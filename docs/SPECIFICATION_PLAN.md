@@ -23,6 +23,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`DECISIONS.md`](DECISIONS.md): akzeptierte Entscheidungen
 - [`PROGRAMS.md`](PROGRAMS.md): allgemeiner Programm- und Prozessablauf
 - [`STANDARD_PROGRAMS.md`](STANDARD_PROGRAMS.md): Zweck und Voreinstellungen der Standardprogramme
+- [`STATE_MACHINE.md`](STATE_MACHINE.md): Betriebszustaende und Uebergaenge
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -57,6 +58,8 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 2B: allgemeine Standardprogramme und ihre Voreinstellungen
   - [ ] Exakte Temperaturen, Zeiten und Grenzwerte werden nach Inbetriebnahme als Werkseinstellungen ergaenzt
 - [ ] Phase 3: Zustandsmaschine
+  - [x] Phase 3A: Grundzustaende, Stoppen, Warnungen und manuelle Betriebsarten
+  - [ ] Phase 3B: Sonderfaelle, Fehlerquittierung und Wiederanlaufdetails
 - [ ] Phase 4: Lokale Bedienung
 - [ ] Phase 5: Web und Netzwerk
 - [ ] Phase 6: Einstellungen und Persistenz
@@ -67,4 +70,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 3 bearbeitet: Betriebszustaende und Zustandsmaschine.
+Als Naechstes wird Phase 3B bearbeitet: Sonderfaelle, Fehlerquittierung und Wiederanlaufdetails.
