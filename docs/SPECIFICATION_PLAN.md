@@ -2,7 +2,10 @@
 
 ## Ziel
 
-Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach implementiert. Die Dokumentation soll so eindeutig sein, dass Codex oder ein anderer Entwickler keine wesentlichen Produktentscheidungen selbst erfinden muss.
+Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach
+implementiert. Die Dokumentation soll so eindeutig sein, dass Codex oder ein
+anderer Entwickler keine wesentlichen Produktentscheidungen selbst erfinden
+muss.
 
 ## Regeln
 
@@ -48,7 +51,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 - [x] Bestehende Dokumentation gesichtet
 - [x] Spezifikationsbranch erstellt
-- [ ] Phase 1: Produktvision und Nutzung
+- [x] Phase 1: Produktvision und Nutzung
 - [ ] Phase 2: Programme und Prozessablauf
 - [ ] Phase 3: Zustandsmaschine
 - [ ] Phase 4: Lokale Bedienung
@@ -58,3 +61,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [ ] Phase 8: Sicherheit und Fehler
 - [ ] Phase 9: Diagnose, Wartung und Updates
 - [ ] Phase 10: Akzeptanztests und Implementierungsplan
+
+## Aktuelle Phase
+
+Als Naechstes wird Phase 2 bearbeitet: Programme und Prozessablauf.
