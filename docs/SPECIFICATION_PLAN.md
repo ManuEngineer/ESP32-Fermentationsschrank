@@ -21,12 +21,14 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): vorgesehene Modulgrenzen
 - [`OPEN_POINTS.md`](OPEN_POINTS.md): offene Fragen
 - [`DECISIONS.md`](DECISIONS.md): akzeptierte Entscheidungen
-- [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges Programmschema
+- [`PROGRAMS.md`](PROGRAMS.md): allgemeiner Programm- und Prozessablauf
+- [`STANDARD_PROGRAMS.md`](STANDARD_PROGRAMS.md): Zweck und Voreinstellungen der Standardprogramme
+- [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
 
 1. **Produktvision und Nutzung** -> `PRODUCT_VISION.md`
-2. **Programme und Prozessablauf** -> `PROGRAMS.md` und Programmschema
+2. **Programme und Prozessablauf** -> `PROGRAMS.md`, `STANDARD_PROGRAMS.md` und Programmschema
 3. **Betriebszustaende und Uebergaenge** -> `STATE_MACHINE.md`
 4. **Lokale Touch-Bedienung** -> `LOCAL_UI.md`
 5. **Weboberflaeche und Netzwerk** -> `WEB_UI.md`, `NETWORK.md`
@@ -50,9 +52,10 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [x] Bestehende Dokumentation gesichtet
 - [x] Spezifikationsbranch erstellt
 - [x] Phase 1: Produktvision und Nutzung
-- [ ] Phase 2: Programme und Prozessablauf
+- [x] Phase 2: Programme und Prozessablauf
   - [x] Phase 2A: allgemeiner Programmablauf, Sensorbetrieb und Vorheizen
-  - [ ] Phase 2B: Standardprogramme, Zeiten, Temperaturen und Grenzwerte
+  - [x] Phase 2B: allgemeine Standardprogramme und ihre Voreinstellungen
+  - [ ] Exakte Temperaturen, Zeiten und Grenzwerte werden nach Inbetriebnahme als Werkseinstellungen ergaenzt
 - [ ] Phase 3: Zustandsmaschine
 - [ ] Phase 4: Lokale Bedienung
 - [ ] Phase 5: Web und Netzwerk
@@ -64,4 +67,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 2B bearbeitet: Standardprogramme, Zeiten, Temperaturen und Grenzwerte.
+Als Naechstes wird Phase 3 bearbeitet: Betriebszustaende und Zustandsmaschine.
