@@ -2,10 +2,7 @@
 
 ## Ziel
 
-Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach
-implementiert. Die Dokumentation soll so eindeutig sein, dass Codex oder ein
-anderer Entwickler keine wesentlichen Produktentscheidungen selbst erfinden
-muss.
+Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach implementiert. Die Dokumentation soll so eindeutig sein, dass Codex oder ein anderer Entwickler keine wesentlichen Produktentscheidungen selbst erfinden muss.
 
 ## Regeln
 
@@ -19,6 +16,7 @@ muss.
 ## Bestehende Quellen
 
 - [`HARDWARE.md`](HARDWARE.md): Hardware und elektrische Randbedingungen
+- [`HARDWARE_REVISIONS.md`](HARDWARE_REVISIONS.md): akzeptierte Hardwareaenderungen aus der Spezifikation
 - [`REQUIREMENTS.md`](REQUIREMENTS.md): bisherige Anforderungen
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): vorgesehene Modulgrenzen
 - [`OPEN_POINTS.md`](OPEN_POINTS.md): offene Fragen
@@ -53,6 +51,8 @@ muss.
 - [x] Spezifikationsbranch erstellt
 - [x] Phase 1: Produktvision und Nutzung
 - [ ] Phase 2: Programme und Prozessablauf
+  - [x] Phase 2A: allgemeiner Programmablauf, Sensorbetrieb und Vorheizen
+  - [ ] Phase 2B: Standardprogramme, Zeiten, Temperaturen und Grenzwerte
 - [ ] Phase 3: Zustandsmaschine
 - [ ] Phase 4: Lokale Bedienung
 - [ ] Phase 5: Web und Netzwerk
@@ -64,4 +64,4 @@ muss.
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 2 bearbeitet: Programme und Prozessablauf.
+Als Naechstes wird Phase 2B bearbeitet: Standardprogramme, Zeiten, Temperaturen und Grenzwerte.
