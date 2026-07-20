@@ -1,20 +1,37 @@
-# Kopieren nach config/pins.yaml, sobald die Belegung am realen Board bestaetigt ist.
-# Keine Kandidaten ohne Kennzeichnung als bestaetigte Pins verwenden.
+# Nach config/pins.yaml kopieren und erst nach Pruefung am realen Board fuellen.
+# Diese Datei enthaelt absichtlich keine endgueltigen GPIO-Zuweisungen.
 
 pins:
-  status_led:
-    gpio: null
-    direction: output
-    active_level: UNKNOWN
-    status: unknown
+  bts7960_rpwm: { gpio: null, direction: output, active_level: unknown, status: unknown }
+  bts7960_lpwm: { gpio: null, direction: output, active_level: unknown, status: unknown }
+  bts7960_ren: { gpio: null, direction: output, active_level: unknown, status: unknown }
+  bts7960_len: { gpio: null, direction: output, active_level: unknown, status: unknown }
 
-  sensor_bus:
+  ds18b20_bus:
     gpio: null
     direction: bidirectional
     pullup_ohm: null
     status: unknown
 
+  ili9341_sck: { gpio: null, direction: output, status: unknown }
+  ili9341_mosi: { gpio: null, direction: output, status: unknown }
+  ili9341_miso: { gpio: null, direction: input, status: unknown }
+  ili9341_cs: { gpio: null, direction: output, active_level: unknown, status: unknown }
+  ili9341_dc: { gpio: null, direction: output, active_level: unknown, status: unknown }
+  ili9341_reset: { gpio: null, direction: output, active_level: unknown, status: unknown }
+  ili9341_backlight: { gpio: null, direction: output, active_level: unknown, status: unknown }
+
+  xpt2046_cs: { gpio: null, direction: output, active_level: unknown, status: unknown }
+  xpt2046_irq: { gpio: null, direction: input, active_level: unknown, status: unknown }
+
+  mosfet_1: { gpio: null, direction: output, active_level: unknown, status: unknown }
+  mosfet_2: { gpio: null, direction: output, active_level: unknown, status: unknown }
+  mosfet_3: { gpio: null, direction: output, active_level: unknown, status: unknown }
+  mosfet_4: { gpio: null, direction: output, active_level: unknown, status: unknown }
+
 reserved_pins: []
 
 notes:
-  - "Bootstrapping-Pins und intern belegte Pins vor Verwendung pruefen."
+  - Bootstrapping-Pins und intern belegte Pins vor Verwendung pruefen.
+  - Gemeinsame SPI-Leitungen von ILI9341 und XPT2046 sind nur candidate, bis der reale Aufbau bestaetigt ist.
+  - Solange GPIO oder aktiver Pegel unknown ist, darf der betreffende Ausgang nicht initialisiert werden.

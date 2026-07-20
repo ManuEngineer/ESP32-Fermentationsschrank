@@ -1,5 +1,5 @@
 {
-  "deviceName": "PROJECT_NAME",
+  "deviceName": "ESP32-Fermentationsschrank",
   "loggingLevel": "info",
   "wifi": {
     "accessPointFallback": true

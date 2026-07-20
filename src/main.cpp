@@ -1,15 +1,16 @@
 #include <Arduino.h>
 
+#include "app_config.hpp"
+
 namespace {
 
-constexpr uint32_t kSerialBaud = 115200;
 constexpr uint32_t kHeartbeatIntervalMs = 1000;
 
 uint32_t lastHeartbeatMs = 0;
 
 void setAllActuatorsSafe() {
-    // Projektspezifisch implementieren.
-    // Alle Ausgaenge muessen vor der weiteren Initialisierung sicher AUS sein.
+    // Es sind noch keine GPIOs oder aktiven Pegel real bestaetigt. Deshalb darf
+    // dieser sichere Einstieg keinen Aktor-Pin konfigurieren oder ansteuern.
 }
 
 }  // namespace
@@ -17,16 +18,11 @@ void setAllActuatorsSafe() {
 void setup() {
     setAllActuatorsSafe();
 
-    Serial.begin(kSerialBaud);
+    Serial.begin(app_config::kSerialBaud);
     delay(100);
     Serial.println();
-    Serial.println("PROJECT_NAME");
-    Serial.println("Boot completed; actuators are in safe state.");
-
-#ifdef LED_BUILTIN
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, LOW);
-#endif
+    Serial.println(app_config::kProjectName);
+    Serial.println("Safe build test: no unconfirmed GPIOs configured.");
 }
 
 void loop() {
@@ -36,8 +32,5 @@ void loop() {
         lastHeartbeatMs = nowMs;
         Serial.println("heartbeat");
 
-#ifdef LED_BUILTIN
-        digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-#endif
     }
 }

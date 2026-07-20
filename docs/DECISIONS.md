@@ -1,27 +1,34 @@
 # Technische Entscheidungen
 
-Entscheidungen werden nicht nur im Code, sondern auch hier festgehalten.
-
-## Vorlage
-
-### ADR-000: Titel
-
-- **Status:** proposed | accepted | superseded
-- **Datum:** YYYY-MM-DD
-- **Kontext:** Welches Problem wird geloest?
-- **Entscheidung:** Welche Variante wird verwendet?
-- **Alternativen:** Welche Varianten wurden verworfen?
-- **Folgen:** Welche Vor- und Nachteile entstehen?
-
----
-
-### ADR-001: PlatformIO mit Arduino Framework
+## ADR-001: PlatformIO mit Arduino Framework
 
 - **Status:** accepted
-- **Datum:** YYYY-MM-DD
-- **Kontext:** Einheitlicher Build fuer lokale Entwicklung, Codex und CI.
-- **Entscheidung:** PlatformIO wird als Buildsystem verwendet; das erste
-  Firmwareziel nutzt das Arduino Framework.
+- **Datum:** 2026-07-20
+- **Kontext:** Reproduzierbarer Build fuer lokalen Einsatz und CI.
+- **Entscheidung:** PlatformIO mit Arduino Framework, C++17 und dem generischen
+  Ziel `esp32dev` fuer das vorgesehene ESP32-WROOM-32E-Modul.
 - **Alternativen:** ESP-IDF direkt, Arduino IDE.
-- **Folgen:** Einfacher Einstieg und reproduzierbarer Build; spezielle
-  ESP-IDF-Funktionen koennen spaeter bei Bedarf eingebunden werden.
+- **Folgen:** Das Ziel bestaetigt keine konkrete Boardrevision oder Pinbelegung.
+
+## ADR-002: Keine GPIO-Zuweisung vor Hardwarebestaetigung
+
+- **Status:** accepted
+- **Datum:** 2026-07-20
+- **Kontext:** Importierte Komponentenangaben enthalten keine verifizierte
+  Anschlussbelegung oder aktive Pegel.
+- **Entscheidung:** Alle Pins bleiben `null` und `unknown`; `src/main.cpp`
+  konfiguriert auch keinen vermeintlichen Onboard-LED-Pin.
+- **Alternativen:** Plausible Standardpins als Kandidaten in Firmware verwenden.
+- **Folgen:** Der Build ist hardwareunabhaengig sicher, ein Hardwaretest ist bis
+  zur Verifikation bewusst eingeschraenkt.
+
+## ADR-003: Noch keine Fermentationssteuerung
+
+- **Status:** accepted
+- **Datum:** 2026-07-20
+- **Kontext:** Elektrische Grenzen, Sensorzuordnung und Sicherheitsanforderungen
+  des realen Aufbaus sind noch offen.
+- **Entscheidung:** Zunaechst nur Projektstruktur, Dokumentation, Metadaten und
+  ein serieller Diagnoseeinstieg.
+- **Alternativen:** Vorlaeufige Regelungslogik implementieren.
+- **Folgen:** Keine unbeabsichtigte Aktorfreigabe durch unbestaetigte Annahmen.

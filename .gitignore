@@ -11,10 +11,18 @@ Thumbs.db
 
 # Geheimnisse und lokale Konfiguration
 include/secrets.hpp
+include/secrets*.hpp
+!include/secrets.example.hpp
 config/pins.yaml
+config/hardware.yaml
 config/settings.local.json
+.env.*
+!.env.example
 .env
 *.local
+credentials.*
+*.pem
+*.key
 
 # Build- und Logdateien
 build/

@@ -1,24 +1,65 @@
 project:
-  name: PROJECT_NAME
-  description: PROJECT_DESCRIPTION
-  owner: PROJECT_OWNER
+  name: ESP32-Fermentationsschrank
+  description: Sichere Firmware-Grundlage fuer einen ESP32-gesteuerten Fermentationsschrank
+  owner: ManuEngineer
 
 controller:
-  board: UNKNOWN
-  mcu: UNKNOWN
+  target: esp32dev
+  module: ESP32-WROOM-32E
+  framework: Arduino
+  build_system: PlatformIO
+  board_revision: unknown
   supply_voltage_v: null
-  programming_interface: UNKNOWN
-  status: unknown
+  programming_interface: unknown
+  status: candidate
 
-sensors: []
+sensors:
+  - type: DS18B20
+    quantity: null
+    interface: OneWire
+    gpio: null
+    pullup_ohm: null
+    power_mode: unknown
+    status: unconfirmed
 
-actuators: []
+actuators:
+  - type: Peltier element
+    driver: BTS7960 H-bridge
+    function: heating_and_cooling
+    supply_voltage_v: null
+    max_current_a: null
+    pins: unknown
+    safe_state: off
+    status: unconfirmed
+  - type: onboard_mosfet_output
+    quantity: 4
+    loads: unknown
+    pins: unknown
+    active_level: unknown
+    safe_state: off
+    status: unconfirmed
+
+display:
+  controller: ILI9341
+  interface: SPI
+  pins: unknown
+  status: unconfirmed
+
+touch:
+  controller: XPT2046
+  interface: SPI
+  pins: unknown
+  calibration: unknown
+  status: unconfirmed
 
 power:
   source_voltage_v: null
   main_fuse_a: null
+  status: unknown
 
 safety:
   boot_outputs_off: true
+  heat_cool_interlock_required: true
+  h_bridge_dead_time_required: true
   watchdog_required: true
-  independent_cutoff_required: false
+  independent_cutoff_required: unconfirmed
