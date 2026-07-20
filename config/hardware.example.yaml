@@ -1,0 +1,24 @@
+project:
+  name: PROJECT_NAME
+  description: PROJECT_DESCRIPTION
+  owner: PROJECT_OWNER
+
+controller:
+  board: UNKNOWN
+  mcu: UNKNOWN
+  supply_voltage_v: null
+  programming_interface: UNKNOWN
+  status: unknown
+
+sensors: []
+
+actuators: []
+
+power:
+  source_voltage_v: null
+  main_fuse_a: null
+
+safety:
+  boot_outputs_off: true
+  watchdog_required: true
+  independent_cutoff_required: false

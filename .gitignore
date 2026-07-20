@@ -1,0 +1,22 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Lokale Editor- und Betriebssystemdateien
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Geheimnisse und lokale Konfiguration
+include/secrets.hpp
+config/pins.yaml
+config/settings.local.json
+.env
+*.local
+
+# Build- und Logdateien
+build/
+dist/
+*.log

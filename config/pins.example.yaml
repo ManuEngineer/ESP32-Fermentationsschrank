@@ -1,0 +1,20 @@
+# Kopieren nach config/pins.yaml, sobald die Belegung am realen Board bestaetigt ist.
+# Keine Kandidaten ohne Kennzeichnung als bestaetigte Pins verwenden.
+
+pins:
+  status_led:
+    gpio: null
+    direction: output
+    active_level: UNKNOWN
+    status: unknown
+
+  sensor_bus:
+    gpio: null
+    direction: bidirectional
+    pullup_ohm: null
+    status: unknown
+
+reserved_pins: []
+
+notes:
+  - "Bootstrapping-Pins und intern belegte Pins vor Verwendung pruefen."

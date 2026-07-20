@@ -1,0 +1,10 @@
+{
+  "deviceName": "PROJECT_NAME",
+  "loggingLevel": "info",
+  "wifi": {
+    "accessPointFallback": true
+  },
+  "safety": {
+    "startAfterPowerLoss": false
+  }
+}
