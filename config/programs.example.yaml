@@ -1,0 +1,72 @@
+# Beispielstruktur. Prozesswerte sind noch nicht final festgelegt.
+schema_version: 1
+
+programs:
+  - id: 1
+    name: Joghurt mild
+    enabled: true
+    fermentation_temperature_c: TBD
+    fermentation_duration_min: TBD
+    stabilization_band_c: 0.3
+    stabilization_duration_min: 10
+    cool_after_finish: true
+    cooling_target_c: TBD
+    max_air_temperature_c: TBD
+
+  - id: 2
+    name: Joghurt stichfest
+    enabled: true
+    fermentation_temperature_c: TBD
+    fermentation_duration_min: TBD
+    stabilization_band_c: 0.3
+    stabilization_duration_min: 10
+    cool_after_finish: true
+    cooling_target_c: TBD
+    max_air_temperature_c: TBD
+
+  - id: 3
+    name: Milchkefir
+    enabled: true
+    fermentation_temperature_c: TBD
+    fermentation_duration_min: TBD
+    stabilization_band_c: 0.5
+    stabilization_duration_min: 10
+    cool_after_finish: true
+    cooling_target_c: TBD
+    max_air_temperature_c: TBD
+
+  - id: 4
+    name: Wasserkefir
+    enabled: true
+    fermentation_temperature_c: TBD
+    fermentation_duration_min: TBD
+    stabilization_band_c: 0.5
+    stabilization_duration_min: 10
+    cool_after_finish: false
+    cooling_target_c: null
+    max_air_temperature_c: TBD
+
+  - id: 5
+    name: Kombucha oder Benutzerprogramm
+    enabled: true
+    fermentation_temperature_c: TBD
+    fermentation_duration_min: TBD
+    stabilization_band_c: 0.5
+    stabilization_duration_min: 15
+    cool_after_finish: false
+    cooling_target_c: null
+    max_air_temperature_c: TBD
+
+validation_limits:
+  fermentation_temperature_c:
+    min: 4
+    max: 45
+  fermentation_duration_min:
+    min: 1
+    max: 20160
+  stabilization_band_c:
+    min: 0.1
+    max: 2.0
+  cooling_target_c:
+    min: 4
+    max: 25

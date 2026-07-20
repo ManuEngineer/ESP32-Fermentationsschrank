@@ -9,53 +9,60 @@ controller:
   framework: Arduino
   build_system: PlatformIO
   board_revision: unknown
-  supply_voltage_v: null
-  programming_interface: unknown
-  status: candidate
+  input_voltage_v: { min: 5, max: 60, recommended: 12 }
+  programming_interface: uart0
+  status: product_documented_board_revision_unconfirmed
 
 sensors:
   - type: DS18B20
-    quantity: null
+    available_quantity: 5
+    planned_quantity: 2
     interface: OneWire
     gpio: null
-    pullup_ohm: null
-    power_mode: unknown
-    status: unconfirmed
+    pullup_ohm: 4700
+    power_mode: external_3_wire_3v3
+    roles: [air_temperature, reference_product_temperature]
+    status: planned_wiring_unconfirmed
 
 actuators:
   - type: Peltier element
     driver: BTS7960 H-bridge
     function: heating_and_cooling
-    supply_voltage_v: null
-    max_current_a: null
+    supply_voltage_v: 12
+    rated_power_w: 60
+    estimated_current_a: 5.0
     pins: unknown
     safe_state: off
     status: unconfirmed
   - type: onboard_mosfet_output
     quantity: 4
-    loads: unknown
+    planned_loads: [inside_fan, outside_fan, reserve, reserve]
     pins: unknown
     active_level: unknown
     safe_state: off
     status: unconfirmed
 
 display:
+  module: MSP2807
   controller: ILI9341
+  size_inch: 2.8
+  resolution_px: [320, 240]
   interface: SPI
   pins: unknown
   status: unconfirmed
 
 touch:
-  controller: XPT2046
+  controller: XPT2046_compatible_candidate
   interface: SPI
   pins: unknown
   calibration: unknown
   status: unconfirmed
 
 power:
-  source_voltage_v: null
-  main_fuse_a: null
-  status: unknown
+  source_voltage_v: 12
+  source_continuous_current_a: null
+  peltier_branch_fuse_a: 7.5
+  status: source_capacity_and_fuse_selection_unconfirmed
 
 safety:
   boot_outputs_off: true

@@ -1,37 +1,56 @@
-# Nach config/pins.yaml kopieren und erst nach Pruefung am realen Board fuellen.
-# Diese Datei enthaelt absichtlich keine endgueltigen GPIO-Zuweisungen.
+# VORLAEUFIGE GPIO-ZUORDNUNG
+# Diese Datei ist keine bestaetigte Verdrahtung. Jeder Zahlenwert ist nur ein
+# Kandidat und darf nicht als produktive Aktorbelegung verwendet werden.
+# Nach Hardwarepruefung als config/pins.yaml uebernehmen und Status je Signal
+# aendern.
 
-pins:
-  bts7960_rpwm: { gpio: null, direction: output, active_level: unknown, status: unknown }
-  bts7960_lpwm: { gpio: null, direction: output, active_level: unknown, status: unknown }
-  bts7960_ren: { gpio: null, direction: output, active_level: unknown, status: unknown }
-  bts7960_len: { gpio: null, direction: output, active_level: unknown, status: unknown }
+status: candidate_unconfirmed
+board: ESP32-WROOM-32E
 
-  ds18b20_bus:
-    gpio: null
-    direction: bidirectional
-    pullup_ohm: null
-    status: unknown
+reserved:
+  status: generic_esp32_constraints_verify_on_board
+  uart0_tx: 1
+  uart0_rx: 3
+  boot_gpio: 0
+  avoid_strapping_gpio: [0, 2, 4, 5, 12, 15]
 
-  ili9341_sck: { gpio: null, direction: output, status: unknown }
-  ili9341_mosi: { gpio: null, direction: output, status: unknown }
-  ili9341_miso: { gpio: null, direction: input, status: unknown }
-  ili9341_cs: { gpio: null, direction: output, active_level: unknown, status: unknown }
-  ili9341_dc: { gpio: null, direction: output, active_level: unknown, status: unknown }
-  ili9341_reset: { gpio: null, direction: output, active_level: unknown, status: unknown }
-  ili9341_backlight: { gpio: null, direction: output, active_level: unknown, status: unknown }
+onboard_mosfet_channels:
+  status: unverified
+  candidate:
+    channel_1_gpio: 16
+    channel_2_gpio: 17
+    channel_3_gpio: 26
+    channel_4_gpio: 27
 
-  xpt2046_cs: { gpio: null, direction: output, active_level: unknown, status: unknown }
-  xpt2046_irq: { gpio: null, direction: input, active_level: unknown, status: unknown }
+spi_display_touch:
+  status: candidate_unconfirmed
+  sck_gpio_candidate: 18
+  mosi_gpio_candidate: 23
+  miso_gpio_candidate: 19
+  lcd_cs_gpio_candidate: 32
+  lcd_dc_gpio_candidate: 33
+  lcd_reset_gpio_unknown: null
+  touch_cs_gpio_candidate: 25
+  touch_irq_gpio_unknown: null
+  backlight: unknown
 
-  mosfet_1: { gpio: null, direction: output, active_level: unknown, status: unknown }
-  mosfet_2: { gpio: null, direction: output, active_level: unknown, status: unknown }
-  mosfet_3: { gpio: null, direction: output, active_level: unknown, status: unknown }
-  mosfet_4: { gpio: null, direction: output, active_level: unknown, status: unknown }
+one_wire:
+  status: candidate_unconfirmed
+  ds18b20_data_gpio_candidate: 13
+  pullup_ohm: 4700
+  pullup_to_v: 3.3
 
-reserved_pins: []
+bts7960:
+  status: candidate_unconfirmed
+  rpwm_gpio_candidate: 21
+  lpwm_gpio_candidate: 22
+  enable_gpio_candidate: 14
+  r_enable_and_l_enable_tied: true
+  r_is_gpio_unknown: null
+  l_is_gpio_unknown: null
 
-notes:
-  - Bootstrapping-Pins und intern belegte Pins vor Verwendung pruefen.
-  - Gemeinsame SPI-Leitungen von ILI9341 und XPT2046 sind nur candidate, bis der reale Aufbau bestaetigt ist.
-  - Solange GPIO oder aktiver Pegel unknown ist, darf der betreffende Ausgang nicht initialisiert werden.
+validation:
+  duplicate_gpio_check_required: true
+  verify_exposed_on_physical_board: true
+  verify_boot_safe_levels: true
+  verify_active_levels: true

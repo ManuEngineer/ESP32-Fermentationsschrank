@@ -13,9 +13,14 @@ Thumbs.db
 include/secrets.hpp
 include/secrets*.hpp
 !include/secrets.example.hpp
+include/secrets.h
 config/pins.yaml
 config/hardware.yaml
 config/settings.local.json
+config/*.local.yaml
+config/*.local.yml
+config/*.local.json
+platformio_override.ini
 .env.*
 !.env.example
 .env

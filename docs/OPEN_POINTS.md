@@ -1,47 +1,73 @@
-# Offene Punkte
+# Offene Punkte und Inbetriebnahme-Checkliste
 
-## Controller und Pinbelegung
+## Controllerboard
 
-- [ ] Konkretes Board und ESP32-WROOM-32E-Modulrevision bestaetigen
-- [ ] Schaltplan oder Leiterbahnzuordnung aller Anschluesse beschaffen
-- [ ] Jeden GPIO und aktiven Pegel am realen Board messen
-- [ ] Bootstrapping-, Flash- und intern belegte Pins ausschliessen
-- [ ] Boot- und Resetverhalten aller Ausgaenge pruefen
-
-## BTS7960 und Peltier
-
-- [ ] RPWM-, LPWM-, REN- und LEN-Anschluesse sowie Pegel bestaetigen
-- [ ] BTS7960-Modulvariante, Wahrheitstabelle und PWM-Grenzen bestaetigen
-- [ ] Peltier-Nennspannung, Maximalstrom und Polaritaet dokumentieren
-- [ ] Totzeit, Strombegrenzung, Sicherung und unabhaengige Abschaltung festlegen
-- [ ] Kuehlkoerper, Luefter und Waermeabfuhr auslegen
-
-## DS18B20
-
-- [ ] Anzahl, ROM-Adressen und Einbauorte erfassen
-- [ ] OneWire-GPIO, Pull-up-Wert und Versorgungsart bestaetigen
-- [ ] Aufloesung, Abtastrate, Plausibilitaetsgrenzen und Timeout festlegen
-- [ ] Verhalten bei Busfehler, CRC-Fehler und Sensorausfall definieren
+- [ ] Tatsächliche Platinenrevision dokumentieren
+- [ ] Prüfen, ob USB-C nur Versorgung ist
+- [ ] GPIO-Zuordnung OUT1–OUT4 messen
+- [ ] Active-high/active-low der MOSFET-Kanäle bestimmen
+- [ ] Ausgangszustände bei Boot, Reset und Bootloader messen
+- [ ] 5-V-Ausgangsspannung und verfügbare Reserve unter Last messen
+- [ ] Pruefen, ob `esp32dev` Flashparameter der gelieferten Revision korrekt
+      abbildet
+- [ ] GPIO4 und alle weiteren Strapping-Pins aus der Verdrahtung ausschliessen
+      oder ihr Bootverhalten explizit nachweisen
 
 ## Display und Touch
 
-- [ ] ILI9341-/XPT2046-Modulvarianten und Versorgung bestaetigen
-- [ ] SPI-Leitungen, getrennte CS-Pins, DC, Reset, IRQ und Backlight bestaetigen
-- [ ] SPI-Modus und maximal zulaessige Taktraten pruefen
-- [ ] Rotation und Touchkalibrierung am montierten Display bestimmen
+- [ ] Touchcontroller anhand Chipbeschriftung bestätigen
+- [ ] Bibliothek und Initialisierung prüfen
+- [ ] Displayrotation festlegen
+- [ ] Touchkalibrierung durchführen
+- [ ] Backlight-Versorgung und Helligkeit prüfen
+- [ ] Entscheiden, ob Display-RESET an GPIO oder Resetnetz gelegt wird
 
-## Vier MOSFET-Ausgaenge
+## Temperatursensoren
 
-- [ ] GPIO und aktiven Pegel pro Kanal bestaetigen
-- [ ] Last, Spannung, Dauer-/Spitzenstrom und thermische Grenze pro Kanal erfassen
-- [ ] Gate-Pulldowns und sicheres Bootverhalten pruefen
-- [ ] Freilauf-, Ueberspannungs- und Kurzschlussschutz je Last pruefen
+- [ ] Fünf Sensoren prüfen und ROM-Adressen erfassen
+- [ ] Zwei Sensoren mit plausibler Übereinstimmung auswählen
+- [ ] Sensorrollen fest zuordnen
+- [ ] Kabelfarben/Pinbelegung der gelieferten Sonden prüfen
+- [ ] Referenzflasche und thermische Kopplung festlegen
 
-## System
+## Peltier und BTS7960
 
-- [ ] Versorgungstopologie, Massefuehrung, Sicherungen und Leitungsquerschnitte
-  dokumentieren
-- [ ] Fachliche Fermentationsablaeufe und Grenzwerte spezifizieren
-- [ ] Zustandsmaschine und Fehlercodes definieren
-- [ ] Persistenz-, OTA-, Web-API- und Testkonzept definieren
-- [ ] Gehaeuse, Feuchtigkeitsschutz, Zugentlastung und Wartungszugang klaeren
+- [ ] Tatsächlichen Peltierstrom messen
+- [ ] Heizrichtung und Kühlrichtung bestimmen
+- [ ] BTS7960-Modulrevision und Pinbeschriftung prüfen
+- [ ] Enable-Verhalten prüfen
+- [ ] Totzeit testen
+- [ ] 7,5-A-Sicherung und Sicherungshalter vorsehen
+- [ ] unabhängige Übertemperaturabschaltung festlegen
+- [ ] Prüfen, ob 60 W das Peltier oder das gesamte Originalgerät bezeichnet
+
+## Lüfter und Thermik
+
+- [ ] Stromaufnahme und Anlaufstrom beider Lüfter messen
+- [ ] Luftführung und Nachlaufzeit festlegen
+- [ ] Temperaturgleichmässigkeit an mehreren Positionen messen
+- [ ] Kondensatführung im Kühlbetrieb vorsehen
+
+## Programme
+
+- [ ] Namen der finalen 4–5 Programme festlegen
+- [ ] Zieltemperaturen und Zeiten festlegen
+- [ ] Stabilisierungskriterien festlegen
+- [ ] Kühlziel je Programm festlegen
+- [ ] Verhalten nach `FINISHED` festlegen
+
+## Mechanik
+
+- [ ] Position des Displays in der Tür festlegen
+- [ ] Elektronik vor Feuchtigkeit/Kondensat schützen
+- [ ] Sensor- und Leistungskabel räumlich trennen
+- [ ] Servicezugang für FT232RL und Sicherung vorsehen
+
+## Firmware
+
+- [ ] Bestaetigte Pins und aktive Pegel in lokaler `config/pins.yaml` erfassen
+- [ ] Sichere GPIO-Initialisierung erst nach dieser Verifikation implementieren
+- [ ] Zustands- und Fehlercode-Modell implementieren und nativ testen
+- [ ] Persistenzformat und Validierungsstrategie festlegen
+- [ ] Verhalten des Aussenluefters je Fehlerart festlegen
+- [ ] Web-API, OTA-Schutz und Access-Point-Einrichtung festlegen

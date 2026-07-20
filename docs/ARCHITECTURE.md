@@ -48,9 +48,11 @@ Fach- und Sicherheitslogik darf nicht direkt von Arduino-GPIO-, SPI- oder
 OneWire-Funktionen abhaengen. Hardwarezugriffe werden in kleinen Adaptern
 gekapselt, damit Verriegelungen und Fehlerreaktionen nativ testbar bleiben.
 
-## Zustaende
+## Vorgesehene Zustaende
 
-Eine projektspezifische Zustandsmaschine wird erst mit den fachlichen
-Anforderungen festgelegt. Bis dahin existiert nur der sichere Diagnosezustand;
-Bezeichnungen wie `RUNNING` oder `HEATING` sind noch keine akzeptierte
-Architekturentscheidung.
+Die Anforderungen sehen `STANDBY`, `TEMPERING`, `STABILIZING`, `FERMENTING`,
+optional `COOLING` und `HOLDING_COLD`, `FINISHED` sowie `FAILURE` vor. Jeder
+Betriebszustand muss sicher nach `FAILURE` wechseln koennen.
+
+Diese Zustandsmaschine ist noch nicht implementiert. Bis zur bestaetigten
+Pinbelegung existiert nur der sichere Diagnoseeinstieg ohne Aktor-GPIOs.

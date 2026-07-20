@@ -16,8 +16,11 @@
 - **Datum:** 2026-07-20
 - **Kontext:** Importierte Komponentenangaben enthalten keine verifizierte
   Anschlussbelegung oder aktive Pegel.
-- **Entscheidung:** Alle Pins bleiben `null` und `unknown`; `src/main.cpp`
-  konfiguriert auch keinen vermeintlichen Onboard-LED-Pin.
+- **Entscheidung:** Die Firmware verwendet keine Kandidatenpins und
+  `src/main.cpp` konfiguriert auch keinen vermeintlichen Onboard-LED-Pin.
+  Zahlenwerte duerfen nur in `config/pins.example.yaml` mit explizitem Status
+  `candidate_unconfirmed` dokumentiert werden; die lokale bestaetigte
+  `config/pins.yaml` bleibt ignoriert.
 - **Alternativen:** Plausible Standardpins als Kandidaten in Firmware verwenden.
 - **Folgen:** Der Build ist hardwareunabhaengig sicher, ein Hardwaretest ist bis
   zur Verifikation bewusst eingeschraenkt.

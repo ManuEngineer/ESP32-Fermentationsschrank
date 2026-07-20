@@ -1,21 +1,35 @@
 # ESP32-Fermentationsschrank
 
-Firmware-Grundgeruest fuer einen Fermentationsschrank mit einem generischen
-ESP32-WROOM-32E, erstellt mit PlatformIO und dem Arduino Framework.
+Universeller Fermentationsschrank für Joghurt, Milch- und Wasserkefir sowie Kombucha.
 
-Der vorgesehene Aufbau umfasst eine BTS7960-H-Bruecke fuer ein Peltier-Element,
-DS18B20-Temperatursensoren, ein ILI9341-Display mit XPT2046-Touchcontroller und
-vier Onboard-MOSFET-Ausgaenge. Die reale Pinbelegung, aktive Pegel und elektrische
-Grenzwerte sind noch nicht bestaetigt. Deshalb implementiert die Firmware derzeit
-nur einen sicheren, hardwareunabhaengigen Build- und Diagnoseeinstieg und noch
-keine Fermentationssteuerung.
+Owner: `ManuEngineer`
 
-## Werkzeugkette
+Die Steuerung basiert auf einem ESP32-32E-Board mit vier MOSFET-Ausgängen. Ein vorhandenes 12-V-/60-W-Peltiermodul kann über eine BTS7960-H-Brücke sowohl heizen als auch kühlen. Zwei DS18B20 erfassen Schrank-/Lufttemperatur und eine Referenztemperatur, die die Produkttemperatur annähert. Die lokale Bedienung erfolgt über ein 2,8-Zoll-Touchdisplay; zusätzlich ist eine lokale Weboberfläche vorgesehen.
+
+## Dokumentation
+
+- [`AGENTS.md`](AGENTS.md): verbindliche Arbeitsanweisungen für Codex
+- [`docs/HARDWARE.md`](docs/HARDWARE.md): Hardware, Schnittstellen und Verdrahtungsregeln
+- [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md): gewünschtes Geräteverhalten
+- [`docs/CODEX_HANDOFF.md`](docs/CODEX_HANDOFF.md): empfohlene Entwicklungsreihenfolge und Startprompt
+- [`docs/OPEN_POINTS.md`](docs/OPEN_POINTS.md): vor der finalen Verdrahtung zu prüfende Punkte
+- [`config/hardware.example.yaml`](config/hardware.example.yaml): versionierte maschinenlesbare Hardwarebeschreibung
+- [`config/pins.example.yaml`](config/pins.example.yaml): vorläufige GPIO-Zuordnung
+- [`config/programs.example.yaml`](config/programs.example.yaml): Schema für die Fermentationsprogramme
+- [`references/LINKS.md`](references/LINKS.md): Hersteller- und Lieferantendokumentation
+
+## Geplanter Software-Stack
 
 - PlatformIO
-- Arduino Framework
-- generisches PlatformIO-Ziel `esp32dev` fuer ESP32-WROOM-32E
-- C++17
+- Arduino-Framework für ESP32
+- lokale Touch-Bedienung
+- lokaler Webserver ohne Cloud-Zwang
+- persistente Konfiguration im Flash
+- OTA-Updates über WLAN nach erfolgreichem Erst-Flashen
+
+Buildziel ist das generische PlatformIO-Board `esp32dev` fuer ein
+ESP32-WROOM-32E mit Arduino-Framework. Diese Auswahl bestaetigt keine GPIO-
+Zuordnung der konkreten Quad-MOSFET-Platine.
 
 ## Bauen und testen
 
@@ -24,30 +38,29 @@ pio run
 pio test -e native
 ```
 
-Ein Upload auf reale Hardware ist erst zulaessig, nachdem die Pinbelegung und
-die sicheren Ausgangspegel am konkreten Board bestaetigt und in einer lokalen,
-nicht versionierten `config/pins.yaml` dokumentiert wurden.
+Ein Upload auf reale Hardware ist erst zulaessig, nachdem Pinbelegung und
+sichere Ausgangspegel bestaetigt und in der lokalen, ignorierten
+`config/pins.yaml` dokumentiert wurden.
 
 ## Projektstruktur
 
 ```text
-config/  Maschinenlesbare Hardware- und Beispielkonfiguration
-data/    Spaetere LittleFS-/Webdateien
-docs/    Quelle der Wahrheit fuer Hardware, Anforderungen und Entscheidungen
-include/ Gemeinsame Typen und Konfiguration
-lib/     Wiederverwendbare, nativ testbare Komponenten
-src/     Minimaler Firmware-Einstieg
-test/    Hardwareunabhaengige Tests
+config/   Maschinenlesbare Hardware- und Beispielkonfiguration
+data/     Spaetere lokale LittleFS-Weboberflaeche
+docs/     Hardware, Anforderungen, Architektur und Entscheidungen
+include/  Projektweite Header und lokale, ignorierte Geheimnisse
+lib/      Hardwareunabhaengige und wiederverwendbare Komponenten
+src/      Minimaler Firmware-Einstieg
+test/     Native Unit-Tests
 ```
 
-## Sicherheit
+## Projektstatus
 
-- GPIOs und aktive Pegel werden nicht geraten.
-- Nicht bestaetigte Angaben bleiben `candidate`, `unconfirmed` oder `unknown`.
-- Heizen, Kuehlen und alle MOSFET-Ausgaenge muessen bei Boot, Reset und Fehlern
-  AUS bleiben.
-- Hochleistungslasten duerfen erst nach Messung mit Multimeter oder Testlast
-  angeschlossen werden.
-- Zugangsdaten und lokale Hardwarekonfiguration werden nicht versioniert.
+**Hardware bestellt, elektrische und GPIO-Verifikation noch ausstehend.**
 
-Owner: ManuEngineer
+Vor dem Anschluss von Peltier und Lüftern muss jede Schnittstelle einzeln geprüft werden. Insbesondere sind die GPIO-Zuordnung der vier Onboard-MOSFET-Kanäle, der Touchcontroller des MSP2807 und die Belastbarkeit der 5-V-Schiene des ESP32-Boards noch am realen Exemplar zu bestätigen.
+
+Lokale Messergebnisse koennen in den von Git ignorierten Dateien
+`config/hardware.yaml` und `config/pins.yaml` gepflegt werden. Bestaetigte,
+allgemein gueltige Ergebnisse muessen anschliessend auch in den versionierten
+Dokumenten und Beispielen nachgefuehrt werden.

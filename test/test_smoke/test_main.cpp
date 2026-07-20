@@ -11,7 +11,7 @@ void test_project_metadata() {
     TEST_ASSERT_GREATER_THAN(0, std::strlen(app_config::kFirmwareVersion));
 }
 
-int main(int argc, char **argv) {
+int main() {
     UNITY_BEGIN();
     RUN_TEST(test_project_metadata);
     return UNITY_END();
