@@ -1,0 +1,60 @@
+# Plan zur Softwarespezifikation
+
+## Ziel
+
+Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach implementiert. Die Dokumentation soll so eindeutig sein, dass Codex oder ein anderer Entwickler keine wesentlichen Produktentscheidungen selbst erfinden muss.
+
+## Regeln
+
+- In dieser Phase wird keine Fermentationssteuerung programmiert.
+- Entscheidungen werden im Repository festgehalten.
+- Offene Fragen bleiben als `TBD`, `unknown` oder Checkliste sichtbar.
+- Hardwaredaten und Softwareverhalten werden getrennt dokumentiert.
+- Sicherheitsanforderungen haben Vorrang vor Komfortfunktionen.
+- Unbestaetigte GPIOs und Pegel bleiben unbestaetigt.
+
+## Bestehende Quellen
+
+- [`HARDWARE.md`](HARDWARE.md): Hardware und elektrische Randbedingungen
+- [`REQUIREMENTS.md`](REQUIREMENTS.md): bisherige Anforderungen
+- [`ARCHITECTURE.md`](ARCHITECTURE.md): vorgesehene Modulgrenzen
+- [`OPEN_POINTS.md`](OPEN_POINTS.md): offene Fragen
+- [`DECISIONS.md`](DECISIONS.md): akzeptierte Entscheidungen
+- [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges Programmschema
+
+## Phasen und Ergebnisdokumente
+
+1. **Produktvision und Nutzung** -> `PRODUCT_VISION.md`
+2. **Programme und Prozessablauf** -> `PROGRAMS.md` und Programmschema
+3. **Betriebszustaende und Uebergaenge** -> `STATE_MACHINE.md`
+4. **Lokale Touch-Bedienung** -> `LOCAL_UI.md`
+5. **Weboberflaeche und Netzwerk** -> `WEB_UI.md`, `NETWORK.md`
+6. **Einstellungen und Persistenz** -> `SETTINGS_AND_STORAGE.md`
+7. **Temperaturregelung und Aktorlogik** -> `TEMPERATURE_CONTROL.md`
+8. **Sicherheit und Fehlerbehandlung** -> `SAFETY_AND_FAULTS.md`
+9. **Diagnose, Wartung und Updates** -> `DIAGNOSTICS_AND_MAINTENANCE.md`
+10. **Akzeptanztests und Implementierungsplan** -> `ACCEPTANCE_TESTS.md` und spaetere GitHub-Issues
+
+## Arbeitsweise
+
+1. Eine Phase wird gemeinsam besprochen.
+2. Ich fasse Entscheidungen und offene Punkte zusammen.
+3. Das zugehoerige Dokument wird auf `docs/software-specification` erstellt oder aktualisiert.
+4. Der Benutzer prueft und korrigiert den Inhalt.
+5. Erst nach Freigabe beginnt die naechste Phase.
+6. Am Ende wird ein Pull Request nach `main` erstellt.
+
+## Stand
+
+- [x] Bestehende Dokumentation gesichtet
+- [x] Spezifikationsbranch erstellt
+- [ ] Phase 1: Produktvision und Nutzung
+- [ ] Phase 2: Programme und Prozessablauf
+- [ ] Phase 3: Zustandsmaschine
+- [ ] Phase 4: Lokale Bedienung
+- [ ] Phase 5: Web und Netzwerk
+- [ ] Phase 6: Einstellungen und Persistenz
+- [ ] Phase 7: Temperaturregelung und Aktoren
+- [ ] Phase 8: Sicherheit und Fehler
+- [ ] Phase 9: Diagnose, Wartung und Updates
+- [ ] Phase 10: Akzeptanztests und Implementierungsplan
