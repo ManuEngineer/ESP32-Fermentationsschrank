@@ -22,7 +22,7 @@ die normale Nutzung nicht erforderlich sein.
 3. Eine lokale Weboberflaeche bietet zusaetzlich die vollstaendige Bedienung,
    Konfiguration und Ueberwachung.
 4. Sicherheitsfunktionen und laufende Temperaturregelung bleiben auch bei
-   Ausfall von Display, Touch, Weboberflaeche, Internet oder externem Server
+   Ausfall von Display, Touch, Weboberflaeche, Internet oder Heimserver
    funktionsfaehig.
 5. Hardware- und Softwarefehler duerfen keine unbeabsichtigte Freigabe von
    Heizung, Kuehlung oder anderen Aktoren bewirken.
@@ -156,7 +156,7 @@ Aktorsteuerung.
 ## Weboberflaeche und Fernbedienung
 
 Die Weboberflaeche soll im lokalen Netzwerk die vollstaendige Bedienung
-ermoeglichen:
+erlauben:
 
 - Status und Temperaturen anzeigen
 - Programme anzeigen und bearbeiten
@@ -164,12 +164,28 @@ ermoeglichen:
 - Einstellungen verwalten
 - Meldungen und Unterbrechungen behandeln
 
-Fernzugriff von ausserhalb des Heimnetzes darf den ESP32 nicht direkt offen ins
-Internet stellen. Authentisierung, Autorisierung und konkrete
-Fernzugriffsarchitektur werden in der Phase `Weboberflaeche und Netzwerk`
-festgelegt.
+Fernzugriff von ausserhalb des Heimnetzes ist nicht Bestandteil des ersten
+Releases. Der ESP32 darf nicht direkt offen ins Internet gestellt werden.
+Authentisierung, Autorisierung und eine spaetere Fernzugriffsarchitektur werden
+in `WEB_UI.md` und `NETWORK.md` festgelegt.
 
 ## Stromausfall und Wiederanlauf
+
+### Infrastruktur waehrend eines Stromausfalls
+
+Der Fermentationsschrank selbst verliert bei einem Stromausfall seine
+Versorgung. Folgende Infrastruktur laeuft ueber eine USV noch ungefaehr
+30 Minuten weiter:
+
+```text
+USV
+├── Router
+└── Heimserver
+```
+
+Dadurch kann der Heimserver in einem spaeteren Release das Verschwinden des
+ESP32 anhand eines fehlenden Heartbeats erkennen. Eine solche Benachrichtigung
+ist jedoch ausdruecklich **nicht Bestandteil des ersten Releases**.
 
 ### Kurzer Stromausfall
 
@@ -197,61 +213,44 @@ Unterbrechungszustand und verlangt eine Entscheidung:
 - eine spaeter festzulegende sichere Abschlussaktion ausfuehren, zum Beispiel
   Kuehlen, falls dies fuer das konkrete Programm sinnvoll ist
 
-Die Entscheidung muss lokal am Display und bei vorhandener Verbindung auch aus
-der Ferne moeglich sein.
+Im ersten Release erfolgt diese Entscheidung lokal am Display oder ueber die
+lokale Weboberflaeche, sobald der Benutzer wieder Zugriff auf das Heimnetz hat.
 
-## Benachrichtigung bei Abwesenheit
+## Benachrichtigungen und spaetere Releases
 
-Das Geraet soll wichtige Ereignisse an den Benutzer melden koennen, besonders:
+Telegram, Push-Benachrichtigungen und serververmittelte Fernaktionen werden auf
+ein spaeteres Release verschoben.
 
-- langer Stromausfall und wiederhergestellte Versorgung
+Eine spaetere Architektur kann wie folgt aussehen:
+
+```text
+ESP32 oder Server-Heartbeat-Ueberwachung
+  -> Heimserver / Notification Gateway
+  -> Telegram oder anderer Benachrichtigungskanal
+```
+
+Moegliche spaetere Ereignisse:
+
+- ESP32 waehrend eines Stromausfalls nicht mehr erreichbar
+- Versorgung wiederhergestellt
 - Entscheidung zum Fortsetzen oder Abbrechen erforderlich
 - Sensor- oder Aktorfehler
 - Programm beendet
 - Kuehlziel erreicht
 
-### Bevorzugte Richtung
+Der Heimserver kann waehrend der ungefaehr 30-minuetigen USV-Laufzeit bereits
+das Ausbleiben des ESP32 erkennen. Nach Ablauf der USV ist auch diese
+Meldekette nicht mehr garantiert.
 
-Fuer die erste Fernbenachrichtigung wird eine serververmittelte Loesung mit
-Telegram bevorzugt:
-
-```text
-ESP32
-  -> ausgehende, authentisierte Verbindung
-  -> eigener Heimserver / Notification Gateway
-  -> Telegram Bot
-  -> Nachricht mit sicheren Aktionsschaltflaechen
-```
-
-Gruende:
-
-- Der ESP32 benoetigt keinen direkt erreichbaren Internet-Port.
-- Das Telegram-Bot-Token bleibt auf dem Server und nicht in der Firmware.
-- Die Benachrichtigungslogik kann spaeter ausgetauscht oder erweitert werden.
-- Telegram unterstuetzt Nachrichten mit Inline-Schaltflaechen und Rueckmeldungen.
-- Der vorhandene Heimserver kann Entscheidungen zwischenspeichern, bis der
-  ESP32 wieder erreichbar ist.
-
-Der ESP32 muss trotzdem eigenstaendig und sicher weiterarbeiten, wenn der
-Server, Telegram oder das Internet nicht erreichbar ist. Die konkrete
-Kommunikation zwischen ESP32 und Server, beispielsweise HTTPS oder MQTT, wird
-in `NETWORK.md` entschieden.
-
-Eine direkte Telegram-Integration auf dem ESP32 bleibt technisch moeglich, ist
-aber nicht die bevorzugte Architektur, weil sie Bot-Zugangsdaten und
-Telegram-spezifische Kommunikationslogik in die Firmware verlagern wuerde.
-
-Offizielle technische Referenzen:
-
-- Telegram Bot API: https://core.telegram.org/bots/api
-- Empfang von Bot-Updates per Long Polling oder Webhook:
-  https://core.telegram.org/bots/webhooks
+Unabhaengig von spaeteren Benachrichtigungen muss der ESP32 eigenstaendig und
+sicher arbeiten. Fernaktionen duerfen die lokale Sicherheitslogik niemals
+umgehen.
 
 ## Verhalten ohne erreichbaren Benutzer
 
-Eine ausstehende Fernentscheidung darf das Geraet nicht in einen undefinierten
-Zustand bringen. Fuer jeden Unterbrechungsfall muss spaeter ein sicherer
-Standardzustand mit einer maximalen Wartezeit definiert werden.
+Eine ausstehende Benutzerentscheidung darf das Geraet nicht in einen
+undefinierten Zustand bringen. Fuer jeden Unterbrechungsfall muss spaeter ein
+sicherer Standardzustand mit einer maximalen Wartezeit definiert werden.
 
 Dabei wird zwischen zwei Fragen unterschieden:
 
@@ -259,50 +258,44 @@ Dabei wird zwischen zwei Fragen unterschieden:
 2. **Prozessqualitaet:** Ist die Fermentation nach der Unterbrechung noch
    sinnvoll fortsetzbar?
 
-Die Software darf eine Fernaktion nur anbieten, wenn sie anhand von Zustand,
-Unterbrechungsdauer und Sensorwerten als zulaessig bewertet wurde. Eine
-Telegram-Schaltflaeche darf die Sicherheitslogik niemals umgehen.
+Die Software darf nur Aktionen anbieten, die anhand von Zustand,
+Unterbrechungsdauer und Sensorwerten als zulaessig bewertet wurden.
 
-## Ausdrueckliche Nicht-Ziele dieser Phase
+## Ausdrueckliche Nicht-Ziele des ersten Releases
 
-In dieser Spezifikationsphase wird noch nicht festgelegt oder implementiert:
-
-- konkrete GPIO-Belegung
-- konkrete Regelparameter
-- genaue Programtemperaturen und Zeiten
-- konkrete Netzwerkprotokolle
-- Telegram-Bot-Code
-- Weboberflaechenlayout
-- Firmware fuer die Fermentationssteuerung
-
-Diese Punkte werden in den folgenden Spezifikationsphasen schrittweise
-entschieden.
+- konkrete GPIO-Belegung vor Hardwareverifikation
+- Telegram-Bot oder sonstige Push-Benachrichtigung
+- Fernzugriff aus dem Internet
+- Cloud-Abhaengigkeit
+- mehrstufige Temperaturprogramme
+- direkte Aktorsteuerung ausserhalb des Servicemodus
 
 ## Akzeptierte Produktentscheidungen
 
 - [x] Bedienung fuer nichttechnische Benutzer ohne Programmierung
 - [x] vollstaendige lokale Bedienung ohne WLAN
-- [x] vier vorbereitete Standardprogramme in der ersten Ausbaustufe
+- [x] vier vorbereitete Standardprogramme im ersten Release
 - [x] dynamisch erweiterbare Programmliste
 - [x] Zieltemperatur kann durch Heizen oder Kuehlen erreicht werden
-- [x] erste Ausbaustufe mit einer Fermentationstemperatur
+- [x] erster Release mit einer Fermentationstemperatur pro Programm
 - [x] Architektur soll spaetere mehrstufige Programme nicht verhindern
 - [x] Verhalten nach Programmende pro Programm konfigurierbar
-- [x] vollstaendige Bedienung ueber die Weboberflaeche
+- [x] vollstaendige Bedienung ueber die lokale Weboberflaeche
 - [x] kurzer Stromausfall kann unter validierten Bedingungen automatisch
       fortgesetzt werden
-- [x] langer Stromausfall verlangt eine lokale oder entfernte Entscheidung
+- [x] langer Stromausfall verlangt eine Benutzerentscheidung
 - [x] einfacher manueller Zeit-/Temperaturbetrieb
 - [x] geschuetzter Servicemodus fuer technische Tests
-- [x] optionale Fernbenachrichtigung ohne Cloud-Abhaengigkeit der Kernfunktion
+- [x] Router und Heimserver laufen bei Stromausfall rund 30 Minuten ueber USV
+- [x] Telegram und Push-Benachrichtigungen werden auf ein spaeteres Release
+      verschoben
 
 ## Offene Punkte fuer spaetere Phasen
 
 - Grenzwert fuer kurzen und langen Stromausfall
 - Bewertung der Prozessqualitaet nach Temperaturabweichung
 - sicherer Zustand waehrend einer ausstehenden Entscheidung
-- erlaubte Fernaktionen je Zustand
-- HTTPS oder MQTT zwischen ESP32 und Heimserver
-- Telegram als erster verbindlicher Benachrichtigungskanal oder generische
-  Provider-Schnittstelle
-- Authentisierung und Schutz von Fernzugriff und Befehlen
+- erlaubte Aktionen nach einer Unterbrechung
+- Datenmodell fuer dynamische und spaeter mehrstufige Programme
+- spaetere Heartbeat-Ueberwachung durch den Heimserver
+- spaetere Benachrichtigungs- und Fernzugriffsarchitektur
