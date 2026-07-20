@@ -17,6 +17,17 @@ Ein normaler 3,5-mm-Klinkenstecker wird vorerst nicht festgelegt, weil beim Stec
 
 Zu pruefen sind Feuchte- und Kondensatschutz, Reinigbarkeit, Zugentlastung, Lebensmitteleignung bei direktem Produktkontakt und das Verhalten des 1-Wire-Busses beim An- und Abstecken.
 
+### Vorgeschlagene Bustrennung
+
+Der fest eingebaute Luftfuehler und der abnehmbare Produktfuehler sollen nach Moeglichkeit nicht denselben 1-Wire-Datenpin verwenden.
+
+Bevorzugter Kandidat:
+
+- eigener 1-Wire-Bus fuer den fest eingebauten Luftfuehler
+- eigener 1-Wire-Bus fuer den abnehmbaren Produktfuehler
+
+Damit kann das An- oder Abstecken des Produktfuehlers den fuer Regelung und Sicherheit wichtigen Luftfuehler nicht kurzzeitig stoeren. Diese Bustrennung kostet einen zusaetzlichen GPIO und wird erst nach der finalen Pinbudget-Pruefung verbindlich.
+
 ## Akustischer Signalgeber
 
 Fuer lokale Warnungen und Aufforderungen wird ein Summer vorgesehen.
