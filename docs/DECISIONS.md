@@ -35,3 +35,63 @@
   ein serieller Diagnoseeinstieg.
 - **Alternativen:** Vorlaeufige Regelungslogik implementieren.
 - **Folgen:** Keine unbeabsichtigte Aktorfreigabe durch unbestaetigte Annahmen.
+
+## ADR-004: Produkt- oder luftgefuehrter Betrieb
+
+- **Status:** accepted
+- **Datum:** 2026-07-20
+- **Kontext:** Vorgewaermte Joghurtmilch und ein vorgeheizter Schrank lassen sich
+  durch ein dauerhaftes Referenzglas nicht verlaesslich abbilden. Ein direkter
+  Produktfuehler soll ausserdem nicht fuer jeden Lauf zwingend sein.
+- **Entscheidung:** Mit angeschlossenem und ausgewaehltem Produktfuehler ist
+  dieser der primaere Prozesssensor; der Luftfuehler unterstuetzt Regelung und
+  Sicherheit. Ohne Produktfuehler ist der Luftfuehler der primaere
+  Prozesssensor. Der Modus wird vor dem Start sichtbar bestaetigt und darf
+  waehrend eines Laufs nicht unbemerkt wechseln.
+- **Alternativen:** Immer Referenzflasche; Produktfuehler zwingend;
+  ausschliesslich Lufttemperatur.
+- **Folgen:** Der Produktfuehler soll abnehmbar werden. Steckverbinder,
+  Hot-Plug-Verhalten und Lebensmitteleignung bleiben zu klaeren.
+
+## ADR-005: Zielqualifikation vor Timerstart
+
+- **Status:** accepted
+- **Datum:** 2026-07-20
+- **Kontext:** Ein einmaliges Erreichen des Zielwerts reicht fuer einen
+  reproduzierbaren Timerstart nicht aus. Der Begriff `Stabilisierung` war
+  missverstaendlich.
+- **Entscheidung:** Vor der Fermentationszeit liegt eine getrennte kurze
+  Zielqualifikation. Der massgebende Sensor muss fuer eine definierte Zeit
+  ausreichend im Zielband liegen. Kurze Ausreisser duerfen innerhalb
+  festgelegter Grenzen ignoriert werden. Erst danach startet der Timer.
+- **Alternativen:** Timer beim Programmstart oder beim ersten Zielkontakt.
+- **Folgen:** Vorheizen, Zielerreichung und Zielqualifikation zaehlen nicht zur
+  Fermentationsdauer.
+
+## ADR-006: Optionales Vorheizen mit zweiter Bestaetigung
+
+- **Status:** accepted
+- **Datum:** 2026-07-20
+- **Kontext:** Der leere Schrank soll vor dem Einsetzen bereits vorgewaermter
+  Milch temperiert werden koennen.
+- **Entscheidung:** Vorheizen ist pro Lauf ein- oder ausschaltbar. Nach dem
+  Temperieren des leeren Schranks fordert das Geraet zum Einsetzen auf. Erst ein
+  zweiter bewusster Start beziehungsweise `Weiter` beginnt die erneute
+  Zielqualifikation fuer den gewaehlten Sensorbetrieb.
+- **Alternativen:** Produkt immer vor dem ersten Start einsetzen; automatischer
+  Timerstart direkt nach Vorheizen.
+- **Folgen:** Die Zustandsmaschine benoetigt einen Wartezustand fuer den
+  Produkteinsatz und ein lokales akustisches Signal.
+
+## ADR-007: Warnung statt sofortigem Abbruch bei langer Zielerreichung
+
+- **Status:** accepted
+- **Datum:** 2026-07-20
+- **Kontext:** Grosse Produktmasse, Tueröffnung oder geringe Leistung koennen die
+  Zielerreichung verzoegern, ohne einen sicheren Weiterbetrieb auszuschliessen.
+- **Entscheidung:** Jedes Programm erhaelt eine maximale erwartete
+  Zielerreichungszeit. Bei Ueberschreitung entstehen sichtbare und akustische
+  Warnung sowie ein Protokolleintrag. Die Regelung versucht standardmaessig
+  weiter, solange kein Sicherheitsfehler vorliegt.
+- **Alternativen:** Unbegrenzt ohne Meldung; sofortiger Programmabbruch.
+- **Folgen:** Prozesswarnungen und Sicherheitsfehler werden getrennt modelliert.
