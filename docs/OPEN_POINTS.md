@@ -25,10 +25,16 @@
 ## Temperatursensoren
 
 - [ ] Fünf Sensoren prüfen und ROM-Adressen erfassen
-- [ ] Zwei Sensoren mit plausibler Übereinstimmung auswählen
-- [ ] Sensorrollen fest zuordnen
+- [ ] Mindestens zwei Sensoren mit plausibler Übereinstimmung auswählen
+- [ ] Luftfuehler fest zuordnen
+- [ ] Abnehmbaren Produktfuehler festlegen
 - [ ] Kabelfarben/Pinbelegung der gelieferten Sonden prüfen
-- [ ] Referenzflasche und thermische Kopplung festlegen
+- [ ] Steckverbinder fuer den Produktfuehler auswaehlen
+- [ ] Hot-Plug-Verhalten des 1-Wire-Busses pruefen
+- [ ] Feuchte-, Kondensat- und Zugentlastungskonzept fuer den Anschluss festlegen
+- [ ] Lebensmitteleignung und Reinigbarkeit bei direktem Produktkontakt klaeren
+- [ ] Optionales Referenzgefaess oder andere thermische Kopplung nur bei Bedarf
+      festlegen
 
 ## Peltier und BTS7960
 
@@ -41,20 +47,29 @@
 - [ ] unabhängige Übertemperaturabschaltung festlegen
 - [ ] Prüfen, ob 60 W das Peltier oder das gesamte Originalgerät bezeichnet
 
-## Lüfter und Thermik
+## Lüfter, Summer und Thermik
 
 - [ ] Stromaufnahme und Anlaufstrom beider Lüfter messen
 - [ ] Luftführung und Nachlaufzeit festlegen
 - [ ] Temperaturgleichmässigkeit an mehreren Positionen messen
 - [ ] Kondensatführung im Kühlbetrieb vorsehen
+- [ ] aktiven 5-V- oder 12-V-Summer auswaehlen
+- [ ] Stromaufnahme und Lautstaerke des Summers pruefen
+- [ ] freien MOSFET-Kanal oder separate Treiberstufe fuer den Summer festlegen
+- [ ] sichere Ausgangslage des Summers bei Boot und Reset pruefen
 
 ## Programme
 
-- [ ] Namen der finalen 4–5 Programme festlegen
+- [x] Vier Standardprogramme festgelegt
+- [x] Produkt- und luftgefuehrten Betrieb als zulaessige Modi festgelegt
+- [x] Optionales Vorheizen mit zweiter Startbestaetigung festgelegt
+- [x] Zielqualifikation von der Fermentationszeit getrennt
 - [ ] Zieltemperaturen und Zeiten festlegen
-- [ ] Stabilisierungskriterien festlegen
+- [ ] Zielband, Qualifikationsdauer und Ausreisser-Gnadenzeit festlegen
+- [ ] maximale Zielerreichungszeit pro Programm festlegen
+- [ ] Warnschwellen fuer Temperaturabweichungen festlegen
 - [ ] Kühlziel je Programm festlegen
-- [ ] Verhalten nach `FINISHED` festlegen
+- [ ] Verhalten nach `FINISHED` je Programm festlegen
 
 ## Mechanik
 
@@ -62,6 +77,8 @@
 - [ ] Elektronik vor Feuchtigkeit/Kondensat schützen
 - [ ] Sensor- und Leistungskabel räumlich trennen
 - [ ] Servicezugang für FT232RL und Sicherung vorsehen
+- [ ] Anschlussposition fuer den abnehmbaren Produktfuehler festlegen
+- [ ] Position und Schallaustritt fuer den Summer festlegen
 
 ## Firmware
 
@@ -70,4 +87,6 @@
 - [ ] Zustands- und Fehlercode-Modell implementieren und nativ testen
 - [ ] Persistenzformat und Validierungsstrategie festlegen
 - [ ] Verhalten des Aussenluefters je Fehlerart festlegen
+- [ ] Sensorwechsel oder Sensorausfall waehrend eines Laufs festlegen
+- [ ] Warnungen, Quittierung und Summermuster festlegen
 - [ ] Web-API, OTA-Schutz und Access-Point-Einrichtung festlegen
