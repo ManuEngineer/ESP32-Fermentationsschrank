@@ -1,61 +1,95 @@
-# Beispielstruktur. Prozesswerte sind noch nicht final festgelegt.
-schema_version: 1
+# Spezifikationsbeispiel. Exakte Prozesswerte folgen erst bei der Inbetriebnahme.
+# TBD_COMMISSIONING ist kein gueltiger Laufzeitwert der fertigen Firmware.
+schema_version: 2
 
 programs:
-  - id: 1
+  - id: yogurt-mild
     name: Joghurt mild
+    built_in: true
+    resettable: true
     enabled: true
-    fermentation_temperature_c: TBD
-    fermentation_duration_min: TBD
-    stabilization_band_c: 0.3
-    stabilization_duration_min: 10
-    cool_after_finish: true
-    cooling_target_c: TBD
-    max_air_temperature_c: TBD
+    defaults:
+      preheat: true
+      sensor_preference: product_if_available_else_air
+      fermentation_temperature_c: TBD_COMMISSIONING
+      fermentation_duration_min: TBD_COMMISSIONING
+      target_qualification_band_c: TBD_COMMISSIONING
+      target_qualification_duration_min: TBD_COMMISSIONING
+      max_target_reach_min: TBD_COMMISSIONING
+      completion:
+        mode: cool_and_hold_until_manual_stop
+        cooling_target_c: TBD_COMMISSIONING
 
-  - id: 2
+  - id: yogurt-firm
     name: Joghurt stichfest
+    built_in: true
+    resettable: true
     enabled: true
-    fermentation_temperature_c: TBD
-    fermentation_duration_min: TBD
-    stabilization_band_c: 0.3
-    stabilization_duration_min: 10
-    cool_after_finish: true
-    cooling_target_c: TBD
-    max_air_temperature_c: TBD
+    defaults:
+      preheat: true
+      sensor_preference: product_if_available_else_air
+      fermentation_temperature_c: TBD_COMMISSIONING
+      fermentation_duration_min: TBD_COMMISSIONING
+      target_qualification_band_c: TBD_COMMISSIONING
+      target_qualification_duration_min: TBD_COMMISSIONING
+      max_target_reach_min: TBD_COMMISSIONING
+      completion:
+        mode: cool_and_hold_until_manual_stop
+        cooling_target_c: TBD_COMMISSIONING
 
-  - id: 3
+  - id: milk-kefir
     name: Milchkefir
+    built_in: true
+    resettable: true
     enabled: true
-    fermentation_temperature_c: TBD
-    fermentation_duration_min: TBD
-    stabilization_band_c: 0.5
-    stabilization_duration_min: 10
-    cool_after_finish: true
-    cooling_target_c: TBD
-    max_air_temperature_c: TBD
+    defaults:
+      preheat: false
+      sensor_preference: air_product_optional
+      fermentation_temperature_c: TBD_COMMISSIONING
+      fermentation_duration_min: TBD_COMMISSIONING
+      target_qualification_band_c: TBD_COMMISSIONING
+      target_qualification_duration_min: TBD_COMMISSIONING
+      max_target_reach_min: TBD_COMMISSIONING
+      completion:
+        mode: cool_and_hold_until_manual_stop
+        cooling_target_c: TBD_COMMISSIONING
 
-  - id: 4
+  - id: water-kefir
     name: Wasserkefir
+    built_in: true
+    resettable: true
     enabled: true
-    fermentation_temperature_c: TBD
-    fermentation_duration_min: TBD
-    stabilization_band_c: 0.5
-    stabilization_duration_min: 10
-    cool_after_finish: false
-    cooling_target_c: null
-    max_air_temperature_c: TBD
+    defaults:
+      preheat: false
+      sensor_preference: air_product_optional
+      fermentation_temperature_c: TBD_COMMISSIONING
+      fermentation_duration_min: TBD_COMMISSIONING
+      target_qualification_band_c: TBD_COMMISSIONING
+      target_qualification_duration_min: TBD_COMMISSIONING
+      max_target_reach_min: TBD_COMMISSIONING
+      completion:
+        mode: finish_without_cooling
+        cooling_target_c: null
 
-  - id: 5
-    name: Kombucha oder Benutzerprogramm
-    enabled: true
-    fermentation_temperature_c: TBD
-    fermentation_duration_min: TBD
-    stabilization_band_c: 0.5
-    stabilization_duration_min: 15
-    cool_after_finish: false
-    cooling_target_c: null
-    max_air_temperature_c: TBD
+program_management:
+  additional_user_programs_allowed: true
+  fixed_program_count: false
+  user_programs_may_be_created_from:
+    - empty_template
+    - copy_of_standard_program
+    - copy_of_user_program
+
+allowed_values:
+  sensor_preference:
+    - product_if_available_else_air
+    - air_product_optional
+    - product_required
+    - air_only
+  completion_mode:
+    - finish_without_cooling
+    - cool_then_finish
+    - cool_and_hold_for_duration
+    - cool_and_hold_until_manual_stop
 
 validation_limits:
   fermentation_temperature_c:
@@ -64,7 +98,7 @@ validation_limits:
   fermentation_duration_min:
     min: 1
     max: 20160
-  stabilization_band_c:
+  target_qualification_band_c:
     min: 0.1
     max: 2.0
   cooling_target_c:
