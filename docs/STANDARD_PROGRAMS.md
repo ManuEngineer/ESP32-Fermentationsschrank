@@ -2,8 +2,8 @@
 
 ## Status
 
-Dieses Dokument definiert Zweck und Grundcharakter der mitgelieferten
-Standardprogramme. Die exakten Temperaturen, Zeiten, Zielbaender und
+Dieses Dokument definiert Zweck, Grundcharakter und Standardablauf der
+mitgelieferten Programme. Die exakten Temperaturen, Zeiten, Zielbaender und
 Kuehlparameter werden erst waehrend der Inbetriebnahme und praktischen Erprobung
 festgelegt.
 
@@ -33,6 +33,19 @@ Fuer jedes Standardprogramm gilt:
 Die Software darf nicht voraussetzen, dass ein bestimmtes Kulturprodukt
 verwendet wird. Hinweise auf Kulturen oder Hersteller gehoeren spaeter hoechstens
 in optionale Notizen eines Programms.
+
+## Akzeptierte Standardablaeufe
+
+| Programm | Vorheizen | Sensorvorschlag | Standard nach Fermentation |
+|---|---|---|---|
+| Joghurt mild | EIN | Produkt, falls vorhanden; sonst Luft | aktiv kuehlen und bis zur manuellen Beendigung gekuehlt halten |
+| Joghurt stichfest | EIN | Produkt, falls vorhanden; sonst Luft | aktiv kuehlen und bis zur manuellen Beendigung gekuehlt halten |
+| Milchkefir | AUS | Luft; Produkt optional | aktiv kuehlen und bis zur manuellen Beendigung gekuehlt halten |
+| Wasserkefir | AUS | Luft; Produkt optional | beenden; aktive Kuehlung bleibt optional |
+
+Diese Werte sind Voreinstellungen. Sie werden vor dem Start angezeigt und
+koennen fuer den einzelnen Lauf geaendert werden, ohne dadurch zwingend die
+gespeicherte Werkseinstellung zu ueberschreiben.
 
 ## Umgang mit noch offenen Prozesswerten
 
@@ -68,11 +81,10 @@ FAIE-Kultur MILD oder eine andere konkrete Kultur festgelegt.
 
 ### Vorgesehener Grundcharakter
 
-- Vorheizen des leeren Schrankes standardmaessig sinnvoll
-- luftgefuehrter Betrieb muss voll unterstuetzt werden
-- produktgefuehrter Betrieb ist bei geeignetem angeschlossenem Produktfuehler
-  moeglich
-- nach Ablauf soll aktive Kuehlung als konfigurierbare Option vorhanden sein
+- Vorheizen des leeren Schrankes standardmaessig EIN
+- Produktfuehler, falls vorhanden; sonst voll unterstuetzter luftgefuehrter Betrieb
+- nach Ablauf standardmaessig aktiv kuehlen
+- anschliessend bis zur manuellen Beendigung gekuehlt halten
 - konkrete Zieltemperatur, Dauer und Kuehlwerte: `TBD_COMMISSIONING`
 
 ### Nicht festgelegt
@@ -92,11 +104,12 @@ stichfeste Konsistenz angestrebt wird.
 
 ### Vorgesehener Grundcharakter
 
-- Vorheizen des leeren Schrankes standardmaessig sinnvoll
+- Vorheizen des leeren Schrankes standardmaessig EIN
+- Produktfuehler, falls vorhanden; sonst voll unterstuetzter luftgefuehrter Betrieb
 - gleichmaessige Temperaturfuehrung und moeglichst geringe Stoerungen waehrend
   der Fermentation
-- luftgefuehrter und produktgefuehrter Betrieb moeglich
-- aktive Kuehlung nach Ablauf als konfigurierbare Option
+- nach Ablauf standardmaessig aktiv kuehlen
+- anschliessend bis zur manuellen Beendigung gekuehlt halten
 - konkrete Zieltemperatur, Dauer und Kuehlwerte: `TBD_COMMISSIONING`
 
 Das Programm allein garantiert keine Stichfestigkeit. Kultur, Milch,
@@ -111,12 +124,13 @@ Kultur.
 
 ### Vorgesehener Grundcharakter
 
-- Vorheizen standardmaessig eher optional
+- Vorheizen standardmaessig AUS
+- luftgefuehrter Betrieb als Standard
+- produktgefuehrter Betrieb optional
 - Zieltemperatur kann je nach Ausgangslage durch Heizen oder Kuehlen erreicht
   werden
-- luftgefuehrter Betrieb muss voll unterstuetzt werden
-- produktgefuehrter Betrieb optional
-- Abschluss ohne Kuehlung oder mit anschliessender Kuehlung konfigurierbar
+- nach Ablauf standardmaessig aktiv kuehlen
+- anschliessend bis zur manuellen Beendigung gekuehlt halten
 - konkrete Zieltemperatur, Dauer und Kuehlwerte: `TBD_COMMISSIONING`
 
 ## Wasserkefir
@@ -127,11 +141,12 @@ Allgemeines Programm fuer Wasserkefir.
 
 ### Vorgesehener Grundcharakter
 
-- Vorheizen standardmaessig eher optional
-- luftgefuehrter Betrieb ist der normale Ausgangspunkt
-- produktgefuehrter Betrieb bleibt technisch moeglich
-- aktive Kuehlung nach Ablauf ist optional und nicht zwingender Standard
-- konkrete Zieltemperatur, Dauer und Kuehlwerte: `TBD_COMMISSIONING`
+- Vorheizen standardmaessig AUS
+- luftgefuehrter Betrieb als Standard
+- produktgefuehrter Betrieb optional
+- nach Ablauf standardmaessig beenden und akustisch sowie optisch melden
+- aktive Kuehlung nach Ablauf bleibt als aenderbare Option verfuegbar
+- konkrete Zieltemperatur, Dauer und optionale Kuehlwerte: `TBD_COMMISSIONING`
 
 ## Benutzerprogramme
 
@@ -159,12 +174,18 @@ abhaengig.
 - [x] konkrete Laufzeitwerte duerfen in der fertigen Firmware nicht fehlen
 - [x] Kultur- und Rezeptdetails koennen spaeter als optionale Notizen oder
       Benutzerprogramme abgebildet werden
+- [x] Joghurtprogramme: Vorheizen EIN, Produktfuehler falls vorhanden, danach
+      kuehlen und halten
+- [x] Milchkefir: Vorheizen AUS, Luftregelung als Standard, danach kuehlen und
+      halten
+- [x] Wasserkefir: Vorheizen AUS, Luftregelung als Standard, danach beenden;
+      Kuehlung optional
 
 ## Noch offen
 
-- vorlaeufige Werkseinstellungen nach Inbetriebnahme
+- vorlaeufige Zahlenwerte nach Inbetriebnahme
 - globale oder programmspezifische Zielbaender
 - Qualifikationsdauer
 - maximale Zielerreichungszeit
-- Standard-Abschlussverhalten je Programm
-- Kuehlziel und Kuehlhalteverhalten
+- konkrete Kuehlzieltemperatur
+- spaetere Feinabstimmung anhand der tatsaechlich verwendeten Kulturen
