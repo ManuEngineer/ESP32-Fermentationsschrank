@@ -27,7 +27,8 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md): Unterbrechungen, Sensorersatz, Zeitquelle und automatischer Wiederanlauf
 - [`RUNTIME_BEHAVIOR.md`](RUNTIME_BEHAVIOR.md): Luefter, Richtungswechsel, Meldungsprioritaeten und akustische Signale
 - [`LOCAL_UI.md`](LOCAL_UI.md): lokale Touch-Grundlagen und Hauptbildschirme
-- [`LOCAL_UI_PROGRAMS.md`](LOCAL_UI_PROGRAMS.md): lokale Programmauswahl, Bearbeitung, Loeschen und Werkswiederherstellung
+- [`LOCAL_PROGRAMS.md`](LOCAL_PROGRAMS.md): lokale Programmauswahl und Programmverwaltung
+- [`LOCAL_RUNTIME_UI.md`](LOCAL_RUNTIME_UI.md): Laufdetails, Meldungen, Stoppen und Wiederanlaufanzeige
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -35,7 +36,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 1. **Produktvision und Nutzung** -> `PRODUCT_VISION.md`
 2. **Programme und Prozessablauf** -> `PROGRAMS.md`, `STANDARD_PROGRAMS.md` und Programmschema
 3. **Betriebszustaende und Uebergaenge** -> `STATE_MACHINE.md`, `RECOVERY_AND_INTERRUPTION.md`, `RUNTIME_BEHAVIOR.md`
-4. **Lokale Touch-Bedienung** -> `LOCAL_UI.md`, `LOCAL_UI_PROGRAMS.md`
+4. **Lokale Touch-Bedienung** -> `LOCAL_UI.md`, `LOCAL_PROGRAMS.md`, `LOCAL_RUNTIME_UI.md`
 5. **Weboberflaeche und Netzwerk** -> `WEB_UI.md`, `NETWORK.md`
 6. **Einstellungen und Persistenz** -> `SETTINGS_AND_STORAGE.md`
 7. **Temperaturregelung und Aktorlogik** -> `TEMPERATURE_CONTROL.md`
@@ -69,7 +70,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [ ] Phase 4: Lokale Bedienung
   - [x] Phase 4A: Displayausrichtung, Hauptbildschirm, Navigation, Temperaturen und Eingabeverhalten
   - [x] Phase 4B: Programmauswahl, Programmverwaltung, Loeschen und Startablauf
-  - [ ] Phase 4C: Laufdetails, Meldungen, Stoppen und Wiederanlaufanzeige
+  - [x] Phase 4C: Laufdetails, Meldungen, Stoppen und Wiederanlaufanzeige
   - [ ] Phase 4D: Menue, Einstellungen, Diagnose, Service und Touchkalibrierung
 - [ ] Phase 5: Web und Netzwerk
 - [ ] Phase 6: Einstellungen und Persistenz
@@ -80,4 +81,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 4C bearbeitet: Laufdetails, Meldungen, Stoppen und Wiederanlaufanzeige.
+Als Naechstes wird Phase 4D bearbeitet: Menue, Einstellungen, Diagnose, Service und Touchkalibrierung.
