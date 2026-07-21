@@ -1,6 +1,6 @@
 # Spezifikationsbeispiel. Exakte Prozesswerte folgen erst bei der Inbetriebnahme.
 # TBD_COMMISSIONING ist kein gueltiger Laufzeitwert der fertigen Firmware.
-schema_version: 2
+schema_version: 3
 
 programs:
   - id: yogurt-mild
@@ -11,6 +11,9 @@ programs:
     defaults:
       preheat: true
       sensor_preference: product_if_available_else_air
+      product_sensor_failure:
+        policy: fallback_to_air_after_timeout
+        fallback_delay_s: TBD_COMMISSIONING
       fermentation_temperature_c: TBD_COMMISSIONING
       fermentation_duration_min: TBD_COMMISSIONING
       target_qualification_band_c: TBD_COMMISSIONING
@@ -28,6 +31,9 @@ programs:
     defaults:
       preheat: true
       sensor_preference: product_if_available_else_air
+      product_sensor_failure:
+        policy: fallback_to_air_after_timeout
+        fallback_delay_s: TBD_COMMISSIONING
       fermentation_temperature_c: TBD_COMMISSIONING
       fermentation_duration_min: TBD_COMMISSIONING
       target_qualification_band_c: TBD_COMMISSIONING
@@ -45,6 +51,9 @@ programs:
     defaults:
       preheat: false
       sensor_preference: air_product_optional
+      product_sensor_failure:
+        policy: fallback_to_air_after_timeout
+        fallback_delay_s: TBD_COMMISSIONING
       fermentation_temperature_c: TBD_COMMISSIONING
       fermentation_duration_min: TBD_COMMISSIONING
       target_qualification_band_c: TBD_COMMISSIONING
@@ -62,6 +71,9 @@ programs:
     defaults:
       preheat: false
       sensor_preference: air_product_optional
+      product_sensor_failure:
+        policy: fallback_to_air_after_timeout
+        fallback_delay_s: TBD_COMMISSIONING
       fermentation_temperature_c: TBD_COMMISSIONING
       fermentation_duration_min: TBD_COMMISSIONING
       target_qualification_band_c: TBD_COMMISSIONING
@@ -85,6 +97,10 @@ allowed_values:
     - air_product_optional
     - product_required
     - air_only
+  product_sensor_failure_policy:
+    - fallback_to_air_after_timeout
+    - wait_for_user
+    - stop_to_safe_state
   completion_mode:
     - finish_without_cooling
     - cool_then_finish
@@ -101,6 +117,9 @@ validation_limits:
   target_qualification_band_c:
     min: 0.1
     max: 2.0
+  product_sensor_fallback_delay_s:
+    min: 0
+    max: 3600
   cooling_target_c:
     min: 4
     max: 25
