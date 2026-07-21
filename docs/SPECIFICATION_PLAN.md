@@ -35,6 +35,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`NETWORK_DIAGNOSTICS_INTEGRATION.md`](NETWORK_DIAGNOSTICS_INTEGRATION.md): Netzwerkdiagnose, VPN, Reverse Proxy, Proxy-Vertrauen und Lese-API
 - [`SETTINGS_AND_STORAGE.md`](SETTINGS_AND_STORAGE.md): Konfigurationsebenen, Aenderungsrechte, Validierung und atomare Speicherung
 - [`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md): Laufzustand, Kontrollpunkte, Messhistorie und Wiederherstellung
+- [`BACKUP_SECURITY_RETENTION.md`](BACKUP_SECURITY_RETENTION.md): Geheimnisse, Sicherung, Import, Aufbewahrung und Werksreset
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -44,7 +45,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 3. **Betriebszustaende und Uebergaenge** -> `STATE_MACHINE.md`, `RECOVERY_AND_INTERRUPTION.md`, `RUNTIME_BEHAVIOR.md`
 4. **Lokale Touch-Bedienung** -> `LOCAL_UI.md`, `LOCAL_PROGRAMS.md`, `LOCAL_RUNTIME_UI.md`, `LOCAL_UI_SETTINGS_SERVICE.md`
 5. **Weboberflaeche und Netzwerk** -> `WEB_UI.md`, `NETWORK.md`, `NETWORK_DIAGNOSTICS_INTEGRATION.md`
-6. **Einstellungen und Persistenz** -> `SETTINGS_AND_STORAGE.md`, `RUN_PERSISTENCE.md`
+6. **Einstellungen und Persistenz** -> `SETTINGS_AND_STORAGE.md`, `RUN_PERSISTENCE.md`, `BACKUP_SECURITY_RETENTION.md`
 7. **Temperaturregelung und Aktorlogik** -> `TEMPERATURE_CONTROL.md`
 8. **Sicherheit und Fehlerbehandlung** -> `SAFETY_AND_FAULTS.md`
 9. **Diagnose, Wartung und Updates** -> `DIAGNOSTICS_AND_MAINTENANCE.md`
@@ -82,10 +83,10 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 5A: WLAN-Ersteinrichtung, QR-Assistent, Ersatz-WLAN, Geraetename und Zugriffsgrundlagen
   - [x] Phase 5B: Weboberflaeche, Anmeldung, Sitzungen und gleichzeitige Bedienung
   - [x] Phase 5C: Netzwerkdiagnose, VPN, Reverse Proxy, Proxy-Vertrauen und lokale Lese-API
-- [ ] Phase 6: Einstellungen und Persistenz
+- [x] Phase 6: Einstellungen und Persistenz
   - [x] Phase 6A: Einstellungsgruppen, Werkseinstellungen und Aenderungsrechte
   - [x] Phase 6B: Laufpersistenz, Speicherzeitpunkte, Messhistorie und Wiederherstellbarkeit
-  - [ ] Phase 6C: Geheimnisse, Sicherung, Export, Reset und Datenaufbewahrung
+  - [x] Phase 6C: Geheimnisse, Sicherung, Export, Reset und Datenaufbewahrung
 - [ ] Phase 7: Temperaturregelung und Aktoren
 - [ ] Phase 8: Sicherheit und Fehler
 - [ ] Phase 9: Diagnose, Wartung und Updates
@@ -93,4 +94,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 6C bearbeitet: Geheimnisse, Sicherung, Export, Reset und Datenaufbewahrung.
+Als Naechstes wird Phase 7 bearbeitet: Temperaturregelung und Aktorlogik.
