@@ -62,6 +62,56 @@ Die bisherige Angabe `2 geplant` in `HARDWARE.md` ist damit ueberholt. Fuer den 
 2. abnehmbares Produkt
 3. Aussenwaermetauscher/Kuehlkoerper
 
+Ein vierter oder fuenfter vorhandener DS18B20 bleibt Reserve und kann spaeter fuer Vergleichsmessungen oder zusaetzliche Diagnose verwendet werden. Er ersetzt keine unabhaengige thermische Notabschaltung.
+
+## Einmalige Temperatursicherung
+
+Fuer den ersten Aufbau wird eine einmalige Temperatursicherung als unabhaengige thermische Rueckfallebene vorgesehen.
+
+Sie ist kein Messsensor und benoetigt keinen GPIO. Sie unterbricht bei ihrer spezifizierten Ausloesetemperatur dauerhaft die Peltier-Leistungsfreigabe beziehungsweise den Peltier-Leistungspfad und muss danach ersetzt werden.
+
+Noch festzulegen und praktisch zu pruefen sind:
+
+- thermisch kritischste Montageposition
+- Ausloesetemperatur mit ausreichendem Abstand zum Normalbetrieb
+- Gleichstrom-, Spannungs- und Stromrating
+- thermische Kopplung
+- elektrische Isolation
+- Schutz gegen Kondensat und Kabelzug
+- Austauschbarkeit im Servicefall
+- sichere Unterbrechung in beiden Peltier-Richtungen
+
+Die Temperatursicherung ergaenzt, aber ersetzt nicht:
+
+- den Kuehlkoerper-DS18B20
+- Software-Sicherheitsgrenzen
+- die 7,5-A-Ueberstromsicherung
+- Luefter- und H-Brueckendiagnose
+
+Nach Ausloesung sind physische Pruefung, Austausch und Ursachenanalyse erforderlich. Eine automatische Wiederfreigabe ist unzulaessig.
+
+## Optionale spaetere 12-V-Spannungsmessung
+
+Das erste Release verlaesst sich fuer die Versorgungserkennung auf ESP32-Brownout und Resetursache. Ein Spannungsteiler am ADC ist keine Pflicht-Hardware.
+
+Die Pinbudget- und Softwarearchitektur sollen eine spaetere 12-V-Messung jedoch nicht verhindern. Eine spaetere Umsetzung benoetigt mindestens:
+
+- geschuetzten Spannungsteiler
+- ADC-Eingang innerhalb der ESP32-Grenzen
+- Filterung und Kalibrierung
+- definierte Unterspannungs- und Instabilitaetsgrenzen
+- Nachweis, dass die Messschaltung die 12-V-Versorgung sicher abbildet
+
+Ohne eingebaute und kalibrierte Messschaltung darf die Firmware keine 12-V-Spannung anzeigen oder daraus Fehler ableiten.
+
+## Sichere BTS7960-Grundbeschaltung
+
+Die BTS7960-Enable- und Richtungseingaenge muessen waehrend Einschalten, Reset, Brownout und UART-Bootloader nachweislich in einem sicheren inaktiven Zustand bleiben.
+
+Vorgesehen sind Hardware-Pulldowns oder eine gleichwertige externe Freigabeschaltung. Eine ausschliessliche Abschaltung in `setup()` ist nicht ausreichend.
+
+Die konkrete Beschaltung wird erst nach Messung des gelieferten Moduls und der verwendeten GPIO-Bootpegel festgelegt.
+
 ## Akustischer Signalgeber
 
 Fuer lokale Warnungen und Aufforderungen wird ein Summer vorgesehen.
