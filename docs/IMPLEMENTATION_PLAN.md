@@ -2,11 +2,15 @@
 
 ## Status
 
-Phase 10B und 10C sind abgeschlossen. Die Software wird vor Eintreffen der
-Hardware weitgehend als nativ testbarer Kern entwickelt. Reale Hardware wird
-spaeter ueber dieselben klar getrennten Adapter integriert.
+Die Software wird vor Eintreffen der Hardware weitgehend als nativ testbarer
+Kern entwickelt. Reale Hardware wird spaeter ueber dieselben klar getrennten
+Adapter integriert.
 
-Die konkrete Struktur steht in [`IMPLEMENTATION_ISSUES.md`](IMPLEMENTATION_ISSUES.md).
+Die konkrete Issue-Struktur steht in
+[`IMPLEMENTATION_ISSUES.md`](IMPLEMENTATION_ISSUES.md). Die verbindlichen
+Korrekturen aus den Reviews von PR #38 stehen in
+[`PR38_REVIEW_CORRECTIONS.md`](PR38_REVIEW_CORRECTIONS.md).
+
 Die Implementierung beginnt erst nach Merge von PR #38. Erstes Issue ist #9.
 
 ## Grundentscheidung
@@ -15,7 +19,7 @@ Die Implementierung beginnt erst nach Merge von PR #38. Erstes Issue ist #9.
 Softwarekern zuerst und mit Simulation entwickeln
 + reale Hardware hinter klaren Schnittstellen kapseln
 + dieselbe Codebasis spaeter in einem geschuetzten Bring-up-Profil verwenden
-+ Aktoren erst nach elektrischer Verifikation schrittweise freigeben
++ Aktoren erst nach elektrischer und thermischer Verifikation freigeben
 ```
 
 Es gibt kein separates Wegwerf-Testprojekt.
@@ -31,25 +35,27 @@ Es gibt kein separates Wegwerf-Testprojekt.
 - Sensorstatus und Filterlogik
 - PI-Reglerkern
 - Aktorplaner ohne GPIOs
-- Fehler- und Wiederherstellungslogik
-- Persistenztests mit Testbackend
+- Fehler-, Persistenz- und Wiederherstellungslogik
 - Simulation mit virtueller Zeit
+- Fehlerinjektionen fuer Boot, Speicher und Unterbrechungen
 
 ### `esp32_bringup`
 
 - alle Aktoren nach Boot gesperrt
+- sichtbarer Zustand `HARDWARE_UNVERIFIED`
 - kein automatischer Fermentationsstart
 - keine automatische Peltier-, Luefter- oder Summerpruefung
-- einzelne Hardwaretests nur ueber den geschuetzten Serviceablauf
-- noch nicht bestaetigte Ausgaenge gesperrt
+- keine Aktortests aus `SAFE_BOOT`
+- einzelne Hardwaretests nur aus validiertem `STANDBY` ueber den geschuetzten
+  Serviceablauf
+- noch nicht bestaetigte Ausgaenge bleiben gesperrt
 - Diagnose von Flash, Heap, Resetursache, Sensorbussen, Display und Eingaben
-- sichtbarer Zustand `HARDWARE_UNVERIFIED`
 
 ### `esp32_release`
 
 Aktoren sind nur zulaessig, wenn Hardwareprofil, GPIOs, aktive Pegel,
-Bootverhalten, Sensoren, Luefter und Hardwareabnahme bestaetigt sind. Ein Wechsel
-des Buildprofils darf unbekannte Hardware nicht automatisch freigeben.
+Bootverhalten, Pflichtsensoren, Luefter und Hardwareabnahme bestaetigt sind. Ein
+Wechsel des Buildprofils darf unbekannte Hardware nicht automatisch freigeben.
 
 ## Architektur fuer Entwicklung ohne Hardware
 
@@ -71,23 +77,27 @@ IResourceMonitor
 
 ESP32-Adapter und native Mockadapter implementieren dieselben Schnittstellen.
 
-## Simulierte Hardware
+## Simulierte Hardware und Fehler
 
 Vor Hardwareankunft werden mindestens simuliert:
 
 - Schrankluft-, Produkt- und Kuehlkoerpersensor
-- `VALID`, `STALE`, `FAILED`
+- Sensorstatus `VALID`, `STALE`, `FAILED`
 - langsame und schnelle Temperaturverlaeufe
 - Heizen, Neutralbereich und Kuehlen
 - Innen- und Aussenluefter
 - BTS7960 als abstrakter Aktor
 - Stromausfall und Neustart
 - fehlende und spaeter eintreffende NTP-Zeit
-- Persistenzfehler
+- Ausfallzeit als Unter-/Obergrenze
+- persistierte Verriegelung und Bootschleife
+- unvollstaendige Persistenztransaktion
+- kritischer Persistenzschreibfehler
+- Wiederherstellung von `COMPLETED`
 - Aktionen von Display und Web
 
 Das thermische Simulationsmodell prueft Softwareablaeufe. Es liefert keine realen
-PI- oder Sicherheitsparameter.
+PI-, Prozess- oder Sicherheitsparameter.
 
 ## Aktorkette vor Hardwareankunft
 
@@ -95,7 +105,7 @@ PI- oder Sicherheitsparameter.
 Regleranforderung
 -> Luftbegrenzung
 -> Sicherheitsfreigabe
--> Mindest-Ein-/Auszeit
+-> Mindest-Einschaltzeit und Mindest-Ausschaltzeit
 -> Richtungswechselbestaetigung
 -> Totzeit
 -> Impulsakkumulator
@@ -104,66 +114,51 @@ Regleranforderung
 
 Der letzte Schritt endet bei einem Mock oder Ereignisprotokoll.
 
-## Vor Hardwareankunft entwickelbar
+## Verbindliche Boot- und Persistenzkette
 
-- Repositorystruktur, PlatformIO-Profile und CI
-- native Tests und virtuelle Zeit
-- Datenmodelle, Fehlercodes und Versionen
-- Programmschema und Standardprogramme mit `TBD_COMMISSIONING`
-- Zustandsmaschine und Prozessablaeufe
-- Start, Stop, Quittierung und Laufanpassungen
-- Sensorqualitaet, Filter und Plausibilitaet
-- PI-Regler und Aktorplaner
-- Totzeit und Richtungswechsel
-- Sicherheits- und Verriegelungslogik
-- Konfiguration, Persistenz und Wiederanlauf
-- Journale, Aufbewahrung und Bereinigung
-- Sprachressourcen
-- lokale UI-Modelle und Navigation
-- Web-API-Vertraege und Weboberflaeche gegen Simulation
-- Diagnose, Exporte und Serviceablauf mit gesperrtem Hardwarebackend
-- Fehlerinjektionen und vollstaendige simulierte Laeufe
+```text
+BOOT
+-> alle Ausgaenge AUS
+-> Resetursache und Bootschleife pruefen
+-> persistierte Verriegelungen pruefen
+-> kritischen Speicher und Transaktionsmarker pruefen
+-> Konfiguration und Laufrevisionen validieren
+-> COMPLETED wiederherstellen oder aktive Recovery bewerten
+-> Recoveryentscheidung atomar speichern
+-> erst danach eine neue Aktoraktion freigeben
+```
 
-## Erst real verifizierbar
-
-- Boardrevision, Flash und Partition
-- GPIOs, Pegel und Bootverhalten
-- BTS7960-Pins, Pulldowns und R_IS/L_IS
-- 1-Wire-Busse und Hot-Plug
-- Display- und Touchcontroller
-- reale Heap-, Flash- und Laufzeitwerte
-- Luefterstrom und Anlauf
-- Peltierstrom, Polaritaet und thermische Leistung
-- PI-Parameter, Filterzeiten und Grenzwerte
-- Temperatursicherung und Montageort
-- reale Standardprogrammwerte
-
-Diese Punkte bleiben `TBD_HARDWARE`, `TBD_COMMISSIONING` oder
-`TBD_IMPLEMENTATION_BUDGET`.
+Ein Neustart ist kein Fehlerreset. `SAFE_BOOT` bleibt aktorfrei.
 
 ## Softwarefolge vor der Hardware
 
 ### SW0: Grundlage
 
 - Profile `native`, `esp32_bringup`, `esp32_release`
-- CI und Tests
+- CI und native Tests
 - Hardwareabstraktionen und Mocks
-- virtuelle Zeit
-- Fehler- und Ergebnistypen
+- virtuelle monotone und optionale UTC-Zeit
+- Fehler-, Ergebnis- und Revisionsmodelle
 
 ### SW1: Fachlicher Kern
 
-- Programme und Laufschnappschuss
-- Zustandsmaschine
+- Programme und unveraenderlicher Laufschnappschuss
+- kanonische Zustandsmaschine
 - Start, Stop und Abschluss
-- Meldungen, Quittierung und Reset
+- Meldungen, Quittierung und Fehlerreset
+- `COMPLETED`-Wiederherstellung
 - simulierte Standardablaeufe
 
-### SW2: Persistenz
+### SW2: Persistenz und Recovery
 
 - Factory-, Benutzer- und Laufdaten
 - atomare Revisionen und Rueckfall
-- Kontrollpunkte und Wiederanlauf
+- Transaktionsabsicht vor aktorwirksamen Zustandsaenderungen
+- Kontrollpunkte
+- reservierter Persistenzfehler-Latch
+- Bootpruefung auf unvollstaendige Transaktionen
+- Ausfallzeit als Unsicherheitsintervall
+- Recovery ohne erfundenen Fortschritt
 - Aufbewahrung und Bereinigung
 
 ### SW3: Sensor, Regelung und Sicherheit
@@ -171,7 +166,8 @@ Diese Punkte bleiben `TBD_HARDWARE`, `TBD_COMMISSIONING` oder
 - Sensorqualitaet und Filter
 - PI-Regler und Luftbegrenzung
 - Aktorplaner, Mindestzeiten und Totzeit
-- Fehlerklassen, Verriegelung und `SAFE_BOOT`
+- Fehlerklassen und persistente Verriegelung
+- `SAFE_BOOT`
 - Fehlerinjektionen
 
 ### SW4: Bedienung
@@ -181,12 +177,16 @@ Diese Punkte bleiben `TBD_HARDWARE`, `TBD_COMMISSIONING` oder
 - Weboberflaeche und lokale API
 - Mehrsprachigkeit
 - Bedienkonflikte und Berechtigungen
+- Anzeige des Ausfallintervalls und ausstehender Benutzerentscheidung
+- PIN-unabhaengiger lokaler Vollreset als Recoveryablauf
 
 ### SW5: Diagnose und Exporte
 
 - Diagnosemodell
 - Lauf-, Diagnose- und Servicebericht
 - gefuehrter Serviceablauf mit Mockbackend
+- passive `SAFE_BOOT`-Diagnose
+- Testprotokoll fuer elektrische und thermische Freigaben
 - vorlaeufige Ressourcenbudgets
 
 Die Abschnitte werden in kleinen vertikalen Funktionsscheiben umgesetzt und
@@ -198,15 +198,17 @@ duerfen teilweise parallel laufen.
 
 - Platinenrevision und Modulbeschriftung
 - Verdrahtungsplan und Fotos
-- Versorgung, Masse, Stecker, Sicherung und Leitungen
+- Versorgung, Masse, Stecker, Sicherungen und Leitungen
+- Montagekonzept fuer Kuehlkoerper und einmalige Temperatursicherung
 
 ### H1: Controller ohne Aktoren
 
-- Flashen und Recovery
+- Flashen und UART-Recovery
 - Flash, Partition und Ressourcen
 - GPIOs unbelastet messen
 - Boot-, Reset- und Bootloaderpegel
 - Onboard-MOSFET-Ausgaenge unbelastet
+- `SAFE_BOOT` und PIN-unabhaengigen Vollreset ohne Aktorwirkung pruefen
 
 ### H2: Sensoren, Display und Touch
 
@@ -214,6 +216,8 @@ duerfen teilweise parallel laufen.
 - Bustopologie und Produkt-Hot-Plug
 - Displaycontroller und Rotation
 - Touchcontroller und Kalibrierung
+- physische Recoverygeste beziehungsweise alternativen lokalen Resetweg
+  verifizieren
 
 ### H3: Luefter und Summer
 
@@ -221,6 +225,7 @@ duerfen teilweise parallel laufen.
 - Verbraucher einzeln anschliessen
 - Strom, Anlauf, Pegel und Nachlauf
 - Boot und Reset mit Verbraucher
+- Aussenluefter als Voraussetzung fuer den spaeteren Peltier-Test abnehmen
 
 ### H4: BTS7960 ohne Peltier
 
@@ -228,35 +233,50 @@ duerfen teilweise parallel laufen.
 - Enable- und Richtungseingaenge
 - Pulldowns
 - Ausgang und Polaritaet mit Multimeter
+- gleichzeitige Richtungen hardware- und softwareseitig ausschliessen
 - R_IS/L_IS erst nach Pegelpruefung
+- Reset und `SAFE_BOOT` mit sicher deaktivierter H-Bruecke pruefen
 
 ### H5: Begrenzte Peltierpulse
 
-Voraussetzungen:
+Vor **jeder ersten realen Bestromung des Peltiers** muessen vorhanden und
+geprueft sein:
 
-- 7,5-A-Sicherung
-- beide Luefter geprueft
-- Schrankluft- und Kuehlkoerpersensor gueltig
-- Waermetauscher und thermische Kopplung montiert
-- Richtung bestaetigt
+- geeignete 7,5-A-Ueberstromsicherung
+- montierte einmalige Temperatursicherung als von der Firmware unabhaengige
+  thermische Abschaltung
+- dokumentierter Montageort und bestandene Durchgangspruefung der
+  Temperatursicherung
+- korrekt montierter Kuehlkoerper und Waermetauscher
+- funktionsgepruefter Aussenluefter; Innenluefter gemaess Testaufbau
+- gueltiger Schrankluft- und Kuehlkoerpersensor
+- bestaetigte BTS7960-Pinbelegung, AUS-Pegel, Enable-Verhalten und Polaritaet
+- stabile, abgesicherte Versorgung
+- validiertes `STANDBY` und PIN-geschuetzter Serviceablauf
+
+Rating und genauer Montageort der Temperatursicherung bleiben
+`TBD_COMMISSIONING`; ihre Installation vor dem ersten Puls ist verbindlich.
 
 Ablauf:
 
 ```text
-begrenzter Heizpuls
--> AUS
+alle Vorbedingungen erneut pruefen
+-> begrenzter Heizpuls
+-> Peltier und beide Richtungen AUS
 -> Aussenluefternachlauf
--> Mindest-Auszeit und Totzeit
+-> Mindest-Ausschaltzeit und Totzeit
 -> begrenzter Kuehlpuls
--> AUS
+-> Peltier und beide Richtungen AUS
 -> Nachlauf
+-> thermische Reaktion und Fehlerpfade dokumentieren
 ```
 
-Die erste reale Peltierfreigabe erfolgt nur im Bring-up-/Servicemodus.
+Die erste reale Peltierfreigabe erfolgt ausschliesslich im Bring-up-/Servicemodus
+aus validiertem `STANDBY`. `SAFE_BOOT` kann keinen solchen Puls ausloesen.
 
 ## Entwicklungsstil
 
-Kleine vertikale Funktionsscheiben:
+Kleine vertikale Funktionsscheiben, beispielsweise:
 
 ```text
 Produktfuehler-Mock
@@ -268,15 +288,15 @@ Produktfuehler-Mock
 -> automatische Tests
 ```
 
-Spaeter wird der reale DS18B20-Adapter hinter derselben Schnittstelle ergaenzt.
+Der reale Adapter wird spaeter hinter derselben Schnittstelle ergaenzt.
 
 ## Branch- und PR-Strategie
 
 - PR #38 zuerst nach `main` mergen
-- danach Branch pro Implementierungs-Issue
+- danach ein Branch pro Implementierungs-Issue
 - kleine pruefbare PRs
 - keine umfangreiche direkte Implementierung auf `main`
-- Hardwareblockaden als `BLOCKED_HARDWARE`
+- Hardwareblockaden als `BLOCKED_HARDWARE` sichtbar lassen
 
 Erster Branch:
 
@@ -289,10 +309,10 @@ zu Issue #9.
 ## Definition of Done
 
 - Implementierung vollstaendig
-- passende Tests bestanden
+- passende native, simulierte oder reale Tests bestanden
 - ESP32-Build erfolgreich, soweit relevant
 - Ressourcenwirkung geprueft oder sichtbar offen
-- Fehlerfaelle behandelt
+- Fehlerfaelle und Reviewkorrekturen behandelt
 - Dokumentation aktualisiert
 - keine Geheimnisse
 - keine unbestaetigten Hardwareannahmen als Fakten
@@ -306,9 +326,9 @@ wenn die reale Verifikation in einem separaten Issue sichtbar bleibt.
 | Meilenstein | Ergebnis |
 |---|---|
 | M0 | Softwaregrundlage und simuliertes System |
-| M1 | Getesteter Softwarekern |
+| M1 | Getesteter Softwarekern inklusive Boot-, Persistenz- und Recoveryregeln |
 | M2 | Bedienbarer Simulator |
-| M3 | Hardware-Bring-up |
+| M3 | Hardware-Bring-up ohne ungesicherte Peltierfreigabe |
 | M4 | Sichere reale Temperatursteuerung |
 | M5 | Vollstaendige Integration |
 | M6 | Release 1 nach thermischer Abnahme und siebentaegigem Test |
