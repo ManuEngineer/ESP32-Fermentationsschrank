@@ -42,6 +42,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`SAFETY_AND_FAULTS.md`](SAFETY_AND_FAULTS.md): Fehlerklassen, Verriegelung, Quittierung, Reset und Wiederfreigabe
 - [`SAFETY_COMPONENT_FAULTS.md`](SAFETY_COMPONENT_FAULTS.md): Temperatur-, Sensor-, Luefter-, BTS7960- und Peltierfehler
 - [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md): Versorgung, Boot, Watchdogs, Datenintegritaet, SAFE_BOOT und Fehlerjournal
+- [`DIAGNOSTICS_AND_MAINTENANCE.md`](DIAGNOSTICS_AND_MAINTENANCE.md): Diagnoseansichten, Boot-Selbsttest, Servicepruefungen, Exporte und UART-Umfang
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -102,11 +103,11 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 8B: Temperatur-, Sensor-, Luefter- und Aktorfehler
   - [x] Phase 8C: Versorgung, Softwarefehler, sichere Zustaende und Fehlerprotokoll
 - [ ] Phase 9: Diagnose, Wartung und Updates
-  - [ ] Phase 9A: Diagnoseansichten, Servicepruefungen und Exporte
+  - [x] Phase 9A: Diagnoseansichten, Servicepruefungen und Exporte
   - [ ] Phase 9B: Firmwareupdate, OTA, Rollback und Wartungsmodus
   - [ ] Phase 9C: Ressourcenueberwachung, Lebensdauer und vorbeugende Wartung
 - [ ] Phase 10: Akzeptanztests und Implementierungsplan
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 9A bearbeitet: Diagnoseansichten, Servicepruefungen und Exporte.
+Als Naechstes wird Phase 9B bearbeitet: Firmwareupdate, OTA, Rollback und Wartungsmodus.
