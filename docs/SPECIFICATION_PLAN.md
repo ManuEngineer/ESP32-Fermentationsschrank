@@ -33,6 +33,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`NETWORK.md`](NETWORK.md): WLAN-Einrichtung, QR-Assistent, Ersatz-WLAN, Geraetename und Zugriffsgrundlagen
 - [`WEB_UI.md`](WEB_UI.md): responsive Weboberflaeche, Anmeldung, Sitzungen, Live-Daten und Konfliktschutz
 - [`NETWORK_DIAGNOSTICS_INTEGRATION.md`](NETWORK_DIAGNOSTICS_INTEGRATION.md): Netzwerkdiagnose, VPN, Reverse Proxy, Proxy-Vertrauen und Lese-API
+- [`SETTINGS_AND_STORAGE.md`](SETTINGS_AND_STORAGE.md): Konfigurationsebenen, Aenderungsrechte, Validierung und atomare Speicherung
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -81,7 +82,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 5B: Weboberflaeche, Anmeldung, Sitzungen und gleichzeitige Bedienung
   - [x] Phase 5C: Netzwerkdiagnose, VPN, Reverse Proxy, Proxy-Vertrauen und lokale Lese-API
 - [ ] Phase 6: Einstellungen und Persistenz
-  - [ ] Phase 6A: Einstellungsgruppen, Werkseinstellungen und Aenderungsrechte
+  - [x] Phase 6A: Einstellungsgruppen, Werkseinstellungen und Aenderungsrechte
   - [ ] Phase 6B: Laufpersistenz, Speicherzeitpunkte und Wiederherstellbarkeit
   - [ ] Phase 6C: Geheimnisse, Sicherung, Export, Reset und Datenaufbewahrung
 - [ ] Phase 7: Temperaturregelung und Aktoren
@@ -91,4 +92,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 6A bearbeitet: Einstellungsgruppen, Werkseinstellungen und Aenderungsrechte.
+Als Naechstes wird Phase 6B bearbeitet: Laufpersistenz, Speicherzeitpunkte und Wiederherstellbarkeit.
