@@ -24,14 +24,15 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`PROGRAMS.md`](PROGRAMS.md): allgemeiner Programm- und Prozessablauf
 - [`STANDARD_PROGRAMS.md`](STANDARD_PROGRAMS.md): Zweck und Voreinstellungen der Standardprogramme
 - [`STATE_MACHINE.md`](STATE_MACHINE.md): Betriebszustaende und Uebergaenge
-- [`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md): Unterbrechungen, Zeitquelle und automatischer Wiederanlauf
+- [`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md): Unterbrechungen, Sensorersatz, Zeitquelle und automatischer Wiederanlauf
+- [`RUNTIME_BEHAVIOR.md`](RUNTIME_BEHAVIOR.md): Luefter, Richtungswechsel, Meldungsprioritaeten und akustische Signale
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
 
 1. **Produktvision und Nutzung** -> `PRODUCT_VISION.md`
 2. **Programme und Prozessablauf** -> `PROGRAMS.md`, `STANDARD_PROGRAMS.md` und Programmschema
-3. **Betriebszustaende und Uebergaenge** -> `STATE_MACHINE.md`, `RECOVERY_AND_INTERRUPTION.md`
+3. **Betriebszustaende und Uebergaenge** -> `STATE_MACHINE.md`, `RECOVERY_AND_INTERRUPTION.md`, `RUNTIME_BEHAVIOR.md`
 4. **Lokale Touch-Bedienung** -> `LOCAL_UI.md`
 5. **Weboberflaeche und Netzwerk** -> `WEB_UI.md`, `NETWORK.md`
 6. **Einstellungen und Persistenz** -> `SETTINGS_AND_STORAGE.md`
@@ -58,11 +59,11 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 2A: allgemeiner Programmablauf, Sensorbetrieb und Vorheizen
   - [x] Phase 2B: allgemeine Standardprogramme und ihre Voreinstellungen
   - [ ] Exakte Temperaturen, Zeiten und Grenzwerte werden nach Inbetriebnahme als Werkseinstellungen ergaenzt
-- [ ] Phase 3: Zustandsmaschine
+- [x] Phase 3: Zustandsmaschine
   - [x] Phase 3A: Grundzustaende, Stoppen, Warnungen und manuelle Betriebsarten
   - [x] Phase 3B: Tuerkontakt, Produktfuehlerausfall, Wartezeit und Wiederanlaufgrundsaetze
   - [x] Phase 3C: Netzwerkzeit, spaetere RTC-Option und autonomer phasenbezogener Wiederanlauf
-  - [ ] Phase 3D: Luefternachlauf, Meldungsprioritaeten und letzte Detailuebergaenge
+  - [x] Phase 3D: Luefternachlauf, Sensorersatz, Meldungsprioritaeten und akustische Signale
 - [ ] Phase 4: Lokale Bedienung
 - [ ] Phase 5: Web und Netzwerk
 - [ ] Phase 6: Einstellungen und Persistenz
@@ -73,4 +74,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 3D bearbeitet: Luefternachlauf, Meldungsprioritaeten und letzte Detailuebergaenge.
+Als Naechstes wird Phase 4 bearbeitet: lokale Touch-Bedienung und Bildschirmablaeufe.
