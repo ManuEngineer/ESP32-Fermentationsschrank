@@ -41,3 +41,23 @@ Bevorzugte Richtung:
 Noch zu pruefen sind Versorgungsspannung, Stromaufnahme, Lautstaerke, Kanalzuordnung, Bootverhalten und mechanische Position.
 
 Der Summer ist eine Warnfunktion. Sicherheitsfehler muessen auch ohne funktionierenden Summer sichtbar behandelt werden.
+
+## Kein Tuerkontakt im ersten Release
+
+Im ersten Release wird kein Tuerkontakt eingebaut.
+
+Die Software darf die Tuerstellung deshalb nicht als bekannt voraussetzen. Eine optionale spaetere Schnittstelle fuer einen Reed- oder Magnetschalter wird nur architektonisch vorgesehen und bleibt ohne bestaetigte Hardware deaktiviert.
+
+Es wird vorerst kein GPIO fuer einen Tuerkontakt reserviert. Eine spaetere Nachruestung muss gegen das dann gueltige Pinbudget geprueft werden.
+
+## Zeitquelle fuer Stromausfallbewertung
+
+Fuer eine automatische Bewertung der Stromausfalldauer wird nach dem Neustart eine verlaessliche Zeitquelle benoetigt.
+
+Noch offen sind:
+
+- Netzwerkzeit mit zuvor gespeichertem Zeitstempel
+- optionales batteriegepuffertes RTC-Modul
+- Verhalten ohne verfuegbare verlaessliche Zeitquelle
+
+Ohne verlaessliche Unterbrechungsdauer darf die Firmware einen unterbrochenen Lauf nicht automatisch fortsetzen. Ein RTC-Modul ist noch nicht als Pflicht-Hardware beschlossen.
