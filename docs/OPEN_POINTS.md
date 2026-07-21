@@ -18,6 +18,9 @@
       korrekt abbildet
 - [ ] GPIO4 und alle weiteren Strapping-Pins aus der Verdrahtung ausschliessen
       oder ihr Bootverhalten explizit nachweisen
+- [ ] Pruefen, ob ein ADC-Pin fuer eine optionale spaetere 12-V-Messung frei bleiben
+      kann; keine Pflicht-Hardware im ersten Aufbau
+- [ ] ESP32-Brownout und Resetursachen auf dem konkreten Board verifizieren
 
 ## Display und Touch
 
@@ -53,6 +56,8 @@
       festlegen
 - [ ] Sensorzustandsgrenzen fuer `VALID`, `STALE` und `FAILED` praktisch bestimmen
 - [ ] Maximal erlaubtes Messwertalter fuer Peltierfreigaben festlegen
+- [ ] Vierten und fuenften DS18B20 als Reserve oder zusaetzliche Diagnose
+      dokumentieren
 
 ## Peltier und BTS7960
 
@@ -60,6 +65,8 @@
 - [ ] Heizrichtung und Kuehlrichtung bestimmen
 - [ ] BTS7960-Modulrevision und Pinbeschriftung pruefen
 - [ ] Enable-Verhalten pruefen
+- [ ] Hardware-Pulldowns oder externe sichere Freigabestufe fuer BTS7960 auslegen
+- [ ] Sicheren Zustand bei Boot, Reset, Brownout und UART-Bootloader messen
 - [ ] Totzeit testen
 - [ ] R_IS und L_IS auf Nutzbarkeit, Pegel, Skalierung, Nullpunkt und Rauschen
       pruefen
@@ -67,7 +74,12 @@
 - [ ] Strom ohne Freigabe, fehlenden Strom und Ueberstrom als Testfaelle pruefen,
       soweit messbar
 - [ ] 7,5-A-Sicherung und Sicherungshalter vorsehen
-- [ ] Unabhaengige Uebertemperaturabschaltung festlegen
+- [ ] Einmalige Temperatursicherung auswaehlen
+- [ ] Ausloesetemperatur sowie DC-Spannungs- und Stromrating der
+      Temperatursicherung festlegen
+- [ ] Thermisch kritischste Montageposition der Temperatursicherung bestimmen
+- [ ] Sichere Unterbrechung des Peltierpfads in beiden Richtungen nachweisen
+- [ ] Servicezugang fuer den Austausch der Temperatursicherung vorsehen
 - [ ] Pruefen, ob 60 W das Peltier oder das gesamte Originalgeraet bezeichnet
 - [ ] Sicherheits-Eingriffsgrenzen und harte obere/untere Notgrenzen bestimmen
 - [ ] Begrenzte Gegenrichtungs-Rueckfuehrung mit maximal zwei Versuchen testen
@@ -107,7 +119,8 @@
 - [ ] Position des Displays in der Tuer festlegen
 - [ ] Elektronik vor Feuchtigkeit/Kondensat schuetzen
 - [ ] Sensor- und Leistungskabel raeumlich trennen
-- [ ] Servicezugang fuer FT232RL und Sicherung vorsehen
+- [ ] Servicezugang fuer FT232RL, Ueberstromsicherung und Temperatursicherung
+      vorsehen
 - [ ] Anschlussposition fuer den abnehmbaren Produktfuehler festlegen
 - [ ] Montageposition und Kabelfuehrung des Kuehlkoerpersensors festlegen
 - [ ] Position und Schallaustritt fuer den Summer festlegen
@@ -118,6 +131,10 @@
 - [ ] Sichere GPIO-Initialisierung erst nach dieser Verifikation implementieren
 - [ ] Zustands- und Fehlercode-Modell implementieren und nativ testen
 - [x] Fachliches Persistenz-, Sicherungs- und Wiederherstellungsmodell festgelegt
+- [x] Fehlerklassen, Verriegelung, Quittierung und Reset fachlich festgelegt
+- [x] Sensor-, Temperatur-, Luefter-, BTS7960- und Peltierfehler fachlich festgelegt
+- [x] Brownout-, SAFE_BOOT-, Speicherfehler- und Wiederanlaufmodell fachlich
+      festgelegt
 - [ ] Konkreten 4-MB-Partitionsplan fuer Firmware, OTA, Konfiguration, Laufdaten
       und Historie erstellen
 - [ ] Maximales Flash- und RAM-Budget fuer jede Hauptfunktion festlegen
@@ -135,8 +152,14 @@
 - [ ] Kriterien fuer hoechstens einen kontrollierten Software-Neustart bei
       Sensoraufgaben- oder Treiberfehler festlegen
 - [ ] Automatische Neustartschleifen sicher verhindern
+- [ ] Konkrete SAFE_BOOT-Schwelle und Zeitfenster festlegen
+- [ ] Watchdog-Zeiten fuer Sensor-, Regel-, Sicherheits-, Aktor- und
+      Persistenzaufgaben festlegen
 - [ ] Temperaturgrenzen, `SAFETY_RECOVERY` und harte Notabschaltung testen
 - [ ] Fehlerreaktionen fuer Kuehlkoerpersensor, Luefter und H-Bruecke testen
+- [ ] Brownout waehrend Flash-Schreibvorgang und H-Brueckenumschaltung testen
+- [ ] Beschaedigte Konfiguration, Laufrevision und Fehlerjournal testen
+- [ ] Priorisiertes begrenztes Fehler- und Resetjournal implementieren und testen
 - [ ] Warnungen, Quittierung und Summermuster implementieren und testen
 - [ ] Web-API, OTA-Schutz und Access-Point-Einrichtung implementieren und testen
 - [ ] Entwicklerzugang ueber UART fuer Diagnose vorsehen; ein vollstaendiges
