@@ -1,73 +1,194 @@
 # Offene Punkte und Inbetriebnahme-Checkliste
 
-## Controllerboard
+## Status
 
-- [ ] Tatsächliche Platinenrevision dokumentieren
-- [ ] Prüfen, ob USB-C nur Versorgung ist
-- [ ] GPIO-Zuordnung OUT1–OUT4 messen
-- [ ] Active-high/active-low der MOSFET-Kanäle bestimmen
-- [ ] Ausgangszustände bei Boot, Reset und Bootloader messen
-- [ ] 5-V-Ausgangsspannung und verfügbare Reserve unter Last messen
-- [ ] Pruefen, ob `esp32dev` Flashparameter der gelieferten Revision korrekt
-      abbildet
-- [ ] GPIO4 und alle weiteren Strapping-Pins aus der Verdrahtung ausschliessen
-      oder ihr Bootverhalten explizit nachweisen
+Nach Phase 10C sind keine bekannten offenen Produktentscheidungen fuer Release 1
+mehr vorhanden. Die verbleibenden Punkte benoetigen reale Hardware, thermische
+Messungen oder reale Build- und Ressourcenwerte.
 
-## Display und Touch
+Kennzeichnungen:
 
-- [ ] Touchcontroller anhand Chipbeschriftung bestätigen
-- [ ] Bibliothek und Initialisierung prüfen
-- [ ] Displayrotation festlegen
-- [ ] Touchkalibrierung durchführen
-- [ ] Backlight-Versorgung und Helligkeit prüfen
-- [ ] Entscheiden, ob Display-RESET an GPIO oder Resetnetz gelegt wird
+- `TBD_HARDWARE`: durch Issues #29 bis #33 zu klaeren
+- `TBD_COMMISSIONING`: durch Issues #34 bis #36 zu klaeren
+- `TBD_IMPLEMENTATION_BUDGET`: durch reale Builds und Belastungstests zu klaeren
+- `FUTURE_RELEASE`: bewusst ausserhalb von Release 1
 
-## Temperatursensoren
+## `TBD_HARDWARE`
 
-- [ ] Fünf Sensoren prüfen und ROM-Adressen erfassen
-- [ ] Zwei Sensoren mit plausibler Übereinstimmung auswählen
-- [ ] Sensorrollen fest zuordnen
-- [ ] Kabelfarben/Pinbelegung der gelieferten Sonden prüfen
-- [ ] Referenzflasche und thermische Kopplung festlegen
+### Controllerboard und Ressourcenbasis
 
-## Peltier und BTS7960
+- [ ] tatsaechliche Platinenrevision und Modulbeschriftung dokumentieren
+- [ ] erkannte Flashgroesse bestaetigen
+- [ ] PSRAM erkennen; Firmware darf sie nicht voraussetzen
+- [ ] reale Partitionstabelle und Appgroesse messen
+- [ ] freien Heap, niedrigsten Heap und groessten freien Block erfassen
+- [ ] UART-/FT232RL-Flash- und Recoveryweg bestaetigen
 
-- [ ] Tatsächlichen Peltierstrom messen
-- [ ] Heizrichtung und Kühlrichtung bestimmen
-- [ ] BTS7960-Modulrevision und Pinbeschriftung prüfen
-- [ ] Enable-Verhalten prüfen
-- [ ] Totzeit testen
-- [ ] 7,5-A-Sicherung und Sicherungshalter vorsehen
-- [ ] unabhängige Übertemperaturabschaltung festlegen
-- [ ] Prüfen, ob 60 W das Peltier oder das gesamte Originalgerät bezeichnet
+Nachverfolgung: #29
 
-## Lüfter und Thermik
+### GPIOs und Bootpegel
 
-- [ ] Stromaufnahme und Anlaufstrom beider Lüfter messen
-- [ ] Luftführung und Nachlaufzeit festlegen
-- [ ] Temperaturgleichmässigkeit an mehreren Positionen messen
-- [ ] Kondensatführung im Kühlbetrieb vorsehen
+- [ ] alle verwendeten GPIOs festlegen
+- [ ] Bootstrapping-Eignung pruefen
+- [ ] aktive Pegel der Onboard-MOSFET-Ausgaenge messen
+- [ ] Boot-, Reset-, Brownout- und Bootloaderverhalten messen
+- [ ] nachweisen, dass unbekannte Aktoren beim Boot gesperrt bleiben
 
-## Programme
+Nachverfolgung: #29 und #32
 
-- [ ] Namen der finalen 4–5 Programme festlegen
-- [ ] Zieltemperaturen und Zeiten festlegen
-- [ ] Stabilisierungskriterien festlegen
-- [ ] Kühlziel je Programm festlegen
-- [ ] Verhalten nach `FINISHED` festlegen
+### Temperatursensoren
 
-## Mechanik
+- [ ] Bustopologie festlegen: drei getrennte Busse oder feste Sensoren gemeinsam
+- [ ] Pull-ups und Leitungslaengen bestimmen
+- [ ] ROM-Adressen der festen Sensoren dokumentieren
+- [ ] Produktfuehleranschluss waehlen; M8-3, GX12-3 oder andere verriegelbare
+      3-polige Loesung vergleichen
+- [ ] Verpolungs-, Fehlsteck- und ESD-Schutz des externen Anschlusses pruefen
+- [ ] Lebensmitteltauglichkeit und Reinigbarkeit des Produktfuehlers bestaetigen
+- [ ] Hot-Plug praktisch testen
 
-- [ ] Position des Displays in der Tür festlegen
-- [ ] Elektronik vor Feuchtigkeit/Kondensat schützen
-- [ ] Sensor- und Leistungskabel räumlich trennen
-- [ ] Servicezugang für FT232RL und Sicherung vorsehen
+Nachverfolgung: #30
 
-## Firmware
+### Display und Touch
 
-- [ ] Bestaetigte Pins und aktive Pegel in lokaler `config/pins.yaml` erfassen
-- [ ] Sichere GPIO-Initialisierung erst nach dieser Verifikation implementieren
-- [ ] Zustands- und Fehlercode-Modell implementieren und nativ testen
-- [ ] Persistenzformat und Validierungsstrategie festlegen
-- [ ] Verhalten des Aussenluefters je Fehlerart festlegen
-- [ ] Web-API, OTA-Schutz und Access-Point-Einrichtung festlegen
+- [ ] Displaycontroller ILI9341 praktisch bestaetigen
+- [ ] Touchcontroller praktisch identifizieren; XPT2046 nicht ungeprueft annehmen
+- [ ] SPI-Pins, Rotation, Reset und Hintergrundbeleuchtung festlegen
+- [ ] Touchrohwerte, Kalibrierung und 10-Sekunden-Boot-Recovery testen
+- [ ] Speicher- und Geschwindigkeitsbedarf der realen Darstellung messen
+
+Nachverfolgung: #31
+
+### Luefter, Summer und MOSFET-Ausgaenge
+
+- [ ] Innen- und Aussenluefterdaten, Strom und Anlaufverhalten erfassen
+- [ ] MOSFET-Kanaele unbelastet messen
+- [ ] Verbraucher einzeln anschliessen und Bootverhalten erneut pruefen
+- [ ] Summer-Spannung, Strom, Kanal und Lautstaerke festlegen
+- [ ] Nachlaufverhalten auf realer Hardware pruefen
+
+Nachverfolgung: #32
+
+### BTS7960 und Leistungspfad
+
+- [ ] genaue Modulvariante und Pinbeschriftung dokumentieren
+- [ ] Enable- und Richtungspins festlegen
+- [ ] Hardware-Pulldowns oder gleichwertige Freigabestufe nachweisen
+- [ ] Ausgangspolaritaet ohne Peltier mit Multimeter messen
+- [ ] R_IS/L_IS-Pegel und diagnostische Nutzbarkeit pruefen
+- [ ] Sicherungstyp, Halter, Stecker und Leitungsquerschnitte dokumentieren
+- [ ] erste begrenzte Heiz- und Kuehlpulse sicher durchfuehren
+
+Nachverfolgung: #33
+
+## `TBD_COMMISSIONING`
+
+### Sensoren und thermischer Aufbau
+
+- [ ] Referenzmessgeraete dokumentieren
+- [ ] individuelle Offsets aller drei DS18B20 bestimmen
+- [ ] Sensorpositionen und Temperaturverteilung messen
+- [ ] leeren Schrank vermessen
+- [ ] kleine und grosse Referenzmasse vermessen
+- [ ] Produkttraegheit und Luftreaktion dokumentieren
+
+Nachverfolgung: #34
+
+### Regelparameter
+
+- [ ] PI-Parameter Luft/Produkt und Heizen/Kuehlen bestimmen
+- [ ] Schaltfenster und Verhalten kleiner Impulse festlegen
+- [ ] Mindest-Ein- und Mindest-Auszeit festlegen
+- [ ] Richtungswechselhysterese und Totzeit validieren
+- [ ] Innen- und Aussenluefternachlauf festlegen
+- [ ] Filterstaerken, Zielband, Qualifikationsdauer und Gnadenzeit festlegen
+- [ ] Stabilitaetszeit fuer automatische Produktfuehler-Rueckkehr bestimmen
+
+Nachverfolgung: #35
+
+### Sicherheitsgrenzen
+
+- [ ] fruehe Luftbegrenzungen bestimmen
+- [ ] Prozesswarnschwellen bestimmen
+- [ ] Sicherheits-Eingriffsgrenzen bestimmen
+- [ ] harte obere und untere Notgrenzen bestimmen
+- [ ] begrenzte Gegenrichtungsversuche validieren
+- [ ] Kuehlkoerpergrenzen und Temperaturtrends festlegen
+- [ ] einmalige Temperatursicherung auswaehlen, Rating und Montageort dokumentieren
+
+Nachverfolgung: #35
+
+### Standardprogramme
+
+- [ ] Temperaturen und Zeiten der vier Standards praktisch festlegen
+- [ ] Vorheiz- und Zielerreichungsgrenzen pruefen
+- [ ] Abschluss- und Kuehlhalteverhalten validieren
+- [ ] mindestens einen praktischen Lauf je Standardprogramm dokumentieren
+
+Nachverfolgung: #36
+
+## `TBD_IMPLEMENTATION_BUDGET`
+
+### Flash und Partition
+
+- [ ] Single-App-Partitionsplan fuer Release 1 festlegen
+- [ ] App-, Konfigurations-, Journal-, Lauf- und Historienbudget dokumentieren
+- [ ] notwendigen freien Sicherheitsabstand definieren
+- [ ] Webressourcen und drei Sprachen messen
+- [ ] Exportgroessen und temporaeren Speicher begrenzen
+
+Release 1 reserviert keine dualen OTA-Slots. Web-OTA ist `FUTURE_RELEASE`.
+
+Nachverfolgung: #9, #10, #19, #28 und #29
+
+### RAM und Laufzeit
+
+- [ ] Warn- und kritische Schwellen fuer freien Heap festlegen
+- [ ] Mindestwert fuer den groessten freien Block festlegen
+- [ ] Ringpuffer- und Warteschlangengroessen dokumentieren
+- [ ] Web, Display, Export und Regelung unter Parallelbelastung messen
+- [ ] Betriebszaehler je nach verbleibendem Budget vollstaendig, reduziert oder
+      nicht persistent umsetzen
+
+Nachverfolgung: #10, #28, #29 und #37
+
+### Aufbewahrung
+
+- [ ] Standard `aktiver Lauf + 5 detaillierte Laeufe + 50 Zusammenfassungen`
+      am realen Budget pruefen
+- [ ] maximale Detailaufloesung der aktuellen Laufhistorie festlegen
+- [ ] proaktive Bereinigung und Reserve praktisch testen
+- [ ] Schreibzaehler und ungewoehnliche Schreibrate diagnostisch bewerten
+
+Nachverfolgung: #19 und #37
+
+## Hardware- und Releaseabnahme
+
+- [ ] vollstaendige Hardwareabnahme gemaess `ACCEPTANCE_TESTS.md`
+- [ ] verpflichtende Fehlerinjektionen am realen Aufbau
+- [ ] Stromunterbrechungen in allen wesentlichen Phasen
+- [ ] lokale und Webbedienung auf realem ESP32
+- [ ] siebentaegiger Dauer- und Belastungstest
+- [ ] alle Release-Gates bewerten
+
+Nachverfolgung: #36 und #37
+
+## `FUTURE_RELEASE`
+
+Bewusst nicht fuer Release 1 zu erledigen:
+
+- Web-OTA, duale Slots und automatisches Firmware-Rollback
+- benutzeraktivierbare UART-Diagnose
+- Produkt-Luft-Kaskadenregelung
+- PID-Autotuning
+- direkte 12-V-ADC-Messung
+- batteriegepufferte RTC als Pflicht
+- Tuerkontakt
+- Luefter-Tachosignal
+- externe Strommessung ausser optional verifiziertem R_IS/L_IS
+- Push- oder Telegram-Benachrichtigungen
+- eigener WireGuard-Client
+- automatische Wartungserinnerungen
+
+Diese Punkte duerfen in Release 1 keine ungenutzten grossen Bibliotheken,
+Partitionen oder aktorfaehigen versteckten Funktionen verursachen.

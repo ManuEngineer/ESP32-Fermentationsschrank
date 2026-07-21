@@ -1,178 +1,173 @@
-# Funktionsanforderungen
+# Funktionsanforderungen fuer Release 1
 
-## Allgemeine Muss-Anforderungen
+## Status
 
-- Das Geraet startet ohne automatische Prozessfortsetzung in einem sicheren,
-  nicht heizenden und nicht kuehlenden Zustand.
-- Firmware muss ohne angeschlossene Hardware kompilieren.
-- Einstellungen werden validiert, bevor sie angewendet oder gespeichert werden.
-- Alle lokalen Bedienhandlungen erhalten eine eindeutige Rueckmeldung.
-- Fach- und Sicherheitslogik soll soweit sinnvoll nativ testbar sein.
-- Fehlercodes und Diagnoseausgaben muessen nachvollziehbar sein.
+Dieses Dokument fasst die verbindlichen Muss-Anforderungen zusammen. Die
+Detailregeln stehen in den thematisch spezialisierten Spezifikationsdokumenten.
+Bei Widerspruechen haben spaetere akzeptierte ADRs und die spezialisierten
+Dokumente Vorrang.
 
-## 1. Bedienung
+## Produkt und Betrieb
 
-Primäre lokale Bedienung über das 2,8-Zoll-Touchdisplay. Zusätzlich lokale Weboberfläche über WLAN.
+- Das Geraet regelt Fermentationsprozesse durch Heizen, neutralen Betrieb und
+  Kuehlen.
+- Der Normalbetrieb funktioniert ohne Cloud, Internet, Heimserver oder WLAN.
+- Touchdisplay und lokale Weboberflaeche bedienen denselben fachlichen Zustand.
+- Die sichere Temperaturregelung bleibt bei Ausfall von Display, Web oder Netzwerk
+  erhalten.
+- Release 1 unterstuetzt Deutsch, Spanisch und Englisch.
+- Die vier Standardprogramme sind Joghurt mild, Joghurt stichfest, Milchkefir und
+  Wasserkefir.
+- Benutzerprogramme koennen erstellt, kopiert, bearbeitet und geloescht werden.
+- Das erste Release verwendet eine Fermentationstemperatur pro Programm; das
+  Datenmodell darf spaetere mehrstufige Programme nicht verhindern.
 
-Die Kernfunktionen müssen ohne Internet verfügbar sein:
+## Programme und Prozess
 
-- Programm auswählen
-- Start
-- Stopp
-- aktuelle Luft- und Referenztemperatur anzeigen
-- Solltemperatur anzeigen
-- Phase und Status anzeigen
-- Restzeit anzeigen
-- Fehler anzeigen und sicher abschalten
+- Ein Lauf kann produkt- oder luftgefuehrt sein.
+- Bei produktgefuehrtem Betrieb ist der Produktfuehler primaer; der
+  Schrankluftfuehler begrenzt und ueberwacht den Prozess.
+- Bei luftgefuehrtem Betrieb ist die Schrankluft der primaere Regelwert; eine
+  nicht gemessene Produkttemperatur wird nicht behauptet.
+- Vorheizen ist optional und kann einen Zustand `WAITING_FOR_PRODUCT` mit
+  bewusster Bestaetigung erfordern.
+- Die Fermentationszeit beginnt erst nach erfolgreicher Zielqualifikation.
+- Kurze Temperaturabweichungen pausieren den Timer nicht automatisch.
+- Das Verhalten nach der Fermentation ist pro Programm waehlbar: beenden,
+  kuehlen, zeitlich halten oder bis zur manuellen Beendigung halten.
+- Es gibt einen manuellen Zeit-/Temperaturlauf und einen manuellen Haltebetrieb
+  ohne Timer.
+- Direkte Aktorsteuerung ist nur als geschuetzte, begrenzte Servicepruefung
+  zulaessig.
+- Ein aktiver Lauf verwendet einen unveraenderlichen Programmschnappschuss.
+- Zieltemperatur und verbleibende Dauer duerfen nur ueber eine ausdrueckliche,
+  validierte und protokollierte Laufanpassung geaendert werden.
 
-## 2. Programme
+## Temperaturregelung
 
-Vier bis fünf Programmslots, über die Weboberfläche veränderbar. Die Programme sollen als Datentabelle gespeichert werden.
+- Release 1 verwendet eine zeitproportionale PI-Regelung.
+- Es gibt getrennte Maschinenparameter fuer Luft/Produkt und Heizen/Kuehlen.
+- Der Regler erzeugt nur abstrakte Anforderungen `HEAT`, `OFF` oder `COOL` mit
+  begrenzter Zeitquote.
+- Ein Impulsakkumulator darf kleine Anforderungen innerhalb fester Grenzen
+  sammeln.
+- Mindest-Einzeit, Mindest-Auszeit, Umschalthysterese und Polaritaetstotzeit
+  werden erzwungen.
+- Heizen und Kuehlen koennen nie gleichzeitig freigegeben werden.
+- Der Innenluefter laeuft waehrend temperaturgeregelter Phasen dauerhaft und
+  besitzt einen Nachlauf.
+- Der Aussenluefter wird ohne absichtliche Vorlaufzeit gemeinsam mit dem Peltier
+  eingeschaltet und besitzt einen zwingenden Nachlauf.
+- Kaskadenregelung und PID-Autotuning sind Zukunftsfunktionen und werden in
+  Release 1 nicht aktiv implementiert.
 
-Vorgesehene Namen:
+## Sensoren
 
-1. Joghurt mild
-2. Joghurt stichfest
-3. Milchkefir
-4. Wasserkefir
-5. Kombucha / Benutzerprogramm
+Der erste Aufbau verwendet drei DS18B20:
 
-Programmdaten siehe `config/programs.example.yaml`.
+1. fest eingebauter Schrankluftfuehler
+2. abnehmbarer Produktfuehler
+3. fest eingebauter Aussenwaermetauscher-/Kuehlkoerperfuehler
 
 Anforderungen:
 
-- Werte persistent im Flash speichern
-- Standardprogramme im Firmwarecode als Rückfallebene
-- Import/Export als JSON oder YAML über die Weboberfläche
-- Änderungen während eines laufenden Programms erst beim nächsten Start verwenden
+- Schrankluft- und Kuehlkoerpersensor sind fuer jede Peltierfreigabe erforderlich.
+- Der Produktfuehler ist optional, ausser ein Lauf verlangt ihn ohne erlaubten
+  Ersatzbetrieb.
+- Der abnehmbare Produktfuehler liegt auf einem getrennten externen 1-Wire-Bus.
+- Die feste Bustopologie wird nach dem GPIO-Budget bestaetigt.
+- Messung erfolgt mit 12 Bit ungefaehr alle zwei Sekunden.
+- CRC, Busstatus, Wertebereich, Aenderungsrate und Sensorrollen werden geprueft.
+- Einzelne Fehler fuehren zunaechst zu `STALE`; dauerhafte Fehler zu `FAILED`.
+- Regelung verwendet Medianfilter und sensorbezogenen Tiefpass.
+- Jeder Sensor besitzt einen begrenzten individuellen Offset anhand seiner
+  ROM-Adresse.
 
-## 3. Zustandsmaschine
+## Sicherheit
 
-Mindestzustände:
+- Bei Boot, Reset, Brownout, Watchdog oder unklarer Lage bleiben Peltier und
+  H-Bruecke AUS.
+- BTS7960-Eingaenge benoetigen Hardware-Pulldowns oder eine nachgewiesen sichere
+  externe Freigabestufe.
+- Sicherheitsabschaltungen ueberstimmen Mindest-Einschaltzeiten.
+- Die Fehlerklassen sind Warnung, behebbarer Betriebsfehler, verriegelter
+  Sicherheitsfehler und schwerer Systemfehler.
+- `Quittieren` entfernt keine Ursache und keine Aktorsperre.
+- Ein Neustart ist kein Fehlerreset.
+- Sicherheits- und Systemfehler bleiben persistent verriegelt.
+- Wiederholte abnormale Neustarts fuehren zu `SAFE_BOOT`.
+- Eine Sicherheits-Eingriffsgrenze darf bei eindeutig sicherer Lage eine
+  begrenzte Gegenrichtung versuchen; eine harte Notgrenze sperrt beide
+  Richtungen.
+- Der Peltierpfad besitzt eine 7,5-A-Ueberstromsicherung und eine einmalige
+  Temperatursicherung als unabhaengige thermische Abschaltung.
+- R_IS/L_IS werden nur verwendet, wenn das gelieferte BTS7960-Modul praktisch
+  brauchbare und sicher angepasste Signale liefert.
 
-- `STANDBY`
-- `TEMPERING` – Zieltemperatur anfahren, je nach Istwert heizen oder kühlen
-- `STABILIZING` – Zielbereich über definierte Zeit halten
-- `FERMENTING` – Fermentationstimer läuft
-- `COOLING` – nach Programmende aktiv abkühlen, sofern aktiviert
-- `HOLDING_COLD` – Kühltemperatur halten, sofern aktiviert
-- `FINISHED`
-- `FAILURE`
+## Persistenz und Wiederanlauf
 
-Der Fermentationstimer startet erst, wenn die Referenztemperatur die Zieltemperatur erreicht hat und die Stabilisierungskriterien erfüllt sind.
+- Konfigurationen und aktive Laufkontrollpunkte sind atomar und versioniert.
+- Die letzte gueltige Revision bleibt als Rueckfall erhalten.
+- Wichtige Laufereignisse werden sofort gespeichert; periodische Kontrollpunkte
+  standardmaessig alle 5 Minuten, einstellbar zwischen 1 und 60 Minuten.
+- Direkte GPIO- oder Aktorzustaende werden nie als Wiederanlaufzustand gespeichert.
+- Nach einer Unterbrechung wird eine sichere phasenbezogene Aktion neu berechnet.
+- Der Wiederanlauf wartet nicht blockierend auf NTP oder eine Benutzeraktion.
+- Fehlende Zeit fuehrt zu einer konservativen, gekennzeichneten Bewertung mit
+  niedriger Vertrauensstufe.
+- Nach spaeterer Netzwerkzeit werden Unterbrechungsdauer und Fortschritt
+  nachtraeglich korrigiert.
+- Nichtkritische Historienfehler duerfen den Prozess mit Warnung weiterlaufen
+  lassen; kritische Persistenzfehler stoppen und verriegeln.
 
-## 4. Temperaturregelung
+## Bedienung und Netzwerk
 
-- Luftsensor für schnelle Regelung und absolute Sicherheitsgrenzen
-- Referenzsensor für Prozessfortschritt und Timerstart
-- Hysterese- oder PI-basierte zeitproportionale Regelung
-- keine hochfrequente Peltier-PWM in der ersten Implementierung
-- lange Schaltfenster, zum Beispiel 30–60 s
-- aktive Gegenrichtung während der normalen Temperaturhaltung vermeiden; zunächst Ausschalten und passives Ausklingen bevorzugen
+- Lokales Display: 320 x 240 Pixel im Querformat, grosse Schaltflaechen, keine
+  notwendige Wischgeste.
+- Die Weboberflaeche ist responsiv und auf Handy, Tablet und Computer fachlich
+  gleichwertig.
+- Display und Web verarbeiten Aenderungen atomar und mit Revisionsschutz.
+- Der normale Webzugang kann mit einem Webpasswort geschuetzt werden; die
+  Service-PIN bleibt getrennt.
+- Servicefunktionen sind PIN-geschuetzt und waehrend eines aktiven Laufes
+  weitgehend gesperrt.
+- WLAN-Ersteinrichtung erfolgt bevorzugt ueber ein geschuetztes Einrichtungs-WLAN
+  mit QR-Code und Captive Portal; lokale Eingabe bleibt moeglich.
+- Bei laenger fehlendem Heim-WLAN kann ein geschuetztes Ersatz-WLAN starten.
+- Direkte Internet-Portfreigabe auf den ESP32 ist nicht vorgesehen.
+- Eine dokumentierte lokale Lese-API ist zulaessig; keine offizielle externe
+  Schreib-API in Release 1.
 
-## 5. Heizen/Kühlen
+## Diagnose, Export und Updates
 
-BTS7960-Zustände:
+- Das Display bietet kompakte, das Web vollstaendige technische Diagnose.
+- Lesende Diagnose bleibt waehrend eines Laufes verfuegbar.
+- Hardwaretests sind nur im Standby, PIN-geschuetzt und zeitlich begrenzt.
+- Lauf-, Diagnose- und Servicebericht-Exporte enthalten keine Passwoerter, PINs,
+  Tokens oder erfundenen Werte.
+- UART/FT232RL ist der verbindliche Update- und Wiederherstellungsweg fuer
+  Release 1.
+- Release 1 benoetigt keine OTA-Slots und kein Web-OTA.
 
-| Zustand | RPWM | LPWM | ENABLE |
-|---|---:|---:|---:|
-| Aus | LOW | LOW | LOW |
-| Richtung A | HIGH | LOW | HIGH |
-| Richtung B | LOW | HIGH | HIGH |
-| Verboten | HIGH | HIGH | beliebig |
+## Ressourcen
 
-Welche Richtung physisch Heizen bzw. Kühlen entspricht, wird beim Inbetriebnahmetest festgestellt und konfiguriert.
+- Ziel sind 4 MB Flash ohne vorausgesetzte PSRAM.
+- Firmware, Konfiguration, Laufpersistenz, Journal und Historie erhalten feste
+  Budgets.
+- Puffer, Programme, Meldungen und Exporte besitzen feste Maximalgroessen.
+- Alte nichtkritische Protokolle und Diagrammdaten werden proaktiv bereinigt.
+- Kritische Daten haben immer Vorrang vor Komfortdaten.
+- Heap, niedrigster Heap, groesster freier Block, Firmwaregroesse und
+  Flashbelegung werden ueberwacht.
 
-Richtungswechsel:
+## Bewusst offene Werte
 
-1. ENABLE LOW
-2. RPWM und LPWM LOW
-3. mindestens 2 s warten
-4. neue Richtung setzen
-5. ENABLE HIGH
+Folgende Werte werden nicht erfunden:
 
-## 6. Lüfter
+- `TBD_HARDWARE`: GPIOs, Pegel, Modulvarianten und Verdrahtungsdetails
+- `TBD_COMMISSIONING`: Temperaturen, Zeiten, PI-Werte, Filter, Nachlaeufe und
+  Sicherheitsgrenzen
+- `TBD_IMPLEMENTATION_BUDGET`: Partitions-, Firmware-, Heap- und Speicherbudgets
 
-- Innenlüfter: für gleichmässige Schranktemperatur während eines laufenden Programms
-- Aussenlüfter: mindestens bei aktivem Peltier
-- konfigurierbarer Nachlauf nach Peltier-Abschaltung
-- bei Fehler abhängig vom Fehlerbild sicher weiterlaufen oder abschalten; Entscheidung explizit dokumentieren
-
-## 7. Touch-Oberfläche
-
-Vorgesehene Seiten:
-
-1. **Standby/Programmauswahl**
-2. **Programmübersicht vor Start**
-3. **Laufender Prozess** mit Temperaturen, Sollwert, Phase und Restzeit
-4. **Fertig**
-5. **Fehlerseite**
-6. **Netzwerk-/Serviceinformationen**
-
-Touchflächen gross genug für Fingerbedienung. Resistiven Touch nach Einbau kalibrieren und Kalibrierwerte persistent speichern.
-
-## 8. Weboberfläche
-
-- responsive für Smartphone
-- lokales Dashboard
-- Programmtabelle bearbeiten
-- Temperaturverlauf anzeigen
-- Start/Stopp
-- Netzwerkstatus und IP-Adresse
-- OTA-Firmwareupdate
-- optional eigener Access Point, wenn kein bekanntes WLAN erreichbar ist
-
-## 9. Persistenz
-
-Zu speichern:
-
-- Programmtabelle
-- Sensorrollen und DS18B20-ROM-Adressen
-- Touchkalibrierung
-- WLAN-Konfiguration
-- Regelparameter
-- letzte Fehlerursache
-
-Keine automatische Fortsetzung eines laufenden Heiz-/Kühlprogramms nach unkontrolliertem Stromausfall, solange keine explizite und sichere Wiederanlauflogik implementiert ist.
-
-## 10. Fehlerbehandlung
-
-Mindestens folgende Fehler erkennen:
-
-- Luftsensor fehlt oder liefert CRC-/Plausibilitätsfehler
-- Referenzsensor fehlt oder liefert CRC-/Plausibilitätsfehler
-- Lufttemperatur über Sicherheitsgrenze
-- Zieltemperatur wird innerhalb maximaler Anfahrzeit nicht erreicht
-- widersprüchliche H-Brückenanforderung
-- Konfigurationsdatei defekt
-- Watchdog-/Software-Neustart
-
-Bei `FAILURE`:
-
-- Peltier sofort aus
-- Richtungssignale LOW
-- Fehler gut sichtbar auf Display und Webseite
-- keine automatische Wiederaufnahme ohne Quittierung bzw. Neustart nach behobenem Fehler
-
-## 11. Nicht-Ziele der aktuellen Integrationsstufe
-
-- keine eigentliche Fermentations-, Temperatur- oder Zeitsteuerung
-- keine produktive Ansteuerung von Peltier, BTS7960 oder Lueftern
-- keine Uebernahme von GPIO-Kandidaten in Firmware
-- keine fertige Displayoberflaeche, Web-API, OTA- oder Persistenzimplementierung
-- keine Cloud-Anbindung
-
-`src/main.cpp` bleibt bis zur realen Hardwareverifikation ein minimaler,
-nicht blockierender Build- und serieller Hardwaretest-Einstieg ohne
-Aktor-GPIO-Konfiguration.
-
-## 12. Akzeptanzkriterien
-
-- [x] `pio run` erfolgreich
-- [x] `pio test -e native` erfolgreich
-- [x] keine endgueltige GPIO-Zuordnung in der Firmware
-- [x] sicherer Einstieg konfiguriert keine unbekannten Ausgaenge
-- [ ] sichere Ausgangszustaende am realen Board gemessen
-- [ ] Sensorfehler fuehrt nach Implementierung zur Abschaltung
-- [ ] Neustart fuehrt nicht zu unbeabsichtigtem Start
-- [ ] Dokumentation entspricht dem realen Aufbau
+Die offenen Werte sind durch die Issues #29 bis #37 und
+[`OPEN_POINTS.md`](OPEN_POINTS.md) nachverfolgbar.

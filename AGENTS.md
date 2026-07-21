@@ -4,145 +4,145 @@ Diese Datei gilt fuer das gesamte Repository.
 
 ## Projektziel
 
-Entwickle eine robuste, nachvollziehbare und wartbare ESP32-Steuerung fuer den
-`ESP32-Fermentationsschrank` (Owner: `ManuEngineer`) mit lokaler
-Touch-Bedienung und lokaler Weboberflaeche. Das Geraet muss ohne Internet und
-ohne Cloud vollstaendig funktionieren.
+Eine sichere, lokal bedienbare ESP32-Firmware fuer einen Fermentationsschrank
+entwickeln. Das Geraet regelt mit einem Peltier sowohl Heizen als auch Kuehlen,
+bleibt ohne Netzwerk funktionsfaehig und darf bei Fehlern keine unbeabsichtigte
+Aktorfreigabe erzeugen.
 
-## Verbindliche Arbeitsreihenfolge
+## Verbindlicher Entwicklungsstand
 
-1. Lies vor jeder Aenderung `README.md` sowie alle Dateien unter `docs/` und
-   `config/`.
-2. Pruefe `config/pins.example.yaml` beziehungsweise eine spaetere lokale,
-   verifizierte `config/pins.yaml`.
-3. Behandle Angaben mit `candidate`, `unconfirmed`, `unverified`, `unknown`
-   oder `TBD` als nicht bestaetigt. Weise daraus keine endgueltigen GPIOs,
-   Pegel oder Anschlussbelegungen ab.
-4. Fuehre nach jeder relevanten Aenderung mindestens `pio run` aus.
-5. Fuehre bei Aenderungen an hardwareunabhaengiger Logik zusaetzlich
-   `pio test -e native` aus.
-6. Aktualisiere Dokumentation, maschinenlesbare Konfiguration und Code
-   gemeinsam.
+- Die Spezifikation liegt auf `docs/software-specification` und wird in PR #38
+  abschliessend geprueft.
+- Implementierung beginnt erst nach dem Merge dieses PRs.
+- Epics #2 bis #8 und Issues #9 bis #37 bilden die geplante Arbeitsstruktur.
+- #9 ist das erste Implementierungs-Issue.
+- Pro Implementierungs-Issue wird ein eigener Branch und ein kleiner PR verwendet.
 
-## Allgemeine Hardware- und Sicherheitsregeln
+## Zielhardware und Grenzen
 
-- Niemals GPIOs, aktive Pegel, Anschlussbelegungen oder Bootzustaende erraten.
-- Aktoren muessen beim Booten, Flashen, Reset, Watchdog-Reset, Sensorausfall
-  und internen Fehler in einen definierten sicheren Zustand wechseln.
-- Gegensaetzliche Ausgaenge duerfen nie gleichzeitig aktiv sein.
-- Keine Hardwaretests mit angeschlossener Hochleistungslast durchfuehren,
-  bevor Logik und Ausgaenge mit Multimeter beziehungsweise geeigneter Testlast
-  geprueft wurden.
-- Blockierende lange `delay()`-Aufrufe in der Anwendung vermeiden.
-- Sensorwerte auf CRC, Timeout, Bereich, Aktualitaet und Plausibilitaet pruefen.
-- Fehler muessen sicher abschalten, einen typisierten Fehlercode setzen und
-  lokal sichtbar protokolliert beziehungsweise angezeigt werden.
-- Die Kernregelung darf nicht von WLAN, Browser, Touchdisplay oder Cloud
-  abhaengen.
-- Nach einem unkontrollierten Neustart darf kein Programm automatisch wieder
-  Heizen oder Kuehlen starten, solange keine explizite sichere
-  Wiederanlauflogik implementiert ist.
+- ESP32-32E mit 4 MB Flash
+- keine PSRAM-Abhaengigkeit
+- Peltier 12 V / etwa 60 W ueber BTS7960
+- drei DS18B20: Schrankluft, abnehmbares Produkt und Kuehlkoerper
+- Innen- und Aussenluefter
+- 320-x-240-Touchdisplay
+- einmalige Temperatursicherung und 7,5-A-Ueberstromsicherung
+- UART/FT232RL als Update- und Wiederherstellungsweg fuer Release 1
 
-## Projektspezifische Hardware-Regeln
+Keine GPIO-Zuordnung, kein aktiver Pegel, kein Display-/Touchcontroller und keine
+BTS7960-Diagnose darf vor realer Verifikation als bestaetigt behandelt werden.
 
-### BTS7960 und Peltier
+## Dokumentationsprioritaet
 
-- Die BTS7960-H-Bruecke zuerst ohne Peltier mit Multimeter oder kleiner
-  Testlast pruefen.
-- `RPWM` und `LPWM` niemals gleichzeitig aktiv setzen. Heizen und Kuehlen
-  duerfen niemals gleichzeitig angefordert werden.
-- Vor jedem Richtungswechsel: Enable beziehungsweise Leistung aus, beide
-  Richtungssignale LOW, mindestens die konfigurierte Totzeit abwarten, neue
-  Richtung setzen und erst danach Leistung freigeben.
-- Eine Richtungsumkehr darf nur lastfrei erfolgen.
-- In der ersten Implementierung keine hochfrequente direkte Peltier-PWM
-  verwenden; vorgesehen sind lange zeitproportionale Schaltfenster.
-- Peltier und Hochleistungszweig erst nach GPIO-, Pegel-, Richtungs-,
-  Sicherungs-, Netzteil- und Waermeabfuhrpruefung anschliessen.
+Bei Widerspruechen gilt:
 
-### DS18B20
+1. akzeptierte spaetere ADRs und `docs/SPECIFICATION_REVIEW.md`
+2. thematisch spezialisierte Spezifikationsdokumente
+3. `docs/REQUIREMENTS.md`, `docs/ARCHITECTURE.md`, `docs/HARDWARE.md`
+4. Beispielkonfigurationen
 
-- Geplant sind zwei von fuenf vorhandenen DS18B20 im 3-Leiter-Betrieb an einem
-  gemeinsamen OneWire-Bus mit externem 4,7-kOhm-Pull-up nach 3,3 V. Die reale
-  Verdrahtung bleibt `unconfirmed`; Parasite Power ist nicht vorgesehen.
-- Sensoren anhand ihrer 64-Bit-ROM-Adresse persistent den Rollen Luft und
-  Referenz zuordnen; niemals von der Erkennungsreihenfolge abhaengen.
-- CRC-Fehler, Disconnect-Wert, Einschaltwert 85 Grad Celsius, fehlende
-  Sensoren, Messalter, Spruenge und unplausible Werte pruefen. Fehler muessen
-  die Peltier-Leistungsstufe sicher deaktivieren.
-- Temperaturkonvertierungen nicht mit langen blockierenden `delay()`-Aufrufen
-  abwarten.
+Zentrale Einstiege:
 
-### ILI9341 und XPT2046
+- `docs/SPECIFICATION_PLAN.md`
+- `docs/IMPLEMENTATION_PLAN.md`
+- `docs/IMPLEMENTATION_ISSUES.md`
+- `docs/ACCEPTANCE_TESTS.md`
+- `docs/OPEN_POINTS.md`
 
-- Das vorgesehene MSP2807-Modul verwendet dokumentiert einen ILI9341. Ob der
-  Touchcontroller des gelieferten Exemplars XPT2046-kompatibel ist, bleibt bis
-  zur Pruefung `unconfirmed`.
-- Display und Touch als getrennte SPI-Teilnehmer mit getrennten
-  Chip-Select-Signalen behandeln; nicht aktive Teilnehmer deselektieren.
-- SPI-, Chip-Select-, Data/Command-, Reset-, IRQ- und Backlight-Pins bleiben bis
-  zur realen Bestaetigung `unknown` oder `unconfirmed`.
-- Rotation, Touchachsen, Kalibrierwerte, Versorgung und Backlight-Beschaltung
-  am realen Modul pruefen. Kalibrierwerte spaeter persistent speichern.
-- Ein Ausfall von Display oder Touch darf die sichere Regelung nicht stoppen.
+## Architekturregeln
 
-### Vier Onboard-MOSFET-Ausgaenge
+Der fachliche Kern wird soweit sinnvoll ohne Arduino-Abhaengigkeit umgesetzt.
+Direkte Hardwarezugriffe gehoeren in Adapter.
 
-- GPIO-Zuordnung, Kanalreihenfolge, aktiven Pegel, Reset-/Bootloaderverhalten,
-  Lastart, Schutzbeschaltung und Dauerstrombelastbarkeit jedes Kanals messen.
-- Weder LOW noch HIGH gilt vor dieser Messung als sicherer Ausschaltpegel;
-  solange der AUS-Pegel unbekannt ist, keinen Kanal als Ausgang aktivieren.
-- Innen- und Aussenluefter sind nur als Lasten fuer Kanal 1 und 2 vorgesehen;
-  Kanalzuordnung und aktive Pegel bleiben `unconfirmed`. Kanal 3 und 4 bleiben
-  Reserve und AUS.
-- Induktive Lasten nur mit bestaetigter Freilauf-/Schutzbeschaltung betreiben.
+Der Kern darf insbesondere nicht direkt verwenden:
 
-## Code-Regeln
+- `digitalWrite` oder `analogRead`
+- 1-Wire-, Display- oder WLANbibliotheken
+- konkrete Dateisystemaufrufe
+- globale reale Zeit ohne abstrahierte Zeitquelle
 
-- PlatformIO mit Arduino-Framework und dem generischen Ziel `esp32dev` fuer
-  ESP32-WROOM-32E verwenden, solange keine dokumentierte technische
-  Notwendigkeit fuer ESP-IDF besteht.
-- C++17-kompatiblen, klar strukturierten Code schreiben.
-- Eine nicht blockierende Zustandsmaschine verwenden.
-- Zeitangaben mit `millis()`-sicherer Differenzbildung verarbeiten.
-- Hardwareabhaengigkeiten hinter kleinen Schnittstellen kapseln.
-- Zustaende, Fehlercodes und Programmschema als `enum class` und klar typisierte
-  Structs modellieren.
-- Regelung, Sicherheitslogik, Hardwareabstraktion, UI, Webserver und Persistenz
-  trennen.
-- Keine dynamische Speicherallokation in schnellen Regelpfaden.
-- Hardware-Pins zentral konfigurieren und auf Doppelbelegung pruefen.
-- Einstellungen validieren, bevor sie gespeichert oder angewendet werden.
-- Ein laufendes Programm verwendet eine unveraenderliche Kopie seiner
-  Startparameter. Aenderungen wirken erst beim naechsten Start.
-- Programmdaten persistent speichern und validierte Werkseinstellungen im Code
-  als Rueckfallebene vorhalten.
-- Sicherheitslogik soweit moeglich hostseitig testen.
-- Keine Geheimnisse, WLAN-Passwoerter, Tokens oder privaten Schluessel in Git
-  einchecken.
+Vorgesehene Profile:
 
-## Dateien und Verantwortlichkeiten
+```text
+native
+esp32_bringup
+esp32_release
+```
 
-- `src/main.cpp`: Initialisierung und minimaler sicherer Hardwaretest-Einstieg
-- `lib/`: wiederverwendbare, testbare Projektkomponenten
-- `include/`: gemeinsame Typen und Konfiguration
-- `data/`: lokale Weboberflaeche fuer LittleFS
-- `docs/`: Quelle der Wahrheit fuer Hardware und Anforderungen
-- `config/`: maschinenlesbare Hardware-, Pin- und Standardkonfiguration
-- `test/`: hardwareunabhaengige Unit-Tests
+`esp32_bringup` startet mit gesperrten Aktoren und dem sichtbaren Zustand
+`HARDWARE_UNVERIFIED`. Ein Wechsel auf `esp32_release` darf unbekannte Hardware
+nicht automatisch freigeben.
 
-## Vor einem Commit
+## Sicherheitsregeln
 
-- `pio run`
-- `pio test -e native`, sofern anwendbar
-- keine Zugangsdaten oder lokale Konfiguration
-- keine unbestaetigten Pins oder Pegel als Fakten
-- Dokumentation und Konfiguration aktualisiert
-- Fehlerpfade und sichere Ausgangszustaende geprueft
+- Peltier und H-Bruecke bleiben bei Boot, Reset, Fehler und unklarer Lage AUS.
+- Heizen und Kuehlen koennen nie gleichzeitig freigegeben werden.
+- Richtungswechsel erzwingen Abschaltung, Mindest-Auszeit und Totzeit.
+- Sicherheitsabschaltungen ueberstimmen Mindest-Einschaltzeiten.
+- Schrankluft- und Kuehlkoerpersensor sind fuer jede Peltierfreigabe erforderlich.
+- Direkte GPIO- oder Aktorzustaende werden nie als Wiederanlaufzustand gespeichert.
+- Ein Neustart ist kein Fehlerreset.
+- `Quittieren` und `Fehler zuruecksetzen` bleiben getrennt.
+- Service-PIN oder Webzugang umgehen keine firmwarefesten Grenzen.
+- Web, WLAN, Display und Exporte duerfen Regel- und Sicherheitsaufgaben nicht
+  blockieren.
 
-## Git
+## Lauf- und Konfigurationsregeln
 
-- Kleine, thematisch klare Commits erstellen.
-- Lokale Geheimnisse nur ueber ignorierte Dateien wie `include/secrets.hpp`,
-  `include/secrets.h`, `.env` oder lokale Build-Konfiguration einbinden.
-- Ohne ausdruecklichen Auftrag nichts committen oder pushen.
+- Ein Lauf verwendet einen unveraenderlichen Programmschnappschuss.
+- Das Quellprogramm wird durch einen laufenden Prozess nicht still veraendert.
+- Zieltemperatur und verbleibende Dauer duerfen nur ueber die ausdruecklich
+  spezifizierte Laufaktion mit Vorschau, Bestaetigung, Validierung und
+  protokollierter Laufrevision geaendert werden.
+- Andere normale Einstellungen veraendern einen aktiven Lauf nicht.
+- Konfigurationen und Kontrollpunkte werden atomar, versioniert und mit
+  Rueckfallrevision gespeichert.
+- Es wird nicht in jedem Sensorzyklus in Flash geschrieben.
+- Historien und Puffer sind fest begrenzt.
+
+## Release-1-Abgrenzung
+
+Nicht als Release-1-Funktion implementieren:
+
+- Web-OTA oder duale OTA-Slots
+- automatischer Firmwaredownload
+- benutzeraktivierbare UART-Diagnose
+- Cloud- oder Pushpflicht
+- eigener WireGuard-Client
+- Tuerkontakt
+- verpflichtende RTC
+- verpflichtende 12-V-ADC-Messung
+- Kaskadenregelung oder PID-Autotuning
+- automatische Wartungserinnerungen
+
+Schnittstellen fuer spaetere Erweiterungen duerfen vorbereitet werden, solange
+keine ungenutzten grossen Bibliotheken, Speicherpuffer oder aktorfaehigen
+Zukunftsfunktionen eingebaut werden.
+
+## Umgang mit offenen Werten
+
+- `TBD_HARDWARE`: reale Komponente, Pin, Pegel oder Verdrahtung fehlt
+- `TBD_COMMISSIONING`: thermischer, regelungstechnischer oder prozessbezogener
+  Wert wird am realen Schrank bestimmt
+- `TBD_IMPLEMENTATION_BUDGET`: reale Build-, Heap- oder Flashmessung fehlt
+- `FUTURE_RELEASE`: bewusst nicht Bestandteil von Release 1
+
+Kein solcher Platzhalter darf in der fertigen Firmware unbemerkt als gueltiger
+Laufzeitwert verwendet werden.
+
+## Tests und Definition of Done
+
+Jedes Issue erfuellt alle zutreffenden Punkte:
+
+- Implementierung vollstaendig
+- native, simulierte oder Hardwaretests vorhanden und bestanden
+- ESP32-Zielbuild erfolgreich, soweit relevant
+- Ressourcenwirkung geprueft oder sichtbar als budgetabhaengig markiert
+- Fehlerfaelle behandelt
+- Dokumentation aktualisiert
+- keine Geheimnisse eingecheckt
+- keine unbestaetigte Hardwareannahme als Tatsache implementiert
+- Akzeptanzkriterien des Issues erfuellt
+
+Hardwareunabhaengige Logik darf vor Hardwareankunft abgeschlossen werden. Die
+reale Verifikation bleibt in einem verknuepften `BLOCKED_HARDWARE`-Issue sichtbar.
