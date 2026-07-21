@@ -3,6 +3,10 @@
 ## Controllerboard
 
 - [ ] Tatsächliche Platinenrevision dokumentieren
+- [ ] Exakte ESP32-WROOM-32E-Bestellvariante beziehungsweise Modulbeschriftung
+      erfassen
+- [ ] Tatsächliche Flashgroesse pruefen
+- [ ] Vorhandensein und Groesse einer eventuellen PSRAM pruefen
 - [ ] Prüfen, ob USB-C nur Versorgung ist
 - [ ] GPIO-Zuordnung OUT1–OUT4 messen
 - [ ] Active-high/active-low der MOSFET-Kanäle bestimmen
@@ -86,6 +90,15 @@
 - [ ] Sichere GPIO-Initialisierung erst nach dieser Verifikation implementieren
 - [ ] Zustands- und Fehlercode-Modell implementieren und nativ testen
 - [ ] Persistenzformat und Validierungsstrategie festlegen
+- [ ] Partitionsplan fuer Firmware, OTA, Konfiguration, Laufdaten und Historie
+      erstellen
+- [ ] Maximales Flash- und RAM-Budget fuer jede Hauptfunktion festlegen
+- [ ] Test-Firmware zur Messung von freiem Heap, groesstem freien Block und
+      Flashbelegung erstellen
+- [ ] Laufpersistenz und Messhistorie auf der kleinsten plausiblen Variante mit
+      4 MB Flash und ohne PSRAM nachweisen
+- [ ] Wear-Leveling- beziehungsweise Journalstrategie festlegen und testen
+- [ ] Verhalten bei vollem oder beschaedigtem Datenspeicher festlegen
 - [ ] Verhalten des Aussenluefters je Fehlerart festlegen
 - [ ] Sensorwechsel oder Sensorausfall waehrend eines Laufs festlegen
 - [ ] Warnungen, Quittierung und Summermuster festlegen
