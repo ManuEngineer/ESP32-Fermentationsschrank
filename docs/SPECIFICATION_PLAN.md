@@ -39,6 +39,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`TEMPERATURE_CONTROL.md`](TEMPERATURE_CONTROL.md): Regelstrategie, Sensorrollen, Zielqualifikation und Laufanpassungen
 - [`ACTUATOR_TIMING_AND_FANS.md`](ACTUATOR_TIMING_AND_FANS.md): Peltier-Schaltfenster, Mindestzeiten, Richtungswechsel und Luefterlogik
 - [`SENSOR_TUNING_COMMISSIONING.md`](SENSOR_TUNING_COMMISSIONING.md): Sensorfilter, Kalibrierung, PI-Parametersaetze und Inbetriebnahme
+- [`SAFETY_AND_FAULTS.md`](SAFETY_AND_FAULTS.md): Fehlerklassen, sichere Reaktionen, Quittierung, Reset und Wiederfreigabe
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -95,7 +96,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 7B: Schaltfenster, Mindestzeiten, Richtungswechsel und Luefterlogik
   - [x] Phase 7C: Sensorfilter, Kalibrierung, Tuning, Inbetriebnahme und spaetere Regelstrategien
 - [ ] Phase 8: Sicherheit und Fehler
-  - [ ] Phase 8A: Fehlerklassen, unmittelbare Reaktionen und Wiederfreigabe
+  - [x] Phase 8A: Fehlerklassen, unmittelbare Reaktionen, Quittierung und Wiederfreigabe
   - [ ] Phase 8B: Temperatur-, Sensor-, Luefter- und Aktorfehler
   - [ ] Phase 8C: Versorgung, Softwarefehler, sichere Zustaende und Fehlerprotokoll
 - [ ] Phase 9: Diagnose, Wartung und Updates
@@ -103,4 +104,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 8A bearbeitet: Fehlerklassen, unmittelbare Reaktionen und Wiederfreigabe.
+Als Naechstes wird Phase 8B bearbeitet: Temperatur-, Sensor-, Luefter- und Aktorfehler.
