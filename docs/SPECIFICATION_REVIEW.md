@@ -20,7 +20,8 @@ Ergebnis des Reviews:
 - Unbestaetigte GPIOs, Pegel, Controllerdetails und reale Grenzwerte bleiben
   sichtbar offen.
 - Die in den PR-Reviews gefundenen sicherheitsrelevanten Widersprueche wurden als
-  verbindliche Korrekturen dokumentiert und werden vor dem Merge beantwortet.
+  verbindliche Korrekturen dokumentiert und in die betroffenen Kerndokumente
+  uebernommen.
 - Es sind nach Einbezug dieser Korrekturen keine bekannten ungeklaerten
   sicherheitsrelevanten Produktentscheidungen zur Implementierung freigegeben.
 - Verbleibende Unsicherheiten sind Hardware-, Inbetriebnahme- oder
@@ -230,6 +231,6 @@ Die Spezifikation gilt als reviewbereit, wenn:
 - [x] Epics und Arbeits-Issues erstellt sind
 - [x] Draft-PR #38 erstellt ist
 - [x] beide PR-Reviews ausgewertet und verbindliche Korrekturen dokumentiert
-- [ ] alle Reviewthreads beantwortet und geschlossen
+- [x] alle Inline-Reviewthreads beantwortet und geschlossen
 - [ ] PR-Review durch den Repository-Owner abgeschlossen
 - [ ] PR #38 nach `main` gemergt
