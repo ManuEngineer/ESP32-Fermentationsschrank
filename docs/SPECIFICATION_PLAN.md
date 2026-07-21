@@ -23,8 +23,8 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`DECISIONS.md`](DECISIONS.md): akzeptierte Entscheidungen
 - [`PROGRAMS.md`](PROGRAMS.md): allgemeiner Programm- und Prozessablauf
 - [`STANDARD_PROGRAMS.md`](STANDARD_PROGRAMS.md): Zweck und Voreinstellungen der Standardprogramme
-- [`STATE_MACHINE.md`](STATE_MACHINE.md): Betriebszustaende und Hauptuebergaenge
-- [`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md): Stromausfall, Sensorunterbrechungen und Wiederanlauf
+- [`STATE_MACHINE.md`](STATE_MACHINE.md): Betriebszustaende und Uebergaenge
+- [`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md): Unterbrechungen, Zeitquelle und automatischer Wiederanlauf
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -61,7 +61,8 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [ ] Phase 3: Zustandsmaschine
   - [x] Phase 3A: Grundzustaende, Stoppen, Warnungen und manuelle Betriebsarten
   - [x] Phase 3B: Tuerkontakt, Produktfuehlerausfall, Wartezeit und Wiederanlaufgrundsaetze
-  - [ ] Phase 3C: Zeitquelle, Zeitkompensation und verbleibende Detailuebergaenge
+  - [x] Phase 3C: Netzwerkzeit, spaetere RTC-Option und autonomer phasenbezogener Wiederanlauf
+  - [ ] Phase 3D: Luefternachlauf, Meldungsprioritaeten und letzte Detailuebergaenge
 - [ ] Phase 4: Lokale Bedienung
 - [ ] Phase 5: Web und Netzwerk
 - [ ] Phase 6: Einstellungen und Persistenz
@@ -72,4 +73,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 3C bearbeitet: verlaessliche Zeitquelle, automatische Zeitkompensation und verbleibende Detailuebergaenge.
+Als Naechstes wird Phase 3D bearbeitet: Luefternachlauf, Meldungsprioritaeten und letzte Detailuebergaenge.
