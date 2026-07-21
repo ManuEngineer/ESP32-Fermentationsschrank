@@ -58,7 +58,8 @@ Dateisystemaufrufe.
 
 ### Zustandsmaschine
 
-Wesentliche Zustaende:
+Wesentliche Zustaende und Kontexte verwenden exakt dieselben Namen wie
+[`STATE_MACHINE.md`](STATE_MACHINE.md):
 
 ```text
 BOOT
@@ -67,15 +68,22 @@ STANDBY
 PREHEATING
 WAITING_FOR_PRODUCT
 REACHING_TARGET
-TARGET_QUALIFICATION
+QUALIFYING_TARGET
 FERMENTING
 COOLING
-HOLDING
+COOL_HOLDING
 COMPLETED
-RECOVERY
+RECOVERY_EVALUATION
+RECOVERY_TIME_PENDING
+WARNING_REQUIRES_ACTION
 FAULT
-SERVICE
+SERVICE_MODE
+MANUAL_HOLDING
 ```
+
+`RECOVERY_TIME_PENDING` und `WARNING_REQUIRES_ACTION` koennen als zusaetzlicher
+Kontext zu einem Prozesszustand auftreten und sind nicht zwingend eigenstaendige
+blockierende Betriebszustaende.
 
 Jeder Uebergang ist explizit und wird durch fachliche Voraussetzungen validiert.
 Aktorpegel sind kein Bestandteil der Zustandsmaschine.
@@ -130,14 +138,14 @@ Sicherheitsfreigabe
 -> Luft- und Kuehlkoerpersensor gueltig
 -> Richtung exklusiv
 -> Gegenanforderung bestaetigt
--> Mindest-Ein-/Auszeit
+-> Mindest-Einschaltzeit und Mindest-Ausschaltzeit
 -> Polaritaetstotzeit
 -> Impulsakkumulator
 -> Luefteranforderung und Nachlauf
 -> abstrakter Aktorbefehl
 ```
 
-Sicherheitsabschaltungen ueberstimmen Mindest-Einzeiten.
+Sicherheitsabschaltungen ueberstimmen Mindest-Einschaltzeiten.
 
 ### Sicherheitskern
 
@@ -263,7 +271,9 @@ Variablen.
 
 Der Serviceablauf ist eine eigene geschuetzte Zustandsmaschine:
 
-- nur im Standby beziehungsweise zulassigem `SAFE_BOOT`
+- Aktortests ausschliesslich aus validiertem `STANDBY`
+- `SAFE_BOOT` erlaubt nur passive Diagnose, Export und Wiederherstellung ohne
+  Aktorfreigabe
 - Service-PIN
 - zeitlich und leistungsmassig begrenzte Aktortests
 - jederzeitiger sicherer Abbruch
@@ -276,7 +286,7 @@ Der Serviceablauf ist eine eigene geschuetzte Zustandsmaschine:
 - UTC/NTP dient Kalenderzeit und Unterbrechungsdauer
 - Wiederanlauf beginnt immer mit ausgeschalteten Aktoren
 - fehlende NTP-Zeit blockiert keine sichere phasenbezogene Entscheidung
-- Spaeter eintreffende Zeit kann die Unterbrechungsbewertung korrigieren
+- spaeter eintreffende Zeit kann die Unterbrechungsbewertung korrigieren
 - eine spaetere batteriegepufferte RTC passt hinter dieselbe Zeitquellenschnittstelle
 
 ## Ressourcenmodell
