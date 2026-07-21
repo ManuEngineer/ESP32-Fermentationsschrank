@@ -26,6 +26,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`STATE_MACHINE.md`](STATE_MACHINE.md): Betriebszustaende und Uebergaenge
 - [`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md): Unterbrechungen, Sensorersatz, Zeitquelle und automatischer Wiederanlauf
 - [`RUNTIME_BEHAVIOR.md`](RUNTIME_BEHAVIOR.md): Luefter, Richtungswechsel, Meldungsprioritaeten und akustische Signale
+- [`LOCAL_UI.md`](LOCAL_UI.md): lokale Touch-Bedienung und Bildschirmablaeufe
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -65,6 +66,10 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 3C: Netzwerkzeit, spaetere RTC-Option und autonomer phasenbezogener Wiederanlauf
   - [x] Phase 3D: Luefternachlauf, Sensorersatz, Meldungsprioritaeten und akustische Signale
 - [ ] Phase 4: Lokale Bedienung
+  - [x] Phase 4A: Displayausrichtung, Hauptbildschirm, Navigation, Temperaturen und Eingabeverhalten
+  - [ ] Phase 4B: Programmauswahl, Programmverwaltung und Startablauf
+  - [ ] Phase 4C: Laufdetails, Meldungen, Stoppen und Wiederanlaufanzeige
+  - [ ] Phase 4D: Menue, Einstellungen, Diagnose, Service und Touchkalibrierung
 - [ ] Phase 5: Web und Netzwerk
 - [ ] Phase 6: Einstellungen und Persistenz
 - [ ] Phase 7: Temperaturregelung und Aktoren
@@ -74,4 +79,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 4 bearbeitet: lokale Touch-Bedienung und Bildschirmablaeufe.
+Als Naechstes wird Phase 4B bearbeitet: Programmauswahl, Programmverwaltung und Startablauf.
