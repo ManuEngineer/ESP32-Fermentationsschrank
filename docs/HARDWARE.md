@@ -4,251 +4,270 @@
 
 | Kennzeichnung | Bedeutung |
 |---|---|
-| `confirmed` | Durch Datenblatt oder Messung fuer die genannte Eigenschaft bestaetigt |
-| `candidate` | Plausibler Vorschlag, aber nicht am realen Aufbau geprueft |
-| `unconfirmed` / `unverified` | Noch nicht am gelieferten Exemplar bestaetigt |
-| `unknown` / `TBD` | Offen; darf in Firmware und Verdrahtung nicht als Fakt verwendet werden |
+| `confirmed_order` | aus der bestellten Produktbeschreibung uebernommen |
+| `confirmed_test` | am realen Aufbau gemessen und dokumentiert |
+| `planned` | fuer Release 1 verbindlich vorgesehen, aber noch nicht real bestaetigt |
+| `candidate` | moegliche Loesung, noch nicht entschieden |
+| `TBD_HARDWARE` | reale Komponente, Pin, Pegel oder Verdrahtung muss geprueft werden |
+| `TBD_COMMISSIONING` | thermischer oder regelungstechnischer Wert wird am Schrank bestimmt |
+| `FUTURE_RELEASE` | bewusst nicht Bestandteil von Release 1 |
 
-Der Build verwendet das generische PlatformIO-Ziel `esp32dev` fuer ein
-ESP32-WROOM-32E-Modul. Das bestaetigt weder Platinenrevision noch GPIO-
-Zuordnung, aktive Pegel oder Flashparameter des realen Controllerboards.
+Kein Kandidat und kein `TBD_HARDWARE` darf als bestaetigte Verdrahtung in die
+Releasefirmware uebernommen werden.
 
-## 1. Systemübersicht
+## Controllerboard
 
-Der Fermentationsschrank nutzt ein vorhandenes thermoelektrisches Kühl-/Heizmodul. Das Peltier wird mit 12 V betrieben und nimmt laut Geräteangabe ungefähr 60 W auf, entsprechend etwa 5 A bei Nennbetrieb. Die Stromrichtung bestimmt Heizen oder Kühlen.
+Planungsbasis:
 
-Geplante Architektur:
+- ESP32-WROOM-32E beziehungsweise bestellte ESP32-32E-Boardvariante
+- 4 MB Flash laut bestellter Produktbeschreibung
+- keine vorausgesetzte PSRAM
+- vier Onboard-MOSFET-Ausgaenge
+- 3,3-V-Logik
+- Programmierung und Wiederherstellung ueber FT232RL/UART
 
-```text
-12-V-Netzteil
-│
-├── ESP32-32E Quad-MOSFET-Board
-│   ├── MOS-Kanal 1 → Innenlüfter
-│   ├── MOS-Kanal 2 → Aussenlüfter
-│   ├── MOS-Kanal 3 → Reserve
-│   ├── MOS-Kanal 4 → Reserve
-│   ├── SPI → MSP2807 Display + Touch
-│   ├── 1-Wire → 2 × DS18B20
-│   └── GPIO → BTS7960-Steuersignale
-│
-└── Sicherung → BTS7960-H-Brücke → 12-V-/60-W-Peltier
-```
+Noch zu messen:
 
-## 2. Bestellte Hardware
+- exakte Boardrevision und Modulbeschriftung
+- tatsaechliche Flashgroesse und Partitionseigenschaften
+- PSRAM-Erkennung
+- verfuegbare GPIOs
+- Zuordnung und aktive Pegel der vier MOSFET-Kanaele
+- Boot-, Reset-, Brownout- und Bootloaderpegel aller verwendeten Signale
+- Verhalten der MOSFET-Ausgaenge ohne und mit angeschlossenen Verbrauchern
 
-| Komponente | Modell | Menge / Verwendung | Dokumentation |
-|---|---|---:|---|
-| Touchdisplay | TZT MSP2807, ILI9341, 2,8 Zoll, 320 × 240, resistiver Touch | 1 | [LCDWiki](https://www.lcdwiki.com/2.8inch_SPI_Module_ILI9341_SKU:MSP2807) |
-| Controller | ESP32-32E Quad MOS Switch Module | 1 | [Lieferanten-PDF](https://ae-pic-a1.aliexpress-media.com/kf/S7c5b73fdea75479fb2d7ada7cce7530cp.pdf?spm=a2g0o.detail.0.0.7988Rg7IRg7IkP&file=S7c5b73fdea75479fb2d7ada7cce7530cp.pdf) |
-| Temperaturfühler | DS18B20, wasserdichte 3-Leiter-Sonden | 5 vorhanden; 2 geplant | [Datenblatt](https://www.analog.com/media/en/technical-documentation/data-sheets/ds18b20.pdf) |
-| Peltier-Leistungsstufe | Doppel-BTS7960 / IBT-2, 43-A-Angebotsbezeichnung | 1 | [BTS7960-Datenblatt](https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf) |
-| Programmieradapter | FT232RL/FTDI USB-C zu TTL, 3,3/5 V | 1 | [Lieferanten-PDF](https://ae-pic-a1.aliexpress-media.com/kf/Sa1b31f527aa04ebeb8f318bef00224866.pdf?spm=a2g0o.detail.0.0.1135Jkg1Jkg1VI&file=Sa1b31f527aa04ebeb8f318bef00224866.pdf) |
+## Peltier und Leistungspfad
 
-## 3. ESP32-32E Quad-MOSFET-Board
+Geplant:
 
-### 3.1 Angaben aus der Lieferantendokumentation
+- Peltier: etwa 12 V / 60 W, ungefaehr 5 A
+- Polaritaetsumkehr ueber BTS7960-H-Bruecke
+- zeitproportionaler Betrieb in langen Schaltfenstern
+- kein hochfrequentes direktes Peltier-PWM
+- 7,5-A-Ueberstromsicherung im Peltier-Leistungspfad
+- ausreichend dimensionierte Leitungen, Stecker und Masseverbindung
+- gemeinsame Bezugsmasse fuer ESP32-Logik und BTS7960, soweit das reale Modul dies
+  verlangt
 
-- ESP32-WROOM-32E / ESP32-32E
-- WLAN und Bluetooth/BLE
-- 4 MB Flash
-- vier N-Kanal-MOSFET-Schaltausgänge
-- DC-Eingang 5–60 V; 12 V wird empfohlen
-- alternativ 5-V-Versorgung über USB-C
-- UART-Pins zum Flashen sind herausgeführt
-- IO0 kann zum Start des UART-Bootloaders mit GND verbunden werden
-- alle wesentlichen ESP32-I/Os sind auf Stiftleisten herausgeführt
-- ungefähre Platinenabmessungen: 55 × 57,5 mm
+Vor dem ersten Peltieranschluss:
 
-### 3.2 Noch zu verifizieren
+1. BTS7960-Logikversorgung und Masse pruefen.
+2. Enable- und Richtungseingaenge unbelastet messen.
+3. Hardware-Pulldowns oder gleichwertige sichere Freigabestufe nachweisen.
+4. H-Brueckenausgang und Polaritaet mit Multimeter messen.
+5. sicherstellen, dass beide Richtungen nie gleichzeitig aktiv werden.
+6. Luefter, Kuehlkoerper, Sensoren und Sicherung vollstaendig montieren.
+7. erste reale Freigabe nur als begrenzter Servicepuls.
 
-- USB-C ist voraussichtlich nur zur Versorgung vorgesehen; kein USB-UART-Chip ist auf den Produktbildern erkennbar.
-- Exakte Zuordnung der vier MOSFET-Ausgänge zu GPIOs.
-- Active-high oder active-low der MOSFET-Ausgänge.
-- Strombelastbarkeit der einzelnen MOSFET-Ausgänge bei Dauerbetrieb.
-- Stromreserve der internen 5-V-Schiene für Display und BTS7960-Logik.
-- Verhalten der Ausgänge während Reset und Bootloaderbetrieb.
+BTS7960 `R_IS` und `L_IS` werden nur angeschlossen und verwendet, wenn
+Pegelbereich, Beschaltung und diagnostischer Nutzen des gelieferten Moduls
+praktisch bestaetigt wurden.
 
-Auf den Produktbildern erscheinen GPIO16, GPIO17, GPIO26 und GPIO27 als
-naheliegende Kandidaten für die vier MOSFET-Kanäle. Kanalzuordnung und aktive
-Pegel sind `unverified`; die Zuordnung **darf erst nach Messung als verbindlich
-übernommen werden**. Vorher gilt weder LOW noch HIGH als sicherer
-Ausschaltpegel.
+## Unabhaengige Schutzkomponenten
 
-### 3.3 Vorgesehene Nutzung
+### Ueberstromsicherung
 
-| Onboard-Kanal | Last | Verhalten |
-|---:|---|---|
-| 1 | Innenlüfter | während des Programms, gegebenenfalls dauernd langsam |
-| 2 | Aussenlüfter | mindestens bei aktivem Peltier, mit Nachlauf |
-| 3 | Reserve | nicht belegt |
-| 4 | Reserve | nicht belegt |
+- geplantes Rating: 7,5 A
+- Einbau im Peltier-Leistungspfad
+- genauer Sicherungstyp, Halter, Leitungsquerschnitt und Kurzschlussverhalten:
+  `TBD_HARDWARE`
 
-## 4. Touchdisplay TZT MSP2807
+### Einmalige Temperatursicherung
 
-### 4.1 Dokumentierte Displaydaten
-
-- 2,8-Zoll-TFT
-- ILI9341
-- 320 × 240 Pixel
-- 65k Farben
-- 4-Draht-SPI
-- Versorgung: 3,3–5 V
-- Logikpegel: 3,3 V
-- Modulgrösse: ungefähr 50 × 86 mm
-- resistiver Touch bei der Variante MSP2807
-- Micro-SD-Steckplatz vorhanden, vorerst nicht benötigt
-
-### 4.2 Anschlussbelegung des 14-poligen Moduls
-
-| Pin | Bezeichnung | Funktion | Geplante Nutzung |
-|---:|---|---|---|
-| 1 | VCC | 3,3/5-V-Versorgung | vorzugsweise 5 V, nach Prüfung der Board-Schiene |
-| 2 | GND | Masse | gemeinsame Masse |
-| 3 | CS | LCD Chip Select | eigener GPIO |
-| 4 | RESET | LCD Reset, active-low | eigener GPIO oder definierte Resetbeschaltung |
-| 5 | DC/RS | Daten/Befehl | eigener GPIO |
-| 6 | SDI/MOSI | SPI-Daten zum Display | gemeinsamer SPI-MOSI |
-| 7 | SCK | SPI-Takt | gemeinsamer SPI-SCK |
-| 8 | LED | Hintergrundbeleuchtung | zunächst 3,3 V dauerhaft; spätere Dimmung optional |
-| 9 | SDO/MISO | SPI-Daten vom Display | gemeinsamer SPI-MISO |
-| 10 | T_CLK | Touch-SPI-Takt | gemeinsam mit SCK |
-| 11 | T_CS | Touch Chip Select | eigener GPIO |
-| 12 | T_DIN | Touch-SPI-Eingang | gemeinsam mit MOSI |
-| 13 | T_DO | Touch-SPI-Ausgang | gemeinsam mit MISO |
-| 14 | T_IRQ | Touch-Interrupt, active-low | optional; Polling ist möglich |
-
-Display und Touch teilen SCK, MOSI und MISO. Minimal erforderlich sind daher
-sechs Signale: SCK, MOSI, MISO, LCD_CS, LCD_DC und TOUCH_CS. Alle konkreten
-ESP32-GPIOs in `config/pins.example.yaml` sind `candidate_unconfirmed`. RESET
-und T_IRQ sind optional beziehungsweise separat loesbar.
-
-### 4.3 Noch zu verifizieren
-
-- tatsächlicher Touchcontroller und kompatible Bibliothek; bei diesen Modulen ist XPT2046-kompatible Hardware üblich, aber am gelieferten Modul zu bestätigen
-- Touchkalibrierung und Displayrotation
-- tatsächliche VCC-/Backlight-Beschaltung des gelieferten Moduls
-
-## 5. Temperaturmessung DS18B20
-
-Zwei von fünf vorhandenen Sensoren werden eingesetzt:
-
-1. **Luft-/Schranksensor:** schnelle Erfassung der Lufttemperatur und Begrenzung der maximalen Lufttemperatur.
-2. **Produkt-/Referenzsensor:** in einer verschlossenen Referenzflasche mit Wasser; dient als Annäherung an die Produkttemperatur und startet den Fermentationstimer.
-
-Beide Sensoren teilen sich einen 1-Wire-Datenpin. Jeder Sensor besitzt eine eindeutige 64-Bit-Adresse.
-
-```text
-ESP32 3,3 V ───────── beide Sensoren VDD
-ESP32 GND   ───────── beide Sensoren GND
-ESP32 GPIO  ───────── beide Sensoren DATA
-                  │
-                4,7 kΩ
-                  │
-                3,3 V
-```
+Release 1 verwendet eine einmalige Temperatursicherung als unabhaengige
+thermische Notabschaltung.
 
 Anforderungen:
 
-- 3-Leiter-Betrieb, kein Parasite-Power-Modus
-- 4,7-kΩ-Pull-up nach 3,3 V
-- Sensorrollen über gespeicherte ROM-Adressen eindeutig zuordnen
-- bei Ausfall, CRC-Fehler oder unplausiblen Werten Leistungsstufe deaktivieren
-- Metallsonden nicht ohne bestätigte Lebensmitteleignung direkt in Lebensmittel eintauchen
+- in der Peltier-Leistungsfreigabe oder im relevanten Leistungspfad
+- arbeitet ohne ESP32, Firmware und DS18B20
+- Montage an der thermisch kritischsten Stelle
+- elektrisch und thermisch sicher befestigt
+- nach Ausloesung zu ersetzen
+- Ausloesetemperatur, Rating und Montageort erst nach thermischen Messungen:
+  `TBD_COMMISSIONING`
 
-## 6. BTS7960-H-Brücke
+Sie ersetzt weder den Kuehlkoerpersensor noch die Ueberstromsicherung.
 
-Die BTS7960-/IBT-2-Platine dient ausschliesslich der Peltier-Leistungssteuerung:
+## Temperatursensoren
 
-- Ein/Aus
-- Heizrichtung
-- Kühlrichtung
-- zeitproportionale Leistungsdosierung in langen Schaltfenstern
+Der erste Aufbau verwendet drei DS18B20.
 
-### 6.1 Standardanschlüsse
+### 1. Schrankluft
 
-| Anschluss | Funktion |
-|---|---|
-| B+ / B- | 12-V-Leistungsversorgung |
-| M+ / M- | Peltieranschluss |
-| VCC / GND | Logikversorgung, üblicherweise 5 V |
-| RPWM | Richtung 1 / Heiz- oder Kühlrichtung |
-| LPWM | Gegenrichtung |
-| R_EN / L_EN | Enable-Eingänge |
-| R_IS / L_IS | Diagnose-/Strommesssignale, zunächst optional |
+- fest eingebaut
+- primaerer Regelsensor im luftgefuehrten Betrieb
+- Begrenzungs- und Sicherheitssensor im produktgefuehrten Betrieb
+- fuer jede Peltierfreigabe erforderlich
+- Position wird so gewaehlt, dass weder direkter Luftstrahl noch Wandkontakt die
+  Messung unbrauchbar machen
 
-### 6.2 Steuerregeln
+### 2. Produkt
 
-- RPWM und LPWM niemals gleichzeitig aktiv ansteuern.
-- R_EN und L_EN können gemeinsam geschaltet werden.
-- Vor Richtungswechsel Leistung deaktivieren und mindestens 2 s Totzeit einhalten.
-- Das Peltier wird nicht mit hochfrequentem direktem PWM geregelt. Vorgesehen ist zeitproportionales Ein/Aus mit langen Fenstern, zum Beispiel 30–60 s.
-- Leistungszweig mit 7,5-A-Sicherung absichern.
-- Leitungsquerschnitt für den 5-A-Zweig mindestens 1,0 mm² bei kurzen Leitungen.
+- abnehmbarer Fühler
+- optionaler primaerer Regelsensor
+- getrennte externe Steckverbindung
+- Hot-Plug wird softwareseitig behandelt
+- gewoehnliche 3,5-mm-Klinke ist verworfen
+- Kandidaten: M8 3-polig, GX12-3 oder anderer verriegelbarer, verpolungssicherer
+  3-poliger Anschluss
+- Lebensmitteltauglichkeit des eigentlichen Fühlers und Reinigbarkeit der
+  Durchfuehrung sind zu bestaetigen
 
-## 7. FT232RL-Programmieradapter
+### 3. Aussenwaermetauscher/Kuehlkoerper
 
-Der Adapter wird für das erstmalige Flashen und als UART-Diagnoseschnittstelle verwendet. Spätere Updates sollen über OTA möglich sein.
+- fest an der thermisch relevanten Aussenseite montiert
+- ueberwacht Temperatur und Aenderungsrate
+- fuer jede Peltierfreigabe erforderlich
+- dient der Erkennung fehlender Waermeabfuhr und unplausibler Aktorreaktionen
+- aufgrund der umkehrbaren Polaritaet kann diese Seite je nach Betriebsrichtung
+  warm oder kalt werden
 
-### 7.1 UART-Verbindung
+### 1-Wire-Topologie
 
-```text
-FT232 TX  → ESP32 RX0
-FT232 RX  → ESP32 TX0
-FT232 GND → ESP32 GND
-```
+Bevorzugt:
 
-- UART-Pegel auf 3,3 V einstellen.
-- TX und RX gekreuzt anschliessen.
-- IO0 beim Einschalten/Reset mit GND verbinden, um den Bootloader zu starten.
-- Nach dem Flashen IO0 von GND trennen und das Board neu starten.
-- Das ESP32-Board separat über USB-C 5 V oder den 12-V-Eingang versorgen. Die Versorgung nicht zusätzlich über den FT232RL einspeisen, solange die genaue Adapterbeschaltung nicht geprüft ist.
+- separater GPIO je Sensor
 
-## 8. Stromversorgung
+Zulaessiger Rueckfall bei GPIO-Knappheit:
 
-Vorhanden ist bisher eine 12-V-Versorgung aus der ursprünglichen Kühl-/Wärmebox.
+- beide festen Sensoren auf einem internen Bus
+- abnehmbarer Produktfuehler auf eigenem externen Bus
 
-Zu prüfen:
+Die tatsaechlichen GPIOs bleiben `TBD_HARDWARE`.
 
-- tatsächliche Dauerstromfähigkeit des Netzteils
-- ob die Angabe 60 W nur das Peltier oder das gesamte Originalgerät einschliesslich Lüfter betrifft
-- Stromaufnahme beider Lüfter
-- Spannungsabfall bei gleichzeitigem Peltierbetrieb, WLAN-Sendeimpulsen und Displaybeleuchtung
+Elektrische Anforderungen:
 
-Empfohlene Verteilung:
+- 3-Leiter-Betrieb, kein parasitaerer Betrieb
+- passende Pull-ups je Bus
+- Steckverbindung verpolungssicher
+- ESD- und Fehlsteckschutz fuer externen Produktanschluss pruefen
+- ROM-Adressen bei Hardwareabnahme dokumentieren
 
-```text
-12 V
-├── 7,5-A-Sicherung → BTS7960 → Peltier
-├── ESP32-Quad-MOSFET-Board
-├── MOS-Ausgang → Innenlüfter
-└── MOS-Ausgang → Aussenlüfter
-```
+## Luefter
 
-Display und BTS7960-Logik dürfen erst aus dem 5-V-Pin des ESP32-Boards versorgt werden, wenn die Schiene unter Last geprüft wurde. Bei instabilen 5 V ist ein separater 12→5-V-Buck vorzusehen.
+### Innenluefter
 
-## 9. Vorläufige GPIO-Planung
+- 12 V
+- sorgt fuer gleichmaessige Schrankluft
+- laeuft waehrend aller temperaturgeregelten Phasen und waehrend Peltier-Totzeiten
+- besitzt einen Nachlauf nach Ende der Temperaturregelung
+- im normalen Standby aus
 
-Die vorläufige Zuordnung steht in [`config/pins.example.yaml`](../config/pins.example.yaml). Sie ist so gewählt, dass:
+### Aussenluefter
 
-- klassische ESP32-VSPI-Pins für Display und Touch genutzt werden,
-- UART0 für den FT232RL frei bleibt,
-- Boot-Strapping-Pins möglichst vermieden werden,
-- die mutmasslichen Onboard-MOSFET-Pins nicht doppelt verwendet werden.
+- 12 V
+- kuehlt den aeusseren Waermetauscher
+- wird ohne absichtliche Vorlaufzeit im selben Steuerzyklus wie die
+  Peltierfreigabe eingeschaltet
+- besitzt einen zwingenden Nachlauf
+- bleibt bei geeigneten Sicherheitsfehlern zur Restwaermeabfuhr aktiviert
 
-Die Datei darf erst nach Hardwareprüfung in eine verbindliche `pins.yaml` übernommen werden.
+Vor Anschluss werden MOSFET-Ausgang, aktiver Pegel, Stromaufnahme und
+Anlaufverhalten unbelastet beziehungsweise mit einzelnem Verbraucher gemessen.
 
-GPIO4 wird wegen seiner Strapping-Funktion nicht als Display-Reset-Kandidat
-gefuehrt. Ob und wie LCD_RESET angeschlossen wird, bleibt `unknown`.
+Ob ein Tachosignal spaeter ergaenzt wird, bleibt `FUTURE_RELEASE`.
 
-## 10. Verifikation vor Leistungsanschluss
+## Summer
 
-1. Platinenrevision fotografieren und Beschriftungen dokumentieren.
-2. ESP32 über UART flashen und seriellen Bootlog prüfen.
-3. Alle freien GPIOs mit Testprogramm einzeln schalten.
-4. Onboard-MOSFET-Kanäle ohne Last messen und GPIO-Zuordnung dokumentieren.
-5. Display ohne Touch initialisieren.
-6. Touchcontroller erkennen, kalibrieren und Rotation prüfen.
-7. Beide DS18B20-Adressen auslesen und Rollen speichern.
-8. BTS7960 ohne Peltier mit Multimeter bzw. kleiner Testlast prüfen.
-9. Lüfter einzeln testen.
-10. Erst danach Peltier über Sicherung anschliessen.
+Geplant ist ein aktiver 5-V- oder 12-V-Summer ueber einen geeigneten
+MOSFET-/Treiberkanal.
+
+Noch offen:
+
+- Spannung und Stromaufnahme
+- konkrete Kanalzuordnung
+- aktiver Pegel
+- akustische Lautstaerke und Montageort
+
+Der Summer darf keine Sicherheitsaufgabe blockieren.
+
+## Display und Touch
+
+Bestellt beziehungsweise geplant:
+
+- TZT MSP2807, 2,8 Zoll
+- 320 x 240 Pixel
+- SPI
+- ILI9341 als Displaycontroller laut Produktbeschreibung
+- resistiver Touch
+- XPT2046 als wahrscheinlicher, aber praktisch zu bestaetigender Touchcontroller
+- Querformat
+
+Noch zu pruefen:
+
+- Pinbelegung und SPI-Bus
+- Controlleridentitaet
+- Displayrotation
+- Touchrohwerte und Kalibrierung
+- Reset- und Bootverhalten
+- Hintergrundbeleuchtung und Dimmung
+- moegliche Konflikte mit Bootstrapping-Pins
+
+## Versorgung
+
+Vorgesehen:
+
+- 12-V-Leistungspfad fuer Peltier und Luefter
+- geeignete 5-V-/3,3-V-Versorgung fuer Controller und Peripherie
+- stabile Massefuehrung
+- lokale Abblockung nahe Controller, Display, Sensorbussen und H-Bruecke
+
+Release 1 wertet die interne ESP32-Brownout-Erkennung und Resetursache aus.
+Eine direkte Messung der 12-V-Leistungsspannung ueber einen geschuetzten
+ADC-Spannungsteiler ist vorbereitet, aber nicht verpflichtend und standardmaessig
+nicht bestueckt (`FUTURE_RELEASE`).
+
+Versorgungsspannungen, Reglerleistung, Leitungsquerschnitte, Sicherungshalter und
+Stecker werden am realen Aufbau dokumentiert.
+
+## Nicht vorgesehene Hardware in Release 1
+
+- Tuerkontakt
+- verpflichtende batteriegepufferte RTC
+- verpflichtende 12-V-ADC-Messung
+- Luefter-Tachosignal
+- externe Strommessung zusaetzlich zu optionalem R_IS/L_IS
+- eigenes OTA- oder Recovery-Zusatzmodul
+
+Die Software darf spaetere Ereignisse oder Adapter dafuer vorbereiten, aber keine
+nicht vorhandene Hardware behaupten.
+
+## Sichere Bootzustaende
+
+Verbindliche Anforderungen:
+
+- beide BTS7960-Richtungen durch Hardwarebeschaltung inaktiv
+- Peltierfreigabe erst nach vollstaendiger Initialisierung und Validierung
+- Onboard-MOSFET-Ausgaenge beim Boot praktisch messen
+- ungeeignete Bootstrapping-Pins nicht fuer sicherheitskritische Freigaben nutzen
+- keine automatische Aktorpruefung beim normalen Boot
+- `esp32_bringup` startet mit `HARDWARE_UNVERIFIED`
+
+## Update und Recovery
+
+Release 1:
+
+- initiales Flashen ueber FT232RL/UART
+- normale Entwicklerupdates ueber UART
+- Wiederherstellung ueber ESP32-ROM-Bootloader
+- Single-App-Partitionsplan ist zulaessig
+- keine reservierten dualen OTA-Slots erforderlich
+
+Web-OTA und automatisches Firmware-Rollback sind `FUTURE_RELEASE` und duerfen nur
+nach realem 4-MB-Budgetnachweis geplant werden.
+
+## Verifikationsreihenfolge
+
+1. Sichtpruefung, Versorgung, Masse und Sicherungen
+2. Controllerboard ohne Aktoren
+3. GPIO- und Bootpegelmessung
+4. Sensoren, Display und Touch
+5. Luefter und Summer einzeln
+6. BTS7960 ohne Peltier
+7. begrenzte Peltier-Heiz- und Kuehlpulse
+8. thermische Grundvermessung
+9. Sicherheits- und Fehlerpruefungen
+10. vollstaendige Hardwareabnahme
+
+Die zugehoerigen Issues sind #29 bis #36.
