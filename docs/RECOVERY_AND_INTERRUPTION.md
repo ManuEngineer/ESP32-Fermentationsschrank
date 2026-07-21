@@ -3,21 +3,21 @@
 ## Status
 
 Dieses Dokument ergaenzt [`STATE_MACHINE.md`](STATE_MACHINE.md) um die in
-Phase 3B und 3C akzeptierten Sonderfaelle. Exakte Zeitgrenzen,
-Temperaturmodelle und Fehlerklassen werden spaeter in
+Phase 3B bis 3D akzeptierten Sonderfaelle. Exakte Zeitgrenzen,
+Temperaturmodelle, Persistenzintervalle und Fehlerklassen werden spaeter in
 `TEMPERATURE_CONTROL.md`, `SAFETY_AND_FAULTS.md` und
 `SETTINGS_AND_STORAGE.md` vervollstaendigt.
 
 ## Grundsatz: keine blockierende Benutzerentscheidung
 
-Ein laufender Prozess darf nach einem Stromausfall nicht unbegrenzt auf eine
+Ein laufender Prozess darf nach einer Unterbrechung nicht unbegrenzt auf eine
 Benutzereingabe warten. Der Benutzer steht unter Umstaenden erst Stunden spaeter
 vor dem Geraet oder oeffnet die Weboberflaeche erst spaeter.
 
 Deshalb gilt:
 
-- Nach dem Neustart wird der Prozess automatisch und phasenbezogen in einer
-  sinnvollen, sicheren Form weitergefuehrt.
+- Nach einem Stromausfall wird der Prozess automatisch und phasenbezogen in
+  einer sinnvollen, sicheren Form weitergefuehrt.
 - Eine fehlende Benutzerquittierung ist allein kein Grund, die Regelung zu
   stoppen.
 - Die Software zeigt die getroffene Wiederanlaufentscheidung, die geschaetzte
@@ -56,36 +56,49 @@ vorgesehen:
 
 ## Ausfall oder Entfernen des Produktfuehlers
 
-Ein produktgefuehrter Lauf darf nicht still und automatisch auf den
+Ein produktgefuehrter Lauf darf nicht still und unprotokolliert auf den
 Luftfuehler wechseln.
+
+### Sofortreaktion
 
 Bei Ausfall, Entfernen oder ungueltigen Messwerten des Produktfuehlers:
 
 1. Peltier vorlaeufig sicher AUS.
-2. Der Luftfuehler und alle weiteren Sicherheitsbedingungen werden geprueft.
+2. Der fest eingebaute Luftfuehler und alle Sicherheitsbedingungen werden
+   geprueft.
 3. Die Bedienoberflaeche zeigt den Sensorfehler deutlich an.
-4. Nur zulaessige Aktionen werden angeboten.
+4. Ein akustisches Warnsignal wird entsprechend der Meldungsklasse ausgegeben.
+5. Der Zeitpunkt, die letzten gueltigen Messwerte und der aktuelle Zustand
+   werden protokolliert.
 
-Moegliche Aktionen:
+### Programmspezifische Ausfallstrategie
 
-- `Mit Luftfuehler fortsetzen`, falls der Luftfuehler gueltig ist
-- `Abbrechen und ausschalten`
-- `Abbrechen und kuehlen`, falls Kuehlen sicher zulaessig ist
+Das Verhalten ist pro Programm konfigurierbar. Vorgesehene Strategien:
 
-Anders als beim Stromausfall ist ein automatischer Wechsel des primaeren
-Sensors nicht vorgesehen, weil der Benutzer beim Start bewusst einen
-produktgefuehrten Lauf gewaehlt hat. Bis zur Entscheidung bleibt die
-Leistungsstufe in einem sicheren, spaeter je Fehlerklasse festzulegenden
-Zustand.
+- `fallback_to_air_after_timeout`
+- `wait_for_user`
+- `stop_to_safe_state`
 
-Bei einer Fortsetzung mit Luftfuehler:
+Standard fuer die allgemeinen Programme ist
+`fallback_to_air_after_timeout`.
 
-- der Sensorwechsel wird deutlich angezeigt
-- der Wechsel wird mit Zeit und Messwerten protokolliert
-- der Lauf bleibt derselbe Programmschnappschuss, erhaelt aber einen
-  dokumentierten Wechsel des Regelmodus
-- die spaetere Bewertung der Temperaturfuehrung beruecksichtigt die geringere
-  Aussagekraft gegenueber einer direkten Produktmessung
+Bei dieser Standardstrategie gilt:
+
+- Der Benutzer kann sofort `Mit Luftfuehler fortsetzen`, `Abbrechen und
+  ausschalten` oder, falls sicher zulaessig, `Abbrechen und kuehlen` waehlen.
+- Erfolgt innerhalb einer konfigurierbaren Wartezeit keine Eingabe, wechselt die
+  Regelung automatisch auf den Luftfuehler, sofern dieser gueltig und die
+  Fortsetzung sicher ist.
+- Der Wechsel wird deutlich angezeigt, akustisch gemeldet und protokolliert.
+- Der Lauf bleibt derselbe Programmschnappschuss, erhaelt aber einen
+  dokumentierten Wechsel des Regelmodus.
+- Die Auswertung kennzeichnet, dass die Temperaturfuehrung nach dem Wechsel nur
+  anhand der Schrankluft erfolgte.
+- Ist der Luftfuehler ungueltig oder eine sichere Fortsetzung nicht moeglich,
+  erfolgt kein automatischer Wechsel; die definierte Fehlerstrategie hat
+  Vorrang.
+
+Die genaue Wartezeit bleibt `TBD_COMMISSIONING`.
 
 ## Maximale Wartezeit nach dem Vorheizen
 
@@ -115,8 +128,9 @@ Beispiele:
 - kurzzeitiger nichtkritischer Kommunikationsfehler
 - voruebergehend ungueltiger Messwert, der sich eindeutig erholt hat
 
-Eine Fortsetzung darf nur angeboten werden, wenn Sensoren, Aktoren und
-Sicherheitsbedingungen erneut vollstaendig geprueft wurden.
+Eine Fortsetzung darf nur angeboten oder automatisch ausgefuehrt werden, wenn
+Sensoren, Aktoren und Sicherheitsbedingungen erneut vollstaendig geprueft
+wurden.
 
 ### Laufbeendende Fehler
 
@@ -135,9 +149,9 @@ Die verbindliche Fehlerklassifikation folgt in `SAFETY_AND_FAULTS.md`.
 
 ## Phasenbezogene automatische Wiederaufnahme
 
-Nach einer Unterbrechung wird nicht blind der letzte elektrische Aktorzustand
-wiederhergestellt. Stattdessen wird aus dem gespeicherten fachlichen Zustand
-eine neue sichere Aktion berechnet.
+Nach einer Stromunterbrechung wird nicht blind der letzte elektrische
+Aktorzustand wiederhergestellt. Stattdessen wird aus dem gespeicherten
+fachlichen Zustand eine neue sichere Aktion berechnet.
 
 ### PREHEATING oder REACHING_TARGET
 
@@ -350,8 +364,10 @@ Wiederanlaufen.
 - [x] kein Tuerkontakt im ersten Release
 - [x] optionale Tuerereignisse in der Architektur fuer eine spaetere Erweiterung
 - [x] bei spaeterem Tuerkontakt Peltier AUS, Timer laeuft weiter
-- [x] Produktfuehlerausfall fuehrt nicht zu stillem Wechsel auf Luftregelung
-- [x] Fortsetzung mit Luftfuehler ist nach Benutzerentscheidung moeglich
+- [x] Produktfuehlerausfall fuehrt nicht zu stillem oder unprotokolliertem Wechsel
+- [x] Ausfallstrategie des Produktfuehlers ist pro Programm konfigurierbar
+- [x] Standard ist automatischer Wechsel auf Luftregelung nach einer Wartezeit,
+      sofern dies sicher moeglich ist
 - [x] maximale Wartezeit in `WAITING_FOR_PRODUCT` pro Programm
 - [x] Fehlerquittierung und Fortsetzung richten sich nach Fehlerklasse
 - [x] Stromausfallzeit wird weder pauschal voll angerechnet noch voll pausiert
@@ -366,11 +382,11 @@ Wiederanlaufen.
 
 ## Noch offen
 
+- konkrete Wartezeit bis zum automatischen Wechsel auf den Luftfuehler
 - Grenzwert fuer kurze und lange Unterbrechung
 - konkrete Temperatur-Aktivitaetsfunktion oder konservative Ersatzlogik
 - maximale automatisch zulaessige Zeitverlaengerung
 - Speicherintervall fuer Zeitstempel und Laufzustand
 - Maximaldauer fuer `recovery_time_pending`
 - genaue programmspezifische Ersatzlogik bei dauerhaft unbekannter Zeit
-- Behandlung der Entscheidungszeit bei Produktfuehlerausfall
 - konkrete Fehlerklassen und Fortsetzungsbedingungen
