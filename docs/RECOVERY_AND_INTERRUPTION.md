@@ -2,391 +2,313 @@
 
 ## Status
 
-Dieses Dokument ergaenzt [`STATE_MACHINE.md`](STATE_MACHINE.md) um die in
-Phase 3B bis 3D akzeptierten Sonderfaelle. Exakte Zeitgrenzen,
-Temperaturmodelle, Persistenzintervalle und Fehlerklassen werden spaeter in
-`TEMPERATURE_CONTROL.md`, `SAFETY_AND_FAULTS.md` und
-`SETTINGS_AND_STORAGE.md` vervollstaendigt.
+Dieses Dokument definiert die Release-1-Regeln fuer Stromunterbrechungen,
+Sensorersatz, phasenbezogenen Wiederanlauf und Zeitbewertung. Es ergaenzt
+[`STATE_MACHINE.md`](STATE_MACHINE.md) und wird durch
+[`PR38_REVIEW_CORRECTIONS.md`](PR38_REVIEW_CORRECTIONS.md) praezisiert.
 
-## Grundsatz: keine blockierende Benutzerentscheidung
+## Grundsatz: autonom, aber nicht blind
 
-Ein laufender Prozess darf nach einer Unterbrechung nicht unbegrenzt auf eine
-Benutzereingabe warten. Der Benutzer steht unter Umstaenden erst Stunden spaeter
-vor dem Geraet oder oeffnet die Weboberflaeche erst spaeter.
+Ein unterbrochener Lauf soll nicht unnoetig auf Benutzer oder Netzwerk warten.
+Automatischer Wiederanlauf bedeutet jedoch nicht, unbekannte Ausfallzeit,
+Temperaturverlauf oder biologischen Fortschritt zu erfinden.
 
 Deshalb gilt:
 
-- Nach einem Stromausfall wird der Prozess automatisch und phasenbezogen in
-  einer sinnvollen, sicheren Form weitergefuehrt.
-- Eine fehlende Benutzerquittierung ist allein kein Grund, die Regelung zu
-  stoppen.
-- Die Software zeigt die getroffene Wiederanlaufentscheidung, die geschaetzte
-  Unterbrechungsdauer und eine allfaellige Zeitkorrektur an.
-- Der Benutzer kann die automatisch gewaehlte Fortsetzung spaeter pruefen und,
-  soweit sicher zulaessig, anpassen oder den Lauf manuell beenden.
-- Ein echter Sicherheitsfehler kann den Prozess weiterhin stoppen und hat
-  Vorrang vor dem Grundsatz des automatischen Fortfahrens.
+- Jeder Wiederanlauf beginnt mit ausgeschalteten Aktoren.
+- Bootschleifen, persistierte Verriegelungen, Speicherintegritaet und Sensoren
+  werden vor jeder Aktorfreigabe geprueft.
+- Der letzte elektrische Aktorzustand wird nie wiederhergestellt.
+- Eine neue phasenbezogene Aktion wird aus validierten fachlichen Daten abgeleitet.
+- Sichere aktuelle Temperaturregelung darf vor verfuegbarer NTP-Zeit wieder
+  beginnen, sofern Phase und Freigaben eindeutig sind.
+- Unbekannter Unterbrechung wird kein frei geschaetzter exakter Fortschritt
+  gutgeschrieben.
+- Ein Sicherheitsfehler oder eine nicht rekonstruierbare Phase stoppt die
+  automatische Fortsetzung.
+- Die Recoveryentscheidung wird persistiert, bevor Aktoren freigegeben werden.
 
-## Kein Tuerkontakt im ersten Release
+## Kein Tuerkontakt in Release 1
 
-Im ersten Release wird kein Tuerkontakt eingebaut.
+Die Software besitzt keine direkte Tuerinformation.
 
 Folgen:
 
-- Die Software kann eine geoeffnete Tuer nicht direkt erkennen.
-- Temperaturabweichungen durch eine geoeffnete Tuer werden wie andere
-  Temperaturabweichungen behandelt.
-- Es gibt keinen tuergesteuerten Timerstopp und keine tuergesteuerte
-  Peltierabschaltung.
-- Bedienungsanweisungen duerfen nicht behaupten, die Tuerstellung zu kennen.
+- keine tuergesteuerte Peltierabschaltung
+- kein tuergesteuerter Timerstopp
+- Temperaturabweichungen durch eine offene Tuer werden wie andere Abweichungen
+  behandelt
+- UI und Diagnose duerfen nicht behaupten, die Tuerstellung zu kennen
 
-Die Softwarearchitektur soll optional ein spaeteres Ereignis `door_open`
-beziehungsweise `door_closed` aufnehmen koennen. Solange kein Tuerkontakt in
-der bestaetigten Hardwarekonfiguration vorhanden ist, bleibt diese Funktion
-deaktiviert und hat keinerlei Einfluss auf den Ablauf.
-
-Falls spaeter ein Tuerkontakt nachgeruestet wird, ist als Standardverhalten
-vorgesehen:
-
-- Peltier bei offener Tuer AUS
-- Fermentationstimer laeuft weiter
-- sichtbare Meldung `Tuer offen`
-- nach laengerer Tueröffnung Warnung und akustisches Signal
-- nach dem Schliessen normale Temperaturregelung fortsetzen
+Eine spaetere Erweiterung darf `door_open` und `door_closed` als optionale
+Ereignisse einfuehren. Ohne bestaetigte Hardware bleibt sie wirkungslos.
 
 ## Ausfall oder Entfernen des Produktfuehlers
 
-Ein produktgefuehrter Lauf darf nicht still und unprotokolliert auf den
-Luftfuehler wechseln.
+Ein produktgefuehrter Lauf wechselt nie still auf den Luftfuehler.
 
 ### Sofortreaktion
 
-Bei Ausfall, Entfernen oder ungueltigen Messwerten des Produktfuehlers:
+1. Peltier vorlaeufig AUS.
+2. Schrankluftfuehler und alle Sicherheitsbedingungen pruefen.
+3. Sensorfehler sichtbar und akustisch melden.
+4. Zeitpunkt, letzte gueltige Werte und Prozessphase protokollieren.
+5. Programmspezifische Ausfallstrategie anwenden.
 
-1. Peltier vorlaeufig sicher AUS.
-2. Der fest eingebaute Luftfuehler und alle Sicherheitsbedingungen werden
-   geprueft.
-3. Die Bedienoberflaeche zeigt den Sensorfehler deutlich an.
-4. Ein akustisches Warnsignal wird entsprechend der Meldungsklasse ausgegeben.
-5. Der Zeitpunkt, die letzten gueltigen Messwerte und der aktuelle Zustand
-   werden protokolliert.
+### Strategien
 
-### Programmspezifische Ausfallstrategie
+```text
+fallback_to_air_after_timeout
+wait_for_user
+stop_to_safe_state
+```
 
-Das Verhalten ist pro Programm konfigurierbar. Vorgesehene Strategien:
+Standard ist `fallback_to_air_after_timeout`.
 
-- `fallback_to_air_after_timeout`
-- `wait_for_user`
-- `stop_to_safe_state`
+Dabei gilt:
 
-Standard fuer die allgemeinen Programme ist
-`fallback_to_air_after_timeout`.
+- Der Benutzer kann sofort mit Luftregelung fortsetzen, ausschalten oder einen
+  separaten manuellen Kuehllauf starten, soweit sicher zulaessig.
+- Nach der konfigurierten Wartezeit darf automatisch auf Luftregelung gewechselt
+  werden, wenn der Luftfuehler gueltig ist und der Wechsel vollstaendig validiert
+  wurde.
+- Wechsel, Zeitpunkt, Werte und reduzierte Prozesskonfidenz werden protokolliert.
+- Der aktive Programmschnappschuss bleibt bestehen; der Regelmoduswechsel wird als
+  Laufrevision gespeichert.
+- Ist der Luftfuehler ungueltig oder die Fortsetzung nicht sicher, erfolgt kein
+  automatischer Wechsel.
 
-Bei dieser Standardstrategie gilt:
-
-- Der Benutzer kann sofort `Mit Luftfuehler fortsetzen`, `Abbrechen und
-  ausschalten` oder, falls sicher zulaessig, `Abbrechen und kuehlen` waehlen.
-- Erfolgt innerhalb einer konfigurierbaren Wartezeit keine Eingabe, wechselt die
-  Regelung automatisch auf den Luftfuehler, sofern dieser gueltig und die
-  Fortsetzung sicher ist.
-- Der Wechsel wird deutlich angezeigt, akustisch gemeldet und protokolliert.
-- Der Lauf bleibt derselbe Programmschnappschuss, erhaelt aber einen
-  dokumentierten Wechsel des Regelmodus.
-- Die Auswertung kennzeichnet, dass die Temperaturfuehrung nach dem Wechsel nur
-  anhand der Schrankluft erfolgte.
-- Ist der Luftfuehler ungueltig oder eine sichere Fortsetzung nicht moeglich,
-  erfolgt kein automatischer Wechsel; die definierte Fehlerstrategie hat
-  Vorrang.
-
-Die genaue Wartezeit bleibt `TBD_COMMISSIONING`.
+Die Wartezeit bleibt `TBD_COMMISSIONING`.
 
 ## Maximale Wartezeit nach dem Vorheizen
 
-Der Zustand `WAITING_FOR_PRODUCT` besitzt eine pro Programm konfigurierbare
-maximale Wartezeit.
+`WAITING_FOR_PRODUCT` besitzt eine programmspezifische Maximalzeit.
 
-Vorgesehener Ablauf:
+- Vor Ablauf wird sichtbar und akustisch gewarnt.
+- Das Produkt wird niemals automatisch als eingesetzt angenommen.
+- Ist die Maximalzeit belastbar abgelaufen, endet das Vorheizen sicher und der
+  Lauf wird als nicht gestartet beziehungsweise abgebrochen protokolliert.
+- Ist nach einem Neustart unklar, ob die Maximalzeit abgelaufen ist, darf keine
+  Fermentation automatisch starten. Die Regelung bleibt nur in einer eindeutig
+  sicheren Warteaktion oder wird beendet.
 
-1. Der leere Schrank haelt die vorbereitete Temperatur.
-2. Vor Ablauf der Maximalzeit erfolgt eine sichtbare und akustische Warnung.
-3. Wird die Maximalzeit erreicht, beginnt die Fermentation nicht automatisch.
-4. Die Vorheizphase wird sicher beendet und der Lauf als nicht gestartet
-   beziehungsweise abgebrochen protokolliert.
-5. Der Benutzer kann den Programmlauf anschliessend neu starten.
+## Fehlerquittierung und Fortsetzung
 
-Die konkreten Warte- und Vorwarnzeiten bleiben `TBD_COMMISSIONING`.
+Quittierung bedeutet nur Kenntnisnahme. Eine Fortsetzung richtet sich nach
+Fehlerklasse, beseitigter Ursache, erneuter Validierung und gegebenenfalls
+bewusstem Fehlerreset.
 
-## Fehlerquittierung nach Fehlerklasse
+Laufbeendende Beispiele:
 
-Die Rueckkehr aus `FAULT` ist von der Fehlerklasse abhaengig.
-
-### Potenziell fortsetzbare Fehler
-
-Beispiele:
-
-- Produktfuehler voruebergehend entfernt und danach wieder gueltig
-- kurzzeitiger nichtkritischer Kommunikationsfehler
-- voruebergehend ungueltiger Messwert, der sich eindeutig erholt hat
-
-Eine Fortsetzung darf nur angeboten oder automatisch ausgefuehrt werden, wenn
-Sensoren, Aktoren und Sicherheitsbedingungen erneut vollstaendig geprueft
-wurden.
-
-### Laufbeendende Fehler
-
-Beispiele:
-
-- harte Ueber- oder Untertemperaturgrenze verletzt
+- harte Ueber- oder Untertemperatur
 - widerspruechliche H-Bruecken-Anforderung
-- nicht gewaehrleisteter sicherer Ausgangszustand
-- beschaedigte oder widerspruechliche Persistenzdaten
+- nicht nachweisbarer sicherer Ausgangszustand
+- unbrauchbare Persistenz oder unvollstaendige Transaktion
 - kritischer interner Softwarefehler
 
-Bei diesen Fehlern fuehrt eine Quittierung nur in einen sicheren Zustand. Der
-urspruengliche Lauf wird nicht normal fortgesetzt.
+Ein Neustart setzt solche Fehler nicht zurueck.
 
-Die verbindliche Fehlerklassifikation folgt in `SAFETY_AND_FAULTS.md`.
+## Phasenbezogene Wiederaufnahme
 
-## Phasenbezogene automatische Wiederaufnahme
+### PREHEATING und REACHING_TARGET
 
-Nach einer Stromunterbrechung wird nicht blind der letzte elektrische
-Aktorzustand wiederhergestellt. Stattdessen wird aus dem gespeicherten
-fachlichen Zustand eine neue sichere Aktion berechnet.
-
-### PREHEATING oder REACHING_TARGET
-
-- Sensoren und Sicherheitsbedingungen pruefen
+- Sensoren, Sicherheitsfreigaben und Zeitgrenzen pruefen
 - Zieltemperatur erneut anfahren
-- danach den normalen Ablauf fortsetzen
-- keine Fermentationszeit anrechnen, solange sie noch nicht begonnen hatte
+- noch nicht gestartete Fermentationszeit nicht anrechnen
 
 ### WAITING_FOR_PRODUCT
 
-- Vorheizzustand nur fortsetzen, wenn er noch innerhalb der konfigurierten
-  maximalen Wartezeit liegt
-- andernfalls Vorheizen beenden und als nicht gestarteten Lauf protokollieren
-- niemals automatisch annehmen, dass das Produkt eingesetzt wurde
+- nur innerhalb einer belastbar gueltigen Wartezeit fortsetzen
+- Produkt niemals automatisch als eingesetzt annehmen
+- bei nicht sicher entscheidbarer Wartezeit keine Fermentation starten
 
 ### QUALIFYING_TARGET
 
 - Zieltemperatur erneut erreichen
-- Zielqualifikation neu beginnen
-- keine bereits teilweise absolvierte Qualifikationszeit blind uebernehmen
+- Zielqualifikation vollständig neu beginnen
 
 ### FERMENTING
 
-- Temperaturregelung nach gueltigem Sensorcheck sofort wieder aufnehmen
-- Prozess nicht auf eine Benutzerentscheidung warten lassen
-- Unterbrechungswirkung spaeter anhand der verfuegbaren Zeit- und
-  Temperaturdaten bewerten
-- verbleibende Fermentationszeit automatisch verlaengern, falls die
-  Unterbrechung den wirksamen Prozessfortschritt reduziert hat
+- sichere Temperaturregelung nach vollstaendiger Recoverypruefung neu ableiten
+- bei fehlender Zeit `RECOVERY_TIME_PENDING` setzen
+- unbekannter Unterbrechung keinen exakten Fortschritt gutschreiben
+- keinen automatischen Abschluss aus einem einzelnen Schaetzwert ableiten
+- spaetere Zeit- und Temperaturbewertung als Laufrevision nachtragen
 
-### COOLING oder COOL_HOLDING
+### COOLING
 
-- bei gueltigen Sensoren und ohne Sicherheitsfehler Kuehlung beziehungsweise
-  Kuehlhalten wieder aufnehmen
-- eine Benutzerquittierung ist fuer die Wiederaufnahme nicht erforderlich
-- Dauer einer zeitlich begrenzten Haltephase anhand der wiederhergestellten
-  Zeitbasis korrigieren
+- bei gueltigen Pflichtsensoren und ohne Sperre Kuehlung erneut ableiten
+- keine alte BTS7960-Richtung blind wiederherstellen
+
+### COOL_HOLDING
+
+- sichere Kuehlregelung erneut ableiten
+- zeitlich begrenztes Halten nur aus belastbarer Zeitbewertung beenden
+- bei ueberlappender Unsicherheit keinen automatischen Abschluss ausloesen
 
 ### MANUAL_HOLDING
 
-- Zieltemperatur nach Sensor- und Sicherheitspruefung wieder halten
-- den Benutzer ueber die Unterbrechung informieren
+- Zieltemperatur nach vollstaendiger Recoverypruefung weiter halten
+- Benutzer sichtbar ueber die Unterbrechung informieren
 
 ### COMPLETED
 
 - keine Temperaturregelung neu starten
-- abgeschlossenen Zustand und Meldung wiederherstellen
-
-## Biologische Wirkung einer Stromunterbrechung
-
-Eine Fermentation stoppt bei sinkender Temperatur nicht schlagartig. Sie laeuft
-in der Regel langsamer weiter. Deshalb sind weder ein vollstaendiges Anrechnen
-der Stromausfallzeit noch ein vollstaendiges Pausieren des Timers allgemein
-korrekt.
-
-Das Ziel ist eine **temperaturgewichtete Unterbrechungskompensation**:
-
-- Zeit nahe der Solltemperatur zaehlt weitgehend als wirksame
-  Fermentationszeit.
-- Zeit deutlich unter der Solltemperatur zaehlt nur teilweise.
-- Daraus wird eine erforderliche Verlaengerung der verbleibenden Laufzeit
-  abgeleitet.
-
-Konzeptionell wird die wirksame Fermentationszeit als temperaturabhaengige
-Groesse behandelt:
-
-```text
-wirksamer Fortschritt = Summe aus Zeitabschnitten * Aktivitaetsfaktor(Temperatur)
-```
-
-Der Aktivitaetsfaktor ist bei der Solltemperatur ungefaehr `1`. Bei tieferen
-Temperaturen liegt er darunter. Die konkrete Funktion darf nicht ohne
-praktische Grundlage erfunden werden, weil sie von Kultur und Prozess abhaengt.
-
-## Verfuegbare Temperaturgrundlage
-
-### Produktgefuehrter Lauf
-
-Ist nach dem Neustart ein gueltiger Produktfuehler vorhanden, hat dessen
-Temperatur fuer die Bewertung Vorrang.
-
-### Luftgefuehrter Lauf
-
-Ohne Produktfuehler wird die **Schranklufttemperatur** verwendet. Damit ist die
-Temperatur im Innenraum des Fermentationsschrankes gemeint, gemessen durch den
-fest eingebauten Luftfuehler.
-
-Die daraus berechnete Kompensation besitzt eine geringere Sicherheit, weil die
-Produkttemperatur traeger reagieren kann als die Schranklufttemperatur.
-
-Eine zusaetzliche Messung der Umgebungsluft ausserhalb des Schrankes ist fuer
-das erste Release nicht vorgesehen.
+- `COMPLETED` und Ergebnisdaten wiederherstellen
+- erst Benutzerquittierung fuehrt nach `STANDBY`
 
 ## Fehlende Messwerte waehrend des Stromausfalls
 
-Der ESP32 und seine Temperatursensoren sind waehrend des Stromausfalls ohne
-Versorgung. Deshalb existiert fuer die Unterbrechungszeit keine kontinuierliche
-Messkurve.
+ESP32 und Sensoren liefern waehrend eines vollstaendigen Stromausfalls keine
+Messkurve. Verfuegbar sind nur:
 
-Verfuegbar sind hoechstens:
+- letzter gueltiger Temperaturwert vor dem Ausfall
+- Zeit und Sequenz des letzten gueltigen Kontrollpunkts
+- erster gueltiger Temperaturwert nach dem Neustart
+- programmspezifische Phase und Sollwerte
+- spaeter eventuell eine vertrauenswuerdige aktuelle UTC-Zeit
+- ein erst nach realer Vermessung freigegebenes thermisches Modell
 
-- letzte gueltige Produkt- oder Schranklufttemperatur vor dem Ausfall
-- Zeitstempel des letzten gespeicherten Zustands
-- erste gueltige Produkt- oder Schranklufttemperatur nach dem Neustart
-- Dauer der Unterbrechung, sobald eine verlaessliche Zeitquelle verfuegbar ist
-- spaeter eventuell ein kalibriertes thermisches Modell
+Die Firmware darf keine dazwischenliegenden Messwerte vortaeuschen.
 
-Die Temperaturentwicklung waehrend des Ausfalls muss daher geschaetzt werden.
-Eine spaetere Inbetriebnahme kann das Abkuehlverhalten des realen Schrankes mit
-Wasser beziehungsweise Testlast vermessen und daraus ein konservatives
-thermisches Modell ableiten.
-
-## Wiederanlauf vor verfuegbarer Netzwerkzeit
-
-Der ESP32 startet schneller als Router und Netzwerkzeit zur Verfuegung stehen.
-Deshalb darf der fachliche Wiederanlauf nicht auf die NTP-Synchronisation
-blockieren.
+## Wiederanlauf vor NTP
 
 Vorgesehener Ablauf:
 
 ```text
 BOOT
-  -> gespeicherten Lauf und Sensoren pruefen
-  -> sichere phasenbezogene Fortsetzung sofort beginnen
-  -> Netzwerk und Zeitabgleich parallel starten
-  -> nach erfolgreicher Zeitsynchronisation Unterbrechungsdauer berechnen
-  -> Zeitkompensation und Protokoll nachtraeglich praezisieren
+  -> Sicherheits-, Persistenz- und Laufpruefung
+  -> RECOVERY_EVALUATION
+  -> sichere phasenbezogene Aktion bestimmen
+  -> Recoveryentscheidung speichern
+  -> Regelung freigeben, falls eindeutig zulaessig
+  -> RECOVERY_TIME_PENDING setzen
+  -> Netzwerk und NTP parallel aufbauen
 ```
 
-Bis die Zeit synchronisiert ist:
+Bis zur Zeitsynchronisation:
 
-- wird der Zustand als `recovery_time_pending` markiert
-- zeigt die Oberflaeche an, dass die Unterbrechungsdauer noch bestimmt wird
-- wird keine ungesicherte exakte Restzeit behauptet
-- laeuft die sichere phasenbezogene Regelung trotzdem weiter
+- keine scheinbar exakte Unterbrechungs- oder Restzeit anzeigen
+- keinen unbekannten Fortschritt frei schaetzen
+- keinen automatischen Phasenabschluss allein aus der unbekannten Zeit ausloesen
+- aktuelle sichere Regelung fortsetzen, wenn Phase und Freigaben eindeutig sind
+- bei nicht eindeutiger Aktion Peltier AUS und Meldung beziehungsweise Fehler
 
-## Zeitquelle fuer die Unterbrechungsdauer
+Fehlende NTP-Zeit allein beendet den Lauf nicht.
 
-### Erstes Release
+## Unterbrechungsdauer ist ein Intervall
 
-Die primaere Zeitquelle ist Netzwerkzeit, beispielsweise ueber NTP.
+Nach NTP gilt nicht automatisch:
 
-Dafuer werden waehrend eines laufenden Prozesses ausreichend aktuelle
-Zeitstempel und Zustandsdaten persistent gespeichert. Nach dem Neustart wird der
-aktuelle Netzwerkzeitstempel mit dem letzten gueltigen gespeicherten
-Zeitstempel verglichen.
+```text
+Ausfalldauer = aktuelle UTC - letzter Kontrollpunkt
+```
 
-Die Persistenzstrategie muss Schreibverschleiss und Genauigkeit gegeneinander
-abwaegen. Das konkrete Speicherintervall wird in
-`SETTINGS_AND_STORAGE.md` festgelegt.
+Diese Differenz enthaelt auch die Zeit, in der das Geraet nach dem letzten
+Kontrollpunkt noch lief.
 
-### Netzwerk noch nicht verfuegbar
+Mindestens zu berechnen sind:
 
-Fehlende Netzwerkzeit unmittelbar nach dem Boot ist kein Fehler. Das Geraet
-arbeitet mit einer vorlaeufigen, phasenbezogenen Wiederanlaufstrategie weiter.
-Sobald Netzwerkzeit verfuegbar ist, wird die Unterbrechungsdauer nachgetragen.
+```text
+obere Grenze = aktuelle UTC - letzter verlaesslicher UTC-Kontrollpunkt
+untere Grenze = max(0, obere Grenze - maximaler moeglicher Abstand bis zum
+                 naechsten planmaessigen oder ereignisbezogenen Kontrollpunkt)
+```
 
-Bleibt Netzwerkzeit ueber eine spaeter festzulegende Maximaldauer nicht
-verfuegbar, gilt die Unterbrechungsdauer als unsicher. Auch dann wird nicht
-allein deshalb abgebrochen. Die Software verwendet eine konservative
-programmspezifische Ersatzlogik und kennzeichnet die Schaetzung mit niedriger
-Vertrauensstufe.
+Der maximale Abstand beruecksichtigt:
 
-### Spaetere RTC-Option
+- konfiguriertes Kontrollpunktintervall
+- den letzten bekannten monotonen Laufzeitstand
+- ausgefallene oder verspaetete Kontrollpunkte
+- Zeitqualitaet vor und nach der Unterbrechung
+- letzte ereignisbezogene Speicherung
 
-Die Architektur soll eine spaetere batteriegepufferte Echtzeituhr, zum Beispiel
-ein DS3231-Modul, als alternative oder zusaetzliche Zeitquelle ermoeglichen.
-Ein RTC-Modul ist fuer das erste Release nicht erforderlich und seine spaetere
-Montage ist nicht vorausgesetzt.
+Je groesser oder schlechter bestimmt das Intervall, desto niedriger die
+Konfidenz.
 
-## Automatische Zeitkompensation
+## Entscheidung mit dem Zeitintervall
 
-### Sicher bewertbare Unterbrechung
+### Eindeutiges Ergebnis
 
-Wenn Unterbrechungsdauer und Temperaturschaetzung ausreichend verlaesslich sind:
+Fuehren Unter- und Obergrenze zur gleichen Phasen- und Fortschrittsentscheidung:
 
-- wird die Restzeit automatisch korrigiert
-- wird die Korrektur angezeigt und protokolliert
+- darf die konservativere Variante automatisch angewendet werden
+- werden beide Grenzen und die angewandte Korrektur protokolliert
 - laeuft der Prozess ohne Benutzerbestaetigung weiter
 
-### Lange oder unsichere Unterbrechung
+### Intervall ueber einer Phasengrenze
 
-Auch bei einer langen oder nur konservativ schaetzbaren Unterbrechung wartet das
-Geraet nicht auf den Benutzer.
+Ueberschneidet das Intervall einen moeglichen Abschluss, eine Haltezeitgrenze oder
+eine festgelegte Unsicherheitsgrenze:
 
-Vorgesehen ist:
+- erfolgt kein automatischer Abschluss aufgrund der Zeit
+- bleibt die sichere aktuelle Regelaktion erhalten, sofern sie eindeutig ist
+- `WARNING_REQUIRES_ACTION` wird sichtbar
+- der Benutzer kann Fortschritt beziehungsweise Abschluss innerhalb der
+  erlaubten Grenzen bestaetigen oder anpassen
 
-- sofortige sichere Fortsetzung entsprechend der Prozessphase
-- konservative automatische Verlaengerung der Fermentationszeit
-- Fortsetzung von Kuehlung oder Kuehlhalten, falls dies die aktive Phase war
-- sichtbare Kennzeichnung der niedrigen Vertrauensstufe
-- spaetere Moeglichkeit fuer den Benutzer, die Verlaengerung zu pruefen und
-  innerhalb sicherer Grenzen anzupassen
+Damit wartet die Regelung nicht blockierend, waehrend die Firmware trotzdem
+keinen fachlichen Abschluss erfindet.
 
-Die Oberflaeche zeigt mindestens:
+## Temperaturgewichteter Fortschritt
 
-- geschaetzte Unterbrechungsdauer
-- letzte Temperatur vor dem Ausfall
-- aktuelle Produkt- oder Schranklufttemperatur
-- Vertrauensstufe der Schaetzung
-- automatisch angewendete Verlaengerung
-- automatisch gewaehlte Wiederanlaufaktion
+Eine Fermentation stoppt bei sinkender Temperatur nicht schlagartig. Weder volle
+Anrechnung noch vollstaendiges Pausieren der Ausfallzeit ist allgemein korrekt.
 
-Eine Schaltflaeche `Abbrechen` kann als bewusste spaetere Benutzeraktion
-vorhanden sein, ist aber keine Voraussetzung fuer das automatische
-Wiederanlaufen.
+Konzeptionell:
+
+```text
+wirksamer Fortschritt = Summe aus Zeitabschnitten * Aktivitaetsfaktor(Temperatur)
+```
+
+Verbindliche Grenzen:
+
+- Keine biologische Aktivitaetskurve wird ohne praktische Grundlage erfunden.
+- Produktwerte haben Vorrang, wenn ein gueltiger Produktfuehler vorhanden ist.
+- Schrankluftwerte besitzen geringere Konfidenz.
+- Fehlende Messzeit wird nur mit einem waehrend der Inbetriebnahme validierten
+  thermischen Modell bewertet.
+- Ohne freigegebenes Modell wird das Zeitintervall konservativ behandelt und
+  nicht durch eine scheinbar genaue Kurve ersetzt.
+
+## Anzeige und Export
+
+Die Recoveryanzeige zeigt mindestens:
+
+- letzte gueltige Temperatur vor dem Ausfall
+- erste gueltige Temperatur nach dem Neustart
+- verwendete Sensorrolle
+- Unter- und Obergrenze der moeglichen Ausfalldauer
+- Alter und Intervall des letzten Kontrollpunkts
+- Zeitqualitaet und Konfidenz
+- automatisch gewaehlte sichere Wiederanlaufaktion
+- angewandte oder noch ausstehende Fortschrittskorrektur
+- Grund einer erforderlichen Benutzerentscheidung
+
+## Spaetere RTC-Option
+
+Eine batteriegepufferte RTC kann spaeter hinter derselben Zeitquellenschnittstelle
+ergaenzt werden. Sie ist keine Voraussetzung fuer Release 1.
 
 ## Akzeptierte Entscheidungen
 
-- [x] kein Tuerkontakt im ersten Release
-- [x] optionale Tuerereignisse in der Architektur fuer eine spaetere Erweiterung
-- [x] bei spaeterem Tuerkontakt Peltier AUS, Timer laeuft weiter
-- [x] Produktfuehlerausfall fuehrt nicht zu stillem oder unprotokolliertem Wechsel
-- [x] Ausfallstrategie des Produktfuehlers ist pro Programm konfigurierbar
-- [x] Standard ist automatischer Wechsel auf Luftregelung nach einer Wartezeit,
-      sofern dies sicher moeglich ist
-- [x] maximale Wartezeit in `WAITING_FOR_PRODUCT` pro Programm
-- [x] Fehlerquittierung und Fortsetzung richten sich nach Fehlerklasse
-- [x] Stromausfallzeit wird weder pauschal voll angerechnet noch voll pausiert
-- [x] Ziel ist eine temperaturgewichtete Verlaengerung der Fermentationszeit
-- [x] Produktfuehler hat fuer die Kompensation Vorrang
-- [x] ohne Produktfuehler wird die Schranklufttemperatur verwendet
-- [x] Wiederanlauf wartet nicht blockierend auf den Benutzer
-- [x] phasenbezogene sichere Aktion wird automatisch ausgefuehrt
-- [x] Netzwerkzeit ist im ersten Release die primaere Zeitquelle
-- [x] der Wiederanlauf beginnt bereits vor verfuegbarer Netzwerkzeit
-- [x] spaetere RTC-Unterstuetzung wird architektonisch vorgesehen
+- [x] kein Tuerkontakt in Release 1
+- [x] kein stiller Wechsel vom Produkt- zum Luftfuehler
+- [x] Produktfuehlerstrategie pro Programm
+- [x] maximale Wartezeit in `WAITING_FOR_PRODUCT`
+- [x] phasenbezogene Recovery statt Wiederherstellung elektrischer Ausgaenge
+- [x] sichere Recovery beginnt vor verfuegbarer NTP-Zeit
+- [x] fehlende NTP-Zeit allein beendet den Lauf nicht
+- [x] unbekannte Zeit erzeugt keinen erfundenen Fortschritt
+- [x] NTP-Differenz zum Kontrollpunkt wird als Intervall, nicht als exakte
+      Ausfalldauer behandelt
+- [x] kein automatischer Phasenabschluss bei ueberlappendem Unsicherheitsintervall
+- [x] spaetere RTC bleibt moeglich
 
-## Noch offen
+## Noch durch Inbetriebnahme festzulegen
 
-- konkrete Wartezeit bis zum automatischen Wechsel auf den Luftfuehler
-- Grenzwert fuer kurze und lange Unterbrechung
-- konkrete Temperatur-Aktivitaetsfunktion oder konservative Ersatzlogik
-- maximale automatisch zulaessige Zeitverlaengerung
-- Speicherintervall fuer Zeitstempel und Laufzustand
-- Maximaldauer fuer `recovery_time_pending`
-- genaue programmspezifische Ersatzlogik bei dauerhaft unbekannter Zeit
-- konkrete Fehlerklassen und Fortsetzungsbedingungen
+- Wartezeit bis zum Produktfuehler-Fallback
+- Kontrollpunktintervall innerhalb der spezifizierten Grenzen
+- maximale automatisch akzeptierte Zeitunsicherheit
+- thermisches Abkuehlmodell und dessen Gueltigkeitsbereich
+- programmbezogene Grenzen fuer Fortschrittskorrekturen
