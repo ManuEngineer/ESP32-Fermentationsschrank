@@ -1,82 +1,166 @@
-# Übergabe an Codex
+# Uebergabe an Codex
 
-## Empfohlene Entwicklungsreihenfolge
+## Status
 
-### Phase 1: Repository und Build
+Die Spezifikation fuer Release 1 wurde auf dem Branch
+`docs/software-specification` erstellt. Pull Request #38 dient dem abschliessenden
+Review. Die Implementierung beginnt erst nach dessen Merge nach `main`.
 
-- PlatformIO-Projekt mit Arduino-Framework für `esp32dev` anlegen
-- zentrale Hardwarekonfiguration erstellen
-- seriellen Bootlog und Heartbeat ausgeben
-- `pio run` erfolgreich ausführen
+Danach ist Issue #9 der erste Arbeitsauftrag. Es wird nicht versucht, mehrere
+Epics in einem einzigen Durchlauf umzusetzen.
 
-### Phase 2: Controllerboard verifizieren
+## Arbeitsweise
 
-- GPIO-Testprogramm
-- Onboard-MOSFET-Ausgänge einzeln prüfen
-- tatsächliche Zuordnung in `config/pins.yaml` dokumentieren
-- aktive Pegel und Bootzustände messen
-- alle Ausgänge beim Booten auf den danach bestätigten AUS-Pegel setzen
+Fuer jedes Implementierungs-Issue:
 
-### Phase 3: Temperaturfühler
+1. Issue und dort verlinkte Spezifikationsquellen lesen.
+2. Abhaengigkeiten und Statuskennzeichnung pruefen.
+3. eigenen Branch vom aktuellen `main` erstellen.
+4. nur den definierten Scope umsetzen.
+5. native, simulierte oder Hardwaretests ergaenzen.
+6. ESP32-Zielbuild ausfuehren, soweit relevant.
+7. Ressourcenwirkung und offene Hardwarewerte dokumentieren.
+8. Dokumentation aktualisieren.
+9. kleinen Pull Request mit Issue-Verweis erstellen.
 
-- 1-Wire-Bus initialisieren
-- alle ROM-Adressen ausgeben
-- Sensorrollen persistent zuweisen
-- CRC-, Timeout- und Plausibilitätsfehler behandeln
+Direkte umfangreiche Implementierung auf `main` ist nicht vorgesehen.
 
-### Phase 4: Display und Touch
+## Erste Implementierungsfolge
 
-- ILI9341 initialisieren
-- Touchcontroller prüfen und kalibrieren
-- einfache Statusseite
-- Kalibrierwerte persistent speichern
+### Issue #9
 
-### Phase 5: BTS7960 ohne Peltier
+`PlatformIO-Profile und Projektgrundlage einrichten`
 
-- sichere H-Brückenabstraktion
-- gegenseitige Verriegelung
-- Richtungswechsel mit Totzeit
-- Tests mit Multimeter oder kleiner Testlast
+Ergebnis:
 
-### Phase 6: Zustandsmaschine
+- Umgebungen `native`, `esp32_bringup`, `esp32_release`
+- getrennte Quell- und Teststruktur
+- 4-MB-Ziel ohne PSRAM-Abhaengigkeit
+- keine reale Aktorfreigabe
+- Web-OTA im Release-1-Profil nicht enthalten
 
-- Prozesszustände implementieren
-- Programmdatenmodell und Persistenz
-- zeitproportionale Regelung
-- Fehlerbehandlung
-
-### Phase 7: Weboberfläche und OTA
-
-- lokaler Webserver
-- Programmverwaltung
-- Livewerte und Verlauf
-- OTA-Update
-- Access-Point-Fallback
-
-## Startprompt für Codex
+Vorgeschlagener Branch:
 
 ```text
-Arbeite in diesem Repository als Embedded-Softwareentwickler.
-
-Lies zuerst vollständig:
-- AGENTS.md
-- docs/HARDWARE.md
-- docs/REQUIREMENTS.md
-- docs/OPEN_POINTS.md
-- config/hardware.example.yaml
-- eine gegebenenfalls vorhandene lokale config/hardware.yaml
-- config/pins.example.yaml
-- config/programs.example.yaml
-
-Erstelle zunächst nur Phase 1 und Phase 2 aus docs/CODEX_HANDOFF.md:
-
-1. Lege ein PlatformIO-Projekt mit Arduino-Framework für einen generischen ESP32-WROOM-32E an.
-2. Verwende keine unbestätigten GPIO-Zuordnungen als endgültige Wahrheit.
-3. Übernimm Kandidaten erst nach Messung in eine lokale Pin-Konfiguration und ergänze Compile-Time-Prüfungen gegen Doppelbelegungen.
-4. Implementiere einen sicheren Hardware-Basiszustand erst mit bestätigten Pins und aktiven Pegeln. Bis dahin darf der Build keine Aktor-GPIOs konfigurieren.
-5. Erstelle danach einen seriellen Diagnosemodus, mit dem die vier Onboard-MOSFET-Kanäle einzeln und zeitlich begrenzt getestet werden können.
-6. Es darf noch kein Peltier angeschlossen oder automatisch angesteuert werden.
-7. Dokumentiere, wie das Board mit dem FT232RL geflasht wird.
-8. Führe pio run aus und behebe alle Buildfehler.
-9. Aktualisiere die Dokumentation nur mit tatsächlich verifizierten Ergebnissen; markiere ungetestete Punkte weiterhin als unverified.
+foundation/platformio-profiles
 ```
+
+### Danach
+
+- #10: native Tests, CI, virtuelle Zeit und Buildberichte
+- #11: Hardwareabstraktionen, Mockadapter und Simulator
+- #12 bis #28: fachlicher Kern, Persistenz, Regelung, Sicherheit, UI und Web
+- #29 bis #33: reale Hardwareintegration, bis zur Hardware als
+  `BLOCKED_HARDWARE`
+- #34 bis #37: Inbetriebnahme und Release-Abnahme als `TBD_COMMISSIONING`
+
+Die vollstaendige Abhaengigkeitsstruktur steht in
+[`IMPLEMENTATION_ISSUES.md`](IMPLEMENTATION_ISSUES.md).
+
+## Verbindliche Architektur
+
+Der fachliche Kern wird soweit sinnvoll nativ testbar und ohne direkte
+Arduino-Hardwarezugriffe umgesetzt.
+
+Vorgesehene Abstraktionen umfassen mindestens:
+
+```text
+ITimeSource
+ITemperatureSource
+IActuatorSink
+IStateStore
+IEventJournal
+INetworkStatus
+IUserNotificationSink
+```
+
+Direkte GPIO-, 1-Wire-, Display-, WLAN- und Speicherzugriffe gehoeren in
+ESP32-spezifische Adapter.
+
+Vor Ankunft der Hardware koennen Zustandsmaschine, Programme, Persistenz,
+Sensorqualitaet, PI-Regler, Aktorplaner, Sicherheitslogik, UI-Modelle,
+Weboberflaeche, Diagnose und Exporte gegen Mocks und simulierte Zeit entwickelt
+werden.
+
+## Hardwarefreigabe
+
+Keine Pinbelegung oder Polaritaet aus Beispielkonfigurationen uebernehmen.
+
+Verbindliche Reihenfolge:
+
+1. Board und Ausgaenge ohne angeschlossene Aktoren messen.
+2. Sensoren, Display und Touch einzeln integrieren.
+3. Luefter und Summer einzeln anschliessen und messen.
+4. BTS7960 ohne Peltier pruefen.
+5. H-Brueckenausgang und Polaritaet mit Multimeter bestaetigen.
+6. Peltier erst mit 7,5-A-Sicherung, geprueften Lueftern, Kuehlkoerper,
+   Temperatursensoren und thermischer Kopplung anschliessen.
+7. erste reale Freigabe ausschliesslich als begrenzter Servicepuls.
+
+Das Profil `esp32_bringup` muss unbekannte Aktoren standardmaessig sperren und
+`HARDWARE_UNVERIFIED` sichtbar machen.
+
+## Release-1-Hardware
+
+- ESP32-32E, 4 MB Flash, keine PSRAM-Voraussetzung
+- Peltier ueber BTS7960
+- Innen- und Aussenluefter
+- drei DS18B20:
+  - Schrankluft
+  - abnehmbares Produkt
+  - Aussenwaermetauscher/Kuehlkoerper
+- ILI9341-Display; Touchcontroller erst nach Messung bestaetigen
+- aktiver Summer
+- 7,5-A-Ueberstromsicherung
+- einmalige Temperatursicherung
+- FT232RL/UART als Update- und Recoveryweg
+
+## Zentrale Sicherheitsregeln
+
+- Peltier und beide H-Brueckenrichtungen bei Boot und unklarer Lage AUS.
+- Schrankluft- und Kuehlkoerpersensor fuer jede Peltierfreigabe erforderlich.
+- Heizen und Kuehlen niemals gleichzeitig.
+- Richtungswechsel nur nach Abschaltung, Mindest-Auszeit und Totzeit.
+- Sicherheitsabschaltung ueberstimmt Mindest-Einschaltzeit.
+- Direkte Ausgangszustaende nie persistieren oder wiederherstellen.
+- `Quittieren` ist kein Fehlerreset.
+- Neustart loescht keine Verriegelung.
+- Wiederholte abnormale Neustarts fuehren zu `SAFE_BOOT`.
+- Netzwerk, Web, Display und Export duerfen den lokalen Regler nicht blockieren.
+
+## Wichtige Umfangsgrenzen
+
+Nicht fuer Release 1 implementieren:
+
+- Web-OTA und automatische Firmwaredownloads
+- benutzeraktivierbare UART-Diagnose
+- Cloud oder Pushbenachrichtigungen
+- Tuerkontakt
+- verpflichtende RTC oder 12-V-ADC-Messung
+- Kaskadenregelung oder PID-Autotuning
+- automatische Wartungserinnerungen
+
+## Umgang mit offenen Punkten
+
+- `TBD_HARDWARE`: nicht erfinden, in Hardware-Issue belassen
+- `TBD_COMMISSIONING`: nicht durch vermeintlich plausible Zahlen ersetzen
+- `TBD_IMPLEMENTATION_BUDGET`: messen und im zustaendigen Issue entscheiden
+- `FUTURE_RELEASE`: keine versteckte Teilimplementierung
+
+`TBD_COMMISSIONING` darf nie als gueltiger Laufzeitwert in einer produktiven
+Konfiguration akzeptiert werden.
+
+## Dokumente
+
+Vor dem jeweiligen Issue die dort genannten Quellen lesen. Die wichtigsten
+Einstiege sind:
+
+- [`SPECIFICATION_REVIEW.md`](SPECIFICATION_REVIEW.md)
+- [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
+- [`IMPLEMENTATION_ISSUES.md`](IMPLEMENTATION_ISSUES.md)
+- [`ACCEPTANCE_TESTS.md`](ACCEPTANCE_TESTS.md)
+- [`OPEN_POINTS.md`](OPEN_POINTS.md)
+- [`../AGENTS.md`](../AGENTS.md)
+
+Bei Widerspruechen gilt die in `SPECIFICATION_REVIEW.md` festgelegte
+Dokumentationsprioritaet.
