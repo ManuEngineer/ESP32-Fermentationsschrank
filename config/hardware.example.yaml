@@ -1,72 +1,122 @@
+# BEISPIELKONFIGURATION – KEINE BESTAETIGTE VERDRAHTUNG
+# Werte mit TBD_HARDWARE oder TBD_COMMISSIONING duerfen nicht als produktive
+# Freigabe verwendet werden.
+
 project:
   name: ESP32-Fermentationsschrank
-  description: Sichere Firmware-Grundlage fuer einen ESP32-gesteuerten Fermentationsschrank
   owner: ManuEngineer
+  release_scope: release_1
 
 controller:
-  target: esp32dev
-  module: ESP32-WROOM-32E
-  framework: Arduino
-  build_system: PlatformIO
-  board_revision: unknown
-  input_voltage_v: { min: 5, max: 60, recommended: 12 }
-  programming_interface: uart0
-  status: product_documented_board_revision_unconfirmed
+  family: esp32
+  module: ESP32-32E
+  module_status: confirmed_order
+  flash_mb: 4
+  flash_status: confirmed_order
+  require_psram: false
+  profiles:
+    - native
+    - esp32_bringup
+    - esp32_release
+
+peltier:
+  voltage_v: 12
+  nominal_power_w: 60
+  nominal_current_a: 5
+  driver: BTS7960
+  reversible: true
+  high_frequency_pwm: false
+  overcurrent_fuse_a: 7.5
+  fuse_type: TBD_HARDWARE
+  one_shot_thermal_fuse: true
+  thermal_fuse_rating_c: TBD_COMMISSIONING
+  thermal_fuse_location: TBD_COMMISSIONING
+  ris_lis_usage: verify_on_real_module
 
 sensors:
-  - type: DS18B20
-    available_quantity: 5
-    planned_quantity: 2
-    interface: OneWire
-    gpio: null
-    pullup_ohm: 4700
-    power_mode: external_3_wire_3v3
-    roles: [air_temperature, reference_product_temperature]
-    status: planned_wiring_unconfirmed
+  conversion_resolution_bit: 12
+  nominal_cycle_s: 2
+  parasite_power: false
+  roles:
+    chamber_air:
+      type: DS18B20
+      required_for_peltier: true
+      removable: false
+      bus: TBD_HARDWARE
+      rom_address: TBD_HARDWARE
+    product:
+      type: DS18B20
+      required_for_peltier: false
+      removable: true
+      bus: product_external
+      connector: TBD_HARDWARE
+      rom_address: runtime_or_commissioning
+    heatsink:
+      type: DS18B20
+      required_for_peltier: true
+      removable: false
+      bus: TBD_HARDWARE
+      rom_address: TBD_HARDWARE
+  preferred_bus_topology: separate_bus_per_sensor
+  minimum_bus_topology: fixed_sensors_shared_product_separate
 
-actuators:
-  - type: Peltier element
-    driver: BTS7960 H-bridge
-    function: heating_and_cooling
-    supply_voltage_v: 12
-    rated_power_w: 60
-    estimated_current_a: 5.0
-    pins: unknown
-    safe_state: off
-    status: unconfirmed
-  - type: onboard_mosfet_output
-    quantity: 4
-    planned_loads: [inside_fan, outside_fan, reserve, reserve]
-    pins: unknown
-    active_level: unknown
-    safe_state: off
-    status: unconfirmed
+fans:
+  internal:
+    voltage_v: 12
+    mode: continuous_during_temperature_control
+    afterrun_s: TBD_COMMISSIONING
+    tachometer: false
+  external:
+    voltage_v: 12
+    intentional_prerun_s: 0
+    afterrun_s: TBD_COMMISSIONING
+    tachometer: false
 
-display:
-  module: MSP2807
-  controller: ILI9341
-  size_inch: 2.8
-  resolution_px: [320, 240]
-  interface: SPI
-  pins: unknown
-  status: unconfirmed
+buzzer:
+  type: active
+  voltage_v: TBD_HARDWARE
+  driver_channel: TBD_HARDWARE
 
-touch:
-  controller: XPT2046_compatible_candidate
-  interface: SPI
-  pins: unknown
-  calibration: unknown
-  status: unconfirmed
+ui:
+  display:
+    model: TZT_MSP2807
+    width_px: 320
+    height_px: 240
+    orientation: landscape
+    controller: ILI9341
+    controller_status: confirmed_order
+  touch:
+    type: resistive
+    controller: XPT2046
+    controller_status: TBD_HARDWARE
 
-power:
-  source_voltage_v: 12
-  source_continuous_current_a: null
-  peltier_branch_fuse_a: 7.5
-  status: source_capacity_and_fuse_selection_unconfirmed
+power_monitoring:
+  esp32_brownout: true
+  reset_reason: true
+  external_12v_adc:
+    enabled: false
+    status: FUTURE_RELEASE
 
-safety:
-  boot_outputs_off: true
-  heat_cool_interlock_required: true
-  h_bridge_dead_time_required: true
-  watchdog_required: true
-  independent_cutoff_required: unconfirmed
+features:
+  door_contact:
+    enabled: false
+    status: not_planned_release_1
+  rtc:
+    required: false
+    status: FUTURE_RELEASE
+  web_ota:
+    enabled: false
+    status: FUTURE_RELEASE
+  uart_update:
+    enabled: true
+    adapter: FT232RL
+  user_uart_diagnostics:
+    enabled: false
+    status: FUTURE_RELEASE
+
+hardware_release:
+  state: HARDWARE_UNVERIFIED
+  pins_confirmed: false
+  active_levels_confirmed: false
+  boot_levels_confirmed: false
+  peltier_pulse_test_passed: false
