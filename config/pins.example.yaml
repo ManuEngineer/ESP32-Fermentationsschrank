@@ -1,56 +1,95 @@
-# VORLAEUFIGE GPIO-ZUORDNUNG
-# Diese Datei ist keine bestaetigte Verdrahtung. Jeder Zahlenwert ist nur ein
-# Kandidat und darf nicht als produktive Aktorbelegung verwendet werden.
-# Nach Hardwarepruefung als config/pins.yaml uebernehmen und Status je Signal
-# aendern.
+# VORLAEUFIGE GPIO-ROLLEN – KEINE BESTAETIGTE VERDRAHTUNG
+#
+# Alle GPIOs und aktiven Pegel bleiben bis Issue #29 bis #33 TBD_HARDWARE.
+# Diese Datei beschreibt nur benoetigte Rollen. Kein Zahlenwert darf vor der
+# realen Messung als produktive Aktorbelegung verwendet werden.
 
-status: candidate_unconfirmed
-board: ESP32-WROOM-32E
-
-reserved:
-  status: generic_esp32_constraints_verify_on_board
-  uart0_tx: 1
-  uart0_rx: 3
-  boot_gpio: 0
-  avoid_strapping_gpio: [0, 2, 4, 5, 12, 15]
-
-onboard_mosfet_channels:
-  status: unverified
-  candidate:
-    channel_1_gpio: 16
-    channel_2_gpio: 17
-    channel_3_gpio: 26
-    channel_4_gpio: 27
-
-spi_display_touch:
-  status: candidate_unconfirmed
-  sck_gpio_candidate: 18
-  mosi_gpio_candidate: 23
-  miso_gpio_candidate: 19
-  lcd_cs_gpio_candidate: 32
-  lcd_dc_gpio_candidate: 33
-  lcd_reset_gpio_unknown: null
-  touch_cs_gpio_candidate: 25
-  touch_irq_gpio_unknown: null
-  backlight: unknown
+hardware_profile:
+  id: ESP32_32E_4MB_UNVERIFIED
+  state: HARDWARE_UNVERIFIED
+  board_revision: TBD_HARDWARE
+  pins_confirmed: false
+  active_levels_confirmed: false
+  boot_levels_confirmed: false
 
 one_wire:
-  status: candidate_unconfirmed
-  ds18b20_data_gpio_candidate: 13
-  pullup_ohm: 4700
-  pullup_to_v: 3.3
+  chamber_air:
+    gpio: TBD_HARDWARE
+    pullup_ohm: TBD_HARDWARE
+    external_connector: false
+  product:
+    gpio: TBD_HARDWARE
+    pullup_ohm: TBD_HARDWARE
+    external_connector: true
+  heatsink:
+    gpio: TBD_HARDWARE
+    pullup_ohm: TBD_HARDWARE
+    external_connector: false
+  fallback_topology:
+    fixed_sensors_shared_gpio: TBD_HARDWARE
+    product_must_remain_separate: true
 
 bts7960:
-  status: candidate_unconfirmed
-  rpwm_gpio_candidate: 21
-  lpwm_gpio_candidate: 22
-  enable_gpio_candidate: 14
-  r_enable_and_l_enable_tied: true
-  r_is_gpio_unknown: null
-  l_is_gpio_unknown: null
+  rpwm_gpio: TBD_HARDWARE
+  lpwm_gpio: TBD_HARDWARE
+  r_en_gpio: TBD_HARDWARE
+  l_en_gpio: TBD_HARDWARE
+  r_is_adc_gpio: TBD_HARDWARE
+  l_is_adc_gpio: TBD_HARDWARE
+  ris_lis_enabled: false
+  hardware_pulldowns_verified: false
+  active_level: TBD_HARDWARE
+  safe_boot_state: both_directions_disabled
 
-validation:
-  duplicate_gpio_check_required: true
-  verify_exposed_on_physical_board: true
-  verify_boot_safe_levels: true
-  verify_active_levels: true
+onboard_mosfet_channels:
+  channel_1:
+    gpio: TBD_HARDWARE
+    role: internal_fan_candidate
+    active_level: TBD_HARDWARE
+  channel_2:
+    gpio: TBD_HARDWARE
+    role: external_fan_candidate
+    active_level: TBD_HARDWARE
+  channel_3:
+    gpio: TBD_HARDWARE
+    role: buzzer_candidate
+    active_level: TBD_HARDWARE
+  channel_4:
+    gpio: TBD_HARDWARE
+    role: spare
+    active_level: TBD_HARDWARE
+
+spi_display:
+  sck_gpio: TBD_HARDWARE
+  mosi_gpio: TBD_HARDWARE
+  miso_gpio: TBD_HARDWARE
+  cs_gpio: TBD_HARDWARE
+  dc_gpio: TBD_HARDWARE
+  reset_gpio: TBD_HARDWARE
+  backlight_gpio: TBD_HARDWARE
+  controller: ILI9341
+  controller_status: confirmed_order
+
+spi_touch:
+  shared_bus_with_display: TBD_HARDWARE
+  cs_gpio: TBD_HARDWARE
+  irq_gpio: TBD_HARDWARE
+  controller: XPT2046
+  controller_status: TBD_HARDWARE
+
+uart_programming:
+  tx_gpio: default_rom_uart_TBD_HARDWARE
+  rx_gpio: default_rom_uart_TBD_HARDWARE
+  adapter: FT232RL
+
+optional_future:
+  external_12v_adc_gpio: TBD_HARDWARE
+  door_contact_gpio: not_allocated
+  fan_tach_gpio: not_allocated
+
+verification:
+  measure_unloaded_before_connecting_consumers: true
+  verify_boot_reset_and_bootloader_levels: true
+  connect_fans_individually: true
+  verify_bts7960_without_peltier: true
+  first_peltier_enable_service_pulse_only: true
