@@ -2,233 +2,153 @@
 
 ## Status
 
-Dieses Dokument beschreibt die in Phase 9A akzeptierten Regeln fuer
-Diagnoseansichten, lesende Diagnose waehrend eines laufenden Prozesses,
-Boot-Selbsttest, gefuehrte Servicepruefungen, begrenzte Peltier-Tests und
-Diagnoseexporte.
+Dieses Dokument definiert die Release-1-Regeln fuer Diagnoseansichten,
+Boot-Selbsttests, gefuehrte Servicepruefungen, begrenzte Peltier-Tests und
+Exporte. Firmwareupdates stehen in `FIRMWARE_UPDATE_AND_ROLLBACK.md`, Ressourcen
+in `RESOURCE_BUDGET_AND_MAINTENANCE.md`.
 
-Firmwareupdate, OTA, Rollback und Wartungsmodus werden in Phase 9B ergaenzt.
-Ressourcenueberwachung, Speicherlebensdauer und vorbeugende Wartung folgen in
-Phase 9C.
-
-Die UART-Schnittstelle wird im ersten Release nur fuer Flashen und technische
-Entwicklung verwendet. Ein spaeterer geschuetzter UART-Diagnosemodus wird
-architektonisch vorbereitet, aber nicht als Benutzerfunktion des ersten Releases
-implementiert.
+UART dient in Release 1 nur dem Flashen, der technischen Entwicklung und der
+physischen Recovery. Ein benutzeraktivierbarer UART-Diagnosemodus ist
+`FUTURE_RELEASE`.
 
 ## Grundsaetze
 
-- Diagnose darf die Temperaturregelung, Sicherheitsaufgaben und Aktor-Watchdogs
-  nicht blockieren.
-- Lesende Diagnose bleibt waehrend eines laufenden Prozesses verfuegbar.
-- Direkte oder gefuehrte Hardwaretests sind nur im Standby und im
-  PIN-geschuetzten Servicebereich erlaubt.
+- Diagnose darf Regelung, Sicherheitsaufgaben und Aktor-Watchdogs nicht blockieren.
+- Lesende Diagnose bleibt waehrend eines Laufes verfuegbar.
+- Aktor- und Hardwaretests sind nur aus validiertem `STANDBY` im
+  PIN-geschuetzten `SERVICE_MODE` erlaubt.
+- `SAFE_BOOT` erlaubt keine leistungsbezogenen Aktortests.
 - Ein normaler Boot fuehrt keine automatische Peltier-, Luefter- oder
   Summeraktivierung aus.
-- Diagnosewerte unterscheiden klar zwischen gemessen, berechnet, gefiltert,
-  vermutet, nicht verfuegbar und nicht verifiziert.
-- Es werden keine Messwerte oder Hardwarefunktionen behauptet, fuer die keine
-  bestaetigte Quelle vorhanden ist.
-- Passwoerter, Service-PIN, Sitzungen und Tokens werden weder angezeigt noch
-  exportiert.
-- Diagnose und Servicefunktionen muessen in das festgelegte 4-MB-Flash- und
-  RAM-Budget ohne vorausgesetzte PSRAM passen.
+- Diagnose unterscheidet gemessen, berechnet, gefiltert, vermutet, nicht
+  verfuegbar und nicht verifiziert.
+- Nicht bestaetigte Hardwarewerte werden nicht als Messung dargestellt.
+- Passwoerter, PINs, Sitzungen und Tokens werden weder angezeigt noch exportiert.
+- Diagnose und Service passen in das 4-MB-Flashbudget ohne PSRAM.
 
-## Zweistufige Diagnoseoberflaeche
+## Diagnoseoberflaechen
 
 ### Lokales Touchdisplay
 
-Das Touchdisplay bietet eine kompakte Diagnose mit den wichtigsten Informationen:
+Mindestens sichtbar:
 
-- aktueller Geraete- und Prozesszustand
+- Geraete- und Prozesszustand
 - aktive Prozessphase
 - aktive und verriegelte Fehler
 - Schrankluft-, Produkt- und Kuehlkoerpertemperatur
 - Sensorstatus `VALID`, `STALE`, `FAILED` oder nicht vorhanden
-- aktuelle Regelsensorrolle
+- primaere Regelsensorrolle
 - angeforderte und tatsaechlich freigegebene Peltier-Richtung
 - Innen- und Aussenluefterstatus
-- WLAN- und Zeitstatus in kompakter Form
-- Resetursache und Hinweis auf `SAFE_BOOT`
-- Firmwareversion und Konfigurationsrevision
-
-Die lokale Ansicht verwendet mehrere kurze Seiten oder Detailansichten. Sie muss
-keine grossen Rohdatentabellen oder langen historischen Listen darstellen.
+- WLAN- und Zeitstatus
+- Resetursache und `SAFE_BOOT`
+- Firmware- und Konfigurationsrevision
 
 ### Weboberflaeche
 
-Die Weboberflaeche bietet die vollstaendige technische Diagnose. Sie umfasst
-mindestens:
+Zusaetzlich mindestens:
 
-- alle lokalen Diagnosewerte
 - Roh-, korrigierte und gefilterte Sensordaten
-- Sensoralter, CRC- und Plausibilitaetsstatus
+- Sensoralter, CRC und Plausibilitaet
 - Reglerausgang, Begrenzung, Impulsakkumulator und Aktorfreigabe
-- Mindest-Ein-/Auszeit, Totzeit und Richtungswechselstatus
-- Innen- und Aussenluefterzustand sowie Nachlauf
-- aktiven Programmschnappschuss und Laufrevision
-- Fehler-, Reset-, Brownout- und Watchdogjournal
-- Netzwerk-, NTP- und Speicherdetails
-- Heap-, Flash- und Ressourcenwerte, soweit in Phase 9C festgelegt
-- Zugriff auf erlaubte Exporte und PIN-geschuetzte Servicepruefungen
+- Mindest-Einschaltzeit, Mindest-Ausschaltzeit, Totzeit und Richtungswechsel
+- Luefterzustand und Nachlauf
+- Programmschnappschuss und Laufrevision
+- Fehler-, Persistenz-, Reset-, Brownout- und Watchdogjournal
+- Netzwerk-, NTP-, Flash-, Heap- und Ressourcenwerte
+- erlaubte Exporte
+- Servicepruefungen nur nach Service-PIN und gueltigem Zustand
 
-Die Weboberflaeche darf die Diagnose in thematische Gruppen aufteilen:
+## Diagnose waehrend eines Laufes
 
-```text
-Uebersicht
-Sensoren
-Regelung
-Aktoren
-Luefter
-Versorgung und Reset
-Speicher und Ressourcen
-Netzwerk und Zeit
-Fehlerjournal
-Servicepruefungen
-Exporte
-```
+Erlaubt:
 
-## Diagnose waehrend eines laufenden Prozesses
-
-Waehrend eines laufenden Prozesses bleiben alle sicheren lesenden Diagnosewerte
-verfuegbar.
-
-Erlaubt sind mindestens:
-
-- aktuelle und historische Temperaturen ansehen
+- Temperaturen und Historie ansehen
 - Sensorstatus und Messwertalter ansehen
-- Regleranforderung und tatsaechliche Aktorfreigabe ansehen
+- Regleranforderung und Aktorfreigabe ansehen
 - Fehler und Warnungen ansehen
-- Diagnose- und Laufexport erstellen
-- Netzwerkdiagnose und WLAN-Neuverbindung gemaess `NETWORK.md`
+- Lauf- und Diagnoseexport erstellen
+- Netzwerkdiagnose und WLAN-Neuverbindung
 - Ressourcen- und Speicherdaten ansehen
 
-Gesperrt sind waehrend eines aktiven Laufes mindestens:
+Gesperrt:
 
-- Sensoroffset oder Sensorrolle veraendern
-- Touch- oder Sensorkalibrierung starten
-- Aktoren direkt oder gefuehrt testen
-- Peltier-Heiz- oder Kuehlpulse starten
-- Luefter- oder Summertest starten
+- Sensorrolle oder Offset aendern
+- Kalibrierung starten
+- Aktoren testen
+- Peltier-, Luefter- oder Summerpulse starten
 - BTS7960-Ausgaenge pruefen
-- Serviceparameter der Regelung veraendern
-- Werksreset oder Wiederherstellungsimport ausfuehren
+- Regelungs-Serviceparameter aendern
+- Werksreset oder Import ausfuehren
 
-Die Oberflaeche zeigt bei einer gesperrten Funktion den Grund an:
-
-```text
-Diese Servicepruefung ist waehrend eines laufenden Prozesses gesperrt.
-Lauf zuerst sicher beenden.
-```
+Die UI nennt den Sperrgrund und fordert zum sicheren Beenden des Laufes auf.
 
 ## Sensordiagnose
 
-Fuer jeden erkannten Temperatursensor werden mindestens folgende Werte
-bereitgestellt:
+Je Sensor mindestens:
 
 ```text
-Rolle:                 Schrankluft
-ROM-Adresse:           28-...
-1-Wire-Bus:            intern-1
-Rohwert:               41,94 °C
-Korrigierter Wert:     42,06 °C
-Gefilterter Regelwert: 42,00 °C
-Kalibrier-Offset:      +0,12 K
-Status:                VALID
-Messwertalter:         0,8 s
-Letzte gueltige Probe: monotoner/UTC-Zeitbezug
-CRC-Fehler aktuell:    0
-CRC-Fehler seit Boot:  0
-Plausibilitaet:        OK
-Trend:                 +0,03 K/min
-Verwendung:            primaer / Begrenzung / Sicherheit / Anzeige
+Rolle
+ROM-Adresse
+1-Wire-Bus
+Rohwert
+korrigierter Wert
+gefilterter Regelwert
+Kalibrier-Offset
+Status VALID / STALE / FAILED
+Messwertalter
+Zeit der letzten gueltigen Probe
+CRC-Fehler aktuell und seit Boot
+Plausibilitaet
+Trend
+Verwendung als Regelung / Begrenzung / Sicherheit / Anzeige
 ```
 
-Zusaetzlich koennen angezeigt werden:
+Regeln:
 
-- Anzahl aufeinanderfolgender Fehler
-- Zeitpunkt des letzten Zustandswechsels
-- Filterinitialisierung oder Wiedererkennungsstatus
-- letzte Bus-Neuinitialisierung
-- erwartete und tatsaechliche Sensor-ROM-Adresse
-- aktiver Ersatzbetrieb
-- Grund einer Sensorabwertung
+- Ein nicht benoetigter fehlender Produktfuehler ist `nicht angeschlossen`, nicht
+  automatisch ein Fehler.
+- `STALE` und Alter bleiben sichtbar.
+- Ein letzter Wert eines `FAILED`-Sensors erscheint nie wie eine aktuelle Messung.
+- Vermutete Ursachen werden als Vermutung bezeichnet.
 
-Verbindliche Darstellungsregeln:
+## Regelungs- und Aktordiagnose
 
-- Ein fehlender Produktfuehler wird als `nicht angeschlossen` und nicht als
-  Temperaturfehler dargestellt, sofern der Lauf keinen Produktfuehler verlangt.
-- Ein `STALE`-Wert wird sichtbar als veraltet gekennzeichnet.
-- Ein `FAILED`-Sensor zeigt den letzten gueltigen Wert nur zusammen mit dessen Alter
-  und darf nicht wie ein aktueller Messwert erscheinen.
-- Ein Kalibrier-Offset wird getrennt vom Rohwert angezeigt.
-- Vermutete Fehlerursachen werden als Vermutung gekennzeichnet.
+Mindestens sichtbar:
 
-## Diagnose der Regelung und Aktoren
-
-Die technische Diagnose zeigt mindestens:
-
-- aktive Regelstrategie und Strategieversion
-- primaeren Regelsensor
-- Solltemperatur
-- gefilterten Istwert
+- Strategie und Version
+- primaerer Regelsensor
+- Soll- und gefilterter Istwert
 - Regelabweichung
-- proportionalen Anteil
-- Integratorzustand beziehungsweise Integrationsbeitrag
-- Anti-Windup- oder Integralsperrstatus
-- resultierende Zeitquote
-- Inhalt des begrenzten Impulsakkumulators
+- P- und I-Anteil
+- Anti-Windup
+- Zeitquote und Impulsakkumulator
 - aktive Luftbegrenzung
 - angeforderte Richtung `HEAT`, `OFF` oder `COOL`
-- bestaetigte Gegenrichtungsanforderung
-- Mindest-Einzeit, Mindest-Auszeit und Totzeit
-- Alter der letzten gueltigen Regelanforderung
-- tatsaechliche Aktorfreigabe
-- Grund einer verweigerten Freigabe
-- R_IS/L_IS-Werte nur, falls am gelieferten Modul verifiziert
+- bestaetigte Gegenrichtung
+- Mindest-Einschaltzeit und Mindest-Ausschaltzeit
+- Totzeit
+- Alter der Regelanforderung
+- tatsaechliche Aktorfreigabe und Sperrgrund
+- R_IS/L_IS nur nach realer Verifikation
 
-Beispiel fuer eine verweigerte Freigabe:
+## Passiver Boot-Selbsttest
 
-```text
-Anforderung:        HEAT 35 %
-Freigabe:           AUS
-Grund:              Kuehlkoerpersensor STALE
-Naechste Pruefung:  nach neuer gueltiger Sensorprobe
-```
+Der Boot-Selbsttest prueft ohne Aktoraktivierung:
 
-## Nicht aktiver Selbsttest beim Boot
-
-Der normale Boot fuehrt ausschliesslich nicht aktive Pruefungen durch.
-
-Mindestens geprueft werden:
-
-1. Resetursache und Neustartzaehler
-2. `SAFE_BOOT`- und verriegelter Fehlerstatus
-3. Firmware-, Schema- und Partitionsinformationen
+1. Resetursache und abnormalen Neustartzaehler
+2. persistierte Verriegelungen und `SAFE_BOOT`
+3. Firmware-, Schema- und Partitionsdaten
 4. Konfigurationsintegritaet und Rueckfallrevision
-5. Laufkontrollpunkt und Wiederherstellbarkeit
+5. Laufkontrollpunkt, Transaktionsmarker und Persistenzgesundheit
 6. Fehler- und Resetjournal
-7. 1-Wire-Busse und erwartete feste Sensoridentitaeten
-8. Produktfuehlerstatus, sofern angeschlossen
-9. aktuelle Sensorwerte und Plausibilitaet
-10. verfuegbare Flash- und RAM-Ressourcen
-11. sichere logische Ausgangszustaende
-12. Netzwerk- und Zeitinitialisierung als nicht sicherheitsblockierende Funktion
+7. 1-Wire-Busse und feste Sensoridentitaeten
+8. aktuelle Sensorwerte und Plausibilitaet
+9. Flash-, Heap- und Ressourcenreserven
+10. logisch sichere Ausgangszustaende
+11. Netzwerk und Zeit als nicht sicherheitsblockierende Funktionen
 
-Beim normalen Boot werden nicht automatisch eingeschaltet:
-
-- Peltier
-- Innenluefter
-- Aussenluefter
-- Summer
-- freie Onboard-MOSFET-Kanaele
-
-Ein Luefter kann nach einem Brownout oder Sicherheitsfehler nur dann im Rahmen
-einer vorher eindeutig persistierten Restwaermestrategie aktiviert werden, wenn
-dieser Start selbst als sichere Wiederanlaufaktion validiert ist. Dies ist kein
-allgemeiner Boot-Selbsttest.
-
-Der Boot-Selbsttest erzeugt einen strukturierten Status:
+Moegliche Ergebnisse:
 
 ```text
 PASS
@@ -237,153 +157,157 @@ SAFE_BOOT
 FAILED
 ```
 
-Ein `PASS` allein startet keinen alten Prozess. Der phasenbezogene validierte
-Wiederanlauf bleibt separat erforderlich.
+`PASS` startet keinen alten Prozess direkt. Eine separate validierte
+Recoveryentscheidung bleibt erforderlich.
+
+## SAFE_BOOT-Diagnose
+
+In `SAFE_BOOT` erlaubt:
+
+- passive Diagnose
+- Lesen und Exportieren von Fehler-, Reset- und Persistenzinformationen
+- Netzwerkrecovery ohne Aktorwirkung
+- PIN-unabhaengiger lokaler Vollreset
+- UART-Recovery beziehungsweise erneutes Flashen
+
+In `SAFE_BOOT` gesperrt:
+
+- Summer-, Luefter-, BTS7960- und Peltier-Test
+- Wechsel in `SERVICE_MODE`
+- Loeschen einer Verriegelung ohne bestandene Ursachen- und Integritaetspruefung
+
+Nach Beseitigung der Ursache muss das Geraet erst bewusst und validiert nach
+`STANDBY` zurueckkehren. Erst dort kann der Servicebereich geoeffnet werden.
 
 ## Gefuehrter Service-Hardwaretest
 
 ### Voraussetzungen
 
-Der gefuehrte Hardwaretest ist nur verfuegbar, wenn:
+- validiertes `STANDBY`
+- kein aktiver Lauf
+- keine aktive oder ungeklaerte Verriegelung
+- Service-PIN erfolgreich eingegeben
+- kritischer Speicher gesund
+- Schrankluft- und Kuehlkoerpersensor gueltig
+- Versorgung stabil
+- alle verwendeten GPIO-Pegel und Richtungen fuer die konkrete Hardware bestaetigt
 
-- Geraet im Standby oder `SAFE_BOOT`-Servicezustand ist
-- kein aktiver Lauf vorhanden ist
-- Service-PIN erfolgreich eingegeben wurde
-- Schrankluft- und Kuehlkoerpersensor gueltig sind
-- keine unvereinbare verriegelte Hardwareursache aktiv ist
-- Versorgung und gespeicherte Konfiguration ausreichend stabil sind
-- alle verwendeten GPIO-Pegel und Richtungen fuer den konkreten Hardwarestand
-  bestaetigt sind
+Fuer einen Peltier-Puls zusaetzlich zwingend:
 
-Ist eine Voraussetzung nicht erfuellt, wird der Testschritt nicht angeboten oder
-mit konkreter Begruendung abgelehnt.
+- 7,5-A-Ueberstromsicherung montiert
+- einmalige Temperatursicherung montiert und auf Durchgang geprueft
+- Montageort der Temperatursicherung dokumentiert
+- Kuehlkoerper korrekt montiert
+- Aussenluefter zuvor erfolgreich getestet
+- BTS7960 ohne Peltier und Polaritaet mit Multimeter verifiziert
 
-### Gefuehrter Ablauf
+Rating und Montageort bleiben bis zur Inbetriebnahme `TBD_COMMISSIONING`; die
+Installation vor dem ersten Peltier-Puls ist verbindlich.
 
-Vorgesehene Reihenfolge:
+### Reihenfolge
 
 1. Firmware-, Hardware- und Konfigurationsrevision erfassen
 2. Sensoren, ROM-Adressen, Busse, Rohwerte und Offsets pruefen
-3. Summer kurz und zeitlich begrenzt testen
-4. Innenluefter zeitlich begrenzt testen
-5. Aussenluefter zeitlich begrenzt testen
-6. BTS7960-Enable- und Richtungsausgaenge ohne Peltierfreigabe pruefen, soweit
-   elektrisch sinnvoll und sicher messbar
-7. Peltier in Heizrichtung mit begrenzter Leistung und Dauer testen
-8. Peltier sicher ausschalten und Mindest-Auszeit/Totzeit abwarten
-9. Peltier in Kuehlrichtung mit begrenzter Leistung und Dauer testen
-10. Schrankluft- und Kuehlkoerperreaktion auswerten
-11. R_IS/L_IS auswerten, falls verifiziert
-12. Testbericht mit Ergebnis und Abweichungen speichern
+3. Summer kurz testen
+4. Innenluefter kurz testen
+5. Aussenluefter kurz testen
+6. BTS7960 ohne angeschlossenes Peltier pruefen
+7. Ausgang und Polaritaet mit Multimeter bestaetigen
+8. Sicherheitskomponenten und Freigaben erneut pruefen
+9. begrenzten Peltier-Heizpuls ausfuehren
+10. sicher ausschalten, Mindest-Ausschaltzeit und Totzeit abwarten
+11. begrenzten Peltier-Kuehlpuls ausfuehren
+12. thermische Reaktion und gegebenenfalls R_IS/L_IS auswerten
+13. Servicebericht speichern
 
-Jeder Schritt besitzt:
+Jeder Schritt besitzt Vorbedingungen, maximale Leistung, maximale Dauer,
+laufende Sicherheitsueberwachung, automatische Abschaltung und jederzeitigen
+Abbruch.
 
-- klare Beschreibung der erwarteten Reaktion
-- maximal erlaubte Dauer
-- maximal erlaubte Leistung
-- Vorbedingungen
-- laufende Sensor- und Sicherheitsueberwachung
-- automatische Abschaltbedingung
-- sichtbares Zwischenergebnis
-- grossen jederzeit erreichbaren `Abbrechen`-Befehl
-
-Abbruch wirkt unmittelbar:
+Abbruch:
 
 ```text
 Peltier AUS
 -> beide Richtungen AUS
 -> Impulsanforderung verwerfen
--> notwendiger Aussenluefternachlauf
+-> erforderlicher Aussenluefternachlauf
 -> Test als abgebrochen protokollieren
 ```
 
-## Begrenzte manuelle Peltierpruefung
+## Begrenzte Peltierpruefung
 
-Eine freie dauerhafte Peltier-Handsteuerung ist nicht erlaubt.
+Freie dauerhafte Handsteuerung ist unzulaessig. Erlaubt sind nur gefuehrte Pulse
+mit:
 
-Zulaessig sind nur gefuehrte Heiz- oder Kuehlpulse mit:
-
-- gueltigem Schrankluftfuehler
-- gueltigem Kuehlkoerpersensor
-- bestandener Sensor- und Aktorvorpruefung
-- eindeutig bestaetigter Richtung
-- begrenzter Leistung
-- begrenzter Dauer
-- fester Sicherheits-Eingriffs- und Notgrenze
-- Aussenluefterbetrieb und Nachlauf
-- Innenluefterbetrieb gemaess Testziel
+- gueltigen Pflichtsensoren
+- bestaetigter Richtung
+- begrenzter Leistung und Dauer
+- firmwarefesten Sicherheits- und Notgrenzen
+- Aussenluefter und Nachlauf
 - Aktor-Watchdog
-- sofortiger Abschaltung bei Sensor-, Luefter-, Strom- oder Softwarefehler
+- sofortiger Abschaltung bei Fehler
 
-Vor einem Richtungswechsel gelten vollstaendige Mindest-Auszeit und Totzeit.
-Ein Test darf keine normalen Sicherheitsgrenzen, Pulldowns, Verriegelungen oder
-Fehlerreaktionen umgehen.
+Servicewerte umgehen keine Pulldowns, Verriegelungen, Mindest-Ausschaltzeiten,
+Totzeiten oder Sicherheitsgrenzen. Konkrete Pulswerte bleiben
+`TBD_COMMISSIONING`.
 
-Konkrete Standardwerte fuer Testleistung und Testdauer bleiben
-`TBD_COMMISSIONING`. Firmwarefeste Obergrenzen verhindern, dass Servicewerte
-einen unkontrollierten Dauerbetrieb erzeugen.
+## PIN-unabhaengiger lokaler Vollreset
 
-## Getrennte Exporte
+Bei vergessener Service-PIN ist ein physischer Recoveryweg erforderlich, der die
+PIN nicht voraussetzt.
 
-Das erste Release verwendet drei klar getrennte Exportarten.
+- nur lokal waehrend Boot oder `SAFE_BOOT`
+- alle leistungsbezogenen Aktoren AUS
+- nicht ueber Web oder Netzwerk ausloesbar
+- mehrstufige Warnung und lange bewusste Bestaetigung
+- Ausloesung ueber eine bei der Hardwareabnahme verifizierte rohe Touchgeste oder
+  einen anderen eindeutig physischen Weg
+- UART-Loeschen/Neu-Flashen als letzter physischer Recoveryweg
+- vollstaendiger Werksreset; kein isolierter PIN-Reset
+
+Die konkrete Geste oder Taste bleibt `TBD_HARDWARE`.
+
+## Exporte
 
 ### Laufexport
-
-Enthaelt mindestens:
 
 - Laufkennung und Programmschnappschuss
 - Firmware-, Konfigurations- und Tuningrevision
 - Phasen und Phasenwechsel
-- Soll-, Produkt-, Schrankluft- und Kuehlkoerpertemperaturen
-- verdichtete Diagrammdaten
+- Temperaturen und verdichtete Diagrammdaten
 - Sensorstatus und Sensorwechsel
-- Regler- und Aktorereignisse im erforderlichen Umfang
-- Warnungen, Fehler und Quittierungen
-- Stromunterbrechungen und Wiederanlaufentscheidungen
-- Laufzeit- und Fortschrittskorrekturen
-- manuelle Laufanpassungen
+- Regler- und Aktorereignisse
+- Warnungen, Fehler, Quittierungen und Resets
+- Unterbrechungsintervall und Recoveryentscheidung
+- Fortschrittskorrekturen und Laufanpassungen
 - Abschluss- oder Abbruchgrund
 
-Formate:
-
-- JSON als vollstaendiges maschinenlesbares Format
-- CSV fuer geeignete tabellarische Messreihen
+Formate: JSON und geeignete CSV-Tabellen.
 
 ### Diagnoseexport
 
-Enthaelt mindestens:
-
-- Geraetename und Firmwareversion
-- Hardware-, Schema- und Konfigurationsrevision
-- Resetursache und Neustartzaehler
-- `SAFE_BOOT`-Status
-- aktuelle Prozess- und Fehlerzustaende
-- Sensoren, Rollen, Busse, Werte, Alter und Qualitaet
-- Regler- und Aktorstatus
-- Luefterstatus
+- Firmware-, Hardware-, Schema- und Konfigurationsrevision
+- Resetursache, Neustartzaehler und `SAFE_BOOT`
+- Prozess-, Fehler- und Persistenzzustand
+- Sensor-, Regel-, Aktor- und Luefterdaten
 - Speicher- und Ressourceninformationen
 - Netzwerk- und Zeitstatus
-- letzte relevante Fehler-, Brownout-, Watchdog- und Resetereignisse
+- relevante Fehler-, Brownout-, Watchdog- und Resetereignisse
 
 ### Servicebericht
 
-Enthaelt mindestens:
-
-- eindeutige Testkennung
-- Start- und Endzeit beziehungsweise monotone Zeitbasis
+- Testkennung und Zeitbasis
 - Bedienquelle
-- Firmware-, Hardware- und Konfigurationsrevision
-- ausgefuehrte und uebersprungene Testschritte
+- Revisionen
+- ausgefuehrte und uebersprungene Schritte
 - Vorbedingungen und Sicherheitsfreigaben
-- Sensorrohwerte und gefilterte Werte
-- angeforderte und tatsaechliche Aktorzustaende
-- Testleistung, Pulsdauer und Richtung
-- thermische Reaktion und Trendbewertung
-- R_IS/L_IS-Werte, falls verifiziert
-- Warnungen, Abbrueche und Fehler
-- Ergebnis je Schritt sowie Gesamtergebnis
+- Sensor- und Aktordaten
+- Pulsleistung, Dauer und Richtung
+- thermische Reaktion
+- R_IS/L_IS nur falls verifiziert
+- Warnungen, Abbrueche, Fehler und Ergebnis
 
-Moegliche Gesamtergebnisse:
+Moegliche Ergebnisse:
 
 ```text
 PASS
@@ -392,98 +316,38 @@ FAILED
 ABORTED
 ```
 
-### Gemeinsame Exportregeln
+### Gemeinsame Regeln
 
-Kein Export enthaelt:
+Kein Export enthaelt Geheimnisse, PINs, Sitzungen, Tokens oder private
+Schluessel. Fehlende Werte werden als fehlend codiert, nicht als `0`. Exporte sind
+versioniert und besitzen eine Schema-ID.
 
-- WLAN-Passwort
-- Webpasswort
-- Service-PIN
-- Sitzungskennung
-- Anmelde- oder CSRF-Token
-- private Schluessel
-- nicht bestaetigte oder erfundene Messwerte
+## UART in Release 1
 
-Exporte sind versioniert und enthalten eine Schema-ID. Ein fehlender Wert wird
-als fehlend oder nicht verfuegbar codiert und nicht durch `0` ersetzt.
+Erlaubt fuer:
 
-## UART im ersten Release
+- Flashen ueber FT232RL
+- Entwicklung und Inbetriebnahme
+- Bootloader- und Recoveryarbeiten
 
-### Verbindliche Entscheidung
+Nicht enthalten:
 
-Die UART-Schnittstelle dient im ersten Release:
+- normaler benutzeraktivierbarer UART-Diagnosemodus
+- Aktorfreigabe durch UART-Befehle in der Releasefirmware
+- Geheimnisse oder blockierende serielle Ausgaben
 
-- dem Flashen ueber den FT232RL
-- der Entwicklung und Inbetriebnahme durch den Firmwareentwickler
-- notwendigen Bootloader- und Recovery-Arbeiten
+## Akzeptierte Entscheidungen
 
-Es gibt im ersten Release keinen normalen, ueber die Benutzeroberflaeche
-aktivierbaren PIN-geschuetzten UART-Diagnosemodus.
-
-Die produktive Firmware darf daher nicht von einem angeschlossenen UART-Terminal
-abhaengen und muss auch ohne serielle Ausgabe vollstaendig diagnostizierbar sein.
-
-### Entwicklungsausgaben
-
-Entwicklerausgaben duerfen ueber Build-Konfigurationen oder definierte
-Loggingstufen vorhanden sein. Dabei gilt:
-
-- keine Passwoerter, PINs oder Tokens ausgeben
-- keine unkontrollierten Rohdatenstroeme im normalen Releasebetrieb
-- keine blockierenden seriellen Schreibvorgaenge in Regel- oder
-  Sicherheitsaufgaben
-- keine Aktorfreigabe durch UART-Befehle in der normalen Releasefirmware
-- Debugausgaben duerfen Zeitverhalten und Speicherbudget nicht unkontrolliert
-  veraendern
-
-### Spaetere Erweiterung
-
-Architektonisch vorbereitet wird ein spaeterer geschuetzter UART-Diagnosemodus
-mit:
-
-- ausdruecklicher lokaler Aktivierung
-- Service-PIN
-- begrenzter Aktivierungsdauer
-- strukturierten Kategorien
-- nicht blockierendem Ringpuffer
-- klarer Trennung von lesender Diagnose und schreibenden Servicebefehlen
-- automatischem Ende nach Inaktivitaet oder Neustart
-- Geheimnisschutz
-
-Diese Funktion wird erst in einem spaeteren Release spezifiziert und getestet.
-Sie ist keine offene Pflicht fuer Release 1.
-
-## Akzeptierte Entscheidungen aus Phase 9A
-
-- [x] kompakte Diagnose am Touchdisplay und vollstaendige technische Diagnose im Web
-- [x] sichere lesende Diagnose bleibt waehrend eines aktiven Laufes verfuegbar
-- [x] veraendernde Service- und Aktortests waehrend eines Laufes gesperrt
-- [x] ausfuehrliche Sensordiagnose mit Rohwert, Korrektur, Filterwert, Offset,
-      Status, Alter, Fehlerzahl und Trend
-- [x] normaler Boot fuehrt nur nicht aktive Selbsttests aus
-- [x] keine automatische Peltier-, Luefter- oder Summeraktivierung als allgemeiner
-      Boot-Selbsttest
-- [x] PIN-geschuetzter gefuehrter Service-Hardwaretest nur im Standby
+- [x] kompakte lokale und vollstaendige Webdiagnose
+- [x] lesende Diagnose waehrend eines Laufes
+- [x] keine Aktortests waehrend eines Laufes
+- [x] normaler Boot fuehrt nur passive Tests aus
+- [x] `SAFE_BOOT` erlaubt keine Aktortests
+- [x] gefuehrter Hardwaretest nur aus validiertem `STANDBY`
+- [x] Temperatursicherung vor dem ersten Peltier-Puls
 - [x] jederzeitiger sicherer Testabbruch
-- [x] Peltierpruefung nur als zeitlich und leistungsmassig begrenzter gefuehrter Puls
-- [x] getrennte Lauf-, Diagnose- und Servicebericht-Exporte
-- [x] keine Geheimnisse in Diagnose oder Exporten
-- [x] UART im ersten Release nur fuer Flashen und technische Entwicklung
-- [x] kein benutzeraktivierbarer UART-Diagnosemodus im ersten Release
-- [x] spaeteren PIN-geschuetzten UART-Diagnosemodus architektonisch vorbereiten
-
-## Noch offen fuer Phase 9B und 9C
-
-- OTA-Updatequelle und Signatur-/Integritaetspruefung
-- Updateberechtigung und Wartungsmodus
-- Verhalten bei Update waehrend eines aktiven Laufes
-- duale Firmwarepartition oder alternatives Rollbackkonzept im 4-MB-Flash
-- Umgang mit Schema- und Konfigurationsmigrationen bei Firmwarewechsel
-- Updatefortschritt und Wiederherstellung nach abgebrochenem Update
-- Ressourcenwarnschwellen fuer Heap, groessten freien Block und Flash
-- Speicher- und Journalbudgets
-- Lebensdauer- und Schreibzaehler
-- vorbeugende Wartungshinweise fuer Sensoren, Luefter, Sicherung und Peltier
-- konkrete Dauer und Leistungsgrenzen der Servicepruefungen
-- konkretes Exportformat und maximale Dateigroessen
-- spaetere detaillierte Spezifikation des UART-Diagnosemodus
+- [x] Peltier nur als begrenzter gefuehrter Puls
+- [x] getrennte Lauf-, Diagnose- und Serviceexporte
+- [x] keine Geheimnisse in Diagnose oder Export
+- [x] PIN-unabhaengiger lokaler Vollreset
+- [x] UART in Release 1 nur fuer Flashen, Entwicklung und Recovery
