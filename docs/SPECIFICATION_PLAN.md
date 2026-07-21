@@ -2,128 +2,142 @@
 
 ## Ziel
 
-Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach implementiert. Die Dokumentation soll so eindeutig sein, dass Codex oder ein anderer Entwickler keine wesentlichen Produktentscheidungen selbst erfinden muss.
+Die Firmware wird vor der Implementierung so beschrieben, dass keine wesentliche
+Produkt-, Sicherheits- oder Hardwareentscheidung durch Codex oder einen
+Entwickler erfunden werden muss.
 
 ## Regeln
 
-- In dieser Phase wird keine Fermentationssteuerung programmiert.
-- Entscheidungen werden im Repository festgehalten.
-- Offene Fragen bleiben als `TBD`, `unknown` oder Checkliste sichtbar.
-- Hardwaredaten und Softwareverhalten werden getrennt dokumentiert.
 - Sicherheitsanforderungen haben Vorrang vor Komfortfunktionen.
-- Unbestaetigte GPIOs und Pegel bleiben unbestaetigt.
+- Unbestaetigte GPIOs, Pegel und Moduldetails bleiben `TBD_HARDWARE`.
+- Thermische und regelungstechnische Werte bleiben `TBD_COMMISSIONING`.
+- Reale Flash-, Heap- und Puffergrenzen bleiben `TBD_IMPLEMENTATION_BUDGET`.
+- Bewusst spaetere Funktionen werden `FUTURE_RELEASE` zugeordnet.
+- Kein Platzhalter darf als produktiver Laufzeitwert verwendet werden.
+- Implementierung beginnt erst nach Merge des Spezifikations-Pull-Requests.
 
-## Bestehende Quellen
+## Dokumentationsprioritaet
 
-- [`HARDWARE.md`](HARDWARE.md): Hardware und elektrische Randbedingungen
-- [`HARDWARE_REVISIONS.md`](HARDWARE_REVISIONS.md): akzeptierte Hardwareaenderungen aus der Spezifikation
-- [`REQUIREMENTS.md`](REQUIREMENTS.md): bisherige Anforderungen
-- [`ARCHITECTURE.md`](ARCHITECTURE.md): vorgesehene Modulgrenzen
-- [`OPEN_POINTS.md`](OPEN_POINTS.md): offene Fragen
-- [`DECISIONS.md`](DECISIONS.md): akzeptierte Entscheidungen
-- [`PROGRAMS.md`](PROGRAMS.md): allgemeiner Programm- und Prozessablauf
-- [`STANDARD_PROGRAMS.md`](STANDARD_PROGRAMS.md): Zweck und Voreinstellungen der Standardprogramme
-- [`STATE_MACHINE.md`](STATE_MACHINE.md): Betriebszustaende und Uebergaenge
-- [`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md): Unterbrechungen, Sensorersatz, Zeitquelle und automatischer Wiederanlauf
-- [`RUNTIME_BEHAVIOR.md`](RUNTIME_BEHAVIOR.md): Luefter, Richtungswechsel, Meldungsprioritaeten und akustische Signale
-- [`LOCAL_UI.md`](LOCAL_UI.md): lokale Touch-Grundlagen und Hauptbildschirme
-- [`LOCAL_PROGRAMS.md`](LOCAL_PROGRAMS.md): lokale Programmauswahl und Programmverwaltung
-- [`LOCAL_RUNTIME_UI.md`](LOCAL_RUNTIME_UI.md): Laufdetails, Meldungen, Stoppen und Wiederanlaufanzeige
-- [`LOCAL_UI_SETTINGS_SERVICE.md`](LOCAL_UI_SETTINGS_SERVICE.md): Menue, Einstellungen, Diagnose, Service, Touchkalibrierung und Sprachen
-- [`NETWORK.md`](NETWORK.md): WLAN-Einrichtung, QR-Assistent, Ersatz-WLAN, Geraetename und Zugriffsgrundlagen
-- [`WEB_UI.md`](WEB_UI.md): responsive Weboberflaeche, Anmeldung, Sitzungen, Live-Daten und Konfliktschutz
-- [`NETWORK_DIAGNOSTICS_INTEGRATION.md`](NETWORK_DIAGNOSTICS_INTEGRATION.md): Netzwerkdiagnose, VPN, Reverse Proxy, Proxy-Vertrauen und Lese-API
-- [`SETTINGS_AND_STORAGE.md`](SETTINGS_AND_STORAGE.md): Konfigurationsebenen, Aenderungsrechte, Validierung und atomare Speicherung
-- [`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md): Laufzustand, Kontrollpunkte, Messhistorie und Wiederherstellung
-- [`BACKUP_SECURITY_RETENTION.md`](BACKUP_SECURITY_RETENTION.md): Geheimnisse, Sicherung, Import, Aufbewahrung und Werksreset
-- [`TEMPERATURE_CONTROL.md`](TEMPERATURE_CONTROL.md): Regelstrategie, Sensorrollen, Zielqualifikation und Laufanpassungen
-- [`ACTUATOR_TIMING_AND_FANS.md`](ACTUATOR_TIMING_AND_FANS.md): Peltier-Schaltfenster, Mindestzeiten, Richtungswechsel und Luefterlogik
-- [`SENSOR_TUNING_COMMISSIONING.md`](SENSOR_TUNING_COMMISSIONING.md): Sensorfilter, Kalibrierung, PI-Parametersaetze und Inbetriebnahme
-- [`SAFETY_AND_FAULTS.md`](SAFETY_AND_FAULTS.md): Fehlerklassen, Verriegelung, Quittierung, Reset und Wiederfreigabe
-- [`SAFETY_COMPONENT_FAULTS.md`](SAFETY_COMPONENT_FAULTS.md): Temperatur-, Sensor-, Luefter-, BTS7960- und Peltierfehler
-- [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md): Versorgung, Boot, Watchdogs, Datenintegritaet, SAFE_BOOT und Fehlerjournal
-- [`DIAGNOSTICS_AND_MAINTENANCE.md`](DIAGNOSTICS_AND_MAINTENANCE.md): Diagnoseansichten, Boot-Selbsttest, Servicepruefungen, Exporte und UART-Umfang
-- [`FIRMWARE_UPDATE_AND_ROLLBACK.md`](FIRMWARE_UPDATE_AND_ROLLBACK.md): UART-Update im ersten Release und vorbereitete spaetere Web-OTA-/Rollbackregeln
-- [`RESOURCE_BUDGET_AND_MAINTENANCE.md`](RESOURCE_BUDGET_AND_MAINTENANCE.md): Ressourcenueberwachung, Speicherpflege, Flashbudget und Wartungsumfang
-- [`ACCEPTANCE_TESTS.md`](ACCEPTANCE_TESTS.md): Testebenen, Fehlerinjektionen, Release-Gates und Abnahmenachweise
-- [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md): software-first Entwicklungsreihenfolge, Simulation, Bring-up und Meilensteine
-- [`IMPLEMENTATION_ISSUES.md`](IMPLEMENTATION_ISSUES.md): konkrete Epics, GitHub-Issues, Abhaengigkeiten und Statuskennzeichnungen
-- [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
+1. spaetere akzeptierte ADRs in `DECISIONS.md`
+2. `SPECIFICATION_REVIEW.md`
+3. thematisch spezialisierte Spezifikationsdokumente
+4. `REQUIREMENTS.md`, `ARCHITECTURE.md` und `HARDWARE.md`
+5. Beispielkonfigurationen
+6. historische Phasen- und Revisionsnotizen
 
-## Phasen und Ergebnisdokumente
+Die aktuelle Liste echter offener Punkte steht in `OPEN_POINTS.md`.
+
+## Zentrale Quellen
+
+### Einstieg und Review
+
+- [`SPECIFICATION_REVIEW.md`](SPECIFICATION_REVIEW.md): Ergebnis von Phase 10C,
+  Prioritaeten und verbleibende offene Kategorien
+- [`REQUIREMENTS.md`](REQUIREMENTS.md): konsolidierte Release-1-Muss-Anforderungen
+- [`ARCHITECTURE.md`](ARCHITECTURE.md): Softwarestruktur, Ports und Adapter
+- [`HARDWARE.md`](HARDWARE.md): konsolidierter Hardwarestand
+- [`OPEN_POINTS.md`](OPEN_POINTS.md): reale Hardware-, Inbetriebnahme- und
+  Ressourcenpunkte
+- [`DECISIONS.md`](DECISIONS.md): Architekturentscheidungen
+
+### Prozess und Bedienung
+
+- [`PRODUCT_VISION.md`](PRODUCT_VISION.md)
+- [`PROGRAMS.md`](PROGRAMS.md)
+- [`STANDARD_PROGRAMS.md`](STANDARD_PROGRAMS.md)
+- [`STATE_MACHINE.md`](STATE_MACHINE.md)
+- [`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md)
+- [`RUNTIME_BEHAVIOR.md`](RUNTIME_BEHAVIOR.md)
+- [`LOCAL_UI.md`](LOCAL_UI.md)
+- [`LOCAL_UI_PROGRAMS.md`](LOCAL_UI_PROGRAMS.md)
+- [`LOCAL_RUNTIME_UI.md`](LOCAL_RUNTIME_UI.md)
+- [`LOCAL_UI_SETTINGS_SERVICE.md`](LOCAL_UI_SETTINGS_SERVICE.md)
+- [`WEB_UI.md`](WEB_UI.md)
+- [`NETWORK.md`](NETWORK.md)
+- [`NETWORK_DIAGNOSTICS_INTEGRATION.md`](NETWORK_DIAGNOSTICS_INTEGRATION.md)
+
+### Persistenz, Regelung und Sicherheit
+
+- [`SETTINGS_AND_STORAGE.md`](SETTINGS_AND_STORAGE.md)
+- [`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md)
+- [`BACKUP_SECURITY_RETENTION.md`](BACKUP_SECURITY_RETENTION.md)
+- [`TEMPERATURE_CONTROL.md`](TEMPERATURE_CONTROL.md)
+- [`ACTUATOR_TIMING.md`](ACTUATOR_TIMING.md)
+- [`SENSOR_TUNING_COMMISSIONING.md`](SENSOR_TUNING_COMMISSIONING.md)
+- [`SAFETY_AND_FAULTS.md`](SAFETY_AND_FAULTS.md)
+- [`SAFETY_COMPONENT_FAULTS.md`](SAFETY_COMPONENT_FAULTS.md)
+- [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md)
+
+### Diagnose, Ressourcen und Umsetzung
+
+- [`DIAGNOSTICS_AND_MAINTENANCE.md`](DIAGNOSTICS_AND_MAINTENANCE.md)
+- [`FIRMWARE_UPDATE_AND_ROLLBACK.md`](FIRMWARE_UPDATE_AND_ROLLBACK.md)
+- [`RESOURCE_BUDGET_AND_MAINTENANCE.md`](RESOURCE_BUDGET_AND_MAINTENANCE.md)
+- [`ACCEPTANCE_TESTS.md`](ACCEPTANCE_TESTS.md)
+- [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
+- [`IMPLEMENTATION_ISSUES.md`](IMPLEMENTATION_ISSUES.md)
+- [`CODEX_HANDOFF.md`](CODEX_HANDOFF.md)
+
+### Maschinenlesbare Beispiele
+
+- [`../config/programs.example.yaml`](../config/programs.example.yaml)
+- [`../config/hardware.example.yaml`](../config/hardware.example.yaml)
+- [`../config/pins.example.yaml`](../config/pins.example.yaml)
+
+## Phasen
 
 1. **Produktvision und Nutzung** -> `PRODUCT_VISION.md`
-2. **Programme und Prozessablauf** -> `PROGRAMS.md`, `STANDARD_PROGRAMS.md` und Programmschema
-3. **Betriebszustaende und Uebergaenge** -> `STATE_MACHINE.md`, `RECOVERY_AND_INTERRUPTION.md`, `RUNTIME_BEHAVIOR.md`
-4. **Lokale Touch-Bedienung** -> `LOCAL_UI.md`, `LOCAL_PROGRAMS.md`, `LOCAL_RUNTIME_UI.md`, `LOCAL_UI_SETTINGS_SERVICE.md`
-5. **Weboberflaeche und Netzwerk** -> `WEB_UI.md`, `NETWORK.md`, `NETWORK_DIAGNOSTICS_INTEGRATION.md`
-6. **Einstellungen und Persistenz** -> `SETTINGS_AND_STORAGE.md`, `RUN_PERSISTENCE.md`, `BACKUP_SECURITY_RETENTION.md`
-7. **Temperaturregelung und Aktorlogik** -> `TEMPERATURE_CONTROL.md`, `ACTUATOR_TIMING_AND_FANS.md`, `SENSOR_TUNING_COMMISSIONING.md`
-8. **Sicherheit und Fehlerbehandlung** -> `SAFETY_AND_FAULTS.md`, `SAFETY_COMPONENT_FAULTS.md`, `SYSTEM_SAFETY_AND_RECOVERY.md`
-9. **Diagnose, Wartung und Updates** -> `DIAGNOSTICS_AND_MAINTENANCE.md`, `FIRMWARE_UPDATE_AND_ROLLBACK.md`, `RESOURCE_BUDGET_AND_MAINTENANCE.md`
-10. **Akzeptanztests und Implementierungsplan** -> `ACCEPTANCE_TESTS.md`, `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_ISSUES.md` und GitHub-Issues
+2. **Programme und Prozessablauf** -> `PROGRAMS.md`, `STANDARD_PROGRAMS.md`
+3. **Betriebszustaende und Uebergaenge** -> `STATE_MACHINE.md`,
+   `RECOVERY_AND_INTERRUPTION.md`, `RUNTIME_BEHAVIOR.md`
+4. **Lokale Touch-Bedienung** -> `LOCAL_UI.md`, `LOCAL_UI_PROGRAMS.md`,
+   `LOCAL_RUNTIME_UI.md`, `LOCAL_UI_SETTINGS_SERVICE.md`
+5. **Weboberflaeche und Netzwerk** -> `WEB_UI.md`, `NETWORK.md`,
+   `NETWORK_DIAGNOSTICS_INTEGRATION.md`
+6. **Einstellungen und Persistenz** -> `SETTINGS_AND_STORAGE.md`,
+   `RUN_PERSISTENCE.md`, `BACKUP_SECURITY_RETENTION.md`
+7. **Temperaturregelung und Aktorlogik** -> `TEMPERATURE_CONTROL.md`,
+   `ACTUATOR_TIMING.md`, `SENSOR_TUNING_COMMISSIONING.md`
+8. **Sicherheit und Fehlerbehandlung** -> `SAFETY_AND_FAULTS.md`,
+   `SAFETY_COMPONENT_FAULTS.md`, `SYSTEM_SAFETY_AND_RECOVERY.md`
+9. **Diagnose, Wartung und Updates** -> `DIAGNOSTICS_AND_MAINTENANCE.md`,
+   `FIRMWARE_UPDATE_AND_ROLLBACK.md`, `RESOURCE_BUDGET_AND_MAINTENANCE.md`
+10. **Akzeptanztests und Implementierungsplan** -> `ACCEPTANCE_TESTS.md`,
+    `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_ISSUES.md`, GitHub-Issues und
+    `SPECIFICATION_REVIEW.md`
 
-## Arbeitsweise
+## Abschlussstand
 
-1. Eine Phase wird gemeinsam besprochen.
-2. Ich fasse Entscheidungen und offene Punkte zusammen.
-3. Das zugehoerige Dokument wird auf `docs/software-specification` erstellt oder aktualisiert.
-4. Der Benutzer prueft und korrigiert den Inhalt.
-5. Erst nach Freigabe beginnt die naechste Phase.
-6. Am Ende wird ein Pull Request nach `main` erstellt.
-
-## Stand
-
-- [x] Bestehende Dokumentation gesichtet
-- [x] Spezifikationsbranch erstellt
 - [x] Phase 1: Produktvision und Nutzung
 - [x] Phase 2: Programme und Prozessablauf
-  - [x] Phase 2A: allgemeiner Programmablauf, Sensorbetrieb und Vorheizen
-  - [x] Phase 2B: allgemeine Standardprogramme und ihre Voreinstellungen
-  - [ ] Exakte Temperaturen, Zeiten und Grenzwerte werden nach Inbetriebnahme als Werkseinstellungen ergaenzt
-- [x] Phase 3: Zustandsmaschine
-  - [x] Phase 3A: Grundzustaende, Stoppen, Warnungen und manuelle Betriebsarten
-  - [x] Phase 3B: Tuerkontakt, Produktfuehlerausfall, Wartezeit und Wiederanlaufgrundsaetze
-  - [x] Phase 3C: Netzwerkzeit, spaetere RTC-Option und autonomer phasenbezogener Wiederanlauf
-  - [x] Phase 3D: Luefternachlauf, Sensorersatz, Meldungsprioritaeten und akustische Signale
+- [x] Phase 3: Zustandsmaschine und Wiederanlauf
 - [x] Phase 4: Lokale Bedienung
-  - [x] Phase 4A: Displayausrichtung, Hauptbildschirm, Navigation, Temperaturen und Eingabeverhalten
-  - [x] Phase 4B: Programmauswahl, Programmverwaltung, Loeschen und Startablauf
-  - [x] Phase 4C: Laufdetails, Meldungen, Stoppen und Wiederanlaufanzeige
-  - [x] Phase 4D: Menue, Einstellungen, Diagnose, PIN-Service, Wiederherstellung, Touchkalibrierung und Sprachen
 - [x] Phase 5: Web und Netzwerk
-  - [x] Phase 5A: WLAN-Ersteinrichtung, QR-Assistent, Ersatz-WLAN, Geraetename und Zugriffsgrundlagen
-  - [x] Phase 5B: Weboberflaeche, Anmeldung, Sitzungen und gleichzeitige Bedienung
-  - [x] Phase 5C: Netzwerkdiagnose, VPN, Reverse Proxy, Proxy-Vertrauen und lokale Lese-API
 - [x] Phase 6: Einstellungen und Persistenz
-  - [x] Phase 6A: Einstellungsgruppen, Werkseinstellungen und Aenderungsrechte
-  - [x] Phase 6B: Laufpersistenz, Speicherzeitpunkte, Messhistorie und Wiederherstellbarkeit
-  - [x] Phase 6C: Geheimnisse, Sicherung, Export, Reset und Datenaufbewahrung
 - [x] Phase 7: Temperaturregelung und Aktoren
-  - [x] Phase 7A: Regelstrategie, Heiz-/Kuehlbetrieb, Sensorrollen, Zielqualifikation und Laufanpassungen
-  - [x] Phase 7B: Schaltfenster, Mindestzeiten, Richtungswechsel und Luefterlogik
-  - [x] Phase 7C: Sensorfilter, Kalibrierung, Tuning, Inbetriebnahme und spaetere Regelstrategien
 - [x] Phase 8: Sicherheit und Fehler
-  - [x] Phase 8A: Fehlerklassen, unmittelbare Reaktionen, Quittierung und Wiederfreigabe
-  - [x] Phase 8B: Temperatur-, Sensor-, Luefter- und Aktorfehler
-  - [x] Phase 8C: Versorgung, Softwarefehler, sichere Zustaende und Fehlerprotokoll
-- [x] Phase 9: Diagnose, Wartung und Updates
-  - [x] Phase 9A: Diagnoseansichten, Servicepruefungen und Exporte
-  - [x] Phase 9B: UART-Update im ersten Release sowie vorbereitete spaetere OTA-, Rollback- und Migrationsregeln
-  - [x] Phase 9C: Ressourcenueberwachung, Speicherpflege, Flashbudget und Wartungsumfang
-- [ ] Phase 10: Akzeptanztests und Implementierungsplan
-  - [x] Phase 10A: Testebenen, Abnahmekriterien und Release-Gates
-  - [x] Phase 10B: Implementierungsreihenfolge und GitHub-Issues
-    - [x] software-first Entwicklung vor Ankunft der Hardware
-    - [x] native Simulation und Hardwareabstraktionen
-    - [x] geschuetztes ESP32-Bring-up innerhalb derselben Codebasis
-    - [x] Branch-, Pull-Request-, Definition-of-Done- und Meilensteinstrategie
-    - [x] sieben Epic-Issues #2 bis #8 erstellt
-    - [x] 29 Implementierungs- und Abnahme-Issues #9 bis #37 erstellt
-    - [x] Abhaengigkeiten und Statuskennzeichnungen dokumentiert
-    - [x] erstes geplantes Implementierungs-Issue #9 festgelegt
-  - [ ] Phase 10C: Gesamtreview, offene Punkte, Pull Request und Uebergabe an die Implementierung
+- [x] Phase 9: Diagnose, Ressourcen und Updates
+- [x] Phase 10A: Testebenen, Abnahmekriterien und Release-Gates
+- [x] Phase 10B: Implementierungsreihenfolge, Epics und Issues
+  - [x] software-first Entwicklung
+  - [x] native Simulation und Hardwareabstraktionen
+  - [x] `esp32_bringup` innerhalb derselben Codebasis
+  - [x] sieben Epics #2 bis #8
+  - [x] 29 Arbeits- und Abnahme-Issues #9 bis #37
+  - [x] erstes Implementierungs-Issue #9 festgelegt
+- [x] Phase 10C: Gesamtreview und Uebergabe
+  - [x] zentrale Alt-Dokumente konsolidiert
+  - [x] falsche zentrale Dateiverweise korrigiert
+  - [x] offene Punkte nach Hardware, Inbetriebnahme, Budget und Zukunft getrennt
+  - [x] Draft-PR #38 erstellt
+  - [x] Issue #1 und Uebergabedokumente aktualisiert
 
-## Aktuelle Phase
+## Ergebnis
 
-Als Naechstes wird Phase 10C bearbeitet: Gesamtreview, Widerspruchspruefung, offene Punkte, Spezifikations-Pull-Request und Uebergabe an die Implementierung.
+Die Dokumentationsphase ist abgeschlossen. Pull Request #38 bleibt bis zum
+Review und Merge durch den Repository-Owner offen. Nach dem Merge wird Issue #9
+auf `READY` gesetzt und die Implementierung auf einem eigenen Branch begonnen.
+
+Exakte Temperaturen, Zeiten, Regelparameter, GPIOs und Ressourcenbudgets werden
+nicht als fehlende Spezifikation gewertet, weil sie durch die realen Hardware-,
+Inbetriebnahme- und Belastungstests #29 bis #37 bestimmt werden muessen.
