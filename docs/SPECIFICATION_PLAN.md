@@ -138,15 +138,14 @@ Korrekturen aus den Reviews von PR #38 stehen in
   - [x] Issue #1 und Uebergabedokumente aktualisiert
   - [x] beide PR-Reviews ausgewertet
   - [x] verbindliche Reviewkorrekturen dokumentiert
-  - [ ] Reviewthreads beantwortet und geschlossen
+  - [x] alle Inline-Reviewthreads beantwortet und geschlossen
   - [ ] Owner-Review und Merge abgeschlossen
 
 ## Ergebnis
 
 Die Dokumentationsphase ist inhaltlich abgeschlossen. Pull Request #38 bleibt bis
-zur Beantwortung der Reviewhinweise, zum Review und zum Merge durch den
-Repository-Owner offen. Nach dem Merge wird Issue #9 auf `READY` gesetzt und die
-Implementierung auf einem eigenen Branch begonnen.
+zum Owner-Review und Merge offen. Nach dem Merge wird Issue #9 auf `READY`
+gesetzt und die Implementierung auf einem eigenen Branch begonnen.
 
 Exakte Temperaturen, Zeiten, Regelparameter, GPIOs und Ressourcenbudgets werden
 nicht als fehlende Spezifikation gewertet, weil sie durch die realen Hardware-,
