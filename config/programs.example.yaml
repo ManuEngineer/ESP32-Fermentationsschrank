@@ -1,12 +1,15 @@
 # Spezifikationsbeispiel. Exakte Prozesswerte folgen erst bei der Inbetriebnahme.
 # TBD_COMMISSIONING ist kein gueltiger Laufzeitwert der fertigen Firmware.
-schema_version: 3
+schema_version: 4
 
 programs:
   - id: yogurt-mild
     name: Joghurt mild
     built_in: true
+    factory_catalog_entry: true
     resettable: true
+    user_deletable: true
+    installed: true
     enabled: true
     defaults:
       preheat: true
@@ -26,7 +29,10 @@ programs:
   - id: yogurt-firm
     name: Joghurt stichfest
     built_in: true
+    factory_catalog_entry: true
     resettable: true
+    user_deletable: true
+    installed: true
     enabled: true
     defaults:
       preheat: true
@@ -46,7 +52,10 @@ programs:
   - id: milk-kefir
     name: Milchkefir
     built_in: true
+    factory_catalog_entry: true
     resettable: true
+    user_deletable: true
+    installed: true
     enabled: true
     defaults:
       preheat: false
@@ -66,7 +75,10 @@ programs:
   - id: water-kefir
     name: Wasserkefir
     built_in: true
+    factory_catalog_entry: true
     resettable: true
+    user_deletable: true
+    installed: true
     enabled: true
     defaults:
       preheat: false
@@ -86,6 +98,13 @@ programs:
 program_management:
   additional_user_programs_allowed: true
   fixed_program_count: false
+  list_order:
+    - installed_standard_programs
+    - user_programs
+  per_run_changes_are_persistent: false
+  delete_confirmation_steps: 2
+  built_in_delete_behavior: remove_active_instance_keep_factory_catalog
+  factory_reset_restores_built_in_programs: true
   user_programs_may_be_created_from:
     - empty_template
     - copy_of_standard_program
