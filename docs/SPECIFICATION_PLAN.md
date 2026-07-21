@@ -41,6 +41,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`SENSOR_TUNING_COMMISSIONING.md`](SENSOR_TUNING_COMMISSIONING.md): Sensorfilter, Kalibrierung, PI-Parametersaetze und Inbetriebnahme
 - [`SAFETY_AND_FAULTS.md`](SAFETY_AND_FAULTS.md): Fehlerklassen, Verriegelung, Quittierung, Reset und Wiederfreigabe
 - [`SAFETY_COMPONENT_FAULTS.md`](SAFETY_COMPONENT_FAULTS.md): Temperatur-, Sensor-, Luefter-, BTS7960- und Peltierfehler
+- [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md): Versorgung, Boot, Watchdogs, Datenintegritaet, SAFE_BOOT und Fehlerjournal
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -52,7 +53,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 5. **Weboberflaeche und Netzwerk** -> `WEB_UI.md`, `NETWORK.md`, `NETWORK_DIAGNOSTICS_INTEGRATION.md`
 6. **Einstellungen und Persistenz** -> `SETTINGS_AND_STORAGE.md`, `RUN_PERSISTENCE.md`, `BACKUP_SECURITY_RETENTION.md`
 7. **Temperaturregelung und Aktorlogik** -> `TEMPERATURE_CONTROL.md`, `ACTUATOR_TIMING_AND_FANS.md`, `SENSOR_TUNING_COMMISSIONING.md`
-8. **Sicherheit und Fehlerbehandlung** -> `SAFETY_AND_FAULTS.md`, `SAFETY_COMPONENT_FAULTS.md`
+8. **Sicherheit und Fehlerbehandlung** -> `SAFETY_AND_FAULTS.md`, `SAFETY_COMPONENT_FAULTS.md`, `SYSTEM_SAFETY_AND_RECOVERY.md`
 9. **Diagnose, Wartung und Updates** -> `DIAGNOSTICS_AND_MAINTENANCE.md`
 10. **Akzeptanztests und Implementierungsplan** -> `ACCEPTANCE_TESTS.md` und spaetere GitHub-Issues
 
@@ -96,13 +97,16 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 7A: Regelstrategie, Heiz-/Kuehlbetrieb, Sensorrollen, Zielqualifikation und Laufanpassungen
   - [x] Phase 7B: Schaltfenster, Mindestzeiten, Richtungswechsel und Luefterlogik
   - [x] Phase 7C: Sensorfilter, Kalibrierung, Tuning, Inbetriebnahme und spaetere Regelstrategien
-- [ ] Phase 8: Sicherheit und Fehler
+- [x] Phase 8: Sicherheit und Fehler
   - [x] Phase 8A: Fehlerklassen, unmittelbare Reaktionen, Quittierung und Wiederfreigabe
   - [x] Phase 8B: Temperatur-, Sensor-, Luefter- und Aktorfehler
-  - [ ] Phase 8C: Versorgung, Softwarefehler, sichere Zustaende und Fehlerprotokoll
+  - [x] Phase 8C: Versorgung, Softwarefehler, sichere Zustaende und Fehlerprotokoll
 - [ ] Phase 9: Diagnose, Wartung und Updates
+  - [ ] Phase 9A: Diagnoseansichten, Servicepruefungen und Exporte
+  - [ ] Phase 9B: Firmwareupdate, OTA, Rollback und Wartungsmodus
+  - [ ] Phase 9C: Ressourcenueberwachung, Lebensdauer und vorbeugende Wartung
 - [ ] Phase 10: Akzeptanztests und Implementierungsplan
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 8C bearbeitet: Versorgung, Softwarefehler, sichere Zustaende und Fehlerprotokoll.
+Als Naechstes wird Phase 9A bearbeitet: Diagnoseansichten, Servicepruefungen und Exporte.
