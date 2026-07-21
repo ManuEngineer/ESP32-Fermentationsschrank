@@ -2,509 +2,379 @@
 
 ## Status
 
-Dieses Dokument beschreibt die in Phase 10A akzeptierten Testebenen,
-automatischen Pruefungen, Release-Gates, Fehlerinjektionen, Hardwareabnahme,
-Dauer- und Belastungstests, thermische Inbetriebnahme sowie den notwendigen
-Testnachweis.
-
-Die konkrete Implementierungsreihenfolge und die daraus abgeleiteten GitHub-Issues
-werden in Phase 10B festgelegt. Exakte thermische Grenzwerte, Regelparameter und
-Ressourcenschwellen bleiben bis zu den jeweiligen Messungen
+Dieses Dokument definiert die verbindlichen Testebenen, Fehlerinjektionen,
+Hardwareabnahmen und Release-Gates fuer Release 1. Die Korrekturen aus den
+Reviews von PR #38 sind integriert. Exakte thermische Grenzwerte,
+Regelparameter und Ressourcenschwellen bleiben bis zu den jeweiligen Messungen
 `TBD_COMMISSIONING` beziehungsweise `TBD_IMPLEMENTATION_BUDGET`.
 
 ## Grundsaetze
 
-- Sicherheitskritische Funktionen werden nicht nur im Normalfall, sondern gezielt
-  unter Fehlerbedingungen getestet.
-- Native und simulierte Tests ersetzen keine Hardwaretests; Hardwaretests ersetzen
-  keine deterministischen Softwaretests.
-- Jeder Test verweist auf eine Anforderung, Entscheidung, Fehlernummer oder
-  Sicherheitsregel.
+- Sicherheitskritische Funktionen werden gezielt unter Fehlerbedingungen getestet.
+- Native Tests ersetzen keine Hardwaretests; Hardwaretests ersetzen keine
+  deterministischen Softwaretests.
+- Jeder formelle Test verweist auf eine Anforderung, Entscheidung, Fehlernummer
+  oder Sicherheitsregel.
 - Ein Test darf keine unkontrollierte Aktorfreigabe oder Umgehung der normalen
   Sicherheitslogik verlangen.
 - Hardwaretests verwenden den bestaetigten Hardwarestand, die dokumentierte
   Verdrahtung und einen gespeicherten Servicebericht.
-- Testergebnisse bleiben versioniert und der getesteten Firmware-, Hardware- und
-  Konfigurationsrevision zugeordnet.
-- Ein nicht ausgefuehrter Test ist nicht bestanden, sondern `BLOCKED` oder
-  `NOT_RUN`.
+- Ein nicht ausgefuehrter Test ist `BLOCKED` oder `NOT_RUN`, nicht bestanden.
 - Ein bestandener Einzeltest hebt keinen anderen aktiven Sicherheitsfehler auf.
+- Ein Neustart gilt nie als Fehlerreset.
+- `SAFE_BOOT` bleibt in allen Tests aktorfrei.
 
 ## Testebenen
 
 ### Ebene 1: Native Unit-Tests
 
-Native Tests laufen auf dem Entwicklungsrechner ohne ESP32-Hardware und pruefen
-kleine deterministische Einheiten.
-
-Mindestens zu pruefen sind:
+Mindestens:
 
 - Programm- und Konfigurationsvalidierung
-- Zustandsuebergaenge
-- Zeit- und Phasenberechnungen
+- kanonische Zustandsuebergaenge
+- Bootprioritaet fuer Bootschleifen, persistierte Sperren und Speicherfehler
+- Wiederherstellung eines persistierten `COMPLETED`
+- virtuelle monotone und absolute Zeit
+- Ausfallzeit als Unter-/Obergrenze
+- kein automatischer Phasenabschluss bei ueberlappendem Unsicherheitsintervall
 - Zielqualifikation und Gnadenzeit
-- PI-Reglerkern und Begrenzungen
+- PI-Reglerkern und Luftbegrenzung
 - Impulsakkumulator
-- Mindest-Ein-/Auszeit und Totzeitlogik
+- Mindest-Einschaltzeit, Mindest-Ausschaltzeit und Totzeit
 - Sensorstatus `VALID`, `STALE`, `FAILED`
-- Plausibilitaets- und Filterlogik mit definierten Messfolgen
-- Fehlerklassifikation und Verriegelung
-- Berechtigungs- und Resetregeln
-- Persistenzschema, Integritaetspruefung und Rueckfallrevision
-- temperaturgewichtete Unterbrechungsbewertung
-- Speicheraufbewahrung und Bereinigungsreihenfolge
+- Fehlerklassifikation, Quittierung und Fehlerreset
+- Persistenzschema, atomare Revisionen und Rueckfall
+- Transaktionsabsicht vor aktorwirksamer Zustandsaenderung
+- Persistenzfehler-Latch und Bootauswertung
+- Aufbewahrung und Bereinigung
+- PIN-unabhaengiger Vollreset-Ablauf als Zustands- und Berechtigungslogik
 
-Die Tests muessen reproduzierbar sein und duerfen nicht von realer Uhrzeit,
-Netzwerk oder zufaelliger Taskplanung abhaengen.
+Tests sind reproduzierbar und unabhaengig von realer Uhrzeit, Netzwerk und
+zufaelliger Taskplanung.
 
-### Ebene 2: Simulierte Zustandsmaschinen- und Fehlerablaeufe
+### Ebene 2: Simulierte Gesamt- und Fehlerablaeufe
 
-Eine Simulationsschicht fuehrt vollstaendige Prozess- und Fehlerablaeufe mit
-virtueller Zeit, simulierten Sensoren und abstrahierten Aktoren aus.
+Mindestens:
 
-Beispiele:
-
-- Standby -> Vorheizen -> Warten auf Produkt -> Zielqualifikation -> Fermentation
+- Standby -> Vorheizen -> Produkt einsetzen -> Zielqualifikation -> Fermentation
 - luftgefuehrter Lauf ohne Produktfuehler
-- Produktfuehlerausfall mit Wechsel auf Luft und validierter Rueckkehr
-- Tag-/Nachtwechsel zwischen Kuehlen und Heizen
-- Richtungswechsel mit Gegenanforderungsbestaetigung und Totzeit
-- kurze und lange Stromunterbrechungen in jeder Prozessphase
-- fehlende NTP-Zeit und spaetere Zeitkorrektur
-- verriegelter Fehler mit Quittierung und getrenntem Fehlerreset
-- Sicherheits-Eingriffsgrenze mit begrenztem Gegenrichtungsversuch
-- harte Notgrenze ohne Gegenrichtung
-- korrupter Kontrollpunkt mit Rueckfall auf aeltere gueltige Revision
-- wiederholter Watchdog mit Uebergang zu `SAFE_BOOT`
+- Produktfuehlerausfall, validierter Luft-Ersatzbetrieb und Rueckkehr
+- Heizen, Neutralbereich, Kuehlen und Richtungswechsel
+- Stromunterbrechung in jeder Prozessphase
+- fehlende NTP-Zeit ohne erfundenen Fortschritt
+- spaeterer NTP-Abgleich mit Ausfallintervall
+- Zeitintervall innerhalb einer Phase
+- Zeitintervall ueber einer Abschluss- oder Haltegrenze
+- persistierte Verriegelung plus Neustart -> `SAFE_BOOT`
+- wiederholter Watchdog oder Bootschleife -> `SAFE_BOOT`
+- unvollstaendige Persistenztransaktion -> `SAFE_BOOT`
+- kritischer Persistenzschreibfehler -> sichere Abschaltung
+- korrupter Kontrollpunkt mit sicherem Rueckfall
+- `COMPLETED` bleibt nach Neustart `COMPLETED`
+- kein Service- oder Aktortest aus `SAFE_BOOT`
+- Quittierung ohne Fehlerreset
+- Benutzerentscheidung bei `WARNING_REQUIRES_ACTION`
 
-Die Simulation protokolliert erwartete und tatsaechliche Zustaende und prueft,
-dass keine verbotene Aktorfreigabe entsteht.
+Die Simulation prueft erwartete Zustaende, Meldungen, Revisionen und abstrakte
+Aktorbefehle. Eine verbotene Aktorfreigabe laesst den Test fehlschlagen.
 
-### Ebene 3: ESP32-Build- und Integrationstests
+### Ebene 3: Build- und statische Integrationstests
 
-Der reale Zielbuild wird mit PlatformIO fuer die bestaetigte ESP32-32E-
-Konfiguration erstellt.
+Mindestens:
 
-Mindestens zu pruefen sind:
-
-- fehlerfreier Releasebuild
-- korrekte 4-MB-Flashkonfiguration
-- verwendete Partitionstabelle
-- Firmwaregroesse und definierter Sicherheitsabstand
-- keine vorausgesetzte PSRAM
-- korrekte Einbindung der Factory-Konfiguration
-- Uebersetzungen Deutsch, Spanisch und Englisch
-- Webressourcen und lokale UI-Ressourcen
-- deaktivierte oder nicht implementierte Zukunftsfunktionen wie Web-OTA und
-  benutzeraktivierbare UART-Diagnose
+- `native`, `esp32_bringup` und `esp32_release` bauen reproduzierbar
+- reale Zielkonfiguration verwendet 4 MB Flash
+- keine PSRAM-Abhaengigkeit
+- dokumentierter Partitionsplan ohne Release-1-Web-OTA
+- Firmware- und Ressourcenbericht
+- Factory-Konfiguration und Schemaversionen
+- Deutsch, Spanisch und Englisch
+- Web- und lokale UI-Ressourcen
 - keine eingebetteten Geheimnisse
-- statische oder native Tests fuer bekannte Fehlercodes und Schemaversionen
+- keine produktiv verwendeten `TBD`-Werte
+- keine unbestaetigten Pins, Pegel oder Controller als freigegebene Werte
+- Zukunftsfunktionen bleiben deaktiviert
 
-Der Build allein gilt nicht als Hardwarefreigabe.
+Ein Build ist keine Hardwarefreigabe.
 
-### Ebene 4: Tests am verdrahteten Hardwareaufbau
+### Ebene 4: Elektrische und Hardwaretests
 
-Diese Ebene prueft das reale Controllerboard, die Verdrahtung und alle Ein- und
-Ausgaenge, bevor der komplette Schrank thermisch belastet wird.
-
-Dazu gehoeren:
+Vor einer thermischen Belastung:
 
 - GPIO-Zuordnung und aktive Pegel
-- Boot-, Reset-, Brownout- und Bootloaderpegel
-- Hardware-Pulldowns der BTS7960-Eingaenge
-- sichere Ausgangszustaende ohne gestarteten Lauf
+- Boot-, Reset-, Brownout- und Bootloaderverhalten
+- sichere H-Bruecken- und MOSFET-Zustaende
+- BTS7960-Pulldowns, Enable, Richtungen und Abschaltung
 - drei DS18B20 mit ROM-Zuordnung
-- getrennte beziehungsweise geschuetzte 1-Wire-Busse
-- Display und resistiver Touch
+- 1-Wire-Bustopologie und Produkt-Hot-Plug
+- Displaycontroller, Touchcontroller, Rotation und Kalibrierung
 - Innen- und Aussenluefter
 - Summer
-- BTS7960-Richtungen
-- R_IS/L_IS nur, sofern am realen Modul brauchbar
-- Peltier-Heiz- und Kuehlrichtung mit begrenzten Pulsen
-- 7,5-A-Sicherung und Leistungspfad
-- Temperatursicherung und deren Einbaukonzept
+- R_IS/L_IS nur bei nachgewiesener Nutzbarkeit
+- PIN-unabhaengiger lokaler Vollreset ohne Aktorwirkung
+- UART-Flash- und Recoveryweg
 
-### Ebene 5: Thermische Tests des vollstaendigen Schranks
+### Ebene 5: Thermische Inbetriebnahme
 
-Der vollstaendige Schrank wird ohne Lebensmittel mit definierten Testmassen
-vermessen. Diese Ebene liefert die Daten fuer PI-Parameter, Grenzwerte,
-Qualifikationszeiten und Sicherheitsreaktionen.
+Mit leerem Schrank und definierten Testmassen:
+
+- Aufheizen, Abkuehlen und Halten
+- Temperaturverteilung
+- Produkt-Luft-Differenz
+- Kuehlkoerper- und Luefterreaktion
+- PI-Parameter je Sensorrolle und Richtung
+- Zielband, Qualifikation und Gnadenzeit
+- Luftbegrenzungen
+- Mindestimpuls, Mindestzeiten und Totzeit
+- Sicherheits-Eingriffs- und harte Notgrenzen
+- fehlende thermische Reaktion
+- thermisches Modell fuer Unterbrechungen, sofern verwendet
+- Temperatursicherung: Rating, Montageort und thermische Wirksamkeit
 
 ### Ebene 6: Praktische Fermentationslaeufe
 
-Erst nach bestandenen Software-, Hardware- und thermischen Tests werden echte
-Fermentationslaeufe fuer die Standardprogramme durchgefuehrt.
-
-Sie dienen zur fachlichen Validierung von:
-
-- Bedienablauf
-- Vorheizen und Einsetzen des Produkts
-- Zielqualifikation
-- produkt- und luftgefuehrtem Betrieb
-- Temperaturstabilitaet
-- Abschluss, Kuehlen und Halten
-- praktischen Standardwerten
-- Verstaendlichkeit der Meldungen
-
-Ein gelungenes Fermentationsprodukt ersetzt keine sicherheitstechnischen Tests.
-
-## Automatische Pruefungen bei Codeaenderungen
-
-Bei jedem relevanten Commit beziehungsweise Pull Request werden mindestens
-automatisch ausgefuehrt:
-
-1. native Unit-Tests
-2. simulierte Zustandsmaschinen- und Fehlerablaeufe
-3. Konfigurations- und Schemavalidierung
-4. Persistenz-, Rueckfall- und Migrationspruefungen
-5. PlatformIO-Build fuer die reale Zielkonfiguration
-6. Pruefung auf versehentlich eingecheckte Geheimnisse oder lokale
-   Konfigurationsdateien
-7. Pruefung auf unbestaetigte Platzhalter in sicherheitskritischen
-   Implementierungsbereichen
-8. Groessenbericht fuer Firmware und statische Ressourcen
-
-Hardware-, thermische und siebentaegige Dauerpruefungen bleiben zunaechst
-manuell beziehungsweise durch dokumentierte Testlaeufe ausgeloest.
-
-### Verhalten bei fehlgeschlagener Automatik
-
-- Ein fehlgeschlagener sicherheits- oder kernfunktionsrelevanter Test blockiert
-  Zusammenfuehren und Release.
-- Ein fehlgeschlagener reiner Komforttest wird bewertet und dokumentiert, darf
-  aber nicht still ignoriert werden.
-- Ein nicht ausfuehrbarer Test wird als `BLOCKED` markiert und benoetigt einen
-  benannten Grund sowie einen Nachholplan.
-
-## Release-Gates
-
-### Gate 0: Dokumentation und Rueckverfolgbarkeit
-
-Vor Implementierungsfreigabe:
-
-- verbindliche Anforderung oder Entscheidung vorhanden
-- zugehoerige Testidee vorhanden
-- offene Hardware- oder Grenzwertannahmen sichtbar markiert
-- keine sicherheitskritische Annahme als bestaetigte Tatsache formuliert
-
-### Gate 1: Softwarekern
-
-Vor erstem kontrolliertem Hardwarebetrieb:
-
-- Zustandsmaschine nativ getestet
-- Sensor- und Fehlerzustandslogik getestet
-- Aktorfreigabelogik getestet
-- Mindestzeiten, Totzeit und Watchdog getestet
-- Persistenz und Rueckfall getestet
-- alle sicherheitsrelevanten automatischen Tests bestanden
-
-### Gate 2: Verdrahtete Hardware
-
-Vor laengerem Peltierbetrieb:
-
-- GPIOs und aktive Pegel bestaetigt
-- sichere Boot- und Resetpegel bestaetigt
-- BTS7960-Richtung und Abschaltung bestaetigt
-- Sensorrollen und ROM-Adressen bestaetigt
-- Luefterfunktion und Nachlauf bestaetigt
-- Sicherung und Leistungspfad geprueft
-- begrenzte Heiz- und Kuehlpulse bestanden
-- Servicebericht gespeichert
-
-### Gate 3: Thermische Inbetriebnahme
-
-Vor echten Fermentationslaeufen:
-
-- Schrank leer vermessen
-- kleine und grosse Referenzmasse vermessen
-- Heizen und Kuehlen abgestimmt
-- Richtungswechsel validiert
-- Luftbegrenzungen festgelegt
-- Sicherheits-Eingriffs- und harte Notgrenzen validiert
-- Temperaturverteilung und kritischste Stellen bestimmt
-- Temperatursicherung ausgewaehlt und montiert
-- keine unbekannte sicherheitsrelevante thermische Abweichung offen
-
-### Gate 4: Dauer- und Belastungstest
-
-Vor Release-1-Freigabe:
-
-- siebentaegiger Belastungstest bestanden
-- keine unerklaerten Resets, Watchdogs oder Brownouts
-- keine relevante RAM-Leckage oder fortschreitende Fragmentierung
-- Speicherbereinigung und Aufbewahrungsgrenzen funktionieren
-- kritische Persistenz bleibt wiederherstellbar
-- Web, Display, Sensoren und Regelung koennen parallel betrieben werden
-- Fehler- und Resetjournal bleibt innerhalb des Budgets
-
-### Gate 5: Fachlicher Releasekandidat
-
-Vor Kennzeichnung als Release 1:
-
-- Standardprogramme praktisch geprueft
-- Bedienung lokal und im Web geprueft
-- Stromunterbrechungs- und Wiederanlaufablaeufe geprueft
-- Export und Diagnose geprueft
-- bekannte Abweichungen bewertet
-- keine offene unbekannte Sicherheitsursache
-- alle sicherheits- und kernfunktionsrelevanten Tests bestanden
-
-## Fehler- und Releaseklassifikation
-
-### Releaseblockierend
-
-Ein Release ist gesperrt bei:
-
-- fehlgeschlagenem Sicherheits- oder Wiederherstellungstest
-- nicht deterministischer oder unerwarteter Peltierfreigabe
-- ungeklaertem Sensor-, H-Bruecken-, Luefter- oder Bootverhalten
-- Datenkorruption ohne sicheren Rueckfall
-- nicht reproduzierbarem Watchdog oder Reset mit moeglicher Aktorgefahr
-- unbekannter sicherheitsrelevanter thermischer Ursache
-- fehlendem Nachweis einer kritischen Anforderung
-
-### Bedingt akzeptierbar
-
-Nichtkritische Komfortfehler duerfen nur offenbleiben, wenn:
-
-- keine Sicherheits- oder Wiederherstellungsfunktion betroffen ist
-- die Einschraenkung dokumentiert ist
-- ein Workaround vorhanden oder die Funktion fuer Release 1 deaktiviert ist
-- ein separates Folge-Issue vorhanden ist
-- die Releasehinweise die Einschraenkung nennen
-
-### Nicht ausreichend
-
-Folgende Begruendungen reichen nicht fuer eine Freigabe:
-
-- "funktioniert meistens"
-- "ist beim normalen Test nicht aufgetreten"
-- "Neustart behebt es"
-- "der Benutzer wird es vermutlich nicht ausloesen"
-- "das Peltier ist nur 50 W"
-
-## Verpflichtende Fehlerinjektionen
-
-### Sensoren
-
-- Schrankluftfuehler waehrend Standby, Vorheizen, Fermentation und Kuehlen abziehen
-- Schrankluftfuehler kurz stoeren und Wiedererkennungsfenster pruefen
-- Produktfuehler abziehen, Ersatzbetrieb pruefen und wieder anschliessen
-- Kuehlkoerpersensor waehrend Peltierbetrieb abziehen
-- CRC-Fehler und Busunterbrechung simulieren
-- veralteten Messwert erzeugen
-- unrealistischen Sprung und unplausible Aenderungsrate einspeisen
-- grosse aber physikalisch moegliche Differenz zwischen Produkt und Luft testen
-- widerspruechliche Sensorwerte mit unklarer Ursache simulieren
-
-### Aktoren und Thermik
-
-- veraltete Regelanforderung erzeugen
-- gleichzeitige Richtungsanforderung simulieren
-- Richtungswechsel bei kurzer und dauerhafter Gegenanforderung testen
-- Totzeit und Mindest-Auszeit pruefen
-- Aussenluefterfehler thermisch simulieren
-- Innenluefterfehler simulieren
-- fehlende thermische Reaktion des Peltiers simulieren
-- Sicherheits-Eingriffsgrenze mit einem begrenzten Gegenrichtungsversuch pruefen
-- harte Notgrenze ohne automatische Gegenrichtung pruefen
-- Abbruch einer gefuehrten Peltierpruefung testen
-
-### Versorgung, Zeit und Netzwerk
-
-- Stromunterbrechung in jeder wesentlichen Prozessphase
-- kurze, mittlere und lange Unterbrechung
-- Unterbrechung waehrend kritischem Flash-Schreibvorgang
-- Brownout und wiederholte Brownouts
-- Watchdog und wiederholte abnormale Neustarts bis `SAFE_BOOT`
-- WLAN-Verlust bei sicher weiterlaufendem Prozess
-- NTP-Verlust und spaetere Rueckkehr
-- Neustart ohne verlaessliche absolute Zeitquelle
-
-### Persistenz und Speicher
-
-- neuesten Laufkontrollpunkt beschaedigen
-- neueste Konfigurationsrevision beschaedigen
-- letzte Rueckfallrevision getrennt pruefen
-- Fehlerjournal voll oder teilweise beschaedigt simulieren
-- Historienspeicher bis zur automatischen Bereinigung fuellen
-- temporare Exportdaten bei Stromunterbrechung pruefen
-- RAM-Knappheit beziehungsweise Allokationsfehler in nichtkritischer Funktion
-  simulieren
-- kritische Persistenz nicht mehr schreibbar simulieren
-
-### Bedienung und Berechtigungen
-
-- Quittieren ohne Fehlerreset
-- Resetversuch bei weiterhin bestehender Ursache
-- Servicefunktion ohne PIN
-- Aktortest waehrend aktivem Lauf
-- konfliktierende gleichzeitige Display- und Webaktion
-- Stoppen mit allen vorgesehenen Stopoptionen
-- vergessenes Webpasswort und vollstaendiger lokaler Werksreset
-
-## Hardware-Abnahme je realem Hardwarestand
-
-Jeder veraenderte reale Hardwarestand erhaelt eine dokumentierte Abnahme.
-
-Mindestens enthalten:
-
-1. Hardwarekennung und Platinenrevision
-2. Foto oder Verdrahtungsreferenz
-3. gemessene Versorgungsspannungen
-4. bestaetigte GPIO-Zuordnung
-5. aktive Pegel und Boot-/Resetverhalten
-6. BTS7960-Enable-, Richtungs- und Abschaltverhalten
-7. Innen- und Aussenluefter inklusive Nachlauf
-8. Summer
-9. drei DS18B20 mit Rolle und ROM-Adresse
-10. 1-Wire-Bustopologie und Hot-Plug-Verhalten des Produktfuehlers
-11. Displayrotation, Touchfunktion und Kalibrierung
-12. Peltierstrom und Heiz-/Kuehlrichtung
-13. 7,5-A-Sicherung und Leitungsquerschnitte
-14. Temperatursicherung: Typ, Montageort, Rating und Austauschbarkeit
-15. begrenzter Heiztest
-16. Totzeit
-17. begrenzter Kuehltest
-18. thermische Reaktion von Luft- und Kuehlkoerpersensor
-19. gespeicherter Servicebericht
-20. Abweichungen und Freigabestatus
-
-Eine Hardwareaenderung an Leistungspfad, Sensorbussen, Lueftern,
-Temperatursicherung, Controllerboard oder Peltier kann eine erneute Teil- oder
-Vollabnahme verlangen.
-
-## Siebentaegiger Dauer- und Belastungstest
-
-### Mindestdauer
-
-Der Releasekandidat wird mindestens sieben zusammenhaengende Tage unter
-laufender Regelung getestet.
-
-### Belastungsprofil
-
-Der Test soll realistische und gezielte Last kombinieren:
-
-- kontinuierliche Sensorerfassung
-- Display eingeschaltet, gedimmt und wiederholt bedient
-- regelmaessige Webzugriffe von mehreren Browsern beziehungsweise Geraeten
-- Live-Aktualisierung der Weboberflaeche
-- wiederholte Exporte
-- periodische Laufkontrollpunkte
-- aktive Speicherbereinigung
-- mehrere Heizphasen
-- mehrere Kuehlphasen
-- mehrere bestaetigte Richtungswechsel
-- zeitweiser WLAN- und NTP-Ausfall
-- mindestens eine kontrollierte Stromunterbrechung mit Wiederanlauf
-- Meldungen, Quittierungen und Diagnoseabrufe
-
-### Aufzuzeichnende Werte
-
-Mindestens:
-
-- freier Heap ueber Zeit
-- niedrigster freier Heap
-- groesster zusammenhaengender Block
-- Task- und Watchdogereignisse
-- Neustarts und Resetursachen
-- Sensorfehler und Bus-Neuinitialisierungen
-- Regler- und Aktorereignisse
-- Flash- und Historienbelegung
-- Bereinigungsereignisse
-- kritische und nichtkritische Schreibfehler
-- Web- und Exportfehler
-- Temperaturstabilitaet und Richtungswechsel
-
-### Bestehenskriterien
-
-Der Test ist nur bestanden, wenn:
-
-- kein unerklaerter Neustart auftritt
-- kein unbehandelter Watchdog auftritt
-- keine unerlaubte Aktorfreigabe entsteht
-- keine fortschreitende relevante RAM-Leckage erkennbar ist
-- der groesste freie Block nicht fortschreitend bis unter die spaetere
-  Mindestreserve faellt
-- Speicherbereinigung die festgelegten Grenzen einhaelt
-- aktive Laufpersistenz nach Unterbrechung wiederherstellbar bleibt
-- Fehlerjournal und kritische Revisionen gueltig bleiben
-- lokale Regelung trotz Web-, Export- und Netzwerklast stabil bleibt
-- keine unbekannte sicherheitsrelevante Abweichung verbleibt
-
-Die konkreten numerischen RAM- und Flashgrenzen werden nach den ersten realen
-Build- und Lastmessungen als `TBD_IMPLEMENTATION_BUDGET` festgelegt.
-
-## Thermische Inbetriebnahmetests
-
-### Testaufbauten
-
-Mindestens:
-
-1. leerer Schrank
-2. definierte kleine Referenzmasse
-3. definierte groessere Referenzmasse
-4. produktfuehlernahe Referenzmessung
-5. mehrere zusaetzliche Messpunkte zur Beurteilung der Temperaturverteilung
-
-Externe Referenzmessgeraete werden fuer die Abnahme dokumentiert.
-
-### Versuchsarten
-
-- Aufheizen aus kaltem Zustand
-- Abkuehlen aus warmem Zustand
-- Halten mehrerer typischer Solltemperaturen
-- Stoerung durch kurzzeitiges Oeffnen
-- Wechsel von Heizen zu Kuehlen
-- Wechsel von Kuehlen zu Heizen
-- Betrieb bei unterschiedlicher Umgebungstemperatur
-- Test der Luftbegrenzung im produktgefuehrten Betrieb
-- Test der Sicherheits-Eingriffsgrenzen
-- Test der harten Notgrenzen nur mit sicherem kontrolliertem Aufbau
-- Test der Kuehlkoerper- und Luefterdiagnose
-
-### Zu bestimmende Parameter
-
-- thermische Totzeiten
-- Aufheiz- und Abkuehlraten
-- Ueberschwingen
-- Einschwingzeit
-- Temperaturverteilung
-- Produkt-Luft-Differenz ueber Zeit
-- geeignete PI-Parameter je Sensorrolle und Richtung
-- Schaltfenster und Mindestimpuls
-- Mindest-Ein-/Auszeit
-- Gegenanforderungsdauer und Umschalthysterese
-- Luftbegrenzungen
-- Sicherheits-Eingriffs- und harte Notgrenzen
-- Zielband, Zielqualifikationsdauer und Gnadenzeit
-- Luefternachlaufzeiten
-- Kriterien fuer fehlende thermische Reaktion
-- Montageposition und Ausloesetemperatur der Temperatursicherung
-
-Kein Wert wird allein aus einem einzelnen Joghurtlauf abgeleitet.
-
-## Praktische Fermentationsabnahme
-
-Nach bestandener technischer Inbetriebnahme werden mindestens die vier
-Standardprogramme praktisch geprueft:
+Erst nach bestandenen Software-, Hardware- und thermischen Gates:
 
 - Joghurt mild
 - Joghurt stichfest
 - Milchkefir
 - Wasserkefir
 
-Dabei werden Bedienung, Temperaturverlauf, Programmschritte und Abschlussverhalten
-bewertet. Exakte sensorische Produktqualitaet ist fachlich wichtig, wird aber
-nicht als alleinige technische Sicherheitsfreigabe verwendet.
+Bewertet werden Bedienung, Vorheizen, Zielqualifikation, produkt- und
+luftgefuehrter Betrieb, Temperaturverlauf, Abschluss, Kuehlen und Halten. Ein
+gelungenes Produkt ersetzt keine technische Sicherheitspruefung.
 
-Mindestens ein Lauf soll produktgefuehrt und mindestens ein Lauf luftgefuehrt
-erfolgen. Stromunterbrechungstests mit echten Lebensmitteln erfolgen erst, wenn
-die simulierten und thermischen Wiederanlauftests bestanden sind.
+## Automatische Pruefungen je relevantem PR
+
+1. native Unit-Tests
+2. simulierte Prozess- und Fehlerablaeufe
+3. Konfigurations- und Schemavalidierung
+4. Persistenz-, Transaktions-, Rueckfall- und Migrationspruefungen
+5. PlatformIO-Builds
+6. Geheimnis- und lokale-Konfigurationspruefung
+7. Pruefung auf produktive `TBD`- oder unbestaetigte Hardwarewerte
+8. Groessenbericht fuer Firmware und statische Ressourcen
+
+Ein fehlgeschlagener Sicherheits-, Persistenz-, Recovery- oder Kernfunktionstest
+blockiert den Merge und das Release.
+
+## Release-Gates
+
+### Gate 0: Spezifikation und Rueckverfolgbarkeit
+
+Vor Implementierungsfreigabe:
+
+- verbindliche Anforderung oder Entscheidung vorhanden
+- zugehoerige Testidee vorhanden
+- Hardware-, Inbetriebnahme- und Budget-TBDs sichtbar
+- Reviewkorrekturen von PR #38 eingebunden
+- keine sicherheitskritische Annahme als bestaetigte Tatsache
+
+### Gate 1: Softwarekern
+
+Vor realem Aktorbetrieb:
+
+- Zustandsmaschine nativ getestet
+- Bootreihenfolge und `SAFE_BOOT` getestet
+- `COMPLETED`-Wiederherstellung getestet
+- Sensor- und Fehlerlogik getestet
+- Aktorfreigabelogik getestet
+- Mindestzeiten, Totzeit und Watchdog getestet
+- Persistenz, Transaktionsmarker und Rueckfall getestet
+- Ausfallintervall und Zeitunsicherheit getestet
+- kein Aktortest aus `SAFE_BOOT` erreichbar
+- alle sicherheitsrelevanten automatischen Tests bestanden
+
+### Gate 2A: Elektrische Freigabe ohne Peltier
+
+Vor Anschluss beziehungsweise Bestromung des Peltiers:
+
+- GPIOs und aktive Pegel bestaetigt
+- sichere Boot-, Reset- und Bootloaderpegel bestaetigt
+- BTS7960 ohne Peltier geprueft
+- beide Richtungen koennen nie gleichzeitig aktiv sein
+- Ausgang und Polaritaet mit Multimeter bestaetigt
+- Schrankluft- und Kuehlkoerpersensor bestaetigt
+- Aussenluefter und Nachlauf bestaetigt
+- 7,5-A-Ueberstromsicherung installiert
+- Kuehlkoerper und Waermetauscher montiert
+- Servicebericht bis zu diesem Gate gespeichert
+
+### Gate 2B: Erster realer Peltier-Puls
+
+Vor **jedem ersten bestromten Peltier-Puls** muessen zusaetzlich erfuellt sein:
+
+- einmalige Temperatursicherung installiert
+- Temperatursicherung auf Durchgang geprueft
+- Montageort dokumentiert
+- Rating innerhalb der aktuellen Inbetriebnahmerevision freigegeben
+- Aussenluefter unmittelbar zuvor erfolgreich getestet
+- Pflichtsensoren aktuell `VALID`
+- kein Fehler, keine Verriegelung und kein `SAFE_BOOT`
+- validiertes `STANDBY` und PIN-geschuetzter Serviceablauf
+- Leistung und Dauer firmwarefest begrenzt
+- grosser jederzeit wirksamer Abbruch
+
+Fehlt eine dieser Voraussetzungen, bleibt das Peltier spannungslos. Die
+Temperatursicherung darf nicht erst nach ersten Pulsen nachgeruestet werden.
+
+Nach dem Heizpuls folgen Peltier AUS, Nachlauf, Mindest-Ausschaltzeit und Totzeit,
+bevor ein begrenzter Kuehlpuls erlaubt ist.
+
+### Gate 3: Thermische Inbetriebnahme
+
+Vor echten Fermentationslaeufen:
+
+- leerer Schrank sowie kleine und grosse Testmasse vermessen
+- Heizen, Kuehlen und Richtungswechsel abgestimmt
+- Luftbegrenzungen festgelegt
+- Sicherheits-Eingriffs- und harte Notgrenzen validiert
+- Temperaturverteilung und kritischste Stellen bestimmt
+- Temperatursicherung thermisch bewertet und dokumentiert
+- keine unbekannte sicherheitsrelevante thermische Abweichung
+
+### Gate 4: Dauer- und Belastungstest
+
+Vor Release 1:
+
+- mindestens sieben zusammenhaengende Tage
+- keine unerklaerten Resets, Watchdogs oder Brownouts
+- keine unerlaubte Aktorfreigabe
+- keine relevante fortschreitende RAM-Leckage
+- Speicherbereinigung innerhalb der Budgets
+- kritische Persistenz und Sperren nach Unterbrechung wiederherstellbar
+- Web, Display, Sensoren, Exporte und Regelung parallel stabil
+- Fehler- und Resetjournal innerhalb des Budgets
+
+### Gate 5: Releasekandidat
+
+- Standardprogramme praktisch geprueft
+- lokale und Webbedienung geprueft
+- Stromunterbrechungs- und Recoveryablaeufe geprueft
+- Exporte und Diagnose geprueft
+- bekannte Abweichungen bewertet
+- keine offene unbekannte Sicherheitsursache
+- alle sicherheits- und kernfunktionsrelevanten Tests `PASS`
+
+## Verpflichtende Fehlerinjektionen
+
+### Sensoren
+
+- Schrankluftfuehler in Standby, Vorheizen, Fermentation und Kuehlen ausfallen lassen
+- Produktfuehler entfernen, Fallback und Rueckkehr pruefen
+- Kuehlkoerpersensor im Peltierbetrieb ausfallen lassen
+- CRC-Fehler, Busunterbrechung, `STALE` und unrealistische Spruenge
+- widerspruechliche Produkt-, Luft- und Kuehlkoerperwerte
+
+### Aktoren und Thermik
+
+- veraltete Regelanforderung
+- gleichzeitige Richtungsanforderung
+- kurze und dauerhafte Gegenanforderung
+- Mindest-Ausschaltzeit und Totzeit
+- Aussen- und Innenluefterfehler
+- fehlende thermische Peltierreaktion
+- Sicherheits-Eingriffsgrenze und harte Notgrenze
+- Abbruch eines Servicepulses
+- Peltier-Test ohne Temperatursicherung muss blockiert werden
+- Aktortest aus `SAFE_BOOT` muss blockiert werden
+
+### Versorgung, Zeit und Boot
+
+- Unterbrechung in jeder wesentlichen Phase
+- Brownout und wiederholte Brownouts
+- Watchdog und Bootschleife bis `SAFE_BOOT`
+- Neustart mit persistierter Sicherheitsverriegelung
+- Neustart mit persistiertem `COMPLETED`
+- fehlende NTP-Zeit
+- spaeterer NTP-Abgleich
+- Ausfallintervall innerhalb und ueber einer Phasengrenze
+- WLAN-Ausfall bei weiterlaufendem sicheren Prozess
+
+### Persistenz und Speicher
+
+- neuesten Kontrollpunkt beschaedigen
+- neueste Konfigurationsrevision beschaedigen
+- Rueckfallrevision pruefen
+- Unterbrechung waehrend kritischem Schreibvorgang
+- unvollstaendigen Transaktionsmarker hinterlassen
+- kritischen Speicher nicht lesbar oder nicht schreibbar simulieren
+- Persistenzfehler-Latch setzen und Neustart ausfuehren
+- Historienspeicher bis zur Bereinigung fuellen
+- nichtkritischen RAM- oder Exportfehler erzeugen
+
+### Bedienung und Berechtigungen
+
+- Quittieren ohne Fehlerreset
+- Resetversuch bei bestehender Ursache
+- Servicefunktion ohne PIN
+- Aktortest waehrend Lauf und `SAFE_BOOT`
+- konfliktierende Display- und Webaktion
+- alle Stopoptionen
+- vergessene Service-PIN mit lokalem PIN-unabhaengigem Vollreset
+- Versuch eines isolierten PIN-Resets muss abgelehnt werden
+
+## Hardware-Abnahme
+
+Jeder relevante Hardwarestand dokumentiert mindestens:
+
+1. Hardwarekennung und Platinenrevision
+2. Verdrahtungsreferenz und Fotos
+3. Versorgungsspannungen
+4. GPIOs, aktive Pegel und Bootverhalten
+5. BTS7960-Enable, Richtungen und Abschaltung
+6. Innen- und Aussenluefter inklusive Nachlauf
+7. Summer
+8. drei DS18B20 mit Rolle und ROM-Adresse
+9. Bustopologie und Produkt-Hot-Plug
+10. Display, Touch und Kalibrierung
+11. 7,5-A-Sicherung und Leitungsquerschnitte
+12. Temperatursicherung vor dem ersten Puls: Typ, Rating, Montageort und
+    Durchgangspruefung
+13. Peltierstrom, Heiz- und Kuehlrichtung
+14. begrenzter Heiztest
+15. Mindest-Ausschaltzeit und Totzeit
+16. begrenzter Kuehltest
+17. thermische Reaktion
+18. gespeicherter Servicebericht
+19. Abweichungen und Freigabestatus
+
+Eine Aenderung an Leistungspfad, Sensorbussen, Lueftern, Temperatursicherung,
+Controllerboard oder Peltier kann eine neue Teil- oder Vollabnahme verlangen.
+
+## Siebentaegiger Dauer- und Belastungstest
+
+Belastungsprofil:
+
+- kontinuierliche Sensorerfassung
+- Displaybetrieb und wiederholte Bedienung
+- parallele Webzugriffe und Live-Aktualisierung
+- wiederholte Exporte
+- periodische Kontrollpunkte und Bereinigung
+- mehrere Heiz-, Kuehl- und Richtungswechsel
+- WLAN- und NTP-Ausfall
+- mindestens eine kontrollierte Stromunterbrechung
+- Meldungen, Quittierungen und Diagnoseabrufe
+
+Aufzuzeichnen:
+
+- freier und niedrigster Heap
+- groesster zusammenhaengender Block
+- Task-, Watchdog- und Resetereignisse
+- Sensor- und Busfehler
+- Regler- und Aktorereignisse
+- Flash- und Historienbelegung
+- Bereinigungen und Schreibfehler
+- Web- und Exportfehler
+- Temperaturstabilitaet und Richtungswechsel
+
+Der Test besteht nur ohne unerlaubte Aktorfreigabe, unerklaerten Reset,
+unbehandelten Watchdog, relevante RAM-Leckage, verlorene kritische Persistenz
+oder unbekannte Sicherheitsabweichung.
 
 ## Testnachweis
 
-Jeder formelle Abnahme- oder Release-Gate-Test besitzt mindestens:
+Jeder formelle Test enthaelt:
 
 ```text
 Test-ID
@@ -526,9 +396,7 @@ verantwortliche Person
 Datum und Zeitbasis
 ```
 
-### Test-ID-Schema
-
-Vorgesehene Gruppen:
+Test-ID-Gruppen:
 
 ```text
 UT-xxx    Native Unit-Tests
@@ -542,46 +410,21 @@ FER-xxx   Praktische Fermentationslaeufe
 REL-xxx   Release-Gates
 ```
 
-### Statusdefinitionen
+`PASS_WITH_WARNINGS` kann in Serviceberichten vorkommen, ersetzt bei einem
+formellen Gate aber kein `PASS`, wenn die Warnung eine Gate-Anforderung betrifft.
 
-- `PASS`: erwartetes Ergebnis vollstaendig erreicht
-- `FAILED`: erwartetes Ergebnis nicht erreicht
-- `BLOCKED`: Test kann wegen benannter Abhaengigkeit nicht ausgefuehrt werden
-- `NOT_RUN`: noch nicht ausgefuehrt, ohne Freigabewirkung
+## Akzeptierte Entscheidungen
 
-Ein `PASS_WITH_WARNINGS` darf fuer Serviceberichte verwendet werden, ersetzt bei
-einem formellen Release-Gate aber kein `PASS`, sofern die Warnung eine
-Gate-Anforderung betrifft.
-
-## Akzeptierte Entscheidungen aus Phase 10A
-
-- [x] sechs Testebenen von nativen Tests bis zu praktischen Fermentationslaeufen
-- [x] automatische native, simulierte, Persistenz- und ESP32-Buildtests bei
-      relevanten Codeaenderungen
-- [x] alle Sicherheits-, Wiederherstellungs- und Kernfunktionstests muessen fuer
-      Release 1 bestanden sein
-- [x] nichtkritische Komfortfehler nur dokumentiert und ohne Sicherheitsauswirkung
-      akzeptierbar
-- [x] verpflichtende Fehlerinjektion fuer Sensoren, Aktoren, Versorgung,
-      Persistenz, Speicher und Bedienung
-- [x] dokumentierte Abnahme jedes relevanten realen Hardwarestands
+- [x] sechs Testebenen
+- [x] automatische native, simulierte, Persistenz- und ESP32-Buildtests
+- [x] sicherheits- und kernfunktionsrelevante Tests muessen bestanden sein
+- [x] verpflichtende Fehlerinjektionen
+- [x] dokumentierte Abnahme jedes relevanten Hardwarestands
+- [x] Temperatursicherung vor dem ersten realen Peltier-Puls
+- [x] `SAFE_BOOT` bleibt aktorfrei
+- [x] Boot bewertet Verriegelungen und Persistenz vor Recovery
+- [x] Ausfallzeit wird als Intervall getestet
+- [x] `COMPLETED` wird nach Neustart wiederhergestellt
+- [x] PIN-unabhaengiger lokaler Vollreset wird getestet
 - [x] mindestens siebentaegiger Dauer- und Belastungstest
-- [x] strukturierte thermische Tests mit leerem Schrank sowie kleiner und grosser
-      Referenzmasse
-- [x] PI- und Sicherheitsparameter werden aus Messreihen und nicht nach Gefuehl
-      festgelegt
-- [x] formeller Testnachweis mit Test-ID, Voraussetzungen, Versionen, Messwerten,
-      Belegen und eindeutigem Status
-
-## Noch offen fuer Phase 10B und 10C
-
-- konkrete Implementierungsreihenfolge
-- Aufteilung in GitHub-Epics und Issues
-- Abhaengigkeiten und Definition of Done je Implementierungsabschnitt
-- erstes Minimalziel fuer Hardwareverifikation und Test-Firmware
-- konkrete CI-Konfiguration
-- Testframeworks fuer native und ESP32-Tests
-- Ablageformat und Speicherort der Testnachweise
-- konkrete Ressourcen- und Thermikgrenzwerte nach Messung
-- Gesamtreview auf Widersprueche und doppelte Anforderungen
-- Entscheidung ueber Pull Request und Zusammenfuehrung nach `main`
+- [x] formeller versionierter Testnachweis
