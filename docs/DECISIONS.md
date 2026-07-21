@@ -87,7 +87,7 @@
 
 - **Status:** accepted
 - **Datum:** 2026-07-20
-- **Kontext:** Grosse Produktmasse, Tueröffnung oder geringe Leistung koennen die
+- **Kontext:** Grosse Produktmasse, Tueroeffnung oder geringe Leistung koennen die
   Zielerreichung verzoegern, ohne einen sicheren Weiterbetrieb auszuschliessen.
 - **Entscheidung:** Jedes Programm erhaelt eine maximale erwartete
   Zielerreichungszeit. Bei Ueberschreitung entstehen sichtbare und akustische
@@ -95,3 +95,54 @@
   weiter, solange kein Sicherheitsfehler vorliegt.
 - **Alternativen:** Unbegrenzt ohne Meldung; sofortiger Programmabbruch.
 - **Folgen:** Prozesswarnungen und Sicherheitsfehler werden getrennt modelliert.
+
+## ADR-008: Festes 4-MB-Ressourcenbudget ohne PSRAM-Abhaengigkeit
+
+- **Status:** accepted
+- **Datum:** 2026-07-21
+- **Kontext:** Die bestellte Controllerboard-Variante ist mit 4 MB Flash
+  beschrieben. Weboberflaeche, drei Sprachen, OTA, Laufpersistenz und
+  Temperaturhistorie konkurrieren um diesen begrenzten Speicher.
+- **Entscheidung:** Das erste Release muss mit 4 MB Flash funktionieren und darf
+  keine PSRAM voraussetzen. Firmware, OTA, Webressourcen, Konfiguration,
+  aktiver Laufzustand und Historie erhalten feste Budgets. Messhistorien werden
+  begrenzt und verdichtet; der aktive Lauf und die Sicherheitslogik haben
+  Vorrang.
+- **Alternativen:** Groessere Modulvariante voraussetzen; OTA oder Historie ohne
+  Budget implementieren; PSRAM als Voraussetzung behandeln.
+- **Folgen:** Vor Implementierung werden Partitionsplan und RAM-/Flashbudget
+  dokumentiert und mit einer Test-Firmware gemessen. Die erkannte Flashgroesse
+  bleibt Teil der Hardwareabnahme.
+
+## ADR-009: Normale Sicherungen enthalten keine Geheimnisse
+
+- **Status:** accepted
+- **Datum:** 2026-07-21
+- **Kontext:** Programme und Einstellungen sollen portabel gesichert werden,
+  ohne WLAN-Passwoerter, Webpasswort, Service-PIN oder Sitzungen zu verbreiten.
+- **Entscheidung:** Der normale Sicherungsexport enthaelt keine Geheimnisse.
+  Webpasswort und Service-PIN werden nur als gesalzene Pruefinformation
+  gespeichert. Das wiederverwendbare WLAN-Passwort wird getrennt behandelt und
+  nicht exportiert. Ein spaeterer physischer Entwicklerzugang ueber UART bleibt
+  moeglich, ist aber keine Release-Anforderung und kein normales
+  Anwendungsbackup.
+- **Alternativen:** Vollstaendige portable Sicherung inklusive Geheimnissen;
+  keinerlei Sicherung.
+- **Folgen:** Nach einem Import muessen nicht enthaltene Zugangsdaten bei Bedarf
+  neu eingerichtet werden. Eine rohe physische Flashkopie ist kein portabler
+  Anwendungsimport.
+
+## ADR-010: Vergessene Service-PIN erfordert vollstaendigen Werksreset
+
+- **Status:** accepted
+- **Datum:** 2026-07-21
+- **Kontext:** Ein reiner PIN-Reset wuerde bei physischem Zugriff Zugang zu einer
+  bestehenden geschuetzten Konfiguration ermoeglichen.
+- **Entscheidung:** Bei vergessener Service-PIN ist nur ein vollstaendiger
+  lokaler Werksreset moeglich. Er loescht Benutzerprogramme, Einstellungen,
+  Zugangsdaten und Laufhistorien, stellt die Standardprogramme wieder her und
+  behaelt die geraetespezifische Touchkalibrierung.
+- **Alternativen:** PIN allein zuruecksetzen; Wiederherstellung nur durch neues
+  Flashen.
+- **Folgen:** Der spaetere physische Wiederherstellungsweg muss mehrstufig,
+  ausschliesslich lokal und klar vom reinen Touchkalibrierungsweg getrennt sein.
