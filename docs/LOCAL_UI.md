@@ -81,12 +81,14 @@ Moegliche Benutzernamen:
 | `PREHEATING` | Schrank wird vorbereitet |
 | `WAITING_FOR_PRODUCT` | Produkt einsetzen |
 | `REACHING_TARGET` | Zieltemperatur wird erreicht |
-| `QUALIFYING_TARGET` | Temperatur wird stabilisiert |
+| `QUALIFYING_TARGET` | Zieltemperatur wird geprüft |
 | `FERMENTING` | Fermentation laeuft |
 | `COOLING` | Wird heruntergekuehlt |
 | `COOL_HOLDING` | Wird gekuehlt gehalten |
 | `COMPLETED` | Programm beendet |
 
+Die Anzeige fuer `QUALIFYING_TARGET` bezeichnet die Zielqualifikation und darf
+nicht mehr mit dem frueher verwendeten Begriff `Stabilisierung` benannt werden.
 Die endgueltigen Formulierungen werden spaeter sprachlich geprueft.
 
 ## Navigation
