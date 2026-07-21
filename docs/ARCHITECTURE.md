@@ -1,58 +1,313 @@
-# Architektur
+# Softwarearchitektur
 
-## Aktueller Stand
+## Ziel
 
-`src/main.cpp` ist absichtlich nur ein sicherer Build- und Diagnoseeinstieg. Er
-konfiguriert keine unbestaetigten GPIOs und implementiert keine
-Fermentationssteuerung.
+Die Firmware trennt fachliche Prozesslogik, Sicherheitsentscheidungen und reale
+Hardwarezugriffe. Der Kern ist weitgehend nativ testbar und kann vor Ankunft der
+Hardware mit virtueller Zeit, simulierten Sensoren und Mockaktoren entwickelt
+werden.
 
-## Zielbild
+## Entwicklungsprofile
 
 ```text
-ILI9341/XPT2046 und Web
-            |
-       Application
-            |
-  Fermentations-Zustandsmaschine
-            |
- SafetyManager / Temperaturregler
-            |
-       OutputManager
-       /           \
-BTS7960/Peltier   4 MOSFET-Kanaele
-            ^
-      DS18B20 SensorManager
+native
+  Fachlicher Kern, Simulation, Unit- und Integrationstests
+
+esp32_bringup
+  Reale Hardwareadapter, alle Aktoren anfangs gesperrt,
+  Zustand HARDWARE_UNVERIFIED
+
+esp32_release
+  Freigegebene Zielkonfiguration nach Hardwareabnahme
 ```
 
-## Vorgesehene Module
+Das Umschalten des Buildprofils darf unbestaetigte Hardware nicht automatisch
+freigeben.
 
-| Modul | Verantwortung |
-|---|---|
-| `Application` | Initialisierung und Zusammenspiel |
-| `StateMachine` | Explizite Betriebszustaende und Uebergaenge |
-| `SafetyManager` | Messalter, Grenzwerte, Verriegelungen, Fehlerreaktionen |
-| `Ds18b20Adapter` | Asynchrones Einlesen und CRC-/Busdiagnose |
-| `PeltierDriver` | BTS7960-Abstraktion, AUS, Totzeit und Richtungsverriegelung |
-| `OutputManager` | Sichere Ansteuerung der vier MOSFET-Kanaele |
-| `DisplayAdapter` | ILI9341-Ausgabe ohne Sicherheitsverantwortung |
-| `TouchAdapter` | XPT2046-Eingabe und Kalibrierung |
-| `SettingsStore` | Validierte persistente Konfiguration |
-| `Diagnostics` | Logging und Fehlercodes |
+## Schichten
 
-Diese Module sind Zielarchitektur und im aktuellen Grundgeruest noch nicht
-implementiert.
+```text
+Lokale UI / Web / API
+        |
+Anwendungsdienste und Kommandos
+        |
+Prozess- und Laufkern
+        |
+Sensor-, Regel-, Sicherheits- und Persistenzlogik
+        |
+Abstrakte Ports
+        |
+ESP32-Adapter oder native Mockadapter
+        |
+Reale Hardware beziehungsweise Simulator
+```
 
-## Abhaengigkeitsregel
+## Fachlicher Kern
 
-Fach- und Sicherheitslogik darf nicht direkt von Arduino-GPIO-, SPI- oder
-OneWire-Funktionen abhaengen. Hardwarezugriffe werden in kleinen Adaptern
-gekapselt, damit Verriegelungen und Fehlerreaktionen nativ testbar bleiben.
+Der fachliche Kern enthaelt keine direkten GPIO-, 1-Wire-, Display-, WLAN- oder
+Dateisystemaufrufe.
 
-## Vorgesehene Zustaende
+### Programme und Laufmodell
 
-Die Anforderungen sehen `STANDBY`, `TEMPERING`, `STABILIZING`, `FERMENTING`,
-optional `COOLING` und `HOLDING_COLD`, `FINISHED` sowie `FAILURE` vor. Jeder
-Betriebszustand muss sicher nach `FAILURE` wechseln koennen.
+- versionierte Programmmodelle
+- unveraenderlicher Factory-Katalog
+- Benutzerprogramme
+- unveraenderlicher Programmschnappschuss je Lauf
+- effektive Laufwerte und protokollierte Laufrevisionen
+- Start-, Stop-, Abschluss- und Anpassungskommandos
 
-Diese Zustandsmaschine ist noch nicht implementiert. Bis zur bestaetigten
-Pinbelegung existiert nur der sichere Diagnoseeinstieg ohne Aktor-GPIOs.
+### Zustandsmaschine
+
+Wesentliche Zustaende:
+
+```text
+BOOT
+SAFE_BOOT
+STANDBY
+PREHEATING
+WAITING_FOR_PRODUCT
+REACHING_TARGET
+TARGET_QUALIFICATION
+FERMENTING
+COOLING
+HOLDING
+COMPLETED
+RECOVERY
+FAULT
+SERVICE
+```
+
+Jeder Uebergang ist explizit und wird durch fachliche Voraussetzungen validiert.
+Aktorpegel sind kein Bestandteil der Zustandsmaschine.
+
+### Sensorverarbeitung
+
+Die Sensorpipeline verarbeitet fuer jede Rolle:
+
+```text
+Rohprobe
+-> Bus/CRC-Pruefung
+-> Wertebereich und Aenderungsrate
+-> Medianfilter
+-> sensorbezogener Tiefpass
+-> Qualitaet VALID / STALE / FAILED
+-> korrigierter Regelwert
+```
+
+Rollen:
+
+- Schrankluft: Regelung, Begrenzung und Sicherheit
+- Produkt: optionale primaere Prozessregelung
+- Kuehlkoerper/Aussenwaermetauscher: thermische Sicherheit und Diagnose
+
+### Regelung
+
+Der Regelkern erzeugt ausschliesslich eine abstrakte Anforderung:
+
+```text
+HEAT + Zeitquote
+OFF
+COOL + Zeitquote
+```
+
+Bestandteile:
+
+- zeitproportionaler PI-Regler
+- getrennte Parameter Luft/Produkt und Heizen/Kuehlen
+- Neutralbereich
+- Anti-Windup
+- Luftbegrenzung bei Produktregelung
+- Zielqualifikation und Gnadenzeit
+
+Der Regler kennt keine GPIOs und keine BTS7960-Pins.
+
+### Aktorplaner
+
+Der Aktorplaner verarbeitet die Regleranforderung und prueft:
+
+```text
+Sicherheitsfreigabe
+-> Luft- und Kuehlkoerpersensor gueltig
+-> Richtung exklusiv
+-> Gegenanforderung bestaetigt
+-> Mindest-Ein-/Auszeit
+-> Polaritaetstotzeit
+-> Impulsakkumulator
+-> Luefteranforderung und Nachlauf
+-> abstrakter Aktorbefehl
+```
+
+Sicherheitsabschaltungen ueberstimmen Mindest-Einzeiten.
+
+### Sicherheitskern
+
+Der Sicherheitskern ist vom Komfort- und UI-Code unabhaengig.
+
+Er enthaelt:
+
+- vier Fehlerklassen
+- stabile Fehlercodes
+- Primaer- und Folgefehler
+- Aktorsperren
+- getrennte Quittierung und Fehlerreset
+- persistente Verriegelungen
+- Watchdog- und Neustartbewertung
+- `SAFE_BOOT`
+- Sicherheits-Eingriffsgrenze und harte Notgrenze
+
+Eine automatische Wiederfreigabe ist nur fuer explizit definierte, sicher
+pruefbare Betriebsfehler erlaubt.
+
+### Persistenz
+
+Persistiert werden fachliche Daten, nie direkte Ausgangspegel.
+
+Bereiche:
+
+- Factory-Konfiguration
+- Benutzerkonfiguration
+- Serviceparameter
+- Geheimnisse in getrenntem Speicherbereich
+- aktiver Laufschnappschuss und Laufrevisionen
+- Kontrollpunkte
+- Fehler- und Resetjournal
+- begrenzte Messhistorie
+- Laufzusammenfassungen
+
+Schreibvorgaenge sind atomar, versioniert und besitzen mindestens eine gueltige
+Rueckfallrevision.
+
+## Ports und Adapter
+
+Mindestens vorgesehene Schnittstellen:
+
+```text
+ITimeSource
+ITemperatureSource
+IActuatorSink
+IStateStore
+IEventJournal
+INetworkStatus
+IUserNotificationSink
+IResourceMonitor
+```
+
+### Native Adapter
+
+- virtuelle monotone Zeit
+- optionale simulierte UTC-Zeit
+- steuerbare Temperatursensoren
+- thermisches Testmodell
+- Aktorjournal statt GPIO
+- speicherbasiertes Persistenzbackend
+- injizierbare Fehler und Stromunterbrechungen
+
+### ESP32-Adapter
+
+- monotone ESP32-Zeit und NTP
+- DS18B20-Busse
+- GPIO- und MOSFET-Ausgaenge
+- BTS7960
+- Display und Touch
+- WLAN, DNS und lokaler Webserver
+- nichtfluechtiger Speicher
+- Resetursache, Brownout und Ressourcenmessung
+
+Jeder ESP32-Adapter validiert die konkrete Hardwarekonfiguration. Unbestaetigte
+Pins bleiben gesperrt.
+
+## Bedienung
+
+Touch und Web verwenden gemeinsame View-Modelle und dieselben fachlichen
+Kommandos.
+
+Sie duerfen:
+
+- Zustand und Diagnose lesen
+- Programme verwalten
+- Laeufe starten und stoppen
+- Meldungen quittieren
+- erlaubte Laufanpassungen ausloesen
+- Einstellungen gemaess Berechtigung aendern
+
+Sie duerfen nicht:
+
+- direkt GPIOs setzen
+- Sicherheitsfreigaben ueberschreiben
+- aktive Laufwerte still veraendern
+- Fehlerursachen durch Quittierung entfernen
+
+Gleichzeitige Aktionen werden atomar und ueber Revisionen beziehungsweise
+Konflikterkennung behandelt.
+
+## Netzwerk
+
+Die Regelung ist netzwerkunabhaengig.
+
+Netzwerkmodule umfassen:
+
+- WLAN-Einrichtung und Ersatz-WLAN
+- mDNS und lokale Namensaufloesung
+- lokalen Webserver
+- Anmeldung und Sitzungen
+- lokale Lese-API
+- NTP als primaere absolute Zeitquelle
+
+Kein Cloudzwang, kein automatischer Firmwaredownload und keine offizielle externe
+Schreib-API in Release 1.
+
+## Diagnose und Service
+
+Diagnose liest strukturierte Zustandsmodelle und keine beliebigen globalen
+Variablen.
+
+Der Serviceablauf ist eine eigene geschuetzte Zustandsmaschine:
+
+- nur im Standby beziehungsweise zulassigem `SAFE_BOOT`
+- Service-PIN
+- zeitlich und leistungsmassig begrenzte Aktortests
+- jederzeitiger sicherer Abbruch
+- automatische Sensor- und Sicherheitsueberwachung
+- versionierter Servicebericht
+
+## Zeit und Wiederanlauf
+
+- monotone Zeit steuert aktive Ablaufe
+- UTC/NTP dient Kalenderzeit und Unterbrechungsdauer
+- Wiederanlauf beginnt immer mit ausgeschalteten Aktoren
+- fehlende NTP-Zeit blockiert keine sichere phasenbezogene Entscheidung
+- Spaeter eintreffende Zeit kann die Unterbrechungsbewertung korrigieren
+- eine spaetere batteriegepufferte RTC passt hinter dieselbe Zeitquellenschnittstelle
+
+## Ressourcenmodell
+
+- 4 MB Flash als harte Planungsbasis
+- keine PSRAM-Abhaengigkeit
+- feste oder begrenzte Puffer im Regel- und Sicherheitspfad
+- proaktive Bereinigung nichtkritischer Historien
+- Prioritaet: Firmware und sichere Bootfaehigkeit, Konfiguration, aktiver Lauf,
+  Sicherheitsjournal, notwendige UI/Webressourcen, Zusammenfassungen, alte
+  Diagrammdaten
+- Web-OTA und duale OTA-Slots sind nicht Teil des Release-1-Layouts
+
+## Erweiterungspunkte nach Release 1
+
+Architektonisch moeglich, aber nicht aktiv implementiert:
+
+- Produkt-Luft-Kaskadenregelung
+- PID-Autotuning
+- Web-OTA mit signierten Paketen und Rollback
+- benutzeraktivierbare UART-Diagnose
+- RTC
+- 12-V-ADC-Messung
+- Tuerkontakt
+- Push-/Telegram-Benachrichtigungen
+- automatische Wartungserinnerungen
+
+## Implementierungsregel
+
+Ein hardwareunabhaengiges Modul gilt als abgeschlossen, sobald seine fachlichen
+Tests bestanden sind. Die reale Adapter- und Hardwareverifikation bleibt in einem
+separaten `BLOCKED_HARDWARE`-Issue sichtbar. Details stehen in
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) und
+[`IMPLEMENTATION_ISSUES.md`](IMPLEMENTATION_ISSUES.md).
