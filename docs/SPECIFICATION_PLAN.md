@@ -46,6 +46,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`FIRMWARE_UPDATE_AND_ROLLBACK.md`](FIRMWARE_UPDATE_AND_ROLLBACK.md): UART-Update im ersten Release und vorbereitete spaetere Web-OTA-/Rollbackregeln
 - [`RESOURCE_BUDGET_AND_MAINTENANCE.md`](RESOURCE_BUDGET_AND_MAINTENANCE.md): Ressourcenueberwachung, Speicherpflege, Flashbudget und Wartungsumfang
 - [`ACCEPTANCE_TESTS.md`](ACCEPTANCE_TESTS.md): Testebenen, Fehlerinjektionen, Release-Gates und Abnahmenachweise
+- [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md): software-first Entwicklungsreihenfolge, Simulation, Bring-up und Meilensteine
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -59,7 +60,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 7. **Temperaturregelung und Aktorlogik** -> `TEMPERATURE_CONTROL.md`, `ACTUATOR_TIMING_AND_FANS.md`, `SENSOR_TUNING_COMMISSIONING.md`
 8. **Sicherheit und Fehlerbehandlung** -> `SAFETY_AND_FAULTS.md`, `SAFETY_COMPONENT_FAULTS.md`, `SYSTEM_SAFETY_AND_RECOVERY.md`
 9. **Diagnose, Wartung und Updates** -> `DIAGNOSTICS_AND_MAINTENANCE.md`, `FIRMWARE_UPDATE_AND_ROLLBACK.md`, `RESOURCE_BUDGET_AND_MAINTENANCE.md`
-10. **Akzeptanztests und Implementierungsplan** -> `ACCEPTANCE_TESTS.md` und spaetere GitHub-Issues
+10. **Akzeptanztests und Implementierungsplan** -> `ACCEPTANCE_TESTS.md`, `IMPLEMENTATION_PLAN.md` und spaetere GitHub-Issues
 
 ## Arbeitsweise
 
@@ -112,8 +113,13 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [ ] Phase 10: Akzeptanztests und Implementierungsplan
   - [x] Phase 10A: Testebenen, Abnahmekriterien und Release-Gates
   - [ ] Phase 10B: Implementierungsreihenfolge und GitHub-Issues
+    - [x] software-first Entwicklung vor Ankunft der Hardware
+    - [x] native Simulation und Hardwareabstraktionen
+    - [x] geschuetztes ESP32-Bring-up innerhalb derselben Codebasis
+    - [x] Branch-, Pull-Request-, Definition-of-Done- und Meilensteinstrategie
+    - [ ] konkrete Epic- und Issue-Liste erstellen
   - [ ] Phase 10C: Gesamtreview, offene Punkte, Pull Request und Uebergabe an die Implementierung
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 10B bearbeitet: Implementierungsreihenfolge und GitHub-Issues.
+Als Naechstes wird Phase 10B mit der konkreten Epic- und Issue-Liste abgeschlossen.
