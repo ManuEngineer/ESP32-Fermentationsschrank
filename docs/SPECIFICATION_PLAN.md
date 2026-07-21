@@ -36,6 +36,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`SETTINGS_AND_STORAGE.md`](SETTINGS_AND_STORAGE.md): Konfigurationsebenen, Aenderungsrechte, Validierung und atomare Speicherung
 - [`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md): Laufzustand, Kontrollpunkte, Messhistorie und Wiederherstellung
 - [`BACKUP_SECURITY_RETENTION.md`](BACKUP_SECURITY_RETENTION.md): Geheimnisse, Sicherung, Import, Aufbewahrung und Werksreset
+- [`TEMPERATURE_CONTROL.md`](TEMPERATURE_CONTROL.md): Regelstrategie, Sensorrollen, Zielqualifikation und Laufanpassungen
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -88,10 +89,13 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 6B: Laufpersistenz, Speicherzeitpunkte, Messhistorie und Wiederherstellbarkeit
   - [x] Phase 6C: Geheimnisse, Sicherung, Export, Reset und Datenaufbewahrung
 - [ ] Phase 7: Temperaturregelung und Aktoren
+  - [x] Phase 7A: Regelstrategie, Heiz-/Kuehlbetrieb, Sensorrollen, Zielqualifikation und Laufanpassungen
+  - [ ] Phase 7B: Schaltfenster, Mindestzeiten, Richtungswechsel und Luefterlogik
+  - [ ] Phase 7C: Sensorfilter, Tuning, Inbetriebnahme und spaetere Kaskadenstrategie
 - [ ] Phase 8: Sicherheit und Fehler
 - [ ] Phase 9: Diagnose, Wartung und Updates
 - [ ] Phase 10: Akzeptanztests und Implementierungsplan
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 7 bearbeitet: Temperaturregelung und Aktorlogik.
+Als Naechstes wird Phase 7B bearbeitet: Schaltfenster, Mindestzeiten, Richtungswechsel und Luefterlogik.
