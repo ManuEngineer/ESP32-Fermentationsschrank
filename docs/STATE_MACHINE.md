@@ -3,21 +3,26 @@
 ## Status
 
 Dieses Dokument beschreibt den akzeptierten Grundaufbau der Betriebszustaende.
-Die Detailbedingungen fuer einzelne Uebergaenge, Warnungen, Fehler und den
-Wiederanlauf werden in den naechsten Spezifikationsschritten ergaenzt.
+Die Detailbedingungen fuer Regelung, Fehlerklassen, Persistenz und Zeitmodelle
+werden in den zugehoerigen Spezifikationsdokumenten vervollstaendigt.
+
+Ergaenzende Wiederanlaufregeln stehen in
+[`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md).
 
 ## Grundsaetze
 
 - Jeder Zustand hat einen klar definierten Zweck.
 - Aktoren duerfen nur in Zustaenden aktiv sein, in denen dies ausdruecklich
   vorgesehen ist.
-- Ein Zustandswechsel muss atomar und nachvollziehbar sein.
+- Ein Zustandswechsel muss atomar, protokollierbar und nachvollziehbar sein.
 - Es gibt keine allgemeine Pausenfunktion fuer laufende Fermentationen.
 - Warnungen und Fehler werden getrennt behandelt.
 - Ein manueller Lauf verwendet dieselben Sicherheits- und Regelmechanismen wie
   ein gespeichertes Programm.
 - Direkte Aktorsteuerung ist ausschliesslich im geschuetzten Servicemodus
   zulaessig.
+- Ein Wiederanlauf nach Stromausfall wartet nicht blockierend auf den Benutzer.
+- Ein echter Sicherheitsfehler hat immer Vorrang vor automatischem Fortfahren.
 
 ## Hauptzustaende
 
@@ -35,16 +40,19 @@ BOOT
   -> STANDBY
 ```
 
-Besondere Zustaende:
+Besondere Zustaende und Kontexte:
 
 ```text
 RECOVERY_EVALUATION
-RECOVERY_DECISION
+RECOVERY_TIME_PENDING
 WARNING_REQUIRES_ACTION
 FAULT
 SERVICE_MODE
 MANUAL_HOLDING
 ```
+
+`RECOVERY_TIME_PENDING` ist kein eigener blockierender Betriebszustand, sondern
+ein zusaetzlicher Kontext eines bereits wieder laufenden Prozesszustands.
 
 ## BOOT
 
@@ -62,6 +70,7 @@ ist.
 - Sensoren erkennen und Grundplausibilitaet pruefen
 - gespeicherten Laufzustand pruefen
 - Reset- und Startursache protokollieren, soweit technisch moeglich
+- Netzwerkverbindung und Zeitabgleich parallel vorbereiten
 
 ### Uebergaenge
 
@@ -111,12 +120,14 @@ bringen. Je nach Ausgangslage kann dies Heizen oder Kuehlen bedeuten.
 
 ### Ende
 
-Nach erfolgreicher Zielqualifikation des leeren Schrankes:
-
 ```text
-PREHEATING
+Ziel des leeren Schrankes erfolgreich qualifiziert
   -> WAITING_FOR_PRODUCT
 ```
+
+Nach einem Stromausfall wird die Vorheizphase nur wieder aufgenommen, wenn der
+gespeicherte Lauf gueltig ist und die maximale Wartezeit noch nicht abgelaufen
+ist.
 
 ## WAITING_FOR_PRODUCT
 
@@ -129,18 +140,25 @@ Benutzer das Produkt einsetzt und dies bewusst bestaetigt.
 
 - Anzeige `Produkt einsetzen`
 - akustisches, quittierbares Signal
-- Temperaturregelung des leeren beziehungsweise geoeffneten Schrankes bleibt
-  aktiv, soweit sicher und sinnvoll
+- Temperaturregelung bleibt aktiv, soweit sicher und sinnvoll
 - Fermentationstimer laeuft nicht
+- pro Programm konfigurierbare maximale Wartezeit
 
-### Uebergang
+### Uebergaenge
 
 ```text
 Benutzer drueckt WEITER / START
   -> REACHING_TARGET
+
+maximale Wartezeit abgelaufen
+  -> Vorheizen sicher beenden
+  -> Lauf als nicht gestartet oder abgebrochen protokollieren
+  -> STANDBY
 ```
 
-Ein automatischer Start ohne diese zweite Bestaetigung ist nicht zulaessig.
+Ein automatischer Start ohne die zweite Bestaetigung ist nicht zulaessig. Auch
+nach einem Stromausfall darf nicht angenommen werden, dass das Produkt bereits
+eingesetzt wurde.
 
 ## REACHING_TARGET
 
@@ -189,6 +207,9 @@ kritischer Fehler
   -> FAULT
 ```
 
+Nach einem Stromausfall beginnt eine zuvor nur teilweise absolvierte
+Zielqualifikation neu.
+
 ## FERMENTING
 
 ### Zweck
@@ -198,8 +219,8 @@ Eigentliche temperaturgefuehrte Fermentationsphase mit laufendem Timer.
 ### Regeln
 
 - Eine allgemeine Pausenfunktion existiert nicht.
-- Die biologische Fermentation laeuft auch bei pausierter Software weiter;
-  deshalb soll die Bedienoberflaeche keinen irrefuehrenden Pause-Befehl bieten.
+- Die biologische Fermentation laeuft auch bei tieferer Temperatur weiter,
+  normalerweise langsamer.
 - Kurze oder moderate Temperaturabweichungen lassen den Timer standardmaessig
   weiterlaufen.
 - Warnungen koennen angezeigt und protokolliert werden, ohne den Lauf
@@ -215,6 +236,16 @@ Fermentationszeit abgelaufen, Abschluss ohne Kuehlung
 Fermentationszeit abgelaufen, aktives Kuehlen vorgesehen
   -> COOLING
 ```
+
+### Wiederanlauf
+
+Nach einem Stromausfall wird die Temperaturregelung nach gueltigem Sensor- und
+Sicherheitscheck automatisch wieder aufgenommen. Der Lauf wartet nicht auf eine
+Benutzerbestaetigung.
+
+Die verbleibende Dauer wird spaeter anhand der Unterbrechungsdauer und der
+Temperaturschaetzung korrigiert. Solange die Netzwerkzeit noch fehlt, bleibt der
+Kontext `RECOVERY_TIME_PENDING` aktiv.
 
 ## COOLING
 
@@ -238,6 +269,9 @@ Kuehlziel erreicht, bis manuell beendet halten
 kritischer Fehler
   -> FAULT
 ```
+
+Nach einem Stromausfall wird eine gueltige Kuehlphase automatisch wieder
+aufgenommen. Sie wartet nicht auf eine Benutzerentscheidung.
 
 ## COOL_HOLDING
 
@@ -263,6 +297,21 @@ kritischer Fehler
   -> FAULT
 ```
 
+Nach einem Stromausfall wird das Kuehlhalten bei gueltigen Sensoren automatisch
+wieder aufgenommen. Eine zeitlich begrenzte Haltephase wird nach verfuegbarer
+Zeitbasis korrigiert.
+
+## MANUAL_HOLDING
+
+### Zweck
+
+Eine manuell gewaehlte Zieltemperatur ohne Timer halten.
+
+Der Zustand verwendet dieselbe Regel- und Sicherheitslogik wie ein
+Programmlauf und endet erst durch bewusste Benutzeraktion oder einen Fehler.
+Nach einem Stromausfall wird er nach erfolgreicher Wiederanlaufpruefung
+automatisch fortgesetzt.
+
 ## COMPLETED
 
 ### Zweck
@@ -271,8 +320,7 @@ Lauf ist fachlich abgeschlossen und wartet auf Benutzerquittierung.
 
 ### Verhalten
 
-- Peltier AUS, sofern nicht bereits ein beabsichtigter Kuehlhaltezustand zuvor
-  beendet wurde
+- Peltier AUS
 - definierter Luefternachlauf
 - optische Meldung `PROGRAMM BEENDET`
 - kurzes akustisches Signalmuster
@@ -286,7 +334,9 @@ Benutzer quittiert
   -> STANDBY
 ```
 
-Das Geraet wechselt nicht automatisch aus `COMPLETED` nach `STANDBY`.
+Das Geraet wechselt nicht automatisch aus `COMPLETED` nach `STANDBY`. Nach
+einem Stromausfall wird der bereits abgeschlossene Zustand wieder angezeigt;
+es wird keine Regelphase neu gestartet.
 
 ## Manuelles Stoppen eines Laufes
 
@@ -328,6 +378,7 @@ Beispiele:
 - erwartete Zielerreichungszeit ueberschritten
 - Temperatur zeitweise ausserhalb des normalen Arbeitsbereichs
 - Kuehlziel wird langsamer als erwartet erreicht
+- Netzwerkzeit nach Wiederanlauf noch nicht verfuegbar
 - nichtkritische Netzwerk- oder Oberflaechenfunktion ausgefallen
 
 Standardverhalten:
@@ -336,11 +387,13 @@ Standardverhalten:
 - Warnung wird sichtbar angezeigt
 - Ereignis wird protokolliert
 - je nach Warnung akustisches Signal
-- einzelne Warnklassen duerfen spaeter eine Benutzerentscheidung verlangen
 
 Falls eine Warnung zwingend eine Entscheidung benoetigt, kann der fachliche
 Unterzustand `WARNING_REQUIRES_ACTION` verwendet werden. Die Sicherheitslogik
-bleibt waehrenddessen aktiv und legt fest, welche Aktoren weiterlaufen duerfen.
+legt fest, welche Aktoren waehrenddessen weiterlaufen duerfen.
+
+Ein fehlender Produktfuehler in einem produktgefuehrten Lauf ist ein Beispiel,
+bei dem nicht still auf einen anderen Sensor gewechselt werden darf.
 
 ## FAULT
 
@@ -371,47 +424,80 @@ festgelegt.
 
 ### Zweck
 
-Nach Boot pruefen, ob ein unterbrochener Lauf automatisch fortgesetzt werden
-darf.
+Nach Boot unverzueglich bestimmen, wie ein unterbrochener Lauf sicher und
+fachlich sinnvoll weitergefuehrt wird.
 
 Zu bewerten sind mindestens:
 
 - Persistenzdaten und Programmschnappschuss gueltig
 - Art und Phase des unterbrochenen Laufes
-- geschaetzte Unterbrechungsdauer
 - aktuelle Sensorwerte
-- Temperaturabweichung
+- letzte gespeicherte Produkt- oder Schranklufttemperatur
+- aktuelle Produkt- oder Schranklufttemperatur
 - aktive Fehler oder Warnungen
+- Verfuegbarkeit einer verlaesslichen Zeitbasis
+
+### Grundsatz
+
+`RECOVERY_EVALUATION` ist kurz und blockiert nicht bis zur Benutzerentscheidung
+oder bis zur Netzwerkzeit. Es wird unmittelbar eine sichere phasenbezogene
+Aktion ausgewaehlt.
 
 ### Uebergaenge
 
 ```text
-automatische Fortsetzung zulaessig
-  -> zuletzt fachlich gueltiger Prozesszustand
+Fortsetzung technisch und sicher zulaessig
+  -> geeigneten normalen Prozesszustand automatisch wieder aufnehmen
 
-Benutzerentscheidung erforderlich
-  -> RECOVERY_DECISION
+Netzwerkzeit noch nicht verfuegbar
+  -> geeigneten normalen Prozesszustand automatisch wieder aufnehmen
+  -> Kontext RECOVERY_TIME_PENDING setzen
 
-Fortsetzung technisch unzulaessig
-  -> RECOVERY_DECISION mit eingeschraenkten Aktionen oder FAULT
+Fortsetzung wegen Sicherheitsfehler nicht zulaessig
+  -> FAULT
+
+Persistenz unbrauchbar oder kein fachlicher Lauf rekonstruierbar
+  -> sicherer Fehler- oder Standby-Zustand gemaess Fehlerklasse
 ```
 
-## RECOVERY_DECISION
+## RECOVERY_TIME_PENDING
 
 ### Zweck
 
-Nach einer langen oder nicht sicher bewertbaren Unterbrechung auf eine
-Benutzerentscheidung warten.
+Kennzeichnen, dass der Prozess bereits sicher weiterlaeuft, die genaue
+Unterbrechungsdauer und Restzeitkorrektur aber noch nicht bestimmt sind.
 
-Moegliche, von der Sicherheitslogik freigegebene Aktionen:
+### Verhalten
 
-- fortsetzen
-- abbrechen und ausschalten
-- abbrechen und kuehlen
+- Netzwerk und NTP-Zeitabgleich laufen im Hintergrund
+- Oberflaeche zeigt `Unterbrechungsdauer wird bestimmt`
+- keine ungesicherte exakte Restzeit behaupten
+- normale phasenbezogene Regelung fortsetzen
 
-Das erste Release bietet diese Entscheidung lokal am Display und in der lokalen
-Weboberflaeche an. Push- oder Telegram-Benachrichtigungen sind nicht Bestandteil
-des ersten Releases.
+### Ende
+
+```text
+Netzwerkzeit verfuegbar
+  -> Unterbrechungsdauer bestimmen
+  -> Restzeit oder Haltezeit korrigieren
+  -> Korrektur anzeigen und protokollieren
+  -> Kontext RECOVERY_TIME_PENDING entfernen
+
+Netzwerkzeit bleibt zu lange unbekannt
+  -> konservative programmspezifische Ersatzlogik anwenden
+  -> niedrige Vertrauensstufe anzeigen
+  -> Prozess weiterfuehren, sofern sicher
+```
+
+## Zeitquelle
+
+Im ersten Release ist Netzwerkzeit die primaere Zeitquelle. Der ESP32 startet
+jedoch schneller als Router und NTP-Verbindung. Deshalb beginnt der
+phasenbezogene Wiederanlauf sofort und die Zeitkorrektur erfolgt nachtraeglich.
+
+Die Architektur soll spaeter eine batteriegepufferte Echtzeituhr, zum Beispiel
+ein DS3231-Modul, als alternative oder zusaetzliche Quelle ermoeglichen. Ein
+RTC-Modul ist fuer das erste Release nicht erforderlich.
 
 ## SERVICE_MODE
 
@@ -479,9 +565,8 @@ optional PREHEATING
   -> MANUAL_HOLDING
 ```
 
-`MANUAL_HOLDING` haelt die Zieltemperatur bis zur manuellen Beendigung. Dieser
-Modus ist keine direkte Aktorsteuerung und verwendet weiterhin alle normalen
-Sicherheits-, Sensor- und Regelmechanismen.
+Dieser Modus ist keine direkte Aktorsteuerung und verwendet weiterhin alle
+normalen Sicherheits-, Sensor- und Regelmechanismen.
 
 ## Akzeptierte Entscheidungen
 
@@ -496,15 +581,19 @@ Sicherheits-, Sensor- und Regelmechanismen.
 - [x] Servicemodus nur aus `STANDBY`
 - [x] manueller Zeit-/Temperaturlauf als temporaeres Programm
 - [x] zusaetzlicher manueller Temperatur-Haltebetrieb ohne Timer
+- [x] kein Tuerkontakt im ersten Release; spaetere Erweiterung vorgesehen
+- [x] Produktfuehlerausfall fuehrt nicht zu stillem Sensorwechsel
+- [x] Wiederanlauf nach Stromausfall wartet nicht auf den Benutzer
+- [x] Fermentations-, Kuehl- und Haltephasen werden phasenbezogen automatisch
+      weitergefuehrt
+- [x] Netzwerkzeit wird nach dem Wiederanlauf parallel beschafft
+- [x] spaetere RTC-Unterstuetzung bleibt moeglich
 
-## Noch offen fuer Phase 3B
+## Noch offen
 
-- genaue Unterzustaende und Uebergaenge bei Tueröffnung
-- Verhalten beim Wechsel oder Ausfall des Produktfuehlers
-- erlaubte Aktoren in `RECOVERY_DECISION`
-- Rueckkehr aus `FAULT` und Bedingungen fuer Fehlerquittierung
 - Luefternachlauf je Zustand
-- Verhalten bei langer Benutzerabwesenheit in `WAITING_FOR_PRODUCT`
 - Verhalten bei ausstehender Entscheidung in `WARNING_REQUIRES_ACTION`
 - Persistenzzeitpunkte und Wiederherstellung der Restzeit
 - Prioritaet gleichzeitiger Warnungen und Fehler
+- konkrete konservative Zeitkompensation bei unbekannter Unterbrechungsdauer
+- genaue Fehlerklassen und Fortsetzungsbedingungen
