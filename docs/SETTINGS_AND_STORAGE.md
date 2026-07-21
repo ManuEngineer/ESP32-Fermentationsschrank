@@ -2,408 +2,256 @@
 
 ## Status
 
-Dieses Dokument beschreibt die in Phase 6A akzeptierten Regeln fuer
-Konfigurationsebenen, Aenderungsrechte, Speichervorgaenge, Validierung,
-Neustartbedarf und Zeitzone.
-
-Die Persistenz eines laufenden Prozesses, Speicherzeitpunkte, Stromausfall-
-Wiederherstellung, Geheimnisse, Sicherungen und Datenaufbewahrung werden in den
-Phasen 6B und 6C ergaenzt.
+Dieses Dokument definiert Konfigurationsebenen, Aenderungsrechte, Vorschau,
+Neustartbedarf, Zeitdarstellung und atomare Speicherung. Laufpersistenz,
+Sicherungen und Recovery werden in `RUN_PERSISTENCE.md`,
+`BACKUP_SECURITY_RETENTION.md` und `PR38_REVIEW_CORRECTIONS.md` ergaenzt.
 
 ## Grundsaetze
 
-- Werkseinstellungen, Benutzereinstellungen und aktive Laufdaten werden
-  fachlich getrennt.
-- Ein bereits gestarteter Lauf verwendet einen unveraenderlichen
-  Programmschnappschuss.
-- Keine teilweise geschriebene Konfiguration darf als gueltig geladen werden.
-- Neue Werte werden vor der dauerhaften Uebernahme vollstaendig validiert.
-- Die letzte nachweislich gueltige Konfiguration bleibt als Rueckfall erhalten.
+- Werkseinstellungen, Benutzereinstellungen und aktive Laufdaten sind getrennt.
+- Ein Lauf verwendet einen unveraenderlichen Programmschnappschuss.
+- Neue Werte werden vor der Aktivierung vollstaendig validiert.
+- Keine teilweise geschriebene Konfiguration gilt als gueltig.
+- Die letzte nachweislich gueltige Revision bleibt als Rueckfall erhalten.
 - Eine Service-PIN hebt keine firmwarefesten Sicherheitsgrenzen auf.
-- Ein laufender Prozess wird niemals wegen einer normalen Einstellung
-  automatisch neu gestartet.
+- Normale Einstellungen starten einen laufenden Prozess nie automatisch neu.
+- Ein vergessener Service-PIN kann nur durch einen vollstaendigen lokalen
+  Werksreset behandelt werden; dieser besondere Recoveryweg darf die vergessene
+  PIN nicht selbst voraussetzen.
 
-## Konfigurations- und Datenebenen
-
-Das Geraet verwendet drei klar getrennte Ebenen:
+## Konfigurationsebenen
 
 ```text
 unveraenderliche Werkseinstellungen
         ↓
-gespeicherte und validierte Benutzereinstellungen
+gespeicherte validierte Benutzereinstellungen
         ↓
-unveraenderlicher Schnappschuss des laufenden Prozesses
+unveraenderlicher Schnappschuss des aktiven Laufes
 ```
 
-### 1. Unveraenderliche Werkseinstellungen
+### Werkseinstellungen
 
-Die Firmware beziehungsweise ein geschuetzter Factory-Katalog enthaelt:
+Enthalten mindestens:
 
-- Standardwerte der allgemeinen Geraetekonfiguration
-- die vier mitgelieferten Standardprogramme
-- feste Schema-Versionen und Migrationsgrundlagen
+- allgemeine Factory-Werte
+- vier Standardprogramme
+- Schema- und Migrationsgrundlagen
 - firmwarefeste Sicherheitsgrenzen
-- nicht erlaubte Aktorkombinationen
-- minimale Schutzzeiten, die durch Einstellungen nicht unterschritten werden
-  duerfen
+- verbotene Aktorkombinationen
+- nicht unterschreitbare Schutzzeiten
 
-Werkseinstellungen werden im normalen Betrieb nicht ueberschrieben. Ein
-Zuruecksetzen stellt daraus eine neue gueltige Benutzerkonfiguration her.
+Sie werden im normalen Betrieb nicht ueberschrieben. Ein Werksreset erzeugt aus
+ihnen eine neue gueltige Benutzerkonfiguration.
 
-### 2. Gespeicherte Benutzereinstellungen
+### Benutzereinstellungen
 
-Diese Ebene enthaelt die vom Benutzer oder Service bewusst gespeicherten Werte,
-beispielsweise:
+Beispiele:
 
-- Sprache des lokalen Displays
-- Geraetename
-- Display- und Toneinstellungen
-- WLAN- und Webzugangskonfiguration
+- Sprache, Geraetename, Display und Ton
+- WLAN und Webzugang
 - Programme und Benutzervoreinstellungen
 - freigegebene Serviceparameter
 - Touchkalibrierung
-- Zeitzone
+- IANA-Zeitzone
 
-Jede gespeicherte Konfiguration besitzt mindestens:
+Jede Revision besitzt mindestens Schema, Generation, Integritaetsinformation,
+Aenderungsquelle und – falls verfuegbar – UTC-Zeit.
 
-- Schema-Version
-- Konfigurationsrevision beziehungsweise Generation
-- Gueltigkeitskennzeichen oder vergleichbare Integritaetsinformation
-- Zeitpunkt der Speicherung, soweit eine verlaessliche Zeitquelle vorhanden ist
-- Quelle der Aenderung, beispielsweise `display`, `web` oder `service_web`
+### Laufschnappschuss
 
-Die konkrete Speichertechnik, beispielsweise NVS, Dateisystem oder eine
-Kombination, wird erst im Implementierungsentwurf festgelegt. Die fachlichen
-Anforderungen gelten unabhaengig davon.
-
-### 3. Unveraenderlicher Laufschnappschuss
-
-Beim Start eines Programms wird ein eigener Laufschnappschuss erzeugt. Er
-enthaelt alle fuer diesen Lauf wirksamen Werte, mindestens:
+Beim Start werden mindestens festgehalten:
 
 - Programm-ID und Programmrevision
-- sichtbarer Programmname zum Startzeitpunkt
-- Zieltemperatur und Fermentationsdauer
-- Vorheizverhalten
+- sichtbarer Name
+- Zieltemperatur und Dauer
+- Vorheizen
 - Sensorbetrieb und Sensorfehlerstrategie
-- Zielqualifikationsparameter
+- Zielqualifikation
 - maximale Zielerreichungszeit
 - Abschluss- und Kuehlverhalten
-- zum Lauf gehoerende freigegebene Regelparameter
-- Sprache unabhaengige maschinenlesbare Codes
+- laufbezogene freigegebene Regelparameter
+- sprachunabhaengige Codes
 
-Spaetere Aenderungen oder das Loeschen des Quellprogramms veraendern diesen
-Schnappschuss nicht.
+Aenderungen am Quellprogramm veraendern den aktiven Lauf nicht. Zieltemperatur
+und Restdauer koennen nur ueber die separat spezifizierte, bestaetigte und
+protokollierte Laufanpassung geaendert werden.
 
-Der Schnappschuss ist ein Ausfuehrungsdatensatz und keine weitere frei
-bearbeitbare Konfigurationsebene.
-
-## Einstellungsgruppen und Aenderungsrechte
+## Berechtigungsebenen
 
 ### Normale Einstellungen
 
-Ohne Service-PIN aenderbar sind mindestens:
+Ohne Service-PIN mindestens:
 
-- Sprache des lokalen Displays
+- Sprache
 - Geraetename
-- Displayhelligkeit
-- Zeit bis zum Abdunkeln
+- Displayhelligkeit und Abdunkeln
 - zulaessige Toneinstellungen
 - Zeitzone
-- WLAN-Zugangsdaten und normale Netzwerkeinrichtung
-- normales Webpasswort und bewusste Deaktivierung des Webpasswortschutzes
+- WLAN-Einrichtung
+- Webpasswort
 - Benutzerprogramme und freigegebene Programmwerte
 
-Auch normale Einstellungen koennen bei weitreichenden Auswirkungen eine
-zusaetzliche Bestaetigung verlangen, beispielsweise:
+Weitreichende normale Aktionen wie WLAN-Ersatz, Deaktivierung des Webschutzes
+oder Programmloeschung benoetigen eine deutliche Bestaetigung.
 
-- WLAN-Konfiguration ersetzen
-- Webpasswortschutz deaktivieren
-- ein Programm loeschen
+### PIN-geschuetzter Service
 
-### PIN-geschuetzte Serviceeinstellungen
-
-Die vierstellige Service-PIN ist mindestens erforderlich fuer:
+Die Service-PIN ist im normalen Betrieb mindestens erforderlich fuer:
 
 - Sensorzuordnung und technische Sensoroptionen
-- statische IPv4-Konfiguration
-- vertrauenswuerdige Proxy-Adressen oder Proxy-Netze
+- statische IPv4- und Proxy-Vertrauenseinstellungen
 - Direktstart-Freigaben
-- Touchkalibrierung aus dem normalen Serviceweg
-- technische Regelparameter innerhalb freigegebener Grenzen
-- Luefter- und Nachlaufparameter, soweit spaeter freigegeben
-- Peltier-Totzeit innerhalb sicherer Grenzen
-- Wiederherstellungsfunktionen und vollstaendigen Werksreset
+- normale Touchkalibrierung
+- technische Regel-, Luefter-, Nachlauf- und Totzeitparameter innerhalb
+  firmwarefester Grenzen
+- gefuehrte Aktor- und Hardwaretests aus validiertem `STANDBY`
+- normale Wiederherstellungsfunktionen
+- bewusst aus dem normalen Menue gestarteten vollstaendigen Werksreset
+
+### Ausnahme bei vergessener Service-PIN
+
+Der besondere lokale Recovery-Werksreset ist **nicht** PIN-geschuetzt, weil die
+PIN gerade nicht mehr bekannt ist.
+
+Verbindliche Bedingungen:
+
+- nur waehrend Boot oder `SAFE_BOOT`
+- nur bei physischer Anwesenheit
+- nicht ueber Web oder Netzwerk
+- Peltier und alle leistungsbezogenen Aktoren AUS
+- mehrstufige Warnung und lange bewusste Bestaetigung
+- verifizierter physischer Ausloeseweg, vorzugsweise rohe Touchgeste;
+  UART-Loeschen beziehungsweise Neu-Flashen bleibt letzter Recoveryweg
+- vollstaendiger Werksreset, kein isolierter PIN-Reset
+
+Die konkrete Geste beziehungsweise Taste bleibt `TBD_HARDWARE`.
 
 ### Firmwarefeste Grenzen
 
-Nicht durch normale Einstellungen und nicht durch die Service-PIN aenderbar
-sind mindestens:
+Nicht durch Benutzer oder Service-PIN aenderbar:
 
 - absolute Temperatur-Sicherheitsgrenzen
-- unzulaessige gleichzeitige Aktoransteuerungen
-- firmwarefeste Mindesttotzeit vor einer Peltier-Polaritaetsumkehr
-- Bedingungen, unter denen Heizen oder Kuehlen zwingend gesperrt werden
-- Ausgangszustand waehrend Boot, Reset und schwerem Fehler
-- grundlegende Sensor-Plausibilitaetsanforderungen
-- Integritaets- und Validierungsregeln fuer gespeicherte Daten
+- verbotene gleichzeitige Aktoransteuerung
+- firmwarefeste Mindesttotzeit
+- zwingende Heiz-/Kuehlsperren
+- sichere Ausgaenge bei Boot, Reset und schwerem Fehler
+- grundlegende Sensorplausibilitaet
+- Datenintegritaets- und Validierungsregeln
 
-Aenderungen solcher Grenzen erfordern eine neue gepruefte Firmwareversion und
-koennen nicht ueber die normale Bedienoberflaeche erfolgen.
+## Serviceparameter innerhalb harter Grenzen
 
-## Technische Parameter innerhalb sicherer Grenzen
+Technische Werte sind nur innerhalb firmwarefester Bereiche speicherbar.
+Manipulierte Webanfragen werden serverseitig gleich validiert wie lokale Eingaben.
+Ein fehlender oder ungueltiger Wert erzeugt keine unsichere Annahme; die Funktion
+wird gesperrt, wenn kein eindeutig sicherer Ersatzwert existiert.
 
-Technische Werte duerfen im Servicebereich veraendert werden, aber nur innerhalb
-firmwarefest definierter Bereiche.
+Konkrete thermische Werte bleiben `TBD_COMMISSIONING`.
 
-Beispielprinzip:
+## Vorschau, Speichern und Abbrechen
 
-```text
-firmwarefeste Mindesttotzeit: 3 s
-freigegebener Servicebereich: 5 bis 120 s
-gespeicherter Benutzerwert:   10 s
-```
+Aenderungen sind zuerst Entwurf. Dauerhaft wirksam werden sie erst mit
+`Speichern` oder gleichwertiger Bestaetigung.
 
-Dabei gilt:
-
-- Die Firmware validiert den Wert unabhaengig von der Benutzeroberflaeche.
-- Eine manipulierte Webanfrage darf keinen Wert ausserhalb des gueltigen Bereichs
-  speichern.
-- Ein fehlender oder ungueltiger Wert fuehrt nicht zu einer unsicheren
-  Standardannahme.
-- Wo kein sicherer Ersatzwert eindeutig ist, wird die betroffene Funktion
-  gesperrt und ein Konfigurationsfehler gemeldet.
-- Werkseinstellungen liegen ebenfalls innerhalb der firmwarefesten Grenzen.
-
-Konkrete Zahlenwerte werden in den Phasen 7 und 8 beziehungsweise bei der
-Inbetriebnahme festgelegt.
-
-## Bearbeiten, Vorschau und Speichern
-
-### Grundverhalten
-
-Aenderungen werden zunaechst als Entwurf behandelt. Dauerhaft wirksam werden sie
-erst nach einer bewussten Aktion `Speichern` oder einer gleichwertigen
-Bestaetigung.
-
-Ungefaehrliche und sinnvoll ruecksetzbare Werte duerfen bereits waehrend der
-Bearbeitung als Vorschau wirken.
-
-Beispiel:
-
-```text
-Displayhelligkeit aendern
-  -> Vorschau sofort sichtbar
-  -> Speichern uebernimmt den Wert dauerhaft
-  -> Abbrechen stellt den vorherigen Wert wieder her
-```
-
-Geeignete Vorschauwerte koennen sein:
+Als reversible Vorschau geeignet:
 
 - Displayhelligkeit
-- akustische Lautstaerke, sofern technisch regelbar
-- Sprache der gerade verwendeten Oberflaeche
-- Darstellungseinstellungen ohne Prozesswirkung
+- Sprache der aktuellen Oberflaeche
+- ungefaehrliche Darstellungs- und Toneinstellungen
 
-Nicht als ungespeicherte Vorschau aktiviert werden insbesondere:
+Nicht als ungespeicherte Vorschau aktivieren:
 
 - WLAN-Zugangsdaten
-- statische IP-Konfiguration
+- statische IP und Proxyvertrauen
 - Sensorzuordnung
-- Regelparameter
-- Sicherheitsnahe Serviceparameter
-- Proxy-Vertrauen
+- Regel- und Sicherheitsparameter
 - Programmaenderungen
 - Wiederherstellungsaktionen
 
-### Abbrechen und Verlassen
+`Abbrechen` stellt Vorschauwerte wieder her. Verlassen mit ungespeicherten
+Aenderungen warnt. Browserabbruch speichert nicht. Revisionsschutz verhindert
+das stille Ueberschreiben neuerer Daten.
 
-Bei ungespeicherten Aenderungen gilt:
+## Verhalten waehrend eines Laufes
 
-- `Abbrechen` stellt Vorschauwerte auf den vorherigen gespeicherten Zustand
-  zurueck.
-- Beim Verlassen einer Seite wird auf ungespeicherte Aenderungen hingewiesen.
-- Ein Browserabbruch oder Verbindungsverlust speichert keinen Entwurf
-  automatisch.
-- Ein Entwurf auf einer Oberflaeche sperrt andere Oberflaechen nicht pauschal.
-- Revisionsschutz verhindert das stille Ueberschreiben neuerer Daten.
+Sofort zulaessig, ohne Schnappschusswirkung:
 
-## Verhalten waehrend eines laufenden Prozesses
-
-Die Wirksamkeit von Aenderungen richtet sich nach der Einstellungsgruppe.
-
-### Sofort zulaessig
-
-Ohne Aenderung des Laufschnappschusses duerfen insbesondere sofort wirksam
-werden:
-
-- Sprache der Bedienoberflaeche
-- Displayhelligkeit und Abdunkelverhalten
+- Oberflaechensprache
+- Displayhelligkeit und Abdunkeln
 - zulaessige Toneinstellungen
 - Stummschalten gemaess Meldungsregeln
-- manuelles Neuverbinden des WLANs
+- WLAN-Neuverbindung
 
-### Nach Pruefung und bewusster Bestaetigung
+Programme duerfen bearbeitet werden, wenn klar angezeigt wird, dass dies nur
+zukuenftige Laeufe betrifft.
 
-Eine neue WLAN-Konfiguration darf waehrend eines Laufes vorbereitet und geprueft
-werden, sofern:
-
-- die Temperaturregelung davon unabhaengig weiterlaeuft,
-- die bestehende funktionierende Konfiguration bis zur erfolgreichen Pruefung
-  erhalten bleibt,
-- ein Verbindungswechsel keine Aktoren oder Laufwerte veraendert,
-- der Benutzer den Wechsel ausdruecklich bestaetigt.
-
-### Nur fuer zukuenftige Laeufe
-
-Gespeicherte Programme duerfen waehrend eines Laufes nur dann bearbeitet werden,
-wenn klar angezeigt wird, dass die Aenderung ausschliesslich zukuenftige Laeufe
-betrifft. Der aktive Laufschnappschuss bleibt unveraendert.
-
-### Waehrend eines Laufes gesperrt
-
-Gesperrt bleiben mindestens:
+Gesperrt bleiben:
 
 - Sensorzuordnung
-- Regel- und Sicherheitsparameter
-- technische Luefter- und Peltierparameter
+- Regel-, Sicherheits-, Luefter- und Peltierparameter
 - Touchkalibrierung
 - Aktortests
-- Wiederherstellungsfunktionen und Werksreset
-- Einstellungen, die einen Neustart der Steuerung erfordern
+- Import, Wiederherstellung und Werksreset
+- neustartpflichtige Systemaenderungen
 
-Aktive Laufwerte koennen nur ueber spaeter ausdruecklich spezifizierte
-Laufaktionen geaendert werden. Eine normale Einstellungsseite darf den laufenden
-Prozess nicht still veraendern.
+## Neustartpflichtige Einstellungen
 
-## Einstellungen mit Neustartbedarf
+- Speichern loest keinen automatischen Neustart aus.
+- Waehrend eines Laufes wird nie automatisch neu gestartet.
+- Ausstehende Aenderungen bleiben sichtbar.
+- `Jetzt neu starten` erscheint nur in sicherem Zustand ohne Lauf.
+- Bis dahin gilt die zuletzt aktivierte gueltige Konfiguration.
+- Ein unerwarteter Neustart darf keine halb angewendete Konfiguration erzeugen.
 
-Eine Einstellung kann nach erfolgreichem Speichern als `Neustart erforderlich`
-gekennzeichnet werden.
+## Zeitbasis und Zeitzone
 
-Verbindliche Regeln:
+- absolute Zeit intern in UTC, sofern verlaesslich
+- Lauf- und Schutzzeiten mit monotoner Zeit
+- konfigurierbare IANA-Zeitzone
+- Werkseinstellung `Europe/Zurich`
+- lokale Darstellung auf Touch und Web ohne Aenderung gespeicherter UTC-Werte
 
-- Nach dem Speichern erfolgt kein automatischer Neustart.
-- Waehrend eines laufenden Prozesses wird niemals automatisch neu gestartet.
-- Die Oberflaeche zeigt dauerhaft, welche Aenderungen noch nicht aktiv sind.
-- `Jetzt neu starten` wird nur in einem sicheren Zustand ohne laufenden Prozess
-  angeboten.
-- Ein spaeterer normaler Neustart aktiviert die gespeicherte neue Konfiguration,
-  sofern sie weiterhin gueltig ist.
-- Bis zum Neustart arbeitet die Firmware mit dem zuletzt aktivierten gueltigen
-  Wert weiter.
-- Ein erzwungener oder unerwarteter Neustart darf keine halb angewendete
-  Konfiguration erzeugen.
-
-Ob einzelne Aenderungen bereits als ausstehende Konfiguration gespeichert werden
-oder erst im sicheren Zustand gespeichert werden duerfen, wird feldbezogen im
-spaeteren Datenmodell festgelegt.
-
-## Zeitbasis, Zeitzone und Darstellung
-
-### Interne Zeitbasis
-
-Absolute Zeitstempel werden intern in UTC gespeichert, sofern eine verlaessliche
-absolute Zeit verfuegbar ist.
-
-Laufdauern und Schutzzeiten verwenden monotone Laufzeitinformationen und duerfen
-nicht durch Sommerzeitwechsel oder eine spaetere NTP-Korrektur rueckwaerts
-springen.
-
-### Konfigurierbare Zeitzone
-
-Das Geraet besitzt eine konfigurierbare IANA-Zeitzone.
-
-Werkseinstellung:
-
-```text
-Europe/Zurich
-```
-
-Die Zeitzone bestimmt mindestens:
-
-- lokale Anzeige auf dem Touchdisplay
-- lokale Uhrzeiten in Meldungen und Protokollen
-- lokale Zeitdarstellung in Diagnoseansichten
-- Standarddarstellung in der API, soweit dort lokale Werte zusaetzlich zu UTC
-  angeboten werden
-
-Browser duerfen Datums- und Zeitwerte entsprechend ihrer Sprache formatieren,
-ohne die gespeicherten UTC-Zeitstempel zu veraendern.
-
-### Unsichere Zeit
-
-Ist NTP nach einem Start noch nicht verfuegbar:
-
-- wird keine erfundene absolute Uhrzeit als verlaesslich ausgegeben,
-- relative Laufzeit kann weitergefuehrt werden,
-- Zeitstempel werden als noch nicht synchronisiert gekennzeichnet,
-- nach spaeterer Synchronisation werden neue absolute Zeitinformationen
-  entsprechend markiert,
-- bereits protokollierte relative Reihenfolgen bleiben erhalten.
+Ohne NTP wird keine erfundene absolute Zeit ausgegeben. Relative Reihenfolge und
+monotone Laufzeit bleiben erhalten. Recovery-Zeit wird gemaess
+`RECOVERY_AND_INTERRUPTION.md` als Unsicherheitsintervall behandelt.
 
 ## Validierung und atomare Speicherung
 
-### Speichervorgang
-
-Ein dauerhafter Speichervorgang folgt logisch mindestens diesen Schritten:
+Logischer Ablauf:
 
 ```text
-1. Entwurf entgegennehmen
-2. Datentypen und Pflichtfelder pruefen
-3. Wertebereiche und Abhaengigkeiten pruefen
-4. firmwarefeste Sicherheitsgrenzen pruefen
-5. neue vollstaendige Revision in einen getrennten Bereich schreiben
-6. Integritaet der geschriebenen Revision pruefen
-7. neue Revision atomar als aktiv markieren
-8. vorherige gueltige Revision als Rueckfall behalten
+Entwurf entgegennehmen
+-> Datentypen und Pflichtfelder pruefen
+-> Wertebereiche und Abhaengigkeiten pruefen
+-> firmwarefeste Sicherheitsgrenzen pruefen
+-> neue vollstaendige Revision getrennt schreiben
+-> Integritaet pruefen
+-> Revision atomar aktivieren
+-> vorherige gueltige Revision als Rueckfall behalten
 ```
 
-Eine Implementierung darf diese Schritte technisch anders abbilden, muss aber
-dasselbe Fehlerverhalten sicherstellen.
+Anforderungen:
 
-### Anforderungen
+- niemals eine Mischung aus alter und neuer Revision laden
+- Integritaet auch beim Laden pruefen
+- unbekannte Schema-Version nicht blind interpretieren
+- Migration auf Kopie ausfuehren und erst danach aktivieren
+- Rueckfall sichtbar protokollieren
+- ohne gueltige aktuelle oder Rueckfallrevision sicherer Konfigurationsfehlerzustand
+- aktorwirksame Recoveryentscheidung zuerst erfolgreich persistieren
+- kritischer Schreibfehler gemaess `RUN_PERSISTENCE.md` verriegeln
 
-- Kein Feld wird einzeln als bereits gueltige Gesamtfassung betrachtet, wenn der
-  restliche Datensatz noch nicht geschrieben ist.
-- Stromausfall waehrend des Schreibens laesst entweder die alte oder die neue
-  vollstaendige Revision gueltig, niemals eine Mischung.
-- Nach dem Laden wird die Integritaet erneut geprueft.
-- Unbekannte Schema-Versionen werden nicht blind interpretiert.
-- Migrationen arbeiten auf einer Kopie und ersetzen die alte Revision erst nach
-  erfolgreicher Validierung.
-- Die letzte nachweislich gueltige Revision bleibt als Rueckfall erhalten.
-- Ein Rueckfall wird sichtbar protokolliert und als Warnung angezeigt.
-- Sind weder aktuelle noch letzte gueltige Benutzerdaten nutzbar, startet das
-  Geraet nicht mit unsicheren Annahmen, sondern in einem sicheren
-  Konfigurationsfehler- beziehungsweise Einrichtungszustand.
+## Akzeptierte Entscheidungen
 
-## Akzeptierte Entscheidungen aus Phase 6A
-
-- [x] getrennte Werkseinstellungen, Benutzereinstellungen und Laufschnappschuesse
-- [x] Werkseinstellungen bleiben unveraenderlich wiederherstellbar
-- [x] ungefaehrliche Vorschau moeglich, dauerhafte Uebernahme erst mit `Speichern`
-- [x] drei Berechtigungsebenen: normal, PIN-Service und firmwarefest
-- [x] technische Servicewerte nur innerhalb firmwarefester Grenzen
-- [x] feldbezogenes Verhalten waehrend eines laufenden Prozesses
-- [x] Programmaenderungen betreffen nur zukuenftige Laeufe
-- [x] kein automatischer Neustart nach Einstellungsanderungen
-- [x] ausstehender Neustart wird sichtbar gekennzeichnet
-- [x] interne UTC-Zeitstempel und konfigurierbare IANA-Zeitzone
-- [x] `Europe/Zurich` als Werkseinstellung
-- [x] vollstaendige Validierung vor Aktivierung
-- [x] atomare Speicherung mit letzter gueltiger Rueckfallrevision
-
-## Noch offen fuer Phase 6B und 6C
-
-- genauer Inhalt des persistierten Laufzustands
-- Speicherzeitpunkte waehrend eines laufenden Prozesses
-- Behandlung von Flash-Verschleiss und Schreibfrequenz
-- Wiederherstellung bei Stromausfall waehrend eines Speichervorgangs
-- Speicherung von Messreihen und Diagrammdaten
-- Aufbewahrungsdauer von Laeufen, Meldungen und Ereignissen
-- Speicherung und Schutz von Passwoertern, PINs und Tokens
-- Sicherungs- und Exportformat fuer Benutzerkonfiguration und Programme
-- Import, Schema-Migration und Versionskompatibilitaet
-- genauer Umfang einzelner Reset- und Wiederherstellungsaktionen
-- Verhalten bei vollstaendig erschoepftem oder beschaedigtem Speicher
+- [x] getrennte Factory-, Benutzer- und Laufebene
+- [x] unveraenderlicher Laufschnappschuss
+- [x] reversible Vorschau und bewusstes Speichern
+- [x] normal, PIN-Service und firmwarefest
+- [x] technische Werte nur innerhalb harter Grenzen
+- [x] feldbezogenes Verhalten waehrend eines Laufes
+- [x] kein automatischer Neustart
+- [x] UTC und IANA-Zeitzone `Europe/Zurich`
+- [x] vollstaendige Validierung und atomare Revisionen
+- [x] normale Vollresetfunktion PIN-geschuetzt
+- [x] PIN-unabhaengiger physischer Vollreset ausschliesslich als Recovery bei
+      vergessener Service-PIN
