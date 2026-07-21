@@ -2,12 +2,11 @@
 
 ## Status
 
-Dieses Dokument schliesst Phase 10B ab und bildet die verbindliche geplante
-Implementierungsstruktur ab.
+Dieses Dokument bildet die verbindliche geplante Implementierungsstruktur ab.
+Phase 10C und Draft-PR #38 sind erstellt. Die Implementierung startet erst nach
+dem Merge des Spezifikations-Pull-Requests.
 
-Die Issues wurden bereits in GitHub angelegt. Bis zum Merge des
-Spezifikations-Pull-Requests besitzen softwareseitige Issues den Status
-`PLANNED_SPEC_PENDING`. Es beginnt vorher keine eigentliche Implementierung.
+Bis dahin besitzen softwareseitige Issues den Status `PLANNED_SPEC_PENDING`.
 
 ## Statuskennzeichnungen
 
@@ -18,8 +17,7 @@ Spezifikations-Pull-Requests besitzen softwareseitige Issues den Status
 - `TBD_IMPLEMENTATION_BUDGET`: Entscheidung benoetigt reale Build-/Ressourcenmessung
 - `BLOCKED`: andere benannte Abhaengigkeit verhindert die Umsetzung
 
-Diese Kennzeichnungen stehen zunaechst verbindlich im Issue-Text. GitHub-Labels
-koennen spaeter ergaenzt werden, sind aber keine Voraussetzung fuer die Planung.
+Die Kennzeichnungen stehen im Issue-Text. GitHub-Labels sind optional.
 
 ## Epic-Uebersicht
 
@@ -39,13 +37,11 @@ koennen spaeter ergaenzt werden, sind aber keine Voraussetzung fuer die Planung.
 - #10 `Native Tests, CI, virtuelle Zeit und Buildberichte`
 - #11 `Hardwareabstraktionen, Mockadapter und Simulator`
 
-### Abhaengigkeit
-
 ```text
 #9 -> #10 -> #11
 ```
 
-#9 ist nach Merge der Spezifikation das erste geplante Implementierungs-Issue.
+#9 ist nach Merge der Spezifikation das erste Implementierungs-Issue.
 
 ## E1 – Programme und fachlicher Softwarekern
 
@@ -54,15 +50,11 @@ koennen spaeter ergaenzt werden, sind aber keine Voraussetzung fuer die Planung.
 - #14 `Zustandsmaschine und Prozessablaeufe implementieren`
 - #15 `Laufkommandos, Meldungen und Bedienaktionen implementieren`
 
-### Abhaengigkeit
-
 ```text
 #9/#10 -> #12 -> #13 -> #14 -> #15
-           \----------------------/
-             teilweise parallel
 ```
 
-#14 benoetigt zusaetzlich virtuelle Zeit und Mockadapter aus #10/#11.
+#14 benoetigt virtuelle Zeit und Mockadapter aus #10/#11.
 
 ## E2 – Konfiguration, Persistenz und Wiederanlauf
 
@@ -71,8 +63,6 @@ koennen spaeter ergaenzt werden, sind aber keine Voraussetzung fuer die Planung.
 - #18 `Wiederanlauf und temperaturgewichteten Fortschritt implementieren`
 - #19 `Journale, Aufbewahrung, Bereinigung, Backup und Import`
 
-### Abhaengigkeit
-
 ```text
 #12 -> #16
 #13/#14/#16 -> #17
@@ -80,8 +70,8 @@ koennen spaeter ergaenzt werden, sind aber keine Voraussetzung fuer die Planung.
 #16/#17 -> #19
 ```
 
-Das native Testbackend wird zuerst umgesetzt. Der reale ESP32-Speicheradapter wird
-bei der Hardwareintegration ergaenzt.
+Zuerst wird ein natives Testbackend umgesetzt. Der reale ESP32-Speicheradapter
+folgt bei der Hardwareintegration.
 
 ## E3 – Sensor-, Regel- und Sicherheitskern
 
@@ -91,15 +81,12 @@ bei der Hardwareintegration ergaenzt.
 - #23 `Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik`
 - #24 `Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion`
 
-### Abhaengigkeit
-
 ```text
 #10/#11 -> #20 -> #21 -> #22 -> #23
 #14/#15/#17/#20/#21/#23 -> #24
 ```
 
-Alle Ausgaenge enden in dieser Phase bei abstrakten Aktorbefehlen und Mockadaptern.
-Es werden keine unbestaetigten GPIOs verwendet.
+Alle Ausgaenge enden in dieser Phase bei abstrakten Aktorbefehlen und Mocks.
 
 ## E4 – Lokale Bedienung, Web und Diagnose
 
@@ -108,8 +95,6 @@ Es werden keine unbestaetigten GPIOs verwendet.
 - #27 `Web-API, Weboberflaeche, Anmeldung und Bedienkonflikte`
 - #28 `Diagnose, Diagramme, Serviceablauf und Exporte`
 
-### Abhaengigkeit
-
 ```text
 #12/#14/#15/#20/#24 -> #25
 #25/#12/#15 -> #26
@@ -117,12 +102,9 @@ Es werden keine unbestaetigten GPIOs verwendet.
 #19/#20/#22/#23/#24/#25 -> #28
 ```
 
-Vor Ankunft der Hardware werden View-Modelle, Navigation, Texte, Weboberflaeche,
-Programmeditor, Laufansichten, Diagnosemodelle und Serviceablaeufe gegen den
-Simulator entwickelt.
-
-Reale Displayinitialisierung, Touchcontroller, Rotation und Kalibrierung sind
-separat in #31 enthalten.
+View-Modelle, Navigation, Texte, Weboberflaeche, Programmeditor, Laufansichten,
+Diagnose und Serviceablaeufe werden vor der Hardware gegen den Simulator
+entwickelt. Reale Display- und Touchintegration steht in #31.
 
 ## E5 – ESP32- und Hardwareintegration
 
@@ -132,8 +114,6 @@ separat in #31 enthalten.
 - #32 `Luefter, Summer und Onboard-MOSFET-Ausgaenge integrieren`
 - #33 `BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen`
 
-### Abhaengigkeit
-
 ```text
 #9/#10/#11/#24 -> #29
 #20/#21/#29 -> #30
@@ -142,16 +122,14 @@ separat in #31 enthalten.
 #23/#24/#29/#30/#32 -> #33
 ```
 
-Diese Issues sind bis zur realen Hardwareverfuegbarkeit `BLOCKED_HARDWARE`.
-Softwareadapter und Treiberschnittstellen duerfen vorher vorbereitet werden, aber
-keine reale Hardwarefunktion gilt ohne Messung als bestaetigt.
+Diese Issues bleiben bis zur realen Hardware `BLOCKED_HARDWARE`.
 
-### Verbindliche elektrische Reihenfolge
+### Elektrische Reihenfolge
 
-1. Controllerboard und Ausgaenge ohne angeschlossene Aktoren messen.
+1. Controllerboard und Ausgaenge ohne Aktoren messen.
 2. Sensoren, Display und Touch einzeln integrieren.
 3. Luefter und Summer einzeln anschliessen und messen.
-4. BTS7960 ohne angeschlossenes Peltier pruefen.
+4. BTS7960 ohne Peltier pruefen.
 5. H-Brueckenausgang und Polaritaet mit Multimeter bestaetigen.
 6. Peltier erst mit Sicherung, Lueftern, Kuehlkoerper und gueltigen
    Sicherheitssensoren anschliessen.
@@ -164,18 +142,16 @@ keine reale Hardwarefunktion gilt ohne Messung als bestaetigt.
 - #36 `Hardwareabnahme, Fehlerinjektionen und Standardprogramme validieren`
 - #37 `Siebentaegigen Belastungstest und Release-1-Abnahme durchfuehren`
 
-### Abhaengigkeit
-
 ```text
 #29-#33 -> #34 -> #35 -> #36 -> #37
 ```
 
-Die Issues bleiben bis zur realen thermischen Inbetriebnahme
+Diese Issues bleiben bis zur realen thermischen Inbetriebnahme
 `TBD_COMMISSIONING`.
 
 ## Meilensteinzuordnung
 
-| Meilenstein | Zugehoerige Issues |
+| Meilenstein | Issues |
 |---|---|
 | M0 – Softwaregrundlage und simuliertes System | #9–#11 |
 | M1 – Getesteter Softwarekern | #12–#24 |
@@ -187,13 +163,13 @@ Die Issues bleiben bis zur realen thermischen Inbetriebnahme
 
 ## Branch- und Pull-Request-Regeln
 
-- Spezifikationsbranch zuerst als eigener Pull Request nach `main`.
+- Spezifikations-PR #38 zuerst nach `main` mergen.
 - Danach ein Branch pro Implementierungs-Issue.
 - Kleine, pruefbare Pull Requests.
 - Keine umfangreiche direkte Implementierung auf `main`.
 - Hardwareblockaden verhindern nicht die Entwicklung unabhaengiger Softwareteile.
 
-Vorgeschlagener erster Branch nach Spezifikationsmerge:
+Erster Branch nach Spezifikationsmerge:
 
 ```text
 foundation/platformio-profiles
@@ -201,7 +177,7 @@ foundation/platformio-profiles
 
 zu Issue #9.
 
-## Definition of Done je Implementierungs-Issue
+## Definition of Done
 
 Ein Issue ist nur abgeschlossen, wenn alle zutreffenden Punkte erfuellt sind:
 
@@ -213,19 +189,14 @@ Ein Issue ist nur abgeschlossen, wenn alle zutreffenden Punkte erfuellt sind:
 - Dokumentation aktualisiert
 - keine Geheimnisse eingecheckt
 - keine unbestaetigte Hardwareannahme als Tatsache implementiert
-- Akzeptanzkriterien des Issues erfuellt
+- Akzeptanzkriterien erfuellt
 
 Ein hardwareunabhaengiges Software-Issue darf vor Hardwareankunft abgeschlossen
-werden. Die verbleibende reale Validierung muss dann in einem verknuepften
-`BLOCKED_HARDWARE`-Issue stehen.
+werden. Die reale Validierung bleibt dann in einem verknuepften
+`BLOCKED_HARDWARE`-Issue sichtbar.
 
 ## Freigaberegel
 
-Die Issues sind angelegt, aber die Implementierung startet erst nach:
-
-1. Gesamtreview in Phase 10C
-2. geklaerten kritischen Widerspruechen
-3. erstellt und geprueftem Spezifikations-Pull-Request
-4. Merge des Spezifikations-Pull-Requests nach `main`
-
-Danach wird #9 von `PLANNED_SPEC_PENDING` auf `READY` gesetzt.
+Phase 10C ist abgeschlossen und PR #38 existiert. Es fehlt nur der Review und
+Merge durch den Repository-Owner. Danach wird #9 von
+`PLANNED_SPEC_PENDING` auf `READY` gesetzt.
