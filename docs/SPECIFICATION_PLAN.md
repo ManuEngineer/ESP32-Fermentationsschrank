@@ -47,6 +47,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`RESOURCE_BUDGET_AND_MAINTENANCE.md`](RESOURCE_BUDGET_AND_MAINTENANCE.md): Ressourcenueberwachung, Speicherpflege, Flashbudget und Wartungsumfang
 - [`ACCEPTANCE_TESTS.md`](ACCEPTANCE_TESTS.md): Testebenen, Fehlerinjektionen, Release-Gates und Abnahmenachweise
 - [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md): software-first Entwicklungsreihenfolge, Simulation, Bring-up und Meilensteine
+- [`IMPLEMENTATION_ISSUES.md`](IMPLEMENTATION_ISSUES.md): konkrete Epics, GitHub-Issues, Abhaengigkeiten und Statuskennzeichnungen
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -60,7 +61,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 7. **Temperaturregelung und Aktorlogik** -> `TEMPERATURE_CONTROL.md`, `ACTUATOR_TIMING_AND_FANS.md`, `SENSOR_TUNING_COMMISSIONING.md`
 8. **Sicherheit und Fehlerbehandlung** -> `SAFETY_AND_FAULTS.md`, `SAFETY_COMPONENT_FAULTS.md`, `SYSTEM_SAFETY_AND_RECOVERY.md`
 9. **Diagnose, Wartung und Updates** -> `DIAGNOSTICS_AND_MAINTENANCE.md`, `FIRMWARE_UPDATE_AND_ROLLBACK.md`, `RESOURCE_BUDGET_AND_MAINTENANCE.md`
-10. **Akzeptanztests und Implementierungsplan** -> `ACCEPTANCE_TESTS.md`, `IMPLEMENTATION_PLAN.md` und spaetere GitHub-Issues
+10. **Akzeptanztests und Implementierungsplan** -> `ACCEPTANCE_TESTS.md`, `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_ISSUES.md` und GitHub-Issues
 
 ## Arbeitsweise
 
@@ -112,14 +113,17 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 9C: Ressourcenueberwachung, Speicherpflege, Flashbudget und Wartungsumfang
 - [ ] Phase 10: Akzeptanztests und Implementierungsplan
   - [x] Phase 10A: Testebenen, Abnahmekriterien und Release-Gates
-  - [ ] Phase 10B: Implementierungsreihenfolge und GitHub-Issues
+  - [x] Phase 10B: Implementierungsreihenfolge und GitHub-Issues
     - [x] software-first Entwicklung vor Ankunft der Hardware
     - [x] native Simulation und Hardwareabstraktionen
     - [x] geschuetztes ESP32-Bring-up innerhalb derselben Codebasis
     - [x] Branch-, Pull-Request-, Definition-of-Done- und Meilensteinstrategie
-    - [ ] konkrete Epic- und Issue-Liste erstellen
+    - [x] sieben Epic-Issues #2 bis #8 erstellt
+    - [x] 29 Implementierungs- und Abnahme-Issues #9 bis #37 erstellt
+    - [x] Abhaengigkeiten und Statuskennzeichnungen dokumentiert
+    - [x] erstes geplantes Implementierungs-Issue #9 festgelegt
   - [ ] Phase 10C: Gesamtreview, offene Punkte, Pull Request und Uebergabe an die Implementierung
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 10B mit der konkreten Epic- und Issue-Liste abgeschlossen.
+Als Naechstes wird Phase 10C bearbeitet: Gesamtreview, Widerspruchspruefung, offene Punkte, Spezifikations-Pull-Request und Uebergabe an die Implementierung.
