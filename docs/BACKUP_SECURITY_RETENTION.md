@@ -1,336 +1,216 @@
-# Geheimnisse, Sicherungen und Datenaufbewahrung
+# Sicherung, Geheimnisse und Datenaufbewahrung
 
-## Status
+## Plattformrahmen
 
-Dieses Dokument beschreibt die in Phase 6C akzeptierten Regeln fuer
-Zugangsdaten, Sicherung und Import, Laufexporte, lokale Aufbewahrung,
-Speicherbereinigung, Werksreset und den Umgang mit einer vergessenen
-Service-PIN.
+- ESP32-32E
+- 4 MB Flash als harte Planungsbasis
+- keine PSRAM-Abhängigkeit
+- Release 1 verwendet UART/FT232RL für Updates und Recovery
+- Release 1 benötigt keine OTA-Slots oder OTA-Reserve
+- konkrete Partitionen und Datenbudgets bleiben `TBD_IMPLEMENTATION_BUDGET`
 
-Es ergaenzt [`SETTINGS_AND_STORAGE.md`](SETTINGS_AND_STORAGE.md) und
-[`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md).
+## Geheimnisse
 
-## Bestaetigte Speicherbasis
+### Webpasswort
 
-Fuer das bestellte Controllerboard ist laut vorliegender Produktbeschreibung ein
-ESP32-32E-Modul mit **4 MB Flash** vorgesehen.
+- wird nicht im Klartext gespeichert
+- gesalzener, einseitiger Prüfnachweis
+- begrenzte Anmeldeversuche und zeitliche Verzögerung
+- niemals in Backup, Diagnose oder Export
 
-Verbindliche Planungsannahmen:
+### Service-PIN
 
-- Das erste Release muss in 4 MB Flash funktionieren.
-- PSRAM wird nicht vorausgesetzt.
-- Die tatsaechlich erkannte Flashgroesse und der wirksame Partitionsplan werden
-  trotzdem bei der Hardwareinbetriebnahme und in einer Test-Firmware geprueft.
-- OTA-Reserve, Firmware, Webressourcen, Konfiguration, aktiver Laufzustand und
-  Historie erhalten feste getrennte Budgets.
-- Eine Funktion darf nicht unbegrenzt wachsen oder den fuer den aktiven Lauf
-  reservierten Speicher verbrauchen.
+- getrennt vom Webpasswort
+- gesalzener, einseitiger Prüfnachweis
+- lokale und Web-Serviceaktionen verwenden dieselbe Berechtigungslogik
+- niemals auslesbar oder exportierbar
 
-## Speicherung von Webpasswort und Service-PIN
+### WLAN-Passwort
 
-Das normale Webpasswort und die vierstellige Service-PIN werden nicht im
-Klartext gespeichert.
+Das WLAN-Passwort muss für eine erneute Verbindung verwendbar bleiben und kann
+daher nicht nur als Prüfnachweis gespeichert werden.
 
-Gespeichert werden mindestens:
+Anforderungen:
 
-- eine gesalzene, nicht umkehrbare Pruefinformation
-- eine eindeutige Versionskennung des verwendeten Pruefverfahrens
-- die fuer eine spaetere Migration notwendigen nicht geheimen Parameter
+- eigener, klar getrennter Speicherbereich
+- nie in normalen Backups oder Diagnoseexporten
+- nie in Logs oder UART-Ausgaben
+- Zugriff nur durch Netzwerkadapter
+- zukünftige Flashverschlüsselung darf ergänzt werden
 
-Verbindliche Regeln:
+Ohne aktivierte Plattform- beziehungsweise Flashverschlüsselung wird keine
+falsche kryptografische Sicherheit behauptet.
 
-- Webpasswort und Service-PIN besitzen getrennte Pruefinformationen und Salze.
-- Die Anwendung muss die Eingabe pruefen koennen, ohne das urspruengliche
-  Passwort oder die PIN wieder auszulesen.
-- Vergleiche und Fehlermeldungen duerfen keine verwertbaren Informationen ueber
-  Teiltreffer preisgeben.
-- Fehlversuche werden begrenzt beziehungsweise zeitlich verzoegert.
-- Die geringe Entropie einer vierstelligen PIN wird nicht durch Hashing allein
-  sicher; physischer Zugangsschutz, Rate-Limiting und die beschraenkten
-  Servicefunktionen bleiben notwendig.
-- Das genaue ressourcengerechte Passwort-Pruefverfahren wird im technischen
-  Entwurf festgelegt und versioniert.
+## Normales Backup
 
-## Speicherung des WLAN-Passworts
-
-Das WLAN-Passwort muss im Gegensatz zum Webpasswort wiederverwendbar sein, weil
-der ESP32 es fuer einen erneuten Verbindungsaufbau benoetigt.
-
-Deshalb gilt:
-
-- Das WLAN-Passwort wird getrennt von normalen Einstellungen behandelt.
-- Es wird nie in normalen Anzeigen, Protokollen, Diagnoseexporten oder
-  Sicherungsdateien ausgegeben.
-- Die Speicherabstraktion wird so aufgebaut, dass eine plattformseitige
-  Verschluesselung beziehungsweise spaetere Flash-Verschluesselung verwendet
-  werden kann.
-- Flash-Verschluesselung und Secure Boot sind keine zwingende Voraussetzung fuer
-  das erste Release.
-- Ohne aktivierte Hardware- oder Flash-Verschluesselung besteht bei physischem
-  Auslesen des Flashs eine verbleibende Sicherheitsgrenze. Die Firmware darf
-  keine Scheinsicherheit durch blosse reversible Verschleierung behaupten.
-
-## Normaler Sicherungsexport
-
-Die normale Geraetesicherung enthaelt ausschliesslich wiederherstellbare,
-nicht geheime Anwendungsdaten.
-
-Mindestens exportierbar sind:
+Enthalten:
 
 - Benutzerprogramme
-- veraenderte Standardprogramme
-- freigegebene normale Einstellungen
-- freigegebene Serviceparameter ohne Geheimnisse
-- Geraetename und Zeitzone
-- Display-, Ton- und Sprachkonfiguration
-- nicht geheime Netzwerkparameter, soweit fuer eine Wiederherstellung sinnvoll
-- Schema- und Exportversion
+- aktive Auswahl der Standardprogramme
+- sichere Benutzereinstellungen
+- erlaubte Serviceparameter
+- Sprache, Zeitzone und UI-Einstellungen
+- Aufbewahrungs- und Exportoptionen
+- Schema- und Revisionsinformationen
 
-Nicht enthalten sind:
+Nicht enthalten:
 
 - WLAN-Passwort
-- Passwort des Einrichtungs- oder Ersatz-WLANs
-- Webpasswort oder dessen direkt wiederverwendbare Darstellung
-- Service-PIN
-- Sitzungskennungen und Anmeldetokens
-- CSRF-Tokens
-- private Schluessel oder spaetere Integrationstokens
-- aktive Servicefreigaben
+- Webpasswort oder Prüfnachweis
+- Service-PIN oder Prüfnachweis
+- Sitzungen, Tokens und CSRF-Daten
+- private Schlüssel
+- aktiver flüchtiger Anmeldezustand
+- rohe Flashpartitionen
 
-Das Fehlen der Geheimnisse wird in der Exportzusammenfassung sichtbar erklaert.
-Nach einem Import muessen betroffene Zugangsdaten bei Bedarf neu eingerichtet
-werden.
+Nach Import müssen fehlende Zugangsdaten neu eingerichtet werden.
 
-### Entwicklerzugang ueber UART
+## Entwickler- und physischer Backupweg
 
-Eine vollstaendige Sicherung mit Geheimnissen ist kein Bestandteil der normalen
-Oberflaeche und keine Anforderung an das erste Release.
+Eine spätere physische Sicherung über UART oder externen Flashzugang kann für den
+Entwickler interessant sein, ist aber keine Release-1-Anwendungsfunktion.
 
-Fuer spaetere Entwicklung oder Reparatur darf ein physisch lokaler
-Entwicklerweg ueber UART beziehungsweise externe Flash-Werkzeuge vorgesehen
-werden. Dabei gilt:
+Eine rohe Flashkopie:
 
-- kein Menuepunkt fuer normale Benutzer
-- keine automatische oder entfernte Uebertragung
-- keine Verpflichtung, ein anwendungsseitiges Klartext-Geheimnisbackup zu bauen
-- physischer Zugriff und ausdruecklicher Entwicklungs- oder Wartungsmodus
-- eine rohe Flashkopie gilt nicht als portabler Anwendungsimport
+- ist nicht portabel zwischen Hardware- oder Partitionsständen
+- ist kein normaler Import
+- kann Geheimnisse enthalten
+- darf nicht über die Weboberfläche angeboten werden
 
-Falls dieser Entwicklerweg nicht sicher und ressourcenschonend umgesetzt werden
-kann, wird er im ersten Release weggelassen.
+## Laufexport
 
-## Export einzelner Laufhistorien
+Jeder Lauf kann einzeln exportiert werden.
 
-Einzelne abgeschlossene Laeufe koennen separat exportiert werden.
+### JSON
 
-Unterstuetzte Formate:
+- vollständiger Programmschnappschuss
+- effektive Laufrevisionen
+- Phasen und Ereignisse
+- Temperaturen und Qualitätsstatus
+- Warnungen, Fehler, Unterbrechungen und Korrekturen
+- Abschluss- oder Abbruchgrund
 
-- JSON als vollstaendiges maschinenlesbares Format
-- CSV fuer tabellarische Temperaturdaten, soweit sinnvoll
+### CSV
 
-Ein Laufexport enthaelt mindestens:
+- geeignete Zeitreihen
+- Zeitbezug und Zeitqualität
+- Soll- und Istwerte
+- Schrankluft, Produkt und Kühlkörper
+- Sensorstatus
+- Phase und relevante Aktorereignisse
 
-- Lauf-ID und Programmschnappschuss
-- Start-, Abschluss- und Abbruchinformationen
-- Temperaturaggregate
-- Phasenwechsel
-- Warnungen und Fehler
-- Stromunterbrechungen und Wiederanlaufaktionen
-- Sensorwechsel
-- Laufzeitkorrekturen
-- Zeitqualitaet und Zeitzone
+Kein Laufexport enthält Geheimnisse.
 
-Geheimnisse und aktuelle Sitzungsdaten werden auch in Laufexporten niemals
-enthalten.
-
-## Import einer Sicherung
-
-Eine Sicherung wird niemals direkt ueber die aktive Konfiguration geschrieben.
+## Import
 
 Verbindlicher Ablauf:
 
 ```text
-Datei empfangen
-  -> Dateityp und Groesse pruefen
-  -> Export- und Schema-Version pruefen
-  -> Integritaet und Pflichtfelder pruefen
-  -> Wertebereiche und firmwarefeste Grenzen pruefen
-  -> erforderliche Migration auf einer Arbeitskopie ausfuehren
-  -> Unterschiede und betroffene Daten anzeigen
-  -> ausdrueckliche Bestaetigung verlangen
-  -> neue vollstaendige Revision getrennt schreiben
-  -> Integritaet pruefen
-  -> atomar aktivieren
-  -> bisherige gueltige Revision als Rueckfall behalten
+Datei einlesen
+-> Format und Grösse prüfen
+-> Schema identifizieren
+-> Integrität prüfen
+-> unterstützte Migration anwenden
+-> gesamten Inhalt validieren
+-> Vorschau und Konflikte anzeigen
+-> ausdrückliche Bestätigung
+-> neue Revision atomar speichern
+-> erst danach aktivieren
 ```
 
 Regeln:
 
-- Ein Import startet niemals automatisch einen Lauf.
-- Ein laufender Prozess wird durch einen Import nicht veraendert.
-- Lauf- oder regelungsrelevante Importe sind waehrend eines aktiven Laufes
-  gesperrt beziehungsweise nur fuer spaetere Aktivierung zulaessig.
-- Unbekannte neuere Schema-Versionen werden nicht blind interpretiert.
-- Eine fehlgeschlagene Migration veraendert die aktive Konfiguration nicht.
-- Vor der Bestaetigung wird angezeigt, welche Programme, Einstellungen und
-  Daten ersetzt, ergaenzt oder ignoriert werden.
-- Da normale Sicherungen keine Geheimnisse enthalten, bleiben vorhandene
-  Geheimnisse unveraendert oder muessen bewusst neu eingerichtet werden; das
-  genaue feldbezogene Verhalten wird im Importschema dokumentiert.
+- keine teilweise Aktivierung
+- kein Import in einen aktiven Lauf
+- Quellprogramm und Factory-Katalog nicht still überschreiben
+- unbekannte kritische Felder führen zur Ablehnung
+- ältere Schemas nur über getestete Migration
+- fehlende Geheimnisse werden nicht mit leeren Werten überschrieben
 
-## Lokale Aufbewahrung abgeschlossener Laeufe
-
-Die Aufbewahrung ist im PIN-geschuetzten Servicebereich konfigurierbar, aber nur
-innerhalb eines firmwarefesten maximalen Speicherbudgets.
+## Aufbewahrungsmodell
 
 Werkseinstellung:
 
 ```text
-Aktiver Lauf:                         vollstaendig
-Letzte abgeschlossene Laeufe:         5 mit Diagrammdaten
-Abgeschlossene Laufzusammenfassungen: 50
+Aktiver Lauf:                 vollständig
+Abgeschlossene Detaildaten:   letzte 5 Läufe
+Zusammenfassungen:            letzte 50 Läufe
 ```
 
-Die Begriffe bedeuten:
+Diese Werte dürfen nur innerhalb eines festen, gemessenen Speicherbudgets
+konfiguriert werden.
 
-- **Diagrammdaten:** verdichtete Temperaturaggregate und exakte
-  Ereignismarkierungen
-- **Zusammenfassung:** Programm, Zeiten, Ergebnis, wesentliche Warnungen,
-  Unterbrechungen und Abschlussgrund ohne vollstaendige Temperaturkurve
+## Verhalten bei knappem Speicher
 
-Verbindliche Regeln:
+Normale proaktive Reihenfolge:
 
-- Der aktive Lauf und seine Wiederherstellungsrevisionen besitzen hoechste
-  Speicherprioritaet.
-- Die konfigurierbaren Zahlen duerfen das feste Historienbudget nicht
-  ueberschreiten.
-- Die Oberflaeche zeigt den ungefaehren Speicherbedarf beziehungsweise die
-  daraus resultierende Aufbewahrung an.
-- Eine hoehere Anzahl Zusammenfassungen darf nicht unbemerkt den Platz fuer
-  detaillierte aktive Laufdaten reduzieren.
-- Die tatsaechlichen Datensatzgroessen werden vor Implementierung mit dem
-  4-MB-Partitionsplan gemessen.
+1. verwaiste temporäre Exportdateien entfernen
+2. älteste nichtkritische Diagrammdetails verdichten
+3. ältere Detaildatensätze zu Zusammenfassungen reduzieren
+4. älteste nichtkritische Zusammenfassungen entfernen
+5. Sicherheits-, Reset- und Fehlerereignisse länger erhalten
+6. aktiven Lauf, Kontrollpunkte und gültige Konfigurationen schützen
 
-## Verhalten bei vollem Historienspeicher
+Die Bereinigung erfolgt sichtbar und protokolliert, aber ohne unnötige
+Benutzerunterbrechung.
 
-Ein voller Historienspeicher darf weder einen neuen Lauf verhindern noch die
-Temperaturregelung oder Wiederherstellung gefaehrden.
+Wenn nach normaler Bereinigung keine sichere Reserve hergestellt werden kann:
 
-Bereinigungsreihenfolge:
+- keinen neuen Lauf starten, falls kritische Persistenz nicht garantiert ist
+- laufenden Prozess nur stoppen, wenn Regelung oder kritische Persistenz
+  tatsächlich nicht mehr sicher möglich ist
+- nie den aktiven Wiederherstellungsdatensatz zugunsten alter Diagramme löschen
 
-1. veraltete temporaere Exportdateien beziehungsweise unvollstaendige
-   nichtkritische Arbeitsdaten entfernen
-2. aelteste nicht mehr geschuetzte Diagrammdaten abgeschlossener Laeufe
-   entfernen
-3. betroffene Laeufe als Zusammenfassung erhalten
-4. erst gemaess definierter Aufbewahrungsgrenze die aeltesten
-   Zusammenfassungen entfernen
+## Werksreset
 
-Dabei gilt:
-
-- Vor beziehungsweise bei einer automatischen Bereinigung wird eine sichtbare
-  Meldung und ein Ereigniseintrag erzeugt.
-- Die Bereinigung erfolgt nicht still.
-- Wichtige Fehler-, Reset- und Sicherheitsereignisse werden laenger als normale
-  Detailmessdaten aufbewahrt, soweit das feste Budget dies erlaubt.
-- Der aktive Wiederherstellungsdatensatz, seine Rueckfallrevision und
-  firmwarekritische Konfiguration werden nie zugunsten alter Diagramme
-  geloescht.
-- Ist auch der reservierte kritische Speicher beschaedigt oder erschoepft,
-  erfolgt kein blindes Weiterarbeiten; die Fehlerbehandlung wird in
-  `SAFETY_AND_FAULTS.md` festgelegt.
-
-## Vollstaendiger Werksreset
-
-Der vollstaendige Werksreset ist eine lokale, PIN-geschuetzte und mindestens
-zweistufig bestaetigte Aktion, solange die Service-PIN bekannt ist.
-
-Er loescht beziehungsweise setzt zurueck:
+Ein vollständiger lokaler Werksreset löscht:
 
 - Benutzerprogramme
-- veraenderte und geloeschte Standardprogramme
-- normale und Serviceeinstellungen
+- Benutzereinstellungen
+- Serviceparameter
 - WLAN-Zugangsdaten
-- Einrichtungs- und Ersatz-WLAN-Passwort
-- Webpasswort und Websitzungen
-- Service-PIN und Servicefreigaben
-- Proxy- und Netzwerkkonfiguration
-- Laufhistorien, Diagrammdaten und Ereignisprotokolle
-- aktiven beziehungsweise wiederherstellbaren Laufzustand
+- Webpasswort
+- Service-PIN
+- Sitzungen und Tokens
+- Laufhistorie und Zusammenfassungen
+- aktive Laufdaten
+- Fehler- und Komforthistorie soweit für den Reset vorgesehen
 
 Er stellt wieder her:
 
-- firmwarefeste Werkseinstellungen
-- die vier Standardprogramme aus dem Factory-Katalog
-- sicheren Erst-Einrichtungszustand
+- Factory-Standardprogramme
+- Factory-Grenzen
+- Ersteinrichtungszustand
 
-### Touchkalibrierung bleibt erhalten
+Er behält:
 
-Die gespeicherte Touchkalibrierung bleibt beim normalen vollstaendigen
-Werksreset erhalten, weil sie geraetespezifisch ist und nicht zur
-Benutzerkonfiguration gehoert.
+- gerätespezifische Touchkalibrierung
 
-Sie kann weiterhin separat ueber:
-
-- `Touchkalibrierung zuruecksetzen`
-- den bereits festgelegten Boot-Wiederherstellungsweg
-
-entfernt beziehungsweise neu aufgebaut werden.
-
-Wenn die Kalibrierungsdaten selbst ungueltig oder beschaedigt sind, werden sie
-nicht blind weiterverwendet.
+Der Reset ist lokal, mehrstufig und bei jedem Schritt aktorsicher.
 
 ## Vergessene Service-PIN
 
-Es gibt keinen Wiederherstellungsweg, der lediglich die Service-PIN entfernt und
-dabei die bestehende geschuetzte Konfiguration vollstaendig erhaelt.
+Es gibt keinen separaten PIN-Bypass. Wiederherstellung ist nur durch den
+vollständigen lokalen Werksreset möglich.
 
-Bei vergessener Service-PIN ist nur ein **vollstaendiger lokaler Werksreset**
-erlaubt.
+Der Ablauf:
 
-Anforderungen an diesen Wiederherstellungsweg:
+- physischer lokaler Zugriff erforderlich
+- keine Remote-Auslösung
+- klare Warnung über Datenverlust
+- mehrere Bestätigungsschritte
+- Peltier und Aktoren AUS
+- danach vollständige Ersteinrichtung
 
-- physische Anwesenheit am Geraet
-- keine Ausloesung ueber die normale Weboberflaeche oder Lese-API
-- klarer Hinweis, dass Benutzerprogramme, Zugangsdaten und Laufhistorien
-  geloescht werden
-- mehrstufige lokale Bestaetigung
-- keine Moeglichkeit, vorher auf bestehende Serviceeinstellungen oder
-  Geheimnisse zuzugreifen
-- alle Aktoren bleiben waehrend des Wiederherstellungsablaufs sicher AUS
-- Touchkalibrierung bleibt gemaess normalem Werksreset erhalten
+## Ressourcenpriorität
 
-Der genaue physische Boot-Ablauf wird in der Diagnose- und Wartungsphase
-festgelegt. Er darf nicht mit dem zehnsekundigen reinen
-Touchkalibrierungs-Wiederherstellungsweg verwechselt werden.
+1. sichere Firmware und Bootfähigkeit
+2. gültige Konfiguration und Rückfallrevision
+3. aktiver Lauf und Wiederherstellung
+4. Sicherheits- und Resetjournal
+5. notwendige Web- und UI-Ressourcen
+6. Laufzusammenfassungen
+7. alte detaillierte Historie
 
-## Akzeptierte Entscheidungen aus Phase 6C
-
-- [x] Zielhardware mit 4 MB Flash; keine PSRAM-Abhaengigkeit
-- [x] Webpasswort und Service-PIN nur als gesalzene Pruefinformation speichern
-- [x] WLAN-Passwort getrennt als wiederverwendbares Geheimnis behandeln
-- [x] Architektur fuer spaetere plattformseitige beziehungsweise
-      Flash-Verschluesselung vorbereiten
-- [x] normaler Sicherungsexport ohne Passwoerter, PINs, Sitzungen oder Tokens
-- [x] optionaler physischer Entwicklerweg ueber UART bleibt spaeter moeglich,
-      ist aber keine Release-Anforderung
-- [x] einzelne Laufhistorien als JSON und bei Bedarf CSV exportierbar
-- [x] Import erst validieren, migrieren, anzeigen, bestaetigen und atomar aktivieren
-- [x] konfigurierbare Aufbewahrung innerhalb eines festen Speicherbudgets
-- [x] Werkseinstellung: 5 detaillierte Laeufe und 50 Zusammenfassungen
-- [x] kontrollierte automatische Bereinigung alter nichtkritischer Historie
-- [x] vollstaendiger Werksreset behaelt die Touchkalibrierung
-- [x] vergessene Service-PIN nur durch vollstaendigen lokalen Werksreset
-
-## Noch offen fuer Phase 7, 8 und 9
-
-- konkreter 4-MB-Partitionsplan und OTA-Aufteilung
-- gemessene Firmware-, Web-, RAM- und Flashbudgets
-- genaues Passwort-Pruefverfahren und Migrationsstrategie
-- technische Speicherung des wiederverwendbaren WLAN-Geheimnisses
-- konkretes Sicherungs-, Laufexport- und Import-JSON-Schema
-- maximale Import- und Exportdateigroesse
-- genaue Aufteilung des festen Historienbudgets
-- konkrete Datensatzgroessen und Verdichtungsstufen
-- physischer Boot-Ablauf fuer einen Werksreset bei vergessener PIN
-- Verhalten bei physisch beschaedigtem Flash
+Web-OTA ist eine mögliche Zukunftsfunktion und erhält in Release 1 weder
+Partitionen noch Speicherreserve.
