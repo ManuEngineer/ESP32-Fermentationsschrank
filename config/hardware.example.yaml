@@ -87,7 +87,9 @@ ui:
     controller_status: confirmed_order
   touch:
     type: resistive
-    controller: XPT2046
+    controller: TBD_HARDWARE
+    candidate_controller: XPT2046
+    candidate_status: unverified_order_description
     controller_status: TBD_HARDWARE
 
 power_monitoring:
