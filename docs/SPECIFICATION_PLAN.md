@@ -19,18 +19,23 @@ Entwickler erfunden werden muss.
 ## Dokumentationsprioritaet
 
 1. spaetere akzeptierte ADRs in `DECISIONS.md`
-2. `SPECIFICATION_REVIEW.md`
-3. thematisch spezialisierte Spezifikationsdokumente
-4. `REQUIREMENTS.md`, `ARCHITECTURE.md` und `HARDWARE.md`
-5. Beispielkonfigurationen
-6. historische Phasen- und Revisionsnotizen
+2. `PR38_REVIEW_CORRECTIONS.md`
+3. `SPECIFICATION_REVIEW.md`
+4. thematisch spezialisierte Spezifikationsdokumente
+5. `REQUIREMENTS.md`, `ARCHITECTURE.md` und `HARDWARE.md`
+6. Beispielkonfigurationen
+7. historische Phasen- und Revisionsnotizen
 
-Die aktuelle Liste echter offener Punkte steht in `OPEN_POINTS.md`.
+Die aktuelle Liste echter offener Punkte steht in `OPEN_POINTS.md`. Verbindliche
+Korrekturen aus den Reviews von PR #38 stehen in
+`PR38_REVIEW_CORRECTIONS.md`.
 
 ## Zentrale Quellen
 
 ### Einstieg und Review
 
+- [`PR38_REVIEW_CORRECTIONS.md`](PR38_REVIEW_CORRECTIONS.md): verbindliche
+  Sicherheits- und Konsistenzkorrekturen aus beiden Reviews von PR #38
 - [`SPECIFICATION_REVIEW.md`](SPECIFICATION_REVIEW.md): Ergebnis von Phase 10C,
   Prioritaeten und verbleibende offene Kategorien
 - [`REQUIREMENTS.md`](REQUIREMENTS.md): konsolidierte Release-1-Muss-Anforderungen
@@ -103,8 +108,8 @@ Die aktuelle Liste echter offener Punkte steht in `OPEN_POINTS.md`.
 9. **Diagnose, Wartung und Updates** -> `DIAGNOSTICS_AND_MAINTENANCE.md`,
    `FIRMWARE_UPDATE_AND_ROLLBACK.md`, `RESOURCE_BUDGET_AND_MAINTENANCE.md`
 10. **Akzeptanztests und Implementierungsplan** -> `ACCEPTANCE_TESTS.md`,
-    `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_ISSUES.md`, GitHub-Issues und
-    `SPECIFICATION_REVIEW.md`
+    `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_ISSUES.md`, GitHub-Issues,
+    `SPECIFICATION_REVIEW.md` und `PR38_REVIEW_CORRECTIONS.md`
 
 ## Abschlussstand
 
@@ -131,12 +136,17 @@ Die aktuelle Liste echter offener Punkte steht in `OPEN_POINTS.md`.
   - [x] offene Punkte nach Hardware, Inbetriebnahme, Budget und Zukunft getrennt
   - [x] Draft-PR #38 erstellt
   - [x] Issue #1 und Uebergabedokumente aktualisiert
+  - [x] beide PR-Reviews ausgewertet
+  - [x] verbindliche Reviewkorrekturen dokumentiert
+  - [ ] Reviewthreads beantwortet und geschlossen
+  - [ ] Owner-Review und Merge abgeschlossen
 
 ## Ergebnis
 
-Die Dokumentationsphase ist abgeschlossen. Pull Request #38 bleibt bis zum
-Review und Merge durch den Repository-Owner offen. Nach dem Merge wird Issue #9
-auf `READY` gesetzt und die Implementierung auf einem eigenen Branch begonnen.
+Die Dokumentationsphase ist inhaltlich abgeschlossen. Pull Request #38 bleibt bis
+zur Beantwortung der Reviewhinweise, zum Review und zum Merge durch den
+Repository-Owner offen. Nach dem Merge wird Issue #9 auf `READY` gesetzt und die
+Implementierung auf einem eigenen Branch begonnen.
 
 Exakte Temperaturen, Zeiten, Regelparameter, GPIOs und Ressourcenbudgets werden
 nicht als fehlende Spezifikation gewertet, weil sie durch die realen Hardware-,
