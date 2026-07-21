@@ -23,14 +23,15 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`DECISIONS.md`](DECISIONS.md): akzeptierte Entscheidungen
 - [`PROGRAMS.md`](PROGRAMS.md): allgemeiner Programm- und Prozessablauf
 - [`STANDARD_PROGRAMS.md`](STANDARD_PROGRAMS.md): Zweck und Voreinstellungen der Standardprogramme
-- [`STATE_MACHINE.md`](STATE_MACHINE.md): Betriebszustaende und Uebergaenge
+- [`STATE_MACHINE.md`](STATE_MACHINE.md): Betriebszustaende und Hauptuebergaenge
+- [`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md): Stromausfall, Sensorunterbrechungen und Wiederanlauf
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
 
 1. **Produktvision und Nutzung** -> `PRODUCT_VISION.md`
 2. **Programme und Prozessablauf** -> `PROGRAMS.md`, `STANDARD_PROGRAMS.md` und Programmschema
-3. **Betriebszustaende und Uebergaenge** -> `STATE_MACHINE.md`
+3. **Betriebszustaende und Uebergaenge** -> `STATE_MACHINE.md`, `RECOVERY_AND_INTERRUPTION.md`
 4. **Lokale Touch-Bedienung** -> `LOCAL_UI.md`
 5. **Weboberflaeche und Netzwerk** -> `WEB_UI.md`, `NETWORK.md`
 6. **Einstellungen und Persistenz** -> `SETTINGS_AND_STORAGE.md`
@@ -59,7 +60,8 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [ ] Exakte Temperaturen, Zeiten und Grenzwerte werden nach Inbetriebnahme als Werkseinstellungen ergaenzt
 - [ ] Phase 3: Zustandsmaschine
   - [x] Phase 3A: Grundzustaende, Stoppen, Warnungen und manuelle Betriebsarten
-  - [ ] Phase 3B: Sonderfaelle, Fehlerquittierung und Wiederanlaufdetails
+  - [x] Phase 3B: Tuerkontakt, Produktfuehlerausfall, Wartezeit und Wiederanlaufgrundsaetze
+  - [ ] Phase 3C: Zeitquelle, Zeitkompensation und verbleibende Detailuebergaenge
 - [ ] Phase 4: Lokale Bedienung
 - [ ] Phase 5: Web und Netzwerk
 - [ ] Phase 6: Einstellungen und Persistenz
@@ -70,4 +72,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 3B bearbeitet: Sonderfaelle, Fehlerquittierung und Wiederanlaufdetails.
+Als Naechstes wird Phase 3C bearbeitet: verlaessliche Zeitquelle, automatische Zeitkompensation und verbleibende Detailuebergaenge.
