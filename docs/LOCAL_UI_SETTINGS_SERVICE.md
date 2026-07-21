@@ -2,17 +2,11 @@
 
 ## Status
 
-Dieses Dokument ergaenzt [`LOCAL_UI.md`](LOCAL_UI.md) um die in Phase 4D
-akzeptierten Regeln fuer Menuestruktur, Einstellungen, Diagnose, Servicezugang,
-Wiederherstellung, Touchkalibrierung und Sprachen.
-
-Die genaue visuelle Gruppierung des Hauptmenues darf spaeter anhand eines
-Bedienprototyps angepasst werden. Die hier festgelegte fachliche Trennung und die
-Zugriffsregeln bleiben davon unberuehrt.
+Dieses Dokument definiert Menuestruktur, Diagnose, Servicezugang,
+Wiederherstellung, Touchkalibrierung und Sprachen. Sicherheits- und
+Recoverykorrekturen aus PR #38 sind integriert.
 
 ## Hauptmenue
-
-Vorgesehene erste Struktur:
 
 ```text
 Menue
@@ -29,117 +23,77 @@ Menue
 
 Regeln:
 
-- Die Funktionen bleiben fachlich getrennt, auch wenn einzelne Punkte spaeter in
-  der Darstellung zusammengefasst werden.
-- Haeufige normale Funktionen stehen vor technischen Funktionen.
-- `Service` ist deutlich als geschuetzter Bereich gekennzeichnet.
-- `Diagnose` darf nicht mit direkten Aktortests verwechselt werden.
-- Ein laufender Prozess bleibt jederzeit ueber einen klaren Rueckweg erreichbar.
-- Gefaehrliche oder zerstoererische Funktionen erscheinen nicht im ersten
-  normalen Menueblick.
+- normale Funktionen stehen vor technischen Funktionen
+- `Service` ist klar als geschuetzt gekennzeichnet
+- `Diagnose` ist keine Aktorsteuerung
+- ein laufender Prozess bleibt jederzeit erreichbar
+- zerstoererische Funktionen stehen nicht im ersten normalen Menueblick
 
-Die endgueltige Gruppierung wird nach einem ersten Displayprototyp erneut
-geprueft.
+## Waehrend eines Laufes
 
-## Einstellungen waehrend eines laufenden Prozesses
+Aenderbar bleiben nur ungefaehrliche Komfortwerte, beispielsweise:
 
-Waerend eines laufenden Prozesses bleiben nur ungefaehrliche
-Komforteinstellungen aenderbar.
+- Displayhelligkeit und Abdunkeln
+- Sprache
+- zulaessige Toneinstellungen
+- Stummschaltung gemaess Meldungsregeln
 
-Beispiele fuer zulaessige Aenderungen:
+Gesperrt bleiben:
 
-- Displayhelligkeit
-- Zeit bis zum Abdunkeln
-- Sprache der Bedienoberflaeche
-- akustische Lautstaerke, sofern die Hardware eine Regelung erlaubt
-- Stummschaltung einer aktuellen Meldung gemaess Meldungsregeln
-
-Gesperrt bleiben insbesondere:
-
-- gespeicherte Programmdaten und Werkseinstellungen
 - Sensorzuordnung
-- Regel- und Sicherheitsparameter
+- Regel-, Sicherheits-, Luefter- und Peltierparameter
 - Direktstart-Freigaben
 - Aktortests
 - Touchkalibrierung
-- Wiederherstellungsfunktionen und Werksreset
-- Firmwareupdate, sofern es den laufenden Prozess beeinflussen kann
+- Wiederherstellung und Werksreset
+- Firmwareupdate mit Laufwirkung
 
-Aenderungen, welche den aktiven Programmschnappschuss betreffen, erfolgen nur
-ueber ausdruecklich vorgesehene Laufaktionen. Ein normales Einstellungsmenue darf
-den laufenden Prozess nicht unbemerkt veraendern.
+Diagnose bleibt lesend verfuegbar und zeigt mindestens Temperaturen,
+Sensorstatus, Regelmodus, Prozessphase, Aktoranforderung, Luefter,
+Wiederanlaufstatus, Fehler, Netzwerk, Firmware und Resetursache.
 
-## Diagnose waehrend eines laufenden Prozesses
+## Normaler Servicebereich
 
-Die Diagnose bleibt waehrend eines Laufes als reine Leseansicht verfuegbar.
+Der normale Servicebereich ist durch eine vierstellige PIN geschuetzt.
 
-Mindestens sichtbar sein duerfen:
+Mindestens PIN-geschuetzt:
 
-- Produkt- und Schranklufttemperatur samt Sensorstatus
-- aktiver Regelmodus und primaerer Regelsensor
-- Sollwert und aktuelle Prozessphase
-- Peltieranforderung und Totzeitstatus
-- Zustand von Innen- und Aussenluefter
-- Laufzeit-, Netzwerkzeit- und Wiederanlaufstatus
-- aktive Warnungen und Fehlercodes
-- WLAN- und Netzwerkstatus
-- Softwareversion und Resetursache
+- Aktor- und Ausgangstests
+- Sensorzuordnung
+- technische Sensor- und Regelparameter
+- Direktstart-Freigaben
+- normale Wiederherstellungsaktionen
+- normal aus dem Menue gestarteter vollstaendiger Werksreset
+- Touchkalibrierung
 
-Nicht zulaessig waehrend eines Laufes sind:
+Die PIN hebt keine Sensor-, Aktor-, Persistenz- oder Sicherheitspruefung auf.
+Fehlversuche werden begrenzt oder verzoegert. Kritische Aktionen besitzen eine
+eigene Bestaetigung.
 
-- direkte Aktortests
-- Aenderung der Sensorzuordnung
-- Kalibrierungs- oder Ausgangstests
-- veraendernde Serviceaktionen
+### Eintritt und Aktortests
 
-## Servicebereich mit verpflichtender PIN
-
-Der Servicebereich ist immer durch eine vierstellige PIN geschuetzt.
-
-Die PIN-Abfrage ist erforderlich fuer mindestens:
-
-- direkte Aktor- und Ausgangstests
-- Sensorzuordnung und technische Sensoreinstellungen
-- Freigabe eines Direktstarts ohne normale Startzusammenfassung
-- technische Regelparameter, soweit spaeter freigegeben
-- Wiederherstellungsfunktionen
-- vollstaendigen Werksreset
-- Touchkalibrierung aus dem Servicebereich
-
-Regeln:
-
-- Die PIN darf nicht offen im normalen Einstellungsmenue angezeigt werden.
-- Fehlversuche werden begrenzt beziehungsweise zeitlich verzoegert, damit nicht
-  unbegrenzt schnell geraten werden kann.
-- Die PIN-Eingabe verwendet einen ausreichend grossen Ziffernblock.
-- Ein korrekter PIN-Eintrag hebt keine Sensor-, Aktor- oder Sicherheitspruefung
-  auf.
-- Kritische Aktionen benoetigen trotz geoeffnetem Servicebereich eine eigene
-  Bestaetigung.
-- Die Behandlung einer vergessenen Service-PIN wird in
-  `SETTINGS_AND_STORAGE.md` festgelegt. Sie darf keinen ungeschuetzten Zugang zu
-  Aktortests ermoeglichen.
+- Eintritt nur aus validiertem `STANDBY`
+- nie aus aktivem Lauf, `FAULT` oder `SAFE_BOOT`
+- Aktortests zeitlich und leistungsmassig begrenzt
+- beim Verlassen alle Testausgaenge AUS
+- erforderlicher Luefternachlauf bleibt aktiv
 
 ## Automatische Servicesperre
 
-Nach einer einstellbaren Inaktivitaetszeit wird der Servicebereich automatisch
-verlassen und wieder gesperrt.
+Nach Inaktivitaet wird der Servicebereich geschlossen:
 
-Beim automatischen oder manuellen Verlassen gilt:
+1. laufenden Test abbrechen
+2. Peltier und beide Richtungen AUS
+3. Testausgaenge AUS
+4. erforderlichen Nachlauf ausfuehren
+5. Berechtigung verwerfen
+6. sicheren Bildschirm anzeigen
 
-1. laufende Servicetests werden beendet
-2. Peltierausgaenge werden sicher deaktiviert
-3. schaltbare Testausgaenge werden ausgeschaltet
-4. erforderlicher Luefternachlauf wird ausgefuehrt
-5. die Serviceberechtigung wird verworfen
-6. das Geraet kehrt in einen sicheren Bildschirm zurueck
+Die genaue Zeit bleibt eine spaetere Serviceeinstellung innerhalb fester Grenzen.
 
-Die konkrete Zeitspanne bleibt bis zur spaeteren Einstellungsphase offen.
+## Normales Wiederherstellungsmenue
 
-## Wiederherstellungsmenue
-
-Im geschuetzten Servicebereich werden getrennte Wiederherstellungsaktionen und
-ein vollstaendiger Werksreset angeboten.
+Im PIN-geschuetzten Servicebereich:
 
 ```text
 Wiederherstellung
@@ -153,149 +107,129 @@ Wiederherstellung
 [Zurueck]
 ```
 
-### Standardprogramme wiederherstellen
+### Standardprogramme
 
-- stellt fehlende oder geloeschte Standardprogramme aus dem unveraenderlichen
-  Factory-Katalog wieder her
-- setzt nur nach ausdruecklicher Auswahl auch veraenderte Standardprogramme auf
-  Werkseinstellungen zurueck
-- veraendert Benutzerprogramme und Protokolle nicht
+Stellt den unveraenderlichen Factory-Katalog wieder her. Benutzerprogramme und
+Protokolle bleiben erhalten, sofern nicht ausdruecklich anders bestaetigt.
 
-### Benutzereinstellungen zuruecksetzen
+### Benutzereinstellungen
 
-Der genaue Umfang wird in `SETTINGS_AND_STORAGE.md` festgelegt. Vor der
-Bestaetigung wird eine Liste der betroffenen Einstellungsgruppen angezeigt.
+Vor dem Reset werden alle betroffenen Gruppen angezeigt.
 
-### Netzwerkeinstellungen loeschen
+### Netzwerk
 
-- entfernt gespeicherte WLAN-Zugangsdaten und zugehoerige Netzwerkkonfiguration
-- veraendert Programme und Laufprotokolle nicht
-- fuehrt anschliessend in einen definierten Netzwerk-Einrichtungszustand
+Loescht WLAN- und Netzwerkkonfiguration, nicht Programme und Laufprotokolle, und
+fuehrt in den Einrichtungszustand.
 
-### Touchkalibrierung zuruecksetzen
+### Touchkalibrierung
 
-- loescht nur die gespeicherten Kalibrierwerte
-- startet beim naechsten geeigneten Zeitpunkt den Kalibrierungsablauf
-- darf nicht waehrend eines laufenden Prozesses ausgefuehrt werden
+Loescht nur Kalibrierwerte und startet beim naechsten geeigneten Zeitpunkt eine
+neue Kalibrierung. Nicht waehrend eines Laufes.
 
-### Vollstaendiger Werksreset
+### Normaler vollstaendiger Werksreset
 
-Mindestregeln:
+- nur ohne Lauf
+- PIN-geschuetzt
+- mindestens zweistufig bestaetigt
+- zeigt geloeschte und wiederhergestellte Daten
+- stellt Factory-Programme und Ersteinrichtung her
 
-- nur ohne laufenden Prozess
-- PIN-geschuetzter Servicezugang
-- mindestens zweistufige Bestaetigung
-- klare Auflistung aller geloeschten beziehungsweise wiederhergestellten Daten
-- Wiederherstellung der vier Standardprogramme
-- Rueckkehr in einen sicheren Erst-Einrichtungsablauf
+## Vergessene Service-PIN
 
-Ob Benutzerprogramme, Protokolle, Sprache, PIN und weitere Daten beim
-vollstaendigen Reset geloescht werden, wird in `SETTINGS_AND_STORAGE.md`
-verbindlich festgelegt.
+Es gibt keinen isolierten PIN-Bypass und keinen ungeschuetzten Servicezugang.
+Es gibt jedoch einen **separaten PIN-unabhaengigen lokalen Vollreset**, weil die
+vergessene PIN fuer ihre eigene Wiederherstellung nicht verlangt werden darf.
+
+Verbindlicher Ablauf:
+
+```text
+Geraet einschalten oder SAFE_BOOT aktiv
+-> physischen Recoveryweg bewusst ausloesen
+-> alle Aktoren und beide BTS7960-Richtungen bleiben AUS
+-> mehrstufige Warnung ueber vollstaendigen Datenverlust
+-> lange bewusste lokale Bestaetigung
+-> vollstaendigen Werksreset ausfuehren
+-> Ersteinrichtung starten
+```
+
+Regeln:
+
+- nicht ueber Web oder Netzwerk ausloesbar
+- keine Aktor- oder Servicefunktionen werden freigeschaltet
+- kein alleiniger PIN-Reset
+- konkrete rohe Touchgeste oder andere physische Eingabe bleibt
+  `TBD_HARDWARE`
+- UART-Loeschen beziehungsweise Neu-Flashen bleibt letzter physischer Recoveryweg
 
 ## Touchkalibrierung
 
 ### Normaler Weg
 
-Die Touchkalibrierung ist im PIN-geschuetzten Servicebereich erreichbar.
-Kalibrierwerte werden erst gespeichert, nachdem alle Kalibrierpunkte erfolgreich
-geprueft wurden.
+PIN-geschuetzt im Servicebereich. Neue Werte werden erst nach erfolgreicher
+Plausibilitaetspruefung gespeichert.
 
-### Wiederherstellungsweg bei unbrauchbarer Kalibrierung
-
-Eine fehlerhafte Kalibrierung darf den Benutzer nicht dauerhaft vom Geraet
-aussperren.
-
-Vorgesehener Ablauf:
+### Wiederherstellung bei unbrauchbarer Kalibrierung
 
 ```text
 Geraet einschalten
-  -> Touch waehrend des Starts mindestens 10 Sekunden gedrueckt halten
-  -> Rohberuehrung ohne vorhandene Kalibrierwerte erkennen
-  -> geschuetzten Kalibrierungs-Wiederherstellungsmodus starten
-  -> Kalibrierpunkte erfassen
-  -> Plausibilitaetspruefung
-  -> neue Werte erst nach erfolgreicher Bestaetigung speichern
+-> Touch mindestens 10 Sekunden roh gedrueckt halten
+-> Beruehrung ohne gespeicherte Kalibrierung erkennen
+-> ausschliesslich Kalibrierungs-Recovery starten
+-> Punkte erfassen und pruefen
+-> erst danach speichern
 ```
 
-Regeln:
+- erlaubt keinen allgemeinen Servicezugang
+- alle Aktoren bleiben AUS
+- bei Abbruch bleiben alte beziehungsweise keine Werte aktiv
+- Rohwerte und Controlleranbindung bleiben `TBD_HARDWARE`
 
-- Die Erkennung des langen Tastendrucks darf nicht von den gespeicherten
-  Kalibrierwerten abhaengen.
-- Der Wiederherstellungsmodus erlaubt nur die Touchkalibrierung und keinen
-  allgemeinen ungeschuetzten Servicezugang.
-- Wird die Kalibrierung abgebrochen oder ist sie unplausibel, werden keine neuen
-  fehlerhaften Werte gespeichert.
-- Alle Aktoren bleiben waehrend dieses Ablaufs sicher AUS.
-- Der genaue Rohwertbereich und die Touchcontroller-Anbindung werden erst nach
-  der Hardwareverifikation festgelegt.
+Die Touchkalibrierungs-Recovery und der PIN-unabhaengige Vollreset muessen durch
+unterschiedliche, eindeutig bestaetigte Ablaeufe getrennt sein.
 
-## Sprachen im ersten Release
+## SAFE_BOOT-Oberflaeche
 
-Das erste Release unterstuetzt:
+`SAFE_BOOT` bietet nur:
+
+- passive Diagnose
+- Fehler- und Resetjournal
+- Exporte
+- Netzwerkwiederherstellung ohne Aktorwirkung
+- PIN-unabhaengigen Vollreset
+- Hinweise zum UART-Recoveryweg
+
+Nicht angeboten werden Servicebereich, Lueftertest, Summer, BTS7960 oder Peltier.
+
+## Sprachen
+
+Release 1:
 
 1. Deutsch
 2. Spanisch
 3. Englisch
 
-### Umfang der Uebersetzung
+Zu uebersetzen sind Menues, Phasen, Startzusammenfassungen, Warnungen, Fehler,
+Service, Diagnose, Wiederherstellung, Kalibrierung und Standardprogramme.
+Benutzerdefinierte Namen werden nicht automatisch uebersetzt.
 
-Zu uebersetzen sind mindestens:
+Technische Regeln:
 
-- Haupt- und Untermenues
-- Phasen- und Statusbezeichnungen
-- Startzusammenfassungen
-- Warnungen, Fehler und Handlungsanweisungen
-- Service- und Diagnosebeschriftungen
-- Wiederherstellungs- und Bestaetigungsdialoge
-- Einrichtungs- und Kalibrierungsablaeufe
-- die Namen und Beschreibungen der mitgelieferten Standardprogramme
+- stabile Sprachschluessel statt sichtbarer Texte in der Prozesslogik
+- gleicher Funktions- und Sicherheitsumfang in allen Sprachen
+- Deutsch als definierter Fallback
+- Sprachwechsel ohne Wirkung auf Programme oder Lauf
+- Zeichensatz unterstuetzt Umlaute, `ñ` und Akzente
 
-Benutzerdefinierte Programmnamen und Notizen werden nicht automatisch uebersetzt.
+## Akzeptierte Entscheidungen
 
-### Technische Regeln
-
-- Bedienungstexte werden ausserhalb der eigentlichen Prozesslogik verwaltet.
-- Die Programmlogik verwendet stabile Sprachschluessel und keine Vergleiche mit
-  sichtbaren Texten.
-- Alle drei Sprachen muessen dieselben Funktionen und Sicherheitsinformationen
-  anbieten.
-- Fehlende Uebersetzungen duerfen keine leere oder unverstaendliche
-  Sicherheitsmeldung erzeugen.
-- Als definierter Fallback wird Deutsch verwendet, bis spaeter ein anderer
-  Fallback beschlossen wird.
-- Die Sprache kann im normalen Einstellungsmenue gewechselt werden, auch waehrend
-  eines laufenden Prozesses.
-- Ein Sprachwechsel veraendert keine Programme, Sensorwerte oder Laufzustaende.
-- Zeichenkodierung und verwendete Schriftarten muessen deutsche, spanische und
-  englische Zeichen einschliesslich Umlaute, `ñ` und Akzente korrekt darstellen.
-
-Die konkrete Speicherung, die Werkssprache und die Sprachauswahl bei der ersten
-Einrichtung werden in `SETTINGS_AND_STORAGE.md` vervollstaendigt.
-
-## Akzeptierte Entscheidungen aus Phase 4D
-
-- [x] getrennte erste Hauptmenuepunkte; spaetere visuelle Zusammenfassung bleibt
-      moeglich
-- [x] waehrend eines Laufes nur ungefaehrliche Komforteinstellungen aenderbar
+- [x] getrennte normale, Diagnose- und Servicebereiche
+- [x] waehrend eines Laufes nur Komforteinstellungen
 - [x] Diagnose waehrend eines Laufes nur lesend
-- [x] Servicebereich immer durch vierstellige PIN geschuetzt
-- [x] Servicebereich sperrt sich nach Inaktivitaet automatisch
-- [x] beim Verlassen des Servicebereichs werden Testausgaenge sicher deaktiviert
-- [x] einzelne Wiederherstellungsfunktionen plus vollstaendiger Werksreset
-- [x] Touchkalibrierung normal im Servicebereich
-- [x] Touch-Wiederherstellung durch mindestens 10 Sekunden Rohberuehrung beim Boot
-- [x] Deutsch, Spanisch und Englisch im ersten Release
-- [x] sichtbare Texte werden von der Prozesslogik getrennt und uebersetzbar
-      aufgebaut
-
-## Noch offen fuer spaetere Phasen
-
-- konkrete PIN-Erstvergabe und Wiederherstellung bei vergessener PIN
-- genaue automatische Sperrzeit des Servicebereichs
-- genauer Datenumfang jeder Wiederherstellungsaktion
-- Speichermodell der Sprachdateien und Texte
-- Werkssprache und Ablauf der ersten Sprachauswahl
-- konkrete Schriftarten und Schriftgroessen
-- endgueltige Menuegruppierung nach Displayprototyp
-- technische Erkennung des zehnsekundigen Roh-Touchs am konkreten Controller
+- [x] normaler Servicebereich vierstellig PIN-geschuetzt
+- [x] Aktortests nur aus validiertem `STANDBY`
+- [x] `SAFE_BOOT` bleibt aktorfrei
+- [x] automatische Servicesperre
+- [x] normaler Werksreset PIN-geschuetzt
+- [x] PIN-unabhaengiger lokaler Vollreset nur bei vergessener PIN
+- [x] Touch-Recovery ueber rohe Beruehrung beim Boot
+- [x] drei Sprachen
