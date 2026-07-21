@@ -29,7 +29,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`LOCAL_UI.md`](LOCAL_UI.md): lokale Touch-Grundlagen und Hauptbildschirme
 - [`LOCAL_PROGRAMS.md`](LOCAL_PROGRAMS.md): lokale Programmauswahl und Programmverwaltung
 - [`LOCAL_RUNTIME_UI.md`](LOCAL_RUNTIME_UI.md): Laufdetails, Meldungen, Stoppen und Wiederanlaufanzeige
-- [`LOCAL_UI_SETTINGS_SERVICE.md`](LOCAL_UI_SETTINGS_SERVICE.md): Menue, Einstellungen, Diagnose, Service, Touchkalibrierung und Sprachen
+- [`LOCAL_UI_SETTINGS_SERVICE.md`](LOCAL_UI_SETTINGS_SERVICE.md): Menue, Einstellungen, Diagnose, PIN-Service, Wiederherstellung, Touchkalibrierung und Sprachen
 - [`NETWORK.md`](NETWORK.md): WLAN-Einrichtung, QR-Assistent, Ersatz-WLAN, Geraetename und Zugriffsgrundlagen
 - [`WEB_UI.md`](WEB_UI.md): responsive Weboberflaeche, Anmeldung, Sitzungen, Live-Daten und Konfliktschutz
 - [`NETWORK_DIAGNOSTICS_INTEGRATION.md`](NETWORK_DIAGNOSTICS_INTEGRATION.md): Netzwerkdiagnose, VPN, Reverse Proxy, Proxy-Vertrauen und Lese-API
@@ -44,6 +44,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md): Versorgung, Boot, Watchdogs, Datenintegritaet, SAFE_BOOT und Fehlerjournal
 - [`DIAGNOSTICS_AND_MAINTENANCE.md`](DIAGNOSTICS_AND_MAINTENANCE.md): Diagnoseansichten, Boot-Selbsttest, Servicepruefungen, Exporte und UART-Umfang
 - [`FIRMWARE_UPDATE_AND_ROLLBACK.md`](FIRMWARE_UPDATE_AND_ROLLBACK.md): UART-Update im ersten Release und vorbereitete spaetere Web-OTA-/Rollbackregeln
+- [`RESOURCE_BUDGET_AND_MAINTENANCE.md`](RESOURCE_BUDGET_AND_MAINTENANCE.md): Ressourcenueberwachung, Speicherpflege, Flashbudget, Schreiblast und Wartungsumfang
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -56,7 +57,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 6. **Einstellungen und Persistenz** -> `SETTINGS_AND_STORAGE.md`, `RUN_PERSISTENCE.md`, `BACKUP_SECURITY_RETENTION.md`
 7. **Temperaturregelung und Aktorlogik** -> `TEMPERATURE_CONTROL.md`, `ACTUATOR_TIMING_AND_FANS.md`, `SENSOR_TUNING_COMMISSIONING.md`
 8. **Sicherheit und Fehlerbehandlung** -> `SAFETY_AND_FAULTS.md`, `SAFETY_COMPONENT_FAULTS.md`, `SYSTEM_SAFETY_AND_RECOVERY.md`
-9. **Diagnose, Wartung und Updates** -> `DIAGNOSTICS_AND_MAINTENANCE.md`, `FIRMWARE_UPDATE_AND_ROLLBACK.md`
+9. **Diagnose, Wartung und Updates** -> `DIAGNOSTICS_AND_MAINTENANCE.md`, `FIRMWARE_UPDATE_AND_ROLLBACK.md`, `RESOURCE_BUDGET_AND_MAINTENANCE.md`
 10. **Akzeptanztests und Implementierungsplan** -> `ACCEPTANCE_TESTS.md` und spaetere GitHub-Issues
 
 ## Arbeitsweise
@@ -103,12 +104,15 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 8A: Fehlerklassen, unmittelbare Reaktionen, Quittierung und Wiederfreigabe
   - [x] Phase 8B: Temperatur-, Sensor-, Luefter- und Aktorfehler
   - [x] Phase 8C: Versorgung, Softwarefehler, sichere Zustaende und Fehlerprotokoll
-- [ ] Phase 9: Diagnose, Wartung und Updates
+- [x] Phase 9: Diagnose, Wartung und Updates
   - [x] Phase 9A: Diagnoseansichten, Servicepruefungen und Exporte
   - [x] Phase 9B: UART-Update im ersten Release sowie vorbereitete spaetere OTA-, Rollback- und Migrationsregeln
-  - [ ] Phase 9C: Ressourcenueberwachung, Lebensdauer und vorbeugende Wartung
+  - [x] Phase 9C: Ressourcenueberwachung, Speicherpflege, Flashbudget und Wartungsumfang
 - [ ] Phase 10: Akzeptanztests und Implementierungsplan
+  - [ ] Phase 10A: Testebenen, Abnahmekriterien und Release-Gates
+  - [ ] Phase 10B: Implementierungsreihenfolge und GitHub-Issues
+  - [ ] Phase 10C: Gesamtreview, offene Punkte, Pull Request und Uebergabe an die Implementierung
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 9C bearbeitet: Ressourcenueberwachung, Lebensdauer und vorbeugende Wartung.
+Als Naechstes wird Phase 10A bearbeitet: Testebenen, Abnahmekriterien und Release-Gates.
