@@ -31,6 +31,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 - [`LOCAL_RUNTIME_UI.md`](LOCAL_RUNTIME_UI.md): Laufdetails, Meldungen, Stoppen und Wiederanlaufanzeige
 - [`LOCAL_UI_SETTINGS_SERVICE.md`](LOCAL_UI_SETTINGS_SERVICE.md): Menue, Einstellungen, Diagnose, Service, Touchkalibrierung und Sprachen
 - [`NETWORK.md`](NETWORK.md): WLAN-Einrichtung, QR-Assistent, Ersatz-WLAN, Geraetename und Zugriffsgrundlagen
+- [`WEB_UI.md`](WEB_UI.md): responsive Weboberflaeche, Anmeldung, Sitzungen, Live-Daten und Konfliktschutz
 - [`../config/programs.example.yaml`](../config/programs.example.yaml): vorlaeufiges maschinenlesbares Programmschema
 
 ## Phasen und Ergebnisdokumente
@@ -76,7 +77,7 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
   - [x] Phase 4D: Menue, Einstellungen, Diagnose, PIN-Service, Wiederherstellung, Touchkalibrierung und Sprachen
 - [ ] Phase 5: Web und Netzwerk
   - [x] Phase 5A: WLAN-Ersteinrichtung, QR-Assistent, Ersatz-WLAN, Geraetename und Zugriffsgrundlagen
-  - [ ] Phase 5B: Weboberflaeche, Anmeldung, Sitzungen und gleichzeitige Bedienung
+  - [x] Phase 5B: Weboberflaeche, Anmeldung, Sitzungen und gleichzeitige Bedienung
   - [ ] Phase 5C: Netzwerkdiagnose, Sicherheitsgrenzen und spaetere Proxy-/VPN-Integration
 - [ ] Phase 6: Einstellungen und Persistenz
 - [ ] Phase 7: Temperaturregelung und Aktoren
@@ -86,4 +87,4 @@ Die gewuenschte Firmware wird zuerst vollstaendig beschrieben und erst danach im
 
 ## Aktuelle Phase
 
-Als Naechstes wird Phase 5B bearbeitet: Weboberflaeche, Anmeldung, Sitzungen und gleichzeitige Bedienung.
+Als Naechstes wird Phase 5C bearbeitet: Netzwerkdiagnose, Sicherheitsgrenzen und spaetere Proxy-/VPN-Integration.
