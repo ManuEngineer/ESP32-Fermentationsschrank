@@ -74,7 +74,9 @@ spi_touch:
   shared_bus_with_display: TBD_HARDWARE
   cs_gpio: TBD_HARDWARE
   irq_gpio: TBD_HARDWARE
-  controller: XPT2046
+  controller: TBD_HARDWARE
+  candidate_controller: XPT2046
+  candidate_status: unverified_order_description
   controller_status: TBD_HARDWARE
 
 uart_programming:
