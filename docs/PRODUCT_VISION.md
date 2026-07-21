@@ -3,10 +3,10 @@
 ## Ziel des Produkts
 
 Der ESP32-Fermentationsschrank soll Fermentationsprozesse automatisch und
-reproduzierbar auf einer vorgegebenen Produkttemperatur fuehren. Das Geraet
-kann die Zieltemperatur je nach Ausgangslage durch **Heizen oder Kuehlen**
-erreichen, die Fermentationszeit kontrolliert ablaufen lassen und das Produkt
-nach Programmende optional aktiv herunterkuehlen oder gekuehlt halten.
+reproduzierbar auf einer vorgegebenen Temperatur fuehren. Das Geraet kann die
+Zieltemperatur je nach Ausgangslage durch **Heizen oder Kuehlen** erreichen, die
+Fermentationszeit kontrolliert ablaufen lassen und das Produkt nach
+Programmende optional aktiv herunterkuehlen oder gekuehlt halten.
 
 Die Bedienung richtet sich an Manuel und seine Partnerin sowie grundsaetzlich
 an Personen ohne Programmier- oder Elektronikkenntnisse. Technische Details
@@ -29,6 +29,9 @@ die normale Nutzung nicht erforderlich sein.
 6. Programme und Bedienoberflaechen werden so gestaltet, dass spaetere
    Erweiterungen moeglich sind, ohne bestehende Programme unbrauchbar zu
    machen.
+7. Ein Wiederanlauf nach Stromausfall darf nicht unbegrenzt auf den Benutzer
+   warten, sondern muss den Prozess automatisch und phasenbezogen sinnvoll
+   weiterfuehren.
 
 ## Zielbenutzer
 
@@ -40,10 +43,11 @@ ausfuehren koennen:
 - gespeichertes Programm auswaehlen
 - Programmparameter vor dem Start pruefen
 - Programm starten und stoppen
-- aktuelle Luft- und Produkttemperatur sehen
+- aktuelle Schrankluft- und Produkttemperatur sehen
 - aktuelle Prozessphase und Restzeit sehen
 - Meldungen und klare Handlungsanweisungen verstehen
-- nach einer Unterbrechung zwischen angebotenen sicheren Aktionen waehlen
+- automatisch getroffene Wiederanlaufentscheidungen nachtraeglich pruefen
+- einen Lauf innerhalb der erlaubten Optionen anpassen oder beenden
 
 Der normale Benutzer muss weder GPIOs, Sensoradressen, Reglerparameter noch
 Netzwerkprotokolle kennen.
@@ -70,25 +74,28 @@ Das Geraet muss ohne WLAN oder Internet vollstaendig bedienbar bleiben:
 - Programm starten und stoppen
 - Status und Temperaturen anzeigen
 - Meldungen bestaetigen
-- nach Stromausfall lokal entscheiden
+- automatischen Wiederanlauf lokal pruefen
 - einfachen manuellen Betrieb verwenden
 
 Netzwerkfunktionen sind Komfort- und Fernbedienfunktionen, aber keine
-Voraussetzung fuer die eigentliche Fermentation.
+Voraussetzung fuer die eigentliche Fermentation. Netzwerkzeit ist fuer eine
+praezisere Wiederanlaufkorrektur vorgesehen; bis sie verfuegbar ist, arbeitet
+das Geraet mit einer sicheren vorlaeufigen Strategie weiter.
 
 ## Programme
 
 ### Standardprogramme
 
-Die erste nutzbare Ausbaustufe enthaelt vier vorbereitete Programme:
+Die erste nutzbare Ausbaustufe enthaelt vier allgemeine Programme:
 
 1. Joghurt mild
 2. Joghurt stichfest
 3. Milchkefir
 4. Wasserkefir
 
-Die genauen Temperaturen, Zeiten und Kuehloptionen werden in der Phase
-`Programme und Prozessablauf` festgelegt.
+Sie sind nicht an eine bestimmte Kultur oder Marke gebunden. Die genauen
+Temperaturen, Zeiten und Kuehlwerte werden nach Inbetriebnahme und praktischen
+Tests festgelegt.
 
 ### Erweiterbarkeit
 
@@ -106,29 +113,30 @@ Bediengrenzen entstehen und wird spaeter dokumentiert.
 
 ## Allgemeiner Prozessablauf
 
-Die erste Ausbaustufe verwendet grundsaetzlich folgenden Ablauf:
-
 ```text
 Programm auswaehlen
   -> Startparameter bestaetigen
+  -> optional vorheizen oder vorkuehlen
+  -> optional Produkt einsetzen und bestaetigen
   -> Zieltemperatur erreichen
-       -> je nach Ausgangstemperatur heizen oder kuehlen
-  -> Temperatur stabilisieren
+  -> Zieltemperatur qualifizieren
   -> Fermentationszeit
   -> optional aktiv kuehlen
   -> optional gekuehlt halten
   -> beendet
 ```
 
-Ein Programm verwendet in der ersten Ausbaustufe eine Fermentationstemperatur.
-Das Datenmodell und die Modulgrenzen sollen spaetere Programme mit mehreren
-Temperaturstufen nicht unnoetig verhindern. Die genaue Modellierung wird in
-`PROGRAMS.md` festgelegt.
+`Zieltemperatur erreichen` kann Heizen oder Kuehlen bedeuten. Die
+Zielqualifikation ist eine kurze Pruefung vor dem Timer und nicht Teil der
+Fermentationszeit.
+
+Ein Programm verwendet im ersten Release eine Fermentationstemperatur. Das
+Datenmodell und die Modulgrenzen sollen spaetere Programme mit mehreren
+Temperaturstufen nicht unnoetig verhindern.
 
 ## Verhalten nach Programmende
 
-Das Verhalten nach Programmende ist pro Programm konfigurierbar. Vorgesehene
-Varianten sind:
+Das Verhalten nach Programmende ist pro Programm konfigurierbar:
 
 - ohne aktive Kuehlung beenden
 - bis zu einer Zieltemperatur herunterkuehlen und danach beenden
@@ -142,16 +150,13 @@ aktivem Herunterkuehlen und anschliessendem Kuehlhalten.
 
 ## Manueller Betrieb
 
-Zusaetzlich zu gespeicherten Programmen ist ein einfacher manueller Modus
-vorgesehen. Der Benutzer gibt mindestens an:
+Es sind zwei normale manuelle Betriebsarten vorgesehen:
 
-- Zieltemperatur
-- Dauer
-- Verhalten nach Ablauf
+1. Zeit-/Temperaturlauf mit Zieltemperatur, Dauer und Abschlussverhalten
+2. Temperatur-Haltebetrieb ohne Timer bis zur manuellen Beendigung
 
-Der manuelle Modus nutzt dieselben Sicherheits-, Sensor- und
-Regelmechanismen wie gespeicherte Programme. Er ist keine direkte
-Aktorsteuerung.
+Beide nutzen dieselben Sicherheits-, Sensor- und Regelmechanismen wie
+Programme. Direkte Aktorsteuerung gehoert ausschliesslich in den Servicemodus.
 
 ## Weboberflaeche und Fernbedienung
 
@@ -162,7 +167,7 @@ erlauben:
 - Programme anzeigen und bearbeiten
 - Programme starten und stoppen
 - Einstellungen verwalten
-- Meldungen und Unterbrechungen behandeln
+- Meldungen und Wiederanlaufdetails anzeigen
 
 Fernzugriff von ausserhalb des Heimnetzes ist nicht Bestandteil des ersten
 Releases. Der ESP32 darf nicht direkt offen ins Internet gestellt werden.
@@ -185,36 +190,49 @@ USV
 
 Dadurch kann der Heimserver in einem spaeteren Release das Verschwinden des
 ESP32 anhand eines fehlenden Heartbeats erkennen. Eine solche Benachrichtigung
-ist jedoch ausdruecklich **nicht Bestandteil des ersten Releases**.
+ist nicht Bestandteil des ersten Releases.
 
-### Kurzer Stromausfall
+### Automatisches phasenbezogenes Fortfahren
 
-Nach einem kurzen Stromausfall darf ein zuvor laufendes Programm automatisch
-fortgesetzt werden, sofern alle folgenden Bedingungen erfuellt sind:
+Nach dem Neustart wartet das Geraet nicht darauf, dass der Benutzer vor dem
+Display steht. Nach erfolgreicher Pruefung von Persistenz, Sensoren und
+Sicherheitsbedingungen wird automatisch eine zur unterbrochenen Phase passende
+Aktion ausgefuehrt:
 
-- ein gueltiger, persistierter Programmschnappschuss ist vorhanden
-- die Unterbrechungsdauer liegt unter einem noch festzulegenden Grenzwert
-- alle erforderlichen Sensoren liefern nach dem Neustart gueltige Werte
-- die Temperaturen liegen innerhalb eines noch festzulegenden
-  Wiederanlaufbereichs
-- kein Sicherheits- oder Hardwarefehler ist aktiv
+- Vorheizen oder Zieltemperatur erneut anfahren
+- Zielqualifikation neu beginnen
+- Fermentationsregelung wieder aufnehmen
+- Kuehlung oder Kuehlhalten fortsetzen
+- manuellen Haltebetrieb fortsetzen
+- einen bereits abgeschlossenen Zustand nur wieder anzeigen
 
-Die genaue Zeitgrenze und die zulaessigen Temperaturabweichungen werden spaeter
-pro Prozessart oder global festgelegt.
+Ein Sicherheitsfehler kann das automatische Fortfahren verhindern und hat
+immer Vorrang.
 
-### Langer Stromausfall
+### Wirkung auf die Fermentationszeit
 
-Nach einer langen oder nicht sicher bewertbaren Unterbrechung darf das Programm
-nicht blind automatisch weiterlaufen. Das Geraet wechselt in einen sicheren
-Unterbrechungszustand und verlangt eine Entscheidung:
+Die Fermentation stoppt bei sinkender Temperatur nicht vollstaendig, sondern
+verlangsamt sich. Deshalb wird die Stromausfallzeit weder pauschal voll
+angerechnet noch pauschal pausiert.
 
-- Programm fortsetzen, sofern die Software dies noch als zulaessig bewertet
-- Programm abbrechen
-- eine spaeter festzulegende sichere Abschlussaktion ausfuehren, zum Beispiel
-  Kuehlen, falls dies fuer das konkrete Programm sinnvoll ist
+Vorgesehen ist eine temperaturgewichtete Schaetzung. Bei einem
+produktgefuehrten Lauf hat der Produktfuehler Vorrang. Ohne Produktfuehler wird
+die Schranklufttemperatur des fest eingebauten Luftfuehlers verwendet.
 
-Im ersten Release erfolgt diese Entscheidung lokal am Display oder ueber die
-lokale Weboberflaeche, sobald der Benutzer wieder Zugriff auf das Heimnetz hat.
+Die daraus abgeleitete Verlaengerung wird automatisch angewendet, angezeigt
+und protokolliert. Der Benutzer kann sie spaeter innerhalb sicherer Grenzen
+pruefen und anpassen.
+
+### Netzwerkzeit und spaetere RTC-Option
+
+Im ersten Release ist Netzwerkzeit die primaere Zeitquelle. Weil der ESP32 nach
+einem Stromausfall schneller startet als Router und NTP-Verbindung, beginnt der
+sichere Wiederanlauf sofort. Sobald Netzwerkzeit verfuegbar ist, werden
+Unterbrechungsdauer und Zeitkorrektur nachtraeglich praezisiert.
+
+Die Architektur soll eine spaetere batteriegepufferte Echtzeituhr, zum Beispiel
+ein DS3231-Modul, ermoeglichen. Eine RTC ist fuer das erste Release nicht
+erforderlich.
 
 ## Benachrichtigungen und spaetere Releases
 
@@ -233,33 +251,14 @@ Moegliche spaetere Ereignisse:
 
 - ESP32 waehrend eines Stromausfalls nicht mehr erreichbar
 - Versorgung wiederhergestellt
-- Entscheidung zum Fortsetzen oder Abbrechen erforderlich
+- automatische Wiederanlaufentscheidung und Zeitkorrektur
 - Sensor- oder Aktorfehler
 - Programm beendet
 - Kuehlziel erreicht
 
-Der Heimserver kann waehrend der ungefaehr 30-minuetigen USV-Laufzeit bereits
-das Ausbleiben des ESP32 erkennen. Nach Ablauf der USV ist auch diese
-Meldekette nicht mehr garantiert.
-
 Unabhaengig von spaeteren Benachrichtigungen muss der ESP32 eigenstaendig und
 sicher arbeiten. Fernaktionen duerfen die lokale Sicherheitslogik niemals
 umgehen.
-
-## Verhalten ohne erreichbaren Benutzer
-
-Eine ausstehende Benutzerentscheidung darf das Geraet nicht in einen
-undefinierten Zustand bringen. Fuer jeden Unterbrechungsfall muss spaeter ein
-sicherer Standardzustand mit einer maximalen Wartezeit definiert werden.
-
-Dabei wird zwischen zwei Fragen unterschieden:
-
-1. **Technische Sicherheit:** Welche Aktoren duerfen laufen?
-2. **Prozessqualitaet:** Ist die Fermentation nach der Unterbrechung noch
-   sinnvoll fortsetzbar?
-
-Die Software darf nur Aktionen anbieten, die anhand von Zustand,
-Unterbrechungsdauer und Sensorwerten als zulaessig bewertet wurden.
 
 ## Ausdrueckliche Nicht-Ziele des ersten Releases
 
@@ -269,22 +268,26 @@ Unterbrechungsdauer und Sensorwerten als zulaessig bewertet wurden.
 - Cloud-Abhaengigkeit
 - mehrstufige Temperaturprogramme
 - direkte Aktorsteuerung ausserhalb des Servicemodus
+- verpflichtendes RTC-Modul
 
 ## Akzeptierte Produktentscheidungen
 
 - [x] Bedienung fuer nichttechnische Benutzer ohne Programmierung
 - [x] vollstaendige lokale Bedienung ohne WLAN
-- [x] vier vorbereitete Standardprogramme im ersten Release
+- [x] vier allgemeine Standardprogramme im ersten Release
 - [x] dynamisch erweiterbare Programmliste
 - [x] Zieltemperatur kann durch Heizen oder Kuehlen erreicht werden
 - [x] erster Release mit einer Fermentationstemperatur pro Programm
 - [x] Architektur soll spaetere mehrstufige Programme nicht verhindern
 - [x] Verhalten nach Programmende pro Programm konfigurierbar
 - [x] vollstaendige Bedienung ueber die lokale Weboberflaeche
-- [x] kurzer Stromausfall kann unter validierten Bedingungen automatisch
-      fortgesetzt werden
-- [x] langer Stromausfall verlangt eine Benutzerentscheidung
+- [x] automatischer phasenbezogener Wiederanlauf ohne blockierendes Warten auf
+      den Benutzer
+- [x] temperaturgewichtete Verlaengerung nach Stromunterbrechung
+- [x] Netzwerkzeit als primaere Zeitquelle
+- [x] spaetere RTC-Unterstuetzung bleibt moeglich
 - [x] einfacher manueller Zeit-/Temperaturbetrieb
+- [x] manueller Temperatur-Haltebetrieb ohne Timer
 - [x] geschuetzter Servicemodus fuer technische Tests
 - [x] Router und Heimserver laufen bei Stromausfall rund 30 Minuten ueber USV
 - [x] Telegram und Push-Benachrichtigungen werden auf ein spaeteres Release
@@ -292,10 +295,10 @@ Unterbrechungsdauer und Sensorwerten als zulaessig bewertet wurden.
 
 ## Offene Punkte fuer spaetere Phasen
 
-- Grenzwert fuer kurzen und langen Stromausfall
-- Bewertung der Prozessqualitaet nach Temperaturabweichung
-- sicherer Zustand waehrend einer ausstehenden Entscheidung
-- erlaubte Aktionen nach einer Unterbrechung
+- Grenzwert fuer kurze und lange Stromunterbrechung
+- konkrete konservative Temperatur- und Zeitkompensation
+- Persistenzintervall fuer Laufzustand und Zeitstempel
+- genaue Fehlerklassen und Fortsetzungsbedingungen
 - Datenmodell fuer dynamische und spaeter mehrstufige Programme
 - spaetere Heartbeat-Ueberwachung durch den Heimserver
 - spaetere Benachrichtigungs- und Fernzugriffsarchitektur
