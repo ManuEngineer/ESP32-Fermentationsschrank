@@ -2,8 +2,8 @@
 
 namespace device_platform {
 
-bool DevicePlatform::begin() {
-    ready_ = app_config::hasSafeDefaults(app_config::kActiveProfilePolicy);
+bool DevicePlatform::begin(const PlatformStartupContext& context) {
+    ready_ = context.configurationSafe;
     return ready_;
 }
 
@@ -13,10 +13,6 @@ void DevicePlatform::update() {
 
 bool DevicePlatform::ready() const {
     return ready_;
-}
-
-const app_config::ProfilePolicy& DevicePlatform::profilePolicy() const {
-    return app_config::kActiveProfilePolicy;
 }
 
 }  // namespace device_platform
