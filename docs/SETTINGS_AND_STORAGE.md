@@ -77,6 +77,15 @@ Aenderungen am Quellprogramm veraendern den aktiven Lauf nicht. Zieltemperatur
 und Restdauer koennen nur ueber die separat spezifizierte, bestaetigte und
 protokollierte Laufanpassung geaendert werden.
 
+Das implementierte Laufmodell bildet diese Atomizitaet im Arbeitsspeicher ab:
+Es validiert eine kombinierte Anpassung vollstaendig, bevor es wirksame Werte
+und den naechsten Eintrag der begrenzten Revisionshistorie gemeinsam
+fortschreibt. Ein Neustartzustand wird deterministisch durch Pruefen und
+Wiederabspielen des unveraenderlichen Schnappschusses und seiner Revisionen
+hergestellt. Der physische Commit, Integritaetsschutz und Rueckfall im
+Geraetespeicher folgen mit Issue #17; Issue #13 fuehrt keinen konkreten
+Dateisystem- oder Flashzugriff ein.
+
 ## Berechtigungsebenen
 
 ### Normale Einstellungen

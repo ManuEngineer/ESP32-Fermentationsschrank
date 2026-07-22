@@ -56,3 +56,7 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 - getrennte aktive Programmauswahl und Benutzerkopien; offene
   `TBD_COMMISSIONING`-Werte bleiben als Katalogvorlage ladbar, werden aber als
   produktive Laufzeitwerte sicher abgelehnt
+- unveraenderliche Laufschnappschuesse mit getrennten wirksamen Ziel-/Zeitwerten,
+  atomaren und begrenzten Laufrevisionen sowie streng validierter
+  Wiederherstellung durch deterministisches Wiederabspielen der Historie;
+  monotone Revisionsepochen erlauben weitere Anpassungen nach einem Neustart
