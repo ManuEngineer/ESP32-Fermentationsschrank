@@ -7,10 +7,9 @@ Owner: `ManuEngineer`
 
 ## Projektstatus
 
-Die Anforderungen fuer Release 1 sind spezifiziert. Auf dem Branch
-`docs/software-specification` laeuft der abschliessende Review in Pull Request
-#38. Die eigentliche Fermentationssteuerung wird erst nach dem Merge dieser
-Spezifikation umgesetzt.
+Die Anforderungen fuer Release 1 sind spezifiziert und mit Pull Request #38 nach
+`main` uebernommen. Die Implementierung erfolgt issueweise, beginnend mit der
+PlatformIO- und Projektgrundlage aus Issue #9.
 
 Die geplante Implementierung ist in den Epics #2 bis #8 und den Arbeits- und
 Abnahme-Issues #9 bis #37 strukturiert. Das erste Implementierungs-Issue ist #9.
@@ -75,6 +74,36 @@ Vorgesehene Profile:
 native          Fachlicher Kern, Simulation und automatische Tests
 esp32_bringup   Reale Hardwarepruefung mit gesperrten Aktoren
 esp32_release   Freigegebene Zielkonfiguration nach Hardwareabnahme
+```
+
+Die Projektgrundlage setzt diese Profile wie folgt um:
+
+| Profil | Ziel und sichere Startpolitik |
+|---|---|
+| `native` | Hostbuild ohne Arduino-Hardware; nur Fachlogik und Tests |
+| `esp32_bringup` | generisches `esp32dev`-Ziel, Start als `HARDWARE_UNVERIFIED`, Aktoren gesperrt |
+| `esp32_release` | generisches `esp32dev`-Ziel, Freigabepolitik verlangt ein spaeter bestaetigtes Hardwareprofil; standardmaessig bleiben Aktoren gesperrt |
+
+Beide ESP32-Profile planen mit 4 MB Flash und setzen keine PSRAM voraus. Web-OTA
+ist als `FUTURE_RELEASE` deaktiviert. Es ist noch keine projektspezifische
+Partitionstabelle festgelegt; Layout und Budgets bleiben bis zu realen Build- und
+Hardwaremessungen `TBD_IMPLEMENTATION_BUDGET`. Ebenso sind keine Hardwaretreiber,
+GPIOs oder aktiven Pegel Bestandteil dieser Grundlage.
+
+Quellcode, gemeinsame Header und Tests sind getrennt:
+
+```text
+include/   gemeinsame hardwareunabhaengige Typen und Buildkonfiguration
+src/       Firmware-Einstieg; der native Pfad bindet kein Arduino ein
+lib/       spaetere testbare Fachkomponenten
+test/      native Unit- und Konfigurationspruefungen
+```
+
+Alle Profile bauen und die nativen Tests laufen mit:
+
+```bash
+pio run
+pio test -e native
 ```
 
 Der Kern greift nicht direkt auf GPIO, 1-Wire, Display, WLAN oder Flash zu,

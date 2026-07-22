@@ -1,6 +1,8 @@
-#include <Arduino.h>
-
 #include "app_config.hpp"
+
+#if defined(ARDUINO)
+
+#include <Arduino.h>
 
 namespace {
 
@@ -11,11 +13,19 @@ uint32_t lastHeartbeatMs = 0;
 }  // namespace
 
 void setup() {
-    // Keine Aktor-GPIOs konfigurieren, bis Pins und aktive Pegel gemessen sind.
     Serial.begin(app_config::kSerialBaud);
     Serial.println();
     Serial.println(app_config::kProjectName);
-    Serial.println("Safe build test: no unconfirmed GPIOs configured.");
+    Serial.print("profile: ");
+    Serial.println(
+        app_config::profileName(app_config::kActiveProfilePolicy.profile));
+    Serial.print("hardware state: ");
+    Serial.println(app_config::hardwareStateName(
+        app_config::kActiveProfilePolicy.startupHardwareState));
+    Serial.print("actuator policy: ");
+    Serial.println(app_config::actuatorPolicyName(
+        app_config::kActiveProfilePolicy.actuatorPolicy));
+    Serial.println("real actuators: disabled");
 }
 
 void loop() {
@@ -26,3 +36,11 @@ void loop() {
         Serial.println("heartbeat: safe test mode");
     }
 }
+
+#else
+
+int main() {
+    return app_config::hasSafeDefaults(app_config::kActiveProfilePolicy) ? 0 : 1;
+}
+
+#endif
