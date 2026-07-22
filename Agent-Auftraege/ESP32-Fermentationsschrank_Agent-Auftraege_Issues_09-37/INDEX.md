@@ -6,7 +6,7 @@
 | [Issue#10.md](Issue#10.md) | [E0.2] Native Tests, CI, virtuelle Zeit und Buildberichte | `COMPLETED` | `feat/issue-10-native-tests-ci-virtuelle-zeit-und-buildberichte` |
 | [Issue#11.md](Issue#11.md) | [E0.3] Hardwareabstraktionen, Mockadapter und Simulator | `COMPLETED` | `feat/issue-11-hardwareabstraktionen-mockadapter-und-simulator` |
 | [Issue#12.md](Issue#12.md) | [E1.1] Programmmodelle, Schema und Standardprogramme | `COMPLETED` | `feat/issue-12-programmmodelle-schema-und-standardprogramme` |
-| [Issue#13.md](Issue#13.md) | [E1.2] Unveraenderlichen Laufschnappschuss und Laufrevisionen implementieren | `READY` | `feat/issue-13-unveraenderlichen-laufschnappschuss-und-laufrevision` |
+| [Issue#13.md](Issue#13.md) | [E1.2] Unveraenderlichen Laufschnappschuss und Laufrevisionen implementieren | `COMPLETED` | `feat/issue-13-unveraenderlichen-laufschnappschuss-und-laufrevision` |
 | [Issue#14.md](Issue#14.md) | [E1.3] Zustandsmaschine und Prozessablaeufe implementieren | `PLANNED_SPEC_PENDING` | `feat/issue-14-zustandsmaschine-und-prozessablaeufe-implementieren` |
 | [Issue#15.md](Issue#15.md) | [E1.4] Laufkommandos, Meldungen und Bedienaktionen implementieren | `PLANNED_SPEC_PENDING` | `feat/issue-15-laufkommandos-meldungen-und-bedienaktionen-implement` |
 | [Issue#16.md](Issue#16.md) | [E2.1] Konfigurationsebenen, Validierung und atomare Revisionen | `PLANNED_SPEC_PENDING` | `feat/issue-16-konfigurationsebenen-validierung-und-atomare-revisio` |
