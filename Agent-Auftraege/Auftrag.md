@@ -1,306 +1,239 @@
+# Allgemeiner Agent-Auftrag: nächstes ausführbares Issue
+
 Arbeite im Repository:
 
-ManuEngineer/ESP32-Fermentationsschrank
+`ManuEngineer/ESP32-Fermentationsschrank`
 
 Die vorbereiteten Agent-Aufträge befinden sich unter:
 
-Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37
+`Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37`
 
-Ziel dieses Auftrags ist, genau EIN nächstes ausführbares Issue zu ermitteln,
-vollständig umzusetzen und dafür einen Pull Request zu erstellen.
+Ziel dieser Ausführung ist, den Aufgabenstatus mit GitHub zu synchronisieren,
+genau **ein** nächstes ausführbares Issue umzusetzen, dafür einen Pull Request
+gegen `main` zu erstellen und danach anzuhalten.
 
-Die erste Repository-Änderung jeder Ausführung ist bei Bedarf die
-Synchronisierung des INDEX mit dem aktuellen GitHub-Stand; erst danach darf ein
-neues Issue ausgewählt und bearbeitet werden.
+Ich übernehme Review, Merge und Branch-Löschung. Merge oder lösche daher weder
+Pull Request noch Branch selbst.
 
 ## 1. Repository vorbereiten
 
-Aktualisiere zuerst den lokalen Stand:
+```bash
+git checkout main
+git pull --ff-only
+git fetch --prune
+git status
+git branch --show-current
+```
 
-- git checkout main
-- git pull --ff-only
-- git fetch --prune
-- git status
+Falls der Arbeitsbaum nicht sauber ist oder ein Merge, Rebase oder Cherry-Pick
+läuft:
 
-Falls lokale Änderungen, nicht eingecheckte Dateien oder ein nicht sauberer
-Arbeitsbaum vorhanden sind, ändere nichts und melde den Zustand als BLOCKED.
+- ändere und verwerfe nichts,
+- erstelle keinen Branch,
+- melde den Zustand mit den betroffenen Dateien als `BLOCKED`,
+- halte danach an.
 
-Arbeite niemals direkt auf main.
+Arbeite niemals direkt auf `main`.
 
-## 2. Regeln und Auftragsunterlagen lesen
+## 2. Verbindliche Regeln lesen
 
 Lies vor der Auswahl eines Issues vollständig:
 
-- AGENTS.md
-- alle für die später geänderten Verzeichnisse geltenden untergeordneten AGENTS.md
-- docs/SPECIFICATION_REVIEW.md
-- docs/DECISIONS.md
-- Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/README.md
-- Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/INDEX.md
+- `AGENTS.md`
+- alle für die später geänderten Verzeichnisse geltenden untergeordneten
+  `AGENTS.md`
+- `docs/SPECIFICATION_REVIEW.md`
+- `docs/DECISIONS.md`
+- `Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/README.md`
+- `Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/INDEX.md`
 
-Die GitHub-Issues, akzeptierte ADRs und die kanonische
-Dokumentationspriorität sind verbindlich. Der INDEX ist nur ein Snapshot und
-darf nicht ungeprüft als aktueller Status behandelt werden.
+Die dort festgelegten Architektur-, Sicherheits-, Qualitäts-, Dokumentations-
+und Quellenregeln gelten vollständig und werden in diesem Auftrag nicht
+wiederholt.
 
-## 3. Live-Status ermitteln und INDEX synchronisieren
+Massgebend sind der aktuelle GitHub-Stand und die kanonische Quellenreihenfolge
+aus `docs/SPECIFICATION_REVIEW.md`. `INDEX.md` und `Issue#XX.md` sind
+Arbeits-Snapshots und dürfen nicht ungeprüft als aktueller Stand verwendet
+werden.
 
-Prüfe vor der Auswahl einer neuen Aufgabe den aktuellen Live-Stand aller
-Arbeits-Issues #9 bis #37 im GitHub-Repository.
+## 3. Live-Status prüfen und INDEX-Korrekturen bestimmen
 
-Prüfe für jedes Issue mindestens:
+Prüfe den aktuellen GitHub-Stand der Issues #9 bis #37. Berücksichtige dabei:
 
-- GitHub-Zustand: offen oder geschlossen
-- aktueller Status im Issue-Text
-- abgeschlossene und offene Abhängigkeiten
-- zugehörige offene oder gemergte Pull Requests
-- bestehende Arbeitsbranches
-- Hardware-, Mess- oder Spezifikationsblockaden
+- offen oder geschlossen,
+- Status und Abhängigkeiten des aktuellen Issue-Texts,
+- offene und gemergte Pull Requests,
+- vorhandene Remote-Arbeitsbranches,
+- Blockaden durch Spezifikation, Hardware oder Inbetriebnahme.
 
-Der INDEX ist nur ein lokaler Snapshot und keine Quelle der Wahrheit.
+Vergleiche das Ergebnis mit `INDEX.md` und bestimme alle notwendigen
+Statuskorrekturen.
 
-Synchronisiere danach:
+Dabei gelten die Statusregeln aus der README, insbesondere:
 
-Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/INDEX.md
+- ein abgeschlossenes GitHub-Issue wird im INDEX als `COMPLETED` geführt,
+- `COMPLETED` wird nicht erneut bearbeitet,
+- `BLOCKED_HARDWARE` und `TBD_COMMISSIONING` werden nicht ohne reale Nachweise
+  begonnen oder abgeschlossen,
+- `PLANNED_SPEC_PENDING` darf nur zu `READY` werden, wenn Freigabe, Scope und
+  Abhängigkeiten nach aktuellem GitHub- und Spezifikationsstand eindeutig sind,
+- abgeschlossene Abhängigkeiten allein reichen nicht für `READY`,
+- bei Widersprüchen wird nicht geraten.
 
-mit dem aktuellen GitHub-Stand.
+Ein offener Pull Request oder ein aktiver Branch für dasselbe Issue verhindert
+eine parallele Bearbeitung, ändert den fachlichen Status im INDEX aber nicht
+automatisch.
 
-### Verbindliche Statusermittlung
+Ändere in dieser Phase noch keine Datei.
 
-Verwende folgende Priorität:
+## 4. Genau ein ausführbares Issue auswählen
 
-1. `COMPLETED`
+Wähle das Issue mit der niedrigsten Nummer, das nach der Live-Prüfung tatsächlich
+ausführbar ist. Es muss mindestens gelten:
 
-   Setze den INDEX-Status auf `COMPLETED`, wenn mindestens eines davon gilt:
+- GitHub-Issue ist offen,
+- Status ist `READY`,
+- alle Abhängigkeiten sind abgeschlossen,
+- kein offener PR und kein aktiver Remote-Branch bearbeitet dasselbe Issue,
+- keine Spezifikations-, Hardware-, Mess- oder Sicherheitsblockade besteht,
+- das Issue wurde noch nicht durch einen gemergten PR umgesetzt.
 
-   - das GitHub-Issue ist geschlossen und als abgeschlossen markiert
-   - ein gemergter Pull Request hat das Issue geschlossen
-   - die Definition of Done ist nachweislich erfüllt und GitHub zeigt das Issue
-     als abgeschlossen
+Überspringe kein früheres ausführbares Issue ohne dokumentierten Grund.
+Bearbeite pro Ausführung genau ein Issue.
 
-   Ein eventuell noch im Issue-Text oder INDEX stehendes `READY`,
-   `PLANNED_SPEC_PENDING` oder anderes älteres Statusfeld wird dadurch
-   überschrieben.
+Lies danach vollständig:
 
-   Beispiel:
-   Ist Issue #10 auf GitHub abgeschlossen, muss sein INDEX-Eintrag von `READY`
-   auf `COMPLETED` geändert werden.
+- das aktuelle GitHub-Issue,
+- die zugehörige Datei `Issue#XX.md`, insbesondere den Abschnitt
+  **Fertiger Auftrag zum Kopieren**,
+- alle dort genannten Spezifikationsquellen,
+- alle für die betroffenen Verzeichnisse geltenden `AGENTS.md`.
 
-2. `BLOCKED_HARDWARE`
+Der aktuelle GitHub- und Spezifikationsstand hat Vorrang vor veralteten Angaben
+in `Issue#XX.md`.
 
-   Verwende diesen Status bei offenen Issues, deren vollständige Umsetzung reale,
-   noch nicht verfügbare oder noch nicht geprüfte Hardware voraussetzt.
+## 5. Plan berichten
 
-3. `TBD_COMMISSIONING`
+Berichte vor Brancherstellung und Dateiänderungen kurz:
 
-   Verwende diesen Status bei offenen Issues, deren Abschluss reale Messreihen,
-   Kalibrierungen, Belastungstests oder Inbetriebnahmeergebnisse voraussetzt.
+- ausgewähltes Issue und Begründung der Ausführbarkeit,
+- geprüfte Abhängigkeiten, PRs und Branches,
+- vorgesehener Branchname,
+- notwendige INDEX-Korrekturen,
+- geplanter Dateiumfang und Tests,
+- Risiken oder echte offene Entscheidungen.
 
-4. `PLANNED_SPEC_PENDING`
+Fahre danach selbstständig fort. Halte nur bei einer Stop-Bedingung aus den
+Repository-Regeln oder dem Issue-Auftrag an, insbesondere bei einem
+Spezifikationswiderspruch, einer neuen Architekturentscheidung oder fehlenden
+Hardware- beziehungsweise Messgrundlagen.
 
-   Verwende diesen Status nur, wenn das Issue offen ist und gemäss aktuellem
-   GitHub-Inhalt oder Spezifikation noch nicht zur Umsetzung freigegeben ist.
+## 6. Branch erstellen und INDEX zuerst synchronisieren
 
-   Abgeschlossene Abhängigkeiten allein reichen nicht aus, um diesen Status
-   automatisch auf `READY` zu setzen, sofern die Freigabe nicht eindeutig aus
-   dem aktuellen Issue oder den verbindlichen Dokumenten hervorgeht.
+Erstelle den im INDEX beziehungsweise Issue-Auftrag vorgeschlagenen Branch vom
+aktuellen `main`. Die Issue-Nummer muss im Branchnamen erhalten bleiben.
 
-5. `READY`
+```bash
+git checkout -b <branchname>
+git branch --show-current
+git status
+```
 
-   Verwende diesen Status nur, wenn:
+Die erste Dateiänderung auf diesem Branch ist die Synchronisierung von:
 
-   - das Issue offen ist
-   - alle Abhängigkeiten abgeschlossen sind
-   - keine Hardware-, Mess- oder Spezifikationsblockade besteht
-   - kein anderer Agent oder offener PR dasselbe Issue bearbeitet
-   - die Umsetzung gemäss aktuellem GitHub-Issue und Spezifikation freigegeben ist
+`Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/INDEX.md`
 
-6. Unklarer oder widersprüchlicher Status
+Aktualisiere dabei alle zuvor eindeutig festgestellten veralteten Einträge, nicht
+nur das ausgewählte Issue. Geschlossene Issues werden `COMPLETED`.
 
-   Bei einem echten Widerspruch zwischen Issue, Abhängigkeiten, PR-Stand und
-   Spezifikation:
+Das aktuell bearbeitete offene Issue bleibt `READY`; setze es nicht vor dem
+Merge auf `COMPLETED`.
 
-   - nicht raten
-   - das Issue nicht auswählen
-   - keine fachliche Implementierung beginnen
-   - den Konflikt konkret melden
+Ändere aufgrund der Synchronisierung weder GitHub-Issue-Texte noch
+`Issue#XX.md` oder die README der Agent-Aufträge.
 
-### Regeln für die INDEX-Aktualisierung
+Prüfe den INDEX-Diff, bevor du fachliche Dateien änderst:
 
-- Aktualisiere alle veralteten Statuswerte, nicht nur den ausgewählten Eintrag.
-- Geschlossene Issues werden immer als `COMPLETED` eingetragen.
-- Bereits gemergte oder geschlossene Issues werden nicht erneut ausgewählt.
-- Branchvorschläge bleiben bei abgeschlossenen Issues zur Nachvollziehbarkeit
-  bestehen, sofern keine Bereinigung ausdrücklich vorgesehen ist.
-- Ändere nicht automatisch die vorbereiteten Issue#XX.md-Dateien, nur weil ihr
-  Snapshot-Status veraltet ist.
-- Das aktuelle GitHub-Issue hat bei Scope, Status und Abhängigkeiten Vorrang vor
-  Issue#XX.md.
-- Ändere den GitHub-Issue-Text oder dessen Status nicht allein aufgrund eines
-  abweichenden INDEX-Eintrags.
-- Eine eindeutige, rein administrative Statuskorrektur im INDEX benötigt keine
-  Rückfrage.
+```bash
+git diff -- Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/INDEX.md
+```
 
-Führe die INDEX-Aktualisierung auf demselben Branch wie die anschliessende
-Issue-Umsetzung aus.
+## 7. Issue-Auftrag vollständig ausführen
 
-Falls kein fachliches Issue ausführbar ist, der INDEX aber veraltet ist:
+Setze ausschliesslich das ausgewählte Issue gemäss aktuellem GitHub-Issue,
+`Issue#XX.md`, den dort genannten Spezifikationen und den Repository-Regeln um.
 
-- erstelle einen kleinen Dokumentationsbranch
-  `docs/sync-agent-task-index`
-- aktualisiere ausschliesslich den INDEX
-- erstelle dafür einen kleinen Pull Request
-- beginne kein blockiertes fachliches Issue
-- halte danach an
+Halte insbesondere Scope, Nicht-Scope, Abhängigkeiten, Akzeptanzkriterien,
+Tests, Dokumentationspflichten und Stop-Bedingungen ein.
 
-## 4. Nächstes ausführbares Issue auswählen
+Nimm keine Arbeiten für weitere Issues vor. Unbestätigte Hardware-,
+Inbetriebnahme- oder Budgetwerte bleiben als solche gekennzeichnet.
 
-Wähle erst nach der vollständigen INDEX-Synchronisierung das Issue mit der
-niedrigsten Nummer, das aktuell tatsächlich ausführbar ist.
+## 8. Prüfen, dokumentieren und Pull Request erstellen
 
-Es müssen alle folgenden Bedingungen erfüllt sein:
+Führe alle im Repository und im Issue-Auftrag vorgesehenen Builds, Tests und
+Qualitätsprüfungen aus. Ein Test gilt nur als bestanden, wenn er tatsächlich
+erfolgreich ausgeführt wurde. Nicht ausführbare Hardware- oder
+Inbetriebnahmetests sind mit Begründung als nicht ausgeführt beziehungsweise
+`BLOCKED` zu dokumentieren.
 
-- Status nach der obigen Prüfung ist `READY`
-- GitHub-Issue ist offen
-- alle Abhängigkeiten sind abgeschlossen
-- kein offener Pull Request bearbeitet dasselbe Issue
-- kein aktiver Arbeitsbranch bearbeitet dasselbe Issue
-- keine reale Hardware oder Messreihe fehlt
-- keine Spezifikationsentscheidung ist offen
-- das Issue ist noch nicht durch einen gemergten PR umgesetzt
+Prüfe vor dem Commit mindestens:
 
-Wähle pro Ausführung genau ein Issue.
+```bash
+git status
+git diff --check
+git diff --stat
+git diff
+```
 
-Nachdem ein Issue ausgewählt wurde:
+Committe und pushe nur Änderungen im Scope des ausgewählten Issues sowie die
+INDEX-Synchronisierung.
 
-- öffne die zugehörige Datei `Issue#XX.md`
-- lies das aktuelle GitHub-Issue vollständig
-- lies alle dort genannten Spezifikationsquellen
-- verwende den Abschnitt „Fertiger Auftrag zum Kopieren“
-- passe veraltete Snapshot-Angaben an den aktuellen GitHub-Stand an
-- bearbeite ausschliesslich dieses eine Issue
+Erstelle anschliessend einen Pull Request gegen `main`. Er muss enthalten:
 
-## 5. Issue-spezifischen Auftrag verwenden
+- Zusammenfassung und Scope,
+- aktualisierte INDEX-Einträge,
+- ausgeführte Prüfungen mit Ergebnissen,
+- nicht ausgeführte oder blockierte Prüfungen,
+- bekannte Einschränkungen und verbleibende TBD-Werte,
+- relevante Sicherheits- oder Architekturhinweise,
+- `Closes #XX` für genau das bearbeitete Issue.
 
-Öffne für das ausgewählte Issue:
+## 9. Sonderfall: Kein fachliches Issue ausführbar
 
-Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/Issue#XX.md
+Ist kein Issue ausführbar, der INDEX aber veraltet:
 
-Lies zusätzlich das vollständige aktuelle GitHub-Issue und alle darin genannten
-Spezifikationsquellen.
+- erstelle vom aktuellen `main` den Branch `docs/sync-agent-task-index`,
+- ändere ausschliesslich den INDEX,
+- führe `git diff --check` aus,
+- erstelle einen kleinen PR gegen `main`,
+- erkläre die Statuskorrekturen und die Blockade des nächsten Issues,
+- halte danach an.
 
-Der aktuelle GitHub-Inhalt hat Vorrang vor einem eventuell älteren Snapshot in
-Issue#XX.md.
+Ist kein Issue ausführbar und der INDEX bereits aktuell:
 
-Befolge den Abschnitt "Fertiger Auftrag zum Kopieren" und alle darin enthaltenen:
+- erstelle keinen Branch und keinen PR,
+- ändere keine Datei,
+- berichte die konkrete Blockade der nächsten Issues,
+- halte danach an.
 
-- Scope-Vorgaben
-- Nicht-im-Scope-Regeln
-- Abhängigkeiten
-- Akzeptanzkriterien
-- Testanforderungen
-- Sicherheitsregeln
-- Stop-Bedingungen
+## 10. Nach dem Pull Request anhalten
 
-## 6. Vor der Implementierung planen
+Nach Erstellung des Pull Requests:
 
-Berichte zuerst kurz:
+- nicht mergen und kein Auto-Merge aktivieren,
+- Branch nicht löschen,
+- GitHub-Issue nicht eigenmächtig schliessen,
+- nicht mit dem nächsten Issue beginnen,
+- keine weiteren Repository-Änderungen durchführen.
 
-- welches Issue ausgewählt wurde
-- weshalb es aktuell ausführbar ist
-- welche Abhängigkeiten geprüft wurden
-- welchen Branch du erstellen wirst
-- welche Dateien oder Module voraussichtlich betroffen sind
-- welche Tests vorgesehen sind
-- welche Risiken oder offenen Entscheidungen bestehen
+Schliesse mit einem Bericht ab:
 
-Fahre danach selbstständig mit der Umsetzung fort, sofern keine Stop-Bedingung
-vorliegt.
+- Issue, Branch und PR-Link,
+- aktualisierte INDEX-Einträge,
+- wichtigste Änderungen,
+- Testergebnisse und nicht ausgeführte Prüfungen,
+- bekannte Einschränkungen und Blockaden,
+- besonders zu prüfende Review-Punkte.
 
-Bei einer echten Architekturentscheidung, einem Spezifikationswiderspruch,
-fehlender Hardware, fehlenden Messwerten oder einer sicherheitsrelevanten
-Unklarheit musst du anhalten und nachfragen.
-
-## 7. Branch und Umsetzung
-
-Erstelle genau einen neuen Branch vom aktuellen main.
-
-Verwende grundsätzlich den im INDEX beziehungsweise im Issue-Auftrag
-vorgeschlagenen Branchnamen. Kürze ihn nur, wenn es technisch notwendig ist,
-ohne die Issue-Nummer zu entfernen.
-
-Setze ausschliesslich das ausgewählte Issue um.
-
-Zwingende Grenzen:
-
-- keine Bearbeitung weiterer Issues
-- keine direkte Änderung auf main
-- keine erfundenen Hardwarewerte
-- keine TBD_HARDWARE- oder TBD_COMMISSIONING-Werte als bestätigt behandeln
-- keine Secrets oder Zugangsdaten einchecken
-- config/hardware.yaml, config/pins.yaml und andere lokale Konfigurationen nicht
-  einchecken
-- bestehende Architektur und ADR-013 einhalten
-- main.cpp bleibt Composition Root ohne Fachlogik
-- keine reale Aktorfreigabe ohne ausdrücklich bestätigte Voraussetzungen
-- keine unnötigen Abhängigkeiten oder grossen Refactorings ausserhalb des Issues
-
-## 8. Tests und Dokumentation
-
-Führe alle im Issue-Auftrag verlangten Prüfungen aus.
-
-Zusätzlich mindestens, soweit für den aktuellen Stand anwendbar:
-
-- pio run -e native -e esp32_bringup -e esp32_release
-- pio test -e native
-- python scripts/check_platformio_config.py
-- bestehende Format-, Lint-, Static-Analysis- und Secret-Prüfungen
-- git diff --check
-
-Dokumentiere:
-
-- welche Prüfungen erfolgreich waren
-- welche Prüfungen nicht ausgeführt werden konnten
-- welche Punkte BLOCKED bleiben
-- weshalb ein Test nicht ausführbar war
-
-Nicht ausgeführte Hardwaretests dürfen niemals als bestanden dargestellt werden.
-
-## 9. Pull Request erstellen
-
-Erstelle nach erfolgreicher Umsetzung einen Pull Request gegen main.
-
-Der Pull Request muss enthalten:
-
-- klare Zusammenfassung
-- Bezug zum bearbeiteten Issue
-- Scope und bewusste Nicht-Scope-Punkte
-- ausgeführte Tests mit Ergebnissen
-- nicht ausführbare Tests oder BLOCKED-Punkte
-- relevante Sicherheits- und Architekturhinweise
-- "Closes #XX"
-
-## 10. Danach anhalten
-
-Nach dem Erstellen des Pull Requests:
-
-- den PR nicht selbst mergen
-- den Branch nicht löschen
-- nicht automatisch mit dem nächsten Issue beginnen
-- keine weiteren Repository-Änderungen durchführen
-
-Ich übernehme anschliessend:
-
-- Review
-- allfällige Korrekturaufträge
-- Merge
-- Löschen des Branches
-
-Schliesse mit einem Bericht ab, der enthält:
-
-- ausgewähltes Issue
-- Branchname
-- PR-Link
-- wichtigste Änderungen
-- Testergebnisse
-- bekannte Einschränkungen
-- Punkte, die ich beim Review besonders prüfen sollte
+Danach halte vollständig an.
