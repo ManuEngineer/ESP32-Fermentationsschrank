@@ -32,12 +32,14 @@ BTS7960-Diagnose darf vor realer Verifikation als bestaetigt behandelt werden.
 
 ## Dokumentationsprioritaet
 
-Bei Widerspruechen gilt:
+Die verbindliche und vollstaendige Reihenfolge bei Dokumentationswiderspruechen
+steht ausschliesslich in `docs/SPECIFICATION_REVIEW.md` im Abschnitt
+`Dokumentationsprioritaet`. Kurzfassungen in Einstiegs- oder Agentendokumenten
+duerfen diese Reihenfolge nicht ersetzen.
 
-1. akzeptierte spaetere ADRs und `docs/SPECIFICATION_REVIEW.md`
-2. thematisch spezialisierte Spezifikationsdokumente
-3. `docs/REQUIREMENTS.md`, `docs/ARCHITECTURE.md`, `docs/HARDWARE.md`
-4. Beispielkonfigurationen
+Akzeptierte ADRs werden im zentralen Register `docs/DECISIONS.md` gefuehrt.
+Ausfuehrliche ADR-Einzeldokumente duerfen das Register ergaenzen, aber nicht
+ersetzen.
 
 Zentrale Einstiege:
 
