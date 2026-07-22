@@ -22,9 +22,8 @@ PASS = "PASS"
 FAILED = "FAILED"
 
 
-def report(name: str, status: str, detail: str = "") -> None:
-    suffix = f": {detail}" if detail else ""
-    print(f"{status}: {name}{suffix}")
+def report(name: str, status: str) -> None:
+    print(f"{status}: {name}")
 
 
 def selftest_format() -> str:
