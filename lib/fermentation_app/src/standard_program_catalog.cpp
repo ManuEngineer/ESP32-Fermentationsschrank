@@ -50,7 +50,7 @@ std::optional<ProgramDocument> FactoryProgramCatalog::find(
     const std::string& id) {
     for (auto& program : programs()) {
         if (program.program.id == id) {
-            return program;
+            return std::move(program);
         }
     }
     return std::nullopt;
@@ -59,7 +59,8 @@ std::optional<ProgramDocument> FactoryProgramCatalog::find(
 std::optional<ProgramDocument> FactoryProgramCatalog::makeUserCopy(
     const std::string& factoryId, std::string userId, std::string userName) {
     auto source = find(factoryId);
-    if (!source.has_value() || userId.empty() || userName.empty()) {
+    if (!source.has_value() || userId.empty() || userName.empty() ||
+        find(userId).has_value()) {
         return std::nullopt;
     }
 

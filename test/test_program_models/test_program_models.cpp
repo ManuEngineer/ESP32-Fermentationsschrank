@@ -241,6 +241,15 @@ void test_user_copy_has_independent_identity_and_lifecycle() {
     TEST_ASSERT_FALSE(FactoryProgramCatalog::find("my-milk-kefir").has_value());
 }
 
+void test_user_copy_rejects_factory_program_ids() {
+    TEST_ASSERT_FALSE(FactoryProgramCatalog::makeUserCopy(
+                          "milk-kefir", "milk-kefir", "Mein Milchkefir")
+                          .has_value());
+    TEST_ASSERT_FALSE(FactoryProgramCatalog::makeUserCopy(
+                          "milk-kefir", "yogurt-mild", "Mein Milchkefir")
+                          .has_value());
+}
+
 void test_release_one_rejects_zero_or_multiple_fermentation_stages() {
     auto noStage = makeRunnableProgram();
     noStage.program.fermentationStages.clear();
@@ -289,6 +298,7 @@ int main() {
     RUN_TEST(test_all_four_factory_programs_load_with_specified_behaviour);
     RUN_TEST(test_active_selection_is_a_copy_separate_from_factory_catalog);
     RUN_TEST(test_user_copy_has_independent_identity_and_lifecycle);
+    RUN_TEST(test_user_copy_rejects_factory_program_ids);
     RUN_TEST(test_release_one_rejects_zero_or_multiple_fermentation_stages);
     RUN_TEST(test_unknown_enum_values_are_rejected);
     return UNITY_END();
