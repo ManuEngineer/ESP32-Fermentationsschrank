@@ -104,7 +104,14 @@ Alle Profile bauen und die nativen Tests laufen mit:
 ```bash
 pio run
 pio test -e native
+python scripts/check_platformio_config.py
 ```
+
+Die reproduzierbare CI-Grundlage verwendet PlatformIO Core `6.1.19` und
+`espressif32` `7.0.1`. Das Pruefskript liest sowohl die effektiv aufgeloeste
+Projektkonfiguration als auch die Boardmetadaten von PlatformIO. Dadurch werden
+4 MB Flash und der interne 320-KiB-RAM-Rahmen ohne vorausgesetzte PSRAM
+unabhaengig von den Anwendungs-Makros kontrolliert.
 
 Der Kern greift nicht direkt auf GPIO, 1-Wire, Display, WLAN oder Flash zu,
 sondern verwendet klar getrennte Adapter. Dadurch koennen Zustandsmaschine,

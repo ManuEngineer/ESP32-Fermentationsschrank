@@ -30,7 +30,8 @@ freigeben.
 derselben Codebasis. `native` kompiliert den hardwareunabhaengigen Pfad ohne
 Arduino. Beide ESP32-Profile verwenden gemaess ADR-001 das generische Ziel
 `esp32dev` fuer ESP32-WROOM-32E und planen mit 4 MB Flash ohne vorausgesetzte
-PSRAM.
+PSRAM. Fuer reproduzierbare Builds sind PlatformIO Core `6.1.19` in CI und die
+ESP32-Plattform `espressif32` `7.0.1` fixiert.
 
 Die Profile unterscheiden ihre Freigabepolitik explizit:
 
@@ -49,6 +50,11 @@ Buildregeln, `src/` fuer den Firmware-Einstieg, `lib/` fuer testbare Komponenten
 und `test/` fuer native Tests. Profilunabhaengige Sicherheitsinvarianten liegen
 in `include/app_config.hpp` und werden sowohl zur Compilezeit in jedem Build als
 auch durch native Tests geprueft.
+
+`scripts/check_platformio_config.py` prueft zusaetzlich die von PlatformIO
+effektiv aufgeloesten Profile und Boardmetadaten. Die Kontrolle von 4 MB Flash
+und 320 KiB internem RAM ohne vorausgesetzte PSRAM ist damit von den
+Anwendungs-Makros getrennt.
 
 ## Schichten
 
