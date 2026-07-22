@@ -64,7 +64,7 @@ def selftest_static_analysis() -> str:
 def selftest_secrets(repo_root: Path) -> str:
     result = subprocess.run(
         [sys.executable, str(repo_root / "scripts" / "check_secrets.py"), "--selftest"],
-        capture_output=True, text=True,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     return PASS if result.returncode == 0 else FAILED
 

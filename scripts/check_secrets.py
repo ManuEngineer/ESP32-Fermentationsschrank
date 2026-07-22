@@ -145,7 +145,7 @@ def run_selftest() -> int:
             "-----END RSA PRIVATE KEY-----\n"
         )
         bad_password_file = tmp_path / "fixture_password.ini"
-        bad_password_file.write_text('wifi_pass' + 'word = "supersecretvalue"\n')
+        bad_password_file.write_text('pass' + 'word = "supersecretvalue"\n')
 
         good_example_file = tmp_path / "fixture.example.hpp"
         good_example_file.write_text(
