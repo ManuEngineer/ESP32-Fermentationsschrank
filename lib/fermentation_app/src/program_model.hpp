@@ -12,7 +12,11 @@ inline constexpr std::uint32_t kMigratableProgramSchemaVersion = 3U;
 
 using ProgramFieldMask = std::uint64_t;
 
-enum class ProgramField : std::uint16_t {
+// Absichtlich so breit wie ProgramFieldMask: Die aktuellen 15 Werte
+// braeuchten zwar weniger, aber spaetere Schemafelder ueber Bit 15 hinaus
+// sollen keinen Typwechsel erzwingen.
+// NOLINTNEXTLINE(performance-enum-size): Headroom fuer weitere Felder.
+enum class ProgramField : ProgramFieldMask {
     Id = 1ULL << 0U,
     Name = 1ULL << 1U,
     BuiltIn = 1ULL << 2U,
@@ -52,6 +56,21 @@ inline constexpr ProgramFieldMask kCurrentRequiredProgramFields =
 
 inline constexpr ProgramFieldMask kCurrentKnownProgramFields =
     kCurrentRequiredProgramFields;
+
+// Anzahl gesetzter Bits, portabel ohne C++20 std::popcount oder
+// Compiler-Builtins. Dient nur dazu, `kRequiredFields` (program_model.cpp)
+// per static_assert gegen die hier deklarierten Felder abzusichern.
+[[nodiscard]] constexpr int countProgramFields(ProgramFieldMask mask) {
+    int count = 0;
+    while (mask != 0U) {
+        mask &= (mask - 1U);
+        ++count;
+    }
+    return count;
+}
+
+inline constexpr int kCurrentProgramFieldCount =
+    countProgramFields(kCurrentKnownProgramFields);
 
 enum class SensorPreference : std::uint8_t {
     ProductIfAvailableElseAir,

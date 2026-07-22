@@ -41,6 +41,13 @@ constexpr std::array<RequiredField, 15> kRequiredFields{{
     {ProgramField::Completion, "defaults.completion"},
 }};
 
+// Haelt kRequiredFields synchron mit den in program_model.hpp deklarierten
+// Feldern: Wird ein ProgramField ergaenzt oder aus kCurrentKnownProgramFields
+// entfernt, ohne kRequiredFields anzupassen, schlaegt der Build fehl statt
+// die Pruefung stillschweigend luecken zu lassen.
+static_assert(kRequiredFields.size() ==
+              static_cast<std::size_t>(kCurrentProgramFieldCount));
+
 void addError(ValidationResult& result, ValidationErrorCode code,
               const char* field) {
     result.errors.push_back({code, field});
