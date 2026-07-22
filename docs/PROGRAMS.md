@@ -326,3 +326,31 @@ Die genaue Bedienung und maximale Anzahl werden spaeter festgelegt.
 - Kuehlziel und Abschlussverhalten je Programm
 - Standardlautstaerke beziehungsweise Signalmuster des Summers
 - endgueltiger Steckverbinder fuer den abnehmbaren Produktfuehler
+
+## Implementiertes Release-1-Programmmodell
+
+Das Programmmodell liegt in `lib/fermentation_app` und verwendet die aktuelle
+Schemaversion 4. Die einzelne Fermentationstemperatur der ersten
+Bedienoberflaeche wird intern bereits als Liste von Fermentationsphasen
+abgebildet. Die Release-1-Validierung akzeptiert genau eine Phase; dadurch ist
+eine spaetere Erweiterung moeglich, ohne mehrere Stufen vorzeitig freizugeben.
+
+Die Validierung unterscheidet bewusst zwei Zwecke:
+
+- `CatalogTemplate` prueft Schema, Pflichtfelder, unbekannte Felder und die
+  strukturell festgelegten Standardablaeufe. Noch offene Zahlenwerte duerfen
+  dabei fehlen und bleiben sichtbar `TBD_COMMISSIONING`.
+- `Runnable` verlangt zusaetzlich alle fuer einen Start benoetigten Zahlenwerte
+  und prueft die dokumentierten Grenzen. Eine Katalogvorlage mit offenen
+  Inbetriebnahmewerten kann dadurch nicht unbemerkt gestartet werden.
+
+Der Factory-Katalog stellt vier unveraenderliche Eintraege bereit. Eine aktive
+Auswahl und Benutzerprogramme sind davon getrennte Kopien; Aenderungen daran
+veraendern weder den Factory-Eintrag noch andere bereits erstellte Kopien.
+
+Schemaversion 3 kann deterministisch auf Version 4 migriert werden. Dabei
+werden ausschliesslich die mit Version 4 dokumentierten Katalog-, Loesch- und
+Installationsfelder ergaenzt. Aeltere oder zukuenftige Versionen sowie
+unvollstaendige Quelldokumente werden abgelehnt, statt teilweise aktiviert zu
+werden. Parser und persistente atomare Revisionen folgen in den dafuer
+vorgesehenen Persistenz-Issues.

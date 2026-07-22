@@ -49,3 +49,10 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 - `scripts/check_architecture_boundaries.py` erzwingt die erlaubte
   Abhaengigkeitsrichtung und Modulplatzierung in CI
 - unbenutzten Include `<cmath>` in `thermal_simulation_model.cpp` entfernt
+- versioniertes Release-1-Programmmodell mit deterministischer Struktur- und
+  Startvalidierung, explizitem Migrationsschritt von Schema 3 auf 4 sowie
+  unveraenderlichem Factory-Katalog fuer Joghurt mild, Joghurt stichfest,
+  Milch- und Wasserkefir
+- getrennte aktive Programmauswahl und Benutzerkopien; offene
+  `TBD_COMMISSIONING`-Werte bleiben als Katalogvorlage ladbar, werden aber als
+  produktive Laufzeitwerte sicher abgelehnt
