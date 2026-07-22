@@ -24,3 +24,12 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   `lib/device_platform/` und `lib/fermentation_app/`, damit
   `-Wall -Wextra -Werror` auch dort greifen (PlatformIOs `build_src_flags` galt
   bisher nur fuer `src/`)
+- Anwendungsneutrale Schnittstellen `ITemperatureSource`, `IActuatorSink`,
+  `IStateStore`, `IEventJournal`, `INetworkStatus` und `IUserNotificationSink`
+  mit deterministisch steuerbaren nativen Mockadaptern
+- einfaches, ausdruecklich unkalibriertes thermisches Simulationsmodell
+  (`ThermalSimulationModel`) fuer deterministische Heiz-/Kuehlverlaeufe in
+  nativen Tests
+- native Tests fuer Sensor-/Aktorfehlerinjektion, Stromausfall-/Neustart-
+  Verhalten, Persistenz-Fehlerinjektion und begrenzte Journal-/
+  Benachrichtigungspuffer

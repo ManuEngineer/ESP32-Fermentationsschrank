@@ -3,8 +3,8 @@
 | Datei | Issue | Snapshot-Status | Vorgeschlagener Branch |
 |---|---|---|---|
 | [Issue#09.md](Issue#09.md) | [E0.1] PlatformIO-Profile und Projektgrundlage einrichten | `COMPLETED` | `feat/issue-9-platformio-profile-und-projektgrundlage-einrichten` |
-| [Issue#10.md](Issue#10.md) | [E0.2] Native Tests, CI, virtuelle Zeit und Buildberichte | `READY` | `feat/issue-10-native-tests-ci-virtuelle-zeit-und-buildberichte` |
-| [Issue#11.md](Issue#11.md) | [E0.3] Hardwareabstraktionen, Mockadapter und Simulator | `PLANNED_SPEC_PENDING` | `feat/issue-11-hardwareabstraktionen-mockadapter-und-simulator` |
+| [Issue#10.md](Issue#10.md) | [E0.2] Native Tests, CI, virtuelle Zeit und Buildberichte | `COMPLETED` | `feat/issue-10-native-tests-ci-virtuelle-zeit-und-buildberichte` |
+| [Issue#11.md](Issue#11.md) | [E0.3] Hardwareabstraktionen, Mockadapter und Simulator | `READY` | `feat/issue-11-hardwareabstraktionen-mockadapter-und-simulator` |
 | [Issue#12.md](Issue#12.md) | [E1.1] Programmmodelle, Schema und Standardprogramme | `PLANNED_SPEC_PENDING` | `feat/issue-12-programmmodelle-schema-und-standardprogramme` |
 | [Issue#13.md](Issue#13.md) | [E1.2] Unveraenderlichen Laufschnappschuss und Laufrevisionen implementieren | `PLANNED_SPEC_PENDING` | `feat/issue-13-unveraenderlichen-laufschnappschuss-und-laufrevision` |
 | [Issue#14.md](Issue#14.md) | [E1.3] Zustandsmaschine und Prozessablaeufe implementieren | `PLANNED_SPEC_PENDING` | `feat/issue-14-zustandsmaschine-und-prozessablaeufe-implementieren` |

@@ -256,6 +256,19 @@ IResourceMonitor
 Jeder ESP32-Adapter validiert die konkrete Hardwarekonfiguration. Unbestaetigte
 Pins bleiben gesperrt.
 
+### Umgesetzte Schnittstellen und native Mockadapter
+
+`ITimeSource` (virtuelle monotone und optionale UTC-Zeit) sowie
+`ITemperatureSource`, `IActuatorSink`, `IStateStore`, `IEventJournal`,
+`INetworkStatus` und `IUserNotificationSink` samt deterministisch steuerbaren
+nativen Mockadaptern in `lib/device_platform/` sind umgesetzt. `IActuatorSink`
+bildet Heizen und Kuehlen als zwei unabhaengige Freigaben ab; der Mock macht
+eine gleichzeitige Freigabe sichtbar, statt sie zu verhindern oder zu
+verbergen. Ein einfaches, ausdruecklich unkalibriertes thermisches
+Simulationsmodell (`ThermalSimulationModel`) prueft nur Softwareablaeufe. Die
+ESP32-Adapter dieser Schnittstellen sowie `IResourceMonitor` sind noch nicht
+Teil dieser Grundlage.
+
 ## Bedienung
 
 Touch und Web verwenden gemeinsame View-Modelle und dieselben fachlichen
