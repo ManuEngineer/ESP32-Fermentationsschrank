@@ -10,10 +10,10 @@ struct PlatformStartupContext {
 
 class DevicePlatform final : public IPlatformServices {
    public:
-    bool begin(const PlatformStartupContext& context);
+    [[nodiscard]] bool begin(const PlatformStartupContext& context);
     void update();
 
-    bool ready() const override;
+    [[nodiscard]] bool ready() const override;
 
    private:
     bool ready_{false};

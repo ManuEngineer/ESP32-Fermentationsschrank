@@ -1,0 +1,8 @@
+# Versionierte Formatkonfiguration. Gepruefte Werkzeugversion: clang-format 18.1.8
+# (siehe .github/workflows/build.yml und docs/CI_AND_QUALITY_GATES.md).
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 80
+AccessModifierOffset: -1
+Standard: c++17
+SortIncludes: false

@@ -1,0 +1,8 @@
+{
+  "name": "device_platform",
+  "version": "0.1.0",
+  "description": "Anwendungsneutrale Geraetedienste und Schnittstellen (ADR-013).",
+  "build": {
+    "flags": ["-Wall", "-Wextra", "-Werror"]
+  }
+}

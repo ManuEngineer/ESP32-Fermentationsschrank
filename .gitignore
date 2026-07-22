@@ -35,3 +35,5 @@ dist/
 __pycache__/
 *.py[cod]
 *.log
+compile_commands.json
+build-report.md

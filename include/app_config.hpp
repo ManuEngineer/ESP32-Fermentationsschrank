@@ -117,14 +117,11 @@ inline constexpr ProfilePolicy kEsp32ReleaseProfilePolicy{
 constexpr bool hasSafeDefaults(const ProfilePolicy& policy) {
     return !policy.webOtaEnabled && !policy.realActuatorsEnabled &&
            (policy.profile != BuildProfile::Esp32Bringup ||
-            (policy.startupHardwareState ==
-                 HardwareState::HardwareUnverified &&
+            (policy.startupHardwareState == HardwareState::HardwareUnverified &&
              policy.actuatorPolicy == ActuatorPolicy::LockedForBringup)) &&
            (policy.profile != BuildProfile::Esp32Release ||
-            (policy.startupHardwareState ==
-                 HardwareState::HardwareUnverified &&
-             policy.actuatorPolicy ==
-                 ActuatorPolicy::RequireVerifiedHardware));
+            (policy.startupHardwareState == HardwareState::HardwareUnverified &&
+             policy.actuatorPolicy == ActuatorPolicy::RequireVerifiedHardware));
 }
 
 static_assert(kTargetFlashMegabytes == 4U);

@@ -23,10 +23,25 @@ jobs:
       - name: PlatformIO installieren
         run: python -m pip install platformio==6.1.19
 
-      - name: Firmware bauen
+      - name: Format- und Analysewerkzeuge installieren (clang 18.1.8)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18 clang-tidy-18
+          sudo ln -sf /usr/bin/clang-format-18 /usr/local/bin/clang-format
+          sudo ln -sf /usr/bin/clang-tidy-18 /usr/local/bin/clang-tidy
+          clang-format --version
+          clang-tidy --version
+
+      - name: Formatpruefung
+        run: |
+          clang-format --dry-run --Werror \
+            $(find src include lib test -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
+
+      - name: Firmware bauen und Groessenbericht erzeugen
         run: |
           set -o pipefail
-          pio run -e native -e esp32_bringup -e esp32_release 2>&1 | tee platformio-build.log
+          python scripts/build_report.py --output build-report.md \
+            native esp32_bringup esp32_release 2>&1 | tee platformio-build.log
 
       - name: Fehlgeschlagenen Buildlog sichern
         if: failure()
@@ -36,8 +51,32 @@ jobs:
           path: platformio-build.log
           if-no-files-found: ignore
 
+      - name: Groessenbericht sichern
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-report
+          path: build-report.md
+          if-no-files-found: ignore
+
       - name: Effektive Boardkonfiguration pruefen
         run: python scripts/check_platformio_config.py
 
       - name: Native Tests
         run: pio test -e native
+
+      - name: Static Analysis (clang-tidy)
+        run: |
+          pio run -e native -t compiledb
+          clang-tidy -p . \
+            include/app_config.hpp \
+            lib/device_platform/src/device_platform.cpp \
+            lib/device_platform/src/virtual_time_source.cpp \
+            lib/fermentation_app/src/fermentation_application.cpp \
+            src/main.cpp
+
+      - name: Geheimnis- und Lokalkonfigurationspruefung
+        run: python scripts/check_secrets.py
+
+      - name: Qualitaetspruefungen gegen absichtlich fehlerhafte Faelle testen
+        run: python scripts/selftest_quality_gates.py
