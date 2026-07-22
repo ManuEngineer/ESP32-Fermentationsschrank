@@ -40,10 +40,6 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 - neue interne Bibliothek `lib/device_platform_test_support/` fuer
   Mockadapter und Simulation; `device_platform` enthaelt jetzt ausschliesslich
   anwendungsneutrale Produktionsschnittstellen und -dienste (ADR-013)
-- `IActuatorSink` durch zwei kleine, anwendungsneutrale Ports ersetzt:
-  `IBidirectionalActuatorSink` (`setForward`/`setReverse`) und
-  `IBinaryOutputSink` (`setEnabled`); keine geraetespezifischen Rollen wie
-  Heizen/Kuehlen oder Innen-/Aussenluefter mehr in der Plattform-API
 - `IEventJournal` von der Mock-Speicherstruktur entkoppelt: der Port kennt nur
   noch `record(...)`, `entries()` ist eine Testhilfe von `MockEventJournal`
 - ADR-013 um die verbindliche Trennung von Produktionsplattform und
