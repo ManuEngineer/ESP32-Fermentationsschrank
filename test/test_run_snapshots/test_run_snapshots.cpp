@@ -420,14 +420,12 @@ void test_adjustment_after_restart_uses_new_monotonic_epoch() {
     const auto source = makeCommissionedUserProgram();
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
     TEST_ASSERT_TRUE(run.has_value());
-    TEST_ASSERT_TRUE(
-        run->applyAdjustment(targetAdjustment(40.0, 500000U),
-                             adjustableContext())
-            .applied());
+    TEST_ASSERT_TRUE(run->applyAdjustment(targetAdjustment(40.0, 500000U),
+                                          adjustableContext())
+                         .applied());
 
-    auto restored =
-        ActiveRun::restore(run->snapshot(), run->revisions(),
-                           run->revisionCount());
+    auto restored = ActiveRun::restore(run->snapshot(), run->revisions(),
+                                       run->revisionCount());
     TEST_ASSERT_TRUE(restored.has_value());
 
     RunAdjustmentRequest afterRestart;
@@ -447,13 +445,11 @@ void test_adjustment_after_restart_uses_new_monotonic_epoch() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::TimestampWentBackwards),
         static_cast<int>(
-            restored
-                ->applyAdjustment(backwardsInSameBoot, adjustableContext())
+            restored->applyAdjustment(backwardsInSameBoot, adjustableContext())
                 .status));
 
-    const auto restoredAgain =
-        ActiveRun::restore(restored->snapshot(), restored->revisions(),
-                           restored->revisionCount());
+    const auto restoredAgain = ActiveRun::restore(
+        restored->snapshot(), restored->revisions(), restored->revisionCount());
     TEST_ASSERT_TRUE(restoredAgain.has_value());
     TEST_ASSERT_EQUAL_UINT32(
         90U, restoredAgain->effectiveValues().remainingDurationMinutes);

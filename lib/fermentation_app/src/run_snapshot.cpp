@@ -88,8 +88,7 @@ bool validMonotonicEpoch(
     }
     const auto previousEpoch = revisions[index - 1U].monotonicEpoch;
     return currentEpoch == previousEpoch ||
-           (currentEpoch > previousEpoch &&
-            currentEpoch - previousEpoch == 1U);
+           (currentEpoch > previousEpoch && currentEpoch - previousEpoch == 1U);
 }
 
 bool validTargetTemperature(const RunProgramSnapshot& snapshot,
@@ -183,11 +182,10 @@ std::optional<ActiveRun> ActiveRun::restore(
                                     revision.after.targetTemperatureCelsius) ||
             !validRemainingDuration(snapshot, revision.stageIndex,
                                     revision.after.remainingDurationMinutes) ||
-            (index > 0U &&
-             monotonicTimestampWentBackwards(
-                 revision.timestamp, revision.monotonicEpoch,
-                 revisions[index - 1U].timestamp,
-                 revisions[index - 1U].monotonicEpoch)) ||
+            (index > 0U && monotonicTimestampWentBackwards(
+                               revision.timestamp, revision.monotonicEpoch,
+                               revisions[index - 1U].timestamp,
+                               revisions[index - 1U].monotonicEpoch)) ||
             unixTimestampWentBackwards(revision.timestamp,
                                        latestUnixTimestamp)) {
             return std::nullopt;
@@ -234,9 +232,9 @@ RunAdjustmentResult ActiveRun::applyAdjustment(
             revisions_[revisionCount_ - 1U].timestamp;
         const auto previousMonotonicEpoch =
             revisions_[revisionCount_ - 1U].monotonicEpoch;
-        if (monotonicTimestampWentBackwards(
-                request.timestamp, monotonicEpoch_, previousTimestamp,
-                previousMonotonicEpoch) ||
+        if (monotonicTimestampWentBackwards(request.timestamp, monotonicEpoch_,
+                                            previousTimestamp,
+                                            previousMonotonicEpoch) ||
             unixTimestampWentBackwards(
                 request.timestamp,
                 latestUnixTimeSeconds(revisions_, revisionCount_))) {
