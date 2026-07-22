@@ -82,16 +82,24 @@ void test_application_rejects_platform_before_startup() {
     TEST_ASSERT_FALSE(application.ready());
 }
 
+void test_platform_rejects_unsafe_startup_context() {
+    device_platform::DevicePlatform platform;
+    const device_platform::PlatformStartupContext startupContext{false};
+
+    TEST_ASSERT_FALSE(platform.begin(startupContext));
+    TEST_ASSERT_FALSE(platform.ready());
+}
+
 void test_application_starts_through_platform_interface() {
     device_platform::DevicePlatform platform;
     fermentation::FermentationApplication application;
+    const device_platform::PlatformStartupContext startupContext{
+        app_config::hasSafeDefaults(app_config::kActiveProfilePolicy),
+    };
 
-    TEST_ASSERT_TRUE(platform.begin());
+    TEST_ASSERT_TRUE(platform.begin(startupContext));
     TEST_ASSERT_TRUE(application.begin(platform));
     TEST_ASSERT_TRUE(application.ready());
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(app_config::BuildProfile::Native),
-        static_cast<int>(platform.profilePolicy().profile));
 }
 
 int main() {
@@ -102,6 +110,7 @@ int main() {
     RUN_TEST(test_release_requires_verification_without_enabling_actuators);
     RUN_TEST(test_native_profile_has_no_hardware_target);
     RUN_TEST(test_application_rejects_platform_before_startup);
+    RUN_TEST(test_platform_rejects_unsafe_startup_context);
     RUN_TEST(test_application_starts_through_platform_interface);
     return UNITY_END();
 }
