@@ -1,7 +1,6 @@
 #pragma once
 
 #include <map>
-#include <optional>
 #include <string>
 
 #include "state_store.hpp"
@@ -14,7 +13,7 @@ class MockStateStore final : public IStateStore {
    public:
     [[nodiscard]] bool write(const std::string& key,
                              const std::string& value) override;
-    [[nodiscard]] std::optional<std::string> read(
+    [[nodiscard]] StateStoreReadResult read(
         const std::string& key) const override;
 
     // Solange gesetzt, schlaegt jeder Schreibvorgang fehl, ohne den

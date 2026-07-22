@@ -10,15 +10,15 @@ bool MockStateStore::write(const std::string& key, const std::string& value) {
     return true;
 }
 
-std::optional<std::string> MockStateStore::read(const std::string& key) const {
+StateStoreReadResult MockStateStore::read(const std::string& key) const {
     if (readShouldFail_) {
-        return std::nullopt;
+        return {StateStoreReadStatus::Error, {}};
     }
     const auto iterator = values_.find(key);
     if (iterator == values_.end()) {
-        return std::nullopt;
+        return {StateStoreReadStatus::NotFound, {}};
     }
-    return iterator->second;
+    return {StateStoreReadStatus::Success, iterator->second};
 }
 
 void MockStateStore::injectWriteFailure(bool shouldFail) {

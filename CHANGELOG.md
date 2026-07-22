@@ -33,3 +33,5 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 - native Tests fuer Sensor-/Aktorfehlerinjektion, Stromausfall-/Neustart-
   Verhalten, Persistenz-Fehlerinjektion und begrenzte Journal-/
   Benachrichtigungspuffer
+- explizite Persistenzergebnisse, die fehlende Werte von Lesefehlern
+  unterscheiden und fehlgeschlagene Journalschreibvorgaenge melden

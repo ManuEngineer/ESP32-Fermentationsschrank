@@ -24,8 +24,9 @@ class IEventJournal {
     IEventJournal(IEventJournal&&) = delete;
     IEventJournal& operator=(IEventJournal&&) = delete;
 
-    virtual void record(uint64_t monotonicMillis,
-                        const std::string& message) = 0;
+    // Gibt `false` zurueck, wenn der Eintrag nicht gespeichert werden konnte.
+    [[nodiscard]] virtual bool record(uint64_t monotonicMillis,
+                                      const std::string& message) = 0;
     [[nodiscard]] virtual const std::vector<JournalEntry>& entries() const = 0;
 };
 

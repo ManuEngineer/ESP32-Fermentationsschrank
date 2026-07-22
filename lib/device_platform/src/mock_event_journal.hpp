@@ -11,11 +11,17 @@ class MockEventJournal final : public IEventJournal {
    public:
     static constexpr std::size_t kMaxEntries = 256;
 
-    void record(uint64_t monotonicMillis, const std::string& message) override;
+    [[nodiscard]] bool record(uint64_t monotonicMillis,
+                              const std::string& message) override;
     [[nodiscard]] const std::vector<JournalEntry>& entries() const override;
+
+    // Solange gesetzt, schlaegt jeder Schreibvorgang fehl, ohne vorhandene
+    // Journaleintraege zu veraendern.
+    void injectWriteFailure(bool shouldFail);
 
    private:
     std::vector<JournalEntry> entries_;
+    bool writeShouldFail_{false};
 };
 
 }  // namespace device_platform

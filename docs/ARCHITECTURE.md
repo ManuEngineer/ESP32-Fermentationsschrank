@@ -269,6 +269,12 @@ Simulationsmodell (`ThermalSimulationModel`) prueft nur Softwareablaeufe. Die
 ESP32-Adapter dieser Schnittstellen sowie `IResourceMonitor` sind noch nicht
 Teil dieser Grundlage.
 
+Persistenzports melden Fehler explizit: `IStateStore::read()` unterscheidet
+erfolgreiches Lesen, einen fehlenden Schluessel und einen Speicherfehler.
+`IEventJournal::record()` meldet fehlgeschlagene Schreibvorgaenge. Dadurch
+koennen spaetere Sicherheits- und Recoverylogik kritische Speicherfehler von
+normalen, noch nicht vorhandenen Daten unterscheiden.
+
 ## Bedienung
 
 Touch und Web verwenden gemeinsame View-Modelle und dieselben fachlichen

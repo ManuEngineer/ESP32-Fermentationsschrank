@@ -1,9 +1,21 @@
 #pragma once
 
-#include <optional>
+#include <cstdint>
 #include <string>
 
 namespace device_platform {
+
+enum class StateStoreReadStatus : uint8_t {
+    Success,
+    NotFound,
+    Error,
+};
+
+struct StateStoreReadResult {
+    StateStoreReadStatus status;
+    // Nur bei `Success` gueltig; bei `NotFound` und `Error` leer.
+    std::string value;
+};
 
 // Anwendungsneutraler Persistenz-Port. Bewusst generisch (Schluessel/Wert):
 // Schema, atomare Revisionen und Rueckfalllogik sind Aufgabe spaeterer Issues
@@ -24,9 +36,9 @@ class IStateStore {
     [[nodiscard]] virtual bool write(const std::string& key,
                                      const std::string& value) = 0;
 
-    // Liefert `std::nullopt`, wenn kein Wert vorhanden ist oder der Lesevorgang
-    // fehlschlaegt (z. B. injizierter Lesefehler).
-    [[nodiscard]] virtual std::optional<std::string> read(
+    // Unterscheidet einen fehlenden Schluessel von einem Speicherfehler, damit
+    // der Aufrufer auf kritische Lesefehler sicher reagieren kann.
+    [[nodiscard]] virtual StateStoreReadResult read(
         const std::string& key) const = 0;
 };
 
