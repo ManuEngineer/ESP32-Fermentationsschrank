@@ -4,13 +4,16 @@
 
 namespace device_platform {
 
+struct PlatformStartupContext {
+    bool configurationSafe;
+};
+
 class DevicePlatform final : public IPlatformServices {
    public:
-    bool begin();
+    bool begin(const PlatformStartupContext& context);
     void update();
 
     bool ready() const override;
-    const app_config::ProfilePolicy& profilePolicy() const override;
 
    private:
     bool ready_{false};
