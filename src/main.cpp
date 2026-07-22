@@ -8,7 +8,11 @@ device_platform::DevicePlatform platform;
 fermentation::FermentationApplication application;
 
 bool startApplication() {
-    return platform.begin() && application.begin(platform);
+    const device_platform::PlatformStartupContext startupContext{
+        app_config::hasSafeDefaults(app_config::kActiveProfilePolicy),
+    };
+
+    return platform.begin(startupContext) && application.begin(platform);
 }
 
 }  // namespace
@@ -24,7 +28,7 @@ uint32_t lastHeartbeatMs = 0;
 bool applicationStarted = false;
 
 void printBootSummary() {
-    const auto& policy = platform.profilePolicy();
+    const auto& policy = app_config::kActiveProfilePolicy;
 
     Serial.println();
     Serial.println(app_config::kProjectName);
