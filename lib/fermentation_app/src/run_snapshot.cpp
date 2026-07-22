@@ -50,6 +50,18 @@ bool equalValues(const EffectiveRunValues& left,
            left.remainingDurationMinutes == right.remainingDurationMinutes;
 }
 
+bool timestampWentBackwards(const RunTimestamp& current,
+                            const RunTimestamp& previous) {
+    if (current.monotonicMillis < previous.monotonicMillis) {
+        return true;
+    }
+    if (!current.unixTimeSeconds.has_value() ||
+        !previous.unixTimeSeconds.has_value()) {
+        return false;
+    }
+    return *current.unixTimeSeconds < *previous.unixTimeSeconds;
+}
+
 bool validTargetTemperature(const RunProgramSnapshot& snapshot,
                             std::size_t stageIndex, double target) {
     if (stageIndex >=
@@ -140,12 +152,8 @@ std::optional<ActiveRun> ActiveRun::restore(
             !validRemainingDuration(snapshot, revision.stageIndex,
                                     revision.after.remainingDurationMinutes) ||
             (index > 0U &&
-             (revision.timestamp.monotonicMillis <
-                  revisions[index - 1U].timestamp.monotonicMillis ||
-              (revision.timestamp.unixTimeSeconds.has_value() &&
-               revisions[index - 1U].timestamp.unixTimeSeconds.has_value() &&
-               *revision.timestamp.unixTimeSeconds <
-                   *revisions[index - 1U].timestamp.unixTimeSeconds)))) {
+             timestampWentBackwards(revision.timestamp,
+                                    revisions[index - 1U].timestamp))) {
             return std::nullopt;
         }
 
@@ -179,15 +187,9 @@ RunAdjustmentResult ActiveRun::applyAdjustment(
         return {RunAdjustmentStatus::InvalidMetadata, false};
     }
     if (revisionCount_ > 0U) {
-        const auto& prevTimestamp =
+        const auto& previousTimestamp =
             revisions_[revisionCount_ - 1U].timestamp;
-        if (request.timestamp.monotonicMillis < prevTimestamp.monotonicMillis) {
-            return {RunAdjustmentStatus::TimestampWentBackwards, false};
-        }
-        if (request.timestamp.unixTimeSeconds.has_value() &&
-            prevTimestamp.unixTimeSeconds.has_value() &&
-            *request.timestamp.unixTimeSeconds <
-                *prevTimestamp.unixTimeSeconds) {
+        if (timestampWentBackwards(request.timestamp, previousTimestamp)) {
             return {RunAdjustmentStatus::TimestampWentBackwards, false};
         }
     }

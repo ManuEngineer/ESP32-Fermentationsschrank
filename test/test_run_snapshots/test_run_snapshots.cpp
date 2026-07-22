@@ -338,7 +338,8 @@ void test_unix_timestamp_going_backwards_is_rejected() {
 
     auto noUtc = targetAdjustment(41.0, 300U);
     noUtc.timestamp.unixTimeSeconds = std::nullopt;
-    TEST_ASSERT_TRUE(run->applyAdjustment(noUtc, adjustableContext()).applied());
+    TEST_ASSERT_TRUE(
+        run->applyAdjustment(noUtc, adjustableContext()).applied());
 }
 
 void test_restore_rejects_decreasing_unix_timestamp() {
@@ -367,7 +368,7 @@ void test_restore_rejects_decreasing_unix_timestamp() {
         ActiveRun::restore(run->snapshot(), revisions, 2U).has_value());
 }
 
-
+void test_noop_and_invalid_metadata_do_not_create_revisions() {
     const auto source = makeCommissionedUserProgram();
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
     TEST_ASSERT_TRUE(run.has_value());
