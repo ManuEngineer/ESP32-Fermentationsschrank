@@ -318,7 +318,56 @@ void test_timestamp_and_revision_capacity_are_enforced() {
     TEST_ASSERT_EQUAL_UINT32(1U, shortRun->revisionCount());
 }
 
-void test_noop_and_invalid_metadata_do_not_create_revisions() {
+void test_unix_timestamp_going_backwards_is_rejected() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    TEST_ASSERT_TRUE(run.has_value());
+
+    auto first = targetAdjustment(40.0, 200U);
+    first.timestamp.unixTimeSeconds = 1000;
+    TEST_ASSERT_TRUE(
+        run->applyAdjustment(first, adjustableContext()).applied());
+
+    auto decreasedUtc = targetAdjustment(41.0, 300U);
+    decreasedUtc.timestamp.unixTimeSeconds = 999;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunAdjustmentStatus::TimestampWentBackwards),
+        static_cast<int>(
+            run->applyAdjustment(decreasedUtc, adjustableContext()).status));
+    TEST_ASSERT_EQUAL_UINT32(1U, run->revisionCount());
+
+    auto noUtc = targetAdjustment(41.0, 300U);
+    noUtc.timestamp.unixTimeSeconds = std::nullopt;
+    TEST_ASSERT_TRUE(run->applyAdjustment(noUtc, adjustableContext()).applied());
+}
+
+void test_restore_rejects_decreasing_unix_timestamp() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    TEST_ASSERT_TRUE(run.has_value());
+
+    auto first = targetAdjustment(40.0, 100U);
+    first.timestamp.unixTimeSeconds = 2000;
+    TEST_ASSERT_TRUE(
+        run->applyAdjustment(first, adjustableContext()).applied());
+
+    RunAdjustmentRequest second;
+    second.remainingDurationMinutes = 90U;
+    second.confirmed = true;
+    second.source = RunChangeSource::LocalDisplay;
+    second.reason = RunChangeReason::UserAdjustment;
+    second.timestamp.monotonicMillis = 200U;
+    second.timestamp.unixTimeSeconds = 2001;
+    TEST_ASSERT_TRUE(
+        run->applyAdjustment(second, adjustableContext()).applied());
+
+    auto revisions = run->revisions();
+    revisions[1].timestamp.unixTimeSeconds = 1999;
+    TEST_ASSERT_FALSE(
+        ActiveRun::restore(run->snapshot(), revisions, 2U).has_value());
+}
+
+
     const auto source = makeCommissionedUserProgram();
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
     TEST_ASSERT_TRUE(run.has_value());
@@ -353,6 +402,8 @@ int main() {
     RUN_TEST(test_restore_replays_snapshot_and_revision_history);
     RUN_TEST(test_restore_rejects_corrupt_or_reordered_revision_history);
     RUN_TEST(test_timestamp_and_revision_capacity_are_enforced);
+    RUN_TEST(test_unix_timestamp_going_backwards_is_rejected);
+    RUN_TEST(test_restore_rejects_decreasing_unix_timestamp);
     RUN_TEST(test_noop_and_invalid_metadata_do_not_create_revisions);
     return UNITY_END();
 }

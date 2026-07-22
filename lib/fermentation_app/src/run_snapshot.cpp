@@ -140,8 +140,12 @@ std::optional<ActiveRun> ActiveRun::restore(
             !validRemainingDuration(snapshot, revision.stageIndex,
                                     revision.after.remainingDurationMinutes) ||
             (index > 0U &&
-             revision.timestamp.monotonicMillis <
-                 revisions[index - 1U].timestamp.monotonicMillis)) {
+             (revision.timestamp.monotonicMillis <
+                  revisions[index - 1U].timestamp.monotonicMillis ||
+              (revision.timestamp.unixTimeSeconds.has_value() &&
+               revisions[index - 1U].timestamp.unixTimeSeconds.has_value() &&
+               *revision.timestamp.unixTimeSeconds <
+                   *revisions[index - 1U].timestamp.unixTimeSeconds)))) {
             return std::nullopt;
         }
 
@@ -174,10 +178,18 @@ RunAdjustmentResult ActiveRun::applyAdjustment(
         !validChangeReason(request.reason)) {
         return {RunAdjustmentStatus::InvalidMetadata, false};
     }
-    if (revisionCount_ > 0U &&
-        request.timestamp.monotonicMillis <
-            revisions_[revisionCount_ - 1U].timestamp.monotonicMillis) {
-        return {RunAdjustmentStatus::TimestampWentBackwards, false};
+    if (revisionCount_ > 0U) {
+        const auto& prevTimestamp =
+            revisions_[revisionCount_ - 1U].timestamp;
+        if (request.timestamp.monotonicMillis < prevTimestamp.monotonicMillis) {
+            return {RunAdjustmentStatus::TimestampWentBackwards, false};
+        }
+        if (request.timestamp.unixTimeSeconds.has_value() &&
+            prevTimestamp.unixTimeSeconds.has_value() &&
+            *request.timestamp.unixTimeSeconds <
+                *prevTimestamp.unixTimeSeconds) {
+            return {RunAdjustmentStatus::TimestampWentBackwards, false};
+        }
     }
     if (!request.targetTemperatureCelsius.has_value() &&
         !request.remainingDurationMinutes.has_value()) {
