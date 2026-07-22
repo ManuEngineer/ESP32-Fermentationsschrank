@@ -166,3 +166,19 @@
 - **Folgen:** Software-Issues koennen durch native Tests abgeschlossen werden,
   waehrend reale Verifikation separat `BLOCKED_HARDWARE` bleibt. Aktoren werden
   im Bring-up erst nach unbelasteter Pegelmessung schrittweise freigegeben.
+
+## ADR-013: Wiederverwendbare ESP32-Geraeteplattform
+
+- **Status:** accepted
+- **Datum:** 2026-07-22
+- **Kontext:** Weitere ESP32-Projekte sollen gemeinsame technische Grundlagen
+  wiederverwenden koennen, ohne Fermentationslogik zu kopieren.
+- **Entscheidung:** Projektgeruest, anwendungsneutrale `device_platform` und
+  konkrete `fermentation_app` werden getrennt. `main.cpp` bleibt Composition
+  Root. Eine Auslagerung in ein eigenes Plattform-Repository erfolgt erst bei
+  einem zweiten realen Anwendungsfall oder klarem Wartungsvorteil.
+- **Alternativen:** komplettes Fermentationsprojekt als Template kopieren;
+  sofortige spekulative Universalbibliothek.
+- **Folgen:** Neue Module muessen bewusst Plattform oder Anwendung zugeordnet und
+  nativ testbar gehalten werden. Die ausfuehrliche Entscheidung steht in
+  [`ADR-013_REUSABLE_DEVICE_PLATFORM.md`](ADR-013_REUSABLE_DEVICE_PLATFORM.md).
