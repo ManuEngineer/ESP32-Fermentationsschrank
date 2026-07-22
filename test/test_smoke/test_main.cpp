@@ -3,6 +3,8 @@
 #include <cstring>
 
 #include "app_config.hpp"
+#include "device_platform.hpp"
+#include "fermentation_application.hpp"
 
 void test_project_metadata() {
     TEST_ASSERT_EQUAL_STRING("ESP32-Fermentationsschrank",
@@ -71,6 +73,27 @@ void test_native_profile_has_no_hardware_target() {
     TEST_ASSERT_TRUE(app_config::hasSafeDefaults(policy));
 }
 
+void test_application_rejects_platform_before_startup() {
+    device_platform::DevicePlatform platform;
+    fermentation::FermentationApplication application;
+
+    TEST_ASSERT_FALSE(platform.ready());
+    TEST_ASSERT_FALSE(application.begin(platform));
+    TEST_ASSERT_FALSE(application.ready());
+}
+
+void test_application_starts_through_platform_interface() {
+    device_platform::DevicePlatform platform;
+    fermentation::FermentationApplication application;
+
+    TEST_ASSERT_TRUE(platform.begin());
+    TEST_ASSERT_TRUE(application.begin(platform));
+    TEST_ASSERT_TRUE(application.ready());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(app_config::BuildProfile::Native),
+        static_cast<int>(platform.profilePolicy().profile));
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_project_metadata);
@@ -78,5 +101,7 @@ int main() {
     RUN_TEST(test_bringup_starts_hardware_unverified_and_locked);
     RUN_TEST(test_release_requires_verification_without_enabling_actuators);
     RUN_TEST(test_native_profile_has_no_hardware_target);
+    RUN_TEST(test_application_rejects_platform_before_startup);
+    RUN_TEST(test_application_starts_through_platform_interface);
     return UNITY_END();
 }
