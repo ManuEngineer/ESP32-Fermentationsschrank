@@ -1,0 +1,45 @@
+# Versionierte Static-Analysis-Konfiguration. Gepruefte Werkzeugversion:
+# clang-tidy 18.1.8 (siehe .github/workflows/build.yml und
+# docs/CI_AND_QUALITY_GATES.md).
+#
+# Analysiert wird der hardwareunabhaengige C++17-Kern (include/, lib/, test/)
+# ueber die `native`-Kompilierungsdatenbank. Der Arduino-Zweig von
+# `src/main.cpp` (`#if defined(ARDUINO)`) wird dadurch nicht erfasst; das ist
+# eine dokumentierte, begruendete Ausnahme (kein ESP32-Cross-Compile-Toolchain
+# fuer clang-tidy verfuegbar).
+# Ausgenommene Checks und Begruendung:
+# - modernize-avoid-c-arrays: feste `char[]`-Stringkonstanten sind fuer
+#   Embedded-Firmware idiomatisch (kein std::array<char,N>-Mehraufwand).
+# - misc-include-cleaner: zu strikt fuer die schmalen Schnittstellenheader
+#   dieses Projekts (Typen werden bewusst ueber das eigene Modulheader
+#   transitiv verfuegbar gemacht, z. B. `time_source.hpp` in
+#   `virtual_time_source.hpp`).
+# - readability-identifier-length, readability-magic-numbers,
+#   cppcoreguidelines-avoid-magic-numbers: fuer diesen Projektstil zu
+#   pedantisch (kurze Testschleifenvariablen, Testzeitwerte).
+# - misc-non-private-member-variables-in-classes: fuer schmale
+#   Datentraeger wie `ProfilePolicy` nicht sinnvoll.
+# - bugprone-easily-swappable-parameters: erzeugt auf kleinen,
+#   dokumentierten Zeit-/Policy-Funktionen mehr Rauschen als Nutzen.
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  cppcoreguidelines-slicing,
+  cppcoreguidelines-special-member-functions,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -modernize-avoid-c-arrays,
+  -modernize-use-trailing-return-type,
+  -misc-include-cleaner,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -misc-non-private-member-variables-in-classes,
+  -bugprone-easily-swappable-parameters
+WarningsAsErrors: "*"
+HeaderFilterRegex: "(include|lib)/.*"
+FormatStyle: none

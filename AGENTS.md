@@ -49,6 +49,7 @@ Zentrale Einstiege:
 - `docs/ACCEPTANCE_TESTS.md`
 - `docs/OPEN_POINTS.md`
 - `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`
+- `docs/CI_AND_QUALITY_GATES.md`
 - `lib/README.md`
 
 ## Architekturregeln

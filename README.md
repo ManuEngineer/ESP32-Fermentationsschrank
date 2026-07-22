@@ -125,6 +125,23 @@ pio test -e native
 python scripts/check_platformio_config.py
 ```
 
+Seit Issue #10 pruefen CI und lokal zusaetzlich Formatierung, Static Analysis,
+Geheimnisse und einen Firmware-/Ressourcen-Groessenbericht:
+
+```bash
+clang-format --dry-run --Werror $(find src include lib test -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
+pio run -e native -t compiledb && clang-tidy -p . include/app_config.hpp \
+  lib/device_platform/src/device_platform.cpp \
+  lib/device_platform/src/virtual_time_source.cpp \
+  lib/fermentation_app/src/fermentation_application.cpp src/main.cpp
+python scripts/check_secrets.py
+python scripts/build_report.py --output build-report.md native esp32_bringup esp32_release
+```
+
+Details, Werkzeugversionen, die virtuelle Zeitquelle `ITimeSource`/
+`VirtualTimeSource` sowie die PASS-/FAILED-/BLOCKED-Konvention stehen in
+[`docs/CI_AND_QUALITY_GATES.md`](docs/CI_AND_QUALITY_GATES.md).
+
 Die reproduzierbare CI-Grundlage verwendet PlatformIO Core `6.1.19` und
 `espressif32` `7.0.1`. Das Pruefskript liest sowohl die effektiv aufgeloeste
 Projektkonfiguration als auch die Boardmetadaten von PlatformIO. Dadurch werden
@@ -153,6 +170,7 @@ Einstieg:
 - [`docs/IMPLEMENTATION_ISSUES.md`](docs/IMPLEMENTATION_ISSUES.md)
 - [`docs/ACCEPTANCE_TESTS.md`](docs/ACCEPTANCE_TESTS.md)
 - [`docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md)
+- [`docs/CI_AND_QUALITY_GATES.md`](docs/CI_AND_QUALITY_GATES.md)
 - [`lib/README.md`](lib/README.md)
 
 Fachliche Spezifikation:

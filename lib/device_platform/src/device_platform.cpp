@@ -11,8 +11,6 @@ void DevicePlatform::update() {
     // Gemeinsame Geraetedienste werden in den Folge-Issues hier angebunden.
 }
 
-bool DevicePlatform::ready() const {
-    return ready_;
-}
+bool DevicePlatform::ready() const { return ready_; }
 
 }  // namespace device_platform

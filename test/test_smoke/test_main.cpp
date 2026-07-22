@@ -15,8 +15,7 @@ void test_project_metadata() {
 
 void test_release_1_resource_invariants() {
     TEST_ASSERT_EQUAL_UINT32(4U, app_config::kTargetFlashMegabytes);
-    TEST_ASSERT_EQUAL_UINT32(4U * 1024U * 1024U,
-                             app_config::kTargetFlashBytes);
+    TEST_ASSERT_EQUAL_UINT32(4U * 1024U * 1024U, app_config::kTargetFlashBytes);
     TEST_ASSERT_FALSE(app_config::kRequiresPsram);
     TEST_ASSERT_FALSE(app_config::kWebOtaEnabled);
     TEST_ASSERT_FALSE(app_config::kRealActuatorsEnabledByDefault);
@@ -50,8 +49,7 @@ void test_release_requires_verification_without_enabling_actuators() {
         static_cast<int>(app_config::HardwareState::HardwareUnverified),
         static_cast<int>(policy.startupHardwareState));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(
-            app_config::ActuatorPolicy::RequireVerifiedHardware),
+        static_cast<int>(app_config::ActuatorPolicy::RequireVerifiedHardware),
         static_cast<int>(policy.actuatorPolicy));
     TEST_ASSERT_FALSE(policy.bringupDiagnostics);
     TEST_ASSERT_TRUE(policy.releasePolicy);
@@ -70,9 +68,8 @@ void test_release_policy_with_non_unverified_startup_state_is_unsafe() {
 void test_native_profile_has_no_hardware_target() {
     const auto& policy = app_config::kActiveProfilePolicy;
 
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(app_config::BuildProfile::Native),
-        static_cast<int>(policy.profile));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(app_config::BuildProfile::Native),
+                          static_cast<int>(policy.profile));
     TEST_ASSERT_FALSE(policy.esp32Target);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(app_config::ActuatorPolicy::SimulationOnly),
