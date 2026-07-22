@@ -24,6 +24,38 @@ esp32_release
 Das Umschalten des Buildprofils darf unbestaetigte Hardware nicht automatisch
 freigeben.
 
+### Umgesetzte Projektgrundlage
+
+`platformio.ini` definiert `native`, `esp32_bringup` und `esp32_release` auf
+derselben Codebasis. `native` kompiliert den hardwareunabhaengigen Pfad ohne
+Arduino. Beide ESP32-Profile verwenden gemaess ADR-001 das generische Ziel
+`esp32dev` fuer ESP32-WROOM-32E und planen mit 4 MB Flash ohne vorausgesetzte
+PSRAM. Fuer reproduzierbare Builds sind PlatformIO Core `6.1.19` in CI und die
+ESP32-Plattform `espressif32` `7.0.1` fixiert.
+
+Die Profile unterscheiden ihre Freigabepolitik explizit:
+
+- `esp32_bringup`: `HARDWARE_UNVERIFIED`, Bring-up-Diagnosepolitik, reale Aktoren
+  gesperrt
+- `esp32_release`: Releasepolitik verlangt ein bestaetigtes Hardwareprofil, reale
+  Aktoren bleiben in der unbestaetigten Standardkonfiguration gesperrt
+
+Web-OTA ist in allen Release-1-Builds deaktiviert. Eine projektspezifische
+Partitionstabelle wird erst nach den Build- und Hardwaremessungen aus #29
+festgelegt und bleibt `TBD_IMPLEMENTATION_BUDGET`. Die Grundlage enthaelt weder
+reale Hardwaretreiber noch GPIO- oder Pegelzuweisungen.
+
+Die gemeinsame Struktur trennt `include/` fuer hardwareunabhaengige Typen und
+Buildregeln, `src/` fuer den Firmware-Einstieg, `lib/` fuer testbare Komponenten
+und `test/` fuer native Tests. Profilunabhaengige Sicherheitsinvarianten liegen
+in `include/app_config.hpp` und werden sowohl zur Compilezeit in jedem Build als
+auch durch native Tests geprueft.
+
+`scripts/check_platformio_config.py` prueft zusaetzlich die von PlatformIO
+effektiv aufgeloesten Profile und Boardmetadaten. Die Kontrolle von 4 MB Flash
+und 320 KiB internem RAM ohne vorausgesetzte PSRAM ist damit von den
+Anwendungs-Makros getrennt.
+
 ## Schichten
 
 ```text

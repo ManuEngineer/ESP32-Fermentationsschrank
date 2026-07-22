@@ -16,16 +16,28 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Python einrichten
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.x"
-          cache: pip
+          python-version: "3.13"
 
       - name: PlatformIO installieren
-        run: python -m pip install --upgrade platformio
+        run: python -m pip install platformio==6.1.19
 
       - name: Firmware bauen
-        run: pio run
+        run: |
+          set -o pipefail
+          pio run -e native -e esp32_bringup -e esp32_release 2>&1 | tee platformio-build.log
+
+      - name: Fehlgeschlagenen Buildlog sichern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: platformio-build-log
+          path: platformio-build.log
+          if-no-files-found: ignore
+
+      - name: Effektive Boardkonfiguration pruefen
+        run: python scripts/check_platformio_config.py
 
       - name: Native Tests
         run: pio test -e native

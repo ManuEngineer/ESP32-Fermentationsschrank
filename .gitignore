@@ -32,4 +32,6 @@ credentials.*
 # Build- und Logdateien
 build/
 dist/
+__pycache__/
+*.py[cod]
 *.log

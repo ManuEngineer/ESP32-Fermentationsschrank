@@ -7,10 +7,9 @@ Owner: `ManuEngineer`
 
 ## Projektstatus
 
-Die Anforderungen fuer Release 1 sind spezifiziert. Auf dem Branch
-`docs/software-specification` laeuft der abschliessende Review in Pull Request
-#38. Die eigentliche Fermentationssteuerung wird erst nach dem Merge dieser
-Spezifikation umgesetzt.
+Die Anforderungen fuer Release 1 sind spezifiziert und mit Pull Request #38 nach
+`main` uebernommen. Die Implementierung erfolgt issueweise, beginnend mit der
+PlatformIO- und Projektgrundlage aus Issue #9.
 
 Die geplante Implementierung ist in den Epics #2 bis #8 und den Arbeits- und
 Abnahme-Issues #9 bis #37 strukturiert. Das erste Implementierungs-Issue ist #9.
@@ -77,6 +76,62 @@ esp32_bringup   Reale Hardwarepruefung mit gesperrten Aktoren
 esp32_release   Freigegebene Zielkonfiguration nach Hardwareabnahme
 ```
 
+Die Projektgrundlage setzt diese Profile wie folgt um:
+
+| Profil | Ziel und sichere Startpolitik |
+|---|---|
+| `native` | Hostbuild ohne Arduino-Hardware; nur Fachlogik und Tests |
+| `esp32_bringup` | generisches `esp32dev`-Ziel, Start als `HARDWARE_UNVERIFIED`, Aktoren gesperrt |
+| `esp32_release` | generisches `esp32dev`-Ziel, Freigabepolitik verlangt ein spaeter bestaetigtes Hardwareprofil; standardmaessig bleiben Aktoren gesperrt |
+
+Beide ESP32-Profile planen mit 4 MB Flash und setzen keine PSRAM voraus. Web-OTA
+ist als `FUTURE_RELEASE` deaktiviert. Es ist noch keine projektspezifische
+Partitionstabelle festgelegt; Layout und Budgets bleiben bis zu realen Build- und
+Hardwaremessungen `TBD_IMPLEMENTATION_BUDGET`. Ebenso sind keine Hardwaretreiber,
+GPIOs oder aktiven Pegel Bestandteil dieser Grundlage.
+
+Die Grundlage trennt Projektkonfiguration, wiederverwendbare Plattform und
+konkrete Anwendung:
+
+```text
+include/
+    gemeinsame Projekt- und Buildkonfiguration
+
+src/main.cpp
+    Composition Root; verbindet Plattform und Anwendung
+
+lib/device_platform/
+    anwendungsneutrale Geraetedienste und Schnittstellen
+
+lib/fermentation_app/
+    Fermentationsprogramme und konkrete Prozesslogik
+
+test/
+    native Unit-, Integrations- und Konfigurationspruefungen
+```
+
+Die Fermentations-App verwendet nur die Schnittstelle `IPlatformServices` und
+kennt weder Arduino noch die konkrete Klasse `DevicePlatform`. Die
+projektspezifische `app_config.hpp` bleibt in `main.cpp` und wird nicht in die
+wiederverwendbare Plattform gezogen. Verbindliche Details und die spaetere
+Auslagerungsstrategie stehen in
+[`ADR-013`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md).
+
+Alle Profile bauen und die nativen Tests laufen mit:
+
+```bash
+pio run
+pio test -e native
+python scripts/check_platformio_config.py
+```
+
+Die reproduzierbare CI-Grundlage verwendet PlatformIO Core `6.1.19` und
+`espressif32` `7.0.1`. Das Pruefskript liest sowohl die effektiv aufgeloeste
+Projektkonfiguration als auch die Boardmetadaten von PlatformIO. Dadurch werden
+4 MB Flash und der interne 320-KiB-RAM-Rahmen ohne vorausgesetzte PSRAM
+unabhaengig von den Anwendungs-Makros kontrolliert. Bei einem fehlgeschlagenen
+Firmwarebuild stellt CI den kompakten PlatformIO-Buildlog als Artefakt bereit.
+
 Der Kern greift nicht direkt auf GPIO, 1-Wire, Display, WLAN oder Flash zu,
 sondern verwendet klar getrennte Adapter. Dadurch koennen Zustandsmaschine,
 Persistenz, Sensorlogik, PI-Regler, Sicherheit, UI-Modelle und Weboberflaeche
@@ -97,6 +152,8 @@ Einstieg:
 - [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
 - [`docs/IMPLEMENTATION_ISSUES.md`](docs/IMPLEMENTATION_ISSUES.md)
 - [`docs/ACCEPTANCE_TESTS.md`](docs/ACCEPTANCE_TESTS.md)
+- [`docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md)
+- [`lib/README.md`](lib/README.md)
 
 Fachliche Spezifikation:
 
@@ -128,10 +185,10 @@ Hardware und offene Punkte:
 
 ## Prioritaet bei Widerspruechen
 
-1. spaetere akzeptierte ADRs und `SPECIFICATION_REVIEW.md`
-2. thematisch spezialisierte Spezifikationsdokumente
-3. `REQUIREMENTS.md`, `ARCHITECTURE.md` und `HARDWARE.md`
-4. Beispielkonfigurationen
+Die verbindliche und vollstaendige Reihenfolge steht ausschliesslich in
+[`docs/SPECIFICATION_REVIEW.md`](docs/SPECIFICATION_REVIEW.md) im Abschnitt
+`Dokumentationsprioritaet`. Dadurch gibt es keine zweite, verkuerzte Liste, die
+spaeter von der kanonischen Reihenfolge abweichen kann.
 
 Unbestaetigte Hardwarewerte bleiben `TBD_HARDWARE`; thermische Werte bleiben
 `TBD_COMMISSIONING`; Speicher- und Ressourcengrenzen bleiben

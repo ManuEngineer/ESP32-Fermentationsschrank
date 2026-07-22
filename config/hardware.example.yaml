@@ -14,10 +14,22 @@ controller:
   flash_mb: 4
   flash_status: confirmed_order
   require_psram: false
+  partition_layout: TBD_IMPLEMENTATION_BUDGET
   profiles:
-    - native
-    - esp32_bringup
-    - esp32_release
+    native:
+      target: host
+      actuator_policy: simulation_only
+      real_actuators_enabled: false
+    esp32_bringup:
+      target: esp32dev
+      startup_state: HARDWARE_UNVERIFIED
+      actuator_policy: locked_for_bringup
+      real_actuators_enabled: false
+    esp32_release:
+      target: esp32dev
+      requires_verified_hardware_profile: true
+      actuator_policy: require_verified_hardware
+      real_actuators_enabled: false
 
 peltier:
   voltage_v: 12
