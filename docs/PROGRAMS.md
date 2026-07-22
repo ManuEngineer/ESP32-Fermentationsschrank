@@ -354,3 +354,26 @@ Installationsfelder ergaenzt. Aeltere oder zukuenftige Versionen sowie
 unvollstaendige Quelldokumente werden abgelehnt, statt teilweise aktiviert zu
 werden. Parser und persistente atomare Revisionen folgen in den dafuer
 vorgesehenen Persistenz-Issues.
+
+## Implementierter Laufschnappschuss und Laufrevisionen
+
+`ActiveRun` kopiert beim Start das vollstaendige, als `Runnable` validierte
+Programmdokument zusammen mit Quellart und Programmrevision. Die wirksame
+Zieltemperatur und Restdauer werden getrennt davon gefuehrt. Spaetere
+Aenderungen am Factory-Eintrag oder Benutzerprogramm koennen den gespeicherten
+Laufschnappschuss daher nicht veraendern.
+
+Eine Laufanpassung wird nur nach ausdruecklicher Bestaetigung, bei aktivem Lauf
+und positiver Sicherheitsfreigabe angenommen. Zieltemperatur und Restdauer
+werden gemeinsam validiert und entweder zusammen oder gar nicht angewendet.
+Jede erfolgreiche Anpassung erzeugt eine fortlaufende, unveraenderliche
+Revision mit Phase, vorherigen und neuen Werten, Aenderungsquelle, Grund sowie
+monotonem und optionalem UTC-Zeitstempel. Eine Zielaenderung markiert die
+erneute Zielqualifikation als erforderlich. Abgeschlossene Phasen und
+rueckwaerts laufende Zeitstempel werden abgelehnt.
+
+Die Revisionshistorie ist auf 32 Eintraege begrenzt. Beim Wiederherstellen wird
+der wirksame Zustand ausschliesslich aus Schnappschuss und lueckenlos gepruefter
+Historie reproduziert; beschaedigte, umsortierte oder widerspruechliche Folgen
+werden nicht teilweise uebernommen. Die physische, ausfallsichere Speicherung
+dieser Daten ist weiterhin Aufgabe von Issue #17.
