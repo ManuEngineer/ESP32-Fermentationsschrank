@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace device_platform {
+namespace device_platform_test_support {
 
 ThermalSimulationModel::ThermalSimulationModel(ThermalSimulationConfig config,
                                                double initialCelsius)
@@ -33,4 +33,4 @@ void ThermalSimulationModel::advance(uint64_t elapsedMs, bool heating,
 
 double ThermalSimulationModel::celsius() const { return celsius_; }
 
-}  // namespace device_platform
+}  // namespace device_platform_test_support

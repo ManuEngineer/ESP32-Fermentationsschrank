@@ -1,6 +1,6 @@
 #include "mock_state_store.hpp"
 
-namespace device_platform {
+namespace device_platform_test_support {
 
 bool MockStateStore::write(const std::string& key, const std::string& value) {
     if (writeShouldFail_) {
@@ -10,15 +10,16 @@ bool MockStateStore::write(const std::string& key, const std::string& value) {
     return true;
 }
 
-StateStoreReadResult MockStateStore::read(const std::string& key) const {
+device_platform::StateStoreReadResult MockStateStore::read(
+    const std::string& key) const {
     if (readShouldFail_) {
-        return {StateStoreReadStatus::Error, {}};
+        return {device_platform::StateStoreReadStatus::Error, {}};
     }
     const auto iterator = values_.find(key);
     if (iterator == values_.end()) {
-        return {StateStoreReadStatus::NotFound, {}};
+        return {device_platform::StateStoreReadStatus::NotFound, {}};
     }
-    return {StateStoreReadStatus::Success, iterator->second};
+    return {device_platform::StateStoreReadStatus::Success, iterator->second};
 }
 
 void MockStateStore::injectWriteFailure(bool shouldFail) {
@@ -29,4 +30,4 @@ void MockStateStore::injectReadFailure(bool shouldFail) {
     readShouldFail_ = shouldFail;
 }
 
-}  // namespace device_platform
+}  // namespace device_platform_test_support

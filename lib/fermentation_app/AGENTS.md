@@ -14,6 +14,9 @@ fermentationsspezifische Bedienmodelle und deren Tests.
   und von allgemeinen, hardwareunabhaengigen Bausteinen abhaengen.
 - Sie darf die konkrete Klasse `DevicePlatform`, Arduino, GPIO, WLAN,
   Dateisystem oder reale Systemzeit nicht direkt verwenden.
+- Sie darf nicht von `lib/device_platform_test_support/` (Mockadapter und
+  Simulation fuer native Tests) abhaengen; eigene Tests verwenden eigene,
+  fermentationsspezifische Testhilfen.
 - Hardwarewirkungen werden ausschliesslich als abstrakte Anforderungen oder
   Kommandos an Ports uebergeben.
 

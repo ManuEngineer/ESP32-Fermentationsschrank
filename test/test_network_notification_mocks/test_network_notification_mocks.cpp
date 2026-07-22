@@ -4,13 +4,13 @@
 #include "mock_user_notification_sink.hpp"
 
 void test_network_status_defaults_to_disconnected() {
-    const device_platform::MockNetworkStatus network;
+    const device_platform_test_support::MockNetworkStatus network;
 
     TEST_ASSERT_FALSE(network.isConnected());
 }
 
 void test_network_status_can_be_toggled() {
-    device_platform::MockNetworkStatus network;
+    device_platform_test_support::MockNetworkStatus network;
 
     network.setConnected(true);
     TEST_ASSERT_TRUE(network.isConnected());
@@ -22,7 +22,7 @@ void test_network_status_can_be_toggled() {
 }
 
 void test_notification_sink_records_severity_and_message() {
-    device_platform::MockUserNotificationSink notifications;
+    device_platform_test_support::MockUserNotificationSink notifications;
 
     notifications.notify(device_platform::NotificationSeverity::Warning,
                          "product sensor failed");
@@ -37,18 +37,18 @@ void test_notification_sink_records_severity_and_message() {
 }
 
 void test_notification_sink_is_bounded_and_drops_oldest_entries() {
-    device_platform::MockUserNotificationSink notifications;
+    device_platform_test_support::MockUserNotificationSink notifications;
 
     const std::size_t entriesToWrite =
-        device_platform::MockUserNotificationSink::kMaxEntries + 5;
+        device_platform_test_support::MockUserNotificationSink::kMaxEntries + 5;
     for (std::size_t i = 0; i < entriesToWrite; ++i) {
         notifications.notify(device_platform::NotificationSeverity::Info,
                              "event");
     }
 
     TEST_ASSERT_EQUAL_UINT32(
-        static_cast<unsigned>(
-            device_platform::MockUserNotificationSink::kMaxEntries),
+        static_cast<unsigned>(device_platform_test_support::
+                                  MockUserNotificationSink::kMaxEntries),
         notifications.notifications().size());
 }
 

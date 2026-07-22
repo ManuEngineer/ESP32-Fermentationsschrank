@@ -1,6 +1,6 @@
 #include "mock_event_journal.hpp"
 
-namespace device_platform {
+namespace device_platform_test_support {
 
 bool MockEventJournal::record(uint64_t monotonicMillis,
                               const std::string& message) {
@@ -22,4 +22,4 @@ void MockEventJournal::injectWriteFailure(bool shouldFail) {
     writeShouldFail_ = shouldFail;
 }
 
-}  // namespace device_platform
+}  // namespace device_platform_test_support

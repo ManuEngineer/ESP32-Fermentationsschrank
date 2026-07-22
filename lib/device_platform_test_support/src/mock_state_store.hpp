@@ -5,15 +5,15 @@
 
 #include "state_store.hpp"
 
-namespace device_platform {
+namespace device_platform_test_support {
 
 // Speicherbasiertes Persistenz-Backend fuer native Tests mit injizierbaren
 // Fehlern, um kritische Speicherausfaelle nachzubilden.
-class MockStateStore final : public IStateStore {
+class MockStateStore final : public device_platform::IStateStore {
    public:
     [[nodiscard]] bool write(const std::string& key,
                              const std::string& value) override;
-    [[nodiscard]] StateStoreReadResult read(
+    [[nodiscard]] device_platform::StateStoreReadResult read(
         const std::string& key) const override;
 
     // Solange gesetzt, schlaegt jeder Schreibvorgang fehl, ohne den
@@ -31,4 +31,4 @@ class MockStateStore final : public IStateStore {
     bool readShouldFail_{false};
 };
 
-}  // namespace device_platform
+}  // namespace device_platform_test_support

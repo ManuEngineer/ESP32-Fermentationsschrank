@@ -1,13 +1,14 @@
 #include <unity.h>
 
-#include "mock_actuator_sink.hpp"
+#include "mock_bidirectional_actuator_sink.hpp"
+#include "mock_binary_output_sink.hpp"
 #include "mock_temperature_source.hpp"
 #include "thermal_simulation_model.hpp"
 #include "virtual_time_source.hpp"
 
 namespace {
 
-constexpr device_platform::ThermalSimulationConfig kTestConfig{
+constexpr device_platform_test_support::ThermalSimulationConfig kTestConfig{
     /*ambientCelsius=*/20.0,
     /*heatingRateCelsiusPerSecond=*/0.1,
     /*coolingRateCelsiusPerSecond=*/0.2,
@@ -17,7 +18,7 @@ constexpr device_platform::ThermalSimulationConfig kTestConfig{
 }  // namespace
 
 void test_temperature_source_reports_configured_value() {
-    device_platform::MockTemperatureSource sensor(4.0);
+    device_platform_test_support::MockTemperatureSource sensor(4.0);
 
     const auto reading = sensor.read();
 
@@ -26,7 +27,7 @@ void test_temperature_source_reports_configured_value() {
 }
 
 void test_temperature_source_can_change_value() {
-    device_platform::MockTemperatureSource sensor(4.0);
+    device_platform_test_support::MockTemperatureSource sensor(4.0);
 
     sensor.setCelsius(6.5);
 
@@ -34,67 +35,78 @@ void test_temperature_source_can_change_value() {
 }
 
 void test_temperature_source_fault_injection_marks_unavailable() {
-    device_platform::MockTemperatureSource sensor(4.0);
+    device_platform_test_support::MockTemperatureSource sensor(4.0);
 
     sensor.setAvailable(false);
 
     TEST_ASSERT_FALSE(sensor.read().available);
 }
 
-void test_actuator_sink_tracks_current_state() {
-    device_platform::MockActuatorSink actuators;
+void test_bidirectional_actuator_sink_tracks_current_state() {
+    device_platform_test_support::MockBidirectionalActuatorSink actuator;
 
-    actuators.setHeating(true);
-    actuators.setInsideFan(true);
-    actuators.setBuzzer(true);
+    actuator.setForward(true);
 
-    TEST_ASSERT_TRUE(actuators.heating());
-    TEST_ASSERT_FALSE(actuators.cooling());
-    TEST_ASSERT_TRUE(actuators.insideFan());
-    TEST_ASSERT_FALSE(actuators.outsideFan());
-    TEST_ASSERT_TRUE(actuators.buzzer());
+    TEST_ASSERT_TRUE(actuator.forward());
+    TEST_ASSERT_FALSE(actuator.reverse());
 }
 
-void test_actuator_sink_journals_every_command_in_order() {
-    device_platform::MockActuatorSink actuators;
+void test_bidirectional_actuator_sink_journals_every_command_in_order() {
+    device_platform_test_support::MockBidirectionalActuatorSink actuator;
 
-    actuators.setHeating(true);
-    actuators.setOutsideFan(true);
-    actuators.setHeating(false);
+    actuator.setForward(true);
+    actuator.setForward(false);
+    actuator.setReverse(true);
 
-    const auto& journal = actuators.commandJournal();
+    const auto& journal = actuator.commandJournal();
     TEST_ASSERT_EQUAL_UINT32(3U, journal.size());
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::ActuatorCommandKind::Heating),
+        static_cast<int>(device_platform_test_support::
+                             BidirectionalActuatorCommandKind::Forward),
         static_cast<int>(journal[0].kind));
     TEST_ASSERT_TRUE(journal[0].enabled);
+    TEST_ASSERT_FALSE(journal[1].enabled);
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::ActuatorCommandKind::OutsideFan),
-        static_cast<int>(journal[1].kind));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::ActuatorCommandKind::Heating),
+        static_cast<int>(device_platform_test_support::
+                             BidirectionalActuatorCommandKind::Reverse),
         static_cast<int>(journal[2].kind));
-    TEST_ASSERT_FALSE(journal[2].enabled);
+    TEST_ASSERT_TRUE(journal[2].enabled);
 }
 
-void test_actuator_sink_makes_simultaneous_directions_visible() {
-    device_platform::MockActuatorSink actuators;
+void test_bidirectional_actuator_sink_makes_simultaneous_activation_visible() {
+    device_platform_test_support::MockBidirectionalActuatorSink actuator;
 
-    TEST_ASSERT_FALSE(actuators.simultaneousDirectionsObserved());
+    TEST_ASSERT_FALSE(actuator.simultaneousActivationObserved());
 
-    actuators.setHeating(true);
-    TEST_ASSERT_FALSE(actuators.simultaneousDirectionsObserved());
+    actuator.setForward(true);
+    TEST_ASSERT_FALSE(actuator.simultaneousActivationObserved());
 
-    actuators.setCooling(true);
-    TEST_ASSERT_TRUE(actuators.simultaneousDirectionsObserved());
+    actuator.setReverse(true);
+    TEST_ASSERT_TRUE(actuator.simultaneousActivationObserved());
 
     // Bleibt sichtbar, auch wenn danach nur noch eine Richtung aktiv ist.
-    actuators.setHeating(false);
-    TEST_ASSERT_TRUE(actuators.simultaneousDirectionsObserved());
+    actuator.setForward(false);
+    TEST_ASSERT_TRUE(actuator.simultaneousActivationObserved());
+}
+
+void test_binary_output_sink_tracks_current_state_and_journal() {
+    device_platform_test_support::MockBinaryOutputSink output;
+
+    TEST_ASSERT_FALSE(output.enabled());
+
+    output.setEnabled(true);
+    output.setEnabled(false);
+
+    TEST_ASSERT_FALSE(output.enabled());
+    const auto& journal = output.commandJournal();
+    TEST_ASSERT_EQUAL_UINT32(2U, journal.size());
+    TEST_ASSERT_TRUE(journal[0].enabled);
+    TEST_ASSERT_FALSE(journal[1].enabled);
 }
 
 void test_thermal_model_heats_deterministically() {
-    device_platform::ThermalSimulationModel model(kTestConfig, 4.0);
+    device_platform_test_support::ThermalSimulationModel model(kTestConfig,
+                                                               4.0);
 
     model.advance(10000, /*heating=*/true, /*cooling=*/false);
 
@@ -102,7 +114,8 @@ void test_thermal_model_heats_deterministically() {
 }
 
 void test_thermal_model_cools_deterministically() {
-    device_platform::ThermalSimulationModel model(kTestConfig, 4.0);
+    device_platform_test_support::ThermalSimulationModel model(kTestConfig,
+                                                               4.0);
 
     model.advance(10000, /*heating=*/false, /*cooling=*/true);
 
@@ -110,7 +123,8 @@ void test_thermal_model_cools_deterministically() {
 }
 
 void test_thermal_model_drifts_toward_ambient_when_idle() {
-    device_platform::ThermalSimulationModel model(kTestConfig, 4.0);
+    device_platform_test_support::ThermalSimulationModel model(kTestConfig,
+                                                               4.0);
 
     model.advance(20000, /*heating=*/false, /*cooling=*/false);
 
@@ -118,7 +132,8 @@ void test_thermal_model_drifts_toward_ambient_when_idle() {
 }
 
 void test_thermal_model_does_not_overshoot_ambient_while_drifting() {
-    device_platform::ThermalSimulationModel model(kTestConfig, 19.99);
+    device_platform_test_support::ThermalSimulationModel model(kTestConfig,
+                                                               19.99);
 
     model.advance(60000, /*heating=*/false, /*cooling=*/false);
 
@@ -126,7 +141,8 @@ void test_thermal_model_does_not_overshoot_ambient_while_drifting() {
 }
 
 void test_thermal_model_ignores_simultaneous_heating_and_cooling() {
-    device_platform::ThermalSimulationModel model(kTestConfig, 4.0);
+    device_platform_test_support::ThermalSimulationModel model(kTestConfig,
+                                                               4.0);
 
     model.advance(10000, /*heating=*/true, /*cooling=*/true);
 
@@ -135,32 +151,37 @@ void test_thermal_model_ignores_simultaneous_heating_and_cooling() {
 
 void test_deterministic_heat_cool_cycle_driven_by_virtual_time() {
     device_platform::VirtualTimeSource timeSource;
-    device_platform::MockActuatorSink actuators;
-    device_platform::ThermalSimulationModel model(kTestConfig, 4.0);
+    device_platform_test_support::MockBidirectionalActuatorSink actuator;
+    device_platform_test_support::ThermalSimulationModel model(kTestConfig,
+                                                               4.0);
 
     uint64_t lastUpdateMillis = timeSource.monotonicMillis();
 
-    actuators.setHeating(true);
+    // "Forward" steht hier stellvertretend fuer Heizen; die Rollenzuordnung
+    // ist Aufgabe der Anwendung, nicht der Plattform.
+    actuator.setForward(true);
     timeSource.advanceMonotonicMillis(10000);
     model.advance(timeSource.monotonicMillis() - lastUpdateMillis,
-                  actuators.heating(), actuators.cooling());
+                  actuator.forward(), actuator.reverse());
     lastUpdateMillis = timeSource.monotonicMillis();
     TEST_ASSERT_EQUAL_DOUBLE(5.0, model.celsius());
 
-    actuators.setHeating(false);
-    actuators.setCooling(true);
+    actuator.setForward(false);
+    actuator.setReverse(true);
     timeSource.advanceMonotonicMillis(5000);
     model.advance(timeSource.monotonicMillis() - lastUpdateMillis,
-                  actuators.heating(), actuators.cooling());
+                  actuator.forward(), actuator.reverse());
     lastUpdateMillis = timeSource.monotonicMillis();
     TEST_ASSERT_EQUAL_DOUBLE(4.0, model.celsius());
 }
 
 void test_power_loss_and_restart_reset_to_safe_defaults() {
     device_platform::VirtualTimeSource beforeRestart;
-    device_platform::MockActuatorSink actuatorsBeforeRestart;
-    actuatorsBeforeRestart.setHeating(true);
-    actuatorsBeforeRestart.setInsideFan(true);
+    device_platform_test_support::MockBidirectionalActuatorSink
+        actuatorBeforeRestart;
+    device_platform_test_support::MockBinaryOutputSink outputBeforeRestart;
+    actuatorBeforeRestart.setForward(true);
+    outputBeforeRestart.setEnabled(true);
     beforeRestart.advanceMonotonicMillis(60000);
     beforeRestart.setUnixTimeSeconds(1700000000);
 
@@ -168,13 +189,15 @@ void test_power_loss_and_restart_reset_to_safe_defaults() {
     // kein Adapter darf ueberlebenden Aktorzustand aus dem vorherigen Lauf
     // erben.
     const device_platform::VirtualTimeSource afterRestart;
-    const device_platform::MockActuatorSink actuatorsAfterRestart;
+    const device_platform_test_support::MockBidirectionalActuatorSink
+        actuatorAfterRestart;
+    const device_platform_test_support::MockBinaryOutputSink outputAfterRestart;
 
     TEST_ASSERT_EQUAL_UINT64(0U, afterRestart.monotonicMillis());
     TEST_ASSERT_FALSE(afterRestart.unixTimeSeconds().has_value());
-    TEST_ASSERT_FALSE(actuatorsAfterRestart.heating());
-    TEST_ASSERT_FALSE(actuatorsAfterRestart.cooling());
-    TEST_ASSERT_FALSE(actuatorsAfterRestart.insideFan());
+    TEST_ASSERT_FALSE(actuatorAfterRestart.forward());
+    TEST_ASSERT_FALSE(actuatorAfterRestart.reverse());
+    TEST_ASSERT_FALSE(outputAfterRestart.enabled());
 }
 
 int main() {
@@ -182,9 +205,11 @@ int main() {
     RUN_TEST(test_temperature_source_reports_configured_value);
     RUN_TEST(test_temperature_source_can_change_value);
     RUN_TEST(test_temperature_source_fault_injection_marks_unavailable);
-    RUN_TEST(test_actuator_sink_tracks_current_state);
-    RUN_TEST(test_actuator_sink_journals_every_command_in_order);
-    RUN_TEST(test_actuator_sink_makes_simultaneous_directions_visible);
+    RUN_TEST(test_bidirectional_actuator_sink_tracks_current_state);
+    RUN_TEST(test_bidirectional_actuator_sink_journals_every_command_in_order);
+    RUN_TEST(
+        test_bidirectional_actuator_sink_makes_simultaneous_activation_visible);
+    RUN_TEST(test_binary_output_sink_tracks_current_state_and_journal);
     RUN_TEST(test_thermal_model_heats_deterministically);
     RUN_TEST(test_thermal_model_cools_deterministically);
     RUN_TEST(test_thermal_model_drifts_toward_ambient_when_idle);

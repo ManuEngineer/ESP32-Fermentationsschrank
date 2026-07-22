@@ -8,7 +8,11 @@ src/main.cpp
     Composition Root: instanziiert Plattform und Anwendung
 
 lib/device_platform/
-    anwendungsneutrale Dienste, Ports und Adapter
+    anwendungsneutrale Produktionsschnittstellen, Dienste und Adapter
+
+lib/device_platform_test_support/
+    deterministisch steuerbare Mockadapter und Simulation fuer native Tests;
+    keine Produktionsabhaengigkeit
 
 lib/fermentation_app/
     konkrete Fermentationsprogramme und Prozesslogik
@@ -21,9 +25,16 @@ main -> DevicePlatform
 main -> FermentationApplication
 FermentationApplication -> IPlatformServices
 DevicePlatform -X-> FermentationApplication
+device_platform_test_support -> device_platform
+device_platform -X-> device_platform_test_support
+FermentationApplication -X-> device_platform_test_support
+main -X-> device_platform_test_support
 ```
 
-`-X->` bedeutet: Diese Abhaengigkeit ist nicht erlaubt.
+`-X->` bedeutet: Diese Abhaengigkeit ist nicht erlaubt. `device_platform_test_support`
+wird ausschliesslich von nativen Tests eingebunden und darf die
+Produktionsbibliothek `device_platform` nicht unnoetig vergroessern oder deren
+oeffentliche API bestimmen.
 
 Neue allgemeine Module werden zuerst innerhalb dieses Repositories entwickelt
 und nativ getestet. Eine Auslagerung in eine eigenstaendig versionierte

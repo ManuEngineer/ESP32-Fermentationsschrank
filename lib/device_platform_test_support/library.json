@@ -1,0 +1,11 @@
+{
+  "name": "device_platform_test_support",
+  "version": "0.1.0",
+  "description": "Deterministisch steuerbare Mockadapter und Simulation fuer native Tests der Geraeteplattform (ADR-013). Nicht Teil der Produktionsbibliothek device_platform.",
+  "dependencies": {
+    "device_platform": ""
+  },
+  "build": {
+    "flags": ["-Wall", "-Wextra", "-Werror"]
+  }
+}

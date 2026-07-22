@@ -2,18 +2,15 @@
 
 #include <cstdint>
 #include <string>
-#include <vector>
 
 namespace device_platform {
 
-struct JournalEntry {
-    uint64_t monotonicMillis;
-    std::string message;
-};
-
-// Anwendungsneutraler Port fuer ein Fehler-/Ereignisjournal. Aufbewahrung,
-// Bereinigung und fachliche Kategorien sind Aufgabe spaeterer Issues; dieser
-// Port stellt nur das Aufzeichnen und Auslesen bereit.
+// Anwendungsneutraler Port fuer ein Fehler-/Ereignisjournal. Dieser Port
+// definiert ausschliesslich das Aufzeichnen eines Eintrags samt expliziter
+// Erfolgsmeldung. Auslesen, Aufbewahrung, Bereinigung und fachliche
+// Kategorien sind keine Aufgabe dieses Produktionsports; ein konkreter
+// Adapter oder Testmock darf eigene Methoden dafuer anbieten, ohne dass die
+// Schnittstelle selbst einen bestimmten Speichercontainer vorschreibt.
 class IEventJournal {
    public:
     IEventJournal() = default;
@@ -27,7 +24,6 @@ class IEventJournal {
     // Gibt `false` zurueck, wenn der Eintrag nicht gespeichert werden konnte.
     [[nodiscard]] virtual bool record(uint64_t monotonicMillis,
                                       const std::string& message) = 0;
-    [[nodiscard]] virtual const std::vector<JournalEntry>& entries() const = 0;
 };
 
 }  // namespace device_platform

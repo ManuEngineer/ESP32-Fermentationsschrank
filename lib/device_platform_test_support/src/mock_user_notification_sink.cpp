@@ -1,9 +1,10 @@
 #include "mock_user_notification_sink.hpp"
 
-namespace device_platform {
+namespace device_platform_test_support {
 
-void MockUserNotificationSink::notify(NotificationSeverity severity,
-                                      const std::string& message) {
+void MockUserNotificationSink::notify(
+    device_platform::NotificationSeverity severity,
+    const std::string& message) {
     if (notifications_.size() >= kMaxEntries) {
         notifications_.erase(notifications_.begin());
     }
@@ -15,4 +16,4 @@ MockUserNotificationSink::notifications() const {
     return notifications_;
 }
 
-}  // namespace device_platform
+}  // namespace device_platform_test_support

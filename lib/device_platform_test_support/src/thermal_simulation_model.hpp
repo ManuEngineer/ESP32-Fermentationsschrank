@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace device_platform {
+namespace device_platform_test_support {
 
 // Parameter des einfachen thermischen Simulationsmodells. Die Werte sind
 // bewusst willkuerlich und dienen ausschliesslich der Pruefung von
@@ -37,4 +37,4 @@ class ThermalSimulationModel {
     double celsius_;
 };
 
-}  // namespace device_platform
+}  // namespace device_platform_test_support

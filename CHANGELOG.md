@@ -35,3 +35,13 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   Benachrichtigungspuffer
 - explizite Persistenzergebnisse, die fehlende Werte von Lesefehlern
   unterscheiden und fehlgeschlagene Journalschreibvorgaenge melden
+- neue interne Bibliothek `lib/device_platform_test_support/` fuer
+  Mockadapter und Simulation; `device_platform` enthaelt jetzt ausschliesslich
+  anwendungsneutrale Produktionsschnittstellen und -dienste (ADR-013)
+- `IActuatorSink` durch zwei kleine, anwendungsneutrale Ports ersetzt:
+  `IBidirectionalActuatorSink` (`setForward`/`setReverse`) und
+  `IBinaryOutputSink` (`setEnabled`); keine geraetespezifischen Rollen wie
+  Heizen/Kuehlen oder Innen-/Aussenluefter mehr in der Plattform-API
+- `IEventJournal` von der Mock-Speicherstruktur entkoppelt: der Port kennt nur
+  noch `record(...)`, `entries()` ist eine Testhilfe von `MockEventJournal`
+- unbenutzten Include `<cmath>` in `thermal_simulation_model.cpp` entfernt

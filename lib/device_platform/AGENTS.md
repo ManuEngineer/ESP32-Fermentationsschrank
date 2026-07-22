@@ -13,7 +13,9 @@ anwendungsneutrale Geraetedienste. Massgebend ist
 - allgemeine Zeit-, Konfigurations-, Persistenz-, Netzwerk-, Diagnose- und
   UI-Grunddienste
 - allgemeine Sensorqualitaet, Filter und begrenzte Reglerbausteine
-- Ports sowie native und ESP32-spezifische Adapter
+- anwendungsneutrale Produktionsports (z. B. `ITemperatureSource`,
+  `IBidirectionalActuatorSink`, `IBinaryOutputSink`) sowie ESP32-spezifische
+  Produktionsadapter
 - schmale Schnittstellen, die von Anwendungen und Tests injiziert werden
 
 ## Nicht erlaubt
@@ -21,6 +23,11 @@ anwendungsneutrale Geraetedienste. Massgebend ist
 - Joghurt-, Kefir-, Kombucha- oder andere Fermentationsprogramme
 - Fermentationszustaende und fermentationsspezifische Standardwerte
 - Abhaengigkeiten auf `lib/fermentation_app/`
+- Abhaengigkeiten auf `lib/device_platform_test_support/`
+- Mockadapter, Testhilfen oder Simulation (gehoeren nach
+  `lib/device_platform_test_support/`)
+- geraetespezifische Rollen (z. B. Heizen/Kuehlen, Innen-/Aussenluefter,
+  Summer) als allgemeine Plattform-API
 - direkte Freigabe unbestaetigter GPIOs oder Aktoren
 - Arduino-Abhaengigkeiten in hardwareunabhaengigen Kernmodulen
 
