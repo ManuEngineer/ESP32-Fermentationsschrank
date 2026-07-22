@@ -11,9 +11,7 @@ Aktorfreigabe erzeugen.
 
 ## Verbindlicher Entwicklungsstand
 
-- Die Spezifikation liegt auf `docs/software-specification` und wird in PR #38
-  abschliessend geprueft.
-- Implementierung beginnt erst nach dem Merge dieses PRs.
+- Die Release-1-Spezifikation wurde mit PR #38 nach `main` uebernommen.
 - Epics #2 bis #8 und Issues #9 bis #37 bilden die geplante Arbeitsstruktur.
 - #9 ist das erste Implementierungs-Issue.
 - Pro Implementierungs-Issue wird ein eigener Branch und ein kleiner PR verwendet.
@@ -48,6 +46,8 @@ Zentrale Einstiege:
 - `docs/IMPLEMENTATION_ISSUES.md`
 - `docs/ACCEPTANCE_TESTS.md`
 - `docs/OPEN_POINTS.md`
+- `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`
+- `lib/README.md`
 
 ## Architekturregeln
 
@@ -72,6 +72,32 @@ esp32_release
 `esp32_bringup` startet mit gesperrten Aktoren und dem sichtbaren Zustand
 `HARDWARE_UNVERIFIED`. Ein Wechsel auf `esp32_release` darf unbekannte Hardware
 nicht automatisch freigeben.
+
+## Modul- und Wiederverwendungsregeln
+
+ADR-013 ist verbindlich. Die Firmware trennt:
+
+```text
+src/main.cpp            Composition Root
+lib/device_platform/    anwendungsneutrale Geraetedienste
+lib/fermentation_app/   konkrete Fermentationsanwendung
+```
+
+- `main.cpp` verbindet Module und enthaelt keine Prozess-, Regel-, Persistenz-
+  oder Aktorlogik.
+- `fermentation_app` darf nur schmale Plattform-Schnittstellen verwenden und
+  kennt weder Arduino noch die konkrete Klasse `DevicePlatform`.
+- `device_platform` darf keine Fermentationsbegriffe, Fermentationszustaende oder
+  Abhaengigkeit auf `fermentation_app` enthalten.
+- Die projektspezifische `app_config.hpp` bleibt ausserhalb der
+  wiederverwendbaren Plattform.
+- Allgemeine Module muessen im Profil `native` testbar sein.
+- Keine vorschnelle Auslagerung oder Universalplattform: Ein separates
+  Plattform-Repository entsteht erst bei einem zweiten realen Anwendungsfall
+  oder einem klaren unabhaengigen Wartungsvorteil.
+
+Fuer Dateien innerhalb der beiden Modulverzeichnisse gelten zusaetzlich die dort
+liegenden `AGENTS.md`.
 
 ## Sicherheitsregeln
 
