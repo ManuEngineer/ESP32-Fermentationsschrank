@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Beweist, dass die Format-, Static-Analysis- und Geheimnispruefungen einen
-absichtlich fehlerhaften Fall tatsaechlich erkennen.
+"""Beweist, dass die Qualitaetspruefungen absichtlich fehlerhafte Faelle erkennen.
 
 Alle Fixtures werden in einem temporaeren Verzeichnis erzeugt und wieder
 entfernt. Dadurch bleibt `main` immer gruen; kein absichtlich fehlerhafter Fall
@@ -37,7 +36,8 @@ def selftest_format() -> str:
 
         result = subprocess.run(
             [clang_format, "--dry-run", "--Werror", str(bad_file)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         return FAILED if result.returncode == 0 else PASS
 
@@ -54,17 +54,25 @@ def selftest_static_analysis() -> str:
         )
 
         result = subprocess.run(
-            [clang_tidy, "--checks=-*,readability-braces-around-statements",
-             "--warnings-as-errors=*", str(bad_file), "--", "-std=c++17"],
-            capture_output=True, text=True,
+            [
+                clang_tidy,
+                "--checks=-*,readability-braces-around-statements",
+                "--warnings-as-errors=*",
+                str(bad_file),
+                "--",
+                "-std=c++17",
+            ],
+            capture_output=True,
+            text=True,
         )
         return FAILED if result.returncode == 0 else PASS
 
 
-def selftest_secrets(repo_root: Path) -> str:
+def run_script_selftest(repo_root: Path, script_name: str) -> str:
     result = subprocess.run(
-        [sys.executable, str(repo_root / "scripts" / "check_secrets.py"), "--selftest"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        [sys.executable, str(repo_root / "scripts" / script_name), "--selftest"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     return PASS if result.returncode == 0 else FAILED
 
@@ -75,7 +83,12 @@ def main() -> int:
     results = {
         "Format-Pruefung erkennt absichtlich fehlerhaften Fall": selftest_format(),
         "Static-Analysis erkennt absichtlich fehlerhaften Fall": selftest_static_analysis(),
-        "Geheimnispruefung erkennt absichtlich fehlerhaften Fall": selftest_secrets(repo_root),
+        "Geheimnispruefung erkennt absichtlich fehlerhaften Fall": run_script_selftest(
+            repo_root, "check_secrets.py"
+        ),
+        "Architekturpruefung erkennt absichtliche Grenzverletzung": run_script_selftest(
+            repo_root, "check_architecture_boundaries.py"
+        ),
     }
 
     for name, status in results.items():

@@ -75,6 +75,9 @@ jobs:
             lib/fermentation_app/src/fermentation_application.cpp \
             src/main.cpp
 
+      - name: Architekturgrenzen pruefen
+        run: python scripts/check_architecture_boundaries.py
+
       - name: Geheimnis- und Lokalkonfigurationspruefung
         run: python scripts/check_secrets.py
 

@@ -224,13 +224,18 @@ Mindestens vorgesehene Schnittstellen:
 ```text
 ITimeSource
 ITemperatureSource
-IActuatorSink
+IBidirectionalActuatorSink
+IBinaryOutputSink
 IStateStore
 IEventJournal
 INetworkStatus
 IUserNotificationSink
 IResourceMonitor
 ```
+
+`IBidirectionalActuatorSink` und `IBinaryOutputSink` ersetzen einen
+urspruenglich gemeinsamen, geraetespezifisch benannten Aktorport (siehe
+"Umgesetzte Schnittstellen" unten).
 
 ### Native Adapter
 
@@ -255,6 +260,44 @@ IResourceMonitor
 
 Jeder ESP32-Adapter validiert die konkrete Hardwarekonfiguration. Unbestaetigte
 Pins bleiben gesperrt.
+
+### Umgesetzte Schnittstellen und native Mockadapter
+
+`ITimeSource` (virtuelle monotone und optionale UTC-Zeit) sowie
+`ITemperatureSource`, `IBidirectionalActuatorSink`, `IBinaryOutputSink`,
+`IStateStore`, `IEventJournal`, `INetworkStatus` und `IUserNotificationSink`
+sind in `lib/device_platform/` umgesetzt. Dieses Verzeichnis enthaelt
+ausschliesslich die anwendungsneutralen Produktionsschnittstellen und
+allgemeinen Geraetedienste (siehe ADR-013).
+
+`IBidirectionalActuatorSink` (`setForward`/`setReverse`) bildet einen
+bidirektionalen Aktor mit zwei unabhaengig ansteuerbaren Richtungen ab, ohne
+geraetespezifische Rollen wie Heizen/Kuehlen festzuschreiben.
+`IBinaryOutputSink` (`setEnabled`) bildet genau einen binaeren Ausgang ab; die
+Zuordnung zu einer konkreten Rolle wie Innenluefter, Aussenluefter oder Summer
+ist Aufgabe der Anwendung beziehungsweise der Composition Root, nicht der
+Plattform.
+
+Deterministisch steuerbare Mockadapter und das einfache, ausdruecklich
+unkalibrierte thermische Simulationsmodell (`ThermalSimulationModel`; prueft
+nur Softwareablaeufe) liegen in der getrennten internen Bibliothek
+`lib/device_platform_test_support/`. Diese Bibliothek darf von
+`device_platform` abhaengen, nicht umgekehrt; `fermentation_app` und
+`src/main.cpp` haengen nicht von ihr ab, und die ESP32-Produktionsbuilds binden
+sie nicht ein. Der bidirektionale Mock macht eine gleichzeitige Aktivierung
+beider Richtungen dauerhaft sichtbar, statt sie zu verhindern oder zu
+verbergen.
+
+Reale ESP32-Adapter dieser Schnittstellen sowie `IResourceMonitor` sind noch
+nicht Teil dieser Grundlage. Eine Auslagerung von `device_platform` oder
+`device_platform_test_support` in ein separates Repository erfolgt weiterhin
+nicht (siehe ADR-013).
+
+Persistenzports melden Fehler explizit: `IStateStore::read()` unterscheidet
+erfolgreiches Lesen, einen fehlenden Schluessel und einen Speicherfehler.
+`IEventJournal::record()` meldet fehlgeschlagene Schreibvorgaenge. Dadurch
+koennen spaetere Sicherheits- und Recoverylogik kritische Speicherfehler von
+normalen, noch nicht vorhandenen Daten unterscheiden.
 
 ## Bedienung
 

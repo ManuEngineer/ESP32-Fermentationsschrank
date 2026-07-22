@@ -30,6 +30,9 @@ wiederverwendbare Geraeteplattform
 konkrete Anwendung
 ```
 
+Testhilfen bilden eine getrennte, nur nach innen gerichtete Unterstuetzung der
+Geraeteplattform und sind kein vierter Produktionsbereich.
+
 Im aktuellen Repository gilt:
 
 ```text
@@ -37,7 +40,10 @@ src/main.cpp
     Zusammensetzungsstelle und Arduino-Einstieg
 
 lib/device_platform/
-    allgemeine, anwendungsneutrale Geraetedienste und deren Schnittstellen
+    allgemeine, anwendungsneutrale Produktionsports, Geraetedienste und Adapter
+
+lib/device_platform_test_support/
+    native Mockadapter, Fehlerinjektionen und deterministische Simulation
 
 lib/fermentation_app/
     ausschliesslich Fermentationsprogramme, Prozesszustaende und
@@ -54,13 +60,19 @@ Die Abhaengigkeitsrichtung ist verbindlich:
 ```text
 main -> konkrete Plattform + konkrete Anwendung
 Anwendung -> Plattform-Schnittstellen
-Plattform -> allgemeine Ports und Adapter
-Adapter -> ESP32/Arduino oder native Testumgebung
+Plattform -> allgemeine Ports und Produktionsadapter
+Test-Support -> Plattform-Schnittstellen
+Produktionsadapter -> ESP32/Arduino oder anwendungsneutrale Hostumgebung
 ```
 
-Rueckwaertsabhaengigkeiten sind unzulaessig. Insbesondere darf
-`device_platform` keine Fermentationsprogramme, Fermentationszustaende oder
-produktspezifischen UI-Texte kennen.
+Rueckwaertsabhaengigkeiten sind unzulaessig. Insbesondere darf:
+
+- `device_platform` weder `fermentation_app` noch `device_platform_test_support`
+  kennen,
+- `fermentation_app` nicht von `device_platform_test_support` abhaengen,
+- `src/main.cpp` keinen Test-Support einbinden,
+- `device_platform` keine Fermentationsprogramme, Fermentationszustaende oder
+  produktspezifischen UI-Texte kennen.
 
 ## Regeln fuer neue Module
 
@@ -84,6 +96,30 @@ Allgemeine Bausteine wie Zeitquellen, Sensorqualitaet, Filter, begrenzte
 Reglerbausteine, Konfigurationsrevisionen, Journale, Web-Grundrahmen und Diagnose
 duerfen in der Plattform liegen. Ihre konkrete Verwendung und Parametrierung
 bleibt Aufgabe der Anwendung.
+
+## Produktionsplattform und Test-Support
+
+Oeffentliche Plattformports beschreiben kleine, anwendungsneutrale Faehigkeiten.
+Konkrete Rollen wie Innenluefter, Aussenluefter, Summer, Heizrichtung oder
+Produktfuehler werden erst durch die Anwendung beziehungsweise die Composition
+Root zugeordnet.
+
+Ausschliesslich fuer native Tests bestimmte Mocks, Fehlerinjektionen,
+Aufzeichnungsfunktionen und Simulationsmodelle liegen unter
+`lib/device_platform_test_support/`. Die Abhaengigkeit verlaeuft ausschliesslich:
+
+```text
+device_platform_test_support -> device_platform
+```
+
+Test-Auslesefunktionen wie Befehls- oder Ereignislisten gehoeren zum konkreten
+Mock und nicht zur Produktionsschnittstelle. Testanforderungen duerfen die
+oeffentliche Plattform-API nicht bestimmen.
+
+Eine anwendungsneutrale Implementierung darf in `device_platform` bleiben, wenn
+sie selbst ein regulaer nutzbarer Plattformdienst ohne Test-Introspektion,
+Fehlerinjektion oder anwendungsspezifisches Simulationsmodell ist. Reine Mocks
+und Testmodelle gehoeren immer in `device_platform_test_support`.
 
 ## Rolle von `main.cpp`
 
@@ -123,5 +159,7 @@ versionierte Bibliothek eingebunden und nicht in jedes Projekt kopiert.
   zugutekommen.
 - Die Trennung erzeugt anfangs einige kleine Schnittstellen und Module, reduziert
   aber spaetere Umbauten und direkte Hardwareabhaengigkeiten.
-- Folge-Issues muessen neue Klassen bewusst `device_platform` oder
-  `fermentation_app` zuordnen und die Abhaengigkeitsrichtung in Tests erhalten.
+- Folge-Issues muessen neue Klassen bewusst `device_platform`,
+  `device_platform_test_support` oder `fermentation_app` zuordnen.
+- Die Abhaengigkeitsrichtung wird durch
+  `scripts/check_architecture_boundaries.py` in CI geprueft.
