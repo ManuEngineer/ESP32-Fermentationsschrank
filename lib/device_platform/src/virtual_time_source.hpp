@@ -15,6 +15,8 @@ class VirtualTimeSource final : public ITimeSource {
 
     // Laesst die monotone Zeit um `deltaMs` voranschreiten. Ein negativer
     // Fortschritt ist nicht vorgesehen; monotone Zeit darf nie zurueckfallen.
+    // Bei einem Ueberlauf wird auf UINT64_MAX saettiert, damit die Monotonie
+    // auch in diesem Grenzfall gewahrt bleibt.
     void advanceMonotonicMillis(uint64_t deltaMs);
 
     // Setzt oder loescht die simulierte absolute Zeit, z. B. um einen

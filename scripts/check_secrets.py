@@ -50,12 +50,6 @@ PROTECTED_FILENAME_PATTERNS = (
 # Explizit erlaubte Beispieldateien trotz `secrets*`-Muster.
 ALLOWED_EXAMPLE_FILES = {"include/secrets.example.hpp"}
 
-# Dieses Skript enthaelt in run_selftest() absichtlich Fixture-Geheimnisse als
-# Stringliterale, um die eigene Erkennung zu beweisen (siehe --selftest). Es
-# wird deshalb von der inhaltsbasierten Musterpruefung ausgenommen, bleibt
-# aber Teil der Dateinamenpruefung.
-EXCLUDED_FROM_CONTENT_SCAN = {"scripts/check_secrets.py"}
-
 SECRET_CONTENT_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"AKIA[0-9A-Z]{16}"),
@@ -117,15 +111,15 @@ def check_repository() -> int:
 
     content_violations = []
     for file in files:
-        if file in EXCLUDED_FROM_CONTENT_SCAN:
-            continue
         path = Path(file)
         if path.suffix.lower() not in TEXT_FILE_SUFFIXES:
             continue
         for line_number, line in scan_file_for_secrets(path):
             content_violations.append((file, line_number, line))
-            print(f"FAILED: moegliches Geheimnis in {file}:{line_number}: {line}",
-                  file=sys.stderr)
+            print(
+                f"FAILED: moegliches Geheimnis in {file}:{line_number}",
+                file=sys.stderr,
+            )
 
     if protected_violations or content_violations:
         print(
@@ -144,11 +138,14 @@ def run_selftest() -> int:
         tmp_path = Path(tmp)
 
         bad_key_file = tmp_path / "fixture_private_key.pem"
+        # Literal split via concatenation so this source file does not itself
+        # contain a complete secret pattern and can be scanned without exclusion.
         bad_key_file.write_text(
-            "-----BEGIN RSA PRIVATE KEY-----\nMIIfake==\n-----END RSA PRIVATE KEY-----\n"
+            "-----BEGIN RSA PRIVATE " + "KEY-----\nMIIfake==\n"
+            "-----END RSA PRIVATE KEY-----\n"
         )
         bad_password_file = tmp_path / "fixture_password.ini"
-        bad_password_file.write_text('wifi_password = "supersecretvalue"\n')
+        bad_password_file.write_text('wifi_pass' + 'word = "supersecretvalue"\n')
 
         good_example_file = tmp_path / "fixture.example.hpp"
         good_example_file.write_text(

@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+from typing import Optional
 
 DEFAULT_ENVIRONMENTS = ("native", "esp32_bringup", "esp32_release")
 
@@ -52,7 +53,7 @@ def parse_esp32_size_reports(build_output: str) -> dict[str, dict[str, object]]:
     return reports
 
 
-def artifact_size(path: str) -> int | None:
+def artifact_size(path: str) -> Optional[int]:
     return os.path.getsize(path) if os.path.isfile(path) else None
 
 

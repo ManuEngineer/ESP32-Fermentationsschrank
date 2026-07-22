@@ -2,8 +2,9 @@
 # clang-tidy 18.1.8 (siehe .github/workflows/build.yml und
 # docs/CI_AND_QUALITY_GATES.md).
 #
-# Analysiert wird der hardwareunabhaengige C++17-Kern (include/, lib/, test/)
-# ueber die `native`-Kompilierungsdatenbank. Der Arduino-Zweig von
+# Analysiert wird der hardwareunabhaengige C++17-Kern (include/, lib/)
+# ueber die `native`-Kompilierungsdatenbank. `test/` liegt ausserhalb des
+# HeaderFilterRegex-Scopes und wird deshalb nicht erfasst. Der Arduino-Zweig von
 # `src/main.cpp` (`#if defined(ARDUINO)`) wird dadurch nicht erfasst; das ist
 # eine dokumentierte, begruendete Ausnahme (kein ESP32-Cross-Compile-Toolchain
 # fuer clang-tidy verfuegbar).
