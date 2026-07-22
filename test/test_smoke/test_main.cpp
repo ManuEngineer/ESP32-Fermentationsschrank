@@ -60,6 +60,13 @@ void test_release_requires_verification_without_enabling_actuators() {
     TEST_ASSERT_TRUE(app_config::hasSafeDefaults(policy));
 }
 
+void test_release_policy_with_non_unverified_startup_state_is_unsafe() {
+    auto policy = app_config::kEsp32ReleaseProfilePolicy;
+    policy.startupHardwareState = app_config::HardwareState::NativeSimulation;
+
+    TEST_ASSERT_FALSE(app_config::hasSafeDefaults(policy));
+}
+
 void test_native_profile_has_no_hardware_target() {
     const auto& policy = app_config::kActiveProfilePolicy;
 
@@ -108,6 +115,7 @@ int main() {
     RUN_TEST(test_release_1_resource_invariants);
     RUN_TEST(test_bringup_starts_hardware_unverified_and_locked);
     RUN_TEST(test_release_requires_verification_without_enabling_actuators);
+    RUN_TEST(test_release_policy_with_non_unverified_startup_state_is_unsafe);
     RUN_TEST(test_native_profile_has_no_hardware_target);
     RUN_TEST(test_application_rejects_platform_before_startup);
     RUN_TEST(test_platform_rejects_unsafe_startup_context);

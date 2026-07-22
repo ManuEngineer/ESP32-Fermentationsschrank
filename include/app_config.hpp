@@ -121,8 +121,10 @@ constexpr bool hasSafeDefaults(const ProfilePolicy& policy) {
                  HardwareState::HardwareUnverified &&
              policy.actuatorPolicy == ActuatorPolicy::LockedForBringup)) &&
            (policy.profile != BuildProfile::Esp32Release ||
-            policy.actuatorPolicy ==
-                ActuatorPolicy::RequireVerifiedHardware);
+            (policy.startupHardwareState ==
+                 HardwareState::HardwareUnverified &&
+             policy.actuatorPolicy ==
+                 ActuatorPolicy::RequireVerifiedHardware));
 }
 
 static_assert(kTargetFlashMegabytes == 4U);
