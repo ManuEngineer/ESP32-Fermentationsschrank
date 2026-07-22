@@ -185,10 +185,10 @@ Hardware und offene Punkte:
 
 ## Prioritaet bei Widerspruechen
 
-1. spaetere akzeptierte ADRs und `SPECIFICATION_REVIEW.md`
-2. thematisch spezialisierte Spezifikationsdokumente
-3. `REQUIREMENTS.md`, `ARCHITECTURE.md` und `HARDWARE.md`
-4. Beispielkonfigurationen
+Die verbindliche und vollstaendige Reihenfolge steht ausschliesslich in
+[`docs/SPECIFICATION_REVIEW.md`](docs/SPECIFICATION_REVIEW.md) im Abschnitt
+`Dokumentationsprioritaet`. Dadurch gibt es keine zweite, verkuerzte Liste, die
+spaeter von der kanonischen Reihenfolge abweichen kann.
 
 Unbestaetigte Hardwarewerte bleiben `TBD_HARDWARE`; thermische Werte bleiben
 `TBD_COMMISSIONING`; Speicher- und Ressourcengrenzen bleiben
