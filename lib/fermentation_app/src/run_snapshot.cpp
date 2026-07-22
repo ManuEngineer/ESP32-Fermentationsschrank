@@ -50,16 +50,46 @@ bool equalValues(const EffectiveRunValues& left,
            left.remainingDurationMinutes == right.remainingDurationMinutes;
 }
 
-bool timestampWentBackwards(const RunTimestamp& current,
-                            const RunTimestamp& previous) {
-    if (current.monotonicMillis < previous.monotonicMillis) {
-        return true;
+bool monotonicTimestampWentBackwards(const RunTimestamp& current,
+                                     std::uint32_t currentMonotonicEpoch,
+                                     const RunTimestamp& previous,
+                                     std::uint32_t previousMonotonicEpoch) {
+    return currentMonotonicEpoch < previousMonotonicEpoch ||
+           (currentMonotonicEpoch == previousMonotonicEpoch &&
+            current.monotonicMillis < previous.monotonicMillis);
+}
+
+bool unixTimestampWentBackwards(
+    const RunTimestamp& current,
+    const std::optional<std::int64_t>& latestUnixTimeSeconds) {
+    return current.unixTimeSeconds.has_value() &&
+           latestUnixTimeSeconds.has_value() &&
+           *current.unixTimeSeconds < *latestUnixTimeSeconds;
+}
+
+std::optional<std::int64_t> latestUnixTimeSeconds(
+    const std::array<RunRevision, kMaximumRunRevisions>& revisions,
+    std::size_t revisionCount) {
+    for (std::size_t index = revisionCount; index > 0U; --index) {
+        const auto& timestamp = revisions[index - 1U].timestamp;
+        if (timestamp.unixTimeSeconds.has_value()) {
+            return timestamp.unixTimeSeconds;
+        }
     }
-    if (!current.unixTimeSeconds.has_value() ||
-        !previous.unixTimeSeconds.has_value()) {
-        return false;
+    return std::nullopt;
+}
+
+bool validMonotonicEpoch(
+    const std::array<RunRevision, kMaximumRunRevisions>& revisions,
+    std::size_t index) {
+    const auto currentEpoch = revisions[index].monotonicEpoch;
+    if (index == 0U) {
+        return currentEpoch == 0U;
     }
-    return *current.unixTimeSeconds < *previous.unixTimeSeconds;
+    const auto previousEpoch = revisions[index - 1U].monotonicEpoch;
+    return currentEpoch == previousEpoch ||
+           (currentEpoch > previousEpoch &&
+            currentEpoch - previousEpoch == 1U);
 }
 
 bool validTargetTemperature(const RunProgramSnapshot& snapshot,
@@ -140,9 +170,11 @@ std::optional<ActiveRun> ActiveRun::restore(
         return std::nullopt;
     }
 
+    std::optional<std::int64_t> latestUnixTimestamp;
     for (std::size_t index = 0U; index < revisionCount; ++index) {
         const auto& revision = revisions[index];
         if (revision.sequence != index + 1U ||
+            !validMonotonicEpoch(revisions, index) ||
             revision.stageIndex >=
                 snapshot.sourceProgram.program.fermentationStages.size() ||
             !equalValues(revision.before, restored->effectiveValues_) ||
@@ -152,14 +184,25 @@ std::optional<ActiveRun> ActiveRun::restore(
             !validRemainingDuration(snapshot, revision.stageIndex,
                                     revision.after.remainingDurationMinutes) ||
             (index > 0U &&
-             timestampWentBackwards(revision.timestamp,
-                                    revisions[index - 1U].timestamp))) {
+             monotonicTimestampWentBackwards(
+                 revision.timestamp, revision.monotonicEpoch,
+                 revisions[index - 1U].timestamp,
+                 revisions[index - 1U].monotonicEpoch)) ||
+            unixTimestampWentBackwards(revision.timestamp,
+                                       latestUnixTimestamp)) {
             return std::nullopt;
         }
 
         restored->revisions_[index] = revision;
         restored->effectiveValues_ = revision.after;
         ++restored->revisionCount_;
+        if (revision.timestamp.unixTimeSeconds.has_value()) {
+            latestUnixTimestamp = revision.timestamp.unixTimeSeconds;
+        }
+    }
+    if (revisionCount > 0U) {
+        restored->monotonicEpoch_ =
+            revisions[revisionCount - 1U].monotonicEpoch + 1U;
     }
     return restored;
 }
@@ -189,7 +232,14 @@ RunAdjustmentResult ActiveRun::applyAdjustment(
     if (revisionCount_ > 0U) {
         const auto& previousTimestamp =
             revisions_[revisionCount_ - 1U].timestamp;
-        if (timestampWentBackwards(request.timestamp, previousTimestamp)) {
+        const auto previousMonotonicEpoch =
+            revisions_[revisionCount_ - 1U].monotonicEpoch;
+        if (monotonicTimestampWentBackwards(
+                request.timestamp, monotonicEpoch_, previousTimestamp,
+                previousMonotonicEpoch) ||
+            unixTimestampWentBackwards(
+                request.timestamp,
+                latestUnixTimeSeconds(revisions_, revisionCount_))) {
             return {RunAdjustmentStatus::TimestampWentBackwards, false};
         }
     }
@@ -227,6 +277,7 @@ RunAdjustmentResult ActiveRun::applyAdjustment(
 
     const RunRevision revision{
         static_cast<std::uint32_t>(revisionCount_ + 1U),
+        monotonicEpoch_,
         context.activeStageIndex,
         context.completedStageCount,
         effectiveValues_,

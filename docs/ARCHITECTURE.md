@@ -359,6 +359,11 @@ Der Serviceablauf ist eine eigene geschuetzte Zustandsmaschine:
 
 - monotone Zeit steuert aktive Ablaufe
 - UTC/NTP dient Kalenderzeit und Unterbrechungsdauer
+- Laufrevisionen speichern eine monotone Epoche. Jede Wiederherstellung
+  eroeffnet eine neue Epoche, sodass die Uptime bei null beginnen darf, ohne die
+  Reihenfolge der persistierten Revisionen zu verletzen.
+- Ein zwischenzeitlich fehlender UTC-Wert verwirft den letzten bekannten
+  UTC-Zeitbezug nicht; spaetere UTC-Werte duerfen dahinter nicht zurueckfallen.
 - Wiederanlauf beginnt immer mit ausgeschalteten Aktoren
 - fehlende NTP-Zeit blockiert keine sichere phasenbezogene Entscheidung
 - spaeter eintreffende Zeit kann die Unterbrechungsbewertung korrigieren

@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <cstddef>
+#include <limits>
 
 #include "run_snapshot.hpp"
 #include "standard_program_catalog.hpp"
@@ -137,6 +138,7 @@ void test_target_adjustment_records_complete_revision() {
     const auto* revision = run->revisionAt(0U);
     TEST_ASSERT_NOT_NULL(revision);
     TEST_ASSERT_EQUAL_UINT32(1U, revision->sequence);
+    TEST_ASSERT_EQUAL_UINT32(0U, revision->monotonicEpoch);
     TEST_ASSERT_EQUAL_DOUBLE(39.0, revision->before.targetTemperatureCelsius);
     TEST_ASSERT_EQUAL_DOUBLE(40.0, revision->after.targetTemperatureCelsius);
     TEST_ASSERT_TRUE(revision->targetTemperatureChanged);
@@ -340,6 +342,15 @@ void test_unix_timestamp_going_backwards_is_rejected() {
     noUtc.timestamp.unixTimeSeconds = std::nullopt;
     TEST_ASSERT_TRUE(
         run->applyAdjustment(noUtc, adjustableContext()).applied());
+
+    auto rollbackAfterMissingUtc = targetAdjustment(42.0, 400U);
+    rollbackAfterMissingUtc.timestamp.unixTimeSeconds = 999;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunAdjustmentStatus::TimestampWentBackwards),
+        static_cast<int>(
+            run->applyAdjustment(rollbackAfterMissingUtc, adjustableContext())
+                .status));
+    TEST_ASSERT_EQUAL_UINT32(2U, run->revisionCount());
 }
 
 void test_restore_rejects_decreasing_unix_timestamp() {
@@ -358,14 +369,94 @@ void test_restore_rejects_decreasing_unix_timestamp() {
     second.source = RunChangeSource::LocalDisplay;
     second.reason = RunChangeReason::UserAdjustment;
     second.timestamp.monotonicMillis = 200U;
-    second.timestamp.unixTimeSeconds = 2001;
+    second.timestamp.unixTimeSeconds = std::nullopt;
     TEST_ASSERT_TRUE(
         run->applyAdjustment(second, adjustableContext()).applied());
 
+    auto third = targetAdjustment(41.0, 300U);
+    third.timestamp.unixTimeSeconds = 2001;
+    TEST_ASSERT_TRUE(
+        run->applyAdjustment(third, adjustableContext()).applied());
+
     auto revisions = run->revisions();
-    revisions[1].timestamp.unixTimeSeconds = 1999;
+    revisions[2].timestamp.unixTimeSeconds = 1999;
+    TEST_ASSERT_FALSE(
+        ActiveRun::restore(run->snapshot(), revisions, 3U).has_value());
+}
+
+void test_restore_rejects_invalid_monotonic_epochs() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    TEST_ASSERT_TRUE(run.has_value());
+    TEST_ASSERT_TRUE(
+        run->applyAdjustment(targetAdjustment(40.0, 100U), adjustableContext())
+            .applied());
+
+    RunAdjustmentRequest durationRequest;
+    durationRequest.remainingDurationMinutes = 90U;
+    durationRequest.confirmed = true;
+    durationRequest.timestamp.monotonicMillis = 200U;
+    TEST_ASSERT_TRUE(
+        run->applyAdjustment(durationRequest, adjustableContext()).applied());
+
+    auto revisions = run->revisions();
+    revisions[0].monotonicEpoch = 1U;
     TEST_ASSERT_FALSE(
         ActiveRun::restore(run->snapshot(), revisions, 2U).has_value());
+
+    revisions = run->revisions();
+    revisions[1].monotonicEpoch = 2U;
+    TEST_ASSERT_FALSE(
+        ActiveRun::restore(run->snapshot(), revisions, 2U).has_value());
+
+    revisions = run->revisions();
+    revisions[0].monotonicEpoch =
+        std::numeric_limits<std::uint32_t>::max() - 1U;
+    TEST_ASSERT_FALSE(
+        ActiveRun::restore(run->snapshot(), revisions, 2U).has_value());
+}
+
+void test_adjustment_after_restart_uses_new_monotonic_epoch() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    TEST_ASSERT_TRUE(run.has_value());
+    TEST_ASSERT_TRUE(
+        run->applyAdjustment(targetAdjustment(40.0, 500000U),
+                             adjustableContext())
+            .applied());
+
+    auto restored =
+        ActiveRun::restore(run->snapshot(), run->revisions(),
+                           run->revisionCount());
+    TEST_ASSERT_TRUE(restored.has_value());
+
+    RunAdjustmentRequest afterRestart;
+    afterRestart.remainingDurationMinutes = 90U;
+    afterRestart.confirmed = true;
+    afterRestart.timestamp.monotonicMillis = 5U;
+    afterRestart.timestamp.unixTimeSeconds = 1784736001;
+    TEST_ASSERT_TRUE(
+        restored->applyAdjustment(afterRestart, adjustableContext()).applied());
+    const auto* restartRevision = restored->revisionAt(1U);
+    TEST_ASSERT_NOT_NULL(restartRevision);
+    TEST_ASSERT_EQUAL_UINT32(1U, restartRevision->monotonicEpoch);
+    TEST_ASSERT_EQUAL_UINT64(5U, restartRevision->timestamp.monotonicMillis);
+
+    auto backwardsInSameBoot = targetAdjustment(41.0, 4U);
+    backwardsInSameBoot.timestamp.unixTimeSeconds = 1784736002;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunAdjustmentStatus::TimestampWentBackwards),
+        static_cast<int>(
+            restored
+                ->applyAdjustment(backwardsInSameBoot, adjustableContext())
+                .status));
+
+    const auto restoredAgain =
+        ActiveRun::restore(restored->snapshot(), restored->revisions(),
+                           restored->revisionCount());
+    TEST_ASSERT_TRUE(restoredAgain.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        90U, restoredAgain->effectiveValues().remainingDurationMinutes);
 }
 
 void test_noop_and_invalid_metadata_do_not_create_revisions() {
@@ -405,6 +496,8 @@ int main() {
     RUN_TEST(test_timestamp_and_revision_capacity_are_enforced);
     RUN_TEST(test_unix_timestamp_going_backwards_is_rejected);
     RUN_TEST(test_restore_rejects_decreasing_unix_timestamp);
+    RUN_TEST(test_restore_rejects_invalid_monotonic_epochs);
+    RUN_TEST(test_adjustment_after_restart_uses_new_monotonic_epoch);
     RUN_TEST(test_noop_and_invalid_metadata_do_not_create_revisions);
     return UNITY_END();
 }

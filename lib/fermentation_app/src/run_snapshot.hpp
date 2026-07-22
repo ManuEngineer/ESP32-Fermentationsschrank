@@ -45,6 +45,7 @@ struct RunProgramSnapshot {
 
 struct RunRevision {
     std::uint32_t sequence{0U};
+    std::uint32_t monotonicEpoch{0U};
     std::size_t stageIndex{0U};
     std::size_t completedStageCount{0U};
     EffectiveRunValues before;
@@ -125,6 +126,7 @@ class ActiveRun {
     EffectiveRunValues effectiveValues_;
     std::array<RunRevision, kMaximumRunRevisions> revisions_{};
     std::size_t revisionCount_{0U};
+    std::uint32_t monotonicEpoch_{0U};
 };
 
 }  // namespace fermentation

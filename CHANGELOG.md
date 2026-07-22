@@ -58,4 +58,5 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   produktive Laufzeitwerte sicher abgelehnt
 - unveraenderliche Laufschnappschuesse mit getrennten wirksamen Ziel-/Zeitwerten,
   atomaren und begrenzten Laufrevisionen sowie streng validierter
-  Wiederherstellung durch deterministisches Wiederabspielen der Historie
+  Wiederherstellung durch deterministisches Wiederabspielen der Historie;
+  monotone Revisionsepochen erlauben weitere Anpassungen nach einem Neustart
