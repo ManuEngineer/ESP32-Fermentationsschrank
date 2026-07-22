@@ -91,8 +91,7 @@ void test_event_journal_is_bounded_and_drops_oldest_entries() {
     const std::size_t entriesToWrite =
         device_platform::MockEventJournal::kMaxEntries + 10;
     for (std::size_t i = 0; i < entriesToWrite; ++i) {
-        TEST_ASSERT_TRUE(
-            journal.record(static_cast<uint64_t>(i), "event"));
+        TEST_ASSERT_TRUE(journal.record(static_cast<uint64_t>(i), "event"));
     }
 
     const auto& entries = journal.entries();
