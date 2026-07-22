@@ -24,7 +24,17 @@ jobs:
         run: python -m pip install platformio==6.1.19
 
       - name: Firmware bauen
-        run: pio run -e native -e esp32_bringup -e esp32_release
+        run: |
+          set -o pipefail
+          pio run -e native -e esp32_bringup -e esp32_release 2>&1 | tee platformio-build.log
+
+      - name: Fehlgeschlagenen Buildlog sichern
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: platformio-build-log
+          path: platformio-build.log
+          if-no-files-found: ignore
 
       - name: Effektive Boardkonfiguration pruefen
         run: python scripts/check_platformio_config.py
