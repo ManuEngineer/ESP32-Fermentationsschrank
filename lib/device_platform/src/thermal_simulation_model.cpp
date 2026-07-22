@@ -1,7 +1,6 @@
 #include "thermal_simulation_model.hpp"
 
 #include <algorithm>
-#include <cmath>
 
 namespace device_platform {
 
