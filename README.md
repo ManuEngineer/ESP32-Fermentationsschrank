@@ -90,14 +90,32 @@ Partitionstabelle festgelegt; Layout und Budgets bleiben bis zu realen Build- un
 Hardwaremessungen `TBD_IMPLEMENTATION_BUDGET`. Ebenso sind keine Hardwaretreiber,
 GPIOs oder aktiven Pegel Bestandteil dieser Grundlage.
 
-Quellcode, gemeinsame Header und Tests sind getrennt:
+Die Grundlage trennt Projektkonfiguration, wiederverwendbare Plattform und
+konkrete Anwendung:
 
 ```text
-include/   gemeinsame hardwareunabhaengige Typen und Buildkonfiguration
-src/       Firmware-Einstieg; der native Pfad bindet kein Arduino ein
-lib/       spaetere testbare Fachkomponenten
-test/      native Unit- und Konfigurationspruefungen
+include/
+    gemeinsame Projekt- und Buildkonfiguration
+
+src/main.cpp
+    Composition Root; verbindet Plattform und Anwendung
+
+lib/device_platform/
+    anwendungsneutrale Geraetedienste und Schnittstellen
+
+lib/fermentation_app/
+    Fermentationsprogramme und konkrete Prozesslogik
+
+test/
+    native Unit-, Integrations- und Konfigurationspruefungen
 ```
+
+Die Fermentations-App verwendet nur die Schnittstelle `IPlatformServices` und
+kennt weder Arduino noch die konkrete Klasse `DevicePlatform`. Die
+projektspezifische `app_config.hpp` bleibt in `main.cpp` und wird nicht in die
+wiederverwendbare Plattform gezogen. Verbindliche Details und die spaetere
+Auslagerungsstrategie stehen in
+[`ADR-013`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md).
 
 Alle Profile bauen und die nativen Tests laufen mit:
 
@@ -111,7 +129,8 @@ Die reproduzierbare CI-Grundlage verwendet PlatformIO Core `6.1.19` und
 `espressif32` `7.0.1`. Das Pruefskript liest sowohl die effektiv aufgeloeste
 Projektkonfiguration als auch die Boardmetadaten von PlatformIO. Dadurch werden
 4 MB Flash und der interne 320-KiB-RAM-Rahmen ohne vorausgesetzte PSRAM
-unabhaengig von den Anwendungs-Makros kontrolliert.
+unabhaengig von den Anwendungs-Makros kontrolliert. Bei einem fehlgeschlagenen
+Firmwarebuild stellt CI den kompakten PlatformIO-Buildlog als Artefakt bereit.
 
 Der Kern greift nicht direkt auf GPIO, 1-Wire, Display, WLAN oder Flash zu,
 sondern verwendet klar getrennte Adapter. Dadurch koennen Zustandsmaschine,
@@ -133,6 +152,8 @@ Einstieg:
 - [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
 - [`docs/IMPLEMENTATION_ISSUES.md`](docs/IMPLEMENTATION_ISSUES.md)
 - [`docs/ACCEPTANCE_TESTS.md`](docs/ACCEPTANCE_TESTS.md)
+- [`docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md)
+- [`lib/README.md`](lib/README.md)
 
 Fachliche Spezifikation:
 
