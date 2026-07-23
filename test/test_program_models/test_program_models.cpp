@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <cstring>
+#include <limits>
 #include <string>
 
 #include "program_limits.hpp"
@@ -17,6 +18,7 @@ using fermentation::ProgramField;
 using fermentation::SensorPreference;
 using fermentation::ValidationErrorCode;
 using fermentation::ValidationPurpose;
+namespace program_limits = fermentation::program_limits;
 
 ProgramDocument makeRunnableProgram() {
     auto copy = FactoryProgramCatalog::makeUserCopy(
@@ -24,14 +26,28 @@ ProgramDocument makeRunnableProgram() {
     TEST_ASSERT_TRUE(copy.has_value());
 
     auto& program = copy->program;
-    program.productSensorFailure.fallbackDelaySeconds = 0U;
-    program.fermentationStages.front().targetTemperatureCelsius = 4.0;
-    program.fermentationStages.front().durationMinutes = 1U;
-    program.targetQualification.bandCelsius = 0.1;
-    program.targetQualification.durationMinutes = 1U;
-    program.maximumTargetReachMinutes = 1U;
-    program.maximumProductWaitMinutes = 1U;
-    program.completion.coolingTargetCelsius = 4.0;
+    program.productSensorFailure.fallbackDelaySeconds =
+        program_limits::kMinimumFallbackDelaySeconds;
+    program.fermentationStages.front().targetTemperatureCelsius =
+        program_limits::kMinimumFermentationTemperatureCelsius;
+    program.fermentationStages.front().durationMinutes =
+        program_limits::kMinimumFermentationDurationMinutes;
+    const auto minimumStage = program.fermentationStages.front();
+    program.fermentationStages.assign(
+        program_limits::kMinimumFermentationStageCount, minimumStage);
+    program.targetQualification.bandCelsius =
+        program_limits::kMinimumQualificationBandCelsius;
+    program.targetQualification.durationMinutes =
+        program_limits::kMinimumQualificationDurationMinutes;
+    program.maximumTargetReachMinutes =
+        program_limits::kMinimumTargetReachMinutes;
+    program.maximumProductWaitMinutes =
+        program_limits::kMinimumProductWaitMinutes;
+    program.completion.mode = CompletionMode::CoolAndHoldForDuration;
+    program.completion.coolingTargetCelsius =
+        program_limits::kMinimumCoolingTargetCelsius;
+    program.completion.holdDurationMinutes =
+        program_limits::kMinimumHoldDurationMinutes;
     return *copy;
 }
 
@@ -51,31 +67,54 @@ void test_documented_boundaries_are_accepted() {
     TEST_ASSERT_TRUE(validateProgram(document).valid());
 
     auto& program = document.program;
-    program.fermentationStages.front().targetTemperatureCelsius = 45.0;
-    program.fermentationStages.front().durationMinutes = 20160U;
-    program.targetQualification.bandCelsius = 2.0;
+    program.fermentationStages.front().targetTemperatureCelsius =
+        program_limits::kMaximumFermentationTemperatureCelsius;
+    program.fermentationStages.front().durationMinutes =
+        program_limits::kMaximumFermentationDurationMinutes;
+    program.targetQualification.bandCelsius =
+        program_limits::kMaximumQualificationBandCelsius;
     program.targetQualification.durationMinutes =
-        fermentation::program_limits::kMaximumQualificationDurationMinutes;
+        program_limits::kMaximumQualificationDurationMinutes;
     program.maximumTargetReachMinutes =
-        fermentation::program_limits::kMaximumTargetReachMinutes;
+        program_limits::kMaximumTargetReachMinutes;
     program.maximumProductWaitMinutes =
-        fermentation::program_limits::kMaximumProductWaitMinutes;
-    program.productSensorFailure.fallbackDelaySeconds = 3600U;
-    program.completion.coolingTargetCelsius = 25.0;
+        program_limits::kMaximumProductWaitMinutes;
+    program.productSensorFailure.fallbackDelaySeconds =
+        program_limits::kMaximumFallbackDelaySeconds;
+    program.completion.coolingTargetCelsius =
+        program_limits::kMaximumCoolingTargetCelsius;
+    program.completion.holdDurationMinutes =
+        program_limits::kMaximumHoldDurationMinutes;
 
     TEST_ASSERT_TRUE(validateProgram(document).valid());
 }
 
 void test_values_outside_documented_boundaries_are_rejected() {
+    static_assert(program_limits::kMinimumFermentationDurationMinutes > 0U);
+    static_assert(program_limits::kMinimumQualificationDurationMinutes > 0U);
+    static_assert(program_limits::kMinimumTargetReachMinutes > 0U);
+    static_assert(program_limits::kMinimumHoldDurationMinutes > 0U);
+
     auto document = makeRunnableProgram();
     auto& program = document.program;
-    program.fermentationStages.front().targetTemperatureCelsius = 3.9;
-    program.fermentationStages.front().durationMinutes = 0U;
-    program.targetQualification.bandCelsius = 2.1;
+    program.fermentationStages.front().targetTemperatureCelsius =
+        program_limits::kMinimumFermentationTemperatureCelsius - 0.1;
+    program.fermentationStages.front().durationMinutes =
+        program_limits::kMinimumFermentationDurationMinutes - 1U;
+    program.targetQualification.bandCelsius =
+        program_limits::kMaximumQualificationBandCelsius + 0.1;
+    program.targetQualification.durationMinutes =
+        program_limits::kMinimumQualificationDurationMinutes - 1U;
+    program.maximumTargetReachMinutes =
+        program_limits::kMinimumTargetReachMinutes - 1U;
     program.maximumProductWaitMinutes =
-        fermentation::program_limits::kMaximumProductWaitMinutes + 1U;
-    program.productSensorFailure.fallbackDelaySeconds = 3601U;
-    program.completion.coolingTargetCelsius = 25.1;
+        program_limits::kMaximumProductWaitMinutes + 1U;
+    program.productSensorFailure.fallbackDelaySeconds =
+        program_limits::kMaximumFallbackDelaySeconds + 1U;
+    program.completion.coolingTargetCelsius =
+        program_limits::kMaximumCoolingTargetCelsius + 0.1;
+    program.completion.holdDurationMinutes =
+        program_limits::kMinimumHoldDurationMinutes - 1U;
 
     const auto result = validateProgram(document);
 
@@ -86,6 +125,11 @@ void test_values_outside_documented_boundaries_are_rejected() {
                                    "defaults.fermentation_duration_min"));
     TEST_ASSERT_TRUE(containsError(result, ValidationErrorCode::ValueOutOfRange,
                                    "defaults.target_qualification_band_c"));
+    TEST_ASSERT_TRUE(
+        containsError(result, ValidationErrorCode::ValueOutOfRange,
+                      "defaults.target_qualification_duration_min"));
+    TEST_ASSERT_TRUE(containsError(result, ValidationErrorCode::ValueOutOfRange,
+                                   "defaults.max_target_reach_min"));
     TEST_ASSERT_TRUE(containsError(result, ValidationErrorCode::ValueOutOfRange,
                                    "defaults.max_product_wait_min"));
     TEST_ASSERT_TRUE(
@@ -93,6 +137,8 @@ void test_values_outside_documented_boundaries_are_rejected() {
                       "defaults.product_sensor_failure.fallback_delay_s"));
     TEST_ASSERT_TRUE(containsError(result, ValidationErrorCode::ValueOutOfRange,
                                    "defaults.completion.cooling_target_c"));
+    TEST_ASSERT_TRUE(containsError(result, ValidationErrorCode::ValueOutOfRange,
+                                   "defaults.completion.hold_duration_min"));
 }
 
 void test_missing_required_and_unknown_fields_are_rejected() {
@@ -286,17 +332,32 @@ void test_user_copy_rejects_factory_program_ids() {
                           .has_value());
 }
 
-void test_release_one_rejects_zero_or_multiple_fermentation_stages() {
-    auto noStage = makeRunnableProgram();
-    noStage.program.fermentationStages.clear();
-    TEST_ASSERT_TRUE(containsError(validateProgram(noStage),
+void test_release_one_stage_count_boundaries_are_enforced() {
+    auto minimumStages = makeRunnableProgram();
+    const auto validStage = minimumStages.program.fermentationStages.front();
+    minimumStages.program.fermentationStages.assign(
+        program_limits::kMinimumFermentationStageCount, validStage);
+    TEST_ASSERT_TRUE(validateProgram(minimumStages).valid());
+
+    auto maximumStages = makeRunnableProgram();
+    maximumStages.program.fermentationStages.assign(
+        program_limits::kMaximumFermentationStageCount, validStage);
+    TEST_ASSERT_TRUE(validateProgram(maximumStages).valid());
+
+    static_assert(program_limits::kMinimumFermentationStageCount > 0U);
+    auto tooFewStages = makeRunnableProgram();
+    tooFewStages.program.fermentationStages.assign(
+        program_limits::kMinimumFermentationStageCount - 1U, validStage);
+    TEST_ASSERT_TRUE(containsError(validateProgram(tooFewStages),
                                    ValidationErrorCode::UnsupportedStageCount,
                                    "defaults.fermentation_stages"));
 
-    auto twoStages = makeRunnableProgram();
-    twoStages.program.fermentationStages.push_back(
-        twoStages.program.fermentationStages.front());
-    TEST_ASSERT_TRUE(containsError(validateProgram(twoStages),
+    static_assert(program_limits::kMaximumFermentationStageCount <
+                  std::numeric_limits<std::size_t>::max());
+    auto tooManyStages = makeRunnableProgram();
+    tooManyStages.program.fermentationStages.assign(
+        program_limits::kMaximumFermentationStageCount + 1U, validStage);
+    TEST_ASSERT_TRUE(containsError(validateProgram(tooManyStages),
                                    ValidationErrorCode::UnsupportedStageCount,
                                    "defaults.fermentation_stages"));
 }
@@ -336,7 +397,7 @@ int main() {
     RUN_TEST(test_active_selection_is_a_copy_separate_from_factory_catalog);
     RUN_TEST(test_user_copy_has_independent_identity_and_lifecycle);
     RUN_TEST(test_user_copy_rejects_factory_program_ids);
-    RUN_TEST(test_release_one_rejects_zero_or_multiple_fermentation_stages);
+    RUN_TEST(test_release_one_stage_count_boundaries_are_enforced);
     RUN_TEST(test_unknown_enum_values_are_rejected);
     return UNITY_END();
 }

@@ -159,7 +159,11 @@ ValidationResult validateProgram(const ProgramDocument& document,
         addError(result, ValidationErrorCode::InvalidEnumValue,
                  "defaults.completion.mode");
     }
-    if (program.fermentationStages.size() != 1U) {
+    const auto fermentationStageCount = program.fermentationStages.size();
+    if (fermentationStageCount <
+            program_limits::kMinimumFermentationStageCount ||
+        fermentationStageCount >
+            program_limits::kMaximumFermentationStageCount) {
         addError(result, ValidationErrorCode::UnsupportedStageCount,
                  "defaults.fermentation_stages");
     } else {

@@ -4,6 +4,12 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ## Unreleased
 
+### Changed
+
+- Programmmodellgrenzen einschliesslich minimaler und maximaler Anzahl der
+  Fermentationsphasen vollstaendig in `program_limits.hpp` zentralisiert; das
+  fachliche Verhalten und das Programmschema bleiben unveraendert
+
 ### Added
 
 - Initiale Projektstruktur
