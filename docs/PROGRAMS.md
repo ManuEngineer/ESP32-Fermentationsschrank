@@ -360,7 +360,7 @@ Die genaue Bedienung und maximale Anzahl werden spaeter festgelegt.
 ## Implementiertes Release-1-Programmmodell
 
 Das Programmmodell liegt in `lib/fermentation_app` und verwendet die aktuelle
-Schemaversion 4. Die einzelne Fermentationstemperatur der ersten
+Schemaversion 5. Die einzelne Fermentationstemperatur der ersten
 Bedienoberflaeche wird intern bereits als Liste von Fermentationsphasen
 abgebildet. Die Release-1-Validierung akzeptiert genau eine Phase; dadurch ist
 eine spaetere Erweiterung moeglich, ohne mehrere Stufen vorzeitig freizugeben.
@@ -378,12 +378,14 @@ Der Factory-Katalog stellt vier unveraenderliche Eintraege bereit. Eine aktive
 Auswahl und Benutzerprogramme sind davon getrennte Kopien; Aenderungen daran
 veraendern weder den Factory-Eintrag noch andere bereits erstellte Kopien.
 
-Schemaversion 3 kann deterministisch auf Version 4 migriert werden. Dabei
-werden ausschliesslich die mit Version 4 dokumentierten Katalog-, Loesch- und
-Installationsfelder ergaenzt. Aeltere oder zukuenftige Versionen sowie
-unvollstaendige Quelldokumente werden abgelehnt, statt teilweise aktiviert zu
-werden. Parser und persistente atomare Revisionen folgen in den dafuer
-vorgesehenen Persistenz-Issues.
+Schemaversion 4 kann deterministisch auf Version 5 migriert werden. Das neue
+Feld `maximumProductWaitMinutes` bleibt dabei leer, weil die Migration keinen
+Inbetriebnahmewert erfinden darf. Migrierte Vorheizprogramme bleiben als
+Katalogvorlage gueltig, sind aber bis zur bewussten Konfiguration nicht
+ausfuehrbar. Aeltere oder zukuenftige Versionen sowie unvollstaendige
+Quelldokumente werden abgelehnt, statt teilweise aktiviert zu werden. Parser
+und persistente atomare Revisionen folgen in den dafuer vorgesehenen
+Persistenz-Issues.
 
 ## Implementierter Laufschnappschuss und Laufrevisionen
 
@@ -407,3 +409,28 @@ der wirksame Zustand ausschliesslich aus Schnappschuss und lueckenlos gepruefter
 Historie reproduziert; beschaedigte, umsortierte oder widerspruechliche Folgen
 werden nicht teilweise uebernommen. Die physische, ausfallsichere Speicherung
 dieser Daten ist weiterhin Aufgabe von Issue #17.
+
+## Implementierter fachlicher Zustandsautomat
+
+Der Zustandsautomat liegt als `process_state_machine.hpp/.cpp` in
+`lib/fermentation_app`. `ProcessRunSnapshot` uebernimmt nur die fuer den
+Prozessablauf erforderlichen, bereits validierten Werte aus `ActiveRun`.
+Manuelle Halteplaene koennen dieselbe Struktur verwenden; ihre Erstellung und
+Bedienvalidierung bleibt Aufgabe von Issue #15.
+
+`decideProcessTransition()` berechnet aus aktuellem Zustand, unveraenderlichem
+Prozessschnappschuss, phasenbezogenem Qualifikationssignal, fachlichem Ereignis
+und monotoner Zeit eine Entscheidung. Der bisherige Zustand bleibt dabei
+unveraendert. `applyProcessTransition()` akzeptiert nur eine Entscheidung, deren
+vollstaendiger Ausgangszustand noch aktuell ist und deren Zustandsfolge zum
+uebergebenen unveraenderlichen Prozessschnappschuss passt. Eine veraltete,
+bereits angewendete oder zum Laufkontext widerspruechliche Entscheidung wird
+ohne Teilmutation abgelehnt. Kritische Sicherheitsabschaltungen bleiben auch
+ohne gueltigen Laufkontext anwendbar.
+
+Phasenzeiten werden ausschliesslich aus monotonen Zeitpunkten berechnet.
+Zielqualifikation startet den Fermentationstimer erst beim bestaetigten Wechsel
+nach `FERMENTING`. Die harte Produktwartefrist hat Vorrang vor einer gleichzeitig
+eintreffenden Produktbestaetigung; ein kritischer Fehler hat Vorrang vor jedem
+anderen Ereignis. Der Automat greift weder auf Persistenz noch auf Hardware oder
+reale Aktorfreigaben zu.

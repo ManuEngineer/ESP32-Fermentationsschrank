@@ -2,28 +2,19 @@
 
 #include <array>
 #include <cmath>
-#include <limits>
 #include <utility>
+
+#include "program_limits.hpp"
 
 namespace fermentation {
 namespace {
-
-constexpr double kMinimumFermentationTemperatureCelsius = 4.0;
-constexpr double kMaximumFermentationTemperatureCelsius = 45.0;
-constexpr std::uint32_t kMinimumFermentationDurationMinutes = 1U;
-constexpr std::uint32_t kMaximumFermentationDurationMinutes = 20160U;
-constexpr double kMinimumQualificationBandCelsius = 0.1;
-constexpr double kMaximumQualificationBandCelsius = 2.0;
-constexpr std::uint32_t kMaximumFallbackDelaySeconds = 3600U;
-constexpr double kMinimumCoolingTargetCelsius = 4.0;
-constexpr double kMaximumCoolingTargetCelsius = 25.0;
 
 struct RequiredField {
     ProgramField field;
     const char* name;
 };
 
-constexpr std::array<RequiredField, 15> kRequiredFields{{
+constexpr std::array<RequiredField, 16> kRequiredFields{{
     {ProgramField::Id, "id"},
     {ProgramField::Name, "name"},
     {ProgramField::BuiltIn, "built_in"},
@@ -38,6 +29,7 @@ constexpr std::array<RequiredField, 15> kRequiredFields{{
     {ProgramField::FermentationStages, "defaults.fermentation_stages"},
     {ProgramField::TargetQualification, "defaults.target_qualification"},
     {ProgramField::MaximumTargetReach, "defaults.max_target_reach_min"},
+    {ProgramField::MaximumProductWait, "defaults.max_product_wait_min"},
     {ProgramField::Completion, "defaults.completion"},
 }};
 
@@ -172,43 +164,60 @@ ValidationResult validateProgram(const ProgramDocument& document,
                  "defaults.fermentation_stages");
     } else {
         const auto& stage = program.fermentationStages.front();
-        validateOptionalDouble(result, stage.targetTemperatureCelsius,
-                               "defaults.fermentation_temperature_c",
-                               kMinimumFermentationTemperatureCelsius,
-                               kMaximumFermentationTemperatureCelsius, purpose);
-        validateOptionalDuration(result, stage.durationMinutes,
-                                 "defaults.fermentation_duration_min",
-                                 kMinimumFermentationDurationMinutes,
-                                 kMaximumFermentationDurationMinutes, purpose);
+        validateOptionalDouble(
+            result, stage.targetTemperatureCelsius,
+            "defaults.fermentation_temperature_c",
+            program_limits::kMinimumFermentationTemperatureCelsius,
+            program_limits::kMaximumFermentationTemperatureCelsius, purpose);
+        validateOptionalDuration(
+            result, stage.durationMinutes, "defaults.fermentation_duration_min",
+            program_limits::kMinimumFermentationDurationMinutes,
+            program_limits::kMaximumFermentationDurationMinutes, purpose);
     }
 
     validateOptionalDouble(result, program.targetQualification.bandCelsius,
                            "defaults.target_qualification_band_c",
-                           kMinimumQualificationBandCelsius,
-                           kMaximumQualificationBandCelsius, purpose);
+                           program_limits::kMinimumQualificationBandCelsius,
+                           program_limits::kMaximumQualificationBandCelsius,
+                           purpose);
     validateOptionalDuration(
         result, program.targetQualification.durationMinutes,
-        "defaults.target_qualification_duration_min", 1U,
-        std::numeric_limits<std::uint32_t>::max(), purpose);
+        "defaults.target_qualification_duration_min",
+        program_limits::kMinimumQualificationDurationMinutes,
+        program_limits::kMaximumQualificationDurationMinutes, purpose);
     validateOptionalDuration(result, program.maximumTargetReachMinutes,
-                             "defaults.max_target_reach_min", 1U,
-                             std::numeric_limits<std::uint32_t>::max(),
+                             "defaults.max_target_reach_min",
+                             program_limits::kMinimumTargetReachMinutes,
+                             program_limits::kMaximumTargetReachMinutes,
                              purpose);
+
+    if (program.preheat) {
+        validateOptionalDuration(result, program.maximumProductWaitMinutes,
+                                 "defaults.max_product_wait_min",
+                                 program_limits::kMinimumProductWaitMinutes,
+                                 program_limits::kMaximumProductWaitMinutes,
+                                 purpose);
+    } else if (program.maximumProductWaitMinutes.has_value()) {
+        addError(result, ValidationErrorCode::UnexpectedValue,
+                 "defaults.max_product_wait_min");
+    }
 
     if (program.productSensorFailure.policy ==
         ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
         validateOptionalDuration(
             result, program.productSensorFailure.fallbackDelaySeconds,
-            "defaults.product_sensor_failure.fallback_delay_s", 0U,
-            kMaximumFallbackDelaySeconds, purpose);
+            "defaults.product_sensor_failure.fallback_delay_s",
+            program_limits::kMinimumFallbackDelaySeconds,
+            program_limits::kMaximumFallbackDelaySeconds, purpose);
     }
 
     if (validCompletionMode(program.completion.mode) &&
         hasCooling(program.completion.mode)) {
         validateOptionalDouble(result, program.completion.coolingTargetCelsius,
                                "defaults.completion.cooling_target_c",
-                               kMinimumCoolingTargetCelsius,
-                               kMaximumCoolingTargetCelsius, purpose);
+                               program_limits::kMinimumCoolingTargetCelsius,
+                               program_limits::kMaximumCoolingTargetCelsius,
+                               purpose);
     } else if (program.completion.coolingTargetCelsius.has_value()) {
         addError(result, ValidationErrorCode::UnexpectedValue,
                  "defaults.completion.cooling_target_c");
@@ -216,8 +225,9 @@ ValidationResult validateProgram(const ProgramDocument& document,
 
     if (program.completion.mode == CompletionMode::CoolAndHoldForDuration) {
         validateOptionalDuration(result, program.completion.holdDurationMinutes,
-                                 "defaults.completion.hold_duration_min", 1U,
-                                 std::numeric_limits<std::uint32_t>::max(),
+                                 "defaults.completion.hold_duration_min",
+                                 program_limits::kMinimumHoldDurationMinutes,
+                                 program_limits::kMaximumHoldDurationMinutes,
                                  purpose);
     } else if (program.completion.holdDurationMinutes.has_value()) {
         addError(result, ValidationErrorCode::UnexpectedValue,
@@ -232,9 +242,9 @@ MigrationResult migrateProgramToCurrentSchema(const ProgramDocument& source) {
         return {MigrationStatus::NotRequired, source};
     }
     if (source.schema.version != kMigratableProgramSchemaVersion ||
-        (source.schema.presentFields & ~kSchema3RequiredProgramFields) != 0U ||
-        (source.schema.presentFields & kSchema3RequiredProgramFields) !=
-            kSchema3RequiredProgramFields) {
+        (source.schema.presentFields & ~kSchema4RequiredProgramFields) != 0U ||
+        (source.schema.presentFields & kSchema4RequiredProgramFields) !=
+            kSchema4RequiredProgramFields) {
         const auto status =
             source.schema.version == kMigratableProgramSchemaVersion
                 ? MigrationStatus::InvalidSourceDocument
@@ -245,9 +255,7 @@ MigrationResult migrateProgramToCurrentSchema(const ProgramDocument& source) {
     ProgramDocument migrated = source;
     migrated.schema.version = kCurrentProgramSchemaVersion;
     migrated.schema.presentFields = kCurrentRequiredProgramFields;
-    migrated.program.factoryCatalogEntry = migrated.program.builtIn;
-    migrated.program.userDeletable = true;
-    migrated.program.installed = true;
+    migrated.program.maximumProductWaitMinutes = std::nullopt;
     return {MigrationStatus::Migrated, std::move(migrated)};
 }
 

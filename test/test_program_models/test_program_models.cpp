@@ -3,6 +3,7 @@
 #include <cstring>
 #include <string>
 
+#include "program_limits.hpp"
 #include "program_model.hpp"
 #include "standard_program_catalog.hpp"
 
@@ -29,6 +30,7 @@ ProgramDocument makeRunnableProgram() {
     program.targetQualification.bandCelsius = 0.1;
     program.targetQualification.durationMinutes = 1U;
     program.maximumTargetReachMinutes = 1U;
+    program.maximumProductWaitMinutes = 1U;
     program.completion.coolingTargetCelsius = 4.0;
     return *copy;
 }
@@ -52,6 +54,12 @@ void test_documented_boundaries_are_accepted() {
     program.fermentationStages.front().targetTemperatureCelsius = 45.0;
     program.fermentationStages.front().durationMinutes = 20160U;
     program.targetQualification.bandCelsius = 2.0;
+    program.targetQualification.durationMinutes =
+        fermentation::program_limits::kMaximumQualificationDurationMinutes;
+    program.maximumTargetReachMinutes =
+        fermentation::program_limits::kMaximumTargetReachMinutes;
+    program.maximumProductWaitMinutes =
+        fermentation::program_limits::kMaximumProductWaitMinutes;
     program.productSensorFailure.fallbackDelaySeconds = 3600U;
     program.completion.coolingTargetCelsius = 25.0;
 
@@ -64,6 +72,8 @@ void test_values_outside_documented_boundaries_are_rejected() {
     program.fermentationStages.front().targetTemperatureCelsius = 3.9;
     program.fermentationStages.front().durationMinutes = 0U;
     program.targetQualification.bandCelsius = 2.1;
+    program.maximumProductWaitMinutes =
+        fermentation::program_limits::kMaximumProductWaitMinutes + 1U;
     program.productSensorFailure.fallbackDelaySeconds = 3601U;
     program.completion.coolingTargetCelsius = 25.1;
 
@@ -76,6 +86,8 @@ void test_values_outside_documented_boundaries_are_rejected() {
                                    "defaults.fermentation_duration_min"));
     TEST_ASSERT_TRUE(containsError(result, ValidationErrorCode::ValueOutOfRange,
                                    "defaults.target_qualification_band_c"));
+    TEST_ASSERT_TRUE(containsError(result, ValidationErrorCode::ValueOutOfRange,
+                                   "defaults.max_product_wait_min"));
     TEST_ASSERT_TRUE(
         containsError(result, ValidationErrorCode::ValueOutOfRange,
                       "defaults.product_sensor_failure.fallback_delay_s"));
@@ -112,32 +124,39 @@ void test_catalog_templates_cannot_silently_become_runnable() {
     TEST_ASSERT_TRUE(containsError(
         runnableResult, ValidationErrorCode::MissingCommissioningValue,
         "defaults.fermentation_duration_min"));
+    TEST_ASSERT_TRUE(containsError(
+        runnableResult, ValidationErrorCode::MissingCommissioningValue,
+        "defaults.max_product_wait_min"));
 }
 
-void test_schema_versions_and_v3_migration_are_explicit() {
+void test_schema_versions_and_v4_migration_are_explicit() {
     auto current = makeRunnableProgram();
     const auto unchanged = fermentation::migrateProgramToCurrentSchema(current);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(MigrationStatus::NotRequired),
                           static_cast<int>(unchanged.status));
     TEST_ASSERT_TRUE(unchanged.document.has_value());
 
-    auto versionThree = current;
-    versionThree.schema.version = fermentation::kMigratableProgramSchemaVersion;
-    versionThree.schema.presentFields =
-        fermentation::kSchema3RequiredProgramFields;
-    versionThree.program.factoryCatalogEntry = false;
-    versionThree.program.userDeletable = false;
-    versionThree.program.installed = false;
+    auto versionFour = current;
+    versionFour.schema.version = fermentation::kMigratableProgramSchemaVersion;
+    versionFour.schema.presentFields =
+        fermentation::kSchema4RequiredProgramFields;
+    versionFour.program.maximumProductWaitMinutes = std::nullopt;
     const auto migrated =
-        fermentation::migrateProgramToCurrentSchema(versionThree);
+        fermentation::migrateProgramToCurrentSchema(versionFour);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(MigrationStatus::Migrated),
                           static_cast<int>(migrated.status));
     TEST_ASSERT_TRUE(migrated.document.has_value());
     TEST_ASSERT_EQUAL_UINT32(fermentation::kCurrentProgramSchemaVersion,
                              migrated.document->schema.version);
-    TEST_ASSERT_TRUE(migrated.document->program.userDeletable);
-    TEST_ASSERT_TRUE(migrated.document->program.installed);
-    TEST_ASSERT_TRUE(validateProgram(*migrated.document).valid());
+    TEST_ASSERT_FALSE(
+        migrated.document->program.maximumProductWaitMinutes.has_value());
+    TEST_ASSERT_TRUE(
+        validateProgram(*migrated.document, ValidationPurpose::CatalogTemplate)
+            .valid());
+    TEST_ASSERT_TRUE(containsError(
+        validateProgram(*migrated.document, ValidationPurpose::Runnable),
+        ValidationErrorCode::MissingCommissioningValue,
+        "defaults.max_product_wait_min"));
 
     auto future = current;
     future.schema.version = fermentation::kCurrentProgramSchemaVersion + 1U;
@@ -155,20 +174,37 @@ void test_schema_versions_and_v3_migration_are_explicit() {
     TEST_ASSERT_FALSE(rejected.document.has_value());
 }
 
-void test_invalid_v3_document_is_not_partially_migrated() {
-    auto versionThree = makeRunnableProgram();
-    versionThree.schema.version = fermentation::kMigratableProgramSchemaVersion;
-    versionThree.schema.presentFields =
-        fermentation::kSchema3RequiredProgramFields &
+void test_invalid_v4_document_is_not_partially_migrated() {
+    auto versionFour = makeRunnableProgram();
+    versionFour.schema.version = fermentation::kMigratableProgramSchemaVersion;
+    versionFour.schema.presentFields =
+        fermentation::kSchema4RequiredProgramFields &
         ~fermentation::fieldMask(ProgramField::Id);
 
     const auto result =
-        fermentation::migrateProgramToCurrentSchema(versionThree);
+        fermentation::migrateProgramToCurrentSchema(versionFour);
 
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(MigrationStatus::InvalidSourceDocument),
         static_cast<int>(result.status));
     TEST_ASSERT_FALSE(result.document.has_value());
+}
+
+void test_product_wait_is_for_preheating_programs_only() {
+    auto preheating = makeRunnableProgram();
+    preheating.program.maximumProductWaitMinutes = std::nullopt;
+    TEST_ASSERT_TRUE(
+        containsError(validateProgram(preheating),
+                      ValidationErrorCode::MissingCommissioningValue,
+                      "defaults.max_product_wait_min"));
+
+    auto withoutPreheat = makeRunnableProgram();
+    withoutPreheat.program.preheat = false;
+    TEST_ASSERT_TRUE(containsError(validateProgram(withoutPreheat),
+                                   ValidationErrorCode::UnexpectedValue,
+                                   "defaults.max_product_wait_min"));
+    withoutPreheat.program.maximumProductWaitMinutes = std::nullopt;
+    TEST_ASSERT_TRUE(validateProgram(withoutPreheat).valid());
 }
 
 void test_all_four_factory_programs_load_with_specified_behaviour() {
@@ -293,8 +329,9 @@ int main() {
     RUN_TEST(test_values_outside_documented_boundaries_are_rejected);
     RUN_TEST(test_missing_required_and_unknown_fields_are_rejected);
     RUN_TEST(test_catalog_templates_cannot_silently_become_runnable);
-    RUN_TEST(test_schema_versions_and_v3_migration_are_explicit);
-    RUN_TEST(test_invalid_v3_document_is_not_partially_migrated);
+    RUN_TEST(test_schema_versions_and_v4_migration_are_explicit);
+    RUN_TEST(test_invalid_v4_document_is_not_partially_migrated);
+    RUN_TEST(test_product_wait_is_for_preheating_programs_only);
     RUN_TEST(test_all_four_factory_programs_load_with_specified_behaviour);
     RUN_TEST(test_active_selection_is_a_copy_separate_from_factory_catalog);
     RUN_TEST(test_user_copy_has_independent_identity_and_lifecycle);

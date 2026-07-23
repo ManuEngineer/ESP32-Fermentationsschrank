@@ -28,6 +28,9 @@ ProgramDocument makeCommissionedFactoryProgram(const char* id) {
     program.targetQualification.bandCelsius = 0.5;
     program.targetQualification.durationMinutes = 10U;
     program.maximumTargetReachMinutes = 180U;
+    if (program.preheat) {
+        program.maximumProductWaitMinutes = 30U;
+    }
     if (program.completion.mode !=
         fermentation::CompletionMode::FinishWithoutCooling) {
         program.completion.coolingTargetCelsius = 8.0;
@@ -47,6 +50,7 @@ ProgramDocument makeCommissionedUserProgram() {
     program.targetQualification.bandCelsius = 0.5;
     program.targetQualification.durationMinutes = 10U;
     program.maximumTargetReachMinutes = 180U;
+    program.maximumProductWaitMinutes = 30U;
     program.completion.coolingTargetCelsius = 8.0;
     TEST_ASSERT_TRUE(validateProgram(*document).valid());
     return *document;

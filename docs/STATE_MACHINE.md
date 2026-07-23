@@ -50,6 +50,22 @@ bisherige Zustand wirksam und es entsteht keine neue Aktorfreigabe. Speicherung,
 Kontrollpunkte, Rueckfallrevisionen und kritische Schreibfehler sind nicht Teil
 des fachlichen Zustandsautomaten.
 
+Die Implementierung verwendet dafuer zwei getrennte Schritte:
+
+1. `decideProcessTransition()` liefert eine vollstaendige, noch nicht angewendete
+   Entscheidung mit Ausgangs- und Folgezustand.
+2. `applyProcessTransition()` uebernimmt sie nur, wenn der vollstaendige
+   Ausgangszustand weiterhin uebereinstimmt und der uebergebene unveraenderliche
+   Laufschnappschuss zu Ausgang, Ziel und Uebergangsgrund passt. Veraltete,
+   bereits angewendete oder zum Laufkontext widerspruechliche Entscheidungen
+   werden ohne Zustandsaenderung abgelehnt. Eine kritische Sicherheitsabschaltung
+   bleibt davon ausgenommen und darf nie an fehlendem oder beschaedigtem
+   Laufkontext scheitern.
+
+Kritische Fehler werden vor Bedienereignissen und normalen Phasenfortschritten
+ausgewertet. In `WAITING_FOR_PRODUCT` hat der belastbar erreichte Zeitablauf
+Vorrang vor einer gleichzeitig eintreffenden Produktbestaetigung.
+
 ## Kanonische Zustandsnamen
 
 ```text
