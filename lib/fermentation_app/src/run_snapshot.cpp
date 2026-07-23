@@ -205,27 +205,32 @@ std::optional<ActiveRun> ActiveRun::restore(
     return restored;
 }
 
-RunAdjustmentResult ActiveRun::applyAdjustment(
-    const RunAdjustmentRequest& request, const RunAdjustmentContext& context) {
+RunAdjustmentDecision ActiveRun::decideAdjustment(
+    const RunAdjustmentRequest& request,
+    const RunAdjustmentContext& context) const {
+    const auto rejected = [this](RunAdjustmentStatus status) {
+        return RunAdjustmentDecision{status, revisionCount_, effectiveValues_,
+                                     std::nullopt};
+    };
     if (!request.confirmed) {
-        return {RunAdjustmentStatus::NotConfirmed, false};
+        return rejected(RunAdjustmentStatus::NotConfirmed);
     }
     if (!context.runActive) {
-        return {RunAdjustmentStatus::RunInactive, false};
+        return rejected(RunAdjustmentStatus::RunInactive);
     }
     if (!context.safetyAllowsChange) {
-        return {RunAdjustmentStatus::SafetyRejected, false};
+        return rejected(RunAdjustmentStatus::SafetyRejected);
     }
     if (context.activeStageIndex >=
         snapshot_.sourceProgram.program.fermentationStages.size()) {
-        return {RunAdjustmentStatus::InvalidStage, false};
+        return rejected(RunAdjustmentStatus::InvalidStage);
     }
     if (context.activeStageIndex < context.completedStageCount) {
-        return {RunAdjustmentStatus::CompletedStage, false};
+        return rejected(RunAdjustmentStatus::CompletedStage);
     }
     if (!validChangeSource(request.source) ||
         !validChangeReason(request.reason)) {
-        return {RunAdjustmentStatus::InvalidMetadata, false};
+        return rejected(RunAdjustmentStatus::InvalidMetadata);
     }
     if (revisionCount_ > 0U) {
         const auto& previousTimestamp =
@@ -238,29 +243,29 @@ RunAdjustmentResult ActiveRun::applyAdjustment(
             unixTimestampWentBackwards(
                 request.timestamp,
                 latestUnixTimeSeconds(revisions_, revisionCount_))) {
-            return {RunAdjustmentStatus::TimestampWentBackwards, false};
+            return rejected(RunAdjustmentStatus::TimestampWentBackwards);
         }
     }
     if (!request.targetTemperatureCelsius.has_value() &&
         !request.remainingDurationMinutes.has_value()) {
-        return {RunAdjustmentStatus::NoChange, false};
+        return rejected(RunAdjustmentStatus::NoChange);
     }
     if (revisionCount_ >= kMaximumRunRevisions) {
-        return {RunAdjustmentStatus::RevisionCapacityReached, false};
+        return rejected(RunAdjustmentStatus::RevisionCapacityReached);
     }
 
     EffectiveRunValues candidate = effectiveValues_;
     if (request.targetTemperatureCelsius.has_value()) {
         if (!validTargetTemperature(snapshot_, context.activeStageIndex,
                                     *request.targetTemperatureCelsius)) {
-            return {RunAdjustmentStatus::InvalidValue, false};
+            return rejected(RunAdjustmentStatus::InvalidValue);
         }
         candidate.targetTemperatureCelsius = *request.targetTemperatureCelsius;
     }
     if (request.remainingDurationMinutes.has_value()) {
         if (!validRemainingDuration(snapshot_, context.activeStageIndex,
                                     *request.remainingDurationMinutes)) {
-            return {RunAdjustmentStatus::InvalidValue, false};
+            return rejected(RunAdjustmentStatus::InvalidValue);
         }
         candidate.remainingDurationMinutes = *request.remainingDurationMinutes;
     }
@@ -270,7 +275,7 @@ RunAdjustmentResult ActiveRun::applyAdjustment(
     const bool durationChanged = candidate.remainingDurationMinutes !=
                                  effectiveValues_.remainingDurationMinutes;
     if (!targetChanged && !durationChanged) {
-        return {RunAdjustmentStatus::NoChange, false};
+        return rejected(RunAdjustmentStatus::NoChange);
     }
 
     const RunRevision revision{
@@ -288,10 +293,46 @@ RunAdjustmentResult ActiveRun::applyAdjustment(
         request.timestamp,
     };
 
+    return {RunAdjustmentStatus::Proposed, revisionCount_, effectiveValues_,
+            revision};
+}
+
+RunAdjustmentResult ActiveRun::applyAdjustment(
+    const RunAdjustmentDecision& decision) {
+    if (!decision.proposed() || !decision.revision.has_value() ||
+        decision.expectedRevisionCount != revisionCount_ ||
+        !equalValues(decision.expectedValues, effectiveValues_) ||
+        revisionCount_ >= kMaximumRunRevisions) {
+        return {RunAdjustmentStatus::NoChange, false};
+    }
+
+    const auto& revision = decision.revision.value();
+    const bool timestampInvalid =
+        revisionCount_ > 0U &&
+        (monotonicTimestampWentBackwards(
+             revision.timestamp, revision.monotonicEpoch,
+             revisions_[revisionCount_ - 1U].timestamp,
+             revisions_[revisionCount_ - 1U].monotonicEpoch) ||
+         unixTimestampWentBackwards(
+             revision.timestamp,
+             latestUnixTimeSeconds(revisions_, revisionCount_)));
+    if (revision.sequence != revisionCount_ + 1U ||
+        revision.monotonicEpoch != monotonicEpoch_ ||
+        !equalValues(revision.before, effectiveValues_) ||
+        !validRevisionMetadata(revision) ||
+        !validTargetTemperature(snapshot_, revision.stageIndex,
+                                revision.after.targetTemperatureCelsius) ||
+        !validRemainingDuration(snapshot_, revision.stageIndex,
+                                revision.after.remainingDurationMinutes) ||
+        timestampInvalid) {
+        return {RunAdjustmentStatus::InvalidValue, false};
+    }
+
     revisions_[revisionCount_] = revision;
-    effectiveValues_ = candidate;
+    effectiveValues_ = revision.after;
     ++revisionCount_;
-    return {RunAdjustmentStatus::Applied, targetChanged};
+    return {RunAdjustmentStatus::Applied,
+            revision.requiresTargetRequalification};
 }
 
 const RunProgramSnapshot& ActiveRun::snapshot() const { return snapshot_; }

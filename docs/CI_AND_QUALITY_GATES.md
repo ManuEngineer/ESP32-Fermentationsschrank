@@ -80,7 +80,9 @@ clang-tidy -p . include/app_config.hpp \
   lib/device_platform/src/device_platform.cpp \
   lib/device_platform/src/virtual_time_source.cpp \
   lib/fermentation_app/src/fermentation_application.cpp \
+  lib/fermentation_app/src/process_state_machine.cpp \
   lib/fermentation_app/src/program_model.cpp \
+  lib/fermentation_app/src/run_commands.cpp \
   lib/fermentation_app/src/run_snapshot.cpp \
   lib/fermentation_app/src/standard_program_catalog.cpp \
   src/main.cpp

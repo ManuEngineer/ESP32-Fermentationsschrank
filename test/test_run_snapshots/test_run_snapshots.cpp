@@ -14,6 +14,7 @@ using fermentation::ProgramDocument;
 using fermentation::ProgramSourceKind;
 using fermentation::RunAdjustmentContext;
 using fermentation::RunAdjustmentRequest;
+using fermentation::RunAdjustmentResult;
 using fermentation::RunAdjustmentStatus;
 using fermentation::RunChangeReason;
 using fermentation::RunChangeSource;
@@ -68,6 +69,16 @@ RunAdjustmentRequest targetAdjustment(double target,
     request.timestamp.monotonicMillis = monotonicMillis;
     request.timestamp.unixTimeSeconds = 1784736000;
     return request;
+}
+
+RunAdjustmentResult decideAndApply(ActiveRun& run,
+                                   const RunAdjustmentRequest& request,
+                                   const RunAdjustmentContext& context) {
+    const auto decision = run.decideAdjustment(request, context);
+    if (!decision.proposed()) {
+        return {decision.status, false};
+    }
+    return run.applyAdjustment(decision);
 }
 
 void test_start_accepts_standard_and_user_programs() {
@@ -131,8 +142,8 @@ void test_target_adjustment_records_complete_revision() {
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 4U);
     TEST_ASSERT_TRUE(run.has_value());
 
-    const auto result = run->applyAdjustment(targetAdjustment(40.0, 1000U),
-                                             adjustableContext());
+    const auto result = decideAndApply(*run, targetAdjustment(40.0, 1000U),
+                                       adjustableContext());
 
     TEST_ASSERT_TRUE(result.applied());
     TEST_ASSERT_TRUE(result.requiresTargetRequalification);
@@ -158,6 +169,34 @@ void test_target_adjustment_records_complete_revision() {
                    .targetTemperatureCelsius);
 }
 
+void test_adjustment_decision_is_immutable_and_stale_decisions_are_rejected() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 4U);
+    TEST_ASSERT_TRUE(run.has_value());
+
+    const auto discarded = run->decideAdjustment(targetAdjustment(40.0, 100U),
+                                                 adjustableContext());
+    TEST_ASSERT_TRUE(discarded.proposed());
+    TEST_ASSERT_EQUAL_DOUBLE(39.0,
+                             run->effectiveValues().targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(0U, run->revisionCount());
+
+    const auto accepted = run->decideAdjustment(targetAdjustment(41.0, 200U),
+                                                adjustableContext());
+    TEST_ASSERT_TRUE(accepted.proposed());
+    TEST_ASSERT_TRUE(run->applyAdjustment(accepted).applied());
+    TEST_ASSERT_EQUAL_DOUBLE(41.0,
+                             run->effectiveValues().targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(1U, run->revisionCount());
+
+    const auto staleResult = run->applyAdjustment(discarded);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunAdjustmentStatus::NoChange),
+                          static_cast<int>(staleResult.status));
+    TEST_ASSERT_EQUAL_DOUBLE(41.0,
+                             run->effectiveValues().targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(1U, run->revisionCount());
+}
+
 void test_duration_and_combined_adjustments_are_atomic() {
     const auto source = makeCommissionedUserProgram();
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 4U);
@@ -168,7 +207,7 @@ void test_duration_and_combined_adjustments_are_atomic() {
     durationRequest.confirmed = true;
     durationRequest.timestamp.monotonicMillis = 100U;
     const auto durationResult =
-        run->applyAdjustment(durationRequest, adjustableContext());
+        decideAndApply(*run, durationRequest, adjustableContext());
     TEST_ASSERT_TRUE(durationResult.applied());
     TEST_ASSERT_FALSE(durationResult.requiresTargetRequalification);
     TEST_ASSERT_EQUAL_UINT32(0U,
@@ -182,7 +221,7 @@ void test_duration_and_combined_adjustments_are_atomic() {
     invalidCombined.confirmed = true;
     invalidCombined.timestamp.monotonicMillis = 200U;
     const auto rejected =
-        run->applyAdjustment(invalidCombined, adjustableContext());
+        decideAndApply(*run, invalidCombined, adjustableContext());
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunAdjustmentStatus::InvalidValue),
                           static_cast<int>(rejected.status));
@@ -204,20 +243,20 @@ void test_unconfirmed_unsafe_and_completed_stage_changes_are_rejected() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::NotConfirmed),
         static_cast<int>(
-            run->applyAdjustment(request, adjustableContext()).status));
+            run->decideAdjustment(request, adjustableContext()).status));
 
     request.confirmed = true;
     auto unsafe = adjustableContext();
     unsafe.safetyAllowsChange = false;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::SafetyRejected),
-        static_cast<int>(run->applyAdjustment(request, unsafe).status));
+        static_cast<int>(run->decideAdjustment(request, unsafe).status));
 
     auto completed = adjustableContext();
     completed.completedStageCount = 1U;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::CompletedStage),
-        static_cast<int>(run->applyAdjustment(request, completed).status));
+        static_cast<int>(run->decideAdjustment(request, completed).status));
 
     TEST_ASSERT_EQUAL_UINT32(0U, run->revisionCount());
     TEST_ASSERT_EQUAL_DOUBLE(initialValues.targetTemperatureCelsius,
@@ -229,7 +268,7 @@ void test_restore_replays_snapshot_and_revision_history() {
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(
-        run->applyAdjustment(targetAdjustment(40.0, 100U), adjustableContext())
+        decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
             .applied());
 
     RunAdjustmentRequest durationRequest;
@@ -239,7 +278,7 @@ void test_restore_replays_snapshot_and_revision_history() {
     durationRequest.reason = RunChangeReason::UserAdjustment;
     durationRequest.timestamp.monotonicMillis = 200U;
     TEST_ASSERT_TRUE(
-        run->applyAdjustment(durationRequest, adjustableContext()).applied());
+        decideAndApply(*run, durationRequest, adjustableContext()).applied());
 
     const auto persistedSnapshot = run->snapshot();
     const auto persistedRevisions = run->revisions();
@@ -263,7 +302,7 @@ void test_restore_rejects_corrupt_or_reordered_revision_history() {
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(
-        run->applyAdjustment(targetAdjustment(40.0, 100U), adjustableContext())
+        decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
             .applied());
 
     auto corrupt = run->revisions();
@@ -299,27 +338,26 @@ void test_timestamp_and_revision_capacity_are_enforced() {
         request.confirmed = true;
         request.timestamp.monotonicMillis = index + 100U;
         TEST_ASSERT_TRUE(
-            run->applyAdjustment(request, adjustableContext()).applied());
+            decideAndApply(*run, request, adjustableContext()).applied());
     }
 
     auto request = targetAdjustment(40.0, 1000U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::RevisionCapacityReached),
         static_cast<int>(
-            run->applyAdjustment(request, adjustableContext()).status));
+            run->decideAdjustment(request, adjustableContext()).status));
 
     auto shortRun =
         ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
     TEST_ASSERT_TRUE(shortRun.has_value());
-    TEST_ASSERT_TRUE(
-        shortRun
-            ->applyAdjustment(targetAdjustment(40.0, 200U), adjustableContext())
-            .applied());
+    TEST_ASSERT_TRUE(decideAndApply(*shortRun, targetAdjustment(40.0, 200U),
+                                    adjustableContext())
+                         .applied());
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::TimestampWentBackwards),
         static_cast<int>(shortRun
-                             ->applyAdjustment(targetAdjustment(41.0, 199U),
-                                               adjustableContext())
+                             ->decideAdjustment(targetAdjustment(41.0, 199U),
+                                                adjustableContext())
                              .status));
     TEST_ASSERT_EQUAL_UINT32(1U, shortRun->revisionCount());
 }
@@ -332,27 +370,27 @@ void test_unix_timestamp_going_backwards_is_rejected() {
     auto first = targetAdjustment(40.0, 200U);
     first.timestamp.unixTimeSeconds = 1000;
     TEST_ASSERT_TRUE(
-        run->applyAdjustment(first, adjustableContext()).applied());
+        decideAndApply(*run, first, adjustableContext()).applied());
 
     auto decreasedUtc = targetAdjustment(41.0, 300U);
     decreasedUtc.timestamp.unixTimeSeconds = 999;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::TimestampWentBackwards),
         static_cast<int>(
-            run->applyAdjustment(decreasedUtc, adjustableContext()).status));
+            run->decideAdjustment(decreasedUtc, adjustableContext()).status));
     TEST_ASSERT_EQUAL_UINT32(1U, run->revisionCount());
 
     auto noUtc = targetAdjustment(41.0, 300U);
     noUtc.timestamp.unixTimeSeconds = std::nullopt;
     TEST_ASSERT_TRUE(
-        run->applyAdjustment(noUtc, adjustableContext()).applied());
+        decideAndApply(*run, noUtc, adjustableContext()).applied());
 
     auto rollbackAfterMissingUtc = targetAdjustment(42.0, 400U);
     rollbackAfterMissingUtc.timestamp.unixTimeSeconds = 999;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::TimestampWentBackwards),
         static_cast<int>(
-            run->applyAdjustment(rollbackAfterMissingUtc, adjustableContext())
+            run->decideAdjustment(rollbackAfterMissingUtc, adjustableContext())
                 .status));
     TEST_ASSERT_EQUAL_UINT32(2U, run->revisionCount());
 }
@@ -365,7 +403,7 @@ void test_restore_rejects_decreasing_unix_timestamp() {
     auto first = targetAdjustment(40.0, 100U);
     first.timestamp.unixTimeSeconds = 2000;
     TEST_ASSERT_TRUE(
-        run->applyAdjustment(first, adjustableContext()).applied());
+        decideAndApply(*run, first, adjustableContext()).applied());
 
     RunAdjustmentRequest second;
     second.remainingDurationMinutes = 90U;
@@ -375,12 +413,12 @@ void test_restore_rejects_decreasing_unix_timestamp() {
     second.timestamp.monotonicMillis = 200U;
     second.timestamp.unixTimeSeconds = std::nullopt;
     TEST_ASSERT_TRUE(
-        run->applyAdjustment(second, adjustableContext()).applied());
+        decideAndApply(*run, second, adjustableContext()).applied());
 
     auto third = targetAdjustment(41.0, 300U);
     third.timestamp.unixTimeSeconds = 2001;
     TEST_ASSERT_TRUE(
-        run->applyAdjustment(third, adjustableContext()).applied());
+        decideAndApply(*run, third, adjustableContext()).applied());
 
     auto revisions = run->revisions();
     revisions[2].timestamp.unixTimeSeconds = 1999;
@@ -393,7 +431,7 @@ void test_restore_rejects_invalid_monotonic_epochs() {
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
     TEST_ASSERT_TRUE(run.has_value());
     TEST_ASSERT_TRUE(
-        run->applyAdjustment(targetAdjustment(40.0, 100U), adjustableContext())
+        decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
             .applied());
 
     RunAdjustmentRequest durationRequest;
@@ -401,7 +439,7 @@ void test_restore_rejects_invalid_monotonic_epochs() {
     durationRequest.confirmed = true;
     durationRequest.timestamp.monotonicMillis = 200U;
     TEST_ASSERT_TRUE(
-        run->applyAdjustment(durationRequest, adjustableContext()).applied());
+        decideAndApply(*run, durationRequest, adjustableContext()).applied());
 
     auto revisions = run->revisions();
     revisions[0].monotonicEpoch = 1U;
@@ -424,8 +462,8 @@ void test_adjustment_after_restart_uses_new_monotonic_epoch() {
     const auto source = makeCommissionedUserProgram();
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
     TEST_ASSERT_TRUE(run.has_value());
-    TEST_ASSERT_TRUE(run->applyAdjustment(targetAdjustment(40.0, 500000U),
-                                          adjustableContext())
+    TEST_ASSERT_TRUE(decideAndApply(*run, targetAdjustment(40.0, 500000U),
+                                    adjustableContext())
                          .applied());
 
     auto restored = ActiveRun::restore(run->snapshot(), run->revisions(),
@@ -438,7 +476,7 @@ void test_adjustment_after_restart_uses_new_monotonic_epoch() {
     afterRestart.timestamp.monotonicMillis = 5U;
     afterRestart.timestamp.unixTimeSeconds = 1784736001;
     TEST_ASSERT_TRUE(
-        restored->applyAdjustment(afterRestart, adjustableContext()).applied());
+        decideAndApply(*restored, afterRestart, adjustableContext()).applied());
     const auto* restartRevision = restored->revisionAt(1U);
     TEST_ASSERT_NOT_NULL(restartRevision);
     TEST_ASSERT_EQUAL_UINT32(1U, restartRevision->monotonicEpoch);
@@ -449,7 +487,7 @@ void test_adjustment_after_restart_uses_new_monotonic_epoch() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::TimestampWentBackwards),
         static_cast<int>(
-            restored->applyAdjustment(backwardsInSameBoot, adjustableContext())
+            restored->decideAdjustment(backwardsInSameBoot, adjustableContext())
                 .status));
 
     const auto restoredAgain = ActiveRun::restore(
@@ -470,14 +508,15 @@ void test_noop_and_invalid_metadata_do_not_create_revisions() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::NoChange),
         static_cast<int>(
-            run->applyAdjustment(noChange, adjustableContext()).status));
+            run->decideAdjustment(noChange, adjustableContext()).status));
 
     auto invalidMetadata = targetAdjustment(40.0, 100U);
     invalidMetadata.source = static_cast<RunChangeSource>(255U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunAdjustmentStatus::InvalidMetadata),
         static_cast<int>(
-            run->applyAdjustment(invalidMetadata, adjustableContext()).status));
+            run->decideAdjustment(invalidMetadata, adjustableContext())
+                .status));
     TEST_ASSERT_EQUAL_UINT32(0U, run->revisionCount());
 }
 
@@ -489,6 +528,8 @@ int main() {
     RUN_TEST(test_start_rejects_uncommissioned_or_mismatched_sources);
     RUN_TEST(test_source_program_changes_do_not_change_run_snapshot);
     RUN_TEST(test_target_adjustment_records_complete_revision);
+    RUN_TEST(
+        test_adjustment_decision_is_immutable_and_stale_decisions_are_rejected);
     RUN_TEST(test_duration_and_combined_adjustments_are_atomic);
     RUN_TEST(test_unconfirmed_unsafe_and_completed_stage_changes_are_rejected);
     RUN_TEST(test_restore_replays_snapshot_and_revision_history);

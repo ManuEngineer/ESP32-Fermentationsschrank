@@ -2,7 +2,7 @@
 
 ## Status
 
-Dieses Dokument legt die fuer Issue #15 akzeptierte fachliche Semantik fuer
+Dieses Dokument legt die fuer Issue #15 implementierte fachliche Semantik fuer
 Laufkommandos, Meldungen und konkurrierende Bedienaktionen fest.
 
 Es ergaenzt insbesondere:
@@ -377,3 +377,29 @@ Native Tests decken mindestens ab:
 
 Issue #15 darf diese Folge-Issues nicht mit provisorischen Hardware-,
 Persistenz-, Sicherheits- oder Transportimplementierungen vorwegnehmen.
+
+## Implementierungszuordnung
+
+Die produktive, hardwareunabhaengige Umsetzung liegt in:
+
+- `lib/fermentation_app/src/run_commands.hpp/.cpp` fuer Kommando-Umschlaege,
+  manuelle Laufplaene, Startzusammenfassungen, Meldungen, Resetbewertungen und
+  zweistufige `CommandDecision`s
+- `lib/fermentation_app/src/run_command_limits.hpp` fuer die festen Grenzen der
+  verarbeiteten Kommando-IDs, Laufzeitmeldungen und Wirkungsabsichten; die
+  Idempotenz-IDs bilden ein gleitendes Fenster und blockieren den Betrieb bei
+  erreichter Puffergrenze nicht
+- `lib/fermentation_app/src/run_snapshot.hpp/.cpp` fuer die ebenfalls
+  zweistufige Entscheidung und Anwendung einer append-only Laufrevision
+- `lib/fermentation_app/src/process_state_machine.hpp/.cpp` fuer die explizite
+  Neubeurteilung nach einer Zielaenderung vor `FERMENTING`
+
+`test/test_run_commands/` prueft die Kommando- und Konfliktsemantik;
+`test/test_run_snapshots/` prueft zusaetzlich, dass eine berechnete
+Laufanpassung bis zur Anwendung keine Mutation erzeugt und eine inzwischen
+veraltete Entscheidung nicht uebernommen wird.
+
+Die Kommandoschicht liefert nur abstrakte Wirkungsabsichten wie sicheren
+Peltier-Stopp oder Luefternachlauf. Persistenz, konkrete Aktorsteuerung,
+Resetpolitik, UI und Transport bleiben gemaess obiger Abgrenzung bei den
+Folge-Issues.
