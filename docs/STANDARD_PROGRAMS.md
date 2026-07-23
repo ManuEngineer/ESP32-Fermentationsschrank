@@ -29,6 +29,7 @@ Fuer jedes Standardprogramm gilt:
 - bearbeitbare Abschluss- und Kuehloption
 - Ruecksetzen auf eine unveraenderliche Werkseinstellung moeglich
 - vor jedem Start sichtbare Zusammenfassung der tatsaechlich verwendeten Werte
+- bei aktiviertem Vorheizen eine bearbeitbare maximale Wartezeit auf das Produkt
 
 Die Software darf nicht voraussetzen, dass ein bestimmtes Kulturprodukt
 verwendet wird. Hinweise auf Kulturen oder Hersteller gehoeren spaeter hoechstens
@@ -85,7 +86,8 @@ FAIE-Kultur MILD oder eine andere konkrete Kultur festgelegt.
 - Produktfuehler, falls vorhanden; sonst voll unterstuetzter luftgefuehrter Betrieb
 - nach Ablauf standardmaessig aktiv kuehlen
 - anschliessend bis zur manuellen Beendigung gekuehlt halten
-- konkrete Zieltemperatur, Dauer und Kuehlwerte: `TBD_COMMISSIONING`
+- konkrete Zieltemperatur, Dauer, Produktwartezeit und Kuehlwerte:
+  `TBD_COMMISSIONING`
 
 ### Nicht festgelegt
 
@@ -110,7 +112,8 @@ stichfeste Konsistenz angestrebt wird.
   der Fermentation
 - nach Ablauf standardmaessig aktiv kuehlen
 - anschliessend bis zur manuellen Beendigung gekuehlt halten
-- konkrete Zieltemperatur, Dauer und Kuehlwerte: `TBD_COMMISSIONING`
+- konkrete Zieltemperatur, Dauer, Produktwartezeit und Kuehlwerte:
+  `TBD_COMMISSIONING`
 
 Das Programm allein garantiert keine Stichfestigkeit. Kultur, Milch,
 Vorbehandlung, Feststoffgehalt und ruhige Aufstellung beeinflussen das Ergebnis.
@@ -187,5 +190,6 @@ abhaengig.
 - globale oder programmspezifische Zielbaender
 - Qualifikationsdauer
 - maximale Zielerreichungszeit
+- maximale Produktwartezeit fuer Programme mit Vorheizen
 - konkrete Kuehlzieltemperatur
 - spaetere Feinabstimmung anhand der tatsaechlich verwendeten Kulturen

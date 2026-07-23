@@ -60,3 +60,9 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   atomaren und begrenzten Laufrevisionen sowie streng validierter
   Wiederherstellung durch deterministisches Wiederabspielen der Historie;
   monotone Revisionsepochen erlauben weitere Anpassungen nach einem Neustart
+- freigegebene Spezifikation fuer den deterministischen, hardware- und
+  persistenzfreien Zustandsautomaten sowie fuer bestaetigungsbeduerftige
+  Uebergangsentscheidungen
+- programmspezifische Produktwartezeit fuer Schema 5 mit sicherer
+  Schema-4-Migration, zentralen Programmmodell-Validierungsgrenzen und
+  `READY`-Freigabe fuer Issue #14

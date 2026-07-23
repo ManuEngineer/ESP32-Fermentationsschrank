@@ -124,6 +124,31 @@ Nach dem Einsetzen kann die Temperatur durch geoeffnete Tuer und Produktmasse
 abweichen. Deshalb wird die Zieltemperatur nach dem zweiten Start erneut
 qualifiziert.
 
+### Maximale Wartezeit auf das Produkt
+
+Ein Programm mit aktiviertem Vorheizen besitzt
+`maximumProductWaitMinutes` (`defaults.max_product_wait_min`). Das Feld begrenzt
+die Phase `WAITING_FOR_PRODUCT` auf 1 bis 1.440 Minuten.
+
+- Im Schema ist das Feld vorhanden, sein Wert bleibt fuer eine Katalogvorlage
+  optional und darf dort `TBD_COMMISSIONING` repraesentieren.
+- Fuer ein ausfuehrbares Programm mit aktiviertem Vorheizen ist ein Wert
+  verpflichtend.
+- Bei deaktiviertem Vorheizen ist ein Wert unzulaessig, weil
+  `WAITING_FOR_PRODUCT` nicht durchlaufen wird.
+- Es gibt keinen stillen Laufzeit- oder Migrationsstandard.
+- Die Migration von Schema 4 auf Schema 5 uebernimmt das Feld ohne Wert.
+  Vorheizprogramme bleiben dadurch als Katalogvorlage gueltig, sind aber bis zur
+  bewussten Konfiguration nicht ausfuehrbar.
+
+Die entwicklerseitig festgelegten Wertebereiche des Programmmodells werden
+ausschliesslich in
+`lib/fermentation_app/src/program_limits.hpp` mit sprechendem Namen und Einheit
+definiert. Dazu gehoeren auch die bisher direkt in der Validierung definierten
+Temperatur-, Dauer-, Zielband-, Sensorersatz- und Kuehlzielbereiche. Reale
+Sicherheitsgrenzen, Hardwarewerte, Inbetriebnahmewerte, Regelparameter und
+Benutzerwerte gehoeren nicht in diese Datei.
+
 ## Zieltemperatur erreichen
 
 `Zieltemperatur erreichen` kann je nach Ausgangslage bedeuten:
@@ -158,6 +183,11 @@ unterbrechen oder starten die Qualifikation neu.
 
 Die genaue Zielbandbreite, Qualifikationsdauer und Gnadenzeit werden pro
 Programm oder als validierte Standardwerte festgelegt.
+
+Der fachliche Zustandsautomat wertet keine Rohsensoren aus. Er erhaelt bereits
+qualitaetsgepruefte Prozesssignale. Filterung, Ausreisser- und Gnadenzeit sowie
+die Bewertung der Sensorqualitaet werden getrennt von der Zustandsmaschine
+implementiert.
 
 ## Start der Fermentationszeit
 
