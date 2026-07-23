@@ -1,10 +1,13 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 
 namespace fermentation::program_limits {
 
+inline constexpr std::size_t kMinimumFermentationStageCount = 1U;
+inline constexpr std::size_t kMaximumFermentationStageCount = 1U;
 inline constexpr double kMinimumFermentationTemperatureCelsius = 4.0;
 inline constexpr double kMaximumFermentationTemperatureCelsius = 45.0;
 inline constexpr std::uint32_t kMinimumFermentationDurationMinutes = 1U;
