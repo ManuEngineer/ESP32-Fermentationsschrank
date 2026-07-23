@@ -117,6 +117,13 @@ wiederverwendbare Plattform gezogen. Verbindliche Details und die spaetere
 Auslagerungsstrategie stehen in
 [`ADR-013`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md).
 
+Der fachliche Zustandsautomat in `lib/fermentation_app` ist ebenfalls frei von
+Hardware- und Persistenzzugriffen. Er berechnet mit monotoner virtueller Zeit
+reversible Uebergangsentscheidungen fuer Vorheizen, Produktwartephase,
+Zielqualifikation, Fermentation, Kuehlen und Halten. Erst eine getrennte
+Bestaetigung uebernimmt den neuen Zustand; veraltete Entscheidungen werden ohne
+Teilmutation abgelehnt.
+
 Alle Profile bauen und die nativen Tests laufen mit:
 
 ```bash
@@ -133,7 +140,8 @@ clang-format --dry-run --Werror $(find src include lib test -type f \( -name "*.
 pio run -e native -t compiledb && clang-tidy -p . include/app_config.hpp \
   lib/device_platform/src/device_platform.cpp \
   lib/device_platform/src/virtual_time_source.cpp \
-  lib/fermentation_app/src/fermentation_application.cpp src/main.cpp
+  lib/fermentation_app/src/fermentation_application.cpp \
+  lib/fermentation_app/src/process_state_machine.cpp src/main.cpp
 python scripts/check_secrets.py
 python scripts/build_report.py --output build-report.md native esp32_bringup esp32_release
 ```

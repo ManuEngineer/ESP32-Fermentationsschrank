@@ -66,3 +66,10 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 - programmspezifische Produktwartezeit fuer Schema 5 mit sicherer
   Schema-4-Migration, zentralen Programmmodell-Validierungsgrenzen und
   `READY`-Freigabe fuer Issue #14
+- zentrale `program_limits.hpp` als einzige Quelle fuer entwicklerseitige
+  Wertebereiche des Programmmodells
+- deterministischer, hardware- und persistenzfreier Zustandsautomat mit
+  expliziter Topologie aller kanonischen Zustaende, monotonen Phasenzeiten und
+  reversiblen Uebergangsentscheidungen
+- native Ablauf- und Negativtests fuer alle vier Standardablaeufe, Vorheizen,
+  Produktwartefrist, Zielqualifikation, Abschlussmodi und manuelles Halten

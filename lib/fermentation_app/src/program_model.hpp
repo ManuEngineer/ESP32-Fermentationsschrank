@@ -7,12 +7,12 @@
 
 namespace fermentation {
 
-inline constexpr std::uint32_t kCurrentProgramSchemaVersion = 4U;
-inline constexpr std::uint32_t kMigratableProgramSchemaVersion = 3U;
+inline constexpr std::uint32_t kCurrentProgramSchemaVersion = 5U;
+inline constexpr std::uint32_t kMigratableProgramSchemaVersion = 4U;
 
 using ProgramFieldMask = std::uint64_t;
 
-// Absichtlich so breit wie ProgramFieldMask: Die aktuellen 15 Werte
+// Absichtlich so breit wie ProgramFieldMask: Die aktuellen 16 Werte
 // braeuchten zwar weniger, aber spaetere Schemafelder ueber Bit 15 hinaus
 // sollen keinen Typwechsel erzwingen.
 // NOLINTNEXTLINE(performance-enum-size): Headroom fuer weitere Felder.
@@ -32,6 +32,7 @@ enum class ProgramField : ProgramFieldMask {
     FactoryCatalogEntry = 1ULL << 12U,
     UserDeletable = 1ULL << 13U,
     Installed = 1ULL << 14U,
+    MaximumProductWait = 1ULL << 15U,
 };
 
 [[nodiscard]] constexpr ProgramFieldMask fieldMask(ProgramField field) {
@@ -49,10 +50,13 @@ inline constexpr ProgramFieldMask kSchema3RequiredProgramFields =
     fieldMask(ProgramField::MaximumTargetReach) |
     fieldMask(ProgramField::Completion);
 
-inline constexpr ProgramFieldMask kCurrentRequiredProgramFields =
+inline constexpr ProgramFieldMask kSchema4RequiredProgramFields =
     kSchema3RequiredProgramFields |
     fieldMask(ProgramField::FactoryCatalogEntry) |
     fieldMask(ProgramField::UserDeletable) | fieldMask(ProgramField::Installed);
+
+inline constexpr ProgramFieldMask kCurrentRequiredProgramFields =
+    kSchema4RequiredProgramFields | fieldMask(ProgramField::MaximumProductWait);
 
 inline constexpr ProgramFieldMask kCurrentKnownProgramFields =
     kCurrentRequiredProgramFields;
@@ -130,6 +134,7 @@ struct ProgramDefinition {
     std::vector<FermentationStage> fermentationStages;
     TargetQualification targetQualification;
     std::optional<std::uint32_t> maximumTargetReachMinutes;
+    std::optional<std::uint32_t> maximumProductWaitMinutes;
     ProgramCompletion completion;
 };
 
