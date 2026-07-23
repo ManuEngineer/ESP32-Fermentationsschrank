@@ -133,6 +133,17 @@ liegenden `AGENTS.md`.
 - Es wird nicht in jedem Sensorzyklus in Flash geschrieben.
 - Historien und Puffer sind fest begrenzt.
 
+## Werte und Parametrierung
+
+- Entwicklerseitige Validierungsgrenzen werden pro fachlichem Bereich in einer
+  zentralen `*_limits.hpp` definiert und nicht als Magic Numbers verteilt.
+- Benutzer- und programmspezifische Werte bleiben versionierte Laufzeitdaten und
+  werden nicht in Limits-Headern gespeichert.
+- Hardwarebelegung, Inbetriebnahmewerte und Regelparameter werden ueber
+  validierte, versionierte Profile bereitgestellt.
+- Firmwarefeste Sicherheitsgrenzen duerfen durch Benutzer-, Programm- oder
+  Inbetriebnahmekonfiguration nur verschaerft, niemals gelockert werden.
+
 ## Release-1-Abgrenzung
 
 Nicht als Release-1-Funktion implementieren:
