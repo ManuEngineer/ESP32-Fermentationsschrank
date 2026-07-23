@@ -182,3 +182,43 @@
 - **Folgen:** Neue Module muessen bewusst Plattform oder Anwendung zugeordnet und
   nativ testbar gehalten werden. Die ausfuehrliche Entscheidung steht in
   [`ADR-013_REUSABLE_DEVICE_PLATFORM.md`](ADR-013_REUSABLE_DEVICE_PLATFORM.md).
+
+## ADR-014: Deterministischer fachlicher Zustandsautomat
+
+- **Status:** accepted
+- **Datum:** 2026-07-23
+- **Kontext:** Fachliche Uebergaenge muessen nativ und mit virtueller Zeit
+  reproduzierbar sein. Persistenzfehler duerfen weder einen nur teilweise
+  uebernommenen Zustand noch eine neue Aktorfreigabe erzeugen.
+- **Entscheidung:** Der Zustandsautomat ist hardware- und persistenzfrei. Er
+  berechnet aus Zustand, unveraenderlichem Laufschnappschuss, abstrahierten
+  Prozesssignalen, Ereignissen und monotoner Zeit eine Uebergangsentscheidung,
+  ohne den bisherigen Zustand unumkehrbar zu veraendern. Der aufrufende
+  Anwendungsteil bestaetigt und uebernimmt sie erst nach erfolgreicher atomarer
+  Speicherung.
+- **Alternativen:** Zustand waehrend der Berechnung direkt mutieren; Persistenz
+  oder Aktorfreigaben in den Automaten integrieren.
+- **Folgen:** Issue #14 definiert alle kanonischen Zustandsnamen und die erlaubte
+  Topologie. Detaillierte Boot-, Recovery-, Service-, Fehlerreset- und
+  Persistenzpolitik bleibt in den dafuer vorgesehenen Folge-Issues. Native Tests
+  duerfen Entscheidungen mit einem einfachen In-Memory-Treiber anwenden.
+
+## ADR-015: Programmspezifische maximale Produktwartezeit
+
+- **Status:** accepted
+- **Datum:** 2026-07-23
+- **Kontext:** `WAITING_FOR_PRODUCT` benoetigt laut Spezifikation eine
+  programmspezifische Maximalzeit, das Programmmodell besitzt dafuer bisher kein
+  Feld.
+- **Entscheidung:** Schema 5 ergaenzt `maximumProductWaitMinutes` mit einem
+  gueltigen Bereich von 1 bis 1.440 Minuten. Der Wert ist fuer ausfuehrbare
+  Vorheizprogramme verpflichtend, ohne Vorheizen unzulaessig und darf in
+  Katalogvorlagen als `TBD_COMMISSIONING` fehlen. Die Migration von Schema 4
+  erfindet keinen Wert.
+- **Alternativen:** globale Wartezeit; stiller Standardwert; unbegrenzte
+  Produktwartephase.
+- **Folgen:** Migrierte Vorheizprogramme bleiben Katalogvorlagen, sind aber bis
+  zur Konfiguration nicht ausfuehrbar. Alle entwicklerseitigen
+  Programmmodell-Wertebereiche werden zentral in `program_limits.hpp` definiert;
+  Hardware-, Sicherheits-, Inbetriebnahme-, Regel- und Benutzerwerte bleiben
+  davon getrennt.

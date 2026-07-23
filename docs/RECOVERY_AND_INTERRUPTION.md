@@ -84,7 +84,9 @@ Die Wartezeit bleibt `TBD_COMMISSIONING`.
 
 `WAITING_FOR_PRODUCT` besitzt eine programmspezifische Maximalzeit.
 
-- Vor Ablauf wird sichtbar und akustisch gewarnt.
+- Beim Eintritt wird sichtbar und akustisch zum Einsetzen des Produkts
+  aufgefordert. Diese Meldung ist zugleich die Warnung vor Ablauf; eine zweite
+  Warnschwelle ist fuer Release 1 nicht vorgesehen.
 - Das Produkt wird niemals automatisch als eingesetzt angenommen.
 - Ist die Maximalzeit belastbar abgelaufen, endet das Vorheizen sicher und der
   Lauf wird als nicht gestartet beziehungsweise abgebrochen protokolliert.

@@ -27,6 +27,29 @@ Release 1. Ergaenzende Detailregeln stehen in
   aber weder Sicherheitsfreigaben noch unbekannten Fortschritt erfinden.
 - Ein echter Sicherheitsfehler hat immer Vorrang vor automatischem Fortfahren.
 
+## Grenze des fachlichen Zustandsautomaten
+
+Der fachliche Zustandsautomat ist deterministisch, hardwarefrei und
+persistenzfrei. Er erhaelt:
+
+- den aktuellen fachlichen Zustand
+- einen unveraenderlichen Laufschnappschuss
+- abstrahierte, bereits qualitaetsgepruefte Prozesssignale
+- fachliche Ereignisse beziehungsweise Benutzerentscheidungen
+- monotone virtuelle Zeit
+
+Er liefert eine noch nicht angewendete Uebergangsentscheidung mit bisherigem und
+vorgeschlagenem Zustand, Grund beziehungsweise Ereigniscode, relevantem
+monotonem Zeitpunkt, aktualisierten fachlichen Phasendaten und gegebenenfalls
+fachlichen Meldungen.
+
+Die Berechnung veraendert den bisherigen Zustand nicht unumkehrbar. Erst der
+aufrufende Anwendungsteil darf die Entscheidung nach erfolgreicher atomarer
+Speicherung bestaetigen und anwenden. Schlaegt die Speicherung fehl, bleibt der
+bisherige Zustand wirksam und es entsteht keine neue Aktorfreigabe. Speicherung,
+Kontrollpunkte, Rueckfallrevisionen und kritische Schreibfehler sind nicht Teil
+des fachlichen Zustandsautomaten.
+
 ## Kanonische Zustandsnamen
 
 ```text
@@ -185,6 +208,10 @@ warten.
 - Fermentationstimer laeuft nicht
 - pro Programm konfigurierbare maximale Wartezeit
 
+Die sichtbare und akustische Aufforderung beim Eintritt in
+`WAITING_FOR_PRODUCT` ist zugleich die Warnung vor Ablauf der Wartezeit. Release
+1 besitzt keine zweite, davon getrennte Warnschwelle.
+
 ### Uebergaenge
 
 ```text
@@ -234,7 +261,8 @@ Die Zielqualifikation ist nicht Teil der Fermentationszeit.
 
 ```text
 Ziel erfolgreich qualifiziert
-  -> FERMENTING
+  -> FERMENTING fuer einen zeitgesteuerten Lauf
+  -> MANUAL_HOLDING fuer einen manuellen Temperatur-Haltebetrieb
 
 laengere oder deutliche Abweichung
   -> REACHING_TARGET oder Neustart der Qualifikation
@@ -330,6 +358,23 @@ Eine manuell gewaehlte Zieltemperatur ohne Timer halten.
 Der Zustand nutzt dieselbe Regel- und Sicherheitslogik wie ein Programmlauf und
 endet durch bewusste Benutzeraktion oder Fehler. Nach einer Unterbrechung wird er
 nur nach erfolgreicher Recoverypruefung automatisch fortgesetzt.
+
+Ein manueller Haltebetrieb wechselt nie direkt von `STANDBY` nach
+`MANUAL_HOLDING`. Sein validierter, unveraenderlicher manueller Laufplan
+durchlaeuft:
+
+```text
+mit Vorheizen:
+  STANDBY -> PREHEATING -> WAITING_FOR_PRODUCT
+          -> REACHING_TARGET -> QUALIFYING_TARGET -> MANUAL_HOLDING
+
+ohne Vorheizen:
+  STANDBY -> REACHING_TARGET -> QUALIFYING_TARGET -> MANUAL_HOLDING
+```
+
+Der Laufplan und das bestaetigte Startkommando werden von der Kommandoschicht
+erstellt und validiert. Der Zustandsautomat definiert und prueft den vollstaendigen
+Uebergangsweg.
 
 ## COMPLETED
 
