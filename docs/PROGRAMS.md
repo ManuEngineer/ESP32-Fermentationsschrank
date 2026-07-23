@@ -422,8 +422,11 @@ Bedienvalidierung bleibt Aufgabe von Issue #15.
 Prozessschnappschuss, phasenbezogenem Qualifikationssignal, fachlichem Ereignis
 und monotoner Zeit eine Entscheidung. Der bisherige Zustand bleibt dabei
 unveraendert. `applyProcessTransition()` akzeptiert nur eine Entscheidung, deren
-vollstaendiger Ausgangszustand noch aktuell ist. Eine veraltete oder bereits
-angewendete Entscheidung wird ohne Teilmutation abgelehnt.
+vollstaendiger Ausgangszustand noch aktuell ist und deren Zustandsfolge zum
+uebergebenen unveraenderlichen Prozessschnappschuss passt. Eine veraltete,
+bereits angewendete oder zum Laufkontext widerspruechliche Entscheidung wird
+ohne Teilmutation abgelehnt. Kritische Sicherheitsabschaltungen bleiben auch
+ohne gueltigen Laufkontext anwendbar.
 
 Phasenzeiten werden ausschliesslich aus monotonen Zeitpunkten berechnet.
 Zielqualifikation startet den Fermentationstimer erst beim bestaetigten Wechsel

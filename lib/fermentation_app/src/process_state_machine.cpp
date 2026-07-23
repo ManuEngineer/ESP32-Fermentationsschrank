@@ -320,6 +320,63 @@ bool validProposedTopology(const TransitionDecision& decision) {
            validControlTopology(decision);
 }
 
+bool transitionMatchesRunSnapshot(const TransitionDecision& decision,
+                                  const ProcessRunSnapshot* runSnapshot) {
+    // Eine Sicherheitsabschaltung darf nie an fehlendem oder beschaedigtem
+    // Laufkontext scheitern.
+    if (decision.reason == TransitionReason::CriticalFault) {
+        return true;
+    }
+
+    if (runSnapshot != nullptr && !validateProcessRunSnapshot(*runSnapshot)) {
+        return false;
+    }
+
+    const bool needsRunSnapshot = stateUsesRunSnapshot(decision.before.state) ||
+                                  stateUsesRunSnapshot(decision.after.state);
+    if (needsRunSnapshot && runSnapshot == nullptr) {
+        return false;
+    }
+    if (!needsRunSnapshot) {
+        return true;
+    }
+    if ((stateUsesRunSnapshot(decision.before.state) &&
+         !stateMatchesRunSnapshot(decision.before.state, *runSnapshot)) ||
+        (stateUsesRunSnapshot(decision.after.state) &&
+         !stateMatchesRunSnapshot(decision.after.state, *runSnapshot))) {
+        return false;
+    }
+
+    switch (decision.reason) {
+        case TransitionReason::RunStarted:
+            return decision.after.state == (runSnapshot->preheatEnabled
+                                                ? ProcessState::Preheating
+                                                : ProcessState::ReachingTarget);
+        case TransitionReason::TargetQualified:
+            return decision.after.state ==
+                   (runSnapshot->kind == ProcessKind::ManualHolding
+                        ? ProcessState::ManualHolding
+                        : ProcessState::Fermenting);
+        case TransitionReason::FermentationCompleted:
+            return decision.after.state ==
+                   (runSnapshot->completionMode ==
+                            CompletionMode::FinishWithoutCooling
+                        ? ProcessState::Completed
+                        : ProcessState::Cooling);
+        case TransitionReason::CoolingTargetReached:
+            return decision.after.state ==
+                   (runSnapshot->completionMode ==
+                            CompletionMode::CoolThenFinish
+                        ? ProcessState::Completed
+                        : ProcessState::CoolHolding);
+        case TransitionReason::HoldDurationCompleted:
+            return runSnapshot->completionMode ==
+                   CompletionMode::CoolAndHoldForDuration;
+        default:
+            return true;
+    }
+}
+
 TransitionDecision result(DecisionStatus status,
                           const ProcessRuntimeState& current,
                           std::uint64_t monotonicMillis) {
@@ -892,12 +949,14 @@ TransitionDecision decideProcessTransition(
 }
 
 bool applyProcessTransition(ProcessRuntimeState& current,
-                            const TransitionDecision& decision) {
+                            const TransitionDecision& decision,
+                            const ProcessRunSnapshot* runSnapshot) {
     if (!decision.proposed() ||
         !equalProcessRuntimeState(current, decision.before) ||
         decision.after.transitionSequence !=
             decision.before.transitionSequence + 1U ||
         !validProposedTopology(decision) ||
+        !transitionMatchesRunSnapshot(decision, runSnapshot) ||
         !runtimeShapeIsValid(decision.after) ||
         !runtimeTimeIsValid(decision.after, decision.monotonicMillis)) {
         return false;

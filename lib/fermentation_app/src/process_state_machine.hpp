@@ -153,7 +153,8 @@ struct TransitionDecision {
     const ProcessSignals& signals, const TransitionRequest& request,
     std::uint64_t monotonicMillis);
 
-[[nodiscard]] bool applyProcessTransition(ProcessRuntimeState& current,
-                                          const TransitionDecision& decision);
+[[nodiscard]] bool applyProcessTransition(
+    ProcessRuntimeState& current, const TransitionDecision& decision,
+    const ProcessRunSnapshot* runSnapshot);
 
 }  // namespace fermentation
