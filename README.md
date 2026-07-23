@@ -124,6 +124,13 @@ Zielqualifikation, Fermentation, Kuehlen und Halten. Erst eine getrennte
 Bestaetigung uebernimmt den neuen Zustand; veraltete Entscheidungen werden ohne
 Teilmutation abgelehnt.
 
+Darauf aufbauend verarbeitet die fachliche Kommandoschicht bestaetigte Starts,
+manuelle Laufplaene, Stoppen, Abschluss, Laufanpassungen, Meldungsaktionen und
+qualifizierte Fehlerresetabsichten ebenfalls zweistufig. Display und Web sind
+gleichberechtigte Quellen; Kommando-IDs sowie Zustands- und Fachrevisionen
+verhindern doppelte oder veraltete Anwendungen. Persistenz, konkrete UI und
+Aktorwirkung bleiben getrennten Folge-Issues vorbehalten.
+
 Alle Profile bauen und die nativen Tests laufen mit:
 
 ```bash
@@ -141,7 +148,8 @@ pio run -e native -t compiledb && clang-tidy -p . include/app_config.hpp \
   lib/device_platform/src/device_platform.cpp \
   lib/device_platform/src/virtual_time_source.cpp \
   lib/fermentation_app/src/fermentation_application.cpp \
-  lib/fermentation_app/src/process_state_machine.cpp src/main.cpp
+  lib/fermentation_app/src/process_state_machine.cpp \
+  lib/fermentation_app/src/run_commands.cpp src/main.cpp
 python scripts/check_secrets.py
 python scripts/build_report.py --output build-report.md native esp32_bringup esp32_release
 ```

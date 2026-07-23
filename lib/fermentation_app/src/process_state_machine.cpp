@@ -231,6 +231,18 @@ bool validBootTopology(const TransitionDecision& decision) {
     }
 }
 
+bool validTargetChangedTopology(ProcessState from, ProcessState to) {
+    switch (from) {
+        case ProcessState::Preheating:
+            return to == ProcessState::Preheating;
+        case ProcessState::ReachingTarget:
+        case ProcessState::QualifyingTarget:
+            return to == ProcessState::ReachingTarget;
+        default:
+            return false;
+    }
+}
+
 bool validPhaseTopology(const TransitionDecision& decision) {
     const auto from = decision.before.state;
     const auto to = decision.after.state;
@@ -255,6 +267,8 @@ bool validPhaseTopology(const TransitionDecision& decision) {
         case TransitionReason::ProductInserted:
             return from == ProcessState::WaitingForProduct &&
                    to == ProcessState::ReachingTarget;
+        case TransitionReason::TargetChangedReevaluation:
+            return validTargetChangedTopology(from, to);
         case TransitionReason::ProductWaitExpired:
             return from == ProcessState::WaitingForProduct &&
                    to == ProcessState::Standby;
@@ -770,6 +784,25 @@ TransitionDecision decideExplicitEvent(const ProcessRuntimeState& current,
                                 TransitionReason::RunAborted, monotonicMillis);
         static_cast<void>(addMessage(decision, ProcessMessage::RunAborted));
         return decision;
+    }
+
+    if (request.event == ProcessEvent::TargetChanged) {
+        if (current.state == ProcessState::Preheating) {
+            auto decision = propose(current, ProcessState::Preheating,
+                                    TransitionReason::TargetChangedReevaluation,
+                                    monotonicMillis);
+            decision.after.qualificationValidSinceMillis.reset();
+            return decision;
+        }
+        if (current.state == ProcessState::ReachingTarget ||
+            current.state == ProcessState::QualifyingTarget) {
+            auto decision = propose(current, ProcessState::ReachingTarget,
+                                    TransitionReason::TargetChangedReevaluation,
+                                    monotonicMillis);
+            initializeTargetReach(decision, monotonicMillis);
+            return decision;
+        }
+        return rejected(current, monotonicMillis);
     }
 
     switch (current.state) {

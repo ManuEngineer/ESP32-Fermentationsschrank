@@ -79,3 +79,7 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   reversiblen Uebergangsentscheidungen
 - native Ablauf- und Negativtests fuer alle vier Standardablaeufe, Vorheizen,
   Produktwartefrist, Zielqualifikation, Abschlussmodi und manuelles Halten
+- hardware- und persistenzfreie Laufkommandos fuer bestaetigten Programm- und
+  manuellen Start, atomare Stopp-/Abschlussaktionen, zweistufige
+  Laufanpassungen, gleichberechtigte Display-/Web-Konflikte sowie getrennte
+  Meldungsquittierung, Stummschaltung und qualifizierte Fehlerresetabsicht

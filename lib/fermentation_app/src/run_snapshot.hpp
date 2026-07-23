@@ -75,6 +75,7 @@ struct RunAdjustmentRequest {
 };
 
 enum class RunAdjustmentStatus : std::uint8_t {
+    Proposed,
     Applied,
     NotConfirmed,
     NoChange,
@@ -86,6 +87,17 @@ enum class RunAdjustmentStatus : std::uint8_t {
     InvalidMetadata,
     TimestampWentBackwards,
     RevisionCapacityReached,
+};
+
+struct RunAdjustmentDecision {
+    RunAdjustmentStatus status{RunAdjustmentStatus::InvalidValue};
+    std::size_t expectedRevisionCount{0U};
+    EffectiveRunValues expectedValues;
+    std::optional<RunRevision> revision;
+
+    [[nodiscard]] bool proposed() const {
+        return status == RunAdjustmentStatus::Proposed && revision.has_value();
+    }
 };
 
 struct RunAdjustmentResult {
@@ -108,9 +120,11 @@ class ActiveRun {
         const std::array<RunRevision, kMaximumRunRevisions>& revisions,
         std::size_t revisionCount);
 
-    [[nodiscard]] RunAdjustmentResult applyAdjustment(
+    [[nodiscard]] RunAdjustmentDecision decideAdjustment(
         const RunAdjustmentRequest& request,
-        const RunAdjustmentContext& context);
+        const RunAdjustmentContext& context) const;
+    [[nodiscard]] RunAdjustmentResult applyAdjustment(
+        const RunAdjustmentDecision& decision);
 
     [[nodiscard]] const RunProgramSnapshot& snapshot() const;
     [[nodiscard]] const EffectiveRunValues& effectiveValues() const;
