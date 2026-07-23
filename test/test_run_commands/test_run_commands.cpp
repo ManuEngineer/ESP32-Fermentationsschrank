@@ -429,6 +429,23 @@ void test_critical_safety_blocks_run_commands_but_not_message_commands() {
     TEST_ASSERT_TRUE(decideMuteMessage(state, message).proposed());
 }
 
+void test_critical_safety_event_invalidates_a_pending_comfort_decision() {
+    auto state = standbyState();
+    const auto pendingStart =
+        decideProgramStart(state, programStart(state, 10U));
+    TEST_ASSERT_TRUE(pendingStart.proposed());
+
+    state.criticalSafetyEventPending = true;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::SafetyRejected),
+        static_cast<int>(applyRunCommand(state, pendingStart)));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                          static_cast<int>(state.processState.state));
+    TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, state.commandSequence);
+    TEST_ASSERT_EQUAL_UINT32(0U, state.processedCommandCount);
+}
+
 void test_domain_revision_conflicts_are_rejected_without_mutation() {
     auto runState = startedProgramState();
     auto adjustment = targetChange(runState, 2U, 39.0, 200U);
@@ -523,6 +540,7 @@ int main() {
     RUN_TEST(test_message_priority_acknowledgement_and_mute_are_independent);
     RUN_TEST(test_fault_reset_requires_current_qualified_evaluation);
     RUN_TEST(test_critical_safety_blocks_run_commands_but_not_message_commands);
+    RUN_TEST(test_critical_safety_event_invalidates_a_pending_comfort_decision);
     RUN_TEST(test_domain_revision_conflicts_are_rejected_without_mutation);
     RUN_TEST(test_processed_command_ids_form_a_bounded_rolling_window);
     return UNITY_END();

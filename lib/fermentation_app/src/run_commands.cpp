@@ -715,6 +715,10 @@ CommandStatus applyRunCommand(RunCommandState& current,
     if (containsProcessedCommand(current, decision.envelope.id)) {
         return CommandStatus::AlreadyProcessed;
     }
+    if (current.criticalSafetyEventPending &&
+        isRunComfortCommand(decision.kind)) {
+        return CommandStatus::SafetyRejected;
+    }
     if (!decision.proposed() ||
         current.commandSequence != decision.before.commandSequence ||
         !equalProcessRuntimeState(current.processState,
@@ -722,6 +726,8 @@ CommandStatus applyRunCommand(RunCommandState& current,
         current.runRevision != decision.before.runRevision ||
         current.messageRevision != decision.before.messageRevision ||
         current.faultRevision != decision.before.faultRevision ||
+        current.criticalSafetyEventPending !=
+            decision.before.criticalSafetyEventPending ||
         current.activeRunId != decision.before.activeRunId ||
         decision.after.commandSequence != current.commandSequence + 1U) {
         return CommandStatus::StaleState;
