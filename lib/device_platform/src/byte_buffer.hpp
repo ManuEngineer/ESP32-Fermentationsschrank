@@ -17,6 +17,9 @@ class ByteWriter {
         buffer_.reserve(capacity);
     }
 
+    // `data` darf nur dann `nullptr` sein, wenn `length == 0` ist (gleiche
+    // Vorbedingung wie bei `std::memcpy`/`Crc32IsoHdlc::update`); bei
+    // `length == 0` wird `data` nicht dereferenziert.
     [[nodiscard]] bool writeBytes(const void* data, std::size_t length) {
         // Laenge 0 mit moeglicherweise nullptr `data` vor jeder
         // Pointerarithmetik/-kopie abfangen: ein Nullzeiger als Beginn eines
@@ -61,6 +64,9 @@ class ByteReader {
    public:
     explicit ByteReader(const std::string& bytes) : bytes_(bytes) {}
 
+    // `out` darf nur dann `nullptr` sein, wenn `length == 0` ist (gleiche
+    // Vorbedingung wie bei `ByteWriter::writeBytes`); bei `length == 0` wird
+    // `out` nicht dereferenziert.
     [[nodiscard]] bool readBytes(void* out, std::size_t length) {
         // Siehe ByteWriter::writeBytes: Laenge 0 mit moeglicherweise
         // nullptr `out` vor jeder Pointerarithmetik/-kopie abfangen.

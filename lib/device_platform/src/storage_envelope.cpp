@@ -168,9 +168,16 @@ EnvelopeEncodeStatus encodeEnvelope(const StorageEnvelope& envelope,
     if (!ok) {
         return EnvelopeEncodeStatus::CapacityExceeded;
     }
-    // Veroeffentlicht das Ergebnis erst nach vollstaendigem Erfolg, per
-    // Verschiebung ohne zusaetzliche Vollkopie des Records.
-    outBytes = finalWriter.takeBytes();
+    // Veroeffentlicht das Ergebnis erst nach vollstaendigem Erfolg per
+    // `swap()`: hoechstens ein zusaetzlicher, neu aufgebauter vollstaendiger
+    // Recordpuffer (`encoded`) entsteht, keine Vollkopie. Ein von der
+    // aufrufenden Anwendung bereits gehaltener alter Wert in `outBytes`
+    // bleibt bis zu genau dieser Zeile vollstaendig bestehen und wird erst
+    // hier durch den neuen Wert ersetzt - siehe
+    // docs/CONFIGURATION_PERSISTENCE.md, Abschnitt "Ressourcenvertrag" fuer
+    // die praezise, nicht absolute Formulierung dieser Garantie.
+    auto encoded = finalWriter.takeBytes();
+    outBytes.swap(encoded);
     return EnvelopeEncodeStatus::Success;
 }
 

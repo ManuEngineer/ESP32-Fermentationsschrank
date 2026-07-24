@@ -56,7 +56,20 @@ struct EnvelopeDecodeResult {
 // Lehnt RecordTypeId, Schema-Version, StorageEpoch und VersionValue 0 ab.
 // `maxTotalBytes` begrenzt Header und Payload gemeinsam; bei Ueberschreitung
 // oder einer Payloadgroesse, die nicht in das 32-Bit-Laengenfeld passt, wird
-// `CapacityExceeded` geliefert und `outBytes` nicht veraendert.
+// `CapacityExceeded` geliefert und `outBytes` nicht veraendert (weder Groesse
+// noch Inhalt).
+//
+// Ressourcenvertrag (siehe docs/CONFIGURATION_PERSISTENCE.md, Abschnitt
+// "Ressourcenvertrag" fuer die vollstaendige Herleitung): der Encoder baut
+// hoechstens einen zusaetzlichen, neu aufgebauten vollstaendigen
+// Recordpuffer auf und veroeffentlicht ihn per `swap()`, nie per Vollkopie.
+// Das ist keine absolute Aussage ueber die gesamte Aufrufdauer: haelt die
+// aufrufende Anwendung in `outBytes` bereits einen alten vollstaendigen
+// Record, bleibt dieser bis zur erfolgreichen `swap()`-Zeile bestehen -
+// waehrend dieses kurzen Zeitraums existieren alter und neuer Puffer
+// gleichzeitig. Die staerkere, absolute "waehrend eines Commits existiert
+// global hoechstens ein vollstaendiger Recordpuffer"-Garantie ist Aufgabe
+// des aufrufenden Commit-Workflows (#56/#57), nicht dieser Funktion allein.
 [[nodiscard]] EnvelopeEncodeStatus encodeEnvelope(
     const StorageEnvelope& envelope, std::string& outBytes,
     std::size_t maxTotalBytes);
