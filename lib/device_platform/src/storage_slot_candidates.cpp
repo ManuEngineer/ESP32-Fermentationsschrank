@@ -6,29 +6,84 @@
 
 namespace device_platform {
 
-std::vector<SlotCandidate> technicalCandidatesDescending(
-    const IStateStore& store, const std::vector<std::string>& slotKeys,
+namespace {
+
+SlotIssueKind toSlotIssueKind(StateStoreStatus status) {
+    switch (status) {
+        case StateStoreStatus::NotFound:
+            return SlotIssueKind::NotFound;
+        case StateStoreStatus::ReadError:
+            return SlotIssueKind::ReadError;
+        case StateStoreStatus::CapacityError:
+            return SlotIssueKind::CapacityError;
+        case StateStoreStatus::Success:
+        case StateStoreStatus::WriteError:
+        case StateStoreStatus::CommitOutcomeUnknown:
+            break;
+    }
+    // Nur Lesestatus werden hier abgebildet; die aufrufenden Codepfade rufen
+    // dies ausschliesslich fuer `status != Success` und nur nach `read()` auf.
+    return SlotIssueKind::ReadError;
+}
+
+SlotIssueKind toSlotIssueKind(EnvelopeDecodeStatus status) {
+    switch (status) {
+        case EnvelopeDecodeStatus::InvalidMagic:
+            return SlotIssueKind::InvalidMagic;
+        case EnvelopeDecodeStatus::UnknownEnvelopeVersion:
+            return SlotIssueKind::UnknownEnvelopeVersion;
+        case EnvelopeDecodeStatus::InvalidRecordType:
+            return SlotIssueKind::InvalidRecordType;
+        case EnvelopeDecodeStatus::InvalidSchemaVersion:
+            return SlotIssueKind::InvalidSchemaVersion;
+        case EnvelopeDecodeStatus::InvalidStorageEpoch:
+            return SlotIssueKind::InvalidStorageEpoch;
+        case EnvelopeDecodeStatus::InvalidVersionValue:
+            return SlotIssueKind::InvalidVersionValue;
+        case EnvelopeDecodeStatus::InvalidUtcTag:
+            return SlotIssueKind::InvalidUtcTag;
+        case EnvelopeDecodeStatus::LengthMismatch:
+            return SlotIssueKind::LengthMismatch;
+        case EnvelopeDecodeStatus::CrcMismatch:
+            return SlotIssueKind::CrcMismatch;
+        case EnvelopeDecodeStatus::Success:
+            break;
+    }
+    return SlotIssueKind::LengthMismatch;
+}
+
+}  // namespace
+
+SlotScanResult scanTechnicalSlotCandidates(
+    const IStateStore& store, const std::vector<StateStoreKey>& slotKeys,
     RecordTypeId expectedRecordType, uint32_t expectedSchemaVersion,
     StorageEpoch expectedStorageEpoch, std::size_t maxEnvelopeBytes) {
-    std::vector<SlotCandidate> candidates;
+    SlotScanResult result;
     for (std::size_t index = 0U; index < slotKeys.size(); ++index) {
+        const auto slot = SlotId(static_cast<uint32_t>(index));
         const auto readResult = store.read(slotKeys[index], maxEnvelopeBytes);
         if (readResult.status != StateStoreStatus::Success) {
+            result.issues.push_back(
+                SlotIssue{slot, toSlotIssueKind(readResult.status)});
             continue;
         }
         const auto decoded = decodeEnvelope(readResult.value);
         if (decoded.status != EnvelopeDecodeStatus::Success ||
             !decoded.envelope.has_value()) {
+            result.issues.push_back(
+                SlotIssue{slot, toSlotIssueKind(decoded.status)});
             continue;
         }
         const auto& envelope = *decoded.envelope;
         if (envelope.recordTypeId != expectedRecordType ||
             envelope.schemaVersion != expectedSchemaVersion ||
             envelope.storageEpoch != expectedStorageEpoch) {
+            result.issues.push_back(
+                SlotIssue{slot, SlotIssueKind::RecordIdentityMismatch});
             continue;
         }
-        candidates.push_back(SlotCandidate{
-            SlotId(static_cast<uint32_t>(index)),
+        result.candidates.push_back(SlotCandidate{
+            slot,
             envelope.versionValue,
             envelope.payload,
             envelope.utcUnixSeconds,
@@ -36,14 +91,14 @@ std::vector<SlotCandidate> technicalCandidatesDescending(
     }
     // Bei gleichem VersionValue entscheidet die Slot-ID aufsteigend, damit
     // die Reihenfolge deterministisch bleibt (`std::sort` ist nicht stabil).
-    std::sort(candidates.begin(), candidates.end(),
+    std::sort(result.candidates.begin(), result.candidates.end(),
               [](const SlotCandidate& left, const SlotCandidate& right) {
                   if (left.versionValue != right.versionValue) {
                       return left.versionValue > right.versionValue;
                   }
                   return left.slot.value() < right.slot.value();
               });
-    return candidates;
+    return result;
 }
 
 SlotId nextSlotRoundRobin(SlotId lastWrittenSlot, std::size_t slotCount) {

@@ -4,16 +4,27 @@
 #include <cstdint>
 #include <string>
 
+#include "state_store_key.hpp"
+
 namespace device_platform {
 
 enum class StateStoreStatus : uint8_t {
     Success,
     NotFound,
     ReadError,
+    // Schreiben: der Vorgang ist sicher nicht wirksam geworden; der zuvor
+    // gespeicherte Wert (falls vorhanden) ist unveraendert.
     WriteError,
     // Lesen: gespeicherter Wert ueberschreitet das aufrufer- beziehungsweise
-    // schluesselspezifische Leselimit. Schreiben: der Speicher ist voll.
+    // schluesselspezifische Leselimit. Schreiben: der Speicher ist voll; der
+    // zuvor gespeicherte Wert (falls vorhanden) ist unveraendert.
     CapacityError,
+    // Nur als Schreibergebnis: der Commit-Ausgang ist unbekannt. Der neue
+    // Wert kann bereits vollstaendig und dauerhaft gespeichert sein oder
+    // auch nicht - beides ist zulaessig, ein abgeschnittener oder gemischter
+    // Wert jedoch nie. Der Aufrufer muss zuruecklesen, um den tatsaechlichen
+    // Stand zu bestimmen.
+    CommitOutcomeUnknown,
 };
 
 struct StateStoreReadResult {
@@ -31,8 +42,22 @@ struct StateStoreReadResult {
 // Vertrag pro Schluessel: ein erfolgreich zurueckgekehrter `write` ersetzt den
 // vorherigen Wert atomar und dauerhaft. Nach einer Unterbrechung ist fuer
 // jeden Schluessel entweder der vollstaendige alte oder der vollstaendige
-// neue Wert sichtbar, nie ein abgeschnittener oder gemischter Wert. Ein
-// fehlgeschlagener `write` laesst den zuvor gespeicherten Wert unveraendert.
+// neue Wert sichtbar, nie ein abgeschnittener oder gemischter Wert.
+//
+// `write` liefert genau eines von vier eindeutig unterscheidbaren Ergebnissen:
+//   - `Success`: der neue Wert ist vollstaendig und dauerhaft gespeichert.
+//   - `WriteError`: der Vorgang ist sicher nicht wirksam geworden; der zuvor
+//     gespeicherte Wert (falls vorhanden) ist unveraendert.
+//   - `CapacityError`: der Speicher ist voll; ebenfalls sicher unveraendert.
+//   - `CommitOutcomeUnknown`: der Commit-Ausgang ist unbekannt (z. B. ein
+//     Stromausfall zwischen Commit und Rueckkehr an den Aufrufer). Der neue
+//     Wert kann bereits dauerhaft gespeichert sein oder auch nicht - welcher
+//     der beiden Faelle zutrifft, ist ohne Ruecklesen nicht bekannt. Es gibt
+//     nie einen abgeschnittenen oder gemischten Wert. Der Aufrufer muss in
+//     diesem Fall zuruecklesen, um den tatsaechlichen Stand zu bestimmen.
+// Es gibt bewusst keine pauschale Garantie, dass jeder nicht erfolgreiche
+// `write` den alten Wert unveraendert laesst - das gilt nur fuer `WriteError`
+// und `CapacityError`, nicht fuer `CommitOutcomeUnknown`.
 class IStateStore {
    public:
     IStateStore() = default;
@@ -43,14 +68,14 @@ class IStateStore {
     IStateStore(IStateStore&&) = delete;
     IStateStore& operator=(IStateStore&&) = delete;
 
-    [[nodiscard]] virtual StateStoreStatus write(const std::string& key,
+    [[nodiscard]] virtual StateStoreStatus write(const StateStoreKey& key,
                                                  const std::string& value) = 0;
 
     // `maxBytes` ist das aufrufer- beziehungsweise schluesselspezifische
     // Leselimit: uebersteigt der gespeicherte Wert `maxBytes`, liefert dies
     // `CapacityError` statt eines unkontrolliert grossen Werts.
     [[nodiscard]] virtual StateStoreReadResult read(
-        const std::string& key, std::size_t maxBytes) const = 0;
+        const StateStoreKey& key, std::size_t maxBytes) const = 0;
 };
 
 }  // namespace device_platform

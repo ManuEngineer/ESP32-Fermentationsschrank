@@ -5,6 +5,7 @@
 #include <string>
 
 #include "state_store.hpp"
+#include "state_store_key.hpp"
 
 namespace device_platform_test_support {
 
@@ -25,17 +26,19 @@ class SimulatedPersistentStateStore final
         // Stromausfall vor Commit: der Speicher wird nicht beruehrt.
         PowerCutBeforeCommit,
         // Stromausfall nach Commit, vor Rueckkehr an den Aufrufer: der Wert
-        // ist bereits dauerhaft committed, der Aufrufer sieht dennoch einen
-        // Fehler.
+        // ist bereits dauerhaft committed; der Aufrufer erhaelt
+        // `CommitOutcomeUnknown` und muss zuruecklesen, um dies festzustellen.
         PowerCutAfterCommitBeforeReturn,
         // Der Speicher ist voll; der Speicher wird nicht beruehrt.
         CapacityExceeded,
     };
 
     [[nodiscard]] device_platform::StateStoreStatus write(
-        const std::string& key, const std::string& value) override;
+        const device_platform::StateStoreKey& key,
+        const std::string& value) override;
     [[nodiscard]] device_platform::StateStoreReadResult read(
-        const std::string& key, std::size_t maxBytes) const override;
+        const device_platform::StateStoreKey& key,
+        std::size_t maxBytes) const override;
 
     // Gilt fuer genau den naechsten `write`-Aufruf und wird danach auf
     // `None` zurueckgesetzt.
@@ -43,16 +46,19 @@ class SimulatedPersistentStateStore final
 
     // Solange gesetzt, schlaegt jeder Lesevorgang fuer `key` mit
     // `ReadError` fehl.
-    void injectReadFailure(const std::string& key, bool shouldFail);
+    void injectReadFailure(const device_platform::StateStoreKey& key,
+                           bool shouldFail);
 
     // Solange gesetzt, liefert jeder Lesevorgang fuer `key` `NotFound`,
     // unabhaengig vom tatsaechlich committed Wert.
-    void forceNotFound(const std::string& key, bool shouldForce);
+    void forceNotFound(const device_platform::StateStoreKey& key,
+                       bool shouldForce);
 
     // Ueberschreibt die physisch committed Bytes fuer `key` direkt, ohne den
     // normalen Schreibpfad zu durchlaufen (bildet reale Bitkorruption nach,
     // die einen Neustart uebersteht).
-    void injectCorruption(const std::string& key, std::string corruptedBytes);
+    void injectCorruption(const device_platform::StateStoreKey& key,
+                          std::string corruptedBytes);
 
     // Simuliert einen Neustart: committed Daten bleiben erhalten, alle
     // Testschalter (Fault, Read-Fehler, erzwungenes NotFound) werden
@@ -60,10 +66,10 @@ class SimulatedPersistentStateStore final
     void restart();
 
    private:
-    std::map<std::string, std::string> committed_;
+    std::map<device_platform::StateStoreKey, std::string> committed_;
     WriteFault nextWriteFault_{WriteFault::None};
-    std::map<std::string, bool> readShouldFail_;
-    std::map<std::string, bool> forceNotFound_;
+    std::map<device_platform::StateStoreKey, bool> readShouldFail_;
+    std::map<device_platform::StateStoreKey, bool> forceNotFound_;
 };
 
 }  // namespace device_platform_test_support

@@ -1,12 +1,15 @@
 #include "simulated_persistent_state_store.hpp"
 
+#include <utility>
+
 namespace device_platform_test_support {
 
+using device_platform::StateStoreKey;
 using device_platform::StateStoreReadResult;
 using device_platform::StateStoreStatus;
 
 StateStoreStatus SimulatedPersistentStateStore::write(
-    const std::string& key, const std::string& value) {
+    const StateStoreKey& key, const std::string& value) {
     const WriteFault fault = nextWriteFault_;
     nextWriteFault_ = WriteFault::None;
 
@@ -18,7 +21,7 @@ StateStoreStatus SimulatedPersistentStateStore::write(
             return StateStoreStatus::CapacityError;
         case WriteFault::PowerCutAfterCommitBeforeReturn:
             committed_[key] = value;
-            return StateStoreStatus::WriteError;
+            return StateStoreStatus::CommitOutcomeUnknown;
         case WriteFault::None:
             break;
     }
@@ -27,7 +30,7 @@ StateStoreStatus SimulatedPersistentStateStore::write(
 }
 
 StateStoreReadResult SimulatedPersistentStateStore::read(
-    const std::string& key, std::size_t maxBytes) const {
+    const StateStoreKey& key, std::size_t maxBytes) const {
     const auto forcedIterator = forceNotFound_.find(key);
     if (forcedIterator != forceNotFound_.end() && forcedIterator->second) {
         return {StateStoreStatus::NotFound, {}};
@@ -50,18 +53,18 @@ void SimulatedPersistentStateStore::setNextWriteFault(WriteFault fault) {
     nextWriteFault_ = fault;
 }
 
-void SimulatedPersistentStateStore::injectReadFailure(const std::string& key,
+void SimulatedPersistentStateStore::injectReadFailure(const StateStoreKey& key,
                                                       bool shouldFail) {
     readShouldFail_[key] = shouldFail;
 }
 
-void SimulatedPersistentStateStore::forceNotFound(const std::string& key,
+void SimulatedPersistentStateStore::forceNotFound(const StateStoreKey& key,
                                                   bool shouldForce) {
     forceNotFound_[key] = shouldForce;
 }
 
 void SimulatedPersistentStateStore::injectCorruption(
-    const std::string& key, std::string corruptedBytes) {
+    const StateStoreKey& key, std::string corruptedBytes) {
     committed_[key] = std::move(corruptedBytes);
 }
 
