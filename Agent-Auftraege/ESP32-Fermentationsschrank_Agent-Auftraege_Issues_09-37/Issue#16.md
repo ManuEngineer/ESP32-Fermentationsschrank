@@ -4,7 +4,7 @@
 
 **[E2.1] Konfigurationsebenen, Validierung und atomare Revisionen**
 
-Aktueller Snapshot-Status: `READY`
+Aktueller Snapshot-Status: `PLANNED_SPEC_PENDING`
 
 Epic: #4
 
@@ -14,234 +14,174 @@ GitHub: https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/16
 > Live-Issue vor jeder Arbeit erneut. Dieser Auftrag ist eine Arbeitsanweisung,
 > kein Ersatz fuer das Issue oder die Spezifikationsquellen.
 
-## Fertiger Auftrag zum Kopieren
+## Aktueller Stand
+
+Die fachliche und technische Spezifikation ist in
+`docs/CONFIGURATION_PERSISTENCE.md` konsolidiert. Der Vertrag ist jedoch zu
+gross fuer einen einzelnen Implementierungsbranch und einen kleinen PR.
+
+Issue #16 bleibt deshalb ein Tracking-Issue. Vor der Umsetzung muessen vier
+abhaengige Teilissues mit eigenen Agent-Auftraegen, Branches und PRs angelegt
+und im INDEX verknuepft werden.
+
+Es darf derzeit kein Implementierungsbranch fuer Issue #16 erstellt werden.
+
+## Verbindliche Reviewkorrekturen
+
+### Kanonische Schutzwurzeln
+
+Nicht jeder physisch noch gueltige alte Root schuetzt seine nur dort
+referenzierten Generationen dauerhaft.
+
+Die Schutzmenge besteht ausschliesslich aus:
+
+- Active und Fallback des aktuell kanonisch ausgewaehlten ConfigurationRoot
+- Pending des aktuell kanonisch ausgewaehlten PendingRoot
+- einem exakt passenden gueltigen Aktivierungsintent samt Pending-Graph
+- der gerade ausgefuehrten serialisierten Mutation
+- dem aktuell kanonischen committed AuthenticationRoot und der laufenden
+  Authentication-Transaktion
+
+Aeltere redundante Roots bleiben technische Bootkandidaten, sind aber keine
+zusaetzlichen dauerhaft schuetzenden fachlichen Wurzeln. Dadurch koennen nur
+noch von Altroots referenzierte Slots nach erfolgreichem neuen Root-Commit
+wiederverwendet werden.
+
+Verbindliche spaetere Tests umfassen mindestens:
+
+- fuenf aufeinanderfolgende Active-Commits
+- drei aufeinanderfolgende Pending-Ersetzungen
+- Pending verwerfen und erneut erzeugen
+- wiederholte Authentication-Rootwechsel
+- kein vorzeitiges `NoUnreferencedSlotAvailable`
+
+### Grenze zu Issue #17
+
+Issue #16 beziehungsweise sein zustaendiges Teilissue definiert nur einen
+schmalen externen `ConfigurationActivationRunAssessment`-Port mit mindestens:
+
+- `Unknown`
+- `NoActiveOrRecoverableRun`
+- `ActiveRunPresent`
+- `RecoverableRunPresent`
+
+Nur `NoActiveOrRecoverableRun` erlaubt eine Pending-Aktivierung. `Unknown`
+blockiert sicher.
+
+Die reale Laufpersistenz und die Erkennung eines wiederherzustellenden Laufs
+bleiben Issue #17.
+
+### Grenze zu Issue #24
+
+Issue #16 beziehungsweise sein zustaendiges Teilissue darf bei einem
+Konfigurations- oder Publish-Vertragsfehler nur einen typisierten
+`ConfigurationSafetyIntent` beziehungsweise
+`ConfigurationRuntimeFailure` erzeugen und keine RuntimeConfiguration
+freigeben.
+
+Nicht vorwegnehmen:
+
+- systemweite Fehlerklassen
+- persistente Verriegelungen
+- vollstaendige `SAFE_BOOT`-Politik
+- reale Aktor- oder GPIO-Sperren
+
+Diese Semantik bleibt Issue #24.
+
+## Verbindliche Aufteilung vor READY
+
+### Teilpaket A: Plattformpersistenz und Wireformat
+
+- begrenztes binaersicheres `IStateStore`
+- starke technische Typen
+- Big-Endian-Codecs, CRC-32/ISO-HDLC und Envelope-Version 1
+- generische feste Slot- und redundante Recordmechanik
+- `ISecureRandomSource` und `ITimeZoneResolver`
+- `SimulatedPersistentStateStore` und Golden Tests
+
+### Teilpaket B: Typisierte Konfigurationsdokumente
+
+- UserConfiguration Schema 1
+- ServiceConfiguration Schema 1
+- ProgramCatalog Schema 1
+- ID-, Text-, Anzahl- und Payloadgrenzen
+- fachliche Codecs, Validierung und Copy-Migration
+
+### Teilpaket C: Manifeste, Roots, Preview und Runtimeaktivierung
+
+- Active/Fallback/Pending
+- korrigierte kanonische Schutzwurzeln und Slotrotation
+- Preview, Owner-, Token- und Konfliktsemantik
+- RuntimeConfigurationSnapshot und Prepare/Publish
+- RunAssessment-Port zu #17
+- ConfigurationSafetyIntent zu #24
+
+### Teilpaket D: Bootstrap, Secret-Manifeste, Reset und End-to-End-Recovery
+
+- Bootstrap und StorageEpoch
+- Connectivity-/Authentication-Manifeste Schema 1 als `NotProvisioned`
+- vorwaertsgerichtete Authentication-Roots
+- wiederaufnehmbarer Werksreset
+- vollstaendige Cut-Point-, Korruptions- und Ressourcenmatrix
+
+## Auftrag bis zur Aufteilung
 
 ```text
-Arbeite im Repository `ManuEngineer/ESP32-Fermentationsschrank` ausschliesslich
-an Issue #16:
-"[E2.1] Konfigurationsebenen, Validierung und atomare Revisionen"
+Arbeite im Repository `ManuEngineer/ESP32-Fermentationsschrank` am Tracking-
+Issue #16 nur, wenn der Owner ausdruecklich die Aufteilung in Teilissues
+beauftragt hat.
 
-Ich uebernehme Review, Merge und Branch-Loeschung. Merge oder loesche weder PR
-noch Branch selbst.
+Lies vor jeder Aenderung:
+- aktuelles Live-Issue #16
+- AGENTS.md und die Modul-AGENTS.md
+- docs/SPECIFICATION_REVIEW.md
+- docs/CONFIGURATION_PERSISTENCE.md
+- docs/SETTINGS_AND_STORAGE.md
+- docs/BACKUP_SECURITY_RETENTION.md
+- Agent-INDEX
 
-1. Repository vorbereiten
+Solange die vier Teilissues nicht angelegt, verknuepft und im INDEX enthalten
+sind:
+- keinen Implementierungsbranch fuer #16 erstellen
+- keinen Produktionscode aendern
+- #16 nicht auf READY setzen
+- keine weiteren Detailentscheidungsserien starten
 
-   git checkout main
-   git pull --ff-only
-   git fetch --prune
-   git status --short
-   git branch --show-current
+Bei ausdruecklichem Auftrag zur Aufteilung:
+1. vier kleine abhaengige Teilissues gemaess diesem Auftrag vorbereiten
+2. jedem Teilissue klare Scope-, Nicht-Scope-, Tests- und DoD-Grenzen geben
+3. Abhaengigkeiten A -> B -> C -> D festlegen, soweit technisch erforderlich
+4. pro Teilissue einen eigenen Agent-Auftrag und vorgeschlagenen Branch anlegen
+5. INDEX aktualisieren
+6. nur das erste tatsaechlich ausfuehrbare Teilissue auf READY setzen
+7. #16 als Tracking-Issue offen lassen
+8. nach PR-Erstellung anhalten; nicht mergen und keinen Branch loeschen
 
-   Ist der Arbeitsbaum nicht sauber oder laeuft Merge, Rebase oder Cherry-Pick:
-   nichts veraendern oder verwerfen, keinen Branch erstellen, BLOCKED melden und
-   anhalten. Arbeite niemals direkt auf main.
-
-2. Vor jeder Aenderung vollstaendig lesen
-
-   - aktuelles GitHub-Issue #16 inklusive Kommentare
-   - AGENTS.md
-   - lib/device_platform/AGENTS.md
-   - lib/device_platform_test_support/AGENTS.md
-   - lib/fermentation_app/AGENTS.md
-   - docs/SPECIFICATION_REVIEW.md, insbesondere Dokumentationsprioritaet
-   - docs/DECISIONS.md
-   - docs/SETTINGS_AND_STORAGE.md
-   - docs/CONFIGURATION_PERSISTENCE.md
-   - docs/BACKUP_SECURITY_RETENTION.md
-   - docs/PR38_REVIEW_CORRECTIONS.md
-   - docs/CI_AND_QUALITY_GATES.md
-   - aktuellen Speicher-, Zeit-, Programm-, Lauf- und Test-Support-Code
-
-3. Freigabe pruefen
-
-   Beginne nur, wenn das Live-Issue READY ist, #9, #10 und #12 geschlossen sind
-   und kein offener PR oder Remote-Branch Issue #16 bereits bearbeitet. Bei
-   Widerspruch nicht raten, sondern BLOCKED mit Beleg melden.
-
-4. Plan vor Codeaenderungen berichten
-
-   Berichte vorhandenen Stand, fehlende Akzeptanzkriterien, geplante Module und
-   Tests, Migrations- und Ressourcenrisiken sowie die Trennung zu #17, #19 und
-   #27. Normale Implementierungsdetails selbst entscheiden. Nur bei echter
-   fachlicher Ownerentscheidung, Sicherheitswiderspruch, widerspruechlicher
-   Spezifikation oder nachweislich nicht implementierbarer Grenze anhalten.
-
-5. Branch
-
-   Erstelle vom aktuellen main:
-   feat/issue-16-konfigurationsebenen-validierung-und-atomare-revisio
-
-6. Verbindlicher produktiver Scope
-
-   Implementiere den vollstaendigen Vertrag aus
-   docs/CONFIGURATION_PERSISTENCE.md, insbesondere:
-
-   - anwendungsneutrale binaersichere Speicher-, Wire-, CRC-, Envelope-, Slot-,
-     Random-, Zeit- und Zeitzonenbausteine in device_platform
-   - ausschliesslich anwendungsneutrale Fault-Injection-Adapter in
-     device_platform_test_support
-   - konkrete Dokumente, Schemas, Manifeste, Roots, IDs, Validierung,
-     Orchestrierung und Recovery in fermentation_app
-   - UserConfiguration Schema 1 mit Displaysprache, IANA-Zeitzone und sichtbarem
-     Geraetenamen
-   - leere, aber verpflichtend referenzierte ServiceConfiguration Schema 1
-   - ProgramCatalog Schema 1 mit vier Factory-Arbeitskopien und bis zu zwoelf
-     Benutzerprogrammen, bestehendem ProgramDocument-Schema und allen Text-, ID-
-     und Payloadgrenzen
-   - hybride Dokumentrevisionen mit genau einer gemeinsam aktivierten
-     Manifestgeneration und letzter gueltiger Rueckfallgeneration
-   - genau einen Pending-Zweig; sobald Pending existiert, keine parallelen
-     dauerhaft gespeicherten Active-Aenderungen
-   - gebundene Aktivierungsabsicht und idempotente Aktivierung durch
-     `Anwenden und neu starten`
-   - zentralen generationen- und ownergebundenen ConfigurationPreview-Pfad mit
-     genau einem Previewplatz, 15 Minuten monotoner Lebensdauer und sicheren
-     16-Byte-Zufallswerten
-   - erneute Basis-, Gesamtvalidierungs- und Wirkungspruefung vor Commit
-   - RuntimeConfigurationSnapshot mit einzigem persistentem Linearisierungspunkt
-     am gueltigen ConfigurationRootRecord
-   - nicht allokierenden, nicht fehlschlagenden Publish nach Root-Commit
-   - Bootstrap, StorageEpoch, wiederaufnehmbaren Werksreset und sichere
-     Behandlung beschaedigter bestehender Daten
-   - feste Revisions-, Manifest-, Root-, Pending-, Intent- und Secret-Slots mit
-     Referenzanalyse statt Referenzzaehlern
-   - ConnectivitySecretSetManifest und AuthenticationManifest Schema 1
-     ausschliesslich als NotProvisioned
-   - vorwaertsgerichtete Authentication-Root-Semantik mit Prepared/Committed
-     und eigener CredentialEpoch
-   - Copy-Migration, Schemaablehnung und ProgramDocument-Migration im Katalog
-   - kanonisches Big-Endian-Wireformat, Envelope-Version 1 und
-     CRC-32/ISO-HDLC mit Golden-Vektoren
-   - globale monotone MutationSequence je StorageEpoch mit dauerhafter
-     Reservierung, Luecken, Ueberlaufschutz und getrennten starken Typen
-   - typisierte Commit-, Validierungs-, Persistenz-, Konflikt-, Aktivierungs-
-     und Migrationsergebnisse ohne Secret-Leaks
-   - zentrale Softwaregrenzen: 32.768 Byte Payload, 32.817 Byte Record,
-     49.152 Byte Preview-Dynamik, 256 zusammengefasste Aenderungseintraege und
-     hoechstens ein vollstaendiger Record-Arbeitspuffer
-
-7. Verbindliche Architektur- und Sicherheitsregeln
-
-   - device_platform kennt keine Fermentationsdokumente, Factorywerte,
-     Manifestbedeutungen, Pending-, Authentication-, Preview- oder Laufsemantik.
-   - Nur fermentation_app validiert den vollstaendigen Referenzgraphen und
-     entscheidet fachliche Aktivierung.
-   - src/main.cpp bleibt reine Composition Root.
-   - Ein hoher Sequenzwert allein aktiviert niemals einen Record.
-   - NotFound ist kein Lesefehler; beschaedigte Daten sind kein leerer Speicher.
-   - Keine Mischung verschiedener Dokumentgenerationen darf sichtbar werden.
-   - Der aktive oder wiederherzustellende Lauf und sein Snapshot bleiben durch
-     jede Konfigurationsoperation unveraendert.
-   - Vor Root-Commit darf jeder Fehler ohne Wirkung abbrechen. Nach Root-Commit
-     erfolgt kein stiller Rollback; eine Publish-Vertragsverletzung sperrt
-     Aktoren und fuehrt zur sicheren Konfigurationsstoerung.
-   - Secrets, Tokens, Nonces und daraus abgeleitete Werte erscheinen nie in
-     Logs, Diagnosen, Zusammenfassungen oder Exporten.
-   - Keine C++-Exceptions als Voraussetzung fuer Fault Injection oder sichere
-     Speicherfehlerbehandlung.
-   - Keine PSRAM-Abhaengigkeit und keine grosse neue Abhaengigkeit ohne belegte
-     Notwendigkeit und Ressourcenvergleich.
-
-8. Ausdruecklicher Nicht-Scope
-
-   Nicht implementieren:
-
-   - Laufpersistenz, Kontrollpunkte oder Laufjournal aus #17
-   - portables Backupformat, Importexport und Aufbewahrung aus #19, ausser dem
-     fuer #16 erforderlichen generischen Preview-/Transaktionsvertrag
-   - reale WLAN-Credential-Dokumente und Netzwerkvalidierung
-   - Passwort-/PIN-Pruefnachweise, KDF, Salt, Work-Factor, Pepper, Anmeldung,
-     Sessions, Tokens, CSRF oder Sperrzeiten aus #27
-   - noch nicht fachlich definierte Display-, Ton-, Sensor-, Regel-, Hardware-
-     oder Sicherheitsfelder
-   - freie Secret-Blob- oder Reservefelder
-   - physische Recovery-Geste, reale GPIO-/Aktorlogik oder behauptete reale
-     Flash-Atomizitaet
-   - zweites ProgramDocument-Schema oder stille Factory-Programmaenderungen
-
-9. Verbindliche Tests
-
-   Implementiere die vollstaendige Testmatrix aus
-   docs/CONFIGURATION_PERSISTENCE.md. Mindestens:
-
-   - gueltige und ungueltige Dokumente, Schemas, Referenzgraphen und Grenzen
-   - minimaler und maximaler ProgramCatalog sowie UTF-8-Grenzfaelle
-   - Envelope-/CRC-/Endian-/Bool-/Optional-/binary64-Golden-Vektoren
-   - unbekannte Metadaten erhalten, unbekannte fachliche Typen ablehnen
-   - Bootstrap, NotFound, Lesefehler, Korruption, Fallback und SAFE_BOOT
-   - Active-, Pending-, Intent-, Connectivity-, Authentication-, Migrations-
-     und Reset-Workflows an jedem Write-Cut unmittelbar vor und nach Commit
-   - workflowspezifische Recovery-Orakel statt pauschalem SAFE_BOOT
-   - Prepared erlaubt keine Anmeldung; widerrufene Credentials kehren nicht
-     zurueck
-   - Pending aktiviert nie ohne passende Absicht und erzeugt keinen Active-Zweig
-   - prepare-, Root-, Allocation-, Zeitzonen- und Publish-Fehler
-   - gleichzeitige Leser sehen nur vollstaendig alte oder neue Runtimegeneration
-   - aktiver Laufschnappschuss bleibt wert- beziehungsweise bytegleich
-   - maximaler Preview innerhalb 49.152 Bytes; Recordpuffer innerhalb 32.817
-     Bytes; vollstaendige Freigabe nach jedem Ende
-   - Test-Support ist in keinem Produktionsprofil enthalten
-
-10. Pruefungen und Ressourcenbericht
-
-   Fuehre mindestens aus:
-
-   - pio test -e native
-   - pio run -e native
-   - pio run -e esp32_bringup
-   - pio run -e esp32_release
-   - vollstaendige Format-, clang-tidy-, Architektur-, Geheimnis- und
-     Quality-Gate-Pruefungen gemaess docs/CI_AND_QUALITY_GATES.md
-   - git diff --check
-
-   Erzeuge mit identischer Toolchain und sauberen Builds fuer Base-SHA und
-   PR-Head einen Bericht mit statischem RAM, Flash, firmware.bin, firmware.elf
-   und Delta. Werte sind informativ, bis reale Budgets bestaetigt sind.
-
-   Dokumentiere als nicht ausgefuehrt beziehungsweise offen:
-
-   - reale Heapreserve unter Web-/Display-/Regellast
-   - reale Replace-Atomizitaet des ESP32-Flashadapters
-   - reale Flashlebensdauer
-   - hardwarebezogene Reset- und Brownoutpruefungen
-
-11. Dokumentation und Pull Request
-
-   Aktualisiere mindestens CHANGELOG.md und bei technischen Abweichungen die
-   kanonischen Spezifikationsquellen. Pruefe vor Commit:
-
-   git status
-   git diff --check
-   git diff --stat
-   git diff
-
-   Committe ausschliesslich Issue-#16-Scope, pushe den Branch und erstelle einen
-   PR gegen main. Der PR nennt Scope, Architekturgrenzen, ausgefuehrte und nicht
-   ausgefuehrte Tests, Base/Head-Ressourcenwerte, bekannte Einschraenkungen und
-   `Closes #16`.
-
-   Nicht mergen, kein Auto-Merge, Branch nicht loeschen, Issue nicht manuell
-   schliessen und Issue #17 nicht beginnen. Danach vollstaendig anhalten.
+Nur bei echter fachlicher Ownerentscheidung, Sicherheitswiderspruch,
+widerspruechlicher Spezifikation oder nicht implementierbarer Grenze
+rueckfragen. Klassennamen, private Datenstrukturen, Dateiaufteilung und
+Test-Fixtures sind spaetere Implementierungsdetails.
 ```
 
 ## Spezifikationsquellen
 
-- `docs/SETTINGS_AND_STORAGE.md`
 - `docs/CONFIGURATION_PERSISTENCE.md`
+- `docs/SETTINGS_AND_STORAGE.md`
 - `docs/BACKUP_SECURITY_RETENTION.md`
 - `docs/PR38_REVIEW_CORRECTIONS.md`
 
-## Definition of Done
+## Definition of Done fuer das Tracking-Issue
 
-- produktiver Scope und Nicht-Scope eingehalten
-- vollstaendige native Test- und Cut-Point-Matrix bestanden
-- `native`, `esp32_bringup` und `esp32_release` erfolgreich gebaut
-- Quality Gates bestanden
-- statische Ressourcenwirkung gegen Base-SHA dokumentiert
-- Test-Support aus Produktionsprofilen ausgeschlossen
-- reale Hardware-/Adaptermessungen eindeutig als spaetere Gates verknuepft
-- Implementierung und Dokumentation abgeschlossen
+Issue #16 wird erst abgeschlossen, wenn:
+
+- alle Teilissues angelegt und verknuepft wurden
+- alle Teilimplementierungen gemergt sind
+- die korrigierte Slotrotation und Schutzwurzeldefinition nachgewiesen ist
+- die vollstaendige End-to-End-Cut-Point-Matrix besteht
+- Produktionsprofile und Quality Gates bestehen
+- Ressourcenwirkungen je Teil-PR und abschliessend dokumentiert sind
+- reale Hardware-/Adaptermessungen weiterhin als spaetere Gates sichtbar sind
 
 ## Vorgeschlagener Branch
 
-`feat/issue-16-konfigurationsebenen-validierung-und-atomare-revisio`
+Kein Implementierungsbranch, bis die Teilissues angelegt sind.
