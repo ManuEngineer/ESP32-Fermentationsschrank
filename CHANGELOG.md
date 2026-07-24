@@ -6,6 +6,24 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Changed
 
+- Laufkommandos aus Issue #15 nach Nachreview des gemergten PR #51 korrigiert
+  (Refs #15): phasengerechte statt pauschale Laufrevision bei
+  Zieltemperaturaenderung ueber einen typisierten Phasenkontext/Wirkungswert;
+  unbekannte Phasenkontexte werden sicher abgelehnt; Kapazitaetspruefung nach
+  den nicht mutierenden Fachpruefungen und vor jeder Erhoehung der Lauf-,
+  Meldungs- und Fehlerrevision sowie der einzelnen Meldungsrevision;
+  `commandSequence` wird nur fuer tatsaechlich vorgeschlagene Entscheidungen
+  erhoeht; mehrstufige Laufanpassungs-, Abbruch-/Kuehl- und
+  Abschluss-/Kuehlentscheidungen werden vor der Uebernahme vollstaendig auf
+  einem lokalen Kandidatenzustand validiert; sichere Ablehnung eines
+  unbekannten `StopOption`-Werts statt stillschweigender Behandlung als
+  Abbruch-und-Ausschalten, wobei Idempotenz vor der Stopwertauswertung geprueft
+  wird;
+  Startzusammenfassung nun auch fuer eine gueltige, aber unbestaetigte Anfrage
+  verfuegbar, ohne dass eine fehlende Bestaetigung eine ungueltige, veraltete
+  oder sicherheitsseitig abgelehnte Anfrage maskiert;
+  Katalog-/Programmaufloesungsgrenze zu #16 sowie die begrenzte
+  In-Memory-Idempotenz zu #17/#27 dokumentiert
 - Konfigurationspersistenz fuer Issue #16 mit typisierten Dokumentgenerationen,
   kanonischen Active-/Fallback-/Pending-Roots, getrennten Secret-
   Rueckfallregeln, Wireformat sowie deterministischen Recovery- und

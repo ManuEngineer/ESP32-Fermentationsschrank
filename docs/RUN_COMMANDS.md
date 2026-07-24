@@ -91,13 +91,31 @@ Verbindliche Regeln:
    oder Fehlerrevision basiert, wird eindeutig als Konflikt beziehungsweise
    veralteter Stand abgelehnt.
 3. Ein abgelehntes Kommando veraendert keine fachlichen Daten.
-4. Eine bereits verarbeitete Kommando-ID wird nicht nochmals ausgefuehrt.
+4. Eine bereits verarbeitete Kommando-ID wird nicht nochmals ausgefuehrt,
+   solange ihre ID noch im begrenzten, gleitenden In-Memory-Fenster der
+   zuletzt verarbeiteten Kommandos steht (siehe `run_command_limits`). Dieses
+   Fenster ist bewusst kein unbegrenztes Verlaufsprotokoll: eine verdraengte,
+   aeltere ID kann nicht mehr als Wiederholung erkannt werden. Eine
+   laengerfristige, sitzungsuebergreifende Wiederholungserkennung ist kein
+   Bestandteil von Issue #15 und folgt mit #27; persistierte
+   Kommandoatomaritaet folgt mit #17.
 5. Eine Wiederholung derselben Kommando-ID liefert dasselbe fachliche Ergebnis
-   beziehungsweise einen eindeutig als Wiederholung erkennbaren Erfolg.
+   beziehungsweise einen eindeutig als Wiederholung erkennbaren Erfolg, solange
+   sie noch innerhalb des Fensters aus Punkt 4 liegt.
+   Die gemeinsame Umschlag- und Idempotenzpruefung erfolgt vor der fachlichen
+   Auswertung einer Stopoption. Deshalb bleibt auch eine Wiederholung mit einem
+   unbekannten oder fehlerhaft deserialisierten Stopwert als `AlreadyProcessed`
+   erkennbar; nur eine frische ID mit unbekanntem Stopwert ist `InvalidInput`.
 6. Sicherheitsereignisse sind keine konkurrierenden Komfortkommandos. Eine
    kritische Sicherheitsentscheidung hat immer Vorrang.
 7. Transportwiederholungen, Anmeldung und konkrete Web-Protokolle folgen in
    Issue #27. Issue #15 definiert nur die fachliche Semantik.
+8. Jeder fuer Konflikterkennung genutzte Revisionszaehler
+   (Lauf-, Meldungs- und Fehlerrevision sowie die Revision einzelner
+   Laufzeitmeldungen) wird vor jeder Erhoehung auf seine Kapazitaetsgrenze
+   geprueft. Ein bereits an der Grenze stehender Zaehler liefert `Kapazitaet
+   oder erforderlicher Kontext fehlt` ohne jede Teilwirkung, statt still
+   ueberzulaufen.
 
 Mindestens unterscheidbare Ergebnisarten sind:
 
@@ -128,6 +146,37 @@ Erst das bestaetigte Startkommando darf:
 Fehlende oder ungueltige Pflichtwerte, ein veralteter Katalogstand, ein
 unzulaessiger Prozesszustand oder eine fehlende Sicherheitsfreigabe fuehren zu
 einer Ablehnung ohne Teilwirkung.
+
+Die Reihenfolge ist verbindlich: Umschlag-, Revisions-, Zustands-,
+Sicherheits- und Eingabepruefung sowie die vollstaendige Planvalidierung laufen
+immer zuerst und unabhaengig von der Bestaetigung. Erst danach entscheidet die
+Bestaetigung, ob eine bereits vollstaendig gueltige Anfrage als `NotConfirmed`
+mit Startzusammenfassung zurueckgegeben oder tatsaechlich angewendet wird. Eine
+ungueltige, veraltete oder sicherheitsseitig abgelehnte Anfrage wird niemals
+durch eine fehlende Bestaetigung maskiert; sie liefert immer ihren eigenen
+Ablehnungsgrund (`InvalidInput`, `StaleState`, `SafetyRejected`, ...), auch
+wenn `confirmed == false` gesetzt ist.
+
+### Programmaufloesung und Katalogstand
+
+Das interne `ProgramStartRequest` traegt ein bereits fachlich aufgeloestes,
+vertrauenswuerdiges Programmdokument. Die Kommandoschicht prueft nur noch
+Lauf-, Sicherheits- und Werteregeln, nicht aber, ob dieses Dokument weiterhin
+dem aktuellen Katalog- oder Programmstand entspricht.
+
+Vor einer echten UI- oder Web-API-Anbindung (#16, #27) darf ein Aufrufer kein
+frei mitgeliefertes Programmdokument ungeprueft als Startvertrag einliefern.
+Die aufrufende Schicht muss die Programmdefinition stattdessen ueber
+Programm-ID und erwartete Katalog- beziehungsweise Programmrevision aus der
+aktuellen `RuntimeConfigurationSnapshot` (#16) aufloesen. Ist das Programm
+seither geaendert oder geloescht worden, ist das Ergebnis `StaleState` oder ein
+typisierter Aufloesungsfehler der aufrufenden Schicht - kein stiller Fallback
+auf einen veralteten oder erfundenen Stand. Der aktive Lauf erhaelt danach
+weiterhin seinen eigenen unveraenderlichen Schnappschuss, unabhaengig von
+spaeteren Katalogaenderungen.
+
+Issue #15 fuehrt weder `ConfigurationService` noch eine provisorische
+Katalogpersistenz ein.
 
 ## Manueller Laufplan
 
@@ -168,6 +217,11 @@ eigener Zustand `MANUAL_COOLING` eingefuehrt.
 `STOP` selbst oeffnet nur den bereits spezifizierten Auswahl- und
 Bestaetigungsdialog.
 
+Ein unbekannter oder fehlerhafter Auswahlwert wird nicht stillschweigend als
+`Abbrechen und ausschalten` behandelt. Er wird als ungueltige Eingabe
+abgelehnt, ohne Zustandsuebergang, Laufabbruch, Wirkungsabsicht oder sonstige
+Mutation.
+
 ### Zurueck
 
 `Zurueck` verwirft den Dialog. Lauf, Meldungen, Zustandsmaschine und
@@ -201,6 +255,13 @@ Der alte Lauf darf nicht bereits beendet werden, wenn der neue manuelle Laufplan
 ungueltig ist oder nicht erzeugt werden kann. Eine spaetere Persistenz muss beide
 Teile als zusammengehoerige atomare Revision behandeln.
 
+Die Entscheidungsfunktion fuehrt beide Prozessuebergaenge ausschliesslich auf
+einem lokalen Kandidatenzustand aus. Erst wenn Abbruch und manueller Neustart
+vollstaendig erfolgreich sind, wird dieser Kandidat als `after` uebernommen.
+Scheitert der zweite Uebergang beispielsweise an Prozesszeit, Sequenzkapazitaet
+oder Snapshot-Invarianten, bleibt `after` strukturell identisch zu `before` und
+es werden keine Wirkungsabsichten ausgegeben.
+
 ## Laufanpassungen
 
 Zieltemperatur und verbleibende Dauer werden nur ueber eine ausdrueckliche
@@ -219,12 +280,36 @@ Der Programmschnappschuss und das gespeicherte Quellprogramm bleiben
 unveraendert. Die bestaetigte Aenderung erzeugt eine protokollierbare
 append-only Laufrevision mit Quelle und Zeitbezug.
 
+Auch die Kombination aus neuer `ActiveRun`-Revision, neuem
+`ProcessRunSnapshot` und gegebenenfalls erforderlichem `TargetChanged`-
+Prozessuebergang wird zuerst vollstaendig auf einem lokalen Kandidatenzustand
+validiert. Eine spaete Ablehnung verwirft den gesamten Kandidaten; insbesondere
+bleiben Zielwert, Revisionshistorie, Prozesszustand und Prozessschnappschuss in
+`after` unveraendert.
+
+Die Kommandoschicht bildet den aktuellen Prozesszustand auf den kleinen, von
+`ProcessState` unabhaengigen `RunAdjustmentPhaseContext`
+(`BeforeFermentation` oder `Fermenting`) ab; `ActiveRun` selbst kennt die
+Zustandsmaschine nicht und lehnt unbekannte Kontextwerte ab. Der Phasenkontext
+ist nur Eingabe der Entscheidung und wird nicht in `RunRevision` persistiert.
+Die persistierbare Revision speichert stattdessen die daraus abgeleitete,
+typisierte Wirkung (`RunAdjustmentEffect`: `None`,
+`RestartTargetQualification` oder
+`ContinueFermentationWithoutRequalification`). Eine spaetere Wiederherstellung
+kann daher unbekannte oder widerspruechliche Wirkungen ablehnen, aber keinen
+nicht gespeicherten Phasenkontext nachtraeglich pruefen: eine unveraenderte
+Zieltemperatur mit gesetzter Requalifizierungswirkung, eine geaenderte
+Zieltemperatur ohne oder mit unbekannter Wirkung sowie jeden unbekannten
+Effekt-Enumwert werden abgelehnt.
+
 ### Zieltemperatur vor der Fermentationsphase
 
-Bei einer Zieltemperaturaenderung in `PREHEATING`, `REACHING_TARGET` oder
-`QUALIFYING_TARGET` wird die Zielerreichung beziehungsweise Zielqualifikation
-mit dem neuen Zielwert neu bewertet. Bereits teilweise absolvierte
-Qualifikationszeit wird nicht auf das neue Ziel uebertragen.
+Bei einer Zieltemperaturaenderung in `PREHEATING` oder `REACHING_TARGET` wird
+die laufende Zielerreichung mit dem neuen Zielwert neu bewertet. Bei einer
+Aenderung in `QUALIFYING_TARGET` wird die bereits teilweise absolvierte
+Qualifikationszeit verworfen und die Zielerreichung mit dem neuen Zielwert neu
+gestartet (Ruecksprung nach `REACHING_TARGET`). In keinem dieser drei Faelle
+wird Qualifikationszeit auf das neue Ziel uebertragen.
 
 ### Zieltemperatur waehrend `FERMENTING`
 
@@ -273,6 +358,10 @@ spaeterer erfolgreicher Persistenz fuehrt seine Anwendung nach `STANDBY`.
 `Jetzt kuehlen` erzeugt wie `Abbrechen und kuehlen` einen neuen manuellen Lauf
 mit eigenem Laufplan. Der abgeschlossene Ursprungslauf bleibt unveraendert als
 abgeschlossen protokolliert.
+
+Quittierung und anschliessender manueller Kuehlstart werden ebenfalls nur als
+vollstaendig erfolgreicher Kandidatenzustand uebernommen. Scheitert der zweite
+Uebergang, bleibt der abgeschlossene Ursprungslauf in `after` unangetastet.
 
 ## Meldungsmodell
 
@@ -364,16 +453,37 @@ Native Tests decken mindestens ab:
 - Quittieren, Stummschalten und Fehlerreset als getrennte Aktionen
 - erlaubte und abgelehnte deterministische Resetfreigabebewertungen
 - keine direkte Persistenz, Hardwarewirkung oder Abhaengigkeit von Display/Web
+- phasengerechte Laufrevision bei Zielaenderung (vor der Fermentationsphase je
+  Einzelphase, waehrend `FERMENTING`, reine Restdaueranpassung) sowie
+  Ablehnung widerspruechlicher oder unbekannter Phasen-/Wirkungswerte bei der
+  Wiederherstellung
+- Kapazitaetsgrenze der Lauf-, Meldungs- und Fehlerrevision sowie der
+  einzelnen Meldungsrevision: Ablehnung ohne Teilwirkung an der Grenze, genau
+  eine weitere Erhoehung unterhalb der Grenze
+- Ablehnung eines unbekannten `StopOption`-Werts ohne Mutation
+- Idempotenzpruefung vor Stopwertauswertung: Wiederholung einer bereits
+  angewendeten Stop-ID bleibt auch mit unbekanntem Stopwert `AlreadyProcessed`
+- vollstaendiger struktureller `before`-/`after`-Vergleich fuer Ablehnungen,
+  einschliesslich spaeter Fehler nach einer ersten erfolgreichen Teiloperation
+  bei Laufanpassung, `Abbrechen und kuehlen` und `Jetzt kuehlen`
+- Verfuegbarkeit der Startzusammenfassung fuer eine gueltige, aber noch nicht
+  bestaetigte Anfrage, ohne dass eine fehlende Bestaetigung eine ungueltige,
+  veraltete oder sicherheitsseitig abgelehnte Anfrage maskiert
 
 ## Abgrenzung zu Folge-Issues
 
+- #16 implementiert `ConfigurationService` und die Programmaufloesung ueber
+  Katalog- beziehungsweise Programmrevision aus der
+  `RuntimeConfigurationSnapshot`; Issue #15 nimmt dies nicht vorweg.
 - #17 implementiert atomare Laufpersistenz, Kontrollpunkte und
   Persistenz-vor-Anwendung.
 - #18 implementiert Wiederanlauf und temperaturgewichteten Fortschritt.
 - #24 implementiert Fehlerklassen, Verriegelungen und die konkrete
   Fehlerresetfreigabe.
 - #25 und #26 implementieren gemeinsame UI-Modelle und die lokale Oberflaeche.
-- #27 implementiert Webtransport, Anmeldung und konkrete Webkonfliktbehandlung.
+- #27 implementiert Webtransport, Anmeldung, konkrete Webkonfliktbehandlung
+  sowie sitzungsgebundene Transportwiederholungserkennung ueber das in Issue
+  #15 nur begrenzt gleitende In-Memory-Idempotenzfenster hinaus.
 
 Issue #15 darf diese Folge-Issues nicht mit provisorischen Hardware-,
 Persistenz-, Sicherheits- oder Transportimplementierungen vorwegnehmen.

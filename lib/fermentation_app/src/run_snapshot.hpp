@@ -43,6 +43,26 @@ struct RunProgramSnapshot {
     std::uint32_t sourceProgramRevision{0U};
 };
 
+// Phasenkontext einer Laufanpassung, absichtlich unabhaengig von
+// `ProcessState` (siehe `process_state_machine.hpp`): `ActiveRun` kennt die
+// Zustandsmaschine nicht. Die Kommandoschicht bildet den aktuellen
+// `ProcessState` auf diesen schmalen Kontext ab.
+enum class RunAdjustmentPhaseContext : std::uint8_t {
+    BeforeFermentation,
+    Fermenting,
+};
+
+// Fachliche Wirkung einer Zieltemperaturaenderung auf die Zielqualifikation.
+// Ersetzt einen einzelnen Boolwert, damit `targetTemperatureChanged` und die
+// Qualifikationswirkung nicht mehr frei widerspruechlich kombiniert werden
+// koennen (siehe docs/RUN_COMMANDS.md, "Zieltemperatur vor/waehrend
+// FERMENTING").
+enum class RunAdjustmentEffect : std::uint8_t {
+    None,
+    RestartTargetQualification,
+    ContinueFermentationWithoutRequalification,
+};
+
 struct RunRevision {
     std::uint32_t sequence{0U};
     std::uint32_t monotonicEpoch{0U};
@@ -52,7 +72,7 @@ struct RunRevision {
     EffectiveRunValues after;
     bool targetTemperatureChanged{false};
     bool remainingDurationChanged{false};
-    bool requiresTargetRequalification{false};
+    RunAdjustmentEffect effect{RunAdjustmentEffect::None};
     RunChangeSource source{RunChangeSource::LocalDisplay};
     RunChangeReason reason{RunChangeReason::UserAdjustment};
     RunTimestamp timestamp;
@@ -63,6 +83,8 @@ struct RunAdjustmentContext {
     bool safetyAllowsChange{true};
     std::size_t activeStageIndex{0U};
     std::size_t completedStageCount{0U};
+    RunAdjustmentPhaseContext phaseContext{
+        RunAdjustmentPhaseContext::BeforeFermentation};
 };
 
 struct RunAdjustmentRequest {
@@ -102,7 +124,7 @@ struct RunAdjustmentDecision {
 
 struct RunAdjustmentResult {
     RunAdjustmentStatus status{RunAdjustmentStatus::InvalidValue};
-    bool requiresTargetRequalification{false};
+    RunAdjustmentEffect effect{RunAdjustmentEffect::None};
 
     [[nodiscard]] bool applied() const {
         return status == RunAdjustmentStatus::Applied;

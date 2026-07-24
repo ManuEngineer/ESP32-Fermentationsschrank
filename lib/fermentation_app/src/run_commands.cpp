@@ -75,6 +75,17 @@ bool adjustmentAllowedIn(ProcessState state) {
            state == ProcessState::Fermenting;
 }
 
+// `ActiveRun` kennt `ProcessState` bewusst nicht (siehe run_snapshot.hpp);
+// die Kommandoschicht bildet den aktuellen Zustand auf den schmalen
+// Phasenkontext ab. Nur innerhalb von `adjustmentAllowedIn()` aufgerufen,
+// daher ist `Fermenting` die einzige verbleibende Alternative zu den drei
+// Vor-Fermentationszustaenden.
+RunAdjustmentPhaseContext phaseContextFor(ProcessState state) {
+    return state == ProcessState::Fermenting
+               ? RunAdjustmentPhaseContext::Fermenting
+               : RunAdjustmentPhaseContext::BeforeFermentation;
+}
+
 bool containsProcessedCommand(const RunCommandState& state, CommandId id) {
     for (std::size_t index = 0U; index < state.processedCommandCount; ++index) {
         if (state.processedCommandIds[index] == id) {
@@ -130,10 +141,16 @@ CommandDecision beginDecision(const RunCommandState& current,
     } else if (current.criticalSafetyEventPending &&
                isRunComfortCommand(kind)) {
         decision.status = CommandStatus::SafetyRejected;
-    } else {
-        decision.after.commandSequence = current.commandSequence + 1U;
     }
     return decision;
+}
+
+// Die Kommandosequenz gehoert zur tatsaechlich vorgeschlagenen Gesamtmutation.
+// Sie wird deshalb erst nach allen nicht mutierenden Fachpruefungen unmittelbar
+// an der Commit-Grenze erhoeht. Abgelehnte Entscheidungen behalten damit einen
+// zu `before` identischen `after`-Zustand.
+void beginMutation(CommandDecision& decision) {
+    decision.after.commandSequence = decision.before.commandSequence + 1U;
 }
 
 bool requireRunRevision(CommandDecision& decision) {
@@ -183,6 +200,24 @@ bool requireFaultRevision(CommandDecision& decision) {
     return true;
 }
 
+// Zentrale Ueberlaufpruefung fuer jeden Konflikt- oder Fachrevisionszaehler
+// (runRevision, messageRevision, RuntimeMessage::revision, faultRevision).
+// Muss vor jeder Erhoehung und vor jeder anderen Mutation von `decision.after`
+// aufgerufen werden, damit ein bereits an `UINT32_MAX` stehender Zaehler
+// `CapacityReached` liefert, ohne eine teilweise erzeugte Entscheidung, einen
+// veraenderten `after`-Zustand oder einen Effect-Eintrag zu hinterlassen.
+bool requireRevisionCapacity(CommandDecision& decision,
+                             std::uint32_t revision) {
+    if (!decision.proposed()) {
+        return false;
+    }
+    if (revision == std::numeric_limits<std::uint32_t>::max()) {
+        decision.status = CommandStatus::CapacityReached;
+        return false;
+    }
+    return true;
+}
+
 bool addEffect(CommandDecision& decision, CommandEffect effect) {
     if (decision.effectCount >= decision.effects.size()) {
         decision.status = CommandStatus::CapacityReached;
@@ -225,18 +260,18 @@ std::optional<ManualRunPlan> makeManualPlan(const ManualRunPlanRequest& request,
                : std::nullopt;
 }
 
-bool installManualRun(CommandDecision& decision, ManualRunPlan plan) {
+bool installManualRun(RunCommandState& state, const CommandEnvelope& envelope,
+                      ManualRunPlan plan) {
     const auto snapshot = makeProcessRunSnapshot(plan);
     if (!snapshot.has_value() ||
-        !applyTransition(decision.after, ProcessEvent::StartRun,
-                         decision.envelope.monotonicMillis, &*snapshot)) {
-        decision.status = CommandStatus::InvalidInput;
+        !applyTransition(state, ProcessEvent::StartRun,
+                         envelope.monotonicMillis, &*snapshot)) {
         return false;
     }
-    decision.after.activeProgramRun.reset();
-    decision.after.activeRunId = plan.values.runId;
-    decision.after.activeManualRun = std::move(plan);
-    decision.after.processRunSnapshot = *snapshot;
+    state.activeProgramRun.reset();
+    state.activeRunId = plan.values.runId;
+    state.activeManualRun = std::move(plan);
+    state.processRunSnapshot = *snapshot;
     return true;
 }
 
@@ -335,10 +370,6 @@ CommandDecision decideProgramStart(const RunCommandState& current,
     if (!requireRunRevision(decision)) {
         return decision;
     }
-    if (!request.envelope.confirmed) {
-        decision.status = CommandStatus::NotConfirmed;
-        return decision;
-    }
     if (!request.safetyAllowsStart) {
         decision.status = CommandStatus::SafetyRejected;
         return decision;
@@ -361,8 +392,37 @@ CommandDecision decideProgramStart(const RunCommandState& current,
         return decision;
     }
     const auto snapshot = makeProcessRunSnapshot(*run);
-    if (!snapshot.has_value() ||
-        !applyTransition(decision.after, ProcessEvent::StartRun,
+    if (!snapshot.has_value()) {
+        decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
+
+    // Die Startzusammenfassung entsteht aus vollstaendig validierten Daten und
+    // steht deshalb auch fuer eine noch unbestaetigte, aber gueltige Anfrage
+    // zur Verfuegung (siehe docs/RUN_COMMANDS.md, "Zusammenfassung vor
+    // Bestaetigung"). `before`/`after` bleiben bis hierher identisch mit
+    // `current`.
+    decision.startSummary = StartSummary{
+        request.runId,
+        request.program.program.name,
+        run->effectiveValues().targetTemperatureCelsius,
+        run->effectiveValues().remainingDurationMinutes,
+        request.sensorMode,
+        request.program.program.preheat,
+        request.program.program.completion.mode,
+        ProcessKind::Timed,
+    };
+
+    if (!request.envelope.confirmed) {
+        decision.status = CommandStatus::NotConfirmed;
+        return decision;
+    }
+
+    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+        return decision;
+    }
+
+    if (!applyTransition(decision.after, ProcessEvent::StartRun,
                          request.envelope.monotonicMillis, &*snapshot)) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
@@ -372,19 +432,8 @@ CommandDecision decideProgramStart(const RunCommandState& current,
     decision.after.activeProgramRun = std::move(run);
     decision.after.activeManualRun.reset();
     decision.after.processRunSnapshot = *snapshot;
+    beginMutation(decision);
     ++decision.after.runRevision;
-    decision.startSummary = StartSummary{
-        request.runId,
-        request.program.program.name,
-        decision.after.activeProgramRun->effectiveValues()
-            .targetTemperatureCelsius,
-        decision.after.activeProgramRun->effectiveValues()
-            .remainingDurationMinutes,
-        request.sensorMode,
-        request.program.program.preheat,
-        request.program.program.completion.mode,
-        ProcessKind::Timed,
-    };
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     return decision;
 }
@@ -394,10 +443,6 @@ CommandDecision decideManualStart(const RunCommandState& current,
     auto decision = beginDecision(current, request.envelope,
                                   CommandKind::StartManualHolding);
     if (!requireRunRevision(decision)) {
-        return decision;
-    }
-    if (!request.envelope.confirmed) {
-        decision.status = CommandStatus::NotConfirmed;
         return decision;
     }
     if (!request.safetyAllowsStart) {
@@ -411,11 +456,16 @@ CommandDecision decideManualStart(const RunCommandState& current,
         return decision;
     }
     auto plan = makeManualPlan(request.plan, request.envelope);
-    if (!plan.has_value() || !installManualRun(decision, std::move(*plan))) {
+    if (!plan.has_value()) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
-    ++decision.after.runRevision;
+
+    // Wie bei decideProgramStart: die Zusammenfassung entsteht aus dem
+    // vollstaendig validierten Plan und steht deshalb auch fuer eine noch
+    // unbestaetigte, aber gueltige Anfrage zur Verfuegung. `installManualRun`
+    // wird erst nach der Bestaetigungspruefung aufgerufen, damit `before`/
+    // `after` bis dahin identisch mit `current` bleiben.
     decision.startSummary = StartSummary{
         request.plan.runId,
         request.plan.runId,
@@ -426,21 +476,56 @@ CommandDecision decideManualStart(const RunCommandState& current,
         CompletionMode::FinishWithoutCooling,
         ProcessKind::ManualHolding,
     };
+
+    if (!request.envelope.confirmed) {
+        decision.status = CommandStatus::NotConfirmed;
+        return decision;
+    }
+
+    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+        return decision;
+    }
+
+    if (!installManualRun(decision.after, decision.envelope,
+                          std::move(*plan))) {
+        decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
+    beginMutation(decision);
+    ++decision.after.runRevision;
     static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     return decision;
 }
 
+bool validStopOption(StopOption option) {
+    switch (option) {
+        case StopOption::Back:
+        case StopOption::AbortAndTurnOff:
+        case StopOption::AbortAndCool:
+            return true;
+    }
+    return false;
+}
+
 CommandDecision decideStop(const RunCommandState& current,
                            const StopRequest& request) {
-    if (request.option == StopOption::Back) {
-        return result(current, request.envelope, CommandKind::AbortAndTurnOff,
-                      CommandStatus::NoChange);
+    auto decision =
+        beginDecision(current, request.envelope, CommandKind::AbortAndTurnOff);
+    if (!decision.proposed()) {
+        return decision;
     }
-    const auto kind = request.option == StopOption::AbortAndCool
-                          ? CommandKind::AbortAndCool
-                          : CommandKind::AbortAndTurnOff;
-    auto decision = beginDecision(current, request.envelope, kind);
+    if (!validStopOption(request.option)) {
+        decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
+    if (request.option == StopOption::Back) {
+        decision.status = CommandStatus::NoChange;
+        return decision;
+    }
+    if (request.option == StopOption::AbortAndCool) {
+        decision.kind = CommandKind::AbortAndCool;
+    }
     if (!requireRunRevision(decision)) {
         return decision;
     }
@@ -471,28 +556,37 @@ CommandDecision decideStop(const RunCommandState& current,
         }
     }
 
-    if (!applyTransition(decision.after, ProcessEvent::Abort,
+    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+        return decision;
+    }
+
+    auto candidate = decision.before;
+    if (!applyTransition(candidate, ProcessEvent::Abort,
                          request.envelope.monotonicMillis,
                          &*current.processRunSnapshot)) {
         decision.status = CommandStatus::NotAllowedInState;
         return decision;
     }
-    clearActiveRun(decision.after);
+    clearActiveRun(candidate);
+
+    if (coolingPlan.has_value() &&
+        !installManualRun(candidate, decision.envelope,
+                          std::move(*coolingPlan))) {
+        decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
+
+    candidate.commandSequence = decision.before.commandSequence + 1U;
+    ++candidate.runRevision;
+    decision.after = std::move(candidate);
     static_cast<void>(addEffect(decision, CommandEffect::RunAborted));
     static_cast<void>(
         addEffect(decision, CommandEffect::SafePeltierStopRequested));
     static_cast<void>(addEffect(decision, CommandEffect::FanRunOnRequired));
-
-    if (coolingPlan.has_value() &&
-        !installManualRun(decision, std::move(*coolingPlan))) {
-        decision.status = CommandStatus::InvalidInput;
-        return decision;
-    }
     if (request.option == StopOption::AbortAndCool) {
         static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
         static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     }
-    ++decision.after.runRevision;
     return decision;
 }
 
@@ -530,24 +624,33 @@ CommandDecision decideCompletion(const RunCommandState& current,
         }
     }
 
-    if (!applyTransition(decision.after, ProcessEvent::AcknowledgeCompletion,
+    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+        return decision;
+    }
+
+    auto candidate = decision.before;
+    if (!applyTransition(candidate, ProcessEvent::AcknowledgeCompletion,
                          request.envelope.monotonicMillis, nullptr)) {
         decision.status = CommandStatus::NotAllowedInState;
         return decision;
     }
-    clearActiveRun(decision.after);
-    static_cast<void>(
-        addEffect(decision, CommandEffect::CompletionAcknowledged));
+    clearActiveRun(candidate);
     if (coolingPlan.has_value() &&
-        !installManualRun(decision, std::move(*coolingPlan))) {
+        !installManualRun(candidate, decision.envelope,
+                          std::move(*coolingPlan))) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
+
+    candidate.commandSequence = decision.before.commandSequence + 1U;
+    ++candidate.runRevision;
+    decision.after = std::move(candidate);
+    static_cast<void>(
+        addEffect(decision, CommandEffect::CompletionAcknowledged));
     if (request.startCooling) {
         static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
         static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     }
-    ++decision.after.runRevision;
     return decision;
 }
 
@@ -580,6 +683,7 @@ CommandDecision decideRunAdjustment(
     RunAdjustmentContext context;
     context.runActive = true;
     context.safetyAllowsChange = request.safetyAllowsChange;
+    context.phaseContext = phaseContextFor(current.processState.state);
     const auto runDecision =
         current.activeProgramRun->decideAdjustment(adjustment, context);
     if (!runDecision.proposed()) {
@@ -587,12 +691,17 @@ CommandDecision decideRunAdjustment(
         return decision;
     }
 
+    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+        return decision;
+    }
+
     const auto beforeValues = current.activeProgramRun->effectiveValues();
-    if (!decision.after.activeProgramRun.has_value()) {
+    auto candidate = decision.before;
+    if (!candidate.activeProgramRun.has_value()) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
-    auto& adjustedRun = decision.after.activeProgramRun.value();
+    auto& adjustedRun = candidate.activeProgramRun.value();
     const auto applied = adjustedRun.applyAdjustment(runDecision);
     if (!applied.applied()) {
         decision.status = CommandStatus::InvalidInput;
@@ -603,33 +712,36 @@ CommandDecision decideRunAdjustment(
                                afterValues.targetTemperatureCelsius;
     const bool durationChanged = beforeValues.remainingDurationMinutes !=
                                  afterValues.remainingDurationMinutes;
-    decision.after.processRunSnapshot = makeProcessRunSnapshot(adjustedRun);
-    if (!decision.after.processRunSnapshot.has_value()) {
+    candidate.processRunSnapshot = makeProcessRunSnapshot(adjustedRun);
+    if (!candidate.processRunSnapshot.has_value()) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
 
     if (targetChanged &&
         current.processState.state != ProcessState::Fermenting &&
-        !applyTransition(decision.after, ProcessEvent::TargetChanged,
+        !applyTransition(candidate, ProcessEvent::TargetChanged,
                          request.envelope.monotonicMillis,
-                         &*decision.after.processRunSnapshot)) {
+                         &*candidate.processRunSnapshot)) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
     if (durationChanged &&
         current.processState.state == ProcessState::Fermenting) {
-        decision.after.processState.stateEnteredAtMillis =
+        candidate.processState.stateEnteredAtMillis =
             request.envelope.monotonicMillis;
     }
 
-    ++decision.after.runRevision;
+    candidate.commandSequence = decision.before.commandSequence + 1U;
+    ++candidate.runRevision;
+    decision.after = std::move(candidate);
     decision.adjustmentPreview = RunAdjustmentPreview{
         beforeValues,
         afterValues,
         current.processState.state,
-        targetChanged && current.processState.state != ProcessState::Fermenting,
-        targetChanged && current.processState.state == ProcessState::Fermenting,
+        applied.effect == RunAdjustmentEffect::RestartTargetQualification,
+        applied.effect ==
+            RunAdjustmentEffect::ContinueFermentationWithoutRequalification,
     };
     static_cast<void>(addEffect(decision, CommandEffect::RunAdjusted));
     return decision;
@@ -651,6 +763,11 @@ CommandDecision decideAcknowledgeMessage(const RunCommandState& current,
         decision.status = CommandStatus::NoChange;
         return decision;
     }
+    if (!requireRevisionCapacity(decision, message->revision) ||
+        !requireRevisionCapacity(decision, decision.after.messageRevision)) {
+        return decision;
+    }
+    beginMutation(decision);
     message->acknowledged = true;
     ++message->revision;
     ++decision.after.messageRevision;
@@ -674,6 +791,11 @@ CommandDecision decideMuteMessage(const RunCommandState& current,
         decision.status = CommandStatus::NoChange;
         return decision;
     }
+    if (!requireRevisionCapacity(decision, message->revision) ||
+        !requireRevisionCapacity(decision, decision.after.messageRevision)) {
+        return decision;
+    }
+    beginMutation(decision);
     message->acousticMuted = true;
     ++message->revision;
     ++decision.after.messageRevision;
@@ -704,6 +826,10 @@ CommandDecision decideFaultReset(const RunCommandState& current,
         decision.status = CommandStatus::SafetyRejected;
         return decision;
     }
+    if (!requireRevisionCapacity(decision, decision.before.faultRevision)) {
+        return decision;
+    }
+    beginMutation(decision);
     ++decision.after.faultRevision;
     decision.after.criticalSafetyEventPending = false;
     static_cast<void>(addEffect(decision, CommandEffect::FaultResetAuthorized));
