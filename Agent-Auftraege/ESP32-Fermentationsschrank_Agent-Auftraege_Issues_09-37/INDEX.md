@@ -8,8 +8,8 @@
 | [Issue#12.md](Issue#12.md) | [E1.1] Programmmodelle, Schema und Standardprogramme | `COMPLETED` | `feat/issue-12-programmmodelle-schema-und-standardprogramme` |
 | [Issue#13.md](Issue#13.md) | [E1.2] Unveraenderlichen Laufschnappschuss und Laufrevisionen implementieren | `COMPLETED` | `feat/issue-13-unveraenderlichen-laufschnappschuss-und-laufrevision` |
 | [Issue#14.md](Issue#14.md) | [E1.3] Zustandsmaschine und Prozessablaeufe implementieren | `COMPLETED` | `feat/issue-14-zustandsmaschine-und-prozessablaeufe-implementieren` |
-| [Issue#15.md](Issue#15.md) | [E1.4] Laufkommandos, Meldungen und Bedienaktionen implementieren | `READY` | `feat/issue-15-laufkommandos-meldungen-und-bedienaktionen-implement` |
-| [Issue#16.md](Issue#16.md) | [E2.1] Konfigurationsebenen, Validierung und atomare Revisionen | `PLANNED_SPEC_PENDING` | `feat/issue-16-konfigurationsebenen-validierung-und-atomare-revisio` |
+| [Issue#15.md](Issue#15.md) | [E1.4] Laufkommandos, Meldungen und Bedienaktionen implementieren | `COMPLETED` | `feat/issue-15-laufkommandos-meldungen-und-bedienaktionen-implement` |
+| [Issue#16.md](Issue#16.md) | [E2.1] Konfigurationsebenen, Validierung und atomare Revisionen | `PLANNED_SPEC_PENDING` | Teilissues vor Implementierung erforderlich |
 | [Issue#17.md](Issue#17.md) | [E2.2] Laufpersistenz und Kontrollpunkte implementieren | `PLANNED_SPEC_PENDING` | `feat/issue-17-laufpersistenz-und-kontrollpunkte-implementieren` |
 | [Issue#18.md](Issue#18.md) | [E2.3] Wiederanlauf und temperaturgewichteten Fortschritt implementieren | `PLANNED_SPEC_PENDING` | `feat/issue-18-wiederanlauf-und-temperaturgewichteten-fortschritt-i` |
 | [Issue#19.md](Issue#19.md) | [E2.4] Journale, Aufbewahrung, Bereinigung, Backup und Import | `PLANNED_SPEC_PENDING` | `feat/issue-19-journale-aufbewahrung-bereinigung-backup-und-import` |

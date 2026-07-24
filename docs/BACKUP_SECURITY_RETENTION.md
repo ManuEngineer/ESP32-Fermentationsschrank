@@ -1,5 +1,10 @@
 # Sicherung, Geheimnisse und Datenaufbewahrung
 
+Der technische Revisions-, Referenz- und Aktivierungsvertrag der
+Konfigurations- und Secret-Domaene steht in
+[`CONFIGURATION_PERSISTENCE.md`](CONFIGURATION_PERSISTENCE.md). Dieses Dokument
+definiert die fachliche Backup-, Geheimnis- und Aufbewahrungspolitik.
+
 ## Plattformrahmen
 
 - ESP32-32E
@@ -10,6 +15,18 @@
 - konkrete Partitionen und Datenbudgets bleiben `TBD_IMPLEMENTATION_BUDGET`
 
 ## Geheimnisse
+
+Geheimnisse und Authentifizierungsnachweise liegen ausserhalb der
+Konfigurationsdokumente in einer getrennten versionierten Secret-Domaene.
+Connectivity-Secrets sind an die jeweils passende Konfigurationsgeneration
+gebunden und duerfen mit ihr zurueckfallen. Authentication ist
+vorwaertsgerichtet: Eine erfolgreich aktivierte neuere Credential-Epoche wird
+durch einen normalen Konfigurationsrueckfall niemals reaktiviert oder
+zurueckgesetzt.
+
+Issue #16 stellt produktiv nur die typisierten `NotProvisioned`-Manifeste und
+die Speichermechanik bereit. Reale WLAN-Credentials sowie Passwort- und PIN-
+Pruefnachweise folgen mit Issue #27 in neuen Schemagenerationen.
 
 ### Webpasswort
 
@@ -41,7 +58,20 @@ Anforderungen:
 Ohne aktivierte Plattform- beziehungsweise Flashverschlüsselung wird keine
 falsche kryptografische Sicherheit behauptet.
 
+Fehlende, ungueltige oder leere Secret-Werte gelten nicht als Zugangsdaten.
+Integritaetspruefung durch CRC ist weder Verschluesselung noch
+Authentifizierung. Alte Flashbytes werden durch StorageEpoch und
+Referenzwechsel logisch unerreichbar; eine kryptografisch sichere physische
+Loeschung wird ohne konkreten Plattformnachweis nicht zugesichert.
+
 ## Normales Backup
+
+Ein normales Backup ist ein vollstaendiges, bewusst versioniertes Bundle aus
+einem portablen Manifest und allen von ihm referenzierten dekodierten
+Konfigurationsdokumenten. Das portable Manifest ist eine secret-freie Projektion
+der Konfigurationsgeneration und enthaelt keine Connectivity- oder
+Authentication-Bindung. Es werden keine rohen internen Envelopes exportiert.
+Das konkrete portable Format und sein Import werden mit Issue #19 implementiert.
 
 Enthalten:
 
@@ -53,7 +83,7 @@ Enthalten:
 - Aufbewahrungs- und Exportoptionen
 - Schema- und Revisionsinformationen
 
-Nicht enthalten:
+Nicht enthalten und nicht gebunden:
 
 - WLAN-Passwort
 - Webpasswort oder Prüfnachweis
@@ -63,7 +93,11 @@ Nicht enthalten:
 - aktiver flüchtiger Anmeldezustand
 - rohe Flashpartitionen
 
-Nach Import müssen fehlende Zugangsdaten neu eingerichtet werden.
+Nach Import muessen fehlende Zugangsdaten neu eingerichtet werden. Fehlende
+Secrets ueberschreiben keine auf dem Ziel vorhandenen Secrets. Ein
+Importkandidat mit einer von der laufenden Firmware nicht unterstuetzten IANA-
+Zeitzone wird abgelehnt oder muss vor Bestaetigung bewusst korrigiert werden;
+es gibt keinen stillen Rueckfall auf `Europe/Zurich`.
 
 ## Entwickler- und physischer Backupweg
 
@@ -126,6 +160,11 @@ Regeln:
 - unbekannte kritische Felder führen zur Ablehnung
 - ältere Schemas nur über getestete Migration
 - fehlende Geheimnisse werden nicht mit leeren Werten überschrieben
+- Import verwendet denselben zentralen Preview-, Validierungs-, Konflikt- und
+  Bestaetigungspfad wie Display und Web
+- besteht bereits Pending, baut ein bestaetigter Import auf diesem Kandidaten
+  auf und erzeugt keinen parallelen Active-Zweig
+- das interne binaere Revisionsformat ist kein portables Backupformat
 
 ## Aufbewahrungsmodell
 
@@ -187,6 +226,12 @@ Er behält:
 - gerätespezifische Touchkalibrierung
 
 Der Reset ist lokal, mehrstufig und bei jedem Schritt aktorsicher.
+
+Technisch ist der Reset ein mit `BootstrapState::Resetting`
+wiederaufnehmbarer Epochenwechsel. Er invalidiert Active, Fallback und Pending,
+setzt Connectivity und Authentication auf `NotProvisioned`, macht alte Secret-
+Revisionen logisch unerreichbar und erzeugt eine neue Initialkonfiguration. Er
+wird nie automatisch aufgrund beschaedigter Konfiguration gestartet.
 
 ## Vergessene Service-PIN
 

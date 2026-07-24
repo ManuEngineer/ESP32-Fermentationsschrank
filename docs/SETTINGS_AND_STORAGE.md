@@ -6,10 +6,14 @@ Dieses Dokument definiert Konfigurationsebenen, Aenderungsrechte, Vorschau,
 Neustartbedarf, Zeitdarstellung und atomare Speicherung. Laufpersistenz,
 Sicherungen und Recovery werden in `RUN_PERSISTENCE.md`,
 `BACKUP_SECURITY_RETENTION.md` und `PR38_REVIEW_CORRECTIONS.md` ergaenzt.
+Der verbindliche technische Speicher-, Wire-, Root-, Preview- und
+Recoveryvertrag fuer Issue #16 steht in
+[`CONFIGURATION_PERSISTENCE.md`](CONFIGURATION_PERSISTENCE.md).
 
 ## Grundsaetze
 
-- Werkseinstellungen, Benutzereinstellungen und aktive Laufdaten sind getrennt.
+- Werkseinstellungen, typisierte Konfigurationsdokumente, Geheimnisse und aktive
+  Laufdaten sind getrennt.
 - Ein Lauf verwendet einen unveraenderlichen Programmschnappschuss.
 - Neue Werte werden vor der Aktivierung vollstaendig validiert.
 - Keine teilweise geschriebene Konfiguration gilt als gueltig.
@@ -23,11 +27,13 @@ Sicherungen und Recovery werden in `RUN_PERSISTENCE.md`,
 ## Konfigurationsebenen
 
 ```text
-unveraenderliche Werkseinstellungen
+unveraenderliche FactoryConfiguration in der Firmware
         ↓
-gespeicherte validierte Benutzereinstellungen
+UserConfiguration + ServiceConfiguration + ProgramCatalog
         ↓
-unveraenderlicher Schnappschuss des aktiven Laufes
+ActiveConfigurationManifest als gemeinsam aktivierte Generation
+
+getrennt davon: Secret-Domaene und unveraenderlicher Laufschnappschuss
 ```
 
 ### Werkseinstellungen
@@ -41,12 +47,22 @@ Enthalten mindestens:
 - verbotene Aktorkombinationen
 - nicht unterschreitbare Schutzzeiten
 
-Sie werden im normalen Betrieb nicht ueberschrieben. Ein Werksreset erzeugt aus
-ihnen eine neue gueltige Benutzerkonfiguration.
+Sie werden im normalen Betrieb nicht ueberschrieben und nicht als
+ueberschreibbare Kopie in jedes Dokument eingefuegt. Ein Werksreset erzeugt aus
+ihnen eine neue gueltige Konfigurationsgeneration.
 
 ### Benutzereinstellungen
 
-Beispiele:
+Die erste Schemageneration enthaelt nur bereits fachlich bestimmte Werte:
+
+- lokale Displaysprache
+- kanonische IANA-Zeitzone
+- sichtbarer Geraetename
+- ein typisiertes, noch parameterloses ServiceConfiguration-Dokument
+- den gespeicherten ProgramCatalog
+
+Spaetere Schemagenerationen koennen nach Festlegung durch ihre zustaendigen
+Issues beispielsweise enthalten:
 
 - Sprache, Geraetename, Display und Ton
 - WLAN und Webzugang
@@ -55,8 +71,11 @@ Beispiele:
 - Touchkalibrierung
 - IANA-Zeitzone
 
-Jede Revision besitzt mindestens Schema, Generation, Integritaetsinformation,
-Aenderungsquelle und – falls verfuegbar – UTC-Zeit.
+Jeder Dokumenttyp besitzt eine eigene Schemaentwicklung und Inhaltsrevision.
+Dokumente werden nicht einzeln aktiviert: Ein Manifest referenziert genau eine
+vollstaendig validierte Kombination und bildet die gemeinsame
+Konfigurationsgeneration. Optionale UTC-Zeit ist nur Metadatum; Reihenfolge und
+Konflikte beruhen ausschliesslich auf monotonen Generationen.
 
 ### Laufschnappschuss
 
@@ -181,6 +200,19 @@ Nicht als ungespeicherte Vorschau aktivieren:
 Aenderungen warnt. Browserabbruch speichert nicht. Revisionsschutz verhindert
 das stille Ueberschreiben neuerer Daten.
 
+Alle Kanaele verwenden denselben fachlichen `ConfigurationPreview`-Dienst und
+dieselbe Validierung. Release 1 besitzt genau einen globalen, hoechstens 15
+Minuten lebenden Previewplatz. Das Preview haelt einen unveraenderlichen
+typisierten Kandidaten, Basisgenerationen, Aktivierungswirkung, redigierte
+Aenderungszusammenfassung, Ownerbindung und einen nicht vorhersagbaren
+Bestaetigungs-Token. Beim Commit wird kein Kandidat von der Oberflaeche erneut
+uebernommen. Basis, Validierung und Aktivierungswirkung werden unmittelbar vor
+dem Commit erneut geprueft; veraltete oder anders wirkende Kandidaten benoetigen
+eine neue Vorschau und Bestaetigung.
+
+Fluechtige UI-Vorschauen veraendern weder Active noch Pending. Ein persistiertes
+Pending wird nur durch eine ausdrueckliche Aktion ersetzt oder verworfen.
+
 ## Verhalten waehrend eines Laufes
 
 Sofort zulaessig, ohne Schnappschusswirkung:
@@ -205,20 +237,35 @@ Gesperrt bleiben:
 
 ## Neustartpflichtige Einstellungen
 
-- Speichern loest keinen automatischen Neustart aus.
-- Waehrend eines Laufes wird nie automatisch neu gestartet.
-- Ausstehende Aenderungen bleiben sichtbar.
-- `Jetzt neu starten` erscheint nur in sicherem Zustand ohne Lauf.
-- Bis dahin gilt die zuletzt aktivierte gueltige Konfiguration.
-- Ein unerwarteter Neustart darf keine halb angewendete Konfiguration erzeugen.
+- Neben Active existiert hoechstens ein vollstaendig validiertes Pending-
+  Manifest.
+- Speichern einer neustartpflichtigen oder gemischten Bearbeitung erzeugt einen
+  vollstaendigen Pending-Kandidaten und loest keinen Neustart aus.
+- Sobald Pending existiert, bauen auch sofort wirksame gespeicherte Aenderungen
+  darauf auf; es entsteht kein paralleler Active-Zweig.
+- Weitere Pending-Revisionen ersetzen den bisherigen Kandidaten erst nach
+  vollstaendiger Validierung.
+- Ausstehende Aenderungen bleiben sichtbar und koennen bewusst ersetzt oder
+  verworfen werden.
+- `Anwenden und neu starten` ist nur in sicherem Zustand ohne aktiven oder
+  wiederherzustellenden Lauf erlaubt.
+- Die Aktion persistiert eine an Pending-Integritaet, Pending-Generation und
+  erwartete Active-Generation gebundene Aktivierungsabsicht und sperrt danach
+  neue Laeufe und Mutationen bis zum unmittelbaren kontrollierten Neustart.
+- Ein unerwarteter Neustart ohne passende Absicht aktiviert Pending niemals.
+- Nach erfolgreichem Root-Commit wird ein unterbrochener Abschluss idempotent
+  fortgesetzt; vor der Commit-Grenze bleibt die alte Generation aktiv.
 
 ## Zeitbasis und Zeitzone
 
 - absolute Zeit intern in UTC, sofern verlaesslich
 - Lauf- und Schutzzeiten mit monotoner Zeit
-- konfigurierbare IANA-Zeitzone
+- Revisionsreihenfolge und Konflikterkennung nur durch monotone Generationen
+- optionale UTC-Revisionsmetadaten ohne ordnende Wirkung
+- ausschliesslich kanonische, kataloggepruefte IANA-Zeitzone
 - Werkseinstellung `Europe/Zurich`
 - lokale Darstellung auf Touch und Web ohne Aenderung gespeicherter UTC-Werte
+- Zeitzonenaenderung ist nicht neustartpflichtig und veraendert keinen Lauf
 
 Ohne NTP wird keine erfundene absolute Zeit ausgegeben. Relative Reihenfolge und
 monotone Laufzeit bleiben erhalten. Recovery-Zeit wird gemaess
@@ -241,12 +288,24 @@ Entwurf entgegennehmen
 
 Anforderungen:
 
-- niemals eine Mischung aus alter und neuer Revision laden
+- getrennte typisierte Dokumentrevisionen, aber genau eine gemeinsam aktivierte
+  Manifestgeneration
+- nur geaenderte Dokumente neu schreiben und unveraenderte Revisionen sicher
+  weiterreferenzieren
+- niemals eine Mischung aus Dokumenten verschiedener Manifestgenerationen laden
 - Integritaet auch beim Laden pruefen
 - unbekannte Schema-Version nicht blind interpretieren
 - Migration auf Kopie ausfuehren und erst danach aktivieren
+- Active und Pending getrennt migrieren; Pending dadurch nie aktivieren
 - Rueckfall sichtbar protokollieren
 - ohne gueltige aktuelle oder Rueckfallrevision sicherer Konfigurationsfehlerzustand
+- vorhandene beschaedigte Daten niemals als fabrikneuen Speicher behandeln
+- neue Active-Generation ausschliesslich durch atomaren Root-Commit aktivieren
+- vor Root-Commit alle falliblen Plattform- und Ressourcenarbeiten abschliessen
+- nach Root-Commit nur nicht allokierenden, nicht fehlschlagenden Runtime-
+  Snapshot veroeffentlichen
+- Geheimnisse und Authentifizierungsnachweise in getrennten, typisierten
+  Revisionsdomaenen halten
 - aktorwirksame Recoveryentscheidung zuerst erfolgreich persistieren
 - kritischer Schreibfehler gemaess `RUN_PERSISTENCE.md` verriegeln
 
@@ -261,6 +320,13 @@ Anforderungen:
 - [x] kein automatischer Neustart
 - [x] UTC und IANA-Zeitzone `Europe/Zurich`
 - [x] vollstaendige Validierung und atomare Revisionen
+- [x] hybride Dokumentarchitektur mit gemeinsamem Active-Manifest
+- [x] genau ein Pending-Zweig ohne parallele Active-Aenderungen
+- [x] generationengebundene zentrale Vorschau und Konflikterkennung
+- [x] kanonisches binaeres Envelope- und CRC-Wireformat
+- [x] getrennte Connectivity- und vorwaertsgerichtete Authentication-Rueckfallpolitik
+- [x] wiederaufnehmbarer Bootstrap und Werksreset mit StorageEpoch
+- [x] feste Slot-, Payload-, Preview- und Recordgrenzen
 - [x] normale Vollresetfunktion PIN-geschuetzt
 - [x] PIN-unabhaengiger physischer Vollreset ausschliesslich als Recovery bei
       vergessener Service-PIN
