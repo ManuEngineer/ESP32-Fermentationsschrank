@@ -520,8 +520,10 @@ void test_stop_back_is_inert_and_abort_off_is_atomic() {
     auto state = startedProgramState();
     StopRequest back{envelope(2U, state), StopOption::Back, std::nullopt,
                      false};
+    const auto backDecision = decideStop(state, back);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NoChange),
-                          static_cast<int>(decideStop(state, back).status));
+                          static_cast<int>(backDecision.status));
+    assertRejectedWithoutStateMutation(backDecision);
 
     StopRequest abort{envelope(3U, state), StopOption::AbortAndTurnOff,
                       std::nullopt, false};
@@ -560,6 +562,20 @@ void test_stop_rejects_unknown_option_without_mutation() {
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::AlreadyProcessed),
                           static_cast<int>(duplicate.status));
     assertRejectedWithoutStateMutation(duplicate);
+
+    StopRequest duplicateBack{envelope(2U, state), StopOption::Back,
+                              std::nullopt, false};
+    const auto alreadyProcessedBack = decideStop(state, duplicateBack);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::AlreadyProcessed),
+                          static_cast<int>(alreadyProcessedBack.status));
+    assertRejectedWithoutStateMutation(alreadyProcessedBack);
+
+    StopRequest freshBack{envelope(3U, state), StopOption::Back, std::nullopt,
+                          false};
+    const auto noChange = decideStop(state, freshBack);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NoChange),
+                          static_cast<int>(noChange.status));
+    assertRejectedWithoutStateMutation(noChange);
 }
 
 void test_abort_and_cool_validates_replacement_before_commit() {
@@ -690,6 +706,15 @@ void test_late_run_adjustment_rejections_discard_the_complete_candidate() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                               static_cast<int>(decision.status));
         assertRejectedWithoutStateMutation(decision);
+        TEST_ASSERT_FALSE(decision.adjustmentPreview.has_value());
+        TEST_ASSERT_EQUAL_DOUBLE(
+            state.activeProgramRun->effectiveValues().targetTemperatureCelsius,
+            decision.after.activeProgramRun->effectiveValues()
+                .targetTemperatureCelsius);
+        TEST_ASSERT_EQUAL_UINT32(
+            state.activeProgramRun->revisionCount(),
+            decision.after.activeProgramRun->revisionCount());
+        TEST_ASSERT_EQUAL_UINT32(state.runRevision, decision.after.runRevision);
     }
 
     // Derselbe spaete Ablehnungspfad bei erschoepfter Prozesssequenz.
@@ -702,6 +727,15 @@ void test_late_run_adjustment_rejections_discard_the_complete_candidate() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                               static_cast<int>(decision.status));
         assertRejectedWithoutStateMutation(decision);
+        TEST_ASSERT_FALSE(decision.adjustmentPreview.has_value());
+        TEST_ASSERT_EQUAL_DOUBLE(
+            state.activeProgramRun->effectiveValues().targetTemperatureCelsius,
+            decision.after.activeProgramRun->effectiveValues()
+                .targetTemperatureCelsius);
+        TEST_ASSERT_EQUAL_UINT32(
+            state.activeProgramRun->revisionCount(),
+            decision.after.activeProgramRun->revisionCount());
+        TEST_ASSERT_EQUAL_UINT32(state.runRevision, decision.after.runRevision);
     }
 }
 
@@ -719,6 +753,12 @@ void test_composed_cooling_rejections_discard_the_complete_candidate() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                               static_cast<int>(decision.status));
         assertRejectedWithoutStateMutation(decision);
+        TEST_ASSERT_TRUE(decision.after.activeProgramRun.has_value());
+        TEST_ASSERT_FALSE(decision.after.activeManualRun.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(state.processState.state),
+            static_cast<int>(decision.after.processState.state));
+        TEST_ASSERT_TRUE(decision.after.processRunSnapshot.has_value());
     }
 
     // Abschlussquittierung gelingt ebenfalls noch; der zweite Uebergang darf
@@ -733,6 +773,12 @@ void test_composed_cooling_rejections_discard_the_complete_candidate() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                               static_cast<int>(decision.status));
         assertRejectedWithoutStateMutation(decision);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProcessState::Completed),
+            static_cast<int>(decision.after.processState.state));
+        TEST_ASSERT_TRUE(decision.after.activeProgramRun.has_value());
+        TEST_ASSERT_FALSE(decision.after.activeManualRun.has_value());
+        TEST_ASSERT_TRUE(decision.after.processRunSnapshot.has_value());
     }
 }
 
