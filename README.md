@@ -202,6 +202,7 @@ Fachliche Spezifikation:
 - [`docs/WEB_UI.md`](docs/WEB_UI.md)
 - [`docs/NETWORK.md`](docs/NETWORK.md)
 - [`docs/SETTINGS_AND_STORAGE.md`](docs/SETTINGS_AND_STORAGE.md)
+- [`docs/CONFIGURATION_PERSISTENCE.md`](docs/CONFIGURATION_PERSISTENCE.md)
 - [`docs/RUN_PERSISTENCE.md`](docs/RUN_PERSISTENCE.md)
 - [`docs/TEMPERATURE_CONTROL.md`](docs/TEMPERATURE_CONTROL.md)
 - [`docs/ACTUATOR_TIMING.md`](docs/ACTUATOR_TIMING.md)

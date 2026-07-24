@@ -6,6 +6,10 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Changed
 
+- Konfigurationspersistenz fuer Issue #16 mit typisierten Dokumentgenerationen,
+  atomaren Active-/Fallback-/Pending-Roots, getrennten Secret-Rueckfallregeln,
+  kanonischem Wireformat sowie deterministischen Recovery- und Ressourcengrenzen
+  vollstaendig spezifiziert und das Issue auf `READY` vorbereitet
 - Programmmodellgrenzen einschliesslich minimaler und maximaler Anzahl der
   Fermentationsphasen vollstaendig in `program_limits.hpp` zentralisiert; das
   fachliche Verhalten und das Programmschema bleiben unveraendert
