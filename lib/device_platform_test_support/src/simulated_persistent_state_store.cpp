@@ -6,9 +6,10 @@ namespace device_platform_test_support {
 
 using device_platform::StateStoreKey;
 using device_platform::StateStoreReadResult;
-using device_platform::StateStoreStatus;
+using device_platform::StateStoreReadStatus;
+using device_platform::StateStoreWriteStatus;
 
-StateStoreStatus SimulatedPersistentStateStore::write(
+StateStoreWriteStatus SimulatedPersistentStateStore::write(
     const StateStoreKey& key, const std::string& value) {
     const WriteFault fault = nextWriteFault_;
     nextWriteFault_ = WriteFault::None;
@@ -16,37 +17,37 @@ StateStoreStatus SimulatedPersistentStateStore::write(
     switch (fault) {
         case WriteFault::FailBeforeBegin:
         case WriteFault::PowerCutBeforeCommit:
-            return StateStoreStatus::WriteError;
+            return StateStoreWriteStatus::WriteError;
         case WriteFault::CapacityExceeded:
-            return StateStoreStatus::CapacityError;
+            return StateStoreWriteStatus::CapacityError;
         case WriteFault::PowerCutAfterCommitBeforeReturn:
             committed_[key] = value;
-            return StateStoreStatus::CommitOutcomeUnknown;
+            return StateStoreWriteStatus::CommitOutcomeUnknown;
         case WriteFault::None:
             break;
     }
     committed_[key] = value;
-    return StateStoreStatus::Success;
+    return StateStoreWriteStatus::Success;
 }
 
 StateStoreReadResult SimulatedPersistentStateStore::read(
     const StateStoreKey& key, std::size_t maxBytes) const {
     const auto forcedIterator = forceNotFound_.find(key);
     if (forcedIterator != forceNotFound_.end() && forcedIterator->second) {
-        return {StateStoreStatus::NotFound, {}};
+        return {StateStoreReadStatus::NotFound, {}};
     }
     const auto failIterator = readShouldFail_.find(key);
     if (failIterator != readShouldFail_.end() && failIterator->second) {
-        return {StateStoreStatus::ReadError, {}};
+        return {StateStoreReadStatus::ReadError, {}};
     }
     const auto valueIterator = committed_.find(key);
     if (valueIterator == committed_.end()) {
-        return {StateStoreStatus::NotFound, {}};
+        return {StateStoreReadStatus::NotFound, {}};
     }
     if (valueIterator->second.size() > maxBytes) {
-        return {StateStoreStatus::CapacityError, {}};
+        return {StateStoreReadStatus::CapacityError, {}};
     }
-    return {StateStoreStatus::Success, valueIterator->second};
+    return {StateStoreReadStatus::Success, valueIterator->second};
 }
 
 void SimulatedPersistentStateStore::setNextWriteFault(WriteFault fault) {

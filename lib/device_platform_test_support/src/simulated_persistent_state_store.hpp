@@ -33,7 +33,7 @@ class SimulatedPersistentStateStore final
         CapacityExceeded,
     };
 
-    [[nodiscard]] device_platform::StateStoreStatus write(
+    [[nodiscard]] device_platform::StateStoreWriteStatus write(
         const device_platform::StateStoreKey& key,
         const std::string& value) override;
     [[nodiscard]] device_platform::StateStoreReadResult read(

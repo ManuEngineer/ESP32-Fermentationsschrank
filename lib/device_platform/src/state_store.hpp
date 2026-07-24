@@ -8,40 +8,42 @@
 
 namespace device_platform {
 
-// Ein gemeinsamer Status fuer Lesen und Schreiben, weil beide Operationen
-// `CapacityError` teilen (siehe unten). Die jeweils gueltige Teilmenge ist
-// hier eindeutig dokumentiert und in den Tests von
-// `SimulatedPersistentStateStore` vollstaendig abgedeckt:
-//   - `read()` liefert ausschliesslich `Success`, `NotFound`, `ReadError`
-//     oder `CapacityError` - niemals `WriteError` oder
-//     `CommitOutcomeUnknown` (beides reine Schreibergebnisse).
-//   - `write()` liefert ausschliesslich `Success`, `WriteError`,
-//     `CapacityError` oder `CommitOutcomeUnknown` - niemals `NotFound` oder
-//     `ReadError` (beides reine Leseergebnisse).
-enum class StateStoreStatus : uint8_t {
+// Read- und Write-Ergebnisse sind bewusst getrennte Typen, nicht nur eine
+// dokumentierte Teilmenge eines gemeinsamen Enums: ein Adapter kann
+// `StateStoreWriteStatus::WriteError` oder `CommitOutcomeUnknown` schon
+// aufgrund des Rueckgabetyps nicht als Leseergebnis zurueckgeben, und
+// umgekehrt kann `read()` `NotFound`/`ReadError` nicht als Schreibergebnis
+// liefern - das ist ein Compilefehler, kein nur dokumentierter oder
+// getesteter Vertrag. `CapacityError` kommt bewusst in beiden Enums vor: Lesen
+// meldet damit ein den Leselimit ueberschreitendes Ergebnis, Schreiben einen
+// vollen Speicher.
+enum class StateStoreReadStatus : uint8_t {
     Success,
-    // Nur als Leseergebnis.
     NotFound,
-    // Nur als Leseergebnis.
     ReadError,
-    // Nur als Schreibergebnis: der Vorgang ist sicher nicht wirksam
-    // geworden; der zuvor gespeicherte Wert (falls vorhanden) ist
-    // unveraendert.
-    WriteError,
-    // Lesen: gespeicherter Wert ueberschreitet das aufrufer- beziehungsweise
-    // schluesselspezifische Leselimit. Schreiben: der Speicher ist voll; der
-    // zuvor gespeicherte Wert (falls vorhanden) ist unveraendert.
+    // Gespeicherter Wert ueberschreitet das aufrufer- beziehungsweise
+    // schluesselspezifische Leselimit.
     CapacityError,
-    // Nur als Schreibergebnis: der Commit-Ausgang ist unbekannt. Der neue
-    // Wert kann bereits vollstaendig und dauerhaft gespeichert sein oder
-    // auch nicht - beides ist zulaessig, ein abgeschnittener oder gemischter
-    // Wert jedoch nie. Der Aufrufer muss zuruecklesen, um den tatsaechlichen
-    // Stand zu bestimmen.
+};
+
+enum class StateStoreWriteStatus : uint8_t {
+    Success,
+    // Der Vorgang ist sicher nicht wirksam geworden; der zuvor gespeicherte
+    // Wert (falls vorhanden) ist unveraendert.
+    WriteError,
+    // Der Speicher ist voll; der zuvor gespeicherte Wert (falls vorhanden)
+    // ist unveraendert.
+    CapacityError,
+    // Der Commit-Ausgang ist unbekannt. Der neue Wert kann bereits
+    // vollstaendig und dauerhaft gespeichert sein oder auch nicht - beides
+    // ist zulaessig, ein abgeschnittener oder gemischter Wert jedoch nie.
+    // Der Aufrufer muss zuruecklesen, um den tatsaechlichen Stand zu
+    // bestimmen.
     CommitOutcomeUnknown,
 };
 
 struct StateStoreReadResult {
-    StateStoreStatus status;
+    StateStoreReadStatus status;
     // Nur bei `Success` gueltig; sonst leer.
     std::string value;
 };
@@ -81,16 +83,18 @@ class IStateStore {
     IStateStore(IStateStore&&) = delete;
     IStateStore& operator=(IStateStore&&) = delete;
 
-    // Liefert ausschliesslich `Success`, `WriteError`, `CapacityError` oder
-    // `CommitOutcomeUnknown` (siehe `StateStoreStatus`).
-    [[nodiscard]] virtual StateStoreStatus write(const StateStoreKey& key,
-                                                 const std::string& value) = 0;
+    // Rueckgabetyp `StateStoreWriteStatus` schliesst `NotFound`/`ReadError`
+    // bereits durch das Typsystem aus - kein Adapter kann diese als
+    // Schreibergebnis zurueckgeben.
+    [[nodiscard]] virtual StateStoreWriteStatus write(
+        const StateStoreKey& key, const std::string& value) = 0;
 
     // `maxBytes` ist das aufrufer- beziehungsweise schluesselspezifische
     // Leselimit: uebersteigt der gespeicherte Wert `maxBytes`, liefert dies
-    // `CapacityError` statt eines unkontrolliert grossen Werts. Liefert
-    // ausschliesslich `Success`, `NotFound`, `ReadError` oder
-    // `CapacityError` (siehe `StateStoreStatus`).
+    // `CapacityError` statt eines unkontrolliert grossen Werts.
+    // Rueckgabetyp `StateStoreReadStatus` (in `StateStoreReadResult`)
+    // schliesst `WriteError`/`CommitOutcomeUnknown` bereits durch das
+    // Typsystem aus - kein Adapter kann diese als Leseergebnis zurueckgeben.
     [[nodiscard]] virtual StateStoreReadResult read(
         const StateStoreKey& key, std::size_t maxBytes) const = 0;
 };
