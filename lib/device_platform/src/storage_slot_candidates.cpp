@@ -11,33 +11,36 @@ namespace device_platform {
 namespace {
 
 // Nur intern nach `IStateStore::read()` aufgerufen, und dort ausschliesslich
-// fuer `status != Success` (siehe Aufrufstelle unten). `read()` liefert laut
-// eigenem Vertrag (state_store.hpp) niemals `WriteError` oder
-// `CommitOutcomeUnknown` - die beiden Faelle sind an dieser Aufrufstelle
-// nachweislich unerreichbar, nicht nur zufaellig ungenutzt. Der Fallback
-// existiert ausschliesslich, damit der `switch` ohne `default` vollstaendig
-// bleibt (jeder neue `StateStoreStatus`-Wert erzeugt eine
-// `-Wswitch`-Warnung, die als Fehler behandelt wird).
-SlotIssueKind toSlotIssueKind(StateStoreStatus status) {
+// fuer `status != Success` (siehe Aufrufstelle unten). Seit der Trennung von
+// `StateStoreReadStatus`/`StateStoreWriteStatus` (state_store.hpp) sind
+// `WriteError` und `CommitOutcomeUnknown` hier nicht mehr nur vertraglich
+// ausgeschlossen, sondern bereits durch den Parametertyp unmoeglich - `read()`
+// kann sie gar nicht erst zurueckgeben. Der verbleibende Fallback deckt
+// ausschliesslich `Success` ab, das an dieser Aufrufstelle nachweislich
+// unerreichbar ist, und existiert nur, damit der `switch` ohne `default`
+// vollstaendig bleibt (jeder neue `StateStoreReadStatus`-Wert erzeugt sonst
+// eine `-Wswitch`-Warnung, die als Fehler behandelt wird). `UnexpectedStatus`
+// darf nie mit einem echten `ReadError` verwechselt werden.
+SlotIssueKind toSlotIssueKind(StateStoreReadStatus status) {
     switch (status) {
-        case StateStoreStatus::NotFound:
+        case StateStoreReadStatus::NotFound:
             return SlotIssueKind::NotFound;
-        case StateStoreStatus::ReadError:
+        case StateStoreReadStatus::ReadError:
             return SlotIssueKind::ReadError;
-        case StateStoreStatus::CapacityError:
+        case StateStoreReadStatus::CapacityError:
             return SlotIssueKind::CapacityError;
-        case StateStoreStatus::Success:
-        case StateStoreStatus::WriteError:
-        case StateStoreStatus::CommitOutcomeUnknown:
+        case StateStoreReadStatus::Success:
             break;
     }
-    return SlotIssueKind::ReadError;
+    return SlotIssueKind::UnexpectedStatus;
 }
 
 // Nur intern nach `decodeEnvelope()` aufgerufen, und dort ausschliesslich
 // fuer `status != Success` (siehe Aufrufstelle unten) - `Success` ist an
 // dieser Aufrufstelle nachweislich unerreichbar. Der Fallback existiert
 // ausschliesslich, damit der `switch` ohne `default` vollstaendig bleibt.
+// `UnexpectedStatus` darf nie mit einem echten `LengthMismatch` verwechselt
+// werden.
 SlotIssueKind toSlotIssueKind(EnvelopeDecodeStatus status) {
     switch (status) {
         case EnvelopeDecodeStatus::InvalidMagic:
@@ -61,7 +64,7 @@ SlotIssueKind toSlotIssueKind(EnvelopeDecodeStatus status) {
         case EnvelopeDecodeStatus::Success:
             break;
     }
-    return SlotIssueKind::LengthMismatch;
+    return SlotIssueKind::UnexpectedStatus;
 }
 
 }  // namespace
@@ -74,7 +77,7 @@ SlotScanResult scanTechnicalSlotCandidates(
     for (std::size_t index = 0U; index < slotKeys.size(); ++index) {
         const auto slot = SlotId(static_cast<uint32_t>(index));
         const auto readResult = store.read(slotKeys[index], maxEnvelopeBytes);
-        if (readResult.status != StateStoreStatus::Success) {
+        if (readResult.status != StateStoreReadStatus::Success) {
             result.issues.push_back(
                 SlotIssue{slot, toSlotIssueKind(readResult.status)});
             continue;
@@ -117,11 +120,12 @@ SlotScanResult scanTechnicalSlotCandidates(
     return result;
 }
 
-SlotId nextSlotRoundRobin(SlotId lastWrittenSlot, std::size_t slotCount) {
+NextSlotResult nextSlotRoundRobin(SlotId lastWrittenSlot,
+                                  std::size_t slotCount) {
     if (slotCount == 0U ||
         slotCount >
             static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
-        return SlotId(0U);
+        return NextSlotResult{NextSlotStatus::InvalidSlotCount, std::nullopt};
     }
     const auto slotCount32 = static_cast<uint32_t>(slotCount);
     // Zuerst modulo reduzieren, dann eins addieren: `normalized` ist immer
@@ -131,7 +135,7 @@ SlotId nextSlotRoundRobin(SlotId lastWrittenSlot, std::size_t slotCount) {
     const uint32_t normalized = lastWrittenSlot.value() % slotCount32;
     const uint32_t next =
         (normalized + 1U == slotCount32) ? 0U : normalized + 1U;
-    return SlotId(next);
+    return NextSlotResult{NextSlotStatus::Success, SlotId(next)};
 }
 
 }  // namespace device_platform
