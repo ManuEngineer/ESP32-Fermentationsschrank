@@ -102,20 +102,207 @@ bool hasEffect(const CommandDecision& decision, CommandEffect effect) {
     return false;
 }
 
+bool equalProgramDocuments(const ProgramDocument& left,
+                           const ProgramDocument& right) {
+    const auto& leftProgram = left.program;
+    const auto& rightProgram = right.program;
+    if (left.schema.version != right.schema.version ||
+        left.schema.presentFields != right.schema.presentFields ||
+        leftProgram.id != rightProgram.id ||
+        leftProgram.name != rightProgram.name ||
+        leftProgram.notes != rightProgram.notes ||
+        leftProgram.builtIn != rightProgram.builtIn ||
+        leftProgram.factoryCatalogEntry != rightProgram.factoryCatalogEntry ||
+        leftProgram.resettable != rightProgram.resettable ||
+        leftProgram.userDeletable != rightProgram.userDeletable ||
+        leftProgram.installed != rightProgram.installed ||
+        leftProgram.enabled != rightProgram.enabled ||
+        leftProgram.preheat != rightProgram.preheat ||
+        leftProgram.sensorPreference != rightProgram.sensorPreference ||
+        leftProgram.productSensorFailure.policy !=
+            rightProgram.productSensorFailure.policy ||
+        leftProgram.productSensorFailure.fallbackDelaySeconds !=
+            rightProgram.productSensorFailure.fallbackDelaySeconds ||
+        leftProgram.targetQualification.bandCelsius !=
+            rightProgram.targetQualification.bandCelsius ||
+        leftProgram.targetQualification.durationMinutes !=
+            rightProgram.targetQualification.durationMinutes ||
+        leftProgram.maximumTargetReachMinutes !=
+            rightProgram.maximumTargetReachMinutes ||
+        leftProgram.maximumProductWaitMinutes !=
+            rightProgram.maximumProductWaitMinutes ||
+        leftProgram.completion.mode != rightProgram.completion.mode ||
+        leftProgram.completion.coolingTargetCelsius !=
+            rightProgram.completion.coolingTargetCelsius ||
+        leftProgram.completion.holdDurationMinutes !=
+            rightProgram.completion.holdDurationMinutes ||
+        leftProgram.fermentationStages.size() !=
+            rightProgram.fermentationStages.size()) {
+        return false;
+    }
+    for (std::size_t index = 0U; index < leftProgram.fermentationStages.size();
+         ++index) {
+        if (leftProgram.fermentationStages[index].targetTemperatureCelsius !=
+                rightProgram.fermentationStages[index]
+                    .targetTemperatureCelsius ||
+            leftProgram.fermentationStages[index].durationMinutes !=
+                rightProgram.fermentationStages[index].durationMinutes) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool equalEffectiveRunValues(const EffectiveRunValues& left,
+                             const EffectiveRunValues& right) {
+    return left.targetTemperatureCelsius == right.targetTemperatureCelsius &&
+           left.remainingDurationMinutes == right.remainingDurationMinutes;
+}
+
+bool equalRunRevisions(const RunRevision& left, const RunRevision& right) {
+    return left.sequence == right.sequence &&
+           left.monotonicEpoch == right.monotonicEpoch &&
+           left.stageIndex == right.stageIndex &&
+           left.completedStageCount == right.completedStageCount &&
+           equalEffectiveRunValues(left.before, right.before) &&
+           equalEffectiveRunValues(left.after, right.after) &&
+           left.targetTemperatureChanged == right.targetTemperatureChanged &&
+           left.remainingDurationChanged == right.remainingDurationChanged &&
+           left.effect == right.effect && left.source == right.source &&
+           left.reason == right.reason &&
+           left.timestamp.monotonicMillis == right.timestamp.monotonicMillis &&
+           left.timestamp.unixTimeSeconds == right.timestamp.unixTimeSeconds;
+}
+
+bool equalActiveRuns(const std::optional<ActiveRun>& left,
+                     const std::optional<ActiveRun>& right) {
+    if (left.has_value() != right.has_value()) {
+        return false;
+    }
+    if (!left.has_value()) {
+        return true;
+    }
+    const auto& leftSnapshot = left->snapshot();
+    const auto& rightSnapshot = right->snapshot();
+    if (!equalProgramDocuments(leftSnapshot.sourceProgram,
+                               rightSnapshot.sourceProgram) ||
+        leftSnapshot.sourceKind != rightSnapshot.sourceKind ||
+        leftSnapshot.sourceProgramRevision !=
+            rightSnapshot.sourceProgramRevision ||
+        !equalEffectiveRunValues(left->effectiveValues(),
+                                 right->effectiveValues()) ||
+        left->revisionCount() != right->revisionCount()) {
+        return false;
+    }
+    for (std::size_t index = 0U; index < kMaximumRunRevisions; ++index) {
+        if (!equalRunRevisions(left->revisions()[index],
+                               right->revisions()[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool equalManualRunPlanRequests(const ManualRunPlanRequest& left,
+                                const ManualRunPlanRequest& right) {
+    return left.runId == right.runId &&
+           left.targetTemperatureCelsius == right.targetTemperatureCelsius &&
+           left.sensorMode == right.sensorMode &&
+           left.preheatEnabled == right.preheatEnabled &&
+           left.maximumProductWaitMinutes == right.maximumProductWaitMinutes &&
+           left.qualificationBandCelsius == right.qualificationBandCelsius &&
+           left.qualificationDurationMinutes ==
+               right.qualificationDurationMinutes &&
+           left.maximumTargetReachMinutes == right.maximumTargetReachMinutes;
+}
+
+bool equalManualRuns(const std::optional<ManualRunPlan>& left,
+                     const std::optional<ManualRunPlan>& right) {
+    if (left.has_value() != right.has_value()) {
+        return false;
+    }
+    return !left.has_value() ||
+           (equalManualRunPlanRequests(left->values, right->values) &&
+            left->source == right->source &&
+            left->createdAtMonotonicMillis == right->createdAtMonotonicMillis &&
+            left->kind == right->kind);
+}
+
+bool equalProcessRunSnapshots(const std::optional<ProcessRunSnapshot>& left,
+                              const std::optional<ProcessRunSnapshot>& right) {
+    if (left.has_value() != right.has_value()) {
+        return false;
+    }
+    return !left.has_value() ||
+           (left->kind == right->kind &&
+            left->preheatEnabled == right->preheatEnabled &&
+            left->completionMode == right->completionMode &&
+            left->qualificationDurationMinutes ==
+                right->qualificationDurationMinutes &&
+            left->maximumTargetReachMinutes ==
+                right->maximumTargetReachMinutes &&
+            left->maximumProductWaitMinutes ==
+                right->maximumProductWaitMinutes &&
+            left->fermentationDurationMinutes ==
+                right->fermentationDurationMinutes &&
+            left->holdDurationMinutes == right->holdDurationMinutes);
+}
+
+bool equalRuntimeMessages(const RuntimeMessage& left,
+                          const RuntimeMessage& right) {
+    return left.id == right.id && left.code == right.code &&
+           left.messageClass == right.messageClass &&
+           left.priority == right.priority && left.trigger == right.trigger &&
+           left.monotonicMillis == right.monotonicMillis &&
+           left.active == right.active &&
+           left.acknowledged == right.acknowledged &&
+           left.resolved == right.resolved &&
+           left.decisionRequired == right.decisionRequired &&
+           left.acousticMuted == right.acousticMuted &&
+           left.acousticIntent == right.acousticIntent &&
+           left.runRevision == right.runRevision &&
+           left.stateSequence == right.stateSequence &&
+           left.faultRevision == right.faultRevision &&
+           left.revision == right.revision;
+}
+
+bool equalRunCommandStates(const RunCommandState& left,
+                           const RunCommandState& right) {
+    if (!equalProcessRuntimeState(left.processState, right.processState) ||
+        !equalActiveRuns(left.activeProgramRun, right.activeProgramRun) ||
+        !equalManualRuns(left.activeManualRun, right.activeManualRun) ||
+        !equalProcessRunSnapshots(left.processRunSnapshot,
+                                  right.processRunSnapshot) ||
+        left.activeRunId != right.activeRunId ||
+        left.runRevision != right.runRevision ||
+        left.messageCount != right.messageCount ||
+        left.messageRevision != right.messageRevision ||
+        left.faultRevision != right.faultRevision ||
+        left.criticalSafetyEventPending != right.criticalSafetyEventPending ||
+        left.commandSequence != right.commandSequence ||
+        left.lastCommandMonotonicMillis != right.lastCommandMonotonicMillis ||
+        left.processedCommandCount != right.processedCommandCount) {
+        return false;
+    }
+    for (std::size_t index = 0U; index < left.messages.size(); ++index) {
+        if (!equalRuntimeMessages(left.messages[index],
+                                  right.messages[index])) {
+            return false;
+        }
+    }
+    for (std::size_t index = 0U; index < left.processedCommandIds.size();
+         ++index) {
+        if (left.processedCommandIds[index] !=
+            right.processedCommandIds[index]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void assertRejectedWithoutStateMutation(const CommandDecision& decision) {
     TEST_ASSERT_FALSE(decision.proposed());
-    TEST_ASSERT_EQUAL_UINT32(decision.before.commandSequence,
-                             decision.after.commandSequence);
-    TEST_ASSERT_EQUAL_UINT32(decision.before.runRevision,
-                             decision.after.runRevision);
-    TEST_ASSERT_EQUAL_UINT32(decision.before.messageRevision,
-                             decision.after.messageRevision);
-    TEST_ASSERT_EQUAL_UINT32(decision.before.faultRevision,
-                             decision.after.faultRevision);
-    TEST_ASSERT_TRUE(equalProcessRuntimeState(decision.before.processState,
-                                              decision.after.processState));
-    TEST_ASSERT_EQUAL_STRING(decision.before.activeRunId.c_str(),
-                             decision.after.activeRunId.c_str());
+    TEST_ASSERT_TRUE(equalRunCommandStates(decision.before, decision.after));
     TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
 }
 
@@ -358,12 +545,21 @@ void test_stop_rejects_unknown_option_without_mutation() {
     const auto decision = decideStop(state, unknown);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                           static_cast<int>(decision.status));
-    TEST_ASSERT_TRUE(decision.after.activeProgramRun.has_value());
-    TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(state.processState.state),
-                          static_cast<int>(decision.after.processState.state));
-    TEST_ASSERT_EQUAL_UINT32(decision.before.runRevision,
-                             decision.after.runRevision);
+    assertRejectedWithoutStateMutation(decision);
+
+    StopRequest valid{envelope(2U, state), StopOption::AbortAndTurnOff,
+                      std::nullopt, false};
+    const auto validDecision = decideStop(state, valid);
+    TEST_ASSERT_TRUE(validDecision.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::Applied),
+        static_cast<int>(applyRunCommand(state, validDecision)));
+
+    unknown.envelope = envelope(2U, state);
+    const auto duplicate = decideStop(state, unknown);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::AlreadyProcessed),
+                          static_cast<int>(duplicate.status));
+    assertRejectedWithoutStateMutation(duplicate);
 }
 
 void test_abort_and_cool_validates_replacement_before_commit() {
@@ -481,6 +677,63 @@ void test_duration_adjustment_restarts_remaining_timer_and_allows_zero() {
         decision.adjustmentPreview->targetRequalificationRequired);
     TEST_ASSERT_FALSE(
         decision.adjustmentPreview->timerContinuesWithoutBiologicalCorrection);
+}
+
+void test_late_run_adjustment_rejections_discard_the_complete_candidate() {
+    // Die ActiveRun-Aenderung ist gueltig, aber der anschliessende
+    // TargetChanged-Uebergang lehnt die ruecklaeufige Prozesszeit ab.
+    {
+        auto state = startedProgramState();
+        state.processState.stateEnteredAtMillis = 300U;
+        const auto decision =
+            decideRunAdjustment(state, targetChange(state, 2U, 39.0, 200U));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(decision.status));
+        assertRejectedWithoutStateMutation(decision);
+    }
+
+    // Derselbe spaete Ablehnungspfad bei erschoepfter Prozesssequenz.
+    {
+        auto state = startedProgramState();
+        state.processState.transitionSequence =
+            std::numeric_limits<std::uint32_t>::max();
+        const auto decision =
+            decideRunAdjustment(state, targetChange(state, 2U, 39.0, 200U));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(decision.status));
+        assertRejectedWithoutStateMutation(decision);
+    }
+}
+
+void test_composed_cooling_rejections_discard_the_complete_candidate() {
+    const auto almostFull = std::numeric_limits<std::uint32_t>::max() - 1U;
+
+    // Abort gelingt mit der letzten Prozesssequenz; der anschliessende
+    // manuelle Kuehlstart muss scheitern, ohne den Alt-Lauf zu entfernen.
+    {
+        auto state = startedProgramState();
+        state.processState.transitionSequence = almostFull;
+        StopRequest request{envelope(2U, state), StopOption::AbortAndCool,
+                            manualPlan("cool"), true};
+        const auto decision = decideStop(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(decision.status));
+        assertRejectedWithoutStateMutation(decision);
+    }
+
+    // Abschlussquittierung gelingt ebenfalls noch; der zweite Uebergang darf
+    // den abgeschlossenen Ursprungslauf bei Ablehnung nicht teilweise loeschen.
+    {
+        auto completed = startedProgramState();
+        completed.processState.state = ProcessState::Completed;
+        completed.processState.transitionSequence = almostFull;
+        CompletionRequest request{envelope(2U, completed), true,
+                                  manualPlan("cool"), true};
+        const auto decision = decideCompletion(completed, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(decision.status));
+        assertRejectedWithoutStateMutation(decision);
+    }
 }
 
 void test_adjustments_are_rejected_in_inappropriate_states() {
@@ -914,7 +1167,7 @@ void test_message_and_fault_revision_overflow_is_rejected() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(decision.status));
         TEST_ASSERT_FALSE(decision.after.messages[0].acknowledged);
-        TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+        assertRejectedWithoutStateMutation(decision);
     }
     // Fachrevision (aggregiert) an der Grenze, einzelne Meldungsrevision
     // unauffaellig: ebenfalls abgelehnt.
@@ -930,6 +1183,7 @@ void test_message_and_fault_revision_overflow_is_rejected() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(decision.status));
         TEST_ASSERT_FALSE(decision.after.messages[0].acknowledged);
+        assertRejectedWithoutStateMutation(decision);
     }
     // Dieselben zwei Faelle fuer Stummschalten.
     {
@@ -944,6 +1198,7 @@ void test_message_and_fault_revision_overflow_is_rejected() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(decision.status));
         TEST_ASSERT_FALSE(decision.after.messages[0].acousticMuted);
+        assertRejectedWithoutStateMutation(decision);
     }
     {
         auto state = standbyState();
@@ -957,6 +1212,7 @@ void test_message_and_fault_revision_overflow_is_rejected() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(decision.status));
         TEST_ASSERT_FALSE(decision.after.messages[0].acousticMuted);
+        assertRejectedWithoutStateMutation(decision);
     }
     // Fehlerrevision an der Grenze abgelehnt, davor genau einmal erhoehbar.
     {
@@ -973,6 +1229,7 @@ void test_message_and_fault_revision_overflow_is_rejected() {
                               static_cast<int>(decision.status));
         TEST_ASSERT_TRUE(decision.after.criticalSafetyEventPending);
         TEST_ASSERT_EQUAL_UINT32(max, decision.after.faultRevision);
+        assertRejectedWithoutStateMutation(decision);
 
         state.faultRevision = max - 1U;
         FaultResetRequest okRequest;
@@ -1010,6 +1267,9 @@ int main() {
     RUN_TEST(test_completion_can_return_to_standby_or_start_manual_cooling);
     RUN_TEST(test_target_adjustments_requalify_before_fermentation_only);
     RUN_TEST(test_duration_adjustment_restarts_remaining_timer_and_allows_zero);
+    RUN_TEST(
+        test_late_run_adjustment_rejections_discard_the_complete_candidate);
+    RUN_TEST(test_composed_cooling_rejections_discard_the_complete_candidate);
     RUN_TEST(test_adjustments_are_rejected_in_inappropriate_states);
     RUN_TEST(test_message_priority_acknowledgement_and_mute_are_independent);
     RUN_TEST(test_fault_reset_requires_current_qualified_evaluation);

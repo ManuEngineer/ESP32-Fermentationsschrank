@@ -260,18 +260,18 @@ std::optional<ManualRunPlan> makeManualPlan(const ManualRunPlanRequest& request,
                : std::nullopt;
 }
 
-bool installManualRun(CommandDecision& decision, ManualRunPlan plan) {
+bool installManualRun(RunCommandState& state, const CommandEnvelope& envelope,
+                      ManualRunPlan plan) {
     const auto snapshot = makeProcessRunSnapshot(plan);
     if (!snapshot.has_value() ||
-        !applyTransition(decision.after, ProcessEvent::StartRun,
-                         decision.envelope.monotonicMillis, &*snapshot)) {
-        decision.status = CommandStatus::InvalidInput;
+        !applyTransition(state, ProcessEvent::StartRun,
+                         envelope.monotonicMillis, &*snapshot)) {
         return false;
     }
-    decision.after.activeProgramRun.reset();
-    decision.after.activeRunId = plan.values.runId;
-    decision.after.activeManualRun = std::move(plan);
-    decision.after.processRunSnapshot = *snapshot;
+    state.activeProgramRun.reset();
+    state.activeRunId = plan.values.runId;
+    state.activeManualRun = std::move(plan);
+    state.processRunSnapshot = *snapshot;
     return true;
 }
 
@@ -486,7 +486,8 @@ CommandDecision decideManualStart(const RunCommandState& current,
         return decision;
     }
 
-    if (!installManualRun(decision, std::move(*plan))) {
+    if (!installManualRun(decision.after, decision.envelope,
+                          std::move(*plan))) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
@@ -509,18 +510,22 @@ bool validStopOption(StopOption option) {
 
 CommandDecision decideStop(const RunCommandState& current,
                            const StopRequest& request) {
+    auto decision =
+        beginDecision(current, request.envelope, CommandKind::AbortAndTurnOff);
+    if (!decision.proposed()) {
+        return decision;
+    }
     if (!validStopOption(request.option)) {
-        return result(current, request.envelope, CommandKind::AbortAndTurnOff,
-                      CommandStatus::InvalidInput);
+        decision.status = CommandStatus::InvalidInput;
+        return decision;
     }
     if (request.option == StopOption::Back) {
-        return result(current, request.envelope, CommandKind::AbortAndTurnOff,
-                      CommandStatus::NoChange);
+        decision.status = CommandStatus::NoChange;
+        return decision;
     }
-    const auto kind = request.option == StopOption::AbortAndCool
-                          ? CommandKind::AbortAndCool
-                          : CommandKind::AbortAndTurnOff;
-    auto decision = beginDecision(current, request.envelope, kind);
+    if (request.option == StopOption::AbortAndCool) {
+        decision.kind = CommandKind::AbortAndCool;
+    }
     if (!requireRunRevision(decision)) {
         return decision;
     }
@@ -555,29 +560,33 @@ CommandDecision decideStop(const RunCommandState& current,
         return decision;
     }
 
-    if (!applyTransition(decision.after, ProcessEvent::Abort,
+    auto candidate = decision.before;
+    if (!applyTransition(candidate, ProcessEvent::Abort,
                          request.envelope.monotonicMillis,
                          &*current.processRunSnapshot)) {
         decision.status = CommandStatus::NotAllowedInState;
         return decision;
     }
-    clearActiveRun(decision.after);
+    clearActiveRun(candidate);
+
+    if (coolingPlan.has_value() &&
+        !installManualRun(candidate, decision.envelope,
+                          std::move(*coolingPlan))) {
+        decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
+
+    candidate.commandSequence = decision.before.commandSequence + 1U;
+    ++candidate.runRevision;
+    decision.after = std::move(candidate);
     static_cast<void>(addEffect(decision, CommandEffect::RunAborted));
     static_cast<void>(
         addEffect(decision, CommandEffect::SafePeltierStopRequested));
     static_cast<void>(addEffect(decision, CommandEffect::FanRunOnRequired));
-
-    if (coolingPlan.has_value() &&
-        !installManualRun(decision, std::move(*coolingPlan))) {
-        decision.status = CommandStatus::InvalidInput;
-        return decision;
-    }
     if (request.option == StopOption::AbortAndCool) {
         static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
         static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     }
-    beginMutation(decision);
-    ++decision.after.runRevision;
     return decision;
 }
 
@@ -619,25 +628,29 @@ CommandDecision decideCompletion(const RunCommandState& current,
         return decision;
     }
 
-    if (!applyTransition(decision.after, ProcessEvent::AcknowledgeCompletion,
+    auto candidate = decision.before;
+    if (!applyTransition(candidate, ProcessEvent::AcknowledgeCompletion,
                          request.envelope.monotonicMillis, nullptr)) {
         decision.status = CommandStatus::NotAllowedInState;
         return decision;
     }
-    clearActiveRun(decision.after);
-    static_cast<void>(
-        addEffect(decision, CommandEffect::CompletionAcknowledged));
+    clearActiveRun(candidate);
     if (coolingPlan.has_value() &&
-        !installManualRun(decision, std::move(*coolingPlan))) {
+        !installManualRun(candidate, decision.envelope,
+                          std::move(*coolingPlan))) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
+
+    candidate.commandSequence = decision.before.commandSequence + 1U;
+    ++candidate.runRevision;
+    decision.after = std::move(candidate);
+    static_cast<void>(
+        addEffect(decision, CommandEffect::CompletionAcknowledged));
     if (request.startCooling) {
         static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
         static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     }
-    beginMutation(decision);
-    ++decision.after.runRevision;
     return decision;
 }
 
@@ -683,11 +696,12 @@ CommandDecision decideRunAdjustment(
     }
 
     const auto beforeValues = current.activeProgramRun->effectiveValues();
-    if (!decision.after.activeProgramRun.has_value()) {
+    auto candidate = decision.before;
+    if (!candidate.activeProgramRun.has_value()) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
-    auto& adjustedRun = decision.after.activeProgramRun.value();
+    auto& adjustedRun = candidate.activeProgramRun.value();
     const auto applied = adjustedRun.applyAdjustment(runDecision);
     if (!applied.applied()) {
         decision.status = CommandStatus::InvalidInput;
@@ -698,28 +712,29 @@ CommandDecision decideRunAdjustment(
                                afterValues.targetTemperatureCelsius;
     const bool durationChanged = beforeValues.remainingDurationMinutes !=
                                  afterValues.remainingDurationMinutes;
-    decision.after.processRunSnapshot = makeProcessRunSnapshot(adjustedRun);
-    if (!decision.after.processRunSnapshot.has_value()) {
+    candidate.processRunSnapshot = makeProcessRunSnapshot(adjustedRun);
+    if (!candidate.processRunSnapshot.has_value()) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
 
     if (targetChanged &&
         current.processState.state != ProcessState::Fermenting &&
-        !applyTransition(decision.after, ProcessEvent::TargetChanged,
+        !applyTransition(candidate, ProcessEvent::TargetChanged,
                          request.envelope.monotonicMillis,
-                         &*decision.after.processRunSnapshot)) {
+                         &*candidate.processRunSnapshot)) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
     if (durationChanged &&
         current.processState.state == ProcessState::Fermenting) {
-        decision.after.processState.stateEnteredAtMillis =
+        candidate.processState.stateEnteredAtMillis =
             request.envelope.monotonicMillis;
     }
 
-    beginMutation(decision);
-    ++decision.after.runRevision;
+    candidate.commandSequence = decision.before.commandSequence + 1U;
+    ++candidate.runRevision;
+    decision.after = std::move(candidate);
     decision.adjustmentPreview = RunAdjustmentPreview{
         beforeValues,
         afterValues,

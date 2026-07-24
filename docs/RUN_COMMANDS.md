@@ -102,6 +102,10 @@ Verbindliche Regeln:
 5. Eine Wiederholung derselben Kommando-ID liefert dasselbe fachliche Ergebnis
    beziehungsweise einen eindeutig als Wiederholung erkennbaren Erfolg, solange
    sie noch innerhalb des Fensters aus Punkt 4 liegt.
+   Die gemeinsame Umschlag- und Idempotenzpruefung erfolgt vor der fachlichen
+   Auswertung einer Stopoption. Deshalb bleibt auch eine Wiederholung mit einem
+   unbekannten oder fehlerhaft deserialisierten Stopwert als `AlreadyProcessed`
+   erkennbar; nur eine frische ID mit unbekanntem Stopwert ist `InvalidInput`.
 6. Sicherheitsereignisse sind keine konkurrierenden Komfortkommandos. Eine
    kritische Sicherheitsentscheidung hat immer Vorrang.
 7. Transportwiederholungen, Anmeldung und konkrete Web-Protokolle folgen in
@@ -251,6 +255,13 @@ Der alte Lauf darf nicht bereits beendet werden, wenn der neue manuelle Laufplan
 ungueltig ist oder nicht erzeugt werden kann. Eine spaetere Persistenz muss beide
 Teile als zusammengehoerige atomare Revision behandeln.
 
+Die Entscheidungsfunktion fuehrt beide Prozessuebergaenge ausschliesslich auf
+einem lokalen Kandidatenzustand aus. Erst wenn Abbruch und manueller Neustart
+vollstaendig erfolgreich sind, wird dieser Kandidat als `after` uebernommen.
+Scheitert der zweite Uebergang beispielsweise an Prozesszeit, Sequenzkapazitaet
+oder Snapshot-Invarianten, bleibt `after` strukturell identisch zu `before` und
+es werden keine Wirkungsabsichten ausgegeben.
+
 ## Laufanpassungen
 
 Zieltemperatur und verbleibende Dauer werden nur ueber eine ausdrueckliche
@@ -268,6 +279,13 @@ Die Vorschau zeigt mindestens:
 Der Programmschnappschuss und das gespeicherte Quellprogramm bleiben
 unveraendert. Die bestaetigte Aenderung erzeugt eine protokollierbare
 append-only Laufrevision mit Quelle und Zeitbezug.
+
+Auch die Kombination aus neuer `ActiveRun`-Revision, neuem
+`ProcessRunSnapshot` und gegebenenfalls erforderlichem `TargetChanged`-
+Prozessuebergang wird zuerst vollstaendig auf einem lokalen Kandidatenzustand
+validiert. Eine spaete Ablehnung verwirft den gesamten Kandidaten; insbesondere
+bleiben Zielwert, Revisionshistorie, Prozesszustand und Prozessschnappschuss in
+`after` unveraendert.
 
 Die Kommandoschicht bildet den aktuellen Prozesszustand auf den kleinen, von
 `ProcessState` unabhaengigen `RunAdjustmentPhaseContext`
@@ -340,6 +358,10 @@ spaeterer erfolgreicher Persistenz fuehrt seine Anwendung nach `STANDBY`.
 `Jetzt kuehlen` erzeugt wie `Abbrechen und kuehlen` einen neuen manuellen Lauf
 mit eigenem Laufplan. Der abgeschlossene Ursprungslauf bleibt unveraendert als
 abgeschlossen protokolliert.
+
+Quittierung und anschliessender manueller Kuehlstart werden ebenfalls nur als
+vollstaendig erfolgreicher Kandidatenzustand uebernommen. Scheitert der zweite
+Uebergang, bleibt der abgeschlossene Ursprungslauf in `after` unangetastet.
 
 ## Meldungsmodell
 
@@ -439,6 +461,11 @@ Native Tests decken mindestens ab:
   einzelnen Meldungsrevision: Ablehnung ohne Teilwirkung an der Grenze, genau
   eine weitere Erhoehung unterhalb der Grenze
 - Ablehnung eines unbekannten `StopOption`-Werts ohne Mutation
+- Idempotenzpruefung vor Stopwertauswertung: Wiederholung einer bereits
+  angewendeten Stop-ID bleibt auch mit unbekanntem Stopwert `AlreadyProcessed`
+- vollstaendiger struktureller `before`-/`after`-Vergleich fuer Ablehnungen,
+  einschliesslich spaeter Fehler nach einer ersten erfolgreichen Teiloperation
+  bei Laufanpassung, `Abbrechen und kuehlen` und `Jetzt kuehlen`
 - Verfuegbarkeit der Startzusammenfassung fuer eine gueltige, aber noch nicht
   bestaetigte Anfrage, ohne dass eine fehlende Bestaetigung eine ungueltige,
   veraltete oder sicherheitsseitig abgelehnte Anfrage maskiert
