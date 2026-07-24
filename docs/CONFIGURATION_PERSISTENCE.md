@@ -940,20 +940,72 @@ einer pauschalen "unveraendert bei Fehler"-Garantie: `Success` (neuer Wert
 dauerhaft gespeichert), `WriteError` und `CapacityError` (sicher
 unveraendert) sowie `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
 nach einem Stromausfall zwischen Commit und Rueckkehr - der neue Wert kann
-bereits dauerhaft gespeichert sein; der Aufrufer muss zuruecklesen). Die
-technische Slotkandidaten-Ermittlung (`scanTechnicalSlotCandidates`) verwirft
+bereits dauerhaft gespeichert sein; der Aufrufer muss zuruecklesen). `read()`
+und `write()` verwenden denselben `StateStoreStatus`, liefern aber jeweils nur
+eine dokumentierte und getestete Teilmenge (`read()` nie `WriteError`/
+`CommitOutcomeUnknown`, `write()` nie `NotFound`/`ReadError`). Die technische
+Slotkandidaten-Ermittlung (`scanTechnicalSlotCandidates`) verwirft
 uebersprungene Slots nicht stillschweigend, sondern liefert zusaetzlich zu den
 sortierten Kandidaten eine typisierte `SlotIssue`-Liste (`NotFound`,
 Lese-/Kapazitaetsfehler, jede Envelope-Integritaetsverletzung, technisch
 gueltige aber nicht passende Kandidaten) - `ReadError` wird dabei nie wie
 `NotFound` behandelt, damit spaeterer Bootstrap-/Recovery-Code (#56/#57)
-fabrikleeren von beschaedigtem Speicher unterscheiden kann. `state_store_key.hpp`
-stellt einen begrenzten, binaersicheren `StateStoreKey`-Werttyp bereit (feste
-anwendungsneutrale Softwaregrenze, keine reale NVS-Garantie); konkrete
-Schluesselwerte bleiben Aufgabe der aufrufenden Anwendung. `storage_types.hpp`
-ergaenzt ausserdem einen generischen `checkedIncrement`-Baustein fuer die
-starken `uint64_t`-Zaehlertypen (lehnt Ueberlauf von `UINT64_MAX` auf 0
-stabil ab); die konkrete Revisions-/Sequenzvergabe bleibt Paket C (#56).
+fabrikleeren von beschaedigtem Speicher unterscheiden kann; die dabei
+verschobene (nicht kopierte) Payload reduziert gleichzeitig gehaltene
+Kandidatenpayloads. `nextSlotRoundRobin` reduziert `lastWrittenSlot` zuerst
+modulo `slotCount`, bevor eins addiert wird, damit die Rotation unabhaengig
+von der `size_t`-Breite der Zielplattform nie still ueberlaeuft.
+
+`state_store_key.hpp` stellt einen gueltig-by-construction begrenzten,
+binaersicheren `StateStoreKey`-Werttyp bereit: kein oeffentlicher
+Default-Konstruktor, `create()` ist der einzige Erzeugungsweg und lehnt
+sowohl einen leeren (`Empty`) als auch einen zu langen (`TooLong`) Schluessel
+typisiert ab, statt einen scheinbar gueltigen leeren Schluessel zu liefern
+(feste anwendungsneutrale Softwaregrenze, keine reale NVS-Garantie); konkrete
+Schluesselwerte bleiben Aufgabe der aufrufenden Anwendung.
+
+`storage_types.hpp` ergaenzt ausserdem einen generischen
+`checkedIncrement`-Baustein fuer die starken `uint64_t`-Zaehlertypen: lehnt
+sowohl den reservierten Ausgangswert 0 (`InvalidCurrentValue`) als auch einen
+Ueberlauf von `UINT64_MAX` auf 0 (`Overflow`) stabil ab, statt eine der
+beiden Situationen still in einen scheinbar gueltigen Wert zu verwandeln; der
+erste gueltige Wert 1 wird explizit vom Bootstrap-/Anwendungscode erzeugt,
+nicht durch Inkrementieren von 0. Die konkrete Revisions-/Sequenzvergabe
+bleibt Paket C (#56).
+
+CRC-32/ISO-HDLC ist als inkrementeller Akkumulator (`Crc32IsoHdlc`) verfuegbar
+und wird von `encodeEnvelope()`/`decodeEnvelope()` genutzt, um den CRC direkt
+ueber Header und Payload zu berechnen, ohne dafuer einen zusaetzlichen
+`header + payload`-Hilfspuffer anzulegen. `encodeEnvelope()` veroeffentlicht
+den fertigen Record erst nach vollstaendigem Erfolg per Verschiebung
+(`ByteWriter::takeBytes()`) statt per Kopie. Waehrend eines Encodes existiert
+damit hoechstens ein vollstaendiger kodierter Recordpuffer (der kleine, auf
+die feste Headergroesse begrenzte `header`-Puffer zaehlt nicht als
+recordgross) - der Ressourcenvertrag oben ("Waehrend Commit existiert
+hoechstens ein vollstaendiger kodierter Recordpuffer") gilt damit bereits auf
+dieser Fundamentschicht, nicht erst ab Paket C.
+
+`decodeEnvelope()` validiert die beanspruchte Laenge vollstaendig, bevor die
+Payload allokiert wird, und berechnet den CRC ebenfalls inkrementell ueber
+den bereits vorhandenen Eingabepuffer (Headerabschnitt und Payloadabschnitt),
+ohne dafuer einen zusaetzlichen `forCrc`-Verkettungspuffer anzulegen; der vom
+Storage-Port gelesene Puffer zaehlt dabei als "der gelesene Record" und wird
+nicht doppelt gezaehlt. Die Payload wird beim Aufbau des Ergebnisses hoechstens
+einmal in dieses Ergebnis verschoben bzw. kopiert.
+
+Der Ein-Puffer-Vertrag ist an dieser Stelle strukturell erzwungen, nicht durch
+einen zur Laufzeit zaehlbaren Test belegbar: `std::string`-Payloads lassen
+keine Kopieranzahl instrumentieren. Der Beleg besteht aus drei Teilen: (1) im
+gesamten Produktionscode existiert kein `forCrc`-Verkettungspuffer mehr
+(geprueft per `grep -rn "forCrc" lib/ src/`), (2) `encodeEnvelope()`
+veroeffentlicht ausschliesslich per `ByteWriter::takeBytes()` (Verschiebung,
+keine Kopie) und (3) die Golden-Vector- sowie Rundlauftests in
+`test_storage_wireformat.cpp` beweisen, dass der inkrementelle CRC ueber
+Header und Payload byteidentische Ergebnisse zum vormaligen
+Verkettungspuffer liefert. Die verschobene (nicht kopierte) Payload in
+`scanTechnicalSlotCandidates` ist dagegen funktional getestet: die
+Scan-Tests pruefen, dass die Payload nach der Verschiebung unveraendert im
+`SlotCandidate` ankommt.
 
 ### Paket B: Typisierte Konfigurationsdokumente
 

@@ -41,24 +41,39 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   Schreibergebnissen - `Success`, `WriteError`/`CapacityError` (sicher
   unveraendert) und `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
   nach Stromausfall zwischen Commit und Rueckkehr; der neue Wert kann bereits
-  dauerhaft gespeichert sein, der Aufrufer muss zuruecklesen); begrenzter,
-  binaersicherer `StateStoreKey`-Werttyp mit anwendungsneutraler
-  Softwaregrenze (keine reale NVS-Garantie); starke technische Typen fuer
-  StorageEpoch, Revision, Generation, RecordSequence, SlotId und RecordTypeId
-  sowie ein generischer `checkedIncrement`-Baustein, der deren Ueberlauf von
-  `UINT64_MAX` auf 0 stabil ablehnt; begrenzte Big-Endian-Byte-Reader/-Writer
+  dauerhaft gespeichert sein, der Aufrufer muss zuruecklesen); `read()` und
+  `write()` teilen sich `StateStoreStatus`, liefern aber je eine dokumentierte
+  und getestete Teilmenge (nie `WriteError`/`CommitOutcomeUnknown` beim Lesen,
+  nie `NotFound`/`ReadError` beim Schreiben); gueltig-by-construction
+  begrenzter, binaersicherer `StateStoreKey`-Werttyp (kein oeffentlicher
+  Default-Konstruktor, `create()` lehnt leeren (`Empty`) und zu langen
+  (`TooLong`) Schluessel typisiert ab, anwendungsneutrale Softwaregrenze ohne
+  reale NVS-Garantie); starke technische Typen fuer StorageEpoch, Revision,
+  Generation, RecordSequence, SlotId und RecordTypeId sowie ein generischer
+  `checkedIncrement`-Baustein, der sowohl den reservierten Ausgangswert 0
+  (`InvalidCurrentValue`) als auch einen Ueberlauf von `UINT64_MAX` auf 0
+  (`Overflow`) stabil ablehnt; begrenzte Big-Endian-Byte-Reader/-Writer
   (Nullzeiger bei Laenge 0 sicher behandelt); portable
   Zweierkomplement-Dekodierung signierter Ganzzahlen ohne
   implementation-defined unsigned-zu-signed-Konvertierung; IEEE-754-binary64-
-  Codec mit `-0.0`-Normalisierung und NaN-/Inf-Ablehnung; CRC-32/ISO-HDLC;
+  Codec mit `-0.0`-Normalisierung und NaN-/Inf-Ablehnung; inkrementeller
+  CRC-32/ISO-HDLC-Akkumulator (`Crc32IsoHdlc`), von Envelope-Encoding und
+  -Decoding genutzt, um den CRC direkt ueber Header und Payload zu berechnen,
+  ohne einen zusaetzlichen `header + payload`-Hilfspuffer anzulegen;
   generischer Envelope Version 1 (41/49 Bytes) mit ueberlaufsicherer,
   gestufter Groessenpruefung (eigener `checkedAddSize`-Baustein) vor jeder
-  Allokation; rein technische Slotkandidaten-Ermittlung
-  (`scanTechnicalSlotCandidates`) mit deterministischer Sortierung, die
-  uebersprungene Slots nicht stillschweigend verwirft, sondern als typisierte
-  `SlotIssue`-Liste erhaelt (`NotFound` nie gleichbedeutend mit `ReadError`)
-  - weiterhin ohne konkrete Slotzahlen oder Root-/Manifestbedeutung;
-  `ISecureRandomSource`- und `ITimeZoneResolver`-Ports;
+  Allokation und Veroeffentlichung des fertigen Records erst nach
+  vollstaendigem Erfolg per Verschiebung (`ByteWriter::takeBytes()`) statt
+  Kopie - waehrend eines Encodes existiert damit hoechstens ein
+  vollstaendiger kodierter Recordpuffer; rein technische
+  Slotkandidaten-Ermittlung (`scanTechnicalSlotCandidates`) mit
+  deterministischer Sortierung, die uebersprungene Slots nicht
+  stillschweigend verwirft, sondern als typisierte `SlotIssue`-Liste erhaelt
+  (`NotFound` nie gleichbedeutend mit `ReadError`) und die Payload eines
+  passenden Kandidaten verschiebt statt kopiert - weiterhin ohne konkrete
+  Slotzahlen oder Root-/Manifestbedeutung; ueberlaufsichere
+  `nextSlotRoundRobin`-Rotation unabhaengig von der `size_t`-Breite der
+  Zielplattform; `ISecureRandomSource`- und `ITimeZoneResolver`-Ports;
   `SimulatedPersistentStateStore` mit injizierbaren Schreib-Cut-Points
   (Fehler vor Beginn, Stromausfall vor/nach Commit, Kapazitaetsfehler) sowie
   Read-/NotFound-/Korruptionsinjektion fuer native Tests
