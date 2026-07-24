@@ -924,6 +924,16 @@ abhaengige GitHub-Issues, Agent-Auftraege, Branches und kleine PRs angelegt:
 - sichere Zufalls- und Zeitzonenports
 - SimulatedPersistentStateStore und Golden Tests
 
+Umgesetzt mit Issue #54 (`lib/device_platform/src/storage_types.hpp`,
+`byte_buffer.hpp`, `big_endian_codec.hpp`, `binary64_codec.hpp`, `crc32.hpp`/
+`.cpp`, `storage_envelope.hpp`/`.cpp`, `storage_slot_candidates.hpp`/`.cpp`,
+`secure_random_source.hpp`, `time_zone_resolver.hpp`, das erweiterte
+`state_store.hpp`; Testadapter in
+`lib/device_platform_test_support/src/simulated_persistent_state_store.hpp`/
+`.cpp`, `mock_secure_random_source.hpp`/`.cpp`,
+`mock_time_zone_resolver.hpp`/`.cpp`). Bewusst noch ohne konkrete Slotzahlen,
+Root-/Manifestbedeutung oder Schutzmengen - das bleibt Paket C (#56).
+
 ### Paket B: Typisierte Konfigurationsdokumente
 
 - UserConfiguration Schema 1

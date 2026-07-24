@@ -35,6 +35,20 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Added
 
+- Anwendungsneutrale Plattformpersistenz und Wireformat fuer Issue #54
+  (Paket A von #16, Closes #54): begrenztes binaersicheres `IStateStore` mit
+  caller-/schluesselspezifischem Leselimit und typisierten Erfolgs-,
+  NotFound-, Lese-, Schreib- und Kapazitaetsergebnissen; starke technische
+  Typen fuer StorageEpoch, Revision, Generation, RecordSequence, SlotId und
+  RecordTypeId; begrenzte Big-Endian-Byte-Reader/-Writer; IEEE-754-binary64-
+  Codec mit `-0.0`-Normalisierung und NaN-/Inf-Ablehnung; CRC-32/ISO-HDLC;
+  generischer Envelope Version 1 (41/49 Bytes) mit vollstaendiger
+  Grenzpruefung vor jeder Allokation; rein technische, generische
+  Slotkandidaten-Ermittlung und -Sortierung ohne konkrete Slotzahlen oder
+  Root-/Manifestbedeutung; `ISecureRandomSource`- und `ITimeZoneResolver`-
+  Ports; `SimulatedPersistentStateStore` mit injizierbaren Schreib-Cut-Points
+  (Fehler vor Beginn, Stromausfall vor/nach Commit, Kapazitaetsfehler) sowie
+  Read-/NotFound-/Korruptionsinjektion fuer native Tests
 - Initiale Projektstruktur
 - Template auf ESP32-Fermentationsschrank angepasst
 - Hardwarekomponenten und Sicherheitsregeln ohne GPIO-Festlegung dokumentiert

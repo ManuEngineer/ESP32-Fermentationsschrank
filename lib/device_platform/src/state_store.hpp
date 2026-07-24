@@ -1,25 +1,38 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
 namespace device_platform {
 
-enum class StateStoreReadStatus : uint8_t {
+enum class StateStoreStatus : uint8_t {
     Success,
     NotFound,
-    Error,
+    ReadError,
+    WriteError,
+    // Lesen: gespeicherter Wert ueberschreitet das aufrufer- beziehungsweise
+    // schluesselspezifische Leselimit. Schreiben: der Speicher ist voll.
+    CapacityError,
 };
 
 struct StateStoreReadResult {
-    StateStoreReadStatus status;
-    // Nur bei `Success` gueltig; bei `NotFound` und `Error` leer.
+    StateStoreStatus status;
+    // Nur bei `Success` gueltig; sonst leer.
     std::string value;
 };
 
-// Anwendungsneutraler Persistenz-Port. Bewusst generisch (Schluessel/Wert):
-// Schema, atomare Revisionen und Rueckfalllogik sind Aufgabe spaeterer Issues
-// (Konfigurations- und Laufpersistenz), nicht dieses Ports.
+// Anwendungsneutraler, begrenzter und binaersicherer Persistenz-Port.
+// Bewusst generisch (Schluessel/Wert): konkrete Schluesselbedeutung, Schema,
+// atomare Revisionen und Rueckfalllogik sind Aufgabe der aufrufenden
+// Anwendung, nicht dieses Ports (siehe docs/CONFIGURATION_PERSISTENCE.md,
+// Abschnitt "Speicherport und Modulgrenzen").
+//
+// Vertrag pro Schluessel: ein erfolgreich zurueckgekehrter `write` ersetzt den
+// vorherigen Wert atomar und dauerhaft. Nach einer Unterbrechung ist fuer
+// jeden Schluessel entweder der vollstaendige alte oder der vollstaendige
+// neue Wert sichtbar, nie ein abgeschnittener oder gemischter Wert. Ein
+// fehlgeschlagener `write` laesst den zuvor gespeicherten Wert unveraendert.
 class IStateStore {
    public:
     IStateStore() = default;
@@ -30,16 +43,14 @@ class IStateStore {
     IStateStore(IStateStore&&) = delete;
     IStateStore& operator=(IStateStore&&) = delete;
 
-    // Gibt `false` zurueck, wenn der Schreibvorgang fehlschlaegt (z. B.
-    // injizierter kritischer Speicherfehler). Bei `false` bleibt ein zuvor
-    // gespeicherter Wert fuer diesen Schluessel unveraendert.
-    [[nodiscard]] virtual bool write(const std::string& key,
-                                     const std::string& value) = 0;
+    [[nodiscard]] virtual StateStoreStatus write(const std::string& key,
+                                                 const std::string& value) = 0;
 
-    // Unterscheidet einen fehlenden Schluessel von einem Speicherfehler, damit
-    // der Aufrufer auf kritische Lesefehler sicher reagieren kann.
+    // `maxBytes` ist das aufrufer- beziehungsweise schluesselspezifische
+    // Leselimit: uebersteigt der gespeicherte Wert `maxBytes`, liefert dies
+    // `CapacityError` statt eines unkontrolliert grossen Werts.
     [[nodiscard]] virtual StateStoreReadResult read(
-        const std::string& key) const = 0;
+        const std::string& key, std::size_t maxBytes) const = 0;
 };
 
 }  // namespace device_platform
