@@ -44,6 +44,26 @@ bool validChangeReason(RunChangeReason reason) {
     return false;
 }
 
+bool validAdjustmentEffect(RunAdjustmentEffect effect) {
+    switch (effect) {
+        case RunAdjustmentEffect::None:
+        case RunAdjustmentEffect::RestartTargetQualification:
+        case RunAdjustmentEffect::ContinueFermentationWithoutRequalification:
+            return true;
+    }
+    return false;
+}
+
+RunAdjustmentEffect adjustmentEffectFor(bool targetChanged,
+                                        RunAdjustmentPhaseContext phase) {
+    if (!targetChanged) {
+        return RunAdjustmentEffect::None;
+    }
+    return phase == RunAdjustmentPhaseContext::Fermenting
+               ? RunAdjustmentEffect::ContinueFermentationWithoutRequalification
+               : RunAdjustmentEffect::RestartTargetQualification;
+}
+
 bool equalValues(const EffectiveRunValues& left,
                  const EffectiveRunValues& right) {
     return left.targetTemperatureCelsius == right.targetTemperatureCelsius &&
@@ -119,6 +139,23 @@ bool validRemainingDuration(const RunProgramSnapshot& snapshot,
     return validateProgram(candidate, ValidationPurpose::Runnable).valid();
 }
 
+// Verlangt eine eindeutige, phasenkorrekte Entsprechung zwischen
+// `targetTemperatureChanged` und `effect`: kein Ziel geaendert -> `None`;
+// Ziel geaendert -> genau einer der beiden Requalifikationseffekte. Ein
+// unbekannter Enumwert wird ueber `validAdjustmentEffect()` abgelehnt.
+bool validAdjustmentEffectForChange(RunAdjustmentEffect effect,
+                                    bool targetTemperatureChanged) {
+    if (!validAdjustmentEffect(effect)) {
+        return false;
+    }
+    if (!targetTemperatureChanged) {
+        return effect == RunAdjustmentEffect::None;
+    }
+    return effect == RunAdjustmentEffect::RestartTargetQualification ||
+           effect ==
+               RunAdjustmentEffect::ContinueFermentationWithoutRequalification;
+}
+
 bool validRevisionMetadata(const RunRevision& revision) {
     return validChangeSource(revision.source) &&
            validChangeReason(revision.reason) &&
@@ -131,8 +168,8 @@ bool validRevisionMetadata(const RunRevision& revision) {
            revision.remainingDurationChanged ==
                (revision.before.remainingDurationMinutes !=
                 revision.after.remainingDurationMinutes) &&
-           revision.requiresTargetRequalification ==
-               revision.targetTemperatureChanged;
+           validAdjustmentEffectForChange(revision.effect,
+                                          revision.targetTemperatureChanged);
 }
 
 }  // namespace
@@ -287,7 +324,7 @@ RunAdjustmentDecision ActiveRun::decideAdjustment(
         candidate,
         targetChanged,
         durationChanged,
-        targetChanged,
+        adjustmentEffectFor(targetChanged, context.phaseContext),
         request.source,
         request.reason,
         request.timestamp,
@@ -303,7 +340,7 @@ RunAdjustmentResult ActiveRun::applyAdjustment(
         decision.expectedRevisionCount != revisionCount_ ||
         !equalValues(decision.expectedValues, effectiveValues_) ||
         revisionCount_ >= kMaximumRunRevisions) {
-        return {RunAdjustmentStatus::NoChange, false};
+        return {RunAdjustmentStatus::NoChange, RunAdjustmentEffect::None};
     }
 
     const auto& revision = decision.revision.value();
@@ -325,14 +362,13 @@ RunAdjustmentResult ActiveRun::applyAdjustment(
         !validRemainingDuration(snapshot_, revision.stageIndex,
                                 revision.after.remainingDurationMinutes) ||
         timestampInvalid) {
-        return {RunAdjustmentStatus::InvalidValue, false};
+        return {RunAdjustmentStatus::InvalidValue, RunAdjustmentEffect::None};
     }
 
     revisions_[revisionCount_] = revision;
     effectiveValues_ = revision.after;
     ++revisionCount_;
-    return {RunAdjustmentStatus::Applied,
-            revision.requiresTargetRequalification};
+    return {RunAdjustmentStatus::Applied, revision.effect};
 }
 
 const RunProgramSnapshot& ActiveRun::snapshot() const { return snapshot_; }

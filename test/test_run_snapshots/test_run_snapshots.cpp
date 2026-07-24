@@ -13,6 +13,8 @@ using fermentation::FactoryProgramCatalog;
 using fermentation::ProgramDocument;
 using fermentation::ProgramSourceKind;
 using fermentation::RunAdjustmentContext;
+using fermentation::RunAdjustmentEffect;
+using fermentation::RunAdjustmentPhaseContext;
 using fermentation::RunAdjustmentRequest;
 using fermentation::RunAdjustmentResult;
 using fermentation::RunAdjustmentStatus;
@@ -76,7 +78,7 @@ RunAdjustmentResult decideAndApply(ActiveRun& run,
                                    const RunAdjustmentContext& context) {
     const auto decision = run.decideAdjustment(request, context);
     if (!decision.proposed()) {
-        return {decision.status, false};
+        return {decision.status, RunAdjustmentEffect::None};
     }
     return run.applyAdjustment(decision);
 }
@@ -146,7 +148,9 @@ void test_target_adjustment_records_complete_revision() {
                                        adjustableContext());
 
     TEST_ASSERT_TRUE(result.applied());
-    TEST_ASSERT_TRUE(result.requiresTargetRequalification);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunAdjustmentEffect::RestartTargetQualification),
+        static_cast<int>(result.effect));
     TEST_ASSERT_EQUAL_DOUBLE(40.0,
                              run->effectiveValues().targetTemperatureCelsius);
     TEST_ASSERT_EQUAL_UINT32(1U, run->revisionCount());
@@ -167,6 +171,66 @@ void test_target_adjustment_records_complete_revision() {
         39.0, *run->snapshot()
                    .sourceProgram.program.fermentationStages.front()
                    .targetTemperatureCelsius);
+}
+
+void test_fermenting_phase_context_continues_without_requalification() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 4U);
+    TEST_ASSERT_TRUE(run.has_value());
+
+    auto fermentingContext = adjustableContext();
+    fermentingContext.phaseContext = RunAdjustmentPhaseContext::Fermenting;
+
+    // Zieltemperaturaenderung waehrend FERMENTING: Zustand und Zeitanker
+    // bleiben fachlich unangetastet, keine Requalifizierung.
+    const auto targetResult =
+        decideAndApply(*run, targetAdjustment(40.0, 100U), fermentingContext);
+    TEST_ASSERT_TRUE(targetResult.applied());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            RunAdjustmentEffect::ContinueFermentationWithoutRequalification),
+        static_cast<int>(targetResult.effect));
+
+    // Reine Laufzeitaenderung waehrend FERMENTING: der Phasenkontext darf die
+    // fehlende Zielaenderung nicht ueberstimmen, das Ergebnis bleibt `None`.
+    RunAdjustmentRequest durationRequest;
+    durationRequest.remainingDurationMinutes = 30U;
+    durationRequest.confirmed = true;
+    durationRequest.timestamp.monotonicMillis = 200U;
+    const auto durationResult =
+        decideAndApply(*run, durationRequest, fermentingContext);
+    TEST_ASSERT_TRUE(durationResult.applied());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunAdjustmentEffect::None),
+                          static_cast<int>(durationResult.effect));
+}
+
+void test_restore_rejects_contradictory_adjustment_effect_metadata() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    TEST_ASSERT_TRUE(run.has_value());
+    TEST_ASSERT_TRUE(
+        decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
+            .applied());
+
+    // Ziel unveraendert, aber Requalifizierungswirkung gesetzt.
+    auto contradictoryEffect = run->revisions();
+    contradictoryEffect[0].targetTemperatureChanged = false;
+    contradictoryEffect[0].remainingDurationChanged = true;
+    TEST_ASSERT_FALSE(
+        ActiveRun::restore(run->snapshot(), contradictoryEffect, 1U)
+            .has_value());
+
+    // Ziel veraendert, aber keine Wirkung eingetragen.
+    auto missingEffect = run->revisions();
+    missingEffect[0].effect = RunAdjustmentEffect::None;
+    TEST_ASSERT_FALSE(
+        ActiveRun::restore(run->snapshot(), missingEffect, 1U).has_value());
+
+    // Unbekannter Enumwert fuer die Wirkung.
+    auto unknownEffect = run->revisions();
+    unknownEffect[0].effect = static_cast<RunAdjustmentEffect>(99U);
+    TEST_ASSERT_FALSE(
+        ActiveRun::restore(run->snapshot(), unknownEffect, 1U).has_value());
 }
 
 void test_adjustment_decision_is_immutable_and_stale_decisions_are_rejected() {
@@ -209,7 +273,8 @@ void test_duration_and_combined_adjustments_are_atomic() {
     const auto durationResult =
         decideAndApply(*run, durationRequest, adjustableContext());
     TEST_ASSERT_TRUE(durationResult.applied());
-    TEST_ASSERT_FALSE(durationResult.requiresTargetRequalification);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunAdjustmentEffect::None),
+                          static_cast<int>(durationResult.effect));
     TEST_ASSERT_EQUAL_UINT32(0U,
                              run->effectiveValues().remainingDurationMinutes);
 
@@ -528,6 +593,8 @@ int main() {
     RUN_TEST(test_start_rejects_uncommissioned_or_mismatched_sources);
     RUN_TEST(test_source_program_changes_do_not_change_run_snapshot);
     RUN_TEST(test_target_adjustment_records_complete_revision);
+    RUN_TEST(test_fermenting_phase_context_continues_without_requalification);
+    RUN_TEST(test_restore_rejects_contradictory_adjustment_effect_metadata);
     RUN_TEST(
         test_adjustment_decision_is_immutable_and_stale_decisions_are_rejected);
     RUN_TEST(test_duration_and_combined_adjustments_are_atomic);

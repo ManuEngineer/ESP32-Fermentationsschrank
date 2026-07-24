@@ -38,6 +38,11 @@ enum class CommandStatus : std::uint8_t {
     NotAllowedInState,
     InvalidInput,
     StaleState,
+    // Nur innerhalb des begrenzten, gleitenden In-Memory-Fensters
+    // `RunCommandState::processedCommandIds` (siehe dort) garantiert. Eine
+    // laengerfristige, sitzungsuebergreifende Wiederholungserkennung ist kein
+    // Bestandteil von Issue #15 und folgt mit #27; dauerhafte
+    // Kommandoatomaritaet folgt mit #17.
     AlreadyProcessed,
     SafetyRejected,
     CapacityReached,
@@ -95,6 +100,26 @@ struct StartSummary {
     ProcessKind kind{ProcessKind::Timed};
 };
 
+// `program` ist ein bereits fachlich aufgeloestes, vertrauenswuerdiges
+// Startprogramm, kein von aussen frei mitgeliefertes Programmdokument. Diese
+// Kommandoschicht prueft nur noch Lauf-, Sicherheits- und Werteregeln, nicht
+// aber, ob `program` tatsaechlich noch dem aktuellen Katalog- oder
+// Programmstand entspricht.
+//
+// Vor einer echten UI-/Web-API-Anbindung (#16, #27) darf ein Aufrufer ein
+// `ProgramDocument` nicht ungeprueft als Startvertrag einliefern. Stattdessen
+// muss die aufrufende Schicht die `ProgramDefinition` ueber Programm-ID und
+// erwartete Katalog-/Programmrevision aus der aktuellen
+// `RuntimeConfigurationSnapshot` (#16) aufloesen. Ist das Programm seither
+// geaendert oder geloescht worden, ist das Ergebnis `CommandStatus::
+// StaleState` oder ein typisierter Aufloesungsfehler der aufrufenden Schicht
+// - kein stiller Fallback auf einen veralteten oder erfundenen Stand. Der
+// aktive Lauf erhaelt danach weiterhin seinen eigenen unveraenderlichen
+// Schnappschuss (`RunProgramSnapshot`), unabhaengig von spaeteren
+// Katalogaenderungen.
+//
+// Diese PR fuehrt weder `ConfigurationService` noch eine provisorische
+// Katalogpersistenz ein; das bleibt Scope von #16.
 struct ProgramStartRequest {
     CommandEnvelope envelope;
     std::string runId;
@@ -255,6 +280,14 @@ struct RunCommandState {
     bool criticalSafetyEventPending{false};
     std::uint32_t commandSequence{0U};
     std::uint64_t lastCommandMonotonicMillis{0U};
+    // Begrenztes, gleitendes In-Memory-Fenster der zuletzt verarbeiteten
+    // Kommando-IDs (siehe `run_command_limits::kMaximumProcessedCommandIds`).
+    // `CommandStatus::AlreadyProcessed` erkennt eine Wiederholung nur, solange
+    // deren ID noch in diesem Fenster steht; eine verdraengte, aeltere ID kann
+    // von dieser Struktur nicht mehr als Wiederholung erkannt werden. Es gibt
+    // absichtlich keine unbegrenzte ID-Historie und keine Sitzungslogik in
+    // dieser Struktur - eine sitzungsgebundene Replay-/Transportsemantik
+    // folgt mit #27, persistierte Kommandoatomaritaet mit #17.
     std::array<CommandId, run_command_limits::kMaximumProcessedCommandIds>
         processedCommandIds{};
     std::size_t processedCommandCount{0U};

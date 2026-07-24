@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
 
 #include "run_commands.hpp"
 #include "standard_program_catalog.hpp"
@@ -138,6 +139,119 @@ void test_program_start_requires_confirmation_safety_and_current_context() {
         static_cast<int>(decideProgramStart(state, request).status));
 }
 
+void test_start_summary_is_available_before_confirmation_but_never_masks_rejections() {
+    // Gueltig, unbestaetigt: Zusammenfassung vorhanden, keine Mutation.
+    {
+        auto state = standbyState();
+        auto request = programStart(state, 1U);
+        request.envelope.confirmed = false;
+        const auto decision = decideProgramStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_TRUE(decision.startSummary.has_value());
+        TEST_ASSERT_EQUAL_STRING("run-15",
+                                 decision.startSummary->runId.c_str());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProcessState::Standby),
+            static_cast<int>(decision.after.processState.state));
+        TEST_ASSERT_FALSE(decision.after.activeProgramRun.has_value());
+        TEST_ASSERT_EQUAL_UINT32(decision.before.runRevision,
+                                 decision.after.runRevision);
+        TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+    }
+    // Dieselbe gueltige Anfrage, bestaetigt: gleiche Zusammenfassung, echte
+    // Mutation.
+    {
+        auto state = standbyState();
+        const auto decision =
+            decideProgramStart(state, programStart(state, 1U));
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_TRUE(decision.startSummary.has_value());
+        TEST_ASSERT_EQUAL_STRING("run-15",
+                                 decision.startSummary->runId.c_str());
+        TEST_ASSERT_TRUE(hasEffect(decision, CommandEffect::RunStarted));
+    }
+    // Ungueltiges Programm, unbestaetigt: InvalidInput darf nicht durch
+    // NotConfirmed maskiert werden.
+    {
+        auto state = standbyState();
+        auto request = programStart(state, 1U);
+        request.sourceProgramRevision = 0U;
+        request.envelope.confirmed = false;
+        const auto decision = decideProgramStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.startSummary.has_value());
+    }
+    // Veraltete Revision, unbestaetigt: StaleState darf nicht durch
+    // NotConfirmed maskiert werden.
+    {
+        auto state = standbyState();
+        auto request = programStart(state, 1U);
+        request.envelope.expectedStateSequence = 1U;
+        request.envelope.confirmed = false;
+        const auto decision = decideProgramStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::StaleState),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.startSummary.has_value());
+    }
+    // Fehlende Sicherheitsfreigabe, unbestaetigt: SafetyRejected darf nicht
+    // durch NotConfirmed maskiert werden.
+    {
+        auto state = standbyState();
+        auto request = programStart(state, 1U);
+        request.safetyAllowsStart = false;
+        request.envelope.confirmed = false;
+        const auto decision = decideProgramStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.startSummary.has_value());
+    }
+}
+
+void test_manual_start_summary_is_available_before_confirmation_but_never_masks_rejections() {
+    // Gueltig, unbestaetigt: Zusammenfassung vorhanden, keine Mutation.
+    {
+        auto state = standbyState();
+        ManualStartRequest request{envelope(1U, state), manualPlan("hold"),
+                                   true};
+        request.envelope.confirmed = false;
+        const auto decision = decideManualStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_TRUE(decision.startSummary.has_value());
+        TEST_ASSERT_FALSE(decision.after.activeManualRun.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProcessState::Standby),
+            static_cast<int>(decision.after.processState.state));
+    }
+    // Ungueltiger Plan (Vorwaerme-Wartezeit fehlt), unbestaetigt: InvalidInput
+    // darf nicht durch NotConfirmed maskiert werden.
+    {
+        auto state = standbyState();
+        auto plan = manualPlan("preheat-hold", true);
+        plan.maximumProductWaitMinutes.reset();
+        ManualStartRequest request{envelope(1U, state), plan, true};
+        request.envelope.confirmed = false;
+        const auto decision = decideManualStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.startSummary.has_value());
+    }
+    // Fehlende Sicherheitsfreigabe, unbestaetigt: SafetyRejected darf nicht
+    // durch NotConfirmed maskiert werden.
+    {
+        auto state = standbyState();
+        ManualStartRequest request{envelope(1U, state), manualPlan("hold"),
+                                   false};
+        request.envelope.confirmed = false;
+        const auto decision = decideManualStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.startSummary.has_value());
+    }
+}
+
 void test_program_start_is_two_stage_and_contains_summary() {
     auto state = standbyState();
     const auto decision = decideProgramStart(state, programStart(state, 1U));
@@ -217,6 +331,21 @@ void test_stop_back_is_inert_and_abort_off_is_atomic() {
                           static_cast<int>(applyRunCommand(state, decision)));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
                           static_cast<int>(state.processState.state));
+}
+
+void test_stop_rejects_unknown_option_without_mutation() {
+    auto state = startedProgramState();
+    StopRequest unknown{envelope(2U, state), static_cast<StopOption>(0xFF),
+                        std::nullopt, false};
+    const auto decision = decideStop(state, unknown);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                          static_cast<int>(decision.status));
+    TEST_ASSERT_TRUE(decision.after.activeProgramRun.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(state.processState.state),
+                          static_cast<int>(decision.after.processState.state));
+    TEST_ASSERT_EQUAL_UINT32(decision.before.runRevision,
+                             decision.after.runRevision);
 }
 
 void test_abort_and_cool_validates_replacement_before_commit() {
@@ -308,6 +437,9 @@ void test_target_adjustments_requalify_before_fermentation_only() {
         biological.adjustmentPreview->targetRequalificationRequired);
     TEST_ASSERT_EQUAL_UINT64(
         75U, biological.after.processState.stateEnteredAtMillis);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fermenting),
+        static_cast<int>(biological.after.processState.state));
 }
 
 void test_duration_adjustment_restarts_remaining_timer_and_allows_zero() {
@@ -329,6 +461,8 @@ void test_duration_adjustment_restarts_remaining_timer_and_allows_zero() {
                              decision.after.processState.stateEnteredAtMillis);
     TEST_ASSERT_FALSE(
         decision.adjustmentPreview->targetRequalificationRequired);
+    TEST_ASSERT_FALSE(
+        decision.adjustmentPreview->timerContinuesWithoutBiologicalCorrection);
 }
 
 void test_adjustments_are_rejected_in_inappropriate_states() {
@@ -521,17 +655,226 @@ void test_processed_command_ids_form_a_bounded_rolling_window() {
     TEST_ASSERT_TRUE(next.proposed());
 }
 
+void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
+    const std::uint32_t max = std::numeric_limits<std::uint32_t>::max();
+
+    // Programmstart: an der Kapazitaetsgrenze abgelehnt, davor genau einmal
+    // erhoehbar.
+    {
+        auto state = standbyState();
+        state.runRevision = max;
+        const auto decision =
+            decideProgramStart(state, programStart(state, 1U));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.startSummary.has_value());
+        TEST_ASSERT_FALSE(decision.after.activeProgramRun.has_value());
+        TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+        TEST_ASSERT_EQUAL_UINT32(max, decision.after.runRevision);
+
+        state.runRevision = max - 1U;
+        const auto ok = decideProgramStart(state, programStart(state, 1U));
+        TEST_ASSERT_TRUE(ok.proposed());
+        TEST_ASSERT_EQUAL_UINT32(max, ok.after.runRevision);
+    }
+    // Manueller Start: gleiche Grenze.
+    {
+        auto state = standbyState();
+        state.runRevision = max;
+        ManualStartRequest request{envelope(1U, state), manualPlan("hold"),
+                                   true};
+        const auto decision = decideManualStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.startSummary.has_value());
+        TEST_ASSERT_FALSE(decision.after.activeManualRun.has_value());
+
+        state.runRevision = max - 1U;
+        ManualStartRequest okRequest{envelope(1U, state), manualPlan("hold"),
+                                     true};
+        const auto ok = decideManualStart(state, okRequest);
+        TEST_ASSERT_TRUE(ok.proposed());
+        TEST_ASSERT_EQUAL_UINT32(max, ok.after.runRevision);
+    }
+    // Abbrechen und ausschalten.
+    {
+        auto state = startedProgramState();
+        state.runRevision = max;
+        StopRequest request{envelope(2U, state), StopOption::AbortAndTurnOff,
+                            std::nullopt, false};
+        const auto decision = decideStop(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_TRUE(decision.after.activeProgramRun.has_value());
+        TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+    }
+    // Abbrechen und kuehlen.
+    {
+        auto state = startedProgramState();
+        state.runRevision = max;
+        StopRequest request{envelope(2U, state), StopOption::AbortAndCool,
+                            manualPlan("cool"), true};
+        const auto decision = decideStop(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_TRUE(decision.after.activeProgramRun.has_value());
+        TEST_ASSERT_FALSE(decision.after.activeManualRun.has_value());
+        TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+    }
+    // Abschluss quittieren.
+    {
+        auto completed = startedProgramState();
+        completed.processState.state = ProcessState::Completed;
+        completed.runRevision = max;
+        CompletionRequest request{envelope(2U, completed), false, std::nullopt,
+                                  false};
+        const auto decision = decideCompletion(completed, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProcessState::Completed),
+            static_cast<int>(decision.after.processState.state));
+    }
+    // Kuehlen nach Abschluss.
+    {
+        auto completed = startedProgramState();
+        completed.processState.state = ProcessState::Completed;
+        completed.runRevision = max;
+        CompletionRequest request{envelope(3U, completed), true,
+                                  manualPlan("cool"), true};
+        const auto decision = decideCompletion(completed, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.after.activeManualRun.has_value());
+    }
+    // Laufanpassung: an der Grenze abgelehnt, davor genau einmal erhoehbar.
+    {
+        auto state = startedProgramState();
+        state.runRevision = max;
+        const auto decision =
+            decideRunAdjustment(state, targetChange(state, 2U, 39.0, 200U));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_EQUAL_DOUBLE(
+            38.0, decision.after.activeProgramRun->effectiveValues()
+                      .targetTemperatureCelsius);
+
+        state.runRevision = max - 1U;
+        const auto ok =
+            decideRunAdjustment(state, targetChange(state, 2U, 39.0, 200U));
+        TEST_ASSERT_TRUE(ok.proposed());
+        TEST_ASSERT_EQUAL_UINT32(max, ok.after.runRevision);
+    }
+}
+
+void test_message_and_fault_revision_overflow_is_rejected() {
+    const std::uint32_t max = std::numeric_limits<std::uint32_t>::max();
+
+    // Einzelne Meldungsrevision an der Grenze: quittieren abgelehnt.
+    {
+        auto state = standbyState();
+        state.messageCount = 1U;
+        state.messages[0] =
+            message(7U, MessageCode::RunCompleted, MessageClass::Information,
+                    1U, MessageTrigger::Process);
+        state.messages[0].revision = max;
+        MessageCommandRequest request{envelope(1U, state), 7U};
+        const auto decision = decideAcknowledgeMessage(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.after.messages[0].acknowledged);
+        TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+    }
+    // Fachrevision (aggregiert) an der Grenze, einzelne Meldungsrevision
+    // unauffaellig: ebenfalls abgelehnt.
+    {
+        auto state = standbyState();
+        state.messageRevision = max;
+        state.messageCount = 1U;
+        state.messages[0] =
+            message(7U, MessageCode::RunCompleted, MessageClass::Information,
+                    1U, MessageTrigger::Process);
+        MessageCommandRequest request{envelope(1U, state), 7U};
+        const auto decision = decideAcknowledgeMessage(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.after.messages[0].acknowledged);
+    }
+    // Dieselben zwei Faelle fuer Stummschalten.
+    {
+        auto state = standbyState();
+        state.messageCount = 1U;
+        state.messages[0] =
+            message(8U, MessageCode::RunCompleted, MessageClass::Information,
+                    1U, MessageTrigger::Process);
+        state.messages[0].revision = max;
+        MessageCommandRequest request{envelope(1U, state), 8U};
+        const auto decision = decideMuteMessage(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.after.messages[0].acousticMuted);
+    }
+    {
+        auto state = standbyState();
+        state.messageRevision = max;
+        state.messageCount = 1U;
+        state.messages[0] =
+            message(8U, MessageCode::RunCompleted, MessageClass::Information,
+                    1U, MessageTrigger::Process);
+        MessageCommandRequest request{envelope(1U, state), 8U};
+        const auto decision = decideMuteMessage(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_FALSE(decision.after.messages[0].acousticMuted);
+    }
+    // Fehlerrevision an der Grenze abgelehnt, davor genau einmal erhoehbar.
+    {
+        auto state = standbyState();
+        state.processState.state = ProcessState::Fault;
+        state.faultRevision = max;
+        state.criticalSafetyEventPending = true;
+        FaultResetRequest request;
+        request.envelope = envelope(1U, state);
+        request.evaluation = {
+            true, false, true, true, false, max, FaultResetRejection::None};
+        const auto decision = decideFaultReset(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_TRUE(decision.after.criticalSafetyEventPending);
+        TEST_ASSERT_EQUAL_UINT32(max, decision.after.faultRevision);
+
+        state.faultRevision = max - 1U;
+        FaultResetRequest okRequest;
+        okRequest.envelope = envelope(2U, state);
+        okRequest.evaluation = {true,
+                                false,
+                                true,
+                                true,
+                                false,
+                                max - 1U,
+                                FaultResetRejection::None};
+        const auto ok = decideFaultReset(state, okRequest);
+        TEST_ASSERT_TRUE(ok.proposed());
+        TEST_ASSERT_EQUAL_UINT32(max, ok.after.faultRevision);
+    }
+}
+
 }  // namespace
 
 int main() {
     UNITY_BEGIN();
     RUN_TEST(
         test_program_start_requires_confirmation_safety_and_current_context);
+    RUN_TEST(
+        test_start_summary_is_available_before_confirmation_but_never_masks_rejections);
+    RUN_TEST(
+        test_manual_start_summary_is_available_before_confirmation_but_never_masks_rejections);
     RUN_TEST(test_program_start_is_two_stage_and_contains_summary);
     RUN_TEST(test_manual_plans_have_no_duration_and_use_canonical_start_states);
     RUN_TEST(
         test_display_and_web_conflict_is_first_applied_without_source_priority);
     RUN_TEST(test_stop_back_is_inert_and_abort_off_is_atomic);
+    RUN_TEST(test_stop_rejects_unknown_option_without_mutation);
     RUN_TEST(test_abort_and_cool_validates_replacement_before_commit);
     RUN_TEST(test_completion_can_return_to_standby_or_start_manual_cooling);
     RUN_TEST(test_target_adjustments_requalify_before_fermentation_only);
@@ -543,5 +886,8 @@ int main() {
     RUN_TEST(test_critical_safety_event_invalidates_a_pending_comfort_decision);
     RUN_TEST(test_domain_revision_conflicts_are_rejected_without_mutation);
     RUN_TEST(test_processed_command_ids_form_a_bounded_rolling_window);
+    RUN_TEST(
+        test_run_revision_overflow_is_rejected_for_every_run_mutating_command);
+    RUN_TEST(test_message_and_fault_revision_overflow_is_rejected);
     return UNITY_END();
 }
