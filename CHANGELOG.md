@@ -42,9 +42,10 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   unveraendert) und `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
   nach Stromausfall zwischen Commit und Rueckkehr; der neue Wert kann bereits
   dauerhaft gespeichert sein, der Aufrufer muss zuruecklesen); `read()` und
-  `write()` teilen sich `StateStoreStatus`, liefern aber je eine dokumentierte
-  und getestete Teilmenge (nie `WriteError`/`CommitOutcomeUnknown` beim Lesen,
-  nie `NotFound`/`ReadError` beim Schreiben); gueltig-by-construction
+  `write()` verwenden bewusst getrennte Statustypen `StateStoreReadStatus`/
+  `StateStoreWriteStatus` statt eines gemeinsamen Enums - ein Adapter kann
+  `WriteError`/`CommitOutcomeUnknown` schon aufgrund des Rueckgabetyps nicht
+  als Leseergebnis liefern, und umgekehrt; gueltig-by-construction
   begrenzter, binaersicherer `StateStoreKey`-Werttyp (kein oeffentlicher
   Default-Konstruktor, `create()` lehnt leeren (`Empty`) und zu langen
   (`TooLong`) Schluessel typisiert ab, anwendungsneutrale Softwaregrenze ohne
@@ -63,17 +64,26 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   generischer Envelope Version 1 (41/49 Bytes) mit ueberlaufsicherer,
   gestufter Groessenpruefung (eigener `checkedAddSize`-Baustein) vor jeder
   Allokation und Veroeffentlichung des fertigen Records erst nach
-  vollstaendigem Erfolg per Verschiebung (`ByteWriter::takeBytes()`) statt
-  Kopie - waehrend eines Encodes existiert damit hoechstens ein
-  vollstaendiger kodierter Recordpuffer; rein technische
+  vollstaendigem Erfolg per `swap()` statt Kopie - dabei entsteht hoechstens
+  ein zusaetzlicher, neu aufgebauter vollstaendiger Recordpuffer; ein bereits
+  in `outBytes` gehaltener alter Record bleibt bis zur erfolgreichen
+  `swap()`-Zeile unveraendert bestehen und wird bei jedem Fehler
+  (`InvalidField`/`CapacityExceeded`) nicht angetastet (die staerkere
+  globale Ein-Puffer-Garantie waehrend eines vollstaendigen Commits ist
+  Aufgabe des Commit-Workflows in #56/#57); rein technische
   Slotkandidaten-Ermittlung (`scanTechnicalSlotCandidates`) mit
   deterministischer Sortierung, die uebersprungene Slots nicht
   stillschweigend verwirft, sondern als typisierte `SlotIssue`-Liste erhaelt
-  (`NotFound` nie gleichbedeutend mit `ReadError`) und die Payload eines
-  passenden Kandidaten verschiebt statt kopiert - weiterhin ohne konkrete
-  Slotzahlen oder Root-/Manifestbedeutung; ueberlaufsichere
-  `nextSlotRoundRobin`-Rotation unabhaengig von der `size_t`-Breite der
-  Zielplattform; `ISecureRandomSource`- und `ITimeZoneResolver`-Ports;
+  (`NotFound` nie gleichbedeutend mit `ReadError`; `UnexpectedStatus` fuer den
+  nachweislich unerreichbaren Success-Fallback in den internen
+  Statusmappern) und die Payload eines passenden Kandidaten verschiebt statt
+  kopiert - weiterhin ohne konkrete Slotzahlen oder Root-/Manifestbedeutung;
+  typisierte `nextSlotRoundRobin`-Rotation (`NextSlotStatus::Success`/
+  `InvalidSlotCount` mit `std::optional<SlotId>`), die eine ungueltige
+  Slotanzahl (0 oder technisch nicht darstellbar) nicht mehr mit einer
+  erfolgreichen Rotation zu Slot 0 verwechselbar macht, unabhaengig von der
+  `size_t`-Breite der Zielplattform ueberlaufsicher; `ISecureRandomSource`-
+  und `ITimeZoneResolver`-Ports;
   `SimulatedPersistentStateStore` mit injizierbaren Schreib-Cut-Points
   (Fehler vor Beginn, Stromausfall vor/nach Commit, Kapazitaetsfehler) sowie
   Read-/NotFound-/Korruptionsinjektion fuer native Tests

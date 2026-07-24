@@ -845,7 +845,15 @@ kein reales Hardwarebudget und keine PSRAM-Verfuegbarkeit.
 Ein Preview wird erst nach erfolgreicher Ressourcenbereitstellung sichtbar.
 Vor Root-Commit bricht jeder Ressourcenfehler typisiert ohne Teilaktivierung ab.
 Nach Root-Commit allokiert, serialisiert und reserviert Publish nichts.
-Waehrend Commit existiert hoechstens ein vollstaendiger kodierter Recordpuffer.
+Waehrend eines vollstaendigen Commits existiert global hoechstens ein
+vollstaendiger kodierter Recordpuffer. Dies ist ein Vertrag auf Ebene des
+gesamten Commit-Workflows (#56/#57): er verlangt zusaetzlich, dass der
+Commit-Workflow selbst keinen alten Ausgabepuffer parallel zum neu kodierten
+haelt. Die Envelope-Codec-Fundamentschicht (#54, `encodeEnvelope()`) liefert
+dafuer die notwendige, aber fuer sich allein schwaechere Voraussetzung:
+hoechstens ein zusaetzlicher, neu aufgebauter vollstaendiger Recordpuffer pro
+Encode-Aufruf, veroeffentlicht per `swap()` ohne Vollkopie - siehe die
+Praezisierung unten im Abschnitt zu Issue #54.
 
 Beide ESP32-Produktionsprofile muessen je Teilissue bauen. Base-SHA und PR-Head
 werden mit identischer Toolchain fuer statisches RAM, Flash, `firmware.bin` und
@@ -941,20 +949,31 @@ dauerhaft gespeichert), `WriteError` und `CapacityError` (sicher
 unveraendert) sowie `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
 nach einem Stromausfall zwischen Commit und Rueckkehr - der neue Wert kann
 bereits dauerhaft gespeichert sein; der Aufrufer muss zuruecklesen). `read()`
-und `write()` verwenden denselben `StateStoreStatus`, liefern aber jeweils nur
-eine dokumentierte und getestete Teilmenge (`read()` nie `WriteError`/
-`CommitOutcomeUnknown`, `write()` nie `NotFound`/`ReadError`). Die technische
-Slotkandidaten-Ermittlung (`scanTechnicalSlotCandidates`) verwirft
-uebersprungene Slots nicht stillschweigend, sondern liefert zusaetzlich zu den
-sortierten Kandidaten eine typisierte `SlotIssue`-Liste (`NotFound`,
-Lese-/Kapazitaetsfehler, jede Envelope-Integritaetsverletzung, technisch
-gueltige aber nicht passende Kandidaten) - `ReadError` wird dabei nie wie
-`NotFound` behandelt, damit spaeterer Bootstrap-/Recovery-Code (#56/#57)
+und `write()` verwenden bewusst getrennte Statustypen -
+`StateStoreReadStatus` (`Success`/`NotFound`/`ReadError`/`CapacityError`) und
+`StateStoreWriteStatus` (`Success`/`WriteError`/`CapacityError`/
+`CommitOutcomeUnknown`) -, nicht nur eine dokumentierte Teilmenge eines
+gemeinsamen Enums: ein Adapter kann `WriteError` oder `CommitOutcomeUnknown`
+schon aufgrund des Rueckgabetyps nicht als Leseergebnis liefern, und
+umgekehrt. Die technische Slotkandidaten-Ermittlung
+(`scanTechnicalSlotCandidates`) verwirft uebersprungene Slots nicht
+stillschweigend, sondern liefert zusaetzlich zu den sortierten Kandidaten
+eine typisierte `SlotIssue`-Liste (`NotFound`, Lese-/Kapazitaetsfehler, jede
+Envelope-Integritaetsverletzung, technisch gueltige aber nicht passende
+Kandidaten, sowie `UnexpectedStatus` fuer den nachweislich unerreichbaren
+Success-Fallback in den internen Statusmappern) - `ReadError` wird dabei nie
+wie `NotFound` behandelt, damit spaeterer Bootstrap-/Recovery-Code (#56/#57)
 fabrikleeren von beschaedigtem Speicher unterscheiden kann; die dabei
 verschobene (nicht kopierte) Payload reduziert gleichzeitig gehaltene
-Kandidatenpayloads. `nextSlotRoundRobin` reduziert `lastWrittenSlot` zuerst
-modulo `slotCount`, bevor eins addiert wird, damit die Rotation unabhaengig
-von der `size_t`-Breite der Zielplattform nie still ueberlaeuft.
+Kandidatenpayloads. `nextSlotRoundRobin` liefert ein typisiertes
+`NextSlotResult` (`NextSlotStatus::Success`/`InvalidSlotCount` mit
+`std::optional<SlotId>`): eine ungueltige Slotanzahl (`0` oder technisch
+nicht darstellbar `> UINT32_MAX`) wird so typisiert abgelehnt, statt einen
+scheinbar gueltigen `SlotId(0)` zu liefern, der von einer erfolgreichen
+Rotation zu Slot 0 nicht unterscheidbar waere. Bei gueltigem `slotCount`
+reduziert die Rotation `lastWrittenSlot` zuerst modulo `slotCount`, bevor
+eins addiert wird, damit sie unabhaengig von der `size_t`-Breite der
+Zielplattform nie still ueberlaeuft.
 
 `state_store_key.hpp` stellt einen gueltig-by-construction begrenzten,
 binaersicheren `StateStoreKey`-Werttyp bereit: kein oeffentlicher
@@ -976,14 +995,25 @@ bleibt Paket C (#56).
 CRC-32/ISO-HDLC ist als inkrementeller Akkumulator (`Crc32IsoHdlc`) verfuegbar
 und wird von `encodeEnvelope()`/`decodeEnvelope()` genutzt, um den CRC direkt
 ueber Header und Payload zu berechnen, ohne dafuer einen zusaetzlichen
-`header + payload`-Hilfspuffer anzulegen. `encodeEnvelope()` veroeffentlicht
-den fertigen Record erst nach vollstaendigem Erfolg per Verschiebung
-(`ByteWriter::takeBytes()`) statt per Kopie. Waehrend eines Encodes existiert
-damit hoechstens ein vollstaendiger kodierter Recordpuffer (der kleine, auf
-die feste Headergroesse begrenzte `header`-Puffer zaehlt nicht als
-recordgross) - der Ressourcenvertrag oben ("Waehrend Commit existiert
-hoechstens ein vollstaendiger kodierter Recordpuffer") gilt damit bereits auf
-dieser Fundamentschicht, nicht erst ab Paket C.
+`header + payload`-Hilfspuffer anzulegen (der kleine, auf die feste
+Headergroesse begrenzte `header`-Puffer zaehlt nicht als recordgross).
+`encodeEnvelope()` veroeffentlicht den fertigen Record erst nach
+vollstaendigem Erfolg per `swap()` (`ByteWriter::takeBytes()` gefolgt von
+`outBytes.swap(encoded)`) statt per Kopie: es entsteht hoechstens ein
+zusaetzlicher, neu aufgebauter vollstaendiger Recordpuffer.
+
+Das ist bewusst keine absolute Aussage fuer die gesamte Aufrufdauer: haelt
+die aufrufende Anwendung in `outBytes` bereits einen alten vollstaendigen
+Record, bleibt dieser bis zur erfolgreichen `swap()`-Zeile unveraendert
+bestehen - waehrend dieses kurzen Zeitraums existieren alter und neuer
+Puffer gleichzeitig. `outBytes` bleibt bei jedem Fehler (`InvalidField`,
+`CapacityExceeded`) vollstaendig unveraendert. Die staerkere, absolute
+Aussage aus dem Ressourcenvertrag oben ("waehrend eines vollstaendigen
+Commits existiert global hoechstens ein vollstaendiger Recordpuffer") ist
+damit auf dieser Fundamentschicht vorbereitet, aber nicht bereits
+vollstaendig erzwungen - das erfordert zusaetzlich, dass der aufrufende
+Commit-Workflow (#56/#57) `encodeEnvelope()` nicht mit einem noch benoetigten
+alten Record in `outBytes` aufruft.
 
 `decodeEnvelope()` validiert die beanspruchte Laenge vollstaendig, bevor die
 Payload allokiert wird, und berechnet den CRC ebenfalls inkrementell ueber
@@ -993,19 +1023,39 @@ Storage-Port gelesene Puffer zaehlt dabei als "der gelesene Record" und wird
 nicht doppelt gezaehlt. Die Payload wird beim Aufbau des Ergebnisses hoechstens
 einmal in dieses Ergebnis verschoben bzw. kopiert.
 
-Der Ein-Puffer-Vertrag ist an dieser Stelle strukturell erzwungen, nicht durch
-einen zur Laufzeit zaehlbaren Test belegbar: `std::string`-Payloads lassen
-keine Kopieranzahl instrumentieren. Der Beleg besteht aus drei Teilen: (1) im
-gesamten Produktionscode existiert kein `forCrc`-Verkettungspuffer mehr
-(geprueft per `grep -rn "forCrc" lib/ src/`), (2) `encodeEnvelope()`
-veroeffentlicht ausschliesslich per `ByteWriter::takeBytes()` (Verschiebung,
-keine Kopie) und (3) die Golden-Vector- sowie Rundlauftests in
-`test_storage_wireformat.cpp` beweisen, dass der inkrementelle CRC ueber
-Header und Payload byteidentische Ergebnisse zum vormaligen
-Verkettungspuffer liefert. Die verschobene (nicht kopierte) Payload in
+Der Verzicht auf einen `forCrc`-Verkettungspuffer ist an dieser Stelle
+strukturell erzwungen, nicht durch einen zur Laufzeit zaehlbaren Test
+belegbar: `std::string`-Payloads lassen keine Kopieranzahl instrumentieren.
+Der Beleg besteht aus drei Teilen: (1) im gesamten Produktionscode existiert
+kein `forCrc`-Verkettungspuffer mehr (geprueft per
+`grep -rn "forCrc" lib/ src/`), (2) `encodeEnvelope()` veroeffentlicht
+ausschliesslich per `swap()` (keine Vollkopie, siehe oben fuer die praezise,
+nicht absolute Formulierung dieser Garantie) und (3) die Golden-Vector- sowie
+Rundlauftests in `test_storage_wireformat.cpp` beweisen, dass der
+inkrementelle CRC ueber Header und Payload byteidentische Ergebnisse zum
+vormaligen Verkettungspuffer liefert. Die verschobene (nicht kopierte)
+Payload in
 `scanTechnicalSlotCandidates` ist dagegen funktional getestet: die
 Scan-Tests pruefen, dass die Payload nach der Verschiebung unveraendert im
 `SlotCandidate` ankommt.
+
+Ein Test mit einem absichtlich vertragsverletzenden Test-Store (der `read()`
+mit `WriteError`/`CommitOutcomeUnknown` oder `write()` mit
+`NotFound`/`ReadError` zurueckgeben liesse) ist seit der Statustyp-Trennung
+nicht mehr in gueltigem C++ konstruierbar: `IStateStore::read()` gibt
+`StateStoreReadResult` mit `StateStoreReadStatus` zurueck, ein Typ ohne
+`WriteError`-/`CommitOutcomeUnknown`-Werte. Das ist ein Compilefehler statt
+eines Laufzeitfehlers und damit ein staerkerer Beleg als ein Test es waere.
+
+`ByteWriter::writeBytes`/`ByteReader::readBytes` und
+`Crc32IsoHdlc::update` teilen dieselbe Vorbedingung wie `std::memcpy`: der
+Zeigerparameter darf nur dann `nullptr` sein, wenn `length == 0` ist; bei
+`length == 0` wird er nicht dereferenziert. Diese Vorbedingung ist jetzt an
+allen drei Stellen wortgleich dokumentiert. `scanTechnicalSlotCandidates`
+setzt als dokumentierte Vorbedingung `slotKeys.size() <= UINT32_MAX` voraus
+(jeder Index wird als `SlotId`, `uint32_t`-getaggt, dargestellt); realistische
+Slotzahlen sind so klein, dass eine typisierte Laufzeitablehnung
+unverhaeltnismaessig waere.
 
 ### Paket B: Typisierte Konfigurationsdokumente
 
