@@ -80,7 +80,13 @@ struct SlotScanResult {
 // `lastWrittenSlot`, modulo `slotCount`). Kennt keine Schutzmenge; die
 // aufrufende Anwendung muss vor dem Schreiben selbst pruefen, dass der
 // gewaehlte Slot nicht Teil ihrer aktuellen Schutzmenge ist. `slotCount == 0`
-// liefert `SlotId(0)`.
+// liefert `SlotId(0)`. Ueberlaufsicher unabhaengig von der `size_t`-Breite
+// der Zielplattform: `lastWrittenSlot` wird zuerst modulo `slotCount`
+// reduziert, bevor eins addiert wird, damit `lastWrittenSlot.value() + 1`
+// nie in der Naehe von `UINT32_MAX` ueberlaufen kann. Realistische
+// Slotzahlen sind sehr klein; ein technisch nicht darstellbares
+// `slotCount > UINT32_MAX` wird sicher wie `slotCount == 0` behandelt statt
+// die Zaehlung stillschweigend abzuschneiden.
 [[nodiscard]] SlotId nextSlotRoundRobin(SlotId lastWrittenSlot,
                                         std::size_t slotCount);
 

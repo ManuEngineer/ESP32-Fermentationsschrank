@@ -1,6 +1,8 @@
 #include "storage_slot_candidates.hpp"
 
 #include <algorithm>
+#include <limits>
+#include <utility>
 
 #include "storage_envelope.hpp"
 
@@ -8,6 +10,14 @@ namespace device_platform {
 
 namespace {
 
+// Nur intern nach `IStateStore::read()` aufgerufen, und dort ausschliesslich
+// fuer `status != Success` (siehe Aufrufstelle unten). `read()` liefert laut
+// eigenem Vertrag (state_store.hpp) niemals `WriteError` oder
+// `CommitOutcomeUnknown` - die beiden Faelle sind an dieser Aufrufstelle
+// nachweislich unerreichbar, nicht nur zufaellig ungenutzt. Der Fallback
+// existiert ausschliesslich, damit der `switch` ohne `default` vollstaendig
+// bleibt (jeder neue `StateStoreStatus`-Wert erzeugt eine
+// `-Wswitch`-Warnung, die als Fehler behandelt wird).
 SlotIssueKind toSlotIssueKind(StateStoreStatus status) {
     switch (status) {
         case StateStoreStatus::NotFound:
@@ -21,11 +31,13 @@ SlotIssueKind toSlotIssueKind(StateStoreStatus status) {
         case StateStoreStatus::CommitOutcomeUnknown:
             break;
     }
-    // Nur Lesestatus werden hier abgebildet; die aufrufenden Codepfade rufen
-    // dies ausschliesslich fuer `status != Success` und nur nach `read()` auf.
     return SlotIssueKind::ReadError;
 }
 
+// Nur intern nach `decodeEnvelope()` aufgerufen, und dort ausschliesslich
+// fuer `status != Success` (siehe Aufrufstelle unten) - `Success` ist an
+// dieser Aufrufstelle nachweislich unerreichbar. Der Fallback existiert
+// ausschliesslich, damit der `switch` ohne `default` vollstaendig bleibt.
 SlotIssueKind toSlotIssueKind(EnvelopeDecodeStatus status) {
     switch (status) {
         case EnvelopeDecodeStatus::InvalidMagic:
@@ -67,14 +79,18 @@ SlotScanResult scanTechnicalSlotCandidates(
                 SlotIssue{slot, toSlotIssueKind(readResult.status)});
             continue;
         }
-        const auto decoded = decodeEnvelope(readResult.value);
+        // Nicht `const`: die Payload wird bei einem technisch gueltigen und
+        // passenden Kandidaten unten in `SlotCandidate` verschoben statt
+        // kopiert (siehe docs/CONFIGURATION_PERSISTENCE.md, Abschnitt
+        // "Ressourcenvertrag").
+        auto decoded = decodeEnvelope(readResult.value);
         if (decoded.status != EnvelopeDecodeStatus::Success ||
             !decoded.envelope.has_value()) {
             result.issues.push_back(
                 SlotIssue{slot, toSlotIssueKind(decoded.status)});
             continue;
         }
-        const auto& envelope = *decoded.envelope;
+        auto& envelope = *decoded.envelope;
         if (envelope.recordTypeId != expectedRecordType ||
             envelope.schemaVersion != expectedSchemaVersion ||
             envelope.storageEpoch != expectedStorageEpoch) {
@@ -85,7 +101,7 @@ SlotScanResult scanTechnicalSlotCandidates(
         result.candidates.push_back(SlotCandidate{
             slot,
             envelope.versionValue,
-            envelope.payload,
+            std::move(envelope.payload),
             envelope.utcUnixSeconds,
         });
     }
@@ -102,11 +118,19 @@ SlotScanResult scanTechnicalSlotCandidates(
 }
 
 SlotId nextSlotRoundRobin(SlotId lastWrittenSlot, std::size_t slotCount) {
-    if (slotCount == 0U) {
+    if (slotCount == 0U ||
+        slotCount >
+            static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
         return SlotId(0U);
     }
-    const auto next = static_cast<uint32_t>(
-        (static_cast<std::size_t>(lastWrittenSlot.value()) + 1U) % slotCount);
+    const auto slotCount32 = static_cast<uint32_t>(slotCount);
+    // Zuerst modulo reduzieren, dann eins addieren: `normalized` ist immer
+    // `< slotCount32 <= UINT32_MAX`, daher kann `normalized + 1` nie
+    // ueberlaufen - unabhaengig davon, ob `size_t` auf der Zielplattform 32
+    // oder 64 Bit breit ist.
+    const uint32_t normalized = lastWrittenSlot.value() % slotCount32;
+    const uint32_t next =
+        (normalized + 1U == slotCount32) ? 0U : normalized + 1U;
     return SlotId(next);
 }
 

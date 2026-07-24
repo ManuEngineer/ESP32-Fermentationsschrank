@@ -8,12 +8,25 @@
 
 namespace device_platform {
 
+// Ein gemeinsamer Status fuer Lesen und Schreiben, weil beide Operationen
+// `CapacityError` teilen (siehe unten). Die jeweils gueltige Teilmenge ist
+// hier eindeutig dokumentiert und in den Tests von
+// `SimulatedPersistentStateStore` vollstaendig abgedeckt:
+//   - `read()` liefert ausschliesslich `Success`, `NotFound`, `ReadError`
+//     oder `CapacityError` - niemals `WriteError` oder
+//     `CommitOutcomeUnknown` (beides reine Schreibergebnisse).
+//   - `write()` liefert ausschliesslich `Success`, `WriteError`,
+//     `CapacityError` oder `CommitOutcomeUnknown` - niemals `NotFound` oder
+//     `ReadError` (beides reine Leseergebnisse).
 enum class StateStoreStatus : uint8_t {
     Success,
+    // Nur als Leseergebnis.
     NotFound,
+    // Nur als Leseergebnis.
     ReadError,
-    // Schreiben: der Vorgang ist sicher nicht wirksam geworden; der zuvor
-    // gespeicherte Wert (falls vorhanden) ist unveraendert.
+    // Nur als Schreibergebnis: der Vorgang ist sicher nicht wirksam
+    // geworden; der zuvor gespeicherte Wert (falls vorhanden) ist
+    // unveraendert.
     WriteError,
     // Lesen: gespeicherter Wert ueberschreitet das aufrufer- beziehungsweise
     // schluesselspezifische Leselimit. Schreiben: der Speicher ist voll; der
@@ -68,12 +81,16 @@ class IStateStore {
     IStateStore(IStateStore&&) = delete;
     IStateStore& operator=(IStateStore&&) = delete;
 
+    // Liefert ausschliesslich `Success`, `WriteError`, `CapacityError` oder
+    // `CommitOutcomeUnknown` (siehe `StateStoreStatus`).
     [[nodiscard]] virtual StateStoreStatus write(const StateStoreKey& key,
                                                  const std::string& value) = 0;
 
     // `maxBytes` ist das aufrufer- beziehungsweise schluesselspezifische
     // Leselimit: uebersteigt der gespeicherte Wert `maxBytes`, liefert dies
-    // `CapacityError` statt eines unkontrolliert grossen Werts.
+    // `CapacityError` statt eines unkontrolliert grossen Werts. Liefert
+    // ausschliesslich `Success`, `NotFound`, `ReadError` oder
+    // `CapacityError` (siehe `StateStoreStatus`).
     [[nodiscard]] virtual StateStoreReadResult read(
         const StateStoreKey& key, std::size_t maxBytes) const = 0;
 };
