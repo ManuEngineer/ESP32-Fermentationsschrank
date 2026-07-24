@@ -152,9 +152,13 @@ EnvelopeEncodeStatus encodeEnvelope(const StorageEnvelope& envelope,
         return EnvelopeEncodeStatus::CapacityExceeded;
     }
 
-    std::string forCrc = header.bytes();
-    forCrc += envelope.payload;
-    const uint32_t crc = computeCrc32IsoHdlc(forCrc);
+    // CRC inkrementell ueber Header und Payload, ohne einen zusaetzlichen
+    // `header + payload`-Hilfspuffer anzulegen (siehe
+    // docs/CONFIGURATION_PERSISTENCE.md, Abschnitt "Ressourcenvertrag").
+    Crc32IsoHdlc crcAccumulator;
+    crcAccumulator.update(header.bytes());
+    crcAccumulator.update(envelope.payload);
+    const uint32_t crc = crcAccumulator.finalize();
 
     ByteWriter finalWriter(totalSize);
     ok = finalWriter.writeBytes(header.bytes().data(), header.bytes().size());
@@ -164,7 +168,9 @@ EnvelopeEncodeStatus encodeEnvelope(const StorageEnvelope& envelope,
     if (!ok) {
         return EnvelopeEncodeStatus::CapacityExceeded;
     }
-    outBytes = finalWriter.bytes();
+    // Veroeffentlicht das Ergebnis erst nach vollstaendigem Erfolg, per
+    // Verschiebung ohne zusaetzliche Vollkopie des Records.
+    outBytes = finalWriter.takeBytes();
     return EnvelopeEncodeStatus::Success;
 }
 
@@ -220,9 +226,15 @@ EnvelopeDecodeResult decodeEnvelope(const std::string& bytes) {
         return {EnvelopeDecodeStatus::LengthMismatch, std::nullopt};
     }
 
-    std::string forCrc = bytes.substr(0U, headerBeforeCrcLen);
-    forCrc += payload;
-    if (computeCrc32IsoHdlc(forCrc) != storedCrc) {
+    // CRC direkt ueber den Headerausschnitt der vorhandenen Eingabe und die
+    // bereits materialisierte Payload, ohne einen zusaetzlichen
+    // `header + payload`-Hilfspuffer anzulegen (kein `substr`-Vollkopie;
+    // siehe docs/CONFIGURATION_PERSISTENCE.md, Abschnitt
+    // "Ressourcenvertrag").
+    Crc32IsoHdlc crcAccumulator;
+    crcAccumulator.update(bytes.data(), headerBeforeCrcLen);
+    crcAccumulator.update(payload);
+    if (crcAccumulator.finalize() != storedCrc) {
         return {EnvelopeDecodeStatus::CrcMismatch, std::nullopt};
     }
 

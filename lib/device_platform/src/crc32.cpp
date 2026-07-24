@@ -24,16 +24,31 @@ const std::array<uint32_t, 256>& crcTable() {
 
 }  // namespace
 
-uint32_t computeCrc32IsoHdlc(const void* data, std::size_t length) {
+void Crc32IsoHdlc::update(const void* data, std::size_t length) {
+    if (length == 0U) {
+        return;
+    }
     const auto* bytes = static_cast<const uint8_t*>(data);
     const auto& table = crcTable();
-    uint32_t crc = 0xFFFFFFFFU;
+    uint32_t crc = crc_;
     for (std::size_t index = 0U; index < length; ++index) {
         const auto tableIndex =
             static_cast<uint8_t>((crc ^ bytes[index]) & 0xFFU);
         crc = table[tableIndex] ^ (crc >> 8U);
     }
-    return crc ^ 0xFFFFFFFFU;
+    crc_ = crc;
+}
+
+void Crc32IsoHdlc::update(const std::string& data) {
+    update(data.data(), data.size());
+}
+
+uint32_t Crc32IsoHdlc::finalize() const { return crc_ ^ 0xFFFFFFFFU; }
+
+uint32_t computeCrc32IsoHdlc(const void* data, std::size_t length) {
+    Crc32IsoHdlc accumulator;
+    accumulator.update(data, length);
+    return accumulator.finalize();
 }
 
 uint32_t computeCrc32IsoHdlc(const std::string& data) {

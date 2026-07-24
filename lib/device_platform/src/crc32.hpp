@@ -12,6 +12,29 @@
 // Verschluesselung.
 namespace device_platform {
 
+// Inkrementeller CRC-32/ISO-HDLC-Akkumulator. Erlaubt, den CRC ueber mehrere
+// nicht zusammenhaengende Speicherbereiche (z. B. Header und Payload eines
+// Envelopes) zu berechnen, ohne diese Bereiche vorher in einem gemeinsamen
+// Puffer zusammenzufuegen (siehe docs/CONFIGURATION_PERSISTENCE.md,
+// Abschnitt "Ressourcenvertrag": hoechstens ein vollstaendiger kodierter
+// Recordpuffer waehrend Commit). Ergebnis ist unabhaengig von der
+// Chunkaufteilung identisch zum CRC ueber den zusammenhaengenden Bereich.
+class Crc32IsoHdlc {
+   public:
+    Crc32IsoHdlc() = default;
+
+    // `data` darf nur dann `nullptr` sein, wenn `length == 0` ist (gleiche
+    // Vorbedingung wie bei `std::memcpy`/`ByteWriter::writeBytes`); bei
+    // `length == 0` wird `data` nicht dereferenziert.
+    void update(const void* data, std::size_t length);
+    void update(const std::string& data);
+
+    [[nodiscard]] uint32_t finalize() const;
+
+   private:
+    uint32_t crc_{0xFFFFFFFFU};
+};
+
 [[nodiscard]] uint32_t computeCrc32IsoHdlc(const void* data,
                                            std::size_t length);
 [[nodiscard]] uint32_t computeCrc32IsoHdlc(const std::string& data);

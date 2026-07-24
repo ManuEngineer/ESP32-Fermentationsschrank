@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace device_platform {
 
@@ -41,6 +42,12 @@ class ByteWriter {
     [[nodiscard]] std::size_t remaining() const {
         return capacity_ - buffer_.size();
     }
+
+    // Uebergibt den internen Puffer per Verschiebung an den Aufrufer, ohne
+    // zusaetzliche Vollkopie (siehe docs/CONFIGURATION_PERSISTENCE.md,
+    // Abschnitt "Ressourcenvertrag"). Der Writer ist danach nur noch zum
+    // Verwerfen bestimmt.
+    [[nodiscard]] std::string takeBytes() { return std::move(buffer_); }
 
    private:
     std::size_t capacity_;
