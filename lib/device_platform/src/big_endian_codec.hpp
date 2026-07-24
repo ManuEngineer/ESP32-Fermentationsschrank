@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 
 #include "byte_buffer.hpp"
 
@@ -9,6 +10,30 @@
 // C++-Layout, Padding, ABI und nativer Enumdarstellung (siehe
 // docs/CONFIGURATION_PERSISTENCE.md, Abschnitt "Kanonisches Wireformat").
 namespace device_platform::big_endian {
+
+namespace detail {
+
+// Rekonstruiert den Zweierkomplement-Wert aus dem Wireformat-Rohwert, ohne
+// eine implementation-defined unsigned-zu-signed-Konvertierung (Cast eines
+// Werts ausserhalb des positiven signed-Bereichs ist unter C++17 nicht
+// portabel; erst C++20 legt das Zweierkomplement-Ergebnis normativ fest).
+// Fuer Rohwerte innerhalb des darstellbaren signed-Bereichs ist der Cast
+// bereits wohldefiniert (der Wert ist im Zieltyp darstellbar); fuer groessere
+// Rohwerte wird der Offset ab dem signed-Maximum separat gebildet und auf
+// das signed-Minimum addiert - beide Teilschritte bleiben innerhalb des
+// darstellbaren signed-Bereichs und sind damit ebenfalls wohldefiniert.
+template <typename Unsigned, typename Signed>
+[[nodiscard]] constexpr Signed toTwosComplementSigned(Unsigned raw) {
+    constexpr auto kSignedMax =
+        static_cast<Unsigned>(std::numeric_limits<Signed>::max());
+    if (raw <= kSignedMax) {
+        return static_cast<Signed>(raw);
+    }
+    const auto offset = static_cast<Unsigned>(raw - kSignedMax - 1U);
+    return static_cast<Signed>(offset) + std::numeric_limits<Signed>::min();
+}
+
+}  // namespace detail
 
 [[nodiscard]] inline bool writeUint8(ByteWriter& writer, uint8_t value) {
     return writer.writeByte(value);
@@ -112,7 +137,7 @@ namespace device_platform::big_endian {
     if (!readUint8(reader, raw)) {
         return false;
     }
-    out = static_cast<int8_t>(raw);
+    out = detail::toTwosComplementSigned<uint8_t, int8_t>(raw);
     return true;
 }
 
@@ -121,7 +146,7 @@ namespace device_platform::big_endian {
     if (!readUint16(reader, raw)) {
         return false;
     }
-    out = static_cast<int16_t>(raw);
+    out = detail::toTwosComplementSigned<uint16_t, int16_t>(raw);
     return true;
 }
 
@@ -130,7 +155,7 @@ namespace device_platform::big_endian {
     if (!readUint32(reader, raw)) {
         return false;
     }
-    out = static_cast<int32_t>(raw);
+    out = detail::toTwosComplementSigned<uint32_t, int32_t>(raw);
     return true;
 }
 
@@ -139,7 +164,7 @@ namespace device_platform::big_endian {
     if (!readUint64(reader, raw)) {
         return false;
     }
-    out = static_cast<int64_t>(raw);
+    out = detail::toTwosComplementSigned<uint64_t, int64_t>(raw);
     return true;
 }
 

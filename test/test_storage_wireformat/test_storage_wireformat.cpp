@@ -7,6 +7,7 @@
 #include "big_endian_codec.hpp"
 #include "binary64_codec.hpp"
 #include "byte_buffer.hpp"
+#include "checked_size.hpp"
 #include "crc32.hpp"
 #include "storage_envelope.hpp"
 #include "storage_types.hpp"
@@ -33,6 +34,24 @@ void test_byte_writer_rejects_writes_beyond_capacity() {
     TEST_ASSERT_TRUE(writer.writeByte(0x03U));
     TEST_ASSERT_EQUAL_UINT32(0U, writer.remaining());
     TEST_ASSERT_FALSE(writer.writeByte(0x04U));
+}
+
+void test_byte_writer_zero_length_write_with_null_pointer_is_safe() {
+    ByteWriter writer(2U);
+    TEST_ASSERT_TRUE(writer.writeBytes(nullptr, 0U));
+    TEST_ASSERT_EQUAL_UINT32(0U, writer.size());
+    TEST_ASSERT_TRUE(writer.writeByte(0x01U));
+    TEST_ASSERT_EQUAL_UINT32(1U, writer.size());
+}
+
+void test_byte_reader_zero_length_read_with_null_pointer_is_safe() {
+    const std::string data = bytesOf({0x01U});
+    ByteReader reader(data);
+    TEST_ASSERT_TRUE(reader.readBytes(nullptr, 0U));
+    TEST_ASSERT_EQUAL_UINT32(0U, reader.position());
+    uint8_t value = 0;
+    TEST_ASSERT_TRUE(reader.readByte(value));
+    TEST_ASSERT_EQUAL_UINT8(0x01U, value);
 }
 
 void test_byte_reader_rejects_reads_beyond_available_bytes() {
@@ -103,6 +122,129 @@ void test_big_endian_signed_two_complement_golden_bytes() {
     TEST_ASSERT_EQUAL_INT16(-2, i16);
     TEST_ASSERT_EQUAL_INT32(-3, i32);
     TEST_ASSERT_EQUAL_INT64(-4, i64);
+}
+
+// Feste Golden-Bytes je Breite fuer 0, 1, INT_MAX, -1 und INT_MIN. Prueft
+// die portable Zweierkomplement-Rekonstruktion unabhaengig von Encoder und
+// Decoder gegeneinander (Werte und Bytes sind von Hand abgeleitet, siehe
+// docs/CONFIGURATION_PERSISTENCE.md, Abschnitt "Kanonisches Wireformat").
+void test_big_endian_int8_golden_values() {
+    const struct {
+        int8_t value;
+        uint8_t byte;
+    } cases[] = {
+        {0, 0x00U},
+        {1, 0x01U},
+        {std::numeric_limits<int8_t>::max(), 0x7FU},
+        {-1, 0xFFU},
+        {std::numeric_limits<int8_t>::min(), 0x80U},
+    };
+    for (const auto& testCase : cases) {
+        ByteWriter writer(1U);
+        TEST_ASSERT_TRUE(be::writeInt8(writer, testCase.value));
+        TEST_ASSERT_EQUAL_UINT8(testCase.byte,
+                                static_cast<uint8_t>(writer.bytes()[0]));
+
+        ByteReader reader(writer.bytes());
+        int8_t decoded = 0;
+        TEST_ASSERT_TRUE(be::readInt8(reader, decoded));
+        TEST_ASSERT_EQUAL_INT8(testCase.value, decoded);
+    }
+}
+
+void test_big_endian_int16_golden_values() {
+    const struct {
+        int16_t value;
+        std::initializer_list<uint8_t> bytes;
+    } cases[] = {
+        {0, {0x00U, 0x00U}},
+        {1, {0x00U, 0x01U}},
+        {std::numeric_limits<int16_t>::max(), {0x7FU, 0xFFU}},
+        {-1, {0xFFU, 0xFFU}},
+        {std::numeric_limits<int16_t>::min(), {0x80U, 0x00U}},
+    };
+    for (const auto& testCase : cases) {
+        ByteWriter writer(2U);
+        TEST_ASSERT_TRUE(be::writeInt16(writer, testCase.value));
+        const std::string expected = bytesOf(testCase.bytes);
+        TEST_ASSERT_EQUAL_MEMORY(expected.data(), writer.bytes().data(), 2U);
+
+        ByteReader reader(writer.bytes());
+        int16_t decoded = 0;
+        TEST_ASSERT_TRUE(be::readInt16(reader, decoded));
+        TEST_ASSERT_EQUAL_INT16(testCase.value, decoded);
+    }
+}
+
+void test_big_endian_int32_golden_values() {
+    const struct {
+        int32_t value;
+        std::initializer_list<uint8_t> bytes;
+    } cases[] = {
+        {0, {0x00U, 0x00U, 0x00U, 0x00U}},
+        {1, {0x00U, 0x00U, 0x00U, 0x01U}},
+        {std::numeric_limits<int32_t>::max(), {0x7FU, 0xFFU, 0xFFU, 0xFFU}},
+        {-1, {0xFFU, 0xFFU, 0xFFU, 0xFFU}},
+        {std::numeric_limits<int32_t>::min(), {0x80U, 0x00U, 0x00U, 0x00U}},
+    };
+    for (const auto& testCase : cases) {
+        ByteWriter writer(4U);
+        TEST_ASSERT_TRUE(be::writeInt32(writer, testCase.value));
+        const std::string expected = bytesOf(testCase.bytes);
+        TEST_ASSERT_EQUAL_MEMORY(expected.data(), writer.bytes().data(), 4U);
+
+        ByteReader reader(writer.bytes());
+        int32_t decoded = 0;
+        TEST_ASSERT_TRUE(be::readInt32(reader, decoded));
+        TEST_ASSERT_EQUAL_INT32(testCase.value, decoded);
+    }
+}
+
+void test_big_endian_int64_golden_values() {
+    const struct {
+        int64_t value;
+        std::initializer_list<uint8_t> bytes;
+    } cases[] = {
+        {0, {0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U}},
+        {1, {0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x01U}},
+        {std::numeric_limits<int64_t>::max(),
+         {0x7FU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU}},
+        {-1, {0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU}},
+        {std::numeric_limits<int64_t>::min(),
+         {0x80U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U}},
+    };
+    for (const auto& testCase : cases) {
+        ByteWriter writer(8U);
+        TEST_ASSERT_TRUE(be::writeInt64(writer, testCase.value));
+        const std::string expected = bytesOf(testCase.bytes);
+        TEST_ASSERT_EQUAL_MEMORY(expected.data(), writer.bytes().data(), 8U);
+
+        ByteReader reader(writer.bytes());
+        int64_t decoded = 0;
+        TEST_ASSERT_TRUE(be::readInt64(reader, decoded));
+        TEST_ASSERT_EQUAL_INT64(testCase.value, decoded);
+    }
+}
+
+void test_big_endian_signed_read_failure_leaves_output_unchanged() {
+    const std::string empty;
+    ByteReader reader(empty);
+
+    int8_t i8 = 42;
+    TEST_ASSERT_FALSE(be::readInt8(reader, i8));
+    TEST_ASSERT_EQUAL_INT8(42, i8);
+
+    int16_t i16 = 42;
+    TEST_ASSERT_FALSE(be::readInt16(reader, i16));
+    TEST_ASSERT_EQUAL_INT16(42, i16);
+
+    int32_t i32 = 42;
+    TEST_ASSERT_FALSE(be::readInt32(reader, i32));
+    TEST_ASSERT_EQUAL_INT32(42, i32);
+
+    int64_t i64 = 42;
+    TEST_ASSERT_FALSE(be::readInt64(reader, i64));
+    TEST_ASSERT_EQUAL_INT64(42, i64);
 }
 
 void test_bool_and_optional_tag_accept_only_zero_and_one() {
@@ -184,6 +326,79 @@ void test_binary64_rejects_nan_and_infinity_both_ways() {
         bytesOf({0xFFU, 0xF0U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U});
     ByteReader negInfReader(negInfBits);
     TEST_ASSERT_FALSE(bin64::decode(negInfReader, decoded));
+}
+
+void test_binary64_decode_failure_leaves_output_unchanged() {
+    const double sentinel = 7.0;
+
+    const std::string nanBits =
+        bytesOf({0x7FU, 0xF8U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U});
+    ByteReader nanReader(nanBits);
+    double outNan = sentinel;
+    TEST_ASSERT_FALSE(bin64::decode(nanReader, outNan));
+    TEST_ASSERT_EQUAL_DOUBLE(sentinel, outNan);
+
+    const std::string infBits =
+        bytesOf({0x7FU, 0xF0U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U});
+    ByteReader infReader(infBits);
+    double outInf = sentinel;
+    TEST_ASSERT_FALSE(bin64::decode(infReader, outInf));
+    TEST_ASSERT_EQUAL_DOUBLE(sentinel, outInf);
+
+    const std::string negativeZeroBits =
+        bytesOf({0x80U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U});
+    ByteReader negativeZeroReader(negativeZeroBits);
+    double outNegZero = sentinel;
+    TEST_ASSERT_FALSE(bin64::decode(negativeZeroReader, outNegZero));
+    TEST_ASSERT_EQUAL_DOUBLE(sentinel, outNegZero);
+
+    // Zu wenige Bytes.
+    const std::string tooShort = bytesOf({0x00U, 0x00U});
+    ByteReader tooShortReader(tooShort);
+    double outTooShort = sentinel;
+    TEST_ASSERT_FALSE(bin64::decode(tooShortReader, outTooShort));
+    TEST_ASSERT_EQUAL_DOUBLE(sentinel, outTooShort);
+}
+
+void test_checked_add_size_accepts_within_bound() {
+    std::size_t out = 0U;
+    TEST_ASSERT_TRUE(device_platform::checkedAddSize(2U, 3U, 10U, out));
+    TEST_ASSERT_EQUAL_UINT32(5U, out);
+}
+
+void test_checked_add_size_accepts_exact_bound() {
+    std::size_t out = 0U;
+    TEST_ASSERT_TRUE(device_platform::checkedAddSize(5U, 5U, 10U, out));
+    TEST_ASSERT_EQUAL_UINT32(10U, out);
+}
+
+void test_checked_add_size_rejects_one_over_bound() {
+    std::size_t out = 123U;
+    TEST_ASSERT_FALSE(device_platform::checkedAddSize(5U, 6U, 10U, out));
+    TEST_ASSERT_EQUAL_UINT32(123U, out);
+}
+
+void test_checked_add_size_rejects_actual_size_t_wraparound() {
+    std::size_t out = 123U;
+    const std::size_t kSizeMax = std::numeric_limits<std::size_t>::max();
+    TEST_ASSERT_FALSE(
+        device_platform::checkedAddSize(kSizeMax, 1U, kSizeMax, out));
+    TEST_ASSERT_EQUAL_UINT32(123U, out);
+}
+
+// Beweist die 32-Bit-Grenzsemantik ueber eine explizite `maxAllowed`, nicht
+// ueber die native (auf dem Testhost 64-Bit-)Breite von `size_t`.
+void test_checked_add_size_simulates_32_bit_boundary() {
+    constexpr std::size_t kSimulated32BitMax = 0xFFFFFFFFULL;
+    std::size_t out = 0U;
+    TEST_ASSERT_TRUE(device_platform::checkedAddSize(0xFFFFFFFEULL, 1U,
+                                                     kSimulated32BitMax, out));
+    TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFULL, out);
+
+    std::size_t rejectedOut = 123U;
+    TEST_ASSERT_FALSE(device_platform::checkedAddSize(
+        0xFFFFFFFFULL, 1U, kSimulated32BitMax, rejectedOut));
+    TEST_ASSERT_EQUAL_UINT32(123U, rejectedOut);
 }
 
 device_platform::StorageEnvelope validEnvelope() {
@@ -315,6 +530,57 @@ void test_envelope_encode_rejects_capacity_overflow() {
         static_cast<int>(
             device_platform::encodeEnvelope(envelope, encoded, 10U)));
     TEST_ASSERT_TRUE(encoded.empty());
+}
+
+// Header(37) + CRC(4) = 41 Bytes ohne UTC; `validEnvelope()`-Payload "AB"
+// ergibt eine Gesamtgroesse von exakt 43 Bytes (siehe Golden-Vektor-Test).
+void test_envelope_encode_accepts_exact_max_total_bytes() {
+    const auto envelope = validEnvelope();
+    std::string encoded;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+        static_cast<int>(
+            device_platform::encodeEnvelope(envelope, encoded, 43U)));
+    TEST_ASSERT_EQUAL_UINT32(43U, encoded.size());
+}
+
+void test_envelope_encode_rejects_one_byte_over_exact_size() {
+    const auto envelope = validEnvelope();
+    std::string encoded = "UNCHANGED";
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::EnvelopeEncodeStatus::CapacityExceeded),
+        static_cast<int>(
+            device_platform::encodeEnvelope(envelope, encoded, 42U)));
+    TEST_ASSERT_EQUAL_STRING("UNCHANGED", encoded.c_str());
+}
+
+// Bereits Header+CRC (41 Bytes ohne Payload) uebersteigt `maxTotalBytes`;
+// die Ablehnung darf nicht erst bei der Payloadaddition erfolgen.
+void test_envelope_encode_rejects_overflow_already_at_header_plus_crc() {
+    auto envelope = validEnvelope();
+    envelope.payload.clear();
+    std::string encoded = "UNCHANGED";
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::EnvelopeEncodeStatus::CapacityExceeded),
+        static_cast<int>(
+            device_platform::encodeEnvelope(envelope, encoded, 40U)));
+    TEST_ASSERT_EQUAL_STRING("UNCHANGED", encoded.c_str());
+}
+
+// `maxTotalBytes` reicht exakt fuer Header+CRC, aber nicht mehr fuer die
+// Payload: die Ablehnung muss aus der Payloadaddition stammen.
+void test_envelope_encode_rejects_overflow_at_header_plus_payload() {
+    auto envelope = validEnvelope();
+    envelope.payload = "A";
+    std::string encoded = "UNCHANGED";
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::EnvelopeEncodeStatus::CapacityExceeded),
+        static_cast<int>(
+            device_platform::encodeEnvelope(envelope, encoded, 41U)));
+    TEST_ASSERT_EQUAL_STRING("UNCHANGED", encoded.c_str());
 }
 
 void test_envelope_decode_rejects_invalid_magic() {
@@ -460,6 +726,76 @@ void test_envelope_preserves_unknown_origin_and_operation_ids() {
     TEST_ASSERT_EQUAL_UINT16(0xF00DU, decoded.envelope->changeOperationWireId);
 }
 
+void test_checked_increment_advances_valid_value_by_one() {
+    using device_platform::Revision;
+    Revision next;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::CheckedIncrementStatus::Success),
+        static_cast<int>(
+            device_platform::checkedIncrement(Revision(1U), next)));
+    TEST_ASSERT_EQUAL_UINT64(2U, next.value());
+}
+
+void test_checked_increment_accepts_value_near_max() {
+    using device_platform::Generation;
+    Generation next;
+    const auto nearMax = Generation(std::numeric_limits<uint64_t>::max() - 1U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::CheckedIncrementStatus::Success),
+        static_cast<int>(device_platform::checkedIncrement(nearMax, next)));
+    TEST_ASSERT_EQUAL_UINT64(std::numeric_limits<uint64_t>::max(),
+                             next.value());
+}
+
+void test_checked_increment_rejects_max_without_wrap_to_zero() {
+    using device_platform::RecordSequence;
+    auto out = RecordSequence(77U);
+    const auto atMax = RecordSequence(std::numeric_limits<uint64_t>::max());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::CheckedIncrementStatus::Overflow),
+        static_cast<int>(device_platform::checkedIncrement(atMax, out)));
+    // `out` bleibt unveraendert; insbesondere kein stiller Wrap auf 0.
+    TEST_ASSERT_EQUAL_UINT64(77U, out.value());
+}
+
+// Belegt, dass der generische Baustein fuer alle vier starken
+// uint64_t-Zaehlertypen einsetzbar ist, ohne dass sich die Typen vermischen
+// lassen (jeder Aufruf bleibt durch das Tag getrennt typisiert).
+void test_checked_increment_keeps_strong_types_separate() {
+    using device_platform::Generation;
+    using device_platform::RecordSequence;
+    using device_platform::Revision;
+    using device_platform::StorageEpoch;
+
+    StorageEpoch epochOut;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::CheckedIncrementStatus::Success),
+        static_cast<int>(
+            device_platform::checkedIncrement(StorageEpoch(1U), epochOut)));
+    TEST_ASSERT_EQUAL_UINT64(2U, epochOut.value());
+
+    Revision revisionOut;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::CheckedIncrementStatus::Success),
+        static_cast<int>(
+            device_platform::checkedIncrement(Revision(5U), revisionOut)));
+    TEST_ASSERT_EQUAL_UINT64(6U, revisionOut.value());
+
+    Generation generationOut;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::CheckedIncrementStatus::Success),
+        static_cast<int>(
+            device_platform::checkedIncrement(Generation(9U), generationOut)));
+    TEST_ASSERT_EQUAL_UINT64(10U, generationOut.value());
+
+    RecordSequence sequenceOut;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::CheckedIncrementStatus::Success),
+        static_cast<int>(device_platform::checkedIncrement(RecordSequence(3U),
+                                                           sequenceOut)));
+    TEST_ASSERT_EQUAL_UINT64(4U, sequenceOut.value());
+}
+
 void test_crc32_iso_hdlc_check_value() {
     // Verbindlicher Pruefwert aus docs/CONFIGURATION_PERSISTENCE.md,
     // Abschnitt "CRC-32/ISO-HDLC".
@@ -472,19 +808,40 @@ void test_crc32_iso_hdlc_check_value() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_byte_writer_rejects_writes_beyond_capacity);
+    RUN_TEST(test_byte_writer_zero_length_write_with_null_pointer_is_safe);
+    RUN_TEST(test_byte_reader_zero_length_read_with_null_pointer_is_safe);
     RUN_TEST(test_byte_reader_rejects_reads_beyond_available_bytes);
     RUN_TEST(test_big_endian_unsigned_golden_bytes);
     RUN_TEST(test_big_endian_signed_two_complement_golden_bytes);
+    RUN_TEST(test_big_endian_int8_golden_values);
+    RUN_TEST(test_big_endian_int16_golden_values);
+    RUN_TEST(test_big_endian_int32_golden_values);
+    RUN_TEST(test_big_endian_int64_golden_values);
+    RUN_TEST(test_big_endian_signed_read_failure_leaves_output_unchanged);
     RUN_TEST(test_bool_and_optional_tag_accept_only_zero_and_one);
     RUN_TEST(test_binary64_golden_values_round_trip);
     RUN_TEST(test_binary64_negative_zero_is_normalized_on_encode);
     RUN_TEST(test_binary64_decode_rejects_noncanonical_negative_zero);
     RUN_TEST(test_binary64_rejects_nan_and_infinity_both_ways);
+    RUN_TEST(test_binary64_decode_failure_leaves_output_unchanged);
+    RUN_TEST(test_checked_increment_advances_valid_value_by_one);
+    RUN_TEST(test_checked_increment_accepts_value_near_max);
+    RUN_TEST(test_checked_increment_rejects_max_without_wrap_to_zero);
+    RUN_TEST(test_checked_increment_keeps_strong_types_separate);
     RUN_TEST(test_crc32_iso_hdlc_check_value);
+    RUN_TEST(test_checked_add_size_accepts_within_bound);
+    RUN_TEST(test_checked_add_size_accepts_exact_bound);
+    RUN_TEST(test_checked_add_size_rejects_one_over_bound);
+    RUN_TEST(test_checked_add_size_rejects_actual_size_t_wraparound);
+    RUN_TEST(test_checked_add_size_simulates_32_bit_boundary);
     RUN_TEST(test_envelope_golden_vector_without_utc);
     RUN_TEST(test_envelope_golden_vector_with_utc);
     RUN_TEST(test_envelope_encode_rejects_reserved_zero_fields);
     RUN_TEST(test_envelope_encode_rejects_capacity_overflow);
+    RUN_TEST(test_envelope_encode_accepts_exact_max_total_bytes);
+    RUN_TEST(test_envelope_encode_rejects_one_byte_over_exact_size);
+    RUN_TEST(test_envelope_encode_rejects_overflow_already_at_header_plus_crc);
+    RUN_TEST(test_envelope_encode_rejects_overflow_at_header_plus_payload);
     RUN_TEST(test_envelope_decode_rejects_invalid_magic);
     RUN_TEST(test_envelope_decode_rejects_unknown_envelope_version);
     RUN_TEST(test_envelope_decode_rejects_reserved_zero_fields);

@@ -5,6 +5,7 @@
 
 #include "big_endian_codec.hpp"
 #include "byte_buffer.hpp"
+#include "checked_size.hpp"
 #include "crc32.hpp"
 
 namespace device_platform {
@@ -111,12 +112,23 @@ EnvelopeEncodeStatus encodeEnvelope(const StorageEnvelope& envelope,
         return EnvelopeEncodeStatus::InvalidField;
     }
 
-    const std::size_t headerBeforeCrc =
-        kHeaderBeforeCrcWithoutUtc +
-        (envelope.utcUnixSeconds.has_value() ? kUtcValueSize : 0U);
-    const std::size_t totalSize =
-        headerBeforeCrc + kCrcSize + envelope.payload.size();
-    if (totalSize > maxTotalBytes) {
+    // Jede Teiladdition ueberlaufsicher und gegen `maxTotalBytes` geprueft,
+    // bevor irgendetwas reserviert wird: `std::size_t` ist plattformabhaengig
+    // (ESP32: 32 Bit) und darf nicht ungeprueft ueberlaufen.
+    std::size_t headerBeforeCrc = kHeaderBeforeCrcWithoutUtc;
+    if (envelope.utcUnixSeconds.has_value() &&
+        !checkedAddSize(headerBeforeCrc, kUtcValueSize, maxTotalBytes,
+                        headerBeforeCrc)) {
+        return EnvelopeEncodeStatus::CapacityExceeded;
+    }
+    std::size_t headerWithCrc = 0U;
+    if (!checkedAddSize(headerBeforeCrc, kCrcSize, maxTotalBytes,
+                        headerWithCrc)) {
+        return EnvelopeEncodeStatus::CapacityExceeded;
+    }
+    std::size_t totalSize = 0U;
+    if (!checkedAddSize(headerWithCrc, envelope.payload.size(), maxTotalBytes,
+                        totalSize)) {
         return EnvelopeEncodeStatus::CapacityExceeded;
     }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 
 namespace device_platform {
 
@@ -77,5 +78,34 @@ using SlotId = StrongId<detail::SlotIdTag, uint32_t>;
 // gueltig. Die konkrete fachliche Bedeutung eines Record-Typs kennt
 // `device_platform` nicht.
 using RecordTypeId = StrongId<detail::RecordTypeIdTag, uint16_t>;
+
+enum class CheckedIncrementStatus : uint8_t {
+    Success,
+    // `current` ist bereits der maximal darstellbare Wert; ein Fortschreiben
+    // wuerde stillschweigend auf 0 (den reservierten, niemals gueltigen
+    // Wert) ueberlaufen. `out` bleibt in diesem Fall unveraendert.
+    Overflow,
+};
+
+// Generischer, anwendungsneutraler Checked-Increment-Baustein fuer die
+// starken uint64_t-Zaehlertypen (StorageEpoch, Revision, Generation,
+// RecordSequence). Erhoeht einen gueltigen Wert um genau eins und lehnt einen
+// Ueberlauf von UINT64_MAX auf 0 stabil ab, statt ihn still zu erzeugen. Die
+// Tags der starken Typen bleiben getrennt: ein `StorageEpoch` laesst sich
+// nicht versehentlich als `Revision` fortschreiben. Kennt keine konkrete
+// MutationSequence-Reservierung, Root- oder Anwendungstransaktionslogik -
+// das bleibt Aufgabe der aufrufenden Anwendung (siehe
+// docs/CONFIGURATION_PERSISTENCE.md, Abschnitt "Schema, Revision und
+// Migration").
+template <typename Tag>
+[[nodiscard]] constexpr CheckedIncrementStatus checkedIncrement(
+    StrongId<Tag, uint64_t> current, StrongId<Tag, uint64_t>& out) {
+    const uint64_t raw = current.value();
+    if (raw == std::numeric_limits<uint64_t>::max()) {
+        return CheckedIncrementStatus::Overflow;
+    }
+    out = StrongId<Tag, uint64_t>(raw + 1U);
+    return CheckedIncrementStatus::Success;
+}
 
 }  // namespace device_platform

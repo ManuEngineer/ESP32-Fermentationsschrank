@@ -17,6 +17,13 @@ class ByteWriter {
     }
 
     [[nodiscard]] bool writeBytes(const void* data, std::size_t length) {
+        // Laenge 0 mit moeglicherweise nullptr `data` vor jeder
+        // Pointerarithmetik/-kopie abfangen: ein Nullzeiger als Beginn eines
+        // (auch leeren) Bereichs ist fuer `std::string::append` nicht
+        // dokumentiert sicher.
+        if (length == 0U) {
+            return true;
+        }
         if (length > capacity_ - buffer_.size()) {
             return false;
         }
@@ -48,6 +55,11 @@ class ByteReader {
     explicit ByteReader(const std::string& bytes) : bytes_(bytes) {}
 
     [[nodiscard]] bool readBytes(void* out, std::size_t length) {
+        // Siehe ByteWriter::writeBytes: Laenge 0 mit moeglicherweise
+        // nullptr `out` vor jeder Pointerarithmetik/-kopie abfangen.
+        if (length == 0U) {
+            return true;
+        }
         if (length > bytes_.size() - position_) {
             return false;
         }
