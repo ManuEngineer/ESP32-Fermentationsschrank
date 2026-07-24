@@ -9,7 +9,11 @@
 | [Issue#13.md](Issue#13.md) | [E1.2] Unveraenderlichen Laufschnappschuss und Laufrevisionen implementieren | `COMPLETED` | `feat/issue-13-unveraenderlichen-laufschnappschuss-und-laufrevision` |
 | [Issue#14.md](Issue#14.md) | [E1.3] Zustandsmaschine und Prozessablaeufe implementieren | `COMPLETED` | `feat/issue-14-zustandsmaschine-und-prozessablaeufe-implementieren` |
 | [Issue#15.md](Issue#15.md) | [E1.4] Laufkommandos, Meldungen und Bedienaktionen implementieren | `COMPLETED` | `feat/issue-15-laufkommandos-meldungen-und-bedienaktionen-implement` |
-| [Issue#16.md](Issue#16.md) | [E2.1] Konfigurationsebenen, Validierung und atomare Revisionen | `PLANNED_SPEC_PENDING` | Teilissues vor Implementierung erforderlich |
+| [Issue#16.md](Issue#16.md) | [E2.1] Konfigurationsebenen, Validierung und atomare Revisionen | `TRACKING` | Teilissues #54 bis #57 |
+| [Issue#54.md](Issue#54.md) | [E2.1a] Plattformpersistenz und Wireformat implementieren | `READY` | `feat/issue-54-platformpersistenz-und-wireformat` |
+| [Issue#55.md](Issue#55.md) | [E2.1b] Typisierte Konfigurationsdokumente implementieren | `BLOCKED_DEPENDENCY` | `feat/issue-55-typisierte-konfigurationsdokumente` |
+| [Issue#56.md](Issue#56.md) | [E2.1c] Konfigurationsmanifeste, Preview und Runtimeaktivierung implementieren | `BLOCKED_DEPENDENCY` | `feat/issue-56-konfigurationsmanifeste-preview-runtimeaktivierung` |
+| [Issue#57.md](Issue#57.md) | [E2.1d] Bootstrap, Secret-Manifeste und Recovery integrieren | `BLOCKED_DEPENDENCY` | `feat/issue-57-bootstrap-secret-manifeste-recovery` |
 | [Issue#17.md](Issue#17.md) | [E2.2] Laufpersistenz und Kontrollpunkte implementieren | `PLANNED_SPEC_PENDING` | `feat/issue-17-laufpersistenz-und-kontrollpunkte-implementieren` |
 | [Issue#18.md](Issue#18.md) | [E2.3] Wiederanlauf und temperaturgewichteten Fortschritt implementieren | `PLANNED_SPEC_PENDING` | `feat/issue-18-wiederanlauf-und-temperaturgewichteten-fortschritt-i` |
 | [Issue#19.md](Issue#19.md) | [E2.4] Journale, Aufbewahrung, Bereinigung, Backup und Import | `PLANNED_SPEC_PENDING` | `feat/issue-19-journale-aufbewahrung-bereinigung-backup-und-import` |
