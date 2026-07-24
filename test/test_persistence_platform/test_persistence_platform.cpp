@@ -32,10 +32,10 @@ using device_platform_test_support::MockTimeZoneResolver;
 using device_platform_test_support::SimulatedPersistentStateStore;
 
 StateStoreKey keyOrFail(const std::string& raw) {
-    StateStoreKey key;
-    TEST_ASSERT_TRUE(StateStoreKey::create(raw, key) ==
-                     StateStoreKeyStatus::Success);
-    return key;
+    auto result = StateStoreKey::create(raw);
+    TEST_ASSERT_TRUE(result.status == StateStoreKeyStatus::Success);
+    TEST_ASSERT_TRUE(result.key.has_value());
+    return *result.key;
 }
 
 std::string encodedEnvelopeOrFail(RecordTypeId recordType,
@@ -555,48 +555,100 @@ void test_next_slot_round_robin_wraps_and_handles_zero_slots() {
                 .value());
 }
 
-void test_state_store_key_accepts_valid_key() {
-    StateStoreKey key;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreKeyStatus::Success),
-        static_cast<int>(StateStoreKey::create("manifest", key)));
-    TEST_ASSERT_EQUAL_STRING("manifest", key.bytes().c_str());
-    TEST_ASSERT_EQUAL_UINT32(8U, key.size());
+// `lastWrittenSlot` nahe UINT32_MAX darf `lastWrittenSlot.value() + 1` nicht
+// ueberlaufen lassen (relevant auf 32-Bit-`size_t`-Zielplattformen wie dem
+// ESP32; auf dem 64-Bit-Testhost waere ein naiver Cast zufaellig unauffaellig
+// gewesen).
+void test_next_slot_round_robin_does_not_overflow_near_uint32_max() {
+    // UINT32_MAX % 4 == 3, naechster Slot ist damit 0 - kein stiller
+    // Ueberlauf von `lastWrittenSlot.value() + 1` auf 32-Bit-`size_t`.
+    const auto nearMax =
+        device_platform::SlotId(std::numeric_limits<uint32_t>::max());
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, device_platform::nextSlotRoundRobin(nearMax, 4U).value());
+
+    // UINT32_MAX % 5 == 0 (4294967295 ist durch 5 teilbar), naechster Slot
+    // ist damit 1.
+    const auto atMax =
+        device_platform::SlotId(std::numeric_limits<uint32_t>::max());
+    TEST_ASSERT_EQUAL_UINT32(
+        1U, device_platform::nextSlotRoundRobin(atMax, 5U).value());
 }
 
-void test_state_store_key_accepts_empty_key() {
-    StateStoreKey key;
+// Ein technisch nicht darstellbares `slotCount` (> UINT32_MAX) wird sicher
+// wie `slotCount == 0` behandelt statt die Zaehlung still abzuschneiden.
+void test_next_slot_round_robin_rejects_slot_count_above_uint32_max() {
+    const std::size_t tooLarge =
+        static_cast<std::size_t>(std::numeric_limits<uint32_t>::max()) + 1U;
+    TEST_ASSERT_EQUAL_UINT32(0U, device_platform::nextSlotRoundRobin(
+                                     device_platform::SlotId(0U), tooLarge)
+                                     .value());
+}
+
+void test_state_store_key_accepts_valid_key() {
+    const auto result = StateStoreKey::create("manifest");
     TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreKeyStatus::Success),
-                          static_cast<int>(StateStoreKey::create("", key)));
-    TEST_ASSERT_EQUAL_UINT32(0U, key.size());
+                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.key.has_value());
+    TEST_ASSERT_EQUAL_STRING("manifest", result.key->bytes().c_str());
+    TEST_ASSERT_EQUAL_UINT32(8U, result.key->size());
+}
+
+void test_state_store_key_accepts_single_byte_key() {
+    const auto result = StateStoreKey::create("k");
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreKeyStatus::Success),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.key.has_value());
+    TEST_ASSERT_EQUAL_UINT32(1U, result.key->size());
+}
+
+// Ein leerer Schluessel ist kein gueltiger technischer Schluessel: `create()`
+// liefert keinen Wert, ein leerer Default-Zustand ist ohnehin nicht
+// erzeugbar (siehe `static_assert` in state_store_key.hpp).
+void test_state_store_key_rejects_empty_key() {
+    const auto result = StateStoreKey::create("");
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreKeyStatus::Empty),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_FALSE(result.key.has_value());
 }
 
 void test_state_store_key_accepts_exact_max_length() {
     const std::string atMax(StateStoreKey::kMaxLength, 'k');
-    StateStoreKey key;
+    const auto result = StateStoreKey::create(atMax);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreKeyStatus::Success),
-                          static_cast<int>(StateStoreKey::create(atMax, key)));
-    TEST_ASSERT_EQUAL_UINT32(StateStoreKey::kMaxLength, key.size());
+                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.key.has_value());
+    TEST_ASSERT_EQUAL_UINT32(StateStoreKey::kMaxLength, result.key->size());
 }
 
 void test_state_store_key_rejects_one_byte_over_max_length() {
     const std::string overMax(StateStoreKey::kMaxLength + 1U, 'k');
-    StateStoreKey key;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreKeyStatus::TooLong),
-        static_cast<int>(StateStoreKey::create(overMax, key)));
-    // Bei Ablehnung bleibt `key` der unveraenderte Default (leer).
-    TEST_ASSERT_EQUAL_UINT32(0U, key.size());
+    const auto result = StateStoreKey::create(overMax);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreKeyStatus::TooLong),
+                          static_cast<int>(result.status));
+    // Fehlgeschlagene Erzeugung liefert keinen verwendbaren Schluessel.
+    TEST_ASSERT_FALSE(result.key.has_value());
 }
 
 void test_state_store_key_is_binary_safe_with_embedded_nul() {
     const std::string withNul("a\0b", 3U);
-    StateStoreKey key;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreKeyStatus::Success),
-        static_cast<int>(StateStoreKey::create(withNul, key)));
-    TEST_ASSERT_EQUAL_UINT32(3U, key.size());
-    TEST_ASSERT_EQUAL_MEMORY(withNul.data(), key.bytes().data(), 3U);
+    const auto result = StateStoreKey::create(withNul);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreKeyStatus::Success),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.key.has_value());
+    TEST_ASSERT_EQUAL_UINT32(3U, result.key->size());
+    TEST_ASSERT_EQUAL_MEMORY(withNul.data(), result.key->bytes().data(), 3U);
+}
+
+// Deterministische, unsigned-byteweise Ordnung: `std::string::operator<`
+// vergleicht `char` fuer `char_traits<char>` normativ als `unsigned char`,
+// unabhaengig von der (ggf. signed) nativen `char`-Darstellung. Ein Byte
+// unterhalb 0x80 muss daher immer kleiner als eines ab 0x80 sein.
+void test_state_store_key_ordering_is_unsigned_byte_deterministic() {
+    const auto low = keyOrFail(std::string(1U, static_cast<char>(0x7FU)));
+    const auto high = keyOrFail(std::string(1U, static_cast<char>(0x80U)));
+    TEST_ASSERT_TRUE(low < high);
+    TEST_ASSERT_FALSE(high < low);
 }
 
 // Der Simulator verwendet den Schluessel wertbasiert (nicht
@@ -649,11 +701,15 @@ int main() {
     RUN_TEST(test_scan_break_ties_by_slot_id_ascending);
     RUN_TEST(test_scan_handles_max_version_value_without_overflow);
     RUN_TEST(test_next_slot_round_robin_wraps_and_handles_zero_slots);
+    RUN_TEST(test_next_slot_round_robin_does_not_overflow_near_uint32_max);
+    RUN_TEST(test_next_slot_round_robin_rejects_slot_count_above_uint32_max);
     RUN_TEST(test_state_store_key_accepts_valid_key);
-    RUN_TEST(test_state_store_key_accepts_empty_key);
+    RUN_TEST(test_state_store_key_accepts_single_byte_key);
+    RUN_TEST(test_state_store_key_rejects_empty_key);
     RUN_TEST(test_state_store_key_accepts_exact_max_length);
     RUN_TEST(test_state_store_key_rejects_one_byte_over_max_length);
     RUN_TEST(test_state_store_key_is_binary_safe_with_embedded_nul);
+    RUN_TEST(test_state_store_key_ordering_is_unsigned_byte_deterministic);
     RUN_TEST(test_state_store_key_comparison_and_deterministic_simulator_use);
     return UNITY_END();
 }

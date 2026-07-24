@@ -758,6 +758,18 @@ void test_checked_increment_rejects_max_without_wrap_to_zero() {
     TEST_ASSERT_EQUAL_UINT64(77U, out.value());
 }
 
+void test_checked_increment_rejects_reserved_zero_as_invalid_current() {
+    using device_platform::StorageEpoch;
+    auto out = StorageEpoch(99U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            device_platform::CheckedIncrementStatus::InvalidCurrentValue),
+        static_cast<int>(
+            device_platform::checkedIncrement(StorageEpoch(0U), out)));
+    // `out` bleibt unveraendert; 0 wird nicht still zu 1.
+    TEST_ASSERT_EQUAL_UINT64(99U, out.value());
+}
+
 // Belegt, dass der generische Baustein fuer alle vier starken
 // uint64_t-Zaehlertypen einsetzbar ist, ohne dass sich die Typen vermischen
 // lassen (jeder Aufruf bleibt durch das Tag getrennt typisiert).
@@ -803,6 +815,108 @@ void test_crc32_iso_hdlc_check_value() {
                                               std::string("123456789")));
 }
 
+void test_incremental_crc32_single_chunk_matches_one_shot() {
+    using device_platform::Crc32IsoHdlc;
+    const std::string data = "123456789";
+    Crc32IsoHdlc accumulator;
+    accumulator.update(data);
+    TEST_ASSERT_EQUAL_UINT32(0xCBF43926U, accumulator.finalize());
+}
+
+void test_incremental_crc32_multiple_chunks_matches_contiguous_buffer() {
+    using device_platform::Crc32IsoHdlc;
+    const std::string full = "123456789";
+    const uint32_t expected = device_platform::computeCrc32IsoHdlc(full);
+
+    // Chunkgrenze mitten im "Header"-Teil der Beispieldaten (nach Byte 3).
+    Crc32IsoHdlc midHeaderSplit;
+    midHeaderSplit.update(full.substr(0U, 3U));
+    midHeaderSplit.update(full.substr(3U));
+    TEST_ASSERT_EQUAL_UINT32(expected, midHeaderSplit.finalize());
+
+    // Chunkgrenze exakt zwischen zwei gleich grossen Haelften (analog zu
+    // Header/Payload-Grenze im Envelope).
+    Crc32IsoHdlc headerPayloadSplit;
+    headerPayloadSplit.update(full.substr(0U, full.size() / 2U));
+    headerPayloadSplit.update(full.substr(full.size() / 2U));
+    TEST_ASSERT_EQUAL_UINT32(expected, headerPayloadSplit.finalize());
+
+    // Viele einzelne Ein-Byte-Chunks.
+    Crc32IsoHdlc byteByByte;
+    for (char character : full) {
+        byteByByte.update(std::string(1U, character));
+    }
+    TEST_ASSERT_EQUAL_UINT32(expected, byteByByte.finalize());
+}
+
+void test_incremental_crc32_empty_chunks_do_not_change_result() {
+    using device_platform::Crc32IsoHdlc;
+    const std::string full = "123456789";
+    const uint32_t expected = device_platform::computeCrc32IsoHdlc(full);
+
+    Crc32IsoHdlc withEmptyChunks;
+    withEmptyChunks.update(std::string());
+    withEmptyChunks.update(full.substr(0U, 4U));
+    withEmptyChunks.update(nullptr, 0U);
+    withEmptyChunks.update(full.substr(4U));
+    withEmptyChunks.update(std::string());
+    TEST_ASSERT_EQUAL_UINT32(expected, withEmptyChunks.finalize());
+}
+
+void test_incremental_crc32_empty_input_matches_one_shot() {
+    using device_platform::Crc32IsoHdlc;
+    Crc32IsoHdlc accumulator;
+    TEST_ASSERT_EQUAL_UINT32(
+        device_platform::computeCrc32IsoHdlc(std::string()),
+        accumulator.finalize());
+}
+
+// Envelope mit leerer Payload: bewusst geprueft, weil die CRC-Berechnung nun
+// inkrementell ueber Header- und Payload-Chunk erfolgt statt ueber einen
+// gemeinsamen Puffer - ein leerer Payload-Chunk darf das Ergebnis nicht
+// veraendern.
+void test_envelope_round_trip_with_empty_payload() {
+    device_platform::StorageEnvelope envelope;
+    envelope.recordTypeId = device_platform::RecordTypeId(1U);
+    envelope.schemaVersion = 1U;
+    envelope.storageEpoch = device_platform::StorageEpoch(1U);
+    envelope.versionValue = 1U;
+    envelope.payload.clear();
+    std::string encoded;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(envelope, encoded, 1024U) ==
+        device_platform::EnvelopeEncodeStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(41U, encoded.size());
+
+    const auto decoded = device_platform::decodeEnvelope(encoded);
+    TEST_ASSERT_TRUE(decoded.status ==
+                     device_platform::EnvelopeDecodeStatus::Success);
+    TEST_ASSERT_TRUE(decoded.envelope->payload.empty());
+}
+
+// Maximale in diesem technischen Test verwendete Payloadgroesse: beweist,
+// dass die inkrementelle CRC-Berechnung auch fuer einen groesseren, nicht
+// trivialen Payload-Chunk mit dem alten Einzelpuffer-Ergebnis
+// uebereinstimmt.
+void test_envelope_round_trip_with_larger_payload() {
+    device_platform::StorageEnvelope envelope;
+    envelope.recordTypeId = device_platform::RecordTypeId(1U);
+    envelope.schemaVersion = 1U;
+    envelope.storageEpoch = device_platform::StorageEpoch(1U);
+    envelope.versionValue = 1U;
+    envelope.payload = std::string(4096U, 'x');
+    std::string encoded;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(envelope, encoded, 8192U) ==
+        device_platform::EnvelopeEncodeStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(41U + 4096U, encoded.size());
+
+    const auto decoded = device_platform::decodeEnvelope(encoded);
+    TEST_ASSERT_TRUE(decoded.status ==
+                     device_platform::EnvelopeDecodeStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(4096U, decoded.envelope->payload.size());
+}
+
 }  // namespace
 
 int main() {
@@ -827,8 +941,15 @@ int main() {
     RUN_TEST(test_checked_increment_advances_valid_value_by_one);
     RUN_TEST(test_checked_increment_accepts_value_near_max);
     RUN_TEST(test_checked_increment_rejects_max_without_wrap_to_zero);
+    RUN_TEST(test_checked_increment_rejects_reserved_zero_as_invalid_current);
     RUN_TEST(test_checked_increment_keeps_strong_types_separate);
     RUN_TEST(test_crc32_iso_hdlc_check_value);
+    RUN_TEST(test_incremental_crc32_single_chunk_matches_one_shot);
+    RUN_TEST(test_incremental_crc32_multiple_chunks_matches_contiguous_buffer);
+    RUN_TEST(test_incremental_crc32_empty_chunks_do_not_change_result);
+    RUN_TEST(test_incremental_crc32_empty_input_matches_one_shot);
+    RUN_TEST(test_envelope_round_trip_with_empty_payload);
+    RUN_TEST(test_envelope_round_trip_with_larger_payload);
     RUN_TEST(test_checked_add_size_accepts_within_bound);
     RUN_TEST(test_checked_add_size_accepts_exact_bound);
     RUN_TEST(test_checked_add_size_rejects_one_over_bound);
