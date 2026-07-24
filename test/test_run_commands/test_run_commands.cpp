@@ -102,6 +102,23 @@ bool hasEffect(const CommandDecision& decision, CommandEffect effect) {
     return false;
 }
 
+void assertRejectedWithoutStateMutation(const CommandDecision& decision) {
+    TEST_ASSERT_FALSE(decision.proposed());
+    TEST_ASSERT_EQUAL_UINT32(decision.before.commandSequence,
+                             decision.after.commandSequence);
+    TEST_ASSERT_EQUAL_UINT32(decision.before.runRevision,
+                             decision.after.runRevision);
+    TEST_ASSERT_EQUAL_UINT32(decision.before.messageRevision,
+                             decision.after.messageRevision);
+    TEST_ASSERT_EQUAL_UINT32(decision.before.faultRevision,
+                             decision.after.faultRevision);
+    TEST_ASSERT_TRUE(equalProcessRuntimeState(decision.before.processState,
+                                              decision.after.processState));
+    TEST_ASSERT_EQUAL_STRING(decision.before.activeRunId.c_str(),
+                             decision.after.activeRunId.c_str());
+    TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+}
+
 RuntimeMessage message(std::uint32_t id, MessageCode code,
                        MessageClass messageClass, std::uint8_t priority,
                        MessageTrigger trigger) {
@@ -157,7 +174,7 @@ void test_start_summary_is_available_before_confirmation_but_never_masks_rejecti
         TEST_ASSERT_FALSE(decision.after.activeProgramRun.has_value());
         TEST_ASSERT_EQUAL_UINT32(decision.before.runRevision,
                                  decision.after.runRevision);
-        TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+        assertRejectedWithoutStateMutation(decision);
     }
     // Dieselbe gueltige Anfrage, bestaetigt: gleiche Zusammenfassung, echte
     // Mutation.
@@ -224,6 +241,7 @@ void test_manual_start_summary_is_available_before_confirmation_but_never_masks_
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(ProcessState::Standby),
             static_cast<int>(decision.after.processState.state));
+        assertRejectedWithoutStateMutation(decision);
     }
     // Ungueltiger Plan (Vorwaerme-Wartezeit fehlt), unbestaetigt: InvalidInput
     // darf nicht durch NotConfirmed maskiert werden.
@@ -667,10 +685,10 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
             decideProgramStart(state, programStart(state, 1U));
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(decision.status));
-        TEST_ASSERT_FALSE(decision.startSummary.has_value());
+        TEST_ASSERT_TRUE(decision.startSummary.has_value());
         TEST_ASSERT_FALSE(decision.after.activeProgramRun.has_value());
-        TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
         TEST_ASSERT_EQUAL_UINT32(max, decision.after.runRevision);
+        assertRejectedWithoutStateMutation(decision);
 
         state.runRevision = max - 1U;
         const auto ok = decideProgramStart(state, programStart(state, 1U));
@@ -686,8 +704,9 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
         const auto decision = decideManualStart(state, request);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(decision.status));
-        TEST_ASSERT_FALSE(decision.startSummary.has_value());
+        TEST_ASSERT_TRUE(decision.startSummary.has_value());
         TEST_ASSERT_FALSE(decision.after.activeManualRun.has_value());
+        assertRejectedWithoutStateMutation(decision);
 
         state.runRevision = max - 1U;
         ManualStartRequest okRequest{envelope(1U, state), manualPlan("hold"),
@@ -706,7 +725,7 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(decision.status));
         TEST_ASSERT_TRUE(decision.after.activeProgramRun.has_value());
-        TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+        assertRejectedWithoutStateMutation(decision);
     }
     // Abbrechen und kuehlen.
     {
@@ -719,7 +738,7 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
                               static_cast<int>(decision.status));
         TEST_ASSERT_TRUE(decision.after.activeProgramRun.has_value());
         TEST_ASSERT_FALSE(decision.after.activeManualRun.has_value());
-        TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
+        assertRejectedWithoutStateMutation(decision);
     }
     // Abschluss quittieren.
     {
@@ -734,6 +753,7 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(ProcessState::Completed),
             static_cast<int>(decision.after.processState.state));
+        assertRejectedWithoutStateMutation(decision);
     }
     // Kuehlen nach Abschluss.
     {
@@ -746,6 +766,7 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(decision.status));
         TEST_ASSERT_FALSE(decision.after.activeManualRun.has_value());
+        assertRejectedWithoutStateMutation(decision);
     }
     // Laufanpassung: an der Grenze abgelehnt, davor genau einmal erhoehbar.
     {
@@ -758,12 +779,122 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
         TEST_ASSERT_EQUAL_DOUBLE(
             38.0, decision.after.activeProgramRun->effectiveValues()
                       .targetTemperatureCelsius);
+        assertRejectedWithoutStateMutation(decision);
 
         state.runRevision = max - 1U;
         const auto ok =
             decideRunAdjustment(state, targetChange(state, 2U, 39.0, 200U));
         TEST_ASSERT_TRUE(ok.proposed());
         TEST_ASSERT_EQUAL_UINT32(max, ok.after.runRevision);
+    }
+}
+
+void test_run_revision_capacity_does_not_mask_prior_domain_results() {
+    const std::uint32_t max = std::numeric_limits<std::uint32_t>::max();
+
+    // Ein gueltiger Start liefert auch an der Revisionsgrenze zuerst die
+    // Vorschau/Bestaetigungsantwort; ungueltige Daten behalten ihre Diagnose.
+    {
+        auto state = standbyState();
+        state.runRevision = max;
+        auto request = programStart(state, 1U);
+        request.envelope.confirmed = false;
+        const auto unconfirmed = decideProgramStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+                              static_cast<int>(unconfirmed.status));
+        TEST_ASSERT_TRUE(unconfirmed.startSummary.has_value());
+        assertRejectedWithoutStateMutation(unconfirmed);
+
+        request.sourceProgramRevision = 0U;
+        const auto invalid = decideProgramStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(invalid.status));
+        assertRejectedWithoutStateMutation(invalid);
+
+        request.sourceProgramRevision = 1U;
+        request.safetyAllowsStart = false;
+        const auto unsafe = decideProgramStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
+                              static_cast<int>(unsafe.status));
+        assertRejectedWithoutStateMutation(unsafe);
+    }
+    {
+        auto state = standbyState();
+        state.runRevision = max;
+        ManualStartRequest request{envelope(1U, state), manualPlan("hold"),
+                                   true};
+        request.envelope.confirmed = false;
+        const auto decision = decideManualStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+                              static_cast<int>(decision.status));
+        TEST_ASSERT_TRUE(decision.startSummary.has_value());
+        assertRejectedWithoutStateMutation(decision);
+    }
+    // Stop und Abschluss pruefen Bestaetigung und Zustand vor der Kapazitaet.
+    {
+        auto state = startedProgramState();
+        state.runRevision = max;
+        StopRequest request{envelope(2U, state), StopOption::AbortAndTurnOff,
+                            std::nullopt, false};
+        request.envelope.confirmed = false;
+        const auto unconfirmed = decideStop(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+                              static_cast<int>(unconfirmed.status));
+        assertRejectedWithoutStateMutation(unconfirmed);
+
+        auto standby = standbyState();
+        standby.runRevision = max;
+        request.envelope = envelope(2U, standby);
+        const auto disallowed = decideStop(standby, request);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(CommandStatus::NotAllowedInState),
+            static_cast<int>(disallowed.status));
+        assertRejectedWithoutStateMutation(disallowed);
+    }
+    {
+        auto completed = startedProgramState();
+        completed.processState.state = ProcessState::Completed;
+        completed.runRevision = max;
+        CompletionRequest request{envelope(2U, completed), false, std::nullopt,
+                                  false};
+        request.envelope.confirmed = false;
+        const auto unconfirmed = decideCompletion(completed, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+                              static_cast<int>(unconfirmed.status));
+        assertRejectedWithoutStateMutation(unconfirmed);
+
+        auto standby = standbyState();
+        standby.runRevision = max;
+        request.envelope = envelope(2U, standby);
+        const auto decision = decideCompletion(standby, request);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(CommandStatus::NotAllowedInState),
+            static_cast<int>(decision.status));
+        assertRejectedWithoutStateMutation(decision);
+    }
+    // Laufanpassungen behalten NotConfirmed, NoChange und InvalidInput.
+    {
+        auto state = startedProgramState();
+        state.runRevision = max;
+        auto request = targetChange(state, 2U, 39.0, 200U);
+        request.envelope.confirmed = false;
+        const auto unconfirmed = decideRunAdjustment(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
+                              static_cast<int>(unconfirmed.status));
+        assertRejectedWithoutStateMutation(unconfirmed);
+
+        request.envelope.confirmed = true;
+        request.targetTemperatureCelsius = 38.0;
+        const auto noChange = decideRunAdjustment(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NoChange),
+                              static_cast<int>(noChange.status));
+        assertRejectedWithoutStateMutation(noChange);
+
+        request.targetTemperatureCelsius = 100.0;
+        const auto invalid = decideRunAdjustment(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(invalid.status));
+        assertRejectedWithoutStateMutation(invalid);
     }
 }
 
@@ -888,6 +1019,7 @@ int main() {
     RUN_TEST(test_processed_command_ids_form_a_bounded_rolling_window);
     RUN_TEST(
         test_run_revision_overflow_is_rejected_for_every_run_mutating_command);
+    RUN_TEST(test_run_revision_capacity_does_not_mask_prior_domain_results);
     RUN_TEST(test_message_and_fault_revision_overflow_is_rejected);
     return UNITY_END();
 }

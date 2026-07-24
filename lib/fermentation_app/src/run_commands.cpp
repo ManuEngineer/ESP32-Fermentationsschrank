@@ -141,10 +141,16 @@ CommandDecision beginDecision(const RunCommandState& current,
     } else if (current.criticalSafetyEventPending &&
                isRunComfortCommand(kind)) {
         decision.status = CommandStatus::SafetyRejected;
-    } else {
-        decision.after.commandSequence = current.commandSequence + 1U;
     }
     return decision;
+}
+
+// Die Kommandosequenz gehoert zur tatsaechlich vorgeschlagenen Gesamtmutation.
+// Sie wird deshalb erst nach allen nicht mutierenden Fachpruefungen unmittelbar
+// an der Commit-Grenze erhoeht. Abgelehnte Entscheidungen behalten damit einen
+// zu `before` identischen `after`-Zustand.
+void beginMutation(CommandDecision& decision) {
+    decision.after.commandSequence = decision.before.commandSequence + 1U;
 }
 
 bool requireRunRevision(CommandDecision& decision) {
@@ -364,9 +370,6 @@ CommandDecision decideProgramStart(const RunCommandState& current,
     if (!requireRunRevision(decision)) {
         return decision;
     }
-    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
-        return decision;
-    }
     if (!request.safetyAllowsStart) {
         decision.status = CommandStatus::SafetyRejected;
         return decision;
@@ -415,6 +418,10 @@ CommandDecision decideProgramStart(const RunCommandState& current,
         return decision;
     }
 
+    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+        return decision;
+    }
+
     if (!applyTransition(decision.after, ProcessEvent::StartRun,
                          request.envelope.monotonicMillis, &*snapshot)) {
         decision.status = CommandStatus::InvalidInput;
@@ -425,6 +432,7 @@ CommandDecision decideProgramStart(const RunCommandState& current,
     decision.after.activeProgramRun = std::move(run);
     decision.after.activeManualRun.reset();
     decision.after.processRunSnapshot = *snapshot;
+    beginMutation(decision);
     ++decision.after.runRevision;
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     return decision;
@@ -435,9 +443,6 @@ CommandDecision decideManualStart(const RunCommandState& current,
     auto decision = beginDecision(current, request.envelope,
                                   CommandKind::StartManualHolding);
     if (!requireRunRevision(decision)) {
-        return decision;
-    }
-    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
         return decision;
     }
     if (!request.safetyAllowsStart) {
@@ -477,10 +482,15 @@ CommandDecision decideManualStart(const RunCommandState& current,
         return decision;
     }
 
+    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+        return decision;
+    }
+
     if (!installManualRun(decision, std::move(*plan))) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
+    beginMutation(decision);
     ++decision.after.runRevision;
     static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
@@ -514,9 +524,6 @@ CommandDecision decideStop(const RunCommandState& current,
     if (!requireRunRevision(decision)) {
         return decision;
     }
-    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
-        return decision;
-    }
     if (!request.envelope.confirmed) {
         decision.status = CommandStatus::NotConfirmed;
         return decision;
@@ -544,6 +551,10 @@ CommandDecision decideStop(const RunCommandState& current,
         }
     }
 
+    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+        return decision;
+    }
+
     if (!applyTransition(decision.after, ProcessEvent::Abort,
                          request.envelope.monotonicMillis,
                          &*current.processRunSnapshot)) {
@@ -565,6 +576,7 @@ CommandDecision decideStop(const RunCommandState& current,
         static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
         static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     }
+    beginMutation(decision);
     ++decision.after.runRevision;
     return decision;
 }
@@ -575,9 +587,6 @@ CommandDecision decideCompletion(const RunCommandState& current,
                                            : CommandKind::AcknowledgeCompletion;
     auto decision = beginDecision(current, request.envelope, kind);
     if (!requireRunRevision(decision)) {
-        return decision;
-    }
-    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
         return decision;
     }
     if (!request.envelope.confirmed) {
@@ -606,6 +615,10 @@ CommandDecision decideCompletion(const RunCommandState& current,
         }
     }
 
+    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
+        return decision;
+    }
+
     if (!applyTransition(decision.after, ProcessEvent::AcknowledgeCompletion,
                          request.envelope.monotonicMillis, nullptr)) {
         decision.status = CommandStatus::NotAllowedInState;
@@ -623,6 +636,7 @@ CommandDecision decideCompletion(const RunCommandState& current,
         static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
         static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     }
+    beginMutation(decision);
     ++decision.after.runRevision;
     return decision;
 }
@@ -633,9 +647,6 @@ CommandDecision decideRunAdjustment(
     auto decision =
         beginDecision(current, request.envelope, CommandKind::AdjustRun);
     if (!requireRunRevision(decision)) {
-        return decision;
-    }
-    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
         return decision;
     }
     if (!request.envelope.confirmed) {
@@ -664,6 +675,10 @@ CommandDecision decideRunAdjustment(
         current.activeProgramRun->decideAdjustment(adjustment, context);
     if (!runDecision.proposed()) {
         decision.status = mapAdjustmentStatus(runDecision.status);
+        return decision;
+    }
+
+    if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
         return decision;
     }
 
@@ -703,6 +718,7 @@ CommandDecision decideRunAdjustment(
             request.envelope.monotonicMillis;
     }
 
+    beginMutation(decision);
     ++decision.after.runRevision;
     decision.adjustmentPreview = RunAdjustmentPreview{
         beforeValues,
@@ -736,6 +752,7 @@ CommandDecision decideAcknowledgeMessage(const RunCommandState& current,
         !requireRevisionCapacity(decision, decision.after.messageRevision)) {
         return decision;
     }
+    beginMutation(decision);
     message->acknowledged = true;
     ++message->revision;
     ++decision.after.messageRevision;
@@ -763,6 +780,7 @@ CommandDecision decideMuteMessage(const RunCommandState& current,
         !requireRevisionCapacity(decision, decision.after.messageRevision)) {
         return decision;
     }
+    beginMutation(decision);
     message->acousticMuted = true;
     ++message->revision;
     ++decision.after.messageRevision;
@@ -796,6 +814,7 @@ CommandDecision decideFaultReset(const RunCommandState& current,
     if (!requireRevisionCapacity(decision, decision.before.faultRevision)) {
         return decision;
     }
+    beginMutation(decision);
     ++decision.after.faultRevision;
     decision.after.criticalSafetyEventPending = false;
     static_cast<void>(addEffect(decision, CommandEffect::FaultResetAuthorized));

@@ -54,6 +54,15 @@ bool validAdjustmentEffect(RunAdjustmentEffect effect) {
     return false;
 }
 
+bool validRunAdjustmentPhaseContext(RunAdjustmentPhaseContext phase) {
+    switch (phase) {
+        case RunAdjustmentPhaseContext::BeforeFermentation:
+        case RunAdjustmentPhaseContext::Fermenting:
+            return true;
+    }
+    return false;
+}
+
 RunAdjustmentEffect adjustmentEffectFor(bool targetChanged,
                                         RunAdjustmentPhaseContext phase) {
     if (!targetChanged) {
@@ -266,6 +275,7 @@ RunAdjustmentDecision ActiveRun::decideAdjustment(
         return rejected(RunAdjustmentStatus::CompletedStage);
     }
     if (!validChangeSource(request.source) ||
+        !validRunAdjustmentPhaseContext(context.phaseContext) ||
         !validChangeReason(request.reason)) {
         return rejected(RunAdjustmentStatus::InvalidMetadata);
     }

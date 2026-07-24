@@ -269,18 +269,20 @@ Der Programmschnappschuss und das gespeicherte Quellprogramm bleiben
 unveraendert. Die bestaetigte Aenderung erzeugt eine protokollierbare
 append-only Laufrevision mit Quelle und Zeitbezug.
 
-Die Laufrevision speichert die fachliche Wirkung einer Zieltemperaturaenderung
-nicht als freien Boolwert, sondern als kleinen, von `ProcessState`
-unabhaengigen Phasenkontext (`RunAdjustmentPhaseContext`: `BeforeFermentation`
-oder `Fermenting`) beziehungsweise als typisierte Wirkung
-(`RunAdjustmentEffect`: `None`, `RestartTargetQualification` oder
-`ContinueFermentationWithoutRequalification`). Die Kommandoschicht bildet den
-aktuellen Prozesszustand auf diesen schmalen Kontext ab; `ActiveRun` selbst
-kennt die Zustandsmaschine nicht. Eine spaetere Wiederherstellung einer
-gespeicherten Laufrevision lehnt widerspruechliche Kombinationen ab: eine
-unveraenderte Zieltemperatur mit gesetzter Requalifizierungswirkung, eine
-geaenderte Zieltemperatur ohne oder mit unbekannter Wirkung sowie jeden
-unbekannten Enumwert.
+Die Kommandoschicht bildet den aktuellen Prozesszustand auf den kleinen, von
+`ProcessState` unabhaengigen `RunAdjustmentPhaseContext`
+(`BeforeFermentation` oder `Fermenting`) ab; `ActiveRun` selbst kennt die
+Zustandsmaschine nicht und lehnt unbekannte Kontextwerte ab. Der Phasenkontext
+ist nur Eingabe der Entscheidung und wird nicht in `RunRevision` persistiert.
+Die persistierbare Revision speichert stattdessen die daraus abgeleitete,
+typisierte Wirkung (`RunAdjustmentEffect`: `None`,
+`RestartTargetQualification` oder
+`ContinueFermentationWithoutRequalification`). Eine spaetere Wiederherstellung
+kann daher unbekannte oder widerspruechliche Wirkungen ablehnen, aber keinen
+nicht gespeicherten Phasenkontext nachtraeglich pruefen: eine unveraenderte
+Zieltemperatur mit gesetzter Requalifizierungswirkung, eine geaenderte
+Zieltemperatur ohne oder mit unbekannter Wirkung sowie jeden unbekannten
+Effekt-Enumwert werden abgelehnt.
 
 ### Zieltemperatur vor der Fermentationsphase
 

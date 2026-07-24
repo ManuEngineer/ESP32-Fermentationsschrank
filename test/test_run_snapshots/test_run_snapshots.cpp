@@ -582,6 +582,14 @@ void test_noop_and_invalid_metadata_do_not_create_revisions() {
         static_cast<int>(
             run->decideAdjustment(invalidMetadata, adjustableContext())
                 .status));
+
+    auto unknownPhase = adjustableContext();
+    unknownPhase.phaseContext = static_cast<RunAdjustmentPhaseContext>(0xFFU);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunAdjustmentStatus::InvalidMetadata),
+        static_cast<int>(
+            run->decideAdjustment(targetAdjustment(40.0, 100U), unknownPhase)
+                .status));
     TEST_ASSERT_EQUAL_UINT32(0U, run->revisionCount());
 }
 
