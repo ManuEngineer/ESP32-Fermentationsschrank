@@ -37,16 +37,29 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 - Anwendungsneutrale Plattformpersistenz und Wireformat fuer Issue #54
   (Paket A von #16, Closes #54): begrenztes binaersicheres `IStateStore` mit
-  caller-/schluesselspezifischem Leselimit und typisierten Erfolgs-,
-  NotFound-, Lese-, Schreib- und Kapazitaetsergebnissen; starke technische
-  Typen fuer StorageEpoch, Revision, Generation, RecordSequence, SlotId und
-  RecordTypeId; begrenzte Big-Endian-Byte-Reader/-Writer; IEEE-754-binary64-
+  caller-/schluesselspezifischem Leselimit und vier eindeutig unterscheidbaren
+  Schreibergebnissen - `Success`, `WriteError`/`CapacityError` (sicher
+  unveraendert) und `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
+  nach Stromausfall zwischen Commit und Rueckkehr; der neue Wert kann bereits
+  dauerhaft gespeichert sein, der Aufrufer muss zuruecklesen); begrenzter,
+  binaersicherer `StateStoreKey`-Werttyp mit anwendungsneutraler
+  Softwaregrenze (keine reale NVS-Garantie); starke technische Typen fuer
+  StorageEpoch, Revision, Generation, RecordSequence, SlotId und RecordTypeId
+  sowie ein generischer `checkedIncrement`-Baustein, der deren Ueberlauf von
+  `UINT64_MAX` auf 0 stabil ablehnt; begrenzte Big-Endian-Byte-Reader/-Writer
+  (Nullzeiger bei Laenge 0 sicher behandelt); portable
+  Zweierkomplement-Dekodierung signierter Ganzzahlen ohne
+  implementation-defined unsigned-zu-signed-Konvertierung; IEEE-754-binary64-
   Codec mit `-0.0`-Normalisierung und NaN-/Inf-Ablehnung; CRC-32/ISO-HDLC;
-  generischer Envelope Version 1 (41/49 Bytes) mit vollstaendiger
-  Grenzpruefung vor jeder Allokation; rein technische, generische
-  Slotkandidaten-Ermittlung und -Sortierung ohne konkrete Slotzahlen oder
-  Root-/Manifestbedeutung; `ISecureRandomSource`- und `ITimeZoneResolver`-
-  Ports; `SimulatedPersistentStateStore` mit injizierbaren Schreib-Cut-Points
+  generischer Envelope Version 1 (41/49 Bytes) mit ueberlaufsicherer,
+  gestufter Groessenpruefung (eigener `checkedAddSize`-Baustein) vor jeder
+  Allokation; rein technische Slotkandidaten-Ermittlung
+  (`scanTechnicalSlotCandidates`) mit deterministischer Sortierung, die
+  uebersprungene Slots nicht stillschweigend verwirft, sondern als typisierte
+  `SlotIssue`-Liste erhaelt (`NotFound` nie gleichbedeutend mit `ReadError`)
+  - weiterhin ohne konkrete Slotzahlen oder Root-/Manifestbedeutung;
+  `ISecureRandomSource`- und `ITimeZoneResolver`-Ports;
+  `SimulatedPersistentStateStore` mit injizierbaren Schreib-Cut-Points
   (Fehler vor Beginn, Stromausfall vor/nach Commit, Kapazitaetsfehler) sowie
   Read-/NotFound-/Korruptionsinjektion fuer native Tests
 - Initiale Projektstruktur

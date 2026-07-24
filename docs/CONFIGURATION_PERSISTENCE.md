@@ -925,14 +925,35 @@ abhaengige GitHub-Issues, Agent-Auftraege, Branches und kleine PRs angelegt:
 - SimulatedPersistentStateStore und Golden Tests
 
 Umgesetzt mit Issue #54 (`lib/device_platform/src/storage_types.hpp`,
-`byte_buffer.hpp`, `big_endian_codec.hpp`, `binary64_codec.hpp`, `crc32.hpp`/
-`.cpp`, `storage_envelope.hpp`/`.cpp`, `storage_slot_candidates.hpp`/`.cpp`,
-`secure_random_source.hpp`, `time_zone_resolver.hpp`, das erweiterte
+`byte_buffer.hpp`, `big_endian_codec.hpp`, `binary64_codec.hpp`,
+`checked_size.hpp`, `crc32.hpp`/`.cpp`, `storage_envelope.hpp`/`.cpp`,
+`storage_slot_candidates.hpp`/`.cpp`, `secure_random_source.hpp`,
+`time_zone_resolver.hpp`, `state_store_key.hpp`, das erweiterte
 `state_store.hpp`; Testadapter in
 `lib/device_platform_test_support/src/simulated_persistent_state_store.hpp`/
 `.cpp`, `mock_secure_random_source.hpp`/`.cpp`,
 `mock_time_zone_resolver.hpp`/`.cpp`). Bewusst noch ohne konkrete Slotzahlen,
 Root-/Manifestbedeutung oder Schutzmengen - das bleibt Paket C (#56).
+
+`IStateStore::write` liefert vier eindeutig unterscheidbare Ergebnisse statt
+einer pauschalen "unveraendert bei Fehler"-Garantie: `Success` (neuer Wert
+dauerhaft gespeichert), `WriteError` und `CapacityError` (sicher
+unveraendert) sowie `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
+nach einem Stromausfall zwischen Commit und Rueckkehr - der neue Wert kann
+bereits dauerhaft gespeichert sein; der Aufrufer muss zuruecklesen). Die
+technische Slotkandidaten-Ermittlung (`scanTechnicalSlotCandidates`) verwirft
+uebersprungene Slots nicht stillschweigend, sondern liefert zusaetzlich zu den
+sortierten Kandidaten eine typisierte `SlotIssue`-Liste (`NotFound`,
+Lese-/Kapazitaetsfehler, jede Envelope-Integritaetsverletzung, technisch
+gueltige aber nicht passende Kandidaten) - `ReadError` wird dabei nie wie
+`NotFound` behandelt, damit spaeterer Bootstrap-/Recovery-Code (#56/#57)
+fabrikleeren von beschaedigtem Speicher unterscheiden kann. `state_store_key.hpp`
+stellt einen begrenzten, binaersicheren `StateStoreKey`-Werttyp bereit (feste
+anwendungsneutrale Softwaregrenze, keine reale NVS-Garantie); konkrete
+Schluesselwerte bleiben Aufgabe der aufrufenden Anwendung. `storage_types.hpp`
+ergaenzt ausserdem einen generischen `checkedIncrement`-Baustein fuer die
+starken `uint64_t`-Zaehlertypen (lehnt Ueberlauf von `UINT64_MAX` auf 0
+stabil ab); die konkrete Revisions-/Sequenzvergabe bleibt Paket C (#56).
 
 ### Paket B: Typisierte Konfigurationsdokumente
 
