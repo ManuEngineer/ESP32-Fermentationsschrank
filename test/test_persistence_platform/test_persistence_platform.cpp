@@ -23,13 +23,26 @@ using device_platform::RecordTypeId;
 using device_platform::SlotIssueKind;
 using device_platform::StateStoreKey;
 using device_platform::StateStoreKeyStatus;
-using device_platform::StateStoreStatus;
+using device_platform::StateStoreReadStatus;
+using device_platform::StateStoreWriteStatus;
 using device_platform::StorageEnvelope;
 using device_platform::StorageEpoch;
 using device_platform::TimeZoneResolutionStatus;
 using device_platform_test_support::MockSecureRandomSource;
 using device_platform_test_support::MockTimeZoneResolver;
 using device_platform_test_support::SimulatedPersistentStateStore;
+
+// Kein Test mit einem absichtlich vertragsverletzenden Test-Store (der
+// `read()` mit `WriteError`/`CommitOutcomeUnknown` oder `write()` mit
+// `NotFound`/`ReadError` zurueckgeben liesse): seit der Trennung von
+// `StateStoreReadStatus`/`StateStoreWriteStatus` (state_store.hpp) ist ein
+// solcher Store nicht mehr in gueltigem C++ konstruierbar -
+// `IStateStore::read()` gibt `StateStoreReadResult` mit `StateStoreReadStatus`
+// zurueck, der Typ selbst besitzt keinen `WriteError`- oder
+// `CommitOutcomeUnknown`-Wert. Das ist ein Compilefehler statt eines
+// Laufzeitfehlers und damit ein staerkerer Beweis als jeder Test es waere;
+// die vorhandenen `test_write_*`/`test_read_*`-Tests unten decken bereits
+// jede tatsaechlich erreichbare Kombination ab.
 
 StateStoreKey keyOrFail(const std::string& raw) {
     auto result = StateStoreKey::create(raw);
@@ -59,50 +72,43 @@ constexpr std::size_t kDefaultMaxBytes = 4096U;
 
 void test_write_and_read_round_trip() {
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("key"), "value")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "value") ==
+                     StateStoreWriteStatus::Success);
     const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreStatus::Success),
-                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.status == StateStoreReadStatus::Success);
     TEST_ASSERT_EQUAL_STRING("value", result.value.c_str());
 }
 
 void test_read_distinguishes_missing_key_from_error() {
     const SimulatedPersistentStateStore store;
     const auto result = store.read(keyOrFail("unknown"), kDefaultMaxBytes);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreStatus::NotFound),
-                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.status == StateStoreReadStatus::NotFound);
     TEST_ASSERT_TRUE(result.value.empty());
 }
 
 void test_read_enforces_caller_specific_maximum_length() {
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("key"), "0123456789")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "0123456789") ==
+                     StateStoreWriteStatus::Success);
 
     const auto tooSmallLimit = store.read(keyOrFail("key"), 5U);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreStatus::CapacityError),
-                          static_cast<int>(tooSmallLimit.status));
+    TEST_ASSERT_TRUE(tooSmallLimit.status ==
+                     StateStoreReadStatus::CapacityError);
     TEST_ASSERT_TRUE(tooSmallLimit.value.empty());
 
     const auto exactLimit = store.read(keyOrFail("key"), 10U);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreStatus::Success),
-                          static_cast<int>(exactLimit.status));
+    TEST_ASSERT_TRUE(exactLimit.status == StateStoreReadStatus::Success);
 }
 
 void test_write_fail_before_begin_leaves_store_unchanged() {
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("key"), "first")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "first") ==
+                     StateStoreWriteStatus::Success);
 
     store.setNextWriteFault(
         SimulatedPersistentStateStore::WriteFault::FailBeforeBegin);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::WriteError),
-        static_cast<int>(store.write(keyOrFail("key"), "second")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "second") ==
+                     StateStoreWriteStatus::WriteError);
 
     const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
     TEST_ASSERT_EQUAL_STRING("first", result.value.c_str());
@@ -110,15 +116,13 @@ void test_write_fail_before_begin_leaves_store_unchanged() {
 
 void test_write_power_cut_before_commit_leaves_store_unchanged() {
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("key"), "first")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "first") ==
+                     StateStoreWriteStatus::Success);
 
     store.setNextWriteFault(
         SimulatedPersistentStateStore::WriteFault::PowerCutBeforeCommit);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::WriteError),
-        static_cast<int>(store.write(keyOrFail("key"), "second")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "second") ==
+                     StateStoreWriteStatus::WriteError);
     store.restart();
 
     const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
@@ -132,32 +136,28 @@ void test_write_power_cut_after_commit_before_return_yields_commit_outcome_unkno
     SimulatedPersistentStateStore store;
     store.setNextWriteFault(SimulatedPersistentStateStore::WriteFault::
                                 PowerCutAfterCommitBeforeReturn);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::CommitOutcomeUnknown),
-        static_cast<int>(
-            store.write(keyOrFail("key"), "committed_despite_unknown")));
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("key"), "committed_despite_unknown") ==
+        StateStoreWriteStatus::CommitOutcomeUnknown);
 
     // Der Aufrufer sah einen unbekannten Commit-Ausgang; erst das Ruecklesen
     // (auch nach einem simulierten Neustart) zeigt, dass der neue Wert
     // bereits dauerhaft gespeichert wurde.
     store.restart();
     const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreStatus::Success),
-                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.status == StateStoreReadStatus::Success);
     TEST_ASSERT_EQUAL_STRING("committed_despite_unknown", result.value.c_str());
 }
 
 void test_write_capacity_exceeded_leaves_store_unchanged() {
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("key"), "first")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "first") ==
+                     StateStoreWriteStatus::Success);
 
     store.setNextWriteFault(
         SimulatedPersistentStateStore::WriteFault::CapacityExceeded);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::CapacityError),
-        static_cast<int>(store.write(keyOrFail("key"), "second")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "second") ==
+                     StateStoreWriteStatus::CapacityError);
 
     const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
     TEST_ASSERT_EQUAL_STRING("first", result.value.c_str());
@@ -167,93 +167,75 @@ void test_write_fault_applies_only_to_next_write() {
     SimulatedPersistentStateStore store;
     store.setNextWriteFault(
         SimulatedPersistentStateStore::WriteFault::FailBeforeBegin);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::WriteError),
-        static_cast<int>(store.write(keyOrFail("key"), "first")));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("key"), "second")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "first") ==
+                     StateStoreWriteStatus::WriteError);
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "second") ==
+                     StateStoreWriteStatus::Success);
     TEST_ASSERT_EQUAL_STRING(
         "second", store.read(keyOrFail("key"), kDefaultMaxBytes).value.c_str());
 }
 
 void test_read_failure_injection_is_key_specific_and_recoverable() {
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("a"), "valueA")));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("b"), "valueB")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("a"), "valueA") ==
+                     StateStoreWriteStatus::Success);
+    TEST_ASSERT_TRUE(store.write(keyOrFail("b"), "valueB") ==
+                     StateStoreWriteStatus::Success);
 
     store.injectReadFailure(keyOrFail("a"), true);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::ReadError),
-        static_cast<int>(store.read(keyOrFail("a"), kDefaultMaxBytes).status));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.read(keyOrFail("b"), kDefaultMaxBytes).status));
+    TEST_ASSERT_TRUE(store.read(keyOrFail("a"), kDefaultMaxBytes).status ==
+                     StateStoreReadStatus::ReadError);
+    TEST_ASSERT_TRUE(store.read(keyOrFail("b"), kDefaultMaxBytes).status ==
+                     StateStoreReadStatus::Success);
 
     store.injectReadFailure(keyOrFail("a"), false);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.read(keyOrFail("a"), kDefaultMaxBytes).status));
+    TEST_ASSERT_TRUE(store.read(keyOrFail("a"), kDefaultMaxBytes).status ==
+                     StateStoreReadStatus::Success);
 }
 
 void test_forced_not_found_overrides_existing_committed_value() {
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("key"), "value")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "value") ==
+                     StateStoreWriteStatus::Success);
 
     store.forceNotFound(keyOrFail("key"), true);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::NotFound),
-        static_cast<int>(
-            store.read(keyOrFail("key"), kDefaultMaxBytes).status));
+    TEST_ASSERT_TRUE(store.read(keyOrFail("key"), kDefaultMaxBytes).status ==
+                     StateStoreReadStatus::NotFound);
 
     store.forceNotFound(keyOrFail("key"), false);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(
-            store.read(keyOrFail("key"), kDefaultMaxBytes).status));
+    TEST_ASSERT_TRUE(store.read(keyOrFail("key"), kDefaultMaxBytes).status ==
+                     StateStoreReadStatus::Success);
 }
 
 void test_corruption_injection_survives_restart() {
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("key"), "valid")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "valid") ==
+                     StateStoreWriteStatus::Success);
 
     store.injectCorruption(keyOrFail("key"),
                            std::string("\x00\x01corrupt", 9U));
     store.restart();
 
     const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreStatus::Success),
-                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.status == StateStoreReadStatus::Success);
     TEST_ASSERT_EQUAL_UINT32(9U, result.value.size());
     TEST_ASSERT_NOT_EQUAL(0, result.value.compare(std::string("valid")));
 }
 
 void test_restart_clears_volatile_fault_injection_but_keeps_committed_data() {
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("key"), "value")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "value") ==
+                     StateStoreWriteStatus::Success);
     store.injectReadFailure(keyOrFail("key"), true);
     store.forceNotFound(keyOrFail("other"), true);
 
     store.restart();
 
     const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreStatus::Success),
-                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.status == StateStoreReadStatus::Success);
     TEST_ASSERT_EQUAL_STRING("value", result.value.c_str());
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::NotFound),
-        static_cast<int>(
-            store.read(keyOrFail("other"), kDefaultMaxBytes).status));
+    TEST_ASSERT_TRUE(store.read(keyOrFail("other"), kDefaultMaxBytes).status ==
+                     StateStoreReadStatus::NotFound);
 }
 
 void test_secure_random_source_fills_requested_length_deterministically() {
@@ -307,38 +289,33 @@ void test_scan_filters_and_sorts_candidates_and_preserves_issues() {
     const auto recordType = RecordTypeId(9U);
     const auto epoch = StorageEpoch(1U);
 
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(
-            keyOrFail("slot0"),
-            encodedEnvelopeOrFail(recordType, 1U, epoch, 5U, "a"))));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(
-            keyOrFail("slot1"),
-            encodedEnvelopeOrFail(recordType, 1U, epoch, 9U, "b"))));
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot0"),
+                    encodedEnvelopeOrFail(recordType, 1U, epoch, 5U, "a")) ==
+        StateStoreWriteStatus::Success);
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot1"),
+                    encodedEnvelopeOrFail(recordType, 1U, epoch, 9U, "b")) ==
+        StateStoreWriteStatus::Success);
     // Falscher RecordType: technisch gueltig, aber nicht passend.
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(
-            store.write(keyOrFail("slot2"),
-                        encodedEnvelopeOrFail(RecordTypeId(99U), 1U, epoch, 20U,
-                                              "wrong-type"))));
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot2"),
+                    encodedEnvelopeOrFail(RecordTypeId(99U), 1U, epoch, 20U,
+                                          "wrong-type")) ==
+        StateStoreWriteStatus::Success);
     // Falsche StorageEpoch: technisch gueltig, aber nicht passend.
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(
-            store.write(keyOrFail("slot3"),
-                        encodedEnvelopeOrFail(recordType, 1U, StorageEpoch(2U),
-                                              30U, "wrong-epoch"))));
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot3"),
+                    encodedEnvelopeOrFail(recordType, 1U, StorageEpoch(2U), 30U,
+                                          "wrong-epoch")) ==
+        StateStoreWriteStatus::Success);
     // Fehlender Slot.
     // ("slot4" wird nie geschrieben.)
     // Envelope strukturell ungueltig: richtige Laenge, falsches Magic.
     auto badMagic = encodedEnvelopeOrFail(recordType, 1U, epoch, 40U, "bad");
     badMagic[0] = 'X';
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("slot5"), badMagic)));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("slot5"), badMagic) ==
+                     StateStoreWriteStatus::Success);
 
     const std::vector<StateStoreKey> slotKeys{
         keyOrFail("slot0"), keyOrFail("slot1"), keyOrFail("slot2"),
@@ -398,11 +375,10 @@ void test_scan_never_conflates_read_error_with_not_found() {
     SimulatedPersistentStateStore store;
     const auto recordType = RecordTypeId(1U);
     const auto epoch = StorageEpoch(1U);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(
-            keyOrFail("slot0"),
-            encodedEnvelopeOrFail(recordType, 1U, epoch, 1U, "ok"))));
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot0"),
+                    encodedEnvelopeOrFail(recordType, 1U, epoch, 1U, "ok")) ==
+        StateStoreWriteStatus::Success);
     store.injectReadFailure(keyOrFail("slot1"), true);
     // "slot2" wird nie geschrieben (NotFound).
 
@@ -427,9 +403,8 @@ void test_scan_preserves_capacity_error_on_read_limit() {
     const auto epoch = StorageEpoch(1U);
     const auto oversized = encodedEnvelopeOrFail(recordType, 1U, epoch, 1U,
                                                  std::string(100U, 'x'));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("slot0"), oversized)));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("slot0"), oversized) ==
+                     StateStoreWriteStatus::Success);
 
     const std::vector<StateStoreKey> slotKeys{keyOrFail("slot0")};
     // `maxEnvelopeBytes` kleiner als der tatsaechlich gespeicherte Envelope:
@@ -450,14 +425,12 @@ void test_scan_preserves_crc_mismatch_issue() {
     auto corrupted =
         encodedEnvelopeOrFail(recordType, 1U, epoch, 1U, "payload");
     corrupted.back() = static_cast<char>(corrupted.back() ^ 0x01);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("slot0"), corrupted)));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(
-            keyOrFail("slot1"),
-            encodedEnvelopeOrFail(recordType, 1U, epoch, 2U, "ok"))));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("slot0"), corrupted) ==
+                     StateStoreWriteStatus::Success);
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot1"),
+                    encodedEnvelopeOrFail(recordType, 1U, epoch, 2U, "ok")) ==
+        StateStoreWriteStatus::Success);
 
     const std::vector<StateStoreKey> slotKeys{keyOrFail("slot0"),
                                               keyOrFail("slot1")};
@@ -479,21 +452,18 @@ void test_scan_break_ties_by_slot_id_ascending() {
 
     // Gleicher versionValue in mehreren Slots: Sortierung muss deterministisch
     // sein (std::sort ist nicht stabil), Tiebreak per aufsteigender Slot-ID.
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(
-            keyOrFail("slot0"),
-            encodedEnvelopeOrFail(recordType, 1U, epoch, 7U, "a"))));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(
-            keyOrFail("slot1"),
-            encodedEnvelopeOrFail(recordType, 1U, epoch, 7U, "b"))));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(
-            keyOrFail("slot2"),
-            encodedEnvelopeOrFail(recordType, 1U, epoch, 7U, "c"))));
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot0"),
+                    encodedEnvelopeOrFail(recordType, 1U, epoch, 7U, "a")) ==
+        StateStoreWriteStatus::Success);
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot1"),
+                    encodedEnvelopeOrFail(recordType, 1U, epoch, 7U, "b")) ==
+        StateStoreWriteStatus::Success);
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot2"),
+                    encodedEnvelopeOrFail(recordType, 1U, epoch, 7U, "c")) ==
+        StateStoreWriteStatus::Success);
 
     const std::vector<StateStoreKey> slotKeys{
         keyOrFail("slot0"), keyOrFail("slot1"), keyOrFail("slot2")};
@@ -515,20 +485,17 @@ void test_scan_handles_max_version_value_without_overflow() {
     // schreibenden Anwendungsschicht (#55/#56, siehe `checkedIncrement` in
     // storage_types.hpp); #54 muss lediglich den vollen 64-Bit-Wertebereich
     // verlustfrei kodieren, dekodieren und korrekt einsortieren.
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(
-            keyOrFail("slot0"),
-            encodedEnvelopeOrFail(recordType, 1U, epoch,
-                                  std::numeric_limits<uint64_t>::max(),
-                                  "max"))));
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(
-            keyOrFail("slot1"),
-            encodedEnvelopeOrFail(recordType, 1U, epoch,
-                                  std::numeric_limits<uint64_t>::max() - 1U,
-                                  "near-max"))));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("slot0"),
+                                 encodedEnvelopeOrFail(
+                                     recordType, 1U, epoch,
+                                     std::numeric_limits<uint64_t>::max(),
+                                     "max")) == StateStoreWriteStatus::Success);
+    TEST_ASSERT_TRUE(store.write(keyOrFail("slot1"),
+                                 encodedEnvelopeOrFail(
+                                     recordType, 1U, epoch,
+                                     std::numeric_limits<uint64_t>::max() - 1U,
+                                     "near-max")) ==
+                     StateStoreWriteStatus::Success);
 
     const std::vector<StateStoreKey> slotKeys{keyOrFail("slot0"),
                                               keyOrFail("slot1")};
@@ -544,15 +511,26 @@ void test_scan_handles_max_version_value_without_overflow() {
 }
 
 void test_next_slot_round_robin_wraps_and_handles_zero_slots() {
-    TEST_ASSERT_EQUAL_UINT32(
-        1U, device_platform::nextSlotRoundRobin(device_platform::SlotId(0U), 4U)
-                .value());
-    TEST_ASSERT_EQUAL_UINT32(
-        0U, device_platform::nextSlotRoundRobin(device_platform::SlotId(3U), 4U)
-                .value());
-    TEST_ASSERT_EQUAL_UINT32(
-        0U, device_platform::nextSlotRoundRobin(device_platform::SlotId(0U), 0U)
-                .value());
+    using device_platform::NextSlotStatus;
+
+    const auto wrap1 =
+        device_platform::nextSlotRoundRobin(device_platform::SlotId(0U), 4U);
+    TEST_ASSERT_TRUE(wrap1.status == NextSlotStatus::Success);
+    TEST_ASSERT_TRUE(wrap1.slot.has_value());
+    TEST_ASSERT_EQUAL_UINT32(1U, wrap1.slot->value());
+
+    const auto wrap2 =
+        device_platform::nextSlotRoundRobin(device_platform::SlotId(3U), 4U);
+    TEST_ASSERT_TRUE(wrap2.status == NextSlotStatus::Success);
+    TEST_ASSERT_TRUE(wrap2.slot.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, wrap2.slot->value());
+
+    // `slotCount == 0` ist ungueltig und liefert keinen Slot - insbesondere
+    // nicht den scheinbar gueltigen `SlotId(0)`.
+    const auto zeroSlots =
+        device_platform::nextSlotRoundRobin(device_platform::SlotId(0U), 0U);
+    TEST_ASSERT_TRUE(zeroSlots.status == NextSlotStatus::InvalidSlotCount);
+    TEST_ASSERT_FALSE(zeroSlots.slot.has_value());
 }
 
 // `lastWrittenSlot` nahe UINT32_MAX darf `lastWrittenSlot.value() + 1` nicht
@@ -560,29 +538,58 @@ void test_next_slot_round_robin_wraps_and_handles_zero_slots() {
 // ESP32; auf dem 64-Bit-Testhost waere ein naiver Cast zufaellig unauffaellig
 // gewesen).
 void test_next_slot_round_robin_does_not_overflow_near_uint32_max() {
+    using device_platform::NextSlotStatus;
+
     // UINT32_MAX % 4 == 3, naechster Slot ist damit 0 - kein stiller
     // Ueberlauf von `lastWrittenSlot.value() + 1` auf 32-Bit-`size_t`.
     const auto nearMax =
         device_platform::SlotId(std::numeric_limits<uint32_t>::max());
-    TEST_ASSERT_EQUAL_UINT32(
-        0U, device_platform::nextSlotRoundRobin(nearMax, 4U).value());
+    const auto result1 = device_platform::nextSlotRoundRobin(nearMax, 4U);
+    TEST_ASSERT_TRUE(result1.status == NextSlotStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(0U, result1.slot->value());
 
     // UINT32_MAX % 5 == 0 (4294967295 ist durch 5 teilbar), naechster Slot
     // ist damit 1.
     const auto atMax =
         device_platform::SlotId(std::numeric_limits<uint32_t>::max());
-    TEST_ASSERT_EQUAL_UINT32(
-        1U, device_platform::nextSlotRoundRobin(atMax, 5U).value());
+    const auto result2 = device_platform::nextSlotRoundRobin(atMax, 5U);
+    TEST_ASSERT_TRUE(result2.status == NextSlotStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(1U, result2.slot->value());
 }
 
-// Ein technisch nicht darstellbares `slotCount` (> UINT32_MAX) wird sicher
-// wie `slotCount == 0` behandelt statt die Zaehlung still abzuschneiden.
+// Ein technisch nicht darstellbares `slotCount` (> UINT32_MAX) wird typisiert
+// als `InvalidSlotCount` abgelehnt statt einen scheinbar gueltigen Slot 0 zu
+// liefern - das war zuvor nicht von einer erfolgreichen Rotation zu Slot 0
+// unterscheidbar.
 void test_next_slot_round_robin_rejects_slot_count_above_uint32_max() {
+    using device_platform::NextSlotStatus;
+
     const std::size_t tooLarge =
         static_cast<std::size_t>(std::numeric_limits<uint32_t>::max()) + 1U;
-    TEST_ASSERT_EQUAL_UINT32(0U, device_platform::nextSlotRoundRobin(
-                                     device_platform::SlotId(0U), tooLarge)
-                                     .value());
+    const auto result = device_platform::nextSlotRoundRobin(
+        device_platform::SlotId(0U), tooLarge);
+    TEST_ASSERT_TRUE(result.status == NextSlotStatus::InvalidSlotCount);
+    TEST_ASSERT_FALSE(result.slot.has_value());
+}
+
+// Beweist explizit, dass ein erfolgreicher Slot 0 (gueltige Rotation) niemals
+// mit einem ungueltigen `slotCount` verwechselt werden kann: beide Faelle vor
+// Round 3 lieferten identisch `SlotId(0)`, sind jetzt aber durch `status`
+// eindeutig unterscheidbar.
+void test_next_slot_round_robin_success_at_slot_zero_is_not_confusable_with_invalid_slot_count() {
+    using device_platform::NextSlotStatus;
+
+    const auto validRotationToZero =
+        device_platform::nextSlotRoundRobin(device_platform::SlotId(3U), 4U);
+    const auto invalidSlotCount =
+        device_platform::nextSlotRoundRobin(device_platform::SlotId(0U), 0U);
+
+    TEST_ASSERT_TRUE(validRotationToZero.status == NextSlotStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(0U, validRotationToZero.slot->value());
+    TEST_ASSERT_TRUE(invalidSlotCount.status ==
+                     NextSlotStatus::InvalidSlotCount);
+    TEST_ASSERT_FALSE(invalidSlotCount.slot.has_value());
+    TEST_ASSERT_TRUE(validRotationToZero.status != invalidSlotCount.status);
 }
 
 void test_state_store_key_accepts_valid_key() {
@@ -660,12 +667,10 @@ void test_state_store_key_comparison_and_deterministic_simulator_use() {
     TEST_ASSERT_TRUE(keyOrFail("a") < keyOrFail("b"));
 
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(StateStoreStatus::Success),
-        static_cast<int>(store.write(keyOrFail("same"), "value")));
+    TEST_ASSERT_TRUE(store.write(keyOrFail("same"), "value") ==
+                     StateStoreWriteStatus::Success);
     const auto result = store.read(keyOrFail("same"), kDefaultMaxBytes);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreStatus::Success),
-                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.status == StateStoreReadStatus::Success);
     TEST_ASSERT_EQUAL_STRING("value", result.value.c_str());
 }
 
@@ -703,6 +708,8 @@ int main() {
     RUN_TEST(test_next_slot_round_robin_wraps_and_handles_zero_slots);
     RUN_TEST(test_next_slot_round_robin_does_not_overflow_near_uint32_max);
     RUN_TEST(test_next_slot_round_robin_rejects_slot_count_above_uint32_max);
+    RUN_TEST(
+        test_next_slot_round_robin_success_at_slot_zero_is_not_confusable_with_invalid_slot_count);
     RUN_TEST(test_state_store_key_accepts_valid_key);
     RUN_TEST(test_state_store_key_accepts_single_byte_key);
     RUN_TEST(test_state_store_key_rejects_empty_key);

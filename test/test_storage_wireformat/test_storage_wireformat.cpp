@@ -583,6 +583,75 @@ void test_envelope_encode_rejects_overflow_at_header_plus_payload() {
     TEST_ASSERT_EQUAL_STRING("UNCHANGED", encoded.c_str());
 }
 
+// `outBytes` darf beim Aufruf bereits einen vollstaendigen alten Record
+// enthalten (siehe docs/CONFIGURATION_PERSISTENCE.md, Abschnitt
+// "Ressourcenvertrag"): ein erfolgreicher Encode ersetzt ihn vollstaendig per
+// `swap()`, nicht nur teilweise oder additiv.
+void test_envelope_encode_replaces_preexisting_old_record_on_success() {
+    auto oldEnvelope = validEnvelope();
+    oldEnvelope.versionValue = 1U;
+    oldEnvelope.payload = "OLD-RECORD-PAYLOAD";
+    std::string outBytes;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(oldEnvelope, outBytes, 1024U) ==
+        device_platform::EnvelopeEncodeStatus::Success);
+    const std::string oldEncoded = outBytes;
+    TEST_ASSERT_FALSE(oldEncoded.empty());
+
+    auto newEnvelope = validEnvelope();
+    newEnvelope.versionValue = 2U;
+    newEnvelope.payload = "NEW-RECORD-PAYLOAD-DIFFERENT-LENGTH";
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(newEnvelope, outBytes, 1024U) ==
+        device_platform::EnvelopeEncodeStatus::Success);
+
+    // Vollstaendig ersetzt: weder ein Rest des alten Records noch eine
+    // Vermischung von altem und neuem Inhalt.
+    TEST_ASSERT_TRUE(outBytes != oldEncoded);
+    std::string expectedNewEncoded;
+    TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
+                         newEnvelope, expectedNewEncoded, 1024U) ==
+                     device_platform::EnvelopeEncodeStatus::Success);
+    TEST_ASSERT_TRUE(outBytes == expectedNewEncoded);
+}
+
+// `InvalidField` darf einen bereits in `outBytes` vorhandenen vollstaendigen
+// alten Record nicht antasten - nicht nur einen kurzen Platzhalterstring wie
+// die aelteren Ablehnungstests oben, sondern einen tatsaechlichen Record.
+void test_envelope_encode_leaves_preexisting_old_record_unchanged_on_invalid_field() {
+    auto oldEnvelope = validEnvelope();
+    std::string outBytes;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(oldEnvelope, outBytes, 1024U) ==
+        device_platform::EnvelopeEncodeStatus::Success);
+    const std::string oldEncoded = outBytes;
+
+    auto invalidEnvelope = validEnvelope();
+    invalidEnvelope.versionValue = 0U;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(invalidEnvelope, outBytes, 1024U) ==
+        device_platform::EnvelopeEncodeStatus::InvalidField);
+    TEST_ASSERT_TRUE(outBytes == oldEncoded);
+}
+
+// Gleiches fuer `CapacityExceeded`: der alte vollstaendige Record bleibt
+// bestehen, wenn der neue Record nicht in `maxTotalBytes` passt.
+void test_envelope_encode_leaves_preexisting_old_record_unchanged_on_capacity_exceeded() {
+    auto oldEnvelope = validEnvelope();
+    std::string outBytes;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(oldEnvelope, outBytes, 1024U) ==
+        device_platform::EnvelopeEncodeStatus::Success);
+    const std::string oldEncoded = outBytes;
+
+    auto tooLargeEnvelope = validEnvelope();
+    tooLargeEnvelope.payload = std::string(1024U, 'x');
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(tooLargeEnvelope, outBytes, 10U) ==
+        device_platform::EnvelopeEncodeStatus::CapacityExceeded);
+    TEST_ASSERT_TRUE(outBytes == oldEncoded);
+}
+
 void test_envelope_decode_rejects_invalid_magic() {
     std::string encoded;
     TEST_ASSERT_TRUE(
@@ -963,6 +1032,11 @@ int main() {
     RUN_TEST(test_envelope_encode_rejects_one_byte_over_exact_size);
     RUN_TEST(test_envelope_encode_rejects_overflow_already_at_header_plus_crc);
     RUN_TEST(test_envelope_encode_rejects_overflow_at_header_plus_payload);
+    RUN_TEST(test_envelope_encode_replaces_preexisting_old_record_on_success);
+    RUN_TEST(
+        test_envelope_encode_leaves_preexisting_old_record_unchanged_on_invalid_field);
+    RUN_TEST(
+        test_envelope_encode_leaves_preexisting_old_record_unchanged_on_capacity_exceeded);
     RUN_TEST(test_envelope_decode_rejects_invalid_magic);
     RUN_TEST(test_envelope_decode_rejects_unknown_envelope_version);
     RUN_TEST(test_envelope_decode_rejects_reserved_zero_fields);
