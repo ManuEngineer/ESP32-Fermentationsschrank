@@ -54,23 +54,41 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   `checkedIncrement`-Baustein, der sowohl den reservierten Ausgangswert 0
   (`InvalidCurrentValue`) als auch einen Ueberlauf von `UINT64_MAX` auf 0
   (`Overflow`) stabil ablehnt; begrenzte Big-Endian-Byte-Reader/-Writer
-  (Nullzeiger bei Laenge 0 sicher behandelt); portable
+  (`ByteWriter::writeBytes`/`ByteReader::readBytes` setzen den
+  Nullzeigervertrag technisch durch: `length == 0` ist ein sicherer No-Op
+  auch mit `nullptr`, `length > 0` mit `nullptr` wird beobachtbar per
+  `false` abgelehnt statt undefiniertes Verhalten zu riskieren; dedizierter
+  `uint8`-Golden-Test mit festen Werten `0x00`/`0x01`/`0x7F`/`0x80`/`0xFF`
+  ergaenzt den bisher erst bei `uint16` beginnenden Big-Endian-Golden-Test,
+  inklusive Lesen aus leerem Puffer, das Ausgabeparameter und Leseposition
+  unveraendert laesst); portable
   Zweierkomplement-Dekodierung signierter Ganzzahlen ohne
   implementation-defined unsigned-zu-signed-Konvertierung; IEEE-754-binary64-
   Codec mit `-0.0`-Normalisierung und NaN-/Inf-Ablehnung; inkrementeller
-  CRC-32/ISO-HDLC-Akkumulator (`Crc32IsoHdlc`), von Envelope-Encoding und
-  -Decoding genutzt, um den CRC direkt ueber Header und Payload zu berechnen,
-  ohne einen zusaetzlichen `header + payload`-Hilfspuffer anzulegen;
-  generischer Envelope Version 1 (41/49 Bytes) mit ueberlaufsicherer,
-  gestufter Groessenpruefung (eigener `checkedAddSize`-Baustein) vor jeder
-  Allokation und Veroeffentlichung des fertigen Records erst nach
-  vollstaendigem Erfolg per `swap()` statt Kopie - dabei entsteht hoechstens
-  ein zusaetzlicher, neu aufgebauter vollstaendiger Recordpuffer; ein bereits
-  in `outBytes` gehaltener alter Record bleibt bis zur erfolgreichen
-  `swap()`-Zeile unveraendert bestehen und wird bei jedem Fehler
-  (`InvalidField`/`CapacityExceeded`) nicht angetastet (die staerkere
-  globale Ein-Puffer-Garantie waehrend eines vollstaendigen Commits ist
-  Aufgabe des Commit-Workflows in #56/#57); rein technische
+  CRC-32/ISO-HDLC-Akkumulator (`Crc32IsoHdlc::update`, jetzt
+  `[[nodiscard]] bool` mit demselben technisch durchgesetzten
+  Nullzeigervertrag; die reine Rohzeiger-One-Shot-Ueberladung
+  `computeCrc32IsoHdlc(const void*, size_t)` wurde entfernt, da kein
+  Aufrufer sie noch braucht und ein Sentinel-Fehlerwert fuer `uint32_t`-CRCs
+  nicht existiert), von Envelope-Encoding und -Decoding genutzt, um den CRC
+  direkt ueber Header und Payload zu berechnen, ohne einen zusaetzlichen
+  `header + payload`-Hilfspuffer anzulegen; generischer Envelope Version 1
+  (41/49 Bytes) mit ueberlaufsicherer, gestufter Groessenpruefung (eigener
+  `checkedAddSize`-Baustein sowie die neue freie, zustandslose
+  `checkEnvelopeEncodedSize(payloadSize, hasUtc, maxTotalBytes)`-Funktion,
+  die dieselbe Entscheidung als reine Zahlen ohne Pufferaufbau liefert und
+  damit Grenzwerte bis `UINT32_MAX` ohne reale 4-GiB-Allokation testbar
+  macht) vor jeder Allokation und Veroeffentlichung des fertigen Records
+  erst nach vollstaendigem Erfolg per `swap()` statt Kopie - dabei entsteht
+  hoechstens ein zusaetzlicher, neu aufgebauter vollstaendiger Recordpuffer;
+  ein bereits in `outBytes` gehaltener alter Record bleibt bis zur
+  erfolgreichen `swap()`-Zeile unveraendert bestehen und wird bei jedem
+  Fehler nicht angetastet - `InvalidField` gilt dabei ausschliesslich fuer
+  die vier reservierten Nullwertfelder und ungueltige Optionaltags,
+  `CapacityExceeded` einheitlich fuer jede Groessen-/Kapazitaetsfrage
+  einschliesslich einer in `uint32_t` nicht darstellbaren Payloadgroesse
+  (die staerkere globale Ein-Puffer-Garantie waehrend eines vollstaendigen
+  Commits ist Aufgabe des Commit-Workflows in #56/#57); rein technische
   Slotkandidaten-Ermittlung (`scanTechnicalSlotCandidates`) mit
   deterministischer Sortierung, die uebersprungene Slots nicht
   stillschweigend verwirft, sondern als typisierte `SlotIssue`-Liste erhaelt
@@ -83,10 +101,23 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   Slotanzahl (0 oder technisch nicht darstellbar) nicht mehr mit einer
   erfolgreichen Rotation zu Slot 0 verwechselbar macht, unabhaengig von der
   `size_t`-Breite der Zielplattform ueberlaufsicher; `ISecureRandomSource`-
-  und `ITimeZoneResolver`-Ports;
+  (`fill()` mit demselben technisch durchgesetzten Nullzeigervertrag: bei
+  `length == 0` wird weder ein vorbereiteter Override konsumiert noch der
+  Generatorzustand weiterbewegt, bei `length > 0` mit `nullptr` lehnt jede
+  Implementierung inklusive `MockSecureRandomSource` beobachtbar ab) und
+  `ITimeZoneResolver`-Ports;
   `SimulatedPersistentStateStore` mit injizierbaren Schreib-Cut-Points
   (Fehler vor Beginn, Stromausfall vor/nach Commit, Kapazitaetsfehler) sowie
-  Read-/NotFound-/Korruptionsinjektion fuer native Tests
+  Read-/NotFound-/Korruptionsinjektion fuer native Tests; die drei
+  geforderten Zustandsbereiche sind als getrennte private Datenhaltung
+  modelliert - dauerhaft `committed_`, eine gestagte, aber noch nicht
+  committete Schreiboperation (`std::optional<PendingWrite> pendingWrite_`)
+  sowie fluechtiger Testzustand; `write()` bildet "vollstaendig staging,
+  dann atomar committen" nach, `restart()` verwirft `pendingWrite_` und alle
+  fluechtigen Testschalter, laesst `committed_` unveraendert; ein
+  testinterner `hasPendingWriteForTesting()`-Zugriff macht das Staging fuer
+  native Tests beobachtbar, ohne die produktive `IStateStore`-Schnittstelle
+  zu vergroessern
 - Initiale Projektstruktur
 - Template auf ESP32-Fermentationsschrank angepasst
 - Hardwarekomponenten und Sicherheitsregeln ohne GPIO-Festlegung dokumentiert

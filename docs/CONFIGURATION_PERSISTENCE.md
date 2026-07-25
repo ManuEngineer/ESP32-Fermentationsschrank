@@ -943,6 +943,25 @@ Umgesetzt mit Issue #54 (`lib/device_platform/src/storage_types.hpp`,
 `mock_time_zone_resolver.hpp`/`.cpp`). Bewusst noch ohne konkrete Slotzahlen,
 Root-/Manifestbedeutung oder Schutzmengen - das bleibt Paket C (#56).
 
+`SimulatedPersistentStateStore` modelliert die drei geforderten Zustands-
+bereiche explizit als getrennte private Datenhaltung: dauerhaft `committed_`,
+eine gestagte, aber noch nicht committete Schreiboperation
+(`std::optional<PendingWrite> pendingWrite_` mit Schluessel und vollstaendigem
+neuem Wert) sowie sonstiger fluechtiger Testzustand (Fault-Schalter, Read-/
+NotFound-Injektion). `write()` bildet damit die reale Reihenfolge "vollstaendig
+staging, dann atomar committen" nach: bei `FailBeforeBegin` und
+`CapacityExceeded` entsteht kein Staging und `committed_` bleibt unberuehrt;
+bei `PowerCutBeforeCommit` wird der vollstaendige neue Wert gestagt, aber nie
+in `committed_` uebernommen - erst ein simulierter `restart()` verwirft das
+Staging, danach ist ausschliesslich der alte committed Wert sichtbar; bei
+Erfolg und bei `PowerCutAfterCommitBeforeReturn` wird der gestagte Wert atomar
+komplett in `committed_` uebernommen (nie ein Teil- oder Mischwert) und das
+Staging sofort geleert. `restart()` loescht `pendingWrite_` sowie alle
+fluechtigen Testschalter, laesst `committed_` aber unveraendert. Ein rein
+testinterner Zugriff `hasPendingWriteForTesting()` macht das gestagte-aber-
+nicht-committete Staging fuer native Tests beobachtbar, ohne die produktive
+`IStateStore`-Schnittstelle zu vergroessern.
+
 `IStateStore::write` liefert vier eindeutig unterscheidbare Ergebnisse statt
 einer pauschalen "unveraendert bei Fehler"-Garantie: `Success` (neuer Wert
 dauerhaft gespeichert), `WriteError` und `CapacityError` (sicher
@@ -1015,6 +1034,19 @@ vollstaendig erzwungen - das erfordert zusaetzlich, dass der aufrufende
 Commit-Workflow (#56/#57) `encodeEnvelope()` nicht mit einem noch benoetigten
 alten Record in `outBytes` aufruft.
 
+`InvalidField` und `CapacityExceeded` sind trennscharf: `InvalidField` gilt
+ausschliesslich fuer die vier reservierten Nullwertfelder (Envelope-Version,
+Record-Type-ID, Schema-Version, StorageEpoch/VersionValue) und ungueltige
+Optionaltags. Jede Groessen- oder Kapazitaetsfrage - einschliesslich einer
+Payloadgroesse, die nicht in `uint32_t` darstellbar ist - liefert konsequent
+`CapacityExceeded`; `outBytes` bleibt dabei unveraendert. Die reine
+Groessenentscheidung ist in der freien, zustandslosen Funktion
+`checkEnvelopeEncodedSize(payloadSize, hasUtc, maxTotalBytes)` gekapselt, die
+`encodeEnvelope()` intern aufruft und die denselben Status samt
+Gesamtgroesse als reine Zahlen liefert - ohne einen Puffer aufzubauen. Damit
+lassen sich Grenzwerte bis `UINT32_MAX` nativ testen, ohne eine reale
+4-GiB-Payload zu allokieren.
+
 `decodeEnvelope()` validiert die beanspruchte Laenge vollstaendig, bevor die
 Payload allokiert wird, und berechnet den CRC ebenfalls inkrementell ueber
 den bereits vorhandenen Eingabepuffer (Headerabschnitt und Payloadabschnitt),
@@ -1047,15 +1079,25 @@ nicht mehr in gueltigem C++ konstruierbar: `IStateStore::read()` gibt
 `WriteError`-/`CommitOutcomeUnknown`-Werte. Das ist ein Compilefehler statt
 eines Laufzeitfehlers und damit ein staerkerer Beleg als ein Test es waere.
 
-`ByteWriter::writeBytes`/`ByteReader::readBytes` und
-`Crc32IsoHdlc::update` teilen dieselbe Vorbedingung wie `std::memcpy`: der
-Zeigerparameter darf nur dann `nullptr` sein, wenn `length == 0` ist; bei
-`length == 0` wird er nicht dereferenziert. Diese Vorbedingung ist jetzt an
-allen drei Stellen wortgleich dokumentiert. `scanTechnicalSlotCandidates`
-setzt als dokumentierte Vorbedingung `slotKeys.size() <= UINT32_MAX` voraus
-(jeder Index wird als `SlotId`, `uint32_t`-getaggt, dargestellt); realistische
-Slotzahlen sind so klein, dass eine typisierte Laufzeitablehnung
-unverhaeltnismaessig waere.
+`ByteWriter::writeBytes`, `ByteReader::readBytes`, `Crc32IsoHdlc::update` und
+`ISecureRandomSource::fill` (samt `MockSecureRandomSource::fill`) setzen den
+Nullzeigervertrag technisch durch, statt ihn wie `std::memcpy` nur zu
+dokumentieren: bei `length == 0` ist der Zeigerparameter erlaubt `nullptr` zu
+sein, wird nie dereferenziert und der Aufruf ist ein erfolgreicher No-Op ohne
+jede Zustandsaenderung (bei `ISecureRandomSource::fill` insbesondere: ein
+vorbereiteter Override wird nicht konsumiert, der Generatorzustand nicht
+weiterbewegt). Bei `length > 0` und `nullptr` lehnen alle vier Stellen
+beobachtbar ab (`bool`/`false`), ohne Speicherzugriff und ohne UB.
+`Crc32IsoHdlc::update` ist dafuer `[[nodiscard]] bool`; alle
+Produktionsaufrufer pruefen den Rueckgabewert. Die reine Rohzeiger-
+One-Shot-Ueberladung `computeCrc32IsoHdlc(const void*, size_t)` wurde entfernt,
+da kein Aufrufer sie noch braucht und ein sinnvoller Sentinel-Fehlerwert fuer
+`uint32_t`-CRCs nicht existiert; `computeCrc32IsoHdlc(const std::string&)`
+bleibt bestehen, da `std::string::data()` nie `nullptr` ist.
+`scanTechnicalSlotCandidates` setzt als dokumentierte Vorbedingung
+`slotKeys.size() <= UINT32_MAX` voraus (jeder Index wird als `SlotId`,
+`uint32_t`-getaggt, dargestellt); realistische Slotzahlen sind so klein, dass
+eine typisierte Laufzeitablehnung unverhaeltnismaessig waere.
 
 ### Paket B: Typisierte Konfigurationsdokumente
 
