@@ -257,6 +257,14 @@ Release 1:
 Web-OTA und automatisches Firmware-Rollback sind `FUTURE_RELEASE` und duerfen nur
 nach realem 4-MB-Budgetnachweis geplant werden.
 
+## Quellen
+
+Die zentrale Liste der Hardwarequellen steht in
+[`references/LINKS.md`](../references/LINKS.md). Lokal archivierte Datenblaetter
+liegen unter [`references/datasheets/`](../references/datasheets/). Die Inhalte
+werden hier nicht dupliziert, damit keine abweichende zweite Quellenliste
+entsteht.
+
 ## Verifikationsreihenfolge
 
 1. Sichtpruefung, Versorgung, Masse und Sicherungen
