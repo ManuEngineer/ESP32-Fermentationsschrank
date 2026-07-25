@@ -53,11 +53,29 @@ struct EnvelopeDecodeResult {
     std::optional<StorageEnvelope> envelope;
 };
 
-// Lehnt RecordTypeId, Schema-Version, StorageEpoch und VersionValue 0 ab.
-// `maxTotalBytes` begrenzt Header und Payload gemeinsam; bei Ueberschreitung
-// oder einer Payloadgroesse, die nicht in das 32-Bit-Laengenfeld passt, wird
-// `CapacityExceeded` geliefert und `outBytes` nicht veraendert (weder Groesse
-// noch Inhalt).
+// Technischer, anwendungsneutraler Baustein: liefert dieselbe
+// Groessenentscheidung wie `encodeEnvelope()` (einschliesslich der
+// 32-Bit-Laengenfeldgrenze fuer die Payload), ohne einen Puffer anzulegen.
+// `encodeEnvelope()` nutzt dies intern als einzige Quelle der Wahrheit;
+// Tests koennen damit Grenzfaelle nahe `UINT32_MAX`/`maxTotalBytes` pruefen,
+// ohne eine reale Payload dieser Groesse zu allokieren (`payloadSize` ist nur
+// ein Zahlenwert, keine tatsaechlichen Daten).
+struct EnvelopeSizeCheckResult {
+    EnvelopeEncodeStatus status{EnvelopeEncodeStatus::CapacityExceeded};
+    // Nur bei `Success` gueltig: Gesamtgroesse des kodierten Records.
+    std::size_t totalSize{0U};
+};
+
+[[nodiscard]] EnvelopeSizeCheckResult checkEnvelopeEncodedSize(
+    std::size_t payloadSize, bool hasUtc, std::size_t maxTotalBytes);
+
+// Lehnt RecordTypeId, Schema-Version, StorageEpoch und VersionValue 0 als
+// `InvalidField` ab. Eine Payloadgroesse, die nicht in das 32-Bit-Laengenfeld
+// passt, sowie jede Ueberschreitung von `maxTotalBytes` (Header und Payload
+// gemeinsam) wird konsistent als `CapacityExceeded` geliefert - beides ist
+// eine technische Kapazitaetsgrenze des Wireformats, kein fachlicher
+// Feldfehler. `outBytes` bleibt bei jeder Ablehnung vollstaendig unveraendert
+// (weder Groesse noch Inhalt).
 //
 // Ressourcenvertrag (siehe docs/CONFIGURATION_PERSISTENCE.md, Abschnitt
 // "Ressourcenvertrag" fuer die vollstaendige Herleitung): der Encoder baut

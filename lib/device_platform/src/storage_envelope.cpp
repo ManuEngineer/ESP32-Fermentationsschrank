@@ -100,6 +100,41 @@ UtcFieldResult readUtcField(ByteReader& reader) {
 
 }  // namespace
 
+EnvelopeSizeCheckResult checkEnvelopeEncodedSize(std::size_t payloadSize,
+                                                 bool hasUtc,
+                                                 std::size_t maxTotalBytes) {
+    // Eine Payloadgroesse, die nicht in das 32-Bit-Wire-Laengenfeld passt,
+    // ist eine technische Kapazitaetsgrenze des Wireformats, kein fachlicher
+    // Feldfehler - konsistent `CapacityExceeded` statt `InvalidField`.
+    if (payloadSize >
+        static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
+        return EnvelopeSizeCheckResult{EnvelopeEncodeStatus::CapacityExceeded,
+                                       0U};
+    }
+
+    // Jede Teiladdition ueberlaufsicher und gegen `maxTotalBytes` geprueft,
+    // bevor irgendetwas reserviert wird: `std::size_t` ist plattformabhaengig
+    // (ESP32: 32 Bit) und darf nicht ungeprueft ueberlaufen.
+    std::size_t headerBeforeCrc = kHeaderBeforeCrcWithoutUtc;
+    if (hasUtc && !checkedAddSize(headerBeforeCrc, kUtcValueSize, maxTotalBytes,
+                                  headerBeforeCrc)) {
+        return EnvelopeSizeCheckResult{EnvelopeEncodeStatus::CapacityExceeded,
+                                       0U};
+    }
+    std::size_t headerWithCrc = 0U;
+    if (!checkedAddSize(headerBeforeCrc, kCrcSize, maxTotalBytes,
+                        headerWithCrc)) {
+        return EnvelopeSizeCheckResult{EnvelopeEncodeStatus::CapacityExceeded,
+                                       0U};
+    }
+    std::size_t totalSize = 0U;
+    if (!checkedAddSize(headerWithCrc, payloadSize, maxTotalBytes, totalSize)) {
+        return EnvelopeSizeCheckResult{EnvelopeEncodeStatus::CapacityExceeded,
+                                       0U};
+    }
+    return EnvelopeSizeCheckResult{EnvelopeEncodeStatus::Success, totalSize};
+}
+
 EnvelopeEncodeStatus encodeEnvelope(const StorageEnvelope& envelope,
                                     std::string& outBytes,
                                     std::size_t maxTotalBytes) {
@@ -107,29 +142,17 @@ EnvelopeEncodeStatus encodeEnvelope(const StorageEnvelope& envelope,
         envelope.storageEpoch.value() == 0U || envelope.versionValue == 0U) {
         return EnvelopeEncodeStatus::InvalidField;
     }
-    if (envelope.payload.size() >
-        static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())) {
-        return EnvelopeEncodeStatus::InvalidField;
-    }
 
-    // Jede Teiladdition ueberlaufsicher und gegen `maxTotalBytes` geprueft,
-    // bevor irgendetwas reserviert wird: `std::size_t` ist plattformabhaengig
-    // (ESP32: 32 Bit) und darf nicht ungeprueft ueberlaufen.
+    const auto sizeCheck = checkEnvelopeEncodedSize(
+        envelope.payload.size(), envelope.utcUnixSeconds.has_value(),
+        maxTotalBytes);
+    if (sizeCheck.status != EnvelopeEncodeStatus::Success) {
+        return sizeCheck.status;
+    }
+    const std::size_t totalSize = sizeCheck.totalSize;
     std::size_t headerBeforeCrc = kHeaderBeforeCrcWithoutUtc;
-    if (envelope.utcUnixSeconds.has_value() &&
-        !checkedAddSize(headerBeforeCrc, kUtcValueSize, maxTotalBytes,
-                        headerBeforeCrc)) {
-        return EnvelopeEncodeStatus::CapacityExceeded;
-    }
-    std::size_t headerWithCrc = 0U;
-    if (!checkedAddSize(headerBeforeCrc, kCrcSize, maxTotalBytes,
-                        headerWithCrc)) {
-        return EnvelopeEncodeStatus::CapacityExceeded;
-    }
-    std::size_t totalSize = 0U;
-    if (!checkedAddSize(headerWithCrc, envelope.payload.size(), maxTotalBytes,
-                        totalSize)) {
-        return EnvelopeEncodeStatus::CapacityExceeded;
+    if (envelope.utcUnixSeconds.has_value()) {
+        headerBeforeCrc += kUtcValueSize;
     }
 
     ByteWriter header(headerBeforeCrc);
@@ -155,9 +178,11 @@ EnvelopeEncodeStatus encodeEnvelope(const StorageEnvelope& envelope,
     // CRC inkrementell ueber Header und Payload, ohne einen zusaetzlichen
     // `header + payload`-Hilfspuffer anzulegen (siehe
     // docs/CONFIGURATION_PERSISTENCE.md, Abschnitt "Ressourcenvertrag").
+    // Beide Aufrufe uebergeben `std::string`-Daten (nie `nullptr`), koennen
+    // also nie `false` liefern.
     Crc32IsoHdlc crcAccumulator;
-    crcAccumulator.update(header.bytes());
-    crcAccumulator.update(envelope.payload);
+    static_cast<void>(crcAccumulator.update(header.bytes()));
+    static_cast<void>(crcAccumulator.update(envelope.payload));
     const uint32_t crc = crcAccumulator.finalize();
 
     ByteWriter finalWriter(totalSize);
@@ -237,10 +262,13 @@ EnvelopeDecodeResult decodeEnvelope(const std::string& bytes) {
     // bereits materialisierte Payload, ohne einen zusaetzlichen
     // `header + payload`-Hilfspuffer anzulegen (kein `substr`-Vollkopie;
     // siehe docs/CONFIGURATION_PERSISTENCE.md, Abschnitt
-    // "Ressourcenvertrag").
+    // "Ressourcenvertrag"). `bytes.data()` ist hier nie `nullptr`
+    // (`bytes.size() >= kHeaderBeforeCrcWithoutUtc + kCrcSize` bereits oben
+    // geprueft), `headerBeforeCrcLen` ist immer > 0 - beide Aufrufe koennen
+    // also nie `false` liefern.
     Crc32IsoHdlc crcAccumulator;
-    crcAccumulator.update(bytes.data(), headerBeforeCrcLen);
-    crcAccumulator.update(payload);
+    static_cast<void>(crcAccumulator.update(bytes.data(), headerBeforeCrcLen));
+    static_cast<void>(crcAccumulator.update(payload));
     if (crcAccumulator.finalize() != storedCrc) {
         return {EnvelopeDecodeStatus::CrcMismatch, std::nullopt};
     }
