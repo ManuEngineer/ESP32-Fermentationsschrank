@@ -222,3 +222,24 @@
   Programmmodell-Wertebereiche werden zentral in `program_limits.hpp` definiert;
   Hardware-, Sicherheits-, Inbetriebnahme-, Regel- und Benutzerwerte bleiben
   davon getrennt.
+
+## ADR-016: Konfigurationsspeicher-Backend und Schluesselraum
+
+- **Status:** accepted
+- **Datum:** 2026-07-25
+- **Kontext:** Der Port `IStateStore` erlaubte binaersichere Schluessel bis 32
+  Byte, waehrend das einzige vorgesehene Backend NVS nur nullterminierte
+  ASCII-Schluessel bis 15 Zeichen kennt. Eine verlustfreie Adapterabbildung
+  existiert nicht.
+- **Entscheidung:** NVS ist das produktive Backend; Werte werden als Blob
+  gespeichert. `StateStoreKey` wird portseitig auf 1 bis 15 Bytes aus
+  `[A-Za-z0-9_.-]` begrenzt. Der Envelope bleibt backendunabhaengig
+  einschliesslich CRC-32. `ChangeOrigin` und `ChangeOperation` verlassen den
+  Envelope und werden Bestandteil der Payload.
+- **Alternativen:** eigene Datenpartition mit selbst implementiertem
+  Recordspeicher; Abbildung erst im spaeteren ESP32-Adapter loesen.
+- **Folgen:** Atomizitaet, Integritaet und Wear-Leveling bleiben fremdgepflegt.
+  Der Envelope-Header schrumpft auf 37 Byte ohne und 45 Byte mit UTC. Die
+  NVS-Partitionsgroesse bleibt `TBD_IMPLEMENTATION_BUDGET` und wird in #29
+  bestimmt. Die ausfuehrliche Entscheidung steht in
+  [`ADR-016_KONFIGURATIONSSPEICHER_BACKEND.md`](ADR-016_KONFIGURATIONSSPEICHER_BACKEND.md).
