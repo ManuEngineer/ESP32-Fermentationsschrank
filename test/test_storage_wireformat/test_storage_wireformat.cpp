@@ -509,8 +509,6 @@ device_platform::StorageEnvelope validEnvelope() {
     envelope.schemaVersion = 3U;
     envelope.storageEpoch = device_platform::StorageEpoch(1U);
     envelope.versionValue = 42U;
-    envelope.changeOriginWireId = 2U;
-    envelope.changeOperationWireId = 5U;
     envelope.payload = "AB";
     return envelope;
 }
@@ -536,13 +534,11 @@ void test_envelope_golden_vector_without_utc() {
         0x00U, 0x00U, 0x00U, 0x00U,
         0x00U, 0x00U, 0x00U, 0x2AU,  // VersionValue 42
         0x00U, 0x00U, 0x00U, 0x02U,  // Payloadlaenge 2
-        0x00U, 0x02U,                // ChangeOrigin 2
-        0x00U, 0x05U,                // ChangeOperation 5
         0x00U,                       // kein UTC
-        0xF0U, 0xB6U, 0x62U, 0x19U,  // CRC-32/ISO-HDLC
+        0xF2U, 0x4EU, 0x20U, 0x5DU,  // CRC-32/ISO-HDLC
         0x41U, 0x42U,                // Payload "AB"
     });
-    TEST_ASSERT_EQUAL_UINT32(43U, expected.size());
+    TEST_ASSERT_EQUAL_UINT32(39U, expected.size());
     TEST_ASSERT_EQUAL_UINT32(expected.size(), encoded.size());
     TEST_ASSERT_EQUAL_MEMORY(expected.data(), encoded.data(), expected.size());
 
@@ -555,8 +551,6 @@ void test_envelope_golden_vector_without_utc() {
     TEST_ASSERT_EQUAL_UINT32(3U, decoded.envelope->schemaVersion);
     TEST_ASSERT_EQUAL_UINT64(1U, decoded.envelope->storageEpoch.value());
     TEST_ASSERT_EQUAL_UINT64(42U, decoded.envelope->versionValue);
-    TEST_ASSERT_EQUAL_UINT16(2U, decoded.envelope->changeOriginWireId);
-    TEST_ASSERT_EQUAL_UINT16(5U, decoded.envelope->changeOperationWireId);
     TEST_ASSERT_FALSE(decoded.envelope->utcUnixSeconds.has_value());
     TEST_ASSERT_EQUAL_STRING("AB", decoded.envelope->payload.c_str());
 }
@@ -571,16 +565,22 @@ void test_envelope_golden_vector_with_utc() {
             device_platform::encodeEnvelope(envelope, encoded, 1024U)));
 
     const std::string expected = bytesOf({
-        0x44U, 0x50U, 0x52U, 0x46U, 0x00U, 0x01U, 0x00U, 0x07U, 0x00U,
-        0x00U, 0x00U, 0x03U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
-        0x00U, 0x01U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
-        0x2AU, 0x00U, 0x00U, 0x00U, 0x02U, 0x00U, 0x02U, 0x00U, 0x05U,
-        0x01U,  // UTC-Tag gesetzt
-        0x00U, 0x00U, 0x00U, 0x00U, 0x65U, 0x53U, 0xF1U, 0x00U,  // 1700000000
-        0xB6U, 0x2AU, 0x94U, 0x87U,  // CRC-32/ISO-HDLC
+        0x44U, 0x50U, 0x52U, 0x46U,  // Magic "DPRF"
+        0x00U, 0x01U,                // Envelope-Version 1
+        0x00U, 0x07U,                // RecordTypeId 7
+        0x00U, 0x00U, 0x00U, 0x03U,  // SchemaVersion 3
+        0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x01U,  // StorageEpoch 1
+        0x00U, 0x00U, 0x00U, 0x00U,
+        0x00U, 0x00U, 0x00U, 0x2AU,  // VersionValue 42
+        0x00U, 0x00U, 0x00U, 0x02U,  // Payloadlaenge 2
+        0x01U,                       // UTC-Tag gesetzt
+        0x00U, 0x00U, 0x00U, 0x00U,
+        0x65U, 0x53U, 0xF1U, 0x00U,  // UTC 1700000000
+        0x4BU, 0x68U, 0xF4U, 0xD4U,  // CRC-32/ISO-HDLC
         0x41U, 0x42U,                // Payload "AB"
     });
-    TEST_ASSERT_EQUAL_UINT32(51U, expected.size());
+    TEST_ASSERT_EQUAL_UINT32(47U, expected.size());
     TEST_ASSERT_EQUAL_UINT32(expected.size(), encoded.size());
     TEST_ASSERT_EQUAL_MEMORY(expected.data(), encoded.data(), expected.size());
 
@@ -634,16 +634,16 @@ void test_envelope_encode_rejects_capacity_overflow() {
     TEST_ASSERT_TRUE(encoded.empty());
 }
 
-// Header(37) + CRC(4) = 41 Bytes ohne UTC; `validEnvelope()`-Payload "AB"
-// ergibt eine Gesamtgroesse von exakt 43 Bytes (siehe Golden-Vektor-Test).
+// Header(33) + CRC(4) = 37 Bytes ohne UTC; `validEnvelope()`-Payload "AB"
+// ergibt eine Gesamtgroesse von exakt 39 Bytes (siehe Golden-Vektor-Test).
 void test_envelope_encode_accepts_exact_max_total_bytes() {
     const auto envelope = validEnvelope();
     std::string encoded;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
         static_cast<int>(
-            device_platform::encodeEnvelope(envelope, encoded, 43U)));
-    TEST_ASSERT_EQUAL_UINT32(43U, encoded.size());
+            device_platform::encodeEnvelope(envelope, encoded, 39U)));
+    TEST_ASSERT_EQUAL_UINT32(39U, encoded.size());
 }
 
 void test_envelope_encode_rejects_one_byte_over_exact_size() {
@@ -653,11 +653,11 @@ void test_envelope_encode_rejects_one_byte_over_exact_size() {
         static_cast<int>(
             device_platform::EnvelopeEncodeStatus::CapacityExceeded),
         static_cast<int>(
-            device_platform::encodeEnvelope(envelope, encoded, 42U)));
+            device_platform::encodeEnvelope(envelope, encoded, 38U)));
     TEST_ASSERT_EQUAL_STRING("UNCHANGED", encoded.c_str());
 }
 
-// Bereits Header+CRC (41 Bytes ohne Payload) uebersteigt `maxTotalBytes`;
+// Bereits Header+CRC (37 Bytes ohne Payload) uebersteigt `maxTotalBytes`;
 // die Ablehnung darf nicht erst bei der Payloadaddition erfolgen.
 void test_envelope_encode_rejects_overflow_already_at_header_plus_crc() {
     auto envelope = validEnvelope();
@@ -667,7 +667,7 @@ void test_envelope_encode_rejects_overflow_already_at_header_plus_crc() {
         static_cast<int>(
             device_platform::EnvelopeEncodeStatus::CapacityExceeded),
         static_cast<int>(
-            device_platform::encodeEnvelope(envelope, encoded, 40U)));
+            device_platform::encodeEnvelope(envelope, encoded, 36U)));
     TEST_ASSERT_EQUAL_STRING("UNCHANGED", encoded.c_str());
 }
 
@@ -681,7 +681,7 @@ void test_envelope_encode_rejects_overflow_at_header_plus_payload() {
         static_cast<int>(
             device_platform::EnvelopeEncodeStatus::CapacityExceeded),
         static_cast<int>(
-            device_platform::encodeEnvelope(envelope, encoded, 41U)));
+            device_platform::encodeEnvelope(envelope, encoded, 37U)));
     TEST_ASSERT_EQUAL_STRING("UNCHANGED", encoded.c_str());
 }
 
@@ -822,7 +822,7 @@ void test_envelope_decode_rejects_invalid_utc_tag() {
     TEST_ASSERT_TRUE(
         device_platform::encodeEnvelope(validEnvelope(), encoded, 1024U) ==
         device_platform::EnvelopeEncodeStatus::Success);
-    encoded[36] = static_cast<char>(0x02U);  // UTC-Tag-Byte
+    encoded[32] = static_cast<char>(0x02U);  // UTC-Tag-Byte
     const auto decoded = device_platform::decodeEnvelope(encoded);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::EnvelopeDecodeStatus::InvalidUtcTag),
@@ -879,22 +879,6 @@ void test_envelope_decode_rejects_crc_errors_in_header_and_payload() {
         static_cast<int>(device_platform::EnvelopeDecodeStatus::CrcMismatch),
         static_cast<int>(
             device_platform::decodeEnvelope(payloadCorrupted).status));
-}
-
-void test_envelope_preserves_unknown_origin_and_operation_ids() {
-    auto envelope = validEnvelope();
-    envelope.changeOriginWireId = 0xBEEFU;
-    envelope.changeOperationWireId = 0xF00DU;
-    std::string encoded;
-    TEST_ASSERT_TRUE(
-        device_platform::encodeEnvelope(envelope, encoded, 1024U) ==
-        device_platform::EnvelopeEncodeStatus::Success);
-    const auto decoded = device_platform::decodeEnvelope(encoded);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(device_platform::EnvelopeDecodeStatus::Success),
-        static_cast<int>(decoded.status));
-    TEST_ASSERT_EQUAL_UINT16(0xBEEFU, decoded.envelope->changeOriginWireId);
-    TEST_ASSERT_EQUAL_UINT16(0xF00DU, decoded.envelope->changeOperationWireId);
 }
 
 void test_checked_increment_advances_valid_value_by_one() {
@@ -1072,7 +1056,7 @@ void test_envelope_round_trip_with_empty_payload() {
     TEST_ASSERT_TRUE(
         device_platform::encodeEnvelope(envelope, encoded, 1024U) ==
         device_platform::EnvelopeEncodeStatus::Success);
-    TEST_ASSERT_EQUAL_UINT32(41U, encoded.size());
+    TEST_ASSERT_EQUAL_UINT32(37U, encoded.size());
 
     const auto decoded = device_platform::decodeEnvelope(encoded);
     TEST_ASSERT_TRUE(decoded.status ==
@@ -1095,7 +1079,7 @@ void test_envelope_round_trip_with_larger_payload() {
     TEST_ASSERT_TRUE(
         device_platform::encodeEnvelope(envelope, encoded, 8192U) ==
         device_platform::EnvelopeEncodeStatus::Success);
-    TEST_ASSERT_EQUAL_UINT32(41U + 4096U, encoded.size());
+    TEST_ASSERT_EQUAL_UINT32(37U + 4096U, encoded.size());
 
     const auto decoded = device_platform::decodeEnvelope(encoded);
     TEST_ASSERT_TRUE(decoded.status ==
@@ -1171,6 +1155,5 @@ int main() {
     RUN_TEST(test_envelope_decode_rejects_invalid_utc_tag);
     RUN_TEST(test_envelope_decode_rejects_wrong_and_overflowing_lengths);
     RUN_TEST(test_envelope_decode_rejects_crc_errors_in_header_and_payload);
-    RUN_TEST(test_envelope_preserves_unknown_origin_and_operation_ids);
     return UNITY_END();
 }

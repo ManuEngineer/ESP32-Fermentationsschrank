@@ -8,8 +8,7 @@
 #include "storage_types.hpp"
 
 // Generischer Envelope Version 1. Anwendungsneutraler Speicherrahmen ohne
-// Kenntnis konkreter Dokumente, Manifestbedeutung oder fachlicher
-// ChangeOrigin-/ChangeOperation-Bedeutung. Siehe
+// Kenntnis konkreter Dokumente oder Manifestbedeutung. Siehe
 // docs/CONFIGURATION_PERSISTENCE.md, Abschnitt "Envelope-Version 1".
 namespace device_platform {
 
@@ -22,9 +21,6 @@ struct StorageEnvelope {
     // Rohes VersionValue; wird je Record-Type vom Aufrufer als Revision,
     // Generation oder RecordSequence interpretiert (siehe storage_types.hpp).
     uint64_t versionValue{0U};
-    // Rohe Wire-IDs ohne Interpretation durch device_platform.
-    uint16_t changeOriginWireId{0U};
-    uint16_t changeOperationWireId{0U};
     std::optional<int64_t> utcUnixSeconds;
     std::string payload;
 };
@@ -109,8 +105,7 @@ struct EnvelopeSizeCheckResult {
     std::size_t maxTotalBytes);
 
 // Prueft Grenzen, Laengen und CRC vor jeder Rueckgabe von Payloadbytes.
-// Unbekannte Envelope-Version wird abgelehnt; unbekannte ChangeOrigin-/
-// ChangeOperation-Wire-IDs werden roh erhalten, nicht abgelehnt.
+// Unbekannte Envelope-Version wird abgelehnt.
 [[nodiscard]] EnvelopeDecodeResult decodeEnvelope(const std::string& bytes);
 
 // Wie `decodeEnvelope()`, liefert aber nur die Metadaten ohne die Payload.

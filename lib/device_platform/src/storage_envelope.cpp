@@ -16,13 +16,12 @@ constexpr char kMagic[4] = {'D', 'P', 'R', 'F'};
 
 // Feldgroessen vor dem CRC-Feld, ohne optionale UTC-Sekunden:
 // Magic(4) + EnvelopeVersion(2) + RecordTypeId(2) + SchemaVersion(4) +
-// StorageEpoch(8) + VersionValue(8) + Payloadlaenge(4) + ChangeOrigin(2) +
-// ChangeOperation(2) + UtcTag(1) = 37 Bytes.
-constexpr std::size_t kHeaderBeforeCrcWithoutUtc = 37U;
+// StorageEpoch(8) + VersionValue(8) + Payloadlaenge(4) + UtcTag(1) = 33 Bytes.
+constexpr std::size_t kHeaderBeforeCrcWithoutUtc = 33U;
 constexpr std::size_t kUtcValueSize = 8U;
 constexpr std::size_t kCrcSize = 4U;
 
-// Zwischenergebnis der Felder zwischen RecordTypeId und ChangeOperation
+// Zwischenergebnis der Kernfelder zwischen RecordTypeId und Payloadlaenge
 // (siehe Envelope-Feldreihenfolge). Ausgelagert, um `decodeEnvelope()` klein
 // und die kognitive Komplexitaet gering zu halten.
 struct CoreFieldsResult {
@@ -32,8 +31,6 @@ struct CoreFieldsResult {
     uint64_t storageEpochRaw{0U};
     uint64_t versionValue{0U};
     uint32_t payloadLength{0U};
-    uint16_t changeOriginWireId{0U};
-    uint16_t changeOperationWireId{0U};
 };
 
 CoreFieldsResult readCoreFields(ByteReader& reader) {
@@ -66,9 +63,7 @@ CoreFieldsResult readCoreFields(ByteReader& reader) {
         result.status = EnvelopeDecodeStatus::InvalidVersionValue;
         return result;
     }
-    if (!big_endian::readUint32(reader, result.payloadLength) ||
-        !big_endian::readUint16(reader, result.changeOriginWireId) ||
-        !big_endian::readUint16(reader, result.changeOperationWireId)) {
+    if (!big_endian::readUint32(reader, result.payloadLength)) {
         return result;
     }
     result.status = EnvelopeDecodeStatus::Success;
@@ -254,8 +249,6 @@ EnvelopeEncodeStatus encodeEnvelope(const StorageEnvelope& envelope,
     ok = ok && big_endian::writeUint64(header, envelope.versionValue);
     ok = ok && big_endian::writeUint32(
                    header, static_cast<uint32_t>(envelope.payload.size()));
-    ok = ok && big_endian::writeUint16(header, envelope.changeOriginWireId);
-    ok = ok && big_endian::writeUint16(header, envelope.changeOperationWireId);
     ok = ok && big_endian::writeOptionalTag(
                    header, envelope.utcUnixSeconds.has_value());
     if (ok && envelope.utcUnixSeconds.has_value()) {
@@ -320,8 +313,6 @@ EnvelopeDecodeResult decodeEnvelope(const std::string& bytes) {
     result.schemaVersion = core.schemaVersion;
     result.storageEpoch = StorageEpoch(core.storageEpochRaw);
     result.versionValue = core.versionValue;
-    result.changeOriginWireId = core.changeOriginWireId;
-    result.changeOperationWireId = core.changeOperationWireId;
     result.utcUnixSeconds = validated.utcUnixSeconds;
     result.payload = std::move(payload);
     return {EnvelopeDecodeStatus::Success, std::move(result)};
