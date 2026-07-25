@@ -104,11 +104,14 @@ void test_write_fail_before_begin_leaves_store_unchanged() {
     SimulatedPersistentStateStore store;
     TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "first") ==
                      StateStoreWriteStatus::Success);
+    TEST_ASSERT_FALSE(store.hasPendingWriteForTesting());
 
     store.setNextWriteFault(
         SimulatedPersistentStateStore::WriteFault::FailBeforeBegin);
     TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "second") ==
                      StateStoreWriteStatus::WriteError);
+    // Fehler vor Beginn: es entsteht kein Staging.
+    TEST_ASSERT_FALSE(store.hasPendingWriteForTesting());
 
     const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
     TEST_ASSERT_EQUAL_STRING("first", result.value.c_str());
@@ -123,7 +126,16 @@ void test_write_power_cut_before_commit_leaves_store_unchanged() {
         SimulatedPersistentStateStore::WriteFault::PowerCutBeforeCommit);
     TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "second") ==
                      StateStoreWriteStatus::WriteError);
+    // Der vollstaendige neue Wert ist gestagt, aber nicht committet.
+    TEST_ASSERT_TRUE(store.hasPendingWriteForTesting());
+    // Vor dem Neustart bleibt ausschliesslich der alte committed Wert
+    // sichtbar - das Staging existiert nur intern, nicht als Leseergebnis.
+    TEST_ASSERT_EQUAL_STRING(
+        "first", store.read(keyOrFail("key"), kDefaultMaxBytes).value.c_str());
+
     store.restart();
+    // Der simulierte Neustart verwirft das Staging.
+    TEST_ASSERT_FALSE(store.hasPendingWriteForTesting());
 
     const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
     TEST_ASSERT_EQUAL_STRING("first", result.value.c_str());
@@ -139,6 +151,9 @@ void test_write_power_cut_after_commit_before_return_yields_commit_outcome_unkno
     TEST_ASSERT_TRUE(
         store.write(keyOrFail("key"), "committed_despite_unknown") ==
         StateStoreWriteStatus::CommitOutcomeUnknown);
+    // Der gestagte Wert wurde bereits atomar committet; kein Staging bleibt
+    // zurueck, obwohl der Aufrufer nur einen unbekannten Ausgang sah.
+    TEST_ASSERT_FALSE(store.hasPendingWriteForTesting());
 
     // Der Aufrufer sah einen unbekannten Commit-Ausgang; erst das Ruecklesen
     // (auch nach einem simulierten Neustart) zeigt, dass der neue Wert
@@ -158,9 +173,52 @@ void test_write_capacity_exceeded_leaves_store_unchanged() {
         SimulatedPersistentStateStore::WriteFault::CapacityExceeded);
     TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "second") ==
                      StateStoreWriteStatus::CapacityError);
+    // Kapazitaetsfehler: kein Commit, kein verbleibendes Staging.
+    TEST_ASSERT_FALSE(store.hasPendingWriteForTesting());
 
     const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
     TEST_ASSERT_EQUAL_STRING("first", result.value.c_str());
+}
+
+void test_successful_write_stages_then_commits_and_clears_pending() {
+    SimulatedPersistentStateStore store;
+    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "value") ==
+                     StateStoreWriteStatus::Success);
+    // Erfolg committet vollstaendig; kein Staging bleibt zurueck.
+    TEST_ASSERT_FALSE(store.hasPendingWriteForTesting());
+}
+
+// Unterschiedlich lange sowie binaere Werte mit eingebetteten NUL-Bytes
+// ersetzen den alten Wert vollstaendig - nie ein Praefix, Suffix oder eine
+// Mischung aus altem und neuem Wert, unabhaengig davon, ob der neue Wert
+// kuerzer oder laenger als der alte ist.
+void test_write_replaces_different_length_and_binary_values_without_residual_bytes() {
+    SimulatedPersistentStateStore store;
+    const auto key = keyOrFail("key");
+
+    TEST_ASSERT_TRUE(store.write(key, "short") ==
+                     StateStoreWriteStatus::Success);
+    TEST_ASSERT_EQUAL_STRING("short",
+                             store.read(key, kDefaultMaxBytes).value.c_str());
+
+    const std::string longerBinary{'\x00', '\x01', '\x02', 'l', 'o',    'n',
+                                   'g',    'e',    'r',    '-', 'b',    'i',
+                                   'n',    'a',    'r',    'y', '-',    'v',
+                                   'a',    'l',    'u',    'e', '\x00', '\xFF'};
+    TEST_ASSERT_TRUE(store.write(key, longerBinary) ==
+                     StateStoreWriteStatus::Success);
+    const auto afterLonger = store.read(key, kDefaultMaxBytes);
+    TEST_ASSERT_EQUAL_UINT32(longerBinary.size(), afterLonger.value.size());
+    TEST_ASSERT_EQUAL_MEMORY(longerBinary.data(), afterLonger.value.data(),
+                             longerBinary.size());
+
+    // Zurueck zu einem kuerzeren Wert: keine Restbytes des laengeren alten
+    // Werts duerfen im gelesenen Ergebnis erscheinen.
+    TEST_ASSERT_TRUE(store.write(key, "again-short") ==
+                     StateStoreWriteStatus::Success);
+    const auto afterShorter = store.read(key, kDefaultMaxBytes);
+    TEST_ASSERT_EQUAL_UINT32(11U, afterShorter.value.size());
+    TEST_ASSERT_EQUAL_STRING("again-short", afterShorter.value.c_str());
 }
 
 void test_write_fault_applies_only_to_next_write() {
@@ -268,6 +326,49 @@ void test_secure_random_source_next_bytes_override_and_failure_injection() {
     TEST_ASSERT_FALSE(source.fill(untouched, sizeof(untouched)));
     const uint8_t stillUntouched[4] = {0x99U, 0x99U, 0x99U, 0x99U};
     TEST_ASSERT_EQUAL_MEMORY(stillUntouched, untouched, sizeof(untouched));
+}
+
+// Laenge 0 ist immer ein erfolgreicher No-op, unabhaengig von einem
+// vorbereiteten Override: `nullptr` ist zulaessig, kein Zeiger wird
+// dereferenziert, der Override bleibt fuer den naechsten Aufruf erhalten.
+void test_secure_random_source_zero_length_fill_with_null_pointer_is_safe_and_does_not_consume_override() {
+    MockSecureRandomSource source;
+    source.setNextBytes(std::string("\x01\x02\x03\x04", 4U));
+    TEST_ASSERT_TRUE(source.fill(nullptr, 0U));
+
+    uint8_t buffer[4] = {0};
+    TEST_ASSERT_TRUE(source.fill(buffer, sizeof(buffer)));
+    const uint8_t expected[4] = {0x01U, 0x02U, 0x03U, 0x04U};
+    TEST_ASSERT_EQUAL_MEMORY(expected, buffer, sizeof(buffer));
+}
+
+// `nullptr` mit positiver Laenge wird beobachtbar abgelehnt, bevor Override
+// oder Generatorzustand beruehrt werden: ein vorbereiteter Override bleibt
+// fuer den naechsten gueltigen Aufruf erhalten, und der seedbare
+// Generatorzustand wird nicht fortgeschaltet.
+void test_secure_random_source_rejects_null_pointer_with_positive_length_and_preserves_override() {
+    MockSecureRandomSource source;
+    source.setNextBytes(std::string("\x01\x02\x03\x04", 4U));
+    TEST_ASSERT_FALSE(source.fill(nullptr, 4U));
+
+    uint8_t buffer[4] = {0};
+    TEST_ASSERT_TRUE(source.fill(buffer, sizeof(buffer)));
+    const uint8_t expected[4] = {0x01U, 0x02U, 0x03U, 0x04U};
+    TEST_ASSERT_EQUAL_MEMORY(expected, buffer, sizeof(buffer));
+}
+
+void test_secure_random_source_rejects_null_pointer_with_positive_length_and_does_not_advance_generator() {
+    MockSecureRandomSource source(42U);
+    TEST_ASSERT_FALSE(source.fill(nullptr, 4U));
+
+    uint8_t afterRejected[16] = {0};
+    TEST_ASSERT_TRUE(source.fill(afterRejected, sizeof(afterRejected)));
+
+    MockSecureRandomSource neverRejected(42U);
+    uint8_t reference[16] = {0};
+    TEST_ASSERT_TRUE(neverRejected.fill(reference, sizeof(reference)));
+
+    TEST_ASSERT_EQUAL_MEMORY(reference, afterRejected, sizeof(reference));
 }
 
 void test_time_zone_resolver_known_unknown_and_failure() {
@@ -686,6 +787,9 @@ int main() {
     RUN_TEST(
         test_write_power_cut_after_commit_before_return_yields_commit_outcome_unknown_and_value_is_durable);
     RUN_TEST(test_write_capacity_exceeded_leaves_store_unchanged);
+    RUN_TEST(test_successful_write_stages_then_commits_and_clears_pending);
+    RUN_TEST(
+        test_write_replaces_different_length_and_binary_values_without_residual_bytes);
     RUN_TEST(test_write_fault_applies_only_to_next_write);
     RUN_TEST(test_read_failure_injection_is_key_specific_and_recoverable);
     RUN_TEST(test_forced_not_found_overrides_existing_committed_value);
@@ -696,6 +800,12 @@ int main() {
         test_secure_random_source_fills_requested_length_deterministically);
     RUN_TEST(
         test_secure_random_source_next_bytes_override_and_failure_injection);
+    RUN_TEST(
+        test_secure_random_source_zero_length_fill_with_null_pointer_is_safe_and_does_not_consume_override);
+    RUN_TEST(
+        test_secure_random_source_rejects_null_pointer_with_positive_length_and_preserves_override);
+    RUN_TEST(
+        test_secure_random_source_rejects_null_pointer_with_positive_length_and_does_not_advance_generator);
     RUN_TEST(test_time_zone_resolver_known_unknown_and_failure);
     RUN_TEST(test_scan_filters_and_sorts_candidates_and_preserves_issues);
     RUN_TEST(

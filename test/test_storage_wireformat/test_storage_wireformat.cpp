@@ -54,6 +54,32 @@ void test_byte_reader_zero_length_read_with_null_pointer_is_safe() {
     TEST_ASSERT_EQUAL_UINT8(0x01U, value);
 }
 
+// `nullptr` mit positiver Laenge wird beobachtbar abgelehnt statt
+// dereferenziert; der Puffer bleibt vollstaendig unveraendert.
+void test_byte_writer_rejects_null_pointer_with_positive_length() {
+    ByteWriter writer(4U);
+    TEST_ASSERT_TRUE(writer.writeByte(0x01U));
+    TEST_ASSERT_FALSE(writer.writeBytes(nullptr, 1U));
+    TEST_ASSERT_EQUAL_UINT32(1U, writer.size());
+    TEST_ASSERT_EQUAL_UINT8(0x01U, static_cast<uint8_t>(writer.bytes()[0]));
+    TEST_ASSERT_TRUE(writer.writeByte(0x02U));
+    TEST_ASSERT_EQUAL_UINT32(2U, writer.size());
+}
+
+// `nullptr` mit positiver Laenge wird beobachtbar abgelehnt statt
+// dereferenziert; die Leseposition bleibt unveraendert.
+void test_byte_reader_rejects_null_pointer_with_positive_length() {
+    const std::string data = bytesOf({0x01U, 0x02U});
+    ByteReader reader(data);
+    uint8_t value = 0;
+    TEST_ASSERT_TRUE(reader.readByte(value));
+    TEST_ASSERT_EQUAL_UINT8(0x01U, value);
+    TEST_ASSERT_FALSE(reader.readBytes(nullptr, 1U));
+    TEST_ASSERT_EQUAL_UINT32(1U, reader.position());
+    TEST_ASSERT_TRUE(reader.readByte(value));
+    TEST_ASSERT_EQUAL_UINT8(0x02U, value);
+}
+
 void test_byte_reader_rejects_reads_beyond_available_bytes() {
     const std::string data = bytesOf({0x01U, 0x02U});
     ByteReader reader(data);
@@ -92,6 +118,42 @@ void test_big_endian_unsigned_golden_bytes() {
     TEST_ASSERT_EQUAL_UINT16(0x0102U, u16);
     TEST_ASSERT_EQUAL_UINT32(0x01020304U, u32);
     TEST_ASSERT_EQUAL_UINT64(0x0102030405060708ULL, u64);
+}
+
+// Fester Golden-Test fuer `writeUint8`/`readUint8` - der bisherige unsigned
+// Golden-Test begann erst bei `uint16`, obwohl die Produktions-API
+// `writeUint8()`/`readUint8()` enthaelt.
+void test_big_endian_uint8_golden_values() {
+    const struct {
+        uint8_t value;
+        uint8_t byte;
+    } cases[] = {
+        {0x00U, 0x00U}, {0x01U, 0x01U}, {0x7FU, 0x7FU},
+        {0x80U, 0x80U}, {0xFFU, 0xFFU},
+    };
+    for (const auto& testCase : cases) {
+        ByteWriter writer(1U);
+        TEST_ASSERT_TRUE(be::writeUint8(writer, testCase.value));
+        TEST_ASSERT_EQUAL_UINT32(1U, writer.size());
+        TEST_ASSERT_EQUAL_UINT8(testCase.byte,
+                                static_cast<uint8_t>(writer.bytes()[0]));
+
+        ByteReader reader(writer.bytes());
+        uint8_t decoded = 0;
+        TEST_ASSERT_TRUE(be::readUint8(reader, decoded));
+        TEST_ASSERT_EQUAL_UINT8(testCase.value, decoded);
+    }
+}
+
+// Lesen aus leerem Puffer schlaegt fehl und laesst Ausgabeparameter sowie
+// Reader-Position unveraendert.
+void test_big_endian_uint8_read_from_empty_buffer_fails_and_leaves_output_unchanged() {
+    const std::string empty;
+    ByteReader reader(empty);
+    uint8_t value = 42U;
+    TEST_ASSERT_FALSE(be::readUint8(reader, value));
+    TEST_ASSERT_EQUAL_UINT8(42U, value);
+    TEST_ASSERT_EQUAL_UINT32(0U, reader.position());
 }
 
 void test_big_endian_signed_two_complement_golden_bytes() {
@@ -400,6 +462,44 @@ void test_checked_add_size_simulates_32_bit_boundary() {
         0xFFFFFFFFULL, 1U, kSimulated32BitMax, rejectedOut));
     TEST_ASSERT_EQUAL_UINT32(123U, rejectedOut);
 }
+
+// `checkEnvelopeEncodedSize()` prueft die Envelope-Groessenentscheidung ohne
+// eine reale Payload dieser Groesse anzulegen - `payloadSize` ist nur ein
+// Zahlenwert. `maxTotalBytes` wird bewusst auf `SIZE_MAX` gesetzt, damit
+// ausschliesslich das 32-Bit-Wire-Laengenfeld die Ablehnung verursacht, nicht
+// `maxTotalBytes`.
+void test_check_envelope_encoded_size_accepts_payload_exactly_at_uint32_max() {
+    const std::size_t exactUint32Max =
+        static_cast<std::size_t>(std::numeric_limits<uint32_t>::max());
+    const auto result = device_platform::checkEnvelopeEncodedSize(
+        exactUint32Max, false, std::numeric_limits<std::size_t>::max());
+    TEST_ASSERT_TRUE(result.status ==
+                     device_platform::EnvelopeEncodeStatus::Success);
+}
+
+// Payloadgroesse eines Bytes ueber dem 32-Bit-Wire-Laengenfeld wird
+// konsistent als `CapacityExceeded` abgelehnt, nicht als `InvalidField` -
+// der Inhalt ist nicht fachlich ungueltig, sondern uebersteigt die
+// technische Wireformat-Kapazitaet. Nur auf einem Testhost mit `size_t`
+// breiter als 32 Bit direkt darstellbar (hier: nativer 64-Bit-Testhost).
+void test_check_envelope_encoded_size_rejects_payload_one_byte_over_uint32_max_as_capacity_exceeded() {
+    const std::size_t oneOverUint32Max =
+        static_cast<std::size_t>(std::numeric_limits<uint32_t>::max()) + 1U;
+    const auto result = device_platform::checkEnvelopeEncodedSize(
+        oneOverUint32Max, false, std::numeric_limits<std::size_t>::max());
+    TEST_ASSERT_TRUE(result.status ==
+                     device_platform::EnvelopeEncodeStatus::CapacityExceeded);
+    TEST_ASSERT_EQUAL_UINT32(0U, result.totalSize);
+}
+
+// `encodeEnvelope()` nutzt `checkEnvelopeEncodedSize()` intern als einzige
+// Quelle der Wahrheit - die exakte Grenze, ein Byte darueber sowie
+// Header+CRC- und Header+Payload-Ueberlauf sind bereits unten durch
+// `test_envelope_encode_accepts_exact_max_total_bytes`,
+// `test_envelope_encode_rejects_one_byte_over_exact_size`,
+// `test_envelope_encode_rejects_overflow_already_at_header_plus_crc` und
+// `test_envelope_encode_rejects_overflow_at_header_plus_payload` ueber den
+// oeffentlichen Encoder abgedeckt.
 
 device_platform::StorageEnvelope validEnvelope() {
     device_platform::StorageEnvelope envelope;
@@ -888,7 +988,7 @@ void test_incremental_crc32_single_chunk_matches_one_shot() {
     using device_platform::Crc32IsoHdlc;
     const std::string data = "123456789";
     Crc32IsoHdlc accumulator;
-    accumulator.update(data);
+    TEST_ASSERT_TRUE(accumulator.update(data));
     TEST_ASSERT_EQUAL_UINT32(0xCBF43926U, accumulator.finalize());
 }
 
@@ -899,21 +999,22 @@ void test_incremental_crc32_multiple_chunks_matches_contiguous_buffer() {
 
     // Chunkgrenze mitten im "Header"-Teil der Beispieldaten (nach Byte 3).
     Crc32IsoHdlc midHeaderSplit;
-    midHeaderSplit.update(full.substr(0U, 3U));
-    midHeaderSplit.update(full.substr(3U));
+    TEST_ASSERT_TRUE(midHeaderSplit.update(full.substr(0U, 3U)));
+    TEST_ASSERT_TRUE(midHeaderSplit.update(full.substr(3U)));
     TEST_ASSERT_EQUAL_UINT32(expected, midHeaderSplit.finalize());
 
     // Chunkgrenze exakt zwischen zwei gleich grossen Haelften (analog zu
     // Header/Payload-Grenze im Envelope).
     Crc32IsoHdlc headerPayloadSplit;
-    headerPayloadSplit.update(full.substr(0U, full.size() / 2U));
-    headerPayloadSplit.update(full.substr(full.size() / 2U));
+    TEST_ASSERT_TRUE(
+        headerPayloadSplit.update(full.substr(0U, full.size() / 2U)));
+    TEST_ASSERT_TRUE(headerPayloadSplit.update(full.substr(full.size() / 2U)));
     TEST_ASSERT_EQUAL_UINT32(expected, headerPayloadSplit.finalize());
 
     // Viele einzelne Ein-Byte-Chunks.
     Crc32IsoHdlc byteByByte;
     for (char character : full) {
-        byteByByte.update(std::string(1U, character));
+        TEST_ASSERT_TRUE(byteByByte.update(std::string(1U, character)));
     }
     TEST_ASSERT_EQUAL_UINT32(expected, byteByByte.finalize());
 }
@@ -924,12 +1025,26 @@ void test_incremental_crc32_empty_chunks_do_not_change_result() {
     const uint32_t expected = device_platform::computeCrc32IsoHdlc(full);
 
     Crc32IsoHdlc withEmptyChunks;
-    withEmptyChunks.update(std::string());
-    withEmptyChunks.update(full.substr(0U, 4U));
-    withEmptyChunks.update(nullptr, 0U);
-    withEmptyChunks.update(full.substr(4U));
-    withEmptyChunks.update(std::string());
+    TEST_ASSERT_TRUE(withEmptyChunks.update(std::string()));
+    TEST_ASSERT_TRUE(withEmptyChunks.update(full.substr(0U, 4U)));
+    TEST_ASSERT_TRUE(withEmptyChunks.update(nullptr, 0U));
+    TEST_ASSERT_TRUE(withEmptyChunks.update(full.substr(4U)));
+    TEST_ASSERT_TRUE(withEmptyChunks.update(std::string()));
     TEST_ASSERT_EQUAL_UINT32(expected, withEmptyChunks.finalize());
+}
+
+// `nullptr` mit positiver Laenge wird beobachtbar abgelehnt, ohne den
+// Akkumulatorzustand zu veraendern: nach dem abgelehnten Aufruf liefert ein
+// nachfolgender gueltiger Chunk denselben Wert wie ein frischer Akkumulator.
+void test_incremental_crc32_rejects_null_pointer_with_positive_length_and_state_is_unchanged() {
+    using device_platform::Crc32IsoHdlc;
+    const std::string data = "123456789";
+    const uint32_t expected = device_platform::computeCrc32IsoHdlc(data);
+
+    Crc32IsoHdlc accumulator;
+    TEST_ASSERT_FALSE(accumulator.update(nullptr, 5U));
+    TEST_ASSERT_TRUE(accumulator.update(data));
+    TEST_ASSERT_EQUAL_UINT32(expected, accumulator.finalize());
 }
 
 void test_incremental_crc32_empty_input_matches_one_shot() {
@@ -994,7 +1109,12 @@ int main() {
     RUN_TEST(test_byte_writer_zero_length_write_with_null_pointer_is_safe);
     RUN_TEST(test_byte_reader_zero_length_read_with_null_pointer_is_safe);
     RUN_TEST(test_byte_reader_rejects_reads_beyond_available_bytes);
+    RUN_TEST(test_byte_writer_rejects_null_pointer_with_positive_length);
+    RUN_TEST(test_byte_reader_rejects_null_pointer_with_positive_length);
     RUN_TEST(test_big_endian_unsigned_golden_bytes);
+    RUN_TEST(test_big_endian_uint8_golden_values);
+    RUN_TEST(
+        test_big_endian_uint8_read_from_empty_buffer_fails_and_leaves_output_unchanged);
     RUN_TEST(test_big_endian_signed_two_complement_golden_bytes);
     RUN_TEST(test_big_endian_int8_golden_values);
     RUN_TEST(test_big_endian_int16_golden_values);
@@ -1017,6 +1137,8 @@ int main() {
     RUN_TEST(test_incremental_crc32_multiple_chunks_matches_contiguous_buffer);
     RUN_TEST(test_incremental_crc32_empty_chunks_do_not_change_result);
     RUN_TEST(test_incremental_crc32_empty_input_matches_one_shot);
+    RUN_TEST(
+        test_incremental_crc32_rejects_null_pointer_with_positive_length_and_state_is_unchanged);
     RUN_TEST(test_envelope_round_trip_with_empty_payload);
     RUN_TEST(test_envelope_round_trip_with_larger_payload);
     RUN_TEST(test_checked_add_size_accepts_within_bound);
@@ -1024,6 +1146,10 @@ int main() {
     RUN_TEST(test_checked_add_size_rejects_one_over_bound);
     RUN_TEST(test_checked_add_size_rejects_actual_size_t_wraparound);
     RUN_TEST(test_checked_add_size_simulates_32_bit_boundary);
+    RUN_TEST(
+        test_check_envelope_encoded_size_accepts_payload_exactly_at_uint32_max);
+    RUN_TEST(
+        test_check_envelope_encoded_size_rejects_payload_one_byte_over_uint32_max_as_capacity_exceeded);
     RUN_TEST(test_envelope_golden_vector_without_utc);
     RUN_TEST(test_envelope_golden_vector_with_utc);
     RUN_TEST(test_envelope_encode_rejects_reserved_zero_fields);
