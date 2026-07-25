@@ -115,9 +115,11 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   sowie fluechtiger Testzustand; `write()` bildet "vollstaendig staging,
   dann atomar committen" nach, `restart()` verwirft `pendingWrite_` und alle
   fluechtigen Testschalter, laesst `committed_` unveraendert; ein
-  testinterner `hasPendingWriteForTesting()`-Zugriff macht das Staging fuer
-  native Tests beobachtbar, ohne die produktive `IStateStore`-Schnittstelle
-  zu vergroessern
+  testinterner Zugriff macht Existenz sowie exakten Schluessel und
+  vollstaendigen binaeren Inhalt des Stagings fuer native Tests beobachtbar,
+  ohne die produktive `IStateStore`-Schnittstelle zu vergroessern; alle
+  Envelope-CRC-Aufrufer behandeln den booleschen `update()`-Rueckgabewert
+  explizit, statt ihn nur als nicht fehlschlagend zu unterstellen
 - Initiale Projektstruktur
 - Template auf ESP32-Fermentationsschrank angepasst
 - Hardwarekomponenten und Sicherheitsregeln ohne GPIO-Festlegung dokumentiert

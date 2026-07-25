@@ -960,7 +960,10 @@ Staging sofort geleert. `restart()` loescht `pendingWrite_` sowie alle
 fluechtigen Testschalter, laesst `committed_` aber unveraendert. Ein rein
 testinterner Zugriff `hasPendingWriteForTesting()` macht das gestagte-aber-
 nicht-committete Staging fuer native Tests beobachtbar, ohne die produktive
-`IStateStore`-Schnittstelle zu vergroessern.
+`IStateStore`-Schnittstelle zu vergroessern. Der ebenfalls rein testinterne
+`pendingWriteMatchesForTesting()`-Beleg prueft, dass nicht nur irgendein
+Staging existiert, sondern Schluessel und vollstaendiger binaerer Wert exakt
+der laufenden Schreiboperation entsprechen.
 
 `IStateStore::write` liefert vier eindeutig unterscheidbare Ergebnisse statt
 einer pauschalen "unveraendert bei Fehler"-Garantie: `Success` (neuer Wert
@@ -1089,7 +1092,9 @@ vorbereiteter Override wird nicht konsumiert, der Generatorzustand nicht
 weiterbewegt). Bei `length > 0` und `nullptr` lehnen alle vier Stellen
 beobachtbar ab (`bool`/`false`), ohne Speicherzugriff und ohne UB.
 `Crc32IsoHdlc::update` ist dafuer `[[nodiscard]] bool`; alle
-Produktionsaufrufer pruefen den Rueckgabewert. Die reine Rohzeiger-
+Produktionsaufrufer behandeln den Rueckgabewert mit einem expliziten
+Fehlerzweig, sodass nie ein CRC aus nur einem Teil der vorgesehenen Chunks
+veroeffentlicht oder akzeptiert wird. Die reine Rohzeiger-
 One-Shot-Ueberladung `computeCrc32IsoHdlc(const void*, size_t)` wurde entfernt,
 da kein Aufrufer sie noch braucht und ein sinnvoller Sentinel-Fehlerwert fuer
 `uint32_t`-CRCs nicht existiert; `computeCrc32IsoHdlc(const std::string&)`
