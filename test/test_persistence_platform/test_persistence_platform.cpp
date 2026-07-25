@@ -770,25 +770,61 @@ void test_state_store_key_rejects_one_byte_over_max_length() {
     TEST_ASSERT_FALSE(result.key.has_value());
 }
 
-void test_state_store_key_is_binary_safe_with_embedded_nul() {
-    const std::string withNul("a\0b", 3U);
-    const auto result = StateStoreKey::create(withNul);
+// Lehnt `raw` mit `InvalidCharacter` ab und liefert keinen Schluessel.
+void assertRejectedAsInvalidCharacter(const std::string& raw) {
+    const auto result = StateStoreKey::create(raw);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(StateStoreKeyStatus::InvalidCharacter),
+        static_cast<int>(result.status));
+    TEST_ASSERT_FALSE(result.key.has_value());
+}
+
+// Alle erlaubten Zeichensatzgrenzen (`A`,`Z`,`a`,`z`,`0`,`9`,`_`,`.`,`-`)
+// werden akzeptiert.
+void test_state_store_key_accepts_charset_boundary_characters() {
+    const auto result = StateStoreKey::create("AZaz09_.-");
     TEST_ASSERT_EQUAL_INT(static_cast<int>(StateStoreKeyStatus::Success),
                           static_cast<int>(result.status));
     TEST_ASSERT_TRUE(result.key.has_value());
-    TEST_ASSERT_EQUAL_UINT32(3U, result.key->size());
-    TEST_ASSERT_EQUAL_MEMORY(withNul.data(), result.key->bytes().data(), 3U);
+    TEST_ASSERT_EQUAL_UINT32(9U, result.key->size());
 }
 
-// Deterministische, unsigned-byteweise Ordnung: `std::string::operator<`
-// vergleicht `char` fuer `char_traits<char>` normativ als `unsigned char`,
-// unabhaengig von der (ggf. signed) nativen `char`-Darstellung. Ein Byte
-// unterhalb 0x80 muss daher immer kleiner als eines ab 0x80 sein.
-void test_state_store_key_ordering_is_unsigned_byte_deterministic() {
-    const auto low = keyOrFail(std::string(1U, static_cast<char>(0x7FU)));
-    const auto high = keyOrFail(std::string(1U, static_cast<char>(0x80U)));
-    TEST_ASSERT_TRUE(low < high);
-    TEST_ASSERT_FALSE(high < low);
+// Direkt an die erlaubten Bereiche angrenzende Zeichen sind der jeweils erste
+// ungueltige Fall: '/' (vor '0'), ':' (nach '9'), '@' (vor 'A'), '[' (nach
+// 'Z'), '`' (vor 'a'), '{' (nach 'z'); ebenso jedes Byte ab 0x80.
+void test_state_store_key_rejects_characters_just_outside_allowed_ranges() {
+    const char invalids[] = {'/', ':', '@', '[', '`', '{'};
+    for (const char invalid : invalids) {
+        assertRejectedAsInvalidCharacter(std::string("a") + invalid + "b");
+    }
+    assertRejectedAsInvalidCharacter(std::string(1U, static_cast<char>(0x80U)));
+    assertRejectedAsInvalidCharacter(std::string(1U, static_cast<char>(0xFFU)));
+}
+
+// NUL ist unzulaessig (kein binaersicherer Schluesselraum): der Schluessel wird
+// abgelehnt statt still aufgenommen.
+void test_state_store_key_rejects_embedded_nul() {
+    assertRejectedAsInvalidCharacter(std::string("a\0b", 3U));
+}
+
+void test_state_store_key_rejects_space() {
+    assertRejectedAsInvalidCharacter("a b");
+}
+
+void test_state_store_key_rejects_path_separators() {
+    assertRejectedAsInvalidCharacter("a/b");
+    assertRejectedAsInvalidCharacter("a\\b");
+}
+
+// Deterministische Ordnung nach unsigned Bytewert innerhalb des erlaubten
+// Zeichensatzes: '-' (0x2D) < '.' (0x2E) < '0' (0x30) < 'A' (0x41) <
+// '_' (0x5F) < 'a' (0x61).
+void test_state_store_key_ordering_follows_unsigned_byte_value() {
+    TEST_ASSERT_TRUE(keyOrFail("-") < keyOrFail("."));
+    TEST_ASSERT_TRUE(keyOrFail(".") < keyOrFail("0"));
+    TEST_ASSERT_TRUE(keyOrFail("0") < keyOrFail("A"));
+    TEST_ASSERT_TRUE(keyOrFail("A") < keyOrFail("_"));
+    TEST_ASSERT_TRUE(keyOrFail("_") < keyOrFail("a"));
 }
 
 // Der Simulator verwendet den Schluessel wertbasiert (nicht
@@ -858,8 +894,12 @@ int main() {
     RUN_TEST(test_state_store_key_rejects_empty_key);
     RUN_TEST(test_state_store_key_accepts_exact_max_length);
     RUN_TEST(test_state_store_key_rejects_one_byte_over_max_length);
-    RUN_TEST(test_state_store_key_is_binary_safe_with_embedded_nul);
-    RUN_TEST(test_state_store_key_ordering_is_unsigned_byte_deterministic);
+    RUN_TEST(test_state_store_key_accepts_charset_boundary_characters);
+    RUN_TEST(test_state_store_key_rejects_characters_just_outside_allowed_ranges);
+    RUN_TEST(test_state_store_key_rejects_embedded_nul);
+    RUN_TEST(test_state_store_key_rejects_space);
+    RUN_TEST(test_state_store_key_rejects_path_separators);
+    RUN_TEST(test_state_store_key_ordering_follows_unsigned_byte_value);
     RUN_TEST(test_state_store_key_comparison_and_deterministic_simulator_use);
     return UNITY_END();
 }

@@ -19,6 +19,9 @@ enum class StateStoreKeyStatus : uint8_t {
     Empty,
     // `bytes.size()` uebersteigt `StateStoreKey::kMaxLength`.
     TooLong,
+    // Mindestens ein Byte liegt ausserhalb des erlaubten Zeichensatzes
+    // `[A-Za-z0-9_.-]`.
+    InvalidCharacter,
 };
 
 // Vorwaertsdeklariert, da `StateStoreKey::create()` diesen Typ als
@@ -27,29 +30,28 @@ enum class StateStoreKeyStatus : uint8_t {
 // braucht dafuer den bereits vollstaendigen `StateStoreKey`-Typ.
 struct StateStoreKeyCreateResult;
 
-// Begrenzter, binaersicherer Schluesselwert (beliebige Bytewerte inklusive
-// eingebettetem NUL sind zulaessig; es gibt keine Zeichensatzeinschraenkung).
+// Begrenzter Schluesselwert: 1 bis `kMaxLength` Bytes, jedes Byte aus
+// `[A-Za-z0-9_.-]`. NUL, Leerzeichen und Pfadtrennzeichen sind unzulaessig.
 // Kennt keine konkrete Konfigurations-, Manifest-, Root- oder
-// Anwendungsschluesselbedeutung - welcher Bytewert wofuer steht, entscheidet
+// Anwendungsschluesselbedeutung - welcher Schluessel wofuer steht, entscheidet
 // ausschliesslich die aufrufende Anwendung.
 //
 // Gueltig-by-construction: es gibt keinen oeffentlichen Konstruktor. Jede
-// existierende Instanz enthaelt daher garantiert 1..kMaxLength Bytes;
-// `create()` ist der einzige Erzeugungsweg und liefert bei einem leeren
-// oder zu langen Eingabewert keinen Wert - ein ungueltiger Schluessel kann
-// dadurch nie still als gueltiges `IStateStore`-Portargument verwendet
-// werden.
+// existierende Instanz enthaelt daher garantiert 1..kMaxLength zulaessige
+// Bytes; `create()` ist der einzige Erzeugungsweg und liefert bei einem
+// leeren, zu langen oder zeichensatzverletzenden Eingabewert keinen Wert -
+// ein ungueltiger Schluessel kann dadurch nie still als gueltiges
+// `IStateStore`-Portargument verwendet werden.
 //
-// `kMaxLength` ist eine kleine, anwendungsneutrale Softwaregrenze dieses
-// Ports und keine reale NVS- oder Flash-Garantie: sie ist bewusst nicht an
-// die ESP32-NVS-Schluesselgrenze (technisch 15 Zeichen) gebunden, damit
-// `device_platform` hardwareneutral bleibt (siehe
-// lib/device_platform/AGENTS.md). Ein produktiver ESP32-Adapter, der echte
-// NVS-Schluessel abbildet, muss eine engere Grenze eigenverantwortlich selbst
-// durchsetzen.
+// Der Schluesselraum und die Laengengrenze werden gemaess ADR-016 im Port
+// erzwungen, nicht in einem Adapter: 15 Zeichen aus `[A-Za-z0-9_.-]` sind der
+// kleinste gemeinsame Nenner plausibler Backends (NVS-Schluessel: ASCII,
+// hoechstens 15 Zeichen; ebenso gueltig fuer dateibasierte Backends und in
+// Logs lesbar). Die Nutzlast (`IStateStore`-Wert) bleibt davon unberuehrt
+// binaersicher.
 class StateStoreKey {
    public:
-    static constexpr std::size_t kMaxLength = 32U;
+    static constexpr std::size_t kMaxLength = 15U;
 
     [[nodiscard]] static StateStoreKeyCreateResult create(std::string bytes);
 
@@ -99,6 +101,19 @@ inline StateStoreKeyCreateResult StateStoreKey::create(std::string bytes) {
     if (bytes.size() > kMaxLength) {
         return StateStoreKeyCreateResult{StateStoreKeyStatus::TooLong,
                                          std::nullopt};
+    }
+    const auto isAllowed = [](char byte) {
+        const auto value = static_cast<unsigned char>(byte);
+        return (value >= 'A' && value <= 'Z') ||
+               (value >= 'a' && value <= 'z') ||
+               (value >= '0' && value <= '9') || value == '_' ||
+               value == '.' || value == '-';
+    };
+    for (const char byte : bytes) {
+        if (!isAllowed(byte)) {
+            return StateStoreKeyCreateResult{
+                StateStoreKeyStatus::InvalidCharacter, std::nullopt};
+        }
     }
     return StateStoreKeyCreateResult{
         StateStoreKeyStatus::Success,
