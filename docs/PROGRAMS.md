@@ -384,8 +384,12 @@ Inbetriebnahmewert erfinden darf. Migrierte Vorheizprogramme bleiben als
 Katalogvorlage gueltig, sind aber bis zur bewussten Konfiguration nicht
 ausfuehrbar. Aeltere oder zukuenftige Versionen sowie unvollstaendige
 Quelldokumente werden abgelehnt, statt teilweise aktiviert zu werden. Parser
-und persistente atomare Revisionen folgen in den dafuer vorgesehenen
-Persistenz-Issues.
+und der typisierte ProgramCatalog aus Issue #55 kodieren das bestehende Modell
+deterministisch, ohne eine zweite Programmschema-Definition einzufuehren.
+`ProgramDefinition::notes` bleibt dabei ein vorhandenes, unabhaengig von der
+ProgramFieldMask kodiertes Feld; es wird kein neues Feldbit eingefuehrt.
+Persistente Aktivierung, Manifeste, Roots und Slotrotation folgen weiterhin in
+den dafuer vorgesehenen Persistenz-Issues.
 
 ## Implementierter Laufschnappschuss und Laufrevisionen
 

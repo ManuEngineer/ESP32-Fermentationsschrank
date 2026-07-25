@@ -28,6 +28,12 @@ Testsuite liegt in einem eigenen Verzeichnis unter `test/`, unter anderem:
 - `test/test_sensor_actuator_mocks/` — Sensor-, Aktor- und Simulationsadapter
 - `test/test_persistence_journal_mocks/` — Persistenz- und Journaladapter
 - `test/test_network_notification_mocks/` — Netzwerk- und Benachrichtigungsadapter
+- `test/test_configuration_documents/` — Dokumentmodelle, Firmwarekataloge,
+  UTF-8-/Unicode-, ID- und Zeitzonenvalidierung
+- `test/test_configuration_codecs/` — feste Golden-Bytes, Grenzfaelle und
+  native Allokationsregression grosser ProgramCatalog-Payloads
+- `test/test_configuration_migration/` — Copy-Migration und Abbruch ohne
+  Teilwirkung
 
 ## Virtuelle Zeitquelle
 
@@ -79,7 +85,12 @@ pio run -e native -t compiledb
 clang-tidy -p . include/app_config.hpp \
   lib/device_platform/src/device_platform.cpp \
   lib/device_platform/src/virtual_time_source.cpp \
+  lib/fermentation_app/src/configuration_document_codec.cpp \
+  lib/fermentation_app/src/configuration_documents.cpp \
+  lib/fermentation_app/src/configuration_migration.cpp \
+  lib/fermentation_app/src/configuration_text.cpp \
   lib/fermentation_app/src/fermentation_application.cpp \
+  lib/fermentation_app/src/firmware_configuration_catalog.cpp \
   lib/fermentation_app/src/process_state_machine.cpp \
   lib/fermentation_app/src/program_model.cpp \
   lib/fermentation_app/src/run_commands.cpp \

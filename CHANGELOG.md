@@ -50,6 +50,19 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Added
 
+- Typisierte Konfigurationsdokumente aus Issue #55: UserConfiguration,
+  exakt leere ServiceConfiguration und ProgramCatalog Schema 1 mit
+  vollstaendiger ID-/UTF-8-/Unicode-/Anzahl-/Payloadvalidierung, versionierten
+  Sprach- und Zeitzonenkatalogen sowie einem schmalen `ITimeZoneResolver` und
+  deterministischem Testadapter. Die fachlichen Big-Endian-Payloadcodecs
+  besitzen feste Golden-Bytes, stabile Enum-Wire-IDs, getrennte starke
+  Schema-/Revisionstypen und Copy-Migration ohne Teilwirkung. Der
+  ProgramCatalog verwendet das vorhandene ProgramDocument-Schema 5 samt
+  bestehender Migration 4 nach 5; Notizen werden ohne neues Feldmaskenbit als
+  ausdrueckliches Katalogfeld kodiert. Native Allokationsregressionstests
+  begrenzen versehentliche vollstaendige Zusatzkopien grosser Kataloge, ohne
+  eine reale ESP32-Heapgarantie zu behaupten.
+
 - Anwendungsneutrale Plattformpersistenz und Wireformat fuer Issue #54
   (Paket A von #16, Closes #54): begrenztes binaersicheres `IStateStore` mit
   caller-/schluesselspezifischem Leselimit und vier eindeutig unterscheidbaren
