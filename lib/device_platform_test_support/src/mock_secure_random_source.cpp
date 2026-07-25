@@ -17,6 +17,19 @@ uint64_t nextSplitMix64(uint64_t& state) {
 }  // namespace
 
 bool MockSecureRandomSource::fill(void* buffer, std::size_t length) {
+    // Laenge 0 ist immer ein erfolgreicher No-op, unabhaengig von
+    // `shouldFail_` oder einem vorbereiteten Override (analog zu
+    // `ByteWriter::writeBytes`, bei dem Laenge 0 ebenfalls vor jeder anderen
+    // Pruefung erfolgreich ist) - `buffer` darf `nullptr` sein und wird nicht
+    // dereferenziert, kein interner Zustand aendert sich.
+    if (length == 0U) {
+        return true;
+    }
+    // Positive Laenge mit `nullptr`: beobachtbar ablehnen, bevor Override
+    // oder Generatorzustand angefasst werden.
+    if (buffer == nullptr) {
+        return false;
+    }
     if (shouldFail_) {
         return false;
     }

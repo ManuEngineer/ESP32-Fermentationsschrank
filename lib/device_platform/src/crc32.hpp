@@ -15,19 +15,23 @@ namespace device_platform {
 // Inkrementeller CRC-32/ISO-HDLC-Akkumulator. Erlaubt, den CRC ueber mehrere
 // nicht zusammenhaengende Speicherbereiche (z. B. Header und Payload eines
 // Envelopes) zu berechnen, ohne diese Bereiche vorher in einem gemeinsamen
-// Puffer zusammenzufuegen (siehe docs/CONFIGURATION_PERSISTENCE.md,
-// Abschnitt "Ressourcenvertrag": hoechstens ein vollstaendiger kodierter
-// Recordpuffer waehrend Commit). Ergebnis ist unabhaengig von der
-// Chunkaufteilung identisch zum CRC ueber den zusammenhaengenden Bereich.
+// Puffer zusammenzufuegen. `encodeEnvelope()`/`decodeEnvelope()` nutzen dies,
+// um ohne zusaetzlichen Verkettungspuffer auszukommen (siehe
+// docs/CONFIGURATION_PERSISTENCE.md, Abschnitt "Ressourcenvertrag" fuer die
+// praezise, nicht absolute Formulierung der dortigen Ein-Puffer-Garantie -
+// diese Klasse selbst macht keine Aussage ueber gleichzeitig existierende
+// Puffer). Ergebnis ist unabhaengig von der Chunkaufteilung identisch zum
+// CRC ueber den zusammenhaengenden Bereich.
 class Crc32IsoHdlc {
    public:
     Crc32IsoHdlc() = default;
 
-    // `data` darf nur dann `nullptr` sein, wenn `length == 0` ist (gleiche
-    // Vorbedingung wie bei `std::memcpy`/`ByteWriter::writeBytes`); bei
-    // `length == 0` wird `data` nicht dereferenziert.
-    void update(const void* data, std::size_t length);
-    void update(const std::string& data);
+    // Laenge 0: `data` darf `nullptr` sein, der Aufruf ist ein erfolgreicher
+    // No-op und veraendert den Akkumulatorzustand nicht. Positive Laenge:
+    // `nullptr` wird beobachtbar mit `false` abgelehnt, ohne `data` zu
+    // dereferenzieren und ohne den Akkumulatorzustand zu veraendern.
+    [[nodiscard]] bool update(const void* data, std::size_t length);
+    [[nodiscard]] bool update(const std::string& data);
 
     [[nodiscard]] uint32_t finalize() const;
 
@@ -35,8 +39,11 @@ class Crc32IsoHdlc {
     uint32_t crc_{0xFFFFFFFFU};
 };
 
-[[nodiscard]] uint32_t computeCrc32IsoHdlc(const void* data,
-                                           std::size_t length);
+// Bequemer Einmalaufruf fuer den haeufigen Fall vollstaendig im Speicher
+// vorliegender `std::string`-Daten; `std::string::data()` ist nie `nullptr`
+// (auch bei leerem String seit C++11), dieser Aufruf kann daher nie
+// fehlschlagen. Fuer rohe Zeiger/Laengen oder mehrere Chunks direkt
+// `Crc32IsoHdlc` verwenden.
 [[nodiscard]] uint32_t computeCrc32IsoHdlc(const std::string& data);
 
 }  // namespace device_platform

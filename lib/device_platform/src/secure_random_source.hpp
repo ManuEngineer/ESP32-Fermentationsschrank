@@ -19,7 +19,12 @@ class ISecureRandomSource {
 
     // Fuellt genau `length` Bytes ab `buffer`. Liefert `false`, wenn keine
     // ausreichende Zufallsquelle zur Verfuegung steht; `buffer` bleibt in
-    // diesem Fall unveraendert.
+    // diesem Fall unveraendert. `length == 0`: `buffer` darf `nullptr` sein,
+    // der Aufruf ist ein erfolgreicher No-op ohne jede Zustandsaenderung
+    // (kein Verbrauch vorbereiteter Testdaten, kein Fortschalten eines
+    // Generatorzustands). Positive Laenge: `nullptr` muss von jeder
+    // Implementierung beobachtbar mit `false` abgelehnt werden, ohne
+    // `buffer` zu dereferenzieren.
     [[nodiscard]] virtual bool fill(void* buffer, std::size_t length) = 0;
 };
 

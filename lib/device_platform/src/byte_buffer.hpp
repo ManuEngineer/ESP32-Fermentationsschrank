@@ -17,9 +17,10 @@ class ByteWriter {
         buffer_.reserve(capacity);
     }
 
-    // `data` darf nur dann `nullptr` sein, wenn `length == 0` ist (gleiche
-    // Vorbedingung wie bei `std::memcpy`/`Crc32IsoHdlc::update`); bei
-    // `length == 0` wird `data` nicht dereferenziert.
+    // `length == 0`: `data` darf `nullptr` sein, erfolgreicher No-op ohne
+    // Zustandsaenderung. Positive Laenge: `nullptr` wird beobachtbar mit
+    // `false` abgelehnt (nicht nur dokumentierte Vorbedingung wie bei
+    // `std::memcpy`), `data` wird dabei nie dereferenziert.
     [[nodiscard]] bool writeBytes(const void* data, std::size_t length) {
         // Laenge 0 mit moeglicherweise nullptr `data` vor jeder
         // Pointerarithmetik/-kopie abfangen: ein Nullzeiger als Beginn eines
@@ -27,6 +28,11 @@ class ByteWriter {
         // dokumentiert sicher.
         if (length == 0U) {
             return true;
+        }
+        // Positive Laenge mit `nullptr`: beobachtbar ablehnen statt
+        // dereferenzieren. `buffer_` bleibt unveraendert.
+        if (data == nullptr) {
+            return false;
         }
         if (length > capacity_ - buffer_.size()) {
             return false;
@@ -64,14 +70,20 @@ class ByteReader {
    public:
     explicit ByteReader(const std::string& bytes) : bytes_(bytes) {}
 
-    // `out` darf nur dann `nullptr` sein, wenn `length == 0` ist (gleiche
-    // Vorbedingung wie bei `ByteWriter::writeBytes`); bei `length == 0` wird
-    // `out` nicht dereferenziert.
+    // `length == 0`: `out` darf `nullptr` sein, erfolgreicher No-op ohne
+    // Positionsaenderung. Positive Laenge: `nullptr` wird beobachtbar mit
+    // `false` abgelehnt (siehe `ByteWriter::writeBytes`), `out` wird dabei
+    // nie dereferenziert.
     [[nodiscard]] bool readBytes(void* out, std::size_t length) {
         // Siehe ByteWriter::writeBytes: Laenge 0 mit moeglicherweise
         // nullptr `out` vor jeder Pointerarithmetik/-kopie abfangen.
         if (length == 0U) {
             return true;
+        }
+        // Positive Laenge mit `nullptr`: beobachtbar ablehnen statt
+        // dereferenzieren. `position_` bleibt unveraendert.
+        if (out == nullptr) {
+            return false;
         }
         if (length > bytes_.size() - position_) {
             return false;
