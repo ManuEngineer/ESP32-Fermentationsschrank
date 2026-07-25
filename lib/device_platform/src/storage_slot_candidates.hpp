@@ -49,12 +49,10 @@ enum class SlotIssueKind : uint8_t {
     // Envelope technisch gueltig, aber RecordType, Schema-Version oder
     // StorageEpoch entsprechen nicht den Erwartungen.
     RecordIdentityMismatch,
-    // Nachweislich unerreichbarer Fallback: an der einzigen Aufrufstelle
-    // kann `toSlotIssueKind()` nie mit `Success` aufgerufen werden (siehe
-    // storage_slot_candidates.cpp). Existiert nur, damit der `switch` ueber
-    // `StateStoreReadStatus`/`EnvelopeDecodeStatus` ohne `default` vollstaendig
-    // bleibt, und darf niemals still mit einem echten Lese- oder
-    // Envelope-Fehler (z. B. `ReadError`/`LengthMismatch`) verwechselt werden.
+    // Fallback fuer den an der Aufrufstelle nicht erreichbaren
+    // `Success`-Zweig der `toSlotIssueKind()`-Mapper; haelt deren `switch` ohne
+    // `default` vollstaendig. Nie mit einem echten Lese- oder Envelope-Fehler
+    // (z. B. `ReadError`/`LengthMismatch`) zu verwechseln.
     UnexpectedStatus,
 };
 

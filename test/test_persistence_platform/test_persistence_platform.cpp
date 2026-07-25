@@ -66,18 +66,6 @@ using device_platform::StorageEpoch;
 using device_platform_test_support::MockSecureRandomSource;
 using device_platform_test_support::SimulatedPersistentStateStore;
 
-// Kein Test mit einem absichtlich vertragsverletzenden Test-Store (der
-// `read()` mit `WriteError`/`CommitOutcomeUnknown` oder `write()` mit
-// `NotFound`/`ReadError` zurueckgeben liesse): seit der Trennung von
-// `StateStoreReadStatus`/`StateStoreWriteStatus` (state_store.hpp) ist ein
-// solcher Store nicht mehr in gueltigem C++ konstruierbar -
-// `IStateStore::read()` gibt `StateStoreReadResult` mit `StateStoreReadStatus`
-// zurueck, der Typ selbst besitzt keinen `WriteError`- oder
-// `CommitOutcomeUnknown`-Wert. Das ist ein Compilefehler statt eines
-// Laufzeitfehlers und damit ein staerkerer Beweis als jeder Test es waere;
-// die vorhandenen `test_write_*`/`test_read_*`-Tests unten decken bereits
-// jede tatsaechlich erreichbare Kombination ab.
-
 StateStoreKey keyOrFail(const std::string& raw) {
     auto result = StateStoreKey::create(raw);
     TEST_ASSERT_TRUE(result.status == StateStoreKeyStatus::Success);
@@ -873,10 +861,9 @@ void test_next_slot_round_robin_rejects_last_slot_out_of_range() {
     TEST_ASSERT_TRUE(equalToCount.status != invalidCount.status);
 }
 
-// Ein technisch nicht darstellbares `slotCount` (> UINT32_MAX) wird typisiert
-// als `InvalidSlotCount` abgelehnt statt einen scheinbar gueltigen Slot 0 zu
-// liefern - das war zuvor nicht von einer erfolgreichen Rotation zu Slot 0
-// unterscheidbar.
+// Ein technisch nicht darstellbares `slotCount` (> UINT32_MAX) wird als
+// `InvalidSlotCount` abgelehnt statt einen scheinbar gueltigen Slot 0 zu
+// liefern.
 void test_next_slot_round_robin_rejects_slot_count_above_uint32_max() {
     using device_platform::NextSlotStatus;
 
@@ -888,10 +875,9 @@ void test_next_slot_round_robin_rejects_slot_count_above_uint32_max() {
     TEST_ASSERT_FALSE(result.slot.has_value());
 }
 
-// Beweist explizit, dass ein erfolgreicher Slot 0 (gueltige Rotation) niemals
-// mit einem ungueltigen `slotCount` verwechselt werden kann: beide Faelle vor
-// Round 3 lieferten identisch `SlotId(0)`, sind jetzt aber durch `status`
-// eindeutig unterscheidbar.
+// Ein erfolgreicher Slot 0 (gueltige Rotation) und ein ungueltiger `slotCount`
+// sind durch `status` eindeutig unterscheidbar, obwohl beide als Slotwert 0
+// naheliegen.
 void test_next_slot_round_robin_success_at_slot_zero_is_not_confusable_with_invalid_slot_count() {
     using device_platform::NextSlotStatus;
 

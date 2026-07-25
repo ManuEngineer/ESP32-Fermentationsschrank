@@ -10,17 +10,12 @@ namespace device_platform {
 
 namespace {
 
-// Nur intern nach `IStateStore::read()` aufgerufen, und dort ausschliesslich
-// fuer `status != Success` (siehe Aufrufstelle unten). Seit der Trennung von
-// `StateStoreReadStatus`/`StateStoreWriteStatus` (state_store.hpp) sind
-// `WriteError` und `CommitOutcomeUnknown` hier nicht mehr nur vertraglich
-// ausgeschlossen, sondern bereits durch den Parametertyp unmoeglich - `read()`
-// kann sie gar nicht erst zurueckgeben. Der verbleibende Fallback deckt
-// ausschliesslich `Success` ab, das an dieser Aufrufstelle nachweislich
-// unerreichbar ist, und existiert nur, damit der `switch` ohne `default`
-// vollstaendig bleibt (jeder neue `StateStoreReadStatus`-Wert erzeugt sonst
-// eine `-Wswitch`-Warnung, die als Fehler behandelt wird). `UnexpectedStatus`
-// darf nie mit einem echten `ReadError` verwechselt werden.
+// Bildet einen Lesefehlerstatus auf die passende `SlotIssueKind` ab. Wird nur
+// fuer `status != Success` aufgerufen; der `Success`-Zweig ist an dieser
+// Aufrufstelle nicht erreichbar und liefert `UnexpectedStatus` (nie mit einem
+// echten `ReadError` zu verwechseln), damit der `switch` ohne `default`
+// vollstaendig bleibt. `WriteError`/`CommitOutcomeUnknown` sind durch den
+// Parametertyp `StateStoreReadStatus` ausgeschlossen.
 SlotIssueKind toSlotIssueKind(StateStoreReadStatus status) {
     switch (status) {
         case StateStoreReadStatus::NotFound:
@@ -35,12 +30,11 @@ SlotIssueKind toSlotIssueKind(StateStoreReadStatus status) {
     return SlotIssueKind::UnexpectedStatus;
 }
 
-// Nur intern nach `decodeEnvelope()` aufgerufen, und dort ausschliesslich
-// fuer `status != Success` (siehe Aufrufstelle unten) - `Success` ist an
-// dieser Aufrufstelle nachweislich unerreichbar. Der Fallback existiert
-// ausschliesslich, damit der `switch` ohne `default` vollstaendig bleibt.
-// `UnexpectedStatus` darf nie mit einem echten `LengthMismatch` verwechselt
-// werden.
+// Bildet einen Envelope-Dekodierfehler auf die passende `SlotIssueKind` ab.
+// Wird nur fuer `status != Success` aufgerufen; der `Success`-Zweig ist an
+// dieser Aufrufstelle nicht erreichbar und liefert `UnexpectedStatus` (nie mit
+// einem echten `LengthMismatch` zu verwechseln), damit der `switch` ohne
+// `default` vollstaendig bleibt.
 SlotIssueKind toSlotIssueKind(EnvelopeDecodeStatus status) {
     switch (status) {
         case EnvelopeDecodeStatus::InvalidMagic:
