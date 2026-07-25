@@ -179,10 +179,14 @@ EnvelopeEncodeStatus encodeEnvelope(const StorageEnvelope& envelope,
     // `header + payload`-Hilfspuffer anzulegen (siehe
     // docs/CONFIGURATION_PERSISTENCE.md, Abschnitt "Ressourcenvertrag").
     // Beide Aufrufe uebergeben `std::string`-Daten (nie `nullptr`), koennen
-    // also nie `false` liefern.
+    // also nach ihrem Vertrag nie `false` liefern. Der Rueckgabewert wird
+    // trotzdem explizit behandelt, damit eine spaetere Aenderung dieser
+    // Vorbedingung nicht unbemerkt einen CRC aus Teilinput veroeffentlicht.
     Crc32IsoHdlc crcAccumulator;
-    static_cast<void>(crcAccumulator.update(header.bytes()));
-    static_cast<void>(crcAccumulator.update(envelope.payload));
+    if (!crcAccumulator.update(header.bytes()) ||
+        !crcAccumulator.update(envelope.payload)) {
+        return EnvelopeEncodeStatus::CapacityExceeded;
+    }
     const uint32_t crc = crcAccumulator.finalize();
 
     ByteWriter finalWriter(totalSize);
@@ -265,10 +269,14 @@ EnvelopeDecodeResult decodeEnvelope(const std::string& bytes) {
     // "Ressourcenvertrag"). `bytes.data()` ist hier nie `nullptr`
     // (`bytes.size() >= kHeaderBeforeCrcWithoutUtc + kCrcSize` bereits oben
     // geprueft), `headerBeforeCrcLen` ist immer > 0 - beide Aufrufe koennen
-    // also nie `false` liefern.
+    // also nach ihrem Vertrag nie `false` liefern. Beide Ergebnisse werden
+    // dennoch explizit behandelt, damit nie ein CRC aus Teilinput akzeptiert
+    // wird, falls sich eine Vorbedingung spaeter aendert.
     Crc32IsoHdlc crcAccumulator;
-    static_cast<void>(crcAccumulator.update(bytes.data(), headerBeforeCrcLen));
-    static_cast<void>(crcAccumulator.update(payload));
+    if (!crcAccumulator.update(bytes.data(), headerBeforeCrcLen) ||
+        !crcAccumulator.update(payload)) {
+        return {EnvelopeDecodeStatus::LengthMismatch, std::nullopt};
+    }
     if (crcAccumulator.finalize() != storedCrc) {
         return {EnvelopeDecodeStatus::CrcMismatch, std::nullopt};
     }

@@ -61,6 +61,7 @@ void test_byte_writer_rejects_null_pointer_with_positive_length() {
     TEST_ASSERT_TRUE(writer.writeByte(0x01U));
     TEST_ASSERT_FALSE(writer.writeBytes(nullptr, 1U));
     TEST_ASSERT_EQUAL_UINT32(1U, writer.size());
+    TEST_ASSERT_EQUAL_UINT32(3U, writer.remaining());
     TEST_ASSERT_EQUAL_UINT8(0x01U, static_cast<uint8_t>(writer.bytes()[0]));
     TEST_ASSERT_TRUE(writer.writeByte(0x02U));
     TEST_ASSERT_EQUAL_UINT32(2U, writer.size());
@@ -76,6 +77,7 @@ void test_byte_reader_rejects_null_pointer_with_positive_length() {
     TEST_ASSERT_EQUAL_UINT8(0x01U, value);
     TEST_ASSERT_FALSE(reader.readBytes(nullptr, 1U));
     TEST_ASSERT_EQUAL_UINT32(1U, reader.position());
+    TEST_ASSERT_EQUAL_UINT32(1U, reader.remaining());
     TEST_ASSERT_TRUE(reader.readByte(value));
     TEST_ASSERT_EQUAL_UINT8(0x02U, value);
 }

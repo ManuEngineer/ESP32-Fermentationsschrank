@@ -79,6 +79,16 @@ class SimulatedPersistentStateStore final
         return pendingWrite_.has_value();
     }
 
+    // Nur fuer native Tests: beweist neben der Existenz auch, dass die
+    // laufende Schreiboperation Schluessel und vollstaendigen binaeren Wert
+    // unveraendert gestagt hat. Vergroessert den Produktionsport nicht.
+    [[nodiscard]] bool pendingWriteMatchesForTesting(
+        const device_platform::StateStoreKey& key,
+        const std::string& value) const {
+        return pendingWrite_.has_value() && pendingWrite_->key == key &&
+               pendingWrite_->value == value;
+    }
+
    private:
     struct PendingWrite {
         device_platform::StateStoreKey key;

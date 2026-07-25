@@ -119,25 +119,30 @@ void test_write_fail_before_begin_leaves_store_unchanged() {
 
 void test_write_power_cut_before_commit_leaves_store_unchanged() {
     SimulatedPersistentStateStore store;
-    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "first") ==
+    const auto key = keyOrFail("key");
+    TEST_ASSERT_TRUE(store.write(key, "first") ==
                      StateStoreWriteStatus::Success);
+
+    const std::string stagedBinary{
+        'n', 'e', 'w', '\0', 'v', 'a', 'l', 'u', 'e', static_cast<char>(0xFF)};
 
     store.setNextWriteFault(
         SimulatedPersistentStateStore::WriteFault::PowerCutBeforeCommit);
-    TEST_ASSERT_TRUE(store.write(keyOrFail("key"), "second") ==
+    TEST_ASSERT_TRUE(store.write(key, stagedBinary) ==
                      StateStoreWriteStatus::WriteError);
     // Der vollstaendige neue Wert ist gestagt, aber nicht committet.
     TEST_ASSERT_TRUE(store.hasPendingWriteForTesting());
+    TEST_ASSERT_TRUE(store.pendingWriteMatchesForTesting(key, stagedBinary));
     // Vor dem Neustart bleibt ausschliesslich der alte committed Wert
     // sichtbar - das Staging existiert nur intern, nicht als Leseergebnis.
-    TEST_ASSERT_EQUAL_STRING(
-        "first", store.read(keyOrFail("key"), kDefaultMaxBytes).value.c_str());
+    TEST_ASSERT_EQUAL_STRING("first",
+                             store.read(key, kDefaultMaxBytes).value.c_str());
 
     store.restart();
     // Der simulierte Neustart verwirft das Staging.
     TEST_ASSERT_FALSE(store.hasPendingWriteForTesting());
 
-    const auto result = store.read(keyOrFail("key"), kDefaultMaxBytes);
+    const auto result = store.read(key, kDefaultMaxBytes);
     TEST_ASSERT_EQUAL_STRING("first", result.value.c_str());
 }
 
@@ -294,6 +299,33 @@ void test_restart_clears_volatile_fault_injection_but_keeps_committed_data() {
     TEST_ASSERT_EQUAL_STRING("value", result.value.c_str());
     TEST_ASSERT_TRUE(store.read(keyOrFail("other"), kDefaultMaxBytes).status ==
                      StateStoreReadStatus::NotFound);
+}
+
+void test_restart_discards_pending_write_and_every_volatile_fault_flag() {
+    SimulatedPersistentStateStore store;
+    const auto key = keyOrFail("key");
+    TEST_ASSERT_TRUE(store.write(key, "committed") ==
+                     StateStoreWriteStatus::Success);
+
+    store.setNextWriteFault(
+        SimulatedPersistentStateStore::WriteFault::PowerCutBeforeCommit);
+    TEST_ASSERT_TRUE(store.write(key, "pending") ==
+                     StateStoreWriteStatus::WriteError);
+    TEST_ASSERT_TRUE(store.hasPendingWriteForTesting());
+
+    store.injectReadFailure(key, true);
+    store.forceNotFound(key, true);
+    store.setNextWriteFault(
+        SimulatedPersistentStateStore::WriteFault::FailBeforeBegin);
+
+    store.restart();
+
+    TEST_ASSERT_FALSE(store.hasPendingWriteForTesting());
+    const auto afterRestart = store.read(key, kDefaultMaxBytes);
+    TEST_ASSERT_TRUE(afterRestart.status == StateStoreReadStatus::Success);
+    TEST_ASSERT_EQUAL_STRING("committed", afterRestart.value.c_str());
+    TEST_ASSERT_TRUE(store.write(key, "after-restart") ==
+                     StateStoreWriteStatus::Success);
 }
 
 void test_secure_random_source_fills_requested_length_deterministically() {
@@ -796,6 +828,7 @@ int main() {
     RUN_TEST(test_corruption_injection_survives_restart);
     RUN_TEST(
         test_restart_clears_volatile_fault_injection_but_keeps_committed_data);
+    RUN_TEST(test_restart_discards_pending_write_and_every_volatile_fault_flag);
     RUN_TEST(
         test_secure_random_source_fills_requested_length_deterministically);
     RUN_TEST(
