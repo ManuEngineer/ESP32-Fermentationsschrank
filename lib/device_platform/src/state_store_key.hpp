@@ -106,8 +106,8 @@ inline StateStoreKeyCreateResult StateStoreKey::create(std::string bytes) {
         const auto value = static_cast<unsigned char>(byte);
         return (value >= 'A' && value <= 'Z') ||
                (value >= 'a' && value <= 'z') ||
-               (value >= '0' && value <= '9') || value == '_' ||
-               value == '.' || value == '-';
+               (value >= '0' && value <= '9') || value == '_' || value == '.' ||
+               value == '-';
     };
     for (const char byte : bytes) {
         if (!isAllowed(byte)) {
