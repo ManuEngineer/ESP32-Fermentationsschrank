@@ -14,19 +14,35 @@ StateStoreWriteStatus SimulatedPersistentStateStore::write(
     const WriteFault fault = nextWriteFault_;
     nextWriteFault_ = WriteFault::None;
 
-    switch (fault) {
-        case WriteFault::FailBeforeBegin:
-        case WriteFault::PowerCutBeforeCommit:
-            return StateStoreWriteStatus::WriteError;
-        case WriteFault::CapacityExceeded:
-            return StateStoreWriteStatus::CapacityError;
-        case WriteFault::PowerCutAfterCommitBeforeReturn:
-            committed_[key] = value;
-            return StateStoreWriteStatus::CommitOutcomeUnknown;
-        case WriteFault::None:
-            break;
+    if (fault == WriteFault::FailBeforeBegin) {
+        // Kein Staging entsteht; committed_ bleibt unberuehrt.
+        return StateStoreWriteStatus::WriteError;
     }
-    committed_[key] = value;
+    if (fault == WriteFault::CapacityExceeded) {
+        // Kein Staging, kein Commit; committed_ bleibt unberuehrt.
+        return StateStoreWriteStatus::CapacityError;
+    }
+
+    // Ab hier ist der neue Wert vollstaendig gestagt (bildet die reale
+    // Reihenfolge "vollstaendig schreiben, dann atomar committen" nach).
+    pendingWrite_ = PendingWrite{key, value};
+
+    if (fault == WriteFault::PowerCutBeforeCommit) {
+        // Staging existiert, wird aber nie committet. Nur restart() (ein
+        // simulierter Neustart) verwirft es; bis dahin bleibt es als
+        // laufende Operation sichtbar (hasPendingWriteForTesting()). Danach
+        // ist ausschliesslich der alte committed Wert sichtbar.
+        return StateStoreWriteStatus::WriteError;
+    }
+
+    // Commit: der gestagte Wert wird atomar in committed_ uebernommen, kein
+    // Teil- oder Mischwert ist jemals sichtbar.
+    committed_[pendingWrite_->key] = pendingWrite_->value;
+    pendingWrite_.reset();
+
+    if (fault == WriteFault::PowerCutAfterCommitBeforeReturn) {
+        return StateStoreWriteStatus::CommitOutcomeUnknown;
+    }
     return StateStoreWriteStatus::Success;
 }
 
@@ -70,6 +86,7 @@ void SimulatedPersistentStateStore::injectCorruption(
 }
 
 void SimulatedPersistentStateStore::restart() {
+    pendingWrite_.reset();
     nextWriteFault_ = WriteFault::None;
     readShouldFail_.clear();
     forceNotFound_.clear();

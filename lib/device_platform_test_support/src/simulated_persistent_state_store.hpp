@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
 
 #include "state_store.hpp"
@@ -10,11 +11,14 @@
 namespace device_platform_test_support {
 
 // Simuliert einen binaersicheren, stromausfallsicheren Schluessel/Wert-
-// Speicher fuer native Tests. Trennt dauerhaft committed Daten von einem
-// einstellbaren Fehlerverhalten des naechsten Schreibvorgangs, damit jeder
-// in docs/CONFIGURATION_PERSISTENCE.md geforderte Cut-Point nachgebildet
-// werden kann. `restart()` bildet einen simulierten Neustart nach: nur
-// committed Daten ueberleben, alle Testschalter werden zurueckgesetzt.
+// Speicher fuer native Tests. Trennt drei Zustandsbereiche: dauerhaft
+// committed Daten (`committed_`), die aktuelle beziehungsweise laufende
+// Schreiboperation (`pendingWrite_`) und sonstigen fluechtigen Testzustand
+// (Fault-Schalter, Read-/NotFound-Injektion). Jeder in
+// docs/CONFIGURATION_PERSISTENCE.md geforderte Cut-Point kann damit
+// nachgebildet werden. `restart()` bildet einen simulierten Neustart nach:
+// nur committed Daten ueberleben, `pendingWrite_` und alle Testschalter
+// werden zurueckgesetzt.
 class SimulatedPersistentStateStore final
     : public device_platform::IStateStore {
    public:
@@ -60,13 +64,29 @@ class SimulatedPersistentStateStore final
     void injectCorruption(const device_platform::StateStoreKey& key,
                           std::string corruptedBytes);
 
-    // Simuliert einen Neustart: committed Daten bleiben erhalten, alle
-    // Testschalter (Fault, Read-Fehler, erzwungenes NotFound) werden
-    // geloescht.
+    // Simuliert einen Neustart: committed Daten bleiben erhalten, eine noch
+    // nicht committete laufende Schreiboperation sowie alle Testschalter
+    // (Fault, Read-Fehler, erzwungenes NotFound) werden geloescht.
     void restart();
 
+    // Nur fuer native Tests: macht sichtbar, ob nach dem letzten `write()`
+    // eine gestagte, aber noch nicht committete Schreiboperation existiert
+    // (z. B. nach einem simulierten Stromausfall vor Commit). Keine
+    // Produktionsschnittstelle; existiert nur, weil die interne
+    // Staging-/Commit-Trennung ueber die oeffentliche `IStateStore`-Sicht
+    // sonst nicht beobachtbar waere.
+    [[nodiscard]] bool hasPendingWriteForTesting() const {
+        return pendingWrite_.has_value();
+    }
+
    private:
+    struct PendingWrite {
+        device_platform::StateStoreKey key;
+        std::string value;
+    };
+
     std::map<device_platform::StateStoreKey, std::string> committed_;
+    std::optional<PendingWrite> pendingWrite_;
     WriteFault nextWriteFault_{WriteFault::None};
     std::map<device_platform::StateStoreKey, bool> readShouldFail_;
     std::map<device_platform::StateStoreKey, bool> forceNotFound_;
