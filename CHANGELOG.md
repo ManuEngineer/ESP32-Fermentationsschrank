@@ -32,9 +32,114 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 - Programmmodellgrenzen einschliesslich minimaler und maximaler Anzahl der
   Fermentationsphasen vollstaendig in `program_limits.hpp` zentralisiert; das
   fachliche Verhalten und das Programmschema bleiben unveraendert
+- Plattformpersistenz aus Issue #54 gemaess ADR-016 (NVS als Backend) korrigiert:
+  - `StateStoreKey` portseitig auf 1..15 Bytes aus `[A-Za-z0-9_.-]` begrenzt,
+    eigener Status `InvalidCharacter` (Befund 1)
+  - Slot-Scan haelt hoechstens einen Recordpuffer (Metadaten-Scan plus
+    `loadSlotPayload` mit voller Neuvalidierung); kein Wachstum mit
+    `Slotzahl * Payloadgroesse`, Metadatenwachstum durch maximal acht Slots pro
+    Scan begrenzt (Befund 2)
+  - `nextSlotRoundRobin` lehnt `lastWrittenSlot >= slotCount` als
+    `InvalidLastSlot` ab statt still per Modulo zu normalisieren (Befund 3)
+  - `ChangeOrigin`/`ChangeOperation` aus dem Envelope in die Payload verschoben
+    (Header 37/45 Bytes, Version bleibt 1); Golden-Vektoren neu berechnet
+    (Befund 4)
+  - aufruferlosen `ITimeZoneResolver`-Port samt Mock entfernt (Befund 5)
+  - Code-Kommentare auf den Vertrag reduziert, ohne Verhaltensaenderung
+    (Befund 6)
 
 ### Added
 
+- Anwendungsneutrale Plattformpersistenz und Wireformat fuer Issue #54
+  (Paket A von #16, Closes #54): begrenztes binaersicheres `IStateStore` mit
+  caller-/schluesselspezifischem Leselimit und vier eindeutig unterscheidbaren
+  Schreibergebnissen - `Success`, `WriteError`/`CapacityError` (sicher
+  unveraendert) und `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
+  nach Stromausfall zwischen Commit und Rueckkehr; der neue Wert kann bereits
+  dauerhaft gespeichert sein, der Aufrufer muss zuruecklesen); `read()` und
+  `write()` verwenden bewusst getrennte Statustypen `StateStoreReadStatus`/
+  `StateStoreWriteStatus` statt eines gemeinsamen Enums - ein Adapter kann
+  `WriteError`/`CommitOutcomeUnknown` schon aufgrund des Rueckgabetyps nicht
+  als Leseergebnis liefern, und umgekehrt; gueltig-by-construction
+  begrenzter `StateStoreKey`-Werttyp (kein oeffentlicher Default-Konstruktor,
+  `create()` erzwingt gemaess ADR-016 1..15 Bytes aus `[A-Za-z0-9_.-]` und
+  lehnt leeren (`Empty`), zu langen (`TooLong`) und zeichensatzverletzenden
+  (`InvalidCharacter`) Schluessel typisiert ab); starke technische Typen fuer
+  StorageEpoch, Revision,
+  Generation, RecordSequence, SlotId und RecordTypeId sowie ein generischer
+  `checkedIncrement`-Baustein, der sowohl den reservierten Ausgangswert 0
+  (`InvalidCurrentValue`) als auch einen Ueberlauf von `UINT64_MAX` auf 0
+  (`Overflow`) stabil ablehnt; begrenzte Big-Endian-Byte-Reader/-Writer
+  (`ByteWriter::writeBytes`/`ByteReader::readBytes` setzen den
+  Nullzeigervertrag technisch durch: `length == 0` ist ein sicherer No-Op
+  auch mit `nullptr`, `length > 0` mit `nullptr` wird beobachtbar per
+  `false` abgelehnt statt undefiniertes Verhalten zu riskieren; dedizierter
+  `uint8`-Golden-Test mit festen Werten `0x00`/`0x01`/`0x7F`/`0x80`/`0xFF`
+  ergaenzt den bisher erst bei `uint16` beginnenden Big-Endian-Golden-Test,
+  inklusive Lesen aus leerem Puffer, das Ausgabeparameter und Leseposition
+  unveraendert laesst); portable
+  Zweierkomplement-Dekodierung signierter Ganzzahlen ohne
+  implementation-defined unsigned-zu-signed-Konvertierung; IEEE-754-binary64-
+  Codec mit `-0.0`-Normalisierung und NaN-/Inf-Ablehnung; inkrementeller
+  CRC-32/ISO-HDLC-Akkumulator (`Crc32IsoHdlc::update`, jetzt
+  `[[nodiscard]] bool` mit demselben technisch durchgesetzten
+  Nullzeigervertrag; die reine Rohzeiger-One-Shot-Ueberladung
+  `computeCrc32IsoHdlc(const void*, size_t)` wurde entfernt, da kein
+  Aufrufer sie noch braucht und ein Sentinel-Fehlerwert fuer `uint32_t`-CRCs
+  nicht existiert), von Envelope-Encoding und -Decoding genutzt, um den CRC
+  direkt ueber Header und Payload zu berechnen, ohne einen zusaetzlichen
+  `header + payload`-Hilfspuffer anzulegen; generischer Envelope Version 1
+  (37/45 Bytes) mit ueberlaufsicherer, gestufter Groessenpruefung (eigener
+  `checkedAddSize`-Baustein sowie die neue freie, zustandslose
+  `checkEnvelopeEncodedSize(payloadSize, hasUtc, maxTotalBytes)`-Funktion,
+  die dieselbe Entscheidung als reine Zahlen ohne Pufferaufbau liefert und
+  damit Grenzwerte bis `UINT32_MAX` ohne reale 4-GiB-Allokation testbar
+  macht) vor jeder Allokation und Veroeffentlichung des fertigen Records
+  erst nach vollstaendigem Erfolg per `swap()` statt Kopie - dabei entsteht
+  hoechstens ein zusaetzlicher, neu aufgebauter vollstaendiger Recordpuffer;
+  ein bereits in `outBytes` gehaltener alter Record bleibt bis zur
+  erfolgreichen `swap()`-Zeile unveraendert bestehen und wird bei jedem
+  Fehler nicht angetastet - `InvalidField` gilt dabei ausschliesslich fuer
+  die vier reservierten Nullwertfelder und ungueltige Optionaltags,
+  `CapacityExceeded` einheitlich fuer jede Groessen-/Kapazitaetsfrage
+  einschliesslich einer in `uint32_t` nicht darstellbaren Payloadgroesse
+  (die staerkere globale Ein-Puffer-Garantie waehrend eines vollstaendigen
+  Commits ist Aufgabe des Commit-Workflows in #56/#57); rein technische
+  Slotkandidaten-Ermittlung (`scanTechnicalSlotCandidates`) mit
+  deterministischer Sortierung, die uebersprungene Slots nicht
+  stillschweigend verwirft, sondern als typisierte `SlotIssue`-Liste erhaelt
+  (`NotFound` nie gleichbedeutend mit `ReadError`; `UnexpectedStatus` fuer den
+  nachweislich unerreichbaren Success-Fallback in den internen
+  Statusmappern) und keine Payload im Ergebnis mehr materialisiert
+  (Metadaten-Scan; `loadSlotPayload` laedt eine gewaehlte Payload spaeter mit
+  voller Neuvalidierung), mit zentraler anwendungsneutraler Obergrenze von acht
+  Slots pro Scan und typisiertem `SlotScanStatus::SlotLimitExceeded` vor jedem
+  Store-Read oder jeder Ergebnisallokation - weiterhin ohne fachliche
+  Slotzahlen oder Root-/Manifestbedeutung;
+  typisierte `nextSlotRoundRobin`-Rotation (`NextSlotStatus::Success`/
+  `InvalidSlotCount`/`InvalidLastSlot` mit `std::optional<SlotId>`), die eine
+  ungueltige Slotanzahl und ein `lastWrittenSlot >= slotCount` typisiert und
+  unterscheidbar ablehnt, statt sie mit einer erfolgreichen Rotation zu Slot 0
+  zu verwechseln oder still per Modulo zu normalisieren, unabhaengig von der
+  `size_t`-Breite der Zielplattform ueberlaufsicher; `ISecureRandomSource`-
+  (`fill()` mit demselben technisch durchgesetzten Nullzeigervertrag: bei
+  `length == 0` wird weder ein vorbereiteter Override konsumiert noch der
+  Generatorzustand weiterbewegt, bei `length > 0` mit `nullptr` lehnt jede
+  Implementierung inklusive `MockSecureRandomSource` beobachtbar ab);
+  `SimulatedPersistentStateStore` mit injizierbaren Schreib-Cut-Points
+  (Fehler vor Beginn, Stromausfall vor/nach Commit, Kapazitaetsfehler) sowie
+  Read-/NotFound-/Korruptionsinjektion fuer native Tests; die drei
+  geforderten Zustandsbereiche sind als getrennte private Datenhaltung
+  modelliert - dauerhaft `committed_`, eine gestagte, aber noch nicht
+  committete Schreiboperation (`std::optional<PendingWrite> pendingWrite_`)
+  sowie fluechtiger Testzustand; `write()` bildet "vollstaendig staging,
+  dann atomar committen" nach, `restart()` verwirft `pendingWrite_` und alle
+  fluechtigen Testschalter, laesst `committed_` unveraendert; ein
+  testinterner Zugriff macht Existenz sowie exakten Schluessel und
+  vollstaendigen binaeren Inhalt des Stagings fuer native Tests beobachtbar,
+  ohne die produktive `IStateStore`-Schnittstelle zu vergroessern; alle
+  Envelope-CRC-Aufrufer behandeln den booleschen `update()`-Rueckgabewert
+  explizit, statt ihn nur als nicht fehlschlagend zu unterstellen
 - Initiale Projektstruktur
 - Template auf ESP32-Fermentationsschrank angepasst
 - Hardwarekomponenten und Sicherheitsregeln ohne GPIO-Festlegung dokumentiert

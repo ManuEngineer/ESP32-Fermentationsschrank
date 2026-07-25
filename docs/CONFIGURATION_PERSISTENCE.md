@@ -287,7 +287,8 @@ von C++-Layout, Padding, ABI und nativer Enumdarstellung. Sie verwendet:
 
 Unbekannte fachliche Enumwerte werden abgelehnt, sofern ihre Spezifikation
 nicht ausdruecklich Vorwaertskompatibilitaet vorsieht. Unbekannte
-ChangeOrigin- und ChangeOperation-IDs bilden diese ausdrueckliche Ausnahme.
+ChangeOrigin- und ChangeOperation-IDs bilden diese ausdrueckliche Ausnahme;
+sie liegen gemaess ADR-016 in der Payload, nicht im Envelope.
 
 ### Gleitkommawerte
 
@@ -315,12 +316,13 @@ Die kanonische Bytefolge lautet:
 5. StorageEpoch: `uint64`, Big Endian
 6. VersionValue: `uint64`, Big Endian
 7. Payloadlaenge: `uint32`, Big Endian
-8. ChangeOrigin-Wire-ID: `uint16`, Big Endian
-9. ChangeOperation-Wire-ID: `uint16`, Big Endian
-10. UTC-Optionaltag: ein Byte
-11. bei `0x01`: UTC-Unix-Sekunden als `int64`, Big Endian
-12. CRC-32/ISO-HDLC: `uint32`, Big Endian
-13. Payload: exakt die angegebene Byteanzahl
+8. UTC-Optionaltag: ein Byte
+9. bei `0x01`: UTC-Unix-Sekunden als `int64`, Big Endian
+10. CRC-32/ISO-HDLC: `uint32`, Big Endian
+11. Payload: exakt die angegebene Byteanzahl
+
+`ChangeOrigin` und `ChangeOperation` sind gemaess ADR-016 nicht mehr Teil des
+Envelopes; sie wandern als Anwendungssemantik in die Payload.
 
 `VersionValue` wird je Record-Type als Revision, Generation oder RecordSequence
 interpretiert; die Produktionscode-Typen bleiben getrennt.
@@ -328,13 +330,14 @@ interpretiert; die Produktionscode-Typen bleiben getrennt.
 Ungueltig sind Envelope-Version, Record-Type-ID, Schema-Version, StorageEpoch
 oder VersionValue 0 sowie UTC-Tags ausser `0x00` und `0x01`. Unbekannte
 Envelope-Versionen lehnt `device_platform` ab. Unbekannte Anwendungs-Record-
-Types lehnt `fermentation_app` vor der Payloaddekodierung ab. Unbekannte
-ChangeOrigin- und ChangeOperation-IDs werden als rohe IDs erhalten.
+Types lehnt `fermentation_app` vor der Payloaddekodierung ab. Das Erhalten
+unbekannter roher ChangeOrigin-/ChangeOperation-IDs ist damit Aufgabe der
+Payloaddekodierung in `fermentation_app`, nicht des Envelopes.
 
 Der Envelope besitzt keine Padding-, Reserve-, Flags- oder ABI-abhaengigen
-Bytes. Seine Groesse einschliesslich CRC betraegt 41 Bytes ohne und 49 Bytes mit
+Bytes. Seine Groesse einschliesslich CRC betraegt 37 Bytes ohne und 45 Bytes mit
 UTC. Bei maximal 32.768 Payloadbytes ist ein Konfigurationsrecord hoechstens
-32.817 Bytes gross.
+32.813 Bytes gross.
 
 ### CRC-32/ISO-HDLC
 
@@ -572,8 +575,8 @@ Preview `Ready`. Danach wechselt es atomar zu `Committing`, kann nicht mehr
 abgebrochen werden und wird nach Erfolg oder verbrauchendem Fehler ungueltig.
 
 Preview-eigene variable Daten sind auf 49.152 Bytes begrenzt. Der getrennte
-Record-Arbeitsbereich haelt hoechstens einen Record von 32.817 Bytes. Die Summe
-beider kontrollierter Bereiche ist 81.969 Bytes, aber keine Aussage ueber die
+Record-Arbeitsbereich haelt hoechstens einen Record von 32.813 Bytes. Die Summe
+beider kontrollierter Bereiche ist 81.965 Bytes, aber keine Aussage ueber die
 gesamte Heapspitze.
 
 Die Aenderungszusammenfassung enthaelt hoechstens 256 Eintraege. Eine groessere
@@ -800,8 +803,13 @@ Korruption loest niemals automatisch einen Werksreset aus.
 
 ## Speicherport und Modulgrenzen
 
-Der Schluessel/Wert-Port verwendet feste deterministische Schluessel. Listing,
-Verzeichnisse, Rename und Mehrschluesseltransaktionen sind nicht erforderlich.
+Das produktive Backend ist gemaess ADR-016 die ESP32-Speicherschicht NVS;
+Werte werden als Blob gespeichert und bleiben binaersicher. Der
+Schluessel/Wert-Port verwendet feste deterministische Schluessel: 1 bis 15
+Bytes aus `[A-Za-z0-9_.-]`, portseitig erzwungen (kleinster gemeinsamer Nenner
+plausibler Backends, auch fuer dateibasierte Backends gueltig und in Logs
+lesbar). Listing, Verzeichnisse, Rename und Mehrschluesseltransaktionen sind
+nicht erforderlich.
 
 Der Port garantiert je Schluessel binaersicheres, dauerhaftes und
 stromausfallsicheres Replace: Nach Unterbrechung existiert der vollstaendige
@@ -810,7 +818,7 @@ erfolgreicher Write; ein erfolgreich zurueckgekehrter Write ist dauerhaft.
 
 `device_platform` enthaelt ausschliesslich anwendungsneutrale Bausteine:
 
-- `IStateStore`, `ISecureRandomSource`, `ITimeSource`, `ITimeZoneResolver`
+- `IStateStore`, `ISecureRandomSource`, `ITimeSource`
 - begrenzte Byte-Reader und -Writer, Big-Endian-Primitiven und CRC
 - generischen Envelope, feste Revisionsslots und redundante Recordslots
 - technische Kandidatenpruefung und -sortierung
@@ -822,6 +830,12 @@ Die Plattform erhaelt Schluessel, Slotzahl, Record-Type und Schutzmengen von der
 Anwendung. Sie kennt keine konkreten Dokumente, Manifestbedeutungen,
 Factorywerte, Programme, Pending-Regeln, Authentifizierungsbedeutung, Preview,
 Lauf oder Aktivierungswirkung.
+
+Ein einzelner technischer Kandidatenscan verarbeitet hoechstens acht Slots
+derselben Recordgruppe. Die aktuell spezifizierten Gruppen benoetigen
+hoechstens vier Slots; die verdoppelte technische Obergrenze laesst eine kleine
+Reserve fuer dieselbe Plattformabstraktion, ohne eine unbeschraenkte oder
+spekulative Slotplattform zu schaffen.
 
 `fermentation_app` besitzt konkrete Dokumente, Schemas, IDs, Schluessel,
 Manifest-, Root-, Bootstrap- und Intentbedeutung, Graphvalidierung,
@@ -845,7 +859,22 @@ kein reales Hardwarebudget und keine PSRAM-Verfuegbarkeit.
 Ein Preview wird erst nach erfolgreicher Ressourcenbereitstellung sichtbar.
 Vor Root-Commit bricht jeder Ressourcenfehler typisiert ohne Teilaktivierung ab.
 Nach Root-Commit allokiert, serialisiert und reserviert Publish nichts.
-Waehrend Commit existiert hoechstens ein vollstaendiger kodierter Recordpuffer.
+Waehrend eines vollstaendigen Commits existiert global hoechstens ein
+vollstaendiger kodierter Recordpuffer. Dies ist ein Vertrag auf Ebene des
+gesamten Commit-Workflows (#56/#57): er verlangt zusaetzlich, dass der
+Commit-Workflow selbst keinen alten Ausgabepuffer parallel zum neu kodierten
+haelt. Die Envelope-Codec-Fundamentschicht (#54, `encodeEnvelope()`) liefert
+dafuer die notwendige, aber fuer sich allein schwaechere Voraussetzung:
+hoechstens ein zusaetzlicher, neu aufgebauter vollstaendiger Recordpuffer pro
+Encode-Aufruf, veroeffentlicht per `swap()` ohne Vollkopie - siehe die
+Praezisierung unten im Abschnitt zu Issue #54.
+
+Der technische Slot-Scan waechst nicht mit `Slotzahl * Payloadgroesse`, weil er
+keine Payload im Ergebnis haelt und waehrend der Iteration nur einen
+Recordpuffer liest. Seine Kandidaten- und Diagnosemetadaten wachsen weiterhin
+mit der tatsaechlich gescannten Slotzahl, sind aber durch die verbindliche
+Obergrenze von acht Slots endlich begrenzt. Das ist keine absolute
+Unabhaengigkeit von der Slotzahl.
 
 Beide ESP32-Produktionsprofile muessen je Teilissue bauen. Base-SHA und PR-Head
 werden mit identischer Toolchain fuer statisches RAM, Flash, `firmware.bin` und
@@ -921,8 +950,198 @@ abhaengige GitHub-Issues, Agent-Auftraege, Branches und kleine PRs angelegt:
 - starke technische Typen
 - Big-Endian-Codecs, CRC und Envelope
 - feste generische Slot-/Recordmechanik
-- sichere Zufalls- und Zeitzonenports
+- sicherer Zufallsport (Zeitzonenport folgt spaeter mit seinem Aufrufer)
 - SimulatedPersistentStateStore und Golden Tests
+
+Umgesetzt mit Issue #54 (`lib/device_platform/src/storage_types.hpp`,
+`byte_buffer.hpp`, `big_endian_codec.hpp`, `binary64_codec.hpp`,
+`checked_size.hpp`, `crc32.hpp`/`.cpp`, `storage_envelope.hpp`/`.cpp`,
+`storage_slot_candidates.hpp`/`.cpp`, `storage_slot_limits.hpp`,
+`secure_random_source.hpp`,
+`state_store_key.hpp`, das erweiterte `state_store.hpp`; Testadapter in
+`lib/device_platform_test_support/src/simulated_persistent_state_store.hpp`/
+`.cpp`, `mock_secure_random_source.hpp`/`.cpp`). Bewusst noch ohne fachliche
+Slotzahlen, Root-/Manifestbedeutung oder Schutzmengen - das bleibt Paket C
+(#56). Die anwendungsneutrale Fundamentschicht begrenzt lediglich jeden
+einzelnen technischen Scan auf hoechstens acht Slots.
+
+`SimulatedPersistentStateStore` modelliert die drei geforderten Zustands-
+bereiche explizit als getrennte private Datenhaltung: dauerhaft `committed_`,
+eine gestagte, aber noch nicht committete Schreiboperation
+(`std::optional<PendingWrite> pendingWrite_` mit Schluessel und vollstaendigem
+neuem Wert) sowie sonstiger fluechtiger Testzustand (Fault-Schalter, Read-/
+NotFound-Injektion). `write()` bildet damit die reale Reihenfolge "vollstaendig
+staging, dann atomar committen" nach: bei `FailBeforeBegin` und
+`CapacityExceeded` entsteht kein Staging und `committed_` bleibt unberuehrt;
+bei `PowerCutBeforeCommit` wird der vollstaendige neue Wert gestagt, aber nie
+in `committed_` uebernommen - erst ein simulierter `restart()` verwirft das
+Staging, danach ist ausschliesslich der alte committed Wert sichtbar; bei
+Erfolg und bei `PowerCutAfterCommitBeforeReturn` wird der gestagte Wert atomar
+komplett in `committed_` uebernommen (nie ein Teil- oder Mischwert) und das
+Staging sofort geleert. `restart()` loescht `pendingWrite_` sowie alle
+fluechtigen Testschalter, laesst `committed_` aber unveraendert. Ein rein
+testinterner Zugriff `hasPendingWriteForTesting()` macht das gestagte-aber-
+nicht-committete Staging fuer native Tests beobachtbar, ohne die produktive
+`IStateStore`-Schnittstelle zu vergroessern. Der ebenfalls rein testinterne
+`pendingWriteMatchesForTesting()`-Beleg prueft, dass nicht nur irgendein
+Staging existiert, sondern Schluessel und vollstaendiger binaerer Wert exakt
+der laufenden Schreiboperation entsprechen.
+
+`IStateStore::write` liefert vier eindeutig unterscheidbare Ergebnisse statt
+einer pauschalen "unveraendert bei Fehler"-Garantie: `Success` (neuer Wert
+dauerhaft gespeichert), `WriteError` und `CapacityError` (sicher
+unveraendert) sowie `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
+nach einem Stromausfall zwischen Commit und Rueckkehr - der neue Wert kann
+bereits dauerhaft gespeichert sein; der Aufrufer muss zuruecklesen). `read()`
+und `write()` verwenden bewusst getrennte Statustypen -
+`StateStoreReadStatus` (`Success`/`NotFound`/`ReadError`/`CapacityError`) und
+`StateStoreWriteStatus` (`Success`/`WriteError`/`CapacityError`/
+`CommitOutcomeUnknown`) -, nicht nur eine dokumentierte Teilmenge eines
+gemeinsamen Enums: ein Adapter kann `WriteError` oder `CommitOutcomeUnknown`
+schon aufgrund des Rueckgabetyps nicht als Leseergebnis liefern, und
+umgekehrt. Die technische Slotkandidaten-Ermittlung
+(`scanTechnicalSlotCandidates`) verwirft uebersprungene Slots nicht
+stillschweigend, sondern liefert zusaetzlich zu den sortierten Kandidaten
+eine typisierte `SlotIssue`-Liste (`NotFound`, Lese-/Kapazitaetsfehler, jede
+Envelope-Integritaetsverletzung, technisch gueltige aber nicht passende
+Kandidaten, sowie `UnexpectedStatus` fuer den an der Aufrufstelle nicht
+erreichbaren Success-Fallback der internen Statusmapper) - `ReadError` wird
+dabei nie wie `NotFound` behandelt, damit spaeterer Bootstrap-/Recovery-Code
+fabrikleeren von beschaedigtem Speicher unterscheiden kann. Der Scan
+dekodiert nur die Metadaten (`decodeEnvelopeMetadata`, CRC direkt ueber den
+Eingabepuffer ohne die Payload zu materialisieren) und traegt keine Payloads
+im Ergebnis: der Speicher waechst nicht mit `Slotzahl * Payloadgroesse`, und
+zu keinem Zeitpunkt liegt mehr als ein Recordpuffer im Speicher. Kandidaten-
+und Diagnosemetadaten wachsen mit der gescannten Slotzahl, sind durch die
+Obergrenze von acht aber endlich begrenzt. Die Payload eines gewaehlten
+Kandidaten wird ueber
+`loadSlotPayload` geladen, das CRC, Record-Identitaet und `versionValue`
+gegen den beim Scan gesehenen Wert vollstaendig neu validiert.
+`nextSlotRoundRobin` liefert ein typisiertes `NextSlotResult`
+(`NextSlotStatus::Success`/`InvalidSlotCount`/`InvalidLastSlot` mit
+`std::optional<SlotId>`): eine ungueltige Slotanzahl (`0` oder technisch
+nicht darstellbar `> UINT32_MAX`) sowie ein `lastWrittenSlot >= slotCount`
+werden typisiert und unterscheidbar abgelehnt, statt einen scheinbar
+gueltigen `SlotId(0)` zu liefern oder einen ausserhalb liegenden Wert still
+per Modulo zu normalisieren. Bei gueltigen Eingaben
+(`lastWrittenSlot < slotCount`) ueberlaeuft `lastWrittenSlot.value() + 1`
+unabhaengig von der `size_t`-Breite der Zielplattform nie.
+
+`state_store_key.hpp` stellt einen gueltig-by-construction begrenzten
+`StateStoreKey`-Werttyp bereit: kein oeffentlicher Default-Konstruktor,
+`create()` ist der einzige Erzeugungsweg und erzwingt gemaess ADR-016
+portseitig 1 bis 15 Bytes aus `[A-Za-z0-9_.-]`; ein leerer (`Empty`), ein zu
+langer (`TooLong`) und ein zeichensatzverletzender (`InvalidCharacter`)
+Schluessel werden typisiert und unterscheidbar abgelehnt, statt einen
+scheinbar gueltigen Schluessel zu liefern. Die Nutzlast bleibt davon
+unberuehrt binaersicher; konkrete Schluesselwerte bleiben Aufgabe der
+aufrufenden Anwendung (Namenskonvention in #55).
+
+`storage_types.hpp` ergaenzt ausserdem einen generischen
+`checkedIncrement`-Baustein fuer die starken `uint64_t`-Zaehlertypen: lehnt
+sowohl den reservierten Ausgangswert 0 (`InvalidCurrentValue`) als auch einen
+Ueberlauf von `UINT64_MAX` auf 0 (`Overflow`) stabil ab, statt eine der
+beiden Situationen still in einen scheinbar gueltigen Wert zu verwandeln; der
+erste gueltige Wert 1 wird explizit vom Bootstrap-/Anwendungscode erzeugt,
+nicht durch Inkrementieren von 0. Die konkrete Revisions-/Sequenzvergabe
+bleibt Paket C (#56).
+
+CRC-32/ISO-HDLC ist als inkrementeller Akkumulator (`Crc32IsoHdlc`) verfuegbar
+und wird von `encodeEnvelope()`/`decodeEnvelope()` genutzt, um den CRC direkt
+ueber Header und Payload zu berechnen, ohne dafuer einen zusaetzlichen
+`header + payload`-Hilfspuffer anzulegen (der kleine, auf die feste
+Headergroesse begrenzte `header`-Puffer zaehlt nicht als recordgross).
+`encodeEnvelope()` veroeffentlicht den fertigen Record erst nach
+vollstaendigem Erfolg per `swap()` (`ByteWriter::takeBytes()` gefolgt von
+`outBytes.swap(encoded)`) statt per Kopie: es entsteht hoechstens ein
+zusaetzlicher, neu aufgebauter vollstaendiger Recordpuffer.
+
+Das ist bewusst keine absolute Aussage fuer die gesamte Aufrufdauer: haelt
+die aufrufende Anwendung in `outBytes` bereits einen alten vollstaendigen
+Record, bleibt dieser bis zur erfolgreichen `swap()`-Zeile unveraendert
+bestehen - waehrend dieses kurzen Zeitraums existieren alter und neuer
+Puffer gleichzeitig. `outBytes` bleibt bei jedem Fehler (`InvalidField`,
+`CapacityExceeded`) vollstaendig unveraendert. Die staerkere, absolute
+Aussage aus dem Ressourcenvertrag oben ("waehrend eines vollstaendigen
+Commits existiert global hoechstens ein vollstaendiger Recordpuffer") ist
+damit auf dieser Fundamentschicht vorbereitet, aber nicht bereits
+vollstaendig erzwungen - das erfordert zusaetzlich, dass der aufrufende
+Commit-Workflow (#56/#57) `encodeEnvelope()` nicht mit einem noch benoetigten
+alten Record in `outBytes` aufruft.
+
+`InvalidField` und `CapacityExceeded` sind trennscharf: `InvalidField` gilt
+ausschliesslich fuer die vier reservierten Nullwertfelder (Envelope-Version,
+Record-Type-ID, Schema-Version, StorageEpoch/VersionValue) und ungueltige
+Optionaltags. Jede Groessen- oder Kapazitaetsfrage - einschliesslich einer
+Payloadgroesse, die nicht in `uint32_t` darstellbar ist - liefert konsequent
+`CapacityExceeded`; `outBytes` bleibt dabei unveraendert. Die reine
+Groessenentscheidung ist in der freien, zustandslosen Funktion
+`checkEnvelopeEncodedSize(payloadSize, hasUtc, maxTotalBytes)` gekapselt, die
+`encodeEnvelope()` intern aufruft und die denselben Status samt
+Gesamtgroesse als reine Zahlen liefert - ohne einen Puffer aufzubauen. Damit
+lassen sich Grenzwerte bis `UINT32_MAX` nativ testen, ohne eine reale
+4-GiB-Payload zu allokieren.
+
+`decodeEnvelope()` validiert die beanspruchte Laenge vollstaendig, bevor die
+Payload allokiert wird, und berechnet den CRC ebenfalls inkrementell ueber
+den bereits vorhandenen Eingabepuffer (Headerabschnitt und Payloadabschnitt),
+ohne dafuer einen zusaetzlichen `forCrc`-Verkettungspuffer anzulegen; der vom
+Storage-Port gelesene Puffer zaehlt dabei als "der gelesene Record" und wird
+nicht doppelt gezaehlt. Die Payload wird beim Aufbau des Ergebnisses hoechstens
+einmal in dieses Ergebnis verschoben bzw. kopiert.
+
+Der Verzicht auf einen `forCrc`-Verkettungspuffer ist an dieser Stelle
+strukturell erzwungen, nicht durch einen zur Laufzeit zaehlbaren Test
+belegbar: `std::string`-Payloads lassen keine Kopieranzahl instrumentieren.
+Der Beleg besteht aus drei Teilen: (1) im gesamten Produktionscode existiert
+kein `forCrc`-Verkettungspuffer mehr (geprueft per
+`grep -rn "forCrc" lib/ src/`), (2) `encodeEnvelope()` veroeffentlicht
+ausschliesslich per `swap()` (keine Vollkopie, siehe oben fuer die praezise,
+nicht absolute Formulierung dieser Garantie) und (3) die Golden-Vector- sowie
+Rundlauftests in `test_storage_wireformat.cpp` beweisen, dass der
+inkrementelle CRC ueber Header und Payload byteidentische Ergebnisse zum
+vormaligen Verkettungspuffer liefert. `scanTechnicalSlotCandidates`
+materialisiert dagegen ueberhaupt keine Payload mehr (nur Metadaten ueber
+`decodeEnvelopeMetadata`); ein Allokationszaehler-Test belegt, dass der
+Spitzenspeicherbedarf nicht mit `Slotzahl * Payloadgroesse` skaliert. Separate
+Grenztests belegen einen erfolgreichen Scan mit exakt acht Slots sowie die
+typisierte Ablehnung von neun Slots vor jedem Store-Read und jeder dynamischen
+Ergebnisallokation. `loadSlotPayload` laedt die Payload eines gewaehlten Slots
+erst spaeter mit vollstaendiger Neuvalidierung (CRC, Record-Identitaet,
+`versionValue`).
+
+Ein Test mit einem absichtlich vertragsverletzenden Test-Store (der `read()`
+mit `WriteError`/`CommitOutcomeUnknown` oder `write()` mit
+`NotFound`/`ReadError` zurueckgeben liesse) ist seit der Statustyp-Trennung
+nicht mehr in gueltigem C++ konstruierbar: `IStateStore::read()` gibt
+`StateStoreReadResult` mit `StateStoreReadStatus` zurueck, ein Typ ohne
+`WriteError`-/`CommitOutcomeUnknown`-Werte. Das ist ein Compilefehler statt
+eines Laufzeitfehlers und damit ein staerkerer Beleg als ein Test es waere.
+
+`ByteWriter::writeBytes`, `ByteReader::readBytes`, `Crc32IsoHdlc::update` und
+`ISecureRandomSource::fill` (samt `MockSecureRandomSource::fill`) setzen den
+Nullzeigervertrag technisch durch, statt ihn wie `std::memcpy` nur zu
+dokumentieren: bei `length == 0` ist der Zeigerparameter erlaubt `nullptr` zu
+sein, wird nie dereferenziert und der Aufruf ist ein erfolgreicher No-Op ohne
+jede Zustandsaenderung (bei `ISecureRandomSource::fill` insbesondere: ein
+vorbereiteter Override wird nicht konsumiert, der Generatorzustand nicht
+weiterbewegt). Bei `length > 0` und `nullptr` lehnen alle vier Stellen
+beobachtbar ab (`bool`/`false`), ohne Speicherzugriff und ohne UB.
+`Crc32IsoHdlc::update` ist dafuer `[[nodiscard]] bool`; alle
+Produktionsaufrufer behandeln den Rueckgabewert mit einem expliziten
+Fehlerzweig, sodass nie ein CRC aus nur einem Teil der vorgesehenen Chunks
+veroeffentlicht oder akzeptiert wird. Die reine Rohzeiger-
+One-Shot-Ueberladung `computeCrc32IsoHdlc(const void*, size_t)` wurde entfernt,
+da kein Aufrufer sie noch braucht und ein sinnvoller Sentinel-Fehlerwert fuer
+`uint32_t`-CRCs nicht existiert; `computeCrc32IsoHdlc(const std::string&)`
+bleibt bestehen, da `std::string::data()` nie `nullptr` ist.
+`scanTechnicalSlotCandidates` erzwingt die zentrale anwendungsneutrale Grenze
+`kMaximumTechnicalSlotsPerScan == 8` zu Beginn des Aufrufs. Neun oder mehr
+Schluessel liefern `SlotScanStatus::SlotLimitExceeded`, bevor der Store gelesen
+oder eine Ergebnisliste allokiert wird; Kandidaten und Slot-Issues bleiben leer.
+Ein erfolgreicher Scan ohne Kandidaten bleibt durch `SlotScanStatus::Success`
+eindeutig unterscheidbar. `SlotIssueKind::CapacityError` bezeichnet weiterhin
+ausschliesslich den Kapazitaetsfehler eines tatsaechlich gelesenen Slots.
 
 ### Paket B: Typisierte Konfigurationsdokumente
 

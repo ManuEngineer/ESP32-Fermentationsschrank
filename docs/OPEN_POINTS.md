@@ -136,6 +136,8 @@ Nachverfolgung: #36
 - [ ] notwendigen freien Sicherheitsabstand definieren
 - [ ] Webressourcen und drei Sprachen messen
 - [ ] Exportgroessen und temporaeren Speicher begrenzen
+- [ ] NVS-Partitionsgroesse fuer Konfiguration, Slots und Secrets bestimmen
+      (Backend gemaess ADR-016)
 
 Release 1 reserviert keine dualen OTA-Slots. Web-OTA ist `FUTURE_RELEASE`.
 
