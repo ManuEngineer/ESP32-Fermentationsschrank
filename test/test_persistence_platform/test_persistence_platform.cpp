@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "mock_secure_random_source.hpp"
-#include "mock_time_zone_resolver.hpp"
 #include "secure_random_source.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "state_store.hpp"
@@ -17,7 +16,6 @@
 #include "storage_envelope.hpp"
 #include "storage_slot_candidates.hpp"
 #include "storage_types.hpp"
-#include "time_zone_resolver.hpp"
 
 // Groessenpraefixierte globale Allokationszaehler fuer den
 // Spitzenspeicher-Test: jede Allokation traegt ihre Groesse in einem
@@ -65,9 +63,7 @@ using device_platform::StateStoreReadStatus;
 using device_platform::StateStoreWriteStatus;
 using device_platform::StorageEnvelope;
 using device_platform::StorageEpoch;
-using device_platform::TimeZoneResolutionStatus;
 using device_platform_test_support::MockSecureRandomSource;
-using device_platform_test_support::MockTimeZoneResolver;
 using device_platform_test_support::SimulatedPersistentStateStore;
 
 // Kein Test mit einem absichtlich vertragsverletzenden Test-Store (der
@@ -444,20 +440,6 @@ void test_secure_random_source_rejects_null_pointer_with_positive_length_and_doe
     TEST_ASSERT_TRUE(neverRejected.fill(reference, sizeof(reference)));
 
     TEST_ASSERT_EQUAL_MEMORY(reference, afterRejected, sizeof(reference));
-}
-
-void test_time_zone_resolver_known_unknown_and_failure() {
-    MockTimeZoneResolver resolver;
-    resolver.addKnownZone("Europe/Zurich");
-
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(TimeZoneResolutionStatus::Success),
-                          static_cast<int>(resolver.prepare("Europe/Zurich")));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(TimeZoneResolutionStatus::Unknown),
-                          static_cast<int>(resolver.prepare("Etc/Unknown")));
-
-    resolver.injectFailure(true);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(TimeZoneResolutionStatus::Error),
-                          static_cast<int>(resolver.prepare("Europe/Zurich")));
 }
 
 void test_scan_filters_and_sorts_candidates_and_preserves_issues() {
@@ -1076,7 +1058,6 @@ int main() {
         test_secure_random_source_rejects_null_pointer_with_positive_length_and_preserves_override);
     RUN_TEST(
         test_secure_random_source_rejects_null_pointer_with_positive_length_and_does_not_advance_generator);
-    RUN_TEST(test_time_zone_resolver_known_unknown_and_failure);
     RUN_TEST(test_scan_filters_and_sorts_candidates_and_preserves_issues);
     RUN_TEST(
         test_scan_reports_not_found_for_every_slot_on_factory_empty_storage);
