@@ -32,6 +32,20 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 - Programmmodellgrenzen einschliesslich minimaler und maximaler Anzahl der
   Fermentationsphasen vollstaendig in `program_limits.hpp` zentralisiert; das
   fachliche Verhalten und das Programmschema bleiben unveraendert
+- Plattformpersistenz aus Issue #54 gemaess ADR-016 (NVS als Backend) korrigiert:
+  - `StateStoreKey` portseitig auf 1..15 Bytes aus `[A-Za-z0-9_.-]` begrenzt,
+    eigener Status `InvalidCharacter` (Befund 1)
+  - Slot-Scan haelt hoechstens einen Recordpuffer (Metadaten-Scan plus
+    `loadSlotPayload` mit voller Neuvalidierung); Spitzenspeicher unabhaengig
+    von der Slotzahl (Befund 2)
+  - `nextSlotRoundRobin` lehnt `lastWrittenSlot >= slotCount` als
+    `InvalidLastSlot` ab statt still per Modulo zu normalisieren (Befund 3)
+  - `ChangeOrigin`/`ChangeOperation` aus dem Envelope in die Payload verschoben
+    (Header 37/45 Bytes, Version bleibt 1); Golden-Vektoren neu berechnet
+    (Befund 4)
+  - aufruferlosen `ITimeZoneResolver`-Port samt Mock entfernt (Befund 5)
+  - Code-Kommentare auf den Vertrag reduziert, ohne Verhaltensaenderung
+    (Befund 6)
 
 ### Added
 
@@ -46,10 +60,11 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   `StateStoreWriteStatus` statt eines gemeinsamen Enums - ein Adapter kann
   `WriteError`/`CommitOutcomeUnknown` schon aufgrund des Rueckgabetyps nicht
   als Leseergebnis liefern, und umgekehrt; gueltig-by-construction
-  begrenzter, binaersicherer `StateStoreKey`-Werttyp (kein oeffentlicher
-  Default-Konstruktor, `create()` lehnt leeren (`Empty`) und zu langen
-  (`TooLong`) Schluessel typisiert ab, anwendungsneutrale Softwaregrenze ohne
-  reale NVS-Garantie); starke technische Typen fuer StorageEpoch, Revision,
+  begrenzter `StateStoreKey`-Werttyp (kein oeffentlicher Default-Konstruktor,
+  `create()` erzwingt gemaess ADR-016 1..15 Bytes aus `[A-Za-z0-9_.-]` und
+  lehnt leeren (`Empty`), zu langen (`TooLong`) und zeichensatzverletzenden
+  (`InvalidCharacter`) Schluessel typisiert ab); starke technische Typen fuer
+  StorageEpoch, Revision,
   Generation, RecordSequence, SlotId und RecordTypeId sowie ein generischer
   `checkedIncrement`-Baustein, der sowohl den reservierten Ausgangswert 0
   (`InvalidCurrentValue`) als auch einen Ueberlauf von `UINT64_MAX` auf 0
@@ -73,7 +88,7 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   nicht existiert), von Envelope-Encoding und -Decoding genutzt, um den CRC
   direkt ueber Header und Payload zu berechnen, ohne einen zusaetzlichen
   `header + payload`-Hilfspuffer anzulegen; generischer Envelope Version 1
-  (41/49 Bytes) mit ueberlaufsicherer, gestufter Groessenpruefung (eigener
+  (37/45 Bytes) mit ueberlaufsicherer, gestufter Groessenpruefung (eigener
   `checkedAddSize`-Baustein sowie die neue freie, zustandslose
   `checkEnvelopeEncodedSize(payloadSize, hasUtc, maxTotalBytes)`-Funktion,
   die dieselbe Entscheidung als reine Zahlen ohne Pufferaufbau liefert und
@@ -94,18 +109,20 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   stillschweigend verwirft, sondern als typisierte `SlotIssue`-Liste erhaelt
   (`NotFound` nie gleichbedeutend mit `ReadError`; `UnexpectedStatus` fuer den
   nachweislich unerreichbaren Success-Fallback in den internen
-  Statusmappern) und die Payload eines passenden Kandidaten verschiebt statt
-  kopiert - weiterhin ohne konkrete Slotzahlen oder Root-/Manifestbedeutung;
+  Statusmappern) und keine Payload im Ergebnis mehr materialisiert
+  (Metadaten-Scan; `loadSlotPayload` laedt eine gewaehlte Payload spaeter mit
+  voller Neuvalidierung) - weiterhin ohne konkrete Slotzahlen oder
+  Root-/Manifestbedeutung;
   typisierte `nextSlotRoundRobin`-Rotation (`NextSlotStatus::Success`/
-  `InvalidSlotCount` mit `std::optional<SlotId>`), die eine ungueltige
-  Slotanzahl (0 oder technisch nicht darstellbar) nicht mehr mit einer
-  erfolgreichen Rotation zu Slot 0 verwechselbar macht, unabhaengig von der
+  `InvalidSlotCount`/`InvalidLastSlot` mit `std::optional<SlotId>`), die eine
+  ungueltige Slotanzahl und ein `lastWrittenSlot >= slotCount` typisiert und
+  unterscheidbar ablehnt, statt sie mit einer erfolgreichen Rotation zu Slot 0
+  zu verwechseln oder still per Modulo zu normalisieren, unabhaengig von der
   `size_t`-Breite der Zielplattform ueberlaufsicher; `ISecureRandomSource`-
   (`fill()` mit demselben technisch durchgesetzten Nullzeigervertrag: bei
   `length == 0` wird weder ein vorbereiteter Override konsumiert noch der
   Generatorzustand weiterbewegt, bei `length > 0` mit `nullptr` lehnt jede
-  Implementierung inklusive `MockSecureRandomSource` beobachtbar ab) und
-  `ITimeZoneResolver`-Ports;
+  Implementierung inklusive `MockSecureRandomSource` beobachtbar ab);
   `SimulatedPersistentStateStore` mit injizierbaren Schreib-Cut-Points
   (Fehler vor Beginn, Stromausfall vor/nach Commit, Kapazitaetsfehler) sowie
   Read-/NotFound-/Korruptionsinjektion fuer native Tests; die drei
