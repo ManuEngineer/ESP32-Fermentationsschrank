@@ -1,7 +1,10 @@
 #include <unity.h>
 
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -15,6 +18,41 @@
 #include "storage_slot_candidates.hpp"
 #include "storage_types.hpp"
 #include "time_zone_resolver.hpp"
+
+// Groessenpraefixierte globale Allokationszaehler fuer den
+// Spitzenspeicher-Test: jede Allokation traegt ihre Groesse in einem
+// ausrichtungssicheren Kopf, damit `delete` die Live-Bytes exakt zurueckrechnet
+// (unabhaengig davon, ob sized-delete aufgerufen wird).
+// Array-`new[]`/`delete[]` bleiben unveraendert und werden nicht mitgezaehlt.
+namespace {
+std::size_t gLiveAllocBytes = 0U;
+std::size_t gPeakAllocBytes = 0U;
+constexpr std::size_t kAllocHeader = alignof(std::max_align_t);
+}  // namespace
+
+void* operator new(std::size_t size) {
+    void* raw = std::malloc(size + kAllocHeader);
+    if (raw == nullptr) {
+        throw std::bad_alloc();
+    }
+    *static_cast<std::size_t*>(raw) = size;
+    gLiveAllocBytes += size;
+    if (gLiveAllocBytes > gPeakAllocBytes) {
+        gPeakAllocBytes = gLiveAllocBytes;
+    }
+    return static_cast<char*>(raw) + kAllocHeader;
+}
+
+void operator delete(void* ptr) noexcept {
+    if (ptr == nullptr) {
+        return;
+    }
+    void* raw = static_cast<char*>(ptr) - kAllocHeader;
+    gLiveAllocBytes -= *static_cast<std::size_t*>(raw);
+    std::free(raw);
+}
+
+void operator delete(void* ptr, std::size_t) noexcept { operator delete(ptr); }
 
 namespace {
 
@@ -69,6 +107,11 @@ std::string encodedEnvelopeOrFail(RecordTypeId recordType,
 }
 
 constexpr std::size_t kDefaultMaxBytes = 4096U;
+
+// SlotCandidate traegt keine Payload - das Scan-Ergebnis waechst nur mit der
+// Slotanzahl (kleine Metadaten), nie mit den Payloadgroessen.
+static_assert(sizeof(device_platform::SlotCandidate) <= 32U,
+              "SlotCandidate darf keine Payload einbetten.");
 
 void test_write_and_read_round_trip() {
     SimulatedPersistentStateStore store;
@@ -460,7 +503,14 @@ void test_scan_filters_and_sorts_candidates_and_preserves_issues() {
     TEST_ASSERT_EQUAL_UINT32(2U, scan.candidates.size());
     TEST_ASSERT_EQUAL_UINT64(9U, scan.candidates[0].versionValue);
     TEST_ASSERT_EQUAL_UINT32(1U, scan.candidates[0].slot.value());
-    TEST_ASSERT_EQUAL_STRING("b", scan.candidates[0].payload.c_str());
+    // Die Payload steht nicht mehr im Scan-Ergebnis, sondern wird gezielt und
+    // vollstaendig neu validiert geladen.
+    const auto loaded = device_platform::loadSlotPayload(
+        store, keyOrFail("slot1"), recordType, 1U, epoch,
+        scan.candidates[0].versionValue, 4096U);
+    TEST_ASSERT_TRUE(loaded.status ==
+                     device_platform::SlotPayloadLoadStatus::Success);
+    TEST_ASSERT_EQUAL_STRING("b", loaded.payload.c_str());
     TEST_ASSERT_EQUAL_UINT64(5U, scan.candidates[1].versionValue);
     TEST_ASSERT_EQUAL_UINT32(0U, scan.candidates[1].slot.value());
 
@@ -638,9 +688,129 @@ void test_scan_handles_max_version_value_without_overflow() {
     TEST_ASSERT_EQUAL_UINT32(2U, scan.candidates.size());
     TEST_ASSERT_EQUAL_UINT64(std::numeric_limits<uint64_t>::max(),
                              scan.candidates[0].versionValue);
-    TEST_ASSERT_EQUAL_STRING("max", scan.candidates[0].payload.c_str());
+    const auto loaded = device_platform::loadSlotPayload(
+        store, keyOrFail("slot0"), recordType, 1U, epoch,
+        scan.candidates[0].versionValue, 4096U);
+    TEST_ASSERT_TRUE(loaded.status ==
+                     device_platform::SlotPayloadLoadStatus::Success);
+    TEST_ASSERT_EQUAL_STRING("max", loaded.payload.c_str());
     TEST_ASSERT_EQUAL_UINT64(std::numeric_limits<uint64_t>::max() - 1U,
                              scan.candidates[1].versionValue);
+}
+
+void test_scan_peak_memory_is_independent_of_slot_count() {
+    constexpr std::size_t payloadSize = 2048U;
+    constexpr std::size_t maxEnvelope = 4096U;
+    const auto recordType = RecordTypeId(9U);
+    const auto epoch = StorageEpoch(1U);
+
+    const auto measurePeak = [&](std::size_t slotCount) {
+        SimulatedPersistentStateStore store;
+        std::vector<StateStoreKey> slotKeys;
+        for (std::size_t i = 0U; i < slotCount; ++i) {
+            StorageEnvelope envelope;
+            envelope.recordTypeId = recordType;
+            envelope.schemaVersion = 1U;
+            envelope.storageEpoch = epoch;
+            envelope.versionValue = i + 1U;
+            envelope.payload =
+                std::string(payloadSize, static_cast<char>('a' + (i % 26U)));
+            std::string encoded;
+            TEST_ASSERT_TRUE(device_platform::encodeEnvelope(envelope, encoded,
+                                                             maxEnvelope) ==
+                             EnvelopeEncodeStatus::Success);
+            const auto key = keyOrFail("slot" + std::to_string(i));
+            TEST_ASSERT_TRUE(store.write(key, encoded) ==
+                             StateStoreWriteStatus::Success);
+            slotKeys.push_back(key);
+        }
+        const std::size_t baseline = gLiveAllocBytes;
+        gPeakAllocBytes = gLiveAllocBytes;
+        const auto scan = device_platform::scanTechnicalSlotCandidates(
+            store, slotKeys, recordType, 1U, epoch, maxEnvelope);
+        TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(slotCount),
+                                 scan.candidates.size());
+        return gPeakAllocBytes - baseline;
+    };
+
+    const std::size_t peakOneSlot = measurePeak(1U);
+    const std::size_t peakManySlots = measurePeak(8U);
+
+    // Der fruehere Scan hielt fuer jeden gueltigen Kandidaten die volle Payload
+    // gleichzeitig (~slotCount * payloadSize). Jetzt liegt zu keinem Zeitpunkt
+    // mehr als ein Recordpuffer im Speicher: der Spitzenbedarf bei acht Slots
+    // bleibt unter zwei Payloadgroessen und unterscheidet sich vom
+    // Ein-Slot-Fall um deutlich weniger als eine Payload.
+    TEST_ASSERT_TRUE(peakManySlots < 2U * payloadSize);
+    TEST_ASSERT_TRUE(peakManySlots <= peakOneSlot + payloadSize);
+}
+
+void test_load_slot_payload_reports_not_found_for_missing_slot() {
+    SimulatedPersistentStateStore store;
+    const auto result = device_platform::loadSlotPayload(
+        store, keyOrFail("slot0"), RecordTypeId(9U), 1U, StorageEpoch(1U), 1U,
+        kDefaultMaxBytes);
+    TEST_ASSERT_TRUE(result.status ==
+                     device_platform::SlotPayloadLoadStatus::NotFound);
+    TEST_ASSERT_TRUE(result.payload.empty());
+}
+
+void test_load_slot_payload_rejects_record_identity_mismatch() {
+    SimulatedPersistentStateStore store;
+    const auto recordType = RecordTypeId(9U);
+    const auto epoch = StorageEpoch(1U);
+    TEST_ASSERT_TRUE(store.write(keyOrFail("slot0"),
+                                 encodedEnvelopeOrFail(recordType, 1U, epoch,
+                                                       5U, "value")) ==
+                     StateStoreWriteStatus::Success);
+
+    const auto result = device_platform::loadSlotPayload(
+        store, keyOrFail("slot0"), RecordTypeId(99U), 1U, epoch, 5U,
+        kDefaultMaxBytes);
+    TEST_ASSERT_TRUE(
+        result.status ==
+        device_platform::SlotPayloadLoadStatus::RecordIdentityMismatch);
+    TEST_ASSERT_TRUE(result.payload.empty());
+}
+
+void test_load_slot_payload_rejects_version_value_changed_since_scan() {
+    SimulatedPersistentStateStore store;
+    const auto recordType = RecordTypeId(9U);
+    const auto epoch = StorageEpoch(1U);
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot0"),
+                    encodedEnvelopeOrFail(recordType, 1U, epoch, 5U, "old")) ==
+        StateStoreWriteStatus::Success);
+    // Der Slot wird nach dem Scan mit einem anderen versionValue
+    // ueberschrieben.
+    TEST_ASSERT_TRUE(
+        store.write(keyOrFail("slot0"),
+                    encodedEnvelopeOrFail(recordType, 1U, epoch, 9U, "new")) ==
+        StateStoreWriteStatus::Success);
+
+    const auto result = device_platform::loadSlotPayload(
+        store, keyOrFail("slot0"), recordType, 1U, epoch, 5U, kDefaultMaxBytes);
+    TEST_ASSERT_TRUE(
+        result.status ==
+        device_platform::SlotPayloadLoadStatus::VersionValueMismatch);
+    TEST_ASSERT_TRUE(result.payload.empty());
+}
+
+void test_load_slot_payload_rejects_crc_corruption() {
+    SimulatedPersistentStateStore store;
+    const auto recordType = RecordTypeId(9U);
+    const auto epoch = StorageEpoch(1U);
+    auto tampered = encodedEnvelopeOrFail(recordType, 1U, epoch, 5U, "value");
+    // Ein Payloadbyte kippen, ohne den CRC anzupassen.
+    tampered.back() = static_cast<char>(tampered.back() ^ 0x01);
+    TEST_ASSERT_TRUE(store.write(keyOrFail("slot0"), tampered) ==
+                     StateStoreWriteStatus::Success);
+
+    const auto result = device_platform::loadSlotPayload(
+        store, keyOrFail("slot0"), recordType, 1U, epoch, 5U, kDefaultMaxBytes);
+    TEST_ASSERT_TRUE(result.status ==
+                     device_platform::SlotPayloadLoadStatus::InvalidEnvelope);
+    TEST_ASSERT_TRUE(result.payload.empty());
 }
 
 void test_next_slot_round_robin_wraps_and_handles_zero_slots() {
@@ -884,6 +1054,11 @@ int main() {
     RUN_TEST(test_scan_preserves_crc_mismatch_issue);
     RUN_TEST(test_scan_break_ties_by_slot_id_ascending);
     RUN_TEST(test_scan_handles_max_version_value_without_overflow);
+    RUN_TEST(test_scan_peak_memory_is_independent_of_slot_count);
+    RUN_TEST(test_load_slot_payload_reports_not_found_for_missing_slot);
+    RUN_TEST(test_load_slot_payload_rejects_record_identity_mismatch);
+    RUN_TEST(test_load_slot_payload_rejects_version_value_changed_since_scan);
+    RUN_TEST(test_load_slot_payload_rejects_crc_corruption);
     RUN_TEST(test_next_slot_round_robin_wraps_and_handles_zero_slots);
     RUN_TEST(test_next_slot_round_robin_does_not_overflow_near_uint32_max);
     RUN_TEST(test_next_slot_round_robin_rejects_slot_count_above_uint32_max);
@@ -895,7 +1070,8 @@ int main() {
     RUN_TEST(test_state_store_key_accepts_exact_max_length);
     RUN_TEST(test_state_store_key_rejects_one_byte_over_max_length);
     RUN_TEST(test_state_store_key_accepts_charset_boundary_characters);
-    RUN_TEST(test_state_store_key_rejects_characters_just_outside_allowed_ranges);
+    RUN_TEST(
+        test_state_store_key_rejects_characters_just_outside_allowed_ranges);
     RUN_TEST(test_state_store_key_rejects_embedded_nul);
     RUN_TEST(test_state_store_key_rejects_space);
     RUN_TEST(test_state_store_key_rejects_path_separators);

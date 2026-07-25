@@ -16,11 +16,13 @@
 // Abschnitt "Technisch gueltige Kandidaten und kanonischer Root").
 namespace device_platform {
 
+// Nur die Metadaten eines Kandidaten, ohne die Payload: der Scan haelt zu
+// keinem Zeitpunkt mehr als einen Recordpuffer, und die Payload wird erst
+// spaeter gezielt ueber `loadSlotPayload()` materialisiert.
 struct SlotCandidate {
     SlotId slot;
     // Rohes VersionValue aus dem Envelope; Bedeutung legt der Aufrufer fest.
     uint64_t versionValue{0U};
-    std::string payload;
     std::optional<int64_t> utcUnixSeconds;
 };
 
@@ -72,12 +74,18 @@ struct SlotScanResult {
     std::vector<SlotIssue> issues;
 };
 
-// Liest jeden `slotKeys`-Eintrag und dekodiert dessen Envelope rein
-// technisch. Jeder Slot, der nicht zu einem technisch gueltigen und
-// passenden Kandidaten fuehrt, erscheint mit einer eindeutigen `SlotIssue`
-// im Ergebnis - nichts wird stillschweigend verworfen. `ReadError` wird nie
-// wie `NotFound` behandelt. Kennt keine Bootstrap-, Root- oder konkrete
-// Recovery-Logik; das bleibt Aufgabe der aufrufenden Anwendung (#56/#57).
+// Liest jeden `slotKeys`-Eintrag und validiert dessen Envelope rein
+// technisch, ohne die Payload zu materialisieren (`decodeEnvelopeMetadata()`).
+// Zu keinem Zeitpunkt liegt mehr als ein Recordpuffer im Speicher, und das
+// Ergebnis enthaelt nur Kandidatenmetadaten - der Spitzenspeicherbedarf ist
+// damit unabhaengig von Slotanzahl und Kandidatenzahl. Die Payload eines
+// gewaehlten Kandidaten wird erst spaeter ueber `loadSlotPayload()` geladen.
+//
+// Jeder Slot, der nicht zu einem technisch gueltigen und passenden Kandidaten
+// fuehrt, erscheint mit einer eindeutigen `SlotIssue` im Ergebnis - nichts
+// wird stillschweigend verworfen. `ReadError` wird nie wie `NotFound`
+// behandelt. Kennt keine Bootstrap-, Root- oder konkrete Recovery-Logik; das
+// bleibt Aufgabe der aufrufenden Anwendung.
 //
 // Vorbedingung: `slotKeys.size() <= UINT32_MAX`, da jeder Index als `SlotId`
 // (`uint32_t`-getaggt) dargestellt wird. Realistische Slotzahlen sind sehr
@@ -88,6 +96,41 @@ struct SlotScanResult {
     const IStateStore& store, const std::vector<StateStoreKey>& slotKeys,
     RecordTypeId expectedRecordType, uint32_t expectedSchemaVersion,
     StorageEpoch expectedStorageEpoch, std::size_t maxEnvelopeBytes);
+
+enum class SlotPayloadLoadStatus : uint8_t {
+    Success,
+    NotFound,
+    ReadError,
+    CapacityError,
+    // Envelope strukturell ungueltig oder CRC-Fehler.
+    InvalidEnvelope,
+    // Envelope technisch gueltig, aber RecordType, Schema-Version oder
+    // StorageEpoch passen nicht zu den erwarteten Werten.
+    RecordIdentityMismatch,
+    // Der jetzt gelesene `versionValue` weicht vom beim Scan gesehenen Wert
+    // ab: der Slot wurde zwischen Scan und Laden veraendert.
+    VersionValueMismatch,
+};
+
+struct SlotPayloadResult {
+    SlotPayloadLoadStatus status{SlotPayloadLoadStatus::NotFound};
+    // Nur bei `status == Success` gueltig.
+    std::string payload;
+    std::optional<int64_t> utcUnixSeconds;
+};
+
+// Laedt die Payload eines beim Scan ausgewaehlten Slots und validiert sie
+// vollstaendig neu: CRC und Record-Identitaet (RecordType, Schema-Version,
+// StorageEpoch) wie beim Scan, zusaetzlich `versionValue` gegen den beim Scan
+// gesehenen `expectedVersionValue`. Erst damit ist der Weg vom Kandidaten zur
+// tatsaechlich verwendeten Payload durchgehend geprueft; ein zwischen Scan und
+// Laden veraenderter Slot wird nicht unbemerkt uebernommen. Materialisiert
+// genau eine Payload (die des gewaehlten Slots).
+[[nodiscard]] SlotPayloadResult loadSlotPayload(
+    const IStateStore& store, const StateStoreKey& slotKey,
+    RecordTypeId expectedRecordType, uint32_t expectedSchemaVersion,
+    StorageEpoch expectedStorageEpoch, uint64_t expectedVersionValue,
+    std::size_t maxEnvelopeBytes);
 
 enum class NextSlotStatus : uint8_t {
     Success,

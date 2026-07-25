@@ -82,30 +82,29 @@ SlotScanResult scanTechnicalSlotCandidates(
                 SlotIssue{slot, toSlotIssueKind(readResult.status)});
             continue;
         }
-        // Nicht `const`: die Payload wird bei einem technisch gueltigen und
-        // passenden Kandidaten unten in `SlotCandidate` verschoben statt
-        // kopiert (siehe docs/CONFIGURATION_PERSISTENCE.md, Abschnitt
-        // "Ressourcenvertrag").
-        auto decoded = decodeEnvelope(readResult.value);
+        // Metadaten-Dekodierung: validiert inklusive CRC ueber die Payload,
+        // materialisiert die Payload aber nicht. Nur `readResult.value` (ein
+        // Recordpuffer) liegt waehrend dieser Iteration im Speicher und wird
+        // am Iterationsende freigegeben.
+        const auto decoded = decodeEnvelopeMetadata(readResult.value);
         if (decoded.status != EnvelopeDecodeStatus::Success ||
-            !decoded.envelope.has_value()) {
+            !decoded.metadata.has_value()) {
             result.issues.push_back(
                 SlotIssue{slot, toSlotIssueKind(decoded.status)});
             continue;
         }
-        auto& envelope = *decoded.envelope;
-        if (envelope.recordTypeId != expectedRecordType ||
-            envelope.schemaVersion != expectedSchemaVersion ||
-            envelope.storageEpoch != expectedStorageEpoch) {
+        const auto& meta = *decoded.metadata;
+        if (meta.recordTypeId != expectedRecordType ||
+            meta.schemaVersion != expectedSchemaVersion ||
+            meta.storageEpoch != expectedStorageEpoch) {
             result.issues.push_back(
                 SlotIssue{slot, SlotIssueKind::RecordIdentityMismatch});
             continue;
         }
         result.candidates.push_back(SlotCandidate{
             slot,
-            envelope.versionValue,
-            std::move(envelope.payload),
-            envelope.utcUnixSeconds,
+            meta.versionValue,
+            meta.utcUnixSeconds,
         });
     }
     // Bei gleichem VersionValue entscheidet die Slot-ID aufsteigend, damit
@@ -118,6 +117,47 @@ SlotScanResult scanTechnicalSlotCandidates(
                   return left.slot.value() < right.slot.value();
               });
     return result;
+}
+
+SlotPayloadResult loadSlotPayload(const IStateStore& store,
+                                  const StateStoreKey& slotKey,
+                                  RecordTypeId expectedRecordType,
+                                  uint32_t expectedSchemaVersion,
+                                  StorageEpoch expectedStorageEpoch,
+                                  uint64_t expectedVersionValue,
+                                  std::size_t maxEnvelopeBytes) {
+    const auto readResult = store.read(slotKey, maxEnvelopeBytes);
+    switch (readResult.status) {
+        case StateStoreReadStatus::Success:
+            break;
+        case StateStoreReadStatus::NotFound:
+            return {SlotPayloadLoadStatus::NotFound, {}, {}};
+        case StateStoreReadStatus::ReadError:
+            return {SlotPayloadLoadStatus::ReadError, {}, {}};
+        case StateStoreReadStatus::CapacityError:
+            return {SlotPayloadLoadStatus::CapacityError, {}, {}};
+    }
+
+    // Einziger bewusst benannter Uebergang mit mehr als einer Payload:
+    // `readResult.value` (voller Record inkl. Payload) und die von
+    // `decodeEnvelope()` materialisierte Kopie bestehen bis zum `std::move`
+    // unten gleichzeitig. Der Scan selbst hat diesen Uebergang nicht.
+    auto decoded = decodeEnvelope(readResult.value);
+    if (decoded.status != EnvelopeDecodeStatus::Success ||
+        !decoded.envelope.has_value()) {
+        return {SlotPayloadLoadStatus::InvalidEnvelope, {}, {}};
+    }
+    auto& envelope = *decoded.envelope;
+    if (envelope.recordTypeId != expectedRecordType ||
+        envelope.schemaVersion != expectedSchemaVersion ||
+        envelope.storageEpoch != expectedStorageEpoch) {
+        return {SlotPayloadLoadStatus::RecordIdentityMismatch, {}, {}};
+    }
+    if (envelope.versionValue != expectedVersionValue) {
+        return {SlotPayloadLoadStatus::VersionValueMismatch, {}, {}};
+    }
+    return {SlotPayloadLoadStatus::Success, std::move(envelope.payload),
+            envelope.utcUnixSeconds};
 }
 
 NextSlotResult nextSlotRoundRobin(SlotId lastWrittenSlot,

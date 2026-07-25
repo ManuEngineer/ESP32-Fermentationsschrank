@@ -98,6 +98,96 @@ UtcFieldResult readUtcField(ByteReader& reader) {
     return result;
 }
 
+// Validiert Magic, Version, Kernfelder, UTC-Feld, Laenge und CRC und liefert
+// die Kernfelder samt Payload-Offset - ohne die Payload zu kopieren. Der CRC
+// wird direkt ueber den Header- und den Payloadausschnitt des Eingabepuffers
+// berechnet. Gemeinsame Grundlage von `decodeEnvelope()` (materialisiert die
+// Payload) und `decodeEnvelopeMetadata()` (materialisiert sie nicht).
+struct ValidatedEnvelope {
+    EnvelopeDecodeStatus status{EnvelopeDecodeStatus::LengthMismatch};
+    CoreFieldsResult core;
+    std::optional<int64_t> utcUnixSeconds;
+    // Offset der Payload im Eingabepuffer; nur bei `status == Success` gueltig.
+    std::size_t payloadOffset{0U};
+};
+
+ValidatedEnvelope validateEnvelope(const std::string& bytes) {
+    ValidatedEnvelope out;
+    if (bytes.size() < kHeaderBeforeCrcWithoutUtc + kCrcSize) {
+        return out;
+    }
+
+    ByteReader reader(bytes);
+    char magic[sizeof(kMagic)];
+    if (!reader.readBytes(magic, sizeof(magic))) {
+        return out;
+    }
+    if (std::memcmp(magic, kMagic, sizeof(kMagic)) != 0) {
+        out.status = EnvelopeDecodeStatus::InvalidMagic;
+        return out;
+    }
+
+    uint16_t envelopeVersion = 0U;
+    if (!big_endian::readUint16(reader, envelopeVersion)) {
+        return out;
+    }
+    if (envelopeVersion != kStorageEnvelopeVersion1) {
+        out.status = EnvelopeDecodeStatus::UnknownEnvelopeVersion;
+        return out;
+    }
+
+    out.core = readCoreFields(reader);
+    if (out.core.status != EnvelopeDecodeStatus::Success) {
+        out.status = out.core.status;
+        return out;
+    }
+    const auto utc = readUtcField(reader);
+    if (utc.status != EnvelopeDecodeStatus::Success) {
+        out.status = utc.status;
+        return out;
+    }
+    out.utcUnixSeconds = utc.utcUnixSeconds;
+
+    // Position hier ist exakt die Headerlaenge vor dem CRC-Feld.
+    const std::size_t headerBeforeCrcLen = reader.position();
+    if (reader.remaining() < kCrcSize) {
+        out.status = EnvelopeDecodeStatus::LengthMismatch;
+        return out;
+    }
+    if (reader.remaining() - kCrcSize != out.core.payloadLength) {
+        out.status = EnvelopeDecodeStatus::LengthMismatch;
+        return out;
+    }
+
+    uint32_t storedCrc = 0U;
+    if (!big_endian::readUint32(reader, storedCrc)) {
+        out.status = EnvelopeDecodeStatus::LengthMismatch;
+        return out;
+    }
+    const std::size_t payloadOffset = headerBeforeCrcLen + kCrcSize;
+
+    // CRC direkt ueber den Header- und den Payloadausschnitt des vorhandenen
+    // Eingabepuffers, ohne die Payload zu materialisieren. `bytes.data()` ist
+    // nie `nullptr` (Mindestlaenge oben geprueft); `bytes.data() +
+    // payloadOffset` ist bei `payloadLength == 0` ein gueltiger
+    // Ein-hinter-Ende-Zeiger, den `update()` mit Laenge 0 nicht dereferenziert.
+    Crc32IsoHdlc crcAccumulator;
+    if (!crcAccumulator.update(bytes.data(), headerBeforeCrcLen) ||
+        !crcAccumulator.update(bytes.data() + payloadOffset,
+                               out.core.payloadLength)) {
+        out.status = EnvelopeDecodeStatus::LengthMismatch;
+        return out;
+    }
+    if (crcAccumulator.finalize() != storedCrc) {
+        out.status = EnvelopeDecodeStatus::CrcMismatch;
+        return out;
+    }
+
+    out.status = EnvelopeDecodeStatus::Success;
+    out.payloadOffset = payloadOffset;
+    return out;
+}
+
 }  // namespace
 
 EnvelopeSizeCheckResult checkEnvelopeEncodedSize(std::size_t payloadSize,
@@ -211,74 +301,18 @@ EnvelopeEncodeStatus encodeEnvelope(const StorageEnvelope& envelope,
 }
 
 EnvelopeDecodeResult decodeEnvelope(const std::string& bytes) {
-    if (bytes.size() < kHeaderBeforeCrcWithoutUtc + kCrcSize) {
-        return {EnvelopeDecodeStatus::LengthMismatch, std::nullopt};
+    const auto validated = validateEnvelope(bytes);
+    if (validated.status != EnvelopeDecodeStatus::Success) {
+        return {validated.status, std::nullopt};
     }
+    const auto& core = validated.core;
 
-    ByteReader reader(bytes);
-    char magic[sizeof(kMagic)];
-    if (!reader.readBytes(magic, sizeof(magic))) {
-        return {EnvelopeDecodeStatus::LengthMismatch, std::nullopt};
-    }
-    if (std::memcmp(magic, kMagic, sizeof(kMagic)) != 0) {
-        return {EnvelopeDecodeStatus::InvalidMagic, std::nullopt};
-    }
-
-    uint16_t envelopeVersion = 0U;
-    if (!big_endian::readUint16(reader, envelopeVersion)) {
-        return {EnvelopeDecodeStatus::LengthMismatch, std::nullopt};
-    }
-    if (envelopeVersion != kStorageEnvelopeVersion1) {
-        return {EnvelopeDecodeStatus::UnknownEnvelopeVersion, std::nullopt};
-    }
-
-    const auto core = readCoreFields(reader);
-    if (core.status != EnvelopeDecodeStatus::Success) {
-        return {core.status, std::nullopt};
-    }
-    const auto utc = readUtcField(reader);
-    if (utc.status != EnvelopeDecodeStatus::Success) {
-        return {utc.status, std::nullopt};
-    }
-
-    // Position hier ist exakt die Headerlaenge vor dem CRC-Feld.
-    const std::size_t headerBeforeCrcLen = reader.position();
-
-    if (reader.remaining() < kCrcSize) {
-        return {EnvelopeDecodeStatus::LengthMismatch, std::nullopt};
-    }
-    if (reader.remaining() - kCrcSize != core.payloadLength) {
-        return {EnvelopeDecodeStatus::LengthMismatch, std::nullopt};
-    }
-
-    uint32_t storedCrc = 0U;
-    if (!big_endian::readUint32(reader, storedCrc)) {
-        return {EnvelopeDecodeStatus::LengthMismatch, std::nullopt};
-    }
-
+    // Einzige Materialisierung der Payload: eine Kopie aus dem bereits
+    // validierten Eingabepuffer in das Ergebnis.
     std::string payload(core.payloadLength, '\0');
-    if (core.payloadLength > 0U &&
-        !reader.readBytes(payload.data(), core.payloadLength)) {
-        return {EnvelopeDecodeStatus::LengthMismatch, std::nullopt};
-    }
-
-    // CRC direkt ueber den Headerausschnitt der vorhandenen Eingabe und die
-    // bereits materialisierte Payload, ohne einen zusaetzlichen
-    // `header + payload`-Hilfspuffer anzulegen (kein `substr`-Vollkopie;
-    // siehe docs/CONFIGURATION_PERSISTENCE.md, Abschnitt
-    // "Ressourcenvertrag"). `bytes.data()` ist hier nie `nullptr`
-    // (`bytes.size() >= kHeaderBeforeCrcWithoutUtc + kCrcSize` bereits oben
-    // geprueft), `headerBeforeCrcLen` ist immer > 0 - beide Aufrufe koennen
-    // also nach ihrem Vertrag nie `false` liefern. Beide Ergebnisse werden
-    // dennoch explizit behandelt, damit nie ein CRC aus Teilinput akzeptiert
-    // wird, falls sich eine Vorbedingung spaeter aendert.
-    Crc32IsoHdlc crcAccumulator;
-    if (!crcAccumulator.update(bytes.data(), headerBeforeCrcLen) ||
-        !crcAccumulator.update(payload)) {
-        return {EnvelopeDecodeStatus::LengthMismatch, std::nullopt};
-    }
-    if (crcAccumulator.finalize() != storedCrc) {
-        return {EnvelopeDecodeStatus::CrcMismatch, std::nullopt};
+    if (core.payloadLength > 0U) {
+        std::memcpy(payload.data(), bytes.data() + validated.payloadOffset,
+                    core.payloadLength);
     }
 
     StorageEnvelope result;
@@ -288,9 +322,26 @@ EnvelopeDecodeResult decodeEnvelope(const std::string& bytes) {
     result.versionValue = core.versionValue;
     result.changeOriginWireId = core.changeOriginWireId;
     result.changeOperationWireId = core.changeOperationWireId;
-    result.utcUnixSeconds = utc.utcUnixSeconds;
+    result.utcUnixSeconds = validated.utcUnixSeconds;
     result.payload = std::move(payload);
     return {EnvelopeDecodeStatus::Success, std::move(result)};
+}
+
+EnvelopeMetadataResult decodeEnvelopeMetadata(const std::string& bytes) {
+    const auto validated = validateEnvelope(bytes);
+    if (validated.status != EnvelopeDecodeStatus::Success) {
+        return {validated.status, std::nullopt};
+    }
+    const auto& core = validated.core;
+
+    EnvelopeMetadata metadata;
+    metadata.recordTypeId = RecordTypeId(core.recordTypeRaw);
+    metadata.schemaVersion = core.schemaVersion;
+    metadata.storageEpoch = StorageEpoch(core.storageEpochRaw);
+    metadata.versionValue = core.versionValue;
+    metadata.utcUnixSeconds = validated.utcUnixSeconds;
+    metadata.payloadLength = core.payloadLength;
+    return {EnvelopeDecodeStatus::Success, metadata};
 }
 
 }  // namespace device_platform

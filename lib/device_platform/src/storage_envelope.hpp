@@ -53,6 +53,22 @@ struct EnvelopeDecodeResult {
     std::optional<StorageEnvelope> envelope;
 };
 
+// Metadaten eines Envelopes ohne die Payload. Fuer Aufrufer wie den
+// Slot-Scan, die die Payload bewusst nicht materialisieren.
+struct EnvelopeMetadata {
+    RecordTypeId recordTypeId;
+    uint32_t schemaVersion{0U};
+    StorageEpoch storageEpoch;
+    uint64_t versionValue{0U};
+    std::optional<int64_t> utcUnixSeconds;
+    uint32_t payloadLength{0U};
+};
+
+struct EnvelopeMetadataResult {
+    EnvelopeDecodeStatus status{EnvelopeDecodeStatus::LengthMismatch};
+    std::optional<EnvelopeMetadata> metadata;
+};
+
 // Technischer, anwendungsneutraler Baustein: liefert dieselbe
 // Groessenentscheidung wie `encodeEnvelope()` (einschliesslich der
 // 32-Bit-Laengenfeldgrenze fuer die Payload), ohne einen Puffer anzulegen.
@@ -96,5 +112,13 @@ struct EnvelopeSizeCheckResult {
 // Unbekannte Envelope-Version wird abgelehnt; unbekannte ChangeOrigin-/
 // ChangeOperation-Wire-IDs werden roh erhalten, nicht abgelehnt.
 [[nodiscard]] EnvelopeDecodeResult decodeEnvelope(const std::string& bytes);
+
+// Wie `decodeEnvelope()`, liefert aber nur die Metadaten ohne die Payload.
+// Der CRC wird direkt ueber Header und Payload im Eingabepuffer berechnet,
+// ohne die Payload zu kopieren oder einen zusaetzlichen Puffer anzulegen -
+// fuer Aufrufer, die zunaechst nur die Kandidateneigenschaften (z. B.
+// `versionValue`) brauchen und die Payload erst spaeter gezielt laden.
+[[nodiscard]] EnvelopeMetadataResult decodeEnvelopeMetadata(
+    const std::string& bytes);
 
 }  // namespace device_platform
