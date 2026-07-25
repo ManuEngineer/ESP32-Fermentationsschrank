@@ -67,7 +67,11 @@ SlotScanResult scanTechnicalSlotCandidates(
     const IStateStore& store, const std::vector<StateStoreKey>& slotKeys,
     RecordTypeId expectedRecordType, uint32_t expectedSchemaVersion,
     StorageEpoch expectedStorageEpoch, std::size_t maxEnvelopeBytes) {
-    SlotScanResult result;
+    if (slotKeys.size() > storage_slot_limits::kMaximumTechnicalSlotsPerScan) {
+        return SlotScanResult{SlotScanStatus::SlotLimitExceeded, {}, {}};
+    }
+
+    SlotScanResult result{SlotScanStatus::Success, {}, {}};
     for (std::size_t index = 0U; index < slotKeys.size(); ++index) {
         const auto slot = SlotId(static_cast<uint32_t>(index));
         const auto readResult = store.read(slotKeys[index], maxEnvelopeBytes);

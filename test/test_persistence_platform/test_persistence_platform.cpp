@@ -57,6 +57,7 @@ namespace {
 using device_platform::EnvelopeEncodeStatus;
 using device_platform::RecordTypeId;
 using device_platform::SlotIssueKind;
+using device_platform::SlotScanStatus;
 using device_platform::StateStoreKey;
 using device_platform::StateStoreKeyStatus;
 using device_platform::StateStoreReadStatus;
@@ -91,6 +92,25 @@ std::string encodedEnvelopeOrFail(RecordTypeId recordType,
 }
 
 constexpr std::size_t kDefaultMaxBytes = 4096U;
+
+class CountingStateStore final : public device_platform::IStateStore {
+   public:
+    [[nodiscard]] StateStoreWriteStatus write(const StateStoreKey&,
+                                              const std::string&) override {
+        return StateStoreWriteStatus::WriteError;
+    }
+
+    [[nodiscard]] device_platform::StateStoreReadResult read(
+        const StateStoreKey&, std::size_t) const override {
+        ++readCount_;
+        return {StateStoreReadStatus::NotFound, {}};
+    }
+
+    [[nodiscard]] std::size_t readCount() const { return readCount_; }
+
+   private:
+    mutable std::size_t readCount_{0U};
+};
 
 // SlotCandidate traegt keine Payload - das Scan-Ergebnis waechst nur mit der
 // Slotanzahl (kleine Metadaten), nie mit den Payloadgroessen.
@@ -470,6 +490,7 @@ void test_scan_filters_and_sorts_candidates_and_preserves_issues() {
     const auto scan = device_platform::scanTechnicalSlotCandidates(
         store, slotKeys, recordType, 1U, epoch, 4096U);
 
+    TEST_ASSERT_TRUE(scan.status == SlotScanStatus::Success);
     TEST_ASSERT_EQUAL_UINT32(2U, scan.candidates.size());
     TEST_ASSERT_EQUAL_UINT64(9U, scan.candidates[0].versionValue);
     TEST_ASSERT_EQUAL_UINT32(1U, scan.candidates[0].slot.value());
@@ -513,6 +534,7 @@ void test_scan_reports_not_found_for_every_slot_on_factory_empty_storage() {
     const auto scan = device_platform::scanTechnicalSlotCandidates(
         store, slotKeys, recordType, 1U, epoch, 4096U);
 
+    TEST_ASSERT_TRUE(scan.status == SlotScanStatus::Success);
     TEST_ASSERT_TRUE(scan.candidates.empty());
     TEST_ASSERT_EQUAL_UINT32(3U, scan.issues.size());
     for (const auto& issue : scan.issues) {
@@ -540,6 +562,7 @@ void test_scan_never_conflates_read_error_with_not_found() {
     const auto scan = device_platform::scanTechnicalSlotCandidates(
         store, slotKeys, recordType, 1U, epoch, 4096U);
 
+    TEST_ASSERT_TRUE(scan.status == SlotScanStatus::Success);
     TEST_ASSERT_EQUAL_UINT32(1U, scan.candidates.size());
     TEST_ASSERT_EQUAL_UINT32(2U, scan.issues.size());
     TEST_ASSERT_EQUAL_UINT32(1U, scan.issues[0].slot.value());
@@ -565,6 +588,7 @@ void test_scan_preserves_capacity_error_on_read_limit() {
     const auto scan = device_platform::scanTechnicalSlotCandidates(
         store, slotKeys, recordType, 1U, epoch, 10U);
 
+    TEST_ASSERT_TRUE(scan.status == SlotScanStatus::Success);
     TEST_ASSERT_TRUE(scan.candidates.empty());
     TEST_ASSERT_EQUAL_UINT32(1U, scan.issues.size());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(SlotIssueKind::CapacityError),
@@ -590,6 +614,7 @@ void test_scan_preserves_crc_mismatch_issue() {
     const auto scan = device_platform::scanTechnicalSlotCandidates(
         store, slotKeys, recordType, 1U, epoch, 4096U);
 
+    TEST_ASSERT_TRUE(scan.status == SlotScanStatus::Success);
     TEST_ASSERT_EQUAL_UINT32(1U, scan.candidates.size());
     TEST_ASSERT_EQUAL_UINT32(1U, scan.candidates[0].slot.value());
     TEST_ASSERT_EQUAL_UINT32(1U, scan.issues.size());
@@ -623,6 +648,7 @@ void test_scan_break_ties_by_slot_id_ascending() {
     const auto scan = device_platform::scanTechnicalSlotCandidates(
         store, slotKeys, recordType, 1U, epoch, 4096U);
 
+    TEST_ASSERT_TRUE(scan.status == SlotScanStatus::Success);
     TEST_ASSERT_EQUAL_UINT32(3U, scan.candidates.size());
     TEST_ASSERT_EQUAL_UINT32(0U, scan.candidates[0].slot.value());
     TEST_ASSERT_EQUAL_UINT32(1U, scan.candidates[1].slot.value());
@@ -655,6 +681,7 @@ void test_scan_handles_max_version_value_without_overflow() {
     const auto scan = device_platform::scanTechnicalSlotCandidates(
         store, slotKeys, recordType, 1U, epoch, 4096U);
 
+    TEST_ASSERT_TRUE(scan.status == SlotScanStatus::Success);
     TEST_ASSERT_EQUAL_UINT32(2U, scan.candidates.size());
     TEST_ASSERT_EQUAL_UINT64(std::numeric_limits<uint64_t>::max(),
                              scan.candidates[0].versionValue);
@@ -668,7 +695,54 @@ void test_scan_handles_max_version_value_without_overflow() {
                              scan.candidates[1].versionValue);
 }
 
-void test_scan_peak_memory_is_independent_of_slot_count() {
+void test_scan_accepts_exact_maximum_slot_count() {
+    CountingStateStore store;
+    std::vector<StateStoreKey> slotKeys;
+    for (std::size_t index = 0U;
+         index <
+         device_platform::storage_slot_limits::kMaximumTechnicalSlotsPerScan;
+         ++index) {
+        slotKeys.push_back(keyOrFail("slot" + std::to_string(index)));
+    }
+
+    const auto scan = device_platform::scanTechnicalSlotCandidates(
+        store, slotKeys, RecordTypeId(9U), 1U, StorageEpoch(1U),
+        kDefaultMaxBytes);
+
+    TEST_ASSERT_TRUE(scan.status == SlotScanStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(
+        device_platform::storage_slot_limits::kMaximumTechnicalSlotsPerScan,
+        store.readCount());
+    TEST_ASSERT_TRUE(scan.candidates.empty());
+    TEST_ASSERT_EQUAL_UINT32(
+        device_platform::storage_slot_limits::kMaximumTechnicalSlotsPerScan,
+        scan.issues.size());
+}
+
+void test_scan_rejects_one_slot_over_limit_before_reads_or_allocations() {
+    CountingStateStore store;
+    std::vector<StateStoreKey> slotKeys;
+    for (std::size_t index = 0U;
+         index <=
+         device_platform::storage_slot_limits::kMaximumTechnicalSlotsPerScan;
+         ++index) {
+        slotKeys.push_back(keyOrFail("slot" + std::to_string(index)));
+    }
+
+    const std::size_t baseline = gLiveAllocBytes;
+    gPeakAllocBytes = baseline;
+    const auto scan = device_platform::scanTechnicalSlotCandidates(
+        store, slotKeys, RecordTypeId(9U), 1U, StorageEpoch(1U),
+        kDefaultMaxBytes);
+
+    TEST_ASSERT_TRUE(scan.status == SlotScanStatus::SlotLimitExceeded);
+    TEST_ASSERT_EQUAL_UINT32(0U, store.readCount());
+    TEST_ASSERT_TRUE(scan.candidates.empty());
+    TEST_ASSERT_TRUE(scan.issues.empty());
+    TEST_ASSERT_EQUAL_UINT32(baseline, gPeakAllocBytes);
+}
+
+void test_scan_peak_memory_does_not_scale_with_slot_count_times_payload_size() {
     constexpr std::size_t payloadSize = 2048U;
     constexpr std::size_t maxEnvelope = 4096U;
     const auto recordType = RecordTypeId(9U);
@@ -698,21 +772,23 @@ void test_scan_peak_memory_is_independent_of_slot_count() {
         gPeakAllocBytes = gLiveAllocBytes;
         const auto scan = device_platform::scanTechnicalSlotCandidates(
             store, slotKeys, recordType, 1U, epoch, maxEnvelope);
+        TEST_ASSERT_TRUE(scan.status == SlotScanStatus::Success);
         TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(slotCount),
                                  scan.candidates.size());
         return gPeakAllocBytes - baseline;
     };
 
     const std::size_t peakOneSlot = measurePeak(1U);
-    const std::size_t peakManySlots = measurePeak(8U);
+    const std::size_t peakAtLimit = measurePeak(
+        device_platform::storage_slot_limits::kMaximumTechnicalSlotsPerScan);
 
     // Der fruehere Scan hielt fuer jeden gueltigen Kandidaten die volle Payload
     // gleichzeitig (~slotCount * payloadSize). Jetzt liegt zu keinem Zeitpunkt
     // mehr als ein Recordpuffer im Speicher: der Spitzenbedarf bei acht Slots
     // bleibt unter zwei Payloadgroessen und unterscheidet sich vom
     // Ein-Slot-Fall um deutlich weniger als eine Payload.
-    TEST_ASSERT_TRUE(peakManySlots < 2U * payloadSize);
-    TEST_ASSERT_TRUE(peakManySlots <= peakOneSlot + payloadSize);
+    TEST_ASSERT_TRUE(peakAtLimit < 2U * payloadSize);
+    TEST_ASSERT_TRUE(peakAtLimit <= peakOneSlot + payloadSize);
 }
 
 void test_load_slot_payload_reports_not_found_for_missing_slot() {
@@ -1052,7 +1128,10 @@ int main() {
     RUN_TEST(test_scan_preserves_crc_mismatch_issue);
     RUN_TEST(test_scan_break_ties_by_slot_id_ascending);
     RUN_TEST(test_scan_handles_max_version_value_without_overflow);
-    RUN_TEST(test_scan_peak_memory_is_independent_of_slot_count);
+    RUN_TEST(test_scan_accepts_exact_maximum_slot_count);
+    RUN_TEST(test_scan_rejects_one_slot_over_limit_before_reads_or_allocations);
+    RUN_TEST(
+        test_scan_peak_memory_does_not_scale_with_slot_count_times_payload_size);
     RUN_TEST(test_load_slot_payload_reports_not_found_for_missing_slot);
     RUN_TEST(test_load_slot_payload_rejects_record_identity_mismatch);
     RUN_TEST(test_load_slot_payload_rejects_version_value_changed_since_scan);

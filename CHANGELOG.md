@@ -36,8 +36,9 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   - `StateStoreKey` portseitig auf 1..15 Bytes aus `[A-Za-z0-9_.-]` begrenzt,
     eigener Status `InvalidCharacter` (Befund 1)
   - Slot-Scan haelt hoechstens einen Recordpuffer (Metadaten-Scan plus
-    `loadSlotPayload` mit voller Neuvalidierung); Spitzenspeicher unabhaengig
-    von der Slotzahl (Befund 2)
+    `loadSlotPayload` mit voller Neuvalidierung); kein Wachstum mit
+    `Slotzahl * Payloadgroesse`, Metadatenwachstum durch maximal acht Slots pro
+    Scan begrenzt (Befund 2)
   - `nextSlotRoundRobin` lehnt `lastWrittenSlot >= slotCount` als
     `InvalidLastSlot` ab statt still per Modulo zu normalisieren (Befund 3)
   - `ChangeOrigin`/`ChangeOperation` aus dem Envelope in die Payload verschoben
@@ -111,8 +112,10 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   nachweislich unerreichbaren Success-Fallback in den internen
   Statusmappern) und keine Payload im Ergebnis mehr materialisiert
   (Metadaten-Scan; `loadSlotPayload` laedt eine gewaehlte Payload spaeter mit
-  voller Neuvalidierung) - weiterhin ohne konkrete Slotzahlen oder
-  Root-/Manifestbedeutung;
+  voller Neuvalidierung), mit zentraler anwendungsneutraler Obergrenze von acht
+  Slots pro Scan und typisiertem `SlotScanStatus::SlotLimitExceeded` vor jedem
+  Store-Read oder jeder Ergebnisallokation - weiterhin ohne fachliche
+  Slotzahlen oder Root-/Manifestbedeutung;
   typisierte `nextSlotRoundRobin`-Rotation (`NextSlotStatus::Success`/
   `InvalidSlotCount`/`InvalidLastSlot` mit `std::optional<SlotId>`), die eine
   ungueltige Slotanzahl und ein `lastWrittenSlot >= slotCount` typisiert und

@@ -8,6 +8,7 @@
 
 #include "state_store.hpp"
 #include "state_store_key.hpp"
+#include "storage_slot_limits.hpp"
 #include "storage_types.hpp"
 
 // Generische, rein technische Slot- und Kandidatenmechanik. Kennt keine
@@ -61,7 +62,19 @@ struct SlotIssue {
     SlotIssueKind kind;
 };
 
+enum class SlotScanStatus : uint8_t {
+    Success,
+    // Der Aufrufer hat mehr als
+    // `storage_slot_limits::kMaximumTechnicalSlotsPerScan` Schluessel
+    // uebergeben. Der Store wurde nicht gelesen und beide Ergebnislisten sind
+    // leer. Nicht mit `SlotIssueKind::CapacityError` verwechseln: dieses
+    // bezeichnet ausschliesslich den Lesefehler eines tatsaechlich gescannten
+    // Slots.
+    SlotLimitExceeded,
+};
+
 struct SlotScanResult {
+    SlotScanStatus status{SlotScanStatus::SlotLimitExceeded};
     // Technisch gueltige Kandidaten, absteigend nach `versionValue` sortiert
     // (Tiebreak: aufsteigende Slot-ID, da `std::sort` nicht stabil ist).
     std::vector<SlotCandidate> candidates;
@@ -75,9 +88,11 @@ struct SlotScanResult {
 // Liest jeden `slotKeys`-Eintrag und validiert dessen Envelope rein
 // technisch, ohne die Payload zu materialisieren (`decodeEnvelopeMetadata()`).
 // Zu keinem Zeitpunkt liegt mehr als ein Recordpuffer im Speicher, und das
-// Ergebnis enthaelt nur Kandidatenmetadaten - der Spitzenspeicherbedarf ist
-// damit unabhaengig von Slotanzahl und Kandidatenzahl. Die Payload eines
-// gewaehlten Kandidaten wird erst spaeter ueber `loadSlotPayload()` geladen.
+// Ergebnis enthaelt nur Kandidatenmetadaten. Es waechst daher nicht mit
+// `Slotzahl * Payloadgroesse`; sein Metadatenwachstum ist durch
+// `storage_slot_limits::kMaximumTechnicalSlotsPerScan` begrenzt. Die Payload
+// eines gewaehlten Kandidaten wird erst spaeter ueber `loadSlotPayload()`
+// geladen.
 //
 // Jeder Slot, der nicht zu einem technisch gueltigen und passenden Kandidaten
 // fuehrt, erscheint mit einer eindeutigen `SlotIssue` im Ergebnis - nichts
@@ -85,11 +100,10 @@ struct SlotScanResult {
 // behandelt. Kennt keine Bootstrap-, Root- oder konkrete Recovery-Logik; das
 // bleibt Aufgabe der aufrufenden Anwendung.
 //
-// Vorbedingung: `slotKeys.size() <= UINT32_MAX`, da jeder Index als `SlotId`
-// (`uint32_t`-getaggt) dargestellt wird. Realistische Slotzahlen sind sehr
-// klein (siehe docs/CONFIGURATION_PERSISTENCE.md); ein Aufruf mit mehr als
-// `UINT32_MAX` Eintraegen ist technisch nicht sinnvoll unterstuetzbar und
-// liegt ausserhalb des Vertrags dieser Funktion.
+// Mehr als `storage_slot_limits::kMaximumTechnicalSlotsPerScan` Eintraege
+// werden vor jedem Store-Read und vor jeder dynamischen Ergebnisallokation mit
+// `SlotScanStatus::SlotLimitExceeded` abgelehnt. Es gibt keinen Teilscan und
+// keine stillschweigende Begrenzung; `candidates` und `issues` bleiben leer.
 [[nodiscard]] SlotScanResult scanTechnicalSlotCandidates(
     const IStateStore& store, const std::vector<StateStoreKey>& slotKeys,
     RecordTypeId expectedRecordType, uint32_t expectedSchemaVersion,

@@ -831,6 +831,12 @@ Anwendung. Sie kennt keine konkreten Dokumente, Manifestbedeutungen,
 Factorywerte, Programme, Pending-Regeln, Authentifizierungsbedeutung, Preview,
 Lauf oder Aktivierungswirkung.
 
+Ein einzelner technischer Kandidatenscan verarbeitet hoechstens acht Slots
+derselben Recordgruppe. Die aktuell spezifizierten Gruppen benoetigen
+hoechstens vier Slots; die verdoppelte technische Obergrenze laesst eine kleine
+Reserve fuer dieselbe Plattformabstraktion, ohne eine unbeschraenkte oder
+spekulative Slotplattform zu schaffen.
+
 `fermentation_app` besitzt konkrete Dokumente, Schemas, IDs, Schluessel,
 Manifest-, Root-, Bootstrap- und Intentbedeutung, Graphvalidierung,
 ProgramCatalog, Preview, Pending, Secret-Manifeste, Migration, Boot/Recovery,
@@ -862,6 +868,13 @@ dafuer die notwendige, aber fuer sich allein schwaechere Voraussetzung:
 hoechstens ein zusaetzlicher, neu aufgebauter vollstaendiger Recordpuffer pro
 Encode-Aufruf, veroeffentlicht per `swap()` ohne Vollkopie - siehe die
 Praezisierung unten im Abschnitt zu Issue #54.
+
+Der technische Slot-Scan waechst nicht mit `Slotzahl * Payloadgroesse`, weil er
+keine Payload im Ergebnis haelt und waehrend der Iteration nur einen
+Recordpuffer liest. Seine Kandidaten- und Diagnosemetadaten wachsen weiterhin
+mit der tatsaechlich gescannten Slotzahl, sind aber durch die verbindliche
+Obergrenze von acht Slots endlich begrenzt. Das ist keine absolute
+Unabhaengigkeit von der Slotzahl.
 
 Beide ESP32-Produktionsprofile muessen je Teilissue bauen. Base-SHA und PR-Head
 werden mit identischer Toolchain fuer statisches RAM, Flash, `firmware.bin` und
@@ -943,12 +956,14 @@ abhaengige GitHub-Issues, Agent-Auftraege, Branches und kleine PRs angelegt:
 Umgesetzt mit Issue #54 (`lib/device_platform/src/storage_types.hpp`,
 `byte_buffer.hpp`, `big_endian_codec.hpp`, `binary64_codec.hpp`,
 `checked_size.hpp`, `crc32.hpp`/`.cpp`, `storage_envelope.hpp`/`.cpp`,
-`storage_slot_candidates.hpp`/`.cpp`, `secure_random_source.hpp`,
+`storage_slot_candidates.hpp`/`.cpp`, `storage_slot_limits.hpp`,
+`secure_random_source.hpp`,
 `state_store_key.hpp`, das erweiterte `state_store.hpp`; Testadapter in
 `lib/device_platform_test_support/src/simulated_persistent_state_store.hpp`/
-`.cpp`, `mock_secure_random_source.hpp`/`.cpp`). Bewusst noch ohne konkrete
+`.cpp`, `mock_secure_random_source.hpp`/`.cpp`). Bewusst noch ohne fachliche
 Slotzahlen, Root-/Manifestbedeutung oder Schutzmengen - das bleibt Paket C
-(#56).
+(#56). Die anwendungsneutrale Fundamentschicht begrenzt lediglich jeden
+einzelnen technischen Scan auf hoechstens acht Slots.
 
 `SimulatedPersistentStateStore` modelliert die drei geforderten Zustands-
 bereiche explizit als getrennte private Datenhaltung: dauerhaft `committed_`,
@@ -995,9 +1010,11 @@ dabei nie wie `NotFound` behandelt, damit spaeterer Bootstrap-/Recovery-Code
 fabrikleeren von beschaedigtem Speicher unterscheiden kann. Der Scan
 dekodiert nur die Metadaten (`decodeEnvelopeMetadata`, CRC direkt ueber den
 Eingabepuffer ohne die Payload zu materialisieren) und traegt keine Payloads
-im Ergebnis: der Spitzenspeicherbedarf ist unabhaengig von Slot- und
-Kandidatenzahl, zu keinem Zeitpunkt liegt mehr als ein Recordpuffer im
-Speicher. Die Payload eines gewaehlten Kandidaten wird ueber
+im Ergebnis: der Speicher waechst nicht mit `Slotzahl * Payloadgroesse`, und
+zu keinem Zeitpunkt liegt mehr als ein Recordpuffer im Speicher. Kandidaten-
+und Diagnosemetadaten wachsen mit der gescannten Slotzahl, sind durch die
+Obergrenze von acht aber endlich begrenzt. Die Payload eines gewaehlten
+Kandidaten wird ueber
 `loadSlotPayload` geladen, das CRC, Record-Identitaet und `versionValue`
 gegen den beim Scan gesehenen Wert vollstaendig neu validiert.
 `nextSlotRoundRobin` liefert ein typisiertes `NextSlotResult`
@@ -1086,9 +1103,12 @@ inkrementelle CRC ueber Header und Payload byteidentische Ergebnisse zum
 vormaligen Verkettungspuffer liefert. `scanTechnicalSlotCandidates`
 materialisiert dagegen ueberhaupt keine Payload mehr (nur Metadaten ueber
 `decodeEnvelopeMetadata`); ein Allokationszaehler-Test belegt, dass der
-Spitzenspeicherbedarf bei einem und bei acht Slots vergleichbar bleibt, und
-`loadSlotPayload` laedt die Payload eines gewaehlten Slots erst spaeter mit
-vollstaendiger Neuvalidierung (CRC, Record-Identitaet, `versionValue`).
+Spitzenspeicherbedarf nicht mit `Slotzahl * Payloadgroesse` skaliert. Separate
+Grenztests belegen einen erfolgreichen Scan mit exakt acht Slots sowie die
+typisierte Ablehnung von neun Slots vor jedem Store-Read und jeder dynamischen
+Ergebnisallokation. `loadSlotPayload` laedt die Payload eines gewaehlten Slots
+erst spaeter mit vollstaendiger Neuvalidierung (CRC, Record-Identitaet,
+`versionValue`).
 
 Ein Test mit einem absichtlich vertragsverletzenden Test-Store (der `read()`
 mit `WriteError`/`CommitOutcomeUnknown` oder `write()` mit
@@ -1115,10 +1135,13 @@ One-Shot-Ueberladung `computeCrc32IsoHdlc(const void*, size_t)` wurde entfernt,
 da kein Aufrufer sie noch braucht und ein sinnvoller Sentinel-Fehlerwert fuer
 `uint32_t`-CRCs nicht existiert; `computeCrc32IsoHdlc(const std::string&)`
 bleibt bestehen, da `std::string::data()` nie `nullptr` ist.
-`scanTechnicalSlotCandidates` setzt als dokumentierte Vorbedingung
-`slotKeys.size() <= UINT32_MAX` voraus (jeder Index wird als `SlotId`,
-`uint32_t`-getaggt, dargestellt); realistische Slotzahlen sind so klein, dass
-eine typisierte Laufzeitablehnung unverhaeltnismaessig waere.
+`scanTechnicalSlotCandidates` erzwingt die zentrale anwendungsneutrale Grenze
+`kMaximumTechnicalSlotsPerScan == 8` zu Beginn des Aufrufs. Neun oder mehr
+Schluessel liefern `SlotScanStatus::SlotLimitExceeded`, bevor der Store gelesen
+oder eine Ergebnisliste allokiert wird; Kandidaten und Slot-Issues bleiben leer.
+Ein erfolgreicher Scan ohne Kandidaten bleibt durch `SlotScanStatus::Success`
+eindeutig unterscheidbar. `SlotIssueKind::CapacityError` bezeichnet weiterhin
+ausschliesslich den Kapazitaetsfehler eines tatsaechlich gelesenen Slots.
 
 ### Paket B: Typisierte Konfigurationsdokumente
 
