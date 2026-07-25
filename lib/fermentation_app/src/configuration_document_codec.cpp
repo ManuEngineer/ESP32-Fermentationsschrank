@@ -1,0 +1,468 @@
+#include "configuration_document_codec.hpp"
+
+#include <limits>
+#include <utility>
+
+#include "big_endian_codec.hpp"
+#include "binary64_codec.hpp"
+#include "byte_buffer.hpp"
+#include "configuration_limits.hpp"
+
+namespace fermentation {
+namespace {
+
+using device_platform::ByteReader;
+using device_platform::ByteWriter;
+namespace big_endian = device_platform::big_endian;
+
+bool writeString(ByteWriter& writer, const std::string& value) {
+    if (value.size() > std::numeric_limits<std::uint16_t>::max()) {
+        return false;
+    }
+    return big_endian::writeUint16(writer,
+                                   static_cast<std::uint16_t>(value.size())) &&
+           writer.writeBytes(value.data(), value.size());
+}
+
+bool readString(ByteReader& reader, std::size_t maximumBytes,
+                std::string& out) {
+    std::uint16_t length = 0U;
+    if (!big_endian::readUint16(reader, length) || length > maximumBytes ||
+        length > reader.remaining()) {
+        return false;
+    }
+    std::string candidate(length, '\0');
+    if (!reader.readBytes(candidate.data(), length)) {
+        return false;
+    }
+    out = std::move(candidate);
+    return true;
+}
+
+bool writeOptionalUint32(ByteWriter& writer,
+                         const std::optional<std::uint32_t>& value) {
+    return big_endian::writeOptionalTag(writer, value.has_value()) &&
+           (!value.has_value() || big_endian::writeUint32(writer, *value));
+}
+
+bool readOptionalUint32(ByteReader& reader, std::optional<std::uint32_t>& out) {
+    bool present = false;
+    if (!big_endian::readOptionalTag(reader, present)) {
+        return false;
+    }
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    std::uint32_t value = 0U;
+    if (!big_endian::readUint32(reader, value)) {
+        return false;
+    }
+    out = value;
+    return true;
+}
+
+bool writeOptionalDouble(ByteWriter& writer,
+                         const std::optional<double>& value) {
+    return big_endian::writeOptionalTag(writer, value.has_value()) &&
+           (!value.has_value() ||
+            device_platform::binary64::encode(*value, writer));
+}
+
+bool readOptionalDouble(ByteReader& reader, std::optional<double>& out) {
+    bool present = false;
+    if (!big_endian::readOptionalTag(reader, present)) {
+        return false;
+    }
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    double value = 0.0;
+    if (!device_platform::binary64::decode(reader, value)) {
+        return false;
+    }
+    out = value;
+    return true;
+}
+
+std::uint8_t sensorWireId(SensorPreference value) {
+    switch (value) {
+        case SensorPreference::ProductIfAvailableElseAir:
+            return 1U;
+        case SensorPreference::AirProductOptional:
+            return 2U;
+        case SensorPreference::ProductRequired:
+            return 3U;
+        case SensorPreference::AirOnly:
+            return 4U;
+    }
+    return 0U;
+}
+
+bool readSensor(ByteReader& reader, SensorPreference& out) {
+    std::uint8_t raw = 0U;
+    if (!big_endian::readUint8(reader, raw) || raw < 1U || raw > 4U) {
+        return false;
+    }
+    out = static_cast<SensorPreference>(raw - 1U);
+    return true;
+}
+
+std::uint8_t failureWireId(ProductSensorFailurePolicy value) {
+    switch (value) {
+        case ProductSensorFailurePolicy::FallbackToAirAfterTimeout:
+            return 1U;
+        case ProductSensorFailurePolicy::WaitForUser:
+            return 2U;
+        case ProductSensorFailurePolicy::StopToSafeState:
+            return 3U;
+    }
+    return 0U;
+}
+
+bool readFailure(ByteReader& reader, ProductSensorFailurePolicy& out) {
+    std::uint8_t raw = 0U;
+    if (!big_endian::readUint8(reader, raw) || raw < 1U || raw > 3U) {
+        return false;
+    }
+    out = static_cast<ProductSensorFailurePolicy>(raw - 1U);
+    return true;
+}
+
+std::uint8_t completionWireId(CompletionMode value) {
+    switch (value) {
+        case CompletionMode::FinishWithoutCooling:
+            return 1U;
+        case CompletionMode::CoolThenFinish:
+            return 2U;
+        case CompletionMode::CoolAndHoldForDuration:
+            return 3U;
+        case CompletionMode::CoolAndHoldUntilManualStop:
+            return 4U;
+    }
+    return 0U;
+}
+
+bool readCompletion(ByteReader& reader, CompletionMode& out) {
+    std::uint8_t raw = 0U;
+    if (!big_endian::readUint8(reader, raw) || raw < 1U || raw > 4U) {
+        return false;
+    }
+    out = static_cast<CompletionMode>(raw - 1U);
+    return true;
+}
+
+bool writeProgramIdentityAndFlags(ByteWriter& writer,
+                                  const ProgramDocument& document,
+                                  std::uint8_t sensor, std::uint8_t failure) {
+    const auto& program = document.program;
+    bool ok = big_endian::writeUint32(writer, document.schema.version);
+    ok = ok && big_endian::writeUint64(writer, document.schema.presentFields);
+    ok = ok && writeString(writer, program.id);
+    ok = ok && writeString(writer, program.name);
+    // `notes` besitzt bewusst kein ProgramFieldMask-Bit. Der Katalogcodec
+    // kodiert es unabhaengig von der Feldmaske immer direkt nach dem Namen.
+    ok = ok && writeString(writer, program.notes);
+    ok = ok && big_endian::writeBool(writer, program.builtIn);
+    ok = ok && big_endian::writeBool(writer, program.factoryCatalogEntry);
+    ok = ok && big_endian::writeBool(writer, program.resettable);
+    ok = ok && big_endian::writeBool(writer, program.userDeletable);
+    ok = ok && big_endian::writeBool(writer, program.installed);
+    ok = ok && big_endian::writeBool(writer, program.enabled);
+    ok = ok && big_endian::writeBool(writer, program.preheat);
+    ok = ok && big_endian::writeUint8(writer, sensor);
+    ok = ok && big_endian::writeUint8(writer, failure);
+    return ok && writeOptionalUint32(
+                     writer, program.productSensorFailure.fallbackDelaySeconds);
+}
+
+bool writeProgramStagesAndLimits(ByteWriter& writer,
+                                 const ProgramDocument& document) {
+    const auto& program = document.program;
+    bool ok = big_endian::writeUint8(
+        writer, static_cast<std::uint8_t>(program.fermentationStages.size()));
+    for (const auto& stage : program.fermentationStages) {
+        ok = ok && writeOptionalDouble(writer, stage.targetTemperatureCelsius);
+        ok = ok && writeOptionalUint32(writer, stage.durationMinutes);
+    }
+    ok = ok &&
+         writeOptionalDouble(writer, program.targetQualification.bandCelsius);
+    ok = ok && writeOptionalUint32(writer,
+                                   program.targetQualification.durationMinutes);
+    ok = ok && writeOptionalUint32(writer, program.maximumTargetReachMinutes);
+    if (document.schema.version >= kCurrentProgramSchemaVersion) {
+        ok = ok &&
+             writeOptionalUint32(writer, program.maximumProductWaitMinutes);
+    }
+    return ok;
+}
+
+bool writeProgram(ByteWriter& writer, const ProgramDocument& document) {
+    const auto& program = document.program;
+    const std::uint8_t sensor = sensorWireId(program.sensorPreference);
+    const std::uint8_t failure =
+        failureWireId(program.productSensorFailure.policy);
+    const std::uint8_t completion = completionWireId(program.completion.mode);
+    if (sensor == 0U || failure == 0U || completion == 0U ||
+        program.fermentationStages.size() >
+            std::numeric_limits<std::uint8_t>::max()) {
+        return false;
+    }
+    bool ok = writeProgramIdentityAndFlags(writer, document, sensor, failure) &&
+              writeProgramStagesAndLimits(writer, document);
+    ok = ok && big_endian::writeUint8(writer, completion);
+    ok = ok &&
+         writeOptionalDouble(writer, program.completion.coolingTargetCelsius);
+    ok = ok &&
+         writeOptionalUint32(writer, program.completion.holdDurationMinutes);
+    return ok;
+}
+
+ConfigurationCodecStatus readProgramSchema(ByteReader& reader,
+                                           ProgramDocument& candidate) {
+    if (!big_endian::readUint32(reader, candidate.schema.version) ||
+        !big_endian::readUint64(reader, candidate.schema.presentFields)) {
+        return ConfigurationCodecStatus::Truncated;
+    }
+    ProgramFieldMask knownFields = 0U;
+    ProgramFieldMask requiredFields = 0U;
+    if (candidate.schema.version == kMigratableProgramSchemaVersion) {
+        knownFields = kSchema4RequiredProgramFields;
+        requiredFields = kSchema4RequiredProgramFields;
+    } else if (candidate.schema.version == kCurrentProgramSchemaVersion) {
+        knownFields = kCurrentKnownProgramFields;
+        requiredFields = kCurrentRequiredProgramFields;
+    } else {
+        return ConfigurationCodecStatus::UnsupportedSchema;
+    }
+    if ((candidate.schema.presentFields & ~knownFields) != 0U ||
+        (candidate.schema.presentFields & requiredFields) != requiredFields) {
+        return ConfigurationCodecStatus::InvalidWireValue;
+    }
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationCodecStatus readProgramIdentityAndFlags(
+    ByteReader& reader, ProgramDefinition& program) {
+    using namespace configuration_limits;
+    if (!readString(reader, kMaximumProgramIdBytes, program.id) ||
+        !readString(reader, kMaximumVisibleNameBytes, program.name) ||
+        !readString(reader, kMaximumNotesBytes, program.notes)) {
+        return ConfigurationCodecStatus::Truncated;
+    }
+    bool ok = big_endian::readBool(reader, program.builtIn);
+    ok = ok && big_endian::readBool(reader, program.factoryCatalogEntry);
+    ok = ok && big_endian::readBool(reader, program.resettable);
+    ok = ok && big_endian::readBool(reader, program.userDeletable);
+    ok = ok && big_endian::readBool(reader, program.installed);
+    ok = ok && big_endian::readBool(reader, program.enabled);
+    ok = ok && big_endian::readBool(reader, program.preheat);
+    ok = ok && readSensor(reader, program.sensorPreference);
+    ok = ok && readFailure(reader, program.productSensorFailure.policy);
+    ok = ok && readOptionalUint32(
+                   reader, program.productSensorFailure.fallbackDelaySeconds);
+    return ok ? ConfigurationCodecStatus::Success
+              : ConfigurationCodecStatus::InvalidWireValue;
+}
+
+ConfigurationCodecStatus readProgramStages(ByteReader& reader,
+                                           ProgramDefinition& program) {
+    std::uint8_t stageCount = 0U;
+    if (!big_endian::readUint8(reader, stageCount) || stageCount != 1U) {
+        return ConfigurationCodecStatus::InvalidWireValue;
+    }
+    program.fermentationStages.reserve(stageCount);
+    for (std::uint8_t index = 0U; index < stageCount; ++index) {
+        FermentationStage stage;
+        if (!readOptionalDouble(reader, stage.targetTemperatureCelsius) ||
+            !readOptionalUint32(reader, stage.durationMinutes)) {
+            return ConfigurationCodecStatus::Truncated;
+        }
+        program.fermentationStages.push_back(stage);
+    }
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationCodecStatus readProgramLimitsAndCompletion(
+    ByteReader& reader, std::uint32_t schemaVersion,
+    ProgramDefinition& program) {
+    if (!readOptionalDouble(reader, program.targetQualification.bandCelsius) ||
+        !readOptionalUint32(reader,
+                            program.targetQualification.durationMinutes) ||
+        !readOptionalUint32(reader, program.maximumTargetReachMinutes)) {
+        return ConfigurationCodecStatus::Truncated;
+    }
+    if (schemaVersion >= kCurrentProgramSchemaVersion &&
+        !readOptionalUint32(reader, program.maximumProductWaitMinutes)) {
+        return ConfigurationCodecStatus::Truncated;
+    }
+    if (!readCompletion(reader, program.completion.mode) ||
+        !readOptionalDouble(reader, program.completion.coolingTargetCelsius) ||
+        !readOptionalUint32(reader, program.completion.holdDurationMinutes)) {
+        return ConfigurationCodecStatus::Truncated;
+    }
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationCodecStatus readProgram(ByteReader& reader, ProgramDocument& out) {
+    ProgramDocument candidate;
+    auto status = readProgramSchema(reader, candidate);
+    if (status != ConfigurationCodecStatus::Success) {
+        return status;
+    }
+    auto& program = candidate.program;
+    status = readProgramIdentityAndFlags(reader, program);
+    if (status == ConfigurationCodecStatus::Success) {
+        status = readProgramStages(reader, program);
+    }
+    if (status == ConfigurationCodecStatus::Success) {
+        status = readProgramLimitsAndCompletion(
+            reader, candidate.schema.version, program);
+    }
+    if (status != ConfigurationCodecStatus::Success) {
+        return status;
+    }
+    if (candidate.schema.version == kMigratableProgramSchemaVersion) {
+        auto migrated = migrateProgramToCurrentSchema(candidate);
+        if (migrated.status != MigrationStatus::Migrated ||
+            !migrated.document.has_value()) {
+            return ConfigurationCodecStatus::MigrationFailed;
+        }
+        candidate = std::move(*migrated.document);
+    }
+    out = std::move(candidate);
+    return ConfigurationCodecStatus::Success;
+}
+
+}  // namespace
+
+ConfigurationCodecStatus encodeUserConfigurationPayload(
+    const UserConfiguration& configuration,
+    const device_platform::ITimeZoneResolver& resolver, std::string& out) {
+    if (validateUserConfiguration(configuration, resolver).status !=
+        UserConfigurationStatus::Success) {
+        return ConfigurationCodecStatus::InvalidDocument;
+    }
+    ByteWriter writer(
+        configuration_limits::kMaximumUserConfigurationPayloadBytes);
+    if (!writeString(writer, configuration.displayLanguageId) ||
+        !writeString(writer, configuration.timeZoneId) ||
+        !writeString(writer, configuration.deviceName)) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    auto encoded = writer.takeBytes();
+    out.swap(encoded);
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationDecodeResult<UserConfiguration> decodeUserConfigurationPayload(
+    std::uint32_t schemaVersion, const std::string& payload,
+    const device_platform::ITimeZoneResolver& resolver) {
+    if (schemaVersion !=
+        static_cast<std::uint32_t>(UserConfigurationSchema::Version1)) {
+        return {ConfigurationCodecStatus::UnsupportedSchema, std::nullopt};
+    }
+    if (payload.size() >
+        configuration_limits::kMaximumUserConfigurationPayloadBytes) {
+        return {ConfigurationCodecStatus::CapacityExceeded, std::nullopt};
+    }
+    ByteReader reader(payload);
+    UserConfiguration candidate;
+    if (!readString(reader, configuration_limits::kMaximumLanguageIdBytes,
+                    candidate.displayLanguageId) ||
+        !readString(reader, configuration_limits::kMaximumTimeZoneIdBytes,
+                    candidate.timeZoneId) ||
+        !readString(reader, configuration_limits::kMaximumVisibleNameBytes,
+                    candidate.deviceName)) {
+        return {ConfigurationCodecStatus::Truncated, std::nullopt};
+    }
+    if (reader.remaining() != 0U) {
+        return {ConfigurationCodecStatus::TrailingBytes, std::nullopt};
+    }
+    if (validateUserConfiguration(candidate, resolver).status !=
+        UserConfigurationStatus::Success) {
+        return {ConfigurationCodecStatus::InvalidDocument, std::nullopt};
+    }
+    return {ConfigurationCodecStatus::Success, std::move(candidate)};
+}
+
+ConfigurationCodecStatus encodeServiceConfigurationPayload(
+    const ServiceConfiguration& /*configuration*/, std::string& out) {
+    std::string encoded;
+    out.swap(encoded);
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationDecodeResult<ServiceConfiguration>
+decodeServiceConfigurationPayload(std::uint32_t schemaVersion,
+                                  const std::string& payload) {
+    if (schemaVersion !=
+        static_cast<std::uint32_t>(ServiceConfigurationSchema::Version1)) {
+        return {ConfigurationCodecStatus::UnsupportedSchema, std::nullopt};
+    }
+    if (!payload.empty()) {
+        return {ConfigurationCodecStatus::TrailingBytes, std::nullopt};
+    }
+    return {ConfigurationCodecStatus::Success, ServiceConfiguration{}};
+}
+
+ConfigurationCodecStatus encodeProgramCatalogPayload(
+    const ProgramCatalog& catalog, std::string& out) {
+    if (validateProgramCatalog(catalog) != ProgramCatalogStatus::Success) {
+        return ConfigurationCodecStatus::InvalidDocument;
+    }
+    ByteWriter writer(configuration_limits::kMaximumProgramCatalogPayloadBytes);
+    if (!big_endian::writeUint8(
+            writer, static_cast<std::uint8_t>(catalog.programs.size()))) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    for (const auto& document : catalog.programs) {
+        if (!writeProgram(writer, document)) {
+            return ConfigurationCodecStatus::CapacityExceeded;
+        }
+    }
+    auto encoded = writer.takeBytes();
+    out.swap(encoded);
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationDecodeResult<ProgramCatalog> decodeProgramCatalogPayload(
+    std::uint32_t schemaVersion, const std::string& payload) {
+    if (schemaVersion !=
+        static_cast<std::uint32_t>(ProgramCatalogSchema::Version1)) {
+        return {ConfigurationCodecStatus::UnsupportedSchema, std::nullopt};
+    }
+    if (payload.size() >
+        configuration_limits::kMaximumProgramCatalogPayloadBytes) {
+        return {ConfigurationCodecStatus::CapacityExceeded, std::nullopt};
+    }
+    ByteReader reader(payload);
+    std::uint8_t count = 0U;
+    if (!big_endian::readUint8(reader, count)) {
+        return {ConfigurationCodecStatus::Truncated, std::nullopt};
+    }
+    if (count < configuration_limits::kFactoryProgramCount ||
+        count > configuration_limits::kMaximumProgramCount) {
+        return {ConfigurationCodecStatus::InvalidWireValue, std::nullopt};
+    }
+    ProgramCatalog candidate;
+    candidate.programs.reserve(count);
+    for (std::uint8_t index = 0U; index < count; ++index) {
+        ProgramDocument document;
+        const auto status = readProgram(reader, document);
+        if (status != ConfigurationCodecStatus::Success) {
+            return {status, std::nullopt};
+        }
+        candidate.programs.push_back(std::move(document));
+    }
+    if (reader.remaining() != 0U) {
+        return {ConfigurationCodecStatus::TrailingBytes, std::nullopt};
+    }
+    if (validateProgramCatalog(candidate) != ProgramCatalogStatus::Success) {
+        return {ConfigurationCodecStatus::InvalidDocument, std::nullopt};
+    }
+    return {ConfigurationCodecStatus::Success, std::move(candidate)};
+}
+
+}  // namespace fermentation
