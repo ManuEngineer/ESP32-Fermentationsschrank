@@ -51,6 +51,7 @@ Zentrale Einstiege:
 - `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`
 - `docs/CI_AND_QUALITY_GATES.md`
 - `lib/README.md`
+- `references/LINKS.md`
 
 ## Architekturregeln
 

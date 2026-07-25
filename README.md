@@ -215,6 +215,8 @@ Hardware und offene Punkte:
 
 - [`docs/HARDWARE.md`](docs/HARDWARE.md)
 - [`docs/OPEN_POINTS.md`](docs/OPEN_POINTS.md)
+- [`references/LINKS.md`](references/LINKS.md) – Hardwarequellen und lokal
+  archivierte Datenblaetter
 - [`config/hardware.example.yaml`](config/hardware.example.yaml)
 - [`config/pins.example.yaml`](config/pins.example.yaml)
 
