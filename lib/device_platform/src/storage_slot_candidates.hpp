@@ -139,6 +139,11 @@ enum class NextSlotStatus : uint8_t {
     // eigenen Status waere eine erfolgreiche Rotation zu Slot 0 nicht von
     // einer ungueltigen Slotanzahl unterscheidbar.
     InvalidSlotCount,
+    // `lastWrittenSlot` liegt ausserhalb des gueltigen Bereichs
+    // (`>= slotCount`), z. B. aus korruptem Speicher. Wird beobachtbar
+    // abgelehnt statt still per Modulo in einen gueltigen Wert verwandelt -
+    // und ist von `InvalidSlotCount` unterscheidbar.
+    InvalidLastSlot,
 };
 
 struct NextSlotResult {
@@ -148,15 +153,15 @@ struct NextSlotResult {
 };
 
 // Rein technische Rotation zwischen `slotCount` Slots (naechster Index nach
-// `lastWrittenSlot`, modulo `slotCount`). Kennt keine Schutzmenge; die
-// aufrufende Anwendung muss vor dem Schreiben selbst pruefen, dass der
-// gewaehlte Slot nicht Teil ihrer aktuellen Schutzmenge ist. `slotCount == 0`
-// oder ein technisch nicht darstellbares `slotCount > UINT32_MAX` liefern
-// `InvalidSlotCount` ohne Slot - nie einen scheinbar gueltigen `SlotId(0)`.
-// Ueberlaufsicher unabhaengig von der `size_t`-Breite der Zielplattform:
-// `lastWrittenSlot` wird zuerst modulo `slotCount` reduziert, bevor eins
-// addiert wird, damit `lastWrittenSlot.value() + 1` nie in der Naehe von
-// `UINT32_MAX` ueberlaufen kann.
+// `lastWrittenSlot`). Kennt keine Schutzmenge; die aufrufende Anwendung muss
+// vor dem Schreiben selbst pruefen, dass der gewaehlte Slot nicht Teil ihrer
+// aktuellen Schutzmenge ist. `slotCount == 0` oder ein technisch nicht
+// darstellbares `slotCount > UINT32_MAX` liefern `InvalidSlotCount`; ein
+// `lastWrittenSlot >= slotCount` liefert `InvalidLastSlot` - beide ohne Slot,
+// nie einen scheinbar gueltigen `SlotId(0)`. Bei gueltigen Eingaben gilt
+// `lastWrittenSlot < slotCount <= UINT32_MAX`, daher kann
+// `lastWrittenSlot.value() + 1` unabhaengig von der `size_t`-Breite der
+// Zielplattform nie ueberlaufen.
 [[nodiscard]] NextSlotResult nextSlotRoundRobin(SlotId lastWrittenSlot,
                                                 std::size_t slotCount);
 

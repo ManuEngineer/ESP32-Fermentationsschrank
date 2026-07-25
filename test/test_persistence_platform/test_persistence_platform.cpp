@@ -836,28 +836,59 @@ void test_next_slot_round_robin_wraps_and_handles_zero_slots() {
     TEST_ASSERT_FALSE(zeroSlots.slot.has_value());
 }
 
-// `lastWrittenSlot` nahe UINT32_MAX darf `lastWrittenSlot.value() + 1` nicht
+// Bei maximalem gueltigem `slotCount` darf der letzte gueltige
+// `lastWrittenSlot` (`slotCount - 1`) `lastWrittenSlot.value() + 1` nicht
 // ueberlaufen lassen (relevant auf 32-Bit-`size_t`-Zielplattformen wie dem
 // ESP32; auf dem 64-Bit-Testhost waere ein naiver Cast zufaellig unauffaellig
 // gewesen).
 void test_next_slot_round_robin_does_not_overflow_near_uint32_max() {
     using device_platform::NextSlotStatus;
 
-    // UINT32_MAX % 4 == 3, naechster Slot ist damit 0 - kein stiller
-    // Ueberlauf von `lastWrittenSlot.value() + 1` auf 32-Bit-`size_t`.
-    const auto nearMax =
-        device_platform::SlotId(std::numeric_limits<uint32_t>::max());
-    const auto result1 = device_platform::nextSlotRoundRobin(nearMax, 4U);
-    TEST_ASSERT_TRUE(result1.status == NextSlotStatus::Success);
-    TEST_ASSERT_EQUAL_UINT32(0U, result1.slot->value());
+    const auto slotCount =
+        static_cast<std::size_t>(std::numeric_limits<uint32_t>::max());
 
-    // UINT32_MAX % 5 == 0 (4294967295 ist durch 5 teilbar), naechster Slot
-    // ist damit 1.
-    const auto atMax =
-        device_platform::SlotId(std::numeric_limits<uint32_t>::max());
-    const auto result2 = device_platform::nextSlotRoundRobin(atMax, 5U);
-    TEST_ASSERT_TRUE(result2.status == NextSlotStatus::Success);
-    TEST_ASSERT_EQUAL_UINT32(1U, result2.slot->value());
+    // Letzter gueltiger Index (`slotCount - 1`); naechster Slot rotiert ohne
+    // Ueberlauf von `lastWrittenSlot.value() + 1` zu 0.
+    const auto lastValid =
+        device_platform::SlotId(std::numeric_limits<uint32_t>::max() - 1U);
+    const auto wrap = device_platform::nextSlotRoundRobin(lastValid, slotCount);
+    TEST_ASSERT_TRUE(wrap.status == NextSlotStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(0U, wrap.slot->value());
+
+    // Ein Index zwei unter dem Maximum rotiert regulaer zu `Maximum - 1`.
+    const auto lastValidMinusOne =
+        device_platform::SlotId(std::numeric_limits<uint32_t>::max() - 2U);
+    const auto step =
+        device_platform::nextSlotRoundRobin(lastValidMinusOne, slotCount);
+    TEST_ASSERT_TRUE(step.status == NextSlotStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(std::numeric_limits<uint32_t>::max() - 1U,
+                             step.slot->value());
+}
+
+// Ein `lastWrittenSlot` ausserhalb des gueltigen Bereichs (`>= slotCount`,
+// z. B. aus korruptem Speicher) wird als `InvalidLastSlot` abgelehnt statt
+// still per Modulo normalisiert - und ist von `InvalidSlotCount`
+// unterscheidbar.
+void test_next_slot_round_robin_rejects_last_slot_out_of_range() {
+    using device_platform::NextSlotStatus;
+
+    // Gleich der Slotanzahl ist bereits ausserhalb (gueltig sind 0..count-1).
+    const auto equalToCount =
+        device_platform::nextSlotRoundRobin(device_platform::SlotId(4U), 4U);
+    TEST_ASSERT_TRUE(equalToCount.status == NextSlotStatus::InvalidLastSlot);
+    TEST_ASSERT_FALSE(equalToCount.slot.has_value());
+
+    // Deutlich ausserhalb.
+    const auto farOutside = device_platform::nextSlotRoundRobin(
+        device_platform::SlotId(std::numeric_limits<uint32_t>::max()), 4U);
+    TEST_ASSERT_TRUE(farOutside.status == NextSlotStatus::InvalidLastSlot);
+    TEST_ASSERT_FALSE(farOutside.slot.has_value());
+
+    // Von einer ungueltigen Slotanzahl unterscheidbar.
+    const auto invalidCount =
+        device_platform::nextSlotRoundRobin(device_platform::SlotId(0U), 0U);
+    TEST_ASSERT_TRUE(invalidCount.status == NextSlotStatus::InvalidSlotCount);
+    TEST_ASSERT_TRUE(equalToCount.status != invalidCount.status);
 }
 
 // Ein technisch nicht darstellbares `slotCount` (> UINT32_MAX) wird typisiert
@@ -1061,6 +1092,7 @@ int main() {
     RUN_TEST(test_load_slot_payload_rejects_crc_corruption);
     RUN_TEST(test_next_slot_round_robin_wraps_and_handles_zero_slots);
     RUN_TEST(test_next_slot_round_robin_does_not_overflow_near_uint32_max);
+    RUN_TEST(test_next_slot_round_robin_rejects_last_slot_out_of_range);
     RUN_TEST(test_next_slot_round_robin_rejects_slot_count_above_uint32_max);
     RUN_TEST(
         test_next_slot_round_robin_success_at_slot_zero_is_not_confusable_with_invalid_slot_count);

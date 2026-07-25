@@ -168,13 +168,19 @@ NextSlotResult nextSlotRoundRobin(SlotId lastWrittenSlot,
         return NextSlotResult{NextSlotStatus::InvalidSlotCount, std::nullopt};
     }
     const auto slotCount32 = static_cast<uint32_t>(slotCount);
-    // Zuerst modulo reduzieren, dann eins addieren: `normalized` ist immer
-    // `< slotCount32 <= UINT32_MAX`, daher kann `normalized + 1` nie
-    // ueberlaufen - unabhaengig davon, ob `size_t` auf der Zielplattform 32
-    // oder 64 Bit breit ist.
-    const uint32_t normalized = lastWrittenSlot.value() % slotCount32;
-    const uint32_t next =
-        (normalized + 1U == slotCount32) ? 0U : normalized + 1U;
+    // Ein `lastWrittenSlot` ausserhalb des gueltigen Bereichs (>= slotCount,
+    // z. B. aus korruptem Speicher) wird beobachtbar abgelehnt statt still per
+    // Modulo in einen gueltigen Wert verwandelt - konsistent mit
+    // `checkedIncrement`, das den reservierten Wert 0 bewusst ablehnt.
+    if (lastWrittenSlot.value() >= slotCount32) {
+        return NextSlotResult{NextSlotStatus::InvalidLastSlot, std::nullopt};
+    }
+    // Hier gilt `lastWrittenSlot.value() < slotCount32 <= UINT32_MAX`, daher
+    // ueberlaeuft `lastWrittenSlot.value() + 1` nie - unabhaengig von der
+    // `size_t`-Breite der Zielplattform.
+    const uint32_t next = (lastWrittenSlot.value() + 1U == slotCount32)
+                              ? 0U
+                              : lastWrittenSlot.value() + 1U;
     return NextSlotResult{NextSlotStatus::Success, SlotId(next)};
 }
 
