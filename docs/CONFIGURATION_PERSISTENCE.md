@@ -471,6 +471,25 @@ ADR-016-Schluessel lauten je Dokumenttyp `uc0`..`uc3`, `sc0`..`sc3` und
 Rotation, Referenzschutz, Manifeste, Roots und Commitlogik folgen nicht in
 Issue #55.
 
+Der ProgramCatalog-Encoder berechnet die exakte kanonische Payloadgroesse vor
+der Writer-Konstruktion mit ueberlaufsicheren `checkedAddSize`-Schritten fuer
+dieselben Felder und Schema-4-/Schema-5-Zweige wie der Encoder. Der
+`ByteWriter` reserviert nur diese berechnete Groesse; nach dem Schreiben muss
+seine tatsaechliche Groesse exakt damit uebereinstimmen. Eine Abweichung oder
+eine Groesse ueber 32.768 Byte wird vor der Veroeffentlichung abgelehnt und
+laesst `out` byteidentisch unveraendert.
+
+Dies ist keine absolute Ein-Puffer-Garantie: Das vollstaendige
+`ProgramCatalog`-Modell bleibt waehrend der Kodierung vorhanden. Der Encoder
+legt hoechstens einen zusaetzlichen, exakt dimensionierten neuen
+Payloadpuffer an. Enthaelt `out` bereits einen alten Puffer, besteht auch
+dieser bis zum abschliessenden erfolgreichen `swap()` parallel. Beim
+Dekodieren bestehen Eingabepayload und der schrittweise aufgebaute
+ProgramCatalog-Kandidat nebeneinander; eine Copy-Migration haelt entsprechend
+Quellmodell und Migrationskandidat. Die nativen Allokationstests erkennen
+Regressionen dieser relativen Vertraege, belegen aber keine reale
+ESP32-Heapreserve.
+
 ## Revisionsplaetze, kanonische Roots und Referenzschutz
 
 ### Physische Slots

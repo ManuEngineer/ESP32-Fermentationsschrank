@@ -59,9 +59,13 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   Schema-/Revisionstypen und Copy-Migration ohne Teilwirkung. Der
   ProgramCatalog verwendet das vorhandene ProgramDocument-Schema 5 samt
   bestehender Migration 4 nach 5; Notizen werden ohne neues Feldmaskenbit als
-  ausdrueckliches Katalogfeld kodiert. Native Allokationsregressionstests
-  begrenzen versehentliche vollstaendige Zusatzkopien grosser Kataloge, ohne
-  eine reale ESP32-Heapgarantie zu behaupten.
+  ausdrueckliches Katalogfeld kodiert. Explizite Enum-Switches in beiden
+  Richtungen entkoppeln die stabilen Wire-IDs von nativen Enumordinalwerten.
+  Der ProgramCatalog-Encoder berechnet seine kanonische Payloadgroesse
+  ueberlaufsicher vorab und reserviert den Writer exakt statt pauschal mit
+  32.768 Byte. Native Allokationsregressionstests unterscheiden Katalogmodell,
+  alten Ausgabepuffer, neuen Payloadpuffer und Migrationskandidaten, ohne eine
+  reale ESP32-Heapgarantie zu behaupten.
 
 - Anwendungsneutrale Plattformpersistenz und Wireformat fuer Issue #54
   (Paket A von #16, Closes #54): begrenztes binaersicheres `IStateStore` mit

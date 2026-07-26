@@ -6,9 +6,122 @@
 #include "big_endian_codec.hpp"
 #include "binary64_codec.hpp"
 #include "byte_buffer.hpp"
+#include "checked_size.hpp"
+#include "configuration_document_codec_internal.hpp"
 #include "configuration_limits.hpp"
 
 namespace fermentation {
+namespace configuration_codec_internal {
+
+bool sensorPreferenceToWireId(SensorPreference value, std::uint8_t& out) {
+    switch (value) {
+        case SensorPreference::ProductIfAvailableElseAir:
+            out = 1U;
+            return true;
+        case SensorPreference::AirProductOptional:
+            out = 2U;
+            return true;
+        case SensorPreference::ProductRequired:
+            out = 3U;
+            return true;
+        case SensorPreference::AirOnly:
+            out = 4U;
+            return true;
+    }
+    return false;
+}
+
+bool sensorPreferenceFromWireId(std::uint8_t wireId, SensorPreference& out) {
+    switch (wireId) {
+        case 1U:
+            out = SensorPreference::ProductIfAvailableElseAir;
+            return true;
+        case 2U:
+            out = SensorPreference::AirProductOptional;
+            return true;
+        case 3U:
+            out = SensorPreference::ProductRequired;
+            return true;
+        case 4U:
+            out = SensorPreference::AirOnly;
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool productSensorFailurePolicyToWireId(ProductSensorFailurePolicy value,
+                                        std::uint8_t& out) {
+    switch (value) {
+        case ProductSensorFailurePolicy::FallbackToAirAfterTimeout:
+            out = 1U;
+            return true;
+        case ProductSensorFailurePolicy::WaitForUser:
+            out = 2U;
+            return true;
+        case ProductSensorFailurePolicy::StopToSafeState:
+            out = 3U;
+            return true;
+    }
+    return false;
+}
+
+bool productSensorFailurePolicyFromWireId(std::uint8_t wireId,
+                                          ProductSensorFailurePolicy& out) {
+    switch (wireId) {
+        case 1U:
+            out = ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+            return true;
+        case 2U:
+            out = ProductSensorFailurePolicy::WaitForUser;
+            return true;
+        case 3U:
+            out = ProductSensorFailurePolicy::StopToSafeState;
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool completionModeToWireId(CompletionMode value, std::uint8_t& out) {
+    switch (value) {
+        case CompletionMode::FinishWithoutCooling:
+            out = 1U;
+            return true;
+        case CompletionMode::CoolThenFinish:
+            out = 2U;
+            return true;
+        case CompletionMode::CoolAndHoldForDuration:
+            out = 3U;
+            return true;
+        case CompletionMode::CoolAndHoldUntilManualStop:
+            out = 4U;
+            return true;
+    }
+    return false;
+}
+
+bool completionModeFromWireId(std::uint8_t wireId, CompletionMode& out) {
+    switch (wireId) {
+        case 1U:
+            out = CompletionMode::FinishWithoutCooling;
+            return true;
+        case 2U:
+            out = CompletionMode::CoolThenFinish;
+            return true;
+        case 3U:
+            out = CompletionMode::CoolAndHoldForDuration;
+            return true;
+        case 4U:
+            out = CompletionMode::CoolAndHoldUntilManualStop;
+            return true;
+        default:
+            return false;
+    }
+}
+
+}  // namespace configuration_codec_internal
+
 namespace {
 
 using device_platform::ByteReader;
@@ -86,71 +199,23 @@ bool readOptionalDouble(ByteReader& reader, std::optional<double>& out) {
     return true;
 }
 
-std::uint8_t sensorWireId(SensorPreference value) {
-    switch (value) {
-        case SensorPreference::ProductIfAvailableElseAir:
-            return 1U;
-        case SensorPreference::AirProductOptional:
-            return 2U;
-        case SensorPreference::ProductRequired:
-            return 3U;
-        case SensorPreference::AirOnly:
-            return 4U;
-    }
-    return 0U;
-}
-
 bool readSensor(ByteReader& reader, SensorPreference& out) {
     std::uint8_t raw = 0U;
-    if (!big_endian::readUint8(reader, raw) || raw < 1U || raw > 4U) {
-        return false;
-    }
-    out = static_cast<SensorPreference>(raw - 1U);
-    return true;
-}
-
-std::uint8_t failureWireId(ProductSensorFailurePolicy value) {
-    switch (value) {
-        case ProductSensorFailurePolicy::FallbackToAirAfterTimeout:
-            return 1U;
-        case ProductSensorFailurePolicy::WaitForUser:
-            return 2U;
-        case ProductSensorFailurePolicy::StopToSafeState:
-            return 3U;
-    }
-    return 0U;
+    return big_endian::readUint8(reader, raw) &&
+           configuration_codec_internal::sensorPreferenceFromWireId(raw, out);
 }
 
 bool readFailure(ByteReader& reader, ProductSensorFailurePolicy& out) {
     std::uint8_t raw = 0U;
-    if (!big_endian::readUint8(reader, raw) || raw < 1U || raw > 3U) {
-        return false;
-    }
-    out = static_cast<ProductSensorFailurePolicy>(raw - 1U);
-    return true;
-}
-
-std::uint8_t completionWireId(CompletionMode value) {
-    switch (value) {
-        case CompletionMode::FinishWithoutCooling:
-            return 1U;
-        case CompletionMode::CoolThenFinish:
-            return 2U;
-        case CompletionMode::CoolAndHoldForDuration:
-            return 3U;
-        case CompletionMode::CoolAndHoldUntilManualStop:
-            return 4U;
-    }
-    return 0U;
+    return big_endian::readUint8(reader, raw) &&
+           configuration_codec_internal::productSensorFailurePolicyFromWireId(
+               raw, out);
 }
 
 bool readCompletion(ByteReader& reader, CompletionMode& out) {
     std::uint8_t raw = 0U;
-    if (!big_endian::readUint8(reader, raw) || raw < 1U || raw > 4U) {
-        return false;
-    }
-    out = static_cast<CompletionMode>(raw - 1U);
-    return true;
+    return big_endian::readUint8(reader, raw) &&
+           configuration_codec_internal::completionModeFromWireId(raw, out);
 }
 
 bool writeProgramIdentityAndFlags(ByteWriter& writer,
@@ -200,11 +265,15 @@ bool writeProgramStagesAndLimits(ByteWriter& writer,
 
 bool writeProgram(ByteWriter& writer, const ProgramDocument& document) {
     const auto& program = document.program;
-    const std::uint8_t sensor = sensorWireId(program.sensorPreference);
-    const std::uint8_t failure =
-        failureWireId(program.productSensorFailure.policy);
-    const std::uint8_t completion = completionWireId(program.completion.mode);
-    if (sensor == 0U || failure == 0U || completion == 0U ||
+    std::uint8_t sensor = 0U;
+    std::uint8_t failure = 0U;
+    std::uint8_t completion = 0U;
+    if (!configuration_codec_internal::sensorPreferenceToWireId(
+            program.sensorPreference, sensor) ||
+        !configuration_codec_internal::productSensorFailurePolicyToWireId(
+            program.productSensorFailure.policy, failure) ||
+        !configuration_codec_internal::completionModeToWireId(
+            program.completion.mode, completion) ||
         program.fermentationStages.size() >
             std::numeric_limits<std::uint8_t>::max()) {
         return false;
@@ -217,6 +286,164 @@ bool writeProgram(ByteWriter& writer, const ProgramDocument& document) {
     ok = ok &&
          writeOptionalUint32(writer, program.completion.holdDurationMinutes);
     return ok;
+}
+
+class ProgramCatalogPayloadSizeAccumulator {
+   public:
+    [[nodiscard]] bool add(std::size_t bytes) {
+        std::size_t next = 0U;
+        if (!device_platform::checkedAddSize(
+                size_, bytes,
+                configuration_limits::kMaximumProgramCatalogPayloadBytes,
+                next)) {
+            return false;
+        }
+        size_ = next;
+        return true;
+    }
+
+    [[nodiscard]] std::size_t size() const { return size_; }
+
+   private:
+    std::size_t size_{0U};
+};
+
+ConfigurationCodecStatus addStringPayloadSize(
+    ProgramCatalogPayloadSizeAccumulator& size, const std::string& value) {
+    if (value.size() > std::numeric_limits<std::uint16_t>::max()) {
+        return ConfigurationCodecStatus::InvalidDocument;
+    }
+    if (!size.add(sizeof(std::uint16_t)) || !size.add(value.size())) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationCodecStatus addOptionalPayloadSize(
+    ProgramCatalogPayloadSizeAccumulator& size, bool present,
+    std::size_t valueBytes) {
+    if (!size.add(sizeof(std::uint8_t)) || (present && !size.add(valueBytes))) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationCodecStatus addProgramIdentityAndFlagsPayloadSize(
+    ProgramCatalogPayloadSizeAccumulator& size,
+    const ProgramDocument& document) {
+    const auto& program = document.program;
+    if (!size.add(sizeof(std::uint32_t)) ||
+        !size.add(sizeof(ProgramFieldMask))) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    for (const auto* value : {&program.id, &program.name, &program.notes}) {
+        const auto status = addStringPayloadSize(size, *value);
+        if (status != ConfigurationCodecStatus::Success) {
+            return status;
+        }
+    }
+    // Sieben Boolwerte sowie Sensor- und Failure-Wire-ID.
+    if (!size.add(7U) || !size.add(2U)) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    return addOptionalPayloadSize(
+        size, program.productSensorFailure.fallbackDelaySeconds.has_value(),
+        sizeof(std::uint32_t));
+}
+
+ConfigurationCodecStatus addProgramStagesAndLimitsPayloadSize(
+    ProgramCatalogPayloadSizeAccumulator& size,
+    const ProgramDocument& document) {
+    const auto& program = document.program;
+    if (program.fermentationStages.size() >
+            std::numeric_limits<std::uint8_t>::max() ||
+        !size.add(sizeof(std::uint8_t))) {
+        return program.fermentationStages.size() >
+                       std::numeric_limits<std::uint8_t>::max()
+                   ? ConfigurationCodecStatus::InvalidDocument
+                   : ConfigurationCodecStatus::CapacityExceeded;
+    }
+    for (const auto& stage : program.fermentationStages) {
+        if (addOptionalPayloadSize(
+                size, stage.targetTemperatureCelsius.has_value(),
+                sizeof(std::uint64_t)) != ConfigurationCodecStatus::Success ||
+            addOptionalPayloadSize(size, stage.durationMinutes.has_value(),
+                                   sizeof(std::uint32_t)) !=
+                ConfigurationCodecStatus::Success) {
+            return ConfigurationCodecStatus::CapacityExceeded;
+        }
+    }
+    const bool optionalSizesFit =
+        addOptionalPayloadSize(
+            size, program.targetQualification.bandCelsius.has_value(),
+            sizeof(std::uint64_t)) == ConfigurationCodecStatus::Success &&
+        addOptionalPayloadSize(
+            size, program.targetQualification.durationMinutes.has_value(),
+            sizeof(std::uint32_t)) == ConfigurationCodecStatus::Success &&
+        addOptionalPayloadSize(
+            size, program.maximumTargetReachMinutes.has_value(),
+            sizeof(std::uint32_t)) == ConfigurationCodecStatus::Success;
+    if (!optionalSizesFit) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    if (document.schema.version >= kCurrentProgramSchemaVersion) {
+        return addOptionalPayloadSize(
+            size, program.maximumProductWaitMinutes.has_value(),
+            sizeof(std::uint32_t));
+    }
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationCodecStatus addProgramPayloadSize(
+    ProgramCatalogPayloadSizeAccumulator& size,
+    const ProgramDocument& document) {
+    std::uint8_t ignoredWireId = 0U;
+    if (!configuration_codec_internal::sensorPreferenceToWireId(
+            document.program.sensorPreference, ignoredWireId) ||
+        !configuration_codec_internal::productSensorFailurePolicyToWireId(
+            document.program.productSensorFailure.policy, ignoredWireId) ||
+        !configuration_codec_internal::completionModeToWireId(
+            document.program.completion.mode, ignoredWireId)) {
+        return ConfigurationCodecStatus::InvalidDocument;
+    }
+    auto status = addProgramIdentityAndFlagsPayloadSize(size, document);
+    if (status == ConfigurationCodecStatus::Success) {
+        status = addProgramStagesAndLimitsPayloadSize(size, document);
+    }
+    if (status != ConfigurationCodecStatus::Success) {
+        return status;
+    }
+    if (!size.add(sizeof(std::uint8_t))) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    const auto& completion = document.program.completion;
+    if (addOptionalPayloadSize(
+            size, completion.coolingTargetCelsius.has_value(),
+            sizeof(std::uint64_t)) != ConfigurationCodecStatus::Success ||
+        addOptionalPayloadSize(size, completion.holdDurationMinutes.has_value(),
+                               sizeof(std::uint32_t)) !=
+            ConfigurationCodecStatus::Success) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    return ConfigurationCodecStatus::Success;
+}
+
+configuration_codec_internal::ProgramCatalogPayloadSizeResult
+calculateProgramCatalogPayloadSizeImpl(const ProgramCatalog& catalog) {
+    if (catalog.programs.size() > std::numeric_limits<std::uint8_t>::max()) {
+        return {ConfigurationCodecStatus::InvalidDocument, 0U};
+    }
+    ProgramCatalogPayloadSizeAccumulator size;
+    if (!size.add(sizeof(std::uint8_t))) {
+        return {ConfigurationCodecStatus::CapacityExceeded, 0U};
+    }
+    for (const auto& document : catalog.programs) {
+        const auto status = addProgramPayloadSize(size, document);
+        if (status != ConfigurationCodecStatus::Success) {
+            return {status, 0U};
+        }
+    }
+    return {ConfigurationCodecStatus::Success, size.size()};
 }
 
 ConfigurationCodecStatus readProgramSchema(ByteReader& reader,
@@ -337,6 +564,15 @@ ConfigurationCodecStatus readProgram(ByteReader& reader, ProgramDocument& out) {
 
 }  // namespace
 
+namespace configuration_codec_internal {
+
+ProgramCatalogPayloadSizeResult calculateProgramCatalogPayloadSize(
+    const ProgramCatalog& catalog) {
+    return calculateProgramCatalogPayloadSizeImpl(catalog);
+}
+
+}  // namespace configuration_codec_internal
+
 ConfigurationCodecStatus encodeUserConfigurationPayload(
     const UserConfiguration& configuration,
     const device_platform::ITimeZoneResolver& resolver, std::string& out) {
@@ -409,10 +645,16 @@ decodeServiceConfigurationPayload(std::uint32_t schemaVersion,
 
 ConfigurationCodecStatus encodeProgramCatalogPayload(
     const ProgramCatalog& catalog, std::string& out) {
+    const auto size =
+        configuration_codec_internal::calculateProgramCatalogPayloadSize(
+            catalog);
+    if (size.status != ConfigurationCodecStatus::Success) {
+        return size.status;
+    }
     if (validateProgramCatalog(catalog) != ProgramCatalogStatus::Success) {
         return ConfigurationCodecStatus::InvalidDocument;
     }
-    ByteWriter writer(configuration_limits::kMaximumProgramCatalogPayloadBytes);
+    ByteWriter writer(size.payloadSize);
     if (!big_endian::writeUint8(
             writer, static_cast<std::uint8_t>(catalog.programs.size()))) {
         return ConfigurationCodecStatus::CapacityExceeded;
@@ -421,6 +663,9 @@ ConfigurationCodecStatus encodeProgramCatalogPayload(
         if (!writeProgram(writer, document)) {
             return ConfigurationCodecStatus::CapacityExceeded;
         }
+    }
+    if (writer.size() != size.payloadSize) {
+        return ConfigurationCodecStatus::CapacityExceeded;
     }
     auto encoded = writer.takeBytes();
     out.swap(encoded);

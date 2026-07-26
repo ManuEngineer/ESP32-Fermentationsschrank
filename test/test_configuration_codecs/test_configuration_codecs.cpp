@@ -6,8 +6,10 @@
 #include <new>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "configuration_document_codec.hpp"
+#include "configuration_document_codec_internal.hpp"
 #include "configuration_limits.hpp"
 #include "configuration_migration.hpp"
 #include "configuration_storage_contract.hpp"
@@ -80,6 +82,52 @@ ProgramCatalog largeCatalog() {
     auto catalog = fermentation::makeFactoryProgramCatalog();
     for (std::size_t index = 0U; index < 12U; ++index) {
         catalog.programs.push_back(userProgram(index, 1024U));
+    }
+    return catalog;
+}
+
+std::string repeatedUmlaut(std::size_t scalarCount) {
+    std::string value;
+    value.reserve(scalarCount * 2U);
+    for (std::size_t index = 0U; index < scalarCount; ++index) {
+        value += "\xC3\xA4";
+    }
+    return value;
+}
+
+void maximizeProgramPayload(fermentation::ProgramDocument& document) {
+    auto& program = document.program;
+    program.name = repeatedUmlaut(48U);
+    program.notes = repeatedUmlaut(512U);
+    program.preheat = true;
+    program.sensorPreference = fermentation::SensorPreference::AirOnly;
+    program.productSensorFailure.policy =
+        fermentation::ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+    program.productSensorFailure.fallbackDelaySeconds = 0U;
+    program.fermentationStages.front().targetTemperatureCelsius = 20.0;
+    program.fermentationStages.front().durationMinutes = 60U;
+    program.targetQualification.bandCelsius = 0.5;
+    program.targetQualification.durationMinutes = 10U;
+    program.maximumTargetReachMinutes = 60U;
+    program.maximumProductWaitMinutes = 60U;
+    program.completion.mode =
+        fermentation::CompletionMode::CoolAndHoldForDuration;
+    program.completion.coolingTargetCelsius = 4.0;
+    program.completion.holdDurationMinutes = 60U;
+}
+
+ProgramCatalog maximumValidCatalog() {
+    auto catalog = fermentation::makeFactoryProgramCatalog();
+    for (auto& document : catalog.programs) {
+        maximizeProgramPayload(document);
+    }
+    for (std::size_t index = 0U; index < 12U; ++index) {
+        const auto suffix = std::to_string(index);
+        const std::size_t padding = 48U - 5U - suffix.size();
+        auto document = userProgram(index);
+        document.program.id = "user-" + std::string(padding, 'a') + suffix;
+        maximizeProgramPayload(document);
+        catalog.programs.push_back(std::move(document));
     }
     return catalog;
 }
@@ -172,6 +220,80 @@ std::string schemaFourCatalogFixture(const std::string& current) {
         legacy.erase(*iterator, 1U);
     }
     return legacy;
+}
+
+void test_sensor_preference_wire_ids_are_explicit_in_both_directions() {
+    using fermentation::SensorPreference;
+    using namespace fermentation::configuration_codec_internal;
+    const std::pair<SensorPreference, std::uint8_t> cases[] = {
+        {SensorPreference::ProductIfAvailableElseAir, 1U},
+        {SensorPreference::AirProductOptional, 2U},
+        {SensorPreference::ProductRequired, 3U},
+        {SensorPreference::AirOnly, 4U},
+    };
+    for (const auto& [value, expectedWireId] : cases) {
+        std::uint8_t wireId = 0U;
+        TEST_ASSERT_TRUE(sensorPreferenceToWireId(value, wireId));
+        TEST_ASSERT_EQUAL_UINT8(expectedWireId, wireId);
+        SensorPreference decoded = SensorPreference::AirOnly;
+        TEST_ASSERT_TRUE(sensorPreferenceFromWireId(expectedWireId, decoded));
+        TEST_ASSERT_TRUE(decoded == value);
+    }
+    SensorPreference unchanged = SensorPreference::ProductRequired;
+    TEST_ASSERT_FALSE(sensorPreferenceFromWireId(0U, unchanged));
+    TEST_ASSERT_TRUE(unchanged == SensorPreference::ProductRequired);
+    TEST_ASSERT_FALSE(sensorPreferenceFromWireId(5U, unchanged));
+    TEST_ASSERT_TRUE(unchanged == SensorPreference::ProductRequired);
+}
+
+void test_failure_policy_wire_ids_are_explicit_in_both_directions() {
+    using fermentation::ProductSensorFailurePolicy;
+    using namespace fermentation::configuration_codec_internal;
+    const std::pair<ProductSensorFailurePolicy, std::uint8_t> cases[] = {
+        {ProductSensorFailurePolicy::FallbackToAirAfterTimeout, 1U},
+        {ProductSensorFailurePolicy::WaitForUser, 2U},
+        {ProductSensorFailurePolicy::StopToSafeState, 3U},
+    };
+    for (const auto& [value, expectedWireId] : cases) {
+        std::uint8_t wireId = 0U;
+        TEST_ASSERT_TRUE(productSensorFailurePolicyToWireId(value, wireId));
+        TEST_ASSERT_EQUAL_UINT8(expectedWireId, wireId);
+        ProductSensorFailurePolicy decoded =
+            ProductSensorFailurePolicy::StopToSafeState;
+        TEST_ASSERT_TRUE(
+            productSensorFailurePolicyFromWireId(expectedWireId, decoded));
+        TEST_ASSERT_TRUE(decoded == value);
+    }
+    ProductSensorFailurePolicy unchanged =
+        ProductSensorFailurePolicy::WaitForUser;
+    TEST_ASSERT_FALSE(productSensorFailurePolicyFromWireId(0U, unchanged));
+    TEST_ASSERT_TRUE(unchanged == ProductSensorFailurePolicy::WaitForUser);
+    TEST_ASSERT_FALSE(productSensorFailurePolicyFromWireId(4U, unchanged));
+    TEST_ASSERT_TRUE(unchanged == ProductSensorFailurePolicy::WaitForUser);
+}
+
+void test_completion_mode_wire_ids_are_explicit_in_both_directions() {
+    using fermentation::CompletionMode;
+    using namespace fermentation::configuration_codec_internal;
+    const std::pair<CompletionMode, std::uint8_t> cases[] = {
+        {CompletionMode::FinishWithoutCooling, 1U},
+        {CompletionMode::CoolThenFinish, 2U},
+        {CompletionMode::CoolAndHoldForDuration, 3U},
+        {CompletionMode::CoolAndHoldUntilManualStop, 4U},
+    };
+    for (const auto& [value, expectedWireId] : cases) {
+        std::uint8_t wireId = 0U;
+        TEST_ASSERT_TRUE(completionModeToWireId(value, wireId));
+        TEST_ASSERT_EQUAL_UINT8(expectedWireId, wireId);
+        CompletionMode decoded = CompletionMode::FinishWithoutCooling;
+        TEST_ASSERT_TRUE(completionModeFromWireId(expectedWireId, decoded));
+        TEST_ASSERT_TRUE(decoded == value);
+    }
+    CompletionMode unchanged = CompletionMode::CoolThenFinish;
+    TEST_ASSERT_FALSE(completionModeFromWireId(0U, unchanged));
+    TEST_ASSERT_TRUE(unchanged == CompletionMode::CoolThenFinish);
+    TEST_ASSERT_FALSE(completionModeFromWireId(5U, unchanged));
+    TEST_ASSERT_TRUE(unchanged == CompletionMode::CoolThenFinish);
 }
 
 void test_user_configuration_payload_golden_bytes_and_round_trip() {
@@ -446,10 +568,34 @@ void test_invalid_catalog_encode_leaves_output_unchanged() {
     TEST_ASSERT_EQUAL_STRING("old", output.c_str());
 }
 
-void test_large_catalog_encode_has_only_one_payload_sized_temporary() {
+void test_factory_catalog_writer_allocation_follows_exact_payload_size() {
+    // Native Regression fuer relative Host-Allokationen. Sie ist keine reale
+    // ESP32-Heapgarantie und zaehlt das bereits vorhandene Katalogmodell nicht
+    // als neuen Encode-Puffer.
+    const auto catalog = fermentation::makeFactoryProgramCatalog();
+    const auto calculated = fermentation::configuration_codec_internal::
+        calculateProgramCatalogPayloadSize(catalog);
+    TEST_ASSERT_TRUE(calculated.status == ConfigurationCodecStatus::Success);
+    const std::size_t baseline = gLiveAllocBytes;
+    gPeakAllocBytes = baseline;
+    std::string encoded;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeProgramCatalogPayload(catalog, encoded) ==
+        ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(calculated.payloadSize, encoded.size());
+    const std::size_t peakDelta = gPeakAllocBytes - baseline;
+    TEST_ASSERT_TRUE(peakDelta < 8192U);
+    TEST_ASSERT_TRUE(
+        peakDelta <
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes /
+            4U);
+}
+
+void test_large_catalog_writer_allocation_follows_exact_payload_size() {
     const auto catalog = largeCatalog();
-    // Native Regression gegen versehentliche vollstaendige Katalogkopien.
-    // Dies misst nur Host-Allokationen und ist keine ESP32-Heapgarantie.
+    const auto calculated = fermentation::configuration_codec_internal::
+        calculateProgramCatalogPayloadSize(catalog);
+    TEST_ASSERT_TRUE(calculated.status == ConfigurationCodecStatus::Success);
     const std::size_t baseline = gLiveAllocBytes;
     gPeakAllocBytes = baseline;
     std::string encoded;
@@ -458,10 +604,74 @@ void test_large_catalog_encode_has_only_one_payload_sized_temporary() {
         ConfigurationCodecStatus::Success);
     const std::size_t peakDelta = gPeakAllocBytes - baseline;
     TEST_ASSERT_TRUE(encoded.size() > 12000U);
+    TEST_ASSERT_EQUAL_UINT32(calculated.payloadSize, encoded.size());
+    TEST_ASSERT_TRUE(peakDelta < encoded.size() + 8192U);
+}
+
+void test_maximum_valid_catalog_has_exact_canonical_payload_size() {
+    const auto catalog = maximumValidCatalog();
+    TEST_ASSERT_TRUE(fermentation::validateProgramCatalog(catalog) ==
+                     fermentation::ProgramCatalogStatus::Success);
+    const auto calculated = fermentation::configuration_codec_internal::
+        calculateProgramCatalogPayloadSize(catalog);
+    TEST_ASSERT_TRUE(calculated.status == ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(19916U, calculated.payloadSize);
+    std::string encoded;
     TEST_ASSERT_TRUE(
-        peakDelta <
-        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes +
-            8192U);
+        fermentation::encodeProgramCatalogPayload(catalog, encoded) ==
+        ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(19916U, encoded.size());
+}
+
+void test_global_payload_boundary_uses_production_size_calculation() {
+    auto exact = maximumValidCatalog();
+    const auto validSize = fermentation::configuration_codec_internal::
+        calculateProgramCatalogPayloadSize(exact);
+    TEST_ASSERT_EQUAL_UINT32(19916U, validSize.payloadSize);
+    exact.programs.back().program.notes.append(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes -
+            validSize.payloadSize,
+        'x');
+    const auto exactSize = fermentation::configuration_codec_internal::
+        calculateProgramCatalogPayloadSize(exact);
+    TEST_ASSERT_TRUE(exactSize.status == ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes,
+        exactSize.payloadSize);
+    const std::string oldOutput("old\0payload", 11U);
+    std::string output = oldOutput;
+    TEST_ASSERT_TRUE(fermentation::encodeProgramCatalogPayload(exact, output) ==
+                     ConfigurationCodecStatus::InvalidDocument);
+    TEST_ASSERT_EQUAL_UINT32(oldOutput.size(), output.size());
+    TEST_ASSERT_EQUAL_MEMORY(oldOutput.data(), output.data(), oldOutput.size());
+
+    exact.programs.back().program.notes.push_back('x');
+    const auto overSize = fermentation::configuration_codec_internal::
+        calculateProgramCatalogPayloadSize(exact);
+    TEST_ASSERT_TRUE(overSize.status ==
+                     ConfigurationCodecStatus::CapacityExceeded);
+    const std::size_t baseline = gLiveAllocBytes;
+    gPeakAllocBytes = baseline;
+    TEST_ASSERT_TRUE(fermentation::encodeProgramCatalogPayload(exact, output) ==
+                     ConfigurationCodecStatus::CapacityExceeded);
+    TEST_ASSERT_EQUAL_UINT32(baseline, gPeakAllocBytes);
+    TEST_ASSERT_EQUAL_UINT32(oldOutput.size(), output.size());
+    TEST_ASSERT_EQUAL_MEMORY(oldOutput.data(), output.data(), oldOutput.size());
+}
+
+void test_successful_encode_can_hold_catalog_old_output_and_new_payload() {
+    const auto catalog = fermentation::makeFactoryProgramCatalog();
+    const auto calculated = fermentation::configuration_codec_internal::
+        calculateProgramCatalogPayloadSize(catalog);
+    std::string output(4096U, 'o');
+    const std::size_t baseline = gLiveAllocBytes;
+    gPeakAllocBytes = baseline;
+    TEST_ASSERT_TRUE(fermentation::encodeProgramCatalogPayload(
+                         catalog, output) == ConfigurationCodecStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(calculated.payloadSize, output.size());
+    const std::size_t peakDelta = gPeakAllocBytes - baseline;
+    TEST_ASSERT_TRUE(peakDelta >= calculated.payloadSize);
+    TEST_ASSERT_TRUE(peakDelta < calculated.payloadSize + 8192U);
 }
 
 void test_large_catalog_decode_does_not_materialize_a_second_full_catalog() {
@@ -505,6 +715,9 @@ void test_large_catalog_copy_migration_keeps_only_source_and_candidate() {
 
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_sensor_preference_wire_ids_are_explicit_in_both_directions);
+    RUN_TEST(test_failure_policy_wire_ids_are_explicit_in_both_directions);
+    RUN_TEST(test_completion_mode_wire_ids_are_explicit_in_both_directions);
     RUN_TEST(test_user_configuration_payload_golden_bytes_and_round_trip);
     RUN_TEST(
         test_user_configuration_full_envelope_golden_bytes_has_no_old_fields);
@@ -523,7 +736,12 @@ int main() {
         test_schema_four_programs_migrate_to_schema_five_deterministically);
     RUN_TEST(test_program_count_boundaries_are_checked_before_allocation);
     RUN_TEST(test_invalid_catalog_encode_leaves_output_unchanged);
-    RUN_TEST(test_large_catalog_encode_has_only_one_payload_sized_temporary);
+    RUN_TEST(test_factory_catalog_writer_allocation_follows_exact_payload_size);
+    RUN_TEST(test_large_catalog_writer_allocation_follows_exact_payload_size);
+    RUN_TEST(test_maximum_valid_catalog_has_exact_canonical_payload_size);
+    RUN_TEST(test_global_payload_boundary_uses_production_size_calculation);
+    RUN_TEST(
+        test_successful_encode_can_hold_catalog_old_output_and_new_payload);
     RUN_TEST(
         test_large_catalog_decode_does_not_materialize_a_second_full_catalog);
     RUN_TEST(test_large_catalog_copy_migration_keeps_only_source_and_candidate);
