@@ -377,6 +377,119 @@ caller- oder schluesselspezifisches maximales Leselimit durch.
 Technische Envelope- und Wiregroessen liegen in `device_platform`; das globale
 Konfigurationsbudget und die Dokumentgrenzen in `fermentation_app`.
 
+### Fachliche Payloads von Schema 1
+
+Alle folgenden Tabellen beschreiben ausschliesslich die fachliche Payload, die
+der Envelope als Bytefolge umschliesst; Envelope-Header und -CRC gehoeren nicht
+dazu. Mehrbyteige Werte sind Big Endian. Strings bestehen aus einer
+`uint16`-Byteanzahl und exakt so vielen Bytes. Boolwerte und Optionaltags
+verwenden ausschliesslich `0x00` und `0x01`; auf einen gesetzten Optionaltag
+folgt unmittelbar der angegebene Wert. Listen verwenden eine vor der
+Ergebnisallokation validierte `uint8`-Anzahl. Es gibt keine Padding-, Reserve-
+oder ABI-abhaengigen Bytes.
+
+#### UserConfiguration Schema 1
+
+| Reihenfolge | Feld | Wirebreite | Teilgrenze |
+|---:|---|---|---:|
+| 1 | DisplayLanguageId | `uint16` Laenge + ASCII | 2..16 Byte |
+| 2 | IANA-Zeitzone | `uint16` Laenge + ASCII | 1..64 Byte |
+| 3 | sichtbarer Geraetename | `uint16` Laenge + UTF-8 | 1..48 Skalare, hoechstens 96 Byte |
+
+Die Gesamtpayload ist hoechstens 256 Byte. Der Decoder prueft diese Grenze vor
+der ersten Feldallokation und lehnt fehlende oder zusaetzliche Bytes ab.
+
+#### ServiceConfiguration Schema 1
+
+Die Payload enthaelt exakt null Bytes. Jedes Byte ist zusaetzlich und damit
+ungueltig.
+
+#### ProgramCatalog Schema 1
+
+| Reihenfolge | Feld | Wirebreite | Teilgrenze |
+|---:|---|---|---:|
+| 1 | Programmanzahl | `uint8` | 4..16 |
+| 2 | ProgramDocument 0..n-1 | variable Struktur unten | zuerst exakt 4 Factorykopien, danach hoechstens 12 Benutzerprogramme |
+
+Die Katalogpayload ist hoechstens 32.768 Byte. Programmanzahl,
+ProgramDocument-Teilgrenzen und Gesamtpayload werden unabhaengig geprueft.
+
+| Reihenfolge je ProgramDocument | Feld | Wirebreite |
+|---:|---|---|
+| 1 | ProgramDocument-Schema | `uint32` |
+| 2 | vorhandene ProgramField-Bits | `uint64` |
+| 3 | ID | `uint16` Laenge + ASCII |
+| 4 | Name | `uint16` Laenge + UTF-8 |
+| 5 | Notizen | `uint16` Laenge + UTF-8 |
+| 6..12 | `builtIn`, `factoryCatalogEntry`, `resettable`, `userDeletable`, `installed`, `enabled`, `preheat` | je ein Boolbyte |
+| 13 | SensorPreference | `uint8` Wire-ID |
+| 14 | ProductSensorFailurePolicy | `uint8` Wire-ID |
+| 15 | optionale Fallbackverzoegerung | Optionaltag + optional `uint32` |
+| 16 | Fermentationsphasenanzahl | `uint8`, Schema 4/5 exakt 1 |
+| 17 je Phase | Zieltemperatur | Optionaltag + optional binary64 |
+| 18 je Phase | Dauer | Optionaltag + optional `uint32` |
+| 19 | Zielqualifikationsband | Optionaltag + optional binary64 |
+| 20 | Zielqualifikationsdauer | Optionaltag + optional `uint32` |
+| 21 | maximale Zielerreichungszeit | Optionaltag + optional `uint32` |
+| 22 | maximale Produktwartezeit | nur Schema 5: Optionaltag + optional `uint32` |
+| 23 | CompletionMode | `uint8` Wire-ID |
+| 24 | Kuehlziel | Optionaltag + optional binary64 |
+| 25 | Haltedauer | Optionaltag + optional `uint32` |
+
+`ProgramDefinition::notes` besitzt im bestehenden ProgramDocument-Schema
+bewusst kein eigenes `ProgramFieldMask`-Bit. Der ProgramCatalog kodiert die
+Notizen immer an Position 5, unabhaengig von der Feldmaske. Es wird weder ein
+neues Feldbit noch ein neues ProgramDocument-Schema eingefuehrt. Schema 4
+enthaelt Position 22 nicht; nach vollstaendig erfolgreichem Dekodieren wird die
+bestehende Copy-Migration 4 nach 5 angewendet. Schema 5 enthaelt Position 22.
+Unbekannte ProgramDocument-Schemas, unbekannte Feldmaskenbits und fehlende
+Pflichtbits werden vor einer Veroeffentlichung abgelehnt.
+
+Stabile Enum-Wire-IDs:
+
+| Enum | Wire-ID | Wert |
+|---|---:|---|
+| SensorPreference | 1 | ProductIfAvailableElseAir |
+| | 2 | AirProductOptional |
+| | 3 | ProductRequired |
+| | 4 | AirOnly |
+| ProductSensorFailurePolicy | 1 | FallbackToAirAfterTimeout |
+| | 2 | WaitForUser |
+| | 3 | StopToSafeState |
+| CompletionMode | 1 | FinishWithoutCooling |
+| | 2 | CoolThenFinish |
+| | 3 | CoolAndHoldForDuration |
+| | 4 | CoolAndHoldUntilManualStop |
+
+Alle anderen Enum-Wire-IDs sind ungueltig. `ChangeOrigin` und
+`ChangeOperation` sind weder Envelope- noch Schema-1-Dokumentfelder.
+
+Die stabilen Anwendungs-Record-Type-IDs sind 1 fuer UserConfiguration, 2 fuer
+ServiceConfiguration und 3 fuer ProgramCatalog. Die vier kurzen
+ADR-016-Schluessel lauten je Dokumenttyp `uc0`..`uc3`, `sc0`..`sc3` und
+`pc0`..`pc3`. Dies ist nur die Namenskonvention. Storezugriff, Slotwahl,
+Rotation, Referenzschutz, Manifeste, Roots und Commitlogik folgen nicht in
+Issue #55.
+
+Der ProgramCatalog-Encoder berechnet die exakte kanonische Payloadgroesse vor
+der Writer-Konstruktion mit ueberlaufsicheren `checkedAddSize`-Schritten fuer
+dieselben Felder und Schema-4-/Schema-5-Zweige wie der Encoder. Der
+`ByteWriter` reserviert nur diese berechnete Groesse; nach dem Schreiben muss
+seine tatsaechliche Groesse exakt damit uebereinstimmen. Eine Abweichung oder
+eine Groesse ueber 32.768 Byte wird vor der Veroeffentlichung abgelehnt und
+laesst `out` byteidentisch unveraendert.
+
+Dies ist keine absolute Ein-Puffer-Garantie: Das vollstaendige
+`ProgramCatalog`-Modell bleibt waehrend der Kodierung vorhanden. Der Encoder
+legt hoechstens einen zusaetzlichen, exakt dimensionierten neuen
+Payloadpuffer an. Enthaelt `out` bereits einen alten Puffer, besteht auch
+dieser bis zum abschliessenden erfolgreichen `swap()` parallel. Beim
+Dekodieren bestehen Eingabepayload und der schrittweise aufgebaute
+ProgramCatalog-Kandidat nebeneinander; eine Copy-Migration haelt entsprechend
+Quellmodell und Migrationskandidat. Die nativen Allokationstests erkennen
+Regressionen dieser relativen Vertraege, belegen aber keine reale
+ESP32-Heapreserve.
+
 ## Revisionsplaetze, kanonische Roots und Referenzschutz
 
 ### Physische Slots
