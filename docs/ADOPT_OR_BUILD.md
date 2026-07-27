@@ -72,6 +72,23 @@ Ports fuer spaetere Funktionen eingebunden. Eine Empfehlung gilt erst nach
 Base-/Kandidatenmessung mit identischer Toolchain. Release 1 erhaelt weder
 Web-OTA, Bluetooth, Cloud/Push, PID-Autotuning noch eine PSRAM-Abhaengigkeit.
 
+## Persistenz und additive Erweiterbarkeit
+
+Auch eigene Speichervertraege folgen dem Adopt-or-build-Grundsatz: Der kleinste
+aktuell benoetigte sichere Vertrag wird umgesetzt, ohne einen spaeteren Ausbau
+durch inkompatible Einwegvereinfachungen zu verbauen. Dokumente, Manifeste,
+Roots, Envelopes, Record-Type-IDs, Revisionen und Schluessel bleiben versioniert
+und stark typisiert. Unbekannte neuere Schemas werden ohne Teilwirkung
+abgelehnt; bestehende Daten werden nicht still umgedeutet.
+
+Spaetere Funktionen werden additiv ueber neue Recordtypen, neue Schema-
+versionen und explizite Copy-Migrationen ergaenzt. Gemeinsame Transaktionsschritte
+wie Kandidatenerzeugung, Validierung, Runtimevorbereitung, persistenter Commit
+und Publish bleiben getrennt und wiederverwendbar. Erweiterbarkeit rechtfertigt
+keine leeren Manifeste, Dummyrecords, ungenutzten Slots, Ports oder
+Zukunftsservices. Solche Produktionsbausteine entstehen erst mit einem echten
+fachlichen Konsumenten.
+
 ## Entscheidungsnachweis
 
 Jede spaetere Komponentenentscheidung nennt:

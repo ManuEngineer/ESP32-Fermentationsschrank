@@ -13,7 +13,8 @@ Backlog vor Umsetzung verkleinert oder geteilt werden sollte.
 
 ```text
 Auditfreigabe
-  -> hardwareunabhaengiger Safety- und Fachkern
+  -> separater Spezifikations-/Issue-Neuschnitt fuer Variante B
+  -> hardwareunabhaengiger Safety-, Persistenz- und Fachkern
   -> aktorfreie Hardware-Spikes
   -> Bibliotheksentscheidungen
   -> produktive Adapter
@@ -23,24 +24,30 @@ Auditfreigabe
   -> spaetere Funktionen
 ```
 
-## Phase 1: Auditfreigabe und Ownerentscheide
+## Phase 1: Auditfreigabe und verbindlicher Persistenz-Neuschnitt
 
 Vor weiterer Architekturverbreiterung:
 
 1. Auditdokumente fachlich freigeben oder korrigieren.
-2. OD-01 entscheiden: volle #56/#57-Manifest-/Root-/Pending-/Secret-Struktur
-   fuer Release 1 bestaetigen oder in einem separaten ADR-/Issueprozess auf den
-   kleinsten sicheren R1-Vertrag reduzieren.
-3. Abhaengigkeit von #17/#24 auf das Tracking-Issue #16 anhand der tatsaechlich
-   benoetigten Persistenzvertraege neu pruefen.
-4. Grundsatz bestaetigen, dass Treiber/Frameworkdienste adoptiert und
+2. Den entschiedenen OD-01-Vertrag in einem separaten ownerfreigegebenen
+   Planungs-/ADR-Schritt in Spezifikation, #16, #56 und #57 ueberfuehren. Der
+   Audit-PR aendert diese Quellen nicht.
+3. #56 auf Active/Fallback, Graphvalidierung, fluechtige Vorschau,
+   Konfliktschutz und Runtime-Publish reduzieren; #57 auf Bootstrap,
+   `StorageEpoch`, Korruptionssperre und wiederaufnehmbaren Werksreset.
+4. Persistentes Pending sowie echte Connectivity-/Authentication-Domaenen als
+   spaetere eigene Arbeit mit ihrem ersten fachlichen Konsumenten planen, nicht
+   als leere R1-Infrastruktur.
+5. Abhaengigkeiten von #17/#24 auf #16 anhand der tatsaechlich benoetigten
+   schmalen Variante-B-Vertraege korrigieren.
+6. Grundsatz bestaetigen, dass Treiber/Frameworkdienste adoptiert und
    Safety-/Fachlogik selbst entwickelt werden.
-5. breite Issues #19 und #25–#28 vor Implementierung in kleine PRs schneiden,
+7. breite Issues #19 und #25–#28 vor Implementierung in kleine PRs schneiden,
    ohne ihren akzeptierten R1-Mindestumfang still zu streichen.
 
 Keine Empfehlung aus dem Audit wird im Audit-PR selbst implementiert.
 
-## Phase 2: zwingende hardwareunabhaengige Safety- und Fachlogik
+## Phase 2: zwingende hardwareunabhaengige Safety-, Persistenz- und Fachlogik
 
 Empfohlene parallele Ketten:
 
@@ -50,7 +57,12 @@ Empfohlene parallele Ketten:
   -> #22 PI und Luftbegrenzung
   -> #23 Aktorplaner
 
-Persistenzminimum aus #54/#55 und Ownerentscheid OD-01
+Persistenzbasis #54/#55
+  -> separater Variante-B-Neuschnitt #16/#56/#57
+  -> #56 Active/Fallback und atomarer Runtime-Publish
+  -> #57 Bootstrap, StorageEpoch und Werksreset
+
+schmale benoetigte Variante-B-Vertraege
   -> #17 Laufpersistenz
   -> #18 Wiederanlauf
 
@@ -72,6 +84,21 @@ Vorgeschlagene kleine PRs:
 - #24: Fehlerdatenmodell, persistente Verriegelung/Boot, danach
   Fehlerinjektionsmatrix;
 - #25: gemeinsame View-Modelle, Sprachressourcen und Navigation getrennt.
+
+Fuer den neu geschnittenen Variante-B-Kern gilt die feste Transaktionsfolge:
+
+1. Kandidat erzeugen;
+2. technisch und fachlich validieren;
+3. fallible Runtimewerte und Ressourcen vorbereiten;
+4. Active-/Fallback-Graph persistent ueber den kanonischen Root committen;
+5. den unveraenderlichen Runtime-Snapshot veroeffentlichen.
+
+Die R1-Vorschau bleibt fluechtig. Ihre Bestaetigung prueft die erwartete aktive
+Basisgeneration, einen unveraenderten Kandidaten und erneut die vollstaendige
+Validierung. Der Bootstrap akzeptiert nur nachweislich fabrikneuen,
+fehlerfrei lesbaren Speicher. Korruption oder unbekannte Schemas fuehren nie zu
+stillem Factory-Fallback. Cut-Point-, Korruptions-, Schema-, Migrations- und
+Ressourcentests decken diesen R1-Kern direkt ab.
 
 Hardwareparameter bleiben `TBD_COMMISSIONING`; Mocks behaupten keine reale
 Thermik.
@@ -150,6 +177,9 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   sekundaer und ist keine Voraussetzung fuer den lokalen Betrieb;
 - vor Authentication OD-09 festlegen: KDF/Work-Factor, Sitzungsdauer,
   Sperrzeiten, CSRF und At-rest-Grenze;
+- Connectivity- und Authentication-Domaenen erst mit den ersten realen WLAN-,
+  Passwort- oder PIN-Nachweisen spezifizieren; keine vorbereiteten leeren
+  Manifeste, Roots oder `CredentialEpoch` aus #57 uebernehmen;
 - #28 teilen in passive Diagnose, Exporte/Diagrammdaten und aktiven
   Serviceablauf;
 - #19 teilen in kritisches Journal/Retention und secret-freies
@@ -182,7 +212,22 @@ Bis nach Release 1:
 - PID-Autotuning und Kaskadenregelung;
 - LVGL, sofern der Hardware-/UI-Vergleich keinen zwingenden R1-Vorteil zeigt;
 - Tuerkontakt, RTC-Pflicht, 12-V-ADC und Lueftertacho;
+- Variante-A-Funktionen bis zu ihrem ersten echten Konsumenten: persistentes
+  Pending/Pending-Root, Aktivierungsintent,
+  `ConfigurationActivationRunAssessment`, persistente Preview-Metadaten,
+  vorbereitete Connectivity-/Authentication-Manifeste, Authentication-Roots,
+  `CredentialEpoch`, Secret-Rootwechsel und kombinierte
+  Konfigurations-/Secret-Transaktionen;
 - vorsorgliche Ports, Puffer und Bibliotheken fuer diese Funktionen.
+
+### Additiver Ausbaupfad zu Variante A
+
+Der spaetere Ausbau verwendet neue Recordtypen, neue Manifest-/Root-
+Schemaversionen und explizite Copy-Migrationen. Active/Fallback bleibt die
+gemeinsame Basis; `StorageEpoch` bleibt die gemeinsame Resetgrenze. Bestehende
+R1-Schema-1-Daten werden weder umgedeutet noch in-place migriert. Der Schluessel-
+und Recordraum bleibt kollisionsfrei erweiterbar, ohne ungenutzte Schluessel,
+Slots, Ports, Dummyrecords oder Zukunftsservices vorzubereiten.
 
 ## Dauerhaft nicht Bestandteil dieses Projekts
 
@@ -199,8 +244,10 @@ Ausgabeelement.
 
 | Bestehendes Issue | Vorschlag nach Ownerfreigabe |
 |---|---|
-| #16 | als Tracking behalten; keine Direktimplementierung; nach #54–#57 beziehungsweise ownerfreigegebenem Ersatzumfang schliessen |
-| #56/#57 | nicht freigeben, bis OD-01 entschieden ist; danach entweder bestehenden Vertrag in kleinen Scheiben umsetzen oder durch separat akzeptierten kleineren R1-Vertrag ersetzen |
+| #16 | als Tracking behalten, aber nach dem Audit in separatem Planungs-/ADR-Schritt auf den Variante-B-Kern und schmale Abhaengigkeiten neu schneiden; keine Direktimplementierung |
+| #56 | nicht unveraendert freigeben; separat auf Active/Fallback, Graphvalidierung, fluechtige Vorschau, Konfliktschutz und Runtime-Publish reduzieren |
+| #57 | nicht unveraendert freigeben; separat auf Bootstrap, `StorageEpoch`, Korruptionssperre und wiederaufnehmbaren Werksreset reduzieren |
+| spaeteres Pending/Secrets | erst mit neustartpflichtigem Konfigurationswert beziehungsweise realen WLAN-/Passwort-/PIN-Nachweisen als eigene Issues planen; Variante A additiv anbinden |
 | #19 | nicht streichen, aber in Journal/Retention, Export und Backup/Import teilen |
 | #25 | View-Modelle, Texte und Navigation in getrennte kleine PRs schneiden |
 | #26 | native UI-Logik von realem Display-/Touchadapter trennen |
@@ -215,7 +262,6 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 
 | ID | Entscheidung | Spaetester Zeitpunkt |
 |---|---|---|
-| OD-01 | voller oder verkleinerter R1-Umfang von #56/#57 und daraus folgende #16-Abhaengigkeiten | vor Freigabe #56 und vor Blockierung von #17/#24 |
 | OD-02 | Display-/Touchstack | nach Display-Spike, vor #31 |
 | OD-03 | DS18B20-/1-Wire-Stack | nach Sensorspike, vor #30 |
 | OD-04 | Framework-WebServer oder ESPAsyncWebServer | nach begrenztem Last-/Ressourcenprototyp, vor #27-Transport |
@@ -223,3 +269,10 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 | OD-06 | WiFiManager oder kleiner Framework-Onboardingadapter | vor Onboardingteil von #27 |
 | OD-07 | Mindestumfang und PR-Schnitt von #19/#25–#28 | vor dem jeweiligen Issue |
 | OD-09 | KDF-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag | vor produktiver Authentication in #27 |
+
+OD-01 ist entschieden: Variante B ist der verbindliche R1-Vertrag, Variante A
+der additive spaetere Ausbaupfad. Vor #56/#57 bleibt als technische
+Detailpruefung offen, ob Dokumentrevisionen und Rootsequenz die Funktion einer
+eigenstaendigen persistenten `MutationSequence` vollstaendig abdecken. Diese
+Pruefung darf die Sequenz nicht ohne Gleichwertigkeitsnachweis entfernen und
+oeffnet OD-01 nicht erneut.

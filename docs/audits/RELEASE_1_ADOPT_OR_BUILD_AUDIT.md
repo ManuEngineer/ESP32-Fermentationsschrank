@@ -32,7 +32,8 @@ offene Backlog, die aktuelle Quell- und Teststruktur, die fixierte Toolchain und
 die vorhandenen Hardwarequellen unter `references/`.
 
 Die Bedien- und Sensorrollengrenze folgt dem verbindlichen Ownerentscheid aus
-dem Auditreview von PR #63, Kommentar `5088383783`.
+dem Auditreview von PR #63, Kommentar `5088383783`. Der verbindliche
+Persistenzentscheid OD-01 folgt Kommentar `5088636861`.
 
 ## Methodik
 
@@ -81,14 +82,13 @@ Zwei Hardwareentscheidungen duerfen nicht am Schreibtisch fallen:
   identisch verglichen; der Espressif-Stack muss zuerst seine Kompatibilitaet
   mit der aktuellen Arduino-ESP32-2.0.17-Toolchain beweisen.
 
-Die wichtigste offene Ownerentscheidung betrifft #16/#56/#57. #54/#55 liefern
-bereits eine starke Persistenzbasis. Der noch spezifizierte Manifest-, Root-,
-Pending-, Intent-, Secret- und End-to-End-Recoverygraph ist fuer Release 1
-umfangreich und blockiert ueber #16 potenziell Laufpersistenz und Safety. Vor
-Freigabe von #56 muss der Owner entweder den vollen Vertrag ausdruecklich
-bestaetigen oder ihn in einem separaten, ADR-konformen Prozess auf das kleinste
-sichere R1-Modell reduzieren. Dieser Audit aendert die bestehende Entscheidung
-nicht.
+OD-01 ist entschieden: Release 1 verwendet das schlanke, stromausfallsichere
+Modell der Variante B. #56 und #57 duerfen nicht unveraendert umgesetzt werden.
+Vor ihrer Implementierung muessen Spezifikation, Issues und gegebenenfalls ADRs
+in einem separaten ownerfreigegebenen Planungs-/ADR-Schritt auf den hier
+festgehaltenen R1-Vertrag zugeschnitten werden. Dieser Audit selbst aendert
+keine dieser Quellen. Variante A bleibt als spaetere additive Erweiterung des
+stabilen Active-/Fallback-Kerns offen, nicht als alternativer R1-Auftrag.
 
 ## Wichtigste Erkenntnisse
 
@@ -143,6 +143,124 @@ Publikationspruefung erforderlich. Lieferantenunterlagen bleiben
 `confirmed_order`; Pins, Pegel, Controller und Verdrahtung werden weiterhin
 real gemessen.
 
+## Entschiedener Persistenzvertrag OD-01
+
+### Variante B: verbindlicher Release-1-Kern
+
+Release 1 enthaelt:
+
+- ein vollstaendig validiertes `ActiveConfigurationManifest`;
+- einen atomar umgeschalteten kanonischen Root als persistenten
+  Linearisierungspunkt;
+- genau eine vorherige vollstaendig nutzbare Fallbackgeneration;
+- sichere Slotrotation fuer Active, Fallback und die laufende Mutation;
+- vollstaendige technische und fachliche Graphvalidierung;
+- Validierung und Vorbereitung aller falliblen Runtimewerte und Ressourcen vor
+  dem Root-Commit;
+- einen unveraenderlichen vorbereiteten Runtime-Snapshot;
+- Sichtbarkeit ausschliesslich der vollstaendig alten oder vollstaendig neuen
+  Runtimegeneration, ohne Teilaktivierung;
+- typisierte Fehler ohne stille Ruecksetzung oder Teilwirkung;
+- Uebergabe eines Publish-Vertragsfehlers an den spaeteren Safety-/Fehlerkern.
+
+Der wiederverwendbare Transaktionsablauf bleibt klar getrennt:
+
+1. Kandidat erzeugen;
+2. technisch und fachlich validieren;
+3. Runtimewerte und Ressourcen vorbereiten;
+4. persistent committen;
+5. Runtime veroeffentlichen.
+
+### Fluechtige Vorschau und Konfliktschutz
+
+Eine R1-Vorschau darf fluechtig sein, muss aber vollstaendig validiert sein. Die
+Bestaetigung prueft mindestens die erwartete aktive Basisgeneration, einen
+unveraenderten validierten Kandidaten und die weiterhin erfolgreiche fachliche
+und technische Validierung. Eine veraltete Basis oder ein veraenderter Kandidat
+wird ohne Teilwirkung abgelehnt.
+
+Nicht erforderlich sind persistente Preview-Slots, Preview-Owner,
+Preview-Tokens oder Ablaufzeiten. Eine eigenstaendige persistente
+`MutationSequence` ist nur dann entbehrlich, wenn Dokumentrevisionen und
+Rootsequenz den benoetigten eindeutigen Konfliktvertrag nachweislich vollstaendig
+abdecken. Diese verbleibende Funktion ist vor dem Neuschnitt separat zu pruefen;
+die Sequenz wird nicht allein entfernt, weil sie nicht mehr zwingend erscheint.
+Diese Detailpruefung oeffnet OD-01 nicht erneut.
+
+### Bootstrap und Werksreset
+
+Release 1 enthaelt:
+
+- sicheren Bootstrap;
+- automatische Factory-Initialisierung ausschliesslich bei nachweislich
+  fabrikneuem und vollstaendig fehlerfrei lesbarem Speicher;
+- gespeicherte Bootstrapzustaende mindestens `Initializing`, `Initialized` und
+  `Resetting`;
+- eine `StorageEpoch`;
+- keine Behandlung beschaedigter, unbekannter oder unlesbarer Daten als
+  fabrikneuen Speicher;
+- keinen stillen Factory-Fallback bei Korruption oder unbekanntem Schema;
+- einen ausdruecklich ausgeloesten, wiederaufnehmbaren Werksreset;
+- idempotente Wiederaufnahme nach Stromausfall;
+- logische Unerreichbarkeit alter Epochen nach abgeschlossenem Reset;
+- keine unbelegte Behauptung sicherer physischer Loeschung alter Flashbytes.
+
+### Aus Release 1 verschoben
+
+Bis zum ersten echten fachlichen Konsumenten werden nicht implementiert:
+
+- persistentes Pending und ein eigener Pending-Root;
+- Aktivierungsintent, `ConfigurationActivationRunAssessment` sowie Sperr- und
+  Abschlusslogik fuer Pending-Aktivierungen;
+- persistente Preview-Slots, Preview-Owner, Preview-Tokens und Ablaufzeiten;
+- vorbereitete Connectivity-Manifeste ohne echte Secret-Payload;
+- vorbereitete Authentication-Manifeste ohne echte Nachweise;
+- Prepared-/Committed-Authentication-Roots;
+- `CredentialEpoch` und Secret-Rootwechsel ohne produktive Credentials;
+- kombinierte Konfigurations-/Secret-Transaktionen.
+
+Persistentes Pending wird erst mit dem ersten tatsaechlich neustartpflichtigen
+Konfigurationswert eingefuehrt. Connectivity- und Authentication-Domaenen
+werden erst mit den ersten realen WLAN-, Passwort- oder PIN-Nachweisen
+festgelegt. R1 erzeugt dafuer keine leeren Manifeste, Dummyrecords oder
+Dummy-Slots. Reale R1-Secrets bleiben getrennt von `UserConfiguration`,
+`ServiceConfiguration` und `ProgramCatalog` und werden mit ihrem ersten
+produktiven Konsumenten gesondert spezifiziert.
+
+### Verbindlicher additiver Ausbaupfad zu Variante A
+
+Variante A erweitert den R1-Kern spaeter additiv:
+
+1. Dokumente, Manifeste, Roots und Envelopes bleiben schema-versioniert;
+   Record-Type-IDs, Revisionen und Schluessel bleiben stark typisiert.
+   Unbekannte neuere Schemas werden ohne Teilwirkung abgelehnt und bestehende
+   Schema-1-Daten nicht still umgedeutet.
+2. Neue Funktionen verwenden neue Recordtypen, neue Manifest- oder
+   Root-Schemaversionen und explizite Copy-Migrationen. Sie ersetzen den
+   R1-Vertrag nicht durch ein inkompatibles Speichermodell.
+3. Der Active-/Fallback-Graph bleibt gemeinsame Basis. Spaeteres Pending,
+   Aktivierungsintent und Secret-Domaenen werden daran angefuegt.
+4. Ein spaeter persistierter Pending-Kandidat kann dieselbe Erzeugungs-,
+   Validierungs- und Runtime-Vorbereitungspipeline wiederverwenden.
+5. WLAN-Passwoerter, Webpasswort-Nachweise, Service-PINs und vergleichbare
+   Secrets werden nicht in die drei R1-Konfigurationsdokumente eingebettet.
+6. `StorageEpoch` bleibt die gemeinsame Resetgrenze, an die spaetere persistente
+   Domaenen gebunden werden koennen, ohne jetzt leere Secret-Manifeste zu
+   erzeugen.
+7. Es entstehen keine ungenutzten Pending-Ports, Intentmodelle,
+   Secret-Manifeste, Authentication-Roots, Dummy-Slots oder hypothetischen
+   Zukunftsservices. Erweiterbarkeit wird durch Vertraege, Versionierung,
+   Register, Migrationstests und Dokumentation gesichert.
+8. NVS-faehiger Schluesselraum und Record-Type-Register bleiben eindeutig und
+   kollisionsfrei erweiterbar; ungenutzte Schluessel oder Slots werden nicht im
+   Voraus reserviert, sofern dies technisch nicht zwingend ist.
+9. R1-Tests weisen nach, dass unbekannte neuere Root-/Manifest-Schemas ohne
+   Teilwirkung abgelehnt werden, R1-Daten deterministisch lesbar bleiben,
+   Copy-Migrationen Quelldaten nicht in-place veraendern und der
+   Active-/Fallback-Graph spaeter um referenzierte Domaenen erweitert werden
+   kann, ohne Schema-1-Daten umzudeuten. Vollstaendige Pending- oder
+   Secret-Dummytests sind nicht erforderlich.
+
 ## Bestaetigte Release-1-Grenze
 
 ### Zwingend
@@ -157,8 +275,11 @@ real gemessen.
   drei Sprachen und eine sekundaere Weboberflaeche;
 - WLAN-Onboarding mit lokalem Fallback, lokale Zeit/NTP und Zeitzonenanzeige;
 - versionierte Konfiguration, Laufpersistenz, Recovery und begrenzte Journale;
-- lokale Authentication/Secrets, Diagnose, Exporte und secret-freies
-  Backup/Import;
+- Variante-B-Konfigurationsaktivierung mit Active-/Fallback-Graph, fluechtiger
+  validierter Vorschau, sicherem Bootstrap, `StorageEpoch` und
+  wiederaufnehmbarem Werksreset;
+- lokale Authentication und die mit ihren ersten realen Konsumenten
+  spezifizierten Secrets, Diagnose, Exporte und secret-freies Backup/Import;
 - UART/FT232RL als Update- und letzter Recoveryweg;
 - Hardware-, thermische und siebentaegige Releaseabnahme.
 
@@ -190,10 +311,11 @@ Die vollstaendige Zuordnung steht in der
 1. [`ADOPT_OR_BUILD.md`](../ADOPT_OR_BUILD.md) nach Ownerreview als dauerhaften
    Grundsatz uebernehmen.
 2. #20–#23 als naechste unabhaengige Safety-Kette priorisieren.
-3. #17 von nicht benoetigten Komfortteilen des Tracking-Issues #16 entkoppeln,
-   sofern eine separate Ownerpruefung dies bestaetigt.
-4. OD-01 vor jeder Freigabe von #56 entscheiden; #57 bleibt danach strikt
-   abhaengig.
+3. #16/#56/#57 vor Implementierung in einem separaten ownerfreigegebenen
+   Planungs-/ADR-Schritt auf Variante B zuschneiden; die Issues nicht
+   unveraendert umsetzen.
+4. #17 und #24 nur von den tatsaechlich benoetigten schmalen R1-Vertraegen
+   abhaengig machen, nicht von spaeterem Pending oder leeren Secret-Domaenen.
 5. #29 als sichere Hardwarebasis ausfuehren, danach die zwei aktorfreien Spikes.
 6. Treiber erst nach identischen Messungen fixieren und in kleinen
    Adapter-PRs einbinden.
@@ -206,7 +328,7 @@ Die vollstaendige Zuordnung steht in der
 
 | Bereich | Befund | Empfohlene Korrektur ausserhalb dieses Audits |
 |---|---|---|
-| #56/#57 | viele Slots, Roots, Pending-/Intentpfade, zwei Secret-Domaenen und vollstaendige Cut-Matrix vor dem ersten Produktivbackend | Owner bestaetigt Nutzen oder reduziert per separatem Entscheid auf kleinstes sicheres R1-Modell |
+| #56/#57 | bestehender Umfang mischt den notwendigen Active-/Fallback- und Bootstrapkern mit Pending-/Intentpfaden und Secret-Domaenen ohne ersten Konsumenten | nach entschiedenem OD-01 in separatem Planungs-/ADR-Schritt auf Variante B zuschneiden; Variante A spaeter additiv planen |
 | #19 | vier grosse Verantwortungsbereiche in einem Issue | in Journal/Retention, Export und Backup/Import schneiden |
 | #25–#28 | UI-, Web-, Auth-, Diagnose- und Servicepakete sind zu breit fuer kleine PRs | nach stabilen DTO-/Portgrenzen in vertikale Scheiben teilen |
 | LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich | schlanke Views als Baseline, LVGL nur nach Messnachweis |
@@ -217,13 +339,21 @@ Die vollstaendige Zuordnung steht in der
 ## Auswirkungen auf #16, #56 und #57
 
 - **#16:** bleibt unveraendert offen und `TRACKING`. #54/#55 werden als
-  vorhandene Basis wiederverwendet. Der Audit empfiehlt nur eine
-  Abhaengigkeits- und Umfangspruefung; er schliesst oder editiert #16 nicht.
-- **#56:** bleibt `BLOCKED_DEPENDENCY`. Keine Manifest-, Root-, Pending-,
-  Preview- oder Runtimeaktivierungslogik wurde implementiert. Freigabe erst nach
-  OD-01.
-- **#57:** bleibt `BLOCKED_DEPENDENCY`. Keine Bootstrap-, Secret-, Reset- oder
-  Recoverylogik wurde implementiert. Freigabe erst nach #56 und OD-01/OD-09.
+  vorhandene Basis wiederverwendet. Nach dem Audit muss ein separater
+  ownerfreigegebener Planungs-/ADR-Schritt das Tracking und seine Abhaengigkeiten
+  auf Variante B zuschneiden. Dieser Audit editiert #16 nicht.
+- **#56:** bleibt `BLOCKED_DEPENDENCY` und darf nicht unveraendert umgesetzt
+  werden. Sein spaeter korrigierter R1-Scope umfasst Active/Fallback,
+  Graphvalidierung, fluechtige Vorschau, Konfliktschutz und Runtime-Publish.
+  Persistentes Pending und Intent werden in spaetere eigene Arbeit verschoben.
+- **#57:** bleibt `BLOCKED_DEPENDENCY` und darf nicht unveraendert umgesetzt
+  werden. Sein spaeter korrigierter R1-Scope umfasst Bootstrap, `StorageEpoch`,
+  Korruptionssperre und wiederaufnehmbaren Werksreset. Connectivity- und
+  Authentication-Domaenen entstehen erst mit realen Konsumenten in eigener
+  spaeterer Planung.
+- **#17/#24:** duerfen nur von den tatsaechlich benoetigten schmalen
+  Variante-B-Vertraegen abhaengen, nicht von Pending-, Intent- oder vorbereiteter
+  Secret-Infrastruktur.
 
 Die vorgeschlagene Reihenfolge steht in
 [`PROPOSED_RELEASE_1_ROADMAP.md`](PROPOSED_RELEASE_1_ROADMAP.md).
@@ -232,7 +362,6 @@ Die vorgeschlagene Reihenfolge steht in
 
 | ID | Entscheidung |
 |---|---|
-| OD-01 | vollen #56/#57-Vertrag fuer R1 bestaetigen oder separat auf ein kleineres sicheres Modell reduzieren; daraus #17/#24-Abhaengigkeiten klaeren |
 | OD-02 | Display-/Touchstack nach dem identischen Hardware-Spike waehlen |
 | OD-03 | DS18B20-/1-Wire-Stack nach Toolchain- und Hardware-Spike waehlen |
 | OD-04 | Arduino-Framework-Webserver oder ESPAsyncWebServer nach identischem Last-/Ressourcentest |
@@ -240,6 +369,11 @@ Die vorgeschlagene Reihenfolge steht in
 | OD-06 | WiFiManager oder kleiner Framework-Onboardingadapter |
 | OD-07 | R1-Mindestumfang und PR-Schnitt von #19 und #25–#28 |
 | OD-09 | KDF-, Work-Factor-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag vor #27 |
+
+OD-01 ist mit Variante B entschieden. Offen bleibt nur die technische
+Detailpruefung, ob Dokumentrevisionen und Rootsequenz die bisherige Funktion
+einer eigenstaendigen persistenten `MutationSequence` vollstaendig abdecken.
+Sie ist keine erneute Auswahl zwischen Variante A und B.
 
 Hardwarewerte, Pins, Pegel und thermische Parameter sind keine freien
 Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.
