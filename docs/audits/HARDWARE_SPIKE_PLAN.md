@@ -26,7 +26,9 @@ Gemeinsame Basis:
 
 Den kleinsten stabilen Treiber fuer das tatsaechliche MSP2807-Modul bestimmen
 und ILI9341, Touchcontroller, Rotation, Reset, Shared-SPI-Verhalten sowie
-Ressourcen auf der Zieltoolchain belegen.
+Ressourcen auf der Zieltoolchain belegen. Das Touchdisplay ist die einzige
+lokale Bedien- und Anzeigeoberflaeche; der Spike plant keine parallelen lokalen
+Eingaben oder Anzeigen.
 
 ### Kandidaten
 
@@ -116,7 +118,10 @@ Pro Kandidat und Baseline werden erfasst:
 ### Nicht-Scope und Artefakte
 
 Nicht-Scope: komplette Release-UI, finale Pins, Touchgehause, echte
-Serviceaktionen, Aktorbedienung und LVGL-Auswahl. Ergebnisartefakte:
+Serviceaktionen, Aktorbedienung und LVGL-Auswahl. Encoder,
+Programmwahlschalter, Start-/Stop-Taster und Status-LED werden auch nicht als
+spaetere Spikevarianten untersucht, weil sie kein Bestandteil dieses Projekts
+sind. Der 230-V-AC-Hauptschalter ist kein Firmwareeingang. Ergebnisartefakte:
 
 - Schaltplan/Fotos des Testaufbaus und gemessene Pin-/Pegelmatrix;
 - je Kandidat fixierte Abhaengigkeits- und Konfigurationsdatei;
@@ -154,7 +159,7 @@ gebaut werden kann. Andernfalls lautet das Ergebnis reproduzierbar
 
 | Punkt | Festlegung |
 |---|---|
-| Sensoren | genau drei reale DS18B20: Schrankluft, Produkt, Kuehlkoerper |
+| Sensoren | genau drei reale DS18B20: optionaler Produktfuehler, Raum-/Luftsensor und verpflichtender Kuehlkoerper-/Peltier-Schutzsensor |
 | Betrieb | 3-Leiter, keine Parasitspeisung |
 | Adressen | 64-Bit-ROM jedes Sensors vor Rollenbindung erfassen |
 | Topologie A | je Sensor separater Bus, sofern GPIO-Budget nach #29 bestaetigt |
@@ -171,10 +176,11 @@ gebaut werden kann. Andernfalls lautet das Ergebnis reproduzierbar
 4. Enumeration und stabile 64-Bit-Adressen ueber zehn Neustarts.
 5. asynchrone 12-Bit-Konvertierung: Trigger, andere Arbeit, fruehester gueltiger
    Read; keine blockierende Wartezeit im Anwendungspfad.
-6. Produktfuehler vor Boot fehlend, waehrend Betrieb entfernen und wieder
-   anschliessen.
-7. festen Sensor entfernen und wieder anschliessen; nur Treiberstatus erfassen,
-   keine Safety-Regel im Spike erfinden.
+6. optionalen Produktfuehler vor Boot fehlend, waehrend Betrieb entfernen und
+   wieder anschliessen; nur Anwesenheits-, Adress- und Fehlerstatus erfassen.
+7. Raum-/Luftsensor sowie Kuehlkoerper-/Peltier-Schutzsensor jeweils entfernen
+   und wieder anschliessen; nur Treiberstatus erfassen, keine Rollenprioritaet
+   oder Safety-Regel im Spike implementieren.
 8. Bus kurzschliessen/unterbrechen nur mit sicherer strombegrenzter Methode;
    Timeout und Wiederherstellung messen.
 9. CRC- beziehungsweise Datenfehler soweit reproduzierbar injizieren.
@@ -201,7 +207,9 @@ gebaut werden kann. Andernfalls lautet das Ergebnis reproduzierbar
 - fehlender Sensor, Busfehler, CRC-Fehler und Wiederanschluss sind typisiert und
   verursachen keine veraltete Messung als neuen gueltigen Wert;
 - 1.000 Zyklen ohne Haenger, Watchdog oder unerklaerten Reset;
-- Adapter bleibt schmal; Rollen-/Safety-Logik bleibt ausserhalb;
+- Adapter bleibt schmal und liefert den benoetigten Bus-, Adress- und
+  Fehlerstatus; Rollenprioritaet, Ersatzregelung und Peltierfreigabe bleiben
+  ausserhalb;
 - Ressourcen und Toolchainkomplexitaet sind gemessen.
 
 ### Abbruchkriterien
@@ -216,8 +224,11 @@ gebaut werden kann. Andernfalls lautet das Ergebnis reproduzierbar
 
 ### Nicht-Scope und Artefakte
 
-Nicht-Scope: `VALID`/`STALE`/`FAILED`, Filter, Offsets, Ersatzbetrieb,
-PI-Regelung, Aktorfreigabe und finale Sensorposition. Ergebnisartefakte:
+Nicht-Scope: `VALID`/`STALE`/`FAILED`, Filter, Offsets, Produktfuehler als
+primaerer Regelsensor, Raum-/Luftsensor als regulaerer Ersatz,
+Kuehlkoerper-/Peltier-Schutzsensor als verpflichtende Sicherheitsgrundlage,
+PI-Regelung, Aktorfreigabe und finale Sensorposition. Diese Vertraege bleiben
+im Fermentations-/Safety-Kern. Ergebnisartefakte:
 
 - Aufbau-/Topologiefotos, Pull-up-/Leitungsdaten und ROM-Liste;
 - identischer Testcode je Kandidat hinter demselben Adaptervertrag;

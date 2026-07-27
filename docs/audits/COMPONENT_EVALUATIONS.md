@@ -49,10 +49,12 @@ noch Kompatibilitaet mit der fixierten Projekttoolchain.
 
 ### Release-1-Aufgabe und Vertrag
 
-Das bestaetigte Ziel ist eine lokale 320-x-240-Touchoberflaeche im Querformat.
-ILI9341 stammt bisher aus der Lieferantenbeschreibung; XPT2046 ist nur
-wahrscheinlich. Controller, Pins, Rotation, Reset, gemeinsamer SPI-Bus,
-Kalibrierung, Boot-Recovery und Ressourcen bleiben `TBD_HARDWARE`.
+Das bestaetigte Ziel ist die einzige lokale Bedien- und Anzeigeoberflaeche: ein
+320-x-240-Touchdisplay im Querformat. Die Weboberflaeche ist sekundaer;
+Encoder, Programmwahlschalter, Start-/Stop-Taster und Status-LED sind kein
+Bestandteil des Projekts. ILI9341 stammt bisher aus der Lieferantenbeschreibung;
+XPT2046 ist nur wahrscheinlich. Controller, Pins, Rotation, Reset, gemeinsamer
+SPI-Bus, Kalibrierung, Boot-Recovery und Ressourcen bleiben `TBD_HARDWARE`.
 
 | Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP32-/PlatformIO-Aussage | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
 |---|---|---|---|---|---|---|---|
@@ -80,18 +82,26 @@ am 2026-07-27.
 ### Release-1-Aufgabe und Vertrag
 
 Drei DS18B20 werden im 3-Leiter-Betrieb bei 12 Bit ungefaehr alle zwei Sekunden
-abgefragt. Benoetigt werden 64-Bit-ROM-Adressen, mehrere Sensoren je Bus als
-Rueckfalltopologie, getrennte feste und abnehmbare Rollen, nicht blockierende
-Konvertierung, CRC-/Busfehler und Hot-Plug. Sensorqualitaet und Safety bleiben
-ausserhalb des Treibers.
+abgefragt. Der optional anschliessbare Produktfuehler ist der primaere
+Regelsensor, wenn er vorhanden und verwendbar ist; sein Fehlen verhindert einen
+dafuer zulaessigen Lauf nicht grundsaetzlich. Der Raum-/Luftsensor ist dann der
+regulaere Ersatz-Regelsensor. Der Kuehlkoerper-/Peltier-Schutzsensor ist
+verpflichtende Sicherheitsgrundlage; ohne ausreichend vertrauenswuerdiges
+Signal darf der Peltier nicht freigegeben werden. Benoetigt werden 64-Bit-ROM-
+Adressen, mehrere Sensoren je Bus als Rueckfalltopologie, getrennte feste und
+abnehmbare Rollen, nicht blockierende Konvertierung, CRC-/Busfehler und Hot-Plug.
+Der Treiber meldet nur Bus-, Adress- und Fehlerstatus. Rollenprioritaet,
+Sensorqualitaet und Safety bleiben im Fermentationskern.
 
 | Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP32-/PlatformIO-Aussage | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
 |---|---|---|---|---|---|---|---|
 | DallasTemperature + OneWire | verbreitete Arduino-Abstraktion ueber den DS18B20- und 1-Wire-Vertrag | DallasTemperature `4.0.6`, `dadbbf7d`, MIT; OneWire `2.3.8`, `800f26f3`, MIT im Quelltext | beide `architectures=*`; OneWire nennt ESP32-Anpassungen | zwei kleine Bibliotheken; exakte Flash-/RAMwirkung im Spike messen | asynchroner `ITemperatureSource`-Adapter mit explizitem Bus-, Adress- und Fehlerstatus | neue DallasTemperature-Hauptversion, alter Arduino-Core, mehrere Busse, Hot-Plug und Timing pruefen | bevorzugter Kandidat fuer die aktuelle Arduino-Toolchain, aber erst nach identischem Spike |
 | Espressif onewire_bus + ds18b20 | offizielle Espressif-Komponenten, RMT/UART-Backend, Enumeration und CRC8 | `onewire_bus 1.1.1`, `a269e1fe`; `ds18b20 0.4.0`, `bf92b0b3`; Apache-2.0 | Registry fordert fuer onewire_bus ESP-IDF >=5.0; aktuelles Projekt nutzt Arduino-ESP32 2.0.17 auf IDF 4.4, direkte Integration daher unbestaetigt | RMT/UART-Ressourcen und optionale Sensor-Hub-Abhaengigkeit; messen | gleicher Plattformport; keine IDF-Typen in der Anwendung | Toolchain-Mismatch, Komponentenmanager in PlatformIO-Arduino, optionaler Sensor-Hub unterstuetzt laut README nur einen Sensor | technisch attraktiver Herstellerkandidat, aber ohne Toolchainwechsel nicht als kompatibel behaupten |
 
-Verbleibende eigene Safety-/Fachlogik: Rollenbindung, Pflichtsensoren,
-`VALID`/`STALE`/`FAILED`, Filter, Plausibilitaet, Offset, Ersatzbetrieb und
+Verbleibende eigene Safety-/Fachlogik: Rollenbindung, Produktfuehler als
+optionaler primaerer Regelsensor, Raum-/Luftsensor als regulaerer Ersatz,
+Kuehlkoerper-/Peltier-Schutzsensor als verpflichtende Freigabegrundlage,
+`VALID`/`STALE`/`FAILED`, Filter, Plausibilitaet, Offset, Rueckkehr und
 Aktorfreigabe. Entscheidungsstatus: `SPIKE_REQUIRED`.
 
 Quellen: [DallasTemperature](https://github.com/milesburton/Arduino-Temperature-Control-Library),
@@ -121,14 +131,17 @@ Abgerufen am 2026-07-27.
 
 | Merkmal | Bewertung |
 |---|---|
-| Aufgabe | zwei 12-V-Luefter und aktiver Summer ueber bestaetigte binaere Ausgaenge |
-| Release-1-Anforderung | sichere Bootpegel, Innenluefterbetrieb, Aussenluefter ohne absichtlichen Vorlauf und mit Nachlauf, Summer nicht blockierend |
+| Aufgabe | zwei 12-V-Luefter und der aktive Summer als einziges zusaetzliches lokales Ausgabeelement ueber bestaetigte binaere Ausgaenge |
+| Release-1-Anforderung | sichere Bootpegel, Innenluefterbetrieb, Aussenluefter ohne absichtlichen Vorlauf und mit Nachlauf, Summer fuer nicht blockierende akustische Warnungen und Hinweise; keine Status-LED |
 | Kandidaten | Arduino-ESP32 GPIO/LEDC; keine Geraeterollen in der Plattform |
 | Quelle/Stand/Lizenz | [Arduino-ESP32](https://github.com/espressif/arduino-esp32), Projektstand `2.0.17`/`dcc1105b`, LGPL-2.1 mit Drittbestandteilen |
 | Ressourcen | kleine `IBinaryOutputSink`-Adapter; Timer/PWM nur falls reale Hardware es verlangt |
 | Eigene Logik | Nachlauf, Sicherheitsprioritaet, Meldungsmuster und Rollenbindung |
 | Risiken/Hardwaretest | Kanalbelegung und aktive Pegel der Quad-MOSFET-Platine sind nur `confirmed_order`; Strom, Anlauf und Reset messen |
 | Empfehlung/Status | `CONFIGURE_FRAMEWORK`; keine separate Luefterbibliothek; `BLOCKED_HARDWARE` |
+
+Der 230-V-AC-Hauptschalter gehoert nicht zu diesen Ausgaengen und erhaelt auch
+keinen Eingangsadapter. Er schaltet das Geraet rein elektrisch ein oder aus.
 
 ## NVS beziehungsweise Preferences
 

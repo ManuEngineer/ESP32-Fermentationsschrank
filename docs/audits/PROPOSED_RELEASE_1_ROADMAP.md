@@ -62,7 +62,9 @@ Persistenzminimum aus #54/#55 und Ownerentscheid OD-01
 Vorgeschlagene kleine PRs:
 
 - #20: Status-/Plausibilitaetsmodell, danach Filterpipeline;
-- #21: Auswahl/Fallback, danach Rueckkehr und Ereignisse;
+- #21: optionalen Produktfuehler als primaeren Regelsensor, regulaeren
+  Raum-/Luft-Ersatzsensor und sichere Rueckkehr modellieren; der verpflichtende
+  Kuehlkoerper-/Peltier-Schutzsensor bleibt unabhaengige Freigabegrundlage;
 - #22: begrenzter PI-Kern, danach Luftbegrenzung/Diagnose;
 - #23: Peltierplaner, danach Luefter/Nachlauf;
 - #17: Kontrollpunktcodec/-slots, danach Ereignis-/Rueckfallservice;
@@ -127,10 +129,13 @@ Verbindliche Reihenfolge:
 
 1. #29 Controller, UART, Ressourcen und unbelastete Ausgaenge;
 2. #30 Sensoren und #31 Display/Touch aktorfrei;
-3. #32 Luefter, Summer und MOSFET-Kanaele einzeln;
+3. #32 Luefter, den Summer als einziges zusaetzliches lokales Ausgabeelement
+   und MOSFET-Kanaele einzeln;
 4. #33 BTS7960 ohne Peltier;
 5. erst danach #33 begrenzte Peltierpulse mit Sicherung, montierter einmaliger
-   Temperatursicherung, Pflichtsensoren, Lueftern und bestaetigten Pegeln.
+   Temperatursicherung, gueltigem und ausreichend vertrauenswuerdigem
+   Kuehlkoerper-/Peltier-Schutzsignal, einem gemaess Laufvertrag verwendbaren
+   Regelsensor, Lueftern und bestaetigten Pegeln.
 
 Ein bestandener Bibliotheksspike ist keine Freigabe fuer reale Aktoren.
 
@@ -138,10 +143,11 @@ Ein bestandener Bibliotheksspike ist keine Freigabe fuer reale Aktoren.
 
 Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
 
-- #26 in Navigations-/Screen-Scheiben umsetzen; UI-Logik weiterhin nativ
-  testen;
+- #26 als einzige lokale Bedien- und Anzeigeoberflaeche in
+  Navigations-/Screen-Scheiben umsetzen; UI-Logik weiterhin nativ testen;
 - #27 teilen in begrenzte Lese-API/Transport, mutierende Kommandos/Konflikte,
-  Webassets, Onboarding und Authentication;
+  Webassets, Onboarding und Authentication; die Weboberflaeche bleibt
+  sekundaer und ist keine Voraussetzung fuer den lokalen Betrieb;
 - vor Authentication OD-09 festlegen: KDF/Work-Factor, Sitzungsdauer,
   Sperrzeiten, CSRF und At-rest-Grenze;
 - #28 teilen in passive Diagnose, Exporte/Diagrammdaten und aktiven
@@ -175,8 +181,19 @@ Bis nach Release 1:
 - Cloud, Push, Telegram und direkter Fernzugriff;
 - PID-Autotuning und Kaskadenregelung;
 - LVGL, sofern der Hardware-/UI-Vergleich keinen zwingenden R1-Vorteil zeigt;
-- Encoder, Taster, LED, Tuerkontakt, RTC-Pflicht, 12-V-ADC und Lueftertacho;
+- Tuerkontakt, RTC-Pflicht, 12-V-ADC und Lueftertacho;
 - vorsorgliche Ports, Puffer und Bibliotheken fuer diese Funktionen.
+
+## Dauerhaft nicht Bestandteil dieses Projekts
+
+Encoder, Programmwahlschalter, Start-/Stop-Taster und Status-LED werden nicht
+auf eine spaetere Release verschoben, sondern gehoeren verbindlich nicht zu
+diesem Fermentationsprojekt. Dafuer werden keine Ports, GPIO-Zuordnungen,
+Adapter oder vorsorglichen Interfaces geplant. Der 230-V-AC-Hauptschalter
+schaltet das ganze Geraet elektrisch ein oder aus und ist kein Firmwareeingang.
+Das Touchdisplay bleibt die einzige lokale Bedien- und Anzeigeoberflaeche, die
+Weboberflaeche bleibt sekundaer und der Summer das einzige zusaetzliche lokale
+Ausgabeelement.
 
 ## Zu verkleinern, zu ersetzen oder zu schliessen
 

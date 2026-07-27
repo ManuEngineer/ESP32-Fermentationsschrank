@@ -31,6 +31,9 @@ ADRs, die Release-/Safety-/Hardware-/Persistenz-/UI-/Netzwerkspezifikation, der
 offene Backlog, die aktuelle Quell- und Teststruktur, die fixierte Toolchain und
 die vorhandenen Hardwarequellen unter `references/`.
 
+Die Bedien- und Sensorrollengrenze folgt dem verbindlichen Ownerentscheid aus
+dem Auditreview von PR #63, Kommentar `5088383783`.
+
 ## Methodik
 
 1. Verbindliche Quellen wurden in der Reihenfolge aus
@@ -55,8 +58,11 @@ Ressourcenwerte fuer noch nicht eingebundene Komponenten erfunden.
 ## Executive Summary
 
 Die akzeptierte Release-1-Grenze ist grundsaetzlich stimmig: Das Geraet muss
-lokal und ohne Netzwerk sicher fermentieren, benoetigt aber fuer Release 1
-zusaetzlich lokale Webbedienung, begrenzte Persistenz/Recovery, Diagnose,
+lokal und ohne Netzwerk sicher fermentieren. Das Touchdisplay ist die einzige
+lokale Bedien- und Anzeigeoberflaeche; die Weboberflaeche ist sekundaer. Der
+230-V-AC-Hauptschalter schaltet das Geraet rein elektrisch und ist kein
+Firmwareeingang. Der Summer ist das einzige zusaetzliche lokale Ausgabeelement.
+Release 1 benoetigt ausserdem begrenzte Persistenz/Recovery, Diagnose,
 secret-freies Backup/Import und UART-Recovery. OTA, Bluetooth, Cloud/Push,
 PID-Autotuning, Kaskadenregelung und PSRAM-Abhaengigkeit bleiben ausserhalb.
 
@@ -104,9 +110,13 @@ nicht.
 
 Treiberbibliotheken duerfen Sensorbytes, Pixel oder HTTP-Verbindungen
 verarbeiten. Sie entscheiden nicht ueber Rollenbindung, Ersatzbetrieb,
-Heiz-/Kuehlfreigabe, Totzeit, Fehlerreset, Recovery oder Authberechtigung. Die
-Issues #20–#24 bleiben deshalb `CUSTOM_SAFETY_CORE`; #17–#19, #25–#28 und der
-fachliche Teil von #56/#57 bleiben `CUSTOM_APPLICATION`.
+Heiz-/Kuehlfreigabe, Totzeit, Fehlerreset, Recovery oder Authberechtigung. Der
+optionale, verwendbare Produktfuehler ist der primaere Regelsensor; ohne ihn
+uebernimmt der Raum-/Luftsensor regulaer die Regelung, sofern der Lauf dies
+zulaesst. Der Kuehlkoerper-/Peltier-Schutzsensor ist fuer jede
+Peltierfreigabe verpflichtend. Die Issues #20–#24 bleiben deshalb
+`CUSTOM_SAFETY_CORE`; #17–#19, #25–#28 und der fachliche Teil von #56/#57
+bleiben `CUSTOM_APPLICATION`.
 
 ### 3. Toolchainkompatibilitaet ist ein eigener Nachweis
 
@@ -137,10 +147,14 @@ real gemessen.
 
 ### Zwingend
 
-- drei DS18B20-Rollen und sensorbasierte sichere Freigabe;
+- drei DS18B20-Rollen: der optionale Produktfuehler ist primaerer Regelsensor,
+  wenn er vorhanden und verwendbar ist; der Raum-/Luftsensor ist der regulaere
+  Ersatz-Regelsensor; der Kuehlkoerper-/Peltier-Schutzsensor ist verpflichtende
+  Sicherheitsgrundlage fuer jede Peltierfreigabe;
 - Peltier ueber BTS7960, Innen-/Aussenluefter und Summer;
 - deterministischer Safety-, PI-, Aktor-, Prozess- und Laufkern;
-- Touchdisplay 320 x 240, drei Sprachen und lokale Weboberflaeche;
+- Touchdisplay 320 x 240 als einzige lokale Bedien- und Anzeigeoberflaeche,
+  drei Sprachen und eine sekundaere Weboberflaeche;
 - WLAN-Onboarding mit lokalem Fallback, lokale Zeit/NTP und Zeitzonenanzeige;
 - versionierte Konfiguration, Laufpersistenz, Recovery und begrenzte Journale;
 - lokale Authentication/Secrets, Diagnose, Exporte und secret-freies
@@ -155,9 +169,18 @@ real gemessen.
 - Cloud-, Push- oder Telegram-Pflicht;
 - PID-Autotuning und aktive Kaskadenregelung;
 - LVGL ohne belegten R1-Vorteil;
-- Encoder, Taster oder LED ohne neue akzeptierte Anforderung;
 - Tuerkontakt, verpflichtende RTC, 12-V-ADC, Lueftertacho;
 - vorsorgliche grosse Puffer, Ports oder Bibliotheken fuer spaetere Funktionen.
+
+### Nicht Bestandteil dieses Projekts
+
+Encoder, Programmwahlschalter, Start-/Stop-Taster und Status-LED gehoeren
+verbindlich nicht zu diesem Fermentationsprojekt (`NOT_PART_OF_THIS_PROJECT`).
+Dafuer entstehen weder Ports noch GPIO-Zuordnungen, Adapter oder vorsorgliche
+Interfaces. Der 230-V-AC-Hauptschalter ist ebenfalls kein Firmwareeingang; er
+schaltet das gesamte Geraet elektrisch ein oder aus. Der Summer bleibt das
+einzige zusaetzliche lokale Ausgabeelement fuer akustische Warnungen und
+Hinweise. Diese Festlegung ist kein Aufschub auf eine spaetere Release.
 
 Die vollstaendige Zuordnung steht in der
 [`Release-1-Funktionsmatrix`](RELEASE_1_FUNCTION_MATRIX.md).
