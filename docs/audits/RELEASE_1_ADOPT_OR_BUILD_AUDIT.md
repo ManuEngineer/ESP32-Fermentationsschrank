@@ -50,8 +50,9 @@ Persistenzentscheid OD-01 folgt Kommentar `5088636861`.
 5. Hersteller-/Projektbehauptungen, Repositorybefunde und noch ausstehende
    Hardwaremessungen werden getrennt. README- oder Marketingaussagen gelten
    nicht als reale Hardwarebestaetigung.
-6. Hardwarekandidaten erhalten identische Spikeplaene, bevor ein Produktivstack
-   gewaehlt wird.
+6. Hardwarekandidaten erhalten vergleichbare, gestufte Spikeplaene, bevor ein
+   Produktivstack gewaehlt wird. Beim Display/Touch erreichen nur Kandidaten mit
+   bestandenem kurzem Smoke-Test die vollstaendige identische Hardwarematrix.
 
 Es wurden keine Bibliotheken installiert, keine Spikes ausgefuehrt und keine
 Ressourcenwerte fuer noch nicht eingebundene Komponenten erfunden.
@@ -76,8 +77,10 @@ und Berechtigungslogik eigene deterministische Module.
 
 Zwei Hardwareentscheidungen duerfen nicht am Schreibtisch fallen:
 
-- Display/Touch: LovyanGFX, TFT_eSPI und das LCDWiki-Paket werden identisch am
-  realen MSP2807 verglichen.
+- Display/Touch: LovyanGFX, TFT_eSPI und das LCDWiki-Paket durchlaufen alle die
+  Quellen-/Lizenz- und Buildpruefung. Ausreichend erfolgreiche Kandidaten
+  erhalten einen kurzen identischen Smoke-Test; nur dessen erfolgreiche
+  Kandidaten erreichen die vollstaendige identische Hardwarematrix.
 - DS18B20: DallasTemperature+OneWire und die Espressif-Komponenten werden
   identisch verglichen; der Espressif-Stack muss zuerst seine Kompatibilitaet
   mit der aktuellen Arduino-ESP32-2.0.17-Toolchain beweisen.
@@ -158,12 +161,21 @@ BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und Summer bleiben physisch
 getrennt oder nachweislich inaktiv; der Summer wird nicht angesteuert.
 
 Die Baseline bestimmt keine finalen Pins, Partitionierung, Bibliotheken,
-Sensorbustopologie, Aktoradapter, Safety-Grenzen oder PI-Parameter. Jeder
-Kandidat durchlaeuft danach drei Gates: Quellen-/Lizenz-/Kompatibilitaetsvertrag,
-isolierter reproduzierbarer Build mit der fixierten Toolchain ohne Aktoren und
-erst dann der identische reale Hardwaretest. Ein Gate-2-Scheitern wird typisiert
-dokumentiert und nicht durch einen Toolchainwechsel oder verfruehten
-Hardwaretest umgangen.
+Sensorbustopologie, Aktoradapter, Safety-Grenzen oder PI-Parameter. Der
+Display-/Touchvergleich beginnt danach mit der realen Hardwareidentifikation in
+Stufe 0. Alle drei Hauptkandidaten durchlaufen Stufe 1 fuer Quellen, Lizenzen,
+Kompatibilitaet und reproduzierbaren Build. Nur ausreichend erfolgreiche
+Kandidaten erreichen den kurzen Hardware-Smoke-Test in Stufe 2, und nur
+`PASS_SMOKE_TEST` erreicht die vollstaendige identische Matrix in Stufe 3.
+Stufe 4 bestimmt bevorzugten Treiber und Rueckfallkandidat. Reservekandidaten
+werden nur bei einem dokumentierten Ausloeser nachgezogen. Der Sensorspike
+behaelt die drei gemeinsamen Mindestgates. Ein Build-Scheitern wird typisiert
+dokumentiert und nicht durch Toolchainwechsel oder verfruehten Hardwaretest
+umgangen.
+
+LVGL ist kein Display-/Touchtreiberkandidat. Es wird erst nach Treiberauswahl,
+schmalem Adaptervertrag und einem repraesentativen Release-1-Screen mit
+schlanken eigenen Views unter identischen Bedingungen verglichen.
 
 Parallel laufen #20 Sensorqualitaet, #21 Regelsensorauswahl, #22 PI/
 Luftbegrenzung, #23 Aktorplaner und #24 Fehlerkern/`SAFE_BOOT`. Bibliothekstypen,
@@ -348,9 +360,9 @@ Die vollstaendige Zuordnung steht in der
    unveraendert umsetzen.
 5. #17 und #24 nur von den tatsaechlich benoetigten schmalen R1-Vertraegen
    abhaengig machen, nicht von spaeterem Pending oder leeren Secret-Domaenen.
-6. Treiber erst nach drei bestandenen beziehungsweise ausreichend bewerteten
-   Kandidatengates und identischen Messungen fixieren und in kleinen
-   Adapter-PRs einbinden.
+6. Display-/Touchtreiber erst nach den Stufen 0 bis 4, DS18B20-/1-Wire-Treiber
+   nach den drei gemeinsamen Mindestgates und den jeweils geforderten
+   identischen Messungen fixieren und in kleinen Adapter-PRs einbinden.
 7. Produktive Aktoradapter und reale Aktortests weiterhin erst nach den
    zugeordneten Safety-Gates freigeben.
 8. Web-/UI-/Backupissues vor Umsetzung in kleine, ressourcenmessbare Scheiben
@@ -366,7 +378,7 @@ Die vollstaendige Zuordnung steht in der
 | #56/#57 | bestehender Umfang mischt den notwendigen Active-/Fallback- und Bootstrapkern mit Pending-/Intentpfaden und Secret-Domaenen ohne ersten Konsumenten | nach entschiedenem OD-01 in separatem Planungs-/ADR-Schritt auf Variante B zuschneiden; Variante A spaeter additiv planen |
 | #19 | vier grosse Verantwortungsbereiche in einem Issue | in Journal/Retention, Export und Backup/Import schneiden |
 | #25–#28 | UI-, Web-, Auth-, Diagnose- und Servicepakete sind zu breit fuer kleine PRs | nach stabilen DTO-/Portgrenzen in vertikale Scheiben teilen |
-| LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich | schlanke Views als Baseline, LVGL nur nach Messnachweis |
+| LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich und ist kein Treiberkandidat | erst nach Treiberauswahl, Adaptervertrag und identischem repraesentativem Screen gegen schlanke Views messen |
 | ESPAsyncWebServer | Async-/WebSocket-/SSE-Umfang koennte groesser als der reale R1-Bedarf sein | Frameworkserver zuerst messen; Async nur bei belegtem Vorteil |
 | Espressif Provisioning/BLE | umfangreicher Provisioningstack wuerde BLE und Toolchainkomplexitaet einbringen | SoftAP/Captive-Portal-Anforderung mit kleinstem Adapter erfuellen |
 | PID-Bibliotheken | allgemeine PID-/Autotune-Funktionen passen nicht zum spezifizierten begrenzten PI-/Safety-Vertrag | kleinen deterministischen PI-Kern selbst implementieren |
@@ -397,10 +409,10 @@ Die vorgeschlagene Reihenfolge steht in
 
 | ID | Entscheidung |
 |---|---|
-| OD-02 | Display-/Touchstack nach dem identischen Hardware-Spike waehlen |
+| OD-02 | Display-/Touchtreiberstack in Stufe 4 nach gestuftem Hardwarevergleich waehlen |
 | OD-03 | DS18B20-/1-Wire-Stack nach Toolchain- und Hardware-Spike waehlen |
 | OD-04 | Arduino-Framework-Webserver oder ESPAsyncWebServer nach identischem Last-/Ressourcentest |
-| OD-05 | schlanke eigene Screens oder LVGL nach representativem Screen-/Ressourcenvergleich |
+| OD-05 | schlanke eigene Screens oder LVGL erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich |
 | OD-06 | WiFiManager oder kleiner Framework-Onboardingadapter |
 | OD-07 | R1-Mindestumfang und PR-Schnitt von #19 und #25–#28 |
 | OD-09 | KDF-, Work-Factor-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag vor #27 |
@@ -423,8 +435,8 @@ Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.
   Kandidaten, Versionen, Adapter und Risiken
 - [`THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md`](THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md)
   – Herkunft, Lizenzen und Publikationspruefung
-- [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md) – identische Display-/Touch-
-  und DS18B20-Spikes
+- [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md) – gestufter Display-/Touch-
+  und identischer DS18B20-Spike
 - [`PROPOSED_RELEASE_1_ROADMAP.md`](PROPOSED_RELEASE_1_ROADMAP.md) – Reihenfolge,
   Gates, kleine PRs und spaetere Funktionen
 - [`../ADOPT_OR_BUILD.md`](../ADOPT_OR_BUILD.md) – Entwurf des dauerhaften

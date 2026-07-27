@@ -53,16 +53,35 @@ Das bestaetigte Ziel ist die einzige lokale Bedien- und Anzeigeoberflaeche: ein
 320-x-240-Touchdisplay im Querformat. Die Weboberflaeche ist sekundaer;
 Encoder, Programmwahlschalter, Start-/Stop-Taster und Status-LED sind kein
 Bestandteil des Projekts. ILI9341 stammt bisher aus der Lieferantenbeschreibung;
-XPT2046 ist nur wahrscheinlich. Controller, Pins, Rotation, Reset, gemeinsamer
-SPI-Bus, Kalibrierung, Boot-Recovery und Ressourcen bleiben `TBD_HARDWARE`.
+XPT2046 ist nur wahrscheinlich. Vor der Kandidatenbewertung identifiziert
+Stufe 0 am gelieferten Modul Variante, beide Controller, Versorgung,
+Logikpegel, Chip-Selects, Reset, Data/Command, Hintergrundbeleuchtung,
+SPI-Topologie, reale Modulbelegung und Bootzustaende. Controller, Pins,
+Rotation, Reset, gemeinsamer SPI-Bus, Kalibrierung, Boot-Recovery und Ressourcen
+bleiben bis zu diesem Nachweis `TBD_HARDWARE`.
+
+Alle drei Hauptkandidaten durchlaufen Stufe 1 fuer Quellen, konkret benoetigte
+Dateien, Lizenzen, Abhaengigkeiten und reproduzierbaren Build. Nur ausreichend
+erfolgreiche Kandidaten erreichen den kurzen identischen Hardware-Smoke-Test in
+Stufe 2; nur `PASS_SMOKE_TEST` fuehrt zur vollstaendigen Matrix in Stufe 3.
+Stufe 4 benennt genau einen bevorzugten Treiberstack und einen
+Rueckfallkandidaten. Die zwei Reservekombinationen werden nur bei einem
+dokumentierten Ausloeser nachgezogen und nicht vorsorglich voll implementiert.
 
 | Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP32-/PlatformIO-Aussage | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
 |---|---|---|---|---|---|---|---|
-| LovyanGFX | Projekt nennt ILI9341, ESP32 und Touchunterstuetzung | `1.2.26`, `3f78b705`; FreeBSD plus dokumentierte Ursprungslizenzen | `architectures=esp32`; konkrete Kompatibilitaet mit Arduino-ESP32 2.0.17 messen | Treiber, Fonts und optionale Sprites; kein Vollbildpuffer erzwingen | schmaler Display-/Touchadapter, feste Bus- und Pufferkonfiguration | Boardprofil, XPT2046, Shared-SPI, Heap und Reset real pruefen | einer der drei verbindlichen Spike-Kandidaten; funktional breitester Kandidat, nicht ausgewaehlt |
-| TFT_eSPI | Projekt nennt ILI9341 und ESP32 | Manifest `2.5.44`, `16e37595`; FreeBSD plus Ursprungsbestandteile | `architectures=*`; User-Setup ist buildzeitnah und muss reproduzierbar gekapselt werden | optimierter Treiber und Fonts; Konfiguration kann ungenutzte Treiber einbeziehen | Displayadapter plus projektspezifische, versionierte Setupdatei; Touch separat oder integriert pruefen | globale Konfiguration, Shared-SPI, Touchkalibrierung und Upstream-Updates | verbindlicher Spike-Kandidat; gute Vergleichsbasis, nicht ausgewaehlt |
-| LCDWiki-Paket | lokale Kopie der zum MSP2807 gelieferten Demos und Treiber | Paketdateien 2018; MIT-Dateien in `LCDWIKI_GUI`, `LCDWIKI_SPI`, `LCDWIKI_TOUCH`; Paketherkunft/Abdeckung erneut pruefen | Demos zielen vorwiegend auf Arduino UNO/Mega; ESP32- und PlatformIO-Tauglichkeit unbestaetigt | unbekannt; altes Paket mit mehreren Demos, Fonts und Controllerpfaden | bei positiver Untersuchung nur kleinster klar lizenzierter Teil hinter Adapter; keine direkte Gesamtuebernahme | fehlende moderne ESP32-Referenz, Paketalter, Abdeckung aller Dateien, Pins und Touch real pruefen | verbindlicher Herstellerreferenz-Spike; keine allgemeine rechtliche oder technische Freigabe |
-| Arduino_GFX plus XPT2046_Touchscreen | Arduino_GFX nennt ILI9341 und ESP32-SPI; separater XPT2046-Treiber | `1.6.7`, `fe33cad8`, BSD; Touch `1.4`, `f956c5d8`, MIT im Header | Arduino-Manifeste `architectures=*`; konkrete alte-Core-Kompatibilitaet messen | zwei Bibliotheken, Adapterschicht und moeglicherweise weniger integrierte Shared-SPI-Koordination | getrennte Display- und Touchadapter | zwei Lebenszyklen, Kalibrierung, Busarbitrierung, Reset | plausible Reservevariante, nur bei Scheitern oder klarem Vorteil der drei Hauptkandidaten vertiefen |
-| Adafruit GFX + ILI9341 + XPT2046_Touchscreen | Adafruit-Treiber dokumentiert ILI9341/ESP32; separater Touchtreiber | GFX `1.12.6`/`ac6d7c38`, ILI9341 `1.6.3`/`dbb447af`, BSD; Touch MIT | `architectures=*`; zusaetzliche Adafruit-Abhaengigkeiten und Core-Kompatibilitaet pruefen | mehrere Bibliotheken und BusIO; Referenz eher Portabilitaet als minimales ESP32-Profil | Display- und Touchadapter, ungenutzte Abhaengigkeiten vermeiden | Abhaengigkeitsumfang, Shared-SPI und Performance messen | stabile Referenzkombination, aber nicht erster Spike wegen zusaetzlichem Umfang |
+| LovyanGFX | Projekt nennt ILI9341, ESP32 und Touchunterstuetzung | `1.2.26`, `3f78b705`; FreeBSD plus dokumentierte Ursprungslizenzen | `architectures=esp32`; konkrete Kompatibilitaet mit Arduino-ESP32 2.0.17 messen | Treiber, Fonts und optionale Sprites; kein Vollbildpuffer erzwingen | schmaler Display-/Touchadapter, feste Bus- und Pufferkonfiguration | Boardprofil, XPT2046, Shared-SPI, Heap und Reset real pruefen | verbindlicher Hauptkandidat fuer Stufe 1; nicht ausgewaehlt |
+| TFT_eSPI | Projekt nennt ILI9341 und ESP32 | Manifest `2.5.44`, `16e37595`; FreeBSD plus Ursprungsbestandteile | `architectures=*`; User-Setup ist buildzeitnah und muss reproduzierbar gekapselt werden | optimierter Treiber und Fonts; Konfiguration kann ungenutzte Treiber einbeziehen | Displayadapter plus projektspezifische, versionierte Setupdatei; Touch separat oder integriert pruefen | globale Konfiguration, Shared-SPI, Touchkalibrierung und Upstream-Updates | verbindlicher Hauptkandidat fuer Stufe 1; nicht ausgewaehlt |
+| LCDWiki-Paket | lokale Kopie der zum MSP2807 gelieferten Demos und Treiber | Paketdateien 2018; MIT-Dateien in `LCDWIKI_GUI`, `LCDWIKI_SPI`, `LCDWIKI_TOUCH`; Paketherkunft/Abdeckung erneut pruefen | Demos zielen vorwiegend auf Arduino UNO/Mega; ESP32- und PlatformIO-Tauglichkeit unbestaetigt | unbekannt; altes Paket mit mehreren Demos, Fonts und Controllerpfaden | bei positiver Untersuchung nur kleinster klar lizenzierter Teil hinter Adapter; keine direkte Gesamtuebernahme | fehlende moderne ESP32-Referenz, Paketalter, Abdeckung aller Dateien, Pins und Touch real pruefen | verbindlicher Hauptkandidat fuer Stufe 1 und interne Herstellerreferenz; keine allgemeine rechtliche oder technische Freigabe |
+| Arduino_GFX plus geeigneter Touchadapter | Arduino_GFX nennt ILI9341 und ESP32-SPI; separater Touchadapter nach bestaetigtem Controller | `1.6.7`, `fe33cad8`, BSD; XPT2046-Touch `1.4`, `f956c5d8`, MIT im Header, falls der Controller bestaetigt wird | Arduino-Manifeste `architectures=*`; konkrete alte-Core-Kompatibilitaet messen | zwei Bibliotheken, Adapterschicht und moeglicherweise weniger integrierte Shared-SPI-Koordination | getrennte Display- und Touchadapter | zwei Lebenszyklen, Kalibrierung, Busarbitrierung, Reset | Reservekandidat; nur bei dokumentiertem Ausloeser nachziehen |
+| Adafruit GFX + ILI9341 + geeigneter XPT2046-Touchadapter | Adafruit-Treiber dokumentiert ILI9341/ESP32; Touchadapter erst nach Controllerbestaetigung | GFX `1.12.6`/`ac6d7c38`, ILI9341 `1.6.3`/`dbb447af`, BSD; XPT2046-Touch MIT | `architectures=*`; zusaetzliche Adafruit-Abhaengigkeiten und Core-Kompatibilitaet pruefen | mehrere Bibliotheken und BusIO; Referenz eher Portabilitaet als minimales ESP32-Profil | Display- und Touchadapter, ungenutzte Abhaengigkeiten vermeiden | Abhaengigkeitsumfang, Shared-SPI und Performance messen | Reservekandidat; nur bei dokumentiertem Ausloeser nachziehen |
+
+Reservekandidaten werden nur nachgezogen, wenn weniger als zwei Hauptkandidaten
+Stufe 2 bestehen, alle Hauptkandidaten ein wesentliches Ressourcen-, Wartungs-,
+Stabilitaets- oder Integrationsproblem besitzen, der erforderliche publizierte
+Dateisatz eine ungeklaerte Lizenz-/Herkunftsfrage behaelt, keine belastbare
+Auswahl moeglich ist oder ein Reservekandidat einen nachgewiesenen wesentlichen
+R1-Vorteil besitzt.
 
 Verbleibende eigene Logik: Touchkalibrierung, Ereignisentprellung,
 Aufweckschutz, UI-Navigation, Sicherheits- und Kommandosemantik. Kein Treiber
@@ -217,13 +236,21 @@ Quellen: [ricmoo/QRCode](https://github.com/ricmoo/QRCode),
 
 ## UI-Framework
 
+LVGL ist kein Display- oder Touchtreiberkandidat. Der Treibervergleich wird
+zuerst mit Stufe 4 abgeschlossen. Danach werden der schmale Adaptervertrag und
+ein repraesentativer Release-1-Screen auf dem ausgewaehlten Treiber erstellt;
+erst dann werden schlanke eigene Views und LVGL auf derselben Hardware mit
+demselben Treiber, Screen, Texten, Eingabeelementen und derselben Messmethode
+verglichen.
+
 | Kandidat | Stand/Lizenz | Eignung | Ressourcen/Risiken | Empfehlung |
 |---|---|---|---|---|
-| LVGL | `9.5.0`, `8fd90bb1`, MIT | vollstaendiges Widget-, Layout-, Event- und Renderingframework | zusaetzliche Displaypuffer, Fonts, Widgetzustand und Integrationskomplexitaet; 4 MB/ohne PSRAM messen | nicht vorsorglich einbinden; nur waehlen, wenn ein kleiner representativer Screen-Satz messbar besser wartbar ist und Budgets einhaelt |
-| schlanke projektspezifische Views auf gewaehltem GFX-Treiber | keine Drittkomponente fuer Widgets | passt zu wenigen festen 320-x-240-Screens und bestehenden View-Modellen | mehr eigene Layout-/Fokuslogik, aber enger kontrollierbarer Umfang | Baseline im Display-Spike; bevorzugt, solange LVGL keinen belegten Vorteil bringt |
+| LVGL | `9.5.0`, `8fd90bb1`, MIT | vollstaendiges Widget-, Layout-, Event- und Renderingframework; kein Display-/Touchtreiber | zusaetzliche Displaypuffer, Fonts, Widgetzustand und Integrationskomplexitaet; 4 MB/ohne PSRAM nach der Treiberwahl messen | nicht vorsorglich einbinden; nur waehlen, wenn der identische repraesentative Screen einen klar gemessenen Vorteil bei Bedienbarkeit, Wartbarkeit oder Umsetzung zeigt und die zusaetzlichen Ressourcen rechtfertigt |
+| schlanke projektspezifische Views auf gewaehltem Treiber | keine Drittkomponente fuer Widgets | passt zu wenigen festen 320-x-240-Screens und bestehenden View-Modellen | mehr eigene Layout-/Fokuslogik, aber enger kontrollierbarer Umfang | Vergleichsbasis erst nach Treiberwahl und Adaptervertrag; bevorzugt, solange LVGL keinen belegten Vorteil bringt |
 
 Touchnavigation und fachliche View-Modelle bleiben in der Anwendung. Status:
-`EVALUATE_LATER`, keine LVGL-Abhaengigkeit vor Hardware-/Ressourcenspike.
+`EVALUATE_LATER`, keine LVGL-Abhaengigkeit im Treiberspike oder vor
+Treiberwahl, Adaptervertrag und repraesentativem Screen.
 
 Quelle: [LVGL](https://github.com/lvgl/lvgl), abgerufen am 2026-07-27.
 

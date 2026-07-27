@@ -24,6 +24,14 @@ erst nach den jeweiligen Safety-Gates:
 produktive Aktoren -> thermische Abnahme -> Releasegate
 ```
 
+Der Display-/Touchpfad ist innerhalb des aktorfreien Spikes weiter gestuft:
+reale Hardware identifizieren, alle drei Hauptkandidaten durch Quellen-/Lizenz-
+und Buildpruefung fuehren, ausreichend erfolgreiche Kandidaten kurz auf der
+Hardware pruefen und nur nach bestandenem Smoke-Test die vollstaendige
+identische Matrix ausfuehren. Danach entscheidet der Owner ueber bevorzugten
+Treiber und Rueckfallkandidat. Reservekandidaten werden nur bei dokumentiertem
+Ausloeser nachgezogen.
+
 ## Phase 1: Auditfreigabe und verbindlicher Persistenz-Neuschnitt
 
 Vor weiterer Architekturverbreiterung:
@@ -117,10 +125,14 @@ warten:
    Heapbaseline sowie GPIO-/Businventar.
 2. Peltier, BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und Summer physisch
    trennen oder nachweislich inaktiv halten. Der Summer wird nicht angesteuert.
-3. Display-/Touch-Kandidaten aus
-   [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md) nacheinander durch
-   Quellen-/Lizenzpruefung, isolierten reproduzierbaren aktorfreien Build und
-   erst danach den identischen realen Hardwaretest fuehren.
+3. Beim Display-/Touch-Spike zuerst die reale Modulvariante, Controller, Pegel,
+   Leitungen und Bootzustaende identifizieren. Danach alle drei Hauptkandidaten
+   durch Stufe 1, ausreichend erfolgreiche Kandidaten durch den kurzen
+   Hardware-Smoke-Test der Stufe 2 und nur `PASS_SMOKE_TEST`-Kandidaten durch
+   die vollstaendige identische Matrix der Stufe 3 fuehren. Stufe 4 benennt
+   bevorzugten Treiber und Rueckfallkandidat. Reservekandidaten bleiben
+   bedarfsabhaengig. Details stehen im
+   [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md).
 4. Dasselbe Drei-Gate-Verfahren fuer DallasTemperature+OneWire und die
    Espressif-Komponenten verwenden. Ein nicht mit der fixierten Toolchain
    reproduzierbar baubarer Espressif-Kandidat endet als
@@ -140,19 +152,23 @@ aktorfreien Bibliotheksevaluationen.
 
 ## Phase 4: Bibliotheksentscheidungen
 
-Der Owner waehlt anhand identischer Messungen:
+Der Owner waehlt anhand der jeweils geforderten gestuften und identischen
+Messungen:
 
-- genau einen Display-/Touchstack und einen Rueckfallkandidaten;
+- in Display-/Touch-Stufe 4 genau einen Treiberstack und einen
+  Rueckfallkandidaten aus den gestuft verbliebenen Kandidaten;
 - genau einen DS18B20-/1-Wire-Stack und einen Rueckfallkandidaten;
 - kleinsten geeigneten Webservertransport;
 - WiFiManager oder einen kleinen Framework-Onboardingadapter;
-- ArduinoJson nur mit endpunktspezifischen Grenzen;
-- schlanke eigene Screens als Baseline; LVGL nur bei gemessenem, klarem
-  Wartungs- und Ressourcenfit.
+- ArduinoJson nur mit endpunktspezifischen Grenzen.
 
 Jede Auswahl erhaelt Version/Commit, Lizenznachweis, Build-/Hardwaremessung,
 Adaptervertrag und ein eigenes umsetzendes Issue/PR. Keine Auswahl nur aufgrund
 von Sternen, Marketing oder README-Beispielen.
+
+LVGL ist keine Treiberoption dieser Phase. Der UI-Frameworkentscheid folgt erst
+nach Treiberauswahl, schmalem Adaptervertrag und einem repraesentativen
+Release-1-Screen.
 
 ## Phase 5: produktive Adapter
 
@@ -168,6 +184,10 @@ Kleine adapterbezogene PRs:
 Bibliothekstypen duerfen weder in `fermentation_app` noch in Safety- oder
 Prozessmodelle durchsickern. Jeder Adapter uebersetzt Fehler und Limits
 vollstaendig und besitzt eine Mock-/Hostgrenze.
+
+Nach dem Display-/Touchadapter wird ein repraesentativer Release-1-Screen als
+gemeinsame Grundlage fuer den spaeteren Vergleich schlanker Views mit LVGL
+festgelegt. Dies ist keine erneute Treiberwahl.
 
 ## Phase 6: Hardware-Bring-up
 
@@ -193,6 +213,10 @@ Ein bestandener Bibliotheksspike ist keine Freigabe fuer reale Aktoren.
 
 Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
 
+- auf dem ausgewaehlten Display-/Touchtreiber und seinem schmalen
+  Adaptervertrag denselben repraesentativen Screen, dieselben Texte,
+  Eingabeelemente und Messmethoden fuer schlanke Views und LVGL verwenden;
+  LVGL nur bei einem klar gemessenen Vorteil uebernehmen;
 - #26 als einzige lokale Bedien- und Anzeigeoberflaeche in
   Navigations-/Screen-Scheiben umsetzen; UI-Logik weiterhin nativ testen;
 - #27 teilen in begrenzte Lese-API/Transport, mutierende Kommandos/Konflikte,
@@ -233,7 +257,8 @@ Bis nach Release 1:
 - Bluetooth/BLE als Produktfunktion;
 - Cloud, Push, Telegram und direkter Fernzugriff;
 - PID-Autotuning und Kaskadenregelung;
-- LVGL, sofern der Hardware-/UI-Vergleich keinen zwingenden R1-Vorteil zeigt;
+- LVGL, sofern der erst nach Treiberwahl und Adaptervertrag durchgefuehrte
+  identische Screenvergleich keinen zwingenden R1-Vorteil zeigt;
 - Tuerkontakt, RTC-Pflicht, 12-V-ADC und Lueftertacho;
 - Variante-A-Funktionen bis zu ihrem ersten echten Konsumenten: persistentes
   Pending/Pending-Root, Aktivierungsintent,
@@ -286,10 +311,10 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 
 | ID | Entscheidung | Spaetester Zeitpunkt |
 |---|---|---|
-| OD-02 | Display-/Touchstack | nach Display-Spike, vor #31 |
+| OD-02 | Display-/Touchtreiberstack | in Stufe 4 nach der gestuften Hardwarematrix, vor #31 |
 | OD-03 | DS18B20-/1-Wire-Stack | nach Sensorspike, vor #30 |
 | OD-04 | Framework-WebServer oder ESPAsyncWebServer | nach begrenztem Last-/Ressourcenprototyp, vor #27-Transport |
-| OD-05 | schlanke Views oder LVGL | nach Display-Spike und representativem Screenvergleich |
+| OD-05 | schlanke Views oder LVGL | nach OD-02, schmalem Adaptervertrag und identischem repraesentativem Screenvergleich |
 | OD-06 | WiFiManager oder kleiner Framework-Onboardingadapter | vor Onboardingteil von #27 |
 | OD-07 | Mindestumfang und PR-Schnitt von #19/#25–#28 | vor dem jeweiligen Issue |
 | OD-09 | KDF-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag | vor produktiver Authentication in #27 |

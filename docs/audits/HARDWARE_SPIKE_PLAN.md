@@ -52,11 +52,17 @@ Die Baseline legt noch nicht fest:
 - Safety-Grenzwerte oder PI-Parameter;
 - finale produktive Partitionierung.
 
-## Drei verbindliche Gates pro Kandidat
+## Gemeinsame Mindestgates pro Kandidat
 
-Jeder Kandidat durchlaeuft die folgenden Gates in dieser Reihenfolge. Ein
-negatives Ergebnis wird dokumentiert; es wird weder durch einen Toolchainwechsel
-noch durch einen verfruehten Hardwaretest umgangen.
+Jeder fuer die Evaluation freigegebene Kandidat durchlaeuft die folgenden Gates
+in dieser Reihenfolge. Ein negatives Ergebnis wird dokumentiert; es wird weder
+durch einen Toolchainwechsel noch durch einen verfruehten Hardwaretest umgangen.
+
+Der Display-/Touch-Spike verfeinert diesen Mindestvertrag in die Stufen 0 bis 4:
+Seine Stufe 1 umfasst Quellen-, Lizenz-, Kompatibilitaets- und Buildpruefung,
+Stufe 2 ist ein kurzer Hardware-Smoke-Test und erst Stufe 3 die vollstaendige
+identische Hardwarematrix. Der DS18B20-/1-Wire-Spike behaelt die drei
+Mindestgates ohne diese zusaetzliche Vorauswahl.
 
 ### Gate 1 – Quelle, Lizenz und Kompatibilitaetsvertrag
 
@@ -100,8 +106,11 @@ REQUIRES_UNAPPROVED_TOOLCHAIN_CHANGE
 
 ### Gate 3 – Identischer realer Hardwaretest
 
-Nur Kandidaten, die Gate 1 und Gate 2 ausreichend bestehen, durchlaufen die
-vollstaendige Hardwarematrix. Zwischen den Kandidaten bleiben gleich:
+Nur Kandidaten, die Gate 1 und Gate 2 ausreichend bestehen, erreichen einen
+realen Hardwaretest. Beim Display-/Touch-Spike ist zunaechst nur Stufe 2
+zulaessig; die vollstaendige Matrix der Stufe 3 folgt ausschliesslich nach
+bestandenem Smoke-Test. Zwischen den jeweils verglichenen Kandidaten bleiben
+gleich:
 
 - dasselbe ESP32-Board;
 - dasselbe Display beziehungsweise dieselben Sensoren;
@@ -116,8 +125,7 @@ Zusaetzlich gilt:
 
 - PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17` (`dcc1105b`), C++17;
 - 4 MB Flash, keine PSRAM-Nutzung;
-- je Kandidat eigener wegwerfbarer Spike-Branch oder isolierter Build, keine
-  Vermischung der Kandidaten;
+- je Kandidat ein isolierter Build, keine Vermischung der Kandidaten;
 - identische Compilerflags, Displayinhalte, Sensorablaeufe und Messmethode;
 - Version/Commit, Konfiguration und Buildartefakte archivieren;
 - keine Kandidatenaussage als bestaetigte Produktverdrahtung uebernehmen.
@@ -126,30 +134,138 @@ Zusaetzlich gilt:
 
 ### Ziel
 
-Den kleinsten stabilen Treiber fuer das tatsaechliche MSP2807-Modul bestimmen
-und ILI9341, Touchcontroller, Rotation, Reset, Shared-SPI-Verhalten sowie
-Ressourcen auf der Zieltoolchain belegen. Das Touchdisplay ist die einzige
+Den kleinsten stabilen Treiber fuer das tatsaechlich gelieferte, als MSP2807
+bestellte Modul bestimmen und Displaycontroller, Touchcontroller, Rotation,
+Reset, Shared-SPI-Verhalten sowie Ressourcen auf der Zieltoolchain belegen. Das
+Touchdisplay ist die einzige
 lokale Bedien- und Anzeigeoberflaeche; der Spike plant keine parallelen lokalen
 Eingaben oder Anzeigen.
 
-### Kandidaten
+### Stufe 0 – Reale Hardware identifizieren
+
+Vor jeder Bibliotheksbewertung wird am tatsaechlich gelieferten Modul
+dokumentiert:
+
+- genaue Modulvariante;
+- Displaycontroller und Touchcontroller;
+- Versorgungsspannung und Logikpegel;
+- Display-Chip-Select und Touch-Chip-Select;
+- Reset, Data/Command und Hintergrundbeleuchtung;
+- gemeinsamer oder getrennter SPI-Bus;
+- reale Pinbelegung des Moduls;
+- Bootzustaende aller relevanten Leitungen.
+
+ILI9341 und XPT2046 gelten nicht allein aufgrund einer Lieferantenbeschreibung
+als bestaetigt. Bei abweichenden realen Controllern wird der Kandidatenvergleich
+vor der Fortsetzung angepasst. Pinzahlen oder Pegel eines nur aehnlich
+aussehenden Moduls werden nicht uebernommen.
+
+### Haupt- und Reservekandidaten
 
 1. LovyanGFX `1.2.26` (`3f78b705`)
 2. TFT_eSPI Manifest `2.5.44` (`16e37595`)
 3. LCDWiki-Paket aus
    `references/datasheets/Display/2.8inch_SPI_Module_ILI9341_MSP2807_V1.1.zip`
 
-Arduino_GFX plus XPT2046_Touchscreen und Adafruit GFX plus ILI9341 plus
-XPT2046_Touchscreen sind Reservekandidaten. Sie werden nur einbezogen, wenn
-weniger als zwei Hauptkandidaten Gate 3 erreichen, alle Hauptkandidaten ein
-wesentliches technisches, Ressourcen-, Wartungs- oder Lizenzproblem besitzen
-oder der Vergleich keine belastbare Ownerentscheidung erlaubt.
+Arduino_GFX plus geeigneter Touchadapter und Adafruit GFX plus ILI9341 plus
+geeigneter XPT2046-Touchadapter sind Reservekandidaten. Sie werden nur
+einbezogen, wenn mindestens eine der folgenden Bedingungen eintritt:
 
-### Hardwareaufbau und Buskonfiguration
+- weniger als zwei Hauptkandidaten bestehen den Hardware-Smoke-Test der Stufe 2;
+- alle Hauptkandidaten besitzen ein wesentliches Ressourcen-, Wartungs-,
+  Stabilitaets- oder Integrationsproblem;
+- fuer den konkret benoetigten, spaeter zu veroeffentlichenden Dateisatz bleibt
+  eine nicht aufloesbare Lizenz- oder Herkunftsfrage;
+- der Vergleich der Hauptkandidaten erlaubt keine belastbare Auswahl;
+- ein Reservekandidat besitzt nachweislich einen fuer Release 1 wesentlichen
+  Vorteil, den kein Hauptkandidat erfuellt.
+
+Es werden nicht vorsorglich fuenf vollstaendige Implementierungen erstellt. Alle
+drei Hauptkandidaten durchlaufen dagegen zunaechst Stufe 1.
+
+### Stufe 1 – Quellen-, Lizenz- und Buildpruefung
+
+Fuer jeden Hauptkandidaten und jeden spaeter begruendet nachgezogenen
+Reservekandidaten werden geprueft:
+
+- offizielle Quelle beziehungsweise lokale Herstellerquelle;
+- konkrete Version oder Commit;
+- Lizenzstatus der tatsaechlich benoetigten Dateien;
+- transitive Abhaengigkeiten;
+- benoetigte Konfigurationsdateien und Buildflags;
+- Unterstuetzung des in Stufe 0 bestaetigten Display- und Touchcontrollers;
+- Kompatibilitaet mit PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17`,
+  C++17, ESP32-32E, 4 MB Flash und Betrieb ohne PSRAM;
+- reproduzierbarer isolierter Build und dessen Compilerwarnungen;
+- Base-/Kandidatenvergleich fuer Flash, statisches RAM, `firmware.bin`,
+  `firmware.elf` und transitive Abhaengigkeiten.
+
+Fuer LCDWiki werden interne technische Referenznutzung, direkte Uebernahme
+einzelner Dateien, abgeleitete Eigenimplementierung und eine spaetere
+oeffentliche Veroeffentlichung getrennt erfasst. Fehlende paketweite
+Lizenzklarheit blockiert den internen technischen Test nicht. Vor einer
+oeffentlichen Veroeffentlichung direkt uebernommener Dateien bleibt eine
+konkrete Dateipruefung erforderlich.
+
+Moegliche Ergebnisse der Stufe 1:
+
+```text
+PASS_BUILD_GATE
+INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN
+BUILD_CONFIGURATION_NOT_REPRODUCIBLE
+REQUIRES_UNAPPROVED_TOOLCHAIN_CHANGE
+CONTROLLER_NOT_SUPPORTED
+LICENSE_SCOPE_UNRESOLVED_FOR_REQUIRED_FILES
+UNRESOLVED_TRANSITIVE_DEPENDENCY
+```
+
+Nur Kandidaten mit einem fuer den internen Test ausreichenden Ergebnis erreichen
+Stufe 2. `LICENSE_SCOPE_UNRESOLVED_FOR_REQUIRED_FILES` kann die interne
+LCDWiki-Untersuchung erlauben, ist aber kein Publikationsnachweis.
+
+### Stufe 2 – Kurzer Hardware-Smoke-Test
+
+Der Smoke-Test prueft mit identischem kleinem Testinhalt, ob ein Kandidat auf
+dem realen Modul grundsaetzlich funktioniert:
+
+1. reproduzierbarer Kaltstart;
+2. Displayinitialisierung;
+3. Querformat 320 x 240;
+4. eindeutige Eckmarkierungen;
+5. je eine Vollbildfuellung in Schwarz, Weiss, Rot, Gruen und Blau;
+6. einfacher ASCII-Text;
+7. deutscher, spanischer und englischer Beispieltext;
+8. Touchcontroller initialisieren;
+9. Touch-Rohwerte an vier Ecken und in der Mitte;
+10. fuenf aufeinanderfolgende Neustarts;
+11. abwechselnd eine Displayoperation und eine Touchabfrage;
+12. Betrieb ohne PSRAM und ohne Vollbild-Framebuffer.
+
+Noch nicht Bestandteil sind eine vollstaendige UI, langfristige Kalibrierung,
+1.000 Zyklen, umfangreiche Resetinjektionen, LVGL, produktive Touchnavigation
+oder Aktorsteuerung.
+
+Moegliche Ergebnisse der Stufe 2:
+
+```text
+PASS_SMOKE_TEST
+DISPLAY_INITIALIZATION_FAILED
+TOUCH_INITIALIZATION_FAILED
+ROTATION_OR_COLOR_FORMAT_INVALID
+SHARED_SPI_UNSTABLE
+RESET_NOT_REPRODUCIBLE
+REQUIRES_UNACCEPTABLE_BUFFER
+```
+
+Nur Kandidaten mit `PASS_SMOKE_TEST` erreichen Stufe 3.
+
+### Stufe 3 – Vollstaendige identische Hardwarematrix
+
+#### Hardwareaufbau und Buskonfiguration
 
 | Punkt | Festlegung |
 |---|---|
-| Display | genau das gelieferte TZT/LCDWiki MSP2807 |
+| Display | genau das gelieferte, als TZT/LCDWiki MSP2807 bestellte Modul; reale Variante in Stufe 0 bestimmen |
 | Controller | vor Test praktisch identifizieren; ILI9341/XPT2046 nicht allein aus Lieferantenangabe als bestaetigt markieren |
 | Versorgung | gemaess gemessener Modulvariante; Spannung und Strom protokollieren |
 | SPI | derselbe Hardware-SPI-Controller und dieselbe gemessene Pinbelegung fuer alle Kandidaten |
@@ -161,9 +277,9 @@ Es werden keine Pinzahlen aus einem aehnlichen Board uebernommen. Die
 verwendeten Pins und Busfrequenzen gehoeren in das Spikeprotokoll und erst nach
 Messung in ein spaeteres Hardwareprofil.
 
-### Identische Testfaelle
+#### Identische Testfaelle
 
-Jeder Kandidat durchlaeuft in derselben Reihenfolge:
+Jeder nach Stufe 2 verbleibende Kandidat durchlaeuft in derselben Reihenfolge:
 
 1. Kaltstart und Initialisierung mit schwarzem, aktorfreiem Startbild.
 2. Querformat 320 x 240 und eindeutige Eckmarkierungen.
@@ -174,14 +290,19 @@ Jeder Kandidat durchlaeuft in derselben Reihenfolge:
    vier grosse Schaltflaechen und Meldungsdialog.
 6. Touch-Rohwerte an Ecken, Kanten und Mitte; Druck-/Kontaktstatus erfassen.
 7. Fuenfpunktkalibrierung, Neustart und erneute Pruefung.
-8. abwechselnde Display- und Touchtransaktionen auf dem gemeinsamen SPI-Bus.
-9. 1.000 Zyklen aus Touch lesen, Schaltflaeche zeichnen und Status aktualisieren.
-10. kontrollierter Reset waehrend Leerlauf, Zeichnen und Touchabfrage.
-11. Betrieb ohne PSRAM und ohne Vollbild-Framebuffer.
-12. Fehlen beziehungsweise Stoeren des Touchcontrollers: Anzeige und
-    Regelkern duerfen nicht blockieren.
+8. Aufweckkontakt und eigentlichen Bedienkontakt reproduzierbar unterscheiden.
+9. abwechselnde Display- und Touchtransaktionen auf dem gemeinsamen SPI-Bus.
+10. 1.000 Zyklen aus Touch lesen, Schaltflaeche zeichnen und Status
+    aktualisieren.
+11. kontrollierter Reset im Leerlauf, waehrend Zeichnen und waehrend einer
+    Touchabfrage.
+12. Betrieb ohne PSRAM und ohne Vollbild-Framebuffer.
+13. Fehlen beziehungsweise Stoeren des Touchcontrollers: Anzeige, Regel- und
+    Safety-Kern duerfen nicht blockieren.
+14. Unter allen Display- und Touchoperationen nachweisen, dass geplante Regel-
+    und Safety-Arbeit nicht blockiert wird.
 
-### Messwerte
+#### Messwerte
 
 Pro Kandidat und Baseline werden erfasst:
 
@@ -193,10 +314,12 @@ Pro Kandidat und Baseline werden erfasst:
 - freier Heap nach Boot, niedrigster freier Heap und groesster freier
   Heapblock;
 - groesster konfigurierter Display-/Sprite-/Transferpuffer;
-- Laufzeit und Fehlerzahl der 1.000 Zyklen;
-- Bibliothekskonfiguration und eingeschlossene Treiber/Fonts.
+- groesster tatsaechlich verwendeter Display-, Sprite- oder Transferpuffer;
+- Laufzeit und Fehlerzahl der 1.000 Zyklen sowie Watchdog- und Resetereignisse;
+- Bibliothekskonfiguration, eingeschlossene Treiber/Fonts und
+  Wartungsaufwand.
 
-### Erfolgskriterien
+#### Erfolgskriterien
 
 - reale Controller und 320-x-240-Querformat funktionieren reproduzierbar;
 - alle Testelemente sind lesbar, Touchkalibrierung bleibt nach Neustart
@@ -208,7 +331,7 @@ Pro Kandidat und Baseline werden erfasst:
 - der Adapter kann Bibliothekstypen aus der Anwendung fernhalten;
 - Herkunfts- und Lizenzpruefung ist fuer den konkreten Dateisatz abschliessbar.
 
-### Abbruchkriterien
+#### Abbruchkriterien
 
 - unkontrollierte GPIO- oder Aktorwirkung;
 - wiederholter Haenger, Watchdog oder Buszustand, der nur durch Power-Cycle
@@ -217,6 +340,49 @@ Pro Kandidat und Baseline werden erfasst:
 - notwendige PSRAM-Abhaengigkeit oder nicht begrenzbarer grosser Puffer;
 - nicht aufloesbare Lizenz-/Herkunftsfrage fuer den konkret benoetigten Code;
 - Kandidat erfordert einen Toolchainwechsel ohne separaten Ownerentscheid.
+
+### Stufe 4 – Ownerentscheid und Rueckfallkandidat
+
+Der Ownerentscheid bewertet mindestens:
+
+- Funktionsabdeckung und Stabilitaet;
+- Touchintegration und Shared-SPI-Verhalten;
+- Ressourcen- und Pufferbedarf sowie Abstand zu den Release-1-Ressourcenlimits;
+- Build-, Konfigurations- und Wartungsaufwand;
+- Upstreamaktivitaet, Lizenz und Herkunft;
+- notwendige eigene Anpassungen und Eignung fuer einen schmalen Adapter.
+
+Das Ergebnis benennt genau einen bevorzugten Kandidaten, genau einen
+Rueckfallkandidaten, alle verworfenen Kandidaten mit nachvollziehbarem Grund und
+noch offene Hardwarefragen. Popularitaet, Sterne oder README-Aussagen allein
+begruenden keine Auswahl.
+
+### LVGL getrennt vom Treibervergleich behandeln
+
+LVGL ist weder Display- noch Touchtreiberkandidat und nimmt an den Stufen 0 bis
+4 dieses Treibervergleichs nicht teil. Die Reihenfolge lautet:
+
+```text
+Display-/Touchtreiber auswaehlen
+        |
+schmalen Adaptervertrag festlegen
+        |
+repraesentativen Release-1-Screen erstellen
+        |
+schlanke eigene Views gegen LVGL vergleichen
+```
+
+Der spaetere UI-Frameworkvergleich verwendet denselben ausgewaehlten Treiber,
+dieselbe Hardware, denselben repraesentativen Screen, dieselben Texte und
+Eingabeelemente sowie dieselbe Messmethode. LVGL wird fuer Release 1 nur
+uebernommen, wenn ein klar gemessener Vorteil bei Bedienbarkeit, Wartbarkeit
+oder Umsetzung die zusaetzlichen Ressourcen und die Komplexitaet rechtfertigt.
+
+### Sicherheitsgrenze waehrend aller Display-/Touchstufen
+
+Peltier, BTS7960, Innenluefter, Aussenluefter, MOSFET-Verbraucher und Summer
+bleiben waehrend aller Stufen physisch getrennt oder nachweislich gesperrt. Kein
+Display- oder Touchereignis darf eine reale Aktorfreigabe ausloesen.
 
 ### Nicht-Scope und Artefakte
 
@@ -349,13 +515,24 @@ erst anhand des identischen Messprotokolls treffen.
 1. Audit- und Planungsbereinigung abschliessen.
 2. Den minimalen Baseline-Anteil von #29 nachweisen; der vollstaendige Abschluss
    von #24 oder #29 ist keine Voraussetzung fuer die aktorfreien Spikes.
-3. Jeden Kandidaten durch Gate 1 und Gate 2 fuehren.
-4. Nur ausreichend erfolgreiche Kandidaten in Gate 3 identisch vergleichen.
-5. Herkunfts-/Lizenzpruefung fuer die technisch geeigneten Kandidaten
+3. Beim Display-/Touch-Spike zuerst die reale Hardware in Stufe 0
+   identifizieren und alle drei Hauptkandidaten durch Stufe 1 fuehren.
+4. Nur ausreichend erfolgreiche Display-/Touchkandidaten in Stufe 2 kurz auf
+   der Hardware pruefen; ausschliesslich Kandidaten mit `PASS_SMOKE_TEST`
+   durchlaufen die vollstaendige identische Matrix der Stufe 3.
+5. In Stufe 4 genau einen bevorzugten Display-/Touchkandidaten und einen
+   Rueckfallkandidaten bestimmen. Reservekandidaten werden nur bei einem
+   dokumentierten Ausloeser nachgezogen.
+6. Die DS18B20-/1-Wire-Kandidaten durch die drei gemeinsamen Mindestgates
+   fuehren.
+7. Herkunfts-/Lizenzpruefung fuer die technisch geeigneten Kandidaten
    aktualisieren.
-6. Owner waehlt je Gruppe genau einen Produktivkandidaten und einen
+8. Owner waehlt je Gruppe genau einen Produktivkandidaten und einen
    dokumentierten Rueckfallkandidaten.
-7. Erst danach implementieren #30 und #31 die schmalen Adapter.
+9. Erst danach implementieren #30 und #31 die schmalen Adapter. Der
+   UI-Frameworkvergleich mit LVGL folgt erst auf den ausgewaehlten
+   Display-/Touchtreiber, den schmalen Adaptervertrag und einen repraesentativen
+   Release-1-Screen.
 
 Parallel dazu darf die hardwareunabhaengige Kette #20 Sensorqualitaet, #21
 Regelsensorauswahl, #22 PI/Luftbegrenzung, #23 Aktorplaner und #24 Fehlerkern/
