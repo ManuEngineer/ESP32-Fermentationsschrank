@@ -889,6 +889,47 @@ Fehlervertrag, Grenz-/Fuzzprotokoll, Base-/Kandidatenmessungen und eine
 begruendete Empfehlung. Ein spaeterer Codecwechsel ersetzt nur die kleine
 konkrete Integrationsgrenze und keine Fachmodelle oder interne Persistenz.
 
+## Spike E: Speicher-, Retention- und Bereinigungsnachweis fuer #19
+
+### Ziel und Grenze
+
+Dieser aktorfreie Nachweis bestimmt die reale Kapazitaet fuer das typisierte
+Ereignisjournal und die begrenzte persistente Laufhistorie. Er ist kein
+Produktivimport und legt weder eine neue Partitionierung noch ungepruefte
+Retentionszahlen fest. Der aktive Lauf, die letzten 5 detaillierten Laeufe und
+50 Laufzusammenfassungen bleiben bis zur Messung ein R1-Ziel und keine
+Speichergarantie. Detaillierte Laeufe verwenden begrenzte, verdichtete
+Messreihen statt jeder etwa zweisekundlichen Rohmessung.
+
+Zu dokumentieren sind reale NVS-/Partitionsgroesse, Recordformate und
+-groessen, Messpunktgroesse, Verdichtungsstrategie, Worst-Case-Laufdauer,
+Flashverbrauch sowie der gleichzeitig benoetigte Platz fuer Konfiguration,
+Active/Fallback, Lauf-Recovery und kritisches Safety-/Recoveryjournal.
+
+### Kapazitaets- und Cut-Point-Matrix
+
+Mindestens zu pruefen sind:
+
+1. Speicher schrittweise bis zur Bereinigung fuellen;
+2. aktiven Lauf und notwendige Recoverydaten jederzeit schuetzen;
+3. kritisches Safety-/Recoveryjournal vor Zusammenfassungen und detaillierten
+   Komfort-/Diagrammdaten schuetzen;
+4. Loeschkandidaten deterministisch auswaehlen;
+5. Unterbruch vor, waehrend und nach jedem Bereinigungsfortschritt;
+6. Neustart und idempotente Wiederaufnahme nach jedem Cut-Point;
+7. wiederholte Journal-/Historien-/Bereinigungszyklen bis zum stabilen
+   Langzeitverhalten;
+8. vollstaendigen Speicher, Read-/Writefehler und unbekannten Fortschrittsstand
+   ohne stilles Verwerfen kritischer Daten behandeln;
+9. Flash-, statisches RAM-, Heap-, Laufzeit- und Schreibmengenwirkung erfassen.
+
+Der Test weist auch nach, dass periodische Temperaturrohwerte nicht als
+einzelne Journalrecords persistiert werden und dass Secrets oder unredigierte
+sensible Eingaben weder im Journal noch in Exportartefakten erscheinen. Alle
+Aktorpfade und der Summer bleiben getrennt oder nachweislich inaktiv. Ergebnisse
+werden als gemessene Budgetgrundlage dokumentiert; aus Hostsimulationen wird
+keine reale Flashlebensdauer oder Stromausfallgarantie abgeleitet.
+
 ## Reihenfolge und Entscheidungsprotokoll
 
 1. Audit- und Planungsbereinigung abschliessen.
@@ -915,9 +956,12 @@ konkrete Integrationsgrenze und keine Fachmodelle oder interne Persistenz.
 9. ArduinoJson durch Quelle-/Toolchain-, Codec-, Grenz-/Fuzz- und
    Ressourcenstufen pruefen. Eine Alternative nur bei dokumentiertem Problem
    untersuchen und die endgueltige Codec-Uebernahme dem Owner vorlegen.
-10. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
+10. Fuer den spaeteren #19-B-Schnitt die reale Speicher-, Retention- und
+    Bereinigungsmatrix einschliesslich Cut-Points ausfuehren und das
+    5-/50-Ziel erst anhand dieser Messung dimensionieren.
+11. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
    dokumentierten Rueckfallkandidaten.
-11. Erst danach implementieren #30 und #31 die schmalen Adapter. Der
+12. Erst danach implementieren #30 und #31 die schmalen Adapter. Der
    UI-Frameworkvergleich mit LVGL folgt erst auf den ausgewaehlten
    Display-/Touchtreiber, den schmalen Adaptervertrag und einen repraesentativen
    Release-1-Screen.

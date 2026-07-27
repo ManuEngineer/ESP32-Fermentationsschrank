@@ -193,22 +193,39 @@ keinen Eingangsadapter. Er schaltet das Geraet rein elektrisch ein oder aus.
 | Wartung/Kompatibilitaet | offizieller Plattformbestandteil; Keys bis 15 Zeichen und Bytewerte dokumentiert |
 | Ressourcen | NVS-Partition und Runtime-Handles; Groesse bleibt bis #29 `TBD_IMPLEMENTATION_BUDGET` |
 | Adapter | vorhandenen `IStateStore` implementieren; `CommitOutcomeUnknown` und Limits explizit uebersetzen |
-| Eigene Logik | Envelope, Slots, fachliche Revisionen, Recovery und Secrets bleiben im Projekt |
+| Eigene Logik | Envelope, Slots, fachliche Revisionen, Recovery und Secrets bleiben im Projekt; der Backendadapter entscheidet weder Ereigniskategorien noch Retention-, Prioritaets-, Verdichtungs- oder Bereinigungssemantik |
 | Risiken/Hardwaretest | reale Atomizitaet, Stromausfallverhalten, Kapazitaet und Flashlebensdauer nicht aus der Hostsimulation ableiten |
 | Empfehlung/Status | gemaess ADR-016 `ADAPTER_EXISTING_LIBRARY`; keine eigene Flashdatenbank |
+
+### Grenze zu Issue #19
+
+Das interne Ereignisjournal und die begrenzte Laufhistorie sind typisierte,
+versionierte Projektvertraege und keine JSON-Datenbank. NVS beziehungsweise
+der `IStateStore` speichert binaere Records, entscheidet aber nicht, welche
+Ereignisse kritisch sind, welche Messreihen verdichtet werden oder welche
+Komfortdaten zuerst geloescht werden. Diese Retention-, Prioritaets- und
+stromausfallsichere Bereinigungssemantik bleibt eigene Fachlogik.
+
+JSON ist fuer begrenzte externe Laufexport-, secret-freie Backup- und
+Importvertraege vorgesehen. Der nur lesende Export-/Backuppfad wird getrennt
+vom spaeteren Import umgesetzt. Ein Import entsteht als vollstaendiger
+typisierter Kandidat, durchlaeuft Vorschau, Konfliktpruefung und Bestaetigung
+und verwendet fuer die Aktivierung den OD-01-Active-/Fallback-Kern. Weder das
+Storagebackend noch ArduinoJson uebernimmt diese Transaktionssemantik. Fuer
+diesen Teilschnitt wird keine neue Bibliothek ausgewaehlt.
 
 ## JSON
 
 | Merkmal | Bewertung |
 |---|---|
-| Aufgabe | begrenzte Web-API-, Konfigurations-, Programm-, Diagnose-, Export-, secret-freie Backup- und Importformate; keine interne Kontrollpunktpersistenz |
+| Aufgabe | begrenzte Web-API-, Konfigurations-, Programm-, Diagnose-, nur lesende Laufexport-, secret-freie Backup- und getrennte Importformate; keine interne Journal-, Historien- oder Kontrollpunktpersistenz |
 | Release-1-Anforderung | korrekte UTF-8-/Escape-/Zahlenverarbeitung, feste Byte-/Struktur-/Feldgrenzen, stabile Projektfehler, Redaction, Importvorschau ohne Aktivierung und Streaming/Pagination grosser Ausgaben |
 | Bevorzugter Kandidat | ArduinoJson `7.4.3`, Tag-Commit `77771d3c07668e01d8f52acb03910c1110bb373f`; `SPIKE_REQUIRED`, noch nicht endgueltig ausgewaehlt |
 | Quelle/Lizenz | [ArduinoJson](https://github.com/bblanchon/ArduinoJson), offizieller Tag `v7.4.3`, MIT; Paketmanifest, konkret verwendete Header/Features, transitive Bestandteile und Notices im Spike pruefen |
 | Kompatibilitaet | isolierter reproduzierbarer Build mit PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17`, C++17, ESP32-32E, 4 MB Flash und ohne PSRAM-Abhaengigkeit erforderlich |
 | Ressourcen | ArduinoJson 7 verwaltet Dokumente dynamisch; Modell, alter Ausgabezustand und neuer Serialisierungspfad koennen gleichzeitig leben. Flash, statisches RAM, Heapspitze/-minimum/-blockgroesse, Fragmentierung und Zeiten pro Profil real messen |
 | Adapter | kleine konkrete DTO-/Codecgrenze in ESP32-/Transportintegration; Bibliotheksfehler vollstaendig in stabile Projektfehler uebersetzen; kein `IJsonProvider`, Pluginregister oder Dummy-Zweitcodec |
-| Eigene Logik | Endpunkt- und Feldschema, Root-Typ, String-/Array-/Wertebereiche, Berechtigung, Redaction, Konflikte, Secretgrenzen, Importvorschau, Bestaetigung und Aktivierung |
+| Eigene Logik | Endpunkt- und Feldschema, Root-Typ, String-/Array-/Wertebereiche, Berechtigung, Redaction, Konflikte, Secretgrenzen, Trennung von Export/Backup und Import, vollstaendiger Importkandidat, Vorschau, Bestaetigung und atomare OD-01-Aktivierung |
 | Alternative | andere Bibliothek oder Eigenloesung nur nach belegtem Toolchain-, Ressourcen-, Stabilitaets-, Limitierungs- oder Publikationsproblem; kein eigener allgemeiner Parser/Serializer |
 | Empfehlung/Status | bevorzugter R1-Kandidat fuer #19/#27/#28 mit `SPIKE_REQUIRED`; Richtungsentscheid getroffen, endgueltige Uebernahme erst nach vollstaendigem Nachweis |
 

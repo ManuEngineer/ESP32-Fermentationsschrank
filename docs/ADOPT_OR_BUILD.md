@@ -117,6 +117,24 @@ Persistenz bleibt beim typisierten binaeren Wireformat. Ein spaeterer Wechsel
 ersetzt die konkrete Codecgrenze und rechtfertigt weder einen
 `IJsonProvider`, ein Pluginregister noch einen vorsorglichen Zweitcodec.
 
+## Journal, Historie und Import
+
+Das Speicherbackend und ein Standard-JSON-Codec werden adoptiert; die
+fachliche Semantik bleibt im Projekt. Dazu gehoeren typisierte
+Ereigniskategorien, kritische Prioritaeten, Retention, begrenzte und
+verdichtete Laufhistorie, stromausfallsichere Bereinigung, Redaction,
+vollstaendige Importvalidierung und atomare Aktivierung ueber den
+Active-/Fallback-Kern. Weder NVS noch eine Codecbibliothek entscheidet, welche
+Daten sicherheitskritisch sind oder wann ein Kandidat veroeffentlicht werden
+darf.
+
+Interne Journale und Historien verwenden weiterhin typisierte binaere Records.
+JSON bleibt an begrenzten externen Laufexport-, secret-freien Backup- und
+Importgrenzen. Der nur lesende Export-/Backuppfad wird vor dem
+zustandsveraendernden Import umgesetzt. Es entsteht weder eine eigene
+allgemeine Datenbank noch eine parallele Aktivierungssemantik; Fehler,
+Unterbruch oder Neustart duerfen keine Teilaktivierung hinterlassen.
+
 ## Entscheidungsnachweis
 
 Jede spaetere Komponentenentscheidung nennt:

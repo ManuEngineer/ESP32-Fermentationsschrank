@@ -51,8 +51,11 @@ Vor weiterer Architekturverbreiterung:
    schmalen Variante-B-Vertraege korrigieren.
 6. Grundsatz bestaetigen, dass Treiber/Frameworkdienste adoptiert und
    Safety-/Fachlogik selbst entwickelt werden.
-7. breite Issues #19 und #25–#28 vor Implementierung in kleine PRs schneiden,
-   ohne ihren akzeptierten R1-Mindestumfang still zu streichen.
+7. den verbindlichen OD-07-Teilschnitt von #19 in Journal/Retention,
+   Laufhistorie/Bereinigung, nur lesenden Laufexport/secret-freies Backup und
+   Importvorschau/atomare Aktivierung in einem separaten ownerfreigegebenen
+   Planungsschritt umsetzen; #25–#28 bleiben innerhalb OD-07 separat zu
+   entscheiden.
 
 Keine Empfehlung aus dem Audit wird im Audit-PR selbst implementiert.
 
@@ -77,6 +80,12 @@ schmale benoetigte Variante-B-Vertraege
   -> #17 Laufpersistenz
   -> #18 Wiederanlauf
 
+#17 + stabiler Variante-B-Kern
+  -> #19-A typisiertes Ereignisjournal und Retention
+  -> #19-B begrenzte Laufhistorie und stromausfallsichere Bereinigung
+  -> #19-C nur lesender Laufexport und secret-freies Backup
+  -> #19-D Importvorschau und atomare Aktivierung
+
 #17 + #20..#23 + bestehender Laufkern
   -> #24 Fehlerkern und SAFE_BOOT
   -> #25 gemeinsame View-Modelle/Sprachen
@@ -92,6 +101,17 @@ Vorgeschlagene kleine PRs:
 - #23: Peltierplaner, danach Luefter/Nachlauf;
 - #17: Kontrollpunktcodec/-slots, danach Ereignis-/Rueckfallservice;
 - #18: phasenbezogener Restart, danach Zeit-/Fortschrittskorrektur;
+- #19-A: stabile Ereignistypen, Prioritaeten, feste Recordgrenzen und native
+  Retention-/Recoverytests; keine einzelne Journalisierung jeder periodischen
+  Temperaturmessung und keine Secrets;
+- #19-B: verdichtete Messreihen, Zusammenfassungen, feste Grenzen und
+  wiederaufnehmbare Bereinigung; aktiver Lauf und Recovery, kritisches
+  Safety-/Recoveryjournal, Zusammenfassungen und Komfortdetails in dieser
+  Schutzreihenfolge;
+- #19-C: begrenzte JSON-/CSV-Laufexporte und secret-freies Backup nur lesend,
+  gestreamt oder stueckweise;
+- #19-D: Importkandidat, Vollvalidierung, Vorschau, Konfliktpruefung,
+  Bestaetigung und atomare Aktivierung erst nach stabiler OD-01-Basis;
 - #24: Fehlerdatenmodell, persistente Verriegelung/Boot, danach
   Fehlerinjektionsmatrix;
 - #25: gemeinsame View-Modelle, Sprachressourcen und Navigation getrennt.
@@ -168,6 +188,12 @@ warten:
    `WebServer`-Baseline und dem spaeteren Schnitt von #19/#27/#28 koordiniert,
    implementiert aber keines dieser breiten Issues. Eine Alternative wird nur
    bei einem konkret belegten R1-Problem untersucht.
+8. Fuer den spaeteren #19-B-Schnitt reale Speicher- und Ressourcenmessungen
+   planen: NVS-/Partitionskapazitaet, Fuellen bis zur Bereinigung,
+   wiederholte Journal-/Historienzyklen sowie Cut-Points vor, waehrend und nach
+   Bereinigungsfortschritt. Das Ziel aktiver Lauf plus 5 detaillierte Laeufe
+   und 50 Zusammenfassungen wird dabei gemessen und erst danach verbindlich
+   dimensioniert; produktive Aktoren sind dafuer nicht erforderlich.
 
 Die minimale Baseline legt weder finale Pins, Partitionierung, Bibliotheken,
 Sensorbustopologie, Aktoradapter, Safety-Grenzen noch PI-Parameter fest. Der
@@ -297,9 +323,13 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   Manifeste, Roots oder `CredentialEpoch` aus #57 uebernehmen;
 - #28 teilen in passive Diagnose, Exporte/Diagrammdaten und aktiven
   Serviceablauf; grosse Daten begrenzen, paginieren oder streamen;
-- #19 teilen in kritisches Journal/Retention und secret-freies
-  Backup/Import mit zentraler Vorschau; interne Journale und Kontrollpunkte
-  bleiben binaer, und ein JSON-Import aktiviert nie direkt aus dem Parser;
+- #19 in der entschiedenen Reihenfolge umsetzen: typisiertes Journal/Retention,
+  begrenzte verdichtete Laufhistorie/stromausfallsichere Bereinigung, nur
+  lesender Laufexport/secret-freies Backup und erst danach Importvorschau/
+  atomare Aktivierung. Interne Journale und Kontrollpunkte bleiben binaer,
+  und ein JSON-Import aktiviert nie direkt aus dem Parser. Der Werksreset
+  bleibt bei #57; Erhalt oder Loeschung der Touchkalibrierung wird als
+  separater zentraler Resetpolicyentscheid geklaert;
 - fuer #19/#27/#28 die initialen JSON-Bodyprofile 1 KiB, 4 KiB und 16 KiB sowie
   Tiefe 6 gegen die realen maximalen DTOs pruefen; Root-, String-, Array-,
   Feld-, Werte- und Schemaversiongrenzen pro Vertrag festlegen und nur nach
@@ -375,7 +405,7 @@ Ausgabeelement.
 | #56 | nicht unveraendert freigeben; separat auf Active/Fallback, Graphvalidierung, fluechtige Vorschau, Konfliktschutz und Runtime-Publish reduzieren |
 | #57 | nicht unveraendert freigeben; separat auf Bootstrap, `StorageEpoch`, Korruptionssperre und wiederaufnehmbaren Werksreset reduzieren |
 | spaeteres Pending/Secrets | erst mit neustartpflichtigem Konfigurationswert beziehungsweise realen WLAN-/Passwort-/PIN-Nachweisen als eigene Issues planen; Variante A additiv anbinden |
-| #19 | nicht streichen, aber in Journal/Retention, Export und Backup/Import teilen |
+| #19 | nicht streichen; nach Auditfreigabe in vier Bereiche schneiden: A Journal/Retention, B begrenzte Laufhistorie/stromausfallsichere Bereinigung, C nur lesender Laufexport/secret-freies Backup, D Importvorschau/atomare Aktivierung; 5 detaillierte Laeufe/50 Zusammenfassungen sind Messziel, kein Versprechen; Issue im Audit nicht aendern |
 | #25 | View-Modelle, Texte und Navigation in getrennte kleine PRs schneiden |
 | #26 | native UI-Logik von realem Display-/Touchadapter trennen |
 | #27 | Webtransport, API, Webassets, Onboarding und Authentisierung trennen |
@@ -393,7 +423,7 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 | OD-03a | DS18B20-/1-Wire-Softwarestack | nach Stufe 3, vor #30 |
 | OD-03b | Bustopologie A oder begruendeter Rueckfall B | nach minimaler Hardwarebaseline, realem Pin-/GPIO-Inventar und identischem Fehlerisolationsvergleich; Produktbus separat, C ausgeschlossen |
 | OD-05 | schlanke Views oder LVGL | nach OD-02, schmalem Adaptervertrag und identischem repraesentativem Screenvergleich |
-| OD-07 | Mindestumfang und PR-Schnitt von #19/#25–#28 | vor dem jeweiligen Issue |
+| OD-07 | #19 als Teilentscheid verbindlich geschnitten; Mindestumfang und PR-/Issue-Schnitt von #25–#28 bleiben offen | vor dem jeweiligen Issue |
 | OD-09 | KDF-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag | vor produktiver Authentication in #27 |
 
 OD-01 ist entschieden: Variante B ist der verbindliche R1-Vertrag, Variante A
@@ -407,6 +437,12 @@ OD-04 ist entschieden: Arduino-ESP32 `WebServer` ist die Release-1-Baseline.
 `ESPAsyncWebServer` bleibt konditionaler Rueckfall; nur ein konkretes offenes
 R1-Risiko und ein klarer Vorteil im identischen begrenzten Prototyp oeffnen die
 Abweichungsentscheidung erneut.
+
+OD-07 ist nicht abgeschlossen. Nur #19 ist mit den vier geordneten Bereichen
+entschieden; #25, #26, #27 und #28 folgen separat. Der Werksreset bleibt im
+zentralen #57-Recoveryvertrag. Die Behandlung der Touchkalibrierung beim Reset
+bedarf eines eigenen expliziten Policyentscheids zwischen Recovery und
+Display-/Touchintegration und wird nicht in #19 versteckt.
 
 OD-06 ist als Richtungsentscheid entschieden: WiFiManager ist der bevorzugte
 Release-1-Onboardingkandidat und wird zuerst begrenzt geprueft. Die

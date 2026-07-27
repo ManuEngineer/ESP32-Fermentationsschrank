@@ -64,8 +64,9 @@ lokal und ohne Netzwerk sicher fermentieren. Das Touchdisplay ist die einzige
 lokale Bedien- und Anzeigeoberflaeche; die Weboberflaeche ist sekundaer. Der
 230-V-AC-Hauptschalter schaltet das Geraet rein elektrisch und ist kein
 Firmwareeingang. Der Summer ist das einzige zusaetzliche lokale Ausgabeelement.
-Release 1 benoetigt ausserdem begrenzte Persistenz/Recovery, Diagnose,
-secret-freies Backup/Import und UART-Recovery. OTA, Bluetooth, Cloud/Push,
+Release 1 benoetigt ausserdem begrenzte Persistenz/Recovery, Diagnose, nur
+lesende Exporte, secret-freies Backup, vollvalidierten atomaren Import und
+UART-Recovery. OTA, Bluetooth, Cloud/Push,
 PID-Autotuning, Kaskadenregelung und PSRAM-Abhaengigkeit bleiben ausserhalb.
 
 Die Plattform muss nicht Display-, 1-Wire-, JSON-, HTTP-, WLAN-, NVS-, Zeit-
@@ -152,10 +153,14 @@ einen Treiber-PR.
 
 ### 4. Breite Issues gefaehrden kleine pruefbare PRs
 
-#19 vereint Journal, Retention, Backup und Import. #25–#28 vereinen jeweils
-mehrere UI-, Web-, Auth-, Diagnose- und Serviceverantwortungen. Der fachliche
-R1-Umfang bleibt, aber die Umsetzung sollte innerhalb der Issues in kleine
-vertikale PRs oder nach Ownerfreigabe in kleinere Folgeissues zerlegt werden.
+#19 vereint vier getrennt pruefbare Verantwortungsbereiche: typisiertes
+Ereignisjournal und Retention, begrenzte persistente Laufhistorie und
+Bereinigung, nur lesenden Laufexport und secret-freies Backup sowie
+Importvorschau und atomare Aktivierung. Der fachliche R1-Umfang bleibt, aber
+die Umsetzung wird nach Auditfreigabe in einem eigenen ownerfreigegebenen
+Planungsschritt geschnitten. #25–#28 vereinen ebenfalls mehrere UI-, Web-,
+Auth-, Diagnose- und Serviceverantwortungen und bleiben innerhalb von OD-07
+noch separat zu entscheiden.
 
 ### 5. Hardwarequellen sind keine Hardwarebestaetigung
 
@@ -402,6 +407,65 @@ Parse-/Serialisierungszeit, Regelzyklus-Jitter sowie Watchdog-, Reset- und
 Stabilitaetsauffaelligkeiten. Ein spaeterer Codecwechsel ersetzt nur die kleine
 konkrete DTO-/Codecgrenze; er rechtfertigt keine allgemeine Providerarchitektur.
 
+### 10. OD-07-Teilentscheid: Issue #19 in vier Bereiche schneiden
+
+Der Teilentscheid fuer #19 ist verbindlich, schliesst OD-07 aber nicht ab. Die
+Mindestumfaenge und PR-/Issue-Schnitte von #25, #26, #27 und #28 werden
+separat mit dem Owner entschieden. Der Audit aendert #19 nicht und erstellt
+keine Folgeissues. Nach Auditabschluss soll ein eigener ownerfreigegebener
+Planungsschritt den folgenden Schnitt festlegen:
+
+1. **Typisiertes Ereignisjournal und Retentionpolicy:** stabile
+   Ereigniskategorien, feste Recordgrenzen, eindeutige Reihenfolge, monotone
+   Zeit und optional vertrauenswuerdige UTC-Zeit, deterministische
+   Loeschkandidaten sowie stromausfallsichere Fortschritts- und
+   Recoverysemantik. Zum R1-Journal gehoeren Boot-/Resetursachen,
+   Bootstrap-/Recovery-, Korruptions-/Fallback-/Werksreset-, Safety-, relevante
+   Sensor- und Regelsensorwechselereignisse, Laufstart/-wechsel/-abschluss/
+   -abbruch, relevante Benutzerkommandos, bestaetigte Konfigurations- und
+   Importaktivierungen sowie safety- und recoveryrelevante Diagnose. Regulaere
+   periodische Temperaturmessungen sind keine einzelnen Journalereignisse.
+   Secrets und unredigierte sensible Eingaben werden nie journalisiert.
+2. **Begrenzte persistente Laufhistorie und stromausfallsichere Bereinigung:**
+   aktiven Lauf und Recoverydaten schuetzen, Messreihen fuer Diagramme begrenzen
+   und verdichten, abgeschlossene Laufzusammenfassungen erhalten sowie
+   proaktiv und nach Unterbruch wiederaufnehmbar bereinigen. Der aktive Lauf,
+   die letzten 5 detaillierten Laeufe und 50 Laufzusammenfassungen bleiben ein
+   auf realem Speicher zu messendes R1-Ziel, keine ungepruefte absolute
+   Speichergarantie. Ein detaillierter Lauf speichert nicht jede etwa
+   zweisekundliche Rohmessung. Die Loeschprioritaet schuetzt in dieser
+   Reihenfolge aktiven Lauf und Recoverydaten, kritisches Safety-/
+   Recoveryjournal, Zusammenfassungen und erst danach detaillierte Komfort-
+   und Diagrammdaten.
+3. **Nur lesender Laufexport und secret-freies Backup:** Laufexporte verwenden
+   begrenzte JSON- beziehungsweise fuer Messreihen geeignete CSV-Vertraege.
+   Normale Backups enthalten nur exportierbare Benutzerkonfiguration,
+   Programme, zulaessige Metadaten, Schemaversionen und notwendige Referenzen.
+   WLAN-/Webpasswoerter, PINs, Tokens, Sessiondaten, ungefilterte Diagnose,
+   vollstaendige interne Journale, Slots und Rohrecords bleiben ausgeschlossen.
+   Journal, Laufexport und Backup sind getrennte Exportarten; groessere
+   Ausgaben werden gestreamt oder stueckweise erzeugt.
+4. **Importvorschau, Vollvalidierung und atomare Aktivierung:** Dieser
+   risikoreichste Teil folgt erst auf den nur lesenden Export-/Backupteil. Nach
+   harter Bytegrenze, Parsing-, Schema-, Struktur-, Typ-, Fach- und
+   Secretpruefung entsteht ein vollstaendiger typisierter Kandidat. Vorschau,
+   Konfliktpruefung gegen die erwartete aktive Basis, ausdrueckliche
+   Bestaetigung und Vorbereitung eines unveraenderlichen Runtime-Snapshots
+   gehen der atomaren Aktivierung ueber den OD-01-Active-/Fallback-Kern voraus.
+   Fehler, Abbruch, Neustart oder Stromunterbruch lassen keine Teilwirkung
+   zurueck; fremde Daten duerfen weder interne Roots/Slots noch Secrets still
+   uebernehmen. Eine bestaetigte Aktivierung wird nachvollziehbar journalisiert.
+
+Der Werksreset bleibt Bestandteil des zentralen Bootstrap-/Recoveryvertrags
+von #57. #19 darf nur seine Journal-/Historiedaten gemaess der zentralen
+Resetpolicy behandeln, gegebenenfalls vorher exportieren und ein Resetereignis
+protokollieren, soweit der zentrale Ablauf dies zulaesst. Ob eine
+Touchkalibrierung beim Werksreset erhalten oder ausdruecklich geloescht wird,
+bleibt ein eigener zentraler Policyentscheid zwischen Recovery und Display-/
+Touchintegration. Bestehende Quellen mit einer Festlegung dazu muessen in dem
+spaeteren ownerfreigegebenen Planungsschritt konsistent aufgeloest werden; #19
+entscheidet diese Frage nicht.
+
 ## Entschiedener Persistenzvertrag OD-01
 
 ### Variante B: verbindlicher Release-1-Kern
@@ -540,12 +604,14 @@ Variante A erweitert den R1-Kern spaeter additiv:
   Frameworkadapter als Rueckfall; lokale Zeit/NTP und Zeitzonenanzeige;
 - begrenzte externe JSON-Vertraege mit ArduinoJson `7.4.3` als bevorzugtem,
   noch spikepflichtigem Kandidaten; interne atomare Persistenz bleibt binaer;
-- versionierte Konfiguration, Laufpersistenz, Recovery und begrenzte Journale;
+- versionierte Konfiguration, Laufpersistenz, Recovery, ein typisiertes
+  begrenztes Ereignisjournal und eine begrenzte verdichtete Laufhistorie;
 - Variante-B-Konfigurationsaktivierung mit Active-/Fallback-Graph, fluechtiger
   validierter Vorschau, sicherem Bootstrap, `StorageEpoch` und
   wiederaufnehmbarem Werksreset;
 - lokale Authentication und die mit ihren ersten realen Konsumenten
-  spezifizierten Secrets, Diagnose, Exporte und secret-freies Backup/Import;
+  spezifizierten Secrets, Diagnose, nur lesende Exporte und secret-freies
+  Backup sowie vollstaendig validierte, atomar aktivierte Imports;
 - UART/FT232RL als Update- und letzter Recoveryweg;
 - Hardware-, thermische und siebentaegige Releaseabnahme.
 
@@ -591,8 +657,9 @@ Die vollstaendige Zuordnung steht in der
    immer separat und Topologie C nicht produktiv planen.
 7. Produktive Aktoradapter und reale Aktortests weiterhin erst nach den
    zugeordneten Safety-Gates freigeben.
-8. Web-/UI-/Backupissues vor Umsetzung in kleine, ressourcenmessbare Scheiben
-   schneiden.
+8. #19 nach dem entschiedenen OD-07-Teilschnitt in Journal/Retention,
+   Laufhistorie/Bereinigung, Laufexport/secret-freies Backup und erst danach
+   Importvorschau/atomare Aktivierung zerlegen; #25–#28 separat entscheiden.
 9. ArduinoJson erst nach isoliertem Build-, Grenzwert-, Fuzz- und
    Ressourcennachweis an der kleinen DTO-/Codecgrenze uebernehmen; die
    1-/4-/16-KiB-Profile und Tiefe 6 mit realen maximalen DTOs pruefen.
@@ -605,7 +672,7 @@ Die vollstaendige Zuordnung steht in der
 |---|---|---|
 | #29 | minimale sichere Spikebaseline und spaetere produktive Hardwareintegration sind in einem breiten Issue verbunden | nach Auditfreigabe in Baseline-Anteil vor den Spikes und produktiven Anteil hinter den jeweiligen Safety-Gates schneiden; Issue im Audit nicht aendern |
 | #56/#57 | bestehender Umfang mischt den notwendigen Active-/Fallback- und Bootstrapkern mit Pending-/Intentpfaden und Secret-Domaenen ohne ersten Konsumenten | nach entschiedenem OD-01 in separatem Planungs-/ADR-Schritt auf Variante B zuschneiden; Variante A spaeter additiv planen |
-| #19 | vier grosse Verantwortungsbereiche in einem Issue | in Journal/Retention, Export und Backup/Import schneiden |
+| #19 | vier grosse Verantwortungsbereiche in einem Issue | nach Auditfreigabe separat in Journal/Retention, begrenzte Laufhistorie/Bereinigung, nur lesenden Laufexport/secret-freies Backup und Importvorschau/atomare Aktivierung schneiden; 5 detaillierte Laeufe und 50 Zusammenfassungen bleiben Messziel |
 | #25–#28 | UI-, Web-, Auth-, Diagnose- und Servicepakete sind zu breit fuer kleine PRs | nach stabilen DTO-/Portgrenzen in vertikale Scheiben teilen |
 | LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich und ist kein Treiberkandidat | erst nach Treiberauswahl, Adaptervertrag und identischem repraesentativem Screen gegen schlanke Views messen |
 | ESPAsyncWebServer | Async-/WebSocket-/SSE-Umfang koennte groesser als der reale R1-Bedarf sein | Frameworkserver zuerst messen; Async nur bei belegtem Vorteil |
@@ -643,7 +710,7 @@ Die vorgeschlagene Reihenfolge steht in
 | OD-03a | DS18B20-/1-Wire-Softwarestack nach Stufe 3 waehlen |
 | OD-03b | Topologie A oder begruendeten Rueckfall B nach realem Pin-/GPIO- und Fehlerisolationsvergleich waehlen; Produktbus bleibt separat, C ausgeschlossen |
 | OD-05 | schlanke eigene Screens oder LVGL erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich |
-| OD-07 | R1-Mindestumfang und PR-Schnitt von #19 und #25–#28 |
+| OD-07 | #19 ist als Teilentscheid in vier Bereiche geschnitten; R1-Mindestumfang und PR-/Issue-Schnitt von #25–#28 bleiben offen |
 | OD-09 | KDF-, Work-Factor-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag vor #27 |
 
 OD-01 ist mit Variante B entschieden. Offen bleibt nur die technische
@@ -667,6 +734,9 @@ zu vergeben: ArduinoJson `7.4.3` ist der bevorzugte Kandidat. Offen bleibt nur
 die endgueltige Uebernahme nach dem dokumentierten Build-, Grenzwert-, Fuzz-
 und Ressourcenspike; eine vorsorgliche Gleichwahl besteht nicht.
 
+OD-07 bleibt ausdruecklich offen: Dieser Auditstand entscheidet nur den
+Teilschnitt von #19; #25, #26, #27 und #28 folgen separat.
+
 Hardwarewerte, Pins, Pegel und thermische Parameter sind keine freien
 Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.
 
@@ -681,7 +751,8 @@ Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.
 - [`THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md`](THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md)
   – Herkunft, Lizenzen und Publikationspruefung
 - [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md) – gestufte Display-/Touch-,
-  DS18B20-/Topologie-/TRS-, WLAN-Onboarding- und JSON-Codec-Spikes
+  DS18B20-/Topologie-/TRS-, WLAN-Onboarding-, JSON-Codec- sowie Speicher-/
+  Retention-/Bereinigungsnachweise
 - [`PROPOSED_RELEASE_1_ROADMAP.md`](PROPOSED_RELEASE_1_ROADMAP.md) – Reihenfolge,
   Gates, kleine PRs und spaetere Funktionen
 - [`../ADOPT_OR_BUILD.md`](../ADOPT_OR_BUILD.md) – Entwurf des dauerhaften
