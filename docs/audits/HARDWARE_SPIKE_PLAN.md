@@ -61,8 +61,9 @@ durch einen Toolchainwechsel noch durch einen verfruehten Hardwaretest umgangen.
 Der Display-/Touch-Spike verfeinert diesen Mindestvertrag in die Stufen 0 bis 4:
 Seine Stufe 1 umfasst Quellen-, Lizenz-, Kompatibilitaets- und Buildpruefung,
 Stufe 2 ist ein kurzer Hardware-Smoke-Test und erst Stufe 3 die vollstaendige
-identische Hardwarematrix. Der DS18B20-/1-Wire-Spike behaelt die drei
-Mindestgates ohne diese zusaetzliche Vorauswahl.
+identische Hardwarematrix. Der DS18B20-/1-Wire-Spike verwendet analog die
+Stufen 1 bis 3: Quellen-/Lizenz-/Buildpruefung, Sensorsmoke-Test und erst danach
+die vollstaendige identische Topologie- und Fehlermatrix.
 
 ### Gate 1 – Quelle, Lizenz und Kompatibilitaetsvertrag
 
@@ -406,109 +407,296 @@ hervorgehenden Kandidaten auswaehlen.
 
 ## Spike B: DS18B20 und 1-Wire
 
-### Ziel
+### Ziel und getrennte Entscheidungen
 
-Den kleinsten stabilen Sensorstack fuer die reale Topologie bestimmen und
-Adressierung, asynchrone 12-Bit-Konvertierung, mehrere Sensoren, Hot-Plug,
-Fehleruebersetzung und Ressourcen belegen.
+Der Spike bestimmt den kleinsten stabilen Softwarestack und bewertet getrennt
+davon die elektrische Bustopologie. Beide Softwarekandidaten muessen die
+zulaessigen Topologien A und B unter identischen Bedingungen pruefen. Ein gutes
+Ergebnis einer Bibliothek waehlt keine Topologie, und eine gute Topologie waehlt
+keine Bibliothek.
 
-### Kandidaten
+Der Treiber liefert ausschliesslich technische Bus-, Adress-, Mess- und
+Fehlerinformationen. Rollenprioritaet, fachliche Sensorqualitaet und
+Peltierfreigabe bleiben vollstaendig ausserhalb.
+
+### Verbindliche Sensorrollen fuer die Spikegrenze
+
+- Der Produktfuehler ist optional, bei Verwendbarkeit primaerer Regelsensor und
+  darf im Stillstand sowie in einem dafuer zulaessigen Lauf fehlen. Entfernen
+  und Wiederanschliessen werden als Anwesenheits- und Treiberereignisse erkannt.
+  Sein eigener Fehler darf die festen Sensorbusse nicht elektrisch
+  beeintraechtigen.
+- Der Raum-/Luftsensor ist fest montiert und regulaerer Ersatz-Regelsensor, wenn
+  kein verwendbarer Produktfuehler verfuegbar ist. Er ist nicht pauschal
+  primaerer Regelsensor.
+- Der Kuehlkoerper-/Peltier-Schutzsensor ist fest montiert und verpflichtende
+  Sicherheitsgrundlage. Bei fehlendem, ungueltigem, veraltetem oder nicht
+  ausreichend vertrauenswuerdigem Signal gibt es keine Peltierfreigabe. Diese
+  Safety-Semantik wird nicht im 1-Wire-Treiber implementiert.
+
+### Verbindliche Softwarekandidaten
 
 1. DallasTemperature `4.0.6` (`dadbbf7d`) plus OneWire `2.3.8`
    (`800f26f3`)
 2. Espressif `onewire_bus 1.1.1` (`a269e1fe`) plus `ds18b20 0.4.0`
    (`bf92b0b3`)
 
-Der Espressif-Kandidat darf nur getestet werden, wenn er mit der bestehenden
-Arduino-ESP32-2.0.17-/PlatformIO-Toolchain ohne verdeckten Frameworkwechsel
-gebaut werden kann. Andernfalls lautet das Ergebnis reproduzierbar
-`INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`, nicht "Treiber ungeeignet".
+Der Espressif-Kandidat wird nur weitergefuehrt, wenn er mit der bestehenden
+Toolchain ohne verdeckten Wechsel von Arduino-ESP32, ESP-IDF oder PlatformIO
+reproduzierbar gebaut werden kann. Ein Konflikt lautet
+`INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`; dies ist keine Aussage, dass der Treiber
+allgemein technisch ungeeignet waere.
 
-### Hardwareaufbau und Buskonfiguration
+### Stufe 1 – Quelle, Lizenz und Build
 
-| Punkt | Festlegung |
+Fuer beide Kandidaten werden geprueft:
+
+- offizielle Quelle, Version beziehungsweise Commit und Lizenz;
+- transitive Abhaengigkeiten und Toolchainkompatibilitaet;
+- mehrere 1-Wire-Busse und mehrere Sensoren je Bus;
+- stabile 64-Bit-ROM-Adressen;
+- nicht blockierende beziehungsweise asynchron integrierbare Konvertierung;
+- CRC-, Busfehler- und Hot-Plug-Vertrag;
+- reproduzierbarer isolierter Build;
+- Flash-, statische RAM- und Heapwirkung.
+
+Moegliche Ergebnisse:
+
+```text
+PASS_BUILD_GATE
+INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN
+BUILD_CONFIGURATION_NOT_REPRODUCIBLE
+MULTIBUS_NOT_SUPPORTED
+MULTISENSOR_NOT_SUPPORTED
+UNRESOLVED_TRANSITIVE_DEPENDENCY
+REQUIRES_UNAPPROVED_FRAMEWORK_CHANGE
+```
+
+Nur Kandidaten mit ausreichendem Ergebnis erreichen Stufe 2.
+
+### Stufe 2 – Sensorsmoke-Test
+
+Mit einem einzelnen realen DS18B20 wird fuer jeden verbliebenen Kandidaten
+identisch geprueft:
+
+1. 64-Bit-ROM-Adresse lesen;
+2. Aufloesungen 9, 10, 11 und 12 Bit setzen;
+3. wiederholt messen;
+4. CRC-Status erfassen;
+5. Sensor entfernen;
+6. Sensor wieder anschliessen;
+7. Neustart durchfuehren;
+8. Konvertierung ohne blockierende Anwendungspause integrieren;
+9. keine alte Messung als neuen gueltigen Wert ausgeben.
+
+Nur Kandidaten, die diesen Sensorsmoke-Test bestehen, erreichen Stufe 3.
+
+### Stufe 3 – Vollstaendige Topologie- und Fehlermatrix
+
+Alle folgenden Tests verwenden 3-Leiter-Betrieb ohne Parasitspeisung. Reale
+Pull-ups, Leitungslaengen, Steckverbindung und Schutzmassnahmen werden gemessen,
+nicht vorgegeben. Peltier, BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und
+Summer bleiben getrennt oder gesperrt.
+
+#### Topologie A – drei getrennte Busse
+
+```text
+Bus 1 -> Produktfuehler
+Bus 2 -> Raum-/Luftsensor
+Bus 3 -> Kuehlkoerper-/Peltier-Schutzsensor
+```
+
+Zu bewerten sind GPIO-Bedarf, drei Pull-ups, Fehlerisolation, Hot-Plug,
+Diagnose, Wartbarkeit, Ressourcen sowie Pinqualitaet und Bootstrapping-Risiken
+des konkreten ESP32-Boards.
+
+#### Topologie B – Produkt separat, feste Sensoren gemeinsam
+
+```text
+Bus 1 -> Produktfuehler
+Bus 2 -> Raum-/Luftsensor
+         Kuehlkoerper-/Peltier-Schutzsensor
+```
+
+Zu bewerten sind geringerer GPIO-Bedarf, Mehrsensorbetrieb, stabile
+ROM-Zuordnung, gemeinsamer Busfehler der festen Sensoren, Fehlererkennung,
+Wiederherstellung und die sichere Sperrung der Peltierfreigabe ausserhalb des
+Treibers.
+
+#### Topologie C – alle drei Sensoren gemeinsam
+
+Topologie C wird nicht als regulaere Zieltopologie weiterverfolgt. Der
+abnehmbare Produktfuehler wuerde denselben Bus wie der verpflichtende
+Schutzsensor verwenden. Kurzschluss, beschaedigtes Kabel, halb eingesteckter
+Stecker oder ein anderer externer Busfehler koennten dadurch die festen
+Sensoren und insbesondere die Safety-Sensorverfuegbarkeit beeintraechtigen.
+
+Topologie C darf hoechstens als negativer Referenztest dokumentiert werden.
+Dafuer entsteht keine produktive Planung.
+
+#### Bevorzugte Zielrichtung und Rueckfall
+
+Der Produktfuehler erhaelt verbindlich einen eigenen 1-Wire-Bus. Bevorzugt
+erhaelt auch der Kuehlkoerper-/Peltier-Schutzsensor einen eigenen Bus, also
+Topologie A. Topologie B ist der zulaessige Rueckfall, falls die reale
+ESP32-Pinpruefung zeigt, dass ein dritter geeigneter GPIO nur mit problematischen
+Boot-, SPI-, Flash- oder Hardwarekonflikten verfuegbar waere.
+
+Die endgueltige Entscheidung erfolgt erst nach minimaler Hardwarebaseline,
+realem GPIO-Inventar, realer Pinpruefung, identischem Test von A und B sowie
+Fehlerisolationsvergleich. Es werden vorab keine drei GPIOs verbindlich
+reserviert.
+
+### Produktfuehler ueber 3,5-mm-TRS-Steckverbindung
+
+Der geplante Produktfuehler verwendet einen dreipoligen 3,5-mm-Klinkenstecker
+mit folgender verbindlicher Belegung:
+
+| TRS-Kontakt | Leitung |
 |---|---|
-| Sensoren | genau drei reale DS18B20: optionaler Produktfuehler, Raum-/Luftsensor und verpflichtender Kuehlkoerper-/Peltier-Schutzsensor |
-| Betrieb | 3-Leiter, keine Parasitspeisung |
-| Adressen | 64-Bit-ROM jedes Sensors vor Rollenbindung erfassen |
-| Topologie A | je Sensor separater Bus, sofern GPIO-Budget nach #29 bestaetigt |
-| Topologie B | beide festen Sensoren gemeinsam, Produkt auf getrenntem externem Bus |
-| Pull-ups/Leitungen | reale Werte, Laengen und Steckverbindung messen und protokollieren; nicht vorgeben |
-| Aktoren | Peltier, BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und Summer getrennt/gesperrt; Spike erzeugt nur Messereignisse |
+| Spitze / Tip | VDD |
+| Ring | DQ |
+| Schaft / Sleeve | GND |
 
-### Identische Testfaelle
+Diese Belegung entspricht der gezeigten beziehungsweise kaufbaren
+Sensorvariante. Bei einer geeigneten Buchse ist der Spitzenkontakt der tiefste
+Kontakt. Beabsichtigt ist, dass VDD beim Einstecken zuletzt schliesst und beim
+Herausziehen zuerst oeffnet, sodass DQ und GND sich bewegen, waehrend der Sensor
+noch beziehungsweise bereits unversorgt ist. Damit soll ein powered
+Hot-Plug-Kurzschluss zwischen VDD und GPIO vermieden werden.
 
-1. Ein Sensor: ROM lesen, 9/10/11/12 Bit konfigurieren, Temperatur und CRC
-   wiederholt lesen.
-2. Drei Sensoren einzeln auf getrennten Bussen.
-3. Zwei feste Sensoren auf einem Bus und Produktfuehler separat.
-4. Enumeration und stabile 64-Bit-Adressen ueber zehn Neustarts.
-5. asynchrone 12-Bit-Konvertierung: Trigger, andere Arbeit, fruehester gueltiger
-   Read; keine blockierende Wartezeit im Anwendungspfad.
-6. optionalen Produktfuehler vor Boot fehlend, waehrend Betrieb entfernen und
-   wieder anschliessen; nur Anwesenheits-, Adress- und Fehlerstatus erfassen.
-7. Raum-/Luftsensor sowie Kuehlkoerper-/Peltier-Schutzsensor jeweils entfernen
-   und wieder anschliessen; nur Treiberstatus erfassen, keine Rollenprioritaet
-   oder Safety-Regel im Spike implementieren.
-8. Bus kurzschliessen/unterbrechen nur mit sicherer strombegrenzter Methode;
-   Timeout und Wiederherstellung messen.
-9. CRC- beziehungsweise Datenfehler soweit reproduzierbar injizieren.
-10. 1.000 Messzyklen bei ungefaehr zwei Sekunden mit Zeitstempeln.
-11. absichtlich ungueltige Rolle/Adresse: Adapter lehnt eindeutig ab.
-12. Reset waehrend Konvertierung und anschliessende Neuinitialisierung.
+Diese Kontaktreihenfolge wird nicht aus der allgemeinen TRS-Bauform abgeleitet.
+Sie muss an der konkret vorgesehenen Buchse praktisch bestaetigt werden.
 
-### Messwerte
+#### Verbindliche Buchsenpruefung
 
-- Erkennungs-, Konvertierungs- und Lesedauer pro Aufloesung;
-- Anzahl erfolgreicher Reads, CRC-/Bus-/Timeoutfehler und Wiederanschlusszeit;
-- ROM-Stabilitaet und Reihenfolge der Enumeration;
-- blockierte CPU-Zeit und maximaler Adapterpuffer;
-- Flash, statisches RAM, `firmware.bin`, `firmware.elf`;
-- freier/niedrigster Heap und groesster freier Heapblock;
-- zusaetzliche Framework-/Buildkomplexitaet und transitive Abhaengigkeiten;
-- Verhalten auf beiden zulaessigen Topologien.
+Am realen Buchsenmodell werden dokumentiert:
 
-### Erfolgskriterien
+1. genaue Buchsenbezeichnung;
+2. mechanische Kontaktreihenfolge;
+3. welcher Buchsenkontakt bei teilweisem Einstecken welchen Plugbereich
+   beruehrt;
+4. ob VDD tatsaechlich zuletzt schliesst;
+5. ob VDD tatsaechlich zuerst oeffnet;
+6. ob VDD und GND in irgendeiner Einsteckposition kurzgeschlossen werden;
+7. ob DQ kurzzeitig GND beruehrt;
+8. Verhalten bei halb eingestecktem Stecker;
+9. Verhalten bei langsamer und schneller Betaetigung;
+10. Verhalten bei gedrehtem oder seitlich belastetem Stecker;
+11. vorhandene Schaltkontakte der Buchse;
+12. Kontaktprellen;
+13. Stromaufnahme und Spannung waehrend des Steckvorgangs.
 
-- alle realen Sensoren sind ueber stabile 64-Bit-Adressen unterscheidbar;
-- mehrere Sensoren und beide Topologien funktionieren;
-- 12-Bit-Konvertierung ist ohne blockierende Wartephase integrierbar;
-- fehlender Sensor, Busfehler, CRC-Fehler und Wiederanschluss sind typisiert und
-  verursachen keine veraltete Messung als neuen gueltigen Wert;
-- 1.000 Zyklen ohne Haenger, Watchdog oder unerklaerten Reset;
-- Adapter bleibt schmal und liefert den benoetigten Bus-, Adress- und
-  Fehlerstatus; Rollenprioritaet, Ersatzregelung und Peltierfreigabe bleiben
-  ausserhalb;
-- Ressourcen und Toolchainkomplexitaet sind gemessen.
+#### Zu pruefende elektrische Schutzmassnahmen
 
-### Abbruchkriterien
+- Pull-up von DQ auf die verwendete 3,3-V-Logikversorgung;
+- kleiner Serienwiderstand im DQ-Pfad nahe beim ESP32; Wert anhand realer
+  Signalqualitaet und Leitungen bestimmen;
+- geeignete Strombegrenzung der Sensorversorgung;
+- Entkopplung nahe an Buchse beziehungsweise Sensor;
+- ESD-Schutz, falls die externe Buchse zugaenglich bleibt;
+- sicherer GPIO-Zustand bei Boot, Reset und abgezogenem Sensor;
+- keine Parasitspeisung des Sensors ueber DQ;
+- keine 5-V-Einwirkung auf den ESP32-GPIO.
 
-- Bibliothek blockiert laenger als der dokumentierte und begrenzte Messvertrag
-  ohne unterbrechbare Alternative;
-- Fehler oder Hot-Plug erfordern einen Geraetereset;
-- stabile ROM-Adressierung oder Mehrsensorbetrieb ist nicht moeglich;
-- Toolchainwechsel, ungebundene Task-/Heapnutzung oder nicht aufloesbare
-  transitive Abhaengigkeiten;
-- unkontrollierte elektrische oder thermische Situation.
+Der Audit legt keine endgueltigen Widerstands- oder Schutzbauteilwerte fest.
+Diese bleiben bis zum realen elektrischen Test offen.
 
-### Nicht-Scope und Artefakte
+#### Steck- und Fehlerpruefungen
 
-Nicht-Scope: `VALID`/`STALE`/`FAILED`, Filter, Offsets, Produktfuehler als
-primaerer Regelsensor, Raum-/Luftsensor als regulaerer Ersatz,
-Kuehlkoerper-/Peltier-Schutzsensor als verpflichtende Sicherheitsgrundlage,
-PI-Regelung, Aktorfreigabe und finale Sensorposition. Diese Vertraege bleiben
-im Fermentations-/Safety-Kern. Ergebnisartefakte:
+Mindestens werden geprueft:
 
-- Aufbau-/Topologiefotos, Pull-up-/Leitungsdaten und ROM-Liste;
-- identischer Testcode je Kandidat hinter demselben Adaptervertrag;
-- Messdaten und Fehlerprotokoll;
-- Base-/Kandidaten-Ressourcenvergleich;
-- Toolchain-/Abhaengigkeitsbericht;
-- begruendete Ownerentscheidung und Rueckfallkandidat.
+- Sensor vor Boot abgezogen und vor Boot angeschlossen;
+- Ein- und Ausstecken im Stillstand;
+- Ein- und Ausstecken waehrend einer laufenden Konvertierung;
+- halb eingesteckter Zustand;
+- langsames und schnelles Einstecken;
+- mindestens 100 Steckzyklen;
+- kurzzeitiger DQ-GND-Kontakt;
+- Leitungsunterbruch und simulierte Kontaktunterbrechung;
+- keine Auswirkung auf die festen Sensorbusse;
+- kein ESP32-Neustart und kein Watchdog;
+- keine alte Messung als neue gueltige Messung;
+- Wiedererkennung ueber dieselbe ROM-Adresse.
 
-Notwendige Owner-/Hardwareaktion: alle drei realen Sensoren, Produktstecker und
-Leitungen bereitstellen; zulaessige Stoer-/Hot-Plug-Tests bestaetigen; Auswahl
-erst anhand des identischen Messprotokolls treffen.
+Der Spike erfasst dabei nur Anwesenheit, ROM-Adresse, Konvertierungsstatus,
+Messwert, CRC, Busstatus, Timeout und Wiederanschluss. Er implementiert weder
+automatische Rollenumschaltung noch Safety-Freigabe.
+
+### Identische Volltests pro Softwarekandidat
+
+1. ein Sensor auf einem Bus;
+2. drei Sensoren auf drei getrennten Bussen;
+3. zwei feste Sensoren gemeinsam und Produktfuehler separat;
+4. zehn Neustarts mit stabilen ROM-Adressen;
+5. asynchrone 12-Bit-Konvertierung;
+6. 1.000 Messzyklen;
+7. Produktfuehler-Hot-Plug;
+8. Fehler eines festen Sensors;
+9. gemeinsamer Busfehler in Topologie B;
+10. Unterbruch;
+11. strombegrenzter Kurzschlusstest;
+12. CRC-Fehlerinjektion, soweit reproduzierbar;
+13. Reset waehrend einer Konvertierung;
+14. Wiederinitialisierung;
+15. Flash-, RAM-, Heap- und Puffervergleich;
+16. blockierte CPU-Zeit;
+17. transitive Abhaengigkeiten;
+18. Wartungs- und Konfigurationsaufwand.
+
+### Messwerte und Erfolgskriterien
+
+Erfasst werden Erkennungs-, Konvertierungs- und Lesedauer pro Aufloesung,
+erfolgreiche Reads, CRC-/Bus-/Timeoutfehler, Wiederanschlusszeit,
+ROM-Stabilitaet, blockierte CPU-Zeit, maximaler Adapterpuffer, Flash, statisches
+RAM, `firmware.bin`, `firmware.elf`, freier und niedrigster Heap, groesster
+freier Heapblock, transitive Abhaengigkeiten sowie das Verhalten auf A und B.
+
+Erfolgreich ist ein Kandidat nur, wenn beide Topologien, Mehrsensorbetrieb,
+stabile 64-Bit-Adressen und asynchrone 12-Bit-Konvertierung funktionieren,
+Fehler und Wiederanschluss typisiert sind, keine alte Messung als neu gilt, der
+Produktfuehlerbus die festen Busse nicht beeintraechtigt und 1.000 Zyklen ohne
+Haenger, Watchdog oder unerklaerten Reset laufen.
+
+### Architekturgrenze des spaeteren Adapters
+
+Der produktive Adapter darf ausschliesslich liefern:
+
+- Bus-ID;
+- ROM-Adresse;
+- Messwert;
+- Zeitpunkt;
+- Aufloesung;
+- CRC-Status;
+- Anwesenheit;
+- Timeout;
+- technischen Fehlerstatus.
+
+Nicht im Adapter liegen Produkt-, Luft- oder Schutzrolle, Auswahl des primaeren
+Regelsensors, Ersatzregelung, stabile Rueckkehr zum Produktfuehler,
+`VALID`/`STALE`/`FAILED` als fachliche Qualitaetsentscheidung,
+Peltierfreigabe oder Safety-Verriegelung. Diese Semantik bleibt in #20, #21 und
+#24.
+
+### Abbruchkriterien, Nicht-Scope und Artefakte
+
+Ein Kandidat wird abgebrochen, wenn er nur mit Toolchain-/Frameworkwechsel,
+ungebundener Task-/Heapnutzung oder unaufgeloesten Abhaengigkeiten funktioniert,
+keine stabile ROM-/Mehrbus-/Mehrsensorunterstuetzung besitzt, Hot-Plug einen
+Geraetereset erfordert oder eine unkontrollierte elektrische Situation erzeugt.
+
+Nicht-Scope sind fachliche Qualitaet, Filter, Offsets, Rollenwahl,
+Ersatzregelung, PI-Regelung, Aktorfreigabe, finale Sensorposition, finale GPIOs
+und finale Schutzbauteilwerte. Artefakte sind Aufbau-/Topologiefotos,
+Buchsen-Kontaktprotokoll, Pull-up-/Leitungsdaten, ROM-Liste, identischer Testcode,
+Mess- und Fehlerdaten, Base-/Kandidaten-Ressourcenvergleich,
+Toolchain-/Abhaengigkeitsbericht sowie getrennte Empfehlungen fuer Softwarestack
+und Bustopologie.
+
+Notwendige Owner-/Hardwareaktion: alle drei realen Sensoren, die konkrete
+3,5-mm-TRS-Buchse, Produktstecker und Leitungen bereitstellen; sichere
+Stoer-/Hot-Plug-Tests bestaetigen; Software- und Topologieentscheidung erst
+anhand der identischen Messprotokolle treffen.
 
 ## Reihenfolge und Entscheidungsprotokoll
 
@@ -523,8 +711,11 @@ erst anhand des identischen Messprotokolls treffen.
 5. In Stufe 4 genau einen bevorzugten Display-/Touchkandidaten und einen
    Rueckfallkandidaten bestimmen. Reservekandidaten werden nur bei einem
    dokumentierten Ausloeser nachgezogen.
-6. Die DS18B20-/1-Wire-Kandidaten durch die drei gemeinsamen Mindestgates
-   fuehren.
+6. Beide DS18B20-/1-Wire-Kandidaten durch Stufe 1 fuehren, nur ausreichende
+   Kandidaten mit einem einzelnen Sensor in Stufe 2 pruefen und nur deren
+   Erfolge in Stufe 3 identisch auf Topologie A und B testen. Softwarestack und
+   elektrische Bustopologie getrennt entscheiden; Topologie C nicht produktiv
+   planen.
 7. Herkunfts-/Lizenzpruefung fuer die technisch geeigneten Kandidaten
    aktualisieren.
 8. Owner waehlt je Gruppe genau einen Produktivkandidaten und einen

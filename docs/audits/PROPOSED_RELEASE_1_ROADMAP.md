@@ -133,10 +133,17 @@ warten:
    bevorzugten Treiber und Rueckfallkandidat. Reservekandidaten bleiben
    bedarfsabhaengig. Details stehen im
    [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md).
-4. Dasselbe Drei-Gate-Verfahren fuer DallasTemperature+OneWire und die
-   Espressif-Komponenten verwenden. Ein nicht mit der fixierten Toolchain
-   reproduzierbar baubarer Espressif-Kandidat endet als
-   `INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`.
+4. Beide DS18B20-/1-Wire-Stacks gestuft pruefen: Stufe 1 Quelle/Lizenz/Build,
+   Stufe 2 Sensorsmoke-Test mit einem realen Sensor und nur nach Erfolg Stufe 3
+   mit identischer Topologie- und Fehlermatrix. Ein nicht mit der fixierten
+   Toolchain reproduzierbar baubarer Espressif-Kandidat endet als
+   `INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`, nicht als allgemein ungeeignet.
+   Softwarestack und Bustopologie getrennt entscheiden: Produktfuehler immer
+   separat, Topologie A mit drei Bussen bevorzugt, Topologie B mit gemeinsamem
+   festen Bus als pinabhaengiger Rueckfall und Topologie C hoechstens als
+   negativer Referenztest. Die konkrete TRS-Buchse und Hot-Plug-Schutzmassnahmen
+   werden praktisch geprueft; drei GPIOs und Bauteilwerte werden nicht vorab
+   festgelegt.
 5. Getrennte kleine Webserver-/Onboarding-Prototypen koennen nativ oder auf dem
    aktorfreien ESP32 Ressourcen messen, ohne #27 vorwegzunehmen.
 
@@ -157,7 +164,10 @@ Messungen:
 
 - in Display-/Touch-Stufe 4 genau einen Treiberstack und einen
   Rueckfallkandidaten aus den gestuft verbliebenen Kandidaten;
-- genau einen DS18B20-/1-Wire-Stack und einen Rueckfallkandidaten;
+- genau einen DS18B20-/1-Wire-Stack und einen Rueckfallkandidaten nach Stufe 3;
+- davon getrennt Topologie A oder den begruendeten Rueckfall B nach realem
+  GPIO-/Pin- und Fehlerisolationsvergleich; der Produktfuehler bleibt immer auf
+  eigenem Bus und Topologie C bleibt ausgeschlossen;
 - kleinsten geeigneten Webservertransport;
 - WiFiManager oder einen kleinen Framework-Onboardingadapter;
 - ArduinoJson nur mit endpunktspezifischen Grenzen.
@@ -312,7 +322,8 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 | ID | Entscheidung | Spaetester Zeitpunkt |
 |---|---|---|
 | OD-02 | Display-/Touchtreiberstack | in Stufe 4 nach der gestuften Hardwarematrix, vor #31 |
-| OD-03 | DS18B20-/1-Wire-Stack | nach Sensorspike, vor #30 |
+| OD-03a | DS18B20-/1-Wire-Softwarestack | nach Stufe 3, vor #30 |
+| OD-03b | Bustopologie A oder begruendeter Rueckfall B | nach minimaler Hardwarebaseline, realem Pin-/GPIO-Inventar und identischem Fehlerisolationsvergleich; Produktbus separat, C ausgeschlossen |
 | OD-04 | Framework-WebServer oder ESPAsyncWebServer | nach begrenztem Last-/Ressourcenprototyp, vor #27-Transport |
 | OD-05 | schlanke Views oder LVGL | nach OD-02, schmalem Adaptervertrag und identischem repraesentativem Screenvergleich |
 | OD-06 | WiFiManager oder kleiner Framework-Onboardingadapter | vor Onboardingteil von #27 |

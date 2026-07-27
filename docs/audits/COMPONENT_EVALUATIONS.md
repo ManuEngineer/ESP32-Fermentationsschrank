@@ -101,27 +101,47 @@ am 2026-07-27.
 ### Release-1-Aufgabe und Vertrag
 
 Drei DS18B20 werden im 3-Leiter-Betrieb bei 12 Bit ungefaehr alle zwei Sekunden
-abgefragt. Der optional anschliessbare Produktfuehler ist der primaere
-Regelsensor, wenn er vorhanden und verwendbar ist; sein Fehlen verhindert einen
-dafuer zulaessigen Lauf nicht grundsaetzlich. Der Raum-/Luftsensor ist dann der
-regulaere Ersatz-Regelsensor. Der Kuehlkoerper-/Peltier-Schutzsensor ist
-verpflichtende Sicherheitsgrundlage; ohne ausreichend vertrauenswuerdiges
-Signal darf der Peltier nicht freigegeben werden. Benoetigt werden 64-Bit-ROM-
-Adressen, mehrere Sensoren je Bus als Rueckfalltopologie, getrennte feste und
-abnehmbare Rollen, nicht blockierende Konvertierung, CRC-/Busfehler und Hot-Plug.
-Der Treiber meldet nur Bus-, Adress- und Fehlerstatus. Rollenprioritaet,
-Sensorqualitaet und Safety bleiben im Fermentationskern.
+abgefragt. Der optionale Produktfuehler ist bei Verwendbarkeit primaerer
+Regelsensor, darf im Stillstand und in einem dafuer zulaessigen Lauf fehlen und
+muss bei Entfernen/Wiederanschliessen ein technisches Anwesenheitsereignis
+erzeugen. Sein externer Bus darf die festen Sensorbusse nicht elektrisch
+beeintraechtigen. Der feste Raum-/Luftsensor ist regulaerer Ersatz, nicht
+pauschal primaer. Der feste Kuehlkoerper-/Peltier-Schutzsensor ist verpflichtende
+Sicherheitsgrundlage; fehlendes, ungueltiges, veraltetes oder nicht ausreichend
+vertrauenswuerdiges Signal sperrt die Peltierfreigabe ausserhalb des Treibers.
+
+Softwarestack und elektrische Bustopologie sind getrennte Entscheidungen. Beide
+Kandidaten durchlaufen Stufe 1 fuer Quelle/Lizenz/Build, Stufe 2 mit einem realen
+Sensor und nur nach Erfolg die identische Topologie-/Fehlermatrix der Stufe 3.
+Dabei werden Topologie A mit drei getrennten Bussen und Topologie B mit separatem
+Produktfuehler sowie gemeinsamem festen Bus identisch verglichen. Topologie C
+mit allen Sensoren auf einem Bus ist keine regulaere Zielvariante.
 
 | Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP32-/PlatformIO-Aussage | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
 |---|---|---|---|---|---|---|---|
-| DallasTemperature + OneWire | verbreitete Arduino-Abstraktion ueber den DS18B20- und 1-Wire-Vertrag | DallasTemperature `4.0.6`, `dadbbf7d`, MIT; OneWire `2.3.8`, `800f26f3`, MIT im Quelltext | beide `architectures=*`; OneWire nennt ESP32-Anpassungen | zwei kleine Bibliotheken; exakte Flash-/RAMwirkung im Spike messen | asynchroner `ITemperatureSource`-Adapter mit explizitem Bus-, Adress- und Fehlerstatus | neue DallasTemperature-Hauptversion, alter Arduino-Core, mehrere Busse, Hot-Plug und Timing pruefen | bevorzugter Kandidat fuer die aktuelle Arduino-Toolchain, aber erst nach identischem Spike |
-| Espressif onewire_bus + ds18b20 | offizielle Espressif-Komponenten, RMT/UART-Backend, Enumeration und CRC8 | `onewire_bus 1.1.1`, `a269e1fe`; `ds18b20 0.4.0`, `bf92b0b3`; Apache-2.0 | Registry fordert fuer onewire_bus ESP-IDF >=5.0; aktuelles Projekt nutzt Arduino-ESP32 2.0.17 auf IDF 4.4, direkte Integration daher unbestaetigt | RMT/UART-Ressourcen und optionale Sensor-Hub-Abhaengigkeit; messen | gleicher Plattformport; keine IDF-Typen in der Anwendung | Toolchain-Mismatch, Komponentenmanager in PlatformIO-Arduino, optionaler Sensor-Hub unterstuetzt laut README nur einen Sensor | technisch attraktiver Herstellerkandidat, aber ohne Toolchainwechsel nicht als kompatibel behaupten |
+| DallasTemperature + OneWire | verbreitete Arduino-Abstraktion ueber den DS18B20- und 1-Wire-Vertrag | DallasTemperature `4.0.6`, `dadbbf7d`, MIT; OneWire `2.3.8`, `800f26f3`, MIT im Quelltext | beide `architectures=*`; OneWire nennt ESP32-Anpassungen | zwei kleine Bibliotheken; Flash-/RAM-/Heapwirkung in Stufe 1 und 3 messen | technischer Adapter mit Bus-ID, ROM, Mess-/Zeit-/CRC-/Anwesenheits-/Timeout-/Fehlerstatus | neue DallasTemperature-Hauptversion, alter Arduino-Core, Mehrbus/Mehrsensor, Hot-Plug und Timing pruefen | verbindlicher Kandidat 1; keine Auswahl vor Stufe 3 |
+| Espressif onewire_bus + ds18b20 | offizielle Espressif-Komponenten, RMT/UART-Backend, Enumeration und CRC8 | `onewire_bus 1.1.1`, `a269e1fe`; `ds18b20 0.4.0`, `bf92b0b3`; Apache-2.0 | Registry fordert fuer onewire_bus ESP-IDF >=5.0; aktuelles Projekt nutzt Arduino-ESP32 2.0.17 auf IDF 4.4, direkte Integration daher unbestaetigt | RMT/UART-Ressourcen und optionale Sensor-Hub-Abhaengigkeit; messen | derselbe technische Plattformport; keine IDF-Typen in der Anwendung | Toolchain-Mismatch, Komponentenmanager in PlatformIO-Arduino, Mehrbus/Mehrsensor und optionale Sensor-Hub-Grenze pruefen | verbindlicher Kandidat 2; bei Toolchainkonflikt `INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`, keine allgemeine Untauglichkeitsaussage |
+
+Der Produktfuehler erhaelt verbindlich einen eigenen Bus. Ein eigener Bus auch
+fuer den Schutzsensor ist bevorzugt; der gemeinsame feste Bus aus Topologie B
+bleibt Rueckfall, falls die reale Pinpruefung keinen dritten unproblematischen
+GPIO ergibt. Vorab werden keine drei GPIOs reserviert.
+
+Die vorgesehene 3,5-mm-TRS-Verbindung verwendet `Tip = VDD`, `Ring = DQ` und
+`Sleeve = GND`. Die beabsichtigte Kontaktfolge mit VDD zuletzt beim Einstecken
+und zuerst beim Herausziehen wird nicht aus der TRS-Bauform behauptet, sondern
+an der konkreten Buchse inklusive Teilstecken, Kurzschluss-, Prell-, Last- und
+mindestens 100 Steckzyklen praktisch geprueft. Pull-up, DQ-Serienwiderstand,
+Strombegrenzung, Entkopplung, ESD-Schutz und sichere Bootzustaende werden erst
+nach realem Signal- und Stecktest dimensioniert.
 
 Verbleibende eigene Safety-/Fachlogik: Rollenbindung, Produktfuehler als
 optionaler primaerer Regelsensor, Raum-/Luftsensor als regulaerer Ersatz,
 Kuehlkoerper-/Peltier-Schutzsensor als verpflichtende Freigabegrundlage,
 `VALID`/`STALE`/`FAILED`, Filter, Plausibilitaet, Offset, Rueckkehr und
-Aktorfreigabe. Entscheidungsstatus: `SPIKE_REQUIRED`.
+Aktorfreigabe. Der Adapter liefert nur Bus-ID, ROM-Adresse, Messwert, Zeitpunkt,
+Aufloesung, CRC, Anwesenheit, Timeout und technischen Fehlerstatus.
+Entscheidungsstatus: `SPIKE_REQUIRED` fuer Softwarestack und Topologie getrennt.
 
 Quellen: [DallasTemperature](https://github.com/milesburton/Arduino-Temperature-Control-Library),
 [OneWire](https://github.com/PaulStoffregen/OneWire),

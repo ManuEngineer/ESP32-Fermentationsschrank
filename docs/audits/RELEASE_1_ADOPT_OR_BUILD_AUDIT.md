@@ -75,15 +75,17 @@ hinter schmalen Adaptern gekapselt werden. Dagegen bleiben Sensorqualitaet,
 Regelsensorauswahl, PI/Luftbegrenzung, Aktorplanung, Safety, Prozess-, Recovery-
 und Berechtigungslogik eigene deterministische Module.
 
-Zwei Hardwareentscheidungen duerfen nicht am Schreibtisch fallen:
+Zwei Hardwarebereiche duerfen nicht am Schreibtisch entschieden werden:
 
 - Display/Touch: LovyanGFX, TFT_eSPI und das LCDWiki-Paket durchlaufen alle die
   Quellen-/Lizenz- und Buildpruefung. Ausreichend erfolgreiche Kandidaten
   erhalten einen kurzen identischen Smoke-Test; nur dessen erfolgreiche
   Kandidaten erreichen die vollstaendige identische Hardwarematrix.
-- DS18B20: DallasTemperature+OneWire und die Espressif-Komponenten werden
-  identisch verglichen; der Espressif-Stack muss zuerst seine Kompatibilitaet
-  mit der aktuellen Arduino-ESP32-2.0.17-Toolchain beweisen.
+- DS18B20: DallasTemperature+OneWire und die Espressif-Komponenten durchlaufen
+  gestuft denselben Build-, Sensorsmoke-, Topologie- und Fehlervergleich. Die
+  Softwarestackwahl bleibt von der elektrischen Bustopologiewahl getrennt; der
+  Espressif-Stack muss zuerst seine Kompatibilitaet mit der aktuellen
+  Arduino-ESP32-2.0.17-Toolchain beweisen.
 
 Diese aktorfreien Spikes warten nicht auf den vollstaendigen Abschluss von
 #20–#24. Nach Audit-/Planungsbereinigung und einer minimalen sicheren
@@ -119,10 +121,12 @@ stabilen Active-/Fallback-Kerns offen, nicht als alternativer R1-Auftrag.
 Treiberbibliotheken duerfen Sensorbytes, Pixel oder HTTP-Verbindungen
 verarbeiten. Sie entscheiden nicht ueber Rollenbindung, Ersatzbetrieb,
 Heiz-/Kuehlfreigabe, Totzeit, Fehlerreset, Recovery oder Authberechtigung. Der
-optionale, verwendbare Produktfuehler ist der primaere Regelsensor; ohne ihn
-uebernimmt der Raum-/Luftsensor regulaer die Regelung, sofern der Lauf dies
-zulaesst. Der Kuehlkoerper-/Peltier-Schutzsensor ist fuer jede
-Peltierfreigabe verpflichtend. Die Issues #20–#24 bleiben deshalb
+optionale, verwendbare Produktfuehler ist der primaere Regelsensor; er darf im
+Stillstand und in einem dafuer zulaessigen Lauf fehlen. Ohne ihn uebernimmt der
+Raum-/Luftsensor regulaer die Regelung. Der Kuehlkoerper-/Peltier-Schutzsensor
+ist fuer jede Peltierfreigabe verpflichtend; ein fehlendes, ungueltiges,
+veraltetes oder nicht ausreichend vertrauenswuerdiges Signal sperrt sie. Die
+Issues #20–#24 bleiben deshalb
 `CUSTOM_SAFETY_CORE`; #17–#19, #25–#28 und der fachliche Teil von #56/#57
 bleiben `CUSTOM_APPLICATION`.
 
@@ -169,9 +173,19 @@ Kandidaten erreichen den kurzen Hardware-Smoke-Test in Stufe 2, und nur
 `PASS_SMOKE_TEST` erreicht die vollstaendige identische Matrix in Stufe 3.
 Stufe 4 bestimmt bevorzugten Treiber und Rueckfallkandidat. Reservekandidaten
 werden nur bei einem dokumentierten Ausloeser nachgezogen. Der Sensorspike
-behaelt die drei gemeinsamen Mindestgates. Ein Build-Scheitern wird typisiert
-dokumentiert und nicht durch Toolchainwechsel oder verfruehten Hardwaretest
-umgangen.
+verwendet die Stufen 1 bis 3: Quelle/Lizenz/Build, Sensorsmoke-Test und erst
+danach die vollstaendige identische Topologie-/Fehlermatrix. Ein
+Build-Scheitern wird typisiert dokumentiert und nicht durch Toolchainwechsel
+oder verfruehten Hardwaretest umgangen.
+
+Beim Sensorspike sind Softwarestack und Bustopologie getrennte Entscheidungen.
+Der Produktfuehler besitzt verbindlich einen eigenen Bus. Drei getrennte Busse
+sind bevorzugt; ein gemeinsamer Bus nur fuer die beiden festen Sensoren bleibt
+pinabhaengiger Rueckfall. Alle drei Sensoren auf einem Bus werden nicht
+produktiv geplant. Die 3,5-mm-TRS-Belegung `Tip = VDD`, `Ring = DQ`,
+`Sleeve = GND` und ihre beabsichtigte Kontaktreihenfolge werden an der konkreten
+Buchse praktisch geprueft; weder drei GPIOs noch Schutzbauteilwerte werden im
+Audit vorweggenommen.
 
 LVGL ist kein Display-/Touchtreiberkandidat. Es wird erst nach Treiberauswahl,
 schmalem Adaptervertrag und einem repraesentativen Release-1-Screen mit
@@ -307,9 +321,12 @@ Variante A erweitert den R1-Kern spaeter additiv:
 ### Zwingend
 
 - drei DS18B20-Rollen: der optionale Produktfuehler ist primaerer Regelsensor,
-  wenn er vorhanden und verwendbar ist; der Raum-/Luftsensor ist der regulaere
-  Ersatz-Regelsensor; der Kuehlkoerper-/Peltier-Schutzsensor ist verpflichtende
-  Sicherheitsgrundlage fuer jede Peltierfreigabe;
+  wenn er vorhanden und verwendbar ist, darf in Stillstand und zulaessigem Lauf
+  fehlen und wird elektrisch von den festen Sensorbussen isoliert; der
+  Raum-/Luftsensor ist der regulaere Ersatz-Regelsensor; der
+  Kuehlkoerper-/Peltier-Schutzsensor ist verpflichtende Sicherheitsgrundlage,
+  deren fehlendes, ungueltiges, veraltetes oder nicht ausreichend
+  vertrauenswuerdiges Signal jede Peltierfreigabe sperrt;
 - Peltier ueber BTS7960, Innen-/Aussenluefter und Summer;
 - deterministischer Safety-, PI-, Aktor-, Prozess- und Laufkern;
 - Touchdisplay 320 x 240 als einzige lokale Bedien- und Anzeigeoberflaeche,
@@ -360,9 +377,10 @@ Die vollstaendige Zuordnung steht in der
    unveraendert umsetzen.
 5. #17 und #24 nur von den tatsaechlich benoetigten schmalen R1-Vertraegen
    abhaengig machen, nicht von spaeterem Pending oder leeren Secret-Domaenen.
-6. Display-/Touchtreiber erst nach den Stufen 0 bis 4, DS18B20-/1-Wire-Treiber
-   nach den drei gemeinsamen Mindestgates und den jeweils geforderten
-   identischen Messungen fixieren und in kleinen Adapter-PRs einbinden.
+6. Display-/Touchtreiber erst nach den Stufen 0 bis 4 und
+   DS18B20-/1-Wire-Treiber erst nach den Sensorstufen 1 bis 3 fixieren. Beim
+   Sensorpfad Softwarestack und Topologie A/B getrennt entscheiden; Produktbus
+   immer separat und Topologie C nicht produktiv planen.
 7. Produktive Aktoradapter und reale Aktortests weiterhin erst nach den
    zugeordneten Safety-Gates freigeben.
 8. Web-/UI-/Backupissues vor Umsetzung in kleine, ressourcenmessbare Scheiben
@@ -410,7 +428,8 @@ Die vorgeschlagene Reihenfolge steht in
 | ID | Entscheidung |
 |---|---|
 | OD-02 | Display-/Touchtreiberstack in Stufe 4 nach gestuftem Hardwarevergleich waehlen |
-| OD-03 | DS18B20-/1-Wire-Stack nach Toolchain- und Hardware-Spike waehlen |
+| OD-03a | DS18B20-/1-Wire-Softwarestack nach Stufe 3 waehlen |
+| OD-03b | Topologie A oder begruendeten Rueckfall B nach realem Pin-/GPIO- und Fehlerisolationsvergleich waehlen; Produktbus bleibt separat, C ausgeschlossen |
 | OD-04 | Arduino-Framework-Webserver oder ESPAsyncWebServer nach identischem Last-/Ressourcentest |
 | OD-05 | schlanke eigene Screens oder LVGL erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich |
 | OD-06 | WiFiManager oder kleiner Framework-Onboardingadapter |
@@ -436,7 +455,7 @@ Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.
 - [`THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md`](THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md)
   – Herkunft, Lizenzen und Publikationspruefung
 - [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md) – gestufter Display-/Touch-
-  und identischer DS18B20-Spike
+  sowie DS18B20-Software-, Topologie- und TRS-Spike
 - [`PROPOSED_RELEASE_1_ROADMAP.md`](PROPOSED_RELEASE_1_ROADMAP.md) – Reihenfolge,
   Gates, kleine PRs und spaetere Funktionen
 - [`../ADOPT_OR_BUILD.md`](../ADOPT_OR_BUILD.md) – Entwurf des dauerhaften

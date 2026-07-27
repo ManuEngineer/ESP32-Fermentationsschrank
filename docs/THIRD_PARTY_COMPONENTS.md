@@ -34,8 +34,8 @@ die technische Bewertung in
 | Display | Arduino_GFX `1.6.7`, Commit `fe33cad8` | 2026-07-27 | BSD | `NOT_SELECTED` | Reservekandidat mit geeignetem Touchadapter; nur bei dokumentiertem Ausloeser nachziehen |
 | Display | Adafruit GFX `1.12.6` und Adafruit ILI9341 `1.6.3` | Commits `ac6d7c38`/`dbb447af` | BSD; Abhaengigkeiten separat pruefen | `NOT_SELECTED` | Reservekandidat mit geeignetem XPT2046-Touchadapter; nur bei dokumentiertem Ausloeser nachziehen |
 | Touch | XPT2046_Touchscreen `1.4`, Commit `f956c5d8` | 2026-07-27 | MIT im Quellheader | `SPIKE_REQUIRED` | nur nach real bestaetigtem Touchcontroller |
-| DS18B20 | DallasTemperature `4.0.6` plus OneWire `2.3.8` | Commits `dadbbf7d`/`800f26f3` | MIT; OneWire MIT im Quelltext | `SPIKE_REQUIRED` | Arduino-kompatibler Sensoradapter |
-| DS18B20 | Espressif `onewire_bus 1.1.1` plus `ds18b20 0.4.0` | Commits `a269e1fe`/`bf92b0b3` | Apache-2.0 | `SPIKE_REQUIRED` | offizieller ESP-IDF-Kandidat; Integration in aktuelle Arduino-Toolchain offen |
+| DS18B20 | DallasTemperature `4.0.6` plus OneWire `2.3.8` | Commits `dadbbf7d`/`800f26f3` | MIT; OneWire MIT im Quelltext | `SPIKE_REQUIRED` | Softwarekandidat 1 fuer Stufen 1–3; Topologie A und B identisch pruefen, Topologiewahl getrennt |
+| DS18B20 | Espressif `onewire_bus 1.1.1` plus `ds18b20 0.4.0` | Commits `a269e1fe`/`bf92b0b3` | Apache-2.0 | `SPIKE_REQUIRED` | Softwarekandidat 2 fuer Stufen 1–3; nur ohne Toolchainwechsel, Topologie A und B identisch pruefen |
 | Persistenz | Arduino-ESP32 Preferences/NVS | Arduino-ESP32 `2.0.17` | LGPL-2.1/ESP-IDF-Komponentenlizenzen | `FRAMEWORK_CANDIDATE` | produktives `IStateStore`-Backend gemaess ADR-016 |
 | JSON | ArduinoJson `7.4.3`, Commit `7823e4a6` | 2026-07-27 | MIT | `EVALUATE_LATER` | begrenzte API-, Export- und Importserialisierung |
 | Webserver | Arduino-ESP32 `WebServer` | Arduino-ESP32 `2.0.17` | Frameworklizenz und Drittbestandteile | `FRAMEWORK_CANDIDATE` | kleinster Kandidat fuer lokalen HTTP-Dienst |
