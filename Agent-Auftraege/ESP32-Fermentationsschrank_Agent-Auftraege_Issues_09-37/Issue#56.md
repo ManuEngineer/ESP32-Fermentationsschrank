@@ -2,9 +2,9 @@
 
 ## Issue
 
-**[E2.1c] Konfigurationsmanifeste, Preview und Runtimeaktivierung implementieren**
+**[E2.1c] Active-/Fallback-Manifeste, Vorschau und Runtimeaktivierung implementieren**
 
-Aktueller Snapshot-Status: `BLOCKED_DEPENDENCY`
+Zielstatus nach Live-Synchronisierung: `READY`
 
 Tracking-Issue: #16
 
@@ -12,289 +12,255 @@ Epic: #4
 
 GitHub: https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/56
 
-> Dieser Auftrag darf erst ausgefuehrt werden, wenn #54 und #55 gemergt und
-> abgeschlossen sind und das Live-Issue #56 auf `READY` steht.
+## Abhaengigkeiten
 
-## Sperrregel
+- #54 – `COMPLETED`
+- #55 – `COMPLETED`
 
-Solange eine Abhaengigkeit offen oder #56 nicht `READY` ist:
+#17 und #24 sind keine blockierenden Abhaengigkeiten. Ihre fachliche Semantik
+wird nicht vorweggenommen.
 
-- keinen Implementierungsbranch erstellen
-- keine Produktionsdatei aendern
-- keinen PR erstellen
-- keine provisorischen Plattform- oder Dokumentmodelle parallel einfuehren
-- Blocker berichten und anhalten
+## Ausfuehrungsgate
 
-## Ziel nach Freigabe
+Der Zielstatus `READY` autorisiert noch keine Implementierung. Vor Code muss
+fuer #56 ein eigener Draft-PR mit versionierter Plan-Datei erstellt, committed
+und gepusht werden. Die Umsetzung beginnt erst nach:
 
-Verbinde die typisierten Dokumentrevisionen zu vollstaendig validierten
-Konfigurationsgenerationen und implementiere:
+```text
+PLAN APPROVED
+Approved plan commit: <commit-sha>
+```
 
-- Active/Fallback/Pending
-- kanonische Roots und korrigierte Schutzwurzeln
-- Slotrotation
-- Preview, Owner, Token und Konfliktsemantik
-- Aktivierungsintent
-- RuntimeConfigurationSnapshot
-- Prepare/Root-Commit/Publish
-- schmale Ports zu #17 und #24
+Der #56-Plan muss insbesondere den Gleichwertigkeitsnachweis zur offenen
+`MutationSequence`-Frage enthalten. Kann er diesen nicht erbringen, ist vor
+Implementierung eine materielle Planergaenzung und neue Ownerfreigabe noetig.
 
-Bootstrap, Secret-Manifeste, Werksreset und die abschliessende End-to-End-Matrix
-bleiben #57.
+## Verbindliche Architekturentscheidung
 
-## Vor jeder Arbeit lesen
+Release 1 folgt ADR-018 mit schlanker Variante-B-Persistenz. ADR-016 bleibt
+fuer NVS, Schluesselraum und Envelope verbindlich.
 
-- Live-Issue #56
-- Tracking-Issue #16
-- gemergte Ergebnisse von #54 und #55
-- `AGENTS.md`
-- Modul-AGENTS.md fuer `device_platform`, `device_platform_test_support` und
-  `fermentation_app`
-- `docs/CONFIGURATION_PERSISTENCE.md`
-- `docs/SETTINGS_AND_STORAGE.md`
-- `docs/BACKUP_SECURITY_RETENTION.md`
-- `docs/PR38_REVIEW_CORRECTIONS.md`
-- `docs/RUN_COMMANDS.md`
-- `docs/CI_AND_QUALITY_GATES.md`
-- Agent-INDEX
+## Ziel
 
-Berichte vor Codeaenderungen:
-
-1. Manifest-, Root- und Referenzmodelle
-2. kanonische Rootauswahl
-3. Schutzmengen- und Slotwahlalgorithmus
-4. Preview-/Bestaetigungs- und Konfliktmodell
-5. Pending-/Intent-Ablauf
-6. Prepare/Commit/Publish-Linearisierung
-7. Integrationsports zu #17/#24
-8. Cut-Point- und Ressourcenplan
-
-Nur bei echter fachlicher Ownerentscheidung, Sicherheitswiderspruch oder
-widerspruechlicher Spezifikation anhalten.
-
-## Git- und PR-Ablauf nach Freigabe
-
-1. aktuellen `main` und Abschluss von #54/#55 pruefen
-2. Branch erstellen:
-   `feat/issue-56-konfigurationsmanifeste-preview-runtimeaktivierung`
-3. INDEX zuerst gegen Live-Status pruefen; nur bei Abweichung synchronisieren
-4. ausschliesslich #56 bearbeiten
-5. PR mit `Closes #56` erstellen
-6. nicht mergen, kein Auto-Merge, Branch nicht loeschen
-7. danach anhalten
+Die vorhandenen typisierten Dokumente als vollstaendig validierten
+Active-/Fallback-Graphen atomar aktivieren. Eine fluechtige Vorschau und ein
+optimistischer Konfliktvertrag fuehren zu einem vorbereiteten
+`RuntimeConfigurationSnapshot`; der Root-Commit linearisiert persistent und
+der anschliessende Publish ist vertraglich nicht fehlschlagend.
 
 ## Verbindlicher Scope
 
-### Physische Slots und Referenzen
+### Manifest und Root
 
-- je 4 Slots fuer UserConfiguration, ServiceConfiguration und ProgramCatalog
-- 3 ConfigurationManifest-Slots
-- 2 ConfigurationRootRecord-Slots
-- 2 PendingConfigurationManifest-Slots
-- 2 PendingRootRecord-Slots
-- 2 Aktivierungsintent-Slots
-- konkrete feste Anwendungsschluessel und Record-Type-IDs in `fermentation_app`
-- Referenzen mit Typ, Slot, Revision, Schema, erwarteter Payloadlaenge und CRC
-- exakte Uebereinstimmung mit Envelope und Payload
+- drei `ConfigurationManifest`-Slots und zwei redundante
+  `ConfigurationRootRecord`-Slots
+- ein Manifest referenziert exakt je eine `UserConfiguration`,
+  `ServiceConfiguration` und `ProgramCatalog`-Revision
+- jede Referenz bindet Recordtyp, Slot, Revision, Schema-Version,
+  Payloadlaenge, CRC und `StorageEpoch`
+- der Root bindet Active, optional genau eine Fallbackgeneration und eine
+  monotone `rootSequence`
+- Active und Fallback sind vollstaendige Graphen
+- keine Connectivity-/Authentication-Referenz in Schema 1
 
-### Kanonischer ConfigurationRoot
+### Kanonische Graphvalidierung
 
-Beim Boot:
+1. Rootkandidaten technisch pruefen und nach `rootSequence` absteigend liefern;
+2. je Kandidat den Active-Zweig vollstaendig technisch und fachlich validieren;
+3. bei unbrauchbarem Active den Fallback desselben Roots vollvalidieren;
+4. den ersten vollstaendig nutzbaren Zweig kanonisch waehlen;
+5. Fallbacknutzung stabil diagnostizieren;
+6. ohne vollstaendig nutzbaren Graphen keine Runtime freigeben.
 
-1. technische Rootkandidaten nach Sequenz absteigend beziehen
-2. Active-Graph des Kandidaten vollstaendig validieren
-3. bei ungueltigem Active Fallback vollstaendig validieren
-4. ersten nutzbaren Zweig als kanonisch waehlen
-5. verwendeten Fallback stabil diagnostizieren
+Ein hoher Sequenzwert, gueltiger CRC oder einzeln gueltiges Dokument aktiviert
+niemals allein eine Generation.
 
-Manifestvorhandensein oder hohe Sequenz allein aktiviert nichts.
+### Sichere Slotrotation und Schutzmenge
 
-### Korrigierte Schutzwurzeln
+Geschuetzt sind ausschliesslich:
 
-Dauerhaft geschuetzt sind ausschliesslich:
+- Active des kanonischen Roots;
+- dessen genau eine vollstaendig nutzbare Fallbackgeneration, falls vorhanden;
+- alle Records der gerade ausgefuehrten serialisierten Mutation.
 
-- Active und Fallback des kanonischen ConfigurationRoot
-- Pending des kanonischen PendingRoot
-- exakt passender gueltiger Aktivierungsintent samt Pending-Graph
-- gerade ausgefuehrte serialisierte Mutation
+Aeltere redundante Rootkopien bleiben technische Bootkandidaten, schuetzen
+aber keine nur noch von ihnen referenzierten Generationen. Ein Slot wird erst
+wiederverwendet, wenn er ausserhalb der kanonischen Schutzmenge liegt. Fehlt
+ein sicherer Slot, wird vor jeder Teilaktivierung typisiert mit
+`NoUnreferencedSlotAvailable` und betroffenem Recordtyp abgelehnt.
 
-Aeltere redundante Roots sind technische Bootkandidaten, aber keine dauerhaft
-schuetzenden fachlichen Wurzeln. Nur Slots ausserhalb der aktuellen Schutzmenge
-duerfen wiederverwendet werden. Slotwahl erfolgt per Referenzanalyse.
+Ein neuer Commit schreibt und validiert zuerst geaenderte Dokumente und das
+neue Manifest. Danach schreibt er in den nicht kanonischen Rootslot:
 
-Fehlt ein sicherer Slot:
+```text
+Active   = neues Manifest
+Fallback = bisheriges Active
+```
 
-- stabiler typisierter `NoUnreferencedSlotAvailable`
-- betroffener Dokument-/Recordtyp enthalten
-- keine Teilwirkung
+Erst nach Readback und Vollvalidierung des neuen Rootgraphen wird dieser
+kanonisch. Mindestens fuenf aufeinanderfolgende Active-Commits muessen ohne
+vorzeitigen Slotmangel funktionieren.
 
-### Commit und MutationSequence
+### Fluechtige validierte Vorschau
 
-- exklusive serialisierte Mutation
-- nur geaenderte Dokumente neu schreiben
-- unveraenderte Revisionen gemeinsam referenzieren
-- Inhaltsgleichheit nie nur anhand CRC annehmen
-- MutationSequence je StorageEpoch erst nach Basis-, Validierungs-,
-  Aktivierungsvorbereitungs- und No-op-Pruefungen reservieren
-- reservierte Sequenzen nie wiederverwenden; Luecken erlaubt
-- Revisionen/Generationen/Sequenzen als getrennte starke Typen
+- vollstaendig typisierter unveraenderlicher Kandidat im RAM
+- erwartete Active-Manifestgeneration
+- stabile Integritaetskennung des Kandidaten
+- typisierte redigierte Aenderungszusammenfassung
+- vollstaendige technische und fachliche Validierung vor Anzeige
+- erneute Basis-, Kandidaten- und Validierungspruefung unmittelbar vor Commit
+- veraltete Basis oder veraenderter Kandidat: typisierter Konflikt ohne Write
+- `NoChange` erzeugt keine neue Revision, Generation, Rootsequenz oder
+  Storeoperation
 
-### Preview und Konflikte
+Nicht Bestandteil sind persistente Preview-Slots, Owner-/Token-Metadaten oder
+Ablaufzeiten. Es entsteht keine allgemeine Preview-, Provider- oder
+Pluginplattform.
 
-- unveraenderlicher vollstaendig validierter Kandidat
-- exakte Basisgeneration
-- Owner/Quelle
-- Token und Spezifikations-Ablaufsemantik
-- Bestaetigung nur fuer denselben Kandidaten und dieselbe Basis
-- NoChange ohne Revision, MutationSequence oder Write
-- veraltete Basis, falscher Owner/Token oder veraenderter Kandidat typisiert und
-  ohne Teilwirkung ablehnen
-- Ergebnisse mindestens: NoChange, Activated, StoredAsPending,
-  ReplacedPending, ValidationFailure, PersistenceFailure,
-  ConfigurationConflictFailure, ActivationFailure und MigrationFailure
+### Serialisierte Mutation und Revisionsschutz
 
-### Pending und Aktivierungsintent
+- global hoechstens eine Konfigurationsmutation gleichzeitig
+- Dokumentrevisionen ordnen Inhalte je Dokumenttyp
+- Manifestgeneration ordnet vollstaendige Kandidatengraphen
+- `rootSequence` ordnet erfolgreiche kanonische Commits
+- erwartete Active-Generation und Kandidatenintegritaet sichern Konflikte
+- `CommitOutcomeUnknown` wird durch Readback der Rootslots und Vollvalidierung
+  des erwarteten Graphen aufgeloest
+- Zaehlerwert 0 bleibt reserviert; Ueberlauf wird vor Writes abgelehnt
 
-- hoechstens ein vollstaendig validiertes Pending
-- weitere dauerhafte Aenderungen bauen auf Pending auf
-- gemischte sofort-/neustartwirksame Aenderung wird als Ganzes Pending
-- Pending-Ersetzung und Verwerfen atomar ueber PendingRoot
-- Intent gebunden an erwartete aktive Generation, exakte Pending-Generation,
-  Manifestintegritaet, monotone Intent-Sequenz und Status
-- bei gueltigem Intent Pending und referenzierte Dokumente sperren
-- unerwarteter Neustart ohne passenden Intent aktiviert nie
-- bereits aktives Pending-Ziel nur idempotent abschliessen
+Eine eigene persistente `MutationSequence` wird nur dann nicht eingefuehrt,
+wenn der freigegebene #56-Plan die Gleichwertigkeit dieser Mechanismen fuer
+Konflikt, Wiederholung und eindeutiges Commit-Ergebnis nachweist.
 
-### Port zu #17
+### RuntimeConfigurationSnapshot und atomare Aktivierung
 
-Definiere und konsumiere ausschliesslich:
+Vor dem Root-Commit werden Kandidat, Plattformwerte, Ressourcen und
+Recordgroessen vollstaendig geprueft beziehungsweise vorbereitet. Der Ablauf:
 
-- Unknown
-- NoActiveOrRecoverableRun
-- ActiveRunPresent
-- RecoverableRunPresent
+1. Kandidat und Basis unter exklusiver Mutation erneut pruefen;
+2. alle Runtimewerte und Ressourcen vorbereiten;
+3. geaenderte Dokumente schreiben, ruecklesen und validieren;
+4. Manifest schreiben, ruecklesen und als Graph validieren;
+5. neuen Root schreiben;
+6. `CommitOutcomeUnknown` durch Readback bestimmen;
+7. Root und gesamten Zielgraphen ruecklesen und validieren;
+8. erfolgreichen Root-Commit als persistenten Linearisierungspunkt behandeln;
+9. vorbereiteten Snapshot ohne Allokation, Serialisierung, Validierung oder
+   Reservierung atomar sichtbar machen;
+10. Mutation freigeben.
 
-Nur NoActiveOrRecoverableRun erlaubt Aktivierung. Unknown blockiert sicher.
-Keine Laufpersistenz oder reale Run-Erkennung implementieren.
+Leser sehen nur den vollstaendig alten oder neuen Snapshot. Fehler vor
+Root-Commit lassen kanonischen Graph und Runtime unveraendert. Stromausfall vor
+Root-Commit laedt den alten, nach Root-Commit den neuen Graphen.
 
-### RuntimeConfigurationSnapshot und Publish
+Publish nach bestaetigtem Root-Commit ist vertraglich nicht fehlschlagend. Eine
+unerwartete Vertragsverletzung erzeugt nur einen stabil typisierten
+`ConfigurationRuntimeFailure`, gibt keine weitere normale Konfigurationsruntime
+frei und fuehrt nicht zu automatischem Rollback.
 
-- FactoryConfiguration und aktive Dokumentgeneration zusammenfuehren
-- Zeitzone und alle falliblen Ressourcen vor Root-Commit vorbereiten
-- unveraenderlichen RuntimeConfigurationSnapshot erzeugen
-- neuer gueltiger Root mit hoeherer rootSequence ist einziger persistenter
-  Linearisierungspunkt
-- danach Publish innerhalb derselben Mutation nicht allokierend,
-  nicht serialisierend und vertraglich nicht fehlschlagend
-- Leser sehen nur vollstaendig alt oder neu
-- Fehler vor Root-Commit lassen persistenten Graph und Runtime unveraendert
+### Grenze zu #24
 
-### Port zu #24
-
-Bei unerwarteter Publish-Vertragsverletzung nach Root-Commit:
-
-- kein automatischer Rollback
-- typisierten ConfigurationSafetyIntent beziehungsweise
-  ConfigurationRuntimeFailure erzeugen
-- keine weitere normale RuntimeConfiguration freigeben
-
-Keine systemweite Fehlerklasse, Verriegelung, SAFE_BOOT-Policy oder Aktorsperre
-implementieren.
+#56 definiert nur den typisierten Fehler und den fail-closed Zustand des
+Konfigurationsdienstes. Systemweite Fehlerklasse, persistente Verriegelung,
+`SAFE_BOOT`, Fehlerreset und reale Aktor-/GPIO-Sperren bleiben #24. Die spaetere
+#24-Integration konsumiert den Fehler ohne zyklische Implementierungsabhaengigkeit.
 
 ## Ausdruecklicher Nicht-Scope
 
-- Bootstrap und automatische Ersteinrichtung
-- Connectivity-/Authentication-Manifeste und Roots
-- reale Secrets oder Authentifizierung
-- StorageEpoch-Werksreset
-- abschliessende Gesamtmatrix aus #57
-- Laufpersistenz aus #17
-- Backup aus #19
-- systemweite Fehlerpolitik aus #24
-- UI-/Webtransport aus #25–#27
-- reale Hardware-, Flash- oder Heapgarantien
+- persistentes Pending oder Pending-Root
+- Aktivierungsintent oder `ConfigurationActivationRunAssessment`
+- neustartpflichtige Konfigurationsaktivierung
+- persistente Preview-Slots, Owner, Tokens oder Ablaufzeiten
+- Bootstrap und Werksreset aus #57
+- Connectivity-/Authentication-Manifeste, Secretslots oder Roots
+- Credentialdaten, `CredentialEpoch` oder kombinierte Secret-Transaktionen
+- Laufpersistenz und Import-Run-Gate
+- systemweite Fehler-/Safety- oder Aktorpolitik
+- produktiver NVS-Adapter, Partitionierung und reale Flashgarantien
 
 ## Architekturgrenzen
 
-- fachliche Bedeutung in `fermentation_app`
-- `device_platform` kennt nur technische Slots, Records und Kandidaten
-- Test-Support nur anwendungsneutrale Adapter; fachliche Orakel in App-Tests
-- `src/main.cpp` bleibt Composition Root
-- aktiver Lauf bleibt ausserhalb der Konfiguration
+- `fermentation_app` besitzt Dokument-, Manifest-, Root-, Graph-, Vorschau-,
+  Konflikt- und Runtimebedeutung.
+- `device_platform` bleibt bei technischen Slots, Envelopes, Kandidaten,
+  Speichertypen und Storefehlern.
+- `device_platform_test_support` liefert nur anwendungsneutrale Store-,
+  Cut-Point- und Korruptionsadapter.
+- `src/main.cpp` bleibt Composition Root.
+- aktiver Lauf und Laufschnappschuss bleiben ausserhalb der Konfiguration.
 
 ## Verbindliche Tests
 
-### Root/Graph
+### Graph und Boot
 
-- Active gueltig
-- Active ungueltig, Fallback gueltig
-- beide ungueltig
-- mehrere Rootkandidaten
-- hoher Root ohne gueltigen Graph
-- jede Referenzkante mit Typ-, Slot-, Revision-, Schema-, Laengen-, CRC- und
-  StorageEpoch-Abweichung
+- gueltiger Active-Graph
+- fachlich ungueltiges Active mit gueltigem Fallback
+- ungueltiges Active und ungueltiger/fehlender Fallback: keine Runtime
+- mehrere Rootkandidaten; erster vollstaendig nutzbarer Graph gewinnt
+- hoehere Sequenz ohne gueltigen Graph aktiviert nichts
+- Abweichungen bei Typ, Slot, Revision, Generation, Schema, Laenge, CRC und
+  `StorageEpoch`
+- unbekannte neuere Root-/Manifest-Schemas ohne Teilwirkung
 
-### Slotrotation
+### Rotation und Schutz
 
-- mindestens 5 aufeinanderfolgende Active-Commits
-- nach jedem Commit korrekter Active/Fallback-Graph
-- Altroots blockieren keine nur noch von ihnen referenzierten Slots
-- kein vorzeitiges NoUnreferencedSlotAvailable
-- echter Slotmangel stabil ohne Teilwirkung
+- Bootstrapgraph ohne Fallback als Ausgang
+- mindestens fuenf aufeinanderfolgende Active-Commits
+- nach jedem Commit Active neu und Fallback exakt vorheriges Active
+- Altroots schuetzen keine ausschliesslich referenzierten Generationen
+- echter Slotmangel liefert typisierten Fehler ohne Rootwrite
+- unveraenderte Dokumentrevisionen koennen sicher gemeinsam referenziert werden
 
-### Pending/Intent
+### Vorschau und Konflikte
 
-- mindestens 3 Pending-Ersetzungen
-- Pending verwerfen und erneut erzeugen
-- weitere Aenderung baut auf Pending auf
-- Intent sperrt Ersetzung
-- Neustart ohne Intent aktiviert nicht
-- passender Intent aktiviert genau einmal
-- bereits aktives Ziel idempotent abschliessen
-- alle vier RunAssessment-Werte
+- gueltiger Kandidat und bestaetigte unveraenderte Basis
+- `NoChange` ohne Revision, Generation, Rootsequenz oder Write
+- veraltete Active-Generation
+- veraenderter Kandidat oder Fingerprint
+- erneuter Validierungsfehler unmittelbar vor Commit
+- konkurrierende Display-/Webmutation: genau eine gewinnt
+- Neustart verwirft jede fluechtige Vorschau
 
-### Preview/Konflikte
+### Commit und Runtime-Publish
 
-- NoChange ohne Write/Sequenz
-- veraltete Basis
-- falscher Owner
-- falscher Token
-- Kandidat nach Preview veraendert
-- MutationSequence erst nach allen Vorpruefungen
-- reservierte Sequenz nach Cut nicht wiederverwenden
+- Fehler vor und nach jedem Dokument-, Manifest- und Rootwrite
+- `CommitOutcomeUnknown` fuer jeden Write mit Readback-Orakel
+- Ressourcen-, Kapazitaets- und Ueberlauffehler vor Root-Commit
+- alle falliblen Arbeiten vor Root-Commit nachweisbar abgeschlossen
+- Publish nach Root-Commit ohne Allokation, Serialisierung oder Validierung
+- Leser beobachten nie Teilgenerationen
+- simulierte Publish-Vertragsverletzung erzeugt nur typisierten Fehler
+- kein automatischer Rollback nach bestaetigtem Root-Commit
 
-### Cut-Points und Publish
+### Ressourcen und Builds
 
-- Stromausfall vor und nach jedem Write/Commit
-- konkretes Recovery-Orakel je Cut
-- Ressourcenfehler vor Root-Commit ohne Teilaktivierung
-- Root-Commit als Linearisierungspunkt
-- keine Allokation/Serialisierung nach Root-Commit
-- simulierte Publish-Vertragsverletzung erzeugt nur den schmalen #24-Intent
-- Leser sehen keine Teilgeneration
-
-## Qualitaets- und Ressourcenpruefung
-
+- vertraglich begrenzter vollstaendiger Recordarbeitsbereich
+- Base-/Head-Vergleich fuer Flash, statisches RAM, `firmware.bin` und
+  `firmware.elf`
 - native Tests und alle drei Buildprofile
-- alle Quality-Gate-Skripte
-- clang-format und clang-tidy LLVM 18
-- `git diff --check`
-- Base-/Head-Ressourcenvergleich
-- waehrend Commit hoechstens ein vollstaendig kodierter Recordpuffer
-- keine reale Heap-/Flashgarantie behaupten
+- keine Heap-, NVS- oder Flashgarantie ohne reale Messung
 
-## Definition of Done
+## Akzeptanzkriterien
 
-- #54 und #55 gemergt und abgeschlossen
-- kompletter Scope von #56 umgesetzt
-- Root-, Schutzmengen-, Slotrotations-, Pending-, Preview-, Cut-Point- und
-  Publish-Tests gruen
-- Grenzen zu #17 und #24 eingehalten
-- kein Scope von #57 vorweggenommen
-- Dokumentation und CHANGELOG aktualisiert
-- PR mit `Closes #56` erstellt
-- nicht gemergt und Branch nicht geloescht
+- Active/Fallback sind jederzeit vollstaendige validierte Graphen.
+- Genau eine vorherige vollstaendig nutzbare Generation bleibt geschuetzt.
+- Fuenf Active-Commits beweisen sichere Slotrotation.
+- Vorschau und Commit sind fluechtig, vollvalidiert und konfliktgesichert.
+- Root-Commit ist der einzige persistente Linearisierungspunkt.
+- Alle falliblen Arbeiten liegen vor dem Root-Commit.
+- Publish danach ist nicht allokierend, nicht serialisierend und vertraglich
+  nicht fehlschlagend.
+- Kein Pending-, Intent-, RunAssessment- oder Secretbaustein wurde eingefuehrt.
+- Grenzen zu #17 und #24 bleiben eingehalten.
+- Tests, Buildprofile, Quality Gates und Ressourcenvergleich sind bestanden.
+
+## Git- und PR-Regeln
+
+Nach commitgebundener Planfreigabe ausschliesslich #56 bearbeiten. Kleiner
+Draft-PR, Dokumentation und `CHANGELOG.md` aktualisieren, `Closes #56` erst im
+Umsetzungs-PR. Nicht selbst auf Ready setzen, mergen, Auto-Merge aktivieren,
+force-pushen oder Branch loeschen.
 
 ## Vorgeschlagener Branch
 
-`feat/issue-56-konfigurationsmanifeste-preview-runtimeaktivierung`
+`feat/issue-56-active-fallback-manifeste-vorschau-runtimeaktivierung`

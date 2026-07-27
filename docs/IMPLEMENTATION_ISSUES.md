@@ -3,15 +3,17 @@
 ## Status
 
 Dieses Dokument bildet die verbindliche geplante Implementierungsstruktur ab.
-Phase 10C und Draft-PR #38 sind erstellt. Die Implementierung startet erst nach
-dem Merge des Spezifikations-Pull-Requests.
-
-Bis dahin besitzen softwareseitige Issues den Status `PLANNED_SPEC_PENDING`.
+Die Release-1-Spezifikation ist gemergt; erledigte, planbare und blockierte
+Arbeiten werden nach ihrem aktuellen Status getrennt ausgewiesen.
 
 ## Statuskennzeichnungen
 
-- `PLANNED_SPEC_PENDING`: geplant, Umsetzung erst nach Merge der Spezifikation
+- `PLANNED_SPEC_PENDING`: geplant, aber Detailvertrag oder freigegebener
+  Implementierungsplan fehlt noch
+- `TRACKING`: koordinierendes Issue, keine direkte Gesamtimplementierung
+- `COMPLETED`: umgesetzt und gemergt
 - `READY`: fachlich und technisch startbereit
+- `BLOCKED_DEPENDENCY`: benannte fachliche oder technische Abhaengigkeit offen
 - `BLOCKED_HARDWARE`: reale Hardware oder Messung fehlt
 - `TBD_COMMISSIONING`: Wert oder Freigabe wird bei thermischer Inbetriebnahme bestimmt
 - `TBD_IMPLEMENTATION_BUDGET`: Entscheidung benoetigt reale Build-/Ressourcenmessung
@@ -59,19 +61,33 @@ Die Kennzeichnungen stehen im Issue-Text. GitHub-Labels sind optional.
 ## E2 – Konfiguration, Persistenz und Wiederanlauf
 
 - #16 `Konfigurationsebenen, Validierung und atomare Revisionen`
+- #54 `Plattformpersistenz und Wireformat implementieren`
+- #55 `Typisierte Konfigurationsdokumente implementieren`
+- #56 `Active-/Fallback-Manifeste, Vorschau und Runtimeaktivierung implementieren`
+- #57 `Bootstrap, StorageEpoch und Recovery implementieren`
 - #17 `Laufpersistenz und Kontrollpunkte implementieren`
 - #18 `Wiederanlauf und temperaturgewichteten Fortschritt implementieren`
 - #19 `Journale, Aufbewahrung, Bereinigung, Backup und Import`
 
 ```text
-#12 -> #16
-#13/#14/#16 -> #17
+#12 -> #16 TRACKING
+#54 COMPLETED -> #55 COMPLETED -> #56 READY -> #57 BLOCKED_DEPENDENCY
+#13/#14/#15/#54 -> #17
 #10/#14/#17/#20 -> #18
 #16/#17 -> #19
 ```
 
-Zuerst wird ein natives Testbackend umgesetzt. Der reale ESP32-Speicheradapter
-folgt bei der Hardwareintegration.
+#16 wird nicht als einzelner Implementierungs-PR umgesetzt. #54 und #55 sind
+abgeschlossen. #56 implementiert den Variante-B-Active-/Fallback-Kern;
+#57 folgt nach dessen Merge mit Bootstrap, `StorageEpoch`, Korruptionssperre und
+wiederaufnehmbarem Werksreset. Persistentes Pending, Aktivierungsintent und
+leere Connectivity-/Authentication-Domaenen sind kein Release-1-Scope.
+
+#17 haengt nicht pauschal von #16, #56 oder #57 ab. Seine harten Grundlagen
+#13, #14, #15 und #54 sind abgeschlossen; der eigene Plan-first-Schritt bleibt
+vor einer Statusaenderung erforderlich. #55 darf als gemergte Grundlage
+verwendet werden, ist aber kein fachlicher Blocker. Der reale
+ESP32-Speicheradapter folgt bei der Hardwareintegration.
 
 ## E3 – Sensor-, Regel- und Sicherheitskern
 
@@ -87,6 +103,10 @@ folgt bei der Hardwareintegration.
 ```
 
 Alle Ausgaenge enden in dieser Phase bei abstrakten Aktorbefehlen und Mocks.
+#24 erhaelt spaeter typisierte `ConfigurationRuntimeFailure`- und
+`ConfigurationUnavailable`-Eingaben aus #56/#57, aber keine neue pauschale
+Abhaengigkeit auf #16, #56 oder #57. Fehlerklasse, persistente Verriegelung,
+`SAFE_BOOT` und reale Aktorsperre bleiben in #24.
 
 ## E4 – Lokale Bedienung, Web und Diagnose
 
@@ -163,19 +183,13 @@ Diese Issues bleiben bis zur realen thermischen Inbetriebnahme
 
 ## Branch- und Pull-Request-Regeln
 
-- Spezifikations-PR #38 zuerst nach `main` mergen.
-- Danach ein Branch pro Implementierungs-Issue.
+- Akzeptierte Spezifikation und Live-Abhaengigkeiten zuerst pruefen.
+- Ein Branch und Draft-PR pro Implementierungs-Issue.
+- Vor nicht trivialer Umsetzung den Plan-first-Workflow aus `AGENTS.md`
+  vollstaendig durchlaufen.
 - Kleine, pruefbare Pull Requests.
 - Keine umfangreiche direkte Implementierung auf `main`.
 - Hardwareblockaden verhindern nicht die Entwicklung unabhaengiger Softwareteile.
-
-Erster Branch nach Spezifikationsmerge:
-
-```text
-foundation/platformio-profiles
-```
-
-zu Issue #9.
 
 ## Definition of Done
 
@@ -197,6 +211,8 @@ werden. Die reale Validierung bleibt dann in einem verknuepften
 
 ## Freigaberegel
 
-Phase 10C ist abgeschlossen und PR #38 existiert. Es fehlt nur der Review und
-Merge durch den Repository-Owner. Danach wird #9 von
-`PLANNED_SPEC_PENDING` auf `READY` gesetzt.
+Ein Zielstatus `READY` ersetzt keine Implementierungsfreigabe. Fuer jede nicht
+triviale Umsetzung ist zunaechst ein eigener versionierter Plan im Draft-PR zu
+committen und zu pushen. Implementiert wird ausschliesslich nach dem exakten
+Ownerkommentar mit freigegebenem Plan-Commit-SHA. Live-Issue-Status und
+Abhaengigkeiten werden vor jeder Arbeit erneut geprueft.

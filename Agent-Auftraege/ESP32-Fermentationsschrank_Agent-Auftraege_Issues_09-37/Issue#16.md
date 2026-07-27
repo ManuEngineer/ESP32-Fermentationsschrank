@@ -4,229 +4,190 @@
 
 **[E2.1] Konfigurationsebenen, Validierung und atomare Revisionen**
 
-Aktueller Snapshot-Status: `TRACKING`
+Snapshot-Status: `TRACKING`
 
 Epic: #4
 
 GitHub: https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/16
 
-> Der Status und Inhalt auf GitHub sind die aktuelle Wahrheit. Lies das
-> Live-Issue vor jeder Arbeit erneut. Dieser Auftrag ist eine Arbeitsanweisung,
-> kein Ersatz fuer das Issue oder die Spezifikationsquellen.
+> Das Live-Issue bleibt die aktuelle Arbeitsquelle. Dieser Auftrag beschreibt
+> den nach ADR-018 verbindlichen Variante-B-Schnitt und autorisiert keine
+> direkte Gesamtimplementierung von #16.
 
-## Aktueller Stand
+## Ziel
 
-Die fachliche und technische Spezifikation ist in
-`docs/CONFIGURATION_PERSISTENCE.md` konsolidiert. Der Vertrag ist in vier
-strikt abhaengige Teilissues zerlegt:
+Eine hardwareunabhaengige, nativ testbare und stromausfallsichere
+Konfigurationspersistenz mit getrennten typisierten Dokumenten, einem
+vollstaendig validierten Active-/Fallback-Graphen, sicherem Bootstrap und
+atomarer Runtimeaktivierung bereitstellen.
 
-1. #54 – Plattformpersistenz und Wireformat
-2. #55 – typisierte Konfigurationsdokumente
-3. #56 – Manifeste, Preview und Runtimeaktivierung
-4. #57 – Bootstrap, Secret-Manifeste und Recovery
+## Kanonische Quellen
 
-Issue #16 bleibt als Tracking-Issue offen und wird nicht direkt implementiert.
-
-Verbindliche Reihenfolge:
-
-`#54 -> #55 -> #56 -> #57`
-
-Nur das jeweils erste technisch ausfuehrbare Teilissue darf `READY` sein.
-Aktuell ist ausschliesslich #54 `READY`; #55 bis #57 sind
-`BLOCKED_DEPENDENCY`.
-
-## Verbindliche Teilissues
-
-### #54 – [E2.1a] Plattformpersistenz und Wireformat implementieren
-
-Status: `READY`
-
-Agent-Auftrag: [Issue#54.md](Issue#54.md)
-
-Scope:
-
-- begrenztes binaersicheres `IStateStore`
-- starke technische Typen
-- Big-Endian-Codecs, CRC-32/ISO-HDLC und Envelope-Version 1
-- generische feste Revisions- und redundante Recordslots
-- `ISecureRandomSource` und `ITimeZoneResolver`
-- `SimulatedPersistentStateStore` und Golden-/Cut-Point-Tests
-
-### #55 – [E2.1b] Typisierte Konfigurationsdokumente implementieren
-
-Status: `BLOCKED_DEPENDENCY`
-
-Abhaengigkeit: #54
-
-Agent-Auftrag: [Issue#55.md](Issue#55.md)
-
-Scope:
-
-- UserConfiguration Schema 1
-- ServiceConfiguration Schema 1
-- ProgramCatalog Schema 1
-- ID-, Text-, Anzahl- und Payloadgrenzen
-- fachliche Codecs, Validierung und Copy-Migration
-
-### #56 – [E2.1c] Konfigurationsmanifeste, Preview und Runtimeaktivierung implementieren
-
-Status: `BLOCKED_DEPENDENCY`
-
-Abhaengigkeiten: #54 und #55
-
-Agent-Auftrag: [Issue#56.md](Issue#56.md)
-
-Scope:
-
-- Active/Fallback/Pending
-- kanonische Rootauswahl
-- korrigierte Schutzwurzeln und Slotrotation
-- Preview, Owner, Token und Konfliktsemantik
-- Aktivierungsintent
-- RuntimeConfigurationSnapshot und Prepare/Commit/Publish
-- RunAssessment-Port zu #17
-- ConfigurationSafetyIntent zu #24
-
-### #57 – [E2.1d] Bootstrap, Secret-Manifeste und Recovery integrieren
-
-Status: `BLOCKED_DEPENDENCY`
-
-Abhaengigkeiten: #54, #55 und #56
-
-Agent-Auftrag: [Issue#57.md](Issue#57.md)
-
-Scope:
-
-- Bootstrap und StorageEpoch
-- Connectivity-/Authentication-Manifeste Schema 1 als `NotProvisioned`
-- vorwaertsgerichtete Authentication-Roots
-- wiederaufnehmbarer Werksreset
-- vollstaendige Cut-Point-, Korruptions-, Slotrotations- und Ressourcenmatrix
-
-## Verbindliche Architektur
-
-- `FactoryConfiguration` bleibt unveraenderlich in der Firmware.
-- UserConfiguration, ServiceConfiguration und ProgramCatalog bleiben getrennte,
-  typisierte, schema-versionierte Dokumente.
-- Dokumente werden ueber vollstaendig validierte Manifeste gemeinsam aktiviert.
-- Nur geaenderte Dokumente erhalten neue Revisionen.
-- Unveraenderte Dokumentrevisionen duerfen gemeinsam referenziert werden.
-- Der aktive Lauf bleibt ausserhalb der Konfiguration und behaelt seinen
-  unveraenderlichen Laufschnappschuss.
-- anwendungsneutrale Wire-, Envelope-, Slot-, Speicher-, Zeit-, Zufalls- und
-  Testbausteine liegen in `device_platform` beziehungsweise
-  `device_platform_test_support`.
-- konkrete Dokumente, Graphvalidierung, Aktivierung, Bootstrap und Recovery
-  liegen in `fermentation_app`.
-- `src/main.cpp` bleibt reine Composition Root.
-
-## Kanonische Schutzwurzelregel
-
-Nicht jeder physisch gueltige alte Root schuetzt dauerhaft seine nur dort
-referenzierten Generationen.
-
-Die Schutzmenge besteht ausschliesslich aus:
-
-- Active und Fallback des kanonischen ConfigurationRoot
-- Pending des kanonischen PendingRoot
-- exakt passendem gueltigem Aktivierungsintent samt Pending-Graph
-- gerade ausgefuehrter serialisierter Mutation
-- kanonischem committed AuthenticationRoot und laufender
-  Authentication-Transaktion
-
-Aeltere redundante Roots bleiben technische Bootkandidaten, aber keine
-dauerhaft schuetzenden fachlichen Wurzeln. Nur noch von ihnen referenzierte
-Slots duerfen nach erfolgreichem neuem Root-Commit wiederverwendet werden.
-
-Verbindliche Gesamttests:
-
-- mindestens fuenf Active-Commits
-- mindestens drei Pending-Ersetzungen
-- Pending verwerfen und erneut erzeugen
-- wiederholte Authentication-Rootwechsel
-- kein vorzeitiges `NoUnreferencedSlotAvailable`
-
-## Grenze zu Issue #17
-
-#56 definiert und konsumiert nur einen schmalen externen
-`ConfigurationActivationRunAssessment`-Port mit mindestens:
-
-- `Unknown`
-- `NoActiveOrRecoverableRun`
-- `ActiveRunPresent`
-- `RecoverableRunPresent`
-
-Nur `NoActiveOrRecoverableRun` erlaubt eine Pending-Aktivierung. `Unknown`
-blockiert sicher. Die reale Laufpersistenz und Recoverable-Run-Erkennung bleiben
-#17.
-
-## Grenze zu Issue #24
-
-#56 darf bei einem Konfigurations- oder Publish-Vertragsfehler nur einen
-typisierten `ConfigurationSafetyIntent` beziehungsweise
-`ConfigurationRuntimeFailure` erzeugen und keine normale RuntimeConfiguration
-freigeben.
-
-Nicht vorwegnehmen:
-
-- systemweite Fehlerklassen
-- persistente Verriegelungen
-- vollstaendige SAFE_BOOT-Politik
-- reale Aktor- oder GPIO-Sperren
-
-Diese Semantik bleibt #24.
-
-## Ausdruecklicher Nicht-Scope des Trackings
-
-- Laufpersistenz und Kontrollpunkte aus #17
-- portable Backups, Journale und Aufbewahrung aus #19
-- systemweite Fehler- und Aktorpolitik aus #24
-- reale Secrets, Netzwerk und Authentifizierung aus #27
-- noch nicht definierte Display-, Ton-, Sensor-, Regel-, Sicherheits- und
-  Hardwarefelder
-- reale GPIO-/Aktorlogik
-- physische Recovery-Geste
-- unbewiesene reale Flash-, Heap- oder Lebensdauergarantie
-
-## Agentenregel fuer die Reihenfolge
-
-Vor Auswahl eines Teilissues:
-
-1. Live-Issue #16 und #54 bis #57 lesen.
-2. INDEX mit GitHub synchronisieren.
-3. niedrigstes technisch ausfuehrbares Teilissue waehlen.
-4. nur arbeiten, wenn dessen Live-Status `READY` ist und alle Abhaengigkeiten
-   geschlossen sind.
-5. eigener Branch, eigener kleiner PR, genau ein Teilissue.
-6. PR mit `Closes #<Teilissue>` erstellen.
-7. nicht mergen, kein Auto-Merge, Branch nicht loeschen.
-8. nach PR-Erstellung anhalten.
-
-Nach Merge eines Teilissues:
-
-- abgeschlossenes Teilissue im INDEX auf `COMPLETED` setzen
-- genau das unmittelbar folgende Teilissue auf `READY` setzen
-- alle spaeteren Teilissues blockiert lassen
-- Issue #16 offen und `TRACKING` lassen
-
-## Spezifikationsquellen
-
+- ADR-018 in `docs/DECISIONS.md`
+- ADR-010 und ADR-016
 - `docs/CONFIGURATION_PERSISTENCE.md`
 - `docs/SETTINGS_AND_STORAGE.md`
 - `docs/BACKUP_SECURITY_RETENTION.md`
 - `docs/PR38_REVIEW_CORRECTIONS.md`
 
-## Definition of Done fuer das Tracking-Issue
+Spaeter datierte akzeptierte ADRs haben gemaess
+`docs/SPECIFICATION_REVIEW.md` Vorrang.
+
+## Verbindlicher Release-1-Kern
+
+- `FactoryConfiguration` bleibt unveraenderlich in der Firmware.
+- `UserConfiguration`, `ServiceConfiguration` und `ProgramCatalog` sind
+  getrennte, typisierte und schema-versionierte Dokumente.
+- Ein `ActiveConfigurationManifest` referenziert genau eine vollstaendig
+  validierte Kombination dieser Dokumente derselben `StorageEpoch`.
+- Ein kanonischer `ConfigurationRootRecord` enthaelt Active und optional genau
+  eine vorherige vollstaendig nutzbare Fallbackgeneration.
+- Der Root-Commit ist der einzige persistente Linearisierungspunkt.
+- Sichere Slotrotation schuetzt nur Active, Fallback und die laufende
+  serialisierte Mutation.
+- Vorschau bleibt fluechtig, vollstaendig typisiert und validiert.
+- Bestaetigung prueft erwartete Active-Basis, unveraenderten Kandidaten und
+  erneute technische sowie fachliche Validierung.
+- Alle falliblen Runtimewerte und Ressourcen werden vor Root-Commit
+  vorbereitet.
+- Ein unveraenderlicher `RuntimeConfigurationSnapshot` wird nach Root-Commit
+  nicht allokierend, nicht serialisierend und vertraglich nicht fehlschlagend
+  publiziert.
+- Bootstrap initialisiert nur nachweislich fabrikneuen, vollstaendig
+  fehlerfrei lesbaren Speicher.
+- `StorageEpoch`, Korruptionssperre und wiederaufnehmbarer Werksreset sind R1.
+- Der Werksreset behaelt gemaess ADR-010 die geraetespezifische
+  Touchkalibrierung.
+
+## Teilissues und Reihenfolge
+
+### #54 – Plattformpersistenz und Wireformat
+
+Status: `COMPLETED`, umgesetzt mit PR #59.
+
+- `IStateStore`, NVS-faehiger Schluesselraum und starke technische Typen
+- Big-Endian-Codecs, CRC-32/ISO-HDLC und Envelope
+- generische begrenzte Slot-/Recordmechanik
+- `SimulatedPersistentStateStore` und technische Golden-/Cut-Point-Tests
+
+### #55 – Typisierte Konfigurationsdokumente
+
+Status: `COMPLETED`, umgesetzt mit PR #61.
+
+- UserConfiguration Schema 1
+- ServiceConfiguration Schema 1
+- ProgramCatalog Schema 1
+- fachliche Limits, Codecs, Validierung und Copy-Migration
+- schmaler Zeitzonenresolver mit Testadapter
+
+### #56 – Active-/Fallback-Manifeste, Vorschau und Runtimeaktivierung
+
+Zielstatus nach Live-Synchronisierung: `READY`.
+
+- vollstaendig validierter Active-/Fallback-Graph
+- kanonischer Root und sichere Slotrotation
+- fluechtige vollstaendig validierte Vorschau
+- Revisions- und Konfliktschutz
+- vorbereiteter unveraenderlicher Runtime-Snapshot
+- atomarer Root-Commit und vertraglich nicht fehlschlagender Publish
+- typisierter Konfigurations-/Publishfehler fuer die spaetere #24-Integration
+
+Die Umsetzung beginnt trotzdem erst nach einem eigenen Plan-first-Draft-PR und
+der commitgebundenen Ownerfreigabe fuer #56.
+
+### #57 – Bootstrap, StorageEpoch und Recovery
+
+Status: `BLOCKED_DEPENDENCY` bis #56 gemergt ist.
+
+- sicherer Bootstrap und gespeicherte Bootstrapzustaende
+- `StorageEpoch`
+- Korruptionssperre ohne stillen Factory-Fallback
+- wiederaufnehmbarer Werksreset
+- Erhaltung der Touchkalibrierung
+- End-to-End-Cut-Point-, Korruptions- und Ressourcenmatrix fuer Variante B
+
+```text
+#54 COMPLETED + #55 COMPLETED
+  -> #56 READY nach Live-Synchronisierung und eigenem Plangate
+  -> #57 BLOCKED_DEPENDENCY bis #56 gemergt
+  -> abschliessende Tracking-Abnahme #16
+```
+
+## Ausdruecklich nicht in Release 1 vorbereitet
+
+- persistentes Pending oder Pending-Root
+- Aktivierungsintent oder `ConfigurationActivationRunAssessment`
+- persistente Preview-Slots, Preview-Owner, Preview-Tokens oder Ablaufzeiten
+- leere Connectivity-/Authentication-Manifeste oder Secret-Roots
+- vorbereitete Credentialslots oder Authentication-Roots
+- `CredentialEpoch` ohne reale Credentials
+- kombinierte Konfigurations-/Secret-Transaktionen
+
+Diese Funktionen werden erst mit einem realen neustartpflichtigen Wert,
+WLAN-Secret, Webpasswort oder Service-PIN-Konsumenten additiv ueber neue
+Recordtypen, Schema-/Rootversionen und Copy-Migrationen geplant. Es entstehen
+keine Dummyrecords, Slots, Keys oder Zukunftsports.
+
+## MutationSequence-Gate
+
+Eine eigene persistente `MutationSequence` ist noch nicht entschieden. Der
+Detailplan von #56 darf sie nur weglassen, wenn er fuer Dokumentrevisionen,
+Manifestgeneration, `rootSequence`, erwartete Basis, Kandidatenintegritaet,
+Commit-Readback und Wiederholung eine gleichwertige testbare Semantik
+nachweist. Andernfalls ist dies eine materielle Planaenderung mit neuer
+Ownerfreigabe. Status: `FINAL_SELECTION_PENDING`.
+
+## Grenze zu #17
+
+#17 verwendet die gemergten anwendungsneutralen Persistenzbausteine und seine
+eigenen typisierten Laufrecords. Es haengt nicht pauschal von #16, #56 oder
+#57 ab. Harte Grundlagen sind #13, #14, #15 und #54; #55 darf verwendet werden,
+ist aber kein fachlicher Blocker.
+
+Der aktive Lauf bleibt ausserhalb der Konfiguration. Der synchrone Import-
+Run-Gate mit `Unknown`, `NoActiveOrRecoverableRun`, `ActiveRunPresent` und
+`RecoverableRunPresent` gehoert spaeter zu #19-D und wird nicht in #56
+vorbereitet.
+
+## Grenze zu #24
+
+#56/#57 liefern bei Konfigurations-, Integritaets- oder
+Publishvertragsfehlern nur stabile typisierte Fehlerdaten und keine
+Runtimefreigabe. Systemweite Fehlerklasse, persistente Verriegelung,
+`SAFE_BOOT`, Fehlerresetpolitik und reale Aktor-/GPIO-Sperren bleiben #24.
+#24 erhaelt keine neue pauschale Abhaengigkeit auf #16, #56 oder #57.
+
+## Ausdruecklicher Nicht-Scope
+
+- Laufpersistenz und Kontrollpunkte aus #17
+- Journal, Historie, Backup und Import aus #19
+- systemweite Fehlerklassen und Aktorsperren aus #24
+- reale Connectivity-, Authentication- und Webvertraege
+- Produktions-NVS-Adapter, Partitionierung und reale Flashgarantien
+- physische Recovery-Geste
+
+## Definition of Done des Tracking-Issues
 
 Issue #16 wird erst abgeschlossen, wenn:
 
-- #54, #55, #56 und #57 gemergt und abgeschlossen sind
-- die vollstaendige End-to-End-Cut-Point-Matrix besteht
-- die korrigierte Slotrotation und Schutzwurzeldefinition nachgewiesen ist
-- Produktionsprofile und Quality Gates bestehen
-- Ressourcenwirkungen je Teil-PR und abschliessend dokumentiert sind
-- reale Hardware-/Adaptermessungen weiterhin als spaetere Gates sichtbar sind
+- #54, #55, #56 und #57 gemergt und abgeschlossen sind;
+- der Active-/Fallback-Graph und mindestens fuenf aufeinanderfolgende
+  Active-Commits ohne vorzeitigen Slotmangel nachgewiesen sind;
+- Bootstrap, Korruptionssperre und Werksreset an jedem Commit-Cut ein
+  konkretes Recovery-Orakel besitzen;
+- Runtime vor dem Root-Commit vollstaendig vorbereitet und danach nur atomar
+  publiziert wird;
+- Touchkalibrierung beim Werksreset erhalten bleibt;
+- unbekannte neuere Schemas ohne Teilwirkung abgelehnt werden und der additive
+  Ausbaupfad ohne Dummyinfrastruktur nachgewiesen ist;
+- native Tests, Buildprofile, Quality Gates und Ressourcenvergleiche der
+  Teilissues bestanden sind;
+- reale NVS-/Partitions-/Flashmessungen als spaetere Gates sichtbar bleiben.
 
-## Naechster ausfuehrbarer Branch
+## Agentenregel
 
-`feat/issue-54-platformpersistenz-und-wireformat`
+Vor jeder Arbeit Live-Issues, Abhaengigkeiten, `AGENTS.md`, Modulregeln und
+kanonische Quellen lesen. Pro Teilissue gilt ein eigener Plan-first-Draft-PR.
+Ohne exakte commitgebundene Planfreigabe keine Implementierung. PR weder auf
+Ready setzen noch mergen, Auto-Merge aktivieren, force-pushen oder Branch
+loeschen.
