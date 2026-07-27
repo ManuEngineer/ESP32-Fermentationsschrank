@@ -151,6 +151,16 @@ ausgewaehlt. Konkrete Treiber und Frameworks bleiben hinter schmalen
 Integrationsgrenzen; Touch- und Webnavigation sowie ihre Layouts bleiben
 oberflaechenspezifisch.
 
+Die lokale Screen-, Navigations-, Dialog- und Aktionslogik wird als kleine
+projektspezifische Verantwortung selbst entwickelt und nativ mit simulierten
+Touchereignissen geprueft. Sie ist weder ein zweiter Fach-/Safetyzustandsautomat
+noch ein Anlass fuer ein allgemeines Widget-, Layout- oder UI-Pluginframework.
+Display-/Touchtreiber und eine allfaellige Widgettechnik werden erst nach dem
+Hardwarevergleich hinter der konkreten Integrationsgrenze adoptiert; schlanke
+Views und LVGL werden nicht vorsorglich parallel vorbereitet. Der vorhandene
+microSD-/SD-Karten-Slot begruendet ohne R1-Konsumenten keine Bibliothek, keinen
+Port, Adapter oder Zukunftspfad.
+
 ## Entscheidungsnachweis
 
 Jede spaetere Komponentenentscheidung nennt:

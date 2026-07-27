@@ -545,6 +545,22 @@ Touchnavigation und konkrete Screens bleiben in #26, Webnavigation und
 responsive Layouts in #27, Display-/Touchadapter in #31. Diese Aufteilung
 waehlt weder einen Treiber noch LVGL oder eine Uebersetzungsbibliothek aus.
 
+Der OD-07-Teilentscheid schneidet #26 spaeter in Navigation/Interaktion,
+Standby/Programmauswahl/Start, Programmverwaltung/Editor,
+Lauf/Meldungen/Stop/Wiederanlauf und Einstellungen/Diagnose/Service/Recovery-UI.
+Diese Screen-, Dialog-, Aktions- und Fehlerlogik ist projektspezifisch und wird
+zuerst nativ mit simulierten Praesentationsmodellen und Touchereignissen
+geprueft. Sie leitet weder Fach-, Sensorrollen-, Safety-, Auth-, Persistenz-
+noch Aktorentscheidungen neu her. Ein allgemeines Widget-, Layout-, Screen-
+oder UI-Pluginframework ist dafuer nicht erforderlich.
+
+Reale Display-/Touchtechnik folgt separat #31 und OD-02; erst danach vergleicht
+OD-05 schlanke Views und LVGL anhand desselben repraesentativen Screens. Reale
+Authentisierung folgt OD-09 und die Resetmechanik dem #57-Vertrag. Der am Modul
+vorhandene microSD-/SD-Karten-Slot ist weder R1-Komponente noch Speicherpfad:
+keine Bibliothek, kein Adapter, kein Port, keine UI und kein Spike werden dafuer
+vorgesehen.
+
 ## UI-Framework
 
 LVGL ist kein Display- oder Touchtreiberkandidat. Der Treibervergleich wird
@@ -559,8 +575,8 @@ verglichen.
 | LVGL | `9.5.0`, `8fd90bb1`, MIT | vollstaendiges Widget-, Layout-, Event- und Renderingframework; kein Display-/Touchtreiber | zusaetzliche Displaypuffer, Fonts, Widgetzustand und Integrationskomplexitaet; 4 MB/ohne PSRAM nach der Treiberwahl messen | nicht vorsorglich einbinden; nur waehlen, wenn der identische repraesentative Screen einen klar gemessenen Vorteil bei Bedienbarkeit, Wartbarkeit oder Umsetzung zeigt und die zusaetzlichen Ressourcen rechtfertigt |
 | schlanke projektspezifische Views auf gewaehltem Treiber | keine Drittkomponente fuer Widgets | passt zu wenigen festen 320-x-240-Screens und bestehenden View-Modellen | mehr eigene Layout-/Fokuslogik, aber enger kontrollierbarer Umfang | Vergleichsbasis erst nach Treiberwahl und Adaptervertrag; bevorzugt, solange LVGL keinen belegten Vorteil bringt |
 
-Die gemeinsamen #25-Praesentationsmodelle bleiben frameworkfrei;
-Touchnavigation und konkrete Screens liegen separat in #26. Status:
+Die gemeinsamen #25-Praesentationsmodelle und die hardwareunabhaengige
+#26-Navigations-/Screenlogik bleiben frameworkfrei. Status:
 `EVALUATE_LATER`, keine LVGL-Abhaengigkeit in #25, im Treiberspike oder vor
 Treiberwahl, Adaptervertrag und repraesentativem Screen.
 

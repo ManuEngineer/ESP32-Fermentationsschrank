@@ -161,8 +161,11 @@ die Umsetzung wird nach Auditfreigabe in einem eigenen ownerfreigegebenen
 Planungsschritt geschnitten. #25 wird nach dem verbindlichen OD-07-Teilentscheid
 in oberflaechenneutrale Praesentationsmodelle sowie gemeinsame
 Sprachressourcen/Formatierungsregeln getrennt. Navigation und Layout bleiben
-ausserhalb. #26–#28 vereinen weiterhin mehrere UI-, Web-, Auth-, Diagnose- und
-Serviceverantwortungen und bleiben innerhalb von OD-07 separat zu entscheiden.
+ausserhalb. #26 bleibt als einzige lokale Bedienoberflaeche vollstaendig
+R1-relevant, wird aber nach dem verbindlichen Teilentscheid in fuenf kleine
+Bedienbereiche geschnitten. #27 und #28 vereinen weiterhin mehrere Web-, Auth-,
+Diagnose- und Serviceverantwortungen und bleiben innerhalb von OD-07 separat zu
+entscheiden.
 
 ### 5. Hardwarequellen sind keine Hardwarebestaetigung
 
@@ -411,10 +414,10 @@ konkrete DTO-/Codecgrenze; er rechtfertigt keine allgemeine Providerarchitektur.
 
 ### 10. OD-07-Teilentscheid: Issue #19 in vier Bereiche schneiden
 
-Der Teilentscheid fuer #19 ist verbindlich, schliesst OD-07 aber nicht ab. Der
-Teilentscheid fuer #25 ist inzwischen ebenfalls verbindlich; Mindestumfaenge
-und PR-/Issue-Schnitte von #26, #27 und #28 werden separat mit dem Owner
-entschieden. Der Audit aendert #19 nicht und erstellt
+Der Teilentscheid fuer #19 ist verbindlich, schliesst OD-07 aber nicht ab. Die
+Teilentscheide fuer #25 und #26 sind inzwischen ebenfalls verbindlich;
+Mindestumfaenge und PR-/Issue-Schnitte von #27 und #28 werden separat mit dem
+Owner entschieden. Der Audit aendert #19 nicht und erstellt
 keine Folgeissues. Nach Auditabschluss soll ein eigener ownerfreigegebener
 Planungsschritt den folgenden Schnitt festlegen:
 
@@ -472,8 +475,8 @@ entscheidet diese Frage nicht.
 ### 11. OD-07-Teilentscheid: Issue #25 auf gemeinsame UI-Basis begrenzen
 
 Der Teilentscheid fuer #25 ist verbindlich, schliesst OD-07 aber nicht ab.
-#19 und #25 sind damit innerhalb von OD-07 entschieden; Mindestumfang und
-PR-/Issue-Schnitt von #26, #27 und #28 folgen separat. Der Audit aendert #25
+#19, #25 und #26 sind damit innerhalb von OD-07 entschieden; Mindestumfang und
+PR-/Issue-Schnitt von #27 und #28 folgen separat. Der Audit aendert #25
 nicht und erstellt keine Folgeissues. Nach Auditabschluss soll ein eigener
 ownerfreigegebener Planungsschritt #25 auf zwei Bereiche reduzieren:
 
@@ -522,6 +525,84 @@ Serviceberechtigung ab. Fuer Sprachen werden alle Schluessel in allen drei
 Katalogen, deutscher Fallback, nichtleere Texte, stabile Fehlercodes,
 Temperatur-/Dauer-/Datum-/Zeitformatierung, unveraenderte benutzerdefinierte
 Namen und das Fernhalten von Bibliotheks-/Treibertexten geprueft.
+
+### 12. OD-07-Teilentscheid: Issue #26 in fuenf lokale UI-Bereiche schneiden
+
+Issue #26 bleibt vollstaendig R1-relevant, weil das Touchdisplay die einzige
+lokale Bedien- und Anzeigeoberflaeche ist. Der verbindliche Teilentscheid
+schliesst OD-07 noch nicht ab: #19, #25 und #26 sind entschieden; #27 und #28
+folgen separat. Der Audit aendert #26 nicht und erstellt keine Folgeissues. Ein
+spaeterer ownerfreigegebener Planungsschritt schneidet den Umfang in diese
+Reihenfolge:
+
+1. **Lokale Navigations- und Interaktionsbasis:** Screen- und Dialogzustand,
+   eindeutige Vorwaerts-/Zuruecknavigation, Abbrechen, modale Bestaetigungen,
+   Aufweckschutz, sprachunabhaengige Aktionskennungen, Sperrgruende sowie
+   simulierte Touchaktionen. Grosse Touchziele, eindeutige Rueckwege und eine
+   Bedienung ohne notwendige Wischgesten sind verbindlich. Ein Aufwecktouch
+   loest kein Kommando aus; kritische Aktionen benoetigen eine bewusste
+   Bestaetigung. Es entsteht weder ein zweiter fachlicher Zustandsautomat noch
+   ein allgemeines Widget-, Layout-, Screen- oder UI-Pluginframework.
+2. **Standby, Programmauswahl und Startablauf:** zustandsabhaengiger
+   Hauptbildschirm, Programmliste mit klarer Factory-/Benutzertrennung,
+   Startzusammenfassung, nur fuer den naechsten Lauf geltende Aenderungen,
+   manueller Betrieb, Sensorstatus und Startbestaetigung. Antippen fuehrt zur
+   Startzusammenfassung; es ueberschreibt kein gespeichertes Programm. Die UI
+   zeigt typisierte Validierungs- und Safetyergebnisse und uebergibt an die
+   bestehenden Kommandos. Den unveraenderlichen Lauf-/Programmsnapshot erzeugt
+   die Fachlogik. Der Ablauf bleibt ohne WLAN vollstaendig nutzbar.
+3. **Programmverwaltung und Editor:** Erstellen aus Vorlage oder leerem
+   Entwurf, Name, Notizen, lokale Tastatur, Bearbeiten, Kopieren, Speichern,
+   Factoryprogramm zuruecksetzen, zweistufig loeschen und Revisionskonflikte
+   anzeigen. Die UI sammelt einen typisierten Entwurf, bildet den bestaetigten
+   Ablauf ab und zeigt feldbezogene Fehler; sie dupliziert weder
+   Programmvalidierung noch Factory-/Persistenzsemantik. Unvollstaendige
+   Entwuerfe erscheinen nicht als startbereit, benutzerdefinierte Namen werden
+   nicht automatisch uebersetzt.
+4. **Lauf-, Meldungs-, Stop- und Wiederanlaufoberflaeche:** normale und
+   technische Laufansicht, Temperaturen samt Qualitaet, Sollwert, Phase,
+   Lauf-/Restzeit, Regelsensor und Ersatzbetrieb, Produkt-einsetzen-Ablauf,
+   Warnungsbanner, Meldungsliste, Quittieren, gegebenenfalls Stummschalten,
+   eindeutige bestaetigte Stopoptionen, Completed und Recoveryhinweise. Die UI
+   sendet nur fachlich angebotene Kommandos und enthaelt keine Aktor-, Regel-
+   oder Safetylogik. Quittieren beseitigt weder Ursache noch Fehler. Ein vom
+   Fach-/Recoveryvertrag angeordneter automatischer Wiederanlauf wartet nicht
+   auf die UI; sie informiert ueber den bereits erfolgten Ablauf.
+5. **Einstellungen, Diagnose, Service und lokale Recovery-UI:** Screens,
+   Navigation, Warnungen, Bestaetigungen, Eingaben und typisierte Status-/
+   Sperrgruende fuer Einstellungen, passive Diagnose, Servicezugang,
+   Aktortestdialoge, Wiederherstellungsmenue, Netzwerkeinstellungen,
+   Factoryprogramme, Touchkalibrierungsablauf, normalen PIN-geschuetzten und
+   PIN-unabhaengigen lokalen Vollreset, `SAFE_BOOT` und UART-Hinweise. PIN/KDF,
+   Verifikation, Sperrzeiten, Sessions und Secretpersistenz bleiben bei OD-09;
+   Safety und Aktortestgrenzen im Safety-Kern/Aktorplaner; Touchrohwerte,
+   Controller und Kalibrierungsmessung bei #31; Kalibrierungspersistenz und
+   Resetpolicy im Persistenz-/Recoveryvertrag; die atomare Resetmechanik bei
+   #57. Eine Service-PIN hebt keine Safetypruefung auf.
+
+#26 verwendet die kleinen Praesentationsmodelle, sprachunabhaengigen Codes und
+DE-/ES-/EN-Ressourcen aus #25 und schafft keine konkurrierende gemeinsame
+UI-Basis. Navigation und Dialoge bleiben in #26. Die hardwareunabhaengige
+Screen-, Navigations-, Aktions- und Fehlerlogik wird mit simulierten Modellen
+und Touchereignissen getestet. #31 liefert erst spaeter Display-/Touchadapter,
+Rohwerte und reale Kalibrierung; OD-02 waehlt den Treiber, OD-05 vergleicht
+danach schlanke Views mit LVGL. Weder konkrete Pixel/Fonts/Puffer noch LVGL oder
+eine parallele Renderingabstraktion werden vorweggenommen.
+
+Die simulierten Testgruppen umfassen Rueckwege, Abbruch ohne Teilwirkung,
+Bestaetigung und Aufweckschutz; Standby, Factory-/Benutzerprogramm, manuellen
+Start, Run-only-Aenderungen, Sensor- und Validierungsfehler sowie
+Revisionskonflikte; Lauf, Produkt-einsetzen, Sensorersatz, Meldungen,
+Verriegelung, Stop, Wiederanlauf, Completed und Recovery; ausserdem gesperrten
+oder erlaubten Service, typisierte Authergebnisse, Safety-seitig verweigerten
+Aktortest, Wiederherstellung, Kalibrierungsdialog, Resetbestaetigung,
+`SAFE_BOOT` und UART-Hinweis. Sie ersetzen keine realen Display-, Touch-, Auth-,
+Safety-, Persistenz- oder Aktortests.
+
+Der vorhandene microSD-/SD-Karten-Slot erzeugt keinen R1-Scope: keine Menues,
+Statusanzeige, Laufaufzeichnung, Backups/Imports, Diagnoseexporte, Updates,
+Dateisystemadapter oder Persistenz. Das Geraet funktioniert vollstaendig ohne
+SD-Karte; es entstehen weder Port, Adapter, Provider, Platzhalter noch Spike.
 
 ## Entschiedener Persistenzvertrag OD-01
 
@@ -657,7 +738,9 @@ Variante A erweitert den R1-Kern spaeter additiv:
 - Touchdisplay 320 x 240 als einzige lokale Bedien- und Anzeigeoberflaeche,
   eine sekundaere Weboberflaeche, kleine gemeinsame oberflaechenneutrale
   Praesentationsmodelle sowie Deutsch, Spanisch und Englisch mit Deutsch als
-  Fallback; Touch- und Webnavigation bleiben getrennt;
+  Fallback; Touch- und Webnavigation bleiben getrennt; die lokale Navigation,
+  Start-/Programmbedienung, Lauf-/Meldungsbedienung und Service-/Recovery-UI
+  bleiben ohne WLAN vollstaendig nutzbar;
 - WLAN-Onboarding mit zuerst begrenzt geprueftem WiFiManager als bevorzugtem
   Kandidaten und einem nur bei dokumentiertem Ausloeser nachgezogenen lokalen
   Frameworkadapter als Rueckfall; lokale Zeit/NTP und Zeitzonenanzeige;
@@ -682,6 +765,7 @@ Variante A erweitert den R1-Kern spaeter additiv:
 - PID-Autotuning und aktive Kaskadenregelung;
 - LVGL ohne belegten R1-Vorteil;
 - Tuerkontakt, verpflichtende RTC, 12-V-ADC, Lueftertacho;
+- microSD-/SD-Karten-Menues, -Persistenz, -Import/-Export oder -Updatepfade;
 - vorsorgliche grosse Puffer, Ports oder Bibliotheken fuer spaetere Funktionen.
 
 ### Nicht Bestandteil dieses Projekts
@@ -720,7 +804,8 @@ Die vollstaendige Zuordnung steht in der
    Laufhistorie/Bereinigung, Laufexport/secret-freies Backup und erst danach
    Importvorschau/atomare Aktivierung zerlegen; #25 in kleine
    Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen
-   schneiden; #26–#28 separat entscheiden.
+   schneiden; #26 in die fuenf entschiedenen lokalen UI-Bereiche zerlegen;
+   #27 und #28 separat entscheiden.
 9. ArduinoJson erst nach isoliertem Build-, Grenzwert-, Fuzz- und
    Ressourcennachweis an der kleinen DTO-/Codecgrenze uebernehmen; die
    1-/4-/16-KiB-Profile und Tiefe 6 mit realen maximalen DTOs pruefen.
@@ -735,7 +820,8 @@ Die vollstaendige Zuordnung steht in der
 | #56/#57 | bestehender Umfang mischt den notwendigen Active-/Fallback- und Bootstrapkern mit Pending-/Intentpfaden und Secret-Domaenen ohne ersten Konsumenten | nach entschiedenem OD-01 in separatem Planungs-/ADR-Schritt auf Variante B zuschneiden; Variante A spaeter additiv planen |
 | #19 | vier grosse Verantwortungsbereiche in einem Issue | nach Auditfreigabe separat in Journal/Retention, begrenzte Laufhistorie/Bereinigung, nur lesenden Laufexport/secret-freies Backup und Importvorschau/atomare Aktivierung schneiden; 5 detaillierte Laeufe und 50 Zusammenfassungen bleiben Messziel |
 | #25 | gemeinsame Praesentationssemantik, Sprachressourcen, Navigation und Layout sind vermischt | nach Auditfreigabe in kleine oberflaechenneutrale Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen schneiden; Navigation/Layout nach #26/#27 verschieben, Issue im Audit nicht aendern |
-| #26–#28 | Touch-, Web-, Auth-, Diagnose- und Servicepakete sind zu breit fuer kleine PRs | nach stabilen DTO-/Portgrenzen und ihren noch ausstehenden OD-07-Teilentscheiden in vertikale Scheiben teilen |
+| #26 | lokale Navigation, Start, Programmeditor, Lauf-/Meldungsbedienung sowie Service-/Recovery-UI sind in einem Issue verbunden | nach Auditfreigabe in die fuenf entschiedenen UI-Bereiche schneiden; hardwareunabhaengige Logik nativ/simuliert vor #31 testen, Auth-/Safety-/Resetmechanik ausserhalb belassen und keinen SD-Scope schaffen |
+| #27–#28 | Web-, Auth-, Diagnose- und Servicepakete sind zu breit fuer kleine PRs | nach stabilen DTO-/Portgrenzen und ihren noch ausstehenden OD-07-Teilentscheiden in vertikale Scheiben teilen |
 | LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich und ist kein Treiberkandidat | erst nach Treiberauswahl, Adaptervertrag und identischem repraesentativem Screen gegen schlanke Views messen |
 | ESPAsyncWebServer | Async-/WebSocket-/SSE-Umfang koennte groesser als der reale R1-Bedarf sein | Frameworkserver zuerst messen; Async nur bei belegtem Vorteil |
 | Vorsorgliche Mehradapter-/Provisioningarchitektur | zwei produktive Portalwege oder allgemeine Provider-/Pluginvertraege waeren ohne zweiten realen Bedarf ueberdimensioniert | WiFiManager zuerst begrenzt pruefen; Frameworkadapter nur bei dokumentiertem Ausloeser als identischen Gegenprototyp nachziehen |
@@ -772,7 +858,7 @@ Die vorgeschlagene Reihenfolge steht in
 | OD-03a | DS18B20-/1-Wire-Softwarestack nach Stufe 3 waehlen |
 | OD-03b | Topologie A oder begruendeten Rueckfall B nach realem Pin-/GPIO- und Fehlerisolationsvergleich waehlen; Produktbus bleibt separat, C ausgeschlossen |
 | OD-05 | schlanke eigene Screens oder LVGL erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich |
-| OD-07 | #19 und #25 sind als Teilentscheide verbindlich geschnitten; R1-Mindestumfang und PR-/Issue-Schnitt von #26–#28 bleiben offen |
+| OD-07 | #19, #25 und #26 sind als Teilentscheide verbindlich geschnitten; R1-Mindestumfang und PR-/Issue-Schnitt von #27 und #28 bleiben offen |
 | OD-09 | KDF-, Work-Factor-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag vor #27 |
 
 OD-01 ist mit Variante B entschieden. Offen bleibt nur die technische
@@ -797,7 +883,7 @@ die endgueltige Uebernahme nach dem dokumentierten Build-, Grenzwert-, Fuzz-
 und Ressourcenspike; eine vorsorgliche Gleichwahl besteht nicht.
 
 OD-07 bleibt ausdruecklich offen: Dieser Auditstand entscheidet die
-Teilschnitte von #19 und #25; #26, #27 und #28 folgen separat.
+Teilschnitte von #19, #25 und #26; #27 und #28 folgen separat.
 
 Hardwarewerte, Pins, Pegel und thermische Parameter sind keine freien
 Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.

@@ -56,7 +56,9 @@ Vor weiterer Architekturverbreiterung:
    Importvorschau/atomare Aktivierung in einem separaten ownerfreigegebenen
    Planungsschritt umsetzen; #25 ebenso in oberflaechenneutrale
    Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen
-   schneiden; #26–#28 bleiben innerhalb OD-07 separat zu entscheiden.
+   schneiden; #26 in lokale Navigation, Start, Programmeditor,
+   Lauf-/Meldungsbedienung und Service-/Recovery-UI schneiden; #27 und #28
+   bleiben innerhalb OD-07 separat zu entscheiden.
 
 Keine Empfehlung aus dem Audit wird im Audit-PR selbst implementiert.
 
@@ -91,7 +93,18 @@ schmale benoetigte Variante-B-Vertraege
   -> #24 Fehlerkern und SAFE_BOOT
   -> #25-A kleine oberflaechenneutrale Praesentationsmodelle
   -> #25-B gemeinsame Sprachressourcen und Formatierungsregeln
+  -> #26-A lokale Navigation und Interaktion
+  -> #26-B Standby, Programmauswahl und Start
+  -> #26-C Programmverwaltung und Editor
+  -> #26-D Lauf, Meldungen, Stop und Wiederanlauf
+  -> #26-E Einstellungen, Diagnose, Service und Recovery-UI
 ```
+
+#26-A bis #26-E bezeichnen den spaeter ownerfreizugebenden Schnitt, keine im
+Audit erstellten Issues. Ihre Screen-, Dialog-, Aktions- und Fehlerlogik ist
+nativ beziehungsweise mit simulierten Touchereignissen pruefbar. Reales
+Rendering und Touchintegration folgen #31/OD-02; der Frameworkvergleich folgt
+OD-05, reale Authentisierung OD-09 und die Resetmechanik dem #57-Vertrag.
 
 Vorgeschlagene kleine PRs:
 
@@ -123,7 +136,18 @@ Vorgeschlagene kleine PRs:
 - #25-B: stabile Textschluessel, sprachunabhaengige Fehler-/Meldungscodes,
   vollstaendige Deutsch-/Spanisch-/Englisch-Kataloge, deutscher Fallback und
   gemeinsame semantische Temperatur-/Dauer-/Datum-/Zeit-/Einheitenformatierung;
-  benutzerdefinierte Namen bleiben unveraendert.
+  benutzerdefinierte Namen bleiben unveraendert;
+- #26-A: Screen-/Dialogzustand, Rueckweg, Abbruch, Bestaetigung, Aufweckschutz,
+  Aktionskennungen und Sperrgruende ohne notwendige Wischgesten nativ testen;
+- #26-B: Standby, Factory-/Benutzerprogrammliste, Startzusammenfassung,
+  Run-only-Aenderungen, manuellen Start und Sensor-/Fehlerdarstellung;
+- #26-C: typisierte Entwuerfe erstellen, kopieren, bearbeiten, speichern,
+  zuruecksetzen und zweistufig loeschen; Validierung/Konflikte nur anzeigen;
+- #26-D: Lauf-/Detailansicht, Meldungen, Quittieren, bestaetigte Stopoptionen,
+  Sensorersatz, Completed und automatischen Wiederanlauf abbilden;
+- #26-E: Einstellungen, passive Diagnose, Service- und Recoverydialoge nativ
+  vorbereiten; Auth-, Safety-, Kalibrierungs-, Persistenz- und Resetmechanik
+  bleiben ausserhalb und werden erst an ihren jeweiligen Gates integriert.
 
 Fuer den neu geschnittenen Variante-B-Kern gilt die feste Transaktionsfolge:
 
@@ -316,10 +340,19 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   Adaptervertrag denselben repraesentativen Screen, dieselben Texte,
   Eingabeelemente und Messmethoden fuer schlanke Views und LVGL verwenden;
   LVGL nur bei einem klar gemessenen Vorteil uebernehmen;
-- #26 als einzige lokale Bedien- und Anzeigeoberflaeche in
-  Navigations-/Screen-Scheiben umsetzen; Dialoge, Stop-/Servicefluss,
-  Touchziele, Pixel- und Textpassung bleiben dort; UI-Logik weiterhin nativ
-  testen;
+- #26 als einzige lokale Bedien- und Anzeigeoberflaeche in der entschiedenen
+  Reihenfolge A Navigation/Interaktion, B Standby/Programmauswahl/Start,
+  C Programmverwaltung/Editor, D Lauf/Meldungen/Stop/Wiederanlauf und
+  E Einstellungen/Diagnose/Service/Recovery-UI umsetzen. Die Logik bleibt
+  ohne WLAN vollstaendig nutzbar und wird nativ mit simulierten Touchaktionen
+  getestet; kein Aufwecktouch loest ein Kommando aus, keine Bedienung setzt
+  Wischgesten voraus und die UI leitet keine Fach-, Safety-, Auth-, Persistenz-
+  oder Aktorentscheidung neu her;
+- reale Display-/Touchintegration erst nach #31 und OD-02 anbinden, danach den
+  identischen repraesentativen Screen unter OD-05 fuer schlanke Views und LVGL
+  vergleichen; Auth erst nach OD-09 und atomare Resetmechanik nur ueber #57
+  integrieren. Der microSD-/SD-Karten-Slot erzeugt weder R1-UI noch Adapter,
+  Persistenz, Import-/Exportweg oder Spike;
 - #27 teilen in begrenzte Lese-API/Transport, mutierende Kommandos/Konflikte,
   Webassets, responsive Webnavigation, Onboarding und Authentication; die
   Weboberflaeche bleibt
@@ -422,7 +455,7 @@ Ausgabeelement.
 | spaeteres Pending/Secrets | erst mit neustartpflichtigem Konfigurationswert beziehungsweise realen WLAN-/Passwort-/PIN-Nachweisen als eigene Issues planen; Variante A additiv anbinden |
 | #19 | nicht streichen; nach Auditfreigabe in vier Bereiche schneiden: A Journal/Retention, B begrenzte Laufhistorie/stromausfallsichere Bereinigung, C nur lesender Laufexport/secret-freies Backup, D Importvorschau/atomare Aktivierung; 5 detaillierte Laeufe/50 Zusammenfassungen sind Messziel, kein Versprechen; Issue im Audit nicht aendern |
 | #25 | nach Auditfreigabe auf zwei Bereiche reduzieren: A kleine oberflaechenneutrale Praesentationsmodelle, B gemeinsame DE/ES/EN-Sprachressourcen und semantische Formatierung mit deutschem Fallback; Touch-/Webnavigation und Layout nach #26/#27 verschieben, keine Mega-View oder Frameworktypen, Issue im Audit nicht aendern |
-| #26 | native UI-Logik von realem Display-/Touchadapter trennen |
+| #26 | nach Auditfreigabe in fuenf Bereiche schneiden: A Navigation/Interaktion, B Standby/Programmauswahl/Start, C Programmverwaltung/Editor, D Lauf/Meldungen/Stop/Wiederanlauf, E Einstellungen/Diagnose/Service/Recovery-UI; nativ/simuliert vor Hardwareintegration testen, #25 verwenden, #31/OD-02, OD-05, OD-09 und #57 nicht vorwegnehmen; kein allgemeines UI-Framework und kein SD-Scope; Issue im Audit nicht aendern |
 | #27 | Webtransport, API, Webassets, Onboarding und Authentisierung trennen |
 | #28 | passive Diagnose/Export vom aktiven Serviceablauf trennen |
 
@@ -438,7 +471,7 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 | OD-03a | DS18B20-/1-Wire-Softwarestack | nach Stufe 3, vor #30 |
 | OD-03b | Bustopologie A oder begruendeter Rueckfall B | nach minimaler Hardwarebaseline, realem Pin-/GPIO-Inventar und identischem Fehlerisolationsvergleich; Produktbus separat, C ausgeschlossen |
 | OD-05 | schlanke Views oder LVGL | nach OD-02, schmalem Adaptervertrag und identischem repraesentativem Screenvergleich |
-| OD-07 | #19 und #25 als Teilentscheide verbindlich geschnitten; Mindestumfang und PR-/Issue-Schnitt von #26–#28 bleiben offen | vor dem jeweiligen Issue |
+| OD-07 | #19, #25 und #26 als Teilentscheide verbindlich geschnitten; Mindestumfang und PR-/Issue-Schnitt von #27/#28 bleiben offen | vor dem jeweiligen Issue |
 | OD-09 | KDF-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag | vor produktiver Authentication in #27 |
 
 OD-01 ist entschieden: Variante B ist der verbindliche R1-Vertrag, Variante A
@@ -453,8 +486,8 @@ OD-04 ist entschieden: Arduino-ESP32 `WebServer` ist die Release-1-Baseline.
 R1-Risiko und ein klarer Vorteil im identischen begrenzten Prototyp oeffnen die
 Abweichungsentscheidung erneut.
 
-OD-07 ist nicht abgeschlossen. #19 ist mit vier und #25 mit zwei geordneten
-Bereichen entschieden; #26, #27 und #28 folgen separat. Der Werksreset bleibt im
+OD-07 ist nicht abgeschlossen. #19 ist mit vier, #25 mit zwei und #26 mit fuenf
+geordneten Bereichen entschieden; #27 und #28 folgen separat. Der Werksreset bleibt im
 zentralen #57-Recoveryvertrag. Die Behandlung der Touchkalibrierung beim Reset
 bedarf eines eigenen expliziten Policyentscheids zwischen Recovery und
 Display-/Touchintegration und wird nicht in #19 versteckt.

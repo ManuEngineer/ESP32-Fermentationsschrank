@@ -159,6 +159,14 @@ Layout. Reale Pixel-/Textpassung, Zeilenumbrueche, Kuerzungen und Schriftgroesse
 werden erst auf der bestaetigten Displayhardware gemessen; daraus entsteht
 keine LVGL-, Treiber- oder Uebersetzungsbibliothekswahl fuer #25.
 
+Auch die nach dem OD-07-Teilentscheid in fuenf Bereiche geschnittene
+#26-Screen-, Navigations-, Dialog-, Aktions- und Fehlerlogik ist kein
+Hardware-Spike. Sie wird nativ mit simulierten Praesentationsmodellen und
+Touchereignissen geprueft. Der Display-/Touch-Spike liefert erst die reale
+technische Integrationsgrundlage und spaeter den identischen repraesentativen
+Screen fuer OD-05; er implementiert weder die fuenf Bedienbereiche noch ein
+allgemeines UI-Framework.
+
 ### Stufe 0 – Reale Hardware identifizieren
 
 Vor jeder Bibliotheksbewertung wird am tatsaechlich gelieferten Modul
@@ -405,11 +413,14 @@ Display- oder Touchereignis darf eine reale Aktorfreigabe ausloesen.
 ### Nicht-Scope und Artefakte
 
 Nicht-Scope: komplette Release-UI, fachliche #25-Projektionen und
-Sprachkataloge, Touch-/Webnavigation, finale Pins, Touchgehause, echte
+Sprachkataloge, die hardwareunabhaengige #26-Navigations-/Screenlogik,
+Touch-/Webnavigation, finale Pins, Touchgehause, echte
 Serviceaktionen, Aktorbedienung und LVGL-Auswahl. Encoder,
 Programmwahlschalter, Start-/Stop-Taster und Status-LED werden auch nicht als
 spaetere Spikevarianten untersucht, weil sie kein Bestandteil dieses Projekts
-sind. Der 230-V-AC-Hauptschalter ist kein Firmwareeingang. Ergebnisartefakte:
+sind. Der microSD-/SD-Karten-Slot wird fuer Release 1 ebenfalls nicht
+evaluiert; er erzeugt keinen Spike, Speicherpfad oder Adapter. Der
+230-V-AC-Hauptschalter ist kein Firmwareeingang. Ergebnisartefakte:
 
 - Schaltplan/Fotos des Testaufbaus und gemessene Pin-/Pegelmatrix;
 - je Kandidat fixierte Abhaengigkeits- und Konfigurationsdatei;
@@ -970,7 +981,8 @@ keine reale Flashlebensdauer oder Stromausfallgarantie abgeleitet.
     5-/50-Ziel erst anhand dieser Messung dimensionieren.
 11. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
    dokumentierten Rueckfallkandidaten.
-12. Erst danach implementieren #30 und #31 die schmalen Adapter. Der
+12. Erst danach implementieren #30 und #31 die schmalen Adapter. Die
+   hardwareunabhaengige #26-Logik wird separat nativ/simuliert entwickelt; der
    UI-Frameworkvergleich mit LVGL folgt erst auf den ausgewaehlten
    Display-/Touchtreiber, den schmalen Adaptervertrag und einen repraesentativen
    Release-1-Screen.
