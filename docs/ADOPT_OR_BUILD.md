@@ -117,6 +117,26 @@ Persistenz bleibt beim typisierten binaeren Wireformat. Ein spaeterer Wechsel
 ersetzt die konkrete Codecgrenze und rechtfertigt weder einen
 `IJsonProvider`, ein Pluginregister noch einen vorsorglichen Zweitcodec.
 
+## Lokaler HTTP-Transport und Weboberflaeche
+
+Der kleine lokale HTTP-Dienst ist als Release-1-Anforderung entschieden, nicht
+aber seine endgueltige Produktivimplementierung. Arduino-ESP32 `WebServer` wird
+als erster Evaluationskandidat und bedingte Produktivrichtung begrenzt
+geprueft. `ESPAsyncWebServer` wird nur bei einem dokumentierten Problem mit
+demselben Umfang als konditionaler Rueckfall bewertet. Ein zweiter Adapter,
+WebSocket, SSE oder eine allgemeine `IWebTransport`-, Middleware-, Provider-
+oder Pluginplattform entsteht nicht auf Vorrat.
+
+Frameworkdienste duerfen HTTP-Lebenszyklus, Routing und begrenzte
+Request-/Responseuebersetzung uebernehmen. Endpunkt-/DTO-Vertraege,
+Fachkommandos, Revisionskonflikte, Authpolicy, Redaction, Persistenz und Safety
+bleiben projektspezifisch. Server-, JSON- und Frontendframeworktypen enden an
+der konkreten ESP32-/Transportgrenze. Die R1-Weboberflaeche verwendet zuerst
+schlanke lokale HTML-/CSS-/JavaScript-Assets; ein Frontendframework wird nur
+bei einem konkreten gemessenen Bedarf untersucht. R1 verspricht keine stabile
+oeffentliche externe Schreib-API. OD-06-Onboarding bleibt ein getrennter
+fachlicher Lebenszyklus, auch wenn technische Frameworkbausteine geteilt werden.
+
 ## Journal, Historie und Import
 
 Das Speicherbackend und ein Standard-JSON-Codec werden adoptiert; die

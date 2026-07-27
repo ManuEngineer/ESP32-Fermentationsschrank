@@ -17,7 +17,10 @@ die technische Bewertung in
 | Status | Bedeutung |
 |---|---|
 | `FRAMEWORK_CANDIDATE` | Bestandteil der fixierten Plattform; Adapter und Messung fehlen |
+| `FIRST_EVALUATION_CANDIDATE` | verbindlich zuerst zu pruefende Richtung; noch keine Produktivauswahl |
 | `SPIKE_REQUIRED` | technisch plausibel, aber auf Zielhardware nicht bestaetigt |
+| `FINAL_SELECTION_PENDING` | endgueltige Uebernahme bleibt bis zum Nachweis und Ownerentscheid offen |
+| `CONDITIONAL_FALLBACK` | identische Evaluation nur bei einem dokumentierten Problem des ersten Kandidaten |
 | `EVALUATE_LATER` | erst fuer ein spaeteres Issue oder nach einem anderen Gate relevant |
 | `DEFER_AFTER_R1` | nicht Bestandteil von Release 1 |
 | `LICENSE_REVIEW_REQUIRED` | Herkunft oder Abdeckung muss vor Veroeffentlichung konkret geprueft werden |
@@ -37,10 +40,10 @@ die technische Bewertung in
 | DS18B20 | DallasTemperature `4.0.6` plus OneWire `2.3.8` | Commits `dadbbf7d`/`800f26f3` | MIT; OneWire MIT im Quelltext | `SPIKE_REQUIRED` | Softwarekandidat 1 fuer Stufen 1–3; Topologie A und B identisch pruefen, Topologiewahl getrennt |
 | DS18B20 | Espressif `onewire_bus 1.1.1` plus `ds18b20 0.4.0` | Commits `a269e1fe`/`bf92b0b3` | Apache-2.0 | `SPIKE_REQUIRED` | Softwarekandidat 2 fuer Stufen 1–3; nur ohne Toolchainwechsel, Topologie A und B identisch pruefen |
 | Persistenz | Arduino-ESP32 Preferences/NVS | Arduino-ESP32 `2.0.17` | LGPL-2.1/ESP-IDF-Komponentenlizenzen | `FRAMEWORK_CANDIDATE` | produktives `IStateStore`-Backend gemaess ADR-016 |
-| JSON | ArduinoJson `7.4.3`, Tag-Commit `77771d3c` | 2026-07-27 | MIT; Paketmanifest, konkret verwendete Header/Features und Notices im Spike pruefen | `SPIKE_REQUIRED` | bevorzugter, noch nicht endgueltig ausgewaehlter R1-Kandidat fuer begrenzte externe API-, Konfigurations-, Diagnose-, Export-, secret-freie Backup- und Importvertraege; keine Bibliothekstypen im Fachkern und keine interne Kontrollpunktpersistenz |
-| Webserver | Arduino-ESP32 `WebServer` | Arduino-ESP32 `2.0.17` | Frameworklizenz und Drittbestandteile | `FRAMEWORK_CANDIDATE` | verbindliche R1-Baseline fuer den begrenzten lokalen HTTP-Dienst; kleiner konkreter Adapter und Prototypnachweis fehlen |
-| Webserver | ESPAsyncWebServer `3.12.0`, Commit `a008cccf` | 2026-07-27 | LGPL-3.0 | `EVALUATE_LATER` | konditionaler Vergleichs-/Rueckfallkandidat nur bei konkretem Baselineproblem und klarem Vorteil im identischen Prototyp; keine vorsorgliche SSE-/WebSocket-Reserve |
-| WLAN-Onboarding | WiFiManager `v2.0.17`, Tag-Commit `d82d0a1b` | 2026-07-27 | MIT; Webassets und transitive Abhaengigkeiten im Spike konkret pruefen | `SPIKE_REQUIRED` | bevorzugter R1-Kandidat fuer den zuerst begrenzten Onboardingspike, noch nicht ausgewaehlt; technischer Portalteil hinter projektspezifischer Start-, Kandidaten-, Commit-, Secret-, Recovery- und Safetylogik; Frameworkadapter ist konditionaler Rueckfall und keine Drittkomponente |
+| JSON | ArduinoJson `7.4.3`, Tag-Commit `77771d3c` | 2026-07-27 | MIT; Paketmanifest, konkret verwendete Header/Features und Notices im Spike pruefen | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` | bevorzugter, noch nicht endgueltig ausgewaehlter R1-Kandidat fuer begrenzte externe API-, Konfigurations-, Diagnose-, Export-, secret-freie Backup- und Importvertraege; keine Bibliothekstypen im Fachkern und keine interne Kontrollpunktpersistenz |
+| Webserver | Arduino-ESP32 `WebServer` | Arduino-ESP32 `2.0.17` | Frameworklizenz und Drittbestandteile | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` | bedingte Produktivrichtung fuer den begrenzten lokalen HTTP-Dienst; kleiner konkreter Adapter und Prototypnachweis fehlen |
+| Webserver | ESPAsyncWebServer `3.12.0`, Commit `a008cccf` | 2026-07-27 | LGPL-3.0 | `CONDITIONAL_FALLBACK`, `EVALUATE_LATER` | identischer Vergleich nur bei konkretem Problem des ersten Kandidaten und klarem Vorteil; keine vorsorgliche SSE-/WebSocket-Reserve |
+| WLAN-Onboarding | WiFiManager `v2.0.17`, Tag-Commit `d82d0a1b` | 2026-07-27 | MIT; Webassets und transitive Abhaengigkeiten im Spike konkret pruefen | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` | bevorzugter R1-Kandidat fuer den zuerst begrenzten, von #27 getrennten Onboardingspike; technischer Portalteil hinter projektspezifischer Start-, Kandidaten-, Commit-, Secret-, Recovery- und Safetylogik; Frameworkadapter ist konditionaler Rueckfall und keine Drittkomponente |
 | QR-Code | QRCode `0.0.1`, Commit `eafbde49` | 2026-07-27 | MIT, abgeleitet von Project Nayuki | `NOT_SELECTED` | lokaler WLAN-QR-Code |
 | QR-Code | Project Nayuki QR-Code-generator `1.8.0`, Commit `2c9044de` | 2026-07-27 | MIT im Quellheader | `NOT_SELECTED` | alternative kleine C-Implementierung |
 | UI-Framework | LVGL `9.5.0`, Commit `8fd90bb1` | 2026-07-27 | MIT | `EVALUATE_LATER` | kein Treiberkandidat; erst nach Treiberwahl und Adaptervertrag auf identischem repraesentativem Screen gegen schlanke Views messen |

@@ -727,14 +727,43 @@ Notwendige Owner-/Hardwareaktion: alle drei realen Sensoren, die konkrete
 Stoer-/Hot-Plug-Tests bestaetigen; Software- und Topologieentscheidung erst
 anhand der identischen Messprotokolle treffen.
 
+## Aktorfreier Webserver-Baselineprototyp fuer #27
+
+Der kleine lokale HTTP-Dienst ist `REQUIREMENT_DECIDED`. Arduino-ESP32
+`WebServer` ist `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und die bedingte
+Produktivrichtung; seine endgueltige Auswahl bleibt `FINAL_SELECTION_PENDING`.
+`ESPAsyncWebServer` ist `CONDITIONAL_FALLBACK`/`EVALUATE_LATER` und wird nur
+bei einem dokumentierten R1-Problem des ersten Prototyps unter identischen
+Bedingungen nachgezogen.
+
+Der erste Prototyp prueft statische lokale HTML-/CSS-/JavaScript-Testassets,
+eine begrenzte Statusabfrage, eine Konfigurationsabfrage, einen simulierten
+begrenzten Aenderungsrequest, Export und Upload/Import. Normale, mehrere
+parallele, langsame, abgebrochene, ungueltige und uebergrosse Requests,
+wiederholtes nicht ueberlappendes Polling, WLAN-Unterbruch und Neustart werden
+reproduzierbar getestet. Erfasst werden Firmwaregroesse, statisches RAM,
+freier/niedrigster Heap, groesster freier Heapblock, Antwort- und maximale
+Bearbeitungszeit, Regelzyklus-Jitter, Watchdog-/Resetereignisse sowie
+Abhaengigkeiten und Lizenzwirkung.
+
+Der Prototyp legt noch keine Pollingintervalle, Clientzahl, Antwort-/
+Chartgroesse, Timeouts oder Heap-/Jitterbudgets fest; er misst diese Werte.
+WebSocket und SSE werden nicht vorsorglich umgesetzt. Die spaetere fachliche
+#27-Umsetzung bleibt in HTTP-Transport/interne API, Status/Polling/aktueller
+Laufchart, Mutationen, Webassets und Authentisierung nach OD-09 getrennt. Es
+gibt keine oeffentliche externe Schreib-API und keine allgemeine Web-/
+Frontend-/Pluginplattform. OD-06-Onboarding besitzt einen getrennten
+fachlichen Lebenszyklus.
+
 ## Spike C: WLAN-Onboarding
 
 ### Ziel und feste Grenze
 
-WiFiManager `v2.0.17` (`d82d0a1b`) ist der bevorzugte technische Kandidat und
-wird zuerst begrenzt geprueft. Der Spike waehlt ihn noch nicht als
+WiFiManager `v2.0.17` (`d82d0a1b`) ist der bevorzugte
+`FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
+`FINAL_SELECTION_PENDING`. Der Spike waehlt ihn noch nicht als
 Produktionsabhaengigkeit aus. Ein kleiner Gegenprototyp aus Arduino-ESP32
-`WiFi`, `DNSServer`, SoftAP und der bereits beschlossenen `WebServer`-Baseline
+`WiFi`, `DNSServer`, SoftAP und dem zuerst evaluierten `WebServer`
 entsteht nur bei einem dokumentierten WiFiManager-Problem. Es werden nie beide
 Loesungen vorsorglich produktiv implementiert.
 
@@ -821,8 +850,9 @@ Fach-, Safety-, Persistenz-, Secret- oder gemeinsame View-Modelle.
 ### Ziel und feste Grenze
 
 ArduinoJson `7.4.3` (Tag-Commit `77771d3c07668e01d8f52acb03910c1110bb373f`)
-ist der bevorzugte technische Kandidat, aber bis zum bestandenen Spike keine
-ausgewaehlte Produktionsabhaengigkeit. Der Spike prueft ausschliesslich
+ist `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
+`FINAL_SELECTION_PENDING`, also bis zum bestandenen Spike keine ausgewaehlte
+Produktionsabhaengigkeit. Der Spike prueft ausschliesslich
 begrenzte externe API-, Konfigurations-, Programm-, Diagnose-, Export-,
 secret-freie Backup- und Importvertraege. Interne Kontrollpunkte, Roots,
 Safety-Zustaende, Lauf-Recovery und binaere Records bleiben unveraendert.
@@ -973,15 +1003,18 @@ keine reale Flashlebensdauer oder Stromausfallgarantie abgeleitet.
 8. WiFiManager durch Stufe 1 und 2 fuehren. Den Frameworkgegenprototyp nur bei
    dokumentiertem Ausloeser in Stufe 3 nachziehen; danach die endgueltige
    Onboardingauswahl dem Owner vorlegen.
-9. ArduinoJson durch Quelle-/Toolchain-, Codec-, Grenz-/Fuzz- und
+9. Den `WebServer`-Baselineprototyp ausfuehren. `ESPAsyncWebServer` nur bei
+   dokumentiertem R1-Problem mit identischem Umfang nachziehen und danach die
+   endgueltige Serverauswahl dem Owner vorlegen.
+10. ArduinoJson durch Quelle-/Toolchain-, Codec-, Grenz-/Fuzz- und
    Ressourcenstufen pruefen. Eine Alternative nur bei dokumentiertem Problem
    untersuchen und die endgueltige Codec-Uebernahme dem Owner vorlegen.
-10. Fuer den spaeteren #19-B-Schnitt die reale Speicher-, Retention- und
+11. Fuer den spaeteren #19-B-Schnitt die reale Speicher-, Retention- und
     Bereinigungsmatrix einschliesslich Cut-Points ausfuehren und das
     5-/50-Ziel erst anhand dieser Messung dimensionieren.
-11. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
-   dokumentierten Rueckfallkandidaten.
-12. Erst danach implementieren #30 und #31 die schmalen Adapter. Die
+12. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
+    dokumentierten Rueckfallkandidaten.
+13. Erst danach implementieren #30 und #31 die schmalen Adapter. Die
    hardwareunabhaengige #26-Logik wird separat nativ/simuliert entwickelt; der
    UI-Frameworkvergleich mit LVGL folgt erst auf den ausgewaehlten
    Display-/Touchtreiber, den schmalen Adaptervertrag und einen repraesentativen

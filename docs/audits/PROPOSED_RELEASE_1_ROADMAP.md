@@ -57,8 +57,10 @@ Vor weiterer Architekturverbreiterung:
    Planungsschritt umsetzen; #25 ebenso in oberflaechenneutrale
    Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen
    schneiden; #26 in lokale Navigation, Start, Programmeditor,
-   Lauf-/Meldungsbedienung und Service-/Recovery-UI schneiden; #27 und #28
-   bleiben innerhalb OD-07 separat zu entscheiden.
+   Lauf-/Meldungsbedienung und Service-/Recovery-UI schneiden; #27 in
+   HTTP-Transport/API, Status/Polling/Laufchart, schreibende Kommandos,
+   responsive Webassets und Authentisierung nach OD-09 schneiden; #28 bleibt
+   als letzter OD-07-Teil separat zu entscheiden.
 
 Keine Empfehlung aus dem Audit wird im Audit-PR selbst implementiert.
 
@@ -98,6 +100,15 @@ schmale benoetigte Variante-B-Vertraege
   -> #26-C Programmverwaltung und Editor
   -> #26-D Lauf, Meldungen, Stop und Wiederanlauf
   -> #26-E Einstellungen, Diagnose, Service und Recovery-UI
+
+Webserver-/JSON-Spikes und spaetere Ownerauswahl
+  -> #27-A HTTP-Transport und interne API-Vertraege
+  -> #27-B Status, begrenztes Polling und aktueller Laufchart
+  -> #27-D responsive lokale Webassets
+
+OD-09
+  -> #27-C schreibende Kommandos und Revisionskonflikte
+  -> #27-E Anmeldung, Sessions, CSRF und Servicefreigabe
 ```
 
 #26-A bis #26-E bezeichnen den spaeter ownerfreizugebenden Schnitt, keine im
@@ -148,6 +159,16 @@ Vorgeschlagene kleine PRs:
 - #26-E: Einstellungen, passive Diagnose, Service- und Recoverydialoge nativ
   vorbereiten; Auth-, Safety-, Kalibrierungs-, Persistenz- und Resetmechanik
   bleiben ausserhalb und werden erst an ihren jeweiligen Gates integriert.
+- #27-A: kleinen konkreten HTTP-Adapter, interne versionierte DTO-Vertraege,
+  feste Grenzen und simuliertes Backend ohne Servertypen im Fachkern pruefen;
+- #27-B: vollstaendige begrenzte Statussnapshots, nicht ueberlappendes Polling
+  und einen punktbegrenzten aktuellen Laufchart umsetzen; Intervalle,
+  Clientzahl, Antwortgroesse und Budgets erst messen;
+- #27-D: schlanke lokale responsive HTML-/CSS-/JavaScript-Assets ohne CDN,
+  Frontendframeworkvorwahl oder Fach-/Safetylogik im Browser;
+- #27-C/#27-E: erst nach OD-09 erwartete Revisionen, Konflikt- und
+  Doppelwirkungsschutz sowie Anmeldung, Sessions, CSRF und Servicefreigabe
+  umsetzen. R1 verspricht keine oeffentliche externe Schreib-API.
 
 Fuer den neu geschnittenen Variante-B-Kern gilt die feste Transaktionsfolge:
 
@@ -198,29 +219,34 @@ warten:
    negativer Referenztest. Die konkrete TRS-Buchse und Hot-Plug-Schutzmassnahmen
    werden praktisch geprueft; drei GPIOs und Bauteilwerte werden nicht vorab
    festgelegt.
-5. Einen kleinen aktorfreien Baselineprototyp mit Arduino-ESP32 `WebServer`
+5. Den `FIRST_EVALUATION_CANDIDATE` Arduino-ESP32 `WebServer` in einem kleinen
+   aktorfreien, `SPIKE_REQUIRED`-Baselineprototyp
    fuer statische Ressourcen, begrenzte API-/Import-/Exportpfade, wenige
    Clients, Abbruch-, WLAN-, Jitter- und Ressourcenmessung vorbereiten, ohne
-   #27 vorwegzunehmen. `ESPAsyncWebServer` wird nur dann mit identischem Umfang
-   nachgezogen, wenn der Baselineprototyp ein konkretes Release-1-Risiko offen
-   laesst.
-6. Davon fachlich getrennt, aber mit der Webserver-Baseline koordiniert,
+   #27 vorwegzunehmen. Die endgueltige Produktivauswahl bleibt
+   `FINAL_SELECTION_PENDING`. `ESPAsyncWebServer` ist
+   `CONDITIONAL_FALLBACK`/`EVALUATE_LATER` und wird nur dann mit identischem
+   Umfang nachgezogen, wenn der Baselineprototyp ein konkretes Release-1-Risiko
+   offen laesst.
+6. Davon fachlich getrennt, aber mit dem Webserver-Baselineprototyp koordiniert,
    WiFiManager zuerst als begrenzten WLAN-Onboardingkandidaten pruefen:
    Toolchain, Quellen/Lizenz/Webassets, ausdruecklicher Portalstart, reale
    Android-/iOS-/Windows-Clients, direkter IP-Rueckfall, Credential-Erhalt,
    Secret-/Fehler-/Lifecyclegrenzen, Cut-Points, Jitter und Ressourcen. Einen
    Adapter aus `WiFi`, `DNSServer`, SoftAP und `WebServer` nur bei einem
    dokumentierten WiFiManager-Problem mit identischem Umfang nachziehen. Dieser
-   Spike nimmt weder das ganze #27 noch eine endgueltige Bibliothekswahl vorweg.
-7. ArduinoJson `7.4.3` als bevorzugten, noch nicht ausgewaehlten JSON-Codec in
+   Spike setzt weder #27 um noch nimmt er eine endgueltige Bibliothekswahl
+   vorweg.
+7. ArduinoJson `7.4.3` als `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
+   `FINAL_SELECTION_PENDING` in
    einem kleinen aktorfreien Prototyp pruefen: isolierter Build, konkrete
    DTO-/Codecgrenze, initiale Profile 1/4/16 KiB, Verschachtelungstiefe 6,
    String-/Array-/Feld-/Schemagrenzen, Importvorschau ohne Aktivierung,
    Streaming/Pagination, reproduzierbare Negativ-/Fuzztests sowie ESP32-
-   Ressourcen-, Laufzeit- und Jittermessung. Dieser Spike wird mit der
-   `WebServer`-Baseline und dem spaeteren Schnitt von #19/#27/#28 koordiniert,
-   implementiert aber keines dieser breiten Issues. Eine Alternative wird nur
-   bei einem konkret belegten R1-Problem untersucht.
+   Ressourcen-, Laufzeit- und Jittermessung. Dieser Spike wird mit dem
+   `WebServer`-Baselineprototyp und dem spaeteren Schnitt von #19/#27/#28
+   koordiniert, implementiert aber keines dieser breiten Issues. Eine
+   Alternative wird nur bei einem konkret belegten R1-Problem untersucht.
 8. Fuer den spaeteren #19-B-Schnitt reale Speicher- und Ressourcenmessungen
    planen: NVS-/Partitionskapazitaet, Fuellen bis zur Bereinigung,
    wiederholte Journal-/Historienzyklen sowie Cut-Points vor, waehrend und nach
@@ -264,12 +290,14 @@ LVGL ist keine Treiberoption dieser Phase. Der UI-Frameworkentscheid folgt erst
 nach Treiberauswahl, schmalem Adaptervertrag und einem repraesentativen
 Release-1-Screen.
 
-Beim Webserver besteht keine offene Gleichwahl: Arduino-ESP32 `WebServer` ist
-die Release-1-Baseline. Nur wenn sein begrenzter Prototyp eine konkrete
-R1-Anforderung nicht stabil und ressourcengerecht erfuellt, wird
-`ESPAsyncWebServer` unter identischen Bedingungen verglichen und eine
-Abweichung dem Owner vorgelegt. Ein vollstaendiger Zweifachprototyp ist keine
-Pflicht.
+Beim Webserver besteht keine offene Gleichwahl: Der kleine lokale HTTP-Dienst
+ist `REQUIREMENT_DECIDED`; Arduino-ESP32 `WebServer` ist der
+`FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und die bedingte
+Produktivrichtung. Die endgueltige Auswahl bleibt `FINAL_SELECTION_PENDING`.
+Nur wenn sein begrenzter Prototyp eine konkrete R1-Anforderung nicht stabil und
+ressourcengerecht erfuellt, wird der `CONDITIONAL_FALLBACK`
+`ESPAsyncWebServer` unter identischen Bedingungen evaluiert. Ein
+vollstaendiger Zweifachprototyp ist keine Pflicht.
 
 ## Phase 5: produktive Adapter
 
@@ -279,8 +307,9 @@ Kleine adapterbezogene PRs:
    bereits in einem zuvor ownerfreigegebenen Persistenzpaket enthalten;
 2. #30 DS18B20-/1-Wire-Adapter hinter `ITemperatureSource`;
 3. #31 Display- und Touchadapter hinter getrennten schmalen Grenzen;
-4. WLAN-, Zeit-/Zeitzonen- und kleiner konkreter Arduino-ESP32-
-   `WebServer`-Adapter;
+4. WLAN-, Zeit-/Zeitzonenadapter und nach bestandenem Server-Spike genau ein
+   kleiner konkreter lokaler HTTP-Adapter; die Zeile waehlt `WebServer` noch
+   nicht produktiv aus;
 5. nach bestandenem OD-06-Spike genau eine konkrete Onboardingintegration;
    WiFiManager bleibt technischer Portalbaustein, der Frameworkadapter bleibt
    ein nur bei dokumentiertem Ausloeser gepruefter Rueckfall;
@@ -353,13 +382,18 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   vergleichen; Auth erst nach OD-09 und atomare Resetmechanik nur ueber #57
   integrieren. Der microSD-/SD-Karten-Slot erzeugt weder R1-UI noch Adapter,
   Persistenz, Import-/Exportweg oder Spike;
-- #27 teilen in begrenzte Lese-API/Transport, mutierende Kommandos/Konflikte,
-  Webassets, responsive Webnavigation, Onboarding und Authentication; die
-  Weboberflaeche bleibt
-  sekundaer und ist keine Voraussetzung fuer den lokalen Betrieb; mit
-  Arduino-ESP32 `WebServer` beginnen, Status-/Diagrammdaten begrenzt pollen und
-  Async nur nach einem konkreten Baselineproblem identisch vergleichen;
-- den Onboardingteil von #27 erst nach dem begrenzten WiFiManager-Spike
+- #27 nach dem entschiedenen Fuenferschnitt umsetzen: zuerst #27-A kleiner
+  HTTP-Transport/interne API, dann #27-B vollstaendige begrenzte
+  Statussnapshots, nicht ueberlappendes Polling und aktueller punktbegrenzter
+  Laufchart, danach #27-D schlanke responsive lokale Webassets. Polling ist die
+  Funktionsrichtung; konkrete Intervalle, Clientzahl, Antwort-/Chartgroesse,
+  Timeouts, Heap und Jitter bleiben bis zur Messung offen. WebSocket/SSE und ein
+  Frontendframework werden nicht vorsorglich eingefuehrt. #27-C schreibende
+  Kommandos mit erwarteten Revisionen, Konflikt-/Doppelwirkungsschutz und #27-E
+  Authentisierung/Sessions/CSRF/Service folgen erst nach OD-09. Es gibt keine
+  Last-write-wins-Strategie, globale Bearbeitungssperre oder versprochene
+  oeffentliche externe Schreib-API;
+- OD-06-Onboarding getrennt von #27 nach dem begrenzten WiFiManager-Spike
   umsetzen: kein Portalstart bei gewoehnlichem temporaerem WLAN-Ausfall, neue
   Zugangsdaten bis zum Nachweis nur als Kandidat behandeln und den bisherigen
   funktionierenden Stand bei Fehler, Timeout oder Abbruch erhalten; den
@@ -456,7 +490,7 @@ Ausgabeelement.
 | #19 | nicht streichen; nach Auditfreigabe in vier Bereiche schneiden: A Journal/Retention, B begrenzte Laufhistorie/stromausfallsichere Bereinigung, C nur lesender Laufexport/secret-freies Backup, D Importvorschau/atomare Aktivierung; 5 detaillierte Laeufe/50 Zusammenfassungen sind Messziel, kein Versprechen; Issue im Audit nicht aendern |
 | #25 | nach Auditfreigabe auf zwei Bereiche reduzieren: A kleine oberflaechenneutrale Praesentationsmodelle, B gemeinsame DE/ES/EN-Sprachressourcen und semantische Formatierung mit deutschem Fallback; Touch-/Webnavigation und Layout nach #26/#27 verschieben, keine Mega-View oder Frameworktypen, Issue im Audit nicht aendern |
 | #26 | nach Auditfreigabe in fuenf Bereiche schneiden: A Navigation/Interaktion, B Standby/Programmauswahl/Start, C Programmverwaltung/Editor, D Lauf/Meldungen/Stop/Wiederanlauf, E Einstellungen/Diagnose/Service/Recovery-UI; nativ/simuliert vor Hardwareintegration testen, #25 verwenden, #31/OD-02, OD-05, OD-09 und #57 nicht vorwegnehmen; kein allgemeines UI-Framework und kein SD-Scope; Issue im Audit nicht aendern |
-| #27 | Webtransport, API, Webassets, Onboarding und Authentisierung trennen |
+| #27 | nach Auditfreigabe in fuenf Bereiche schneiden: A HTTP-Transport/interne API, B Status/begrenztes Polling/aktueller Laufchart, C schreibende Kommandos/Revisionskonflikte, D responsive lokale Webassets, E Anmeldung/Sessions/CSRF/Service nach OD-09; Onboarding bleibt OD-06, Issue im Audit nicht aendern |
 | #28 | passive Diagnose/Export vom aktiven Serviceablauf trennen |
 
 Es gibt derzeit kein offenes Implementierungsissue, das allein wegen einer
@@ -471,7 +505,7 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 | OD-03a | DS18B20-/1-Wire-Softwarestack | nach Stufe 3, vor #30 |
 | OD-03b | Bustopologie A oder begruendeter Rueckfall B | nach minimaler Hardwarebaseline, realem Pin-/GPIO-Inventar und identischem Fehlerisolationsvergleich; Produktbus separat, C ausgeschlossen |
 | OD-05 | schlanke Views oder LVGL | nach OD-02, schmalem Adaptervertrag und identischem repraesentativem Screenvergleich |
-| OD-07 | #19, #25 und #26 als Teilentscheide verbindlich geschnitten; Mindestumfang und PR-/Issue-Schnitt von #27/#28 bleiben offen | vor dem jeweiligen Issue |
+| OD-07 | #19, #25, #26 und #27 als Teilentscheide verbindlich geschnitten; Mindestumfang und PR-/Issue-Schnitt von #28 bleibt offen | vor #28 |
 | OD-09 | KDF-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag | vor produktiver Authentication in #27 |
 
 OD-01 ist entschieden: Variante B ist der verbindliche R1-Vertrag, Variante A
@@ -481,13 +515,15 @@ eigenstaendigen persistenten `MutationSequence` vollstaendig abdecken. Diese
 Pruefung darf die Sequenz nicht ohne Gleichwertigkeitsnachweis entfernen und
 oeffnet OD-01 nicht erneut.
 
-OD-04 ist entschieden: Arduino-ESP32 `WebServer` ist die Release-1-Baseline.
-`ESPAsyncWebServer` bleibt konditionaler Rueckfall; nur ein konkretes offenes
-R1-Risiko und ein klarer Vorteil im identischen begrenzten Prototyp oeffnen die
-Abweichungsentscheidung erneut.
+OD-04 ist als Evaluationsrichtung entschieden: Der lokale HTTP-Dienst ist
+`REQUIREMENT_DECIDED`; Arduino-ESP32 `WebServer` ist
+`FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und bedingte Produktivrichtung,
+aber `FINAL_SELECTION_PENDING`. `ESPAsyncWebServer` bleibt
+`CONDITIONAL_FALLBACK`/`EVALUATE_LATER`; nur ein konkretes offenes R1-Risiko
+loest den identischen Vergleich aus.
 
-OD-07 ist nicht abgeschlossen. #19 ist mit vier, #25 mit zwei und #26 mit fuenf
-geordneten Bereichen entschieden; #27 und #28 folgen separat. Der Werksreset bleibt im
+OD-07 ist nicht abgeschlossen. #19 ist mit vier, #25 mit zwei, #26 mit fuenf
+lokalen und #27 mit fuenf Webbereichen entschieden; nur #28 folgt separat. Der Werksreset bleibt im
 zentralen #57-Recoveryvertrag. Die Behandlung der Touchkalibrierung beim Reset
 bedarf eines eigenen expliziten Policyentscheids zwischen Recovery und
 Display-/Touchintegration und wird nicht in #19 versteckt.

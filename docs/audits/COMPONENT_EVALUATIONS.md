@@ -220,14 +220,14 @@ diesen Teilschnitt wird keine neue Bibliothek ausgewaehlt.
 |---|---|
 | Aufgabe | begrenzte Web-API-, Konfigurations-, Programm-, Diagnose-, nur lesende Laufexport-, secret-freie Backup- und getrennte Importformate; keine interne Journal-, Historien- oder Kontrollpunktpersistenz |
 | Release-1-Anforderung | korrekte UTF-8-/Escape-/Zahlenverarbeitung, feste Byte-/Struktur-/Feldgrenzen, stabile Projektfehler, Redaction, Importvorschau ohne Aktivierung und Streaming/Pagination grosser Ausgaben |
-| Bevorzugter Kandidat | ArduinoJson `7.4.3`, Tag-Commit `77771d3c07668e01d8f52acb03910c1110bb373f`; `SPIKE_REQUIRED`, noch nicht endgueltig ausgewaehlt |
+| Bevorzugter Kandidat | ArduinoJson `7.4.3`, Tag-Commit `77771d3c07668e01d8f52acb03910c1110bb373f`; `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` |
 | Quelle/Lizenz | [ArduinoJson](https://github.com/bblanchon/ArduinoJson), offizieller Tag `v7.4.3`, MIT; Paketmanifest, konkret verwendete Header/Features, transitive Bestandteile und Notices im Spike pruefen |
 | Kompatibilitaet | isolierter reproduzierbarer Build mit PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17`, C++17, ESP32-32E, 4 MB Flash und ohne PSRAM-Abhaengigkeit erforderlich |
 | Ressourcen | ArduinoJson 7 verwaltet Dokumente dynamisch; Modell, alter Ausgabezustand und neuer Serialisierungspfad koennen gleichzeitig leben. Flash, statisches RAM, Heapspitze/-minimum/-blockgroesse, Fragmentierung und Zeiten pro Profil real messen |
 | Adapter | kleine konkrete DTO-/Codecgrenze in ESP32-/Transportintegration; Bibliotheksfehler vollstaendig in stabile Projektfehler uebersetzen; kein `IJsonProvider`, Pluginregister oder Dummy-Zweitcodec |
 | Eigene Logik | Endpunkt- und Feldschema, Root-Typ, String-/Array-/Wertebereiche, Berechtigung, Redaction, Konflikte, Secretgrenzen, Trennung von Export/Backup und Import, vollstaendiger Importkandidat, Vorschau, Bestaetigung und atomare OD-01-Aktivierung |
 | Alternative | andere Bibliothek oder Eigenloesung nur nach belegtem Toolchain-, Ressourcen-, Stabilitaets-, Limitierungs- oder Publikationsproblem; kein eigener allgemeiner Parser/Serializer |
-| Empfehlung/Status | bevorzugter R1-Kandidat fuer #19/#27/#28 mit `SPIKE_REQUIRED`; Richtungsentscheid getroffen, endgueltige Uebernahme erst nach vollstaendigem Nachweis |
+| Empfehlung/Status | bevorzugter R1-Kandidat fuer #19/#27/#28 mit `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING`; Richtungsentscheid getroffen, endgueltige Uebernahme erst nach vollstaendigem Nachweis |
 
 ### Release-1-Nutzungs- und Architekturgrenze
 
@@ -329,8 +329,8 @@ Persistenz; daraus folgt keine allgemeine Provider- oder Pluginarchitektur.
 
 | Kandidat | Gepruefter Stand/Lizenz | Eignung | Ressourcen/Risiken | Empfehlung |
 |---|---|---|---|---|
-| Arduino-ESP32 `WebServer` | Teil der fixierten Arduino-ESP32-Toolchain `2.0.17`; Framework-/Drittkomponentenlizenzen | synchroner lokaler HTTP-Server fuer statische Ressourcen, begrenzte JSON-Endpunkte und wenige Clients; keine zusaetzliche Serverbibliothek | langsame/abgebrochene Clients, Parallelitaet, Import/Export, Antwortzeit, Regelzyklus-Jitter, Watchdog, Flash/RAM/Heap und Verbindungslebenszyklus begrenzt messen | verbindliche Release-1-Baseline und erste Produktivrichtung; nur nach bestandenem begrenztem Prototyp produktiv integrieren |
-| ESPAsyncWebServer | `3.12.0`, `a008cccf`, LGPL-3.0; asynchrone TCP- und optionale JSON-Abhaengigkeiten separat | kann bei belegtem Bedarf parallele Verbindungen oder Ereignis-/Streamingpfade anders behandeln; fuer R1 sind WebSocket und SSE nicht vorausgesetzt | zusaetzliche Abhaengigkeit, Callback-/Lebensdauerkomplexitaet, Heaplast, transitive Komponenten und LGPL-Pflichten | konditionaler Vergleichs- und Rueckfallkandidat; nur bei konkretem Scheitern der Baseline und klarem Vorteil im identischen Prototyp uebernehmen |
+| Arduino-ESP32 `WebServer` | Teil der fixierten Arduino-ESP32-Toolchain `2.0.17`; Framework-/Drittkomponentenlizenzen | synchroner lokaler HTTP-Server fuer statische Ressourcen, begrenzte JSON-Endpunkte und wenige Clients; keine zusaetzliche Serverbibliothek | langsame/abgebrochene Clients, Parallelitaet, Import/Export, Antwortzeit, Regelzyklus-Jitter, Watchdog, Flash/RAM/Heap und Verbindungslebenszyklus begrenzt messen | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, bedingte Produktivrichtung und `FINAL_SELECTION_PENDING`; nur nach bestandenem begrenztem Prototyp produktiv integrieren |
+| ESPAsyncWebServer | `3.12.0`, `a008cccf`, LGPL-3.0; asynchrone TCP- und optionale JSON-Abhaengigkeiten separat | kann bei belegtem Bedarf parallele Verbindungen oder Ereignis-/Streamingpfade anders behandeln; fuer R1 sind WebSocket und SSE nicht vorausgesetzt | zusaetzliche Abhaengigkeit, Callback-/Lebensdauerkomplexitaet, Heaplast, transitive Komponenten und LGPL-Pflichten | `CONDITIONAL_FALLBACK`, `EVALUATE_LATER`; nur bei konkretem Scheitern des ersten Kandidaten und klarem Vorteil im identischen Prototyp uebernehmen |
 
 ### Release-1-Bedarf und Nichtbedarf
 
@@ -393,20 +393,46 @@ Webserver- und WLAN-Fehler stoppen Regelung und Safety nicht; WLAN-Verlust
 beendet keinen Lauf. Webanfragen wirken nur ueber normale fachliche Kommando-
 und Safety-Pfade. Authentisierung, CSRF, Sessions, Sperrlogik, Redaction und
 Importvalidierung bleiben eigene Vertraege. Secrets gelangen nicht in Logs,
-Exporte oder Fehlermeldungen. Entscheidungsstatus: Frameworkserver-Baseline
-beschlossen; `ESPAsyncWebServer` bleibt `EVALUATE_LATER` als konditionaler
-Rueckfall.
+Exporte oder Fehlermeldungen. Entscheidungsstatus: Der lokale HTTP-Dienst ist
+`REQUIREMENT_DECIDED`. Arduino-ESP32 `WebServer` ist
+`FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
+`FINAL_SELECTION_PENDING`; `ESPAsyncWebServer` bleibt
+`CONDITIONAL_FALLBACK`/`EVALUATE_LATER`. Die Evaluationsrichtung ist
+entschieden, die Produktivauswahl nicht.
 
 Quellen: [Arduino-ESP32](https://github.com/espressif/arduino-esp32),
 [ESPAsyncWebServer](https://github.com/ESP32Async/ESPAsyncWebServer). Abgerufen
 am 2026-07-27.
 
+### Grenze zum OD-07-Teilentscheid fuer #27
+
+Der Webserververgleich bewertet ausschliesslich den technischen HTTP-
+Lebenszyklus und nimmt die fachliche Webumsetzung nicht vorweg. #27 wird
+spaeter in diese fuenf Bereiche geschnitten:
+
+1. HTTP-Transport und interne versionierte, begrenzte API-/DTO-Vertraege;
+2. nur lesende Statussnapshots, nicht ueberlappendes begrenztes Polling und ein
+   punktbegrenzter aktueller Laufchart;
+3. schreibende Fachkommandos mit erwarteter Revision, Konflikt- und
+   Doppelwirkungsschutz erst nach OD-09;
+4. schlanke lokale responsive HTML-/CSS-/JavaScript-Assets als
+   `FIRST_EVALUATION_DIRECTION`, ohne ausgewaehltes Frontendframework;
+5. Anmeldung, Sessions, CSRF und Servicefreigabe erst nach OD-09.
+
+R1 verspricht keine stabile oeffentliche externe Schreib-API. Konkrete
+Pollingintervalle, parallele Clientzahl, Antwort-/Chartgroesse, Timeouts,
+Heap- und Jitterbudgets werden erst im Prototyp festgelegt. WebSocket und SSE
+werden nicht als Reserve implementiert. HTTP-Handler und Browsercode leiten
+weder Fach-, Sensorrollen-, Safety-, Berechtigungs- noch Konfliktentscheidungen
+neu her. OD-06-Onboarding bleibt ein getrennter fachlicher Arbeitsbereich,
+selbst wenn technische Frameworkbausteine geteilt werden.
+
 ## WLAN-Onboarding
 
 | Kandidat | Stand/Lizenz | Eignung und Grenzen | Empfehlung |
 |---|---|---|---|
-| WiFiManager | `v2.0.17`, `d82d0a1b`, MIT | stellt den standardisierten Portalteil fuer SoftAP, DNS-Umleitung, Captive Portal, Netzwerkscan, Formulare, Timeouts und Clientverhalten bereit; projektspezifische Start-, Secret-, Commit-, Recovery- und Safetysemantik bleibt ausserhalb | bevorzugter Release-1-Kandidat, `SPIKE_REQUIRED`; zuerst allein begrenzt pruefen, noch nicht als Produktionsabhaengigkeit ausgewaehlt |
-| Arduino-ESP32 `WiFi` + `DNSServer` + SoftAP + `WebServer` | Framework `2.0.17` | keine zusaetzliche Portalbibliothek, aber mehr eigener technischer Portal-, DNS- und Clientlebenszykluscode; verwendet die bereits beschlossene Webserver-Baseline | konditionaler Rueckfall; nur bei einem dokumentierten Problem des WiFiManager-Spikes mit identischem Ablauf als Gegenprototyp nachziehen |
+| WiFiManager | `v2.0.17`, `d82d0a1b`, MIT | stellt den standardisierten Portalteil fuer SoftAP, DNS-Umleitung, Captive Portal, Netzwerkscan, Formulare, Timeouts und Clientverhalten bereit; projektspezifische Start-, Secret-, Commit-, Recovery- und Safetysemantik bleibt ausserhalb | bevorzugter `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING`; zuerst allein begrenzt pruefen |
+| Arduino-ESP32 `WiFi` + `DNSServer` + SoftAP + `WebServer` | Framework `2.0.17` | keine zusaetzliche Portalbibliothek, aber mehr eigener technischer Portal-, DNS- und Clientlebenszykluscode; kann den zuerst evaluierten Frameworkserver technisch mitverwenden | konditionaler Rueckfall; nur bei einem dokumentierten Problem des WiFiManager-Spikes mit identischem Ablauf als Gegenprototyp nachziehen |
 
 ### Release-1-Bedarf und Grenze
 
@@ -507,7 +533,8 @@ wird nicht erstellt.
 
 Quelle: [WiFiManager](https://github.com/tzapu/WiFiManager). Abgerufen am
 2026-07-27. Entscheidungsstatus: OD-06-Richtung entschieden, endgueltige
-Uebernahme `SPIKE_REQUIRED` fuer den Onboardingteil von #27.
+Uebernahme `SPIKE_REQUIRED` und `FINAL_SELECTION_PENDING` fuer den von #27
+getrennten Onboarding-Arbeitsbereich.
 
 ## QR-Code
 
