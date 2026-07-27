@@ -325,6 +325,37 @@ Ein spaeterer Codecwechsel bleibt durch die konkrete DTO-/Codecgrenze
 moeglich. Er ersetzt diese Integration und nicht Fachmodelle oder interne
 Persistenz; daraus folgt keine allgemeine Provider- oder Pluginarchitektur.
 
+## Diagnose-, Ressourcen- und Servicegrenze
+
+Der OD-07-Teilentscheid zu #28 waehlt keine technische Komponente aus. Die
+passiven Diagnosemodelle, Ressourcenwarnungen, der gefuehrte Serviceablauf und
+der typisierte Diagnose-/Servicebericht sind projektspezifische Fachlogik.
+Plattformmetriken wie freier Heap, niedrigster freier Heap, groesster freier
+Block, Firmware-/Buildgroessen, Flash-/Partitions- und Resetstatus gelangen nur
+ueber schmale konkrete Messpunkte in diese Modelle.
+
+Es wird weder eine Diagnose-, Logging-, Telemetrie-, Metrics-, Chart- noch
+Exportplattform fuer R1 ausgewaehlt. Insbesondere entstehen kein generisches
+Prometheus-/OpenTelemetry-Modell und keine unbeschraenkte Zeitreihendatenbank.
+Zaehler, Ereignisse und Puffer bleiben fest begrenzt. Schwellen, Heap-/Flash-
+reserven, Partitions- sowie Journal-/Historienbudgets sind
+`MEASUREMENT_REQUIRED`; sie werden erst mit der realen ESP32-Firmware und den
+tatsaechlichen Bibliothekskandidaten bestimmt und nicht als Produktgarantie
+vorweggenommen.
+
+Die Aufteilung verhindert parallele technische Pfade: Der aktuelle pollende
+Laufchart bleibt #27-B, persistente verdichtete Historie #19-B und die
+gemeinsame JSON-/CSV-/Download-/Streaminginfrastruktur #19-C. #28-D liefert
+dafuer nur einen versionierten, bereits redigierten und nur lesenden
+Fachbericht. Ein Codec bleibt hinter dem JSON-/Transport-Spike-Gate und erhaelt
+keine Bibliothekstypen im Fachkern. Serviceablaeufe werden zuerst mit Mocks
+geprueft; reale Aktortests bleiben hinter #24 und den Hardwaregates,
+Authentisierung hinter OD-09.
+
+Status: Diagnoseanforderung `REQUIREMENT_DECIDED`, technische Auswahl soweit
+noetig `FINAL_SELECTION_PENDING`, Ressourcen `MEASUREMENT_REQUIRED`, reale
+Hardwarefreigabe `HARDWARE_GATE_PENDING`.
+
 ## Webserver
 
 | Kandidat | Gepruefter Stand/Lizenz | Eignung | Ressourcen/Risiken | Empfehlung |

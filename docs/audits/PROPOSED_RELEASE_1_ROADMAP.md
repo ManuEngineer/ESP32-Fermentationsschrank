@@ -59,8 +59,10 @@ Vor weiterer Architekturverbreiterung:
    schneiden; #26 in lokale Navigation, Start, Programmeditor,
    Lauf-/Meldungsbedienung und Service-/Recovery-UI schneiden; #27 in
    HTTP-Transport/API, Status/Polling/Laufchart, schreibende Kommandos,
-   responsive Webassets und Authentisierung nach OD-09 schneiden; #28 bleibt
-   als letzter OD-07-Teil separat zu entscheiden.
+   responsive Webassets und Authentisierung nach OD-09 schneiden; #28 in
+   passive Diagnose/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose,
+   gefuehrten Serviceablauf und nur lesenden Diagnose-/Servicebericht
+   schneiden. OD-07 ist damit vollstaendig entschieden.
 
 Keine Empfehlung aus dem Audit wird im Audit-PR selbst implementiert.
 
@@ -109,6 +111,17 @@ Webserver-/JSON-Spikes und spaetere Ownerauswahl
 OD-09
   -> #27-C schreibende Kommandos und Revisionskonflikte
   -> #27-E Anmeldung, Sessions, CSRF und Servicefreigabe
+
+Fach-, Sensor- und Safetymodelle
+  -> #28-A passive Diagnosemodelle und Boot-Selbsttest
+  -> #28-B Ressourcen- und Gesundheitsdiagnose mit realen Messpunkten
+
+OD-09 + #28-A/#28-B
+  -> #28-C gefuehrter Serviceablauf zuerst vollstaendig mit Mocks
+  -> #24- und Hardwaregates vor realen Serviceadaptern
+
+#19-C Exportinfrastruktur + #28-A/#28-B
+  -> #28-D nur lesender Diagnose- und Servicebericht
 ```
 
 #26-A bis #26-E bezeichnen den spaeter ownerfreizugebenden Schnitt, keine im
@@ -169,6 +182,18 @@ Vorgeschlagene kleine PRs:
 - #27-C/#27-E: erst nach OD-09 erwartete Revisionen, Konflikt- und
   Doppelwirkungsschutz sowie Anmeldung, Sessions, CSRF und Servicefreigabe
   umsetzen. R1 verspricht keine oeffentliche externe Schreib-API.
+- #28-A: passive typisierte Diagnoseprojektionen und Boot-Selbsttest ohne
+  Aktoransteuerung; Roh-/Korrektur-/Filterwerte, Qualitaet, Regelsensor,
+  Regler-/Aktorstatus, Fehler, Verriegelungen und Systemstatus getrennt testen;
+- #28-B: begrenzte Plattform-, Build-, Persistenz-, Heap-, Flash-, Reset- und
+  Gesundheitsmesspunkte anbinden; Schwellen und Reserven bleiben bis zur realen
+  Messung `MEASUREMENT_REQUIRED`;
+- #28-C: Auswahl, Voraussetzungen, Sperrgruende, Bestaetigung, Fortschritt,
+  sicheren Abbruch und Ergebnis zuerst mit Mocks testen; Auth nach OD-09 und
+  reale Aktorpruefungen erst hinter #24 und Hardwaregates;
+- #28-D: versionierten, redigierten, nur lesenden Diagnose-/Servicebericht auf
+  #28-A/#28-B aufbauen und fuer Serialisierung/Download die #19-C-Infrastruktur
+  wiederverwenden; kein zweiter Exportpfad und kein Berichtsimport.
 
 Fuer den neu geschnittenen Variante-B-Kern gilt die feste Transaktionsfolge:
 
@@ -403,8 +428,12 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
 - Connectivity- und Authentication-Domaenen erst mit den ersten realen WLAN-,
   Passwort- oder PIN-Nachweisen spezifizieren; keine vorbereiteten leeren
   Manifeste, Roots oder `CredentialEpoch` aus #57 uebernehmen;
-- #28 teilen in passive Diagnose, Exporte/Diagrammdaten und aktiven
-  Serviceablauf; grosse Daten begrenzen, paginieren oder streamen;
+- #28 in der entschiedenen Reihenfolge umsetzen: A passive Diagnosemodelle und
+  Boot-Selbsttest, B Ressourcen-/Gesundheitsdiagnose, C gefuehrter
+  Serviceablauf zuerst mit Mocks, D nur lesender Diagnose-/Servicebericht.
+  Der aktuelle Laufchart bleibt #27-B, persistente Historie #19-B und die
+  generische Export-/Download-/Streaminginfrastruktur #19-C. Reale
+  Serviceaktoren bleiben hinter #24 und Hardwaregates; Auth bleibt OD-09;
 - #19 in der entschiedenen Reihenfolge umsetzen: typisiertes Journal/Retention,
   begrenzte verdichtete Laufhistorie/stromausfallsichere Bereinigung, nur
   lesender Laufexport/secret-freies Backup und erst danach Importvorschau/
@@ -491,7 +520,7 @@ Ausgabeelement.
 | #25 | nach Auditfreigabe auf zwei Bereiche reduzieren: A kleine oberflaechenneutrale Praesentationsmodelle, B gemeinsame DE/ES/EN-Sprachressourcen und semantische Formatierung mit deutschem Fallback; Touch-/Webnavigation und Layout nach #26/#27 verschieben, keine Mega-View oder Frameworktypen, Issue im Audit nicht aendern |
 | #26 | nach Auditfreigabe in fuenf Bereiche schneiden: A Navigation/Interaktion, B Standby/Programmauswahl/Start, C Programmverwaltung/Editor, D Lauf/Meldungen/Stop/Wiederanlauf, E Einstellungen/Diagnose/Service/Recovery-UI; nativ/simuliert vor Hardwareintegration testen, #25 verwenden, #31/OD-02, OD-05, OD-09 und #57 nicht vorwegnehmen; kein allgemeines UI-Framework und kein SD-Scope; Issue im Audit nicht aendern |
 | #27 | nach Auditfreigabe in fuenf Bereiche schneiden: A HTTP-Transport/interne API, B Status/begrenztes Polling/aktueller Laufchart, C schreibende Kommandos/Revisionskonflikte, D responsive lokale Webassets, E Anmeldung/Sessions/CSRF/Service nach OD-09; Onboarding bleibt OD-06, Issue im Audit nicht aendern |
-| #28 | passive Diagnose/Export vom aktiven Serviceablauf trennen |
+| #28 | nach Auditfreigabe in vier Bereiche schneiden: A passive Diagnosemodelle/Boot-Selbsttest, B Ressourcen-/Gesundheitsdiagnose, C gefuehrter Serviceablauf, D nur lesender Diagnose-/Servicebericht; aktuellen Laufchart nach #27-B, Historie nach #19-B und Exportinfrastruktur nach #19-C abgrenzen; Ressourcen `MEASUREMENT_REQUIRED`, reale Aktoren hinter #24/Hardwaregates und Auth hinter OD-09; Issue im Audit nicht aendern |
 
 Es gibt derzeit kein offenes Implementierungsissue, das allein wegen einer
 Bibliotheksalternative sofort geschlossen werden sollte. Treiberbibliotheken
@@ -505,7 +534,6 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 | OD-03a | DS18B20-/1-Wire-Softwarestack | nach Stufe 3, vor #30 |
 | OD-03b | Bustopologie A oder begruendeter Rueckfall B | nach minimaler Hardwarebaseline, realem Pin-/GPIO-Inventar und identischem Fehlerisolationsvergleich; Produktbus separat, C ausgeschlossen |
 | OD-05 | schlanke Views oder LVGL | nach OD-02, schmalem Adaptervertrag und identischem repraesentativem Screenvergleich |
-| OD-07 | #19, #25, #26 und #27 als Teilentscheide verbindlich geschnitten; Mindestumfang und PR-/Issue-Schnitt von #28 bleibt offen | vor #28 |
 | OD-09 | KDF-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag | vor produktiver Authentication in #27 |
 
 OD-01 ist entschieden: Variante B ist der verbindliche R1-Vertrag, Variante A
@@ -522,8 +550,9 @@ aber `FINAL_SELECTION_PENDING`. `ESPAsyncWebServer` bleibt
 `CONDITIONAL_FALLBACK`/`EVALUATE_LATER`; nur ein konkretes offenes R1-Risiko
 loest den identischen Vergleich aus.
 
-OD-07 ist nicht abgeschlossen. #19 ist mit vier, #25 mit zwei, #26 mit fuenf
-lokalen und #27 mit fuenf Webbereichen entschieden; nur #28 folgt separat. Der Werksreset bleibt im
+OD-07 ist vollstaendig entschieden. #19 ist mit vier, #25 mit zwei, #26 mit
+fuenf lokalen, #27 mit fuenf Web- und #28 mit vier Diagnose-/Servicebereichen
+geschnitten. Die Live-Issues bleiben im Audit unveraendert. Der Werksreset bleibt im
 zentralen #57-Recoveryvertrag. Die Behandlung der Touchkalibrierung beim Reset
 bedarf eines eigenen expliziten Policyentscheids zwischen Recovery und
 Display-/Touchintegration und wird nicht in #19 versteckt.

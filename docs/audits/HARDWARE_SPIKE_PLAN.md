@@ -980,6 +980,33 @@ Aktorpfade und der Summer bleiben getrennt oder nachweislich inaktiv. Ergebnisse
 werden als gemessene Budgetgrundlage dokumentiert; aus Hostsimulationen wird
 keine reale Flashlebensdauer oder Stromausfallgarantie abgeleitet.
 
+## Spike F: Diagnose- und Ressourcennachweis fuer #28
+
+Dieser Nachweis waehlt keine Diagnose-, Logging-, Telemetrie-, Metrics-, Chart-
+oder Exportbibliothek aus. Die passiven #28-A-Modelle werden zuerst nativ
+geprueft. Nach der realen Ressourcenmessung und dem OD-09-Vertrag wird der
+gefuehrte #28-C-Serviceablauf nativ mit Mocks geprueft. Der reale ESP32 dient
+fuer #28-B zur Erfassung der Plattform- und Gesundheitsmetriken sowie spaeter
+zur Abnahme bereits gegateter Adapter.
+
+Nach der minimalen Hardwarebaseline werden mindestens freier und niedrigster
+freier Heap, groesster freier Heapblock soweit verfuegbar, statisches RAM,
+Firmwaregroesse, Flash-/Partitionsstatus, Persistenz-/Journal-/Historien-
+auslastung, Reset-/Watchdog-/Stabilitaetsereignisse sowie die Grenzen technischer
+Zaehler und Diagnosepuffer unter identischen Lastfaellen erfasst. Rohmessungen
+und abgeleitete Warnstatus werden getrennt protokolliert. Schwellen, Reserven,
+Partitionen und Budgets bleiben bis zum Nachweis `MEASUREMENT_REQUIRED` und
+werden nicht als Garantie aus Hostwerten abgeleitet.
+
+Der simulierte Serviceablauf prueft Voraussetzungen, getrennte Auth-/Safety-
+Gates, Bestaetigung, Fortschritt, Abbruch, Fehler und sichere Rueckkehr ohne
+reale Aktoren. Reale Aktortests folgen erst nach #24 und den jeweiligen
+Hardware-/Inbetriebnahmegates; bis dahin bleiben Peltier, BTS7960, beide
+Luefter, MOSFET-Verbraucher und Summer getrennt oder nachweislich inaktiv. Der
+microSD-/SD-Karten-Slot wird nicht evaluiert. #28-D verwendet spaeter den
+bereits redigierten Fachbericht mit der #19-C-Exportinfrastruktur; dieser Spike
+implementiert weder Exportframework noch Berichtsimport.
+
 ## Reihenfolge und Entscheidungsprotokoll
 
 1. Audit- und Planungsbereinigung abschliessen.
@@ -1012,9 +1039,13 @@ keine reale Flashlebensdauer oder Stromausfallgarantie abgeleitet.
 11. Fuer den spaeteren #19-B-Schnitt die reale Speicher-, Retention- und
     Bereinigungsmatrix einschliesslich Cut-Points ausfuehren und das
     5-/50-Ziel erst anhand dieser Messung dimensionieren.
-12. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
+12. #28-A nativ pruefen und nach der Baseline die realen
+    #28-B-Ressourcenmesspunkte erfassen; danach OD-09 festlegen und #28-C mit
+    Mocks pruefen. Reale Serviceadapter bleiben hinter #24, OD-09 und den
+    jeweiligen Hardwaregates.
+13. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
     dokumentierten Rueckfallkandidaten.
-13. Erst danach implementieren #30 und #31 die schmalen Adapter. Die
+14. Erst danach implementieren #30 und #31 die schmalen Adapter. Die
    hardwareunabhaengige #26-Logik wird separat nativ/simuliert entwickelt; der
    UI-Frameworkvergleich mit LVGL folgt erst auf den ausgewaehlten
    Display-/Touchtreiber, den schmalen Adaptervertrag und einen repraesentativen

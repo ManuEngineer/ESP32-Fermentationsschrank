@@ -166,8 +166,12 @@ R1-relevant, wird aber nach dem verbindlichen Teilentscheid in fuenf kleine
 Bedienbereiche geschnitten. #27 wird nach dem verbindlichen OD-07-Teilentscheid
 in HTTP-Transport/API, Status/Polling/Laufchart, schreibende Kommandos,
 responsive Webassets und Authentisierung nach OD-09 getrennt. #28 vereint
-weiterhin mehrere Diagnose- und Serviceverantwortungen und bleibt als letzter
-Teil von OD-07 separat zu entscheiden.
+mehrere Diagnose- und Serviceverantwortungen und wird nach dem verbindlichen
+OD-07-Teilentscheid in vier kleine Bereiche geschnitten: passive
+Diagnosemodelle/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose, gefuehrter
+Serviceablauf sowie ein nur lesender Diagnose-/Servicebericht. Damit ist OD-07
+fachlich vollstaendig entschieden; die Live-Issues bleiben in diesem Audit
+unveraendert.
 
 ### 5. Hardwarequellen sind keine Hardwarebestaetigung
 
@@ -421,10 +425,9 @@ konkrete DTO-/Codecgrenze; er rechtfertigt keine allgemeine Providerarchitektur.
 
 ### 10. OD-07-Teilentscheid: Issue #19 in vier Bereiche schneiden
 
-Der Teilentscheid fuer #19 ist verbindlich, schliesst OD-07 aber nicht ab. Die
-Teilentscheide fuer #25, #26 und #27 sind inzwischen ebenfalls verbindlich;
-Mindestumfang und PR-/Issue-Schnitt von #28 werden separat mit dem Owner
-entschieden. Der Audit aendert #19 nicht und erstellt
+Der Teilentscheid fuer #19 ist verbindlich. Die Teilentscheide fuer #25 bis
+#28 sind inzwischen ebenfalls verbindlich; damit ist OD-07 insgesamt
+abgeschlossen. Der Audit aendert #19 nicht und erstellt
 keine Folgeissues. Nach Auditabschluss soll ein eigener ownerfreigegebener
 Planungsschritt den folgenden Schnitt festlegen:
 
@@ -481,9 +484,9 @@ entscheidet diese Frage nicht.
 
 ### 11. OD-07-Teilentscheid: Issue #25 auf gemeinsame UI-Basis begrenzen
 
-Der Teilentscheid fuer #25 ist verbindlich, schliesst OD-07 aber nicht ab.
-#19, #25, #26 und #27 sind damit innerhalb von OD-07 entschieden;
-Mindestumfang und PR-/Issue-Schnitt von #28 folgen separat. Der Audit aendert #25
+Der Teilentscheid fuer #25 ist verbindlich. #19 sowie #25 bis #28 sind
+innerhalb von OD-07 entschieden; damit ist OD-07 insgesamt abgeschlossen. Der
+Audit aendert #25
 nicht und erstellt keine Folgeissues. Nach Auditabschluss soll ein eigener
 ownerfreigegebener Planungsschritt #25 auf zwei Bereiche reduzieren:
 
@@ -536,9 +539,9 @@ Namen und das Fernhalten von Bibliotheks-/Treibertexten geprueft.
 ### 12. OD-07-Teilentscheid: Issue #26 in fuenf lokale UI-Bereiche schneiden
 
 Issue #26 bleibt vollstaendig R1-relevant, weil das Touchdisplay die einzige
-lokale Bedien- und Anzeigeoberflaeche ist. Der verbindliche Teilentscheid
-schliesst OD-07 noch nicht ab: #19, #25, #26 und #27 sind entschieden; #28
-folgt separat. Der Audit aendert #26 nicht und erstellt keine Folgeissues. Ein
+lokale Bedien- und Anzeigeoberflaeche ist. #19 sowie #25 bis #28 sind
+verbindlich geschnitten; damit ist OD-07 insgesamt abgeschlossen. Der Audit
+aendert #26 nicht und erstellt keine Folgeissues. Ein
 spaeterer ownerfreigegebener Planungsschritt schneidet den Umfang in diese
 Reihenfolge:
 
@@ -616,7 +619,7 @@ SD-Karte; es entstehen weder Port, Adapter, Provider, Platzhalter noch Spike.
 Issue #27 bleibt als sekundaere lokale Weboberflaeche R1-relevant. Der
 verbindliche Teilentscheid schneidet den spaeteren Umfang in fuenf kleine,
 getrennt pruefbare Bereiche. Der Audit aendert #27 nicht und erstellt keine
-Folgeissues. OD-07 bleibt danach nur fuer #28 offen; OD-09 bleibt Gate vor
+Folgeissues. OD-09 bleibt Gate vor
 produktiven schreibenden Endpunkten und realer Authentisierung.
 
 1. **HTTP-Transport und interne API-Vertraege:** kleiner konkreter
@@ -646,8 +649,8 @@ produktiven schreibenden Endpunkten und realer Authentisierung.
    umgesetzt. Der aktuelle Chart enthaelt mindestens Produkttemperatur, soweit
    vorhanden, Luft- und Solltemperatur, Phasenwechsel, relevante Warnungs-/
    Unterbrechungsmarkierungen, sichtbare Messluecken und Sensorwechsel. Seine
-   Punktzahl ist fest begrenzt beziehungsweise verdichtet; historische
-   Vollcharts werden mit #19/#28 abgegrenzt.
+   Punktzahl ist fest begrenzt beziehungsweise verdichtet; persistente
+   Historie bleibt #19-B und gehoert nicht zu #28.
 3. **Schreibende Kommandos und Revisionskonflikte:** Start, Stop, Quittieren,
    zulaessige Laufaktionen, Programm- und Einstellungsveraenderungen verwenden
    dieselben fachlichen Kommandos wie das Display. HTTP-Handler veraendern
@@ -698,6 +701,89 @@ die normalen fachlichen Kommando- und Safety-Pfade beeinflussen. Secrets
 gelangen weder in Logs, Assets, Exporte noch Fehlerantworten. Dieser
 Teilentscheid waehlt keine TLS-, Server-, JSON-, Onboarding- oder
 Frontendbibliothek endgueltig aus.
+
+### 14. OD-07-Teilentscheid: Issue #28 in vier Diagnosebereiche schneiden
+
+Issue #28 bleibt fuer Release 1 relevant, ist aber als ein einzelner
+Implementierungs-PR zu breit. Der verbindliche Teilentscheid schneidet den
+spaeteren Umfang in vier kleine, getrennt pruefbare Bereiche. Der Audit aendert
+#28 nicht und erstellt keine Folgeissues. Mit diesem Entscheid ist OD-07
+fachlich vollstaendig entschieden; OD-09 bleibt vor produktiver
+Authentisierung, Sessions, CSRF, Sperrlogik und Secret-at-rest offen.
+
+1. **Passive Diagnosemodelle und Boot-Selbsttest:** nur lesende, typisierte
+   Projektionen fuer rohe, korrigierte und gefilterte Sensorwerte, Qualitaet und
+   Alter, verwendeten Regelsensor/Ersatzbetrieb, Reglerstatus, geplanten und
+   soweit verfuegbar bestaetigten Aktorzustand, Warnungen, Fehler,
+   Verriegelungen, Konfiguration, Speicher, Netzwerk, Zeit, Firmware/Build und
+   Resetursache. Fehlende Werte werden nie als `0` erfunden, Treiberfehler und
+   fachliche Sensorqualitaet bleiben getrennt, und UI oder Diagnose lesen keine
+   GPIOs oder Treiber direkt. Der passive Boot-Selbsttest schaltet keine
+   produktiven Aktoren ein, umgeht keine Hardwarefreigabe und veraendert keinen
+   Laufzustand.
+2. **Ressourcen- und Gesundheitsdiagnose:** freier und niedrigster freier Heap,
+   groesster freier Heapblock soweit sinnvoll verfuegbar, statisches RAM und
+   Buildinformationen, Firmwaregroesse, Flash-/Partitionsstatus,
+   Persistenz-/Journal-/Historienauslastung, Reset-/Watchdog-/Stabilitaets-
+   ereignisse sowie begrenzte Fehlerzaehler und Diagnosepuffer. Rohmessung und
+   daraus abgeleiteter Warnstatus bleiben unterscheidbar; die zentrale Fehler-
+   und Safetylogik entscheidet ueber Auswirkungen. Schwellen, Reserven,
+   Partitionen und Budgets bleiben bis zur realen Messung
+   `MEASUREMENT_REQUIRED` und sind keine Produktgarantie.
+3. **Gefuehrter Serviceablauf:** Auswahl, Voraussetzungen und Sperrgrund,
+   bewusste Bestaetigung, kontrollierter Start, Fortschritt, sicherer Abbruch,
+   Ergebnis und Rueckkehr in einen sicheren Zustand werden zuerst vollstaendig
+   mit Mocksensoren/-aktoren simuliert. Authentisierung und Safety bleiben
+   getrennte Gates; eine Service-PIN hebt keine Safetypruefung auf. Veraendernde
+   Tests sind bei aktivem oder wiederherstellbarem Lauf gesperrt, reale
+   Hardwarezugriffe folgen den normalen Fach-/Safety-/Aktorpfaden und reale
+   Aktortests bleiben hinter #24 und den jeweiligen Hardwaregates. KDF,
+   PIN-Hashing, Sessions, Cookies, CSRF, Lockout, Secretpersistenz, GPIO- und
+   Treiberadapter sowie neue Safetylogik gehoeren nicht in diesen Bereich.
+4. **Nur lesender Diagnose- und Servicebericht:** ein versionierter, typisierter
+   Fachbericht fuer Firmware/Build, Resetursache, redigierte Konfiguration,
+   Sensor-/Qualitaets-/Regelsensorstatus, Fehler/Verriegelungen, Ressourcen,
+   Speicher, Netzwerk/Zeit, Serviceergebnis und begrenzte relevante Ereignisse.
+   Redaction erfolgt vor der Serialisierung. Passwoerter, PINs, Verifier,
+   Salts/Pepper, Session-/CSRF-Tokens, Credential-/Authentication-Roots,
+   ungefilterte Eingaben, interne Rohrecords, Speicheradressen und geheime
+   Payloads sind ausgeschlossen. #28 definiert den Bericht; die generische
+   JSON-/CSV-/Download-/Streaminginfrastruktur stammt aus #19-C. Ein
+   abgebrochener Export veraendert keinen Zustand, und Diagnoseberichte werden
+   nicht importiert.
+
+Die Verantwortungsgrenzen sind verbindlich: Der aktuelle pollende Laufchart
+gehoert zu #27-B, persistente Laufhistorie und verdichtete historische
+Messreihen zu #19-B, und die gemeinsame nur lesende Exportinfrastruktur zu
+#19-C. Konkrete Touch- und Webansichten bleiben #26 beziehungsweise #27;
+Authentisierung bleibt OD-09/#27-E. Reale Aktorfreigabe, Safetyverriegelungen,
+GPIO, Treiber und thermische Grenzwerte bleiben #24 und den Hardwareissues
+zugeordnet. UART bleibt Entwicklungs-, Recovery- und qualifizierter technischer
+Serviceweg, nicht normales Endbenutzerfeature.
+
+Der fachliche Diagnoseumfang ist `REQUIREMENT_DECIDED`. Eine technische
+Implementierung bleibt dort `FINAL_SELECTION_PENDING`, wo Evaluation noetig
+ist; Ressourcenbudgets sind `MEASUREMENT_REQUIRED` und reale Hardwarefreigaben
+`HARDWARE_GATE_PENDING`. Es wird weder eine Diagnose-, Chart-, Logging-,
+Telemetrie-, Metrics- noch Exportbibliothek ausgewaehlt und keine allgemeine
+Plattform dafuer geplant. Ein externer Codec bleibt hinter den bereits
+dokumentierten JSON-/Transport-Spike-Gates.
+
+Die spaetere Abnahme prueft pro Bereich mindestens:
+
+- #28-A gueltige, fehlende, veraltete und ungueltige Sensorwerte,
+  unterscheidbare Roh-/Korrektur-/Filterwerte, Regelsensorwechsel,
+  Ersatzbetrieb, Warnung/Fehler/Verriegelung, lesende Diagnose im aktiven Lauf
+  sowie Bootfaelle mit und ohne verfuegbare Konfiguration, Sensoradapter,
+  Speicher, Zeit und Netzwerk ohne Aktoransteuerung;
+- #28-B normale/fehlende Metriken, Warnstatus, begrenzte Zaehler,
+  Ueberlaufschutz sowie Reset/Wiederaufbau ohne ungepruefte Reservegarantie;
+- #28-C getrennte Auth-/Safetyablehnung, aktiven und wiederherstellbaren Lauf,
+  Bestaetigung, Abbruch, Hardwarefehler, Neustart und sichere Rueckkehr,
+  zunaechst vollstaendig mit Mocks;
+- #28-D vollstaendige und optionale Berichtsfelder, Redaction, Ausschluss von
+  Secrets, stabile Schemaversion, feste Datengrenzen, abgebrochene
+  Serialisierung und nachgewiesene Zustandsfreiheit des nur lesenden Exports.
 
 ## Entschiedener Persistenzvertrag OD-01
 
@@ -900,8 +986,9 @@ Die vollstaendige Zuordnung steht in der
    Importvorschau/atomare Aktivierung zerlegen; #25 in kleine
    Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen
    schneiden; #26 in die fuenf entschiedenen lokalen UI-Bereiche zerlegen;
-   #27 in die fuenf entschiedenen Webbereiche zerlegen; #28 als letzten
-   offenen OD-07-Teil separat entscheiden.
+   #27 in die fuenf entschiedenen Webbereiche zerlegen; #28 in passive
+   Diagnose/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose, gefuehrten
+   Serviceablauf und nur lesenden Diagnose-/Servicebericht schneiden.
 9. ArduinoJson erst nach isoliertem Build-, Grenzwert-, Fuzz- und
    Ressourcennachweis an der kleinen DTO-/Codecgrenze uebernehmen; die
    1-/4-/16-KiB-Profile und Tiefe 6 mit realen maximalen DTOs pruefen.
@@ -918,7 +1005,7 @@ Die vollstaendige Zuordnung steht in der
 | #25 | gemeinsame Praesentationssemantik, Sprachressourcen, Navigation und Layout sind vermischt | nach Auditfreigabe in kleine oberflaechenneutrale Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen schneiden; Navigation/Layout nach #26/#27 verschieben, Issue im Audit nicht aendern |
 | #26 | lokale Navigation, Start, Programmeditor, Lauf-/Meldungsbedienung sowie Service-/Recovery-UI sind in einem Issue verbunden | nach Auditfreigabe in die fuenf entschiedenen UI-Bereiche schneiden; hardwareunabhaengige Logik nativ/simuliert vor #31 testen, Auth-/Safety-/Resetmechanik ausserhalb belassen und keinen SD-Scope schaffen |
 | #27 | HTTP-Transport/API, Status/Polling/aktueller Laufchart, Mutationen, Webassets und Authentisierung sind fuer einen PR zu breit | nach Auditfreigabe in die fuenf entschiedenen Bereiche schneiden; Onboarding bleibt OD-06, produktive Mutationen/Auth bleiben hinter OD-09, Issue im Audit nicht aendern |
-| #28 | Diagnose- und Servicepaket ist zu breit fuer kleine PRs | nach stabilen DTO-/Portgrenzen und dem noch ausstehenden letzten OD-07-Teilentscheid in vertikale Scheiben teilen |
+| #28 | passive Diagnose, Ressourcenueberwachung, Serviceablauf, Bericht, Charts, Historie und Exportmechanik sind vermischt | nach Auditfreigabe in vier Bereiche schneiden: passive Diagnose/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose, gefuehrter Serviceablauf und nur lesender Diagnose-/Servicebericht; aktuellen Chart nach #27-B, Historie nach #19-B und Exportinfrastruktur nach #19-C abgrenzen |
 | LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich und ist kein Treiberkandidat | erst nach Treiberauswahl, Adaptervertrag und identischem repraesentativem Screen gegen schlanke Views messen |
 | ESPAsyncWebServer | Async-/WebSocket-/SSE-Umfang koennte groesser als der reale R1-Bedarf sein | ersten `WebServer`-Kandidaten messen; Async nur bei belegtem Vorteil |
 | Vorsorgliche Mehradapter-/Provisioningarchitektur | zwei produktive Portalwege oder allgemeine Provider-/Pluginvertraege waeren ohne zweiten realen Bedarf ueberdimensioniert | WiFiManager zuerst begrenzt pruefen; Frameworkadapter nur bei dokumentiertem Ausloeser als identischen Gegenprototyp nachziehen |
@@ -955,7 +1042,6 @@ Die vorgeschlagene Reihenfolge steht in
 | OD-03a | DS18B20-/1-Wire-Softwarestack nach Stufe 3 waehlen |
 | OD-03b | Topologie A oder begruendeten Rueckfall B nach realem Pin-/GPIO- und Fehlerisolationsvergleich waehlen; Produktbus bleibt separat, C ausgeschlossen |
 | OD-05 | schlanke eigene Screens oder LVGL erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich |
-| OD-07 | #19, #25, #26 und #27 sind als Teilentscheide verbindlich geschnitten; R1-Mindestumfang und PR-/Issue-Schnitt von #28 bleibt offen |
 | OD-09 | KDF-, Work-Factor-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag vor produktiven #27-C/#27-E-Endpunkten |
 
 OD-01 ist mit Variante B entschieden. Offen bleibt nur die technische
@@ -982,9 +1068,11 @@ zu vergeben: ArduinoJson `7.4.3` ist der bevorzugte Kandidat. Offen bleibt nur
 die endgueltige Uebernahme nach dem dokumentierten Build-, Grenzwert-, Fuzz-
 und Ressourcenspike; eine vorsorgliche Gleichwahl besteht nicht.
 
-OD-07 bleibt ausdruecklich nur fuer #28 offen: Dieser Auditstand entscheidet
-die Teilschnitte von #19, #25, #26 und #27. OD-09 bleibt ein separates Gate
-vor produktiven schreibenden Webendpunkten und realer Authentisierung.
+OD-07 ist fachlich vollstaendig entschieden: #19, #25, #26, #27 und #28 sind
+in kleine, ownerfreizugebende Umsetzungsbereiche geschnitten. Dieser Auditstand
+aendert oder erstellt keine Issues. OD-09 bleibt ein separates Gate vor
+produktiven schreibenden Webendpunkten, realer Authentisierung und den
+authentisierten Teilen des Serviceablaufs.
 
 Hardwarewerte, Pins, Pegel und thermische Parameter sind keine freien
 Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.

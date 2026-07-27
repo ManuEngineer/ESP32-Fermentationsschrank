@@ -181,6 +181,21 @@ Views und LVGL werden nicht vorsorglich parallel vorbereitet. Der vorhandene
 microSD-/SD-Karten-Slot begruendet ohne R1-Konsumenten keine Bibliothek, keinen
 Port, Adapter oder Zukunftspfad.
 
+## Diagnose und Service
+
+Passive Diagnosemodelle, Ressourcenwarnungen, gefuehrte Serviceablaeufe und
+der typisierte Diagnose-/Servicebericht bleiben projektspezifisch. Technische
+Plattformmetriken und Hardwareadapter werden nur hinter schmalen Grenzen
+adoptiert; sie entscheiden weder ueber fachliche Qualitaet noch ueber Safety,
+Authentisierung oder Servicefreigaben.
+
+Release 1 baut keine allgemeine Logging-, Telemetrie-, Metrics-, Chart- oder
+Exportplattform. Der aktuelle Laufchart, persistente Historie und
+Exportinfrastruktur bleiben in ihren eigenen Verantwortungsbereichen. Der
+Diagnosebericht verwendet die gemeinsame begrenzte Exportstrecke erst nach
+Redaction. Ressourcenbudgets werden real gemessen, und Serviceablaeufe werden
+vor realen Aktortests vollstaendig mit Mocks geprueft.
+
 ## Entscheidungsnachweis
 
 Jede spaetere Komponentenentscheidung nennt:
