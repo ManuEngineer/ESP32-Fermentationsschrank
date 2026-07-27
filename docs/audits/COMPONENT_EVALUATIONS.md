@@ -201,16 +201,112 @@ keinen Eingangsadapter. Er schaltet das Geraet rein elektrisch ein oder aus.
 
 | Merkmal | Bewertung |
 |---|---|
-| Aufgabe | begrenzte Web-API-, Export-, Backup- und Importformate; nicht interne Kontrollpunktpersistenz |
-| Release-1-Anforderung | UTF-8, feste Groessen-/Tiefenlimits, deterministische Fehler, keine Secrets, Streaming wo sinnvoll |
-| Kandidaten | ArduinoJson `7.4.3`/`7823e4a6`; kleine manuelle Ausgabe nur fuer nachweislich triviale feste Antworten |
-| Quelle/Lizenz | [ArduinoJson](https://github.com/bblanchon/ArduinoJson), MIT, aktiv gepflegt |
-| Kompatibilitaet | `architectures=*`; genaue Kompatibilitaet mit Arduino-ESP32 2.0.17 und PlatformIO isoliert bauen |
-| Ressourcen | Dokumentmodell und Serialisierungspuffer koennen gleichzeitig leben; exakte Kapazitaeten pro Endpunkt messen |
-| Adapter | projektspezifische DTO-/Codecgrenze; keine ArduinoJson-Typen im fachlichen Kern |
-| Eigene Logik | Schema, Redaction, Berechtigung, Konflikte, Importvorschau und Validierung |
-| Risiken/Hardwaretest | ungebundene dynamische Dokumente, tiefe Eingaben und grosse Strings; Fuzz-/Grenztests |
-| Empfehlung/Status | `ADOPT_LIBRARY` als bevorzugter Kandidat fuer #19/#27/#28, erst im jeweiligen kleinen PR und mit Limits |
+| Aufgabe | begrenzte Web-API-, Konfigurations-, Programm-, Diagnose-, Export-, secret-freie Backup- und Importformate; keine interne Kontrollpunktpersistenz |
+| Release-1-Anforderung | korrekte UTF-8-/Escape-/Zahlenverarbeitung, feste Byte-/Struktur-/Feldgrenzen, stabile Projektfehler, Redaction, Importvorschau ohne Aktivierung und Streaming/Pagination grosser Ausgaben |
+| Bevorzugter Kandidat | ArduinoJson `7.4.3`, Tag-Commit `77771d3c07668e01d8f52acb03910c1110bb373f`; `SPIKE_REQUIRED`, noch nicht endgueltig ausgewaehlt |
+| Quelle/Lizenz | [ArduinoJson](https://github.com/bblanchon/ArduinoJson), offizieller Tag `v7.4.3`, MIT; Paketmanifest, konkret verwendete Header/Features, transitive Bestandteile und Notices im Spike pruefen |
+| Kompatibilitaet | isolierter reproduzierbarer Build mit PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17`, C++17, ESP32-32E, 4 MB Flash und ohne PSRAM-Abhaengigkeit erforderlich |
+| Ressourcen | ArduinoJson 7 verwaltet Dokumente dynamisch; Modell, alter Ausgabezustand und neuer Serialisierungspfad koennen gleichzeitig leben. Flash, statisches RAM, Heapspitze/-minimum/-blockgroesse, Fragmentierung und Zeiten pro Profil real messen |
+| Adapter | kleine konkrete DTO-/Codecgrenze in ESP32-/Transportintegration; Bibliotheksfehler vollstaendig in stabile Projektfehler uebersetzen; kein `IJsonProvider`, Pluginregister oder Dummy-Zweitcodec |
+| Eigene Logik | Endpunkt- und Feldschema, Root-Typ, String-/Array-/Wertebereiche, Berechtigung, Redaction, Konflikte, Secretgrenzen, Importvorschau, Bestaetigung und Aktivierung |
+| Alternative | andere Bibliothek oder Eigenloesung nur nach belegtem Toolchain-, Ressourcen-, Stabilitaets-, Limitierungs- oder Publikationsproblem; kein eigener allgemeiner Parser/Serializer |
+| Empfehlung/Status | bevorzugter R1-Kandidat fuer #19/#27/#28 mit `SPIKE_REQUIRED`; Richtungsentscheid getroffen, endgueltige Uebernahme erst nach vollstaendigem Nachweis |
+
+### Release-1-Nutzungs- und Architekturgrenze
+
+JSON wird nur an externen, begrenzten Vertraegen eingesetzt. Atomare
+Kontrollpunkte, Active-/Fallback-Roots, Safety-Zustaende, Lauf-Recovery und
+interne Records verwenden weiterhin die vorhandenen typisierten Binaercodecs.
+Parsererfolg ist keine fachliche Gueltigkeit. Ein Import wird zunaechst
+technisch und danach fachlich validiert, als Vorschau dargestellt und erst
+nach dem normalen Bestaetigungs-/Konfliktpfad aktiviert.
+
+```text
+Bytequelle
+  -> Methode, Content-Type, Content-Length und harte Bytegrenze
+  -> konkreter ArduinoJson-Codec
+  -> stabiler projektspezifischer Parse-/Strukturfehler
+  -> typisiertes DTO
+  -> Schema-, Werte-, Berechtigungs-, Konflikt- und Fachvalidierung
+```
+
+`JsonDocument`, `JsonObject`, `JsonArray`, `JsonVariant` und
+bibliotheksspezifische Fehler bleiben innerhalb dieser Codec-/Integrations-
+grenze. Sie duerfen weder `fermentation_app`, Safety-, Sensor-, Regel-, Aktor-,
+Prozess-, Lauf-, Persistenz-, Root-, Secret- oder gemeinsame View-Modelle noch
+fachliche Ports oder Kommandos praegen. Fuer Antworten folgen auf typisierte
+DTOs zuerst Feldfreigabe und Redaction, dann eine moeglichst direkte
+Serialisierung in ein begrenztes `Print`-/Streamziel. Grosse Historien und
+Diagnosedaten werden begrenzt, paginiert oder gestreamt.
+
+Eine manuelle Ausgabe bleibt hoechstens fuer nachweislich triviale feste
+Antworten zulaessig. Sie darf weder einen zweiten allgemeinen JSON-Pfad noch
+abweichende Escape-, Redaction- oder Fehlerregeln begruenden.
+
+### Initiale Grenzprofile
+
+| Profil | Beispiele | harte Requestbodygrenze im Spike |
+|---|---|---:|
+| A | Start, Stop, Bestaetigung, einzelne kleine Einstellung | 1 KiB |
+| B | Programm- oder zusammengehoerige Konfigurationsaenderung | 4 KiB |
+| C | vollstaendiger R1-Import oder secret-freies Backup | 16 KiB |
+
+Die maximale Verschachtelung betraegt zunaechst 6. Jedes Schema legt Root-Typ,
+Pflichtfelder, String-, Array-, Objektfeld-, Zahlen- und Schemaversiongrenzen
+sowie die einheitliche Behandlung unbekannter Felder fest. `NaN`, `Infinity`
+und andere nicht standardkonforme oeffentliche Zahlenwerte werden abgelehnt.
+Content-Type und Methode sind verbindlich; Content-Length wird vor dem Einlesen
+geprueft, sofern vorhanden. Nicht verlaesslich begrenzbare Bodies werden
+zeitlich und mengenmaessig begrenzt verarbeitet oder abgelehnt. Die Werte sind
+initiale Spikegrenzen; eine spaetere Erhoehung braucht einen konkreten
+maximalen DTO-Nachweis und erneute Messung.
+
+### Stabiler Fehlervertrag
+
+Die Integrationsschicht uebersetzt mindestens:
+
+- Requestbody zu gross, nicht unterstuetzter Content-Type und abgebrochene
+  oder unvollstaendige Eingabe;
+- syntaktisch ungueltiges JSON, zu tiefe Verschachtelung und erreichtes
+  Speicher-/Ressourcenlimit;
+- falschen Root-Typ, fehlende Pflichtfelder, unbekannte oder unzulaessige
+  Felder und falsche Datentypen;
+- zu lange Strings, zu grosse Arrays sowie Zahlen oder Werte ausserhalb ihres
+  Bereichs;
+- unbekannte Schema-/Schemaversion, Secret oder geschuetztes Feld im falschen
+  Vertrag und unzureichende Berechtigung;
+- Konflikt mit aktiver Revision, technisch gueltigen aber fachlich ungueltigen
+  Import, noch nicht bestaetigten Import und interne Serialisierungsfehler.
+
+Oeffentliche Fehler enthalten keine Secrets, Bibliotheksdetails,
+Speicheradressen oder ungefilterten Eingaben.
+
+### Gestufter Spike- und Auswahlpfad
+
+1. **Quelle, Lizenz und Toolchain:** Tag/Commit, MIT-Lizenz, Manifest,
+   verwendete Header/Features, Abhaengigkeiten und Notices erfassen und den
+   isolierten fixierten ESP32-Build reproduzieren.
+2. **Begrenzter Codecprototyp:** kleine und maximale gueltige Requests,
+   Status-/Response-DTO, Export, vollstaendiger R1-Importkandidat,
+   Importvorschau ohne Aktivierung, Streaming und Fehleruebersetzung abbilden.
+3. **Grenz-, Negativ- und Fuzztests:** leer/abgeschnitten, Syntax/Escapes/UTF-8,
+   Root/Felder/Typen/Zahlen, lange Strings/grosse Arrays, Tiefe und Bytegrenze
+   an/ueber dem Limit, Schema, `NaN`/`Infinity`, langsame/abgebrochene Quellen,
+   Wiederholungen, Secrets und Parseerfolg mit Fachfehler reproduzierbar
+   pruefen. Jeder Fehler endet ohne Teilaktivierung.
+4. **Ressourcen und Laufzeit:** Firmware, statisches RAM, freien/niedrigsten
+   Heap, groessten freien Heapblock, gleichzeitige Speicherbelegung,
+   Fragmentierung ueber wiederholte Zyklen, Parse-/Serialisierungszeit,
+   Regelzyklus-Jitter sowie Watchdog-/Reset-/Stabilitaetsereignisse messen.
+5. **Ownerentscheid:** ArduinoJson erst nach bestandenem Nachweis endgueltig
+   uebernehmen. Eine Alternative wird nur bei konkret dokumentierter
+   Toolchaininkompatibilitaet, unvertretbaren Ressourcen, nicht begrenzbarem
+   Speicherverhalten/Fragmentierung, Instabilitaet, Safety-/Jitterwirkung,
+   unerfuellbarer R1-Anforderung oder Publikationsproblem untersucht.
+
+Ein spaeterer Codecwechsel bleibt durch die konkrete DTO-/Codecgrenze
+moeglich. Er ersetzt diese Integration und nicht Fachmodelle oder interne
+Persistenz; daraus folgt keine allgemeine Provider- oder Pluginarchitektur.
 
 ## Webserver
 

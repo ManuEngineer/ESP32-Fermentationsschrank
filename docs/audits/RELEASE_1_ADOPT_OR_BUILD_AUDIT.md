@@ -108,8 +108,10 @@ stabilen Active-/Fallback-Kerns offen, nicht als alternativer R1-Auftrag.
   eine eigene Flashdatenbank waere unnoetige Risiko- und Wartungslast.
 - Display-, Touch- und 1-Wire-Protokolltreiber sollen adoptiert, nicht neu
   geschrieben werden.
-- ArduinoJson ist der bevorzugte Kandidat fuer begrenzte JSON-Grenzen; interne
-  kritische Persistenz bleibt beim vorhandenen binaeren Wireformat.
+- ArduinoJson `7.4.3` ist der bevorzugte Kandidat fuer begrenzte externe
+  JSON-Grenzen, aber bis zum Build-, Grenzwert-, Fuzz- und Ressourcenspike
+  keine ausgewaehlte Produktionsabhaengigkeit; interne kritische Persistenz
+  bleibt beim vorhandenen typisierten binaeren Wireformat.
 - Framework-WLAN, Zeit/NTP, mDNS/DNS, GPIO und UART werden konfiguriert und
   adaptiert.
 - Beim Webserver ist der kleinere Frameworkserver die Baseline; ein
@@ -322,6 +324,84 @@ den Frameworkadapter endgueltig. Ein spaeterer Wechsel bleibt ueber die kleine
 konkrete ESP32-Integrationsgrenze an der Composition Root moeglich, ohne leere
 Zukunftsports vorzubereiten.
 
+### 9. Verbindlicher JSON-Richtungsentscheid
+
+ArduinoJson `7.4.3` (Tag-Commit
+`77771d3c07668e01d8f52acb03910c1110bb373f`, MIT) ist der bevorzugte
+technische JSON-Codec fuer Release 1. Dieser Richtungsentscheid bindet noch
+keine Produktionsabhaengigkeit: Vor der endgueltigen Uebernahme folgen ein
+reproduzierbarer isolierter Build mit der fixierten Toolchain sowie begrenzte
+Grenzwert-, Negativ-, Fuzz-, Laufzeit- und Ressourcenpruefungen. Eine andere
+Bibliothek oder ein eigener Parser wird nur untersucht, wenn dieser Nachweis
+ein konkretes Release-1-Problem belegt. Ein allgemeiner Eigenparser, ein
+`IJsonProvider`, ein Codec-Pluginregister oder ein vorsorglicher Zweitcodec
+entstehen nicht.
+
+JSON bleibt auf begrenzte externe Vertraege beschraenkt: Web-API,
+Konfigurations- und Programaenderungen, Diagnoseantworten, Exporte,
+secret-freie Backups sowie Import und Importvorschau. Atomare Kontrollpunkte,
+Active-/Fallback-Roots, Safety-Zustaende, Lauf-Recovery und interne Records
+verwenden weiterhin das typisierte binaere Persistenzmodell. Grosse Historien
+oder Diagnosedaten werden begrenzt, paginiert oder gestreamt und nicht als
+unbeschraenktes Gesamtdokument aufgebaut.
+
+Die Integrationsrichtung lautet:
+
+```text
+begrenzte HTTP-/Import-Bytequelle
+  -> Content-Type-, Content-Length- und Bytegrenzen
+  -> kleiner konkreter ArduinoJson-Codec
+  -> projektspezifische Parse-/Strukturfehler
+  -> typisiertes DTO
+  -> Schema-, Werte-, Berechtigungs-, Konflikt- und Fachvalidierung
+  -> fachliches Kommando oder validierte Importvorschau
+```
+
+Antworten und Exporte laufen nach projektspezifischer Redaction aus einem
+typisierten Response-DTO ueber den kleinen Serializer moeglichst direkt in ein
+begrenztes Streamziel. `JsonDocument`, `JsonObject`, `JsonArray`,
+`JsonVariant` und bibliotheksspezifische Fehler enden an dieser konkreten
+Codec-/ESP32-Integrationsgrenze. Sie gelangen weder in `fermentation_app`,
+Safety-, Prozess-, Persistenz- und Secretmodelle noch in gemeinsame
+View-Modelle oder fachliche Ports und Kommandos. Parsererfolg ist keine
+fachliche Gueltigkeit; ein Import wird waehrend des Parsings nie aktiviert
+oder als kanonischer Zustand veroeffentlicht.
+
+Fuer Spike und Prototyp gelten zunaechst diese harten Eingabeprofile:
+
+| Profil | Zweck | initiale Bodygrenze |
+|---|---|---:|
+| A | kleine Kommandos wie Start, Stop oder Bestaetigung | 1 KiB |
+| B | Programm- und zusammengehoerige Konfigurationsaenderungen | 4 KiB |
+| C | vollstaendiger R1-Import oder secret-freies Backup | 16 KiB |
+
+Die maximale Verschachtelung betraegt im Prototyp zunaechst 6. Root-Typ,
+Methode, Content-Type, String-, Array-, Objektfeld-, Zahlen-, Schema- und
+Antwortgrenzen werden pro Vertrag festgelegt. Unbekannte Felder werden je
+Schema einheitlich kontrolliert abgelehnt oder ausdruecklich ignoriert;
+`NaN`, `Infinity` und andere nicht standardkonforme oeffentliche Zahlenwerte
+sind unzulaessig. Bodies ohne verlaesslich begrenzbare Laenge werden
+kontrolliert und zeitlich begrenzt verarbeitet oder abgelehnt. Die spaetere
+Umsetzung muss mit realen maximalen DTOs nachweisen, ob diese initialen Grenzen
+genuegen; jede Erhoehung braucht fachliche Begruendung und neue Messung.
+
+Die Codecgrenze uebersetzt mindestens Bodygroesse, Content-Type, Syntax,
+Abbruch, Tiefe, Ressourcenlimit, Root-Typ, Pflicht-/unbekannte Felder,
+Datentypen, String-/Arraygrenzen, Wertebereich, Schema, geschuetzte Felder,
+Berechtigung, Revisionskonflikt, technische und fachliche Importfehler,
+fehlende Bestaetigung sowie Serialisierungsfehler in stabile
+projektspezifische Kategorien. Oeffentliche Fehler enthalten weder Secrets
+noch Bibliotheksdetails, Speicheradressen oder ungefilterte Eingaben.
+
+Der Nachweis erfolgt gestuft: Quelle/Lizenz/Toolchain, kleiner Codecprototyp,
+reproduzierbare Grenz-/Negativ-/Fuzztests, ESP32-Ressourcen- und
+Laufzeitmessung und erst danach die endgueltige Ownerfreigabe. Gemessen werden
+Firmwaregroesse, statisches RAM, freier und niedrigster Heap, groesster freier
+Heapblock, maximale gleichzeitige Speicherbelegung, moegliche Fragmentierung,
+Parse-/Serialisierungszeit, Regelzyklus-Jitter sowie Watchdog-, Reset- und
+Stabilitaetsauffaelligkeiten. Ein spaeterer Codecwechsel ersetzt nur die kleine
+konkrete DTO-/Codecgrenze; er rechtfertigt keine allgemeine Providerarchitektur.
+
 ## Entschiedener Persistenzvertrag OD-01
 
 ### Variante B: verbindlicher Release-1-Kern
@@ -458,6 +538,8 @@ Variante A erweitert den R1-Kern spaeter additiv:
 - WLAN-Onboarding mit zuerst begrenzt geprueftem WiFiManager als bevorzugtem
   Kandidaten und einem nur bei dokumentiertem Ausloeser nachgezogenen lokalen
   Frameworkadapter als Rueckfall; lokale Zeit/NTP und Zeitzonenanzeige;
+- begrenzte externe JSON-Vertraege mit ArduinoJson `7.4.3` als bevorzugtem,
+  noch spikepflichtigem Kandidaten; interne atomare Persistenz bleibt binaer;
 - versionierte Konfiguration, Laufpersistenz, Recovery und begrenzte Journale;
 - Variante-B-Konfigurationsaktivierung mit Active-/Fallback-Graph, fluechtiger
   validierter Vorschau, sicherem Bootstrap, `StorageEpoch` und
@@ -511,7 +593,10 @@ Die vollstaendige Zuordnung steht in der
    zugeordneten Safety-Gates freigeben.
 8. Web-/UI-/Backupissues vor Umsetzung in kleine, ressourcenmessbare Scheiben
    schneiden.
-9. Jede spaetere Drittkomponente mit Version, Lizenz, Abhaengigkeiten,
+9. ArduinoJson erst nach isoliertem Build-, Grenzwert-, Fuzz- und
+   Ressourcennachweis an der kleinen DTO-/Codecgrenze uebernehmen; die
+   1-/4-/16-KiB-Profile und Tiefe 6 mit realen maximalen DTOs pruefen.
+10. Jede spaetere Drittkomponente mit Version, Lizenz, Abhaengigkeiten,
    Base-/Head-Messung und Hardwarestatus im Komponentenregister nachfuehren.
 
 ## Erkannte Ueberdimensionierungen
@@ -525,6 +610,7 @@ Die vollstaendige Zuordnung steht in der
 | LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich und ist kein Treiberkandidat | erst nach Treiberauswahl, Adaptervertrag und identischem repraesentativem Screen gegen schlanke Views messen |
 | ESPAsyncWebServer | Async-/WebSocket-/SSE-Umfang koennte groesser als der reale R1-Bedarf sein | Frameworkserver zuerst messen; Async nur bei belegtem Vorteil |
 | Vorsorgliche Mehradapter-/Provisioningarchitektur | zwei produktive Portalwege oder allgemeine Provider-/Pluginvertraege waeren ohne zweiten realen Bedarf ueberdimensioniert | WiFiManager zuerst begrenzt pruefen; Frameworkadapter nur bei dokumentiertem Ausloeser als identischen Gegenprototyp nachziehen |
+| Eigener JSON-Parser oder allgemeine JSON-Providerarchitektur | Standardparser-, UTF-8-, Escape-, Zahlen-, Ressourcen- und Serialisierungsprobleme wuerden ohne zweiten realen Codecbedarf dupliziert | ArduinoJson `7.4.3` zuerst begrenzt pruefen; Fachschema selbst validieren, Alternative nur bei belegtem Problem |
 | PID-Bibliotheken | allgemeine PID-/Autotune-Funktionen passen nicht zum spezifizierten begrenzten PI-/Safety-Vertrag | kleinen deterministischen PI-Kern selbst implementieren |
 
 ## Auswirkungen auf #16, #56 und #57
@@ -576,6 +662,11 @@ endgueltige Kandidatenwahl bleibt ein Spike-Gate; der kleine Frameworkadapter
 wird nur bei einem dokumentierten Ausloeser als identischer Gegenprototyp
 nachgezogen.
 
+Der JSON-Richtungsentscheid ist ebenfalls getroffen, ohne ein neues OD-Kuerzel
+zu vergeben: ArduinoJson `7.4.3` ist der bevorzugte Kandidat. Offen bleibt nur
+die endgueltige Uebernahme nach dem dokumentierten Build-, Grenzwert-, Fuzz-
+und Ressourcenspike; eine vorsorgliche Gleichwahl besteht nicht.
+
 Hardwarewerte, Pins, Pegel und thermische Parameter sind keine freien
 Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.
 
@@ -589,8 +680,8 @@ Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.
   Kandidaten, Versionen, Adapter und Risiken
 - [`THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md`](THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md)
   – Herkunft, Lizenzen und Publikationspruefung
-- [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md) – gestufter Display-/Touch-
-  sowie DS18B20-Software-, Topologie- und TRS-Spike
+- [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md) – gestufte Display-/Touch-,
+  DS18B20-/Topologie-/TRS-, WLAN-Onboarding- und JSON-Codec-Spikes
 - [`PROPOSED_RELEASE_1_ROADMAP.md`](PROPOSED_RELEASE_1_ROADMAP.md) – Reihenfolge,
   Gates, kleine PRs und spaetere Funktionen
 - [`../ADOPT_OR_BUILD.md`](../ADOPT_OR_BUILD.md) – Entwurf des dauerhaften

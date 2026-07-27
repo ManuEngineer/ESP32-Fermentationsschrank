@@ -4,11 +4,12 @@ Zur Auditnavigation: [`RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`](RELEASE_1_ADOPT_OR_BU
 
 ## Zweck und Sicherheitsgrenze
 
-Die Spikes entscheiden nur ueber Hardwaretreiber und technische Adapter. Sie
-implementieren weder fachliche UI, Sensor-Safety, Regelung noch produktive
-Aktorfreigaben. Alle Peltier-, H-Bruecken-, Luefter- und MOSFET-Ausgaenge
-bleiben waehrend dieser Spikes elektrisch getrennt oder nachweislich AUS. Der
-Summer bleibt ebenfalls getrennt und wird nicht angesteuert.
+Die Spikes entscheiden nur ueber Hardwaretreiber, technische Adapter und
+begrenzte Integrationscodecs. Sie implementieren weder fachliche UI,
+Sensor-Safety, Regelung noch produktive Aktorfreigaben. Alle Peltier-,
+H-Bruecken-, Luefter- und MOSFET-Ausgaenge bleiben waehrend dieser Spikes
+elektrisch getrennt oder nachweislich AUS. Der Summer bleibt ebenfalls
+getrennt und wird nicht angesteuert.
 
 Die Spikes muessen nicht auf den Abschluss von #20–#24 warten. Nach der Audit-
 und Planungsbereinigung genuegt die folgende minimale sichere Hardwarebaseline;
@@ -16,7 +17,8 @@ die hardwareunabhaengige Safety-Kette kann parallel weiterlaufen.
 
 ## Minimale sichere Hardwarebaseline vor den Spikes
 
-Vor jedem Display-, Touch-, Sensor- oder WLAN-Onboardingspike werden
+Vor jedem Display-, Touch-, Sensor-, WLAN-Onboarding- oder realen
+JSON-Ressourcenspike werden
 dokumentiert und nachgewiesen:
 
 - reale ESP32-Boardrevision;
@@ -67,6 +69,10 @@ die vollstaendige identische Topologie- und Fehlermatrix.
 Der WLAN-Onboardingspike verwendet die Stufen 1 bis 4 fuer Quellen-/Lizenz-/
 Toolchainpruefung, begrenzten WiFiManager-Prototyp, nur konditionalen
 Frameworkgegenprototyp und endgueltigen Ownerentscheid.
+Der aktorfreie JSON-Codecspike verwendet eigene Stufen 1 bis 5 fuer
+Quelle/Lizenz/Toolchain, begrenzten Codecprototyp, Grenz-/Fuzztests, reale
+ESP32-Ressourcenmessung und den endgueltigen Ownerentscheid. Seine Hosttests
+koennen vor der Hardwarebaseline beginnen; seine ESP32-Messung nicht.
 
 ### Gate 1 – Quelle, Lizenz und Kompatibilitaetsvertrag
 
@@ -790,6 +796,99 @@ Wechsel bleibt ueber die konkrete ESP32-Integrationsschicht an der Composition
 Root moeglich; Bibliotheks-, DNS-, HTTP- und Callbacktypen gelangen nicht in
 Fach-, Safety-, Persistenz-, Secret- oder gemeinsame View-Modelle.
 
+## Spike D: begrenzter JSON-Codec
+
+### Ziel und feste Grenze
+
+ArduinoJson `7.4.3` (Tag-Commit `77771d3c07668e01d8f52acb03910c1110bb373f`)
+ist der bevorzugte technische Kandidat, aber bis zum bestandenen Spike keine
+ausgewaehlte Produktionsabhaengigkeit. Der Spike prueft ausschliesslich
+begrenzte externe API-, Konfigurations-, Programm-, Diagnose-, Export-,
+secret-freie Backup- und Importvertraege. Interne Kontrollpunkte, Roots,
+Safety-Zustaende, Lauf-Recovery und binaere Records bleiben unveraendert.
+
+ArduinoJson-Typen enden an einer kleinen konkreten DTO-/Codecgrenze. Schema-,
+Werte-, Berechtigungs-, Konflikt-, Secret-, Redaction- und Importaktivierungs-
+logik bleiben projektspezifisch. Es entstehen weder ein Eigenparser noch ein
+`IJsonProvider`, ein Pluginregister oder ein vorsorglicher Zweitcodec.
+
+### Stufe 1 – Quelle, Lizenz und Toolchain
+
+Zu dokumentieren sind offizieller Tag und Commit, MIT-Lizenz, Paketmanifest,
+tatsaechlich verwendete Header/Features, deaktivierte Funktionen, transitive
+Bestandteile und Notices. Der isolierte reproduzierbare Build verwendet
+PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17`, C++17, ESP32-32E,
+4 MB Flash und keine PSRAM-Abhaengigkeit. Ein bestandener Build ist noch keine
+Auswahl.
+
+### Stufe 2 – begrenzter Codecprototyp
+
+Der Prototyp bildet mindestens ab:
+
+1. ein kleines gueltiges Request-DTO;
+2. die maximale gueltige Struktur jedes Profils;
+3. ein Status-/Response-DTO;
+4. einen begrenzten Export;
+5. einen vollstaendigen R1-Importkandidaten;
+6. eine technische und fachliche Importvorschau ohne Aktivierung;
+7. direkte Serialisierung in ein begrenztes `Print`-/Streamziel, soweit
+   sinnvoll;
+8. die vollstaendige Uebersetzung in stabile projektspezifische Fehler;
+9. den Nachweis, dass keine ArduinoJson-Typen ausserhalb der Codec-/
+   Integrationsschicht sichtbar werden.
+
+Initial gelten die harten Bodygrenzen 1 KiB fuer kleine Kommandos, 4 KiB fuer
+Programme und Konfigurationsaenderungen und 16 KiB fuer vollstaendigen
+R1-Import beziehungsweise secret-freies Backup. Die maximale Verschachtelung
+betraegt zunaechst 6. Root-Typ, Methode, Content-Type, Strings, Arrays,
+Objektfelder, Zahlen, unbekannte Felder und Schemaversionen werden je Vertrag
+begrenzt. Grosse Antworten und Verlaeufe werden paginiert oder gestreamt.
+
+### Stufe 3 – Grenz-, Negativ- und Fuzztests
+
+Reproduzierbar und begrenzt zu pruefen sind mindestens:
+
+- leerer und abgeschnittener Body, ungueltige Syntax und Escapes sowie
+  ungewoehnliche UTF-8-Eingaben;
+- falscher Root-Typ, unbekannte/doppelte/fehlende Felder, falsche Datentypen,
+  negative Werte, Ueberlaeufe und Werte an/ueber ihren Grenzen;
+- lange Strings, grosse Arrays, Verschachtelung und Bodygroesse jeweils an und
+  ueber der Grenze;
+- unbekannte Schemaversion, `NaN`, `Infinity` und nicht erlaubte Zahlenformen;
+- langsame oder abgebrochene Quellen, wiederholte ungueltige sowie maximale
+  gueltige Requests;
+- Import mit Secrets oder geschuetzten Feldern, secret-freier Export und
+  Parseerfolg mit anschliessendem Fachfehler.
+
+Jeder Fehler endet ohne Teilaktivierung. Oeffentliche Fehler enthalten keine
+Secrets, Bibliotheksdetails, Speicheradressen oder ungefilterten Eingaben.
+
+### Stufe 4 – Ressourcen und Laufzeit
+
+Auf der minimalen sicheren ESP32-Baseline werden Base und Kandidat verglichen:
+Firmwaregroesse, statisches RAM, freier und niedrigster Heap, groesster freier
+Heapblock, maximale gleichzeitige Speicherbelegung, moegliche Fragmentierung
+bei wiederholten kleinen und maximalen Parse-/Serialize-Zyklen, Parse- und
+Serialisierungszeit, Regelzyklus-Jitter sowie Watchdog-, Reset- und
+Stabilitaetsauffaelligkeiten. Fehlerhafte und abgebrochene Eingaben gehoeren
+zur Messmatrix. Alle Aktorpfade und der Summer bleiben getrennt oder
+nachweislich inaktiv.
+
+### Stufe 5 – endgueltiger Ownerentscheid und Artefakte
+
+Erst nach bestandenem Nachweis wird ArduinoJson zur endgueltigen Uebernahme
+vorgelegt. Eine Alternative wird nur bei reproduzierbarer Toolchain-
+inkompatibilitaet, unvertretbarem Flash-/RAM-/Heapbedarf, nicht begrenzbarem
+Speicherverhalten oder Fragmentierung, Instabilitaet, relevanter Jitter-/
+Safetywirkung, nicht robust abbildbarer R1-Anforderung oder konkretem Lizenz-/
+Publikationsproblem untersucht. Modernitaet, Vorliebe und hypothetischer
+Zukunftsbedarf sind keine Ausloeser.
+
+Der Bericht enthaelt Quell-/Lizenznachweis, Buildkonfiguration, DTO-/
+Fehlervertrag, Grenz-/Fuzzprotokoll, Base-/Kandidatenmessungen und eine
+begruendete Empfehlung. Ein spaeterer Codecwechsel ersetzt nur die kleine
+konkrete Integrationsgrenze und keine Fachmodelle oder interne Persistenz.
+
 ## Reihenfolge und Entscheidungsprotokoll
 
 1. Audit- und Planungsbereinigung abschliessen.
@@ -813,9 +912,12 @@ Fach-, Safety-, Persistenz-, Secret- oder gemeinsame View-Modelle.
 8. WiFiManager durch Stufe 1 und 2 fuehren. Den Frameworkgegenprototyp nur bei
    dokumentiertem Ausloeser in Stufe 3 nachziehen; danach die endgueltige
    Onboardingauswahl dem Owner vorlegen.
-9. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
+9. ArduinoJson durch Quelle-/Toolchain-, Codec-, Grenz-/Fuzz- und
+   Ressourcenstufen pruefen. Eine Alternative nur bei dokumentiertem Problem
+   untersuchen und die endgueltige Codec-Uebernahme dem Owner vorlegen.
+10. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
    dokumentierten Rueckfallkandidaten.
-10. Erst danach implementieren #30 und #31 die schmalen Adapter. Der
+11. Erst danach implementieren #30 und #31 die schmalen Adapter. Der
    UI-Frameworkvergleich mit LVGL folgt erst auf den ausgewaehlten
    Display-/Touchtreiber, den schmalen Adaptervertrag und einen repraesentativen
    Release-1-Screen.

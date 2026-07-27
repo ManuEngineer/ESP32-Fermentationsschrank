@@ -101,6 +101,22 @@ spaeterer Wechsel rechtfertigt eine vorsorgliche Provisioning-, Provider-,
 Plugin- oder Mehradapterarchitektur; die konkrete Integration bleibt an der
 Composition Root austauschbar.
 
+## JSON an externen Grenzen
+
+Standardkonformes JSON-Parsing und -Serialisieren wird adoptiert statt als
+allgemeiner Parser neu entwickelt. ArduinoJson `7.4.3` ist dafuer der
+bevorzugte Release-1-Kandidat, wird aber erst nach einem begrenzten Build-,
+Grenzwert-, Fuzz- und Ressourcennachweis endgueltig uebernommen. Eine
+Alternative wird nur bei einem konkret belegten Release-1-Problem untersucht.
+
+Die Bibliothek bleibt hinter einer kleinen konkreten DTO-/Codecgrenze.
+Fachschema, Werte, Berechtigungen, Konflikte, Redaction, Importvorschau und
+Aktivierung kontrolliert das Projekt selbst. Bibliothekstypen gelangen nicht
+in Fach-, Safety-, Persistenz- oder gemeinsame View-Modelle; interne atomare
+Persistenz bleibt beim typisierten binaeren Wireformat. Ein spaeterer Wechsel
+ersetzt die konkrete Codecgrenze und rechtfertigt weder einen
+`IJsonProvider`, ein Pluginregister noch einen vorsorglichen Zweitcodec.
+
 ## Entscheidungsnachweis
 
 Jede spaetere Komponentenentscheidung nennt:

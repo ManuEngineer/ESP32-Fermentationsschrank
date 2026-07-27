@@ -14,8 +14,8 @@ Backlog vor Umsetzung verkleinert oder geteilt werden sollte.
 ```text
 Auditfreigabe und Spezifikations-/Issue-Bereinigung
   -> minimale sichere ESP32-Hardwarebaseline
-  -> aktorfreie Display-/Touch-, DS18B20-/1-Wire-, Webserver- und
-     WLAN-Onboardingspikes
+  -> aktorfreie Display-/Touch-, DS18B20-/1-Wire-, Webserver-,
+     WLAN-Onboarding- und JSON-Codec-Spikes
   -> Bibliotheksentscheidungen und produktive Adapter
 
 parallel zur Baseline und zu den Spikes:
@@ -159,6 +159,15 @@ warten:
    Adapter aus `WiFi`, `DNSServer`, SoftAP und `WebServer` nur bei einem
    dokumentierten WiFiManager-Problem mit identischem Umfang nachziehen. Dieser
    Spike nimmt weder das ganze #27 noch eine endgueltige Bibliothekswahl vorweg.
+7. ArduinoJson `7.4.3` als bevorzugten, noch nicht ausgewaehlten JSON-Codec in
+   einem kleinen aktorfreien Prototyp pruefen: isolierter Build, konkrete
+   DTO-/Codecgrenze, initiale Profile 1/4/16 KiB, Verschachtelungstiefe 6,
+   String-/Array-/Feld-/Schemagrenzen, Importvorschau ohne Aktivierung,
+   Streaming/Pagination, reproduzierbare Negativ-/Fuzztests sowie ESP32-
+   Ressourcen-, Laufzeit- und Jittermessung. Dieser Spike wird mit der
+   `WebServer`-Baseline und dem spaeteren Schnitt von #19/#27/#28 koordiniert,
+   implementiert aber keines dieser breiten Issues. Eine Alternative wird nur
+   bei einem konkret belegten R1-Problem untersucht.
 
 Die minimale Baseline legt weder finale Pins, Partitionierung, Bibliotheken,
 Sensorbustopologie, Aktoradapter, Safety-Grenzen noch PI-Parameter fest. Der
@@ -184,7 +193,9 @@ Messungen:
 - WiFiManager als bevorzugten Onboardingkandidaten endgueltig uebernehmen oder
   bei dokumentiertem Spikeausloeser den identischen kleinen
   Frameworkgegenprototyp bewerten und danach den Owner entscheiden lassen;
-- ArduinoJson nur mit endpunktspezifischen Grenzen.
+- ArduinoJson `7.4.3` als bevorzugten Kandidaten erst nach bestandenem
+  Build-, Grenzwert-, Fuzz- und Ressourcennachweis endgueltig uebernehmen;
+  Alternative nur bei dokumentiertem Problem.
 
 Jede Auswahl erhaelt Version/Commit, Lizenznachweis, Build-/Hardwaremessung,
 Adaptervertrag und ein eigenes umsetzendes Issue/PR. Keine Auswahl nur aufgrund
@@ -214,11 +225,16 @@ Kleine adapterbezogene PRs:
 5. nach bestandenem OD-06-Spike genau eine konkrete Onboardingintegration;
    WiFiManager bleibt technischer Portalbaustein, der Frameworkadapter bleibt
    ein nur bei dokumentiertem Ausloeser gepruefter Rueckfall;
-6. JSON nur an den konkreten API-/Export-/Importgrenzen.
+6. nach bestandenem JSON-Spike einen kleinen konkreten ArduinoJson-Codec nur an
+   begrenzten API-, Konfigurations-, Programm-, Diagnose-, Export-,
+   secret-freien Backup- und Importgrenzen; interne Persistenz bleibt binaer.
 
 Bibliothekstypen duerfen weder in `fermentation_app` noch in Safety- oder
-Prozessmodelle durchsickern. Jeder Adapter uebersetzt Fehler und Limits
-vollstaendig und besitzt eine Mock-/Hostgrenze.
+Prozessmodelle durchsickern. Das gilt insbesondere fuer `JsonDocument`,
+`JsonObject`, `JsonArray`, `JsonVariant` und ArduinoJson-Fehler in Fach-,
+Persistenz- und gemeinsamen View-Modellen. Jeder Adapter uebersetzt Fehler und
+Limits vollstaendig und besitzt eine Mock-/Hostgrenze. Es entsteht keine
+allgemeine `IJsonProvider`-, Codec-Plugin- oder Zweitcodecarchitektur.
 
 Der Webserveradapter kapselt nur Initialisierung, Routenbindung, feste
 Request-/Responsegrenzen, Timeouts und HTTP-Uebersetzung. DTOs, fachliche
@@ -280,16 +296,23 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   Passwort- oder PIN-Nachweisen spezifizieren; keine vorbereiteten leeren
   Manifeste, Roots oder `CredentialEpoch` aus #57 uebernehmen;
 - #28 teilen in passive Diagnose, Exporte/Diagrammdaten und aktiven
-  Serviceablauf;
+  Serviceablauf; grosse Daten begrenzen, paginieren oder streamen;
 - #19 teilen in kritisches Journal/Retention und secret-freies
-  Backup/Import mit zentraler Vorschau.
+  Backup/Import mit zentraler Vorschau; interne Journale und Kontrollpunkte
+  bleiben binaer, und ein JSON-Import aktiviert nie direkt aus dem Parser;
+- fuer #19/#27/#28 die initialen JSON-Bodyprofile 1 KiB, 4 KiB und 16 KiB sowie
+  Tiefe 6 gegen die realen maximalen DTOs pruefen; Root-, String-, Array-,
+  Feld-, Werte- und Schemaversiongrenzen pro Vertrag festlegen und nur nach
+  fachlicher Begruendung und neuer Messung erhoehen.
 
 Regelung und Safety muessen unter Web-, Export- und Netzwerklast
-deterministisch bleiben. Request-, Antwort-, JSON-Tiefen-, String-, Upload-,
-Zeit- und Parallelitaetsgrenzen gelten unabhaengig vom Server. Langsame oder
-abgebrochene Clients und WLAN-Verlust werden kontrolliert behandelt; sie
-stoppen weder Lauf noch Safety-Kern. HTTP ist nur fuer das vertrauenswuerdige
-lokale Netz; Cloud und Internet-Portfreigabe bleiben ausgeschlossen.
+deterministisch bleiben. Request-, Antwort-, JSON-Tiefen-, String-, Array-,
+Upload-, Zeit- und Parallelitaetsgrenzen gelten unabhaengig vom Server.
+Langsame oder abgebrochene Clients und WLAN-Verlust werden kontrolliert
+behandelt; sie stoppen weder Lauf noch Safety-Kern. Parsererfolg ersetzt keine
+Schema-, Berechtigungs-, Konflikt- oder Fachvalidierung. HTTP ist nur fuer das
+vertrauenswuerdige lokale Netz; Cloud und Internet-Portfreigabe bleiben
+ausgeschlossen.
 
 ## Phase 8: Inbetriebnahme und Release
 
@@ -390,3 +413,8 @@ Release-1-Onboardingkandidat und wird zuerst begrenzt geprueft. Die
 endgueltige Uebernahme bleibt das Ergebnis dieses Spike-Gates. Der kleine
 Frameworkadapter wird nur bei einem dokumentierten Ausloeser als identischer
 Gegenprototyp nachgezogen; eine offene vorsorgliche Gleichwahl besteht nicht.
+
+Der JSON-Richtungsentscheid besitzt bewusst kein neues OD-Kuerzel:
+ArduinoJson `7.4.3` ist der bevorzugte Kandidat. Die endgueltige Uebernahme
+bleibt das Ergebnis des Build-, Grenzwert-, Fuzz- und Ressourcen-Spike-Gates;
+eine Alternative wird nur bei einem dokumentierten Problem untersucht.
