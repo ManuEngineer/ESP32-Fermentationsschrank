@@ -33,7 +33,8 @@ UserConfiguration + ServiceConfiguration + ProgramCatalog
         ↓
 ActiveConfigurationManifest als gemeinsam aktivierte Generation
 
-getrennt davon: Secret-Domaene und unveraenderlicher Laufschnappschuss
+getrennt davon: spaetere reale Secret-Domaenen und unveraenderlicher
+Laufschnappschuss
 ```
 
 ### Werkseinstellungen
@@ -201,17 +202,15 @@ Aenderungen warnt. Browserabbruch speichert nicht. Revisionsschutz verhindert
 das stille Ueberschreiben neuerer Daten.
 
 Alle Kanaele verwenden denselben fachlichen `ConfigurationPreview`-Dienst und
-dieselbe Validierung. Release 1 besitzt genau einen globalen, hoechstens 15
-Minuten lebenden Previewplatz. Das Preview haelt einen unveraenderlichen
-typisierten Kandidaten, Basisgenerationen, Aktivierungswirkung, redigierte
-Aenderungszusammenfassung, Ownerbindung und einen nicht vorhersagbaren
-Bestaetigungs-Token. Beim Commit wird kein Kandidat von der Oberflaeche erneut
-uebernommen. Basis, Validierung und Aktivierungswirkung werden unmittelbar vor
-dem Commit erneut geprueft; veraltete oder anders wirkende Kandidaten benoetigen
-eine neue Vorschau und Bestaetigung.
-
-Fluechtige UI-Vorschauen veraendern weder Active noch Pending. Ein persistiertes
-Pending wird nur durch eine ausdrueckliche Aktion ersetzt oder verworfen.
+dieselbe Validierung. Das Preview bleibt fluechtig und haelt einen
+unveraenderlichen typisierten Kandidaten, die erwartete aktive Basis, eine
+Kandidatenintegritaet, die Aktivierungswirkung und eine redigierte
+Aenderungszusammenfassung. Beim Commit wird kein Kandidat von der Oberflaeche
+erneut uebernommen. Basis, Integritaet, Validierung und Aktivierungswirkung
+werden unmittelbar vor dem Commit erneut geprueft; veraltete oder anders
+wirkende Kandidaten benoetigen eine neue Vorschau und Bestaetigung. Neustart
+verwirft jede Vorschau. Anzahl, Lebensdauer und Ressourcenobergrenzen werden im
+Detailplan und Ressourcennachweis von #56 festgelegt.
 
 ## Verhalten waehrend eines Laufes
 
@@ -237,24 +236,12 @@ Gesperrt bleiben:
 
 ## Neustartpflichtige Einstellungen
 
-- Neben Active existiert hoechstens ein vollstaendig validiertes Pending-
-  Manifest.
-- Speichern einer neustartpflichtigen oder gemischten Bearbeitung erzeugt einen
-  vollstaendigen Pending-Kandidaten und loest keinen Neustart aus.
-- Sobald Pending existiert, bauen auch sofort wirksame gespeicherte Aenderungen
-  darauf auf; es entsteht kein paralleler Active-Zweig.
-- Weitere Pending-Revisionen ersetzen den bisherigen Kandidaten erst nach
-  vollstaendiger Validierung.
-- Ausstehende Aenderungen bleiben sichtbar und koennen bewusst ersetzt oder
-  verworfen werden.
-- `Anwenden und neu starten` ist nur in sicherem Zustand ohne aktiven oder
-  wiederherzustellenden Lauf erlaubt.
-- Die Aktion persistiert eine an Pending-Integritaet, Pending-Generation und
-  erwartete Active-Generation gebundene Aktivierungsabsicht und sperrt danach
-  neue Laeufe und Mutationen bis zum unmittelbaren kontrollierten Neustart.
-- Ein unerwarteter Neustart ohne passende Absicht aktiviert Pending niemals.
-- Nach erfolgreichem Root-Commit wird ein unterbrochener Abschluss idempotent
-  fortgesetzt; vor der Commit-Grenze bleibt die alte Generation aktiv.
+Release 1 besitzt keinen persistenten Pending-Zweig und kein
+Aktivierungsintent. Ein Kandidat bleibt bis zum atomaren Commit fluechtig.
+Neustartpflichtige Aenderungen werden nicht als voraktivierter persistenter
+Zweig gespeichert. Falls ein spaeterer Produktbedarf dafuer nachgewiesen wird,
+benoetigt er eine additive Vertrags- und Ownerentscheidung; Variante B wird
+nicht vorsorglich um leere Zukunftsstrukturen erweitert.
 
 ## Zeitbasis und Zeitzone
 
@@ -296,7 +283,8 @@ Anforderungen:
 - Integritaet auch beim Laden pruefen
 - unbekannte Schema-Version nicht blind interpretieren
 - Migration auf Kopie ausfuehren und erst danach aktivieren
-- Active und Pending getrennt migrieren; Pending dadurch nie aktivieren
+- Migration ueber denselben vollstaendig validierten Active-/Fallback-
+  Commitpfad ausfuehren
 - Rueckfall sichtbar protokollieren
 - ohne gueltige aktuelle oder Rueckfallrevision sicherer Konfigurationsfehlerzustand
 - vorhandene beschaedigte Daten niemals als fabrikneuen Speicher behandeln
@@ -304,8 +292,9 @@ Anforderungen:
 - vor Root-Commit alle falliblen Plattform- und Ressourcenarbeiten abschliessen
 - nach Root-Commit nur nicht allokierenden, nicht fehlschlagenden Runtime-
   Snapshot veroeffentlichen
-- Geheimnisse und Authentifizierungsnachweise in getrennten, typisierten
-  Revisionsdomaenen halten
+- reale Geheimnisse und Authentifizierungsnachweise erst mit ihrem ersten
+  produktiven Konsumenten in getrennten, typisierten und epochengebundenen
+  Revisionsdomaenen einfuehren
 - aktorwirksame Recoveryentscheidung zuerst erfolgreich persistieren
 - kritischer Schreibfehler gemaess `RUN_PERSISTENCE.md` verriegeln
 
@@ -321,12 +310,14 @@ Anforderungen:
 - [x] UTC und IANA-Zeitzone `Europe/Zurich`
 - [x] vollstaendige Validierung und atomare Revisionen
 - [x] hybride Dokumentarchitektur mit gemeinsamem Active-Manifest
-- [x] genau ein Pending-Zweig ohne parallele Active-Aenderungen
-- [x] generationengebundene zentrale Vorschau und Konflikterkennung
+- [x] kein persistenter Pending-Zweig und kein Aktivierungsintent in R1
+- [x] fluechtige basis- und integritaetsgebundene Vorschau mit
+      Konflikterkennung
 - [x] kanonisches binaeres Envelope- und CRC-Wireformat
-- [x] getrennte Connectivity- und vorwaertsgerichtete Authentication-Rueckfallpolitik
+- [x] reale Connectivity-/Authentication-Domaenen erst mit ihrem ersten
+      produktiven Konsumenten
 - [x] wiederaufnehmbarer Bootstrap und Werksreset mit StorageEpoch
-- [x] feste Slot-, Payload-, Preview- und Recordgrenzen
+- [x] feste Slot-, Payload- und Recordgrenzen; Previewbudget im #56-Nachweis
 - [x] normale Vollresetfunktion PIN-geschuetzt
 - [x] PIN-unabhaengiger physischer Vollreset ausschliesslich als Recovery bei
       vergessener Service-PIN

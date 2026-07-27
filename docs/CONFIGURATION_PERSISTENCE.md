@@ -13,10 +13,11 @@ Es nimmt weder Laufpersistenz aus Issue #17, das portable Backupformat aus
 Issue #19, die Fehler- und Verriegelungspolitik aus Issue #24 noch konkrete
 WLAN- und Authentifizierungsdaten aus Issue #27 vorweg.
 
-Die fachliche Spezifikation ist ausreichend bestimmt. Der gesamte Vertrag wird
-jedoch nicht als ein einziger Implementierungs-PR umgesetzt. Issue #16 bleibt
-bis zur Anlage und Freigabe kleiner, abhaengiger Teilissues ein Tracking-Issue
-mit Status `PLANNED_SPEC_PENDING`.
+Der Release-1-Vertrag folgt ADR-018 (Variante B). Der gesamte Vertrag wird nicht
+als ein einziger Implementierungs-PR umgesetzt. Issue #16 bleibt ein
+Tracking-Issue; #54 und #55 bilden das bereits umgesetzte Fundament, #56 und
+#57 sind die verbleibenden kleinen Umsetzungspakete. Jedes Paket benoetigt vor
+seiner Implementierung einen eigenen freigegebenen Plan.
 
 Reale Flash-Atomizitaet, reale Heapreserve und Belastungsmessungen bleiben
 spaetere Hardware- beziehungsweise Release-Gates.
@@ -34,9 +35,9 @@ vollstaendig typisierte und jeweils schema-versionierte Dokumente gespeichert:
 
 Die Dokumente besitzen eigene Inhaltsrevisionen, werden aber nicht unabhaengig
 aktiviert. Ein `ActiveConfigurationManifest` verweist auf genau eine
-vollstaendig validierte Kombination konkreter Dokumentrevisionen und auf eine
-konkrete Connectivity-Secret-Generation. Diese Kombination bildet die aktive
-Konfigurationsgeneration.
+vollstaendig validierte Kombination konkreter Revisionen von
+`UserConfiguration`, `ServiceConfiguration` und `ProgramCatalog` derselben
+`StorageEpoch`. Diese Kombination bildet die aktive Konfigurationsgeneration.
 
 Eine Aenderung wird logisch in folgender Reihenfolge ausgefuehrt:
 
@@ -47,7 +48,8 @@ Eine Aenderung wird logisch in folgender Reihenfolge ausgefuehrt:
 4. neue Dokumentrevisionen schreiben und ruecklesen
 5. ein Manifest mit exakten Referenzen schreiben und pruefen
 6. einen neuen gueltigen RootRecord committen
-7. den vorbereiteten Runtime-Snapshot atomar veroeffentlichen
+7. den vorbereiteten Runtime-Snapshot nicht fehlschlagend atomar
+   veroeffentlichen
 8. die vorherige aktive Generation als genau eine Rueckfallgeneration behalten
 
 Unveraenderte Dokumentrevisionen duerfen von mehreren Manifesten gemeinsam
@@ -226,8 +228,6 @@ Folgende fachliche Schemas entwickeln sich unabhaengig:
 - `ProgramCatalogSchema`
 - bestehendes `ProgramDocumentSchema`
 - `ConfigurationManifestSchema`
-- `ConnectivityManifestSchema`
-- `AuthenticationManifestSchema`
 
 Es wird keine zweite Programmschema-Definition eingefuehrt.
 
@@ -239,15 +239,15 @@ Es wird keine zweite Programmschema-Definition eingefuehrt.
 Revisionen und Generationen verwenden `uint64_t`, beginnen bei 1, reservieren 0
 und laufen niemals still ueber.
 
-Eine persistente monotone `MutationSequence` je `StorageEpoch` wird nach allen
-Basis-, Validierungs-, Aktivierungsvorbereitungs- und No-op-Pruefungen, aber vor
-den eigentlichen Schreibvorgaengen ueber redundante
-`StorageMutationSequenceRecord`s dauerhaft reserviert. Reservierte Werte werden
-nicht wiederverwendet; Luecken sind zulaessig. Unterschiedliche starke Typen
-bleiben auch bei gleichen numerischen Werten getrennt. Unveraenderte Dokumente
-behalten ihre Revision. `CredentialEpoch` bleibt eine eigene fachliche,
-vorwaertsgerichtete Epoche und wird nicht automatisch mit der globalen
-MutationSequence gleichgesetzt.
+Ob Release 1 neben Dokumentrevision, Manifestgeneration, `rootSequence`,
+erwarteter Basis und Kandidatenintegritaet eine eigene persistente monotone
+`MutationSequence` benoetigt, bleibt bis zum Detailplan von #56
+`FINAL_SELECTION_PENDING`. Der Detailplan darf sie nur weglassen, wenn er fuer
+Konflikterkennung, eindeutiges Commit-Ergebnis, Wiederholung und Readback eine
+gleichwertige, testbare Semantik nachweist. Eine spaetere Einfuehrung waere eine
+materielle Planaenderung und benoetigt Ownerfreigabe. Unterschiedliche starke
+Typen bleiben auch bei gleichen numerischen Werten getrennt; unveraenderte
+Dokumente behalten ihre Revision.
 
 Migrationen sind ausschliesslich Copy-Migrationen:
 
@@ -259,13 +259,14 @@ Migrationen sind ausschliesslich Copy-Migrationen:
 6. Dokument und Gesamtkonfiguration vollstaendig validieren
 7. nur erforderliche neue Dokumentrevisionen schreiben
 8. neues Manifest schreiben und pruefen
-9. atomar aktivieren oder weiterhin als Pending referenzieren
+9. durch einen neuen kanonischen Root atomar aktivieren
 10. vorherige Manifestgeneration bis zum nachweislichen Erfolg behalten
 
 Es gibt keine In-place-Migration und keine erfundenen Defaults fuer noch
 ungeklaerte Sicherheits-, Sensor- oder Prozesswerte. Unbekannte neuere
-Versionen werden abgelehnt. Active und Pending werden getrennt migriert; eine
-Pending-Migration aktiviert den Kandidaten nicht.
+Versionen werden abgelehnt. Eine Migration wird wie jede andere Aenderung erst
+nach vollstaendiger Validierung und Runtimevorbereitung durch den Root-Commit
+aktiviert.
 
 Fuer erstmals eingefuehrte Schema-1-Dokumente wird keine Schema-0-Migration
 erfunden. Der generische Copy-Ablauf wird mit Testschemas und die bestehende
@@ -508,9 +509,6 @@ Es existieren ausserdem:
 
 - 3 `ConfigurationManifest`-Slots
 - 2 `ConfigurationRootRecord`-Slots
-- 2 `PendingConfigurationManifest`-Slots
-- 2 `PendingRootRecord`-Slots
-- 2 Aktivierungsabsichts-Slots
 
 ### Technisch gueltige Kandidaten und kanonischer Root
 
@@ -538,12 +536,7 @@ Validierung eines neueren kanonischen Roots bestimmt nur die folgende Menge den
 Referenzschutz:
 
 - Active und Fallback des aktuell kanonisch ausgewaehlten ConfigurationRoot
-- das Pending des aktuell kanonisch ausgewaehlten PendingRoot
-- ein exakt passender, vollstaendig gueltiger Aktivierungsintent samt
-  Pending-Graph
 - die gerade ausgefuehrte serialisierte Mutation bis zu ihrem Abschluss
-- fuer Authentication der aktuell kanonisch ausgewaehlte committed Root und die
-  laufende vorbereitete Transaktion
 
 Eine aeltere redundante Rootkopie bleibt ein moeglicher technischer
 Bootkandidat, schuetzt aber keine Generation, die ausschliesslich noch von ihr
@@ -580,68 +573,18 @@ Ausgehend von einem kanonischen Root mit Active A und Fallback F:
 Verbindliche Tests fuehren mindestens fuenf aufeinanderfolgende Active-Commits
 durch und beweisen, dass die Slotrotation nicht vorzeitig blockiert.
 
-### Pending
+### Keine persistente Voraktivierung in Release 1
 
-Neben Active existiert hoechstens ein vollstaendig validiertes
-`PendingConfigurationManifest`. Ein neues Pending wird zuerst in den jeweils
-nicht kanonisch geschuetzten Manifestplatz geschrieben und validiert. Danach
-wird der nicht kanonische PendingRoot aktualisiert und vollstaendig geprueft.
-Erst dann wird er kanonisch. Die nur vom aelteren PendingRoot referenzierte
-Generation verliert ihren Schutz.
+Release 1 besitzt keinen persistenten Pending-Zweig, keinen `PendingRoot`, kein
+Aktivierungsintent und keinen vorbereiteten parallelen Active-Zweig. Ein
+Kandidat bleibt bis zum Commit ausschliesslich fluechtig. Neustartpflichtige
+Aenderungen werden fuer Release 1 nicht als persistenter Zwischenzustand
+gespeichert; ein spaeterer Bedarf benoetigt einen neuen Ownerentscheid und eine
+additive, rueckwaertskompatible Erweiterung des Vertrags.
 
-Verbindliche Tests fuehren mindestens drei aufeinanderfolgende
-Pending-Ersetzungen sowie Verwerfen und erneutes Erzeugen durch.
-
-### Aktivierungsabsicht
-
-Die Aktivierungsabsicht verwendet zwei CRC-geschuetzte Slots und ist mindestens
-gebunden an:
-
-- erwartete aktive Manifestgeneration
-- exakte Pending-Manifestgeneration
-- Integritaetskennung des Pending-Manifests
-- monotone Intent-Sequenz
-- Intent-Status
-
-Waehrend eine gueltige Aktivierungsabsicht besteht, duerfen Pending und seine
-Dokumentrevisionen nicht ersetzt werden.
-
-## Neustartpflichtige Konfiguration
-
-Enthaelt eine Bearbeitung sofort und erst nach Neustart wirksame Aenderungen,
-wird der gesamte Kandidat Pending; ein Speichervorgang wird nicht aufgeteilt.
-Sobald Pending existiert, bauen alle weiteren dauerhaft gespeicherten
-Aenderungen darauf auf. Es entsteht kein paralleler neuer Active-Zweig.
-
-`Anwenden und neu starten` verwendet eine externe typisierte
-`ConfigurationActivationRunAssessment` mit mindestens:
-
-- `Unknown`
-- `NoActiveOrRecoverableRun`
-- `ActiveRunPresent`
-- `RecoverableRunPresent`
-
-Nur `NoActiveOrRecoverableRun` erlaubt die weitere Aktivierungspruefung.
-`Unknown` blockiert sicher. Issue #16 definiert und konsumiert diesen Port, aber
-implementiert weder Laufpersistenz noch die reale Erkennung eines
-wiederherzustellenden Laufs. Der reale Produzent folgt mit Issue #17.
-
-Nach Persistierung einer passenden Absicht werden neuer Lauf, weitere
-Konfigurationsaenderung und Pending-Ersetzung bis zum unmittelbaren
-kontrollierten Neustart gesperrt.
-
-Beim Boot wird Pending nur aktiviert, wenn Absicht, Pending und alle Dokumente
-gueltig und passend sind, Active weiterhin der Erwartung entspricht und die
-externe Laufbewertung die Aktivierung erlaubt. Ein unerwarteter Neustart ohne
-passende Absicht aktiviert Pending nie.
-
-Bei Erfolg wird der bisherige Active zum Fallback und Pending zum Active. Ist
-das Pending-Ziel beim Boot bereits Active, erfolgt keine zweite Aktivierung,
-sondern nur der idempotente Abschluss. Bei Fehler bleibt der alte Active
-wirksam; die Absicht wird nicht unbegrenzt bei jedem Boot erneut ausgefuehrt.
-
-Welche Felder einen Neustart erfordern, bestimmt ausschliesslich das typisierte
-Modell. Display, Web und Import koennen dies nicht frei setzen.
+Display, Web und Import koennen Aktivierungswirkung nicht frei setzen. Sie
+reichen typisierte Eingaben an denselben Konfigurationsdienst; dieser erzeugt
+Vorschau, Validierung, vorbereiteten Runtime-Snapshot und den atomaren Commit.
 
 ## Preview und Konflikterkennung
 
@@ -651,71 +594,46 @@ Ein `ConfigurationPreview` wird ausschliesslich durch den fachlichen
 Konfigurationsdienst erzeugt. Es enthaelt:
 
 - einen unveraenderlichen, vollstaendig typisierten Kandidaten
-- alle Basisgenerationen
+- die erwartete aktive Basisrevision und Manifestgeneration
+- eine Integritaetskennung des unveraenderlichen Kandidaten
 - berechnete Aktivierungswirkung
 - typisierte Aenderungszusammenfassung
-- Owner-Kontext
-- monotone Erstellungs- und Ablaufzeit
-- eindeutigen PreviewHandle
-- opaken Bestaetigungs-Token
 
-Oberflaechen erhalten nur eine redigierte Darstellung, Handle und Token. Beim
-Commit uebermitteln sie keinen Kandidaten erneut.
+Das Preview ist rein fluechtig und wird weder in einen Record noch in einen
+Root geschrieben. Oberflaechen erhalten eine redigierte Darstellung und eine
+fluechtige Referenz auf genau diesen Kandidaten. Der Commit nimmt keinen vom
+Client neu aufgebauten Kandidaten entgegen. Nach Neustart existiert keine
+Vorschau mehr.
 
-Der PreviewHandle enthaelt mindestens RuntimeInstanceId, PreviewSequence und
-PreviewNonce. RuntimeInstanceId, Nonce und Token umfassen je 16 zufaellige
-Bytes aus `ISecureRandomSource`. Sie werden nicht aus Zeit, MAC oder Zaehlern
-abgeleitet und nie geloggt. Der Token wird konstantzeitlich verglichen.
-
-Die PreviewSequence beginnt je Runtime bei 1. Bei `UINT64_MAX` entstehen keine
-weiteren Previews. Neustart erzeugt eine neue RuntimeInstanceId. Handle ist
-keine Autorisierung; Commit-Kontext und Owner muessen uebereinstimmen.
-
-Vor Commit werden Basiszustand, Validierung und Wirkung neu berechnet. Eine
-abweichende Wirkung fuehrt zu Ablehnung und neuem Preview statt stiller
-Umdeutung zwischen sofort, `FutureRunsOnly`, Pending und unzulaessig.
+Unmittelbar vor dem Commit werden erwartete Basis, Kandidatenintegritaet,
+vollstaendige technische und fachliche Validierung sowie die
+Aktivierungswirkung erneut geprueft. Eine Abweichung fuehrt zu einem typisierten
+Konflikt und zu einer neuen Vorschau, nie zu automatischem Merge oder stiller
+Umdeutung.
 
 ### Kapazitaet und Lebenszyklus
 
-Release 1 besitzt genau einen globalen Previewplatz. Lebend sind `Ready` und
-`Committing`. Ein abgelaufenes Preview wird vor Neuerstellung logisch
-verworfen; ein nicht abgelaufenes wird nie verdraengt.
-
-Ein Preview lebt hoechstens 15 Minuten monotone Zeit. Nur sein Owner darf es in
-`Ready` abbrechen. Owner-, Handle-, Token- und Ablaufpruefung sowie Belegung des
-globalen Mutationsslots erfolgen gemeinsam. Ist der Slot belegt, bleibt das
-Preview `Ready`. Danach wechselt es atomar zu `Committing`, kann nicht mehr
-abgebrochen werden und wird nach Erfolg oder verbrauchendem Fehler ungueltig.
-
-Preview-eigene variable Daten sind auf 49.152 Bytes begrenzt. Der getrennte
-Record-Arbeitsbereich haelt hoechstens einen Record von 32.813 Bytes. Die Summe
-beider kontrollierter Bereiche ist 81.965 Bytes, aber keine Aussage ueber die
-gesamte Heapspitze.
-
-Die Aenderungszusammenfassung enthaelt hoechstens 256 Eintraege. Eine groessere
-detaillierte Zusammenfassung wird deterministisch auf Programm- oder
-Dokumentebene aggregiert und nie still gekuerzt. Nach Veroeffentlichung ist das
-Preview unveraenderlich und erzeugt keine weiteren eigenen Allokationen.
+Kapazitaet, Anzahl gleichzeitig erlaubter Vorschauen und konkrete
+Speicherobergrenzen werden im Detailplan und Ressourcennachweis von #56
+festgelegt. Es gibt keine unbeschraenkte Vorschau, aber auch keine ungepruefte
+Produktgarantie. Eine begonnene Commitentscheidung wird gegen parallele
+Konfigurationsmutationen serialisiert.
 
 Secret-Werte erscheinen nie in Preview-Antworten, oeffentlichen Fingerprints,
 Zusammenfassungen, Logs, Diagnosen oder Exporten.
 
 ### Globale Mutation und Konflikte
 
-In der gesamten Konfigurations- und Secret-Persistenzdomaene laeuft hoechstens
-eine persistente Mutation gleichzeitig. Dies umfasst Konfiguration,
-Connectivity, Authentication, Pending, Migration, Bootstrap und Werksreset.
-Lesen und Preview-Berechnung duerfen parallel erfolgen.
+In der Konfigurationspersistenz laeuft hoechstens eine persistente Mutation
+gleichzeitig. Dies umfasst normale Konfiguration, Migration, Bootstrap und
+Werksreset. Lesen und Preview-Berechnung duerfen parallel erfolgen.
 
 Nach Belegung werden erneut geprueft:
 
-- PreviewHandle, Owner und Token
-- interner Kandidatenfingerprint beziehungsweise unveraenderlicher Kandidat
+- fluechtige Vorschauidentitaet und unveraenderlicher Kandidat
 - StorageEpoch und Active-Generation
-- erwartetes Pending oder dessen Nichtvorhandensein
-- erwartetes Nichtvorhandensein einer Aktivierungsabsicht
-- bei Authentication committed Generation und CredentialEpoch
-- externe Lauf- und Aktivierungsbewertung
+- Kandidatenintegritaet
+- alle fachlichen und technischen Voraussetzungen
 
 Abweichungen werden typisiert als Konflikt abgelehnt; es gibt kein
 automatisches Merge.
@@ -749,9 +667,7 @@ Ein Commit liefert genau eine typisierte Kategorie:
 - `ActivationFailure`
 - `MigrationFailure`
 
-Erfolg unterscheidet mindestens `NoChange`, `Activated`, `StoredAsPending` und
-`ReplacedPending`. Secret-Fehler enthalten keine geheimen oder daraus
-abgeleiteten Payloadbestandteile.
+Erfolg unterscheidet mindestens `NoChange` und `Activated`.
 
 ## Laufzeitaktivierung und Grenze zu Issue #24
 
@@ -769,9 +685,9 @@ neue Generation.
 
 Ein Fehler vor Root-Commit laesst alte Konfiguration und Snapshot unveraendert.
 Eine unerwartete Publish-Vertragsverletzung nach Root-Commit verursacht keinen
-automatischen Rollback. Issue #16 erzeugt dafuer nur einen typisierten
-`ConfigurationSafetyIntent` beziehungsweise `ConfigurationRuntimeFailure` und
-verhindert weitere normale Konfigurationsfreigabe.
+automatischen Rollback. Der #16-Vertrag sieht dafuer nur einen typisierten
+`ConfigurationRuntimeFailure` vor; die Umsetzung in #56 verhindert weitere
+normale Konfigurationsfreigabe.
 
 Die vollstaendige Fehlerklassifizierung, persistente Verriegelung,
 `SAFE_BOOT`-Politik und reale Aktorsperre gehoeren zu Issue #24. Issue #16 darf
@@ -779,67 +695,26 @@ diese Logik weder vorwegnehmen noch eine konkrete Aktorsteuerung implementieren.
 Bis zur Integration mit #24 bleibt die Konfigurationslaufzeit in diesem
 Vertragsverletzungsfall fachlich nicht betriebsbereit.
 
-Stromausfall vor Root-Commit laedt den alten Graphen; nach Root-Commit den neuen.
-Stromausfall nach Publish, aber vor Intent-Abschluss behaelt den neuen Graphen
-und setzt den Abschluss idempotent fort.
+Stromausfall vor Root-Commit laedt den alten Graphen; nach dem dauerhaft
+erfolgreichen Root-Commit den neuen. Es existiert kein nachgelagerter
+persistenter Aktivierungsintent.
 
-## Secret-Domaene
+## Spaetere persistente Connectivity- und Authentication-Domaenen
 
 Konfigurationsdokumente enthalten weder Geheimnisse noch Passwort- oder PIN-
-Pruefnachweise.
+Pruefnachweise. #16, #56 und #57 erzeugen keine leeren Connectivity- oder
+Authentication-Manifeste, -Roots, -Slots oder Reservepayloads.
 
-### Connectivity
+Eine reale persistente Connectivity- beziehungsweise Authentication-Domaene
+entsteht erst mit ihrem ersten produktiven Konsumenten. Sie muss dann eigene
+stark typisierte, versionierte und an die aktuelle `StorageEpoch` gebundene
+Records sowie ihre fachlich notwendige Commit-, Widerrufs- und
+Recoverysemantik erhalten. Der spaetere Detailplan darf diese Semantik nicht
+stillschweigend in `UserConfiguration`, `ProgramCatalog` oder freie Key/Value-
+Strukturen verschieben.
 
-Es existieren vier WLAN-Secret-Revisionsslots und vier
-`ConnectivitySecretSetManifest`-Slots, aber keine eigenen Connectivity-Roots.
-Ein Manifest wird nur durch einen vollstaendig gueltigen Active-, Fallback- oder
-Pending-Konfigurationsgraphen wirksam.
-
-Bei unveraenderten WLAN-Secrets wird dieselbe Generation weiterverwendet. Neue
-Secrets werden zuerst geschrieben und geprueft; erst ein neues
-Konfigurationsmanifest aktiviert die Kombination. WLAN-Secrets duerfen mit der
-Konfiguration zurueckfallen.
-
-Schema 1 des Connectivity-Manifests enthaelt ausschliesslich StorageEpoch,
-Manifestgeneration und den kanonischen Zustand `NotProvisioned`; es enthaelt
-keine Secret-Referenzen.
-
-### Authentication
-
-Es existieren:
-
-- 3 Slots fuer Webpasswort-Pruefnachweise
-- 3 Slots fuer Service-PIN-Pruefnachweise
-- 3 `AuthenticationManifest`-Slots
-- 2 redundante `AuthenticationRootRecord`-Slots
-
-Roots sind vorwaertsgerichtet und besitzen `Prepared` oder `Committed`. Nur der
-aktuell kanonische vollstaendig gueltige `Committed`-Root darf dem spaeteren
-Authentifizierungsdienst Referenzen bereitstellen. Ein `Prepared`-Root allein
-ist nie wirksam.
-
-Credential- und Manifestslots werden vorbereitet, danach ein Root als Prepared
-und der zweite als Committed geschrieben. Nach erfolgreicher Pruefung des neuen
-Committed-Roots wird der vorbereitete Root auf dieselbe committed Generation
-nachgefuehrt. Danach darf kein committed Root der aelteren CredentialEpoch
-verbleiben.
-
-Issue #16 prueft damit Referenzauswahl, Widerruf und Recovery, aber noch keine
-tatsaechliche Passwort- oder PIN-Anmeldung.
-
-Authentication Schema 1 enthaelt ausschliesslich StorageEpoch,
-Manifestgeneration, CredentialEpoch sowie `NotProvisioned` fuer Webpasswort und
-Service-PIN, ohne Pruefnachweisreferenzen. StorageEpoch und CredentialEpoch
-beginnen bei 1; 0 ist reserviert.
-
-Issue #27 fuehrt mit neuer Schemageneration reale WLAN-Dokumente und -Grenzen,
-Pruefnachweise, KDF- und Algorithmus-IDs, Salt, Work-Factor, gegebenenfalls
-Pepper, Provisioned/Disabled, Anmeldung, Sitzungen, Tokens, CSRF, Sperrzeiten
-und konkrete Befehle ein. Issue #16 legt keine freie oder opake produktive
-Secret-Payload an.
-
-Normale Backups besitzen keine Secret-Bindung und enthalten weder Secret-
-Inhalte noch Pruefnachweise. Das konkrete portable Format folgt mit Issue #19.
+Normale Backups enthalten weder wiederverwendbare Secrets noch
+Pruefnachweise. Das konkrete portable Format folgt mit Issue #19.
 
 ## Bootstrap, StorageEpoch und Werksreset
 
@@ -869,8 +744,6 @@ Danach entstehen unter StorageEpoch 1:
 - ProgramCatalog Revision 1 mit vier Factory-Arbeitskopien
 - ConfigurationManifest Generation 1
 - ConfigurationRootRecord rootSequence 1 ohne Fallback
-- Connectivity- und Authentication-Manifeste Generation 1 als
-  `NotProvisioned`
 
 Erst nach Schreiben, Ruecklesen und Validieren des gesamten Graphen wird
 Bootstrap auf `Initialized` fortgeschrieben.
@@ -891,9 +764,11 @@ Unbekannte oder nicht migrierbare Schemas loesen keine Factory-Neuanlage aus.
 
 ### StorageEpoch
 
-Die gesamte Konfigurations- und Secret-Persistenz ist an die aktuelle
-StorageEpoch gebunden. Eine Referenz ist nur gueltig, wenn alle beteiligten
-Objekte dieselbe aktuelle Epoche besitzen.
+Die gesamte Konfigurationspersistenz ist an die aktuelle `StorageEpoch`
+gebunden. Eine Referenz ist nur gueltig, wenn alle beteiligten Objekte dieselbe
+aktuelle Epoche besitzen. Spaetere reale Connectivity- und
+Authentication-Domaenen muessen sich ebenfalls an diese Epoche binden, werden
+aber nicht von #57 vorbereitet.
 
 ### Werksreset
 
@@ -903,16 +778,19 @@ wiederaufnehmbar:
 1. StorageEpoch ohne stillen Ueberlauf erhoehen
 2. Resetting unter neuer Epoche persistieren
 3. Referenzen alter Epochen logisch ungueltig machen
-4. Connectivity und Authentication als `NotProvisioned` erzeugen
-5. neue Initialkonfiguration aktivieren
+4. neue Initialdokumente, Manifest und Root unter der neuen Epoche schreiben,
+   ruecklesen und vollstaendig validieren
+5. den neuen Konfigurationsgraphen aktivieren
 6. Bootstrap als `Initialized` abschliessen
 
-Der Reset invalidiert Active, Pending und Fallback, macht alte Secrets logisch
-unerreichbar und reaktiviert nie eine fruehere CredentialEpoch. Eine sichere
-physische Loeschung alter Flashbytes wird ohne Plattformnachweis nicht
-zugesichert. Touchkalibrierung bleibt erhalten. Bedienablauf, physische Geste
-sowie Lauf-, Journal- und Historiendaten bleiben bei ihren zustaendigen Issues.
-Korruption loest niemals automatisch einen Werksreset aus.
+Der Reset invalidiert Active und Fallback der alten Epoche. Spaetere reale
+Connectivity- und Authentication-Domaenen muessen ihre eigenen
+epochengebundenen Resetregeln ergaenzen; #57 erfindet sie nicht vorab. Eine
+sichere physische Loeschung alter Flashbytes wird ohne Plattformnachweis nicht
+zugesichert. Die geraetespezifische Touchkalibrierung bleibt erhalten.
+Bedienablauf, physische Geste sowie Lauf-, Journal- und Historiendaten bleiben
+bei ihren zustaendigen Issues. Korruption loest niemals automatisch einen
+Werksreset aus.
 
 ## Speicherport und Modulgrenzen
 
@@ -941,8 +819,7 @@ erfolgreicher Write; ein erfolgreich zurueckgekehrter Write ist dauerhaft.
 
 Die Plattform erhaelt Schluessel, Slotzahl, Record-Type und Schutzmengen von der
 Anwendung. Sie kennt keine konkreten Dokumente, Manifestbedeutungen,
-Factorywerte, Programme, Pending-Regeln, Authentifizierungsbedeutung, Preview,
-Lauf oder Aktivierungswirkung.
+Factorywerte, Programme, Vorschau, Lauf oder Aktivierungswirkung.
 
 Ein einzelner technischer Kandidatenscan verarbeitet hoechstens acht Slots
 derselben Recordgruppe. Die aktuell spezifizierten Gruppen benoetigen
@@ -951,10 +828,11 @@ Reserve fuer dieselbe Plattformabstraktion, ohne eine unbeschraenkte oder
 spekulative Slotplattform zu schaffen.
 
 `fermentation_app` besitzt konkrete Dokumente, Schemas, IDs, Schluessel,
-Manifest-, Root-, Bootstrap- und Intentbedeutung, Graphvalidierung,
-ProgramCatalog, Preview, Pending, Secret-Manifeste, Migration, Boot/Recovery,
-RuntimeConfigurationSnapshot und die typisierten Integrationsports zu #17 und
-#24.
+Manifest-, Root- und Bootstrapbedeutung, Graphvalidierung, ProgramCatalog,
+fluechtige Vorschau, Migration, Boot/Recovery,
+`RuntimeConfigurationSnapshot` und den typisierten
+`ConfigurationRuntimeFailure` fuer die spaetere Integration in #24. #56 und
+#57 fuehren keinen Port zu #17 und keine vorbereitete Secret-Domaene ein.
 
 `device_platform_test_support` enthaelt nur anwendungsneutrale Testadapter wie
 `SimulatedPersistentStateStore`, kontrollierbare Zufallsquelle, Cut-Point- und
@@ -965,9 +843,11 @@ Produktionsmodul oder ESP32-Profil darf Test-Support referenzieren.
 
 ## Ressourcenvertrag
 
-Die Umsetzung erzwingt zentrale Softwareobergrenzen fuer Preview,
-Recordpuffer, typisierten ProgramCatalog und alle Payloads, behauptet damit aber
-kein reales Hardwarebudget und keine PSRAM-Verfuegbarkeit.
+Die Umsetzung erzwingt zentrale Softwareobergrenzen fuer fluechtige Vorschau,
+Recordpuffer, typisierten ProgramCatalog und alle Payloads. Die konkreten
+Vorschau- und Workflowbudgets werden erst im Detailplan und
+Ressourcennachweis von #56 festgelegt; daraus folgt weder eine ungepruefte reale
+Hardwaregarantie noch eine PSRAM-Verfuegbarkeit.
 
 Ein Preview wird erst nach erfolgreicher Ressourcenbereitstellung sichtbar.
 Vor Root-Commit bricht jeder Ressourcenfehler typisiert ohne Teilaktivierung ab.
@@ -1022,11 +902,15 @@ Die vollstaendige Matrix umfasst nach Abschluss aller Teilissues mindestens:
 
 - Bootstrap
 - mindestens fuenf aufeinanderfolgende Active-Commits
-- Pending erzeugen, mindestens dreimal ersetzen, verwerfen und erneut erzeugen
-- `Anwenden und neu starten`
-- kombinierte Connectivity- und Konfigurationstransaktion
-- Authentication-Rootwechsel und Widerruf
-- Active-/Pending-Migration
+- fluechtige Vorschau erstellen, verwerfen, bestaetigen und bei geaenderter
+  Basis als Konflikt ablehnen
+- Manifest- und Root-Slotrotation bis ueber die erste Wiederverwendung hinaus
+- technische und fachliche Graphkorruption an Active und Fallback
+- Fehler bei Dokument-, Manifest- und Root-Write sowie Readback
+- Runtimevorbereitung vor dem Root-Commit
+- Neustart unmittelbar vor und nach dem Root-Commit
+- unerwartete Verletzung des nicht fehlschlagenden Publish-Vertrags
+- Schema-Copy-Migration ueber denselben Active-/Fallback-Commitpfad
 - Werksreset
 
 Jeder Cut besitzt ein konkretes Recovery-Orakel; ein allgemeiner Fehlerzustand
@@ -1036,13 +920,11 @@ Immer gelten:
 
 - keine gemischten Dokumentgenerationen
 - keine Aktivierung allein wegen hoher Generation
-- keine Wirkung unreferenzierter Secrets
-- kein wirksamer Prepared-Authentication-Root
-- keine Reaktivierung widerrufener Credentials
-- keine Pending-Aktivierung ohne passende Absicht
-- keine Aenderung eines aktiven oder wiederherzustellenden Laufs
+- keine persistente oder nach Neustart wiederauflebende Vorschau
+- kein Pending, Aktivierungsintent oder vorbereiteter paralleler Active-Zweig
 - keine Behandlung beschaedigter Daten als leer
 - keine Konfigurationsfreigabe bei unklarem Zustand
+- Touchkalibrierung bleibt beim normalen Werksreset erhalten
 
 Korruptionstests unterscheiden rohe Byteaenderung ohne CRC-Anpassung und
 semantisch ungueltige, CRC-korrekt neu kodierte Datensaetze.
@@ -1266,27 +1148,33 @@ ausschliesslich den Kapazitaetsfehler eines tatsaechlich gelesenen Slots.
 
 ### Paket C: Manifeste, kanonische Roots, Preview und Runtimeaktivierung
 
-- Active/Fallback/Pending und korrigierte kanonische Schutzwurzeln
-- Preview, Owner-, Token- und Konfliktsemantik
-- RuntimeConfigurationSnapshot und Prepare/Publish
-- externer RunAssessment-Port zu #17
-- typisierter ConfigurationSafetyIntent zu #24
+- Active/Fallback und korrigierte kanonische Schutzwurzeln
+- vollstaendige technische und fachliche Graphvalidierung
+- sichere Manifest- und Root-Slotrotation
+- fluechtige vollstaendig validierte Vorschau mit Revisions-, Basis- und
+  Konfliktschutz
+- vorbereiteter `RuntimeConfigurationSnapshot`, atomarer Root-Commit und
+  vertraglich nicht fehlschlagendes Publish
+- typisierter `ConfigurationRuntimeFailure` fuer die spaetere Integration in
+  #24
+- kein Pending, Aktivierungsintent oder vorbereiteter paralleler Active-Zweig
 
-### Paket D: Bootstrap, Secret-Manifeste, Werksreset und End-to-End-Recovery
+### Paket D: Bootstrap, StorageEpoch, Werksreset und End-to-End-Recovery
 
 - Bootstrap und StorageEpoch
-- Connectivity-/Authentication-Manifeste Schema 1
-- vorwaertsgerichtete Authentication-Roots
+- Korruptionssperre statt stiller Factory-Neuanlage
 - wiederaufnehmbarer Werksreset
+- Erhalt der geraetespezifischen Touchkalibrierung
+- keine leeren Connectivity-/Authentication-Manifeste, -Roots oder -Slots
 - vollstaendige Cut-Point- und Ressourcenmatrix
 
 Jedes Paket erhaelt einen eigenen kleinen PR. Issue #16 bleibt als
 Tracking-Issue offen und wird erst abgeschlossen, wenn alle Teilissues gemergt
 und die End-to-End-Akzeptanzkriterien erfuellt sind.
 
-Bis diese Teilissues angelegt, verknuepft und im INDEX eingetragen sind, ist
-Issue #16 nicht `READY` und es darf kein Implementierungsbranch fuer den
-gesamten Vertrag erstellt werden.
+#54 und #55 sind abgeschlossen. #56 und #57 bleiben eigene, nacheinander
+geplante Implementierungsvorhaben; fuer den Gesamtvertrag wird kein einzelner
+Implementierungsbranch erstellt.
 
 ## Ausdruecklicher Nicht-Scope
 
@@ -1296,8 +1184,9 @@ Der Themenbereich implementiert noch keine:
 - portables Backupformat, Journale und Aufbewahrung aus #19
 - systemweite Fehlerklassen, persistente Verriegelungen, vollstaendige
   `SAFE_BOOT`-Politik oder reale Aktorsperren aus #24
-- reale WLAN-Credentials, Passwort-/PIN-Pruefnachweise, Anmeldung, Sitzungen,
-  Tokens, CSRF oder Sperrzeiten aus #27
+- reale Connectivity-Domaene, WLAN-Credentials, Passwort-/PIN-Pruefnachweise,
+  Anmeldung, Sitzungen, Tokens, CSRF oder Sperrzeiten aus den spaeteren
+  Connectivity-/Authentication-Arbeiten
 - noch nicht fachlich definierte Display-, Ton-, Sensor-, Regel-, Sicherheits-
   oder Hardwarefelder
 - lokale Terminplanung oder lokale-Zeit-nach-UTC-Regeln
