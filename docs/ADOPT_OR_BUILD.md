@@ -101,6 +101,15 @@ spaeterer Wechsel rechtfertigt eine vorsorgliche Provisioning-, Provider-,
 Plugin- oder Mehradapterarchitektur; die konkrete Integration bleibt an der
 Composition Root austauschbar.
 
+Der primaere Onboarding-QR transportiert die individuellen SoftAP-
+Zugangsdaten im gaengigen WLAN-QR-Format; die sichtbare Portaladresse bleibt
+ein manueller Rueckfall. Payload und Secretregeln entwickelt das Projekt,
+waehrend eine QR-Bibliothek erst nach Scannbarkeits- und Ressourcenmessung
+gewaehlt wird. Das geschuetzte Ersatz-WLAN ist davon getrennt: Es ist ein
+projektspezifischer Netzwerklebenszyklus bei langem Heim-WLAN-Ausfall, nutzt
+die evaluierten Frameworkdienste hinter schmalen Grenzen und erzeugt keine
+allgemeine Connectivity-Plattform.
+
 ## JSON an externen Grenzen
 
 Standardkonformes JSON-Parsing und -Serialisieren wird adoptiert statt als
@@ -116,6 +125,14 @@ in Fach-, Safety-, Persistenz- oder gemeinsame View-Modelle; interne atomare
 Persistenz bleibt beim typisierten binaeren Wireformat. Ein spaeterer Wechsel
 ersetzt die konkrete Codecgrenze und rechtfertigt weder einen
 `IJsonProvider`, ein Pluginregister noch einen vorsorglichen Zweitcodec.
+
+Die Grenzen kleiner Kommandos werden aus ihren maximalen DTOs nachgewiesen.
+Fuer einen vollstaendigen Import wird keine feste Groesse vorweggenommen: Der
+maximal gueltige externe Kandidat wird aus dem gesamten Schema erzeugt und
+gemessen; erst danach faellt die Wahl zwischen begrenztem Gesamtbody und
+begrenztem Streaming/Chunking. Backupausgabe und Importrequest bleiben
+getrennte Vertraege, und beide Importwege validieren vor Aktivierung einen
+vollstaendigen typisierten Kandidaten.
 
 ## Lokaler HTTP-Transport und Weboberflaeche
 

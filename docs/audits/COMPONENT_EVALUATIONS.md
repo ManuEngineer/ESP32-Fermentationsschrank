@@ -87,6 +87,16 @@ Verbleibende eigene Logik: Touchkalibrierung, Ereignisentprellung,
 Aufweckschutz, UI-Navigation, Sicherheits- und Kommandosemantik. Kein Treiber
 darf eine Aktorfreigabe ausloesen. Entscheidungsstatus: `SPIKE_REQUIRED`.
 
+Der PIN-unabhaengige Raw-Touch-Boot-Recoverypfad ist ein Auswahlgate. Jeder
+verbleibende Kandidat muss im ersten Zehn-Sekunden-Boot-/`SAFE_BOOT`-Fenster
+vor der normalen UI und ohne brauchbare gespeicherte Kalibrierung erkennen,
+False Trigger vermeiden, einen vorzeitig freigegebenen Kontakt sicher
+abbrechen und alle Leistungsaktoren aus halten. Ein fehlender Touchcontroller
+fuehrt zum UART-Rueckfall; Web, Session oder Service-PIN duerfen den Modus nicht
+ausloesen. Genaue Geste und Schwellen sind `TBD_HARDWARE`. Der normale
+Werksreset behaelt die Kalibrierung gemaess ADR-010; ein gesonderter
+Kalibrierungs-Recoveryfall bleibt getrennt.
+
 Quellen: [LovyanGFX](https://github.com/lovyan03/LovyanGFX),
 [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI),
 [Arduino_GFX](https://github.com/moononournation/Arduino_GFX),
@@ -264,7 +274,7 @@ abweichende Escape-, Redaction- oder Fehlerregeln begruenden.
 |---|---|---:|
 | A | Start, Stop, Bestaetigung, einzelne kleine Einstellung | 1 KiB |
 | B | Programm- oder zusammengehoerige Konfigurationsaenderung | 4 KiB |
-| C | vollstaendiger R1-Import oder secret-freies Backup | 16 KiB |
+| C | vollstaendiger R1-Import | `DERIVE_FROM_MAXIMUM_VALID_EXTERNAL_SCHEMA`; `MEASUREMENT_REQUIRED` |
 
 Die maximale Verschachtelung betraegt zunaechst 6. Jedes Schema legt Root-Typ,
 Pflichtfelder, String-, Array-, Objektfeld-, Zahlen- und Schemaversiongrenzen
@@ -273,8 +283,17 @@ und andere nicht standardkonforme oeffentliche Zahlenwerte werden abgelehnt.
 Content-Type und Methode sind verbindlich; Content-Length wird vor dem Einlesen
 geprueft, sofern vorhanden. Nicht verlaesslich begrenzbare Bodies werden
 zeitlich und mengenmaessig begrenzt verarbeitet oder abgelehnt. Die Werte sind
-initiale Spikegrenzen; eine spaetere Erhoehung braucht einen konkreten
-maximalen DTO-Nachweis und erneute Messung.
+initiale Spikegrenzen nur fuer A und B und brauchen den jeweiligen maximalen
+DTO-Nachweis. Fuer C erzeugt der Spike deterministisch den maximal gueltigen
+externen Kandidaten mit maximal 16 Programmen, IDs bis 48 Byte, Namen bis 96
+Byte, Notizen bis 1.024 Byte je Programm, allen Programmfeldern,
+Konfiguration, Schema, JSON-Struktur, Worst-Case-Escaping,
+UTF-8, Metadaten sowie Integritaets-/Referenzfeldern. Erst daraus folgt eine
+harte Grenze. Der vollstaendige Maximalfall muss importierbar sein; Gesamtbody
+mit begruendeter Reserve und begrenztes Streaming/Chunking bleiben bis zur
+Messung offen. Beide Wege validieren einen vollstaendigen typisierten
+Kandidaten vor atomarer Aktivierung. Backupausgabe und Importrequest sind
+getrennte Vertraege.
 
 ### Stabiler Fehlervertrag
 
@@ -481,8 +500,12 @@ bleiben unabhaengig von WLAN, Portal und Browser.
 
 BLE, Smartphone-App, SmartConfig, Cloud-Provisioning, mehrere Provider,
 automatische Internetfreigabe und komplexe Netzwerkverwaltung sind keine
-Release-1-Pflicht. Ein QR-Code kann spaeter die lokale Portaladresse abbilden;
-diese Entscheidung waehlt keine QR-Bibliothek aus.
+Release-1-Pflicht. Der primaere QR-Code enthaelt die individuelle SoftAP-SSID
+und das individuelle SoftAP-Passwort im gaengigen WLAN-QR-Format. SSID,
+Passwort, Portaladresse beziehungsweise IP und eine lokale Schaltflaeche zur
+erneuten QR-Anzeige bleiben separat sichtbar; die Portaladresse ist der
+manuelle Rueckfall nach dem WLAN-Beitritt, nicht der primaere QR-Inhalt. Diese
+Anforderung waehlt keine QR-Bibliothek aus.
 
 WiFiManager dient ausschliesslich als technischer Portalbaustein. Ausserhalb
 der Bibliothek bleiben Startentscheidung, Touchstatus und Abbruch, der
@@ -566,6 +589,19 @@ Quelle: [WiFiManager](https://github.com/tzapu/WiFiManager). Abgerufen am
 Uebernahme `SPIKE_REQUIRED` und `FINAL_SELECTION_PENDING` fuer den von #27
 getrennten Onboarding-Arbeitsbereich.
 
+### Getrennter Ersatz-WLAN-Lebenszyklus
+
+Das geschuetzte Ersatz-WLAN ist `REQUIREMENT_DECIDED` und strikt vom
+Onboarding getrennt. Es startet erst nach einem laengeren Ausfall eines bereits
+konfigurierten Heim-WLANs; Aktivierungs- und Abschaltuebergang bleiben
+`TBD_COMMISSIONING`. Heim-WLAN-Reconnect laeuft parallel, der Prozess bleibt
+unveraendert und normale Weboberflaeche, Netzwerkdiagnose sowie erneute
+Einrichtung bleiben unter den bestehenden Auth-, CSRF-, Service- und
+Safetygates erreichbar. Nach stabiler Heim-WLAN-Rueckkehr endet das Ersatz-WLAN
+kontrolliert, ohne offene Requests oder Speichervorgaenge abzuschneiden.
+Clientzahl und Ressourcen sind `MEASUREMENT_REQUIRED`; dies ist kein neuer
+Bibliotheksentscheid und keine Connectivity-Pluginplattform.
+
 ## QR-Code
 
 | Kandidat | Stand/Lizenz | Ressourcen und Adapter | Empfehlung |
@@ -573,8 +609,14 @@ getrennten Onboarding-Arbeitsbereich.
 | ricmoo/QRCode | `0.0.1`, `eafbde49`, MIT; nennt Project Nayuki als Ursprung | kleine C/C++-Bibliothek; Versions- und Wartungsaktivitaet gering; Ausgabematrix begrenzen | als Arduino-nahe Referenz messen |
 | Project Nayuki QR-Code-generator | `1.8.0`, `2c9044de`, MIT im Quellheader | portable C-Implementierung, auf feste QR-Version/ECC und caller-provided Buffer begrenzbar | bevorzugter technischer Gegenkandidat, aber erst nach Lizenz-/Ressourcenpruefung im umsetzenden PR |
 
-Nur der lokale WLAN-QR-String wird erzeugt; Onboardingstatus, Secret-Schutz und
-Displaydarstellung bleiben eigene Logik. Entscheidungsstatus: `NOT_SELECTED`.
+Der Payloadvertrag ist `REQUIREMENT_DECIDED`: individuelle SoftAP-SSID und
+individuelles SoftAP-Passwort im gaengigen WLAN-QR-Format. Escaping,
+Sonderzeichen, sichtbare/versteckte SSID soweit unterstuetzt, Scannbarkeit auf
+320 x 240 unter Android, iOS/iPadOS und soweit unterstuetzt Windows,
+Kameraabstand, Helligkeit, Rotation, Fallback und Credentialwechsel werden
+gemessen. Keine Zugangsdaten gelangen in Logs. Onboardingstatus, Secret-Schutz
+und Displaydarstellung bleiben eigene Logik. QR-Bibliothek:
+`FINAL_SELECTION_PENDING`; Darstellung/Scannbarkeit: `SPIKE_REQUIRED`.
 
 Quellen: [ricmoo/QRCode](https://github.com/ricmoo/QRCode),
 [Project Nayuki](https://github.com/nayuki/QR-Code-generator). Abgerufen am

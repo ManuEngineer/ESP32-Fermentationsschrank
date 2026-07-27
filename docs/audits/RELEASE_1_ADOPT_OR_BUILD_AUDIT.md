@@ -326,6 +326,15 @@ Portalstart-, Verbindungs- und Antwortzeiten, Regelzyklus-Jitter,
 Watchdog-/Resetereignisse, Abhaengigkeiten und projektspezifischer
 Integrationscode.
 
+Der primaere Onboarding-QR-Code enthaelt die individuelle SoftAP-SSID und das
+individuelle SoftAP-Passwort im gaengigen WLAN-QR-Format. SSID, Passwort,
+Portaladresse beziehungsweise IP und eine lokale Schaltflaeche zum erneuten
+Anzeigen des QR-Codes bleiben separat sichtbar; die Portaladresse ist nur der
+manuelle Rueckfall nach dem WLAN-Beitritt. Der Spike prueft Escaping,
+Sonderzeichen und Scannbarkeit auf 320 x 240 mit den relevanten Clients. Der
+Payloadvertrag ist `REQUIREMENT_DECIDED`; Darstellung und Scannbarkeit sind
+`SPIKE_REQUIRED`, die QR-Bibliothek bleibt `FINAL_SELECTION_PENDING`.
+
 WiFiManager bleibt ein technischer Portalbaustein. Startentscheidung,
 Touchstatus und Abbruch, Kandidatenpruefung, Credential-Commit,
 Secret-Lebenszyklus, Redaction, Recovery, Fehlersemantik und Safetyisolation
@@ -345,6 +354,20 @@ abbildbare Release-1-Anforderung. Erst danach waehlt der Owner WiFiManager oder
 den Frameworkadapter endgueltig. Ein spaeterer Wechsel bleibt ueber die kleine
 konkrete ESP32-Integrationsgrenze an der Composition Root moeglich, ohne leere
 Zukunftsports vorzubereiten.
+
+Das geschuetzte Ersatz-WLAN ist ein eigener akzeptierter R1-
+Netzwerklebenszyklus und kein Onboarding-Fallback. Es startet erst, wenn ein
+konfiguriertes Heim-WLAN laenger als eine konfigurierbare Zeit unerreichbar
+bleibt. Reconnectversuche laufen parallel weiter; Fermentation und lokale
+Bedienung bleiben unveraendert, waehrend normale Weboberflaeche, Laufanzeige,
+zulaessige Bedienhandlungen, Netzwerkdiagnose und erneute WLAN-Einrichtung
+erreichbar sind. Auth-, CSRF-, Service-PIN- und Safetygates gelten
+unveraendert. Nach stabiler Rueckkehr des Heim-WLANs endet das Ersatz-WLAN nach
+einer kontrollierten Uebergangszeit, ohne offene Requests oder
+Speichervorgaenge unkontrolliert abzuschneiden. Funktion:
+`REQUIREMENT_DECIDED`; Zeiten: `TBD_COMMISSIONING`; technische Umsetzung hinter
+WLAN-, Webserver- und Auth-Spike-Gates. Kurze Ausfaelle duerfen weder
+Ersatz-WLAN noch Onboardingportal starten.
 
 ### 9. Verbindlicher JSON-Richtungsentscheid
 
@@ -389,13 +412,13 @@ View-Modelle oder fachliche Ports und Kommandos. Parsererfolg ist keine
 fachliche Gueltigkeit; ein Import wird waehrend des Parsings nie aktiviert
 oder als kanonischer Zustand veroeffentlicht.
 
-Fuer Spike und Prototyp gelten zunaechst diese harten Eingabeprofile:
+Fuer Spike und Prototyp gelten zunaechst diese Eingabeprofile:
 
 | Profil | Zweck | initiale Bodygrenze |
 |---|---|---:|
 | A | kleine Kommandos wie Start, Stop oder Bestaetigung | 1 KiB |
 | B | Programm- und zusammengehoerige Konfigurationsaenderungen | 4 KiB |
-| C | vollstaendiger R1-Import oder secret-freies Backup | 16 KiB |
+| C | vollstaendiger R1-Import | `DERIVE_FROM_MAXIMUM_VALID_EXTERNAL_SCHEMA`; `MEASUREMENT_REQUIRED` |
 
 Die maximale Verschachtelung betraegt im Prototyp zunaechst 6. Root-Typ,
 Methode, Content-Type, String-, Array-, Objektfeld-, Zahlen-, Schema- und
@@ -403,9 +426,24 @@ Antwortgrenzen werden pro Vertrag festgelegt. Unbekannte Felder werden je
 Schema einheitlich kontrolliert abgelehnt oder ausdruecklich ignoriert;
 `NaN`, `Infinity` und andere nicht standardkonforme oeffentliche Zahlenwerte
 sind unzulaessig. Bodies ohne verlaesslich begrenzbare Laenge werden
-kontrolliert und zeitlich begrenzt verarbeitet oder abgelehnt. Die spaetere
-Umsetzung muss mit realen maximalen DTOs nachweisen, ob diese initialen Grenzen
-genuegen; jede Erhoehung braucht fachliche Begruendung und neue Messung.
+kontrolliert und zeitlich begrenzt verarbeitet oder abgelehnt. Fuer Profil A
+und B muss das jeweilige maximale DTO die initiale Grenze bestaetigen. Fuer
+Profil C erzeugt der Spike zuerst deterministisch den maximal gueltigen
+externen Importkandidaten aus maximal 16 Programmen, IDs bis 48 Byte, Namen bis
+96 Byte, Notizen bis 1.024 Byte je Programm und allen weiteren
+Programmfeldern, Konfiguration, Schemaversionen, JSON-Struktur,
+Worst-Case-Escaping, UTF-8, Metadaten sowie Integritaets- und Referenzfeldern.
+Erst daraus wird die harte externe Grenze abgeleitet. Der vollstaendige
+gueltige Maximalfall muss importierbar bleiben.
+
+Der Spike entscheidet danach zwischen einem begrenzten Gesamtbody mit
+begruendeter Reserve und einem begrenzten Streaming-/Chunkpfad. Auch beim
+Streaming entstehen vor jeder Aktivierung ein vollstaendiger typisierter
+Kandidat und dessen technische und fachliche Vollvalidierung; Gesamt-, Feld-,
+Objekt-, String-, Array- und Zeitgrenzen bleiben fest. Abbruch oder
+Stromunterbruch hat keine Teilwirkung. Backupausgabe und Importrequest sind
+getrennte Vertraege; eine gestreamte Backuperzeugung beweist keinen
+importierbaren Gesamtbody.
 
 Die Codecgrenze uebersetzt mindestens Bodygroesse, Content-Type, Syntax,
 Abbruch, Tiefe, Ressourcenlimit, Root-Typ, Pflicht-/unbekannte Felder,
@@ -476,12 +514,13 @@ Planungsschritt den folgenden Schnitt festlegen:
 Der Werksreset bleibt Bestandteil des zentralen Bootstrap-/Recoveryvertrags
 von #57. #19 darf nur seine Journal-/Historiedaten gemaess der zentralen
 Resetpolicy behandeln, gegebenenfalls vorher exportieren und ein Resetereignis
-protokollieren, soweit der zentrale Ablauf dies zulaesst. Ob eine
-Touchkalibrierung beim Werksreset erhalten oder ausdruecklich geloescht wird,
-bleibt ein eigener zentraler Policyentscheid zwischen Recovery und Display-/
-Touchintegration. Bestehende Quellen mit einer Festlegung dazu muessen in dem
-spaeteren ownerfreigegebenen Planungsschritt konsistent aufgeloest werden; #19
-entscheidet diese Frage nicht.
+protokollieren, soweit der zentrale Ablauf dies zulaesst. Gemaess ADR-010 und
+der zentralen Persistenzspezifikation behaelt ein vollstaendiger Werksreset die
+geraetespezifische Touchkalibrierung; #19 loescht oder veraendert sie nicht und
+#57 implementiert diese Erhaltung. Ein gesonderter lokaler Recoveryfall fuer
+unbrauchbare Kalibrierungsdaten bleibt davon getrennt. Touchkalibrierung bleibt
+aus portablen Backups ausgeschlossen und wird nicht aus ungeprueften Werten
+automatisch wiederhergestellt.
 
 ### 11. OD-07-Teilentscheid: Issue #25 auf gemeinsame UI-Basis begrenzen
 
@@ -970,6 +1009,7 @@ Release 1 enthaelt:
   fabrikneuen Speicher;
 - keinen stillen Factory-Fallback bei Korruption oder unbekanntem Schema;
 - einen ausdruecklich ausgeloesten, wiederaufnehmbaren Werksreset;
+- Erhaltung der geraetespezifischen Touchkalibrierung gemaess ADR-010;
 - idempotente Wiederaufnahme nach Stromausfall;
 - logische Unerreichbarkeit alter Epochen nach abgeschlossenem Reset;
 - keine unbelegte Behauptung sicherer physischer Loeschung alter Flashbytes.
@@ -1051,7 +1091,13 @@ Variante A erweitert den R1-Kern spaeter additiv:
   bleiben ohne WLAN vollstaendig nutzbar;
 - WLAN-Onboarding mit zuerst begrenzt geprueftem WiFiManager als bevorzugtem
   Kandidaten und einem nur bei dokumentiertem Ausloeser nachgezogenen lokalen
-  Frameworkadapter als Rueckfall; lokale Zeit/NTP und Zeitzonenanzeige;
+  Frameworkadapter als Rueckfall; primaer ein WLAN-Credential-QR mit sichtbarem
+  manuellem Portaladress-Rueckfall; geschuetztes Ersatz-WLAN als eigener
+  Netzwerklebenszyklus bei langem Heim-WLAN-Ausfall; lokale Zeit/NTP und
+  Zeitzonenanzeige;
+- PIN-unabhaengiger lokaler Raw-Touch-Boot-Recoverypfad im ersten
+  Boot-/`SAFE_BOOT`-Fenster; genaue Geste/Schwellen bleiben `TBD_HARDWARE`, die
+  Hardwaretauglichkeit `SPIKE_REQUIRED`;
 - begrenzte externe JSON-Vertraege mit ArduinoJson `7.4.3` als bevorzugtem,
   noch spikepflichtigem Kandidaten; interne atomare Persistenz bleibt binaer;
 - versionierte Konfiguration, Laufpersistenz, Recovery, ein typisiertes

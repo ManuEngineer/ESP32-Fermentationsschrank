@@ -327,6 +327,20 @@ Jeder nach Stufe 2 verbleibende Kandidat durchlaeuft in derselben Reihenfolge:
     Safety-Kern duerfen nicht blockieren.
 14. Unter allen Display- und Touchoperationen nachweisen, dass geplante Regel-
     und Safety-Arbeit nicht blockiert wird.
+15. Raw-Touch bereits vor oder waehrend der Controllerinitialisierung halten
+    und im ersten Zehn-Sekunden-Boot-/`SAFE_BOOT`-Fenster erkennen.
+16. Erkennung ohne gespeicherte beziehungsweise mit unbrauchbarer Kalibrierung;
+    keine False Trigger ohne Beruehrung, bei Rauschen, Reset oder kurzem Touch.
+17. Halten ueber Bootgrenzen; Freigeben vor der mehrstufigen langen
+    Bestaetigung bricht sicher ab; nach Fensterende kein spaeter Trigger.
+18. Recovery haelt Peltier und alle Leistungsaktoren aus; Neustart waehrend
+    Recovery bleibt sicher.
+19. Fehlender/defekter Touchcontroller fuehrt zu sicherem Hinweis und UART als
+    letztem Recoveryweg; kein Netzwerkweg und keine Service-PIN loesen den
+    Modus aus.
+20. Ein abgeschlossener normaler Werksreset behaelt die geraetespezifische
+    Touchkalibrierung; der gesonderte Kalibrierungs-Recoveryfall bleibt davon
+    getrennt.
 
 #### Messwerte
 
@@ -356,6 +370,9 @@ Pro Kandidat und Baseline werden erfasst:
 - Build passt in die gemessenen Release-1-Budgets mit dokumentiertem Abstand;
 - der Adapter kann Bibliothekstypen aus der Anwendung fernhalten;
 - Herkunfts- und Lizenzpruefung ist fuer den konkreten Dateisatz abschliessbar.
+- der PIN-unabhaengige Raw-Touch-Boot-Recoveryvertrag ist aktorsicher und ohne
+  brauchbare gespeicherte Kalibrierung nachgewiesen; genaue Geste und
+  Schwellen bleiben `TBD_HARDWARE`.
 
 #### Abbruchkriterien
 
@@ -366,6 +383,7 @@ Pro Kandidat und Baseline werden erfasst:
 - notwendige PSRAM-Abhaengigkeit oder nicht begrenzbarer grosser Puffer;
 - nicht aufloesbare Lizenz-/Herkunftsfrage fuer den konkret benoetigten Code;
 - Kandidat erfordert einen Toolchainwechsel ohne separaten Ownerentscheid.
+- Kandidat kann den Raw-Touch-Boot-Recoveryvertrag nicht erfuellen.
 
 ### Stufe 4 – Ownerentscheid und Rueckfallkandidat
 
@@ -754,6 +772,18 @@ Der identisch reproduzierbare Ablauf prueft:
 9. keine Secrets in Logs, URLs, Diagnose, Exporten oder Fehlermeldungen;
 10. keine relevante Blockierung von Regelung oder Safety sowie vollstaendige
     Ressourcenfreigabe nach Portalende.
+11. primaeren QR mit individueller SoftAP-SSID und individuellem
+    SoftAP-Passwort im gaengigen WLAN-QR-Format; Escaping, Sonderzeichen,
+    sichtbare/versteckte SSID soweit unterstuetzt, 320-x-240-Scannbarkeit,
+    Abstand, Helligkeit, Rotation und Credentialwechsel ohne Secretlogs;
+12. SSID, Passwort, Portaladresse/IP und lokale QR-Wiederanzeige separat; die
+    Portaladresse bleibt der manuelle Rueckfall nach dem WLAN-Beitritt;
+13. separaten geschuetzten Ersatz-WLAN-Lifecycle: kurzer Ausfall startet
+    nichts, langer Ausfall startet nach `TBD_COMMISSIONING`, Heim-Reconnect
+    laeuft parallel, Lauf/Web/Auth-/CSRF-/Service-/Safetygates bleiben wirksam,
+    und stabile Heim-WLAN-Rueckkehr beendet ihn nach kontrollierter
+    Uebergangszeit ohne Abbruch offener Requests oder Speichervorgaenge;
+14. Neustart waehrend Ersatz-WLAN und Erhalt aller bestaetigten Credentials.
 
 Auf realer ESP32-Hardware werden Android, iOS beziehungsweise iPadOS und
 Windows verwendet. Fuer jeden Client werden automatische Captive-Portal-
@@ -835,12 +865,23 @@ Der Prototyp bildet mindestens ab:
 9. den Nachweis, dass keine ArduinoJson-Typen ausserhalb der Codec-/
    Integrationsschicht sichtbar werden.
 
-Initial gelten die harten Bodygrenzen 1 KiB fuer kleine Kommandos, 4 KiB fuer
-Programme und Konfigurationsaenderungen und 16 KiB fuer vollstaendigen
-R1-Import beziehungsweise secret-freies Backup. Die maximale Verschachtelung
+Initial gelten 1 KiB fuer nachgewiesene kleine Kommandos und 4 KiB fuer
+nachgewiesene einzelne Programm-/Konfigurationsaenderungen. Fuer den
+vollstaendigen R1-Import gilt `DERIVE_FROM_MAXIMUM_VALID_EXTERNAL_SCHEMA` und
+`MEASUREMENT_REQUIRED`: Der Spike erzeugt zuerst deterministisch den maximal
+gueltigen externen Kandidaten aus maximal 16 Programmen, IDs bis 48 Byte,
+Namen bis 96 Byte, Notizen bis 1.024 Byte je Programm, weiteren Feldern,
+Konfiguration, Schemaversionen, JSON-Struktur,
+Worst-Case-Escaping, UTF-8, Metadaten sowie Integritaets-/Referenzfeldern. Der
+Maximalfall muss importierbar sein. Die maximale Verschachtelung
 betraegt zunaechst 6. Root-Typ, Methode, Content-Type, Strings, Arrays,
 Objektfelder, Zahlen, unbekannte Felder und Schemaversionen werden je Vertrag
 begrenzt. Grosse Antworten und Verlaeufe werden paginiert oder gestreamt.
+Backupausgabe und Importrequest sind getrennte Vertraege. Erst der Spike waehlt
+zwischen begrenztem Gesamtbody mit begruendeter Reserve und begrenztem
+Streaming-/Chunkpfad; beide bauen vor Aktivierung einen vollstaendigen
+typisierten, vollvalidierten Kandidaten und bleiben ohne Teilwirkung bei
+Abbruch oder Stromunterbruch.
 
 ### Stufe 3 – Grenz-, Negativ- und Fuzztests
 

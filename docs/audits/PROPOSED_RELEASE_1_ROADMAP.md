@@ -238,7 +238,11 @@ warten:
    Hardware-Smoke-Test der Stufe 2 und nur `PASS_SMOKE_TEST`-Kandidaten durch
    die vollstaendige identische Matrix der Stufe 3 fuehren. Stufe 4 benennt
    bevorzugten Treiber und Rueckfallkandidat. Reservekandidaten bleiben
-   bedarfsabhaengig. Details stehen im
+   bedarfsabhaengig. Dieselbe Matrix muss den PIN-unabhaengigen Raw-Touch-
+   Boot-Recoverypfad im ersten Zehn-Sekunden-Fenster ohne brauchbare
+   Kalibrierung, False Trigger, sicheren Abbruch, aktorfreien Zustand und UART-
+   Rueckfall nachweisen. Geste und Schwellen bleiben `TBD_HARDWARE`; ein
+   Kandidat ohne diesen Nachweis scheidet aus. Details stehen im
    [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md).
 4. Beide DS18B20-/1-Wire-Stacks gestuft pruefen: Stufe 1 Quelle/Lizenz/Build,
    Stufe 2 Sensorsmoke-Test mit einem realen Sensor und nur nach Erfolg Stufe 3
@@ -263,7 +267,8 @@ warten:
 6. Davon fachlich getrennt, aber mit dem Webserver-Baselineprototyp koordiniert,
    WiFiManager zuerst als begrenzten WLAN-Onboardingkandidaten pruefen:
    Toolchain, Quellen/Lizenz/Webassets, ausdruecklicher Portalstart, reale
-   Android-/iOS-/Windows-Clients, direkter IP-Rueckfall, Credential-Erhalt,
+   Android-/iOS-/Windows-Clients, primaerer QR mit individuellen SoftAP-
+   Zugangsdaten, sichtbarer direkter IP-Rueckfall, Credential-Erhalt,
    Secret-/Fehler-/Lifecyclegrenzen, Cut-Points, Jitter und Ressourcen. Einen
    Adapter aus `WiFi`, `DNSServer`, SoftAP und `WebServer` nur bei einem
    dokumentierten WiFiManager-Problem mit identischem Umfang nachziehen. Dieser
@@ -272,7 +277,9 @@ warten:
 7. ArduinoJson `7.4.3` als `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
    `FINAL_SELECTION_PENDING` in
    einem kleinen aktorfreien Prototyp pruefen: isolierter Build, konkrete
-   DTO-/Codecgrenze, initiale Profile 1/4/16 KiB, Verschachtelungstiefe 6,
+   DTO-/Codecgrenze, 1-/4-KiB-Profile fuer nachgewiesene kleine DTOs,
+   Vollimportgrenze aus dem maximal gueltigen externen Schema,
+   Verschachtelungstiefe 6,
    String-/Array-/Feld-/Schemagrenzen, Importvorschau ohne Aktivierung,
    Streaming/Pagination, reproduzierbare Negativ-/Fuzztests sowie ESP32-
    Ressourcen-, Laufzeit- und Jittermessung. Dieser Spike wird mit dem
@@ -450,6 +457,12 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   Zugangsdaten bis zum Nachweis nur als Kandidat behandeln und den bisherigen
   funktionierenden Stand bei Fehler, Timeout oder Abbruch erhalten; den
   Frameworkadapter nur bei dokumentiertem Ausloeser identisch vergleichen;
+- den akzeptierten geschuetzten Ersatz-WLAN-Lebenszyklus getrennt vom
+  Onboarding umsetzen und pruefen: kurzer Ausfall startet nichts; langer
+  Ausfall startet nach `TBD_COMMISSIONING`, waehrend Heim-Reconnect, Lauf,
+  normale Weboberflaeche und Auth-/CSRF-/Service-/Safetygates weiterlaufen;
+  stabile Rueckkehr beendet ihn nach kontrollierter Uebergangszeit ohne offene
+  Requests oder Speichervorgaenge abzuschneiden;
 - OD-09 fachlich umsetzen, aber technische Auswahl nicht vorwegnehmen: zuerst
   KDF-/Zufalls-/Ressourcen-/Cut-Point-Spike, danach Ownerentscheid zu KDF und
   Work Factor, erster realer Authkonsument mit Credentialdomaene, fluechtige
@@ -469,12 +482,14 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   lesender Laufexport/secret-freies Backup und erst danach Importvorschau/
   atomare Aktivierung. Interne Journale und Kontrollpunkte bleiben binaer,
   und ein JSON-Import aktiviert nie direkt aus dem Parser. Der Werksreset
-  bleibt bei #57; Erhalt oder Loeschung der Touchkalibrierung wird als
-  separater zentraler Resetpolicyentscheid geklaert;
-- fuer #19/#27/#28 die initialen JSON-Bodyprofile 1 KiB, 4 KiB und 16 KiB sowie
-  Tiefe 6 gegen die realen maximalen DTOs pruefen; Root-, String-, Array-,
-  Feld-, Werte- und Schemaversiongrenzen pro Vertrag festlegen und nur nach
-  fachlicher Begruendung und neuer Messung erhoehen.
+  bleibt bei #57; der Werksreset behaelt die geraetespezifische
+  Touchkalibrierung gemaess ADR-010, waehrend ein gesonderter Recoveryfall fuer
+  unbrauchbare Kalibrierung getrennt bleibt;
+- fuer #19/#27/#28 1 KiB und 4 KiB nur gegen die jeweiligen maximalen kleinen
+  DTOs pruefen; fuer den Vollimport zuerst den maximal gueltigen externen
+  Kandidaten deterministisch erzeugen und die Grenze daraus ableiten. Danach
+  Gesamtbody oder begrenztes Streaming/Chunking entscheiden; Tiefe 6 sowie
+  Root-, String-, Array-, Feld-, Werte- und Schemagrenzen pruefen.
 
 Regelung und Safety muessen unter Web-, Export- und Netzwerklast
 deterministisch bleiben. Request-, Antwort-, JSON-Tiefen-, String-, Array-,
@@ -581,10 +596,10 @@ loest den identischen Vergleich aus.
 
 OD-07 ist vollstaendig entschieden. #19 ist mit vier, #25 mit zwei, #26 mit
 fuenf lokalen, #27 mit fuenf Web- und #28 mit vier Diagnose-/Servicebereichen
-geschnitten. Die Live-Issues bleiben im Audit unveraendert. Der Werksreset bleibt im
-zentralen #57-Recoveryvertrag. Die Behandlung der Touchkalibrierung beim Reset
-bedarf eines eigenen expliziten Policyentscheids zwischen Recovery und
-Display-/Touchintegration und wird nicht in #19 versteckt.
+geschnitten. Die Live-Issues bleiben im Audit unveraendert. Der Werksreset
+bleibt im zentralen #57-Recoveryvertrag und behaelt gemaess ADR-010 die
+geraetespezifische Touchkalibrierung; #19 veraendert sie nicht. Ein gesonderter
+Recoveryfall fuer unbrauchbare Kalibrierung bleibt davon getrennt.
 
 OD-06 ist als Richtungsentscheid entschieden: WiFiManager ist der bevorzugte
 Release-1-Onboardingkandidat und wird zuerst begrenzt geprueft. Die
