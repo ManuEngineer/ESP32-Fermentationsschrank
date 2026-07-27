@@ -181,6 +181,13 @@ einem Geraeteneustart verworfen. Persistente Login-, Refresh- oder
 Browsergeraete-Tokens sind nicht vorgesehen. Ein spaeterer Ausbau benoetigt
 eine neue Entscheidung und einen eigenen Securitynachweis.
 
+Ein reiner Browserneustart ist kein garantiertes Logout- oder
+Widerrufsereignis. Stellt der Browser das Sitzungscookie wieder her, bleibt die
+serverseitige Session hoechstens bis zum Inaktivitaets-/Absolutlimit, Logout,
+Credential-/Moduswechsel, Werksreset oder einem anderen serverseitigen
+Widerruf gueltig. Browser-Fingerprints, `beforeunload`-Garantien oder andere
+Lifecycle-Hacks sind dafuer nicht vorgesehen.
+
 ### Betrieb ohne normales Webpasswort
 
 Ist der normale Webpasswortschutz bewusst deaktiviert:
@@ -368,7 +375,8 @@ Phase 6 und Phase 9 festgelegt.
 - [x] Deutsch, Spanisch und Englisch auch im Web
 - [x] gemaess ADR-017 keine dauerhafte Anmeldung in Release 1
 - [x] fluechtige serverseitige Sessions mit 30 Minuten Inaktivitaet,
-      12 Stunden absoluter Dauer und Widerruf beim Geraeteneustart
+      12 Stunden absoluter Dauer und Widerruf beim Geraeteneustart; ein reiner
+      Browserneustart ist kein garantiertes Widerrufsereignis
 - [x] Service-PIN entsperrt nur die jeweilige Sitzung fuer begrenzte Zeit
 - [x] kritische Serviceaktionen verlangen eine eigene Bestaetigung
 - [x] Live-Aktualisierung ohne manuelles Neuladen

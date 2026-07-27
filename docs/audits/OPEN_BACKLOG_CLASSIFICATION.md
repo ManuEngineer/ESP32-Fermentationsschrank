@@ -76,7 +76,7 @@ Kuehlkoerper-/Peltier-Schutzsensor verpflichtende Freigabegrundlage.
 | **#34 – Sensorvergleich, Offsets, thermische Grundvermessung** | zwingendes Commissioning-Gate | `BLOCKED_HARDWARE` | Diagnose-/Exportmodelle spaeter, drei reale Sensoren | Messplan ausfuehren, Offsets und Thermikdaten versionieren | vollstaendig | nach #29–#33; keine Treiberwahl mehr; Phase 8 | Referenzmessgeraete, Massen und Aufbau bereitstellen |
 | **#35 – PI-Parameter, Luftbegrenzung, Sicherheitsgrenzen** | zwingend | `BLOCKED_HARDWARE`; sekundaer `CUSTOM_SAFETY_CORE` | #22–#24 und Messdaten #34 | vier Parametersaetze und nachgewiesene Grenzen | vollstaendig | reine Parametrierung/Validierung, kein PID-Autotuning; Phase 8 | Ownerfreigabe der gemessenen Sicherheitsrevision |
 | **#36 – Hardwareabnahme, Fehlerinjektionen, Standardprogramme** | zwingend | `BLOCKED_HARDWARE` | gesamte vorherige Software/Adapter, Acceptance-Testvertrag | reale Matrix, Programmdaten und Abweichungsmanagement | vollstaendig | Gate vor Releasebelastung; Phase 8 | Abnahmeverantwortung und sichere Testfreigaben |
-| **#37 – siebentaegiger Belastungstest und R1-Abnahme** | zwingendes Schlussgate | `BLOCKED_HARDWARE` | Ressourcen-/Testinstrumentierung aus allen vorigen Issues | sieben Tage ausfuehren, Resultate bewerten, Releaseentscheid | vollstaendig | letzter Schritt; keine neue Funktion waehrend Test; Phase 8 | formelle Ownerentscheidung Release/Blockade |
+| **#37 – siebentaegiger Belastungstest und R1-Abnahme** | zwingendes Schlussgate | `BLOCKED_HARDWARE` | Ressourcen-/Testinstrumentierung aus allen vorigen Issues; abgeschlossenes `EVALUATE_BEFORE_RELEASE`-Gate zur Plattformverschluesselung | sieben Tage ausfuehren, Resultate bewerten, Releaseentscheid | vollstaendig | erst nach #36 und dokumentiertem Security-Spike samt Ownerentscheid: produktive Auswahl mit Provisionierungs-/Recovery-/Regressionstest oder begruendete Nichtauswahl mit Rest-Risiken und Schutzgrenzen; keine neue Funktion waehrend Test; Phase 8 | formelle Ownerentscheidung fuer Plattformschutz vor #37 sowie danach Release/Blockade |
 
 ## Verbindliche Folgen und weitere Abhaengigkeitskorrekturen
 
@@ -120,6 +120,11 @@ Kuehlkoerper-/Peltier-Schutzsensor verpflichtende Freigabegrundlage.
     verlangt zusaetzlich PIN- und Safety-/Hardwaregates. Begrenztes Polling ist
     eine Funktionsrichtung; Intervalle, Parallelitaet, Antwort-/Chartgroessen
     und Ressourcenbudgets werden erst im Prototyp festgelegt.
+11. Das `EVALUATE_BEFORE_RELEASE`-Gate zur Plattformverschluesselung liegt
+    zwingend zwischen #36 und #37. Es endet ergebnisoffen mit produktiver
+    Auswahl samt erforderlichen Nachweisen oder begruendeter Nichtauswahl mit
+    dokumentierten Rest-Risiken, Schutzgrenzen und ausdruecklicher
+    Ownerfreigabe; der Audit nimmt keine Auswahl vorweg.
 
 Der Audit veraendert die Live-Issues und ADRs nicht. Der verbindlich notwendige
 Neuschnitt und alle spaeteren Issues fuer Pending oder reale Secret-Domaenen

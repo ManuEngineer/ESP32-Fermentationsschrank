@@ -701,7 +701,7 @@ Revision/Konfliktschutz und sichtbarer Warnung bleibt erforderlich.
 |---|---|---|---|---|
 | PBKDF2-HMAC-SHA-256 aus der fixierten mbedTLS-/ESP32-Toolchain | Bestandteil der fixierten Toolchain; konkrete Funktion, Version, Lizenz-/Noticeumfang und Build im Spike pruefen | langsamer KDF-Pfad fuer getrennte Passwort- und PIN-Verifier | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` | bekannte Testvektoren, mindestens 128-Bit-Salt und 256-Bit-Verifier mit Parameterkennung, konstanter Vergleich, Laufzeit, Stack, Heap, Jitter, Watchdog und parallele Anfragen; Iterationszahl erst danach |
 | `esp_fill_random()` oder korrekt gesaeter mbedTLS-DRBG | fixierter ESP32-/mbedTLS-Pfad, konkrete Integration offen | kryptografischer Zufall fuer Salts, Sessionkennungen und CSRF-Tokens | `FIRST_EVALUATION_DIRECTION`, `SPIKE_REQUIRED` | Initialisierung/Fehlerpfad, wiederholte Bildung und Plausibilitaetspruefung; keine schwachen Ersatzwerte und keine Entropiebehauptung ueber die Plattformgarantie hinaus |
-| NVS-/Flashverschluesselung | nicht aktiviert oder projektbezogen getestet | moeglicher Schutz wiederverwendbarer Secrets gegen physischen Flashzugriff | `EVALUATE_BEFORE_RELEASE`; separater Security-Spike | Toolchain, Partitionierung, Provisionierung, Schluesselverlust, Entwicklungs-/Produktionsflash, Recovery, Werksreset, Updatepfad, Ressourcen und dokumentierte Schutzgrenze; expliziter Ownerentscheid danach |
+| NVS-/Flashverschluesselung | nicht aktiviert oder projektbezogen getestet | moeglicher Schutz wiederverwendbarer Secrets gegen physischen Flashzugriff | `EVALUATE_BEFORE_RELEASE`; zwingendes ergebnisoffenes Security-Gate vor #37 | Toolchain, Boot, Partitionierung, Provisionierung, Schluesselentstehung/-speicherung/-verlust, Entwicklungs-/Produktionsflash, Recovery, Werksreset, UART-Neuflash, Update/Migration, Ressourcen und Stabilitaet; danach vor #37 expliziter Ownerentscheid fuer produktive Auswahl samt Provisionierungs-/Recovery-/Regressionstest oder begruendete Nichtauswahl mit Rest-Risiken und Schutzgrenzen |
 
 Der KDF-Spike prueft ausserdem richtige/falsche Passwort- und PIN-Pruefungen,
 globale Fehlversuchsserien samt atomar neustartfestem Vor-Sperr-Zaehler,
@@ -714,6 +714,13 @@ keine Schutzgrenze. Ohne aktivierte und getestete Plattformverschluesselung wird
 kein Schutz gegen physischen Flashzugriff behauptet. Es wird keine zusaetzliche
 Kryptobibliothek, allgemeine Authplattform oder endgueltige Kryptokonfiguration
 gewaehlt.
+
+Der Plattformverschluesselungs-Spike und sein dokumentierter Ownerentscheid
+sind zwingend vor #37 abzuschliessen. Eine Auswahl verlangt die produktive
+Umsetzung samt Provisionierungs-, Recovery- und Regressionstests; eine
+Nichtauswahl verlangt dokumentierte Rest-Risiken, klare Schutzgrenzen und
+ausdrueckliche Ownerfreigabe. Diese Evaluation nimmt keines der Ergebnisse
+vorweg.
 
 Produktive Webmutationen bleiben ueber den Policyentscheid hinaus gesperrt,
 bis die je Modus erforderlichen KDF-/Work-Factor-, Zufalls-, Credential-,

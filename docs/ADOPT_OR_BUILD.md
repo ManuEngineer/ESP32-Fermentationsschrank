@@ -181,6 +181,22 @@ bleiben. Produktive Mutationen warten ueber den Policyentscheid hinaus auf die
 modusbezogenen technischen Auth-/Credential-/Ressourcen-, Webserver- und
 JSON-Nachweise und deren Ownerfreigabe.
 
+Dieser Ausschluss betrifft nur persistente Session-, Remember-me-, Login-,
+Refresh- und Browsergeraetetokens. Credentialverifier, getrennte Salts,
+KDF-Parameter, Credential-Epoche/-Generation, Vor-Sperr-Zaehler, Sperrstufe,
+aktiver Sperrzustand sowie Integritaets- und atomare Commitinformationen bleiben
+neustartfest persistent; wiederverwendbare WLAN-Secrets liegen in einer
+getrennten Connectivity-Domaene. Sessionkennungen, CSRF-Tokens und
+Servicefreigaben bleiben fluechtig. Ein ESP32-/Geraeteneustart verwirft sie,
+waehrend ein reiner Browserneustart kein garantiertes Widerrufsereignis ist.
+
+Die Plattformverschluesselung bleibt ein zwingendes, ergebnisoffenes
+`EVALUATE_BEFORE_RELEASE`-Gate vor #37. Auswahl und Aktivierung werden hier
+nicht vorweggenommen; vor #37 braucht es entweder produktive Umsetzung samt
+Provisionierungs-, Recovery- und Regressionstests oder eine begruendete
+Nichtauswahl mit dokumentierten Rest-Risiken, Schutzgrenzen und ausdruecklicher
+Ownerfreigabe.
+
 ## Journal, Historie und Import
 
 Das Speicherbackend und ein Standard-JSON-Codec werden adoptiert; die
@@ -229,6 +245,10 @@ Hardwarevergleich hinter der konkreten Integrationsgrenze adoptiert; schlanke
 Views und LVGL werden nicht vorsorglich parallel vorbereitet. Der vorhandene
 microSD-/SD-Karten-Slot begruendet ohne R1-Konsumenten keine Bibliothek, keinen
 Port, Adapter oder Zukunftspfad.
+
+LVGL bleibt bis zu diesem identischen Vergleich `EVALUATE_LATER`. Nur ein klar
+gemessener R1-Vorteil fuehrt zu einer Ownerauswahl; andernfalls wird LVGL
+`DEFER_AFTER_R1`.
 
 ## Diagnose und Service
 

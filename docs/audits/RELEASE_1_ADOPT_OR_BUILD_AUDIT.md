@@ -887,7 +887,11 @@ IP-Adresse, Session oder Tab:
   Stabilitaet haben Vorrang.
 
 Normale Sessions werden serverseitig, fluechtig und begrenzt im RAM gehalten.
-Ein Neustart meldet alle Browser ab. Die opake Sessionkennung enthaelt
+Ein ESP32-/Geraeteneustart verwirft alle Sessions. Ein reiner Browserneustart
+ist dagegen kein garantiertes Widerrufsereignis: Stellt der Browser das
+Sitzungscookie wieder her, bleibt die Session hoechstens bis zum
+Inaktivitaets-/Absolutlimit oder einem serverseitigen Widerruf gueltig. Die
+opake Sessionkennung enthaelt
 mindestens 128 Bit kryptografisch zufaelligen Inhalt und keine Credential- oder
 Rollendaten; sie erscheint nie in URL, Log, Export, Diagnose, `localStorage`
 oder `sessionStorage`. R1 muss mindestens vier gleichzeitige normale
@@ -896,7 +900,7 @@ Inaktivitaet beendet eine Session nach 30 Minuten, die absolute Hoechstdauer
 betraegt 12 Stunden. Logout, Passwortaenderung, Werksreset oder Wechsel der
 Credential-Epoche widerrufen die betroffenen Sessions. `Angemeldet bleiben`,
 persistente Login-/Refresh-Tokens, persistente Browsergeraete und Login ueber
-einen Neustart gehoeren nicht zu R1.
+einen ESP32-/Geraeteneustart gehoeren nicht zu R1.
 
 ADR-017 registriert diesen Entscheid gegenueber der bisherigen Anforderung in
 `WEB_UI.md` als akzeptierte hoeherrangige Entscheidung.
@@ -957,14 +961,20 @@ Zaehler allein sind unzulaessig; ein Fehler fuehrt zur sicheren Ablehnung.
 `FIRST_EVALUATION_DIRECTION` und `SPIKE_REQUIRED`, der endgueltige
 Integrationspfad bleibt offen.
 
-Secret-at-rest unterscheidet drei Kategorien:
+Secret-at-rest unterscheidet persistente und fluechtige Kategorien sowie einen
+ausdruecklichen R1-Ausschluss:
 
-- einseitige Pruefnachweise: Webpasswort- und PIN-Verifier, eigene Salts,
-  KDF-Parameterkennung und Credential-Epoche;
-- wiederverwendbare Secrets: WLAN-Passwort und gegebenenfalls als
+- persistente Credentialdaten: Webpasswort- und PIN-Verifier, eigene Salts,
+  KDF-Parameterkennung, Credential-Epoche/-Generation, Vor-Sperr-
+  Fehlversuchszaehler, Sperrstufe, aktiver Sperrzustand sowie Integritaets- und
+  atomare Commitinformationen;
+- persistente wiederverwendbare Connectivity-Secrets: WLAN-Passwort und
+  gegebenenfalls als
   nichtoeffentlich behandelte SSID, die fuer Wiederverbindung lesbar bleiben;
 - fluechtige Secrets: Sessionkennungen, CSRF-Tokens, Servicefreigaben und kurze
-  Authaktionszustaende, die beim Neustart verworfen werden.
+  Authaktionszustaende, die beim Geraeteneustart verworfen werden;
+- nicht in R1: persistente Session-, Remember-me-, Login-, Refresh- oder
+  Browsergeraetetokens und dauerhafte Sessionfortsetzung.
 
 Ohne aktivierte und getestete NVS-/Flashverschluesselung wird kein Schutz gegen
 physischen Flashzugriff behauptet. Gesalzene Verifier schuetzen nicht
@@ -974,6 +984,11 @@ Provisionierung, Schluesselverwaltung/-verlust, Entwicklungs- und
 Produktionsflash, Recovery, Werksreset, Updatepfad, Ressourcen und reale
 Schutzgrenze werden vor einem ausdruecklichen spaeteren Ownerentscheid
 geprueft. Der Audit aktiviert nichts und legt kein Schluesselmodell fest.
+Dieses `EVALUATE_BEFORE_RELEASE`-Gate muss vor #37 abgeschlossen und vom Owner
+entschieden sein. Zulaessig sind entweder die produktive Auswahl mit
+Provisionierungsprozess sowie Recovery-/Regressionstests vor #37 oder eine
+begruendete Nichtauswahl mit dokumentierten Rest-Risiken, klaren Schutzgrenzen
+und ausdruecklicher Ownerfreigabe. Der Audit nimmt dieses Ergebnis nicht vorweg.
 
 #57 erzeugt keine leeren Authentication-Manifeste, Credentialslots oder
 Authentication-Roots. Die reale Authentisierungsdomaene entsteht erst mit dem
@@ -1271,7 +1286,7 @@ Die vorgeschlagene Reihenfolge steht in
 | OD-02 | Display-/Touchtreiberstack in Stufe 4 nach gestuftem Hardwarevergleich waehlen |
 | OD-03a | DS18B20-/1-Wire-Softwarestack nach Stufe 3 waehlen |
 | OD-03b | Topologie A oder begruendeten Rueckfall B nach realem Pin-/GPIO- und Fehlerisolationsvergleich waehlen; Produktbus bleibt separat, C ausgeschlossen |
-| OD-05 | schlanke eigene Screens oder LVGL erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich |
+| OD-05 | LVGL als `EVALUATE_LATER` erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich gegen schlanke eigene Screens pruefen; nur bei klarem R1-Vorteil auswaehlen, andernfalls `DEFER_AFTER_R1` |
 
 Die fachlichen Ownerentscheidungen der aktuellen Auditliste sind damit
 vollstaendig bearbeitet. Die Tabelle enthaelt nur noch mess- und

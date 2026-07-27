@@ -524,8 +524,24 @@ ausgeschlossen.
 #34 Sensorvergleich und Thermik
   -> #35 PI-/Safetyparameter
   -> #36 Hardware-/Fehlerinjektions- und Programmabnahme
+  -> Security-Gate Plattformverschluesselung
   -> #37 sieben Tage Belastung und Releaseentscheid
 ```
+
+Das `EVALUATE_BEFORE_RELEASE`-Security-Gate vor #37 umfasst einen isolierten
+NVS-/Flashverschluesselungs-Spike mit Toolchain-, Boot- und Partitionspruefung,
+Provisionierungs- und Produktionsflashablauf, Schluesselentstehung,
+-speicherung und -verlust, Recovery, Werksreset, UART-Neuflash,
+Update-/Migrationsauswirkungen sowie Ressourcen- und Stabilitaetsmessung. Der
+Owner entscheidet danach vor #37 explizit zwischen:
+
+1. **Auswahl:** produktive Umsetzung, dokumentierter Provisionierungsprozess
+   sowie Recovery- und Regressionstests werden vor #37 abgeschlossen;
+2. **begruendeter Nichtauswahl:** Rest-Risiken und Schutzgrenzen werden
+   dokumentiert und vom Owner vor #37 ausdruecklich freigegeben.
+
+Diese Roadmap waehlt oder aktiviert keine Plattformverschluesselung und legt
+weder eFuses, Secure Boot, Schluesselmodell noch Partitionierung fest.
 
 Jedes Gate verwendet versionierte Messdaten, Hardwarestand, Firmwarecommit und
 Konfigurations-/Tuningrevision. Kein gelungenes Fermentationsprodukt ersetzt

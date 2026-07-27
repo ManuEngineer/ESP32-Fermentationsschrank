@@ -1040,6 +1040,14 @@ Updatepfad, Ressourcen und dokumentierte physische Schutzgrenze geprueft. Sie
 wird hier weder aktiviert noch zugesagt. Alle Aktorpfade bleiben getrennt oder
 nachweislich inaktiv.
 
+Dieses separate Gate liegt zwingend vor #37 und prueft zusaetzlich Boot,
+Schluesselentstehung/-speicherung, UART-Neuflash sowie Migrations- und
+Stabilitaetsauswirkungen. Das Ergebnis ist entweder eine produktive Auswahl mit
+Provisionierungsprozess und Recovery-/Regressionstests oder eine begruendete
+Nichtauswahl mit dokumentierten Rest-Risiken, klaren Schutzgrenzen und
+ausdruecklicher Ownerfreigabe. Weder Ergebnis, eFuse-/Secure-Boot-Nutzung,
+Schluesselmodell noch Partitionierung werden in diesem Audit festgelegt.
+
 Der Policyentscheid allein gibt keine Webmutation frei. Der Nachweis umfasst
 je Modus auch Methoden-, Content-Type-, Origin-/Referer-/Fetch-Metadata-,
 Revisions-, Konflikt-, Wiederholungs-, Abbruch- und Neustartpruefungen sowie die
