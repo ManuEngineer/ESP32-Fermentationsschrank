@@ -118,6 +118,12 @@ stabilen Active-/Fallback-Kerns offen, nicht als alternativer R1-Auftrag.
   Fuer Release 1 ist Arduino-ESP32 `WebServer` die verbindliche erste
   Produktivrichtung; `ESPAsyncWebServer` bleibt konditionaler Vergleichs- und
   Rueckfallkandidat.
+- Beim WLAN-Onboarding ist WiFiManager der bevorzugte Release-1-Kandidat und
+  wird zuerst in einem begrenzten Spike geprueft. Die endgueltige Uebernahme
+  folgt erst nach bestandenem Spike. Ein kleiner Adapter aus Arduino-ESP32
+  `WiFi`, `DNSServer`, SoftAP und der beschlossenen `WebServer`-Baseline wird
+  nur bei einem dokumentierten Problem als identischer Gegenprototyp
+  nachgezogen.
 
 ### 2. Safety und Fachlogik nicht delegieren
 
@@ -270,6 +276,52 @@ Sperrlogik und Redaction bleiben eigene Vertraege; Serverhilfen ersetzen keine
 Authpolicy, und Secrets gelangen weder in Logs noch Exporte oder
 Fehlermeldungen.
 
+### 8. OD-06: WiFiManager zuerst begrenzt pruefen
+
+OD-06 ist als Richtungsentscheid geklaert: WiFiManager `v2.0.17`
+(`d82d0a1b`) ist der bevorzugte technische Kandidat fuer das Release-1-
+WLAN-Onboarding, aber noch keine ausgewaehlte Produktionsabhaengigkeit. Zuerst
+werden Quelle, Lizenz, eingebettete Webassets, transitive Abhaengigkeiten und
+der reproduzierbare Build mit PlatformIO `espressif32@7.0.1`, Arduino-ESP32
+`2.0.17`, ESP32-32E, 4 MB Flash und ohne PSRAM geprueft. Danach folgt ein
+begrenzter realer Spike mit Android, iOS beziehungsweise iPadOS und Windows.
+Automatische Captive-Portal-Erkennung und der direkte Aufruf ueber die
+angezeigte IP werden getrennt getestet.
+
+Der Spike prueft einen ausdruecklich gesteuerten Portalstart, SoftAP-, DNS- und
+Portallebenszyklus, WLAN-Scan, gueltige und falsche Zugangsdaten, nicht
+erreichbaren Access Point, Abbruch, Timeout, Browser- und WLAN-Unterbruch,
+Neustart sowie geeignete Stromunterbruch-Cut-Points. Ein gewoehnlicher
+voruebergehender Router-, Access-Point- oder Internetausfall startet das Portal
+nicht automatisch. Neue WLAN-Daten bleiben bis zum begrenzten Verbindungs- und
+Funktionsnachweis ein unbestaetigter Kandidat; ein Fehlschlag veraendert den
+bisherigen funktionierenden WLAN-Stand nicht. Secrets gelangen nicht in Logs,
+URLs, Diagnose, Exporte oder Fehlermeldungen. Gemessen werden Firmwaregroesse,
+statisches RAM, freier und niedrigster Heap, groesster freier Heapblock,
+Portalstart-, Verbindungs- und Antwortzeiten, Regelzyklus-Jitter,
+Watchdog-/Resetereignisse, Abhaengigkeiten und projektspezifischer
+Integrationscode.
+
+WiFiManager bleibt ein technischer Portalbaustein. Startentscheidung,
+Touchstatus und Abbruch, Kandidatenpruefung, Credential-Commit,
+Secret-Lebenszyklus, Redaction, Recovery, Fehlersemantik und Safetyisolation
+bleiben projektspezifisch. WiFiManager-, SoftAP-, DNS-, HTTP-, Callback- und
+Frameworktypen enden in der konkreten ESP32-Integrationsschicht. Es entsteht
+weder ein allgemeines Provisioning-/Provider-/Pluginframework noch eine
+vorsorgliche Mehradapterimplementierung.
+
+Nur wenn dieser Spike ein konkretes Release-1-Problem nachweist, wird der
+kleine Frameworkadapter aus Arduino-ESP32 `WiFi`, `DNSServer`, SoftAP und
+`WebServer` mit demselben begrenzten Ablauf und derselben Messmatrix erstellt.
+Ausloeser sind insbesondere unkontrollierter Portalstart oder Credential-
+Commit, ein nicht beherrschbarer Secret- oder AP-/DNS-/Serverlebenszyklus,
+relevante Clientinstabilitaet, Toolchainkonflikt, unvertretbare Ressourcen- oder
+Jitterwirkung, problematische Abhaengigkeiten oder eine nicht robust
+abbildbare Release-1-Anforderung. Erst danach waehlt der Owner WiFiManager oder
+den Frameworkadapter endgueltig. Ein spaeterer Wechsel bleibt ueber die kleine
+konkrete ESP32-Integrationsgrenze an der Composition Root moeglich, ohne leere
+Zukunftsports vorzubereiten.
+
 ## Entschiedener Persistenzvertrag OD-01
 
 ### Variante B: verbindlicher Release-1-Kern
@@ -403,7 +455,9 @@ Variante A erweitert den R1-Kern spaeter additiv:
 - deterministischer Safety-, PI-, Aktor-, Prozess- und Laufkern;
 - Touchdisplay 320 x 240 als einzige lokale Bedien- und Anzeigeoberflaeche,
   drei Sprachen und eine sekundaere Weboberflaeche;
-- WLAN-Onboarding mit lokalem Fallback, lokale Zeit/NTP und Zeitzonenanzeige;
+- WLAN-Onboarding mit zuerst begrenzt geprueftem WiFiManager als bevorzugtem
+  Kandidaten und einem nur bei dokumentiertem Ausloeser nachgezogenen lokalen
+  Frameworkadapter als Rueckfall; lokale Zeit/NTP und Zeitzonenanzeige;
 - versionierte Konfiguration, Laufpersistenz, Recovery und begrenzte Journale;
 - Variante-B-Konfigurationsaktivierung mit Active-/Fallback-Graph, fluechtiger
   validierter Vorschau, sicherem Bootstrap, `StorageEpoch` und
@@ -470,7 +524,7 @@ Die vollstaendige Zuordnung steht in der
 | #25–#28 | UI-, Web-, Auth-, Diagnose- und Servicepakete sind zu breit fuer kleine PRs | nach stabilen DTO-/Portgrenzen in vertikale Scheiben teilen |
 | LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich und ist kein Treiberkandidat | erst nach Treiberauswahl, Adaptervertrag und identischem repraesentativem Screen gegen schlanke Views messen |
 | ESPAsyncWebServer | Async-/WebSocket-/SSE-Umfang koennte groesser als der reale R1-Bedarf sein | Frameworkserver zuerst messen; Async nur bei belegtem Vorteil |
-| Espressif Provisioning/BLE | umfangreicher Provisioningstack wuerde BLE und Toolchainkomplexitaet einbringen | SoftAP/Captive-Portal-Anforderung mit kleinstem Adapter erfuellen |
+| Vorsorgliche Mehradapter-/Provisioningarchitektur | zwei produktive Portalwege oder allgemeine Provider-/Pluginvertraege waeren ohne zweiten realen Bedarf ueberdimensioniert | WiFiManager zuerst begrenzt pruefen; Frameworkadapter nur bei dokumentiertem Ausloeser als identischen Gegenprototyp nachziehen |
 | PID-Bibliotheken | allgemeine PID-/Autotune-Funktionen passen nicht zum spezifizierten begrenzten PI-/Safety-Vertrag | kleinen deterministischen PI-Kern selbst implementieren |
 
 ## Auswirkungen auf #16, #56 und #57
@@ -503,7 +557,6 @@ Die vorgeschlagene Reihenfolge steht in
 | OD-03a | DS18B20-/1-Wire-Softwarestack nach Stufe 3 waehlen |
 | OD-03b | Topologie A oder begruendeten Rueckfall B nach realem Pin-/GPIO- und Fehlerisolationsvergleich waehlen; Produktbus bleibt separat, C ausgeschlossen |
 | OD-05 | schlanke eigene Screens oder LVGL erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich |
-| OD-06 | WiFiManager oder kleiner Framework-Onboardingadapter |
 | OD-07 | R1-Mindestumfang und PR-Schnitt von #19 und #25–#28 |
 | OD-09 | KDF-, Work-Factor-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag vor #27 |
 
@@ -516,6 +569,12 @@ OD-04 ist ebenfalls entschieden: Arduino-ESP32 `WebServer` ist die
 Release-1-Baseline. Eine Abweichung zu `ESPAsyncWebServer` wird nur bei einem
 konkreten offenen R1-Risiko und nach identischem begrenztem Vergleich erneut
 dem Owner vorgelegt; es besteht keine offene Gleichwahl.
+
+OD-06 ist als Richtungsentscheid ebenfalls entschieden: WiFiManager ist der
+bevorzugte Release-1-Kandidat und wird zuerst begrenzt geprueft. Die
+endgueltige Kandidatenwahl bleibt ein Spike-Gate; der kleine Frameworkadapter
+wird nur bei einem dokumentierten Ausloeser als identischer Gegenprototyp
+nachgezogen.
 
 Hardwarewerte, Pins, Pegel und thermische Parameter sind keine freien
 Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.

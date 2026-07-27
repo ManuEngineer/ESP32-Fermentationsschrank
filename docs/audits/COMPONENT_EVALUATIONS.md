@@ -292,14 +292,109 @@ am 2026-07-27.
 
 | Kandidat | Stand/Lizenz | Eignung und Grenzen | Empfehlung |
 |---|---|---|---|
-| WiFiManager | `2.0.17`, `4131fe61`, MIT | Arduino-ESP32-Captive-Portal und Laufzeitparameter; Secret-Lebenszyklus, Ersatz-WLAN, projektspezifische UI und Recovery bleiben eigene Logik | ernsthafter Kandidat fuer einen schmalen Onboardingadapter; exakten Core-Build, Flash/Heap und Portalverhalten pruefen |
-| Arduino-ESP32 WiFi + DNS/WebServer | Framework `2.0.17` | kleinster Abhaengigkeitssatz, aber mehr eigener Portal- und Zustandsautomatencode | Gegenkandidat; bevorzugen, falls der spezifizierte Ablauf klein und mit weniger Risiko abbildbar ist |
-| Espressif Unified/Network Provisioning | offizielle ESP-IDF-Loesung; aktuelle Dokumentation beschreibt SoftAP/BLE | flexibler und sicherheitsorientiert, aber der aktuelle Arduino-/Release-1-Ablauf verlangt weder BLE noch eine Smartphone-App | nicht ohne Toolchain- und Scopebegruendung uebernehmen; BLE bleibt ausserhalb Release 1 |
+| WiFiManager | `v2.0.17`, `d82d0a1b`, MIT | stellt den standardisierten Portalteil fuer SoftAP, DNS-Umleitung, Captive Portal, Netzwerkscan, Formulare, Timeouts und Clientverhalten bereit; projektspezifische Start-, Secret-, Commit-, Recovery- und Safetysemantik bleibt ausserhalb | bevorzugter Release-1-Kandidat, `SPIKE_REQUIRED`; zuerst allein begrenzt pruefen, noch nicht als Produktionsabhaengigkeit ausgewaehlt |
+| Arduino-ESP32 `WiFi` + `DNSServer` + SoftAP + `WebServer` | Framework `2.0.17` | keine zusaetzliche Portalbibliothek, aber mehr eigener technischer Portal-, DNS- und Clientlebenszykluscode; verwendet die bereits beschlossene Webserver-Baseline | konditionaler Rueckfall; nur bei einem dokumentierten Problem des WiFiManager-Spikes mit identischem Ablauf als Gegenprototyp nachziehen |
 
-Quelle: [WiFiManager](https://github.com/tzapu/WiFiManager),
-[Espressif Unified Provisioning](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/provisioning/provisioning.html).
-Entscheidungsstatus: `SPIKE_REQUIRED` fuer #27; keine Connectivity-Secrets in
-der Bibliothekskonfiguration offenlegen.
+### Release-1-Bedarf und Grenze
+
+Das Onboarding wird nur bei einem fabrikneuen Geraet ohne bestaetigte
+Zugangsdaten oder durch ausdrueckliche Benutzeraktion am Touchdisplay gestartet.
+Ein voruebergehender Router-, Access-Point-, WLAN- oder Internetausfall startet
+kein Portal. Release 1 zeigt am Touchdisplay Onboardingstatus, SoftAP-Name,
+notwendige Zugangsinformation und direkte Portaladresse beziehungsweise IP.
+Das lokale Portal nimmt WLAN-Auswahl und Zugangsdaten entgegen. Neue Daten
+bleiben bis zu einem zeitlich begrenzten Verbindungs- und Funktionsnachweis ein
+unbestaetigter Kandidat. Nach Erfolg werden Status und Erfolg am Touchdisplay
+angezeigt und der Kandidat an die projektspezifische Secret-/Commitlogik
+uebergeben. Fehler, Timeout oder Abbruch erhalten den bisherigen funktionierenden
+WLAN-Stand. Offlinebetrieb, Fermentation, Regelung, Safety und lokale Bedienung
+bleiben unabhaengig von WLAN, Portal und Browser.
+
+BLE, Smartphone-App, SmartConfig, Cloud-Provisioning, mehrere Provider,
+automatische Internetfreigabe und komplexe Netzwerkverwaltung sind keine
+Release-1-Pflicht. Ein QR-Code kann spaeter die lokale Portaladresse abbilden;
+diese Entscheidung waehlt keine QR-Bibliothek aus.
+
+WiFiManager dient ausschliesslich als technischer Portalbaustein. Ausserhalb
+der Bibliothek bleiben Startentscheidung, Touchstatus und Abbruch, der
+unbestaetigte Credential-Kandidat, Verbindungsnachweis und ausdruecklicher
+Commit, Secret-Lebenszyklus, Redaction, Recovery, Fehlersemantik sowie die
+Isolation von Regelung und Safety. WiFiManager-, SoftAP-, DNS-, HTTP-,
+Callback- und Frameworktypen enden in der konkreten ESP32-Integrationsschicht.
+Es entsteht weder ein allgemeines `IProvisioningProvider` noch eine Provider-,
+Plugin- oder vorsorgliche Mehradapterarchitektur.
+
+### Stufe 1 – Quelle, Lizenz und Toolchain
+
+Fuer WiFiManager werden die exakte Version beziehungsweise der Commit, MIT-
+Lizenz, eingebettete Webassets, transitive Abhaengigkeiten und verwendete sowie
+deaktivierte Funktionen dokumentiert. Der isolierte Build muss mit PlatformIO
+`espressif32@7.0.1`, Arduino-ESP32 `2.0.17`, ESP32-32E, 4 MB Flash und ohne
+PSRAM reproduzierbar sein. Insbesondere ist zu pruefen, wie framework- oder
+bibliotheksseitig gespeicherte WLAN-Daten verhindert beziehungsweise
+kontrolliert gekapselt werden und ob automatischer Portalfallback sowie
+automatischer Credential-Commit abschaltbar sind. Ein erfolgreicher Build ist
+noch keine Uebernahmeentscheidung.
+
+### Stufe 2 – begrenzter WiFiManager-Prototyp
+
+Der konkrete Prototyp prueft mindestens:
+
+- ausdruecklich gesteuerten Portalstart und keinen Portalstart bei gewoehnlichem
+  temporaerem WLAN-Ausfall;
+- vollstaendigen Start und Abbau von SoftAP, DNS und Portal;
+- DNS-Umleitung und direkten Aufruf ueber die angezeigte IP;
+- WLAN-Scan, gueltige Daten, falsches Passwort und nicht erreichbaren Access
+  Point;
+- Abbruch, Timeout, Browserabbruch, WLAN-Unterbruch, Neustart, geeignete
+  Stromunterbruch-Cut-Points und erneutes Oeffnen;
+- Erhalt bisher funktionierender Zugangsdaten bei Fehlschlag und keinen
+  unkontrollierten kanonischen Commit durch die Bibliothek;
+- keine Secrets in Logs, URLs, Diagnose, Exporten oder Fehlermeldungen;
+- keine relevante Blockierung von Regelung oder Safety und vollstaendige
+  Ressourcenfreigabe nach Portalende.
+
+Der reale Clienttest umfasst Android, iOS beziehungsweise iPadOS und Windows.
+Je Client werden automatische Captive-Portal-Erkennung und der direkte
+IP-Aufruf getestet; nur der direkte Aufruf ist der verlaessliche Rueckfall.
+Gemessen werden Firmwaregroesse, statisches RAM, freier und niedrigster Heap,
+groesster freier Heapblock, Portalstart-, Verbindungs- und Antwortzeiten,
+Regelzyklus-Jitter, Watchdog-/Resetereignisse, Abhaengigkeiten und Umfang des
+projektspezifischen Integrationscodes.
+
+### Stufe 3 – konditionaler Frameworkgegenprototyp
+
+Der Adapter aus `WiFi`, `DNSServer`, SoftAP und `WebServer` wird nur
+nachgezogen, wenn der WiFiManager-Prototyp mindestens einen dieser Ausloeser
+belegt:
+
+- automatischer Portalstart oder Credential-Commit ist nicht sauber
+  kontrollierbar;
+- Secret-, DNS-, AP- oder Serverlebenszyklus ist nicht beherrschbar;
+- relevante Clients sind reproduzierbar instabil;
+- Toolchain, Flash, RAM, Heap, Regelzyklus oder Safety werden unvertretbar
+  belastet;
+- Abhaengigkeits-, Wartungs- oder Publikationsrisiken erfordern wesentliche
+  Bibliotheksaenderungen;
+- eine konkrete Release-1-Anforderung ist nicht robust abbildbar.
+
+Der Gegenprototyp verwendet denselben begrenzten Ablauf, dieselben Clients und
+dieselbe Messmatrix. Er wird nicht zu einem allgemeinen eigenen
+Captive-Portal-Framework ausgebaut.
+
+### Stufe 4 – endgueltiger Ownerentscheid
+
+Erst anhand des Spikeberichts entscheidet der Owner zwischen WiFiManager und
+dem kleinen Frameworkadapter. Bis dahin gilt WiFiManager als bevorzugter
+Kandidat mit `SPIKE_REQUIRED`, nicht als ausgewaehlte Abhaengigkeit. Ein
+spaeterer Wechsel ersetzt nur Portalinitialisierung, konkrete Callbackbindung
+und Frameworklebenszyklus an der Composition Root; fachliche Connectivity-,
+Secret-, Recovery- und Safetyvertraege bleiben erhalten. Ein Dummy-Zweitadapter
+wird nicht erstellt.
+
+Quelle: [WiFiManager](https://github.com/tzapu/WiFiManager). Abgerufen am
+2026-07-27. Entscheidungsstatus: OD-06-Richtung entschieden, endgueltige
+Uebernahme `SPIKE_REQUIRED` fuer den Onboardingteil von #27.
 
 ## QR-Code
 

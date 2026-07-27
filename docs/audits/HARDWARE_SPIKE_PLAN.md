@@ -16,8 +16,8 @@ die hardwareunabhaengige Safety-Kette kann parallel weiterlaufen.
 
 ## Minimale sichere Hardwarebaseline vor den Spikes
 
-Vor jedem Display-, Touch- oder Sensorspike werden dokumentiert und
-nachgewiesen:
+Vor jedem Display-, Touch-, Sensor- oder WLAN-Onboardingspike werden
+dokumentiert und nachgewiesen:
 
 - reale ESP32-Boardrevision;
 - erfolgreiche Verbindung ueber UART beziehungsweise FT232RL;
@@ -64,6 +64,9 @@ Stufe 2 ist ein kurzer Hardware-Smoke-Test und erst Stufe 3 die vollstaendige
 identische Hardwarematrix. Der DS18B20-/1-Wire-Spike verwendet analog die
 Stufen 1 bis 3: Quellen-/Lizenz-/Buildpruefung, Sensorsmoke-Test und erst danach
 die vollstaendige identische Topologie- und Fehlermatrix.
+Der WLAN-Onboardingspike verwendet die Stufen 1 bis 4 fuer Quellen-/Lizenz-/
+Toolchainpruefung, begrenzten WiFiManager-Prototyp, nur konditionalen
+Frameworkgegenprototyp und endgueltigen Ownerentscheid.
 
 ### Gate 1 – Quelle, Lizenz und Kompatibilitaetsvertrag
 
@@ -698,6 +701,95 @@ Notwendige Owner-/Hardwareaktion: alle drei realen Sensoren, die konkrete
 Stoer-/Hot-Plug-Tests bestaetigen; Software- und Topologieentscheidung erst
 anhand der identischen Messprotokolle treffen.
 
+## Spike C: WLAN-Onboarding
+
+### Ziel und feste Grenze
+
+WiFiManager `v2.0.17` (`d82d0a1b`) ist der bevorzugte technische Kandidat und
+wird zuerst begrenzt geprueft. Der Spike waehlt ihn noch nicht als
+Produktionsabhaengigkeit aus. Ein kleiner Gegenprototyp aus Arduino-ESP32
+`WiFi`, `DNSServer`, SoftAP und der bereits beschlossenen `WebServer`-Baseline
+entsteht nur bei einem dokumentierten WiFiManager-Problem. Es werden nie beide
+Loesungen vorsorglich produktiv implementiert.
+
+Der Portalbaustein entscheidet weder ueber den erlaubten Start noch ueber
+Credential-Kandidaten, Commit, Secrets, Recovery oder Safety. Ein Portal darf
+nur beim fabrikneuen Geraet ohne bestaetigte Zugangsdaten oder nach
+ausdruecklicher Touchaktion starten, nie allein aufgrund eines temporaeren
+Router-, Access-Point-, WLAN- oder Internetausfalls. Fehler, Timeout oder
+Abbruch erhalten den bisherigen funktionierenden WLAN-Stand. Regelung, Safety
+und Touchbedienung laufen ohne WLAN, Portal oder Browser weiter.
+
+### Stufe 1 – Quelle, Lizenz und Toolchain
+
+Fuer WiFiManager werden Version/Commit, MIT-Lizenz, eingebettete Webassets,
+transitive Abhaengigkeiten sowie verwendete und deaktivierte Funktionen
+dokumentiert. Der isolierte Build verwendet PlatformIO
+`espressif32@7.0.1`, Arduino-ESP32 `2.0.17`, ESP32-32E, 4 MB Flash und kein
+PSRAM. Zu pruefen sind insbesondere kontrollierbarer Portalstart, abschaltbarer
+automatischer Fallback und Credential-Commit sowie die Behandlung
+frameworkseitig gespeicherter WLAN-Daten. Ein bestandener Build ist noch keine
+Auswahl.
+
+### Stufe 2 – begrenzter WiFiManager-Prototyp
+
+Der identisch reproduzierbare Ablauf prueft:
+
+1. normalen Verbindungsversuch mit bestaetigten Zugangsdaten;
+2. ausdruecklich gesteuerten Portalstart und keinen automatischen Start bei
+   gewoehnlichem temporaerem WLAN-Ausfall;
+3. SoftAP-Start, DNS-Umleitung, direkten Aufruf ueber angezeigte IP und
+   vollstaendigen Abbau von Portal, DNS und AP;
+4. WLAN-Scan, gueltige Daten, falsches Passwort und nicht erreichbaren Access
+   Point;
+5. Abbruch, Timeout, Browserabbruch, WLAN-Unterbruch, Neustart und geeignete
+   Stromunterbruch-Cut-Points;
+6. erneutes Oeffnen des Portals und kontrollierte Wiederaufnahme;
+7. Erhalt des bisherigen funktionierenden Credential-Stands bei jedem
+   fehlgeschlagenen Kandidaten;
+8. keinen unkontrollierten kanonischen Credential-Commit durch die Bibliothek;
+9. keine Secrets in Logs, URLs, Diagnose, Exporten oder Fehlermeldungen;
+10. keine relevante Blockierung von Regelung oder Safety sowie vollstaendige
+    Ressourcenfreigabe nach Portalende.
+
+Auf realer ESP32-Hardware werden Android, iOS beziehungsweise iPadOS und
+Windows verwendet. Fuer jeden Client werden automatische Captive-Portal-
+Erkennung und der direkte IP-Aufruf getestet. Der direkte Aufruf bleibt der
+verlaessliche Rueckfall, weil die automatische Erkennung nicht garantiert ist.
+
+Erfasst werden Firmwaregroesse, statisches RAM, freier und niedrigster Heap,
+groesster freier Heapblock, Portalstart-, Verbindungs- und Antwortzeiten,
+Regelzyklus-Jitter, Watchdog-/Resetereignisse, Zahl und Umfang der
+Abhaengigkeiten sowie der notwendige projektspezifische Integrationscode.
+
+### Stufe 3 – konditionaler Frameworkgegenprototyp
+
+Der Frameworkadapter wird nur bei mindestens einem belegten Ausloeser erstellt:
+
+- automatischer Portalstart oder Credential-Commit ist nicht kontrollierbar;
+- Secret-, DNS-, AP- oder Webserverlebenszyklus ist nicht sauber begrenzbar;
+- relevante reale Clients sind reproduzierbar instabil;
+- Toolchainkonflikt oder unvertretbare Flash-, RAM- oder Heapwirkung;
+- relevante Regelzyklus-/Safetybeeintraechtigung;
+- nicht beherrschbare Abhaengigkeits-, Wartungs- oder Publikationsrisiken;
+- eine konkrete Release-1-Anforderung ist nicht robust abbildbar.
+
+Der Gegenprototyp verwendet denselben Ablauf, dieselben Clients, Cut-Points und
+Messungen. Er wird nicht zu einem allgemeinen Captive-Portal-, Provisioning-,
+Provider- oder Pluginframework ausgebaut. BLE, SmartConfig, Cloud- und
+App-Provisioning bleiben ausserhalb Release 1.
+
+### Stufe 4 – endgueltiger Ownerentscheid und Artefakte
+
+Erst nach dem Spike waehlt der Owner WiFiManager oder den kleinen
+Frameworkadapter. Der Bericht enthaelt Quell-/Lizenznachweis, reproduzierbare
+Buildkonfiguration, Client-/Fehler-/Cut-Protokoll, Redactionnachweis,
+Base-/Kandidaten-Ressourcenvergleich, Lebenszyklus- und Jittermessung,
+festgestellte Ausloeser sowie eine begruendete Empfehlung. Ein spaeterer
+Wechsel bleibt ueber die konkrete ESP32-Integrationsschicht an der Composition
+Root moeglich; Bibliotheks-, DNS-, HTTP- und Callbacktypen gelangen nicht in
+Fach-, Safety-, Persistenz-, Secret- oder gemeinsame View-Modelle.
+
 ## Reihenfolge und Entscheidungsprotokoll
 
 1. Audit- und Planungsbereinigung abschliessen.
@@ -718,9 +810,12 @@ anhand der identischen Messprotokolle treffen.
    planen.
 7. Herkunfts-/Lizenzpruefung fuer die technisch geeigneten Kandidaten
    aktualisieren.
-8. Owner waehlt je Gruppe genau einen Produktivkandidaten und einen
+8. WiFiManager durch Stufe 1 und 2 fuehren. Den Frameworkgegenprototyp nur bei
+   dokumentiertem Ausloeser in Stufe 3 nachziehen; danach die endgueltige
+   Onboardingauswahl dem Owner vorlegen.
+9. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
    dokumentierten Rueckfallkandidaten.
-9. Erst danach implementieren #30 und #31 die schmalen Adapter. Der
+10. Erst danach implementieren #30 und #31 die schmalen Adapter. Der
    UI-Frameworkvergleich mit LVGL folgt erst auf den ausgewaehlten
    Display-/Touchtreiber, den schmalen Adaptervertrag und einen repraesentativen
    Release-1-Screen.

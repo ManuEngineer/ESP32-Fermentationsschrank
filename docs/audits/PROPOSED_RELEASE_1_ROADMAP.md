@@ -14,7 +14,8 @@ Backlog vor Umsetzung verkleinert oder geteilt werden sollte.
 ```text
 Auditfreigabe und Spezifikations-/Issue-Bereinigung
   -> minimale sichere ESP32-Hardwarebaseline
-  -> aktorfreie Display-/Touch- und DS18B20-/1-Wire-Spikes
+  -> aktorfreie Display-/Touch-, DS18B20-/1-Wire-, Webserver- und
+     WLAN-Onboardingspikes
   -> Bibliotheksentscheidungen und produktive Adapter
 
 parallel zur Baseline und zu den Spikes:
@@ -149,7 +150,15 @@ warten:
    Clients, Abbruch-, WLAN-, Jitter- und Ressourcenmessung vorbereiten, ohne
    #27 vorwegzunehmen. `ESPAsyncWebServer` wird nur dann mit identischem Umfang
    nachgezogen, wenn der Baselineprototyp ein konkretes Release-1-Risiko offen
-   laesst. Onboarding bleibt davon getrennt.
+   laesst.
+6. Davon fachlich getrennt, aber mit der Webserver-Baseline koordiniert,
+   WiFiManager zuerst als begrenzten WLAN-Onboardingkandidaten pruefen:
+   Toolchain, Quellen/Lizenz/Webassets, ausdruecklicher Portalstart, reale
+   Android-/iOS-/Windows-Clients, direkter IP-Rueckfall, Credential-Erhalt,
+   Secret-/Fehler-/Lifecyclegrenzen, Cut-Points, Jitter und Ressourcen. Einen
+   Adapter aus `WiFi`, `DNSServer`, SoftAP und `WebServer` nur bei einem
+   dokumentierten WiFiManager-Problem mit identischem Umfang nachziehen. Dieser
+   Spike nimmt weder das ganze #27 noch eine endgueltige Bibliothekswahl vorweg.
 
 Die minimale Baseline legt weder finale Pins, Partitionierung, Bibliotheken,
 Sensorbustopologie, Aktoradapter, Safety-Grenzen noch PI-Parameter fest. Der
@@ -172,7 +181,9 @@ Messungen:
 - davon getrennt Topologie A oder den begruendeten Rueckfall B nach realem
   GPIO-/Pin- und Fehlerisolationsvergleich; der Produktfuehler bleibt immer auf
   eigenem Bus und Topologie C bleibt ausgeschlossen;
-- WiFiManager oder einen kleinen Framework-Onboardingadapter;
+- WiFiManager als bevorzugten Onboardingkandidaten endgueltig uebernehmen oder
+  bei dokumentiertem Spikeausloeser den identischen kleinen
+  Frameworkgegenprototyp bewerten und danach den Owner entscheiden lassen;
 - ArduinoJson nur mit endpunktspezifischen Grenzen.
 
 Jede Auswahl erhaelt Version/Commit, Lizenznachweis, Build-/Hardwaremessung,
@@ -200,7 +211,10 @@ Kleine adapterbezogene PRs:
 3. #31 Display- und Touchadapter hinter getrennten schmalen Grenzen;
 4. WLAN-, Zeit-/Zeitzonen- und kleiner konkreter Arduino-ESP32-
    `WebServer`-Adapter;
-5. JSON nur an den konkreten API-/Export-/Importgrenzen.
+5. nach bestandenem OD-06-Spike genau eine konkrete Onboardingintegration;
+   WiFiManager bleibt technischer Portalbaustein, der Frameworkadapter bleibt
+   ein nur bei dokumentiertem Ausloeser gepruefter Rueckfall;
+6. JSON nur an den konkreten API-/Export-/Importgrenzen.
 
 Bibliothekstypen duerfen weder in `fermentation_app` noch in Safety- oder
 Prozessmodelle durchsickern. Jeder Adapter uebersetzt Fehler und Limits
@@ -255,6 +269,11 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   sekundaer und ist keine Voraussetzung fuer den lokalen Betrieb; mit
   Arduino-ESP32 `WebServer` beginnen, Status-/Diagrammdaten begrenzt pollen und
   Async nur nach einem konkreten Baselineproblem identisch vergleichen;
+- den Onboardingteil von #27 erst nach dem begrenzten WiFiManager-Spike
+  umsetzen: kein Portalstart bei gewoehnlichem temporaerem WLAN-Ausfall, neue
+  Zugangsdaten bis zum Nachweis nur als Kandidat behandeln und den bisherigen
+  funktionierenden Stand bei Fehler, Timeout oder Abbruch erhalten; den
+  Frameworkadapter nur bei dokumentiertem Ausloeser identisch vergleichen;
 - vor Authentication OD-09 festlegen: KDF/Work-Factor, Sitzungsdauer,
   Sperrzeiten, CSRF und At-rest-Grenze;
 - Connectivity- und Authentication-Domaenen erst mit den ersten realen WLAN-,
@@ -351,7 +370,6 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 | OD-03a | DS18B20-/1-Wire-Softwarestack | nach Stufe 3, vor #30 |
 | OD-03b | Bustopologie A oder begruendeter Rueckfall B | nach minimaler Hardwarebaseline, realem Pin-/GPIO-Inventar und identischem Fehlerisolationsvergleich; Produktbus separat, C ausgeschlossen |
 | OD-05 | schlanke Views oder LVGL | nach OD-02, schmalem Adaptervertrag und identischem repraesentativem Screenvergleich |
-| OD-06 | WiFiManager oder kleiner Framework-Onboardingadapter | vor Onboardingteil von #27 |
 | OD-07 | Mindestumfang und PR-Schnitt von #19/#25–#28 | vor dem jeweiligen Issue |
 | OD-09 | KDF-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag | vor produktiver Authentication in #27 |
 
@@ -366,3 +384,9 @@ OD-04 ist entschieden: Arduino-ESP32 `WebServer` ist die Release-1-Baseline.
 `ESPAsyncWebServer` bleibt konditionaler Rueckfall; nur ein konkretes offenes
 R1-Risiko und ein klarer Vorteil im identischen begrenzten Prototyp oeffnen die
 Abweichungsentscheidung erneut.
+
+OD-06 ist als Richtungsentscheid entschieden: WiFiManager ist der bevorzugte
+Release-1-Onboardingkandidat und wird zuerst begrenzt geprueft. Die
+endgueltige Uebernahme bleibt das Ergebnis dieses Spike-Gates. Der kleine
+Frameworkadapter wird nur bei einem dokumentierten Ausloeser als identischer
+Gegenprototyp nachgezogen; eine offene vorsorgliche Gleichwahl besteht nicht.

@@ -89,6 +89,18 @@ keine leeren Manifeste, Dummyrecords, ungenutzten Slots, Ports oder
 Zukunftsservices. Solche Produktionsbausteine entstehen erst mit einem echten
 fachlichen Konsumenten.
 
+## WLAN-Onboarding
+
+Standardisierte Portaltechnik soll zuerst adoptiert werden, waehrend
+Connectivity-Ablauf, Credential-Kandidaten und -Commit, Secrets, Recovery,
+Redaction und Safetyisolation projektspezifisch bleiben. Fuer Release 1 wird
+WiFiManager zuerst begrenzt geprueft. Ein eigener Adapter aus den
+Arduino-ESP32-Frameworkbausteinen wird nur bei einem nachgewiesenen Problem als
+identischer Gegenprototyp nachgezogen. Weder dieser Rueckfall noch ein
+spaeterer Wechsel rechtfertigt eine vorsorgliche Provisioning-, Provider-,
+Plugin- oder Mehradapterarchitektur; die konkrete Integration bleibt an der
+Composition Root austauschbar.
+
 ## Entscheidungsnachweis
 
 Jede spaetere Komponentenentscheidung nennt:
