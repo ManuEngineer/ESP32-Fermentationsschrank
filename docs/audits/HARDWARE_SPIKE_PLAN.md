@@ -151,6 +151,14 @@ Touchdisplay ist die einzige
 lokale Bedien- und Anzeigeoberflaeche; der Spike plant keine parallelen lokalen
 Eingaben oder Anzeigen.
 
+Die gemeinsamen #25-Praesentationsmodelle und Sprachressourcen werden zuvor
+beziehungsweise parallel nativ und hardwareunabhaengig getestet. Der Spike
+verwendet sie nur als fachlich identische Eingabe fuer repraesentative
+Darstellungen. Er entscheidet weder ihre Struktur noch Navigation oder
+Layout. Reale Pixel-/Textpassung, Zeilenumbrueche, Kuerzungen und Schriftgroessen
+werden erst auf der bestaetigten Displayhardware gemessen; daraus entsteht
+keine LVGL-, Treiber- oder Uebersetzungsbibliothekswahl fuer #25.
+
 ### Stufe 0 – Reale Hardware identifizieren
 
 Vor jeder Bibliotheksbewertung wird am tatsaechlich gelieferten Modul
@@ -396,7 +404,8 @@ Display- oder Touchereignis darf eine reale Aktorfreigabe ausloesen.
 
 ### Nicht-Scope und Artefakte
 
-Nicht-Scope: komplette Release-UI, finale Pins, Touchgehause, echte
+Nicht-Scope: komplette Release-UI, fachliche #25-Projektionen und
+Sprachkataloge, Touch-/Webnavigation, finale Pins, Touchgehause, echte
 Serviceaktionen, Aktorbedienung und LVGL-Auswahl. Encoder,
 Programmwahlschalter, Start-/Stop-Taster und Status-LED werden auch nicht als
 spaetere Spikevarianten untersucht, weil sie kein Bestandteil dieses Projekts

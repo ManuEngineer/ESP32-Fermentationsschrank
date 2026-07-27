@@ -523,6 +523,28 @@ Quellen: [ricmoo/QRCode](https://github.com/ricmoo/QRCode),
 [Project Nayuki](https://github.com/nayuki/QR-Code-generator). Abgerufen am
 2026-07-27.
 
+## Gemeinsame UI-Basis und Frameworkgrenze
+
+Der OD-07-Teilentscheid zu #25 benoetigt keine Drittkomponente. Kleine
+oberflaechenneutrale Praesentationsmodelle projizieren kanonische Fach-,
+Prozess-, Sensorqualitaets-, Safety- und Berechtigungszustaende fuer Touch und
+Web. Sie enthalten weder eine allumfassende Mega-View noch Navigation, Layout,
+Pixelkoordinaten, HTML, CSS, Webrouten, Browserzustand oder Bibliothekstypen.
+Insbesondere bleiben Display-/Touch-, LVGL-, Widget-, ArduinoJson- und
+Webservertypen ausserhalb.
+
+Gemeinsame Sprachressourcen verwenden stabile Textschluessel,
+sprachunabhaengige Fehler-/Meldungscodes, vollstaendige Kataloge fuer Deutsch,
+Spanisch und Englisch sowie Deutsch als Fallback. Semantische Formatierung
+arbeitet erst an der Praesentationsgrenze auf typisierten Fachwerten.
+Display- und Browsersprache duerfen unabhaengig gewaehlt werden;
+oberflaechenspezifische Auswahl, Zeilenumbrueche, Kuerzungen, Schriftgroessen
+und Pixelpassung sind keine Verantwortung von #25.
+
+Touchnavigation und konkrete Screens bleiben in #26, Webnavigation und
+responsive Layouts in #27, Display-/Touchadapter in #31. Diese Aufteilung
+waehlt weder einen Treiber noch LVGL oder eine Uebersetzungsbibliothek aus.
+
 ## UI-Framework
 
 LVGL ist kein Display- oder Touchtreiberkandidat. Der Treibervergleich wird
@@ -537,8 +559,9 @@ verglichen.
 | LVGL | `9.5.0`, `8fd90bb1`, MIT | vollstaendiges Widget-, Layout-, Event- und Renderingframework; kein Display-/Touchtreiber | zusaetzliche Displaypuffer, Fonts, Widgetzustand und Integrationskomplexitaet; 4 MB/ohne PSRAM nach der Treiberwahl messen | nicht vorsorglich einbinden; nur waehlen, wenn der identische repraesentative Screen einen klar gemessenen Vorteil bei Bedienbarkeit, Wartbarkeit oder Umsetzung zeigt und die zusaetzlichen Ressourcen rechtfertigt |
 | schlanke projektspezifische Views auf gewaehltem Treiber | keine Drittkomponente fuer Widgets | passt zu wenigen festen 320-x-240-Screens und bestehenden View-Modellen | mehr eigene Layout-/Fokuslogik, aber enger kontrollierbarer Umfang | Vergleichsbasis erst nach Treiberwahl und Adaptervertrag; bevorzugt, solange LVGL keinen belegten Vorteil bringt |
 
-Touchnavigation und fachliche View-Modelle bleiben in der Anwendung. Status:
-`EVALUATE_LATER`, keine LVGL-Abhaengigkeit im Treiberspike oder vor
+Die gemeinsamen #25-Praesentationsmodelle bleiben frameworkfrei;
+Touchnavigation und konkrete Screens liegen separat in #26. Status:
+`EVALUATE_LATER`, keine LVGL-Abhaengigkeit in #25, im Treiberspike oder vor
 Treiberwahl, Adaptervertrag und repraesentativem Screen.
 
 Quelle: [LVGL](https://github.com/lvgl/lvgl), abgerufen am 2026-07-27.

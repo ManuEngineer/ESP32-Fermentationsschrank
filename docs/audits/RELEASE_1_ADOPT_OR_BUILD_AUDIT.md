@@ -158,9 +158,11 @@ Ereignisjournal und Retention, begrenzte persistente Laufhistorie und
 Bereinigung, nur lesenden Laufexport und secret-freies Backup sowie
 Importvorschau und atomare Aktivierung. Der fachliche R1-Umfang bleibt, aber
 die Umsetzung wird nach Auditfreigabe in einem eigenen ownerfreigegebenen
-Planungsschritt geschnitten. #25–#28 vereinen ebenfalls mehrere UI-, Web-,
-Auth-, Diagnose- und Serviceverantwortungen und bleiben innerhalb von OD-07
-noch separat zu entscheiden.
+Planungsschritt geschnitten. #25 wird nach dem verbindlichen OD-07-Teilentscheid
+in oberflaechenneutrale Praesentationsmodelle sowie gemeinsame
+Sprachressourcen/Formatierungsregeln getrennt. Navigation und Layout bleiben
+ausserhalb. #26–#28 vereinen weiterhin mehrere UI-, Web-, Auth-, Diagnose- und
+Serviceverantwortungen und bleiben innerhalb von OD-07 separat zu entscheiden.
 
 ### 5. Hardwarequellen sind keine Hardwarebestaetigung
 
@@ -409,9 +411,10 @@ konkrete DTO-/Codecgrenze; er rechtfertigt keine allgemeine Providerarchitektur.
 
 ### 10. OD-07-Teilentscheid: Issue #19 in vier Bereiche schneiden
 
-Der Teilentscheid fuer #19 ist verbindlich, schliesst OD-07 aber nicht ab. Die
-Mindestumfaenge und PR-/Issue-Schnitte von #25, #26, #27 und #28 werden
-separat mit dem Owner entschieden. Der Audit aendert #19 nicht und erstellt
+Der Teilentscheid fuer #19 ist verbindlich, schliesst OD-07 aber nicht ab. Der
+Teilentscheid fuer #25 ist inzwischen ebenfalls verbindlich; Mindestumfaenge
+und PR-/Issue-Schnitte von #26, #27 und #28 werden separat mit dem Owner
+entschieden. Der Audit aendert #19 nicht und erstellt
 keine Folgeissues. Nach Auditabschluss soll ein eigener ownerfreigegebener
 Planungsschritt den folgenden Schnitt festlegen:
 
@@ -465,6 +468,60 @@ bleibt ein eigener zentraler Policyentscheid zwischen Recovery und Display-/
 Touchintegration. Bestehende Quellen mit einer Festlegung dazu muessen in dem
 spaeteren ownerfreigegebenen Planungsschritt konsistent aufgeloest werden; #19
 entscheidet diese Frage nicht.
+
+### 11. OD-07-Teilentscheid: Issue #25 auf gemeinsame UI-Basis begrenzen
+
+Der Teilentscheid fuer #25 ist verbindlich, schliesst OD-07 aber nicht ab.
+#19 und #25 sind damit innerhalb von OD-07 entschieden; Mindestumfang und
+PR-/Issue-Schnitt von #26, #27 und #28 folgen separat. Der Audit aendert #25
+nicht und erstellt keine Folgeissues. Nach Auditabschluss soll ein eigener
+ownerfreigegebener Planungsschritt #25 auf zwei Bereiche reduzieren:
+
+1. **Oberflaechenneutrale Praesentationsmodelle:** Kleine anwendungs- oder
+   ansichtsbezogene Projektionen stellen Touchdisplay und Weboberflaeche
+   dieselben fachlichen Fakten bereit. Dazu gehoeren Geraete- und Laufzustand,
+   Prozessphase, Soll-, Produkt-, Raum-/Luft- und freigegebene
+   Schutztemperatur, Messwertqualitaet `gueltig`, `fehlt`, `veraltet` oder
+   `ungueltig` samt Alter, tatsaechlich verwendeter Regelsensor und
+   Ersatzbetrieb, Lauf-/Restzeit, Programmzusammenfassungen, priorisierte
+   Meldungen samt Schweregrad und Quittierbarkeit, zulaessige Aktionen mit
+   Sperrgruenden sowie Revisionsinformationen. Text-, Meldungs- und
+   Fehlerkennungen bleiben
+   sprachunabhaengig. Die Projektion liest kanonischen Fach-, Prozess-,
+   Sensorqualitaets-, Safety- und Berechtigungszustand und erfindet keine
+   eigene Entscheidung darueber, welcher Sensor regelt, ob ein Wert
+   vertrauenswuerdig ist, ob ein Aktor freigegeben, ein Fehler quittierbar oder
+   ruecksetzbar, ein Kommando beziehungsweise Servicezugang zulaessig oder eine
+   Revision konfliktfrei ist.
+2. **Gemeinsame Sprachressourcen und Formatierungsregeln:** Release 1 umfasst
+   Deutsch, Spanisch und Englisch mit Deutsch als kontrollierter
+   Fallbacksprache. Stabile Textschluessel und sprachunabhaengige Fehler-/
+   Meldungscodes speisen vollstaendig gepruefte Kataloge. Gemeinsame
+   semantische Regeln formatieren Einheiten, Temperaturen, Dauern, Datum und
+   Uhrzeit erst an der Praesentationsgrenze; Fachwerte bleiben typisiert.
+   Benutzerdefinierte Programmnamen werden nicht automatisch uebersetzt.
+   Display- und Browsersprache duerfen unabhaengig gewaehlt werden; ihre
+   konkrete Auswahl und Persistenz bleibt oberflaechenspezifisch.
+
+Es entsteht keine allumfassende `DeviceUiModel`-artige Mega-View und kein
+globaler UI-Zustand, der Touch und Web koppelt. Gemeinsame Modelle enthalten
+weder Navigation noch Pixelkoordinaten, Schriftgroessen, konkrete Farben,
+Touchflaechen, HTML, CSS-Klassen, Webrouten, Browserzustaende, LVGL-, Widget-,
+Displaytreiber-, ArduinoJson- oder Webservertypen. Touchnavigation, Dialoge,
+Stop-/Servicefluss und Touchziele gehoeren zu #26; Webrouten, responsive
+Navigation, Browserhistorie und Sessionbezug zu #27; Display-/Touchadapter zu
+#31. Die Treiberentscheidung OD-02 und der spaetere Vergleich schlanker Views
+mit LVGL unter OD-05 bleiben davon unabhaengig.
+
+Native Tests der spaeteren Bereiche decken Standby, Startvorbereitung, aktiven
+und abgeschlossenen beziehungsweise abgebrochenen Lauf, Recovery,
+Produktfuehler vorhanden/fehlend, Luftsensor als Ersatz, ungueltigen oder
+fehlenden Schutzsensor, veraltete Werte, Safetyfehler, quittierbare und nicht
+quittierbare Meldungen, erlaubte/gesperrte Aktionen, Revisionskonflikte und
+Serviceberechtigung ab. Fuer Sprachen werden alle Schluessel in allen drei
+Katalogen, deutscher Fallback, nichtleere Texte, stabile Fehlercodes,
+Temperatur-/Dauer-/Datum-/Zeitformatierung, unveraenderte benutzerdefinierte
+Namen und das Fernhalten von Bibliotheks-/Treibertexten geprueft.
 
 ## Entschiedener Persistenzvertrag OD-01
 
@@ -598,7 +655,9 @@ Variante A erweitert den R1-Kern spaeter additiv:
 - Peltier ueber BTS7960, Innen-/Aussenluefter und Summer;
 - deterministischer Safety-, PI-, Aktor-, Prozess- und Laufkern;
 - Touchdisplay 320 x 240 als einzige lokale Bedien- und Anzeigeoberflaeche,
-  drei Sprachen und eine sekundaere Weboberflaeche;
+  eine sekundaere Weboberflaeche, kleine gemeinsame oberflaechenneutrale
+  Praesentationsmodelle sowie Deutsch, Spanisch und Englisch mit Deutsch als
+  Fallback; Touch- und Webnavigation bleiben getrennt;
 - WLAN-Onboarding mit zuerst begrenzt geprueftem WiFiManager als bevorzugtem
   Kandidaten und einem nur bei dokumentiertem Ausloeser nachgezogenen lokalen
   Frameworkadapter als Rueckfall; lokale Zeit/NTP und Zeitzonenanzeige;
@@ -659,7 +718,9 @@ Die vollstaendige Zuordnung steht in der
    zugeordneten Safety-Gates freigeben.
 8. #19 nach dem entschiedenen OD-07-Teilschnitt in Journal/Retention,
    Laufhistorie/Bereinigung, Laufexport/secret-freies Backup und erst danach
-   Importvorschau/atomare Aktivierung zerlegen; #25–#28 separat entscheiden.
+   Importvorschau/atomare Aktivierung zerlegen; #25 in kleine
+   Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen
+   schneiden; #26–#28 separat entscheiden.
 9. ArduinoJson erst nach isoliertem Build-, Grenzwert-, Fuzz- und
    Ressourcennachweis an der kleinen DTO-/Codecgrenze uebernehmen; die
    1-/4-/16-KiB-Profile und Tiefe 6 mit realen maximalen DTOs pruefen.
@@ -673,7 +734,8 @@ Die vollstaendige Zuordnung steht in der
 | #29 | minimale sichere Spikebaseline und spaetere produktive Hardwareintegration sind in einem breiten Issue verbunden | nach Auditfreigabe in Baseline-Anteil vor den Spikes und produktiven Anteil hinter den jeweiligen Safety-Gates schneiden; Issue im Audit nicht aendern |
 | #56/#57 | bestehender Umfang mischt den notwendigen Active-/Fallback- und Bootstrapkern mit Pending-/Intentpfaden und Secret-Domaenen ohne ersten Konsumenten | nach entschiedenem OD-01 in separatem Planungs-/ADR-Schritt auf Variante B zuschneiden; Variante A spaeter additiv planen |
 | #19 | vier grosse Verantwortungsbereiche in einem Issue | nach Auditfreigabe separat in Journal/Retention, begrenzte Laufhistorie/Bereinigung, nur lesenden Laufexport/secret-freies Backup und Importvorschau/atomare Aktivierung schneiden; 5 detaillierte Laeufe und 50 Zusammenfassungen bleiben Messziel |
-| #25–#28 | UI-, Web-, Auth-, Diagnose- und Servicepakete sind zu breit fuer kleine PRs | nach stabilen DTO-/Portgrenzen in vertikale Scheiben teilen |
+| #25 | gemeinsame Praesentationssemantik, Sprachressourcen, Navigation und Layout sind vermischt | nach Auditfreigabe in kleine oberflaechenneutrale Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen schneiden; Navigation/Layout nach #26/#27 verschieben, Issue im Audit nicht aendern |
+| #26–#28 | Touch-, Web-, Auth-, Diagnose- und Servicepakete sind zu breit fuer kleine PRs | nach stabilen DTO-/Portgrenzen und ihren noch ausstehenden OD-07-Teilentscheiden in vertikale Scheiben teilen |
 | LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich und ist kein Treiberkandidat | erst nach Treiberauswahl, Adaptervertrag und identischem repraesentativem Screen gegen schlanke Views messen |
 | ESPAsyncWebServer | Async-/WebSocket-/SSE-Umfang koennte groesser als der reale R1-Bedarf sein | Frameworkserver zuerst messen; Async nur bei belegtem Vorteil |
 | Vorsorgliche Mehradapter-/Provisioningarchitektur | zwei produktive Portalwege oder allgemeine Provider-/Pluginvertraege waeren ohne zweiten realen Bedarf ueberdimensioniert | WiFiManager zuerst begrenzt pruefen; Frameworkadapter nur bei dokumentiertem Ausloeser als identischen Gegenprototyp nachziehen |
@@ -710,7 +772,7 @@ Die vorgeschlagene Reihenfolge steht in
 | OD-03a | DS18B20-/1-Wire-Softwarestack nach Stufe 3 waehlen |
 | OD-03b | Topologie A oder begruendeten Rueckfall B nach realem Pin-/GPIO- und Fehlerisolationsvergleich waehlen; Produktbus bleibt separat, C ausgeschlossen |
 | OD-05 | schlanke eigene Screens oder LVGL erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich |
-| OD-07 | #19 ist als Teilentscheid in vier Bereiche geschnitten; R1-Mindestumfang und PR-/Issue-Schnitt von #25–#28 bleiben offen |
+| OD-07 | #19 und #25 sind als Teilentscheide verbindlich geschnitten; R1-Mindestumfang und PR-/Issue-Schnitt von #26–#28 bleiben offen |
 | OD-09 | KDF-, Work-Factor-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag vor #27 |
 
 OD-01 ist mit Variante B entschieden. Offen bleibt nur die technische
@@ -734,8 +796,8 @@ zu vergeben: ArduinoJson `7.4.3` ist der bevorzugte Kandidat. Offen bleibt nur
 die endgueltige Uebernahme nach dem dokumentierten Build-, Grenzwert-, Fuzz-
 und Ressourcenspike; eine vorsorgliche Gleichwahl besteht nicht.
 
-OD-07 bleibt ausdruecklich offen: Dieser Auditstand entscheidet nur den
-Teilschnitt von #19; #25, #26, #27 und #28 folgen separat.
+OD-07 bleibt ausdruecklich offen: Dieser Auditstand entscheidet die
+Teilschnitte von #19 und #25; #26, #27 und #28 folgen separat.
 
 Hardwarewerte, Pins, Pegel und thermische Parameter sind keine freien
 Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.

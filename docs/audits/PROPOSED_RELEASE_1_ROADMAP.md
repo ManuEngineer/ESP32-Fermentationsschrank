@@ -54,8 +54,9 @@ Vor weiterer Architekturverbreiterung:
 7. den verbindlichen OD-07-Teilschnitt von #19 in Journal/Retention,
    Laufhistorie/Bereinigung, nur lesenden Laufexport/secret-freies Backup und
    Importvorschau/atomare Aktivierung in einem separaten ownerfreigegebenen
-   Planungsschritt umsetzen; #25–#28 bleiben innerhalb OD-07 separat zu
-   entscheiden.
+   Planungsschritt umsetzen; #25 ebenso in oberflaechenneutrale
+   Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen
+   schneiden; #26–#28 bleiben innerhalb OD-07 separat zu entscheiden.
 
 Keine Empfehlung aus dem Audit wird im Audit-PR selbst implementiert.
 
@@ -88,7 +89,8 @@ schmale benoetigte Variante-B-Vertraege
 
 #17 + #20..#23 + bestehender Laufkern
   -> #24 Fehlerkern und SAFE_BOOT
-  -> #25 gemeinsame View-Modelle/Sprachen
+  -> #25-A kleine oberflaechenneutrale Praesentationsmodelle
+  -> #25-B gemeinsame Sprachressourcen und Formatierungsregeln
 ```
 
 Vorgeschlagene kleine PRs:
@@ -114,7 +116,14 @@ Vorgeschlagene kleine PRs:
   Bestaetigung und atomare Aktivierung erst nach stabiler OD-01-Basis;
 - #24: Fehlerdatenmodell, persistente Verriegelung/Boot, danach
   Fehlerinjektionsmatrix;
-- #25: gemeinsame View-Modelle, Sprachressourcen und Navigation getrennt.
+- #25-A: kleine ansichtsbezogene Projektionen aus kanonischem Fach-, Prozess-,
+  Sensorqualitaets-, Safety- und Berechtigungszustand mit Qualitaet/Alter,
+  Meldungen, Aktionsverfuegbarkeit, Sperrgruenden und Revisionen; keine
+  Mega-View und keine neue UI-Fachentscheidung;
+- #25-B: stabile Textschluessel, sprachunabhaengige Fehler-/Meldungscodes,
+  vollstaendige Deutsch-/Spanisch-/Englisch-Kataloge, deutscher Fallback und
+  gemeinsame semantische Temperatur-/Dauer-/Datum-/Zeit-/Einheitenformatierung;
+  benutzerdefinierte Namen bleiben unveraendert.
 
 Fuer den neu geschnittenen Variante-B-Kern gilt die feste Transaktionsfolge:
 
@@ -300,14 +309,20 @@ Ein bestandener Bibliotheksspike ist keine Freigabe fuer reale Aktoren.
 
 Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
 
+- die nativ getesteten #25-A-/#25-B-Vertraege fuer Touch und Web verwenden,
+  ohne Layout-, Navigations-, HTML-, Treiber-, Widget-, ArduinoJson- oder
+  Webservertypen einzumischen; Display- und Browsersprache bleiben unabhaengig;
 - auf dem ausgewaehlten Display-/Touchtreiber und seinem schmalen
   Adaptervertrag denselben repraesentativen Screen, dieselben Texte,
   Eingabeelemente und Messmethoden fuer schlanke Views und LVGL verwenden;
   LVGL nur bei einem klar gemessenen Vorteil uebernehmen;
 - #26 als einzige lokale Bedien- und Anzeigeoberflaeche in
-  Navigations-/Screen-Scheiben umsetzen; UI-Logik weiterhin nativ testen;
+  Navigations-/Screen-Scheiben umsetzen; Dialoge, Stop-/Servicefluss,
+  Touchziele, Pixel- und Textpassung bleiben dort; UI-Logik weiterhin nativ
+  testen;
 - #27 teilen in begrenzte Lese-API/Transport, mutierende Kommandos/Konflikte,
-  Webassets, Onboarding und Authentication; die Weboberflaeche bleibt
+  Webassets, responsive Webnavigation, Onboarding und Authentication; die
+  Weboberflaeche bleibt
   sekundaer und ist keine Voraussetzung fuer den lokalen Betrieb; mit
   Arduino-ESP32 `WebServer` beginnen, Status-/Diagrammdaten begrenzt pollen und
   Async nur nach einem konkreten Baselineproblem identisch vergleichen;
@@ -406,7 +421,7 @@ Ausgabeelement.
 | #57 | nicht unveraendert freigeben; separat auf Bootstrap, `StorageEpoch`, Korruptionssperre und wiederaufnehmbaren Werksreset reduzieren |
 | spaeteres Pending/Secrets | erst mit neustartpflichtigem Konfigurationswert beziehungsweise realen WLAN-/Passwort-/PIN-Nachweisen als eigene Issues planen; Variante A additiv anbinden |
 | #19 | nicht streichen; nach Auditfreigabe in vier Bereiche schneiden: A Journal/Retention, B begrenzte Laufhistorie/stromausfallsichere Bereinigung, C nur lesender Laufexport/secret-freies Backup, D Importvorschau/atomare Aktivierung; 5 detaillierte Laeufe/50 Zusammenfassungen sind Messziel, kein Versprechen; Issue im Audit nicht aendern |
-| #25 | View-Modelle, Texte und Navigation in getrennte kleine PRs schneiden |
+| #25 | nach Auditfreigabe auf zwei Bereiche reduzieren: A kleine oberflaechenneutrale Praesentationsmodelle, B gemeinsame DE/ES/EN-Sprachressourcen und semantische Formatierung mit deutschem Fallback; Touch-/Webnavigation und Layout nach #26/#27 verschieben, keine Mega-View oder Frameworktypen, Issue im Audit nicht aendern |
 | #26 | native UI-Logik von realem Display-/Touchadapter trennen |
 | #27 | Webtransport, API, Webassets, Onboarding und Authentisierung trennen |
 | #28 | passive Diagnose/Export vom aktiven Serviceablauf trennen |
@@ -423,7 +438,7 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 | OD-03a | DS18B20-/1-Wire-Softwarestack | nach Stufe 3, vor #30 |
 | OD-03b | Bustopologie A oder begruendeter Rueckfall B | nach minimaler Hardwarebaseline, realem Pin-/GPIO-Inventar und identischem Fehlerisolationsvergleich; Produktbus separat, C ausgeschlossen |
 | OD-05 | schlanke Views oder LVGL | nach OD-02, schmalem Adaptervertrag und identischem repraesentativem Screenvergleich |
-| OD-07 | #19 als Teilentscheid verbindlich geschnitten; Mindestumfang und PR-/Issue-Schnitt von #25–#28 bleiben offen | vor dem jeweiligen Issue |
+| OD-07 | #19 und #25 als Teilentscheide verbindlich geschnitten; Mindestumfang und PR-/Issue-Schnitt von #26–#28 bleiben offen | vor dem jeweiligen Issue |
 | OD-09 | KDF-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag | vor produktiver Authentication in #27 |
 
 OD-01 ist entschieden: Variante B ist der verbindliche R1-Vertrag, Variante A
@@ -438,8 +453,8 @@ OD-04 ist entschieden: Arduino-ESP32 `WebServer` ist die Release-1-Baseline.
 R1-Risiko und ein klarer Vorteil im identischen begrenzten Prototyp oeffnen die
 Abweichungsentscheidung erneut.
 
-OD-07 ist nicht abgeschlossen. Nur #19 ist mit den vier geordneten Bereichen
-entschieden; #25, #26, #27 und #28 folgen separat. Der Werksreset bleibt im
+OD-07 ist nicht abgeschlossen. #19 ist mit vier und #25 mit zwei geordneten
+Bereichen entschieden; #26, #27 und #28 folgen separat. Der Werksreset bleibt im
 zentralen #57-Recoveryvertrag. Die Behandlung der Touchkalibrierung beim Reset
 bedarf eines eigenen expliziten Policyentscheids zwischen Recovery und
 Display-/Touchintegration und wird nicht in #19 versteckt.

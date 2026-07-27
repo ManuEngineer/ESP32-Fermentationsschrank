@@ -135,6 +135,22 @@ zustandsveraendernden Import umgesetzt. Es entsteht weder eine eigene
 allgemeine Datenbank noch eine parallele Aktivierungssemantik; Fehler,
 Unterbruch oder Neustart duerfen keine Teilaktivierung hinterlassen.
 
+## Praesentationsmodelle und Sprachen
+
+Die fachliche Praesentationsprojektion bleibt unter Projektkontrolle. Kleine
+ansichtsbezogene Modelle bilden kanonische Fach-, Sensorqualitaets-, Safety-
+und Berechtigungsentscheidungen ab, ohne sie in der UI neu herzuleiten. Ein
+allumfassender globaler UI-Zustand oder eine Mega-View wird ebenso wenig
+vorbereitet wie eine Bindung an HTML, Webserver-, Displaytreiber-, Widget- oder
+LVGL-Typen.
+
+Gemeinsame Textschluessel, sprachunabhaengige Fehlercodes, Kataloge und
+semantische Formatierungsregeln sind eigene Produktvertraege. Eine
+Uebersetzungsbibliothek oder ein UI-Framework wird dafuer nicht vorsorglich
+ausgewaehlt. Konkrete Treiber und Frameworks bleiben hinter schmalen
+Integrationsgrenzen; Touch- und Webnavigation sowie ihre Layouts bleiben
+oberflaechenspezifisch.
+
 ## Entscheidungsnachweis
 
 Jede spaetere Komponentenentscheidung nennt:
