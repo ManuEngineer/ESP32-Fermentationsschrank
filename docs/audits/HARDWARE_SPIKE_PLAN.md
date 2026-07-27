@@ -485,7 +485,7 @@ Fuer beide Kandidaten werden geprueft:
 - mehrere 1-Wire-Busse und mehrere Sensoren je Bus;
 - stabile 64-Bit-ROM-Adressen;
 - nicht blockierende beziehungsweise asynchron integrierbare Konvertierung;
-- CRC-, Busfehler- und Hot-Plug-Vertrag;
+- CRC-, Busfehler-, Trennungs- und Wiederkehrvertrag;
 - reproduzierbarer isolierter Build;
 - Flash-, statische RAM- und Heapwirkung.
 
@@ -535,7 +535,7 @@ Bus 2 -> Raum-/Luftsensor
 Bus 3 -> Kuehlkoerper-/Peltier-Schutzsensor
 ```
 
-Zu bewerten sind GPIO-Bedarf, drei Pull-ups, Fehlerisolation, Hot-Plug,
+Zu bewerten sind GPIO-Bedarf, drei Pull-ups, Fehlerisolation, Trennung/Wiederkehr,
 Diagnose, Wartbarkeit, Ressourcen sowie Pinqualitaet und Bootstrapping-Risiken
 des konkreten ESP32-Boards.
 
@@ -576,72 +576,17 @@ realem GPIO-Inventar, realer Pinpruefung, identischem Test von A und B sowie
 Fehlerisolationsvergleich. Es werden vorab keine drei GPIOs verbindlich
 reserviert.
 
-### Produktfuehler ueber 3,5-mm-TRS-Steckverbindung
+### Allgemeine Trennungs-, Fehler- und Wiederkehrpruefungen
 
-Der geplante Produktfuehler verwendet einen dreipoligen 3,5-mm-Klinkenstecker
-mit folgender verbindlicher Belegung:
+Das konkrete mechanische und elektrische Stecksystem des Produktfuehlers ist
+keine Entscheidung dieses Softwareaudits. Es werden weder Steckertyp,
+Kontaktreihenfolge, Anschlussbelegung noch steckerspezifische Schutzschaltung
+vorgegeben. Erhalten bleiben die vom Anschluss unabhaengigen Software- und
+Buspruefungen:
 
-| TRS-Kontakt | Leitung |
-|---|---|
-| Spitze / Tip | VDD |
-| Ring | DQ |
-| Schaft / Sleeve | GND |
-
-Diese Belegung entspricht der gezeigten beziehungsweise kaufbaren
-Sensorvariante. Bei einer geeigneten Buchse ist der Spitzenkontakt der tiefste
-Kontakt. Beabsichtigt ist, dass VDD beim Einstecken zuletzt schliesst und beim
-Herausziehen zuerst oeffnet, sodass DQ und GND sich bewegen, waehrend der Sensor
-noch beziehungsweise bereits unversorgt ist. Damit soll ein powered
-Hot-Plug-Kurzschluss zwischen VDD und GPIO vermieden werden.
-
-Diese Kontaktreihenfolge wird nicht aus der allgemeinen TRS-Bauform abgeleitet.
-Sie muss an der konkret vorgesehenen Buchse praktisch bestaetigt werden.
-
-#### Verbindliche Buchsenpruefung
-
-Am realen Buchsenmodell werden dokumentiert:
-
-1. genaue Buchsenbezeichnung;
-2. mechanische Kontaktreihenfolge;
-3. welcher Buchsenkontakt bei teilweisem Einstecken welchen Plugbereich
-   beruehrt;
-4. ob VDD tatsaechlich zuletzt schliesst;
-5. ob VDD tatsaechlich zuerst oeffnet;
-6. ob VDD und GND in irgendeiner Einsteckposition kurzgeschlossen werden;
-7. ob DQ kurzzeitig GND beruehrt;
-8. Verhalten bei halb eingestecktem Stecker;
-9. Verhalten bei langsamer und schneller Betaetigung;
-10. Verhalten bei gedrehtem oder seitlich belastetem Stecker;
-11. vorhandene Schaltkontakte der Buchse;
-12. Kontaktprellen;
-13. Stromaufnahme und Spannung waehrend des Steckvorgangs.
-
-#### Zu pruefende elektrische Schutzmassnahmen
-
-- Pull-up von DQ auf die verwendete 3,3-V-Logikversorgung;
-- kleiner Serienwiderstand im DQ-Pfad nahe beim ESP32; Wert anhand realer
-  Signalqualitaet und Leitungen bestimmen;
-- geeignete Strombegrenzung der Sensorversorgung;
-- Entkopplung nahe an Buchse beziehungsweise Sensor;
-- ESD-Schutz, falls die externe Buchse zugaenglich bleibt;
-- sicherer GPIO-Zustand bei Boot, Reset und abgezogenem Sensor;
-- keine Parasitspeisung des Sensors ueber DQ;
-- keine 5-V-Einwirkung auf den ESP32-GPIO.
-
-Der Audit legt keine endgueltigen Widerstands- oder Schutzbauteilwerte fest.
-Diese bleiben bis zum realen elektrischen Test offen.
-
-#### Steck- und Fehlerpruefungen
-
-Mindestens werden geprueft:
-
-- Sensor vor Boot abgezogen und vor Boot angeschlossen;
-- Ein- und Ausstecken im Stillstand;
-- Ein- und Ausstecken waehrend einer laufenden Konvertierung;
-- halb eingesteckter Zustand;
-- langsames und schnelles Einstecken;
-- mindestens 100 Steckzyklen;
-- kurzzeitiger DQ-GND-Kontakt;
+- Sensor vor Boot getrennt und vor Boot verbunden;
+- Trennen und Wiederanschliessen im Stillstand;
+- Trennen und Wiederanschliessen waehrend einer laufenden Konvertierung;
 - Leitungsunterbruch und simulierte Kontaktunterbrechung;
 - keine Auswirkung auf die festen Sensorbusse;
 - kein ESP32-Neustart und kein Watchdog;
@@ -650,7 +595,9 @@ Mindestens werden geprueft:
 
 Der Spike erfasst dabei nur Anwesenheit, ROM-Adresse, Konvertierungsstatus,
 Messwert, CRC, Busstatus, Timeout und Wiederanschluss. Er implementiert weder
-automatische Rollenumschaltung noch Safety-Freigabe.
+automatische Rollenumschaltung noch Safety-Freigabe. Die spaetere konkrete
+Hardwareausfuehrung und ihre elektrische Abnahme bleiben ausserhalb dieses
+Plans.
 
 ### Identische Volltests pro Softwarekandidat
 
@@ -660,7 +607,7 @@ automatische Rollenumschaltung noch Safety-Freigabe.
 4. zehn Neustarts mit stabilen ROM-Adressen;
 5. asynchrone 12-Bit-Konvertierung;
 6. 1.000 Messzyklen;
-7. Produktfuehler-Hot-Plug;
+7. Produktfuehler trennen und wieder anschliessen;
 8. Fehler eines festen Sensors;
 9. gemeinsamer Busfehler in Topologie B;
 10. Unterbruch;
@@ -711,21 +658,22 @@ Peltierfreigabe oder Safety-Verriegelung. Diese Semantik bleibt in #20, #21 und
 
 Ein Kandidat wird abgebrochen, wenn er nur mit Toolchain-/Frameworkwechsel,
 ungebundener Task-/Heapnutzung oder unaufgeloesten Abhaengigkeiten funktioniert,
-keine stabile ROM-/Mehrbus-/Mehrsensorunterstuetzung besitzt, Hot-Plug einen
+keine stabile ROM-/Mehrbus-/Mehrsensorunterstuetzung besitzt, Trennung/Wiederkehr einen
 Geraetereset erfordert oder eine unkontrollierte elektrische Situation erzeugt.
 
 Nicht-Scope sind fachliche Qualitaet, Filter, Offsets, Rollenwahl,
 Ersatzregelung, PI-Regelung, Aktorfreigabe, finale Sensorposition, finale GPIOs
 und finale Schutzbauteilwerte. Artefakte sind Aufbau-/Topologiefotos,
-Buchsen-Kontaktprotokoll, Pull-up-/Leitungsdaten, ROM-Liste, identischer Testcode,
+Pull-up-/Leitungsdaten, ROM-Liste, identischer Testcode,
 Mess- und Fehlerdaten, Base-/Kandidaten-Ressourcenvergleich,
 Toolchain-/Abhaengigkeitsbericht sowie getrennte Empfehlungen fuer Softwarestack
 und Bustopologie.
 
-Notwendige Owner-/Hardwareaktion: alle drei realen Sensoren, die konkrete
-3,5-mm-TRS-Buchse, Produktstecker und Leitungen bereitstellen; sichere
-Stoer-/Hot-Plug-Tests bestaetigen; Software- und Topologieentscheidung erst
-anhand der identischen Messprotokolle treffen.
+Notwendige Owner-/Hardwareaktion: alle drei realen Sensoren und geeignete
+Testleitungen bereitstellen; allgemeine Trennungs-, Stoer- und Wiederkehrtests
+bestaetigen; Software- und Topologieentscheidung erst anhand der identischen
+Messprotokolle treffen. Die Anschlussausfuehrung bleibt eine spaetere separate
+Hardwareentscheidung.
 
 ## Aktorfreier Webserver-Baselineprototyp fuer #27
 
@@ -750,7 +698,7 @@ Der Prototyp legt noch keine Pollingintervalle, Clientzahl, Antwort-/
 Chartgroesse, Timeouts oder Heap-/Jitterbudgets fest; er misst diese Werte.
 WebSocket und SSE werden nicht vorsorglich umgesetzt. Die spaetere fachliche
 #27-Umsetzung bleibt in HTTP-Transport/interne API, Status/Polling/aktueller
-Laufchart, Mutationen, Webassets und Authentisierung nach OD-09 getrennt. Es
+Laufchart, Mutationen, Webassets und Authentisierung gemaess OD-09 getrennt. Es
 gibt keine oeffentliche externe Schreib-API und keine allgemeine Web-/
 Frontend-/Pluginplattform. OD-06-Onboarding besitzt einen getrennten
 fachlichen Lebenszyklus.
@@ -1007,6 +955,38 @@ microSD-/SD-Karten-Slot wird nicht evaluiert. #28-D verwendet spaeter den
 bereits redigierten Fachbericht mit der #19-C-Exportinfrastruktur; dieser Spike
 implementiert weder Exportframework noch Berichtsimport.
 
+## Spike G: Authentisierung und Plattformschutz
+
+OD-09 ist fachlich entschieden; dieser aktorfreie Spike weist die technische
+Eignung nach und implementiert keine produktiven Endpunkte. PBKDF2-HMAC-SHA-256
+aus der fixierten mbedTLS-/ESP32-Toolchain ist
+`FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
+`FINAL_SELECTION_PENDING`. Mindestens geprueft werden:
+
+- reproduzierbarer Build und bekannte KDF-Testvektoren;
+- getrennte zufaellige Salts mit mindestens 128 Bit, 256-Bit-Verifier,
+  KDF-Parameterkennung und zeitkonstanter Vergleich;
+- richtige und falsche Passwort- und PIN-Pruefungen, auch parallel;
+- KDF-Laufzeit, Stack, Heap, niedrigster freier Heap, groesster freier
+  Heapblock, Regelzyklus-Jitter, Watchdog und Stabilitaet;
+- globale Fehlversuchsserien fuer Passwort und PIN, Sperrstufenpersistenz und
+  Neustart ohne Sperrbypass;
+- `esp_fill_random()` oder korrekt gesaeter mbedTLS-DRBG fuer Salts,
+  Sessionkennungen und CSRF-Tokens, einschliesslich sicherem Fehlerpfad;
+- Credentialwechsel, Readback, Validierung, atomarer Epochcommit, Widerruf und
+  Stromunterbruch an allen relevanten Cut-Points;
+- keine Teilaktivierung, kein Rueckfall auf eine alte Credential-Epoche und
+  keine Secrets in Testlogs oder Artefakten.
+
+Der Spike legt keine Iterationszahl, KDF-Produktionswahl, Stack-/Heapgarantie
+oder Schedulingstrategie fest. Danach entscheidet der Owner KDF und Work
+Factor. NVS-/Flashverschluesselung wird separat als
+`EVALUATE_BEFORE_RELEASE` auf Toolchain, Partitionierung, Provisionierung,
+Schluesselverlust, Entwicklungs-/Produktionsflash, Recovery, Werksreset,
+Updatepfad, Ressourcen und dokumentierte physische Schutzgrenze geprueft. Sie
+wird hier weder aktiviert noch zugesagt. Alle Aktorpfade bleiben getrennt oder
+nachweislich inaktiv.
+
 ## Reihenfolge und Entscheidungsprotokoll
 
 1. Audit- und Planungsbereinigung abschliessen.
@@ -1036,16 +1016,20 @@ implementiert weder Exportframework noch Berichtsimport.
 10. ArduinoJson durch Quelle-/Toolchain-, Codec-, Grenz-/Fuzz- und
    Ressourcenstufen pruefen. Eine Alternative nur bei dokumentiertem Problem
    untersuchen und die endgueltige Codec-Uebernahme dem Owner vorlegen.
-11. Fuer den spaeteren #19-B-Schnitt die reale Speicher-, Retention- und
+11. Den OD-09-Authspike fuer KDF, Zufall, Ressourcen, Sperrserien und
+    Credential-Cut-Points ausfuehren; danach KDF und Work Factor dem Owner
+    vorlegen. Plattformverschluesselung separat vor Release evaluieren.
+12. Fuer den spaeteren #19-B-Schnitt die reale Speicher-, Retention- und
     Bereinigungsmatrix einschliesslich Cut-Points ausfuehren und das
     5-/50-Ziel erst anhand dieser Messung dimensionieren.
-12. #28-A nativ pruefen und nach der Baseline die realen
-    #28-B-Ressourcenmesspunkte erfassen; danach OD-09 festlegen und #28-C mit
-    Mocks pruefen. Reale Serviceadapter bleiben hinter #24, OD-09 und den
+13. #28-A nativ pruefen und nach der Baseline die realen
+    #28-B-Ressourcenmesspunkte erfassen; danach #28-C gemaess entschiedenem
+    OD-09-Vertrag mit Mocks pruefen. Reale Serviceadapter bleiben hinter #24,
+    den OD-09-Technikgates und den
     jeweiligen Hardwaregates.
-13. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
+14. Owner waehlt je Hardwaregruppe genau einen Produktivkandidaten und einen
     dokumentierten Rueckfallkandidaten.
-14. Erst danach implementieren #30 und #31 die schmalen Adapter. Die
+15. Erst danach implementieren #30 und #31 die schmalen Adapter. Die
    hardwareunabhaengige #26-Logik wird separat nativ/simuliert entwickelt; der
    UI-Frameworkvergleich mit LVGL folgt erst auf den ausgewaehlten
    Display-/Touchtreiber, den schmalen Adaptervertrag und einen repraesentativen

@@ -137,6 +137,24 @@ bei einem konkreten gemessenen Bedarf untersucht. R1 verspricht keine stabile
 oeffentliche externe Schreib-API. OD-06-Onboarding bleibt ein getrennter
 fachlicher Lebenszyklus, auch wenn technische Frameworkbausteine geteilt werden.
 
+## Authentisierung und Secret-Schutz
+
+Bewaehrte Kryptoprimitive und vorhandene Plattformfunktionen werden erst nach
+reproduzierbarer Toolchain-, Testvektor-, Laufzeit-, Stack-, Heap-, Jitter- und
+Watchdogpruefung adoptiert. PBKDF2-HMAC-SHA-256 aus dem fixierten
+mbedTLS-/ESP32-Pfad ist nur erster Evaluationskandidat; Work Factor,
+Zufallsintegration und Plattformverschluesselung werden nicht im Voraus
+festgelegt.
+
+Das Projekt entwickelt die Produktpolicy selbst: getrennte Passwort- und
+PIN-Credentials, globale neustartfeste Fehlversuchsbegrenzung, atomaren
+vorwaertsgerichteten Credentialwechsel, fluechtige begrenzte Sessions,
+sitzungsgebundene Servicefreigabe, CSRF, Redaction, Widerruf und die Trennung
+von Auth- und Safetygates. Es entsteht keine generische Authplattform, kein
+Provider-/Pluginregister und keine leere Zukunftsdomaene. Ohne aktivierte und
+getestete Plattformverschluesselung wird kein Schutz gegen physischen
+Flashzugriff behauptet.
+
 ## Journal, Historie und Import
 
 Das Speicherbackend und ein Standard-JSON-Codec werden adoptiert; die

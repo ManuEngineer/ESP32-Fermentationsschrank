@@ -59,7 +59,7 @@ Vor weiterer Architekturverbreiterung:
    schneiden; #26 in lokale Navigation, Start, Programmeditor,
    Lauf-/Meldungsbedienung und Service-/Recovery-UI schneiden; #27 in
    HTTP-Transport/API, Status/Polling/Laufchart, schreibende Kommandos,
-   responsive Webassets und Authentisierung nach OD-09 schneiden; #28 in
+   responsive Webassets und Authentisierung gemaess OD-09 schneiden; #28 in
    passive Diagnose/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose,
    gefuehrten Serviceablauf und nur lesenden Diagnose-/Servicebericht
    schneiden. OD-07 ist damit vollstaendig entschieden.
@@ -108,15 +108,18 @@ Webserver-/JSON-Spikes und spaetere Ownerauswahl
   -> #27-B Status, begrenztes Polling und aktueller Laufchart
   -> #27-D responsive lokale Webassets
 
-OD-09
+OD-09-Policy
+  -> Authspike: PBKDF2/Zufall/Ressourcen/Cut-Points
+  -> Ownerentscheid KDF und Work Factor
+  -> erster Authkonsument mit Credentialdomaene
+  -> #27-E Sessions, CSRF und Servicefreigabe
   -> #27-C schreibende Kommandos und Revisionskonflikte
-  -> #27-E Anmeldung, Sessions, CSRF und Servicefreigabe
 
 Fach-, Sensor- und Safetymodelle
   -> #28-A passive Diagnosemodelle und Boot-Selbsttest
   -> #28-B Ressourcen- und Gesundheitsdiagnose mit realen Messpunkten
 
-OD-09 + #28-A/#28-B
+OD-09-Integrationsnachweis + #28-A/#28-B
   -> #28-C gefuehrter Serviceablauf zuerst vollstaendig mit Mocks
   -> #24- und Hardwaregates vor realen Serviceadaptern
 
@@ -128,7 +131,8 @@ OD-09 + #28-A/#28-B
 Audit erstellten Issues. Ihre Screen-, Dialog-, Aktions- und Fehlerlogik ist
 nativ beziehungsweise mit simulierten Touchereignissen pruefbar. Reales
 Rendering und Touchintegration folgen #31/OD-02; der Frameworkvergleich folgt
-OD-05, reale Authentisierung OD-09 und die Resetmechanik dem #57-Vertrag.
+OD-05, reale Authentisierung dem entschiedenen OD-09-Vertrag und seinen
+technischen Gates und die Resetmechanik dem #57-Vertrag.
 
 Vorgeschlagene kleine PRs:
 
@@ -179,9 +183,11 @@ Vorgeschlagene kleine PRs:
   Clientzahl, Antwortgroesse und Budgets erst messen;
 - #27-D: schlanke lokale responsive HTML-/CSS-/JavaScript-Assets ohne CDN,
   Frontendframeworkvorwahl oder Fach-/Safetylogik im Browser;
-- #27-C/#27-E: erst nach OD-09 erwartete Revisionen, Konflikt- und
-  Doppelwirkungsschutz sowie Anmeldung, Sessions, CSRF und Servicefreigabe
-  umsetzen. R1 verspricht keine oeffentliche externe Schreib-API.
+- #27-E/#27-C: nach dem OD-09-Authspike zuerst getrennte Webpasswortpruefung,
+  fluechtige Sessions, globale Sperrpolicy, CSRF und sitzungsgebundene
+  Servicefreigabe integrieren; schreibende Kommandos erst nach bestandenem
+  Auth-/CSRF-Gate. R1 verspricht keine oeffentliche externe Schreib-API und
+  keine dauerhafte Anmeldung.
 - #28-A: passive typisierte Diagnoseprojektionen und Boot-Selbsttest ohne
   Aktoransteuerung; Roh-/Korrektur-/Filterwerte, Qualitaet, Regelsensor,
   Regler-/Aktorstatus, Fehler, Verriegelungen und Systemstatus getrennt testen;
@@ -189,7 +195,8 @@ Vorgeschlagene kleine PRs:
   Gesundheitsmesspunkte anbinden; Schwellen und Reserven bleiben bis zur realen
   Messung `MEASUREMENT_REQUIRED`;
 - #28-C: Auswahl, Voraussetzungen, Sperrgruende, Bestaetigung, Fortschritt,
-  sicheren Abbruch und Ergebnis zuerst mit Mocks testen; Auth nach OD-09 und
+  sicheren Abbruch und Ergebnis zuerst mit Mocks testen; Auth gemaess OD-09
+  nach technischen Gates und
   reale Aktorpruefungen erst hinter #24 und Hardwaregates;
 - #28-D: versionierten, redigierten, nur lesenden Diagnose-/Servicebericht auf
   #28-A/#28-B aufbauen und fuer Serialisierung/Download die #19-C-Infrastruktur
@@ -241,9 +248,9 @@ warten:
    Softwarestack und Bustopologie getrennt entscheiden: Produktfuehler immer
    separat, Topologie A mit drei Bussen bevorzugt, Topologie B mit gemeinsamem
    festen Bus als pinabhaengiger Rueckfall und Topologie C hoechstens als
-   negativer Referenztest. Die konkrete TRS-Buchse und Hot-Plug-Schutzmassnahmen
-   werden praktisch geprueft; drei GPIOs und Bauteilwerte werden nicht vorab
-   festgelegt.
+   negativer Referenztest. Allgemeine Trennungs-, Unterbruch-, Fehler- und
+   Wiederkehrtests bleiben erhalten; Anschlussart, Anschlussbelegung, drei
+   GPIOs und Schutzbauteilwerte werden in diesem Softwareaudit nicht festgelegt.
 5. Den `FIRST_EVALUATION_CANDIDATE` Arduino-ESP32 `WebServer` in einem kleinen
    aktorfreien, `SPIKE_REQUIRED`-Baselineprototyp
    fuer statische Ressourcen, begrenzte API-/Import-/Exportpfade, wenige
@@ -272,7 +279,16 @@ warten:
    `WebServer`-Baselineprototyp und dem spaeteren Schnitt von #19/#27/#28
    koordiniert, implementiert aber keines dieser breiten Issues. Eine
    Alternative wird nur bei einem konkret belegten R1-Problem untersucht.
-8. Fuer den spaeteren #19-B-Schnitt reale Speicher- und Ressourcenmessungen
+8. Den OD-09-Authspike ohne produktive Endpunkte ausfuehren: PBKDF2-HMAC-
+   SHA-256 aus der fixierten Toolchain mit bekannten Testvektoren, getrennten
+   Salts und Parameterkennung pruefen; Work Factor, Laufzeit, Stack, Heap,
+   Jitter, Watchdog und parallele Anfragen messen. `esp_fill_random()` oder
+   einen korrekt gesaeten mbedTLS-DRBG samt Fehlerpfad evaluieren. Globale
+   Fehlversuchsserien, Neustartpersistenz, Session-/CSRF-Tokenbildung,
+   Credentialwechsel und Widerruf an Cut-Points pruefen. Danach entscheidet
+   der Owner KDF und Work Factor. NVS-/Flashverschluesselung bleibt ein
+   getrennter `EVALUATE_BEFORE_RELEASE`-Security-Spike.
+9. Fuer den spaeteren #19-B-Schnitt reale Speicher- und Ressourcenmessungen
    planen: NVS-/Partitionskapazitaet, Fuellen bis zur Bereinigung,
    wiederholte Journal-/Historienzyklen sowie Cut-Points vor, waehrend und nach
    Bereinigungsfortschritt. Das Ziel aktiver Lauf plus 5 detaillierte Laeufe
@@ -305,7 +321,11 @@ Messungen:
   Frameworkgegenprototyp bewerten und danach den Owner entscheiden lassen;
 - ArduinoJson `7.4.3` als bevorzugten Kandidaten erst nach bestandenem
   Build-, Grenzwert-, Fuzz- und Ressourcennachweis endgueltig uebernehmen;
-  Alternative nur bei dokumentiertem Problem.
+  Alternative nur bei dokumentiertem Problem;
+- PBKDF2-HMAC-SHA-256 nur nach bestandenem KDF-/Ressourcenspike und separatem
+  Ownerentscheid samt Work Factor uebernehmen; den kryptografischen
+  Zufallsintegrationspfad ebenfalls erst nach Nachweis festlegen. Die
+  Plattformverschluesselung bleibt davon getrennt.
 
 Jede Auswahl erhaelt Version/Commit, Lizenznachweis, Build-/Hardwaremessung,
 Adaptervertrag und ein eigenes umsetzendes Issue/PR. Keine Auswahl nur aufgrund
@@ -340,7 +360,12 @@ Kleine adapterbezogene PRs:
    ein nur bei dokumentiertem Ausloeser gepruefter Rueckfall;
 6. nach bestandenem JSON-Spike einen kleinen konkreten ArduinoJson-Codec nur an
    begrenzten API-, Konfigurations-, Programm-, Diagnose-, Export-,
-   secret-freien Backup- und Importgrenzen; interne Persistenz bleibt binaer.
+   secret-freien Backup- und Importgrenzen; interne Persistenz bleibt binaer;
+7. nach Authspike und Ownerwahl mit dem ersten produktiven Credentialkonsumenten
+   stark typisierte versionierte Credentialrecords und eine vorwaertsgerichtete
+   Credential-Epoche einfuehren; danach fluechtige Sessions, CSRF und
+   sitzungsgebundene Servicefreigabe. #57 bereitet keine leeren Authstrukturen
+   vor, und schreibende Webendpunkte folgen erst nach bestandenem Gate.
 
 Bibliothekstypen duerfen weder in `fermentation_app` noch in Safety- oder
 Prozessmodelle durchsickern. Das gilt insbesondere fuer `JsonDocument`,
@@ -404,7 +429,8 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   oder Aktorentscheidung neu her;
 - reale Display-/Touchintegration erst nach #31 und OD-02 anbinden, danach den
   identischen repraesentativen Screen unter OD-05 fuer schlanke Views und LVGL
-  vergleichen; Auth erst nach OD-09 und atomare Resetmechanik nur ueber #57
+  vergleichen; Auth gemaess OD-09 erst nach Technikgates und atomare
+  Resetmechanik nur ueber #57
   integrieren. Der microSD-/SD-Karten-Slot erzeugt weder R1-UI noch Adapter,
   Persistenz, Import-/Exportweg oder Spike;
 - #27 nach dem entschiedenen Fuenferschnitt umsetzen: zuerst #27-A kleiner
@@ -415,7 +441,8 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   Timeouts, Heap und Jitter bleiben bis zur Messung offen. WebSocket/SSE und ein
   Frontendframework werden nicht vorsorglich eingefuehrt. #27-C schreibende
   Kommandos mit erwarteten Revisionen, Konflikt-/Doppelwirkungsschutz und #27-E
-  Authentisierung/Sessions/CSRF/Service folgen erst nach OD-09. Es gibt keine
+  Authentisierung/Sessions/CSRF/Service folgen gemaess OD-09 erst nach den
+  Technikgates. Es gibt keine
   Last-write-wins-Strategie, globale Bearbeitungssperre oder versprochene
   oeffentliche externe Schreib-API;
 - OD-06-Onboarding getrennt von #27 nach dem begrenzten WiFiManager-Spike
@@ -423,8 +450,10 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   Zugangsdaten bis zum Nachweis nur als Kandidat behandeln und den bisherigen
   funktionierenden Stand bei Fehler, Timeout oder Abbruch erhalten; den
   Frameworkadapter nur bei dokumentiertem Ausloeser identisch vergleichen;
-- vor Authentication OD-09 festlegen: KDF/Work-Factor, Sitzungsdauer,
-  Sperrzeiten, CSRF und At-rest-Grenze;
+- OD-09 fachlich umsetzen, aber technische Auswahl nicht vorwegnehmen: zuerst
+  KDF-/Zufalls-/Ressourcen-/Cut-Point-Spike, danach Ownerentscheid zu KDF und
+  Work Factor, erster realer Authkonsument mit Credentialdomaene, fluechtige
+  Sessions/CSRF, Servicefreigabe und erst dann produktive Webmutationen;
 - Connectivity- und Authentication-Domaenen erst mit den ersten realen WLAN-,
   Passwort- oder PIN-Nachweisen spezifizieren; keine vorbereiteten leeren
   Manifeste, Roots oder `CredentialEpoch` aus #57 uebernehmen;
@@ -433,7 +462,8 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   Serviceablauf zuerst mit Mocks, D nur lesender Diagnose-/Servicebericht.
   Der aktuelle Laufchart bleibt #27-B, persistente Historie #19-B und die
   generische Export-/Download-/Streaminginfrastruktur #19-C. Reale
-  Serviceaktoren bleiben hinter #24 und Hardwaregates; Auth bleibt OD-09;
+  Serviceaktoren bleiben hinter #24 und Hardwaregates; Auth folgt dem
+  entschiedenen OD-09-Vertrag und seinen technischen Gates;
 - #19 in der entschiedenen Reihenfolge umsetzen: typisiertes Journal/Retention,
   begrenzte verdichtete Laufhistorie/stromausfallsichere Bereinigung, nur
   lesender Laufexport/secret-freies Backup und erst danach Importvorschau/
@@ -519,7 +549,7 @@ Ausgabeelement.
 | #19 | nicht streichen; nach Auditfreigabe in vier Bereiche schneiden: A Journal/Retention, B begrenzte Laufhistorie/stromausfallsichere Bereinigung, C nur lesender Laufexport/secret-freies Backup, D Importvorschau/atomare Aktivierung; 5 detaillierte Laeufe/50 Zusammenfassungen sind Messziel, kein Versprechen; Issue im Audit nicht aendern |
 | #25 | nach Auditfreigabe auf zwei Bereiche reduzieren: A kleine oberflaechenneutrale Praesentationsmodelle, B gemeinsame DE/ES/EN-Sprachressourcen und semantische Formatierung mit deutschem Fallback; Touch-/Webnavigation und Layout nach #26/#27 verschieben, keine Mega-View oder Frameworktypen, Issue im Audit nicht aendern |
 | #26 | nach Auditfreigabe in fuenf Bereiche schneiden: A Navigation/Interaktion, B Standby/Programmauswahl/Start, C Programmverwaltung/Editor, D Lauf/Meldungen/Stop/Wiederanlauf, E Einstellungen/Diagnose/Service/Recovery-UI; nativ/simuliert vor Hardwareintegration testen, #25 verwenden, #31/OD-02, OD-05, OD-09 und #57 nicht vorwegnehmen; kein allgemeines UI-Framework und kein SD-Scope; Issue im Audit nicht aendern |
-| #27 | nach Auditfreigabe in fuenf Bereiche schneiden: A HTTP-Transport/interne API, B Status/begrenztes Polling/aktueller Laufchart, C schreibende Kommandos/Revisionskonflikte, D responsive lokale Webassets, E Anmeldung/Sessions/CSRF/Service nach OD-09; Onboarding bleibt OD-06, Issue im Audit nicht aendern |
+| #27 | nach Auditfreigabe in fuenf Bereiche schneiden: A HTTP-Transport/interne API, B Status/begrenztes Polling/aktueller Laufchart, C schreibende Kommandos/Revisionskonflikte, D responsive lokale Webassets, E Anmeldung/Sessions/CSRF/Service gemaess OD-09 nach Technikgates; Onboarding bleibt OD-06, Issue im Audit nicht aendern |
 | #28 | nach Auditfreigabe in vier Bereiche schneiden: A passive Diagnosemodelle/Boot-Selbsttest, B Ressourcen-/Gesundheitsdiagnose, C gefuehrter Serviceablauf, D nur lesender Diagnose-/Servicebericht; aktuellen Laufchart nach #27-B, Historie nach #19-B und Exportinfrastruktur nach #19-C abgrenzen; Ressourcen `MEASUREMENT_REQUIRED`, reale Aktoren hinter #24/Hardwaregates und Auth hinter OD-09; Issue im Audit nicht aendern |
 
 Es gibt derzeit kein offenes Implementierungsissue, das allein wegen einer
@@ -534,7 +564,6 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 | OD-03a | DS18B20-/1-Wire-Softwarestack | nach Stufe 3, vor #30 |
 | OD-03b | Bustopologie A oder begruendeter Rueckfall B | nach minimaler Hardwarebaseline, realem Pin-/GPIO-Inventar und identischem Fehlerisolationsvergleich; Produktbus separat, C ausgeschlossen |
 | OD-05 | schlanke Views oder LVGL | nach OD-02, schmalem Adaptervertrag und identischem repraesentativem Screenvergleich |
-| OD-09 | KDF-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag | vor produktiver Authentication in #27 |
 
 OD-01 ist entschieden: Variante B ist der verbindliche R1-Vertrag, Variante A
 der additive spaetere Ausbaupfad. Vor #56/#57 bleibt als technische
@@ -567,3 +596,9 @@ Der JSON-Richtungsentscheid besitzt bewusst kein neues OD-Kuerzel:
 ArduinoJson `7.4.3` ist der bevorzugte Kandidat. Die endgueltige Uebernahme
 bleibt das Ergebnis des Build-, Grenzwert-, Fuzz- und Ressourcen-Spike-Gates;
 eine Alternative wird nur bei einem dokumentierten Problem untersucht.
+
+OD-09 ist fachlich entschieden. Offen bleiben keine Policyfragen, sondern der
+KDF-/Zufalls-/Ressourcenspike, der anschliessende Ownerentscheid zu KDF und
+Work Factor sowie der getrennte `EVALUATE_BEFORE_RELEASE`-Entscheid zur
+Plattformverschluesselung. Das bestehende Zwischenreview und ein erneutes
+Review bleiben vor einer Mergefreigabe zwingende Gates.

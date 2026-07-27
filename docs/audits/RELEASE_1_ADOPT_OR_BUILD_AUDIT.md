@@ -165,7 +165,7 @@ ausserhalb. #26 bleibt als einzige lokale Bedienoberflaeche vollstaendig
 R1-relevant, wird aber nach dem verbindlichen Teilentscheid in fuenf kleine
 Bedienbereiche geschnitten. #27 wird nach dem verbindlichen OD-07-Teilentscheid
 in HTTP-Transport/API, Status/Polling/Laufchart, schreibende Kommandos,
-responsive Webassets und Authentisierung nach OD-09 getrennt. #28 vereint
+responsive Webassets und Authentisierung gemaess OD-09 getrennt. #28 vereint
 mehrere Diagnose- und Serviceverantwortungen und wird nach dem verbindlichen
 OD-07-Teilentscheid in vier kleine Bereiche geschnitten: passive
 Diagnosemodelle/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose, gefuehrter
@@ -209,10 +209,11 @@ Beim Sensorspike sind Softwarestack und Bustopologie getrennte Entscheidungen.
 Der Produktfuehler besitzt verbindlich einen eigenen Bus. Drei getrennte Busse
 sind bevorzugt; ein gemeinsamer Bus nur fuer die beiden festen Sensoren bleibt
 pinabhaengiger Rueckfall. Alle drei Sensoren auf einem Bus werden nicht
-produktiv geplant. Die 3,5-mm-TRS-Belegung `Tip = VDD`, `Ring = DQ`,
-`Sleeve = GND` und ihre beabsichtigte Kontaktreihenfolge werden an der konkreten
-Buchse praktisch geprueft; weder drei GPIOs noch Schutzbauteilwerte werden im
-Audit vorweggenommen.
+produktiv geplant. Die mechanische und elektrische Ausfuehrung des trennbaren
+Produktfuehleranschlusses bleibt eine spaetere Hardwareentscheidung. Dieser
+Softwareaudit legt weder Stecksystem, Kontaktreihenfolge, Anschlussbelegung,
+GPIOs noch Schutzbauteilwerte fest. Allgemeine Trennungs-, Fehler- und
+Wiederkehrtests bleiben Bestandteil des Sensorspikes.
 
 LVGL ist kein Display-/Touchtreiberkandidat. Es wird erst nach Treiberauswahl,
 schmalem Adaptervertrag und einem repraesentativen Release-1-Screen mit
@@ -619,7 +620,7 @@ SD-Karte; es entstehen weder Port, Adapter, Provider, Platzhalter noch Spike.
 Issue #27 bleibt als sekundaere lokale Weboberflaeche R1-relevant. Der
 verbindliche Teilentscheid schneidet den spaeteren Umfang in fuenf kleine,
 getrennt pruefbare Bereiche. Der Audit aendert #27 nicht und erstellt keine
-Folgeissues. OD-09 bleibt Gate vor
+Folgeissues. Die OD-09-Technik- und Integrationsnachweise bleiben Gates vor
 produktiven schreibenden Endpunkten und realer Authentisierung.
 
 1. **HTTP-Transport und interne API-Vertraege:** kleiner konkreter
@@ -671,16 +672,13 @@ produktiven schreibenden Endpunkten und realer Authentisierung.
    oder Berechtigungsentscheidung her. Schlanke eingebettete Assets sind
    `FIRST_EVALUATION_DIRECTION`; ein Frontendframework ist nicht ausgewaehlt
    und wird nur bei einem konkreten R1-Nachweis untersucht.
-5. **Anmeldung, Sessions, CSRF und Servicefreigabe nach OD-09:** Dieser Teil
-   umfasst spaeter Webpasswort-Verifier, Anmeldung, Sessions, optionale
-   dauerhafte Anmeldung, Inaktivitaet, Abmeldung/Widerruf, CSRF-Schutz,
-   Cookieattribute, Fehlversuchsbegrenzung, Service-PIN in einer normalen
-   Websitzung, zeitlich begrenzte Servicefreigabe, erneute Bestaetigung
-   kritischer Aktionen, Redaction und Secret-at-rest. Vor OD-09 werden weder
-   KDF/Work Factor/Pepper, Passwort-/PIN-Regeln, Sitzungsdauer, Token-/Cookie-
-   oder CSRF-Format, Sperrzeiten, Fehlversuchszaehler, Secretpersistenz noch
-   Widerrufsmodell festgelegt oder implementiert. Hoechstens UI-Mocks, DTOs und
-   typisierte Authergebnisse sind vorher zulaessig.
+5. **Anmeldung, Sessions, CSRF und Servicefreigabe gemaess OD-09:** Dieser Teil
+   setzt den in Abschnitt 15 entschiedenen Authvertrag um. Produktive
+   schreibende Endpunkte bleiben hinter dem KDF-, Zufalls-, Ressourcen- und
+   Authintegrationsnachweis. Eine dauerhafte Anmeldung ist kein R1-Scope;
+   Webpasswort und Service-PIN, serverseitige fluechtige Sessions, die
+   sitzungsgebundene Servicefreigabe, globale Sperrpolicy, CSRF und
+   vorwaertsgerichtete Credentialwechsel bleiben getrennte Vertraege.
 
 Die Kandidatenstatus bleiben eindeutig: Der lokale HTTP-Dienst ist
 `REQUIREMENT_DECIDED`; Arduino-ESP32 `WebServer` ist
@@ -708,8 +706,9 @@ Issue #28 bleibt fuer Release 1 relevant, ist aber als ein einzelner
 Implementierungs-PR zu breit. Der verbindliche Teilentscheid schneidet den
 spaeteren Umfang in vier kleine, getrennt pruefbare Bereiche. Der Audit aendert
 #28 nicht und erstellt keine Folgeissues. Mit diesem Entscheid ist OD-07
-fachlich vollstaendig entschieden; OD-09 bleibt vor produktiver
-Authentisierung, Sessions, CSRF, Sperrlogik und Secret-at-rest offen.
+fachlich vollstaendig entschieden. OD-09 ist in Abschnitt 15 ebenfalls
+fachlich entschieden; seine technischen Auswahl- und Messgates bleiben vor
+produktiver Authentisierung offen.
 
 1. **Passive Diagnosemodelle und Boot-Selbsttest:** nur lesende, typisierte
    Projektionen fuer rohe, korrigierte und gefilterte Sensorwerte, Qualitaet und
@@ -784,6 +783,134 @@ Die spaetere Abnahme prueft pro Bereich mindestens:
 - #28-D vollstaendige und optionale Berichtsfelder, Redaction, Ausschluss von
   Secrets, stabile Schemaversion, feste Datengrenzen, abgebrochene
   Serialisierung und nachgewiesene Zustandsfreiheit des nur lesenden Exports.
+
+### 15. OD-09: Authentisierung, Sessions, CSRF und Secret-at-rest
+
+OD-09 ist als fachlicher R1-Vertrag entschieden. Technische Kandidaten und
+Messwerte bleiben bewusst hinter Spikes: PBKDF2-HMAC-SHA-256 aus der fixierten
+mbedTLS-/ESP32-Toolchain ist `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
+`FINAL_SELECTION_PENDING`; Iterationszahl, Verifikationsdauer, Stack-/Heapbudget
+und Scheduling werden erst nach reproduzierbaren Messungen festgelegt. Eine
+einzelne schnelle SHA-256-Pruefung ist unzulaessig. Der Vergleich abgeleiteter
+Pruefnachweise muss zeitkonstant erfolgen. Initial werden mindestens 128 Bit
+zufaelliger Salt, ein 256-Bit-Pruefnachweis und eine explizite
+KDF-Parameterkennung beziehungsweise KDF-Schemaversion evaluiert. Ein Pepper
+ist ohne einen vom normalen Flash getrennten geschuetzten Geraeteschluessel
+keine belastbare Schutzgrenze.
+
+R1 trennt das normale Webpasswort und die genau vierstellige Service-PIN ohne
+Benutzerkonto- oder Rollenmodell. Beide besitzen eigene zufaellige Salts,
+einseitige Pruefnachweise und getrennte Credentialrecords; Klartext und
+Credentialwerte gelangen nie in Logs, Diagnose, Exporte, Backups oder
+Fehlermeldungen. Es gibt keine feste Factory-PIN. Die PIN wird beim ersten
+produktiven Credentialkonsumenten gesetzt, nicht angezeigt oder
+zurueckgewonnen und kann bei Vergessen nur ueber den bestaetigten lokalen
+vollstaendigen Recovery-/Werksreset zurueckgesetzt werden. Normale
+Webanmeldung oder Netzwerk duerfen sie nicht zuruecksetzen. Die konkrete
+physische Recoverygeste bleibt dem bestaetigten Recovery-/Touchvertrag
+ueberlassen. Eine gueltige PIN hebt keine Safety-, Laufzustands- oder
+Hardwarepruefung auf.
+
+Die globale Fehlversuchsbegrenzung gilt pro Credential, nicht pro Browser,
+IP-Adresse, Session oder Tab:
+
+- Webpasswort: nach fuenf aufeinanderfolgenden Fehlern 30 Sekunden Sperre;
+  weitere Fehlversuchsbloecke verdoppeln bis hoechstens 15 Minuten;
+- Service-PIN: nach drei aufeinanderfolgenden Fehlern 30 Sekunden Sperre;
+  weitere Fehlversuchsbloecke verdoppeln bis hoechstens 30 Minuten;
+- eine erfolgreiche Pruefung setzt Zaehler und Sperrstufe des jeweiligen
+  Credentials zurueck;
+- ein Neustart umgeht keine aktive Sperre. Ohne vertrauenswuerdige UTC beginnt
+  mindestens die zuletzt persistierte Sperrdauer erneut. Nicht jeder Versuch,
+  mindestens aber bypassverhindernde Sperrstufenuebergaenge werden persistiert;
+- KDF-Arbeit wird begrenzt und serialisiert; Regelung, Safety, Watchdog und
+  Stabilitaet haben Vorrang.
+
+Normale Sessions werden serverseitig, fluechtig und begrenzt im RAM gehalten.
+Ein Neustart meldet alle Browser ab. Die opake Sessionkennung enthaelt
+mindestens 128 Bit kryptografisch zufaelligen Inhalt und keine Credential- oder
+Rollendaten; sie erscheint nie in URL, Log, Export, Diagnose, `localStorage`
+oder `sessionStorage`. R1 muss mindestens vier gleichzeitige normale
+Browsersessions tragen; die endgueltige Obergrenze folgt der Ressourcenmessung.
+Inaktivitaet beendet eine Session nach 30 Minuten, die absolute Hoechstdauer
+betraegt 12 Stunden. Logout, Passwortaenderung, Werksreset oder Wechsel der
+Credential-Epoche widerrufen die betroffenen Sessions. `Angemeldet bleiben`,
+persistente Login-/Refresh-Tokens, persistente Browsergeraete und Login ueber
+einen Neustart gehoeren nicht zu R1.
+
+Das Sessioncookie verwendet `HttpOnly`, `SameSite=Strict`, `Path=/` und kein
+`Domain`-Attribut. `Secure` wird gesetzt, sobald der konkrete Zugriffsweg HTTPS
+verwendet. Direkter lokaler HTTP-Betrieb bietet keinen behaupteten Schutz gegen
+Mitschneiden im lokalen Netz; OD-09 waehlt weder TLS-Bibliothek noch
+Zertifikatsloesung.
+
+Eine Servicefreigabe entsteht erst nach gueltiger Service-PIN innerhalb genau
+einer normalen Session. Sie gilt weder global noch fuer andere Browser, endet
+nach 5 Minuten Inaktivitaet oder absolut nach 15 Minuten und wird mit der
+normalen Session, bei Logout oder PIN-Aenderung widerrufen. Kritische Aktionen
+verlangen weiterhin eine eigene Bestaetigung; eine spaetere konkrete Aktion
+darf erneute PIN-Eingabe fordern. Authfreigabe und Safetyfreigabe bleiben
+getrennte Gates: Session, PIN, zeitlich begrenzte Servicefreigabe, konkrete
+Aktion sowie Zustands-/Safety-/Hardwarepruefung werden nacheinander geprueft.
+
+Der CSRF-Vertrag verbietet Zustandsaenderungen ueber `GET`, verlangt die
+vorgesehene Methode und fuer JSON-Endpunkte den vorgesehenen Content-Type und
+erlaubt weder allgemeines CORS noch Wildcard-Origin. Jede normale Session
+besitzt einen serverseitig zugeordneten CSRF-Token mit mindestens 128 Bit
+kryptografischer Zufallsguete. Die Weboberflaeche sendet ihn bei jeder Mutation
+im Header `X-CSRF-Token`; fehlende, falsche oder fremde Tokens werden ohne
+Teilwirkung abgelehnt. Der Token steht nie in URL, Log, Cookie, Export oder
+Diagnose. `Origin` wird gegen den erwarteten Zielorigin geprueft, bei fehlendem
+`Origin` entsprechend `Referer`; eindeutig fremde
+`Sec-Fetch-Site: cross-site`-Anfragen werden abgelehnt, soweit der Header
+vorhanden ist. `SameSite=Strict` ist nur eine zusaetzliche Schutzschicht.
+Fachliche Revisions- und CSRF-Pruefung bleiben getrennte Gates.
+
+Sessionkennungen, CSRF-Tokens und Salts stammen aus einem geeigneten
+kryptografischen Zufallspfad. Standard-C-PRNG, Zeitstempel, MAC-Adresse oder
+Zaehler allein sind unzulaessig; ein Fehler fuehrt zur sicheren Ablehnung.
+`esp_fill_random()` oder ein korrekt gesaeter mbedTLS-DRBG ist
+`FIRST_EVALUATION_DIRECTION` und `SPIKE_REQUIRED`, der endgueltige
+Integrationspfad bleibt offen.
+
+Secret-at-rest unterscheidet drei Kategorien:
+
+- einseitige Pruefnachweise: Webpasswort- und PIN-Verifier, eigene Salts,
+  KDF-Parameterkennung und Credential-Epoche;
+- wiederverwendbare Secrets: WLAN-Passwort und gegebenenfalls als
+  nichtoeffentlich behandelte SSID, die fuer Wiederverbindung lesbar bleiben;
+- fluechtige Secrets: Sessionkennungen, CSRF-Tokens, Servicefreigaben und kurze
+  Authaktionszustaende, die beim Neustart verworfen werden.
+
+Ohne aktivierte und getestete NVS-/Flashverschluesselung wird kein Schutz gegen
+physischen Flashzugriff behauptet. Gesalzene Verifier schuetzen nicht
+automatisch wiederverwendbare Secrets. Plattformverschluesselung ist
+`EVALUATE_BEFORE_RELEASE` in einem separaten Security-Spike; Partitionierung,
+Provisionierung, Schluesselverwaltung/-verlust, Entwicklungs- und
+Produktionsflash, Recovery, Werksreset, Updatepfad, Ressourcen und reale
+Schutzgrenze werden vor einem ausdruecklichen spaeteren Ownerentscheid
+geprueft. Der Audit aktiviert nichts und legt kein Schluesselmodell fest.
+
+#57 erzeugt keine leeren Authentication-Manifeste, Credentialslots oder
+Authentication-Roots. Die reale Authentisierungsdomaene entsteht erst mit dem
+ersten produktiven Credentialkonsumenten. Sie verwendet stark typisierte,
+versionierte Records und eine eigene vorwaertsgerichtete Credential-Epoche,
+liegt weder in `UserConfiguration` noch `ProgramCatalog` und wird nicht in
+allgemeine Backups aufgenommen. Ein atomarer Credentialwechsel bestimmt zuerst
+die Zielgeneration, erzeugt Salt und Pruefnachweis samt KDF-Parameterkennung,
+schreibt und validiert den vollstaendigen Record, committet dann atomar die neue
+Epoche und widerruft alte Sessions und Servicefreigaben. Vor dem Commit bleibt
+das alte Credential wirksam; nach dem Commit bleibt die neue Epoche kanonisch
+und darf durch Fallback oder Recovery nie auf eine alte Epoche zurueckfallen.
+Cut-Point-, Korruptions-, Wiederholungs- und Widerrufstests sind verpflichtend.
+
+Der Authspike prueft Toolchainbuild und bekannte KDF-Testvektoren, getrennte
+Salts/Parameter, richtige und falsche Passwort-/PIN-Pruefungen, zeitkonstanten
+Vergleich, Laufzeit, Stack, Heap, niedrigsten freien Heap und groessten freien
+Heapblock, parallele Anfragen, Regelzyklus-Jitter, Watchdog, globale
+Fehlversuchsserien, Neustartpersistenz sowie Credentialwechsel an allen
+Cut-Points. Eine Alternative wird nur bei einem konkret nachgewiesenen
+R1-Problem untersucht; Policyaenderungen gehen erneut an den Owner.
 
 ## Entschiedener Persistenzvertrag OD-01
 
@@ -1042,7 +1169,12 @@ Die vorgeschlagene Reihenfolge steht in
 | OD-03a | DS18B20-/1-Wire-Softwarestack nach Stufe 3 waehlen |
 | OD-03b | Topologie A oder begruendeten Rueckfall B nach realem Pin-/GPIO- und Fehlerisolationsvergleich waehlen; Produktbus bleibt separat, C ausgeschlossen |
 | OD-05 | schlanke eigene Screens oder LVGL erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich |
-| OD-09 | KDF-, Work-Factor-, Sitzungs-, CSRF-, Sperr- und Secret-at-rest-Vertrag vor produktiven #27-C/#27-E-Endpunkten |
+
+Die fachlichen Ownerentscheidungen der aktuellen Auditliste sind damit
+vollstaendig bearbeitet. Die Tabelle enthaelt nur noch mess- und
+evaluationsabhaengige Auswahlentscheide. OD-09 ist entschieden; PBKDF2,
+Work Factor, Zufallspfad und Plattformverschluesselung bleiben technische
+Spike-Gates und duerfen nicht als endgueltig ausgewaehlt gelten.
 
 OD-01 ist mit Variante B entschieden. Offen bleibt nur die technische
 Detailpruefung, ob Dokumentrevisionen und Rootsequenz die bisherige Funktion
@@ -1070,9 +1202,13 @@ und Ressourcenspike; eine vorsorgliche Gleichwahl besteht nicht.
 
 OD-07 ist fachlich vollstaendig entschieden: #19, #25, #26, #27 und #28 sind
 in kleine, ownerfreizugebende Umsetzungsbereiche geschnitten. Dieser Auditstand
-aendert oder erstellt keine Issues. OD-09 bleibt ein separates Gate vor
-produktiven schreibenden Webendpunkten, realer Authentisierung und den
-authentisierten Teilen des Serviceablaufs.
+aendert oder erstellt keine Issues. OD-09 legt nun den fachlichen Authvertrag
+fest; produktive schreibende Webendpunkte und authentisierte Serviceablaeufe
+bleiben hinter seinen technischen Spike- und Integrationsgates.
+
+Vor einer Mergefreigabe muessen das bereits vorliegende Zwischenreview
+vollstaendig eingearbeitet und der konsolidierte Stand erneut unabhaengig
+geprueft werden. Der PR bleibt bis dahin Draft.
 
 Hardwarewerte, Pins, Pegel und thermische Parameter sind keine freien
 Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.
@@ -1088,7 +1224,7 @@ Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.
 - [`THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md`](THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md)
   – Herkunft, Lizenzen und Publikationspruefung
 - [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md) – gestufte Display-/Touch-,
-  DS18B20-/Topologie-/TRS-, WLAN-Onboarding-, JSON-Codec- sowie Speicher-/
+  DS18B20-/Topologie-, WLAN-Onboarding-, JSON-Codec-, Auth-/Security- sowie Speicher-/
   Retention-/Bereinigungsnachweise
 - [`PROPOSED_RELEASE_1_ROADMAP.md`](PROPOSED_RELEASE_1_ROADMAP.md) – Reihenfolge,
   Gates, kleine PRs und spaetere Funktionen

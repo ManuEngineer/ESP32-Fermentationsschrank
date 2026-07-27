@@ -119,7 +119,7 @@ mit allen Sensoren auf einem Bus ist keine regulaere Zielvariante.
 
 | Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP32-/PlatformIO-Aussage | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
 |---|---|---|---|---|---|---|---|
-| DallasTemperature + OneWire | verbreitete Arduino-Abstraktion ueber den DS18B20- und 1-Wire-Vertrag | DallasTemperature `4.0.6`, `dadbbf7d`, MIT; OneWire `2.3.8`, `800f26f3`, MIT im Quelltext | beide `architectures=*`; OneWire nennt ESP32-Anpassungen | zwei kleine Bibliotheken; Flash-/RAM-/Heapwirkung in Stufe 1 und 3 messen | technischer Adapter mit Bus-ID, ROM, Mess-/Zeit-/CRC-/Anwesenheits-/Timeout-/Fehlerstatus | neue DallasTemperature-Hauptversion, alter Arduino-Core, Mehrbus/Mehrsensor, Hot-Plug und Timing pruefen | verbindlicher Kandidat 1; keine Auswahl vor Stufe 3 |
+| DallasTemperature + OneWire | verbreitete Arduino-Abstraktion ueber den DS18B20- und 1-Wire-Vertrag | DallasTemperature `4.0.6`, `dadbbf7d`, MIT; OneWire `2.3.8`, `800f26f3`, MIT im Quelltext | beide `architectures=*`; OneWire nennt ESP32-Anpassungen | zwei kleine Bibliotheken; Flash-/RAM-/Heapwirkung in Stufe 1 und 3 messen | technischer Adapter mit Bus-ID, ROM, Mess-/Zeit-/CRC-/Anwesenheits-/Timeout-/Fehlerstatus | neue DallasTemperature-Hauptversion, alter Arduino-Core, Mehrbus/Mehrsensor, Trennung/Wiederkehr und Timing pruefen | verbindlicher Kandidat 1; keine Auswahl vor Stufe 3 |
 | Espressif onewire_bus + ds18b20 | offizielle Espressif-Komponenten, RMT/UART-Backend, Enumeration und CRC8 | `onewire_bus 1.1.1`, `a269e1fe`; `ds18b20 0.4.0`, `bf92b0b3`; Apache-2.0 | Registry fordert fuer onewire_bus ESP-IDF >=5.0; aktuelles Projekt nutzt Arduino-ESP32 2.0.17 auf IDF 4.4, direkte Integration daher unbestaetigt | RMT/UART-Ressourcen und optionale Sensor-Hub-Abhaengigkeit; messen | derselbe technische Plattformport; keine IDF-Typen in der Anwendung | Toolchain-Mismatch, Komponentenmanager in PlatformIO-Arduino, Mehrbus/Mehrsensor und optionale Sensor-Hub-Grenze pruefen | verbindlicher Kandidat 2; bei Toolchainkonflikt `INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`, keine allgemeine Untauglichkeitsaussage |
 
 Der Produktfuehler erhaelt verbindlich einen eigenen Bus. Ein eigener Bus auch
@@ -127,13 +127,11 @@ fuer den Schutzsensor ist bevorzugt; der gemeinsame feste Bus aus Topologie B
 bleibt Rueckfall, falls die reale Pinpruefung keinen dritten unproblematischen
 GPIO ergibt. Vorab werden keine drei GPIOs reserviert.
 
-Die vorgesehene 3,5-mm-TRS-Verbindung verwendet `Tip = VDD`, `Ring = DQ` und
-`Sleeve = GND`. Die beabsichtigte Kontaktfolge mit VDD zuletzt beim Einstecken
-und zuerst beim Herausziehen wird nicht aus der TRS-Bauform behauptet, sondern
-an der konkreten Buchse inklusive Teilstecken, Kurzschluss-, Prell-, Last- und
-mindestens 100 Steckzyklen praktisch geprueft. Pull-up, DQ-Serienwiderstand,
-Strombegrenzung, Entkopplung, ESD-Schutz und sichere Bootzustaende werden erst
-nach realem Signal- und Stecktest dimensioniert.
+Das konkrete trennbare Produktfuehler-Stecksystem und seine elektrische
+Ausfuehrung sind keine Komponente dieses Softwareaudits und bleiben eine
+spaetere Hardwareentscheidung. Die Softwareevaluation behaelt allgemeine
+Trennungs-, Unterbruch-, Fehler- und Wiederkehrtests bei, ohne Stecksystem,
+Kontaktreihenfolge oder Anschlussbelegung vorzugeben.
 
 Verbleibende eigene Safety-/Fachlogik: Rollenbindung, Produktfuehler als
 optionaler primaerer Regelsensor, Raum-/Luftsensor als regulaerer Ersatz,
@@ -445,10 +443,11 @@ spaeter in diese fuenf Bereiche geschnitten:
 2. nur lesende Statussnapshots, nicht ueberlappendes begrenztes Polling und ein
    punktbegrenzter aktueller Laufchart;
 3. schreibende Fachkommandos mit erwarteter Revision, Konflikt- und
-   Doppelwirkungsschutz erst nach OD-09;
+   Doppelwirkungsschutz erst nach den OD-09-Technikgates;
 4. schlanke lokale responsive HTML-/CSS-/JavaScript-Assets als
    `FIRST_EVALUATION_DIRECTION`, ohne ausgewaehltes Frontendframework;
-5. Anmeldung, Sessions, CSRF und Servicefreigabe erst nach OD-09.
+5. Anmeldung, Sessions, CSRF und Servicefreigabe gemaess OD-09 erst nach den
+   zugehoerigen KDF-, Zufalls- und Ressourcennachweisen.
 
 R1 verspricht keine stabile oeffentliche externe Schreib-API. Konkrete
 Pollingintervalle, parallele Clientzahl, Antwort-/Chartgroesse, Timeouts,
@@ -640,6 +639,29 @@ Treiberwahl, Adaptervertrag und repraesentativem Screen.
 
 Quelle: [LVGL](https://github.com/lvgl/lvgl), abgerufen am 2026-07-27.
 
+## Authentisierung und Plattformschutz
+
+OD-09 legt die fachliche Policy fest, nicht die endgueltige technische Auswahl.
+Webpasswort und vierstellige Service-PIN verwenden getrennte, gesalzene,
+einseitige Pruefnachweise; eine schnelle Einzel-SHA-256-Pruefung ist
+unzulaessig. Sessions, CSRF-Tokens und Servicefreigaben bleiben fluechtig und
+begrenzt. Credentialwechsel sind atomar und vorwaertsgerichtet; #57 erzeugt
+keine leeren Authstrukturen.
+
+| Kandidat oder Pfad | Gepruefter Stand | Aufgabe | Status | Verbindlicher Nachweis |
+|---|---|---|---|---|
+| PBKDF2-HMAC-SHA-256 aus der fixierten mbedTLS-/ESP32-Toolchain | Bestandteil der fixierten Toolchain; konkrete Funktion, Version, Lizenz-/Noticeumfang und Build im Spike pruefen | langsamer KDF-Pfad fuer getrennte Passwort- und PIN-Verifier | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` | bekannte Testvektoren, mindestens 128-Bit-Salt und 256-Bit-Verifier mit Parameterkennung, konstanter Vergleich, Laufzeit, Stack, Heap, Jitter, Watchdog und parallele Anfragen; Iterationszahl erst danach |
+| `esp_fill_random()` oder korrekt gesaeter mbedTLS-DRBG | fixierter ESP32-/mbedTLS-Pfad, konkrete Integration offen | kryptografischer Zufall fuer Salts, Sessionkennungen und CSRF-Tokens | `FIRST_EVALUATION_DIRECTION`, `SPIKE_REQUIRED` | Initialisierung/Fehlerpfad, wiederholte Bildung und Plausibilitaetspruefung; keine schwachen Ersatzwerte und keine Entropiebehauptung ueber die Plattformgarantie hinaus |
+| NVS-/Flashverschluesselung | nicht aktiviert oder projektbezogen getestet | moeglicher Schutz wiederverwendbarer Secrets gegen physischen Flashzugriff | `EVALUATE_BEFORE_RELEASE`; separater Security-Spike | Toolchain, Partitionierung, Provisionierung, Schluesselverlust, Entwicklungs-/Produktionsflash, Recovery, Werksreset, Updatepfad, Ressourcen und dokumentierte Schutzgrenze; expliziter Ownerentscheid danach |
+
+Der KDF-Spike prueft ausserdem richtige/falsche Passwort- und PIN-Pruefungen,
+globale Fehlversuchsserien samt neustartfester Sperrstufe, Credentialwechsel an
+Cut-Points und Sessionwiderruf. Ein Pepper im selben ungeschuetzten Flash ist
+keine Schutzgrenze. Ohne aktivierte und getestete Plattformverschluesselung wird
+kein Schutz gegen physischen Flashzugriff behauptet. Es wird keine zusaetzliche
+Kryptobibliothek, allgemeine Authplattform oder endgueltige Kryptokonfiguration
+gewaehlt.
+
 ## Regelung und PID
 
 | Kandidat | Stand/Lizenz | Vertragsfit | Empfehlung |
@@ -660,7 +682,7 @@ Quellen: [Arduino PID](https://github.com/br3ttb/Arduino-PID-Library),
 - Kein Display-/Touchkandidat ist auf dem gelieferten MSP2807 mit gemeinsamem
   SPI-Bus und der Projekttoolchain getestet.
 - Kein DS18B20-Kandidat ist mit den drei realen Sensoren, Leitungen, Pull-ups und
-  Hot-Plug getestet.
+  Trennungs-/Wiederkehrfaellen getestet.
 - Keine Web-/JSON-/UI-Bibliothek besitzt einen Base-/Head-Ressourcennachweis fuer
   die fertige Firmware.
 - NVS-Kapazitaet, reale Flashatomizitaet und Lebensdauer sind nicht gemessen.
