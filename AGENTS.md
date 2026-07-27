@@ -191,3 +191,213 @@ Jedes Issue erfuellt alle zutreffenden Punkte:
 
 Hardwareunabhaengige Logik darf vor Hardwareankunft abgeschlossen werden. Die
 reale Verifikation bleibt in einem verknuepften `BLOCKED_HARDWARE`-Issue sichtbar.
+
+## Plan-first-Workflow fuer Implementierungsarbeit
+
+Fuer jede nicht triviale Implementierungs-, Architektur-, Persistenz-,
+Security-, Safety-, Hardware-, Bibliotheks- oder moduluebergreifende Aufgabe
+gilt ein zweistufiger Draft-PR-Workflow.
+
+### 1. Planungsphase
+
+Der Agent erstellt zunaechst einen Branch und einen Draft-PR.
+
+In der Planungsphase darf der Agent ausschliesslich:
+
+- den Live-Stand des Repositorys, des Issues und der Abhaengigkeiten
+  analysieren;
+- geltende Anweisungen, Spezifikationen, ADRs und Reviewkommentare lesen;
+- eine versionierte Plan-Datei erstellen oder aktualisieren;
+- die Draft-PR-Beschreibung aktualisieren;
+- Fragen, Widersprueche, Risiken und offene Gates dokumentieren.
+
+Die Plan-Datei liegt unter:
+
+```text
+docs/tasks/issue-<issue-number>-implementation-plan.md
+```
+
+Bei Aufgaben ohne einzelnes Issue wird ein eindeutiger beschreibender Dateiname
+verwendet.
+
+In dieser Phase sind ohne ausdrueckliche Ownerfreigabe nicht erlaubt:
+
+- Produktionscode;
+- produktive Tests;
+- neue Abhaengigkeiten;
+- Build-, Toolchain- oder Konfigurationsaenderungen;
+- Issueaenderungen;
+- ADRs;
+- Hardware-, GPIO- oder Pinentscheidungen;
+- Bibliotheksauswahl;
+- produktive Spikes.
+
+Der Plan muss mindestens enthalten:
+
+- Ziel;
+- Nicht-Ziele;
+- verbindliche Quellen und Entscheidungen;
+- aktuelle Ausgangslage;
+- betroffene Module und voraussichtlich betroffene Dateien;
+- Abhaengigkeiten und Gates;
+- geplanter kleiner PR-/Commit-Schnitt;
+- Daten-, Zustands- und Schnittstellenvertraege;
+- Fehler-, Recovery-, Security- und Safetygrenzen;
+- Teststrategie;
+- Dokumentationsaenderungen;
+- offene Entscheidungen;
+- als `SPIKE_REQUIRED`, `MEASUREMENT_REQUIRED`, `TBD_HARDWARE`,
+  `TBD_COMMISSIONING`, `EVALUATE_BEFORE_RELEASE` oder
+  `FINAL_SELECTION_PENDING` verbleibende Punkte;
+- ausdruecklich verbotene Vorwegnahmen;
+- Abnahmekriterien.
+
+Die PR-Beschreibung nennt:
+
+- Plan-Datei;
+- Plan-Commit-SHA;
+- Planstatus;
+- offene Ownerentscheidungen;
+- ausdruecklich:
+
+```text
+IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL
+```
+
+Der Agent haelt nach Commit und Push des Plans an.
+
+### 2. Planfreigabe
+
+Die Implementierung darf erst nach einem eindeutigen Ownerkommentar beginnen:
+
+```text
+PLAN APPROVED
+Approved plan commit: <commit-sha>
+```
+
+Die Freigabe gilt ausschliesslich fuer die Planversion des genannten Commits.
+
+Eine allgemeine Zustimmung ohne Plan-Commit-SHA gilt nicht als
+Implementierungsfreigabe.
+
+### 3. Umsetzung im selben Draft-PR
+
+Nach der Planfreigabe erfolgt die Umsetzung grundsaetzlich im selben Draft-PR.
+
+Der Agent muss:
+
+- innerhalb des freigegebenen Scopes bleiben;
+- Planpunkte und tatsaechliche Aenderungen nachvollziehbar korrelieren;
+- nur die freigegebenen Module und Verantwortungen aendern;
+- keine neue Produkt-, Architektur-, Persistenz-, Security-, Safety-, Hardware-
+  oder Bibliotheksentscheidung selbststaendig treffen;
+- offene Evaluations-, Mess- und Hardwareentscheidungen offen lassen;
+- keine zusaetzlichen Issues oder ADRs ohne ausdrueckliche Freigabe erstellen;
+- PR und Branch nicht selbst mergen oder loeschen.
+
+Kleine technische Detailentscheidungen sind erlaubt, wenn:
+
+- sie keine sichtbare Produktwirkung besitzen;
+- sie keine oeffentliche oder persistente Schnittstelle veraendern;
+- sie keine neue Abhaengigkeit erzeugen;
+- sie keine Security-, Safety-, Recovery- oder Hardwaregrenze veraendern;
+- sie eindeutig innerhalb des freigegebenen Plans liegen.
+
+### 4. Materielle Planabweichungen
+
+Eine materielle Planabweichung liegt insbesondere vor bei:
+
+- veraendertem Scope;
+- neuen Dateien oder Modulen ausserhalb des Plans;
+- neuer Abhaengigkeit;
+- geaendertem Daten-, Wire-, Persistenz- oder API-Vertrag;
+- neuer Architekturentscheidung;
+- neuer Security-, Safety-, Recovery- oder Hardwareannahme;
+- vorgezogener Evaluation oder Produktivauswahl;
+- geaenderter Issue- oder PR-Struktur;
+- einem neuen Risiko, das die Abnahmekriterien beeinflusst.
+
+Bei einer materiellen Abweichung muss der Agent:
+
+1. die Umsetzung anhalten;
+2. die Plan-Datei aktualisieren;
+3. einen neuen Plan-Commit pushen;
+4. die bisherige Freigabe als ueberholt kennzeichnen;
+5. erneut auf Ownerfreigabe warten.
+
+Die bestehende Planfreigabe gilt nach einer materiellen Planaenderung nicht
+weiter.
+
+Der Agent darf den Plan nicht nachtraeglich still an eine bereits vorgenommene
+Implementierung anpassen.
+
+### 5. Abschlussphase
+
+Vor Ready for Review dokumentiert der Agent:
+
+- freigegebenen Plan-Commit;
+- umgesetzte Planpunkte;
+- zugehoerige Commits;
+- tatsaechliche Abweichungen;
+- ausgefuehrte Tests und Nachweise;
+- verbleibende Hardware-, Mess-, Security- oder Release-Gates;
+- offene Reviewthreads;
+- geaenderte Dateien;
+- Bestaetigung, dass keine nicht freigegebene Entscheidung getroffen wurde.
+
+Der Agent fuehrt mindestens aus:
+
+- projektspezifische Tests;
+- Format- und Konsistenzpruefungen;
+- `git diff --check`;
+- Secretpruefung;
+- Pruefung gegen `AGENTS.md`;
+- Pruefung des tatsaechlichen Diffs gegen den freigegebenen Plan.
+
+Der PR bleibt Draft, bis ein unabhaengiges Abschlussreview erfolgt ist.
+
+Der Agent:
+
+- setzt den PR nicht selbst auf Ready for Review;
+- mergt nicht;
+- aktiviert kein Auto-Merge;
+- verwendet keinen Force-Push;
+- loescht den Branch nicht.
+
+### 6. Ausnahme fuer triviale Aenderungen
+
+Ein separater Plan-Commit ist nur dann nicht erforderlich, wenn alle folgenden
+Bedingungen erfuellt sind:
+
+- genau eine klar begrenzte mechanische Aenderung;
+- keine Verhaltensaenderung;
+- keine neue oder veraenderte Schnittstelle;
+- keine Persistenz-, Security-, Safety-, Recovery- oder Hardwarewirkung;
+- keine neue Abhaengigkeit;
+- keine moduluebergreifende Aenderung;
+- kein ungeklaerter Interpretationsspielraum;
+- der Owner hat die direkte Umsetzung ausdruecklich freigegeben.
+
+Typische Beispiele:
+
+- Tippfehler;
+- reine Formatierung;
+- eindeutig falscher Link;
+- mechanische Umbenennung ohne Vertragsaenderung;
+- kleine Dokumentkorrektur ohne neue Entscheidung.
+
+Sobald Zweifel bestehen, gilt der Plan-first-Workflow.
+
+### 7. Plan-Datei beim Abschluss
+
+Die Plan-Datei bleibt mindestens bis zum Abschlussreview im Branch.
+
+Vor dem Merge entscheidet der Owner:
+
+- Plan als Projektnachweis behalten;
+- Plan in eine dauerhafte Entscheidungs- oder Implementierungsdokumentation
+  ueberfuehren;
+- oder Plan aus dem finalen Dateibaum entfernen.
+
+Auch bei einer spaeteren Entfernung bleiben der freigegebene Plan-Commit-SHA
+und die Planhistorie im PR nachvollziehbar.

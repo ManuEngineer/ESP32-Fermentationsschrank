@@ -243,3 +243,33 @@
   NVS-Partitionsgroesse bleibt `TBD_IMPLEMENTATION_BUDGET` und wird in #29
   bestimmt. Die ausfuehrliche Entscheidung steht in
   [`ADR-016_KONFIGURATIONSSPEICHER_BACKEND.md`](ADR-016_KONFIGURATIONSSPEICHER_BACKEND.md).
+
+## ADR-017: Keine dauerhafte Webanmeldung in Release 1
+
+- **Status:** accepted
+- **Datum:** 2026-07-27
+- **Kontext:** Persistente Login-Tokens wuerden dauerhafte Secretpersistenz,
+  Rotation, Widerruf, Browsergeraeteverwaltung, Recovery, Ablauf ohne
+  zuverlaessige UTC und zusaetzliche Flash-/Securitygrenzen erfordern.
+- **Entscheidung:** Keine Option `Angemeldet bleiben` in R1. Normale und
+  anonyme lokale Sessions bleiben serverseitig, fluechtig und begrenzt. Ein
+  ESP32-/Geraeteneustart verwirft alle Sessions; Logout, Credentialwechsel,
+  Moduswechsel und Werksreset widerrufen sie ebenfalls. 30 Minuten
+  Inaktivitaet, 12 Stunden absolute Dauer.
+  Keine persistenten Session-, Remember-me-, Login-, Refresh- oder
+  Browsergeraete-Tokens. Ein reiner Browserneustart ist kein garantiertes
+  Widerrufsereignis; ein Browser kann ein Sitzungscookie bei der
+  Sitzungswiederherstellung erneut senden. Spaeterer Ausbau nur mit neuer
+  Entscheidung und Securitynachweis.
+- **Alternativen:** bestehende dauerhafte Anmeldung; unbefristete Session;
+  persistentes Geraetetoken ohne vollstaendigen Widerruf.
+- **Folgen:** Nach einem ESP32-/Geraeteneustart ist eine erneute Anmeldung
+  erforderlich. Eine vom Browser wiederhergestellte Session bleibt hoechstens
+  bis zum Inaktivitaets-/Absolutlimit oder einem serverseitigen Widerruf
+  gueltig. In R1 entsteht keine persistente Session-, Remember-me-, Login-,
+  Refresh- oder Browsergeraetetoken-Domaene. Persistente Credentialverifier,
+  getrennte Salts, KDF-Parameter, Credential-Epoche/-Generation,
+  Vor-Sperr-Fehlversuchszaehler, Sperrstufe, aktiver Sperrzustand sowie
+  Integritaets- und atomare Commitinformationen bleiben davon unberuehrt;
+  wiederverwendbare WLAN-Secrets liegen getrennt in der Connectivity-Domaene.
+  Die Begrenzung senkt Angriffsflaeche und Recoverykomplexitaet.
