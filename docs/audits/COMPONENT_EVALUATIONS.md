@@ -216,12 +216,73 @@ keinen Eingangsadapter. Er schaltet das Geraet rein elektrisch ein oder aus.
 
 | Kandidat | Gepruefter Stand/Lizenz | Eignung | Ressourcen/Risiken | Empfehlung |
 |---|---|---|---|---|
-| Arduino-ESP32 `WebServer` | Teil von `2.0.17`; Framework-/Drittkomponentenlizenzen | synchroner, kleiner Frameworkkandidat fuer lokale HTTP-API und statische Ressourcen | darf Regel-/Safety-Aufgaben nie blockieren; Parallelitaet, Upload- und SSE-Bedarf pruefen | zuerst einen begrenzten Prototyp hinter `IWebTransport`-aehnlicher interner Grenze messen |
-| ESPAsyncWebServer | `3.12.0`, `a008cccf`, LGPL-3.0 | SSE, WebSocket, statische Dateien und Auth-Helfer; aktiv gepflegt | weitere Abhaengigkeit, asynchroner Lebenszyklus, Callback-/Heaplast und LGPL-Pflichten | nur uebernehmen, wenn der identische Prototyp einen klaren Funktions-/Stabilitaetsvorteil zeigt |
+| Arduino-ESP32 `WebServer` | Teil der fixierten Arduino-ESP32-Toolchain `2.0.17`; Framework-/Drittkomponentenlizenzen | synchroner lokaler HTTP-Server fuer statische Ressourcen, begrenzte JSON-Endpunkte und wenige Clients; keine zusaetzliche Serverbibliothek | langsame/abgebrochene Clients, Parallelitaet, Import/Export, Antwortzeit, Regelzyklus-Jitter, Watchdog, Flash/RAM/Heap und Verbindungslebenszyklus begrenzt messen | verbindliche Release-1-Baseline und erste Produktivrichtung; nur nach bestandenem begrenztem Prototyp produktiv integrieren |
+| ESPAsyncWebServer | `3.12.0`, `a008cccf`, LGPL-3.0; asynchrone TCP- und optionale JSON-Abhaengigkeiten separat | kann bei belegtem Bedarf parallele Verbindungen oder Ereignis-/Streamingpfade anders behandeln; fuer R1 sind WebSocket und SSE nicht vorausgesetzt | zusaetzliche Abhaengigkeit, Callback-/Lebensdauerkomplexitaet, Heaplast, transitive Komponenten und LGPL-Pflichten | konditionaler Vergleichs- und Rueckfallkandidat; nur bei konkretem Scheitern der Baseline und klarem Vorteil im identischen Prototyp uebernehmen |
 
-Der Webserver implementiert keine fachlichen Kommandos, Authentisierungsregeln
-oder Aktorlogik. Release 1 bleibt lokal per HTTP; keine direkte
-Internetfreigabe. Entscheidungsstatus: `EVALUATE_LATER` in #27.
+### Release-1-Bedarf und Nichtbedarf
+
+Die Weboberflaeche ist sekundaer; das Touchdisplay bleibt ohne WLAN und Browser
+die vollstaendige lokale Bedien- und Anzeigeoberflaeche. Der lokale HTTP-Dienst
+benoetigt statische HTML-/CSS-/JavaScript-Ressourcen, Status-, Temperatur-,
+Lauf-, Programm- und Konfigurationsabfragen, begrenzte Aenderungs- und
+Laufkommandos, Diagnose, begrenzte Exporte/Imports, Anmeldung/Sitzungen und die
+HTTP-Oberflaeche des WLAN-Onboardings. Status und Diagramme duerfen begrenzt
+pollend abgerufen werden.
+
+Keine Release-1-Pflicht sind WebSocket, Server-Sent Events, ein permanenter
+bidirektionaler Stream, hohe Clientzahlen, Cloudtransport, direkter
+Internetbetrieb, unbeschraenkte Uploads oder Millisekunden-Echtzeitdarstellung.
+
+### Baselineprototyp und konditionaler Vergleich
+
+Der Frameworkserver-Prototyp muss nachweisen:
+
+- statische Ressourcen, begrenzte JSON-Anfragen, Import und Export;
+- stabile Bedienung durch einen bis wenige lokale Clients;
+- feste Request-, Antwort-, JSON-Tiefen-, String-, Upload-, Zeit- und
+  Parallelitaetsgrenzen;
+- kontrollierte langsame, abgebrochene, ungueltige und uebergrosse Requests
+  sowie WLAN-Unterbruch und Neustart;
+- keine relevante Verzoegerung von Regel- und Safety-Ausfuehrung;
+- gemessene Flash-, statische RAM-, freie/niedrigste Heap-, groesste freie
+  Heapblock-, Antwortzeit-, Bearbeitungszeit-, Jitter-, Watchdog- und
+  Resetwerte.
+
+Nur wenn dabei ein konkretes R1-Risiko offenbleibt, erhalten `WebServer` und
+`ESPAsyncWebServer` denselben begrenzten Vergleich mit Testseite,
+`GET /api/status`, `GET /api/config`, simuliertem begrenztem
+Aenderungsrequest, Export, Import/Upload, normalen und parallelen Clients,
+langsamem und abgebrochenem Client, ungueltiger/uebergrosser Anfrage,
+wiederholtem Polling, WLAN-Unterbruch und Neustart. Async ist nur bei
+unvertretbarem Jitter, nicht sinnvoll begrenzbarer Blockierung, instabiler
+tatsaechlich benoetigter Parallelitaet, nicht robust begrenzbarem Import/Export
+oder klarem Stabilitaets-/Ressourcenmehrwert begruendet. "Moderner", populaerer
+oder vorsorglich WebSocket-/SSE-faehig reicht nicht.
+
+### Integrations- und Sicherheitsgrenze
+
+Eine kleine konkrete ESP32-Schicht kapselt Serverinitialisierung,
+Routenregistrierung, Methoden/Header, feste Bodygrenzen, Timeouts,
+Request-/Responseuebersetzung und technische Fehler. Die Endpunktlogik
+uebersetzt nur zwischen HTTP, begrenztem DTO, fachlicher Query oder fachlichem
+Kommando und typisierter Antwort. Server-, Request-, Response-, Connection-,
+Socket- und Callbacktypen gelangen nicht in `fermentation_app`, Safety-,
+Persistenz- oder gemeinsame View-Modelle.
+
+Es entsteht keine allgemeine `IWebTransport`-, Stream-, SSE-, WebSocket-,
+Middleware-, Provider- oder Pluginhierarchie und kein Dummy-Zweitadapter. Ein
+spaeterer Serverwechsel erfolgt an Composition Root und ESP32-
+Integrationsgrenze und ersetzt Serverlebenszyklus sowie HTTP-Uebersetzung,
+nicht DTOs, fachliche Queries/Kommandos, Validierung, Authpolicy,
+Konfliktsemantik, Persistenz oder Safety-Core.
+
+Webserver- und WLAN-Fehler stoppen Regelung und Safety nicht; WLAN-Verlust
+beendet keinen Lauf. Webanfragen wirken nur ueber normale fachliche Kommando-
+und Safety-Pfade. Authentisierung, CSRF, Sessions, Sperrlogik, Redaction und
+Importvalidierung bleiben eigene Vertraege. Secrets gelangen nicht in Logs,
+Exporte oder Fehlermeldungen. Entscheidungsstatus: Frameworkserver-Baseline
+beschlossen; `ESPAsyncWebServer` bleibt `EVALUATE_LATER` als konditionaler
+Rueckfall.
 
 Quellen: [Arduino-ESP32](https://github.com/espressif/arduino-esp32),
 [ESPAsyncWebServer](https://github.com/ESP32Async/ESPAsyncWebServer). Abgerufen

@@ -38,8 +38,8 @@ die technische Bewertung in
 | DS18B20 | Espressif `onewire_bus 1.1.1` plus `ds18b20 0.4.0` | Commits `a269e1fe`/`bf92b0b3` | Apache-2.0 | `SPIKE_REQUIRED` | Softwarekandidat 2 fuer Stufen 1–3; nur ohne Toolchainwechsel, Topologie A und B identisch pruefen |
 | Persistenz | Arduino-ESP32 Preferences/NVS | Arduino-ESP32 `2.0.17` | LGPL-2.1/ESP-IDF-Komponentenlizenzen | `FRAMEWORK_CANDIDATE` | produktives `IStateStore`-Backend gemaess ADR-016 |
 | JSON | ArduinoJson `7.4.3`, Commit `7823e4a6` | 2026-07-27 | MIT | `EVALUATE_LATER` | begrenzte API-, Export- und Importserialisierung |
-| Webserver | Arduino-ESP32 `WebServer` | Arduino-ESP32 `2.0.17` | Frameworklizenz und Drittbestandteile | `FRAMEWORK_CANDIDATE` | kleinster Kandidat fuer lokalen HTTP-Dienst |
-| Webserver | ESPAsyncWebServer `3.12.0`, Commit `a008cccf` | 2026-07-27 | LGPL-3.0 | `EVALUATE_LATER` | Alternative fuer SSE/WebSocket; Ressourcen und Lizenzpflichten messen |
+| Webserver | Arduino-ESP32 `WebServer` | Arduino-ESP32 `2.0.17` | Frameworklizenz und Drittbestandteile | `FRAMEWORK_CANDIDATE` | verbindliche R1-Baseline fuer den begrenzten lokalen HTTP-Dienst; kleiner konkreter Adapter und Prototypnachweis fehlen |
+| Webserver | ESPAsyncWebServer `3.12.0`, Commit `a008cccf` | 2026-07-27 | LGPL-3.0 | `EVALUATE_LATER` | konditionaler Vergleichs-/Rueckfallkandidat nur bei konkretem Baselineproblem und klarem Vorteil im identischen Prototyp; keine vorsorgliche SSE-/WebSocket-Reserve |
 | WLAN-Onboarding | WiFiManager `2.0.17`, Commit `4131fe61` | 2026-07-27 | MIT | `EVALUATE_LATER` | Captive-Portal-Kandidat hinter projektspezifischer Secret- und Zustandslogik |
 | QR-Code | QRCode `0.0.1`, Commit `eafbde49` | 2026-07-27 | MIT, abgeleitet von Project Nayuki | `NOT_SELECTED` | lokaler WLAN-QR-Code |
 | QR-Code | Project Nayuki QR-Code-generator `1.8.0`, Commit `2c9044de` | 2026-07-27 | MIT im Quellheader | `NOT_SELECTED` | alternative kleine C-Implementierung |

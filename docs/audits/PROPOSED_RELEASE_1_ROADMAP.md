@@ -144,8 +144,12 @@ warten:
    negativer Referenztest. Die konkrete TRS-Buchse und Hot-Plug-Schutzmassnahmen
    werden praktisch geprueft; drei GPIOs und Bauteilwerte werden nicht vorab
    festgelegt.
-5. Getrennte kleine Webserver-/Onboarding-Prototypen koennen nativ oder auf dem
-   aktorfreien ESP32 Ressourcen messen, ohne #27 vorwegzunehmen.
+5. Einen kleinen aktorfreien Baselineprototyp mit Arduino-ESP32 `WebServer`
+   fuer statische Ressourcen, begrenzte API-/Import-/Exportpfade, wenige
+   Clients, Abbruch-, WLAN-, Jitter- und Ressourcenmessung vorbereiten, ohne
+   #27 vorwegzunehmen. `ESPAsyncWebServer` wird nur dann mit identischem Umfang
+   nachgezogen, wenn der Baselineprototyp ein konkretes Release-1-Risiko offen
+   laesst. Onboarding bleibt davon getrennt.
 
 Die minimale Baseline legt weder finale Pins, Partitionierung, Bibliotheken,
 Sensorbustopologie, Aktoradapter, Safety-Grenzen noch PI-Parameter fest. Der
@@ -168,7 +172,6 @@ Messungen:
 - davon getrennt Topologie A oder den begruendeten Rueckfall B nach realem
   GPIO-/Pin- und Fehlerisolationsvergleich; der Produktfuehler bleibt immer auf
   eigenem Bus und Topologie C bleibt ausgeschlossen;
-- kleinsten geeigneten Webservertransport;
 - WiFiManager oder einen kleinen Framework-Onboardingadapter;
 - ArduinoJson nur mit endpunktspezifischen Grenzen.
 
@@ -180,6 +183,13 @@ LVGL ist keine Treiberoption dieser Phase. Der UI-Frameworkentscheid folgt erst
 nach Treiberauswahl, schmalem Adaptervertrag und einem repraesentativen
 Release-1-Screen.
 
+Beim Webserver besteht keine offene Gleichwahl: Arduino-ESP32 `WebServer` ist
+die Release-1-Baseline. Nur wenn sein begrenzter Prototyp eine konkrete
+R1-Anforderung nicht stabil und ressourcengerecht erfuellt, wird
+`ESPAsyncWebServer` unter identischen Bedingungen verglichen und eine
+Abweichung dem Owner vorgelegt. Ein vollstaendiger Zweifachprototyp ist keine
+Pflicht.
+
 ## Phase 5: produktive Adapter
 
 Kleine adapterbezogene PRs:
@@ -188,12 +198,23 @@ Kleine adapterbezogene PRs:
    bereits in einem zuvor ownerfreigegebenen Persistenzpaket enthalten;
 2. #30 DS18B20-/1-Wire-Adapter hinter `ITemperatureSource`;
 3. #31 Display- und Touchadapter hinter getrennten schmalen Grenzen;
-4. WLAN-, Zeit-/Zeitzonen- und Webtransportadapter;
+4. WLAN-, Zeit-/Zeitzonen- und kleiner konkreter Arduino-ESP32-
+   `WebServer`-Adapter;
 5. JSON nur an den konkreten API-/Export-/Importgrenzen.
 
 Bibliothekstypen duerfen weder in `fermentation_app` noch in Safety- oder
 Prozessmodelle durchsickern. Jeder Adapter uebersetzt Fehler und Limits
 vollstaendig und besitzt eine Mock-/Hostgrenze.
+
+Der Webserveradapter kapselt nur Initialisierung, Routenbindung, feste
+Request-/Responsegrenzen, Timeouts und HTTP-Uebersetzung. DTOs, fachliche
+Queries/Kommandos, Validierung, Authpolicy, Konfliktsemantik, Persistenz und
+Safety bleiben serverunabhaengig. Es entsteht keine allgemeine
+`IWebTransport`-, Stream-, SSE-, WebSocket-, Middleware- oder Pluginhierarchie.
+Ein spaeterer Serverwechsel ersetzt diese konkrete ESP32-Integrationsschicht
+ueber die Composition Root, sofern dieselben begrenzten Endpunkt-/DTO-Vertraege
+erfuellt bleiben und ein konkreter Vorteil nachgewiesen ist; ein Dummy-
+Zweitadapter wird nicht erstellt.
 
 Nach dem Display-/Touchadapter wird ein repraesentativer Release-1-Screen als
 gemeinsame Grundlage fuer den spaeteren Vergleich schlanker Views mit LVGL
@@ -231,7 +252,9 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   Navigations-/Screen-Scheiben umsetzen; UI-Logik weiterhin nativ testen;
 - #27 teilen in begrenzte Lese-API/Transport, mutierende Kommandos/Konflikte,
   Webassets, Onboarding und Authentication; die Weboberflaeche bleibt
-  sekundaer und ist keine Voraussetzung fuer den lokalen Betrieb;
+  sekundaer und ist keine Voraussetzung fuer den lokalen Betrieb; mit
+  Arduino-ESP32 `WebServer` beginnen, Status-/Diagrammdaten begrenzt pollen und
+  Async nur nach einem konkreten Baselineproblem identisch vergleichen;
 - vor Authentication OD-09 festlegen: KDF/Work-Factor, Sitzungsdauer,
   Sperrzeiten, CSRF und At-rest-Grenze;
 - Connectivity- und Authentication-Domaenen erst mit den ersten realen WLAN-,
@@ -243,8 +266,11 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   Backup/Import mit zentraler Vorschau.
 
 Regelung und Safety muessen unter Web-, Export- und Netzwerklast
-deterministisch bleiben. HTTP ist nur fuer das vertrauenswuerdige lokale Netz;
-Cloud und Internet-Portfreigabe bleiben ausgeschlossen.
+deterministisch bleiben. Request-, Antwort-, JSON-Tiefen-, String-, Upload-,
+Zeit- und Parallelitaetsgrenzen gelten unabhaengig vom Server. Langsame oder
+abgebrochene Clients und WLAN-Verlust werden kontrolliert behandelt; sie
+stoppen weder Lauf noch Safety-Kern. HTTP ist nur fuer das vertrauenswuerdige
+lokale Netz; Cloud und Internet-Portfreigabe bleiben ausgeschlossen.
 
 ## Phase 8: Inbetriebnahme und Release
 
@@ -324,7 +350,6 @@ ersetzen nur Low-Level-Arbeit, nicht die fachlichen Issueziele.
 | OD-02 | Display-/Touchtreiberstack | in Stufe 4 nach der gestuften Hardwarematrix, vor #31 |
 | OD-03a | DS18B20-/1-Wire-Softwarestack | nach Stufe 3, vor #30 |
 | OD-03b | Bustopologie A oder begruendeter Rueckfall B | nach minimaler Hardwarebaseline, realem Pin-/GPIO-Inventar und identischem Fehlerisolationsvergleich; Produktbus separat, C ausgeschlossen |
-| OD-04 | Framework-WebServer oder ESPAsyncWebServer | nach begrenztem Last-/Ressourcenprototyp, vor #27-Transport |
 | OD-05 | schlanke Views oder LVGL | nach OD-02, schmalem Adaptervertrag und identischem repraesentativem Screenvergleich |
 | OD-06 | WiFiManager oder kleiner Framework-Onboardingadapter | vor Onboardingteil von #27 |
 | OD-07 | Mindestumfang und PR-Schnitt von #19/#25–#28 | vor dem jeweiligen Issue |
@@ -336,3 +361,8 @@ Detailpruefung offen, ob Dokumentrevisionen und Rootsequenz die Funktion einer
 eigenstaendigen persistenten `MutationSequence` vollstaendig abdecken. Diese
 Pruefung darf die Sequenz nicht ohne Gleichwertigkeitsnachweis entfernen und
 oeffnet OD-01 nicht erneut.
+
+OD-04 ist entschieden: Arduino-ESP32 `WebServer` ist die Release-1-Baseline.
+`ESPAsyncWebServer` bleibt konditionaler Rueckfall; nur ein konkretes offenes
+R1-Risiko und ein klarer Vorteil im identischen begrenzten Prototyp oeffnen die
+Abweichungsentscheidung erneut.

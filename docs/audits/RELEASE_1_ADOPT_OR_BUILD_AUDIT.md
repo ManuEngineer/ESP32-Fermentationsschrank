@@ -113,8 +113,11 @@ stabilen Active-/Fallback-Kerns offen, nicht als alternativer R1-Auftrag.
 - Framework-WLAN, Zeit/NTP, mDNS/DNS, GPIO und UART werden konfiguriert und
   adaptiert.
 - Beim Webserver ist der kleinere Frameworkserver die Baseline; ein
-  asynchroner Server muss seinen Mehrwert und seine Ressourcen-/Lizenzwirkung
-  im identischen Prototyp beweisen.
+  asynchroner Server muss seinen konkreten Release-1-Mehrwert und seine
+  Ressourcen-/Lizenzwirkung in einem identischen, begrenzten Prototyp beweisen.
+  Fuer Release 1 ist Arduino-ESP32 `WebServer` die verbindliche erste
+  Produktivrichtung; `ESPAsyncWebServer` bleibt konditionaler Vergleichs- und
+  Rueckfallkandidat.
 
 ### 2. Safety und Fachlogik nicht delegieren
 
@@ -197,6 +200,75 @@ reale GPIOs und erfundene Messwerte gelangen nicht in den Safety-/Fachkern;
 Treiber- und Fachstatus bleiben getrennt. Der Audit empfiehlt eine spaetere
 Aufteilung von #29 in minimalen Baseline- und produktiven Hardwareanteil, aendert
 das Issue aber nicht.
+
+### 7. Lokaler Frameworkserver ist die Release-1-Baseline
+
+Die Weboberflaeche bleibt sekundaer. Der Fermentationsschrank muss ohne WLAN
+und Browser lokal ueber das Touchdisplay vollstaendig und sicher bedienbar
+bleiben. Release 1 verwendet fuer seinen lokalen HTTP-Dienst zunaechst den in
+Arduino-ESP32 `2.0.17` enthaltenen synchronen `WebServer`. Er benoetigt keine
+zusaetzliche Serverbibliothek und ist fuer wenige lokale Clients sowie einen
+begrenzten Endpunktsatz die kleinste plausible Basis.
+
+Der Release-1-Bedarf umfasst statische HTML-/CSS-/JavaScript-Ressourcen,
+begrenzte Status-, Temperatur-, Lauf-, Programm- und Konfigurationsabfragen,
+Konfigurationsaenderungen mit Basisgenerations- und Konfliktpruefung,
+Laufkommandos, Diagnose, begrenzte Exporte und Imports, Anmeldung/Sitzungen
+sowie die lokale HTTP-Oberflaeche des WLAN-Onboardings. Status- und
+Diagrammdaten duerfen ueber begrenztes Polling abgerufen werden. WebSocket,
+Server-Sent Events, ein permanenter bidirektionaler Stream, hohe Clientzahlen,
+Cloudtransport, direkter Internetbetrieb, unbeschraenkte Uploads und
+Millisekunden-Echtzeitdarstellung sind keine Release-1-Pflicht.
+
+Der Frameworkserver bleibt Baseline, sofern ein begrenzter Prototyp statische
+Ressourcen, JSON-Anfragen, Import/Export und wenige lokale Clients innerhalb
+fester Zeit-, Groessen-, Tiefen-, Parallelitaets- und Speichergrenzen stabil
+bedient. Langsame oder abgebrochene Clients, WLAN-Unterbruch und ungueltige oder
+uebergrosse Anfragen muessen kontrolliert enden; Regel- und Safety-Ausfuehrung
+duerfen nicht relevant verzoegert werden. Flash, statisches RAM, freier und
+niedrigster Heap, groesster freier Heapblock, Antwort- und Bearbeitungszeit,
+Regelzyklus-Jitter sowie Watchdog-/Resetereignisse werden gemessen.
+
+`ESPAsyncWebServer` wird nur bei einem konkreten offenen Release-1-Risiko mit
+demselben Prototyp verglichen, etwa bei unvertretbarem Regelzyklus-Jitter,
+nicht sinnvoll begrenzbarer Blockierung durch langsame Clients, instabiler
+benoetigter Parallelitaet oder nicht robust begrenzbaren Import-/Exportpfaden.
+Eine Uebernahme verlangt einen klaren Stabilitaets-, Funktions- oder
+Ressourcenvorteil. Popularitaet, ein groesserer README-Funktionsumfang oder
+vorsorgliche WebSocket-/SSE-/Cloudfaehigkeit reichen nicht.
+
+Die R1-Architektur kapselt den konkreten Server in einer kleinen
+ESP32-Integrationsschicht fuer Initialisierung, Routenbindung, begrenzte
+Bodyannahme, Request-/Responseuebersetzung, Timeouts und Fehleruebersetzung.
+Endpunkte uebersetzen HTTP ausschliesslich in begrenzte DTOs und fachliche
+Queries oder Kommandos. Server-, Request-, Response-, Connection-, Socket- und
+Callbacktypen gelangen nicht in `fermentation_app`, Safety-, Persistenz- oder
+gemeinsame View-Modelle. Laufkommandosemantik, Validierung, Konflikte,
+Berechtigung, Safety, Persistenz, Diagnose und Importvalidierung bleiben
+serverunabhaengig.
+
+Es entsteht keine allgemeine `IWebTransport`-Hierarchie, keine Stream-, SSE-
+oder WebSocket-Abstraktion, kein Middleware-, Provider- oder Pluginframework und
+kein Dummy-Zweitadapter. Ein spaeterer Serverwechsel bleibt trotzdem moeglich:
+Er ersetzt an der Composition Root beziehungsweise ESP32-Integrationsgrenze
+Serverinitialisierung, Routenbindung, Request-/Responseuebersetzung und
+Verbindungslebenszyklus, nicht DTOs, Fachkommandos, Validierung, Authpolicy,
+Konfliktsemantik, Persistenz oder Safety-Core. Voraussetzung sind dieselben
+begrenzten Endpunkt-/DTO-Vertraege und ein belegter konkreter Vorteil.
+
+> Ein spaeterer Wechsel des lokalen HTTP-Servers ist zulaessig, wenn der Ersatz
+> dieselben begrenzten Endpunkt-/DTO-Vertraege erfuellt und der Vergleich einen
+> konkreten Vorteil belegt. Die R1-Architektur kapselt Servertypen an der
+> Integrationsgrenze, baut aber keine vorsorgliche allgemeine
+> Transportplattform.
+
+HTTP bleibt lokale sekundaere Bedienung ohne direkten Internet- oder Cloudzwang.
+Webserver- oder WLAN-Fehler beenden keinen Lauf und stoppen den Regel-/Safety-
+Kern nicht. Webanfragen koennen Aktoren nur ueber die normalen fachlichen
+Kommando- und Safety-Pfade beeinflussen. Authentisierung, CSRF, Sessions,
+Sperrlogik und Redaction bleiben eigene Vertraege; Serverhilfen ersetzen keine
+Authpolicy, und Secrets gelangen weder in Logs noch Exporte oder
+Fehlermeldungen.
 
 ## Entschiedener Persistenzvertrag OD-01
 
@@ -430,7 +502,6 @@ Die vorgeschlagene Reihenfolge steht in
 | OD-02 | Display-/Touchtreiberstack in Stufe 4 nach gestuftem Hardwarevergleich waehlen |
 | OD-03a | DS18B20-/1-Wire-Softwarestack nach Stufe 3 waehlen |
 | OD-03b | Topologie A oder begruendeten Rueckfall B nach realem Pin-/GPIO- und Fehlerisolationsvergleich waehlen; Produktbus bleibt separat, C ausgeschlossen |
-| OD-04 | Arduino-Framework-Webserver oder ESPAsyncWebServer nach identischem Last-/Ressourcentest |
 | OD-05 | schlanke eigene Screens oder LVGL erst nach Treiberwahl, Adaptervertrag und identischem repraesentativem Screen-/Ressourcenvergleich |
 | OD-06 | WiFiManager oder kleiner Framework-Onboardingadapter |
 | OD-07 | R1-Mindestumfang und PR-Schnitt von #19 und #25–#28 |
@@ -440,6 +511,11 @@ OD-01 ist mit Variante B entschieden. Offen bleibt nur die technische
 Detailpruefung, ob Dokumentrevisionen und Rootsequenz die bisherige Funktion
 einer eigenstaendigen persistenten `MutationSequence` vollstaendig abdecken.
 Sie ist keine erneute Auswahl zwischen Variante A und B.
+
+OD-04 ist ebenfalls entschieden: Arduino-ESP32 `WebServer` ist die
+Release-1-Baseline. Eine Abweichung zu `ESPAsyncWebServer` wird nur bei einem
+konkreten offenen R1-Risiko und nach identischem begrenztem Vergleich erneut
+dem Owner vorgelegt; es besteht keine offene Gleichwahl.
 
 Hardwarewerte, Pins, Pegel und thermische Parameter sind keine freien
 Ownerpraeferenzen; sie bleiben Mess- und Gateentscheidungen in #29–#37.
