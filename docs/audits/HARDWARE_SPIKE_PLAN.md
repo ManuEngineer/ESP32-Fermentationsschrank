@@ -901,6 +901,12 @@ Reproduzierbar und begrenzt zu pruefen sind mindestens:
 
 Jeder Fehler endet ohne Teilaktivierung. Oeffentliche Fehler enthalten keine
 Secrets, Bibliotheksdetails, Speicheradressen oder ungefilterten Eingaben.
+Der spaetere #19-D-Nachweis prueft zusaetzlich den synchronen Run-Gate vor
+Annahme, Vorschau/Bestaetigung und Commit fuer `Unknown`,
+`NoActiveOrRecoverableRun`, `ActiveRunPresent` und `RecoverableRunPresent`,
+einen konkurrierenden Runstart, Neustarts und Cut-Points. Nur
+`NoActiveOrRecoverableRun` erlaubt; die Serialisierung fuehrt weder Pending
+noch Intent oder einen parallelen Active-Zweig ein.
 
 ### Stufe 4 – Ressourcen und Laufzeit
 
@@ -1010,8 +1016,14 @@ aus der fixierten mbedTLS-/ESP32-Toolchain ist
 - richtige und falsche Passwort- und PIN-Pruefungen, auch parallel;
 - KDF-Laufzeit, Stack, Heap, niedrigster freier Heap, groesster freier
   Heapblock, Regelzyklus-Jitter, Watchdog und Stabilitaet;
-- globale Fehlversuchsserien fuer Passwort und PIN, Sperrstufenpersistenz und
-  Neustart ohne Sperrbypass;
+- globale Fehlversuchsserien fuer Passwort und PIN; Vor-Sperr-Zaehler,
+  Sperrstufe, aktiver Sperrzustand, Credential-Epoche/-Generation und
+  Integritaet vor der Fehlerantwort atomar persistieren/validieren; Erfolg
+  atomar zuruecksetzen, Persistenzfehler `fail closed`, Neustart ohne Bypass;
+- waehrend aktiver Sperre weder KDF noch einen Write je abgewiesener Anfrage;
+- passwortgeschuetzte normale Sessions und bewusst passwortlose anonyme lokale
+  Sessions mit gleicher Cookie-/CSRF-/Ressourcenpolicy, sichtbarer Warnung,
+  geschuetztem Moduswechsel und vollstaendigem Sessionwiderruf;
 - `esp_fill_random()` oder korrekt gesaeter mbedTLS-DRBG fuer Salts,
   Sessionkennungen und CSRF-Tokens, einschliesslich sicherem Fehlerpfad;
 - Credentialwechsel, Readback, Validierung, atomarer Epochcommit, Widerruf und
@@ -1027,6 +1039,13 @@ Schluesselverlust, Entwicklungs-/Produktionsflash, Recovery, Werksreset,
 Updatepfad, Ressourcen und dokumentierte physische Schutzgrenze geprueft. Sie
 wird hier weder aktiviert noch zugesagt. Alle Aktorpfade bleiben getrennt oder
 nachweislich inaktiv.
+
+Der Policyentscheid allein gibt keine Webmutation frei. Der Nachweis umfasst
+je Modus auch Methoden-, Content-Type-, Origin-/Referer-/Fetch-Metadata-,
+Revisions-, Konflikt-, Wiederholungs-, Abbruch- und Neustartpruefungen sowie die
+Webserver-/JSON-Gates. Servicefaelle verlangen zusaetzlich PIN-KDF und
+neustartfeste PIN-Sperre; reale Serviceaktoren bleiben hinter Safety- und
+Hardwaregates.
 
 ## Reihenfolge und Entscheidungsprotokoll
 

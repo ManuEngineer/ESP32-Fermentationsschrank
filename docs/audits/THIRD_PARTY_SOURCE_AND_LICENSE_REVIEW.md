@@ -33,6 +33,13 @@ moeglichst als nachvollziehbarer Patch oder eigener Adapter erfolgen.
 | `FRAMEWORK_PRESENT` | bereits Teil der fixierten Toolchain, aber Verpflichtungen fuer das Gesamtartefakt bleiben |
 | `DEFERRED` | fuer Release 1 keine Komponente auswaehlen |
 
+Technische Status wie `FIRST_EVALUATION_DIRECTION` und
+`EVALUATE_BEFORE_RELEASE` werden im Komponentenregister definiert. Insbesondere
+ist `EVALUATE_BEFORE_RELEASE` ein zwingendes Release-Gate mit dokumentiertem
+Ownerentscheid und Nachweis, keine optionale Verschiebung und keine
+automatische Produktivauswahl. Diese Quellenpruefung ersetzt den technischen
+Securitynachweis nicht.
+
 ## Register
 
 Alle Onlinequellen wurden am 2026-07-27 abgerufen. "Aktivitaet" beschreibt nur

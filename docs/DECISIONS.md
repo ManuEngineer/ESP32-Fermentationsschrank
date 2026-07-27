@@ -243,3 +243,20 @@
   NVS-Partitionsgroesse bleibt `TBD_IMPLEMENTATION_BUDGET` und wird in #29
   bestimmt. Die ausfuehrliche Entscheidung steht in
   [`ADR-016_KONFIGURATIONSSPEICHER_BACKEND.md`](ADR-016_KONFIGURATIONSSPEICHER_BACKEND.md).
+
+## ADR-017: Keine dauerhafte Webanmeldung in Release 1
+
+- **Status:** accepted
+- **Datum:** 2026-07-27
+- **Kontext:** Persistente Login-Tokens wuerden dauerhafte Secretpersistenz,
+  Rotation, Widerruf, Browsergeraeteverwaltung, Recovery, Ablauf ohne
+  zuverlaessige UTC und zusaetzliche Flash-/Securitygrenzen erfordern.
+- **Entscheidung:** Keine Option `Angemeldet bleiben` in R1. Normale Sessions
+  bleiben serverseitig, fluechtig und begrenzt. Neustart meldet alle Browser
+  ab. 30 Minuten Inaktivitaet, 12 Stunden absolute Dauer. Keine persistenten
+  Login-, Refresh- oder Browsergeraete-Tokens. Spaeterer Ausbau nur mit neuer
+  Entscheidung und Securitynachweis.
+- **Alternativen:** bestehende dauerhafte Anmeldung; unbefristete Session;
+  persistentes Geraetetoken ohne vollstaendigen Widerruf.
+- **Folgen:** erneute Anmeldung nach Browser-/Geraeteneustart; keine persistente
+  Auth-Secretdomaene in R1; geringere Angriffsflaeche und Recoverykomplexitaet.

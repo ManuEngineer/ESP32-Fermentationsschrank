@@ -510,6 +510,19 @@ Planungsschritt den folgenden Schnitt festlegen:
    Fehler, Abbruch, Neustart oder Stromunterbruch lassen keine Teilwirkung
    zurueck; fremde Daten duerfen weder interne Roots/Slots noch Secrets still
    uebernehmen. Eine bestaetigte Aktivierung wird nachvollziehbar journalisiert.
+   Ein schmaler synchroner Import-Run-Gate unterscheidet `Unknown`,
+   `NoActiveOrRecoverableRun`, `ActiveRunPresent` und
+   `RecoverableRunPresent`; nur `NoActiveOrRecoverableRun` erlaubt den Import.
+   Der Gate wird vor Dateiannahme beziehungsweise Importstart, vor
+   Vorschau/Bestaetigung und unmittelbar vor dem atomaren Commit unter
+   derselben serialisierten Anwendungsentscheidung geprueft. Aktive,
+   pausierte/unterbrochene, wiederherstellbare und unbekannte Laufzustaende
+   blockieren sicher. Runstart und Importcommit sind gegeneinander
+   serialisiert: Gewinnt der Runstart, wird der Import abgelehnt; gewinnt der
+   Importcommit, sieht ein danach gestarteter Lauf nur die vollstaendig neue
+   Konfiguration. Dafuer entstehen weder persistentes Pending noch
+   Aktivierungsintent oder ein paralleler Active-Zweig. Tests decken alle
+   Gatezeitpunkte, konkurrierenden Runstart, Neustarts und Cut-Points ab.
 
 Der Werksreset bleibt Bestandteil des zentralen Bootstrap-/Recoveryvertrags
 von #57. #19 darf nur seine Journal-/Historiedaten gemaess der zentralen
@@ -699,8 +712,9 @@ produktiven schreibenden Endpunkten und realer Authentisierung.
    abgelehnt, und der aktuelle Stand wird erneut geladen. Wiederholte
    Browserrequests duerfen abgeschlossene Aktionen nicht unkontrolliert
    doppelt ausfuehren; die Bedienquelle wird protokolliert. Safety darf jedes
-   Webkommando ablehnen. Produktive schreibende Endpunkte werden erst nach dem
-   Auth-/CSRF-Vertrag aus OD-09 freigegeben.
+   Webkommando ablehnen. Produktive schreibende Endpunkte werden erst nach den
+   erfolgreichen technischen Auth-/CSRF-/Credential-/Ressourcen-, Webserver-
+   und JSON-Gates freigegeben; OD-09 allein ist keine Produktivfreigabe.
 4. **Responsive lokale Webassets:** lokale, versionierte und groessenmaessig
    begrenzte HTML-, CSS- und JavaScript-Assets bilden Programme, Lauf,
    Einstellungen, Meldungen, Diagnose, System, Login und Service auf mobilen
@@ -857,11 +871,18 @@ IP-Adresse, Session oder Tab:
   weitere Fehlversuchsbloecke verdoppeln bis hoechstens 15 Minuten;
 - Service-PIN: nach drei aufeinanderfolgenden Fehlern 30 Sekunden Sperre;
   weitere Fehlversuchsbloecke verdoppeln bis hoechstens 30 Minuten;
-- eine erfolgreiche Pruefung setzt Zaehler und Sperrstufe des jeweiligen
-  Credentials zurueck;
-- ein Neustart umgeht keine aktive Sperre. Ohne vertrauenswuerdige UTC beginnt
-  mindestens die zuletzt persistierte Sperrdauer erneut. Nicht jeder Versuch,
-  mindestens aber bypassverhindernde Sperrstufenuebergaenge werden persistiert;
+- der vollstaendige sicherheitsrelevante Zustand aus Vor-Sperr-
+  Fehlversuchszaehler, Sperrstufe, aktivem Sperrzustand, Credential-Epoche
+  beziehungsweise -Generation und Integritaet ist neustartfest. Nach einer
+  falschen Pruefung wird der neue Zustand zuerst berechnet, atomar persistiert
+  und validiert; erst danach endet die Fehlerantwort. Ein beantworteter
+  Fehlversuch darf durch Neustart nicht verschwinden;
+- waehrend einer aktiven Sperre erfolgen weder KDF-Arbeit noch ein Write pro
+  abgewiesener Anfrage. Ohne vertrauenswuerdige UTC beginnt nach Neustart
+  mindestens die volle zuletzt persistierte Sperrdauer erneut. Eine
+  erfolgreiche Pruefung setzt Zaehler und Sperrstufe atomar zurueck;
+- Persistenzfehler ergeben niemals `fail open`. Das konkrete Slot-/Wear-Modell
+  bleibt Implementierungs- und Messgate;
 - KDF-Arbeit wird begrenzt und serialisiert; Regelung, Safety, Watchdog und
   Stabilitaet haben Vorrang.
 
@@ -877,6 +898,28 @@ Credential-Epoche widerrufen die betroffenen Sessions. `Angemeldet bleiben`,
 persistente Login-/Refresh-Tokens, persistente Browsergeraete und Login ueber
 einen Neustart gehoeren nicht zu R1.
 
+ADR-017 registriert diesen Entscheid gegenueber der bisherigen Anforderung in
+`WEB_UI.md` als akzeptierte hoeherrangige Entscheidung.
+
+Der normale Webpasswortschutz ist empfohlen und bei der Ersteinrichtung
+vorausgewaehlt, darf aber bewusst nach Warnung deaktiviert werden. Ohne
+Passwortpruefung erzeugt der Server weiterhin eine begrenzte fluechtige
+anonyme lokale Session mit mindestens 128 Bit kryptografisch zufaelliger
+Kennung, derselben Cookiepolicy, sitzungsgebundenem CSRF-Token sowie denselben
+Session- und Ressourcenlimits. Sie enthaelt keine Benutzeridentitaet oder
+Rolle und wird beim Neustart verworfen. Eine dauerhafte sichtbare Warnung
+erklaert, dass jedes Geraet im erreichbaren lokalen Netz normale Funktionen
+bedienen kann. Normale Mutationen behalten Session-, CSRF-, Methoden-,
+Content-Type-, Origin-/Referer-/Fetch-Metadata-, Revisions-, Konflikt-,
+Wiederholungs-, Fach- und Safetygates. Servicefunktionen verlangen zusaetzlich
+Service-PIN-KDF, neustartfeste PIN-Sperre, sitzungsgebundene Servicefreigabe
+und Safety-/Hardwaregates.
+
+Der Wechsel vom aktivierten zum deaktivierten Passwortschutz verlangt eine
+gueltige Session, CSRF, erwartete Revision sowie ausdrueckliche Warnung und
+Bestaetigung und widerruft danach alle alten Sessions. Der Rueckwechsel setzt
+ein neues Passwort atomar und widerruft alle anonymen Sessions.
+
 Das Sessioncookie verwendet `HttpOnly`, `SameSite=Strict`, `Path=/` und kein
 `Domain`-Attribut. `Secure` wird gesetzt, sobald der konkrete Zugriffsweg HTTPS
 verwendet. Direkter lokaler HTTP-Betrieb bietet keinen behaupteten Schutz gegen
@@ -884,9 +927,10 @@ Mitschneiden im lokalen Netz; OD-09 waehlt weder TLS-Bibliothek noch
 Zertifikatsloesung.
 
 Eine Servicefreigabe entsteht erst nach gueltiger Service-PIN innerhalb genau
-einer normalen Session. Sie gilt weder global noch fuer andere Browser, endet
+einer fluechtigen normalen oder anonymen lokalen Websession. Sie gilt weder
+global noch fuer andere Browser, endet
 nach 5 Minuten Inaktivitaet oder absolut nach 15 Minuten und wird mit der
-normalen Session, bei Logout oder PIN-Aenderung widerrufen. Kritische Aktionen
+zugrunde liegenden Session, bei Logout oder PIN-Aenderung widerrufen. Kritische Aktionen
 verlangen weiterhin eine eigene Bestaetigung; eine spaetere konkrete Aktion
 darf erneute PIN-Eingabe fordern. Authfreigabe und Safetyfreigabe bleiben
 getrennte Gates: Session, PIN, zeitlich begrenzte Servicefreigabe, konkrete
@@ -894,7 +938,8 @@ Aktion sowie Zustands-/Safety-/Hardwarepruefung werden nacheinander geprueft.
 
 Der CSRF-Vertrag verbietet Zustandsaenderungen ueber `GET`, verlangt die
 vorgesehene Methode und fuer JSON-Endpunkte den vorgesehenen Content-Type und
-erlaubt weder allgemeines CORS noch Wildcard-Origin. Jede normale Session
+erlaubt weder allgemeines CORS noch Wildcard-Origin. Jede normale oder anonyme
+lokale Session
 besitzt einen serverseitig zugeordneten CSRF-Token mit mindestens 128 Bit
 kryptografischer Zufallsguete. Die Weboberflaeche sendet ihn bei jeder Mutation
 im Header `X-CSRF-Token`; fehlende, falsche oder fremde Tokens werden ohne
@@ -950,6 +995,18 @@ Heapblock, parallele Anfragen, Regelzyklus-Jitter, Watchdog, globale
 Fehlversuchsserien, Neustartpersistenz sowie Credentialwechsel an allen
 Cut-Points. Eine Alternative wird nur bei einem konkret nachgewiesenen
 R1-Problem untersucht; Policyaenderungen gehen erneut an den Owner.
+
+OD-09 entscheidet die Securitypolicy, nicht die technische Produktfreigabe.
+Im passwortgeschuetzten Normalbetrieb bleiben produktive Mutationen gesperrt,
+bis KDF und Work Factor ownerfreigegeben, Zufallspfad, atomare
+Credentialpersistenz, vollstaendige neustartfeste Fehlversuchs-/Sperrpersistenz,
+Session/Cookie, CSRF samt Methoden-, Content-Type-, Origin-/Referer- und
+Fetch-Metadata-Pruefung, Revision/Konflikt/Wiederholung, Widerruf sowie
+Ressourcen-, Jitter-, Watchdog-, Abbruch-, Neustart-, Webserver- und
+JSON-Nachweise bestanden sind. Im bewusst passwortlosen Modus entfaellt nur
+die normale Passwort-KDF; die anonyme Session und alle uebrigen einschlaegigen
+Gates bleiben erforderlich. Servicefunktionen verlangen zusaetzlich den
+bestandenen Service-PIN-KDF-/Sperrnachweis und die Safety-/Hardwaregates.
 
 ## Entschiedener Persistenzvertrag OD-01
 
@@ -1177,7 +1234,7 @@ Die vollstaendige Zuordnung steht in der
 | #19 | vier grosse Verantwortungsbereiche in einem Issue | nach Auditfreigabe separat in Journal/Retention, begrenzte Laufhistorie/Bereinigung, nur lesenden Laufexport/secret-freies Backup und Importvorschau/atomare Aktivierung schneiden; 5 detaillierte Laeufe und 50 Zusammenfassungen bleiben Messziel |
 | #25 | gemeinsame Praesentationssemantik, Sprachressourcen, Navigation und Layout sind vermischt | nach Auditfreigabe in kleine oberflaechenneutrale Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen schneiden; Navigation/Layout nach #26/#27 verschieben, Issue im Audit nicht aendern |
 | #26 | lokale Navigation, Start, Programmeditor, Lauf-/Meldungsbedienung sowie Service-/Recovery-UI sind in einem Issue verbunden | nach Auditfreigabe in die fuenf entschiedenen UI-Bereiche schneiden; hardwareunabhaengige Logik nativ/simuliert vor #31 testen, Auth-/Safety-/Resetmechanik ausserhalb belassen und keinen SD-Scope schaffen |
-| #27 | HTTP-Transport/API, Status/Polling/aktueller Laufchart, Mutationen, Webassets und Authentisierung sind fuer einen PR zu breit | nach Auditfreigabe in die fuenf entschiedenen Bereiche schneiden; Onboarding bleibt OD-06, produktive Mutationen/Auth bleiben hinter OD-09, Issue im Audit nicht aendern |
+| #27 | HTTP-Transport/API, Status/Polling/aktueller Laufchart, Mutationen, Webassets und Authentisierung sind fuer einen PR zu breit | nach Auditfreigabe in die fuenf entschiedenen Bereiche schneiden; Onboarding bleibt OD-06, produktive Mutationen bleiben bis zum erfolgreichen technischen Auth-/CSRF-/Credential-/Ressourcen-, Webserver- und JSON-Nachweis gesperrt, Issue im Audit nicht aendern |
 | #28 | passive Diagnose, Ressourcenueberwachung, Serviceablauf, Bericht, Charts, Historie und Exportmechanik sind vermischt | nach Auditfreigabe in vier Bereiche schneiden: passive Diagnose/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose, gefuehrter Serviceablauf und nur lesender Diagnose-/Servicebericht; aktuellen Chart nach #27-B, Historie nach #19-B und Exportinfrastruktur nach #19-C abgrenzen |
 | LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich und ist kein Treiberkandidat | erst nach Treiberauswahl, Adaptervertrag und identischem repraesentativem Screen gegen schlanke Views messen |
 | ESPAsyncWebServer | Async-/WebSocket-/SSE-Umfang koennte groesser als der reale R1-Bedarf sein | ersten `WebServer`-Kandidaten messen; Async nur bei belegtem Vorteil |

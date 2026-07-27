@@ -91,7 +91,7 @@ schmale benoetigte Variante-B-Vertraege
   -> #19-A typisiertes Ereignisjournal und Retention
   -> #19-B begrenzte Laufhistorie und stromausfallsichere Bereinigung
   -> #19-C nur lesender Laufexport und secret-freies Backup
-  -> #19-D Importvorschau und atomare Aktivierung
+  -> #19-D Importvorschau und atomare Aktivierung mit synchronem Run-Gate
 
 #17 + #20..#23 + bestehender Laufkern
   -> #24 Fehlerkern und SAFE_BOOT
@@ -112,8 +112,9 @@ OD-09-Policy
   -> Authspike: PBKDF2/Zufall/Ressourcen/Cut-Points
   -> Ownerentscheid KDF und Work Factor
   -> erster Authkonsument mit Credentialdomaene
-  -> #27-E Sessions, CSRF und Servicefreigabe
-  -> #27-C schreibende Kommandos und Revisionskonflikte
+  -> #27-E normale oder anonyme fluechtige Sessions, CSRF und Servicefreigabe
+  -> technische Auth-/Credential-/Ressourcen-, Webserver- und JSON-Gates
+  -> #27-C schreibende Kommandos und Revisionskonflikte erst nach Ownerfreigabe
 
 Fach-, Sensor- und Safetymodelle
   -> #28-A passive Diagnosemodelle und Boot-Selbsttest
@@ -154,7 +155,11 @@ Vorgeschlagene kleine PRs:
 - #19-C: begrenzte JSON-/CSV-Laufexporte und secret-freies Backup nur lesend,
   gestreamt oder stueckweise;
 - #19-D: Importkandidat, Vollvalidierung, Vorschau, Konfliktpruefung,
-  Bestaetigung und atomare Aktivierung erst nach stabiler OD-01-Basis;
+  Bestaetigung und atomare Aktivierung erst nach stabiler OD-01-Basis; den
+  synchronen Run-Gate `Unknown`/`NoActiveOrRecoverableRun`/
+  `ActiveRunPresent`/`RecoverableRunPresent` vor Annahme, Vorschau/Bestaetigung
+  und unmittelbar vor Commit pruefen und Runstart gegen Importcommit
+  serialisieren; nur `NoActiveOrRecoverableRun` erlaubt, ohne Pending/Intent;
 - #24: Fehlerdatenmodell, persistente Verriegelung/Boot, danach
   Fehlerinjektionsmatrix;
 - #25-A: kleine ansichtsbezogene Projektionen aus kanonischem Fach-, Prozess-,
@@ -184,10 +189,12 @@ Vorgeschlagene kleine PRs:
 - #27-D: schlanke lokale responsive HTML-/CSS-/JavaScript-Assets ohne CDN,
   Frontendframeworkvorwahl oder Fach-/Safetylogik im Browser;
 - #27-E/#27-C: nach dem OD-09-Authspike zuerst getrennte Webpasswortpruefung,
-  fluechtige Sessions, globale Sperrpolicy, CSRF und sitzungsgebundene
-  Servicefreigabe integrieren; schreibende Kommandos erst nach bestandenem
-  Auth-/CSRF-Gate. R1 verspricht keine oeffentliche externe Schreib-API und
-  keine dauerhafte Anmeldung.
+  vollstaendig neustartfeste Fehlversuchs-/Sperrpersistenz, fluechtige normale
+  oder anonyme lokale Sessions, CSRF und sitzungsgebundene Servicefreigabe
+  integrieren; schreibende Kommandos erst nach allen erforderlichen
+  technischen Auth-/CSRF-/Credential-/Ressourcen-, Webserver- und JSON-Gates
+  und Ownerfreigabe. ADR-017 schliesst dauerhafte Anmeldung aus; R1 verspricht
+  keine oeffentliche externe Schreib-API.
 - #28-A: passive typisierte Diagnoseprojektionen und Boot-Selbsttest ohne
   Aktoransteuerung; Roh-/Korrektur-/Filterwerte, Qualitaet, Regelsensor,
   Regler-/Aktorstatus, Fehler, Verriegelungen und Systemstatus getrennt testen;
@@ -291,7 +298,9 @@ warten:
    Salts und Parameterkennung pruefen; Work Factor, Laufzeit, Stack, Heap,
    Jitter, Watchdog und parallele Anfragen messen. `esp_fill_random()` oder
    einen korrekt gesaeten mbedTLS-DRBG samt Fehlerpfad evaluieren. Globale
-   Fehlversuchsserien, Neustartpersistenz, Session-/CSRF-Tokenbildung,
+   Fehlversuchsserien mit atomar persistiertem Vor-Sperr-Zaehler, Sperrstufe,
+   aktivem Sperrzustand, Credential-Epoche/-Generation und Integritaet,
+   Neustartpersistenz, normale und anonyme Session-/CSRF-Tokenbildung,
    Credentialwechsel und Widerruf an Cut-Points pruefen. Danach entscheidet
    der Owner KDF und Work Factor. NVS-/Flashverschluesselung bleibt ein
    getrennter `EVALUATE_BEFORE_RELEASE`-Security-Spike.
@@ -372,7 +381,10 @@ Kleine adapterbezogene PRs:
    stark typisierte versionierte Credentialrecords und eine vorwaertsgerichtete
    Credential-Epoche einfuehren; danach fluechtige Sessions, CSRF und
    sitzungsgebundene Servicefreigabe. #57 bereitet keine leeren Authstrukturen
-   vor, und schreibende Webendpunkte folgen erst nach bestandenem Gate.
+   vor. Schreibende Webendpunkte folgen erst nach bestandenem technischem
+   Auth-/CSRF-/Credential-/Ressourcen-, Webserver- und JSON-Gate; ohne normales
+   Webpasswort bleiben anonyme Session, Cookie, CSRF, Revision und Warnung
+   verbindlich.
 
 Bibliothekstypen duerfen weder in `fermentation_app` noch in Safety- oder
 Prozessmodelle durchsickern. Das gilt insbesondere fuer `JsonDocument`,
@@ -466,7 +478,10 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
 - OD-09 fachlich umsetzen, aber technische Auswahl nicht vorwegnehmen: zuerst
   KDF-/Zufalls-/Ressourcen-/Cut-Point-Spike, danach Ownerentscheid zu KDF und
   Work Factor, erster realer Authkonsument mit Credentialdomaene, fluechtige
-  Sessions/CSRF, Servicefreigabe und erst dann produktive Webmutationen;
+  normale oder anonyme fluechtige Sessions/CSRF, Servicefreigabe und erst nach
+  erfolgreichem Abschluss aller modusbezogenen Auth-/Credential-/Ressourcen-,
+  Webserver- und JSON-Gates produktive Webmutationen; ADR-017 verbietet
+  persistente Anmeldung;
 - Connectivity- und Authentication-Domaenen erst mit den ersten realen WLAN-,
   Passwort- oder PIN-Nachweisen spezifizieren; keine vorbereiteten leeren
   Manifeste, Roots oder `CredentialEpoch` aus #57 uebernehmen;
@@ -481,7 +496,10 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   begrenzte verdichtete Laufhistorie/stromausfallsichere Bereinigung, nur
   lesender Laufexport/secret-freies Backup und erst danach Importvorschau/
   atomare Aktivierung. Interne Journale und Kontrollpunkte bleiben binaer,
-  und ein JSON-Import aktiviert nie direkt aus dem Parser. Der Werksreset
+  und ein JSON-Import aktiviert nie direkt aus dem Parser. #19-D prueft seinen
+  synchronen Run-Gate vor Annahme, Vorschau/Bestaetigung und Commit; aktive,
+  pausierte/unterbrochene, recoverable oder unbekannte Laufzustaende blockieren,
+  und Runstart/Importcommit sind ohne Pending oder Intent serialisiert. Der Werksreset
   bleibt bei #57; der Werksreset behaelt die geraetespezifische
   Touchkalibrierung gemaess ADR-010, waehrend ein gesonderter Recoveryfall fuer
   unbrauchbare Kalibrierung getrennt bleibt;

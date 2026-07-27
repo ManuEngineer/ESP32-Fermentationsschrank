@@ -218,7 +218,11 @@ JSON ist fuer begrenzte externe Laufexport-, secret-freie Backup- und
 Importvertraege vorgesehen. Der nur lesende Export-/Backuppfad wird getrennt
 vom spaeteren Import umgesetzt. Ein Import entsteht als vollstaendiger
 typisierter Kandidat, durchlaeuft Vorschau, Konfliktpruefung und Bestaetigung
-und verwendet fuer die Aktivierung den OD-01-Active-/Fallback-Kern. Weder das
+und verwendet fuer die Aktivierung den OD-01-Active-/Fallback-Kern. Ein
+synchroner Run-Gate erlaubt Annahme, Vorschau/Bestaetigung und Commit nur bei
+`NoActiveOrRecoverableRun`; `Unknown`, `ActiveRunPresent` und
+`RecoverableRunPresent` blockieren. Runstart und Commit werden ohne Pending,
+Intent oder parallelen Active-Zweig serialisiert. Weder das
 Storagebackend noch ArduinoJson uebernimmt diese Transaktionssemantik. Fuer
 diesen Teilschnitt wird keine neue Bibliothek ausgewaehlt.
 
@@ -688,7 +692,10 @@ Webpasswort und vierstellige Service-PIN verwenden getrennte, gesalzene,
 einseitige Pruefnachweise; eine schnelle Einzel-SHA-256-Pruefung ist
 unzulaessig. Sessions, CSRF-Tokens und Servicefreigaben bleiben fluechtig und
 begrenzt. Credentialwechsel sind atomar und vorwaertsgerichtet; #57 erzeugt
-keine leeren Authstrukturen.
+keine leeren Authstrukturen. ADR-017 schliesst dauerhafte Anmeldung in R1 aus.
+Ein bewusst deaktiviertes normales Webpasswort beseitigt nur die Passwort-KDF:
+eine begrenzte anonyme lokale Session mit zufaelliger Kennung, Cookie, CSRF,
+Revision/Konfliktschutz und sichtbarer Warnung bleibt erforderlich.
 
 | Kandidat oder Pfad | Gepruefter Stand | Aufgabe | Status | Verbindlicher Nachweis |
 |---|---|---|---|---|
@@ -697,12 +704,23 @@ keine leeren Authstrukturen.
 | NVS-/Flashverschluesselung | nicht aktiviert oder projektbezogen getestet | moeglicher Schutz wiederverwendbarer Secrets gegen physischen Flashzugriff | `EVALUATE_BEFORE_RELEASE`; separater Security-Spike | Toolchain, Partitionierung, Provisionierung, Schluesselverlust, Entwicklungs-/Produktionsflash, Recovery, Werksreset, Updatepfad, Ressourcen und dokumentierte Schutzgrenze; expliziter Ownerentscheid danach |
 
 Der KDF-Spike prueft ausserdem richtige/falsche Passwort- und PIN-Pruefungen,
-globale Fehlversuchsserien samt neustartfester Sperrstufe, Credentialwechsel an
-Cut-Points und Sessionwiderruf. Ein Pepper im selben ungeschuetzten Flash ist
+globale Fehlversuchsserien samt atomar neustartfestem Vor-Sperr-Zaehler,
+Sperrstufe, aktivem Sperrzustand, Credential-Epoche/-Generation und Integritaet,
+Credentialwechsel an Cut-Points, normale und anonyme Sessions sowie Widerruf.
+Der neue Fehlerzustand wird vor der Antwort persistiert und validiert; Fehler
+bleiben `fail closed`, waehrend aktiver Sperre gibt es weder KDF noch einen
+Write je Ablehnung. Ein Pepper im selben ungeschuetzten Flash ist
 keine Schutzgrenze. Ohne aktivierte und getestete Plattformverschluesselung wird
 kein Schutz gegen physischen Flashzugriff behauptet. Es wird keine zusaetzliche
 Kryptobibliothek, allgemeine Authplattform oder endgueltige Kryptokonfiguration
 gewaehlt.
+
+Produktive Webmutationen bleiben ueber den Policyentscheid hinaus gesperrt,
+bis die je Modus erforderlichen KDF-/Work-Factor-, Zufalls-, Credential-,
+Sperr-, Session-/Cookie-, CSRF-/HTTP-, Revisions-/Wiederholungs-, Ressourcen-,
+Jitter-, Watchdog-, Abbruch-, Neustart-, Webserver- und JSON-Nachweise
+ownerfreigegeben sind. Servicefunktionen benoetigen zusaetzlich PIN-KDF,
+PIN-Sperre, sitzungsgebundene Servicefreigabe und Safety-/Hardwaregates.
 
 ## Regelung und PID
 

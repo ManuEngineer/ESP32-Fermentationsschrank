@@ -164,43 +164,48 @@ Diese Regeln gelten, wenn der normale Webpasswortschutz aktiviert ist.
 - getrennt von der vierstelligen Service-PIN
 - kein Benutzerkonten- oder Rollenmodell im ersten Release
 - Passwort wird bei der Eingabe verdeckt dargestellt
-- Fehlversuche werden begrenzt beziehungsweise zeitlich verzoegert
+- Fehlversuche werden global pro Credential gezaehlt: nach fuenf falschen
+  Passwortpruefungen 30 Sekunden Sperre, weitere Fehlversuchsbloecke
+  verdoppeln bis hoechstens 15 Minuten
+- Vor-Sperr-Zaehler, Sperrstufe und aktiver Sperrzustand werden atomar und
+  neustartfest gefuehrt; ein beantworteter Fehlversuch verschwindet nicht
+  durch Neustart und Persistenzfehler ergeben niemals Freigabe
 
-### Option `Angemeldet bleiben`
+### Keine dauerhafte Anmeldung in Release 1
 
-Der Anmeldedialog bietet:
-
-```text
-[ ] Angemeldet bleiben
-```
-
-Ohne aktivierte Option:
-
-- Sitzung endet nach einer konfigurierbaren Inaktivitaetszeit
-- Sitzung soll spaetestens beim Ende der Browsersitzung ihre Gueltigkeit verlieren
-- erneute Anmeldung ist danach erforderlich
-
-Mit aktivierter Option:
-
-- ein sicher gespeichertes Anmeldetoken darf ueber das Schliessen des Browsers
-  hinaus gueltig bleiben
-- die Gueltigkeit ist zeitlich begrenzt
-- der Benutzer kann sich aktiv abmelden
-- Passwortaenderung oder Zuruecksetzen der Webanmeldung widerruft bestehende
-  dauerhafte Sitzungen
-
-Die konkreten Zeitspannen werden in `SETTINGS_AND_STORAGE.md` festgelegt.
+Gemaess [ADR-017](DECISIONS.md#adr-017-keine-dauerhafte-webanmeldung-in-release-1)
+gibt es in Release 1 keine Option `Angemeldet bleiben`.
+Normale Sessions bleiben serverseitig, fluechtig und begrenzt. Sie enden nach
+30 Minuten Inaktivitaet, spaetestens nach 12 Stunden absolut, und werden bei
+einem Geraeteneustart verworfen. Persistente Login-, Refresh- oder
+Browsergeraete-Tokens sind nicht vorgesehen. Ein spaeterer Ausbau benoetigt
+eine neue Entscheidung und einen eigenen Securitynachweis.
 
 ### Betrieb ohne normales Webpasswort
 
 Ist der normale Webpasswortschutz bewusst deaktiviert:
 
-- entfällt die normale Anmeldung
-- jede Person im erreichbaren lokalen Netz kann die normalen Webfunktionen
-  aufrufen und bedienen
-- die Oberflaeche zeigt einen sichtbaren Hinweis auf den ungeschuetzten normalen
-  Webzugang
-- der Servicebereich bleibt weiterhin PIN-geschuetzt
+- entfaellt die Passwortpruefung, nicht aber die Sitzung;
+- der Server erzeugt eine begrenzte fluechtige anonyme lokale Session mit
+  mindestens 128 Bit kryptografisch zufaelliger Kennung, derselben Cookiepolicy,
+  einem sitzungsgebundenen CSRF-Token sowie denselben Session- und
+  Ressourcenlimits; sie enthaelt keine Benutzeridentitaet oder Rolle und wird
+  beim Neustart verworfen;
+- jede Person im erreichbaren lokalen Netz kann normale Funktionen bedienen;
+  eine dauerhafte sichtbare Warnung weist darauf hin;
+- normale Mutationen verlangen weiterhin Session, CSRF, vorgesehene Methode
+  und Content-Type, Origin-/Referer-/Fetch-Metadata-Pruefung, erwartete
+  Revision, Konflikt-/Wiederholungsschutz sowie Fach- und Safetypruefung;
+- der Servicebereich bleibt zusaetzlich durch Service-PIN, PIN-KDF,
+  neustartfeste Sperrlogik, sitzungsgebundene Servicefreigabe und
+  Hardware-/Safetygates geschuetzt.
+
+Der Moduswechsel ist selbst eine geschuetzte Mutation. Aktiviert zu deaktiviert
+verlangt eine gueltige Session, CSRF, erwartete Revision sowie ausdrueckliche
+Warnung und Bestaetigung; danach werden alle bisherigen Sessions widerrufen.
+Deaktiviert zu aktiviert setzt das neue Passwort atomar und widerruft alle
+anonymen Sessions. Bei der Ersteinrichtung ist Passwortschutz empfohlen und
+vorausgewaehlt; Deaktivierung ist nur bewusst nach Warnung moeglich.
 
 ## Sitzungstechnische Mindestregeln
 
@@ -208,13 +213,17 @@ Unabhaengig von der spaeteren konkreten Bibliothek gelten:
 
 - Sitzungskennungen duerfen nicht als dauerhaft sichtbare URL-Parameter verwendet
   werden.
-- Sitzungskennungen muessen ausreichend zufaellig und nicht erratbar sein.
-- Bei cookiebasierter Anmeldung werden mindestens `HttpOnly` und ein sinnvoller
-  `SameSite`-Schutz verwendet.
+- Sitzungskennungen enthalten mindestens 128 Bit kryptografisch zufaelligen
+  Inhalt und sind nicht erratbar.
+- Das Sessioncookie verwendet `HttpOnly`, `SameSite=Strict`, `Path=/` und kein
+  `Domain`-Attribut.
 - Unter direktem lokalem HTTP kann `Secure` technisch nicht erzwungen werden;
   bei spaeterem TLS-Betrieb muss es aktiviert werden koennen.
-- Zustandsveraendernde Webanfragen benoetigen Schutz gegen unbeabsichtigte oder
-  fremde Formularanforderungen, beispielsweise CSRF-Schutz.
+- Zustandsveraendernde Webanfragen benoetigen einen sitzungsgebundenen
+  CSRF-Token mit mindestens 128 Bit Zufall im Header `X-CSRF-Token`, die
+  vorgesehene Methode und den vorgesehenen Content-Type sowie Origin-,
+  ersatzweise Referer-, und soweit vorhanden Fetch-Metadata-Pruefung. Eine
+  erwartete fachliche Revision bleibt ein separates Gate.
 - Abmeldung und Passwortaenderung machen die betroffene Sitzung ungueltig.
 - Sitzungs- und Servicefreigaben werden nicht in normale Diagnoseexporte
   aufgenommen.
@@ -226,18 +235,22 @@ wie der lokale Servicebereich.
 
 ### Freigabe
 
-Nach korrekter PIN-Eingabe wird der Servicebereich fuer eine begrenzte
-Inaktivitaetszeit entsperrt.
+Nach korrekter PIN-Eingabe wird der Servicebereich fuer genau diese fluechtige
+normale oder anonyme lokale Websession freigegeben: 5 Minuten Inaktivitaet,
+hoechstens 15 Minuten absolut.
 
 Verbindliche Regeln:
 
-- Servicefreigabe ist getrennt von der normalen Webanmeldung.
+- Servicefreigabe ist getrennt von der normalen Webanmeldung beziehungsweise
+  anonymen lokalen Session.
 - Die Freigabe gilt nur fuer die jeweilige Websitzung.
 - Sie wird nach Inaktivitaet automatisch verworfen.
 - Abmeldung verwirft auch die Servicefreigabe.
 - Schliessen oder Ablauf einer normalen Sitzung verwirft die Servicefreigabe.
 - Ein anderes angemeldetes Endgeraet wird dadurch nicht ebenfalls entsperrt.
-- PIN-Fehlversuche werden begrenzt beziehungsweise verzoegert.
+- PIN-Fehlversuche werden global gezaehlt: nach drei Fehlern 30 Sekunden
+  Sperre, weitere Bloecke verdoppeln bis hoechstens 30 Minuten. Der
+  sicherheitsrelevante Fehlversuchs-/Sperrzustand ist atomar neustartfest.
 
 ### Kritische Aktionen
 
@@ -353,8 +366,9 @@ Phase 6 und Phase 9 festgelegt.
       Meldungen, Einstellungen, Diagnose, Service und System
 - [x] Sprache je Browser unabhaengig von der Displaysprache
 - [x] Deutsch, Spanisch und Englisch auch im Web
-- [x] Option `Angemeldet bleiben`
-- [x] ohne diese Option Sitzungsende nach Browserende oder Inaktivitaet
+- [x] gemaess ADR-017 keine dauerhafte Anmeldung in Release 1
+- [x] fluechtige serverseitige Sessions mit 30 Minuten Inaktivitaet,
+      12 Stunden absoluter Dauer und Widerruf beim Geraeteneustart
 - [x] Service-PIN entsperrt nur die jeweilige Sitzung fuer begrenzte Zeit
 - [x] kritische Serviceaktionen verlangen eine eigene Bestaetigung
 - [x] Live-Aktualisierung ohne manuelles Neuladen
@@ -363,11 +377,9 @@ Phase 6 und Phase 9 festgelegt.
 
 ## Noch offen fuer Phase 5C und spaeter
 
-- genaue Zeitspannen fuer normale und dauerhafte Sitzungen
-- genaue Service-Inaktivitaetszeit
 - konkrete Passwortmindestanforderungen
 - technische Auswahl fuer Live-Aktualisierung
-- konkretes CSRF-Verfahren und weitere HTTP-Schutzheader
+- weitere HTTP-Schutzheader ueber den verbindlichen Cookie-/CSRF-Vertrag hinaus
 - maximale Anzahl paralleler Webverbindungen
 - Abtastrate und Reduktion der Diagrammdaten
 - Speicherung und Export vergangener Laufdiagramme

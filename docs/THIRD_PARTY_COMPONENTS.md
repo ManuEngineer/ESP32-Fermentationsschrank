@@ -18,6 +18,7 @@ die technische Bewertung in
 |---|---|
 | `FRAMEWORK_CANDIDATE` | Bestandteil der fixierten Plattform; Adapter und Messung fehlen |
 | `FIRST_EVALUATION_CANDIDATE` | verbindlich zuerst zu pruefende Richtung; noch keine Produktivauswahl |
+| `FIRST_EVALUATION_DIRECTION` | zuerst zu untersuchender technischer Pfad, der mehrere konkrete Integrationsvarianten enthalten kann; keine Produktivauswahl |
 | `SPIKE_REQUIRED` | technisch plausibel, aber auf Zielhardware nicht bestaetigt |
 | `FINAL_SELECTION_PENDING` | endgueltige Uebernahme bleibt bis zum Nachweis und Ownerentscheid offen |
 | `CONDITIONAL_FALLBACK` | identische Evaluation nur bei einem dokumentierten Problem des ersten Kandidaten |
@@ -25,6 +26,11 @@ die technische Bewertung in
 | `DEFER_AFTER_R1` | nicht Bestandteil von Release 1 |
 | `LICENSE_REVIEW_REQUIRED` | Herkunft oder Abdeckung muss vor Veroeffentlichung konkret geprueft werden |
 | `NOT_SELECTED` | gepruefter Kandidat, keine Auswahl getroffen |
+| `EVALUATE_BEFORE_RELEASE` | zwingendes technisches beziehungsweise Security-Release-Gate; kein produktiver Release vor Evaluation, dokumentiertem Ownerentscheid und erforderlichem Nachweis |
+
+`FIRST_EVALUATION_DIRECTION` und `EVALUATE_BEFORE_RELEASE` sind weder optionale
+Aufschuebe noch Synonyme fuer `EVALUATE_LATER` oder `DEFER_AFTER_R1` und waehlen
+keine konkrete Integration automatisch aus.
 
 ## Register
 
@@ -45,8 +51,8 @@ die technische Bewertung in
 | Webserver | ESPAsyncWebServer `3.12.0`, Commit `a008cccf` | 2026-07-27 | LGPL-3.0 | `CONDITIONAL_FALLBACK`, `EVALUATE_LATER` | identischer Vergleich nur bei konkretem Problem des ersten Kandidaten und klarem Vorteil; keine vorsorgliche SSE-/WebSocket-Reserve |
 | WLAN-Onboarding | WiFiManager `v2.0.17`, Tag-Commit `d82d0a1b` | 2026-07-27 | MIT; Webassets und transitive Abhaengigkeiten im Spike konkret pruefen | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` | bevorzugter R1-Kandidat fuer den zuerst begrenzten, von #27 getrennten Onboardingspike; technischer Portalteil hinter projektspezifischer Start-, Kandidaten-, Commit-, Secret-, Recovery- und Safetylogik; Frameworkadapter ist konditionaler Rueckfall und keine Drittkomponente |
 | Auth-KDF | PBKDF2-HMAC-SHA-256 aus der fixierten mbedTLS-/ESP32-Toolchain | konkrete Toolchainfunktion, Version und Dateisatz im Spike pruefen | Framework-/mbedTLS-Lizenz und Notices des tatsaechlich verwendeten Pakets pruefen | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` | erster Evaluationspfad fuer getrennte gesalzene Passwort-/PIN-Verifier; keine neue Bibliothek eingebunden, Iterationszahl und Produktionswahl bleiben bis Testvektor-, Laufzeit-, Stack-, Heap-, Jitter- und Watchdognachweis offen |
-| Kryptografischer Zufall | `esp_fill_random()` oder korrekt gesaeter mbedTLS-DRBG aus der fixierten Toolchain | konkrete Integration offen | Bestandteil des ESP32-/mbedTLS-Pfads; konkret verwendete Dateien und Notices pruefen | `FIRST_EVALUATION_DIRECTION`, `SPIKE_REQUIRED` | Salts, fluechtige Sessionkennungen und CSRF-Tokens; Fehler fuehren zur Ablehnung, keine schwachen Ersatzwerte |
-| Plattformverschluesselung | ESP32-NVS-/Flashverschluesselung | nicht aktiviert oder projektbezogen getestet | Toolchain-/ESP-IDF-Bestandteile und Produktionsprozess im separaten Spike pruefen | `EVALUATE_BEFORE_RELEASE` | getrenntes Security-Gate fuer wiederverwendbare Secrets; keine Aktivierung, Produktionszusage oder Schutzbehauptung im Audit |
+| Kryptografischer Zufall | `esp_fill_random()` oder korrekt gesaeter mbedTLS-DRBG aus der fixierten Toolchain | konkrete Integration offen | Bestandteil des ESP32-/mbedTLS-Pfads; konkret verwendete Dateien und Notices pruefen | `FIRST_EVALUATION_DIRECTION`, `SPIKE_REQUIRED` | zuerst zu untersuchender Pfad fuer Salts sowie fluechtige normale/anonyme Sessionkennungen und CSRF-Tokens; konkrete Integration nicht ausgewaehlt, Fehler fuehren zur Ablehnung, keine schwachen Ersatzwerte |
+| Plattformverschluesselung | ESP32-NVS-/Flashverschluesselung | nicht aktiviert oder projektbezogen getestet | Toolchain-/ESP-IDF-Bestandteile und Produktionsprozess im separaten Spike pruefen | `EVALUATE_BEFORE_RELEASE` | zwingendes separates Security-Release-Gate fuer wiederverwendbare Secrets; kein Release vor Evaluation, dokumentiertem Ownerentscheid und Nachweis, aber keine automatische Auswahl, Aktivierung oder Schutzbehauptung im Audit |
 | QR-Code | QRCode `0.0.1`, Commit `eafbde49` | 2026-07-27 | MIT, abgeleitet von Project Nayuki | `NOT_SELECTED` | lokaler WLAN-QR-Code |
 | QR-Code | Project Nayuki QR-Code-generator `1.8.0`, Commit `2c9044de` | 2026-07-27 | MIT im Quellheader | `NOT_SELECTED` | alternative kleine C-Implementierung |
 | UI-Framework | LVGL `9.5.0`, Commit `8fd90bb1` | 2026-07-27 | MIT | `EVALUATE_LATER` | kein Treiberkandidat; erst nach Treiberwahl und Adaptervertrag auf identischem repraesentativem Screen gegen schlanke Views messen |

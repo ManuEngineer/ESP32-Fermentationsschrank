@@ -164,13 +164,22 @@ Zufallsintegration und Plattformverschluesselung werden nicht im Voraus
 festgelegt.
 
 Das Projekt entwickelt die Produktpolicy selbst: getrennte Passwort- und
-PIN-Credentials, globale neustartfeste Fehlversuchsbegrenzung, atomaren
-vorwaertsgerichteten Credentialwechsel, fluechtige begrenzte Sessions,
+PIN-Credentials, atomar neustartfeste Vor-Sperr-Zaehler/Sperrzustaende,
+atomaren vorwaertsgerichteten Credentialwechsel, fluechtige begrenzte normale
+oder anonyme lokale Sessions,
 sitzungsgebundene Servicefreigabe, CSRF, Redaction, Widerruf und die Trennung
 von Auth- und Safetygates. Es entsteht keine generische Authplattform, kein
 Provider-/Pluginregister und keine leere Zukunftsdomaene. Ohne aktivierte und
 getestete Plattformverschluesselung wird kein Schutz gegen physischen
 Flashzugriff behauptet.
+
+ADR-017 schliesst dauerhafte Login-, Refresh- und Browsergeraete-Tokens in R1
+aus. Bewusst deaktivierter Passwortschutz entfernt nur die Passwort-KDF; eine
+zufaellige anonyme Session, Cookie-/CSRF-/HTTP-Pruefungen, Revision,
+Konflikt-/Wiederholungsschutz, sichtbare Warnung sowie Fach-/Safetypruefung
+bleiben. Produktive Mutationen warten ueber den Policyentscheid hinaus auf die
+modusbezogenen technischen Auth-/Credential-/Ressourcen-, Webserver- und
+JSON-Nachweise und deren Ownerfreigabe.
 
 ## Journal, Historie und Import
 
@@ -189,6 +198,11 @@ Importgrenzen. Der nur lesende Export-/Backuppfad wird vor dem
 zustandsveraendernden Import umgesetzt. Es entsteht weder eine eigene
 allgemeine Datenbank noch eine parallele Aktivierungssemantik; Fehler,
 Unterbruch oder Neustart duerfen keine Teilaktivierung hinterlassen.
+Ein schmaler synchroner Run-Gate blockiert Import bei unbekanntem, aktivem,
+pausiertem/unterbrochenem oder wiederherstellbarem Lauf. Er wird vor Annahme,
+vor Vorschau/Bestaetigung und unmittelbar vor Commit geprueft; Runstart und
+Importcommit werden ohne Pending, Intent oder parallelen Active-Zweig
+serialisiert.
 
 ## Praesentationsmodelle und Sprachen
 
