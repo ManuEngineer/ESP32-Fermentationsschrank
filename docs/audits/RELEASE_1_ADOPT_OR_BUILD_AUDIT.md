@@ -82,6 +82,11 @@ Zwei Hardwareentscheidungen duerfen nicht am Schreibtisch fallen:
   identisch verglichen; der Espressif-Stack muss zuerst seine Kompatibilitaet
   mit der aktuellen Arduino-ESP32-2.0.17-Toolchain beweisen.
 
+Diese aktorfreien Spikes warten nicht auf den vollstaendigen Abschluss von
+#20–#24. Nach Audit-/Planungsbereinigung und einer minimalen sicheren
+ESP32-Hardwarebaseline laufen sie parallel zur hardwareunabhaengigen
+Safety-Kette. Produktive Aktoren bleiben bis zu ihren Safety-Gates gesperrt.
+
 OD-01 ist entschieden: Release 1 verwendet das schlanke, stromausfallsichere
 Modell der Variante B. #56 und #57 duerfen nicht unveraendert umgesetzt werden.
 Vor ihrer Implementierung muessen Spezifikation, Issues und gegebenenfalls ADRs
@@ -142,6 +147,30 @@ und keine paketweite Herkunftsmatrix vorliegt, bleibt eine konkrete
 Publikationspruefung erforderlich. Lieferantenunterlagen bleiben
 `confirmed_order`; Pins, Pegel, Controller und Verdrahtung werden weiterhin
 real gemessen.
+
+### 6. Minimale Hardwarebaseline ermoeglicht fruehe aktorfreie Spikes
+
+Vor Display-/Touch- und DS18B20-/1-Wire-Spikes wird nur der minimale sichere
+Anteil von #29 benoetigt: reale Boardrevision, UART/FT232RL, reproduzierbares
+Flashen/Booten/Resetten, reale Flashgroesse und Versorgung, fixierte Toolchain,
+Betrieb ohne PSRAM, Firmware-/RAM-/Heapbaseline sowie GPIO-/Businventar. Peltier,
+BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und Summer bleiben physisch
+getrennt oder nachweislich inaktiv; der Summer wird nicht angesteuert.
+
+Die Baseline bestimmt keine finalen Pins, Partitionierung, Bibliotheken,
+Sensorbustopologie, Aktoradapter, Safety-Grenzen oder PI-Parameter. Jeder
+Kandidat durchlaeuft danach drei Gates: Quellen-/Lizenz-/Kompatibilitaetsvertrag,
+isolierter reproduzierbarer Build mit der fixierten Toolchain ohne Aktoren und
+erst dann der identische reale Hardwaretest. Ein Gate-2-Scheitern wird typisiert
+dokumentiert und nicht durch einen Toolchainwechsel oder verfruehten
+Hardwaretest umgangen.
+
+Parallel laufen #20 Sensorqualitaet, #21 Regelsensorauswahl, #22 PI/
+Luftbegrenzung, #23 Aktorplaner und #24 Fehlerkern/`SAFE_BOOT`. Bibliothekstypen,
+reale GPIOs und erfundene Messwerte gelangen nicht in den Safety-/Fachkern;
+Treiber- und Fachstatus bleiben getrennt. Der Audit empfiehlt eine spaetere
+Aufteilung von #29 in minimalen Baseline- und produktiven Hardwareanteil, aendert
+das Issue aber nicht.
 
 ## Entschiedener Persistenzvertrag OD-01
 
@@ -310,24 +339,30 @@ Die vollstaendige Zuordnung steht in der
 
 1. [`ADOPT_OR_BUILD.md`](../ADOPT_OR_BUILD.md) nach Ownerreview als dauerhaften
    Grundsatz uebernehmen.
-2. #20–#23 als naechste unabhaengige Safety-Kette priorisieren.
-3. #16/#56/#57 vor Implementierung in einem separaten ownerfreigegebenen
+2. Nach Audit-/Planungsbereinigung den minimalen sicheren Baseline-Anteil von
+   #29 nachweisen.
+3. Display-/Touch- und DS18B20-/1-Wire-Spikes aktorfrei ausfuehren und parallel
+   #20–#24 als hardwareunabhaengige Safety-Kette fortsetzen.
+4. #16/#56/#57 vor Implementierung in einem separaten ownerfreigegebenen
    Planungs-/ADR-Schritt auf Variante B zuschneiden; die Issues nicht
    unveraendert umsetzen.
-4. #17 und #24 nur von den tatsaechlich benoetigten schmalen R1-Vertraegen
+5. #17 und #24 nur von den tatsaechlich benoetigten schmalen R1-Vertraegen
    abhaengig machen, nicht von spaeterem Pending oder leeren Secret-Domaenen.
-5. #29 als sichere Hardwarebasis ausfuehren, danach die zwei aktorfreien Spikes.
-6. Treiber erst nach identischen Messungen fixieren und in kleinen
+6. Treiber erst nach drei bestandenen beziehungsweise ausreichend bewerteten
+   Kandidatengates und identischen Messungen fixieren und in kleinen
    Adapter-PRs einbinden.
-7. Web-/UI-/Backupissues vor Umsetzung in kleine, ressourcenmessbare Scheiben
+7. Produktive Aktoradapter und reale Aktortests weiterhin erst nach den
+   zugeordneten Safety-Gates freigeben.
+8. Web-/UI-/Backupissues vor Umsetzung in kleine, ressourcenmessbare Scheiben
    schneiden.
-8. Jede spaetere Drittkomponente mit Version, Lizenz, Abhaengigkeiten,
+9. Jede spaetere Drittkomponente mit Version, Lizenz, Abhaengigkeiten,
    Base-/Head-Messung und Hardwarestatus im Komponentenregister nachfuehren.
 
 ## Erkannte Ueberdimensionierungen
 
 | Bereich | Befund | Empfohlene Korrektur ausserhalb dieses Audits |
 |---|---|---|
+| #29 | minimale sichere Spikebaseline und spaetere produktive Hardwareintegration sind in einem breiten Issue verbunden | nach Auditfreigabe in Baseline-Anteil vor den Spikes und produktiven Anteil hinter den jeweiligen Safety-Gates schneiden; Issue im Audit nicht aendern |
 | #56/#57 | bestehender Umfang mischt den notwendigen Active-/Fallback- und Bootstrapkern mit Pending-/Intentpfaden und Secret-Domaenen ohne ersten Konsumenten | nach entschiedenem OD-01 in separatem Planungs-/ADR-Schritt auf Variante B zuschneiden; Variante A spaeter additiv planen |
 | #19 | vier grosse Verantwortungsbereiche in einem Issue | in Journal/Retention, Export und Backup/Import schneiden |
 | #25–#28 | UI-, Web-, Auth-, Diagnose- und Servicepakete sind zu breit fuer kleine PRs | nach stabilen DTO-/Portgrenzen in vertikale Scheiben teilen |

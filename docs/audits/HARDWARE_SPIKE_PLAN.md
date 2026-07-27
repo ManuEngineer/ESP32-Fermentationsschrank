@@ -7,11 +7,113 @@ Zur Auditnavigation: [`RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`](RELEASE_1_ADOPT_OR_BU
 Die Spikes entscheiden nur ueber Hardwaretreiber und technische Adapter. Sie
 implementieren weder fachliche UI, Sensor-Safety, Regelung noch produktive
 Aktorfreigaben. Alle Peltier-, H-Bruecken-, Luefter- und MOSFET-Ausgaenge
-bleiben waehrend dieser Spikes elektrisch getrennt oder nachweislich AUS.
+bleiben waehrend dieser Spikes elektrisch getrennt oder nachweislich AUS. Der
+Summer bleibt ebenfalls getrennt und wird nicht angesteuert.
 
-Gemeinsame Basis:
+Die Spikes muessen nicht auf den Abschluss von #20–#24 warten. Nach der Audit-
+und Planungsbereinigung genuegt die folgende minimale sichere Hardwarebaseline;
+die hardwareunabhaengige Safety-Kette kann parallel weiterlaufen.
 
-- ESP32-32E-Boardrevision, Flashgroesse und Versorgung vorab dokumentieren;
+## Minimale sichere Hardwarebaseline vor den Spikes
+
+Vor jedem Display-, Touch- oder Sensorspike werden dokumentiert und
+nachgewiesen:
+
+- reale ESP32-Boardrevision;
+- erfolgreiche Verbindung ueber UART beziehungsweise FT232RL;
+- reproduzierbarer Flash-, Boot- und Resetablauf;
+- reale Flashgroesse;
+- Versorgungsspannungen und sichere Einspeisung;
+- verwendete PlatformIO- und Arduino-ESP32-Version;
+- Betrieb ohne PSRAM;
+- Baselinewerte fuer Firmwaregroesse, statisches RAM, freien Heap und groessten
+  freien Heapblock;
+- verfuegbare GPIOs und grundsaetzlich moegliche Busse, ohne eine produktive
+  Belegung festzulegen;
+- physische Trennung oder nachweisliche Inaktivitaet aller Aktorpfade.
+
+Mindestens Peltier, BTS7960, Innenluefter, Aussenluefter, alle
+MOSFET-Verbraucher und der Summer bleiben getrennt oder nachweislich inaktiv.
+Der Summer wird in keinem Display- oder Sensorspike angesteuert.
+
+Diese Baseline ist der kleinste vorziehbare Anteil von #29. Sie ist ein sicheres
+Mess-, Build- und Flashfundament, kein vollstaendiges Hardware-Bring-up. Der
+Audit empfiehlt eine spaetere Aufteilung von #29, aendert das Issue aber nicht.
+
+### Nicht Bestandteil der minimalen Baseline
+
+Die Baseline legt noch nicht fest:
+
+- endgueltige produktive Pinbelegung;
+- finale Display-, Touch- oder DS18B20-Bibliothek;
+- endgueltige Sensorbustopologie;
+- Luefter-, Summer- oder BTS7960-Adapter;
+- Peltierbetrieb oder andere produktive Aktorfreigaben;
+- Safety-Grenzwerte oder PI-Parameter;
+- finale produktive Partitionierung.
+
+## Drei verbindliche Gates pro Kandidat
+
+Jeder Kandidat durchlaeuft die folgenden Gates in dieser Reihenfolge. Ein
+negatives Ergebnis wird dokumentiert; es wird weder durch einen Toolchainwechsel
+noch durch einen verfruehten Hardwaretest umgangen.
+
+### Gate 1 – Quelle, Lizenz und Kompatibilitaetsvertrag
+
+Zu dokumentieren sind:
+
+- offizielle Projektquelle oder lokale Herstellerquelle;
+- konkrete Version beziehungsweise Commit;
+- Lizenz und betroffene Dateien;
+- transitive Abhaengigkeiten;
+- deklarierte ESP32-Unterstuetzung;
+- Unterstuetzung der benoetigten Controller beziehungsweise Sensoren;
+- erwartete Kompatibilitaet mit der fixierten Toolchain;
+- erforderliche Konfigurationsdateien oder Buildflags;
+- moegliche Veroeffentlichungseinschraenkungen.
+
+Fuer das LCDWiki-Paket bleibt die interne technische Evaluation freigegeben.
+Fehlende paketweite Lizenzklarheit blockiert die Untersuchung nicht. Direkte
+Codeuebernahme, abgeleitete Eigenimplementierung und reine Referenznutzung
+werden getrennt dokumentiert. Vor einer oeffentlichen Veroeffentlichung direkt
+uebernommener Dateien ist eine konkrete Dateipruefung erforderlich; der Spike
+erteilt keine allgemeine Publikationsfreigabe.
+
+### Gate 2 – Reproduzierbarer Build ohne reale Aktoren
+
+Der Kandidat wird in einem isolierten Spike-Build mit der bestehenden
+PlatformIO-/Arduino-ESP32-Toolchain eingebunden. Konfiguration, Buildflags und
+transitive Abhaengigkeiten muessen reproduzierbar sein. Ein Toolchain- oder
+Frameworkwechsel ist nicht zulaessig. Der Build und jeder Lauf bleiben ohne
+Peltier-, BTS7960-, Innen-/Aussenluefter-, MOSFET- oder Summeraktivierung und
+ermoeglichen einen Base-/Kandidaten-Ressourcenvergleich.
+
+Ein Kandidat, der Gate 2 nicht besteht, erreicht Gate 3 nicht. Zulaessige
+typisierte Ergebnisse sind insbesondere:
+
+```text
+INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN
+BUILD_CONFIGURATION_NOT_REPRODUCIBLE
+UNRESOLVED_TRANSITIVE_DEPENDENCY
+REQUIRES_UNAPPROVED_TOOLCHAIN_CHANGE
+```
+
+### Gate 3 – Identischer realer Hardwaretest
+
+Nur Kandidaten, die Gate 1 und Gate 2 ausreichend bestehen, durchlaufen die
+vollstaendige Hardwarematrix. Zwischen den Kandidaten bleiben gleich:
+
+- dasselbe ESP32-Board;
+- dasselbe Display beziehungsweise dieselben Sensoren;
+- dieselbe Versorgung und dieselben Leitungen;
+- dieselbe gemessene Pinbelegung und Buskonfiguration;
+- dieselben Compilerflags und Testinhalte;
+- dieselbe Messmethode und Anzahl Wiederholungen.
+
+## Gemeinsame Spikebedingungen
+
+Zusaetzlich gilt:
+
 - PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17` (`dcc1105b`), C++17;
 - 4 MB Flash, keine PSRAM-Nutzung;
 - je Kandidat eigener wegwerfbarer Spike-Branch oder isolierter Build, keine
@@ -38,9 +140,10 @@ Eingaben oder Anzeigen.
    `references/datasheets/Display/2.8inch_SPI_Module_ILI9341_MSP2807_V1.1.zip`
 
 Arduino_GFX plus XPT2046_Touchscreen und Adafruit GFX plus ILI9341 plus
-XPT2046_Touchscreen sind Reservekandidaten. Sie werden nur nachgezogen, wenn
-die drei Hauptkandidaten scheitern oder keine nachvollziehbare Entscheidung
-erlauben.
+XPT2046_Touchscreen sind Reservekandidaten. Sie werden nur einbezogen, wenn
+weniger als zwei Hauptkandidaten Gate 3 erreichen, alle Hauptkandidaten ein
+wesentliches technisches, Ressourcen-, Wartungs- oder Lizenzproblem besitzen
+oder der Vergleich keine belastbare Ownerentscheidung erlaubt.
 
 ### Hardwareaufbau und Buskonfiguration
 
@@ -52,7 +155,7 @@ erlauben.
 | SPI | derselbe Hardware-SPI-Controller und dieselbe gemessene Pinbelegung fuer alle Kandidaten |
 | Chip Select | getrennte Display-/Touch-CS nur nach Boardpruefung; inaktiv sichere Pegel messen |
 | Reset/DC/Backlight | reale Pins, aktive Pegel und Bootzustand messen und als `TBD_HARDWARE` bis dahin offen lassen |
-| Weitere Verbraucher | Peltier, BTS7960, Luefter und Summer getrennt/gesperrt |
+| Weitere Verbraucher | Peltier, BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und Summer getrennt/gesperrt |
 
 Es werden keine Pinzahlen aus einem aehnlichen Board uebernommen. Die
 verwendeten Pins und Busfrequenzen gehoeren in das Spikeprotokoll und erst nach
@@ -165,7 +268,7 @@ gebaut werden kann. Andernfalls lautet das Ergebnis reproduzierbar
 | Topologie A | je Sensor separater Bus, sofern GPIO-Budget nach #29 bestaetigt |
 | Topologie B | beide festen Sensoren gemeinsam, Produkt auf getrenntem externem Bus |
 | Pull-ups/Leitungen | reale Werte, Laengen und Steckverbindung messen und protokollieren; nicht vorgeben |
-| Aktoren | Peltier/H-Bruecke gesperrt; Spike erzeugt nur Messereignisse |
+| Aktoren | Peltier, BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und Summer getrennt/gesperrt; Spike erzeugt nur Messereignisse |
 
 ### Identische Testfaelle
 
@@ -243,11 +346,22 @@ erst anhand des identischen Messprotokolls treffen.
 
 ## Reihenfolge und Entscheidungsprotokoll
 
-1. #29 bestaetigt Board, Flash, sichere Pins und Ressourcenbaseline ohne Aktoren.
-2. Display-/Touch- und DS18B20-Spikes laufen unabhaengig, aktorfrei und mit
-   fixierter Toolchain.
-3. Herkunfts-/Lizenzpruefung wird fuer die zwei technisch besten Kandidaten
-   aktualisiert.
-4. Owner waehlt je Gruppe genau einen Produktivkandidaten und einen
+1. Audit- und Planungsbereinigung abschliessen.
+2. Den minimalen Baseline-Anteil von #29 nachweisen; der vollstaendige Abschluss
+   von #24 oder #29 ist keine Voraussetzung fuer die aktorfreien Spikes.
+3. Jeden Kandidaten durch Gate 1 und Gate 2 fuehren.
+4. Nur ausreichend erfolgreiche Kandidaten in Gate 3 identisch vergleichen.
+5. Herkunfts-/Lizenzpruefung fuer die technisch geeigneten Kandidaten
+   aktualisieren.
+6. Owner waehlt je Gruppe genau einen Produktivkandidaten und einen
    dokumentierten Rueckfallkandidaten.
-5. Erst danach implementieren #30 und #31 die schmalen Adapter.
+7. Erst danach implementieren #30 und #31 die schmalen Adapter.
+
+Parallel dazu darf die hardwareunabhaengige Kette #20 Sensorqualitaet, #21
+Regelsensorauswahl, #22 PI/Luftbegrenzung, #23 Aktorplaner und #24 Fehlerkern/
+`SAFE_BOOT` weiterlaufen. Bibliothekstypen und reale GPIOs gelangen nicht in
+diesen Kern; Treiber- und Fachstatus bleiben getrennt, und ungemessene
+Hardwarewerte bleiben `TBD_COMMISSIONING`.
+
+Produktive Aktoradapter und reale Aktortests bleiben von ihren Safety-Gates
+abhaengig. Ein bestandener aktorfreier Spike ist keine Aktorfreigabe.

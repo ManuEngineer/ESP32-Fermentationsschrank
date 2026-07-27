@@ -12,16 +12,16 @@ Backlog vor Umsetzung verkleinert oder geteilt werden sollte.
 ## Leitende Reihenfolge
 
 ```text
-Auditfreigabe
-  -> separater Spezifikations-/Issue-Neuschnitt fuer Variante B
-  -> hardwareunabhaengiger Safety-, Persistenz- und Fachkern
-  -> aktorfreie Hardware-Spikes
-  -> Bibliotheksentscheidungen
-  -> produktive Adapter
-  -> sicheres Hardware-Bring-up
-  -> Web- und Bedienintegration
-  -> thermische Abnahme und Releasegate
-  -> spaetere Funktionen
+Auditfreigabe und Spezifikations-/Issue-Bereinigung
+  -> minimale sichere ESP32-Hardwarebaseline
+  -> aktorfreie Display-/Touch- und DS18B20-/1-Wire-Spikes
+  -> Bibliotheksentscheidungen und produktive Adapter
+
+parallel zur Baseline und zu den Spikes:
+#20 -> #21 -> #22 -> #23 -> #24
+
+erst nach den jeweiligen Safety-Gates:
+produktive Aktoren -> thermische Abnahme -> Releasegate
 ```
 
 ## Phase 1: Auditfreigabe und verbindlicher Persistenz-Neuschnitt
@@ -49,7 +49,9 @@ Keine Empfehlung aus dem Audit wird im Audit-PR selbst implementiert.
 
 ## Phase 2: zwingende hardwareunabhaengige Safety-, Persistenz- und Fachlogik
 
-Empfohlene parallele Ketten:
+Diese Ketten laufen parallel zur minimalen Hardwarebaseline und zu den
+aktorfreien Display-/Touch- und Sensorspikes. Sie muessen nicht zuerst
+abgeschlossen werden:
 
 ```text
 #20 Sensorqualitaet
@@ -101,23 +103,40 @@ stillem Factory-Fallback. Cut-Point-, Korruptions-, Schema-, Migrations- und
 Ressourcentests decken diesen R1-Kern direkt ab.
 
 Hardwareparameter bleiben `TBD_COMMISSIONING`; Mocks behaupten keine reale
-Thermik.
+Thermik. Bibliothekstypen und reale GPIOs gelangen nicht in #20–#24;
+Treiberstatus und Fachstatus bleiben strikt getrennt.
 
 ## Phase 3: Hardwarebasis und aktorfreie Spikes
 
-Nach #24 beziehungsweise sobald sichere Boot-/Fehlergrenzen verfuegbar sind:
+Nach Audit- und Planungsbereinigung, aber ohne auf den Abschluss von #20–#24 zu
+warten:
 
-1. #29 als kleinster Hardwarebaseline-PR: Boardrevision, Flash/Partition,
-   Ressourcen, UART-Recovery und unbelastete sichere Ausgangszustaende.
-2. Display-/Touch-Spike aus [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md)
-   mit LovyanGFX, TFT_eSPI und LCDWiki-Paket.
-3. DS18B20-Spike mit DallasTemperature+OneWire und Espressif-Komponenten, soweit
-   die aktuelle Toolchain letztere ohne Scopewechsel bauen kann.
-4. getrennte kleine Webserver-/Onboarding-Prototypen koennen nativ/auf
-   aktorfreiem ESP32 Ressourcen messen, ohne #27 vorwegzunehmen.
+1. Den minimalen Baseline-Anteil von #29 nachweisen: reale Boardrevision,
+   UART/FT232RL, reproduzierbares Flashen/Booten/Resetten, reale Flashgroesse,
+   sichere Versorgung, fixierte Toolchain, Betrieb ohne PSRAM, Firmware-/RAM-/
+   Heapbaseline sowie GPIO-/Businventar.
+2. Peltier, BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und Summer physisch
+   trennen oder nachweislich inaktiv halten. Der Summer wird nicht angesteuert.
+3. Display-/Touch-Kandidaten aus
+   [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md) nacheinander durch
+   Quellen-/Lizenzpruefung, isolierten reproduzierbaren aktorfreien Build und
+   erst danach den identischen realen Hardwaretest fuehren.
+4. Dasselbe Drei-Gate-Verfahren fuer DallasTemperature+OneWire und die
+   Espressif-Komponenten verwenden. Ein nicht mit der fixierten Toolchain
+   reproduzierbar baubarer Espressif-Kandidat endet als
+   `INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`.
+5. Getrennte kleine Webserver-/Onboarding-Prototypen koennen nativ oder auf dem
+   aktorfreien ESP32 Ressourcen messen, ohne #27 vorwegzunehmen.
 
-Hardwaregate: keine Peltier-, H-Bruecken-, Luefter- oder Summerfreigabe in den
-Display-/Sensor-/Netzwerkspikes.
+Die minimale Baseline legt weder finale Pins, Partitionierung, Bibliotheken,
+Sensorbustopologie, Aktoradapter, Safety-Grenzen noch PI-Parameter fest. Der
+Audit empfiehlt, #29 spaeter in diesen Baseline-Anteil und den produktiven
+Hardwareanteil zu schneiden; er aendert #29 nicht.
+
+Hardwaregate: keine Peltier-, H-Bruecken-, Innen-/Aussenluefter-, MOSFET- oder
+Summerfreigabe in den Display-/Sensor-/Netzwerkspikes. Der Abschluss von #24
+bleibt Gate fuer produktive Aktoradapter und reale Aktortests, nicht fuer diese
+aktorfreien Bibliotheksevaluationen.
 
 ## Phase 4: Bibliotheksentscheidungen
 
@@ -154,9 +173,13 @@ vollstaendig und besitzt eine Mock-/Hostgrenze.
 
 Verbindliche Reihenfolge:
 
-1. #29 Controller, UART, Ressourcen und unbelastete Ausgaenge;
-2. #30 Sensoren und #31 Display/Touch aktorfrei;
-3. #32 Luefter, den Summer als einziges zusaetzliches lokales Ausgabeelement
+1. nach der bereits bestandenen minimalen Baseline den spaeteren produktiven
+   #29-Anteil mit finaler Partitionierung und bestaetigter produktiver
+   Boardkonfiguration abschliessen;
+2. #30 Sensoren und #31 Display/Touch auf Basis der gewaehlten Kandidaten
+   produktiv integrieren;
+3. erst nach den zugeordneten Safety-Gates #32 Luefter, den Summer als einziges
+   zusaetzliches lokales Ausgabeelement
    und MOSFET-Kanaele einzeln;
 4. #33 BTS7960 ohne Peltier;
 5. erst danach #33 begrenzte Peltierpulse mit Sicherung, montierter einmaliger
@@ -244,6 +267,7 @@ Ausgabeelement.
 
 | Bestehendes Issue | Vorschlag nach Ownerfreigabe |
 |---|---|
+| #29 | spaetere Aufteilung empfehlen: minimaler Baseline-Anteil mit Board/UART/Flash/Boot/Reset/Ressourcen/GPIO-/Businventar und sicher inaktiven Aktorpfaden vor den Spikes; produktiver Hardwareanteil mit finaler Partitionierung, Pins, Adaptern, Verbrauchern und Abnahmen erst nach den jeweiligen Gates; Issue im Audit nicht aendern |
 | #16 | als Tracking behalten, aber nach dem Audit in separatem Planungs-/ADR-Schritt auf den Variante-B-Kern und schmale Abhaengigkeiten neu schneiden; keine Direktimplementierung |
 | #56 | nicht unveraendert freigeben; separat auf Active/Fallback, Graphvalidierung, fluechtige Vorschau, Konfliktschutz und Runtime-Publish reduzieren |
 | #57 | nicht unveraendert freigeben; separat auf Bootstrap, `StorageEpoch`, Korruptionssperre und wiederaufnehmbaren Werksreset reduzieren |
