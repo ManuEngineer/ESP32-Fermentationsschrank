@@ -5,6 +5,19 @@ Kuehlen von Joghurt, Milch- und Wasserkefir sowie eigenen Fermentationsprozessen
 
 Owner: `ManuEngineer`
 
+## Lizenzstatus
+
+Die allgemeine Projektlizenz ist bewusst noch nicht festgelegt. Soweit fuer
+einzelne Dateien oder Pfade nichts anderes angegeben ist, erteilt der
+Projekteigentuemer fuer selbst erstellte Projektinhalte keine allgemeine
+Freigabe zur Nutzung, Veraenderung, Weitergabe oder kommerziellen Verwertung.
+Drittanbieterinhalte bleiben unter ihren jeweiligen Originallizenzen und
+Rechten. Das Repository wird bis zu einem ausdruecklichen spaeteren Entscheid
+nicht als Open-Source-Projekt bezeichnet.
+
+Der kanonische vorlaeufige Stand und die spaeteren Entscheidungs-Gates stehen in
+[`docs/LICENSE_STATUS.md`](docs/LICENSE_STATUS.md).
+
 ## Projektstatus
 
 Die Anforderungen fuer Release 1 sind spezifiziert und mit Pull Request #38 nach
