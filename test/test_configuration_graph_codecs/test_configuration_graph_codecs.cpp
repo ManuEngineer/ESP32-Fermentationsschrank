@@ -118,6 +118,43 @@ void test_manifest_rejects_truncation_trailing_and_invalid_references() {
                                  unchanged.size());
 }
 
+void test_manifest_rejects_inconsistent_wire_metadata_and_reference_contracts() {
+    auto manifest = validManifest();
+    manifest.origin.kind = fermentation::ChangeOriginKind::InternalSystem;
+    std::string output = "sentinel";
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+
+    manifest = validManifest();
+    manifest.operation.kind =
+        fermentation::ChangeOperationKind::FactoryInitialization;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+
+    manifest = validManifest();
+    manifest.userConfiguration.schemaVersion = 2U;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+
+    manifest = validManifest();
+    manifest.serviceConfiguration.payloadLength = 1U;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+
+    manifest = validManifest();
+    manifest.programCatalog.payloadLength =
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes +
+        1U;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationManifestPayload(manifest, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+    TEST_ASSERT_EQUAL_STRING_LEN("sentinel", output.data(), output.size());
+}
+
 void test_root_payload_without_and_with_fallback_round_trips() {
     fermentation::ConfigurationRootRecord root{manifestReference(1U, 9U),
                                                std::nullopt};
@@ -172,6 +209,29 @@ void test_root_rejects_invalid_optional_tag_trailing_and_equal_branches() {
         ConfigurationGraphCodecStatus::InvalidModel);
     TEST_ASSERT_EQUAL_STRING_LEN("sentinel", unchanged.data(),
                                  unchanged.size());
+}
+
+void test_root_rejects_invalid_manifest_reference_and_same_generation_fallback() {
+    auto active = manifestReference(1U, 9U);
+    active.schemaVersion = 2U;
+    fermentation::ConfigurationRootRecord root{active, std::nullopt};
+    std::string output = "sentinel";
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationRootPayload(root, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+
+    active = manifestReference(1U, 9U);
+    active.payloadLength--;
+    root = {active, std::nullopt};
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationRootPayload(root, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+
+    root = {manifestReference(1U, 9U), manifestReference(0U, 9U)};
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationRootPayload(root, output) ==
+        ConfigurationGraphCodecStatus::InvalidModel);
+    TEST_ASSERT_EQUAL_STRING_LEN("sentinel", output.data(), output.size());
 }
 
 void test_full_records_use_exact_identity_and_envelope_limits() {
@@ -231,9 +291,13 @@ int main() {
     RUN_TEST(test_manifest_payload_is_canonical_and_round_trips);
     RUN_TEST(test_unknown_change_metadata_is_preserved);
     RUN_TEST(test_manifest_rejects_truncation_trailing_and_invalid_references);
+    RUN_TEST(
+        test_manifest_rejects_inconsistent_wire_metadata_and_reference_contracts);
     RUN_TEST(test_root_payload_without_and_with_fallback_round_trips);
     RUN_TEST(
         test_root_rejects_invalid_optional_tag_trailing_and_equal_branches);
+    RUN_TEST(
+        test_root_rejects_invalid_manifest_reference_and_same_generation_fallback);
     RUN_TEST(test_full_records_use_exact_identity_and_envelope_limits);
     RUN_TEST(test_reserved_zero_values_leave_output_unchanged);
     return UNITY_END();

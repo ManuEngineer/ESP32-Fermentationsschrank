@@ -13,7 +13,9 @@ namespace fermentation {
 enum class ConfigurationGraphLoadStatus : std::uint8_t {
     ConfigurationGraphAvailable,
     ConfigurationGraphUnavailable,
+    ConfigurationGraphUnavailableOtherEpoch,
     ConfigurationGraphIntegrityFailure,
+    UnsupportedNewerConfigurationSchema,
     RootReadError,
     RootCapacityError,
     RecordReadError,
@@ -25,6 +27,9 @@ struct ConfigurationGraphDiagnostics {
     std::uint32_t invalidCandidates{0U};
     std::uint32_t exactDuplicateRecords{0U};
     std::uint32_t skippedHigherRoots{0U};
+    std::uint32_t otherEpochSlots{0U};
+    std::uint32_t corruptRootSlots{0U};
+    std::uint32_t unsupportedNewerSchemaSlots{0U};
     bool fallbackUsed{false};
     bool unusableFallback{false};
     bool identicalRootTie{false};
@@ -42,6 +47,10 @@ enum class ConfigurationScanStatus : std::uint8_t {
     ReadError,
     CapacityError,
     UnsupportedNewerConfigurationSchema,
+    PersistentConfigurationIdentityCollision,
+    ConfigurationGraphEnvelopeOrCrcFailure,
+    ConfigurationGraphReferenceFailure,
+    ConfigurationGraphSemanticFailure,
     ConfigurationGraphIntegrityFailure,
     HighWaterOverflow,
     ActiveBasisMismatch,
@@ -97,7 +106,6 @@ struct ConfigurationCommitCandidate {
     std::shared_ptr<const UserConfiguration> userConfiguration;
     std::shared_ptr<const ServiceConfiguration> serviceConfiguration;
     std::shared_ptr<const ProgramCatalog> programCatalog;
-    ConfigurationChangeMask changes;
 };
 
 enum class ConfigurationCommitPrepareStatus : std::uint8_t {
@@ -107,6 +115,7 @@ enum class ConfigurationCommitPrepareStatus : std::uint8_t {
     PersistenceFailure,
     CapacityFailure,
     IntegrityFailure,
+    IdentityCollision,
     UnsupportedNewerSchema,
     HighWaterOverflow,
     NoUnreferencedSlotAvailable,
@@ -119,6 +128,7 @@ struct PreparedConfigurationCommit {
     ConfigurationSlotPlan slotPlan;
     std::string manifestRecordBytes;
     std::string rootRecordBytes;
+    std::optional<std::string> previousTargetRootRecordBytes;
 };
 
 struct ConfigurationCommitPrepareResult {
@@ -140,8 +150,24 @@ enum class ConfigurationCommitFailurePhase : std::uint8_t {
     ServiceDocument,
     ProgramDocument,
     Manifest,
+    TargetGraphVerification,
     Root,
     RootVerification,
+};
+
+enum class ConfigurationCommitResolutionCause : std::uint8_t {
+    None,
+    RootReadError,
+    RootCapacityError,
+    GraphReadError,
+    GraphCapacityError,
+    GraphEnvelopeOrCrcFailure,
+    GraphReferenceFailure,
+    GraphSemanticFailure,
+    GraphIntegrityFailure,
+    IdentityCollision,
+    UnsupportedNewerSchema,
+    AmbiguousRootOutcome,
 };
 
 struct ConfigurationCommitExecutionResult {
@@ -149,6 +175,8 @@ struct ConfigurationCommitExecutionResult {
         ConfigurationCommitExecutionStatus::WriteFailure};
     ConfigurationCommitFailurePhase phase{
         ConfigurationCommitFailurePhase::Root};
+    ConfigurationCommitResolutionCause resolutionCause{
+        ConfigurationCommitResolutionCause::None};
 };
 
 enum class ConfigurationCommitResolutionStatus : std::uint8_t {
@@ -156,6 +184,13 @@ enum class ConfigurationCommitResolutionStatus : std::uint8_t {
     ResolutionRecoveredNew,
     ResolutionStillIndeterminate,
     ResolutionRuntimeFailure,
+};
+
+struct ConfigurationCommitResolutionResult {
+    ConfigurationCommitResolutionStatus status{
+        ConfigurationCommitResolutionStatus::ResolutionStillIndeterminate};
+    ConfigurationCommitResolutionCause cause{
+        ConfigurationCommitResolutionCause::AmbiguousRootOutcome};
 };
 
 class ConfigurationGraphStore {
@@ -185,6 +220,9 @@ class ConfigurationGraphStore {
         PreparedConfigurationCommit& prepared);
 
     [[nodiscard]] ConfigurationCommitResolutionStatus resolveCommit(
+        const PreparedConfigurationCommit& prepared) const;
+
+    [[nodiscard]] ConfigurationCommitResolutionResult resolveCommitDetailed(
         const PreparedConfigurationCommit& prepared) const;
 
    private:

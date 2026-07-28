@@ -82,4 +82,13 @@ enum class ProgramCatalogStatus : std::uint8_t {
 
 [[nodiscard]] ProgramCatalog makeFactoryProgramCatalog();
 
+[[nodiscard]] bool configurationContentEquals(const UserConfiguration& left,
+                                              const UserConfiguration& right);
+[[nodiscard]] bool configurationContentEquals(
+    const ServiceConfiguration& left, const ServiceConfiguration& right);
+[[nodiscard]] bool configurationContentEquals(const ProgramDocument& left,
+                                              const ProgramDocument& right);
+[[nodiscard]] bool configurationContentEquals(const ProgramCatalog& left,
+                                              const ProgramCatalog& right);
+
 }  // namespace fermentation
