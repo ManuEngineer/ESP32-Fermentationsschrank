@@ -100,13 +100,30 @@ ESP32-Speicheradapter folgt bei der Hardwareintegration.
 ```text
 #10/#11 -> #20 -> #21 -> #22 -> #23
 #14/#15/#17/#20/#21/#23 -> #24
+#56/#57 Producer-Vertraege -> CONFIGURATION_SAFETY_INTEGRATION_GATE -> #24 vollstaendig
 ```
 
 Alle Ausgaenge enden in dieser Phase bei abstrakten Aktorbefehlen und Mocks.
 #24 erhaelt spaeter typisierte `ConfigurationRuntimeFailure`- und
-`ConfigurationUnavailable`-Eingaben aus #56/#57, aber keine neue pauschale
-Abhaengigkeit auf #16, #56 oder #57. Fehlerklasse, persistente Verriegelung,
-`SAFE_BOOT` und reale Aktorsperre bleiben in #24.
+`ConfigurationUnavailable`-/`ConfigurationIntegrityFailure`-Eingaben sowie den
+unbestimmten Root-Commitzustand aus #56/#57, aber keine neue pauschale oder
+zyklische Abhaengigkeit auf #16, #56 oder #57. #56/#57 duerfen ihre Producer-
+Vertraege und #24 darf seinen Fehlerkern unabhaengig implementieren.
+
+Das nachgelagerte `CONFIGURATION_SAFETY_INTEGRATION_GATE` ist dennoch ein
+verbindliches Abschlusskriterium fuer #24. Bevor #24 als vollstaendig
+abgeschlossen gelten darf, muessen die realen Producer-Vertraege systemweit
+auf persistente Verriegelung, sichere Bootprioritaet beziehungsweise
+`SAFE_BOOT`, keine normale Aktorfreigabe und reproduzierbare Fehlerinjektion
+abgebildet und getestet sein. Wird der #24-Core zuerst gemergt, bleibt #24 bis
+zu dieser Integration offen. Reale Aktoradapter oder eine produktive
+Aktorfreigabe duerfen das Gate nicht umgehen.
+
+Die Gate-Matrix umfasst mindestens `ConfigurationRuntimeFailure`,
+`ConfigurationUnavailable`, `ConfigurationIntegrityFailure`, einen nach
+`CommitOutcomeUnknown` nicht eindeutig aufloesbaren Rootzustand, Neustart ohne
+Verlust notwendiger Verriegelung, keine Aktorfreigabe bei unbekanntem Zustand
+und Recovery nur gemaess #24-Fehlerresetvertrag.
 
 ## E4 – Lokale Bedienung, Web und Diagnose
 

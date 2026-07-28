@@ -96,6 +96,9 @@ Manifeste, Secret-Roots oder Dummyrecords.
 - bei `Resetting` Werksreset idempotent fortsetzen
 - bei Korruption, unbekanntem Schema, unlesbarem Speicher oder fehlendem
   nutzbarem Graphen keine Runtime freigeben
+- nach einem zuvor unbestimmten Root-Commit nur dann Runtime freigeben, wenn der
+  normale Bootscan beide Rootslots und alle benoetigten Graphrecords
+  vollstaendig und eindeutig als alt oder neu aufloest
 
 ### StorageEpoch
 
@@ -165,11 +168,21 @@ Service-PIN-Konsument muss in einem eigenen ownerfreigegebenen Plan:
 - verhindern, dass alte Epochen oder Credentials reaktiviert werden;
 - Secret-, Redaction-, Backup- und Plattformschutzvertraege nachweisen.
 
-### Grenze zu #24
+### CONFIGURATION_SAFETY_INTEGRATION_GATE zu #24
 
 #57 liefert bei nicht verfuegbarer oder beschaedigter Konfiguration nur stabile
 typisierte Fehlerdaten und keine Runtimefreigabe. Fehlerklasse, persistente
 Verriegelung, Bootprioritaet, `SAFE_BOOT` und reale Aktorsperren bleiben #24.
+
+#57 darf `ConfigurationUnavailable` und `ConfigurationIntegrityFailure`
+unabhaengig implementieren und abschliessen. Das nachgelagerte
+`CONFIGURATION_SAFETY_INTEGRATION_GATE` verpflichtet #24 jedoch, diese realen
+Producer-Vertraege zusammen mit `ConfigurationRuntimeFailure` und dem
+unbestimmten Commitzustand aus #56 auf persistente Verriegelung, sichere
+Bootprioritaet, keine normale Aktorfreigabe und reproduzierbare
+Fehlerinjektion abzubilden. Wird der #24-Core zuerst gemergt, bleibt #24 bis zur
+vollstaendigen Gate-Abnahme offen. Recovery hebt eine Verriegelung nur gemaess
+dem #24-Fehlerresetvertrag auf.
 
 ## Ausdruecklicher Nicht-Scope
 
@@ -218,6 +231,10 @@ Verriegelung, Bootprioritaet, `SAFE_BOOT` und reale Aktorsperren bleiben #24.
 - unbekannte Bootstrap-, Root-, Manifest- und Dokumentversion
 - Lese-/Kapazitaetsfehler niemals als `NotFound`
 - Korruption startet nie Reset oder Factoryinitialisierung
+- Neustart nach unbestimmtem Root-Commit loest den vollstaendigen Scan eindeutig
+  alt oder neu auf
+- Neustart nach unbestimmtem Root-Commit bleibt bei erneutem Scanfehler
+  fail closed und meldet den typisierten Fehler an das Safety-Gate
 
 ### Werksreset
 
@@ -260,6 +277,10 @@ Verriegelung, Bootprioritaet, `SAFE_BOOT` und reale Aktorsperren bleiben #24.
 - Korruption erzeugt keinen stillen Factory-Fallback oder automatischen Reset.
 - Werksreset ist wiederaufnehmbar und behaelt Touchkalibrierung.
 - Alte Epochen werden nie reaktiviert.
+- `ConfigurationUnavailable` und `ConfigurationIntegrityFailure` sind fuer das
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE` stabil typisiert und getestet.
+- Ein beim Boot weiterhin unbestimmter Konfigurationszustand gibt keine Runtime
+  und keine normale Aktorfreigabe frei.
 - Es existieren keine leeren Connectivity-/Authentication-Manifeste,
   Secret-Roots oder vorbereiteten Credentialstrukturen.
 - Tests, Buildprofile, Quality Gates und Ressourcenvergleich sind bestanden.

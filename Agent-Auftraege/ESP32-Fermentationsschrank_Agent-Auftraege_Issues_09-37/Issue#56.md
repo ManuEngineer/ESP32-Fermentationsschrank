@@ -124,8 +124,9 @@ Pluginplattform.
 - Manifestgeneration ordnet vollstaendige Kandidatengraphen
 - `rootSequence` ordnet erfolgreiche kanonische Commits
 - erwartete Active-Generation und Kandidatenintegritaet sichern Konflikte
-- `CommitOutcomeUnknown` wird durch Readback der Rootslots und Vollvalidierung
-  des erwarteten Graphen aufgeloest
+- `CommitOutcomeUnknown` wird nur durch vollstaendigen Readback beider
+  Rootslots und aller benoetigten Graphrecords eindeutig als alt oder neu
+  aufgeloest
 - Zaehlerwert 0 bleibt reserviert; Ueberlauf wird vor Writes abgelehnt
 
 Eine eigene persistente `MutationSequence` wird nur dann nicht eingefuehrt,
@@ -142,12 +143,15 @@ Recordgroessen vollstaendig geprueft beziehungsweise vorbereitet. Der Ablauf:
 3. geaenderte Dokumente schreiben, ruecklesen und validieren;
 4. Manifest schreiben, ruecklesen und als Graph validieren;
 5. neuen Root schreiben;
-6. `CommitOutcomeUnknown` durch Readback bestimmen;
-7. Root und gesamten Zielgraphen ruecklesen und validieren;
-8. erfolgreichen Root-Commit als persistenten Linearisierungspunkt behandeln;
-9. vorbereiteten Snapshot ohne Allokation, Serialisierung, Validierung oder
+6. bei `CommitOutcomeUnknown` beide Rootslots und alle benoetigten Graphrecords
+   vollstaendig scannen und den Ausgang eindeutig alt oder neu bestimmen;
+7. falls der Scan nicht eindeutig abgeschlossen werden kann, in den stabilen
+   unbestimmten Commitzustand wechseln und den Erfolgsablauf abbrechen;
+8. Root und gesamten Zielgraphen ruecklesen und validieren;
+9. erfolgreichen Root-Commit als persistenten Linearisierungspunkt behandeln;
+10. vorbereiteten Snapshot ohne Allokation, Serialisierung, Validierung oder
    Reservierung atomar sichtbar machen;
-10. Mutation freigeben.
+11. Mutation freigeben.
 
 Leser sehen nur den vollstaendig alten oder neuen Snapshot. Fehler vor
 Root-Commit lassen kanonischen Graph und Runtime unveraendert. Stromausfall vor
@@ -158,12 +162,45 @@ unerwartete Vertragsverletzung erzeugt nur einen stabil typisierten
 `ConfigurationRuntimeFailure`, gibt keine weitere normale Konfigurationsruntime
 frei und fuehrt nicht zu automatischem Rollback.
 
-### Grenze zu #24
+### Unbestimmter Commitzustand
+
+Kann ein `CommitOutcomeUnknown` wegen `ReadError`, `CapacityError`, CRC-,
+Integritaets-, Semantik- oder vergleichbarem Storefehler nicht durch den
+vollstaendigen Aufloesungsscan bestimmt werden, entsteht ein stabil typisierter
+Zustand mit der verbindlichen Semantik von
+`ConfigurationCommitIndeterminate`. Der endgueltige Typname wird im
+freigegebenen #56-Plan festgelegt.
+
+In diesem Zustand:
+
+- wird weder alter noch neuer Graph als sicher kanonisch behauptet;
+- wird der vorbereitete Snapshot nicht publiziert;
+- wird keine normale Konfigurationsruntime weiter freigegeben;
+- bleiben weitere Mutationen und Slotwiederverwendung gesperrt;
+- erfolgt die Meldung an das `CONFIGURATION_SAFETY_INTEGRATION_GATE`;
+- gibt es keinen automatischen Rollback und keinen Factory-Fallback;
+- bleibt ein aktiver unveraenderlicher Laufschnappschuss unveraendert; #24
+  entscheidet seine systemweite Safetywirkung.
+
+Nur ein spaeterer vollstaendig erfolgreicher Scan beider Rootslots und aller
+benoetigten Graphrecords oder derselbe erfolgreiche Scan beim Neustart darf den
+Zustand eindeutig aufloesen. Bleibt der Scan unklar, bleibt der Dienst fail
+closed.
+
+### CONFIGURATION_SAFETY_INTEGRATION_GATE zu #24
 
 #56 definiert nur den typisierten Fehler und den fail-closed Zustand des
-Konfigurationsdienstes. Systemweite Fehlerklasse, persistente Verriegelung,
-`SAFE_BOOT`, Fehlerreset und reale Aktor-/GPIO-Sperren bleiben #24. Die spaetere
-#24-Integration konsumiert den Fehler ohne zyklische Implementierungsabhaengigkeit.
+Konfigurationsdienstes einschliesslich des unbestimmten Commitzustands.
+Systemweite Fehlerklasse, persistente Verriegelung, `SAFE_BOOT`, Fehlerreset und
+reale Aktor-/GPIO-Sperren bleiben #24. Die spaetere #24-Integration konsumiert
+die realen Producer-Vertraege ohne zyklische Implementierungsabhaengigkeit.
+
+#56 darf als Producer unabhaengig abgeschlossen werden. #24 darf aber nicht als
+vollstaendig abgeschlossen gelten, bevor `ConfigurationRuntimeFailure` und der
+unbestimmte Commitzustand zusammen mit den #57-Fehlern systemweit auf
+persistente Verriegelung, sichere Bootprioritaet, keine Aktorfreigabe und
+reproduzierbare Fehlerinjektion abgebildet und getestet sind. Wird der
+#24-Core zuerst gemergt, bleibt #24 bis zur Gate-Abnahme offen.
 
 ## Ausdruecklicher Nicht-Scope
 
@@ -224,7 +261,15 @@ Konfigurationsdienstes. Systemweite Fehlerklasse, persistente Verriegelung,
 ### Commit und Runtime-Publish
 
 - Fehler vor und nach jedem Dokument-, Manifest- und Rootwrite
-- `CommitOutcomeUnknown` fuer jeden Write mit Readback-Orakel
+- `CommitOutcomeUnknown` mit erfolgreichem Readback: eindeutig alt
+- `CommitOutcomeUnknown` mit erfolgreichem Readback: eindeutig neu
+- `CommitOutcomeUnknown` mit `ReadError` beziehungsweise `CapacityError`
+- CRC-, Integritaets- und Semantikfehler beim Aufloesungsscan
+- wiederholter fehlgeschlagener Scan
+- Neustart loest eindeutig alt oder neu auf beziehungsweise bleibt unklar
+- keine weitere Mutation oder Slotrotation im unbestimmten Zustand
+- kein Publish des vorbereiteten Snapshots im unbestimmten Zustand
+- Uebergabe an das `CONFIGURATION_SAFETY_INTEGRATION_GATE`
 - Ressourcen-, Kapazitaets- und Ueberlauffehler vor Root-Commit
 - alle falliblen Arbeiten vor Root-Commit nachweisbar abgeschlossen
 - Publish nach Root-Commit ohne Allokation, Serialisierung oder Validierung
@@ -250,8 +295,13 @@ Konfigurationsdienstes. Systemweite Fehlerklasse, persistente Verriegelung,
 - Alle falliblen Arbeiten liegen vor dem Root-Commit.
 - Publish danach ist nicht allokierend, nicht serialisierend und vertraglich
   nicht fehlschlagend.
+- Ein nicht aufloesbares `CommitOutcomeUnknown` bleibt bis zu einem
+  erfolgreichen Vollscan stabil typisiert fail closed.
+- Im unbestimmten Zustand erfolgen weder Publish, Mutation noch
+  Slotwiederverwendung.
 - Kein Pending-, Intent-, RunAssessment- oder Secretbaustein wurde eingefuehrt.
-- Grenzen zu #17 und #24 bleiben eingehalten.
+- Grenzen zu #17 und #24 sowie das verbindliche
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE` bleiben eingehalten.
 - Tests, Buildprofile, Quality Gates und Ressourcenvergleich sind bestanden.
 
 ## Git- und PR-Regeln

@@ -292,6 +292,14 @@ Anforderungen:
 - vor Root-Commit alle falliblen Plattform- und Ressourcenarbeiten abschliessen
 - nach Root-Commit nur nicht allokierenden, nicht fehlschlagenden Runtime-
   Snapshot veroeffentlichen
+- `CommitOutcomeUnknown` nur nach vollstaendigem Root-/Graph-Readback als
+  eindeutig alt oder neu aufloesen
+- bei nicht abschliessbarem Readback stabil typisiert fail closed bleiben:
+  kein Snapshot-Publish, keine normale Runtime, keine weitere Mutation oder
+  Slotwiederverwendung, kein Rollback und kein Factory-Fallback
+- unbestimmten Commitzustand sowie Konfigurations-, Integritaets- und
+  Verfuegbarkeitsfehler verbindlich ueber das
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE` in #24 integrieren
 - reale Geheimnisse und Authentifizierungsnachweise erst mit ihrem ersten
   produktiven Konsumenten in getrennten, typisierten und epochengebundenen
   Revisionsdomaenen einfuehren
@@ -313,6 +321,10 @@ Anforderungen:
 - [x] kein persistenter Pending-Zweig und kein Aktivierungsintent in R1
 - [x] fluechtige basis- und integritaetsgebundene Vorschau mit
       Konflikterkennung
+- [x] unbestimmter Root-Commit-Ausgang bleibt bis zum erfolgreichen Vollscan
+      fail closed
+- [x] nachgelagertes `CONFIGURATION_SAFETY_INTEGRATION_GATE` vor Abschluss von
+      #24
 - [x] kanonisches binaeres Envelope- und CRC-Wireformat
 - [x] reale Connectivity-/Authentication-Domaenen erst mit ihrem ersten
       produktiven Konsumenten

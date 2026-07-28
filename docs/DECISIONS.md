@@ -291,7 +291,16 @@
   persistenten Root-Commit vorbereitet; dieser Commit ist der persistente
   Linearisierungspunkt. Das anschliessende atomare Publish des vorbereiteten
   Runtime-Snapshots allokiert, serialisiert, validiert und reserviert nichts und
-  darf vertraglich nicht fehlschlagen. Release 1 besitzt weder persistente
+  darf vertraglich nicht fehlschlagen. Liefert der Root-Write
+  `CommitOutcomeUnknown` und kann ein vollstaendiger Readback beider Rootslots
+  und des Zielgraphen den persistenten Ausgang nicht eindeutig bestimmen,
+  bleibt der Konfigurationsdienst in einem stabil typisierten unbestimmten
+  Commitzustand fail closed. Er publiziert keinen vorbereiteten Snapshot,
+  erlaubt keine weitere Mutation oder Slotwiederverwendung und behauptet weder
+  alten noch neuen Graphen als kanonisch. Nur ein spaeterer vollstaendig
+  erfolgreicher Scan oder derselbe Scan beim Neustart darf den Zustand
+  eindeutig aufloesen. Es gibt weder automatischen Rollback noch
+  Factory-Fallback. Release 1 besitzt weder persistente
   Pending-Roots noch Aktivierungsintents noch vorbereitete leere Connectivity-
   oder Authentication-Manifeste, -Roots oder -Slots. Bootstrap und
   wiederaufnehmbarer Werksreset verwenden eine `StorageEpoch`; normale
@@ -306,7 +315,10 @@
 - **Folgen:** #16 bleibt Tracking-Issue; #56 uebernimmt Active/Fallback,
   Graphvalidierung, fluechtige Vorschau und Runtimeaktivierung, #57 Bootstrap,
   `StorageEpoch`, Korruptionssperre und Werksreset. #17 und #24 werden nur ueber
-  ihre tatsaechlichen fachlichen Vertraege gekoppelt. Ein eigener persistenter
+  ihre tatsaechlichen fachlichen Vertraege und das nachgelagerte
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE` gekoppelt. #24 darf nicht als
+  vollstaendig abgeschlossen gelten, bevor die realen Fehlerproducer aus #56
+  und #57 systemweit integriert und getestet sind. Ein eigener persistenter
   globaler Mutationszaehler ist kein beschlossener Bestandteil von Release 1;
   seine Notwendigkeit bleibt bis zum Detailplan von #56
   `FINAL_SELECTION_PENDING`. ADR-010, ADR-013 und ADR-016 bleiben unveraendert

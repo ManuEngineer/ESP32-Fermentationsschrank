@@ -40,3 +40,10 @@ Der Snapshot-Status bleibt bis zum Merge der Variante-B-Spezifikation und dem
 separat ownerfreigegebenen Live-Issue-Metadatenschritt unveraendert. Danach ist
 #56 fachlich `READY`; #57 bleibt bis zum Merge von #56
 `BLOCKED_DEPENDENCY`.
+
+#56 und #57 duerfen ihre typisierten Konfigurationsfehler unabhaengig von #24
+produzieren. #24 bleibt jedoch bis zur Abnahme des nachgelagerten
+`CONFIGURATION_SAFETY_INTEGRATION_GATE` offen; erst dann sind persistente
+Verriegelung, `SAFE_BOOT`, Aktorsperre und Fehlerinjektion gegen die realen
+Producer-Vertraege integriert. Dies aendert keinen Snapshot-Status in dieser
+Tabelle und erzeugt keine zyklische Abhaengigkeit.

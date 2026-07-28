@@ -53,6 +53,9 @@ Spaeter datierte akzeptierte ADRs haben gemaess
 - Ein unveraenderlicher `RuntimeConfigurationSnapshot` wird nach Root-Commit
   nicht allokierend, nicht serialisierend und vertraglich nicht fehlschlagend
   publiziert.
+- Ein `CommitOutcomeUnknown`, dessen vollstaendiger Root-/Graph-Readback nicht
+  eindeutig alt oder neu bestimmen kann, fuehrt zu einem stabil typisierten
+  fail-closed Zustand ohne Publish, weitere Mutation oder Slotwiederverwendung.
 - Bootstrap initialisiert nur nachweislich fabrikneuen, vollstaendig
   fehlerfrei lesbaren Speicher.
 - `StorageEpoch`, Korruptionssperre und wiederaufnehmbarer Werksreset sind R1.
@@ -152,10 +155,24 @@ vorbereitet.
 ## Grenze zu #24
 
 #56/#57 liefern bei Konfigurations-, Integritaets- oder
-Publishvertragsfehlern nur stabile typisierte Fehlerdaten und keine
-Runtimefreigabe. Systemweite Fehlerklasse, persistente Verriegelung,
-`SAFE_BOOT`, Fehlerresetpolitik und reale Aktor-/GPIO-Sperren bleiben #24.
-#24 erhaelt keine neue pauschale Abhaengigkeit auf #16, #56 oder #57.
+Publishvertragsfehlern sowie einem unbestimmten Root-Commitzustand nur stabile
+typisierte Fehlerdaten und keine Runtimefreigabe. Systemweite Fehlerklasse,
+persistente Verriegelung, `SAFE_BOOT`, Fehlerresetpolitik und reale
+Aktor-/GPIO-Sperren bleiben #24. #24 erhaelt keine neue pauschale oder zyklische
+Abhaengigkeit auf #16, #56 oder #57.
+
+Das nachgelagerte `CONFIGURATION_SAFETY_INTEGRATION_GATE` ist ein verbindliches
+Abschlusskriterium: #56 produziert `ConfigurationRuntimeFailure` und den
+unbestimmten Commitzustand; #57 produziert `ConfigurationUnavailable` und
+`ConfigurationIntegrityFailure`; #24 muss diese realen Eingaben auf
+persistente Verriegelung, sichere Bootprioritaet beziehungsweise `SAFE_BOOT`,
+keine normale Aktorfreigabe und reproduzierbare Fehlerinjektion abbilden.
+
+#56/#57 duerfen ihre Producer-Vertraege und #24 darf seinen Fehlerkern
+unabhaengig umsetzen. Wird der #24-Core zuerst gemergt, bleibt #24 jedoch offen,
+bis die Gate-Integration einschliesslich Neustart-, Verriegelungs- und
+Recoverytests bestanden ist. Reale Aktoradapter duerfen das Gate nicht
+umgehen.
 
 ## Ausdruecklicher Nicht-Scope
 
@@ -177,6 +194,11 @@ Issue #16 wird erst abgeschlossen, wenn:
   konkretes Recovery-Orakel besitzen;
 - Runtime vor dem Root-Commit vollstaendig vorbereitet und danach nur atomar
   publiziert wird;
+- `CommitOutcomeUnknown` mit altem, neuem und nicht aufloesbarem Readback sowie
+  Neustart in eindeutigem und weiterhin unklarem Zustand getestet ist;
+- der unbestimmte Zustand Publish, weitere Mutation und Slotrotation sperrt;
+- das `CONFIGURATION_SAFETY_INTEGRATION_GATE` als verpflichtender Abschluss von
+  #24 mit allen realen Producer-Vertraegen dokumentiert und getestet ist;
 - Touchkalibrierung beim Werksreset erhalten bleibt;
 - unbekannte neuere Schemas ohne Teilwirkung abgelehnt werden und der additive
   Ausbaupfad ohne Dummyinfrastruktur nachgewiesen ist;

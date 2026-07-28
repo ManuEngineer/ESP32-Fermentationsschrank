@@ -573,6 +573,39 @@ Ausgehend von einem kanonischen Root mit Active A und Fallback F:
 Verbindliche Tests fuehren mindestens fuenf aufeinanderfolgende Active-Commits
 durch und beweisen, dass die Slotrotation nicht vorzeitig blockiert.
 
+### Nicht aufloesbares Root-Commit-Ergebnis
+
+Liefert der Root-Write `CommitOutcomeUnknown`, muss die laufende Mutation beide
+Rootslots und alle fuer den erwarteten Zielgraphen benoetigten Records
+vollstaendig ruecklesen sowie technisch und fachlich validieren. Ergibt dieser
+Scan eindeutig den alten oder den neuen kanonischen Graphen, wird genau dieser
+Ausgang verwendet.
+
+Kann der Scan wegen `ReadError`, `CapacityError`, Integritaetsfehler,
+semantischem Graphfehler oder eines vergleichbaren Storefehlers nicht
+vollstaendig und eindeutig abgeschlossen werden, entsteht ein stabil
+typisierter unbestimmter Commitzustand. Der spaetere #56-Plan legt den
+endgueltigen Typnamen fest; `ConfigurationCommitIndeterminate` bezeichnet hier
+die verbindliche Semantik.
+
+In diesem Zustand gilt:
+
+- weder alter noch neuer persistenter Graph wird als sicher kanonisch
+  behauptet;
+- der vorbereitete neue `RuntimeConfigurationSnapshot` wird nicht publiziert;
+- keine normale Konfigurationsruntime wird weiter freigegeben;
+- weitere Konfigurationsmutationen und jede Slotwiederverwendung sind gesperrt;
+- der Zustand wird an das `CONFIGURATION_SAFETY_INTEGRATION_GATE` gemeldet;
+- es gibt weder automatischen Rollback noch Factory-Fallback;
+- ein unveraenderlicher aktiver Laufschnappschuss wird nicht still
+  umgeschrieben; seine systemweite Safetywirkung bleibt #24.
+
+Aufloesung ist nur durch einen spaeteren vollstaendig erfolgreichen Scan beider
+Rootslots und aller benoetigten Graphrecords oder durch einen Neustart erlaubt,
+bei dem der normale Boot-/Recoverypfad denselben Scan erfolgreich abschliesst.
+Bleibt das Ergebnis unklar, bleibt der Dienst fail closed und ohne normale
+Runtimefreigabe.
+
 ### Keine persistente Voraktivierung in Release 1
 
 Release 1 besitzt keinen persistenten Pending-Zweig, keinen `PendingRoot`, kein
@@ -683,7 +716,11 @@ vorbereitete Snapshot nicht allokierend, nicht serialisierend und vertraglich
 nicht fehlschlagend atomar sichtbar. Leser sehen nur die vollstaendig alte oder
 neue Generation.
 
-Ein Fehler vor Root-Commit laesst alte Konfiguration und Snapshot unveraendert.
+Ein eindeutig festgestellter Fehler vor Root-Commit laesst alte Konfiguration
+und Snapshot unveraendert. Ein nicht aufloesbares
+`CommitOutcomeUnknown` folgt dagegen dem stabilen fail-closed Zustand
+`ConfigurationCommitIndeterminate`; es darf nicht als Fehler vor dem Commit
+umgedeutet werden.
 Eine unerwartete Publish-Vertragsverletzung nach Root-Commit verursacht keinen
 automatischen Rollback. Der #16-Vertrag sieht dafuer nur einen typisierten
 `ConfigurationRuntimeFailure` vor; die Umsetzung in #56 verhindert weitere
@@ -698,6 +735,35 @@ Vertragsverletzungsfall fachlich nicht betriebsbereit.
 Stromausfall vor Root-Commit laedt den alten Graphen; nach dem dauerhaft
 erfolgreichen Root-Commit den neuen. Es existiert kein nachgelagerter
 persistenter Aktivierungsintent.
+
+## Nachgelagertes CONFIGURATION_SAFETY_INTEGRATION_GATE
+
+Zwischen #24 und #56/#57 entsteht keine zyklische oder pauschale
+Implementierungsabhaengigkeit. Stattdessen ist vor Abschluss des integrierten
+Safetykerns das verbindliche `CONFIGURATION_SAFETY_INTEGRATION_GATE` zu
+erfuellen:
+
+- #56 produziert `ConfigurationRuntimeFailure`, den fail-closed Zustand des
+  Konfigurationsdienstes und den unbestimmten Commitzustand;
+- #57 produziert `ConfigurationUnavailable` und
+  `ConfigurationIntegrityFailure` und gibt in diesen Faellen keine Runtime
+  frei;
+- #24 konsumiert diese realen Eingaben und bildet sie auf persistente
+  Verriegelung, sichere Bootprioritaet beziehungsweise `SAFE_BOOT`, keine
+  normale Aktorfreigabe und reproduzierbare Fehlerinjektion ab.
+
+#56 und #57 duerfen ihre typisierten Producer-Vertraege unabhaengig umsetzen
+und abschliessen; #24 darf seinen Fehlerkern parallel vorbereiten. #24 darf
+aber nicht als vollstaendig abgeschlossen gelten, bevor die realen Producer
+integriert und getestet sind. Wird der #24-Core zuerst gemergt, bleibt #24 bis
+zur Gate-Abnahme offen. Reale Aktoradapter und produktive Aktorfreigabe duerfen
+das Gate nicht umgehen.
+
+Die Gate-Tests umfassen mindestens `ConfigurationRuntimeFailure`,
+`ConfigurationUnavailable`, `ConfigurationIntegrityFailure`, den unbestimmten
+Commitzustand, Neustart mit erhaltener notwendiger Verriegelung, keine
+Aktorfreigabe bei unbekanntem oder unaufgeloestem Konfigurationszustand sowie
+Recovery ausschliesslich nach dem #24-Fehlerresetvertrag.
 
 ## Spaetere persistente Connectivity- und Authentication-Domaenen
 
@@ -907,6 +973,13 @@ Die vollstaendige Matrix umfasst nach Abschluss aller Teilissues mindestens:
 - Manifest- und Root-Slotrotation bis ueber die erste Wiederverwendung hinaus
 - technische und fachliche Graphkorruption an Active und Fallback
 - Fehler bei Dokument-, Manifest- und Root-Write sowie Readback
+- `CommitOutcomeUnknown` mit eindeutig altem beziehungsweise neuem Readback
+- `CommitOutcomeUnknown` mit `ReadError`, `CapacityError`, CRC- oder
+  Semantikfehler beim Aufloesungsscan
+- wiederholter erfolgloser Aufloesungsscan und Neustart mit eindeutigem
+  beziehungsweise weiterhin unklarem Ergebnis
+- im unbestimmten Commitzustand kein Publish, keine weitere Mutation und keine
+  Slotrotation
 - Runtimevorbereitung vor dem Root-Commit
 - Neustart unmittelbar vor und nach dem Root-Commit
 - unerwartete Verletzung des nicht fehlschlagenden Publish-Vertrags
@@ -924,6 +997,8 @@ Immer gelten:
 - kein Pending, Aktivierungsintent oder vorbereiteter paralleler Active-Zweig
 - keine Behandlung beschaedigter Daten als leer
 - keine Konfigurationsfreigabe bei unklarem Zustand
+- Uebergabe aller typisierten Konfigurationsfehler an das
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE`
 - Touchkalibrierung bleibt beim normalen Werksreset erhalten
 
 Korruptionstests unterscheiden rohe Byteaenderung ohne CRC-Anpassung und
