@@ -91,13 +91,19 @@ struct ConfigurationGraphBranch {
     std::string canonicalManifestRecordBytes;
 };
 
+struct ConfigurationGraphMetadataBranch {
+    ConfigurationManifestReference manifestReference;
+    ConfigurationManifest manifest;
+    std::string canonicalManifestRecordBytes;
+};
+
 struct LoadedConfigurationGraph {
     device_platform::SlotId rootSlot;
     ConfigurationRootSequence rootSequence;
     ConfigurationRootRecord root;
     std::string canonicalRootRecordBytes;
     ConfigurationGraphBranch active;
-    std::optional<ConfigurationGraphBranch> fallback;
+    std::optional<ConfigurationGraphMetadataBranch> fallback;
     bool selectedFallback{false};
 };
 

@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <limits>
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -26,15 +25,14 @@ struct StoredRecord {
     device_platform::StorageEnvelope envelope;
 };
 
-struct GroupReadResult {
-    ConfigurationScanStatus status{ConfigurationScanStatus::Success};
-    std::vector<StoredRecord> records;
-    std::uint64_t highWater{0U};
-    bool newerSchema{false};
-};
-
 struct MetadataScanResult {
     ConfigurationScanStatus status{ConfigurationScanStatus::Success};
+    struct RecordDescriptor {
+        device_platform::SlotId slot;
+        std::uint64_t versionValue;
+        std::uint32_t schemaVersion;
+    };
+    std::vector<RecordDescriptor> records;
     std::uint64_t highWater{0U};
     bool newerSchema{false};
 };
@@ -54,60 +52,6 @@ ConfigurationScanStatus mapReadStatus(
 }
 
 template <std::size_t N>
-GroupReadResult readGroup(const device_platform::IStateStore& store,
-                          const std::array<const char*, N>& keys,
-                          device_platform::RecordTypeId expectedRecordType,
-                          std::uint32_t currentSchema,
-                          device_platform::StorageEpoch epoch,
-                          std::size_t maxBytes,
-                          ConfigurationGraphDiagnostics& diagnostics) {
-    GroupReadResult result;
-    std::map<std::uint64_t, std::string> identities;
-    result.records.reserve(N);
-    for (std::size_t index = 0U; index < N; ++index) {
-        auto read = store.read(key(keys[index]), maxBytes);
-        if (read.status == device_platform::StateStoreReadStatus::NotFound) {
-            ++diagnostics.notFoundSlots;
-            continue;
-        }
-        if (read.status != device_platform::StateStoreReadStatus::Success) {
-            result.status = mapReadStatus(read.status);
-            return result;
-        }
-        auto decoded = device_platform::decodeEnvelope(read.value);
-        if (!decoded.envelope.has_value()) {
-            ++diagnostics.invalidCandidates;
-            continue;
-        }
-        auto& envelope = *decoded.envelope;
-        if (envelope.recordTypeId != expectedRecordType ||
-            envelope.storageEpoch != epoch) {
-            ++diagnostics.invalidCandidates;
-            continue;
-        }
-        result.highWater = std::max(result.highWater, envelope.versionValue);
-        if (envelope.schemaVersion > currentSchema) {
-            result.newerSchema = true;
-        }
-        const auto existing = identities.find(envelope.versionValue);
-        if (existing != identities.end()) {
-            if (existing->second != read.value) {
-                result.status =
-                    ConfigurationScanStatus::ConfigurationGraphIntegrityFailure;
-                return result;
-            }
-            ++diagnostics.exactDuplicateRecords;
-        } else {
-            identities.emplace(envelope.versionValue, read.value);
-        }
-        result.records.push_back(
-            {device_platform::SlotId(static_cast<std::uint32_t>(index)),
-             std::move(read.value), std::move(envelope)});
-    }
-    return result;
-}
-
-template <std::size_t N>
 MetadataScanResult scanGroupMetadata(
     const device_platform::IStateStore& store,
     const std::array<const char*, N>& keys,
@@ -115,7 +59,7 @@ MetadataScanResult scanGroupMetadata(
     std::uint32_t currentSchema, device_platform::StorageEpoch epoch,
     std::size_t maxBytes, ConfigurationGraphDiagnostics& diagnostics) {
     MetadataScanResult result;
-    std::map<std::uint64_t, std::size_t> identities;
+    result.records.reserve(N);
     for (std::size_t index = 0U; index < N; ++index) {
         auto read = store.read(key(keys[index]), maxBytes);
         if (read.status == device_platform::StateStoreReadStatus::NotFound) {
@@ -141,32 +85,31 @@ MetadataScanResult scanGroupMetadata(
         result.highWater = std::max(result.highWater, metadata.versionValue);
         result.newerSchema =
             result.newerSchema || metadata.schemaVersion > currentSchema;
-        const auto existing = identities.find(metadata.versionValue);
-        if (existing == identities.end()) {
-            identities.emplace(metadata.versionValue, index);
-            continue;
+        const auto existing = std::find_if(
+            result.records.begin(), result.records.end(),
+            [&metadata](const MetadataScanResult::RecordDescriptor& record) {
+                return record.versionValue == metadata.versionValue;
+            });
+        if (existing != result.records.end()) {
+            const auto previous =
+                store.read(key(keys[existing->slot.value()]), maxBytes);
+            if (previous.status !=
+                device_platform::StateStoreReadStatus::Success) {
+                result.status = mapReadStatus(previous.status);
+                return result;
+            }
+            if (previous.value != read.value) {
+                result.status =
+                    ConfigurationScanStatus::ConfigurationGraphIntegrityFailure;
+                return result;
+            }
+            ++diagnostics.exactDuplicateRecords;
         }
-        const auto previous = store.read(key(keys[existing->second]), maxBytes);
-        if (previous.status != device_platform::StateStoreReadStatus::Success) {
-            result.status = mapReadStatus(previous.status);
-            return result;
-        }
-        if (previous.value != read.value) {
-            result.status =
-                ConfigurationScanStatus::ConfigurationGraphIntegrityFailure;
-            return result;
-        }
-        ++diagnostics.exactDuplicateRecords;
+        result.records.push_back(
+            {device_platform::SlotId(static_cast<std::uint32_t>(index)),
+             metadata.versionValue, metadata.schemaVersion});
     }
     return result;
-}
-
-const StoredRecord* findRecord(const std::vector<StoredRecord>& records,
-                               device_platform::SlotId slot) {
-    const auto found = std::find_if(
-        records.begin(), records.end(),
-        [slot](const StoredRecord& record) { return record.slot == slot; });
-    return found == records.end() ? nullptr : &*found;
 }
 
 template <typename Version>
@@ -211,9 +154,9 @@ ConfigurationScanStatus validateStoredReference(
     return ConfigurationScanStatus::Success;
 }
 
+template <typename Branch>
 ConfigurationScanStatus validateExpectedBranch(
-    const device_platform::IStateStore& store,
-    const ConfigurationGraphBranch& branch) {
+    const device_platform::IStateStore& store, const Branch& branch) {
     auto status = validateStoredReference(
         store, configuration_storage_contract::kConfigurationManifestSlotKeys,
         branch.manifestReference,
@@ -241,57 +184,179 @@ ConfigurationScanStatus validateExpectedBranch(
         configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U);
 }
 
-std::optional<ConfigurationGraphBranch> loadBranch(
-    const ConfigurationManifestReference& reference,
-    const std::vector<StoredRecord>& manifests,
-    const std::vector<StoredRecord>& users,
-    const std::vector<StoredRecord>& services,
-    const std::vector<StoredRecord>& catalogs,
-    const device_platform::ITimeZoneResolver& resolver) {
-    const auto* manifestRecord = findRecord(manifests, reference.slot);
-    if (manifestRecord == nullptr ||
-        !referenceMatches(reference, *manifestRecord) ||
-        manifestRecord->envelope.schemaVersion !=
-            kConfigurationManifestSchemaVersion1) {
-        return std::nullopt;
+struct StoredRecordLoadResult {
+    ConfigurationScanStatus status{
+        ConfigurationScanStatus::ConfigurationGraphIntegrityFailure};
+    std::optional<StoredRecord> record;
+};
+
+template <typename Version, std::size_t N>
+StoredRecordLoadResult loadReferencedRecord(
+    const device_platform::IStateStore& store,
+    const std::array<const char*, N>& keys,
+    const ConfigurationRecordReference<Version>& reference,
+    std::size_t maxBytes) {
+    if (reference.slot.value() >= N) {
+        return {};
     }
-    auto decodedManifest =
-        decodeConfigurationManifestPayload(manifestRecord->envelope.payload);
+    auto read = store.read(key(keys[reference.slot.value()]), maxBytes);
+    if (read.status == device_platform::StateStoreReadStatus::NotFound) {
+        return {};
+    }
+    if (read.status != device_platform::StateStoreReadStatus::Success) {
+        return {mapReadStatus(read.status), std::nullopt};
+    }
+    auto decoded = device_platform::decodeEnvelope(read.value);
+    if (!decoded.envelope.has_value()) {
+        return {};
+    }
+    StoredRecord record{reference.slot, std::move(read.value),
+                        std::move(*decoded.envelope)};
+    if (!referenceMatches(reference, record)) {
+        return {};
+    }
+    return {ConfigurationScanStatus::Success, std::move(record)};
+}
+
+struct LoadedBranchParts {
+    ConfigurationManifest manifest;
+    std::string canonicalManifestRecordBytes;
+    std::shared_ptr<const UserConfiguration> userConfiguration;
+    std::shared_ptr<const ServiceConfiguration> serviceConfiguration;
+    std::shared_ptr<const ProgramCatalog> programCatalog;
+};
+
+struct LoadedBranchPartsResult {
+    ConfigurationScanStatus status{
+        ConfigurationScanStatus::ConfigurationGraphIntegrityFailure};
+    std::optional<LoadedBranchParts> parts;
+};
+
+LoadedBranchPartsResult loadBranchParts(
+    const ConfigurationManifestReference& reference,
+    const device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& resolver) {
+    auto manifestRecord = loadReferencedRecord(
+        store, configuration_storage_contract::kConfigurationManifestSlotKeys,
+        reference,
+        configuration_limits::kMaximumConfigurationManifestEnvelopeBytes);
+    if (!manifestRecord.record.has_value()) {
+        return {manifestRecord.status, std::nullopt};
+    }
+    if (manifestRecord.record->envelope.schemaVersion !=
+        kConfigurationManifestSchemaVersion1) {
+        return {};
+    }
+    auto decodedManifest = decodeConfigurationManifestPayload(
+        manifestRecord.record->envelope.payload);
     if (!decodedManifest.value.has_value()) {
-        return std::nullopt;
+        return {};
     }
     const auto manifest = *decodedManifest.value;
+    auto manifestBytes = std::move(manifestRecord.record->bytes);
+    manifestRecord.record.reset();
 
-    const auto* userRecord = findRecord(users, manifest.userConfiguration.slot);
-    const auto* serviceRecord =
-        findRecord(services, manifest.serviceConfiguration.slot);
-    const auto* catalogRecord =
-        findRecord(catalogs, manifest.programCatalog.slot);
-    if (userRecord == nullptr || serviceRecord == nullptr ||
-        catalogRecord == nullptr ||
-        !referenceMatches(manifest.userConfiguration, *userRecord) ||
-        !referenceMatches(manifest.serviceConfiguration, *serviceRecord) ||
-        !referenceMatches(manifest.programCatalog, *catalogRecord)) {
-        return std::nullopt;
+    std::shared_ptr<const UserConfiguration> user;
+    {
+        auto record = loadReferencedRecord(
+            store, configuration_storage_contract::kUserConfigurationSlotKeys,
+            manifest.userConfiguration,
+            configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U);
+        if (!record.record.has_value()) {
+            return {record.status, std::nullopt};
+        }
+        auto decoded = decodeUserConfigurationPayload(
+            record.record->envelope.schemaVersion,
+            record.record->envelope.payload, resolver);
+        if (!decoded.document.has_value()) {
+            return {};
+        }
+        user = std::make_shared<const UserConfiguration>(
+            std::move(*decoded.document));
     }
-    auto user =
-        decodeUserConfigurationPayload(userRecord->envelope.schemaVersion,
-                                       userRecord->envelope.payload, resolver);
-    auto service = decodeServiceConfigurationPayload(
-        serviceRecord->envelope.schemaVersion, serviceRecord->envelope.payload);
-    auto catalog = decodeProgramCatalogPayload(
-        catalogRecord->envelope.schemaVersion, catalogRecord->envelope.payload);
-    if (!user.document.has_value() || !service.document.has_value() ||
-        !catalog.document.has_value()) {
-        return std::nullopt;
+    std::shared_ptr<const ServiceConfiguration> service;
+    {
+        auto record = loadReferencedRecord(
+            store,
+            configuration_storage_contract::kServiceConfigurationSlotKeys,
+            manifest.serviceConfiguration, 45U);
+        if (!record.record.has_value()) {
+            return {record.status, std::nullopt};
+        }
+        auto decoded = decodeServiceConfigurationPayload(
+            record.record->envelope.schemaVersion,
+            record.record->envelope.payload);
+        if (!decoded.document.has_value()) {
+            return {};
+        }
+        service =
+            std::make_shared<const ServiceConfiguration>(*decoded.document);
     }
-    return ConfigurationGraphBranch{
-        reference,
-        manifest,
-        std::make_shared<const UserConfiguration>(std::move(*user.document)),
-        std::make_shared<const ServiceConfiguration>(*service.document),
-        std::make_shared<const ProgramCatalog>(std::move(*catalog.document)),
-        manifestRecord->bytes};
+    std::shared_ptr<const ProgramCatalog> catalog;
+    {
+        auto record = loadReferencedRecord(
+            store, configuration_storage_contract::kProgramCatalogSlotKeys,
+            manifest.programCatalog,
+            configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U);
+        if (!record.record.has_value()) {
+            return {record.status, std::nullopt};
+        }
+        auto decoded =
+            decodeProgramCatalogPayload(record.record->envelope.schemaVersion,
+                                        record.record->envelope.payload);
+        if (!decoded.document.has_value()) {
+            return {};
+        }
+        catalog = std::make_shared<const ProgramCatalog>(
+            std::move(*decoded.document));
+    }
+    return {
+        ConfigurationScanStatus::Success,
+        LoadedBranchParts{manifest, std::move(manifestBytes), std::move(user),
+                          std::move(service), std::move(catalog)}};
+}
+
+struct LoadedBranchResult {
+    ConfigurationScanStatus status{
+        ConfigurationScanStatus::ConfigurationGraphIntegrityFailure};
+    std::optional<ConfigurationGraphBranch> branch;
+};
+
+LoadedBranchResult loadBranch(
+    const ConfigurationManifestReference& reference,
+    const device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& resolver) {
+    auto parts = loadBranchParts(reference, store, resolver);
+    if (!parts.parts.has_value()) {
+        return {parts.status, std::nullopt};
+    }
+    return {ConfigurationScanStatus::Success,
+            ConfigurationGraphBranch{
+                reference, parts.parts->manifest,
+                std::move(parts.parts->userConfiguration),
+                std::move(parts.parts->serviceConfiguration),
+                std::move(parts.parts->programCatalog),
+                std::move(parts.parts->canonicalManifestRecordBytes)}};
+}
+
+struct MetadataBranchResult {
+    ConfigurationScanStatus status{
+        ConfigurationScanStatus::ConfigurationGraphIntegrityFailure};
+    std::optional<ConfigurationGraphMetadataBranch> branch;
+};
+
+MetadataBranchResult validateMetadataBranch(
+    const ConfigurationManifestReference& reference,
+    const device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& resolver) {
+    auto parts = loadBranchParts(reference, store, resolver);
+    if (!parts.parts.has_value()) {
+        return {parts.status, std::nullopt};
+    }
+    return {ConfigurationScanStatus::Success,
+            ConfigurationGraphMetadataBranch{
+                reference, parts.parts->manifest,
+                std::move(parts.parts->canonicalManifestRecordBytes)}};
 }
 
 ConfigurationGraphLoadStatus toLoadStatus(ConfigurationScanStatus status,
@@ -333,9 +398,9 @@ std::optional<device_platform::SlotId> chooseSlot(
     return std::nullopt;
 }
 
-void protectBranch(const ConfigurationGraphBranch& branch,
-                   std::array<bool, 4>& users, std::array<bool, 4>& services,
-                   std::array<bool, 4>& catalogs,
+template <typename Branch>
+void protectBranch(const Branch& branch, std::array<bool, 4>& users,
+                   std::array<bool, 4>& services, std::array<bool, 4>& catalogs,
                    std::array<bool, 3>& manifests) {
     users[branch.manifest.userConfiguration.slot.value()] = true;
     services[branch.manifest.serviceConfiguration.slot.value()] = true;
@@ -397,10 +462,11 @@ ConfigurationCommitExecutionResult mapPreRootWrite(
 
 }  // namespace
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
     device_platform::StorageEpoch storageEpoch) const {
     ConfigurationGraphLoadResult result;
-    auto roots = readGroup(
+    auto roots = scanGroupMetadata(
         store_, configuration_storage_contract::kConfigurationRootSlotKeys,
         configuration_storage_contract::kConfigurationRootRecordType,
         kConfigurationRootSchemaVersion1, storageEpoch,
@@ -410,23 +476,23 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
         result.status = toLoadStatus(roots.status, true);
         return result;
     }
-    auto users = readGroup(
+    auto users = scanGroupMetadata(
         store_, configuration_storage_contract::kUserConfigurationSlotKeys,
         configuration_storage_contract::kUserConfigurationRecordType, 1U,
         storageEpoch,
         configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
         result.diagnostics);
-    auto services = readGroup(
+    auto services = scanGroupMetadata(
         store_, configuration_storage_contract::kServiceConfigurationSlotKeys,
         configuration_storage_contract::kServiceConfigurationRecordType, 1U,
         storageEpoch, 45U, result.diagnostics);
-    auto catalogs = readGroup(
+    auto catalogs = scanGroupMetadata(
         store_, configuration_storage_contract::kProgramCatalogSlotKeys,
         configuration_storage_contract::kProgramCatalogRecordType, 1U,
         storageEpoch,
         configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
         result.diagnostics);
-    auto manifests = readGroup(
+    auto manifests = scanGroupMetadata(
         store_, configuration_storage_contract::kConfigurationManifestSlotKeys,
         configuration_storage_contract::kConfigurationManifestRecordType,
         kConfigurationManifestSchemaVersion1, storageEpoch,
@@ -443,47 +509,83 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
             ConfigurationGraphLoadStatus::ConfigurationGraphUnavailable;
         return result;
     }
-    std::sort(
-        roots.records.begin(), roots.records.end(),
-        [](const StoredRecord& left, const StoredRecord& right) {
-            if (left.envelope.versionValue != right.envelope.versionValue) {
-                return left.envelope.versionValue > right.envelope.versionValue;
-            }
-            return left.slot.value() < right.slot.value();
-        });
+    std::sort(roots.records.begin(), roots.records.end(),
+              [](const MetadataScanResult::RecordDescriptor& left,
+                 const MetadataScanResult::RecordDescriptor& right) {
+                  if (left.versionValue != right.versionValue) {
+                      return left.versionValue > right.versionValue;
+                  }
+                  return left.slot.value() < right.slot.value();
+              });
     if (roots.records.size() > 1U &&
-        roots.records[0].envelope.versionValue ==
-            roots.records[1].envelope.versionValue &&
-        roots.records[0].bytes == roots.records[1].bytes) {
+        roots.records[0].versionValue == roots.records[1].versionValue) {
         result.diagnostics.identicalRootTie = true;
     }
 
-    for (const auto& rootRecord : roots.records) {
-        if (rootRecord.envelope.schemaVersion !=
-            kConfigurationRootSchemaVersion1) {
+    for (const auto& rootDescriptor : roots.records) {
+        if (rootDescriptor.schemaVersion != kConfigurationRootSchemaVersion1) {
+            ++result.diagnostics.invalidCandidates;
+            continue;
+        }
+        auto rootRead = store_.read(
+            key(configuration_storage_contract::kConfigurationRootSlotKeys
+                    [rootDescriptor.slot.value()]),
+            configuration_limits::kMaximumConfigurationRootEnvelopeBytes);
+        if (rootRead.status != device_platform::StateStoreReadStatus::Success) {
+            result.status = toLoadStatus(mapReadStatus(rootRead.status), true);
+            return result;
+        }
+        auto rootEnvelope = device_platform::decodeEnvelope(rootRead.value);
+        if (!rootEnvelope.envelope.has_value()) {
             ++result.diagnostics.invalidCandidates;
             continue;
         }
         auto decodedRoot =
-            decodeConfigurationRootPayload(rootRecord.envelope.payload);
+            decodeConfigurationRootPayload(rootEnvelope.envelope->payload);
         if (!decodedRoot.value.has_value()) {
             ++result.diagnostics.invalidCandidates;
             continue;
         }
         const auto root = *decodedRoot.value;
-        auto active =
-            loadBranch(root.active, manifests.records, users.records,
-                       services.records, catalogs.records, timeZoneResolver_);
-        std::optional<ConfigurationGraphBranch> fallback;
+        auto canonicalRootBytes = std::move(rootRead.value);
+        rootEnvelope.envelope.reset();
+        auto activeResult = loadBranch(root.active, store_, timeZoneResolver_);
+        if (activeResult.status == ConfigurationScanStatus::ReadError ||
+            activeResult.status == ConfigurationScanStatus::CapacityError) {
+            result.status = toLoadStatus(activeResult.status, false);
+            return result;
+        }
+        auto active = std::move(activeResult.branch);
+        std::optional<ConfigurationGraphMetadataBranch> fallback;
         if (root.fallback.has_value()) {
-            fallback = loadBranch(*root.fallback, manifests.records,
-                                  users.records, services.records,
-                                  catalogs.records, timeZoneResolver_);
+            if (active.has_value()) {
+                auto fallbackResult = validateMetadataBranch(
+                    *root.fallback, store_, timeZoneResolver_);
+                if (fallbackResult.status ==
+                        ConfigurationScanStatus::ReadError ||
+                    fallbackResult.status ==
+                        ConfigurationScanStatus::CapacityError) {
+                    result.status = toLoadStatus(fallbackResult.status, false);
+                    return result;
+                }
+                fallback = std::move(fallbackResult.branch);
+            } else {
+                auto promotedResult =
+                    loadBranch(*root.fallback, store_, timeZoneResolver_);
+                if (promotedResult.status ==
+                        ConfigurationScanStatus::ReadError ||
+                    promotedResult.status ==
+                        ConfigurationScanStatus::CapacityError) {
+                    result.status = toLoadStatus(promotedResult.status, false);
+                    return result;
+                }
+                active = std::move(promotedResult.branch);
+            }
         }
         bool selectedFallback = false;
-        if (!active.has_value() && fallback.has_value()) {
-            active = *fallback;
-            fallback.reset();
+        if (active.has_value() && !fallback.has_value() &&
+            root.fallback.has_value() &&
+            active->manifestReference == *root.fallback) {
             selectedFallback = true;
             result.diagnostics.fallbackUsed = true;
         } else if (active.has_value() && root.fallback.has_value() &&
@@ -498,10 +600,10 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
         result.status =
             ConfigurationGraphLoadStatus::ConfigurationGraphAvailable;
         result.graph = LoadedConfigurationGraph{
-            rootRecord.slot,
-            ConfigurationRootSequence(rootRecord.envelope.versionValue),
+            rootDescriptor.slot,
+            ConfigurationRootSequence(rootDescriptor.versionValue),
             root,
-            rootRecord.bytes,
+            std::move(canonicalRootBytes),
             std::move(*active),
             std::move(fallback),
             selectedFallback};
@@ -819,9 +921,12 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
         manifestReference,           manifest,
         candidate.userConfiguration, candidate.serviceConfiguration,
         candidate.programCatalog,    manifestRecord};
+    ConfigurationGraphMetadataBranch previousActive{
+        current.active.manifestReference, current.active.manifest,
+        current.active.canonicalManifestRecordBytes};
     LoadedConfigurationGraph newGraph{
-        plan.rootSlot,        plan.rootSequence, root, rootRecord,
-        std::move(newActive), current.active,    false};
+        plan.rootSlot,        plan.rootSequence,         root, rootRecord,
+        std::move(newActive), std::move(previousActive), false};
     return {ConfigurationCommitPrepareStatus::Success,
             PreparedConfigurationCommit{current, std::move(newGraph), changes,
                                         plan, std::move(manifestRecord),

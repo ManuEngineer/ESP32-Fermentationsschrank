@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <optional>
 #include <string>
@@ -126,12 +127,13 @@ StateStoreKey key(const char* value) {
 }
 
 std::string envelope(RecordTypeId type, std::uint32_t schema,
-                     std::uint64_t version, const std::string& payload) {
+                     std::uint64_t version, const std::string& payload,
+                     std::optional<std::int64_t> utc = std::nullopt) {
     std::string bytes;
     TEST_ASSERT_TRUE(
         device_platform::encodeEnvelope(
-            {type, schema, StorageEpoch{1U}, version, std::nullopt, payload},
-            bytes, payload.size() + 45U) ==
+            {type, schema, StorageEpoch{1U}, version, utc, payload}, bytes,
+            payload.size() + (utc.has_value() ? 53U : 45U)) ==
         device_platform::EnvelopeEncodeStatus::Success);
     return bytes;
 }
@@ -254,6 +256,59 @@ void test_root_read_error_has_priority_over_valid_older_root() {
     TEST_ASSERT_TRUE(loaded.status ==
                      fermentation::ConfigurationGraphLoadStatus::RootReadError);
     TEST_ASSERT_FALSE(loaded.graph.has_value());
+}
+
+void test_root_capacity_error_has_priority_over_valid_older_root() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);
+    store.failRead("cr1", device_platform::StateStoreReadStatus::CapacityError);
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    const auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(
+        loaded.status ==
+        fermentation::ConfigurationGraphLoadStatus::RootCapacityError);
+    TEST_ASSERT_FALSE(loaded.graph.has_value());
+}
+
+void test_referenced_record_read_error_does_not_fall_back_to_older_root() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);
+    store.failRead("pc0", device_platform::StateStoreReadStatus::ReadError);
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    const auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(
+        loaded.status ==
+        fermentation::ConfigurationGraphLoadStatus::RecordReadError);
+    TEST_ASSERT_FALSE(loaded.graph.has_value());
+}
+
+void test_invalid_active_branch_promotes_complete_fallback() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    const auto seeded = seedGraph(store);
+    auto missingActive = seeded.manifestReference;
+    missingActive.slot = SlotId{1U};
+    missingActive.version = fermentation::ConfigurationManifestGeneration{2U};
+    fermentation::ConfigurationRootRecord root{missingActive,
+                                               seeded.manifestReference};
+    std::string rootPayload;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationRootPayload(root, rootPayload) ==
+        fermentation::ConfigurationGraphCodecStatus::Success);
+    store.put("cr1", envelope(fermentation::configuration_storage_contract::
+                                  kConfigurationRootRecordType,
+                              1U, 2U, rootPayload));
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    const auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(loaded.status ==
+                     fermentation::ConfigurationGraphLoadStatus::
+                         ConfigurationGraphAvailable);
+    TEST_ASSERT_TRUE(loaded.graph->selectedFallback);
+    TEST_ASSERT_FALSE(loaded.graph->fallback.has_value());
+    TEST_ASSERT_TRUE(loaded.graph->active.manifestReference ==
+                     seeded.manifestReference);
 }
 
 void test_different_bytes_under_same_document_revision_fail_closed() {
@@ -593,6 +648,91 @@ void test_document_and_manifest_identity_collisions_all_fail_closed() {
     }
 }
 
+void test_valid_envelope_identity_collisions_fail_closed_for_every_group() {
+    LocalTimeZoneResolver resolver;
+    for (const char* slot : {"uc1", "sc1", "pc1"}) {
+        LocalStore store;
+        seedGraph(store);
+        const char* source = slot[0] == 'u'   ? "uc0"
+                             : slot[0] == 's' ? "sc0"
+                                              : "pc0";
+        const auto original = store.read(key(source), 32813U);
+        const auto decoded = device_platform::decodeEnvelope(original.value);
+        TEST_ASSERT_TRUE(decoded.envelope.has_value());
+        store.put(slot, envelope(decoded.envelope->recordTypeId,
+                                 decoded.envelope->schemaVersion,
+                                 decoded.envelope->versionValue,
+                                 decoded.envelope->payload, 1234));
+        fermentation::ConfigurationGraphStore graphStore(store, resolver);
+        TEST_ASSERT_TRUE(
+            graphStore.loadCanonicalGraph(StorageEpoch{1U}).status ==
+            fermentation::ConfigurationGraphLoadStatus::
+                ConfigurationGraphIntegrityFailure);
+    }
+
+    LocalStore store;
+    seedGraph(store);
+    const auto original = store.read(key("cm0"), 149U);
+    const auto decoded = device_platform::decodeEnvelope(original.value);
+    TEST_ASSERT_TRUE(decoded.envelope.has_value());
+    store.put("cm1", envelope(decoded.envelope->recordTypeId,
+                              decoded.envelope->schemaVersion,
+                              decoded.envelope->versionValue,
+                              decoded.envelope->payload, 1234));
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    TEST_ASSERT_TRUE(graphStore.loadCanonicalGraph(StorageEpoch{1U}).status ==
+                     fermentation::ConfigurationGraphLoadStatus::
+                         ConfigurationGraphIntegrityFailure);
+}
+
+void test_exact_record_duplicates_are_diagnostic_and_loadable() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);
+    for (const auto& pair : {std::pair{"uc0", "uc1"}, std::pair{"sc0", "sc1"},
+                             std::pair{"pc0", "pc1"}, std::pair{"cm0", "cm1"},
+                             std::pair{"cr0", "cr1"}}) {
+        const auto original = store.read(key(pair.first), 32813U);
+        TEST_ASSERT_TRUE(original.status ==
+                         device_platform::StateStoreReadStatus::Success);
+        store.put(pair.second, original.value);
+    }
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    const auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(loaded.status ==
+                     fermentation::ConfigurationGraphLoadStatus::
+                         ConfigurationGraphAvailable);
+    TEST_ASSERT_TRUE(loaded.diagnostics.exactDuplicateRecords >= 5U);
+    TEST_ASSERT_TRUE(loaded.diagnostics.identicalRootTie);
+}
+
+void test_high_water_overflow_blocks_before_any_write() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);
+    const fermentation::UserConfiguration orphan{"de", "Europe/Zurich",
+                                                 "Maximale Revision"};
+    std::string payload;
+    TEST_ASSERT_TRUE(fermentation::encodeUserConfigurationPayload(
+                         orphan, resolver, payload) ==
+                     fermentation::ConfigurationCodecStatus::Success);
+    store.put("uc2",
+              envelope(fermentation::configuration_storage_contract::
+                           kUserConfigurationRecordType,
+                       1U, std::numeric_limits<std::uint64_t>::max(), payload));
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    const auto writesBefore = store.writeCount();
+    auto prepared = graphStore.prepareCommit(
+        *loaded.graph, changedCandidate(*loaded.graph, "Blockiert"),
+        fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(
+        prepared.status ==
+        fermentation::ConfigurationCommitPrepareStatus::HighWaterOverflow);
+    TEST_ASSERT_EQUAL_UINT32(writesBefore, store.writeCount());
+}
+
 void test_unusable_higher_root_advances_high_water_without_activation() {
     LocalStore store;
     LocalTimeZoneResolver resolver;
@@ -639,6 +779,10 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_loads_complete_active_graph);
     RUN_TEST(test_root_read_error_has_priority_over_valid_older_root);
+    RUN_TEST(test_root_capacity_error_has_priority_over_valid_older_root);
+    RUN_TEST(
+        test_referenced_record_read_error_does_not_fall_back_to_older_root);
+    RUN_TEST(test_invalid_active_branch_promotes_complete_fallback);
     RUN_TEST(test_different_bytes_under_same_document_revision_fail_closed);
     RUN_TEST(test_equal_root_sequence_with_different_bytes_has_no_tiebreak);
     RUN_TEST(test_orphan_high_water_is_used_for_next_revision);
@@ -651,6 +795,10 @@ int main() {
     RUN_TEST(test_orphaned_document_and_manifest_values_are_never_reused);
     RUN_TEST(test_five_commits_rotate_active_and_exact_previous_fallback);
     RUN_TEST(test_document_and_manifest_identity_collisions_all_fail_closed);
+    RUN_TEST(
+        test_valid_envelope_identity_collisions_fail_closed_for_every_group);
+    RUN_TEST(test_exact_record_duplicates_are_diagnostic_and_loadable);
+    RUN_TEST(test_high_water_overflow_blocks_before_any_write);
     RUN_TEST(test_unusable_higher_root_advances_high_water_without_activation);
     RUN_TEST(test_high_water_read_failures_block_before_any_write);
     return UNITY_END();

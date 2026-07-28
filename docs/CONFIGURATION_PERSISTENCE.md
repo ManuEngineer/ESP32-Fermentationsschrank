@@ -939,6 +939,15 @@ mit der tatsaechlich gescannten Slotzahl, sind aber durch die verbindliche
 Obergrenze von acht Slots endlich begrenzt. Das ist keine absolute
 Unabhaengigkeit von der Slotzahl.
 
+Der kanonische Loader haelt nur den aktiven Graphen als vollstaendiges
+typisiertes Laufzeitmodell. Einen gueltigen Fallback prueft er recordweise und
+behaelt danach nur Manifest- und Referenzmetadaten. Muss der Fallback einen
+ungueltigen Active-Zweig ersetzen, wird er direkt zum aktiven Modell; ein
+zweites dauerhaft gehaltenes Fallback-`ProgramCatalog`-Modell entsteht nicht.
+`ReadError` oder `CapacityError` eines benoetigten Root- oder Graphrecords
+brechen die Bestimmung fail closed ab und erlauben nicht das Ausweichen auf
+einen aelteren scheinbar gueltigen Graphen.
+
 Beide ESP32-Produktionsprofile muessen je Teilissue bauen. Base-SHA und PR-Head
 werden mit identischer Toolchain fuer statisches RAM, Flash, `firmware.bin` und
 `firmware.elf` verglichen. Werte bleiben informativ, bis reale Budgets

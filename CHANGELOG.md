@@ -64,6 +64,9 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   Leserlebensdauer und die Zwei-Modell-Grenze ab. Das nachgelagerte
   `CONFIGURATION_SAFETY_INTEGRATION_GATE` in #24 sowie reale ESP32-Heap-,
   NVS-, Jitter-, Watchdog- und Lebensdauermessungen bleiben offen.
+  Der Loader behaelt den Fallback nur als validierte Metadaten, scannt
+  Recordgruppen ohne Payloadsammlung und behandelt nicht lesbare benoetigte
+  Root-/Graphrecords vor jeder Runtimefreigabe fail closed.
 
 - Typisierte Konfigurationsdokumente aus Issue #55: UserConfiguration,
   exakt leere ServiceConfiguration und ProgramCatalog Schema 1 mit
