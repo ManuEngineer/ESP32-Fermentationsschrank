@@ -358,7 +358,9 @@ fermentation::ConfigurationCommitCandidate changedCandidate(
     const fermentation::LoadedConfigurationGraph& current, const char* name) {
     return {std::make_shared<const fermentation::UserConfiguration>(
                 fermentation::UserConfiguration{"de", "Europe/Zurich", name}),
-            current.active.serviceConfiguration, current.active.programCatalog};
+            current.active.serviceConfiguration,
+            current.active.programCatalog,
+            {true, false, false}};
 }
 
 void test_prepares_high_water_values_and_exact_fallback_before_writes() {

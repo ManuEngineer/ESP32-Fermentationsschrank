@@ -614,36 +614,7 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
         return {ConfigurationCommitPrepareStatus::InvalidCandidate,
                 std::nullopt};
     }
-    std::string userPayload;
-    std::string servicePayload;
-    std::string programPayload;
-    std::string oldUserPayload;
-    std::string oldServicePayload;
-    std::string oldProgramPayload;
-    if (encodeUserConfigurationPayload(*candidate.userConfiguration,
-                                       timeZoneResolver_, userPayload) !=
-            ConfigurationCodecStatus::Success ||
-        encodeServiceConfigurationPayload(*candidate.serviceConfiguration,
-                                          servicePayload) !=
-            ConfigurationCodecStatus::Success ||
-        encodeProgramCatalogPayload(*candidate.programCatalog,
-                                    programPayload) !=
-            ConfigurationCodecStatus::Success ||
-        encodeUserConfigurationPayload(*current.active.userConfiguration,
-                                       timeZoneResolver_, oldUserPayload) !=
-            ConfigurationCodecStatus::Success ||
-        encodeServiceConfigurationPayload(*current.active.serviceConfiguration,
-                                          oldServicePayload) !=
-            ConfigurationCodecStatus::Success ||
-        encodeProgramCatalogPayload(*current.active.programCatalog,
-                                    oldProgramPayload) !=
-            ConfigurationCodecStatus::Success) {
-        return {ConfigurationCommitPrepareStatus::InvalidCandidate,
-                std::nullopt};
-    }
-    const ConfigurationChangeMask changes{userPayload != oldUserPayload,
-                                          servicePayload != oldServicePayload,
-                                          programPayload != oldProgramPayload};
+    const auto changes = candidate.changes;
     if (!changes.userConfiguration && !changes.serviceConfiguration &&
         !changes.programCatalog) {
         return {ConfigurationCommitPrepareStatus::InvalidCandidate,
@@ -681,64 +652,56 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
     auto userReference = current.active.manifest.userConfiguration;
     auto serviceReference = current.active.manifest.serviceConfiguration;
     auto programReference = current.active.manifest.programCatalog;
-    std::optional<std::string> userRecord;
-    std::optional<std::string> serviceRecord;
-    std::optional<std::string> programRecord;
+    std::string payload;
     if (changes.userConfiguration) {
+        if (encodeUserConfigurationPayload(*candidate.userConfiguration,
+                                           timeZoneResolver_, payload) !=
+            ConfigurationCodecStatus::Success) {
+            return {ConfigurationCommitPrepareStatus::InvalidCandidate,
+                    std::nullopt};
+        }
         userReference = {
             configuration_storage_contract::kUserConfigurationRecordType,
             *plan.userConfigurationSlot,
             *plan.userConfigurationRevision,
             1U,
-            static_cast<std::uint32_t>(userPayload.size()),
-            device_platform::computeCrc32IsoHdlc(userPayload),
+            static_cast<std::uint32_t>(payload.size()),
+            device_platform::computeCrc32IsoHdlc(payload),
             epoch};
-        userRecord.emplace();
-        if (!encodeDocumentRecord(
-                userReference.recordType, userReference.version, epoch,
-                userPayload,
-                configuration_limits::kMaximumUserConfigurationPayloadBytes +
-                    45U,
-                *userRecord)) {
-            return {ConfigurationCommitPrepareStatus::CapacityFailure,
-                    std::nullopt};
-        }
+        payload.clear();
     }
     if (changes.serviceConfiguration) {
+        if (encodeServiceConfigurationPayload(*candidate.serviceConfiguration,
+                                              payload) !=
+            ConfigurationCodecStatus::Success) {
+            return {ConfigurationCommitPrepareStatus::InvalidCandidate,
+                    std::nullopt};
+        }
         serviceReference = {
             configuration_storage_contract::kServiceConfigurationRecordType,
             *plan.serviceConfigurationSlot,
             *plan.serviceConfigurationRevision,
             1U,
-            static_cast<std::uint32_t>(servicePayload.size()),
-            device_platform::computeCrc32IsoHdlc(servicePayload),
+            static_cast<std::uint32_t>(payload.size()),
+            device_platform::computeCrc32IsoHdlc(payload),
             epoch};
-        serviceRecord.emplace();
-        if (!encodeDocumentRecord(serviceReference.recordType,
-                                  serviceReference.version, epoch,
-                                  servicePayload, 45U, *serviceRecord)) {
-            return {ConfigurationCommitPrepareStatus::CapacityFailure,
-                    std::nullopt};
-        }
+        payload.clear();
     }
     if (changes.programCatalog) {
+        if (encodeProgramCatalogPayload(*candidate.programCatalog, payload) !=
+            ConfigurationCodecStatus::Success) {
+            return {ConfigurationCommitPrepareStatus::InvalidCandidate,
+                    std::nullopt};
+        }
         programReference = {
             configuration_storage_contract::kProgramCatalogRecordType,
             *plan.programCatalogSlot,
             *plan.programCatalogRevision,
             1U,
-            static_cast<std::uint32_t>(programPayload.size()),
-            device_platform::computeCrc32IsoHdlc(programPayload),
+            static_cast<std::uint32_t>(payload.size()),
+            device_platform::computeCrc32IsoHdlc(payload),
             epoch};
-        programRecord.emplace();
-        if (!encodeDocumentRecord(
-                programReference.recordType, programReference.version, epoch,
-                programPayload,
-                configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
-                *programRecord)) {
-            return {ConfigurationCommitPrepareStatus::CapacityFailure,
-                    std::nullopt};
-        }
+        payload.clear();
     }
     ConfigurationManifest manifest{origin, operation, userReference,
                                    serviceReference, programReference};
@@ -779,34 +742,45 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
     LoadedConfigurationGraph newGraph{
         plan.rootSlot,        plan.rootSequence, root, rootRecord,
         std::move(newActive), current.active,    false};
-    return {
-        ConfigurationCommitPrepareStatus::Success,
-        PreparedConfigurationCommit{
-            current, std::move(newGraph), changes, plan, std::move(userRecord),
-            std::move(serviceRecord), std::move(programRecord),
-            std::move(manifestRecord), std::move(rootRecord)}};
+    return {ConfigurationCommitPrepareStatus::Success,
+            PreparedConfigurationCommit{current, std::move(newGraph), changes,
+                                        plan, std::move(manifestRecord),
+                                        std::move(rootRecord)}};
 }
 
 ConfigurationCommitExecutionResult
 ConfigurationGraphStore::executePreparedCommit(
-    const PreparedConfigurationCommit& prepared) {
-    const auto writeOptional =
-        [this](const std::optional<std::string>& bytes, const char* keyValue,
-               std::size_t maxBytes, ConfigurationCommitFailurePhase phase)
+    PreparedConfigurationCommit& prepared) {
+    std::string payload;
+    std::string record;
+    const auto writeRecord = [this, &record](
+                                 const char* keyValue, std::size_t maxBytes,
+                                 ConfigurationCommitFailurePhase phase)
         -> std::optional<ConfigurationCommitExecutionResult> {
-        if (!bytes.has_value()) {
-            return std::nullopt;
-        }
         const auto status =
-            writeAndReadBack(store_, keyValue, *bytes, maxBytes);
+            writeAndReadBack(store_, keyValue, record, maxBytes);
         if (status != WriteReadbackStatus::NewValue) {
             return mapPreRootWrite(status, phase);
         }
+        record.clear();
         return std::nullopt;
     };
-    if (prepared.userRecordBytes.has_value()) {
-        const auto failure = writeOptional(
-            prepared.userRecordBytes,
+    const auto epoch = prepared.newGraph.active.manifestReference.storageEpoch;
+    if (prepared.changes.userConfiguration) {
+        if (encodeUserConfigurationPayload(
+                *prepared.newGraph.active.userConfiguration, timeZoneResolver_,
+                payload) != ConfigurationCodecStatus::Success ||
+            !encodeDocumentRecord(
+                configuration_storage_contract::kUserConfigurationRecordType,
+                *prepared.slotPlan.userConfigurationRevision, epoch, payload,
+                configuration_limits::kMaximumUserConfigurationPayloadBytes +
+                    45U,
+                record)) {
+            return {ConfigurationCommitExecutionStatus::CapacityFailure,
+                    ConfigurationCommitFailurePhase::UserDocument};
+        }
+        payload.clear();
+        const auto failure = writeRecord(
             configuration_storage_contract::kUserConfigurationSlotKeys
                 [prepared.slotPlan.userConfigurationSlot->value()],
             configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
@@ -815,9 +789,19 @@ ConfigurationGraphStore::executePreparedCommit(
             return *failure;
         }
     }
-    if (prepared.serviceRecordBytes.has_value()) {
-        const auto failure = writeOptional(
-            prepared.serviceRecordBytes,
+    if (prepared.changes.serviceConfiguration) {
+        if (encodeServiceConfigurationPayload(
+                *prepared.newGraph.active.serviceConfiguration, payload) !=
+                ConfigurationCodecStatus::Success ||
+            !encodeDocumentRecord(
+                configuration_storage_contract::kServiceConfigurationRecordType,
+                *prepared.slotPlan.serviceConfigurationRevision, epoch, payload,
+                45U, record)) {
+            return {ConfigurationCommitExecutionStatus::CapacityFailure,
+                    ConfigurationCommitFailurePhase::ServiceDocument};
+        }
+        payload.clear();
+        const auto failure = writeRecord(
             configuration_storage_contract::kServiceConfigurationSlotKeys
                 [prepared.slotPlan.serviceConfigurationSlot->value()],
             45U, ConfigurationCommitFailurePhase::ServiceDocument);
@@ -825,9 +809,20 @@ ConfigurationGraphStore::executePreparedCommit(
             return *failure;
         }
     }
-    if (prepared.programRecordBytes.has_value()) {
-        const auto failure = writeOptional(
-            prepared.programRecordBytes,
+    if (prepared.changes.programCatalog) {
+        if (encodeProgramCatalogPayload(
+                *prepared.newGraph.active.programCatalog, payload) !=
+                ConfigurationCodecStatus::Success ||
+            !encodeDocumentRecord(
+                configuration_storage_contract::kProgramCatalogRecordType,
+                *prepared.slotPlan.programCatalogRevision, epoch, payload,
+                configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
+                record)) {
+            return {ConfigurationCommitExecutionStatus::CapacityFailure,
+                    ConfigurationCommitFailurePhase::ProgramDocument};
+        }
+        payload.clear();
+        const auto failure = writeRecord(
             configuration_storage_contract::kProgramCatalogSlotKeys
                 [prepared.slotPlan.programCatalogSlot->value()],
             configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,

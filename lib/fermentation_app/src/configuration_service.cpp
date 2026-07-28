@@ -421,7 +421,7 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
     const ConfigurationCommitCandidate candidate{
         captured->candidate->userConfiguration,
         captured->candidate->serviceConfiguration,
-        captured->candidate->programCatalog};
+        captured->candidate->programCatalog, captured->view.changes};
     auto prepared = graphStore_.prepareCommit(
         current, candidate, captured->origin, captured->operation);
     if (!prepared.prepared.has_value()) {

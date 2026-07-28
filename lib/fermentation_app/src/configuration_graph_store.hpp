@@ -97,6 +97,7 @@ struct ConfigurationCommitCandidate {
     std::shared_ptr<const UserConfiguration> userConfiguration;
     std::shared_ptr<const ServiceConfiguration> serviceConfiguration;
     std::shared_ptr<const ProgramCatalog> programCatalog;
+    ConfigurationChangeMask changes;
 };
 
 enum class ConfigurationCommitPrepareStatus : std::uint8_t {
@@ -116,9 +117,6 @@ struct PreparedConfigurationCommit {
     LoadedConfigurationGraph newGraph;
     ConfigurationChangeMask changes;
     ConfigurationSlotPlan slotPlan;
-    std::optional<std::string> userRecordBytes;
-    std::optional<std::string> serviceRecordBytes;
-    std::optional<std::string> programRecordBytes;
     std::string manifestRecordBytes;
     std::string rootRecordBytes;
 };
@@ -184,7 +182,7 @@ class ConfigurationGraphStore {
         ChangeOperation operation) const;
 
     [[nodiscard]] ConfigurationCommitExecutionResult executePreparedCommit(
-        const PreparedConfigurationCommit& prepared);
+        PreparedConfigurationCommit& prepared);
 
     [[nodiscard]] ConfigurationCommitResolutionStatus resolveCommit(
         const PreparedConfigurationCommit& prepared) const;
