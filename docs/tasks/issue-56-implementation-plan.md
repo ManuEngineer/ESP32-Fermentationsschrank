@@ -7,8 +7,9 @@
 - Ausgangs-Commit: `bcdd3b3fbf956ccbcff3f70b4f359e61d9529fb7`
 - Planbranch: `plan/issue-56-active-fallback-runtime`
 - Planstatus: `PLAN_DRAFT`
-- Ueberholter erster Plan-Commit:
-  `48f342857a17e6ada2f0b4a7d147fd86b5489b83`
+- Ueberholte Plan-Commits:
+  - `48f342857a17e6ada2f0b4a7d147fd86b5489b83`
+  - `e9d3fdc1b93f2feb8bf5a0c1cdaf3908d635b8b3`
 - Live-Issue-Status bei Planerstellung: `READY`
 - Harte Abhaengigkeiten: #54 und #55, beide `COMPLETED`
 
@@ -224,8 +225,8 @@ Verantwortungen:
 - `configuration_graph_codec.*`: einziges kanonisches Schema-1-Wireformat fuer
   Manifest und Root, ohne Storezugriff;
 - `configuration_graph_store.*`: begrenztes Lesen, vollstaendige
-  Graphvalidierung, kanonische Auswahl, Slotvorplanung, Writes und Readbacks
-  ueber `IStateStore`;
+  Graphvalidierung, kanonische Auswahl, High-Water-Scans, Slotvorplanung,
+  Writes und Readbacks ueber `IStateStore`;
 - `runtime_configuration_snapshot.*`: unveraenderlicher Runtime-Snapshot,
   vorab vorbereiteter Publish-Handle und schmaler atomarer Publisher;
 - `configuration_service.*`: genau eine fluechtige Vorschau, serialisierte
@@ -440,6 +441,63 @@ wird genau dieser tatsaechlich verwendete vollstaendige Graph neuer Fallback.
 Ein technisch vorhandener, aber unbrauchbarer Active-Zweig wird nicht als
 Rueckfallgeneration weitergereicht.
 
+### Fachliche Identitaet und High-Water-Marks
+
+Revision, Generation und Sequenz sind innerhalb einer `StorageEpoch` keine
+blossen Zaehlerstaende des aktuell kanonischen Graphen, sondern stabile
+fachliche Identitaeten:
+
+- Eine Dokumentrevision identifiziert je Dokumenttyp und `StorageEpoch` genau
+  einen kanonischen Dokumentinhalt.
+- Eine `ConfigurationManifestGeneration` identifiziert je `StorageEpoch`
+  genau eine kanonische Manifestpayload.
+- Eine `ConfigurationRootSequence` identifiziert je `StorageEpoch` genau einen
+  kanonischen Rootrecordinhalt.
+- Unterschiedliche Inhalte duerfen deshalb auch nach einem abgebrochenen
+  Vor-Root-Versuch niemals denselben Wert erhalten.
+- Derselbe Wert darf nur fuer exakt denselben kanonischen Recordinhalt im
+  selben Dokumenttyp- beziehungsweise Manifest-/Root-Identitaetsvertrag
+  erneut verwendet werden. Eine solche byte- und identitaetsgleiche
+  Wiederverwendung ist ein explizit erkannter Wiederholungsfall, keine freie
+  Neuvergabe.
+
+#56 sucht verwaiste Records nicht als allgemeine Deduplizierung. Die erlaubte
+Wiederverwendung desselben Werts ist auf den Readback beziehungsweise die
+idempotente Aufloesung des exakt vorbereiteten Writeversuchs mit identischen
+erwarteten kanonischen Bytes begrenzt. Jeder spaetere neue Writeversuch fuer
+einen anderen Inhalt verwendet `HighWaterMark + 1`.
+
+Vor dem ersten Write bestimmt der Graphstore unter der gemeinsamen
+Mutationslease folgende High-Water-Marks:
+
+1. fuer jeden tatsaechlich geaenderten Dokumenttyp ueber alle vier
+   zugehoerigen Dokumentslots;
+2. fuer `ConfigurationManifest` ueber alle drei Manifest-Slots;
+3. fuer `ConfigurationRootRecord` ueber beide Rootslots.
+
+Jeder vollstaendig gelesene und technisch gueltige Record derselben
+`StorageEpoch` traegt mit seinem starken `versionValue` zum zugehoerigen
+Maximum bei. Das gilt auch fuer verwaiste, nicht kanonische, fachlich
+ungueltige oder nicht aktive Records. `NotFound` traegt nichts bei. Der neue
+Wert fuer einen anderen Inhalt ist jeweils `maximal beobachteter gueltiger
+Wert + 1`; der checked increment wird vor jedem Write ausgefuehrt und lehnt
+Null sowie Ueberlauf typisiert ab.
+
+Ein `ReadError` oder `CapacityError` in einem fuer diesen Nachweis
+erforderlichen Slot macht den High-Water-Mark unbekannt und blockiert die
+gesamte Mutation vor jedem Write. Ein vollstaendig technisch gueltiger Record
+mit unbekanntem neuerem Schema wird weder still ignoriert noch ueberschrieben:
+Er traegt zwar mit seinem Envelope-`versionValue` zum High-Water-Mark bei,
+sperrt aber die Mutation mit einem typisierten
+`UnsupportedNewerConfigurationSchema`, weil seine fachliche Identitaet und
+sichere Wiederverwendbarkeit nicht nachgewiesen werden koennen.
+
+Die High-Water-Scans und die darauf basierenden Werte werden innerhalb
+derselben Mutationslease nicht aus einem Cache oder nur aus dem aktuell
+verwendeten aelteren Graphen abgeleitet. Unveraenderte Dokumenttypen behalten
+ihre bestehende exakte Referenz und benoetigen keinen neuen Revisionswert;
+ihre Slots bleiben dennoch Teil der normalen Graph- und Schutzmengenpruefung.
+
 ## Kanonische Graphvalidierung
 
 ### Ergebnisvertrag
@@ -480,8 +538,14 @@ Prioritaetsregel:
    gelesener, aber wegen Envelope, CRC, Schema, Payload oder Fachsemantik
    ungueltiger Rootkandidat darf diagnostiziert und zugunsten eines aelteren
    vollstaendig gueltigen Kandidaten uebersprungen werden;
-5. technisch passende Kandidaten absteigend nach `rootSequence`, bei Gleichheit
-   deterministisch nach Slot-ID untersuchen;
+5. technisch passende Kandidaten absteigend nach `rootSequence` untersuchen;
+   tragen beide Rootslots denselben Sequenzwert, ist eine deterministische
+   Slotauswahl nur bei exakt identischen kanonischen Rootbytes des gesamten
+   Envelope- und Payloadrecords zulaessig und wird diagnostiziert;
+   unterscheiden sich Rootpayload, Referenzen oder kanonische Bytes, liefert
+   der Loader
+   `ConfigurationGraphIntegrityFailure`, gibt keine Runtime frei und benutzt
+   keinen Slot-Tiebreak als Aktivierungsentscheid;
 6. Rootpayload und jede Referenz vollstaendig pruefen;
 7. zuerst den Active-Zweig des Kandidaten laden;
 8. fuer jede Dokumentkante Envelope, Referenzbindung, Schema, Payload und
@@ -546,15 +610,19 @@ Noch vor dem ersten Write werden unter der exklusiven Mutation:
 
 1. Basis und Vorschau erneut geprueft;
 2. geaenderte Dokumente exakt bestimmt;
-3. alle benoetigten Revisionen, Manifestgeneration und `rootSequence` mit
-   Ueberlaufpruefung berechnet;
-4. fuer jeden geaenderten Dokumenttyp ein ungeschuetzter Zielslot bestimmt;
-5. ein ungeschuetzter Manifestplatz bestimmt;
-6. der andere der beiden Rootslots als Ziel bestimmt;
-7. alle ausgewaehlten Ziele zur lokalen Mutationsschutzmenge hinzugefuegt;
-8. alle Payload- und Envelopegroessen geprueft;
-9. der vollstaendige Runtime-Snapshot samt Plattformwerten vorbereitet;
-10. die neue Manifest- und Rootstruktur im RAM vollstaendig validiert.
+3. die High-Water-Scans fuer jeden geaenderten Dokumenttyp, alle Manifest-Slots
+   und beide Rootslots vollstaendig und ohne Lese-/Kapazitaetsfehler
+   abgeschlossen;
+4. unbekannte neuere technisch gueltige Schemas ausgeschlossen;
+5. alle benoetigten Revisionen, die Manifestgeneration und `rootSequence` als
+   checked `HighWaterMark + 1` fuer den jeweils neuen Inhalt berechnet;
+6. fuer jeden geaenderten Dokumenttyp ein ungeschuetzter Zielslot bestimmt;
+7. ein ungeschuetzter Manifestplatz bestimmt;
+8. der andere der beiden Rootslots als Ziel bestimmt;
+9. alle ausgewaehlten Ziele zur lokalen Mutationsschutzmenge hinzugefuegt;
+10. alle Payload- und Envelopegroessen geprueft;
+11. der vollstaendige Runtime-Snapshot samt Plattformwerten vorbereitet;
+12. die neue Manifest- und Rootstruktur im RAM vollstaendig validiert.
 
 Fehlt fuer irgendeinen Recordtyp ein sicherer Platz, endet die Mutation vor
 jedem Write mit `NoUnreferencedSlotAvailable` und dem betroffenen Recordtyp.
@@ -585,13 +653,35 @@ Wiederverwendungsslots eindeutig sein.
 Der `ConfigurationService` haelt global genau eine sichtbare Vorschau. Das ist
 die verbindliche R1-Obergrenze fuer #56.
 
-- Eine neue vollstaendig validierte Vorschau ersetzt die bisherige atomar.
+- Jede sichtbare Vorschau besitzt einen unveraenderlichen, rein fluechtigen
+  internen Handle, der ihre Identitaet und Lebensdauer bindet. Der Handle ist
+  weder Authentisierung noch persistentes Preview-, Wiederaufnahme- oder
+  Autorisierungstoken und wird nach Neustart verworfen.
+- Der sichtbare Slot ist konkret ein
+  `shared_ptr<const ConfigurationPreview>` und wird ueber die C++17-freien
+  atomaren `shared_ptr`-Operationen verwaltet. Eine neue vollstaendig
+  validierte Vorschau wird per atomarem Austausch installiert; der zuletzt
+  linearisierte Austausch bestimmt den genau einen sichtbaren Handle.
+  Identitaetsgebundene Entfernung verwendet Compare-and-exchange mit dem
+  erfassten Handle als Erwartungswert. Dieser kleine preview-spezifische
+  Mechanismus schuetzt nur den sichtbaren Previewslot und ist weder ein zweites
+  persistentes Mutationsgate noch eine Previewplattform.
 - Eine ungueltige oder nicht vorbereitbare neue Anfrage laesst eine bereits
   sichtbare Vorschau unveraendert.
-- Eine alte Bestaetigung nach Ersetzung endet als typisierter
+- Zwei parallele Preview-Erstellungen duerfen Kandidaten unabhaengig
+  vorbereiten; ihre Installation besitzt aber je einen eindeutigen
+  Linearisierungspunkt und hinterlaesst genau einen eindeutig aktuellen
+  sichtbaren Handle.
+- Die Bestaetigung erfasst unter derselben Preview-Synchronisation exakt den
+  unveraenderlichen Handle, den sie committen will. Dieser Besitz verhindert
+  Use-after-free, auch wenn eine neuere Vorschau parallel sichtbar wird.
+- Eine alte Bestaetigung, deren erfasster Handle bereits vor der exklusiven
+  erneuten Pruefung ersetzt wurde, endet als typisierter
   `PreviewSuperseded`-/Konfliktzustand ohne Write.
-- `Abbrechen`, erfolgreicher Commit, erkannter Konflikt oder Neustart verwirft
-  die Vorschau.
+- `Abbrechen`, erfolgreicher Commit oder erkannter Konflikt entfernt per
+  Compare-and-exchange ausschliesslich den dafuer erfassten Handle. Ist
+  inzwischen eine neuere Vorschau sichtbar, bleibt sie unveraendert erhalten.
+- Neustart verwirft den gesamten fluechtigen Previewslot.
 - Es gibt keine zeitbasierte Ablaufregel und keine Abhaengigkeit von UTC.
 - Es gibt keine persistente Preview, keinen Preview-Owner und kein
   Autorisierungs- oder Wiederaufnahmetoken.
@@ -629,19 +719,25 @@ Session und CSRF bleiben ausserhalb von #56.
 5. kanonische Payloads einzeln kodieren und deren Integritaet bestimmen;
 6. Aenderungsmaske, Aktivierungswirkung und redigierte Zusammenfassung bilden;
 7. alle Anzahl- und Ressourcenobergrenzen pruefen;
-8. erst danach die alte Vorschau ersetzen und die neue sichtbar machen.
+8. einen unveraenderlichen, lebensdauerbesitzenden Preview-Handle bilden;
+9. erst danach den sichtbaren Previewslot am eindeutigen atomaren
+   Linearisierungspunkt ersetzen und die neue Vorschau sichtbar machen.
 
 Ist der Kandidat exakt identisch, liefert die Vorschau `NoChange`. Eine
 Bestaetigung von `NoChange` erzeugt weder Revision, Manifestgeneration,
 `rootSequence` noch Storezugriff.
 
-### Bestaetigung unter exklusiver Mutation
+### Bestaetigung unter exklusiver Mutation und parallele Ersetzung
 
-Unmittelbar vor jedem Commit werden erneut geprueft:
+Die Bestaetigung erfasst zuerst unter der Preview-Synchronisation den exakt zu
+bestaetigenden unveraenderlichen Handle. Nach Erwerb der gemeinsamen
+Mutationslease werden unmittelbar vor jedem Commit erneut geprueft:
 
-- die noch aktuelle serviceeigene Vorschau;
+- die Identitaet des erfassten Handles gegen den am Prueflinearisierungspunkt
+  noch sichtbaren serviceeigenen Previewslot;
 - `StorageEpoch` und exakte Active-Manifestbasis;
-- unveraenderter Kandidat und neu berechnete Kandidatenintegritaet;
+- der ausschliesslich aus dem erfassten Handle gelesene unveraenderliche
+  Kandidat und seine neu berechnete Kandidatenintegritaet;
 - vollstaendige technische und fachliche Validierung;
 - unveraenderte Aktivierungswirkung;
 - Ressourcen, Zaehler und gesamte Slotvorplanung.
@@ -650,6 +746,18 @@ Jede Abweichung liefert einen stabilen Konflikt ohne automatisches Merge,
 ohne Last-write-wins und ohne Write. Bei zwei konkurrierenden Display-/Web-
 Bestaetigungen gewinnt unter der exklusiven Mutation hoechstens eine; die
 zweite sieht die neue Basis oder eine verworfene Vorschau und wird abgelehnt.
+
+Wird Preview B erst nach der erfolgreichen exklusiven Identitaetspruefung von
+Preview A installiert, schreibt der laufende Commit weiterhin ausschliesslich
+Kandidat A aus seinem erfassten Handle. Sein Abschluss versucht nur Handle A
+aus dem sichtbaren Slot zu entfernen und kann B daher nicht versehentlich
+loeschen. Wurde B noch auf der alten Active-Basis erstellt, bleibt es zwar
+fluechtig darstellbar, wird aber bei Bestaetigung durch die erneute
+Basispruefung sicher als stale abgelehnt. Ein nach dem Publish gegen die neue
+Active-Basis erstelltes Preview C bleibt bei der identitaetsgebundenen
+Bereinigung von A sichtbar. Es gibt keine ungeschuetzte Datenrace-Situation
+und keinen Zugriff auf einen vom letzten Besitzer bereits freigegebenen
+Kandidaten.
 
 ## Entscheidung zur persistenten `MutationSequence`
 
@@ -666,25 +774,28 @@ weder ein neuer Mutationsrecord noch ein zusaetzlicher Slot oder Root.
 | Erforderliche Eigenschaft | Variante-B-Nachweis ohne separate Sequenz |
 |---|---|
 | Konflikt zwischen zwei Vorschauen | Exakte `StorageEpoch` und Active-Manifestreferenz werden unter derselben exklusiven Mutation erneut verglichen. Nur eine Bestaetigung kann dieselbe Basis erfolgreich verwenden. |
-| Ordnung geaenderter Dokumentinhalte | Jeder geaenderte Dokumenttyp erhaelt genau die naechste starke Dokumentrevision; unveraenderte Dokumente behalten ihre Revision. |
-| Ordnung vollstaendiger Graphkandidaten | Jede Aktivierung erhaelt genau die naechste `ConfigurationManifestGeneration`. |
-| Persistente Gesamtordnung erfolgreicher Aktivierungen | Jeder erfolgreiche Root-Commit erhaelt genau die naechste `ConfigurationRootSequence`; in #56 existiert kein anderer persistenter Konfigurationscommit ausserhalb dieses Root-Linearisierungspunkts. |
+| Ordnung geaenderter Dokumentinhalte | Jeder geaenderte Dokumenttyp erhaelt eine Revision oberhalb des High-Water-Marks aller technisch gueltigen Records dieses Typs und dieser Epoche; unveraenderte Dokumente behalten ihre exakte Referenz. Verwaiste Writes koennen Luecken, aber keine Identitaetswiederverwendung erzeugen. |
+| Ordnung vollstaendiger Graphkandidaten | Jedes neue Manifest erhaelt eine Generation oberhalb des High-Water-Marks aller technisch gueltigen Manifestrecords derselben Epoche. Ein verwaistes Manifest verbraucht seine fachliche Identitaet dauerhaft fuer andere Inhalte. |
+| Persistente Gesamtordnung erfolgreicher Aktivierungen | Jeder neue Rootinhalt erhaelt eine `ConfigurationRootSequence` oberhalb des High-Water-Marks beider technisch gueltigen Rootrecords derselben Epoche; sie wird nicht nur aus dem aktuell verwendeten Graphen abgeleitet. In #56 existiert kein anderer persistenter Konfigurationscommit ausserhalb dieses Root-Linearisierungspunkts. |
 | `NoChange` | Schreibt nichts und verbraucht keinen Zaehlerwert. Eine separate Mutationsnummer duerfte ebenfalls nicht fortgeschrieben werden und enthaelt daher keine Zusatzinformation. |
-| Abbruch vor Root-Commit | Neue Dokumente oder ein Manifest bleiben unreferenziert und nicht kanonisch. Eine nur vorbereitete Mutationsnummer waere ebenfalls nicht wirksam. |
-| Wiederholung nach eindeutig altem Ausgang | Die fluechtige Vorschau wird verworfen; ein neuer Versuch benoetigt eine neue Vorschau gegen die weiterhin kanonische Basis. Verwaiste Slots duerfen nach Referenzanalyse sicher ueberschrieben werden. |
+| Abbruch vor Root-Commit | Neue Dokumente oder ein Manifest bleiben unreferenziert und nicht kanonisch, ihre technisch gueltigen Revisionen beziehungsweise Generationen tragen aber zum naechsten High-Water-Mark bei. Eine separate Mutationsnummer waere ebenfalls nicht wirksam und verhindert die notwendige Inhaltsidentitaetsregel nicht. |
+| Wiederholung nach eindeutig altem Ausgang | Der fuer den Versuch erfasste Preview-Handle wird identitaetsgebunden entfernt; eine inzwischen neuere Vorschau bleibt erhalten. Ein neuer Versuch benoetigt eine bestaetigbare Vorschau gegen die weiterhin kanonische Basis. Verwaiste Slots duerfen nach Referenzanalyse sicher ueberschrieben werden, aber ein anderer Inhalt erhaelt stets einen Wert oberhalb des beobachteten High-Water-Marks. |
 | Eindeutig neuer Ausgang | Exakte Ziel-Rootreferenz, Ziel-`rootSequence`, Manifestgeneration und vollstaendiger Zielgraph bestimmen den neuen kanonischen Zustand. |
 | `CommitOutcomeUnknown` | Beide Rootslots und die benoetigten Graphrecords werden vollstaendig gescannt. Die kanonische Rootordnung plus exakte Zielidentitaet ergibt eindeutig alt oder neu; bei fehlender Eindeutigkeit folgt `ConfigurationCommitIndeterminate`. |
 | Neustart | Vorschauen existieren nicht mehr. Derselbe kanonische Root-/Graphscan bestimmt ausschliesslich aus persistenten Daten den Zustand; es gibt nichts wiederzugeben oder fortzusetzen. |
 | Bootstrap und Reset | #57 besitzt dafuer `BootstrapSequence` und `StorageEpoch`; diese Vorgaenge sind keine zusaetzlichen #56-Graphcommits, die eine gemeinsame Mutationsnummer benoetigen. Sie teilen aber zwingend dieselbe fluechtige `ConfigurationMutationCoordinator`-Instanz mit #56. |
 | Spaetere Secret-Domaenen | Sie erhalten erst mit ihrem ersten Konsumenten eigene epochengebundene Commitvertraege und duerfen keine jetzt leere Kreuzdomaenensequenz voraussetzen. |
 
-Im #56-Scope besteht damit eine Eins-zu-eins-Zuordnung zwischen einem
-erfolgreichen persistenten Konfigurationscommit und genau einer neuen
-`ConfigurationRootSequence`. Eine weitere persistente Sequenz im Root waere
-eine identische zweite Zahl. Ein separater Sequenzrecord ausserhalb des Roots
-wuerde dagegen einen neuen Write, einen weiteren unklaren Commitausgang und
-neue Recoveryordnung erzeugen. Er koennte einen unklaren Rootwrite nicht
-aufloesen, weil weiterhin der Root und sein Zielgraph gelesen werden muessen.
+Im #56-Scope besitzt damit jeder erfolgreiche persistente
+Konfigurationscommit genau eine eindeutige neue `ConfigurationRootSequence`
+oberhalb aller beobachteten technisch gueltigen Rootrecords. Verwaiste Writes
+duerfen Luecken erzeugen; Eindeutigkeit verlangt keine lueckenlose Folge. Eine
+weitere persistente Sequenz im Root waere dieselbe Ordnungsinformation. Ein
+separater Sequenzrecord ausserhalb des Roots wuerde dagegen einen neuen Write,
+einen weiteren unklaren Commitausgang und neue Recoveryordnung erzeugen. Er
+koennte weder die Inhaltsidentitaet verwaister Dokument-/Manifestwrites noch
+einen unklaren Rootwrite aufloesen, weil weiterhin alle betroffenen Slots,
+der Root und sein Zielgraph gelesen werden muessen.
 
 ### Verbindliche Gegenbeispieltests
 
@@ -694,7 +805,18 @@ Der Nachweis gilt nur, wenn Tests mindestens beweisen:
 - Wiederholung derselben bestaetigten Aktion nach eindeutig altem, eindeutig
   neuem und unbestimmtem Rootwrite;
 - `NoChange` ohne jede Sequenzaenderung;
-- verwaiste Dokument-/Manifestrevisionen nach Abbruch vor Root;
+- Abbruch nach einem Dokumentwrite und danach ein anderer Kandidat: andere
+  Payload erhaelt eine hoehere Dokumentrevision;
+- Abbruch nach einem Manifestwrite und danach ein anderer Kandidat: andere
+  Manifestpayload erhaelt eine hoehere Manifestgeneration;
+- verwaiste hoehere Dokumentrevision und verwaiste hoehere
+  Manifestgeneration werden in den jeweiligen High-Water-Mark aufgenommen;
+- ein hoeherer technisch gueltiger, aber fachlich nicht nutzbarer Root wird in
+  den Root-High-Water-Mark aufgenommen;
+- `ReadError`, `CapacityError`, unbekanntes neueres Schema und High-Water-
+  Ueberlauf blockieren vor jedem Write;
+- unterschiedliche Inhalte erhalten in derselben Epoche niemals dieselbe
+  Dokumentrevision, Manifestgeneration oder Rootsequenz;
 - gleiche numerische Werte verschiedener starker Revisions-/Generationstypen
   werden nie vermischt;
 - Root- und Manifestueberlauf werden vor dem ersten Write abgelehnt;
@@ -713,17 +835,20 @@ Unter der exklusiven Mutation erfolgt vor dem ersten Write:
 1. Erwerb der gemeinsamen `ConfigurationMutationLease` und erneute Vorschau-,
    Basis-, Integritaets- und Vollvalidierungspruefung;
 2. exakter `NoChange`-Entscheid;
-3. checked increment aller benoetigten Revisionen, der Manifestgeneration und
-   der Rootsequenz;
-4. vollstaendige Schutzmengen- und Slotvorplanung;
-5. Groessenpruefung jedes benoetigten Payloads und Envelopes;
-6. Vorbereitung aller fachlichen und Plattformwerte;
-7. Aufbau eines unveraenderlichen `RuntimeConfigurationSnapshot`;
-8. vollstaendige Ressourcenreservierung fuer den Snapshot-Publish,
+3. vollstaendiger High-Water-Scan der erforderlichen Dokument-, Manifest- und
+   Rootslots mit Sperre bei unbekanntem Ergebnis oder neuerem unbekanntem
+   Schema;
+4. checked `HighWaterMark + 1` fuer jede benoetigte Dokumentrevision, die
+   Manifestgeneration und die Rootsequenz;
+5. vollstaendige Schutzmengen- und Slotvorplanung;
+6. Groessenpruefung jedes benoetigten Payloads und Envelopes;
+7. Vorbereitung aller fachlichen und Plattformwerte;
+8. Aufbau eines unveraenderlichen `RuntimeConfigurationSnapshot`;
+9. vollstaendige Ressourcenreservierung fuer den Snapshot-Publish,
    einschliesslich eines leeren Besitzers fuer den beim Austausch
    uebernommenen alten Publisher-Handle;
-9. Aufbau und Validierung der kuenftigen Manifest- und Rootmodelle;
-10. Nachweis aller Publisher-Praekonditionen, sodass nach bestaetigtem
+10. Aufbau und Validierung der kuenftigen Manifest- und Rootmodelle;
+11. Nachweis aller Publisher-Praekonditionen, sodass nach bestaetigtem
     Root-Commit kein normaler fachlicher Fehlerzweig mehr verbleibt.
 
 Kein Kandidat wird vor vollstaendiger erfolgreicher Vorbereitung sichtbar
@@ -1056,6 +1181,10 @@ Keine Storeorchestrierung und keine Vorschau in diesem Commit.
 - Rootslot-`ReadError`/`CapacityError` vor jeder kanonischen Auswahl fail
   closed priorisieren;
 - kanonische Root-/Active-/Fallback-Auswahl und Diagnosen implementieren;
+- High-Water-Scans fuer Dokumentrevisionen, Manifestgeneration und Rootsequenz
+  einschliesslich unbekannter neuerer Schemas und Ueberlauf implementieren;
+- Root-Gleichstand nur bei identischen kanonischen Bytes deterministisch
+  aufloesen, unterschiedliche Bytes als Integritaetsfehler sperren;
 - exakte Referenzbindung und fachliche Dokumentvalidierung integrieren;
 - Schutzmenge und deterministische Slotvorplanung implementieren;
 - Graph-, Korruptions- und Rotationsmodelltests ergaenzen.
@@ -1071,6 +1200,9 @@ Noch kein persistenter Aktivierungsworkflow.
   implementieren;
 - genau eine serviceeigene Vorschau, Kandidatenintegritaet, exakte
   Inhaltsvergleiche, `NoChange` und Konfliktvertrag implementieren;
+- rein fluechtige unveraenderliche Preview-Handles, atomare Ersetzung,
+  identitaetsgebundene Bereinigung und parallele Erstellungs-/Commitrennen
+  implementieren;
 - Preview-, Lebensdauer-, Konkurrenz- und Allokationstests ergaenzen.
 
 Noch kein Rootwrite aus dem Konfigurationsdienst.
@@ -1155,8 +1287,11 @@ Plan-Commit mit erneuter Ownerfreigabe.
   Runtimefreigabe;
 - ein Rootslot mit `CapacityError` und der andere aeltere Root vollstaendig
   gueltig: `ConfigurationGraphLoadFailure`, keine Runtimefreigabe;
-- gleicher Sequenzwert in zwei Rootslots mit deterministischem Tiebreak und
-  sichtbarer Integritaetsdiagnose;
+- gleicher Sequenzwert und exakt identische kanonische Rootbytes in beiden
+  Rootslots: deterministische Auswahl mit sichtbarer Diagnose;
+- gleicher Sequenzwert, aber unterschiedliche Rootpayload, Referenzen oder
+  kanonische Bytes: `ConfigurationGraphIntegrityFailure`, keine
+  Runtimefreigabe und kein Slot-Tiebreak;
 - hohes `rootSequence` ohne gueltigen Graph aktiviert nichts;
 - jede Referenzkante einzeln mit falschem Typ, Slot, Revision/Generation,
   Schema, Laenge, Payload-CRC und Epoche;
@@ -1181,7 +1316,24 @@ Plan-Commit mit erneuter Ownerfreigabe.
 - nach jedem Commit neues Active und vorheriger tatsaechlich kanonischer Graph
   als genau ein nutzbarer Fallback;
 - Wiederverwendung verwaister Vor-Root-Records ohne Schutzverletzung;
-- Revision, Generation und Rootsequenz an und ueber der Ueberlaufgrenze.
+- Abbruch nach Dokumentwrite, danach anderer Kandidat: hoehere Revision fuer
+  den anderen Inhalt;
+- Abbruch nach Manifestwrite, danach anderer Kandidat: hoehere Generation fuer
+  den anderen Manifestinhalt;
+- verwaiste hoehere Dokumentrevision je Dokumenttyp bestimmt den
+  Dokument-High-Water-Mark;
+- verwaiste hoehere Manifestgeneration bestimmt den Manifest-High-Water-Mark;
+- hoeherer technisch gueltiger, aber nicht nutzbarer Root bestimmt den
+  Root-High-Water-Mark;
+- `NotFound` traegt zu keinem High-Water-Mark bei;
+- `ReadError` und `CapacityError` in jedem erforderlichen High-Water-Slot
+  blockieren die Mutation vor jedem Write;
+- unbekanntes neueres technisch gueltiges Dokument-, Manifest- oder Rootschema
+  wird nicht ueberschrieben und blockiert vor jedem Write;
+- unterschiedliche kanonische Inhalte erhalten nie denselben fachlichen
+  Revisions-, Generations- oder Sequenzwert;
+- Revision, Generation und Rootsequenz mit High-Water-Mark an und ueber der
+  Ueberlaufgrenze.
 
 ### Preview-, Validierungs- und Konflikttests
 
@@ -1191,7 +1343,8 @@ Plan-Commit mit erneuter Ownerfreigabe.
 - exakt ein sichtbares Preview;
 - gueltiges neues Preview ersetzt das alte;
 - ungueltiges neues Preview erhaelt das alte;
-- Abbrechen verwirft ohne Wirkung;
+- Abbrechen entfernt nur den erfassten Preview-Handle ohne persistente
+  Wirkung und laesst eine inzwischen neuere Vorschau bestehen;
 - Neustart verwirft ohne Persistenz;
 - `NoChange` ohne Storezugriff oder Zaehlerfortschritt;
 - exakter Inhaltsvergleich erkennt unterschiedliche Inhalte auch bei
@@ -1202,6 +1355,22 @@ Plan-Commit mit erneuter Ownerfreigabe.
 - erneuter fachlicher oder Plattformvalidierungsfehler vor Commit;
 - geaenderte Aktivierungswirkung;
 - zwei Display-/Webaehnliche Bestaetigungen: genau eine gewinnt;
+- Preview A wird bestaetigt, waehrend Preview B berechnet und nach der
+  exklusiven Identitaetspruefung von A installiert wird: Commit A schreibt nur
+  Kandidat A;
+- wird B bereits vor der exklusiven Identitaetspruefung von A installiert,
+  endet A als `PreviewSuperseded` ohne Write;
+- Abschluss, Konflikt oder Abbruch von A entfernt per Compare-and-exchange nie
+  das inzwischen sichtbare Preview B;
+- B auf der alten Active-Basis wird bei Bestaetigung sicher als stale
+  abgelehnt;
+- Preview C, das nach Commit A gegen die neue Active-Basis installiert wird,
+  bleibt nach der identitaetsgebundenen Bereinigung von A sichtbar;
+- zwei parallele Preview-Erstellungen hinterlassen genau einen eindeutig
+  aktuellen sichtbaren Handle; der andere Handle ist sicher superseded;
+- kontrollierte Erstellungs-, Ersetzungs-, Erfassungs-, Abbruch- und
+  Commitinterleavings besitzen keine ungeschuetzte Datenrace-Situation und
+  keinen Use-after-free;
 - keine RunAssessment-, Auth- oder Safetyentscheidung im Dienst.
 
 ### Cut-Point- und Persistenzmatrix
@@ -1282,11 +1451,14 @@ Fuer Root wird bewiesen:
 
 ### `MutationSequence`-Nachweistests
 
-- jede erfolgreiche Aktivierung inkrementiert genau Manifestgeneration und
-  Rootsequenz einmal;
-- nur geaenderte Dokumenttypen inkrementieren ihre Revision;
+- jede erfolgreiche Aktivierung verwendet eine Manifestgeneration und
+  Rootsequenz oberhalb aller technisch gueltigen gleichartigen Records der
+  Epoche;
+- nur geaenderte Dokumenttypen erhalten eine neue Revision oberhalb ihres
+  High-Water-Marks;
 - fehlgeschlagene Vor-Root-Versuche veraendern die kanonische Gesamtordnung
-  nicht;
+  nicht, ihre technisch gueltigen verwaisten Werte verhindern aber eine
+  spaetere Identitaetswiederverwendung fuer andere Inhalte;
 - Rootsequenz ordnet jede persistent sichtbare #56-Mutation eindeutig;
 - Wiederholung nach altem/neuem/unbestimmtem Ausgang folgt den oben
   definierten Orakeln;
@@ -1297,6 +1469,9 @@ Fuer Root wird bewiesen:
 ### Ressourcen- und Buildtests
 
 - Peak-Allokationsmessung fuer leeres, typisches und maximal gueltiges Preview;
+- Peak-Allokationsmessung fuer zwei parallel vorbereitete maximale Previews,
+  einen sichtbaren und einen vom Commit erfassten Handle; nur unveraenderliche
+  Besitzhandles duerfen Inhalte teilen, keine unerkannte dritte Vollkopie;
 - Peak-Allokationsmessung fuer Laden, Fallbackpruefung und Commit eines maximalen
   ProgramCatalog;
 - genau ein vollstaendiger Recordarbeitsbereich waehrend des Commits;
@@ -1322,6 +1497,10 @@ Messgates.
 
 - Kein Lese-, Kapazitaets-, CRC-, Referenz-, Schema- oder Fachfehler wird als
   `NotFound` oder fabrikneu umgedeutet.
+- Ein unbekannter High-Water-Mark, ein High-Water-Ueberlauf oder ein
+  technisch gueltiges neueres unbekanntes Schema sperrt die Mutation vor jedem
+  Write und wird nicht durch Wiederverwendung eines scheinbar freien Slots
+  umgangen.
 - Ein `ReadError` oder `CapacityError` eines Rootslots sperrt die kanonische
   Auswahl auch dann, wenn der andere Rootslot einen vollstaendig gueltigen,
   aber moeglicherweise aelteren Graphen enthaelt.
@@ -1356,7 +1535,8 @@ Messgates.
 
 | Punkt | Status nach diesem Plan | Behandlung |
 |---|---|---|
-| separate persistente `MutationSequence` | entschieden: fuer #56/R1 nicht erforderlich | Gleichwertigkeits- und Gegenbeispieltests in diesem Plan; Scheitern ist materielle Planabweichung |
+| separate persistente `MutationSequence` | entschieden: fuer #56/R1 nicht erforderlich | High-Water-basierter Gleichwertigkeits- und Gegenbeispielnachweis in diesem Plan; Scheitern ist materielle Planabweichung |
+| Preview-Synchronisation | C++17-atomarer `shared_ptr`-Slot mit identitaetsgebundener Compare-and-exchange-Bereinigung | Konkurrenz-, Lebensdauer-, Allokations- und Data-Race-Nachweis in `native` und allen Buildprofilen |
 | finaler unbestimmter Typname | entschieden: `ConfigurationCommitIndeterminate` | eigener stabiler Zustand und Safety-Producer |
 | atomarer Snapshot-Publish | geplant mit vorbereiteten C++17-`shared_ptr`-Handles | Build-, Allokations- und Interleavingnachweis in allen Profilen; Vertragsaenderung erfordert neuen Plan |
 | gemeinsame Mutationskoordination | konkreter `ConfigurationMutationCoordinator` in `fermentation_app` | #56 nutzt eine injizierte Referenz; #57 muss spaeter dieselbe Instanz nutzen; keine zweite Sperre oder Transaktionsplattform |
@@ -1385,8 +1565,13 @@ Auch nach Planfreigabe sind verboten:
   aktualisierten Plan;
 - Einfuehrung einer persistenten `MutationSequence` ohne materiellen neuen
   Plan und Ownerfreigabe;
+- Ableitung neuer Revisions-, Generations- oder Sequenzwerte nur aus dem
+  aktuell kanonischen Graphen, Wiederverwendung einer fachlichen Identitaet
+  fuer anderen Inhalt oder Ueberschreiben eines unbekannten neueren Schemas;
 - Pending, PendingRoot, Aktivierungsintent oder RunAssessment;
 - persistente Preview-Slots, Owner-, Auth- oder Ablaufmetadaten;
+- pauschales Entfernen des sichtbaren Previewslots ohne Identitaetsvergleich
+  oder Zugriff auf Previewdaten ohne lebensdauerbesitzenden Handle;
 - Connectivity-/Authentication-Records, Secret-Roots oder Credentialslots;
 - Implementierung von #57, #17 oder #24;
 - automatische Factoryinitialisierung, Werksreset oder Rollback bei Fehlern;
@@ -1451,7 +1636,18 @@ Der Planungsauftrag ist abgeschlossen, wenn:
   mit genau einer konkreten Koordinatorinstanz festgelegt und testbar ist;
 - Manifest-, Root-, Active-/Fallback- und Slotrotationsvertrag vollstaendig
   festgelegt sind;
+- High-Water-Marks fuer Dokumentrevisionen, Manifestgeneration und
+  Rootsequenz verwaiste technisch gueltige Records einschliessen, unbekannte
+  Scans fail closed blockieren und Inhaltsidentitaeten nie fuer andere Inhalte
+  wiederverwenden;
+- gleiche Rootsequenzen nur bei identischen kanonischen Bytes deterministisch
+  aufgeloest und bei unterschiedlichen Bytes als Integritaetsfehler gesperrt
+  werden;
 - fluechtige Vorschau, Anzahlgrenze und Konfliktschutz festgelegt sind;
+- Preview-Ersetzung, Commit-Erfassung und Bereinigung mit unveraenderlichen
+  fluechtigen Handles atomar und identitaetsgebunden sind, sodass parallele
+  Erstellungen oder ein laufender Commit weder Kandidaten verwechseln noch
+  neuere Vorschauen loeschen;
 - Root-Commit und nicht fehlschlagender Publish eindeutig getrennt sind;
 - Rootslot-`ReadError` und `CapacityError` gegen die Verwendung eines
   moeglicherweise aelteren gueltigen Roots fail closed priorisiert sind;
