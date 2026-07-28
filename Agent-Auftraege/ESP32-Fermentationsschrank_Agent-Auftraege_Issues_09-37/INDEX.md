@@ -11,9 +11,9 @@
 | [Issue#15.md](Issue#15.md) | [E1.4] Laufkommandos, Meldungen und Bedienaktionen implementieren | `COMPLETED` | `feat/issue-15-laufkommandos-meldungen-und-bedienaktionen-implement` |
 | [Issue#16.md](Issue#16.md) | [E2.1] Konfigurationsebenen, Validierung und atomare Revisionen | `TRACKING` | Teilissues #54 bis #57 |
 | [Issue#54.md](Issue#54.md) | [E2.1a] Plattformpersistenz und Wireformat implementieren | `COMPLETED` | `feat/issue-54-platformpersistenz-und-wireformat` |
-| [Issue#55.md](Issue#55.md) | [E2.1b] Typisierte Konfigurationsdokumente implementieren | `READY` | `feat/issue-55-typisierte-konfigurationsdokumente` |
-| [Issue#56.md](Issue#56.md) | [E2.1c] Konfigurationsmanifeste, Preview und Runtimeaktivierung implementieren | `BLOCKED_DEPENDENCY` | `feat/issue-56-konfigurationsmanifeste-preview-runtimeaktivierung` |
-| [Issue#57.md](Issue#57.md) | [E2.1d] Bootstrap, Secret-Manifeste und Recovery integrieren | `BLOCKED_DEPENDENCY` | `feat/issue-57-bootstrap-secret-manifeste-recovery` |
+| [Issue#55.md](Issue#55.md) | [E2.1b] Typisierte Konfigurationsdokumente implementieren | `COMPLETED` | `feat/issue-55-typisierte-konfigurationsdokumente` |
+| [Issue#56.md](Issue#56.md) | [E2.1c] Active-/Fallback-Manifeste, Vorschau und Runtimeaktivierung implementieren | `BLOCKED_DEPENDENCY` | `feat/issue-56-active-fallback-manifeste-vorschau-runtimeaktivierung` |
+| [Issue#57.md](Issue#57.md) | [E2.1d] Bootstrap, StorageEpoch und Recovery implementieren | `BLOCKED_DEPENDENCY` | `feat/issue-57-bootstrap-storageepoch-recovery` |
 | [Issue#17.md](Issue#17.md) | [E2.2] Laufpersistenz und Kontrollpunkte implementieren | `PLANNED_SPEC_PENDING` | `feat/issue-17-laufpersistenz-und-kontrollpunkte-implementieren` |
 | [Issue#18.md](Issue#18.md) | [E2.3] Wiederanlauf und temperaturgewichteten Fortschritt implementieren | `PLANNED_SPEC_PENDING` | `feat/issue-18-wiederanlauf-und-temperaturgewichteten-fortschritt-i` |
 | [Issue#19.md](Issue#19.md) | [E2.4] Journale, Aufbewahrung, Bereinigung, Backup und Import | `PLANNED_SPEC_PENDING` | `feat/issue-19-journale-aufbewahrung-bereinigung-backup-und-import` |
@@ -35,3 +35,15 @@
 | [Issue#35.md](Issue#35.md) | [E6.2] PI-Parameter, Luftbegrenzungen und Sicherheitsgrenzen festlegen | `TBD_COMMISSIONING` | `commissioning/issue-35-pi-parameter-luftbegrenzungen-und-sicherheitsgrenzen` |
 | [Issue#36.md](Issue#36.md) | [E6.3] Hardwareabnahme, Fehlerinjektionen und Standardprogramme validieren | `TBD_COMMISSIONING` | `commissioning/issue-36-hardwareabnahme-fehlerinjektionen-und-standardprogra` |
 | [Issue#37.md](Issue#37.md) | [E6.4] Siebentaegigen Belastungstest und Release-1-Abnahme durchfuehren | `TBD_COMMISSIONING` | `commissioning/issue-37-siebentaegigen-belastungstest-und-release-1-abnahme` |
+
+Der Snapshot-Status bleibt bis zum Merge der Variante-B-Spezifikation und dem
+separat ownerfreigegebenen Live-Issue-Metadatenschritt unveraendert. Danach ist
+#56 fachlich `READY`; #57 bleibt bis zum Merge von #56
+`BLOCKED_DEPENDENCY`.
+
+#56 und #57 duerfen ihre typisierten Konfigurationsfehler unabhaengig von #24
+produzieren. #24 bleibt jedoch bis zur Abnahme des nachgelagerten
+`CONFIGURATION_SAFETY_INTEGRATION_GATE` offen; erst dann sind persistente
+Verriegelung, `SAFE_BOOT`, Aktorsperre und Fehlerinjektion gegen die realen
+Producer-Vertraege integriert. Dies aendert keinen Snapshot-Status in dieser
+Tabelle und erzeugt keine zyklische Abhaengigkeit.

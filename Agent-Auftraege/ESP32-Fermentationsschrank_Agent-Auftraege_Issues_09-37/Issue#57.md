@@ -2,9 +2,9 @@
 
 ## Issue
 
-**[E2.1d] Bootstrap, Secret-Manifeste und Recovery integrieren**
+**[E2.1d] Bootstrap, StorageEpoch und Recovery implementieren**
 
-Aktueller Snapshot-Status: `BLOCKED_DEPENDENCY`
+Snapshot-Status: `BLOCKED_DEPENDENCY`
 
 Tracking-Issue: #16
 
@@ -12,312 +12,287 @@ Epic: #4
 
 GitHub: https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/57
 
-> Dieser Auftrag darf erst ausgefuehrt werden, wenn #54, #55 und #56 gemergt und
-> abgeschlossen sind und das Live-Issue #57 auf `READY` steht.
+## Abhaengigkeiten und Sperrregel
 
-## Sperrregel
+- #54 – `COMPLETED`
+- #55 – `COMPLETED`
+- #56 – nach Variante-B-Neuschnitt zu planen, umzusetzen und zu mergen
 
-Solange eine Abhaengigkeit offen oder #57 nicht `READY` ist:
+Solange #56 nicht gemergt und das Live-Issue #57 nicht fuer seinen eigenen
+Plan-first-Schritt freigegeben ist: keinen Implementierungsbranch, keinen Code
+und keinen PR fuer #57 erstellen. Nach #56 folgt zuerst ein eigener
+Plan-Draft-PR und eine commitgebundene Ownerfreigabe.
 
-- keinen Implementierungsbranch erstellen
-- keine Produktionsdatei aendern
-- keinen PR erstellen
-- keine provisorischen Bootstrap-, Secret- oder Resetmodelle parallel einfuehren
-- Blocker berichten und anhalten
+## Verbindliche Architekturentscheidung
 
-## Ziel nach Freigabe
+Release 1 implementiert sicheren Bootstrap, `StorageEpoch`, Korruptionssperre
+und wiederaufnehmbaren Werksreset auf dem Variante-B-Active-/Fallback-Kern.
+Connectivity- und Authentication-Domaenen entstehen erst mit ihrem ersten
+realen Konsumenten.
 
-Integriere die bisherigen Teilpakete zu einem wiederanlaufbaren Gesamtworkflow:
+## Ziel
 
-- BootstrapRecord und automatische Ersteinrichtung
-- StorageEpoch
-- Connectivity-Manifest Schema 1 als NotProvisioned
-- Authentication-Manifest Schema 1 als NotProvisioned
-- vorwaertsgerichtete Authentication-Roots
-- wiederaufnehmbarer Werksreset
-- vollstaendige End-to-End-Cut-Point-, Korruptions- und Ressourcenmatrix
-
-Reale WLAN-, Passwort-, PIN- und Authentifizierungsdaten bleiben #27.
-
-## Vor jeder Arbeit lesen
-
-- Live-Issue #57
-- Tracking-Issue #16
-- gemergte Ergebnisse von #54, #55 und #56
-- `AGENTS.md`
-- Modul-AGENTS.md fuer `device_platform`, `device_platform_test_support` und
-  `fermentation_app`
-- `docs/CONFIGURATION_PERSISTENCE.md`
-- `docs/SETTINGS_AND_STORAGE.md`
-- `docs/BACKUP_SECURITY_RETENTION.md`
-- `docs/PR38_REVIEW_CORRECTIONS.md`
-- `docs/CI_AND_QUALITY_GATES.md`
-- Agent-INDEX
-
-Berichte vor Codeaenderungen:
-
-1. Bootstrap- und Bootzustandsmodell
-2. StorageEpoch-Regeln
-3. Connectivity-/Authentication-Schema-1-Modelle
-4. Prepared-/Committed-Authentication-Rootablauf
-5. Werksreset-Zustandsmaschine
-6. Gesamt-Recoverydienst
-7. Cut-Point-/Korruptionsorakel
-8. Ressourcen- und Buildplan
-
-Nur bei echter fachlicher Ownerentscheidung, Sicherheitswiderspruch oder
-widerspruechlicher Spezifikation anhalten.
-
-## Git- und PR-Ablauf nach Freigabe
-
-1. aktuellen `main` und Abschluss von #54/#55/#56 pruefen
-2. Branch erstellen:
-   `feat/issue-57-bootstrap-secret-manifeste-recovery`
-3. INDEX zuerst gegen Live-Status pruefen; nur bei Abweichung synchronisieren
-4. ausschliesslich #57 bearbeiten
-5. PR mit `Closes #57` erstellen
-6. nicht mergen, kein Auto-Merge, Branch nicht loeschen
-7. danach anhalten
+Den Variante-B-Konfigurationsgraphen bei fabrikneuem Speicher sicher
+initialisieren, bei Boot eindeutig laden oder fail closed sperren und einen
+ausdruecklich ausgeloesten Werksreset nach jedem Stromunterbruch idempotent
+fortsetzen. Geraetespezifische Touchkalibrierung bleibt erhalten.
 
 ## Verbindlicher Scope
 
 ### BootstrapRecord
 
-- zwei redundante ConfigurationBootstrapRecord-Slots
-- mindestens BootstrapSequence, Speicherformatversion, StorageEpoch und Zustand
+- zwei redundante `ConfigurationBootstrapRecord`-Slots
+- Felder mindestens: `BootstrapSequence`, Speicherformatversion,
+  `StorageEpoch` und Zustand
 - gespeicherte Zustaende:
-  - Initializing
-  - Initialized
-  - Resetting
-- NotFound ist kein gespeicherter Zustand
-- Readfehler niemals als NotFound behandeln
+  - `Initializing`
+  - `Initialized`
+  - `Resetting`
+- `NotFound` ist kein gespeicherter Zustand
+- Lese-, Kapazitaets- und Integritaetsfehler werden nie wie `NotFound`
+  behandelt
+- BootstrapSequence und `StorageEpoch` beginnen bei 1; 0 ist reserviert und
+  Ueberlauf wird vor Writes abgelehnt
 
-Automatische Initialisierung nur, wenn:
+### Nachweislich fabrikneuer Speicher
 
-- alle erforderlichen Reads erfolgreich waren
-- kein gueltiger Root existiert
-- keine beschaedigt vorhandenen Root-/Bootstrapdaten erkannt wurden
-- kein BootstrapRecord existiert
+Automatische Initialisierung ist nur erlaubt, wenn:
 
-Vor der ersten Dokumentrevision Initializing persistieren.
+- alle erforderlichen Reads technisch erfolgreich abgeschlossen wurden;
+- alle Bootstrap-, Root-, Manifest- und Konfigurationsslots eindeutig
+  `NotFound` melden;
+- keine gueltigen, unbekannten, beschaedigten oder unlesbaren Altbytes erkannt
+  wurden;
+- kein BootstrapRecord existiert.
 
-Unter StorageEpoch 1 erzeugen:
+Readfehler, CRC-Fehler, unbekannte Schemas, ungueltige Roots oder
+widerspruechliche Slotzustaende sind niemals fabrikneu.
 
-- UserConfiguration Revision 1: de, Europe/Zurich, Fermentationsschrank
-- ServiceConfiguration Revision 1 mit 0 Payloadbytes
-- ProgramCatalog Revision 1 mit vier Factory-Arbeitskopien
-- ConfigurationManifest Generation 1
-- ConfigurationRootRecord Sequenz 1 ohne Fallback
-- Connectivity- und Authentication-Manifeste Generation 1 als NotProvisioned
+### Initialisierung unter StorageEpoch 1
 
-Erst nach Ruecklesen und Vollvalidierung des gesamten Graphen Bootstrap auf
-Initialized setzen.
+1. `Initializing` dauerhaft schreiben und ruecklesen;
+2. UserConfiguration Revision 1 mit bestaetigten Factory-Startwerten erzeugen;
+3. ServiceConfiguration Revision 1 erzeugen;
+4. ProgramCatalog Revision 1 mit vier Factory-Arbeitskopien erzeugen;
+5. ConfigurationManifest Generation 1 schreiben und vollstaendig validieren;
+6. ConfigurationRootRecord rootSequence 1 mit Active Generation 1 und ohne
+   Fallback schreiben, ruecklesen und als Graph validieren;
+7. vorbereiteten Factory-`RuntimeConfigurationSnapshot` nach #56 publizieren;
+8. Bootstrap auf `Initialized` fortschreiben.
+
+Nach Stromausfall wird aus `Initializing` anhand persistierter Records
+idempotent fortgesetzt. Es entstehen keine Connectivity-/Authentication-
+Manifeste, Secret-Roots oder Dummyrecords.
+
+### Normaler Boot
+
+- kanonischen BootstrapRecord technisch und fachlich bestimmen
+- `StorageEpoch` und Speicherformat validieren
+- bei `Initialized` den vollstaendigen Variante-B-Rootgraphen aus #56 laden
+- Active, ersatzweise genau einen gueltigen Fallback verwenden
+- Fallbacknutzung sichtbar diagnostizieren
+- Runtime-Snapshot vor Freigabe vollstaendig vorbereiten
+- bei `Initializing` Initialisierung idempotent fortsetzen
+- bei `Resetting` Werksreset idempotent fortsetzen
+- bei Korruption, unbekanntem Schema, unlesbarem Speicher oder fehlendem
+  nutzbarem Graphen keine Runtime freigeben
+- nach einem zuvor unbestimmten Root-Commit nur dann Runtime freigeben, wenn der
+  normale Bootscan beide Rootslots und alle benoetigten Graphrecords
+  vollstaendig und eindeutig als alt oder neu aufloest
 
 ### StorageEpoch
 
-- gesamte Konfigurations- und Secretpersistenz an aktuelle StorageEpoch binden
-- alle Referenzen muessen dieselbe aktuelle Epoche besitzen
-- Startwert 1, Wert 0 reserviert
-- Ueberlauf sicher ablehnen
-- alte Epochen nach Reset logisch unerreichbar
-- keine sichere physische Flashloeschung behaupten
+- jeder R1-Konfigurations- und Bootstraprecord ist an die aktuelle Epoche
+  gebunden
+- Referenzen ueber Epochen hinweg sind ungueltig
+- ein abgeschlossener Werksreset macht alte Epochen logisch unerreichbar
+- ohne Plattformnachweis keine sichere physische Loeschung alter Flashbytes
+- spaetere reale Connectivity-/Authentication-Domaenen muessen ihre Records
+  beim ersten Konsumenten an dieselbe Resetgrenze binden
 
-### Connectivity Schema 1
+### Beschaedigte oder unbekannte Daten
 
-Vorbereitete physische Struktur:
-
-- 4 WLAN-Secret-Revisionsslots
-- 4 ConnectivitySecretSetManifest-Slots
-- keine eigenen Connectivity-Roots
-
-Schema 1 enthaelt ausschliesslich:
-
-- StorageEpoch
-- Manifestgeneration
-- Zustand NotProvisioned
-
-Keine Secret-Referenzen und keine freie/opake Payload. Wirksamkeit nur durch
-einen vollstaendig gueltigen Active-/Fallback-/Pending-Konfigurationsgraphen.
-
-### Authentication Schema 1
-
-Physische Struktur:
-
-- 3 vorbereitete Webpasswort-Nachweisslots
-- 3 vorbereitete Service-PIN-Nachweisslots
-- 3 AuthenticationManifest-Slots
-- 2 AuthenticationRootRecord-Slots
-
-Schema 1 enthaelt:
-
-- StorageEpoch
-- Manifestgeneration
-- CredentialEpoch
-- NotProvisioned fuer Webpasswort
-- NotProvisioned fuer Service-PIN
-
-Keine reale Nachweispayload.
-
-Rootregeln:
-
-- Status Prepared oder Committed
-- nur kanonischer vollstaendig gueltiger Committed-Root ist wirksam
-- Prepared allein nie wirksam
-- Credentials/Manifest vorbereiten
-- einen Root Prepared schreiben
-- zweiten Root Committed schreiben
-- neuen committed Graph vollstaendig pruefen
-- Prepared-Root auf dieselbe committed Generation nachziehen
-- danach darf kein committed Root der aelteren CredentialEpoch verbleiben
-- CredentialEpoch beginnt bei 1, ist von MutationSequence getrennt und laeuft
-  nie still ueber
-
-Teste Auswahl, Widerruf, Rootwechsel und Recovery, aber keine Anmeldung.
-
-### Beschaedigte Daten
-
-- ungueltige, beschaedigte oder unlesbare Daten sind nie fabrikneuer Speicher
-- ohne nutzbaren Active/Fallback keine Factory-Neuanlage
-- nichts still loeschen
-- unbekanntes oder nicht migrierbares Schema erzeugt keinen Factory-Fallback
-- typisierten ConfigurationUnavailable beziehungsweise
-  ConfigurationIntegrityFailure liefern
-- keine RuntimeConfiguration freigeben
-- systemweite Fehlerklasse und SAFE_BOOT bleiben #24
+- ungueltige, beschaedigte oder unlesbare Daten loesen keinen Factory-
+  Bootstrap und keinen automatischen Werksreset aus
+- unbekannte oder nicht migrierbare Schemas werden ohne Teilwirkung abgelehnt
+- ohne nutzbaren Active/Fallback entsteht ein typisierter
+  `ConfigurationUnavailable` beziehungsweise `ConfigurationIntegrityFailure`
+- keine Runtime und keine Aktorfreigabe
+- systemweite Fehlerklasse, persistente Verriegelung und `SAFE_BOOT` bleiben #24
 
 ### Wiederaufnehmbarer Werksreset
 
-Ein bestaetigter Vollreset:
+Der Reset wird nur durch einen bereits fachlich autorisierten, ausdruecklichen
+lokalen Resetauftrag gestartet. UI, PIN-Pruefung, Raw-Touch-Geste, Laufgate,
+Historienloeschung und Safetyfreigabe liegen bei ihren zustaendigen Issues.
 
-1. StorageEpoch ohne Ueberlauf erhoehen
-2. Resetting unter neuer Epoche persistieren
-3. Referenzen alter Epochen logisch ungueltig machen
-4. Connectivity und Authentication als NotProvisioned erzeugen
-5. neue Initialkonfiguration aktivieren
-6. Bootstrap als Initialized abschliessen
+Persistenter Ablauf:
 
-Verbindlich:
+1. naechste `StorageEpoch` und BootstrapSequence ohne Ueberlauf bestimmen;
+2. `Resetting` unter der neuen Epoche dauerhaft schreiben und ruecklesen;
+3. damit alle Records alter Epochen logisch unerreichbar machen;
+4. neue UserConfiguration, ServiceConfiguration und ProgramCatalog-
+   Anfangsrevisionen schreiben und pruefen;
+5. neues ConfigurationManifest und neuen Root ohne Fallback schreiben und den
+   gesamten Graphen validieren;
+6. vorbereiteten Factory-Runtime-Snapshot nach #56 publizieren;
+7. Bootstrap als `Initialized` abschliessen.
 
-- Active, Pending und Fallback der alten Epoche invalidieren
-- alte Secrets logisch unerreichbar machen
-- nie fruehere CredentialEpoch reaktivieren
-- Touchkalibrierung erhalten
-- Lauf-, Journal- und Historiendaten anderer Issues nicht still loeschen
-- Korruption startet niemals automatisch einen Reset
-- keine sichere physische Flashloeschung behaupten
+Nach jedem Cut wird aus `Resetting` idempotent fortgesetzt. Vor dem
+Linearisierungspunkt bleibt kein teilweise neuer Graph wirksam; nach dem
+Root-Commit bleibt die neue Epoche kanonisch.
 
-### End-to-End-Recovery
+Der Reset:
 
-- Bootdienst aus Bootstrap, ConfigurationRoot, Pending/Intent, Connectivity und
-  Authentication zusammensetzen
-- nach jedem simulierten Neustart alle Dienste und externen Quellen neu aufbauen
-- Zeit, Zufall und RunAssessment kontrollierbar
-- jeder Cut mit konkretem Recovery-Orakel
-- halbfertige Initialisierung, Authentication-Transaktion und Reset idempotent
-  fortsetzen oder sicher blockieren
+- erhaelt gemaess ADR-010 die geraetespezifische Touchkalibrierung;
+- schreibt, loescht oder ueberschreibt keine Touchkalibrierungsrecords;
+- erzeugt keine leeren Connectivity-/Authentication-Manifeste oder Secret-
+  Roots;
+- reaktiviert keine Records einer alten `StorageEpoch`;
+- behauptet keine physische Flashloeschung;
+- wird nie automatisch durch Korruption ausgeloest.
+
+Ein gesonderter Recoveryfall fuer unbrauchbare Touchkalibrierung bleibt vom
+normalen Werksreset getrennt.
+
+### Spaetere reale Connectivity-/Authentication-Domaenen
+
+#57 reserviert keine Keys, Slots, Records, Manifeste, Roots, CredentialEpoch
+oder Ports fuer Secrets. Der erste produktive WLAN-, Webpasswort- oder
+Service-PIN-Konsument muss in einem eigenen ownerfreigegebenen Plan:
+
+- sein typisiertes Schema und seine Schluessel definieren;
+- Records an die aktuelle `StorageEpoch` binden;
+- atomaren Commit, Widerruf und fail-closed Recovery festlegen;
+- Werksreset- und Cut-Point-Verhalten ergaenzen;
+- verhindern, dass alte Epochen oder Credentials reaktiviert werden;
+- Secret-, Redaction-, Backup- und Plattformschutzvertraege nachweisen.
+
+### CONFIGURATION_SAFETY_INTEGRATION_GATE zu #24
+
+#57 liefert bei nicht verfuegbarer oder beschaedigter Konfiguration nur stabile
+typisierte Fehlerdaten und keine Runtimefreigabe. Fehlerklasse, persistente
+Verriegelung, Bootprioritaet, `SAFE_BOOT` und reale Aktorsperren bleiben #24.
+
+#57 darf `ConfigurationUnavailable` und `ConfigurationIntegrityFailure`
+unabhaengig implementieren und abschliessen. Das nachgelagerte
+`CONFIGURATION_SAFETY_INTEGRATION_GATE` verpflichtet #24 jedoch, diese realen
+Producer-Vertraege zusammen mit `ConfigurationRuntimeFailure` und dem
+unbestimmten Commitzustand aus #56 auf persistente Verriegelung, sichere
+Bootprioritaet, keine normale Aktorfreigabe und reproduzierbare
+Fehlerinjektion abzubilden. Wird der #24-Core zuerst gemergt, bleibt #24 bis zur
+vollstaendigen Gate-Abnahme offen. Recovery hebt eine Verriegelung nur gemaess
+dem #24-Fehlerresetvertrag auf.
 
 ## Ausdruecklicher Nicht-Scope
 
-- reale WLAN-SSID oder Passwoerter
-- reale Passwort-/PIN-Pruefnachweise
-- KDF-, Algorithmus-, Salt-, Work-Factor- oder Pepperdaten
-- Anmeldung, Sitzungen, Tokens, CSRF oder Sperrzeiten
-- Netzwerkadapter oder WLAN-Verbindung
-- Laufpersistenz aus #17
-- Backup-/Importformat aus #19
-- systemweite Fehlerklassen, Verriegelung, SAFE_BOOT und Aktorsperren aus #24
-- Bedienablauf oder physische Resetgeste aus #25/#26
-- Webtransport und Authentifizierung aus #27
-- reale Flashatomizitaet, Flashlebensdauer oder physische sichere Loeschung
+- persistentes Pending, PendingRoot oder Aktivierungsintent
+- `ConfigurationActivationRunAssessment`
+- persistente Previewdaten
+- Connectivity-/Authentication-Manifeste oder Secretslots
+- Prepared-/Committed-Authentication-Roots
+- `CredentialEpoch`, Credentialwechsel, KDF, Sessions oder CSRF
+- kombinierte Konfigurations-/Secret-Transaktionen
+- Lauf-, Journal- und Historienpersistenz
+- physische Resetgeste oder Touchkalibrierungsmathematik
+- systemweite Fehler-/Safety-/Aktorlogik
+- produktiver NVS-Adapter, Partitionierung oder physische Loeschgarantie
 
 ## Architekturgrenzen
 
-- Bootstrap-, Secret-Manifest-, Authentication-Root-, Epoch- und Resetbedeutung
-  in `fermentation_app`
-- technische Persistenzbausteine aus #54 nicht duplizieren
-- Test-Support nur anwendungsneutral; fachliche Recovery-Orakel in App-Tests
-- keine produktive Secret-Payload in freien oder opaken Strukturen
-- `src/main.cpp` bleibt Composition Root
+- Bootstrap-, Epoch-, Reset- und Konfigurations-Recoverysemantik liegt in
+  `fermentation_app`.
+- technische Store-, Envelope-, Slot- und Cut-Point-Bausteine bleiben in
+  `device_platform`.
+- Testadapter bleiben in `device_platform_test_support`.
+- `src/main.cpp` bleibt Composition Root.
+- es entsteht kein allgemeines Domaenen-, Reset-Plugin- oder Providerframework.
 
 ## Verbindliche Tests
 
 ### Bootstrap
 
-- fabrikneuer simulierter Speicher
-- Initializing vor erster Dokumentrevision
-- Cut vor und nach jedem Write bis Initialized
-- Wiederaufnahme aus jedem Cut
-- Readfehler verhindert Initialisierung
-- beschaedigte Altbytes verhindern Initialisierung
-- unbekannte Speicherformat-/Schemageneration verhindert Factory-Fallback
+- vollstaendig leerer simulierter Speicher mit erfolgreichen Reads
+- `Initializing` vor erster Dokumentrevision
+- Cut vor und nach jedem Write bis `Initialized`
+- Wiederaufnahme ohne doppelte oder gemischte aktive Generation
+- Readfehler, Altbytes, unbekanntes Schema oder ungueltiger Root verhindern
+  automatische Initialisierung
+- BootstrapSequence-/StorageEpoch-Ueberlauf wird vor Write abgelehnt
 
-### Connectivity/Authentication
+### Boot und Korruption
 
-- NotProvisioned nur ueber gueltigen Konfigurationsgraph wirksam
-- gemeinsame Connectivity-Generation fuer Active/Fallback/Pending
-- wiederholte Authentication-Rootwechsel
-- Cuts vor/nach jedem Credential-/Manifest-/Prepared-/Committed-Write
-- Prepared allein nie wirksam
-- nach Erfolg kein committed Root der alten CredentialEpoch
-- gemischte Epoch/Generation/CRC/Referenz ablehnen
-- Widerruf reaktiviert nie alte CredentialEpoch
+- normaler `Initialized`-Boot mit Active
+- unbrauchbares Active mit gueltigem Fallback
+- kein nutzbarer Graph: typisiertes Unavailable und keine Runtime
+- rohe Bytekorruption ohne passende CRC
+- semantisch ungueltiger, CRC-korrekt kodierter Record
+- falsche `StorageEpoch` an jeder Referenzkante
+- unbekannte Bootstrap-, Root-, Manifest- und Dokumentversion
+- Lese-/Kapazitaetsfehler niemals als `NotFound`
+- Korruption startet nie Reset oder Factoryinitialisierung
+- Neustart nach unbestimmtem Root-Commit loest den vollstaendigen Scan eindeutig
+  alt oder neu auf
+- Neustart nach unbestimmtem Root-Commit bleibt bei erneutem Scanfehler
+  fail closed und meldet den typisierten Fehler an das Safety-Gate
 
 ### Werksreset
 
-- Cut vor und nach jedem der sechs Schritte
-- Resetting idempotent wiederaufnehmen
-- alte Active/Pending/Fallback/Connectivity/Authentication unerreichbar
-- Touchkalibrierung erhalten
-- keine alte CredentialEpoch reaktivieren
-- StorageEpoch-/CredentialEpoch-Ueberlauf ablehnen
-- Korruption startet keinen Reset
+- Cut vor und nach jedem persistenten Resetschritt
+- Wiederaufnahme von `Resetting` ist idempotent
+- alte Active-/Fallback-/Dokumentrecords bleiben logisch unerreichbar
+- neue Anfangskonfiguration ist vollstaendig oder noch nicht aktiv, nie gemischt
+- Touchkalibrierungs-Sentinel bleibt an jedem Cut und nach Abschluss
+  unveraendert
+- keine Connectivity-/Authentication-/Secretrecords werden erzeugt
+- `StorageEpoch`-Ueberlauf wird fail closed abgelehnt
+- Neustart nach Root-Commit und vor `Initialized` behaelt die neue Epoche
+- Korruption waehrend Reset fuehrt zu sicherem Unavailable
 
-### Vollstaendige Matrix von #16
+### Additiver Ausbauvertrag
 
-- Bootstrap
-- mindestens 5 Active-Commits
-- mindestens 3 Pending-Ersetzungen
-- Pending verwerfen und erneut erzeugen
-- Anwenden und neu starten
-- kombinierte Connectivity-/Konfigurationstransaktion
-- wiederholte Authentication-Rootwechsel und Widerruf
-- Active-/Pending-Migration
-- Werksreset
-- kein vorzeitiges NoUnreferencedSlotAvailable
-- Korruption jedes Recordtyps und jeder Referenzkante
-- konkretes Fallback- oder Unavailable-Orakel fuer jeden Fall
+- unbekannte spaetere Recordtypen oder Schemas ohne Teilwirkung ablehnen
+- Schema-1-Variante-B-Daten bleiben deterministisch lesbar
+- Copy-Migration veraendert Quelldaten nicht in place
+- Testmodell kann spaeter einen neuen epochengebundenen Recordtyp hinzufuegen,
+  ohne bestehende Schema-1-Bytes umzudeuten
+- keine produktiven Dummy-Secretrecords fuer diesen Nachweis
 
-### Ressourcen
+### Ressourcen und Builds
 
-- hoechstens ein vollstaendiger kodierter Recordpuffer waehrend Commit
-- Preview erst nach Ressourcenbereitstellung sichtbar
-- Ressourcenfehler vor Root-Commit ohne Teilaktivierung
-- Publish nach Root-Commit ohne Allokation, Serialisierung oder Reservierung
-- Base-/Head-Vergleich fuer RAM, Flash, firmware.bin und firmware.elf
-- keine reale Heap-/Flashgarantie ohne Hardwaremessung
+- vollstaendige Cut-Point-Matrix fuer Bootstrap, Boot und Reset
+- begrenzte Record-/Scanpuffer gemaess Vertrag
+- Base-/Head-Vergleich fuer Flash, statisches RAM, `firmware.bin` und
+  `firmware.elf`
+- native Tests und alle drei Buildprofile
+- keine reale Heap-, NVS-, Flashatomizitaets- oder
+  Flashlebensdauergarantie ohne Messung
 
-## Qualitaetspruefung
+## Akzeptanzkriterien
 
-- `pio test -e native`
-- alle drei Buildprofile
-- alle Quality-Gate-Skripte
-- clang-format
-- clang-tidy LLVM 18
-- `git diff --check`
-- vollstaendiger Ressourcenbericht
+- fabrikneu, `Initializing`, `Initialized`, `Resetting`, korrupt und unbekannt
+  sind eindeutig unterscheidbar.
+- Nur nachweislich leerer, fehlerfrei lesbarer Speicher wird initialisiert.
+- Jeder Cut besitzt ein konkretes fachliches Recovery-Orakel.
+- Korruption erzeugt keinen stillen Factory-Fallback oder automatischen Reset.
+- Werksreset ist wiederaufnehmbar und behaelt Touchkalibrierung.
+- Alte Epochen werden nie reaktiviert.
+- `ConfigurationUnavailable` und `ConfigurationIntegrityFailure` sind fuer das
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE` stabil typisiert und getestet.
+- Ein beim Boot weiterhin unbestimmter Konfigurationszustand gibt keine Runtime
+  und keine normale Aktorfreigabe frei.
+- Es existieren keine leeren Connectivity-/Authentication-Manifeste,
+  Secret-Roots oder vorbereiteten Credentialstrukturen.
+- Tests, Buildprofile, Quality Gates und Ressourcenvergleich sind bestanden.
 
-## Definition of Done
+## Git- und PR-Regeln
 
-- #54, #55 und #56 gemergt und abgeschlossen
-- kompletter Scope von #57 umgesetzt
-- Bootstrap, Secret-Manifeste, Authentication-Roots und Reset wiederanlaufbar
-- vollstaendige Cut-Point-, Korruptions-, Slotrotations- und Ressourcenmatrix gruen
-- keine reale Secret-/Authlogik aus #27 vorweggenommen
-- Dokumentation und CHANGELOG aktualisiert
-- PR mit `Closes #57` erstellt
-- nicht gemergt und Branch nicht geloescht
-- #16 bleibt bis Merge und finaler Gesamtpruefung offen
+Nach Merge von #56 fuer #57 zuerst einen eigenen Plan-first-Draft-PR erstellen.
+Nach commitgebundener Planfreigabe ausschliesslich #57 bearbeiten. Kleiner
+Draft-PR, Dokumentation und `CHANGELOG.md` aktualisieren, `Closes #57` erst im
+Umsetzungs-PR. Nicht selbst auf Ready setzen, mergen, Auto-Merge aktivieren,
+force-pushen oder Branch loeschen.
 
 ## Vorgeschlagener Branch
 
-`feat/issue-57-bootstrap-secret-manifeste-recovery`
+`feat/issue-57-bootstrap-storageepoch-recovery`

@@ -1,7 +1,7 @@
 # Sicherung, Geheimnisse und Datenaufbewahrung
 
 Der technische Revisions-, Referenz- und Aktivierungsvertrag der
-Konfigurations- und Secret-Domaene steht in
+Konfigurationsdomaene steht in
 [`CONFIGURATION_PERSISTENCE.md`](CONFIGURATION_PERSISTENCE.md). Dieses Dokument
 definiert die fachliche Backup-, Geheimnis- und Aufbewahrungspolitik.
 
@@ -17,16 +17,18 @@ definiert die fachliche Backup-, Geheimnis- und Aufbewahrungspolitik.
 ## Geheimnisse
 
 Geheimnisse und Authentifizierungsnachweise liegen ausserhalb der
-Konfigurationsdokumente in einer getrennten versionierten Secret-Domaene.
-Connectivity-Secrets sind an die jeweils passende Konfigurationsgeneration
-gebunden und duerfen mit ihr zurueckfallen. Authentication ist
-vorwaertsgerichtet: Eine erfolgreich aktivierte neuere Credential-Epoche wird
-durch einen normalen Konfigurationsrueckfall niemals reaktiviert oder
-zurueckgesetzt.
+Konfigurationsdokumente. #16, #56 und #57 bereiten dafuer keine leeren
+`NotProvisioned`-Manifeste, Roots, Slots oder Reservepayloads vor. Eine reale
+Connectivity- beziehungsweise Authentication-Domaene entsteht erst mit ihrem
+ersten produktiven Konsumenten und verwendet eigene typisierte, versionierte
+und an die aktuelle `StorageEpoch` gebundene Records.
 
-Issue #16 stellt produktiv nur die typisierten `NotProvisioned`-Manifeste und
-die Speichermechanik bereit. Reale WLAN-Credentials sowie Passwort- und PIN-
-Pruefnachweise folgen mit Issue #27 in neuen Schemagenerationen.
+Connectivity muss spaeter den kontrollierten Credentialwechsel und Recovery
+definieren. Authentication bleibt vorwaertsgerichtet: Eine erfolgreich
+aktivierte neuere Credential-Epoche darf durch Konfigurationsfallback oder
+Recovery niemals auf eine aeltere Credential-Epoche zurueckfallen. Diese
+fachlichen Vertraege werden nicht durch vorzeitig leere Speicherstrukturen
+ersetzt.
 
 ### Webpasswort
 
@@ -155,15 +157,16 @@ Datei einlesen
 Regeln:
 
 - keine teilweise Aktivierung
-- kein Import in einen aktiven Lauf
+- Import nur bei sicher festgestelltem `NoActiveOrRecoverableRun`; aktiver,
+  unterbrochener, wiederherstellbarer oder unbekannter Laufzustand blockiert
 - Quellprogramm und Factory-Katalog nicht still überschreiben
 - unbekannte kritische Felder führen zur Ablehnung
 - ältere Schemas nur über getestete Migration
 - fehlende Geheimnisse werden nicht mit leeren Werten überschrieben
 - Import verwendet denselben zentralen Preview-, Validierungs-, Konflikt- und
   Bestaetigungspfad wie Display und Web
-- besteht bereits Pending, baut ein bestaetigter Import auf diesem Kandidaten
-  auf und erzeugt keinen parallelen Active-Zweig
+- Importkandidat und Vorschau bleiben bis zur atomaren Aktivierung fluechtig;
+  es entsteht kein Pending oder paralleler Active-Zweig
 - das interne binaere Revisionsformat ist kein portables Backupformat
 
 ## Aufbewahrungsmodell
@@ -228,10 +231,11 @@ Er behält:
 Der Reset ist lokal, mehrstufig und bei jedem Schritt aktorsicher.
 
 Technisch ist der Reset ein mit `BootstrapState::Resetting`
-wiederaufnehmbarer Epochenwechsel. Er invalidiert Active, Fallback und Pending,
-setzt Connectivity und Authentication auf `NotProvisioned`, macht alte Secret-
-Revisionen logisch unerreichbar und erzeugt eine neue Initialkonfiguration. Er
-wird nie automatisch aufgrund beschaedigter Konfiguration gestartet.
+wiederaufnehmbarer Epochenwechsel. Er invalidiert Active und Fallback der alten
+Epoche und erzeugt eine neue Initialkonfiguration. Spaetere reale Connectivity-
+und Authentication-Domaenen muessen ihre eigenen epochengebundenen Reset- und
+Widerrufsregeln mitbringen; #57 bereitet sie nicht leer vor. Der Reset wird nie
+automatisch aufgrund beschaedigter Konfiguration gestartet.
 
 ## Vergessene Service-PIN
 

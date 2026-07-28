@@ -273,3 +273,54 @@
   Integritaets- und atomare Commitinformationen bleiben davon unberuehrt;
   wiederverwendbare WLAN-Secrets liegen getrennt in der Connectivity-Domaene.
   Die Begrenzung senkt Angriffsflaeche und Recoverykomplexitaet.
+
+## ADR-018: Variante-B-Konfigurationspersistenz fuer Release 1
+
+- **Status:** accepted
+- **Datum:** 2026-07-27
+- **Kontext:** Der bisherige Persistenzvertrag plante neben Active und Fallback
+  zusaetzliche persistente Pending-Roots, Aktivierungsabsichten und vorbereitete
+  Connectivity-/Authentication-Domaenen. Dieser Umfang ist fuer Release 1
+  groesser als der erste reale Bedarf und vervielfacht Schutzwurzeln,
+  Cut-Points, Recoveryzustaende und Abhaengigkeiten. Die bereits umgesetzten
+  Grundlagen aus #54 und #55 bleiben verwertbar.
+- **Entscheidung:** Release 1 verwendet Variante B mit genau einem kanonischen
+  aktiven Konfigurationsgraphen und genau einer nachweislich nutzbaren
+  Rueckfallgeneration. Aenderungen entstehen als fluechtige, vollstaendig
+  validierte Vorschau. Alle falliblen Runtime-Ressourcen werden vor dem
+  persistenten Root-Commit vorbereitet; dieser Commit ist der persistente
+  Linearisierungspunkt. Das anschliessende atomare Publish des vorbereiteten
+  Runtime-Snapshots allokiert, serialisiert, validiert und reserviert nichts und
+  darf vertraglich nicht fehlschlagen. Liefert der Root-Write
+  `CommitOutcomeUnknown` und kann ein vollstaendiger Readback beider Rootslots
+  und des Zielgraphen den persistenten Ausgang nicht eindeutig bestimmen,
+  bleibt der Konfigurationsdienst in einem stabil typisierten unbestimmten
+  Commitzustand fail closed. Er publiziert keinen vorbereiteten Snapshot,
+  erlaubt keine weitere Mutation oder Slotwiederverwendung und behauptet weder
+  alten noch neuen Graphen als kanonisch. Nur ein spaeterer vollstaendig
+  erfolgreicher Scan oder derselbe Scan beim Neustart darf den Zustand
+  eindeutig aufloesen. Es gibt weder automatischen Rollback noch
+  Factory-Fallback. Release 1 besitzt weder persistente
+  Pending-Roots noch Aktivierungsintents noch vorbereitete leere Connectivity-
+  oder Authentication-Manifeste, -Roots oder -Slots. Bootstrap und
+  wiederaufnehmbarer Werksreset verwenden eine `StorageEpoch`; normale
+  Werksresets behalten die geraetespezifische Touchkalibrierung. Reale
+  Connectivity- und Authentication-Domaenen werden erst mit ihrem ersten
+  produktiven Konsumenten als eigene typisierte, versionierte und
+  epochengebundene Persistenz eingefuehrt.
+- **Alternativen:** Variante A bereits in Release 1 mit persistentem Pending,
+  Aktivierungsintent und vorbereiteten Secret-Domaenen; nur eine aktive
+  Generation ohne Fallback; eine Vereinfachung ohne atomaren Root-Commit und
+  vorbereiteten Runtime-Snapshot.
+- **Folgen:** #16 bleibt Tracking-Issue; #56 uebernimmt Active/Fallback,
+  Graphvalidierung, fluechtige Vorschau und Runtimeaktivierung, #57 Bootstrap,
+  `StorageEpoch`, Korruptionssperre und Werksreset. #17 und #24 werden nur ueber
+  ihre tatsaechlichen fachlichen Vertraege und das nachgelagerte
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE` gekoppelt. #24 darf nicht als
+  vollstaendig abgeschlossen gelten, bevor die realen Fehlerproducer aus #56
+  und #57 systemweit integriert und getestet sind. Ein eigener persistenter
+  globaler Mutationszaehler ist kein beschlossener Bestandteil von Release 1;
+  seine Notwendigkeit bleibt bis zum Detailplan von #56
+  `FINAL_SELECTION_PENDING`. ADR-010, ADR-013 und ADR-016 bleiben unveraendert
+  gueltig; ADR-018 ersetzt fuer Release 1 die abweichenden Variante-A-Teile des
+  bisherigen Persistenzvertrags.
