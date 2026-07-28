@@ -62,6 +62,87 @@ void operator delete(void* ptr) noexcept {
 
 void operator delete(void* ptr, std::size_t) noexcept { operator delete(ptr); }
 
+struct ConfigurationServiceHookControl {
+    std::atomic<int> desiredPoint{-1};
+    std::atomic<bool> reached{false};
+    std::atomic<bool> released{false};
+};
+
+namespace fermentation {
+
+class ConfigurationServiceTestAccess {
+   public:
+    static void installHook(ConfigurationService& service,
+                            ConfigurationServiceHookControl& control,
+                            int desiredPoint) {
+        control.desiredPoint.store(desiredPoint, std::memory_order_release);
+        control.reached.store(false, std::memory_order_release);
+        control.released.store(false, std::memory_order_release);
+        service.testHookContext_ = &control;
+        service.testHook_ = &hook;
+    }
+
+    static void clearHook(ConfigurationService& service) {
+        service.testHook_ = nullptr;
+        service.testHookContext_ = nullptr;
+    }
+
+    static void setStateRevision(ConfigurationService& service,
+                                 std::uint64_t revision) {
+        const std::lock_guard<std::mutex> lock(service.stateMutex_);
+        service.stateRevision_ = revision;
+    }
+
+    static void forceRuntimeFailure(ConfigurationService& service) {
+        const std::lock_guard<std::mutex> lock(service.stateMutex_);
+        service.enterFailClosedLocked(
+            ConfigurationServiceMode::RuntimeFailure,
+            ConfigurationRuntimeFailureCause::ServiceStateInvariantViolation);
+    }
+
+    static void restoreOperationalForReservationTest(
+        ConfigurationService& service) {
+        const std::lock_guard<std::mutex> lock(service.stateMutex_);
+        service.mode_ = ConfigurationServiceMode::Operational;
+        service.runtimeFailureCause_.reset();
+        TEST_ASSERT_TRUE(service.incrementStateRevisionLocked());
+    }
+
+    static std::uint64_t previewBuildReservation(
+        ConfigurationService& service) {
+        const std::lock_guard<std::mutex> lock(service.stateMutex_);
+        return service.previewBuildReservation_.value_or(0U);
+    }
+
+    static void releasePreviewBuild(ConfigurationService& service,
+                                    std::uint64_t reservationId) {
+        service.releasePreviewBuild(reservationId);
+    }
+
+    static void invalidateRuntimeBinding(ConfigurationService& service) {
+        service.invalidateRuntimePreparationBindingForTest();
+    }
+
+    static void rejectRuntimePreparation(ConfigurationService& service,
+                                         bool reject) {
+        service.rejectRuntimePreparationForTest(reject);
+    }
+
+   private:
+    static void hook(void* context, ConfigurationService::TestPoint point) {
+        auto& control = *static_cast<ConfigurationServiceHookControl*>(context);
+        if (static_cast<int>(point) !=
+            control.desiredPoint.load(std::memory_order_acquire)) {
+            return;
+        }
+        control.reached.store(true, std::memory_order_release);
+        while (!control.released.load(std::memory_order_acquire)) {
+        }
+    }
+};
+
+}  // namespace fermentation
+
 namespace {
 
 class LocalStore final : public device_platform::IStateStore {
@@ -109,6 +190,10 @@ class LocalStore final : public device_platform::IStateStore {
     void failWrite(const char* key,
                    device_platform::StateStoreWriteStatus status,
                    bool commitValue) {
+        TEST_ASSERT_FALSE(
+            commitValue &&
+            (status == device_platform::StateStoreWriteStatus::WriteError ||
+             status == device_platform::StateStoreWriteStatus::CapacityError));
         writeFaults_[key] = {status, commitValue};
     }
 
@@ -295,8 +380,7 @@ fermentation::ConfigurationPreviewView installChangedPreview(Fixture& fixture,
     auto build = fixture.service.beginPreview();
     TEST_ASSERT_TRUE(build.status ==
                      fermentation::ConfigurationPreviewStatus::Success);
-    TEST_ASSERT_TRUE(
-        build.lease.replaceUserConfiguration({"de", "Europe/Zurich", name}));
+    build.lease.userConfiguration() = {"de", "Europe/Zurich", name};
     auto installed = fixture.service.installPreview(
         std::move(build.lease), fermentation::decodeChangeOrigin(2U),
         fermentation::decodeChangeOperation(1U));
@@ -403,8 +487,7 @@ void test_changed_preview_owns_the_only_second_model_generation() {
     auto build = fixture.service.beginPreview();
     TEST_ASSERT_TRUE(build.status ==
                      fermentation::ConfigurationPreviewStatus::Success);
-    TEST_ASSERT_TRUE(build.lease.replaceUserConfiguration(
-        {"de", "Europe/Zurich", "Neuer Name"}));
+    build.lease.userConfiguration() = {"de", "Europe/Zurich", "Neuer Name"};
     auto second = fixture.service.beginPreview();
     TEST_ASSERT_TRUE(
         second.status ==
@@ -451,8 +534,8 @@ void test_invalid_new_request_does_not_replace_visible_no_change_preview() {
         std::move(firstBuild.lease), fermentation::decodeChangeOrigin(2U),
         fermentation::decodeChangeOperation(1U));
     auto invalidBuild = fixture.service.beginPreview();
-    TEST_ASSERT_TRUE(invalidBuild.lease.replaceUserConfiguration(
-        {"xx", "Europe/Zurich", "Ungueltig"}));
+    invalidBuild.lease.userConfiguration() = {"xx", "Europe/Zurich",
+                                              "Ungueltig"};
     auto invalid = fixture.service.installPreview(
         std::move(invalidBuild.lease), fermentation::decodeChangeOrigin(2U),
         fermentation::decodeChangeOperation(1U));
@@ -541,6 +624,9 @@ void test_indeterminate_commit_blocks_runtime_until_exact_new_resolution() {
     TEST_ASSERT_TRUE(
         fixture.service.mode() ==
         fermentation::ConfigurationServiceMode::CommitIndeterminate);
+    TEST_ASSERT_TRUE(
+        fixture.service.commitIndeterminateCause() ==
+        fermentation::ConfigurationCommitIndeterminateCause::RootReadError);
     TEST_ASSERT_FALSE(fixture.service.visiblePreview().has_value());
     TEST_ASSERT_TRUE(fixture.service.acquireRuntime().status ==
                      fermentation::RuntimeConfigurationReadStatus::
@@ -553,10 +639,42 @@ void test_indeterminate_commit_blocks_runtime_until_exact_new_resolution() {
     TEST_ASSERT_TRUE(fixture.service.resolveIndeterminate() ==
                      fermentation::ConfigurationCommitResolutionStatus::
                          ResolutionRecoveredNew);
+    TEST_ASSERT_FALSE(fixture.service.commitIndeterminateCause().has_value());
     auto runtime = fixture.service.acquireRuntime();
     TEST_ASSERT_EQUAL_STRING(
         "Spaeter aufgeloest",
         runtime.lease->userConfiguration().deviceName.c_str());
+}
+
+void test_indeterminate_commit_preserves_graph_read_and_capacity_causes() {
+    const std::pair<device_platform::StateStoreReadStatus,
+                    fermentation::ConfigurationCommitIndeterminateCause>
+        cases[]{
+            {device_platform::StateStoreReadStatus::ReadError,
+             fermentation::ConfigurationCommitIndeterminateCause::
+                 GraphReadError},
+            {device_platform::StateStoreReadStatus::CapacityError,
+             fermentation::ConfigurationCommitIndeterminateCause::
+                 GraphCapacityError},
+        };
+    for (const auto& [storeStatus, expectedCause] : cases) {
+        Fixture fixture;
+        const auto preview = installChangedPreview(fixture, "Graph unklar");
+        fixture.store.failWrite(
+            "cr1", device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+            true);
+        fixture.store.failReadsAfterWrite("cr1", {{"uc1", storeStatus}});
+        const auto committed = fixture.service.confirmPreview(preview.handle);
+        TEST_ASSERT_TRUE(committed.status ==
+                         fermentation::ConfigurationCommitStatus::
+                             ConfigurationCommitIndeterminate);
+        TEST_ASSERT_TRUE(fixture.service.commitIndeterminateCause() ==
+                         expectedCause);
+        fixture.store.clearReadFault("uc1");
+        TEST_ASSERT_TRUE(fixture.service.resolveIndeterminate() ==
+                         fermentation::ConfigurationCommitResolutionStatus::
+                             ResolutionRecoveredNew);
+    }
 }
 
 void test_post_commit_verification_failure_is_fail_closed_until_rescan() {
@@ -625,7 +743,7 @@ void test_no_change_confirmation_removes_only_its_visible_handle() {
 void test_maximum_count_catalog_keeps_two_model_limit_through_commit() {
     Fixture fixture;
     auto build = fixture.service.beginPreview();
-    TEST_ASSERT_TRUE(build.lease.replaceProgramCatalog(maximumCountCatalog()));
+    build.lease.programCatalog() = maximumCountCatalog();
     TEST_ASSERT_TRUE(
         fixture.service.beginPreview().status ==
         fermentation::ConfigurationPreviewStatus::ConfigurationModelBudgetBusy);
@@ -651,7 +769,7 @@ void test_maximum_valid_active_and_preview_never_create_third_model() {
                      fermentation::ConfigurationPreviewStatus::Success);
     auto candidate = maximumCountCatalog();
     candidate.programs.back().program.notes.back() = 'x';
-    TEST_ASSERT_TRUE(build.lease.replaceProgramCatalog(std::move(candidate)));
+    build.lease.programCatalog() = std::move(candidate);
     TEST_ASSERT_EQUAL_UINT32(2U, fixture.service.fullModelGenerationCount());
     TEST_ASSERT_TRUE(
         fixture.service.beginPreview().status ==
@@ -663,8 +781,7 @@ void test_preview_cancel_cycles_return_to_stable_live_allocation() {
     Fixture fixture;
     const auto runCycle = [&fixture]() {
         auto build = fixture.service.beginPreview();
-        TEST_ASSERT_TRUE(
-            build.lease.replaceProgramCatalog(maximumCountCatalog()));
+        build.lease.programCatalog() = maximumCountCatalog();
         auto installed = fixture.service.installPreview(
             std::move(build.lease), fermentation::decodeChangeOrigin(2U),
             fermentation::decodeChangeOperation(1U));
@@ -734,8 +851,8 @@ void test_superseded_no_change_handle_cannot_remove_newer_preview() {
         std::move(noChangeBuild.lease), fermentation::decodeChangeOrigin(2U),
         fermentation::decodeChangeOperation(1U));
     auto changedBuild = fixture.service.beginPreview();
-    TEST_ASSERT_TRUE(changedBuild.lease.replaceUserConfiguration(
-        {"de", "Europe/Zurich", "Neuere Vorschau"}));
+    changedBuild.lease.userConfiguration() = {"de", "Europe/Zurich",
+                                              "Neuere Vorschau"};
     auto changed = fixture.service.installPreview(
         std::move(changedBuild.lease), fermentation::decodeChangeOrigin(2U),
         fermentation::decodeChangeOperation(1U));
@@ -830,6 +947,370 @@ void test_two_concurrent_confirmations_have_exactly_one_winner() {
         second == fermentation::ConfigurationCommitStatus::PreviewNotFound);
 }
 
+void test_captured_preview_keeps_model_reservation_until_commit_finishes() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Reserviert A");
+    ConfigurationServiceHookControl control;
+    fermentation::ConfigurationServiceTestAccess::installHook(fixture.service,
+                                                              control, 0);
+    fermentation::ConfigurationCommitStatus commitStatus{};
+    std::thread commit([&] {
+        commitStatus = fixture.service.confirmPreview(preview.handle).status;
+    });
+    while (!control.reached.load(std::memory_order_acquire)) {
+    }
+    TEST_ASSERT_TRUE(fixture.service.cancelPreview(preview.handle) ==
+                     fermentation::ConfigurationPreviewStatus::PreviewNotFound);
+    TEST_ASSERT_TRUE(
+        fixture.service.beginPreview().status ==
+        fermentation::ConfigurationPreviewStatus::ConfigurationModelBudgetBusy);
+    TEST_ASSERT_EQUAL_UINT32(2U, fixture.service.fullModelGenerationCount());
+    control.released.store(true, std::memory_order_release);
+    commit.join();
+    fermentation::ConfigurationServiceTestAccess::clearHook(fixture.service);
+    TEST_ASSERT_TRUE(commitStatus ==
+                     fermentation::ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.service.fullModelGenerationCount());
+}
+
+void test_all_old_runtime_leases_hold_retired_generation_until_last_release() {
+    Fixture fixture;
+    std::vector<fermentation::RuntimeConfigurationReadLease> leases;
+    leases.reserve(
+        fermentation::configuration_limits::kMaxRuntimeConfigurationReadLeases);
+    for (std::size_t index = 0U;
+         index <
+         fermentation::configuration_limits::kMaxRuntimeConfigurationReadLeases;
+         ++index) {
+        auto read = fixture.service.acquireRuntime();
+        TEST_ASSERT_TRUE(
+            read.status ==
+            fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted);
+        leases.push_back(std::move(read.lease));
+    }
+    const auto preview = installChangedPreview(fixture, "Neue Generation");
+    TEST_ASSERT_TRUE(fixture.service.confirmPreview(preview.handle).status ==
+                     fermentation::ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_EQUAL_UINT32(2U, fixture.service.fullModelGenerationCount());
+    for (std::size_t index = 0U; index + 1U < leases.size(); ++index) {
+        leases[index] = {};
+        TEST_ASSERT_EQUAL_UINT32(2U,
+                                 fixture.service.fullModelGenerationCount());
+        TEST_ASSERT_TRUE(fixture.service.beginPreview().status ==
+                         fermentation::ConfigurationPreviewStatus::
+                             ConfigurationModelBudgetBusy);
+    }
+    leases.back() = {};
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.service.fullModelGenerationCount());
+    auto available = fixture.service.beginPreview();
+    TEST_ASSERT_TRUE(available.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+}
+
+void test_publish_retirement_keeps_service_closed_until_local_owners_die() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Retirement");
+    ConfigurationServiceHookControl control;
+    fermentation::ConfigurationServiceTestAccess::installHook(fixture.service,
+                                                              control, 1);
+    fermentation::ConfigurationCommitStatus commitStatus{};
+    std::thread commit([&] {
+        commitStatus = fixture.service.confirmPreview(preview.handle).status;
+    });
+    while (!control.reached.load(std::memory_order_acquire)) {
+    }
+    TEST_ASSERT_TRUE(fixture.service.mode() ==
+                     fermentation::ConfigurationServiceMode::CommitInProgress);
+    TEST_ASSERT_EQUAL_UINT32(2U, fixture.service.fullModelGenerationCount());
+    TEST_ASSERT_TRUE(fixture.service.beginPreview().status ==
+                     fermentation::ConfigurationPreviewStatus::
+                         ConfigurationRuntimeUnavailable);
+    control.released.store(true, std::memory_order_release);
+    commit.join();
+    fermentation::ConfigurationServiceTestAccess::clearHook(fixture.service);
+    TEST_ASSERT_TRUE(commitStatus ==
+                     fermentation::ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.service.fullModelGenerationCount());
+}
+
+void test_revoked_preview_build_reservation_is_released_by_identity_only() {
+    Fixture fixture;
+    auto oldBuild = fixture.service.beginPreview();
+    const auto oldId =
+        fermentation::ConfigurationServiceTestAccess::previewBuildReservation(
+            fixture.service);
+    TEST_ASSERT_NOT_EQUAL(0U, oldId);
+    fermentation::ConfigurationServiceTestAccess::forceRuntimeFailure(
+        fixture.service);
+    fermentation::ConfigurationServiceTestAccess::
+        restoreOperationalForReservationTest(fixture.service);
+    TEST_ASSERT_TRUE(
+        fixture.service.beginPreview().status ==
+        fermentation::ConfigurationPreviewStatus::ConfigurationModelBudgetBusy);
+    oldBuild.lease = {};
+    auto newBuild = fixture.service.beginPreview();
+    TEST_ASSERT_TRUE(newBuild.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    fermentation::ConfigurationServiceTestAccess::releasePreviewBuild(
+        fixture.service, oldId);
+    TEST_ASSERT_TRUE(
+        fixture.service.beginPreview().status ==
+        fermentation::ConfigurationPreviewStatus::ConfigurationModelBudgetBusy);
+}
+
+void test_preview_finishing_after_fail_closed_cannot_install_or_lose_budget() {
+    Fixture fixture;
+    auto build = fixture.service.beginPreview();
+    TEST_ASSERT_TRUE(build.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    build.lease.userConfiguration().deviceName = "Spaete Vorschau";
+    ConfigurationServiceHookControl control;
+    fermentation::ConfigurationServiceTestAccess::installHook(fixture.service,
+                                                              control, 3);
+    fermentation::ConfigurationPreviewStatus installStatus{};
+    std::thread installer([&] {
+        installStatus =
+            fixture.service
+                .installPreview(std::move(build.lease),
+                                fermentation::decodeChangeOrigin(2U),
+                                fermentation::decodeChangeOperation(1U))
+                .status;
+    });
+    while (!control.reached.load(std::memory_order_acquire)) {
+    }
+    fermentation::ConfigurationServiceTestAccess::forceRuntimeFailure(
+        fixture.service);
+    TEST_ASSERT_FALSE(fixture.service.visiblePreview().has_value());
+    control.released.store(true, std::memory_order_release);
+    installer.join();
+    fermentation::ConfigurationServiceTestAccess::clearHook(fixture.service);
+    TEST_ASSERT_TRUE(installStatus ==
+                     fermentation::ConfigurationPreviewStatus::StateChanged);
+    TEST_ASSERT_FALSE(fixture.service.visiblePreview().has_value());
+    TEST_ASSERT_EQUAL_UINT32(2U, fixture.service.fullModelGenerationCount());
+    build.lease = {};
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.service.fullModelGenerationCount());
+
+    fermentation::ConfigurationServiceTestAccess::
+        restoreOperationalForReservationTest(fixture.service);
+    auto next = fixture.service.beginPreview();
+    TEST_ASSERT_TRUE(next.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+}
+
+void test_invalid_runtime_binding_is_rebuilt_before_recovered_new_publish() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Neu gebunden");
+    fixture.store.failWrite(
+        "cr1", device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+        true);
+    fixture.store.failReadsAfterWrite(
+        "cr1", {{"cr1", device_platform::StateStoreReadStatus::ReadError}});
+    TEST_ASSERT_TRUE(fixture.service.confirmPreview(preview.handle).status ==
+                     fermentation::ConfigurationCommitStatus::
+                         ConfigurationCommitIndeterminate);
+    fixture.store.clearReadFault("cr1");
+    fermentation::ConfigurationServiceTestAccess::invalidateRuntimeBinding(
+        fixture.service);
+    TEST_ASSERT_TRUE(fixture.service.resolveIndeterminate() ==
+                     fermentation::ConfigurationCommitResolutionStatus::
+                         ResolutionRecoveredNew);
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_EQUAL_STRING(
+        "Neu gebunden", runtime.lease->userConfiguration().deviceName.c_str());
+}
+
+void test_failed_runtime_rebuild_stays_closed_and_can_retry_allowed_cause() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Spaeter vorbereitet");
+    fixture.store.failWrite(
+        "cr1", device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+        true);
+    fixture.store.failReadsAfterWrite(
+        "cr1", {{"cr1", device_platform::StateStoreReadStatus::ReadError}});
+    TEST_ASSERT_TRUE(fixture.service.confirmPreview(preview.handle).status ==
+                     fermentation::ConfigurationCommitStatus::
+                         ConfigurationCommitIndeterminate);
+    fixture.store.clearReadFault("cr1");
+    fermentation::ConfigurationServiceTestAccess::invalidateRuntimeBinding(
+        fixture.service);
+    fermentation::ConfigurationServiceTestAccess::rejectRuntimePreparation(
+        fixture.service, true);
+    TEST_ASSERT_TRUE(fixture.service.resolveIndeterminate() ==
+                     fermentation::ConfigurationCommitResolutionStatus::
+                         ResolutionRuntimeFailure);
+    TEST_ASSERT_TRUE(fixture.service.runtimeFailureCause().has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRuntimeFailureCause::
+                             RuntimePreparationAfterResolutionFailure),
+        static_cast<int>(*fixture.service.runtimeFailureCause()));
+    fermentation::ConfigurationServiceTestAccess::rejectRuntimePreparation(
+        fixture.service, false);
+    TEST_ASSERT_TRUE(fixture.service.recoverRuntimeFailure() ==
+                     fermentation::ConfigurationCommitResolutionStatus::
+                         ResolutionRecoveredNew);
+}
+
+void test_state_revision_headroom_blocks_before_first_write() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Kein Overflow");
+    fermentation::ConfigurationServiceTestAccess::setStateRevision(
+        fixture.service, std::numeric_limits<std::uint64_t>::max() - 1U);
+    const auto beforeWrites = fixture.store.writeCount();
+    TEST_ASSERT_TRUE(
+        fixture.service.confirmPreview(preview.handle).status ==
+        fermentation::ConfigurationCommitStatus::ConfigurationRuntimeFailure);
+    TEST_ASSERT_EQUAL_UINT64(beforeWrites, fixture.store.writeCount());
+    TEST_ASSERT_TRUE(fixture.service.mode() ==
+                     fermentation::ConfigurationServiceMode::RuntimeFailure);
+}
+
+void test_publish_contract_violation_never_returns_activated() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Publish verletzt");
+    ConfigurationServiceHookControl control;
+    fermentation::ConfigurationServiceTestAccess::installHook(fixture.service,
+                                                              control, 4);
+    fermentation::ConfigurationCommitStatus status{};
+    std::thread commit([&] {
+        status = fixture.service.confirmPreview(preview.handle).status;
+    });
+    while (!control.reached.load(std::memory_order_acquire)) {
+    }
+    fermentation::ConfigurationServiceTestAccess::forceRuntimeFailure(
+        fixture.service);
+    control.released.store(true, std::memory_order_release);
+    commit.join();
+    fermentation::ConfigurationServiceTestAccess::clearHook(fixture.service);
+    TEST_ASSERT_TRUE(
+        status ==
+        fermentation::ConfigurationCommitStatus::ConfigurationRuntimeFailure);
+    TEST_ASSERT_TRUE(fixture.service.runtimeFailureCause() ==
+                     fermentation::ConfigurationRuntimeFailureCause::
+                         PublishContractViolation);
+    TEST_ASSERT_TRUE(fixture.service.acquireRuntime().status ==
+                     fermentation::RuntimeConfigurationReadStatus::
+                         ConfigurationRuntimeUnavailable);
+}
+
+void test_state_revision_invariant_after_publish_never_returns_activated() {
+    Fixture fixture;
+    const auto preview =
+        installChangedPreview(fixture, "Revision nach Publish");
+    ConfigurationServiceHookControl control;
+    fermentation::ConfigurationServiceTestAccess::installHook(fixture.service,
+                                                              control, 1);
+    fermentation::ConfigurationCommitStatus status{};
+    std::thread commit([&] {
+        status = fixture.service.confirmPreview(preview.handle).status;
+    });
+    while (!control.reached.load(std::memory_order_acquire)) {
+    }
+    fermentation::ConfigurationServiceTestAccess::setStateRevision(
+        fixture.service, std::numeric_limits<std::uint64_t>::max());
+    control.released.store(true, std::memory_order_release);
+    commit.join();
+    fermentation::ConfigurationServiceTestAccess::clearHook(fixture.service);
+    TEST_ASSERT_TRUE(
+        status ==
+        fermentation::ConfigurationCommitStatus::ConfigurationRuntimeFailure);
+    TEST_ASSERT_TRUE(fixture.service.mode() ==
+                     fermentation::ConfigurationServiceMode::RuntimeFailure);
+}
+
+void test_preview_reports_schema_bound_integrity_and_redacted_summary() {
+    Fixture fixture;
+    auto build = fixture.service.beginPreview();
+    build.lease.userConfiguration().deviceName = "Zusammenfassung";
+    auto extra = build.lease.programCatalog().programs.back();
+    extra.program.id = "zusatz";
+    extra.program.name = "Zusatz";
+    extra.program.builtIn = false;
+    extra.program.factoryCatalogEntry = false;
+    extra.program.resettable = false;
+    extra.program.userDeletable = true;
+    build.lease.programCatalog().programs.push_back(std::move(extra));
+    const auto installed = fixture.service.installPreview(
+        std::move(build.lease), fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(installed.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(1U, installed.preview->integrity.userSchema);
+    TEST_ASSERT_EQUAL_UINT32(1U, installed.preview->integrity.serviceSchema);
+    TEST_ASSERT_EQUAL_UINT32(1U, installed.preview->integrity.programSchema);
+    TEST_ASSERT_TRUE(installed.preview->summary.deviceNameChanged);
+    TEST_ASSERT_EQUAL_UINT16(1U, installed.preview->summary.programsAdded);
+}
+
+void test_persistent_failure_causes_remain_distinct() {
+    {
+        Fixture fixture;
+        const auto preview = installChangedPreview(fixture, "Kollision");
+        const fermentation::UserConfiguration other{
+            "de", "Europe/Zurich", "Gleiche Revision, anderer Inhalt"};
+        std::string payload;
+        TEST_ASSERT_TRUE(fermentation::encodeUserConfigurationPayload(
+                             other, fixture.resolver, payload) ==
+                         fermentation::ConfigurationCodecStatus::Success);
+        fixture.store.put(
+            "uc1", envelope(fermentation::configuration_storage_contract::
+                                kUserConfigurationRecordType,
+                            1U, payload));
+        TEST_ASSERT_TRUE(
+            fixture.service.confirmPreview(preview.handle).status ==
+            fermentation::ConfigurationCommitStatus::
+                ConfigurationRuntimeFailure);
+        TEST_ASSERT_TRUE(fixture.service.runtimeFailureCause() ==
+                         fermentation::ConfigurationRuntimeFailureCause::
+                             PersistentConfigurationIdentityCollision);
+    }
+    {
+        Fixture fixture;
+        const auto preview = installChangedPreview(fixture, "Integritaet");
+        fixture.store.put("cr1", "corrupt-root-record");
+        TEST_ASSERT_TRUE(
+            fixture.service.confirmPreview(preview.handle).status ==
+            fermentation::ConfigurationCommitStatus::
+                ConfigurationRuntimeFailure);
+        TEST_ASSERT_TRUE(fixture.service.runtimeFailureCause() ==
+                         fermentation::ConfigurationRuntimeFailureCause::
+                             PersistentGraphIntegrityFailure);
+    }
+    {
+        Fixture fixture;
+        const auto preview = installChangedPreview(fixture, "Neues Schema");
+        std::string future;
+        TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
+                             {fermentation::configuration_storage_contract::
+                                  kConfigurationRootRecordType,
+                              2U, device_platform::StorageEpoch{1U}, 2U,
+                              std::nullopt, "future-root"},
+                             future, 114U) ==
+                         device_platform::EnvelopeEncodeStatus::Success);
+        fixture.store.put("cr1", std::move(future));
+        TEST_ASSERT_TRUE(
+            fixture.service.confirmPreview(preview.handle).status ==
+            fermentation::ConfigurationCommitStatus::
+                ConfigurationRuntimeFailure);
+        TEST_ASSERT_TRUE(fixture.service.runtimeFailureCause() ==
+                         fermentation::ConfigurationRuntimeFailureCause::
+                             UnsupportedNewerConfigurationSchema);
+    }
+    {
+        Fixture fixture;
+        const auto preview = installChangedPreview(fixture, "Lesefehler");
+        fixture.store.failRead(
+            "pc3", device_platform::StateStoreReadStatus::ReadError);
+        TEST_ASSERT_TRUE(
+            fixture.service.confirmPreview(preview.handle).status ==
+            fermentation::ConfigurationCommitStatus::
+                ConfigurationRuntimeFailure);
+        TEST_ASSERT_TRUE(fixture.service.runtimeFailureCause() ==
+                         fermentation::ConfigurationRuntimeFailureCause::
+                             PersistentStoreReadFailure);
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -847,6 +1328,8 @@ int main() {
     RUN_TEST(test_unknown_root_commit_with_verified_new_graph_activates);
     RUN_TEST(
         test_indeterminate_commit_blocks_runtime_until_exact_new_resolution);
+    RUN_TEST(
+        test_indeterminate_commit_preserves_graph_read_and_capacity_causes);
     RUN_TEST(test_post_commit_verification_failure_is_fail_closed_until_rescan);
     RUN_TEST(test_held_old_reader_blocks_third_model_before_any_write);
     RUN_TEST(test_no_change_confirmation_removes_only_its_visible_handle);
@@ -858,5 +1341,25 @@ int main() {
     RUN_TEST(test_indeterminate_commit_can_resolve_exactly_old);
     RUN_TEST(test_runtime_failure_does_not_recover_to_old_graph_in_process);
     RUN_TEST(test_two_concurrent_confirmations_have_exactly_one_winner);
+    RUN_TEST(
+        test_captured_preview_keeps_model_reservation_until_commit_finishes);
+    RUN_TEST(
+        test_all_old_runtime_leases_hold_retired_generation_until_last_release);
+    RUN_TEST(
+        test_publish_retirement_keeps_service_closed_until_local_owners_die);
+    RUN_TEST(
+        test_revoked_preview_build_reservation_is_released_by_identity_only);
+    RUN_TEST(
+        test_preview_finishing_after_fail_closed_cannot_install_or_lose_budget);
+    RUN_TEST(
+        test_invalid_runtime_binding_is_rebuilt_before_recovered_new_publish);
+    RUN_TEST(
+        test_failed_runtime_rebuild_stays_closed_and_can_retry_allowed_cause);
+    RUN_TEST(test_state_revision_headroom_blocks_before_first_write);
+    RUN_TEST(test_publish_contract_violation_never_returns_activated);
+    RUN_TEST(
+        test_state_revision_invariant_after_publish_never_returns_activated);
+    RUN_TEST(test_preview_reports_schema_bound_integrity_and_redacted_summary);
+    RUN_TEST(test_persistent_failure_causes_remain_distinct);
     return UNITY_END();
 }

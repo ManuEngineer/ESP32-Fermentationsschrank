@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -49,11 +50,13 @@ class RuntimeConfigurationReadLease {
     friend class ConfigurationService;
     RuntimeConfigurationReadLease(
         ConfigurationService& owner,
-        std::shared_ptr<const RuntimeConfigurationSnapshot> snapshot) noexcept;
+        std::shared_ptr<const RuntimeConfigurationSnapshot> snapshot,
+        std::uint64_t generationId) noexcept;
     void release() noexcept;
 
     ConfigurationService* owner_{nullptr};
     std::shared_ptr<const RuntimeConfigurationSnapshot> snapshot_;
+    std::uint64_t generationId_{0U};
 };
 
 struct RuntimeConfigurationReadResult {
@@ -75,12 +78,24 @@ enum class ConfigurationPreviewStatus : std::uint8_t {
 enum class ConfigurationActivationEffect : std::uint8_t { Immediate };
 
 struct ConfigurationCandidateIntegrity {
+    std::uint32_t userSchema{0U};
     std::uint32_t userPayloadLength{0U};
     std::uint32_t userPayloadCrc{0U};
+    std::uint32_t serviceSchema{0U};
     std::uint32_t servicePayloadLength{0U};
     std::uint32_t servicePayloadCrc{0U};
+    std::uint32_t programSchema{0U};
     std::uint32_t programPayloadLength{0U};
     std::uint32_t programPayloadCrc{0U};
+};
+
+struct ConfigurationChangeSummary {
+    bool displayLanguageChanged{false};
+    bool timeZoneChanged{false};
+    bool deviceNameChanged{false};
+    std::uint16_t programsAdded{0U};
+    std::uint16_t programsRemoved{0U};
+    std::uint16_t programsModified{0U};
 };
 
 struct ConfigurationPreviewView {
@@ -88,6 +103,7 @@ struct ConfigurationPreviewView {
     ConfigurationManifestReference expectedActive;
     ConfigurationChangeMask changes;
     ConfigurationCandidateIntegrity integrity;
+    ConfigurationChangeSummary summary;
     ConfigurationActivationEffect activationEffect{
         ConfigurationActivationEffect::Immediate};
     bool noChange{false};
@@ -95,6 +111,7 @@ struct ConfigurationPreviewView {
 
 class ConfigurationPreviewBuildLease {
    public:
+    struct Candidate;
     ConfigurationPreviewBuildLease() = default;
     ~ConfigurationPreviewBuildLease();
     ConfigurationPreviewBuildLease(const ConfigurationPreviewBuildLease&) =
@@ -107,22 +124,21 @@ class ConfigurationPreviewBuildLease {
         ConfigurationPreviewBuildLease&& other) noexcept;
 
     [[nodiscard]] bool valid() const noexcept { return owner_ != nullptr; }
-    [[nodiscard]] bool replaceUserConfiguration(
-        UserConfiguration configuration);
-    [[nodiscard]] bool replaceServiceConfiguration(
-        ServiceConfiguration configuration);
-    [[nodiscard]] bool replaceProgramCatalog(ProgramCatalog catalog);
+    [[nodiscard]] UserConfiguration& userConfiguration();
+    [[nodiscard]] ServiceConfiguration& serviceConfiguration();
+    [[nodiscard]] ProgramCatalog& programCatalog();
 
    private:
     friend class ConfigurationService;
-    struct Candidate;
     ConfigurationPreviewBuildLease(
-        ConfigurationService& owner, std::uint64_t expectedStateRevision,
+        ConfigurationService& owner, std::uint64_t reservationId,
+        std::uint64_t expectedStateRevision,
         ConfigurationManifestReference expectedActive,
         std::shared_ptr<Candidate> candidate) noexcept;
     void release() noexcept;
 
     ConfigurationService* owner_{nullptr};
+    std::uint64_t reservationId_{0U};
     std::uint64_t expectedStateRevision_{0U};
     ConfigurationManifestReference expectedActive_;
     std::shared_ptr<Candidate> candidate_;
@@ -161,12 +177,27 @@ struct ConfigurationCommitResult {
 
 enum class ConfigurationRuntimeFailureCause : std::uint8_t {
     PersistentGraphVerificationFailure,
+    PersistentGraphIntegrityFailure,
+    UnsupportedNewerConfigurationSchema,
+    PersistentStoreReadFailure,
     PostCommitVerificationFailure,
     RuntimePreparationAfterResolutionFailure,
     PublishContractViolation,
     ServiceStateInvariantViolation,
     ConfigurationModelBudgetInvariantViolation,
     PersistentConfigurationIdentityCollision,
+};
+
+enum class ConfigurationCommitIndeterminateCause : std::uint8_t {
+    RootReadError,
+    RootCapacityError,
+    GraphReadError,
+    GraphCapacityError,
+    GraphEnvelopeOrCrcFailure,
+    GraphReferenceFailure,
+    GraphSemanticFailure,
+    GraphIntegrityFailure,
+    AmbiguousRootOutcome,
 };
 
 class ConfigurationService {
@@ -197,6 +228,8 @@ class ConfigurationService {
         std::uint64_t handle);
     [[nodiscard]] ConfigurationCommitResolutionStatus resolveIndeterminate();
     [[nodiscard]] ConfigurationCommitResolutionStatus recoverRuntimeFailure();
+    [[nodiscard]] std::optional<ConfigurationCommitIndeterminateCause>
+    commitIndeterminateCause() const;
     [[nodiscard]] std::optional<ConfigurationRuntimeFailureCause>
     runtimeFailureCause() const;
     [[nodiscard]] std::size_t activeReadLeaseCount() const;
@@ -205,14 +238,23 @@ class ConfigurationService {
    private:
     friend class RuntimeConfigurationReadLease;
     friend class ConfigurationPreviewBuildLease;
+    friend class ConfigurationServiceTestAccess;
 
     struct Preview;
     struct ResolutionContext;
-    void releaseRuntimeLease(
-        const std::shared_ptr<const RuntimeConfigurationSnapshot>&
-            snapshot) noexcept;
-    void releasePreviewBuild(std::uint64_t expectedStateRevision) noexcept;
+    enum class TestPoint : std::uint8_t {
+        PreviewCaptured,
+        BeforeRetirementRelease,
+        BeforeResolutionContextRelease,
+        PreviewBeforeInstall,
+        BeforePublish,
+    };
+    using TestHook = void (*)(void*, TestPoint);
+    void releaseRuntimeLease(std::uint64_t generationId) noexcept;
+    void releasePreviewBuild(std::uint64_t reservationId) noexcept;
     [[nodiscard]] bool incrementStateRevisionLocked() noexcept;
+    [[nodiscard]] bool stateRevisionHasHeadroomLocked(
+        std::uint64_t steps) const noexcept;
     [[nodiscard]] std::shared_ptr<RuntimeConfigurationSnapshot> prepareSnapshot(
         const LoadedConfigurationGraph& graph,
         std::uint64_t generationId) const;
@@ -225,6 +267,10 @@ class ConfigurationService {
         std::shared_ptr<const RuntimeConfigurationSnapshot> preparedRuntime,
         std::shared_ptr<const RuntimeConfigurationSnapshot>& retiredRuntime,
         std::unique_ptr<LoadedConfigurationGraph>& retiredGraph) noexcept;
+    void completeRuntimeRetirement(std::uint64_t generationId) noexcept;
+    void invokeTestHook(TestPoint point) const;
+    void invalidateRuntimePreparationBindingForTest();
+    void rejectRuntimePreparationForTest(bool reject) noexcept;
 
     ConfigurationMutationCoordinator& mutationCoordinator_;
     ConfigurationGraphStore& graphStore_;
@@ -233,16 +279,25 @@ class ConfigurationService {
     ConfigurationServiceMode mode_{ConfigurationServiceMode::RuntimeFailure};
     std::uint64_t stateRevision_{1U};
     std::uint64_t nextPreviewHandle_{1U};
+    std::uint64_t nextPreviewBuildReservation_{1U};
     std::uint64_t nextRuntimeGeneration_{1U};
     std::shared_ptr<const RuntimeConfigurationSnapshot> activeRuntime_;
     std::unique_ptr<LoadedConfigurationGraph> currentGraph_;
-    std::weak_ptr<const RuntimeConfigurationSnapshot> retiredRuntime_;
     std::shared_ptr<const Preview> visiblePreview_;
+    std::shared_ptr<const Preview> capturedPreview_;
     std::size_t readLeaseCount_{0U};
-    bool previewBuildReserved_{false};
+    std::size_t activeGenerationReadLeases_{0U};
+    std::optional<std::uint64_t> retiredGenerationId_;
+    std::size_t retiredGenerationReadLeases_{0U};
+    bool retirementOwnerPending_{false};
+    std::optional<std::uint64_t> previewBuildReservation_;
+    bool previewBuildRevoked_{false};
     bool previewModelReserved_{false};
     std::unique_ptr<ResolutionContext> resolutionContext_;
     std::optional<ConfigurationRuntimeFailureCause> runtimeFailureCause_;
+    void* testHookContext_{nullptr};
+    TestHook testHook_{nullptr};
+    std::atomic<bool> rejectRuntimePreparationForTest_{false};
 };
 
 }  // namespace fermentation

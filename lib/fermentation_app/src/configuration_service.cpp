@@ -1,5 +1,6 @@
 #include "configuration_service.hpp"
 
+#include <algorithm>
 #include <limits>
 #include <utility>
 
@@ -10,9 +11,12 @@
 namespace fermentation {
 
 struct ConfigurationPreviewBuildLease::Candidate {
-    std::shared_ptr<const UserConfiguration> userConfiguration;
-    std::shared_ptr<const ServiceConfiguration> serviceConfiguration;
-    std::shared_ptr<const ProgramCatalog> programCatalog;
+    std::shared_ptr<UserConfiguration> userConfiguration;
+    std::shared_ptr<ServiceConfiguration> serviceConfiguration;
+    std::shared_ptr<ProgramCatalog> programCatalog;
+    std::shared_ptr<const UserConfiguration> baseUserConfiguration;
+    std::shared_ptr<const ServiceConfiguration> baseServiceConfiguration;
+    std::shared_ptr<const ProgramCatalog> baseProgramCatalog;
 };
 
 struct ConfigurationService::Preview {
@@ -23,23 +27,223 @@ struct ConfigurationService::Preview {
     device_platform::PreparedTimeZone preparedTimeZone;
 };
 
+struct RuntimePreparationBinding {
+    device_platform::StorageEpoch storageEpoch;
+    ConfigurationRootSequence rootSequence;
+    ConfigurationManifestReference manifestReference;
+    UserConfigurationReference userConfiguration;
+    ServiceConfigurationReference serviceConfiguration;
+    ProgramCatalogReference programCatalog;
+    std::string preparedTimeZoneIdentifier;
+};
+
 struct ConfigurationService::ResolutionContext {
     PreparedConfigurationCommit persistent;
     std::unique_ptr<LoadedConfigurationGraph> preparedGraph;
     std::shared_ptr<const RuntimeConfigurationSnapshot> preparedRuntime;
+    RuntimePreparationBinding runtimeBinding;
+    ConfigurationCommitIndeterminateCause indeterminateCause{
+        ConfigurationCommitIndeterminateCause::AmbiguousRootOutcome};
 };
+
+namespace {
+
+RuntimePreparationBinding makeRuntimeBinding(
+    const LoadedConfigurationGraph& graph,
+    const RuntimeConfigurationSnapshot& snapshot) {
+    return {graph.active.manifestReference.storageEpoch,
+            graph.rootSequence,
+            graph.active.manifestReference,
+            graph.active.manifest.userConfiguration,
+            graph.active.manifest.serviceConfiguration,
+            graph.active.manifest.programCatalog,
+            snapshot.preparedTimeZone().canonicalIdentifier};
+}
+
+bool runtimeBindingMatches(const RuntimePreparationBinding& binding,
+                           const LoadedConfigurationGraph& graph,
+                           const RuntimeConfigurationSnapshot& snapshot) {
+    return binding.storageEpoch ==
+               graph.active.manifestReference.storageEpoch &&
+           binding.rootSequence == graph.rootSequence &&
+           binding.manifestReference == graph.active.manifestReference &&
+           binding.userConfiguration ==
+               graph.active.manifest.userConfiguration &&
+           binding.serviceConfiguration ==
+               graph.active.manifest.serviceConfiguration &&
+           binding.programCatalog == graph.active.manifest.programCatalog &&
+           snapshot.storageEpoch() == binding.storageEpoch &&
+           snapshot.manifestReference() == binding.manifestReference &&
+           snapshot.userConfigurationRevision() ==
+               binding.userConfiguration.version &&
+           snapshot.serviceConfigurationRevision() ==
+               binding.serviceConfiguration.version &&
+           snapshot.programCatalogRevision() ==
+               binding.programCatalog.version &&
+           configurationContentEquals(*graph.active.userConfiguration,
+                                      snapshot.userConfiguration()) &&
+           configurationContentEquals(*graph.active.serviceConfiguration,
+                                      snapshot.serviceConfiguration()) &&
+           configurationContentEquals(*graph.active.programCatalog,
+                                      snapshot.programCatalog()) &&
+           snapshot.preparedTimeZone().canonicalIdentifier ==
+               binding.preparedTimeZoneIdentifier;
+}
+
+bool runtimeSnapshotMatchesGraph(const LoadedConfigurationGraph& graph,
+                                 const RuntimeConfigurationSnapshot& snapshot) {
+    return snapshot.storageEpoch() ==
+               graph.active.manifestReference.storageEpoch &&
+           snapshot.manifestReference() == graph.active.manifestReference &&
+           snapshot.userConfigurationRevision() ==
+               graph.active.manifest.userConfiguration.version &&
+           snapshot.serviceConfigurationRevision() ==
+               graph.active.manifest.serviceConfiguration.version &&
+           snapshot.programCatalogRevision() ==
+               graph.active.manifest.programCatalog.version &&
+           configurationContentEquals(*graph.active.userConfiguration,
+                                      snapshot.userConfiguration()) &&
+           configurationContentEquals(*graph.active.serviceConfiguration,
+                                      snapshot.serviceConfiguration()) &&
+           configurationContentEquals(*graph.active.programCatalog,
+                                      snapshot.programCatalog()) &&
+           snapshot.preparedTimeZone().canonicalIdentifier ==
+               graph.active.userConfiguration->timeZoneId;
+}
+
+ConfigurationCommitIndeterminateCause mapIndeterminateCause(
+    ConfigurationCommitResolutionCause cause) {
+    switch (cause) {
+        case ConfigurationCommitResolutionCause::RootReadError:
+            return ConfigurationCommitIndeterminateCause::RootReadError;
+        case ConfigurationCommitResolutionCause::RootCapacityError:
+            return ConfigurationCommitIndeterminateCause::RootCapacityError;
+        case ConfigurationCommitResolutionCause::GraphReadError:
+            return ConfigurationCommitIndeterminateCause::GraphReadError;
+        case ConfigurationCommitResolutionCause::GraphCapacityError:
+            return ConfigurationCommitIndeterminateCause::GraphCapacityError;
+        case ConfigurationCommitResolutionCause::GraphEnvelopeOrCrcFailure:
+            return ConfigurationCommitIndeterminateCause::
+                GraphEnvelopeOrCrcFailure;
+        case ConfigurationCommitResolutionCause::GraphReferenceFailure:
+            return ConfigurationCommitIndeterminateCause::GraphReferenceFailure;
+        case ConfigurationCommitResolutionCause::GraphSemanticFailure:
+            return ConfigurationCommitIndeterminateCause::GraphSemanticFailure;
+        case ConfigurationCommitResolutionCause::GraphIntegrityFailure:
+            return ConfigurationCommitIndeterminateCause::GraphIntegrityFailure;
+        case ConfigurationCommitResolutionCause::IdentityCollision:
+        case ConfigurationCommitResolutionCause::UnsupportedNewerSchema:
+        case ConfigurationCommitResolutionCause::None:
+        case ConfigurationCommitResolutionCause::AmbiguousRootOutcome:
+            return ConfigurationCommitIndeterminateCause::AmbiguousRootOutcome;
+    }
+    return ConfigurationCommitIndeterminateCause::AmbiguousRootOutcome;
+}
+
+ConfigurationChangeSummary summarizeChanges(
+    const ConfigurationPreviewBuildLease::Candidate& candidate) {
+    ConfigurationChangeSummary summary;
+    summary.displayLanguageChanged =
+        candidate.userConfiguration->displayLanguageId !=
+        candidate.baseUserConfiguration->displayLanguageId;
+    summary.timeZoneChanged = candidate.userConfiguration->timeZoneId !=
+                              candidate.baseUserConfiguration->timeZoneId;
+    summary.deviceNameChanged = candidate.userConfiguration->deviceName !=
+                                candidate.baseUserConfiguration->deviceName;
+    for (const auto& program : candidate.programCatalog->programs) {
+        const auto found =
+            std::find_if(candidate.baseProgramCatalog->programs.begin(),
+                         candidate.baseProgramCatalog->programs.end(),
+                         [&program](const ProgramDocument& entry) {
+                             return entry.program.id == program.program.id;
+                         });
+        if (found == candidate.baseProgramCatalog->programs.end()) {
+            ++summary.programsAdded;
+        } else {
+            ProgramCatalog left{{program}};
+            ProgramCatalog right{{*found}};
+            if (!configurationContentEquals(left, right)) {
+                ++summary.programsModified;
+            }
+        }
+    }
+    for (const auto& program : candidate.baseProgramCatalog->programs) {
+        const auto found =
+            std::find_if(candidate.programCatalog->programs.begin(),
+                         candidate.programCatalog->programs.end(),
+                         [&program](const ProgramDocument& entry) {
+                             return entry.program.id == program.program.id;
+                         });
+        if (found == candidate.programCatalog->programs.end()) {
+            ++summary.programsRemoved;
+        }
+    }
+    return summary;
+}
+
+bool calculateCandidateIntegrity(
+    const ConfigurationPreviewBuildLease::Candidate& candidate,
+    const device_platform::ITimeZoneResolver& resolver,
+    ConfigurationCandidateIntegrity& integrity) {
+    std::string payload;
+    if (encodeUserConfigurationPayload(*candidate.userConfiguration, resolver,
+                                       payload) !=
+        ConfigurationCodecStatus::Success) {
+        return false;
+    }
+    integrity.userSchema = 1U;
+    integrity.userPayloadLength = static_cast<std::uint32_t>(payload.size());
+    integrity.userPayloadCrc = device_platform::computeCrc32IsoHdlc(payload);
+    payload.clear();
+    if (encodeServiceConfigurationPayload(*candidate.serviceConfiguration,
+                                          payload) !=
+        ConfigurationCodecStatus::Success) {
+        return false;
+    }
+    integrity.serviceSchema = 1U;
+    integrity.servicePayloadLength = static_cast<std::uint32_t>(payload.size());
+    integrity.servicePayloadCrc = device_platform::computeCrc32IsoHdlc(payload);
+    payload.clear();
+    if (encodeProgramCatalogPayload(*candidate.programCatalog, payload) !=
+        ConfigurationCodecStatus::Success) {
+        return false;
+    }
+    integrity.programSchema = 1U;
+    integrity.programPayloadLength = static_cast<std::uint32_t>(payload.size());
+    integrity.programPayloadCrc = device_platform::computeCrc32IsoHdlc(payload);
+    return true;
+}
+
+bool candidateIntegrityEquals(const ConfigurationCandidateIntegrity& left,
+                              const ConfigurationCandidateIntegrity& right) {
+    return left.userSchema == right.userSchema &&
+           left.userPayloadLength == right.userPayloadLength &&
+           left.userPayloadCrc == right.userPayloadCrc &&
+           left.serviceSchema == right.serviceSchema &&
+           left.servicePayloadLength == right.servicePayloadLength &&
+           left.servicePayloadCrc == right.servicePayloadCrc &&
+           left.programSchema == right.programSchema &&
+           left.programPayloadLength == right.programPayloadLength &&
+           left.programPayloadCrc == right.programPayloadCrc;
+}
+
+}  // namespace
 
 RuntimeConfigurationReadLease::RuntimeConfigurationReadLease(
     ConfigurationService& owner,
-    std::shared_ptr<const RuntimeConfigurationSnapshot> snapshot) noexcept
-    : owner_(&owner), snapshot_(std::move(snapshot)) {}
+    std::shared_ptr<const RuntimeConfigurationSnapshot> snapshot,
+    std::uint64_t generationId) noexcept
+    : owner_(&owner),
+      snapshot_(std::move(snapshot)),
+      generationId_(generationId) {}
 
 RuntimeConfigurationReadLease::~RuntimeConfigurationReadLease() { release(); }
 
 RuntimeConfigurationReadLease::RuntimeConfigurationReadLease(
     RuntimeConfigurationReadLease&& other) noexcept
     : owner_(std::exchange(other.owner_, nullptr)),
-      snapshot_(std::move(other.snapshot_)) {}
+      snapshot_(std::move(other.snapshot_)),
+      generationId_(std::exchange(other.generationId_, 0U)) {}
 
 RuntimeConfigurationReadLease& RuntimeConfigurationReadLease::operator=(
     RuntimeConfigurationReadLease&& other) noexcept {
@@ -47,6 +251,7 @@ RuntimeConfigurationReadLease& RuntimeConfigurationReadLease::operator=(
         release();
         owner_ = std::exchange(other.owner_, nullptr);
         snapshot_ = std::move(other.snapshot_);
+        generationId_ = std::exchange(other.generationId_, 0U);
     }
     return *this;
 }
@@ -62,17 +267,22 @@ const RuntimeConfigurationSnapshot* RuntimeConfigurationReadLease::operator->()
 
 void RuntimeConfigurationReadLease::release() noexcept {
     if (owner_ != nullptr) {
-        owner_->releaseRuntimeLease(snapshot_);
+        auto* owner = owner_;
+        const auto generationId = generationId_;
         snapshot_.reset();
         owner_ = nullptr;
+        generationId_ = 0U;
+        owner->releaseRuntimeLease(generationId);
     }
 }
 
 ConfigurationPreviewBuildLease::ConfigurationPreviewBuildLease(
-    ConfigurationService& owner, std::uint64_t expectedStateRevision,
+    ConfigurationService& owner, std::uint64_t reservationId,
+    std::uint64_t expectedStateRevision,
     ConfigurationManifestReference expectedActive,
     std::shared_ptr<Candidate> candidate) noexcept
     : owner_(&owner),
+      reservationId_(reservationId),
       expectedStateRevision_(expectedStateRevision),
       expectedActive_(expectedActive),
       candidate_(std::move(candidate)) {}
@@ -82,6 +292,7 @@ ConfigurationPreviewBuildLease::~ConfigurationPreviewBuildLease() { release(); }
 ConfigurationPreviewBuildLease::ConfigurationPreviewBuildLease(
     ConfigurationPreviewBuildLease&& other) noexcept
     : owner_(std::exchange(other.owner_, nullptr)),
+      reservationId_(std::exchange(other.reservationId_, 0U)),
       expectedStateRevision_(other.expectedStateRevision_),
       expectedActive_(other.expectedActive_),
       candidate_(std::move(other.candidate_)) {}
@@ -91,6 +302,7 @@ ConfigurationPreviewBuildLease& ConfigurationPreviewBuildLease::operator=(
     if (this != &other) {
         release();
         owner_ = std::exchange(other.owner_, nullptr);
+        reservationId_ = std::exchange(other.reservationId_, 0U);
         expectedStateRevision_ = other.expectedStateRevision_;
         expectedActive_ = other.expectedActive_;
         candidate_ = std::move(other.candidate_);
@@ -98,41 +310,25 @@ ConfigurationPreviewBuildLease& ConfigurationPreviewBuildLease::operator=(
     return *this;
 }
 
-bool ConfigurationPreviewBuildLease::replaceUserConfiguration(
-    UserConfiguration configuration) {
-    if (!valid()) {
-        return false;
-    }
-    candidate_->userConfiguration =
-        std::make_shared<const UserConfiguration>(std::move(configuration));
-    return true;
+UserConfiguration& ConfigurationPreviewBuildLease::userConfiguration() {
+    return *candidate_->userConfiguration;
 }
 
-bool ConfigurationPreviewBuildLease::replaceServiceConfiguration(
-    ServiceConfiguration configuration) {
-    if (!valid()) {
-        return false;
-    }
-    candidate_->serviceConfiguration =
-        std::make_shared<const ServiceConfiguration>(configuration);
-    return true;
+ServiceConfiguration& ConfigurationPreviewBuildLease::serviceConfiguration() {
+    return *candidate_->serviceConfiguration;
 }
 
-bool ConfigurationPreviewBuildLease::replaceProgramCatalog(
-    ProgramCatalog catalog) {
-    if (!valid()) {
-        return false;
-    }
-    candidate_->programCatalog =
-        std::make_shared<const ProgramCatalog>(std::move(catalog));
-    return true;
+ProgramCatalog& ConfigurationPreviewBuildLease::programCatalog() {
+    return *candidate_->programCatalog;
 }
 
 void ConfigurationPreviewBuildLease::release() noexcept {
     if (owner_ != nullptr) {
+        const auto reservationId = reservationId_;
         candidate_.reset();
-        owner_->releasePreviewBuild(expectedStateRevision_);
+        owner_->releasePreviewBuild(reservationId);
         owner_ = nullptr;
+        reservationId_ = 0U;
     }
 }
 
@@ -186,37 +382,85 @@ RuntimeConfigurationReadResult ConfigurationService::acquireRuntime() {
         return result;
     }
     ++readLeaseCount_;
+    ++activeGenerationReadLeases_;
     RuntimeConfigurationReadResult result;
     result.status = RuntimeConfigurationReadStatus::RuntimeLeaseGranted;
-    result.lease = RuntimeConfigurationReadLease(*this, activeRuntime_);
+    result.lease = RuntimeConfigurationReadLease(
+        *this, activeRuntime_, activeRuntime_->volatileGenerationId());
     return result;
 }
 
 ConfigurationPreviewBuildResult ConfigurationService::beginPreview() {
-    const std::lock_guard<std::mutex> lock(stateMutex_);
     ConfigurationPreviewBuildResult result;
-    if (mode_ != ConfigurationServiceMode::Operational || !activeRuntime_) {
-        result.status =
-            ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable;
-        return result;
+    std::uint64_t reservationId = 0U;
+    std::uint64_t expectedRevision = 0U;
+    ConfigurationManifestReference expectedActive;
+    std::shared_ptr<const UserConfiguration> baseUser;
+    std::shared_ptr<const ServiceConfiguration> baseService;
+    std::shared_ptr<const ProgramCatalog> baseCatalog;
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (mode_ != ConfigurationServiceMode::Operational || !activeRuntime_) {
+            result.status =
+                ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable;
+            return result;
+        }
+        if (previewBuildReservation_.has_value() || previewModelReserved_ ||
+            retiredGenerationId_.has_value() || retirementOwnerPending_) {
+            result.status =
+                ConfigurationPreviewStatus::ConfigurationModelBudgetBusy;
+            return result;
+        }
+        if (nextPreviewBuildReservation_ ==
+            std::numeric_limits<std::uint64_t>::max()) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            result.status =
+                ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable;
+            return result;
+        }
+        reservationId = nextPreviewBuildReservation_++;
+        previewBuildReservation_ = reservationId;
+        previewBuildRevoked_ = false;
+        previewModelReserved_ = true;
+        expectedRevision = stateRevision_;
+        expectedActive = activeRuntime_->manifestReference_;
+        baseUser = activeRuntime_->userConfiguration_;
+        baseService = activeRuntime_->serviceConfiguration_;
+        baseCatalog = activeRuntime_->programCatalog_;
     }
-    if (previewBuildReserved_ || previewModelReserved_ ||
-        !retiredRuntime_.expired()) {
-        result.status =
-            ConfigurationPreviewStatus::ConfigurationModelBudgetBusy;
-        return result;
-    }
-    previewBuildReserved_ = true;
-    previewModelReserved_ = true;
+
     auto candidate =
         std::make_shared<ConfigurationPreviewBuildLease::Candidate>();
-    candidate->userConfiguration = activeRuntime_->userConfiguration_;
-    candidate->serviceConfiguration = activeRuntime_->serviceConfiguration_;
-    candidate->programCatalog = activeRuntime_->programCatalog_;
+    candidate->baseUserConfiguration = baseUser;
+    candidate->baseServiceConfiguration = baseService;
+    candidate->baseProgramCatalog = baseCatalog;
+    candidate->userConfiguration =
+        std::make_shared<UserConfiguration>(*baseUser);
+    candidate->serviceConfiguration =
+        std::make_shared<ServiceConfiguration>(*baseService);
+    candidate->programCatalog = std::make_shared<ProgramCatalog>(*baseCatalog);
+
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (previewBuildReservation_ != reservationId || previewBuildRevoked_ ||
+            mode_ != ConfigurationServiceMode::Operational ||
+            stateRevision_ != expectedRevision || !activeRuntime_ ||
+            activeRuntime_->manifestReference_ != expectedActive) {
+            if (previewBuildReservation_ == reservationId) {
+                previewBuildReservation_.reset();
+                previewBuildRevoked_ = false;
+                previewModelReserved_ = false;
+            }
+            result.status = ConfigurationPreviewStatus::StateChanged;
+            return result;
+        }
+    }
     result.status = ConfigurationPreviewStatus::Success;
-    result.lease = ConfigurationPreviewBuildLease(
-        *this, stateRevision_, activeRuntime_->manifestReference_,
-        std::move(candidate));
+    result.lease =
+        ConfigurationPreviewBuildLease(*this, reservationId, expectedRevision,
+                                       expectedActive, std::move(candidate));
     return result;
 }
 
@@ -239,90 +483,96 @@ ConfigurationPreviewInstallResult ConfigurationService::installPreview(
         return result;
     }
 
-    std::string candidateUser;
-    std::string candidateService;
-    std::string candidatePrograms;
-    std::string activeUser;
-    std::string activeService;
-    std::string activePrograms;
-    if (encodeUserConfigurationPayload(*candidate->userConfiguration,
-                                       timeZoneResolver_, candidateUser) !=
-            ConfigurationCodecStatus::Success ||
-        encodeServiceConfigurationPayload(*candidate->serviceConfiguration,
-                                          candidateService) !=
-            ConfigurationCodecStatus::Success ||
-        encodeProgramCatalogPayload(*candidate->programCatalog,
-                                    candidatePrograms) !=
-            ConfigurationCodecStatus::Success) {
+    ConfigurationCandidateIntegrity integrity;
+    if (!calculateCandidateIntegrity(*candidate, timeZoneResolver_,
+                                     integrity)) {
         result.status = ConfigurationPreviewStatus::InvalidCandidate;
         return result;
     }
-
-    const std::lock_guard<std::mutex> lock(stateMutex_);
-    if (mode_ != ConfigurationServiceMode::Operational ||
-        stateRevision_ != buildLease.expectedStateRevision_ ||
-        !activeRuntime_ ||
-        activeRuntime_->manifestReference_ != buildLease.expectedActive_) {
-        result.status = ConfigurationPreviewStatus::StateChanged;
-        return result;
-    }
-    if (encodeUserConfigurationPayload(activeRuntime_->userConfiguration(),
-                                       timeZoneResolver_, activeUser) !=
-            ConfigurationCodecStatus::Success ||
-        encodeServiceConfigurationPayload(
-            activeRuntime_->serviceConfiguration(), activeService) !=
-            ConfigurationCodecStatus::Success ||
-        encodeProgramCatalogPayload(activeRuntime_->programCatalog(),
-                                    activePrograms) !=
-            ConfigurationCodecStatus::Success) {
-        enterFailClosedLocked(
-            ConfigurationServiceMode::RuntimeFailure,
-            ConfigurationRuntimeFailureCause::ServiceStateInvariantViolation);
-        result.status =
-            ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable;
-        return result;
-    }
-    if (nextPreviewHandle_ == std::numeric_limits<std::uint64_t>::max()) {
-        enterFailClosedLocked(
-            ConfigurationServiceMode::RuntimeFailure,
-            ConfigurationRuntimeFailureCause::ServiceStateInvariantViolation);
-        result.status =
-            ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable;
-        return result;
-    }
-    const ConfigurationChangeMask changes{candidateUser != activeUser,
-                                          candidateService != activeService,
-                                          candidatePrograms != activePrograms};
+    const ConfigurationChangeMask changes{
+        !configurationContentEquals(*candidate->userConfiguration,
+                                    *candidate->baseUserConfiguration),
+        !configurationContentEquals(*candidate->serviceConfiguration,
+                                    *candidate->baseServiceConfiguration),
+        !configurationContentEquals(*candidate->programCatalog,
+                                    *candidate->baseProgramCatalog)};
     const bool noChange = !changes.userConfiguration &&
                           !changes.serviceConfiguration &&
                           !changes.programCatalog;
-    const ConfigurationPreviewView view{
-        nextPreviewHandle_++,
-        buildLease.expectedActive_,
-        changes,
-        {static_cast<std::uint32_t>(candidateUser.size()),
-         device_platform::computeCrc32IsoHdlc(candidateUser),
-         static_cast<std::uint32_t>(candidateService.size()),
-         device_platform::computeCrc32IsoHdlc(candidateService),
-         static_cast<std::uint32_t>(candidatePrograms.size()),
-         device_platform::computeCrc32IsoHdlc(candidatePrograms)},
-        ConfigurationActivationEffect::Immediate,
-        noChange};
-    if (noChange) {
-        candidate.reset();
-        candidate =
-            std::make_shared<ConfigurationPreviewBuildLease::Candidate>();
-        candidate->userConfiguration = activeRuntime_->userConfiguration_;
-        candidate->serviceConfiguration = activeRuntime_->serviceConfiguration_;
-        candidate->programCatalog = activeRuntime_->programCatalog_;
-        previewModelReserved_ = false;
+    const auto summary = summarizeChanges(*candidate);
+    std::uint64_t handle = 0U;
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (previewBuildReservation_ != buildLease.reservationId_ ||
+            previewBuildRevoked_ ||
+            mode_ != ConfigurationServiceMode::Operational ||
+            stateRevision_ != buildLease.expectedStateRevision_ ||
+            !activeRuntime_ ||
+            activeRuntime_->manifestReference_ != buildLease.expectedActive_) {
+            result.status = ConfigurationPreviewStatus::StateChanged;
+            return result;
+        }
+        if (nextPreviewHandle_ == std::numeric_limits<std::uint64_t>::max()) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            result.status =
+                ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable;
+            return result;
+        }
+        handle = nextPreviewHandle_++;
     }
-    visiblePreview_ = std::make_shared<const Preview>(
-        Preview{view, origin, operation, std::move(candidate),
+    const ConfigurationPreviewView view{
+        handle,  buildLease.expectedActive_,
+        changes, integrity,
+        summary, ConfigurationActivationEffect::Immediate,
+        noChange};
+    if (!noChange) {
+        auto immutableCandidate =
+            std::make_shared<ConfigurationPreviewBuildLease::Candidate>();
+        immutableCandidate->baseUserConfiguration =
+            candidate->baseUserConfiguration;
+        immutableCandidate->baseServiceConfiguration =
+            candidate->baseServiceConfiguration;
+        immutableCandidate->baseProgramCatalog = candidate->baseProgramCatalog;
+        immutableCandidate->userConfiguration =
+            std::make_shared<UserConfiguration>(
+                std::move(*candidate->userConfiguration));
+        immutableCandidate->serviceConfiguration =
+            std::make_shared<ServiceConfiguration>(
+                std::move(*candidate->serviceConfiguration));
+        immutableCandidate->programCatalog = std::make_shared<ProgramCatalog>(
+            std::move(*candidate->programCatalog));
+        candidate = std::move(immutableCandidate);
+    }
+    auto preview = std::make_shared<const Preview>(
+        Preview{view, origin, operation, noChange ? nullptr : candidate,
                 std::move(*userValidation.preparedTimeZone)});
-    previewBuildReserved_ = false;
-    buildLease.candidate_.reset();
-    buildLease.owner_ = nullptr;
+    std::shared_ptr<ConfigurationPreviewBuildLease::Candidate> discarded;
+    invokeTestHook(TestPoint::PreviewBeforeInstall);
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (previewBuildReservation_ != buildLease.reservationId_ ||
+            previewBuildRevoked_ ||
+            mode_ != ConfigurationServiceMode::Operational ||
+            stateRevision_ != buildLease.expectedStateRevision_ ||
+            !activeRuntime_ ||
+            activeRuntime_->manifestReference_ != buildLease.expectedActive_) {
+            result.status = ConfigurationPreviewStatus::StateChanged;
+            return result;
+        }
+        visiblePreview_ = std::move(preview);
+        previewBuildReservation_.reset();
+        previewBuildRevoked_ = false;
+        if (noChange) {
+            previewModelReserved_ = false;
+            discarded = std::move(candidate);
+        }
+        buildLease.candidate_.reset();
+        buildLease.owner_ = nullptr;
+        buildLease.reservationId_ = 0U;
+    }
+    discarded.reset();
     result.status = ConfigurationPreviewStatus::Success;
     result.preview = view;
     return result;
@@ -339,14 +589,28 @@ std::optional<ConfigurationPreviewView> ConfigurationService::visiblePreview()
 
 ConfigurationPreviewStatus ConfigurationService::cancelPreview(
     std::uint64_t handle) {
-    const std::lock_guard<std::mutex> lock(stateMutex_);
-    if (!visiblePreview_) {
-        return ConfigurationPreviewStatus::PreviewNotFound;
+    std::shared_ptr<const Preview> cancelled;
+    bool fullModel = false;
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (!visiblePreview_) {
+            return ConfigurationPreviewStatus::PreviewNotFound;
+        }
+        if (visiblePreview_->view.handle != handle) {
+            return ConfigurationPreviewStatus::PreviewSuperseded;
+        }
+        fullModel = !visiblePreview_->view.noChange;
+        cancelled = std::move(visiblePreview_);
     }
-    if (visiblePreview_->view.handle != handle) {
-        return ConfigurationPreviewStatus::PreviewSuperseded;
+    cancelled.reset();
+    if (fullModel) {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (!capturedPreview_ && !previewBuildReservation_.has_value() &&
+            !resolutionContext_ && !retiredGenerationId_.has_value() &&
+            !retirementOwnerPending_) {
+            previewModelReserved_ = false;
+        }
     }
-    clearPreviewLocked();
     return ConfigurationPreviewStatus::Success;
 }
 
@@ -356,7 +620,8 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
     std::shared_ptr<const Preview> captured;
     {
         const std::lock_guard<std::mutex> lock(stateMutex_);
-        if (mode_ == ConfigurationServiceMode::CommitInProgress) {
+        if (mode_ == ConfigurationServiceMode::CommitInProgress ||
+            capturedPreview_) {
             return {ConfigurationCommitStatus::ConfigurationMutationBusy};
         }
         if (mode_ != ConfigurationServiceMode::Operational || !currentGraph_) {
@@ -375,71 +640,152 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
             }
             return {ConfigurationCommitStatus::NoChange};
         }
+        visiblePreview_.reset();
+        capturedPreview_ = captured;
     }
+    invokeTestHook(TestPoint::PreviewCaptured);
 
     auto mutation = mutationCoordinator_.tryAcquire();
     if (!mutation.lease.valid()) {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (capturedPreview_ == captured &&
+            mode_ == ConfigurationServiceMode::Operational &&
+            !visiblePreview_) {
+            visiblePreview_ = captured;
+            capturedPreview_.reset();
+        }
         return {ConfigurationCommitStatus::ConfigurationMutationBusy};
     }
 
+    ConfigurationCandidateIntegrity confirmedIntegrity;
+    if (!calculateCandidateIntegrity(*captured->candidate, timeZoneResolver_,
+                                     confirmedIntegrity) ||
+        !candidateIntegrityEquals(confirmedIntegrity,
+                                  captured->view.integrity)) {
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            capturedPreview_.reset();
+        }
+        captured.reset();
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            previewModelReserved_ = false;
+        }
+        return {ConfigurationCommitStatus::ConfigurationValidationFailure};
+    }
+
     LoadedConfigurationGraph current;
+    bool basisConflict = false;
     {
         const std::lock_guard<std::mutex> lock(stateMutex_);
         if (mode_ != ConfigurationServiceMode::Operational || !currentGraph_ ||
             !activeRuntime_) {
             return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
         }
-        if (!visiblePreview_) {
-            return {ConfigurationCommitStatus::PreviewNotFound};
-        }
-        if (visiblePreview_ != captured) {
+        if (capturedPreview_ != captured) {
             return {ConfigurationCommitStatus::PreviewSuperseded};
         }
         if (captured->view.expectedActive !=
                 currentGraph_->active.manifestReference ||
             captured->view.expectedActive !=
                 activeRuntime_->manifestReference()) {
-            clearPreviewLocked();
-            return {ConfigurationCommitStatus::ConfigurationConflictFailure};
+            capturedPreview_.reset();
+            basisConflict = true;
+        } else if (nextRuntimeGeneration_ ==
+                       std::numeric_limits<std::uint64_t>::max() ||
+                   !stateRevisionHasHeadroomLocked(2U)) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+        } else {
+            mode_ = ConfigurationServiceMode::CommitInProgress;
         }
-        if (nextRuntimeGeneration_ ==
-            std::numeric_limits<std::uint64_t>::max()) {
+        if (!basisConflict && !incrementStateRevisionLocked()) {
             enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
                                   ConfigurationRuntimeFailureCause::
                                       ServiceStateInvariantViolation);
             return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
         }
-        mode_ = ConfigurationServiceMode::CommitInProgress;
-        if (!incrementStateRevisionLocked()) {
-            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
-                                  ConfigurationRuntimeFailureCause::
-                                      ServiceStateInvariantViolation);
-            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+        if (!basisConflict) {
+            current = *currentGraph_;
         }
-        current = *currentGraph_;
+    }
+    if (basisConflict) {
+        captured.reset();
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        previewModelReserved_ = false;
+        return {ConfigurationCommitStatus::ConfigurationConflictFailure};
     }
 
     const ConfigurationCommitCandidate candidate{
         captured->candidate->userConfiguration,
         captured->candidate->serviceConfiguration,
-        captured->candidate->programCatalog, captured->view.changes};
+        captured->candidate->programCatalog};
     auto prepared = graphStore_.prepareCommit(
         current, candidate, captured->origin, captured->operation);
     if (!prepared.prepared.has_value()) {
-        const std::lock_guard<std::mutex> lock(stateMutex_);
-        if (prepared.status ==
+        const bool failClosed =
+            prepared.status ==
                 ConfigurationCommitPrepareStatus::IntegrityFailure ||
             prepared.status ==
-                ConfigurationCommitPrepareStatus::UnsupportedNewerSchema) {
-            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
-                                  ConfigurationRuntimeFailureCause::
-                                      PersistentConfigurationIdentityCollision);
-            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+                ConfigurationCommitPrepareStatus::IdentityCollision ||
+            prepared.status ==
+                ConfigurationCommitPrepareStatus::UnsupportedNewerSchema ||
+            prepared.status ==
+                ConfigurationCommitPrepareStatus::PersistenceFailure ||
+            prepared.status ==
+                ConfigurationCommitPrepareStatus::CapacityFailure;
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            capturedPreview_.reset();
+            if (failClosed) {
+                auto cause = ConfigurationRuntimeFailureCause::
+                    PersistentGraphVerificationFailure;
+                if (prepared.status ==
+                    ConfigurationCommitPrepareStatus::IdentityCollision) {
+                    cause = ConfigurationRuntimeFailureCause::
+                        PersistentConfigurationIdentityCollision;
+                } else if (prepared.status == ConfigurationCommitPrepareStatus::
+                                                  UnsupportedNewerSchema) {
+                    cause = ConfigurationRuntimeFailureCause::
+                        UnsupportedNewerConfigurationSchema;
+                } else if (prepared.status ==
+                           ConfigurationCommitPrepareStatus::IntegrityFailure) {
+                    cause = ConfigurationRuntimeFailureCause::
+                        PersistentGraphIntegrityFailure;
+                } else if (prepared.status == ConfigurationCommitPrepareStatus::
+                                                  PersistenceFailure ||
+                           prepared.status == ConfigurationCommitPrepareStatus::
+                                                  CapacityFailure) {
+                    cause = ConfigurationRuntimeFailureCause::
+                        PersistentStoreReadFailure;
+                }
+                enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                      cause);
+            }
         }
-        mode_ = ConfigurationServiceMode::Operational;
-        (void)incrementStateRevisionLocked();
-        if (visiblePreview_ == captured) {
-            clearPreviewLocked();
+        captured.reset();
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            if (!resolutionContext_ && !retiredGenerationId_.has_value() &&
+                !retirementOwnerPending_) {
+                previewModelReserved_ = false;
+            }
+            if (!failClosed) {
+                mode_ = ConfigurationServiceMode::Operational;
+                if (!incrementStateRevisionLocked()) {
+                    enterFailClosedLocked(
+                        ConfigurationServiceMode::RuntimeFailure,
+                        ConfigurationRuntimeFailureCause::
+                            ServiceStateInvariantViolation);
+                    return {
+                        ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+                }
+            }
+        }
+        if (failClosed) {
+            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
         }
         if (prepared.status == ConfigurationCommitPrepareStatus::Conflict) {
             return {ConfigurationCommitStatus::ConfigurationConflictFailure};
@@ -462,25 +808,38 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
     auto preparedRuntime =
         prepareSnapshot(prepared.prepared->newGraph, nextRuntimeGeneration_);
     if (!preparedRuntime) {
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            capturedPreview_.reset();
+        }
+        captured.reset();
         const std::lock_guard<std::mutex> lock(stateMutex_);
+        previewModelReserved_ = false;
         mode_ = ConfigurationServiceMode::Operational;
-        (void)incrementStateRevisionLocked();
-        if (visiblePreview_ == captured) {
-            clearPreviewLocked();
+        if (!incrementStateRevisionLocked()) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
         }
         return {ConfigurationCommitStatus::ConfigurationValidationFailure};
     }
 
     auto publishedGraph =
         std::make_unique<LoadedConfigurationGraph>(prepared.prepared->newGraph);
+    const auto runtimeBinding =
+        makeRuntimeBinding(*publishedGraph, *preparedRuntime);
     auto resolution = std::make_unique<ResolutionContext>(ResolutionContext{
         std::move(*prepared.prepared), std::move(publishedGraph),
-        std::move(preparedRuntime)});
+        std::move(preparedRuntime), runtimeBinding,
+        ConfigurationCommitIndeterminateCause::AmbiguousRootOutcome});
     const auto execution =
         graphStore_.executePreparedCommit(resolution->persistent);
     if (execution.status == ConfigurationCommitExecutionStatus::Activated) {
+        invokeTestHook(TestPoint::BeforePublish);
         std::shared_ptr<const RuntimeConfigurationSnapshot> retired;
         std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
+        std::uint64_t retiredGeneration = 0U;
         {
             const std::lock_guard<std::mutex> lock(stateMutex_);
             if (mode_ != ConfigurationServiceMode::CommitInProgress) {
@@ -492,16 +851,30 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
             publishPreparedLocked(
                 resolution->persistent, resolution->preparedGraph,
                 std::move(resolution->preparedRuntime), retired, retiredGraph);
+            retiredGeneration = retired->volatileGenerationId();
             ++nextRuntimeGeneration_;
-            mode_ = ConfigurationServiceMode::Operational;
-            runtimeFailureCause_.reset();
-            (void)incrementStateRevisionLocked();
-            if (visiblePreview_ == captured) {
-                clearPreviewLocked();
-            }
+            capturedPreview_.reset();
         }
+        invokeTestHook(TestPoint::BeforeRetirementRelease);
         retired.reset();
         retiredGraph.reset();
+        resolution.reset();
+        captured.reset();
+        completeRuntimeRetirement(retiredGeneration);
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            if (mode_ == ConfigurationServiceMode::RuntimeFailure) {
+                return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+            }
+            mode_ = ConfigurationServiceMode::Operational;
+            runtimeFailureCause_.reset();
+            if (!incrementStateRevisionLocked()) {
+                enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                      ConfigurationRuntimeFailureCause::
+                                          ServiceStateInvariantViolation);
+                return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+            }
+        }
         return {ConfigurationCommitStatus::Activated};
     }
 
@@ -509,6 +882,9 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
         ConfigurationCommitExecutionStatus::CommitIndeterminate) {
         const std::lock_guard<std::mutex> lock(stateMutex_);
         resolutionContext_ = std::move(resolution);
+        resolutionContext_->indeterminateCause =
+            mapIndeterminateCause(execution.resolutionCause);
+        capturedPreview_.reset();
         enterFailClosedLocked(ConfigurationServiceMode::CommitIndeterminate,
                               ConfigurationRuntimeFailureCause::
                                   PersistentGraphVerificationFailure);
@@ -518,18 +894,65 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
         ConfigurationCommitExecutionStatus::RuntimeFailure) {
         const std::lock_guard<std::mutex> lock(stateMutex_);
         resolutionContext_ = std::move(resolution);
-        enterFailClosedLocked(
-            ConfigurationServiceMode::RuntimeFailure,
-            ConfigurationRuntimeFailureCause::PostCommitVerificationFailure);
+        capturedPreview_.reset();
+        auto failureCause =
+            ConfigurationRuntimeFailureCause::PostCommitVerificationFailure;
+        if (execution.phase ==
+            ConfigurationCommitFailurePhase::RootVerification) {
+            failureCause =
+                ConfigurationRuntimeFailureCause::PostCommitVerificationFailure;
+        } else if (execution.resolutionCause ==
+                   ConfigurationCommitResolutionCause::IdentityCollision) {
+            failureCause = ConfigurationRuntimeFailureCause::
+                PersistentConfigurationIdentityCollision;
+        } else if (execution.resolutionCause ==
+                   ConfigurationCommitResolutionCause::UnsupportedNewerSchema) {
+            failureCause = ConfigurationRuntimeFailureCause::
+                UnsupportedNewerConfigurationSchema;
+        } else if (execution.resolutionCause ==
+                       ConfigurationCommitResolutionCause::GraphReadError ||
+                   execution.resolutionCause ==
+                       ConfigurationCommitResolutionCause::GraphCapacityError) {
+            failureCause =
+                ConfigurationRuntimeFailureCause::PersistentStoreReadFailure;
+        } else if (execution.resolutionCause ==
+                   ConfigurationCommitResolutionCause::GraphIntegrityFailure) {
+            failureCause = ConfigurationRuntimeFailureCause::
+                PersistentGraphIntegrityFailure;
+        } else if (
+            execution.resolutionCause ==
+                ConfigurationCommitResolutionCause::GraphEnvelopeOrCrcFailure ||
+            execution.resolutionCause ==
+                ConfigurationCommitResolutionCause::GraphReferenceFailure ||
+            execution.resolutionCause ==
+                ConfigurationCommitResolutionCause::GraphSemanticFailure) {
+            failureCause = ConfigurationRuntimeFailureCause::
+                PersistentGraphIntegrityFailure;
+        } else if (execution.phase ==
+                   ConfigurationCommitFailurePhase::TargetGraphVerification) {
+            failureCause = ConfigurationRuntimeFailureCause::
+                PersistentGraphVerificationFailure;
+        }
+        enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                              failureCause);
         return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
     }
 
     {
         const std::lock_guard<std::mutex> lock(stateMutex_);
+        capturedPreview_.reset();
+    }
+    resolution.reset();
+    captured.reset();
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        previewModelReserved_ = false;
         mode_ = ConfigurationServiceMode::Operational;
-        (void)incrementStateRevisionLocked();
-        if (visiblePreview_ == captured) {
-            clearPreviewLocked();
+        if (!incrementStateRevisionLocked()) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
         }
     }
     return {execution.status ==
@@ -549,52 +972,136 @@ ConfigurationService::resolveIndeterminate() {
     {
         const std::lock_guard<std::mutex> lock(stateMutex_);
         if (mode_ != ConfigurationServiceMode::CommitIndeterminate ||
-            !resolutionContext_) {
+            !resolutionContext_ || !stateRevisionHasHeadroomLocked(1U)) {
             return ConfigurationCommitResolutionStatus::
                 ResolutionRuntimeFailure;
         }
         context = resolutionContext_.get();
     }
-    const auto resolution = graphStore_.resolveCommit(context->persistent);
-    if (resolution ==
+    const auto resolution =
+        graphStore_.resolveCommitDetailed(context->persistent);
+    if (resolution.status ==
         ConfigurationCommitResolutionStatus::ResolutionStillIndeterminate) {
-        return resolution;
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (resolutionContext_.get() == context) {
+            resolutionContext_->indeterminateCause =
+                mapIndeterminateCause(resolution.cause);
+        }
+        return resolution.status;
     }
-    if (resolution ==
+    if (resolution.status ==
         ConfigurationCommitResolutionStatus::ResolutionRecoveredOld) {
         std::unique_ptr<ResolutionContext> discarded;
         {
             const std::lock_guard<std::mutex> lock(stateMutex_);
+            if (resolutionContext_.get() != context) {
+                return ConfigurationCommitResolutionStatus::
+                    ResolutionRuntimeFailure;
+            }
             discarded = std::move(resolutionContext_);
+        }
+        invokeTestHook(TestPoint::BeforeResolutionContextRelease);
+        discarded.reset();
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            previewModelReserved_ = false;
             mode_ = ConfigurationServiceMode::Operational;
             runtimeFailureCause_.reset();
-            (void)incrementStateRevisionLocked();
+            if (!incrementStateRevisionLocked()) {
+                return ConfigurationCommitResolutionStatus::
+                    ResolutionRuntimeFailure;
+            }
         }
-        discarded.reset();
-        return resolution;
+        return resolution.status;
     }
-    if (resolution ==
+    if (resolution.status ==
         ConfigurationCommitResolutionStatus::ResolutionRecoveredNew) {
+        if (!runtimeBindingMatches(context->runtimeBinding,
+                                   context->persistent.newGraph,
+                                   *context->preparedRuntime)) {
+            std::shared_ptr<const RuntimeConfigurationSnapshot> invalid;
+            {
+                const std::lock_guard<std::mutex> lock(stateMutex_);
+                if (resolutionContext_.get() != context) {
+                    return ConfigurationCommitResolutionStatus::
+                        ResolutionRuntimeFailure;
+                }
+                invalid = std::move(resolutionContext_->preparedRuntime);
+            }
+            invalid.reset();
+            auto rebuilt = prepareSnapshot(context->persistent.newGraph,
+                                           nextRuntimeGeneration_);
+            if (!rebuilt) {
+                const std::lock_guard<std::mutex> lock(stateMutex_);
+                enterFailClosedLocked(
+                    ConfigurationServiceMode::RuntimeFailure,
+                    ConfigurationRuntimeFailureCause::
+                        RuntimePreparationAfterResolutionFailure);
+                return ConfigurationCommitResolutionStatus::
+                    ResolutionRuntimeFailure;
+            }
+            const auto rebuiltBinding =
+                makeRuntimeBinding(context->persistent.newGraph, *rebuilt);
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            if (resolutionContext_.get() != context ||
+                mode_ != ConfigurationServiceMode::CommitIndeterminate) {
+                return ConfigurationCommitResolutionStatus::
+                    ResolutionRuntimeFailure;
+            }
+            resolutionContext_->preparedRuntime = std::move(rebuilt);
+            resolutionContext_->runtimeBinding = rebuiltBinding;
+        }
         std::shared_ptr<const RuntimeConfigurationSnapshot> retired;
         std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
         std::unique_ptr<ResolutionContext> completed;
+        std::uint64_t retiredGeneration = 0U;
         {
             const std::lock_guard<std::mutex> lock(stateMutex_);
+            if (resolutionContext_.get() != context ||
+                !runtimeBindingMatches(resolutionContext_->runtimeBinding,
+                                       resolutionContext_->persistent.newGraph,
+                                       *resolutionContext_->preparedRuntime)) {
+                enterFailClosedLocked(
+                    ConfigurationServiceMode::RuntimeFailure,
+                    ConfigurationRuntimeFailureCause::
+                        RuntimePreparationAfterResolutionFailure);
+                return ConfigurationCommitResolutionStatus::
+                    ResolutionRuntimeFailure;
+            }
             publishPreparedLocked(
                 resolutionContext_->persistent,
                 resolutionContext_->preparedGraph,
                 std::move(resolutionContext_->preparedRuntime), retired,
                 retiredGraph);
+            retiredGeneration = retired->volatileGenerationId();
             ++nextRuntimeGeneration_;
             completed = std::move(resolutionContext_);
-            mode_ = ConfigurationServiceMode::Operational;
-            runtimeFailureCause_.reset();
-            (void)incrementStateRevisionLocked();
         }
+        invokeTestHook(TestPoint::BeforeRetirementRelease);
         retired.reset();
         retiredGraph.reset();
         completed.reset();
-        return resolution;
+        completeRuntimeRetirement(retiredGeneration);
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            if (mode_ == ConfigurationServiceMode::RuntimeFailure) {
+                return ConfigurationCommitResolutionStatus::
+                    ResolutionRuntimeFailure;
+            }
+            mode_ = ConfigurationServiceMode::Operational;
+            runtimeFailureCause_.reset();
+            if (!incrementStateRevisionLocked()) {
+                return ConfigurationCommitResolutionStatus::
+                    ResolutionRuntimeFailure;
+            }
+        }
+        return resolution.status;
+    }
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        enterFailClosedLocked(
+            ConfigurationServiceMode::RuntimeFailure,
+            ConfigurationRuntimeFailureCause::PostCommitVerificationFailure);
     }
     return ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure;
 }
@@ -606,47 +1113,133 @@ ConfigurationService::recoverRuntimeFailure() {
         return ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure;
     }
     ResolutionContext* context = nullptr;
+    ConfigurationRuntimeFailureCause failureCause =
+        ConfigurationRuntimeFailureCause::ServiceStateInvariantViolation;
     {
         const std::lock_guard<std::mutex> lock(stateMutex_);
+        const bool inProcessAllowed =
+            runtimeFailureCause_ == ConfigurationRuntimeFailureCause::
+                                        PersistentGraphVerificationFailure ||
+            runtimeFailureCause_ == ConfigurationRuntimeFailureCause::
+                                        PostCommitVerificationFailure ||
+            runtimeFailureCause_ ==
+                ConfigurationRuntimeFailureCause::
+                    RuntimePreparationAfterResolutionFailure;
         if (mode_ != ConfigurationServiceMode::RuntimeFailure ||
-            !resolutionContext_ ||
-            runtimeFailureCause_ != ConfigurationRuntimeFailureCause::
-                                        PostCommitVerificationFailure) {
+            !resolutionContext_ || !inProcessAllowed ||
+            !stateRevisionHasHeadroomLocked(1U)) {
             return ConfigurationCommitResolutionStatus::
                 ResolutionRuntimeFailure;
         }
         context = resolutionContext_.get();
+        failureCause = *runtimeFailureCause_;
     }
-    const auto resolution = graphStore_.resolveCommit(context->persistent);
-    if (resolution !=
+    if (failureCause ==
+        ConfigurationRuntimeFailureCause::PersistentGraphVerificationFailure) {
+        const auto oldScan =
+            graphStore_.validationScan(context->persistent.oldGraph);
+        if (oldScan.status != ConfigurationScanStatus::Success) {
+            return ConfigurationCommitResolutionStatus::
+                ResolutionRuntimeFailure;
+        }
+        std::unique_ptr<ResolutionContext> completed;
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            if (!activeRuntime_ || !currentGraph_ ||
+                currentGraph_->canonicalRootRecordBytes !=
+                    context->persistent.oldGraph.canonicalRootRecordBytes ||
+                !runtimeSnapshotMatchesGraph(context->persistent.oldGraph,
+                                             *activeRuntime_)) {
+                return ConfigurationCommitResolutionStatus::
+                    ResolutionRuntimeFailure;
+            }
+            completed = std::move(resolutionContext_);
+        }
+        invokeTestHook(TestPoint::BeforeResolutionContextRelease);
+        completed.reset();
+        {
+            const std::lock_guard<std::mutex> lock(stateMutex_);
+            previewModelReserved_ = false;
+            mode_ = ConfigurationServiceMode::Operational;
+            runtimeFailureCause_.reset();
+            if (!incrementStateRevisionLocked()) {
+                return ConfigurationCommitResolutionStatus::
+                    ResolutionRuntimeFailure;
+            }
+        }
+        return ConfigurationCommitResolutionStatus::ResolutionRecoveredOld;
+    }
+
+    const auto resolution =
+        graphStore_.resolveCommitDetailed(context->persistent);
+    if (resolution.status !=
         ConfigurationCommitResolutionStatus::ResolutionRecoveredNew) {
         return ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure;
     }
+    auto preparedRuntime =
+        prepareSnapshot(context->persistent.newGraph, nextRuntimeGeneration_);
+    if (!preparedRuntime) {
+        return ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure;
+    }
+    const auto binding =
+        makeRuntimeBinding(context->persistent.newGraph, *preparedRuntime);
     std::shared_ptr<const RuntimeConfigurationSnapshot> retired;
     std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
     std::unique_ptr<ResolutionContext> completed;
+    std::uint64_t retiredGeneration = 0U;
     {
         const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (resolutionContext_.get() != context) {
+            return ConfigurationCommitResolutionStatus::
+                ResolutionRuntimeFailure;
+        }
+        resolutionContext_->preparedRuntime = std::move(preparedRuntime);
+        resolutionContext_->runtimeBinding = binding;
         publishPreparedLocked(resolutionContext_->persistent,
                               resolutionContext_->preparedGraph,
                               std::move(resolutionContext_->preparedRuntime),
                               retired, retiredGraph);
+        retiredGeneration = retired->volatileGenerationId();
         ++nextRuntimeGeneration_;
         completed = std::move(resolutionContext_);
-        mode_ = ConfigurationServiceMode::Operational;
-        runtimeFailureCause_.reset();
-        (void)incrementStateRevisionLocked();
     }
+    invokeTestHook(TestPoint::BeforeRetirementRelease);
     retired.reset();
     retiredGraph.reset();
     completed.reset();
-    return resolution;
+    completeRuntimeRetirement(retiredGeneration);
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if (runtimeFailureCause_ ==
+            ConfigurationRuntimeFailureCause::
+                ConfigurationModelBudgetInvariantViolation) {
+            return ConfigurationCommitResolutionStatus::
+                ResolutionRuntimeFailure;
+        }
+        mode_ = ConfigurationServiceMode::Operational;
+        runtimeFailureCause_.reset();
+        if (!incrementStateRevisionLocked()) {
+            return ConfigurationCommitResolutionStatus::
+                ResolutionRuntimeFailure;
+        }
+    }
+    return resolution.status;
 }
 
 std::optional<ConfigurationRuntimeFailureCause>
 ConfigurationService::runtimeFailureCause() const {
     const std::lock_guard<std::mutex> lock(stateMutex_);
     return runtimeFailureCause_;
+}
+
+std::optional<ConfigurationCommitIndeterminateCause>
+ConfigurationService::commitIndeterminateCause() const {
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    if (mode_ != ConfigurationServiceMode::CommitIndeterminate ||
+        !resolutionContext_) {
+        return std::nullopt;
+    }
+    return resolutionContext_->indeterminateCause;
 }
 
 std::size_t ConfigurationService::activeReadLeaseCount() const {
@@ -656,36 +1249,53 @@ std::size_t ConfigurationService::activeReadLeaseCount() const {
 
 std::size_t ConfigurationService::fullModelGenerationCount() const {
     const std::lock_guard<std::mutex> lock(stateMutex_);
-    return activeRuntime_
-               ? 1U + static_cast<std::size_t>(previewModelReserved_ ||
-                                               !retiredRuntime_.expired() ||
-                                               resolutionContext_ != nullptr)
-               : 0U;
+    return activeRuntime_ ? 1U + static_cast<std::size_t>(
+                                     previewModelReserved_ ||
+                                     retiredGenerationId_.has_value() ||
+                                     retirementOwnerPending_ ||
+                                     resolutionContext_ != nullptr)
+                          : 0U;
 }
 
 void ConfigurationService::releaseRuntimeLease(
-    const std::shared_ptr<const RuntimeConfigurationSnapshot>&
-        snapshot) noexcept {
+    std::uint64_t generationId) noexcept {
     const std::lock_guard<std::mutex> lock(stateMutex_);
     if (readLeaseCount_ > 0U) {
         --readLeaseCount_;
     }
-    if (snapshot && activeRuntime_ &&
-        snapshot->volatileGenerationId() !=
-            activeRuntime_->volatileGenerationId() &&
-        snapshot.use_count() <= 2) {
-        retiredRuntime_.reset();
+    if (activeRuntime_ &&
+        generationId == activeRuntime_->volatileGenerationId()) {
+        if (activeGenerationReadLeases_ > 0U) {
+            --activeGenerationReadLeases_;
+        }
+        return;
+    }
+    if (retiredGenerationId_.has_value() &&
+        generationId == *retiredGenerationId_) {
+        if (retiredGenerationReadLeases_ > 0U) {
+            --retiredGenerationReadLeases_;
+        }
+        if (retiredGenerationReadLeases_ == 0U && !retirementOwnerPending_) {
+            retiredGenerationId_.reset();
+            if (!previewBuildReservation_.has_value() && !visiblePreview_ &&
+                !capturedPreview_ && !resolutionContext_) {
+                previewModelReserved_ = false;
+            }
+        }
     }
 }
 
 void ConfigurationService::releasePreviewBuild(
-    std::uint64_t expectedStateRevision) noexcept {
+    std::uint64_t reservationId) noexcept {
     const std::lock_guard<std::mutex> lock(stateMutex_);
-    if (previewBuildReserved_) {
-        previewBuildReserved_ = false;
-        previewModelReserved_ = false;
+    if (previewBuildReservation_ == reservationId) {
+        previewBuildReservation_.reset();
+        previewBuildRevoked_ = false;
+        if (!visiblePreview_ && !capturedPreview_ && !resolutionContext_ &&
+            !retiredGenerationId_.has_value() && !retirementOwnerPending_) {
+            previewModelReserved_ = false;
+        }
     }
-    (void)expectedStateRevision;
 }
 
 bool ConfigurationService::incrementStateRevisionLocked() noexcept {
@@ -699,9 +1309,17 @@ bool ConfigurationService::incrementStateRevisionLocked() noexcept {
     return true;
 }
 
+bool ConfigurationService::stateRevisionHasHeadroomLocked(
+    std::uint64_t steps) const noexcept {
+    return stateRevision_ <= std::numeric_limits<std::uint64_t>::max() - steps;
+}
+
 std::shared_ptr<RuntimeConfigurationSnapshot>
 ConfigurationService::prepareSnapshot(const LoadedConfigurationGraph& graph,
                                       std::uint64_t generationId) const {
+    if (rejectRuntimePreparationForTest_.load(std::memory_order_acquire)) {
+        return {};
+    }
     const auto prepared = validateUserConfiguration(
         *graph.active.userConfiguration, timeZoneResolver_);
     if (prepared.status != UserConfigurationStatus::Success ||
@@ -721,18 +1339,28 @@ ConfigurationService::prepareSnapshot(const LoadedConfigurationGraph& graph,
 }
 
 void ConfigurationService::clearPreviewLocked() {
-    if (visiblePreview_ && !visiblePreview_->view.noChange) {
+    const bool releasedFullModel =
+        visiblePreview_ && !visiblePreview_->view.noChange;
+    visiblePreview_.reset();
+    if (releasedFullModel && !capturedPreview_ &&
+        !previewBuildReservation_.has_value() && !resolutionContext_ &&
+        !retiredGenerationId_.has_value() && !retirementOwnerPending_) {
         previewModelReserved_ = false;
     }
-    visiblePreview_.reset();
 }
 
 void ConfigurationService::enterFailClosedLocked(
     ConfigurationServiceMode mode, ConfigurationRuntimeFailureCause cause) {
     mode_ = mode;
     runtimeFailureCause_ = cause;
-    (void)incrementStateRevisionLocked();
-    previewBuildReserved_ = false;
+    if (!incrementStateRevisionLocked()) {
+        mode_ = ConfigurationServiceMode::RuntimeFailure;
+        runtimeFailureCause_ =
+            ConfigurationRuntimeFailureCause::ServiceStateInvariantViolation;
+    }
+    if (previewBuildReservation_.has_value()) {
+        previewBuildRevoked_ = true;
+    }
     clearPreviewLocked();
 }
 
@@ -744,10 +1372,52 @@ void ConfigurationService::publishPreparedLocked(
     std::unique_ptr<LoadedConfigurationGraph>& retiredGraph) noexcept {
     retiredRuntime.swap(activeRuntime_);
     activeRuntime_.swap(preparedRuntime);
-    retiredRuntime_ = retiredRuntime;
+    retiredGenerationId_ = retiredRuntime->volatileGenerationId();
+    retiredGenerationReadLeases_ = activeGenerationReadLeases_;
+    activeGenerationReadLeases_ = 0U;
+    retirementOwnerPending_ = true;
     retiredGraph.swap(currentGraph_);
     currentGraph_.swap(preparedGraph);
     (void)persistent;
+}
+
+void ConfigurationService::completeRuntimeRetirement(
+    std::uint64_t generationId) noexcept {
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    if (!retiredGenerationId_.has_value() ||
+        *retiredGenerationId_ != generationId) {
+        mode_ = ConfigurationServiceMode::RuntimeFailure;
+        runtimeFailureCause_ = ConfigurationRuntimeFailureCause::
+            ConfigurationModelBudgetInvariantViolation;
+        return;
+    }
+    retirementOwnerPending_ = false;
+    if (retiredGenerationReadLeases_ == 0U) {
+        retiredGenerationId_.reset();
+        if (!previewBuildReservation_.has_value() && !visiblePreview_ &&
+            !capturedPreview_ && !resolutionContext_) {
+            previewModelReserved_ = false;
+        }
+    }
+}
+
+void ConfigurationService::invokeTestHook(TestPoint point) const {
+    if (testHook_ != nullptr) {
+        testHook_(testHookContext_, point);
+    }
+}
+
+void ConfigurationService::invalidateRuntimePreparationBindingForTest() {
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    if (resolutionContext_) {
+        resolutionContext_->runtimeBinding.preparedTimeZoneIdentifier =
+            "test-invalid-binding";
+    }
+}
+
+void ConfigurationService::rejectRuntimePreparationForTest(
+    bool reject) noexcept {
+    rejectRuntimePreparationForTest_.store(reject, std::memory_order_release);
 }
 
 }  // namespace fermentation
