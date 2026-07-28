@@ -66,7 +66,12 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   NVS-, Jitter-, Watchdog- und Lebensdauermessungen bleiben offen.
   Der Loader behaelt den Fallback nur als validierte Metadaten, scannt
   Recordgruppen ohne Payloadsammlung und behandelt nicht lesbare benoetigte
-  Root-/Graphrecords vor jeder Runtimefreigabe fail closed.
+  Root-/Graphrecords vor jeder Runtimefreigabe fail closed. Die vollstaendige
+  Reviewkorrektur ergaenzt die erneute kanonische Root-/Fallbackbestimmung vor
+  jedem Write, die vollstaendige Zielgraphpruefung vor dem Rootwrite, intern
+  abgeleitete Aenderungsmasken, getrennte Persistenzursachen sowie besitzsichere
+  Preview-, Reader-, Retirement- und Recoveryreservierungen. Ein exakt
+  persistenter neuer Root kann nicht als alter Ausgang aufgeloest werden.
 
 - Typisierte Konfigurationsdokumente aus Issue #55: UserConfiguration,
   exakt leere ServiceConfiguration und ProgramCatalog Schema 1 mit
