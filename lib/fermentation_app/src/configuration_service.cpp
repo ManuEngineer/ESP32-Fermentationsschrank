@@ -114,7 +114,7 @@ bool ConfigurationPreviewBuildLease::replaceServiceConfiguration(
         return false;
     }
     candidate_->serviceConfiguration =
-        std::make_shared<const ServiceConfiguration>(std::move(configuration));
+        std::make_shared<const ServiceConfiguration>(configuration);
     return true;
 }
 
@@ -149,7 +149,7 @@ ConfigurationService::~ConfigurationService() = default;
 bool ConfigurationService::initialize(const LoadedConfigurationGraph& graph) {
     auto prepared = prepareSnapshot(graph, 1U);
     auto preparedGraph = std::make_unique<LoadedConfigurationGraph>(graph);
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     if (!prepared || activeRuntime_) {
         mode_ = ConfigurationServiceMode::RuntimeFailure;
         runtimeFailureCause_ =
@@ -165,17 +165,17 @@ bool ConfigurationService::initialize(const LoadedConfigurationGraph& graph) {
 }
 
 ConfigurationServiceMode ConfigurationService::mode() const {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     return mode_;
 }
 
 std::uint64_t ConfigurationService::stateRevision() const {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     return stateRevision_;
 }
 
 RuntimeConfigurationReadResult ConfigurationService::acquireRuntime() {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     if (mode_ != ConfigurationServiceMode::Operational || !activeRuntime_) {
         return {};
     }
@@ -193,7 +193,7 @@ RuntimeConfigurationReadResult ConfigurationService::acquireRuntime() {
 }
 
 ConfigurationPreviewBuildResult ConfigurationService::beginPreview() {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     ConfigurationPreviewBuildResult result;
     if (mode_ != ConfigurationServiceMode::Operational || !activeRuntime_) {
         result.status =
@@ -258,7 +258,7 @@ ConfigurationPreviewInstallResult ConfigurationService::installPreview(
         return result;
     }
 
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     if (mode_ != ConfigurationServiceMode::Operational ||
         stateRevision_ != buildLease.expectedStateRevision_ ||
         !activeRuntime_ ||
@@ -296,7 +296,7 @@ ConfigurationPreviewInstallResult ConfigurationService::installPreview(
     const bool noChange = !changes.userConfiguration &&
                           !changes.serviceConfiguration &&
                           !changes.programCatalog;
-    ConfigurationPreviewView view{
+    const ConfigurationPreviewView view{
         nextPreviewHandle_++,
         buildLease.expectedActive_,
         changes,
@@ -330,7 +330,7 @@ ConfigurationPreviewInstallResult ConfigurationService::installPreview(
 
 std::optional<ConfigurationPreviewView> ConfigurationService::visiblePreview()
     const {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     if (!visiblePreview_) {
         return std::nullopt;
     }
@@ -339,7 +339,7 @@ std::optional<ConfigurationPreviewView> ConfigurationService::visiblePreview()
 
 ConfigurationPreviewStatus ConfigurationService::cancelPreview(
     std::uint64_t handle) {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     if (!visiblePreview_) {
         return ConfigurationPreviewStatus::PreviewNotFound;
     }
@@ -350,11 +350,12 @@ ConfigurationPreviewStatus ConfigurationService::cancelPreview(
     return ConfigurationPreviewStatus::Success;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationCommitResult ConfigurationService::confirmPreview(
     std::uint64_t handle) {
     std::shared_ptr<const Preview> captured;
     {
-        std::lock_guard<std::mutex> lock(stateMutex_);
+        const std::lock_guard<std::mutex> lock(stateMutex_);
         if (mode_ == ConfigurationServiceMode::CommitInProgress) {
             return {ConfigurationCommitStatus::ConfigurationMutationBusy};
         }
@@ -383,7 +384,7 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
 
     LoadedConfigurationGraph current;
     {
-        std::lock_guard<std::mutex> lock(stateMutex_);
+        const std::lock_guard<std::mutex> lock(stateMutex_);
         if (mode_ != ConfigurationServiceMode::Operational || !currentGraph_ ||
             !activeRuntime_) {
             return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
@@ -425,7 +426,7 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
     auto prepared = graphStore_.prepareCommit(
         current, candidate, captured->origin, captured->operation);
     if (!prepared.prepared.has_value()) {
-        std::lock_guard<std::mutex> lock(stateMutex_);
+        const std::lock_guard<std::mutex> lock(stateMutex_);
         if (prepared.status ==
                 ConfigurationCommitPrepareStatus::IntegrityFailure ||
             prepared.status ==
@@ -461,7 +462,7 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
     auto preparedRuntime =
         prepareSnapshot(prepared.prepared->newGraph, nextRuntimeGeneration_);
     if (!preparedRuntime) {
-        std::lock_guard<std::mutex> lock(stateMutex_);
+        const std::lock_guard<std::mutex> lock(stateMutex_);
         mode_ = ConfigurationServiceMode::Operational;
         (void)incrementStateRevisionLocked();
         if (visiblePreview_ == captured) {
@@ -481,7 +482,7 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
         std::shared_ptr<const RuntimeConfigurationSnapshot> retired;
         std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
         {
-            std::lock_guard<std::mutex> lock(stateMutex_);
+            const std::lock_guard<std::mutex> lock(stateMutex_);
             if (mode_ != ConfigurationServiceMode::CommitInProgress) {
                 enterFailClosedLocked(
                     ConfigurationServiceMode::RuntimeFailure,
@@ -506,7 +507,7 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
 
     if (execution.status ==
         ConfigurationCommitExecutionStatus::CommitIndeterminate) {
-        std::lock_guard<std::mutex> lock(stateMutex_);
+        const std::lock_guard<std::mutex> lock(stateMutex_);
         resolutionContext_ = std::move(resolution);
         enterFailClosedLocked(ConfigurationServiceMode::CommitIndeterminate,
                               ConfigurationRuntimeFailureCause::
@@ -515,7 +516,7 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
     }
     if (execution.status ==
         ConfigurationCommitExecutionStatus::RuntimeFailure) {
-        std::lock_guard<std::mutex> lock(stateMutex_);
+        const std::lock_guard<std::mutex> lock(stateMutex_);
         resolutionContext_ = std::move(resolution);
         enterFailClosedLocked(
             ConfigurationServiceMode::RuntimeFailure,
@@ -524,7 +525,7 @@ ConfigurationCommitResult ConfigurationService::confirmPreview(
     }
 
     {
-        std::lock_guard<std::mutex> lock(stateMutex_);
+        const std::lock_guard<std::mutex> lock(stateMutex_);
         mode_ = ConfigurationServiceMode::Operational;
         (void)incrementStateRevisionLocked();
         if (visiblePreview_ == captured) {
@@ -546,7 +547,7 @@ ConfigurationService::resolveIndeterminate() {
     }
     ResolutionContext* context = nullptr;
     {
-        std::lock_guard<std::mutex> lock(stateMutex_);
+        const std::lock_guard<std::mutex> lock(stateMutex_);
         if (mode_ != ConfigurationServiceMode::CommitIndeterminate ||
             !resolutionContext_) {
             return ConfigurationCommitResolutionStatus::
@@ -563,7 +564,7 @@ ConfigurationService::resolveIndeterminate() {
         ConfigurationCommitResolutionStatus::ResolutionRecoveredOld) {
         std::unique_ptr<ResolutionContext> discarded;
         {
-            std::lock_guard<std::mutex> lock(stateMutex_);
+            const std::lock_guard<std::mutex> lock(stateMutex_);
             discarded = std::move(resolutionContext_);
             mode_ = ConfigurationServiceMode::Operational;
             runtimeFailureCause_.reset();
@@ -578,7 +579,7 @@ ConfigurationService::resolveIndeterminate() {
         std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
         std::unique_ptr<ResolutionContext> completed;
         {
-            std::lock_guard<std::mutex> lock(stateMutex_);
+            const std::lock_guard<std::mutex> lock(stateMutex_);
             publishPreparedLocked(
                 resolutionContext_->persistent,
                 resolutionContext_->preparedGraph,
@@ -606,7 +607,7 @@ ConfigurationService::recoverRuntimeFailure() {
     }
     ResolutionContext* context = nullptr;
     {
-        std::lock_guard<std::mutex> lock(stateMutex_);
+        const std::lock_guard<std::mutex> lock(stateMutex_);
         if (mode_ != ConfigurationServiceMode::RuntimeFailure ||
             !resolutionContext_ ||
             runtimeFailureCause_ != ConfigurationRuntimeFailureCause::
@@ -625,7 +626,7 @@ ConfigurationService::recoverRuntimeFailure() {
     std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
     std::unique_ptr<ResolutionContext> completed;
     {
-        std::lock_guard<std::mutex> lock(stateMutex_);
+        const std::lock_guard<std::mutex> lock(stateMutex_);
         publishPreparedLocked(resolutionContext_->persistent,
                               resolutionContext_->preparedGraph,
                               std::move(resolutionContext_->preparedRuntime),
@@ -644,17 +645,17 @@ ConfigurationService::recoverRuntimeFailure() {
 
 std::optional<ConfigurationRuntimeFailureCause>
 ConfigurationService::runtimeFailureCause() const {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     return runtimeFailureCause_;
 }
 
 std::size_t ConfigurationService::activeReadLeaseCount() const {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     return readLeaseCount_;
 }
 
 std::size_t ConfigurationService::fullModelGenerationCount() const {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     return activeRuntime_
                ? 1U + static_cast<std::size_t>(previewModelReserved_ ||
                                                !retiredRuntime_.expired() ||
@@ -665,7 +666,7 @@ std::size_t ConfigurationService::fullModelGenerationCount() const {
 void ConfigurationService::releaseRuntimeLease(
     const std::shared_ptr<const RuntimeConfigurationSnapshot>&
         snapshot) noexcept {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     if (readLeaseCount_ > 0U) {
         --readLeaseCount_;
     }
@@ -679,7 +680,7 @@ void ConfigurationService::releaseRuntimeLease(
 
 void ConfigurationService::releasePreviewBuild(
     std::uint64_t expectedStateRevision) noexcept {
-    std::lock_guard<std::mutex> lock(stateMutex_);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
     if (previewBuildReserved_) {
         previewBuildReserved_ = false;
         previewModelReserved_ = false;

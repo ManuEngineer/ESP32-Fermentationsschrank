@@ -72,7 +72,7 @@ ConfigurationGraphCodecStatus encodeRecord(
     if (payloadStatus != ConfigurationGraphCodecStatus::Success) {
         return payloadStatus;
     }
-    device_platform::StorageEnvelope envelope{
+    const device_platform::StorageEnvelope envelope{
         recordType,      schemaVersion,  storageEpoch,
         version.value(), utcUnixSeconds, std::move(payload)};
     std::string encoded;
@@ -134,7 +134,7 @@ decodeConfigurationManifestPayload(const std::string& payload) {
     if (!isPlausible(manifest)) {
         return {ConfigurationGraphCodecStatus::InvalidModel, std::nullopt};
     }
-    return {ConfigurationGraphCodecStatus::Success, std::move(manifest)};
+    return {ConfigurationGraphCodecStatus::Success, manifest};
 }
 
 ConfigurationGraphCodecStatus encodeConfigurationRootPayload(
@@ -193,7 +193,7 @@ decodeConfigurationRootPayload(const std::string& payload) {
     if (!isPlausible(root)) {
         return {ConfigurationGraphCodecStatus::InvalidModel, std::nullopt};
     }
-    return {ConfigurationGraphCodecStatus::Success, std::move(root)};
+    return {ConfigurationGraphCodecStatus::Success, root};
 }
 
 ConfigurationGraphCodecStatus encodeConfigurationManifestRecord(

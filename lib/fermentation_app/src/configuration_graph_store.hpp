@@ -171,10 +171,10 @@ class ConfigurationGraphStore {
     [[nodiscard]] ConfigurationValidationScanResult validationScan(
         const LoadedConfigurationGraph& expectedActive) const;
 
-    [[nodiscard]] ConfigurationSlotPlanResult planSlots(
+    [[nodiscard]] static ConfigurationSlotPlanResult planSlots(
         const LoadedConfigurationGraph& current,
         const ConfigurationHighWaterMarks& highWater,
-        ConfigurationChangeMask changes) const;
+        ConfigurationChangeMask changes);
 
     [[nodiscard]] ConfigurationCommitPrepareResult prepareCommit(
         const LoadedConfigurationGraph& current,

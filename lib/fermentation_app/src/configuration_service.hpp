@@ -176,6 +176,10 @@ class ConfigurationService {
         ConfigurationGraphStore& graphStore,
         const device_platform::ITimeZoneResolver& timeZoneResolver);
     ~ConfigurationService();
+    ConfigurationService(const ConfigurationService&) = delete;
+    ConfigurationService& operator=(const ConfigurationService&) = delete;
+    ConfigurationService(ConfigurationService&&) = delete;
+    ConfigurationService& operator=(ConfigurationService&&) = delete;
 
     [[nodiscard]] bool initialize(const LoadedConfigurationGraph& graph);
     [[nodiscard]] ConfigurationServiceMode mode() const;

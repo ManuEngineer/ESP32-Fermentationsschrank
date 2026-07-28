@@ -41,6 +41,8 @@ struct MetadataScanResult {
 
 device_platform::StateStoreKey key(const char* value) {
     auto result = device_platform::StateStoreKey::create(value);
+    // All call sites use compile-time keys from the validated storage contract.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     return std::move(*result.key);
 }
 
@@ -258,7 +260,7 @@ std::optional<ConfigurationGraphBranch> loadBranch(
     if (!decodedManifest.value.has_value()) {
         return std::nullopt;
     }
-    auto manifest = std::move(*decodedManifest.value);
+    const auto manifest = *decodedManifest.value;
 
     const auto* userRecord = findRecord(users, manifest.userConfiguration.slot);
     const auto* serviceRecord =
@@ -285,10 +287,9 @@ std::optional<ConfigurationGraphBranch> loadBranch(
     }
     return ConfigurationGraphBranch{
         reference,
-        std::move(manifest),
+        manifest,
         std::make_shared<const UserConfiguration>(std::move(*user.document)),
-        std::make_shared<const ServiceConfiguration>(
-            std::move(*service.document)),
+        std::make_shared<const ServiceConfiguration>(*service.document),
         std::make_shared<const ProgramCatalog>(std::move(*catalog.document)),
         manifestRecord->bytes};
 }
@@ -310,6 +311,13 @@ template <typename Version>
 bool checkedNext(Version current, Version& out) {
     return device_platform::checkedIncrement(current, out) ==
            device_platform::CheckedIncrementStatus::Success;
+}
+
+template <typename T>
+const T& requiredPlannedValue(const std::optional<T>& value) {
+    // planSlots() establishes this precondition for every enabled change bit.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    return *value;
 }
 
 template <std::size_t N>
@@ -462,7 +470,7 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
             ++result.diagnostics.invalidCandidates;
             continue;
         }
-        auto root = std::move(*decodedRoot.value);
+        const auto root = *decodedRoot.value;
         auto active =
             loadBranch(root.active, manifests.records, users.records,
                        services.records, catalogs.records, timeZoneResolver_);
@@ -474,7 +482,7 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
         }
         bool selectedFallback = false;
         if (!active.has_value() && fallback.has_value()) {
-            active = std::move(fallback);
+            active = *fallback;
             fallback.reset();
             selectedFallback = true;
             result.diagnostics.fallbackUsed = true;
@@ -492,7 +500,7 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
         result.graph = LoadedConfigurationGraph{
             rootRecord.slot,
             ConfigurationRootSequence(rootRecord.envelope.versionValue),
-            std::move(root),
+            root,
             rootRecord.bytes,
             std::move(*active),
             std::move(fallback),
@@ -588,10 +596,11 @@ ConfigurationValidationScanResult ConfigurationGraphStore::validationScan(
     return result;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationSlotPlanResult ConfigurationGraphStore::planSlots(
     const LoadedConfigurationGraph& current,
     const ConfigurationHighWaterMarks& highWater,
-    ConfigurationChangeMask changes) const {
+    ConfigurationChangeMask changes) {
     std::array<bool, 4> users{};
     std::array<bool, 4> services{};
     std::array<bool, 4> catalogs{};
@@ -664,9 +673,10 @@ ConfigurationSlotPlanResult ConfigurationGraphStore::planSlots(
         device_platform::SlotId(current.rootSlot.value() == 0U ? 1U : 0U);
     plan.manifestGeneration = nextManifest;
     plan.rootSequence = nextRoot;
-    return {ConfigurationSlotPlanStatus::Success, std::move(plan)};
+    return {ConfigurationSlotPlanStatus::Success, plan};
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
     const LoadedConfigurationGraph& current,
     const ConfigurationCommitCandidate& candidate, ChangeOrigin origin,
@@ -732,8 +742,8 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
         }
         userReference = {
             configuration_storage_contract::kUserConfigurationRecordType,
-            *plan.userConfigurationSlot,
-            *plan.userConfigurationRevision,
+            requiredPlannedValue(plan.userConfigurationSlot),
+            requiredPlannedValue(plan.userConfigurationRevision),
             1U,
             static_cast<std::uint32_t>(payload.size()),
             device_platform::computeCrc32IsoHdlc(payload),
@@ -749,8 +759,8 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
         }
         serviceReference = {
             configuration_storage_contract::kServiceConfigurationRecordType,
-            *plan.serviceConfigurationSlot,
-            *plan.serviceConfigurationRevision,
+            requiredPlannedValue(plan.serviceConfigurationSlot),
+            requiredPlannedValue(plan.serviceConfigurationRevision),
             1U,
             static_cast<std::uint32_t>(payload.size()),
             device_platform::computeCrc32IsoHdlc(payload),
@@ -765,23 +775,23 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
         }
         programReference = {
             configuration_storage_contract::kProgramCatalogRecordType,
-            *plan.programCatalogSlot,
-            *plan.programCatalogRevision,
+            requiredPlannedValue(plan.programCatalogSlot),
+            requiredPlannedValue(plan.programCatalogRevision),
             1U,
             static_cast<std::uint32_t>(payload.size()),
             device_platform::computeCrc32IsoHdlc(payload),
             epoch};
         payload.clear();
     }
-    ConfigurationManifest manifest{origin, operation, userReference,
-                                   serviceReference, programReference};
+    const ConfigurationManifest manifest{origin, operation, userReference,
+                                         serviceReference, programReference};
     std::string manifestPayload;
     if (encodeConfigurationManifestPayload(manifest, manifestPayload) !=
         ConfigurationGraphCodecStatus::Success) {
         return {ConfigurationCommitPrepareStatus::InvalidCandidate,
                 std::nullopt};
     }
-    ConfigurationManifestReference manifestReference{
+    const ConfigurationManifestReference manifestReference{
         configuration_storage_contract::kConfigurationManifestRecordType,
         plan.manifestSlot,
         plan.manifestGeneration,
@@ -796,8 +806,8 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
         return {ConfigurationCommitPrepareStatus::CapacityFailure,
                 std::nullopt};
     }
-    ConfigurationRootRecord root{manifestReference,
-                                 current.active.manifestReference};
+    const ConfigurationRootRecord root{manifestReference,
+                                       current.active.manifestReference};
     std::string rootRecord;
     if (encodeConfigurationRootRecord(root, plan.rootSequence, epoch,
                                       std::nullopt, rootRecord) !=
@@ -818,9 +828,9 @@ ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
                                         std::move(rootRecord)}};
 }
 
-ConfigurationCommitExecutionResult
-ConfigurationGraphStore::executePreparedCommit(
-    PreparedConfigurationCommit& prepared) {
+ConfigurationCommitExecutionResult ConfigurationGraphStore::
+    executePreparedCommit(  // NOLINT(readability-function-cognitive-complexity)
+        PreparedConfigurationCommit& prepared) {
     std::string payload;
     std::string record;
     const auto writeRecord = [this, &record](
@@ -842,7 +852,9 @@ ConfigurationGraphStore::executePreparedCommit(
                 payload) != ConfigurationCodecStatus::Success ||
             !encodeDocumentRecord(
                 configuration_storage_contract::kUserConfigurationRecordType,
-                *prepared.slotPlan.userConfigurationRevision, epoch, payload,
+                requiredPlannedValue(
+                    prepared.slotPlan.userConfigurationRevision),
+                epoch, payload,
                 configuration_limits::kMaximumUserConfigurationPayloadBytes +
                     45U,
                 record)) {
@@ -852,7 +864,8 @@ ConfigurationGraphStore::executePreparedCommit(
         payload.clear();
         const auto failure = writeRecord(
             configuration_storage_contract::kUserConfigurationSlotKeys
-                [prepared.slotPlan.userConfigurationSlot->value()],
+                [requiredPlannedValue(prepared.slotPlan.userConfigurationSlot)
+                     .value()],
             configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
             ConfigurationCommitFailurePhase::UserDocument);
         if (failure.has_value()) {
@@ -865,15 +878,18 @@ ConfigurationGraphStore::executePreparedCommit(
                 ConfigurationCodecStatus::Success ||
             !encodeDocumentRecord(
                 configuration_storage_contract::kServiceConfigurationRecordType,
-                *prepared.slotPlan.serviceConfigurationRevision, epoch, payload,
-                45U, record)) {
+                requiredPlannedValue(
+                    prepared.slotPlan.serviceConfigurationRevision),
+                epoch, payload, 45U, record)) {
             return {ConfigurationCommitExecutionStatus::CapacityFailure,
                     ConfigurationCommitFailurePhase::ServiceDocument};
         }
         payload.clear();
         const auto failure = writeRecord(
             configuration_storage_contract::kServiceConfigurationSlotKeys
-                [prepared.slotPlan.serviceConfigurationSlot->value()],
+                [requiredPlannedValue(
+                     prepared.slotPlan.serviceConfigurationSlot)
+                     .value()],
             45U, ConfigurationCommitFailurePhase::ServiceDocument);
         if (failure.has_value()) {
             return *failure;
@@ -885,7 +901,8 @@ ConfigurationGraphStore::executePreparedCommit(
                 ConfigurationCodecStatus::Success ||
             !encodeDocumentRecord(
                 configuration_storage_contract::kProgramCatalogRecordType,
-                *prepared.slotPlan.programCatalogRevision, epoch, payload,
+                requiredPlannedValue(prepared.slotPlan.programCatalogRevision),
+                epoch, payload,
                 configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
                 record)) {
             return {ConfigurationCommitExecutionStatus::CapacityFailure,
@@ -894,7 +911,8 @@ ConfigurationGraphStore::executePreparedCommit(
         payload.clear();
         const auto failure = writeRecord(
             configuration_storage_contract::kProgramCatalogSlotKeys
-                [prepared.slotPlan.programCatalogSlot->value()],
+                [requiredPlannedValue(prepared.slotPlan.programCatalogSlot)
+                     .value()],
             configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
             ConfigurationCommitFailurePhase::ProgramDocument);
         if (failure.has_value()) {
@@ -911,7 +929,7 @@ ConfigurationGraphStore::executePreparedCommit(
         return mapPreRootWrite(manifestStatus,
                                ConfigurationCommitFailurePhase::Manifest);
     }
-    const auto rootKey = configuration_storage_contract::
+    const auto* const rootKey = configuration_storage_contract::
         kConfigurationRootSlotKeys[prepared.slotPlan.rootSlot.value()];
     const auto write = store_.write(key(rootKey), prepared.rootRecordBytes);
     if (write == device_platform::StateStoreWriteStatus::WriteError) {
