@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <optional>
+#include <memory>
+#include <string>
 
 #include "configuration_documents.hpp"
 #include "storage_types.hpp"
@@ -78,6 +80,25 @@ struct ConfigurationManifest {
 struct ConfigurationRootRecord {
     ConfigurationManifestReference active;
     std::optional<ConfigurationManifestReference> fallback;
+};
+
+struct ConfigurationGraphBranch {
+    ConfigurationManifestReference manifestReference;
+    ConfigurationManifest manifest;
+    std::shared_ptr<const UserConfiguration> userConfiguration;
+    std::shared_ptr<const ServiceConfiguration> serviceConfiguration;
+    std::shared_ptr<const ProgramCatalog> programCatalog;
+    std::string canonicalManifestRecordBytes;
+};
+
+struct LoadedConfigurationGraph {
+    device_platform::SlotId rootSlot;
+    ConfigurationRootSequence rootSequence;
+    ConfigurationRootRecord root;
+    std::string canonicalRootRecordBytes;
+    ConfigurationGraphBranch active;
+    std::optional<ConfigurationGraphBranch> fallback;
+    bool selectedFallback{false};
 };
 
 [[nodiscard]] bool operator==(const ChangeOrigin& left,
