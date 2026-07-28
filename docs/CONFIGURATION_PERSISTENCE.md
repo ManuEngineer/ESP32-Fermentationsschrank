@@ -239,15 +239,17 @@ Es wird keine zweite Programmschema-Definition eingefuehrt.
 Revisionen und Generationen verwenden `uint64_t`, beginnen bei 1, reservieren 0
 und laufen niemals still ueber.
 
-Ob Release 1 neben Dokumentrevision, Manifestgeneration, `rootSequence`,
-erwarteter Basis und Kandidatenintegritaet eine eigene persistente monotone
-`MutationSequence` benoetigt, bleibt bis zum Detailplan von #56
-`FINAL_SELECTION_PENDING`. Der Detailplan darf sie nur weglassen, wenn er fuer
-Konflikterkennung, eindeutiges Commit-Ergebnis, Wiederholung und Readback eine
-gleichwertige, testbare Semantik nachweist. Eine spaetere Einfuehrung waere eine
-materielle Planaenderung und benoetigt Ownerfreigabe. Unterschiedliche starke
-Typen bleiben auch bei gleichen numerischen Werten getrennt; unveraenderte
-Dokumente behalten ihre Revision.
+Release 1 benoetigt keine separate persistente `MutationSequence`. Der fuer
+#56 erbrachte Gleichwertigkeitsnachweis verwendet je `StorageEpoch` die
+High-Water-Marks aller technisch gueltigen Dokumentrevisionen,
+Manifestgenerationen und Rootsequenzen. Auch verwaiste Vor-Root-Writes
+verbrauchen ihre Identitaet fuer andere Inhalte; neue Werte entstehen checked
+als `max + 1`. `NoChange` schreibt nichts. Konflikterkennung, eindeutige
+Commitaufloesung und Wiederholung besitzen damit keine zusaetzliche Information,
+die ein weiterer persistenter Zaehler liefern wuerde. Eine spaetere Einfuehrung
+waere eine materielle Planaenderung und benoetigt Ownerfreigabe.
+Unterschiedliche starke Typen bleiben auch bei gleichen numerischen Werten
+getrennt; unveraenderte Dokumente behalten ihre Revision.
 
 Migrationen sind ausschliesslich Copy-Migrationen:
 
@@ -584,9 +586,8 @@ Ausgang verwendet.
 Kann der Scan wegen `ReadError`, `CapacityError`, Integritaetsfehler,
 semantischem Graphfehler oder eines vergleichbaren Storefehlers nicht
 vollstaendig und eindeutig abgeschlossen werden, entsteht ein stabil
-typisierter unbestimmter Commitzustand. Der spaetere #56-Plan legt den
-endgueltigen Typnamen fest; `ConfigurationCommitIndeterminate` bezeichnet hier
-die verbindliche Semantik.
+typisierter unbestimmter Commitzustand
+`ConfigurationCommitIndeterminate`.
 
 In diesem Zustand gilt:
 
@@ -646,11 +647,14 @@ Umdeutung.
 
 ### Kapazitaet und Lebenszyklus
 
-Kapazitaet, Anzahl gleichzeitig erlaubter Vorschauen und konkrete
-Speicherobergrenzen werden im Detailplan und Ressourcennachweis von #56
-festgelegt. Es gibt keine unbeschraenkte Vorschau, aber auch keine ungepruefte
-Produktgarantie. Eine begonnene Commitentscheidung wird gegen parallele
-Konfigurationsmutationen serialisiert.
+Release 1 erlaubt genau eine sichtbare Vorschau, genau eine volle
+Previewerstellung, hoechstens zwei unterschiedliche vollstaendige
+Konfigurationsmodellgenerationen und hoechstens acht registrierte
+`RuntimeConfigurationReadLease`-Objekte. Eine belegte Modellposition fuehrt
+vor tiefer Kopie und vor jedem Write zu `ConfigurationModelBudgetBusy`.
+Diese Softwaregrenzen sind keine ungepruefte reale Heapgarantie. Eine begonnene
+Commitentscheidung wird ueber die gemeinsame `ConfigurationMutationLease`
+gegen parallele Konfigurationsmutationen serialisiert.
 
 Secret-Werte erscheinen nie in Preview-Antworten, oeffentlichen Fingerprints,
 Zusammenfassungen, Logs, Diagnosen oder Exporten.
@@ -910,10 +914,10 @@ Produktionsmodul oder ESP32-Profil darf Test-Support referenzieren.
 ## Ressourcenvertrag
 
 Die Umsetzung erzwingt zentrale Softwareobergrenzen fuer fluechtige Vorschau,
-Recordpuffer, typisierten ProgramCatalog und alle Payloads. Die konkreten
-Vorschau- und Workflowbudgets werden erst im Detailplan und
-Ressourcennachweis von #56 festgelegt; daraus folgt weder eine ungepruefte reale
-Hardwaregarantie noch eine PSRAM-Verfuegbarkeit.
+Recordpuffer, typisierten ProgramCatalog und alle Payloads: eine sichtbare
+Vorschau, eine volle Previewerstellung, zwei Modellgenerationen, acht
+Read-Leases und eine persistente Konfigurationsmutation. Daraus folgt weder
+eine ungepruefte reale Hardwaregarantie noch eine PSRAM-Verfuegbarkeit.
 
 Ein Preview wird erst nach erfolgreicher Ressourcenbereitstellung sichtbar.
 Vor Root-Commit bricht jeder Ressourcenfehler typisiert ohne Teilaktivierung ab.
