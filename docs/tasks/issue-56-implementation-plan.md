@@ -7,6 +7,8 @@
 - Ausgangs-Commit: `bcdd3b3fbf956ccbcff3f70b4f359e61d9529fb7`
 - Planbranch: `plan/issue-56-active-fallback-runtime`
 - Planstatus: `PLAN_DRAFT`
+- Ueberholter erster Plan-Commit:
+  `48f342857a17e6ada2f0b4a7d147fd86b5489b83`
 - Live-Issue-Status bei Planerstellung: `READY`
 - Harte Abhaengigkeiten: #54 und #55, beide `COMPLETED`
 
@@ -198,6 +200,8 @@ Voraussichtlich geaenderte bestehende Dateien:
 
 Neue Produktionsdateien:
 
+- `lib/fermentation_app/src/configuration_mutation_coordinator.hpp`
+- `lib/fermentation_app/src/configuration_mutation_coordinator.cpp`
 - `lib/fermentation_app/src/configuration_graph.hpp`
 - `lib/fermentation_app/src/configuration_graph.cpp`
 - `lib/fermentation_app/src/configuration_graph_codec.hpp`
@@ -211,6 +215,9 @@ Neue Produktionsdateien:
 
 Verantwortungen:
 
+- `configuration_mutation_coordinator.*`: genau eine konkrete gemeinsame
+  Mutationskoordination fuer alle persistenten Konfigurationsmutationen, ohne
+  Store-, Bootstrap-, Reset- oder Transaktionssemantik;
 - `configuration_graph.*`: starke fachliche Referenz-, Manifest-, Root-,
   Schutzmengen-, Graph- und Diagnosemodelle sowie rein fachliche
   Gleichheits-/Plausibilitaetsregeln;
@@ -232,13 +239,15 @@ Safetytypen in diese Dateien aufgenommen.
 
 Neue Testdateien:
 
+- `test/test_configuration_mutation_coordinator/test_configuration_mutation_coordinator.cpp`
 - `test/test_configuration_graph_codecs/test_configuration_graph_codecs.cpp`
 - `test/test_configuration_graph_store/test_configuration_graph_store.cpp`
 - `test/test_configuration_service/test_configuration_service.cpp`
 
-Die erste Datei deckt Golden-/Negativtests des Wireformats ab. Die zweite
-deckt Rootauswahl, Graphvalidierung und Slotrotation ab. Die dritte deckt
-Vorschau, Konflikt, Commit, Cut-Points, Runtime-Publish,
+Die erste Datei deckt den gemeinsamen, nicht blockierenden Lease-Vertrag ab.
+Die zweite deckt Golden-/Negativtests des Wireformats ab. Die dritte deckt
+Rootauswahl, Graphvalidierung und Slotrotation ab. Die vierte deckt Vorschau,
+Konflikt, Commit, Cut-Points, Runtime-Publish,
 `ConfigurationCommitIndeterminate` und Ressourcenvertraege ab.
 
 ### Dokumentation nach freigegebener Implementierung
@@ -256,6 +265,58 @@ Voraussichtlich anzupassen:
 
 Keine Live-Issue-, Label-, Milestone- oder ADR-Aenderung ist Bestandteil des
 Umsetzungs-PRs.
+
+## Gemeinsame Mutationskoordination fuer #56 und #57
+
+### Ort und schmale Schnittstelle
+
+`ConfigurationMutationCoordinator` lebt als konkrete, anwendungsinterne
+Klasse in `fermentation_app`. Sie kapselt genau ein exklusives Gate fuer alle
+persistent zustandsaendernden Konfigurationsablaeufe. Ihre schmale
+Produktionsschnittstelle besteht sinngemaess aus:
+
+```text
+tryAcquire() noexcept
+  -> ConfigurationMutationLease
+  -> ConfigurationMutationBusy
+```
+
+Die erfolgreiche Rueckgabe ist eine nicht kopierbare, verschiebbare
+RAII-Lease. Intern darf der Koordinator genau ein nicht blockierend erworbenes
+Mutex- beziehungsweise gleichwertiges Exklusivitaetsprimitiv verwenden. Er
+kennt weder Store, Records, Rootslots noch Preview, Bootstrap, Migration,
+Werksreset oder einzelne Operationstypen. Er ist insbesondere keine
+Transaktionsplattform und fuehrt keine Callbacks, Warteschlange oder
+dynamische Providerregistrierung ein.
+
+### Gemeinsame Nutzung
+
+- Der `ConfigurationService` aus #56 erhaelt den Koordinator als Referenz und
+  besitzt weder einen eigenen Mutationsmutex noch ein zweites persistentes
+  Mutationsgate.
+- Eine normale Aktivierung und eine durch #56 ausgefuehrte Schema-1-Migration
+  erwerben dieselbe Lease vor den exklusiven Basis-, Konflikt-, Zaehler- und
+  Slotpruefungen.
+- Der spaetere #57-Bootstrap-/Recoverydienst erhaelt im Composition Root exakt
+  dieselbe Koordinatorinstanz. Bootstrap und Werksreset erwerben diese Lease,
+  ohne dass #56 dafuer umgebaut oder mit #57-Logik ergaenzt wird.
+- Die Composition-Root-Erzeugung und die produktive #57-Verkabelung bleiben
+  ausserhalb dieses Issues. #56 stellt nur den wiederverwendbaren konkreten
+  Koordinator sowie seine Nutzung durch den `ConfigurationService` bereit.
+- Reine Reads und die rechenintensive Vorbereitung einer Vorschau benoetigen
+  keine Lease. Die Bestaetigung erwirbt sie vor der erneuten exklusiven
+  Pruefung und haelt sie durch alle Writes, die Bestimmung des
+  Root-Commitresultats und den minimalen Snapshot-Publish. Sie wird erst nach
+  dem erreichten Endzustand freigegeben.
+- `ConfigurationMutationBusy` beendet den Versuch ohne Storezugriff und ohne
+  Teilwirkung. Der Aufrufer darf spaeter bewusst erneut versuchen; #56 wartet
+  nicht blockierend und startet keine zweite Mutation.
+
+Damit gilt global hoechstens eine persistente Konfigurationsmutation
+gleichzeitig, einschliesslich normaler Aktivierung, Migration sowie spaeterem
+Bootstrap und Werksreset. Ein zweiter unabhaengiger Mutex in #57 oder im
+Graphstore waere eine materielle Planabweichung. Der spaetere #57-Plan muss die
+gemeinsame Instanz explizit als Abhaengigkeit uebernehmen.
 
 ## Persistenter Schema-1-Vertrag
 
@@ -390,8 +451,12 @@ Der Graphloader liefert genau einen der typisierten Zustaende:
 - `ConfigurationGraphUnavailable`, wenn kein vollstaendiger Graph nutzbar ist;
 - `ConfigurationGraphIntegrityFailure`, wenn technische Kandidaten vorhanden,
   aber nicht vollstaendig und widerspruchsfrei validierbar sind;
-- `ConfigurationGraphReadFailure` beziehungsweise
-  `ConfigurationGraphCapacityFailure` fuer Storefehler, die nicht als
+- `ConfigurationGraphLoadFailure` mit stabil unterscheidbarer Ursache
+  `RootReadError` beziehungsweise `RootCapacityError`, wenn bereits ein
+  Rootslot nicht sicher lesbar ist und deshalb die globale Rootreihenfolge
+  nicht bestimmt werden kann;
+- weitere typisierte Graph-Read-/Capacity-Fehler fuer Storefehler beim Laden
+  eines bereits eindeutig geordneten Rootkandidaten, die ebenfalls nicht als
   `NotFound` umgedeutet werden duerfen.
 
 Die spaeteren extern sichtbaren #57-Namen `ConfigurationUnavailable` und
@@ -401,27 +466,40 @@ Graphloadervertrag ab.
 
 ### Auswahlalgorithmus
 
-Fuer eine vom Aufrufer vorgegebene gueltige `StorageEpoch`:
+Fuer eine vom Aufrufer vorgegebene gueltige `StorageEpoch` gilt diese
+Prioritaetsregel:
 
-1. beide Rootslots technisch scannen;
-2. `NotFound`, `ReadError`, `CapacityError` und jede Envelopeverletzung als
-   getrennte Diagnose erhalten;
-3. technisch passende Kandidaten absteigend nach `rootSequence`, bei Gleichheit
+1. beide Rootslots technisch und voneinander unabhaengig lesen;
+2. `NotFound` als sicher abwesenden Slot diagnostizieren und ueberspringen;
+3. liefert auch nur ein Rootslot `ReadError` oder `CapacityError`, sofort den
+   typisierten `ConfigurationGraphLoadFailure` liefern: Der moeglicherweise
+   unlesbare Slot koennte den global neuesten Root enthalten, daher darf weder
+   ein anderer aelterer Root als kanonisch behauptet noch eine Runtime
+   freigegeben werden;
+4. vollstaendig gelesene Rootrecords technisch pruefen; ein vollstaendig
+   gelesener, aber wegen Envelope, CRC, Schema, Payload oder Fachsemantik
+   ungueltiger Rootkandidat darf diagnostiziert und zugunsten eines aelteren
+   vollstaendig gueltigen Kandidaten uebersprungen werden;
+5. technisch passende Kandidaten absteigend nach `rootSequence`, bei Gleichheit
    deterministisch nach Slot-ID untersuchen;
-4. Rootpayload und jede Referenz vollstaendig pruefen;
-5. zuerst den Active-Zweig des Kandidaten laden;
-6. fuer jede Dokumentkante Envelope, Referenzbindung, Schema, Payload und
+6. Rootpayload und jede Referenz vollstaendig pruefen;
+7. zuerst den Active-Zweig des Kandidaten laden;
+8. fuer jede Dokumentkante Envelope, Referenzbindung, Schema, Payload und
    fachliches Dokument validieren;
-7. ist Active unbrauchbar, den Fallback desselben Roots vollstaendig pruefen;
-8. den ersten vollstaendig nutzbaren Zweig als kanonisch waehlen;
-9. bei gueltigem Active einen vorhandenen Fallback zusaetzlich vollstaendig
-   validieren, bevor er als geschuetzte nutzbare Rueckfallgeneration gilt;
-10. Fallbacknutzung, unbrauchbaren Fallback und uebersprungene hoehere
+9. ist Active unbrauchbar, den Fallback desselben Roots vollstaendig pruefen;
+10. den ersten vollstaendig nutzbaren Zweig als kanonisch waehlen;
+11. bei gueltigem Active einen vorhandenen Fallback zusaetzlich vollstaendig
+    validieren, bevor er als geschuetzte nutzbare Rueckfallgeneration gilt;
+12. Fallbacknutzung, unbrauchbaren Fallback und uebersprungene hoehere
     Rootkandidaten stabil und ohne Payloaddaten diagnostizieren.
 
 Ein hoher Sequenzwert, ein gueltiger Envelope, ein gueltiges Manifest oder ein
 einzeln gueltiges Dokument aktiviert niemals allein einen Graphen. Ein
-`ReadError` oder `CapacityError` ist niemals fabrikleerer Speicher.
+`ReadError` oder `CapacityError` ist niemals fabrikleerer Speicher. Speziell
+beim Rootscan besitzt der fail-closed Ladefehler Vorrang vor jedem anderen
+vollstaendig gueltigen, aber moeglicherweise aelteren Root. #57 bildet diesen
+Producer spaeter auf seine Boot-/Recovery- und Safetygrenze ab; #56 startet
+weder Bootstrap noch Factory-Fallback.
 
 Der Loader haelt nur den schliesslich ausgewaehlten typisierten Graphen. Beim
 Pruefen verworfener Kandidaten und des Fallbacks werden grosse Payloads nach
@@ -597,7 +675,7 @@ weder ein neuer Mutationsrecord noch ein zusaetzlicher Slot oder Root.
 | Eindeutig neuer Ausgang | Exakte Ziel-Rootreferenz, Ziel-`rootSequence`, Manifestgeneration und vollstaendiger Zielgraph bestimmen den neuen kanonischen Zustand. |
 | `CommitOutcomeUnknown` | Beide Rootslots und die benoetigten Graphrecords werden vollstaendig gescannt. Die kanonische Rootordnung plus exakte Zielidentitaet ergibt eindeutig alt oder neu; bei fehlender Eindeutigkeit folgt `ConfigurationCommitIndeterminate`. |
 | Neustart | Vorschauen existieren nicht mehr. Derselbe kanonische Root-/Graphscan bestimmt ausschliesslich aus persistenten Daten den Zustand; es gibt nichts wiederzugeben oder fortzusetzen. |
-| Bootstrap und Reset | #57 besitzt dafuer `BootstrapSequence` und `StorageEpoch`; diese Vorgaenge sind keine zusaetzlichen #56-Graphcommits, die eine gemeinsame Mutationsnummer benoetigen. |
+| Bootstrap und Reset | #57 besitzt dafuer `BootstrapSequence` und `StorageEpoch`; diese Vorgaenge sind keine zusaetzlichen #56-Graphcommits, die eine gemeinsame Mutationsnummer benoetigen. Sie teilen aber zwingend dieselbe fluechtige `ConfigurationMutationCoordinator`-Instanz mit #56. |
 | Spaetere Secret-Domaenen | Sie erhalten erst mit ihrem ersten Konsumenten eigene epochengebundene Commitvertraege und duerfen keine jetzt leere Kreuzdomaenensequenz voraussetzen. |
 
 Im #56-Scope besteht damit eine Eins-zu-eins-Zuordnung zwischen einem
@@ -632,7 +710,8 @@ dieser Plan ergaenzt und erneut commitgebunden ownerfreigegeben.
 
 Unter der exklusiven Mutation erfolgt vor dem ersten Write:
 
-1. Vorschau-, Basis-, Integritaets- und Vollvalidierungspruefung;
+1. Erwerb der gemeinsamen `ConfigurationMutationLease` und erneute Vorschau-,
+   Basis-, Integritaets- und Vollvalidierungspruefung;
 2. exakter `NoChange`-Entscheid;
 3. checked increment aller benoetigten Revisionen, der Manifestgeneration und
    der Rootsequenz;
@@ -640,8 +719,12 @@ Unter der exklusiven Mutation erfolgt vor dem ersten Write:
 5. Groessenpruefung jedes benoetigten Payloads und Envelopes;
 6. Vorbereitung aller fachlichen und Plattformwerte;
 7. Aufbau eines unveraenderlichen `RuntimeConfigurationSnapshot`;
-8. vollstaendige Ressourcenreservierung fuer den Snapshot-Publish;
-9. Aufbau und Validierung der kuenftigen Manifest- und Rootmodelle.
+8. vollstaendige Ressourcenreservierung fuer den Snapshot-Publish,
+   einschliesslich eines leeren Besitzers fuer den beim Austausch
+   uebernommenen alten Publisher-Handle;
+9. Aufbau und Validierung der kuenftigen Manifest- und Rootmodelle;
+10. Nachweis aller Publisher-Praekonditionen, sodass nach bestaetigtem
+    Root-Commit kein normaler fachlicher Fehlerzweig mehr verbleibt.
 
 Kein Kandidat wird vor vollstaendiger erfolgreicher Vorbereitung sichtbar
 oder persistent wirksam.
@@ -707,24 +790,44 @@ sichtbar gemacht:
 - der neue unveraenderliche Snapshot und sein Besitz-/Controlblock entstehen
   vollstaendig vor dem Rootwrite;
 - der Publisher tauscht nach bestaetigtem Root-Commit nur den vorbereiteten
-  C++17-`shared_ptr` atomar mit Release/Acquire-Semantik aus;
+  C++17-`shared_ptr` atomar mit Release/Acquire-Semantik aus und uebergibt den
+  dabei aus dem Publisher entfernten alten Handle an den bereits vorbereiteten
+  leeren Besitzer;
 - `publishPrepared(...)` ist `noexcept` und allokiert, serialisiert, validiert,
-  reserviert und liest keinen Store;
+  reserviert, protokolliert und liest keinen Store;
 - Leser erhalten einen unveraenderlichen Snapshot-Handle und beobachten nur
   die vollstaendig alte oder vollstaendig neue Generation;
-- das Freigeben eines alten Handles darf keinen neuen fachlichen Fehlerpfad
-  erzeugen.
+- Leser, die den alten Handle bereits besitzen, koennen ihn unveraendert bis
+  zum Ende ihrer eigenen Lebensdauer weiterverwenden;
+- der alte Publisher-Handle wird im kritischen Post-Root-Commit-Schritt weder
+  zerstoert noch freigegeben. Seine potenziell umfangreiche Freigabe erfolgt
+  erst ausserhalb dieses Schritts, spaetestens in der Vorbereitungsphase einer
+  spaeteren Mutation oder in einem ausdruecklich nicht kritischen
+  Wartungspunkt;
+- das Freigeben des uebernommenen Handles ausserhalb des kritischen Schritts
+  darf keinen fachlichen Fehlerpfad erzeugen und zerstoert den alten Snapshot
+  erst, wenn auch kein Leserhandle mehr besteht.
+
+Der kritische Publish nach bestaetigtem Root-Commit besteht damit
+ausschliesslich aus atomarem Austausch und nicht allokierenden Besitzmoves
+beziehungsweise `swap`-Operationen. Danach erfolgen in diesem kritischen Pfad
+keine Allokation, Freigabe des alten Snapshots, Serialisierung, Validierung,
+Storeoperation, fachliche Entscheidung oder recoverbare Fehlerbehandlung.
+Die gemeinsame Mutationslease bleibt bis zum abgeschlossenen Austausch und der
+stabilen Uebernahme des alten Publisher-Handles gehalten.
 
 Die C++17-Toolchainunterstuetzung der atomaren `shared_ptr`-Operationen wird in
 `native`, `esp32_bringup` und `esp32_release` gebaut und getestet. Eine andere
 Publishertechnik, die das oeffentliche Lebensdauer- oder
 Nichtfehlschlagenversprechen veraendert, waere eine materielle Planabweichung.
 
-Ein defensiver Testpublisher darf eine Vertragsverletzung melden. Dieser
-Status ist kein normaler recoverbarer Publishfehler, sondern erzeugt nach dem
-bereits bestaetigten Root-Commit `ConfigurationRuntimeFailure`, sperrt normale
-Runtime und weitere Mutationen und fuehrt weder Rollback noch Factory-Fallback
-aus.
+Alle in Produktion pruefbaren Publisher-Praekonditionen werden vor dem
+Rootwrite ausgewertet. `publishPrepared(...)` besitzt danach keinen normalen
+Fehlerrueckgabepfad. Eine absichtlich injizierte interne Vertragsverletzung
+wird in Tests weiterhin als `ConfigurationRuntimeFailure` und fail closed
+nachgewiesen; sie ist kein fachlich recoverbarer Publishzweig, fuehrt weder
+Rollback noch Factory-Fallback ein und darf den Produktionsaustausch nicht um
+eine fallible Nacharbeit erweitern.
 
 ## Endgueltiger unbestimmter Commitzustand
 
@@ -875,7 +978,11 @@ Abhaengigkeit von #56 auf #24.
 - maximal 149 Byte fuer ein Manifest-Envelope;
 - maximal 114 Byte fuer ein Root-Envelope;
 - global hoechstens ein vollstaendiger kodierter Recordarbeitsbereich im
-  Commitworkflow.
+  Commitworkflow;
+- genau eine gemeinsame Mutationslease fuer alle persistenten
+  Konfigurationsmutationen;
+- hoechstens ein vom Publisher uebernommener alter Snapshot-Handle zur
+  verzoegerten Freigabe ausserhalb des kritischen Publish-Schritts.
 
 Der Workflow ruft `encodeEnvelope()` nur mit einem leeren oder nicht mehr
 benoetigten Ausgabepuffer auf. Nach jedem Write und Readback wird dieser
@@ -887,7 +994,11 @@ Aktiver Snapshot, Vorschaukandidat und vorbereiteter neuer Snapshot teilen
 unveraenderte Dokumente. Bei einer maximalen ProgramCatalog-Aenderung duerfen
 hoechstens der aktuelle unveraenderliche Katalog und genau ein neuer
 unveraenderlicher Kandidatenkatalog als fachliche Vollmodelle gleichzeitig
-leben. Der vorbereitete Snapshot besitzt keine dritte Katalogkopie.
+leben. Der vorbereitete Snapshot besitzt keine dritte Katalogkopie. Der
+uebernommene alte Publisher-Handle ist nur ein weiterer Besitzhandle auf das
+bereits vorhandene alte Modell und erzeugt keine Modellkopie. Seine
+verzoegerte Freigabe und die Lebensdauer alter Leserhandles werden im
+Base-/Head- sowie Peak-Allokationsnachweis sichtbar gemessen.
 
 ### Messpflichtige Werte
 
@@ -937,9 +1048,13 @@ und die bis dahin vorhandenen Tests bestehen.
 
 Keine Storeorchestrierung und keine Vorschau in diesem Commit.
 
-### Commit 2 – Graphladen, Validierung und Schutzmenge
+### Commit 2 – Gemeinsame Mutationskoordination, Graphladen und Schutzmenge
 
+- konkreten `ConfigurationMutationCoordinator` mit nicht blockierender,
+  verschiebbarer RAII-Lease und isolierten Koordinationstests einfuehren;
 - vollstaendigen Graphloader implementieren;
+- Rootslot-`ReadError`/`CapacityError` vor jeder kanonischen Auswahl fail
+  closed priorisieren;
 - kanonische Root-/Active-/Fallback-Auswahl und Diagnosen implementieren;
 - exakte Referenzbindung und fachliche Dokumentvalidierung integrieren;
 - Schutzmenge und deterministische Slotvorplanung implementieren;
@@ -951,6 +1066,9 @@ Noch kein persistenter Aktivierungsworkflow.
 
 - unveraenderlichen `RuntimeConfigurationSnapshot` und atomaren Publisher
   implementieren;
+- Uebernahme des alten Publisher-Handles ohne Freigabe im kritischen
+  Post-Root-Schritt sowie verzoegerte Zerstoerung ausserhalb dieses Schritts
+  implementieren;
 - genau eine serviceeigene Vorschau, Kandidatenintegritaet, exakte
   Inhaltsvergleiche, `NoChange` und Konfliktvertrag implementieren;
 - Preview-, Lebensdauer-, Konkurrenz- und Allokationstests ergaenzen.
@@ -959,6 +1077,8 @@ Noch kein Rootwrite aus dem Konfigurationsdienst.
 
 ### Commit 4 – Serialisierter Commit und fail-closed Zustaende
 
+- `ConfigurationService` an die gemeinsame Koordinatorreferenz binden und jede
+  interne zweite Mutationssperre ausschliessen;
 - vollstaendige Vorplanung und geordnete Dokument-/Manifestwrites;
 - Root-Commit als Linearisierungspunkt;
 - Unknown-Aufloesung alt/neu;
@@ -980,6 +1100,24 @@ dies als materielle Planabweichung und erfordert vor der Aenderung einen neuen
 Plan-Commit mit erneuter Ownerfreigabe.
 
 ## Vollstaendige Teststrategie
+
+### Gemeinsame Mutationskoordination
+
+- erste `tryAcquire()`-Operation liefert genau eine gueltige, nicht kopierbare
+  Lease;
+- ein zweiter Erwerb waehrend der gehaltenen Lease liefert
+  `ConfigurationMutationBusy` ohne Blockieren und ohne Storezugriff;
+- verschobene Lease gibt die Exklusivitaet genau einmal frei;
+- nach Freigabe kann die naechste Mutation dieselbe Koordinatorinstanz
+  erwerben;
+- zwei getrennte `ConfigurationService`-aehnliche Testkonsumenten sowie ein
+  #57-aehnlicher Mockkonsument teilen dieselbe Instanz und koennen nie
+  gleichzeitig mutieren;
+- normale Aktivierung, Migration und simulierte Bootstrap-/Resetoperation
+  verwenden den gleichen Lease-Vertrag, ohne Bootstrap- oder Resetlogik in
+  #56 zu implementieren;
+- Repositorysuche weist nach, dass `ConfigurationService` und Graphstore keinen
+  zweiten unabhaengigen Mutationsmutex besitzen.
 
 ### Wire- und Codec-Tests
 
@@ -1007,6 +1145,16 @@ Plan-Commit mit erneuter Ownerfreigabe.
 - ungueltiges Active mit gueltigem Fallback;
 - ungueltiges Active und fehlender beziehungsweise ungueltiger Fallback;
 - hoeherer unbrauchbarer Root, danach niedrigerer vollstaendig nutzbarer Root;
+- vollstaendig gelesener, aber technisch oder fachlich ungueltiger hoeherer
+  Root darf zugunsten eines aelteren vollstaendig gueltigen Roots
+  uebersprungen werden;
+- `NotFound` in einem Rootslot und ein vollstaendig gueltiger anderer Root
+  erlauben dessen normale Auswahl;
+- ein Rootslot nicht lesbar (`ReadError`) und der andere aeltere Root
+  vollstaendig gueltig: `ConfigurationGraphLoadFailure`, keine
+  Runtimefreigabe;
+- ein Rootslot mit `CapacityError` und der andere aeltere Root vollstaendig
+  gueltig: `ConfigurationGraphLoadFailure`, keine Runtimefreigabe;
 - gleicher Sequenzwert in zwei Rootslots mit deterministischem Tiebreak und
   sichtbarer Integritaetsdiagnose;
 - hohes `rootSequence` ohne gueltigen Graph aktiviert nichts;
@@ -1107,10 +1255,25 @@ Fuer Root wird bewiesen:
   vor dem Rootwrite abgeschlossen;
 - Allokationszaehler meldet null neue Allokationen innerhalb
   `publishPrepared(...)`;
-- Publish serialisiert, validiert, reserviert und liest nichts;
+- Allokations- und Destruktionszaehler melden im kritischen
+  `publishPrepared(...)` weder neue Allokation noch Freigabe des alten
+  Snapshots;
+- Publish serialisiert, validiert, reserviert, protokolliert und liest nichts;
+- der atomare Austausch uebergibt den alten Publisher-Handle an den vorab
+  leeren Besitzer, ohne ihn im kritischen Schritt zu zerstoeren;
 - Leser sehen unter kontrollierten Interleavings nur vollstaendig alt oder
   vollstaendig neu;
 - alte Snapshot-Handles bleiben fuer bereits laufende Leser unveraendert;
+- ein Leser haelt den alten Handle ueber den Publish hinaus und kann den alten
+  Snapshot vollstaendig lesen;
+- die verzoegerte Freigabe des Publisher-Handles ausserhalb des kritischen
+  Schritts zerstoert den alten Snapshot erst nach Freigabe des letzten
+  Leserhandles;
+- ein zuvor uebernommener alter Publisher-Handle wird vor dem Rootwrite einer
+  spaeteren Mutation in einer nicht kritischen Vorbereitungsphase freigegeben;
+- kontrollierte Interleavings aus neuem Leser, altem Leser, Publish und
+  verzoegerter Freigabe erzeugen weder Use-after-free noch dritte
+  Modellkopie;
 - simulierte Publish-Vertragsverletzung erzeugt
   `ConfigurationRuntimeFailure`;
 - nach Runtimefehler kein normaler Snapshot und keine weitere Mutation;
@@ -1159,6 +1322,9 @@ Messgates.
 
 - Kein Lese-, Kapazitaets-, CRC-, Referenz-, Schema- oder Fachfehler wird als
   `NotFound` oder fabrikneu umgedeutet.
+- Ein `ReadError` oder `CapacityError` eines Rootslots sperrt die kanonische
+  Auswahl auch dann, wenn der andere Rootslot einen vollstaendig gueltigen,
+  aber moeglicherweise aelteren Graphen enthaelt.
 - Kein Fehler startet Bootstrap, Werksreset oder Factoryinitialisierung.
 - Vor Root-Commit bleibt der alte kanonische Graph wirksam.
 - Nach bestaetigtem Root-Commit gibt es keinen automatischen Rollback.
@@ -1193,6 +1359,7 @@ Messgates.
 | separate persistente `MutationSequence` | entschieden: fuer #56/R1 nicht erforderlich | Gleichwertigkeits- und Gegenbeispieltests in diesem Plan; Scheitern ist materielle Planabweichung |
 | finaler unbestimmter Typname | entschieden: `ConfigurationCommitIndeterminate` | eigener stabiler Zustand und Safety-Producer |
 | atomarer Snapshot-Publish | geplant mit vorbereiteten C++17-`shared_ptr`-Handles | Build-, Allokations- und Interleavingnachweis in allen Profilen; Vertragsaenderung erfordert neuen Plan |
+| gemeinsame Mutationskoordination | konkreter `ConfigurationMutationCoordinator` in `fermentation_app` | #56 nutzt eine injizierte Referenz; #57 muss spaeter dieselbe Instanz nutzen; keine zweite Sperre oder Transaktionsplattform |
 | reale NVS-Kapazitaet und Replace-Eigenschaften | `MEASUREMENT_REQUIRED` | spaeterer Adapter-/Hardwaretest, keine Hostgarantie |
 | absolute Heap-/Flashreserve | `TBD_IMPLEMENTATION_BUDGET`, `MEASUREMENT_REQUIRED` | Base-/Head-Bericht plus spaetere reale Messung |
 | reale Commitdauer, Jitter und Watchdogwirkung | `MEASUREMENT_REQUIRED` | spaeter mit realem NVS-/ESP32-Adapter |
@@ -1225,6 +1392,10 @@ Auch nach Planfreigabe sind verboten:
 - automatische Factoryinitialisierung, Werksreset oder Rollback bei Fehlern;
 - Publish mit Allokation, Serialisierung, Validierung, Reservierung oder
   normalem Fehlerpfad nach bestaetigtem Root-Commit;
+- Freigabe oder Zerstoerung des alten Publisher-Snapshots im kritischen
+  Post-Root-Commit-Austausch;
+- zweiter unabhaengiger Mutationsmutex in `ConfigurationService`, Graphstore
+  oder der spaeteren #57-Integration;
 - Vermischung von CRC und Authentifizierung;
 - neue Bibliothek, Toolchain-, Build-, Partitions-, Hardware-, GPIO- oder
   Pinentscheidung;
@@ -1274,12 +1445,18 @@ Der Planungsauftrag ist abgeschlossen, wenn:
 - der aktuelle `main`-Stand und das Live-Issue #56 geprueft sind;
 - alle Repository- und Modul-Anweisungen sowie ADR-016, ADR-018 und die
   referenzierten Spezifikationen geprueft sind;
-- nur diese Plan-Datei neu angelegt ist;
+- in dieser Planpraezisierung ausschliesslich diese Plan-Datei geaendert ist;
 - konkrete Module, Dateien und der kleine Commit-Schnitt festgelegt sind;
+- die gemeinsame Mutationskoordination fuer #56 und die spaetere #57-Nutzung
+  mit genau einer konkreten Koordinatorinstanz festgelegt und testbar ist;
 - Manifest-, Root-, Active-/Fallback- und Slotrotationsvertrag vollstaendig
   festgelegt sind;
 - fluechtige Vorschau, Anzahlgrenze und Konfliktschutz festgelegt sind;
 - Root-Commit und nicht fehlschlagender Publish eindeutig getrennt sind;
+- Rootslot-`ReadError` und `CapacityError` gegen die Verwendung eines
+  moeglicherweise aelteren gueltigen Roots fail closed priorisiert sind;
+- der alte Publisher-Handle im kritischen Publish nur uebernommen und erst
+  ausserhalb dieses Schritts potenziell freigegeben wird;
 - `ConfigurationCommitIndeterminate` als endgueltiger Typname und fail-closed
   Verhalten festgelegt ist;
 - der Gleichwertigkeitsnachweis gegen eine separate persistente
