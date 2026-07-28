@@ -180,6 +180,65 @@ bool referenceMatches(const ConfigurationRecordReference<Version>& reference,
                reference.payloadCrc;
 }
 
+template <typename Version, std::size_t N>
+ConfigurationScanStatus validateStoredReference(
+    const device_platform::IStateStore& store,
+    const std::array<const char*, N>& keys,
+    const ConfigurationRecordReference<Version>& reference,
+    std::size_t maxBytes, const std::string* exactBytes = nullptr) {
+    if (reference.slot.value() >= N) {
+        return ConfigurationScanStatus::ConfigurationGraphIntegrityFailure;
+    }
+    auto read = store.read(key(keys[reference.slot.value()]), maxBytes);
+    if (read.status == device_platform::StateStoreReadStatus::NotFound) {
+        return ConfigurationScanStatus::ConfigurationGraphIntegrityFailure;
+    }
+    if (read.status != device_platform::StateStoreReadStatus::Success) {
+        return mapReadStatus(read.status);
+    }
+    auto decoded = device_platform::decodeEnvelope(read.value);
+    if (!decoded.envelope.has_value()) {
+        return ConfigurationScanStatus::ConfigurationGraphIntegrityFailure;
+    }
+    const StoredRecord record{reference.slot, read.value,
+                              std::move(*decoded.envelope)};
+    if (!referenceMatches(reference, record) ||
+        (exactBytes != nullptr && *exactBytes != read.value)) {
+        return ConfigurationScanStatus::ConfigurationGraphIntegrityFailure;
+    }
+    return ConfigurationScanStatus::Success;
+}
+
+ConfigurationScanStatus validateExpectedBranch(
+    const device_platform::IStateStore& store,
+    const ConfigurationGraphBranch& branch) {
+    auto status = validateStoredReference(
+        store, configuration_storage_contract::kConfigurationManifestSlotKeys,
+        branch.manifestReference,
+        configuration_limits::kMaximumConfigurationManifestEnvelopeBytes,
+        &branch.canonicalManifestRecordBytes);
+    if (status != ConfigurationScanStatus::Success) {
+        return status;
+    }
+    status = validateStoredReference(
+        store, configuration_storage_contract::kUserConfigurationSlotKeys,
+        branch.manifest.userConfiguration,
+        configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U);
+    if (status != ConfigurationScanStatus::Success) {
+        return status;
+    }
+    status = validateStoredReference(
+        store, configuration_storage_contract::kServiceConfigurationSlotKeys,
+        branch.manifest.serviceConfiguration, 45U);
+    if (status != ConfigurationScanStatus::Success) {
+        return status;
+    }
+    return validateStoredReference(
+        store, configuration_storage_contract::kProgramCatalogSlotKeys,
+        branch.manifest.programCatalog,
+        configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U);
+}
+
 std::optional<ConfigurationGraphBranch> loadBranch(
     const ConfigurationManifestReference& reference,
     const std::vector<StoredRecord>& manifests,
@@ -500,6 +559,17 @@ ConfigurationValidationScanResult ConfigurationGraphStore::validationScan(
     if (expectedRoot.value != expectedActive.canonicalRootRecordBytes) {
         result.status = ConfigurationScanStatus::ActiveBasisMismatch;
         return result;
+    }
+    result.status = validateExpectedBranch(store_, expectedActive.active);
+    if (result.status != ConfigurationScanStatus::Success) {
+        return result;
+    }
+    if (expectedActive.fallback.has_value()) {
+        result.status =
+            validateExpectedBranch(store_, *expectedActive.fallback);
+        if (result.status != ConfigurationScanStatus::Success) {
+            return result;
+        }
     }
     result.highWater = {UserConfigurationRevision(users.highWater),
                         ServiceConfigurationRevision(services.highWater),
