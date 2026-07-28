@@ -1,0 +1,1298 @@
+# Implementierungsplan fuer Issue #56
+
+## Planstatus
+
+- Issue: #56 – `[E2.1c] Active-/Fallback-Manifeste, Vorschau und Runtimeaktivierung implementieren`
+- Ausgangsbranch: `main`
+- Ausgangs-Commit: `bcdd3b3fbf956ccbcff3f70b4f359e61d9529fb7`
+- Planbranch: `plan/issue-56-active-fallback-runtime`
+- Planstatus: `PLAN_DRAFT`
+- Live-Issue-Status bei Planerstellung: `READY`
+- Harte Abhaengigkeiten: #54 und #55, beide `COMPLETED`
+
+```text
+IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL
+```
+
+Dieser Plan autorisiert noch keine Implementierung. Die Umsetzung darf erst
+nach folgendem eindeutigen Ownerkommentar fuer genau den Commit beginnen, der
+diese Planversion enthaelt:
+
+```text
+PLAN APPROVED
+Approved plan commit: <commit-sha>
+```
+
+## Ziel
+
+Issue #56 implementiert den in ADR-018 beschlossenen Variante-B-Kern der
+Konfigurationspersistenz auf den bereits gemergten Grundlagen aus #54 und #55:
+
+1. deterministische Schema-1-Codecs fuer `ConfigurationManifest` und
+   `ConfigurationRootRecord`;
+2. kanonische Validierung des vollstaendigen Active-/Fallback-Graphen;
+3. sichere, referenzbasierte Rotation der Dokument-, Manifest- und Rootslots;
+4. genau eine fluechtige, vollstaendig validierte Konfigurationsvorschau;
+5. optimistischen Revisions- und Konfliktschutz fuer Display und Web;
+6. einen vor dem Root-Commit vollstaendig vorbereiteten unveraenderlichen
+   `RuntimeConfigurationSnapshot`;
+7. den Root-Commit als einzigen persistenten Linearisierungspunkt und einen
+   anschliessenden nicht allokierenden, nicht serialisierenden und
+   vertraglich nicht fehlschlagenden Publish;
+8. stabile typisierte Fehlerproducer fuer den spaeteren
+   `CONFIGURATION_SAFETY_INTEGRATION_GATE`;
+9. einen vollstaendigen nativen Cut-Point-, Korruptions-, Konflikt- und
+   Ressourcen-Nachweis sowie Builds aller drei Profile.
+
+Das Ergebnis bleibt hardwareunabhaengig und benutzt ausschliesslich den
+bereits vorhandenen `IStateStore`-Port. Es bindet noch keinen NVS-Adapter in
+den Composition Root ein.
+
+## Nicht-Ziele
+
+Issue #56 implementiert ausdruecklich nicht:
+
+- Bootstrap, `BootstrapRecord`, `BootstrapSequence`, `StorageEpoch`-Wechsel,
+  Werksreset oder Korruptions-Startupsteuerung aus #57;
+- Laufpersistenz, Kontrollpunkte oder einen Integrationsport zu #17;
+- Fehlerklassifizierung, persistente Verriegelung, `SAFE_BOOT`, Fehlerreset,
+  Aktorfreigabe, GPIO oder andere Teile aus #24;
+- persistentes Pending, einen `PendingRoot` oder einen parallelen
+  voraktivierten Graphen;
+- ein Aktivierungsintent oder `ConfigurationActivationRunAssessment`;
+- neustartpflichtige Konfigurationsaktivierung;
+- persistente Preview-Slots, Preview-Owner, Autorisierungstokens oder
+  zeitbasierte Preview-Ablaufregeln;
+- Connectivity-/Authentication-Manifeste, -Roots, -Slots oder Reservepayloads;
+- WLAN-Secrets, Credentialdaten, `CredentialEpoch`, KDF, Sessions oder CSRF;
+- kombinierte Konfigurations-/Secret-Transaktionen;
+- Import-Run-Gates aus #19-D;
+- einen produktiven NVS-Adapter, Partitionierung, Flashverschluesselung oder
+  eine reale Flash-Atomizitaets- beziehungsweise Lebensdauergarantie;
+- neue Abhaengigkeiten, Buildflags, Toolchain- oder Hardwarekonfiguration;
+- eine allgemeine Persistenz-, Transaktions-, Preview-, Provider- oder
+  Pluginplattform.
+
+## Verbindliche Quellen und Entscheidungen
+
+Die Dokumentationsprioritaet aus
+[`docs/SPECIFICATION_REVIEW.md`](../SPECIFICATION_REVIEW.md) ist verbindlich.
+Fuer diesen Plan wurden insbesondere vollstaendig geprueft:
+
+- das Live-Issue #56 einschliesslich des Synchronisationskommentars nach PR
+  #64;
+- das Repository-`AGENTS.md` sowie die Modulregeln in
+  `lib/device_platform`, `lib/device_platform_test_support` und
+  `lib/fermentation_app`;
+- ADR-016 in
+  [`docs/ADR-016_KONFIGURATIONSSPEICHER_BACKEND.md`](../ADR-016_KONFIGURATIONSSPEICHER_BACKEND.md);
+- ADR-018 im zentralen Register
+  [`docs/DECISIONS.md`](../DECISIONS.md);
+- [`docs/CONFIGURATION_PERSISTENCE.md`](../CONFIGURATION_PERSISTENCE.md);
+- [`docs/SETTINGS_AND_STORAGE.md`](../SETTINGS_AND_STORAGE.md);
+- [`docs/BACKUP_SECURITY_RETENTION.md`](../BACKUP_SECURITY_RETENTION.md);
+- [`docs/PR38_REVIEW_CORRECTIONS.md`](../PR38_REVIEW_CORRECTIONS.md);
+- [`docs/IMPLEMENTATION_ISSUES.md`](../IMPLEMENTATION_ISSUES.md);
+- den gemergten Neuschnitt in
+  [`docs/tasks/issue-16-implementation-plan.md`](issue-16-implementation-plan.md);
+- die bestehenden #54-/55-Speicher-, Dokument-, Codec-, Migrations- und
+  Testbausteine im Code.
+
+Verbindlich bleiben insbesondere:
+
+- ADR-013 fuer die Modulgrenzen;
+- ADR-016 fuer `IStateStore`, NVS-kompatiblen Schluesselraum, Envelope,
+  CRC-32/ISO-HDLC und atomaren Replace pro Schluessel;
+- ADR-018 fuer Variante B, Root-Linearisierung, Active/Fallback und den
+  fail-closed unbestimmten Commitzustand;
+- der bestehende Dokumentvertrag aus #55 fuer `UserConfiguration`,
+  `ServiceConfiguration` und `ProgramCatalog`;
+- genau vier Slots je Dokumenttyp, drei Manifest- und zwei Rootslots;
+- `StorageEpoch`, Revision, Generation und Sequenz beginnen bei 1, reservieren
+  0 und laufen nie still ueber;
+- reale Flash-, NVS- und Heapgarantien bleiben Messgates.
+
+## Aktuelle Ausgangslage
+
+### Bereits umgesetzt
+
+`device_platform` stellt aus #54 bereit:
+
+- `IStateStore` mit getrennten Lese- und Schreibstatus;
+- `CommitOutcomeUnknown` als expliziten Schreibergebniszustand;
+- gueltig-by-construction `StateStoreKey` mit maximal 15 Zeichen;
+- starke technische Typen, checked increment, Big-Endian-Primitiven und CRC;
+- `StorageEnvelope` mit begrenztem Schema- und Payloadvertrag;
+- technische Slotkandidatensuche mit sichtbaren Lese-, Kapazitaets- und
+  Integritaetsproblemen;
+- gezieltes Nachladen und erneutes Validieren einer Slotpayload;
+- rein technische Round-Robin-Slotwahl ohne fachliche Schutzmenge.
+
+`device_platform_test_support` stellt bereit:
+
+- einen binaersicheren `SimulatedPersistentStateStore`;
+- Writefehler und Power-Cuts vor beziehungsweise nach dem atomaren Replace;
+- `CommitOutcomeUnknown` nach dauerhaftem Commit;
+- gezielte Read-, NotFound- und Korruptionsinjektion;
+- Neustart mit Erhalt ausschliesslich committeter Daten.
+
+`fermentation_app` stellt aus #55 bereit:
+
+- die drei typisierten Dokumentmodelle und ihre starken Revisionstypen;
+- vollstaendige fachliche Validierung;
+- deterministische Schema-1-Codecs mit festen Payloadgrenzen;
+- Copy-Migration als Grundlage;
+- Record-Type-IDs und vier kurze Slotschluessel je Dokumenttyp;
+- zentrale Konfigurationsgrenzen.
+
+### Noch nicht umgesetzt
+
+Es existieren noch keine Produktionsbausteine fuer:
+
+- Manifest- oder Rootmodelle und deren Wireformat;
+- fachliche Graphvalidierung und kanonische Rootauswahl;
+- referenzbasierte Schutzmenge und Slotplanung;
+- Vorschau, Konfigurationsdienst und Konfliktschutz;
+- `RuntimeConfigurationSnapshot` und dessen Publish;
+- `ConfigurationRuntimeFailure` oder den unbestimmten Commitzustand.
+
+`src/main.cpp`, `DevicePlatform` und `FermentationApplication` besitzen noch
+keinen produktiven Store. Diese Composition-Root-Integration bleibt ausserhalb
+von #56 und folgt erst mit dem realen Persistenzadapter und #57.
+
+## Modul- und Dateischnitt
+
+### `device_platform`
+
+Keine Produktionsaenderung ist geplant. Die vorhandenen generischen
+Speicherbausteine genuegen. Insbesondere werden keine Manifest-, Root-,
+Preview- oder Fermentationsbegriffe in dieses Modul verschoben.
+
+Falls die Umsetzung wider Erwarten eine Aenderung am generischen Storeport,
+Envelope oder Slot-Scan erfordern sollte, ist dies eine materielle
+Planabweichung. Die Arbeit wird dann vor der Aenderung angehalten und der Plan
+erneut ownerfreigegeben.
+
+### `device_platform_test_support`
+
+Keine Produktions- oder Test-Support-Aenderung ist geplant. Spezifische
+Write-/Read-Skripte fuer die #56-Matrix werden lokal im Anwendungstest als
+schmaler `IStateStore`-Decorator implementiert. Dadurch werden keine
+fachlichen #56-Zustaende in das anwendungsneutrale Testmodul eingebaut.
+
+### `fermentation_app`
+
+Voraussichtlich geaenderte bestehende Dateien:
+
+- `lib/fermentation_app/src/configuration_storage_contract.hpp`
+  - Record-Type-IDs und ADR-016-konforme Keys fuer drei Manifest- und zwei
+    Rootslots;
+- `lib/fermentation_app/src/configuration_limits.hpp`
+  - feste Manifest-/Root-Payload- und Envelopegrenzen sowie die verbindlichen
+    Workflow-Anzahlgrenzen;
+- `lib/fermentation_app/src/configuration_documents.hpp`
+  - nur falls fuer exakte typisierte Inhaltsvergleiche kleine
+    wertsemantische Hilfen benoetigt werden; keine neue Dokumentsemantik;
+- `lib/fermentation_app/src/configuration_documents.cpp`
+  - nur die zugehoerigen exakten Inhaltsvergleiche.
+
+Neue Produktionsdateien:
+
+- `lib/fermentation_app/src/configuration_graph.hpp`
+- `lib/fermentation_app/src/configuration_graph.cpp`
+- `lib/fermentation_app/src/configuration_graph_codec.hpp`
+- `lib/fermentation_app/src/configuration_graph_codec.cpp`
+- `lib/fermentation_app/src/configuration_graph_store.hpp`
+- `lib/fermentation_app/src/configuration_graph_store.cpp`
+- `lib/fermentation_app/src/runtime_configuration_snapshot.hpp`
+- `lib/fermentation_app/src/runtime_configuration_snapshot.cpp`
+- `lib/fermentation_app/src/configuration_service.hpp`
+- `lib/fermentation_app/src/configuration_service.cpp`
+
+Verantwortungen:
+
+- `configuration_graph.*`: starke fachliche Referenz-, Manifest-, Root-,
+  Schutzmengen-, Graph- und Diagnosemodelle sowie rein fachliche
+  Gleichheits-/Plausibilitaetsregeln;
+- `configuration_graph_codec.*`: einziges kanonisches Schema-1-Wireformat fuer
+  Manifest und Root, ohne Storezugriff;
+- `configuration_graph_store.*`: begrenztes Lesen, vollstaendige
+  Graphvalidierung, kanonische Auswahl, Slotvorplanung, Writes und Readbacks
+  ueber `IStateStore`;
+- `runtime_configuration_snapshot.*`: unveraenderlicher Runtime-Snapshot,
+  vorab vorbereiteter Publish-Handle und schmaler atomarer Publisher;
+- `configuration_service.*`: genau eine fluechtige Vorschau, serialisierte
+  Mutation, Konfliktpruefung, Commitorchestrierung und fail-closed
+  Betriebszustand.
+
+Es werden keine Arduino-, NVS-, GPIO-, WLAN-, Webserver-, JSON-, Lauf- oder
+Safetytypen in diese Dateien aufgenommen.
+
+### Native Tests
+
+Neue Testdateien:
+
+- `test/test_configuration_graph_codecs/test_configuration_graph_codecs.cpp`
+- `test/test_configuration_graph_store/test_configuration_graph_store.cpp`
+- `test/test_configuration_service/test_configuration_service.cpp`
+
+Die erste Datei deckt Golden-/Negativtests des Wireformats ab. Die zweite
+deckt Rootauswahl, Graphvalidierung und Slotrotation ab. Die dritte deckt
+Vorschau, Konflikt, Commit, Cut-Points, Runtime-Publish,
+`ConfigurationCommitIndeterminate` und Ressourcenvertraege ab.
+
+### Dokumentation nach freigegebener Implementierung
+
+Voraussichtlich anzupassen:
+
+- `docs/CONFIGURATION_PERSISTENCE.md`
+  - finaler Typname, abgeschlossener `MutationSequence`-Nachweis, konkrete
+    Workflow-Anzahl- und Wiregrenzen sowie Implementierungsnachweis;
+- `docs/IMPLEMENTATION_ISSUES.md`
+  - nur eine sachliche Umsetzungsreferenz; kein vorzeitiges Schliessen oder
+    Entsperren von #57;
+- `CHANGELOG.md`
+  - #56-Implementierung und Nachweise.
+
+Keine Live-Issue-, Label-, Milestone- oder ADR-Aenderung ist Bestandteil des
+Umsetzungs-PRs.
+
+## Persistenter Schema-1-Vertrag
+
+### Starke Typen
+
+`fermentation_app` fuehrt getrennte starke Typen ein:
+
+- `ConfigurationManifestGeneration`;
+- `ConfigurationRootSequence`.
+
+Sie duerfen weder untereinander noch mit Dokumentrevisionen, `StorageEpoch`
+oder einer spaeteren `BootstrapSequence` implizit vermischt werden. Die rohen
+`versionValue`-Bytes des generischen Envelopes werden erst nach technischer
+Pruefung in den erwarteten fachlichen Typ ueberfuehrt.
+
+### Record-Type-IDs und Keys
+
+Die bestehenden IDs 1 bis 3 und Dokumentkeys bleiben unveraendert. Schema 1
+ergaenzt:
+
+| Record | `RecordTypeId` | Slots | Keys |
+|---|---:|---:|---|
+| `ConfigurationManifest` | 4 | 3 | `cm0`, `cm1`, `cm2` |
+| `ConfigurationRootRecord` | 5 | 2 | `cr0`, `cr1` |
+
+ID 6 und weitere IDs werden nicht fuer #57 oder Secrets vorreserviert.
+
+### Exakte Referenzbindung
+
+Jede Dokumentreferenz und jede Manifestreferenz enthaelt in kanonischer
+Big-Endian-Reihenfolge:
+
+| Feld | Breite |
+|---|---:|
+| Record-Type-ID | `uint16` |
+| Slot-ID | `uint32` |
+| Revision beziehungsweise Generation | `uint64` |
+| Schema-Version | `uint32` |
+| Payloadlaenge | `uint32` |
+| Payload-CRC-32/ISO-HDLC | `uint32` |
+| `StorageEpoch` | `uint64` |
+
+Eine Referenz ist damit exakt 34 Byte breit. Die referenzierte Payload-CRC
+bezieht sich ausschliesslich auf die kanonischen Payloadbytes. Zusaetzlich
+bleibt die Envelope-CRC ueber Header und Payload verbindlich. Beim Laden
+werden beide Ebenen geprueft:
+
+1. der generische Envelope-Decoder prueft seinen eigenen CRC- und
+   Strukturvertrag;
+2. `fermentation_app` prueft Recordtyp, Slot, Version, Schema, Epoche,
+   Payloadlaenge und neu berechnete Payload-CRC gegen die Referenz;
+3. erst danach wird die Payload fachlich dekodiert und validiert.
+
+Die Payload-CRC ist Integritaets- und Referenzbindung, kein
+Authentifizierungs- oder Manipulationsschutz. Inhaltsgleichheit und
+`NoChange` werden nie allein aus einem CRC abgeleitet.
+
+### `ConfigurationManifest` Schema 1
+
+Der Envelope traegt:
+
+- Record-Type-ID 4;
+- Schema-Version 1;
+- die aktuelle `StorageEpoch`;
+- die `ConfigurationManifestGeneration` als `versionValue`;
+- optional vertrauenswuerdige UTC-Metadaten ohne Ordnungswirkung.
+
+Die Payload enthaelt exakt:
+
+1. `ChangeOrigin` als `uint8`-Wire-ID;
+2. `ChangeOperation` als `uint8`-Wire-ID;
+3. eine `UserConfiguration`-Referenz;
+4. eine `ServiceConfiguration`-Referenz;
+5. eine `ProgramCatalog`-Referenz.
+
+Bekannte Origin-IDs bleiben `InternalSystem`, `LocalDisplay` und
+`WebInterface`; bekannte Operationen bleiben `NormalEdit`,
+`FactoryInitialization`, `BackupImport`, `SchemaMigration`, `FactoryReset`
+und `StandardProgramReset`. Unbekannte IDs werden als `Unknown` zusammen mit
+ihrem rohen Byte erhalten und nicht still normalisiert.
+
+Die Manifestpayload ist exakt 104 Byte gross. Das maximale Envelope mit
+optionalem UTC-Feld ist 149 Byte gross. Fehlende oder zusaetzliche Bytes,
+reservierte Nullwerte, falsche Recordtypen, ungueltige Slots und
+Epochenabweichungen werden abgelehnt.
+
+Schema 1 referenziert weder Connectivity noch Authentication, Secrets,
+Pending oder einen Lauf.
+
+### `ConfigurationRootRecord` Schema 1
+
+Der Envelope traegt:
+
+- Record-Type-ID 5;
+- Schema-Version 1;
+- dieselbe `StorageEpoch` wie der Graph;
+- die `ConfigurationRootSequence` als `versionValue`;
+- optional vertrauenswuerdige UTC-Metadaten ohne Ordnungswirkung.
+
+Die Payload enthaelt exakt:
+
+1. die Active-Manifestreferenz;
+2. einen Optionaltag `0x00` oder `0x01`;
+3. nur bei `0x01` die Fallback-Manifestreferenz.
+
+Ohne Fallback ist die Payload exakt 35 Byte, mit Fallback exakt 69 Byte. Das
+maximale Envelope mit optionalem UTC-Feld ist 114 Byte gross. Andere Tags,
+Trailing Bytes oder Active und Fallback mit identischer Referenz werden
+abgelehnt.
+
+Ein fehlender Fallback ist nur fuer den von #57 spaeter erzeugten ersten
+Bootstrapgraphen gueltig. Jeder normale erfolgreiche #56-Commit setzt:
+
+```text
+Active   = neues vollstaendig validiertes Manifest
+Fallback = vorheriger kanonischer Active- beziehungsweise Fallback-Zweig
+```
+
+War der bisher kanonisch verwendete Zweig der Fallback eines Rootkandidaten,
+wird genau dieser tatsaechlich verwendete vollstaendige Graph neuer Fallback.
+Ein technisch vorhandener, aber unbrauchbarer Active-Zweig wird nicht als
+Rueckfallgeneration weitergereicht.
+
+## Kanonische Graphvalidierung
+
+### Ergebnisvertrag
+
+Der Graphloader liefert genau einen der typisierten Zustaende:
+
+- `ConfigurationGraphAvailable` mit kanonischem Graph,
+  `RuntimeConfigurationSnapshot`-Vorbereitung und Diagnosen;
+- `ConfigurationGraphUnavailable`, wenn kein vollstaendiger Graph nutzbar ist;
+- `ConfigurationGraphIntegrityFailure`, wenn technische Kandidaten vorhanden,
+  aber nicht vollstaendig und widerspruchsfrei validierbar sind;
+- `ConfigurationGraphReadFailure` beziehungsweise
+  `ConfigurationGraphCapacityFailure` fuer Storefehler, die nicht als
+  `NotFound` umgedeutet werden duerfen.
+
+Die spaeteren extern sichtbaren #57-Namen `ConfigurationUnavailable` und
+`ConfigurationIntegrityFailure` werden in #56 weder vorweggenommen noch
+implementiert. #57 bildet seine Bootstrap-/Bootsemantik auf den
+Graphloadervertrag ab.
+
+### Auswahlalgorithmus
+
+Fuer eine vom Aufrufer vorgegebene gueltige `StorageEpoch`:
+
+1. beide Rootslots technisch scannen;
+2. `NotFound`, `ReadError`, `CapacityError` und jede Envelopeverletzung als
+   getrennte Diagnose erhalten;
+3. technisch passende Kandidaten absteigend nach `rootSequence`, bei Gleichheit
+   deterministisch nach Slot-ID untersuchen;
+4. Rootpayload und jede Referenz vollstaendig pruefen;
+5. zuerst den Active-Zweig des Kandidaten laden;
+6. fuer jede Dokumentkante Envelope, Referenzbindung, Schema, Payload und
+   fachliches Dokument validieren;
+7. ist Active unbrauchbar, den Fallback desselben Roots vollstaendig pruefen;
+8. den ersten vollstaendig nutzbaren Zweig als kanonisch waehlen;
+9. bei gueltigem Active einen vorhandenen Fallback zusaetzlich vollstaendig
+   validieren, bevor er als geschuetzte nutzbare Rueckfallgeneration gilt;
+10. Fallbacknutzung, unbrauchbaren Fallback und uebersprungene hoehere
+    Rootkandidaten stabil und ohne Payloaddaten diagnostizieren.
+
+Ein hoher Sequenzwert, ein gueltiger Envelope, ein gueltiges Manifest oder ein
+einzeln gueltiges Dokument aktiviert niemals allein einen Graphen. Ein
+`ReadError` oder `CapacityError` ist niemals fabrikleerer Speicher.
+
+Der Loader haelt nur den schliesslich ausgewaehlten typisierten Graphen. Beim
+Pruefen verworfener Kandidaten und des Fallbacks werden grosse Payloads nach
+der jeweiligen Validierung freigegeben; es wird keine Sammlung aller
+ProgramCatalog-Payloads aufgebaut.
+
+### Runtime-Snapshot aus einem Graphen
+
+Der unveraenderliche Snapshot enthaelt mindestens:
+
+- `StorageEpoch`;
+- vollstaendige Active-Manifestreferenz und `ConfigurationManifestGeneration`;
+- die drei konkreten Dokumentrevisionen;
+- unveraenderliche typisierte `UserConfiguration`, `ServiceConfiguration`
+  und `ProgramCatalog`;
+- die bereits erfolgreich vorbereitete `PreparedTimeZone`;
+- die fuer Leser erforderlichen, nicht geheimen Aktivierungsmetadaten.
+
+Der Snapshot enthaelt keine Store-, Slot-, Request-, Web-, Lauf-, Safety- oder
+Secretobjekte. Grosse unveraenderliche Dokumente werden zwischen kanonischem
+Graphen, Vorschaukandidat und vorbereitetem Snapshot ueber unveraenderliche
+Besitzobjekte geteilt; sie werden nicht fuer jeden Schritt erneut vollstaendig
+kopiert.
+
+## Schutzmenge und Slotrotation
+
+### Kanonische Schutzmenge
+
+Vor einer Mutation wird eine unveraenderliche Schutzmenge gebildet aus:
+
+- allen Dokument- und Manifestslots des aktuell kanonisch verwendeten Graphen;
+- allen Dokument- und Manifestslots seines vollstaendig validierten nutzbaren
+  Fallbacks, soweit vorhanden;
+- waehrend der Mutation allen bereits gewaehlten oder geschriebenen
+  Zielslots.
+
+Aeltere Rootkopien sind nur technische Bootkandidaten. Sie erweitern die
+fachliche Schutzmenge nicht. Ein ausschliesslich von einer aelteren,
+nichtkanonischen Rootkopie referenzierter Slot darf wiederverwendet werden.
+
+### Vollstaendige Vorplanung
+
+Noch vor dem ersten Write werden unter der exklusiven Mutation:
+
+1. Basis und Vorschau erneut geprueft;
+2. geaenderte Dokumente exakt bestimmt;
+3. alle benoetigten Revisionen, Manifestgeneration und `rootSequence` mit
+   Ueberlaufpruefung berechnet;
+4. fuer jeden geaenderten Dokumenttyp ein ungeschuetzter Zielslot bestimmt;
+5. ein ungeschuetzter Manifestplatz bestimmt;
+6. der andere der beiden Rootslots als Ziel bestimmt;
+7. alle ausgewaehlten Ziele zur lokalen Mutationsschutzmenge hinzugefuegt;
+8. alle Payload- und Envelopegroessen geprueft;
+9. der vollstaendige Runtime-Snapshot samt Plattformwerten vorbereitet;
+10. die neue Manifest- und Rootstruktur im RAM vollstaendig validiert.
+
+Fehlt fuer irgendeinen Recordtyp ein sicherer Platz, endet die Mutation vor
+jedem Write mit `NoUnreferencedSlotAvailable` und dem betroffenen Recordtyp.
+Eine teilweise Slotreservierung wird nicht sichtbar und schreibt nichts.
+
+### Deterministische Wahl
+
+- Fuer einen geaenderten Dokumenttyp beginnt die Suche zyklisch hinter dessen
+  Slot im aktuell kanonischen Graphen und ueberspringt jeden geschuetzten oder
+  bereits reservierten Slot.
+- Fuer das neue Manifest beginnt sie zyklisch hinter dem aktuell kanonischen
+  Manifest und ueberspringt Active-/Fallback-/Mutationsschutz.
+- Der Rootwrite verwendet immer den anderen der zwei Rootslots als den Slot,
+  aus dem der kanonische Zweig geladen wurde.
+- Ein unveraendertes Dokument behaelt Revision und exakte Referenz; es wird
+  weder neu kodiert noch geschrieben.
+
+Der Test startet mit einem gueltigen Graphen ohne Fallback und fuehrt
+mindestens fuenf aufeinanderfolgende Aktivierungen mit wechselnden
+Dokumentkombinationen aus. Nach jedem Commit muessen Active, exakt eine
+nutzbare vorherige Generation als Fallback und die freigegebenen
+Wiederverwendungsslots eindeutig sein.
+
+## Fluechtige Vorschau und Konfliktschutz
+
+### Lebenszyklus und Anzahlgrenze
+
+Der `ConfigurationService` haelt global genau eine sichtbare Vorschau. Das ist
+die verbindliche R1-Obergrenze fuer #56.
+
+- Eine neue vollstaendig validierte Vorschau ersetzt die bisherige atomar.
+- Eine ungueltige oder nicht vorbereitbare neue Anfrage laesst eine bereits
+  sichtbare Vorschau unveraendert.
+- Eine alte Bestaetigung nach Ersetzung endet als typisierter
+  `PreviewSuperseded`-/Konfliktzustand ohne Write.
+- `Abbrechen`, erfolgreicher Commit, erkannter Konflikt oder Neustart verwirft
+  die Vorschau.
+- Es gibt keine zeitbasierte Ablaufregel und keine Abhaengigkeit von UTC.
+- Es gibt keine persistente Preview, keinen Preview-Owner und kein
+  Autorisierungs- oder Wiederaufnahmetoken.
+
+Display- und Webadapter duerfen eine redigierte Darstellung halten, aber nicht
+den Kandidaten rekonstruieren. Der Konfigurationsdienst committet nur seinen
+eigenen aktuell gehaltenen unveraenderlichen Kandidaten.
+
+### Inhalt
+
+Die Vorschau enthaelt:
+
+- einen tief besessenen und danach unveraenderlichen vollstaendigen Kandidaten;
+- die exakte erwartete Active-Manifestreferenz einschliesslich Epoche,
+  Generation, Slot, Laenge und CRC;
+- eine `ConfigurationCandidateIntegrity` aus Schema, Laenge und CRC jeder
+  kanonisch kodierten Dokumentpayload;
+- eine typisierte Aenderungsmaske fuer User-, Service- und Programmdokument;
+- eine typisierte redigierte Aenderungszusammenfassung;
+- die Aktivierungswirkung `Immediate`, die einzige R1-Wirkung in #56;
+- alle bereits erfolgreich vorbereitbaren Plattformwerte.
+
+Die Integritaetskennung ist keine Authentisierung. Sie bindet die
+serviceeigene unveraenderliche Vorschau an die Bestaetigung. Autorisierung,
+Session und CSRF bleiben ausserhalb von #56.
+
+### Erstellung
+
+1. vollstaendigen typisierten Kandidaten uebernehmen und von
+   aufruferveraenderbaren Objekten entkoppeln;
+2. UserConfiguration inklusive Zeitzone validieren und vorbereiten;
+3. ServiceConfiguration und ProgramCatalog vollstaendig validieren;
+4. Kandidateninhalte exakt, nicht nur per CRC, gegen den aktiven Snapshot
+   vergleichen;
+5. kanonische Payloads einzeln kodieren und deren Integritaet bestimmen;
+6. Aenderungsmaske, Aktivierungswirkung und redigierte Zusammenfassung bilden;
+7. alle Anzahl- und Ressourcenobergrenzen pruefen;
+8. erst danach die alte Vorschau ersetzen und die neue sichtbar machen.
+
+Ist der Kandidat exakt identisch, liefert die Vorschau `NoChange`. Eine
+Bestaetigung von `NoChange` erzeugt weder Revision, Manifestgeneration,
+`rootSequence` noch Storezugriff.
+
+### Bestaetigung unter exklusiver Mutation
+
+Unmittelbar vor jedem Commit werden erneut geprueft:
+
+- die noch aktuelle serviceeigene Vorschau;
+- `StorageEpoch` und exakte Active-Manifestbasis;
+- unveraenderter Kandidat und neu berechnete Kandidatenintegritaet;
+- vollstaendige technische und fachliche Validierung;
+- unveraenderte Aktivierungswirkung;
+- Ressourcen, Zaehler und gesamte Slotvorplanung.
+
+Jede Abweichung liefert einen stabilen Konflikt ohne automatisches Merge,
+ohne Last-write-wins und ohne Write. Bei zwei konkurrierenden Display-/Web-
+Bestaetigungen gewinnt unter der exklusiven Mutation hoechstens eine; die
+zweite sieht die neue Basis oder eine verworfene Vorschau und wird abgelehnt.
+
+## Entscheidung zur persistenten `MutationSequence`
+
+### Entscheidung
+
+Issue #56 fuehrt **keine separate persistente `MutationSequence`** ein.
+
+Diese Entscheidung ist auf den Variante-B-R1-Scope von ADR-018 begrenzt. Der
+vorhandene generische Typ `RecordSequence` bleibt unveraendert; es entsteht
+weder ein neuer Mutationsrecord noch ein zusaetzlicher Slot oder Root.
+
+### Gleichwertigkeitsnachweis
+
+| Erforderliche Eigenschaft | Variante-B-Nachweis ohne separate Sequenz |
+|---|---|
+| Konflikt zwischen zwei Vorschauen | Exakte `StorageEpoch` und Active-Manifestreferenz werden unter derselben exklusiven Mutation erneut verglichen. Nur eine Bestaetigung kann dieselbe Basis erfolgreich verwenden. |
+| Ordnung geaenderter Dokumentinhalte | Jeder geaenderte Dokumenttyp erhaelt genau die naechste starke Dokumentrevision; unveraenderte Dokumente behalten ihre Revision. |
+| Ordnung vollstaendiger Graphkandidaten | Jede Aktivierung erhaelt genau die naechste `ConfigurationManifestGeneration`. |
+| Persistente Gesamtordnung erfolgreicher Aktivierungen | Jeder erfolgreiche Root-Commit erhaelt genau die naechste `ConfigurationRootSequence`; in #56 existiert kein anderer persistenter Konfigurationscommit ausserhalb dieses Root-Linearisierungspunkts. |
+| `NoChange` | Schreibt nichts und verbraucht keinen Zaehlerwert. Eine separate Mutationsnummer duerfte ebenfalls nicht fortgeschrieben werden und enthaelt daher keine Zusatzinformation. |
+| Abbruch vor Root-Commit | Neue Dokumente oder ein Manifest bleiben unreferenziert und nicht kanonisch. Eine nur vorbereitete Mutationsnummer waere ebenfalls nicht wirksam. |
+| Wiederholung nach eindeutig altem Ausgang | Die fluechtige Vorschau wird verworfen; ein neuer Versuch benoetigt eine neue Vorschau gegen die weiterhin kanonische Basis. Verwaiste Slots duerfen nach Referenzanalyse sicher ueberschrieben werden. |
+| Eindeutig neuer Ausgang | Exakte Ziel-Rootreferenz, Ziel-`rootSequence`, Manifestgeneration und vollstaendiger Zielgraph bestimmen den neuen kanonischen Zustand. |
+| `CommitOutcomeUnknown` | Beide Rootslots und die benoetigten Graphrecords werden vollstaendig gescannt. Die kanonische Rootordnung plus exakte Zielidentitaet ergibt eindeutig alt oder neu; bei fehlender Eindeutigkeit folgt `ConfigurationCommitIndeterminate`. |
+| Neustart | Vorschauen existieren nicht mehr. Derselbe kanonische Root-/Graphscan bestimmt ausschliesslich aus persistenten Daten den Zustand; es gibt nichts wiederzugeben oder fortzusetzen. |
+| Bootstrap und Reset | #57 besitzt dafuer `BootstrapSequence` und `StorageEpoch`; diese Vorgaenge sind keine zusaetzlichen #56-Graphcommits, die eine gemeinsame Mutationsnummer benoetigen. |
+| Spaetere Secret-Domaenen | Sie erhalten erst mit ihrem ersten Konsumenten eigene epochengebundene Commitvertraege und duerfen keine jetzt leere Kreuzdomaenensequenz voraussetzen. |
+
+Im #56-Scope besteht damit eine Eins-zu-eins-Zuordnung zwischen einem
+erfolgreichen persistenten Konfigurationscommit und genau einer neuen
+`ConfigurationRootSequence`. Eine weitere persistente Sequenz im Root waere
+eine identische zweite Zahl. Ein separater Sequenzrecord ausserhalb des Roots
+wuerde dagegen einen neuen Write, einen weiteren unklaren Commitausgang und
+neue Recoveryordnung erzeugen. Er koennte einen unklaren Rootwrite nicht
+aufloesen, weil weiterhin der Root und sein Zielgraph gelesen werden muessen.
+
+### Verbindliche Gegenbeispieltests
+
+Der Nachweis gilt nur, wenn Tests mindestens beweisen:
+
+- zwei Vorschauen auf gleicher Basis, genau eine Aktivierung;
+- Wiederholung derselben bestaetigten Aktion nach eindeutig altem, eindeutig
+  neuem und unbestimmtem Rootwrite;
+- `NoChange` ohne jede Sequenzaenderung;
+- verwaiste Dokument-/Manifestrevisionen nach Abbruch vor Root;
+- gleiche numerische Werte verschiedener starker Revisions-/Generationstypen
+  werden nie vermischt;
+- Root- und Manifestueberlauf werden vor dem ersten Write abgelehnt;
+- ein zusaetzlicher persistenter Zaehler waere in keinem Orakel erforderlich.
+
+Scheitert einer dieser Nachweise, ist das keine lokale Implementierungsdetails,
+sondern eine materielle Planabweichung. Die Implementierung wird angehalten,
+dieser Plan ergaenzt und erneut commitgebunden ownerfreigegeben.
+
+## Commit- und Runtimeaktivierungsvertrag
+
+### Commitvorbereitung
+
+Unter der exklusiven Mutation erfolgt vor dem ersten Write:
+
+1. Vorschau-, Basis-, Integritaets- und Vollvalidierungspruefung;
+2. exakter `NoChange`-Entscheid;
+3. checked increment aller benoetigten Revisionen, der Manifestgeneration und
+   der Rootsequenz;
+4. vollstaendige Schutzmengen- und Slotvorplanung;
+5. Groessenpruefung jedes benoetigten Payloads und Envelopes;
+6. Vorbereitung aller fachlichen und Plattformwerte;
+7. Aufbau eines unveraenderlichen `RuntimeConfigurationSnapshot`;
+8. vollstaendige Ressourcenreservierung fuer den Snapshot-Publish;
+9. Aufbau und Validierung der kuenftigen Manifest- und Rootmodelle.
+
+Kein Kandidat wird vor vollstaendiger erfolgreicher Vorbereitung sichtbar
+oder persistent wirksam.
+
+### Persistente Schreibreihenfolge
+
+1. fuer jedes tatsaechlich geaenderte Dokument in stabiler Reihenfolge
+   UserConfiguration, ServiceConfiguration, ProgramCatalog:
+   - kanonische Payload in einen leeren, wiederverwendeten Recordarbeitsbereich
+     kodieren;
+   - Envelope bilden;
+   - Zielslot schreiben;
+   - bei `CommitOutcomeUnknown` genau diesen Slot vollstaendig ruecklesen und
+     als eindeutig alt oder exakt neu bestimmen;
+   - neue Bytes ruecklesen, Referenzbindung pruefen und fachlich validieren;
+   - Recordarbeitsbereich vor dem naechsten vollstaendigen Record leeren;
+2. Manifest auf dieselbe Weise schreiben und den gesamten neuen Zielgraphen
+   ohne Root als vollstaendig nutzbar pruefen;
+3. Rootpayload und -envelope in einem leeren Arbeitsbereich fertig kodieren
+   und lokal validieren;
+4. Root in den anderen Rootslot schreiben.
+
+Bei Dokument- oder Manifestwrites mit eindeutig altem oder nicht wirksamem
+Ausgang bleibt der kanonische Root unveraendert. Der Commit endet typisiert;
+verwaiste neue Records sind nicht aktiv und spaeter nach Schutzanalyse
+wiederverwendbar. Kann ein nichtlinearisierender Write nicht rueckgelesen
+werden, bleibt die alte Runtime kanonisch; es erfolgt kein Rootwrite.
+
+### Root-Commit als Linearisierungspunkt
+
+Ein neuer Root wird nur geschrieben, nachdem Zielgraph, Snapshot und alle
+normalen falliblen Ressourcenarbeiten erfolgreich vorbereitet sind. Der
+persistente Linearisierungspunkt ist:
+
+- `StateStoreWriteStatus::Success` fuer die exakt vorbereiteten Rootbytes,
+  gefolgt von verpflichtendem Readback; oder
+- bei `CommitOutcomeUnknown` ein vollstaendiger Aufloesungsscan, der den exakt
+  erwarteten neuen Root und dessen vollstaendigen Zielgraphen eindeutig als
+  kanonisch bestimmt.
+
+Der verpflichtende Readback beziehungsweise Aufloesungsscan ist kein
+nachgelagerter fachlicher Vorbereitungsschritt, sondern die Bestimmung des
+tatsaechlichen persistenten Commitresultats. Ein Fehler dabei wird niemals
+als normaler Fehler vor dem Root-Commit umgedeutet.
+
+Ergibt der Unknown-Scan eindeutig den alten kanonischen Graphen, wird nichts
+publiziert, die alte Runtime bleibt verfuegbar und das Ergebnis ist ein
+typisierter Persistenzfehler. Ergibt er eindeutig den neuen Graphen, folgt der
+nicht fehlschlagende Publish. Ist keine eindeutige Bestimmung moeglich, gilt
+der unten definierte unbestimmte Zustand.
+
+Ein nach `Success` nicht abschliessbarer verpflichtender Root-/Graph-Readback
+ist ein `ConfigurationRuntimeFailure`: der Store hat den neuen Root laut
+Portvertrag dauerhaft angenommen, aber der #56-Gesamtvertrag kann nicht
+vollstaendig bestaetigt werden. Es erfolgen weder Publish noch Rollback;
+normale Runtimefreigabe und weitere Mutationen bleiben gesperrt.
+
+### Nicht fehlschlagender Publish
+
+Der vorbereitete Snapshot wird ueber einen kleinen app-internen Publisher
+sichtbar gemacht:
+
+- der neue unveraenderliche Snapshot und sein Besitz-/Controlblock entstehen
+  vollstaendig vor dem Rootwrite;
+- der Publisher tauscht nach bestaetigtem Root-Commit nur den vorbereiteten
+  C++17-`shared_ptr` atomar mit Release/Acquire-Semantik aus;
+- `publishPrepared(...)` ist `noexcept` und allokiert, serialisiert, validiert,
+  reserviert und liest keinen Store;
+- Leser erhalten einen unveraenderlichen Snapshot-Handle und beobachten nur
+  die vollstaendig alte oder vollstaendig neue Generation;
+- das Freigeben eines alten Handles darf keinen neuen fachlichen Fehlerpfad
+  erzeugen.
+
+Die C++17-Toolchainunterstuetzung der atomaren `shared_ptr`-Operationen wird in
+`native`, `esp32_bringup` und `esp32_release` gebaut und getestet. Eine andere
+Publishertechnik, die das oeffentliche Lebensdauer- oder
+Nichtfehlschlagenversprechen veraendert, waere eine materielle Planabweichung.
+
+Ein defensiver Testpublisher darf eine Vertragsverletzung melden. Dieser
+Status ist kein normaler recoverbarer Publishfehler, sondern erzeugt nach dem
+bereits bestaetigten Root-Commit `ConfigurationRuntimeFailure`, sperrt normale
+Runtime und weitere Mutationen und fuehrt weder Rollback noch Factory-Fallback
+aus.
+
+## Endgueltiger unbestimmter Commitzustand
+
+### Typname
+
+Der endgueltige Produktions-Typname lautet:
+
+```text
+ConfigurationCommitIndeterminate
+```
+
+Der Typ ist ein eigener stabiler fachlicher Zustand und weder ein Alias fuer
+`PersistenceFailure` noch ein boolesches Flag. Er enthaelt ausschliesslich
+redigierbare technische Identitaet:
+
+- versuchte `ConfigurationRootSequence`;
+- versuchte `ConfigurationManifestGeneration`;
+- `ConfigurationCommitIndeterminateCause`.
+
+Die Ursache unterscheidet mindestens Root-/Graph-`ReadError`,
+`CapacityError`, Envelope-/CRC-/Referenzintegritaet, fachliche
+Graphungueltigkeit und nicht eindeutige Aufloesung. Sie enthaelt keine
+Payload, Benutzereingabe oder Secrets.
+
+### Eintritt
+
+Der Zustand entsteht ausschliesslich, wenn:
+
+1. der Rootwrite `CommitOutcomeUnknown` liefert; und
+2. der vollstaendige Scan beider Rootslots und aller fuer alten und erwarteten
+   neuen kanonischen Graphen benoetigten Records wegen eines Fehlers oder
+   Widerspruchs nicht eindeutig als alt oder neu abgeschlossen werden kann.
+
+### Verhalten
+
+In `ConfigurationCommitIndeterminate`:
+
+- wird weder alter noch neuer persistenter Graph als sicher kanonisch
+  behauptet;
+- wird der vorbereitete neue Snapshot nicht publiziert;
+- liefert der Konfigurationsdienst keinen normalen Runtime-Snapshot mehr aus;
+- werden weitere Vorschauen verworfen;
+- werden jede weitere Mutation, Slotplanung und Slotwiederverwendung
+  abgelehnt;
+- bleibt ein bereits laufender unveraenderlicher Laufschnappschuss unberuehrt;
+- wird der Zustand als eigener Producer an das spaetere
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE` gemeldet;
+- gibt es keinen automatischen Rollback, kein Umschreiben eines Roots und
+  keinen Factory-Fallback.
+
+Eine Aufloesung ist nur durch einen expliziten spaeteren vollstaendig
+erfolgreichen Scan beider Rootslots und aller benoetigten Graphrecords oder
+durch denselben Scan im normalen #57-Neustartpfad zulaessig. Der Scan darf nur
+einen eindeutig kanonischen alten oder neuen Graphen freigeben. Bleibt eine
+Unklarheit, bleibt der Dienst fail closed.
+
+Der in #24 spaeter persistierte Verriegelungszustand wird durch eine lokale
+Aufloesung nicht automatisch geloescht. Dessen Reset bleibt ausschliesslich
+beim #24-Fehlerresetvertrag.
+
+## Weitere Fehler- und Ergebnisvertraege
+
+### Commitergebnisse
+
+Der Dienst bildet Ergebnisse auf stabile projektspezifische Kategorien ab:
+
+- `ConfigurationCommitSuccess`
+  - `NoChange`
+  - `Activated`
+- `ConfigurationValidationFailure`
+- `ConfigurationConflictFailure`
+- `PersistenceFailure`
+- `ActivationFailure`
+- `MigrationFailure`
+- `ConfigurationCommitIndeterminate` als eigener Zustand, nicht als
+  Unterfall eines normalen Fehlers vor Commit.
+
+Store-, Codec- oder Bibliotheksdetails werden nicht ungefiltert an UI- oder
+Fachkonsumenten durchgereicht. Die Fehler tragen hoechstens Recordart, Phase
+und redigierte stabile Ursache.
+
+### `ConfigurationRuntimeFailure`
+
+`ConfigurationRuntimeFailure` ist der zweite stabile #56-Producer und deckt
+mindestens ab:
+
+- bestaetigter Root-Commit, dessen verpflichtender Nachweis nicht
+  abgeschlossen werden kann;
+- unerwartete Verletzung des vertraglich nicht fehlschlagenden
+  Snapshot-Publish.
+
+In diesem Zustand wird kein Rollback versucht, keine normale Runtime mehr
+freigegeben und keine weitere Mutation erlaubt. Er ist von
+`ConfigurationCommitIndeterminate` getrennt: Beim Runtimefehler ist der
+Rootwrite laut Storevertrag beziehungsweise erfolgreichem Scan bestimmt; beim
+unbestimmten Zustand ist gerade diese persistente Bestimmung nicht moeglich.
+
+## Grenze zum `CONFIGURATION_SAFETY_INTEGRATION_GATE`
+
+#56 implementiert ausschliesslich Producer-Vertraege:
+
+- `ConfigurationRuntimeFailure`;
+- `ConfigurationCommitIndeterminate`;
+- fail-closed Zustand und keine normale Runtimefreigabe.
+
+#56 implementiert nicht:
+
+- eine Safetyfehlerklasse;
+- eine persistente Verriegelung;
+- `SAFE_BOOT`-Prioritaet;
+- Fehlerreset;
+- Aktorsperre oder Aktorfreigabe;
+- GPIO- oder Hardwaretests.
+
+#24 konsumiert spaeter diese realen Typen zusammen mit
+`ConfigurationUnavailable` und `ConfigurationIntegrityFailure` aus #57. Das
+nachgelagerte `CONFIGURATION_SAFETY_INTEGRATION_GATE` muss mindestens
+nachweisen:
+
+- `ConfigurationRuntimeFailure` fuehrt zur persistenten Verriegelung;
+- `ConfigurationCommitIndeterminate` fuehrt zur persistenten Verriegelung;
+- Bootprioritaet beziehungsweise `SAFE_BOOT` bleibt sicher;
+- keine normale Aktorfreigabe entsteht;
+- Neustart umgeht die notwendige Verriegelung nicht;
+- Recovery hebt sie nur gemaess #24-Fehlerresetvertrag auf;
+- alle Producer sind reproduzierbar injizierbar.
+
+#56 darf seine Producer-Vertraege unabhaengig abschliessen. #24 darf jedoch
+nicht als vollstaendig abgeschlossen gelten, bevor dieses Gate mit den realen
+#56-/57-Typen bestanden ist. Es entsteht keine zyklische oder pauschale
+Abhaengigkeit von #56 auf #24.
+
+## Ressourcen- und Lebensdauervertrag
+
+### Verbindliche Softwareobergrenzen
+
+- genau eine sichtbare fluechtige Vorschau global;
+- genau eine Konfigurationsmutation gleichzeitig;
+- vier Slots je Dokumenttyp, drei Manifest- und zwei Rootslots;
+- maximal acht technische Kandidaten je vorhandener
+  `device_platform`-Scanoperation;
+- maximal 256 Byte UserConfiguration-Payload;
+- exakt 0 Byte ServiceConfiguration-Payload;
+- maximal 32.768 Byte ProgramCatalog-Payload;
+- exakt 104 Byte Manifestpayload;
+- maximal 69 Byte Rootpayload;
+- maximal 32.813 Byte fuer einen Dokumentrecord inklusive UTC-Envelope;
+- maximal 149 Byte fuer ein Manifest-Envelope;
+- maximal 114 Byte fuer ein Root-Envelope;
+- global hoechstens ein vollstaendiger kodierter Recordarbeitsbereich im
+  Commitworkflow.
+
+Der Workflow ruft `encodeEnvelope()` nur mit einem leeren oder nicht mehr
+benoetigten Ausgabepuffer auf. Nach jedem Write und Readback wird dieser
+Arbeitsbereich geleert beziehungsweise wiederverwendet, bevor der naechste
+vollstaendige Record kodiert wird. Ein alter Ausgaberecord bleibt nie parallel
+zum neuen Encoderpuffer erhalten.
+
+Aktiver Snapshot, Vorschaukandidat und vorbereiteter neuer Snapshot teilen
+unveraenderte Dokumente. Bei einer maximalen ProgramCatalog-Aenderung duerfen
+hoechstens der aktuelle unveraenderliche Katalog und genau ein neuer
+unveraenderlicher Kandidatenkatalog als fachliche Vollmodelle gleichzeitig
+leben. Der vorbereitete Snapshot besitzt keine dritte Katalogkopie.
+
+### Messpflichtige Werte
+
+Folgende Werte bleiben bis zum Implementierungsnachweis
+`TBD_IMPLEMENTATION_BUDGET` beziehungsweise `MEASUREMENT_REQUIRED`:
+
+- absolute Host- und ESP32-Heapspitze;
+- niedrigster freier Heap und groesster freier Block auf realem ESP32;
+- tatsaechliche NVS-Belegung und Replace-Atomizitaet;
+- reale Commitdauer, Jitter und Flashlebensdauer;
+- endgueltige Flash- und statische RAM-Reserve.
+
+Die Softwaregrenzen duerfen nicht als reale Hardwaregarantie formuliert
+werden.
+
+### Base-/Head-Vergleich
+
+Nach Planfreigabe und vor der ersten Produktionsaenderung wird der
+freigegebene Plan-Commit als Code-Baseline gebaut. Nach der Implementierung wird
+der Head mit exakt derselben Toolchain und denselben Umgebungsvariablen gebaut.
+
+Fuer beide Staende werden mit `scripts/build_report.py` mindestens erfasst:
+
+- Host-Testbinaer fuer `native`;
+- statisches RAM und Flash fuer `esp32_bringup`;
+- statisches RAM und Flash fuer `esp32_release`;
+- Groesse von `firmware.bin`;
+- Groesse von `firmware.elf`.
+
+Der Abschlussbericht nennt Base-SHA, Head-SHA, absolute Werte und Deltas. Die
+Berichte werden als CI-/PR-Nachweis verwendet und nicht als neue dauerhaft
+versionierte Buildartefakte eingecheckt. Unterschiede gelten informativ, bis
+reale Budgets ownerfreigegeben sind; unerwartete oder nicht erklaerbare
+Spruenge blockieren den Abschluss.
+
+## Geplanter kleiner Commit-Schnitt nach Planfreigabe
+
+Alle Commits bleiben im selben Draft-PR. Jeder Schritt muss fuer sich bauen
+und die bis dahin vorhandenen Tests bestehen.
+
+### Commit 1 – Manifest-, Root- und Wirevertraege
+
+- Record-IDs, Keys und Limits ergaenzen;
+- starke Referenz-, Manifest- und Rootmodelle einfuehren;
+- kanonische Schema-1-Codecs implementieren;
+- Golden-, Roundtrip-, Grenz- und Negativtests ergaenzen.
+
+Keine Storeorchestrierung und keine Vorschau in diesem Commit.
+
+### Commit 2 – Graphladen, Validierung und Schutzmenge
+
+- vollstaendigen Graphloader implementieren;
+- kanonische Root-/Active-/Fallback-Auswahl und Diagnosen implementieren;
+- exakte Referenzbindung und fachliche Dokumentvalidierung integrieren;
+- Schutzmenge und deterministische Slotvorplanung implementieren;
+- Graph-, Korruptions- und Rotationsmodelltests ergaenzen.
+
+Noch kein persistenter Aktivierungsworkflow.
+
+### Commit 3 – Runtime-Snapshot und fluechtige Vorschau
+
+- unveraenderlichen `RuntimeConfigurationSnapshot` und atomaren Publisher
+  implementieren;
+- genau eine serviceeigene Vorschau, Kandidatenintegritaet, exakte
+  Inhaltsvergleiche, `NoChange` und Konfliktvertrag implementieren;
+- Preview-, Lebensdauer-, Konkurrenz- und Allokationstests ergaenzen.
+
+Noch kein Rootwrite aus dem Konfigurationsdienst.
+
+### Commit 4 – Serialisierter Commit und fail-closed Zustaende
+
+- vollstaendige Vorplanung und geordnete Dokument-/Manifestwrites;
+- Root-Commit als Linearisierungspunkt;
+- Unknown-Aufloesung alt/neu;
+- `ConfigurationCommitIndeterminate` und `ConfigurationRuntimeFailure`;
+- nicht fehlschlagenden Snapshot-Publish;
+- vollstaendige Cut-Point-, Wiederholungs- und Publishmatrix.
+
+### Commit 5 – Ressourcen, Gesamtnachweis und Dokumentation
+
+- Maximalmodell- und Peak-Allokationstests;
+- fuenf aufeinanderfolgende Active-Commits;
+- alle drei Buildprofile und Base-/Head-Ressourcenvergleich;
+- Spezifikation, Implementierungsuebersicht und Changelog aktualisieren;
+- Diff gegen diesen freigegebenen Plan dokumentieren.
+
+Falls der tatsaechliche Dateischnitt ausserhalb der oben genannten Dateien
+waechst oder ein Commit eine neue Modul-/Vertragsentscheidung benoetigt, gilt
+dies als materielle Planabweichung und erfordert vor der Aenderung einen neuen
+Plan-Commit mit erneuter Ownerfreigabe.
+
+## Vollstaendige Teststrategie
+
+### Wire- und Codec-Tests
+
+- Golden Bytes fuer Manifest mit allen bekannten Origin-/Operation-IDs;
+- unbekannte Origin-/Operation-ID bleibt mit Rohwert erhalten;
+- Root ohne Fallback und Root mit Fallback;
+- exakte Payloadlaengen 104, 35 und 69 Byte;
+- Envelopegrenzen 149 und 114 Byte;
+- Roundtrip fuer Minimal-/Maximalwerte;
+- Nullwerte fuer Epoche, Revision, Generation und Sequenz;
+- ungueltige Slot-ID je Recordgruppe;
+- falscher Recordtyp, falsches Schema, falsche Epoche;
+- Truncation an jeder Feldgrenze und Trailing Bytes;
+- ungueltiger Optionaltag;
+- Active und Fallback identisch;
+- Payload-CRC-Abweichung bei gueltiger Envelope-CRC;
+- Envelope-CRC-Abweichung;
+- unbekannte neuere Manifest-/Rootschemas ohne Teilwirkung;
+- Encoder laesst Ausgabepuffer bei jedem Fehler byteidentisch unveraendert.
+
+### Kanonische Graph- und Korruptionstests
+
+- gueltiger Active-Graph ohne Fallback;
+- gueltiger Active-Graph mit gueltigem Fallback;
+- ungueltiges Active mit gueltigem Fallback;
+- ungueltiges Active und fehlender beziehungsweise ungueltiger Fallback;
+- hoeherer unbrauchbarer Root, danach niedrigerer vollstaendig nutzbarer Root;
+- gleicher Sequenzwert in zwei Rootslots mit deterministischem Tiebreak und
+  sichtbarer Integritaetsdiagnose;
+- hohes `rootSequence` ohne gueltigen Graph aktiviert nichts;
+- jede Referenzkante einzeln mit falschem Typ, Slot, Revision/Generation,
+  Schema, Laenge, Payload-CRC und Epoche;
+- technisch gueltige, CRC-korrekte aber fachlich ungueltige UserConfiguration;
+- technisch gueltiger, CRC-korrekter aber fachlich ungueltiger ProgramCatalog;
+- `NotFound`, `ReadError` und `CapacityError` bleiben unterscheidbar;
+- Fallbacknutzung und unbrauchbarer Fallback sind diagnostizierbar;
+- verworfene Kandidaten halten keine grossen Payloadsammlungen.
+
+### Schutzmengen- und Rotationstests
+
+- Ausgangsgraph ohne Fallback;
+- exakt geschuetzte Active-/Fallback-Dokument- und Manifestplaetze;
+- Altroot schuetzt keine nur noch von ihm referenzierte Generation;
+- geaendertes einzelnes Dokument;
+- zwei geaenderte Dokumente;
+- alle drei geaenderten Dokumente;
+- unveraenderte Dokumente behalten exakte Referenz und Revision;
+- echter Slotmangel je Dokumenttyp und beim Manifest;
+- kein Rootwrite bei `NoUnreferencedSlotAvailable`;
+- mindestens fuenf aufeinanderfolgende Active-Commits;
+- nach jedem Commit neues Active und vorheriger tatsaechlich kanonischer Graph
+  als genau ein nutzbarer Fallback;
+- Wiederverwendung verwaister Vor-Root-Records ohne Schutzverletzung;
+- Revision, Generation und Rootsequenz an und ueber der Ueberlaufgrenze.
+
+### Preview-, Validierungs- und Konflikttests
+
+- gueltige User-, Service- und ProgramCatalog-Aenderung einzeln und kombiniert;
+- maximal gueltiger ProgramCatalog-Kandidat;
+- ungültiger Kandidat wird nie sichtbar;
+- exakt ein sichtbares Preview;
+- gueltiges neues Preview ersetzt das alte;
+- ungueltiges neues Preview erhaelt das alte;
+- Abbrechen verwirft ohne Wirkung;
+- Neustart verwirft ohne Persistenz;
+- `NoChange` ohne Storezugriff oder Zaehlerfortschritt;
+- exakter Inhaltsvergleich erkennt unterschiedliche Inhalte auch bei
+  absichtlich gleicher testseitiger CRC-Metadatenvorgabe;
+- veraltete Epoche;
+- veraltete Active-Manifestreferenz;
+- geaenderte Kandidatenintegritaet;
+- erneuter fachlicher oder Plattformvalidierungsfehler vor Commit;
+- geaenderte Aktivierungswirkung;
+- zwei Display-/Webaehnliche Bestaetigungen: genau eine gewinnt;
+- keine RunAssessment-, Auth- oder Safetyentscheidung im Dienst.
+
+### Cut-Point- und Persistenzmatrix
+
+Fuer jede moegliche Writeposition der konkreten Mutation:
+
+- `WriteError` vor Wirkung;
+- `CapacityError` vor Wirkung;
+- `CommitOutcomeUnknown` mit eindeutig altem Record;
+- `CommitOutcomeUnknown` mit eindeutig neuem Record;
+- Neustart direkt vor dem Write;
+- Neustart direkt nach dauerhaftem Write.
+
+Positionen umfassen mindestens:
+
+- jede geaenderte Dokumentrevision;
+- Manifest;
+- Root.
+
+Fuer Dokument und Manifest wird bewiesen:
+
+- vor Root bleibt der alte kanonische Graph wirksam;
+- ein eindeutig neuer unreferenzierter Record aktiviert nichts;
+- ein unaufloesbarer Readback vor Root erzeugt keinen Rootwrite;
+- spaetere sichere Wiederverwendung bleibt moeglich.
+
+Fuer Root wird bewiesen:
+
+- Unknown + Vollscan eindeutig alt: alter Snapshot, kein Publish;
+- Unknown + Vollscan eindeutig neu: exakt neuer vorbereiteter Snapshot;
+- Unknown + Root-`ReadError`;
+- Unknown + Root-`CapacityError`;
+- Unknown + Graph-`ReadError`;
+- Unknown + Graph-`CapacityError`;
+- Unknown + Envelope-/CRC-Fehler;
+- Unknown + Referenzintegritaetsfehler;
+- Unknown + fachlicher Semantikfehler;
+- wiederholter fehlgeschlagener Aufloesungsscan;
+- spaeterer erfolgreicher Scan loest eindeutig alt oder neu auf;
+- Neustartscan loest eindeutig alt oder neu auf;
+- Neustartscan bleibt unklar;
+- kein Publish, keine Mutation und keine Slotwiederverwendung im unbestimmten
+  Zustand;
+- kein automatischer Rollback und kein Factory-Fallback;
+- Root-`Success` mit nachgelagertem Readbackfehler erzeugt
+  `ConfigurationRuntimeFailure`, nicht einen normalen Vor-Commit-Fehler.
+
+### Runtime- und Publish-Tests
+
+- alle falliblen Kandidaten-, Plattform-, Groessen- und Snapshotarbeiten sind
+  vor dem Rootwrite abgeschlossen;
+- Allokationszaehler meldet null neue Allokationen innerhalb
+  `publishPrepared(...)`;
+- Publish serialisiert, validiert, reserviert und liest nichts;
+- Leser sehen unter kontrollierten Interleavings nur vollstaendig alt oder
+  vollstaendig neu;
+- alte Snapshot-Handles bleiben fuer bereits laufende Leser unveraendert;
+- simulierte Publish-Vertragsverletzung erzeugt
+  `ConfigurationRuntimeFailure`;
+- nach Runtimefehler kein normaler Snapshot und keine weitere Mutation;
+- ein aktiver `ProcessRunSnapshot` wird weder referenziert noch umgeschrieben;
+- Safety- und Aktorports werden nicht aufgerufen.
+
+### `MutationSequence`-Nachweistests
+
+- jede erfolgreiche Aktivierung inkrementiert genau Manifestgeneration und
+  Rootsequenz einmal;
+- nur geaenderte Dokumenttypen inkrementieren ihre Revision;
+- fehlgeschlagene Vor-Root-Versuche veraendern die kanonische Gesamtordnung
+  nicht;
+- Rootsequenz ordnet jede persistent sichtbare #56-Mutation eindeutig;
+- Wiederholung nach altem/neuem/unbestimmtem Ausgang folgt den oben
+  definierten Orakeln;
+- kein Test benoetigt einen zusaetzlichen persistenten Mutationswert;
+- Repositorysuche weist nach, dass #56 keinen `MutationSequence`-Record,
+  -Key, -Slot oder Wirewert einfuehrt.
+
+### Ressourcen- und Buildtests
+
+- Peak-Allokationsmessung fuer leeres, typisches und maximal gueltiges Preview;
+- Peak-Allokationsmessung fuer Laden, Fallbackpruefung und Commit eines maximalen
+  ProgramCatalog;
+- genau ein vollstaendiger Recordarbeitsbereich waehrend des Commits;
+- keine dritte vollstaendige ProgramCatalog-Modellkopie;
+- wiederholte Preview-/Abbruch-/Commitzyklen ohne wachsenden Live-Heap im
+  nativen Allokationszaehler;
+- `pio test -e native` vollstaendig;
+- zielgerichtete neue Testgruppen;
+- `pio run -e native -e esp32_bringup -e esp32_release`;
+- Base-/Head-Bericht mit identischer Toolchain;
+- `clang-format`-Pruefung aller betroffenen C++-Dateien;
+- `clang-tidy` fuer die betroffenen Produktionsdateien, soweit die bestehende
+  Toolchain dies ohne neue Konfiguration unterstuetzt;
+- `git diff --check` und Secretpruefung.
+
+Native Allokations- und Timingwerte beweisen keine reale ESP32-Heapreserve,
+NVS-Latenz oder Watchdogfreiheit. Diese bleiben sichtbar als spaetere
+Messgates.
+
+## Fehler-, Recovery-, Security- und Safetygrenzen
+
+### Fehler und Recovery
+
+- Kein Lese-, Kapazitaets-, CRC-, Referenz-, Schema- oder Fachfehler wird als
+  `NotFound` oder fabrikneu umgedeutet.
+- Kein Fehler startet Bootstrap, Werksreset oder Factoryinitialisierung.
+- Vor Root-Commit bleibt der alte kanonische Graph wirksam.
+- Nach bestaetigtem Root-Commit gibt es keinen automatischen Rollback.
+- Ein unbestimmter Rootausgang bleibt bis zum erfolgreichen Vollscan fail
+  closed.
+- #56 erzeugt keine persistente Recoveryabsicht und setzt keinen Fehler zurueck.
+
+### Security
+
+- Konfigurationsgraph, Vorschau, Fingerprint, Diagnose und Fehler enthalten
+  keine WLAN-, Passwort-, PIN-, Token- oder Sessiondaten.
+- CRC ist kein Securitymechanismus und wird nicht als solcher beschrieben.
+- Keine Connectivity-/Authentication-Domaene wird vorbereitet.
+- Keine Flashverschluesselungs- oder physische Loeschgarantie wird behauptet.
+- Plattformverschluesselung bleibt `EVALUATE_BEFORE_RELEASE` ausserhalb #56.
+
+### Safety
+
+- #56 steuert keine Hardware und gibt keine Aktoren frei.
+- Unbekannter, unaufgeloester oder runtimeinkonsistenter
+  Konfigurationszustand liefert keine normale Runtimefreigabe.
+- Service-PIN, Webzugang oder ChangeOrigin veraendern diese Grenze nicht.
+- Der unveraenderliche Laufschnappschuss bleibt ausserhalb der
+  Konfigurationsmutation.
+- Persistente Verriegelung und `SAFE_BOOT` werden nicht provisorisch in #56
+  nachgebaut, sondern spaeter zwingend ueber das benannte Gate integriert.
+
+## Offene Entscheidungen und Gates
+
+| Punkt | Status nach diesem Plan | Behandlung |
+|---|---|---|
+| separate persistente `MutationSequence` | entschieden: fuer #56/R1 nicht erforderlich | Gleichwertigkeits- und Gegenbeispieltests in diesem Plan; Scheitern ist materielle Planabweichung |
+| finaler unbestimmter Typname | entschieden: `ConfigurationCommitIndeterminate` | eigener stabiler Zustand und Safety-Producer |
+| atomarer Snapshot-Publish | geplant mit vorbereiteten C++17-`shared_ptr`-Handles | Build-, Allokations- und Interleavingnachweis in allen Profilen; Vertragsaenderung erfordert neuen Plan |
+| reale NVS-Kapazitaet und Replace-Eigenschaften | `MEASUREMENT_REQUIRED` | spaeterer Adapter-/Hardwaretest, keine Hostgarantie |
+| absolute Heap-/Flashreserve | `TBD_IMPLEMENTATION_BUDGET`, `MEASUREMENT_REQUIRED` | Base-/Head-Bericht plus spaetere reale Messung |
+| reale Commitdauer, Jitter und Watchdogwirkung | `MEASUREMENT_REQUIRED` | spaeter mit realem NVS-/ESP32-Adapter |
+| produktiver Storeadapter und Composition Root | `FINAL_SELECTION_PENDING` innerhalb der bereits geplanten Hardwareintegration | nicht in #56 |
+| Bootstrap und Reset | #57, `BLOCKED_DEPENDENCY` bis #56 gemergt | eigener Plan-first-Draft-PR |
+| Safetyintegration | verbindliches `CONFIGURATION_SAFETY_INTEGRATION_GATE` | #24 muss reale Producer integrieren; nicht in #56 |
+| Plattformverschluesselung | `EVALUATE_BEFORE_RELEASE` | separates Security-Gate vor #37 |
+| spaeteres Pending/Intent | `FINAL_SELECTION_PENDING` bis realer neustartpflichtiger Bedarf | kein R1-Baustein |
+| reale Connectivity-/Authentication-Domaenen | `FINAL_SELECTION_PENDING` bis erster Konsument | keine Reserveinfrastruktur in #56 |
+
+Es verbleibt keine offene Ownerentscheidung, die den Start der exakt hier
+geplanten #56-Implementierung nach commitgebundener Planfreigabe blockiert.
+Die aufgefuehrten Mess- und Integrationsgates muessen jedoch sichtbar offen
+bleiben und duerfen nicht als bestanden behauptet werden.
+
+## Ausdruecklich verbotene Vorwegnahmen
+
+Auch nach Planfreigabe sind verboten:
+
+- Aenderungen ausserhalb der oben genannten Produktions-, Test- und
+  Dokumentdateien ohne neue Planfreigabe;
+- Aenderung von `IStateStore`, Envelope oder generischer Slotmechanik ohne
+  aktualisierten Plan;
+- Einfuehrung einer persistenten `MutationSequence` ohne materiellen neuen
+  Plan und Ownerfreigabe;
+- Pending, PendingRoot, Aktivierungsintent oder RunAssessment;
+- persistente Preview-Slots, Owner-, Auth- oder Ablaufmetadaten;
+- Connectivity-/Authentication-Records, Secret-Roots oder Credentialslots;
+- Implementierung von #57, #17 oder #24;
+- automatische Factoryinitialisierung, Werksreset oder Rollback bei Fehlern;
+- Publish mit Allokation, Serialisierung, Validierung, Reservierung oder
+  normalem Fehlerpfad nach bestaetigtem Root-Commit;
+- Vermischung von CRC und Authentifizierung;
+- neue Bibliothek, Toolchain-, Build-, Partitions-, Hardware-, GPIO- oder
+  Pinentscheidung;
+- Live-Issue-, ADR-, Label-, Milestone- oder Projektstatusaenderung;
+- PR auf Ready setzen, mergen, Auto-Merge aktivieren, force-pushen oder Branch
+  loeschen.
+
+## Abschlussnachweis vor einem spaeteren Review
+
+Vor dem unabhängigen Abschlussreview dokumentiert der Agent im Draft-PR:
+
+- den freigegebenen Plan-Commit-SHA;
+- jeden Planpunkt und den zugehoerigen Umsetzungscommit;
+- alle tatsaechlich geaenderten Dateien;
+- Base- und Head-SHA des Ressourcenvergleichs;
+- alle ausgefuehrten Tests, Builds und Quality Gates;
+- Ergebnis der Cut-Point-, Korruptions-, Konflikt- und
+  `MutationSequence`-Nachweismatrix;
+- gemessene Ressourcenwerte und verbleibende reale Messgates;
+- jede Abweichung; bei materieller Abweichung den neu freigegebenen
+  Plan-Commit;
+- Bestaetigung, dass kein Pending-, Intent-, RunAssessment- oder Secret-Scope
+  eingefuehrt wurde;
+- offene Reviewthreads;
+- Bestaetigung, dass keine nicht freigegebene Entscheidung getroffen wurde.
+
+Mindestens auszufuehren sind:
+
+- alle projektspezifischen neuen nativen Tests;
+- vollstaendiges `pio test -e native`;
+- Builds `native`, `esp32_bringup`, `esp32_release`;
+- Base-/Head-Ressourcenbericht;
+- Format- und Konsistenzpruefungen;
+- `git diff --check`;
+- `python3 scripts/check_secrets.py`;
+- relative Markdown-Link- und Tabellenpruefung;
+- Schweizer Schreibweise ohne scharfes S;
+- Pruefung des tatsaechlichen Diffs gegen diesen freigegebenen Plan und
+  `AGENTS.md`.
+
+Der PR bleibt bis zu einem unabhaengigen Abschlussreview Draft.
+
+## Abnahmekriterien des Plan-PRs
+
+Der Planungsauftrag ist abgeschlossen, wenn:
+
+- der aktuelle `main`-Stand und das Live-Issue #56 geprueft sind;
+- alle Repository- und Modul-Anweisungen sowie ADR-016, ADR-018 und die
+  referenzierten Spezifikationen geprueft sind;
+- nur diese Plan-Datei neu angelegt ist;
+- konkrete Module, Dateien und der kleine Commit-Schnitt festgelegt sind;
+- Manifest-, Root-, Active-/Fallback- und Slotrotationsvertrag vollstaendig
+  festgelegt sind;
+- fluechtige Vorschau, Anzahlgrenze und Konfliktschutz festgelegt sind;
+- Root-Commit und nicht fehlschlagender Publish eindeutig getrennt sind;
+- `ConfigurationCommitIndeterminate` als endgueltiger Typname und fail-closed
+  Verhalten festgelegt ist;
+- der Gleichwertigkeitsnachweis gegen eine separate persistente
+  `MutationSequence` dokumentiert und testbar ist;
+- die Grenze zum `CONFIGURATION_SAFETY_INTEGRATION_GATE` zyklusfrei bleibt;
+- Cut-Point-, Korruptions-, Konflikt-, Ressourcen- und Base-/Head-Strategie
+  vollstaendig beschrieben sind;
+- Pending, Intent, RunAssessment, Secret-Scope sowie #57/#17/#24-Umsetzung
+  ausdruecklich ausgeschlossen sind;
+- `git diff --check`, Secretpruefung, Links, Tabellen und Schreibweise bestanden
+  sind;
+- ein einzelner Plan-Commit gepusht ist;
+- ein Draft-PR mit Plan-Datei, Plan-Commit-SHA, offenen Gates und
+  `IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL` erstellt ist;
+- der Agent danach anhaelt und auf die exakte commitgebundene Ownerfreigabe
+  wartet.
