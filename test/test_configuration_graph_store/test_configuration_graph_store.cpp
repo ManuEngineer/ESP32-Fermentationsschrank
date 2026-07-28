@@ -657,6 +657,53 @@ void test_unknown_root_outcome_resolves_exactly_old_or_new() {
     }
 }
 
+void test_root_write_outcome_matrix_obeys_state_store_contract() {
+    struct Scenario {
+        device_platform::StateStoreWriteStatus writeStatus;
+        bool commitValue;
+        fermentation::ConfigurationCommitExecutionStatus expectedExecution;
+        fermentation::ConfigurationCommitResolutionStatus expectedResolution;
+    };
+    constexpr std::array scenarios{
+        Scenario{device_platform::StateStoreWriteStatus::WriteError, false,
+                 fermentation::ConfigurationCommitExecutionStatus::WriteFailure,
+                 fermentation::ConfigurationCommitResolutionStatus::
+                     ResolutionRecoveredOld},
+        Scenario{
+            device_platform::StateStoreWriteStatus::CapacityError, false,
+            fermentation::ConfigurationCommitExecutionStatus::CapacityFailure,
+            fermentation::ConfigurationCommitResolutionStatus::
+                ResolutionRecoveredOld},
+        Scenario{device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+                 false,
+                 fermentation::ConfigurationCommitExecutionStatus::WriteFailure,
+                 fermentation::ConfigurationCommitResolutionStatus::
+                     ResolutionRecoveredOld},
+        Scenario{device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+                 true,
+                 fermentation::ConfigurationCommitExecutionStatus::Activated,
+                 fermentation::ConfigurationCommitResolutionStatus::
+                     ResolutionRecoveredNew},
+    };
+    for (const auto& scenario : scenarios) {
+        LocalStore store;
+        LocalTimeZoneResolver resolver;
+        seedGraph(store);
+        fermentation::ConfigurationGraphStore graphStore(store, resolver);
+        const auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+        auto prepared = graphStore.prepareCommit(
+            *loaded.graph, changedCandidate(*loaded.graph, "Rootmatrix"),
+            fermentation::decodeChangeOrigin(2U),
+            fermentation::decodeChangeOperation(1U));
+        store.failWrite("cr1", scenario.writeStatus, scenario.commitValue);
+        const auto execution =
+            graphStore.executePreparedCommit(*prepared.prepared);
+        TEST_ASSERT_TRUE(execution.status == scenario.expectedExecution);
+        TEST_ASSERT_TRUE(graphStore.resolveCommit(*prepared.prepared) ==
+                         scenario.expectedResolution);
+    }
+}
+
 void test_unknown_root_with_unreadable_scan_stays_indeterminate() {
     LocalStore store;
     LocalTimeZoneResolver resolver;
@@ -1403,10 +1450,12 @@ void test_each_pre_root_write_phase_obeys_state_store_outcome_contract() {
 }
 
 void test_unknown_pre_root_readback_failures_never_reach_root_write() {
+    enum class Phase : std::uint8_t { User, Service, Program, Manifest };
     for (const auto readStatus :
          {device_platform::StateStoreReadStatus::ReadError,
           device_platform::StateStoreReadStatus::CapacityError}) {
-        for (const char* target : {"uc1", "cm1"}) {
+        for (const auto phase :
+             {Phase::User, Phase::Service, Phase::Program, Phase::Manifest}) {
             LocalStore store;
             LocalTimeZoneResolver resolver;
             seedGraph(store);
@@ -1414,9 +1463,20 @@ void test_unknown_pre_root_readback_failures_never_reach_root_write() {
             const auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
             auto prepared = graphStore.prepareCommit(
                 *loaded.graph,
-                changedCandidate(*loaded.graph, "Readbackmatrix"),
+                phase == Phase::Program
+                    ? programChangedCandidate(*loaded.graph)
+                    : changedCandidate(*loaded.graph, "Readbackmatrix"),
                 fermentation::decodeChangeOrigin(2U),
                 fermentation::decodeChangeOperation(1U));
+            if (phase == Phase::Service) {
+                enableSchemaOneServiceWriteForTest(*prepared.prepared);
+            }
+            const char* target = "cm1";
+            if (phase == Phase::User || phase == Phase::Service) {
+                target = phase == Phase::User ? "uc1" : "sc1";
+            } else if (phase == Phase::Program) {
+                target = "pc1";
+            }
             store.failWrite(
                 target,
                 device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
@@ -1455,6 +1515,7 @@ int main() {
     RUN_TEST(test_prepares_high_water_values_and_exact_fallback_before_writes);
     RUN_TEST(test_document_write_failure_leaves_old_graph_canonical);
     RUN_TEST(test_unknown_root_outcome_resolves_exactly_old_or_new);
+    RUN_TEST(test_root_write_outcome_matrix_obeys_state_store_contract);
     RUN_TEST(test_unknown_root_with_unreadable_scan_stays_indeterminate);
     RUN_TEST(test_orphaned_document_and_manifest_values_are_never_reused);
     RUN_TEST(test_five_commits_rotate_active_and_exact_previous_fallback);
