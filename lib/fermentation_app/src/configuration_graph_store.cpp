@@ -33,6 +33,12 @@ struct GroupReadResult {
     bool newerSchema{false};
 };
 
+struct MetadataScanResult {
+    ConfigurationScanStatus status{ConfigurationScanStatus::Success};
+    std::uint64_t highWater{0U};
+    bool newerSchema{false};
+};
+
 device_platform::StateStoreKey key(const char* value) {
     auto result = device_platform::StateStoreKey::create(value);
     return std::move(*result.key);
@@ -95,6 +101,60 @@ GroupReadResult readGroup(const device_platform::IStateStore& store,
         result.records.push_back(
             {device_platform::SlotId(static_cast<std::uint32_t>(index)),
              std::move(read.value), std::move(envelope)});
+    }
+    return result;
+}
+
+template <std::size_t N>
+MetadataScanResult scanGroupMetadata(
+    const device_platform::IStateStore& store,
+    const std::array<const char*, N>& keys,
+    device_platform::RecordTypeId expectedRecordType,
+    std::uint32_t currentSchema, device_platform::StorageEpoch epoch,
+    std::size_t maxBytes, ConfigurationGraphDiagnostics& diagnostics) {
+    MetadataScanResult result;
+    std::map<std::uint64_t, std::size_t> identities;
+    for (std::size_t index = 0U; index < N; ++index) {
+        auto read = store.read(key(keys[index]), maxBytes);
+        if (read.status == device_platform::StateStoreReadStatus::NotFound) {
+            ++diagnostics.notFoundSlots;
+            continue;
+        }
+        if (read.status != device_platform::StateStoreReadStatus::Success) {
+            result.status = mapReadStatus(read.status);
+            return result;
+        }
+        const auto decoded =
+            device_platform::decodeEnvelopeMetadata(read.value);
+        if (!decoded.metadata.has_value()) {
+            ++diagnostics.invalidCandidates;
+            continue;
+        }
+        const auto& metadata = *decoded.metadata;
+        if (metadata.recordTypeId != expectedRecordType ||
+            metadata.storageEpoch != epoch) {
+            ++diagnostics.invalidCandidates;
+            continue;
+        }
+        result.highWater = std::max(result.highWater, metadata.versionValue);
+        result.newerSchema =
+            result.newerSchema || metadata.schemaVersion > currentSchema;
+        const auto existing = identities.find(metadata.versionValue);
+        if (existing == identities.end()) {
+            identities.emplace(metadata.versionValue, index);
+            continue;
+        }
+        const auto previous = store.read(key(keys[existing->second]), maxBytes);
+        if (previous.status != device_platform::StateStoreReadStatus::Success) {
+            result.status = mapReadStatus(previous.status);
+            return result;
+        }
+        if (previous.value != read.value) {
+            result.status =
+                ConfigurationScanStatus::ConfigurationGraphIntegrityFailure;
+            return result;
+        }
+        ++diagnostics.exactDuplicateRecords;
     }
     return result;
 }
@@ -214,6 +274,58 @@ void protectBranch(const ConfigurationGraphBranch& branch,
     services[branch.manifest.serviceConfiguration.slot.value()] = true;
     catalogs[branch.manifest.programCatalog.slot.value()] = true;
     manifests[branch.manifestReference.slot.value()] = true;
+}
+
+template <typename Version>
+bool encodeDocumentRecord(device_platform::RecordTypeId recordType,
+                          Version version, device_platform::StorageEpoch epoch,
+                          const std::string& payload, std::size_t maxBytes,
+                          std::string& out) {
+    return device_platform::encodeEnvelope(
+               {recordType, 1U, epoch, version.value(), std::nullopt, payload},
+               out, maxBytes) == device_platform::EnvelopeEncodeStatus::Success;
+}
+
+enum class WriteReadbackStatus : std::uint8_t {
+    NewValue,
+    OldValue,
+    WriteFailure,
+    CapacityFailure,
+    ReadbackFailure,
+};
+
+WriteReadbackStatus writeAndReadBack(device_platform::IStateStore& store,
+                                     const char* keyValue,
+                                     const std::string& bytes,
+                                     std::size_t maxBytes) {
+    const auto write = store.write(key(keyValue), bytes);
+    if (write == device_platform::StateStoreWriteStatus::WriteError) {
+        return WriteReadbackStatus::WriteFailure;
+    }
+    if (write == device_platform::StateStoreWriteStatus::CapacityError) {
+        return WriteReadbackStatus::CapacityFailure;
+    }
+    const auto read = store.read(key(keyValue), maxBytes);
+    if (read.status != device_platform::StateStoreReadStatus::Success) {
+        return read.status ==
+                       device_platform::StateStoreReadStatus::CapacityError
+                   ? WriteReadbackStatus::CapacityFailure
+                   : WriteReadbackStatus::ReadbackFailure;
+    }
+    if (read.value == bytes) {
+        return WriteReadbackStatus::NewValue;
+    }
+    return write == device_platform::StateStoreWriteStatus::CommitOutcomeUnknown
+               ? WriteReadbackStatus::OldValue
+               : WriteReadbackStatus::ReadbackFailure;
+}
+
+ConfigurationCommitExecutionResult mapPreRootWrite(
+    WriteReadbackStatus status, ConfigurationCommitFailurePhase phase) {
+    if (status == WriteReadbackStatus::CapacityFailure) {
+        return {ConfigurationCommitExecutionStatus::CapacityFailure, phase};
+    }
+    return {ConfigurationCommitExecutionStatus::WriteFailure, phase};
 }
 
 }  // namespace
@@ -339,27 +451,27 @@ ConfigurationValidationScanResult ConfigurationGraphStore::validationScan(
     const LoadedConfigurationGraph& expectedActive) const {
     ConfigurationValidationScanResult result;
     const auto epoch = expectedActive.active.manifestReference.storageEpoch;
-    auto roots = readGroup(
+    auto roots = scanGroupMetadata(
         store_, configuration_storage_contract::kConfigurationRootSlotKeys,
         configuration_storage_contract::kConfigurationRootRecordType,
         kConfigurationRootSchemaVersion1, epoch,
         configuration_limits::kMaximumConfigurationRootEnvelopeBytes,
         result.diagnostics);
-    auto users = readGroup(
+    auto users = scanGroupMetadata(
         store_, configuration_storage_contract::kUserConfigurationSlotKeys,
         configuration_storage_contract::kUserConfigurationRecordType, 1U, epoch,
         configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
         result.diagnostics);
-    auto services = readGroup(
+    auto services = scanGroupMetadata(
         store_, configuration_storage_contract::kServiceConfigurationSlotKeys,
         configuration_storage_contract::kServiceConfigurationRecordType, 1U,
         epoch, 45U, result.diagnostics);
-    auto catalogs = readGroup(
+    auto catalogs = scanGroupMetadata(
         store_, configuration_storage_contract::kProgramCatalogSlotKeys,
         configuration_storage_contract::kProgramCatalogRecordType, 1U, epoch,
         configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
         result.diagnostics);
-    auto manifests = readGroup(
+    auto manifests = scanGroupMetadata(
         store_, configuration_storage_contract::kConfigurationManifestSlotKeys,
         configuration_storage_contract::kConfigurationManifestRecordType,
         kConfigurationManifestSchemaVersion1, epoch,
@@ -377,10 +489,15 @@ ConfigurationValidationScanResult ConfigurationGraphStore::validationScan(
             return result;
         }
     }
-    const auto* root = findRecord(roots.records, expectedActive.rootSlot);
-    if (root == nullptr ||
-        root->bytes != expectedActive.canonicalRootRecordBytes ||
-        roots.highWater > expectedActive.rootSequence.value()) {
+    const auto expectedRoot = store_.read(
+        key(configuration_storage_contract::kConfigurationRootSlotKeys
+                [expectedActive.rootSlot.value()]),
+        configuration_limits::kMaximumConfigurationRootEnvelopeBytes);
+    if (expectedRoot.status != device_platform::StateStoreReadStatus::Success) {
+        result.status = mapReadStatus(expectedRoot.status);
+        return result;
+    }
+    if (expectedRoot.value != expectedActive.canonicalRootRecordBytes) {
         result.status = ConfigurationScanStatus::ActiveBasisMismatch;
         return result;
     }
@@ -478,6 +595,306 @@ ConfigurationSlotPlanResult ConfigurationGraphStore::planSlots(
     plan.manifestGeneration = nextManifest;
     plan.rootSequence = nextRoot;
     return {ConfigurationSlotPlanStatus::Success, std::move(plan)};
+}
+
+ConfigurationCommitPrepareResult ConfigurationGraphStore::prepareCommit(
+    const LoadedConfigurationGraph& current,
+    const ConfigurationCommitCandidate& candidate, ChangeOrigin origin,
+    ChangeOperation operation) const {
+    if (!candidate.userConfiguration || !candidate.serviceConfiguration ||
+        !candidate.programCatalog) {
+        return {ConfigurationCommitPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+    auto userValidation = validateUserConfiguration(
+        *candidate.userConfiguration, timeZoneResolver_);
+    if (userValidation.status != UserConfigurationStatus::Success ||
+        validateProgramCatalog(*candidate.programCatalog) !=
+            ProgramCatalogStatus::Success) {
+        return {ConfigurationCommitPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+    std::string userPayload;
+    std::string servicePayload;
+    std::string programPayload;
+    std::string oldUserPayload;
+    std::string oldServicePayload;
+    std::string oldProgramPayload;
+    if (encodeUserConfigurationPayload(*candidate.userConfiguration,
+                                       timeZoneResolver_, userPayload) !=
+            ConfigurationCodecStatus::Success ||
+        encodeServiceConfigurationPayload(*candidate.serviceConfiguration,
+                                          servicePayload) !=
+            ConfigurationCodecStatus::Success ||
+        encodeProgramCatalogPayload(*candidate.programCatalog,
+                                    programPayload) !=
+            ConfigurationCodecStatus::Success ||
+        encodeUserConfigurationPayload(*current.active.userConfiguration,
+                                       timeZoneResolver_, oldUserPayload) !=
+            ConfigurationCodecStatus::Success ||
+        encodeServiceConfigurationPayload(*current.active.serviceConfiguration,
+                                          oldServicePayload) !=
+            ConfigurationCodecStatus::Success ||
+        encodeProgramCatalogPayload(*current.active.programCatalog,
+                                    oldProgramPayload) !=
+            ConfigurationCodecStatus::Success) {
+        return {ConfigurationCommitPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+    const ConfigurationChangeMask changes{userPayload != oldUserPayload,
+                                          servicePayload != oldServicePayload,
+                                          programPayload != oldProgramPayload};
+    if (!changes.userConfiguration && !changes.serviceConfiguration &&
+        !changes.programCatalog) {
+        return {ConfigurationCommitPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+    const auto scan = validationScan(current);
+    if (scan.status != ConfigurationScanStatus::Success) {
+        ConfigurationCommitPrepareStatus status =
+            ConfigurationCommitPrepareStatus::PersistenceFailure;
+        if (scan.status == ConfigurationScanStatus::ActiveBasisMismatch) {
+            status = ConfigurationCommitPrepareStatus::Conflict;
+        } else if (scan.status == ConfigurationScanStatus::
+                                      UnsupportedNewerConfigurationSchema) {
+            status = ConfigurationCommitPrepareStatus::UnsupportedNewerSchema;
+        } else if (scan.status == ConfigurationScanStatus::HighWaterOverflow) {
+            status = ConfigurationCommitPrepareStatus::HighWaterOverflow;
+        } else if (scan.status == ConfigurationScanStatus::
+                                      ConfigurationGraphIntegrityFailure) {
+            status = ConfigurationCommitPrepareStatus::IntegrityFailure;
+        } else if (scan.status == ConfigurationScanStatus::CapacityError) {
+            status = ConfigurationCommitPrepareStatus::CapacityFailure;
+        }
+        return {status, std::nullopt};
+    }
+    auto slotPlan = planSlots(current, scan.highWater, changes);
+    if (!slotPlan.plan.has_value()) {
+        return {
+            slotPlan.status == ConfigurationSlotPlanStatus::HighWaterOverflow
+                ? ConfigurationCommitPrepareStatus::HighWaterOverflow
+                : ConfigurationCommitPrepareStatus::NoUnreferencedSlotAvailable,
+            std::nullopt};
+    }
+    auto plan = *slotPlan.plan;
+    const auto epoch = current.active.manifestReference.storageEpoch;
+    auto userReference = current.active.manifest.userConfiguration;
+    auto serviceReference = current.active.manifest.serviceConfiguration;
+    auto programReference = current.active.manifest.programCatalog;
+    std::optional<std::string> userRecord;
+    std::optional<std::string> serviceRecord;
+    std::optional<std::string> programRecord;
+    if (changes.userConfiguration) {
+        userReference = {
+            configuration_storage_contract::kUserConfigurationRecordType,
+            *plan.userConfigurationSlot,
+            *plan.userConfigurationRevision,
+            1U,
+            static_cast<std::uint32_t>(userPayload.size()),
+            device_platform::computeCrc32IsoHdlc(userPayload),
+            epoch};
+        userRecord.emplace();
+        if (!encodeDocumentRecord(
+                userReference.recordType, userReference.version, epoch,
+                userPayload,
+                configuration_limits::kMaximumUserConfigurationPayloadBytes +
+                    45U,
+                *userRecord)) {
+            return {ConfigurationCommitPrepareStatus::CapacityFailure,
+                    std::nullopt};
+        }
+    }
+    if (changes.serviceConfiguration) {
+        serviceReference = {
+            configuration_storage_contract::kServiceConfigurationRecordType,
+            *plan.serviceConfigurationSlot,
+            *plan.serviceConfigurationRevision,
+            1U,
+            static_cast<std::uint32_t>(servicePayload.size()),
+            device_platform::computeCrc32IsoHdlc(servicePayload),
+            epoch};
+        serviceRecord.emplace();
+        if (!encodeDocumentRecord(serviceReference.recordType,
+                                  serviceReference.version, epoch,
+                                  servicePayload, 45U, *serviceRecord)) {
+            return {ConfigurationCommitPrepareStatus::CapacityFailure,
+                    std::nullopt};
+        }
+    }
+    if (changes.programCatalog) {
+        programReference = {
+            configuration_storage_contract::kProgramCatalogRecordType,
+            *plan.programCatalogSlot,
+            *plan.programCatalogRevision,
+            1U,
+            static_cast<std::uint32_t>(programPayload.size()),
+            device_platform::computeCrc32IsoHdlc(programPayload),
+            epoch};
+        programRecord.emplace();
+        if (!encodeDocumentRecord(
+                programReference.recordType, programReference.version, epoch,
+                programPayload,
+                configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
+                *programRecord)) {
+            return {ConfigurationCommitPrepareStatus::CapacityFailure,
+                    std::nullopt};
+        }
+    }
+    ConfigurationManifest manifest{origin, operation, userReference,
+                                   serviceReference, programReference};
+    std::string manifestPayload;
+    if (encodeConfigurationManifestPayload(manifest, manifestPayload) !=
+        ConfigurationGraphCodecStatus::Success) {
+        return {ConfigurationCommitPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+    ConfigurationManifestReference manifestReference{
+        configuration_storage_contract::kConfigurationManifestRecordType,
+        plan.manifestSlot,
+        plan.manifestGeneration,
+        kConfigurationManifestSchemaVersion1,
+        static_cast<std::uint32_t>(manifestPayload.size()),
+        device_platform::computeCrc32IsoHdlc(manifestPayload),
+        epoch};
+    std::string manifestRecord;
+    if (encodeConfigurationManifestRecord(
+            manifest, plan.manifestGeneration, epoch, std::nullopt,
+            manifestRecord) != ConfigurationGraphCodecStatus::Success) {
+        return {ConfigurationCommitPrepareStatus::CapacityFailure,
+                std::nullopt};
+    }
+    ConfigurationRootRecord root{manifestReference,
+                                 current.active.manifestReference};
+    std::string rootRecord;
+    if (encodeConfigurationRootRecord(root, plan.rootSequence, epoch,
+                                      std::nullopt, rootRecord) !=
+        ConfigurationGraphCodecStatus::Success) {
+        return {ConfigurationCommitPrepareStatus::CapacityFailure,
+                std::nullopt};
+    }
+    ConfigurationGraphBranch newActive{
+        manifestReference,           manifest,
+        candidate.userConfiguration, candidate.serviceConfiguration,
+        candidate.programCatalog,    manifestRecord};
+    LoadedConfigurationGraph newGraph{
+        plan.rootSlot,        plan.rootSequence, root, rootRecord,
+        std::move(newActive), current.active,    false};
+    return {
+        ConfigurationCommitPrepareStatus::Success,
+        PreparedConfigurationCommit{
+            current, std::move(newGraph), changes, plan, std::move(userRecord),
+            std::move(serviceRecord), std::move(programRecord),
+            std::move(manifestRecord), std::move(rootRecord)}};
+}
+
+ConfigurationCommitExecutionResult
+ConfigurationGraphStore::executePreparedCommit(
+    const PreparedConfigurationCommit& prepared) {
+    const auto writeOptional =
+        [this](const std::optional<std::string>& bytes, const char* keyValue,
+               std::size_t maxBytes, ConfigurationCommitFailurePhase phase)
+        -> std::optional<ConfigurationCommitExecutionResult> {
+        if (!bytes.has_value()) {
+            return std::nullopt;
+        }
+        const auto status =
+            writeAndReadBack(store_, keyValue, *bytes, maxBytes);
+        if (status != WriteReadbackStatus::NewValue) {
+            return mapPreRootWrite(status, phase);
+        }
+        return std::nullopt;
+    };
+    if (prepared.userRecordBytes.has_value()) {
+        const auto failure = writeOptional(
+            prepared.userRecordBytes,
+            configuration_storage_contract::kUserConfigurationSlotKeys
+                [prepared.slotPlan.userConfigurationSlot->value()],
+            configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
+            ConfigurationCommitFailurePhase::UserDocument);
+        if (failure.has_value()) {
+            return *failure;
+        }
+    }
+    if (prepared.serviceRecordBytes.has_value()) {
+        const auto failure = writeOptional(
+            prepared.serviceRecordBytes,
+            configuration_storage_contract::kServiceConfigurationSlotKeys
+                [prepared.slotPlan.serviceConfigurationSlot->value()],
+            45U, ConfigurationCommitFailurePhase::ServiceDocument);
+        if (failure.has_value()) {
+            return *failure;
+        }
+    }
+    if (prepared.programRecordBytes.has_value()) {
+        const auto failure = writeOptional(
+            prepared.programRecordBytes,
+            configuration_storage_contract::kProgramCatalogSlotKeys
+                [prepared.slotPlan.programCatalogSlot->value()],
+            configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
+            ConfigurationCommitFailurePhase::ProgramDocument);
+        if (failure.has_value()) {
+            return *failure;
+        }
+    }
+    const auto manifestStatus = writeAndReadBack(
+        store_,
+        configuration_storage_contract::kConfigurationManifestSlotKeys
+            [prepared.slotPlan.manifestSlot.value()],
+        prepared.manifestRecordBytes,
+        configuration_limits::kMaximumConfigurationManifestEnvelopeBytes);
+    if (manifestStatus != WriteReadbackStatus::NewValue) {
+        return mapPreRootWrite(manifestStatus,
+                               ConfigurationCommitFailurePhase::Manifest);
+    }
+    const auto rootKey = configuration_storage_contract::
+        kConfigurationRootSlotKeys[prepared.slotPlan.rootSlot.value()];
+    const auto write = store_.write(key(rootKey), prepared.rootRecordBytes);
+    if (write == device_platform::StateStoreWriteStatus::WriteError) {
+        return {ConfigurationCommitExecutionStatus::WriteFailure,
+                ConfigurationCommitFailurePhase::Root};
+    }
+    if (write == device_platform::StateStoreWriteStatus::CapacityError) {
+        return {ConfigurationCommitExecutionStatus::CapacityFailure,
+                ConfigurationCommitFailurePhase::Root};
+    }
+    if (write == device_platform::StateStoreWriteStatus::CommitOutcomeUnknown) {
+        const auto resolution = resolveCommit(prepared);
+        if (resolution ==
+            ConfigurationCommitResolutionStatus::ResolutionRecoveredNew) {
+            return {ConfigurationCommitExecutionStatus::Activated,
+                    ConfigurationCommitFailurePhase::Root};
+        }
+        if (resolution ==
+            ConfigurationCommitResolutionStatus::ResolutionRecoveredOld) {
+            return {ConfigurationCommitExecutionStatus::WriteFailure,
+                    ConfigurationCommitFailurePhase::Root};
+        }
+        return {resolution == ConfigurationCommitResolutionStatus::
+                                  ResolutionStillIndeterminate
+                    ? ConfigurationCommitExecutionStatus::CommitIndeterminate
+                    : ConfigurationCommitExecutionStatus::RuntimeFailure,
+                ConfigurationCommitFailurePhase::RootVerification};
+    }
+    const auto verified = validationScan(prepared.newGraph);
+    if (verified.status != ConfigurationScanStatus::Success) {
+        return {ConfigurationCommitExecutionStatus::RuntimeFailure,
+                ConfigurationCommitFailurePhase::RootVerification};
+    }
+    return {ConfigurationCommitExecutionStatus::Activated,
+            ConfigurationCommitFailurePhase::Root};
+}
+
+ConfigurationCommitResolutionStatus ConfigurationGraphStore::resolveCommit(
+    const PreparedConfigurationCommit& prepared) const {
+    const auto newResult = validationScan(prepared.newGraph);
+    if (newResult.status == ConfigurationScanStatus::Success) {
+        return ConfigurationCommitResolutionStatus::ResolutionRecoveredNew;
+    }
+    const auto oldResult = validationScan(prepared.oldGraph);
+    if (oldResult.status == ConfigurationScanStatus::Success) {
+        return ConfigurationCommitResolutionStatus::ResolutionRecoveredOld;
+    }
+    return ConfigurationCommitResolutionStatus::ResolutionStillIndeterminate;
 }
 
 }  // namespace fermentation

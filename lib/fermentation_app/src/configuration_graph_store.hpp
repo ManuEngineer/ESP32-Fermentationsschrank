@@ -93,6 +93,73 @@ struct ConfigurationSlotPlanResult {
     std::optional<ConfigurationSlotPlan> plan;
 };
 
+struct ConfigurationCommitCandidate {
+    std::shared_ptr<const UserConfiguration> userConfiguration;
+    std::shared_ptr<const ServiceConfiguration> serviceConfiguration;
+    std::shared_ptr<const ProgramCatalog> programCatalog;
+};
+
+enum class ConfigurationCommitPrepareStatus : std::uint8_t {
+    Success,
+    Conflict,
+    InvalidCandidate,
+    PersistenceFailure,
+    CapacityFailure,
+    IntegrityFailure,
+    UnsupportedNewerSchema,
+    HighWaterOverflow,
+    NoUnreferencedSlotAvailable,
+};
+
+struct PreparedConfigurationCommit {
+    LoadedConfigurationGraph oldGraph;
+    LoadedConfigurationGraph newGraph;
+    ConfigurationChangeMask changes;
+    ConfigurationSlotPlan slotPlan;
+    std::optional<std::string> userRecordBytes;
+    std::optional<std::string> serviceRecordBytes;
+    std::optional<std::string> programRecordBytes;
+    std::string manifestRecordBytes;
+    std::string rootRecordBytes;
+};
+
+struct ConfigurationCommitPrepareResult {
+    ConfigurationCommitPrepareStatus status{
+        ConfigurationCommitPrepareStatus::PersistenceFailure};
+    std::optional<PreparedConfigurationCommit> prepared;
+};
+
+enum class ConfigurationCommitExecutionStatus : std::uint8_t {
+    Activated,
+    WriteFailure,
+    CapacityFailure,
+    CommitIndeterminate,
+    RuntimeFailure,
+};
+
+enum class ConfigurationCommitFailurePhase : std::uint8_t {
+    UserDocument,
+    ServiceDocument,
+    ProgramDocument,
+    Manifest,
+    Root,
+    RootVerification,
+};
+
+struct ConfigurationCommitExecutionResult {
+    ConfigurationCommitExecutionStatus status{
+        ConfigurationCommitExecutionStatus::WriteFailure};
+    ConfigurationCommitFailurePhase phase{
+        ConfigurationCommitFailurePhase::Root};
+};
+
+enum class ConfigurationCommitResolutionStatus : std::uint8_t {
+    ResolutionRecoveredOld,
+    ResolutionRecoveredNew,
+    ResolutionStillIndeterminate,
+    ResolutionRuntimeFailure,
+};
+
 class ConfigurationGraphStore {
    public:
     ConfigurationGraphStore(
@@ -110,6 +177,17 @@ class ConfigurationGraphStore {
         const LoadedConfigurationGraph& current,
         const ConfigurationHighWaterMarks& highWater,
         ConfigurationChangeMask changes) const;
+
+    [[nodiscard]] ConfigurationCommitPrepareResult prepareCommit(
+        const LoadedConfigurationGraph& current,
+        const ConfigurationCommitCandidate& candidate, ChangeOrigin origin,
+        ChangeOperation operation) const;
+
+    [[nodiscard]] ConfigurationCommitExecutionResult executePreparedCommit(
+        const PreparedConfigurationCommit& prepared);
+
+    [[nodiscard]] ConfigurationCommitResolutionStatus resolveCommit(
+        const PreparedConfigurationCommit& prepared) const;
 
    private:
     device_platform::IStateStore& store_;

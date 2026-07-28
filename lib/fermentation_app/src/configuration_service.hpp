@@ -140,12 +140,42 @@ struct ConfigurationPreviewInstallResult {
     std::optional<ConfigurationPreviewView> preview;
 };
 
+enum class ConfigurationCommitStatus : std::uint8_t {
+    Activated,
+    NoChange,
+    PreviewNotFound,
+    PreviewSuperseded,
+    ConfigurationMutationBusy,
+    ConfigurationConflictFailure,
+    ConfigurationValidationFailure,
+    PersistenceFailure,
+    CapacityFailure,
+    ConfigurationCommitIndeterminate,
+    ConfigurationRuntimeFailure,
+};
+
+struct ConfigurationCommitResult {
+    ConfigurationCommitStatus status{
+        ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+};
+
+enum class ConfigurationRuntimeFailureCause : std::uint8_t {
+    PersistentGraphVerificationFailure,
+    PostCommitVerificationFailure,
+    RuntimePreparationAfterResolutionFailure,
+    PublishContractViolation,
+    ServiceStateInvariantViolation,
+    ConfigurationModelBudgetInvariantViolation,
+    PersistentConfigurationIdentityCollision,
+};
+
 class ConfigurationService {
    public:
     ConfigurationService(
         ConfigurationMutationCoordinator& mutationCoordinator,
         ConfigurationGraphStore& graphStore,
         const device_platform::ITimeZoneResolver& timeZoneResolver);
+    ~ConfigurationService();
 
     [[nodiscard]] bool initialize(const LoadedConfigurationGraph& graph);
     [[nodiscard]] ConfigurationServiceMode mode() const;
@@ -159,6 +189,12 @@ class ConfigurationService {
         const;
     [[nodiscard]] ConfigurationPreviewStatus cancelPreview(
         std::uint64_t handle);
+    [[nodiscard]] ConfigurationCommitResult confirmPreview(
+        std::uint64_t handle);
+    [[nodiscard]] ConfigurationCommitResolutionStatus resolveIndeterminate();
+    [[nodiscard]] ConfigurationCommitResolutionStatus recoverRuntimeFailure();
+    [[nodiscard]] std::optional<ConfigurationRuntimeFailureCause>
+    runtimeFailureCause() const;
     [[nodiscard]] std::size_t activeReadLeaseCount() const;
     [[nodiscard]] std::size_t fullModelGenerationCount() const;
 
@@ -167,6 +203,7 @@ class ConfigurationService {
     friend class ConfigurationPreviewBuildLease;
 
     struct Preview;
+    struct ResolutionContext;
     void releaseRuntimeLease(
         const std::shared_ptr<const RuntimeConfigurationSnapshot>&
             snapshot) noexcept;
@@ -176,6 +213,14 @@ class ConfigurationService {
         const LoadedConfigurationGraph& graph,
         std::uint64_t generationId) const;
     void clearPreviewLocked();
+    void enterFailClosedLocked(ConfigurationServiceMode mode,
+                               ConfigurationRuntimeFailureCause cause);
+    void publishPreparedLocked(
+        PreparedConfigurationCommit& persistent,
+        std::unique_ptr<LoadedConfigurationGraph>& preparedGraph,
+        std::shared_ptr<const RuntimeConfigurationSnapshot> preparedRuntime,
+        std::shared_ptr<const RuntimeConfigurationSnapshot>& retiredRuntime,
+        std::unique_ptr<LoadedConfigurationGraph>& retiredGraph) noexcept;
 
     ConfigurationMutationCoordinator& mutationCoordinator_;
     ConfigurationGraphStore& graphStore_;
@@ -186,11 +231,14 @@ class ConfigurationService {
     std::uint64_t nextPreviewHandle_{1U};
     std::uint64_t nextRuntimeGeneration_{1U};
     std::shared_ptr<const RuntimeConfigurationSnapshot> activeRuntime_;
+    std::unique_ptr<LoadedConfigurationGraph> currentGraph_;
     std::weak_ptr<const RuntimeConfigurationSnapshot> retiredRuntime_;
     std::shared_ptr<const Preview> visiblePreview_;
     std::size_t readLeaseCount_{0U};
     bool previewBuildReserved_{false};
     bool previewModelReserved_{false};
+    std::unique_ptr<ResolutionContext> resolutionContext_;
+    std::optional<ConfigurationRuntimeFailureCause> runtimeFailureCause_;
 };
 
 }  // namespace fermentation

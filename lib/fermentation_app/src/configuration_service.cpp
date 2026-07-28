@@ -23,6 +23,12 @@ struct ConfigurationService::Preview {
     device_platform::PreparedTimeZone preparedTimeZone;
 };
 
+struct ConfigurationService::ResolutionContext {
+    PreparedConfigurationCommit persistent;
+    std::unique_ptr<LoadedConfigurationGraph> preparedGraph;
+    std::shared_ptr<const RuntimeConfigurationSnapshot> preparedRuntime;
+};
+
 RuntimeConfigurationReadLease::RuntimeConfigurationReadLease(
     ConfigurationService& owner,
     std::shared_ptr<const RuntimeConfigurationSnapshot> snapshot) noexcept
@@ -138,16 +144,23 @@ ConfigurationService::ConfigurationService(
       graphStore_(graphStore),
       timeZoneResolver_(timeZoneResolver) {}
 
+ConfigurationService::~ConfigurationService() = default;
+
 bool ConfigurationService::initialize(const LoadedConfigurationGraph& graph) {
     auto prepared = prepareSnapshot(graph, 1U);
+    auto preparedGraph = std::make_unique<LoadedConfigurationGraph>(graph);
     std::lock_guard<std::mutex> lock(stateMutex_);
     if (!prepared || activeRuntime_) {
         mode_ = ConfigurationServiceMode::RuntimeFailure;
+        runtimeFailureCause_ =
+            ConfigurationRuntimeFailureCause::ServiceStateInvariantViolation;
         return false;
     }
     activeRuntime_ = std::move(prepared);
+    currentGraph_ = std::move(preparedGraph);
     nextRuntimeGeneration_ = 2U;
     mode_ = ConfigurationServiceMode::Operational;
+    runtimeFailureCause_.reset();
     return true;
 }
 
@@ -262,17 +275,17 @@ ConfigurationPreviewInstallResult ConfigurationService::installPreview(
         encodeProgramCatalogPayload(activeRuntime_->programCatalog(),
                                     activePrograms) !=
             ConfigurationCodecStatus::Success) {
-        mode_ = ConfigurationServiceMode::RuntimeFailure;
-        (void)incrementStateRevisionLocked();
-        clearPreviewLocked();
+        enterFailClosedLocked(
+            ConfigurationServiceMode::RuntimeFailure,
+            ConfigurationRuntimeFailureCause::ServiceStateInvariantViolation);
         result.status =
             ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable;
         return result;
     }
     if (nextPreviewHandle_ == std::numeric_limits<std::uint64_t>::max()) {
-        mode_ = ConfigurationServiceMode::RuntimeFailure;
-        (void)incrementStateRevisionLocked();
-        clearPreviewLocked();
+        enterFailClosedLocked(
+            ConfigurationServiceMode::RuntimeFailure,
+            ConfigurationRuntimeFailureCause::ServiceStateInvariantViolation);
         result.status =
             ConfigurationPreviewStatus::ConfigurationRuntimeUnavailable;
         return result;
@@ -337,6 +350,304 @@ ConfigurationPreviewStatus ConfigurationService::cancelPreview(
     return ConfigurationPreviewStatus::Success;
 }
 
+ConfigurationCommitResult ConfigurationService::confirmPreview(
+    std::uint64_t handle) {
+    std::shared_ptr<const Preview> captured;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        if (mode_ == ConfigurationServiceMode::CommitInProgress) {
+            return {ConfigurationCommitStatus::ConfigurationMutationBusy};
+        }
+        if (mode_ != ConfigurationServiceMode::Operational || !currentGraph_) {
+            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+        }
+        if (!visiblePreview_) {
+            return {ConfigurationCommitStatus::PreviewNotFound};
+        }
+        if (visiblePreview_->view.handle != handle) {
+            return {ConfigurationCommitStatus::PreviewSuperseded};
+        }
+        captured = visiblePreview_;
+        if (captured->view.noChange) {
+            if (visiblePreview_ == captured) {
+                clearPreviewLocked();
+            }
+            return {ConfigurationCommitStatus::NoChange};
+        }
+    }
+
+    auto mutation = mutationCoordinator_.tryAcquire();
+    if (!mutation.lease.valid()) {
+        return {ConfigurationCommitStatus::ConfigurationMutationBusy};
+    }
+
+    LoadedConfigurationGraph current;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        if (mode_ != ConfigurationServiceMode::Operational || !currentGraph_ ||
+            !activeRuntime_) {
+            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+        }
+        if (!visiblePreview_) {
+            return {ConfigurationCommitStatus::PreviewNotFound};
+        }
+        if (visiblePreview_ != captured) {
+            return {ConfigurationCommitStatus::PreviewSuperseded};
+        }
+        if (captured->view.expectedActive !=
+                currentGraph_->active.manifestReference ||
+            captured->view.expectedActive !=
+                activeRuntime_->manifestReference()) {
+            clearPreviewLocked();
+            return {ConfigurationCommitStatus::ConfigurationConflictFailure};
+        }
+        if (nextRuntimeGeneration_ ==
+            std::numeric_limits<std::uint64_t>::max()) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+        }
+        mode_ = ConfigurationServiceMode::CommitInProgress;
+        if (!incrementStateRevisionLocked()) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+        }
+        current = *currentGraph_;
+    }
+
+    const ConfigurationCommitCandidate candidate{
+        captured->candidate->userConfiguration,
+        captured->candidate->serviceConfiguration,
+        captured->candidate->programCatalog};
+    auto prepared = graphStore_.prepareCommit(
+        current, candidate, captured->origin, captured->operation);
+    if (!prepared.prepared.has_value()) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        if (prepared.status ==
+                ConfigurationCommitPrepareStatus::IntegrityFailure ||
+            prepared.status ==
+                ConfigurationCommitPrepareStatus::UnsupportedNewerSchema) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      PersistentConfigurationIdentityCollision);
+            return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+        }
+        mode_ = ConfigurationServiceMode::Operational;
+        (void)incrementStateRevisionLocked();
+        if (visiblePreview_ == captured) {
+            clearPreviewLocked();
+        }
+        if (prepared.status == ConfigurationCommitPrepareStatus::Conflict) {
+            return {ConfigurationCommitStatus::ConfigurationConflictFailure};
+        }
+        if (prepared.status ==
+            ConfigurationCommitPrepareStatus::InvalidCandidate) {
+            return {ConfigurationCommitStatus::ConfigurationValidationFailure};
+        }
+        if (prepared.status ==
+                ConfigurationCommitPrepareStatus::CapacityFailure ||
+            prepared.status ==
+                ConfigurationCommitPrepareStatus::HighWaterOverflow ||
+            prepared.status ==
+                ConfigurationCommitPrepareStatus::NoUnreferencedSlotAvailable) {
+            return {ConfigurationCommitStatus::CapacityFailure};
+        }
+        return {ConfigurationCommitStatus::PersistenceFailure};
+    }
+
+    auto preparedRuntime =
+        prepareSnapshot(prepared.prepared->newGraph, nextRuntimeGeneration_);
+    if (!preparedRuntime) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        mode_ = ConfigurationServiceMode::Operational;
+        (void)incrementStateRevisionLocked();
+        if (visiblePreview_ == captured) {
+            clearPreviewLocked();
+        }
+        return {ConfigurationCommitStatus::ConfigurationValidationFailure};
+    }
+
+    auto publishedGraph =
+        std::make_unique<LoadedConfigurationGraph>(prepared.prepared->newGraph);
+    auto resolution = std::make_unique<ResolutionContext>(ResolutionContext{
+        std::move(*prepared.prepared), std::move(publishedGraph),
+        std::move(preparedRuntime)});
+    const auto execution =
+        graphStore_.executePreparedCommit(resolution->persistent);
+    if (execution.status == ConfigurationCommitExecutionStatus::Activated) {
+        std::shared_ptr<const RuntimeConfigurationSnapshot> retired;
+        std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            if (mode_ != ConfigurationServiceMode::CommitInProgress) {
+                enterFailClosedLocked(
+                    ConfigurationServiceMode::RuntimeFailure,
+                    ConfigurationRuntimeFailureCause::PublishContractViolation);
+                return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+            }
+            publishPreparedLocked(
+                resolution->persistent, resolution->preparedGraph,
+                std::move(resolution->preparedRuntime), retired, retiredGraph);
+            ++nextRuntimeGeneration_;
+            mode_ = ConfigurationServiceMode::Operational;
+            runtimeFailureCause_.reset();
+            (void)incrementStateRevisionLocked();
+            if (visiblePreview_ == captured) {
+                clearPreviewLocked();
+            }
+        }
+        retired.reset();
+        retiredGraph.reset();
+        return {ConfigurationCommitStatus::Activated};
+    }
+
+    if (execution.status ==
+        ConfigurationCommitExecutionStatus::CommitIndeterminate) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        resolutionContext_ = std::move(resolution);
+        enterFailClosedLocked(ConfigurationServiceMode::CommitIndeterminate,
+                              ConfigurationRuntimeFailureCause::
+                                  PersistentGraphVerificationFailure);
+        return {ConfigurationCommitStatus::ConfigurationCommitIndeterminate};
+    }
+    if (execution.status ==
+        ConfigurationCommitExecutionStatus::RuntimeFailure) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        resolutionContext_ = std::move(resolution);
+        enterFailClosedLocked(
+            ConfigurationServiceMode::RuntimeFailure,
+            ConfigurationRuntimeFailureCause::PostCommitVerificationFailure);
+        return {ConfigurationCommitStatus::ConfigurationRuntimeFailure};
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        mode_ = ConfigurationServiceMode::Operational;
+        (void)incrementStateRevisionLocked();
+        if (visiblePreview_ == captured) {
+            clearPreviewLocked();
+        }
+    }
+    return {execution.status ==
+                    ConfigurationCommitExecutionStatus::CapacityFailure
+                ? ConfigurationCommitStatus::CapacityFailure
+                : ConfigurationCommitStatus::PersistenceFailure};
+}
+
+ConfigurationCommitResolutionStatus
+ConfigurationService::resolveIndeterminate() {
+    auto mutation = mutationCoordinator_.tryAcquire();
+    if (!mutation.lease.valid()) {
+        return ConfigurationCommitResolutionStatus::
+            ResolutionStillIndeterminate;
+    }
+    ResolutionContext* context = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        if (mode_ != ConfigurationServiceMode::CommitIndeterminate ||
+            !resolutionContext_) {
+            return ConfigurationCommitResolutionStatus::
+                ResolutionRuntimeFailure;
+        }
+        context = resolutionContext_.get();
+    }
+    const auto resolution = graphStore_.resolveCommit(context->persistent);
+    if (resolution ==
+        ConfigurationCommitResolutionStatus::ResolutionStillIndeterminate) {
+        return resolution;
+    }
+    if (resolution ==
+        ConfigurationCommitResolutionStatus::ResolutionRecoveredOld) {
+        std::unique_ptr<ResolutionContext> discarded;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            discarded = std::move(resolutionContext_);
+            mode_ = ConfigurationServiceMode::Operational;
+            runtimeFailureCause_.reset();
+            (void)incrementStateRevisionLocked();
+        }
+        discarded.reset();
+        return resolution;
+    }
+    if (resolution ==
+        ConfigurationCommitResolutionStatus::ResolutionRecoveredNew) {
+        std::shared_ptr<const RuntimeConfigurationSnapshot> retired;
+        std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
+        std::unique_ptr<ResolutionContext> completed;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            publishPreparedLocked(
+                resolutionContext_->persistent,
+                resolutionContext_->preparedGraph,
+                std::move(resolutionContext_->preparedRuntime), retired,
+                retiredGraph);
+            ++nextRuntimeGeneration_;
+            completed = std::move(resolutionContext_);
+            mode_ = ConfigurationServiceMode::Operational;
+            runtimeFailureCause_.reset();
+            (void)incrementStateRevisionLocked();
+        }
+        retired.reset();
+        retiredGraph.reset();
+        completed.reset();
+        return resolution;
+    }
+    return ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure;
+}
+
+ConfigurationCommitResolutionStatus
+ConfigurationService::recoverRuntimeFailure() {
+    auto mutation = mutationCoordinator_.tryAcquire();
+    if (!mutation.lease.valid()) {
+        return ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure;
+    }
+    ResolutionContext* context = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        if (mode_ != ConfigurationServiceMode::RuntimeFailure ||
+            !resolutionContext_ ||
+            runtimeFailureCause_ != ConfigurationRuntimeFailureCause::
+                                        PostCommitVerificationFailure) {
+            return ConfigurationCommitResolutionStatus::
+                ResolutionRuntimeFailure;
+        }
+        context = resolutionContext_.get();
+    }
+    const auto resolution = graphStore_.resolveCommit(context->persistent);
+    if (resolution !=
+        ConfigurationCommitResolutionStatus::ResolutionRecoveredNew) {
+        return ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure;
+    }
+    std::shared_ptr<const RuntimeConfigurationSnapshot> retired;
+    std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
+    std::unique_ptr<ResolutionContext> completed;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        publishPreparedLocked(resolutionContext_->persistent,
+                              resolutionContext_->preparedGraph,
+                              std::move(resolutionContext_->preparedRuntime),
+                              retired, retiredGraph);
+        ++nextRuntimeGeneration_;
+        completed = std::move(resolutionContext_);
+        mode_ = ConfigurationServiceMode::Operational;
+        runtimeFailureCause_.reset();
+        (void)incrementStateRevisionLocked();
+    }
+    retired.reset();
+    retiredGraph.reset();
+    completed.reset();
+    return resolution;
+}
+
+std::optional<ConfigurationRuntimeFailureCause>
+ConfigurationService::runtimeFailureCause() const {
+    std::lock_guard<std::mutex> lock(stateMutex_);
+    return runtimeFailureCause_;
+}
+
 std::size_t ConfigurationService::activeReadLeaseCount() const {
     std::lock_guard<std::mutex> lock(stateMutex_);
     return readLeaseCount_;
@@ -346,7 +657,8 @@ std::size_t ConfigurationService::fullModelGenerationCount() const {
     std::lock_guard<std::mutex> lock(stateMutex_);
     return activeRuntime_
                ? 1U + static_cast<std::size_t>(previewModelReserved_ ||
-                                               !retiredRuntime_.expired())
+                                               !retiredRuntime_.expired() ||
+                                               resolutionContext_ != nullptr)
                : 0U;
 }
 
@@ -378,6 +690,8 @@ void ConfigurationService::releasePreviewBuild(
 bool ConfigurationService::incrementStateRevisionLocked() noexcept {
     if (stateRevision_ == std::numeric_limits<std::uint64_t>::max()) {
         mode_ = ConfigurationServiceMode::RuntimeFailure;
+        runtimeFailureCause_ =
+            ConfigurationRuntimeFailureCause::ServiceStateInvariantViolation;
         return false;
     }
     ++stateRevision_;
@@ -410,6 +724,29 @@ void ConfigurationService::clearPreviewLocked() {
         previewModelReserved_ = false;
     }
     visiblePreview_.reset();
+}
+
+void ConfigurationService::enterFailClosedLocked(
+    ConfigurationServiceMode mode, ConfigurationRuntimeFailureCause cause) {
+    mode_ = mode;
+    runtimeFailureCause_ = cause;
+    (void)incrementStateRevisionLocked();
+    previewBuildReserved_ = false;
+    clearPreviewLocked();
+}
+
+void ConfigurationService::publishPreparedLocked(
+    PreparedConfigurationCommit& persistent,
+    std::unique_ptr<LoadedConfigurationGraph>& preparedGraph,
+    std::shared_ptr<const RuntimeConfigurationSnapshot> preparedRuntime,
+    std::shared_ptr<const RuntimeConfigurationSnapshot>& retiredRuntime,
+    std::unique_ptr<LoadedConfigurationGraph>& retiredGraph) noexcept {
+    retiredRuntime.swap(activeRuntime_);
+    activeRuntime_.swap(preparedRuntime);
+    retiredRuntime_ = retiredRuntime;
+    retiredGraph.swap(currentGraph_);
+    currentGraph_.swap(preparedGraph);
+    (void)persistent;
 }
 
 }  // namespace fermentation

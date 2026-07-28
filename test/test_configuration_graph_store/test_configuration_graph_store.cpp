@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "configuration_document_codec.hpp"
 #include "configuration_documents.hpp"
@@ -29,7 +30,20 @@ class LocalStore final : public device_platform::IStateStore {
    public:
     device_platform::StateStoreWriteStatus write(
         const StateStoreKey& key, const std::string& value) override {
-        values_[key.bytes()] = value;
+        ++writeCount_;
+        const auto fault = writeFaults_.find(key.bytes());
+        if (fault == writeFaults_.end() || fault->second.commitValue) {
+            values_[key.bytes()] = value;
+        }
+        const auto readFaults = readFaultsAfterWrite_.find(key.bytes());
+        if (readFaults != readFaultsAfterWrite_.end()) {
+            for (const auto& [readKey, status] : readFaults->second) {
+                faults_[readKey] = status;
+            }
+        }
+        if (fault != writeFaults_.end()) {
+            return fault->second.status;
+        }
         return device_platform::StateStoreWriteStatus::Success;
     }
 
@@ -58,9 +72,38 @@ class LocalStore final : public device_platform::IStateStore {
         faults_[keyValue] = status;
     }
 
+    void clearReadFault(const char* keyValue) { faults_.erase(keyValue); }
+
+    void failWrite(const char* keyValue,
+                   device_platform::StateStoreWriteStatus status,
+                   bool commitValue) {
+        writeFaults_[keyValue] = {status, commitValue};
+    }
+
+    void failReadsAfterWrite(
+        const char* writeKey,
+        std::vector<
+            std::pair<std::string, device_platform::StateStoreReadStatus>>
+            faults) {
+        readFaultsAfterWrite_[writeKey] = std::move(faults);
+    }
+
+    [[nodiscard]] std::size_t writeCount() const { return writeCount_; }
+
    private:
+    struct WriteFault {
+        device_platform::StateStoreWriteStatus status;
+        bool commitValue;
+    };
     std::map<std::string, std::string> values_;
-    std::map<std::string, device_platform::StateStoreReadStatus> faults_;
+    mutable std::map<std::string, device_platform::StateStoreReadStatus>
+        faults_;
+    std::map<std::string, WriteFault> writeFaults_;
+    std::map<std::string,
+             std::vector<
+                 std::pair<std::string, device_platform::StateStoreReadStatus>>>
+        readFaultsAfterWrite_;
+    std::size_t writeCount_{0U};
 };
 
 class LocalTimeZoneResolver final : public device_platform::ITimeZoneResolver {
@@ -311,6 +354,283 @@ void test_identical_root_duplicate_is_diagnostic_and_loadable() {
     TEST_ASSERT_EQUAL_UINT32(1U, loaded.diagnostics.exactDuplicateRecords);
 }
 
+fermentation::ConfigurationCommitCandidate changedCandidate(
+    const fermentation::LoadedConfigurationGraph& current, const char* name) {
+    return {std::make_shared<const fermentation::UserConfiguration>(
+                fermentation::UserConfiguration{"de", "Europe/Zurich", name}),
+            current.active.serviceConfiguration, current.active.programCatalog};
+}
+
+void test_prepares_high_water_values_and_exact_fallback_before_writes() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    const auto writesBefore = store.writeCount();
+    auto prepared = graphStore.prepareCommit(
+        *loaded.graph, changedCandidate(*loaded.graph, "Neu"),
+        fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(prepared.status ==
+                     fermentation::ConfigurationCommitPrepareStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(writesBefore, store.writeCount());
+    TEST_ASSERT_EQUAL_UINT64(
+        2U, prepared.prepared->slotPlan.userConfigurationRevision->value());
+    TEST_ASSERT_EQUAL_UINT64(
+        2U, prepared.prepared->slotPlan.manifestGeneration.value());
+    TEST_ASSERT_EQUAL_UINT64(2U,
+                             prepared.prepared->slotPlan.rootSequence.value());
+    TEST_ASSERT_TRUE(prepared.prepared->newGraph.fallback.has_value());
+    TEST_ASSERT_TRUE(prepared.prepared->newGraph.fallback->manifestReference ==
+                     loaded.graph->active.manifestReference);
+}
+
+void test_document_write_failure_leaves_old_graph_canonical() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    auto prepared = graphStore.prepareCommit(
+        *loaded.graph, changedCandidate(*loaded.graph, "Nicht aktiv"),
+        fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    store.failWrite("uc1", device_platform::StateStoreWriteStatus::WriteError,
+                    false);
+    const auto execution = graphStore.executePreparedCommit(*prepared.prepared);
+    TEST_ASSERT_TRUE(
+        execution.status ==
+        fermentation::ConfigurationCommitExecutionStatus::WriteFailure);
+    auto after = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_EQUAL_STRING(
+        "Fermentationsschrank",
+        after.graph->active.userConfiguration->deviceName.c_str());
+}
+
+void test_unknown_root_outcome_resolves_exactly_old_or_new() {
+    {
+        LocalStore store;
+        LocalTimeZoneResolver resolver;
+        seedGraph(store);
+        fermentation::ConfigurationGraphStore graphStore(store, resolver);
+        auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+        auto prepared = graphStore.prepareCommit(
+            *loaded.graph, changedCandidate(*loaded.graph, "Bleibt alt"),
+            fermentation::decodeChangeOrigin(2U),
+            fermentation::decodeChangeOperation(1U));
+        store.failWrite(
+            "cr1", device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+            false);
+        const auto execution =
+            graphStore.executePreparedCommit(*prepared.prepared);
+        TEST_ASSERT_TRUE(
+            execution.status ==
+            fermentation::ConfigurationCommitExecutionStatus::WriteFailure);
+        TEST_ASSERT_TRUE(graphStore.resolveCommit(*prepared.prepared) ==
+                         fermentation::ConfigurationCommitResolutionStatus::
+                             ResolutionRecoveredOld);
+    }
+    {
+        LocalStore store;
+        LocalTimeZoneResolver resolver;
+        seedGraph(store);
+        fermentation::ConfigurationGraphStore graphStore(store, resolver);
+        auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+        auto prepared = graphStore.prepareCommit(
+            *loaded.graph, changedCandidate(*loaded.graph, "Wird neu"),
+            fermentation::decodeChangeOrigin(2U),
+            fermentation::decodeChangeOperation(1U));
+        store.failWrite(
+            "cr1", device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+            true);
+        const auto execution =
+            graphStore.executePreparedCommit(*prepared.prepared);
+        TEST_ASSERT_TRUE(
+            execution.status ==
+            fermentation::ConfigurationCommitExecutionStatus::Activated);
+        TEST_ASSERT_TRUE(graphStore.resolveCommit(*prepared.prepared) ==
+                         fermentation::ConfigurationCommitResolutionStatus::
+                             ResolutionRecoveredNew);
+    }
+}
+
+void test_unknown_root_with_unreadable_scan_stays_indeterminate() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    auto prepared = graphStore.prepareCommit(
+        *loaded.graph, changedCandidate(*loaded.graph, "Unklar"),
+        fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    store.failWrite(
+        "cr1", device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+        true);
+    store.failReadsAfterWrite(
+        "cr1", {{"cr0", device_platform::StateStoreReadStatus::ReadError},
+                {"cr1", device_platform::StateStoreReadStatus::CapacityError}});
+    const auto execution = graphStore.executePreparedCommit(*prepared.prepared);
+    TEST_ASSERT_TRUE(
+        execution.status ==
+        fermentation::ConfigurationCommitExecutionStatus::CommitIndeterminate);
+    TEST_ASSERT_TRUE(graphStore.resolveCommit(*prepared.prepared) ==
+                     fermentation::ConfigurationCommitResolutionStatus::
+                         ResolutionStillIndeterminate);
+    store.clearReadFault("cr0");
+    store.clearReadFault("cr1");
+    TEST_ASSERT_TRUE(graphStore.resolveCommit(*prepared.prepared) ==
+                     fermentation::ConfigurationCommitResolutionStatus::
+                         ResolutionRecoveredNew);
+}
+
+void test_orphaned_document_and_manifest_values_are_never_reused() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    auto abandoned = graphStore.prepareCommit(
+        *loaded.graph, changedCandidate(*loaded.graph, "Verwaist"),
+        fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    store.failWrite("cm1", device_platform::StateStoreWriteStatus::WriteError,
+                    true);
+    TEST_ASSERT_TRUE(
+        graphStore.executePreparedCommit(*abandoned.prepared).status ==
+        fermentation::ConfigurationCommitExecutionStatus::WriteFailure);
+    auto next = graphStore.prepareCommit(
+        *loaded.graph, changedCandidate(*loaded.graph, "Anderer Inhalt"),
+        fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_EQUAL_UINT64(
+        3U, next.prepared->slotPlan.userConfigurationRevision->value());
+    TEST_ASSERT_EQUAL_UINT64(
+        3U, next.prepared->slotPlan.manifestGeneration.value());
+}
+
+void test_five_commits_rotate_active_and_exact_previous_fallback() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    for (std::uint64_t index = 0U; index < 5U; ++index) {
+        const auto previous = loaded.graph->active.manifestReference;
+        const auto name = std::string("Schrank ") + std::to_string(index);
+        auto prepared = graphStore.prepareCommit(
+            *loaded.graph, changedCandidate(*loaded.graph, name.c_str()),
+            fermentation::decodeChangeOrigin(2U),
+            fermentation::decodeChangeOperation(1U));
+        TEST_ASSERT_TRUE(prepared.prepared.has_value());
+        TEST_ASSERT_TRUE(
+            graphStore.executePreparedCommit(*prepared.prepared).status ==
+            fermentation::ConfigurationCommitExecutionStatus::Activated);
+        loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+        TEST_ASSERT_TRUE(loaded.graph.has_value());
+        TEST_ASSERT_TRUE(loaded.graph->fallback.has_value());
+        TEST_ASSERT_TRUE(loaded.graph->fallback->manifestReference == previous);
+        TEST_ASSERT_EQUAL_UINT64(index + 2U,
+                                 loaded.graph->rootSequence.value());
+    }
+}
+
+void test_document_and_manifest_identity_collisions_all_fail_closed() {
+    LocalTimeZoneResolver resolver;
+    {
+        LocalStore store;
+        seedGraph(store);
+        store.put("sc1", envelope(fermentation::configuration_storage_contract::
+                                      kServiceConfigurationRecordType,
+                                  1U, 1U, "different"));
+        fermentation::ConfigurationGraphStore graphStore(store, resolver);
+        TEST_ASSERT_TRUE(
+            graphStore.loadCanonicalGraph(StorageEpoch{1U}).status ==
+            fermentation::ConfigurationGraphLoadStatus::RecordCapacityError);
+    }
+    {
+        LocalStore store;
+        seedGraph(store);
+        store.put("pc1", envelope(fermentation::configuration_storage_contract::
+                                      kProgramCatalogRecordType,
+                                  1U, 1U, "different"));
+        fermentation::ConfigurationGraphStore graphStore(store, resolver);
+        TEST_ASSERT_TRUE(
+            graphStore.loadCanonicalGraph(StorageEpoch{1U}).status ==
+            fermentation::ConfigurationGraphLoadStatus::
+                ConfigurationGraphIntegrityFailure);
+    }
+    {
+        LocalStore store;
+        seedGraph(store);
+        fermentation::ConfigurationManifest manifest{
+            fermentation::decodeChangeOrigin(3U),
+            fermentation::decodeChangeOperation(2U),
+            reference(fermentation::configuration_storage_contract::
+                          kUserConfigurationRecordType,
+                      0U, fermentation::UserConfigurationRevision{1U}, ""),
+            reference(fermentation::configuration_storage_contract::
+                          kServiceConfigurationRecordType,
+                      0U, fermentation::ServiceConfigurationRevision{1U}, ""),
+            reference(fermentation::configuration_storage_contract::
+                          kProgramCatalogRecordType,
+                      0U, fermentation::ProgramCatalogRevision{1U}, "")};
+        std::string manifestPayload;
+        TEST_ASSERT_TRUE(fermentation::encodeConfigurationManifestPayload(
+                             manifest, manifestPayload) ==
+                         fermentation::ConfigurationGraphCodecStatus::Success);
+        store.put("cm1", envelope(fermentation::configuration_storage_contract::
+                                      kConfigurationManifestRecordType,
+                                  1U, 1U, manifestPayload));
+        fermentation::ConfigurationGraphStore graphStore(store, resolver);
+        TEST_ASSERT_TRUE(
+            graphStore.loadCanonicalGraph(StorageEpoch{1U}).status ==
+            fermentation::ConfigurationGraphLoadStatus::
+                ConfigurationGraphIntegrityFailure);
+    }
+}
+
+void test_unusable_higher_root_advances_high_water_without_activation() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    seedGraph(store);
+    store.put("cr1", envelope(fermentation::configuration_storage_contract::
+                                  kConfigurationRootRecordType,
+                              1U, 9U, "invalid-root-payload"));
+    fermentation::ConfigurationGraphStore graphStore(store, resolver);
+    auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(loaded.graph.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, loaded.graph->rootSequence.value());
+    auto prepared = graphStore.prepareCommit(
+        *loaded.graph, changedCandidate(*loaded.graph, "Nach Rootluecke"),
+        fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(prepared.prepared.has_value());
+    TEST_ASSERT_EQUAL_UINT64(10U,
+                             prepared.prepared->slotPlan.rootSequence.value());
+}
+
+void test_high_water_read_failures_block_before_any_write() {
+    for (const auto status :
+         {device_platform::StateStoreReadStatus::ReadError,
+          device_platform::StateStoreReadStatus::CapacityError}) {
+        LocalStore store;
+        LocalTimeZoneResolver resolver;
+        seedGraph(store);
+        fermentation::ConfigurationGraphStore graphStore(store, resolver);
+        auto loaded = graphStore.loadCanonicalGraph(StorageEpoch{1U});
+        store.failRead("pc3", status);
+        const auto writesBefore = store.writeCount();
+        auto prepared = graphStore.prepareCommit(
+            *loaded.graph, changedCandidate(*loaded.graph, "Blockiert"),
+            fermentation::decodeChangeOrigin(2U),
+            fermentation::decodeChangeOperation(1U));
+        TEST_ASSERT_FALSE(prepared.prepared.has_value());
+        TEST_ASSERT_EQUAL_UINT32(writesBefore, store.writeCount());
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -322,5 +642,14 @@ int main() {
     RUN_TEST(test_orphan_high_water_is_used_for_next_revision);
     RUN_TEST(test_unknown_newer_schema_blocks_mutation_before_plan);
     RUN_TEST(test_identical_root_duplicate_is_diagnostic_and_loadable);
+    RUN_TEST(test_prepares_high_water_values_and_exact_fallback_before_writes);
+    RUN_TEST(test_document_write_failure_leaves_old_graph_canonical);
+    RUN_TEST(test_unknown_root_outcome_resolves_exactly_old_or_new);
+    RUN_TEST(test_unknown_root_with_unreadable_scan_stays_indeterminate);
+    RUN_TEST(test_orphaned_document_and_manifest_values_are_never_reused);
+    RUN_TEST(test_five_commits_rotate_active_and_exact_previous_fallback);
+    RUN_TEST(test_document_and_manifest_identity_collisions_all_fail_closed);
+    RUN_TEST(test_unusable_higher_root_advances_high_water_without_activation);
+    RUN_TEST(test_high_water_read_failures_block_before_any_write);
     return UNITY_END();
 }

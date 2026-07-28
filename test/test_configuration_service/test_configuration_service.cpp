@@ -1,34 +1,112 @@
 #include <unity.h>
 
+#include <atomic>
 #include <cstddef>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
 #include "configuration_documents.hpp"
+#include "configuration_document_codec.hpp"
 #include "configuration_graph.hpp"
+#include "configuration_graph_codec.hpp"
 #include "configuration_graph_store.hpp"
 #include "configuration_limits.hpp"
 #include "configuration_mutation_coordinator.hpp"
 #include "configuration_service.hpp"
 #include "configuration_storage_contract.hpp"
+#include "crc32.hpp"
 #include "state_store.hpp"
+#include "state_store_key.hpp"
+#include "storage_envelope.hpp"
 
 namespace {
 
-class EmptyStore final : public device_platform::IStateStore {
+class LocalStore final : public device_platform::IStateStore {
    public:
     device_platform::StateStoreWriteStatus write(
-        const device_platform::StateStoreKey&, const std::string&) override {
-        return device_platform::StateStoreWriteStatus::WriteError;
+        const device_platform::StateStoreKey& key,
+        const std::string& value) override {
+        ++writeCount_;
+        const auto fault = writeFaults_.find(key.bytes());
+        if (fault == writeFaults_.end() || fault->second.commitValue) {
+            values_[key.bytes()] = value;
+        }
+        const auto readFaults = readFaultsAfterWrite_.find(key.bytes());
+        if (readFaults != readFaultsAfterWrite_.end()) {
+            for (const auto& [readKey, status] : readFaults->second) {
+                readFaults_[readKey] = status;
+            }
+        }
+        if (fault != writeFaults_.end()) {
+            return fault->second.status;
+        }
+        return device_platform::StateStoreWriteStatus::Success;
     }
     device_platform::StateStoreReadResult read(
-        const device_platform::StateStoreKey&, std::size_t) const override {
-        return {device_platform::StateStoreReadStatus::NotFound, {}};
+        const device_platform::StateStoreKey& key,
+        std::size_t maxBytes) const override {
+        const auto fault = readFaults_.find(key.bytes());
+        if (fault != readFaults_.end()) {
+            return {fault->second, {}};
+        }
+        const auto found = values_.find(key.bytes());
+        if (found == values_.end()) {
+            return {device_platform::StateStoreReadStatus::NotFound, {}};
+        }
+        if (found->second.size() > maxBytes) {
+            return {device_platform::StateStoreReadStatus::CapacityError, {}};
+        }
+        return {device_platform::StateStoreReadStatus::Success, found->second};
     }
+
+    void put(const char* key, std::string value) {
+        values_[key] = std::move(value);
+    }
+
+    void failWrite(const char* key,
+                   device_platform::StateStoreWriteStatus status,
+                   bool commitValue) {
+        writeFaults_[key] = {status, commitValue};
+    }
+
+    void clearWriteFault(const char* key) { writeFaults_.erase(key); }
+
+    void failReadsAfterWrite(
+        const char* writeKey,
+        std::vector<
+            std::pair<std::string, device_platform::StateStoreReadStatus>>
+            faults) {
+        readFaultsAfterWrite_[writeKey] = std::move(faults);
+    }
+
+    void failRead(const char* key,
+                  device_platform::StateStoreReadStatus status) {
+        readFaults_[key] = status;
+    }
+
+    void clearReadFault(const char* key) { readFaults_.erase(key); }
+
+    [[nodiscard]] std::size_t writeCount() const { return writeCount_; }
+
+   private:
+    struct WriteFault {
+        device_platform::StateStoreWriteStatus status;
+        bool commitValue;
+    };
+    std::map<std::string, std::string> values_;
+    std::map<std::string, WriteFault> writeFaults_;
+    mutable std::map<std::string, device_platform::StateStoreReadStatus>
+        readFaults_;
+    std::map<std::string,
+             std::vector<
+                 std::pair<std::string, device_platform::StateStoreReadStatus>>>
+        readFaultsAfterWrite_;
+    std::size_t writeCount_{0U};
 };
 
 class Resolver final : public device_platform::ITimeZoneResolver {
@@ -45,62 +123,161 @@ class Resolver final : public device_platform::ITimeZoneResolver {
     }
 };
 
-fermentation::LoadedConfigurationGraph graph() {
-    const device_platform::StorageEpoch epoch{1U};
+std::string envelope(device_platform::RecordTypeId type, std::uint64_t version,
+                     const std::string& payload) {
+    std::string bytes;
+    TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
+                         {type, 1U, device_platform::StorageEpoch{1U}, version,
+                          std::nullopt, payload},
+                         bytes, payload.size() + 45U) ==
+                     device_platform::EnvelopeEncodeStatus::Success);
+    return bytes;
+}
+
+template <typename Version>
+fermentation::ConfigurationRecordReference<Version> reference(
+    device_platform::RecordTypeId type, std::uint32_t slot, Version version,
+    const std::string& payload) {
+    return {type,
+            device_platform::SlotId{slot},
+            version,
+            1U,
+            static_cast<std::uint32_t>(payload.size()),
+            device_platform::computeCrc32IsoHdlc(payload),
+            device_platform::StorageEpoch{1U}};
+}
+
+fermentation::LoadedConfigurationGraph seedGraph(LocalStore& store,
+                                                 const Resolver& resolver) {
+    const fermentation::UserConfiguration user{"de", "Europe/Zurich",
+                                               "Fermentationsschrank"};
+    const fermentation::ServiceConfiguration service;
+    const auto catalog = fermentation::makeFactoryProgramCatalog();
+    std::string userPayload;
+    std::string servicePayload;
+    std::string catalogPayload;
+    TEST_ASSERT_TRUE(fermentation::encodeUserConfigurationPayload(
+                         user, resolver, userPayload) ==
+                     fermentation::ConfigurationCodecStatus::Success);
+    TEST_ASSERT_TRUE(fermentation::encodeServiceConfigurationPayload(
+                         service, servicePayload) ==
+                     fermentation::ConfigurationCodecStatus::Success);
+    TEST_ASSERT_TRUE(
+        fermentation::encodeProgramCatalogPayload(catalog, catalogPayload) ==
+        fermentation::ConfigurationCodecStatus::Success);
+    store.put("uc0", envelope(fermentation::configuration_storage_contract::
+                                  kUserConfigurationRecordType,
+                              1U, userPayload));
+    store.put("sc0", envelope(fermentation::configuration_storage_contract::
+                                  kServiceConfigurationRecordType,
+                              1U, servicePayload));
+    store.put("pc0", envelope(fermentation::configuration_storage_contract::
+                                  kProgramCatalogRecordType,
+                              1U, catalogPayload));
     fermentation::ConfigurationManifest manifest{
         fermentation::decodeChangeOrigin(1U),
         fermentation::decodeChangeOperation(2U),
-        {fermentation::configuration_storage_contract::
-             kUserConfigurationRecordType,
-         device_platform::SlotId{0U},
-         fermentation::UserConfigurationRevision{1U}, 1U, 0U, 0U, epoch},
-        {fermentation::configuration_storage_contract::
-             kServiceConfigurationRecordType,
-         device_platform::SlotId{0U},
-         fermentation::ServiceConfigurationRevision{1U}, 1U, 0U, 0U, epoch},
-        {fermentation::configuration_storage_contract::
-             kProgramCatalogRecordType,
-         device_platform::SlotId{0U}, fermentation::ProgramCatalogRevision{1U},
-         1U, 0U, 0U, epoch}};
-    fermentation::ConfigurationManifestReference manifestReference{
+        reference(fermentation::configuration_storage_contract::
+                      kUserConfigurationRecordType,
+                  0U, fermentation::UserConfigurationRevision{1U}, userPayload),
+        reference(fermentation::configuration_storage_contract::
+                      kServiceConfigurationRecordType,
+                  0U, fermentation::ServiceConfigurationRevision{1U},
+                  servicePayload),
+        reference(fermentation::configuration_storage_contract::
+                      kProgramCatalogRecordType,
+                  0U, fermentation::ProgramCatalogRevision{1U},
+                  catalogPayload)};
+    std::string manifestPayload;
+    TEST_ASSERT_TRUE(fermentation::encodeConfigurationManifestPayload(
+                         manifest, manifestPayload) ==
+                     fermentation::ConfigurationGraphCodecStatus::Success);
+    auto manifestReference = reference(
         fermentation::configuration_storage_contract::
             kConfigurationManifestRecordType,
-        device_platform::SlotId{0U},
-        fermentation::ConfigurationManifestGeneration{1U},
-        1U,
-        104U,
-        0U,
-        epoch};
+        0U, fermentation::ConfigurationManifestGeneration{1U}, manifestPayload);
+    const auto manifestBytes =
+        envelope(fermentation::configuration_storage_contract::
+                     kConfigurationManifestRecordType,
+                 1U, manifestPayload);
+    store.put("cm0", manifestBytes);
     fermentation::ConfigurationGraphBranch branch{
         manifestReference,
         manifest,
-        std::make_shared<const fermentation::UserConfiguration>(
-            fermentation::UserConfiguration{"de", "Europe/Zurich",
-                                            "Fermentationsschrank"}),
-        std::make_shared<const fermentation::ServiceConfiguration>(),
-        std::make_shared<const fermentation::ProgramCatalog>(
-            fermentation::makeFactoryProgramCatalog()),
-        "manifest"};
+        std::make_shared<const fermentation::UserConfiguration>(user),
+        std::make_shared<const fermentation::ServiceConfiguration>(service),
+        std::make_shared<const fermentation::ProgramCatalog>(catalog),
+        manifestBytes};
     fermentation::ConfigurationRootRecord root{manifestReference, std::nullopt};
+    std::string rootPayload;
+    TEST_ASSERT_TRUE(
+        fermentation::encodeConfigurationRootPayload(root, rootPayload) ==
+        fermentation::ConfigurationGraphCodecStatus::Success);
+    const auto rootBytes =
+        envelope(fermentation::configuration_storage_contract::
+                     kConfigurationRootRecordType,
+                 1U, rootPayload);
+    store.put("cr0", rootBytes);
     return {device_platform::SlotId{0U},
             fermentation::ConfigurationRootSequence{1U},
             root,
-            "root",
+            rootBytes,
             std::move(branch),
             std::nullopt,
             false};
 }
 
 struct Fixture {
-    EmptyStore store;
+    LocalStore store;
     Resolver resolver;
     fermentation::ConfigurationGraphStore graphStore{store, resolver};
     fermentation::ConfigurationMutationCoordinator coordinator;
     fermentation::ConfigurationService service{coordinator, graphStore,
                                                resolver};
+    fermentation::LoadedConfigurationGraph initialGraph;
 
-    Fixture() { TEST_ASSERT_TRUE(service.initialize(graph())); }
+    Fixture() : initialGraph(seedGraph(store, resolver)) {
+        TEST_ASSERT_TRUE(service.initialize(initialGraph));
+    }
 };
+
+fermentation::ConfigurationPreviewView installChangedPreview(Fixture& fixture,
+                                                             const char* name) {
+    auto build = fixture.service.beginPreview();
+    TEST_ASSERT_TRUE(build.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    TEST_ASSERT_TRUE(
+        build.lease.replaceUserConfiguration({"de", "Europe/Zurich", name}));
+    auto installed = fixture.service.installPreview(
+        std::move(build.lease), fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(installed.status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+    TEST_ASSERT_TRUE(installed.preview.has_value());
+    return *installed.preview;
+}
+
+fermentation::ProgramCatalog maximumCountCatalog() {
+    auto catalog = fermentation::makeFactoryProgramCatalog();
+    const auto prototype = catalog.programs.front();
+    for (std::size_t index = 0U;
+         index < fermentation::configuration_limits::kMaximumUserProgramCount;
+         ++index) {
+        auto program = prototype;
+        program.program.id = "user-" + std::to_string(index);
+        program.program.name = std::string(48U, 'N');
+        program.program.notes = std::string(512U, 'x');
+        program.program.builtIn = false;
+        program.program.factoryCatalogEntry = false;
+        program.program.resettable = false;
+        program.program.userDeletable = true;
+        program.program.installed = true;
+        catalog.programs.push_back(std::move(program));
+    }
+    TEST_ASSERT_TRUE(fermentation::validateProgramCatalog(catalog) ==
+                     fermentation::ProgramCatalogStatus::Success);
+    return catalog;
+}
 
 void test_initial_runtime_is_available_through_move_only_lease() {
     Fixture fixture;
@@ -215,6 +392,209 @@ void test_abandoned_build_lease_releases_model_budget() {
                      fermentation::ConfigurationPreviewStatus::Success);
 }
 
+void test_confirmed_preview_commits_root_then_publishes_runtime() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Neuer Schrank");
+    const auto committed = fixture.service.confirmPreview(preview.handle);
+    TEST_ASSERT_TRUE(committed.status ==
+                     fermentation::ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_TRUE(fixture.service.mode() ==
+                     fermentation::ConfigurationServiceMode::Operational);
+    TEST_ASSERT_FALSE(fixture.service.visiblePreview().has_value());
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_TRUE(
+        runtime.status ==
+        fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted);
+    TEST_ASSERT_EQUAL_STRING(
+        "Neuer Schrank", runtime.lease->userConfiguration().deviceName.c_str());
+    TEST_ASSERT_EQUAL_UINT64(
+        2U, runtime.lease->manifestReference().version.value());
+}
+
+void test_pre_root_write_failure_keeps_old_runtime_and_no_partial_publish() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Nicht aktiv");
+    fixture.store.failWrite(
+        "uc1", device_platform::StateStoreWriteStatus::WriteError, false);
+    const auto committed = fixture.service.confirmPreview(preview.handle);
+    TEST_ASSERT_TRUE(
+        committed.status ==
+        fermentation::ConfigurationCommitStatus::PersistenceFailure);
+    TEST_ASSERT_TRUE(fixture.service.mode() ==
+                     fermentation::ConfigurationServiceMode::Operational);
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_EQUAL_STRING(
+        "Fermentationsschrank",
+        runtime.lease->userConfiguration().deviceName.c_str());
+}
+
+void test_unknown_root_commit_with_verified_new_graph_activates() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Unbekannt aber neu");
+    fixture.store.failWrite(
+        "cr1", device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+        true);
+    const auto committed = fixture.service.confirmPreview(preview.handle);
+    TEST_ASSERT_TRUE(committed.status ==
+                     fermentation::ConfigurationCommitStatus::Activated);
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_EQUAL_STRING(
+        "Unbekannt aber neu",
+        runtime.lease->userConfiguration().deviceName.c_str());
+}
+
+void test_indeterminate_commit_blocks_runtime_until_exact_new_resolution() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Spaeter aufgeloest");
+    fixture.store.failWrite(
+        "cr1", device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+        true);
+    fixture.store.failReadsAfterWrite(
+        "cr1", {{"cr0", device_platform::StateStoreReadStatus::ReadError},
+                {"cr1", device_platform::StateStoreReadStatus::ReadError}});
+    const auto committed = fixture.service.confirmPreview(preview.handle);
+    TEST_ASSERT_TRUE(committed.status ==
+                     fermentation::ConfigurationCommitStatus::
+                         ConfigurationCommitIndeterminate);
+    TEST_ASSERT_TRUE(
+        fixture.service.mode() ==
+        fermentation::ConfigurationServiceMode::CommitIndeterminate);
+    TEST_ASSERT_FALSE(fixture.service.visiblePreview().has_value());
+    TEST_ASSERT_TRUE(fixture.service.acquireRuntime().status ==
+                     fermentation::RuntimeConfigurationReadStatus::
+                         ConfigurationRuntimeUnavailable);
+    TEST_ASSERT_TRUE(fixture.service.beginPreview().status ==
+                     fermentation::ConfigurationPreviewStatus::
+                         ConfigurationRuntimeUnavailable);
+    fixture.store.clearReadFault("cr0");
+    fixture.store.clearReadFault("cr1");
+    TEST_ASSERT_TRUE(fixture.service.resolveIndeterminate() ==
+                     fermentation::ConfigurationCommitResolutionStatus::
+                         ResolutionRecoveredNew);
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_EQUAL_STRING(
+        "Spaeter aufgeloest",
+        runtime.lease->userConfiguration().deviceName.c_str());
+}
+
+void test_post_commit_verification_failure_is_fail_closed_until_rescan() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Nachpruefung");
+    fixture.store.failWrite(
+        "cr1", device_platform::StateStoreWriteStatus::Success, true);
+    fixture.store.failReadsAfterWrite(
+        "cr1", {{"cr0", device_platform::StateStoreReadStatus::ReadError},
+                {"cr1", device_platform::StateStoreReadStatus::ReadError}});
+    const auto committed = fixture.service.confirmPreview(preview.handle);
+    TEST_ASSERT_TRUE(
+        committed.status ==
+        fermentation::ConfigurationCommitStatus::ConfigurationRuntimeFailure);
+    TEST_ASSERT_TRUE(fixture.service.mode() ==
+                     fermentation::ConfigurationServiceMode::RuntimeFailure);
+    TEST_ASSERT_TRUE(fixture.service.runtimeFailureCause() ==
+                     fermentation::ConfigurationRuntimeFailureCause::
+                         PostCommitVerificationFailure);
+    TEST_ASSERT_TRUE(fixture.service.acquireRuntime().status ==
+                     fermentation::RuntimeConfigurationReadStatus::
+                         ConfigurationRuntimeUnavailable);
+    fixture.store.clearReadFault("cr0");
+    fixture.store.clearReadFault("cr1");
+    TEST_ASSERT_TRUE(fixture.service.recoverRuntimeFailure() ==
+                     fermentation::ConfigurationCommitResolutionStatus::
+                         ResolutionRecoveredNew);
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_EQUAL_STRING(
+        "Nachpruefung", runtime.lease->userConfiguration().deviceName.c_str());
+}
+
+void test_held_old_reader_blocks_third_model_before_any_write() {
+    Fixture fixture;
+    auto oldReader = fixture.service.acquireRuntime();
+    const auto first = installChangedPreview(fixture, "Generation zwei");
+    TEST_ASSERT_TRUE(fixture.service.confirmPreview(first.handle).status ==
+                     fermentation::ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_EQUAL_STRING(
+        "Fermentationsschrank",
+        oldReader.lease->userConfiguration().deviceName.c_str());
+    const auto writesBefore = fixture.store.writeCount();
+    TEST_ASSERT_TRUE(
+        fixture.service.beginPreview().status ==
+        fermentation::ConfigurationPreviewStatus::ConfigurationModelBudgetBusy);
+    TEST_ASSERT_EQUAL_UINT32(writesBefore, fixture.store.writeCount());
+    oldReader.lease = {};
+    TEST_ASSERT_TRUE(fixture.service.beginPreview().status ==
+                     fermentation::ConfigurationPreviewStatus::Success);
+}
+
+void test_no_change_confirmation_removes_only_its_visible_handle() {
+    Fixture fixture;
+    auto build = fixture.service.beginPreview();
+    auto installed = fixture.service.installPreview(
+        std::move(build.lease), fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_TRUE(installed.preview->noChange);
+    TEST_ASSERT_TRUE(
+        fixture.service.confirmPreview(installed.preview->handle).status ==
+        fermentation::ConfigurationCommitStatus::NoChange);
+    TEST_ASSERT_FALSE(fixture.service.visiblePreview().has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, fixture.store.writeCount());
+}
+
+void test_maximum_count_catalog_keeps_two_model_limit_through_commit() {
+    Fixture fixture;
+    auto build = fixture.service.beginPreview();
+    TEST_ASSERT_TRUE(build.lease.replaceProgramCatalog(maximumCountCatalog()));
+    TEST_ASSERT_TRUE(
+        fixture.service.beginPreview().status ==
+        fermentation::ConfigurationPreviewStatus::ConfigurationModelBudgetBusy);
+    auto installed = fixture.service.installPreview(
+        std::move(build.lease), fermentation::decodeChangeOrigin(2U),
+        fermentation::decodeChangeOperation(1U));
+    TEST_ASSERT_EQUAL_UINT32(2U, fixture.service.fullModelGenerationCount());
+    TEST_ASSERT_TRUE(
+        fixture.service.confirmPreview(installed.preview->handle).status ==
+        fermentation::ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.service.fullModelGenerationCount());
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_EQUAL_UINT32(
+        fermentation::configuration_limits::kMaximumProgramCount,
+        runtime.lease->programCatalog().programs.size());
+}
+
+void test_two_concurrent_confirmations_have_exactly_one_winner() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Ein Gewinner");
+    std::atomic<bool> start{false};
+    fermentation::ConfigurationCommitStatus first{};
+    fermentation::ConfigurationCommitStatus second{};
+    auto confirm = [&](fermentation::ConfigurationCommitStatus& status) {
+        while (!start.load(std::memory_order_acquire)) {
+        }
+        status = fixture.service.confirmPreview(preview.handle).status;
+    };
+    std::thread firstThread(confirm, std::ref(first));
+    std::thread secondThread(confirm, std::ref(second));
+    start.store(true, std::memory_order_release);
+    firstThread.join();
+    secondThread.join();
+    const auto activated =
+        static_cast<unsigned int>(
+            first == fermentation::ConfigurationCommitStatus::Activated) +
+        static_cast<unsigned int>(
+            second == fermentation::ConfigurationCommitStatus::Activated);
+    TEST_ASSERT_EQUAL_UINT32(1U, activated);
+    TEST_ASSERT_TRUE(
+        first == fermentation::ConfigurationCommitStatus::Activated ||
+        first == fermentation::ConfigurationCommitStatus::
+                     ConfigurationMutationBusy ||
+        first == fermentation::ConfigurationCommitStatus::PreviewNotFound);
+    TEST_ASSERT_TRUE(
+        second == fermentation::ConfigurationCommitStatus::Activated ||
+        second == fermentation::ConfigurationCommitStatus::
+                      ConfigurationMutationBusy ||
+        second == fermentation::ConfigurationCommitStatus::PreviewNotFound);
+}
+
 }  // namespace
 
 int main() {
@@ -226,5 +606,16 @@ int main() {
     RUN_TEST(
         test_invalid_new_request_does_not_replace_visible_no_change_preview);
     RUN_TEST(test_abandoned_build_lease_releases_model_budget);
+    RUN_TEST(test_confirmed_preview_commits_root_then_publishes_runtime);
+    RUN_TEST(
+        test_pre_root_write_failure_keeps_old_runtime_and_no_partial_publish);
+    RUN_TEST(test_unknown_root_commit_with_verified_new_graph_activates);
+    RUN_TEST(
+        test_indeterminate_commit_blocks_runtime_until_exact_new_resolution);
+    RUN_TEST(test_post_commit_verification_failure_is_fail_closed_until_rescan);
+    RUN_TEST(test_held_old_reader_blocks_third_model_before_any_write);
+    RUN_TEST(test_no_change_confirmation_removes_only_its_visible_handle);
+    RUN_TEST(test_maximum_count_catalog_keeps_two_model_limit_through_commit);
+    RUN_TEST(test_two_concurrent_confirmations_have_exactly_one_winner);
     return UNITY_END();
 }
