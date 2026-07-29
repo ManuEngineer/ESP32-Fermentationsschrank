@@ -6,6 +6,7 @@
 #include "configuration_bootstrap.hpp"
 #include "configuration_bootstrap_codec.hpp"
 #include "configuration_limits.hpp"
+#include "configuration_storage_contract.hpp"
 #include "storage_envelope.hpp"
 
 namespace {
@@ -72,6 +73,44 @@ void test_crc_and_trailing_bytes_are_rejected() {
             fermentation::decodeConfigurationBootstrapRecord(bytes).status));
 }
 
+void test_newer_bootstrap_schema_is_fail_closed_without_partial_value() {
+    std::string bytes;
+    TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
+                         {fermentation::configuration_storage_contract::
+                              kConfigurationBootstrapRecordType,
+                          2U, device_platform::StorageEpoch{1U}, 1U,
+                          std::nullopt, std::string(5U, '\0')},
+                         bytes, 42U) ==
+                     device_platform::EnvelopeEncodeStatus::Success);
+    const auto decoded =
+        fermentation::decodeConfigurationBootstrapRecord(bytes);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationBootstrapCodecStatus::
+                             UnsupportedNewerSchema),
+        static_cast<int>(decoded.status));
+    TEST_ASSERT_FALSE(decoded.value.has_value());
+}
+
+void test_test_local_epoch_record_does_not_reinterpret_bootstrap_schema1() {
+    std::string bytes;
+    TEST_ASSERT_TRUE(
+        device_platform::encodeEnvelope(
+            {device_platform::RecordTypeId{65000U}, 1U,
+             device_platform::StorageEpoch{7U}, 1U, std::nullopt, "test-only"},
+            bytes, 128U) == device_platform::EnvelopeEncodeStatus::Success);
+    const auto generic = device_platform::decodeEnvelope(bytes);
+    TEST_ASSERT_TRUE(generic.status ==
+                     device_platform::EnvelopeDecodeStatus::Success);
+    TEST_ASSERT_EQUAL_UINT32(7U, generic.envelope->storageEpoch.value());
+    const auto bootstrap =
+        fermentation::decodeConfigurationBootstrapRecord(bytes);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationBootstrapCodecStatus::
+                             RecordIdentityMismatch),
+        static_cast<int>(bootstrap.status));
+    TEST_ASSERT_FALSE(bootstrap.value.has_value());
+}
+
 }  // namespace
 
 int main() {
@@ -79,5 +118,8 @@ int main() {
     RUN_TEST(test_schema1_history_is_closed);
     RUN_TEST(test_roundtrip_is_exactly_42_bytes);
     RUN_TEST(test_crc_and_trailing_bytes_are_rejected);
+    RUN_TEST(test_newer_bootstrap_schema_is_fail_closed_without_partial_value);
+    RUN_TEST(
+        test_test_local_epoch_record_does_not_reinterpret_bootstrap_schema1);
     return UNITY_END();
 }

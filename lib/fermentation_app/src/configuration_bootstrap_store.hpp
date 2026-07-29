@@ -65,6 +65,10 @@ class ConfigurationBootstrapStore {
         ConfigurationBootstrapState targetState);
 
    private:
+    friend class ConfigurationRecoveryService;
+    [[nodiscard]] const device_platform::IStateStore* storeIdentity() const {
+        return &store_;
+    }
     [[nodiscard]] ConfigurationBootstrapWriteResult writeBound(
         const ConfigurationBootstrapScanResult& scan,
         const ConfigurationBootstrapRecord& target);

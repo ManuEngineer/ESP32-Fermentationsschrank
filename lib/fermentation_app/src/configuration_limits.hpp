@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace fermentation::configuration_limits {
 
@@ -37,5 +38,10 @@ inline constexpr std::size_t kConfigurationBootstrapPayloadBytes = 5U;
 inline constexpr std::size_t kMaximumConfigurationBootstrapEnvelopeBytes = 42U;
 inline constexpr std::size_t kConfigurationBootstrapSlotCount = 2U;
 inline constexpr std::size_t kConfigurationFactoryScanKeyCount = 19U;
+// Worst-case mode transitions in one bounded call, including entry/exit of a
+// root-indeterminate state and the bootstrap-finalization gate.
+inline constexpr std::uint64_t kInitializationRecoveryRevisionHeadroom = 6U;
+inline constexpr std::uint64_t kResetRecoveryRevisionHeadroom = 7U;
+inline constexpr std::uint64_t kNormalBootRevisionHeadroom = 3U;
 
 }  // namespace fermentation::configuration_limits

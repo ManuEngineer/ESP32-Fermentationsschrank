@@ -76,6 +76,10 @@ namespace fermentation {
 
 class ConfigurationServiceTestAccess {
    public:
+    static bool initialize(ConfigurationService& service,
+                           const LoadedConfigurationGraph& graph) {
+        return service.initializeForTest(graph);
+    }
     static void installHook(ConfigurationService& service,
                             ConfigurationServiceHookControl& control,
                             int desiredPoint) {
@@ -450,12 +454,16 @@ struct Fixture {
     fermentation::LoadedConfigurationGraph initialGraph;
 
     Fixture() : initialGraph(seedGraph(store, resolver)) {
-        TEST_ASSERT_TRUE(service.initialize(initialGraph));
+        TEST_ASSERT_TRUE(
+            fermentation::ConfigurationServiceTestAccess::initialize(
+                service, initialGraph));
     }
 
     explicit Fixture(const fermentation::ProgramCatalog& catalog)
         : initialGraph(seedGraphWithCatalog(store, resolver, catalog)) {
-        TEST_ASSERT_TRUE(service.initialize(initialGraph));
+        TEST_ASSERT_TRUE(
+            fermentation::ConfigurationServiceTestAccess::initialize(
+                service, initialGraph));
     }
 };
 

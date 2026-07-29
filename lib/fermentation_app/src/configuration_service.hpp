@@ -17,9 +17,15 @@
 namespace fermentation {
 
 enum class ConfigurationServiceMode : std::uint8_t {
+    NoRuntime,
+    RecoveryPreparing,
     Operational,
     CommitInProgress,
     CommitIndeterminate,
+    ResetPreparing,
+    ResetEligibleNoRuntime,
+    EpochResetting,
+    BootstrapFinalizationPending,
     RuntimeFailure,
 };
 
@@ -212,7 +218,6 @@ class ConfigurationService {
     ConfigurationService(ConfigurationService&&) = delete;
     ConfigurationService& operator=(ConfigurationService&&) = delete;
 
-    [[nodiscard]] bool initialize(const LoadedConfigurationGraph& graph);
     [[nodiscard]] ConfigurationServiceMode mode() const;
     [[nodiscard]] std::uint64_t stateRevision() const;
     [[nodiscard]] RuntimeConfigurationReadResult acquireRuntime();
@@ -239,6 +244,7 @@ class ConfigurationService {
     friend class RuntimeConfigurationReadLease;
     friend class ConfigurationPreviewBuildLease;
     friend class ConfigurationServiceTestAccess;
+    friend class ConfigurationRecoveryService;
 
     struct Preview;
     struct ResolutionContext;
@@ -274,12 +280,35 @@ class ConfigurationService {
     void invalidateRuntimePreparationBindingForTest();
     void rejectRuntimePreparationForTest(bool reject) noexcept;
     [[nodiscard]] bool runtimePreparationRetryConsumedForTest() const noexcept;
+    [[nodiscard]] bool beginRecovery(ConfigurationServiceMode targetMode,
+                                     std::uint64_t requiredHeadroom);
+    [[nodiscard]] bool prepareRecoveredGraph(
+        const LoadedConfigurationGraph& graph);
+    [[nodiscard]] bool publishRecoveredGraph();
+    [[nodiscard]] bool finalizeRecoveredGraph();
+    [[nodiscard]] bool transitionRecovery(ConfigurationServiceMode targetMode);
+    [[nodiscard]] bool discardPreparedRecovery(
+        ConfigurationServiceMode targetMode);
+    [[nodiscard]] bool cancelRecovery();
+    void failRecovery(ConfigurationRuntimeFailureCause cause);
+    [[nodiscard]] bool initializeForTest(const LoadedConfigurationGraph& graph);
+    [[nodiscard]] const ConfigurationMutationCoordinator*
+    mutationCoordinatorIdentity() const {
+        return &mutationCoordinator_;
+    }
+    [[nodiscard]] const ConfigurationGraphStore* graphStoreIdentity() const {
+        return &graphStore_;
+    }
+    [[nodiscard]] const device_platform::ITimeZoneResolver*
+    timeZoneResolverIdentity() const {
+        return &timeZoneResolver_;
+    }
 
     ConfigurationMutationCoordinator& mutationCoordinator_;
     ConfigurationGraphStore& graphStore_;
     const device_platform::ITimeZoneResolver& timeZoneResolver_;
     mutable std::mutex stateMutex_;
-    ConfigurationServiceMode mode_{ConfigurationServiceMode::RuntimeFailure};
+    ConfigurationServiceMode mode_{ConfigurationServiceMode::NoRuntime};
     std::uint64_t stateRevision_{1U};
     std::uint64_t nextPreviewHandle_{1U};
     std::uint64_t nextPreviewBuildReservation_{1U};
@@ -297,6 +326,9 @@ class ConfigurationService {
     bool previewBuildRevoked_{false};
     bool previewModelReserved_{false};
     std::unique_ptr<ResolutionContext> resolutionContext_;
+    std::shared_ptr<const RuntimeConfigurationSnapshot>
+        recoveryPreparedRuntime_;
+    std::unique_ptr<LoadedConfigurationGraph> recoveryPreparedGraph_;
     std::optional<ConfigurationRuntimeFailureCause> runtimeFailureCause_;
     void* testHookContext_{nullptr};
     TestHook testHook_{nullptr};

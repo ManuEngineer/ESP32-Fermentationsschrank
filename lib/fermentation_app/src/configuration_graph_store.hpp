@@ -143,6 +143,7 @@ enum class ConfigurationCommitExecutionStatus : std::uint8_t {
     Activated,
     WriteFailure,
     CapacityFailure,
+    RecordOutcomeIndeterminate,
     CommitIndeterminate,
     RuntimeFailure,
 };
@@ -211,6 +212,10 @@ struct PreparedInitialConfigurationGraph {
     std::string manifestRecordBytes;
     std::string rootRecordBytes;
     std::optional<std::string> previousTargetRootRecordBytes;
+    std::optional<std::string> previousTargetUserRecordBytes;
+    std::optional<std::string> previousTargetServiceRecordBytes;
+    std::optional<std::string> previousTargetProgramRecordBytes;
+    std::optional<std::string> previousTargetManifestRecordBytes;
     bool userWriteRequired{true};
     bool serviceWriteRequired{true};
     bool programWriteRequired{true};
@@ -243,16 +248,19 @@ class ConfigurationEpochGraphWriteCapability {
         device_platform::StorageEpoch epoch,
         device_platform::SlotId bootstrapSlot,
         ConfigurationBootstrapState bootstrapState, std::uint32_t planIdentity,
+        const PreparedInitialConfigurationGraph& prepared,
         const ConfigurationMutationLease& mutationLease) noexcept
         : epoch_(epoch),
           bootstrapSlot_(bootstrapSlot),
           bootstrapState_(bootstrapState),
           planIdentity_(planIdentity),
+          prepared_(&prepared),
           mutationLease_(&mutationLease) {}
     device_platform::StorageEpoch epoch_;
     device_platform::SlotId bootstrapSlot_;
     ConfigurationBootstrapState bootstrapState_;
     std::uint32_t planIdentity_{0U};
+    const PreparedInitialConfigurationGraph* prepared_{nullptr};
     const ConfigurationMutationLease* mutationLease_{nullptr};
     bool consumed_{false};
 };
@@ -298,6 +306,14 @@ class ConfigurationGraphStore {
         const PreparedInitialConfigurationGraph& prepared) const;
 
    private:
+    friend class ConfigurationRecoveryService;
+    [[nodiscard]] const device_platform::IStateStore* storeIdentity() const {
+        return &store_;
+    }
+    [[nodiscard]] const device_platform::ITimeZoneResolver*
+    timeZoneResolverIdentity() const {
+        return &timeZoneResolver_;
+    }
     device_platform::IStateStore& store_;
     const device_platform::ITimeZoneResolver& timeZoneResolver_;
 };

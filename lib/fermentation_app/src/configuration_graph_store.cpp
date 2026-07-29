@@ -689,6 +689,42 @@ WriteReadbackStatus writeAndReadBack(device_platform::IStateStore& store,
                : WriteReadbackStatus::ReadbackFailure;
 }
 
+enum class InitialWriteReadbackStatus : std::uint8_t {
+    NewValue,
+    OldValue,
+    WriteFailure,
+    CapacityFailure,
+    Indeterminate,
+};
+
+InitialWriteReadbackStatus writeInitialAndReadBack(
+    device_platform::IStateStore& store, const char* keyValue,
+    const std::string& bytes, const std::optional<std::string>& previousBytes,
+    std::size_t maxBytes) {
+    const auto write = store.write(key(keyValue), bytes);
+    if (write == device_platform::StateStoreWriteStatus::WriteError) {
+        return InitialWriteReadbackStatus::WriteFailure;
+    }
+    if (write == device_platform::StateStoreWriteStatus::CapacityError) {
+        return InitialWriteReadbackStatus::CapacityFailure;
+    }
+    const auto read = store.read(key(keyValue), maxBytes);
+    if (read.status == device_platform::StateStoreReadStatus::Success &&
+        read.value == bytes) {
+        return InitialWriteReadbackStatus::NewValue;
+    }
+    if (write == device_platform::StateStoreWriteStatus::CommitOutcomeUnknown &&
+        ((read.status == device_platform::StateStoreReadStatus::NotFound &&
+          !previousBytes.has_value()) ||
+         (read.status == device_platform::StateStoreReadStatus::Success &&
+          previousBytes.has_value() && read.value == *previousBytes))) {
+        return InitialWriteReadbackStatus::OldValue;
+    }
+    return read.status == device_platform::StateStoreReadStatus::CapacityError
+               ? InitialWriteReadbackStatus::CapacityFailure
+               : InitialWriteReadbackStatus::Indeterminate;
+}
+
 ConfigurationCommitExecutionResult mapPreRootWrite(
     WriteReadbackStatus status, ConfigurationCommitFailurePhase phase) {
     if (status == WriteReadbackStatus::CapacityFailure) {
@@ -742,10 +778,11 @@ InitialSlotSelection selectInitialSlot(
     const device_platform::IStateStore& store,
     const std::array<const char*, N>& keys, device_platform::StorageEpoch epoch,
     device_platform::RecordTypeId recordType, std::uint32_t schemaVersion,
-    std::uint64_t versionValue, const std::string& expectedBytes,
-    std::size_t maxBytes) {
+    const std::string& expectedBytes, std::size_t maxBytes) {
     std::optional<std::size_t> safeSlot;
     std::optional<std::string> safePrevious;
+    std::optional<std::size_t> exactSlot;
+    std::optional<std::string> exactBytes;
     for (std::size_t index = 0U; index < N; ++index) {
         auto read = store.read(key(keys[index]), maxBytes);
         if (read.status == device_platform::StateStoreReadStatus::ReadError) {
@@ -765,9 +802,11 @@ InitialSlotSelection selectInitialSlot(
             continue;
         }
         if (read.value == expectedBytes) {
-            return {InitialConfigurationPrepareStatus::Success,
-                    device_platform::SlotId{static_cast<std::uint32_t>(index)},
-                    false, read.value};
+            if (!exactSlot.has_value()) {
+                exactSlot = index;
+                exactBytes = std::move(read.value);
+            }
+            continue;
         }
         const auto metadata =
             device_platform::decodeEnvelopeMetadata(read.value);
@@ -786,12 +825,15 @@ InitialSlotSelection selectInitialSlot(
             return {InitialConfigurationPrepareStatus::UnsupportedNewerSchema,
                     std::nullopt, true, std::nullopt};
         }
-        if (metadata.metadata->recordTypeId == recordType &&
-            metadata.metadata->schemaVersion == schemaVersion &&
-            metadata.metadata->versionValue == versionValue) {
+        if (metadata.metadata->recordTypeId == recordType) {
             return {InitialConfigurationPrepareStatus::IntegrityFailure,
                     std::nullopt, true, std::nullopt};
         }
+    }
+    if (exactSlot.has_value()) {
+        return {InitialConfigurationPrepareStatus::Success,
+                device_platform::SlotId{static_cast<std::uint32_t>(*exactSlot)},
+                false, std::move(exactBytes)};
     }
     if (!safeSlot.has_value()) {
         return {InitialConfigurationPrepareStatus::NoSafeSlotAvailable,
@@ -1658,7 +1700,7 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     const auto userSlot = selectInitialSlot(
         store_, configuration_storage_contract::kUserConfigurationSlotKeys,
         epoch, configuration_storage_contract::kUserConfigurationRecordType, 1U,
-        1U, record,
+        record,
         configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U);
     if (userSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {userSlot.status, std::nullopt};
@@ -1685,7 +1727,7 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     const auto serviceSlot = selectInitialSlot(
         store_, configuration_storage_contract::kServiceConfigurationSlotKeys,
         epoch, configuration_storage_contract::kServiceConfigurationRecordType,
-        1U, 1U, record, 45U);
+        1U, record, 45U);
     if (serviceSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {serviceSlot.status, std::nullopt};
     }
@@ -1712,8 +1754,8 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     }
     const auto catalogSlot = selectInitialSlot(
         store_, configuration_storage_contract::kProgramCatalogSlotKeys, epoch,
-        configuration_storage_contract::kProgramCatalogRecordType, 1U, 1U,
-        record, configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U);
+        configuration_storage_contract::kProgramCatalogRecordType, 1U, record,
+        configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U);
     if (catalogSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {catalogSlot.status, std::nullopt};
     }
@@ -1754,7 +1796,7 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     const auto manifestSlot = selectInitialSlot(
         store_, configuration_storage_contract::kConfigurationManifestSlotKeys,
         epoch, configuration_storage_contract::kConfigurationManifestRecordType,
-        kConfigurationManifestSchemaVersion1, 1U, manifestRecord,
+        kConfigurationManifestSchemaVersion1, manifestRecord,
         configuration_limits::kMaximumConfigurationManifestEnvelopeBytes);
     if (manifestSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {manifestSlot.status, std::nullopt};
@@ -1772,7 +1814,7 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     const auto rootSlot = selectInitialSlot(
         store_, configuration_storage_contract::kConfigurationRootSlotKeys,
         epoch, configuration_storage_contract::kConfigurationRootRecordType,
-        kConfigurationRootSchemaVersion1, 1U, rootRecord,
+        kConfigurationRootSchemaVersion1, rootRecord,
         configuration_limits::kMaximumConfigurationRootEnvelopeBytes);
     if (rootSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {rootSlot.status, std::nullopt};
@@ -1802,6 +1844,8 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
             PreparedInitialConfigurationGraph{
                 std::move(graph), plan, std::move(manifestRecord),
                 std::move(rootRecord), rootSlot.previousBytes,
+                userSlot.previousBytes, serviceSlot.previousBytes,
+                catalogSlot.previousBytes, manifestSlot.previousBytes,
                 userSlot.writeRequired, serviceSlot.writeRequired,
                 catalogSlot.writeRequired, manifestSlot.writeRequired,
                 rootSlot.writeRequired, planIdentity}};
@@ -1814,6 +1858,7 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
         capability.epoch_ !=
             prepared.graph.active.manifestReference.storageEpoch ||
         capability.planIdentity_ != prepared.planIdentity ||
+        capability.prepared_ != &prepared ||
         capability.mutationLease_ == nullptr ||
         !capability.mutationLease_->valid() ||
         (capability.bootstrapState_ !=
@@ -1828,17 +1873,30 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
     std::string payload;
     std::string record;
     const auto epoch = capability.epoch_;
-    const auto writeDocument = [this, &record](
-                                   const char* keyValue, std::size_t maxBytes,
-                                   ConfigurationCommitFailurePhase phase) {
-        const auto status =
-            writeAndReadBack(store_, keyValue, record, maxBytes);
-        std::string{}.swap(record);
-        return status == WriteReadbackStatus::NewValue
-                   ? std::optional<ConfigurationCommitExecutionResult>{}
-                   : std::optional<ConfigurationCommitExecutionResult>{
-                         mapPreRootWrite(status, phase)};
-    };
+    const auto writeDocument =
+        [this, &record](
+            const char* keyValue, const std::optional<std::string>& previous,
+            std::size_t maxBytes, ConfigurationCommitFailurePhase phase) {
+            const auto status = writeInitialAndReadBack(
+                store_, keyValue, record, previous, maxBytes);
+            std::string{}.swap(record);
+            if (status == InitialWriteReadbackStatus::NewValue) {
+                return std::optional<ConfigurationCommitExecutionResult>{};
+            }
+            if (status == InitialWriteReadbackStatus::CapacityFailure) {
+                return std::optional<ConfigurationCommitExecutionResult>{
+                    ConfigurationCommitExecutionResult{
+                        ConfigurationCommitExecutionStatus::CapacityFailure,
+                        phase}};
+            }
+            return std::optional<ConfigurationCommitExecutionResult>{
+                ConfigurationCommitExecutionResult{
+                    status == InitialWriteReadbackStatus::Indeterminate
+                        ? ConfigurationCommitExecutionStatus::
+                              RecordOutcomeIndeterminate
+                        : ConfigurationCommitExecutionStatus::WriteFailure,
+                    phase}};
+        };
     if (prepared.userWriteRequired &&
         (encodeUserConfigurationPayload(
              *prepared.graph.active.userConfiguration, timeZoneResolver_,
@@ -1856,6 +1914,7 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
         if (auto failure = writeDocument(
                 configuration_storage_contract::kUserConfigurationSlotKeys
                     [prepared.slotPlan.userConfigurationSlot->value()],
+                prepared.previousTargetUserRecordBytes,
                 configuration_limits::kMaximumUserConfigurationPayloadBytes +
                     45U,
                 ConfigurationCommitFailurePhase::UserDocument)) {
@@ -1877,7 +1936,8 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
         if (auto failure = writeDocument(
                 configuration_storage_contract::kServiceConfigurationSlotKeys
                     [prepared.slotPlan.serviceConfigurationSlot->value()],
-                45U, ConfigurationCommitFailurePhase::ServiceDocument)) {
+                prepared.previousTargetServiceRecordBytes, 45U,
+                ConfigurationCommitFailurePhase::ServiceDocument)) {
             return *failure;
         }
     }
@@ -1898,21 +1958,29 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
         if (auto failure = writeDocument(
                 configuration_storage_contract::kProgramCatalogSlotKeys
                     [prepared.slotPlan.programCatalogSlot->value()],
+                prepared.previousTargetProgramRecordBytes,
                 configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
                 ConfigurationCommitFailurePhase::ProgramDocument)) {
             return *failure;
         }
     }
     if (prepared.manifestWriteRequired) {
-        const auto manifest = writeAndReadBack(
+        const auto manifest = writeInitialAndReadBack(
             store_,
             configuration_storage_contract::kConfigurationManifestSlotKeys
                 [prepared.slotPlan.manifestSlot.value()],
             prepared.manifestRecordBytes,
+            prepared.previousTargetManifestRecordBytes,
             configuration_limits::kMaximumConfigurationManifestEnvelopeBytes);
-        if (manifest != WriteReadbackStatus::NewValue) {
-            return mapPreRootWrite(manifest,
-                                   ConfigurationCommitFailurePhase::Manifest);
+        if (manifest != InitialWriteReadbackStatus::NewValue) {
+            return {
+                manifest == InitialWriteReadbackStatus::CapacityFailure
+                    ? ConfigurationCommitExecutionStatus::CapacityFailure
+                    : (manifest == InitialWriteReadbackStatus::Indeterminate
+                           ? ConfigurationCommitExecutionStatus::
+                                 RecordOutcomeIndeterminate
+                           : ConfigurationCommitExecutionStatus::WriteFailure),
+                ConfigurationCommitFailurePhase::Manifest};
         }
     }
     const auto target = validateBranchSemantically(store_, timeZoneResolver_,

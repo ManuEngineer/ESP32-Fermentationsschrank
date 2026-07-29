@@ -344,7 +344,8 @@ ConfigurationService::ConfigurationService(
 
 ConfigurationService::~ConfigurationService() = default;
 
-bool ConfigurationService::initialize(const LoadedConfigurationGraph& graph) {
+bool ConfigurationService::initializeForTest(
+    const LoadedConfigurationGraph& graph) {
     auto prepared = prepareSnapshot(graph, 1U);
     auto preparedGraph = std::make_unique<LoadedConfigurationGraph>(graph);
     const std::lock_guard<std::mutex> lock(stateMutex_);
@@ -360,6 +361,166 @@ bool ConfigurationService::initialize(const LoadedConfigurationGraph& graph) {
     mode_ = ConfigurationServiceMode::Operational;
     runtimeFailureCause_.reset();
     return true;
+}
+
+bool ConfigurationService::beginRecovery(ConfigurationServiceMode targetMode,
+                                         std::uint64_t requiredHeadroom) {
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    if ((mode_ != ConfigurationServiceMode::NoRuntime &&
+         mode_ != ConfigurationServiceMode::Operational &&
+         mode_ != ConfigurationServiceMode::RuntimeFailure &&
+         mode_ != targetMode) ||
+        !stateRevisionHasHeadroomLocked(requiredHeadroom) || capturedPreview_ ||
+        previewBuildReservation_.has_value() ||
+        retiredGenerationId_.has_value() || retirementOwnerPending_) {
+        return false;
+    }
+    clearPreviewLocked();
+    mode_ = targetMode;
+    return incrementStateRevisionLocked();
+}
+
+bool ConfigurationService::prepareRecoveredGraph(
+    const LoadedConfigurationGraph& graph) {
+    auto prepared = prepareSnapshot(graph, nextRuntimeGeneration_);
+    auto preparedGraph = std::make_unique<LoadedConfigurationGraph>(graph);
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    if (!prepared ||
+        (mode_ != ConfigurationServiceMode::RecoveryPreparing &&
+         mode_ != ConfigurationServiceMode::ResetPreparing &&
+         mode_ != ConfigurationServiceMode::EpochResetting) ||
+        recoveryPreparedRuntime_ || recoveryPreparedGraph_) {
+        enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                              ConfigurationRuntimeFailureCause::
+                                  RuntimePreparationAfterResolutionFailure);
+        return false;
+    }
+    recoveryPreparedRuntime_ = std::move(prepared);
+    recoveryPreparedGraph_ = std::move(preparedGraph);
+    previewModelReserved_ = activeRuntime_ != nullptr;
+    return true;
+}
+
+bool ConfigurationService::publishRecoveredGraph() {
+    std::shared_ptr<const RuntimeConfigurationSnapshot> retiredRuntime;
+    std::unique_ptr<LoadedConfigurationGraph> retiredGraph;
+    std::uint64_t retiredGeneration = 0U;
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        if ((mode_ != ConfigurationServiceMode::RecoveryPreparing &&
+             mode_ != ConfigurationServiceMode::EpochResetting) ||
+            !recoveryPreparedRuntime_ || !recoveryPreparedGraph_) {
+            enterFailClosedLocked(
+                ConfigurationServiceMode::RuntimeFailure,
+                ConfigurationRuntimeFailureCause::PublishContractViolation);
+            return false;
+        }
+        retiredRuntime = std::move(activeRuntime_);
+        retiredGraph = std::move(currentGraph_);
+        activeRuntime_ = std::move(recoveryPreparedRuntime_);
+        currentGraph_ = std::move(recoveryPreparedGraph_);
+        if (retiredRuntime) {
+            retiredGeneration = retiredRuntime->volatileGenerationId();
+            retiredGenerationId_ = retiredGeneration;
+            retiredGenerationReadLeases_ = activeGenerationReadLeases_;
+            activeGenerationReadLeases_ = 0U;
+            retirementOwnerPending_ = true;
+        }
+        ++nextRuntimeGeneration_;
+        mode_ = ConfigurationServiceMode::BootstrapFinalizationPending;
+        if (!incrementStateRevisionLocked()) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            return false;
+        }
+    }
+    retiredGraph.reset();
+    retiredRuntime.reset();
+    if (retiredGeneration != 0U) {
+        if (!completeRuntimeRetirement(retiredGeneration)) {
+            return false;
+        }
+    } else {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        previewModelReserved_ = false;
+    }
+    return true;
+}
+
+bool ConfigurationService::transitionRecovery(
+    ConfigurationServiceMode targetMode) {
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    if (mode_ != ConfigurationServiceMode::RecoveryPreparing &&
+        mode_ != ConfigurationServiceMode::ResetPreparing &&
+        mode_ != ConfigurationServiceMode::EpochResetting &&
+        mode_ != ConfigurationServiceMode::CommitIndeterminate) {
+        return false;
+    }
+    mode_ = targetMode;
+    return incrementStateRevisionLocked();
+}
+
+bool ConfigurationService::discardPreparedRecovery(
+    ConfigurationServiceMode targetMode) {
+    std::shared_ptr<const RuntimeConfigurationSnapshot> discardedRuntime;
+    std::unique_ptr<LoadedConfigurationGraph> discardedGraph;
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        discardedRuntime = std::move(recoveryPreparedRuntime_);
+        discardedGraph = std::move(recoveryPreparedGraph_);
+        if (!retiredGenerationId_.has_value() && !retirementOwnerPending_) {
+            previewModelReserved_ = false;
+        }
+        mode_ = targetMode;
+        if (!incrementStateRevisionLocked()) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ConfigurationService::cancelRecovery() {
+    std::shared_ptr<const RuntimeConfigurationSnapshot> discardedRuntime;
+    std::unique_ptr<LoadedConfigurationGraph> discardedGraph;
+    {
+        const std::lock_guard<std::mutex> lock(stateMutex_);
+        discardedRuntime = std::move(recoveryPreparedRuntime_);
+        discardedGraph = std::move(recoveryPreparedGraph_);
+        if (!retiredGenerationId_.has_value() && !retirementOwnerPending_) {
+            previewModelReserved_ = false;
+        }
+        mode_ = activeRuntime_ && currentGraph_
+                    ? ConfigurationServiceMode::Operational
+                    : ConfigurationServiceMode::NoRuntime;
+        if (!incrementStateRevisionLocked()) {
+            enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure,
+                                  ConfigurationRuntimeFailureCause::
+                                      ServiceStateInvariantViolation);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ConfigurationService::finalizeRecoveredGraph() {
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    if (mode_ != ConfigurationServiceMode::BootstrapFinalizationPending ||
+        !activeRuntime_ || !currentGraph_) {
+        return false;
+    }
+    mode_ = ConfigurationServiceMode::Operational;
+    runtimeFailureCause_.reset();
+    return incrementStateRevisionLocked();
+}
+
+void ConfigurationService::failRecovery(
+    ConfigurationRuntimeFailureCause cause) {
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    enterFailClosedLocked(ConfigurationServiceMode::RuntimeFailure, cause);
 }
 
 ConfigurationServiceMode ConfigurationService::mode() const {
