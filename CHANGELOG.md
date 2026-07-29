@@ -51,6 +51,20 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Added
 
+- Bootstrap-, `StorageEpoch`- und Recoverykern fuer Issue #57: redundanter
+  Schema-1-Bootstrap mit geschlossener Historienrelation, exakt gebundenes
+  Factory-Neuheitsorakel, wiederaufnehmbare Initialisierung und autorisierter
+  Werksreset mit erhaltener Touchkalibrierung. Epocheninitiale Graphwrites
+  verwenden den bestehenden #56-Graphstore und dieselbe Mutationslease;
+  Dokument-/Manifest-, Root- und Bootstrap-Unknowns bleiben getrennt. Runtime
+  wird erst nach vollstaendig validiertem Root intern publiziert und erst nach
+  bestaetigtem `Initialized` normal freigegeben. No-Runtime-Reset,
+  Active-/Fallback-Boot, Cut-Points, Konkurrenz, unbekannte Schemas, additive
+  Erweiterbarkeit und Zwei-Modell-Grenze sind nativ abgedeckt. Keine
+  Connectivity-, Authentication-, Secret-, Lauf- oder Safetyimplementierung
+  wurde vorgezogen; reale NVS-/Heap-/Jitter-/Watchdog-/Flashmessungen und das
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE` aus #24 bleiben offen.
+
 - Active-/Fallback-Konfigurationskern fuer Issue #56: kanonische Manifest- und
   Rootcodecs, vollstaendige Graph- und Identitaetsvalidierung, High-Water-
   basierte sichere Slotrotation ohne separate `MutationSequence`, gemeinsame

@@ -71,19 +71,19 @@ Die Kennzeichnungen stehen im Issue-Text. GitHub-Labels sind optional.
 
 ```text
 #12 -> #16 TRACKING
-#54 COMPLETED -> #55 COMPLETED -> #56 READY -> #57 BLOCKED_DEPENDENCY
+#54 COMPLETED -> #55 COMPLETED -> #56 COMPLETED -> #57 IN_IMPLEMENTATION (PR #68, Draft)
 #13/#14/#15/#54 -> #17
 #10/#14/#17/#20 -> #18
 #16/#17 -> #19
 ```
 
-#16 wird nicht als einzelner Implementierungs-PR umgesetzt. #54 und #55 sind
-abgeschlossen. #56 implementiert den Variante-B-Active-/Fallback-Kern;
-#57 folgt nach dessen Merge mit Bootstrap, `StorageEpoch`, Korruptionssperre und
-wiederaufnehmbarem Werksreset. Persistentes Pending, Aktivierungsintent und
-leere Connectivity-/Authentication-Domaenen sind kein Release-1-Scope.
+#16 wird nicht als einzelner Implementierungs-PR umgesetzt. #54, #55 und #56
+sind abgeschlossen. Draft-PR #68 implementiert fuer #57 Bootstrap,
+`StorageEpoch`, Korruptionssperre und den wiederaufnehmbaren Werksreset.
+Persistentes Pending, Aktivierungsintent und leere
+Connectivity-/Authentication-Domaenen sind kein Release-1-Scope.
 
-Der Draft-PR zu #56 liefert die typisierten Producer
+Der gemergte PR #65 zu #56 liefert die typisierten Producer
 `ConfigurationCommitIndeterminate` und `ConfigurationRuntimeFailure`, die
 gemeinsame `ConfigurationMutationLease`, High-Water-basierte Identitaeten ohne
 separate persistente `MutationSequence`, den begrenzten Preview-/Readervertrag
@@ -93,9 +93,11 @@ erneut, verifiziert vor dem Rootwrite den vollstaendigen Zielgraphen und leitet
 die Aenderungsmaske selbst aus kanonischen Inhalten ab. Nicht aufloesbare
 Rootausgaenge bleiben mit getrennten Root-, Graph-, Integritaets- und
 Schemandiagnosen fail closed; Modellreservierungen erzwingen die Zwei-Modell-
-und Acht-Reader-Grenzen auch unter Konkurrenz und Recovery. Bis zum Merge und
-unabhaengigen Abschlussreview bleibt der Live-Status von #56 `READY`; #57
-bleibt `BLOCKED_DEPENDENCY` und wird nicht vorweggenommen.
+und Acht-Reader-Grenzen auch unter Konkurrenz und Recovery. Draft-PR #68 baut
+darauf additiv auf: Er verwendet dieselbe Mutationskoordination und denselben
+Graphstore, gibt Runtime erst nach bestaetigtem `Initialized` frei und fuehrt
+keine Connectivity-, Authentication- oder Secretrecords ein. #57 bleibt bis
+zum Merge und unabhaengigen Abschlussreview offen.
 
 #17 haengt nicht pauschal von #16, #56 oder #57 ab. Seine harten Grundlagen
 #13, #14, #15 und #54 sind abgeschlossen; der eigene Plan-first-Schritt bleibt
