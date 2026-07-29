@@ -11,6 +11,7 @@
   - `48f342857a17e6ada2f0b4a7d147fd86b5489b83`
   - `e9d3fdc1b93f2feb8bf5a0c1cdaf3908d635b8b3`
   - `18bf1c0fa68c7606ba669496445b128c13458f13`
+  - `1693fd3fb3bf8780a1b9319ab4ff69c1b54c1ab2`
 - Live-Issue-Status bei Planerstellung: `READY`
 - Harte Abhaengigkeiten: #54 und #55, beide `COMPLETED`
 
@@ -26,6 +27,14 @@ diese Planversion enthaelt:
 PLAN APPROVED
 Approved plan commit: <commit-sha>
 ```
+
+Die fruehere Freigabe fuer
+`1693fd3fb3bf8780a1b9319ab4ff69c1b54c1ab2` deckte die spaeter tatsaechlich
+geaenderten `configuration_document_codec.*`-Dateien nicht ab und gilt fuer
+den erweiterten Dateischnitt als ueberholt. Diese Planrevision dokumentiert
+die Abweichung und die letzten Reviewpraezisierungen vor jeder weiteren
+Produktions- oder Testaenderung. Eine Fortsetzung verlangt eine neue
+commitgebundene Ownerfreigabe.
 
 ## Ziel
 
@@ -199,6 +208,21 @@ Voraussichtlich geaenderte bestehende Dateien:
     wertsemantische Hilfen benoetigt werden; keine neue Dokumentsemantik;
 - `lib/fermentation_app/src/configuration_documents.cpp`
   - nur die zugehoerigen exakten Inhaltsvergleiche.
+- `lib/fermentation_app/src/configuration_document_codec.hpp`
+  - schmale recordweise fachliche Validierung einer kanonischen
+    `ProgramCatalog`-Payload gegen einen optional gebundenen typisierten
+    Katalog;
+- `lib/fermentation_app/src/configuration_document_codec.cpp`
+  - zugehoerige begrenzte Schema-1-Dekodierung und Fachvalidierung eines
+    `ProgramDocument` nach dem anderen.
+
+Die beiden Codecdateien sind erforderlich, damit der `ValidationOnly`-Pfad
+einen gespeicherten `ProgramCatalog` vollstaendig fachlich validiert und exakt
+an den bereits gebundenen aktiven beziehungsweise vorbereiteten Katalog
+vergleicht, ohne ein zweites vollstaendiges Katalogmodell aufzubauen. Diese
+Erweiterung aendert weder Dokumentmodell, Schema-1-Wireformat noch
+Persistenzsemantik. Sie fuehrt keine neue Bibliothek, Plattformabhaengigkeit
+oder allgemeine Streaming-/Codecarchitektur ein.
 
 Neue Produktionsdateien:
 
@@ -229,6 +253,9 @@ Verantwortungen:
   Graphvalidierung, kanonische Auswahl, High-Water-Scans, Slotvorplanung,
   Identitaetskollisionspruefung, modellfreier `ValidationOnly`-Scan waehrend
   einer Mutation, Writes und Readbacks ueber `IStateStore`;
+- `configuration_document_codec.*`: ausschliesslich die recordweise fachliche
+  `ProgramCatalog`-Validierung fuer den modellbegrenzten `ValidationOnly`- und
+  Zielgraphpruefpfad; keine neue Wire- oder Dokumentsemantik;
 - `runtime_configuration_snapshot.*`: unveraenderlicher Runtime-Snapshot,
   vorab vorbereiteter Publish-Handle, begrenzte
   `RuntimeConfigurationReadLease` und schmaler Publisher ohne nach aussen frei
@@ -955,11 +982,18 @@ Ist der Kandidat exakt identisch, wird ein sichtbarer leichter `NoChange`-
 Preview-Handle installiert. Er referenziert den aktiven unveraenderlichen
 Snapshot statt ein zweites volles Konfigurationsmodell zu besitzen; die fuer
 den Vergleich voruebergehend erworbene Modellreservierung wird vor der
-Installation freigegeben. Bestaetigung erfasst diesen Handle, prueft Basis,
-Identitaet, Modus und Zustandsrevision und liefert `NoChange` ohne Revision,
-Manifestgeneration, `rootSequence` oder Storezugriff. Danach entfernt sie per
-Identitaetsvergleich nur diesen `NoChange`-Handle. Abbruch oder Ersetzung tun
-dasselbe; eine inzwischen neuere Vorschau bleibt stets unberuehrt.
+Installation freigegeben. Der Handle bindet unveraenderlich die
+`ConfigurationServiceStateRevision` seines Installationslinearisierungspunkts
+und die exakte Active-Manifestbasis. Bestaetigung erfasst diesen Handle und
+prueft vor jedem Storezugriff erneut Handle, Modus `Operational`, exakt diese
+Installations-Zustandsrevision und die Active-Referenz. Ist eine dieser
+Erwartungen veraltet, liefert sie einen typisierten Konflikt beziehungsweise
+`StateChanged`, schreibt nichts und verbraucht weder Dokumentrevision,
+Manifestgeneration noch `rootSequence`. Nur wenn alle Erwartungen exakt
+gelten, liefert sie `NoChange` ohne Storezugriff oder Zaehlerfortschritt.
+Danach entfernt sie per Identitaetsvergleich ausschliesslich diesen
+`NoChange`-Handle. Abbruch, Konflikt oder Ersetzung duerfen eine inzwischen
+neuere sichtbare Vorschau niemals entfernen.
 
 ### Bestaetigung unter exklusiver Mutation und parallele Ersetzung
 
@@ -1185,6 +1219,22 @@ Storeoperation, fachliche Entscheidung oder recoverbare Fehlerbehandlung.
 Die gemeinsame Mutationslease bleibt bis zum abgeschlossenen Austausch und der
 stabilen Uebernahme des alten Publisher-Handles gehalten.
 
+Erkennt `completeRuntimeRetirement(...)` nach Publish oder Recovery eine
+falsche Generation, ein inkonsistentes Modellbudget oder eine vergleichbare
+Retirement-Invariante, besitzt auch dieser Fehler einen eindeutigen
+fail-closed Zustandslinearisierungspunkt. Alle fuer diesen moeglichen
+Post-Root-Uebergang benoetigten Zustandsrevisionswerte beziehungsweise das
+entsprechende checked Headroom werden vor dem ersten Write reserviert. Unter
+dem Zustandsmutex werden die reservierte naechste Zustandsrevision, Modus
+`RuntimeFailure` und die Ursache
+`ConfigurationModelBudgetInvariantViolation` gemeinsam sichtbar. Ein
+unerwartet unbrauchbarer Revisionsschritt ist selbst
+`ServiceStateInvariantViolation`, kann wegen der Vorreservierung im normalen
+Produktionspfad nicht auftreten und liefert niemals normalen Erfolg. Kein
+Moduswechsel erfolgt ohne den vertraglichen Zustandsrevisionswechsel; der
+Aufrufer erhaelt bei dieser Invariante weder `Activated` noch
+`ResolutionRecoveredNew`.
+
 Die C++17-Toolchainunterstuetzung von internem `shared_ptr`-Besitz,
 nichtkopierbarer Read-Lease und vor Root erworbener Zustandslease wird in
 `native`, `esp32_bringup` und `esp32_release` gebaut und getestet. Eine andere
@@ -1372,7 +1422,7 @@ Daten.
 |---|---|---|
 | `PersistentGraphVerificationFailure` | expliziter vollstaendiger Verifikationsscan | Nur die weiterhin exakt erwartete Active-Root-/Graphidentitaet plus gueltige lokale Runtimebindung duerfen zu `Operational` fuehren; ein anderer Graph verlangt Neustart/#57. |
 | `PostCommitVerificationFailure` | expliziter vollstaendiger Verifikationsscan | Nur exakt erwarteter persistenter Graph plus erfolgreiche vollstaendige Runtimevorbereitung duerfen zu `Operational` fuehren. |
-| `RuntimePreparationAfterResolutionFailure` | expliziter erneuter Vollscan und genau ein neuer begrenzter Vorbereitungsversuch | Erfolg nur bei weiterhin exakt gebundenem neuen Graphen; sonst `RuntimeFailure`. |
+| `RuntimePreparationAfterResolutionFailure` | hoechstens ein expliziter erneuter Vollscan und genau ein neuer begrenzter Vorbereitungsversuch | Der Versuch wird vor jeder falliblen Vorbereitung atomar als verbraucht markiert. Erfolg ist nur beim weiterhin exakt gebundenen neuen Graphen erlaubt; ein weiterer Fehlschlag bleibt bis Neustart/#57 dauerhaft in-process fail closed. |
 | `PublishContractViolation` | nein | Neustart und #57-Rekonstruktion; kein in-process Wiederpublish. |
 | `ServiceStateInvariantViolation` oder `ConfigurationModelBudgetInvariantViolation` | nein | Neustart und #57-Rekonstruktion; interne Invariante wird nicht lokal zurueckgesetzt. |
 | `PersistentConfigurationIdentityCollision` | nein | #57-/Recoverypfad bleibt fail closed, bis die persistente Integritaet durch einen ausdruecklich freigegebenen Recoveryvertrag wiederhergestellt ist. |
@@ -1388,6 +1438,20 @@ leer. Jeder Fehlschlag bleibt `RuntimeFailure`. Bereits gehaltene Read-Leases
 bleiben speichersicher, sind aber keine normale Runtimefreigabe. Die spaetere
 #24-Verriegelung wird durch keinen dieser lokalen Erfolge automatisch
 geloescht; deren Reset bleibt ausschliesslich beim #24-Fehlerresetvertrag.
+
+Der `ConfigurationRuntimeFailureResolutionContext` besitzt fuer
+`RuntimePreparationAfterResolutionFailure` zusaetzlich einen rein fluechtigen,
+nicht ruecksetzbaren Versuchsstatus. Der erste fehlgeschlagene Neuaufbau nach
+einer ungueltigen `RuntimePreparationBinding` erzeugt diese Ursache und laesst
+hoechstens genau einen weiteren in-process Vorbereitungsversuch zu. Dieser
+Retry wird unter dem Zustandsmutex atomar als verbraucht markiert, bevor
+`prepareSnapshot()` oder eine andere fallible Vorbereitung beziehungsweise
+Allokation beginnt. Gelingt er, darf nur der weiterhin exakt gebundene neue
+Graph publiziert werden. Scheitert er erneut, bleibt der Dienst fuer den Rest
+dieser Prozessinstanz dauerhaft fail closed; weitere Aufrufe fuehren keinen
+Vollscan, keine Runtimevorbereitung und keine Allokation mehr aus. Danach sind
+nur Neustart und die spaetere #57-Rekonstruktion zulaessige Recoverywege. Der
+Versuchsstatus ist weder persistent noch ein allgemeiner Retryzaehler.
 
 ## Grenze zum `CONFIGURATION_SAFETY_INTEGRATION_GATE`
 
@@ -1544,6 +1608,9 @@ Keine Storeorchestrierung und keine Vorschau in diesem Commit.
 - Root-Gleichstand nur bei identischen kanonischen Bytes deterministisch
   aufloesen, unterschiedliche Bytes als Integritaetsfehler sperren;
 - exakte Referenzbindung und fachliche Dokumentvalidierung integrieren;
+- `configuration_document_codec.*` um die schmale recordweise
+  `ProgramCatalog`-Validierung fuer den modellbegrenzten `ValidationOnly`-Pfad
+  ergaenzen, ohne Wire- oder Dokumentsemantik zu aendern;
 - Schutzmenge und deterministische Slotvorplanung implementieren;
 - Graph-, Korruptions- und Rotationsmodelltests ergaenzen.
 
@@ -1752,6 +1819,11 @@ Plan-Commit mit erneuter Ownerfreigabe.
 - Bestaetigung eines `NoChange` prueft Handle, Basis, Modus und Zustandsrevision,
   liefert `NoChange` ohne Storezugriff oder Zaehlerfortschritt und entfernt nur
   genau diesen Handle;
+- nach der Installation geaenderte Zustandsrevision, geaenderte Active-Basis
+  oder inzwischen anderer sichtbarer Previewhandle machen das `NoChange`
+  jeweils typisiert stale; jeder Fall schreibt nichts, verbraucht keine
+  Dokumentrevision, Manifestgeneration oder Rootsequenz und entfernt keine
+  neuere Vorschau;
 - Abbruch oder Ersetzung eines `NoChange` entfernt keine inzwischen neuere
   Vorschau;
 - exakter Inhaltsvergleich erkennt unterschiedliche Inhalte auch bei
@@ -1882,7 +1954,15 @@ Fuer `ConfigurationRuntimeFailure` wird zusaetzlich bewiesen:
   Graphen und vollstaendiger neuer Runtimevorbereitung zu `Operational`
   zurueckkehren;
 - `RuntimePreparationAfterResolutionFailure` erlaubt hoechstens den
-  spezifizierten begrenzten erneuten Vorbereitungsversuch;
+  spezifizierten begrenzten erneuten Vorbereitungsversuch; der Kontext markiert
+  ihn vor `prepareSnapshot()` atomar als verbraucht, ein zweiter Fehlschlag
+  bleibt bis Neustart/#57 in-process gesperrt und weitere Aufrufe erhoehen
+  keinen Vorbereitungszaehler und allokieren nichts;
+- ein einmaliger erlaubter Retry kann bei weiterhin exakt gebundenem Graphen
+  erfolgreich vorbereiten und publizieren;
+- scheitert dieser Retry, bleiben Vorbereitungszaehler und Allokationszaehler
+  bei allen weiteren in-process Aufrufen unveraendert und nur Neustart/#57
+  bleibt als Recoveryweg;
 - `PublishContractViolation`, `ServiceStateInvariantViolation` und
   `ConfigurationModelBudgetInvariantViolation` lassen sich in-process nicht
   zuruecksetzen und verlangen Neustart/#57-Rekonstruktion;
@@ -1934,6 +2014,14 @@ Fuer `ConfigurationRuntimeFailure` wird zusaetzlich bewiesen:
   Deadlock noch eine dritte Modellgeneration;
 - simulierte Publish-Vertragsverletzung erzeugt
   `ConfigurationRuntimeFailure`;
+- eine absichtlich falsche Retirement-Generation erzeugt am checked
+  Zustandslinearisierungspunkt `RuntimeFailure` mit
+  `ConfigurationModelBudgetInvariantViolation`, schreibt die
+  Zustandsrevision fort und erlaubt weder normalen Erfolg noch neue Runtime-,
+  Preview- oder Mutationsfreigabe;
+- derselbe Test erzwingt den nur theoretischen Revisionsinvariantenpfad und
+  weist nach, dass er als `ServiceStateInvariantViolation` statt als Erfolg
+  behandelt wird;
 - nach Runtimefehler kein normaler Snapshot und keine weitere Mutation;
 - ein aktiver `ProcessRunSnapshot` wird weder referenziert noch umgeschrieben;
 - Safety- und Aktorports werden nicht aufgerufen.
@@ -2054,7 +2142,7 @@ Messgates.
 | Modell- und Readerobergrenzen | entschieden: hoechstens zwei unterschiedliche Vollmodellgenerationen, acht nicht kopierbare Read-Leases und eine volle Previewerstellung | typisierte Ablehnung vor tiefer Kopie beziehungsweise jedem Write sowie Base-/Head- und Peak-Nachweis; absolute Hardwarebudgets bleiben messpflichtig |
 | finaler unbestimmter Typname | entschieden: `ConfigurationCommitIndeterminate` | eigener stabiler Zustand und Safety-Producer |
 | atomarer Snapshot-Publish | entschieden: vorbereiteter interner C++17-Besitzhandle, vor Root gehaltene Zustandslease und begrenzte `RuntimeConfigurationReadLease`; kein frei kopierbarer Leserhandle | Build-, Allokations-, Lebensdauer- und Interleavingnachweis in allen Profilen; Vertragsaenderung erfordert neuen Plan |
-| In-process Aufloesung nach fail closed | ursachenspezifisch entschieden | `CommitIndeterminate` nur ueber gebundenen Vollscan alt/neu; `RuntimeFailure` nur fuer explizit erlaubte Ursachen, sonst Neustart/#57; kein automatisches Loeschen der #24-Verriegelung |
+| In-process Aufloesung nach fail closed | ursachenspezifisch entschieden | `CommitIndeterminate` nur ueber gebundenen Vollscan alt/neu; `RuntimeFailure` nur fuer explizit erlaubte Ursachen, bei `RuntimePreparationAfterResolutionFailure` genau ein vor Ausfuehrung atomar verbrauchter Retry, danach sonst Neustart/#57; kein automatisches Loeschen der #24-Verriegelung |
 | gemeinsame Mutationskoordination | konkreter `ConfigurationMutationCoordinator` in `fermentation_app` | #56 nutzt eine injizierte Referenz; #57 muss spaeter dieselbe Instanz nutzen; keine zweite Sperre oder Transaktionsplattform |
 | reale NVS-Kapazitaet und Replace-Eigenschaften | `MEASUREMENT_REQUIRED` | spaeterer Adapter-/Hardwaretest, keine Hostgarantie |
 | absolute Heap-/Flashreserve | `TBD_IMPLEMENTATION_BUDGET`, `MEASUREMENT_REQUIRED` | Base-/Head-Bericht plus spaetere reale Messung |
@@ -2160,6 +2248,9 @@ Der Planungsauftrag ist abgeschlossen, wenn:
   referenzierten Spezifikationen geprueft sind;
 - in dieser Planpraezisierung ausschliesslich diese Plan-Datei geaendert ist;
 - konkrete Module, Dateien und der kleine Commit-Schnitt festgelegt sind;
+- `configuration_document_codec.*` ausschliesslich fuer recordweise fachliche
+  `ProgramCatalog`-Validierung ohne zweites Vollmodell, neue Wiresemantik oder
+  neue Abhaengigkeit im Dateischnitt autorisiert ist;
 - die gemeinsame Mutationskoordination fuer #56 und die spaetere #57-Nutzung
   mit genau einer konkreten Koordinatorinstanz festgelegt und testbar ist;
 - Manifest-, Root-, Active-/Fallback- und Slotrotationsvertrag vollstaendig
@@ -2177,6 +2268,9 @@ Der Planungsauftrag ist abgeschlossen, wenn:
 - fluechtige Vorschau, `NoChange`-Lebenszyklus, Konfliktschutz und die
   erzwingbaren Obergrenzen von zwei Vollmodellgenerationen, acht Read-Leases
   und einer vollen Previewerstellung festgelegt sind;
+- ein `NoChange` seine Installations-Zustandsrevision und Active-Basis bindet,
+  veraltete Bestaetigungen ohne Storezugriff oder Zaehlerverbrauch ablehnt und
+  nur den exakt erfassten Handle entfernen kann;
 - Preview-Ersetzung, Commit-Erfassung und Bereinigung mit unveraenderlichen
   fluechtigen Handles servicezustandslinearisiert und identitaetsgebunden sind,
   sodass parallele Anfragen oder ein laufender Commit weder Kandidaten
@@ -2194,6 +2288,12 @@ Der Planungsauftrag ist abgeschlossen, wenn:
   Alt-/Neu-/Unklar-Uebergaengen festgelegt ist;
 - `ConfigurationRuntimeFailure` ursachenspezifisch nur ueber die festgelegten
   in-process Verifikationswege beziehungsweise Neustart/#57 aufloesbar ist;
+- `RuntimePreparationAfterResolutionFailure` hoechstens einen vor der
+  Vorbereitung atomar verbrauchten in-process Retry erlaubt und nach dessen
+  Fehlschlag ohne weitere Allokation bis Neustart/#57 fail closed bleibt;
+- ein Retirement-Invariantenfehler Modus, typisierte Ursache und reservierte
+  Zustandsrevision gemeinsam linearisiert und nie `Activated` oder
+  `ResolutionRecoveredNew` liefert;
 - Servicezustand, Previewslot, Runtimepublisher und Budgetzaehler am
   fail-closed Linearisierungspunkt atomar gekoppelt sind und danach keine neue
   normale Preview- oder Runtimefreigabe erfolgt;
