@@ -10,6 +10,9 @@
 - Live-Status #57: `READY` ausschliesslich fuer diesen Plan-first-Schritt.
 - Planstatus: `IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL`
 - Implementierung: nicht begonnen
+- Ueberholter Planstand:
+  `fb4e4f39e080cb472c85ed14c2e8e136d0f2083e`; diese Abschlusskorrektur
+  benoetigt einen neuen commitgebundenen Ownerkommentar.
 
 Dieser Plan ist die einzige Repositoryaenderung der Planungsphase. Er wird erst
 nach Commit und Push durch den folgenden exakten Ownerkommentar zur
@@ -457,6 +460,55 @@ Ein technisch gueltiges neueres Bootstrap- oder Speicherformat wird als
 `UnsupportedNewerConfigurationSchema` diagnostiziert und niemals
 ueberschrieben oder als leer behandelt.
 
+### Formale Schema-1-Historienrelation
+
+Schema 1 besitzt absichtlich eine geschlossene mathematische Zuordnung, damit
+auch ein einzelner nach Stromausfall verbliebener gueltiger Bootstraprecord
+ohne fluechtige Historie als moeglicher oder unmoeglicher Zustand bewertet
+werden kann. Fuer `StorageEpoch E` und `BootstrapSequence S` gilt exakt:
+
+```text
+Initializing: E = 1 und S = 1
+Resetting:    E >= 2 und S = 2 * E - 1
+Initialized:  E >= 1 und S = 2 * E
+```
+
+Multiplikation, Addition und Subtraktion erfolgen checked. Daraus folgt eine
+Schema-1-Obergrenze fuer die Epoche; ein Wert, fuer den `2 * E` nicht mehr als
+`uint64_t` darstellbar ist, kann nicht `Initialized` werden und blockiert den
+vorhergehenden Reset vor seinem ersten Write mit `CounterOverflow`.
+
+Die einzig erlaubten persistenten Fortschreibungen sind:
+
+| Ausgang | Ziel | Epochenrelation | Sequenzrelation |
+|---|---|---|---|
+| kein Bootstrap und nachweislich fabrikneu | `Initializing` | `1` | `1` |
+| `Initializing(E=1,S=1)` | `Initialized(E=1,S=2)` | gleich | exakt `S + 1` |
+| `Initialized(E,S=2*E)` | `Resetting(E+1,S+1)` | checked naechste Epoche | exakt `2*(E+1)-1` |
+| `Resetting(E,S=2*E-1)` | `Initialized(E,S+1)` | gleich | exakt `2*E` |
+
+`Initializing` ist ausserhalb von Epoche 1/Sequence 1 unzulaessig. Es gibt
+keine direkte Fortschreibung `Initializing -> Resetting`,
+`Resetting -> Resetting`, `Initialized -> Initialized` oder einen Sprung ueber
+einen Zustand. Idempotente Wiederaufnahme schreibt keinen neuen Zustand,
+sondern verwendet nur exakt dieselben kanonischen Bytes derselben Identitaet.
+
+Sind beide Slots vorhanden und nicht byteidentische Duplikate, muessen der
+niedrigere und der hoehere Kandidat in der Tabelle eine unmittelbar erlaubte
+Fortschreibung bilden: Sequenzdifferenz exakt 1, keine Epochenregression und
+die dort definierte Zustandsfolge. Eine Luecke, Regression, hoehere Sequence
+mit kleinerer Epoche, kleinere Sequence mit scheinbar neuerer Epoche oder eine
+sonst widerspruechliche Kombination ist
+`ConfigurationIntegrityFailure`, selbst wenn jeder Einzelrecord Envelope und
+CRC technisch besteht. Ein einzelner Kandidat muss mindestens die
+mathematische Zuordnung erfuellen.
+
+Ein byteidentisches Duplikat derselben Epoche, Sequence und kanonischen Bytes
+darf deterministisch mit Duplikatdiagnose gewaehlt werden. Gleiche Identitaet
+mit abweichenden Bytes bleibt Integritaetsfehler. Ein unbekanntes neueres
+Schema wird vor dieser Relation erkannt, bleibt fail closed und wird niemals
+mit Schema-1-Regeln interpretiert.
+
 ## Kanonische Bootstrapauswahl und High-Water
 
 ### Vollstaendiger Zwei-Slot-Scan
@@ -478,7 +530,10 @@ Prioritaet:
    scheinbar brauchbaren aelteren Bootstrap zu aktivieren.
 4. Ein unbekanntes neueres Schema oder Speicherformat blockiert mit eigener
    Diagnose.
-5. Unter vollstaendig gueltigen Kandidaten gewinnt die hoechste
+5. Jeder Schema-1-Kandidat muss die formale Einzelrecordrelation erfuellen.
+6. Zwei unterschiedliche Kandidaten muessen zusaetzlich eine unmittelbar
+   erlaubte Historienfortschreibung bilden.
+7. Erst unter danach vollstaendig gueltigen Kandidaten gewinnt die hoechste
    BootstrapSequence unabhaengig vom Slot.
 
 Gleichstand:
@@ -491,9 +546,12 @@ Gleichstand:
 
 ### High-Water und naechster Wert
 
-Alle vollstaendig technisch und fachlich gueltigen Bootstraprecords tragen zu
-einem globalen BootstrapSequence-High-Water bei, auch alte Epochen und
-verwaiste, aber valide Records. Der naechste Wert ist checked `max + 1`.
+Alle vollstaendig technisch, fachlich und historisch gueltigen
+Bootstraprecords tragen zu einem globalen BootstrapSequence-High-Water bei,
+auch der unmittelbar vorherige Record. Ein isolierter Record mit formal
+unmoeglicher Epochen-/Sequence-/Zustandskombination ist nicht verwaist
+brauchbar, sondern Integritaetsfehler. Der naechste Wert wird aus der einzig
+erlaubten Zielrelation abgeleitet und muss zugleich checked `max + 1` sein.
 
 - 0 ist reserviert.
 - `UINT64_MAX` blockiert vor jedem Write.
@@ -503,6 +561,8 @@ verwaiste, aber valide Records. Der naechste Wert ist checked `max + 1`.
   Recordbytes wiederverwendet werden, wenn ein unterbrochener Ablauf genau
   diesen Zustand idempotent fortsetzt.
 - Unterschiedliche Inhalte erhalten niemals dieselbe BootstrapSequence.
+- Ein Wert groesser als der kanonische Record darf nur dessen exakt erlaubter
+  direkter Nachfolger sein; Luecken oder fremde Historien blockieren.
 
 Der neue Bootstraprecord wird in den nicht kanonischen Slot geschrieben. Bei
 nur einem vorhandenen Kandidaten ist dies der andere Slot; bei identischem
@@ -592,6 +652,53 @@ Transaktionsbuilder noch zweiter Commitpfad: Er akzeptiert ausschliesslich die
 drei Factorydokumente, `FactoryInitialization` oder `FactoryReset`, eine
 explizite neue Epoche und den festen Identitaetsstart 1.
 
+### Besitzform von `PreparedInitialConfigurationGraph`
+
+`PreparedInitialConfigurationGraph` ist ein nicht kopierbarer,
+capability-gebundener Ausfuehrungsbesitz. Er haelt:
+
+- genau die zwischen Graphvorbereitung und Runtime-Snapshot geteilten
+  typisierten Factorymodelle `UserConfiguration`, `ServiceConfiguration` und
+  `ProgramCatalog`;
+- feste kleine Deskriptoren je Zielrecord mit Dokumentart, Slot,
+  `StorageEpoch`, Revision/Generation/Sequence, Schema, Payloadlaenge, CRC und
+  der spaeteren Manifest-/Rootreferenz;
+- die kanonische Manifest- und Rootidentitaet als begrenzte typisierte
+  Metadaten;
+- die eine `ConfigurationEpochBuildCapability` und den Status, ob sie bereits
+  ausgefuehrt oder verworfen wurde.
+
+Er haelt ausdruecklich nicht gleichzeitig die vollstaendigen kodierten Bytes
+aller Dokumente, des Manifests und des Roots. Kodierung, Write und exakter
+Readback verwenden genau einen wiederverwendeten Recordarbeitsbereich bis zur
+groessten erlaubten Recordlaenge. Derselbe Puffer wird nach abgeschlossener
+Pruefung eines Records fuer den naechsten Record wiederverwendet. Der maximale
+ProgramCatalog bleibt genau ein typisiertes Vollmodell; es entstehen nicht
+parallel mehrere vollstaendige ProgramCatalog-Payload- oder Envelopekopien.
+
+Die vollstaendige Vorplanung bedeutet deshalb: alle kleinen Identitaets-,
+Slot-, Laengen-, CRC- und Referenzdeskriptoren stehen fest und alle geteilten
+typisierten Modelle sind validiert. Sie bedeutet nicht, dass alle
+Recordstrings gleichzeitig materialisiert werden.
+
+### Wiederverwendung der #56-Graphbausteine
+
+Neue interne Hilfsfunktionen werden nur aus vorhandenen #56-Operationen
+extrahiert beziehungsweise von beiden Pfaden gemeinsam verwendet:
+
+| Interne Hilfsverantwortung | Bestehender Baustein | Konkreter #57-Wiederverwendungszweck |
+|---|---|---|
+| Identitaets-, Schema-, Read-/Capacity- und Kollisionsscan | #56 `validationScan()` und gebundene Recordscans | Zielepochen-Slots vor jedem Write pruefen, ohne normalen Active vorauszusetzen |
+| kanonische Dokumentkodierung und fachliche Validierung | #55-Dokumentcodecs sowie #56-Inhaltsvergleich | Factoryrecord nacheinander in den einen Arbeitsbereich kodieren und an den Deskriptor binden |
+| exakter Write-/Readbackvertrag | #56-Writehilfen auf `IStateStore` | `Success`, garantierte Fehler und `CommitOutcomeUnknown` fuer jeden Zielrecord unveraendert behandeln |
+| Manifest-/Referenzpruefung | #56-Manifestcodec und Zielgraphvalidierung | neue und wiederverwendete Referenzen der Zielepoche vollstaendig pruefen |
+| Rootwrite und Aufloesung | #56 Rootcodec und `resolveCommitDetailed()`-Semantik | exakte Zielrootbytes zuerst, danach gesamten Zielgraph alt/neu/unaufloesbar bestimmen |
+| vollstaendiger Graphload | #56 kanonischer Loader/`ValidationOnly`-Pfad | Boot und Vor-Root-Pruefung ohne zweite Graphinterpretation |
+
+Falls eine dieser Verantwortungen nicht ohne duplizierten allgemeinen
+Commitworkflow teilbar ist, ist dies eine materielle Planabweichung. Dann wird
+vor Codeaenderung angehalten und der Plan erneut ownerfreigegeben.
+
 ### Identitaeten innerhalb einer neuen Epoche
 
 Je neuer `StorageEpoch` beginnen folgende fachliche Identitaeten bei 1:
@@ -623,9 +730,20 @@ unveraendert fuer normale Mutationen; der neue Epochenstart ist durch die neue
 ### Deterministische Slotwahl und Idempotenz
 
 Vor dem ersten Graphwrite werden alle Dokument-, Manifest- und Rootslots
-gescannt und der vollstaendige Zielgraph geplant. Fuer jeden noch fehlenden
-Zielrecord wird deterministisch der kleinste Slot gewaehlt, der keinen bereits
-exakt passenden Zielrecord enthaelt. Alte Epochen sind nach bestaetigtem
+gescannt und der vollstaendige Zielgraph ueber begrenzte Deskriptoren geplant.
+Fuer jede Identitaet gilt:
+
+- existieren mehrere byteidentische, technisch und fachlich gueltige
+  Zielrecords, wird deterministisch der kleinste passende Slot gebunden und
+  kein weiteres Duplikat geschrieben;
+- existieren gleiche Identitaeten mit unterschiedlichen kanonischen Bytes,
+  blockiert `ConfigurationIntegrityFailure` jede Wiederverwendung und jeden
+  Write;
+- fehlt der Zielrecord, wird deterministisch der kleinste verfuegbare Slot
+  gebunden und in der festen Reihenfolge User, Service, ProgramCatalog,
+  Manifest, Root ergaenzt.
+
+Alte Epochen sind nach bestaetigtem
 `Initializing` beziehungsweise `Resetting` logisch nicht mehr aktiv und
 duerfen fuer den neuen Epochenaufbau ueberschrieben werden.
 
@@ -634,8 +752,11 @@ werden vorhandene exakte Zielrecords gefunden und wiederverwendet; fehlende
 Records werden mit identischen kanonischen Bytes vervollstaendigt. Der Ablauf
 erzeugt keine zweite Generation, keine gemischte Epoche und keinen Fallback.
 
-Die Graphstore-Erweiterung haelt hoechstens einen vollstaendigen Recordpuffer
-und teilt die typisierten Factorymodelle zwischen Prepared Graph und
+Ein unterbrochener Ablauf vergibt fuer denselben Zielinhalt keine neue
+Identitaet. Er scannt erneut, bindet den deterministisch kleinsten exakten
+Zielrecord und schreibt nur weiterhin fehlende Records. Die
+Graphstore-Erweiterung haelt hoechstens einen vollstaendigen Recordpuffer und
+teilt die typisierten Factorymodelle zwischen Prepared Graph und
 Runtime-Snapshot.
 
 ### Schreibreihenfolge
@@ -704,9 +825,11 @@ keinen zweiten Runtime-Snapshot-Typ und keinen zweiten Publisher.
 - Beim ersten Boot existiert hoechstens das neue Factorymodell.
 - Beim Werksreset existieren hoechstens die alte aktive und die vorbereitete
   neue Modellgeneration.
-- Ist die zweite Modellposition durch Preview, Commit, Retirement oder alte
-  Read-Leases belegt, wird der Reset vor `Resetting` und vor jedem Write mit
-  `ConfigurationModelBudgetBusy` abgelehnt.
+- Ist die zweite Modellposition durch Preview, Commit, eine bereits retired
+  Generation oder deren alte Read-Leases belegt, wird der Reset vor
+  `Resetting` und vor jedem Write mit `ConfigurationModelBudgetBusy`
+  abgelehnt. Ein bis acht Leases der aktuell aktiven Generation belegen keine
+  dritte Generation und duerfen in den gebundenen Retirementbesitz uebergehen.
 - Neue normale Preview-, Runtime- oder Mutationsfreigaben werden nach
   bestaetigtem `Resetting` gesperrt.
 - Bereits gehaltene unveraenderliche Read-Leases bleiben speichersicher, gelten
@@ -744,6 +867,157 @@ Der Zielgraph wird erneut vollstaendig geladen, der Snapshot neu fallibel
 vorbereitet und erst nach dem fuer den jeweiligen Zustand erlaubten
 persistentem Abschluss freigegeben.
 
+## Gemeinsame ConfigurationService-/Recovery-Zustandsmaschine
+
+### Geplante konkrete Dienstmodi
+
+Der bestehende `ConfigurationServiceMode` wird fuer #57 erweitert, ohne die
+#56-Modi `CommitInProgress` und `CommitIndeterminate` umzudeuten. Die
+Recoveryintegration besitzt genau folgende zusaetzliche Modi und
+Zugriffsgrenzen:
+
+| Dienstmodus | Persistente Bedeutung | Neue Runtimeakquisition | Preview | normale Mutation | Erlaubter naechster Modus |
+|---|---|---|---|---|---|
+| `NoRuntime` | noch kein bestaetigter Bootstrap/Graph gebunden | gesperrt | gesperrt | gesperrt | `RecoveryPreparing` oder `RuntimeFailure` |
+| `RecoveryPreparing` | Factory-Neuheit, `Initializing` oder Bootgraph wird fallibel geprueft; persistente Epochengrenze noch nicht zwingend bestaetigt | gesperrt | gesperrt | nur gebundene Recoveryfortsetzung | bleibt gleich, `BootstrapFinalizationPending`, `Operational` bei reinem bestaetigtem Boot oder `RuntimeFailure` |
+| `Operational` | Bootstrap `Initialized`, Runtime exakt an dessen Epoche und kanonischen Graph gebunden | erlaubt innerhalb Readerlimit | erlaubt | #56 normal erlaubt; Reset darf `ResetPreparing` beginnen | `CommitInProgress`, `ResetPreparing`, `RuntimeFailure` |
+| `CommitInProgress` | #56-Normalmutation exklusiv in Arbeit | gesperrt; alte Leases bleiben sicher | gesperrt | nur erfasster #56-Commit | `Operational`, `CommitIndeterminate` oder `RuntimeFailure` gemaess #56 |
+| `CommitIndeterminate` | #56-Rootausgang noch nicht eindeutig aufgeloest | gesperrt | gesperrt | nur gebundene #56-Aufloesung | bleibt gleich, `Operational` oder `RuntimeFailure` gemaess #56 |
+| `ResetPreparing` | alter Bootstrap/Graph weiterhin kanonisch; noch kein bestaetigtes `Resetting` | gesperrt, bereits gehaltene Leases bleiben speichersicher | Installation gesperrt und bestehende Previewbesitze werden kontrolliert geleert/widerrufen | nur Resetvorbereitung unter gemeinsamer Lease | bleibt gleich, `Operational`, `EpochResetting` oder `RuntimeFailure` |
+| `EpochResetting` | `Resetting` der checked naechsten Epoche ist bestaetigt; alte Epoche irreversibel verlassen | gesperrt | gesperrt | nur exakt gebundene Resetfortsetzung | bleibt gleich, `BootstrapFinalizationPending` oder `RuntimeFailure` |
+| `BootstrapFinalizationPending` | neuer Root und interner Snapshotpublish sind bestaetigt; passendes `Initialized` fehlt oder ist noch unbestimmt | gesperrt | gesperrt | nur exakt gebundener Bootstrapabschluss | bleibt gleich, `Operational` derselben neuen Epoche oder `RuntimeFailure` |
+| `RuntimeFailure` | stabil fail closed | gesperrt | gesperrt | gesperrt, ausser einem im #56-Vertrag ausdruecklich erlaubten gebundenen Recoveryversuch | nur vertraglich erlaubte Recovery oder Neustart/#57-Rekonstruktion |
+
+`Operational` nach erfolgreichem Reset ist derselbe Modus, aber eine neue,
+unverwechselbar an `StorageEpoch`, Root, Manifest und Runtimegeneration
+gebundene Dienstgeneration. Es gibt keinen Modus, in dem die alte und die neue
+Epoche zugleich normal freigegeben sind.
+
+Ein neu konstruierter `ConfigurationService` beginnt in `NoRuntime`, nicht in
+einem scheinbar bereits klassifizierten `RuntimeFailure`. Erst der gebundene
+Boot-/Recoverypfad entscheidet zwischen `Operational` und einer stabilen
+Fehlerursache. Bestehende #56-Tests, die bislang direkt `initialize(...)`
+aufrufen, werden auf einen testintern erzeugten gueltigen Bootbesitz
+umgestellt; der Produktions-Bypass bleibt dennoch unmoeglich.
+
+### Produktions-Bypass wird geschlossen
+
+Der heutige oeffentliche Pfad
+`ConfigurationService::initialize(const LoadedConfigurationGraph&)` wird im
+#57-Dateischnitt aus der frei aufrufbaren Produktionsschnittstelle entfernt.
+Die gemeinsame Snapshotvorbereitung bleibt als interne Implementierung
+erhalten. Ein normaler Runtimepublish ist danach nur noch moeglich durch:
+
+1. einen bereits `Initialized` bestaetigten Bootstrap-/Bootbesitz; oder
+2. einen nicht kopierbaren, genau einmal verwendbaren
+   `ConfigurationRecoveryActivation`-Handoff fuer den exakt gebundenen
+   Initialisierungs-/Resetabschluss.
+
+Der Handoff ist nur durch `ConfigurationRecoveryService` unter derselben
+`ConfigurationMutationLease` erhaeltlich und bindet mindestens
+Dienstzustandsrevision, `StorageEpoch`, Rootslot und kanonische Rootbytes,
+Manifestreferenz, Graphidentitaet, Runtimebindungsidentitaet sowie die
+vorbereitete Modellgeneration. Seine Konstruktoren bleiben intern/private;
+Tests erhalten nur den vorhandenen schmalen Friend-Testzugang. Stale, fremde,
+bereits verwendete oder doppelt publizierte Handoffs werden vor Publish ohne
+Zustands- oder Storewirkung abgelehnt.
+
+Auch `PreparedInitialConfigurationGraph` wird kein frei aufrufbarer zweiter
+Commitpfad. Seine Erzeugung und Ausfuehrung verlangt eine nicht kopierbare
+interne `ConfigurationEpochBuildCapability`, die nur der laufende
+Recoverybesitz nach bestaetigter Factory-Neuheit beziehungsweise kanonischem
+`Resetting` ausstellen kann. `ConfigurationGraphStore` kann weder selbst einen
+Bootstrapzustand erfinden noch eine beliebige Zielepoche initialisieren.
+
+### Zustandsrevision und Revisionsreserve
+
+Jeder Moduswechsel und jede Aenderung der gebundenen Recoverygeneration
+erhoeht `stateRevision` unter `stateMutex_` checked. Kein direkter Assignment-
+Bypass ist erlaubt. Bereits der Eintritt in `RecoveryPreparing` oder
+`ResetPreparing` muss die erste Erhoehung erfolgreich abschliessen.
+
+Unmittelbar vor dem ersten persistenten Bootstrapwrite wird ein Headroom von
+mindestens drei weiteren Zustandsrevisionen nachgewiesen. Dieser deckt fuer
+den laengsten Resetpfad exakt ab:
+
+1. `ResetPreparing -> EpochResetting`;
+2. `EpochResetting -> BootstrapFinalizationPending`;
+3. `BootstrapFinalizationPending -> Operational` oder alternativ den
+   fail-closed Wechsel zu `RuntimeFailure`.
+
+Initialisierung benoetigt nicht mehr Schritte, verwendet aber dieselbe feste
+Reserve. Jeder in-process Wiederaufnahmeversuch prueft vor seinem ersten
+falliblen Schritt den fuer seine verbleibenden Moduswechsel erforderlichen
+Headroom. Reicht die Reserve nicht, erfolgt vor jedem Write der typisierte
+`CounterOverflow`; ein unerwarteter Ueberlauf nach einer persistenten Grenze
+ist `ServiceStateInvariantViolation`, liefert niemals Erfolg und bleibt fail
+closed.
+
+### Resetvorbereitung, Preview- und Modellbesitz
+
+Der Eintritt `Operational -> ResetPreparing` ist der fluechtige
+Linearisierungspunkt, ab dem neue Preview-Builds, Previewinstallationen,
+Bestätigungen, normale Mutationen und neue Runtimeakquisitionen abgelehnt
+werden. Unter dem kurzen Zustandsmutex werden:
+
+- sichtbare `NoChange`- und Changed-Previews identitaetsgebunden entfernt;
+- laufende Preview-Build-Reservierungen widerrufen, aber ihr Modellbudget erst
+  nach tatsaechlichem Besitzende freigegeben;
+- erfasste Preview-/Commitbesitze, bestehendes Retirement und alte
+  Modellgenerationen bilanziert;
+- neue Installationen durch Zustandsrevision und Modus sicher stale gemacht.
+
+Teure Destruktion geschieht ausserhalb des Mutex. Erst nachdem kein
+Previewkandidat, erfasster Commit oder vorhandenes Retirement eine dritte
+Vollmodellgeneration erzeugen kann, darf die Factorygeneration vorbereitet
+werden. Ein bis acht Leases der aktuell aktiven Generation duerfen bestehen;
+sie werden nach Publish zu gebundenen alten Leserbesitzen und blockieren jede
+weitere Modellgeneration, bis der letzte Besitz real zerstoert ist. Existiert
+bereits eine andere retired Generation oder ist die zweite Modellposition
+sonst belegt, endet die Resetvorbereitung vor jedem Write typisiert busy.
+
+Scheitert die Vorbereitung vor bestaetigtem `Resetting`, werden alle
+#57-Reservierungen besitzsicher freigegeben. Ist der alte Bootstrap-/Graphstand
+vollstaendig und eindeutig unveraendert, wechselt der Dienst checked zurueck
+zu `Operational`; die alte Runtime bleibt dieselbe gueltige Generation. Kann
+dieser alte Stand nicht eindeutig bestaetigt werden, folgt stattdessen
+`RuntimeFailure` mit dem passenden Safety-Producer.
+
+### Verhalten nach der persistenten Epochengrenze
+
+Ein `CommitOutcomeUnknown` des `Resetting`-Writes wird noch in
+`ResetPreparing` durch exakten Bootstrap-Slotreadback aufgeloest:
+
+- exakt alte Bytes beziehungsweise nachweislich nicht wirksam: alte Epoche
+  bleibt kanonisch und `Operational` wird checked wiederhergestellt;
+- exakt neue `Resetting`-Bytes: checked Wechsel zu `EpochResetting`, niemals
+  alte Runtimefreigabe;
+- fremde Bytes, Read-/Capacityfehler oder unaufloesbares Ergebnis:
+  `RuntimeFailure` und `ConfigurationUnavailable`.
+
+Nach bestaetigtem `Resetting` bleibt jede normale Runtime-, Preview- und
+Mutationsfreigabe gesperrt. Nach neuem Root wird der bereits vollstaendig
+vorbereitete Snapshot intern genau einmal publiziert und der Dienst wechselt
+checked zu `BootstrapFinalizationPending`. Schlaegt `Initialized` fehl oder
+bleibt sein Write unbestimmt, bleiben neuer Publisherbesitz,
+Recoveryidentitaet, Zustandsrevision und Modellreservierungen an diesen
+exakten Zielgraphen gebunden; es gibt keine normale Runtimeakquisition und
+keinen Rueckfall zur alten Epoche.
+
+Im selben Prozess darf nur der identitaetsgebundene Recoverybesitz den
+fehlenden Abschluss erneut lesen beziehungsweise exakt fortsetzen. Nach
+Neustart existiert kein fluechtiger Handoff: Bootstrap- und Graphscan muessen
+den persistenten Zustand neu eindeutig bestimmen, Snapshot und Plattformwerte
+vollstaendig neu vorbereiten und einen neuen internen Einmal-Handoff binden.
+Kein lokaler Recoveryerfolg loescht eine bereits von #24 gefuehrte
+Verriegelung.
+
+Alte und vorbereitete Modellbesitzer werden ausserhalb kurzer kritischer
+Abschnitte zerstoert. Ihre Modellreservierung bleibt jedoch bis zum
+tatsaechlichen Besitzende belegt; `Operational` und freies Modellbudget werden
+nicht vorzeitig gekoppelt. Dadurch bleiben Zwei-Modell-Grenze, Readerlimit und
+Retirementvertrag aus #56 unveraendert.
+
 ## Initialisierung von StorageEpoch 1
 
 ### Voraussetzungen vor dem ersten Write
@@ -754,7 +1028,9 @@ Unter einer gemeinsamen Mutationslease werden vor dem ersten Write:
 2. Factory-UserConfiguration erzeugt und fachlich validiert;
 3. die leere Factory-ServiceConfiguration validiert;
 4. vier Factory-Arbeitskopien erzeugt und der Katalog vollvalidiert;
-5. Zielslots und alle Schema-1-Recordbytes begrenzt vorgeplant;
+5. Zielslots, Identitaets-/Laengen-/CRC-/Referenzdeskriptoren und die
+   kanonische Schema-1-Kodierreihenfolge vorgeplant; vollstaendige
+   Recordbytes werden dabei nur nacheinander im einen Arbeitsbereich erzeugt;
 6. Zeitzone und Runtime-Ressourcen soweit ohne persistente Referenzen moeglich
    vorbereitet;
 7. BootstrapSequence 1, `StorageEpoch 1` und alle Zielidentitaeten checked
@@ -908,7 +1184,9 @@ Vor `Resetting` werden unter gemeinsamer Mutationslease:
 
 - kanonischer `Initialized`-Bootstrap und aktuelle Epoche erneut gelesen;
 - BootstrapSequence-High-Water vollstaendig bestimmt;
-- naechste `StorageEpoch` und BootstrapSequence checked berechnet;
+- naechste `StorageEpoch = E + 1`, `Resetting`-Sequence
+  `2 * (E + 1) - 1 = currentSequence + 1` und abschliessende
+  `Initialized`-Sequence `2 * (E + 1)` checked berechnet;
 - Factorymodelle, Zielslots, Zielidentitaeten, Recordgroessen,
   Runtimevorbereitung und Modellbudget vollstaendig vorgeplant;
 - alle normalen neuen Preview- und Runtimeakquisitionen fuer den Uebergang
@@ -952,7 +1230,8 @@ Nach bestaetigtem `Resetting`:
 8. vorbereiteten Snapshot intern nicht fehlschlagend publizieren, normale
    Akquisition weiterhin sperren;
 9. naechste BootstrapSequence als `Initialized` derselben neuen Epoche
-   schreiben und bestaetigen;
+   schreiben und bestaetigen; sie ist exakt die `Resetting`-Sequence plus 1
+   und erfuellt `Sequence = 2 * StorageEpoch`;
 10. normale Runtimefreigabe ohne weitere fallible Arbeit erteilen.
 
 Die BootstrapSequence bleibt epochenuebergreifend monoton; Dokumentrevision,
@@ -1037,6 +1316,56 @@ Mindestens folgende Ursachen bleiben unterscheidbar:
 Nur `NotFound` ist leer. Weder andere Epoche, unbekanntes Schema noch
 Korruption oder Storefehler werden zu Factory-Neuheit normalisiert.
 
+### Vollständige Fehler- und Safety-Producer-Zuordnung
+
+`ConfigurationUnavailable` und `ConfigurationIntegrityFailure` sind die
+einzigen Ausgaben von #57 an das spaetere
+`CONFIGURATION_SAFETY_INTEGRATION_GATE`. Der konkrete oeffentliche Status
+bleibt fuer Diagnose und aufrufende Anwendung genauer; Store-, Codec-, Key-
+und Bibliothekstypen werden dabei in stabile Projektkategorien uebersetzt.
+
+| Phase | Ursache | Persistenter Stand | Runtimewirkung | Öffentlicher Status | Safety-Producer |
+|---|---|---|---|---|---|
+| Resetvorbereitung mit eindeutig altem `Operational` | Mutationslease busy | unveraendert alt, kein Write | alte Runtime bleibt normal gueltig | `ConfigurationMutationBusy` | keiner |
+| Boot/Initialisierung ohne Runtime | Mutationslease busy | unveraendert, kein Write | weiterhin keine Runtime | `ConfigurationMutationBusy` | `ConfigurationUnavailable` |
+| Resetvorbereitung mit eindeutig altem `Operational` | Modellbudget, Previewbesitz oder Retirement busy | unveraendert alt, kein Write | alte Runtime wird checked wieder freigegeben | `ConfigurationModelBudgetBusy` | keiner |
+| Boot/Initialisierung ohne Runtime | Modellbudget busy | unveraendert, kein Write | keine Runtime | `ConfigurationModelBudgetBusy` | `ConfigurationUnavailable` |
+| Resetvorbereitung vor `Resetting` | Bootstrap-/Epochen-/Record-Counteroverflow | unveraendert alt, kein Write | alte Runtime bleibt gueltig | `CounterOverflow` | keiner |
+| Initialisierung/Boot ohne Runtime | Counteroverflow | unveraendert, kein Write | keine Runtime | `CounterOverflow` | `ConfigurationUnavailable` |
+| beliebiger Dienstmodus | Zustandsrevisionsoverflow oder interne Counterinvariante | nicht als sicher fortsetzbar behauptet | fail closed | `RuntimePreparationFailure` mit stabiler Invariantenursache | `ConfigurationIntegrityFailure` |
+| Resetvorbereitung, `Resetting` garantiert nicht geschrieben | `WriteError` | eindeutig alter Bootstrap | alte Runtime checked wieder `Operational` | `PersistenceWriteFailure` | keiner |
+| Resetvorbereitung, `Resetting` garantiert nicht geschrieben | Write-`CapacityError` | eindeutig alter Bootstrap | alte Runtime checked wieder `Operational` | `PersistenceCapacityFailure` | keiner |
+| Initialisierung oder nach bestaetigtem `Resetting` | `WriteError` | Zielzustand unvollstaendig, kein behaupteter Fortschritt | keine normale Runtime | `PersistenceWriteFailure` | `ConfigurationUnavailable` |
+| Initialisierung oder nach bestaetigtem `Resetting` | Write-`CapacityError` | Zielzustand unvollstaendig | keine normale Runtime | `PersistenceCapacityFailure` | `ConfigurationUnavailable` |
+| Resetvorpruefung vor jedem Write | `ReadError` oder Read-`CapacityError` eines fuer den kanonischen Nachweis erforderlichen Slots | alter persistenter Stand nicht mehr vollstaendig bestaetigbar | fail closed statt nur auf die geladene alte Runtime zu vertrauen | `PersistenceReadFailure` oder `PersistenceCapacityFailure` | `ConfigurationUnavailable` |
+| Boot, Initialisierung, `EpochResetting` oder Finalisierung | `ReadError` oder Read-`CapacityError` | kanonischer Zielstand nicht bestimmbar | keine normale Runtime | `PersistenceReadFailure` oder `PersistenceCapacityFailure` | `ConfigurationUnavailable` |
+| `Resetting`-Write unbestimmt | exakter Readback alt/nicht wirksam | eindeutig alte Epoche | alte Runtime checked wieder `Operational` | Resetoperation abgelehnt mit `PersistenceWriteFailure` | keiner |
+| `Resetting`-Write unbestimmt | exakter Readback neu | neue Epoche `Resetting` kanonisch | alte Runtime bleibt gesperrt; gebundene Fortsetzung | interner Fortschritt, danach finaler Aufrufstatus | keiner, solange die Fortsetzung erfolgreich endet |
+| beliebiger Zielrecordwrite unbestimmt | exakter Readback alt oder neu | eindeutig kein Fortschritt oder exakt erwarteter Fortschritt | entsprechend alte Runtime oder gebundene Fortsetzung | interner Fortschritt, danach finaler Aufrufstatus | phasenabhaengig wie der aufgeloeste Stand |
+| Rootwrite nach `Initializing`/`Resetting` unbestimmt | Zielslot nachweislich alt/nicht wirksam | neuer Epochenroot noch nicht committed | keine Runtime; gebundene Wiederaufnahme darf fehlenden Root spaeter schreiben | `BootstrapCommitIndeterminate` wird als nicht wirksam aufgeloest, danach konkrete Fortsetzungsablehnung | `ConfigurationUnavailable`, falls der Aufruf ohne vollstaendigen Abschluss endet |
+| Rootwrite nach `Initializing`/`Resetting` unbestimmt | exakt neuer Root und Zielgraph vollstaendig gueltig | neuer Root kanonisch committed | interner Einmal-Publish und Bootstrapfinalisierung; keine Teilruntime | interner Fortschritt, danach finaler Aufrufstatus | keiner bei vollstaendig erfolgreichem Abschluss |
+| Rootwrite nach `Initializing`/`Resetting` unbestimmt | Zielslot fremd oder Root-/Graphscan unaufloesbar | weder alter noch neuer Root sicher kanonisch | fail closed | `BootstrapCommitIndeterminate` | `ConfigurationUnavailable` beziehungsweise bei nachgewiesener Integritaetsverletzung `ConfigurationIntegrityFailure` |
+| beliebiger Write unbestimmt | fremde Bytes, `ReadError`, Read-`CapacityError` oder sonst unaufloesbar | weder alt noch neu sicher behauptbar | fail closed, keine normale Runtime | `BootstrapCommitIndeterminate` | `ConfigurationUnavailable` |
+| Boot/Recovery/Targetscan | CRC-, Envelope- oder Recordtypfehler | vorhandene Bytes technisch korrupt | keine Runtime beziehungsweise alte Runtime nur vor unberuehrter Resetgrenze | `ConfigurationIntegrityFailure` | `ConfigurationIntegrityFailure` |
+| Graph-/Zielpruefung | Referenz-, Epochen- oder fachlicher Semantikfehler | Graph nicht kanonisch gueltig | keine Runtime | `ConfigurationIntegrityFailure` | `ConfigurationIntegrityFailure` |
+| Bootstrap-, Dokument-, Manifest- oder Rootscan | gleiche Identitaet mit unterschiedlichen kanonischen Bytes | persistente Identitaetskollision | keine Runtime und keine Slotwiederverwendung | `ConfigurationIntegrityFailure` mit Kollisionsursache | `ConfigurationIntegrityFailure` |
+| jeder Lesepfad | technisch gueltiges unbekanntes neueres Schema oder Speicherformat | nicht mit Schema 1 interpretierbar, unveraendert | keine kompatible Runtimefreigabe | `UnsupportedNewerConfigurationSchema` | `ConfigurationUnavailable` |
+| normaler Boot | weder Active noch vollstaendig gueltiger Fallback | Bootstrap vorhanden, kein nutzbarer Graph | keine Runtime | `ConfigurationUnavailable` | `ConfigurationUnavailable` |
+| Boot/Initialisierung vor Runtimepublish | Runtime-/Zeitzonenvorbereitung scheitert | Root je nach Phase noch nicht geschrieben oder bereits Zielstand | ohne alte gebundene Runtime keine Freigabe | `RuntimePreparationFailure` | `ConfigurationUnavailable` |
+| Resetvorbereitung vor `Resetting` | Runtimevorbereitung scheitert, alter Stand eindeutig | unveraendert alt | alte Runtime checked wieder `Operational` | `RuntimePreparationFailure` | keiner |
+| nach bestaetigtem `Resetting` | Runtimevorbereitung scheitert | neue Epoche unvollstaendig | alte Epoche bleibt gesperrt, keine neue Runtime | `RuntimePreparationFailure` | `ConfigurationUnavailable` |
+| nach neuem Root, vor `Initialized` | `Initialized`-WriteError, Capacity oder unbestimmt | neuer Root bleibt kanonisch, Bootstrapabschluss fehlt | interner neuer Publisher bleibt gebunden; normale Akquisition gesperrt | jeweiliger Persistence-Status oder `BootstrapCommitIndeterminate` | `ConfigurationUnavailable` |
+| Publish/Zustandsmaschine | stale/fremder Handoff vor Publish | kein Publish und kein persistenter Fortschritt durch den Handoff | bisheriger eindeutiger Zustand bleibt | typisierte `StateChanged`-/Invariantenablehnung | keiner, sofern alter `Operational`-Stand eindeutig bleibt |
+| Publish/Zustandsmaschine | doppelter Publish, Bindungsbruch oder interne Zustandsinvariante | persistent moeglicherweise bereits neue Grenze | fail closed, niemals normaler Erfolg | `RuntimePreparationFailure` mit `ServiceStateInvariantViolation` | `ConfigurationIntegrityFailure` |
+| allgemeiner Fehler vor bestaetigtem `Resetting` | alter Bootstrap und Graph exakt bestaetigt | eindeutig alt | alte Runtime checked wieder `Operational` | konkrete Ablehnung aus obigen Zeilen | keiner |
+| allgemeiner Fehler vor bestaetigtem `Resetting` | alter Stand nicht mehr eindeutig bestaetigbar | unklar | fail closed | konkrete Unavailable-/Integrity-Kategorie | gemaess Ursache `ConfigurationUnavailable` oder `ConfigurationIntegrityFailure` |
+| allgemeiner Fehler nach bestaetigtem `Resetting` | Verfuegbarkeits-/Storeursache | neue Epoche kanonisch, Ziel unvollstaendig | keine normale Runtime | konkrete Unavailable-/Persistence-Kategorie | `ConfigurationUnavailable` |
+| allgemeiner Fehler nach bestaetigtem `Resetting` | Korruption, Kollision oder Semantik | neue Epoche widerspruechlich | keine Runtime | `ConfigurationIntegrityFailure` | `ConfigurationIntegrityFailure` |
+
+Ein erfolgreicher lokaler Retry oder Boot-Recovery aktualisiert nur den lokalen
+Konfigurationsstatus. Er sendet niemals einen impliziten Fehlerreset und
+loescht keine spaetere #24-Verriegelung.
+
 ### Fail-closed-Regel
 
 Bei jedem unbekannten, unlesbaren, widerspruechlichen oder weiterhin
@@ -1104,7 +1433,10 @@ Decorator. `fermentation_app` haengt weder in Produktion noch in Tests von
 | Gleichstand | byteidentisches Duplikat; gleiche Sequence mit anderem Zustand, Epoche oder Bytes fail closed |
 | Fehler | `ReadError`, `CapacityError`, CRC-/Envelope-/Typ-/Schemafehler je Slot |
 | Schema | unbekanntes neueres Bootstrap- und Speicherformat blockiert |
-| High-Water | alte Epoche, verwaister hoeherer Record, Maximum und checked Overflow |
+| Historienrelation | alle vier erlaubten Start-/Fortschreibungsrelationen; Einzelrecordformel fuer jeden Zustand |
+| Regressionen | hoehere Sequence mit kleinerer Epoche; kleinere Sequence mit neuerer Epoche; alte Epoche nie reaktivieren |
+| Unmoegliche Zustaende | `Initializing` ausser Epoche 1/Sequence 1; `Resetting` ohne checked Epochenwechsel; Zustands-/Sequenzsprung und Luecke |
+| High-Water | direkt erlaubter Vorgaenger/Nachfolger, byteidentisches Duplikat, unmoeglicher hoeherer Record, Maximum und checked Overflow |
 | Write | Success, WriteError, CapacityError, `CommitOutcomeUnknown` alt/neu/unaufloesbar |
 | Wiederaufnahme | exakter Record wird unter gleicher Identitaet wiederverwendet; anderer Inhalt nie |
 
@@ -1153,6 +1485,9 @@ Zusaetzlich:
   Write abgelehnt;
 - Root ohne Fallback ist exakt der erwartete Epochenstart;
 - `Initialized` wird niemals vor vollstaendig gebundenem Zielroot bestaetigt.
+- ein byteidentisches Bootstrapduplikat ist diagnostizierbar und
+  deterministisch; gleiche Identitaet mit abweichenden Bytes blockiert;
+- keine Schema-1-Historie kann eine bereits verlassene Epoche reaktivieren.
 
 ### Normaler Boot
 
@@ -1227,6 +1562,73 @@ Initialisierung getestet. Zusaetzlich:
 - kein Deadlock, Use-after-free oder ungeschuetztes Data Race in kontrollierten
   Interleavings.
 
+### ConfigurationService-/Recovery-Zustandsmaschine
+
+Tabellengetrieben werden jeder in der Zustandsmaschine erlaubte Uebergang und
+jeder andere direkte Uebergang als verboten geprueft. Zusaetzlich:
+
+- ein direkter Aufruf des bisherigen `initialize(...)`-/Publish-Bypasses ist
+  in Produktionscode nicht mehr kompilierbar beziehungsweise ohne interne
+  Capability nicht aufrufbar;
+- der epocheninitiale Graphwrite ist ohne gueltige
+  `ConfigurationEpochBuildCapability` nicht ausfuehrbar;
+- Fehler vor `Resetting` mit exakt altem Readback stellen dieselbe alte
+  `Operational`-Runtime checked wieder her;
+- `CommitOutcomeUnknown` beim `Resetting`-Write wird fuer alt, neu und
+  unaufloesbar geprueft;
+- `CommitOutcomeUnknown` beim neuen Root wird fuer alt, neu mit vollstaendig
+  gueltigem Graph und unaufloesbaren/fremden Root geprueft;
+- jeder Fehler nach bestaetigtem `Resetting` sperrt die alte Epoche;
+- neuer Root plus fehlgeschlagenes oder unbestimmtes `Initialized` bleibt in
+  `BootstrapFinalizationPending` beziehungsweise stabil fail closed und gibt
+  keine normale Runtime aus;
+- Wiederaufnahme im selben Prozess verwendet nur den exakt gebundenen Besitz;
+  vollstaendiger Neustart rekonstruiert ohne fluechtige Capability;
+- sichtbare `NoChange`- und Changed-Preview sowie laufende Previewerstellung
+  werden beim Resetstart identitaets- und reservierungsrichtig behandelt;
+- ein bis acht alte Read-Leases, bestehendes Retirement und verzoegerte
+  Besitzerzerstoerung halten die Zwei-Modell-Grenze ein;
+- Zustandsrevisionsheadroom nahe `UINT64_MAX` blockiert vor dem ersten Write;
+- stale, doppelte und fremde Recovery-Handoffs publizieren nie;
+- zu keinem kontrollierten Interleaving existieren mehr als zwei
+  Vollmodellgenerationen oder eine normal sichtbare Teilruntime.
+
+### Fehler- und Safety-Zuordnung
+
+Jede Zeile der Fehler-/Safety-Tabelle wird mindestens einmal als
+tabellengetriebener Testfall abgebildet. Besonders werden gleiche Ursachen vor
+und nach der bestaetigten Epochengrenze paarweise geprueft:
+
+- Busy, Modellbudget und Vorbedingungsablehnung vor jedem Write lassen eine
+  eindeutig alte Runtime ohne Safety-Producer bestehen;
+- Read-, Capacity-, Write- und Unknown-Befunde ohne vorhandene Runtime oder
+  nach `Resetting` produzieren `ConfigurationUnavailable`;
+- CRC-, Envelope-, Referenz-, Semantik- und Identitaetskollision produzieren
+  `ConfigurationIntegrityFailure`;
+- unbekanntes neueres Schema liefert oeffentlich
+  `UnsupportedNewerConfigurationSchema` und als Safety-Producer
+  `ConfigurationUnavailable`;
+- interner Zustands-/Publishbruch liefert niemals Erfolg und produziert
+  `ConfigurationIntegrityFailure`;
+- erfolgreicher lokaler Retry aendert keinen simulierten #24-Latchzustand.
+
+### Recordpuffer, Duplikate und idempotente Wiederaufnahme
+
+- maximaler ProgramCatalog bei Initialisierung und Reset;
+- Instrumentierung beweist einen einzigen vollstaendigen
+  Recordarbeitsbereich als Peak;
+- keine Phase besitzt gleichzeitig mehrere vollstaendige ProgramCatalog-
+  Payload- oder Recordkopien;
+- byteidentische Zielrecords derselben Identitaet in mehreren Slots waehlen
+  den kleinsten Slot und erzeugen keinen Rewrite;
+- gleiche Identitaet mit unterschiedlichen Bytes blockiert vor jedem Write;
+- fehlende Records werden ausschliesslich in der festen Reihenfolge ergaenzt;
+- wiederholte Wiederaufnahme schreibt exakt vorhandene Records nicht neu,
+  vergibt keine neue Identitaet und zeigt keinen wachsenden Live-Heap;
+- die vollstaendige bestehende #56-Normalmutationsmatrix bleibt unveraendert
+  gruen und beweist, dass kein zweiter allgemeiner Commitworkflow entstanden
+  ist.
+
 ### Ressourcen und Builds nach Planfreigabe
 
 - maximal ein vollstaendiger Recordarbeitsbereich im Commitworkflow;
@@ -1235,7 +1637,8 @@ Initialisierung getestet. Zusaetzlich:
 - maximal zwei Vollmodellgenerationen und acht Runtime-Read-Leases wie #56;
 - wiederholte Boot-/Initialisierungs-/Resetzyklen ohne wachsenden Live-Heap;
 - Peak-Allokationsbericht fuer maximales ProgramCatalog-Modell und
-  Runtime-Handoff;
+  Runtime-Handoff sowie separater Peaknachweis fuer genau einen
+  vollstaendigen Recordpuffer;
 - vollstaendiges `pio test -e native`;
 - Builds `native`, `esp32_bringup`, `esp32_release`;
 - Base-/Head-Bericht fuer Hostbinaer, statisches RAM, Flash,
@@ -1255,7 +1658,8 @@ dahin zutreffenden nativen Tests.
 ### Commit 1 – Bootstrapmodell, Wireformat und redundanter Store
 
 - Record-Type-ID 6, Keys `cb0`/`cb1` und Limits;
-- Bootstraptypen, Schema-1-Codec und kanonische Auswahl;
+- Bootstraptypen, Schema-1-Codec, formale Epochen-/Sequence-/Zustandsrelation
+  und kanonische Auswahl;
 - High-Water, Gleichstand, Read-/Capacity-/Schema-/Integritaetsdiagnosen;
 - Bootstrapwrite und Unknown-Aufloesung;
 - Golden-, Roundtrip-, Slot- und Negativtests.
@@ -1265,13 +1669,18 @@ dahin zutreffenden nativen Tests.
 - 19-Slot-Factory-Neuheitsorakel;
 - schmale `ConfigurationGraphStore`-Erweiterung fuer neuen Graph ohne
   Fallback;
+- capability-gebundener `PreparedInitialConfigurationGraph`, begrenzte
+  Deskriptoren und genau ein wiederverwendeter Recordpuffer;
 - idempotente Zielrecordwiederverwendung und vollstaendige Vor-Root-Pruefung;
 - Dokument-/Manifest-/Root-Write- und Cut-Point-Tests.
 
 ### Commit 3 – Runtime-Handoff, normaler Boot und Initialisierung
 
-- schmalen vorbereiteten Recovery-Handoff im bestehenden
+- frei aufrufbaren `initialize(...)`-Bypass schliessen und schmalen
+  capability-gebundenen Recovery-Handoff im bestehenden
   `ConfigurationService`;
+- vollstaendige gemeinsame Dienstzustandsmaschine mit checked
+  Zustandsrevisionen;
 - `ConfigurationRecoveryService` und stabile Ergebnisursachen;
 - `Initializing`-Wiederaufnahme und `Initialized`-Boot;
 - Active-/Fallback-, Unknown-Reboot-, Modell- und Runtimefreigabetests.
@@ -1282,6 +1691,7 @@ dahin zutreffenden nativen Tests.
 - `Resetting`-Wiederaufnahme an allen Cut-Points;
 - Touch-Sentinel-, alte-Epochen-, Koordinator-, Reader- und
   Modellbudgettests;
+- phasenbezogene Fehler-/Safety-Producer-Matrix;
 - keine Secret-/Pending-/Intent-Records.
 
 ### Commit 5 – Gesamtnachweis und Dokumentation
@@ -1379,10 +1789,23 @@ Die Planungsphase ist abgeschlossen, wenn:
   sind;
 - Bootstraprecord, Wireformat, Slots, High-Water und Gleichstaende eindeutig
   geplant sind;
+- die mathematische Schema-1-Historienrelation bei einem oder zwei
+  Bootstraprecords Epochenregression, Luecken und unmoegliche Zustaende
+  ausschliesst;
 - Factory-Neuheits-, Initialisierungs-, Boot- und Resetorakel jeden
   persistenten Cut abdecken;
 - gemeinsame Mutationskoordination und #56-Runtime-Handoff ohne zweiten
   Mechanismus festgelegt sind;
+- kein oeffentlicher Initialisierungs- oder epocheninitialer Graphwrite-Bypass
+  die Bootstrapfreigabe umgehen kann;
+- alle ConfigurationService-/Recoverymodi, Zustandsrevisionen, Preview-,
+  Reader-, Retirement- und Zwei-Modell-Grenzen testbar definiert sind;
+- jede Fehlerursache und Ablaufphase eindeutig auf Runtimewirkung,
+  oeffentlichen Status und hoechstens einen der zwei #57-Safety-Producer
+  abgebildet ist;
+- `PreparedInitialConfigurationGraph` nur geteilte Modelle und begrenzte
+  Deskriptoren haelt und genau einen vollstaendigen Recordarbeitsbereich
+  verwendet;
 - Touchkalibrierung nachweislich unangetastet bleibt;
 - #17 und #24 weder vorgezogen noch implementiert werden;
 - keine Secret-, Pending-, Intent- oder allgemeine Persistenzinfrastruktur
