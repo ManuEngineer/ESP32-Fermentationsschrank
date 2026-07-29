@@ -33,5 +33,9 @@ inline constexpr std::size_t kConfigurationRootSlotCount = 2U;
 inline constexpr std::size_t kMaxDistinctConfigurationModelGenerations = 2U;
 inline constexpr std::size_t kMaxRuntimeConfigurationReadLeases = 8U;
 inline constexpr std::size_t kMaxConcurrentFullPreviewBuilds = 1U;
+inline constexpr std::size_t kConfigurationBootstrapPayloadBytes = 5U;
+inline constexpr std::size_t kMaximumConfigurationBootstrapEnvelopeBytes = 42U;
+inline constexpr std::size_t kConfigurationBootstrapSlotCount = 2U;
+inline constexpr std::size_t kConfigurationFactoryScanKeyCount = 19U;
 
 }  // namespace fermentation::configuration_limits
