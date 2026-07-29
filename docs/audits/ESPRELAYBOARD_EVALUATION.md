@@ -14,11 +14,20 @@ aktiv gepflegte ESP-IDF-Firmware fuer ESP32-basierte Relayboards und allgemein
 fuer per `HIGH`/`LOW` gesteuerte digitale Ausgaenge. Gepruefter Upstreamstand:
 Commit `82c6d117ea4b0c26b7e83641fb246c508ed977a9` vom 2026-04-11.
 
-Der Owner hat eine Reddit-Referenz gefunden, laut der die Firmware auf dem
-konkret bestellten ESP32-32E-Quad-MOSFET-Board eingesetzt wurde. Diese Aussage
-ist fuer die Kandidatenaufnahme relevant, aber noch kein technischer Nachweis:
-Die genaue Reddit-URL, Boardbezeichnung, Revision, Bilder und Pinbelegung sind
-noch nachzutragen und an der realen Hardware zu bestaetigen.
+Der Owner hat folgende Reddit-Quelle nachgereicht:
+
+- [Unable to program ESP32-WROOM-32E relay board](https://www.reddit.com/r/esp32/comments/1czys44/unable_to_program_esp32wroom32e_relay_board/)
+
+Die Quelle zeigt ein Vierfach-Relaisboard mit ESP32-WROOM-32E ohne integrierten
+USB-Anschluss und beschreibt die Programmierung ueber einen externen
+USB-/UART-Adapter. Sie zeigt **nicht** das bestellte ESP32-32E-Quad-MOSFET-Board,
+nennt `rpavlyuk/ESPRelayBoard` nicht und belegt keine Ausfuehrung dieser Firmware.
+
+Relais- und MOSFET-Variante koennen Layout-, Versorgungs-, Programmierheader-
+oder GPIO-Gemeinsamkeiten besitzen. Aus optischer Aehnlichkeit und gleichem
+ESP32-Modul folgt jedoch keine identische Leiterplatte, Kanalbelegung,
+Ausgangspolaritaet, Schutzbeschaltung oder Bootpegelsemantik. Diese Punkte
+bleiben bis zum Vergleich der realen Hardware unbestaetigt.
 
 ## Upstreamumfang
 
@@ -57,9 +66,10 @@ bei einer Auswahl bewusst aufgegeben werden.
 
 | Projektbedarf | ESPRelayBoard | Bewertung |
 |---|---|---|
-| konkretes Quad-MOSFET-Board | externe Ownerquelle behauptet Einsatz | Quelle und Hardware-Smoke-Test fehlen |
-| einfache binaere GPIO-Ausgaenge | vorhanden | potenziell direkt nutzbar |
-| aktive HIGH-/LOW-Pegel | konfigurierbar | reale Boardpolaritaet und Bootpegel messen |
+| konkretes Quad-MOSFET-Board | nicht nachgewiesen | Reddit zeigt separates Vierfach-Relaisboard; reale Hardwarepruefung erforderlich |
+| externer USB-/UART-Programmierpfad | beim Reddit-Relaisboard beschrieben | moegliche Referenz fuer Programmierheader und Bootmodus, nicht fuer Ausgangsstufe |
+| einfache binaere GPIO-Ausgaenge | vorhanden | potenziell nutzbar nach bestaetigter Pin- und Pegelzuordnung |
+| aktive HIGH-/LOW-Pegel | konfigurierbar | reale MOSFET-Polaritaet und Bootpegel messen |
 | WLAN-Onboarding | ESP-IDF-SoftAP-Provisioning vorhanden | alternative Basis, aber nicht unser bisheriger Arduino-Adapter |
 | Weboberflaeche und JSON-API | vorhanden | fachlich nicht auf Fermentation zugeschnitten |
 | MQTT/Home Assistant | vorhanden | fuer R1 nicht Kernanforderung |
@@ -78,8 +88,10 @@ bei einer Auswahl bewusst aufgegeben werden.
 
 ### Weg A: bestehende Device-Platform fortsetzen
 
-- ESPRelayBoard nur fuer Boardidentifikation, Pinmapping, Pegel und
-  Hardware-Bring-up verwenden;
+- Reddit-Relaisboard nur als begrenzte Referenz fuer externes Flashen und
+  moegliche Familienaehnlichkeiten verwenden;
+- `ESPRelayBoard` fuer generische Infrastrukturideen, nicht als bestaetigten
+  Boardtreiber behandeln;
 - keinen GPLv3-Code kopieren;
 - vorhandene Arduino-/PlatformIO-Architektur, Tests, Persistenz-, Safety- und
   Fachvertraege behalten;
@@ -87,7 +99,7 @@ bei einer Auswahl bewusst aufgegeben werden.
 
 ### Weg B: GPLv3-Fork als Firmwarebasis
 
-- ESPRelayBoard als ESP-IDF-C-Basis forken;
+- `ESPRelayBoard` als ESP-IDF-C-Basis forken;
 - Fermentationskern, Touchdisplay, Sensoren, BTS7960, Safety, Programme,
   Persistenz und Recovery integrieren oder portieren;
 - vorhandenen C++-/PlatformIO-Projektkern entweder portieren, parallel anbinden
@@ -98,22 +110,31 @@ Die Behauptung, bei Weg B muesse "fast nichts mehr" entwickelt werden, ist vor
 dem Feature-Gap- und Portierungsnachweis nicht belegt. Der Upstream deckt
 mehrere Infrastruktur- und Komfortfunktionen ab, aber nicht die zentralen
 Fermentations-, Display-, Sensor-, Peltier-, Safety- und Recoveryfunktionen.
+Die Reddit-Quelle aendert daran nichts, weil sie weder diese Firmware noch unser
+MOSFET-Board nachweist.
 
 ## Verbindlicher Spike vor Auswahl
 
-1. Reddit-URL und exakte Boardrevision dokumentieren.
-2. Boardfotos, Aufdrucke, Schaltplan oder nachvollziehbares Pinmapping sichern.
-3. Unveraenderten Upstreamstand reproduzierbar bauen und auf dem Zielboard
-   flashen.
-4. Alle vier Kanaele ohne Last messen:
+1. Produktlink, Boardaufdrucke, Vorder-/Rueckseitenfotos und Revision des
+   bestellten Quad-MOSFET-Boards dokumentieren.
+2. Reddit-Relaisboard und MOSFET-Board nur anhand belegbarer Merkmale vergleichen:
+   ESP32-Modul, Versorgung, Programmierheader, Taster, Leiterplattenlayout,
+   Bestueckung, Ausgangsstufe und Kanalbeschriftung.
+3. Schaltplan oder nachvollziehbares Pinmapping fuer das MOSFET-Board sichern.
+4. Programmierzugang zuerst mit einem kleinen neutralen Testprogramm pruefen;
+   die Reddit-Quelle darf als Hinweis auf externen USB-/UART-Adapter und
+   Bootmodus dienen.
+5. Einen unmodifizierten `ESPRelayBoard`-Build erst nach geklaertem Pinmapping
+   ohne Last und mit sicher deaktivierten Ausgaengen flashen.
+6. Alle vier MOSFET-Kanaele ohne Last messen:
    - GPIO-Zuordnung;
    - aktive Polaritaet;
    - Pegel bei Reset, Bootloader, Boot, Provisioning und Neustart;
    - Zustand nach Stromunterbruch;
    - Eignung fuer binaeres Schalten beziehungsweise PWM.
-5. Keine reale Last anschliessen, bevor sichere Pegel und Strompfade bestaetigt
+7. Keine reale Last anschliessen, bevor sichere Pegel und Strompfade bestaetigt
    sind.
-6. Weg A und Weg B mit derselben Matrix vergleichen:
+8. Weg A und Weg B mit derselben Matrix vergleichen:
    - bereits nutzbarer Code;
    - neu zu entwickelnder oder zu portierender Code;
    - Safety- und Securityluecken;
@@ -121,13 +142,16 @@ Fermentations-, Display-, Sensor-, Peltier-, Safety- und Recoveryfunktionen.
    - Flash, RAM, Heap und Wartungsaufwand;
    - Testbarkeit und Hardwareabhaengigkeit;
    - Lizenz- und Veroeffentlichungsfolgen.
-7. Danach einen dokumentierten Ownerentscheid treffen:
-   `REFERENCE_ONLY`, `BOARD_SUPPORT_REFERENCE`, `PARTIAL_ADOPTION` oder
+9. Danach einen dokumentierten Ownerentscheid treffen:
+   `REFERENCE_ONLY`, `PROGRAMMING_REFERENCE`, `PARTIAL_ADOPTION` oder
    `GPLV3_FORK_BASE`.
 
 ## Vorlaeufige Entscheidung
 
-`ESPRelayBoard` ist nicht mehr nur `REFERENCE_ONLY`, sondern ein ernsthaft zu
-pruefender Board- und Firmwarebasiskandidat. Vor Quelle, Hardwaretest,
-Feature-Gap-Vergleich und Lizenzentscheid wird jedoch weder Code uebernommen
-noch die bestehende Device-Platform aufgegeben.
+`ESPRelayBoard` bleibt ein ernsthaft zu pruefender allgemeiner
+Firmwarebasiskandidat. Die Reddit-Quelle stuetzt nur die Existenz und den
+externen Programmierweg eines aehnlichen Vierfach-Relaisboards mit
+ESP32-WROOM-32E. Sie liefert keinen Nachweis fuer unser Quad-MOSFET-Board und
+keinen Nachweis, dass `ESPRelayBoard` darauf laeuft. Vor Hardwaretest,
+Feature-Gap-Vergleich und Lizenzentscheid wird weder Code uebernommen noch die
+bestehende Device-Platform aufgegeben.
