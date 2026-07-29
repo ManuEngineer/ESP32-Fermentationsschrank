@@ -433,6 +433,82 @@ void test_state_revision_headroom_blocks_before_factory_write() {
     TEST_ASSERT_EQUAL_UINT32(0U, fixture.store.writeCount());
 }
 
+void test_shared_mutation_lease_blocks_boot_and_reset_without_writes() {
+    Fixture fixture;
+    auto held = fixture.coordinator.tryAcquire();
+    TEST_ASSERT_TRUE(held.lease.valid());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             ConfigurationMutationBusy),
+        static_cast<int>(fixture.recovery->boot().status));
+    TEST_ASSERT_EQUAL_UINT32(0U, fixture.store.writeCount());
+    held.lease = fermentation::ConfigurationMutationLease{};
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(fixture.recovery->boot().status));
+    const auto writes = fixture.store.writeCount();
+    auto heldAgain = fixture.coordinator.tryAcquire();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             ConfigurationMutationBusy),
+        static_cast<int>(
+            fixture.recovery->beginAuthorizedFactoryReset().status));
+    TEST_ASSERT_EQUAL_UINT32(writes, fixture.store.writeCount());
+}
+
+void test_authorized_reset_recovers_corrupt_old_graph_without_reusing_slot() {
+    LocalStore store;
+    Resolver resolver;
+    {
+        fermentation::ConfigurationMutationCoordinator coordinator;
+        fermentation::ConfigurationBootstrapStore bootstrap(store);
+        fermentation::ConfigurationGraphStore graph(store, resolver);
+        fermentation::ConfigurationService service(coordinator, graph,
+                                                   resolver);
+        auto recovery = fermentation::ConfigurationRecoveryService::create(
+            store, bootstrap, graph, service, coordinator);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryInitializationCompleted),
+            static_cast<int>(recovery->boot().status));
+    }
+    store.put("pc0", "corrupt-old-catalog");
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    fermentation::ConfigurationService service(coordinator, graph, resolver);
+    auto recovery = fermentation::ConfigurationRecoveryService::create(
+        store, bootstrap, graph, service, coordinator);
+    const auto writesBeforeBoot = store.writeCount();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             ConfigurationIntegrityFailure),
+        static_cast<int>(recovery->boot().status));
+    TEST_ASSERT_EQUAL_UINT32(writesBeforeBoot, store.writeCount());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
+        static_cast<int>(recovery->beginAuthorizedFactoryReset().status));
+    TEST_ASSERT_EQUAL_STRING("corrupt-old-catalog",
+                             store.value("pc0")->c_str());
+    TEST_ASSERT_TRUE(store.value("pc1").has_value());
+
+    fermentation::ConfigurationMutationCoordinator rebootCoordinator;
+    fermentation::ConfigurationBootstrapStore rebootBootstrap(store);
+    fermentation::ConfigurationGraphStore rebootGraph(store, resolver);
+    fermentation::ConfigurationService rebootService(rebootCoordinator,
+                                                     rebootGraph, resolver);
+    auto rebootRecovery = fermentation::ConfigurationRecoveryService::create(
+        store, rebootBootstrap, rebootGraph, rebootService, rebootCoordinator);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::RuntimeReady),
+        static_cast<int>(rebootRecovery->boot().status));
+    auto runtime = rebootService.acquireRuntime();
+    TEST_ASSERT_EQUAL_UINT64(2U, runtime.lease.get().storageEpoch().value());
+}
+
 }  // namespace
 
 int main() {
@@ -451,5 +527,8 @@ int main() {
     RUN_TEST(
         test_reset_keeps_retired_runtime_generation_until_last_reader_releases);
     RUN_TEST(test_state_revision_headroom_blocks_before_factory_write);
+    RUN_TEST(test_shared_mutation_lease_blocks_boot_and_reset_without_writes);
+    RUN_TEST(
+        test_authorized_reset_recovers_corrupt_old_graph_without_reusing_slot);
     return UNITY_END();
 }
