@@ -267,7 +267,8 @@ class ConfigurationService {
         std::shared_ptr<const RuntimeConfigurationSnapshot> preparedRuntime,
         std::shared_ptr<const RuntimeConfigurationSnapshot>& retiredRuntime,
         std::unique_ptr<LoadedConfigurationGraph>& retiredGraph) noexcept;
-    void completeRuntimeRetirement(std::uint64_t generationId) noexcept;
+    [[nodiscard]] bool completeRuntimeRetirement(
+        std::uint64_t generationId) noexcept;
     void invokeTestHook(TestPoint point) const;
     void invalidateRuntimePreparationBindingForTest();
     void rejectRuntimePreparationForTest(bool reject) noexcept;
