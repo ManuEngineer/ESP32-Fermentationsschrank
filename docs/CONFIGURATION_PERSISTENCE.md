@@ -239,15 +239,21 @@ Es wird keine zweite Programmschema-Definition eingefuehrt.
 Revisionen und Generationen verwenden `uint64_t`, beginnen bei 1, reservieren 0
 und laufen niemals still ueber.
 
-Ob Release 1 neben Dokumentrevision, Manifestgeneration, `rootSequence`,
-erwarteter Basis und Kandidatenintegritaet eine eigene persistente monotone
-`MutationSequence` benoetigt, bleibt bis zum Detailplan von #56
-`FINAL_SELECTION_PENDING`. Der Detailplan darf sie nur weglassen, wenn er fuer
-Konflikterkennung, eindeutiges Commit-Ergebnis, Wiederholung und Readback eine
-gleichwertige, testbare Semantik nachweist. Eine spaetere Einfuehrung waere eine
-materielle Planaenderung und benoetigt Ownerfreigabe. Unterschiedliche starke
-Typen bleiben auch bei gleichen numerischen Werten getrennt; unveraenderte
-Dokumente behalten ihre Revision.
+Release 1 benoetigt keine separate persistente `MutationSequence`. Der fuer
+#56 erbrachte Gleichwertigkeitsnachweis verwendet je `StorageEpoch` die
+High-Water-Marks aller technisch gueltigen Dokumentrevisionen,
+Manifestgenerationen und Rootsequenzen. Auch verwaiste Vor-Root-Writes
+verbrauchen ihre Identitaet fuer andere Inhalte; neue Werte entstehen checked
+als `max + 1`. `NoChange` schreibt nichts. Konflikterkennung, eindeutige
+Commitaufloesung und Wiederholung besitzen damit keine zusaetzliche Information,
+die ein weiterer persistenter Zaehler liefern wuerde. Eine spaetere Einfuehrung
+waere eine materielle Planaenderung und benoetigt Ownerfreigabe.
+Unterschiedliche starke Typen bleiben auch bei gleichen numerischen Werten
+getrennt; unveraenderte Dokumente behalten ihre Revision. Gleiche fachliche
+Identitaeten mit unterschiedlichen kanonischen Bytes werden bereits beim Scan
+als Persistenzintegritaetsfehler abgelehnt. Ein Revisionsueberlauf blockiert nur
+die tatsaechlich geaenderten Dokumenttypen; Manifest- und Rootueberlauf
+blockieren jede schreibende Aktivierung.
 
 Migrationen sind ausschliesslich Copy-Migrationen:
 
@@ -581,12 +587,20 @@ vollstaendig ruecklesen sowie technisch und fachlich validieren. Ergibt dieser
 Scan eindeutig den alten oder den neuen kanonischen Graphen, wird genau dieser
 Ausgang verwendet.
 
+Die Aufloesung bestimmt zuerst den exakten Ausgang des Zielrootwrites. Liegen
+die erwarteten neuen kanonischen Rootbytes persistent vor, darf der Vorgang nie
+als alter Ausgang aufgeloest werden. Ist der neue Zielgraph danach noch nicht
+vollstaendig lesbar oder bestaetigbar, bleibt der Zustand unbestimmt
+beziehungsweise wechselt bei einem eindeutigen nachgelagerten Vertragsfehler in
+`ConfigurationRuntimeFailure`. `ResolutionRecoveredOld` ist nur erlaubt, wenn
+der Zielroot nachweislich nicht wirksam wurde und der alte kanonische Graph
+erneut exakt bestaetigt ist. Ein fremder dritter Root ist weder alt noch neu.
+
 Kann der Scan wegen `ReadError`, `CapacityError`, Integritaetsfehler,
 semantischem Graphfehler oder eines vergleichbaren Storefehlers nicht
 vollstaendig und eindeutig abgeschlossen werden, entsteht ein stabil
-typisierter unbestimmter Commitzustand. Der spaetere #56-Plan legt den
-endgueltigen Typnamen fest; `ConfigurationCommitIndeterminate` bezeichnet hier
-die verbindliche Semantik.
+typisierter unbestimmter Commitzustand
+`ConfigurationCommitIndeterminate`.
 
 In diesem Zustand gilt:
 
@@ -646,11 +660,23 @@ Umdeutung.
 
 ### Kapazitaet und Lebenszyklus
 
-Kapazitaet, Anzahl gleichzeitig erlaubter Vorschauen und konkrete
-Speicherobergrenzen werden im Detailplan und Ressourcennachweis von #56
-festgelegt. Es gibt keine unbeschraenkte Vorschau, aber auch keine ungepruefte
-Produktgarantie. Eine begonnene Commitentscheidung wird gegen parallele
-Konfigurationsmutationen serialisiert.
+Release 1 erlaubt genau eine sichtbare Vorschau, genau eine volle
+Previewerstellung, hoechstens zwei unterschiedliche vollstaendige
+Konfigurationsmodellgenerationen und hoechstens acht registrierte
+`RuntimeConfigurationReadLease`-Objekte. Eine belegte Modellposition fuehrt
+vor tiefer Kopie und vor jedem Write zu `ConfigurationModelBudgetBusy`.
+Diese Softwaregrenzen sind keine ungepruefte reale Heapgarantie. Eine begonnene
+Commitentscheidung wird ueber die gemeinsame `ConfigurationMutationLease`
+gegen parallele Konfigurationsmutationen serialisiert.
+
+Previewaufbau, erfasste Commitvorschau, aktive und ausgemusterte
+Runtimegenerationen besitzen dazu eindeutige fluechtige Reservierungen. Das
+Entfernen einer sichtbaren Vorschau gibt eine bereits vom Commit erfasste
+Modellposition nicht frei. Eine ausgemusterte Runtimegeneration belegt ihre
+Position bis zur letzten tatsaechlich zerstoerten Read-Lease und bis alle
+lokalen Publish-/Recoverybesitzer freigegeben sind. Veraltete Build-Leases
+koennen keine neuere Reservierung entfernen. Der Dienst nimmt erst danach neue
+Vollmodelle an.
 
 Secret-Werte erscheinen nie in Preview-Antworten, oeffentlichen Fingerprints,
 Zusammenfassungen, Logs, Diagnosen oder Exporten.
@@ -708,6 +734,15 @@ Vor dem persistenten Root-Commit werden der vollstaendige Kandidat erneut
 validiert, Plattformwerte wie die Zeitzone aufgeloest und alle falliblen
 Ressourcen vorbereitet. Das Ergebnis ist ein unveraenderlicher
 `RuntimeConfigurationSnapshot` ohne sichtbare Wirkung.
+
+Unmittelbar vor dem Rootwrite liest der Dienst das vorbereitete Manifest aus
+dem Store zurueck und prueft den gesamten Zielgraphen nochmals. Dies umfasst
+alle geaenderten und unveraenderten Referenzen, Envelope, Schema, Epoche,
+Laenge, CRC, fachliche Dekodierung sowie die exakte Bindung an den vorbereiteten
+typisierten Runtime-Snapshot. Jede Abweichung oder jeder Read-/Capacity-Fehler
+bricht ohne Rootwrite ab. Die Aenderungsmaske wird aus exakten kanonischen
+Inhaltsvergleichen abgeleitet und nie vom Aufrufer als Persistenzwahrheit
+uebernommen.
 
 Der erfolgreiche dauerhafte Write eines neuen gueltigen
 `ConfigurationRootRecord` mit hoeherer rootSequence ist der einzige persistente
@@ -910,10 +945,10 @@ Produktionsmodul oder ESP32-Profil darf Test-Support referenzieren.
 ## Ressourcenvertrag
 
 Die Umsetzung erzwingt zentrale Softwareobergrenzen fuer fluechtige Vorschau,
-Recordpuffer, typisierten ProgramCatalog und alle Payloads. Die konkreten
-Vorschau- und Workflowbudgets werden erst im Detailplan und
-Ressourcennachweis von #56 festgelegt; daraus folgt weder eine ungepruefte reale
-Hardwaregarantie noch eine PSRAM-Verfuegbarkeit.
+Recordpuffer, typisierten ProgramCatalog und alle Payloads: eine sichtbare
+Vorschau, eine volle Previewerstellung, zwei Modellgenerationen, acht
+Read-Leases und eine persistente Konfigurationsmutation. Daraus folgt weder
+eine ungepruefte reale Hardwaregarantie noch eine PSRAM-Verfuegbarkeit.
 
 Ein Preview wird erst nach erfolgreicher Ressourcenbereitstellung sichtbar.
 Vor Root-Commit bricht jeder Ressourcenfehler typisiert ohne Teilaktivierung ab.
@@ -934,6 +969,23 @@ Recordpuffer liest. Seine Kandidaten- und Diagnosemetadaten wachsen weiterhin
 mit der tatsaechlich gescannten Slotzahl, sind aber durch die verbindliche
 Obergrenze von acht Slots endlich begrenzt. Das ist keine absolute
 Unabhaengigkeit von der Slotzahl.
+
+Der kanonische Loader haelt nur den aktiven Graphen als vollstaendiges
+typisiertes Laufzeitmodell. Einen gueltigen Fallback prueft er recordweise und
+behaelt danach nur Manifest- und Referenzmetadaten. Muss der Fallback einen
+ungueltigen Active-Zweig ersetzen, wird er direkt zum aktiven Modell; ein
+zweites dauerhaft gehaltenes Fallback-`ProgramCatalog`-Modell entsteht nicht.
+`ReadError` oder `CapacityError` eines benoetigten Root- oder Graphrecords
+brechen die Bestimmung fail closed ab und erlauben nicht das Ausweichen auf
+einen aelteren scheinbar gueltigen Graphen.
+
+Auch die schreibende `ValidationOnly`-Pruefung wiederholt die globale
+Rootordnung und Active-/Fallback-Auswahl, bindet jeden zweiten Rootread an die
+zuvor gescannten Metadaten und validiert beide benoetigten Zweige technisch,
+referenziell und fachlich. Ein neuerer fremder Root, ein veraenderter
+Fallbackschutz oder ein nicht lesbarer benoetigter Record blockiert vor jedem
+Write. Diese Pruefung verwendet begrenzte Recordpuffer und baut kein drittes
+Vollmodell auf.
 
 Beide ESP32-Produktionsprofile muessen je Teilissue bauen. Base-SHA und PR-Head
 werden mit identischer Toolchain fuer statisches RAM, Flash, `firmware.bin` und
@@ -976,10 +1028,19 @@ Die vollstaendige Matrix umfasst nach Abschluss aller Teilissues mindestens:
 - `CommitOutcomeUnknown` mit eindeutig altem beziehungsweise neuem Readback
 - `CommitOutcomeUnknown` mit `ReadError`, `CapacityError`, CRC- oder
   Semantikfehler beim Aufloesungsscan
+- exakter neuer Zielroot mit voruebergehend nicht lesbarem oder ungueltigem
+  Zielgraphen darf nie als alter Ausgang gelten
 - wiederholter erfolgloser Aufloesungsscan und Neustart mit eindeutigem
   beziehungsweise weiterhin unklarem Ergebnis
 - im unbestimmten Commitzustand kein Publish, keine weitere Mutation und keine
   Slotrotation
+- neuerer kanonischer Root, veraenderte Rootmetadaten, Fallbackschutz und
+  fachlich ungueltige CRC-korrekte Payload vor dem ersten Write
+- vollstaendige Zielgraphpruefung nach Manifestwrite und vor Rootwrite fuer
+  jedes geaenderte und unveraenderte Dokument
+- falsche positive und negative Aenderungsbits mit identischem Reload-Orakel
+- erfasste, ersetzte und parallele Vorschauen sowie ein bis acht gehaltene alte
+  Runtime-Leases ohne Ueberschreitung der Zwei-Modell-Grenze
 - Runtimevorbereitung vor dem Root-Commit
 - Neustart unmittelbar vor und nach dem Root-Commit
 - unerwartete Verletzung des nicht fehlschlagenden Publish-Vertrags

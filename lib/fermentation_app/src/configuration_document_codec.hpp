@@ -48,4 +48,12 @@ decodeServiceConfigurationPayload(std::uint32_t schemaVersion,
 decodeProgramCatalogPayload(std::uint32_t schemaVersion,
                             const std::string& payload);
 
+// Validates a canonical catalog payload one program at a time. Unlike the
+// decoding API this does not retain a second complete ProgramCatalog model and
+// is therefore suitable for ValidationOnly graph scans while active and
+// preview model generations are already resident.
+[[nodiscard]] ConfigurationCodecStatus validateProgramCatalogPayload(
+    std::uint32_t schemaVersion, const std::string& payload,
+    const ProgramCatalog* expected = nullptr);
+
 }  // namespace fermentation

@@ -24,11 +24,12 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   oder sicherheitsseitig abgelehnte Anfrage maskiert;
   Katalog-/Programmaufloesungsgrenze zu #16 sowie die begrenzte
   In-Memory-Idempotenz zu #17/#27 dokumentiert
-- Konfigurationspersistenz fuer Issue #16 mit typisierten Dokumentgenerationen,
-  kanonischen Active-/Fallback-/Pending-Roots, getrennten Secret-
-  Rueckfallregeln, Wireformat sowie deterministischen Recovery- und
-  Ressourcengrenzen spezifiziert; Schutzwurzeldefinition, Abgrenzung zu #17/#24
-  und verpflichtende Aufteilung in kleine Teilissues nach Review korrigiert
+- Konfigurationspersistenz fuer Issue #16 auf den Variante-B-Vertrag mit
+  typisierten Dokumentgenerationen, kanonischem Active/Fallback, Wireformat
+  sowie deterministischen Recovery- und Ressourcengrenzen konsolidiert;
+  persistentes Pending, Aktivierungsintent und vorbereitete Secret-Domaenen
+  entfernt; Schutzwurzeldefinition, Abgrenzung zu #17/#24 und verpflichtende
+  Aufteilung in kleine Teilissues nach Review korrigiert
 - Programmmodellgrenzen einschliesslich minimaler und maximaler Anzahl der
   Fermentationsphasen vollstaendig in `program_limits.hpp` zentralisiert; das
   fachliche Verhalten und das Programmschema bleiben unveraendert
@@ -49,6 +50,28 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
     (Befund 6)
 
 ### Added
+
+- Active-/Fallback-Konfigurationskern fuer Issue #56: kanonische Manifest- und
+  Rootcodecs, vollstaendige Graph- und Identitaetsvalidierung, High-Water-
+  basierte sichere Slotrotation ohne separate `MutationSequence`, gemeinsame
+  nicht blockierende Mutationslease, rein fluechtige validierte Vorschau,
+  begrenzte Runtime-Read-Leases sowie Root-Commit mit vorbereitetem
+  nicht fehlschlagendem Snapshot-Publish. Nicht aufloesbare Rootausgaenge
+  wechseln in `ConfigurationCommitIndeterminate`; nach bestaetigtem Root
+  nicht abschliessbare Verifikation wechselt fail closed in
+  `ConfigurationRuntimeFailure`. Native Tests decken Kollisionen, verwaiste
+  Writes, mindestens fuenf Rotationen, Cut-Points, Konkurrenz,
+  Leserlebensdauer und die Zwei-Modell-Grenze ab. Das nachgelagerte
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE` in #24 sowie reale ESP32-Heap-,
+  NVS-, Jitter-, Watchdog- und Lebensdauermessungen bleiben offen.
+  Der Loader behaelt den Fallback nur als validierte Metadaten, scannt
+  Recordgruppen ohne Payloadsammlung und behandelt nicht lesbare benoetigte
+  Root-/Graphrecords vor jeder Runtimefreigabe fail closed. Die vollstaendige
+  Reviewkorrektur ergaenzt die erneute kanonische Root-/Fallbackbestimmung vor
+  jedem Write, die vollstaendige Zielgraphpruefung vor dem Rootwrite, intern
+  abgeleitete Aenderungsmasken, getrennte Persistenzursachen sowie besitzsichere
+  Preview-, Reader-, Retirement- und Recoveryreservierungen. Ein exakt
+  persistenter neuer Root kann nicht als alter Ausgang aufgeloest werden.
 
 - Typisierte Konfigurationsdokumente aus Issue #55: UserConfiguration,
   exakt leere ServiceConfiguration und ProgramCatalog Schema 1 mit

@@ -13,6 +13,9 @@ inline constexpr device_platform::RecordTypeId kUserConfigurationRecordType{1U};
 inline constexpr device_platform::RecordTypeId kServiceConfigurationRecordType{
     2U};
 inline constexpr device_platform::RecordTypeId kProgramCatalogRecordType{3U};
+inline constexpr device_platform::RecordTypeId kConfigurationManifestRecordType{
+    4U};
+inline constexpr device_platform::RecordTypeId kConfigurationRootRecordType{5U};
 
 // ADR-016-konforme kurze NVS-Schluessel. Es handelt sich nur um die stabile
 // Namenskonvention fuer die vier Dokumentplaetze; Lesen, Schreiben, Rotation
@@ -23,5 +26,9 @@ inline constexpr std::array<const char*, 4> kServiceConfigurationSlotKeys{
     "sc0", "sc1", "sc2", "sc3"};
 inline constexpr std::array<const char*, 4> kProgramCatalogSlotKeys{
     "pc0", "pc1", "pc2", "pc3"};
+inline constexpr std::array<const char*, 3> kConfigurationManifestSlotKeys{
+    "cm0", "cm1", "cm2"};
+inline constexpr std::array<const char*, 2> kConfigurationRootSlotKeys{"cr0",
+                                                                       "cr1"};
 
 }  // namespace fermentation::configuration_storage_contract

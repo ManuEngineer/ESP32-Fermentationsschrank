@@ -1,6 +1,9 @@
 #include "configuration_document_codec.hpp"
 
+#include <algorithm>
+#include <array>
 #include <limits>
+#include <set>
 #include <utility>
 
 #include "big_endian_codec.hpp"
@@ -9,6 +12,8 @@
 #include "checked_size.hpp"
 #include "configuration_document_codec_internal.hpp"
 #include "configuration_limits.hpp"
+#include "configuration_text.hpp"
+#include "standard_program_catalog.hpp"
 
 namespace fermentation {
 namespace configuration_codec_internal {
@@ -562,6 +567,59 @@ ConfigurationCodecStatus readProgram(ByteReader& reader, ProgramDocument& out) {
     return ConfigurationCodecStatus::Success;
 }
 
+ProgramCatalogStatus validateStreamedProgram(
+    const ProgramDocument& document, std::size_t index,
+    const std::array<ProgramDocument, 4>& factory,
+    std::set<std::string>& identifiers, std::size_t& factoryCount) {
+    using namespace configuration_limits;
+    const auto& program = document.program;
+    if (index < kFactoryProgramCount) {
+        if (program.id != factory[index].program.id) {
+            return ProgramCatalogStatus::InvalidFactoryOrder;
+        }
+        if (!program.builtIn || !program.factoryCatalogEntry ||
+            !program.resettable) {
+            return ProgramCatalogStatus::InvalidFactoryMarkers;
+        }
+    } else {
+        if (program.builtIn || program.factoryCatalogEntry ||
+            program.resettable) {
+            return ProgramCatalogStatus::InvalidUserMarkers;
+        }
+        const auto reserved =
+            std::any_of(factory.begin(), factory.end(),
+                        [&program](const ProgramDocument& entry) {
+                            return program.id == entry.program.id;
+                        });
+        if (reserved) {
+            return ProgramCatalogStatus::ReservedFactoryId;
+        }
+    }
+    if (!identifiers.insert(program.id).second) {
+        return ProgramCatalogStatus::DuplicateProgramId;
+    }
+    if (validateLowercaseIdentifier(program.id, kMinimumProgramIdBytes,
+                                    kMaximumProgramIdBytes) !=
+        ConfigurationTextStatus::Success) {
+        return ProgramCatalogStatus::InvalidProgramId;
+    }
+    if (validateVisibleName(program.name) != ConfigurationTextStatus::Success) {
+        return ProgramCatalogStatus::InvalidProgramName;
+    }
+    if (validateProgramNotes(program.notes) !=
+        ConfigurationTextStatus::Success) {
+        return ProgramCatalogStatus::InvalidProgramNotes;
+    }
+    if (!validateProgram(document, ValidationPurpose::CatalogTemplate)
+             .valid()) {
+        return ProgramCatalogStatus::InvalidProgramDocument;
+    }
+    if (program.factoryCatalogEntry) {
+        ++factoryCount;
+    }
+    return ProgramCatalogStatus::Success;
+}
+
 }  // namespace
 
 namespace configuration_codec_internal {
@@ -708,6 +766,56 @@ ConfigurationDecodeResult<ProgramCatalog> decodeProgramCatalogPayload(
         return {ConfigurationCodecStatus::InvalidDocument, std::nullopt};
     }
     return {ConfigurationCodecStatus::Success, std::move(candidate)};
+}
+
+ConfigurationCodecStatus validateProgramCatalogPayload(
+    std::uint32_t schemaVersion, const std::string& payload,
+    const ProgramCatalog* expected) {
+    if (schemaVersion !=
+        static_cast<std::uint32_t>(ProgramCatalogSchema::Version1)) {
+        return ConfigurationCodecStatus::UnsupportedSchema;
+    }
+    if (payload.size() >
+        configuration_limits::kMaximumProgramCatalogPayloadBytes) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    ByteReader reader(payload);
+    std::uint8_t count = 0U;
+    if (!big_endian::readUint8(reader, count)) {
+        return ConfigurationCodecStatus::Truncated;
+    }
+    if (count < configuration_limits::kFactoryProgramCount ||
+        count > configuration_limits::kMaximumProgramCount) {
+        return ConfigurationCodecStatus::InvalidWireValue;
+    }
+    if (expected != nullptr && expected->programs.size() != count) {
+        return ConfigurationCodecStatus::InvalidDocument;
+    }
+    const auto factory = FactoryProgramCatalog::programs();
+    std::set<std::string> identifiers;
+    std::size_t factoryCount = 0U;
+    for (std::size_t index = 0U; index < count; ++index) {
+        ProgramDocument document;
+        const auto status = readProgram(reader, document);
+        if (status != ConfigurationCodecStatus::Success) {
+            return status;
+        }
+        if (validateStreamedProgram(document, index, factory, identifiers,
+                                    factoryCount) !=
+            ProgramCatalogStatus::Success) {
+            return ConfigurationCodecStatus::InvalidDocument;
+        }
+        if (expected != nullptr &&
+            !configurationContentEquals(document, expected->programs[index])) {
+            return ConfigurationCodecStatus::InvalidDocument;
+        }
+    }
+    if (reader.remaining() != 0U) {
+        return ConfigurationCodecStatus::TrailingBytes;
+    }
+    return factoryCount == configuration_limits::kFactoryProgramCount
+               ? ConfigurationCodecStatus::Success
+               : ConfigurationCodecStatus::InvalidDocument;
 }
 
 }  // namespace fermentation

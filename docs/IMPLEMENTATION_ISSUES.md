@@ -83,6 +83,20 @@ abgeschlossen. #56 implementiert den Variante-B-Active-/Fallback-Kern;
 wiederaufnehmbarem Werksreset. Persistentes Pending, Aktivierungsintent und
 leere Connectivity-/Authentication-Domaenen sind kein Release-1-Scope.
 
+Der Draft-PR zu #56 liefert die typisierten Producer
+`ConfigurationCommitIndeterminate` und `ConfigurationRuntimeFailure`, die
+gemeinsame `ConfigurationMutationLease`, High-Water-basierte Identitaeten ohne
+separate persistente `MutationSequence`, den begrenzten Preview-/Readervertrag
+und den nicht fehlschlagenden Publish nach dem Root-Linearisierungspunkt. Die
+schreibende Vorpruefung bestimmt Rootordnung und Active-/Fallback-Schutzmenge
+erneut, verifiziert vor dem Rootwrite den vollstaendigen Zielgraphen und leitet
+die Aenderungsmaske selbst aus kanonischen Inhalten ab. Nicht aufloesbare
+Rootausgaenge bleiben mit getrennten Root-, Graph-, Integritaets- und
+Schemandiagnosen fail closed; Modellreservierungen erzwingen die Zwei-Modell-
+und Acht-Reader-Grenzen auch unter Konkurrenz und Recovery. Bis zum Merge und
+unabhaengigen Abschlussreview bleibt der Live-Status von #56 `READY`; #57
+bleibt `BLOCKED_DEPENDENCY` und wird nicht vorweggenommen.
+
 #17 haengt nicht pauschal von #16, #56 oder #57 ab. Seine harten Grundlagen
 #13, #14, #15 und #54 sind abgeschlossen; der eigene Plan-first-Schritt bleibt
 vor einer Statusaenderung erforderlich. #55 darf als gemergte Grundlage

@@ -20,5 +20,18 @@ inline constexpr std::size_t kMaximumUserProgramCount = 12U;
 inline constexpr std::size_t kMaximumProgramCount = 16U;
 inline constexpr std::size_t kMaximumUserConfigurationPayloadBytes = 256U;
 inline constexpr std::size_t kMaximumProgramCatalogPayloadBytes = 32768U;
+inline constexpr std::size_t kConfigurationReferenceBytes = 34U;
+inline constexpr std::size_t kConfigurationManifestPayloadBytes = 104U;
+inline constexpr std::size_t kConfigurationRootPayloadWithoutFallbackBytes =
+    35U;
+inline constexpr std::size_t kConfigurationRootPayloadWithFallbackBytes = 69U;
+inline constexpr std::size_t kMaximumConfigurationManifestEnvelopeBytes = 149U;
+inline constexpr std::size_t kMaximumConfigurationRootEnvelopeBytes = 114U;
+inline constexpr std::size_t kConfigurationDocumentSlotCount = 4U;
+inline constexpr std::size_t kConfigurationManifestSlotCount = 3U;
+inline constexpr std::size_t kConfigurationRootSlotCount = 2U;
+inline constexpr std::size_t kMaxDistinctConfigurationModelGenerations = 2U;
+inline constexpr std::size_t kMaxRuntimeConfigurationReadLeases = 8U;
+inline constexpr std::size_t kMaxConcurrentFullPreviewBuilds = 1U;
 
 }  // namespace fermentation::configuration_limits

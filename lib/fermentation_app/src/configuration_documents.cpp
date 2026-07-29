@@ -145,4 +145,69 @@ ProgramCatalog makeFactoryProgramCatalog() {
         std::vector<ProgramDocument>(factory.begin(), factory.end())};
 }
 
+bool configurationContentEquals(const UserConfiguration& left,
+                                const UserConfiguration& right) {
+    return left.displayLanguageId == right.displayLanguageId &&
+           left.timeZoneId == right.timeZoneId &&
+           left.deviceName == right.deviceName;
+}
+
+bool configurationContentEquals(const ServiceConfiguration& /*left*/,
+                                const ServiceConfiguration& /*right*/) {
+    return true;
+}
+
+bool configurationContentEquals(const ProgramDocument& left,
+                                const ProgramDocument& right) {
+    const auto& a = left.program;
+    const auto& b = right.program;
+    if (left.schema.version != right.schema.version ||
+        left.schema.presentFields != right.schema.presentFields ||
+        a.id != b.id || a.name != b.name || a.notes != b.notes ||
+        a.builtIn != b.builtIn ||
+        a.factoryCatalogEntry != b.factoryCatalogEntry ||
+        a.resettable != b.resettable || a.userDeletable != b.userDeletable ||
+        a.installed != b.installed || a.enabled != b.enabled ||
+        a.preheat != b.preheat || a.sensorPreference != b.sensorPreference ||
+        a.productSensorFailure.policy != b.productSensorFailure.policy ||
+        a.productSensorFailure.fallbackDelaySeconds !=
+            b.productSensorFailure.fallbackDelaySeconds ||
+        a.fermentationStages.size() != b.fermentationStages.size() ||
+        a.targetQualification.bandCelsius !=
+            b.targetQualification.bandCelsius ||
+        a.targetQualification.durationMinutes !=
+            b.targetQualification.durationMinutes ||
+        a.maximumTargetReachMinutes != b.maximumTargetReachMinutes ||
+        a.maximumProductWaitMinutes != b.maximumProductWaitMinutes ||
+        a.completion.mode != b.completion.mode ||
+        a.completion.coolingTargetCelsius !=
+            b.completion.coolingTargetCelsius ||
+        a.completion.holdDurationMinutes != b.completion.holdDurationMinutes) {
+        return false;
+    }
+    for (std::size_t index = 0U; index < a.fermentationStages.size(); ++index) {
+        if (a.fermentationStages[index].targetTemperatureCelsius !=
+                b.fermentationStages[index].targetTemperatureCelsius ||
+            a.fermentationStages[index].durationMinutes !=
+                b.fermentationStages[index].durationMinutes) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool configurationContentEquals(const ProgramCatalog& left,
+                                const ProgramCatalog& right) {
+    if (left.programs.size() != right.programs.size()) {
+        return false;
+    }
+    for (std::size_t index = 0U; index < left.programs.size(); ++index) {
+        if (!configurationContentEquals(left.programs[index],
+                                        right.programs[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace fermentation
