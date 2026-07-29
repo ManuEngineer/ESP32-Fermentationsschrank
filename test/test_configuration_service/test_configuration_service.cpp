@@ -68,6 +68,10 @@ struct ConfigurationServiceHookControl {
     std::atomic<bool> released{false};
 };
 
+struct RuntimePreparationObservation {
+    std::atomic<std::size_t> attemptCount{0U};
+};
+
 namespace fermentation {
 
 class ConfigurationServiceTestAccess {
@@ -85,6 +89,14 @@ class ConfigurationServiceTestAccess {
     static void clearHook(ConfigurationService& service) {
         service.testHook_ = nullptr;
         service.testHookContext_ = nullptr;
+    }
+
+    static void observeRuntimePreparation(
+        ConfigurationService& service,
+        RuntimePreparationObservation& observation) {
+        observation.attemptCount.store(0U, std::memory_order_release);
+        service.testHookContext_ = &observation;
+        service.testHook_ = &runtimePreparationHook;
     }
 
     static void setStateRevision(ConfigurationService& service,
@@ -128,6 +140,10 @@ class ConfigurationServiceTestAccess {
         service.rejectRuntimePreparationForTest(reject);
     }
 
+    static bool runtimePreparationRetryConsumed(ConfigurationService& service) {
+        return service.runtimePreparationRetryConsumedForTest();
+    }
+
     static void changeCurrentGraphActiveBasis(ConfigurationService& service) {
         const std::lock_guard<std::mutex> lock(service.stateMutex_);
         TEST_ASSERT_NOT_NULL(service.currentGraph_.get());
@@ -143,6 +159,17 @@ class ConfigurationServiceTestAccess {
     }
 
    private:
+    static void runtimePreparationHook(void* context,
+                                       ConfigurationService::TestPoint point) {
+        if (point !=
+            ConfigurationService::TestPoint::BeforeRuntimePreparation) {
+            return;
+        }
+        auto& observation =
+            *static_cast<RuntimePreparationObservation*>(context);
+        observation.attemptCount.fetch_add(1U, std::memory_order_relaxed);
+    }
+
     static void hook(void* context, ConfigurationService::TestPoint point) {
         auto& control = *static_cast<ConfigurationServiceHookControl*>(context);
         if (static_cast<int>(point) !=
@@ -161,6 +188,8 @@ namespace {
 
 class LocalStore final : public device_platform::IStateStore {
    public:
+    using ReadObserver = void (*)(void*);
+
     device_platform::StateStoreWriteStatus write(
         const device_platform::StateStoreKey& key,
         const std::string& value) override {
@@ -183,6 +212,10 @@ class LocalStore final : public device_platform::IStateStore {
     device_platform::StateStoreReadResult read(
         const device_platform::StateStoreKey& key,
         std::size_t maxBytes) const override {
+        if (readObserver_ != nullptr) {
+            readObserver_(readObserverContext_);
+        }
+        readCount_.fetch_add(1U, std::memory_order_relaxed);
         const auto fault = readFaults_.find(key.bytes());
         if (fault != readFaults_.end()) {
             return {fault->second, {}};
@@ -228,7 +261,20 @@ class LocalStore final : public device_platform::IStateStore {
 
     void clearReadFault(const char* key) { readFaults_.erase(key); }
 
+    void observeReads(ReadObserver observer, void* context) {
+        readObserver_ = observer;
+        readObserverContext_ = context;
+    }
+
+    void clearReadObserver() {
+        readObserver_ = nullptr;
+        readObserverContext_ = nullptr;
+    }
+
     [[nodiscard]] std::size_t writeCount() const { return writeCount_; }
+    [[nodiscard]] std::size_t readCount() const {
+        return readCount_.load(std::memory_order_relaxed);
+    }
 
    private:
     struct WriteFault {
@@ -244,7 +290,23 @@ class LocalStore final : public device_platform::IStateStore {
                  std::pair<std::string, device_platform::StateStoreReadStatus>>>
         readFaultsAfterWrite_;
     std::size_t writeCount_{0U};
+    mutable std::atomic<std::size_t> readCount_{0U};
+    mutable ReadObserver readObserver_{nullptr};
+    mutable void* readObserverContext_{nullptr};
 };
+
+struct RetryReadObservation {
+    fermentation::ConfigurationService* service{nullptr};
+    std::size_t readCount{0U};
+};
+
+void observeConsumedRetryAtStoreRead(void* context) {
+    auto& observation = *static_cast<RetryReadObservation*>(context);
+    TEST_ASSERT_NOT_NULL(observation.service);
+    TEST_ASSERT_TRUE(fermentation::ConfigurationServiceTestAccess::
+                         runtimePreparationRetryConsumed(*observation.service));
+    ++observation.readCount;
+}
 
 class Resolver final : public device_platform::ITimeZoneResolver {
    public:
@@ -1204,11 +1266,30 @@ void test_failed_runtime_rebuild_stays_closed_and_can_retry_allowed_cause() {
         static_cast<int>(fermentation::ConfigurationRuntimeFailureCause::
                              RuntimePreparationAfterResolutionFailure),
         static_cast<int>(*fixture.service.runtimeFailureCause()));
+    RetryReadObservation observation{&fixture.service};
+    fixture.store.observeReads(observeConsumedRetryAtStoreRead, &observation);
+    RuntimePreparationObservation preparation;
+    fermentation::ConfigurationServiceTestAccess::observeRuntimePreparation(
+        fixture.service, preparation);
+    const auto readsBeforeRetry = fixture.store.readCount();
     fermentation::ConfigurationServiceTestAccess::rejectRuntimePreparation(
         fixture.service, false);
     TEST_ASSERT_TRUE(fixture.service.recoverRuntimeFailure() ==
                      fermentation::ConfigurationCommitResolutionStatus::
                          ResolutionRecoveredNew);
+    fixture.store.clearReadObserver();
+    fermentation::ConfigurationServiceTestAccess::clearHook(fixture.service);
+    TEST_ASSERT_GREATER_THAN_UINT32(0U, observation.readCount);
+    TEST_ASSERT_GREATER_THAN_UINT64(readsBeforeRetry,
+                                    fixture.store.readCount());
+    TEST_ASSERT_EQUAL_UINT64(1U, preparation.attemptCount.load());
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_TRUE(
+        runtime.status ==
+        fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted);
+    TEST_ASSERT_EQUAL_STRING(
+        "Spaeter vorbereitet",
+        runtime.lease->userConfiguration().deviceName.c_str());
 }
 
 void test_failed_runtime_rebuild_retry_is_consumed_before_preparation() {
@@ -1231,24 +1312,127 @@ void test_failed_runtime_rebuild_retry_is_consumed_before_preparation() {
                      fermentation::ConfigurationCommitResolutionStatus::
                          ResolutionRuntimeFailure);
 
+    RetryReadObservation observation{&fixture.service};
+    fixture.store.observeReads(observeConsumedRetryAtStoreRead, &observation);
+    RuntimePreparationObservation preparation;
+    fermentation::ConfigurationServiceTestAccess::observeRuntimePreparation(
+        fixture.service, preparation);
+    const auto readsBeforeRetry = fixture.store.readCount();
     TEST_ASSERT_TRUE(fixture.service.recoverRuntimeFailure() ==
                      fermentation::ConfigurationCommitResolutionStatus::
                          ResolutionRuntimeFailure);
-    const auto preparationsAfterConsumedRetry = fixture.resolver.prepareCount();
+    fixture.store.clearReadObserver();
+    TEST_ASSERT_GREATER_THAN_UINT32(0U, observation.readCount);
+    TEST_ASSERT_GREATER_THAN_UINT64(readsBeforeRetry,
+                                    fixture.store.readCount());
+    TEST_ASSERT_EQUAL_UINT64(1U, preparation.attemptCount.load());
+    const auto readsAfterConsumedRetry = fixture.store.readCount();
     fermentation::ConfigurationServiceTestAccess::rejectRuntimePreparation(
         fixture.service, false);
+    const auto writesAfterConsumedRetry = fixture.store.writeCount();
+    const auto liveAllocationsAfterConsumedRetry = gLiveAllocBytes.load();
+    const auto peakAllocationsAfterConsumedRetry = gPeakAllocBytes.load();
     for (std::size_t attempt = 0U; attempt < 3U; ++attempt) {
         TEST_ASSERT_TRUE(fixture.service.recoverRuntimeFailure() ==
                          fermentation::ConfigurationCommitResolutionStatus::
                              ResolutionRuntimeFailure);
     }
-    TEST_ASSERT_EQUAL_UINT64(preparationsAfterConsumedRetry,
-                             fixture.resolver.prepareCount());
+    TEST_ASSERT_EQUAL_UINT64(readsAfterConsumedRetry,
+                             fixture.store.readCount());
+    TEST_ASSERT_EQUAL_UINT64(1U, preparation.attemptCount.load());
+    TEST_ASSERT_EQUAL_UINT64(writesAfterConsumedRetry,
+                             fixture.store.writeCount());
+    TEST_ASSERT_EQUAL_UINT64(liveAllocationsAfterConsumedRetry,
+                             gLiveAllocBytes.load());
+    TEST_ASSERT_EQUAL_UINT64(peakAllocationsAfterConsumedRetry,
+                             gPeakAllocBytes.load());
     TEST_ASSERT_TRUE(fixture.service.mode() ==
                      fermentation::ConfigurationServiceMode::RuntimeFailure);
+    TEST_ASSERT_TRUE(fixture.service.runtimeFailureCause() ==
+                     fermentation::ConfigurationRuntimeFailureCause::
+                         RuntimePreparationAfterResolutionFailure);
     TEST_ASSERT_TRUE(fixture.service.acquireRuntime().status ==
                      fermentation::RuntimeConfigurationReadStatus::
                          ConfigurationRuntimeUnavailable);
+    TEST_ASSERT_TRUE(fixture.service.beginPreview().status ==
+                     fermentation::ConfigurationPreviewStatus::
+                         ConfigurationRuntimeUnavailable);
+    TEST_ASSERT_TRUE(
+        fixture.service.confirmPreview(preview.handle).status ==
+        fermentation::ConfigurationCommitStatus::ConfigurationRuntimeFailure);
+    fermentation::ConfigurationServiceTestAccess::clearHook(fixture.service);
+}
+
+void test_failed_runtime_rebuild_scan_consumes_retry_before_first_read() {
+    Fixture fixture;
+    const auto preview = installChangedPreview(fixture, "Scan scheitert");
+    fixture.store.failWrite(
+        "cr1", device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+        true);
+    fixture.store.failReadsAfterWrite(
+        "cr1", {{"cr1", device_platform::StateStoreReadStatus::ReadError}});
+    TEST_ASSERT_TRUE(fixture.service.confirmPreview(preview.handle).status ==
+                     fermentation::ConfigurationCommitStatus::
+                         ConfigurationCommitIndeterminate);
+    fixture.store.clearReadFault("cr1");
+    fermentation::ConfigurationServiceTestAccess::invalidateRuntimeBinding(
+        fixture.service);
+    fermentation::ConfigurationServiceTestAccess::rejectRuntimePreparation(
+        fixture.service, true);
+    TEST_ASSERT_TRUE(fixture.service.resolveIndeterminate() ==
+                     fermentation::ConfigurationCommitResolutionStatus::
+                         ResolutionRuntimeFailure);
+
+    fermentation::ConfigurationServiceTestAccess::rejectRuntimePreparation(
+        fixture.service, false);
+    fixture.store.failRead("cr1",
+                           device_platform::StateStoreReadStatus::ReadError);
+    RetryReadObservation observation{&fixture.service};
+    fixture.store.observeReads(observeConsumedRetryAtStoreRead, &observation);
+    RuntimePreparationObservation preparation;
+    fermentation::ConfigurationServiceTestAccess::observeRuntimePreparation(
+        fixture.service, preparation);
+    const auto readsBeforeRetry = fixture.store.readCount();
+    TEST_ASSERT_TRUE(fixture.service.recoverRuntimeFailure() ==
+                     fermentation::ConfigurationCommitResolutionStatus::
+                         ResolutionRuntimeFailure);
+    fixture.store.clearReadObserver();
+    fixture.store.clearReadFault("cr1");
+    TEST_ASSERT_GREATER_THAN_UINT32(0U, observation.readCount);
+    TEST_ASSERT_GREATER_THAN_UINT64(readsBeforeRetry,
+                                    fixture.store.readCount());
+    TEST_ASSERT_EQUAL_UINT64(0U, preparation.attemptCount.load());
+
+    const auto readsAfterConsumedRetry = fixture.store.readCount();
+    const auto writesAfterConsumedRetry = fixture.store.writeCount();
+    const auto liveAllocationsAfterConsumedRetry = gLiveAllocBytes.load();
+    const auto peakAllocationsAfterConsumedRetry = gPeakAllocBytes.load();
+    for (std::size_t attempt = 0U; attempt < 3U; ++attempt) {
+        TEST_ASSERT_TRUE(fixture.service.recoverRuntimeFailure() ==
+                         fermentation::ConfigurationCommitResolutionStatus::
+                             ResolutionRuntimeFailure);
+    }
+    TEST_ASSERT_EQUAL_UINT64(readsAfterConsumedRetry,
+                             fixture.store.readCount());
+    TEST_ASSERT_EQUAL_UINT64(0U, preparation.attemptCount.load());
+    TEST_ASSERT_EQUAL_UINT64(writesAfterConsumedRetry,
+                             fixture.store.writeCount());
+    TEST_ASSERT_EQUAL_UINT64(liveAllocationsAfterConsumedRetry,
+                             gLiveAllocBytes.load());
+    TEST_ASSERT_EQUAL_UINT64(peakAllocationsAfterConsumedRetry,
+                             gPeakAllocBytes.load());
+    TEST_ASSERT_TRUE(fixture.service.mode() ==
+                     fermentation::ConfigurationServiceMode::RuntimeFailure);
+    TEST_ASSERT_TRUE(fixture.service.runtimeFailureCause() ==
+                     fermentation::ConfigurationRuntimeFailureCause::
+                         RuntimePreparationAfterResolutionFailure);
+    TEST_ASSERT_TRUE(fixture.service.acquireRuntime().status ==
+                     fermentation::RuntimeConfigurationReadStatus::
+                         ConfigurationRuntimeUnavailable);
+    TEST_ASSERT_TRUE(fixture.service.beginPreview().status ==
+                     fermentation::ConfigurationPreviewStatus::
+                         ConfigurationRuntimeUnavailable);
+    fermentation::ConfigurationServiceTestAccess::clearHook(fixture.service);
 }
 
 void test_wrong_retirement_generation_is_revisioned_and_never_activated() {
@@ -1536,6 +1720,7 @@ int main() {
     RUN_TEST(
         test_failed_runtime_rebuild_stays_closed_and_can_retry_allowed_cause);
     RUN_TEST(test_failed_runtime_rebuild_retry_is_consumed_before_preparation);
+    RUN_TEST(test_failed_runtime_rebuild_scan_consumes_retry_before_first_read);
     RUN_TEST(
         test_wrong_retirement_generation_is_revisioned_and_never_activated);
     RUN_TEST(test_wrong_retirement_generation_never_returns_recovered_new);

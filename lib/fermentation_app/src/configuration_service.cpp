@@ -1146,10 +1146,12 @@ ConfigurationService::recoverRuntimeFailure() {
         context = resolutionContext_.get();
         failureCause = *runtimeFailureCause_;
         if (failureCause == ConfigurationRuntimeFailureCause::
-                                RuntimePreparationAfterResolutionFailure &&
-            context->runtimePreparationRetryConsumed) {
-            return ConfigurationCommitResolutionStatus::
-                ResolutionRuntimeFailure;
+                                RuntimePreparationAfterResolutionFailure) {
+            if (context->runtimePreparationRetryConsumed) {
+                return ConfigurationCommitResolutionStatus::
+                    ResolutionRuntimeFailure;
+            }
+            context->runtimePreparationRetryConsumed = true;
         }
     }
     if (failureCause ==
@@ -1193,16 +1195,6 @@ ConfigurationService::recoverRuntimeFailure() {
     if (resolution.status !=
         ConfigurationCommitResolutionStatus::ResolutionRecoveredNew) {
         return ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure;
-    }
-    if (failureCause == ConfigurationRuntimeFailureCause::
-                            RuntimePreparationAfterResolutionFailure) {
-        const std::lock_guard<std::mutex> lock(stateMutex_);
-        if (resolutionContext_.get() != context ||
-            context->runtimePreparationRetryConsumed) {
-            return ConfigurationCommitResolutionStatus::
-                ResolutionRuntimeFailure;
-        }
-        context->runtimePreparationRetryConsumed = true;
     }
     auto preparedRuntime =
         prepareSnapshot(context->persistent.newGraph, nextRuntimeGeneration_);
@@ -1344,6 +1336,7 @@ bool ConfigurationService::stateRevisionHasHeadroomLocked(
 std::shared_ptr<RuntimeConfigurationSnapshot>
 ConfigurationService::prepareSnapshot(const LoadedConfigurationGraph& graph,
                                       std::uint64_t generationId) const {
+    invokeTestHook(TestPoint::BeforeRuntimePreparation);
     if (rejectRuntimePreparationForTest_.load(std::memory_order_acquire)) {
         return {};
     }
@@ -1446,6 +1439,13 @@ void ConfigurationService::invalidateRuntimePreparationBindingForTest() {
 void ConfigurationService::rejectRuntimePreparationForTest(
     bool reject) noexcept {
     rejectRuntimePreparationForTest_.store(reject, std::memory_order_release);
+}
+
+bool ConfigurationService::runtimePreparationRetryConsumedForTest()
+    const noexcept {
+    const std::lock_guard<std::mutex> lock(stateMutex_);
+    return resolutionContext_ &&
+           resolutionContext_->runtimePreparationRetryConsumed;
 }
 
 }  // namespace fermentation

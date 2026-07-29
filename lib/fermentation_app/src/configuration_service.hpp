@@ -248,6 +248,7 @@ class ConfigurationService {
         BeforeResolutionContextRelease,
         PreviewBeforeInstall,
         BeforePublish,
+        BeforeRuntimePreparation,
     };
     using TestHook = void (*)(void*, TestPoint);
     void releaseRuntimeLease(std::uint64_t generationId) noexcept;
@@ -272,6 +273,7 @@ class ConfigurationService {
     void invokeTestHook(TestPoint point) const;
     void invalidateRuntimePreparationBindingForTest();
     void rejectRuntimePreparationForTest(bool reject) noexcept;
+    [[nodiscard]] bool runtimePreparationRetryConsumedForTest() const noexcept;
 
     ConfigurationMutationCoordinator& mutationCoordinator_;
     ConfigurationGraphStore& graphStore_;
