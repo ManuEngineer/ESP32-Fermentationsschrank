@@ -13,6 +13,8 @@ namespace {
 
 device_platform::StateStoreKey key(const char* value) {
     auto result = device_platform::StateStoreKey::create(value);
+    // All call sites pass compile-time keys from the validated storage
+    // contract. NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     return std::move(*result.key);
 }
 
@@ -114,7 +116,7 @@ ConfigurationRecoveryStatus ConfigurationRecoveryService::verifyFactoryEmpty()
 }
 
 ConfigurationRecoveryResult ConfigurationRecoveryService::mapBootstrapFailure(
-    ConfigurationBootstrapScanStatus status) const {
+    ConfigurationBootstrapScanStatus status) {
     switch (status) {
         case ConfigurationBootstrapScanStatus::ReadError:
             return {ConfigurationRecoveryStatus::PersistenceFailure, {}};
@@ -208,15 +210,16 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
     if (!configurationService_.discardPreparedRecovery(resumeMode)) {
         return {ConfigurationRecoveryStatus::RuntimePreparationFailure, {}};
     }
-    return {
-        execution.status == ConfigurationCommitExecutionStatus::CapacityFailure
-            ? ConfigurationRecoveryStatus::CapacityFailure
-            : (execution.status == ConfigurationCommitExecutionStatus::
-                                       RecordOutcomeIndeterminate
-                   ? ConfigurationRecoveryStatus::
-                         ConfigurationRecordOutcomeIndeterminate
-                   : ConfigurationRecoveryStatus::PersistenceFailure),
-        {}};
+    auto status = ConfigurationRecoveryStatus::PersistenceFailure;
+    if (execution.status ==
+        ConfigurationCommitExecutionStatus::CapacityFailure) {
+        status = ConfigurationRecoveryStatus::CapacityFailure;
+    } else if (execution.status ==
+               ConfigurationCommitExecutionStatus::RecordOutcomeIndeterminate) {
+        status = ConfigurationRecoveryStatus::
+            ConfigurationRecordOutcomeIndeterminate;
+    }
+    return {status, {}};
 }
 
 ConfigurationRecoveryResult ConfigurationRecoveryService::resolvePendingRoot(
@@ -270,6 +273,9 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::resolvePendingRoot(
     return finalizePublishedGraph(completed.bootstrap, completed.successStatus);
 }
 
+// Boot keeps the persistent-state classification and its recovery transitions
+// in one auditable decision path.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
     auto acquired = mutationCoordinator_.tryAcquire();
     if (acquired.status != ConfigurationMutationAcquireStatus::Acquired) {

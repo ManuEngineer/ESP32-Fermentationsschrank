@@ -17,6 +17,8 @@ using device_platform::StateStoreReadStatus;
 device_platform::StateStoreKey keyFor(std::size_t slot) {
     auto created = device_platform::StateStoreKey::create(
         configuration_storage_contract::kConfigurationBootstrapSlotKeys[slot]);
+    // The indexed values come from the compile-time validated storage contract.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     return std::move(*created.key);
 }
 
@@ -47,6 +49,8 @@ ConfigurationBootstrapWriteStatus mapScan(
 
 }  // namespace
 
+// The complete two-slot history relation is intentionally evaluated together.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationBootstrapScanResult ConfigurationBootstrapStore::scan() const {
     struct Candidate {
         std::size_t slot;
@@ -80,7 +84,10 @@ ConfigurationBootstrapScanResult ConfigurationBootstrapStore::scan() const {
         return {ConfigurationBootstrapScanStatus::Empty, std::nullopt};
     }
     if (candidates[0].has_value() && candidates[1].has_value()) {
+        // Both optionals are proven present by the enclosing condition.
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
         const auto& left = *candidates[0];
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
         const auto& right = *candidates[1];
         if (left.record.sequence == right.record.sequence) {
             if (left.bytes != right.bytes) {
@@ -106,8 +113,12 @@ ConfigurationBootstrapScanResult ConfigurationBootstrapStore::scan() const {
                 device_platform::SlotId{static_cast<std::uint32_t>(newer.slot)},
                 newer.record, newer.bytes, newer.record.sequence, false}};
     }
+    // The preceding empty and both-present branches prove exactly one value.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     const auto& only =
-        candidates[0].has_value() ? *candidates[0] : *candidates[1];
+        candidates[0].has_value()
+            ? *candidates[0]   // NOLINT(bugprone-unchecked-optional-access)
+            : *candidates[1];  // NOLINT(bugprone-unchecked-optional-access)
     return {ConfigurationBootstrapScanStatus::Available,
             LoadedConfigurationBootstrap{
                 device_platform::SlotId{static_cast<std::uint32_t>(only.slot)},

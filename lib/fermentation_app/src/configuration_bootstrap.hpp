@@ -37,8 +37,9 @@ inline constexpr ConfigurationStorageFormatVersion
 
 [[nodiscard]] bool operator==(const ConfigurationBootstrapRecord& left,
                               const ConfigurationBootstrapRecord& right);
-[[nodiscard]] inline bool operator!=(const ConfigurationBootstrapRecord& left,
-                                     const ConfigurationBootstrapRecord& right) {
+[[nodiscard]] inline bool operator!=(
+    const ConfigurationBootstrapRecord& left,
+    const ConfigurationBootstrapRecord& right) {
     return !(left == right);
 }
 [[nodiscard]] bool isPlausible(const ConfigurationBootstrapRecord& record);

@@ -23,7 +23,7 @@ ConfigurationBootstrapCodecStatus encodeConfigurationBootstrapRecord(
             payload, static_cast<std::uint8_t>(record.state))) {
         return ConfigurationBootstrapCodecStatus::CapacityExceeded;
     }
-    device_platform::StorageEnvelope envelope{
+    const device_platform::StorageEnvelope envelope{
         configuration_storage_contract::kConfigurationBootstrapRecordType,
         kConfigurationBootstrapSchemaVersion1,
         record.storageEpoch,

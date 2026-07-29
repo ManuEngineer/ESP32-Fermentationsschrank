@@ -53,6 +53,9 @@ ConfigurationScanStatus mapReadStatus(
 }
 
 template <std::size_t N>
+// The bounded scan deliberately keeps all identity and collision checks in one
+// pass so no caller can accidentally omit a global blocker.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 MetadataScanResult scanGroupMetadata(
     const device_platform::IStateStore& store,
     const std::array<const char*, N>& keys,
@@ -451,7 +454,7 @@ BoundRootReadResult readBoundRootDescriptor(
                 {},
                 true};
     }
-    return {ConfigurationScanStatus::Success, *decodedRoot.value, read.value,
+    return {ConfigurationScanStatus::Success, decodedRoot.value, read.value,
             true};
 }
 
@@ -774,6 +777,8 @@ struct InitialSlotSelection {
 };
 
 template <std::size_t N>
+// Slot safety, exact reuse and collision rejection form one atomic classifier.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 InitialSlotSelection selectInitialSlot(
     const device_platform::IStateStore& store,
     const std::array<const char*, N>& keys, device_platform::StorageEpoch epoch,
@@ -1004,16 +1009,21 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
             selectedFallback};
         return result;
     }
-    result.status =
-        roots.newerSchema
-            ? ConfigurationGraphLoadStatus::UnsupportedNewerConfigurationSchema
-            : (result.diagnostics.invalidCandidates == 0U
-                   ? ConfigurationGraphLoadStatus::ConfigurationGraphUnavailable
-                   : ConfigurationGraphLoadStatus::
-                         ConfigurationGraphIntegrityFailure);
+    if (roots.newerSchema) {
+        result.status =
+            ConfigurationGraphLoadStatus::UnsupportedNewerConfigurationSchema;
+    } else if (result.diagnostics.invalidCandidates == 0U) {
+        result.status =
+            ConfigurationGraphLoadStatus::ConfigurationGraphUnavailable;
+    } else {
+        result.status =
+            ConfigurationGraphLoadStatus::ConfigurationGraphIntegrityFailure;
+    }
     return result;
 }
 
+// Validation replays the complete bounded canonical selection contract.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationValidationScanResult ConfigurationGraphStore::validationScan(
     const LoadedConfigurationGraph& expectedActive) const {
     ConfigurationValidationScanResult result;
@@ -1705,9 +1715,11 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     if (userSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {userSlot.status, std::nullopt};
     }
+    // Successful slot selection guarantees a bound slot.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     const UserConfigurationReference userRef{
         configuration_storage_contract::kUserConfigurationRecordType,
-        *userSlot.slot,
+        *userSlot.slot,  // NOLINT(bugprone-unchecked-optional-access)
         UserConfigurationRevision{1U},
         1U,
         static_cast<std::uint32_t>(payload.size()),
@@ -1731,9 +1743,11 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     if (serviceSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {serviceSlot.status, std::nullopt};
     }
+    // Successful slot selection guarantees a bound slot.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     const ServiceConfigurationReference serviceRef{
         configuration_storage_contract::kServiceConfigurationRecordType,
-        *serviceSlot.slot,
+        *serviceSlot.slot,  // NOLINT(bugprone-unchecked-optional-access)
         ServiceConfigurationRevision{1U},
         1U,
         static_cast<std::uint32_t>(payload.size()),
@@ -1759,9 +1773,11 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     if (catalogSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {catalogSlot.status, std::nullopt};
     }
+    // Successful slot selection guarantees a bound slot.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     const ProgramCatalogReference catalogRef{
         configuration_storage_contract::kProgramCatalogRecordType,
-        *catalogSlot.slot,
+        *catalogSlot.slot,  // NOLINT(bugprone-unchecked-optional-access)
         ProgramCatalogRevision{1U},
         1U,
         static_cast<std::uint32_t>(payload.size()),
@@ -1802,6 +1818,8 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
         return {manifestSlot.status, std::nullopt};
     }
     auto boundManifestRef = manifestRef;
+    // Successful slot selection guarantees a bound slot.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     boundManifestRef.slot = *manifestSlot.slot;
     const ConfigurationRootRecord root{boundManifestRef, std::nullopt};
     std::string rootRecord;
@@ -1821,6 +1839,8 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     }
     ConfigurationGraphBranch branch{boundManifestRef, manifest, user,
                                     service,          catalog,  manifestRecord};
+    // Successful slot selection guarantees all five bound slots below.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     LoadedConfigurationGraph graph{*rootSlot.slot,
                                    ConfigurationRootSequence{1U},
                                    root,
@@ -1829,13 +1849,18 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
                                    std::nullopt,
                                    false};
     ConfigurationSlotPlan plan;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     plan.userConfigurationSlot = *userSlot.slot;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     plan.serviceConfigurationSlot = *serviceSlot.slot;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     plan.programCatalogSlot = *catalogSlot.slot;
     plan.userConfigurationRevision = UserConfigurationRevision{1U};
     plan.serviceConfigurationRevision = ServiceConfigurationRevision{1U};
     plan.programCatalogRevision = ProgramCatalogRevision{1U};
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     plan.manifestSlot = *manifestSlot.slot;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     plan.rootSlot = *rootSlot.slot;
     plan.manifestGeneration = ConfigurationManifestGeneration{1U};
     plan.rootSequence = ConfigurationRootSequence{1U};
@@ -1851,6 +1876,9 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
                 rootSlot.writeRequired, planIdentity}};
 }
 
+// The fixed write sequence keeps every pre-root cut point explicit and
+// auditable; helper extraction must not create a second commit workflow.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
     PreparedInitialConfigurationGraph& prepared,
     ConfigurationEpochGraphWriteCapability& capability) {
@@ -1911,9 +1939,14 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
     }
     std::string{}.swap(payload);
     if (prepared.userWriteRequired) {
+        if (!prepared.slotPlan.userConfigurationSlot.has_value()) {
+            return {ConfigurationCommitExecutionStatus::RuntimeFailure,
+                    ConfigurationCommitFailurePhase::UserDocument};
+        }
+        const auto selectedSlot = *prepared.slotPlan.userConfigurationSlot;
         if (auto failure = writeDocument(
                 configuration_storage_contract::kUserConfigurationSlotKeys
-                    [prepared.slotPlan.userConfigurationSlot->value()],
+                    [selectedSlot.value()],
                 prepared.previousTargetUserRecordBytes,
                 configuration_limits::kMaximumUserConfigurationPayloadBytes +
                     45U,
@@ -1933,9 +1966,14 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
     }
     std::string{}.swap(payload);
     if (prepared.serviceWriteRequired) {
+        if (!prepared.slotPlan.serviceConfigurationSlot.has_value()) {
+            return {ConfigurationCommitExecutionStatus::RuntimeFailure,
+                    ConfigurationCommitFailurePhase::ServiceDocument};
+        }
+        const auto selectedSlot = *prepared.slotPlan.serviceConfigurationSlot;
         if (auto failure = writeDocument(
                 configuration_storage_contract::kServiceConfigurationSlotKeys
-                    [prepared.slotPlan.serviceConfigurationSlot->value()],
+                    [selectedSlot.value()],
                 prepared.previousTargetServiceRecordBytes, 45U,
                 ConfigurationCommitFailurePhase::ServiceDocument)) {
             return *failure;
@@ -1955,9 +1993,14 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
     }
     std::string{}.swap(payload);
     if (prepared.programWriteRequired) {
+        if (!prepared.slotPlan.programCatalogSlot.has_value()) {
+            return {ConfigurationCommitExecutionStatus::RuntimeFailure,
+                    ConfigurationCommitFailurePhase::ProgramDocument};
+        }
+        const auto selectedSlot = *prepared.slotPlan.programCatalogSlot;
         if (auto failure = writeDocument(
                 configuration_storage_contract::kProgramCatalogSlotKeys
-                    [prepared.slotPlan.programCatalogSlot->value()],
+                    [selectedSlot.value()],
                 prepared.previousTargetProgramRecordBytes,
                 configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
                 ConfigurationCommitFailurePhase::ProgramDocument)) {
@@ -1973,14 +2016,14 @@ ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
             prepared.previousTargetManifestRecordBytes,
             configuration_limits::kMaximumConfigurationManifestEnvelopeBytes);
         if (manifest != InitialWriteReadbackStatus::NewValue) {
-            return {
-                manifest == InitialWriteReadbackStatus::CapacityFailure
-                    ? ConfigurationCommitExecutionStatus::CapacityFailure
-                    : (manifest == InitialWriteReadbackStatus::Indeterminate
-                           ? ConfigurationCommitExecutionStatus::
-                                 RecordOutcomeIndeterminate
-                           : ConfigurationCommitExecutionStatus::WriteFailure),
-                ConfigurationCommitFailurePhase::Manifest};
+            auto status = ConfigurationCommitExecutionStatus::WriteFailure;
+            if (manifest == InitialWriteReadbackStatus::CapacityFailure) {
+                status = ConfigurationCommitExecutionStatus::CapacityFailure;
+            } else if (manifest == InitialWriteReadbackStatus::Indeterminate) {
+                status = ConfigurationCommitExecutionStatus::
+                    RecordOutcomeIndeterminate;
+            }
+            return {status, ConfigurationCommitFailurePhase::Manifest};
         }
     }
     const auto target = validateBranchSemantically(store_, timeZoneResolver_,

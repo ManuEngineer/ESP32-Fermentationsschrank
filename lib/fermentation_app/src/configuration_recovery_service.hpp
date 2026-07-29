@@ -46,6 +46,10 @@ class ConfigurationRecoveryService {
     ConfigurationRecoveryService(const ConfigurationRecoveryService&) = delete;
     ConfigurationRecoveryService& operator=(
         const ConfigurationRecoveryService&) = delete;
+    ConfigurationRecoveryService(ConfigurationRecoveryService&&) = delete;
+    ConfigurationRecoveryService& operator=(ConfigurationRecoveryService&&) =
+        delete;
+    ~ConfigurationRecoveryService() = default;
 
     [[nodiscard]] ConfigurationRecoveryResult boot();
     [[nodiscard]] ConfigurationRecoveryResult beginAuthorizedFactoryReset();
@@ -80,8 +84,8 @@ class ConfigurationRecoveryService {
         const LoadedConfigurationBootstrap& bootstrap,
         ConfigurationRecoveryStatus successStatus);
     [[nodiscard]] ConfigurationRecoveryStatus verifyFactoryEmpty() const;
-    [[nodiscard]] ConfigurationRecoveryResult mapBootstrapFailure(
-        ConfigurationBootstrapScanStatus status) const;
+    [[nodiscard]] static ConfigurationRecoveryResult mapBootstrapFailure(
+        ConfigurationBootstrapScanStatus status);
 
     device_platform::IStateStore& store_;
     ConfigurationBootstrapStore& bootstrapStore_;

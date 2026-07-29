@@ -240,6 +240,7 @@ class ConfigurationEpochGraphWriteCapability {
         ConfigurationEpochGraphWriteCapability&&) noexcept = default;
     ConfigurationEpochGraphWriteCapability& operator=(
         ConfigurationEpochGraphWriteCapability&&) noexcept = default;
+    ~ConfigurationEpochGraphWriteCapability() = default;
 
    private:
     friend class ConfigurationRecoveryService;
