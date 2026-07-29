@@ -78,6 +78,7 @@ struct ConfigurationRecoveryResourcePeaks {
     std::size_t documentEnvelopeCapacity{0U};
     std::size_t storeReadbackCapacity{0U};
     std::size_t smallCanonicalRecordCapacity{0U};
+    std::size_t indeterminateContextCapacity{0U};
     std::size_t fullModelGenerations{0U};
 };
 

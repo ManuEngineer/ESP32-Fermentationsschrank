@@ -982,7 +982,9 @@ kleinen kanonischen Bootstrap-/Manifest-/Rootbindungen. Vorherige maximale
 Dokumentrecords werden nur als kleine technische Deskriptoren gebunden; der
 Old-or-New-Portvertrag ersetzt eine zweite Vollkopie. Modellreservierung erfolgt
 vor Factorymodellaufbau, und vorbereitete Recoverymodelle zaehlen zur festen
-Zwei-Generationen-Grenze.
+Zwei-Generationen-Grenze. Ein tatsaechlich gehaltener Root-Indeterminate-
+Kontext weist seine zusaetzlichen fluechtigen Bootstrap-/Rootbindungskapazitaeten
+separat aus und haelt keinen zweiten maximalen Dokumentrecord.
 
 Ein erfolgreicher lokaler Reset loescht weder einen bereits erzeugten
 Konfigurationsfehler noch eine spaetere Verriegelung aus #24. Deren Aufhebung

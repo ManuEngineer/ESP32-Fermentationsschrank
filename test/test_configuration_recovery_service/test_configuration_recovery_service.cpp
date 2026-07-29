@@ -927,16 +927,17 @@ void test_recovery_resource_peaks_are_measured_and_bounded() {
     TEST_ASSERT_GREATER_THAN(0U, peaks->documentEnvelopeCapacity);
     TEST_ASSERT_GREATER_THAN(0U, peaks->storeReadbackCapacity);
     TEST_ASSERT_GREATER_THAN(0U, peaks->smallCanonicalRecordCapacity);
+    TEST_ASSERT_EQUAL_UINT32(0U, peaks->indeterminateContextCapacity);
     TEST_ASSERT_LESS_OR_EQUAL_UINT32(
         fermentation::configuration_limits::
             kMaxDistinctConfigurationModelGenerations,
         peaks->fullModelGenerations);
     std::printf(
         "ISSUE57_INIT_RESOURCE_PEAK payload=%zu envelope=%zu readback=%zu "
-        "small=%zu models=%zu\n",
+        "small=%zu indeterminate=%zu models=%zu\n",
         peaks->programPayloadCapacity, peaks->documentEnvelopeCapacity,
         peaks->storeReadbackCapacity, peaks->smallCanonicalRecordCapacity,
-        peaks->fullModelGenerations);
+        peaks->indeterminateContextCapacity, peaks->fullModelGenerations);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
@@ -950,11 +951,32 @@ void test_recovery_resource_peaks_are_measured_and_bounded() {
         resetPeaks->fullModelGenerations);
     std::printf(
         "ISSUE57_RESET_RESOURCE_PEAK payload=%zu envelope=%zu readback=%zu "
-        "small=%zu models=%zu\n",
+        "small=%zu indeterminate=%zu models=%zu\n",
         resetPeaks->programPayloadCapacity,
         resetPeaks->documentEnvelopeCapacity, resetPeaks->storeReadbackCapacity,
         resetPeaks->smallCanonicalRecordCapacity,
+        resetPeaks->indeterminateContextCapacity,
         resetPeaks->fullModelGenerations);
+
+    Fixture indeterminateFixture;
+    indeterminateFixture.store.faultWrite(
+        "cr0", device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+        true, true);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             ConfigurationCommitIndeterminate),
+        static_cast<int>(indeterminateFixture.recovery->boot().status));
+    const auto indeterminatePeaks =
+        indeterminateFixture.recovery->lastResourcePeaks();
+    TEST_ASSERT_TRUE(indeterminatePeaks.has_value());
+    TEST_ASSERT_GREATER_THAN(0U,
+                             indeterminatePeaks->indeterminateContextCapacity);
+    std::printf(
+        "ISSUE57_INDETERMINATE_RESOURCE_PEAK small=%zu context=%zu "
+        "models=%zu\n",
+        indeterminatePeaks->smallCanonicalRecordCapacity,
+        indeterminatePeaks->indeterminateContextCapacity,
+        indeterminatePeaks->fullModelGenerations);
 }
 
 }  // namespace

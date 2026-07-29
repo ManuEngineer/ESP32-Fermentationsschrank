@@ -338,7 +338,9 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
         prepared.peakProgramPayloadCapacity,
         prepared.peakDocumentEnvelopeCapacity,
         prepared.peakStoreReadbackCapacity,
-        prepared.smallCanonicalRecordCapacity,
+        prepared.smallCanonicalRecordCapacity +
+            bootstrap.canonicalRecordBytes.capacity(),
+        0U,
         configurationService_.fullModelGenerationCount()};
     if (execution.status == ConfigurationCommitExecutionStatus::Activated) {
         CommittedRecoveryActivation activation(
@@ -365,6 +367,9 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
             std::move(prepared), bootstrap,
             operation,           successStatus,
             recoveryGeneration,  configurationService_.stateRevision()};
+        lastResourcePeaks_->indeterminateContextCapacity =
+            pendingRoot_->bootstrap.canonicalRecordBytes.capacity() +
+            pendingRoot_->prepared.rootRecordBytes.capacity();
         return {ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate,
                 {}};
     }
