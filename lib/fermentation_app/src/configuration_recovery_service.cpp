@@ -6,6 +6,7 @@
 
 #include "configuration_limits.hpp"
 #include "configuration_storage_contract.hpp"
+#include "crc32.hpp"
 #include "state_store_key.hpp"
 
 namespace fermentation {
@@ -22,9 +23,9 @@ ConfigurationRecoveryStatus mapPrepare(
     InitialConfigurationPrepareStatus status) {
     switch (status) {
         case InitialConfigurationPrepareStatus::CapacityFailure:
-            return ConfigurationRecoveryStatus::CapacityFailure;
+            return ConfigurationRecoveryStatus::PersistenceCapacityFailure;
         case InitialConfigurationPrepareStatus::PersistenceFailure:
-            return ConfigurationRecoveryStatus::PersistenceFailure;
+            return ConfigurationRecoveryStatus::PersistenceReadFailure;
         case InitialConfigurationPrepareStatus::UnsupportedNewerSchema:
             return ConfigurationRecoveryStatus::
                 UnsupportedNewerConfigurationSchema;
@@ -47,10 +48,10 @@ ConfigurationRecoveryStatus mapLoad(ConfigurationGraphLoadStatus status) {
                 UnsupportedNewerConfigurationSchema;
         case ConfigurationGraphLoadStatus::RootCapacityError:
         case ConfigurationGraphLoadStatus::RecordCapacityError:
-            return ConfigurationRecoveryStatus::CapacityFailure;
+            return ConfigurationRecoveryStatus::PersistenceCapacityFailure;
         case ConfigurationGraphLoadStatus::RootReadError:
         case ConfigurationGraphLoadStatus::RecordReadError:
-            return ConfigurationRecoveryStatus::PersistenceFailure;
+            return ConfigurationRecoveryStatus::PersistenceReadFailure;
         case ConfigurationGraphLoadStatus::ConfigurationGraphIntegrityFailure:
             return ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
         case ConfigurationGraphLoadStatus::ConfigurationGraphUnavailable:
@@ -61,9 +62,124 @@ ConfigurationRecoveryStatus mapLoad(ConfigurationGraphLoadStatus status) {
     return ConfigurationRecoveryStatus::ConfigurationUnavailable;
 }
 
+ConfigurationRecoveryResult makeResult(
+    ConfigurationRecoveryStatus status,
+    ConfigurationGraphDiagnostics diagnostics = {}) {
+    return {status, diagnostics};
+}
+
+ConfigurationRecoveryResult makeUnavailableResult(
+    ConfigurationRecoveryStatus status,
+    ConfigurationGraphDiagnostics diagnostics = {}) {
+    auto result = makeResult(status, diagnostics);
+    result.safetyProducer =
+        ConfigurationSafetyProducer::ConfigurationUnavailable;
+    return result;
+}
+
+ConfigurationRecoveryResult makeRejectedWithValidRuntime(
+    ConfigurationRecoveryStatus status,
+    ConfigurationGraphDiagnostics diagnostics = {}) {
+    auto result = makeResult(status, diagnostics);
+    result.safetyProducer.reset();
+    return result;
+}
+
+ConfigurationRecoveryStatus mapBootstrapScanFailure(
+    ConfigurationBootstrapScanStatus status) {
+    switch (status) {
+        case ConfigurationBootstrapScanStatus::ReadError:
+            return ConfigurationRecoveryStatus::PersistenceReadFailure;
+        case ConfigurationBootstrapScanStatus::CapacityError:
+            return ConfigurationRecoveryStatus::PersistenceCapacityFailure;
+        default:
+            return ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
+    }
+}
+
+ConfigurationRecoveryStatus mapRecoveryBeginStatus(
+    ConfigurationRecoveryBeginStatus status) {
+    switch (status) {
+        case ConfigurationRecoveryBeginStatus::Success:
+            return ConfigurationRecoveryStatus::RuntimeReady;
+        case ConfigurationRecoveryBeginStatus::ConfigurationModelBudgetBusy:
+            return ConfigurationRecoveryStatus::ConfigurationModelBudgetBusy;
+        case ConfigurationRecoveryBeginStatus::CounterOverflow:
+            return ConfigurationRecoveryStatus::CounterOverflow;
+        case ConfigurationRecoveryBeginStatus::StateTransitionRejected:
+            return ConfigurationRecoveryStatus::StateTransitionRejected;
+    }
+    return ConfigurationRecoveryStatus::StateTransitionRejected;
+}
+
 bool isBootstrapIndeterminate(ConfigurationBootstrapWriteStatus status) {
     return status ==
            ConfigurationBootstrapWriteStatus::BootstrapCommitIndeterminate;
+}
+
+ConfigurationRecoveryStatus mapBootstrapWriteFailure(
+    ConfigurationBootstrapWriteStatus status) {
+    switch (status) {
+        case ConfigurationBootstrapWriteStatus::ReadError:
+            return ConfigurationRecoveryStatus::PersistenceReadFailure;
+        case ConfigurationBootstrapWriteStatus::CapacityError:
+        case ConfigurationBootstrapWriteStatus::WriteCapacityError:
+            return ConfigurationRecoveryStatus::PersistenceCapacityFailure;
+        case ConfigurationBootstrapWriteStatus::UnsupportedNewerSchema:
+            return ConfigurationRecoveryStatus::
+                UnsupportedNewerConfigurationSchema;
+        case ConfigurationBootstrapWriteStatus::IntegrityFailure:
+            return ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
+        case ConfigurationBootstrapWriteStatus::CounterOverflow:
+            return ConfigurationRecoveryStatus::CounterOverflow;
+        case ConfigurationBootstrapWriteStatus::BootstrapCommitIndeterminate:
+            return ConfigurationRecoveryStatus::BootstrapCommitIndeterminate;
+        case ConfigurationBootstrapWriteStatus::InvalidTransition:
+            return ConfigurationRecoveryStatus::StateTransitionRejected;
+        case ConfigurationBootstrapWriteStatus::WriteError:
+        case ConfigurationBootstrapWriteStatus::CommitNotEffective:
+        case ConfigurationBootstrapWriteStatus::Success:
+            return ConfigurationRecoveryStatus::PersistenceWriteFailure;
+    }
+    return ConfigurationRecoveryStatus::PersistenceWriteFailure;
+}
+
+bool bootstrapFailureLeavesOldState(ConfigurationBootstrapWriteStatus status) {
+    return status == ConfigurationBootstrapWriteStatus::ReadError ||
+           status == ConfigurationBootstrapWriteStatus::CapacityError ||
+           status == ConfigurationBootstrapWriteStatus::WriteError ||
+           status == ConfigurationBootstrapWriteStatus::WriteCapacityError ||
+           status == ConfigurationBootstrapWriteStatus::CommitNotEffective ||
+           status == ConfigurationBootstrapWriteStatus::InvalidTransition ||
+           status == ConfigurationBootstrapWriteStatus::CounterOverflow;
+}
+
+ConfigurationRecoveryResult makeResetPreparationFailure(
+    ConfigurationRecoveryStatus status, bool oldRuntimeRemainsValid) {
+    if (oldRuntimeRemainsValid) {
+        return makeRejectedWithValidRuntime(status);
+    }
+    return makeUnavailableResult(status);
+}
+
+ConfigurationRecoveryResult makeResetBootstrapFailure(
+    ConfigurationBootstrapWriteStatus status, bool oldRuntimeRemainsValid) {
+    const auto mapped = mapBootstrapWriteFailure(status);
+    if (oldRuntimeRemainsValid && bootstrapFailureLeavesOldState(status)) {
+        return makeRejectedWithValidRuntime(mapped);
+    }
+    return makeUnavailableResult(mapped);
+}
+
+bool isResetEligibleNoRuntimeGraph(const ConfigurationGraphLoadResult& graph) {
+    if (graph.status ==
+        ConfigurationGraphLoadStatus::ConfigurationGraphUnavailable) {
+        return true;
+    }
+    return graph.status == ConfigurationGraphLoadStatus::
+                               ConfigurationGraphIntegrityFailure &&
+           !graph.diagnostics.globalScanBlocker &&
+           !graph.diagnostics.persistentIdentityCollision;
 }
 
 }  // namespace
@@ -94,22 +210,44 @@ ConfigurationRecoveryStatus ConfigurationRecoveryService::verifyFactoryEmpty()
     const {
     // The bootstrap scan already read cb0/cb1 under the same mutation lease.
     // These are exactly the remaining 17 known configuration keys.
-    const std::array<const char*, 17> keys{
-        "cr0", "cr1", "cm0", "cm1", "cm2", "uc0", "uc1", "uc2", "uc3",
-        "sc0", "sc1", "sc2", "sc3", "pc0", "pc1", "pc2", "pc3"};
-    for (const auto* keyValue : keys) {
+    const auto inspect = [this](const char* keyValue) {
         const auto read = store_.read(
             key(keyValue),
             configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U);
         if (read.status == device_platform::StateStoreReadStatus::ReadError) {
-            return ConfigurationRecoveryStatus::PersistenceFailure;
+            return ConfigurationRecoveryStatus::PersistenceReadFailure;
         }
         if (read.status ==
             device_platform::StateStoreReadStatus::CapacityError) {
-            return ConfigurationRecoveryStatus::CapacityFailure;
+            return ConfigurationRecoveryStatus::PersistenceCapacityFailure;
         }
         if (read.status != device_platform::StateStoreReadStatus::NotFound) {
             return ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
+        }
+        return ConfigurationRecoveryStatus::RuntimeReady;
+    };
+    const auto inspectGroup = [&inspect](const auto& keys) {
+        for (const auto* keyValue : keys) {
+            const auto status = inspect(keyValue);
+            if (status != ConfigurationRecoveryStatus::RuntimeReady) {
+                return status;
+            }
+        }
+        return ConfigurationRecoveryStatus::RuntimeReady;
+    };
+    const auto statuses = {
+        inspectGroup(
+            configuration_storage_contract::kConfigurationRootSlotKeys),
+        inspectGroup(
+            configuration_storage_contract::kConfigurationManifestSlotKeys),
+        inspectGroup(
+            configuration_storage_contract::kUserConfigurationSlotKeys),
+        inspectGroup(
+            configuration_storage_contract::kServiceConfigurationSlotKeys),
+        inspectGroup(configuration_storage_contract::kProgramCatalogSlotKeys)};
+    for (const auto status : statuses) {
+        if (status != ConfigurationRecoveryStatus::RuntimeReady) {
+            return status;
         }
     }
     return ConfigurationRecoveryStatus::RuntimeReady;
@@ -119,9 +257,11 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::mapBootstrapFailure(
     ConfigurationBootstrapScanStatus status) {
     switch (status) {
         case ConfigurationBootstrapScanStatus::ReadError:
-            return {ConfigurationRecoveryStatus::PersistenceFailure, {}};
+            return makeResult(
+                ConfigurationRecoveryStatus::PersistenceReadFailure);
         case ConfigurationBootstrapScanStatus::CapacityError:
-            return {ConfigurationRecoveryStatus::CapacityFailure, {}};
+            return makeResult(
+                ConfigurationRecoveryStatus::PersistenceCapacityFailure);
         case ConfigurationBootstrapScanStatus::UnsupportedNewerSchema:
             return {ConfigurationRecoveryStatus::
                         UnsupportedNewerConfigurationSchema,
@@ -139,12 +279,17 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::mapBootstrapFailure(
 ConfigurationRecoveryResult
 ConfigurationRecoveryService::finalizePublishedGraph(
     const LoadedConfigurationBootstrap& bootstrap,
+    const PreparedInitialConfigurationGraph& prepared,
     ConfigurationRecoveryStatus successStatus) {
     const auto finalized = bootstrapStore_.writeSuccessor(
         bootstrap, ConfigurationBootstrapState::Initialized);
     if (finalized.status == ConfigurationBootstrapWriteStatus::Success &&
         finalized.loaded.has_value()) {
-        if (!configurationService_.finalizeRecoveredGraph()) {
+        if (finalized.loaded->record.storageEpoch !=
+                prepared.graph.active.manifestReference.storageEpoch ||
+            !configurationService_.finalizeRecoveredGraph(
+                prepared.graph.active.manifestReference.storageEpoch,
+                prepared.rootRecordBytes, prepared.planIdentity)) {
             configurationService_.failRecovery(
                 ConfigurationRuntimeFailureCause::
                     ServiceStateInvariantViolation);
@@ -155,13 +300,7 @@ ConfigurationRecoveryService::finalizePublishedGraph(
     if (isBootstrapIndeterminate(finalized.status)) {
         return {ConfigurationRecoveryStatus::BootstrapCommitIndeterminate, {}};
     }
-    configurationService_.failRecovery(
-        ConfigurationRuntimeFailureCause::PersistentGraphVerificationFailure);
-    return {finalized.status ==
-                    ConfigurationBootstrapWriteStatus::WriteCapacityError
-                ? ConfigurationRecoveryStatus::CapacityFailure
-                : ConfigurationRecoveryStatus::PersistenceFailure,
-            {}};
+    return makeUnavailableResult(mapBootstrapWriteFailure(finalized.status));
 }
 
 ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
@@ -172,16 +311,46 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
     if (!configurationService_.prepareRecoveredGraph(prepared.graph)) {
         return {ConfigurationRecoveryStatus::RuntimePreparationFailure, {}};
     }
+    const auto reboundBootstrap = bootstrapStore_.scan();
+    if (reboundBootstrap.status !=
+            ConfigurationBootstrapScanStatus::Available ||
+        !reboundBootstrap.loaded.has_value() ||
+        reboundBootstrap.loaded->slot != bootstrap.slot ||
+        reboundBootstrap.loaded->record != bootstrap.record ||
+        reboundBootstrap.loaded->canonicalRecordBytes !=
+            bootstrap.canonicalRecordBytes) {
+        configurationService_.failRecovery(
+            ConfigurationRuntimeFailureCause::PersistentGraphIntegrityFailure);
+        return makeResult(mapBootstrapScanFailure(reboundBootstrap.status));
+    }
+    const auto stateRevision = configurationService_.stateRevision();
+    const auto recoveryGeneration = configurationService_.recoveryGeneration();
     ConfigurationEpochGraphWriteCapability capability(
-        bootstrap.record.storageEpoch, bootstrap.slot, bootstrap.record.state,
-        prepared.planIdentity, prepared, lease);
+        bootstrap, stateRevision, recoveryGeneration, prepared.planIdentity,
+        prepared, lease);
+    if (!configurationService_.validateRecoveryBinding(stateRevision,
+                                                       recoveryGeneration)) {
+        return makeResult(ConfigurationRecoveryStatus::StateTransitionRejected);
+    }
     const auto execution =
         graphStore_.executeInitialGraph(prepared, capability);
+    lastResourcePeaks_ = ConfigurationRecoveryResourcePeaks{
+        prepared.peakProgramPayloadCapacity,
+        prepared.peakDocumentEnvelopeCapacity,
+        prepared.peakStoreReadbackCapacity,
+        prepared.smallCanonicalRecordCapacity,
+        configurationService_.fullModelGenerationCount()};
     if (execution.status == ConfigurationCommitExecutionStatus::Activated) {
-        if (!configurationService_.publishRecoveredGraph()) {
+        CommittedRecoveryActivation activation(
+            prepared.graph.active.manifestReference.storageEpoch,
+            prepared.graph.rootSlot, prepared.rootRecordBytes,
+            prepared.planIdentity, configurationService_.stateRevision(),
+            recoveryGeneration, prepared.graph);
+        if (!configurationService_.publishRecoveredGraph(
+                std::move(activation))) {
             return {ConfigurationRecoveryStatus::RuntimePreparationFailure, {}};
         }
-        return finalizePublishedGraph(bootstrap, successStatus);
+        return finalizePublishedGraph(bootstrap, prepared, successStatus);
     }
     if (execution.status ==
         ConfigurationCommitExecutionStatus::CommitIndeterminate) {
@@ -192,8 +361,10 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
                     ServiceStateInvariantViolation);
             return {ConfigurationRecoveryStatus::RuntimePreparationFailure, {}};
         }
-        pendingRoot_ = PendingRootResolution{std::move(prepared), bootstrap,
-                                             operation, successStatus};
+        pendingRoot_ = PendingRootResolution{
+            std::move(prepared), bootstrap,
+            operation,           successStatus,
+            recoveryGeneration,  configurationService_.stateRevision()};
         return {ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate,
                 {}};
     }
@@ -210,10 +381,10 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
     if (!configurationService_.discardPreparedRecovery(resumeMode)) {
         return {ConfigurationRecoveryStatus::RuntimePreparationFailure, {}};
     }
-    auto status = ConfigurationRecoveryStatus::PersistenceFailure;
+    auto status = ConfigurationRecoveryStatus::PersistenceWriteFailure;
     if (execution.status ==
         ConfigurationCommitExecutionStatus::CapacityFailure) {
-        status = ConfigurationRecoveryStatus::CapacityFailure;
+        status = ConfigurationRecoveryStatus::PersistenceCapacityFailure;
     } else if (execution.status ==
                ConfigurationCommitExecutionStatus::RecordOutcomeIndeterminate) {
         status = ConfigurationRecoveryStatus::
@@ -225,21 +396,31 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
 ConfigurationRecoveryResult ConfigurationRecoveryService::resolvePendingRoot(
     ConfigurationMutationLease& lease) {
     if (!pendingRoot_.has_value() || !lease.valid()) {
-        return {ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
+        return makeResult(
+            ConfigurationRecoveryStatus::ConfigurationUnavailable);
+    }
+    if (!configurationService_.validateRecoveryBinding(
+            pendingRoot_->serviceStateRevision,
+            pendingRoot_->recoveryGeneration)) {
+        configurationService_.failRecovery(
+            ConfigurationRuntimeFailureCause::PublishContractViolation);
+        return makeResult(
+            ConfigurationRecoveryStatus::ConfigurationIntegrityFailure);
     }
     const auto resolution =
         graphStore_.resolveInitialGraph(pendingRoot_->prepared);
     if (resolution.status ==
         ConfigurationCommitResolutionStatus::ResolutionStillIndeterminate) {
-        return {ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate,
-                {}};
+        return makeResult(
+            ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate);
     }
     if (resolution.status ==
         ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure) {
         pendingRoot_.reset();
         configurationService_.failRecovery(
             ConfigurationRuntimeFailureCause::PersistentGraphIntegrityFailure);
-        return {ConfigurationRecoveryStatus::ConfigurationIntegrityFailure, {}};
+        return makeResult(
+            ConfigurationRecoveryStatus::ConfigurationIntegrityFailure);
     }
     if (resolution.status ==
         ConfigurationCommitResolutionStatus::ResolutionRecoveredOld) {
@@ -252,7 +433,8 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::resolvePendingRoot(
         if (!configurationService_.discardPreparedRecovery(resumeMode)) {
             return {ConfigurationRecoveryStatus::RuntimePreparationFailure, {}};
         }
-        return {ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
+        return makeResult(
+            ConfigurationRecoveryStatus::ConfigurationUnavailable);
     }
     auto completed = std::move(*pendingRoot_);
     pendingRoot_.reset();
@@ -265,12 +447,19 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::resolvePendingRoot(
             completed.prepared.rootRecordBytes) {
         configurationService_.failRecovery(
             ConfigurationRuntimeFailureCause::PersistentGraphIntegrityFailure);
-        return {mapLoad(loaded.status), loaded.diagnostics};
+        return makeResult(mapLoad(loaded.status), loaded.diagnostics);
     }
-    if (!configurationService_.publishRecoveredGraph()) {
+    completed.prepared.graph = std::move(*loaded.graph);
+    CommittedRecoveryActivation activation(
+        completed.prepared.graph.active.manifestReference.storageEpoch,
+        completed.prepared.graph.rootSlot, completed.prepared.rootRecordBytes,
+        completed.prepared.planIdentity, configurationService_.stateRevision(),
+        completed.recoveryGeneration, completed.prepared.graph);
+    if (!configurationService_.publishRecoveredGraph(std::move(activation))) {
         return {ConfigurationRecoveryStatus::RuntimePreparationFailure, {}};
     }
-    return finalizePublishedGraph(completed.bootstrap, completed.successStatus);
+    return finalizePublishedGraph(completed.bootstrap, completed.prepared,
+                                  completed.successStatus);
 }
 
 // Boot keeps the persistent-state classification and its recovery transitions
@@ -292,17 +481,32 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
             bootstrap.loaded.has_value()) {
             if (bootstrap.loaded->record.state ==
                 ConfigurationBootstrapState::Initialized) {
-                if (configurationService_.finalizeRecoveredGraph()) {
+                if (configurationService_.finalizeRecoveredGraphForBootstrap(
+                        bootstrap.loaded->record.storageEpoch)) {
                     return {ConfigurationRecoveryStatus::RuntimeReady, {}};
                 }
             } else {
-                return finalizePublishedGraph(
-                    *bootstrap.loaded,
+                const auto successStatus =
                     bootstrap.loaded->record.state ==
                             ConfigurationBootstrapState::Initializing
                         ? ConfigurationRecoveryStatus::
                               FactoryInitializationCompleted
-                        : ConfigurationRecoveryStatus::FactoryResetCompleted);
+                        : ConfigurationRecoveryStatus::FactoryResetCompleted;
+                const auto finalized = bootstrapStore_.writeSuccessor(
+                    *bootstrap.loaded,
+                    ConfigurationBootstrapState::Initialized);
+                if (finalized.status ==
+                        ConfigurationBootstrapWriteStatus::Success &&
+                    finalized.loaded.has_value() &&
+                    configurationService_.finalizeRecoveredGraphForBootstrap(
+                        finalized.loaded->record.storageEpoch)) {
+                    return makeResult(successStatus);
+                }
+                return makeResult(
+                    isBootstrapIndeterminate(finalized.status)
+                        ? ConfigurationRecoveryStatus::
+                              BootstrapCommitIndeterminate
+                        : ConfigurationRecoveryStatus::PersistenceWriteFailure);
             }
         }
         return mapBootstrapFailure(bootstrap.status);
@@ -313,17 +517,18 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
         if (empty != ConfigurationRecoveryStatus::RuntimeReady) {
             return {empty, {}};
         }
+        const auto begin = configurationService_.beginRecovery(
+            ConfigurationServiceMode::RecoveryPreparing,
+            configuration_limits::kInitializationRecoveryRevisionHeadroom);
+        if (begin != ConfigurationRecoveryBeginStatus::Success) {
+            return makeUnavailableResult(mapRecoveryBeginStatus(begin));
+        }
         auto prepared = graphStore_.prepareInitialGraph(
             device_platform::StorageEpoch{1U}, decodeChangeOperation(2U));
         if (prepared.status != InitialConfigurationPrepareStatus::Success ||
             !prepared.prepared.has_value()) {
-            return {mapPrepare(prepared.status), {}};
-        }
-        if (!configurationService_.beginRecovery(
-                ConfigurationServiceMode::RecoveryPreparing,
-                configuration_limits::
-                    kInitializationRecoveryRevisionHeadroom)) {
-            return {ConfigurationRecoveryStatus::CounterOverflow, {}};
+            static_cast<void>(configurationService_.cancelRecovery());
+            return makeResult(mapPrepare(prepared.status));
         }
         auto initial = bootstrapStore_.writeInitialInitializing();
         if (initial.status != ConfigurationBootstrapWriteStatus::Success ||
@@ -337,12 +542,8 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
                     {}};
             }
             static_cast<void>(configurationService_.cancelRecovery());
-            return {
-                initial.status ==
-                        ConfigurationBootstrapWriteStatus::WriteCapacityError
-                    ? ConfigurationRecoveryStatus::CapacityFailure
-                    : ConfigurationRecoveryStatus::PersistenceFailure,
-                {}};
+            return makeUnavailableResult(
+                mapBootstrapWriteFailure(initial.status));
         }
         return continueEpochBuild(
             *initial.loaded, std::move(*prepared.prepared),
@@ -361,16 +562,47 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
         if (loaded.status !=
                 ConfigurationGraphLoadStatus::ConfigurationGraphAvailable ||
             !loaded.graph.has_value()) {
-            return {mapLoad(loaded.status), loaded.diagnostics};
+            const auto status = mapLoad(loaded.status);
+            if ((status ==
+                     ConfigurationRecoveryStatus::ConfigurationUnavailable ||
+                 status == ConfigurationRecoveryStatus::
+                               ConfigurationIntegrityFailure) &&
+                !loaded.diagnostics.globalScanBlocker &&
+                !loaded.diagnostics.persistentIdentityCollision &&
+                configurationService_.mode() ==
+                    ConfigurationServiceMode::NoRuntime) {
+                static_cast<void>(
+                    configurationService_.markResetEligibleNoRuntime());
+            }
+            return makeResult(status, loaded.diagnostics);
         }
-        if (!configurationService_.beginRecovery(
-                ConfigurationServiceMode::RecoveryPreparing,
-                configuration_limits::kNormalBootRevisionHeadroom) ||
-            !configurationService_.prepareRecoveredGraph(*loaded.graph) ||
-            !configurationService_.publishRecoveredGraph() ||
-            !configurationService_.finalizeRecoveredGraph()) {
-            return {ConfigurationRecoveryStatus::RuntimePreparationFailure,
-                    loaded.diagnostics};
+        const auto begin = configurationService_.beginRecovery(
+            ConfigurationServiceMode::RecoveryPreparing,
+            configuration_limits::kNormalBootRevisionHeadroom);
+        if (begin != ConfigurationRecoveryBeginStatus::Success) {
+            return makeUnavailableResult(mapRecoveryBeginStatus(begin),
+                                         loaded.diagnostics);
+        }
+        if (!configurationService_.prepareRecoveredGraph(*loaded.graph)) {
+            return makeUnavailableResult(
+                ConfigurationRecoveryStatus::RuntimePreparationFailure,
+                loaded.diagnostics);
+        }
+        const auto planIdentity = device_platform::computeCrc32IsoHdlc(
+            loaded.graph->canonicalRootRecordBytes);
+        CommittedRecoveryActivation activation(
+            bootstrap.loaded->record.storageEpoch, loaded.graph->rootSlot,
+            loaded.graph->canonicalRootRecordBytes, planIdentity,
+            configurationService_.stateRevision(),
+            configurationService_.recoveryGeneration(), *loaded.graph);
+        if (!configurationService_.publishRecoveredGraph(
+                std::move(activation)) ||
+            !configurationService_.finalizeRecoveredGraph(
+                bootstrap.loaded->record.storageEpoch,
+                loaded.graph->canonicalRootRecordBytes, planIdentity)) {
+            return makeResult(
+                ConfigurationRecoveryStatus::RuntimePreparationFailure,
+                loaded.diagnostics);
         }
         return {ConfigurationRecoveryStatus::RuntimeReady, loaded.diagnostics};
     }
@@ -378,20 +610,21 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
                                    ConfigurationBootstrapState::Initializing
                                ? decodeChangeOperation(2U)
                                : decodeChangeOperation(5U);
-    auto prepared = graphStore_.prepareInitialGraph(
-        bootstrap.loaded->record.storageEpoch, operation);
-    if (prepared.status != InitialConfigurationPrepareStatus::Success ||
-        !prepared.prepared.has_value()) {
-        return {mapPrepare(prepared.status), {}};
-    }
     const auto mode =
         bootstrap.loaded->record.state == ConfigurationBootstrapState::Resetting
             ? ConfigurationServiceMode::EpochResetting
             : ConfigurationServiceMode::RecoveryPreparing;
-    if (!configurationService_.beginRecovery(
-            mode,
-            configuration_limits::kInitializationRecoveryRevisionHeadroom)) {
-        return {ConfigurationRecoveryStatus::CounterOverflow, {}};
+    const auto begin = configurationService_.beginRecovery(
+        mode, configuration_limits::kInitializationRecoveryRevisionHeadroom);
+    if (begin != ConfigurationRecoveryBeginStatus::Success) {
+        return makeResult(mapRecoveryBeginStatus(begin));
+    }
+    auto prepared = graphStore_.prepareInitialGraph(
+        bootstrap.loaded->record.storageEpoch, operation);
+    if (prepared.status != InitialConfigurationPrepareStatus::Success ||
+        !prepared.prepared.has_value()) {
+        static_cast<void>(configurationService_.cancelRecovery());
+        return makeResult(mapPrepare(prepared.status));
     }
     return continueEpochBuild(
         *bootstrap.loaded, std::move(*prepared.prepared), operation,
@@ -419,22 +652,47 @@ ConfigurationRecoveryService::beginAuthorizedFactoryReset() {
                                                  {}}
                    : mapBootstrapFailure(bootstrap.status);
     }
-    if (bootstrap.loaded->record.storageEpoch.value() ==
-        std::numeric_limits<std::uint64_t>::max()) {
-        return {ConfigurationRecoveryStatus::CounterOverflow, {}};
+    constexpr auto kMaximumResettableEpoch =
+        std::numeric_limits<std::uint64_t>::max() / 2U - 1U;
+    if (bootstrap.loaded->record.storageEpoch.value() >
+            kMaximumResettableEpoch ||
+        bootstrap.loaded->highWater.value() ==
+            std::numeric_limits<std::uint64_t>::max()) {
+        return makeResult(ConfigurationRecoveryStatus::CounterOverflow);
+    }
+    if (configurationService_.mode() == ConfigurationServiceMode::NoRuntime) {
+        const auto graph = graphStore_.loadCanonicalGraph(
+            bootstrap.loaded->record.storageEpoch);
+        if (!isResetEligibleNoRuntimeGraph(graph)) {
+            return makeResult(mapLoad(graph.status), graph.diagnostics);
+        }
+        if (!configurationService_.markResetEligibleNoRuntime()) {
+            return makeResult(
+                ConfigurationRecoveryStatus::StateTransitionRejected);
+        }
+    }
+    if (configurationService_.mode() != ConfigurationServiceMode::Operational &&
+        configurationService_.mode() !=
+            ConfigurationServiceMode::ResetEligibleNoRuntime) {
+        return makeResult(ConfigurationRecoveryStatus::StateTransitionRejected);
     }
     const auto targetEpoch = device_platform::StorageEpoch{
         bootstrap.loaded->record.storageEpoch.value() + 1U};
+    const bool oldRuntimeRemainsValid =
+        configurationService_.mode() == ConfigurationServiceMode::Operational;
+    const auto begin = configurationService_.beginRecovery(
+        ConfigurationServiceMode::ResetPreparing,
+        configuration_limits::kResetRecoveryRevisionHeadroom);
+    if (begin != ConfigurationRecoveryBeginStatus::Success) {
+        return makeResult(mapRecoveryBeginStatus(begin));
+    }
     auto prepared =
         graphStore_.prepareInitialGraph(targetEpoch, decodeChangeOperation(5U));
     if (prepared.status != InitialConfigurationPrepareStatus::Success ||
         !prepared.prepared.has_value()) {
-        return {mapPrepare(prepared.status), {}};
-    }
-    if (!configurationService_.beginRecovery(
-            ConfigurationServiceMode::ResetPreparing,
-            configuration_limits::kResetRecoveryRevisionHeadroom)) {
-        return {ConfigurationRecoveryStatus::CounterOverflow, {}};
+        static_cast<void>(configurationService_.cancelRecovery());
+        return makeResetPreparationFailure(mapPrepare(prepared.status),
+                                           oldRuntimeRemainsValid);
     }
     auto resetting = bootstrapStore_.writeSuccessor(
         *bootstrap.loaded, ConfigurationBootstrapState::Resetting);
@@ -447,11 +705,8 @@ ConfigurationRecoveryService::beginAuthorizedFactoryReset() {
                     {}};
         }
         static_cast<void>(configurationService_.cancelRecovery());
-        return {resetting.status ==
-                        ConfigurationBootstrapWriteStatus::WriteCapacityError
-                    ? ConfigurationRecoveryStatus::CapacityFailure
-                    : ConfigurationRecoveryStatus::PersistenceFailure,
-                {}};
+        return makeResetBootstrapFailure(resetting.status,
+                                         oldRuntimeRemainsValid);
     }
     if (!configurationService_.transitionRecovery(
             ConfigurationServiceMode::EpochResetting)) {

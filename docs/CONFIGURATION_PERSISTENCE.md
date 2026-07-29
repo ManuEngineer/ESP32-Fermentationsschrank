@@ -856,10 +856,17 @@ Das Factory-Neuheitsorakel liest unter derselben
 Manifest- und Dokumentkeys genau einmal. Die beiden bereits gebundenen
 Bootstrapbeobachtungen werden nicht erneut gelesen. Erst der exakt
 bestaetigte `Initializing`- beziehungsweise `Resetting`-Record erzeugt die
-nicht kopierbare, an Epoche, Plan und Lease gebundene Graphwrite-Capability.
+nicht kopierbare, an Bootstrapslot und kanonische Bootstrapbytes, Sequence,
+Zustand, Epoche, Plan, Prepared-Graph, Dienstrevision, Recoverygeneration und
+dieselbe Lease gebundene Graphwrite-Capability. Bootstrapwrites sind private
+Recoveryoperationen und koennen nicht ausserhalb dieser gemeinsamen
+Mutationsgrenze als Produktionsmutation aufgerufen werden.
 Ein vorbereiteter Runtime-Snapshot ist vor dem bestaetigten und vollstaendig
-validierten Root nicht publish-faehig; normale Runtimeakquisition bleibt bis
-zum bestaetigten `Initialized` gesperrt.
+validierten Root nicht publish-faehig. Erst ein nicht kopierbarer
+`CommittedRecoveryActivation`-Besitz bindet Rootslot, kanonische Rootbytes,
+Graph, Epoche, Plan, Dienstrevision und vorbereitete Runtimegeneration. Normale
+Runtimeakquisition bleibt bis zum exakt passenden bestaetigten `Initialized`
+gesperrt.
 
 Danach entstehen unter StorageEpoch 1:
 
@@ -926,6 +933,14 @@ Bootstrap- oder Speicherformat sowie Read-/Capacity-Fehler der Bootstrapslots
 blockieren dagegen jeden Resetwrite. `Initializing` und `Resetting` werden
 wiederaufgenommen und starten keinen zweiten Reset.
 
+Der Dienst bildet diese Ausnahme als `ResetEligibleNoRuntime` ab. Der Zustand
+entsteht nur nach erneuter vollstaendiger persistenter Klassifikation eines
+fehlenden oder unbrauchbaren alten Graphen bei weiterhin eindeutigem
+`Initialized`-Bootstrap. Ein beliebiger `RuntimeFailure`, ein unbestimmter
+Rootausgang, ein globaler Read-/Capacityblocker, eine persistente
+Identitaetskollision, eine instabile kanonische Reihenfolge oder eine interne
+Publish-, Modell- oder Zustandsinvariante ist nicht resetberechtigt.
+
 Vor dem bestaetigten `Resetting` wird kein Zielepochenrecord geschrieben.
 Danach werden exakte Records der Zielepoche idempotent wiederverwendet;
 `NotFound` und eindeutig andere Epochen duerfen als Zielslot dienen. Korrupte,
@@ -950,6 +965,24 @@ Unbestimmte Writeausgaenge bleiben fachlich getrennt:
   erst zur internen Aktivierung und zu `BootstrapFinalizationPending`, nicht
   direkt zu `Operational`. Normale Runtime bleibt bis zum bestaetigten
   `Initialized` gesperrt.
+
+Die oeffentlichen Recoverydetails unterscheiden Mutations- und Modellbudget-
+Busy, Zustandskonflikt, Read-, Capacity- und Writefehler, nicht unterstuetztes
+Schema, die drei Indeterminate-Ebenen, Counteroverflow und
+Runtimevorbereitungsfehler. Unabhaengig davon transportiert jedes fehlerhafte
+Ergebnis hoechstens einen stabilen #57-Safety-Producer:
+`ConfigurationUnavailable` oder `ConfigurationIntegrityFailure`. Eine sicher
+abgelehnte Operation bei weiterhin eindeutig gueltiger alter Runtime erzeugt
+keinen Producer; #24 muss Detailstatus nicht erneut fachlich klassifizieren.
+
+Der #57-Ressourcennachweis speichert fuer den jeweils letzten Initialisierungs-
+oder Resetversuch die relevanten Stringkapazitaeten getrennt fuer
+ProgramCatalog-Payload, Dokument-Envelopeworkspace, Store-Readback sowie die
+kleinen kanonischen Bootstrap-/Manifest-/Rootbindungen. Vorherige maximale
+Dokumentrecords werden nur als kleine technische Deskriptoren gebunden; der
+Old-or-New-Portvertrag ersetzt eine zweite Vollkopie. Modellreservierung erfolgt
+vor Factorymodellaufbau, und vorbereitete Recoverymodelle zaehlen zur festen
+Zwei-Generationen-Grenze.
 
 Ein erfolgreicher lokaler Reset loescht weder einen bereits erzeugten
 Konfigurationsfehler noch eine spaetere Verriegelung aus #24. Deren Aufhebung

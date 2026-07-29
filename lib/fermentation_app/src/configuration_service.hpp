@@ -7,6 +7,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "configuration_graph.hpp"
 #include "configuration_graph_store.hpp"
@@ -27,6 +28,51 @@ enum class ConfigurationServiceMode : std::uint8_t {
     EpochResetting,
     BootstrapFinalizationPending,
     RuntimeFailure,
+};
+
+enum class ConfigurationRecoveryBeginStatus : std::uint8_t {
+    Success,
+    StateTransitionRejected,
+    ConfigurationModelBudgetBusy,
+    CounterOverflow,
+};
+
+class CommittedRecoveryActivation {
+   public:
+    ~CommittedRecoveryActivation() = default;
+    CommittedRecoveryActivation(const CommittedRecoveryActivation&) = delete;
+    CommittedRecoveryActivation& operator=(const CommittedRecoveryActivation&) =
+        delete;
+    CommittedRecoveryActivation(CommittedRecoveryActivation&&) noexcept =
+        default;
+    CommittedRecoveryActivation& operator=(
+        CommittedRecoveryActivation&&) noexcept = default;
+
+   private:
+    friend class ConfigurationRecoveryService;
+    friend class ConfigurationService;
+    CommittedRecoveryActivation(device_platform::StorageEpoch epoch,
+                                device_platform::SlotId rootSlot,
+                                std::string canonicalRootBytes,
+                                std::uint32_t planIdentity,
+                                std::uint64_t stateRevision,
+                                std::uint64_t recoveryGeneration,
+                                const LoadedConfigurationGraph& graph) noexcept
+        : epoch_(epoch),
+          rootSlot_(rootSlot),
+          canonicalRootBytes_(std::move(canonicalRootBytes)),
+          planIdentity_(planIdentity),
+          stateRevision_(stateRevision),
+          recoveryGeneration_(recoveryGeneration),
+          graph_(&graph) {}
+    device_platform::StorageEpoch epoch_;
+    device_platform::SlotId rootSlot_;
+    std::string canonicalRootBytes_;
+    std::uint32_t planIdentity_{0U};
+    std::uint64_t stateRevision_{0U};
+    std::uint64_t recoveryGeneration_{0U};
+    const LoadedConfigurationGraph* graph_{nullptr};
+    bool consumed_{false};
 };
 
 enum class RuntimeConfigurationReadStatus : std::uint8_t {
@@ -280,12 +326,21 @@ class ConfigurationService {
     void invalidateRuntimePreparationBindingForTest();
     void rejectRuntimePreparationForTest(bool reject) noexcept;
     [[nodiscard]] bool runtimePreparationRetryConsumedForTest() const noexcept;
-    [[nodiscard]] bool beginRecovery(ConfigurationServiceMode targetMode,
-                                     std::uint64_t requiredHeadroom);
+    [[nodiscard]] ConfigurationRecoveryBeginStatus beginRecovery(
+        ConfigurationServiceMode targetMode, std::uint64_t requiredHeadroom);
     [[nodiscard]] bool prepareRecoveredGraph(
         const LoadedConfigurationGraph& graph);
-    [[nodiscard]] bool publishRecoveredGraph();
-    [[nodiscard]] bool finalizeRecoveredGraph();
+    [[nodiscard]] bool publishRecoveredGraph(
+        CommittedRecoveryActivation&& activation);
+    [[nodiscard]] bool finalizeRecoveredGraph(
+        device_platform::StorageEpoch epoch,
+        const std::string& canonicalRootBytes, std::uint32_t planIdentity);
+    [[nodiscard]] bool finalizeRecoveredGraphForBootstrap(
+        device_platform::StorageEpoch epoch);
+    [[nodiscard]] bool validateRecoveryBinding(
+        std::uint64_t stateRevision, std::uint64_t recoveryGeneration) const;
+    [[nodiscard]] bool markResetEligibleNoRuntime();
+    [[nodiscard]] std::uint64_t recoveryGeneration() const;
     [[nodiscard]] bool transitionRecovery(ConfigurationServiceMode targetMode);
     [[nodiscard]] bool discardPreparedRecovery(
         ConfigurationServiceMode targetMode);
@@ -329,6 +384,10 @@ class ConfigurationService {
     std::shared_ptr<const RuntimeConfigurationSnapshot>
         recoveryPreparedRuntime_;
     std::unique_ptr<LoadedConfigurationGraph> recoveryPreparedGraph_;
+    std::uint64_t recoveryGeneration_{0U};
+    std::optional<device_platform::StorageEpoch> publishedRecoveryEpoch_;
+    std::string publishedRecoveryRootBytes_;
+    std::uint32_t publishedRecoveryPlanIdentity_{0U};
     std::optional<ConfigurationRuntimeFailureCause> runtimeFailureCause_;
     void* testHookContext_{nullptr};
     TestHook testHook_{nullptr};

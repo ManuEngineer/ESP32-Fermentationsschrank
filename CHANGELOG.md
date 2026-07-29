@@ -64,6 +64,14 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   Connectivity-, Authentication-, Secret-, Lauf- oder Safetyimplementierung
   wurde vorgezogen; reale NVS-/Heap-/Jitter-/Watchdog-/Flashmessungen und das
   `CONFIGURATION_SAFETY_INTEGRATION_GATE` aus #24 bleiben offen.
+  Das konsolidierte Implementierungsreview ergaenzt die echte spaetere
+  Root-Unknown-Aufloesung fuer Initialisierung und Reset, vollstaendig
+  identitaetsgebundene Graphwrite-/Publish-Capabilities, private
+  Bootstrapmutationen, den klassifizierten `ResetEligibleNoRuntime`-Pfad,
+  getrennte Read-/Capacity-/Write- und Safety-Producer-Ergebnisse, checked
+  Schema-1-Epochengrenzen sowie einen instrumentierten Record-/Modell-
+  Peaknachweis. Alte maximale Dokumentrecords bleiben nicht als zweite
+  Vollkopie im Prepared Graph.
 
 - Active-/Fallback-Konfigurationskern fuer Issue #56: kanonische Manifest- und
   Rootcodecs, vollstaendige Graph- und Identitaetsvalidierung, High-Water-

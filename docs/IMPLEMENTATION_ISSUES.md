@@ -99,6 +99,17 @@ Graphstore, gibt Runtime erst nach bestaetigtem `Initialized` frei und fuehrt
 keine Connectivity-, Authentication- oder Secretrecords ein. #57 bleibt bis
 zum Merge und unabhaengigen Abschlussreview offen.
 
+Die Nachreviewkorrektur bindet Graphwrite und Runtimepublish an nicht
+kopierbare Bootstrap-/Root-/Dienstgenerationen, loest einen spaeter eindeutig
+neuen Root aus Initialisierung und Reset ueber
+`BootstrapFinalizationPending` auf und trennt den explizit klassifizierten
+`ResetEligibleNoRuntime`-Pfad von beliebigen internen Runtimefehlern. Die
+oeffentlichen Detailstatus bleiben von den zwei maschinenlesbaren #57-
+Safety-Producern getrennt. Vollstaendige alte Dokumentrecords werden nicht im
+Prepared Graph gehalten; Modellbudget wird vor der Factoryallokation reserviert
+und native Peakwerte werden getrennt von den unveraenderten Buildartefakten
+berichtet.
+
 #17 haengt nicht pauschal von #16, #56 oder #57 ab. Seine harten Grundlagen
 #13, #14, #15 und #54 sind abgeschlossen; der eigene Plan-first-Schritt bleibt
 vor einer Statusaenderung erforderlich. #55 darf als gemergte Grundlage

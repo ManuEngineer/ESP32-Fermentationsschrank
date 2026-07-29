@@ -181,7 +181,7 @@ ConfigurationBootstrapWriteResult ConfigurationBootstrapStore::writeBound(
     const ConfigurationBootstrapScanResult& scanResult,
     const ConfigurationBootstrapRecord& target) {
     std::size_t targetSlot = 0U;
-    std::string previous;
+    std::optional<std::string> previous;
     if (scanResult.loaded.has_value()) {
         targetSlot = scanResult.loaded->slot.value() == 0U ? 1U : 0U;
         const auto prior = store_.read(
@@ -221,10 +221,24 @@ ConfigurationBootstrapWriteResult ConfigurationBootstrapStore::writeBound(
         return {ConfigurationBootstrapWriteStatus::BootstrapCommitIndeterminate,
                 std::nullopt};
     }
-    if (readback.status == StateStoreReadStatus::NotFound ||
-        readback.value == previous) {
-        return {ConfigurationBootstrapWriteStatus::CommitNotEffective,
+    if (write == device_platform::StateStoreWriteStatus::Success &&
+        (readback.status != StateStoreReadStatus::Success ||
+         readback.value != encoded)) {
+        return {ConfigurationBootstrapWriteStatus::IntegrityFailure,
                 std::nullopt};
+    }
+    const bool priorConfirmed =
+        (readback.status == StateStoreReadStatus::NotFound &&
+         !previous.has_value()) ||
+        (readback.status == StateStoreReadStatus::Success &&
+         previous.has_value() && readback.value == *previous);
+    if (priorConfirmed) {
+        return {
+            write ==
+                    device_platform::StateStoreWriteStatus::CommitOutcomeUnknown
+                ? ConfigurationBootstrapWriteStatus::CommitNotEffective
+                : ConfigurationBootstrapWriteStatus::IntegrityFailure,
+            std::nullopt};
     }
     if (readback.value != encoded) {
         return {ConfigurationBootstrapWriteStatus::BootstrapCommitIndeterminate,

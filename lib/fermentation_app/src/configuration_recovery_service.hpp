@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <utility>
 
 #include "configuration_bootstrap_store.hpp"
 #include "configuration_graph_store.hpp"
@@ -17,11 +19,14 @@ enum class ConfigurationRecoveryStatus : std::uint8_t {
     FactoryInitializationCompleted,
     FactoryResetCompleted,
     ConfigurationMutationBusy,
+    ConfigurationModelBudgetBusy,
+    StateTransitionRejected,
     ConfigurationUnavailable,
     ConfigurationIntegrityFailure,
     UnsupportedNewerConfigurationSchema,
-    PersistenceFailure,
-    CapacityFailure,
+    PersistenceReadFailure,
+    PersistenceCapacityFailure,
+    PersistenceWriteFailure,
     CounterOverflow,
     RuntimePreparationFailure,
     BootstrapCommitIndeterminate,
@@ -29,10 +34,51 @@ enum class ConfigurationRecoveryStatus : std::uint8_t {
     ConfigurationCommitIndeterminate,
 };
 
+enum class ConfigurationSafetyProducer : std::uint8_t {
+    ConfigurationUnavailable,
+    ConfigurationIntegrityFailure,
+};
+
 struct ConfigurationRecoveryResult {
     ConfigurationRecoveryStatus status{
         ConfigurationRecoveryStatus::ConfigurationUnavailable};
     ConfigurationGraphDiagnostics diagnostics;
+    std::optional<ConfigurationSafetyProducer> safetyProducer;
+    ConfigurationRecoveryResult() = default;
+    ConfigurationRecoveryResult(ConfigurationRecoveryStatus value,
+                                ConfigurationGraphDiagnostics graphDiagnostics)
+        : status(value), diagnostics(graphDiagnostics) {
+        switch (status) {
+            case ConfigurationRecoveryStatus::ConfigurationIntegrityFailure:
+            case ConfigurationRecoveryStatus::
+                UnsupportedNewerConfigurationSchema:
+                safetyProducer =
+                    ConfigurationSafetyProducer::ConfigurationIntegrityFailure;
+                break;
+            case ConfigurationRecoveryStatus::ConfigurationUnavailable:
+            case ConfigurationRecoveryStatus::PersistenceReadFailure:
+            case ConfigurationRecoveryStatus::PersistenceCapacityFailure:
+            case ConfigurationRecoveryStatus::PersistenceWriteFailure:
+            case ConfigurationRecoveryStatus::BootstrapCommitIndeterminate:
+            case ConfigurationRecoveryStatus::
+                ConfigurationRecordOutcomeIndeterminate:
+            case ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate:
+            case ConfigurationRecoveryStatus::RuntimePreparationFailure:
+                safetyProducer =
+                    ConfigurationSafetyProducer::ConfigurationUnavailable;
+                break;
+            default:
+                break;
+        }
+    }
+};
+
+struct ConfigurationRecoveryResourcePeaks {
+    std::size_t programPayloadCapacity{0U};
+    std::size_t documentEnvelopeCapacity{0U};
+    std::size_t storeReadbackCapacity{0U};
+    std::size_t smallCanonicalRecordCapacity{0U};
+    std::size_t fullModelGenerations{0U};
 };
 
 class ConfigurationRecoveryService {
@@ -53,6 +99,10 @@ class ConfigurationRecoveryService {
 
     [[nodiscard]] ConfigurationRecoveryResult boot();
     [[nodiscard]] ConfigurationRecoveryResult beginAuthorizedFactoryReset();
+    [[nodiscard]] std::optional<ConfigurationRecoveryResourcePeaks>
+    lastResourcePeaks() const {
+        return lastResourcePeaks_;
+    }
 
    private:
     ConfigurationRecoveryService(
@@ -72,6 +122,8 @@ class ConfigurationRecoveryService {
         LoadedConfigurationBootstrap bootstrap;
         ChangeOperation operation;
         ConfigurationRecoveryStatus successStatus;
+        std::uint64_t recoveryGeneration{0U};
+        std::uint64_t serviceStateRevision{0U};
     };
     [[nodiscard]] ConfigurationRecoveryResult continueEpochBuild(
         const LoadedConfigurationBootstrap& bootstrap,
@@ -82,6 +134,7 @@ class ConfigurationRecoveryService {
         ConfigurationMutationLease& lease);
     [[nodiscard]] ConfigurationRecoveryResult finalizePublishedGraph(
         const LoadedConfigurationBootstrap& bootstrap,
+        const PreparedInitialConfigurationGraph& prepared,
         ConfigurationRecoveryStatus successStatus);
     [[nodiscard]] ConfigurationRecoveryStatus verifyFactoryEmpty() const;
     [[nodiscard]] static ConfigurationRecoveryResult mapBootstrapFailure(
@@ -93,6 +146,7 @@ class ConfigurationRecoveryService {
     ConfigurationService& configurationService_;
     ConfigurationMutationCoordinator& mutationCoordinator_;
     std::optional<PendingRootResolution> pendingRoot_;
+    std::optional<ConfigurationRecoveryResourcePeaks> lastResourcePeaks_;
 };
 
 }  // namespace fermentation

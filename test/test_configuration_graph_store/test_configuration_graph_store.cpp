@@ -368,6 +368,8 @@ void test_different_bytes_under_same_document_revision_fail_closed() {
     TEST_ASSERT_TRUE(loaded.status ==
                      fermentation::ConfigurationGraphLoadStatus::
                          ConfigurationGraphIntegrityFailure);
+    TEST_ASSERT_TRUE(loaded.diagnostics.persistentIdentityCollision);
+    TEST_ASSERT_TRUE(loaded.diagnostics.globalScanBlocker);
 }
 
 void test_equal_root_sequence_with_different_bytes_has_no_tiebreak() {
@@ -388,6 +390,8 @@ void test_equal_root_sequence_with_different_bytes_has_no_tiebreak() {
     TEST_ASSERT_TRUE(loaded.status ==
                      fermentation::ConfigurationGraphLoadStatus::
                          ConfigurationGraphIntegrityFailure);
+    TEST_ASSERT_TRUE(loaded.diagnostics.persistentIdentityCollision);
+    TEST_ASSERT_TRUE(loaded.diagnostics.globalScanBlocker);
 }
 
 void test_orphan_high_water_is_used_for_next_revision() {
@@ -1546,6 +1550,35 @@ void test_initial_graph_plan_rejects_same_epoch_identity_collision() {
         static_cast<int>(prepared.status));
 }
 
+void test_initial_graph_keeps_maximum_old_catalog_as_descriptor_only() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    const std::string maximumPayload(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes,
+        'x');
+    store.put("pc0",
+              envelope(fermentation::configuration_storage_contract::
+                           kProgramCatalogRecordType,
+                       1U, 1U, maximumPayload, std::nullopt, StorageEpoch{1U}));
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    const auto prepared = graph.prepareInitialGraph(
+        StorageEpoch{2U}, fermentation::decodeChangeOperation(5U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::InitialConfigurationPrepareStatus::Success),
+        static_cast<int>(prepared.status));
+    TEST_ASSERT_TRUE(prepared.prepared.has_value());
+    TEST_ASSERT_FALSE(
+        prepared.prepared->previousTargetProgramRecord.wasNotFound);
+    TEST_ASSERT_EQUAL_UINT32(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes +
+            37U,
+        prepared.prepared->previousTargetProgramRecord.recordLength);
+    TEST_ASSERT_LESS_THAN(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes,
+        prepared.prepared->peakDocumentEnvelopeCapacity);
+}
+
 }  // namespace
 
 int main() {
@@ -1599,5 +1632,6 @@ int main() {
     RUN_TEST(
         test_initial_graph_plan_uses_safe_slots_and_fixed_epoch_identities);
     RUN_TEST(test_initial_graph_plan_rejects_same_epoch_identity_collision);
+    RUN_TEST(test_initial_graph_keeps_maximum_old_catalog_as_descriptor_only);
     return UNITY_END();
 }

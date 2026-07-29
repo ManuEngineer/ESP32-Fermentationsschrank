@@ -1,13 +1,46 @@
 #include <unity.h>
 
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 
 #include "configuration_bootstrap_store.hpp"
+#include "configuration_bootstrap_codec.hpp"
 #include "state_store.hpp"
 
+namespace fermentation {
+class ConfigurationBootstrapStoreTestAccess {
+   public:
+    static ConfigurationBootstrapWriteResult initialize(
+        ConfigurationBootstrapStore& store) {
+        return store.writeInitialInitializing();
+    }
+    static ConfigurationBootstrapWriteResult advance(
+        ConfigurationBootstrapStore& store,
+        const LoadedConfigurationBootstrap& expected,
+        ConfigurationBootstrapState target) {
+        return store.writeSuccessor(expected, target);
+    }
+};
+}  // namespace fermentation
+
 namespace {
+
+std::string bootstrapBytes(std::uint64_t epoch, std::uint64_t sequence,
+                           fermentation::ConfigurationBootstrapState state) {
+    std::string bytes;
+    const fermentation::ConfigurationBootstrapRecord record{
+        fermentation::ConfigurationBootstrapSequence{sequence},
+        fermentation::kConfigurationStorageFormatVersion1,
+        device_platform::StorageEpoch{epoch}, state};
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapCodecStatus::Success),
+        static_cast<int>(
+            fermentation::encodeConfigurationBootstrapRecord(record, bytes)));
+    return bytes;
+}
 
 class LocalStore final : public device_platform::IStateStore {
    public:
@@ -19,10 +52,17 @@ class LocalStore final : public device_platform::IStateStore {
             !commitUnknown_) {
             return writeStatus_;
         }
-        if (writeStatus_ == device_platform::StateStoreWriteStatus::Success ||
+        if ((writeStatus_ == device_platform::StateStoreWriteStatus::Success &&
+             commitSuccess_) ||
             writeStatus_ ==
                 device_platform::StateStoreWriteStatus::CommitOutcomeUnknown) {
             values_[key.bytes()] = value;
+        }
+        if (readStatusAfterWrite_.has_value()) {
+            readStatus_ = *readStatusAfterWrite_;
+        }
+        if (foreignReadbackAfterWrite_) {
+            values_[key.bytes()] = "foreign-readback";
         }
         return writeStatus_;
     }
@@ -51,6 +91,13 @@ class LocalStore final : public device_platform::IStateStore {
     void setReadStatus(device_platform::StateStoreReadStatus status) {
         readStatus_ = status;
     }
+    void setCommitSuccess(bool commit) { commitSuccess_ = commit; }
+    void setReadStatusAfterWrite(device_platform::StateStoreReadStatus status) {
+        readStatusAfterWrite_ = status;
+    }
+    void setForeignReadbackAfterWrite(bool enabled) {
+        foreignReadbackAfterWrite_ = enabled;
+    }
     void put(std::string key, std::string value) {
         values_[std::move(key)] = std::move(value);
     }
@@ -62,6 +109,9 @@ class LocalStore final : public device_platform::IStateStore {
     device_platform::StateStoreReadStatus readStatus_{
         device_platform::StateStoreReadStatus::Success};
     bool commitUnknown_{false};
+    bool commitSuccess_{true};
+    std::optional<device_platform::StateStoreReadStatus> readStatusAfterWrite_;
+    bool foreignReadbackAfterWrite_{false};
 };
 
 void test_empty_initializes_and_progresses_history() {
@@ -70,15 +120,18 @@ void test_empty_initializes_and_progresses_history() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::ConfigurationBootstrapScanStatus::Empty),
         static_cast<int>(bootstrap.scan().status));
-    auto initializing = bootstrap.writeInitialInitializing();
+    auto initializing =
+        fermentation::ConfigurationBootstrapStoreTestAccess::initialize(
+            bootstrap);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::ConfigurationBootstrapWriteStatus::Success),
         static_cast<int>(initializing.status));
     TEST_ASSERT_TRUE(initializing.loaded.has_value());
-    auto initialized = bootstrap.writeSuccessor(
-        *initializing.loaded,
-        fermentation::ConfigurationBootstrapState::Initialized);
+    auto initialized =
+        fermentation::ConfigurationBootstrapStoreTestAccess::advance(
+            bootstrap, *initializing.loaded,
+            fermentation::ConfigurationBootstrapState::Initialized);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::ConfigurationBootstrapWriteStatus::Success),
@@ -94,7 +147,10 @@ void test_unknown_old_and_new_are_distinguished() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::ConfigurationBootstrapWriteStatus::
                              CommitNotEffective),
-        static_cast<int>(oldBootstrap.writeInitialInitializing().status));
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapStoreTestAccess::initialize(
+                oldBootstrap)
+                .status));
 
     LocalStore newStore;
     newStore.setWriteStatus(
@@ -103,7 +159,10 @@ void test_unknown_old_and_new_are_distinguished() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::ConfigurationBootstrapWriteStatus::Success),
-        static_cast<int>(newBootstrap.writeInitialInitializing().status));
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapStoreTestAccess::initialize(
+                newBootstrap)
+                .status));
 }
 
 void test_read_errors_are_not_empty() {
@@ -116,6 +175,100 @@ void test_read_errors_are_not_empty() {
         static_cast<int>(bootstrap.scan().status));
 }
 
+void test_success_without_new_readback_is_store_contract_violation() {
+    LocalStore store;
+    store.setCommitSuccess(false);
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    const auto write =
+        fermentation::ConfigurationBootstrapStoreTestAccess::initialize(
+            bootstrap);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::IntegrityFailure),
+        static_cast<int>(write.status));
+
+    LocalStore foreignStore;
+    foreignStore.setForeignReadbackAfterWrite(true);
+    fermentation::ConfigurationBootstrapStore foreignBootstrap(foreignStore);
+    const auto foreignWrite =
+        fermentation::ConfigurationBootstrapStoreTestAccess::initialize(
+            foreignBootstrap);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::IntegrityFailure),
+        static_cast<int>(foreignWrite.status));
+}
+
+void test_unknown_read_failures_remain_indeterminate() {
+    for (const auto readStatus :
+         {device_platform::StateStoreReadStatus::ReadError,
+          device_platform::StateStoreReadStatus::CapacityError}) {
+        LocalStore store;
+        store.setWriteStatus(
+            device_platform::StateStoreWriteStatus::CommitOutcomeUnknown, true);
+        store.setReadStatusAfterWrite(readStatus);
+        fermentation::ConfigurationBootstrapStore bootstrap(store);
+        const auto write =
+            fermentation::ConfigurationBootstrapStoreTestAccess::initialize(
+                bootstrap);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationBootstrapWriteStatus::
+                                 BootstrapCommitIndeterminate),
+            static_cast<int>(write.status));
+    }
+}
+
+void test_two_slot_history_and_duplicates_are_canonical() {
+    LocalStore store;
+    store.put(
+        "cb0",
+        bootstrapBytes(
+            1U, 1U, fermentation::ConfigurationBootstrapState::Initializing));
+    store.put(
+        "cb1",
+        bootstrapBytes(1U, 2U,
+                       fermentation::ConfigurationBootstrapState::Initialized));
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    auto scan = bootstrap.scan();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapScanStatus::Available),
+        static_cast<int>(scan.status));
+    TEST_ASSERT_EQUAL_UINT64(2U, scan.loaded->record.sequence.value());
+
+    LocalStore duplicateStore;
+    const auto duplicate = bootstrapBytes(
+        2U, 4U, fermentation::ConfigurationBootstrapState::Initialized);
+    duplicateStore.put("cb0", duplicate);
+    duplicateStore.put("cb1", duplicate);
+    fermentation::ConfigurationBootstrapStore duplicateBootstrap(
+        duplicateStore);
+    const auto duplicateScan = duplicateBootstrap.scan();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapScanStatus::Available),
+        static_cast<int>(duplicateScan.status));
+    TEST_ASSERT_TRUE(duplicateScan.loaded->duplicate);
+    TEST_ASSERT_EQUAL_UINT32(0U, duplicateScan.loaded->slot.value());
+}
+
+void test_impossible_history_gap_and_regression_fail_closed() {
+    LocalStore store;
+    store.put(
+        "cb0",
+        bootstrapBytes(
+            1U, 1U, fermentation::ConfigurationBootstrapState::Initializing));
+    store.put(
+        "cb1",
+        bootstrapBytes(2U, 4U,
+                       fermentation::ConfigurationBootstrapState::Initialized));
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapScanStatus::IntegrityFailure),
+        static_cast<int>(bootstrap.scan().status));
+}
+
 }  // namespace
 
 int main() {
@@ -123,5 +276,9 @@ int main() {
     RUN_TEST(test_empty_initializes_and_progresses_history);
     RUN_TEST(test_unknown_old_and_new_are_distinguished);
     RUN_TEST(test_read_errors_are_not_empty);
+    RUN_TEST(test_success_without_new_readback_is_store_contract_violation);
+    RUN_TEST(test_unknown_read_failures_remain_indeterminate);
+    RUN_TEST(test_two_slot_history_and_duplicates_are_canonical);
+    RUN_TEST(test_impossible_history_gap_and_regression_fail_closed);
     return UNITY_END();
 }

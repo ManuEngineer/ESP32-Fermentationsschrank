@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "configuration_bootstrap.hpp"
@@ -111,6 +112,56 @@ void test_test_local_epoch_record_does_not_reinterpret_bootstrap_schema1() {
     TEST_ASSERT_FALSE(bootstrap.value.has_value());
 }
 
+void test_schema1_rejects_invalid_payload_format_state_and_utc() {
+    struct Case {
+        std::uint32_t format;
+        std::uint8_t state;
+        std::size_t payloadSize;
+        bool utc;
+        fermentation::ConfigurationBootstrapCodecStatus expected;
+    };
+    const Case cases[]{
+        {0U, 1U, 5U, false,
+         fermentation::ConfigurationBootstrapCodecStatus::InvalidModel},
+        {2U, 1U, 5U, false,
+         fermentation::ConfigurationBootstrapCodecStatus::
+             UnsupportedNewerSchema},
+        {1U, 0U, 5U, false,
+         fermentation::ConfigurationBootstrapCodecStatus::InvalidModel},
+        {1U, 1U, 4U, false,
+         fermentation::ConfigurationBootstrapCodecStatus::InvalidModel},
+        {1U, 1U, 6U, false,
+         fermentation::ConfigurationBootstrapCodecStatus::InvalidModel},
+        {1U, 1U, 5U, true,
+         fermentation::ConfigurationBootstrapCodecStatus::InvalidModel}};
+    for (const auto& item : cases) {
+        std::string payload(item.payloadSize, '\0');
+        if (item.payloadSize >= 4U) {
+            payload[0] = static_cast<char>((item.format >> 24U) & 0xFFU);
+            payload[1] = static_cast<char>((item.format >> 16U) & 0xFFU);
+            payload[2] = static_cast<char>((item.format >> 8U) & 0xFFU);
+            payload[3] = static_cast<char>(item.format & 0xFFU);
+        }
+        if (item.payloadSize >= 5U) {
+            payload[4] = static_cast<char>(item.state);
+        }
+        std::string bytes;
+        TEST_ASSERT_TRUE(
+            device_platform::encodeEnvelope(
+                {fermentation::configuration_storage_contract::
+                     kConfigurationBootstrapRecordType,
+                 1U, device_platform::StorageEpoch{1U}, 1U,
+                 item.utc ? std::optional<std::int64_t>{0} : std::nullopt,
+                 payload},
+                bytes, 64U) == device_platform::EnvelopeEncodeStatus::Success);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(item.expected),
+            static_cast<int>(
+                fermentation::decodeConfigurationBootstrapRecord(bytes)
+                    .status));
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -121,5 +172,6 @@ int main() {
     RUN_TEST(test_newer_bootstrap_schema_is_fail_closed_without_partial_value);
     RUN_TEST(
         test_test_local_epoch_record_does_not_reinterpret_bootstrap_schema1);
+    RUN_TEST(test_schema1_rejects_invalid_payload_format_state_and_utc);
     return UNITY_END();
 }

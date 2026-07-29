@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "configuration_bootstrap.hpp"
+#include "configuration_bootstrap_store.hpp"
 #include "configuration_graph.hpp"
 #include "configuration_mutation_coordinator.hpp"
 #include "state_store.hpp"
@@ -35,6 +36,8 @@ struct ConfigurationGraphDiagnostics {
     bool fallbackUsed{false};
     bool unusableFallback{false};
     bool identicalRootTie{false};
+    bool persistentIdentityCollision{false};
+    bool globalScanBlocker{false};
 };
 
 struct ConfigurationGraphLoadResult {
@@ -212,9 +215,18 @@ struct PreparedInitialConfigurationGraph {
     std::string manifestRecordBytes;
     std::string rootRecordBytes;
     std::optional<std::string> previousTargetRootRecordBytes;
-    std::optional<std::string> previousTargetUserRecordBytes;
-    std::optional<std::string> previousTargetServiceRecordBytes;
-    std::optional<std::string> previousTargetProgramRecordBytes;
+    struct PreviousRecordDescriptor {
+        bool wasNotFound{true};
+        device_platform::RecordTypeId recordType;
+        std::uint32_t schemaVersion{0U};
+        device_platform::StorageEpoch storageEpoch;
+        std::uint64_t versionValue{0U};
+        std::size_t recordLength{0U};
+        std::uint32_t payloadLength{0U};
+    };
+    PreviousRecordDescriptor previousTargetUserRecord;
+    PreviousRecordDescriptor previousTargetServiceRecord;
+    PreviousRecordDescriptor previousTargetProgramRecord;
     std::optional<std::string> previousTargetManifestRecordBytes;
     bool userWriteRequired{true};
     bool serviceWriteRequired{true};
@@ -222,6 +234,10 @@ struct PreparedInitialConfigurationGraph {
     bool manifestWriteRequired{true};
     bool rootWriteRequired{true};
     std::uint32_t planIdentity{0U};
+    std::size_t peakProgramPayloadCapacity{0U};
+    std::size_t peakDocumentEnvelopeCapacity{0U};
+    std::size_t peakStoreReadbackCapacity{0U};
+    std::size_t smallCanonicalRecordCapacity{0U};
 };
 
 struct InitialConfigurationPrepareResult {
@@ -246,20 +262,28 @@ class ConfigurationEpochGraphWriteCapability {
     friend class ConfigurationRecoveryService;
     friend class ConfigurationGraphStore;
     explicit ConfigurationEpochGraphWriteCapability(
-        device_platform::StorageEpoch epoch,
-        device_platform::SlotId bootstrapSlot,
-        ConfigurationBootstrapState bootstrapState, std::uint32_t planIdentity,
+        const LoadedConfigurationBootstrap& bootstrap,
+        std::uint64_t serviceStateRevision, std::uint64_t recoveryGeneration,
+        std::uint32_t planIdentity,
         const PreparedInitialConfigurationGraph& prepared,
         const ConfigurationMutationLease& mutationLease) noexcept
-        : epoch_(epoch),
-          bootstrapSlot_(bootstrapSlot),
-          bootstrapState_(bootstrapState),
+        : epoch_(bootstrap.record.storageEpoch),
+          bootstrapSlot_(bootstrap.slot),
+          bootstrapSequence_(bootstrap.record.sequence),
+          bootstrapState_(bootstrap.record.state),
+          canonicalBootstrapRecordBytes_(bootstrap.canonicalRecordBytes),
+          serviceStateRevision_(serviceStateRevision),
+          recoveryGeneration_(recoveryGeneration),
           planIdentity_(planIdentity),
           prepared_(&prepared),
           mutationLease_(&mutationLease) {}
     device_platform::StorageEpoch epoch_;
     device_platform::SlotId bootstrapSlot_;
+    ConfigurationBootstrapSequence bootstrapSequence_;
     ConfigurationBootstrapState bootstrapState_;
+    std::string canonicalBootstrapRecordBytes_;
+    std::uint64_t serviceStateRevision_{0U};
+    std::uint64_t recoveryGeneration_{0U};
     std::uint32_t planIdentity_{0U};
     const PreparedInitialConfigurationGraph* prepared_{nullptr};
     const ConfigurationMutationLease* mutationLease_{nullptr};

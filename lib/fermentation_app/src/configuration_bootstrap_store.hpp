@@ -59,13 +59,14 @@ class ConfigurationBootstrapStore {
         : store_(store) {}
 
     [[nodiscard]] ConfigurationBootstrapScanResult scan() const;
+
+   private:
+    friend class ConfigurationRecoveryService;
+    friend class ConfigurationBootstrapStoreTestAccess;
     [[nodiscard]] ConfigurationBootstrapWriteResult writeInitialInitializing();
     [[nodiscard]] ConfigurationBootstrapWriteResult writeSuccessor(
         const LoadedConfigurationBootstrap& expected,
         ConfigurationBootstrapState targetState);
-
-   private:
-    friend class ConfigurationRecoveryService;
     [[nodiscard]] const device_platform::IStateStore* storeIdentity() const {
         return &store_;
     }
