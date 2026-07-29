@@ -4,7 +4,9 @@
 #include <cstdint>
 #include <optional>
 
+#include "configuration_bootstrap.hpp"
 #include "configuration_graph.hpp"
+#include "configuration_mutation_coordinator.hpp"
 #include "state_store.hpp"
 #include "time_zone_resolver.hpp"
 
@@ -193,6 +195,68 @@ struct ConfigurationCommitResolutionResult {
         ConfigurationCommitResolutionCause::AmbiguousRootOutcome};
 };
 
+enum class InitialConfigurationPrepareStatus : std::uint8_t {
+    Success,
+    InvalidCandidate,
+    PersistenceFailure,
+    CapacityFailure,
+    IntegrityFailure,
+    UnsupportedNewerSchema,
+    NoSafeSlotAvailable,
+};
+
+struct PreparedInitialConfigurationGraph {
+    LoadedConfigurationGraph graph;
+    ConfigurationSlotPlan slotPlan;
+    std::string manifestRecordBytes;
+    std::string rootRecordBytes;
+    std::optional<std::string> previousTargetRootRecordBytes;
+    bool userWriteRequired{true};
+    bool serviceWriteRequired{true};
+    bool programWriteRequired{true};
+    bool manifestWriteRequired{true};
+    bool rootWriteRequired{true};
+    std::uint32_t planIdentity{0U};
+};
+
+struct InitialConfigurationPrepareResult {
+    InitialConfigurationPrepareStatus status{
+        InitialConfigurationPrepareStatus::PersistenceFailure};
+    std::optional<PreparedInitialConfigurationGraph> prepared;
+};
+
+class ConfigurationEpochGraphWriteCapability {
+   public:
+    ConfigurationEpochGraphWriteCapability(
+        const ConfigurationEpochGraphWriteCapability&) = delete;
+    ConfigurationEpochGraphWriteCapability& operator=(
+        const ConfigurationEpochGraphWriteCapability&) = delete;
+    ConfigurationEpochGraphWriteCapability(
+        ConfigurationEpochGraphWriteCapability&&) noexcept = default;
+    ConfigurationEpochGraphWriteCapability& operator=(
+        ConfigurationEpochGraphWriteCapability&&) noexcept = default;
+
+   private:
+    friend class ConfigurationRecoveryService;
+    friend class ConfigurationGraphStore;
+    explicit ConfigurationEpochGraphWriteCapability(
+        device_platform::StorageEpoch epoch,
+        device_platform::SlotId bootstrapSlot,
+        ConfigurationBootstrapState bootstrapState, std::uint32_t planIdentity,
+        const ConfigurationMutationLease& mutationLease) noexcept
+        : epoch_(epoch),
+          bootstrapSlot_(bootstrapSlot),
+          bootstrapState_(bootstrapState),
+          planIdentity_(planIdentity),
+          mutationLease_(&mutationLease) {}
+    device_platform::StorageEpoch epoch_;
+    device_platform::SlotId bootstrapSlot_;
+    ConfigurationBootstrapState bootstrapState_;
+    std::uint32_t planIdentity_{0U};
+    const ConfigurationMutationLease* mutationLease_{nullptr};
+    bool consumed_{false};
+};
+
 class ConfigurationGraphStore {
    public:
     ConfigurationGraphStore(
@@ -224,6 +288,14 @@ class ConfigurationGraphStore {
 
     [[nodiscard]] ConfigurationCommitResolutionResult resolveCommitDetailed(
         const PreparedConfigurationCommit& prepared) const;
+
+    [[nodiscard]] InitialConfigurationPrepareResult prepareInitialGraph(
+        device_platform::StorageEpoch epoch, ChangeOperation operation) const;
+    [[nodiscard]] ConfigurationCommitExecutionResult executeInitialGraph(
+        PreparedInitialConfigurationGraph& prepared,
+        ConfigurationEpochGraphWriteCapability& capability);
+    [[nodiscard]] ConfigurationCommitResolutionResult resolveInitialGraph(
+        const PreparedInitialConfigurationGraph& prepared) const;
 
    private:
     device_platform::IStateStore& store_;

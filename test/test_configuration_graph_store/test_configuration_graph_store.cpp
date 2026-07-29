@@ -167,13 +167,13 @@ StateStoreKey key(const char* value) {
 
 std::string envelope(RecordTypeId type, std::uint32_t schema,
                      std::uint64_t version, const std::string& payload,
-                     std::optional<std::int64_t> utc = std::nullopt) {
+                     std::optional<std::int64_t> utc = std::nullopt,
+                     StorageEpoch epoch = StorageEpoch{1U}) {
     std::string bytes;
-    TEST_ASSERT_TRUE(
-        device_platform::encodeEnvelope(
-            {type, schema, StorageEpoch{1U}, version, utc, payload}, bytes,
-            payload.size() + (utc.has_value() ? 53U : 45U)) ==
-        device_platform::EnvelopeEncodeStatus::Success);
+    TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
+                         {type, schema, epoch, version, utc, payload}, bytes,
+                         payload.size() + (utc.has_value() ? 53U : 45U)) ==
+                     device_platform::EnvelopeEncodeStatus::Success);
     return bytes;
 }
 
@@ -1497,6 +1497,55 @@ void test_unknown_pre_root_readback_failures_never_reach_root_write() {
     }
 }
 
+void test_initial_graph_plan_uses_safe_slots_and_fixed_epoch_identities() {
+    LocalStore empty;
+    LocalTimeZoneResolver resolver;
+    fermentation::ConfigurationGraphStore emptyGraph(empty, resolver);
+    auto initial = emptyGraph.prepareInitialGraph(
+        StorageEpoch{1U}, fermentation::decodeChangeOperation(2U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::InitialConfigurationPrepareStatus::Success),
+        static_cast<int>(initial.status));
+    TEST_ASSERT_TRUE(initial.prepared.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, initial.prepared->slotPlan.rootSlot.value());
+    TEST_ASSERT_EQUAL_UINT64(1U,
+                             initial.prepared->slotPlan.rootSequence.value());
+    TEST_ASSERT_FALSE(initial.prepared->graph.root.fallback.has_value());
+
+    LocalStore priorEpoch;
+    static_cast<void>(seedGraph(priorEpoch));
+    fermentation::ConfigurationGraphStore resetGraph(priorEpoch, resolver);
+    auto reset = resetGraph.prepareInitialGraph(
+        StorageEpoch{2U}, fermentation::decodeChangeOperation(5U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::InitialConfigurationPrepareStatus::Success),
+        static_cast<int>(reset.status));
+    TEST_ASSERT_TRUE(reset.prepared.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        2U,
+        reset.prepared->graph.active.manifestReference.storageEpoch.value());
+    TEST_ASSERT_EQUAL_UINT64(
+        1U, reset.prepared->slotPlan.manifestGeneration.value());
+}
+
+void test_initial_graph_plan_rejects_same_epoch_identity_collision() {
+    LocalStore store;
+    LocalTimeZoneResolver resolver;
+    store.put("uc0",
+              envelope(fermentation::configuration_storage_contract::
+                           kUserConfigurationRecordType,
+                       1U, 1U, "different", std::nullopt, StorageEpoch{2U}));
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    const auto prepared = graph.prepareInitialGraph(
+        StorageEpoch{2U}, fermentation::decodeChangeOperation(5U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::InitialConfigurationPrepareStatus::IntegrityFailure),
+        static_cast<int>(prepared.status));
+}
+
 }  // namespace
 
 int main() {
@@ -1547,5 +1596,8 @@ int main() {
         test_target_graph_failure_causes_distinguish_envelope_and_reference);
     RUN_TEST(test_each_pre_root_write_phase_obeys_state_store_outcome_contract);
     RUN_TEST(test_unknown_pre_root_readback_failures_never_reach_root_write);
+    RUN_TEST(
+        test_initial_graph_plan_uses_safe_slots_and_fixed_epoch_identities);
+    RUN_TEST(test_initial_graph_plan_rejects_same_epoch_identity_collision);
     return UNITY_END();
 }
