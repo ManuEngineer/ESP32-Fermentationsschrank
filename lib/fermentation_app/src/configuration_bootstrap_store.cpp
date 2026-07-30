@@ -142,8 +142,13 @@ ConfigurationBootstrapStore::writeInitialInitializing() {
 
 ConfigurationBootstrapWriteResult
 ConfigurationBootstrapStore::writeInitialInitializing(
-    const FactoryNoveltyProof& proof) {
-    static_cast<void>(proof);
+    const FactoryNoveltyProof& proof,
+    const ConfigurationMutationLease& mutationLease,
+    std::uint64_t serviceStateRevision, std::uint64_t recoveryGeneration) {
+    if (!proof.consumeForBootstrapWrite(
+            store_, mutationLease, serviceStateRevision, recoveryGeneration)) {
+        return writeInitialInitializing();
+    }
     return writeBound(
         {ConfigurationBootstrapScanStatus::Empty, std::nullopt},
         {ConfigurationBootstrapSequence{1U},

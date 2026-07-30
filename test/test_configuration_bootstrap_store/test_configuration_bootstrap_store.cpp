@@ -7,6 +7,7 @@
 
 #include "configuration_bootstrap_store.hpp"
 #include "configuration_bootstrap_codec.hpp"
+#include "configuration_mutation_coordinator.hpp"
 #include "configuration_storage_contract.hpp"
 #include "state_store.hpp"
 #include "storage_envelope.hpp"
@@ -18,11 +19,29 @@ class ConfigurationBootstrapStoreTestAccess {
         ConfigurationBootstrapStore& store) {
         return store.writeInitialInitializing();
     }
+    static ConfigurationBootstrapWriteResult initializeWithProof(
+        ConfigurationBootstrapStore& store, const FactoryNoveltyProof& proof,
+        const ConfigurationMutationLease& lease,
+        std::uint64_t serviceStateRevision, std::uint64_t recoveryGeneration) {
+        return store.writeInitialInitializing(
+            proof, lease, serviceStateRevision, recoveryGeneration);
+    }
     static ConfigurationBootstrapWriteResult advance(
         ConfigurationBootstrapStore& store,
         const LoadedConfigurationBootstrap& expected,
         ConfigurationBootstrapState target) {
         return store.writeSuccessor(expected, target);
+    }
+};
+
+class FactoryNoveltyProofTestAccess {
+   public:
+    static FactoryNoveltyProof create(const device_platform::IStateStore& store,
+                                      const ConfigurationMutationLease& lease,
+                                      std::uint64_t serviceStateRevision,
+                                      std::uint64_t recoveryGeneration) {
+        return FactoryNoveltyProof(store, lease, serviceStateRevision,
+                                   recoveryGeneration);
     }
 };
 }  // namespace fermentation
@@ -332,6 +351,148 @@ void test_impossible_history_gap_and_regression_fail_closed() {
         static_cast<int>(bootstrap.scan().status));
 }
 
+void test_factory_novelty_proof_matching_binding_succeeds_in_order() {
+    LocalStore store;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    auto acquired = coordinator.tryAcquire();
+    TEST_ASSERT_TRUE(acquired.lease.valid());
+    auto proof = fermentation::FactoryNoveltyProofTestAccess::create(
+        store, acquired.lease, 5U, 3U);
+    TEST_ASSERT_TRUE(
+        proof.consumeForGraphPreparation(store, acquired.lease, 5U, 3U));
+    TEST_ASSERT_TRUE(
+        proof.consumeForBootstrapWrite(store, acquired.lease, 5U, 3U));
+}
+
+void test_factory_novelty_proof_rejects_wrong_store() {
+    LocalStore store;
+    LocalStore otherStore;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    auto acquired = coordinator.tryAcquire();
+    auto proof = fermentation::FactoryNoveltyProofTestAccess::create(
+        store, acquired.lease, 5U, 3U);
+    TEST_ASSERT_FALSE(
+        proof.consumeForGraphPreparation(otherStore, acquired.lease, 5U, 3U));
+    // The mismatch permanently burned the proof: even the originally correct
+    // store no longer succeeds afterwards.
+    TEST_ASSERT_FALSE(
+        proof.consumeForGraphPreparation(store, acquired.lease, 5U, 3U));
+}
+
+void test_factory_novelty_proof_rejects_wrong_lease() {
+    LocalStore store;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    fermentation::ConfigurationMutationCoordinator otherCoordinator;
+    auto acquired = coordinator.tryAcquire();
+    auto otherAcquired = otherCoordinator.tryAcquire();
+    auto proof = fermentation::FactoryNoveltyProofTestAccess::create(
+        store, acquired.lease, 5U, 3U);
+    TEST_ASSERT_FALSE(
+        proof.consumeForGraphPreparation(store, otherAcquired.lease, 5U, 3U));
+}
+
+void test_factory_novelty_proof_rejects_expired_lease() {
+    LocalStore store;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    auto acquired = coordinator.tryAcquire();
+    auto proof = fermentation::FactoryNoveltyProofTestAccess::create(
+        store, acquired.lease, 5U, 3U);
+    // Releasing the lease leaves the same lease object bound but no longer
+    // valid: a proof must not be usable through a released lease.
+    acquired.lease = fermentation::ConfigurationMutationLease{};
+    TEST_ASSERT_FALSE(
+        proof.consumeForGraphPreparation(store, acquired.lease, 5U, 3U));
+}
+
+void test_factory_novelty_proof_rejects_wrong_revision_or_generation() {
+    {
+        LocalStore store;
+        fermentation::ConfigurationMutationCoordinator coordinator;
+        auto acquired = coordinator.tryAcquire();
+        auto proof = fermentation::FactoryNoveltyProofTestAccess::create(
+            store, acquired.lease, 5U, 3U);
+        TEST_ASSERT_FALSE(
+            proof.consumeForGraphPreparation(store, acquired.lease, 6U, 3U));
+    }
+    {
+        LocalStore store;
+        fermentation::ConfigurationMutationCoordinator coordinator;
+        auto acquired = coordinator.tryAcquire();
+        auto proof = fermentation::FactoryNoveltyProofTestAccess::create(
+            store, acquired.lease, 5U, 3U);
+        TEST_ASSERT_FALSE(
+            proof.consumeForGraphPreparation(store, acquired.lease, 5U, 4U));
+    }
+}
+
+void test_factory_novelty_proof_rejects_write_before_graph_preparation() {
+    LocalStore store;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    auto acquired = coordinator.tryAcquire();
+    auto proof = fermentation::FactoryNoveltyProofTestAccess::create(
+        store, acquired.lease, 5U, 3U);
+    TEST_ASSERT_FALSE(
+        proof.consumeForBootstrapWrite(store, acquired.lease, 5U, 3U));
+    // Burned: a correctly ordered attempt afterwards must not succeed
+    // either.
+    TEST_ASSERT_FALSE(
+        proof.consumeForGraphPreparation(store, acquired.lease, 5U, 3U));
+}
+
+void test_factory_novelty_proof_rejects_double_graph_preparation() {
+    LocalStore store;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    auto acquired = coordinator.tryAcquire();
+    auto proof = fermentation::FactoryNoveltyProofTestAccess::create(
+        store, acquired.lease, 5U, 3U);
+    TEST_ASSERT_TRUE(
+        proof.consumeForGraphPreparation(store, acquired.lease, 5U, 3U));
+    TEST_ASSERT_FALSE(
+        proof.consumeForGraphPreparation(store, acquired.lease, 5U, 3U));
+    // Burned: the bootstrap write is also blocked afterwards.
+    TEST_ASSERT_FALSE(
+        proof.consumeForBootstrapWrite(store, acquired.lease, 5U, 3U));
+}
+
+void test_factory_novelty_proof_rejects_double_bootstrap_write() {
+    LocalStore store;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    auto acquired = coordinator.tryAcquire();
+    auto proof = fermentation::FactoryNoveltyProofTestAccess::create(
+        store, acquired.lease, 5U, 3U);
+    TEST_ASSERT_TRUE(
+        proof.consumeForGraphPreparation(store, acquired.lease, 5U, 3U));
+    TEST_ASSERT_TRUE(
+        proof.consumeForBootstrapWrite(store, acquired.lease, 5U, 3U));
+    TEST_ASSERT_FALSE(
+        proof.consumeForBootstrapWrite(store, acquired.lease, 5U, 3U));
+}
+
+// A proof that fails validation at the store level must not let
+// writeInitialInitializing() skip the scan: with real, non-empty content
+// already in place, the fallback scan must detect it and reject the write,
+// proving the scan genuinely ran instead of blindly trusting the proof.
+void test_factory_novelty_proof_mismatch_falls_back_to_real_scan_without_write() {
+    LocalStore store;
+    store.put(
+        "cb0",
+        bootstrapBytes(
+            1U, 1U, fermentation::ConfigurationBootstrapState::Initializing));
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    auto acquired = coordinator.tryAcquire();
+    auto proof = fermentation::FactoryNoveltyProofTestAccess::create(
+        store, acquired.lease, 5U, 3U);
+    // Wrong revision: the proof will never validate for this attempt.
+    const auto result = fermentation::ConfigurationBootstrapStoreTestAccess::
+        initializeWithProof(bootstrap, proof, acquired.lease, 6U, 3U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::InvalidTransition),
+        static_cast<int>(result.status));
+    TEST_ASSERT_FALSE(result.loaded.has_value());
+}
+
 }  // namespace
 
 int main() {
@@ -345,5 +506,15 @@ int main() {
     RUN_TEST(test_write_successor_rejects_stale_expected_without_write);
     RUN_TEST(test_write_successor_detects_newer_schema_during_rescan);
     RUN_TEST(test_impossible_history_gap_and_regression_fail_closed);
+    RUN_TEST(test_factory_novelty_proof_matching_binding_succeeds_in_order);
+    RUN_TEST(test_factory_novelty_proof_rejects_wrong_store);
+    RUN_TEST(test_factory_novelty_proof_rejects_wrong_lease);
+    RUN_TEST(test_factory_novelty_proof_rejects_expired_lease);
+    RUN_TEST(test_factory_novelty_proof_rejects_wrong_revision_or_generation);
+    RUN_TEST(test_factory_novelty_proof_rejects_write_before_graph_preparation);
+    RUN_TEST(test_factory_novelty_proof_rejects_double_graph_preparation);
+    RUN_TEST(test_factory_novelty_proof_rejects_double_bootstrap_write);
+    RUN_TEST(
+        test_factory_novelty_proof_mismatch_falls_back_to_real_scan_without_write);
     return UNITY_END();
 }

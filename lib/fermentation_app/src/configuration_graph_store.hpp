@@ -328,13 +328,19 @@ class ConfigurationGraphStore {
         const PreparedConfigurationCommit& prepared) const;
 
     // factoryNoveltyProof, when non-null, is only honored for the exact
-    // first-ever factory initialization (epoch 1, FactoryInitialization):
-    // it lets the already-proven-empty target slots skip their otherwise
-    // redundant re-scan. Any other epoch or operation always scans in full,
-    // regardless of whether a proof is passed.
+    // first-ever factory initialization (epoch 1, FactoryInitialization) and
+    // only after it independently validates that mutationLease,
+    // serviceStateRevision and recoveryGeneration match exactly what it was
+    // constructed for and consumeForGraphPreparation() succeeds: it then
+    // lets the already-proven-empty target slots skip their otherwise
+    // redundant re-scan. Any other epoch or operation, a missing lease, or a
+    // binding mismatch always scans in full instead.
     [[nodiscard]] InitialConfigurationPrepareResult prepareInitialGraph(
         device_platform::StorageEpoch epoch, ChangeOperation operation,
-        const FactoryNoveltyProof* factoryNoveltyProof = nullptr) const;
+        const FactoryNoveltyProof* factoryNoveltyProof = nullptr,
+        const ConfigurationMutationLease* mutationLease = nullptr,
+        std::uint64_t serviceStateRevision = 0U,
+        std::uint64_t recoveryGeneration = 0U) const;
     [[nodiscard]] ConfigurationCommitExecutionResult executeInitialGraph(
         PreparedInitialConfigurationGraph& prepared,
         ConfigurationEpochGraphWriteCapability& capability);

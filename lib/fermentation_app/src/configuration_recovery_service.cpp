@@ -587,27 +587,38 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
         if (empty != ConfigurationRecoveryStatus::RuntimeReady) {
             return {empty, {}};
         }
-        // The two bootstrap reads from the scan above plus the 17 reads
-        // just performed by verifyFactoryEmpty() are exactly the 19 known
-        // keys; this proof lets the rest of this single attempt skip
-        // re-reading any of them.
-        const FactoryNoveltyProof factoryNoveltyProof;
         const auto begin = configurationService_.beginRecovery(
             ConfigurationServiceMode::RecoveryPreparing,
             configuration_limits::kInitializationRecoveryRevisionHeadroom);
         if (begin != ConfigurationRecoveryBeginStatus::Success) {
             return makeUnavailableResult(mapRecoveryBeginStatus(begin));
         }
+        // The two bootstrap reads from the scan above plus the 17 reads
+        // just performed by verifyFactoryEmpty() are exactly the 19 known
+        // keys; this proof lets the rest of this single attempt skip
+        // re-reading any of them. It is bound to this exact store, the
+        // lease acquired above, and the revision/generation beginRecovery()
+        // just established, and is independently re-validated by every
+        // consumer. Neither value changes again before the proof is
+        // consumed below.
+        const auto boundStateRevision = configurationService_.stateRevision();
+        const auto boundRecoveryGeneration =
+            configurationService_.recoveryGeneration();
+        const FactoryNoveltyProof factoryNoveltyProof(store_, acquired.lease,
+                                                      boundStateRevision,
+                                                      boundRecoveryGeneration);
         auto prepared = graphStore_.prepareInitialGraph(
             device_platform::StorageEpoch{1U}, decodeChangeOperation(2U),
-            &factoryNoveltyProof);
+            &factoryNoveltyProof, &acquired.lease, boundStateRevision,
+            boundRecoveryGeneration);
         if (prepared.status != InitialConfigurationPrepareStatus::Success ||
             !prepared.prepared.has_value()) {
             static_cast<void>(configurationService_.cancelRecovery());
             return makeUnavailableResult(mapPrepare(prepared.status));
         }
-        auto initial =
-            bootstrapStore_.writeInitialInitializing(factoryNoveltyProof);
+        auto initial = bootstrapStore_.writeInitialInitializing(
+            factoryNoveltyProof, acquired.lease, boundStateRevision,
+            boundRecoveryGeneration);
         if (initial.status != ConfigurationBootstrapWriteStatus::Success ||
             !initial.loaded.has_value()) {
             if (isBootstrapIndeterminate(initial.status)) {

@@ -1796,7 +1796,10 @@ ConfigurationGraphStore::resolveCommitDetailed(
 
 InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     device_platform::StorageEpoch epoch, ChangeOperation operation,
-    const FactoryNoveltyProof* factoryNoveltyProof) const {
+    const FactoryNoveltyProof* factoryNoveltyProof,
+    const ConfigurationMutationLease* mutationLease,
+    std::uint64_t serviceStateRevision,
+    std::uint64_t recoveryGeneration) const {
     if (epoch.value() == 0U ||
         (operation.kind != ChangeOperationKind::FactoryInitialization &&
          operation.kind != ChangeOperationKind::FactoryReset)) {
@@ -1805,10 +1808,17 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     }
     // Only the exact first-ever factory initialization is ever provably
     // empty: any other epoch or a reset may still hold leftover records
-    // from an earlier epoch and must always be scanned for real.
+    // from an earlier epoch and must always be scanned for real. A proof
+    // that fails its own independent binding check (wrong store, lease,
+    // revision or attempt, or out-of-order/repeated use) never grants the
+    // fast path either; the full scan below still yields the correct
+    // result either way.
     const bool knownEmpty =
         factoryNoveltyProof != nullptr && epoch.value() == 1U &&
-        operation.kind == ChangeOperationKind::FactoryInitialization;
+        operation.kind == ChangeOperationKind::FactoryInitialization &&
+        mutationLease != nullptr &&
+        factoryNoveltyProof->consumeForGraphPreparation(
+            store_, *mutationLease, serviceStateRevision, recoveryGeneration);
     auto user = std::make_shared<const UserConfiguration>(
         UserConfiguration{"de", "Europe/Zurich", "Fermentationsschrank"});
     auto service = std::make_shared<const ServiceConfiguration>();
