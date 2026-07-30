@@ -64,6 +64,11 @@ class ConfigurationBootstrapStore {
     friend class ConfigurationRecoveryService;
     friend class ConfigurationBootstrapStoreTestAccess;
     [[nodiscard]] ConfigurationBootstrapWriteResult writeInitialInitializing();
+    // Skips the internal re-scan: the caller already proved both bootstrap
+    // slots are empty as part of the factory-novelty oracle and holds a
+    // proof of it for this single attempt.
+    [[nodiscard]] ConfigurationBootstrapWriteResult writeInitialInitializing(
+        const FactoryNoveltyProof& proof);
     [[nodiscard]] ConfigurationBootstrapWriteResult writeSuccessor(
         const LoadedConfigurationBootstrap& expected,
         ConfigurationBootstrapState targetState);

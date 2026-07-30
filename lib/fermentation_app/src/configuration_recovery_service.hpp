@@ -80,6 +80,10 @@ struct ConfigurationRecoveryResourcePeaks {
     std::size_t smallCanonicalRecordCapacity{0U};
     std::size_t indeterminateContextCapacity{0U};
     std::size_t fullModelGenerations{0U};
+    // Largest transient buffer read while scanning candidate slots for a
+    // safe or exact target (e.g. a leftover full-size old ProgramCatalog
+    // envelope during a reset), distinct from storeReadbackCapacity.
+    std::size_t slotScanReadCapacity{0U};
 };
 
 class ConfigurationRecoveryService {

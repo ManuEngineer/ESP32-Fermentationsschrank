@@ -7,7 +7,9 @@
 
 #include "configuration_bootstrap_store.hpp"
 #include "configuration_bootstrap_codec.hpp"
+#include "configuration_storage_contract.hpp"
 #include "state_store.hpp"
+#include "storage_envelope.hpp"
 
 namespace fermentation {
 class ConfigurationBootstrapStoreTestAccess {
@@ -252,6 +254,67 @@ void test_two_slot_history_and_duplicates_are_canonical() {
     TEST_ASSERT_EQUAL_UINT32(0U, duplicateScan.loaded->slot.value());
 }
 
+// A caller's "expected" snapshot can only be stale relative to the store if
+// something else advanced the canonical bootstrap between the caller's read
+// and this write attempt. writeSuccessor() must reject that without writing,
+// and callers must never treat it as proof that the caller's own old
+// snapshot is still the persisted state (see beginAuthorizedFactoryReset()).
+void test_write_successor_rejects_stale_expected_without_write() {
+    LocalStore store;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    auto initializing =
+        fermentation::ConfigurationBootstrapStoreTestAccess::initialize(
+            bootstrap);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::Success),
+        static_cast<int>(initializing.status));
+    auto stale = *initializing.loaded;
+    stale.record.sequence = fermentation::ConfigurationBootstrapSequence{99U};
+    const auto result =
+        fermentation::ConfigurationBootstrapStoreTestAccess::advance(
+            bootstrap, stale,
+            fermentation::ConfigurationBootstrapState::Initialized);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::InvalidTransition),
+        static_cast<int>(result.status));
+    TEST_ASSERT_FALSE(result.loaded.has_value());
+}
+
+// A newer bootstrap or storage format discovered by writeSuccessor()'s own
+// re-scan must block fail closed and must never be treated as proof that the
+// caller's previously observed record is still safely in place.
+void test_write_successor_detects_newer_schema_during_rescan() {
+    LocalStore store;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    auto initializing =
+        fermentation::ConfigurationBootstrapStoreTestAccess::initialize(
+            bootstrap);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationBootstrapWriteStatus::Success),
+        static_cast<int>(initializing.status));
+    std::string newerSchemaBytes;
+    TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
+                         {fermentation::configuration_storage_contract::
+                              kConfigurationBootstrapRecordType,
+                          2U, device_platform::StorageEpoch{1U}, 1U,
+                          std::nullopt, std::string(5U, '\0')},
+                         newerSchemaBytes, 42U) ==
+                     device_platform::EnvelopeEncodeStatus::Success);
+    store.put("cb1", newerSchemaBytes);
+    const auto result =
+        fermentation::ConfigurationBootstrapStoreTestAccess::advance(
+            bootstrap, *initializing.loaded,
+            fermentation::ConfigurationBootstrapState::Initialized);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationBootstrapWriteStatus::
+                             UnsupportedNewerSchema),
+        static_cast<int>(result.status));
+    TEST_ASSERT_FALSE(result.loaded.has_value());
+}
+
 void test_impossible_history_gap_and_regression_fail_closed() {
     LocalStore store;
     store.put(
@@ -279,6 +342,8 @@ int main() {
     RUN_TEST(test_success_without_new_readback_is_store_contract_violation);
     RUN_TEST(test_unknown_read_failures_remain_indeterminate);
     RUN_TEST(test_two_slot_history_and_duplicates_are_canonical);
+    RUN_TEST(test_write_successor_rejects_stale_expected_without_write);
+    RUN_TEST(test_write_successor_detects_newer_schema_during_rescan);
     RUN_TEST(test_impossible_history_gap_and_regression_fail_closed);
     return UNITY_END();
 }

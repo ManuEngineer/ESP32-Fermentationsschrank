@@ -1577,6 +1577,19 @@ void test_initial_graph_keeps_maximum_old_catalog_as_descriptor_only() {
     TEST_ASSERT_LESS_THAN(
         fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes,
         prepared.prepared->peakDocumentEnvelopeCapacity);
+    // The old 32805-byte envelope (32768-byte payload plus the 37-byte
+    // non-UTC envelope) is genuinely read in full while scanning for a safe
+    // slot, even though only its small descriptor survives afterwards; the
+    // resource report must show that real transient buffer, not just the
+    // small kept descriptor.
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes +
+            37U,
+        prepared.prepared->peakSlotScanReadCapacity);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes +
+            45U,
+        prepared.prepared->peakSlotScanReadCapacity);
 }
 
 }  // namespace

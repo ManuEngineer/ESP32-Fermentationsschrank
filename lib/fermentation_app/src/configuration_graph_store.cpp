@@ -827,6 +827,11 @@ struct InitialSlotSelection {
     bool writeRequired{true};
     std::optional<std::string> previousBytes;
     PreparedInitialConfigurationGraph::PreviousRecordDescriptor descriptor;
+    // Largest transient read buffer seen while scanning this slot group,
+    // including candidates that turn out unusable (wrong epoch, corrupt,
+    // superseded): the buffer is real the moment the store returns it, even
+    // though only a small descriptor of it is kept afterwards.
+    std::size_t peakReadCapacity{0U};
 };
 
 template <std::size_t N>
@@ -837,20 +842,35 @@ InitialSlotSelection selectInitialSlot(
     const std::array<const char*, N>& keys, device_platform::StorageEpoch epoch,
     device_platform::RecordTypeId recordType, std::uint32_t schemaVersion,
     const std::string& expectedBytes, std::size_t maxBytes,
-    bool retainPreviousBytes = false) {
+    bool retainPreviousBytes = false, bool knownEmpty = false) {
+    if (knownEmpty) {
+        // The caller already proved every one of these slots NotFound as
+        // part of the factory-novelty oracle; this is exactly what the loop
+        // below would deterministically compute for an all-NotFound scan,
+        // without re-reading any of them.
+        return {InitialConfigurationPrepareStatus::Success,
+                device_platform::SlotId{0U},
+                true,
+                std::nullopt,
+                {},
+                0U};
+    }
     std::optional<std::size_t> safeSlot;
     std::optional<std::string> safePrevious;
     PreparedInitialConfigurationGraph::PreviousRecordDescriptor safeDescriptor;
     std::optional<std::size_t> exactSlot;
     std::optional<std::string> exactBytes;
+    std::size_t peakReadCapacity = 0U;
     for (std::size_t index = 0U; index < N; ++index) {
         auto read = store.read(key(keys[index]), maxBytes);
+        peakReadCapacity = std::max(peakReadCapacity, read.value.capacity());
         if (read.status == device_platform::StateStoreReadStatus::ReadError) {
             return {InitialConfigurationPrepareStatus::PersistenceFailure,
                     std::nullopt,
                     true,
                     std::nullopt,
-                    {}};
+                    {},
+                    peakReadCapacity};
         }
         if (read.status ==
             device_platform::StateStoreReadStatus::CapacityError) {
@@ -858,7 +878,8 @@ InitialSlotSelection selectInitialSlot(
                     std::nullopt,
                     true,
                     std::nullopt,
-                    {}};
+                    {},
+                    peakReadCapacity};
         }
         if (read.status == device_platform::StateStoreReadStatus::NotFound) {
             if (!safeSlot.has_value()) {
@@ -902,14 +923,16 @@ InitialSlotSelection selectInitialSlot(
                     std::nullopt,
                     true,
                     std::nullopt,
-                    {}};
+                    {},
+                    peakReadCapacity};
         }
         if (metadata.metadata->recordTypeId == recordType) {
             return {InitialConfigurationPrepareStatus::IntegrityFailure,
                     std::nullopt,
                     true,
                     std::nullopt,
-                    {}};
+                    {},
+                    peakReadCapacity};
         }
     }
     if (exactSlot.has_value()) {
@@ -917,18 +940,23 @@ InitialSlotSelection selectInitialSlot(
                 device_platform::SlotId{static_cast<std::uint32_t>(*exactSlot)},
                 false,
                 std::move(exactBytes),
-                {}};
+                {},
+                peakReadCapacity};
     }
     if (!safeSlot.has_value()) {
         return {InitialConfigurationPrepareStatus::NoSafeSlotAvailable,
                 std::nullopt,
                 true,
                 std::nullopt,
-                {}};
+                {},
+                peakReadCapacity};
     }
     return {InitialConfigurationPrepareStatus::Success,
             device_platform::SlotId{static_cast<std::uint32_t>(*safeSlot)},
-            true, std::move(safePrevious), safeDescriptor};
+            true,
+            std::move(safePrevious),
+            safeDescriptor,
+            peakReadCapacity};
 }
 
 }  // namespace
@@ -1767,13 +1795,20 @@ ConfigurationGraphStore::resolveCommitDetailed(
 }
 
 InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
-    device_platform::StorageEpoch epoch, ChangeOperation operation) const {
+    device_platform::StorageEpoch epoch, ChangeOperation operation,
+    const FactoryNoveltyProof* factoryNoveltyProof) const {
     if (epoch.value() == 0U ||
         (operation.kind != ChangeOperationKind::FactoryInitialization &&
          operation.kind != ChangeOperationKind::FactoryReset)) {
         return {InitialConfigurationPrepareStatus::InvalidCandidate,
                 std::nullopt};
     }
+    // Only the exact first-ever factory initialization is ever provably
+    // empty: any other epoch or a reset may still hold leftover records
+    // from an earlier epoch and must always be scanned for real.
+    const bool knownEmpty =
+        factoryNoveltyProof != nullptr && epoch.value() == 1U &&
+        operation.kind == ChangeOperationKind::FactoryInitialization;
     auto user = std::make_shared<const UserConfiguration>(
         UserConfiguration{"de", "Europe/Zurich", "Fermentationsschrank"});
     auto service = std::make_shared<const ServiceConfiguration>();
@@ -1802,7 +1837,8 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
         store_, configuration_storage_contract::kUserConfigurationSlotKeys,
         epoch, configuration_storage_contract::kUserConfigurationRecordType, 1U,
         record,
-        configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U);
+        configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
+        false, knownEmpty);
     if (userSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {userSlot.status, std::nullopt};
     }
@@ -1830,7 +1866,7 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     const auto serviceSlot = selectInitialSlot(
         store_, configuration_storage_contract::kServiceConfigurationSlotKeys,
         epoch, configuration_storage_contract::kServiceConfigurationRecordType,
-        1U, record, 45U);
+        1U, record, 45U, false, knownEmpty);
     if (serviceSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {serviceSlot.status, std::nullopt};
     }
@@ -1860,7 +1896,8 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     const auto catalogSlot = selectInitialSlot(
         store_, configuration_storage_contract::kProgramCatalogSlotKeys, epoch,
         configuration_storage_contract::kProgramCatalogRecordType, 1U, record,
-        configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U);
+        configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U, false,
+        knownEmpty);
     if (catalogSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {catalogSlot.status, std::nullopt};
     }
@@ -1906,7 +1943,8 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
         store_, configuration_storage_contract::kConfigurationManifestSlotKeys,
         epoch, configuration_storage_contract::kConfigurationManifestRecordType,
         kConfigurationManifestSchemaVersion1, manifestRecord,
-        configuration_limits::kMaximumConfigurationManifestEnvelopeBytes, true);
+        configuration_limits::kMaximumConfigurationManifestEnvelopeBytes, true,
+        knownEmpty);
     if (manifestSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {manifestSlot.status, std::nullopt};
     }
@@ -1926,7 +1964,8 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
         store_, configuration_storage_contract::kConfigurationRootSlotKeys,
         epoch, configuration_storage_contract::kConfigurationRootRecordType,
         kConfigurationRootSchemaVersion1, rootRecord,
-        configuration_limits::kMaximumConfigurationRootEnvelopeBytes, true);
+        configuration_limits::kMaximumConfigurationRootEnvelopeBytes, true,
+        knownEmpty);
     if (rootSlot.status != InitialConfigurationPrepareStatus::Success) {
         return {rootSlot.status, std::nullopt};
     }
@@ -1960,16 +1999,31 @@ InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
     const auto planIdentity = device_platform::computeCrc32IsoHdlc(rootRecord);
     const auto smallCanonicalRecordCapacity =
         manifestRecord.capacity() + rootRecord.capacity();
+    const auto peakSlotScanReadCapacity =
+        std::max({userSlot.peakReadCapacity, serviceSlot.peakReadCapacity,
+                  catalogSlot.peakReadCapacity, manifestSlot.peakReadCapacity,
+                  rootSlot.peakReadCapacity});
     return {InitialConfigurationPrepareStatus::Success,
-            PreparedInitialConfigurationGraph{
-                std::move(graph), plan, std::move(manifestRecord),
-                std::move(rootRecord), rootSlot.previousBytes,
-                userSlot.descriptor, serviceSlot.descriptor,
-                catalogSlot.descriptor, manifestSlot.previousBytes,
-                userSlot.writeRequired, serviceSlot.writeRequired,
-                catalogSlot.writeRequired, manifestSlot.writeRequired,
-                rootSlot.writeRequired, planIdentity, programPayloadCapacity,
-                programEnvelopeCapacity, 0U, smallCanonicalRecordCapacity}};
+            PreparedInitialConfigurationGraph{std::move(graph),
+                                              plan,
+                                              std::move(manifestRecord),
+                                              std::move(rootRecord),
+                                              rootSlot.previousBytes,
+                                              userSlot.descriptor,
+                                              serviceSlot.descriptor,
+                                              catalogSlot.descriptor,
+                                              manifestSlot.previousBytes,
+                                              userSlot.writeRequired,
+                                              serviceSlot.writeRequired,
+                                              catalogSlot.writeRequired,
+                                              manifestSlot.writeRequired,
+                                              rootSlot.writeRequired,
+                                              planIdentity,
+                                              programPayloadCapacity,
+                                              programEnvelopeCapacity,
+                                              0U,
+                                              smallCanonicalRecordCapacity,
+                                              peakSlotScanReadCapacity}};
 }
 
 // The fixed write sequence keeps every pre-root cut point explicit and

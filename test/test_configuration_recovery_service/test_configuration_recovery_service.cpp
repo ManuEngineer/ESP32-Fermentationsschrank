@@ -12,11 +12,13 @@
 
 #include "configuration_bootstrap_store.hpp"
 #include "configuration_bootstrap_codec.hpp"
+#include "configuration_graph_codec.hpp"
 #include "configuration_graph_store.hpp"
 #include "configuration_limits.hpp"
 #include "configuration_mutation_coordinator.hpp"
 #include "configuration_recovery_service.hpp"
 #include "configuration_service.hpp"
+#include "configuration_storage_contract.hpp"
 #include "state_store.hpp"
 #include "storage_envelope.hpp"
 #include "time_zone_resolver.hpp"
@@ -41,11 +43,17 @@ namespace {
 
 class LocalStore final : public device_platform::IStateStore {
    public:
+    struct Event {
+        bool isWrite;
+        std::string key;
+    };
+
     device_platform::StateStoreWriteStatus write(
         const device_platform::StateStoreKey& key,
         const std::string& value) override {
         ++writeCount_;
         writeKeys_.push_back(key.bytes());
+        events_.push_back({true, key.bytes()});
         const auto fault = writeFaults_.find(key.bytes());
         if (fault == writeFaults_.end()) {
             values_[key.bytes()] = value;
@@ -65,6 +73,7 @@ class LocalStore final : public device_platform::IStateStore {
         std::size_t maxBytes) const override {
         ++readCount_;
         readKeys_.push_back(key.bytes());
+        events_.push_back({false, key.bytes()});
         const auto fault = readFaults_.find(key.bytes());
         if (fault != readFaults_.end()) {
             return {fault->second, {}};
@@ -131,6 +140,7 @@ class LocalStore final : public device_platform::IStateStore {
     [[nodiscard]] const std::vector<std::string>& writeKeys() const {
         return writeKeys_;
     }
+    [[nodiscard]] const std::vector<Event>& events() const { return events_; }
 
    private:
     struct WriteFault {
@@ -144,6 +154,7 @@ class LocalStore final : public device_platform::IStateStore {
         readFaults_;
     mutable std::size_t readCount_{0U};
     std::size_t writeCount_{0U};
+    mutable std::vector<Event> events_;
     mutable std::vector<std::string> readKeys_;
     std::vector<std::string> writeKeys_;
 };
@@ -245,14 +256,57 @@ void test_factory_boot_uses_exactly_one_factory_read_per_known_key() {
     TEST_ASSERT_EQUAL_UINT32(
         4U, runtime.lease.get().programCatalog().programs.size());
 
-    std::map<std::string, std::size_t> firstReads;
-    for (std::size_t index = 0U;
-         index < fixture.store.readKeys().size() && firstReads.size() < 19U;
-         ++index) {
-        ++firstReads[fixture.store.readKeys()[index]];
+    // Exactly the 19 known configuration/bootstrap keys are read, each
+    // exactly once, with no write and no re-read of any of them before the
+    // first Initializing write: the factory-novelty oracle's own 19 reads
+    // are the only reads that happen before that write, and nothing
+    // downstream (graph slot planning, the bootstrap write itself) re-scans
+    // slots it already knows are empty.
+    std::map<std::string, std::size_t> knownKeys;
+    for (const auto* key : fermentation::configuration_storage_contract::
+             kConfigurationBootstrapSlotKeys) {
+        knownKeys[key] = 0U;
     }
-    TEST_ASSERT_EQUAL_UINT32(19U, firstReads.size());
-    for (const auto& [key, count] : firstReads) {
+    for (const auto* key : fermentation::configuration_storage_contract::
+             kConfigurationRootSlotKeys) {
+        knownKeys[key] = 0U;
+    }
+    for (const auto* key : fermentation::configuration_storage_contract::
+             kConfigurationManifestSlotKeys) {
+        knownKeys[key] = 0U;
+    }
+    for (const auto* key : fermentation::configuration_storage_contract::
+             kUserConfigurationSlotKeys) {
+        knownKeys[key] = 0U;
+    }
+    for (const auto* key : fermentation::configuration_storage_contract::
+             kServiceConfigurationSlotKeys) {
+        knownKeys[key] = 0U;
+    }
+    for (const auto* key : fermentation::configuration_storage_contract::
+             kProgramCatalogSlotKeys) {
+        knownKeys[key] = 0U;
+    }
+    TEST_ASSERT_EQUAL_UINT32(19U, knownKeys.size());
+
+    std::size_t firstWriteIndex = fixture.store.events().size();
+    for (std::size_t index = 0U; index < fixture.store.events().size();
+         ++index) {
+        if (fixture.store.events()[index].isWrite) {
+            firstWriteIndex = index;
+            break;
+        }
+    }
+    TEST_ASSERT_TRUE(firstWriteIndex < fixture.store.events().size());
+    TEST_ASSERT_EQUAL_UINT32(19U, static_cast<std::uint32_t>(firstWriteIndex));
+    for (std::size_t index = 0U; index < firstWriteIndex; ++index) {
+        const auto& event = fixture.store.events()[index];
+        TEST_ASSERT_FALSE(event.isWrite);
+        const auto found = knownKeys.find(event.key);
+        TEST_ASSERT_TRUE(found != knownKeys.end());
+        ++found->second;
+    }
+    for (const auto& [key, count] : knownKeys) {
         static_cast<void>(key);
         TEST_ASSERT_EQUAL_UINT32(1U, count);
     }
@@ -915,6 +969,284 @@ void test_additive_unknown_records_and_envelope_versions_have_no_partial_effect(
     }
 }
 
+// Success plus a readback that does not confirm the new bytes (missing, or
+// still exactly the old content) is an integrity failure. The old runtime
+// must never be handed out again afterwards: cancelRecovery() must not run.
+void test_reset_write_integrity_failure_fails_closed_without_cancelling() {
+    const bool eraseTargetFirst[]{true, false};
+    for (const auto eraseTarget : eraseTargetFirst) {
+        Fixture fixture;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryInitializationCompleted),
+            static_cast<int>(fixture.recovery->boot().status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::ConfigurationServiceMode::Operational),
+            static_cast<int>(fixture.service.mode()));
+        if (eraseTarget) {
+            // Target slot cb0 has never been written before: the readback
+            // after a falsely reported Success finds nothing at all.
+            fixture.store.erase("cb0");
+        }
+        // write() reports Success but does not actually commit: the
+        // readback still proves either no bytes or the old bytes, never
+        // the new target record.
+        fixture.store.faultWrite(
+            "cb0", device_platform::StateStoreWriteStatus::Success, false);
+        const auto writesBefore = fixture.store.writeCount();
+        const auto result = fixture.recovery->beginAuthorizedFactoryReset();
+        TEST_ASSERT_EQUAL_INT_MESSAGE(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 ConfigurationIntegrityFailure),
+            static_cast<int>(result.status), eraseTarget ? "missing" : "old");
+        TEST_ASSERT_TRUE(result.safetyProducer.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationSafetyProducer::
+                                 ConfigurationIntegrityFailure),
+            static_cast<int>(*result.safetyProducer));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::ConfigurationServiceMode::RuntimeFailure),
+            static_cast<int>(fixture.service.mode()));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::RuntimeConfigurationReadStatus::
+                                 ConfigurationRuntimeUnavailable),
+            static_cast<int>(fixture.service.acquireRuntime().status));
+        TEST_ASSERT_EQUAL_UINT32(writesBefore + 1U, fixture.store.writeCount());
+    }
+}
+
+// A write attempt that is provably never applied (WriteError,
+// write-CapacityError, or a CommitOutcomeUnknown readback confirming the
+// old bytes) is safe: the old runtime may be handed out again and no
+// safety producer applies.
+void test_reset_write_safe_failures_cancel_back_to_old_runtime() {
+    struct Case {
+        device_platform::StateStoreWriteStatus status;
+        bool commit;
+    };
+    const Case cases[]{
+        {device_platform::StateStoreWriteStatus::WriteError, false},
+        {device_platform::StateStoreWriteStatus::CapacityError, false},
+        {device_platform::StateStoreWriteStatus::CommitOutcomeUnknown, false}};
+    for (const auto& item : cases) {
+        Fixture fixture;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryInitializationCompleted),
+            static_cast<int>(fixture.recovery->boot().status));
+        fixture.store.faultWrite("cb0", item.status, item.commit);
+        const auto result = fixture.recovery->beginAuthorizedFactoryReset();
+        TEST_ASSERT_FALSE(result.safetyProducer.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::ConfigurationServiceMode::Operational),
+            static_cast<int>(fixture.service.mode()));
+        auto runtime = fixture.service.acquireRuntime();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::RuntimeConfigurationReadStatus::
+                                 RuntimeLeaseGranted),
+            static_cast<int>(runtime.status));
+        TEST_ASSERT_EQUAL_UINT64(1U,
+                                 runtime.lease.get().storageEpoch().value());
+        fixture.store.clearFaults();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryResetCompleted),
+            static_cast<int>(
+                fixture.recovery->beginAuthorizedFactoryReset().status));
+    }
+}
+
+// The same safe-failure classification without any prior runtime: the
+// service must still cancel back to NoRuntime (not stay stuck) and the
+// result must carry a producer, since no runtime is available to a caller.
+void test_reset_write_safe_failure_without_runtime_gets_producer() {
+    LocalStore store;
+    Resolver resolver;
+    {
+        fermentation::ConfigurationMutationCoordinator coordinator;
+        fermentation::ConfigurationBootstrapStore bootstrap(store);
+        fermentation::ConfigurationGraphStore graph(store, resolver);
+        fermentation::ConfigurationService service(coordinator, graph,
+                                                   resolver);
+        auto recovery = fermentation::ConfigurationRecoveryService::create(
+            store, bootstrap, graph, service, coordinator);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryInitializationCompleted),
+            static_cast<int>(recovery->boot().status));
+    }
+    store.erase("cr0");
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    fermentation::ConfigurationService service(coordinator, graph, resolver);
+    auto recovery = fermentation::ConfigurationRecoveryService::create(
+        store, bootstrap, graph, service, coordinator);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             ConfigurationUnavailable),
+        static_cast<int>(recovery->boot().status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationServiceMode::ResetEligibleNoRuntime),
+        static_cast<int>(service.mode()));
+    store.faultWrite("cb0", device_platform::StateStoreWriteStatus::WriteError,
+                     false);
+    const auto result = recovery->beginAuthorizedFactoryReset();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::PersistenceWriteFailure),
+        static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.safetyProducer.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationSafetyProducer::
+                             ConfigurationUnavailable),
+        static_cast<int>(*result.safetyProducer));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationServiceMode::NoRuntime),
+        static_cast<int>(service.mode()));
+}
+
+// A mode latched by an earlier boot() (ResetEligibleNoRuntime) must never be
+// trusted as-is: every beginAuthorizedFactoryReset() call re-derives
+// eligibility from the current persisted state under the freshly acquired
+// lease. Conditions that appear only after the earlier classification must
+// still block the reset without any write.
+void test_reset_eligibility_is_reproven_on_every_call() {
+    struct Blocker {
+        const char* name;
+        void (*apply)(LocalStore&);
+    };
+    const Blocker blockers[]{
+        {"root-read-error",
+         [](LocalStore& store) {
+             store.faultRead("cr0",
+                             device_platform::StateStoreReadStatus::ReadError);
+         }},
+        {"root-capacity-error",
+         [](LocalStore& store) {
+             store.faultRead(
+                 "cr0", device_platform::StateStoreReadStatus::CapacityError);
+         }},
+        {"root-unsupported-newer-schema", [](LocalStore& store) {
+             std::string bytes;
+             TEST_ASSERT_TRUE(
+                 device_platform::encodeEnvelope(
+                     {fermentation::configuration_storage_contract::
+                          kConfigurationRootRecordType,
+                      fermentation::kConfigurationRootSchemaVersion1 + 1U,
+                      device_platform::StorageEpoch{1U}, 1U, std::nullopt,
+                      std::string(5U, '\0')},
+                     bytes,
+                     128U) == device_platform::EnvelopeEncodeStatus::Success);
+             store.put("cr0", bytes);
+         }}};
+    for (const auto& blocker : blockers) {
+        LocalStore store;
+        Resolver resolver;
+        {
+            fermentation::ConfigurationMutationCoordinator coordinator;
+            fermentation::ConfigurationBootstrapStore bootstrap(store);
+            fermentation::ConfigurationGraphStore graph(store, resolver);
+            fermentation::ConfigurationService service(coordinator, graph,
+                                                       resolver);
+            auto recovery = fermentation::ConfigurationRecoveryService::create(
+                store, bootstrap, graph, service, coordinator);
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                     FactoryInitializationCompleted),
+                static_cast<int>(recovery->boot().status));
+        }
+        store.erase("cr0");
+        fermentation::ConfigurationMutationCoordinator coordinator;
+        fermentation::ConfigurationBootstrapStore bootstrap(store);
+        fermentation::ConfigurationGraphStore graph(store, resolver);
+        fermentation::ConfigurationService service(coordinator, graph,
+                                                   resolver);
+        auto recovery = fermentation::ConfigurationRecoveryService::create(
+            store, bootstrap, graph, service, coordinator);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 ConfigurationUnavailable),
+            static_cast<int>(recovery->boot().status), blocker.name);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(
+            static_cast<int>(
+                fermentation::ConfigurationServiceMode::ResetEligibleNoRuntime),
+            static_cast<int>(service.mode()), blocker.name);
+
+        blocker.apply(store);
+        const auto writesBefore = store.writeCount();
+        const auto blocked = recovery->beginAuthorizedFactoryReset();
+        TEST_ASSERT_NOT_EQUAL_MESSAGE(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryResetCompleted),
+            static_cast<int>(blocked.status), blocker.name);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(writesBefore, store.writeCount(),
+                                         blocker.name);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(
+            static_cast<int>(
+                fermentation::ConfigurationServiceMode::ResetEligibleNoRuntime),
+            static_cast<int>(service.mode()), blocker.name);
+    }
+}
+
+// The unchanged case: eligibility re-derived from the same still-missing
+// graph must still succeed and actually write Resetting.
+void test_reset_eligibility_reproof_still_succeeds_when_unchanged() {
+    LocalStore store;
+    Resolver resolver;
+    {
+        fermentation::ConfigurationMutationCoordinator coordinator;
+        fermentation::ConfigurationBootstrapStore bootstrap(store);
+        fermentation::ConfigurationGraphStore graph(store, resolver);
+        fermentation::ConfigurationService service(coordinator, graph,
+                                                   resolver);
+        auto recovery = fermentation::ConfigurationRecoveryService::create(
+            store, bootstrap, graph, service, coordinator);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryInitializationCompleted),
+            static_cast<int>(recovery->boot().status));
+    }
+    store.erase("cr0");
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    fermentation::ConfigurationService service(coordinator, graph, resolver);
+    auto recovery = fermentation::ConfigurationRecoveryService::create(
+        store, bootstrap, graph, service, coordinator);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             ConfigurationUnavailable),
+        static_cast<int>(recovery->boot().status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationServiceMode::ResetEligibleNoRuntime),
+        static_cast<int>(service.mode()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
+        static_cast<int>(recovery->beginAuthorizedFactoryReset().status));
+    auto runtime = service.acquireRuntime();
+    TEST_ASSERT_EQUAL_UINT64(2U, runtime.lease.get().storageEpoch().value());
+}
+
+// Upper bounds every peak field is checked against: derived from the fixed
+// document/manifest/root/bootstrap envelope limits, never from an observed
+// value, so a regression that quietly grows a peak is caught.
+constexpr std::size_t kMaxDocumentEnvelopeCapacity =
+    fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes +
+    45U;
+constexpr std::size_t kMaxSmallCanonicalRecordCapacity =
+    fermentation::configuration_limits::
+        kMaximumConfigurationManifestEnvelopeBytes +
+    fermentation::configuration_limits::kMaximumConfigurationRootEnvelopeBytes +
+    fermentation::configuration_limits::
+        kMaximumConfigurationBootstrapEnvelopeBytes;
+
 void test_recovery_resource_peaks_are_measured_and_bounded() {
     Fixture fixture;
     TEST_ASSERT_EQUAL_INT(
@@ -924,20 +1256,34 @@ void test_recovery_resource_peaks_are_measured_and_bounded() {
     const auto peaks = fixture.recovery->lastResourcePeaks();
     TEST_ASSERT_TRUE(peaks.has_value());
     TEST_ASSERT_GREATER_THAN(0U, peaks->programPayloadCapacity);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes,
+        peaks->programPayloadCapacity);
     TEST_ASSERT_GREATER_THAN(0U, peaks->documentEnvelopeCapacity);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(kMaxDocumentEnvelopeCapacity,
+                                     peaks->documentEnvelopeCapacity);
     TEST_ASSERT_GREATER_THAN(0U, peaks->storeReadbackCapacity);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(kMaxDocumentEnvelopeCapacity,
+                                     peaks->storeReadbackCapacity);
     TEST_ASSERT_GREATER_THAN(0U, peaks->smallCanonicalRecordCapacity);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(kMaxSmallCanonicalRecordCapacity,
+                                     peaks->smallCanonicalRecordCapacity);
     TEST_ASSERT_EQUAL_UINT32(0U, peaks->indeterminateContextCapacity);
+    // The exactly-empty-store factory-novelty proof skips slot scanning
+    // entirely (see the exact-19-reads contract): no slot-scan buffer is
+    // read at all for the very first factory initialization.
+    TEST_ASSERT_EQUAL_UINT32(0U, peaks->slotScanReadCapacity);
     TEST_ASSERT_LESS_OR_EQUAL_UINT32(
         fermentation::configuration_limits::
             kMaxDistinctConfigurationModelGenerations,
         peaks->fullModelGenerations);
     std::printf(
         "ISSUE57_INIT_RESOURCE_PEAK payload=%zu envelope=%zu readback=%zu "
-        "small=%zu indeterminate=%zu models=%zu\n",
+        "small=%zu scan=%zu indeterminate=%zu models=%zu\n",
         peaks->programPayloadCapacity, peaks->documentEnvelopeCapacity,
         peaks->storeReadbackCapacity, peaks->smallCanonicalRecordCapacity,
-        peaks->indeterminateContextCapacity, peaks->fullModelGenerations);
+        peaks->slotScanReadCapacity, peaks->indeterminateContextCapacity,
+        peaks->fullModelGenerations);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(
             fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
@@ -945,16 +1291,23 @@ void test_recovery_resource_peaks_are_measured_and_bounded() {
             fixture.recovery->beginAuthorizedFactoryReset().status));
     const auto resetPeaks = fixture.recovery->lastResourcePeaks();
     TEST_ASSERT_TRUE(resetPeaks.has_value());
+    // The reset scans the small factory-sized epoch-1 leftovers written by
+    // the preceding initialization: bounded, but no longer zero, since a
+    // real reset is never provably empty and must always scan.
+    TEST_ASSERT_GREATER_THAN(0U, resetPeaks->slotScanReadCapacity);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(kMaxDocumentEnvelopeCapacity,
+                                     resetPeaks->slotScanReadCapacity);
     TEST_ASSERT_LESS_OR_EQUAL_UINT32(
         fermentation::configuration_limits::
             kMaxDistinctConfigurationModelGenerations,
         resetPeaks->fullModelGenerations);
     std::printf(
         "ISSUE57_RESET_RESOURCE_PEAK payload=%zu envelope=%zu readback=%zu "
-        "small=%zu indeterminate=%zu models=%zu\n",
+        "small=%zu scan=%zu indeterminate=%zu models=%zu\n",
         resetPeaks->programPayloadCapacity,
         resetPeaks->documentEnvelopeCapacity, resetPeaks->storeReadbackCapacity,
         resetPeaks->smallCanonicalRecordCapacity,
+        resetPeaks->slotScanReadCapacity,
         resetPeaks->indeterminateContextCapacity,
         resetPeaks->fullModelGenerations);
 
@@ -971,12 +1324,104 @@ void test_recovery_resource_peaks_are_measured_and_bounded() {
     TEST_ASSERT_TRUE(indeterminatePeaks.has_value());
     TEST_ASSERT_GREATER_THAN(0U,
                              indeterminatePeaks->indeterminateContextCapacity);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(
+        kMaxSmallCanonicalRecordCapacity * 2U,
+        indeterminatePeaks->indeterminateContextCapacity);
     std::printf(
         "ISSUE57_INDETERMINATE_RESOURCE_PEAK small=%zu context=%zu "
         "models=%zu\n",
         indeterminatePeaks->smallCanonicalRecordCapacity,
         indeterminatePeaks->indeterminateContextCapacity,
         indeterminatePeaks->fullModelGenerations);
+}
+
+// The worst realistic slot-scan case: a full-size leftover ProgramCatalog
+// envelope from the previous epoch is read in full while scanning for a
+// safe target slot during a reset, even though only its small descriptor is
+// kept afterwards (see PreparedInitialConfigurationGraph::
+// previousTargetProgramRecord). The resource report must show that
+// transient 32805-byte buffer, not just the small kept descriptor or the
+// small new write-back readback.
+void test_recovery_resource_peaks_show_maximal_old_program_catalog_scan() {
+    Fixture fixture;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(fixture.recovery->boot().status));
+    const std::string maximumPayload(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes,
+        'x');
+    std::string maximumEnvelope;
+    TEST_ASSERT_TRUE(device_platform::encodeEnvelope(
+                         {fermentation::configuration_storage_contract::
+                              kProgramCatalogRecordType,
+                          1U, device_platform::StorageEpoch{1U}, 1U,
+                          std::nullopt, maximumPayload},
+                         maximumEnvelope,
+                         fermentation::configuration_limits::
+                                 kMaximumProgramCatalogPayloadBytes +
+                             45U) ==
+                     device_platform::EnvelopeEncodeStatus::Success);
+    fixture.store.put("pc0", maximumEnvelope);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted),
+        static_cast<int>(
+            fixture.recovery->beginAuthorizedFactoryReset().status));
+    const auto peaks = fixture.recovery->lastResourcePeaks();
+    TEST_ASSERT_TRUE(peaks.has_value());
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes +
+            37U,
+        peaks->slotScanReadCapacity);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(kMaxDocumentEnvelopeCapacity,
+                                     peaks->slotScanReadCapacity);
+    // Only a small descriptor of the old leftover record survives into the
+    // new record's own envelope/readback peaks.
+    TEST_ASSERT_LESS_THAN_UINT32(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes,
+        peaks->documentEnvelopeCapacity);
+    TEST_ASSERT_LESS_THAN_UINT32(
+        fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes,
+        peaks->storeReadbackCapacity);
+    std::printf(
+        "ISSUE57_RESET_MAX_OLD_CATALOG_SCAN_PEAK scan=%zu envelope=%zu "
+        "readback=%zu\n",
+        peaks->slotScanReadCapacity, peaks->documentEnvelopeCapacity,
+        peaks->storeReadbackCapacity);
+}
+
+// Resuming after an interrupted root write (cr0) re-derives the slot plan
+// the same way a fresh reset does, this time re-scanning the already
+// committed user/service/program/manifest records from before the
+// interruption: the resume path must show a bounded, non-zero slot-scan
+// peak from those real matched records, not a stale or missing value from
+// before the interruption, and must not silently fall back to the
+// empty-store fast path.
+void test_recovery_resource_peaks_are_bounded_on_resume() {
+    Fixture fixture;
+    fixture.store.faultWrite(
+        "cr0", device_platform::StateStoreWriteStatus::WriteError, false);
+    const auto interrupted = fixture.recovery->boot();
+    TEST_ASSERT_NOT_EQUAL(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(interrupted.status));
+    fixture.store.clearFaults();
+    const auto resumed = fixture.recovery->boot();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(resumed.status));
+    const auto peaks = fixture.recovery->lastResourcePeaks();
+    TEST_ASSERT_TRUE(peaks.has_value());
+    TEST_ASSERT_GREATER_THAN(0U, peaks->slotScanReadCapacity);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(kMaxDocumentEnvelopeCapacity,
+                                     peaks->slotScanReadCapacity);
+    TEST_ASSERT_LESS_OR_EQUAL_UINT32(
+        fermentation::configuration_limits::
+            kMaxDistinctConfigurationModelGenerations,
+        peaks->fullModelGenerations);
 }
 
 }  // namespace
@@ -1012,6 +1457,15 @@ int main() {
     RUN_TEST(test_schema1_epoch_overflow_blocks_before_graph_or_factory_model);
     RUN_TEST(
         test_additive_unknown_records_and_envelope_versions_have_no_partial_effect);
+    RUN_TEST(
+        test_reset_write_integrity_failure_fails_closed_without_cancelling);
+    RUN_TEST(test_reset_write_safe_failures_cancel_back_to_old_runtime);
+    RUN_TEST(test_reset_write_safe_failure_without_runtime_gets_producer);
+    RUN_TEST(test_reset_eligibility_is_reproven_on_every_call);
+    RUN_TEST(test_reset_eligibility_reproof_still_succeeds_when_unchanged);
     RUN_TEST(test_recovery_resource_peaks_are_measured_and_bounded);
+    RUN_TEST(
+        test_recovery_resource_peaks_show_maximal_old_program_catalog_scan);
+    RUN_TEST(test_recovery_resource_peaks_are_bounded_on_resume);
     return UNITY_END();
 }

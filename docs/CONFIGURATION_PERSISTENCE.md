@@ -977,14 +977,19 @@ keinen Producer; #24 muss Detailstatus nicht erneut fachlich klassifizieren.
 
 Der #57-Ressourcennachweis speichert fuer den jeweils letzten Initialisierungs-
 oder Resetversuch die relevanten Stringkapazitaeten getrennt fuer
-ProgramCatalog-Payload, Dokument-Envelopeworkspace, Store-Readback sowie die
-kleinen kanonischen Bootstrap-/Manifest-/Rootbindungen. Vorherige maximale
-Dokumentrecords werden nur als kleine technische Deskriptoren gebunden; der
-Old-or-New-Portvertrag ersetzt eine zweite Vollkopie. Modellreservierung erfolgt
-vor Factorymodellaufbau, und vorbereitete Recoverymodelle zaehlen zur festen
-Zwei-Generationen-Grenze. Ein tatsaechlich gehaltener Root-Indeterminate-
-Kontext weist seine zusaetzlichen fluechtigen Bootstrap-/Rootbindungskapazitaeten
-separat aus und haelt keinen zweiten maximalen Dokumentrecord.
+ProgramCatalog-Payload, Dokument-Envelopeworkspace, Store-Readback, den
+maximalen Slot-Scan-Lesepuffer sowie die kleinen kanonischen
+Bootstrap-/Manifest-/Rootbindungen. Vorherige maximale Dokumentrecords werden
+nur als kleine technische Deskriptoren gebunden; der Old-or-New-Portvertrag
+ersetzt eine zweite Vollkopie. Der transiente Lesepuffer, mit dem ein solcher
+alter Record waehrend der Slotsuche vollstaendig gelesen wird, bleibt davon
+unabhaengig real und erscheint eigenstaendig als Slot-Scan-Peak; er wird nicht
+mit dem kleinen Store-Readback-Peak des tatsaechlich neu geschriebenen Records
+vermischt. Modellreservierung erfolgt vor Factorymodellaufbau, und
+vorbereitete Recoverymodelle zaehlen zur festen Zwei-Generationen-Grenze. Ein
+tatsaechlich gehaltener Root-Indeterminate-Kontext weist seine zusaetzlichen
+fluechtigen Bootstrap-/Rootbindungskapazitaeten separat aus und haelt keinen
+zweiten maximalen Dokumentrecord.
 
 Ein erfolgreicher lokaler Reset loescht weder einen bereits erzeugten
 Konfigurationsfehler noch eine spaetere Verriegelung aus #24. Deren Aufhebung

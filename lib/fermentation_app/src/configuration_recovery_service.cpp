@@ -72,8 +72,12 @@ ConfigurationRecoveryResult makeUnavailableResult(
     ConfigurationRecoveryStatus status,
     ConfigurationGraphDiagnostics diagnostics = {}) {
     auto result = makeResult(status, diagnostics);
-    result.safetyProducer =
-        ConfigurationSafetyProducer::ConfigurationUnavailable;
+    // Never demote an already-assigned integrity producer: this call site
+    // only asserts "no runtime survives", not which producer applies.
+    if (!result.safetyProducer.has_value()) {
+        result.safetyProducer =
+            ConfigurationSafetyProducer::ConfigurationUnavailable;
+    }
     return result;
 }
 
@@ -92,9 +96,15 @@ ConfigurationRecoveryStatus mapBootstrapScanFailure(
             return ConfigurationRecoveryStatus::PersistenceReadFailure;
         case ConfigurationBootstrapScanStatus::CapacityError:
             return ConfigurationRecoveryStatus::PersistenceCapacityFailure;
-        default:
+        case ConfigurationBootstrapScanStatus::UnsupportedNewerSchema:
+            return ConfigurationRecoveryStatus::
+                UnsupportedNewerConfigurationSchema;
+        case ConfigurationBootstrapScanStatus::IntegrityFailure:
+        case ConfigurationBootstrapScanStatus::Empty:
+        case ConfigurationBootstrapScanStatus::Available:
             return ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
     }
+    return ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
 }
 
 ConfigurationRecoveryStatus mapRecoveryBeginStatus(
@@ -144,14 +154,27 @@ ConfigurationRecoveryStatus mapBootstrapWriteFailure(
     return ConfigurationRecoveryStatus::PersistenceWriteFailure;
 }
 
+// A write attempt is provably safe-not-effective only when the store was
+// never actually mutated, or the readback proves the prior bytes are still
+// exactly in place. InvalidTransition means the canonical bootstrap changed
+// underneath this attempt (or the target relation became disallowed) and is
+// therefore never proof that the previously bound old state still persists.
 bool bootstrapFailureLeavesOldState(ConfigurationBootstrapWriteStatus status) {
     return status == ConfigurationBootstrapWriteStatus::ReadError ||
            status == ConfigurationBootstrapWriteStatus::CapacityError ||
            status == ConfigurationBootstrapWriteStatus::WriteError ||
            status == ConfigurationBootstrapWriteStatus::WriteCapacityError ||
            status == ConfigurationBootstrapWriteStatus::CommitNotEffective ||
-           status == ConfigurationBootstrapWriteStatus::InvalidTransition ||
            status == ConfigurationBootstrapWriteStatus::CounterOverflow;
+}
+
+ConfigurationRuntimeFailureCause mapBootstrapWriteFailureCause(
+    ConfigurationBootstrapWriteStatus status) {
+    return status == ConfigurationBootstrapWriteStatus::UnsupportedNewerSchema
+               ? ConfigurationRuntimeFailureCause::
+                     UnsupportedNewerConfigurationSchema
+               : ConfigurationRuntimeFailureCause::
+                     PersistentGraphIntegrityFailure;
 }
 
 ConfigurationRecoveryResult makeResetPreparationFailure(
@@ -341,7 +364,8 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
         prepared.smallCanonicalRecordCapacity +
             bootstrap.canonicalRecordBytes.capacity(),
         0U,
-        configurationService_.fullModelGenerationCount()};
+        configurationService_.fullModelGenerationCount(),
+        prepared.peakSlotScanReadCapacity};
     if (execution.status == ConfigurationCommitExecutionStatus::Activated) {
         CommittedRecoveryActivation activation(
             prepared.graph.active.manifestReference.storageEpoch,
@@ -522,6 +546,11 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
         if (empty != ConfigurationRecoveryStatus::RuntimeReady) {
             return {empty, {}};
         }
+        // The two bootstrap reads from the scan above plus the 17 reads
+        // just performed by verifyFactoryEmpty() are exactly the 19 known
+        // keys; this proof lets the rest of this single attempt skip
+        // re-reading any of them.
+        const FactoryNoveltyProof factoryNoveltyProof;
         const auto begin = configurationService_.beginRecovery(
             ConfigurationServiceMode::RecoveryPreparing,
             configuration_limits::kInitializationRecoveryRevisionHeadroom);
@@ -529,13 +558,15 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
             return makeUnavailableResult(mapRecoveryBeginStatus(begin));
         }
         auto prepared = graphStore_.prepareInitialGraph(
-            device_platform::StorageEpoch{1U}, decodeChangeOperation(2U));
+            device_platform::StorageEpoch{1U}, decodeChangeOperation(2U),
+            &factoryNoveltyProof);
         if (prepared.status != InitialConfigurationPrepareStatus::Success ||
             !prepared.prepared.has_value()) {
             static_cast<void>(configurationService_.cancelRecovery());
-            return makeResult(mapPrepare(prepared.status));
+            return makeUnavailableResult(mapPrepare(prepared.status));
         }
-        auto initial = bootstrapStore_.writeInitialInitializing();
+        auto initial =
+            bootstrapStore_.writeInitialInitializing(factoryNoveltyProof);
         if (initial.status != ConfigurationBootstrapWriteStatus::Success ||
             !initial.loaded.has_value()) {
             if (isBootstrapIndeterminate(initial.status)) {
@@ -622,14 +653,14 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
     const auto begin = configurationService_.beginRecovery(
         mode, configuration_limits::kInitializationRecoveryRevisionHeadroom);
     if (begin != ConfigurationRecoveryBeginStatus::Success) {
-        return makeResult(mapRecoveryBeginStatus(begin));
+        return makeUnavailableResult(mapRecoveryBeginStatus(begin));
     }
     auto prepared = graphStore_.prepareInitialGraph(
         bootstrap.loaded->record.storageEpoch, operation);
     if (prepared.status != InitialConfigurationPrepareStatus::Success ||
         !prepared.prepared.has_value()) {
         static_cast<void>(configurationService_.cancelRecovery());
-        return makeResult(mapPrepare(prepared.status));
+        return makeUnavailableResult(mapPrepare(prepared.status));
     }
     return continueEpochBuild(
         *bootstrap.loaded, std::move(*prepared.prepared), operation,
@@ -640,7 +671,10 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
         acquired.lease);
 }
 
+// Authorized reset keeps eligibility re-proof, overflow checks and the
+// bootstrap-write fail-closed classification in one auditable decision path.
 ConfigurationRecoveryResult
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationRecoveryService::beginAuthorizedFactoryReset() {
     auto acquired = mutationCoordinator_.tryAcquire();
     if (acquired.status != ConfigurationMutationAcquireStatus::Acquired) {
@@ -657,39 +691,55 @@ ConfigurationRecoveryService::beginAuthorizedFactoryReset() {
                                                  {}}
                    : mapBootstrapFailure(bootstrap.status);
     }
+    // A valid Operational runtime can only already be present at entry:
+    // nothing below this point ever newly establishes one before the
+    // recovery attempt either completes or fails closed.
+    const bool oldRuntimeRemainsValid =
+        configurationService_.mode() == ConfigurationServiceMode::Operational;
     constexpr auto kMaximumResettableEpoch =
         std::numeric_limits<std::uint64_t>::max() / 2U - 1U;
     if (bootstrap.loaded->record.storageEpoch.value() >
             kMaximumResettableEpoch ||
         bootstrap.loaded->highWater.value() ==
             std::numeric_limits<std::uint64_t>::max()) {
-        return makeResult(ConfigurationRecoveryStatus::CounterOverflow);
+        return makeResetPreparationFailure(
+            ConfigurationRecoveryStatus::CounterOverflow,
+            oldRuntimeRemainsValid);
     }
-    if (configurationService_.mode() == ConfigurationServiceMode::NoRuntime) {
+    // Eligibility is re-proven under the lease just acquired above on every
+    // call, including when a previous boot() already latched
+    // ResetEligibleNoRuntime: that earlier classification is never reused
+    // as-is, since the persisted bootstrap or root state may have changed
+    // since it was made.
+    if (configurationService_.mode() == ConfigurationServiceMode::NoRuntime ||
+        configurationService_.mode() ==
+            ConfigurationServiceMode::ResetEligibleNoRuntime) {
         const auto graph = graphStore_.loadCanonicalGraph(
             bootstrap.loaded->record.storageEpoch);
         if (!isResetEligibleNoRuntimeGraph(graph)) {
             return makeResult(mapLoad(graph.status), graph.diagnostics);
         }
-        if (!configurationService_.markResetEligibleNoRuntime()) {
-            return makeResult(
+        if (configurationService_.mode() ==
+                ConfigurationServiceMode::NoRuntime &&
+            !configurationService_.markResetEligibleNoRuntime()) {
+            return makeUnavailableResult(
                 ConfigurationRecoveryStatus::StateTransitionRejected);
         }
     }
     if (configurationService_.mode() != ConfigurationServiceMode::Operational &&
         configurationService_.mode() !=
             ConfigurationServiceMode::ResetEligibleNoRuntime) {
-        return makeResult(ConfigurationRecoveryStatus::StateTransitionRejected);
+        return makeUnavailableResult(
+            ConfigurationRecoveryStatus::StateTransitionRejected);
     }
     const auto targetEpoch = device_platform::StorageEpoch{
         bootstrap.loaded->record.storageEpoch.value() + 1U};
-    const bool oldRuntimeRemainsValid =
-        configurationService_.mode() == ConfigurationServiceMode::Operational;
     const auto begin = configurationService_.beginRecovery(
         ConfigurationServiceMode::ResetPreparing,
         configuration_limits::kResetRecoveryRevisionHeadroom);
     if (begin != ConfigurationRecoveryBeginStatus::Success) {
-        return makeResult(mapRecoveryBeginStatus(begin));
+        return makeResetPreparationFailure(mapRecoveryBeginStatus(begin),
+                                           oldRuntimeRemainsValid);
     }
     auto prepared =
         graphStore_.prepareInitialGraph(targetEpoch, decodeChangeOperation(5U));
@@ -709,9 +759,20 @@ ConfigurationRecoveryService::beginAuthorizedFactoryReset() {
             return {ConfigurationRecoveryStatus::BootstrapCommitIndeterminate,
                     {}};
         }
-        static_cast<void>(configurationService_.cancelRecovery());
-        return makeResetBootstrapFailure(resetting.status,
-                                         oldRuntimeRemainsValid);
+        if (bootstrapFailureLeavesOldState(resetting.status)) {
+            static_cast<void>(configurationService_.cancelRecovery());
+            return makeResetBootstrapFailure(resetting.status,
+                                             oldRuntimeRemainsValid);
+        }
+        // Integrity failure, unsupported newer schema or a canonical
+        // bootstrap that changed underneath this attempt: the old runtime
+        // is not provably still backed by the persisted state, so it must
+        // not be handed out again. Fail closed instead of cancelling back
+        // to Operational.
+        configurationService_.failRecovery(
+            mapBootstrapWriteFailureCause(resetting.status));
+        return makeUnavailableResult(
+            mapBootstrapWriteFailure(resetting.status));
     }
     if (!configurationService_.transitionRecovery(
             ConfigurationServiceMode::EpochResetting)) {

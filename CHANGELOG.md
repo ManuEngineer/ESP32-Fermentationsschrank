@@ -72,6 +72,27 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   Schema-1-Epochengrenzen sowie einen instrumentierten Record-/Modell-
   Peaknachweis. Alte maximale Dokumentrecords bleiben nicht als zweite
   Vollkopie im Prepared Graph.
+  - Letzte konsolidierte Restkorrektur (PR #68): `beginAuthorizedFactoryReset()`
+    ruft `cancelRecovery()` nur noch bei nachweislich sicher nicht wirksamen
+    Bootstrapwrites auf; Integritaetsfehler, unbekannte neuere Schemas und ein
+    zwischen Vorbereitung und Write geaenderter kanonischer Bootstrap fuehren
+    stattdessen zu `RuntimeFailure` ohne erneute Freigabe der alten Runtime
+    (Befund 1)
+  - `ResetEligibleNoRuntime` wird bei jedem Resetaufruf unter der aktuellen
+    Lease vollstaendig neu klassifiziert statt einen frueher von `boot()`
+    gesetzten Modus wiederzuverwenden (Befund 2)
+  - vollstaendige Status-/Safety-Producer-Matrix: `makeUnavailableResult()`
+    ueberschreibt einen bereits zugeordneten Integritaets-Producer nicht mehr;
+    `UnsupportedNewerSchema` bleibt beim Bootstrapscan ursachentreu;
+    `CounterOverflow`/`ConfigurationModelBudgetBusy`/`StateTransitionRejected`
+    ohne Runtime bleiben nicht mehr producerlos (Befund 3)
+  - das Factory-Neuheitsorakel liest exakt 19 Keys ohne erneuten Scan: ein
+    nicht kopierbarer `FactoryNoveltyProof` laesst die erste Initialisierung
+    die bereits bewiesene Leere von Graphstore- und Bootstrap-Slotsuche
+    wiederverwenden; ein separat ausgewiesener Slot-Scan-Ressourcenpeak zeigt
+    den realen transienten Lesepuffer eines vollstaendig gelesenen alten
+    Records (etwa 32805 Byte fuer einen maximalen alten ProgramCatalog) statt
+    nur die kleine behaltene Deskriptorgroesse (Befund 4)
 
 - Active-/Fallback-Konfigurationskern fuer Issue #56: kanonische Manifest- und
   Rootcodecs, vollstaendige Graph- und Identitaetsvalidierung, High-Water-

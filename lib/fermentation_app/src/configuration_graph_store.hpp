@@ -238,6 +238,11 @@ struct PreparedInitialConfigurationGraph {
     std::size_t peakDocumentEnvelopeCapacity{0U};
     std::size_t peakStoreReadbackCapacity{0U};
     std::size_t smallCanonicalRecordCapacity{0U};
+    // Largest transient buffer read while scanning candidate slots (user,
+    // service, program, manifest, root) for a safe or exact target, distinct
+    // from peakStoreReadbackCapacity, which only covers the write-back
+    // confirmation reads of the new records actually written.
+    std::size_t peakSlotScanReadCapacity{0U};
 };
 
 struct InitialConfigurationPrepareResult {
@@ -322,8 +327,14 @@ class ConfigurationGraphStore {
     [[nodiscard]] ConfigurationCommitResolutionResult resolveCommitDetailed(
         const PreparedConfigurationCommit& prepared) const;
 
+    // factoryNoveltyProof, when non-null, is only honored for the exact
+    // first-ever factory initialization (epoch 1, FactoryInitialization):
+    // it lets the already-proven-empty target slots skip their otherwise
+    // redundant re-scan. Any other epoch or operation always scans in full,
+    // regardless of whether a proof is passed.
     [[nodiscard]] InitialConfigurationPrepareResult prepareInitialGraph(
-        device_platform::StorageEpoch epoch, ChangeOperation operation) const;
+        device_platform::StorageEpoch epoch, ChangeOperation operation,
+        const FactoryNoveltyProof* factoryNoveltyProof = nullptr) const;
     [[nodiscard]] ConfigurationCommitExecutionResult executeInitialGraph(
         PreparedInitialConfigurationGraph& prepared,
         ConfigurationEpochGraphWriteCapability& capability);

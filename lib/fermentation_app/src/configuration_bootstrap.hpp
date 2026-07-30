@@ -47,4 +47,23 @@ inline constexpr ConfigurationStorageFormatVersion
     const ConfigurationBootstrapRecord& previous,
     const ConfigurationBootstrapRecord& next);
 
+// Non-copyable, non-movable proof that the exactly 19 known configuration
+// and bootstrap keys were already read as NotFound under the current
+// mutation lease and service revision, in this single recovery attempt. Its
+// only purpose is to let the first-ever factory initialization skip the
+// otherwise redundant re-scan of slots already proven empty by that oracle;
+// it never carries or reuses any read payload.
+class FactoryNoveltyProof {
+   public:
+    FactoryNoveltyProof(const FactoryNoveltyProof&) = delete;
+    FactoryNoveltyProof& operator=(const FactoryNoveltyProof&) = delete;
+    FactoryNoveltyProof(FactoryNoveltyProof&&) = delete;
+    FactoryNoveltyProof& operator=(FactoryNoveltyProof&&) = delete;
+    ~FactoryNoveltyProof() = default;
+
+   private:
+    friend class ConfigurationRecoveryService;
+    FactoryNoveltyProof() = default;
+};
+
 }  // namespace fermentation

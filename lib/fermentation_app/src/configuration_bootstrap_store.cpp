@@ -140,6 +140,17 @@ ConfigurationBootstrapStore::writeInitialInitializing() {
                                 ConfigurationBootstrapState::Initializing});
 }
 
+ConfigurationBootstrapWriteResult
+ConfigurationBootstrapStore::writeInitialInitializing(
+    const FactoryNoveltyProof& proof) {
+    static_cast<void>(proof);
+    return writeBound(
+        {ConfigurationBootstrapScanStatus::Empty, std::nullopt},
+        {ConfigurationBootstrapSequence{1U},
+         kConfigurationStorageFormatVersion1, device_platform::StorageEpoch{1U},
+         ConfigurationBootstrapState::Initializing});
+}
+
 ConfigurationBootstrapWriteResult ConfigurationBootstrapStore::writeSuccessor(
     const LoadedConfigurationBootstrap& expected,
     ConfigurationBootstrapState targetState) {
