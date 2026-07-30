@@ -50,8 +50,50 @@ Zentrale Einstiege:
 - `docs/OPEN_POINTS.md`
 - `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`
 - `docs/CI_AND_QUALITY_GATES.md`
+- `docs/ENGINEERING_PRINCIPLES.md`
 - `lib/README.md`
 - `references/LINKS.md`
+
+## Verbindliche Software-Engineering-Grundsaetze
+
+SOLID, DRY und KISS sind verbindliche Grundsaetze fuer alle Agenten und fuer
+jede Planung, Architekturentscheidung, Bibliotheksbewertung, Implementierung,
+Testaenderung und jedes Review in diesem Repository. Die ausfuehrliche
+Erlaeuterung steht in `docs/ENGINEERING_PRINCIPLES.md`; die Verbindlichkeit wird
+durch diesen Abschnitt festgelegt.
+
+- **Single Responsibility:** Funktionen, Klassen und Module besitzen eine klar
+  abgegrenzte Verantwortung.
+- **Open/Closed:** Stabile Kernlogik wird bevorzugt ueber vorhandene
+  Abstraktionen erweitert, statt fuer jede Erweiterung wiederholt veraendert zu
+  werden.
+- **Liskov Substitution:** Implementierungen einer Schnittstelle muessen ohne
+  Verletzung ihrer dokumentierten Vertraege austauschbar sein.
+- **Interface Segregation:** Kleine, zweckgebundene Schnittstellen sind grossen
+  universellen Schnittstellen vorzuziehen.
+- **Dependency Inversion:** Fachlogik haengt von Abstraktionen ab, nicht direkt
+  von Hardware-, Framework-, Bibliotheks- oder Infrastrukturklassen.
+- **DRY:** Fachliche Regeln, Validierungen und Vertraege besitzen eine eindeutige
+  Quelle. Copy-and-paste-Logik und parallel divergierende Implementierungen sind
+  zu vermeiden.
+- **KISS:** Die einfachste verstaendliche, testbare und wartbare Loesung, welche
+  die Anforderungen sowie Security- und Safetygrenzen erfuellt, ist zu
+  bevorzugen.
+
+Die Grundsaetze duerfen nicht mechanisch angewendet werden:
+
+- SOLID rechtfertigt keine vorsorgliche Ueberabstraktion oder ungenutzte
+  Erweiterungspunkte.
+- DRY verlangt keine gemeinsame Abstraktion fuer nur oberflaechlich aehnlichen
+  Code mit unterschiedlichen fachlichen Verantwortungen.
+- KISS rechtfertigt keine Vereinfachung, welche Safety, Security, Recovery,
+  Testbarkeit oder dokumentierte Vertraege schwaecht.
+
+Eine bewusste Abweichung muss im freigegebenen Plan oder, bei einer ausdruecklich
+freigegebenen trivialen Aenderung, in der PR-Beschreibung konkret begruendet
+werden. Reviews pruefen diese Grundsaetze ausdruecklich; reine Behauptungen wie
+"SOLID eingehalten" ohne Bezug auf den tatsaechlichen Diff gelten nicht als
+Nachweis.
 
 ## Architekturregeln
 
@@ -188,6 +230,8 @@ Jedes Issue erfuellt alle zutreffenden Punkte:
 - keine Geheimnisse eingecheckt
 - keine unbestaetigte Hardwareannahme als Tatsache implementiert
 - Akzeptanzkriterien des Issues erfuellt
+- SOLID, DRY und KISS gegen den tatsaechlichen Diff geprueft; Abweichungen sind
+  konkret begruendet
 
 Hardwareunabhaengige Logik darf vor Hardwareankunft abgeschlossen werden. Die
 reale Verifikation bleibt in einem verknuepften `BLOCKED_HARDWARE`-Issue sichtbar.
@@ -246,6 +290,8 @@ Der Plan muss mindestens enthalten:
 - Teststrategie;
 - Dokumentationsaenderungen;
 - offene Entscheidungen;
+- Bewertung der geplanten Loesung gegen SOLID, DRY und KISS einschliesslich
+  begruendeter Abweichungen;
 - als `SPIKE_REQUIRED`, `MEASUREMENT_REQUIRED`, `TBD_HARDWARE`,
   `TBD_COMMISSIONING`, `EVALUATE_BEFORE_RELEASE` oder
   `FINAL_SELECTION_PENDING` verbleibende Punkte;
@@ -343,6 +389,7 @@ Vor Ready for Review dokumentiert der Agent:
 - verbleibende Hardware-, Mess-, Security- oder Release-Gates;
 - offene Reviewthreads;
 - geaenderte Dateien;
+- Bewertung des tatsaechlichen Diffs gegen SOLID, DRY und KISS;
 - Bestaetigung, dass keine nicht freigegebene Entscheidung getroffen wurde.
 
 Der Agent fuehrt mindestens aus:
@@ -352,7 +399,8 @@ Der Agent fuehrt mindestens aus:
 - `git diff --check`;
 - Secretpruefung;
 - Pruefung gegen `AGENTS.md`;
-- Pruefung des tatsaechlichen Diffs gegen den freigegebenen Plan.
+- Pruefung des tatsaechlichen Diffs gegen den freigegebenen Plan;
+- konkrete Pruefung des tatsaechlichen Diffs gegen SOLID, DRY und KISS.
 
 Der PR bleibt Draft, bis ein unabhaengiges Abschlussreview erfolgt ist.
 
