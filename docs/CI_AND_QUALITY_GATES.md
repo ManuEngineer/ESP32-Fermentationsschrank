@@ -3,10 +3,11 @@
 ## Status
 
 Dieses Dokument beschreibt die mit Issue #10 eingefuehrte Testausfuehrung,
-virtuelle Zeitquelle, CI-Pipeline und Qualitaetswerkzeuge sowie die mit Issue #11
-ergaenzte Pruefung der Architekturgrenzen. Es ergaenzt
-`docs/ACCEPTANCE_TESTS.md` und `docs/IMPLEMENTATION_PLAN.md` um die konkrete
-lokale und CI-seitige Umsetzung.
+virtuelle Zeitquelle, CI-Pipeline und Qualitaetswerkzeuge, die mit Issue #11
+ergaenzte Pruefung der Architekturgrenzen sowie den mit Issue #72
+hinzugekommenen, noch nicht CI-gebundenen lokalen ESP-IDF-6.0.2-Buildpfad. Es
+ergaenzt `docs/ACCEPTANCE_TESTS.md` und `docs/IMPLEMENTATION_PLAN.md` um die
+konkrete lokale und CI-seitige Umsetzung.
 
 ## Native Tests lokal ausfuehren
 
@@ -142,6 +143,55 @@ Sie blockiert insbesondere:
 
 Die Pruefung ersetzt kein Architekturreview. Sie sichert die klar automatisch
 erkennbaren Grenzen ab und liefert bei einer Verletzung Datei und Zeile.
+
+## ESP-IDF-6.0.2-Buildbasis (lokal, Issue #72)
+
+Parallel zum PlatformIO-/Arduino-Pfad existiert seit Issue #72 ein
+reproduzierbarer ESP-IDF-6.0.2-Compile-/Linkpfad fuer die portablen
+Komponenten `device_platform` und `fermentation_app`. Dieser Pfad ist
+**nicht** in `.github/workflows/build.yml` eingebunden; die CI-Migration
+bleibt vollstaendig Issue #74 vorbehalten. Bis dahin ist der folgende Ablauf
+eine lokale Entwicklerpflicht vor jedem Commit, der `lib/device_platform/`,
+`lib/fermentation_app/` oder die ESP-IDF-Buildkonfiguration selbst betrifft.
+
+Voraussetzung ist eine bereits installierte native ESP-IDF-6.0.2-Umgebung
+(offizieller Tag `v6.0.2`, `--recursive` geklont). Aktivierung in der
+jeweiligen Shell:
+
+```bash
+. ${IDF_PATH:-<pfad-zum-esp-idf-v6.0.2-checkout>}/export.sh
+```
+
+Lokaler Build:
+
+```bash
+idf.py set-target esp32   # einmalig pro frischem build/-Verzeichnis
+idf.py build
+```
+
+Der Build verwendet ein temporaeres, produktionsloses `main/`-Compile-
+/Linkanker (`main/issue72_build_stub.c`, `void app_main(void) {}`); er startet
+keine Anwendung und initialisiert keine Hardware. Ein `IDF_VER`-Guard im
+Root-`CMakeLists.txt` bricht den Konfigurationslauf bei einer anderen
+ESP-IDF-Version als `v6.0.2` mit `FATAL_ERROR` ab.
+
+Nach Hinzufuegen oder Entfernen einer Quelldatei unter `lib/device_platform/src/`
+oder `lib/fermentation_app/src/` kann lokal `idf.py reconfigure` noetig sein,
+da beide Komponenten ueber `SRC_DIRS` automatisch alle Quellen ihres
+Verzeichnisses einsammeln.
+
+Generierte Bestaende (`build/`, `sdkconfig`, `sdkconfig.old`,
+`managed_components/`) sind gitignored. `dependencies.lock` wird nicht
+ignoriert: Issue #72 bindet keine Fremdkomponente ein, sobald eine reale
+Component-Manager-Abhaengigkeit entsteht, wird das dabei erzeugte Lockfile
+grundsaetzlich versioniert.
+
+Die um eine schmale IDF-Leak-Pruefung erweiterte
+`scripts/check_architecture_boundaries.py` (siehe oben) stellt sicher, dass
+`lib/device_platform/src/` und `lib/fermentation_app/src/` keinen direkten
+ESP-IDF-/RTOS-Include, keine `ESP_PLATFORM`-/`ARDUINO`-/Kconfig-Praeprozessor-
+verwendung und keine unautorisierte direkte IDF-Komponentenabhaengigkeit in
+`REQUIRES`/`PRIV_REQUIRES` enthalten.
 
 ## Geheimnis- und Lokalkonfigurationspruefung
 

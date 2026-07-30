@@ -51,6 +51,16 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Added
 
+- Reproduzierbare, noch nicht CI-gebundene ESP-IDF-6.0.2-Buildbasis fuer
+  Issue #72: `device_platform` und `fermentation_app` werden unveraendert
+  ueber `EXTRA_COMPONENT_DIRS` als ESP-IDF-Komponenten registriert
+  (`gnu++17`-Override gegen den 6.0.2-Default `gnu++26`), ein temporaerer
+  produktionsloser `main/`-Buildstub dient als Compile-/Linkanker,
+  `src/main.cpp` bleibt unveraendert. Der bestehende PlatformIO-/Arduino-Pfad
+  bleibt bis zur Laufzeitparitaet (#73) und Ablösung (#74) unveraendert
+  parallel bestehen. `scripts/check_architecture_boundaries.py` erkennt
+  zusaetzlich IDF-/RTOS-Include-Leaks und unautorisierte direkte
+  IDF-Komponentenabhaengigkeiten in den portablen Quellwurzeln.
 - Bootstrap-, `StorageEpoch`- und Recoverykern fuer Issue #57: redundanter
   Schema-1-Bootstrap mit geschlossener Historienrelation, exakt gebundenes
   Factory-Neuheitsorakel, wiederaufnehmbare Initialisierung und autorisierter
