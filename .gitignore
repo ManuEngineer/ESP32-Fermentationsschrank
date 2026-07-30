@@ -37,3 +37,8 @@ __pycache__/
 *.log
 compile_commands.json
 build-report.md
+
+# ESP-IDF (generierte lokale Buildbestaende, siehe Issue #72)
+managed_components/
+sdkconfig
+sdkconfig.old

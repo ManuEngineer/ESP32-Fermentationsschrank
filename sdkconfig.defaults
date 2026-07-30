@@ -1,0 +1,13 @@
+# Reproduzierbare Startwerte fuer die ESP-IDF-6.0.2-Buildbasis (Issue #72).
+# Kein Bring-up-/CI-/Release-Overlay: #72 besitzt noch keine reale
+# funktionale Kconfig-Differenz zwischen diesen Stufen (siehe
+# docs/tasks/issue-72-implementation-plan.md, Abschnitt 6).
+
+# ESP32-WROOM-32E, passend zu platformio.ini board=esp32dev.
+CONFIG_IDF_TARGET="esp32"
+
+# Release 1 zielt auf exakt 4 MB Flash (siehe AGENTS.md, app_config.hpp).
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# Kein PSRAM-Eintrag: CONFIG_SPIRAM ist im ESP-IDF-Default bereits
+# deaktiviert; Release 1 darf keine PSRAM-Abhaengigkeit einfuehren.
