@@ -141,6 +141,17 @@ class ConfigurationRecoveryService {
         const LoadedConfigurationBootstrap& bootstrap,
         const PreparedInitialConfigurationGraph& prepared,
         ConfigurationRecoveryStatus successStatus);
+    // The single outcome matrix for finalizing a published graph's
+    // bootstrap record to Initialized, shared by finalizePublishedGraph()
+    // and the BootstrapFinalizationPending resume path in boot().
+    // finalizeGraph performs the caller-specific graph-side finalization
+    // and is only invoked once the bootstrap write itself is exactly
+    // confirmed.
+    template <typename FinalizeGraphFn>
+    [[nodiscard]] ConfigurationRecoveryResult classifyBootstrapFinalization(
+        const ConfigurationBootstrapWriteResult& finalized,
+        ConfigurationRecoveryStatus successStatus,
+        FinalizeGraphFn&& finalizeGraph);
     [[nodiscard]] ConfigurationRecoveryStatus verifyFactoryEmpty() const;
     [[nodiscard]] static ConfigurationRecoveryResult mapBootstrapFailure(
         ConfigurationBootstrapScanStatus status);

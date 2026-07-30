@@ -78,6 +78,14 @@ class LocalStore final : public device_platform::IStateStore {
         if (fault != readFaults_.end()) {
             return {fault->second, {}};
         }
+        const auto countFault = readCountFaults_.find(key.bytes());
+        if (countFault != readCountFaults_.end()) {
+            auto& state = countFault->second;
+            if (state.occurrencesSeen >= state.occurrencesBeforeFault) {
+                return {state.status, {}};
+            }
+            ++state.occurrencesSeen;
+        }
         const auto found = values_.find(key.bytes());
         if (found == values_.end()) {
             return {device_platform::StateStoreReadStatus::NotFound, {}};
@@ -122,9 +130,20 @@ class LocalStore final : public device_platform::IStateStore {
                    device_platform::StateStoreReadStatus status) {
         readFaults_[std::move(key)] = status;
     }
+    // Lets the first `occurrencesBeforeFault` reads of this key succeed
+    // normally, and only faults reads from that point on: needed to isolate
+    // a store round's own re-read of a slot it already scanned (e.g.
+    // writeBound()'s prior-slot read) from the earlier scan reads of the
+    // exact same key within the same call.
+    void faultReadAfterOccurrences(std::string key,
+                                   device_platform::StateStoreReadStatus status,
+                                   std::size_t occurrencesBeforeFault) {
+        readCountFaults_[std::move(key)] = {status, occurrencesBeforeFault, 0U};
+    }
     void clearFaults() {
         writeFaults_.clear();
         readFaults_.clear();
+        readCountFaults_.clear();
     }
     [[nodiscard]] std::optional<std::string> value(const char* key) const {
         const auto found = values_.find(key);
@@ -148,10 +167,16 @@ class LocalStore final : public device_platform::IStateStore {
         bool commit;
         std::optional<device_platform::StateStoreReadStatus> readbackFault;
     };
+    struct ReadCountFault {
+        device_platform::StateStoreReadStatus status;
+        std::size_t occurrencesBeforeFault;
+        std::size_t occurrencesSeen;
+    };
     mutable std::map<std::string, std::string> values_;
     std::map<std::string, WriteFault> writeFaults_;
     mutable std::map<std::string, device_platform::StateStoreReadStatus>
         readFaults_;
+    mutable std::map<std::string, ReadCountFault> readCountFaults_;
     mutable std::size_t readCount_{0U};
     std::size_t writeCount_{0U};
     mutable std::vector<Event> events_;
@@ -1234,6 +1259,215 @@ void test_reset_eligibility_reproof_still_succeeds_when_unchanged() {
     TEST_ASSERT_EQUAL_UINT64(2U, runtime.lease.get().storageEpoch().value());
 }
 
+// A real BootstrapFinalizationPending state: publish an initial graph, then
+// have the bootstrap's own Initializing->Initialized write fail so the
+// service is left with a published graph but an unconfirmed bootstrap.
+void reachBootstrapFinalizationPendingViaFailedCb1Write(Fixture& fixture) {
+    fixture.store.faultWrite(
+        "cb1", device_platform::StateStoreWriteStatus::WriteError, false);
+    const auto first = fixture.recovery->boot();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationRecoveryStatus::PersistenceWriteFailure),
+        static_cast<int>(first.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationServiceMode::
+                             BootstrapFinalizationPending),
+        static_cast<int>(fixture.service.mode()));
+    fixture.store.clearFaults();
+}
+
+// classifyBootstrapFinalization() is shared by the direct publish path and
+// the BootstrapFinalizationPending resume path in boot(): this table drives
+// the resume path through every reachable ConfigurationBootstrapWriteStatus
+// outcome for the pending Initializing->Initialized write and checks status,
+// producer, mode and runtime availability for each.
+void test_bootstrap_finalization_resume_matches_outcome_matrix() {
+    struct Case {
+        const char* name;
+        void (*injectFault)(LocalStore&);
+        fermentation::ConfigurationRecoveryStatus expectedStatus;
+        std::optional<fermentation::ConfigurationSafetyProducer>
+            expectedProducer;
+        fermentation::ConfigurationServiceMode expectedMode;
+    };
+    const Case cases[]{
+        {"write-error",
+         [](LocalStore& store) {
+             store.faultWrite(
+                 "cb1", device_platform::StateStoreWriteStatus::WriteError,
+                 false);
+         },
+         fermentation::ConfigurationRecoveryStatus::PersistenceWriteFailure,
+         fermentation::ConfigurationSafetyProducer::ConfigurationUnavailable,
+         fermentation::ConfigurationServiceMode::BootstrapFinalizationPending},
+        {"write-capacity-error",
+         [](LocalStore& store) {
+             store.faultWrite(
+                 "cb1", device_platform::StateStoreWriteStatus::CapacityError,
+                 false);
+         },
+         fermentation::ConfigurationRecoveryStatus::PersistenceCapacityFailure,
+         fermentation::ConfigurationSafetyProducer::ConfigurationUnavailable,
+         fermentation::ConfigurationServiceMode::BootstrapFinalizationPending},
+        {"commit-not-effective",
+         [](LocalStore& store) {
+             store.faultWrite(
+                 "cb1",
+                 device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+                 false);
+         },
+         fermentation::ConfigurationRecoveryStatus::PersistenceWriteFailure,
+         fermentation::ConfigurationSafetyProducer::ConfigurationUnavailable,
+         fermentation::ConfigurationServiceMode::BootstrapFinalizationPending},
+        {"commit-indeterminate",
+         [](LocalStore& store) {
+             store.faultWriteReadback(
+                 "cb1",
+                 device_platform::StateStoreWriteStatus::CommitOutcomeUnknown,
+                 true, device_platform::StateStoreReadStatus::ReadError);
+         },
+         fermentation::ConfigurationRecoveryStatus::
+             BootstrapCommitIndeterminate,
+         fermentation::ConfigurationSafetyProducer::ConfigurationUnavailable,
+         fermentation::ConfigurationServiceMode::BootstrapFinalizationPending},
+        {"integrity-failure-success-with-old-readback",
+         [](LocalStore& store) {
+             store.faultWrite(
+                 "cb1", device_platform::StateStoreWriteStatus::Success, false);
+         },
+         fermentation::ConfigurationRecoveryStatus::
+             ConfigurationIntegrityFailure,
+         fermentation::ConfigurationSafetyProducer::
+             ConfigurationIntegrityFailure,
+         fermentation::ConfigurationServiceMode::RuntimeFailure},
+        {"prior-read-read-error",
+         [](LocalStore& store) {
+             store.faultReadAfterOccurrences(
+                 "cb1", device_platform::StateStoreReadStatus::ReadError, 2U);
+         },
+         fermentation::ConfigurationRecoveryStatus::PersistenceReadFailure,
+         fermentation::ConfigurationSafetyProducer::ConfigurationUnavailable,
+         fermentation::ConfigurationServiceMode::BootstrapFinalizationPending},
+        {"prior-read-capacity-error",
+         [](LocalStore& store) {
+             store.faultReadAfterOccurrences(
+                 "cb1", device_platform::StateStoreReadStatus::CapacityError,
+                 2U);
+         },
+         fermentation::ConfigurationRecoveryStatus::PersistenceCapacityFailure,
+         fermentation::ConfigurationSafetyProducer::ConfigurationUnavailable,
+         fermentation::ConfigurationServiceMode::BootstrapFinalizationPending},
+    };
+    for (const auto& item : cases) {
+        Fixture fixture;
+        reachBootstrapFinalizationPendingViaFailedCb1Write(fixture);
+        item.injectFault(fixture.store);
+        const auto writesBefore = fixture.store.writeCount();
+        const auto resumed = fixture.recovery->boot();
+        TEST_ASSERT_EQUAL_INT_MESSAGE(static_cast<int>(item.expectedStatus),
+                                      static_cast<int>(resumed.status),
+                                      item.name);
+        TEST_ASSERT_EQUAL_MESSAGE(item.expectedProducer.has_value(),
+                                  resumed.safetyProducer.has_value(),
+                                  item.name);
+        if (item.expectedProducer.has_value()) {
+            TEST_ASSERT_EQUAL_INT_MESSAGE(
+                static_cast<int>(*item.expectedProducer),
+                static_cast<int>(*resumed.safetyProducer), item.name);
+        }
+        TEST_ASSERT_EQUAL_INT_MESSAGE(static_cast<int>(item.expectedMode),
+                                      static_cast<int>(fixture.service.mode()),
+                                      item.name);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(
+            static_cast<int>(fermentation::RuntimeConfigurationReadStatus::
+                                 ConfigurationRuntimeUnavailable),
+            static_cast<int>(fixture.service.acquireRuntime().status),
+            item.name);
+        // At most the single attempted cb1 write happens; a prior-read
+        // fault blocks before any write is attempted at all.
+        TEST_ASSERT_LESS_OR_EQUAL_UINT32_MESSAGE(
+            writesBefore + 1U, fixture.store.writeCount(), item.name);
+    }
+}
+
+// The success case on resume must behave exactly like the direct-publish
+// success path: finalize, become Operational and grant a normal runtime
+// lease.
+void test_bootstrap_finalization_resume_success_matches_direct_path() {
+    Fixture fixture;
+    reachBootstrapFinalizationPendingViaFailedCb1Write(fixture);
+    const auto resumed = fixture.recovery->boot();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(resumed.status));
+    TEST_ASSERT_FALSE(resumed.safetyProducer.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationServiceMode::Operational),
+        static_cast<int>(fixture.service.mode()));
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted),
+        static_cast<int>(runtime.status));
+    TEST_ASSERT_EQUAL_UINT64(1U, runtime.lease.get().storageEpoch().value());
+}
+
+// writeSuccessor()'s CounterOverflow guard for this specific call
+// (Initializing/Resetting -> Initialized) checks
+// `expected.record.sequence.value() == UINT64_MAX`. That is provably
+// unreachable here: isPlausible() requires `2 * storageEpoch` to fit in a
+// uint64_t and, for Resetting, `sequence == 2 * storageEpoch - 1`, so the
+// largest sequence any Initializing/Resetting record can ever decode with is
+// UINT64_MAX - 2 (at the largest representable epoch). A record that could
+// trigger this guard could never have passed isPlausible() on decode in the
+// first place, so it can never reach boot() as `expected` to begin with.
+// classifyBootstrapFinalization() still maps CounterOverflow correctly by
+// construction (bootstrapFailureLeavesOldState() includes it, exactly like
+// the reachable WriteError/CapacityError/CommitNotEffective cases already
+// covered above), so no dedicated reachability test exists for it here; the
+// epoch-overflow guard for Resetting itself is exercised by
+// test_schema1_epoch_overflow_blocks_before_graph_or_factory_model.
+
+// Regression: introducing the shared classifyBootstrapFinalization() helper
+// must not change finalizePublishedGraph()'s own direct-path outcomes.
+void test_direct_bootstrap_finalization_outcomes_are_unchanged() {
+    {
+        Fixture fixture;
+        fixture.store.faultWrite(
+            "cb1", device_platform::StateStoreWriteStatus::WriteError, false);
+        const auto result = fixture.recovery->boot();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 PersistenceWriteFailure),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationServiceMode::
+                                 BootstrapFinalizationPending),
+            static_cast<int>(fixture.service.mode()));
+    }
+    {
+        Fixture fixture;
+        fixture.store.faultWrite(
+            "cb1", device_platform::StateStoreWriteStatus::Success, false);
+        const auto result = fixture.recovery->boot();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 ConfigurationIntegrityFailure),
+            static_cast<int>(result.status));
+        TEST_ASSERT_TRUE(result.safetyProducer.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationSafetyProducer::
+                                 ConfigurationIntegrityFailure),
+            static_cast<int>(*result.safetyProducer));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::ConfigurationServiceMode::RuntimeFailure),
+            static_cast<int>(fixture.service.mode()));
+    }
+}
+
 // Upper bounds every peak field is checked against: derived from the fixed
 // document/manifest/root/bootstrap envelope limits, never from an observed
 // value, so a regression that quietly grows a peak is caught.
@@ -1463,6 +1697,9 @@ int main() {
     RUN_TEST(test_reset_write_safe_failure_without_runtime_gets_producer);
     RUN_TEST(test_reset_eligibility_is_reproven_on_every_call);
     RUN_TEST(test_reset_eligibility_reproof_still_succeeds_when_unchanged);
+    RUN_TEST(test_bootstrap_finalization_resume_matches_outcome_matrix);
+    RUN_TEST(test_bootstrap_finalization_resume_success_matches_direct_path);
+    RUN_TEST(test_direct_bootstrap_finalization_outcomes_are_unchanged);
     RUN_TEST(test_recovery_resource_peaks_are_measured_and_bounded);
     RUN_TEST(
         test_recovery_resource_peaks_show_maximal_old_program_catalog_scan);

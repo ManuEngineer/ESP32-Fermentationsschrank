@@ -299,20 +299,21 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::mapBootstrapFailure(
     return {ConfigurationRecoveryStatus::ConfigurationUnavailable, {}};
 }
 
+// The single outcome matrix for finalizing a published graph's bootstrap
+// record to Initialized, shared by the direct publish path
+// (finalizePublishedGraph()) and the BootstrapFinalizationPending resume
+// path in boot(). finalizeGraph performs the caller-specific graph-side
+// finalization (which differs in what binding data is available) and is
+// only invoked once the bootstrap write itself is exactly confirmed.
+template <typename FinalizeGraphFn>
 ConfigurationRecoveryResult
-ConfigurationRecoveryService::finalizePublishedGraph(
-    const LoadedConfigurationBootstrap& bootstrap,
-    const PreparedInitialConfigurationGraph& prepared,
-    ConfigurationRecoveryStatus successStatus) {
-    const auto finalized = bootstrapStore_.writeSuccessor(
-        bootstrap, ConfigurationBootstrapState::Initialized);
+ConfigurationRecoveryService::classifyBootstrapFinalization(
+    const ConfigurationBootstrapWriteResult& finalized,
+    ConfigurationRecoveryStatus successStatus,
+    FinalizeGraphFn&& finalizeGraph) {
     if (finalized.status == ConfigurationBootstrapWriteStatus::Success &&
         finalized.loaded.has_value()) {
-        if (finalized.loaded->record.storageEpoch !=
-                prepared.graph.active.manifestReference.storageEpoch ||
-            !configurationService_.finalizeRecoveredGraph(
-                prepared.graph.active.manifestReference.storageEpoch,
-                prepared.rootRecordBytes, prepared.planIdentity)) {
+        if (!finalizeGraph(finalized.loaded->record.storageEpoch)) {
             configurationService_.failRecovery(
                 ConfigurationRuntimeFailureCause::
                     ServiceStateInvariantViolation);
@@ -323,7 +324,36 @@ ConfigurationRecoveryService::finalizePublishedGraph(
     if (isBootstrapIndeterminate(finalized.status)) {
         return {ConfigurationRecoveryStatus::BootstrapCommitIndeterminate, {}};
     }
+    if (bootstrapFailureLeavesOldState(finalized.status)) {
+        // BootstrapFinalizationPending is retained: no further write is
+        // attempted and no normal runtime is available until a later
+        // attempt confirms Initialized.
+        return makeUnavailableResult(
+            mapBootstrapWriteFailure(finalized.status));
+    }
+    // Integrity failure, unsupported newer schema or a foreign canonical
+    // bootstrap discovered during finalization: the already-published graph
+    // is no longer provably bound to a safe persistent state.
+    configurationService_.failRecovery(
+        mapBootstrapWriteFailureCause(finalized.status));
     return makeUnavailableResult(mapBootstrapWriteFailure(finalized.status));
+}
+
+ConfigurationRecoveryResult
+ConfigurationRecoveryService::finalizePublishedGraph(
+    const LoadedConfigurationBootstrap& bootstrap,
+    const PreparedInitialConfigurationGraph& prepared,
+    ConfigurationRecoveryStatus successStatus) {
+    const auto finalized = bootstrapStore_.writeSuccessor(
+        bootstrap, ConfigurationBootstrapState::Initialized);
+    return classifyBootstrapFinalization(
+        finalized, successStatus,
+        [this, &prepared](device_platform::StorageEpoch epoch) {
+            return epoch ==
+                       prepared.graph.active.manifestReference.storageEpoch &&
+                   configurationService_.finalizeRecoveredGraph(
+                       epoch, prepared.rootRecordBytes, prepared.planIdentity);
+        });
 }
 
 ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
@@ -514,29 +544,26 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
                         bootstrap.loaded->record.storageEpoch)) {
                     return {ConfigurationRecoveryStatus::RuntimeReady, {}};
                 }
-            } else {
-                const auto successStatus =
-                    bootstrap.loaded->record.state ==
-                            ConfigurationBootstrapState::Initializing
-                        ? ConfigurationRecoveryStatus::
-                              FactoryInitializationCompleted
-                        : ConfigurationRecoveryStatus::FactoryResetCompleted;
-                const auto finalized = bootstrapStore_.writeSuccessor(
-                    *bootstrap.loaded,
-                    ConfigurationBootstrapState::Initialized);
-                if (finalized.status ==
-                        ConfigurationBootstrapWriteStatus::Success &&
-                    finalized.loaded.has_value() &&
-                    configurationService_.finalizeRecoveredGraphForBootstrap(
-                        finalized.loaded->record.storageEpoch)) {
-                    return makeResult(successStatus);
-                }
-                return makeResult(
-                    isBootstrapIndeterminate(finalized.status)
-                        ? ConfigurationRecoveryStatus::
-                              BootstrapCommitIndeterminate
-                        : ConfigurationRecoveryStatus::PersistenceWriteFailure);
+                configurationService_.failRecovery(
+                    ConfigurationRuntimeFailureCause::
+                        ServiceStateInvariantViolation);
+                return {ConfigurationRecoveryStatus::RuntimePreparationFailure,
+                        {}};
             }
+            const auto successStatus =
+                bootstrap.loaded->record.state ==
+                        ConfigurationBootstrapState::Initializing
+                    ? ConfigurationRecoveryStatus::
+                          FactoryInitializationCompleted
+                    : ConfigurationRecoveryStatus::FactoryResetCompleted;
+            const auto finalized = bootstrapStore_.writeSuccessor(
+                *bootstrap.loaded, ConfigurationBootstrapState::Initialized);
+            return classifyBootstrapFinalization(
+                finalized, successStatus,
+                [this](device_platform::StorageEpoch epoch) {
+                    return configurationService_
+                        .finalizeRecoveredGraphForBootstrap(epoch);
+                });
         }
         return mapBootstrapFailure(bootstrap.status);
     }
