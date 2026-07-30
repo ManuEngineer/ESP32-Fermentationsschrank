@@ -383,7 +383,15 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::continueEpochBuild(
         prepared, lease);
     if (!configurationService_.validateRecoveryBinding(stateRevision,
                                                        recoveryGeneration)) {
-        return makeResult(ConfigurationRecoveryStatus::StateTransitionRejected);
+        // Same treatment as the equivalent binding check in
+        // resolvePendingRoot(): a stale or foreign binding here means the
+        // service state moved out from under this attempt, not a simple
+        // busy rejection, so it fails closed rather than leaving the
+        // service in its current in-progress mode.
+        configurationService_.failRecovery(
+            ConfigurationRuntimeFailureCause::PublishContractViolation);
+        return makeResult(
+            ConfigurationRecoveryStatus::ConfigurationIntegrityFailure);
     }
     const auto execution =
         graphStore_.executeInitialGraph(prepared, capability);
@@ -527,7 +535,13 @@ ConfigurationRecoveryResult ConfigurationRecoveryService::resolvePendingRoot(
 ConfigurationRecoveryResult ConfigurationRecoveryService::boot() {
     auto acquired = mutationCoordinator_.tryAcquire();
     if (acquired.status != ConfigurationMutationAcquireStatus::Acquired) {
-        return {ConfigurationRecoveryStatus::ConfigurationMutationBusy, {}};
+        // A valid old Operational runtime is unaffected by a busy
+        // coordinator; without one, callers must be able to tell that no
+        // runtime is available right now.
+        return makeResetPreparationFailure(
+            ConfigurationRecoveryStatus::ConfigurationMutationBusy,
+            configurationService_.mode() ==
+                ConfigurationServiceMode::Operational);
     }
     if (pendingRoot_.has_value()) {
         return resolvePendingRoot(acquired.lease);
@@ -705,7 +719,14 @@ ConfigurationRecoveryResult
 ConfigurationRecoveryService::beginAuthorizedFactoryReset() {
     auto acquired = mutationCoordinator_.tryAcquire();
     if (acquired.status != ConfigurationMutationAcquireStatus::Acquired) {
-        return {ConfigurationRecoveryStatus::ConfigurationMutationBusy, {}};
+        // Same context-aware classification as boot(): a valid old
+        // Operational runtime is unaffected by a busy coordinator; without
+        // one (NoRuntime or ResetEligibleNoRuntime), no runtime is
+        // available right now.
+        return makeResetPreparationFailure(
+            ConfigurationRecoveryStatus::ConfigurationMutationBusy,
+            configurationService_.mode() ==
+                ConfigurationServiceMode::Operational);
     }
     auto bootstrap = bootstrapStore_.scan();
     if (bootstrap.status != ConfigurationBootstrapScanStatus::Available ||

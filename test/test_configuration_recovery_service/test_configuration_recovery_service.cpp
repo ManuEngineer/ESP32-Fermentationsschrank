@@ -598,10 +598,18 @@ void test_shared_mutation_lease_blocks_boot_and_reset_without_writes() {
     Fixture fixture;
     auto held = fixture.coordinator.tryAcquire();
     TEST_ASSERT_TRUE(held.lease.valid());
+    // Fresh boot + Busy: no runtime exists yet, so the result must carry a
+    // producer.
+    const auto freshBusy = fixture.recovery->boot();
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::ConfigurationRecoveryStatus::
                              ConfigurationMutationBusy),
-        static_cast<int>(fixture.recovery->boot().status));
+        static_cast<int>(freshBusy.status));
+    TEST_ASSERT_TRUE(freshBusy.safetyProducer.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationSafetyProducer::
+                             ConfigurationUnavailable),
+        static_cast<int>(*freshBusy.safetyProducer));
     TEST_ASSERT_EQUAL_UINT32(0U, fixture.store.writeCount());
     held.lease = fermentation::ConfigurationMutationLease{};
     TEST_ASSERT_EQUAL_INT(
@@ -610,13 +618,85 @@ void test_shared_mutation_lease_blocks_boot_and_reset_without_writes() {
         static_cast<int>(fixture.recovery->boot().status));
     const auto writes = fixture.store.writeCount();
     auto heldAgain = fixture.coordinator.tryAcquire();
+    // Operational reset + Busy: the old runtime remains exactly valid and
+    // unaffected, so the result must carry no producer.
+    const auto operationalBusy =
+        fixture.recovery->beginAuthorizedFactoryReset();
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(fermentation::ConfigurationRecoveryStatus::
                              ConfigurationMutationBusy),
-        static_cast<int>(
-            fixture.recovery->beginAuthorizedFactoryReset().status));
+        static_cast<int>(operationalBusy.status));
+    TEST_ASSERT_FALSE(operationalBusy.safetyProducer.has_value());
     TEST_ASSERT_EQUAL_UINT32(writes, fixture.store.writeCount());
+    auto runtime = fixture.service.acquireRuntime();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted),
+        static_cast<int>(runtime.status));
 }
+
+// No-runtime reset + Busy: ResetEligibleNoRuntime carries no runtime either,
+// so a concurrently busy coordinator must also produce a producer, matching
+// the fresh-boot case rather than the operational-reset case above.
+void test_no_runtime_reset_busy_carries_producer() {
+    LocalStore store;
+    Resolver resolver;
+    {
+        fermentation::ConfigurationMutationCoordinator coordinator;
+        fermentation::ConfigurationBootstrapStore bootstrap(store);
+        fermentation::ConfigurationGraphStore graph(store, resolver);
+        fermentation::ConfigurationService service(coordinator, graph,
+                                                   resolver);
+        auto recovery = fermentation::ConfigurationRecoveryService::create(
+            store, bootstrap, graph, service, coordinator);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryInitializationCompleted),
+            static_cast<int>(recovery->boot().status));
+    }
+    store.erase("cr0");
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    fermentation::ConfigurationService service(coordinator, graph, resolver);
+    auto recovery = fermentation::ConfigurationRecoveryService::create(
+        store, bootstrap, graph, service, coordinator);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             ConfigurationUnavailable),
+        static_cast<int>(recovery->boot().status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            fermentation::ConfigurationServiceMode::ResetEligibleNoRuntime),
+        static_cast<int>(service.mode()));
+    auto held = coordinator.tryAcquire();
+    TEST_ASSERT_TRUE(held.lease.valid());
+    const auto writesBefore = store.writeCount();
+    const auto result = recovery->beginAuthorizedFactoryReset();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             ConfigurationMutationBusy),
+        static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.safetyProducer.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationSafetyProducer::
+                             ConfigurationUnavailable),
+        static_cast<int>(*result.safetyProducer));
+    TEST_ASSERT_EQUAL_UINT32(writesBefore, store.writeCount());
+}
+
+// The equivalent stale-binding check inside continueEpochBuild() (used by
+// both the empty-store initialization path and the resume path) must fail
+// closed exactly like the already-tested one in resolvePendingRoot():
+// failRecovery(PublishContractViolation), RuntimeFailure, no normal
+// runtime, ConfigurationIntegrityFailure producer. Both checks read the
+// service's stateRevision/recoveryGeneration immediately before comparing
+// them, so there is no reachable window in a single-threaded test to make
+// them actually observe a foreign value; this is confirmed correct by
+// matching the identical, already-covered pattern rather than by a
+// dedicated reachability test (see
+// test_stale_root_resolution_binding_fails_closed for the reachable sibling
+// check).
 
 void test_authorized_reset_recovers_corrupt_old_graph_without_reusing_slot() {
     LocalStore store;
@@ -1677,6 +1757,7 @@ int main() {
         test_reset_keeps_retired_runtime_generation_until_last_reader_releases);
     RUN_TEST(test_state_revision_headroom_blocks_before_factory_write);
     RUN_TEST(test_shared_mutation_lease_blocks_boot_and_reset_without_writes);
+    RUN_TEST(test_no_runtime_reset_busy_carries_producer);
     RUN_TEST(
         test_authorized_reset_recovers_corrupt_old_graph_without_reusing_slot);
     RUN_TEST(test_initialization_root_unknown_is_resolved_new_on_later_call);
