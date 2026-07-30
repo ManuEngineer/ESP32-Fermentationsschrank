@@ -4,7 +4,10 @@
 #include <cstdint>
 #include <optional>
 
+#include "configuration_bootstrap.hpp"
+#include "configuration_bootstrap_store.hpp"
 #include "configuration_graph.hpp"
+#include "configuration_mutation_coordinator.hpp"
 #include "state_store.hpp"
 #include "time_zone_resolver.hpp"
 
@@ -33,6 +36,8 @@ struct ConfigurationGraphDiagnostics {
     bool fallbackUsed{false};
     bool unusableFallback{false};
     bool identicalRootTie{false};
+    bool persistentIdentityCollision{false};
+    bool globalScanBlocker{false};
 };
 
 struct ConfigurationGraphLoadResult {
@@ -141,6 +146,7 @@ enum class ConfigurationCommitExecutionStatus : std::uint8_t {
     Activated,
     WriteFailure,
     CapacityFailure,
+    RecordOutcomeIndeterminate,
     CommitIndeterminate,
     RuntimeFailure,
 };
@@ -193,6 +199,102 @@ struct ConfigurationCommitResolutionResult {
         ConfigurationCommitResolutionCause::AmbiguousRootOutcome};
 };
 
+enum class InitialConfigurationPrepareStatus : std::uint8_t {
+    Success,
+    InvalidCandidate,
+    PersistenceFailure,
+    CapacityFailure,
+    IntegrityFailure,
+    UnsupportedNewerSchema,
+    NoSafeSlotAvailable,
+};
+
+struct PreparedInitialConfigurationGraph {
+    LoadedConfigurationGraph graph;
+    ConfigurationSlotPlan slotPlan;
+    std::string manifestRecordBytes;
+    std::string rootRecordBytes;
+    std::optional<std::string> previousTargetRootRecordBytes;
+    struct PreviousRecordDescriptor {
+        bool wasNotFound{true};
+        device_platform::RecordTypeId recordType;
+        std::uint32_t schemaVersion{0U};
+        device_platform::StorageEpoch storageEpoch;
+        std::uint64_t versionValue{0U};
+        std::size_t recordLength{0U};
+        std::uint32_t payloadLength{0U};
+    };
+    PreviousRecordDescriptor previousTargetUserRecord;
+    PreviousRecordDescriptor previousTargetServiceRecord;
+    PreviousRecordDescriptor previousTargetProgramRecord;
+    std::optional<std::string> previousTargetManifestRecordBytes;
+    bool userWriteRequired{true};
+    bool serviceWriteRequired{true};
+    bool programWriteRequired{true};
+    bool manifestWriteRequired{true};
+    bool rootWriteRequired{true};
+    std::uint32_t planIdentity{0U};
+    std::size_t peakProgramPayloadCapacity{0U};
+    std::size_t peakDocumentEnvelopeCapacity{0U};
+    std::size_t peakStoreReadbackCapacity{0U};
+    std::size_t smallCanonicalRecordCapacity{0U};
+    // Largest transient buffer read while scanning candidate slots (user,
+    // service, program, manifest, root) for a safe or exact target, distinct
+    // from peakStoreReadbackCapacity, which only covers the write-back
+    // confirmation reads of the new records actually written.
+    std::size_t peakSlotScanReadCapacity{0U};
+};
+
+struct InitialConfigurationPrepareResult {
+    InitialConfigurationPrepareStatus status{
+        InitialConfigurationPrepareStatus::PersistenceFailure};
+    std::optional<PreparedInitialConfigurationGraph> prepared;
+};
+
+class ConfigurationEpochGraphWriteCapability {
+   public:
+    ConfigurationEpochGraphWriteCapability(
+        const ConfigurationEpochGraphWriteCapability&) = delete;
+    ConfigurationEpochGraphWriteCapability& operator=(
+        const ConfigurationEpochGraphWriteCapability&) = delete;
+    ConfigurationEpochGraphWriteCapability(
+        ConfigurationEpochGraphWriteCapability&&) noexcept = default;
+    ConfigurationEpochGraphWriteCapability& operator=(
+        ConfigurationEpochGraphWriteCapability&&) noexcept = default;
+    ~ConfigurationEpochGraphWriteCapability() = default;
+
+   private:
+    friend class ConfigurationRecoveryService;
+    friend class ConfigurationGraphStore;
+    explicit ConfigurationEpochGraphWriteCapability(
+        const LoadedConfigurationBootstrap& bootstrap,
+        std::uint64_t serviceStateRevision, std::uint64_t recoveryGeneration,
+        std::uint32_t planIdentity,
+        const PreparedInitialConfigurationGraph& prepared,
+        const ConfigurationMutationLease& mutationLease) noexcept
+        : epoch_(bootstrap.record.storageEpoch),
+          bootstrapSlot_(bootstrap.slot),
+          bootstrapSequence_(bootstrap.record.sequence),
+          bootstrapState_(bootstrap.record.state),
+          canonicalBootstrapRecordBytes_(bootstrap.canonicalRecordBytes),
+          serviceStateRevision_(serviceStateRevision),
+          recoveryGeneration_(recoveryGeneration),
+          planIdentity_(planIdentity),
+          prepared_(&prepared),
+          mutationLease_(&mutationLease) {}
+    device_platform::StorageEpoch epoch_;
+    device_platform::SlotId bootstrapSlot_;
+    ConfigurationBootstrapSequence bootstrapSequence_;
+    ConfigurationBootstrapState bootstrapState_;
+    std::string canonicalBootstrapRecordBytes_;
+    std::uint64_t serviceStateRevision_{0U};
+    std::uint64_t recoveryGeneration_{0U};
+    std::uint32_t planIdentity_{0U};
+    const PreparedInitialConfigurationGraph* prepared_{nullptr};
+    const ConfigurationMutationLease* mutationLease_{nullptr};
+    bool consumed_{false};
+};
+
 class ConfigurationGraphStore {
    public:
     ConfigurationGraphStore(
@@ -225,7 +327,35 @@ class ConfigurationGraphStore {
     [[nodiscard]] ConfigurationCommitResolutionResult resolveCommitDetailed(
         const PreparedConfigurationCommit& prepared) const;
 
+    // factoryNoveltyProof, when non-null, is only honored for the exact
+    // first-ever factory initialization (epoch 1, FactoryInitialization) and
+    // only after it independently validates that mutationLease,
+    // serviceStateRevision and recoveryGeneration match exactly what it was
+    // constructed for and consumeForGraphPreparation() succeeds: it then
+    // lets the already-proven-empty target slots skip their otherwise
+    // redundant re-scan. Any other epoch or operation, a missing lease, or a
+    // binding mismatch always scans in full instead.
+    [[nodiscard]] InitialConfigurationPrepareResult prepareInitialGraph(
+        device_platform::StorageEpoch epoch, ChangeOperation operation,
+        const FactoryNoveltyProof* factoryNoveltyProof = nullptr,
+        const ConfigurationMutationLease* mutationLease = nullptr,
+        std::uint64_t serviceStateRevision = 0U,
+        std::uint64_t recoveryGeneration = 0U) const;
+    [[nodiscard]] ConfigurationCommitExecutionResult executeInitialGraph(
+        PreparedInitialConfigurationGraph& prepared,
+        ConfigurationEpochGraphWriteCapability& capability);
+    [[nodiscard]] ConfigurationCommitResolutionResult resolveInitialGraph(
+        const PreparedInitialConfigurationGraph& prepared) const;
+
    private:
+    friend class ConfigurationRecoveryService;
+    [[nodiscard]] const device_platform::IStateStore* storeIdentity() const {
+        return &store_;
+    }
+    [[nodiscard]] const device_platform::ITimeZoneResolver*
+    timeZoneResolverIdentity() const {
+        return &timeZoneResolver_;
+    }
     device_platform::IStateStore& store_;
     const device_platform::ITimeZoneResolver& timeZoneResolver_;
 };

@@ -51,6 +51,49 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Added
 
+- Bootstrap-, `StorageEpoch`- und Recoverykern fuer Issue #57: redundanter
+  Schema-1-Bootstrap mit geschlossener Historienrelation, exakt gebundenes
+  Factory-Neuheitsorakel, wiederaufnehmbare Initialisierung und autorisierter
+  Werksreset mit erhaltener Touchkalibrierung. Epocheninitiale Graphwrites
+  verwenden den bestehenden #56-Graphstore und dieselbe Mutationslease;
+  Dokument-/Manifest-, Root- und Bootstrap-Unknowns bleiben getrennt. Runtime
+  wird erst nach vollstaendig validiertem Root intern publiziert und erst nach
+  bestaetigtem `Initialized` normal freigegeben. No-Runtime-Reset,
+  Active-/Fallback-Boot, Cut-Points, Konkurrenz, unbekannte Schemas, additive
+  Erweiterbarkeit und Zwei-Modell-Grenze sind nativ abgedeckt. Keine
+  Connectivity-, Authentication-, Secret-, Lauf- oder Safetyimplementierung
+  wurde vorgezogen; reale NVS-/Heap-/Jitter-/Watchdog-/Flashmessungen und das
+  `CONFIGURATION_SAFETY_INTEGRATION_GATE` aus #24 bleiben offen.
+  Das konsolidierte Implementierungsreview ergaenzt die echte spaetere
+  Root-Unknown-Aufloesung fuer Initialisierung und Reset, vollstaendig
+  identitaetsgebundene Graphwrite-/Publish-Capabilities, private
+  Bootstrapmutationen, den klassifizierten `ResetEligibleNoRuntime`-Pfad,
+  getrennte Read-/Capacity-/Write- und Safety-Producer-Ergebnisse, checked
+  Schema-1-Epochengrenzen sowie einen instrumentierten Record-/Modell-
+  Peaknachweis. Alte maximale Dokumentrecords bleiben nicht als zweite
+  Vollkopie im Prepared Graph.
+  - Letzte konsolidierte Restkorrektur (PR #68): `beginAuthorizedFactoryReset()`
+    ruft `cancelRecovery()` nur noch bei nachweislich sicher nicht wirksamen
+    Bootstrapwrites auf; Integritaetsfehler, unbekannte neuere Schemas und ein
+    zwischen Vorbereitung und Write geaenderter kanonischer Bootstrap fuehren
+    stattdessen zu `RuntimeFailure` ohne erneute Freigabe der alten Runtime
+    (Befund 1)
+  - `ResetEligibleNoRuntime` wird bei jedem Resetaufruf unter der aktuellen
+    Lease vollstaendig neu klassifiziert statt einen frueher von `boot()`
+    gesetzten Modus wiederzuverwenden (Befund 2)
+  - vollstaendige Status-/Safety-Producer-Matrix: `makeUnavailableResult()`
+    ueberschreibt einen bereits zugeordneten Integritaets-Producer nicht mehr;
+    `UnsupportedNewerSchema` bleibt beim Bootstrapscan ursachentreu;
+    `CounterOverflow`/`ConfigurationModelBudgetBusy`/`StateTransitionRejected`
+    ohne Runtime bleiben nicht mehr producerlos (Befund 3)
+  - das Factory-Neuheitsorakel liest exakt 19 Keys ohne erneuten Scan: ein
+    nicht kopierbarer `FactoryNoveltyProof` laesst die erste Initialisierung
+    die bereits bewiesene Leere von Graphstore- und Bootstrap-Slotsuche
+    wiederverwenden; ein separat ausgewiesener Slot-Scan-Ressourcenpeak zeigt
+    den realen transienten Lesepuffer eines vollstaendig gelesenen alten
+    Records (etwa 32805 Byte fuer einen maximalen alten ProgramCatalog) statt
+    nur die kleine behaltene Deskriptorgroesse (Befund 4)
+
 - Active-/Fallback-Konfigurationskern fuer Issue #56: kanonische Manifest- und
   Rootcodecs, vollstaendige Graph- und Identitaetsvalidierung, High-Water-
   basierte sichere Slotrotation ohne separate `MutationSequence`, gemeinsame

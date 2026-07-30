@@ -696,6 +696,7 @@ void test_large_catalog_copy_migration_keeps_only_source_and_candidate() {
             fermentation::kSchema4RequiredProgramFields;
         document.program.maximumProductWaitMinutes.reset();
     }
+    const auto sourceBefore = source;
     const std::size_t baseline = gLiveAllocBytes;
     gPeakAllocBytes = baseline;
     const auto migrated =
@@ -709,6 +710,8 @@ void test_large_catalog_copy_migration_keeps_only_source_and_candidate() {
         TEST_ASSERT_EQUAL_UINT32(fermentation::kCurrentProgramSchemaVersion,
                                  document.schema.version);
     }
+    TEST_ASSERT_TRUE(
+        fermentation::configurationContentEquals(sourceBefore, source));
 }
 
 }  // namespace

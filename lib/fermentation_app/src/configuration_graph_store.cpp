@@ -53,6 +53,9 @@ ConfigurationScanStatus mapReadStatus(
 }
 
 template <std::size_t N>
+// The bounded scan deliberately keeps all identity and collision checks in one
+// pass so no caller can accidentally omit a global blocker.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 MetadataScanResult scanGroupMetadata(
     const device_platform::IStateStore& store,
     const std::array<const char*, N>& keys,
@@ -451,7 +454,7 @@ BoundRootReadResult readBoundRootDescriptor(
                 {},
                 true};
     }
-    return {ConfigurationScanStatus::Success, *decodedRoot.value, read.value,
+    return {ConfigurationScanStatus::Success, decodedRoot.value, read.value,
             true};
 }
 
@@ -689,6 +692,94 @@ WriteReadbackStatus writeAndReadBack(device_platform::IStateStore& store,
                : WriteReadbackStatus::ReadbackFailure;
 }
 
+enum class InitialWriteReadbackStatus : std::uint8_t {
+    NewValue,
+    OldValue,
+    WriteFailure,
+    CapacityFailure,
+    Indeterminate,
+};
+
+InitialWriteReadbackStatus writeInitialAndReadBack(
+    device_platform::IStateStore& store, const char* keyValue,
+    const std::string& bytes, const std::optional<std::string>& previousBytes,
+    std::size_t maxBytes) {
+    const auto write = store.write(key(keyValue), bytes);
+    if (write == device_platform::StateStoreWriteStatus::WriteError) {
+        return InitialWriteReadbackStatus::WriteFailure;
+    }
+    if (write == device_platform::StateStoreWriteStatus::CapacityError) {
+        return InitialWriteReadbackStatus::CapacityFailure;
+    }
+    const auto read = store.read(key(keyValue), maxBytes);
+    if (read.status == device_platform::StateStoreReadStatus::Success &&
+        read.value == bytes) {
+        return InitialWriteReadbackStatus::NewValue;
+    }
+    if (write == device_platform::StateStoreWriteStatus::CommitOutcomeUnknown &&
+        ((read.status == device_platform::StateStoreReadStatus::NotFound &&
+          !previousBytes.has_value()) ||
+         (read.status == device_platform::StateStoreReadStatus::Success &&
+          previousBytes.has_value() && read.value == *previousBytes))) {
+        return InitialWriteReadbackStatus::OldValue;
+    }
+    return read.status == device_platform::StateStoreReadStatus::CapacityError
+               ? InitialWriteReadbackStatus::CapacityFailure
+               : InitialWriteReadbackStatus::Indeterminate;
+}
+
+InitialWriteReadbackStatus writeInitialDocumentAndReadBack(
+    device_platform::IStateStore& store, const char* keyValue,
+    const std::string& bytes,
+    const PreparedInitialConfigurationGraph::PreviousRecordDescriptor& prior,
+    std::size_t maxBytes, std::size_t& peakReadbackCapacity) {
+    const auto write = store.write(key(keyValue), bytes);
+    if (write == device_platform::StateStoreWriteStatus::WriteError) {
+        return InitialWriteReadbackStatus::WriteFailure;
+    }
+    if (write == device_platform::StateStoreWriteStatus::CapacityError) {
+        return InitialWriteReadbackStatus::CapacityFailure;
+    }
+    const auto read = store.read(key(keyValue), maxBytes);
+    peakReadbackCapacity =
+        std::max(peakReadbackCapacity, read.value.capacity());
+    if (read.status == device_platform::StateStoreReadStatus::Success &&
+        read.value == bytes) {
+        return InitialWriteReadbackStatus::NewValue;
+    }
+    if (write != device_platform::StateStoreWriteStatus::CommitOutcomeUnknown) {
+        return read.status ==
+                       device_platform::StateStoreReadStatus::CapacityError
+                   ? InitialWriteReadbackStatus::CapacityFailure
+                   : InitialWriteReadbackStatus::Indeterminate;
+    }
+    if (prior.wasNotFound &&
+        read.status == device_platform::StateStoreReadStatus::NotFound) {
+        return InitialWriteReadbackStatus::OldValue;
+    }
+    if (!prior.wasNotFound &&
+        read.status == device_platform::StateStoreReadStatus::Success) {
+        const auto metadata =
+            device_platform::decodeEnvelopeMetadata(read.value);
+        if (metadata.metadata.has_value() &&
+            metadata.metadata->recordTypeId == prior.recordType &&
+            metadata.metadata->schemaVersion == prior.schemaVersion &&
+            metadata.metadata->storageEpoch == prior.storageEpoch &&
+            metadata.metadata->versionValue == prior.versionValue &&
+            metadata.metadata->payloadLength == prior.payloadLength &&
+            read.value.size() == prior.recordLength) {
+            // IStateStore guarantees old-or-new for CommitOutcomeUnknown. The
+            // descriptor only verifies that the non-new value is the bound
+            // pre-write class; it is deliberately not a collision-prone byte
+            // identity substitute.
+            return InitialWriteReadbackStatus::OldValue;
+        }
+    }
+    return read.status == device_platform::StateStoreReadStatus::CapacityError
+               ? InitialWriteReadbackStatus::CapacityFailure
+               : InitialWriteReadbackStatus::Indeterminate;
+}
+
 ConfigurationCommitExecutionResult mapPreRootWrite(
     WriteReadbackStatus status, ConfigurationCommitFailurePhase phase) {
     if (status == WriteReadbackStatus::CapacityFailure) {
@@ -729,6 +820,145 @@ ConfigurationCommitResolutionCause mapResolutionCause(
     return ConfigurationCommitResolutionCause::GraphIntegrityFailure;
 }
 
+struct InitialSlotSelection {
+    InitialConfigurationPrepareStatus status{
+        InitialConfigurationPrepareStatus::NoSafeSlotAvailable};
+    std::optional<device_platform::SlotId> slot;
+    bool writeRequired{true};
+    std::optional<std::string> previousBytes;
+    PreparedInitialConfigurationGraph::PreviousRecordDescriptor descriptor;
+    // Largest transient read buffer seen while scanning this slot group,
+    // including candidates that turn out unusable (wrong epoch, corrupt,
+    // superseded): the buffer is real the moment the store returns it, even
+    // though only a small descriptor of it is kept afterwards.
+    std::size_t peakReadCapacity{0U};
+};
+
+template <std::size_t N>
+// Slot safety, exact reuse and collision rejection form one atomic classifier.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+InitialSlotSelection selectInitialSlot(
+    const device_platform::IStateStore& store,
+    const std::array<const char*, N>& keys, device_platform::StorageEpoch epoch,
+    device_platform::RecordTypeId recordType, std::uint32_t schemaVersion,
+    const std::string& expectedBytes, std::size_t maxBytes,
+    bool retainPreviousBytes = false, bool knownEmpty = false) {
+    if (knownEmpty) {
+        // The caller already proved every one of these slots NotFound as
+        // part of the factory-novelty oracle; this is exactly what the loop
+        // below would deterministically compute for an all-NotFound scan,
+        // without re-reading any of them.
+        return {InitialConfigurationPrepareStatus::Success,
+                device_platform::SlotId{0U},
+                true,
+                std::nullopt,
+                {},
+                0U};
+    }
+    std::optional<std::size_t> safeSlot;
+    std::optional<std::string> safePrevious;
+    PreparedInitialConfigurationGraph::PreviousRecordDescriptor safeDescriptor;
+    std::optional<std::size_t> exactSlot;
+    std::optional<std::string> exactBytes;
+    std::size_t peakReadCapacity = 0U;
+    for (std::size_t index = 0U; index < N; ++index) {
+        auto read = store.read(key(keys[index]), maxBytes);
+        peakReadCapacity = std::max(peakReadCapacity, read.value.capacity());
+        if (read.status == device_platform::StateStoreReadStatus::ReadError) {
+            return {InitialConfigurationPrepareStatus::PersistenceFailure,
+                    std::nullopt,
+                    true,
+                    std::nullopt,
+                    {},
+                    peakReadCapacity};
+        }
+        if (read.status ==
+            device_platform::StateStoreReadStatus::CapacityError) {
+            return {InitialConfigurationPrepareStatus::CapacityFailure,
+                    std::nullopt,
+                    true,
+                    std::nullopt,
+                    {},
+                    peakReadCapacity};
+        }
+        if (read.status == device_platform::StateStoreReadStatus::NotFound) {
+            if (!safeSlot.has_value()) {
+                safeSlot = index;
+                safePrevious = std::nullopt;
+                safeDescriptor = {};
+            }
+            continue;
+        }
+        if (read.value == expectedBytes) {
+            if (!exactSlot.has_value()) {
+                exactSlot = index;
+                exactBytes = std::move(read.value);
+            }
+            continue;
+        }
+        const auto metadata =
+            device_platform::decodeEnvelopeMetadata(read.value);
+        if (!metadata.metadata.has_value()) {
+            continue;
+        }
+        if (metadata.metadata->storageEpoch != epoch) {
+            if (!safeSlot.has_value()) {
+                safeSlot = index;
+                safeDescriptor.wasNotFound = false;
+                safeDescriptor.recordType = metadata.metadata->recordTypeId;
+                safeDescriptor.schemaVersion = metadata.metadata->schemaVersion;
+                safeDescriptor.storageEpoch = metadata.metadata->storageEpoch;
+                safeDescriptor.versionValue = metadata.metadata->versionValue;
+                safeDescriptor.recordLength = read.value.size();
+                safeDescriptor.payloadLength = metadata.metadata->payloadLength;
+                if (retainPreviousBytes) {
+                    safePrevious = std::move(read.value);
+                }
+            }
+            continue;
+        }
+        if (metadata.metadata->recordTypeId == recordType &&
+            metadata.metadata->schemaVersion > schemaVersion) {
+            return {InitialConfigurationPrepareStatus::UnsupportedNewerSchema,
+                    std::nullopt,
+                    true,
+                    std::nullopt,
+                    {},
+                    peakReadCapacity};
+        }
+        if (metadata.metadata->recordTypeId == recordType) {
+            return {InitialConfigurationPrepareStatus::IntegrityFailure,
+                    std::nullopt,
+                    true,
+                    std::nullopt,
+                    {},
+                    peakReadCapacity};
+        }
+    }
+    if (exactSlot.has_value()) {
+        return {InitialConfigurationPrepareStatus::Success,
+                device_platform::SlotId{static_cast<std::uint32_t>(*exactSlot)},
+                false,
+                std::move(exactBytes),
+                {},
+                peakReadCapacity};
+    }
+    if (!safeSlot.has_value()) {
+        return {InitialConfigurationPrepareStatus::NoSafeSlotAvailable,
+                std::nullopt,
+                true,
+                std::nullopt,
+                {},
+                peakReadCapacity};
+    }
+    return {InitialConfigurationPrepareStatus::Success,
+            device_platform::SlotId{static_cast<std::uint32_t>(*safeSlot)},
+            true,
+            std::move(safePrevious),
+            safeDescriptor,
+            peakReadCapacity};
+}
+
 }  // namespace
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
@@ -744,6 +974,10 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
     const auto rootOtherEpochSlots = result.diagnostics.otherEpochSlots;
     const auto corruptRootSlots = result.diagnostics.corruptRootSlots;
     if (roots.status != ConfigurationScanStatus::Success) {
+        result.diagnostics.persistentIdentityCollision =
+            roots.status ==
+            ConfigurationScanStatus::PersistentConfigurationIdentityCollision;
+        result.diagnostics.globalScanBlocker = true;
         result.status = toLoadStatus(roots.status, true);
         return result;
     }
@@ -771,6 +1005,10 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
         result.diagnostics);
     for (const auto* group : {&users, &services, &catalogs, &manifests}) {
         if (group->status != ConfigurationScanStatus::Success) {
+            result.diagnostics.persistentIdentityCollision =
+                group->status == ConfigurationScanStatus::
+                                     PersistentConfigurationIdentityCollision;
+            result.diagnostics.globalScanBlocker = true;
             result.status = toLoadStatus(group->status, false);
             return result;
         }
@@ -814,6 +1052,7 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
             return result;
         }
         if (!rootRead.descriptorStable) {
+            result.diagnostics.globalScanBlocker = true;
             result.status = ConfigurationGraphLoadStatus::
                 ConfigurationGraphIntegrityFailure;
             return result;
@@ -889,16 +1128,21 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
             selectedFallback};
         return result;
     }
-    result.status =
-        roots.newerSchema
-            ? ConfigurationGraphLoadStatus::UnsupportedNewerConfigurationSchema
-            : (result.diagnostics.invalidCandidates == 0U
-                   ? ConfigurationGraphLoadStatus::ConfigurationGraphUnavailable
-                   : ConfigurationGraphLoadStatus::
-                         ConfigurationGraphIntegrityFailure);
+    if (roots.newerSchema) {
+        result.status =
+            ConfigurationGraphLoadStatus::UnsupportedNewerConfigurationSchema;
+    } else if (result.diagnostics.invalidCandidates == 0U) {
+        result.status =
+            ConfigurationGraphLoadStatus::ConfigurationGraphUnavailable;
+    } else {
+        result.status =
+            ConfigurationGraphLoadStatus::ConfigurationGraphIntegrityFailure;
+    }
     return result;
 }
 
+// Validation replays the complete bounded canonical selection contract.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 ConfigurationValidationScanResult ConfigurationGraphStore::validationScan(
     const LoadedConfigurationGraph& expectedActive) const {
     ConfigurationValidationScanResult result;
@@ -1548,6 +1792,526 @@ ConfigurationGraphStore::resolveCommitDetailed(
             ? ConfigurationCommitResolutionStatus::ResolutionStillIndeterminate
             : ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure,
         mapResolutionCause(oldResult.status)};
+}
+
+InitialConfigurationPrepareResult ConfigurationGraphStore::prepareInitialGraph(
+    device_platform::StorageEpoch epoch, ChangeOperation operation,
+    const FactoryNoveltyProof* factoryNoveltyProof,
+    const ConfigurationMutationLease* mutationLease,
+    std::uint64_t serviceStateRevision,
+    std::uint64_t recoveryGeneration) const {
+    if (epoch.value() == 0U ||
+        (operation.kind != ChangeOperationKind::FactoryInitialization &&
+         operation.kind != ChangeOperationKind::FactoryReset)) {
+        return {InitialConfigurationPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+    // Only the exact first-ever factory initialization is ever provably
+    // empty: any other epoch or a reset may still hold leftover records
+    // from an earlier epoch and must always be scanned for real. A proof
+    // that fails its own independent binding check (wrong store, lease,
+    // revision or attempt, or out-of-order/repeated use) never grants the
+    // fast path either; the full scan below still yields the correct
+    // result either way.
+    const bool knownEmpty =
+        factoryNoveltyProof != nullptr && epoch.value() == 1U &&
+        operation.kind == ChangeOperationKind::FactoryInitialization &&
+        mutationLease != nullptr &&
+        factoryNoveltyProof->consumeForGraphPreparation(
+            store_, *mutationLease, serviceStateRevision, recoveryGeneration);
+    auto user = std::make_shared<const UserConfiguration>(
+        UserConfiguration{"de", "Europe/Zurich", "Fermentationsschrank"});
+    auto service = std::make_shared<const ServiceConfiguration>();
+    auto catalog =
+        std::make_shared<const ProgramCatalog>(makeFactoryProgramCatalog());
+    if (validateUserConfiguration(*user, timeZoneResolver_).status !=
+            UserConfigurationStatus::Success ||
+        validateProgramCatalog(*catalog) != ProgramCatalogStatus::Success) {
+        return {InitialConfigurationPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+
+    std::string payload;
+    std::string record;
+    if (encodeUserConfigurationPayload(*user, timeZoneResolver_, payload) !=
+            ConfigurationCodecStatus::Success ||
+        !encodeDocumentRecord(
+            configuration_storage_contract::kUserConfigurationRecordType,
+            UserConfigurationRevision{1U}, epoch, payload,
+            configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
+            record)) {
+        return {InitialConfigurationPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+    const auto userSlot = selectInitialSlot(
+        store_, configuration_storage_contract::kUserConfigurationSlotKeys,
+        epoch, configuration_storage_contract::kUserConfigurationRecordType, 1U,
+        record,
+        configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
+        false, knownEmpty);
+    if (userSlot.status != InitialConfigurationPrepareStatus::Success) {
+        return {userSlot.status, std::nullopt};
+    }
+    // Successful slot selection guarantees a bound slot.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    const UserConfigurationReference userRef{
+        configuration_storage_contract::kUserConfigurationRecordType,
+        *userSlot.slot,  // NOLINT(bugprone-unchecked-optional-access)
+        UserConfigurationRevision{1U},
+        1U,
+        static_cast<std::uint32_t>(payload.size()),
+        device_platform::computeCrc32IsoHdlc(payload),
+        epoch};
+    std::string{}.swap(payload);
+    std::string{}.swap(record);
+
+    if (encodeServiceConfigurationPayload(*service, payload) !=
+            ConfigurationCodecStatus::Success ||
+        !encodeDocumentRecord(
+            configuration_storage_contract::kServiceConfigurationRecordType,
+            ServiceConfigurationRevision{1U}, epoch, payload, 45U, record)) {
+        return {InitialConfigurationPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+    const auto serviceSlot = selectInitialSlot(
+        store_, configuration_storage_contract::kServiceConfigurationSlotKeys,
+        epoch, configuration_storage_contract::kServiceConfigurationRecordType,
+        1U, record, 45U, false, knownEmpty);
+    if (serviceSlot.status != InitialConfigurationPrepareStatus::Success) {
+        return {serviceSlot.status, std::nullopt};
+    }
+    // Successful slot selection guarantees a bound slot.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    const ServiceConfigurationReference serviceRef{
+        configuration_storage_contract::kServiceConfigurationRecordType,
+        *serviceSlot.slot,  // NOLINT(bugprone-unchecked-optional-access)
+        ServiceConfigurationRevision{1U},
+        1U,
+        static_cast<std::uint32_t>(payload.size()),
+        device_platform::computeCrc32IsoHdlc(payload),
+        epoch};
+    std::string{}.swap(payload);
+    std::string{}.swap(record);
+
+    if (encodeProgramCatalogPayload(*catalog, payload) !=
+            ConfigurationCodecStatus::Success ||
+        !encodeDocumentRecord(
+            configuration_storage_contract::kProgramCatalogRecordType,
+            ProgramCatalogRevision{1U}, epoch, payload,
+            configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
+            record)) {
+        return {InitialConfigurationPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+    const auto catalogSlot = selectInitialSlot(
+        store_, configuration_storage_contract::kProgramCatalogSlotKeys, epoch,
+        configuration_storage_contract::kProgramCatalogRecordType, 1U, record,
+        configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U, false,
+        knownEmpty);
+    if (catalogSlot.status != InitialConfigurationPrepareStatus::Success) {
+        return {catalogSlot.status, std::nullopt};
+    }
+    const auto programPayloadCapacity = payload.capacity();
+    const auto programEnvelopeCapacity = record.capacity();
+    // Successful slot selection guarantees a bound slot.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    const ProgramCatalogReference catalogRef{
+        configuration_storage_contract::kProgramCatalogRecordType,
+        *catalogSlot.slot,  // NOLINT(bugprone-unchecked-optional-access)
+        ProgramCatalogRevision{1U},
+        1U,
+        static_cast<std::uint32_t>(payload.size()),
+        device_platform::computeCrc32IsoHdlc(payload),
+        epoch};
+    std::string{}.swap(payload);
+    std::string{}.swap(record);
+
+    const ConfigurationManifest manifest{decodeChangeOrigin(1U), operation,
+                                         userRef, serviceRef, catalogRef};
+    std::string manifestPayload;
+    if (encodeConfigurationManifestPayload(manifest, manifestPayload) !=
+        ConfigurationGraphCodecStatus::Success) {
+        return {InitialConfigurationPrepareStatus::InvalidCandidate,
+                std::nullopt};
+    }
+    const ConfigurationManifestReference manifestRef{
+        configuration_storage_contract::kConfigurationManifestRecordType,
+        device_platform::SlotId{0U},
+        ConfigurationManifestGeneration{1U},
+        kConfigurationManifestSchemaVersion1,
+        static_cast<std::uint32_t>(manifestPayload.size()),
+        device_platform::computeCrc32IsoHdlc(manifestPayload),
+        epoch};
+    std::string manifestRecord;
+    if (encodeConfigurationManifestRecord(
+            manifest, ConfigurationManifestGeneration{1U}, epoch, std::nullopt,
+            manifestRecord) != ConfigurationGraphCodecStatus::Success) {
+        return {InitialConfigurationPrepareStatus::CapacityFailure,
+                std::nullopt};
+    }
+    const auto manifestSlot = selectInitialSlot(
+        store_, configuration_storage_contract::kConfigurationManifestSlotKeys,
+        epoch, configuration_storage_contract::kConfigurationManifestRecordType,
+        kConfigurationManifestSchemaVersion1, manifestRecord,
+        configuration_limits::kMaximumConfigurationManifestEnvelopeBytes, true,
+        knownEmpty);
+    if (manifestSlot.status != InitialConfigurationPrepareStatus::Success) {
+        return {manifestSlot.status, std::nullopt};
+    }
+    auto boundManifestRef = manifestRef;
+    // Successful slot selection guarantees a bound slot.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    boundManifestRef.slot = *manifestSlot.slot;
+    const ConfigurationRootRecord root{boundManifestRef, std::nullopt};
+    std::string rootRecord;
+    if (encodeConfigurationRootRecord(root, ConfigurationRootSequence{1U},
+                                      epoch, std::nullopt, rootRecord) !=
+        ConfigurationGraphCodecStatus::Success) {
+        return {InitialConfigurationPrepareStatus::CapacityFailure,
+                std::nullopt};
+    }
+    const auto rootSlot = selectInitialSlot(
+        store_, configuration_storage_contract::kConfigurationRootSlotKeys,
+        epoch, configuration_storage_contract::kConfigurationRootRecordType,
+        kConfigurationRootSchemaVersion1, rootRecord,
+        configuration_limits::kMaximumConfigurationRootEnvelopeBytes, true,
+        knownEmpty);
+    if (rootSlot.status != InitialConfigurationPrepareStatus::Success) {
+        return {rootSlot.status, std::nullopt};
+    }
+    ConfigurationGraphBranch branch{boundManifestRef, manifest, user,
+                                    service,          catalog,  manifestRecord};
+    // Successful slot selection guarantees all five bound slots below.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    LoadedConfigurationGraph graph{*rootSlot.slot,
+                                   ConfigurationRootSequence{1U},
+                                   root,
+                                   rootRecord,
+                                   std::move(branch),
+                                   std::nullopt,
+                                   false};
+    ConfigurationSlotPlan plan;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    plan.userConfigurationSlot = *userSlot.slot;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    plan.serviceConfigurationSlot = *serviceSlot.slot;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    plan.programCatalogSlot = *catalogSlot.slot;
+    plan.userConfigurationRevision = UserConfigurationRevision{1U};
+    plan.serviceConfigurationRevision = ServiceConfigurationRevision{1U};
+    plan.programCatalogRevision = ProgramCatalogRevision{1U};
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    plan.manifestSlot = *manifestSlot.slot;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+    plan.rootSlot = *rootSlot.slot;
+    plan.manifestGeneration = ConfigurationManifestGeneration{1U};
+    plan.rootSequence = ConfigurationRootSequence{1U};
+    const auto planIdentity = device_platform::computeCrc32IsoHdlc(rootRecord);
+    const auto smallCanonicalRecordCapacity =
+        manifestRecord.capacity() + rootRecord.capacity();
+    const auto peakSlotScanReadCapacity =
+        std::max({userSlot.peakReadCapacity, serviceSlot.peakReadCapacity,
+                  catalogSlot.peakReadCapacity, manifestSlot.peakReadCapacity,
+                  rootSlot.peakReadCapacity});
+    return {InitialConfigurationPrepareStatus::Success,
+            PreparedInitialConfigurationGraph{std::move(graph),
+                                              plan,
+                                              std::move(manifestRecord),
+                                              std::move(rootRecord),
+                                              rootSlot.previousBytes,
+                                              userSlot.descriptor,
+                                              serviceSlot.descriptor,
+                                              catalogSlot.descriptor,
+                                              manifestSlot.previousBytes,
+                                              userSlot.writeRequired,
+                                              serviceSlot.writeRequired,
+                                              catalogSlot.writeRequired,
+                                              manifestSlot.writeRequired,
+                                              rootSlot.writeRequired,
+                                              planIdentity,
+                                              programPayloadCapacity,
+                                              programEnvelopeCapacity,
+                                              0U,
+                                              smallCanonicalRecordCapacity,
+                                              peakSlotScanReadCapacity}};
+}
+
+// The fixed write sequence keeps every pre-root cut point explicit and
+// auditable; helper extraction must not create a second commit workflow.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+ConfigurationCommitExecutionResult ConfigurationGraphStore::executeInitialGraph(
+    PreparedInitialConfigurationGraph& prepared,
+    ConfigurationEpochGraphWriteCapability& capability) {
+    if (capability.consumed_ ||
+        capability.epoch_ !=
+            prepared.graph.active.manifestReference.storageEpoch ||
+        capability.planIdentity_ != prepared.planIdentity ||
+        capability.bootstrapSequence_.value() == 0U ||
+        capability.canonicalBootstrapRecordBytes_.empty() ||
+        capability.serviceStateRevision_ == 0U ||
+        capability.recoveryGeneration_ == 0U ||
+        capability.prepared_ != &prepared ||
+        capability.mutationLease_ == nullptr ||
+        !capability.mutationLease_->valid() ||
+        (capability.bootstrapState_ !=
+             ConfigurationBootstrapState::Initializing &&
+         capability.bootstrapState_ !=
+             ConfigurationBootstrapState::Resetting)) {
+        return {ConfigurationCommitExecutionStatus::RuntimeFailure,
+                ConfigurationCommitFailurePhase::TargetGraphVerification,
+                ConfigurationCommitResolutionCause::GraphIntegrityFailure};
+    }
+    capability.consumed_ = true;
+    std::string payload;
+    std::string record;
+    const auto epoch = capability.epoch_;
+    const auto writeDocument =
+        [this, &record, &prepared](
+            const char* keyValue,
+            const PreparedInitialConfigurationGraph::PreviousRecordDescriptor&
+                previous,
+            std::size_t maxBytes, ConfigurationCommitFailurePhase phase) {
+            const auto status = writeInitialDocumentAndReadBack(
+                store_, keyValue, record, previous, maxBytes,
+                prepared.peakStoreReadbackCapacity);
+            std::string{}.swap(record);
+            if (status == InitialWriteReadbackStatus::NewValue) {
+                return std::optional<ConfigurationCommitExecutionResult>{};
+            }
+            if (status == InitialWriteReadbackStatus::CapacityFailure) {
+                return std::optional<ConfigurationCommitExecutionResult>{
+                    ConfigurationCommitExecutionResult{
+                        ConfigurationCommitExecutionStatus::CapacityFailure,
+                        phase}};
+            }
+            return std::optional<ConfigurationCommitExecutionResult>{
+                ConfigurationCommitExecutionResult{
+                    status == InitialWriteReadbackStatus::Indeterminate
+                        ? ConfigurationCommitExecutionStatus::
+                              RecordOutcomeIndeterminate
+                        : ConfigurationCommitExecutionStatus::WriteFailure,
+                    phase}};
+        };
+    if (prepared.userWriteRequired &&
+        (encodeUserConfigurationPayload(
+             *prepared.graph.active.userConfiguration, timeZoneResolver_,
+             payload) != ConfigurationCodecStatus::Success ||
+         !encodeDocumentRecord(
+             configuration_storage_contract::kUserConfigurationRecordType,
+             UserConfigurationRevision{1U}, epoch, payload,
+             configuration_limits::kMaximumUserConfigurationPayloadBytes + 45U,
+             record))) {
+        return {ConfigurationCommitExecutionStatus::CapacityFailure,
+                ConfigurationCommitFailurePhase::UserDocument};
+    }
+    std::string{}.swap(payload);
+    if (prepared.userWriteRequired) {
+        if (!prepared.slotPlan.userConfigurationSlot.has_value()) {
+            return {ConfigurationCommitExecutionStatus::RuntimeFailure,
+                    ConfigurationCommitFailurePhase::UserDocument};
+        }
+        const auto selectedSlot = *prepared.slotPlan.userConfigurationSlot;
+        if (auto failure = writeDocument(
+                configuration_storage_contract::kUserConfigurationSlotKeys
+                    [selectedSlot.value()],
+                prepared.previousTargetUserRecord,
+                configuration_limits::kMaximumUserConfigurationPayloadBytes +
+                    45U,
+                ConfigurationCommitFailurePhase::UserDocument)) {
+            return *failure;
+        }
+    }
+    if (prepared.serviceWriteRequired &&
+        (encodeServiceConfigurationPayload(
+             *prepared.graph.active.serviceConfiguration, payload) !=
+             ConfigurationCodecStatus::Success ||
+         !encodeDocumentRecord(
+             configuration_storage_contract::kServiceConfigurationRecordType,
+             ServiceConfigurationRevision{1U}, epoch, payload, 45U, record))) {
+        return {ConfigurationCommitExecutionStatus::CapacityFailure,
+                ConfigurationCommitFailurePhase::ServiceDocument};
+    }
+    std::string{}.swap(payload);
+    if (prepared.serviceWriteRequired) {
+        if (!prepared.slotPlan.serviceConfigurationSlot.has_value()) {
+            return {ConfigurationCommitExecutionStatus::RuntimeFailure,
+                    ConfigurationCommitFailurePhase::ServiceDocument};
+        }
+        const auto selectedSlot = *prepared.slotPlan.serviceConfigurationSlot;
+        if (auto failure = writeDocument(
+                configuration_storage_contract::kServiceConfigurationSlotKeys
+                    [selectedSlot.value()],
+                prepared.previousTargetServiceRecord, 45U,
+                ConfigurationCommitFailurePhase::ServiceDocument)) {
+            return *failure;
+        }
+    }
+    if (prepared.programWriteRequired &&
+        (encodeProgramCatalogPayload(*prepared.graph.active.programCatalog,
+                                     payload) !=
+             ConfigurationCodecStatus::Success ||
+         !encodeDocumentRecord(
+             configuration_storage_contract::kProgramCatalogRecordType,
+             ProgramCatalogRevision{1U}, epoch, payload,
+             configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
+             record))) {
+        return {ConfigurationCommitExecutionStatus::CapacityFailure,
+                ConfigurationCommitFailurePhase::ProgramDocument};
+    }
+    if (prepared.programWriteRequired) {
+        prepared.peakProgramPayloadCapacity =
+            std::max(prepared.peakProgramPayloadCapacity, payload.capacity());
+        prepared.peakDocumentEnvelopeCapacity =
+            std::max(prepared.peakDocumentEnvelopeCapacity, record.capacity());
+    }
+    std::string{}.swap(payload);
+    if (prepared.programWriteRequired) {
+        if (!prepared.slotPlan.programCatalogSlot.has_value()) {
+            return {ConfigurationCommitExecutionStatus::RuntimeFailure,
+                    ConfigurationCommitFailurePhase::ProgramDocument};
+        }
+        const auto selectedSlot = *prepared.slotPlan.programCatalogSlot;
+        if (auto failure = writeDocument(
+                configuration_storage_contract::kProgramCatalogSlotKeys
+                    [selectedSlot.value()],
+                prepared.previousTargetProgramRecord,
+                configuration_limits::kMaximumProgramCatalogPayloadBytes + 45U,
+                ConfigurationCommitFailurePhase::ProgramDocument)) {
+            return *failure;
+        }
+    }
+    if (prepared.manifestWriteRequired) {
+        const auto manifest = writeInitialAndReadBack(
+            store_,
+            configuration_storage_contract::kConfigurationManifestSlotKeys
+                [prepared.slotPlan.manifestSlot.value()],
+            prepared.manifestRecordBytes,
+            prepared.previousTargetManifestRecordBytes,
+            configuration_limits::kMaximumConfigurationManifestEnvelopeBytes);
+        if (manifest != InitialWriteReadbackStatus::NewValue) {
+            auto status = ConfigurationCommitExecutionStatus::WriteFailure;
+            if (manifest == InitialWriteReadbackStatus::CapacityFailure) {
+                status = ConfigurationCommitExecutionStatus::CapacityFailure;
+            } else if (manifest == InitialWriteReadbackStatus::Indeterminate) {
+                status = ConfigurationCommitExecutionStatus::
+                    RecordOutcomeIndeterminate;
+            }
+            return {status, ConfigurationCommitFailurePhase::Manifest};
+        }
+    }
+    const auto target = validateBranchSemantically(store_, timeZoneResolver_,
+                                                   prepared.graph.active);
+    if (target != ConfigurationScanStatus::Success) {
+        return {ConfigurationCommitExecutionStatus::RuntimeFailure,
+                ConfigurationCommitFailurePhase::TargetGraphVerification,
+                mapResolutionCause(target)};
+    }
+    if (!prepared.rootWriteRequired) {
+        auto existing = loadCanonicalGraph(epoch);
+        if (existing.status !=
+                ConfigurationGraphLoadStatus::ConfigurationGraphAvailable ||
+            !existing.graph.has_value() ||
+            existing.graph->canonicalRootRecordBytes !=
+                prepared.rootRecordBytes) {
+            return {ConfigurationCommitExecutionStatus::RuntimeFailure,
+                    ConfigurationCommitFailurePhase::RootVerification,
+                    ConfigurationCommitResolutionCause::GraphIntegrityFailure};
+        }
+        prepared.graph = std::move(*existing.graph);
+        return {ConfigurationCommitExecutionStatus::Activated,
+                ConfigurationCommitFailurePhase::Root};
+    }
+    const auto rootWrite = store_.write(
+        key(configuration_storage_contract::kConfigurationRootSlotKeys
+                [prepared.slotPlan.rootSlot.value()]),
+        prepared.rootRecordBytes);
+    if (rootWrite == device_platform::StateStoreWriteStatus::WriteError) {
+        return {ConfigurationCommitExecutionStatus::WriteFailure,
+                ConfigurationCommitFailurePhase::Root};
+    }
+    if (rootWrite == device_platform::StateStoreWriteStatus::CapacityError) {
+        return {ConfigurationCommitExecutionStatus::CapacityFailure,
+                ConfigurationCommitFailurePhase::Root};
+    }
+    const auto loaded = loadCanonicalGraph(epoch);
+    if (loaded.status !=
+            ConfigurationGraphLoadStatus::ConfigurationGraphAvailable ||
+        !loaded.graph.has_value() ||
+        loaded.graph->canonicalRootRecordBytes != prepared.rootRecordBytes) {
+        return {
+            rootWrite ==
+                    device_platform::StateStoreWriteStatus::CommitOutcomeUnknown
+                ? ConfigurationCommitExecutionStatus::CommitIndeterminate
+                : ConfigurationCommitExecutionStatus::RuntimeFailure,
+            ConfigurationCommitFailurePhase::RootVerification,
+            ConfigurationCommitResolutionCause::AmbiguousRootOutcome};
+    }
+    prepared.graph = *loaded.graph;
+    return {ConfigurationCommitExecutionStatus::Activated,
+            ConfigurationCommitFailurePhase::Root};
+}
+
+ConfigurationCommitResolutionResult
+ConfigurationGraphStore::resolveInitialGraph(
+    const PreparedInitialConfigurationGraph& prepared) const {
+    const auto target = store_.read(
+        key(configuration_storage_contract::kConfigurationRootSlotKeys
+                [prepared.slotPlan.rootSlot.value()]),
+        configuration_limits::kMaximumConfigurationRootEnvelopeBytes);
+    if (target.status == device_platform::StateStoreReadStatus::ReadError) {
+        return {
+            ConfigurationCommitResolutionStatus::ResolutionStillIndeterminate,
+            ConfigurationCommitResolutionCause::RootReadError};
+    }
+    if (target.status == device_platform::StateStoreReadStatus::CapacityError) {
+        return {
+            ConfigurationCommitResolutionStatus::ResolutionStillIndeterminate,
+            ConfigurationCommitResolutionCause::RootCapacityError};
+    }
+    if (target.status == device_platform::StateStoreReadStatus::Success &&
+        target.value == prepared.rootRecordBytes) {
+        const auto loaded = loadCanonicalGraph(
+            prepared.graph.active.manifestReference.storageEpoch);
+        if (loaded.status ==
+                ConfigurationGraphLoadStatus::ConfigurationGraphAvailable &&
+            loaded.graph.has_value() &&
+            loaded.graph->canonicalRootRecordBytes ==
+                prepared.rootRecordBytes) {
+            return {ConfigurationCommitResolutionStatus::ResolutionRecoveredNew,
+                    ConfigurationCommitResolutionCause::None};
+        }
+        if (loaded.status == ConfigurationGraphLoadStatus::RootReadError ||
+            loaded.status == ConfigurationGraphLoadStatus::RecordReadError) {
+            return {ConfigurationCommitResolutionStatus::
+                        ResolutionStillIndeterminate,
+                    ConfigurationCommitResolutionCause::GraphReadError};
+        }
+        if (loaded.status == ConfigurationGraphLoadStatus::RootCapacityError ||
+            loaded.status ==
+                ConfigurationGraphLoadStatus::RecordCapacityError) {
+            return {ConfigurationCommitResolutionStatus::
+                        ResolutionStillIndeterminate,
+                    ConfigurationCommitResolutionCause::GraphCapacityError};
+        }
+        return {
+            ConfigurationCommitResolutionStatus::ResolutionRuntimeFailure,
+            loaded.status == ConfigurationGraphLoadStatus::
+                                 UnsupportedNewerConfigurationSchema
+                ? ConfigurationCommitResolutionCause::UnsupportedNewerSchema
+                : ConfigurationCommitResolutionCause::GraphIntegrityFailure};
+    }
+    const bool oldConfirmed =
+        (target.status == device_platform::StateStoreReadStatus::NotFound &&
+         !prepared.previousTargetRootRecordBytes.has_value()) ||
+        (target.status == device_platform::StateStoreReadStatus::Success &&
+         prepared.previousTargetRootRecordBytes.has_value() &&
+         target.value == *prepared.previousTargetRootRecordBytes);
+    if (oldConfirmed) {
+        return {ConfigurationCommitResolutionStatus::ResolutionRecoveredOld,
+                ConfigurationCommitResolutionCause::None};
+    }
+    return {ConfigurationCommitResolutionStatus::ResolutionStillIndeterminate,
+            ConfigurationCommitResolutionCause::AmbiguousRootOutcome};
 }
 
 }  // namespace fermentation

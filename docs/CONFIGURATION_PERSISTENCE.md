@@ -832,10 +832,41 @@ einen Zustand:
 `NotFound` ist kein gespeicherter Zustand. Lesefehler werden nie wie NotFound
 behandelt.
 
+Die Umsetzung in #57 verwendet Record-Type-ID 6, die beiden Keys `cb0` und
+`cb1`, Schema 1 und eine exakt fuenf Byte grosse Payload. Die Payload enthaelt
+die 32-Bit-Speicherformatversion und den Zustands-Wirewert; `StorageEpoch` und
+`BootstrapSequence` liegen in den vorhandenen Envelopefeldern. Fuer Schema 1
+gilt die geschlossene Historienrelation:
+
+- `Initializing`: ausschliesslich Epoche 1, Sequence 1;
+- `Initialized`: `Sequence = 2 * StorageEpoch`;
+- `Resetting`: ab Epoche 2, `Sequence = 2 * StorageEpoch - 1`.
+
+Gleiche Identitaet mit verschiedenen kanonischen Bytes, unzulaessige Spruenge
+und unbekannte neuere Schemas bleiben fail closed. Ein byteidentisches
+Duplikat ist diagnostizierbar, aber keine neue Identitaet.
+
 Automatische Initialisierung ist nur erlaubt, wenn alle erforderlichen Reads
 erfolgreich waren, weder gueltige noch beschaedigt vorhandene Roots erkannt
 wurden und kein BootstrapRecord existiert. Vor der ersten Dokumentrevision wird
 `Initializing` persistiert.
+
+Das Factory-Neuheitsorakel liest unter derselben
+`ConfigurationMutationLease` jeden der 19 bekannten Bootstrap-, Root-,
+Manifest- und Dokumentkeys genau einmal. Die beiden bereits gebundenen
+Bootstrapbeobachtungen werden nicht erneut gelesen. Erst der exakt
+bestaetigte `Initializing`- beziehungsweise `Resetting`-Record erzeugt die
+nicht kopierbare, an Bootstrapslot und kanonische Bootstrapbytes, Sequence,
+Zustand, Epoche, Plan, Prepared-Graph, Dienstrevision, Recoverygeneration und
+dieselbe Lease gebundene Graphwrite-Capability. Bootstrapwrites sind private
+Recoveryoperationen und koennen nicht ausserhalb dieser gemeinsamen
+Mutationsgrenze als Produktionsmutation aufgerufen werden.
+Ein vorbereiteter Runtime-Snapshot ist vor dem bestaetigten und vollstaendig
+validierten Root nicht publish-faehig. Erst ein nicht kopierbarer
+`CommittedRecoveryActivation`-Besitz bindet Rootslot, kanonische Rootbytes,
+Graph, Epoche, Plan, Dienstrevision und vorbereitete Runtimegeneration. Normale
+Runtimeakquisition bleibt bis zum exakt passenden bestaetigten `Initialized`
+gesperrt.
 
 Danach entstehen unter StorageEpoch 1:
 
@@ -892,6 +923,78 @@ zugesichert. Die geraetespezifische Touchkalibrierung bleibt erhalten.
 Bedienablauf, physische Geste sowie Lauf-, Journal- und Historiendaten bleiben
 bei ihren zustaendigen Issues. Korruption loest niemals automatisch einen
 Werksreset aus.
+
+Ein ausdruecklich fachlich autorisierter Werksreset darf auch ohne geladene
+Runtime beginnen, wenn ein kanonischer, unterstuetzter `Initialized`-
+Bootstrap die aktuelle Epoche und den vollstaendigen Bootstrap-High-Water
+eindeutig bindet. Ein fehlender oder unbrauchbarer Konfigurationsgraph ist in
+diesem Fall kein Resetverbot. Bootstrapkorruption, ein unbekanntes neueres
+Bootstrap- oder Speicherformat sowie Read-/Capacity-Fehler der Bootstrapslots
+blockieren dagegen jeden Resetwrite. `Initializing` und `Resetting` werden
+wiederaufgenommen und starten keinen zweiten Reset.
+
+Der Dienst bildet diese Ausnahme als `ResetEligibleNoRuntime` ab. Der Zustand
+entsteht nur nach erneuter vollstaendiger persistenter Klassifikation eines
+fehlenden oder unbrauchbaren alten Graphen bei weiterhin eindeutigem
+`Initialized`-Bootstrap. Ein beliebiger `RuntimeFailure`, ein unbestimmter
+Rootausgang, ein globaler Read-/Capacityblocker, eine persistente
+Identitaetskollision, eine instabile kanonische Reihenfolge oder eine interne
+Publish-, Modell- oder Zustandsinvariante ist nicht resetberechtigt.
+
+Vor dem bestaetigten `Resetting` wird kein Zielepochenrecord geschrieben.
+Danach werden exakte Records der Zielepoche idempotent wiederverwendet;
+`NotFound` und eindeutig andere Epochen duerfen als Zielslot dienen. Korrupte,
+unlesbare, kollidierende oder einer unbekannten Epoche zugehoerige Slots sind
+weder exakte Zielrecords noch sicher frei. Reicht die sichere Slotmenge nicht,
+bleibt der Reset fail closed. Alte Bytes duerfen physisch bestehen bleiben,
+werden aber weder referenziert noch als erfolgreiche Loeschung ausgegeben.
+
+Unbestimmte Writeausgaenge bleiben fachlich getrennt:
+
+- Ein unbestimmter Bootstraprecord betrifft nur `Initializing`, `Resetting`
+  oder `Initialized` und wird durch exakten Readback dieses Bootstraprecords
+  aufgeloest.
+- Ein unbestimmter Dokument- oder Manifestwrite liegt vor dem Root-
+  Linearisierungspunkt. Der Readback akzeptiert nur den vollstaendig gegen das
+  gebundene Modell validierten neuen Record. Ein nach Portvertrag sicher nicht
+  wirksamer Write beendet den Versuch ohne weiteren Write; fremde oder nicht
+  abschliessend pruefbare Werte bleiben fail closed.
+- Ein unbestimmter Rootwrite behaelt unveraendert den aus #56 stammenden
+  `ConfigurationCommitIndeterminate`- und `resolveCommitDetailed()`-Vertrag.
+  In Initialisierungs- und Resetkontexten fuehrt ein bestaetigter neuer Root
+  erst zur internen Aktivierung und zu `BootstrapFinalizationPending`, nicht
+  direkt zu `Operational`. Normale Runtime bleibt bis zum bestaetigten
+  `Initialized` gesperrt.
+
+Die oeffentlichen Recoverydetails unterscheiden Mutations- und Modellbudget-
+Busy, Zustandskonflikt, Read-, Capacity- und Writefehler, nicht unterstuetztes
+Schema, die drei Indeterminate-Ebenen, Counteroverflow und
+Runtimevorbereitungsfehler. Unabhaengig davon transportiert jedes fehlerhafte
+Ergebnis hoechstens einen stabilen #57-Safety-Producer:
+`ConfigurationUnavailable` oder `ConfigurationIntegrityFailure`. Eine sicher
+abgelehnte Operation bei weiterhin eindeutig gueltiger alter Runtime erzeugt
+keinen Producer; #24 muss Detailstatus nicht erneut fachlich klassifizieren.
+
+Der #57-Ressourcennachweis speichert fuer den jeweils letzten Initialisierungs-
+oder Resetversuch die relevanten Stringkapazitaeten getrennt fuer
+ProgramCatalog-Payload, Dokument-Envelopeworkspace, Store-Readback, den
+maximalen Slot-Scan-Lesepuffer sowie die kleinen kanonischen
+Bootstrap-/Manifest-/Rootbindungen. Vorherige maximale Dokumentrecords werden
+nur als kleine technische Deskriptoren gebunden; der Old-or-New-Portvertrag
+ersetzt eine zweite Vollkopie. Der transiente Lesepuffer, mit dem ein solcher
+alter Record waehrend der Slotsuche vollstaendig gelesen wird, bleibt davon
+unabhaengig real und erscheint eigenstaendig als Slot-Scan-Peak; er wird nicht
+mit dem kleinen Store-Readback-Peak des tatsaechlich neu geschriebenen Records
+vermischt. Modellreservierung erfolgt vor Factorymodellaufbau, und
+vorbereitete Recoverymodelle zaehlen zur festen Zwei-Generationen-Grenze. Ein
+tatsaechlich gehaltener Root-Indeterminate-Kontext weist seine zusaetzlichen
+fluechtigen Bootstrap-/Rootbindungskapazitaeten separat aus und haelt keinen
+zweiten maximalen Dokumentrecord.
+
+Ein erfolgreicher lokaler Reset loescht weder einen bereits erzeugten
+Konfigurationsfehler noch eine spaetere Verriegelung aus #24. Deren Aufhebung
+bleibt Teil des `CONFIGURATION_SAFETY_INTEGRATION_GATE` und des dortigen
+Fehlerresetvertrags.
 
 ## Speicherport und Modulgrenzen
 
@@ -1308,8 +1411,10 @@ Jedes Paket erhaelt einen eigenen kleinen PR. Issue #16 bleibt als
 Tracking-Issue offen und wird erst abgeschlossen, wenn alle Teilissues gemergt
 und die End-to-End-Akzeptanzkriterien erfuellt sind.
 
-#54 und #55 sind abgeschlossen. #56 und #57 bleiben eigene, nacheinander
-geplante Implementierungsvorhaben; fuer den Gesamtvertrag wird kein einzelner
+#54 und #55 sind abgeschlossen; #56 wurde mit PR #65 gemergt. #57 wird im
+Draft-PR #68 als eigenes Implementierungsvorhaben umgesetzt. Reale ESP32-NVS-,
+Heap-, Jitter-, Watchdog-, Flashatomizitaets- und Lebensdauermessungen bleiben
+sichtbare nachgelagerte Gates; fuer den Gesamtvertrag wird kein einzelner
 Implementierungsbranch erstellt.
 
 ## Ausdruecklicher Nicht-Scope
