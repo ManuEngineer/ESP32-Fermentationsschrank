@@ -89,6 +89,9 @@ def main() -> int:
         "Architekturpruefung erkennt absichtliche Grenzverletzung": run_script_selftest(
             repo_root, "check_architecture_boundaries.py"
         ),
+        "Profil-/Driftpruefung erkennt absichtlich fehlerhafte Faelle": run_script_selftest(
+            repo_root, "check_build_profiles.py"
+        ),
     }
 
     for name, status in results.items():

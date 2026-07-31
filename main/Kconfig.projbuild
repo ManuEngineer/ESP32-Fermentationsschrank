@@ -1,0 +1,17 @@
+choice APP_ESP32_PROFILE
+    prompt "ESP32 application profile"
+    default APP_PROFILE_ESP32_BRINGUP
+    help
+        Waehlt genau eines der beiden ESP32-Produktionsprofile. Ohne
+        explizites Release-Overlay bleibt Bring-up der sichere Default.
+        Keine Option aktiviert reale Aktoren; das bleibt firmwarefest in
+        main/CMakeLists.txt und include/app_config.hpp verankert
+        (siehe docs/tasks/issue-74-implementation-plan.md, Abschnitt 7.2).
+
+    config APP_PROFILE_ESP32_BRINGUP
+        bool "ESP32 bring-up profile"
+
+    config APP_PROFILE_ESP32_RELEASE
+        bool "ESP32 release profile"
+
+endchoice
