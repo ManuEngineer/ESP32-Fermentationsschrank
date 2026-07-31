@@ -144,15 +144,21 @@ Sie blockiert insbesondere:
 Die Pruefung ersetzt kein Architekturreview. Sie sichert die klar automatisch
 erkennbaren Grenzen ab und liefert bei einer Verletzung Datei und Zeile.
 
-## ESP-IDF-6.0.2-Buildbasis (lokal, Issue #72)
+## ESP-IDF-6.0.2-Buildbasis und Laufzeitpfad (lokal, Issue #72/#73)
 
 Parallel zum PlatformIO-/Arduino-Pfad existiert seit Issue #72 ein
 reproduzierbarer ESP-IDF-6.0.2-Compile-/Linkpfad fuer die portablen
-Komponenten `device_platform` und `fermentation_app`. Dieser Pfad ist
+Komponenten `device_platform` und `fermentation_app`. Seit Issue #73 startet
+dieser Pfad ueber einen echten `app_main()`-Composition-Root
+(`main/app_main.cpp`) mit derselben Sicherheitsparitaet wie der Arduino-
+Pfad (Profil `esp32_bringup`, `HARDWARE_UNVERIFIED`, reale Aktoren
+deaktiviert) und nutzt die neue, minimale Adapterkomponente
+`lib/device_platform_esp_idf/` (`EspTimerTimeSource`). Dieser Pfad ist
 **nicht** in `.github/workflows/build.yml` eingebunden; die CI-Migration
 bleibt vollstaendig Issue #74 vorbehalten. Bis dahin ist der folgende Ablauf
 eine lokale Entwicklerpflicht vor jedem Commit, der `lib/device_platform/`,
-`lib/fermentation_app/` oder die ESP-IDF-Buildkonfiguration selbst betrifft.
+`lib/fermentation_app/`, `lib/device_platform_esp_idf/`, `main/` oder die
+ESP-IDF-Buildkonfiguration selbst betrifft.
 
 Voraussetzung ist eine bereits installierte native ESP-IDF-6.0.2-Umgebung
 (offizieller Tag `v6.0.2`, `--recursive` geklont). Aktivierung in der
@@ -169,29 +175,37 @@ idf.py set-target esp32   # einmalig pro frischem build/-Verzeichnis
 idf.py build
 ```
 
-Der Build verwendet ein temporaeres, produktionsloses `main/`-Compile-
-/Linkanker (`main/issue72_build_stub.c`, `void app_main(void) {}`); er startet
-keine Anwendung und initialisiert keine Hardware. Ein `IDF_VER`-Guard im
-Root-`CMakeLists.txt` bricht den Konfigurationslauf bei einer anderen
-ESP-IDF-Version als `v6.0.2` mit `FATAL_ERROR` ab.
+`app_main()` startet keine reale Hardware; alle Aktoren bleiben deaktiviert.
+Ein `IDF_VER`-Guard im Root-`CMakeLists.txt` bricht den Konfigurationslauf
+bei einer anderen ESP-IDF-Version als `v6.0.2` mit `FATAL_ERROR` ab.
 
-Nach Hinzufuegen oder Entfernen einer Quelldatei unter `lib/device_platform/src/`
-oder `lib/fermentation_app/src/` kann lokal `idf.py reconfigure` noetig sein,
-da beide Komponenten ueber `SRC_DIRS` automatisch alle Quellen ihres
-Verzeichnisses einsammeln.
+Nach Hinzufuegen oder Entfernen einer Quelldatei unter `lib/device_platform/src/`,
+`lib/fermentation_app/src/` oder `lib/device_platform_esp_idf/src/` kann
+lokal `idf.py reconfigure` noetig sein, da diese Komponenten ueber
+`SRC_DIRS` automatisch alle Quellen ihres Verzeichnisses einsammeln.
 
 Generierte Bestaende (`build/`, `sdkconfig`, `sdkconfig.old`,
 `managed_components/`) sind gitignored. `dependencies.lock` wird nicht
-ignoriert: Issue #72 bindet keine Fremdkomponente ein, sobald eine reale
+ignoriert: `#72`/`#73` binden keine Fremdkomponente ein, sobald eine reale
 Component-Manager-Abhaengigkeit entsteht, wird das dabei erzeugte Lockfile
 grundsaetzlich versioniert.
 
 Die um eine schmale IDF-Leak-Pruefung erweiterte
 `scripts/check_architecture_boundaries.py` (siehe oben) stellt sicher, dass
 `lib/device_platform/src/` und `lib/fermentation_app/src/` keinen direkten
-ESP-IDF-/RTOS-Include, keine `ESP_PLATFORM`-/`ARDUINO`-/Kconfig-Praeprozessor-
-verwendung und keine unautorisierte direkte IDF-Komponentenabhaengigkeit in
-`REQUIRES`/`PRIV_REQUIRES` enthalten.
+ESP-IDF-/RTOS-/Arduino-/Adapter-Include, keine `ESP_PLATFORM`-/`ARDUINO`-/
+Kconfig-Praeprozessorverwendung und keine unautorisierte direkte IDF-
+Komponentenabhaengigkeit in `REQUIRES`/`PRIV_REQUIRES` enthalten. Seit
+Issue #73 prueft sie zusaetzlich, dass `lib/device_platform_esp_idf/` weder
+`fermentation_app` noch Test-Support referenziert, dass `main/` keinen
+Test-Support verwendet, und dass die `REQUIRES`/`PRIV_REQUIRES`-Eintraege
+von `lib/device_platform_esp_idf/CMakeLists.txt` und `main/CMakeLists.txt`
+getrennt nach oeffentlich/privat einer festen Allowlist entsprechen.
+
+Der Hardware-Smoke-Test aus Issue #73 (`idf.py -p <PORT> flash monitor`,
+Bootzusammenfassung, kontrollierter Heartbeat, keine Watchdog-Resets) ist
+ein verbindliches Merge-Gate fuer den zugehoerigen PR, aber kein Bestandteil
+dieses lokalen Buildgates.
 
 ## Geheimnis- und Lokalkonfigurationspruefung
 

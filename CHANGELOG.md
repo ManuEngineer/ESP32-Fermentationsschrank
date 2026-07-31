@@ -51,6 +51,21 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Added
 
+- Echter ESP-IDF-6.0.2-Laufzeitpfad fuer Issue #73: `main/app_main.cpp`
+  ersetzt den produktionslosen `#72`-Buildstub durch einen
+  `app_main()`-Composition-Root mit derselben Sicherheitsparitaet wie der
+  Arduino-Pfad (Profil `esp32_bringup`, `HARDWARE_UNVERIFIED`, reale
+  Aktoren deaktiviert, vollstaendige Bootzusammenfassung bei Erfolg und
+  Fehlschlag, sicherer Fehlerpfad ueber Rueckkehr aus `app_main()`). Neue,
+  minimale Adapterkomponente `lib/device_platform_esp_idf/`
+  (`EspTimerTimeSource`, `esp_timer_get_time()`) mit dem Composition Root
+  als realem Konsumenten; kein Zusatz-Task, kooperative Schleife mit
+  Ein-Tick-`vTaskDelay`-Yield, zeitgesteuertem 1000-ms-Heartbeat und genau
+  zwei Ressourcenmessungen. `scripts/check_architecture_boundaries.py`
+  unterscheidet jetzt oeffentliche/private `REQUIRES`-Allowlists je
+  Komponente und prueft zusaetzlich `lib/device_platform_esp_idf/` und
+  `main/`. Weiterhin nicht in CI eingebunden (`#74`); der Hardware-Smoke-
+  Test ist ein verbindliches Merge-Gate fuer den zugehoerigen PR.
 - Reproduzierbare, noch nicht CI-gebundene ESP-IDF-6.0.2-Buildbasis fuer
   Issue #72: `device_platform` und `fermentation_app` werden unveraendert
   ueber `EXTRA_COMPONENT_DIRS` als ESP-IDF-Komponenten registriert

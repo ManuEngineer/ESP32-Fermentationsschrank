@@ -26,11 +26,12 @@ PLATFORM_FORBIDDEN_ROLES = (
     "outsideFan",
 )
 
-# Issue #72: portable Quellwurzeln, die keinen ESP-IDF-/RTOS-Zugriff, keine
-# Arduino-Abhaengigkeit und keinen Zugriff auf die noch nicht angelegte
-# Adaptergrenze device_platform_esp_idf enthalten duerfen. Bewusst eng
-# gehalten (nicht main/ oder eine kuenftige device_platform_esp_idf/), siehe
-# docs/tasks/issue-72-implementation-plan.md, Abschnitt 9.
+# Issue #72/#73: portable Quellwurzeln, die keinen ESP-IDF-/RTOS-Zugriff,
+# keine Arduino-Abhaengigkeit und keinen Zugriff auf die Adaptergrenze
+# device_platform_esp_idf enthalten duerfen. Bewusst eng gehalten (nicht
+# main/ oder device_platform_esp_idf/ selbst, die beide ESP-IDF-Header
+# verwenden duerfen), siehe docs/tasks/issue-72-implementation-plan.md,
+# Abschnitt 9, und docs/tasks/issue-73-implementation-plan.md, Abschnitt 20.
 IDF_LEAK_PORTABLE_ROOTS = (
     "lib/device_platform/src",
     "lib/fermentation_app/src",
@@ -59,12 +60,32 @@ PREPROCESSOR_CONDITION_PATTERN = re.compile(r"^\s*#\s*(?:if|ifdef|ifndef|elif)\b
 PLATFORM_MACRO_PATTERN = re.compile(r"\b(?:ESP_PLATFORM|ARDUINO)\b")
 CONFIG_TOKEN_PATTERN = re.compile(r"\bCONFIG_[A-Za-z0-9_]+\b")
 
-# Issue #72: erlaubte idf_component_register()-REQUIRES/PRIV_REQUIRES-Namen
-# je Komponente. Jede andere direkte IDF-Komponentenabhaengigkeit dieser
-# beiden Dateien ist eine unerlaubte Vorwegnahme von device_platform_esp_idf.
+# Issue #72/#73: exakter idf_component_register()-REQUIRES/PRIV_REQUIRES-
+# Vertrag je Komponente, getrennt nach oeffentlich (REQUIRES) und privat
+# (PRIV_REQUIRES). Eine gemeinsame Menge wuerde z. B. ein faelschlich
+# oeffentliches "REQUIRES esp_timer" nicht von einem korrekten
+# "PRIV_REQUIRES esp_timer" unterscheiden. Geprueft werden beide Richtungen:
+# unerlaubte zusaetzliche Namen UND fehlende vorgeschriebene Direktabhaengig-
+# keiten (siehe add_component_requires_violations).
 COMPONENT_REQUIRES_ALLOWLIST = {
-    "lib/device_platform/CMakeLists.txt": frozenset(),
-    "lib/fermentation_app/CMakeLists.txt": frozenset({"device_platform"}),
+    "lib/device_platform/CMakeLists.txt": {
+        "public": frozenset(),
+        "private": frozenset(),
+    },
+    "lib/fermentation_app/CMakeLists.txt": {
+        "public": frozenset({"device_platform"}),
+        "private": frozenset(),
+    },
+    "lib/device_platform_esp_idf/CMakeLists.txt": {
+        "public": frozenset({"device_platform"}),
+        "private": frozenset({"esp_timer"}),
+    },
+    "main/CMakeLists.txt": {
+        "public": frozenset(),
+        "private": frozenset(
+            {"device_platform", "fermentation_app", "device_platform_esp_idf"}
+        ),
+    },
 }
 # Bekannte idf_component_register()-Schluesselwoerter: jedes davon beendet
 # eine gerade offene REQUIRES-/PRIV_REQUIRES-Liste. Bewusst nur diese kleine,
@@ -189,14 +210,16 @@ def extract_component_register_body(text: str) -> str | None:
     return text[start : index - 1]
 
 
-def collect_component_requires(body: str) -> tuple[set[str], list[str]]:
+def collect_component_requires(body: str) -> tuple[set[str], set[str], list[str]]:
     """Wertet REQUIRES/PRIV_REQUIRES innerhalb einer Registrierung aus.
 
-    Liefert (statisch pruefbare Komponentennamen, nicht statisch pruefbare
-    Tokens). Jedes andere bekannte Schluesselwort beendet die aktuell offene
-    Liste; Quotes bieten keinen Bypass.
+    Liefert (oeffentliche Namen aus REQUIRES, private Namen aus
+    PRIV_REQUIRES, nicht statisch pruefbare Tokens aus beiden). Jedes andere
+    bekannte Schluesselwort beendet die aktuell offene Liste; Quotes bieten
+    keinen Bypass.
     """
-    static_names: set[str] = set()
+    public_names: set[str] = set()
+    private_names: set[str] = set()
     dynamic_tokens: list[str] = []
     mode: str | None = None
     for match in CMAKE_TOKEN_PATTERN.finditer(body):
@@ -209,10 +232,10 @@ def collect_component_requires(body: str) -> tuple[set[str], list[str]]:
         if mode is None:
             continue
         if CMAKE_IDENTIFIER_PATTERN.match(value):
-            static_names.add(value)
+            (public_names if mode == "REQUIRES" else private_names).add(value)
         else:
             dynamic_tokens.append(value)
-    return static_names, dynamic_tokens
+    return public_names, private_names, dynamic_tokens
 
 
 def add_component_requires_violations(violations: list[str], root: Path) -> None:
@@ -227,11 +250,26 @@ def add_component_requires_violations(violations: list[str], root: Path) -> None
         body = extract_component_register_body(strip_cmake_line_comments(text))
         if body is None:
             continue
-        static_names, dynamic_tokens = collect_component_requires(body)
-        for name in sorted(static_names - allowed):
+        public_names, private_names, dynamic_tokens = collect_component_requires(body)
+        for name in sorted(public_names - allowed["public"]):
             violations.append(
-                f"{path}: unerlaubte direkte IDF-Komponentenabhaengigkeit "
-                f"in REQUIRES/PRIV_REQUIRES: {name!r}"
+                f"{path}: unerlaubte oeffentliche IDF-Komponentenabhaengigkeit "
+                f"in REQUIRES: {name!r}"
+            )
+        for name in sorted(allowed["public"] - public_names):
+            violations.append(
+                f"{path}: fehlende oeffentliche Direktabhaengigkeit "
+                f"in REQUIRES: {name!r}"
+            )
+        for name in sorted(private_names - allowed["private"]):
+            violations.append(
+                f"{path}: unerlaubte private IDF-Komponentenabhaengigkeit "
+                f"in PRIV_REQUIRES: {name!r}"
+            )
+        for name in sorted(allowed["private"] - private_names):
+            violations.append(
+                f"{path}: fehlende private Direktabhaengigkeit "
+                f"in PRIV_REQUIRES: {name!r}"
             )
         for token in dynamic_tokens:
             violations.append(
@@ -245,7 +283,9 @@ def check(root: Path) -> list[str]:
     platform = root / "lib" / "device_platform"
     test_support = root / "lib" / "device_platform_test_support"
     fermentation_app = root / "lib" / "fermentation_app"
+    platform_esp_idf = root / "lib" / "device_platform_esp_idf"
     main_cpp = root / "src" / "main.cpp"
+    main_dir = root / "main"
 
     add_reference_violations(
         violations,
@@ -265,6 +305,12 @@ def check(root: Path) -> list[str]:
         ("fermentation_app", "Arduino.h"),
         "Test-Support darf Anwendung oder reale Arduino-Hardware nicht verwenden",
     )
+    add_reference_violations(
+        violations,
+        platform_esp_idf,
+        ("fermentation_app", "device_platform_test_support"),
+        "ESP-IDF-Adapter darf Anwendung oder Test-Support nicht verwenden",
+    )
 
     if main_cpp.exists():
         add_reference_violations(
@@ -272,6 +318,13 @@ def check(root: Path) -> list[str]:
             main_cpp.parent,
             ("device_platform_test_support",),
             "Composition Root darf Test-Support nicht verwenden",
+        )
+    if main_dir.exists():
+        add_reference_violations(
+            violations,
+            main_dir,
+            ("device_platform_test_support",),
+            "ESP-IDF-Composition-Root darf Test-Support nicht verwenden",
         )
 
     src_dir = platform / "src"
@@ -324,6 +377,19 @@ def create_clean_fixture(root: Path) -> None:
         "lib/fermentation_app/CMakeLists.txt": (
             'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
             "REQUIRES device_platform)\n"
+        ),
+        "lib/device_platform_esp_idf/src/esp_timer_time_source.hpp": (
+            '#pragma once\n#include "time_source.hpp"\n'
+        ),
+        "lib/device_platform_esp_idf/CMakeLists.txt": (
+            'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
+            'REQUIRES device_platform PRIV_REQUIRES esp_timer)\n'
+        ),
+        "main/app_main.cpp": '#include "device_platform.hpp"\n',
+        "main/CMakeLists.txt": (
+            'idf_component_register(SRCS "app_main.cpp" '
+            'PRIV_INCLUDE_DIRS "../include" PRIV_REQUIRES '
+            "device_platform fermentation_app device_platform_esp_idf)\n"
         ),
     }
     for relative_path, content in files.items():
@@ -381,6 +447,47 @@ IDF_LEAK_VIOLATION_CASES = {
         "set(PORTABLE_DEPS device_platform)\n"
         'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
         "REQUIRES ${PORTABLE_DEPS})\n",
+    ),
+    # Issue #73: device_platform_esp_idf und main/ ergaenzt.
+    "esp_timer_faelschlich_oeffentlich": (
+        "lib/device_platform_esp_idf/CMakeLists.txt",
+        'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
+        "REQUIRES device_platform esp_timer)\n",
+    ),
+    "adapter_referenziert_fermentation_app": (
+        "lib/device_platform_esp_idf/src/bad.hpp",
+        '#include "fermentation_application.hpp"\n',
+    ),
+    "adapter_unerlaubte_private_idf_komponente": (
+        "lib/device_platform_esp_idf/CMakeLists.txt",
+        'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
+        "REQUIRES device_platform PRIV_REQUIRES esp_timer driver)\n",
+    ),
+    "main_referenziert_test_support": (
+        "main/app_main.cpp",
+        '#include "device_platform_test_support/mock_time_source.hpp"\n',
+    ),
+    "main_unerlaubte_hardwarekomponente": (
+        "main/CMakeLists.txt",
+        'idf_component_register(SRCS "app_main.cpp" '
+        'PRIV_INCLUDE_DIRS "../include" PRIV_REQUIRES '
+        "device_platform fermentation_app device_platform_esp_idf driver)\n",
+    ),
+    "main_faelschlich_oeffentliche_requires": (
+        "main/CMakeLists.txt",
+        'idf_component_register(SRCS "app_main.cpp" '
+        'PRIV_INCLUDE_DIRS "../include" REQUIRES device_platform '
+        "PRIV_REQUIRES fermentation_app device_platform_esp_idf)\n",
+    ),
+    "fehlende_oeffentliche_requires": (
+        "lib/fermentation_app/CMakeLists.txt",
+        'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src")\n',
+    ),
+    "fehlende_private_requires_in_main": (
+        "main/CMakeLists.txt",
+        'idf_component_register(SRCS "app_main.cpp" '
+        'PRIV_INCLUDE_DIRS "../include" '
+        "PRIV_REQUIRES fermentation_app device_platform_esp_idf)\n",
     ),
 }
 
