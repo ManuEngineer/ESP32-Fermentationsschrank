@@ -10,11 +10,14 @@ Diese Fassung überarbeitet den ursprünglichen Plan-Commit
 `05b987e3d2b375b82922990f718d0dc07c730a71` nach einem vollständigen Review
 (`PLAN_REVIEW: CHANGES_REQUIRED`) auf PR #79, die erste Überarbeitung
 (Plan-Commit `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754`) nach einer zweiten
-Reviewrunde (`PLAN_REVIEW: CHANGES_REQUIRED`) sowie die zweite
-Überarbeitung (Plan-Commit `6c8092755dde1fe0b39299abe94a0b3e02003beb`) nach
-einer dritten, finalen Reviewrunde (`PLAN_REVIEW: CHANGES_REQUIRED`). Alle
-drei vorherigen Plan-Commits bleiben in der Historie und sind überholt;
-diese Fassung ersetzt sie inhaltlich.
+Reviewrunde (`PLAN_REVIEW: CHANGES_REQUIRED`), die zweite Überarbeitung
+(Plan-Commit `6c8092755dde1fe0b39299abe94a0b3e02003beb`) nach einer
+dritten Reviewrunde (`PLAN_REVIEW: CHANGES_REQUIRED`) sowie die dritte
+Überarbeitung (Plan-Commit `806abbfd7400412285c1f83e94d80cc6c5a7bf31`)
+nach einer vierten, abschliessenden Reviewrunde
+(`PLAN_REVIEW: CHANGES_REQUIRED`). Alle vier vorherigen Plan-Commits
+bleiben in der Historie und sind überholt; diese Fassung ersetzt sie
+inhaltlich.
 
 ## 1. Ziel
 
@@ -90,12 +93,27 @@ Die ESP-IDF-6.0.2-Migration abschliessen:
   Artefakt-Aufbewahrung;
 - **Reviewauftrag "PR #79 – finale gezielte Plan-Korrekturen"**
   (`PLAN_REVIEW: CHANGES_REQUIRED` auf Plan-Commit
-  `6c8092755dde1fe0b39299abe94a0b3e02003beb`): verbindliche Grundlage
-  dieser Fassung, insbesondere fuer den zweiphasigen Uebergangsvertrag von
-  `scripts/check_build_profiles.py`, die Unveraenderlichkeit gepinnter
-  Action-SHAs, den dokumentierten Lizenzkonflikt der
-  ESP-IDF-Installations-Action, den vollstaendigen Textartefakt-Scan und
-  den exakten Zeitpunkt der Hardware-Smoke-Tests;
+  `6c8092755dde1fe0b39299abe94a0b3e02003beb`): verbindliche Grundlage der
+  dritten Überarbeitung, insbesondere fuer den zweiphasigen
+  Uebergangsvertrag von `scripts/check_build_profiles.py`, die
+  Unveraenderlichkeit gepinnter Action-SHAs, den dokumentierten
+  Lizenzkonflikt der ESP-IDF-Installations-Action, den vollstaendigen
+  Textartefakt-Scan und den exakten Zeitpunkt der Hardware-Smoke-Tests;
+- **Reviewauftrag "PR #79 – abschliessende Korrektur vor Planfreigabe"**
+  (`PLAN_REVIEW: CHANGES_REQUIRED` auf Plan-Commit
+  `806abbfd7400412285c1f83e94d80cc6c5a7bf31`): verbindliche Grundlage
+  dieser Fassung. Deckte insbesondere einen sachlichen Fehler auf: die
+  vorherige Fassung begruendete die Wahl von `eim-version: "v0.1.7"` mit
+  dem Status von `espressif/idf-im-cli` (archiviert), obwohl der
+  tatsaechliche Code der gepinnten Action seine EIM-Binaries live
+  verifiziert aus `espressif/idf-im-ui` laedt — einem **aktiven**
+  Repository mit haeufigen 2026er-Releases. Fuehrte zur vollstaendigen
+  Abkehr von `espressif/install-esp-idf-action` zugunsten einer direkten
+  offiziellen ESP-IDF-Installation (Abschnitt 7.1), zum zweiphasigen
+  Uebergangsvertrag fuer `scripts/build_report.py` (Abschnitt 7.7.5), zur
+  Bereinigung einer sprachlich widerspruechlichen Hardwaretest-Formulierung
+  (Abschnitt 7.12), zur vollstaendigen Liste ueberholter Plan-Commits und
+  zu einer praeziseren Beschreibung der `check_secrets.py`-Erweiterung;
 - `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` und `docs/DECISIONS.md`
   (ADR-001 PlatformIO/Arduino, ADR-008 4-MB-Budget, ADR-012 Bring-up-Profil,
   ADR-013 Plattformtrennung);
@@ -263,8 +281,10 @@ Nur in der spaeteren Umsetzungsphase, nach Planfreigabe, zu aendern:
 - `src/main.cpp` (**nur** Entfernung des `#if defined(ARDUINO)`-Zweigs;
   `startApplication()` und der native `#else`-Zweig bleiben unveraendert
   erhalten, siehe Abschnitt 7.5.1)
-- `scripts/build_report.py` (Erweiterung um ESP-IDF-Groessendaten aus
-  `idf.py size --format json2`)
+- `scripts/build_report.py` (Commit 3: Parallelbericht um ESP-IDF-
+  Groessendaten aus `idf.py size --format json2` erweitert, Arduino-
+  Messungen bleiben; Commit 5: auf `native` + ESP-IDF-only umgestellt, im
+  selben Skript, Abschnitt 7.7.5)
 - `scripts/check_secrets.py` (Erweiterung um optionalen Scan-Modus fuer
   alle hochgeladenen, nicht getrackten Textartefakte, Abschnitt 7.7.4)
 - `scripts/check_platformio_config.py` (bleibt in Commits 1–4 unveraendert
@@ -308,8 +328,10 @@ angefasst (Abschnitt 7.13.3).
   Abschnitt 8) darf erst erfolgen, nachdem exakt auf dem Head von Commit 4
   ein vollstaendiger GitHub-Actions-Lauf bestanden hat mit: beide
   ESP-IDF-Profile gruen, **der alte Arduino-Pfad unveraendert weiterhin
-  gruen** (Parallelvertrag aus Abschnitt 7.5.2, Phase 1), native Tests
-  gruen, Ressourcen-, Architektur-, Format-, Static-Analysis-, Secret- und
+  gruen** (Parallelvertrag aus Abschnitt 7.5.2, Phase 1), der
+  Parallel-Ressourcenbericht mit beiden Arduino- und beiden ESP-IDF-
+  Messungen gruen (Abschnitt 7.7.5, Phase 1), native Tests gruen,
+  Ressourcen-, Architektur-, Format-, Static-Analysis-, Secret- und
   Quality-Gate-Selftests gruen. Kein gleichzeitiger Austausch von
   CI-Einfuehrung und Arduino-Entfernung in einem Commit.
 - **Gate 3 — Hardware-Smoke-Test-Gate:** Nach Commit 5 (Arduino-Entfernung)
@@ -327,128 +349,135 @@ angefasst (Abschnitt 7.13.3).
 
 ### 7.1 Bereitstellung der ESP-IDF-Toolchain in CI
 
-**Reviewentscheid (verbindlich, ersetzt die urspruengliche Empfehlung
-"manuelle native Installation"):** primaere Loesung ist die offizielle
-Espressif-Action
+**Verbindliche Neuentscheidung aus der vierten Reviewrunde (ersetzt die
+Empfehlung "espressif/install-esp-idf-action" aus der ersten und zweiten
+Reviewrunde vollstaendig):** primaere und einzige Loesung ist die
+**direkte offizielle ESP-IDF-Installation** (Git-Checkout des exakten
+Commits plus offizielle `install.sh`/`export.sh`-Skripte aus dem
+ESP-IDF-Repository selbst). `espressif/install-esp-idf-action` und der
+davon verwendete ESP-IDF Installation Manager (EIM) werden im aktiven
+CI-Pfad von #74 **nicht** eingesetzt.
+
+**Befund, der zu dieser Neuentscheidung fuehrt (live verifiziert am
+Code des zuvor gepinnten Commits
+`8fc05d1470d5591417e7a3707a1f2bec178db4ae`):** Die vorherige Planfassung
+begruendete die Wahl von `eim-version: "v0.1.7"` damit, dass
+`espressif/idf-im-cli` archiviert und `v0.1.7` dessen letzte Version sei.
+Diese Begruendung war **sachlich falsch**: Der tatsaechliche
+Action-Code (`index.js`) erzeugt seine Download-URL aus
+`https://github.com/espressif/idf-im-ui/releases/download/<version>/...`
+— die EIM-Binaries stammen aus `espressif/idf-im-ui`, nicht aus dem
+archivierten `espressif/idf-im-cli`. `espressif/idf-im-ui` ist
+**nicht archiviert** (`archived: false`, verifiziert), `pushed_at` liegt
+zum Recherchezeitpunkt dieser Planungsphase auf dem Tag der Recherche
+selbst, und die letzte Release-Version zu diesem Zeitpunkt ist `v0.17.3`
+— nicht `v0.1.7`. Der zuvor gepinnte Wert `eim-version: "v0.1.7"` bezog
+sich damit auf die Versionsnummerierung des falschen, archivierten
+Repositorys und haette in der tatsaechlich verwendeten Aufloesung
+(`idf-im-ui`) vermutlich gar keine gueltige Version bezeichnet. Die
+Kombination aus Action-Commit, diesem `eim-version`-Wert, ESP-IDF `v6.0.2`
+und `ubuntu-24.04` war zudem im Plan nie tatsaechlich als funktionierende
+Kette nachgewiesen, sondern nur behauptet. Diese Korrektur uebernimmt
+damit keinen weiteren, in dieser Planungsphase noch nicht verifizierten
+Versionswert fuer `idf-im-ui`, sondern verzichtet stattdessen ganz auf die
+Action und den davon abhaengigen EIM-Installationspfad.
+
+**Verbindliche Struktur** (Repository, Tag und Commit exakt, kein
+Platzhalter):
 
 ```text
-espressif/install-esp-idf-action
+Repository: espressif/esp-idf
+Tag: v6.0.2
+Commit: 7101770dc6db2667b3c477cc31365dd1acd6db4e
 ```
 
-**Befund aus der zweiten Reviewrunde (live verifiziert):** Das Repository
-`espressif/install-esp-idf-action` hat **keine** semver-Release-Tags; als
-einzige Referenz existiert der bewegliche Branch `v1` (aktueller HEAD zum
-Recherchezeitpunkt dieser Planungsphase:
-`8fc05d1470d5591417e7a3707a1f2bec178db4ae`, Commit vom 2025-09-18, Titel
-"Fixed user name (#10) * enabled use of fixed EIM version"). Die Action
-delegiert die eigentliche Installation an den **ESP-IDF Installation
-Manager (EIM)** (`espressif/idf-im-cli`); ihr Input `eim-version` ist
-optional und veraltet ohne Angabe stillschweigend auf die jeweils neueste
-EIM-Version — der Installationspfad waere damit trotz gepinntem
-Action-Commit und gepinntem ESP-IDF-Tag weiterhin zeitabhaengig.
-Zusaetzlicher Befund: `idf-im-cli` ist als Repository seit 25.02.2026
-archiviert (read-only); die letzte veroeffentlichte EIM-Version ist
-`v0.1.7` (12.02.2025) und bleibt damit die einzig sinnvolle, dauerhaft
-stabile Pin-Wahl (keine kuenftigen EIM-Versionen sind zu erwarten).
+Vorgesehener Ablauf, sinngemaess (exakte, von ESP-IDF 6.0.2 tatsaechlich
+unterstuetzte Syntax wird vor dem Implementierungscommit — Commit 2 —
+anhand der offiziellen ESP-IDF-Dokumentation und der bereits vorhandenen
+lokalen Installation aus #72/#73 read-only verifiziert; dies ist eine
+technische Detailkorrektur ohne Vertrags-/Safetywirkung, keine materielle
+Planabweichung, solange Repository, Tag und Commit unveraendert bleiben):
 
-**Verbindlich festgelegte Konfiguration** (exakte Werte, kein Platzhalter):
+```bash
+export IDF_PATH="$RUNNER_TEMP/esp-idf-v6.0.2"
+export IDF_TOOLS_PATH="$RUNNER_TEMP/espressif"
 
-```yaml
-uses: espressif/install-esp-idf-action@8fc05d1470d5591417e7a3707a1f2bec178db4ae  # v1, Stand 2025-09-18
-with:
-  version: "v6.0.2"
-  eim-version: "v0.1.7"  # letzte veroeffentlichte EIM-Version; idf-im-cli seit 25.02.2026 archiviert
+git clone --filter=blob:none --no-checkout \
+  https://github.com/espressif/esp-idf.git \
+  "$IDF_PATH"
+
+git -C "$IDF_PATH" fetch --depth 1 origin \
+  7101770dc6db2667b3c477cc31365dd1acd6db4e
+
+git -C "$IDF_PATH" checkout --detach \
+  7101770dc6db2667b3c477cc31365dd1acd6db4e
+
+git -C "$IDF_PATH" submodule update --init --recursive
+
+git -C "$IDF_PATH" describe --tags --exact-match
+git -C "$IDF_PATH" rev-parse HEAD
+git -C "$IDF_PATH" status --short
+
+"$IDF_PATH/install.sh" esp32
+. "$IDF_PATH/export.sh"
+idf.py --version
 ```
 
-**Verbindlichkeit des Pins (Korrektur aus dritter Reviewrunde):** Die hier
-genannten SHAs (`8fc05d1470d5591417e7a3707a1f2bec178db4ae` fuer die Action,
-sowie die in Abschnitt 7.11 gelisteten SHAs fuer `actions/checkout`,
-`actions/setup-python`, `actions/upload-artifact`) sind mit der
-Planfreigabe verbindlich und werden in der Umsetzung **unveraendert**
-verwendet. Ein anderer Commit enthaelt anderen ausfuehrbaren Drittcode;
-"funktionale Gleichwertigkeit" laesst sich nicht allein am Branch- oder
-Tag-Namen ablesen und wird daher nicht als Grund fuer eine stille
-Aktualisierung akzeptiert. Die vorherige Planfassung erlaubte einen
-solchen stillen Wechsel als "technische Detailkorrektur" — das ist
-ersatzlos gestrichen.
+**Reproduzierbarkeitsvertrag:** Der CI-Schritt bricht ab, wenn
 
-Die Umsetzung **darf**:
+- der ausgecheckte Commit nicht exakt
+  `7101770dc6db2667b3c477cc31365dd1acd6db4e` ist;
+- der Tag nicht exakt `v6.0.2` ist;
+- der ESP-IDF-Arbeitsbaum nicht sauber ist (`git status --short`
+  nicht leer);
+- `idf.py --version` nicht ESP-IDF 6.0.2 meldet;
+- benoetigte Submodule fehlen;
+- die offizielle Installation (`install.sh`) fehlschlaegt.
 
-- pruefen, dass die gepinnten Commits weiterhin im jeweiligen Repository
-  existieren und erreichbar sind;
-- Herkunft und Repository-Zugehoerigkeit der Commits kontrollieren;
-- bekannte, oeffentlich dokumentierte Security-Hinweise zu den gepinnten
-  Commits pruefen und dokumentieren;
-- die Kompatibilitaet von Action-Commit, `eim-version: "v0.1.7"` und
-  ESP-IDF `v6.0.2` auf dem GitHub-hosted Runner `ubuntu-24.04` (Abschnitt
-  7.11) zu Beginn der Umsetzung (Commit 2) verifizieren, **ohne** dabei den
-  gepinnten SHA zu aendern.
+Keine automatische Aktualisierung; keine Installation ueber einen
+gleitenden Branch oder ein gleitendes Release. Dieser Vertrag ersetzt den
+bisherigen `IDF_VER`-CMake-Guard nicht, sondern ergaenzt ihn um eine
+fruehere, CI-seitige Herkunftspruefung.
 
-Die Umsetzung **darf nicht**:
+**Actions:** Verbindlich bleiben ausschliesslich die folgenden drei,
+bereits in Abschnitt 7.11 gelisteten Pins (unveraendert, weiterhin ohne
+stillen Wechsel):
 
-- automatisch auf einen neueren `v1`-Branch- oder Tag-HEAD wechseln;
-- einen anderen Action-Commit als technische Detailkorrektur behandeln;
-- die hier genannten SHAs ohne neue Ownerfreigabe ersetzen.
+```text
+actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+```
 
-Weitere Bedingungen:
+Der Pin `espressif/install-esp-idf-action@8fc05d1470d5591417e7a3707a1f2bec178db4ae`
+ist **vollstaendig entfernt** — aus der aktiven Loesung, der Action-Liste
+in Abschnitt 7.11 und den Abnahmekriterien (Abschnitt 16).
 
-- nach der Installation zusaetzliche Pruefung des tatsaechlich
-  resultierenden ESP-IDF-Commits (nicht nur des Tags), Sollwert
-  `7101770dc6db2667b3c477cc31365dd1acd6db4e` (siehe Abschnitt 7.11);
-- Lizenz von `espressif/install-esp-idf-action` **nicht widerspruchsfrei**
-  (`LICENSE_METADATA_CONFLICT`, siehe unten) sowie die transitive Nutzung
-  von EIM (`espressif/idf-im-cli`, archiviert, letzte Version `v0.1.7`,
-  Root-Lizenz Apache-2.0) werden im PR und im Supply-Chain-Teil von
-  Abschnitt 7.11 dokumentiert;
-- minimale Workflow-Permissions bleiben unveraendert (`contents: read`);
-- kein Default `latest` fuer `version` oder `eim-version`, kein gleitender
-  Tag;
-- keine zusaetzliche inoffizielle Wrapper-Action.
+**Lizenzdokumentation der verworfenen Variante (bleibt als Begruendung
+erhalten, ist aber kein aktiver Abhaengigkeits- oder Lieferkettenvertrag
+des Projekts mehr):** Der in der dritten Reviewrunde festgestellte
+`LICENSE_METADATA_CONFLICT` von `espressif/install-esp-idf-action`
+(Root-`LICENSE`: Apache-2.0; `README.md`/`package.json`: MIT; gebuendelte
+MIT-Drittanbieter-Notices in `dist/licenses.txt`) bleibt im Plan als
+zusaetzliche, unterstuetzende Begruendung fuer die Nichtverwendung
+dokumentiert — ausschlaggebend fuer die Neuentscheidung ist jedoch der
+oben beschriebene sachliche Fehler zur EIM-Herkunft, nicht der
+Lizenzkonflikt allein.
 
-**Lizenzstatus `espressif/install-esp-idf-action` — `LICENSE_METADATA_CONFLICT`
-(neuer Befund aus dritter Reviewrunde, live verifiziert am exakt gepinnten
-Commit `8fc05d1470d5591417e7a3707a1f2bec178db4ae`):**
+**Aktive CI-Toolchain-Lizenz:** ESP-IDF `v6.0.2`, mit der Lizenz und den
+Third-Party-Hinweisen des offiziellen `espressif/esp-idf`-Repositories
+(bereits Grundlage von #72/#73, keine neue Lizenzpruefung noetig).
 
-- Root-`LICENSE`: Apache License 2.0 (voller Lizenztext, verifiziert);
-- `package.json`: `"license": "MIT"` (verifiziert);
-- `README.md`: "This project is licensed under the MIT License - see the
-  LICENSE file for details." — behauptet MIT, verweist aber auf die
-  Apache-2.0-`LICENSE`-Datei (in sich widerspruechlich, verifiziert);
-- `dist/licenses.txt`: enthaelt separate MIT- und weitere Notices der
-  bebuendelten Node-Laufzeitabhaengigkeiten (`@actions/core`,
-  `@actions/exec` und weitere, verifiziert vorhanden).
-
-Der Plan behauptet **keinen** widerspruchsfreien Lizenzstatus. Stattdessen
-gilt: zwei permissive, aber einander widersprechende Eigenangaben
-(Apache-2.0 vs. MIT) plus gebuendelte MIT-Drittnotices; Verwendung
-ausschliesslich als CI-Werkzeug, nicht als Bestandteil der ausgelieferten
-Firmware. Root-Lizenz und gebuendelte Notices werden im
-Implementierungs-PR nachvollziehbar referenziert; der Widerspruch wird
-dokumentiert, nicht rechtlich aufgeloest oder verschwiegen. Angesichts
-zweier permissiver Angaben und der reinen CI-Verwendung ist dies kein
-automatischer Implementierungsblocker.
-
-Fuer EIM zusaetzlich dokumentiert: `espressif/idf-im-cli` `v0.1.7`,
-Root-Lizenz Apache-2.0 (verifiziert), Repository archiviert
-(`archived: true`, verifiziert).
-
-**Fallback-Regel, jetzt vollstaendig fuer jeden Grund einer Pin-Aenderung**
-(nicht nur technisches Versagen): Stellt sich in der Umsetzung heraus, dass
-einer der in Abschnitt 7.1 oder 7.11 gepinnten SHAs nicht mehr verwendet
-werden soll — sei es wegen eines Security-Fixes, Inkompatibilitaet,
-Entfernung des Commits, einer neuen offiziellen Empfehlung oder einer
-technischen Funktionsstoerung (z. B. die Action stellt ESP-IDF 6.0.2 nicht
-reproduzierbar auf `ubuntu-24.04` bereit) —, gilt derselbe Ablauf:
-
-1. Implementierung anhalten.
-2. Plan-Datei aktualisieren.
-3. neuen Plan-Commit erstellen.
-4. neuen SHA, Diff zum vorherigen Commit (soweit einsehbar), Herkunft,
-   Lizenz und konkrete Begruendung fuer den Wechsel dokumentieren.
-5. erneut auf einen commitgebundenen `PLAN APPROVED`-Ownerkommentar warten.
-
-Kein eigenmaechtiger Wechsel auf eine andere Installationsvariante oder
-einen anderen Commit ausserhalb dieses Ablaufs.
+**Fallback-Regel** (uebernommen, jetzt bezogen auf die direkte
+Installation statt auf einen Action-Pin): Stellt sich in der Umsetzung
+heraus, dass der exakte Commit `7101770dc6db2667b3c477cc31365dd1acd6db4e`
+auf `ubuntu-24.04` nicht reproduzierbar installierbar ist oder die
+offiziellen Installationsskripte in ihrer zu verifizierenden Syntax nicht
+wie hier skizziert funktionieren, haelt der Agent an, aktualisiert die
+Plan-Datei, erstellt einen neuen Plan-Commit mit Begruendung und wartet
+erneut auf `PLAN APPROVED`. Kein eigenmaechtiger Ruecksprung auf
+`espressif/install-esp-idf-action` oder eine andere Installationsvariante
+ausserhalb dieses Ablaufs.
 
 **Caching:** Fuer #74 wird **kein** Toolchain-Cache eingefuehrt (KISS: zuerst
 ein korrekter, reproduzierbarer Clean-Build; keine versteckte Cache-Drift;
@@ -751,7 +780,10 @@ ESP-IDF-Zweig erweitert (gleiche Datei, gleiche Berichtsstruktur, kein
 Parallelskript — DRY); keine eigene Reimplementierung der ESP-IDF-
 Groessenberechnung, ausschliesslich Parsing der offiziellen JSON2-Ausgabe.
 Fehlt ein Profil oder Artefakt, fuehrt das zu einem harten Fehler, nicht zu
-einer stillen Zeile "kein Groessenartefakt gefunden".
+einer stillen Zeile "kein Groessenartefakt gefunden". Diese Erweiterung ist
+Phase 1 eines zweiphasigen Uebergangs desselben Skripts — siehe Abschnitt
+7.7.5 fuer den vollstaendigen Vertrag inklusive der Phase-2-Umstellung in
+Commit 5.
 
 Mindestens erfasst je Profil: App-BIN, ELF, Bootloader-BIN,
 Partitionstabellen-BIN, gesamter Flashverbrauch laut `size.json`,
@@ -785,8 +817,10 @@ ausdruecklich als zusaetzlichen, im Dateiumfang und Commit-Schnitt separat
 zu benennenden Punkt.
 
 Keine lokalen Secrets oder privaten absoluten Pfade in Artefaktmanifesten —
-siehe Abschnitt 7.7.4 fuer die tatsaechliche Pruefung (nicht durch das
-unveraenderte `scripts/check_secrets.py` allein abgedeckt).
+siehe Abschnitt 7.7.4 fuer die tatsaechliche Pruefung durch den dort
+beschriebenen, neuen Scan-Modus von `scripts/check_secrets.py` (die
+bestehende Pruefung getrackter Dateien allein deckt generierte
+Artefaktdateien nicht ab).
 
 #### 7.7.3 Schwellenwerte
 
@@ -874,6 +908,65 @@ Neue Selftest-Faelle in `scripts/selftest_quality_gates.py`:
   weiterhin erkannt;
 - eine fehlende, aber erwartete Textartefaktdatei fuehrt zu einem Fehler;
 - eine Binärdatei wird nicht als Text gescannt.
+
+#### 7.7.5 Uebergangsvertrag fuer `scripts/build_report.py` (neuer Punkt
+aus vierter Reviewrunde)
+
+**Befund:** `scripts/build_report.py` hat aktuell
+`DEFAULT_ENVIRONMENTS = ("native", "esp32_bringup", "esp32_release")`
+(live verifiziert) und baut diese drei Profile ausschliesslich als
+PlatformIO-Umgebungen. Abschnitt 7.7.1 erweitert das Skript in Commit 3 um
+die ESP-IDF-JSON2-Auswertung, ohne dass die vorherige Planfassung fuer
+Commit 5 (Entfernung von `[env:esp32_bringup]`/`[env:esp32_release]` aus
+`platformio.ini`, Abschnitt 7.5) eine notwendige Anpassung dieses Skripts
+nannte. Ohne eine solche Anpassung wuerde der finale CI-Pfad weiterhin
+versuchen, die beiden entfernten PlatformIO-Environments zu bauen, und
+zwangslaeufig fehlschlagen.
+
+**Verbindliche Korrektur:** Dasselbe `scripts/build_report.py` durchlaeuft
+denselben zweiphasigen Uebergang wie `scripts/check_build_profiles.py`
+(Abschnitt 7.5.2) — kein Parallelskript, kein zweites Werkzeug.
+
+**Phase 1 — Commit 3 (Parallelbericht):** Das Skript erzeugt einen
+gemeinsamen Bericht mit klar unterschiedenen Ueberschriften fuer Arduino-
+und ESP-IDF-Messungen, damit beide Wertereihen nicht unter derselben
+Bezeichnung vermischt werden, z. B.:
+
+```text
+Arduino/PlatformIO esp32_bringup   (letzter Arduino-Vergleichspfad)
+Arduino/PlatformIO esp32_release   (letzter Arduino-Vergleichspfad)
+ESP-IDF esp32_bringup              (JSON2-basierte IDF-Messung)
+ESP-IDF esp32_release              (JSON2-basierte IDF-Messung)
+Native Host
+```
+
+Der letzte Arduino-Ressourcenvergleichsstand (Abschnitt 4.4, Abschnitt
+7.5.3) bleibt damit im Bericht selbst nachvollziehbar dokumentiert, nicht
+nur im Fliesstext des Plans.
+
+**Phase 2 — Commit 5 (finaler Zustand):** Im selben Commit, der den
+Arduino-Pfad entfernt, wird `scripts/build_report.py` umgestellt:
+
+- PlatformIO-Teil baut nur noch `native`;
+- ESP-IDF-Teil liest weiterhin `build/esp32_bringup/size.json` und
+  `build/esp32_release/size.json` (unveraendert gegenueber Phase 1);
+- das Skript ruft **keine** entfernten PlatformIO-Environments mehr auf;
+- `DEFAULT_ENVIRONMENTS`, CLI-Hilfe und zugehoerige Tests werden auf den
+  finalen Zustand angepasst.
+
+**Selftests:** Parallelbericht (Phase 1) enthaelt beide Arduino- und beide
+ESP-IDF-Messungen unter eindeutig unterschiedenen Ueberschriften; finaler
+Bericht (Phase 2) ruft ausschliesslich PlatformIO `native` auf und enthaelt
+weiterhin beide ESP-IDF-Profile; ein fehlendes ESP-IDF-Profil fuehrt in
+beiden Phasen zu einem Fehler; ein entferntes Arduino-Environment wird im
+finalen Modus nicht mehr aufgerufen; Arduino- und ESP-IDF-Werte werden zu
+keinem Zeitpunkt unter derselben Ueberschrift vermischt.
+
+**Commit-Zuordnung:** Commit 3 fuehrt die Parallelbericht-Erweiterung ein;
+Commit 5 stellt im selben Commit, der den Arduino-Pfad entfernt, auf den
+finalen Zustand um (Abschnitt 8). Gate 2
+(`PRE_ARDUINO_REMOVAL_CI: PASS`, Abschnitt 6) verlangt damit implizit auch
+einen gruenen Parallelbericht auf dem Head von Commit 4.
 
 ### 7.8 Format und Static Analysis
 
@@ -968,12 +1061,17 @@ Patch-Version.
   actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803          # v6
   actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1      # v6
   actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
-  espressif/install-esp-idf-action@8fc05d1470d5591417e7a3707a1f2bec178db4ae  # v1, siehe Abschnitt 7.1
   ```
 
-  Die Umsetzung darf lediglich pruefen, dass diese Commits weiterhin
-  existieren, ihre Herkunft kontrollieren und bekannte Security-Hinweise
-  dazu dokumentieren — nicht sie ersetzen.
+  **Korrektur aus vierter Reviewrunde:** `espressif/install-esp-idf-action`
+  ist keine `uses:`-Action mehr in diesem Plan (Abschnitt 7.1); die
+  ESP-IDF-Bereitstellung erfolgt direkt per `git clone`/`install.sh`, nicht
+  ueber eine gepinnte Marketplace-Action. Nur die drei oben genannten
+  Actions sind noch Teil der Loesung.
+
+  Die Umsetzung darf bei diesen drei Actions lediglich pruefen, dass die
+  Commits weiterhin existieren, ihre Herkunft kontrollieren und bekannte
+  Security-Hinweise dazu dokumentieren — nicht sie ersetzen.
 
 - `platformio==6.1.19` bleibt exakt gepinnt (unveraendert);
 - `clang-format-18`/`clang-tidy-18` bleiben auf Major 18 fixiert; die
@@ -981,7 +1079,8 @@ Patch-Version.
   Artefaktmanifest (Abschnitt 7.7.2) erfasst, ohne eine nicht garantierte
   Patch-Fixierung zu behaupten;
 - ESP-IDF-Herkunft wird zwingend geprueft: Tag `v6.0.2`, Commit
-  `7101770dc6db2667b3c477cc31365dd1acd6db4e`, sauberer Arbeitsbaum. Der
+  `7101770dc6db2667b3c477cc31365dd1acd6db4e`, sauberer Arbeitsbaum, ueber
+  den in Abschnitt 7.1 beschriebenen Reproduzierbarkeitsvertrag. Der
   bestehende CMake-Guard auf `IDF_VER == v6.0.2` bleibt zusaetzliche
   Verteidigung, ist aber nicht der einzige Herkunftsnachweis.
 
@@ -995,14 +1094,14 @@ nicht, dass auf realer Hardware das beabsichtigte Profil und die richtige
 Aktorpolicy tatsaechlich starten. Ein Hardware-Gate ist daher **Pflicht**,
 nicht optional.
 
-**Zeitpunkt (Korrektur aus dritter Reviewrunde, ersetzt die vormals
-weichere Formulierung "nach Commit 5 beziehungsweise auf dem finalen
-Implementierungs-Head"):** Beide Hardware-Smoke-Tests werden
+**Zeitpunkt (Korrektur aus dritter Reviewrunde, sprachlich widerspruchsfrei
+gemacht in vierter Reviewrunde):** Beide Hardware-Smoke-Tests werden
 **ausschliesslich auf dem exakten finalen Implementierungs-Head nach
-Commit 6** durchgefuehrt — nicht bereits auf Commit 5 und nicht ein
-weiteres Mal wiederholt, falls Commit 6 nach einem ersten Testlauf noch
-Aenderungen erhaelt (in diesem Fall wird der Test auf dem dann neuen
-finalen Head erneut ausgefuehrt). Je mindestens 35 Sekunden:
+Commit 6** durchgefuehrt — nicht bereits auf Commit 5. Aendert sich der
+Head nach einem Testlauf (z. B. durch einen weiteren Commit), verlieren
+beide bisherigen Hardwaretest-Nachweise ihre Gueltigkeit; Bring-up- und
+Release-Smoke-Test muessen dann auf dem neuen finalen Head vollstaendig
+wiederholt werden. Je mindestens 35 Sekunden:
 
 **Bring-up-Smoke-Test:**
 
@@ -1185,12 +1284,16 @@ Reihenfolge:
    bestehende Arduino-Envs, Abschnitt 7.5.2 Phase 1) samt Selftests. Beide
    ESP-IDF-Profile lokal gruen. Arduino-Produktionsprofile und
    `scripts/check_platformio_config.py` bleiben unveraendert bestehen.
-2. **ESP-IDF-CI additiv einfuehren:** gepinnte ESP-IDF-Installation
-   (Abschnitt 7.1), beide Profile ueber den kanonischen Buildtreiber in
-   `build.yml`; bestehender Arduino-Produktionspfad bleibt bestehen; CI auf
-   exakt diesem Commit vollstaendig gruen.
+2. **ESP-IDF-CI additiv einfuehren:** direkte offizielle ESP-IDF-
+   Installation per exaktem Commit-Checkout und `install.sh`/`export.sh`
+   (Abschnitt 7.1, **kein** `espressif/install-esp-idf-action`), beide
+   Profile ueber den kanonischen Buildtreiber in `build.yml`; bestehender
+   Arduino-Produktionspfad bleibt bestehen; CI auf exakt diesem Commit
+   vollstaendig gruen.
 3. **Ressourcenbericht und Artefakte:** `idf.py size --format json2`-
-   Auswertung, Erweiterung von `scripts/build_report.py`,
+   Auswertung, Erweiterung von `scripts/build_report.py` um den
+   **Parallelbericht** (Arduino- und ESP-IDF-Messungen unter eindeutig
+   unterschiedenen Ueberschriften, Abschnitt 7.7.5 Phase 1),
    profilspezifische CI-Artefakte, Erweiterung von
    `scripts/check_secrets.py` um den Scan-Modus fuer generierte
    Artefakttexte samt neuer Selftests (Abschnitt 7.7, insbesondere 7.7.4).
@@ -1210,8 +1313,10 @@ Reihenfolge:
    `scripts/check_build_profiles.py` im selben Commit vom
    Parallel-Migrationsvertrag auf den finalen ESP-IDF-only-Vertrag
    umgestellt (kein neues Skript, kein Bypass-Flag, Abschnitt 7.5.2 Phase
-   2); `.github/workflows/build.yml`-Schritt „PlatformIO installieren“ auf
-   ausschliesslich `native` reduziert.
+   2); `scripts/build_report.py` im selben Commit vom Parallelbericht auf
+   den finalen `native` + ESP-IDF-only-Bericht umgestellt (Abschnitt 7.7.5
+   Phase 2); `.github/workflows/build.yml`-Schritt „PlatformIO
+   installieren“ auf ausschliesslich `native` reduziert.
 6. **Upgradevertrag und Abschlussdokumentation:**
    `docs/ESP_IDF_UPGRADE_CONTRACT.md` (neu), `docs/THIRD_PARTY_COMPONENTS.md`
    (in-place aktualisiert, kein neues Dokument, Abschnitt 7.13.3),
@@ -1246,30 +1351,39 @@ dritte Review hat zusaetzlich den zweiphasigen Uebergangsvertrag fuer
 der gepinnten Action-SHAs (Abschnitte 7.1, 7.11), den dokumentierten
 Lizenzkonflikt der Installations-Action (Abschnitt 7.1), den vollstaendigen
 Textartefakt-Scan (Abschnitt 7.7.4) und den exakten Zeitpunkt der
-Hardware-Smoke-Tests (Abschnitt 7.12) verbindlich entschieden. Diese Punkte
-entfallen als offene Punkte. Es verbleibt:
+Hardware-Smoke-Tests (Abschnitt 7.12) verbindlich entschieden. Das vierte,
+abschliessende Review hat zusaetzlich die vollstaendige Abkehr von
+`espressif/install-esp-idf-action` zugunsten einer direkten offiziellen
+ESP-IDF-Installation (Abschnitt 7.1, siehe dortiger Befund zur falschen
+`idf-im-cli`/`idf-im-ui`-Zuordnung), den zweiphasigen Uebergangsvertrag fuer
+`scripts/build_report.py` (Abschnitt 7.7.5), die widerspruchsfreie
+Hardwaretest-Formulierung (Abschnitt 7.12) und die vollstaendige Liste
+ueberholter Plan-Commits verbindlich entschieden. Diese Punkte entfallen
+als offene Punkte. Es verbleibt:
 
 1. Byte-Budget-Schwellenwerte bleiben `TBD_IMPLEMENTATION_BUDGET`
    (Abschnitt 7.7.3) — kein Blocker, sondern ein dokumentierter,
    bewusst offener Wert bis zu realer Belastungsmessung.
 2. Die exakte Kconfig-Syntax fuer `main/Kconfig.projbuild` (Abschnitt 7.2)
-   wird unmittelbar zu Beginn von Commit 1 gegen den echten ESP-IDF-6.0.2-
-   Build verifiziert; sollte sie von der hier skizzierten Form abweichen,
+   sowie die exakte, von ESP-IDF 6.0.2 tatsaechlich unterstuetzte Syntax
+   der direkten Installation (Abschnitt 7.1) werden unmittelbar zu Beginn
+   von Commit 1 beziehungsweise Commit 2 gegen den echten ESP-IDF-6.0.2-
+   Build verifiziert; sollten sie von der hier skizzierten Form abweichen,
    ist das eine technische Detailkorrektur ohne Vertrags-/Safetywirkung,
-   keine materielle Planabweichung.
-3. Sollte die offizielle Installations-Action mit den in Abschnitt 7.1
-   exakt gepinnten und **verbindlichen** Werten (Action-Commit
-   `8fc05d1470d5591417e7a3707a1f2bec178db4ae`, `version: "v6.0.2"`,
-   `eim-version: "v0.1.7"`) ESP-IDF 6.0.2 auf `ubuntu-24.04` nachweislich
-   nicht reproduzierbar bereitstellen, ist ausschliesslich der in
-   Abschnitt 7.1 beschriebene vollstaendige Fallback-Prozess (Anhalten,
-   neuer Plan-Commit, erneute Freigabe) zu befolgen — **kein** stiller
-   Wechsel auf einen aktuelleren `v1`-HEAD oder einen anderen Commit.
+   keine materielle Planabweichung, solange Repository, Tag und Commit aus
+   Abschnitt 7.1 unveraendert bleiben.
+3. Sollte die direkte ESP-IDF-Installation mit dem in Abschnitt 7.1 exakt
+   genannten Commit `7101770dc6db2667b3c477cc31365dd1acd6db4e` auf
+   `ubuntu-24.04` nachweislich nicht reproduzierbar funktionieren, ist
+   ausschliesslich der in Abschnitt 7.1 beschriebene Fallback-Prozess
+   (Anhalten, neuer Plan-Commit, erneute Freigabe) zu befolgen — **kein**
+   eigenmaechtiger Ruecksprung auf `espressif/install-esp-idf-action` oder
+   eine andere Installationsvariante.
 4. Der in Abschnitt 7.1 dokumentierte `LICENSE_METADATA_CONFLICT` von
-   `espressif/install-esp-idf-action` (Apache-2.0 in `LICENSE` versus MIT
-   in `package.json`/`README.md`) bleibt ein dokumentierter Befund, kein
-   Blocker; eine rechtliche Klaerung durch das Projekt ist nicht Teil von
-   #74.
+   `espressif/install-esp-idf-action` bleibt als Begruendung der
+   Nichtverwendung im Plan dokumentiert, ist aber kein aktiver
+   Abhaengigkeits- oder Lieferkettenvertrag mehr, da die Action im aktiven
+   CI-Pfad nicht mehr verwendet wird.
 5. Der genaue Flag-Name fuer den in Abschnitt 7.7.4 beschriebenen
    `check_secrets.py`-Scan-Modus (`--scan-path` oder gleichwertig) wird in
    der Umsetzung final benannt; der Pruefvertrag selbst ist bereits
@@ -1287,9 +1401,9 @@ entfallen als offene Punkte. Es verbleibt:
 - keine Auswahl einer konkreten Ersatzbibliothek im
   Third-Party-Komponentenregister (Abschnitt 7.13.3);
 - keine reale Aktorfreigabe in irgendeinem Profil;
-- kein Wechsel von der offiziellen `espressif/install-esp-idf-action`
-  (Abschnitt 7.1) auf eine andere Installationsvariante ohne den dort
-  beschriebenen Fallback-Prozess;
+- kein Wechsel von der direkten offiziellen ESP-IDF-Installation
+  (Abschnitt 7.1) auf `espressif/install-esp-idf-action` oder eine andere
+  Installationsvariante ohne den dort beschriebenen Fallback-Prozess;
 - kein neues Dokument unter dem Pfad `docs/THIRD_PARTY_COMPONENTS.md`; die
   bestehende Datei wird ausschliesslich in-place aktualisiert (Abschnitt
   7.13.3);
@@ -1315,12 +1429,14 @@ Abschnitt 7.2), nicht die dadurch erzeugte Semantik.
   Umstellung auf Kconfig-Overlays, siehe Abschnitt 7.2, zusaetzlich durch
   die zweiteilige Driftpruefung aus Abschnitt 7.2 Punkt 5 abgesichert);
 - CI-Workflow-`permissions` bleiben minimal (`contents: read`);
-- keine Secrets in Workflow, Cache oder Artefakten: getrackte Dateien
-  bleiben durch das unveraenderte `scripts/check_secrets.py` abgedeckt;
-  generierte, ungetrackte Artefakttexte (Manifeste, Buildlogs) werden erst
-  durch den neuen `--scan-path`-Modus aus Abschnitt 7.7.4 tatsaechlich
-  geprueft — die vorherige Planfassung behauptete hier faelschlich eine
-  bereits bestehende Abdeckung;
+- keine Secrets in Workflow, Cache oder Artefakten: die bestehende
+  Pruefung getrackter Repositorydateien in `scripts/check_secrets.py`
+  bleibt unveraendert erhalten; das Skript selbst wird zusaetzlich um den
+  in Abschnitt 7.7.4 beschriebenen Scan explizit benannter, ungetrackter
+  Textartefakte (Manifeste, Buildlogs, `sdkconfig`,
+  `compile_commands.json`, `size.json`, Flashargumentdateien) erweitert —
+  die Datei bleibt also nicht unveraendert, nur ihre bisherige Pruefung
+  getrackter Dateien bleibt es;
 - keine unfixierten Actions: alle `uses:`-Referenzen werden auf
   Commit-SHA gepinnt (Abschnitt 7.11);
 - fehlgeschlagene ESP-IDF-Builds liefern Log-Artefakte, analog zum
@@ -1463,8 +1579,11 @@ geschlossen.
 
 - genau ein Plan-Korrekturcommit fuer diese Ueberarbeitung;
 - Draft-PR-Beschreibung verweist auf den neuen Plan-Commit und markiert
-  sowohl `05b987e3d2b375b82922990f718d0dc07c730a71` als auch
-  `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754` als überholt;
+  alle vier vorherigen Plan-Commits als überholt:
+  `05b987e3d2b375b82922990f718d0dc07c730a71`,
+  `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754`,
+  `6c8092755dde1fe0b39299abe94a0b3e02003beb`,
+  `806abbfd7400412285c1f83e94d80cc6c5a7bf31`;
 - Status bleibt `IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL`;
 - vollstaendiges Anhalten bis zu einem commitgebundenen
   `PLAN APPROVED`-Ownerkommentar auf den neuen Plan-Commit.
