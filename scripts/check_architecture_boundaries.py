@@ -60,11 +60,13 @@ PREPROCESSOR_CONDITION_PATTERN = re.compile(r"^\s*#\s*(?:if|ifdef|ifndef|elif)\b
 PLATFORM_MACRO_PATTERN = re.compile(r"\b(?:ESP_PLATFORM|ARDUINO)\b")
 CONFIG_TOKEN_PATTERN = re.compile(r"\bCONFIG_[A-Za-z0-9_]+\b")
 
-# Issue #72/#73: erlaubte idf_component_register()-REQUIRES/PRIV_REQUIRES-
-# Namen je Komponente, getrennt nach oeffentlich (REQUIRES) und privat
+# Issue #72/#73: exakter idf_component_register()-REQUIRES/PRIV_REQUIRES-
+# Vertrag je Komponente, getrennt nach oeffentlich (REQUIRES) und privat
 # (PRIV_REQUIRES). Eine gemeinsame Menge wuerde z. B. ein faelschlich
 # oeffentliches "REQUIRES esp_timer" nicht von einem korrekten
-# "PRIV_REQUIRES esp_timer" unterscheiden.
+# "PRIV_REQUIRES esp_timer" unterscheiden. Geprueft werden beide Richtungen:
+# unerlaubte zusaetzliche Namen UND fehlende vorgeschriebene Direktabhaengig-
+# keiten (siehe add_component_requires_violations).
 COMPONENT_REQUIRES_ALLOWLIST = {
     "lib/device_platform/CMakeLists.txt": {
         "public": frozenset(),
@@ -254,9 +256,19 @@ def add_component_requires_violations(violations: list[str], root: Path) -> None
                 f"{path}: unerlaubte oeffentliche IDF-Komponentenabhaengigkeit "
                 f"in REQUIRES: {name!r}"
             )
+        for name in sorted(allowed["public"] - public_names):
+            violations.append(
+                f"{path}: fehlende oeffentliche Direktabhaengigkeit "
+                f"in REQUIRES: {name!r}"
+            )
         for name in sorted(private_names - allowed["private"]):
             violations.append(
                 f"{path}: unerlaubte private IDF-Komponentenabhaengigkeit "
+                f"in PRIV_REQUIRES: {name!r}"
+            )
+        for name in sorted(allowed["private"] - private_names):
+            violations.append(
+                f"{path}: fehlende private Direktabhaengigkeit "
                 f"in PRIV_REQUIRES: {name!r}"
             )
         for token in dynamic_tokens:
@@ -465,6 +477,16 @@ IDF_LEAK_VIOLATION_CASES = {
         "main/CMakeLists.txt",
         'idf_component_register(SRCS "app_main.cpp" '
         'PRIV_INCLUDE_DIRS "../include" REQUIRES device_platform '
+        "PRIV_REQUIRES fermentation_app device_platform_esp_idf)\n",
+    ),
+    "fehlende_oeffentliche_requires": (
+        "lib/fermentation_app/CMakeLists.txt",
+        'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src")\n',
+    ),
+    "fehlende_private_requires_in_main": (
+        "main/CMakeLists.txt",
+        'idf_component_register(SRCS "app_main.cpp" '
+        'PRIV_INCLUDE_DIRS "../include" '
         "PRIV_REQUIRES fermentation_app device_platform_esp_idf)\n",
     ),
 }

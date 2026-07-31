@@ -52,7 +52,6 @@ void logResources() {
 }  // namespace
 
 extern "C" void app_main(void) {
-    device_platform_esp_idf::EspTimerTimeSource timeSource;
     device_platform::DevicePlatform platform;
     fermentation::FermentationApplication application;
 
@@ -66,15 +65,21 @@ extern "C" void app_main(void) {
 
     if (!applicationStarted) {
         // Sicherer Fehlerpfad: keine Hardware, kein Busy-Loop, keine
-        // automatische Reboot-Schleife. Ein return aus app_main() ist
-        // offiziell unterstuetzt (siehe Plan Abschnitt 5/10): die Task wird
-        // sauber beendet, ihr Stack freigegeben, das System laeuft mit den
-        // uebrigen Tasks normal weiter.
+        // automatische Reboot-Schleife, keine Laufzeit-Zeitquelle. Ein
+        // return aus app_main() ist offiziell unterstuetzt (siehe Plan
+        // Abschnitt 5/10): die Task wird sauber beendet, ihr Stack
+        // freigegeben, das System laeuft mit den uebrigen Tasks normal
+        // weiter.
         return;
     }
 
     logResources();
 
+    // Erst hier, unmittelbar vor der Laufzeitschleife, konstruiert: die
+    // geloggte Uptime bedeutet damit eindeutig "Laufzeit seit
+    // Schleifenstart" und schliesst Startpruefung, Bootlogging und die
+    // erste Ressourcenmessung nicht mit ein.
+    const device_platform_esp_idf::EspTimerTimeSource timeSource;
     const uint64_t startMs = timeSource.monotonicMillis();
     uint64_t lastHeartbeatMs = startMs;
     bool secondResourceLogDone = false;
