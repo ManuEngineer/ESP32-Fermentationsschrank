@@ -8,8 +8,11 @@ Basis-`main`-SHA: `c3f8044be0f081822ca8724f67fa99e9614d57ef` (Merge-Commit von P
 
 Diese Fassung überarbeitet den ursprünglichen Plan-Commit
 `05b987e3d2b375b82922990f718d0dc07c730a71` nach einem vollständigen Review
-(`PLAN_REVIEW: CHANGES_REQUIRED`) auf PR #79. Der alte Plan-Commit bleibt in
-der Historie und ist überholt; diese Fassung ersetzt ihn inhaltlich.
+(`PLAN_REVIEW: CHANGES_REQUIRED`) auf PR #79 sowie die erste Überarbeitung
+(Plan-Commit `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754`) nach einer zweiten,
+abschliessenden Reviewrunde (`PLAN_REVIEW: CHANGES_REQUIRED`). Beide
+vorherigen Plan-Commits bleiben in der Historie und sind überholt; diese
+Fassung ersetzt sie inhaltlich.
 
 ## 1. Ziel
 
@@ -28,15 +31,22 @@ Die ESP-IDF-6.0.2-Migration abschliessen:
 - genau einen kanonischen Hosttestpfad festlegen und dokumentieren;
 - den Arduino-Zweig aus `src/main.cpp` entfernen und `src/main.cpp` als
   reine native Composition Root erhalten (kein Loeschen der Datei);
-- den alten Arduino-ESP32-Produktionspfad (PlatformIO-Envs) erst nach
-  bestandener CI-Paritaet und **zwei bestandenen Hardware-Smoke-Tests**
-  (Bring-up und Release) entfernen;
+- den alten Arduino-ESP32-Produktionspfad (PlatformIO-Envs) nach bestandener
+  CI-Paritaet (`PRE_ARDUINO_REMOVAL_CI: PASS`) entfernen und danach auf dem
+  finalen Implementierungs-Head **zwei verpflichtende Hardware-Smoke-Tests**
+  (Bring-up und Release) als Pflicht-Merge-Gate bestehen — die Hardwaretests
+  sind damit Voraussetzung fuer den Merge, nicht Voraussetzung fuer die
+  Arduino-Entfernung selbst (siehe Abschnitt 6, Gates 2 und 3, sowie
+  Abschnitt 8);
 - einen versionierten ESP-IDF-Upgradevertrag (Bugfix/Minor/Major)
   dokumentieren;
 - den Komponenten-/Lockfilevertrag fuer den aktuellen (leeren)
   Abhaengigkeitsstand festschreiben;
-- ADR-001 auf `superseded` setzen und `AGENTS.md` an den ESP-IDF-only-Stand
-  anpassen (Ownerentscheid, Teil dieses Plans, siehe Abschnitt 7.13).
+- ADR-001 auf `superseded` setzen, `AGENTS.md` an den ESP-IDF-only-Stand
+  anpassen, das bestehende `docs/THIRD_PARTY_COMPONENTS.md` in-place
+  aktualisieren sowie `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` und
+  `lib/README.md` auf zwei Composition Roots korrigieren (Ownerentscheid,
+  Teil dieses Plans, siehe Abschnitt 7.13).
 
 ## 2. Nicht-Ziele
 
@@ -61,11 +71,21 @@ Die ESP-IDF-6.0.2-Migration abschliessen:
 - Issue #74 (Scope, Upgradegrundsaetze, Grenzen, Akzeptanzkriterien);
 - **Reviewauftrag "PR #79 – Plan für Issue #74 vollständig korrigieren"**
   (`PLAN_REVIEW: CHANGES_REQUIRED` auf Plan-Commit
-  `05b987e3d2b375b82922990f718d0dc07c730a71`): verbindliche Grundlage dieser
-  überarbeiteten Fassung, insbesondere fuer Profilmechanismus,
+  `05b987e3d2b375b82922990f718d0dc07c730a71`): verbindliche Grundlage der
+  ersten Überarbeitung, insbesondere fuer Profilmechanismus,
   Profilisolation, Commit-Reihenfolge, Hardware-Gate, Ressourcen-/
   Artefaktvertrag, CI-Reproduzierbarkeit, ESP-IDF-Installationsvariante und
   Dokumentationsumfang;
+- **Reviewauftrag "PR #79 – zweite und abschliessende Plan-Korrekturrunde"**
+  (`PLAN_REVIEW: CHANGES_REQUIRED` auf Plan-Commit
+  `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754`): verbindliche Grundlage dieser
+  Fassung, insbesondere fuer die korrekte Behandlung des bestehenden
+  `docs/THIRD_PARTY_COMPONENTS.md`, die widerspruchsfreie Hardware-Gate-
+  Reihenfolge, die vollstaendige Pinnung der ESP-IDF-Installations-Action
+  samt EIM-Version, die reale Secret-/Pfadpruefung generierter Artefakte,
+  die Aktualisierung von ADR-013 und `lib/README.md`, die Abgrenzung
+  historischer Auditdateien und die korrekte Formulierung der
+  Artefakt-Aufbewahrung;
 - `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` und `docs/DECISIONS.md`
   (ADR-001 PlatformIO/Arduino, ADR-008 4-MB-Budget, ADR-012 Bring-up-Profil,
   ADR-013 Plattformtrennung);
@@ -232,6 +252,8 @@ Nur in der spaeteren Umsetzungsphase, nach Planfreigabe, zu aendern:
   erhalten, siehe Abschnitt 7.5.1)
 - `scripts/build_report.py` (Erweiterung um ESP-IDF-Groessendaten aus
   `idf.py size --format json2`)
+- `scripts/check_secrets.py` (Erweiterung um optionalen Scan-Modus fuer
+  generierte, nicht getrackte Artefakttexte, Abschnitt 7.7.4)
 - `scripts/check_platformio_config.py` (Entfernung, abgeloest durch
   `scripts/check_build_profiles.py`)
 - `scripts/selftest_quality_gates.py` (neue Fixture-Faelle fuer
@@ -240,17 +262,24 @@ Nur in der spaeteren Umsetzungsphase, nach Planfreigabe, zu aendern:
   in der Umsetzungsphase eine neue Grenze zeigt; aktuell keine Aenderung
   identifiziert)
 - neu: `docs/ESP_IDF_UPGRADE_CONTRACT.md` (Upgradevertrag, Abschnitt 7.10)
-- neu: `docs/THIRD_PARTY_COMPONENTS.md` (Registerpflege, Abschnitt 7.13.3)
+- `docs/THIRD_PARTY_COMPONENTS.md` (**bestehende** Datei, In-place-
+  Aktualisierung, kein neues Dokument, Abschnitt 7.13.3)
 - `docs/CI_AND_QUALITY_GATES.md`, `docs/ARCHITECTURE.md`, `README.md`,
   `CHANGELOG.md`
 - `docs/DECISIONS.md` (ADR-001-Status auf `superseded`, Abschnitt 7.13.1)
+- `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` (Statuszusatz und
+  Repository-Mapping aktualisieren, Abschnitt 7.13.5)
+- `lib/README.md` (Modulübersicht auf zwei Composition Roots korrigieren,
+  Abschnitt 7.13.5)
 - `AGENTS.md` (ESP-IDF-only-Stand, Abschnitt 7.13.2)
 - `.clang-tidy` (`HeaderFilterRegex` auf `^(include|lib|main)/.*`
   erweitert, Abschnitt 7.8)
 
 Kein produktiver Fachcode (`lib/device_platform/`, `lib/fermentation_app/`,
 `main/app_main.cpp`, `startApplication()`/nativer Kern in `src/main.cpp`)
-wird inhaltlich veraendert.
+wird inhaltlich veraendert. `docs/audits/` (historische Auditdateien, u. a.
+`docs/audits/RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`) wird in #74 **nicht**
+angefasst (Abschnitt 7.13.3).
 
 ## 6. Abhaengigkeiten und Gates
 
@@ -268,9 +297,11 @@ wird inhaltlich veraendert.
   Format-, Static-Analysis-, Secret- und Quality-Gate-Selftests gruen. Kein
   gleichzeitiger Austausch von CI-Einfuehrung und Arduino-Entfernung in
   einem Commit.
-- **Gate 3 — Hardware-Smoke-Test-Gate:** Nach Commit 5 beziehungsweise auf
-  dem finalen Umsetzungs-Head sind **zwei** Hardware-Smoke-Tests Pflicht
-  (Bring-up **und** Release, Abschnitt 7.12) — anders als in der urspruenglichen
+- **Gate 3 — Hardware-Smoke-Test-Gate:** Nach Commit 5 (Arduino-Entfernung)
+  und Commit 6 (Abschlussdokumentation), auf dem finalen Implementierungs-
+  Head, sind **zwei** Hardware-Smoke-Tests Pflicht (Bring-up **und**
+  Release, Abschnitt 7.12) — als Pflicht-**Merge**-Gate, nicht als
+  Voraussetzung fuer Commit 5 selbst. Anders als in der urspruenglichen
   Planfassung ist dies **kein optionales** Gate mehr.
 - **Gate 4 — Dokumentierte Ownerentscheidungen bereits getroffen:**
   ADR-001-Statuspflege und `AGENTS.md`-Aktualisierung sind laut
@@ -289,24 +320,61 @@ Espressif-Action
 espressif/install-esp-idf-action
 ```
 
-Bedingungen:
+**Befund aus der zweiten Reviewrunde (live verifiziert):** Das Repository
+`espressif/install-esp-idf-action` hat **keine** semver-Release-Tags; als
+einzige Referenz existiert der bewegliche Branch `v1` (aktueller HEAD zum
+Recherchezeitpunkt dieser Planungsphase:
+`8fc05d1470d5591417e7a3707a1f2bec178db4ae`, Commit vom 2025-09-18, Titel
+"Fixed user name (#10) * enabled use of fixed EIM version"). Die Action
+delegiert die eigentliche Installation an den **ESP-IDF Installation
+Manager (EIM)** (`espressif/idf-im-cli`); ihr Input `eim-version` ist
+optional und veraltet ohne Angabe stillschweigend auf die jeweils neueste
+EIM-Version — der Installationspfad waere damit trotz gepinntem
+Action-Commit und gepinntem ESP-IDF-Tag weiterhin zeitabhaengig.
+Zusaetzlicher Befund: `idf-im-cli` ist als Repository seit 25.02.2026
+archiviert (read-only); die letzte veroeffentlichte EIM-Version ist
+`v0.1.7` (12.02.2025) und bleibt damit die einzig sinnvolle, dauerhaft
+stabile Pin-Wahl (keine kuenftigen EIM-Versionen sind zu erwarten).
 
-- Pin auf einen vollstaendigen Commit-SHA (kein `@v1`-Alias), mit lesbarem
-  Versionskommentar daneben;
-- `version: "v6.0.2"`;
+**Verbindlich festgelegte Konfiguration** (exakte Werte, kein Platzhalter):
+
+```yaml
+uses: espressif/install-esp-idf-action@8fc05d1470d5591417e7a3707a1f2bec178db4ae  # v1, Stand 2025-09-18
+with:
+  version: "v6.0.2"
+  eim-version: "v0.1.7"  # letzte veroeffentlichte EIM-Version; idf-im-cli seit 25.02.2026 archiviert
+```
+
+Weitere Bedingungen:
+
+- der Action-Commit-SHA wird zu Beginn der Umsetzung (Commit 2) erneut
+  gegen den dann aktuellen HEAD von `v1` geprueft, um eine zwischenzeitlich
+  gepatchte, aber noch funktional kompatible Version nicht zu verpassen;
+  eine Abweichung vom hier genannten SHA ist eine technische
+  Detailkorrektur (aktualisierter Pin, gleiche Funktion), keine materielle
+  Planabweichung, solange Version und `eim-version` weiterhin exakt
+  gepinnt bleiben;
 - nach der Installation zusaetzliche Pruefung des tatsaechlich
   resultierenden ESP-IDF-Commits (nicht nur des Tags), Sollwert
   `7101770dc6db2667b3c477cc31365dd1acd6db4e` (siehe Abschnitt 7.11);
-- Lizenz (Apache-2.0) und der exakte, in der Umsetzung tatsaechlich
-  verwendete Action-Commit werden im PR dokumentiert;
+- Kompatibilitaet von Action-Commit, `eim-version: "v0.1.7"` und ESP-IDF
+  `v6.0.2` auf dem GitHub-hosted Runner `ubuntu-24.04` (Abschnitt 7.11)
+  wird zu Beginn der Umsetzung (Commit 2) explizit verifiziert, bevor der
+  Rest der ESP-IDF-CI-Strecke darauf aufbaut;
+- Lizenz Apache-2.0 (verifiziert anhand der `LICENSE`-Datei im Repository
+  `espressif/install-esp-idf-action`) sowie die transitive Nutzung von EIM
+  (`espressif/idf-im-cli`, archiviert, letzte Version `v0.1.7`) werden im
+  PR und im Supply-Chain-Teil von Abschnitt 7.11 dokumentiert;
 - minimale Workflow-Permissions bleiben unveraendert (`contents: read`);
+- kein Default `latest` fuer `version` oder `eim-version`, kein gleitender
+  Tag;
 - keine zusaetzliche inoffizielle Wrapper-Action.
 
 Fallback-Regel: Stellt sich in der Umsetzung heraus, dass die offizielle
-Action ESP-IDF 6.0.2 nicht reproduzierbar bereitstellt, haelt der Agent an.
-Ein Wechsel auf manuelle Installation ist dann eine materielle
-Planabweichung mit neuem Plan-Commit und erneuter Freigabe — keine
-eigenmaechtige Ersatzloesung.
+Action mit den hier gepinnten Werten ESP-IDF 6.0.2 nicht reproduzierbar auf
+`ubuntu-24.04` bereitstellt, haelt der Agent an. Ein Wechsel auf manuelle
+Installation ist dann eine materielle Planabweichung mit neuem Plan-Commit
+und erneuter Freigabe — keine eigenmaechtige Ersatzloesung.
 
 **Caching:** Fuer #74 wird **kein** Toolchain-Cache eingefuehrt (KISS: zuerst
 ein korrekter, reproduzierbarer Clean-Build; keine versteckte Cache-Drift;
@@ -591,10 +659,20 @@ Flashargumentdateien), generierte `sdkconfig`, `compile_commands.json`,
 `size.json`, Buildlog, kurzer Manifestbericht (Profil, Git-SHA,
 IDF-Version, IDF-Commit).
 
-Aufbewahrung: `retention-days: 30`, analog zur bereits bestehenden
-Artefaktaufbewahrung in `build.yml`. Keine lokalen Secrets oder privaten
-absoluten Pfade in Artefaktmanifesten (geprueft durch
-`scripts/check_secrets.py`, das unveraendert auch neue Dateien abdeckt).
+**Aufbewahrung (Korrektur):** Der bestehende Workflow setzt fuer die
+bisherigen Artefakte (`platformio-build-log`, `build-report`) **keinen**
+expliziten `retention-days`-Wert (live verifiziert: kein `retention-days`
+in `.github/workflows/build.yml`). Fuer die neuen ESP-IDF-Artefakte wird in
+#74 **erstmals explizit** `retention-days: 30` festgelegt — keine Analogie
+zu einer bereits bestehenden Einstellung, da keine existiert. Eine
+Vereinheitlichung der bestehenden Uploads auf denselben Wert ist fuer #74
+nicht vorgesehen und wird nicht umgesetzt, ausser der Owner bestaetigt dies
+ausdruecklich als zusaetzlichen, im Dateiumfang und Commit-Schnitt separat
+zu benennenden Punkt.
+
+Keine lokalen Secrets oder privaten absoluten Pfade in Artefaktmanifesten —
+siehe Abschnitt 7.7.4 fuer die tatsaechliche Pruefung (nicht durch das
+unveraenderte `scripts/check_secrets.py` allein abgedeckt).
 
 #### 7.7.3 Schwellenwerte
 
@@ -603,6 +681,58 @@ die erste dokumentierte, maschinenlesbare Baseline (Abschnitt 4.4), keine
 CI-Abbruchgrenze. Spaeteres Entscheidungskriterium: reale
 Belastungs-/Heap-Messung auf Zielhardware nach Anbindung von
 Sensoren/Display/Aktoren.
+
+#### 7.7.4 Secret- und Pfadpruefung fuer generierte Artefakte (neuer Punkt
+aus zweiter Reviewrunde)
+
+**Befund (live verifiziert):** `scripts/check_secrets.py` ermittelt seine
+Pruefmenge ueber `git ls-files` (`scripts/check_secrets.py:70`) — es scannt
+ausschliesslich von Git getrackte Dateien. Die in Abschnitt 7.7.1 und
+7.7.2 neu eingefuehrten generierten Artefakte (`size.json`, Buildlogs,
+Artefaktmanifeste, generierte `sdkconfig`) sind bewusst **nicht** getrackt
+(sie liegen unter `build/`, das gitignored bleibt) und werden von
+`scripts/check_secrets.py` in seiner aktuellen Form **nicht** erfasst. Die
+vorherige Planfassung behauptete faelschlich das Gegenteil.
+
+**Verbindliche Korrektur:** `scripts/check_secrets.py` erhaelt einen
+optionalen, zusaetzlichen CLI-Modus fuer explizit benannte, ungetrackte
+Textdateien, ohne die bestehende Pruefung getrackter Repositorydateien zu
+veraendern:
+
+```bash
+python scripts/check_secrets.py \
+  --scan-path build/esp32_bringup/artifact-manifest.json \
+  --scan-path build/esp32_release/artifact-manifest.json \
+  --scan-path build/esp32_bringup/build.log \
+  --scan-path build/esp32_release/build.log
+```
+
+Der genaue Flag-Name (`--scan-path` oder gleichwertig) wird in der
+Umsetzung final benannt; der Vertrag ist bereits hier verbindlich:
+
+- die bestehende Pruefung getrackter Repositorydateien bleibt unveraendert
+  aktiv, auch wenn `--scan-path` genutzt wird;
+- jede per `--scan-path` benannte Datei wird zusaetzlich auf dieselben
+  Geheimnismuster geprueft wie getrackte Dateien;
+- private absolute Benutzerpfade (z. B. `/home/<name>/...`) in Manifesten
+  werden erkannt und abgelehnt oder auf einen projektrelativen/CI-Pfad
+  normalisiert — die Umsetzung legt fest, welche der beiden Reaktionen
+  gilt, sofern beide keine Geheimnisse durchlassen;
+- eine erwartete, aber fehlende Manifestdatei ist ein harter Fehler, kein
+  stiller Übersprung;
+- Binärdateien (z. B. `.bin`, `.elf`) werden nicht als Text interpretiert
+  und nicht in den Musterabgleich einbezogen;
+- der Aufruf erfolgt in der CI **vor** `actions/upload-artifact` fuer die
+  betroffenen ESP-IDF-Artefakte (Commit 3, Abschnitt 8).
+
+Neue Selftest-Faelle in `scripts/selftest_quality_gates.py`:
+
+- Geheimnis in einer ungetrackten, per `--scan-path` benannten Manifestdatei
+  wird erkannt;
+- ein privater absoluter Benutzerpfad in einer Manifestdatei wird erkannt;
+- ein normalisierter CI-/Projektpfad wird akzeptiert;
+- eine fehlende, aber erwartete Manifestdatei fuehrt zu einem Fehler;
+- eine Binärdatei wird nicht als Text gescannt.
 
 ### 7.8 Format und Static Analysis
 
@@ -685,9 +815,20 @@ Patch-Version.
 
 - Runner nicht `ubuntu-latest`, sondern eine feste Runnerfamilie
   (`ubuntu-24.04`);
-- alle `uses:`-Actions (`actions/checkout`, `actions/setup-python`,
-  `actions/upload-artifact`, `espressif/install-esp-idf-action`) auf
-  vollstaendige Commit-SHAs pinnen, mit lesbarem Versionskommentar daneben;
+- alle `uses:`-Actions auf vollstaendige Commit-SHAs pinnen, mit lesbarem
+  Versionskommentar daneben. Zum Recherchezeitpunkt dieser Planungsphase
+  verifizierte SHAs (in der Umsetzung erneut gegen den dann aktuellen Tag-
+  HEAD zu pruefen; eine aktualisierte, aber funktional gleichwertige
+  Version ist eine technische Detailkorrektur, keine materielle
+  Planabweichung):
+
+  ```text
+  actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803          # v6
+  actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1      # v6
+  actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
+  espressif/install-esp-idf-action@8fc05d1470d5591417e7a3707a1f2bec178db4ae  # v1, siehe Abschnitt 7.1
+  ```
+
 - `platformio==6.1.19` bleibt exakt gepinnt (unveraendert);
 - `clang-format-18`/`clang-tidy-18` bleiben auf Major 18 fixiert; die
   tatsaechlich geladene Patch-Version wird im Build-Log und im
@@ -772,27 +913,104 @@ Architekturentscheidung selbst ist bereits durch #71/ADR-013 getroffen.
   hinzufuegen;
 - **keine** Aenderung fachlicher Safetyregeln.
 
-#### 7.13.3 Third-Party-Komponentenregister
+#### 7.13.3 Third-Party-Komponentenregister (Korrektur: bestehendes
+Dokument, kein neues)
 
-Neues Dokument `docs/THIRD_PARTY_COMPONENTS.md`:
+**Befund (live verifiziert):** `docs/THIRD_PARTY_COMPONENTS.md` existiert
+bereits auf `main` (Stand 27.07.2026), Status `DRAFT – Ownerfreigabe
+ausstehend`, verlinkt aus dem
+`Release-1-Adopt-or-build-Audit`
+(`docs/audits/RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`). Die Tabellenzeile
+`ESP32-/Arduino-Plattform` nennt aktuell `PlatformIO espressif32@7.0.1,
+Arduino-ESP32 2.0.17 (dcc1105b)` als Plattformbasis. Die urspruengliche
+Planfassung sprach faelschlich von einem **neuen** Dokument gleichen Namens.
 
-- Plattformzeile von Arduino/PlatformIO-ESP32 auf ESP-IDF 6.0.2
-  aktualisieren;
-- exakten ESP-IDF-Tag und -Commit dokumentieren;
-- Arduino-spezifische Kandidaten (z. B. Preferences, Arduino-WebServer)
-  nicht laenger als aktive Plattformbasis darstellen;
-- **keine** Ersatzbibliothek in #74 vorzeitig auswaehlen; spaetere
-  Neu-Evaluation unter ESP-IDF klar als offen markieren;
-- historische Auditdateien bleiben inhaltlich unveraendert; falls dort ein
-  Statusbanner fehlt und Verwechslungsgefahr besteht, nur eine rein
-  dokumentarische Kennzeichnung ergaenzen, keine rueckwirkende
-  Kandidatenbewertung.
+**Verbindliche Korrektur:** `docs/THIRD_PARTY_COMPONENTS.md` wird in
+Commit 6 **in-place aktualisiert**, nicht neu erstellt. Struktur, Historie
+und alle Statuswerte (`FRAMEWORK_CANDIDATE`, `FIRST_EVALUATION_CANDIDATE`
+usw.) bleiben erhalten. Der bestehende Status
+`DRAFT – Ownerfreigabe ausstehend` wird **nicht** still entfernt oder
+geaendert; #74 aendert ausschliesslich die im Folgenden genannten
+Tatsachenzeilen, nicht die Freigabesystematik des Dokuments.
+
+Aktualisiert werden mindestens:
+
+- die Zeile `ESP32-/Arduino-Plattform` auf die aktive Plattformbasis
+  ESP-IDF 6.0.2 (exakter Tag `v6.0.2`, Commit
+  `7101770dc6db2667b3c477cc31365dd1acd6db4e`);
+- `PlatformIO espressif32@7.0.1`/`Arduino-ESP32 2.0.17` nicht mehr als
+  aktive Produktionsplattform darstellen;
+- Arduino-spezifische Kandidatenzeilen (`Persistenz` – Arduino-ESP32
+  Preferences/NVS; `Webserver` – Arduino-ESP32 `WebServer`) nicht mehr als
+  gegen eine aktive Arduino-Laufzeit bewertete Basis darstellen, sondern
+  als unter ESP-IDF offen zu bewertende Kandidaten kennzeichnen;
+- **keine** Ersatzbibliothek in #74 vorzeitig auswaehlen; die spaetere
+  Neu-Evaluation unter ESP-IDF bleibt klar als offen markiert (z. B.
+  weiterhin `FIRST_EVALUATION_CANDIDATE`/`SPIKE_REQUIRED`/
+  `FINAL_SELECTION_PENDING`, nicht `NOT_SELECTED`, ohne echte Pruefung).
+
+**Historische Auditdateien bleiben unangetastet:** `docs/audits/`
+(`RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`,
+`THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md`, `COMPONENT_EVALUATIONS.md` und
+alle weiteren Dateien in diesem Verzeichnis) werden in #74 **nicht**
+geaendert. Es gibt **keine** bedingte Erlaubnis, dort bei fehlendem
+Statusbanner zusaetzlich einzugreifen — diese in der vorherigen Planfassung
+enthaltene Bedingung ist ersatzlos gestrichen. Sollten historische Audits
+spaeter ein Statusbanner benoetigen, geschieht das in einer separaten,
+eigens begrenzten Dokumentationsaenderung ausserhalb von #74.
 
 #### 7.13.4 `include/app_config.hpp`-Fehlermeldungen
 
 Rein mechanische Korrektur veralteter Fehlermeldungen (kein Vertrags- oder
 Verhaltenswechsel): von z. B. `"must be defined by the PlatformIO profile"`
 zu `"must be defined by the active build profile"`.
+
+#### 7.13.5 ADR-013 und `lib/README.md` (neuer Punkt aus zweiter Reviewrunde)
+
+**Befund (live verifiziert):** `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`
+beschreibt aktuell `src/main.cpp` als "Zusammensetzungsstelle und
+Arduino-Einstieg" und listet unter anderem
+`Produktionsadapter -> ESP32/Arduino oder anwendungsneutrale
+Hostumgebung` sowie den Satz "`main.cpp` ist eine Composition Root. Die
+Datei darf ... den Arduino-Einstieg und minimale Bootausgabe
+bereitstellen." `lib/README.md` beschreibt in seiner Modulstruktur nur
+`src/main.cpp` als "Composition Root: instanziiert Plattform und
+Anwendung" und erwaehnt `lib/device_platform_esp_idf/` gar nicht. Beide
+Dokumente sind nach #74 materiell falsch, da dann zwei Composition Roots
+mit unterschiedlicher Rolle existieren
+(`src/main.cpp` native-only, `main/app_main.cpp` ESP-IDF).
+
+**Verbindliche Korrektur (Commit 6):**
+
+`docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`:
+
+- kein neues ADR, keine Ersetzung der Grundentscheidung;
+- Status ergaenzt, z. B.
+  `accepted; amended by Issue #71 / PR #79` (exakte Formulierung in der
+  Umsetzung);
+- Repository-Mapping auf zwei Composition Roots korrigiert
+  (`src/main.cpp` native-only, `main/app_main.cpp` ESP-IDF);
+- Arduino-Verweise aus dem beschriebenen aktuellen Produktionspfad entfernt
+  (historische Begruendung der urspruenglichen Entscheidung bleibt
+  nachvollziehbar, wird nicht rueckwirkend umgeschrieben);
+- Abhaengigkeitsrichtung um
+  `device_platform_esp_idf -> device_platform` und die ESP-IDF-
+  Adaptergrenze ergaenzt;
+- native Teststruktur unveraendert.
+
+`lib/README.md`:
+
+- Modulübersicht korrigiert auf `src/main.cpp` (native-only Composition
+  Root), `main/app_main.cpp` (ESP-IDF Composition Root),
+  `lib/device_platform_esp_idf/` (konkrete ESP-IDF-Adapter, abhaengig von
+  `device_platform`);
+- bestehende verbotene Abhaengigkeitsrichtungen (`-X->`) und der Ausschluss
+  von `device_platform_test_support` aus Produktionsbuilds bleiben
+  inhaltlich erhalten.
+
+Beide Dateien sind Teil des Dateiumfangs (Abschnitt 5), von Commit 6
+(Abschnitt 8), der Dokumentationsaenderungen (Abschnitt 14) und der
+Abnahmekriterien (Abschnitt 16).
 
 ## 8. Geplanter kleiner PR-/Commit-Schnitt
 
@@ -811,7 +1029,9 @@ Reihenfolge:
    exakt diesem Commit vollstaendig gruen.
 3. **Ressourcenbericht und Artefakte:** `idf.py size --format json2`-
    Auswertung, Erweiterung von `scripts/build_report.py`,
-   profilspezifische CI-Artefakte (Abschnitt 7.7).
+   profilspezifische CI-Artefakte, Erweiterung von
+   `scripts/check_secrets.py` um den Scan-Modus fuer generierte
+   Artefakttexte samt neuer Selftests (Abschnitt 7.7, insbesondere 7.7.4).
 4. **Format und Static Analysis:** vollstaendiger Format-Scope, native
    Compile-DB fuer portable Quellen, beide ESP-IDF-Compile-DBs fuer
    IDF-spezifische Quellen, `.clang-tidy`-`HeaderFilterRegex`-Erweiterung,
@@ -827,9 +1047,12 @@ Reihenfolge:
    bleibt, Abschnitt 7.5.1); `scripts/check_platformio_config.py` durch
    `scripts/check_build_profiles.py` ersetzen (Abschnitt 7.5.2).
 6. **Upgradevertrag und Abschlussdokumentation:**
-   `docs/ESP_IDF_UPGRADE_CONTRACT.md`, `docs/THIRD_PARTY_COMPONENTS.md`,
+   `docs/ESP_IDF_UPGRADE_CONTRACT.md` (neu), `docs/THIRD_PARTY_COMPONENTS.md`
+   (in-place aktualisiert, kein neues Dokument, Abschnitt 7.13.3),
    `docs/CI_AND_QUALITY_GATES.md`, `docs/ARCHITECTURE.md`, `README.md`,
-   `docs/DECISIONS.md` (ADR-001), `AGENTS.md`, `CHANGELOG.md`.
+   `docs/DECISIONS.md` (ADR-001), `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`
+   und `lib/README.md` (Abschnitt 7.13.5), `AGENTS.md`, `CHANGELOG.md`.
+   `docs/audits/` bleibt unangetastet (Abschnitt 7.13.3).
 
 **Finaler Head:** Auf dem finalen Implementierungs-Head erneut vollstaendige
 CI **und** beide Hardware-Smoke-Tests (Bring-up, Release) ausfuehren
@@ -843,9 +1066,14 @@ etablierten Muster bei #72/#73.
 
 Gegenueber der urspruenglichen Planfassung sind die frueheren offenen
 Punkte 1 (ADR-001), 2 (`AGENTS.md`-Verweis), 3 (CI-Caching), 4 (native
-Eintrittsdatei) und 5 (Driftpruefung) durch dieses Review verbindlich
-entschieden (Abschnitte 7.1, 7.2, 7.5.1, 7.5.2, 7.13) und entfallen als
-offene Punkte. Es verbleibt:
+Eintrittsdatei) und 5 (Driftpruefung) durch das erste Review verbindlich
+entschieden (Abschnitte 7.1, 7.2, 7.5.1, 7.5.2, 7.13). Das zweite Review hat
+zusaetzlich die Behandlung von `docs/THIRD_PARTY_COMPONENTS.md` (Abschnitt
+7.13.3), die Hardware-Gate-Reihenfolge (Abschnitte 1, 6, 8), die exakten
+Action-/EIM-Pins (Abschnitt 7.1), die reale Secret-/Pfadpruefung (Abschnitt
+7.7.4), die ADR-013-/`lib/README.md`-Aktualisierung (Abschnitt 7.13.5) und
+die Artefakt-Aufbewahrung (Abschnitt 7.7.2) verbindlich entschieden. Diese
+Punkte entfallen als offene Punkte. Es verbleibt:
 
 1. Byte-Budget-Schwellenwerte bleiben `TBD_IMPLEMENTATION_BUDGET`
    (Abschnitt 7.7.3) — kein Blocker, sondern ein dokumentierter,
@@ -855,10 +1083,14 @@ offene Punkte. Es verbleibt:
    Build verifiziert; sollte sie von der hier skizzierten Form abweichen,
    ist das eine technische Detailkorrektur ohne Vertrags-/Safetywirkung,
    keine materielle Planabweichung.
-3. Sollte `espressif/install-esp-idf-action` (Abschnitt 7.1) ESP-IDF 6.0.2
-   in der Umsetzung nachweislich nicht reproduzierbar bereitstellen, ist
-   der in Abschnitt 7.1 beschriebene Fallback-Prozess (Anhalten, neuer
-   Plan-Commit) zu befolgen.
+3. Der in Abschnitt 7.1 genannte Action-Commit-SHA fuer
+   `espressif/install-esp-idf-action` wird zu Beginn von Commit 2 erneut
+   gegen den dann aktuellen HEAD von `v1` geprueft (das Repository pflegt
+   keine semver-Tags). Sollte die Action mit den in Abschnitt 7.1 exakt
+   gepinnten Werten (`version: "v6.0.2"`, `eim-version: "v0.1.7"`) ESP-IDF
+   6.0.2 auf `ubuntu-24.04` nachweislich nicht reproduzierbar
+   bereitstellen, ist der in Abschnitt 7.1 beschriebene Fallback-Prozess
+   (Anhalten, neuer Plan-Commit) zu befolgen.
 
 ## 10. Ausdruecklich verbotene Vorwegnahmen
 
@@ -874,7 +1106,12 @@ offene Punkte. Es verbleibt:
 - keine reale Aktorfreigabe in irgendeinem Profil;
 - kein Wechsel von der offiziellen `espressif/install-esp-idf-action`
   (Abschnitt 7.1) auf eine andere Installationsvariante ohne den dort
-  beschriebenen Fallback-Prozess.
+  beschriebenen Fallback-Prozess;
+- kein neues Dokument unter dem Pfad `docs/THIRD_PARTY_COMPONENTS.md`; die
+  bestehende Datei wird ausschliesslich in-place aktualisiert (Abschnitt
+  7.13.3);
+- keine Aenderung an `docs/audits/` (historische Auditdateien, Abschnitt
+  7.13.3).
 
 ## 11. Daten-, Zustands- und Schnittstellenvertraege
 
@@ -895,9 +1132,12 @@ Abschnitt 7.2), nicht die dadurch erzeugte Semantik.
   Umstellung auf Kconfig-Overlays, siehe Abschnitt 7.2, zusaetzlich durch
   die zweiteilige Driftpruefung aus Abschnitt 7.2 Punkt 5 abgesichert);
 - CI-Workflow-`permissions` bleiben minimal (`contents: read`);
-- keine Secrets in Workflow, Cache oder Artefakten
-  (`scripts/check_secrets.py` bleibt unveraendert wirksam, deckt auch neue
-  Dateien und Artefaktmanifeste ab, Abschnitt 7.7.2);
+- keine Secrets in Workflow, Cache oder Artefakten: getrackte Dateien
+  bleiben durch das unveraenderte `scripts/check_secrets.py` abgedeckt;
+  generierte, ungetrackte Artefakttexte (Manifeste, Buildlogs) werden erst
+  durch den neuen `--scan-path`-Modus aus Abschnitt 7.7.4 tatsaechlich
+  geprueft — die vorherige Planfassung behauptete hier faelschlich eine
+  bereits bestehende Abdeckung;
 - keine unfixierten Actions: alle `uses:`-Referenzen werden auf
   Commit-SHA gepinnt (Abschnitt 7.11);
 - fehlgeschlagene ESP-IDF-Builds liefern Log-Artefakte, analog zum
@@ -917,8 +1157,9 @@ Abschnitt 7.2), nicht die dadurch erzeugte Semantik.
 - `scripts/check_architecture_boundaries.py --selftest` bleibt
   Pflichtschritt, unveraendert;
 - `scripts/selftest_quality_gates.py` erhaelt neue Fixture-Faelle fuer
-  `scripts/check_build_profiles.py` (Abschnitt 7.5.2) und den erweiterten
-  Format-Scope, sobald diese in der Umsetzung konkret vorliegen;
+  `scripts/check_build_profiles.py` (Abschnitt 7.5.2), den erweiterten
+  Format-Scope und den `--scan-path`-Modus von `scripts/check_secrets.py`
+  (Abschnitt 7.7.4), sobald diese in der Umsetzung konkret vorliegen;
 - Hardware-Smoke-Tests (Bring-up, Release) als Pflichtabschluss nach der
   Arduino-Entfernung (Abschnitt 7.12).
 
@@ -934,7 +1175,12 @@ Abschnitt 7.2), nicht die dadurch erzeugte Semantik.
   `docs/ESP_IDF_UPGRADE_CONTRACT.md` ergaenzen;
 - `docs/DECISIONS.md`: ADR-001 auf `superseded` (Abschnitt 7.13.1);
 - `AGENTS.md`: siehe Abschnitt 7.13.2;
-- neu: `docs/THIRD_PARTY_COMPONENTS.md` (Abschnitt 7.13.3);
+- `docs/THIRD_PARTY_COMPONENTS.md`: **bestehende** Datei in-place
+  aktualisieren, DRAFT-Status bleibt erhalten (Abschnitt 7.13.3);
+- `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` und `lib/README.md`:
+  Repository-Mapping auf zwei Composition Roots korrigieren (Abschnitt
+  7.13.5);
+- `docs/audits/` bleibt unveraendert (Abschnitt 7.13.3);
 - `CHANGELOG.md`: Eintrag nach Abschluss.
 
 ## 15. Bewertung gegen SOLID, DRY, KISS
@@ -1006,7 +1252,9 @@ sicherheitsrelevant, wird daher in diesem Plan verbindlich festgelegt
 
 - `docs/ESP_IDF_UPGRADE_CONTRACT.md`, `docs/CI_AND_QUALITY_GATES.md`,
   `docs/ARCHITECTURE.md`, `README.md`, `docs/DECISIONS.md` (ADR-001),
-  `AGENTS.md`, `docs/THIRD_PARTY_COMPONENTS.md`, `CHANGELOG.md` aktuell.
+  `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`, `lib/README.md`, `AGENTS.md`,
+  `docs/THIRD_PARTY_COMPONENTS.md` (in-place aktualisiert, DRAFT-Status
+  erhalten), `CHANGELOG.md` aktuell; `docs/audits/` unveraendert.
 
 ### Abschlussstatus
 
@@ -1026,7 +1274,8 @@ geschlossen.
 
 - genau ein Plan-Korrekturcommit fuer diese Ueberarbeitung;
 - Draft-PR-Beschreibung verweist auf den neuen Plan-Commit und markiert
-  `05b987e3d2b375b82922990f718d0dc07c730a71` als überholt;
+  sowohl `05b987e3d2b375b82922990f718d0dc07c730a71` als auch
+  `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754` als überholt;
 - Status bleibt `IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL`;
 - vollstaendiges Anhalten bis zu einem commitgebundenen
   `PLAN APPROVED`-Ownerkommentar auf den neuen Plan-Commit.
