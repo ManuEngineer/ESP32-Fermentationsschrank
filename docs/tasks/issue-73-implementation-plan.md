@@ -111,7 +111,7 @@ Weitere Quellen: `docs/ARCHITECTURE.md`, `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.
 | Objekte | globale `platform`/`application` (aus `src/main.cpp`) | dieselben | eigene Instanzen in `main/app_main.cpp` (bewusste, begruendete Dopplung, siehe Abschnitt 8) |
 | Start | `startApplication()`: `PlatformStartupContext{hasSafeDefaults(...)}`, `platform.begin()`, `application.begin(platform)` | identisch | aequivalente lokale Funktion, identischer `app_config`-Vertrag (Profil `esp32_bringup`) |
 | Bootausgabe | `Serial.println(...)` mehrzeilig, immer vollstaendig (auch bei Fehlschlag) | keine | `ESP_LOGI`/`ESP_LOGE` mit denselben Feldern, **immer vollstaendig ausgegeben**, unabhaengig vom Ergebnis (Abschnitt 10) |
-| Updatezyklus | jede `loop()`-Iteration ruft `update()` ungebremst auf; nur der Heartbeat-Print ist auf 1000 ms gegated | ein Durchlauf | eine kooperative Endlosschleife: `update()` bei jedem Durchlauf, Heartbeat separat zeitgesteuert, ein Ein-Tick-`vTaskDelay`-Yield pro Durchlauf (Abschnitt 12) — **keine** Frequenzaenderung an `update()` gegenueber Arduino |
+| Updatezyklus | jede `loop()`-Iteration ruft `update()` ungebremst auf; nur der Heartbeat-Print ist auf 1000 ms gegated | ein Durchlauf | gleicher Aufrufvertrag (`update()` einmal pro Durchlauf, gleiche Reihenfolge), aber technisch gebremst: ein Ein-Tick-`vTaskDelay`-Yield nach jedem Durchlauf ergibt bei 100 Hz eine kooperative Kadenz von ca. 10 ms statt Arduinos ungebremster Schleife (Abschnitt 12) — bewusste, dokumentierte Schedulerabweichung, kein fachlicher Zeitvertrag |
 | Zeitbasis | `millis()` | keine | `ITimeSource` via `EspTimerTimeSource` (`esp_timer_get_time()`) |
 | Fehlerpfad | `applicationStarted=false`, `loop()` fuehrt danach nur noch `return` je Iteration aus (Task laeuft technisch weiter) | Exit-Code `1` | `app_main()` gibt die vollstaendige Zusammenfassung mit Fehlerstatus aus und kehrt danach zurueck (Abschnitt 10, offiziell unterstuetzt) |
 | Task-Modell | Arduino-Loop-Task (Framework-verwaltet) | Prozess | ESP-IDF-Main-Task, keine Zusatz-Task |
@@ -215,8 +215,11 @@ Grund, siehe Auftrag).
 ## 12. Updatekadenz
 
 Arduino ruft `update()` bei jeder ungebremsten `loop()`-Iteration auf; nur
-der Heartbeat-Print ist auf 1000 ms begrenzt. `#73` uebernimmt das exakt so
-und erfindet keine neue Frequenzgarantie fuer `update()`:
+der Heartbeat-Print ist auf 1000 ms begrenzt. `#73` uebernimmt denselben
+**Aufrufvertrag** (`update()` einmal pro Durchlauf, gleiche Reihenfolge),
+aber nicht dieselbe Taktung: ein Ein-Tick-`vTaskDelay`-Yield nach jedem
+Durchlauf ist eine bewusste, technisch begruendete Schedulerabweichung, kein
+fachlicher Zeitvertrag.
 
 ```cpp
 constexpr TickType_t kCooperativeYieldTicks = 1;  // mind. 1 Tick, siehe unten
@@ -242,21 +245,23 @@ zweite Ressourcenmessung nach ~30 s (Abschnitt 18) in denselben Schleifenkopf.
 Verbindlich:
 
 - genau eine Schleife, keine Zusatz-Task;
-- `update()` bei **jedem** Durchlauf, wie im Arduino-Pfad — keine
-  Frequenzaenderung;
-- der Heartbeat bleibt separat zeitgesteuert ueber `monotonicMillis()`;
-- `vTaskDelay(kCooperativeYieldTicks)` mit `kCooperativeYieldTicks = 1`
-  (fester Mindest-Tick), **nicht** `pdMS_TO_TICKS(1)`: Bei
-  `CONFIG_FREERTOS_HZ = 100` kann `pdMS_TO_TICKS(1)` auf `0` runden, was den
-  Yield entfallen liesse;
-- der Ein-Tick-Yield ist reine Schedulerkooperation (haelt den Idle-Task
-  regelmaessig lauffaehig, Abschnitt 13), **keine** fachliche Updateperiode
-  und **keine** Frequenzgarantie fuer `update()`;
-- eine spaetere fachliche Periode wird erst mit dem ersten realen `update()`-
-  Konsumenten geplant, nicht in `#73`.
-
-Damit entfaellt die in einer frueheren Planfassung offene Frage nach einer
-„feineren Updateperiode“ vollstaendig (siehe Abschnitt 28).
+- `update()` bei jedem Durchlauf, gleicher Aufrufvertrag wie Arduino;
+- technisch entsteht dadurch bei `CONFIG_FREERTOS_HZ = 100` eine kooperative
+  Kadenz von ca. 10 ms (ein Tick), nicht Arduinos ungebremste Schleife — das
+  ist die richtige KISS-Loesung, weil sie den Idle-Task zuverlaessig
+  lauffaehig haelt (Abschnitt 13) ohne Zusatz-Task oder
+  Schedulerabstraktion, ist aber **kein fachlicher Zeitvertrag**;
+- da `DevicePlatform::update()`/`FermentationApplication::update()` heute
+  wirkungslos sind, entsteht dadurch keine beobachtbare
+  Fachverhaltensaenderung;
+- der Heartbeat bleibt separat zeitgesteuert ueber `monotonicMillis()`, nicht
+  an die Yield-Kadenz gekoppelt;
+- `kCooperativeYieldTicks = 1` als fester Mindest-Tick, **nicht**
+  `pdMS_TO_TICKS(1)`: Bei `CONFIG_FREERTOS_HZ = 100` kann `pdMS_TO_TICKS(1)`
+  auf `0` runden, was den Yield entfallen liesse;
+- vor dem ersten realen, zeitkritischen `update()`-Konsumenten muss die dann
+  erforderliche fachliche Kadenz erneut geprueft und eigenstaendig
+  festgelegt werden — nicht in `#73`.
 
 ## 13. Task-/Stack-/Watchdogvertrag
 
@@ -454,13 +459,11 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
     APP_WEB_OTA_ENABLED=0 APP_REAL_ACTUATORS_ENABLED=0)
 ```
 
-`app_config.hpp` wird ausschliesslich vom Composition Root selbst benoetigt
-(kein anderer Konsument im ESP-IDF-Baum) und ist deshalb
-`PRIV_INCLUDE_DIRS`, nicht `INCLUDE_DIRS`: Der `main`-Komponente besitzt
-ohnehin keine eigenen Konsumenten, aber die private Sichtbarkeit macht die
-Absicht explizit und vermeidet einen unnoetig oeffentlichen Includepfad.
-`-std=gnu++17` ist jetzt auch fuer `main` noetig, da die Komponente von
-reinem C (Stub) auf C++ (`app_main.cpp`) wechselt.
+`app_config.hpp` wird ausschliesslich vom Composition Root selbst benoetigt;
+`PRIV_INCLUDE_DIRS` statt `INCLUDE_DIRS` macht das explizit und vermeidet
+einen unnoetig oeffentlichen Includepfad. `-std=gnu++17` ist jetzt auch fuer
+`main` noetig, da die Komponente von reinem C (Stub) auf C++
+(`app_main.cpp`) wechselt.
 
 **PlatformIO-Auswirkung:** `lib/device_platform_esp_idf/` wird von
 `src/main.cpp` nicht `#include`t und erscheint daher im Chain-Modus-LDF nicht
@@ -475,9 +478,10 @@ Erweitert `scripts/check_architecture_boundaries.py` (bestehende
 Mechanismen aus `#72` wiederverwendet, keine neue Parserklasse):
 
 1. `COMPONENT_REQUIRES_ALLOWLIST` wird von „eine Menge erlaubter Namen“ auf
-   „getrennte oeffentliche und private Mengen“ umgestellt, da
-   `device_platform_esp_idf` **oeffentlich** `device_platform`, aber **nur
-   privat** `esp_timer` haben darf — eine gemeinsame Menge wuerde
+   „getrennte oeffentliche und private Mengen“ umgestellt und um `main/`
+   ergaenzt, da `device_platform_esp_idf` **oeffentlich** `device_platform`,
+   aber **nur privat** `esp_timer` haben darf und `main` gar keine
+   oeffentliche Abhaengigkeit besitzen soll — eine gemeinsame Menge wuerde
    `REQUIRES esp_timer` faelschlich erlauben:
 
 ```python
@@ -489,15 +493,25 @@ COMPONENT_REQUIRES_ALLOWLIST = {
     "lib/device_platform_esp_idf/CMakeLists.txt": {
         "public": frozenset({"device_platform"}),
         "private": frozenset({"esp_timer"})},
+    "main/CMakeLists.txt": {
+        "public": frozenset(),
+        "private": frozenset(
+            {"device_platform", "fermentation_app", "device_platform_esp_idf"})},
 }
 ```
 
-   Der bestehende Tokenparser aus `#72` liefert bereits `REQUIRES`- und
-   `PRIV_REQUIRES`-Fundstellen getrennt (siehe dortige `mode`-Unterscheidung);
-   die Auswertungsfunktion wird so angepasst, dass sie beide Mengen gegen
-   ihre jeweils eigene Allowlist prueft, statt sie vor der Pruefung zu
-   einer Menge zu vereinigen. Kein neuer Parser, nur eine geaenderte
-   Vergleichslogik auf denselben bereits getrennt vorliegenden Ergebnissen.
+   Korrekturbedarf am bestehenden `#72`-Code: `collect_component_requires(...)`
+   unterscheidet intern zwar bereits per `mode`, ob ein Token unter
+   `REQUIRES` oder `PRIV_REQUIRES` steht, sammelt beide aber aktuell in
+   **einem gemeinsamen** `static_names`-Set und gibt nur
+   `(static_names, dynamic_tokens)` zurueck — die Trennung geht vor der
+   Rueckgabe verloren. Die Funktion wird so geaendert, dass sie stattdessen
+   `(public_names, private_names, dynamic_tokens)` liefert (je ein Set pro
+   `mode`), und die Vergleichslogik prueft `public_names` gegen `"public"`
+   sowie `private_names` gegen `"private"` der jeweiligen Allowlist.
+   Dynamische Tokens werden weiterhin unabhaengig vom Modus immer abgelehnt.
+   Kein neuer Parser, keine allgemeine CMake-Grammatik — nur diese eine
+   Rueckgabe- und Vergleichsanpassung auf der bestehenden Tokenlogik.
 2. Neuer `add_reference_violations(...)`-Aufruf (bestehende Funktion) fuer
    `lib/device_platform_esp_idf/`: verbietet `fermentation_app` und
    `device_platform_test_support` als Referenz — dieselbe Technik wie die
@@ -505,7 +519,9 @@ COMPONENT_REQUIRES_ALLOWLIST = {
 3. Neuer `add_reference_violations(...)`-Aufruf fuer das Verzeichnis `main/`
    (bisher nicht geprueft, da es in `#72` nur einen leeren C-Stub enthielt):
    verbietet `device_platform_test_support`, analog zur bereits bestehenden
-   Pruefung fuer `src/main.cpp`.
+   Pruefung fuer `src/main.cpp`. `main/` darf weiterhin ESP-IDF-Header aus
+   Common-Komponenten frei verwenden — nur die expliziten CMake-`REQUIRES`/
+   `PRIV_REQUIRES`-Eintraege werden durch Punkt 1 begrenzt.
 4. `IDF_LEAK_PORTABLE_ROOTS` bleibt unveraendert bei genau
    `lib/device_platform/src` und `lib/fermentation_app/src` —
    `device_platform_esp_idf` und `main/` duerfen ESP-IDF-Header enthalten
@@ -522,6 +538,12 @@ folgend), mindestens:
 - Referenz auf `fermentation_app` aus `device_platform_esp_idf`: `FAILED`;
 - eine weitere, nicht erlaubte private IDF-Komponente in
   `PRIV_REQUIRES`: `FAILED`;
+- `main` mit genau `PRIV_REQUIRES device_platform fermentation_app
+  device_platform_esp_idf`: `PASS`;
+- `main` mit `device_platform_test_support`: `FAILED`;
+- `main` mit einer zusaetzlichen direkten IDF-/Hardwarekomponente wie
+  `driver`: `FAILED`;
+- `main` mit faelschlich oeffentlichem `REQUIRES device_platform`: `FAILED`;
 - eine dynamische `${...}`-Abhaengigkeit (Muster aus `#72`): `FAILED`.
 
 Keine grosse Permutationsmatrix, kein neuer allgemeiner CMake-Parser.
@@ -616,10 +638,26 @@ erzeugt einen Compile-Abbruch durch den bestehenden
 `app_config.hpp`-Sicherheitsguard (`#error`-Direktive, siehe Abschnitt 5);
 die tatsaechliche Compilerdiagnose wird im Nachweis dokumentiert.
 
-## 25. Hardware-Smoke-Test
+## 25. Hardware-Smoke-Test — verbindliches Merge-Gate
 
 Status: `TBD_HARDWARE` — keine ESP32-Hardware in dieser Planungsphase
 angeschlossen oder geflasht.
+
+**Ownerentscheidung:** Der Hardware-Smoke-Test ist fuer `#73` ein
+**verbindliches Merge-Gate**, kein spaeter frei entscheidbarer Punkt. Ein
+erfolgreicher `idf.py build` allein beweist weder Bootverhalten noch
+Heartbeat, Watchdogfreiheit oder monotone Laufzeit auf echter Hardware —
+genau das ist aber das eigentliche Ergebnis von `#73`. Deshalb:
+
+- `TBD_HARDWARE` darf waehrend Implementierung und Code-Review offen
+  bleiben;
+- Draft-PR #78 bleibt Draft beziehungsweise ungemergt, bis dieser Test
+  bestanden und im PR dokumentiert ist;
+- `idf.py build` schliesst das Gate nicht ab;
+- fehlt Hardware, darf die Implementierung fertiggestellt werden, aber
+  Issue `#73` und der Implementierungs-PR bleiben bis zum bestandenen Test
+  offen;
+- `#74` beginnt erst nach bestandenem Smoke-Test und Merge von `#73`.
 
 Manuelle Owner-Prozedur nach Freigabe und Flashen:
 
@@ -630,25 +668,20 @@ idf.py -p <PORT> flash monitor
 Erwartete serielle Ausgabe und Nachweise:
 
 - Bootzusammenfassung (Projektname, Profil `esp32_bringup`,
-  `HARDWARE_UNVERIFIED`, `LockedForBringup`, „real actuators: disabled“,
-  „application: ready“);
+  `HARDWARE_UNVERIFIED`, Aktorpolicy exakt `LOCKED_FOR_BRINGUP` gemaess
+  `actuatorPolicyName()`, „real actuators: disabled“, „application: ready“);
 - erste Ressourcenmessung direkt danach;
 - periodische `heartbeat: safe test mode, uptime_ms=...`-Zeilen;
-- die erste geloggte Uptime liegt plausibel nahe `0` (seit
-  `EspTimerTimeSource`-Instanzerstellung, nicht seit Boot);
+- `EspTimerTimeSource` wird unmittelbar vor Eintritt in die Laufzeitschleife
+  konstruiert; der **erste Heartbeat** erscheint planmaessig erst nach der
+  1000-ms-Wartezeit, also plausibel bei ca. `1000 ms` seit Instanzerstellung
+  — **nicht** nahe `0`. Keine harte Echtzeitgrenze; serielle Log- und
+  Schedulerlatenz werden beruecksichtigt;
+- folgende Heartbeatdifferenzen liegen ungefaehr bei `1000 ms`;
 - die Uptime faellt ueber die gesamte Laufzeit nie zurueck;
-- Heartbeatdifferenzen liegen ungefaehr bei `1000 ms`;
 - eine zweite Ressourcenmessung nach rund 30 s;
 - mindestens 30 Sekunden durchgehender Betrieb ohne Neustart, ohne
   Watchdog-Reset-Log und ohne jeden GPIO-/Sensor-/Display-/WLAN-/Webzugriff.
-
-**Gate-Status:** Build-, Architektur- und statische Paritaet (Abschnitt 24)
-koennen unabhaengig vom Hardware-Smoke-Test vollstaendig abgeschlossen
-werden; `idf.py build` allein schliesst das Hardware-Gate **nicht** ab. Die
-Laufzeitparitaet im engeren Sinn bleibt bis zum bestandenen manuellen
-Smoke-Test offen. Ob der Hardware-Smoke-Test ein zwingendes Merge-Gate ist
-oder dokumentiert nachgeholt werden darf, entscheidet der Owner vor dem
-Merge; dieser Plan nimmt diese Entscheidung nicht vorweg.
 
 ## 26. Security-, Safety-, Recovery- und Persistenzgrenzen
 
@@ -694,11 +727,14 @@ einzeln begruendet.
 ## 28. Offene Ownerentscheidungen
 
 Keine. Fuer `#73` ist bereits entschieden: keine Resetursache, kein
-Loggingport, keine Zusatz-Task, keine fachliche Updateperiode (Abschnitt 12).
-Eine moegliche spaetere Bootdiagnose via `esp_reset_reason()` in einem noch
-nicht existierenden Folgeissue ist keine offene Ownerentscheidung dieses
-Plans. Offen bleiben ausschliesslich die Nicht-Entscheidungs-Kategorien
-`TBD_HARDWARE` und `MEASUREMENT_REQUIRED` (Abschnitt 29).
+Loggingport, keine Zusatz-Task, keine fachliche Updateperiode (Abschnitt 12),
+und der Hardware-Smoke-Test ist ein verbindliches Merge-Gate statt einer
+spaeter frei zu treffenden Entscheidung (Abschnitt 25). Eine moegliche
+spaetere Bootdiagnose via `esp_reset_reason()` in einem noch nicht
+existierenden Folgeissue ist keine offene Ownerentscheidung dieses Plans.
+Offen bleiben ausschliesslich die Nicht-Entscheidungs-Kategorien
+`TBD_HARDWARE` und `MEASUREMENT_REQUIRED` (Abschnitt 29) — beide sind
+Zwischenstaende bis zum Test/zur Messung, keine Entscheidungsfragen.
 
 ## 29. `SPIKE_REQUIRED` / `MEASUREMENT_REQUIRED` / `TBD_HARDWARE`
 
@@ -714,8 +750,8 @@ Siehe Abschnitt 4 (Nicht-Ziele); zusaetzlich ausdruecklich: keine
 `esp_reset_reason()`-Einbindung, kein `ILogger`-Port, keine zweite
 Composition-Root-Datei, keine Aenderung an `src/main.cpp`, keine
 Kconfig-Overlay-Differenzierung Bring-up/CI/Release, keine
-Fremdkomponente/kein Lockfile, keine Aenderung der `update()`-Aufruffrequenz
-gegenueber Arduino, kein Dauerlogging von Ressourcenwerten.
+Fremdkomponente/kein Lockfile, keine fachliche Updateperiode fuer
+`update()`, kein Dauerlogging von Ressourcenwerten.
 
 ## 31. Abgrenzung zu `#74`
 
@@ -741,9 +777,11 @@ den lokal nachgewiesenen Laufzeitpfad, auf dem `#74` aufsetzt.
   Fehlschlag; sicherer Startfehler (kein Busy-Loop, keine automatische
   Reboot-Schleife, `app_main()`-Rueckkehr statt Endlosschleife, kein
   Schleifeneintritt nach Fehlschlag).
-- `update()` wird bei jedem Schleifendurchlauf aufgerufen (keine
-  Frequenzaenderung gegenueber Arduino); Heartbeat separat zeitgesteuert bei
-  1000 ms; Ein-Tick-`vTaskDelay`-Yield pro Durchlauf; keine Zusatz-Task.
+- `update()` wird bei jedem Schleifendurchlauf aufgerufen (gleicher
+  Aufrufvertrag wie Arduino; die Ein-Tick-`vTaskDelay`-Kadenz ist eine
+  dokumentierte technische Schedulerabweichung, kein fachlicher
+  Zeitvertrag); Heartbeat separat zeitgesteuert bei 1000 ms; keine
+  Zusatz-Task.
 - Genau zwei Ressourcenmessungen (nach Init, nach ~30 s), kein
   Dauerlogging jede Sekunde.
 - CMake-Sichtbarkeit korrekt: `PRIV_INCLUDE_DIRS` fuer `app_config.hpp` in
@@ -760,9 +798,9 @@ den lokal nachgewiesenen Laufzeitpfad, auf dem `#74` aufsetzt.
 - Aktor-Negativtest korrekt als Compile-Abbruch durch den bestehenden
   `app_config.hpp`-`#error`-Sicherheitsguard nachgewiesen und dokumentiert
   (nicht als `static_assert`-Fehlschlag beschrieben).
-- Hardware-Smoke-Test bestanden oder weiterhin `TBD_HARDWARE` dokumentiert;
-  `idf.py build` schliesst dieses Gate nicht ab; Owner entscheidet vor dem
-  Merge ueber dessen Verbindlichkeit.
+- Hardware-Smoke-Test **bestanden** (verbindliches Merge-Gate, Abschnitt 25);
+  `idf.py build` allein schliesst dieses Gate nicht ab; `TBD_HARDWARE` darf
+  waehrend Implementierung/Review offen bleiben, aber nicht beim Merge.
 - Keine Fach-, Persistenz-, Wire-, Safety- oder Recoveryaenderung; keine
   Fremdkomponente.
 - Tatsaechlicher Diff gegen `docs/ENGINEERING_PRINCIPLES.md` (SOLID, DRY,
