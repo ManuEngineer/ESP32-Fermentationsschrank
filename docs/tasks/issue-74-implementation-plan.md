@@ -8,11 +8,13 @@ Basis-`main`-SHA: `c3f8044be0f081822ca8724f67fa99e9614d57ef` (Merge-Commit von P
 
 Diese Fassung überarbeitet den ursprünglichen Plan-Commit
 `05b987e3d2b375b82922990f718d0dc07c730a71` nach einem vollständigen Review
-(`PLAN_REVIEW: CHANGES_REQUIRED`) auf PR #79 sowie die erste Überarbeitung
-(Plan-Commit `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754`) nach einer zweiten,
-abschliessenden Reviewrunde (`PLAN_REVIEW: CHANGES_REQUIRED`). Beide
-vorherigen Plan-Commits bleiben in der Historie und sind überholt; diese
-Fassung ersetzt sie inhaltlich.
+(`PLAN_REVIEW: CHANGES_REQUIRED`) auf PR #79, die erste Überarbeitung
+(Plan-Commit `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754`) nach einer zweiten
+Reviewrunde (`PLAN_REVIEW: CHANGES_REQUIRED`) sowie die zweite
+Überarbeitung (Plan-Commit `6c8092755dde1fe0b39299abe94a0b3e02003beb`) nach
+einer dritten, finalen Reviewrunde (`PLAN_REVIEW: CHANGES_REQUIRED`). Alle
+drei vorherigen Plan-Commits bleiben in der Historie und sind überholt;
+diese Fassung ersetzt sie inhaltlich.
 
 ## 1. Ziel
 
@@ -86,6 +88,14 @@ Die ESP-IDF-6.0.2-Migration abschliessen:
   die Aktualisierung von ADR-013 und `lib/README.md`, die Abgrenzung
   historischer Auditdateien und die korrekte Formulierung der
   Artefakt-Aufbewahrung;
+- **Reviewauftrag "PR #79 – finale gezielte Plan-Korrekturen"**
+  (`PLAN_REVIEW: CHANGES_REQUIRED` auf Plan-Commit
+  `6c8092755dde1fe0b39299abe94a0b3e02003beb`): verbindliche Grundlage
+  dieser Fassung, insbesondere fuer den zweiphasigen Uebergangsvertrag von
+  `scripts/check_build_profiles.py`, die Unveraenderlichkeit gepinnter
+  Action-SHAs, den dokumentierten Lizenzkonflikt der
+  ESP-IDF-Installations-Action, den vollstaendigen Textartefakt-Scan und
+  den exakten Zeitpunkt der Hardware-Smoke-Tests;
 - `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` und `docs/DECISIONS.md`
   (ADR-001 PlatformIO/Arduino, ADR-008 4-MB-Budget, ADR-012 Bring-up-Profil,
   ADR-013 Plattformtrennung);
@@ -244,17 +254,21 @@ Nur in der spaeteren Umsetzungsphase, nach Planfreigabe, zu aendern:
   (endgueltige Namen, Abschnitt 7.2)
 - neu: `scripts/build_esp_idf_profiles.py` (kanonischer Buildtreiber,
   Abschnitt 7.4)
-- neu: `scripts/check_build_profiles.py` (Nachfolger von
-  `check_platformio_config.py`, Abschnitt 7.5.2)
-- `platformio.ini` (Entfernung `[env:esp32_bringup]`/`[env:esp32_release]`)
+- neu: `scripts/check_build_profiles.py` (Commit 1: zeitlich begrenzter
+  Parallelvertrag ESP-IDF + bestehende Arduino-Envs; Commit 5: Umstellung
+  auf den finalen ESP-IDF-only-Vertrag im selben Skript, kein neues Skript
+  und kein Bypass-Flag, Abschnitt 7.5.2)
+- `platformio.ini` (Entfernung `[env:esp32_bringup]`/`[env:esp32_release]`
+  in Commit 5; bleibt in Commits 1–4 unveraendert bestehen)
 - `src/main.cpp` (**nur** Entfernung des `#if defined(ARDUINO)`-Zweigs;
   `startApplication()` und der native `#else`-Zweig bleiben unveraendert
   erhalten, siehe Abschnitt 7.5.1)
 - `scripts/build_report.py` (Erweiterung um ESP-IDF-Groessendaten aus
   `idf.py size --format json2`)
 - `scripts/check_secrets.py` (Erweiterung um optionalen Scan-Modus fuer
-  generierte, nicht getrackte Artefakttexte, Abschnitt 7.7.4)
-- `scripts/check_platformio_config.py` (Entfernung, abgeloest durch
+  alle hochgeladenen, nicht getrackten Textartefakte, Abschnitt 7.7.4)
+- `scripts/check_platformio_config.py` (bleibt in Commits 1–4 unveraendert
+  parallel aktiv; Entfernung erst in Commit 5, abgeloest durch
   `scripts/check_build_profiles.py`)
 - `scripts/selftest_quality_gates.py` (neue Fixture-Faelle fuer
   Profilisolation und Driftpruefung, Abschnitt 7.5.2)
@@ -293,10 +307,11 @@ angefasst (Abschnitt 7.13.3).
 - **Gate 2 — `PRE_ARDUINO_REMOVAL_CI: PASS`:** Commit 5 (Arduino-Entfernung,
   Abschnitt 8) darf erst erfolgen, nachdem exakt auf dem Head von Commit 4
   ein vollstaendiger GitHub-Actions-Lauf bestanden hat mit: beide
-  ESP-IDF-Profile gruen, native Tests gruen, Ressourcen-, Architektur-,
-  Format-, Static-Analysis-, Secret- und Quality-Gate-Selftests gruen. Kein
-  gleichzeitiger Austausch von CI-Einfuehrung und Arduino-Entfernung in
-  einem Commit.
+  ESP-IDF-Profile gruen, **der alte Arduino-Pfad unveraendert weiterhin
+  gruen** (Parallelvertrag aus Abschnitt 7.5.2, Phase 1), native Tests
+  gruen, Ressourcen-, Architektur-, Format-, Static-Analysis-, Secret- und
+  Quality-Gate-Selftests gruen. Kein gleichzeitiger Austausch von
+  CI-Einfuehrung und Arduino-Entfernung in einem Commit.
 - **Gate 3 — Hardware-Smoke-Test-Gate:** Nach Commit 5 (Arduino-Entfernung)
   und Commit 6 (Abschlussdokumentation), auf dem finalen Implementierungs-
   Head, sind **zwei** Hardware-Smoke-Tests Pflicht (Bring-up **und**
@@ -345,36 +360,95 @@ with:
   eim-version: "v0.1.7"  # letzte veroeffentlichte EIM-Version; idf-im-cli seit 25.02.2026 archiviert
 ```
 
+**Verbindlichkeit des Pins (Korrektur aus dritter Reviewrunde):** Die hier
+genannten SHAs (`8fc05d1470d5591417e7a3707a1f2bec178db4ae` fuer die Action,
+sowie die in Abschnitt 7.11 gelisteten SHAs fuer `actions/checkout`,
+`actions/setup-python`, `actions/upload-artifact`) sind mit der
+Planfreigabe verbindlich und werden in der Umsetzung **unveraendert**
+verwendet. Ein anderer Commit enthaelt anderen ausfuehrbaren Drittcode;
+"funktionale Gleichwertigkeit" laesst sich nicht allein am Branch- oder
+Tag-Namen ablesen und wird daher nicht als Grund fuer eine stille
+Aktualisierung akzeptiert. Die vorherige Planfassung erlaubte einen
+solchen stillen Wechsel als "technische Detailkorrektur" — das ist
+ersatzlos gestrichen.
+
+Die Umsetzung **darf**:
+
+- pruefen, dass die gepinnten Commits weiterhin im jeweiligen Repository
+  existieren und erreichbar sind;
+- Herkunft und Repository-Zugehoerigkeit der Commits kontrollieren;
+- bekannte, oeffentlich dokumentierte Security-Hinweise zu den gepinnten
+  Commits pruefen und dokumentieren;
+- die Kompatibilitaet von Action-Commit, `eim-version: "v0.1.7"` und
+  ESP-IDF `v6.0.2` auf dem GitHub-hosted Runner `ubuntu-24.04` (Abschnitt
+  7.11) zu Beginn der Umsetzung (Commit 2) verifizieren, **ohne** dabei den
+  gepinnten SHA zu aendern.
+
+Die Umsetzung **darf nicht**:
+
+- automatisch auf einen neueren `v1`-Branch- oder Tag-HEAD wechseln;
+- einen anderen Action-Commit als technische Detailkorrektur behandeln;
+- die hier genannten SHAs ohne neue Ownerfreigabe ersetzen.
+
 Weitere Bedingungen:
 
-- der Action-Commit-SHA wird zu Beginn der Umsetzung (Commit 2) erneut
-  gegen den dann aktuellen HEAD von `v1` geprueft, um eine zwischenzeitlich
-  gepatchte, aber noch funktional kompatible Version nicht zu verpassen;
-  eine Abweichung vom hier genannten SHA ist eine technische
-  Detailkorrektur (aktualisierter Pin, gleiche Funktion), keine materielle
-  Planabweichung, solange Version und `eim-version` weiterhin exakt
-  gepinnt bleiben;
 - nach der Installation zusaetzliche Pruefung des tatsaechlich
   resultierenden ESP-IDF-Commits (nicht nur des Tags), Sollwert
   `7101770dc6db2667b3c477cc31365dd1acd6db4e` (siehe Abschnitt 7.11);
-- Kompatibilitaet von Action-Commit, `eim-version: "v0.1.7"` und ESP-IDF
-  `v6.0.2` auf dem GitHub-hosted Runner `ubuntu-24.04` (Abschnitt 7.11)
-  wird zu Beginn der Umsetzung (Commit 2) explizit verifiziert, bevor der
-  Rest der ESP-IDF-CI-Strecke darauf aufbaut;
-- Lizenz Apache-2.0 (verifiziert anhand der `LICENSE`-Datei im Repository
-  `espressif/install-esp-idf-action`) sowie die transitive Nutzung von EIM
-  (`espressif/idf-im-cli`, archiviert, letzte Version `v0.1.7`) werden im
-  PR und im Supply-Chain-Teil von Abschnitt 7.11 dokumentiert;
+- Lizenz von `espressif/install-esp-idf-action` **nicht widerspruchsfrei**
+  (`LICENSE_METADATA_CONFLICT`, siehe unten) sowie die transitive Nutzung
+  von EIM (`espressif/idf-im-cli`, archiviert, letzte Version `v0.1.7`,
+  Root-Lizenz Apache-2.0) werden im PR und im Supply-Chain-Teil von
+  Abschnitt 7.11 dokumentiert;
 - minimale Workflow-Permissions bleiben unveraendert (`contents: read`);
 - kein Default `latest` fuer `version` oder `eim-version`, kein gleitender
   Tag;
 - keine zusaetzliche inoffizielle Wrapper-Action.
 
-Fallback-Regel: Stellt sich in der Umsetzung heraus, dass die offizielle
-Action mit den hier gepinnten Werten ESP-IDF 6.0.2 nicht reproduzierbar auf
-`ubuntu-24.04` bereitstellt, haelt der Agent an. Ein Wechsel auf manuelle
-Installation ist dann eine materielle Planabweichung mit neuem Plan-Commit
-und erneuter Freigabe — keine eigenmaechtige Ersatzloesung.
+**Lizenzstatus `espressif/install-esp-idf-action` — `LICENSE_METADATA_CONFLICT`
+(neuer Befund aus dritter Reviewrunde, live verifiziert am exakt gepinnten
+Commit `8fc05d1470d5591417e7a3707a1f2bec178db4ae`):**
+
+- Root-`LICENSE`: Apache License 2.0 (voller Lizenztext, verifiziert);
+- `package.json`: `"license": "MIT"` (verifiziert);
+- `README.md`: "This project is licensed under the MIT License - see the
+  LICENSE file for details." — behauptet MIT, verweist aber auf die
+  Apache-2.0-`LICENSE`-Datei (in sich widerspruechlich, verifiziert);
+- `dist/licenses.txt`: enthaelt separate MIT- und weitere Notices der
+  bebuendelten Node-Laufzeitabhaengigkeiten (`@actions/core`,
+  `@actions/exec` und weitere, verifiziert vorhanden).
+
+Der Plan behauptet **keinen** widerspruchsfreien Lizenzstatus. Stattdessen
+gilt: zwei permissive, aber einander widersprechende Eigenangaben
+(Apache-2.0 vs. MIT) plus gebuendelte MIT-Drittnotices; Verwendung
+ausschliesslich als CI-Werkzeug, nicht als Bestandteil der ausgelieferten
+Firmware. Root-Lizenz und gebuendelte Notices werden im
+Implementierungs-PR nachvollziehbar referenziert; der Widerspruch wird
+dokumentiert, nicht rechtlich aufgeloest oder verschwiegen. Angesichts
+zweier permissiver Angaben und der reinen CI-Verwendung ist dies kein
+automatischer Implementierungsblocker.
+
+Fuer EIM zusaetzlich dokumentiert: `espressif/idf-im-cli` `v0.1.7`,
+Root-Lizenz Apache-2.0 (verifiziert), Repository archiviert
+(`archived: true`, verifiziert).
+
+**Fallback-Regel, jetzt vollstaendig fuer jeden Grund einer Pin-Aenderung**
+(nicht nur technisches Versagen): Stellt sich in der Umsetzung heraus, dass
+einer der in Abschnitt 7.1 oder 7.11 gepinnten SHAs nicht mehr verwendet
+werden soll — sei es wegen eines Security-Fixes, Inkompatibilitaet,
+Entfernung des Commits, einer neuen offiziellen Empfehlung oder einer
+technischen Funktionsstoerung (z. B. die Action stellt ESP-IDF 6.0.2 nicht
+reproduzierbar auf `ubuntu-24.04` bereit) —, gilt derselbe Ablauf:
+
+1. Implementierung anhalten.
+2. Plan-Datei aktualisieren.
+3. neuen Plan-Commit erstellen.
+4. neuen SHA, Diff zum vorherigen Commit (soweit einsehbar), Herkunft,
+   Lizenz und konkrete Begruendung fuer den Wechsel dokumentieren.
+5. erneut auf einen commitgebundenen `PLAN APPROVED`-Ownerkommentar warten.
+
+Kein eigenmaechtiger Wechsel auf eine andere Installationsvariante oder
+einen anderen Commit ausserhalb dieses Ablaufs.
 
 **Caching:** Fuer #74 wird **kein** Toolchain-Cache eingefuehrt (KISS: zuerst
 ein korrekter, reproduzierbarer Clean-Build; keine versteckte Cache-Drift;
@@ -565,33 +639,73 @@ main/app_main.cpp  ESP-IDF Composition Root
 
 Keine gemeinsame Universal-Composition-Root-Abstraktion.
 
-#### 7.5.2 Nachfolger fuer `scripts/check_platformio_config.py`
+#### 7.5.2 Nachfolger fuer `scripts/check_platformio_config.py` —
+zweiphasiger Uebergangsvertrag (Korrektur aus dritter Reviewrunde)
 
-`scripts/check_platformio_config.py` entfaellt mit den Arduino-Envs
-vollstaendig. Sein Schutzvertrag verschwindet nicht ersatzlos, sondern geht
-in ein neues, breiteres Skript ueber: `scripts/check_build_profiles.py`.
-Es prueft mindestens:
+**Befund:** Die vorherige Planfassung beschrieb fuer
+`scripts/check_build_profiles.py` bereits den **finalen** Vertrag (nur
+`native` unter PlatformIO, keine Arduino-Envs), waehrend Commit 1 laut
+Commit-Schnitt (Abschnitt 8) dieselbe Profil-/Driftpruefung samt Selftests
+einfuehren soll — zu einem Zeitpunkt, an dem die Arduino-Produktionsprofile
+in `platformio.ini` laut Plan noch bestehen bleiben (Commits 1–4). Beide
+Anforderungen sind gleichzeitig unerfuellbar. Die Korrektur legt daher
+einen **zeitlich begrenzten Parallelvertrag** fest, den dasselbe Skript in
+zwei Phasen durchlaeuft.
 
-- **PlatformIO:** genau ein produktiver Pfad `native`; keine
-  ESP32-Arduino-Envs; kein `framework = arduino`; keine
-  `espressif32`-Plattform; `APP_PROFILE_NATIVE=1`; bestehende native
-  Warnflags und C++17-Vertrag;
-- **ESP-IDF Bring-up:** getrennte Build-/Konfigurationspfade (Abschnitt
-  7.3); korrektes Kconfig-Profil; korrekte App-Compile-Definitionen;
-  ESP-IDF v6.0.2 und exakter Commit; reale Aktoren deaktiviert;
-- **ESP-IDF Release:** getrennte Build-/Konfigurationspfade; korrektes
-  Kconfig-Profil; `REQUIRE_VERIFIED_HARDWARE`-Profil; reale Aktoren
-  deaktiviert; kein Arduino.
+**Phase 1 — Commit 1 (Parallel-Migrationsvertrag):**
 
-`scripts/selftest_quality_gates.py` erhaelt neue Fixture-Faelle: beide
-Profile gleichzeitig aktiv; kein Profil aktiv; vertauschte Overlay-Datei;
-gemeinsames `sdkconfig`; gemeinsamer Buildordner; reale Aktoren aktiviert;
-falsche Flashgroesse; Arduino-Env erneut hinzugefuegt; falscher IDF-Tag
-oder -Commit.
+Neu: `scripts/check_build_profiles.py`. Prueft in dieser Phase:
 
-`.github/workflows/build.yml`: Schritt „PlatformIO installieren“ bleibt nur
-fuer `native` bestehen; `esp32_bringup`/`esp32_release`-Buildaufrufe werden
-durch `scripts/build_esp_idf_profiles.py` ersetzt.
+- **ESP-IDF:** Bring-up- und Release-Buildpfade getrennt (Abschnitt 7.3);
+  getrennte generierte `sdkconfig`-Dateien; korrektes Kconfig-Profil je
+  Build; korrekte Compile-Definitionen; 4-MB-Vertrag; kein PSRAM; kein
+  Web-OTA; reale Aktoren deaktiviert; kein Arduino im ESP-IDF-Build;
+  ESP-IDF v6.0.2 und exakter Commit;
+- **PlatformIO waehrend der Parallelphase:** `native` ist vorhanden und
+  unveraendert korrekt; die beiden Arduino-Environments `esp32_bringup`
+  und `esp32_release` sind noch vorhanden und entsprechen exakt dem
+  bekannten Altvertrag (`espressif32@7.0.1`, `framework = arduino`,
+  `board = esp32dev`); keine zusaetzlichen, unerwarteten PlatformIO-
+  Environments; `scripts/check_platformio_config.py` bleibt in dieser
+  Phase unveraendert **parallel aktiv** (wird erst in Commit 5 entfernt).
+
+Dieser Parallelzustand ist ein ausdruecklich zeitlich begrenzter
+Migrationsvertrag fuer Commits 1–4 und wird **nicht** als Endzustand
+dokumentiert.
+
+Selftests in Commit 1: getrennte ESP-IDF-Profile; vertauschte Overlays;
+gemeinsamer Buildordner; gemeinsames `sdkconfig`; kein Profil; beide
+Profile gleichzeitig; falscher IDF-Tag/-Commit; reale Aktoren aktiviert;
+unerwartetes zusaetzliches PlatformIO-Environment.
+
+**Phase 2 — Commit 5 (endgueltiger ESP-IDF-only-Vertrag):** Dasselbe
+`scripts/check_build_profiles.py` wird im selben Commit, der den
+Arduino-Pfad entfernt, auf den finalen Vertrag umgestellt:
+
+- PlatformIO enthaelt nur noch `native`; keine Arduino-Environments; kein
+  `framework = arduino`; keine `espressif32`-Plattform;
+  `APP_PROFILE_NATIVE=1`; bestehende native Warnflags und C++17-Vertrag;
+- beide ESP-IDF-Profile bleiben unveraendert vollstaendig geprueft (siehe
+  Phase 1);
+- `scripts/check_platformio_config.py` wird geloescht (Abschnitt 7.5.3);
+- neuer Selftest: jede erneute Einfuehrung eines Arduino- oder
+  `espressif32`-Environments schlaegt fehl.
+
+**Kein dauerhafter Bypass:** Die Phase-1-Pruefung fuer die Arduino-
+Environments ist ein Codepfad, der in Commit 5 **entfernt** (nicht per
+Flag umgeschaltet) wird. Es gibt zu keinem Zeitpunkt eine Kommandozeilen-
+option wie `--allow-legacy-arduino` oder `--migration-mode`; der
+Parallelvertrag existiert ausschliesslich als der in Commit 1 geschriebene
+und in Commit 5 durch die endgueltige Fassung ersetzte Skriptinhalt. Im
+finalen Repository (nach Commit 5) akzeptiert der Guard den Parallelzustand
+nicht mehr.
+
+`.github/workflows/build.yml`: Schritt „PlatformIO installieren“ bleibt
+waehrend Commits 1–4 fuer `native` **und** die Arduino-Envs bestehen und
+wird erst in Commit 5 auf ausschliesslich `native` reduziert;
+`esp32_bringup`/`esp32_release`-Buildaufrufe unter ESP-IDF laufen ab
+Commit 2 zusaetzlich (nicht anstelle) ueber
+`scripts/build_esp_idf_profiles.py`.
 
 #### 7.5.3 Reihenfolge
 
@@ -682,8 +796,9 @@ CI-Abbruchgrenze. Spaeteres Entscheidungskriterium: reale
 Belastungs-/Heap-Messung auf Zielhardware nach Anbindung von
 Sensoren/Display/Aktoren.
 
-#### 7.7.4 Secret- und Pfadpruefung fuer generierte Artefakte (neuer Punkt
-aus zweiter Reviewrunde)
+#### 7.7.4 Secret- und Pfadpruefung fuer generierte Artefakte (eingefuehrt
+in zweiter Reviewrunde, Geltungsbereich in dritter Reviewrunde
+vervollstaendigt)
 
 **Befund (live verifiziert):** `scripts/check_secrets.py` ermittelt seine
 Pruefmenge ueber `git ls-files` (`scripts/check_secrets.py:70`) — es scannt
@@ -697,15 +812,30 @@ vorherige Planfassung behauptete faelschlich das Gegenteil.
 **Verbindliche Korrektur:** `scripts/check_secrets.py` erhaelt einen
 optionalen, zusaetzlichen CLI-Modus fuer explizit benannte, ungetrackte
 Textdateien, ohne die bestehende Pruefung getrackter Repositorydateien zu
-veraendern:
+veraendern.
+
+**Vollstaendiger Geltungsbereich (Korrektur aus dritter Reviewrunde):**
+Alle vor `actions/upload-artifact` hochgeladenen **Textartefakte** werden
+erfasst, nicht nur Manifest und Buildlog:
 
 ```bash
 python scripts/check_secrets.py \
   --scan-path build/esp32_bringup/artifact-manifest.json \
   --scan-path build/esp32_release/artifact-manifest.json \
   --scan-path build/esp32_bringup/build.log \
-  --scan-path build/esp32_release/build.log
+  --scan-path build/esp32_release/build.log \
+  --scan-path build/esp32_bringup/sdkconfig \
+  --scan-path build/esp32_release/sdkconfig \
+  --scan-path build/esp32_bringup/compile_commands.json \
+  --scan-path build/esp32_release/compile_commands.json \
+  --scan-path build/esp32_bringup/size.json \
+  --scan-path build/esp32_release/size.json \
+  --scan-path build/esp32_bringup/flasher_args.json \
+  --scan-path build/esp32_release/flasher_args.json
 ```
+
+(exakte, tatsaechlich vorhandene Text-Flashargumentdateien statt eines
+festen Namens, falls `idf.py` einen abweichenden Dateinamen erzeugt).
 
 Der genaue Flag-Name (`--scan-path` oder gleichwertig) wird in der
 Umsetzung final benannt; der Vertrag ist bereits hier verbindlich:
@@ -714,14 +844,20 @@ Umsetzung final benannt; der Vertrag ist bereits hier verbindlich:
   aktiv, auch wenn `--scan-path` genutzt wird;
 - jede per `--scan-path` benannte Datei wird zusaetzlich auf dieselben
   Geheimnismuster geprueft wie getrackte Dateien;
-- private absolute Benutzerpfade (z. B. `/home/<name>/...`) in Manifesten
-  werden erkannt und abgelehnt oder auf einen projektrelativen/CI-Pfad
-  normalisiert — die Umsetzung legt fest, welche der beiden Reaktionen
-  gilt, sofern beide keine Geheimnisse durchlassen;
-- eine erwartete, aber fehlende Manifestdatei ist ein harter Fehler, kein
-  stiller Übersprung;
 - Binärdateien (z. B. `.bin`, `.elf`) werden nicht als Text interpretiert
   und nicht in den Musterabgleich einbezogen;
+- **kontextbezogene Pfadregel:** selbst erzeugte Manifeste
+  (`artifact-manifest.json`) muessen normalisiert sein — private absolute
+  Benutzerpfade (z. B. `/home/<name>/...`) darin werden erkannt und
+  abgelehnt oder auf einen projektrelativen/CI-Pfad normalisiert;
+  fremdgenerierte Compile-Datenbanken (`compile_commands.json`) duerfen
+  dagegen bekannte, ephemere CI-/Runner-Pfade (z. B. `/home/runner/...`,
+  Toolchain-Installationspfade) enthalten, ohne als Fund gewertet zu
+  werden — sie duerfen jedoch zu keinem Zeitpunkt Tokens, Credentials oder
+  private lokale Owner-Pfade (z. B. Entwickler-Heimatverzeichnisse ausserhalb
+  des CI-Runners) enthalten; diese werden weiterhin erkannt;
+- eine erwartete, aber fehlende Textartefaktdatei ist ein harter Fehler,
+  kein stiller Übersprung;
 - der Aufruf erfolgt in der CI **vor** `actions/upload-artifact` fuer die
   betroffenen ESP-IDF-Artefakte (Commit 3, Abschnitt 8).
 
@@ -729,9 +865,14 @@ Neue Selftest-Faelle in `scripts/selftest_quality_gates.py`:
 
 - Geheimnis in einer ungetrackten, per `--scan-path` benannten Manifestdatei
   wird erkannt;
-- ein privater absoluter Benutzerpfad in einer Manifestdatei wird erkannt;
-- ein normalisierter CI-/Projektpfad wird akzeptiert;
-- eine fehlende, aber erwartete Manifestdatei fuehrt zu einem Fehler;
+- ein privater absoluter Benutzerpfad in einer selbst erzeugten
+  Manifestdatei wird erkannt;
+- ein normalisierter CI-/Projektpfad in einer Manifestdatei wird akzeptiert;
+- ein bekannter ephemerer CI-Runner-Pfad in einer
+  `compile_commands.json`-Fixture wird **nicht** als Fund gewertet;
+- ein Token/Credential-Muster in einer `compile_commands.json`-Fixture wird
+  weiterhin erkannt;
+- eine fehlende, aber erwartete Textartefaktdatei fuehrt zu einem Fehler;
 - eine Binärdatei wird nicht als Text gescannt.
 
 ### 7.8 Format und Static Analysis
@@ -816,11 +957,12 @@ Patch-Version.
 - Runner nicht `ubuntu-latest`, sondern eine feste Runnerfamilie
   (`ubuntu-24.04`);
 - alle `uses:`-Actions auf vollstaendige Commit-SHAs pinnen, mit lesbarem
-  Versionskommentar daneben. Zum Recherchezeitpunkt dieser Planungsphase
-  verifizierte SHAs (in der Umsetzung erneut gegen den dann aktuellen Tag-
-  HEAD zu pruefen; eine aktualisierte, aber funktional gleichwertige
-  Version ist eine technische Detailkorrektur, keine materielle
-  Planabweichung):
+  Versionskommentar daneben. Die folgenden, zum Recherchezeitpunkt dieser
+  Planungsphase verifizierten SHAs sind mit der Planfreigabe **verbindlich
+  und werden in der Umsetzung unveraendert eingesetzt** (kein stiller
+  Wechsel auf einen aktuelleren Tag-/Branch-HEAD; eine Aenderung erfordert
+  den vollstaendigen Fallback-Prozess aus Abschnitt 7.1, nicht eine
+  technische Detailkorrektur):
 
   ```text
   actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803          # v6
@@ -828,6 +970,10 @@ Patch-Version.
   actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
   espressif/install-esp-idf-action@8fc05d1470d5591417e7a3707a1f2bec178db4ae  # v1, siehe Abschnitt 7.1
   ```
+
+  Die Umsetzung darf lediglich pruefen, dass diese Commits weiterhin
+  existieren, ihre Herkunft kontrollieren und bekannte Security-Hinweise
+  dazu dokumentieren — nicht sie ersetzen.
 
 - `platformio==6.1.19` bleibt exakt gepinnt (unveraendert);
 - `clang-format-18`/`clang-tidy-18` bleiben auf Major 18 fixiert; die
@@ -849,8 +995,14 @@ nicht, dass auf realer Hardware das beabsichtigte Profil und die richtige
 Aktorpolicy tatsaechlich starten. Ein Hardware-Gate ist daher **Pflicht**,
 nicht optional.
 
-Nach Commit 5 beziehungsweise auf dem finalen Implementierungs-Head, je
-mindestens 35 Sekunden:
+**Zeitpunkt (Korrektur aus dritter Reviewrunde, ersetzt die vormals
+weichere Formulierung "nach Commit 5 beziehungsweise auf dem finalen
+Implementierungs-Head"):** Beide Hardware-Smoke-Tests werden
+**ausschliesslich auf dem exakten finalen Implementierungs-Head nach
+Commit 6** durchgefuehrt — nicht bereits auf Commit 5 und nicht ein
+weiteres Mal wiederholt, falls Commit 6 nach einem ersten Testlauf noch
+Aenderungen erhaelt (in diesem Fall wird der Test auf dem dann neuen
+finalen Head erneut ausgefuehrt). Je mindestens 35 Sekunden:
 
 **Bring-up-Smoke-Test:**
 
@@ -880,6 +1032,14 @@ Testaufbau (beide Laeufe): dasselbe unbelastete ESP32-Board, UART/USB,
 keine externe 12-V-Versorgung, kein BTS7960, kein Display, keine Sensoren,
 keine Luefter, kein Peltier, MOSFET-Ausgaenge ohne Last — identisch zum
 bereits etablierten und bewaehrten Vorgehen aus #73/PR #78.
+
+**Testnachweis** (je Profil, analog zum bereits bewaehrten Format aus PR
+#78) enthaelt mindestens: finalen Implementierungs-Commit-SHA; Profil;
+Firmware-Build-SHA (identisch mit dem finalen Commit-SHA, da beide Profile
+aus demselben Head gebaut werden); seriellen Port; Beobachtungsdauer;
+tatsaechlich gemessene Heartbeat-Werte (erster Wert, Anzahl, Abstaende);
+tatsaechlich gemessene Ressourcenwerte (Heap, Stack-HWM, Zeitpunkte);
+PASS/FAIL je Kriterium.
 
 Merge-Gates fuer #74:
 
@@ -1020,9 +1180,11 @@ Reihenfolge:
 1. **Profil- und lokaler Buildvertrag:** `main/Kconfig.projbuild`,
    Bring-up-/Release-Overlays, getrennte Build-/`sdkconfig`-Pfade
    (Abschnitt 7.3), `main/CMakeLists.txt`-Mapping (Abschnitt 7.2),
-   `scripts/build_esp_idf_profiles.py`, Profil-/Driftpruefung samt
-   Selftests. Beide Profile lokal gruen. Arduino-Produktionsprofile
-   bleiben unveraendert bestehen.
+   `scripts/build_esp_idf_profiles.py`, `scripts/check_build_profiles.py`
+   im **Parallel-Migrationsvertrag** (ESP-IDF-Profile plus unveraendert
+   bestehende Arduino-Envs, Abschnitt 7.5.2 Phase 1) samt Selftests. Beide
+   ESP-IDF-Profile lokal gruen. Arduino-Produktionsprofile und
+   `scripts/check_platformio_config.py` bleiben unveraendert bestehen.
 2. **ESP-IDF-CI additiv einfuehren:** gepinnte ESP-IDF-Installation
    (Abschnitt 7.1), beide Profile ueber den kanonischen Buildtreiber in
    `build.yml`; bestehender Arduino-Produktionspfad bleibt bestehen; CI auf
@@ -1044,8 +1206,12 @@ Reihenfolge:
 5. **Arduino-Produktionspfad entfernen:** nur nach bestandenem Gate;
    `[env:esp32_bringup]`/`[env:esp32_release]` aus `platformio.ini`
    entfernen; Arduino-Zweig aus `src/main.cpp` entfernen (Datei selbst
-   bleibt, Abschnitt 7.5.1); `scripts/check_platformio_config.py` durch
-   `scripts/check_build_profiles.py` ersetzen (Abschnitt 7.5.2).
+   bleibt, Abschnitt 7.5.1); `scripts/check_platformio_config.py` loeschen;
+   `scripts/check_build_profiles.py` im selben Commit vom
+   Parallel-Migrationsvertrag auf den finalen ESP-IDF-only-Vertrag
+   umgestellt (kein neues Skript, kein Bypass-Flag, Abschnitt 7.5.2 Phase
+   2); `.github/workflows/build.yml`-Schritt „PlatformIO installieren“ auf
+   ausschliesslich `native` reduziert.
 6. **Upgradevertrag und Abschlussdokumentation:**
    `docs/ESP_IDF_UPGRADE_CONTRACT.md` (neu), `docs/THIRD_PARTY_COMPONENTS.md`
    (in-place aktualisiert, kein neues Dokument, Abschnitt 7.13.3),
@@ -1054,9 +1220,11 @@ Reihenfolge:
    und `lib/README.md` (Abschnitt 7.13.5), `AGENTS.md`, `CHANGELOG.md`.
    `docs/audits/` bleibt unangetastet (Abschnitt 7.13.3).
 
-**Finaler Head:** Auf dem finalen Implementierungs-Head erneut vollstaendige
-CI **und** beide Hardware-Smoke-Tests (Bring-up, Release) ausfuehren
-(Abschnitt 7.12).
+**Finaler Head:** Beide Hardware-Smoke-Tests (Bring-up, Release) werden
+**ausschliesslich** auf dem exakten finalen Implementierungs-Head **nach
+Commit 6** durchgefuehrt, zusammen mit einer erneuten vollstaendigen
+CI-Ausfuehrung auf demselben Head (Abschnitt 7.12). Nicht auf Commit 5 und
+nicht vor Commit 6.
 
 Issue #71 wird **nicht** in diesem PR geschlossen, sondern erst nach
 Owner-Merge und verifiziertem Abschluss von #74, analog zum bereits
@@ -1072,8 +1240,14 @@ zusaetzlich die Behandlung von `docs/THIRD_PARTY_COMPONENTS.md` (Abschnitt
 7.13.3), die Hardware-Gate-Reihenfolge (Abschnitte 1, 6, 8), die exakten
 Action-/EIM-Pins (Abschnitt 7.1), die reale Secret-/Pfadpruefung (Abschnitt
 7.7.4), die ADR-013-/`lib/README.md`-Aktualisierung (Abschnitt 7.13.5) und
-die Artefakt-Aufbewahrung (Abschnitt 7.7.2) verbindlich entschieden. Diese
-Punkte entfallen als offene Punkte. Es verbleibt:
+die Artefakt-Aufbewahrung (Abschnitt 7.7.2) verbindlich entschieden. Das
+dritte Review hat zusaetzlich den zweiphasigen Uebergangsvertrag fuer
+`scripts/check_build_profiles.py` (Abschnitt 7.5.2), die Unveraenderlichkeit
+der gepinnten Action-SHAs (Abschnitte 7.1, 7.11), den dokumentierten
+Lizenzkonflikt der Installations-Action (Abschnitt 7.1), den vollstaendigen
+Textartefakt-Scan (Abschnitt 7.7.4) und den exakten Zeitpunkt der
+Hardware-Smoke-Tests (Abschnitt 7.12) verbindlich entschieden. Diese Punkte
+entfallen als offene Punkte. Es verbleibt:
 
 1. Byte-Budget-Schwellenwerte bleiben `TBD_IMPLEMENTATION_BUDGET`
    (Abschnitt 7.7.3) — kein Blocker, sondern ein dokumentierter,
@@ -1083,14 +1257,23 @@ Punkte entfallen als offene Punkte. Es verbleibt:
    Build verifiziert; sollte sie von der hier skizzierten Form abweichen,
    ist das eine technische Detailkorrektur ohne Vertrags-/Safetywirkung,
    keine materielle Planabweichung.
-3. Der in Abschnitt 7.1 genannte Action-Commit-SHA fuer
-   `espressif/install-esp-idf-action` wird zu Beginn von Commit 2 erneut
-   gegen den dann aktuellen HEAD von `v1` geprueft (das Repository pflegt
-   keine semver-Tags). Sollte die Action mit den in Abschnitt 7.1 exakt
-   gepinnten Werten (`version: "v6.0.2"`, `eim-version: "v0.1.7"`) ESP-IDF
-   6.0.2 auf `ubuntu-24.04` nachweislich nicht reproduzierbar
-   bereitstellen, ist der in Abschnitt 7.1 beschriebene Fallback-Prozess
-   (Anhalten, neuer Plan-Commit) zu befolgen.
+3. Sollte die offizielle Installations-Action mit den in Abschnitt 7.1
+   exakt gepinnten und **verbindlichen** Werten (Action-Commit
+   `8fc05d1470d5591417e7a3707a1f2bec178db4ae`, `version: "v6.0.2"`,
+   `eim-version: "v0.1.7"`) ESP-IDF 6.0.2 auf `ubuntu-24.04` nachweislich
+   nicht reproduzierbar bereitstellen, ist ausschliesslich der in
+   Abschnitt 7.1 beschriebene vollstaendige Fallback-Prozess (Anhalten,
+   neuer Plan-Commit, erneute Freigabe) zu befolgen — **kein** stiller
+   Wechsel auf einen aktuelleren `v1`-HEAD oder einen anderen Commit.
+4. Der in Abschnitt 7.1 dokumentierte `LICENSE_METADATA_CONFLICT` von
+   `espressif/install-esp-idf-action` (Apache-2.0 in `LICENSE` versus MIT
+   in `package.json`/`README.md`) bleibt ein dokumentierter Befund, kein
+   Blocker; eine rechtliche Klaerung durch das Projekt ist nicht Teil von
+   #74.
+5. Der genaue Flag-Name fuer den in Abschnitt 7.7.4 beschriebenen
+   `check_secrets.py`-Scan-Modus (`--scan-path` oder gleichwertig) wird in
+   der Umsetzung final benannt; der Pruefvertrag selbst ist bereits
+   verbindlich festgelegt.
 
 ## 10. Ausdruecklich verbotene Vorwegnahmen
 
@@ -1156,12 +1339,18 @@ Abschnitt 7.2), nicht die dadurch erzeugte Semantik.
   CI-Pflichtschritt (Kompilieroffenheit, kein Laufzeittest ohne Hardware);
 - `scripts/check_architecture_boundaries.py --selftest` bleibt
   Pflichtschritt, unveraendert;
+- `scripts/check_build_profiles.py` wird in zwei Phasen getestet: Commit 1
+  gegen den Parallelvertrag (ESP-IDF-Profile plus bestehende Arduino-Envs),
+  Commit 5 gegen den finalen ESP-IDF-only-Vertrag (Abschnitt 7.5.2) —
+  jeweils mit eigenen Selftest-Faellen fuer die jeweilige Phase;
 - `scripts/selftest_quality_gates.py` erhaelt neue Fixture-Faelle fuer
-  `scripts/check_build_profiles.py` (Abschnitt 7.5.2), den erweiterten
-  Format-Scope und den `--scan-path`-Modus von `scripts/check_secrets.py`
+  `scripts/check_build_profiles.py` (beide Phasen, Abschnitt 7.5.2), den
+  erweiterten Format-Scope und den `--scan-path`-Modus von
+  `scripts/check_secrets.py` fuer alle hochgeladenen Textartefakte
   (Abschnitt 7.7.4), sobald diese in der Umsetzung konkret vorliegen;
-- Hardware-Smoke-Tests (Bring-up, Release) als Pflichtabschluss nach der
-  Arduino-Entfernung (Abschnitt 7.12).
+- Hardware-Smoke-Tests (Bring-up, Release) werden ausschliesslich auf dem
+  finalen Implementierungs-Head nach Commit 6 durchgefuehrt, als
+  Pflichtabschluss vor dem Merge (Abschnitt 7.12).
 
 ## 14. Dokumentationsaenderungen (Umsetzungsphase)
 
