@@ -145,3 +145,66 @@ jobs:
           esac
 
           python scripts/build_esp_idf_profiles.py all
+
+      - name: ESP-IDF-Ressourcenbericht ergaenzen (Parallelbericht)
+        run: |
+          set -euo pipefail
+          . "$IDF_PATH/export.sh"
+          python scripts/build_report.py --output build-report.md --append \
+            --esp-idf-profiles bringup release
+
+      - name: Secret- und Pfadpruefung generierter ESP-IDF-Artefakte
+        run: |
+          python scripts/check_secrets.py \
+            --scan-path build/esp32_bringup/artifact-manifest.json \
+            --scan-path build/esp32_release/artifact-manifest.json \
+            --scan-path build/esp32_bringup/build.log \
+            --scan-path build/esp32_release/build.log \
+            --scan-path build/esp32_bringup/sdkconfig \
+            --scan-path build/esp32_release/sdkconfig \
+            --scan-path build/esp32_bringup/compile_commands.json \
+            --scan-path build/esp32_release/compile_commands.json \
+            --scan-path build/esp32_bringup/size.json \
+            --scan-path build/esp32_release/size.json \
+            --scan-path build/esp32_bringup/flasher_args.json \
+            --scan-path build/esp32_release/flasher_args.json
+
+      - name: ESP-IDF-Bringup-Artefakte sichern
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: esp-idf-esp32_bringup-${{ github.sha }}
+          path: |
+            build/esp32_bringup/esp32_fermentationsschrank.bin
+            build/esp32_bringup/esp32_fermentationsschrank.elf
+            build/esp32_bringup/esp32_fermentationsschrank.map
+            build/esp32_bringup/bootloader/bootloader.bin
+            build/esp32_bringup/partition_table/partition-table.bin
+            build/esp32_bringup/flasher_args.json
+            build/esp32_bringup/sdkconfig
+            build/esp32_bringup/compile_commands.json
+            build/esp32_bringup/size.json
+            build/esp32_bringup/build.log
+            build/esp32_bringup/artifact-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: ESP-IDF-Release-Artefakte sichern
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: esp-idf-esp32_release-${{ github.sha }}
+          path: |
+            build/esp32_release/esp32_fermentationsschrank.bin
+            build/esp32_release/esp32_fermentationsschrank.elf
+            build/esp32_release/esp32_fermentationsschrank.map
+            build/esp32_release/bootloader/bootloader.bin
+            build/esp32_release/partition_table/partition-table.bin
+            build/esp32_release/flasher_args.json
+            build/esp32_release/sdkconfig
+            build/esp32_release/compile_commands.json
+            build/esp32_release/size.json
+            build/esp32_release/build.log
+            build/esp32_release/artifact-manifest.json
+          if-no-files-found: error
+          retention-days: 30

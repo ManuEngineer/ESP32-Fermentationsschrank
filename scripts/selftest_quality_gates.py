@@ -95,6 +95,8 @@ def main() -> int:
         "Buildtreiber meldet Erfolg erst nach bestandenem Guard": run_script_selftest(
             repo_root, "build_esp_idf_profiles.py"
         ),
+        "Ressourcenbericht trennt Arduino- und ESP-IDF-Messungen, erkennt "
+        "fehlende Artefakte": run_script_selftest(repo_root, "build_report.py"),
     }
 
     for name, status in results.items():
