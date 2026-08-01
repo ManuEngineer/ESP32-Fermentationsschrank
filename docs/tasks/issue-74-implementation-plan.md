@@ -997,6 +997,108 @@ einen gruenen Parallelbericht auf dem Head von Commit 4.
 - Werkzeugversionen bleiben `clang-format-18`/`clang-tidy-18` (Grenzen der
   Reproduzierbarkeit dieser Fixierung: Abschnitt 7.11).
 
+#### 7.8.1 Befund waehrend der Commit-4-Umsetzung: `clang-tidy -p build/esp32_*`
+funktioniert nicht wie geplant (materielle Planabweichung)
+
+**Status:** `COMMIT_4_BLOCKED_PENDING_PLAN_DECISION`. Die bisherige
+Planfreigabe auf Commit `7440d0964b94f06857a4e689f62e134f0da55931` gilt
+fuer den oben in diesem Abschnitt 7.8 woertlich festgelegten Befehl
+`clang-tidy -p build/esp32_bringup main/app_main.cpp ...` als **ueberholt**;
+sie deckt keine der drei unten genannten Alternativen ab.
+
+**Befund (live gegen den echten, lokal bereits gebauten
+`build/esp32_bringup`/`build/esp32_release` verifiziert, `clang-tidy-18`,
+identische Version wie in CI):**
+
+```text
+$ clang-tidy -p build/esp32_bringup \
+    main/app_main.cpp \
+    lib/device_platform_esp_idf/src/esp_timer_time_source.cpp
+Error while processing .../main/app_main.cpp.
+Error while processing .../esp_timer_time_source.cpp.
+error: unknown argument '-mlongcalls'; did you mean '-mlong-calls'? [clang-diagnostic-error]
+error: unknown argument: '-fno-shrink-wrap' [clang-diagnostic-error]
+error: unknown argument: '-fno-tree-switch-conversion' [clang-diagnostic-error]
+error: unknown argument: '-fstrict-volatile-bitfields' [clang-diagnostic-error]
+error: unknown target triple 'xtensa-esp32-unknown-elf' [clang-diagnostic-error]
+Found compiler error(s).
+```
+
+Ursache: ESP-IDFs generierte `compile_commands.json` verwendet den
+xtensa-Cross-Compiler (`xtensa-esp32-elf-gcc`, GCC-spezifische Flags wie
+`-mlongcalls`) und einen Xtensa-Zieltriple. Der `clang-tidy-18`-Vertrag
+aus Abschnitt 7.8/7.11 basiert auf Standard-LLVM/Clang aus dem
+Debian-Paket, das **keinen Xtensa-Backend besitzt** — nur Espressifs
+eigener LLVM/Clang-Fork (`esp-clang`) unterstuetzt dieses Ziel. Das ist
+kein Flag-Problem, sondern eine grundsaetzliche Ziel-Architektur-Luecke.
+
+**Zweite Verifikation (Diagnose, kein Fix-Versuch in der Umsetzung):** Ein
+probeweise gefiltertes `compile_commands.json` ohne die vier genannten
+GCC-Flags und ohne den Zieltriple schlaegt weiterhin fehl:
+
+```text
+error: no such file or directory: '@".../toolchain/cxxflags"' [clang-diagnostic-error]
+error: unknown target triple 'xtensa-esp32-unknown-elf' [clang-diagnostic-error]
+```
+
+Der Zieltriple wird von `clang-tidy` aus dem Namen des Compiler-Binaries
+selbst (`xtensa-esp32-elf-gcc`) abgeleitet, nicht (nur) aus expliziten
+Flags — reines Filtern der `compile_commands.json` kann das grundsaetzlich
+nicht beheben, solange `clang-tidy-18` kein Xtensa-Backend besitzt. Diese
+Option ist damit kein kleiner Filter, sondern ein Sackgassenbefund.
+
+**Drei mit belegten Fakten unterlegte Optionen fuer die Ownerentscheidung
+(keine davon ist vorentschieden):**
+
+1. **`esp-clang`-Toolchain verwenden (`idf.py clang-check`):** ESP-IDF
+   6.0.2 bietet den optionalen Toolchain-Bestandteil `esp-clang` an
+   (verifiziert: `idf_tools.py list` listet `esp-clang` und
+   `esp-clang-libs` als `optional`). `idf.py clang-check` ist jedoch
+   selbst kein direkter `clang-tidy`-Aufruf, sondern erfordert zusaetzlich
+   das Python-Paket `pyclang` (`pip install --upgrade pyclang`,
+   verifiziert im ESP-IDF-Quelltext
+   `tools/idf_py_actions/core_ext.py`). Das bedeutet: zwei neue
+   Abhaengigkeiten (Toolchain-Download plus Python-Paket) und ein anderer
+   Invokationsmechanismus als der im Plan woertlich festgelegte
+   `clang-tidy -p <dir> <datei>`-Befehl sowie der gepinnte
+   `clang-tidy-18`. Widerspricht damit dem bisherigen Wortlaut von
+   Abschnitt 7.8/7.11 und erfordert eine neue Lieferketten-/
+   Abhaengigkeitsentscheidung.
+2. **`compile_commands.json` gefiltert/neu geschrieben verwenden:** wie
+   oben gezeigt bereits am Zieltriple gescheitert, der nicht allein durch
+   Flags entfernt werden kann, solange kein Xtensa-faehiger Clang
+   verwendet wird. Selbst wenn eine Umgehung gefunden wuerde, ist
+   ungeklaert, ob Xtensa-spezifische Header/Intrinsics
+   (`xtensa/hal.h` u. ae.) danach ueberhaupt aufloesbar waeren. Neue,
+   bisher nicht geplante Skriptlogik ausserhalb des Plans; hohes Risiko,
+   dass dies eine tiefergehende Sackgasse ist statt eines kleinen Filters.
+3. **ESP-IDF-spezifische `clang-tidy`-Pruefung fuer #74 nicht umsetzen:**
+   `main` bleibt im `clang-format`-Suchpfad und die
+   `HeaderFilterRegex`-Erweiterung auf `^(include|lib|main)/.*` bleibt
+   bestehen (beide lokal bereits verifiziert, funktionieren unveraendert
+   ohne Xtensa-Bezug). Die ESP-IDF-spezifische statische Analyse von
+   `main/app_main.cpp`/`esp_timer_time_source.cpp` wird als
+   `BLOCKED_TOOLCHAIN` dokumentiert und **nicht** umgesetzt. Das gibt einen
+   in Abschnitt 7.8 explizit genannten Teil der Anforderung auf und
+   erfordert eine Anpassung des Wortlauts von Gate 2 (Abschnitt 6:
+   „Static-Analysis-...-Selftests gruen" muesste den ESP-IDF-Teil
+   ausdruecklich ausnehmen).
+
+Keine dieser drei Optionen liegt eindeutig innerhalb des bereits
+freigegebenen Plans (AGENTS.md, Abschnitt „Kleine technische
+Detailentscheidungen"); jede aendert entweder eine Abhaengigkeit, den
+Invokationsvertrag oder den Gate-Wortlaut. Die Umsetzung von Commit 4 ist
+deshalb angehalten, bis der Owner eine der drei Optionen (oder eine
+vierte) freigibt.
+
+Bereits vor diesem Befund lokal verifiziert und **nicht** von der
+Blockierung betroffen (koennen im gewaehlten Umfang von Commit 4
+unveraendert uebernommen werden): `main` im `clang-format`-Suchpfad
+(`clang-format-18 --dry-run --Werror` lokal PASS ueber `src include lib
+test main`) und die `HeaderFilterRegex`-Erweiterung auf
+`^(include|lib|main)/.*` (reine Konfigurationsaenderung, keine
+Werkzeug-/Zielarchitektur-Abhaengigkeit).
+
 ### 7.9 Komponenten- und Lockfilevertrag
 
 - Kein `idf_component.yml` fuer #74: es gibt aktuell null externe
@@ -1388,6 +1490,17 @@ als offene Punkte. Es verbleibt:
    `check_secrets.py`-Scan-Modus (`--scan-path` oder gleichwertig) wird in
    der Umsetzung final benannt; der Pruefvertrag selbst ist bereits
    verbindlich festgelegt.
+6. **Neu, `COMMIT_4_BLOCKED_PENDING_PLAN_DECISION` (Abschnitt 7.8.1):** Der
+   in Abschnitt 7.8 woertlich festgelegte Befehl
+   `clang-tidy -p build/esp32_bringup main/app_main.cpp ...` funktioniert
+   nicht gegen die von ESP-IDF 6.0.2 generierte `compile_commands.json`
+   (kein Xtensa-Backend in `clang-tidy-18`, live verifiziert). Drei
+   Optionen mit Belegen sind in Abschnitt 7.8.1 dokumentiert
+   (`esp-clang`/`idf.py clang-check` mit neuen Abhaengigkeiten;
+   `compile_commands.json`-Filterung, bereits als Sackgasse verifiziert;
+   Verzicht auf die ESP-IDF-spezifische `clang-tidy`-Pruefung fuer #74
+   inklusive Anpassung von Gate 2 in Abschnitt 6). Keine Option ist
+   vorentschieden; Commit 4 ist bis zur Ownerentscheidung angehalten.
 
 ## 10. Ausdruecklich verbotene Vorwegnahmen
 
