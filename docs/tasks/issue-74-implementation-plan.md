@@ -29,13 +29,25 @@ festgelegte Befehl nicht funktioniert (Xtensa-Backend-Luecke in
 Standard-`clang-tidy-18`). Plan-Commit
 `9607fbafc283dfb89623043f10dbff43780bc148` dokumentierte diesen Befund
 mit drei offenen, nicht vorentschiedenen Optionen und war **nicht**
-freigabefaehig. Diese Fassung setzt die verbindliche Ownerentscheidung
-fuer den offiziellen `esp-clang`/`idf.py clang-check`-Pfad um
-(Abschnitt 7.8.1) und dokumentiert zwei daraus live verifizierte,
-zusaetzliche offene Punkte (Abschnitt 7.8.2, Abschnitt 9). Plan-Commit
-`9607fbafc283dfb89623043f10dbff43780bc148` ist damit **ueberholt**; diese
-Fassung ersetzt ihn fuer Abschnitt 7.8 vollstaendig. Abschnitte 1–7.7,
-7.9–7.13 sowie die zugehoerige `PLAN APPROVED`-Freigabe auf Commit
+freigabefaehig. Die erste Ueberarbeitung (Plan-Commit
+`72700d76aec8e0a4fb5a0e78bb17d3ebcaa2ad53`) setzte die verbindliche
+Ownerentscheidung fuer den offiziellen `esp-clang`/`idf.py clang-check`-
+Pfad um (Abschnitt 7.8.1) und dokumentierte zwei daraus live verifizierte,
+zusaetzliche offene Punkte (Befund A, Befund B), war aber selbst nach dem
+Reviewauftrag "PR #79 – Commit-4-Plan: letzte verbindliche Korrekturen"
+noch **nicht** freigabefaehig: Befund A war fälschlich als drei offene,
+nicht vorentschiedene Optionen dargestellt statt als reines
+Makroexpansionsartefakt entschieden, die `pyclang`-Version war nur
+protokolliert statt fail-closed erzwungen, die Werkzeugverifikation im
+geplanten Analysetreiber war zu schwach ("enthaelt Espressif" statt
+exakter Pfad-/Versionsabgleich), die PATTERNS-Dateiauswahl war nicht
+gegen die real reproduzierte "0 von 28 Dateien"-Falle abgesichert, und
+mehrere abhaengige Abschnitte (5, 6, 8, 9, 10, 13, die Liste ueberholter
+Plan-Commits) waren inkonsistent. Diese Fassung schliesst alle diese
+Punkte. Plan-Commits `9607fbafc283dfb89623043f10dbff43780bc148` **und**
+`72700d76aec8e0a4fb5a0e78bb17d3ebcaa2ad53` sind damit **ueberholt**;
+diese Fassung ersetzt beide fuer Abschnitt 7.8 vollstaendig. Abschnitte
+1–7.7, 7.9–7.13 sowie die zugehoerige `PLAN APPROVED`-Freigabe auf Commit
 `7440d0964b94f06857a4e689f62e134f0da55931` bleiben unveraendert in Kraft;
 nur Abschnitt 7.8 und die davon abhaengigen Abschnitte 5, 6, 8, 9, 10, 12,
 13 wurden in dieser Fassung angepasst.
@@ -164,7 +176,25 @@ Die ESP-IDF-6.0.2-Migration abschliessen:
   Freigabe; offizielle ESP-IDF-6.0.2-Dokumentation
   (`docs/en/api-guides/tools/idf-clang-tidy.rst`) und der installierte
   `pyclang`-Quelltext wurden fuer diese Ueberarbeitung read-only
-  verifiziert.
+  verifiziert;
+- **Reviewauftrag "PR #79 – Commit-4-Plan: letzte verbindliche
+  Korrekturen"** (`COMMIT_4_PLAN_REVIEW: CHANGES_REQUIRED`,
+  `OWNER_DECISION_ESP_CLANG: CONFIRMED`,
+  `OWNER_DECISION_COGNITIVE_COMPLEXITY: IGNORE_MACRO_EXPANSIONS` auf
+  Plan-Commit `72700d76aec8e0a4fb5a0e78bb17d3ebcaa2ad53`): verbindliche
+  Grundlage dieser Fassung — entscheidet Befund A abschliessend als
+  Makroexpansionsartefakt (`readability-function-cognitive-complexity.
+  IgnoreMacros: 'true'`, `main/app_main.cpp` bleibt unveraendert), macht
+  die `pyclang`-Version zu einem fail-closed pruefbaren Vertrag, verlangt
+  exakte Pfad-/Versionsverifikation fuer `esp-clang` **und** `pyclang` im
+  Analysetreiber, verlangt eine `re.escape()`-verankerte PATTERNS-Regex
+  mit positiver Nachweisfuehrung ueber die tatsaechlich ausgewaehlten
+  Dateien, verlangt eine reale Nachweisfuehrung, dass `.clang-tidy` die
+  alleinige Konfigurationsquelle bleibt, verlangt das Sichern von
+  `warnings.txt` auch bei einem fehlgeschlagenen Analyselauf, erweitert
+  die Selftestliste und die vollstaendige Liste ueberholter Plan-Commits,
+  und verlangt einen im Plan dokumentierten, real durchgefuehrten
+  Read-only-Verifikationsnachweis vor dieser Freigabe (Abschnitt 7.8.7).
 
 ## 4. Aktuelle Ausgangslage (Bestandsaufnahme)
 
@@ -342,18 +372,24 @@ Nur in der spaeteren Umsetzungsphase, nach Planfreigabe, zu aendern:
   Abschnitt 7.13.5)
 - `AGENTS.md` (ESP-IDF-only-Stand, Abschnitt 7.13.2)
 - `.clang-tidy` (`HeaderFilterRegex` auf `^(include|lib|main)/.*`
-  erweitert, Abschnitt 7.8)
+  erweitert, `CheckOptions:
+  readability-function-cognitive-complexity.IgnoreMacros: 'true'`
+  ergaenzt, Abschnitt 7.8)
 - neu: `scripts/run_esp_idf_static_analysis.py` (kanonischer
   ESP-IDF-`esp-clang`-Analysetreiber, Abschnitt 7.8.4)
+- `scripts/esp_idf_contract.py` (Erweiterung um die neuen
+  Werkzeugvertragskonstanten `ESP_CLANG_VERSION`,
+  `ESP_CLANG_LINUX_AMD64_SHA256`, `PYCLANG_VERSION` — bestehende
+  Konstanten/Namenshelfer bleiben unveraendert, DRY-Quelle fuer beide
+  Analysetreiber, Abschnitt 7.8.4)
 
 Kein produktiver Fachcode (`lib/device_platform/`, `lib/fermentation_app/`,
-`startApplication()`/nativer Kern in `src/main.cpp`) wird inhaltlich
-veraendert. **Offene Ausnahme:** `main/app_main.cpp` ist von dieser
-Zusicherung ausgenommen, solange Befund A aus Abschnitt 7.8.2 nicht
-entschieden ist — je nach Ownerentscheidung bleibt die Datei entweder
-unveraendert (Option 3, projektweite `.clang-tidy`-Anpassung) oder
-erhaelt eine gezielte Aenderung (Option 1 Refactoring, Option 2
-Inline-Ausnahme). `docs/audits/` (historische Auditdateien, u. a.
+`startApplication()`/nativer Kern in `src/main.cpp`, `main/app_main.cpp`)
+wird inhaltlich veraendert. Befund A (Abschnitt 7.8.2) ist entschieden:
+die Loesung liegt ausschliesslich in `.clang-tidy`
+(`IgnoreMacros: 'true'`), `main/app_main.cpp` bleibt **ohne jede
+Aenderung** — kein Refactoring, kein `NOLINT`, keine sonstige
+Modifikation. `docs/audits/` (historische Auditdateien, u. a.
 `docs/audits/RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`) wird in #74 **nicht**
 angefasst (Abschnitt 7.13.3).
 
@@ -386,12 +422,13 @@ angefasst (Abschnitt 7.13.3).
 
   Gate 2 wird **nicht** um die ESP-IDF-Static-Analysis erleichtert; die
   „ESP-IDF ... static analysis"-Zeilen sind ab Commit 4 verbindlicher
-  Bestandteil des Gates, nicht optional. Diese beiden Zeilen koennen erst
-  wahrheitsgemaess `PASS` melden, wenn Befund A aus Abschnitt 7.8.2
-  entschieden ist (die Entscheidung selbst legt fest, ob eine Aenderung
-  an `main/app_main.cpp` oder an `.clang-tidy` noetig ist, damit der
-  Analyselauf ueberhaupt fehlerfrei durchlaeuft). Kein gleichzeitiger
-  Austausch von CI-Einfuehrung und Arduino-Entfernung in einem Commit.
+  Bestandteil des Gates, nicht optional. Befund A (Abschnitt 7.8.2) ist
+  entschieden (`readability-function-cognitive-complexity.IgnoreMacros:
+  'true'` in `.clang-tidy`, `main/app_main.cpp` unveraendert); diese
+  beiden Zeilen koennen damit in der Umsetzung wahrheitsgemaess `PASS`
+  melden, sobald der in Abschnitt 7.8.4 spezifizierte Analysetreiber
+  implementiert ist. Kein gleichzeitiger Austausch von CI-Einfuehrung und
+  Arduino-Entfernung in einem Commit.
 - **Gate 3 — Hardware-Smoke-Test-Gate:** Nach Commit 5 (Arduino-Entfernung)
   und Commit 6 (Abschlussdokumentation), auf dem finalen Implementierungs-
   Head, sind **zwei** Hardware-Smoke-Tests Pflicht (Bring-up **und**
@@ -1079,19 +1116,32 @@ enthaelt am gepinnten ESP-IDF-Commit
 Nach dem bestehenden, bereits in Commit 2 verwendeten
 `"$IDF_PATH/install.sh" esp32` ist `pyclang` **ohne zusaetzlichen
 Installationsschritt** verfuegbar — live verifiziert:
-`pip show pyclang` meldet Version `0.7.0`. **Einschraenkung gegenueber
-der urspruenglichen Korrekturformulierung:** `pyclang` ist in
+`importlib.metadata.version("pyclang")` meldet `0.7.0`. `pyclang` ist in
 `espidf.constraints.v6.0.txt` (der von ESP-IDF selbst fuer
 reproduzierbare Python-Abhaengigkeiten verwendeten Constraints-Datei)
-**nicht** aufgefuehrt (live verifiziert: kein Treffer). Der
-Installationsschritt selbst ist an die exakt ausgecheckte ESP-IDF-Version
-gebunden (dieselbe `requirements.core.txt`), die tatsaechlich
-installierte `pyclang`-Version ist jedoch **nicht** durch ein
-Constraints-File exakt fixiert und kann sich bei einer Neuinstallation
-aendern. Verbindlich: kein separates `pip install --upgrade pyclang`;
-die durch ESP-IDF installierte Version wird im CI-Log protokolliert
-(`pip show pyclang` oder gleichwertig), damit eine spaetere Drift
-sichtbar bleibt statt stillschweigend zu passieren.
+**nicht** aufgefuehrt (live verifiziert: kein Treffer) — die tatsaechlich
+installierte `pyclang`-Version ist damit **nicht** durch ESP-IDFs eigenes
+Constraints-File exakt fixiert.
+
+**Verbindliche Korrektur (ersetzt die vorherige Log-only-Behandlung):**
+Da ESP-IDF selbst keine exakte `pyclang`-Fixierung liefert, erzwingt
+`scripts/run_esp_idf_static_analysis.py` diese Fixierung projekteigen als
+**fail-closed Vertrag**, nicht als reine Protokollierung:
+
+```text
+PYCLANG_VERSION = "0.7.0"   (scripts/esp_idf_contract.py)
+```
+
+Der Analysetreiber prueft `importlib.metadata.version("pyclang") ==
+PYCLANG_VERSION` **vor** jedem Analyselauf und bricht bei jeder
+Abweichung (aeltere, neuere oder fehlende `pyclang`-Installation) mit
+einem harten Fehler ab, bevor `idf.py clang-check` ueberhaupt
+aufgerufen wird — kein Fortfahren mit einer nicht exakt verifizierten
+`pyclang`-Version, keine reine Log-Zeile. Eine spaetere, bewusste
+`pyclang`-Versionsaenderung erfordert eine explizite Aktualisierung von
+`PYCLANG_VERSION` in `scripts/esp_idf_contract.py` als eigene,
+nachvollziehbare Aenderung — kein stiller Drift. Weiterhin verbindlich:
+kein separates `pip install --upgrade pyclang`.
 
 **`esp-clang`-Herkunft (live installiert und gegen den gepinnten
 ESP-IDF-Commit verifiziert):**
@@ -1168,17 +1218,16 @@ Interpretationsspielraum):
    sobald Funde als Fehler gewertet werden, und mit `0`, wenn keine
    vorliegen.
 
-#### 7.8.2 Zwei einzeln zu entscheidende Befunde aus dem realen Probelauf
-(Ownerentscheidung erforderlich, nicht durch die `esp-clang`-Entscheidung
-geloest)
+#### 7.8.2 Zwei Funde aus dem realen Probelauf — Befund A entschieden,
+Befund B als einzeln begruendete Fremdheader-Ausnahme umgesetzt
 
 Der reale Probelauf gegen **beide** Profile (identische Funde auf
 `esp32_bringup` und `esp32_release`, da dieselben Quellen und dieselbe
-`.clang-tidy` verwendet werden) liefert **zwei** Funde, die vor
-`COMMIT_4_REVIEW: PASS` und vor Gate 2 (Abschnitt 6) explizit entschieden
-sein muessen.
+`.clang-tidy` verwendet werden) lieferte **zwei** Funde.
 
-**Befund A — echter Code-Befund, keine Werkzeugluecke:**
+**Befund A — entschieden: Makroexpansionsartefakt, keine echte
+Codekomplexitaet (`OWNER_DECISION_COGNITIVE_COMPLEXITY:
+IGNORE_MACRO_EXPANSIONS`):**
 
 ```text
 main/app_main.cpp:23:6: error: function 'logBootSummary' has cognitive
@@ -1186,39 +1235,45 @@ complexity of 145 (threshold 25)
 [readability-function-cognitive-complexity,-warnings-as-errors]
 ```
 
-Dies ist ein inhaltlich zutreffender Befund im bestehenden, aus Issue #73
-uebernommenen `main/app_main.cpp` — keine Fehlkonfiguration des neuen
-Analysepfads. Abschnitt 5 dieses Plans legt jedoch ausdruecklich fest:
-„Kein produktiver Fachcode (..., `main/app_main.cpp`, ...) wird
-inhaltlich veraendert." `readability-function-cognitive-complexity` ist
-zudem kein Sonderfall wie `misc-header-include-cycle` in Befund B: Es ist
-kein ESP-IDF-Fremdheader betroffen, sondern Projektcode selbst — die in
-Abschnitt 9 vorgesehene Ausnahme fuer „notwendige", einzeln begruendete
-Abweichungen deckt gezielte Fremdheader-Ausnahmen, aber keine pauschale
-Nichtbeachtung echter Befunde im eigenen Code.
+**Ursache:** Der hohe gemeldete Wert entsteht durch die Expansion der in
+`logBootSummary` verwendeten `ESP_LOGI`/`ESP_LOGE`-Makros — diese Makros
+expandieren intern zu bedingten Anweisungen (`if`/`else`-Ketten fuer die
+laufzeitabhaengige Log-Level-Pruefung), die `clang-tidy` beim Nachzaehlen
+der kognitiven Komplexitaet als zusaetzliche Verzweigungen des
+Quellcodes zaehlt, obwohl sie nicht vom Projektentwickler geschrieben
+wurden und keine reale Kontrollflusskomplexitaet des Projekts darstellen.
 
-Drei Optionen, **keine vorentschieden**:
+**Loesung (verbindlich, einzige zulaessige Umsetzung):**
+`readability-function-cognitive-complexity.IgnoreMacros: 'true'` wird in
+`.clang-tidy`s `CheckOptions:` ergaenzt. `main/app_main.cpp` bleibt dabei
+**vollstaendig unveraendert** — kein Refactoring, kein `NOLINT`, keine
+sonstige Aenderung an der Datei. Der Check selbst
+(`readability-function-cognitive-complexity`) bleibt **aktiv**, sowohl
+fuer `main/app_main.cpp` als auch fuer alle anderen von der ESP-IDF- und
+der nativen Analyse erfassten Quellen — es handelt sich um eine gezielte
+Option desselben Checks, keine Deaktivierung des Checks (weder projektweit
+noch fuer diese eine Datei).
 
-1. `logBootSummary` in `main/app_main.cpp` refaktorieren, um die
-   kognitive Komplexitaet unter den Schwellenwert zu senken. Erfordert
-   eine ausdrueckliche Erweiterung des Dateiumfangs aus Abschnitt 5 (die
-   dortige Formulierung schliesst inhaltliche Aenderungen an
-   `main/app_main.cpp` derzeit aus) und eine gesonderte Freigabe fuer
-   diese Code-Aenderung ausserhalb der reinen CI-/Tooling-Anpassung von
-   Commit 4.
-2. Eine gezielte, dokumentierte Inline-Ausnahme in `main/app_main.cpp`
-   (`// NOLINT(readability-function-cognitive-complexity)` an der
-   betroffenen Funktion) setzen. Technisch minimal (keine
-   Verhaltensaenderung), aendert aber ebenfalls den Dateiinhalt von
-   `main/app_main.cpp` entgegen der bisherigen Formulierung in
-   Abschnitt 5 und muesste dort ausdruecklich als Ausnahme dokumentiert
-   werden.
-3. `readability-function-cognitive-complexity` projektweit in
-   `.clang-tidy` deaktivieren. Vermeidet jede Aenderung an
-   `main/app_main.cpp`, schwaecht aber die Analyse fuer **alle** Quellen
-   (nativ und ESP-IDF) und widerspricht dem in AGENTS.md verlangten
-   Begruendungsgrad fuer projektweite statt einzeln begruendete
-   Ausnahmen.
+**Real verifiziert (Read-only-Nachweis dieser Ueberarbeitung, Abschnitt
+7.8.7):**
+
+- Mit `IgnoreMacros: 'true'` gesetzt: `idf.py clang-check --exit-code`
+  gegen `main/app_main.cpp` liefert Exitcode `0`, keine Funde — der
+  Makro-Befund verschwindet vollstaendig.
+- Mit identischer Konfiguration, aber **ohne** die `IgnoreMacros`-Option
+  (Check aktiv, Standardverhalten): derselbe Aufruf liefert exakt
+  denselben Befund wie oben (Exitcode `1`, `cognitive complexity of 145`)
+  — der Check ist also nachweislich weiterhin voll aktiv, nur die
+  Makro-verursachte Fehlmeldung wird durch die Option unterdrueckt.
+- Gegenprobe mit einer synthetischen, **nicht** makrobasierten Fixture
+  (funktionale Verschachtelung aus `if`/`for`/`while`/`switch` ohne
+  Makroverwendung, echte kognitive Komplexitaet): derselbe Check mit
+  `IgnoreMacros: 'true'` meldet fuer diese Fixture weiterhin einen Fund
+  (`cognitive complexity of 75`, Schwellenwert 25) — die Option
+  unterdrueckt also **ausschliesslich** makroverursachte Verzweigungen,
+  nicht echte, im Projektcode selbst geschriebene Verschachtelung. Die
+  Ownerentscheidung schwaecht den Check damit nachweislich nicht
+  projektweit ab.
 
 **Befund B — Fremdheader-Ausnahme, durch Abschnitt 9 bereits vorgesehen:**
 
@@ -1235,17 +1290,28 @@ Verhalten) — betrifft ausschliesslich ESP-IDFs eigene, unveraenderliche
 Headerstruktur (`components/freertos/...`), nicht Projektcode. Dies ist
 die in Abschnitt 9 bereits vorgesehene, einzeln zu benennende Ausnahme:
 `misc-header-include-cycle` wird fuer den ESP-IDF-Analysepfad gezielt
-deaktiviert (z. B. per `-checks="-misc-header-include-cycle"`-Ergaenzung
-in `--run-clang-tidy-options`, exakte Syntax vor der Commit-4-
-Implementierung final gegen die reale Installation zu bestaetigen). Die
-native Analyse (Debian clang-tidy 18) bleibt davon unberuehrt, da sie
-ESP-IDF-Header ueberhaupt nicht compiliert.
+deaktiviert, per verifizierter, exakter Syntax:
 
-**Bis zur Ownerentscheidung zu Befund A gilt:** Gate 2 (Abschnitt 6) kann
-mit der Formulierung „ESP-IDF esp32_bringup/esp32_release static
-analysis with official esp-clang: PASS" **nicht** wahrheitsgemaess
-erfuellt werden, solange Befund A nicht entschieden ist. Der Owner
-entscheidet mit der Freigabe dieses Plan-Commits zugleich ueber Befund A.
+```text
+--run-clang-tidy-options '-header-filter="^(include|lib|main)/.*" -checks="-misc-header-include-cycle"'
+```
+
+**Real verifiziert (Abschnitt 7.8.7):** Diese `-checks=`-Ergaenzung ist
+eine echte **inkrementelle** Ausnahme zusaetzlich zu `.clang-tidy`, keine
+zweite, `.clang-tidy` ersetzende Checkliste — belegt durch denselben
+Testlauf wie bei Befund A: mit `-checks="-misc-header-include-cycle"`
+und **ohne** `IgnoreMacros: 'true'` gesetzt liefert der Analyselauf
+weiterhin den Befund-A-Fund (Check aktiv), aber nicht mehr den
+Befund-B-Fund (Check gezielt ausgenommen) — beide Ausnahmen wirken
+nachweislich unabhaengig voneinander und unabhaengig vom Rest der in
+`.clang-tidy` aktivierten Checks. Die native Analyse (Debian
+clang-tidy 18) bleibt von dieser Ausnahme unberuehrt, da sie ESP-IDF-
+Header ueberhaupt nicht compiliert. `.clang-tidy` bleibt fuer beide
+Analysepfade die alleinige Konfigurationsquelle; die ESP-IDF-Kommandozeile
+ergaenzt ausschliesslich diese eine, oben genannte Ausnahme, keine
+weiteren Checks und keinen abweichenden `-header-filter`-Wert ausserhalb
+des in Abschnitt 7.8.1 dokumentierten Werts (Abschnitt 7.8.4 verlangt
+eine reale Nachweisfuehrung dieses Vertrags im Analysetreiber).
 
 #### 7.8.3 Strikte Trennung von Produktionsbuild und Analysebuild
 
@@ -1287,26 +1353,68 @@ Aufgaben:
   `scripts/build_esp_idf_profiles.py`);
 - Verwendung der bestehenden Konstanten/Namenshelfer aus
   `scripts/esp_idf_contract.py` (DRY, keine erneute Profil-/
-  Pfadnamensdefinition);
+  Pfadnamensdefinition), erweitert um `ESP_CLANG_VERSION`,
+  `ESP_CLANG_LINUX_AMD64_SHA256`, `PYCLANG_VERSION` (Abschnitt 5);
 - Pruefung der aktiven ESP-IDF-Herkunft (Wiederverwendung von
   `check_build_profiles.check_esp_idf_version()`, analog zum bestehenden
   Muster in `scripts/build_esp_idf_profiles.py`, Abschnitt 7.4 — keine
   zweite Implementierung);
-- Pruefung, dass tatsaechlich `esp-clang` und nicht System-`clang-tidy`
-  aktiv ist (`clang-tidy --version` enthaelt „Espressif", harter Fehler
-  sonst);
+- **Exakte Werkzeugverifikation vor jedem Analyselauf** (ersetzt die
+  vorherige, zu schwache Pruefung „`clang-tidy --version` enthaelt
+  Espressif"; jeder einzelne Punkt ist ein harter Fehler bei Abweichung,
+  bevor `idf.py clang-check` aufgerufen wird):
+  1. das aufgeloeste `clang-tidy` liegt exakt unter
+     `$IDF_TOOLS_PATH/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/
+     clang-tidy` (exakter Pfad, nicht nur ein Teilstring-Vergleich);
+  2. `clang-tidy --version` enthaelt exakt `ESP_CLANG_VERSION`
+     (`esp-20.1.1_20250829`);
+  3. `/usr/bin/clang-tidy-18` (das native, in Abschnitt 7.8 fuer den
+     PlatformIO-Pfad verwendete Debian-Werkzeug) wird **ausdruecklich
+     nicht** als aktives `clang-tidy` fuer den ESP-IDF-Analysepfad
+     akzeptiert — expliziter Vergleich des aufgeloesten Pfads gegen
+     diesen bekannten Fehlerfall, harter Fehler bei Treffer;
+  4. `importlib.metadata.version("pyclang") == PYCLANG_VERSION`
+     (`0.7.0`, Abschnitt 7.8.1) — fail-closed, kein Log-only;
+  5. `.clang-tidy` bleibt nachweislich die alleinige Konfigurationsquelle:
+     der Treiber verifiziert nach dem Zusammenbau von
+     `--run-clang-tidy-options`, dass ausschliesslich der in
+     Abschnitt 7.8.1 dokumentierte `-header-filter`-Wert und die eine in
+     Abschnitt 7.8.2 dokumentierte `-checks="-misc-header-include-cycle"`-
+     Ausnahme uebergeben werden — keine zusaetzlichen, `.clang-tidy`
+     ueberschreibenden `-checks=`- oder `WarningsAsErrors`-Werte;
 - Aufbau der in Abschnitt 7.8.3 festgelegten, strikt getrennten
   Analyseverzeichnisse mit denselben Profiloverlays wie der
   Produktionsbuild;
+- **Verankerte, `re.escape()`-basierte PATTERNS-Regex mit positiver
+  Dateiauswahlverifikation** (schliesst die real reproduzierte "Running
+  clang-tidy for 0 files out of 28"-Falle aus Abschnitt 7.8.1 aus): die
+  Regex wird programmatisch aus den beiden exakten, repository-relativen
+  Pfaden `main/app_main.cpp` und
+  `lib/device_platform_esp_idf/src/esp_timer_time_source.cpp` mittels
+  `re.escape()` aufgebaut und verankert (`(?:^|/)` am Anfang, `$` am Ende
+  jedes Pfadsegments), nicht aus einem frei geschriebenen Regex-String.
+  Vor dem eigentlichen `clang-check`-Aufruf liest der Treiber das
+  profilspezifische `compile_commands.json` und wendet dieselbe Regex
+  selbst auf die darin enthaltenen Dateipfade an; das Ergebnis muss
+  **exakt zwei** Treffer liefern, je einer fuer die beiden erwarteten
+  Dateien. Harter Fehler, unabhaengig von der spaeteren Textausgabe des
+  Werkzeugs, bei: null Treffern, genau einem Treffer, drei oder mehr
+  Treffern, doppelten Treffern derselben Datei, oder einem Treffer
+  ausserhalb des erwarteten Repository-Pfads;
 - Aufruf von `idf.py clang-check` in der in Abschnitt 7.8.1 verifizierten
-  Kommandoform (Ein-Regex-PATTERNS, `--run-clang-tidy-options` mit
-  Header-Filter und der Befund-B-Ausnahme, `--exit-code`);
+  Kommandoform (die oben verankerte Ein-Regex-PATTERNS,
+  `--run-clang-tidy-options` mit Header-Filter und der Befund-B-Ausnahme,
+  `--exit-code`);
 - Analyse genau `main/app_main.cpp` und
   `lib/device_platform_esp_idf/src/esp_timer_time_source.cpp` je Profil;
-- profilspezifisches Verschieben von `warnings.txt` unmittelbar nach
-  jedem Lauf (Abschnitt 7.8.5 — das Werkzeug schreibt live verifiziert
-  immer in das aktuelle Arbeitsverzeichnis, nicht in das `-B`-
-  Analyseverzeichnis);
+- **`warnings.txt` wird auch bei einem fehlgeschlagenen Analyselauf
+  gesichert** (nicht nur bei Erfolg): der Treiber ruft `idf.py
+  clang-check` auf, sichert `warnings.txt` in den profilspezifischen
+  Zielpfad (Abschnitt 7.8.5) **unabhaengig vom Exitcode**, und wertet den
+  Exitcode erst danach aus (vergleichbar einem `finally`-Block: erst
+  Beweissicherung, dann Fehlerbehandlung) — ein fehlgeschlagener Lauf darf
+  nicht dazu fuehren, dass kein Nachweis der tatsaechlich gefundenen
+  Verstoesse vorliegt;
 - harter Fehler bei Toolchain-, Konfigurations- oder Analysefehler, mit
   klarer Ausgabe des betroffenen Profils und der fehlgeschlagenen Phase;
 - keine Installation der Toolchain (das bleibt Aufgabe des in Abschnitt
@@ -1334,14 +1442,19 @@ build/clang_tidy/esp32_release/warnings.txt
 
 `scripts/run_esp_idf_static_analysis.py` verschiebt `warnings.txt`
 unmittelbar nach jedem Profillauf vom Arbeitsverzeichnis in den
-profilspezifischen Zielpfad; eine fehlende Datei danach ist ein harter
-Fehler; vor jedem Profillauf wird ein eventuell vorhandener alter
-Zielnachweis entfernt, damit kein veralteter Stand stillschweigend
-akzeptiert wird. Ein Upload dieser Logs ist fuer #74 nicht zwingend;
-falls sie hochgeladen werden, gelten der bestehende Artefaktscan
-(Abschnitt 7.7.4) und die Scanabdeckungspruefung
-(`scripts/check_ci_artifact_scan_coverage.py`) auch fuer diese neuen
-Textartefakte.
+profilspezifischen Zielpfad — **unabhaengig davon, ob `clang-check` mit
+Exitcode `0` oder `1` endet** (Abschnitt 7.8.4: Beweissicherung vor
+Fehlerauswertung); eine fehlende Datei danach ist ein harter Fehler; vor
+jedem Profillauf wird ein eventuell vorhandener alter Zielnachweis
+entfernt, damit kein veralteter Stand stillschweigend akzeptiert wird.
+Erst nachdem `warnings.txt` gesichert ist, wertet der Treiber den
+Exitcode von `clang-check` aus und bricht bei Funden mit einem harten
+Fehler ab — der gesicherte Nachweis bleibt dabei erhalten und ist damit
+Teil der Fehlerdiagnose, nicht nur des Erfolgsfalls. Ein Upload dieser
+Logs ist fuer #74 nicht zwingend; falls sie hochgeladen werden, gelten
+der bestehende Artefaktscan (Abschnitt 7.7.4) und die
+Scanabdeckungspruefung (`scripts/check_ci_artifact_scan_coverage.py`)
+auch fuer diese neuen Textartefakte.
 
 #### 7.8.6 Selftests
 
@@ -1367,17 +1480,127 @@ Toolchain-Installation:
    aufgerufen oder veraendert (analog zum bestehenden Selftest-Muster).
 10. Eine fehlende profilspezifische `warnings.txt` nach dem Verschieben
     wird nicht still akzeptiert.
+11. Ein simuliertes `esp-clang` mit exakt `ESP_CLANG_VERSION`, aber
+    einem `clang-tidy`-Pfad ausserhalb von
+    `$IDF_TOOLS_PATH/tools/esp-clang/...` wird abgelehnt (Pfadpruefung,
+    nicht nur Versions-String).
+12. Ein simuliertes `esp-clang` mit abweichender Version (z. B.
+    `esp-20.1.0_...` statt `esp-20.1.1_20250829`) fuehrt zu einem harten
+    Fehler.
+13. Ein aufgeloester `clang-tidy`-Pfad, der exakt `/usr/bin/clang-tidy-18`
+    entspricht, wird explizit als bekannter Fehlerfall erkannt und
+    abgelehnt (nicht nur implizit ueber die Pfadpruefung aus Fall 11).
+14. Eine simulierte `pyclang`-Version exakt `PYCLANG_VERSION` (`0.7.0`)
+    wird akzeptiert.
+15. Eine simulierte `pyclang`-Version ungleich `PYCLANG_VERSION` (aelter
+    oder neuer) fuehrt zu einem harten Fehler, bevor `clang-check`
+    aufgerufen wird.
+16. Eine fehlende `pyclang`-Installation (kein Treffer in
+    `importlib.metadata`) fuehrt zu einem harten Fehler mit klarer
+    Fehlermeldung, nicht zu einer stillen Ausnahme.
+17. Die aus `re.escape()` aufgebaute, verankerte PATTERNS-Regex liefert
+    gegen eine synthetische, 28-Eintraege-grosse `compile_commands.json`-
+    Fixture (analog zur real verifizierten Datei) exakt zwei Treffer fuer
+    die beiden erwarteten Dateien.
+18. Dieselbe Fixture ohne einen der beiden erwarteten Dateipfade (null
+    Treffer fuer diese Datei) fuehrt zu einem harten Fehler.
+19. Dieselbe Fixture mit einem zusaetzlichen, aehnlich benannten
+    Lookalike-Pfad (z. B. `test/fake/app_main.cpp` oder ein Pfad in einem
+    fremden Wurzelverzeichnis mit identischem Dateinamen) fuehrt zu einem
+    harten Fehler statt einer stillschweigenden Mehrfachauswahl.
+20. Eine simulierte doppelte Auflistung derselben Datei in
+    `compile_commands.json` fuehrt zu einem harten Fehler (keine
+    versteckte Dopplung als „zwei Treffer" akzeptiert).
+21. Die zusammengesetzten `--run-clang-tidy-options` enthalten fuer beide
+    Profile ausschliesslich den dokumentierten `-header-filter`-Wert und
+    die eine `-checks="-misc-header-include-cycle"`-Ausnahme — kein
+    zusaetzlicher, `.clang-tidy` ueberschreibender Wert.
+22. `warnings.txt` wird auch bei einem simulierten fehlgeschlagenen
+    `clang-check`-Aufruf (Exitcode `1`) in den profilspezifischen Zielpfad
+    verschoben, **bevor** der Treiber den Fehler weiterreicht (Reihenfolge
+    wird explizit geprueft, nicht nur das Endergebnis).
+23. Ein bereits vorhandener, veralteter `warnings.txt`-Zielnachweis wird
+    vor einem neuen Profillauf entfernt und nicht als aktueller Nachweis
+    stehen gelassen.
 
 `scripts/selftest_quality_gates.py` ruft diesen neuen Selftest ab Commit 4
 zusaetzlich auf (bestehendes `run_script_selftest()`-Muster).
 
 Realer Commit-4-Nachweis (zusaetzlich zu den Selftests): native Static
 Analysis weiterhin PASS; ESP-IDF-Static-Analysis Bring-up und Release
-PASS (abhaengig von der Entscheidung zu Befund A, Abschnitt 7.8.2);
-vollstaendiger Formatcheck inklusive `main/` PASS; 420 native Tests PASS;
-beide produktiven ESP-IDF-GCC-Builds PASS; beide bestehenden Arduino-
-Produktionsprofile weiterhin PASS; Ressourcenbericht- und Artefaktchecks
-weiterhin PASS; Architektur-, Secret- und Quality-Gates PASS.
+PASS; vollstaendiger Formatcheck inklusive `main/` PASS; 420 native Tests
+PASS; beide produktiven ESP-IDF-GCC-Builds PASS; beide bestehenden
+Arduino-Produktionsprofile weiterhin PASS; Ressourcenbericht- und
+Artefaktchecks weiterhin PASS; Architektur-, Secret- und Quality-Gates
+PASS.
+
+#### 7.8.7 Read-only-Verifikationsnachweis dieser Korrekturrunde
+
+Vor dem Schreiben dieses Plan-Korrekturcommits real, ohne Aenderung an
+einer Commit-4-Datei, gegen die lokale ESP-IDF-6.0.2-Installation
+durchgefuehrt (kein Commit-4-Skript existiert bereits; alle Befehle
+wurden manuell ausgefuehrt, `.clang-tidy` nur temporaer und nicht
+committet veraendert, danach per `git checkout -- .clang-tidy`
+vollstaendig zurueckgesetzt und gegen `HEAD` als identisch verifiziert):
+
+```text
+1.  esp-clang Pfad/Version/Hash-Kontrakt (esp-20.1.1_20250829,
+    SHA-256 88910c21...cc07f):                              PASS
+2.  pyclang installierte Version == 0.7.0
+    (importlib.metadata.version):                            PASS
+3.  IgnoreMacros: 'true' unterdrueckt Befund A
+    (main/app_main.cpp, Exitcode 0, keine Funde):             PASS
+4.  Ohne IgnoreMacros bleibt Befund A aktiv
+    (identischer Fund, Exitcode 1):                           PASS
+5.  IgnoreMacros unterdrueckt keine echte, nicht-makrobasierte
+    Verschachtelung (synthetische Fixture, cognitive complexity
+    75 gegen Schwellenwert 25, weiterhin gemeldet):            PASS
+6.  -checks="-misc-header-include-cycle" unterdrueckt Befund B,
+    waehrend Befund A (ohne IgnoreMacros) weiterhin aktiv bleibt
+    (inkrementelle, nicht ersetzende Ausnahme):                PASS
+7.  Anchored re.escape()-Regex waehlt exakt 2 von 28 Dateien aus
+    der realen Bring-up-compile_commands.json:                 PASS
+    (Release-Profil nicht separat neu generiert und geprueft;
+    architektonisch identische Quellen und identischer
+    Analysetreiber wie Bring-up, siehe Anmerkung unten)
+8.  Produktive Buildverzeichnisse (build/esp32_bringup,
+    build/esp32_release) bleiben durch einen separaten
+    -B-Analyseordner unveraendert (mtime-Vergleich):            PASS
+9.  esp-clang-Herkunftswerte (Version, Linux-AMD64-SHA-256, Groesse)
+    stimmen mit der bereits fruehere dokumentierten Fassung
+    ueberein (keine Drift seit der vorherigen Ueberarbeitung):   PASS
+10. .clang-tidy nach allen Testlaeufen vollstaendig auf den
+    committeten Stand zurueckgesetzt (diff gegen HEAD leer):     PASS
+11. Arbeitsverzeichnis nach Abschluss der Verifikation sauber
+    (git status --short leer, keine Scratch-Dateien verblieben): PASS
+```
+
+**Nicht als real verifiziert behauptet (bewusst offen fuer die
+Implementierungsphase, kein PASS):**
+
+- die exakte Dateiauswahl (Nachweis 7) wurde nur gegen das
+  Bring-up-Profil real durchgefuehrt; das Release-Profil verwendet
+  denselben Quellcode, denselben Treiber und dieselbe verankerte Regex,
+  wurde aber in dieser Runde nicht zusaetzlich real durchgemessen — dies
+  ist kein architektonischer Unterschied, sondern ein in der
+  Implementierungsphase (Commit 4) durch Selftest-Fall 17 und den realen
+  CI-Lauf gegen beide Profile abzudeckender Punkt;
+- die in Abschnitt 7.8.5 spezifizierte Reihenfolge "warnings.txt sichern,
+  dann Exitcode auswerten" ist eine Anforderung an die noch zu
+  implementierende Steuerlogik von `scripts/run_esp_idf_static_
+  analysis.py`, keine bereits beobachtete Laufzeiteigenschaft eines
+  vorhandenen Treibers — real verifiziert wurde ausschliesslich, dass das
+  zugrundeliegende Werkzeug (`idf.py clang-check`) selbst `warnings.txt`
+  unabhaengig vom Exitcode in das Arbeitsverzeichnis schreibt (Abschnitt
+  7.8.5); die Sicherungsreihenfolge im eigenen Treiber ist Commit-4-
+  Implementierung und wird dort durch Selftest-Fall 22 geprueft;
+- die anhand von `re.escape()` verankerte Regex verhindert nachweislich
+  keine Uebereinstimmung mit einem identischen relativen Teilpfad unter
+  einer fremden Wurzel (z. B. `anderer/ordner/main/app_main.cpp`) — dies
+  ist unschaedlich, weil Nachweis 7 (die tatsaechliche Pruefung gegen die
+  reale, aus dem eigenen Repository erzeugte `compile_commands.json`) der
+  eigentliche Schutzmechanismus ist, nicht die Regex allein; Selftest-Fall
+  19 deckt diesen Grenzfall zusaetzlich ab.
 
 ### 7.9 Komponenten- und Lockfilevertrag
 
@@ -1696,14 +1919,23 @@ Reihenfolge:
    `scripts/check_secrets.py` um den Scan-Modus fuer generierte
    Artefakttexte samt neuer Selftests (Abschnitt 7.7, insbesondere 7.7.4).
 4. **Format und Static Analysis:** vollstaendiger Format-Scope (`main`
-   ergaenzt), `.clang-tidy`-`HeaderFilterRegex`-Erweiterung, offizieller
-   `esp-clang`-Installationsschritt (Abschnitt 7.8.1), neuer kanonischer
-   Analysetreiber `scripts/run_esp_idf_static_analysis.py`
-   (Abschnitt 7.8.4) fuer beide ESP-IDF-Profile getrennt, Umsetzung der
-   Ownerentscheidung zu Befund A (Abschnitt 7.8.2 — je nach Entscheidung
-   ggf. mit einer gezielten, einzeln dokumentierten Aenderung an
-   `main/app_main.cpp` oder `.clang-tidy`), Selftests
-   (Abschnitt 7.8.6), Integration in `scripts/selftest_quality_gates.py`.
+   ergaenzt), `.clang-tidy`-`HeaderFilterRegex`-Erweiterung und
+   `CheckOptions:
+   readability-function-cognitive-complexity.IgnoreMacros: 'true'`
+   (Befund A, Abschnitt 7.8.2 — entschieden, kein offener Punkt mehr),
+   offizieller `esp-clang`-Installationsschritt (Abschnitt 7.8.1), neuer
+   kanonischer Analysetreiber `scripts/run_esp_idf_static_analysis.py`
+   (Abschnitt 7.8.4) fuer beide ESP-IDF-Profile getrennt, Erweiterung von
+   `scripts/esp_idf_contract.py` um die neuen Werkzeugvertragskonstanten
+   (Abschnitt 5), Selftests (Abschnitt 7.8.6), Integration in
+   `scripts/selftest_quality_gates.py`.
+
+   **Exakter Dateiumfang dieses Commits:**
+   `.github/workflows/build.yml`, `.clang-tidy`,
+   `scripts/esp_idf_contract.py`, `scripts/run_esp_idf_static_analysis.py`,
+   `scripts/selftest_quality_gates.py`. **Nicht** Teil dieses Commits:
+   `main/app_main.cpp` (bleibt laut Befund-A-Entscheidung unveraendert,
+   Abschnitt 7.8.2).
 
    **Gate vor Commit 5:** `PRE_ARDUINO_REMOVAL_CI: PASS` — ein vollstaendiger
    erfolgreicher GitHub-Actions-Lauf exakt auf dem Head von Commit 4
@@ -1802,27 +2034,38 @@ als offene Punkte. Es verbleibt:
    (`compile_commands.json`-Filterung, Verzicht auf die ESP-IDF-
    spezifische Analyse) sind verworfen. Dieser Punkt entfaellt damit als
    offene Entscheidung.
-7. **Neu, Abschnitt 7.8.2, Befund A:** `main/app_main.cpp` enthaelt einen
-   echten `readability-function-cognitive-complexity`-Befund
-   (`logBootSummary`, Komplexitaet 145 gegen Schwellenwert 25), live mit
-   `esp-clang` gegen beide Profile verifiziert. Drei Optionen
-   (Refactoring, Inline-Ausnahme, projektweite `.clang-tidy`-Anpassung)
-   sind in Abschnitt 7.8.2 dokumentiert; keine ist vorentschieden. Ohne
-   diese Entscheidung kann Gate 2 (Abschnitt 6) fuer die ESP-IDF-Static-
-   Analysis nicht wahrheitsgemaess `PASS` melden.
-8. **Neu, Abschnitt 7.8.2, Befund B:** `misc-header-include-cycle` feuert
-   trotz `HeaderFilterRegex`-Scoping auf ESP-IDFs eigener
+7. **Entschieden (Abschnitt 7.8.2, Befund A):** `main/app_main.cpp`
+   enthielt einen gemeldeten `readability-function-cognitive-complexity`-
+   Befund (`logBootSummary`, Komplexitaet 145 gegen Schwellenwert 25),
+   live mit `esp-clang` gegen beide Profile verifiziert. Der Owner hat
+   diesen Befund als Makroexpansionsartefakt der `ESP_LOG*`-Makros
+   identifiziert (`OWNER_DECISION_COGNITIVE_COMPLEXITY:
+   IGNORE_MACRO_EXPANSIONS`) und die Loesung
+   `readability-function-cognitive-complexity.IgnoreMacros: 'true'` in
+   `.clang-tidy` verbindlich festgelegt; `main/app_main.cpp` bleibt
+   unveraendert, der Check bleibt aktiv (real gegenverifiziert anhand
+   einer synthetischen, nicht-makrobasierten Fixture, Abschnitt 7.8.7).
+   Dieser Punkt entfaellt damit als offene Entscheidung.
+8. **Entschieden (Abschnitt 7.8.2, Befund B):** `misc-header-include-cycle`
+   feuert trotz `HeaderFilterRegex`-Scoping auf ESP-IDFs eigener
    `FreeRTOS.h`/`idf_additions.h`-Headerstruktur (live verifiziert, beide
-   Profile identisch betroffen). Verbindlich als einzeln begruendete
-   Ausnahme fuer den ESP-IDF-Analysepfad vorgesehen (Abschnitt 7.8.2);
-   exakte Deaktivierungssyntax vor der Commit-4-Implementierung final zu
-   bestaetigen.
-9. **Neu, Abschnitt 7.8.1:** Die tatsaechlich installierte `pyclang`-
-   Version (live beobachtet: `0.7.0`) ist nicht ueber
-   `espidf.constraints.v6.0.txt` exakt fixiert (live verifiziert: kein
-   Eintrag). Die installierte Version wird in CI protokolliert, damit
-   eine kuenftige Drift sichtbar bleibt; dies ist kein Blocker, sondern
-   eine dokumentierte Reproduzierbarkeitsgrenze (Abschnitt 7.11).
+   Profile identisch betroffen). Dies ist keine Ownerentscheidung, sondern
+   eine technische, einzeln begruendete Fremdheader-Ausnahme fuer den
+   ESP-IDF-Analysepfad (Abschnitt 7.8.2): die exakte
+   Deaktivierungssyntax (`-checks="-misc-header-include-cycle"` als
+   inkrementelle Ergaenzung zu `--run-clang-tidy-options`) ist real
+   verifiziert und verbindlich (Abschnitt 7.8.7). Dieser Punkt entfaellt
+   damit als offene Entscheidung.
+9. **Entschieden, fail-closed (Abschnitt 7.8.1):** Die tatsaechlich
+   installierte `pyclang`-Version (live beobachtet: `0.7.0`) ist nicht
+   ueber `espidf.constraints.v6.0.txt` exakt fixiert (live verifiziert:
+   kein Eintrag). Dies wird **nicht** nur protokolliert, sondern durch
+   eine eigene, projektweite `PYCLANG_VERSION`-Konstante
+   (`scripts/esp_idf_contract.py`) und eine harte
+   `importlib.metadata.version("pyclang") == PYCLANG_VERSION`-Pruefung im
+   Analysetreiber vor jedem Lauf erzwungen (Abschnitt 7.8.4). Kein
+   offener Punkt mehr — ein Versionswechsel erfordert eine bewusste
+   Aenderung dieser Konstante, keine stille Drift.
 
 ## 10. Ausdruecklich verbotene Vorwegnahmen
 
@@ -1844,14 +2087,18 @@ als offene Punkte. Es verbleibt:
   7.13.3);
 - keine Aenderung an `docs/audits/` (historische Auditdateien, Abschnitt
   7.13.3);
-- keine Umsetzung von Befund A (Abschnitt 7.8.2) ohne vorherige
-  ausdrueckliche Ownerentscheidung fuer genau eine der drei dort
-  genannten Optionen; insbesondere keine stillschweigende Aenderung an
-  `main/app_main.cpp` und keine stillschweigende projektweite
-  `.clang-tidy`-Abschwaechung;
+- fuer Befund A (Abschnitt 7.8.2) ausschliesslich die entschiedene Loesung
+  `readability-function-cognitive-complexity.IgnoreMacros: 'true'` in
+  `.clang-tidy`; **keine** Aenderung an `main/app_main.cpp` (kein
+  Refactoring, kein `NOLINT`), und **keine** projektweite Deaktivierung
+  des Checks (`readability-function-cognitive-complexity` bleibt aktiv);
+- keine zweite, `.clang-tidy` ueberschreibende oder ergaenzende
+  `-checks=`-Liste im ESP-IDF-Analysepfad ausser der einen dokumentierten
+  `-checks="-misc-header-include-cycle"`-Ausnahme (Abschnitt 7.8.2);
 - kein `pip install --upgrade pyclang` und kein sonstiger unfixierter
   Versions-Bump der ESP-IDF-eigenen Python-Abhaengigkeiten (Abschnitt
-  7.8.1);
+  7.8.1); keine Lockerung der fail-closed `PYCLANG_VERSION`-Pruefung zu
+  einer reinen Protokollierung;
 - keine vorsorgliche Installation von `esp-clang-libs`, solange kein
   realer Testnachweis zeigt, dass `idf.py clang-check` sie benoetigt
   (Abschnitt 7.8.1).
@@ -1902,8 +2149,14 @@ Abschnitt 7.2), nicht die dadurch erzeugte Semantik.
   (`esp-20.1.1_20250829`) und den Linux-AMD64-SHA-256
   (`88910c21350c06a521f243304d1a3adbdb78447123b3f8e27493aab75e3cc07f`)
   aus der Tooldefinition des gepinnten ESP-IDF-Commits geprueft
-  (Abschnitt 7.8.1); ein Rueckfall auf System-`clang-tidy-18` im
-  ESP-IDF-Analyseschritt ist ein harter Fehler.
+  (Abschnitt 7.8.1); ein Rueckfall auf System-`clang-tidy-18`
+  (`/usr/bin/clang-tidy-18`, explizit als bekannter Fehlerfall geprueft)
+  im ESP-IDF-Analyseschritt ist ein harter Fehler (Abschnitt 7.8.4);
+- `pyclang`s Version ist **fail-closed** erzwungen, nicht nur
+  protokolliert: `importlib.metadata.version("pyclang") ==
+  PYCLANG_VERSION` (`0.7.0`, `scripts/esp_idf_contract.py`) wird vor
+  jedem Analyselauf geprueft; ein Abweichen bricht den Lauf ab, bevor
+  `idf.py clang-check` aufgerufen wird (Abschnitt 7.8.1, 7.8.4).
 
 ## 13. Teststrategie
 
@@ -1922,12 +2175,12 @@ Abschnitt 7.2), nicht die dadurch erzeugte Semantik.
   erweiterten Format-Scope und den `--scan-path`-Modus von
   `scripts/check_secrets.py` fuer alle hochgeladenen Textartefakte
   (Abschnitt 7.7.4), sobald diese in der Umsetzung konkret vorliegen;
-- `scripts/run_esp_idf_static_analysis.py --selftest` (zehn Fixture-Faelle,
+- `scripts/run_esp_idf_static_analysis.py --selftest` (23 Fixture-Faelle,
   Abschnitt 7.8.6) wird ab Commit 4 zusaetzlicher Pflichtschritt in
   `scripts/selftest_quality_gates.py`;
 - `idf.py clang-check` fuer beide Profile getrennt (Abschnitt 7.8.1/7.8.4)
-  wird neuer CI-Pflichtschritt, abhaengig von der Ownerentscheidung zu
-  Befund A (Abschnitt 7.8.2);
+  wird neuer CI-Pflichtschritt, mit der in Abschnitt 7.8.2 entschiedenen
+  `IgnoreMacros: 'true'`-Konfiguration;
 - Hardware-Smoke-Tests (Bring-up, Release) werden ausschliesslich auf dem
   finalen Implementierungs-Head nach Commit 6 durchgefuehrt, als
   Pflichtabschluss vor dem Merge (Abschnitt 7.12).
@@ -1992,6 +2245,42 @@ Mechanismus bestimmt die aktive `ActuatorPolicy` und ist damit
 sicherheitsrelevant, wird daher in diesem Plan verbindlich festgelegt
 (Abschnitt 7.2) statt in die Umsetzungsphase verschoben.
 
+**Commit-4-spezifische Bewertung (diese Ueberarbeitung, Abschnitt 7.8):**
+
+- **SRP:** `scripts/run_esp_idf_static_analysis.py` (Analyse) bleibt
+  strikt getrennt von `scripts/build_esp_idf_profiles.py`
+  (Produktionsbuild) — unterschiedliche Verzeichnisse (Abschnitt 7.8.3),
+  unterschiedliche Toolchains, keine gegenseitige Aufrufkette; der
+  Produktionsbuildtreiber bleibt unveraendert (Abschnitt 7.8.4).
+- **OCP/DRY:** Die neuen Werkzeugvertragskonstanten
+  (`ESP_CLANG_VERSION`, `ESP_CLANG_LINUX_AMD64_SHA256`,
+  `PYCLANG_VERSION`) erweitern das bestehende
+  `scripts/esp_idf_contract.py` statt eine zweite, parallele
+  Konstantenquelle einzufuehren (Abschnitt 5); `.clang-tidy` bleibt die
+  alleinige Checkkonfiguration fuer beide Analysepfade — der
+  ESP-IDF-Pfad ergaenzt genau eine dokumentierte Ausnahme
+  (`-checks="-misc-header-include-cycle"`), keine zweite, konkurrierende
+  Positivliste (Abschnitt 7.8.2, 7.8.4).
+- **KISS ohne Safety-/Reproduzierbarkeitsabschwaechung:** Befund A wird
+  ueber die kleinstmoegliche, bereits im Check vorgesehene
+  Konfigurationsoption geloest (`IgnoreMacros: 'true'`) statt ueber ein
+  Refactoring, eine Inline-Ausnahme oder eine projektweite
+  Checkdeaktivierung — die am wenigsten eingreifende Loesung, die den
+  Check dabei nachweislich nicht schwaecht (Abschnitt 7.8.7). Kein
+  zusaetzlicher `pip install` ausserhalb des ohnehin bestehenden
+  ESP-IDF-Installationsschritts; `pyclang` wird nicht separat installiert,
+  nur seine bereits vorhandene Version fail-closed geprueft. Die
+  Dateiauswahl fuer die statische Analyse verlaesst sich nicht auf
+  Werkzeug-Textausgabe, sondern auf eine einfache, direkt gegen die reale
+  `compile_commands.json` verifizierbare Mengenpruefung (exakt zwei
+  Treffer) — die einfachste Absicherung, die die real reproduzierte
+  "0 von 28 Dateien"-Falle strukturell ausschliesst, ohne ein generisches
+  Validierungsframework einzufuehren.
+- **DIP:** Der Analysetreiber haengt von der offiziellen `idf.py
+  clang-check`-Schnittstelle und der Projektkonfiguration
+  (`scripts/esp_idf_contract.py`, `.clang-tidy`) ab, nicht von
+  Implementierungsdetails der Produktionsbuildtreiber.
+
 ## 16. Abnahmekriterien
 
 ### CI
@@ -2045,11 +2334,13 @@ geschlossen.
 
 - genau ein Plan-Korrekturcommit fuer diese Ueberarbeitung;
 - Draft-PR-Beschreibung verweist auf den neuen Plan-Commit und markiert
-  alle vier vorherigen Plan-Commits als überholt:
+  alle sechs vorherigen Plan-Commits als überholt:
   `05b987e3d2b375b82922990f718d0dc07c730a71`,
   `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754`,
   `6c8092755dde1fe0b39299abe94a0b3e02003beb`,
-  `806abbfd7400412285c1f83e94d80cc6c5a7bf31`;
+  `806abbfd7400412285c1f83e94d80cc6c5a7bf31`,
+  `9607fbafc283dfb89623043f10dbff43780bc148`,
+  `72700d76aec8e0a4fb5a0e78bb17d3ebcaa2ad53`;
 - Status bleibt `IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL`;
 - vollstaendiges Anhalten bis zu einem commitgebundenen
   `PLAN APPROVED`-Ownerkommentar auf den neuen Plan-Commit.
