@@ -9,14 +9,14 @@ permissions:
 
 jobs:
   firmware:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Repository auschecken
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Python einrichten
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
 
@@ -45,7 +45,7 @@ jobs:
 
       - name: Fehlgeschlagenen Buildlog sichern
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: platformio-build-log
           path: platformio-build.log
@@ -53,7 +53,7 @@ jobs:
 
       - name: Groessenbericht sichern
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: build-report
           path: build-report.md
@@ -88,3 +88,60 @@ jobs:
 
       - name: Qualitaetspruefungen gegen absichtlich fehlerhafte Faelle testen
         run: python scripts/selftest_quality_gates.py
+
+      - name: ESP-IDF installieren (v6.0.2, exakter Commit)
+        run: |
+          set -euo pipefail
+
+          IDF_PATH="$RUNNER_TEMP/esp-idf-v6.0.2"
+          IDF_TOOLS_PATH="$RUNNER_TEMP/espressif"
+          echo "IDF_PATH=$IDF_PATH" >> "$GITHUB_ENV"
+          echo "IDF_TOOLS_PATH=$IDF_TOOLS_PATH" >> "$GITHUB_ENV"
+
+          EXPECTED_TAG="v6.0.2"
+          EXPECTED_COMMIT="7101770dc6db2667b3c477cc31365dd1acd6db4e"
+
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/espressif/esp-idf.git \
+            "$IDF_PATH"
+
+          git -C "$IDF_PATH" fetch --depth 1 origin "$EXPECTED_COMMIT"
+          git -C "$IDF_PATH" checkout --detach "$EXPECTED_COMMIT"
+          git -C "$IDF_PATH" submodule update --init --recursive
+
+          ACTUAL_TAG=$(git -C "$IDF_PATH" describe --tags --exact-match)
+          if [ "$ACTUAL_TAG" != "$EXPECTED_TAG" ]; then
+            echo "::error::falscher ESP-IDF-Tag: erwartet $EXPECTED_TAG, gefunden $ACTUAL_TAG"
+            exit 1
+          fi
+
+          ACTUAL_COMMIT=$(git -C "$IDF_PATH" rev-parse HEAD)
+          if [ "$ACTUAL_COMMIT" != "$EXPECTED_COMMIT" ]; then
+            echo "::error::falscher ESP-IDF-Commit: erwartet $EXPECTED_COMMIT, gefunden $ACTUAL_COMMIT"
+            exit 1
+          fi
+
+          if [ -n "$(git -C "$IDF_PATH" status --short)" ]; then
+            echo "::error::ESP-IDF-Arbeitsbaum ist nicht sauber"
+            git -C "$IDF_PATH" status --short
+            exit 1
+          fi
+
+          "$IDF_PATH/install.sh" esp32
+
+      - name: ESP-IDF-Profile bauen (Bring-up und Release)
+        run: |
+          set -euo pipefail
+          . "$IDF_PATH/export.sh"
+
+          IDF_VERSION_OUTPUT=$(idf.py --version)
+          echo "$IDF_VERSION_OUTPUT"
+          case "$IDF_VERSION_OUTPUT" in
+            *v6.0.2*) ;;
+            *)
+              echo "::error::idf.py --version meldet nicht v6.0.2: $IDF_VERSION_OUTPUT"
+              exit 1
+              ;;
+          esac
+
+          python scripts/build_esp_idf_profiles.py all
