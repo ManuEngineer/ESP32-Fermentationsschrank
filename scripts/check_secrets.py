@@ -26,11 +26,12 @@ unterwirft sie denselben Geheimnismustern, plus einer zusaetzlichen
 Pruefung auf private absolute Benutzerpfade. Dabei gilt eine
 kontextbezogene Regel: selbst erzeugte Manifeste muessen vollstaendig
 normalisiert sein (jeder `/home/...`- oder `/Users/...`-Pfad ist ein Fund);
-`compile_commands.json` (fremdgeneriert von CMake) darf dagegen bekannte,
-ephemere CI-Runner-Pfade (`/home/runner/...`) enthalten, ohne als Fund
-gewertet zu werden. Eine erwartete, aber fehlende `--scan-path`-Datei ist
-ein harter Fehler. Binaerdateien werden anhand ihrer Dekodierbarkeit
-erkannt und nicht als Text durchsucht.
+fremdgeneriertes Werkzeugausgabe wie `compile_commands.json` (CMake) und
+`build.log` (ninja/idf.py) darf dagegen bekannte, ephemere CI-Runner-Pfade
+(`/home/runner/...`) enthalten, ohne als Fund gewertet zu werden. Eine
+erwartete, aber fehlende `--scan-path`-Datei ist ein harter Fehler.
+Binaerdateien werden anhand ihrer Dekodierbarkeit erkannt und nicht als
+Text durchsucht.
 
 `--selftest` prueft die Erkennung selbst anhand temporaerer Fixture-Dateien,
 ohne dass ein absichtlich fehlerhafter Fall jemals in dieses Repository
@@ -81,11 +82,13 @@ TEXT_FILE_SUFFIXES = {
 }
 
 # Abschnitt 7.7.4: bekannte, ephemere CI-Runner-Pfade, die in fremdgenerierten
-# Dateien (z. B. `compile_commands.json`) toleriert werden, ohne als privater
-# Benutzerpfad gewertet zu werden. Andere `/home/...`- oder `/Users/...`-Pfade
-# bleiben ein Fund.
+# Dateien (z. B. `compile_commands.json`, `build.log`) toleriert werden, ohne
+# als privater Benutzerpfad gewertet zu werden. Andere `/home/...`- oder
+# `/Users/...`-Pfade bleiben ein Fund. Selbst erzeugte Dateien (Manifest)
+# stehen bewusst NICHT in dieser Liste: sie enthalten von vornherein keine
+# Pfade und muessen es auch nicht.
 KNOWN_CI_PATH_PREFIXES = ("/home/runner/",)
-LENIENT_PATH_FILENAMES = {"compile_commands.json"}
+LENIENT_PATH_FILENAMES = {"compile_commands.json", "build.log"}
 
 PRIVATE_ABSOLUTE_PATH_PATTERN = re.compile(r"(/home/[^\s\"']+|/Users/[^\s\"']+)")
 
@@ -276,6 +279,11 @@ def run_selftest() -> int:
             # sich nicht selbst bei der Repository-Geheimnispruefung meldet.
             '[{"file": "main.cpp", "define": "AWS_KEY=' + 'AKIA' + 'ABCDEFGHIJKLMNOP"}]\n'
         )
+        build_log_ci_path_file = tmp_path / "build.log"
+        build_log_ci_path_file.write_text(
+            "Project build complete. To flash, run:\n"
+            "  idf.py -B /home/runner/work/repo/repo/build/esp32_bringup flash\n"
+        )
         missing_scan_path_file = tmp_path / "build" / "esp32_bringup" / "size.json"
         binary_scan_path_file = tmp_path / "fixture-binary.bin"
         binary_scan_path_file.write_bytes(b"\x7fELF\x00\x01\x02\xff\xfe\x00")
@@ -287,6 +295,7 @@ def run_selftest() -> int:
         compile_commands_credential_secrets, _ = scan_path_file(
             compile_commands_credential_file
         )
+        _, build_log_ci_paths = scan_path_file(build_log_ci_path_file)
         binary_secrets, binary_paths = scan_path_file(binary_scan_path_file)
 
         missing_scan_path_error = None
@@ -306,6 +315,8 @@ def run_selftest() -> int:
              "wird NICHT als Fund gewertet", len(compile_commands_ci_paths) == 0),
             ("Token-/Credential-Muster in compile_commands.json wird "
              "weiterhin erkannt", len(compile_commands_credential_secrets) > 0),
+            ("Bekannter ephemerer CI-Runner-Pfad in build.log wird NICHT "
+             "als Fund gewertet", len(build_log_ci_paths) == 0),
             ("Fehlende, aber erwartete --scan-path-Datei fuehrt zu einem "
              "Fehler", missing_scan_path_error is not None),
             ("Binaerdatei wird nicht als Text gescannt (--scan-path)",
