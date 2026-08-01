@@ -1556,6 +1556,17 @@ Aufgaben:
      eigene, nicht persistierte PATTERNS-Auswahl) waehlt dadurch
      nachweislich dieselben zwei, bereits unabhaengig bestaetigten
      Dateien aus;
+  6. **Invariante, die diese Gleichheit traegt:** der eigene
+     `reconfigure`-Schritt (Punkt 2) und der interne `reconfigure`-Schritt
+     von `clang-check` (Punkt 5) laufen gegen **dasselbe**
+     `-B`-Analyseverzeichnis mit **identischen**
+     `-DSDKCONFIG`/`-DSDKCONFIG_DEFAULTS`-Argumenten, unmittelbar
+     nacheinander, ohne dass der Treiber dazwischen den Quellbaum
+     veraendert. Nur unter dieser Invariante liefert der interne
+     `reconfigure`-Schritt von `clang-check` zwangslaeufig dieselbe
+     Dateimenge wie der vorab selbst durchgefuehrte Schritt — der Treiber
+     darf zwischen Punkt 2 und Punkt 5 keine andere Aktion ausfuehren, die
+     `compile_commands.json` beeinflussen koennte;
 - Aufruf von `idf.py clang-check` in der in Abschnitt 7.8.1 verifizierten
   Kommandoform (die oben verankerte Ein-Regex-PATTERNS,
   `--run-clang-tidy-options` mit Header-Filter und der Befund-B-Ausnahme,
@@ -1689,13 +1700,17 @@ Toolchain-Installation:
 22. Eine simulierte doppelte Auflistung derselben Datei in der Fixture
     fuehrt zu einem harten Fehler (keine versteckte Dopplung als „zwei
     Treffer" akzeptiert).
-23. Der Dateiauswahlnachweis (Faelle 19–22) wird gegen eine vom Treiber
-    selbst per `reconfigure` erzeugte `compile_commands.json` gefuehrt,
-    nicht gegen eine vermeintlich bereits von `clang-check` per PATTERNS
-    gefilterte Datei (Abschnitt 7.8.1 Detailbefund 4, Abschnitt 7.8.4) —
-    dieser Selftest stellt sicher, dass der Treiber den eigenen
-    `reconfigure`-Schritt tatsaechlich ausfuehrt und nicht stillschweigend
-    eine vorhandene, moeglicherweise veraltete Datei wiederverwendet.
+23. Gegen einen simulierten (nicht echten) `idf.py`-Aufruf geprueft: der
+    Treiber ruft seinen eigenen `reconfigure`-Schritt **vor** dem Lesen
+    der `compile_commands.json` und **vor** dem eigentlichen
+    `clang-check`-Aufruf auf (Aufrufreihenfolge, nicht Dateiinhalt — ein
+    Selftest ohne echte Toolchain kann keine reale Datei beobachten,
+    Abschnitt 7.8.4 Punkt 6). Der Dateiauswahlnachweis selbst (Faelle
+    19–22) wird gegen eine synthetische Fixture gefuehrt, die eine vom
+    Treiber selbst per `reconfigure` erzeugte, vollstaendige
+    `compile_commands.json` nachbildet — nicht gegen eine vermeintlich
+    bereits von `clang-check` per PATTERNS gefilterte Datei (Abschnitt
+    7.8.1 Detailbefund 4).
 24. Die zusammengesetzten `--run-clang-tidy-options` enthalten fuer beide
     Profile ausschliesslich den dokumentierten `-header-filter`-Wert und
     die eine `-checks="-misc-header-include-cycle"`-Ausnahme — kein
