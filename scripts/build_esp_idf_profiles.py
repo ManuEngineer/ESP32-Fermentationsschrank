@@ -13,11 +13,19 @@ Erfolg: ein vorhandenes generiertes `sdkconfig` hat Vorrang vor den
 Defaults, sodass ein Build technisch gelingen kann, obwohl das falsche
 Profil aktiv ist. Nach allen angeforderten Builds fuehrt dieser Treiber
 deshalb zwingend die reale Profil- und Herkunftspruefung aus
-`scripts/check_build_profiles.py` aus (per `sys.executable`, kein Import,
-kein eigener Guard-Code in dieser Datei — SOLID: dieser Treiber
+`scripts/check_build_profiles.py` aus (per `sys.executable`, als eigener
+Prozess, kein eigener Guard-Code in dieser Datei — SOLID: dieser Treiber
 orchestriert Build und Validierung, `check_build_profiles.py` enthaelt die
 Pruef- und Vertragslogik). Erst nach bestandener Validierung wird
 Gesamterfolg gemeldet.
+
+Die fruehe ESP-IDF-Herkunftspruefung (Commit/Tag/sauberer Arbeitsbaum) vor
+dem Build importiert dieselbe kanonische Funktion
+`check_build_profiles.check_esp_idf_version()`, statt sie erneut zu
+implementieren (DRY: genau eine Implementierung der Herkunftspruefung).
+Dieser Treiber behaelt nur seine eigenen Vorbedingungen (`IDF_PATH`
+vorhanden, Pfad ist ein Verzeichnis, `idf.py` auf `PATH`,
+`idf.py --version` passt).
 
 Installiert oder aendert die ESP-IDF-Toolchain nicht (das ist Aufgabe der
 direkten Installation aus Abschnitt 7.1) und flasht nicht. Setzt voraus,
@@ -37,6 +45,7 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
+import check_build_profiles
 import esp_idf_contract
 
 
@@ -76,39 +85,12 @@ def verify_idf_environment() -> None:
             "idf.py nicht auf PATH gefunden; zuerst `. $IDF_PATH/export.sh` ausfuehren",
         )
 
-    commit_result = run(["git", "-C", str(idf_path), "rev-parse", "HEAD"])
-    if commit_result.returncode != 0:
-        raise BuildDriverError(
-            "-", "environment",
-            f"ESP-IDF-Commit konnte nicht ermittelt werden: {commit_result.stderr.strip()}",
-        )
-    actual_commit = commit_result.stdout.strip()
-    if actual_commit != esp_idf_contract.ESP_IDF_COMMIT:
-        raise BuildDriverError(
-            "-", "environment",
-            f"falscher ESP-IDF-Commit: erwartet {esp_idf_contract.ESP_IDF_COMMIT}, "
-            f"gefunden {actual_commit}",
-        )
-
-    tag_result = run(["git", "-C", str(idf_path), "describe", "--tags", "--exact-match"])
-    actual_tag = tag_result.stdout.strip()
-    if tag_result.returncode != 0 or actual_tag != esp_idf_contract.ESP_IDF_TAG:
-        raise BuildDriverError(
-            "-", "environment",
-            f"falscher ESP-IDF-Tag: erwartet {esp_idf_contract.ESP_IDF_TAG}, "
-            f"gefunden {actual_tag or '(kein exakter Tag)'}",
-        )
-
-    status_result = run(["git", "-C", str(idf_path), "status", "--short"])
-    if status_result.returncode != 0:
-        raise BuildDriverError(
-            "-", "environment", f"git status fehlgeschlagen: {status_result.stderr.strip()}",
-        )
-    if status_result.stdout.strip():
-        raise BuildDriverError(
-            "-", "environment",
-            "ESP-IDF-Arbeitsbaum ist nicht sauber:\n" + status_result.stdout,
-        )
+    # Herkunftspruefung (Commit/Tag/sauberer Arbeitsbaum) ist keine zweite
+    # Implementierung, sondern ein Aufruf der kanonischen Pruefung aus
+    # check_build_profiles.py (DRY, Abschnitt 1 des Reviews).
+    origin_violations = check_build_profiles.check_esp_idf_version(idf_path)
+    if origin_violations:
+        raise BuildDriverError("-", "environment", "; ".join(origin_violations))
 
     version_result = run(["idf.py", "--version"])
     if version_result.returncode != 0 or esp_idf_contract.ESP_IDF_TAG not in version_result.stdout:

@@ -14,7 +14,16 @@ Im normalen Repositorymodus ist die ESP-IDF-Herkunftspruefung
 verpflichtend: der ESP-IDF-Pfad wird ueber `--idf-path`, sonst ueber die
 Umgebungsvariable `IDF_PATH` aufgeloest; fehlen beide, bricht das Skript
 mit einem harten Fehler ab. Nur `--selftest` laeuft ohne realen
-ESP-IDF-Checkout.
+ESP-IDF-Checkout. Die Profilisolationspruefung (reale Pfadgleichheit
+zwischen den generierten `sdkconfig`-Dateien) laeuft immer, unabhaengig
+davon, welches einzelne Profil gerade angefordert wurde — eine bereits
+vorhandene, mit dem anderen Profil geteilte Datei waere sonst auch bei
+einem Einzelprofil-Aufruf unentdeckt.
+
+`check_esp_idf_version()` ist die einzige Implementierung der
+ESP-IDF-Herkunftspruefung im Repository; `scripts/build_esp_idf_profiles.py`
+importiert genau diese Funktion fuer seine fruehe Pruefung, statt sie
+erneut zu implementieren (DRY).
 
 `--selftest` prueft die Erkennung selbst anhand temporaerer Fixture-Dateien
 und eines minimalen echten Git-Repositorys, ohne dass ein absichtlich
@@ -25,6 +34,7 @@ import argparse
 import configparser
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -51,6 +61,10 @@ ALLOWED_PLATFORMIO_SECTIONS = {"platformio", "profile", "env:native"} | set(
     EXPECTED_PLATFORMIO_ARDUINO_ENVS
 )
 
+EXPECTED_PLATFORMIO_DEFAULT_ENVS = {"native"} | {
+    esp_idf_contract.build_dir_name(profile) for profile in esp_idf_contract.PROFILES
+}
+
 REQUIRED_SAFETY_DEFINES = {
     "APP_TARGET_FLASH_MB": "4",
     "APP_REQUIRE_PSRAM": "0",
@@ -58,7 +72,18 @@ REQUIRED_SAFETY_DEFINES = {
     "APP_REAL_ACTUATORS_ENABLED": "0",
 }
 
-FORBIDDEN_DEFINE_NAMES = ("ARDUINO",)
+# Exakte Namen und Praefixe, die im ESP-IDF-Build keinesfalls vorkommen
+# duerfen. Eine reine Substring-Suche im gesamten Kommando wuerde auch
+# harmlose Zufallstreffer melden; stattdessen wird jede strukturiert
+# geparste Definition einzeln gegen diese Regeln geprueft.
+FORBIDDEN_DEFINE_EXACT_NAMES = ("ARDUINO",)
+FORBIDDEN_DEFINE_PREFIXES = ("ARDUINO_", "CONFIG_ARDUINO_")
+
+
+def is_forbidden_arduino_define(name: str) -> bool:
+    if name in FORBIDDEN_DEFINE_EXACT_NAMES:
+        return True
+    return any(name.startswith(prefix) for prefix in FORBIDDEN_DEFINE_PREFIXES)
 
 
 def repo_root() -> Path:
@@ -113,20 +138,27 @@ def check_sdkconfig_for_profile(sdkconfig_path: Path, profile: str) -> list[str]
     return violations
 
 
-# --- compile_commands.json, strukturiert ausgewertet --------------------
+# --- Strukturierte -D-Definitionsauswertung (gemeinsam fuer
+# compile_commands.json und platformio.ini build_flags) -------------------
 
-def parse_defines(entry: dict) -> list[tuple[str, str | None]]:
-    """Zerlegt `command`/`arguments` eines compile_commands.json-Eintrags in
-    (Name, Wert)-Paare fuer jede `-D`-Definition, in Auftrittsreihenfolge,
-    damit Mehrfachdefinitionen erkennbar bleiben."""
-    arguments = entry.get("arguments")
-    tokens = list(arguments) if arguments else shlex.split(entry.get("command", ""))
-
+def defines_from_tokens(tokens: list[str]) -> list[tuple[str, str | None]]:
+    """Zerlegt eine Tokenliste in (Name, Wert)-Paare fuer jede `-D`-Definition,
+    in Auftrittsreihenfolge (damit Mehrfachdefinitionen erkennbar bleiben).
+    Akzeptiert sowohl `-DNAME=VALUE` als auch die getrennte Zwei-Token-Form
+    `-D NAME=VALUE`."""
     defines: list[tuple[str, str | None]] = []
-    for token in tokens:
-        if not token.startswith("-D"):
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "-D" and index + 1 < len(tokens):
+            body = tokens[index + 1]
+            index += 2
+        elif token.startswith("-D") and token != "-D":
+            body = token[2:]
+            index += 1
+        else:
+            index += 1
             continue
-        body = token[2:]
         if "=" in body:
             name, value = body.split("=", 1)
         else:
@@ -140,6 +172,13 @@ def group_defines(defines: list[tuple[str, str | None]]) -> dict[str, list[str |
     for name, value in defines:
         grouped.setdefault(name, []).append(value)
     return grouped
+
+
+def parse_defines(entry: dict) -> list[tuple[str, str | None]]:
+    """Zerlegt `command`/`arguments` eines compile_commands.json-Eintrags."""
+    arguments = entry.get("arguments")
+    tokens = list(arguments) if arguments else shlex.split(entry.get("command", ""))
+    return defines_from_tokens(tokens)
 
 
 def check_compile_definitions_for_profile(
@@ -192,10 +231,10 @@ def check_compile_definitions_for_profile(
                 f"{compile_commands_path}: -D{name} erwartet {expected}, gefunden {values[0]}"
             )
 
-    for forbidden in FORBIDDEN_DEFINE_NAMES:
-        if forbidden in grouped:
+    for name in grouped:
+        if is_forbidden_arduino_define(name):
             violations.append(
-                f"{compile_commands_path}: verbotene Definition -D{forbidden} im "
+                f"{compile_commands_path}: verbotene Arduino-Definition -D{name} im "
                 "ESP-IDF-Build vorhanden"
             )
 
@@ -234,6 +273,38 @@ def check_profiles_are_isolated(build_root: Path) -> list[str]:
 
 # --- PlatformIO-Parallelvertrag ------------------------------------------
 
+_PLATFORMIO_REFERENCE = re.compile(r"\$\{([\w:]+)\.([\w]+)\}")
+
+
+def resolve_platformio_option(
+    parser: configparser.ConfigParser, section: str, key: str, *, _seen: frozenset = frozenset()
+) -> str:
+    """Loest das in diesem Repository tatsaechlich verwendete
+    PlatformIO-Interpolationsmuster `${section.key}` auf eigenen Zeilen auf
+    (kein generischer Templating-Motor, nur dieses eine, konkrete Muster)."""
+    if section not in parser or section in _seen:
+        return ""
+    raw = parser[section].get(key, "")
+    resolved_lines: list[str] = []
+    for line in raw.splitlines():
+        match = _PLATFORMIO_REFERENCE.fullmatch(line.strip())
+        if match:
+            ref_section, ref_key = match.group(1), match.group(2)
+            resolved_lines.append(
+                resolve_platformio_option(parser, ref_section, ref_key, _seen=_seen | {section})
+            )
+        else:
+            resolved_lines.append(line)
+    return "\n".join(resolved_lines)
+
+
+def defines_from_platformio_flags(
+    parser: configparser.ConfigParser, section: str
+) -> dict[str, list[str | None]]:
+    resolved = resolve_platformio_option(parser, section, "build_flags")
+    return group_defines(defines_from_tokens(shlex.split(resolved)))
+
+
 def check_platformio_parallel_contract(platformio_ini_path: Path) -> list[str]:
     if not platformio_ini_path.is_file():
         return [f"platformio.ini fehlt: {platformio_ini_path}"]
@@ -250,6 +321,34 @@ def check_platformio_parallel_contract(platformio_ini_path: Path) -> list[str]:
             + ", ".join(sorted(unexpected_sections))
         )
 
+    if "platformio" not in parser:
+        violations.append("PlatformIO-Sektion [platformio] fehlt")
+    else:
+        raw_default_envs = parser["platformio"].get("default_envs", "")
+        actual_envs = {token.strip() for token in raw_default_envs.split(",") if token.strip()}
+        if actual_envs != EXPECTED_PLATFORMIO_DEFAULT_ENVS:
+            violations.append(
+                f"[platformio] default_envs erwartet die Menge "
+                f"{sorted(EXPECTED_PLATFORMIO_DEFAULT_ENVS)}, gefunden {sorted(actual_envs)}"
+            )
+
+    if "profile" not in parser:
+        violations.append("PlatformIO-Sektion [profile] fehlt")
+    else:
+        profile_defines = defines_from_platformio_flags(parser, "profile")
+        for name, expected in REQUIRED_SAFETY_DEFINES.items():
+            values = profile_defines.get(name, [])
+            if not values:
+                violations.append(f"[profile] build_flags: erwartete Definition -D{name} fehlt")
+            elif len(values) > 1:
+                violations.append(
+                    f"[profile] build_flags: Definition -D{name} mehrfach vorhanden ({values})"
+                )
+            elif values[0] != expected:
+                violations.append(
+                    f"[profile] build_flags: -D{name} erwartet {expected}, gefunden {values[0]}"
+                )
+
     if "env:native" not in parser:
         violations.append("PlatformIO-Environment env:native fehlt")
     else:
@@ -259,8 +358,24 @@ def check_platformio_parallel_contract(platformio_ini_path: Path) -> list[str]:
                 violations.append(
                     f"env:native: erwartete {key}={expected!r}, gefunden {actual!r}"
                 )
+        native_defines = defines_from_platformio_flags(parser, "env:native")
+        native_values = native_defines.get("APP_PROFILE_NATIVE", [])
+        if native_values != ["1"]:
+            violations.append(
+                f"env:native: erwartete genau eine Definition -DAPP_PROFILE_NATIVE=1, "
+                f"gefunden {native_values or '(fehlt)'}"
+            )
+        for esp32_profile in esp_idf_contract.PROFILES:
+            forbidden_name = esp_idf_contract.profile_define(esp32_profile)
+            if forbidden_name in native_defines:
+                violations.append(
+                    f"env:native: unerwartete ESP32-Profildefinition -D{forbidden_name} "
+                    "vorhanden"
+                )
 
-    for section, expected_options in EXPECTED_PLATFORMIO_ARDUINO_ENVS.items():
+    for profile in esp_idf_contract.PROFILES:
+        section = f"env:{esp_idf_contract.build_dir_name(profile)}"
+        expected_options = EXPECTED_PLATFORMIO_ARDUINO_ENVS[section]
         if section not in parser:
             violations.append(
                 f"Parallelphase verletzt: PlatformIO-Environment {section} fehlt "
@@ -275,10 +390,26 @@ def check_platformio_parallel_contract(platformio_ini_path: Path) -> list[str]:
                     "(Altvertrag waehrend Parallelphase muss unveraendert bleiben)"
                 )
 
+        env_defines = defines_from_platformio_flags(parser, section)
+        own_name = esp_idf_contract.profile_define(profile)
+        other_name = esp_idf_contract.profile_define(esp_idf_contract.other_profile(profile))
+        own_values = env_defines.get(own_name, [])
+        if own_values != ["1"]:
+            violations.append(
+                f"{section}: erwartete genau eine Definition -D{own_name}=1, "
+                f"gefunden {own_values or '(fehlt)'}"
+            )
+        other_values = env_defines.get(other_name, [])
+        if other_values:
+            violations.append(
+                f"{section}: unerwartete Definition -D{other_name} zusaetzlich "
+                f"vorhanden ({other_values}) — Profile vertauscht?"
+            )
+
     return violations
 
 
-# --- ESP-IDF-Herkunft ------------------------------------------------------
+# --- ESP-IDF-Herkunft (einzige Implementierung im Repository) -------------
 
 def check_esp_idf_version(
     idf_git_dir: Path,
@@ -333,18 +464,36 @@ def check_esp_idf_version(
 
 # --- Realer Repositorymodus -----------------------------------------------
 
-def check_repository(idf_path: str, profiles: list[str]) -> int:
+def check_repository(
+    idf_path: str,
+    profiles: list[str],
+    *,
+    build_root: Path | None = None,
+    platformio_ini_path: Path | None = None,
+    expected_tag: str = esp_idf_contract.ESP_IDF_TAG,
+    expected_commit: str = esp_idf_contract.ESP_IDF_COMMIT,
+) -> int:
     root = repo_root()
+    build_root = build_root if build_root is not None else root / "build"
+    platformio_ini_path = (
+        platformio_ini_path if platformio_ini_path is not None else root / "platformio.ini"
+    )
+
     violations: list[str] = []
 
     for profile in profiles:
-        violations += check_esp_idf_profile(root / "build", profile)
+        violations += check_esp_idf_profile(build_root, profile)
 
-    if set(profiles) == set(esp_idf_contract.PROFILES):
-        violations += check_profiles_are_isolated(root / "build")
+    # Immer, unabhaengig vom angeforderten Profilfilter: eine bereits
+    # vorhandene, mit dem jeweils anderen Profil geteilte sdkconfig waere
+    # sonst auch bei einem Einzelprofil-Aufruf unentdeckt (Abschnitt 2 des
+    # Reviews).
+    violations += check_profiles_are_isolated(build_root)
 
-    violations += check_platformio_parallel_contract(root / "platformio.ini")
-    violations += check_esp_idf_version(Path(idf_path))
+    violations += check_platformio_parallel_contract(platformio_ini_path)
+    violations += check_esp_idf_version(
+        Path(idf_path), expected_tag=expected_tag, expected_commit=expected_commit,
+    )
 
     if violations:
         for violation in violations:
@@ -373,8 +522,9 @@ def _write_sdkconfig(path: Path, active_options: set[str], *, flash_ok: bool = T
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _write_compile_commands(path: Path, defines: list[str]) -> None:
-    command = "clang++ " + " ".join(f"-D{define}" for define in defines) + " app_main.cpp"
+def _write_compile_commands(path: Path, defines: list[str], *, command: str | None = None) -> None:
+    if command is None:
+        command = "clang++ " + " ".join(f"-D{define}" for define in defines) + " app_main.cpp"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps([{"file": "main/app_main.cpp", "command": command}]),
@@ -412,14 +562,56 @@ def _make_git_repo(root: Path, *, tag: str | None, dirty: bool = False) -> str:
     return commit_sha
 
 
-_GOOD_PLATFORMIO_INI = (
-    "[platformio]\ndefault_envs = native, esp32_bringup, esp32_release\n\n"
-    "[env:native]\nplatform = native\ntest_framework = unity\n\n"
-    "[env:esp32_bringup]\nplatform = espressif32@7.0.1\nframework = arduino\n"
-    "board = esp32dev\n\n"
-    "[env:esp32_release]\nplatform = espressif32@7.0.1\nframework = arduino\n"
-    "board = esp32dev\n"
-)
+def _make_platformio_ini(
+    *,
+    default_envs: str = "native, esp32_bringup, esp32_release",
+    profile_build_flags: str = (
+        "    -DAPP_TARGET_FLASH_MB=4\n"
+        "    -DAPP_REQUIRE_PSRAM=0\n"
+        "    -DAPP_WEB_OTA_ENABLED=0\n"
+        "    -DAPP_REAL_ACTUATORS_ENABLED=0\n"
+    ),
+    native_platform: str = "native",
+    native_extra_flags: str = "    -DAPP_PROFILE_NATIVE=1\n",
+    bringup_platform: str = "espressif32@7.0.1",
+    bringup_framework: str = "arduino",
+    bringup_board: str = "esp32dev",
+    bringup_extra_flags: str = "    -DAPP_PROFILE_ESP32_BRINGUP=1\n",
+    release_platform: str = "espressif32@7.0.1",
+    release_framework: str = "arduino",
+    release_board: str = "esp32dev",
+    release_extra_flags: str = "    -DAPP_PROFILE_ESP32_RELEASE=1\n",
+    include_native: bool = True,
+    include_bringup: bool = True,
+    include_release: bool = True,
+    extra_sections: str = "",
+) -> str:
+    """Baut ein minimales, aber strukturell reales platformio.ini-Fixture
+    (mit derselben `${profile.build_flags}`-Interpolation wie das
+    tatsaechliche Repository) mit gezielt ueberschreibbaren Feldern, statt
+    fragiler Textersetzung an einer festen Konstante."""
+    sections = [f"[platformio]\ndefault_envs = {default_envs}\n"]
+    sections.append(f"[profile]\nbuild_flags =\n    -std=gnu++17\n{profile_build_flags}")
+    if include_native:
+        sections.append(
+            f"[env:native]\nplatform = {native_platform}\ntest_framework = unity\n"
+            f"build_flags =\n    ${{profile.build_flags}}\n{native_extra_flags}"
+        )
+    if include_bringup:
+        sections.append(
+            f"[env:esp32_bringup]\nplatform = {bringup_platform}\n"
+            f"framework = {bringup_framework}\nboard = {bringup_board}\n"
+            f"build_flags =\n    ${{profile.build_flags}}\n{bringup_extra_flags}"
+        )
+    if include_release:
+        sections.append(
+            f"[env:esp32_release]\nplatform = {release_platform}\n"
+            f"framework = {release_framework}\nboard = {release_board}\n"
+            f"build_flags =\n    ${{profile.build_flags}}\n{release_extra_flags}"
+        )
+    if extra_sections:
+        sections.append(extra_sections)
+    return "\n".join(sections)
 
 
 def run_selftest() -> int:
@@ -538,13 +730,45 @@ def run_selftest() -> int:
         defines = _good_defines("bringup") + ["ARDUINO=1"]
         _write_compile_commands(path, defines)
         violations = check_compile_definitions_for_profile(path, "bringup")
-        checks.append(("Arduino-Definition im ESP-IDF-Build wird erkannt", bool(violations)))
+        checks.append(("Arduino-Definition -DARDUINO im ESP-IDF-Build wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "build" / esp_idf_contract.build_dir_name("bringup") / "compile_commands.json"
+        defines = _good_defines("bringup") + ["ARDUINO_ARCH_ESP32=1"]
+        _write_compile_commands(path, defines)
+        violations = check_compile_definitions_for_profile(path, "bringup")
+        checks.append(("Arduino-Praefixdefinition -DARDUINO_ARCH_ESP32 wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "build" / esp_idf_contract.build_dir_name("bringup") / "compile_commands.json"
+        defines = _good_defines("bringup") + ["CONFIG_ARDUINO_RUNNING_CORE=1"]
+        _write_compile_commands(path, defines)
+        violations = check_compile_definitions_for_profile(path, "bringup")
+        checks.append(("Arduino-Kconfig-Definition -DCONFIG_ARDUINO_RUNNING_CORE wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "build" / esp_idf_contract.build_dir_name("bringup") / "compile_commands.json"
+        defines = _good_defines("bringup") + ["APP_HARMLESS_EXTRA_DEFINE=1"]
+        _write_compile_commands(path, defines)
+        violations = check_compile_definitions_for_profile(path, "bringup")
+        checks.append(("Harmlose Definition ohne Arduino-Bezug wird akzeptiert", not violations))
 
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "build" / esp_idf_contract.build_dir_name("release") / "compile_commands.json"
         _write_compile_commands(path, _good_defines("release"))
         violations = check_compile_definitions_for_profile(path, "release")
         checks.append(("Korrekte Compile-Definitionen werden akzeptiert", not violations))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # Getrennte Zwei-Token-Form "-D NAME=VALUE" (Abschnitt 5 des Reviews).
+        path = Path(tmp) / "build" / esp_idf_contract.build_dir_name("bringup") / "compile_commands.json"
+        good = _good_defines("bringup")
+        first_flag = f"-D {good[0]}"
+        rest_flags = " ".join(f"-D{define}" for define in good[1:])
+        command = f"clang++ {first_flag} {rest_flags} app_main.cpp"
+        _write_compile_commands(path, [], command=command)
+        violations = check_compile_definitions_for_profile(path, "bringup")
+        checks.append(("Getrennte Zwei-Token-Form (-D NAME=VALUE) wird korrekt geparst", not violations))
 
     # --- ESP-IDF-Herkunft: echtes temporaeres Git-Repository -----------
     with tempfile.TemporaryDirectory() as tmp:
@@ -601,53 +825,32 @@ def run_selftest() -> int:
     # --- PlatformIO-Parallelvertrag -------------------------------------
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
-        ini_path.write_text(_GOOD_PLATFORMIO_INI, encoding="utf-8")
+        ini_path.write_text(_make_platformio_ini(), encoding="utf-8")
         violations = check_platformio_parallel_contract(ini_path)
         checks.append(("Korrekter PlatformIO-Parallelvertrag wird akzeptiert", not violations))
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
-        ini_path.write_text(
-            _GOOD_PLATFORMIO_INI.replace(
-                "[env:esp32_bringup]\nplatform = espressif32@7.0.1\nframework = arduino",
-                "[env:esp32_bringup]\nplatform = espressif32@7.0.1\nframework = espidf",
-            ),
-            encoding="utf-8",
-        )
+        ini_path.write_text(_make_platformio_ini(bringup_framework="espidf"), encoding="utf-8")
         violations = check_platformio_parallel_contract(ini_path)
         checks.append(("Veraendertes framework im Arduino-Environment wird erkannt", bool(violations)))
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
-        ini_path.write_text(
-            _GOOD_PLATFORMIO_INI.replace(
-                "[env:esp32_bringup]\nplatform = espressif32@7.0.1",
-                "[env:esp32_bringup]\nplatform = espressif32@7.1.0",
-            ),
-            encoding="utf-8",
-        )
+        ini_path.write_text(_make_platformio_ini(bringup_platform="espressif32@7.1.0"), encoding="utf-8")
         violations = check_platformio_parallel_contract(ini_path)
         checks.append(("Veraendertes platform im Arduino-Environment wird erkannt", bool(violations)))
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
-        ini_path.write_text(
-            _GOOD_PLATFORMIO_INI.replace(
-                "board = esp32dev\n\n[env:esp32_release]",
-                "board = esp32-s3-devkitc-1\n\n[env:esp32_release]",
-            ),
-            encoding="utf-8",
-        )
+        ini_path.write_text(_make_platformio_ini(bringup_board="esp32-s3-devkitc-1"), encoding="utf-8")
         violations = check_platformio_parallel_contract(ini_path)
         checks.append(("Veraendertes board im Arduino-Environment wird erkannt", bool(violations)))
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
         ini_path.write_text(
-            "[platformio]\ndefault_envs = native, esp32_release\n\n"
-            "[env:native]\nplatform = native\ntest_framework = unity\n\n"
-            "[env:esp32_release]\nplatform = espressif32@7.0.1\nframework = arduino\n"
-            "board = esp32dev\n",
+            _make_platformio_ini(include_bringup=False, default_envs="native, esp32_release"),
             encoding="utf-8",
         )
         violations = check_platformio_parallel_contract(ini_path)
@@ -656,7 +859,10 @@ def run_selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
         ini_path.write_text(
-            _GOOD_PLATFORMIO_INI + "\n[env:esp32_unexpected]\nplatform = espressif32@7.0.1\n",
+            _make_platformio_ini(
+                default_envs="native, esp32_bringup, esp32_release, esp32_unexpected",
+                extra_sections="[env:esp32_unexpected]\nplatform = espressif32@7.0.1\n",
+            ),
             encoding="utf-8",
         )
         violations = check_platformio_parallel_contract(ini_path)
@@ -665,11 +871,7 @@ def run_selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
         ini_path.write_text(
-            "[platformio]\ndefault_envs = esp32_bringup, esp32_release\n\n"
-            "[env:esp32_bringup]\nplatform = espressif32@7.0.1\nframework = arduino\n"
-            "board = esp32dev\n\n"
-            "[env:esp32_release]\nplatform = espressif32@7.0.1\nframework = arduino\n"
-            "board = esp32dev\n",
+            _make_platformio_ini(include_native=False, default_envs="esp32_bringup, esp32_release"),
             encoding="utf-8",
         )
         violations = check_platformio_parallel_contract(ini_path)
@@ -677,15 +879,143 @@ def run_selftest() -> int:
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(_make_platformio_ini(native_platform="espressif32@7.0.1"), encoding="utf-8")
+        violations = check_platformio_parallel_contract(ini_path)
+        checks.append(("env:native mit falscher Plattform wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
         ini_path.write_text(
-            _GOOD_PLATFORMIO_INI.replace(
-                "[env:native]\nplatform = native",
-                "[env:native]\nplatform = espressif32@7.0.1",
+            _make_platformio_ini(
+                bringup_extra_flags="    -DAPP_PROFILE_ESP32_RELEASE=1\n",
+                release_extra_flags="    -DAPP_PROFILE_ESP32_BRINGUP=1\n",
             ),
             encoding="utf-8",
         )
         violations = check_platformio_parallel_contract(ini_path)
-        checks.append(("env:native mit falscher Plattform wird erkannt", bool(violations)))
+        checks.append(("Vertauschte Bring-up-/Release-Profilzuordnung wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(
+            _make_platformio_ini(
+                profile_build_flags=(
+                    "    -DAPP_TARGET_FLASH_MB=4\n"
+                    "    -DAPP_REQUIRE_PSRAM=0\n"
+                    "    -DAPP_WEB_OTA_ENABLED=0\n"
+                ),
+            ),
+            encoding="utf-8",
+        )
+        violations = check_platformio_parallel_contract(ini_path)
+        checks.append(("Fehlender gemeinsamer Safetywert in [profile] wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(
+            _make_platformio_ini(
+                profile_build_flags=(
+                    "    -DAPP_TARGET_FLASH_MB=4\n"
+                    "    -DAPP_REQUIRE_PSRAM=0\n"
+                    "    -DAPP_WEB_OTA_ENABLED=0\n"
+                    "    -DAPP_REAL_ACTUATORS_ENABLED=1\n"
+                ),
+            ),
+            encoding="utf-8",
+        )
+        violations = check_platformio_parallel_contract(ini_path)
+        checks.append(("APP_REAL_ACTUATORS_ENABLED=1 in [profile] wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(
+            _make_platformio_ini(
+                profile_build_flags=(
+                    "    -DAPP_TARGET_FLASH_MB=4\n"
+                    "    -DAPP_REQUIRE_PSRAM=0\n"
+                    "    -DAPP_WEB_OTA_ENABLED=0\n"
+                    "    -DAPP_REAL_ACTUATORS_ENABLED=0\n"
+                    "    -DAPP_REAL_ACTUATORS_ENABLED=1\n"
+                ),
+            ),
+            encoding="utf-8",
+        )
+        violations = check_platformio_parallel_contract(ini_path)
+        checks.append(("Doppelter widerspruechlicher Safetywert in [profile] wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(
+            _make_platformio_ini(default_envs="native, esp32_bringup"),
+            encoding="utf-8",
+        )
+        violations = check_platformio_parallel_contract(ini_path)
+        checks.append(("Unvollstaendiges default_envs wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(
+            _make_platformio_ini(
+                native_extra_flags="    -DAPP_PROFILE_NATIVE=1\n    -DAPP_PROFILE_ESP32_BRINGUP=1\n",
+            ),
+            encoding="utf-8",
+        )
+        violations = check_platformio_parallel_contract(ini_path)
+        checks.append(("ESP32-Profildefinition in env:native wird erkannt", bool(violations)))
+
+    # --- check_repository: Profilisolation auch bei Einzelprofil-Aufrufen ---
+    with tempfile.TemporaryDirectory() as tmp:
+        # Positivfall: Einzelprofil "release" ohne Konflikt wird geprueft
+        # und akzeptiert.
+        build_root = Path(tmp) / "build"
+        _write_sdkconfig(
+            build_root / esp_idf_contract.build_dir_name("release") / "sdkconfig",
+            {esp_idf_contract.profile_kconfig_option("release")},
+        )
+        _write_compile_commands(
+            build_root / esp_idf_contract.build_dir_name("release") / "compile_commands.json",
+            _good_defines("release"),
+        )
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(_make_platformio_ini(), encoding="utf-8")
+        idf_repo = Path(tmp) / "esp-idf"
+        idf_commit = _make_git_repo(idf_repo, tag=esp_idf_contract.ESP_IDF_TAG)
+        exit_code = check_repository(
+            str(idf_repo), ["release"], build_root=build_root, platformio_ini_path=ini_path,
+            expected_tag=esp_idf_contract.ESP_IDF_TAG, expected_commit=idf_commit,
+        )
+        checks.append((
+            "Einzelprofil-Aufruf (release) ohne Konflikt wird akzeptiert",
+            exit_code == 0,
+        ))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # Negativfall: Einzelprofil "release" angefordert, aber die bereits
+        # vorhandene Bring-up-sdkconfig ist real dieselbe Datei -> muss auch
+        # bei einem Einzelprofil-Aufruf erkannt werden.
+        build_root = Path(tmp) / "build"
+        release_sdkconfig = build_root / esp_idf_contract.build_dir_name("release") / "sdkconfig"
+        _write_sdkconfig(release_sdkconfig, {esp_idf_contract.profile_kconfig_option("release")})
+        _write_compile_commands(
+            build_root / esp_idf_contract.build_dir_name("release") / "compile_commands.json",
+            _good_defines("release"),
+        )
+        bringup_dir = build_root / esp_idf_contract.build_dir_name("bringup")
+        bringup_dir.mkdir(parents=True, exist_ok=True)
+        (bringup_dir / "sdkconfig").symlink_to(release_sdkconfig)
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(_make_platformio_ini(), encoding="utf-8")
+        idf_repo = Path(tmp) / "esp-idf"
+        idf_commit = _make_git_repo(idf_repo, tag=esp_idf_contract.ESP_IDF_TAG)
+        exit_code = check_repository(
+            str(idf_repo), ["release"], build_root=build_root, platformio_ini_path=ini_path,
+            expected_tag=esp_idf_contract.ESP_IDF_TAG, expected_commit=idf_commit,
+        )
+        checks.append((
+            "Einzelprofil-Aufruf (release) erkennt bereits vorhandene, mit "
+            "Bring-up geteilte sdkconfig",
+            exit_code != 0,
+        ))
 
     all_passed = True
     for description, passed in checks:
