@@ -11,6 +11,16 @@ jobs:
   firmware:
     runs-on: ubuntu-24.04
 
+    env:
+      # Bei pull_request-Events checkt actions/checkout einen ephemeren
+      # Merge-Commit aus; github.sha zeigt dann auf diese nicht im
+      # sichtbaren PR-Commit-Verlauf vorkommende SHA. BUILD_SHA verwendet
+      # stattdessen den tatsaechlichen PR-Head-Commit, damit Artefaktname
+      # und Manifest-Feld "git_sha" auf denselben, tatsaechlich
+      # reviewbaren Commit zeigen (bei push-Events sind beide SHAs ohnehin
+      # identisch).
+      BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
     steps:
       - name: Repository auschecken
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -143,7 +153,7 @@ jobs:
           set -euo pipefail
           . "$IDF_PATH/export.sh"
           python scripts/build_report.py --output build-report.md --append \
-            --esp-idf-profiles bringup release
+            --esp-idf-profiles bringup release --git-sha "$BUILD_SHA"
 
       - name: Groessenbericht sichern
         if: success()
@@ -173,7 +183,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: esp-idf-esp32_bringup-${{ github.sha }}
+          name: esp-idf-esp32_bringup-${{ env.BUILD_SHA }}
           path: |
             build/esp32_bringup/esp32_fermentationsschrank.bin
             build/esp32_bringup/esp32_fermentationsschrank.elf
@@ -193,7 +203,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: esp-idf-esp32_release-${{ github.sha }}
+          name: esp-idf-esp32_release-${{ env.BUILD_SHA }}
           path: |
             build/esp32_release/esp32_fermentationsschrank.bin
             build/esp32_release/esp32_fermentationsschrank.elf

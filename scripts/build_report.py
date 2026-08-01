@@ -196,7 +196,8 @@ def generate_esp_idf_size_json(build_dir: Path, *, idf_py: str) -> Path:
 
 
 def build_esp_idf_profile_report(profile: str, build_dir: Path, *,
-                                  idf_py: str = "idf.py") -> dict:
+                                  idf_py: str = "idf.py",
+                                  git_sha: str | None = None) -> dict:
     if not build_dir.is_dir():
         raise SystemExit(
             f"ESP-IDF-Buildverzeichnis fehlt fuer Profil {profile}: {build_dir} "
@@ -235,7 +236,7 @@ def build_esp_idf_profile_report(profile: str, build_dir: Path, *,
         "sdkconfig_sha256": sha256_of(build_dir / "sdkconfig"),
         "idf_tag": esp_idf_contract.ESP_IDF_TAG,
         "idf_commit": esp_idf_contract.ESP_IDF_COMMIT,
-        "git_sha": git_head_sha(),
+        "git_sha": git_sha if git_sha is not None else git_head_sha(),
     }
 
 
@@ -349,6 +350,15 @@ def run_selftest() -> int:
             report["total_size"] == 99999999,
         ))
 
+        overridden_report = build_esp_idf_profile_report(
+            "bringup", build_dir, idf_py=fake_idf_py, git_sha="fixture-pr-head-sha",
+        )
+        checks.append((
+            "Explizit uebergebene --git-sha ersetzt `git rev-parse HEAD` "
+            "(fuer den ephemeren Merge-Commit bei pull_request-Events)",
+            overridden_report["git_sha"] == "fixture-pr-head-sha",
+        ))
+
         arduino_reports = {
             "esp32_bringup": {
                 "ram_percent": 12.3, "ram_used_bytes": 1111, "ram_total_bytes": 327680,
@@ -457,6 +467,15 @@ def main() -> int:
              "aufgenommen werden (Abschnitt 7.7.1/7.7.2)",
     )
     parser.add_argument(
+        "--git-sha", default=None,
+        help="Commit-SHA fuer Manifest und Bericht (Default: `git rev-parse "
+             "HEAD`). In CI bei pull_request-Events checkt actions/checkout "
+             "einen ephemeren Merge-Commit aus, der nicht im sichtbaren "
+             "Commit-Verlauf des PRs vorkommt; dort muss der tatsaechliche "
+             "PR-Head-SHA explizit uebergeben werden, damit Artefaktname und "
+             "Manifest nachvollziehbar bleiben.",
+    )
+    parser.add_argument(
         "--selftest", action="store_true",
         help="Prueft die Berichts- und Manifesterzeugung anhand temporaerer "
              "Fixtures, ohne eine echte ESP-IDF-Installation zu benoetigen.",
@@ -490,7 +509,9 @@ def main() -> int:
 
     for profile in arguments.esp_idf_profiles:
         build_dir = esp_idf_build_dir(profile)
-        report = build_esp_idf_profile_report(profile, build_dir, idf_py=arguments.idf_py)
+        report = build_esp_idf_profile_report(
+            profile, build_dir, idf_py=arguments.idf_py, git_sha=arguments.git_sha,
+        )
         report_lines += esp_idf_report_lines(profile, report)
         write_artifact_manifest(report)
 
