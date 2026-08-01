@@ -72,6 +72,10 @@ REQUIRED_SAFETY_DEFINES = {
     "APP_REAL_ACTUATORS_ENABLED": "0",
 }
 
+# sdkconfig speichert String-Werte mit Anführungszeichen im Text selbst;
+# read_sdkconfig() entfernt sie bewusst nicht (verlustfreie Rohwertpruefung).
+EXPECTED_IDF_TARGET = '"esp32"'
+
 # Exakte Namen und Praefixe, die im ESP-IDF-Build keinesfalls vorkommen
 # duerfen. Eine reine Substring-Suche im gesamten Kommando wuerde auch
 # harmlose Zufallstreffer melden; stattdessen wird jede strukturiert
@@ -135,6 +139,11 @@ def check_sdkconfig_for_profile(sdkconfig_path: Path, profile: str) -> list[str]
         violations.append(f"{sdkconfig_path}: 4-MB-Flashkonfiguration fehlt")
     if values.get("CONFIG_SPIRAM") == "y":
         violations.append(f"{sdkconfig_path}: PSRAM (CONFIG_SPIRAM) ist aktiviert")
+    if values.get("CONFIG_IDF_TARGET") != EXPECTED_IDF_TARGET:
+        violations.append(
+            f"{sdkconfig_path}: CONFIG_IDF_TARGET erwartet {EXPECTED_IDF_TARGET}, "
+            f"gefunden {values.get('CONFIG_IDF_TARGET', '(fehlt)')}"
+        )
     return violations
 
 
@@ -508,7 +517,13 @@ def check_repository(
 
 # --- Selftest-Fixtures ------------------------------------------------------
 
-def _write_sdkconfig(path: Path, active_options: set[str], *, flash_ok: bool = True) -> None:
+def _write_sdkconfig(
+    path: Path,
+    active_options: set[str],
+    *,
+    flash_ok: bool = True,
+    idf_target: str | None = EXPECTED_IDF_TARGET,
+) -> None:
     lines = []
     for profile in esp_idf_contract.PROFILES:
         option = esp_idf_contract.profile_kconfig_option(profile)
@@ -518,6 +533,8 @@ def _write_sdkconfig(path: Path, active_options: set[str], *, flash_ok: bool = T
             lines.append(f"# {option} is not set")
     if flash_ok:
         lines.append("CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y")
+    if idf_target is not None:
+        lines.append(f"CONFIG_IDF_TARGET={idf_target}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -694,6 +711,33 @@ def run_selftest() -> int:
         )
         violations = check_sdkconfig_for_profile(sdkconfig_path, "bringup")
         checks.append(("Beide Profile gleichzeitig aktiv werden erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        build_root = Path(tmp) / "build"
+        sdkconfig_path = build_root / esp_idf_contract.build_dir_name("bringup") / "sdkconfig"
+        _write_sdkconfig(
+            sdkconfig_path, {esp_idf_contract.profile_kconfig_option("bringup")},
+            idf_target=None,
+        )
+        violations = check_sdkconfig_for_profile(sdkconfig_path, "bringup")
+        checks.append(("Fehlender CONFIG_IDF_TARGET wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        build_root = Path(tmp) / "build"
+        sdkconfig_path = build_root / esp_idf_contract.build_dir_name("bringup") / "sdkconfig"
+        _write_sdkconfig(
+            sdkconfig_path, {esp_idf_contract.profile_kconfig_option("bringup")},
+            idf_target='"esp32s3"',
+        )
+        violations = check_sdkconfig_for_profile(sdkconfig_path, "bringup")
+        checks.append(("Abweichender Zielchip (esp32s3 statt esp32) wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        build_root = Path(tmp) / "build"
+        sdkconfig_path = build_root / esp_idf_contract.build_dir_name("bringup") / "sdkconfig"
+        _write_sdkconfig(sdkconfig_path, {esp_idf_contract.profile_kconfig_option("bringup")})
+        violations = check_sdkconfig_for_profile(sdkconfig_path, "bringup")
+        checks.append(("Korrekter Zielchip CONFIG_IDF_TARGET=\"esp32\" wird akzeptiert", not violations))
 
     # --- Compile-Definitionen strukturiert -----------------------------
     with tempfile.TemporaryDirectory() as tmp:
