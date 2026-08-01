@@ -19,6 +19,27 @@ nach einer vierten, abschliessenden Reviewrunde
 bleiben in der Historie und sind überholt; diese Fassung ersetzt sie
 inhaltlich.
 
+**Nach `PLAN APPROVED` auf Commit `7440d0964b94f06857a4e689f62e134f0da55931`
+und nach freigegebener, verifizierter Umsetzung von Commit 1–3
+(`COMMIT_1_REVIEW: PASS`, `COMMIT_2_REVIEW: PASS`, `COMMIT_3_REVIEW: PASS`,
+zuletzt verifizierter Head `40bf011918555e397ec02d5ccb0e14cc57b99a5d`):**
+Waehrend der Umsetzung von Commit 4 wurde festgestellt, dass der in
+Abschnitt 7.8 fuer die ESP-IDF-spezifische statische Analyse woertlich
+festgelegte Befehl nicht funktioniert (Xtensa-Backend-Luecke in
+Standard-`clang-tidy-18`). Plan-Commit
+`9607fbafc283dfb89623043f10dbff43780bc148` dokumentierte diesen Befund
+mit drei offenen, nicht vorentschiedenen Optionen und war **nicht**
+freigabefaehig. Diese Fassung setzt die verbindliche Ownerentscheidung
+fuer den offiziellen `esp-clang`/`idf.py clang-check`-Pfad um
+(Abschnitt 7.8.1) und dokumentiert zwei daraus live verifizierte,
+zusaetzliche offene Punkte (Abschnitt 7.8.2, Abschnitt 9). Plan-Commit
+`9607fbafc283dfb89623043f10dbff43780bc148` ist damit **ueberholt**; diese
+Fassung ersetzt ihn fuer Abschnitt 7.8 vollstaendig. Abschnitte 1–7.7,
+7.9–7.13 sowie die zugehoerige `PLAN APPROVED`-Freigabe auf Commit
+`7440d0964b94f06857a4e689f62e134f0da55931` bleiben unveraendert in Kraft;
+nur Abschnitt 7.8 und die davon abhaengigen Abschnitte 5, 6, 8, 9, 10, 12,
+13 wurden in dieser Fassung angepasst.
+
 ## 1. Ziel
 
 Die ESP-IDF-6.0.2-Migration abschliessen:
@@ -129,7 +150,21 @@ Die ESP-IDF-6.0.2-Migration abschliessen:
   read-only verifiziert: Build-System-Referenz
   (`SDKCONFIG`/`SDKCONFIG_DEFAULTS`-Cache-Variablen, Semikolon-getrennte
   Mehrfachdateien) und `idf.py`-Referenz (`-B`, `-D<NAME>=<WERT>`,
-  `idf.py size --format json2 --output-file`).
+  `idf.py size --format json2 --output-file`);
+- **Reviewauftrag "PR #79 / Commit 4: ESP-IDF-Static-Analysis-Plan
+  korrigieren"** (`COMMIT_4_PLAN_REVIEW: CHANGES_REQUIRED`,
+  `OWNER_DECISION: USE_OFFICIAL_ESP_CLANG_PATH` auf Plan-Commit
+  `9607fbafc283dfb89623043f10dbff43780bc148`, nach `PLAN APPROVED` und
+  freigegebenen Commits 1–3): verbindliche Grundlage dieser
+  Ueberarbeitung von Abschnitt 7.8 — legt die Ownerentscheidung fuer den
+  offiziellen `esp-clang`/`idf.py clang-check`-Pfad fest, korrigiert die
+  `pyclang`-Aussage aus Plan-Commit `9607fba`, verlangt die strikte
+  Trennung von Produktions- und Analysebuild, einen kanonischen
+  Analysetreiber sowie eine live verifizierte, exakte Kommandoform vor
+  Freigabe; offizielle ESP-IDF-6.0.2-Dokumentation
+  (`docs/en/api-guides/tools/idf-clang-tidy.rst`) und der installierte
+  `pyclang`-Quelltext wurden fuer diese Ueberarbeitung read-only
+  verifiziert.
 
 ## 4. Aktuelle Ausgangslage (Bestandsaufnahme)
 
@@ -308,10 +343,17 @@ Nur in der spaeteren Umsetzungsphase, nach Planfreigabe, zu aendern:
 - `AGENTS.md` (ESP-IDF-only-Stand, Abschnitt 7.13.2)
 - `.clang-tidy` (`HeaderFilterRegex` auf `^(include|lib|main)/.*`
   erweitert, Abschnitt 7.8)
+- neu: `scripts/run_esp_idf_static_analysis.py` (kanonischer
+  ESP-IDF-`esp-clang`-Analysetreiber, Abschnitt 7.8.4)
 
 Kein produktiver Fachcode (`lib/device_platform/`, `lib/fermentation_app/`,
-`main/app_main.cpp`, `startApplication()`/nativer Kern in `src/main.cpp`)
-wird inhaltlich veraendert. `docs/audits/` (historische Auditdateien, u. a.
+`startApplication()`/nativer Kern in `src/main.cpp`) wird inhaltlich
+veraendert. **Offene Ausnahme:** `main/app_main.cpp` ist von dieser
+Zusicherung ausgenommen, solange Befund A aus Abschnitt 7.8.2 nicht
+entschieden ist — je nach Ownerentscheidung bleibt die Datei entweder
+unveraendert (Option 3, projektweite `.clang-tidy`-Anpassung) oder
+erhaelt eine gezielte Aenderung (Option 1 Refactoring, Option 2
+Inline-Ausnahme). `docs/audits/` (historische Auditdateien, u. a.
 `docs/audits/RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`) wird in #74 **nicht**
 angefasst (Abschnitt 7.13.3).
 
@@ -326,14 +368,30 @@ angefasst (Abschnitt 7.13.3).
   Plan-Commit dieser Datei (AGENTS.md, Plan-first-Workflow).
 - **Gate 2 — `PRE_ARDUINO_REMOVAL_CI: PASS`:** Commit 5 (Arduino-Entfernung,
   Abschnitt 8) darf erst erfolgen, nachdem exakt auf dem Head von Commit 4
-  ein vollstaendiger GitHub-Actions-Lauf bestanden hat mit: beide
-  ESP-IDF-Profile gruen, **der alte Arduino-Pfad unveraendert weiterhin
-  gruen** (Parallelvertrag aus Abschnitt 7.5.2, Phase 1), der
+  ein vollstaendiger GitHub-Actions-Lauf bestanden hat mit:
+
+  ```text
+  beide ESP-IDF-GCC-Produktionsprofile: PASS
+  ESP-IDF esp32_bringup static analysis with official esp-clang: PASS
+  ESP-IDF esp32_release static analysis with official esp-clang: PASS
+  clang-format including main/: PASS
+  native static analysis (clang-tidy 18): PASS
+  der alte Arduino-Pfad unveraendert weiterhin gruen (Parallelvertrag
+    aus Abschnitt 7.5.2, Phase 1)
   Parallel-Ressourcenbericht mit beiden Arduino- und beiden ESP-IDF-
-  Messungen gruen (Abschnitt 7.7.5, Phase 1), native Tests gruen,
-  Ressourcen-, Architektur-, Format-, Static-Analysis-, Secret- und
-  Quality-Gate-Selftests gruen. Kein gleichzeitiger Austausch von
-  CI-Einfuehrung und Arduino-Entfernung in einem Commit.
+    Messungen gruen (Abschnitt 7.7.5, Phase 1)
+  native Tests: PASS
+  Ressourcen-, Architektur-, Secret- und Quality-Gate-Selftests: PASS
+  ```
+
+  Gate 2 wird **nicht** um die ESP-IDF-Static-Analysis erleichtert; die
+  „ESP-IDF ... static analysis"-Zeilen sind ab Commit 4 verbindlicher
+  Bestandteil des Gates, nicht optional. Diese beiden Zeilen koennen erst
+  wahrheitsgemaess `PASS` melden, wenn Befund A aus Abschnitt 7.8.2
+  entschieden ist (die Entscheidung selbst legt fest, ob eine Aenderung
+  an `main/app_main.cpp` oder an `.clang-tidy` noetig ist, damit der
+  Analyselauf ueberhaupt fehlerfrei durchlaeuft). Kein gleichzeitiger
+  Austausch von CI-Einfuehrung und Arduino-Entfernung in einem Commit.
 - **Gate 3 — Hardware-Smoke-Test-Gate:** Nach Commit 5 (Arduino-Entfernung)
   und Commit 6 (Abschlussdokumentation), auf dem finalen Implementierungs-
   Head, sind **zwei** Hardware-Smoke-Tests Pflicht (Bring-up **und**
@@ -970,134 +1028,356 @@ einen gruenen Parallelbericht auf dem Head von Commit 4.
 
 ### 7.8 Format und Static Analysis
 
-- `clang-format`-Suchpfad in `build.yml` um `main` ergaenzen
-  (`find src include lib test main ...`, nach Entfernung des
-  Arduino-Zweigs unveraendert, da `src/main.cpp` selbst bestehen bleibt).
-- ESP-IDF liefert `build/esp32_bringup/compile_commands.json` und
-  `build/esp32_release/compile_commands.json` automatisch (`idf.py build`
-  je Profil, Abschnitt 7.3). `clang-tidy` wird fuer
-  `main/app_main.cpp` und
-  `lib/device_platform_esp_idf/src/esp_timer_time_source.cpp` **fuer beide
-  Profile getrennt** aufgerufen:
+- `clang-format`-Suchpfad in `build.yml` um `main` ergaenzt (`find src
+  include lib test main ...`). Lokal verifiziert: `clang-format-18
+  --dry-run --Werror` ueber `src include lib test main`: PASS.
+- Zwei getrennte statische Analysen mit zwei getrennten Werkzeugen
+  (Ownerentscheidung, Abschnitt 7.8.1):
 
   ```text
-  clang-tidy -p build/esp32_bringup main/app_main.cpp ...
-  clang-tidy -p build/esp32_release main/app_main.cpp ...
+  Portable/native Quellen:
+  Debian clang-tidy 18 ueber die native PlatformIO-Compile-Datenbank
+  (unveraendert)
+
+  ESP-IDF-spezifische Quellen (main/app_main.cpp,
+  lib/device_platform_esp_idf/src/esp_timer_time_source.cpp):
+  Espressif esp-clang esp-20.1.1_20250829 ueber den offiziellen
+  idf.py clang-check-Mechanismus, fuer beide Profile getrennt
   ```
 
-  statt eines einzelnen generischen `-p build`, da die beiden Profile
-  eigene Compile-Datenbanken besitzen (Abschnitt 7.3). Portable Quellen
-  bleiben ueber die native Compile-Datenbank geprueft (unveraendert).
 - `.clang-tidy`s `HeaderFilterRegex` wird von `(include|lib)/.*` auf
-  `^(include|lib|main)/.*` erweitert, unter Ausschluss generierter
-  ESP-IDF- und Drittanbieterheader. Diese Erweiterung ist damit
-  **festgelegt**, keine offene Implementierungsentscheidung mehr.
-  Diagnosen aus ESP-IDF selbst (ausserhalb des Projekt-Headerfilters)
-  werden nicht als Projektfehler behandelt.
-- Werkzeugversionen bleiben `clang-format-18`/`clang-tidy-18` (Grenzen der
-  Reproduzierbarkeit dieser Fixierung: Abschnitt 7.11).
+  `^(include|lib|main)/.*` erweitert (reine Konfigurationsaenderung,
+  lokal verifiziert, unveraendert gegenueber der vorherigen
+  Planfassung). Generierte ESP-IDF- und Drittanbieterheader bleiben
+  ausserhalb des Filters; die dokumentierte Einzelausnahme fuer
+  `misc-header-include-cycle` (Abschnitt 7.8.2, Befund B) betrifft ein
+  vom Headerfilter unabhaengiges Checkverhalten, keine
+  Filtererweiterung.
+- Werkzeugversionen: `clang-format-18`/`clang-tidy-18` (nativ,
+  unveraendert, Grenzen der Reproduzierbarkeit: Abschnitt 7.11) sowie
+  `esp-clang esp-20.1.1_20250829` (ESP-IDF-Pfad, neu, exakte
+  Versions-/Hash-Pruefung: Abschnitt 7.8.1).
 
-#### 7.8.1 Befund waehrend der Commit-4-Umsetzung: `clang-tidy -p build/esp32_*`
-funktioniert nicht wie geplant (materielle Planabweichung)
+#### 7.8.1 ESP-IDF-Static-Analysis-Vertrag: offizieller `esp-clang`-Pfad
+(Ownerentscheidung, ersetzt Plan-Commit `9607fba`)
 
-**Status:** `COMMIT_4_BLOCKED_PENDING_PLAN_DECISION`. Die bisherige
-Planfreigabe auf Commit `7440d0964b94f06857a4e689f62e134f0da55931` gilt
-fuer den oben in diesem Abschnitt 7.8 woertlich festgelegten Befehl
-`clang-tidy -p build/esp32_bringup main/app_main.cpp ...` als **ueberholt**;
-sie deckt keine der drei unten genannten Alternativen ab.
+**Ownerentscheidung (verbindlich, ersetzt die drei Optionen aus
+Plan-Commit `9607fbafc283dfb89623043f10dbff43780bc148`):** Fuer die
+ESP-IDF-spezifische statische Analyse wird die offizielle, zu ESP-IDF
+6.0.2 gehoerende Espressif-`esp-clang`-Toolchain ueber den offiziellen
+`idf.py clang-check`-Mechanismus verwendet. Die produktiven GCC-Builds
+und deren Buildverzeichnisse (`build/esp32_bringup`, `build/esp32_release`)
+bleiben davon strikt getrennt (Abschnitt 7.8.3). Diese Entscheidung ersetzt
+alle drei Optionen aus dem vorherigen Plan-Commit; Option 2
+(`compile_commands.json`-Filterung) und Option 3 (Verzicht auf die
+ESP-IDF-spezifische Analyse) sind damit verworfen.
 
-**Befund (live gegen den echten, lokal bereits gebauten
-`build/esp32_bringup`/`build/esp32_release` verifiziert, `clang-tidy-18`,
-identische Version wie in CI):**
+**Sachliche Korrektur zu `pyclang` (live gegen die reale ESP-IDF-6.0.2-
+Installation verifiziert):** `tools/requirements/requirements.core.txt`
+enthaelt am gepinnten ESP-IDF-Commit
+`7101770dc6db2667b3c477cc31365dd1acd6db4e` bereits die Zeile `pyclang`.
+Nach dem bestehenden, bereits in Commit 2 verwendeten
+`"$IDF_PATH/install.sh" esp32` ist `pyclang` **ohne zusaetzlichen
+Installationsschritt** verfuegbar — live verifiziert:
+`pip show pyclang` meldet Version `0.7.0`. **Einschraenkung gegenueber
+der urspruenglichen Korrekturformulierung:** `pyclang` ist in
+`espidf.constraints.v6.0.txt` (der von ESP-IDF selbst fuer
+reproduzierbare Python-Abhaengigkeiten verwendeten Constraints-Datei)
+**nicht** aufgefuehrt (live verifiziert: kein Treffer). Der
+Installationsschritt selbst ist an die exakt ausgecheckte ESP-IDF-Version
+gebunden (dieselbe `requirements.core.txt`), die tatsaechlich
+installierte `pyclang`-Version ist jedoch **nicht** durch ein
+Constraints-File exakt fixiert und kann sich bei einer Neuinstallation
+aendern. Verbindlich: kein separates `pip install --upgrade pyclang`;
+die durch ESP-IDF installierte Version wird im CI-Log protokolliert
+(`pip show pyclang` oder gleichwertig), damit eine spaetere Drift
+sichtbar bleibt statt stillschweigend zu passieren.
+
+**`esp-clang`-Herkunft (live installiert und gegen den gepinnten
+ESP-IDF-Commit verifiziert):**
 
 ```text
-$ clang-tidy -p build/esp32_bringup \
-    main/app_main.cpp \
-    lib/device_platform_esp_idf/src/esp_timer_time_source.cpp
-Error while processing .../main/app_main.cpp.
-Error while processing .../esp_timer_time_source.cpp.
-error: unknown argument '-mlongcalls'; did you mean '-mlong-calls'? [clang-diagnostic-error]
-error: unknown argument: '-fno-shrink-wrap' [clang-diagnostic-error]
-error: unknown argument: '-fno-tree-switch-conversion' [clang-diagnostic-error]
-error: unknown argument: '-fstrict-volatile-bitfields' [clang-diagnostic-error]
-error: unknown target triple 'xtensa-esp32-unknown-elf' [clang-diagnostic-error]
-Found compiler error(s).
+Tool:                esp-clang
+Installtyp:          on_request (tools.json)
+Version:             esp-20.1.1_20250829
+Lizenz:              Apache-2.0
+Repository:          espressif/llvm-project
+Linux-AMD64-SHA-256: 88910c21350c06a521f243304d1a3adbdb78447123b3f8e27493aab75e3cc07f
 ```
 
-Ursache: ESP-IDFs generierte `compile_commands.json` verwendet den
-xtensa-Cross-Compiler (`xtensa-esp32-elf-gcc`, GCC-spezifische Flags wie
-`-mlongcalls`) und einen Xtensa-Zieltriple. Der `clang-tidy-18`-Vertrag
-aus Abschnitt 7.8/7.11 basiert auf Standard-LLVM/Clang aus dem
-Debian-Paket, das **keinen Xtensa-Backend besitzt** — nur Espressifs
-eigener LLVM/Clang-Fork (`esp-clang`) unterstuetzt dieses Ziel. Das ist
-kein Flag-Problem, sondern eine grundsaetzliche Ziel-Architektur-Luecke.
+Installationsschritt (live verifiziert, exakte Syntax):
 
-**Zweite Verifikation (Diagnose, kein Fix-Versuch in der Umsetzung):** Ein
-probeweise gefiltertes `compile_commands.json` ohne die vier genannten
-GCC-Flags und ohne den Zieltriple schlaegt weiterhin fehl:
+```bash
+python "$IDF_PATH/tools/idf_tools.py" install esp-clang
+. "$IDF_PATH/export.sh"
+```
+
+Nach diesen zwei Schritten zeigen `command -v clang` und
+`command -v clang-tidy` live verifiziert auf
+`$IDF_TOOLS_PATH/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/...`;
+`clang --version` meldet `Espressif clang version 20.1.1 (...
+esp-20.1.1_20250829)`, `clang-tidy --version` meldet `Espressif LLVM
+version 20.1.1`. Ein Rueckfall auf `/usr/bin/clang-tidy-18` im
+ESP-IDF-Analyseschritt ist ein harter Fehler (Selftest-Anforderung,
+Abschnitt 7.8.6).
+
+**Verifizierte, tatsaechlich funktionierende Kommandoform** (live gegen
+beide Profile ausgefuehrt, identische Funde auf beiden — Abschnitt
+7.8.2):
+
+```bash
+export IDF_TOOLCHAIN=clang
+idf.py -B build/clang_tidy/esp32_bringup \
+  -DSDKCONFIG=build/clang_tidy/esp32_bringup/sdkconfig \
+  -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.bringup" \
+  clang-check --exit-code \
+  --run-clang-tidy-options '-header-filter="^(include|lib|main)/.*"' \
+  'main/app_main\.cpp|esp_timer_time_source\.cpp'
+```
+
+analog fuer `esp32_release` mit `sdkconfig.defaults.release`.
+
+**Drei live verifizierte, verbindliche Detailbefunde zur Kommandoform**
+(muessen in der Implementierung exakt so beruecksichtigt werden, kein
+Interpretationsspielraum):
+
+1. **PATTERNS ist genau ein Regex, keine Dateiliste.** `idf.py
+   clang-check [PATTERNS]...` nimmt zwar mehrere Argumente entgegen,
+   `pyclang/runner.py` fuegt sie jedoch mit `' '.join(...)` zu einem
+   **einzigen** Regex zusammen (live im installierten pyclang-Quelltext
+   verifiziert, `site-packages/pyclang/runner.py`). Zwei separate
+   Dateiargumente ergeben daher einen kaputten, nie-treffenden Regex
+   (live reproduziert: „Running clang-tidy for 0 files out of 28").
+   Verbindlich ist **eine** Alternations-Regex wie im Beispiel oben
+   (`datei_a\.cpp|datei_b\.cpp`).
+2. **`--run-clang-tidy-options` ist zwingend, sonst gilt nicht die
+   Projekt-`.clang-tidy`.** `pyclang/runner.py` hat einen fest codierten
+   Default fuer `-header-filter` (`".*\..*"`, praktisch alles) und eine
+   eigene, vom Projekt unabhaengige `-checks=...`-Liste (u. a.
+   `clang-analyzer-*`, im Projekt `.clang-tidy` nicht aktiviert). Ohne
+   expliziten `--run-clang-tidy-options`-Override werden ESP-IDF-eigene
+   System-Header (z. B. `xtensa/xtruntime.h`) faelschlich als Fehler
+   gemeldet (live reproduziert). Wird `--run-clang-tidy-options` wie
+   oben **ohne** eigenen `-checks=`-Wert gesetzt, uebernimmt
+   `clang-tidy` korrekt die Projekt-`.clang-tidy` (live verifiziert: die
+   Fehlermeldungen aus System-Headern verschwinden, die verbleibenden
+   Funde stammen ausschliesslich aus dem projekteigenen Checks-Umfang,
+   Abschnitt 7.8.2).
+3. **`--exit-code` funktioniert wie dokumentiert.** Live verifiziert:
+   `idf.py clang-check --exit-code ...` beendet sich mit Exitcode `1`,
+   sobald Funde als Fehler gewertet werden, und mit `0`, wenn keine
+   vorliegen.
+
+#### 7.8.2 Zwei einzeln zu entscheidende Befunde aus dem realen Probelauf
+(Ownerentscheidung erforderlich, nicht durch die `esp-clang`-Entscheidung
+geloest)
+
+Der reale Probelauf gegen **beide** Profile (identische Funde auf
+`esp32_bringup` und `esp32_release`, da dieselben Quellen und dieselbe
+`.clang-tidy` verwendet werden) liefert **zwei** Funde, die vor
+`COMMIT_4_REVIEW: PASS` und vor Gate 2 (Abschnitt 6) explizit entschieden
+sein muessen.
+
+**Befund A — echter Code-Befund, keine Werkzeugluecke:**
 
 ```text
-error: no such file or directory: '@".../toolchain/cxxflags"' [clang-diagnostic-error]
-error: unknown target triple 'xtensa-esp32-unknown-elf' [clang-diagnostic-error]
+main/app_main.cpp:23:6: error: function 'logBootSummary' has cognitive
+complexity of 145 (threshold 25)
+[readability-function-cognitive-complexity,-warnings-as-errors]
 ```
 
-Der Zieltriple wird von `clang-tidy` aus dem Namen des Compiler-Binaries
-selbst (`xtensa-esp32-elf-gcc`) abgeleitet, nicht (nur) aus expliziten
-Flags — reines Filtern der `compile_commands.json` kann das grundsaetzlich
-nicht beheben, solange `clang-tidy-18` kein Xtensa-Backend besitzt. Diese
-Option ist damit kein kleiner Filter, sondern ein Sackgassenbefund.
+Dies ist ein inhaltlich zutreffender Befund im bestehenden, aus Issue #73
+uebernommenen `main/app_main.cpp` — keine Fehlkonfiguration des neuen
+Analysepfads. Abschnitt 5 dieses Plans legt jedoch ausdruecklich fest:
+„Kein produktiver Fachcode (..., `main/app_main.cpp`, ...) wird
+inhaltlich veraendert." `readability-function-cognitive-complexity` ist
+zudem kein Sonderfall wie `misc-header-include-cycle` in Befund B: Es ist
+kein ESP-IDF-Fremdheader betroffen, sondern Projektcode selbst — die in
+Abschnitt 9 vorgesehene Ausnahme fuer „notwendige", einzeln begruendete
+Abweichungen deckt gezielte Fremdheader-Ausnahmen, aber keine pauschale
+Nichtbeachtung echter Befunde im eigenen Code.
 
-**Drei mit belegten Fakten unterlegte Optionen fuer die Ownerentscheidung
-(keine davon ist vorentschieden):**
+Drei Optionen, **keine vorentschieden**:
 
-1. **`esp-clang`-Toolchain verwenden (`idf.py clang-check`):** ESP-IDF
-   6.0.2 bietet den optionalen Toolchain-Bestandteil `esp-clang` an
-   (verifiziert: `idf_tools.py list` listet `esp-clang` und
-   `esp-clang-libs` als `optional`). `idf.py clang-check` ist jedoch
-   selbst kein direkter `clang-tidy`-Aufruf, sondern erfordert zusaetzlich
-   das Python-Paket `pyclang` (`pip install --upgrade pyclang`,
-   verifiziert im ESP-IDF-Quelltext
-   `tools/idf_py_actions/core_ext.py`). Das bedeutet: zwei neue
-   Abhaengigkeiten (Toolchain-Download plus Python-Paket) und ein anderer
-   Invokationsmechanismus als der im Plan woertlich festgelegte
-   `clang-tidy -p <dir> <datei>`-Befehl sowie der gepinnte
-   `clang-tidy-18`. Widerspricht damit dem bisherigen Wortlaut von
-   Abschnitt 7.8/7.11 und erfordert eine neue Lieferketten-/
-   Abhaengigkeitsentscheidung.
-2. **`compile_commands.json` gefiltert/neu geschrieben verwenden:** wie
-   oben gezeigt bereits am Zieltriple gescheitert, der nicht allein durch
-   Flags entfernt werden kann, solange kein Xtensa-faehiger Clang
-   verwendet wird. Selbst wenn eine Umgehung gefunden wuerde, ist
-   ungeklaert, ob Xtensa-spezifische Header/Intrinsics
-   (`xtensa/hal.h` u. ae.) danach ueberhaupt aufloesbar waeren. Neue,
-   bisher nicht geplante Skriptlogik ausserhalb des Plans; hohes Risiko,
-   dass dies eine tiefergehende Sackgasse ist statt eines kleinen Filters.
-3. **ESP-IDF-spezifische `clang-tidy`-Pruefung fuer #74 nicht umsetzen:**
-   `main` bleibt im `clang-format`-Suchpfad und die
-   `HeaderFilterRegex`-Erweiterung auf `^(include|lib|main)/.*` bleibt
-   bestehen (beide lokal bereits verifiziert, funktionieren unveraendert
-   ohne Xtensa-Bezug). Die ESP-IDF-spezifische statische Analyse von
-   `main/app_main.cpp`/`esp_timer_time_source.cpp` wird als
-   `BLOCKED_TOOLCHAIN` dokumentiert und **nicht** umgesetzt. Das gibt einen
-   in Abschnitt 7.8 explizit genannten Teil der Anforderung auf und
-   erfordert eine Anpassung des Wortlauts von Gate 2 (Abschnitt 6:
-   „Static-Analysis-...-Selftests gruen" muesste den ESP-IDF-Teil
-   ausdruecklich ausnehmen).
+1. `logBootSummary` in `main/app_main.cpp` refaktorieren, um die
+   kognitive Komplexitaet unter den Schwellenwert zu senken. Erfordert
+   eine ausdrueckliche Erweiterung des Dateiumfangs aus Abschnitt 5 (die
+   dortige Formulierung schliesst inhaltliche Aenderungen an
+   `main/app_main.cpp` derzeit aus) und eine gesonderte Freigabe fuer
+   diese Code-Aenderung ausserhalb der reinen CI-/Tooling-Anpassung von
+   Commit 4.
+2. Eine gezielte, dokumentierte Inline-Ausnahme in `main/app_main.cpp`
+   (`// NOLINT(readability-function-cognitive-complexity)` an der
+   betroffenen Funktion) setzen. Technisch minimal (keine
+   Verhaltensaenderung), aendert aber ebenfalls den Dateiinhalt von
+   `main/app_main.cpp` entgegen der bisherigen Formulierung in
+   Abschnitt 5 und muesste dort ausdruecklich als Ausnahme dokumentiert
+   werden.
+3. `readability-function-cognitive-complexity` projektweit in
+   `.clang-tidy` deaktivieren. Vermeidet jede Aenderung an
+   `main/app_main.cpp`, schwaecht aber die Analyse fuer **alle** Quellen
+   (nativ und ESP-IDF) und widerspricht dem in AGENTS.md verlangten
+   Begruendungsgrad fuer projektweite statt einzeln begruendete
+   Ausnahmen.
 
-Keine dieser drei Optionen liegt eindeutig innerhalb des bereits
-freigegebenen Plans (AGENTS.md, Abschnitt „Kleine technische
-Detailentscheidungen"); jede aendert entweder eine Abhaengigkeit, den
-Invokationsvertrag oder den Gate-Wortlaut. Die Umsetzung von Commit 4 ist
-deshalb angehalten, bis der Owner eine der drei Optionen (oder eine
-vierte) freigibt.
+**Befund B — Fremdheader-Ausnahme, durch Abschnitt 9 bereits vorgesehen:**
 
-Bereits vor diesem Befund lokal verifiziert und **nicht** von der
-Blockierung betroffen (koennen im gewaehlten Umfang von Commit 4
-unveraendert uebernommen werden): `main` im `clang-format`-Suchpfad
-(`clang-format-18 --dry-run --Werror` lokal PASS ueber `src include lib
-test main`) und die `HeaderFilterRegex`-Erweiterung auf
-`^(include|lib|main)/.*` (reine Konfigurationsaenderung, keine
-Werkzeug-/Zielarchitektur-Abhaengigkeit).
+```text
+.../esp-idf-v6.0.2/components/freertos/esp_additions/include/freertos/idf_additions.h:19:10:
+error: circular header file dependency detected while including
+'FreeRTOS.h' [misc-header-include-cycle,-warnings-as-errors]
+```
+
+Live verifiziert: Dieser Fund tritt trotz `-header-filter=^(include|lib|
+main)/.*` auf, weil `misc-header-include-cycle` seine Diagnose
+unabhaengig vom Header-Filter meldet (checktypisches clang-tidy-
+Verhalten) — betrifft ausschliesslich ESP-IDFs eigene, unveraenderliche
+Headerstruktur (`components/freertos/...`), nicht Projektcode. Dies ist
+die in Abschnitt 9 bereits vorgesehene, einzeln zu benennende Ausnahme:
+`misc-header-include-cycle` wird fuer den ESP-IDF-Analysepfad gezielt
+deaktiviert (z. B. per `-checks="-misc-header-include-cycle"`-Ergaenzung
+in `--run-clang-tidy-options`, exakte Syntax vor der Commit-4-
+Implementierung final gegen die reale Installation zu bestaetigen). Die
+native Analyse (Debian clang-tidy 18) bleibt davon unberuehrt, da sie
+ESP-IDF-Header ueberhaupt nicht compiliert.
+
+**Bis zur Ownerentscheidung zu Befund A gilt:** Gate 2 (Abschnitt 6) kann
+mit der Formulierung „ESP-IDF esp32_bringup/esp32_release static
+analysis with official esp-clang: PASS" **nicht** wahrheitsgemaess
+erfuellt werden, solange Befund A nicht entschieden ist. Der Owner
+entscheidet mit der Freigabe dieses Plan-Commits zugleich ueber Befund A.
+
+#### 7.8.3 Strikte Trennung von Produktionsbuild und Analysebuild
+
+`idf.py clang-check` re-konfiguriert und baut die per `-B` angegebene
+Compile-Datenbank. Live verifiziert (Vergleich der `sdkconfig`-mtimes von
+`build/esp32_bringup`/`build/esp32_release` vor und nach mehreren
+Analyselaeufen mit fremdem `-B`): Bei Verwendung eines vom
+Produktionsbuild vollstaendig getrennten `-B`-Verzeichnisses bleiben die
+produktiven Buildverzeichnisse unveraendert.
+
+Verbindlich fuer die Umsetzung:
+
+```text
+build/clang_tidy/esp32_bringup
+build/clang_tidy/esp32_release
+```
+
+je mit eigenem CMake-Cache, eigener generierter `sdkconfig`, eigener
+`compile_commands.json`, demselben gemeinsamen `sdkconfig.defaults` und
+exakt dem passenden Profiloverlay (`sdkconfig.defaults.bringup`
+beziehungsweise `sdkconfig.defaults.release`, analog zum
+Produktionsbuildtreiber aus Abschnitt 7.4), `IDF_TOOLCHAIN=clang` bereits
+vor dem ersten Configure-Aufruf, keine Wiederverwendung oder Mutation des
+produktiven GCC-Buildordners. Die beiden Analyseprofile bleiben
+untereinander ebenfalls strikt getrennt. Ein Analysefehler darf keine
+produktiven Artefakte loeschen, ueberschreiben oder neu erzeugen.
+
+#### 7.8.4 Kanonischer Analysetreiber `scripts/run_esp_idf_static_analysis.py`
+
+Neues, projekteigenes Skript (kein generisches Toolchain-Framework):
+
+```text
+scripts/run_esp_idf_static_analysis.py
+```
+
+Aufgaben:
+
+- Argumente `bringup`, `release`, `all` (analog zu
+  `scripts/build_esp_idf_profiles.py`);
+- Verwendung der bestehenden Konstanten/Namenshelfer aus
+  `scripts/esp_idf_contract.py` (DRY, keine erneute Profil-/
+  Pfadnamensdefinition);
+- Pruefung der aktiven ESP-IDF-Herkunft (Wiederverwendung von
+  `check_build_profiles.check_esp_idf_version()`, analog zum bestehenden
+  Muster in `scripts/build_esp_idf_profiles.py`, Abschnitt 7.4 — keine
+  zweite Implementierung);
+- Pruefung, dass tatsaechlich `esp-clang` und nicht System-`clang-tidy`
+  aktiv ist (`clang-tidy --version` enthaelt „Espressif", harter Fehler
+  sonst);
+- Aufbau der in Abschnitt 7.8.3 festgelegten, strikt getrennten
+  Analyseverzeichnisse mit denselben Profiloverlays wie der
+  Produktionsbuild;
+- Aufruf von `idf.py clang-check` in der in Abschnitt 7.8.1 verifizierten
+  Kommandoform (Ein-Regex-PATTERNS, `--run-clang-tidy-options` mit
+  Header-Filter und der Befund-B-Ausnahme, `--exit-code`);
+- Analyse genau `main/app_main.cpp` und
+  `lib/device_platform_esp_idf/src/esp_timer_time_source.cpp` je Profil;
+- profilspezifisches Verschieben von `warnings.txt` unmittelbar nach
+  jedem Lauf (Abschnitt 7.8.5 — das Werkzeug schreibt live verifiziert
+  immer in das aktuelle Arbeitsverzeichnis, nicht in das `-B`-
+  Analyseverzeichnis);
+- harter Fehler bei Toolchain-, Konfigurations- oder Analysefehler, mit
+  klarer Ausgabe des betroffenen Profils und der fehlgeschlagenen Phase;
+- keine Installation der Toolchain (das bleibt Aufgabe des in Abschnitt
+  7.8.1 dokumentierten, separaten Installationsschritts);
+- kein Flashen;
+- keine Aenderung an `scripts/build_esp_idf_profiles.py`.
+
+Lokaler und CI-Aufruf sind identisch; `build.yml` enthaelt keine zweite,
+abweichende Folge komplexer `idf.py`-Befehle.
+
+#### 7.8.5 Profilgetrennte Ausgaben
+
+Live verifiziert: `idf.py clang-check` schreibt `warnings.txt` stets in
+das aktuelle Arbeitsverzeichnis (Repository-Wurzel bei Aufruf ueber
+`idf.py` aus dem Projektroot), **nicht** in das per `-B` angegebene
+Analyseverzeichnis — ein zweiter Profillauf ueberschreibt sonst
+unbemerkt den Nachweis des ersten (live reproduziert: der zweite
+Testlauf gegen `esp32_release` ueberschrieb den `warnings.txt`-Stand des
+ersten Testlaufs gegen `esp32_bringup`). Verbindlich:
+
+```text
+build/clang_tidy/esp32_bringup/warnings.txt
+build/clang_tidy/esp32_release/warnings.txt
+```
+
+`scripts/run_esp_idf_static_analysis.py` verschiebt `warnings.txt`
+unmittelbar nach jedem Profillauf vom Arbeitsverzeichnis in den
+profilspezifischen Zielpfad; eine fehlende Datei danach ist ein harter
+Fehler; vor jedem Profillauf wird ein eventuell vorhandener alter
+Zielnachweis entfernt, damit kein veralteter Stand stillschweigend
+akzeptiert wird. Ein Upload dieser Logs ist fuer #74 nicht zwingend;
+falls sie hochgeladen werden, gelten der bestehende Artefaktscan
+(Abschnitt 7.7.4) und die Scanabdeckungspruefung
+(`scripts/check_ci_artifact_scan_coverage.py`) auch fuer diese neuen
+Textartefakte.
+
+#### 7.8.6 Selftests
+
+`scripts/run_esp_idf_static_analysis.py --selftest` beweist ohne echte
+Toolchain-Installation:
+
+1. Bring-up und Release verwenden verschiedene Analyse-Buildverzeichnisse.
+2. Beide Profile verwenden verschiedene generierte `sdkconfig`-Pfade.
+3. Bring-up verwendet ausschliesslich das Bring-up-Overlay, Release
+   ausschliesslich das Release-Overlay.
+4. `IDF_TOOLCHAIN=clang` ist bereits beim ersten Configure-/Clang-Check-
+   Aufruf gesetzt.
+5. Beide festgelegten Projektquellen sind in der zusammengesetzten
+   PATTERNS-Regex fuer beide Profile enthalten.
+6. Ein simulierter Diagnosefehler (nicht-Null-Ruckgabe des
+   `clang-check`-Aufrufs) fuehrt zu einem harten Fehler des Treibers.
+7. Ein simuliertes fehlendes oder falsches `esp-clang`
+   (`clang-tidy --version` ohne „Espressif") fuehrt zu einem harten
+   Fehler, bevor ein Analyselauf versucht wird.
+8. Die produktiven Verzeichnisse `build/esp32_bringup`/
+   `build/esp32_release` werden vom Treiber nie als `-B`-Ziel verwendet.
+9. `scripts/build_esp_idf_profiles.py` wird vom neuen Treiber nicht
+   aufgerufen oder veraendert (analog zum bestehenden Selftest-Muster).
+10. Eine fehlende profilspezifische `warnings.txt` nach dem Verschieben
+    wird nicht still akzeptiert.
+
+`scripts/selftest_quality_gates.py` ruft diesen neuen Selftest ab Commit 4
+zusaetzlich auf (bestehendes `run_script_selftest()`-Muster).
+
+Realer Commit-4-Nachweis (zusaetzlich zu den Selftests): native Static
+Analysis weiterhin PASS; ESP-IDF-Static-Analysis Bring-up und Release
+PASS (abhaengig von der Entscheidung zu Befund A, Abschnitt 7.8.2);
+vollstaendiger Formatcheck inklusive `main/` PASS; 420 native Tests PASS;
+beide produktiven ESP-IDF-GCC-Builds PASS; beide bestehenden Arduino-
+Produktionsprofile weiterhin PASS; Ressourcenbericht- und Artefaktchecks
+weiterhin PASS; Architektur-, Secret- und Quality-Gates PASS.
 
 ### 7.9 Komponenten- und Lockfilevertrag
 
@@ -1185,6 +1465,22 @@ Patch-Version.
   den in Abschnitt 7.1 beschriebenen Reproduzierbarkeitsvertrag. Der
   bestehende CMake-Guard auf `IDF_VER == v6.0.2` bleibt zusaetzliche
   Verteidigung, ist aber nicht der einzige Herkunftsnachweis.
+- Zwei getrennte Static-Analysis-Werkzeuge mit unterschiedlichem
+  Reproduzierbarkeitsgrad (Abschnitt 7.8.1):
+
+  ```text
+  Native:
+  clang-tidy 18 aus dem Debian/Ubuntu-Paket; nur Major-Version fixiert,
+  tatsaechliche Patchversion wird im Log erfasst (siehe oben)
+
+  ESP-IDF:
+  esp-clang esp-20.1.1_20250829 aus der Tooldefinition des exakt
+  gepinnten ESP-IDF-Commits; Version und Linux-AMD64-SHA-256 sind exakt
+  geprueft (Abschnitt 7.8.1). Die zusaetzlich benoetigte `pyclang`-
+  Python-Abhaengigkeit ist dagegen nicht ueber ein Constraints-File
+  fixiert (live verifiziert, Abschnitt 7.8.1); ihre tatsaechlich
+  installierte Version wird deshalb ebenfalls im CI-Log protokolliert.
+  ```
 
 ### 7.12 Hardware-Smoke-Test-Gate (Bring-up und Release, Pflicht)
 
@@ -1399,10 +1695,15 @@ Reihenfolge:
    profilspezifische CI-Artefakte, Erweiterung von
    `scripts/check_secrets.py` um den Scan-Modus fuer generierte
    Artefakttexte samt neuer Selftests (Abschnitt 7.7, insbesondere 7.7.4).
-4. **Format und Static Analysis:** vollstaendiger Format-Scope, native
-   Compile-DB fuer portable Quellen, beide ESP-IDF-Compile-DBs fuer
-   IDF-spezifische Quellen, `.clang-tidy`-`HeaderFilterRegex`-Erweiterung,
-   Selftests (Abschnitt 7.8).
+4. **Format und Static Analysis:** vollstaendiger Format-Scope (`main`
+   ergaenzt), `.clang-tidy`-`HeaderFilterRegex`-Erweiterung, offizieller
+   `esp-clang`-Installationsschritt (Abschnitt 7.8.1), neuer kanonischer
+   Analysetreiber `scripts/run_esp_idf_static_analysis.py`
+   (Abschnitt 7.8.4) fuer beide ESP-IDF-Profile getrennt, Umsetzung der
+   Ownerentscheidung zu Befund A (Abschnitt 7.8.2 — je nach Entscheidung
+   ggf. mit einer gezielten, einzeln dokumentierten Aenderung an
+   `main/app_main.cpp` oder `.clang-tidy`), Selftests
+   (Abschnitt 7.8.6), Integration in `scripts/selftest_quality_gates.py`.
 
    **Gate vor Commit 5:** `PRE_ARDUINO_REMOVAL_CI: PASS` — ein vollstaendiger
    erfolgreicher GitHub-Actions-Lauf exakt auf dem Head von Commit 4
@@ -1490,17 +1791,38 @@ als offene Punkte. Es verbleibt:
    `check_secrets.py`-Scan-Modus (`--scan-path` oder gleichwertig) wird in
    der Umsetzung final benannt; der Pruefvertrag selbst ist bereits
    verbindlich festgelegt.
-6. **Neu, `COMMIT_4_BLOCKED_PENDING_PLAN_DECISION` (Abschnitt 7.8.1):** Der
-   in Abschnitt 7.8 woertlich festgelegte Befehl
-   `clang-tidy -p build/esp32_bringup main/app_main.cpp ...` funktioniert
-   nicht gegen die von ESP-IDF 6.0.2 generierte `compile_commands.json`
-   (kein Xtensa-Backend in `clang-tidy-18`, live verifiziert). Drei
-   Optionen mit Belegen sind in Abschnitt 7.8.1 dokumentiert
-   (`esp-clang`/`idf.py clang-check` mit neuen Abhaengigkeiten;
-   `compile_commands.json`-Filterung, bereits als Sackgasse verifiziert;
-   Verzicht auf die ESP-IDF-spezifische `clang-tidy`-Pruefung fuer #74
-   inklusive Anpassung von Gate 2 in Abschnitt 6). Keine Option ist
-   vorentschieden; Commit 4 ist bis zur Ownerentscheidung angehalten.
+6. **Entschieden (Abschnitt 7.8.1):** Der urspruenglich in Abschnitt 7.8
+   woertlich festgelegte Befehl `clang-tidy -p build/esp32_bringup
+   main/app_main.cpp ...` funktionierte nachweislich nicht gegen die von
+   ESP-IDF 6.0.2 generierte `compile_commands.json` (kein Xtensa-Backend
+   in `clang-tidy-18`, live verifiziert, Plan-Commit `9607fba`). Der
+   Owner hat die ESP-IDF-spezifische statische Analyse verbindlich auf
+   den offiziellen `esp-clang`/`idf.py clang-check`-Pfad festgelegt
+   (Abschnitt 7.8.1); die beiden anderen zuvor offenen Optionen
+   (`compile_commands.json`-Filterung, Verzicht auf die ESP-IDF-
+   spezifische Analyse) sind verworfen. Dieser Punkt entfaellt damit als
+   offene Entscheidung.
+7. **Neu, Abschnitt 7.8.2, Befund A:** `main/app_main.cpp` enthaelt einen
+   echten `readability-function-cognitive-complexity`-Befund
+   (`logBootSummary`, Komplexitaet 145 gegen Schwellenwert 25), live mit
+   `esp-clang` gegen beide Profile verifiziert. Drei Optionen
+   (Refactoring, Inline-Ausnahme, projektweite `.clang-tidy`-Anpassung)
+   sind in Abschnitt 7.8.2 dokumentiert; keine ist vorentschieden. Ohne
+   diese Entscheidung kann Gate 2 (Abschnitt 6) fuer die ESP-IDF-Static-
+   Analysis nicht wahrheitsgemaess `PASS` melden.
+8. **Neu, Abschnitt 7.8.2, Befund B:** `misc-header-include-cycle` feuert
+   trotz `HeaderFilterRegex`-Scoping auf ESP-IDFs eigener
+   `FreeRTOS.h`/`idf_additions.h`-Headerstruktur (live verifiziert, beide
+   Profile identisch betroffen). Verbindlich als einzeln begruendete
+   Ausnahme fuer den ESP-IDF-Analysepfad vorgesehen (Abschnitt 7.8.2);
+   exakte Deaktivierungssyntax vor der Commit-4-Implementierung final zu
+   bestaetigen.
+9. **Neu, Abschnitt 7.8.1:** Die tatsaechlich installierte `pyclang`-
+   Version (live beobachtet: `0.7.0`) ist nicht ueber
+   `espidf.constraints.v6.0.txt` exakt fixiert (live verifiziert: kein
+   Eintrag). Die installierte Version wird in CI protokolliert, damit
+   eine kuenftige Drift sichtbar bleibt; dies ist kein Blocker, sondern
+   eine dokumentierte Reproduzierbarkeitsgrenze (Abschnitt 7.11).
 
 ## 10. Ausdruecklich verbotene Vorwegnahmen
 
@@ -1521,7 +1843,18 @@ als offene Punkte. Es verbleibt:
   bestehende Datei wird ausschliesslich in-place aktualisiert (Abschnitt
   7.13.3);
 - keine Aenderung an `docs/audits/` (historische Auditdateien, Abschnitt
-  7.13.3).
+  7.13.3);
+- keine Umsetzung von Befund A (Abschnitt 7.8.2) ohne vorherige
+  ausdrueckliche Ownerentscheidung fuer genau eine der drei dort
+  genannten Optionen; insbesondere keine stillschweigende Aenderung an
+  `main/app_main.cpp` und keine stillschweigende projektweite
+  `.clang-tidy`-Abschwaechung;
+- kein `pip install --upgrade pyclang` und kein sonstiger unfixierter
+  Versions-Bump der ESP-IDF-eigenen Python-Abhaengigkeiten (Abschnitt
+  7.8.1);
+- keine vorsorgliche Installation von `esp-clang-libs`, solange kein
+  realer Testnachweis zeigt, dass `idf.py clang-check` sie benoetigt
+  (Abschnitt 7.8.1).
 
 ## 11. Daten-, Zustands- und Schnittstellenvertraege
 
@@ -1558,7 +1891,19 @@ Abschnitt 7.2), nicht die dadurch erzeugte Semantik.
   Toolchain-Cache ein (Abschnitt 7.1);
 - zwei Hardware-Smoke-Tests (Bring-up, Release) sind vor Merge Pflicht
   (Abschnitt 7.12) — kein rein simulierter Nachweis fuer den
-  Produktionswechsel.
+  Produktionswechsel;
+- `esp-clang` (Apache-2.0, `espressif/llvm-project`) und `pyclang` (durch
+  ESP-IDFs `requirements.core.txt` installiert) sind reine Build-/CI-
+  Werkzeuge fuer die statische Analyse (Abschnitt 7.8.1); keine dieser
+  Abhaengigkeiten wird in die Firmware gelinkt oder als
+  Laufzeitkomponente registriert, kein `idf_component.yml` und kein
+  Runtime-Komponentenlock dafuer (Abschnitt 7.9 bleibt unveraendert);
+- `esp-clang`s Herkunft wird ueber die exakte Version
+  (`esp-20.1.1_20250829`) und den Linux-AMD64-SHA-256
+  (`88910c21350c06a521f243304d1a3adbdb78447123b3f8e27493aab75e3cc07f`)
+  aus der Tooldefinition des gepinnten ESP-IDF-Commits geprueft
+  (Abschnitt 7.8.1); ein Rueckfall auf System-`clang-tidy-18` im
+  ESP-IDF-Analyseschritt ist ein harter Fehler.
 
 ## 13. Teststrategie
 
@@ -1577,6 +1922,12 @@ Abschnitt 7.2), nicht die dadurch erzeugte Semantik.
   erweiterten Format-Scope und den `--scan-path`-Modus von
   `scripts/check_secrets.py` fuer alle hochgeladenen Textartefakte
   (Abschnitt 7.7.4), sobald diese in der Umsetzung konkret vorliegen;
+- `scripts/run_esp_idf_static_analysis.py --selftest` (zehn Fixture-Faelle,
+  Abschnitt 7.8.6) wird ab Commit 4 zusaetzlicher Pflichtschritt in
+  `scripts/selftest_quality_gates.py`;
+- `idf.py clang-check` fuer beide Profile getrennt (Abschnitt 7.8.1/7.8.4)
+  wird neuer CI-Pflichtschritt, abhaengig von der Ownerentscheidung zu
+  Befund A (Abschnitt 7.8.2);
 - Hardware-Smoke-Tests (Bring-up, Release) werden ausschliesslich auf dem
   finalen Implementierungs-Head nach Commit 6 durchgefuehrt, als
   Pflichtabschluss vor dem Merge (Abschnitt 7.12).
@@ -1650,10 +2001,12 @@ sicherheitsrelevant, wird daher in diesem Plan verbindlich festgelegt
 - native Tests gruen;
 - Bring-up-IDF-Build gruen (isolierter Buildpfad);
 - Release-IDF-Build gruen (isolierter Buildpfad);
-- Format gruen;
-- native `clang-tidy` gruen;
-- Bring-up-`clang-tidy` gruen;
-- Release-`clang-tidy` gruen;
+- Format gruen (inklusive `main/`);
+- native `clang-tidy` (Debian, Major 18) gruen;
+- Bring-up-ESP-IDF-`clang-tidy` (offizieller `esp-clang`-Pfad,
+  Abschnitt 7.8.1) gruen;
+- Release-ESP-IDF-`clang-tidy` (offizieller `esp-clang`-Pfad,
+  Abschnitt 7.8.1) gruen;
 - Architekturguard real + Selftests gruen;
 - Secretcheck gruen;
 - Quality-Gate-Selftests gruen;
