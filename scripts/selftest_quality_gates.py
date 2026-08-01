@@ -97,6 +97,10 @@ def main() -> int:
         ),
         "Ressourcenbericht trennt Arduino- und ESP-IDF-Messungen, erkennt "
         "fehlende Artefakte": run_script_selftest(repo_root, "build_report.py"),
+        "CI-Artefakt-Scanabdeckung erkennt ungescannt hochgeladene "
+        "Textartefakte": run_script_selftest(
+            repo_root, "check_ci_artifact_scan_coverage.py"
+        ),
     }
 
     for name, status in results.items():

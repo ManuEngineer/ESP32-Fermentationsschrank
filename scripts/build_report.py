@@ -197,7 +197,15 @@ def generate_esp_idf_size_json(build_dir: Path, *, idf_py: str) -> Path:
 
 def build_esp_idf_profile_report(profile: str, build_dir: Path, *,
                                   idf_py: str = "idf.py",
-                                  git_sha: str | None = None) -> dict:
+                                  source_git_sha: str | None = None) -> dict:
+    """`source_git_sha` und der tatsaechlich ausgecheckte `build_commit`
+    (immer per `git rev-parse HEAD`) sind bewusst getrennte Werte und
+    duerfen nicht zusammengelegt werden: bei `pull_request`-Events checkt
+    `actions/checkout` einen ephemeren Merge-Commit aus, der nicht dem
+    reviewbaren PR-Head entspricht. `source_git_sha` (Default: derselbe
+    `build_commit`, fuer lokale Entwicklerlaeufe ohne PR-Kontext) bestimmt
+    Artefaktname und Manifest-`git_sha`; `build_commit` erscheint
+    ausschliesslich als eigene Berichtszeile."""
     if not build_dir.is_dir():
         raise SystemExit(
             f"ESP-IDF-Buildverzeichnis fehlt fuer Profil {profile}: {build_dir} "
@@ -218,6 +226,7 @@ def build_esp_idf_profile_report(profile: str, build_dir: Path, *,
 
     dram = layout_entry(size_data, "DRAM")
     iram = layout_entry(size_data, "IRAM")
+    build_commit = git_head_sha()
 
     return {
         "profile": profile,
@@ -236,7 +245,8 @@ def build_esp_idf_profile_report(profile: str, build_dir: Path, *,
         "sdkconfig_sha256": sha256_of(build_dir / "sdkconfig"),
         "idf_tag": esp_idf_contract.ESP_IDF_TAG,
         "idf_commit": esp_idf_contract.ESP_IDF_COMMIT,
-        "git_sha": git_sha if git_sha is not None else git_head_sha(),
+        "build_commit": build_commit,
+        "git_sha": source_git_sha if source_git_sha is not None else build_commit,
     }
 
 
@@ -246,7 +256,8 @@ def esp_idf_report_lines(profile: str, report: dict) -> list[str]:
     lines.append(f"- Profil: {build_name}")
     lines.append(f"- ESP-IDF-Tag: {report['idf_tag']}")
     lines.append(f"- ESP-IDF-Commit: {report['idf_commit']}")
-    lines.append(f"- Build-Commit: {report['git_sha']}")
+    lines.append(f"- Build-Commit: {report['build_commit']}")
+    lines.append(f"- Source-Git-SHA: {report['git_sha']}")
     lines.append(
         f"- Gesamter Flashverbrauch (size.json total_size): "
         f"{report['total_size']} Bytes"
@@ -351,12 +362,15 @@ def run_selftest() -> int:
         ))
 
         overridden_report = build_esp_idf_profile_report(
-            "bringup", build_dir, idf_py=fake_idf_py, git_sha="fixture-pr-head-sha",
+            "bringup", build_dir, idf_py=fake_idf_py, source_git_sha="fixture-source-head",
         )
         checks.append((
-            "Explizit uebergebene --git-sha ersetzt `git rev-parse HEAD` "
-            "(fuer den ephemeren Merge-Commit bei pull_request-Events)",
-            overridden_report["git_sha"] == "fixture-pr-head-sha",
+            "Explizit uebergebene --source-git-sha ersetzt Manifest-/"
+            "Artefaktwert `git_sha`, aber nicht den tatsaechlichen "
+            "`build_commit`",
+            overridden_report["git_sha"] == "fixture-source-head"
+            and overridden_report["build_commit"] != "fixture-source-head"
+            and overridden_report["build_commit"] == git_head_sha(),
         ))
 
         arduino_reports = {
@@ -467,13 +481,17 @@ def main() -> int:
              "aufgenommen werden (Abschnitt 7.7.1/7.7.2)",
     )
     parser.add_argument(
-        "--git-sha", default=None,
-        help="Commit-SHA fuer Manifest und Bericht (Default: `git rev-parse "
-             "HEAD`). In CI bei pull_request-Events checkt actions/checkout "
-             "einen ephemeren Merge-Commit aus, der nicht im sichtbaren "
-             "Commit-Verlauf des PRs vorkommt; dort muss der tatsaechliche "
-             "PR-Head-SHA explizit uebergeben werden, damit Artefaktname und "
-             "Manifest nachvollziehbar bleiben.",
+        "--source-git-sha", default=None,
+        help="Reviewbarer Quell-Commit fuer Artefaktname und Manifestfeld "
+             "`git_sha` (Default: derselbe Wert wie der tatsaechlich "
+             "ausgecheckte `Build-Commit`, fuer lokale Entwicklerlaeufe "
+             "ohne PR-Kontext). In CI bei pull_request-Events checkt "
+             "actions/checkout einen ephemeren Merge-Commit aus, der nicht "
+             "im sichtbaren Commit-Verlauf des PRs vorkommt; dort muss der "
+             "tatsaechliche PR-Head-SHA explizit uebergeben werden. Der "
+             "davon unabhaengige, tatsaechlich ausgecheckte `Build-Commit` "
+             "wird immer per `git rev-parse HEAD` ermittelt und im Bericht "
+             "separat ausgegeben, nie mit diesem Wert gleichgesetzt.",
     )
     parser.add_argument(
         "--selftest", action="store_true",
@@ -510,7 +528,8 @@ def main() -> int:
     for profile in arguments.esp_idf_profiles:
         build_dir = esp_idf_build_dir(profile)
         report = build_esp_idf_profile_report(
-            profile, build_dir, idf_py=arguments.idf_py, git_sha=arguments.git_sha,
+            profile, build_dir, idf_py=arguments.idf_py,
+            source_git_sha=arguments.source_git_sha,
         )
         report_lines += esp_idf_report_lines(profile, report)
         write_artifact_manifest(report)

@@ -24,14 +24,16 @@ dadurch nicht erfasst (docs/tasks/issue-74-implementation-plan.md,
 Abschnitt 7.7.4). `--scan-path` benennt solche Dateien explizit und
 unterwirft sie denselben Geheimnismustern, plus einer zusaetzlichen
 Pruefung auf private absolute Benutzerpfade. Dabei gilt eine
-kontextbezogene Regel: selbst erzeugte Manifeste muessen vollstaendig
-normalisiert sein (jeder `/home/...`- oder `/Users/...`-Pfad ist ein Fund);
-fremdgeneriertes Werkzeugausgabe wie `compile_commands.json` (CMake) und
-`build.log` (ninja/idf.py) darf dagegen bekannte, ephemere CI-Runner-Pfade
-(`/home/runner/...`) enthalten, ohne als Fund gewertet zu werden. Eine
-erwartete, aber fehlende `--scan-path`-Datei ist ein harter Fehler.
-Binaerdateien werden anhand ihrer Dekodierbarkeit erkannt und nicht als
-Text durchsucht.
+kontextbezogene Regel: selbst erzeugte Dateien (Manifest, Ressourcenbericht)
+muessen vollstaendig normalisiert sein (jeder `/home/...`- oder
+`/Users/...`-Pfad ist ein Fund); fremdgenerierte Werkzeugausgabe wie
+`compile_commands.json` (CMake), `build.log` (ninja/idf.py) und `*.map`-
+Linkerkarten (GNU ld) darf dagegen bekannte, ephemere CI-Runner-Pfade
+(`/home/runner/...`) enthalten, ohne als Fund gewertet zu werden.
+Geheimnismuster, Tokens, Credentials und private Schluessel bleiben in allen
+Dateien uneingeschraenkt ein Fund. Eine erwartete, aber fehlende
+`--scan-path`-Datei ist ein harter Fehler. Binaerdateien werden anhand ihrer
+Dekodierbarkeit erkannt und nicht als Text durchsucht.
 
 `--selftest` prueft die Erkennung selbst anhand temporaerer Fixture-Dateien,
 ohne dass ein absichtlich fehlerhafter Fall jemals in dieses Repository
@@ -82,15 +84,23 @@ TEXT_FILE_SUFFIXES = {
 }
 
 # Abschnitt 7.7.4: bekannte, ephemere CI-Runner-Pfade, die in fremdgenerierten
-# Dateien (z. B. `compile_commands.json`, `build.log`) toleriert werden, ohne
-# als privater Benutzerpfad gewertet zu werden. Andere `/home/...`- oder
-# `/Users/...`-Pfade bleiben ein Fund. Selbst erzeugte Dateien (Manifest)
-# stehen bewusst NICHT in dieser Liste: sie enthalten von vornherein keine
-# Pfade und muessen es auch nicht.
+# Werkzeugausgaben (z. B. `compile_commands.json` von CMake, `build.log` von
+# ninja/idf.py, `*.map`-Linkerkarten von GNU ld) toleriert werden, ohne als
+# privater Benutzerpfad gewertet zu werden. Andere `/home/...`- oder
+# `/Users/...`-Pfade bleiben ein Fund. `.map` ist absichtlich ein Suffix statt
+# eines festen Dateinamens: der Binaername stammt aus der Projektkonfiguration
+# und gehoert nicht in dieses allgemeine Skript. Selbst erzeugte Dateien
+# (Manifest, Ressourcenbericht) stehen bewusst NICHT in dieser Liste: sie
+# enthalten von vornherein keine Pfade und muessen es auch nicht.
 KNOWN_CI_PATH_PREFIXES = ("/home/runner/",)
 LENIENT_PATH_FILENAMES = {"compile_commands.json", "build.log"}
+LENIENT_PATH_SUFFIXES = {".map"}
 
 PRIVATE_ABSOLUTE_PATH_PATTERN = re.compile(r"(/home/[^\s\"']+|/Users/[^\s\"']+)")
+
+
+def is_lenient_path_file(path: Path) -> bool:
+    return path.name in LENIENT_PATH_FILENAMES or path.suffix.lower() in LENIENT_PATH_SUFFIXES
 
 
 def tracked_files() -> list[str]:
@@ -130,7 +140,7 @@ def scan_file_for_secrets(path: Path) -> list[tuple[int, str]]:
 
 
 def scan_for_private_paths(path: Path, lines: list[str]) -> list[tuple[int, str]]:
-    lenient = path.name in LENIENT_PATH_FILENAMES
+    lenient = is_lenient_path_file(path)
     findings = []
     for line_number, line in enumerate(lines, start=1):
         for match in PRIVATE_ABSOLUTE_PATH_PATTERN.finditer(line):
@@ -284,7 +294,34 @@ def run_selftest() -> int:
             "Project build complete. To flash, run:\n"
             "  idf.py -B /home/runner/work/repo/repo/build/esp32_bringup flash\n"
         )
+        map_ci_path_file = tmp_path / "map_ci" / "esp32_fermentationsschrank.map"
+        map_ci_path_file.parent.mkdir()
+        map_ci_path_file.write_text(
+            "Archive member included because of file (symbol)\n"
+            "/home/runner/work/repo/repo/build/esp32_bringup/libmain.a\n"
+        )
+        map_private_path_dir = tmp_path / "map_private"
+        map_private_path_dir.mkdir()
+        map_private_path_file = map_private_path_dir / "esp32_fermentationsschrank.map"
+        map_private_path_file.write_text(
+            "Archive member included because of file (symbol)\n"
+            "/home/exampleuser/private/build/esp32_bringup/libmain.a\n"
+        )
+        map_credential_dir = tmp_path / "map_credential"
+        map_credential_dir.mkdir()
+        map_credential_file = map_credential_dir / "esp32_fermentationsschrank.map"
+        map_credential_file.write_text(
+            # Literal per Konkatenation aufgeteilt (siehe compile_commands-Fixture oben).
+            'password = "' + 'not-a-real-secret-value"\n'
+        )
+        build_report_file = tmp_path / "build-report.md"
+        build_report_file.write_text(
+            "# Firmware- und Ressourcen-Groessenbericht\n\n## native\n\n"
+            "- Host-Testbinaer (`program`): 12345 Bytes\n"
+        )
         missing_scan_path_file = tmp_path / "build" / "esp32_bringup" / "size.json"
+        missing_map_file = tmp_path / "does-not-exist" / "esp32_fermentationsschrank.map"
+        missing_build_report_file = tmp_path / "does-not-exist-build-report.md"
         binary_scan_path_file = tmp_path / "fixture-binary.bin"
         binary_scan_path_file.write_bytes(b"\x7fELF\x00\x01\x02\xff\xfe\x00")
 
@@ -296,6 +333,10 @@ def run_selftest() -> int:
             compile_commands_credential_file
         )
         _, build_log_ci_paths = scan_path_file(build_log_ci_path_file)
+        _, map_ci_paths = scan_path_file(map_ci_path_file)
+        _, map_private_paths = scan_path_file(map_private_path_file)
+        map_credential_secrets, _ = scan_path_file(map_credential_file)
+        build_report_secrets, build_report_paths = scan_path_file(build_report_file)
         binary_secrets, binary_paths = scan_path_file(binary_scan_path_file)
 
         missing_scan_path_error = None
@@ -303,6 +344,18 @@ def run_selftest() -> int:
             scan_path_file(missing_scan_path_file)
         except SystemExit as error:
             missing_scan_path_error = error
+
+        missing_map_error = None
+        try:
+            scan_path_file(missing_map_file)
+        except SystemExit as error:
+            missing_map_error = error
+
+        missing_build_report_error = None
+        try:
+            scan_path_file(missing_build_report_file)
+        except SystemExit as error:
+            missing_build_report_error = error
 
         checks += [
             ("Geheimnis in ungetrackter --scan-path-Manifestdatei wird erkannt",
@@ -321,6 +374,18 @@ def run_selftest() -> int:
              "Fehler", missing_scan_path_error is not None),
             ("Binaerdatei wird nicht als Text gescannt (--scan-path)",
              len(binary_secrets) == 0 and len(binary_paths) == 0),
+            ("Bekannter ephemerer CI-Runner-Pfad in einer .map-Datei wird "
+             "akzeptiert", len(map_ci_paths) == 0),
+            ("Privater absoluter Benutzerpfad in einer .map-Datei wird "
+             "abgelehnt", len(map_private_paths) > 0),
+            ("Token-/Credential-Muster in einer .map-Datei wird abgelehnt",
+             len(map_credential_secrets) > 0),
+            ("build-report.md wird als explizites Textartefakt geprueft",
+             len(build_report_secrets) == 0 and len(build_report_paths) == 0),
+            ("Fehlende erwartete .map-Datei fuehrt zu einem Fehler",
+             missing_map_error is not None),
+            ("Fehlende erwartete build-report.md fuehrt zu einem Fehler",
+             missing_build_report_error is not None),
         ]
 
         all_passed = True
