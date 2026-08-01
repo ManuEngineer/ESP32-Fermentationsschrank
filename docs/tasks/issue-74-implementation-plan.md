@@ -44,13 +44,46 @@ exakter Pfad-/Versionsabgleich), die PATTERNS-Dateiauswahl war nicht
 gegen die real reproduzierte "0 von 28 Dateien"-Falle abgesichert, und
 mehrere abhaengige Abschnitte (5, 6, 8, 9, 10, 13, die Liste ueberholter
 Plan-Commits) waren inkonsistent. Diese Fassung schliesst alle diese
-Punkte. Plan-Commits `9607fbafc283dfb89623043f10dbff43780bc148` **und**
-`72700d76aec8e0a4fb5a0e78bb17d3ebcaa2ad53` sind damit **ueberholt**;
-diese Fassung ersetzt beide fuer Abschnitt 7.8 vollstaendig. Abschnitte
-1–7.7, 7.9–7.13 sowie die zugehoerige `PLAN APPROVED`-Freigabe auf Commit
-`7440d0964b94f06857a4e689f62e134f0da55931` bleiben unveraendert in Kraft;
-nur Abschnitt 7.8 und die davon abhaengigen Abschnitte 5, 6, 8, 9, 10, 12,
-13 wurden in dieser Fassung angepasst.
+Punkte. Sie besteht aus den zwei Plan-Commits
+`d1a1ec21f7463dc274f7bd9f03d1b46f00a655c4` (Hauptkorrektur) und
+`bf9981b2676a0b7662713a4d8968b68274a075c5` (Selbstreview-Nachkorrektur
+zweier verbliebener Widersprueche in Abschnitt 7.11 und der
+7.8-Einleitung).
+
+**Nach dem Reviewauftrag "PR #79 – Commit-4-Plan: Abschlusskorrektur vor
+Freigabe"** (`COMMIT_4_PLAN_REVIEW: CHANGES_REQUIRED` auf Plan-Commit
+`bf9981b2676a0b7662713a4d8968b68274a075c5`): Dieser Reviewauftrag
+bestaetigte alle vorherigen Entscheidungen (offizieller `esp-clang`-Pfad,
+`IgnoreMacros: 'true'` fuer Befund A, `main/app_main.cpp` unveraendert,
+`pyclang` fail-closed) und deckte drei verbleibende Blocker auf: (1) die
+zwischenzeitlich verlangte Forderung, `clang-tidy --version` muesse den
+vollstaendigen `esp-clang`-Toolpaketnamen enthalten, widersprach dem im
+selben Plan bereits dokumentierten realen Output (`clang-tidy --version`
+meldet nachweislich nur die LLVM-Version, nicht den Toolpaketnamen); (2)
+die verlangte Pruefung einer "post-filter", per PATTERNS gefilterten
+`compile_commands.json` existiert real nicht — `pyclang`s eigener
+Dateifilter arbeitet nach Projektwurzel-Zugehoerigkeit, nicht nach
+PATTERNS, und die eigentliche PATTERNS-Auswahl geschieht ausschliesslich
+in-memory in `run-clang-tidy`, ohne je auf Platte geschrieben zu werden
+(live am Quelltext beider Werkzeuge sowie an realen Testlaeufen
+verifiziert, Abschnitt 7.8.1 Detailbefund 4, Abschnitt 7.8.4); (3) die
+Abnahmekriterien behaupteten faelschlich "genau ein
+Plan-Korrekturcommit", obwohl diese Ueberarbeitung bereits aus zwei
+Commits bestand. Diese Fassung korrigiert alle drei Punkte anhand realer
+Verifikation gegen die lokale ESP-IDF-6.0.2-Installation (Abschnitt
+7.8.7) und dokumentiert an mehreren Stellen, wo die urspruenglich vom
+Reviewauftrag vorgeschlagene Loesung an der realen Werkzeugarchitektur
+scheiterte und durch eine funktional gleichwertige, tatsaechlich
+implementierbare Alternative ersetzt wurde. Plan-Commits
+`9607fbafc283dfb89623043f10dbff43780bc148`,
+`72700d76aec8e0a4fb5a0e78bb17d3ebcaa2ad53`,
+`d1a1ec21f7463dc274f7bd9f03d1b46f00a655c4` **und**
+`bf9981b2676a0b7662713a4d8968b68274a075c5` sind damit **ueberholt**;
+diese Fassung ersetzt alle vier fuer Abschnitt 7.8 vollstaendig.
+Abschnitte 1–7.7, 7.9–7.13 sowie die zugehoerige `PLAN APPROVED`-Freigabe
+auf Commit `7440d0964b94f06857a4e689f62e134f0da55931` bleiben unveraendert
+in Kraft; nur Abschnitt 7.8 und die davon abhaengigen Abschnitte 5, 6, 8,
+9, 10, 12, 13 wurden in dieser Fassung angepasst.
 
 ## 1. Ziel
 
@@ -194,7 +227,21 @@ Die ESP-IDF-6.0.2-Migration abschliessen:
   `warnings.txt` auch bei einem fehlgeschlagenen Analyselauf, erweitert
   die Selftestliste und die vollstaendige Liste ueberholter Plan-Commits,
   und verlangt einen im Plan dokumentierten, real durchgefuehrten
-  Read-only-Verifikationsnachweis vor dieser Freigabe (Abschnitt 7.8.7).
+  Read-only-Verifikationsnachweis vor dieser Freigabe (Abschnitt 7.8.7);
+- **Reviewauftrag "PR #79 – Commit-4-Plan: Abschlusskorrektur vor
+  Freigabe"** (`COMMIT_4_PLAN_REVIEW: CHANGES_REQUIRED` auf Plan-Commit
+  `bf9981b2676a0b7662713a4d8968b68274a075c5`): verbindliche Grundlage
+  dieser Fassung — bestaetigt alle vorherigen Entscheidungen, deckt aber
+  drei Blocker auf: eine nicht erfuellbare Forderung an `clang-tidy
+  --version` (widerspricht dem im selben Plan bereits dokumentierten
+  realen Output, korrigiert in Abschnitt 7.8.1/7.8.4 durch mehrere
+  unabhaengige, zueinander passende Signale statt eines einzelnen, real
+  nicht gelieferten Strings), eine real nicht existierende „post-filter
+  compile_commands.json"-Pruefmethode (korrigiert in Abschnitt 7.8.4
+  durch einen eigenen, unabhaengigen Dateiauswahlnachweis gegen die
+  vollstaendige, ungefilterte Compile-Datenbank) und eine falsche
+  Behauptung ueber die Anzahl der Plan-Korrekturcommits (korrigiert in
+  Abschnitt 16, Plan-spezifisch).
 
 ## 4. Aktuelle Ausgangslage (Bestandsaufnahme)
 
@@ -378,10 +425,10 @@ Nur in der spaeteren Umsetzungsphase, nach Planfreigabe, zu aendern:
 - neu: `scripts/run_esp_idf_static_analysis.py` (kanonischer
   ESP-IDF-`esp-clang`-Analysetreiber, Abschnitt 7.8.4)
 - `scripts/esp_idf_contract.py` (Erweiterung um die neuen
-  Werkzeugvertragskonstanten `ESP_CLANG_VERSION`,
-  `ESP_CLANG_LINUX_AMD64_SHA256`, `PYCLANG_VERSION` — bestehende
-  Konstanten/Namenshelfer bleiben unveraendert, DRY-Quelle fuer beide
-  Analysetreiber, Abschnitt 7.8.4)
+  Werkzeugvertragskonstanten `ESP_CLANG_TOOL_VERSION`,
+  `ESP_CLANG_LLVM_VERSION`, `ESP_CLANG_LINUX_AMD64_SHA256`,
+  `PYCLANG_VERSION` — bestehende Konstanten/Namenshelfer bleiben
+  unveraendert, DRY-Quelle fuer beide Analysetreiber, Abschnitt 7.8.4)
 
 Kein produktiver Fachcode (`lib/device_platform/`, `lib/fermentation_app/`,
 `startApplication()`/nativer Kern in `src/main.cpp`, `main/app_main.cpp`)
@@ -1154,11 +1201,13 @@ ESP-IDF-Commit verifiziert):**
 
 ```text
 Tool:                esp-clang
-Installtyp:          on_request (tools.json)
+Installtyp:          on_request (tools.json "install")
+Versionsstatus:       recommended (tools.json "versions[].status")
 Version:             esp-20.1.1_20250829
 Lizenz:              Apache-2.0
 Repository:          espressif/llvm-project
 Linux-AMD64-SHA-256: 88910c21350c06a521f243304d1a3adbdb78447123b3f8e27493aab75e3cc07f
+Linux-AMD64-Groesse: 339870496 Bytes
 ```
 
 Installationsschritt (live verifiziert, exakte Syntax):
@@ -1170,12 +1219,29 @@ python "$IDF_PATH/tools/idf_tools.py" install esp-clang
 
 Nach diesen zwei Schritten zeigen `command -v clang` und
 `command -v clang-tidy` live verifiziert auf
-`$IDF_TOOLS_PATH/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/...`;
-`clang --version` meldet `Espressif clang version 20.1.1 (...
-esp-20.1.1_20250829)`, `clang-tidy --version` meldet `Espressif LLVM
-version 20.1.1`. Ein Rueckfall auf `/usr/bin/clang-tidy-18` im
-ESP-IDF-Analyseschritt ist ein harter Fehler (Selftest-Anforderung,
-Abschnitt 7.8.6).
+`$IDF_TOOLS_PATH/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/...`.
+
+**Korrektur aus der Abschlussreviewrunde — unterschiedliche, real
+verifizierte Versionsstrings von `clang` und `clang-tidy`:** `clang
+--version` meldet den vollstaendigen Toolpaketnamen
+(`Espressif clang version 20.1.1 (...esp-20.1.1_20250829)`); `clang-tidy
+--version` meldet dagegen **nur** `Espressif LLVM version 20.1.1` —
+**ohne** den Toolpaketnamen `esp-20.1.1_20250829`. Eine fruehere Fassung
+dieses Plans verlangte faelschlich, dass auch `clang-tidy --version`
+diesen Toolpaketnamen exakt enthalten muesse; das widerspricht dem real
+beobachteten Output und ist damit nicht erfuellbar. Die Herkunftspruefung
+verwendet deshalb **mehrere, zueinander passende, unabhaengige Signale**
+statt eines einzelnen, vom realen Tool nicht gelieferten Strings
+(vollstaendige Spezifikation in Abschnitt 7.8.4). `scripts/esp_idf_
+contract.py` fuehrt dafuer zwei getrennte Konstanten statt einer:
+
+```text
+ESP_CLANG_TOOL_VERSION = "esp-20.1.1_20250829"   (Toolpaketname, tools.json)
+ESP_CLANG_LLVM_VERSION = "20.1.1"                (von clang-tidy gemeldete LLVM-Version)
+```
+
+Ein Rueckfall auf `/usr/bin/clang-tidy-18` im ESP-IDF-Analyseschritt ist
+ein harter Fehler (Selftest-Anforderung, Abschnitt 7.8.6).
 
 **Verifizierte, tatsaechlich funktionierende Kommandoform** (live gegen
 beide Profile ausgefuehrt, identische Funde auf beiden — Abschnitt
@@ -1223,6 +1289,42 @@ Interpretationsspielraum):
    `idf.py clang-check --exit-code ...` beendet sich mit Exitcode `1`,
    sobald Funde als Fehler gewertet werden, und mit `0`, wenn keine
    vorliegen.
+4. **Es existiert keine auf Platte geschriebene, per PATTERNS gefilterte
+   `compile_commands.json`** (Korrektur aus der Abschlussreviewrunde,
+   live anhand des installierten `pyclang`- und `run-clang-tidy`-
+   Quelltexts sowie eines realen Testlaufs verifiziert — wichtig fuer den
+   in Abschnitt 7.8.4 spezifizierten Dateiauswahlnachweis). Zwei getrennte
+   Filterschritte sind beteiligt, die leicht verwechselt werden koennen:
+   - `pyclang/runner.py`s `filter_cmd()` schreibt die
+     `compile_commands.json` im Analyseverzeichnis tatsaechlich neu —
+     aber gefiltert nach `--include-paths`/`--exclude-paths` (hier nicht
+     gesetzt) beziehungsweise, mangels solcher Optionen, nach der
+     einfachen Regel „liegt die Datei unterhalb des Projektwurzel-
+     verzeichnisses". Live verifiziert: nach einem vollstaendigen
+     `clang-check`-Lauf enthaelt die Datei exakt die 28 projekteigenen
+     Quellen (`lib/`, `main/`) — nicht die zwei per PATTERNS gewaehlten
+     Dateien, sondern **alle** projekteigenen Uebersetzungseinheiten.
+   - Die eigentliche PATTERNS-Filterung auf genau die zwei gewuenschten
+     Dateien geschieht **ausschliesslich in-memory** innerhalb des von
+     `esp-clang` mitgelieferten `run-clang-tidy`-Skripts (`files =
+     {f for f in files if file_name_re.search(f)}`, gefolgt von der
+     Konsolenzeile „Running clang-tidy for N files out of M"). Dieses
+     Zwischenergebnis wird **nie** in eine Datei geschrieben.
+   - **Praktische Folge:** Es gibt keinen Zeitpunkt, zu dem eine Datei auf
+     Platte die PATTERNS-gefilterte Zwei-Dateien-Auswahl widerspiegelt —
+     weder vor noch nach dem `clang-check`-Aufruf. Ein unabhaengiger
+     Nachweis muss die Auswahl daher **selbst nachvollziehen** (exakt
+     dieselbe Pfad-/Regexlogik wie `run-clang-tidy`, angewendet auf die
+     **vollstaendige, ungefilterte** `compile_commands.json`, die eine
+     gewoehnliche `idf.py ... reconfigure` liefert), nicht eine vermeintlich
+     bereits gefilterte Datei einlesen. Live verifiziert: Die vollstaendige,
+     ungefilterte `compile_commands.json` des Release-Analyseverzeichnisses
+     enthaelt 456 Eintraege (ESP-IDF-interne plus projekteigene Quellen);
+     dieselbe verankerte PATTERNS-Regex angewendet auf diese 456 Eintraege
+     liefert ebenfalls exakt die zwei erwarteten Dateien, keine zufaellige
+     Kollision mit einer gleichnamigen ESP-IDF-internen Datei. Die genaue
+     Spezifikation dieses unabhaengigen Nachweises steht in Abschnitt
+     7.8.4.
 
 #### 7.8.2 Zwei Funde aus dem realen Probelauf — Befund A entschieden,
 Befund B als einzeln begruendete Fremdheader-Ausnahme umgesetzt
@@ -1359,54 +1461,101 @@ Aufgaben:
   `scripts/build_esp_idf_profiles.py`);
 - Verwendung der bestehenden Konstanten/Namenshelfer aus
   `scripts/esp_idf_contract.py` (DRY, keine erneute Profil-/
-  Pfadnamensdefinition), erweitert um `ESP_CLANG_VERSION`,
-  `ESP_CLANG_LINUX_AMD64_SHA256`, `PYCLANG_VERSION` (Abschnitt 5);
+  Pfadnamensdefinition), erweitert um `ESP_CLANG_TOOL_VERSION`,
+  `ESP_CLANG_LLVM_VERSION`, `ESP_CLANG_LINUX_AMD64_SHA256`,
+  `PYCLANG_VERSION` (Abschnitt 5);
 - Pruefung der aktiven ESP-IDF-Herkunft (Wiederverwendung von
   `check_build_profiles.check_esp_idf_version()`, analog zum bestehenden
   Muster in `scripts/build_esp_idf_profiles.py`, Abschnitt 7.4 — keine
   zweite Implementierung);
-- **Exakte Werkzeugverifikation vor jedem Analyselauf** (ersetzt die
-  vorherige, zu schwache Pruefung „`clang-tidy --version` enthaelt
-  Espressif"; jeder einzelne Punkt ist ein harter Fehler bei Abweichung,
-  bevor `idf.py clang-check` aufgerufen wird):
-  1. das aufgeloeste `clang-tidy` liegt exakt unter
+- **Exakte Werkzeugverifikation vor jedem Analyselauf, aus mehreren
+  unabhaengigen, jeweils zum real beobachteten Tooloutput passenden
+  Signalen** (ersetzt die vorherige, zu schwache Pruefung
+  „`clang-tidy --version` enthaelt Espressif"; ersetzt auch die
+  zwischenzeitlich verlangte, aber am realen Output nachweislich
+  scheiternde Forderung, `clang-tidy --version` muesse den vollstaendigen
+  Toolpaketnamen enthalten, Abschnitt 7.8.1; jeder einzelne Punkt ist ein
+  harter Fehler bei Abweichung, bevor `idf.py clang-check` aufgerufen
+  wird):
+  1. der aufgeloeste `clang`-Pfad liegt exakt unter
+     `$IDF_TOOLS_PATH/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/clang`;
+  2. der aufgeloeste `clang-tidy`-Pfad liegt exakt unter
      `$IDF_TOOLS_PATH/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/clang-tidy`
-     (exakter Pfad, nicht nur ein Teilstring-Vergleich);
-  2. `clang-tidy --version` enthaelt exakt `ESP_CLANG_VERSION`
-     (`esp-20.1.1_20250829`);
-  3. `/usr/bin/clang-tidy-18` (das native, in Abschnitt 7.8 fuer den
+     (beide Pfade exakt, nicht nur ein Teilstring-Vergleich);
+  3. `clang --version` enthaelt exakt `ESP_CLANG_TOOL_VERSION`
+     (`esp-20.1.1_20250829`) — dieser vollstaendige Toolpaketname wird
+     **nur** von `clang`, nicht von `clang-tidy` gemeldet (Abschnitt
+     7.8.1);
+  4. `clang-tidy --version` enthaelt exakt `ESP_CLANG_LLVM_VERSION`
+     (`20.1.1`) — **ohne** den Toolpaketnamen zu verlangen, da
+     `clang-tidy --version` ihn real nachweislich nicht ausgibt;
+  5. die `tools.json`-Definition im exakt gepinnten ESP-IDF-Checkout
+     (Abschnitt 7.1) enthaelt fuer `esp-clang` exakt
+     `version: esp-20.1.1_20250829`, `status: recommended` und den
+     Linux-AMD64-`sha256`-Wert `ESP_CLANG_LINUX_AMD64_SHA256`
+     (Abschnitt 7.8.1) — bestaetigt die Werkzeugherkunft unabhaengig von
+     jeder Versionsausgabe eines bereits installierten Binaries;
+  6. `/usr/bin/clang-tidy-18` (das native, in Abschnitt 7.8 fuer den
      PlatformIO-Pfad verwendete Debian-Werkzeug) wird **ausdruecklich
      nicht** als aktives `clang-tidy` fuer den ESP-IDF-Analysepfad
      akzeptiert — expliziter Vergleich des aufgeloesten Pfads gegen
      diesen bekannten Fehlerfall, harter Fehler bei Treffer;
-  4. `importlib.metadata.version("pyclang") == PYCLANG_VERSION`
+  7. `importlib.metadata.version("pyclang") == PYCLANG_VERSION`
      (`0.7.0`, Abschnitt 7.8.1) — fail-closed, kein Log-only;
-  5. `.clang-tidy` bleibt nachweislich die alleinige Konfigurationsquelle:
+  8. `.clang-tidy` bleibt nachweislich die alleinige Konfigurationsquelle:
      der Treiber verifiziert nach dem Zusammenbau von
      `--run-clang-tidy-options`, dass ausschliesslich der in
      Abschnitt 7.8.1 dokumentierte `-header-filter`-Wert und die eine in
      Abschnitt 7.8.2 dokumentierte `-checks="-misc-header-include-cycle"`-
      Ausnahme uebergeben werden — keine zusaetzlichen, `.clang-tidy`
-     ueberschreibenden `-checks=`- oder `WarningsAsErrors`-Werte;
+     ueberschreibenden `-checks=`- oder `WarningsAsErrors`-Werte.
+
+     Kein einzelner dieser Punkte allein ist hinreichend (ein passender
+     Pfad allein beweist keine passende Version, ein passender
+     Versionsstring allein beweist keine passende Herkunft) — erst die
+     Kombination aus Pfad, Versionsausgabe **und** `tools.json`-Eintrag
+     ist der verbindliche Herkunftsnachweis (Abschnitt 7.8.1);
 - Aufbau der in Abschnitt 7.8.3 festgelegten, strikt getrennten
   Analyseverzeichnisse mit denselben Profiloverlays wie der
   Produktionsbuild;
-- **Verankerte, `re.escape()`-basierte PATTERNS-Regex mit positiver
-  Dateiauswahlverifikation** (schliesst die real reproduzierte "Running
-  clang-tidy for 0 files out of 28"-Falle aus Abschnitt 7.8.1 aus): die
-  Regex wird programmatisch aus den beiden exakten, repository-relativen
-  Pfaden `main/app_main.cpp` und
-  `lib/device_platform_esp_idf/src/esp_timer_time_source.cpp` mittels
-  `re.escape()` aufgebaut und verankert (`(?:^|/)` am Anfang, `$` am Ende
-  jedes Pfadsegments), nicht aus einem frei geschriebenen Regex-String.
-  Vor dem eigentlichen `clang-check`-Aufruf liest der Treiber das
-  profilspezifische `compile_commands.json` und wendet dieselbe Regex
-  selbst auf die darin enthaltenen Dateipfade an; das Ergebnis muss
-  **exakt zwei** Treffer liefern, je einer fuer die beiden erwarteten
-  Dateien. Harter Fehler, unabhaengig von der spaeteren Textausgabe des
-  Werkzeugs, bei: null Treffern, genau einem Treffer, drei oder mehr
-  Treffern, doppelten Treffern derselben Datei, oder einem Treffer
-  ausserhalb des erwarteten Repository-Pfads;
+- **Unabhaengiger Dateiauswahlnachweis vor dem eigentlichen
+  `clang-check`-Aufruf, gegen die vollstaendige, ungefilterte
+  `compile_commands.json`** (ersetzt die zwischenzeitlich verlangte,
+  aber real nicht existierende „post-filter compile_commands.json"-
+  Pruefung, Abschnitt 7.8.1 Detailbefund 4 — es gibt zu keinem Zeitpunkt
+  eine auf Platte per PATTERNS gefilterte Datei):
+  1. die PATTERNS-Regex wird programmatisch aus den beiden exakten,
+     repository-relativen Pfaden `main/app_main.cpp` und
+     `lib/device_platform_esp_idf/src/esp_timer_time_source.cpp` mittels
+     `re.escape()` aufgebaut und verankert (`(?:^|/)` am Anfang, `$` am
+     Ende jedes Pfadsegments), nicht aus einem frei geschriebenen
+     Regex-String;
+  2. der Treiber fuehrt im jeweiligen, strikt getrennten Analyse-
+     verzeichnis (Abschnitt 7.8.3) selbst einen einfachen
+     `idf.py -B <analyseverzeichnis> ... reconfigure`-Schritt aus (mit
+     denselben Profiloverlays wie der eigentliche Analyselauf), um eine
+     frische, **vollstaendige** `compile_commands.json` zu erzeugen —
+     diese enthaelt sowohl ESP-IDF-interne als auch projekteigene
+     Quellen (live verifiziert: 456 Eintraege im Release-Profil) und ist
+     zu diesem Zeitpunkt **noch nicht** durch `pyclang`s eigenen,
+     abweichenden Projektwurzel-Filter reduziert;
+  3. der Treiber baut aus `directory` und `file` jedes Eintrags denselben
+     absoluten Pfad, den auch `run-clang-tidy` intern bildet, und wendet
+     dieselbe Regex aus Punkt 1 mit `.search()` darauf an — exakt
+     dieselbe Auswahllogik wie im esp-clang-eigenen `run-clang-tidy`-
+     Skript (Abschnitt 7.8.1 Detailbefund 4), aber als eigene,
+     unabhaengige Berechnung, nicht durch Parsen von dessen Textausgabe;
+  4. das Ergebnis muss **exakt zwei** Treffer liefern, je einer fuer die
+     beiden erwarteten Dateien — harter Fehler bei: null Treffern, genau
+     einem Treffer, drei oder mehr Treffern, doppelten Treffern derselben
+     Datei, oder einem Treffer ausserhalb des erwarteten Repository-Pfads;
+  5. erst nach bestandenem Nachweis wird `idf.py clang-check` mit
+     derselben Regex aufgerufen; dessen eigener, in Abschnitt 7.8.1
+     Detailbefund 4 dokumentierter interner Ablauf (erneutes
+     `reconfigure`, `pyclang`s Projektwurzel-Filter, `run-clang-tidy`s
+     eigene, nicht persistierte PATTERNS-Auswahl) waehlt dadurch
+     nachweislich dieselben zwei, bereits unabhaengig bestaetigten
+     Dateien aus;
 - Aufruf von `idf.py clang-check` in der in Abschnitt 7.8.1 verifizierten
   Kommandoform (die oben verankerte Ein-Regex-PATTERNS,
   `--run-clang-tidy-options` mit Header-Filter und der Befund-B-Ausnahme,
@@ -1414,10 +1563,12 @@ Aufgaben:
 - Analyse genau `main/app_main.cpp` und
   `lib/device_platform_esp_idf/src/esp_timer_time_source.cpp` je Profil;
 - **`warnings.txt` wird auch bei einem fehlgeschlagenen Analyselauf
-  gesichert** (nicht nur bei Erfolg): der Treiber ruft `idf.py
-  clang-check` auf, sichert `warnings.txt` in den profilspezifischen
-  Zielpfad (Abschnitt 7.8.5) **unabhaengig vom Exitcode**, und wertet den
-  Exitcode erst danach aus (vergleichbar einem `finally`-Block: erst
+  gesichert** (nicht nur bei Erfolg): vor jedem Profillauf entfernt der
+  Treiber einen eventuell vorhandenen alten profilspezifischen
+  `warnings.txt`-Zielnachweis, ruft dann `idf.py clang-check` auf, sichert
+  die neu erzeugte `warnings.txt` in den profilspezifischen Zielpfad
+  (Abschnitt 7.8.5) **unabhaengig vom Exitcode**, und wertet den Exitcode
+  erst danach aus (vergleichbar einem `finally`-Block: erst
   Beweissicherung, dann Fehlerbehandlung) — ein fehlgeschlagener Lauf darf
   nicht dazu fuehren, dass kein Nachweis der tatsaechlich gefundenen
   Verstoesse vorliegt;
@@ -1478,58 +1629,82 @@ Toolchain-Installation:
 6. Ein simulierter Diagnosefehler (nicht-Null-Ruckgabe des
    `clang-check`-Aufrufs) fuehrt zu einem harten Fehler des Treibers.
 7. Ein simuliertes fehlendes oder falsches `esp-clang` (aufgeloester
-   `clang-tidy`-Pfad ausserhalb von `$IDF_TOOLS_PATH/tools/esp-clang/...`
-   oder `clang-tidy --version` ohne den exakten `ESP_CLANG_VERSION`-Wert)
-   fuehrt zu einem harten Fehler, bevor ein Analyselauf versucht wird —
-   die reine Teilstring-Pruefung „enthaelt Espressif" allein ist dafuer
-   laut Abschnitt 7.8.4 **nicht** ausreichend; siehe die praezisierenden
-   Faelle 11–13 fuer die einzelnen Pfad-/Versionskriterien.
+   `clang`- oder `clang-tidy`-Pfad ausserhalb von
+   `$IDF_TOOLS_PATH/tools/esp-clang/...`) fuehrt zu einem harten Fehler,
+   bevor ein Analyselauf versucht wird — die reine Teilstring-Pruefung
+   „enthaelt Espressif" allein ist dafuer laut Abschnitt 7.8.4 **nicht**
+   ausreichend; siehe die praezisierenden Faelle 11–15 fuer die einzelnen
+   Pfad-/Versions-/`tools.json`-Kriterien.
 8. Die produktiven Verzeichnisse `build/esp32_bringup`/
    `build/esp32_release` werden vom Treiber nie als `-B`-Ziel verwendet.
 9. `scripts/build_esp_idf_profiles.py` wird vom neuen Treiber nicht
    aufgerufen oder veraendert (analog zum bestehenden Selftest-Muster).
 10. Eine fehlende profilspezifische `warnings.txt` nach dem Verschieben
     wird nicht still akzeptiert.
-11. Ein simuliertes `esp-clang` mit exakt `ESP_CLANG_VERSION`, aber
-    einem `clang-tidy`-Pfad ausserhalb von
-    `$IDF_TOOLS_PATH/tools/esp-clang/...` wird abgelehnt (Pfadpruefung,
-    nicht nur Versions-String).
-12. Ein simuliertes `esp-clang` mit abweichender Version (z. B.
-    `esp-20.1.0_...` statt `esp-20.1.1_20250829`) fuehrt zu einem harten
-    Fehler.
-13. Ein aufgeloester `clang-tidy`-Pfad, der exakt `/usr/bin/clang-tidy-18`
-    entspricht, wird explizit als bekannter Fehlerfall erkannt und
-    abgelehnt (nicht nur implizit ueber die Pfadpruefung aus Fall 11).
-14. Eine simulierte `pyclang`-Version exakt `PYCLANG_VERSION` (`0.7.0`)
+11. Ein simulierter korrekter `clang`-Pfad unter
+    `$IDF_TOOLS_PATH/tools/esp-clang/...` mit `clang --version`, der
+    exakt `ESP_CLANG_TOOL_VERSION` enthaelt, wird akzeptiert; derselbe
+    Versionsstring an einem Pfad ausserhalb dieses Toolverzeichnisses
+    wird abgelehnt.
+12. Ein simulierter korrekter `clang-tidy`-Pfad unter
+    `$IDF_TOOLS_PATH/tools/esp-clang/...` mit `clang-tidy --version`, der
+    exakt `ESP_CLANG_LLVM_VERSION` (**ohne** den Toolpaketnamen) enthaelt,
+    wird akzeptiert; derselbe Pfad mit abweichender LLVM-Version wird
+    abgelehnt.
+13. Eine simulierte `tools.json`-Fixture mit abweichender `esp-clang`-
+    Version, abweichendem `status` oder abweichendem
+    Linux-AMD64-`sha256` fuehrt zu einem harten Fehler — auch dann, wenn
+    die Pfad- und Versionspruefungen aus den Faellen 11–12 fuer sich
+    genommen bestehen wuerden (kein einzelnes Signal ist allein
+    hinreichend, Abschnitt 7.8.4).
+14. Ein aufgeloester `clang-tidy`-Pfad, der exakt
+    `/usr/bin/clang-tidy-18` entspricht, wird explizit als bekannter
+    Fehlerfall erkannt und abgelehnt (nicht nur implizit ueber die
+    Pfadpruefung aus Fall 12).
+15. Eine simulierte `clang --version`-Ausgabe ohne den exakten
+    `ESP_CLANG_TOOL_VERSION`-String (z. B. abweichende Toolpaket-Version)
+    fuehrt zu einem harten Fehler.
+16. Eine simulierte `pyclang`-Version exakt `PYCLANG_VERSION` (`0.7.0`)
     wird akzeptiert.
-15. Eine simulierte `pyclang`-Version ungleich `PYCLANG_VERSION` (aelter
+17. Eine simulierte `pyclang`-Version ungleich `PYCLANG_VERSION` (aelter
     oder neuer) fuehrt zu einem harten Fehler, bevor `clang-check`
     aufgerufen wird.
-16. Eine fehlende `pyclang`-Installation (kein Treffer in
+18. Eine fehlende `pyclang`-Installation (kein Treffer in
     `importlib.metadata`) fuehrt zu einem harten Fehler mit klarer
     Fehlermeldung, nicht zu einer stillen Ausnahme.
-17. Die aus `re.escape()` aufgebaute, verankerte PATTERNS-Regex liefert
-    gegen eine synthetische, 28-Eintraege-grosse `compile_commands.json`-
-    Fixture (analog zur real verifizierten Datei) exakt zwei Treffer fuer
-    die beiden erwarteten Dateien.
-18. Dieselbe Fixture ohne einen der beiden erwarteten Dateipfade (null
+19. Die aus `re.escape()` aufgebaute, verankerte PATTERNS-Regex liefert
+    gegen eine synthetische, **vollstaendige, ungefilterte**
+    `compile_commands.json`-Fixture mit sowohl ESP-IDF-internen als auch
+    projekteigenen Eintraegen (analog zur real verifizierten, 456
+    Eintraege umfassenden Datei, Abschnitt 7.8.1 Detailbefund 4) exakt
+    zwei Treffer fuer die beiden erwarteten Dateien — unabhaengig von
+    etwaigen gleichnamigen oder aehnlich benannten ESP-IDF-internen
+    Dateien in derselben Fixture.
+20. Dieselbe Fixture ohne einen der beiden erwarteten Dateipfade (null
     Treffer fuer diese Datei) fuehrt zu einem harten Fehler.
-19. Dieselbe Fixture mit einem zusaetzlichen, aehnlich benannten
+21. Dieselbe Fixture mit einem zusaetzlichen, aehnlich benannten
     Lookalike-Pfad (z. B. `test/fake/app_main.cpp` oder ein Pfad in einem
     fremden Wurzelverzeichnis mit identischem Dateinamen) fuehrt zu einem
     harten Fehler statt einer stillschweigenden Mehrfachauswahl.
-20. Eine simulierte doppelte Auflistung derselben Datei in
-    `compile_commands.json` fuehrt zu einem harten Fehler (keine
-    versteckte Dopplung als „zwei Treffer" akzeptiert).
-21. Die zusammengesetzten `--run-clang-tidy-options` enthalten fuer beide
+22. Eine simulierte doppelte Auflistung derselben Datei in der Fixture
+    fuehrt zu einem harten Fehler (keine versteckte Dopplung als „zwei
+    Treffer" akzeptiert).
+23. Der Dateiauswahlnachweis (Faelle 19–22) wird gegen eine vom Treiber
+    selbst per `reconfigure` erzeugte `compile_commands.json` gefuehrt,
+    nicht gegen eine vermeintlich bereits von `clang-check` per PATTERNS
+    gefilterte Datei (Abschnitt 7.8.1 Detailbefund 4, Abschnitt 7.8.4) —
+    dieser Selftest stellt sicher, dass der Treiber den eigenen
+    `reconfigure`-Schritt tatsaechlich ausfuehrt und nicht stillschweigend
+    eine vorhandene, moeglicherweise veraltete Datei wiederverwendet.
+24. Die zusammengesetzten `--run-clang-tidy-options` enthalten fuer beide
     Profile ausschliesslich den dokumentierten `-header-filter`-Wert und
     die eine `-checks="-misc-header-include-cycle"`-Ausnahme — kein
     zusaetzlicher, `.clang-tidy` ueberschreibender Wert.
-22. `warnings.txt` wird auch bei einem simulierten fehlgeschlagenen
+25. `warnings.txt` wird auch bei einem simulierten fehlgeschlagenen
     `clang-check`-Aufruf (Exitcode `1`) in den profilspezifischen Zielpfad
     verschoben, **bevor** der Treiber den Fehler weiterreicht (Reihenfolge
     wird explizit geprueft, nicht nur das Endergebnis).
-23. Ein bereits vorhandener, veralteter `warnings.txt`-Zielnachweis wird
+26. Ein bereits vorhandener, veralteter `warnings.txt`-Zielnachweis wird
     vor einem neuen Profillauf entfernt und nicht als aktueller Nachweis
     stehen gelassen.
 
@@ -1551,66 +1726,85 @@ einer Commit-4-Datei, gegen die lokale ESP-IDF-6.0.2-Installation
 durchgefuehrt (kein Commit-4-Skript existiert bereits; alle Befehle
 wurden manuell ausgefuehrt, `.clang-tidy` nur temporaer und nicht
 committet veraendert, danach per `git checkout -- .clang-tidy`
-vollstaendig zurueckgesetzt und gegen `HEAD` als identisch verifiziert):
+vollstaendig zurueckgesetzt und gegen `HEAD` als identisch verifiziert;
+Scratch-Analyseverzeichnisse wurden ausschliesslich unter `/tmp/`
+angelegt und nach der Verifikation vollstaendig entfernt):
 
 ```text
 1.  esp-clang Pfad/Version/Hash-Kontrakt (esp-20.1.1_20250829,
-    SHA-256 88910c21...cc07f):                              PASS
-2.  pyclang installierte Version == 0.7.0
-    (importlib.metadata.version):                            PASS
-3.  IgnoreMacros: 'true' unterdrueckt Befund A
-    (main/app_main.cpp, Exitcode 0, keine Funde):             PASS
-4.  Ohne IgnoreMacros bleibt Befund A aktiv
-    (identischer Fund, Exitcode 1):                           PASS
-5.  IgnoreMacros unterdrueckt keine echte, nicht-makrobasierte
+    SHA-256 88910c21...cc07f, Groesse 339870496 Bytes,
+    tools.json status: recommended):                          PASS
+2.  clang --version enthaelt exakt esp-20.1.1_20250829
+    (ESP_CLANG_TOOL_VERSION):                                  PASS
+3.  clang-tidy --version enthaelt exakt "Espressif LLVM version
+    20.1.1" (ESP_CLANG_LLVM_VERSION), OHNE den Toolpaketnamen —
+    bestaetigt die Notwendigkeit der Korrektur aus Blocker 1:      PASS
+4.  pyclang installierte Version == 0.7.0
+    (importlib.metadata.version):                              PASS
+5.  IgnoreMacros: 'true' unterdrueckt Befund A
+    (main/app_main.cpp, Exitcode 0, keine Funde):               PASS
+6.  Ohne IgnoreMacros bleibt Befund A aktiv
+    (identischer Fund, Exitcode 1):                             PASS
+7.  IgnoreMacros unterdrueckt keine echte, nicht-makrobasierte
     Verschachtelung (synthetische Fixture, cognitive complexity
-    75 gegen Schwellenwert 25, weiterhin gemeldet):            PASS
-6.  -checks="-misc-header-include-cycle" unterdrueckt Befund B,
+    75 gegen Schwellenwert 25, weiterhin gemeldet):              PASS
+8.  -checks="-misc-header-include-cycle" unterdrueckt Befund B,
     waehrend Befund A (ohne IgnoreMacros) weiterhin aktiv bleibt
-    (inkrementelle, nicht ersetzende Ausnahme):                PASS
-7.  Anchored re.escape()-Regex waehlt exakt 2 von 28 Dateien aus
-    der realen Bring-up-compile_commands.json:                 PASS
-    (Release-Profil nicht separat neu generiert und geprueft;
-    architektonisch identische Quellen und identischer
-    Analysetreiber wie Bring-up, siehe Anmerkung unten)
-8.  Produktive Buildverzeichnisse (build/esp32_bringup,
+    (inkrementelle, nicht ersetzende Ausnahme):                  PASS
+9.  pyclangs filter_cmd() filtert compile_commands.json real
+    nach Projektwurzel-Zugehoerigkeit (28 projekteigene Dateien),
+    NICHT nach der PATTERNS-Regex — live am Quelltext und an
+    einem realen Lauf verifiziert (Blocker 2):                   PASS
+10. Die tatsaechliche PATTERNS-Auswahl geschieht ausschliesslich
+    in-memory in run-clang-tidy und wird nie auf Platte
+    persistiert — live am Quelltext von
+    esp-clang/.../bin/run-clang-tidy verifiziert:                PASS
+11. Anchored re.escape()-Regex waehlt exakt 2 von 456 Dateien aus
+    der vollstaendigen, ungefilterten Bring-up-
+    compile_commands.json (frisch per eigenem reconfigure
+    erzeugt):                                                    PASS
+12. Dieselbe Pruefung fuer das Release-Profil: ebenfalls exakt
+    2 von 456 Dateien, dieselben zwei Dateien (schliesst die in
+    der vorherigen Runde offen gelassene Release-Luecke):        PASS
+13. Produktive Buildverzeichnisse (build/esp32_bringup,
     build/esp32_release) bleiben durch einen separaten
-    -B-Analyseordner unveraendert (mtime-Vergleich):            PASS
-9.  esp-clang-Herkunftswerte (Version, Linux-AMD64-SHA-256, Groesse)
+    -B-Analyseordner unveraendert (mtime-Vergleich):              PASS
+14. esp-clang-Herkunftswerte (Version, Linux-AMD64-SHA-256, Groesse)
     stimmen mit der bereits fruehere dokumentierten Fassung
-    ueberein (keine Drift seit der vorherigen Ueberarbeitung):   PASS
-10. .clang-tidy nach allen Testlaeufen vollstaendig auf den
-    committeten Stand zurueckgesetzt (diff gegen HEAD leer):     PASS
-11. Arbeitsverzeichnis nach Abschluss der Verifikation sauber
-    (git status --short leer, keine Scratch-Dateien verblieben): PASS
+    ueberein (keine Drift seit der vorherigen Ueberarbeitung):     PASS
+15. .clang-tidy nach allen Testlaeufen vollstaendig auf den
+    committeten Stand zurueckgesetzt (diff gegen HEAD leer):       PASS
+16. Arbeitsverzeichnis nach Abschluss der Verifikation sauber
+    (git status --short leer, keine Scratch-Dateien verblieben):   PASS
 ```
 
 **Nicht als real verifiziert behauptet (bewusst offen fuer die
 Implementierungsphase, kein PASS):**
 
-- die exakte Dateiauswahl (Nachweis 7) wurde nur gegen das
-  Bring-up-Profil real durchgefuehrt; das Release-Profil verwendet
-  denselben Quellcode, denselben Treiber und dieselbe verankerte Regex,
-  wurde aber in dieser Runde nicht zusaetzlich real durchgemessen — dies
-  ist kein architektonischer Unterschied, sondern ein in der
-  Implementierungsphase (Commit 4) durch Selftest-Fall 17 und den realen
-  CI-Lauf gegen beide Profile abzudeckender Punkt;
-- die in Abschnitt 7.8.5 spezifizierte Reihenfolge "warnings.txt sichern,
-  dann Exitcode auswerten" ist eine Anforderung an die noch zu
+- die in Abschnitt 7.8.4 spezifizierte Reihenfolge „`warnings.txt`
+  sichern, dann Exitcode auswerten" ist eine Anforderung an die noch zu
   implementierende Steuerlogik von `scripts/run_esp_idf_static_
   analysis.py`, keine bereits beobachtete Laufzeiteigenschaft eines
   vorhandenen Treibers — real verifiziert wurde ausschliesslich, dass das
   zugrundeliegende Werkzeug (`idf.py clang-check`) selbst `warnings.txt`
   unabhaengig vom Exitcode in das Arbeitsverzeichnis schreibt (Abschnitt
   7.8.5); die Sicherungsreihenfolge im eigenen Treiber ist Commit-4-
-  Implementierung und wird dort durch Selftest-Fall 22 geprueft;
+  Implementierung und wird dort durch Selftest-Fall 25 geprueft;
 - die anhand von `re.escape()` verankerte Regex verhindert nachweislich
   keine Uebereinstimmung mit einem identischen relativen Teilpfad unter
   einer fremden Wurzel (z. B. `anderer/ordner/main/app_main.cpp`) — dies
-  ist unschaedlich, weil Nachweis 7 (die tatsaechliche Pruefung gegen die
-  reale, aus dem eigenen Repository erzeugte `compile_commands.json`) der
-  eigentliche Schutzmechanismus ist, nicht die Regex allein; Selftest-Fall
-  19 deckt diesen Grenzfall zusaetzlich ab.
+  ist unschaedlich, weil Nachweise 11–12 (die tatsaechliche Pruefung gegen
+  die reale, aus dem eigenen Repository erzeugte, vollstaendige
+  `compile_commands.json`) den eigentlichen Schutz bilden, nicht die
+  Regex allein; kein realer Kollisionsfall trat gegen die tatsaechliche
+  456-Eintraege-Datenbank auf; Selftest-Fall 21 deckt diesen synthetischen
+  Grenzfall zusaetzlich ab;
+- der eigene `reconfigure`-Schritt des Treibers (Abschnitt 7.8.4) wurde in
+  dieser Runde manuell nachgebildet (separater `idf.py -B ... reconfigure`-
+  Aufruf gegen ein Scratch-Analyseverzeichnis je Profil), nicht durch den
+  noch nicht existierenden Treiber selbst ausgefuehrt — die Reihenfolge
+  „eigener `reconfigure`, dann Regexpruefung, dann `clang-check`" ist
+  Commit-4-Implementierung und wird dort durch Selftest-Fall 23 geprueft.
 
 ### 7.9 Komponenten- und Lockfilevertrag
 
@@ -2188,7 +2382,7 @@ Abschnitt 7.2), nicht die dadurch erzeugte Semantik.
   erweiterten Format-Scope und den `--scan-path`-Modus von
   `scripts/check_secrets.py` fuer alle hochgeladenen Textartefakte
   (Abschnitt 7.7.4), sobald diese in der Umsetzung konkret vorliegen;
-- `scripts/run_esp_idf_static_analysis.py --selftest` (23 Fixture-Faelle,
+- `scripts/run_esp_idf_static_analysis.py --selftest` (26 Fixture-Faelle,
   Abschnitt 7.8.6) wird ab Commit 4 zusaetzlicher Pflichtschritt in
   `scripts/selftest_quality_gates.py`;
 - `idf.py clang-check` fuer beide Profile getrennt (Abschnitt 7.8.1/7.8.4)
@@ -2266,8 +2460,9 @@ sicherheitsrelevant, wird daher in diesem Plan verbindlich festgelegt
   unterschiedliche Toolchains, keine gegenseitige Aufrufkette; der
   Produktionsbuildtreiber bleibt unveraendert (Abschnitt 7.8.4).
 - **OCP/DRY:** Die neuen Werkzeugvertragskonstanten
-  (`ESP_CLANG_VERSION`, `ESP_CLANG_LINUX_AMD64_SHA256`,
-  `PYCLANG_VERSION`) erweitern das bestehende
+  (`ESP_CLANG_TOOL_VERSION`, `ESP_CLANG_LLVM_VERSION`,
+  `ESP_CLANG_LINUX_AMD64_SHA256`, `PYCLANG_VERSION`) erweitern das
+  bestehende
   `scripts/esp_idf_contract.py` statt eine zweite, parallele
   Konstantenquelle einzufuehren (Abschnitt 5); `.clang-tidy` bleibt die
   alleinige Checkkonfiguration fuer beide Analysepfade — der
@@ -2345,15 +2540,29 @@ geschlossen.
 
 ### Plan-spezifisch
 
-- genau ein Plan-Korrekturcommit fuer diese Ueberarbeitung;
+- keine Umschreibung der bestehenden Plan-Historie (kein Amend, kein
+  Rebase, kein Force-Push auf einen bereits gepushten Plan-Commit);
+- alle tatsaechlich vorhandenen Plan-Korrekturcommits werden transparent
+  dokumentiert, statt eine nicht zutreffende feste Commitanzahl zu
+  behaupten (Korrektur gegenueber der vorherigen Fassung dieses
+  Abschnitts, die faelschlich „genau ein Plan-Korrekturcommit" fuer
+  diese Ueberarbeitung verlangte, obwohl die Ueberarbeitung tatsaechlich
+  aus den beiden Commits `d1a1ec21f7463dc274f7bd9f03d1b46f00a655c4` und
+  `bf9981b2676a0b7662713a4d8968b68274a075c5` bestand);
+- genau **ein** zusaetzlicher Abschlusskorrekturcommit nach
+  `bf9981b2676a0b7662713a4d8968b68274a075c5` fuer die in dieser Fassung
+  behandelte Reviewrunde ("PR #79 – Commit-4-Plan: Abschlusskorrektur vor
+  Freigabe");
 - Draft-PR-Beschreibung verweist auf den neuen Plan-Commit und markiert
-  alle sechs vorherigen Plan-Commits als überholt:
+  alle acht vorherigen Plan-Commits als überholt:
   `05b987e3d2b375b82922990f718d0dc07c730a71`,
   `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754`,
   `6c8092755dde1fe0b39299abe94a0b3e02003beb`,
   `806abbfd7400412285c1f83e94d80cc6c5a7bf31`,
   `9607fbafc283dfb89623043f10dbff43780bc148`,
-  `72700d76aec8e0a4fb5a0e78bb17d3ebcaa2ad53`;
+  `72700d76aec8e0a4fb5a0e78bb17d3ebcaa2ad53`,
+  `d1a1ec21f7463dc274f7bd9f03d1b46f00a655c4`,
+  `bf9981b2676a0b7662713a4d8968b68274a075c5`;
 - Status bleibt `IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL`;
 - vollstaendiges Anhalten bis zu einem commitgebundenen
   `PLAN APPROVED`-Ownerkommentar auf den neuen Plan-Commit.
