@@ -1082,14 +1082,20 @@ einen gruenen Parallelbericht auf dem Head von Commit 4.
   idf.py clang-check-Mechanismus, fuer beide Profile getrennt
   ```
 
-- `.clang-tidy`s `HeaderFilterRegex` wird von `(include|lib)/.*` auf
-  `^(include|lib|main)/.*` erweitert (reine Konfigurationsaenderung,
-  lokal verifiziert, unveraendert gegenueber der vorherigen
-  Planfassung). Generierte ESP-IDF- und Drittanbieterheader bleiben
-  ausserhalb des Filters; die dokumentierte Einzelausnahme fuer
+- `.clang-tidy` erhaelt zwei Aenderungen (beide reine
+  Konfigurationsaenderungen, keine Fachcodeaenderung): `HeaderFilterRegex`
+  wird von `(include|lib)/.*` auf `^(include|lib|main)/.*` erweitert
+  (lokal verifiziert); zusaetzlich wird unter `CheckOptions:` die Option
+  `readability-function-cognitive-complexity.IgnoreMacros: 'true'`
+  ergaenzt (entschiedene Loesung fuer Befund A, Abschnitt 7.8.2). Beide
+  Aenderungen sind Teil desselben Commit-4-Datei-Scopes (Abschnitt 5, 8).
+  Generierte ESP-IDF- und Drittanbieterheader bleiben ausserhalb des
+  `HeaderFilterRegex`-Filters; die dokumentierte Einzelausnahme fuer
   `misc-header-include-cycle` (Abschnitt 7.8.2, Befund B) betrifft ein
-  vom Headerfilter unabhaengiges Checkverhalten, keine
-  Filtererweiterung.
+  vom Headerfilter unabhaengiges Checkverhalten, keine Filtererweiterung,
+  und wird nicht in `.clang-tidy`, sondern ausschliesslich als
+  ESP-IDF-pfadspezifische `--run-clang-tidy-options`-Ergaenzung
+  umgesetzt.
 - Werkzeugversionen: `clang-format-18`/`clang-tidy-18` (nativ,
   unveraendert, Grenzen der Reproduzierbarkeit: Abschnitt 7.11) sowie
   `esp-clang esp-20.1.1_20250829` (ESP-IDF-Pfad, neu, exakte
@@ -1364,8 +1370,8 @@ Aufgaben:
   Espressif"; jeder einzelne Punkt ist ein harter Fehler bei Abweichung,
   bevor `idf.py clang-check` aufgerufen wird):
   1. das aufgeloeste `clang-tidy` liegt exakt unter
-     `$IDF_TOOLS_PATH/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/
-     clang-tidy` (exakter Pfad, nicht nur ein Teilstring-Vergleich);
+     `$IDF_TOOLS_PATH/tools/esp-clang/esp-20.1.1_20250829/esp-clang/bin/clang-tidy`
+     (exakter Pfad, nicht nur ein Teilstring-Vergleich);
   2. `clang-tidy --version` enthaelt exakt `ESP_CLANG_VERSION`
      (`esp-20.1.1_20250829`);
   3. `/usr/bin/clang-tidy-18` (das native, in Abschnitt 7.8 fuer den
@@ -1471,9 +1477,13 @@ Toolchain-Installation:
    PATTERNS-Regex fuer beide Profile enthalten.
 6. Ein simulierter Diagnosefehler (nicht-Null-Ruckgabe des
    `clang-check`-Aufrufs) fuehrt zu einem harten Fehler des Treibers.
-7. Ein simuliertes fehlendes oder falsches `esp-clang`
-   (`clang-tidy --version` ohne „Espressif") fuehrt zu einem harten
-   Fehler, bevor ein Analyselauf versucht wird.
+7. Ein simuliertes fehlendes oder falsches `esp-clang` (aufgeloester
+   `clang-tidy`-Pfad ausserhalb von `$IDF_TOOLS_PATH/tools/esp-clang/...`
+   oder `clang-tidy --version` ohne den exakten `ESP_CLANG_VERSION`-Wert)
+   fuehrt zu einem harten Fehler, bevor ein Analyselauf versucht wird —
+   die reine Teilstring-Pruefung „enthaelt Espressif" allein ist dafuer
+   laut Abschnitt 7.8.4 **nicht** ausreichend; siehe die praezisierenden
+   Faelle 11–13 fuer die einzelnen Pfad-/Versionskriterien.
 8. Die produktiven Verzeichnisse `build/esp32_bringup`/
    `build/esp32_release` werden vom Treiber nie als `-B`-Ziel verwendet.
 9. `scripts/build_esp_idf_profiles.py` wird vom neuen Treiber nicht
@@ -1701,8 +1711,11 @@ Patch-Version.
   gepinnten ESP-IDF-Commits; Version und Linux-AMD64-SHA-256 sind exakt
   geprueft (Abschnitt 7.8.1). Die zusaetzlich benoetigte `pyclang`-
   Python-Abhaengigkeit ist dagegen nicht ueber ein Constraints-File
-  fixiert (live verifiziert, Abschnitt 7.8.1); ihre tatsaechlich
-  installierte Version wird deshalb ebenfalls im CI-Log protokolliert.
+  fixiert (live verifiziert, Abschnitt 7.8.1); da ESP-IDF selbst keine
+  exakte Fixierung liefert, erzwingt der Analysetreiber sie projekteigen
+  als fail-closed Vertrag (`PYCLANG_VERSION = "0.7.0"` in
+  `scripts/esp_idf_contract.py`, harte Pruefung vor jedem Lauf,
+  Abschnitt 7.8.1/7.8.4) statt sie nur zu protokollieren.
   ```
 
 ### 7.12 Hardware-Smoke-Test-Gate (Bring-up und Release, Pflicht)
