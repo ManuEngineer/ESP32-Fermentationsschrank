@@ -93,8 +93,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          IDF_PATH="$RUNNER_TEMP/esp-idf-v6.0.2"
-          IDF_TOOLS_PATH="$RUNNER_TEMP/espressif"
+          export IDF_PATH="$RUNNER_TEMP/esp-idf-v6.0.2"
+          export IDF_TOOLS_PATH="$RUNNER_TEMP/espressif"
           echo "IDF_PATH=$IDF_PATH" >> "$GITHUB_ENV"
           echo "IDF_TOOLS_PATH=$IDF_TOOLS_PATH" >> "$GITHUB_ENV"
 
