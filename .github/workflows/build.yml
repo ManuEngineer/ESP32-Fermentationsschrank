@@ -48,7 +48,7 @@ jobs:
       - name: Formatpruefung
         run: |
           clang-format --dry-run --Werror \
-            $(find src include lib test -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
+            $(find src include lib test main -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
 
       - name: Firmware bauen und Groessenbericht erzeugen
         run: |
@@ -158,6 +158,15 @@ jobs:
           python scripts/build_report.py --output build-report.md --append \
             --esp-idf-profiles bringup release \
             --source-git-sha "$SOURCE_GIT_SHA"
+
+      - name: esp-clang installieren (Static-Analysis-Toolchain)
+        run: python "$IDF_PATH/tools/idf_tools.py" install esp-clang
+
+      - name: ESP-IDF-Static-Analysis (esp-clang, beide Profile)
+        run: |
+          set -euo pipefail
+          . "$IDF_PATH/export.sh"
+          python scripts/run_esp_idf_static_analysis.py all
 
       - name: CI-Artefakt-Scanabdeckung pruefen
         run: python scripts/check_ci_artifact_scan_coverage.py

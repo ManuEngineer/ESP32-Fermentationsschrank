@@ -101,6 +101,10 @@ def main() -> int:
         "Textartefakte": run_script_selftest(
             repo_root, "check_ci_artifact_scan_coverage.py"
         ),
+        "ESP-IDF-Static-Analysis-Treiber (esp-clang) erkennt fehlerhafte "
+        "Werkzeug-/Dateiauswahlfaelle": run_script_selftest(
+            repo_root, "run_esp_idf_static_analysis.py"
+        ),
     }
 
     for name, status in results.items():

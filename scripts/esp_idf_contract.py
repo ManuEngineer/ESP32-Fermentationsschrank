@@ -17,6 +17,21 @@ ESP_IDF_COMMIT = "7101770dc6db2667b3c477cc31365dd1acd6db4e"
 
 PROFILES = ("bringup", "release")
 
+# ESP-IDF-Static-Analysis-Werkzeugvertrag (Issue #74, Commit 4, Plan
+# Abschnitt 7.8.1/7.8.4). `clang --version` meldet den vollstaendigen
+# Toolpaketnamen (ESP_CLANG_TOOL_VERSION); `clang-tidy --version` meldet
+# nachweislich nur die LLVM-Version (ESP_CLANG_LLVM_VERSION), nicht den
+# Toolpaketnamen - deshalb zwei getrennte Konstanten statt einer.
+ESP_CLANG_TOOL_VERSION = "esp-20.1.1_20250829"
+ESP_CLANG_LLVM_VERSION = "20.1.1"
+ESP_CLANG_LINUX_AMD64_SHA256 = (
+    "88910c21350c06a521f243304d1a3adbdb78447123b3f8e27493aab75e3cc07f"
+)
+
+# Von ESP-IDF selbst nicht ueber ein Constraints-File fixiert (siehe Plan
+# Abschnitt 7.8.1); wird deshalb hier projekteigen fail-closed erzwungen.
+PYCLANG_VERSION = "0.7.0"
+
 
 def sdkconfig_overlay(profile: str) -> str:
     """Overlay-Dateiname fuer ein Profil, z. B. 'sdkconfig.defaults.bringup'."""
