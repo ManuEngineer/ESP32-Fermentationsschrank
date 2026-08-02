@@ -2561,14 +2561,19 @@ geschlossen.
   dokumentiert, statt eine nicht zutreffende feste Commitanzahl zu
   behaupten. Diese Regel ersetzt die urspruengliche Vorgabe „genau ein
   Plan-Korrekturcommit" endgueltig — bereits zwei vorherige
-  Ueberarbeitungsrunden dieses Plans bestanden real aus je zwei Commits
-  (`d1a1ec21f7463dc274f7bd9f03d1b46f00a655c4` +
-  `bf9981b2676a0b7662713a4d8968b68274a075c5`; danach
-  `969cd9607dfd382e0510e588872207b96530b79a` +
-  `f43e227db98fd5a4e71ec7f443b5befc331a8627`),
+  Ueberarbeitungsrunden dieses Plans bestanden real aus mehreren Commits:
+  eine Runde aus den zwei Commits
+  `d1a1ec21f7463dc274f7bd9f03d1b46f00a655c4` und
+  `bf9981b2676a0b7662713a4d8968b68274a075c5`; eine spaetere Runde aus den
+  drei Commits `969cd9607dfd382e0510e588872207b96530b79a`,
+  `f43e227db98fd5a4e71ec7f443b5befc331a8627` und
+  `ce251f49a02e3b9defc0513a84c781f9636a7f70`,
   jeweils weil ein Selbstreview nach dem ersten Commit derselben Runde
-  reale, im ersten Commit uebersehene Widersprueche fand. Eine erneut
-  fest behauptete Commitzahl fuer kuenftige Runden waere dieselbe Art von
+  reale, im ersten Commit uebersehene Widersprueche fand — einschliesslich
+  eines Falls, in dem der Nachbesserungscommit selbst wieder eine feste
+  Zahl behauptete und dadurch einen weiteren Nachbesserungscommit noetig
+  machte. Eine erneut fest behauptete Commitzahl fuer kuenftige Runden
+  waere dieselbe Art von
   nicht belastbarer Zusicherung;
 - stattdessen verbindlich: jede Ueberarbeitungsrunde bleibt auf
   `docs/tasks/issue-74-implementation-plan.md` (und die PR-Beschreibung)
@@ -2577,7 +2582,12 @@ geschlossen.
   derselben Runde wird im PR-Beschreibungstext einzeln benannt und
   begruendet (kein stillschweigendes Nachbessern);
 - Draft-PR-Beschreibung verweist auf den neuen Plan-Commit und markiert
-  alle neun vorherigen Plan-Commits als überholt:
+  **alle vorherigen Plan-Korrekturcommits** als überholt (keine feste
+  Zahl nennen — jede Ueberarbeitungsrunde kann, wie die beiden
+  vorherigen bereits gezeigt haben, aus mehr als einem Commit bestehen;
+  eine im Voraus genannte Zahl wird dadurch bei der naechsten Runde
+  zuverlaessig wieder falsch). Vollstaendige Liste zum Zeitpunkt dieser
+  Fassung:
   `05b987e3d2b375b82922990f718d0dc07c730a71`,
   `bbccd74d49b7fcb7c2c529054da5dcd2d8e9a754`,
   `6c8092755dde1fe0b39299abe94a0b3e02003beb`,
@@ -2586,7 +2596,9 @@ geschlossen.
   `72700d76aec8e0a4fb5a0e78bb17d3ebcaa2ad53`,
   `d1a1ec21f7463dc274f7bd9f03d1b46f00a655c4`,
   `bf9981b2676a0b7662713a4d8968b68274a075c5`,
-  `969cd9607dfd382e0510e588872207b96530b79a`;
+  `969cd9607dfd382e0510e588872207b96530b79a`,
+  `f43e227db98fd5a4e71ec7f443b5befc331a8627`,
+  `ce251f49a02e3b9defc0513a84c781f9636a7f70`;
 - Status bleibt `IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL`;
 - vollstaendiges Anhalten bis zu einem commitgebundenen
   `PLAN APPROVED`-Ownerkommentar auf den neuen Plan-Commit.
