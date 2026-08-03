@@ -5,7 +5,10 @@ Fermentationsanwendung.
 
 ```text
 src/main.cpp
-    Composition Root: instanziiert Plattform und Anwendung
+    native-only Composition Root
+
+main/app_main.cpp
+    ESP-IDF Composition Root: instanziiert ESP-IDF-Adapter und Anwendung
 
 lib/device_platform/
     anwendungsneutrale Produktionsschnittstellen, Dienste und Adapter
@@ -16,19 +19,26 @@ lib/device_platform_test_support/
 
 lib/fermentation_app/
     konkrete Fermentationsprogramme und Prozesslogik
+
+lib/device_platform_esp_idf/
+    konkrete ESP-IDF-Adapter; abhaengig von device_platform
 ```
 
 ## Abhaengigkeitsrichtung
 
 ```text
-main -> DevicePlatform
-main -> FermentationApplication
+src/main.cpp -> native Plattform + FermentationApplication
+main/app_main.cpp -> device_platform_esp_idf
+main/app_main.cpp -> FermentationApplication
+device_platform_esp_idf -> device_platform
 FermentationApplication -> IPlatformServices
 DevicePlatform -X-> FermentationApplication
 device_platform_test_support -> device_platform
 device_platform -X-> device_platform_test_support
 FermentationApplication -X-> device_platform_test_support
 main -X-> device_platform_test_support
+device_platform_esp_idf -X-> FermentationApplication
+device_platform_esp_idf -X-> device_platform_test_support
 ```
 
 `-X->` bedeutet: Diese Abhaengigkeit ist nicht erlaubt. `device_platform_test_support`

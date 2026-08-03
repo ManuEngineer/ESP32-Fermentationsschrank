@@ -50,6 +50,7 @@ Zentrale Einstiege:
 - `docs/OPEN_POINTS.md`
 - `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`
 - `docs/CI_AND_QUALITY_GATES.md`
+- `docs/ESP_IDF_UPGRADE_CONTRACT.md`
 - `docs/ENGINEERING_PRINCIPLES.md`
 - `lib/README.md`
 - `references/LINKS.md`
@@ -115,6 +116,12 @@ esp32_bringup
 esp32_release
 ```
 
+`native` ist der ausschliessliche PlatformIO-Hosttestpfad. Die beiden
+ESP32-Produktionsprofile werden ausschliesslich mit dem festgelegten
+ESP-IDF-6.0.2-Pfad gebaut: `src/main.cpp` ist die native-only Composition
+Root, `main/app_main.cpp` die ESP-IDF Composition Root. Ein Arduino-
+Produktionspfad besteht nicht.
+
 `esp32_bringup` startet mit gesperrten Aktoren und dem sichtbaren Zustand
 `HARDWARE_UNVERIFIED`. Ein Wechsel auf `esp32_release` darf unbekannte Hardware
 nicht automatisch freigeben.
@@ -124,13 +131,15 @@ nicht automatisch freigeben.
 ADR-013 ist verbindlich. Die Firmware trennt:
 
 ```text
-src/main.cpp                      Composition Root
+src/main.cpp                      native-only Composition Root
+main/app_main.cpp                 ESP-IDF Composition Root
 lib/device_platform/              anwendungsneutrale Geraetedienste (Produktion)
 lib/device_platform_test_support/ Mockadapter und Simulation fuer native Tests
 lib/fermentation_app/             konkrete Fermentationsanwendung
 ```
 
-- `main.cpp` verbindet Module und enthaelt keine Prozess-, Regel-, Persistenz-
+- `src/main.cpp` und `main/app_main.cpp` verbinden jeweils nur ihre passende
+  Plattform mit der Anwendung und enthalten keine Prozess-, Regel-, Persistenz-
   oder Aktorlogik.
 - `fermentation_app` darf nur schmale Plattform-Schnittstellen verwenden und
   kennt weder Arduino noch die konkrete Klasse `DevicePlatform`.

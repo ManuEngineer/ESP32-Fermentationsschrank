@@ -22,7 +22,7 @@ Der kanonische vorlaeufige Stand und die spaeteren Entscheidungs-Gates stehen in
 
 Die Anforderungen fuer Release 1 sind spezifiziert und mit Pull Request #38 nach
 `main` uebernommen. Die Implementierung erfolgt issueweise, beginnend mit der
-PlatformIO- und Projektgrundlage aus Issue #9.
+ESP-IDF-Produktions- und native Hosttestgrundlage aus Issue #9.
 
 Die geplante Implementierung ist in den Epics #2 bis #8 und den Arbeits- und
 Abnahme-Issues #9 bis #37 strukturiert. Das erste Implementierungs-Issue ist #9.
@@ -93,9 +93,9 @@ Die Projektgrundlage setzt diese Profile wie folgt um:
 
 | Profil | Ziel und sichere Startpolitik |
 |---|---|
-| `native` | Hostbuild ohne Arduino-Hardware; nur Fachlogik und Tests |
-| `esp32_bringup` | generisches `esp32dev`-Ziel, Start als `HARDWARE_UNVERIFIED`, Aktoren gesperrt |
-| `esp32_release` | generisches `esp32dev`-Ziel, Freigabepolitik verlangt ein spaeter bestaetigtes Hardwareprofil; standardmaessig bleiben Aktoren gesperrt |
+| `native` | PlatformIO-Hostbuild ohne Hardware; nur Fachlogik und Tests |
+| `esp32_bringup` | ESP-IDF-Produktionsprofil, Start als `HARDWARE_UNVERIFIED`, Aktoren gesperrt |
+| `esp32_release` | ESP-IDF-Produktionsprofil; verlangt ein spaeter bestaetigtes Hardwareprofil, Aktoren bleiben standardmaessig gesperrt |
 
 Beide ESP32-Profile planen mit 4 MB Flash und setzen keine PSRAM voraus. Web-OTA
 ist als `FUTURE_RELEASE` deaktiviert. Es ist noch keine projektspezifische
@@ -111,7 +111,10 @@ include/
     gemeinsame Projekt- und Buildkonfiguration
 
 src/main.cpp
-    Composition Root; verbindet Plattform und Anwendung
+    native-only Composition Root
+
+main/app_main.cpp
+    ESP-IDF Composition Root; verbindet die Produktionsadapter und Anwendung
 
 lib/device_platform/
     anwendungsneutrale Geraetedienste und Schnittstellen
@@ -144,19 +147,26 @@ gleichberechtigte Quellen; Kommando-IDs sowie Zustands- und Fachrevisionen
 verhindern doppelte oder veraltete Anwendungen. Persistenz, konkrete UI und
 Aktorwirkung bleiben getrennten Folge-Issues vorbehalten.
 
-Alle Profile bauen und die nativen Tests laufen mit:
+Der native Hostpfad baut und testet mit:
 
 ```bash
-pio run
+pio run -e native
 pio test -e native
-python scripts/check_platformio_config.py
+```
+
+Die beiden ESP-IDF-Produktionsprofile werden mit einer aktivierten,
+festgelegten ESP-IDF-`v6.0.2`-Umgebung gebaut:
+
+```bash
+. "$IDF_PATH/export.sh"
+python scripts/build_esp_idf_profiles.py all
 ```
 
 Seit Issue #10 pruefen CI und lokal zusaetzlich Formatierung, Static Analysis,
 Geheimnisse und einen Firmware-/Ressourcen-Groessenbericht:
 
 ```bash
-clang-format --dry-run --Werror $(find src include lib test -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
+clang-format --dry-run --Werror $(find src include lib test main -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
 pio run -e native -t compiledb && clang-tidy -p . include/app_config.hpp \
   lib/device_platform/src/device_platform.cpp \
   lib/device_platform/src/virtual_time_source.cpp \
@@ -164,19 +174,22 @@ pio run -e native -t compiledb && clang-tidy -p . include/app_config.hpp \
   lib/fermentation_app/src/process_state_machine.cpp \
   lib/fermentation_app/src/run_commands.cpp src/main.cpp
 python scripts/check_secrets.py
-python scripts/build_report.py --output build-report.md native esp32_bringup esp32_release
+python scripts/build_report.py --output build-report.md
 ```
 
 Details, Werkzeugversionen, die virtuelle Zeitquelle `ITimeSource`/
 `VirtualTimeSource` sowie die PASS-/FAILED-/BLOCKED-Konvention stehen in
 [`docs/CI_AND_QUALITY_GATES.md`](docs/CI_AND_QUALITY_GATES.md).
 
-Die reproduzierbare CI-Grundlage verwendet PlatformIO Core `6.1.19` und
-`espressif32` `7.0.1`. Das Pruefskript liest sowohl die effektiv aufgeloeste
-Projektkonfiguration als auch die Boardmetadaten von PlatformIO. Dadurch werden
-4 MB Flash und der interne 320-KiB-RAM-Rahmen ohne vorausgesetzte PSRAM
-unabhaengig von den Anwendungs-Makros kontrolliert. Bei einem fehlgeschlagenen
-Firmwarebuild stellt CI den kompakten PlatformIO-Buildlog als Artefakt bereit.
+Die reproduzierbare Produktionsgrundlage verwendet ESP-IDF `v6.0.2`
+(`7101770dc6db2667b3c477cc31365dd1acd6db4e`) in getrennten Bring-up- und
+Release-Buildverzeichnissen. PlatformIO Core `6.1.19` bleibt ausschliesslich
+fuer den nativen Hostpfad. Der Profilguard prueft die generierten ESP-IDF-
+Konfigurationen und effektiven Compile-Definitionen, damit 4 MB Flash, keine
+PSRAM-Abhaengigkeit, deaktiviertes Web-OTA und gesperrte reale Aktoren nicht
+allein von Anwendungs-Makros abhaengen. Bei einem fehlgeschlagenen ESP-IDF-Build
+sichert CI die profilspezifischen Logs; erfolgreiche Builds liefern getrennte
+Artefakte und Ressourcenberichte.
 
 Der Kern greift nicht direkt auf GPIO, 1-Wire, Display, WLAN oder Flash zu,
 sondern verwendet klar getrennte Adapter. Dadurch koennen Zustandsmaschine,
@@ -200,6 +213,7 @@ Einstieg:
 - [`docs/ACCEPTANCE_TESTS.md`](docs/ACCEPTANCE_TESTS.md)
 - [`docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md)
 - [`docs/CI_AND_QUALITY_GATES.md`](docs/CI_AND_QUALITY_GATES.md)
+- [`docs/ESP_IDF_UPGRADE_CONTRACT.md`](docs/ESP_IDF_UPGRADE_CONTRACT.md)
 - [`lib/README.md`](lib/README.md)
 
 Fachliche Spezifikation:

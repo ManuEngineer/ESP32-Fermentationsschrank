@@ -6,6 +6,16 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Changed
 
+- Issue #74 / PR #79: ESP-IDF `v6.0.2`
+  (`7101770dc6db2667b3c477cc31365dd1acd6db4e`) ist nun der einzige
+  ESP32-Produktionspfad. Bring-up und Release bauen, analysieren und berichten
+  getrennt in CI; PlatformIO bleibt ausschliesslich fuer den nativen
+  Hosttestpfad. Der Arduino-Produktionspfad, seine PlatformIO-Profile und der
+  zugehoerige Konfigurationsguard wurden entfernt. Der versionierte
+  ESP-IDF-Upgradevertrag, die ADR- und Architekturzuordnung sowie das
+  Third-Party-Register wurden auf diesen Stand aktualisiert; konkrete
+  ESP-IDF-Persistenz- und Webserverkandidaten bleiben weiterhin offen.
+
 - Laufkommandos aus Issue #15 nach Nachreview des gemergten PR #51 korrigiert
   (Refs #15): phasengerechte statt pauschale Laufrevision bei
   Zieltemperaturaenderung ueber einen typisierten Phasenkontext/Wirkungswert;

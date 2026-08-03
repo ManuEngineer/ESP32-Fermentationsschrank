@@ -1,6 +1,6 @@
 # ADR-013: Wiederverwendbare ESP32-Geraeteplattform
 
-- **Status:** accepted
+- **Status:** accepted; amended by Issue #71 / PR #79
 - **Datum:** 2026-07-22
 
 ## Kontext
@@ -37,7 +37,10 @@ Im aktuellen Repository gilt:
 
 ```text
 src/main.cpp
-    Zusammensetzungsstelle und Arduino-Einstieg
+    native-only Composition Root
+
+main/app_main.cpp
+    ESP-IDF Composition Root
 
 lib/device_platform/
     allgemeine, anwendungsneutrale Produktionsports, Geraetedienste und Adapter
@@ -48,6 +51,9 @@ lib/device_platform_test_support/
 lib/fermentation_app/
     ausschliesslich Fermentationsprogramme, Prozesszustaende und
     fermentationsspezifische Bedienlogik
+
+lib/device_platform_esp_idf/
+    konkrete ESP-IDF-Adapter, abhaengig von device_platform
 ```
 
 `FermentationApplication` darf nicht von der konkreten Klasse `DevicePlatform`
@@ -58,11 +64,13 @@ einem Simulator oder der realen ESP32-Plattform betrieben werden.
 Die Abhaengigkeitsrichtung ist verbindlich:
 
 ```text
-main -> konkrete Plattform + konkrete Anwendung
+src/main.cpp -> native Plattform + konkrete Anwendung
+main/app_main.cpp -> ESP-IDF-Adapter + konkrete Anwendung
 Anwendung -> Plattform-Schnittstellen
 Plattform -> allgemeine Ports und Produktionsadapter
 Test-Support -> Plattform-Schnittstellen
-Produktionsadapter -> ESP32/Arduino oder anwendungsneutrale Hostumgebung
+ESP-IDF-Adapter -> device_platform
+Produktionsadapter -> ESP-IDF oder anwendungsneutrale Hostumgebung
 ```
 
 Rueckwaertsabhaengigkeiten sind unzulaessig. Insbesondere darf:
@@ -70,7 +78,7 @@ Rueckwaertsabhaengigkeiten sind unzulaessig. Insbesondere darf:
 - `device_platform` weder `fermentation_app` noch `device_platform_test_support`
   kennen,
 - `fermentation_app` nicht von `device_platform_test_support` abhaengen,
-- `src/main.cpp` keinen Test-Support einbinden,
+- keine Composition Root Test-Support einbinden,
 - `device_platform` keine Fermentationsprogramme, Fermentationszustaende oder
   produktspezifischen UI-Texte kennen.
 
@@ -82,7 +90,7 @@ Ein Modul gehoert zur Geraeteplattform, wenn es:
 - fuer mindestens einen weiteren plausiblen Geraetetyp unveraendert nuetzlich ist,
 - keine direkte Abhaengigkeit zur Fermentations-Zustandsmaschine besitzt,
 - hinter Ports oder schmalen Dienstschnittstellen testbar ist,
-- im Profil `native` ohne Arduino-Hardware gebaut und getestet werden kann.
+- im Profil `native` ohne reale Hardware gebaut und getestet werden kann.
 
 Ein Modul gehoert zur Fermentations-App, wenn es beispielsweise Folgendes kennt:
 
@@ -121,16 +129,18 @@ sie selbst ein regulaer nutzbarer Plattformdienst ohne Test-Introspektion,
 Fehlerinjektion oder anwendungsspezifisches Simulationsmodell ist. Reine Mocks
 und Testmodelle gehoeren immer in `device_platform_test_support`.
 
-## Rolle von `main.cpp`
+## Rolle der Composition Roots
 
-`main.cpp` ist eine Composition Root. Die Datei darf:
+`src/main.cpp` ist ausschliesslich die native Composition Root.
+`main/app_main.cpp` ist ausschliesslich die ESP-IDF Composition Root. Beide
+Dateien duerfen jeweils:
 
 - konkrete Plattform- und Anwendungsmodule instanziieren,
 - deren `begin()`- und `update()`-Lebenszyklus verbinden,
-- den Arduino-Einstieg und minimale Bootausgabe bereitstellen.
+- ihren passenden Plattform-Einstieg und minimale Bootausgabe bereitstellen.
 
-Sie darf keine Prozesslogik, Sensorfilter, Regelalgorithmen, Persistenzregeln oder
-Aktorentscheidungen enthalten.
+Sie duerfen keine Prozesslogik, Sensorfilter, Regelalgorithmen,
+Persistenzregeln oder Aktorentscheidungen enthalten.
 
 ## Noch keine Auslagerung in ein separates Repository
 

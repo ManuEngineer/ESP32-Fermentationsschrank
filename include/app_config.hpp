@@ -3,19 +3,19 @@
 #include <cstdint>
 
 #ifndef APP_TARGET_FLASH_MB
-#error "APP_TARGET_FLASH_MB must be defined by the PlatformIO profile"
+#error "APP_TARGET_FLASH_MB must be defined by the active build profile"
 #endif
 
 #ifndef APP_REQUIRE_PSRAM
-#error "APP_REQUIRE_PSRAM must be defined by the PlatformIO profile"
+#error "APP_REQUIRE_PSRAM must be defined by the active build profile"
 #endif
 
 #ifndef APP_WEB_OTA_ENABLED
-#error "APP_WEB_OTA_ENABLED must be defined by the PlatformIO profile"
+#error "APP_WEB_OTA_ENABLED must be defined by the active build profile"
 #endif
 
 #ifndef APP_REAL_ACTUATORS_ENABLED
-#error "APP_REAL_ACTUATORS_ENABLED must be defined by the PlatformIO profile"
+#error "APP_REAL_ACTUATORS_ENABLED must be defined by the active build profile"
 #endif
 
 #if (defined(APP_PROFILE_NATIVE) + defined(APP_PROFILE_ESP32_BRINGUP) + \
