@@ -48,6 +48,14 @@ Mindestens:
 - Persistenzfehler-Latch und Bootauswertung
 - Aufbewahrung und Bereinigung
 - PIN-unabhaengiger Vollreset-Ablauf als Zustands- und Berechtigungslogik
+- Device-Shell mit Header, exakt vier festen Slots, Home-/Zurueck-Hierarchie
+  und sichtbaren leeren Slots
+- gemeinsame rendererunabhaengige View-Modelle, Commands, strukturierte
+  Command-Ergebnisse, Bestaetigungen und Snapshotaktualisierung fuer Touch/Web
+- Textfallback aktive Sprache -> Englisch -> sichtbarer technischer Schluessel,
+  Theme-Standardfallback und 320-x-240-Textlaengenvertrag
+- lokale Servicefreigabe: 10 Minuten Inaktivitaet, kein UI-Parameter, keine
+  R1-Maximaldauer sowie Sperre bei Neustart, Abmelden und Safetyzustandswechsel
 
 Tests sind reproduzierbar und unabhaengig von realer Uhrzeit, Netzwerk und
 zufaelliger Taskplanung.
@@ -74,6 +82,10 @@ Mindestens:
 - kein Service- oder Aktortest aus `SAFE_BOOT`
 - Quittierung ohne Fehlerreset
 - Benutzerentscheidung bei `WARNING_REQUIRES_ACTION`
+- Touchnavigation ohne Wischgeste, sichtbares Pressfeedback, keine
+  Doppelausloesung und erster Wake-Touch ohne Command
+- SAFE_BOOT mit reduziertem aktorfreiem Diagnose-/Recoveryzugang, getrennt von
+  normalem PIN-Service und von Raw-Touch-Kalibrierungsrecovery
 
 Die Simulation prueft erwartete Zustaende, Meldungen, Revisionen und abstrakte
 Aktorbefehle. Eine verbotene Aktorfreigabe laesst den Test fehlschlagen.
@@ -89,6 +101,8 @@ Mindestens:
 - Firmware- und Ressourcenbericht
 - Factory-Konfiguration und Schemaversionen
 - Deutsch, Spanisch und Englisch
+- konfiguriertes Branding, Sprach-/Theme-Pakete und gezielt erzeugte Fontassets
+  innerhalb des 4-MB- und ohne-PSRAM-Budgets
 - Web- und lokale UI-Ressourcen
 - keine eingebetteten Geheimnisse
 - keine produktiv verwendeten `TBD`-Werte
@@ -108,6 +122,8 @@ Vor einer thermischen Belastung:
 - drei DS18B20 mit ROM-Zuordnung
 - 1-Wire-Bustopologie und Produkt-Hot-Plug
 - Displaycontroller, Touchcontroller, Rotation und Kalibrierung
+- Raw-Touch-Kalibrierungsrecovery im 10-Sekunden-Fenster getrennt von
+  PIN-unabhaengigem Vollreset; keine physische Bedienannahme
 - Innen- und Aussenluefter
 - Summer
 - R_IS/L_IS nur bei nachgewiesener Nutzbarkeit

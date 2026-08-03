@@ -154,14 +154,14 @@ und Recovery nur gemaess #24-Fehlerresetvertrag.
 
 ## E4 – Lokale Bedienung, Web und Diagnose
 
-- #25 `Gemeinsame UI-Modelle, Navigation und Mehrsprachigkeit`
-- #26 `Lokale Touchoberflaeche fuer Programme, Lauf und Service`
+- #25 `Gemeinsame UI-Modelle, Device-Shell-Vertraege und Mehrsprachigkeit`
+- #26 `Lokale Touch-Shell und Fermentations-Workspace`
 - #27 `Web-API, Weboberflaeche, Anmeldung und Bedienkonflikte`
 - #28 `Diagnose, Diagramme, Serviceablauf und Exporte`
 
 ```text
 #12/#14/#15/#20/#24 -> #25
-#25/#12/#15 -> #26
+#25/#12/#14/#15/#20/#24 -> #26
 #25/#12/#15/#16 -> #27
 #19/#20/#22/#23/#24/#25 -> #28
 ```
@@ -174,14 +174,14 @@ entwickelt. Reale Display- und Touchintegration steht in #31.
 
 - #29 `ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende`
 - #30 `DS18B20-Busse und reale Sensoradapter integrieren`
-- #31 `Display- und Touchadapter integrieren und kalibrieren`
+- #31 `Renderer, Display-/Touchadapter und Kalibrierung nach Hardwarebeweis`
 - #32 `Luefter, Summer und Onboard-MOSFET-Ausgaenge integrieren`
 - #33 `BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen`
 
 ```text
 #9/#10/#11/#24 -> #29
 #20/#21/#29 -> #30
-#25/#26/#29 -> #31
+#25/#26/#29/#74 -> #31
 #23/#24/#28/#29 -> #32
 #23/#24/#29/#30/#32 -> #33
 ```

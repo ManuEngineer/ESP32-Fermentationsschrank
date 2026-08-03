@@ -7,6 +7,9 @@ Dieses Dokument beschreibt die lokale Bedienoberflaeche auf dem
 verbindlich. Detailablaeufe, einzelne Dialoge und die genaue visuelle Gestaltung
 werden in den folgenden Teilphasen ergaenzt.
 
+Die verbindliche Shell-, Sprach-, Theme- und Renderergrenze steht in
+[`DEVICE_UI_ARCHITECTURE_DECISIONS.md`](DEVICE_UI_ARCHITECTURE_DECISIONS.md).
+
 ## Hardware- und Bedienannahmen
 
 - Displayausrichtung: Querformat, 320 x 240 Pixel
@@ -16,9 +19,33 @@ werden in den folgenden Teilphasen ergaenzt.
 - keine wichtigen Funktionen nur ueber kleine Symbole
 - jeder Unterdialog besitzt einen klaren `Zurueck`- oder `Abbrechen`-Weg
 - kritische Aktionen benoetigen eine bewusste Bestaetigung
+- es gibt keine physischen Taster, keinen Encoder, keinen Programmwahlschalter
+  und keine Status-LED als Bedien- oder Recoveryersatz
 
 Die genaue Touchkalibrierung und der konkrete Touchcontroller bleiben von der
 Hardwareverifikation abhaengig.
+
+## Feste Device-Shell
+
+Jede normale lokale Ansicht verwendet dieselbe Shell: Der Header zeigt das zur
+Build-Zeit gewaehlte Branding, die aktive Sprache, WLAN-Status und Uhrzeit. Der
+mittlere Bereich gehoert vollstaendig der aktiven Anwendung oder dem gewaehlten
+Plattformbereich.
+
+Am unteren Rand befinden sich immer genau vier gleich breite, feste Slots.
+Nicht benoetigte Slots bleiben sichtbar leer und verbreitern keine anderen
+Slots. Auf der Hauptansicht enthalten sie die primaeren App- und
+Plattformbereiche; auf Unterseiten enthalten sie lokale Navigation, Tabs,
+`Home`, `Zurueck`, `Abbrechen` oder `Speichern`. Auf der ersten Ebene unterhalb
+der Hauptansicht ist `Home` sichtbar, auf tieferen Ebenen ersetzt `Zurueck` es
+und steigt genau eine Ebene auf. Ungespeicherte Aenderungen und kritische
+Abläufe duerfen dadurch weder still verworfen noch umgangen werden.
+
+Nur Splashscreen, Touchkalibrierung, kritische Recoverybildschirme und
+ausdruecklich nicht unterbrechbare Sicherheits- oder Bestaetigungsablaeufe
+duerfen die Shell voruebergehend vollflaechig ersetzen. Status und Service sind
+Plattformbereiche; die Fermentations-App darf rendererunabhaengige
+Unterseiten hinzufuegen, aber keine Plattformseiten oder Schutzregeln ersetzen.
 
 ## Grundprinzip: zustandsabhaengiger Hauptbildschirm
 
@@ -34,7 +61,7 @@ Beispiel:
 ```text
 Fermentationsschrank
 
-Luft:       22,4 °C
+Schrank:    22,4 °C
 Produkt:    nicht angeschlossen
 
 [Programm starten]
@@ -44,7 +71,8 @@ Produkt:    nicht angeschlossen
 
 Verbindliche Inhalte:
 
-- aktuelle Schranklufttemperatur
+- aktuelle Schranktemperatur; die technische Sensorrolle bleibt
+  `Schrankluftfuehler`
 - Produkttemperatur oder klarer Status `nicht angeschlossen`
 - sichtbarer Sensorfehler, falls ein erkannter Sensor ungueltig ist
 - Start eines gespeicherten Programms
@@ -64,7 +92,7 @@ FERMENTIERT
 
 Soll:       42,0 °C
 Produkt:    41,8 °C
-Luft:       42,3 °C
+Schrank:    42,3 °C
 Restzeit:   06:14
 
 [Details]       [STOP]
@@ -104,27 +132,25 @@ Verbindliche Regeln:
   versehentliche Ausloesung geschuetzt
 - Dialoge duerfen nicht mehrere unterschiedliche Aktionen unter identischen
   Symbolen verstecken
-- bei mehr Inhalt als auf eine Seite passt, werden grosse Seiten- oder
-  Scroll-Schaltflaechen verwendet
-
-Eine feste Navigationsleiste wird nicht vorausgesetzt, weil sie auf 240 Pixel
-Hoehe zu viel Platz beanspruchen kann.
+- bei mehr Inhalt als auf eine Seite passt, bewegen sichtbare `Auf`-/`Ab`-
+  Schaltflaechen am rechten Inhaltsrand seitenweise oder um vollstaendige
+  Eintraege; weder horizontales noch freies Wischscrollen ist erforderlich
 
 ## Temperaturanzeige
 
-Produkt- und Schranklufttemperatur werden waehrend eines Laufes grundsaetzlich
+Produkt- und Schranktemperatur werden waehrend eines Laufes grundsaetzlich
 gleichwertig und gleich gross angezeigt, sofern beide verfuegbar sind.
 
 Beispiele:
 
 ```text
 Produkt     41,8 °C
-Luft        42,3 °C
+Schrank     42,3 °C
 ```
 
 ```text
 Produkt     --.- °C
-Luft        24,1 °C
+Schrank     24,1 °C
 ```
 
 Die Hauptansicht muss nicht durch unterschiedliche Schriftgroessen erklaeren,
@@ -152,7 +178,8 @@ Das Display bleibt nicht dauerhaft mit voller Helligkeit aktiv.
 
 Vorgesehenes Verhalten:
 
-1. Nach einer einstellbaren Zeit ohne Bedienung wird die Beleuchtung reduziert.
+1. Nach einer zentral konfigurierten Zeit ohne Bedienung wird die Beleuchtung
+   reduziert; die konkrete Grenze ist `TBD_HARDWARE`/`TBD_COMMISSIONING`.
 2. Eine Beruehrung stellt zuerst die normale Helligkeit wieder her.
 3. Die erste Beruehrung zum Aufwecken darf keine darunterliegende Aktion
    versehentlich ausloesen.
@@ -161,8 +188,9 @@ Vorgesehenes Verhalten:
 5. Ein Sicherheitsfehler darf nicht durch eine abgedunkelte Anzeige verborgen
    bleiben.
 
-Die konkrete Wartezeit und Helligkeitsstufe werden in
-`SETTINGS_AND_STORAGE.md` festgelegt.
+Helligkeit ist eine plattformseitige Benutzereinstellung. Dimm- und spaetere
+Ausschaltzeiten bleiben innerhalb zentraler Grenzen; Hintergrundereignisse
+zaehlen nicht als Bedienung.
 
 ## Programmstart und Startbestaetigung
 
@@ -176,7 +204,7 @@ Joghurt mild
 Ziel:          42,0 °C
 Dauer:         8:00 h
 Vorheizen:     Ja
-Regelung:      Produkt, sonst Luft
+Regelung:      Produkt, sonst Schrank
 Danach:        Kuehlen und halten
 
 [START]       [Zurueck]

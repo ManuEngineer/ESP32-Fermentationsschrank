@@ -33,7 +33,7 @@ Fermentation laeuft
 
 Soll:       42,0 °C
 Produkt:    41,8 °C
-Luft:       42,3 °C
+Schrank:    42,3 °C
 Restzeit:   06:14
 Danach:     Kuehlen und halten
 
@@ -117,7 +117,7 @@ Nach abgeschlossenem Vorheizen zeigt das Geraet:
 ```text
 Schrank vorbereitet
 
-Luft:       42,1 °C
+Schrank:    42,1 °C
 Produkt:    nicht angeschlossen
 
 Produkt einsetzen und Tuer schliessen.
@@ -228,7 +228,7 @@ Nach dem automatischen Wechsel vom Produkt- zum Schrankluftfuehler wird eine
 Warnung angezeigt:
 
 ```text
-WARNUNG: Regelung ueber Luftfuehler
+WARNUNG: Regelung ueber Schrankluftfuehler
 
 Produktfuehler ausgefallen
 Wechsel um 14:37 Uhr

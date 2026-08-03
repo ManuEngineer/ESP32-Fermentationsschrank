@@ -62,6 +62,13 @@ Die erste Schemageneration enthaelt nur bereits fachlich bestimmte Werte:
 - ein typisiertes, noch parameterloses ServiceConfiguration-Dokument
 - den gespeicherten ProgramCatalog
 
+Die Device-UI ergaenzt diese Ebene nur ueber ihre eigenen versionierten
+Vertraege: Build-Konfiguration bestimmt enthaltenes ManuEngineer-Branding,
+Sprachpakete, gezielt erzeugte Fonts und Themes. Die aktive lokale Sprache und
+das aktive, enthaltene Theme sind persistente Laufzeitwahlen. Ein Branding ist
+in Release 1 nicht zur Laufzeit wechselbar; ein unvollstaendiges Theme faellt
+sicher auf das Standardtheme zurueck.
+
 Spaetere Schemagenerationen koennen nach Festlegung durch ihre zustaendigen
 Issues beispielsweise enthalten:
 
@@ -137,6 +144,19 @@ Die Service-PIN ist im normalen Betrieb mindestens erforderlich fuer:
 - gefuehrte Aktor- und Hardwaretests aus validiertem `STANDBY`
 - normale Wiederherstellungsfunktionen
 - bewusst aus dem normalen Menue gestarteten vollstaendigen Werksreset
+
+### Servicefreigabe auf dem lokalen Touchdisplay
+
+Die lokale Servicefreigabe ist eine fluechtige, getrennte Touchsession. Sie
+endet nach 10 Minuten Inaktivitaet, bei Geraeteneustart, ausdruecklichem
+Abmelden sowie den durch die Safetylogik definierten sicherheitsrelevanten
+Zustandswechseln. Die 10 Minuten sind zentraler Build-/Produktparameter, nicht
+als normale oder Serviceeinstellung speicher- oder aenderbar. Release 1 besitzt
+keine absolute Maximaldauer fuer diese lokale Freigabe.
+
+Die Web-Servicefreigabe bleibt davon getrennt und folgt weiterhin den in
+`WEB_UI.md` definierten 5 Minuten Inaktivitaet und 15 Minuten absolut. Beide
+Freigaben ersetzen keine fachliche oder Safetypruefung.
 
 ### Ausnahme bei vergessener Service-PIN
 

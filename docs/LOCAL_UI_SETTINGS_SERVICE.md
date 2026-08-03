@@ -6,7 +6,11 @@ Dieses Dokument definiert Menuestruktur, Diagnose, Servicezugang,
 Wiederherstellung, Touchkalibrierung und Sprachen. Sicherheits- und
 Recoverykorrekturen aus PR #38 sind integriert.
 
-## Hauptmenue
+Die feste Device-Shell mit genau vier Slots, Plattformbereichen und
+App-Erweiterungspunkten folgt
+[`DEVICE_UI_ARCHITECTURE_DECISIONS.md`](DEVICE_UI_ARCHITECTURE_DECISIONS.md).
+
+## Hauptmenue und Plattformbereiche
 
 ```text
 Menue
@@ -23,6 +27,12 @@ Menue
 
 Regeln:
 
+- `Status` und `Service` sind feste Plattformbereiche der Shell. Die App darf
+  eigene Status-, Diagnose-, Kalibrier- und Wartungsseiten nur ueber die
+  rendererunabhaengigen Erweiterungspunkte hinzufuegen; Plattformseiten und
+  ihre Schutzregeln bleiben erhalten.
+- Jeder Bereich nutzt die vier festen Slots. Auf langen Seiten bewegen sichtbare
+  `Auf`-/`Ab`-Schaltflaechen am rechten Inhaltsrand; Wischen ist nicht noetig.
 - normale Funktionen stehen vor technischen Funktionen
 - `Service` ist klar als geschuetzt gekennzeichnet
 - `Diagnose` ist keine Aktorsteuerung
@@ -70,6 +80,15 @@ Die PIN hebt keine Sensor-, Aktor-, Persistenz- oder Sicherheitspruefung auf.
 Fehlversuche werden begrenzt oder verzoegert. Kritische Aktionen besitzen eine
 eigene Bestaetigung.
 
+Frei sichtbar bleiben Firmwareversion, Geraete-, Netzwerk- und Zeitstatus,
+Anzeigehelligkeit sowie passive Logs und Diagnose. Neustart,
+Netzwerkruecksetzen sowie gespeicherte Daten exportieren oder loeschen benoetigen
+eine eigene Bestaetigung. Die normale, aus dem Menue gestartete
+Touchkalibrierung benoetigt **immer Service-PIN und eigene bewusste
+Bestaetigung**. Werkseinstellungen, Aktortest, Sensorkalibrierung,
+Reglerparameter, Hardwarezuordnung und andere sicherheitsrelevante
+Servicefunktionen benoetigen zusaetzlich die PIN.
+
 ### Eintritt und Aktortests
 
 - Eintritt nur aus validiertem `STANDBY`
@@ -89,7 +108,16 @@ Nach Inaktivitaet wird der Servicebereich geschlossen:
 5. Berechtigung verwerfen
 6. sicheren Bildschirm anzeigen
 
-Die genaue Zeit bleibt eine spaetere Serviceeinstellung innerhalb fester Grenzen.
+Die lokale Touch-Servicefreigabe endet nach **10 Minuten Inaktivitaet**. Diese
+Zeit ist ein zentraler Build-/Produktparameter, nicht ueber die UI aenderbar
+und besitzt in Release 1 keine absolute Maximaldauer. Relevante Bedienung im
+geschuetzten Bereich setzt den Inaktivitaetstimer zurueck; Hintergrundupdates
+und automatische Anzeigen nicht.
+
+Die Freigabe wird ebenso bei Geraeteneustart, ausdruecklichem Abmelden und bei
+den durch den Safetyvertrag definierten sicherheitsrelevanten Zustandswechseln
+verworfen. Editoren duerfen dabei keine Eingabe still verlieren; Speichern
+fordert nach erneutem Entsperren wieder die PIN.
 
 ## Normales Wiederherstellungsmenue
 
@@ -165,10 +193,12 @@ Regeln:
 
 ### Normaler Weg
 
-PIN-geschuetzt im Servicebereich. Neue Werte werden erst nach erfolgreicher
-Plausibilitaetspruefung gespeichert.
+Die normale, aus dem Menue gestartete Touchkalibrierung ist nur im
+PIN-geschuetzten Servicebereich nach einer eigenen bewussten Bestaetigung
+zulaessig. Neue Werte werden erst nach erfolgreicher Plausibilitaetspruefung
+gespeichert.
 
-### Wiederherstellung bei unbrauchbarer Kalibrierung
+### PIN-unabhaengige Raw-Touch-Recovery bei unbrauchbarer Kalibrierung
 
 ```text
 Geraet einschalten
@@ -179,17 +209,22 @@ Geraet einschalten
 -> erst danach speichern
 ```
 
-- erlaubt keinen allgemeinen Servicezugang
+- ist PIN-unabhaengig, erlaubt aber ausschliesslich die
+  Kalibrierungswiederherstellung und keinen allgemeinen Servicezugang
 - alle Aktoren bleiben AUS
 - bei Abbruch bleiben alte beziehungsweise keine Werte aktiv
 - Rohwerte und Controlleranbindung bleiben `TBD_HARDWARE`
 
 Die Touchkalibrierungs-Recovery und der PIN-unabhaengige Vollreset muessen durch
-unterschiedliche, eindeutig bestaetigte Ablaeufe getrennt sein.
+unterschiedliche, eindeutig bestaetigte Ablaeufe getrennt sein. Mangels
+physischer Bedienelemente duerfen weder Taster noch Encoder als Ersatzweg
+vorausgesetzt werden; konkrete Raw-Touch-Geste, Schwellen und
+Verwechselungsschutz bleiben `TBD_HARDWARE` und Scope von #31.
 
 ## SAFE_BOOT-Oberflaeche
 
-`SAFE_BOOT` bietet nur:
+`SAFE_BOOT` bietet keinen normalen PIN-Servicebereich. Es bietet nur einen
+reduzierten, aktorfreien Diagnose-/Recoveryzugang:
 
 - passive Diagnose
 - Fehler- und Resetjournal
@@ -215,10 +250,26 @@ Benutzerdefinierte Namen werden nicht automatisch uebersetzt.
 Technische Regeln:
 
 - stabile Sprachschluessel statt sichtbarer Texte in der Prozesslogik
+- Plattform und App besitzen getrennte Textnamensraeume. Jede Firmware legt
+  die enthaltenen Sprachpakete zur Build-Zeit fest; die aktive lokale Sprache
+  bleibt persistent zur Laufzeit waehbar.
 - gleicher Funktions- und Sicherheitsumfang in allen Sprachen
-- Deutsch als definierter Fallback
+- fehlende Uebersetzung: aktive Sprache, danach Englisch, danach sichtbarer
+  technischer Schluessel
 - Sprachwechsel ohne Wirkung auf Programme oder Lauf
-- Zeichensatz unterstuetzt Umlaute, `ñ` und Akzente
+- Sprachpakete deklarieren ihren Zeichensatz, Fontunterstuetzung,
+  Textlaengenpruefung und 320-x-240-Eignung; es wird kein voller grosser
+  Unicode-Font eingebunden
+
+## Branding und Themes
+
+Das Standardbranding ist ManuEngineer und wird mit Logo, Bootlogo und
+semantischen Theme-Grundwerten zur Build-Zeit festgelegt; Laufzeitbranding ist
+nicht Teil von Release 1. Release 1 enthaelt nur das ManuEngineer Dark Theme.
+Die Plattform kann spaeter weitere bereits zur Build-Zeit enthaltene Themes
+laden; die aktive Themeauswahl ist persistent und verwendet ausschliesslich
+semantische Tokens. Unvollstaendige Themes fallen sicher auf das Standardtheme
+zurueck.
 
 ## Akzeptierte Entscheidungen
 
