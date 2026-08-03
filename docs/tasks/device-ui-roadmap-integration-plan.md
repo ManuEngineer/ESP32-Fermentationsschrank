@@ -60,8 +60,8 @@ Ownerentscheidung.
 | UI-17 zweiter Slot | fehlt | #26 | appgelieferter zweiter Slot; Fermentation: Rezepte und Snapshotschutz |
 | UI-18 Status/Service-Navigation | fehlt | Service UI, #25/#26 | vier Slots auch dort, Plattform vor Apps, tiefe Ebene gemass UI-02 |
 | UI-19 Service-Schutz | teilweise | Service-/Web-UI, #26/#27 | Freier, bestaetigter und PIN-geschuetzter Bereich; Safety bleibt separates Gate |
-| UI-20 PIN-Parameter | widerspruechlich | Service UI, `SETTINGS_AND_STORAGE.md` | lokale Werte aus normalen Einstellungen entfernen; zentraler Build-/Produktparameter, Richtwert 10 min |
-| UI-21 Servicesitzung | widerspruechlich/offen | Service-/Web-UI, #26/#27 | getrennte Touch-/Web-Sitzungen; Touch inaktivitaetsbasiert, Web-5/15-Minuten-Policy nicht still aendern |
+| UI-20 PIN-Parameter | widerspruechlich | Service UI, `SETTINGS_AND_STORAGE.md` | lokale Inaktivitaet: zentraler Build-/Produktparameter, initial 10 min, nicht per UI aenderbar, keine R1-Maximaldauer |
+| UI-21 Servicesitzung | widerspruechlich | Service-/Web-UI, #26/#27 | getrennte Touch-/Web-Sitzungen; Touch nur inaktivitaetsbasiert, Web verbindlich 5 min inaktiv plus 15 min absolut |
 | UI-22 Ruhezustand | teilweise | Local UI, #26/#31 | Plattformvertrag, erster Touch nur wake, Werte hardwareabhaengig |
 | UI-23 Feedback | teilweise | Runtime UI, #26/#32 | semantische Plattformmuster, App-Intent, Touchton standardmaessig aus |
 | UI-24 nur Touch | teilweise | Hardware, Audits, #26/#31 | Ausschluss physischer Controls zentral dokumentieren; keine erfundene Resetgeste |
@@ -75,16 +75,18 @@ Ownerentscheidung.
    `Schrank` fuer die benutzernahe Temperaturanzeige und behält
    `Schrankluftfuehler` fuer die technische Sensorrolle. `Produkt` bleibt
    unveraendert.
-3. Lokale Service-Inaktivitaet ist keine normale Serviceeinstellung. Sie wird
-   zentraler Build-/Produktparameter; ihre konkrete Default-/Grenzentscheidung
-   bleibt vom technischen Auth-/Konfigurationsvertrag abhaengig.
+3. Lokale Service-Inaktivitaet ist keine normale Serviceeinstellung. Sie ist
+   ein zentraler Build-/Produktparameter mit initial 10 Minuten, nicht ueber
+   die UI aenderbar und ohne absolute Maximaldauer in Release 1. Die lokale
+   Freigabe endet bei Neustart, explizitem Abmelden, Inaktivitaetsablauf und
+   definierten sicherheitsrelevanten Zustandswechseln.
 4. Deutsch als Fallback wird fuer Touch und Web durch `aktive Sprache ->
    Englisch -> sichtbarer technischer Schluessel` ersetzt. Touch-Sprache bleibt
    persistent geraetebezogen, Web-Sprache browser-/sitzungsbezogen.
-5. Die 5-Minuten-Inaktivitaet und 15-Minuten-Absolutgrenze im Web werden nicht
-   ueberschrieben. Der Plan dokumentiert getrennte Policys: Touch folgt UI-21,
-   Web behält die bestehende sicherheitsspezifische Grenze, bis ein expliziter
-   Ownerentscheid beide vereinheitlicht.
+5. Die 5-Minuten-Inaktivitaet und 15-Minuten-Absolutgrenze im Web werden als
+   strengere netzwerkseitige Securitygrenze bewusst unveraendert beibehalten.
+   Touch und Web verwenden getrennte Sessions und werden in Release 1 nicht
+   vereinheitlicht.
 6. `SAFE_BOOT` bekommt keinen normalen PIN-Service. Er erhaelt nur den
    reduzierten, aktorfreien Diagnose-/Recoverybereich. Dies praezisiert, statt
    die bestehende Sperre zu lockern.
@@ -121,14 +123,12 @@ Codebegriffe wurden als technische Fehlertreffer ausgeschlossen.
 #32 realer Pieper (semantischer Intent aus #25/#26) ----------------------------+
 ```
 
-Empfehlung: **kein neues Issue jetzt erstellen**. #25 ist inhaltlich breit,
-bleibt aber die einzige richtige Quelle fuer rendererunabhaengige gemeinsame
-Vertraege. Sein Implementierungsplan muss die Arbeit in kleine, testbare
-Commit-Schritte gliedern (Contracts/Snapshots, Navigation/Locale/Theme,
-Tests). Ein neuer Vorlaeufer wuerde dieselben Verträge doppeln und #25/#26
-unnoetig verschieben. Ergibt die spaetere Aufwandsschaetzung mehr als einen
-kleinen Issue-PR, ist vor der Umsetzung ein Ownerentscheid fuer einen Split
-einzuholen.
+Verbindlicher Schnitt: **#25 wird nicht gesplittet.** #25 bleibt die einzige
+Quelle fuer rendererunabhaengige gemeinsame Vertraege. Sein spaeterer
+Implementierungsplan gliedert die Arbeit in kleine, testbare Commit-Schritte
+(Contracts/Snapshots, Navigation/Locale/Theme, Tests). Ein Split darf erst nach
+konkreter Aufwandsschaetzung und erneuter Ownerentscheidung vorgeschlagen
+werden.
 
 ## Vorgeschlagene neue Bodies
 
@@ -169,6 +169,11 @@ Meldungsentscheidungen, leiten sie jedoch nicht neu her.
   Zeichensatz, Font-/Textlaengen- und 320x240-Layoutvertrag;
 - semantische Theme-Tokens, Dark Theme als einziges R1-Theme und fail-closed
   Standardtheme-Fallback;
+- zentraler UI-Sitzungsvertrag: lokale Touch-Servicefreigabe endet nach 10
+  Minuten Inaktivitaet sowie bei Neustart, explizitem Abmelden und definierten
+  sicherheitsrelevanten Zustandswechseln; keine lokale R1-Maximaldauer und
+  keine UI-Aenderung dieses Build-/Produktparameters; Web bleibt als getrennte,
+  strengere 5/15-Minuten-Policy spezifiziert;
 - kleines Komponenten-/Layoutvokabular ohne Widget- oder Rendererframework;
 - native Tests fuer Modi, Navigation, Fallbacks, Commands, Meldungen,
   Aktualisierung und alle Sprachpakete.
@@ -183,6 +188,9 @@ Meldungsentscheidungen, leiten sie jedoch nicht neu her.
 ## Abnahme
 - Shell, vier Slots, Home/Zurueck und Erweiterungspunkte sind nativ testbar;
 - Touch und Web koennen denselben Snapshot und dieselben Commands verwenden;
+- der gemeinsame Vertrag unterscheidet lokale 10-Minuten-Inaktivitaet ohne
+  Maximaldauer von der getrennten Web-5/15-Minuten-Policy; die durch #24
+  definierten Sicherheitszustandswechsel sperren lokal fail closed;
 - fehlende Texte sind nie still deutsch, sondern EN oder sichtbarer Key;
 - unvollstaendiges Theme wird sicher auf Standard abgebildet;
 - alle Contracts bleiben klein, stark typisiert und rendererunabhaengig.
@@ -210,7 +218,9 @@ Meldungsentscheidungen, leiten sie jedoch nicht neu her.
 - integrierte Header-Touchflaechen fuer Sprache/WLAN/Uhrzeit ohne permanente
   Buttonoptik;
 - Splash, nichtblockierender Startstatus, aktorfreie Recoveryanzeige, normale
-  PIN-UI, inaktivitaetsbasierte lokale Servicesitzung, UI-Ruhezustand und
+  PIN-UI, eine lokale 10-Minuten-Inaktivitaetssitzung ohne absolute R1-
+  Maximaldauer, explizites Abmelden und Sperre bei Neustart beziehungsweise
+  definiertem sicherheitsrelevantem Zustandswechsel, UI-Ruhezustand und
   semantische Pieper-/Feedbackintents;
 - vollstaendige Simulation ohne Displayhardware und 320x240
   Layout-/Screenshot-/Golden- oder gleichwertige Zustands-/Layouttests.
@@ -227,6 +237,10 @@ Meldungsentscheidungen, leiten sie jedoch nicht neu her.
 ## Abnahme
 - jeder lokale Bedienpfad ist simuliert pruefbar; erster Wake-Touch fuehrt kein
   Command aus; kritische Aktionen sind bestaetigt und nicht doppelt ausloesbar;
+- lokale Servicefreigabe wird nach 10 Minuten ohne relevante Bedienhandlung,
+  nach Abmelden, Neustart und jedem definierten sicherheitsrelevanten
+  Zustandswechsel verworfen; Hintergrundupdates verlaengern sie nicht und es
+  existiert keine absolute R1-Maximaldauer;
 - kein Screen leitet Fach-/Safetyzustand aus Rohwerten ab; Programme aendern
   keinen aktiven Schnappschuss; alle Texte/Theme-Tokens stammen aus #25.
 ```
@@ -288,36 +302,43 @@ SPI-/DMA-Verhalten, Boot-/Wake-/Fehlerverhalten sowie Testabdeckung.
   Touch-/Wake-Vertrag und Vollbildausnahmen.
 - `LOCAL_UI_PROGRAMS.md`, `LOCAL_RUNTIME_UI.md`: Slot-/Pagernavigation,
   Primaer-/Rezepteaktion, Meldungs-/Recoverymodelle.
-- `LOCAL_UI_SETTINGS_SERVICE.md`: Plattformservice, Touchsessionparameter,
-  SAFE_BOOT-Recoverytrennung, Sprachfallback.
+- `LOCAL_UI_SETTINGS_SERVICE.md`: Plattformservice, verbindliche lokale
+  10-Minuten-Inaktivitaet als nicht per UI aenderbarer Build-/Produktparameter,
+  keine R1-Maximaldauer, Sperrereignisse, SAFE_BOOT-Recoverytrennung,
+  Sprachfallback.
 - `WEB_UI.md`: gemeinsamer Key-/Fallbackvertrag; getrennte Browserlanguage und
-  unveraenderte Web-5/15-Policy klar dokumentieren.
+  verbindlich getrennte, strengere Web-5/15-Policy klar dokumentieren.
 - `HARDWARE.md`, `ACCEPTANCE_TESTS.md`, `SETTINGS_AND_STORAGE.md`,
   `IMPLEMENTATION_ISSUES.md`, `DECISIONS.md` und relevante Audits: Hardware-
-  ausschluesse, Renderer-/Lizenz-/Ressourcengates, Issuegraph und Akzeptanztests.
+  ausschluesse, Renderer-/Lizenz-/Ressourcengates, Issuegraph, Akzeptanztests
+  und kompakter ADR-/Registereintrag mit Verweis auf die ausfuehrliche
+  `DEVICE_UI_ARCHITECTURE_DECISIONS.md`.
 
 ## Risiken, Safety, Security und Ressourcen
 
 - Alle Shell-/Recoverywege bleiben aktorfrei bis #24 und reale Hardwaregates;
   Service-PIN hebt keine Begrenzung auf.
-- Die Web-Servicesitzung wird nicht still auf 10 Minuten geaendert. Der
-  Unterschied zur Touchpolicy ist ein offener Ownerentscheid.
+- Die Web-Servicesitzung bleibt bewusst die strengere netzwerkseitige Policy
+  von 5 Minuten Inaktivitaet und 15 Minuten absolut; sie wird nicht mit der
+  lokalen 10-Minuten-Inaktivitaetssitzung vereinheitlicht.
 - Keine Font-Vollunicode-, PSRAM-, Puffer- oder Assetannahme. Der Build muss
   je enthaltenem Sprach-/Branding-/Theme-Set Ressourcen messen.
 - Jede spaetere Drittkomponente braucht Herkunft, exakte Version, Lizenz,
   Notice, transitive Pruefung und Ownerauswahl gemaess `ADOPT_OR_BUILD.md`.
 
-## Offene Ownerentscheidungen
+## Verbindlich entschiedene Planparameter
 
-1. Soll die lokale Inaktivitaetsdauer nach dem Richtwert 10 Minuten verbindlich
-   als Default gesetzt werden, und gibt es eine absolute lokale Maximaldauer?
-2. Soll die Web-Servicepolicy 5/15 Minuten absichtlich von der Touchpolicy
-   abweichen oder vereinheitlicht werden?
-3. Soll #25 nach einer Aufwandsschaetzung in einen neuen Vorlaeufer gesplittet
-   werden? Empfehlung dieses Plans: nein.
-4. Welche Dokumentationsform soll nach Umsetzung bestehen bleiben: diese
-   Ownerentscheidung, ein ADR-Auszug oder beides (zentraler Registereintrag
-   bleibt bei einer dauerhaften Architekturentscheidung erforderlich)?
+- Touch-Service: 10 Minuten Inaktivitaet, zentraler Build-/Produktparameter,
+  keine UI-Aenderung, keine absolute R1-Maximaldauer; Sperre bei Neustart,
+  Abmelden, Inaktivitaet und definierten sicherheitsrelevanten
+  Zustandswechseln.
+- Web-Service: getrennte strengere Securitypolicy mit 5 Minuten Inaktivitaet
+  und 15 Minuten absolut.
+- #25 bleibt unsplittet; ein neuer Vorschlag verlangt konkrete Aufwandsdaten
+  und eine erneute Ownerentscheidung.
+- `DEVICE_UI_ARCHITECTURE_DECISIONS.md` bleibt die ausfuehrliche Quelle.
+  `DECISIONS.md` erhaelt nach Planfreigabe einen kompakten Registereintrag mit
+  Verweis auf diese Quelle.
 
 ## Planfreigabe und Abnahme
 
