@@ -2,7 +2,7 @@
 
 ## Status
 
-`PLAN_DRAFT_PENDING_OWNER_APPROVAL`
+`IMPLEMENTED_PENDING_OWNER_REVIEW`
 
 ## Issue
 
@@ -14,7 +14,7 @@ Die in PR #80 verabschiedete rendererunabhaengige Device-UI-Architektur um eine 
 
 ## Planumfang
 
-1. Die drei vom Owner gelieferten SVG-Dateien als unveraenderte Masterquellen unter `assets/branding/source/` versionieren.
+1. Die drei vom Owner gelieferten SVG-Dateien als unveraenderte Masterquellen unter `assets/branding/manuengineer/` versionieren.
 2. `docs/DEVICE_UI_VISUAL_DESIGN.md` als verbindliche visuelle R1-Spezifikation anlegen.
 3. Folgende Ownerentscheidungen festhalten:
    - Header 32 px;
@@ -48,9 +48,9 @@ Es werden keine Vollbildframes gespeichert. #31 muss spaeter Flash, statisches R
 
 ## Vorgesehene Dateien
 
-- `assets/branding/source/ManuEngineer.svg`
-- `assets/branding/source/ManuEngineer-short.svg`
-- `assets/branding/source/ManuEngineer-Boot-splash.svg`
+- `assets/branding/manuengineer/ManuEngineer.svg`
+- `assets/branding/manuengineer/ManuEngineer-short.svg`
+- `assets/branding/manuengineer/ManuEngineer-Boot-splash.svg`
 - `docs/DEVICE_UI_VISUAL_DESIGN.md`
 - `docs/tasks/issue-81-design-plan.md`
 
@@ -75,4 +75,23 @@ PLAN APPROVED
 Approved plan commit: <commit-sha>
 ```
 
-Bis dahin bleibt der PR Draft und enthaelt nur diesen Plan. Kein Ready for Review, Merge oder Auto-Merge.
+Vor der Freigabe blieb der PR Draft und enthielt nur diesen Plan. Auch nach der
+Umsetzung bleiben Ready for Review, Merge und Auto-Merge untersagt, bis ein
+unabhaengiges Ownerreview abgeschlossen ist.
+
+## Umsetzung und Planabschluss
+
+Die commitgebundene Ownerfreigabe fuer
+`9d4f484eff43f9969e888617e2e9ae8c41ca8978` liegt vor. Die aktuelle
+Ownervorgabe praezisiert den im Plan noch generischen Assetpfad
+`assets/branding/source/` auf `assets/branding/manuengineer/`; diese
+Pfadpraezisierung erweitert weder Produkt- noch Architekturscope.
+
+- `4b81d81` versioniert ausschliesslich die drei bytegleichen SVG-Masterassets.
+- `2caebdf` fuegt ausschliesslich die rendererunabhaengige visuelle
+  Designspezifikation hinzu.
+- Dieser Planabschluss aktualisiert Status, Zielpfade und Nachweisreferenzen.
+
+Kein Produktcode, Renderer, Treiber, generiertes Firmwareasset, Font,
+Bibliothek, GPIO- oder Hardwareentscheidung wurde eingefuehrt. Der PR bleibt
+bis zu einem unabhaengigen Ownerreview Draft.
