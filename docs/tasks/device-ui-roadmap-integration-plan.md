@@ -2,14 +2,14 @@
 
 ## Status
 
-`PLAN_DRAFT_PENDING_OWNER_APPROVAL`
+`IMPLEMENTED_PENDING_OWNER_REVIEW`
 
 Verbindliche Quellentscheidung: [`DEVICE_UI_ARCHITECTURE_DECISIONS.md`](../DEVICE_UI_ARCHITECTURE_DECISIONS.md).
 
 Dieser Plan aendert weder Produktcode noch Abhaengigkeiten, Renderer, GPIOs,
-Treiber, Bibliotheken oder Hardwareannahmen. Die als Entwurf enthaltenen
-Issue-Bodies sind erst nach der commitgebundenen Freigabe dieses Plans auf
-GitHub zu uebernehmen.
+Treiber, Bibliotheken oder Hardwareannahmen. Die in ihm enthaltenen
+Issue-Body-Entwuerfe wurden erst nach der commitgebundenen Ownerfreigabe auf
+GitHub uebernommen.
 
 ## Ziel und Nicht-Ziele
 
@@ -340,6 +340,25 @@ SPI-/DMA-Verhalten, Boot-/Wake-/Fehlerverhalten sowie Testabdeckung.
   `DECISIONS.md` erhaelt nach Planfreigabe einen kompakten Registereintrag mit
   Verweis auf diese Quelle.
 
+## Umsetzungsnachweis
+
+- Freigegebener Plan-Commit:
+  `cfedbf2ca31e317a0869a9e474a68b93b01f321e`.
+- Umsetzungscommit: `9b97595` – Spezifikations-, Roadmap-, Test- und
+  Registerabgleich in zehn Dokumenten; kein Produktcode.
+- Live-Issues aktualisiert: #25, #26 und #31, einschliesslich der im Plan
+  vorgesehenen Titel, Abhaengigkeiten, Scopes, Grenzen, Tests und Quellen.
+- `DEVICE_UI_ARCHITECTURE_DECISIONS.md` bleibt die ausfuehrliche Quelle;
+  ADR-019 in `DECISIONS.md` verweist kompakt darauf.
+- Keine Planabweichung: kein neues Issue, kein #25-Split, keine Aenderung an
+  PR #79, keine Renderer-/Bibliotheks-/Hardware-/GPIO-Auswahl.
+- Nachweise: `python3 scripts/check_secrets.py` PASS,
+  `python3 scripts/check_architecture_boundaries.py` PASS,
+  `git diff cfedbf2ca31e317a0869a9e474a68b93b01f321e..HEAD --check` PASS.
+- SOLID/DRY/KISS: Die Aenderung dokumentiert schmale gemeinsame Contracts und
+  klare Adaptergrenzen; sie fuegt weder ein Widgetframework noch parallele
+  Fach-, Safety- oder Hardwarelogik hinzu.
+
 ## Planfreigabe und Abnahme
 
 Nach Commit und Push dieses Plans darf erst folgender Ownerkommentar die
@@ -350,7 +369,6 @@ PLAN APPROVED
 Approved plan commit: <commit-sha>
 ```
 
-Danach werden ausschliesslich die genehmigten Issues und Dokumente auf diesem
-Branch aktualisiert. Vor Ready for Review folgen Diff-gegen-Plan, Markdown-
-und Linkpruefung, Secretscan, `git diff --check`, Architektur-/AGENTS-Pruefung
-und konkrete SOLID/DRY/KISS-Bewertung.
+Die genehmigten Issues und Dokumente sind auf diesem Branch aktualisiert. Vor
+Ready for Review folgen weiterhin unabhängiges Abschlussreview und die im
+Repository festgelegten PR-Gates; dieser PR bleibt bis dahin Draft.
