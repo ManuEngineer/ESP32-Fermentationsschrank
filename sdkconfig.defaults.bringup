@@ -1,0 +1,5 @@
+# Profil-Overlay Bring-up (Issue #74). Setzt ausschliesslich die
+# Kconfig-Profilwahl aus main/Kconfig.projbuild; gemeinsame ESP-IDF-
+# Konfiguration bleibt in sdkconfig.defaults (siehe
+# docs/tasks/issue-74-implementation-plan.md, Abschnitt 7.2).
+CONFIG_APP_PROFILE_ESP32_BRINGUP=y

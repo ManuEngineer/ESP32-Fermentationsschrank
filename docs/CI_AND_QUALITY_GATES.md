@@ -2,22 +2,30 @@
 
 ## Status
 
-Dieses Dokument beschreibt die mit Issue #10 eingefuehrte Testausfuehrung,
-virtuelle Zeitquelle, CI-Pipeline und Qualitaetswerkzeuge, die mit Issue #11
-ergaenzte Pruefung der Architekturgrenzen sowie den mit Issue #72
-hinzugekommenen, noch nicht CI-gebundenen lokalen ESP-IDF-6.0.2-Buildpfad. Es
-ergaenzt `docs/ACCEPTANCE_TESTS.md` und `docs/IMPLEMENTATION_PLAN.md` um die
-konkrete lokale und CI-seitige Umsetzung.
+Dieses Dokument beschreibt die Testausfuehrung, virtuelle Zeitquelle,
+CI-Pipeline und Qualitaetswerkzeuge. Der native Hostpfad verwendet PlatformIO;
+die ESP32-Produktionsprofile verwenden verbindlich ESP-IDF `v6.0.2`
+(`7101770dc6db2667b3c477cc31365dd1acd6db4e`). Es ergaenzt
+`docs/ACCEPTANCE_TESTS.md` und `docs/IMPLEMENTATION_PLAN.md` um die konkrete
+lokale und CI-seitige Umsetzung.
 
 ## Native Tests lokal ausfuehren
 
 ```bash
-pio run -e native -e esp32_bringup -e esp32_release
+pio run -e native
 pio test -e native
-python scripts/check_platformio_config.py
 python scripts/check_architecture_boundaries.py
 python scripts/check_secrets.py
 python scripts/selftest_quality_gates.py
+```
+
+Die beiden ESP-IDF-Produktionsprofile werden nach Aktivierung der festgelegten
+Toolchain gebaut und validiert:
+
+```bash
+. "$IDF_PATH/export.sh"
+python scripts/build_esp_idf_profiles.py all
+python scripts/run_esp_idf_static_analysis.py all
 ```
 
 Die native Testausfuehrung ist reproduzierbar: Sie verwendet ausschliesslich
@@ -53,15 +61,17 @@ Die Zeit schreitet ausschliesslich durch expliziten Aufruf von
 `advanceMonotonicMillis(deltaMs)` voran; es wird nie auf reale Systemzeit oder
 das Netzwerk zugegriffen. Ein Neustart wird durch eine neue Instanz simuliert.
 
-Die Grundlage ist noch nicht in `DevicePlatform` oder `main.cpp` verdrahtet, da
-es dafuer erst ab der fachlichen Logik einen Verbraucher gibt. Der reale
-ESP32-Zeitadapter (`millis()`, NTP) folgt mit der realen Hardwareintegration.
+`EspTimerTimeSource` existiert bereits unter
+`lib/device_platform_esp_idf/` und ist in `main/app_main.cpp` fuer monotone
+Laufzeit-, Heartbeat- und Ressourcen-Telemetrie eingebunden. Eine weitergehende
+Verwendung durch Fachlogik oder `DevicePlatform` wird hier nicht behauptet und
+bedarf eines tatsaechlich implementierten Verbrauchers.
 
 ## Compilerwarnungen
 
-`native` und beide ESP32-Profile bauen mit `-Wall -Wextra -Werror`
-(`native` zusaetzlich mit `-Wpedantic`). Neue Warnungen im Projektcode werden
-damit zu Buildfehlern, nicht still akzeptiert.
+`native` baut mit `-Wall -Wextra -Werror -Wpedantic`; beide ESP-IDF-Profile
+bauen mit `-Wall -Wextra -Werror`. Neue Warnungen im Projektcode werden damit
+zu Buildfehlern, nicht still akzeptiert.
 
 PlatformIOs `build_src_flags` gilt nur fuer `src/`, nicht fuer `lib/`. Deshalb
 besitzen `lib/device_platform/`, `lib/device_platform_test_support/` und
@@ -73,13 +83,13 @@ verwendet und nicht in die ESP32-Produktionsbuilds eingebunden.
 
 | Werkzeug | Version | Konfiguration | Umfang |
 |---|---|---|---|
-| clang-format | 18.1.8 | `.clang-format` | `src/`, `include/`, `lib/`, `test/` |
+| clang-format | 18 | `.clang-format` | `src/`, `include/`, `lib/`, `test/`, `main/` |
 | clang-tidy | 18.1.8 | `.clang-tidy` | Produktions-Kompilierungsdatenbank des Profils `native` |
 
 Lokale Ausfuehrung:
 
 ```bash
-clang-format --dry-run --Werror $(find src include lib test -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
+clang-format --dry-run --Werror $(find src include lib test main -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
 clang-format -i <datei>
 
 pio run -e native -t compiledb
@@ -103,8 +113,6 @@ clang-tidy -p . include/app_config.hpp \
 `clang-tidy` analysiert den hardwareunabhaengigen Produktionskern ueber die
 `native`-Kompilierungsdatenbank. Dokumentierte Ausnahmen:
 
-- Der Arduino-Zweig von `src/main.cpp` wird nicht erfasst, da keine
-  ESP32-Cross-Compile-Kompilierungsdatenbank fuer clang-tidy verfuegbar ist.
 - `test/` und `lib/device_platform_test_support/` sind nicht im Scope, da
   PlatformIOs `compiledb`-Ziel nur den Produktionsbuild und nicht den
   Test-Build-Graphen abbildet. Beide Bereiche werden mit denselben
@@ -144,21 +152,14 @@ Sie blockiert insbesondere:
 Die Pruefung ersetzt kein Architekturreview. Sie sichert die klar automatisch
 erkennbaren Grenzen ab und liefert bei einer Verletzung Datei und Zeile.
 
-## ESP-IDF-6.0.2-Buildbasis und Laufzeitpfad (lokal, Issue #72/#73)
+## ESP-IDF-6.0.2-Produktionspfad
 
-Parallel zum PlatformIO-/Arduino-Pfad existiert seit Issue #72 ein
-reproduzierbarer ESP-IDF-6.0.2-Compile-/Linkpfad fuer die portablen
-Komponenten `device_platform` und `fermentation_app`. Seit Issue #73 startet
-dieser Pfad ueber einen echten `app_main()`-Composition-Root
-(`main/app_main.cpp`) mit derselben Sicherheitsparitaet wie der Arduino-
-Pfad (Profil `esp32_bringup`, `HARDWARE_UNVERIFIED`, reale Aktoren
-deaktiviert) und nutzt die neue, minimale Adapterkomponente
-`lib/device_platform_esp_idf/` (`EspTimerTimeSource`). Dieser Pfad ist
-**nicht** in `.github/workflows/build.yml` eingebunden; die CI-Migration
-bleibt vollstaendig Issue #74 vorbehalten. Bis dahin ist der folgende Ablauf
-eine lokale Entwicklerpflicht vor jedem Commit, der `lib/device_platform/`,
-`lib/fermentation_app/`, `lib/device_platform_esp_idf/`, `main/` oder die
-ESP-IDF-Buildkonfiguration selbst betrifft.
+ESP-IDF `v6.0.2` ist der einzige ESP32-Produktionspfad und wird in
+`.github/workflows/build.yml` fuer `esp32_bringup` und `esp32_release`
+getrennt gebaut. `main/app_main.cpp` ist die ESP-IDF Composition Root und
+`lib/device_platform_esp_idf/` enthaelt die konkreten ESP-IDF-Adapter.
+`src/main.cpp` und PlatformIO bleiben ausschliesslich fuer den nativen
+Hosttestpfad.
 
 Voraussetzung ist eine bereits installierte native ESP-IDF-6.0.2-Umgebung
 (offizieller Tag `v6.0.2`, `--recursive` geklont). Aktivierung in der
@@ -168,16 +169,16 @@ jeweiligen Shell:
 . ${IDF_PATH:-<pfad-zum-esp-idf-v6.0.2-checkout>}/export.sh
 ```
 
-Lokaler Build:
+Lokaler Build und Profilnachweis:
 
 ```bash
-idf.py set-target esp32   # einmalig pro frischem build/-Verzeichnis
-idf.py build
+python scripts/build_esp_idf_profiles.py all
 ```
 
 `app_main()` startet keine reale Hardware; alle Aktoren bleiben deaktiviert.
-Ein `IDF_VER`-Guard im Root-`CMakeLists.txt` bricht den Konfigurationslauf
-bei einer anderen ESP-IDF-Version als `v6.0.2` mit `FATAL_ERROR` ab.
+Der kanonische Buildtreiber und Profilguard pruefen Herkunft, getrennte
+`sdkconfig`-Pfade, Profilkonfiguration und Compile-Definitionen. Ein
+`IDF_VER`-Guard im Root-`CMakeLists.txt` ist eine zusaetzliche Verteidigung.
 
 Nach Hinzufuegen oder Entfernen einer Quelldatei unter `lib/device_platform/src/`,
 `lib/fermentation_app/src/` oder `lib/device_platform_esp_idf/src/` kann
@@ -202,10 +203,10 @@ Test-Support verwendet, und dass die `REQUIRES`/`PRIV_REQUIRES`-Eintraege
 von `lib/device_platform_esp_idf/CMakeLists.txt` und `main/CMakeLists.txt`
 getrennt nach oeffentlich/privat einer festen Allowlist entsprechen.
 
-Der Hardware-Smoke-Test aus Issue #73 (`idf.py -p <PORT> flash monitor`,
-Bootzusammenfassung, kontrollierter Heartbeat, keine Watchdog-Resets) ist
-ein verbindliches Merge-Gate fuer den zugehoerigen PR, aber kein Bestandteil
-dieses lokalen Buildgates.
+Die zwei Hardware-Smoke-Tests fuer Bring-up und Release sind ein verbindliches
+Merge-Gate. Sie werden ausschliesslich auf dem exakten finalen
+Implementierungs-Head ausgefuehrt; genaue Kriterien und der Upgradeprozess
+stehen in [`ESP_IDF_UPGRADE_CONTRACT.md`](ESP_IDF_UPGRADE_CONTRACT.md).
 
 ## Geheimnis- und Lokalkonfigurationspruefung
 
@@ -221,12 +222,16 @@ Zuweisungspruefung ausgenommen, da sie absichtlich Platzhalterwerte enthalten.
 ## Firmware- und Ressourcen-Groessenbericht
 
 ```bash
-python scripts/build_report.py --output build-report.md native esp32_bringup esp32_release
+python scripts/build_report.py --output build-report.md
+. "$IDF_PATH/export.sh"
+python scripts/build_report.py --output build-report.md --append \
+  --esp-idf-profiles bringup release
 ```
 
-Der Befehl baut die angegebenen Profile und erzeugt `build-report.md` mit
-RAM-/Flash-Belegung je ESP32-Profil sowie der Groesse der erzeugten Binaerdateien.
-Der Bericht ist informativ; verbindliche Byte-Budgets bleiben
+Der erste Befehl baut den nativen Hostpfad; der zweite wertet die bereits
+gebauten ESP-IDF-Profile aus und ergaenzt ihre maschinenlesbaren
+RAM-/Flash- und Artefaktdaten. Der Bericht ist informativ; verbindliche
+Byte-Budgets bleiben
 `TBD_IMPLEMENTATION_BUDGET` bis zu realen Hardware- und Belastungsmessungen. CI
 sichert den Bericht als Artefakt `build-report`.
 

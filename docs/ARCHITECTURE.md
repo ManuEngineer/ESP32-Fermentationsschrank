@@ -18,7 +18,7 @@ esp32_bringup
   Zustand HARDWARE_UNVERIFIED
 
 esp32_release
-  Freigegebene Zielkonfiguration nach Hardwareabnahme
+  ESP-IDF-Zielkonfiguration nach Hardwareabnahme
 ```
 
 Das Umschalten des Buildprofils darf unbestaetigte Hardware nicht automatisch
@@ -26,12 +26,12 @@ freigeben.
 
 ### Umgesetzte Projektgrundlage
 
-`platformio.ini` definiert `native`, `esp32_bringup` und `esp32_release` auf
-derselben Codebasis. `native` kompiliert den hardwareunabhaengigen Pfad ohne
-Arduino. Beide ESP32-Profile verwenden gemaess ADR-001 das generische Ziel
-`esp32dev` fuer ESP32-WROOM-32E und planen mit 4 MB Flash ohne vorausgesetzte
-PSRAM. Fuer reproduzierbare Builds sind PlatformIO Core `6.1.19` in CI und die
-ESP32-Plattform `espressif32` `7.0.1` fixiert.
+`platformio.ini` definiert ausschliesslich `native` fuer den
+hardwareunabhaengigen Hosttestpfad. `esp32_bringup` und `esp32_release` werden
+aus derselben Codebasis ausschliesslich mit ESP-IDF `v6.0.2`
+(`7101770dc6db2667b3c477cc31365dd1acd6db4e`) in getrennten Buildverzeichnissen
+gebaut. Beide ESP32-Profile planen mit 4 MB Flash ohne vorausgesetzte PSRAM.
+PlatformIO Core `6.1.19` bleibt fuer den nativen Hostpfad fixiert.
 
 Die Profile unterscheiden ihre Freigabepolitik explizit:
 
@@ -46,15 +46,17 @@ festgelegt und bleibt `TBD_IMPLEMENTATION_BUDGET`. Die Grundlage enthaelt weder
 reale Hardwaretreiber noch GPIO- oder Pegelzuweisungen.
 
 Die gemeinsame Struktur trennt `include/` fuer hardwareunabhaengige Typen und
-Buildregeln, `src/` fuer den Firmware-Einstieg, `lib/` fuer testbare Komponenten
-und `test/` fuer native Tests. Profilunabhaengige Sicherheitsinvarianten liegen
-in `include/app_config.hpp` und werden sowohl zur Compilezeit in jedem Build als
+Buildregeln, `lib/` fuer testbare Komponenten und `test/` fuer native Tests.
+`main/app_main.cpp` ist die produktive ESP-IDF Composition Root und
+Laufzeitorchestrierung; `src/main.cpp` ist ausschliesslich die native Host- und
+Test-Composition-Root. Profilunabhaengige Sicherheitsinvarianten liegen in
+`include/app_config.hpp` und werden sowohl zur Compilezeit in jedem Build als
 auch durch native Tests geprueft.
 
-`scripts/check_platformio_config.py` prueft zusaetzlich die von PlatformIO
-effektiv aufgeloesten Profile und Boardmetadaten. Die Kontrolle von 4 MB Flash
-und 320 KiB internem RAM ohne vorausgesetzte PSRAM ist damit von den
-Anwendungs-Makros getrennt.
+`scripts/check_build_profiles.py` prueft die getrennten generierten
+`sdkconfig`-Dateien und Compile-Definitionen beider ESP-IDF-Profile. Die
+Kontrolle von 4 MB Flash, deaktiviertem Web-OTA und gesperrten realen Aktoren
+bleibt damit von den Anwendungs-Makros getrennt.
 
 ## Schichten
 
@@ -69,7 +71,7 @@ Sensor-, Regel-, Sicherheits- und Persistenzlogik
         |
 Abstrakte Ports
         |
-ESP32-Adapter oder native Mockadapter
+ESP-IDF-Adapter oder native Mockadapter
         |
 Reale Hardware beziehungsweise Simulator
 ```

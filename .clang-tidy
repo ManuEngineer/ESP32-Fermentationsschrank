@@ -2,11 +2,20 @@
 # clang-tidy 18.1.8 (siehe .github/workflows/build.yml und
 # docs/CI_AND_QUALITY_GATES.md).
 #
-# Analysiert wird der hardwareunabhaengige C++17-Kern (include/, lib/)
-# ueber die `native`-Kompilierungsdatenbank. `test/` liegt ausserhalb des
-# HeaderFilterRegex-Scopes und wird deshalb nicht erfasst. Der Arduino-Zweig von
-# `src/main.cpp` (`#if defined(ARDUINO)`) wird dadurch nicht erfasst; das ist
-# eine dokumentierte, begruendete Ausnahme (kein ESP32-Cross-Compile-Toolchain
+# Analysiert wird der hardwareunabhaengige C++17-Kern (include/, lib/) ueber
+# die `native`-Kompilierungsdatenbank sowie, seit Issue #74 Commit 4, die
+# ESP-IDF-spezifischen Quellen (main/, lib/device_platform_esp_idf/) ueber
+# den offiziellen `idf.py clang-check`-Mechanismus mit der Espressif-eigenen
+# esp-clang-Toolchain (siehe .github/workflows/build.yml und
+# docs/tasks/issue-74-implementation-plan.md, Abschnitt 7.8). Diese Datei
+# bleibt fuer beide Analysepfade die alleinige Checkkonfiguration; der
+# ESP-IDF-Pfad ergaenzt lediglich eine einzelne, dokumentierte
+# Fremdheader-Ausnahme (`-checks="-misc-header-include-cycle"`, ausserhalb
+# dieser Datei uebergeben, siehe unten) fuer ESP-IDFs eigene, unveraenderliche
+# Headerstruktur. `test/` liegt ausserhalb des HeaderFilterRegex-Scopes und
+# wird deshalb nicht erfasst. Der Arduino-Zweig von `src/main.cpp`
+# (`#if defined(ARDUINO)`) wird dadurch nicht erfasst; das ist eine
+# dokumentierte, begruendete Ausnahme (kein ESP32-Cross-Compile-Toolchain
 # fuer clang-tidy verfuegbar).
 # Ausgenommene Checks und Begruendung:
 # - modernize-avoid-c-arrays: feste `char[]`-Stringkonstanten sind fuer
@@ -22,6 +31,16 @@
 #   Datentraeger wie `ProfilePolicy` nicht sinnvoll.
 # - bugprone-easily-swappable-parameters: erzeugt auf kleinen,
 #   dokumentierten Zeit-/Policy-Funktionen mehr Rauschen als Nutzen.
+#
+# CheckOptions readability-function-cognitive-complexity.IgnoreMacros:
+# main/app_main.cpp meldete ueber den ESP-IDF-Analysepfad einen
+# kognitive-Komplexitaets-Befund, der nachweislich durch die Expansion der
+# ESP_LOGI/ESP_LOGE-Makros entsteht, nicht durch echte Kontrollfluss-
+# komplexitaet im Projektcode (Ownerentscheidung
+# OWNER_DECISION_COGNITIVE_COMPLEXITY: IGNORE_MACRO_EXPANSIONS, Plan
+# Abschnitt 7.8.2). Real gegenverifiziert: der Check bleibt fuer echte,
+# nicht-makrobasierte Verschachtelung aktiv (siehe Plan Abschnitt 7.8.7);
+# main/app_main.cpp selbst bleibt unveraendert.
 Checks: >
   -*,
   bugprone-*,
@@ -42,5 +61,7 @@ Checks: >
   -misc-non-private-member-variables-in-classes,
   -bugprone-easily-swappable-parameters
 WarningsAsErrors: "*"
-HeaderFilterRegex: "(include|lib)/.*"
+HeaderFilterRegex: "^(include|lib|main)/.*"
+CheckOptions:
+  readability-function-cognitive-complexity.IgnoreMacros: 'true'
 FormatStyle: none

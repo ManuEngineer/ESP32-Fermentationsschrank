@@ -2,13 +2,17 @@
 
 ## ADR-001: PlatformIO mit Arduino Framework
 
-- **Status:** accepted
+- **Status:** superseded by Issue #71 / PR #79
 - **Datum:** 2026-07-20
 - **Kontext:** Reproduzierbarer Build fuer lokalen Einsatz und CI.
-- **Entscheidung:** PlatformIO mit Arduino Framework, C++17 und dem generischen
-  Ziel `esp32dev` fuer das vorgesehene ESP32-WROOM-32E-Modul.
+- **Entscheidung:** Historisch wurde PlatformIO mit Arduino Framework, C++17 und
+  dem generischen Ziel `esp32dev` verwendet. Der aktive ESP32-
+  Produktionspfad ist nun ESP-IDF `v6.0.2`
+  (`7101770dc6db2667b3c477cc31365dd1acd6db4e`); PlatformIO bleibt nur der
+  native Hosttestpfad.
 - **Alternativen:** ESP-IDF direkt, Arduino IDE.
-- **Folgen:** Das Ziel bestaetigt keine konkrete Boardrevision oder Pinbelegung.
+- **Folgen:** Der Arduino-Produktionspfad wurde mit PR #79 entfernt. Das Ziel
+  bestaetigt weiterhin keine konkrete Boardrevision oder Pinbelegung.
 
 ## ADR-002: Keine GPIO-Zuweisung vor Hardwarebestaetigung
 

@@ -89,6 +89,22 @@ def main() -> int:
         "Architekturpruefung erkennt absichtliche Grenzverletzung": run_script_selftest(
             repo_root, "check_architecture_boundaries.py"
         ),
+        "Profil-/Driftpruefung erkennt absichtlich fehlerhafte Faelle": run_script_selftest(
+            repo_root, "check_build_profiles.py"
+        ),
+        "Buildtreiber meldet Erfolg erst nach bestandenem Guard": run_script_selftest(
+            repo_root, "build_esp_idf_profiles.py"
+        ),
+        "Ressourcenbericht kombiniert nativen Host- und ESP-IDF-Bericht, "
+        "erkennt fehlende Artefakte": run_script_selftest(repo_root, "build_report.py"),
+        "CI-Artefakt-Scanabdeckung erkennt ungescannt hochgeladene "
+        "Textartefakte": run_script_selftest(
+            repo_root, "check_ci_artifact_scan_coverage.py"
+        ),
+        "ESP-IDF-Static-Analysis-Treiber (esp-clang) erkennt fehlerhafte "
+        "Werkzeug-/Dateiauswahlfaelle": run_script_selftest(
+            repo_root, "run_esp_idf_static_analysis.py"
+        ),
     }
 
     for name, status in results.items():

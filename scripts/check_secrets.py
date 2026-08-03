@@ -2,7 +2,7 @@
 """Prueft, dass keine Geheimnisse oder lokalen Konfigurationsdateien
 eingecheckt sind.
 
-Zwei Pruefungen:
+Zwei Pruefungen auf getrackten Dateien:
 
 1. Dateinamen, die laut `.gitignore` lokal bleiben muessen (z. B.
    `include/secrets.hpp`, `config/hardware.yaml`, `*.pem`), duerfen nicht von
@@ -15,6 +15,25 @@ Bekannte, dokumentierte Ausnahme: Dateien mit `example` im Namen (z. B.
 `include/secrets.example.hpp`) enthalten absichtlich Platzhalterwerte wie
 `YOUR_WIFI_PASSWORD` und werden von der musterbasierten Zuweisungspruefung
 ausgenommen. Private-Key-Header werden trotzdem in jeder Datei erkannt.
+
+Zusaetzliche, optionale dritte Pruefung ueber `--scan-path` (wiederholbar):
+`git ls-files` erfasst nur getrackte Dateien. Generierte, bewusst
+ungetrackte Artefakte unter `build/` (ESP-IDF-Groessenberichte, Buildlogs,
+Artefaktmanifeste, generierte `sdkconfig`, `compile_commands.json`) werden
+dadurch nicht erfasst (docs/tasks/issue-74-implementation-plan.md,
+Abschnitt 7.7.4). `--scan-path` benennt solche Dateien explizit und
+unterwirft sie denselben Geheimnismustern, plus einer zusaetzlichen
+Pruefung auf private absolute Benutzerpfade. Dabei gilt eine
+kontextbezogene Regel: selbst erzeugte Dateien (Manifest, Ressourcenbericht)
+muessen vollstaendig normalisiert sein (jeder `/home/...`- oder
+`/Users/...`-Pfad ist ein Fund); fremdgenerierte Werkzeugausgabe wie
+`compile_commands.json` (CMake), `build.log` (ninja/idf.py) und `*.map`-
+Linkerkarten (GNU ld) darf dagegen bekannte, ephemere CI-Runner-Pfade
+(`/home/runner/...`) enthalten, ohne als Fund gewertet zu werden.
+Geheimnismuster, Tokens, Credentials und private Schluessel bleiben in allen
+Dateien uneingeschraenkt ein Fund. Eine erwartete, aber fehlende
+`--scan-path`-Datei ist ein harter Fehler. Binaerdateien werden anhand ihrer
+Dekodierbarkeit erkannt und nicht als Text durchsucht.
 
 `--selftest` prueft die Erkennung selbst anhand temporaerer Fixture-Dateien,
 ohne dass ein absichtlich fehlerhafter Fall jemals in dieses Repository
@@ -54,7 +73,7 @@ SECRET_CONTENT_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(
-        r"(?i)(password|passwd|secret|api[_-]?key|token)\s*[:=]\s*"
+        r"(?i)(password|passwd|secret|api[_-]?key|token)['\"]?\s*[:=]\s*"
         r"['\"][^'\"\s]{6,}['\"]"
     ),
 )
@@ -63,6 +82,25 @@ TEXT_FILE_SUFFIXES = {
     ".hpp", ".h", ".cpp", ".c", ".py", ".ini", ".json", ".yaml", ".yml",
     ".md", ".txt", ".sh", ".cfg", ".toml",
 }
+
+# Abschnitt 7.7.4: bekannte, ephemere CI-Runner-Pfade, die in fremdgenerierten
+# Werkzeugausgaben (z. B. `compile_commands.json` von CMake, `build.log` von
+# ninja/idf.py, `*.map`-Linkerkarten von GNU ld) toleriert werden, ohne als
+# privater Benutzerpfad gewertet zu werden. Andere `/home/...`- oder
+# `/Users/...`-Pfade bleiben ein Fund. `.map` ist absichtlich ein Suffix statt
+# eines festen Dateinamens: der Binaername stammt aus der Projektkonfiguration
+# und gehoert nicht in dieses allgemeine Skript. Selbst erzeugte Dateien
+# (Manifest, Ressourcenbericht) stehen bewusst NICHT in dieser Liste: sie
+# enthalten von vornherein keine Pfade und muessen es auch nicht.
+KNOWN_CI_PATH_PREFIXES = ("/home/runner/",)
+LENIENT_PATH_FILENAMES = {"compile_commands.json", "build.log"}
+LENIENT_PATH_SUFFIXES = {".map"}
+
+PRIVATE_ABSOLUTE_PATH_PATTERN = re.compile(r"(/home/[^\s\"']+|/Users/[^\s\"']+)")
+
+
+def is_lenient_path_file(path: Path) -> bool:
+    return path.name in LENIENT_PATH_FILENAMES or path.suffix.lower() in LENIENT_PATH_SUFFIXES
 
 
 def tracked_files() -> list[str]:
@@ -101,7 +139,39 @@ def scan_file_for_secrets(path: Path) -> list[tuple[int, str]]:
     return findings
 
 
-def check_repository() -> int:
+def scan_for_private_paths(path: Path, lines: list[str]) -> list[tuple[int, str]]:
+    lenient = is_lenient_path_file(path)
+    findings = []
+    for line_number, line in enumerate(lines, start=1):
+        for match in PRIVATE_ABSOLUTE_PATH_PATTERN.finditer(line):
+            candidate = match.group(0)
+            if lenient and candidate.startswith(KNOWN_CI_PATH_PREFIXES):
+                continue
+            findings.append((line_number, line.strip()))
+            break
+    return findings
+
+
+def scan_path_file(path: Path) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
+    """Prueft eine explizit per `--scan-path` benannte, ungetrackte Datei auf
+    Geheimnisse und private absolute Pfade. Eine fehlende Datei ist ein
+    harter Fehler (der vorherige Build-/Berichtsschritt haette sie erzeugen
+    muessen); eine vorhandene, aber nicht als UTF-8 dekodierbare Datei gilt
+    als Binaerdatei und wird nicht als Text durchsucht."""
+    if not path.is_file():
+        raise SystemExit(f"erwartetes Textartefakt fehlt: {path}")
+
+    try:
+        lines = path.read_text(encoding="utf-8", errors="strict").splitlines()
+    except UnicodeDecodeError:
+        return [], []
+
+    secret_findings = scan_file_for_secrets(path)
+    path_findings = scan_for_private_paths(path, lines)
+    return secret_findings, path_findings
+
+
+def check_repository(scan_paths: tuple[str, ...] = ()) -> int:
     files = tracked_files()
 
     protected_violations = find_protected_files_tracked(files)
@@ -121,15 +191,38 @@ def check_repository() -> int:
                 file=sys.stderr,
             )
 
-    if protected_violations or content_violations:
+    scan_path_violations = []
+    for scan_path in scan_paths:
+        path = Path(scan_path)
+        secret_findings, path_findings = scan_path_file(path)
+        for line_number, line in secret_findings:
+            scan_path_violations.append((scan_path, line_number, line))
+            print(
+                f"FAILED: moegliches Geheimnis in {scan_path}:{line_number}",
+                file=sys.stderr,
+            )
+        for line_number, line in path_findings:
+            scan_path_violations.append((scan_path, line_number, line))
+            print(
+                f"FAILED: privater absoluter Pfad in {scan_path}:{line_number}",
+                file=sys.stderr,
+            )
+
+    if protected_violations or content_violations or scan_path_violations:
         print(
             f"FAILED: {len(protected_violations)} geschuetzte Datei(en) "
-            f"eingecheckt, {len(content_violations)} verdaechtige Textstelle(n)",
+            f"eingecheckt, {len(content_violations)} verdaechtige Textstelle(n) "
+            f"in getrackten Dateien, {len(scan_path_violations)} verdaechtige "
+            "Textstelle(n) in --scan-path-Artefakten",
             file=sys.stderr,
         )
         return 1
 
-    print(f"PASS: {len(files)} getrackte Dateien geprueft, keine Geheimnisse gefunden.")
+    print(
+        f"PASS: {len(files)} getrackte Dateien und {len(scan_paths)} "
+        "--scan-path-Artefakt(e) geprueft, keine Geheimnisse oder privaten "
+        "Pfade gefunden."
+    )
     return 0
 
 
@@ -168,6 +261,133 @@ def run_selftest() -> int:
             ("Unverdaechtige Datei wird NICHT gemeldet", len(clean_findings) == 0),
         ]
 
+        # --scan-path: ungetrackte generierte Artefakte (Abschnitt 7.7.4)
+        manifest_secret_file = tmp_path / "artifact-manifest-with-secret.json"
+        manifest_secret_file.write_text(
+            '{"token": "' + 'sk_live_abcdef1234567890"}\n'
+        )
+        manifest_private_path_file = tmp_path / "artifact-manifest-private-path.json"
+        manifest_private_path_file.write_text(
+            '{"note": "/home/exampleuser/private/build"}\n'
+        )
+        manifest_clean_file = tmp_path / "artifact-manifest-clean.json"
+        manifest_clean_file.write_text(
+            '{"profile": "esp32_bringup", "git_sha": "abc123", '
+            '"idf_version": "v6.0.2", "idf_commit": "7101770dc"}\n'
+        )
+        compile_commands_ci_path_file = tmp_path / "compile_commands.json"
+        compile_commands_ci_path_file.write_text(
+            '[{"file": "/home/runner/work/repo/repo/src/main.cpp"}]\n'
+        )
+        compile_commands_credential_file_dir = tmp_path / "with_credential"
+        compile_commands_credential_file_dir.mkdir()
+        compile_commands_credential_file = (
+            compile_commands_credential_file_dir / "compile_commands.json"
+        )
+        compile_commands_credential_file.write_text(
+            # Literal per Konkatenation aufgeteilt, damit dieses Quellfile
+            # sich nicht selbst bei der Repository-Geheimnispruefung meldet.
+            '[{"file": "main.cpp", "define": "AWS_KEY=' + 'AKIA' + 'ABCDEFGHIJKLMNOP"}]\n'
+        )
+        build_log_ci_path_file = tmp_path / "build.log"
+        build_log_ci_path_file.write_text(
+            "Project build complete. To flash, run:\n"
+            "  idf.py -B /home/runner/work/repo/repo/build/esp32_bringup flash\n"
+        )
+        map_ci_path_file = tmp_path / "map_ci" / "esp32_fermentationsschrank.map"
+        map_ci_path_file.parent.mkdir()
+        map_ci_path_file.write_text(
+            "Archive member included because of file (symbol)\n"
+            "/home/runner/work/repo/repo/build/esp32_bringup/libmain.a\n"
+        )
+        map_private_path_dir = tmp_path / "map_private"
+        map_private_path_dir.mkdir()
+        map_private_path_file = map_private_path_dir / "esp32_fermentationsschrank.map"
+        map_private_path_file.write_text(
+            "Archive member included because of file (symbol)\n"
+            "/home/exampleuser/private/build/esp32_bringup/libmain.a\n"
+        )
+        map_credential_dir = tmp_path / "map_credential"
+        map_credential_dir.mkdir()
+        map_credential_file = map_credential_dir / "esp32_fermentationsschrank.map"
+        map_credential_file.write_text(
+            # Literal per Konkatenation aufgeteilt (siehe compile_commands-Fixture oben).
+            'password = "' + 'not-a-real-secret-value"\n'
+        )
+        build_report_file = tmp_path / "build-report.md"
+        build_report_file.write_text(
+            "# Firmware- und Ressourcen-Groessenbericht\n\n## native\n\n"
+            "- Host-Testbinaer (`program`): 12345 Bytes\n"
+        )
+        missing_scan_path_file = tmp_path / "build" / "esp32_bringup" / "size.json"
+        missing_map_file = tmp_path / "does-not-exist" / "esp32_fermentationsschrank.map"
+        missing_build_report_file = tmp_path / "does-not-exist-build-report.md"
+        binary_scan_path_file = tmp_path / "fixture-binary.bin"
+        binary_scan_path_file.write_bytes(b"\x7fELF\x00\x01\x02\xff\xfe\x00")
+
+        manifest_secret_secrets, _ = scan_path_file(manifest_secret_file)
+        _, manifest_private_paths = scan_path_file(manifest_private_path_file)
+        manifest_clean_secrets, manifest_clean_paths = scan_path_file(manifest_clean_file)
+        _, compile_commands_ci_paths = scan_path_file(compile_commands_ci_path_file)
+        compile_commands_credential_secrets, _ = scan_path_file(
+            compile_commands_credential_file
+        )
+        _, build_log_ci_paths = scan_path_file(build_log_ci_path_file)
+        _, map_ci_paths = scan_path_file(map_ci_path_file)
+        _, map_private_paths = scan_path_file(map_private_path_file)
+        map_credential_secrets, _ = scan_path_file(map_credential_file)
+        build_report_secrets, build_report_paths = scan_path_file(build_report_file)
+        binary_secrets, binary_paths = scan_path_file(binary_scan_path_file)
+
+        missing_scan_path_error = None
+        try:
+            scan_path_file(missing_scan_path_file)
+        except SystemExit as error:
+            missing_scan_path_error = error
+
+        missing_map_error = None
+        try:
+            scan_path_file(missing_map_file)
+        except SystemExit as error:
+            missing_map_error = error
+
+        missing_build_report_error = None
+        try:
+            scan_path_file(missing_build_report_file)
+        except SystemExit as error:
+            missing_build_report_error = error
+
+        checks += [
+            ("Geheimnis in ungetrackter --scan-path-Manifestdatei wird erkannt",
+             len(manifest_secret_secrets) > 0),
+            ("Privater absoluter Benutzerpfad in einer selbst erzeugten "
+             "Manifestdatei wird erkannt", len(manifest_private_paths) > 0),
+            ("Normalisierte, pfadfreie Manifestdatei wird akzeptiert",
+             len(manifest_clean_secrets) == 0 and len(manifest_clean_paths) == 0),
+            ("Bekannter ephemerer CI-Runner-Pfad in compile_commands.json "
+             "wird NICHT als Fund gewertet", len(compile_commands_ci_paths) == 0),
+            ("Token-/Credential-Muster in compile_commands.json wird "
+             "weiterhin erkannt", len(compile_commands_credential_secrets) > 0),
+            ("Bekannter ephemerer CI-Runner-Pfad in build.log wird NICHT "
+             "als Fund gewertet", len(build_log_ci_paths) == 0),
+            ("Fehlende, aber erwartete --scan-path-Datei fuehrt zu einem "
+             "Fehler", missing_scan_path_error is not None),
+            ("Binaerdatei wird nicht als Text gescannt (--scan-path)",
+             len(binary_secrets) == 0 and len(binary_paths) == 0),
+            ("Bekannter ephemerer CI-Runner-Pfad in einer .map-Datei wird "
+             "akzeptiert", len(map_ci_paths) == 0),
+            ("Privater absoluter Benutzerpfad in einer .map-Datei wird "
+             "abgelehnt", len(map_private_paths) > 0),
+            ("Token-/Credential-Muster in einer .map-Datei wird abgelehnt",
+             len(map_credential_secrets) > 0),
+            ("build-report.md wird als explizites Textartefakt geprueft",
+             len(build_report_secrets) == 0 and len(build_report_paths) == 0),
+            ("Fehlende erwartete .map-Datei fuehrt zu einem Fehler",
+             missing_map_error is not None),
+            ("Fehlende erwartete build-report.md fuehrt zu einem Fehler",
+             missing_build_report_error is not None),
+        ]
+
         all_passed = True
         for description, passed in checks:
             status = "PASS" if passed else "FAILED"
@@ -183,11 +403,18 @@ def main() -> int:
         "--selftest", action="store_true",
         help="Prueft die Erkennung selbst anhand temporaerer Fixtures.",
     )
+    parser.add_argument(
+        "--scan-path", action="append", default=[], dest="scan_paths",
+        metavar="PATH",
+        help="Zusaetzliche, explizit benannte ungetrackte Textdatei, die "
+             "ebenfalls auf Geheimnisse und private absolute Pfade geprueft "
+             "wird (wiederholbar, Abschnitt 7.7.4).",
+    )
     arguments = parser.parse_args()
 
     if arguments.selftest:
         return run_selftest()
-    return check_repository()
+    return check_repository(tuple(arguments.scan_paths))
 
 
 if __name__ == "__main__":
