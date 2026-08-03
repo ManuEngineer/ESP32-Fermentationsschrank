@@ -92,6 +92,26 @@ Pfadpraezisierung erweitert weder Produkt- noch Architekturscope.
   Designspezifikation hinzu.
 - Dieser Planabschluss aktualisiert Status, Zielpfade und Nachweisreferenzen.
 
+### Ownerreview-Korrektur nach Implementierung
+
+Das Ownerreview nach `ba12570b54bb2ffb873d34c85494291ea074cf13` verlangt
+verbindliche Ausfuehrbarkeit der visuellen R1-Quelle, ohne den Produkt- oder
+Architekturscope zu erweitern. `f2bc8cc` ergaenzt daher ausschliesslich:
+
+- on_*-Vordergrundtokens mit 4.5:1-Kontrastnachweisen fuer semantisch gefaerbte
+  Flaechen;
+- einen renderer- und alpha-unabhaengigen Overlayvertrag mit zentralen,
+  deckenden Ersatzwerten ohne zusaetzlichen Vollbildpuffer;
+- feste, in #26 simulier- und in #31 hardwarepruefbare Teilbereiche der rechten
+  32-px-Headerzone;
+- die notwendigen reinen Querverweise aus
+  `DEVICE_UI_ARCHITECTURE_DECISIONS.md` und `DECISIONS.md` auf die zentrale
+  visuelle Quelle.
+
+Die zwei zusaetzlich geaenderten Architekturquellen waren im urspruenglichen
+Fuenf-Dateien-Schnitt nicht enthalten. Sie duplizieren keine Geometrie oder
+Farbwerte und sind die notwendige Integrationskorrektur aus dem Ownerreview.
+
 Kein Produktcode, Renderer, Treiber, generiertes Firmwareasset, Font,
 Bibliothek, GPIO- oder Hardwareentscheidung wurde eingefuehrt. Der PR bleibt
 bis zu einem unabhaengigen Ownerreview Draft.
