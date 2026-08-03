@@ -46,9 +46,11 @@ festgelegt und bleibt `TBD_IMPLEMENTATION_BUDGET`. Die Grundlage enthaelt weder
 reale Hardwaretreiber noch GPIO- oder Pegelzuweisungen.
 
 Die gemeinsame Struktur trennt `include/` fuer hardwareunabhaengige Typen und
-Buildregeln, `src/` fuer den Firmware-Einstieg, `lib/` fuer testbare Komponenten
-und `test/` fuer native Tests. Profilunabhaengige Sicherheitsinvarianten liegen
-in `include/app_config.hpp` und werden sowohl zur Compilezeit in jedem Build als
+Buildregeln, `lib/` fuer testbare Komponenten und `test/` fuer native Tests.
+`main/app_main.cpp` ist die produktive ESP-IDF Composition Root und
+Laufzeitorchestrierung; `src/main.cpp` ist ausschliesslich die native Host- und
+Test-Composition-Root. Profilunabhaengige Sicherheitsinvarianten liegen in
+`include/app_config.hpp` und werden sowohl zur Compilezeit in jedem Build als
 auch durch native Tests geprueft.
 
 `scripts/check_build_profiles.py` prueft die getrennten generierten

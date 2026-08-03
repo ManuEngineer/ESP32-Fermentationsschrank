@@ -128,9 +128,10 @@ test/
 
 Die Fermentations-App verwendet nur die Schnittstelle `IPlatformServices` und
 kennt weder Arduino noch die konkrete Klasse `DevicePlatform`. Die
-projektspezifische `app_config.hpp` bleibt in `main.cpp` und wird nicht in die
-wiederverwendbare Plattform gezogen. Verbindliche Details und die spaetere
-Auslagerungsstrategie stehen in
+projektspezifische Datei `include/app_config.hpp` bleibt ausserhalb der
+wiederverwendbaren Plattform und wird von den passenden Composition Roots
+beziehungsweise Builds eingebunden. Sie enthaelt keine Zugangsdaten oder
+Geheimnisse. Verbindliche Details und die spaetere Auslagerungsstrategie stehen in
 [`ADR-013`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md).
 
 Der fachliche Zustandsautomat in `lib/fermentation_app` ist ebenfalls frei von

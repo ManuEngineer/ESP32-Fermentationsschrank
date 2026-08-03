@@ -134,6 +134,7 @@ ADR-013 ist verbindlich. Die Firmware trennt:
 src/main.cpp                      native-only Composition Root
 main/app_main.cpp                 ESP-IDF Composition Root
 lib/device_platform/              anwendungsneutrale Geraetedienste (Produktion)
+lib/device_platform_esp_idf/      konkrete ESP-IDF-Produktionsadapter
 lib/device_platform_test_support/ Mockadapter und Simulation fuer native Tests
 lib/fermentation_app/             konkrete Fermentationsanwendung
 ```
@@ -145,6 +146,9 @@ lib/fermentation_app/             konkrete Fermentationsanwendung
   kennt weder Arduino noch die konkrete Klasse `DevicePlatform`.
 - `device_platform` darf keine Fermentationsbegriffe, Fermentationszustaende oder
   Abhaengigkeit auf `fermentation_app` enthalten.
+- `device_platform_esp_idf` haengt nur in Richtung `device_platform` und darf
+  weder von `fermentation_app` noch von `device_platform_test_support`
+  abhaengen.
 - `device_platform_test_support` darf von `device_platform` abhaengen, nicht
   umgekehrt; weder `fermentation_app` noch `main.cpp` noch ein
   ESP32-Produktionsbuild duerfen davon abhaengen.

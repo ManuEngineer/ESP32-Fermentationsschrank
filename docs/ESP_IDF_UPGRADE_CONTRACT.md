@@ -28,6 +28,21 @@ offiziellen `esp-clang`-Pfad ueber `scripts/run_esp_idf_static_analysis.py`.
   Implementierungs-Head. Aendert sich dieser Head, sind alle Smoke-Nachweise
   zu wiederholen.
 
+## Komponenten- und Lockfilevertrag
+
+Der aktuelle Produktionsstand verwendet keine externe ESP-IDF-Komponente.
+Deshalb gibt es weder ein `idf_component.yml` noch ein `dependencies.lock`;
+eine leere Manifest- oder Lockdatei als Scheinstruktur ist nicht zulaessig.
+
+Bei einem spaeteren echten Bedarf werden zuerst offizielle Espressif-
+Component-Manager-Komponenten geprueft. Jede uebernommene Abhaengigkeit muss
+auf eine feste Version gebunden sein. Direkte Git-Downloads, unfixierte
+Versionsbereiche und unbestimmte Quell-URLs sind ausgeschlossen. Sobald die
+erste reale Component-Manager-Abhaengigkeit eingebunden wird, ist das erzeugte
+`dependencies.lock` zu versionieren und darf nicht manuell bearbeitet werden.
+Komponenten- und Lockfile-Diffs werden ab diesem Zeitpunkt Teil der
+Upgrade-Nachweise.
+
 ## Bugfix-Upgrade
 
 Ein Bugfix-Upgrade verlangt vor Merge:
@@ -67,9 +82,9 @@ ohne Last.
 Fuer beide gelten: erster Heartbeat etwa nach 1000 ms, weitere Abstaende etwa
 1000 ms, monotone Uptime, genau zwei Ressourcenmessungen sowie kein Reset,
 Watchdog, Panic, Brownout oder unerwartete Hardwareaktivitaet. Der Nachweis
-nennt finalen Implementierungs- und Firmware-Build-SHA, Profil, seriellen
-Port, Beobachtungsdauer, gemessene Heartbeats und Ressourcenwerte sowie
-PASS/FAIL je Kriterium.
+nennt finalen Implementierungs- und Firmware-Build-SHA, die identisch sein
+muessen, Profil, seriellen Port, Beobachtungsdauer, gemessene Heartbeats und
+Ressourcenwerte sowie PASS/FAIL je Kriterium.
 
 ## Verbleibende Messgates
 

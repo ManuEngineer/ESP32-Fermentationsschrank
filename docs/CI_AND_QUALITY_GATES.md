@@ -61,9 +61,11 @@ Die Zeit schreitet ausschliesslich durch expliziten Aufruf von
 `advanceMonotonicMillis(deltaMs)` voran; es wird nie auf reale Systemzeit oder
 das Netzwerk zugegriffen. Ein Neustart wird durch eine neue Instanz simuliert.
 
-Die Grundlage ist noch nicht in `DevicePlatform` oder `main.cpp` verdrahtet, da
-es dafuer erst ab der fachlichen Logik einen Verbraucher gibt. Der reale
-ESP32-Zeitadapter (`millis()`, NTP) folgt mit der realen Hardwareintegration.
+`EspTimerTimeSource` existiert bereits unter
+`lib/device_platform_esp_idf/` und ist in `main/app_main.cpp` fuer monotone
+Laufzeit-, Heartbeat- und Ressourcen-Telemetrie eingebunden. Eine weitergehende
+Verwendung durch Fachlogik oder `DevicePlatform` wird hier nicht behauptet und
+bedarf eines tatsaechlich implementierten Verbrauchers.
 
 ## Compilerwarnungen
 
@@ -87,7 +89,7 @@ verwendet und nicht in die ESP32-Produktionsbuilds eingebunden.
 Lokale Ausfuehrung:
 
 ```bash
-clang-format --dry-run --Werror $(find src include lib test -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
+clang-format --dry-run --Werror $(find src include lib test main -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
 clang-format -i <datei>
 
 pio run -e native -t compiledb
