@@ -54,17 +54,23 @@ Der normale Header ist 32 px hoch. Die vier festen Bottom-Slots und alle
 Shellregeln bleiben bei ADR-019 und der Ownerquelle; diese Spezifikation
 verdoppelt sie nicht.
 
-| Bereich | Geometrievertrag bei 320 x 240 px | Regel |
+| Bereich | Verbindlicher Rahmen bei 320 x 240 px | Regel |
 |---|---|---|
-| Langes Headerlogo | sichtbarer Rahmen x=4, y=4, 168 x 24 px | ManuEngineer.svg ist bei 24 px Hoehe proportional rund 168 px breit; nie strecken, stauchen oder neu zeichnen. |
-| Rechte Headerzone | x=176..316 innerhalb der 32-px-Headerhoehe | reserviert fuer kompakte Sprache, WLAN und Uhrzeit ohne Sekunden; sichtbare Elemente duerfen nicht in den Logorahmen ragen. |
-| Sprache | kompakt, beispielsweise DE ▾ | aktive Sprache; sichtbarer Text und Hit-Target sind getrennte Konzepte. |
-| WLAN | Symbol | ausreichend grosses, nicht ueberlappendes unsichtbares Touchziel; keine dauerhafte Buttonoptik. |
-| Uhrzeit | Text ohne Sekunden | Anzeige oder vorhandene Zeiteinstellung gemaess Shellvertrag. |
+| Header | x=0..319, y=0..31 | feste Hoehe 32 px |
+| Langes Headerlogo | sichtbar x=4..171, y=4..27, 168 x 24 px | ManuEngineer.svg ist bei 24 px Hoehe proportional rund 168 px breit; nie strecken, stauchen oder neu zeichnen. |
+| Abstand | x=172..175, y=0..31 | frei; trennt Logo und rechte Zone |
+| Sprache | sichtbar und Hit-Target x=176..219, y=0..31, 44 x 32 px | kompakte aktive Sprache einschliesslich DE, EN und ES; sichtbarer Text und Hit-Target bleiben getrennte Konzepte. |
+| WLAN | Hit-Target x=220..263, y=0..31, 44 x 32 px | sichtbares Symbol darf kleiner sein; Hit-Target ist nicht ueberlappend und besitzt keine dauerhafte Buttonoptik. |
+| Uhrzeit | Bereich x=264..315, y=0..31, 52 x 32 px | Text ohne Sekunden; nur interaktiv, wenn eine zulaessige Zeiteinstellung existiert, sonst reine Anzeige. |
+| Rechter Rand | x=316..319, y=0..31 | frei |
 
 Die lange Variante ist R1-Standard. Ergibt die spaetere reale Messung, dass sie
 mit der rechten Headerzone nicht robust passt, darf der Renderer nicht
 eigenmaechtig auf die kurze Variante wechseln; dies erfordert einen Ownerentscheid.
+Die Teilbereiche sind vollstaendig, lueckenlos innerhalb der rechten Zone und
+nicht ueberlappend. #26 simuliert sie bei 320 x 240 px; #31 prueft sie mit
+resistivem Touch. Bestaetigt die reale Touchpruefung die 32-px-Headerhoehe nicht
+als robust, ist dies ein Ownerentscheid und kein stiller Renderer-Fallback.
 
 ## Boot-Splash, Startstatus und Fallback
 
@@ -111,20 +117,55 @@ Release 1 keine Laufzeitwahl.
 | text_secondary | #D9D2C7 | aus Branding abgeleitet: gedämpftes Hell | sekundaerer Text |
 | text_disabled | #A69D91 | aus Branding abgeleitet: gedämpftes Hell | deaktivierter Text |
 | brand_primary | #D89A3B | aus Branding uebernommen: Gold | Marke und primaere Betonung |
+| on_brand_primary | #1C1712 | aus Branding uebernommen: dunkle Logoform | Text und Icons auf brand_primary |
 | brand_accent | #9A7C4E | aus Branding uebernommen: Bronze | untergeordnete Markenbetonung |
 | focus | #F4C06E | ergaenzende funktionale Designfarbe, aus Goldhelligkeit abgeleitet | Fokusindikator |
 | selection | #5D421F | aus Branding abgeleitet: dunkle Goldflaeche | Auswahlhintergrund |
+| on_selection | #FBF7EF | aus Branding uebernommen: helle Logoform | Text und Icons auf selection |
 | success | #5DBA82 | ergaenzende funktionale Designfarbe | positiver Status |
+| on_success | #1C1712 | aus Branding uebernommen: dunkle Logoform | Text und Icons auf success |
 | warning | #E7AE57 | ergaenzende funktionale Designfarbe, nicht brand_primary | Warnung |
+| on_warning | #1C1712 | aus Branding uebernommen: dunkle Logoform | Text und Icons auf warning |
 | error | #E36B6B | ergaenzende funktionale Designfarbe | Fehler |
+| on_error | #1C1712 | aus Branding uebernommen: dunkle Logoform | Text und Icons auf error |
 | critical | #FF9B9B | ergaenzende funktionale Designfarbe | kritischer Fehler |
+| on_critical | #1C1712 | aus Branding uebernommen: dunkle Logoform | Text und Icons auf critical |
 | info | #72B9E8 | ergaenzende funktionale Designfarbe | Information |
+| on_info | #1C1712 | aus Branding uebernommen: dunkle Logoform | Text und Icons auf info |
 | disabled_surface | #252019 | aus Branding abgeleitet: abgedunkelte Grundflaeche | deaktivierter Container |
 | disabled_content | #978D80 | aus Branding abgeleitet: gedämpftes Hell | deaktivierte Symbole und Inhalte |
-| overlay | #000000B3 | ergaenzende funktionale Designfarbe: 70-%-Schwarz | Modal- und Recoveryueberlagerung |
+| overlay | Zielwirkung 70-%-Schwarz, Referenz #000000B3 | Designreferenz, kein Speicherformat | Modal- und Recoveryueberlagerung |
 
 Gold ist keine allgemeine Warnfarbe. Warnung, Fehler und kritisch benoetigen
 zusätzlich Icon und Text; Farbe ist nie der einzige Informationstraeger.
+
+Text und Icons auf semantisch gefaerbten Flaechen verwenden ausschliesslich das
+zugehoerige on_* Token. text_primary ist nur fuer normale dunkle Themeflaechen
+vorgesehen. Apps duerfen eine Vordergrundfarbe weder anhand eines Statuswerts
+noch anhand einer Screen-spezifischen Farbentscheidung waehlen.
+
+### Overlay ohne Rendererannahme
+
+overlay beschreibt eine semantische Wirkung, nicht ARGB8888 oder ein anderes
+Speicherformat. #000000B3 ist nur die Designreferenz fuer 70-%-Schwarz ueber
+einer zulässigen Basisflaeche. Ein Renderer mit Alpha darf die Ueberblendung
+darstellen. Ohne Alpha verwendet die zentrale Theme-/Rendererkonfiguration den
+folgenden deterministischen, deckenden Ersatzwert; Screens berechnen weder
+Alpha noch Mischwerte selbst.
+
+| Zulaessige Basisflaeche | Deckender Ersatz fuer overlay |
+|---|---|
+| background | #080705 |
+| surface | #0D0B08 |
+| surface_elevated | #100E0B |
+| surface_interactive | #14110C |
+| disabled_surface | #0B0A08 |
+| selection | #1C1409 |
+
+Die Tabelle begrenzt die zulaessigen Basisflaechen. Der deckende Fallback
+benoetigt weder Alpha noch einen zusätzlichen Vollbildpuffer. #31 misst reale
+Darstellung und Ressourcenwirkung fuer den gewaehlten Renderer und das
+Zielformat.
 
 ### Rechnerische Kontrastbetrachtung
 
@@ -140,6 +181,13 @@ Helligkeit und Blickwinkel in #31.
 | brand_primary auf background | 3:1 | 7.29:1 | bestanden |
 | focus auf background | 3:1 | 10.68:1 | bestanden |
 | success, warning, error, critical, info auf background | 3:1 | 5.57:1 bis 8.97:1 | bestanden |
+| on_brand_primary auf brand_primary | 4.5:1 | 7.29:1 | bestanden |
+| on_success auf success | 4.5:1 | 7.46:1 | bestanden |
+| on_warning auf warning | 4.5:1 | 8.97:1 | bestanden |
+| on_error auf error | 4.5:1 | 5.57:1 | bestanden |
+| on_critical auf critical | 4.5:1 | 8.82:1 | bestanden |
+| on_info auf info | 4.5:1 | 8.32:1 | bestanden |
+| on_selection auf selection | 4.5:1 | 8.68:1 | bestanden |
 
 ## Ressourcenmodell und spaetere Renderergrenze
 
@@ -203,12 +251,16 @@ bleiben in #31 FINAL_SELECTION_PENDING beziehungsweise TBD_HARDWARE.
 - Alle drei Owner-SVGs liegen bytegleich unter den dokumentierten
   Repositorypfaden und bestehen XML-, ViewBox-, Sicherheits- und Hashpruefung.
 - Das lange Logo ist als R1-Standard mit proportionaler 168-x-24-px-Geometrie
-  dokumentiert; die rechte Headerzone bleibt reserviert.
+  dokumentiert; die rechte Headerzone besitzt simulierte und real pruefbare,
+  nicht ueberlappende Teilbereiche.
 - Der Splash ist proportional, zentriert, nicht blockierend und besitzt den
   statischen Fallback aus demselben Master.
 - Jedes Theme-Token besitzt einen konkreten Wert und nachvollziehbare Herkunft;
-  funktionale Statusfarben sind klar von Brandingfarben getrennt.
+  funktionale Statusfarben sind klar von Brandingfarben getrennt; gefaerbte
+  Flaechen besitzen ein zugeordnetes on_* Token.
 - Wesentliche Text-/Hintergrund- und Statuskontraste sind rechnerisch belegt.
+- overlay bleibt eine semantische Wirkung mit zentralem, alpha-unabhaengigem
+  deckendem Fallback und ohne Screen-lokale Mischwerte.
 - #25 kann Asset-IDs und semantische Token als rendererfreie Vertraege nutzen,
   #26 die Geometrie im Simulator validieren und #31 Konvertierung sowie reale
   Ressourcen- und Hardwaregates pruefen.
