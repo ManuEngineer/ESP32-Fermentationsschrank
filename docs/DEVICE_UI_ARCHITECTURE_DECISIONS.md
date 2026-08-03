@@ -70,6 +70,11 @@ Branding wird zentral und anwendungsunabhängig konfiguriert und nicht in Screen
 
 Dazu gehören mindestens Markenname, Headerlogo, Bootlogo, Theme-Grundwerte sowie Web-Favicon/Web-Branding.
 
+Die konkrete rendererunabhaengige R1-Definition fuer ManuEngineer-Assets,
+Headergeometrie, Boot-Splash und semantische Theme-Tokens steht in
+[`DEVICE_UI_VISUAL_DESIGN.md`](DEVICE_UI_VISUAL_DESIGN.md). Renderer, Zielformat
+und reale Ressourcenpruefung bleiben davon unberuehrt.
+
 Für Release 1 wird Branding zur Build-Zeit festgelegt. Die erzeugte Firmware besitzt ein festes Branding; die Plattform bleibt für andere Projekte konfigurierbar. Laufzeitänderbares Branding ist nicht Bestandteil von Release 1.
 
 Initiale Sprachen:

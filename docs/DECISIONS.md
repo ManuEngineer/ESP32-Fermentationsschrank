@@ -346,3 +346,5 @@
   Status-LEDs werden als Bedien- oder Recoveryweg vorausgesetzt. Die
   ausfuehrliche Ownerquelle ist
   [`DEVICE_UI_ARCHITECTURE_DECISIONS.md`](DEVICE_UI_ARCHITECTURE_DECISIONS.md).
+  Die konkrete visuelle R1-Ausprägung ist in
+  [`DEVICE_UI_VISUAL_DESIGN.md`](DEVICE_UI_VISUAL_DESIGN.md) festgelegt.
