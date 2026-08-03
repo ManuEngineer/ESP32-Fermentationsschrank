@@ -431,13 +431,20 @@ def warnings_txt_target(directory: Path) -> Path:
     return directory / WARNINGS_FILENAME
 
 
-def remove_stale_warnings(directory: Path) -> None:
-    """Vor jedem Profillauf: ein alter Zielnachweis wird entfernt, damit
-    kein veralteter Stand stillschweigend akzeptiert wird (Selftest-Fall
-    26)."""
-    target = warnings_txt_target(directory)
-    if target.exists():
-        target.unlink()
+def remove_stale_warnings(root: Path, directory: Path, profile: str) -> None:
+    """Entfernt vor einem Profillauf beide moeglichen alten Nachweise."""
+    for path in (warnings_txt_source(root), warnings_txt_target(directory)):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            raise AnalysisError(
+                profile,
+                "warnings-cleanup",
+                "veralteter warnings.txt-Nachweis konnte nicht entfernt "
+                f"werden: {path}: {error}",
+            ) from error
 
 
 def secure_warnings(root: Path, directory: Path, profile: str) -> None:
@@ -465,12 +472,13 @@ def analyze_profile(
     read_compile_commands_fn=read_compile_commands,
     run_clang_check_fn=run_clang_check,
     secure_warnings_fn=secure_warnings,
+    remove_stale_warnings_fn=remove_stale_warnings,
 ) -> None:
     root = root if root is not None else repo_root()
     directory = directory if directory is not None else analysis_dir(root, profile)
 
     verify_toolchain_fn(profile)
-    remove_stale_warnings(directory)
+    remove_stale_warnings_fn(root, directory, profile)
 
     reconfigure_fn(profile, directory, root)
 
@@ -883,6 +891,9 @@ def run_selftest() -> int:
     def _order_verify(profile: str) -> None:
         call_order.append("verify_toolchain")
 
+    def _order_cleanup(root_arg: Path, directory: Path, profile: str) -> None:
+        call_order.append("warnings_cleanup")
+
     def _order_reconfigure(profile: str, directory: Path, root_arg: Path) -> None:
         call_order.append("reconfigure")
 
@@ -904,13 +915,15 @@ def run_selftest() -> int:
         read_compile_commands_fn=_order_read,
         run_clang_check_fn=_order_clang_check,
         secure_warnings_fn=_order_secure,
+        remove_stale_warnings_fn=_order_cleanup,
     )
     checks.append((
         "Der Treiber ruft seinen eigenen reconfigure-Schritt vor dem Lesen "
         "der compile_commands.json und vor dem eigentlichen clang-check-"
         "Aufruf auf",
         call_order == [
-            "verify_toolchain", "reconfigure", "read_compile_commands",
+            "verify_toolchain", "warnings_cleanup", "reconfigure",
+            "read_compile_commands",
             "clang_check", "secure_warnings",
         ],
     ))
@@ -932,10 +945,10 @@ def run_selftest() -> int:
 
     # Fall 25: warnings.txt wird vor der Fehlerweitergabe gesichert.
     with _temp_directory_pair() as (fail_root, fail_dir):
-        (fail_root / WARNINGS_FILENAME).write_text("simulierter Fund\n", encoding="utf-8")
         fail_root_entries = _synthetic_compile_commands_entries(fail_root)
 
         def _failing_clang_check(profile: str, directory: Path, root_arg: Path, patterns: str) -> int:
+            warnings_txt_source(root_arg).write_text("frischer Fund\n", encoding="utf-8")
             return 1
 
         raised = _raises_analysis_error(lambda: analyze_profile(
@@ -946,7 +959,9 @@ def run_selftest() -> int:
             run_clang_check_fn=_failing_clang_check,
             secure_warnings_fn=secure_warnings,
         ))
-        warnings_secured = warnings_txt_target(fail_dir).is_file()
+        warnings_secured = (
+            warnings_txt_target(fail_dir).read_text(encoding="utf-8") == "frischer Fund\n"
+        )
     checks.append((
         "warnings.txt wird auch bei einem simulierten fehlgeschlagenen "
         "clang-check-Aufruf in den profilspezifischen Zielpfad verschoben, "
@@ -954,17 +969,197 @@ def run_selftest() -> int:
         raised and warnings_secured,
     ))
 
-    # Fall 26: veralteter warnings.txt-Zielnachweis wird entfernt.
-    with _temp_directory_pair() as (_stale_root, stale_dir):
+    # Fall 26: veralteter Profilnachweis wird vor dem neuen Lauf entfernt.
+    with _temp_directory_pair() as (stale_root, stale_dir):
         stale_target = warnings_txt_target(stale_dir)
         stale_target.parent.mkdir(parents=True, exist_ok=True)
         stale_target.write_text("veralteter Stand\n", encoding="utf-8")
-        remove_stale_warnings(stale_dir)
+        stale_entries = _synthetic_compile_commands_entries(stale_root)
+
+        def _fresh_profile_clang_check(
+            profile: str, directory: Path, root_arg: Path, patterns: str,
+        ) -> int:
+            warnings_txt_source(root_arg).write_text("frischer Profilstand\n", encoding="utf-8")
+            return 0
+
+        analyze_profile(
+            "bringup", root=stale_root, directory=stale_dir,
+            verify_toolchain_fn=_fake_verify_ok,
+            reconfigure_fn=_fake_reconfigure_ok,
+            read_compile_commands_fn=lambda path: stale_entries,
+            run_clang_check_fn=_fresh_profile_clang_check,
+            secure_warnings_fn=secure_warnings,
+        )
         checks.append((
             "Ein bereits vorhandener, veralteter warnings.txt-Zielnachweis "
-            "wird vor einem neuen Profillauf entfernt und nicht als "
-            "aktueller Nachweis stehen gelassen",
-            not stale_target.exists(),
+            "wird vor einem neuen Profillauf entfernt und nicht als aktueller "
+            "Nachweis stehen gelassen",
+            stale_target.read_text(encoding="utf-8") == "frischer Profilstand\n",
+        ))
+
+    # Fall 27: ein veralteter Rootnachweis wird vor reconfigure und clang-check entfernt.
+    with _temp_directory_pair() as (stale_root, stale_dir):
+        stale_source = warnings_txt_source(stale_root)
+        stale_source.write_text("veralteter Rootstand\n", encoding="utf-8")
+        stale_entries = _synthetic_compile_commands_entries(stale_root)
+        stale_seen_before_run: list[bool] = []
+
+        def _root_cleanup_reconfigure(profile: str, directory: Path, root_arg: Path) -> None:
+            stale_seen_before_run.append(warnings_txt_source(root_arg).exists())
+
+        def _root_cleanup_clang_check(
+            profile: str, directory: Path, root_arg: Path, patterns: str,
+        ) -> int:
+            stale_seen_before_run.append(warnings_txt_source(root_arg).exists())
+            warnings_txt_source(root_arg).write_text("frischer Rootstand\n", encoding="utf-8")
+            return 0
+
+        analyze_profile(
+            "bringup", root=stale_root, directory=stale_dir,
+            verify_toolchain_fn=_fake_verify_ok,
+            reconfigure_fn=_root_cleanup_reconfigure,
+            read_compile_commands_fn=lambda path: stale_entries,
+            run_clang_check_fn=_root_cleanup_clang_check,
+            secure_warnings_fn=secure_warnings,
+        )
+        checks.append((
+            "Ein bereits vorhandener Root-warnings.txt-Nachweis wird vor "
+            "reconfigure und clang-check entfernt; nur der frische Nachweis "
+            "wird gesichert",
+            stale_seen_before_run == [False, False]
+            and warnings_txt_target(stale_dir).read_text(encoding="utf-8")
+            == "frischer Rootstand\n",
+        ))
+
+    # Fall 28: fehlt nach der Bereinigung ein neuer Rootnachweis, bricht der Lauf hart ab.
+    with _temp_directory_pair() as (missing_root, missing_dir):
+        warnings_txt_source(missing_root).write_text(
+            "veralteter Rootstand\n", encoding="utf-8",
+        )
+        missing_entries = _synthetic_compile_commands_entries(missing_root)
+        missing_evidence = _raises_analysis_error(lambda: analyze_profile(
+            "bringup", root=missing_root, directory=missing_dir,
+            verify_toolchain_fn=_fake_verify_ok,
+            reconfigure_fn=_fake_reconfigure_ok,
+            read_compile_commands_fn=lambda path: missing_entries,
+            run_clang_check_fn=lambda profile, directory, root_arg, patterns: 0,
+            secure_warnings_fn=secure_warnings,
+        ))
+        no_stale_evidence = (
+            not warnings_txt_source(missing_root).exists()
+            and not warnings_txt_target(missing_dir).exists()
+        )
+        checks.append((
+            "Ein fehlender neuer Root-warnings.txt-Nachweis nach der "
+            "Bereinigung fuehrt zu einem harten Fehler statt zur Uebernahme "
+            "des alten Nachweises",
+            missing_evidence and no_stale_evidence,
+        ))
+
+    # Fall 29: ein frischer Nachweis wird vollstaendig in seinen Profilpfad verschoben.
+    with _temp_directory_pair() as (fresh_root, fresh_dir):
+        fresh_entries = _synthetic_compile_commands_entries(fresh_root)
+
+        def _fresh_clang_check(
+            profile: str, directory: Path, root_arg: Path, patterns: str,
+        ) -> int:
+            warnings_txt_source(root_arg).write_text("frischer Nachweis\n", encoding="utf-8")
+            return 0
+
+        analyze_profile(
+            "bringup", root=fresh_root, directory=fresh_dir,
+            verify_toolchain_fn=_fake_verify_ok,
+            reconfigure_fn=_fake_reconfigure_ok,
+            read_compile_commands_fn=lambda path: fresh_entries,
+            run_clang_check_fn=_fresh_clang_check,
+            secure_warnings_fn=secure_warnings,
+        )
+        checks.append((
+            "Ein frischer Root-warnings.txt-Nachweis wird vollstaendig in "
+            "den korrekten Profilpfad verschoben",
+            not warnings_txt_source(fresh_root).exists()
+            and warnings_txt_target(fresh_dir).read_text(encoding="utf-8")
+            == "frischer Nachweis\n",
+        ))
+
+    # Fall 30: ein Bring-up-Nachweis kann das Fehlen eines Release-Nachweises nicht verdecken.
+    with tempfile.TemporaryDirectory() as tmp:
+        isolation_root = Path(tmp)
+        bringup_dir = analysis_dir(isolation_root, "bringup")
+        release_dir = analysis_dir(isolation_root, "release")
+        isolation_entries = _synthetic_compile_commands_entries(isolation_root)
+
+        def _bringup_clang_check(
+            profile: str, directory: Path, root_arg: Path, patterns: str,
+        ) -> int:
+            warnings_txt_source(root_arg).write_text("bringup Nachweis\n", encoding="utf-8")
+            return 0
+
+        analyze_profile(
+            "bringup", root=isolation_root, directory=bringup_dir,
+            verify_toolchain_fn=_fake_verify_ok,
+            reconfigure_fn=_fake_reconfigure_ok,
+            read_compile_commands_fn=lambda path: isolation_entries,
+            run_clang_check_fn=_bringup_clang_check,
+            secure_warnings_fn=secure_warnings,
+        )
+        release_missing_evidence = _raises_analysis_error(lambda: analyze_profile(
+            "release", root=isolation_root, directory=release_dir,
+            verify_toolchain_fn=_fake_verify_ok,
+            reconfigure_fn=_fake_reconfigure_ok,
+            read_compile_commands_fn=lambda path: isolation_entries,
+            run_clang_check_fn=lambda profile, directory, root_arg, patterns: 0,
+            secure_warnings_fn=secure_warnings,
+        ))
+        checks.append((
+            "Bring-up- und Release-warnings.txt-Nachweise bleiben strikt "
+            "getrennt; ein Bring-up-Nachweis verdeckt keinen fehlenden "
+            "Release-Nachweis",
+            bringup_dir != release_dir
+            and warnings_txt_target(bringup_dir).read_text(encoding="utf-8")
+            == "bringup Nachweis\n"
+            and not warnings_txt_target(release_dir).exists()
+            and release_missing_evidence,
+        ))
+
+    # Fall 31: ein Cleanup-Fehler stoppt vor reconfigure und clang-check fail-closed.
+    with _temp_directory_pair() as (cleanup_root, cleanup_dir):
+        stale_source_directory = warnings_txt_source(cleanup_root)
+        stale_source_directory.mkdir()
+        (stale_source_directory / "blocked").write_text("x", encoding="utf-8")
+        cleanup_entries = _synthetic_compile_commands_entries(cleanup_root)
+        cleanup_calls: list[str] = []
+        cleanup_error: AnalysisError | None = None
+
+        def _cleanup_reconfigure(profile: str, directory: Path, root_arg: Path) -> None:
+            cleanup_calls.append("reconfigure")
+
+        def _cleanup_clang_check(
+            profile: str, directory: Path, root_arg: Path, patterns: str,
+        ) -> int:
+            cleanup_calls.append("clang-check")
+            return 0
+
+        try:
+            analyze_profile(
+                "bringup", root=cleanup_root, directory=cleanup_dir,
+                verify_toolchain_fn=_fake_verify_ok,
+                reconfigure_fn=_cleanup_reconfigure,
+                read_compile_commands_fn=lambda path: cleanup_entries,
+                run_clang_check_fn=_cleanup_clang_check,
+                secure_warnings_fn=secure_warnings,
+            )
+        except AnalysisError as error:
+            cleanup_error = error
+        checks.append((
+            "Ein Fehler beim Entfernen eines veralteten warnings.txt-"
+            "Nachweises bricht mit Profil, Phase und Pfad vor reconfigure "
+            "und clang-check fail-closed ab",
+            cleanup_error is not None
+            and cleanup_error.profile == "bringup"
+            and cleanup_error.phase == "warnings-cleanup"
+            and str(stale_source_directory) in cleanup_error.detail
+            and cleanup_calls == [],
         ))
 
     all_passed = True
