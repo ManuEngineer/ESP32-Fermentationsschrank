@@ -31,7 +31,8 @@ Verbindliche Regeln:
 - Danach folgen Benutzerprogramme.
 - Innerhalb beider Gruppen bleibt die Reihenfolge stabil und nachvollziehbar.
 - Fuer weitere Seiten werden grosse Schaltflaechen wie `Zurueck` und `Weiter`
-  beziehungsweise `Auf` und `Ab` verwendet.
+  beziehungsweise `Auf` und `Ab` am rechten Inhaltsrand verwendet. Die vier
+  festen Bottom-Slots bleiben dabei erhalten.
 - Wischgesten sind nicht erforderlich.
 - Die Liste darf nicht auf vier oder fuenf Programme begrenzt sein.
 - Ein deaktiviertes oder ungueltiges Programm wird klar gekennzeichnet und kann

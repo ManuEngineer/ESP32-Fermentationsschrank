@@ -20,6 +20,12 @@ Die Netzwerkbereitstellung und grundlegenden Sicherheitsgrenzen stehen in
   Sicherheitsregeln wie das Touchdisplay.
 - Keine Webaktion darf Sensor-, Aktor- oder Sicherheitspruefungen umgehen.
 - Ein Ausfall der Weboberflaeche beeinflusst den laufenden Prozess nicht.
+- Touch und Web verwenden dieselben rendererunabhaengigen View-Modelle,
+  typisierten Commands, erwarteten Revisionen und strukturierten
+  Command-Ergebnisse. Layout, Navigation, Browser-Sprache, Transport- und
+  Sitzungsgrenzen bleiben oberflaechenspezifisch.
+- Plattform- und App-Texte besitzen getrennte Namensraeume. Renderer und
+  Transportadapter veraendern Fachzustaende nie direkt.
 
 ## Responsive Darstellung
 
@@ -51,7 +57,8 @@ Geraetezustand.
 Mindestens sichtbar:
 
 - Geraetename
-- Produkt- und Schranklufttemperatur
+- Produkt- und Schranktemperatur; die technische Rolle bleibt
+  Schrankluftfuehler
 - Produktfuehlerstatus
 - aktive Meldungen
 - Netzwerk- und Zeitstatus in kompakter Form
@@ -64,7 +71,7 @@ Beispiel:
 Fermentationsschrank
 
 Produkt       nicht angeschlossen
-Luft          22,4 °C
+Schrank       22,4 °C
 
 [Programm starten]
 [Manueller Betrieb]
@@ -76,7 +83,7 @@ Mindestens sichtbar:
 
 - Programmname
 - benutzerverstaendliche Prozessphase
-- Produkt-, Schrankluft- und Solltemperatur
+- Produkt-, Schrank- und Solltemperatur
 - verstrichene und verbleibende Zeit
 - Abschlussverhalten
 - hoechste aktive Meldung
@@ -89,7 +96,7 @@ Joghurt mild
 Fermentation laeuft
 
 Produkt       41,8 °C
-Luft          42,3 °C
+Schrank       42,3 °C
 Soll          42,0 °C
 Restzeit      06:14
 
@@ -152,7 +159,9 @@ Verbindliche Regeln:
 - Eine Sprachwahl veraendert keine Prozessdaten oder Geraeteeinstellungen.
 - Benutzerdefinierte Programmnamen und Notizen werden nicht automatisch
   uebersetzt.
-- Fehlende Uebersetzungen verwenden Deutsch als Fallback.
+- Fehlende Uebersetzungen verwenden zuerst Englisch und danach den sichtbaren
+  technischen Schluessel. Die Regel gilt gleichermassen fuer Touch und Web,
+  ohne die browserindividuelle Sprachwahl zu veraendern.
 
 ## Normale Webanmeldung
 
@@ -244,7 +253,9 @@ wie der lokale Servicebereich.
 
 Nach korrekter PIN-Eingabe wird der Servicebereich fuer genau diese fluechtige
 normale oder anonyme lokale Websession freigegeben: 5 Minuten Inaktivitaet,
-hoechstens 15 Minuten absolut.
+hoechstens 15 Minuten absolut. Diese bewusst strengere netzwerkseitige
+Securitygrenze bleibt von der lokalen Touch-Servicefreigabe getrennt und wird
+nicht auf deren 10-Minuten-Inaktivitaet vereinheitlicht.
 
 Verbindliche Regeln:
 
@@ -345,7 +356,7 @@ Programm wurde inzwischen an einer anderen Oberflaeche geaendert.
 Die Weboberflaeche zeigt fuer den aktuellen Lauf ein Diagramm mit mindestens:
 
 - Produkttemperatur, sofern verfuegbar
-- Schranklufttemperatur
+- Schranktemperatur
 - Solltemperatur
 - Phasenwechseln
 - Warnungs- und Unterbrechungsmarkierungen, soweit sinnvoll

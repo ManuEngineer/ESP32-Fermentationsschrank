@@ -324,3 +324,25 @@
   `FINAL_SELECTION_PENDING`. ADR-010, ADR-013 und ADR-016 bleiben unveraendert
   gueltig; ADR-018 ersetzt fuer Release 1 die abweichenden Variante-A-Teile des
   bisherigen Persistenzvertrags.
+
+## ADR-019: Rendererunabhaengige Device-UI-Shell
+
+- **Status:** accepted
+- **Datum:** 2026-08-03
+- **Kontext:** Touchdisplay und Web benoetigen gemeinsame fachliche Projektionen
+  und Commands, ohne Renderer, Treiber, Hardware oder Fachlogik zu koppeln.
+- **Entscheidung:** Release 1 verwendet eine feste lokale Device-Shell mit
+  Header und genau vier festen, kontextabhaengigen Bottom-Slots. Gemeinsame
+  View-Modelle, Commands, Textschluessel, Branding-, Theme- und
+  Sprachpaketvertraege bleiben rendererunabhaengig. ManuEngineer ist das
+  Build-Zeit-Standardbranding; die aktive Sprache und ein enthaltenes Theme
+  sind Laufzeitwahlen. LVGL bleibt bevorzugter, aber nicht ausgewaehlter
+  Kandidat. Lokale Servicefreigabe dauert 10 Minuten bei Inaktivitaet ohne
+  R1-Maximaldauer; die Web-Servicepolicy bleibt getrennt 5 Minuten
+  Inaktivitaet/15 Minuten absolut.
+- **Folgen:** #25 besitzt die gemeinsamen Contracts, #26 die simulierte lokale
+  Shell und #31 erst nach Hardwarebeweis Renderer, Treiber, Assets und
+  Kalibrierung. Keine physischen Taster, Encoder, Programmwahlschalter oder
+  Status-LEDs werden als Bedien- oder Recoveryweg vorausgesetzt. Die
+  ausfuehrliche Ownerquelle ist
+  [`DEVICE_UI_ARCHITECTURE_DECISIONS.md`](DEVICE_UI_ARCHITECTURE_DECISIONS.md).

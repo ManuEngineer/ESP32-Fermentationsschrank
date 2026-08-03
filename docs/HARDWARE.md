@@ -204,6 +204,15 @@ Noch zu pruefen:
 - Hintergrundbeleuchtung und Dimmung
 - moegliche Konflikte mit Bootstrapping-Pins
 
+## Lokale Bedien- und Anzeigeelemente
+
+Release 1 besitzt das Touchdisplay als einzigen lokalen Eingabekanal und den
+Pieper als zusaetzlichen Ausgabekanal. Es gibt keine physischen Taster, keinen
+Encoder, keinen Programmwahlschalter und keine Status-LEDs. Daher darf weder
+normaler Betrieb noch Service, Recovery oder Touchkalibrierung ein solches
+Element voraussetzen. Raw-Touch-Recovery bleibt bis zum Hardwarebeweis
+`TBD_HARDWARE`; der Pieper ist kein Safetyentscheider.
+
 ## Versorgung
 
 Vorgesehen:
