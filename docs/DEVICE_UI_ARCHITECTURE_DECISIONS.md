@@ -1,7 +1,7 @@
 # Device-UI-Architekturentscheidungen
 
 **Projekt:** ESP32-Fermentationsschrank / wiederverwendbare Device Platform
-**Status:** Vom Owner im Gespräch bestätigt
+**Status:** Vom Owner bestätigt; Roadmap- und Spezifikationsintegration in PR #80 umgesetzt, Ownerreview ausstehend
 **Zweck:** Verbindliche Grundlage für die spätere Prüfung und Anpassung der Issues #25, #26 und #31 sowie für die Implementierungsplanung
 **Hinweis:** Dieses Dokument enthält Architektur- und Produktentscheide. Es ist noch kein Implementierungsauftrag und greift der vorgesehenen Issue-Reihenfolge nicht vor.
 
@@ -351,16 +351,27 @@ Release 1 besitzt normalen Zugriff und geschützten Servicezugriff, aber kein ko
 
 ## UI-21 – Inaktivitätsbasierte Servicesitzung
 
-- Ablauf nach Inaktivitätsdauer, nicht starrer Gesamtdauer.
-- Relevante Bedienhandlungen im geschützten Bereich setzen den Timer zurück.
-- Hintergrundaktivität und automatische Updates nicht.
-- Nach Ablauf automatische Sperre.
-- Dauer zentral als Build-/Produktparameter.
-- Optionale absolute Maximaldauer ebenfalls als Build-Parameter.
-- Frei zugängliche Informationen bleiben sichtbar.
-- Geschützte Aktionen verlangen erneut die PIN.
+### Lokale Touch-Servicefreigabe
+
+- Ablauf nach 10 Minuten Inaktivität, nicht nach einer starren Gesamtdauer.
+- Die 10 Minuten sind zentraler Build-/Produktparameter und nicht über die UI
+  änderbar.
+- Relevante Bedienhandlungen im geschützten Bereich setzen den Timer zurück;
+  Hintergrundaktivität und automatische Updates nicht.
+- Release 1 besitzt keine absolute Maximaldauer für die lokale Freigabe.
+- Die Freigabe wird bei Inaktivitätsablauf, Gerätestart, explizitem Abmelden und
+  definierten sicherheitsrelevanten Zustandswechseln gesperrt.
+- Frei zugängliche Informationen bleiben sichtbar; geschützte Aktionen verlangen
+  erneut die PIN.
+- Eingaben in Editoren dürfen bei Ablauf nicht kommentarlos verloren gehen;
+  Speichern verlangt erneut PIN.
+
+### Getrennte Web-Servicepolicy
+
 - Touch und Web verwalten getrennte Sitzungen.
-- Eingaben in Editoren dürfen bei Ablauf nicht kommentarlos verloren gehen; Speichern verlangt erneut PIN.
+- Die Web-Servicefreigabe bleibt die bewusst strengere netzwerkseitige Grenze:
+  5 Minuten Inaktivität und 15 Minuten absolute Maximaldauer.
+- Diese Web-Policy wird nicht mit der lokalen Touch-Servicefreigabe vereinheitlicht.
 
 ## UI-22 – Displayhelligkeit und Ruhezustand
 
@@ -415,7 +426,7 @@ Alle lokalen Benutzeraktionen erfolgen über das Touchdisplay und typisierte Com
 
 ---
 
-## Noch offen und bewusst nicht vorentschieden
+## Noch offene technische Punkte
 
 1. endgültige Wahl von LVGL oder anderem Renderer
 2. konkreter Display-/Touch-Treiberstack
@@ -424,12 +435,23 @@ Alle lokalen Benutzeraktionen erfolgen über das Touchdisplay und typisierte Com
 5. konkrete Helligkeits-, Dimm- und Ausschaltwerte
 6. konkrete Pieper-Signalmuster
 7. genaue Seiten- und Komponentenliste nach Abgleich mit den bestehenden Spezifikationen
-8. Einordnung und Anpassung der Issues #25, #26 und #31
-9. Bereinigung aller veralteten Repository-Verweise auf Taster, Encoder, Programmwahlschalter oder Status-LEDs
+
+## Erledigte Roadmap- und Dokumentationspunkte
+
+- Der Live-Abgleich, die Konfliktmatrix, der Issue-Schnitt und die Anpassung
+  von #25, #26 und #31 sind in PR #80 umgesetzt.
+- Die repositoryweite Prüfung physischer Bedienelementannahmen ist erfolgt;
+  verbindlich ausgeschlossene Taster, Encoder, Programmwahlschalter und
+  Status-LEDs sind in Spezifikation, Hardware- und Roadmapdokumentation
+  bereinigt beziehungsweise als Ausschluss dokumentiert.
 
 ## Nächster verbindlicher Schritt
 
-Vor jeder Implementierung wird ein Agentenauftrag erstellt, der:
+PR #80 wartet auf unabhängiges Ownerreview. Nach seinem Abschluss startet jedes
+einzelne Implementierungs-Issue weiterhin nur mit einem eigenen Plan-first-
+Draft-PR und einer commitgebundenen Ownerfreigabe. Insbesondere bleiben
+Rendererwahl, Treiberstack, Ressourcenmessung, Font-/Assets, Helligkeitswerte
+und reale Hardwareverifikation vor ihrer jeweiligen Freigabe offen.
 
 1. den Live-Stand des Repositorys und der Issues #25, #26 und #31 vollständig prüft,
 2. diese Entscheidungen mit Spezifikationen, ADRs, Plänen und Abhängigkeiten abgleicht,

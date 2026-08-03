@@ -82,10 +82,12 @@ eigene Bestaetigung.
 
 Frei sichtbar bleiben Firmwareversion, Geraete-, Netzwerk- und Zeitstatus,
 Anzeigehelligkeit sowie passive Logs und Diagnose. Neustart,
-Netzwerkruecksetzen, Touchkalibrierung sowie gespeicherte Daten exportieren oder
-loeschen benoetigen eine eigene Bestaetigung. Werkseinstellungen, Aktortest,
-Sensorkalibrierung, Reglerparameter, Hardwarezuordnung und andere
-sicherheitsrelevante Servicefunktionen benoetigen zusaetzlich die PIN.
+Netzwerkruecksetzen sowie gespeicherte Daten exportieren oder loeschen benoetigen
+eine eigene Bestaetigung. Die normale, aus dem Menue gestartete
+Touchkalibrierung benoetigt **immer Service-PIN und eigene bewusste
+Bestaetigung**. Werkseinstellungen, Aktortest, Sensorkalibrierung,
+Reglerparameter, Hardwarezuordnung und andere sicherheitsrelevante
+Servicefunktionen benoetigen zusaetzlich die PIN.
 
 ### Eintritt und Aktortests
 
@@ -191,10 +193,12 @@ Regeln:
 
 ### Normaler Weg
 
-PIN-geschuetzt im Servicebereich. Neue Werte werden erst nach erfolgreicher
-Plausibilitaetspruefung gespeichert.
+Die normale, aus dem Menue gestartete Touchkalibrierung ist nur im
+PIN-geschuetzten Servicebereich nach einer eigenen bewussten Bestaetigung
+zulaessig. Neue Werte werden erst nach erfolgreicher Plausibilitaetspruefung
+gespeichert.
 
-### Wiederherstellung bei unbrauchbarer Kalibrierung
+### PIN-unabhaengige Raw-Touch-Recovery bei unbrauchbarer Kalibrierung
 
 ```text
 Geraet einschalten
@@ -205,7 +209,8 @@ Geraet einschalten
 -> erst danach speichern
 ```
 
-- erlaubt keinen allgemeinen Servicezugang
+- ist PIN-unabhaengig, erlaubt aber ausschliesslich die
+  Kalibrierungswiederherstellung und keinen allgemeinen Servicezugang
 - alle Aktoren bleiben AUS
 - bei Abbruch bleiben alte beziehungsweise keine Werte aktiv
 - Rohwerte und Controlleranbindung bleiben `TBD_HARDWARE`
