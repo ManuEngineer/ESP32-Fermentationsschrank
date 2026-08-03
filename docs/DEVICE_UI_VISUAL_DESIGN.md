@@ -223,4 +223,3 @@ bleiben in #31 FINAL_SELECTION_PENDING beziehungsweise TBD_HARDWARE.
 - keine LVGL-, LovyanGFX-, TFT_eSPI- oder andere Treiberintegration;
 - keine Displaypuffer-, DMA-, GPIO-, Touch- oder konkrete Animationsimplementierung;
 - keine Laufzeitwahl des Brandings in Release 1.
-
