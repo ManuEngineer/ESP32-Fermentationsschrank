@@ -1,22 +1,16 @@
 #!/usr/bin/env python3
-"""Baut die angegebenen PlatformIO-Profile und/oder liest bereits gebaute
+"""Baut den nativen PlatformIO-Hostpfad und/oder liest bereits gebaute
 ESP-IDF-Profile aus und erzeugt einen Firmware- und Ressourcen-Groessenbericht.
 
 Der Bericht ist informativ. Verbindliche Byte-Budgets sind laut
 `docs/OPEN_POINTS.md` weiterhin `TBD_IMPLEMENTATION_BUDGET` und werden hier
 nicht erfunden.
 
-Zweiphasiger Uebergang (docs/tasks/issue-74-implementation-plan.md,
-Abschnitt 7.7.5): Phase 1 (Commit 3, dieser Stand) erzeugt einen
-Parallelbericht mit klar unterschiedenen Ueberschriften fuer Arduino-
-/PlatformIO- und ESP-IDF-Messungen, damit beide Wertereihen nie unter
-derselben Bezeichnung vermischt werden. Der PlatformIO-Teil und der
-ESP-IDF-Teil koennen in getrennten Aufrufen in dieselbe Datei geschrieben
-werden (`--append`), sodass die CI den ESP-IDF-Teil erst nach den
-ESP-IDF-Builds ergaenzen kann, ohne den bestehenden fruehen
-PlatformIO-Buildschritt (Commit 1/2) umzustrukturieren. Phase 2 (Commit 5)
-stellt im selben Commit, der den Arduino-Pfad entfernt, auf einen
-ESP-IDF-only-Bericht um.
+Finaler Vertrag (docs/tasks/issue-74-implementation-plan.md, Abschnitt
+7.7.5): PlatformIO baut ausschliesslich den nativen Hostpfad. Der
+PlatformIO- und ESP-IDF-Teil koennen in getrennten Aufrufen in dieselbe Datei
+geschrieben werden (`--append`), sodass die CI die ESP-IDF-Messungen nach
+deren Builds ergaenzt, ohne den fruehen nativen Hostbuild zu wiederholen.
 
 Fuer ESP-IDF-Profile werden ausschliesslich die offiziellen, von `idf.py`
 generierten Dateien ausgewertet (`size --format json2`,
@@ -38,7 +32,7 @@ from typing import Optional
 
 import esp_idf_contract
 
-DEFAULT_ENVIRONMENTS = ("native", "esp32_bringup", "esp32_release")
+DEFAULT_ENVIRONMENTS = ("native",)
 
 SIZE_BLOCK_PATTERN = re.compile(
     r"Checking size \.pio/build/(?P<env>[\w-]+)/firmware\.elf\s*\n"
@@ -64,6 +58,25 @@ def run_pio_build(environments: tuple[str, ...], pio: str) -> str:
     if result.returncode != 0:
         raise SystemExit(result.returncode)
     return result.stdout
+
+
+def selected_platformio_environments(
+    environments: tuple[str, ...], *, append: bool
+) -> tuple[str, ...]:
+    """Waehlt PlatformIO-Environments fuer den finalen Bericht.
+
+    Ohne explizite Environments baut der erste Aufruf nur den kanonischen
+    nativen Hostpfad. Ein spaeterer `--append`-Aufruf verarbeitet nur die
+    bereits erzeugten ESP-IDF-Artefakte und startet keinen zweiten Hostbuild.
+    """
+    selected = environments or (() if append else DEFAULT_ENVIRONMENTS)
+    unsupported = set(selected) - set(DEFAULT_ENVIRONMENTS)
+    if unsupported:
+        raise SystemExit(
+            "Entfernte PlatformIO-Environment(s) angefordert: "
+            + ", ".join(sorted(unsupported))
+        )
+    return selected
 
 
 def parse_esp32_size_reports(build_output: str) -> dict[str, dict[str, object]]:
@@ -117,7 +130,7 @@ def platformio_report_lines(heading: str, environment: str,
     return lines
 
 
-# --- ESP-IDF-Zweig (Abschnitt 7.7.1/7.7.2/7.7.5 Phase 1) -------------------
+# --- ESP-IDF-Zweig (Abschnitt 7.7.1/7.7.2/7.7.5) ---------------------------
 
 
 def required_json(path: Path) -> dict:
@@ -373,38 +386,37 @@ def run_selftest() -> int:
             and overridden_report["build_commit"] == git_head_sha(),
         ))
 
-        arduino_reports = {
-            "esp32_bringup": {
-                "ram_percent": 12.3, "ram_used_bytes": 1111, "ram_total_bytes": 327680,
-                "flash_percent": 4.5, "flash_used_bytes": 2222, "flash_total_bytes": 4194304,
-            },
-        }
         combined_lines = (
-            platformio_report_lines(
-                "Arduino/PlatformIO esp32_bringup (letzter Arduino-Vergleichspfad)",
-                "esp32_bringup", arduino_reports,
-            )
+            platformio_report_lines("native", "native", {})
             + esp_idf_report_lines("bringup", report)
         )
         combined_text = "\n".join(combined_lines)
 
         checks.append((
-            "Bericht enthaelt getrennte Arduino- und ESP-IDF-Ueberschriften "
-            "fuer dasselbe Profil",
-            "## Arduino/PlatformIO esp32_bringup" in combined_text
-            and "## ESP-IDF esp32_bringup" in combined_text,
+            "Finaler Bericht enthaelt nativen Host- und ESP-IDF-Abschnitt, "
+            "aber keinen Arduino-Abschnitt",
+            "## native" in combined_text
+            and "## ESP-IDF esp32_bringup" in combined_text
+            and "Arduino/PlatformIO" not in combined_text,
         ))
 
-        arduino_section, _, esp_idf_section = combined_text.partition("## ESP-IDF")
         checks.append((
-            "Arduino-Messwert erscheint nur im Arduino-Abschnitt, nicht im "
-            "ESP-IDF-Abschnitt",
-            "1111" in arduino_section and "1111" not in esp_idf_section,
+            "Standardbericht baut ausschliesslich den nativen Hostpfad",
+            selected_platformio_environments((), append=False) == DEFAULT_ENVIRONMENTS,
         ))
         checks.append((
-            "ESP-IDF-Messwert erscheint nur im ESP-IDF-Abschnitt, nicht im "
-            "Arduino-Abschnitt",
-            "99999999" in esp_idf_section and "99999999" not in arduino_section,
+            "ESP-IDF-Anhang startet keinen zweiten PlatformIO-Build",
+            selected_platformio_environments((), append=True) == (),
+        ))
+
+        removed_environment_rejected = False
+        try:
+            selected_platformio_environments(("esp32_bringup",), append=False)
+        except SystemExit:
+            removed_environment_rejected = True
+        checks.append((
+            "Entfernte Arduino-PlatformIO-Environment wird im finalen Bericht abgelehnt",
+            removed_environment_rejected,
         ))
 
         manifest_path = write_artifact_manifest(report)
@@ -464,21 +476,19 @@ def main() -> int:
     parser.add_argument(
         "--append", action="store_true",
         help="An eine bestehende --output-Datei anhaengen statt sie zu "
-             "ueberschreiben (Abschnitt 7.7.5: ergaenzt denselben "
-             "Parallelbericht um die ESP-IDF-Messung, ohne den fruehen "
-             "PlatformIO-Buildschritt umzustrukturieren)",
+             "ueberschreiben; ohne explizite Environment-Angabe wird dabei "
+             "kein zweiter nativer PlatformIO-Build gestartet.",
     )
     parser.add_argument(
         "environments", nargs="*", default=(),
-        help="Zu bauende PlatformIO-Umgebungen (leer lassen, wenn nur "
-             "--esp-idf-profiles ausgewertet werden soll)",
+        help="Zu bauende PlatformIO-Umgebung; nur `native` ist zulaessig. "
+             "Leer startet im ersten Aufruf den nativen Standardpfad.",
     )
     parser.add_argument(
         "--esp-idf-profiles", nargs="*", default=(),
         choices=list(esp_idf_contract.PROFILES),
         help="Bereits gebaute ESP-IDF-Profile, deren Groessendaten und "
-             "Artefaktmanifeste zusaetzlich in den Parallelbericht "
-             "aufgenommen werden (Abschnitt 7.7.1/7.7.2)",
+             "Artefaktmanifeste in den finalen Bericht aufgenommen werden.",
     )
     parser.add_argument(
         "--source-git-sha", default=None,
@@ -503,7 +513,9 @@ def main() -> int:
     if arguments.selftest:
         return run_selftest()
 
-    environments = tuple(arguments.environments)
+    environments = selected_platformio_environments(
+        tuple(arguments.environments), append=arguments.append,
+    )
     report_lines: list[str] = []
 
     if not arguments.append:
@@ -519,11 +531,7 @@ def main() -> int:
         build_output = run_pio_build(environments, arguments.pio)
         esp32_reports = parse_esp32_size_reports(build_output)
         for environment in environments:
-            if environment == "native":
-                heading = environment
-            else:
-                heading = f"Arduino/PlatformIO {environment} (letzter Arduino-Vergleichspfad)"
-            report_lines += platformio_report_lines(heading, environment, esp32_reports)
+            report_lines += platformio_report_lines(environment, environment, esp32_reports)
 
     for profile in arguments.esp_idf_profiles:
         build_dir = esp_idf_build_dir(profile)

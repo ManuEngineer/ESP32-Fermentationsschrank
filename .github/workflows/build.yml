@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: PlatformIO installieren
+      - name: PlatformIO fuer nativen Hostpfad installieren
         run: python -m pip install platformio==6.1.19
 
       - name: Format- und Analysewerkzeuge installieren (clang 18.1.8)
@@ -53,8 +53,7 @@ jobs:
       - name: Firmware bauen und Groessenbericht erzeugen
         run: |
           set -o pipefail
-          python scripts/build_report.py --output build-report.md \
-            native esp32_bringup esp32_release 2>&1 | tee platformio-build.log
+          python scripts/build_report.py --output build-report.md 2>&1 | tee platformio-build.log
 
       - name: Fehlgeschlagenen Buildlog sichern
         if: failure()
@@ -63,9 +62,6 @@ jobs:
           name: platformio-build-log
           path: platformio-build.log
           if-no-files-found: ignore
-
-      - name: Effektive Boardkonfiguration pruefen
-        run: python scripts/check_platformio_config.py
 
       - name: Native Tests
         run: pio test -e native
@@ -151,7 +147,7 @@ jobs:
 
           python scripts/build_esp_idf_profiles.py all
 
-      - name: ESP-IDF-Ressourcenbericht ergaenzen (Parallelbericht)
+      - name: ESP-IDF-Ressourcenbericht ergaenzen (finaler Bericht)
         run: |
           set -euo pipefail
           . "$IDF_PATH/export.sh"

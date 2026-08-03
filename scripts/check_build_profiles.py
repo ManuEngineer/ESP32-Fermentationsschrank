@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Prueft den Profil- und Driftvertrag fuer beide ESP-IDF-Profile
+"""Prueft den finalen Profil- und Driftvertrag fuer beide ESP-IDF-Profile
 (Issue #74, docs/tasks/issue-74-implementation-plan.md Abschnitt 7.5.2).
 
-Aktuelle Phase: **Parallel-Migrationsvertrag** (Phase 1, Commit 1 bis 4).
-Prueft sowohl die neuen, isolierten ESP-IDF-Buildpfade als auch den noch
-unveraendert bestehenden Arduino-Pfad unter PlatformIO. Dieser
-Parallelzustand ist zeitlich begrenzt; in Commit 5 wird dieselbe Datei auf
-den finalen ESP-IDF-only-Vertrag umgestellt (Phase 2), sobald der
-Arduino-Pfad entfernt wird. Kein dauerhafter Bypass, kein
-Kommandozeilenschalter fuer den Parallelzustand.
+Der finale Vertrag erlaubt unter PlatformIO ausschliesslich den nativen
+Hosttestpfad. Arduino- und espressif32-Environments sind nach Commit 5 nicht
+mehr zulaessig. Die isolierten ESP-IDF-Buildpfade bleiben unveraendert
+verpflichtend. Es gibt keinen Migrationsmodus oder Bypass.
 
 Im normalen Repositorymodus ist die ESP-IDF-Herkunftspruefung
 verpflichtend: der ESP-IDF-Pfad wird ueber `--idf-path`, sonst ueber die
@@ -43,27 +40,14 @@ from pathlib import Path
 
 import esp_idf_contract
 
-EXPECTED_PLATFORMIO_ARDUINO_ENVS = {
-    f"env:{esp_idf_contract.build_dir_name(profile)}": {
-        "platform": "espressif32@7.0.1",
-        "framework": "arduino",
-        "board": "esp32dev",
-    }
-    for profile in esp_idf_contract.PROFILES
-}
-
 EXPECTED_PLATFORMIO_NATIVE_ENV = {
     "platform": "native",
     "test_framework": "unity",
 }
 
-ALLOWED_PLATFORMIO_SECTIONS = {"platformio", "profile", "env:native"} | set(
-    EXPECTED_PLATFORMIO_ARDUINO_ENVS
-)
+ALLOWED_PLATFORMIO_SECTIONS = {"platformio", "profile", "env:native"}
 
-EXPECTED_PLATFORMIO_DEFAULT_ENVS = {"native"} | {
-    esp_idf_contract.build_dir_name(profile) for profile in esp_idf_contract.PROFILES
-}
+EXPECTED_PLATFORMIO_DEFAULT_ENVS = {"native"}
 
 REQUIRED_SAFETY_DEFINES = {
     "APP_TARGET_FLASH_MB": "4",
@@ -71,6 +55,9 @@ REQUIRED_SAFETY_DEFINES = {
     "APP_WEB_OTA_ENABLED": "0",
     "APP_REAL_ACTUATORS_ENABLED": "0",
 }
+
+REQUIRED_CPP_STANDARD = "-std=gnu++17"
+REQUIRED_NATIVE_WARNINGS = {"-Wall", "-Wextra", "-Wpedantic", "-Werror"}
 
 # sdkconfig speichert String-Werte mit Anführungszeichen im Text selbst;
 # read_sdkconfig() entfernt sie bewusst nicht (verlustfreie Rohwertpruefung).
@@ -280,7 +267,7 @@ def check_profiles_are_isolated(build_root: Path) -> list[str]:
     return []
 
 
-# --- PlatformIO-Parallelvertrag ------------------------------------------
+# --- Finaler PlatformIO-Vertrag -------------------------------------------
 
 _PLATFORMIO_REFERENCE = re.compile(r"\$\{([\w:]+)\.([\w]+)\}")
 
@@ -307,14 +294,20 @@ def resolve_platformio_option(
     return "\n".join(resolved_lines)
 
 
+def tokens_from_platformio_flags(
+    parser: configparser.ConfigParser, section: str
+) -> list[str]:
+    resolved = resolve_platformio_option(parser, section, "build_flags")
+    return shlex.split(resolved)
+
+
 def defines_from_platformio_flags(
     parser: configparser.ConfigParser, section: str
 ) -> dict[str, list[str | None]]:
-    resolved = resolve_platformio_option(parser, section, "build_flags")
-    return group_defines(defines_from_tokens(shlex.split(resolved)))
+    return group_defines(defines_from_tokens(tokens_from_platformio_flags(parser, section)))
 
 
-def check_platformio_parallel_contract(platformio_ini_path: Path) -> list[str]:
+def check_platformio_final_contract(platformio_ini_path: Path) -> list[str]:
     if not platformio_ini_path.is_file():
         return [f"platformio.ini fehlt: {platformio_ini_path}"]
 
@@ -344,6 +337,12 @@ def check_platformio_parallel_contract(platformio_ini_path: Path) -> list[str]:
     if "profile" not in parser:
         violations.append("PlatformIO-Sektion [profile] fehlt")
     else:
+        profile_tokens = tokens_from_platformio_flags(parser, "profile")
+        if profile_tokens.count(REQUIRED_CPP_STANDARD) != 1:
+            violations.append(
+                f"[profile] build_flags: erwartete genau einmal {REQUIRED_CPP_STANDARD}, "
+                f"gefunden {profile_tokens.count(REQUIRED_CPP_STANDARD)}"
+            )
         profile_defines = defines_from_platformio_flags(parser, "profile")
         for name, expected in REQUIRED_SAFETY_DEFINES.items():
             values = profile_defines.get(name, [])
@@ -367,6 +366,13 @@ def check_platformio_parallel_contract(platformio_ini_path: Path) -> list[str]:
                 violations.append(
                     f"env:native: erwartete {key}={expected!r}, gefunden {actual!r}"
                 )
+        native_tokens = tokens_from_platformio_flags(parser, "env:native")
+        for warning in sorted(REQUIRED_NATIVE_WARNINGS):
+            if native_tokens.count(warning) != 1:
+                violations.append(
+                    f"env:native build_flags: erwartetes Flag {warning} genau einmal, "
+                    f"gefunden {native_tokens.count(warning)}"
+                )
         native_defines = defines_from_platformio_flags(parser, "env:native")
         native_values = native_defines.get("APP_PROFILE_NATIVE", [])
         if native_values != ["1"]:
@@ -382,38 +388,11 @@ def check_platformio_parallel_contract(platformio_ini_path: Path) -> list[str]:
                     "vorhanden"
                 )
 
-    for profile in esp_idf_contract.PROFILES:
-        section = f"env:{esp_idf_contract.build_dir_name(profile)}"
-        expected_options = EXPECTED_PLATFORMIO_ARDUINO_ENVS[section]
-        if section not in parser:
-            violations.append(
-                f"Parallelphase verletzt: PlatformIO-Environment {section} fehlt "
-                "(Arduino-Pfad darf vor Commit 5 nicht entfernt werden)"
-            )
-            continue
-        for key, expected in expected_options.items():
-            actual = parser[section].get(key)
-            if actual != expected:
-                violations.append(
-                    f"{section}: erwartete {key}={expected!r}, gefunden {actual!r} "
-                    "(Altvertrag waehrend Parallelphase muss unveraendert bleiben)"
-                )
-
-        env_defines = defines_from_platformio_flags(parser, section)
-        own_name = esp_idf_contract.profile_define(profile)
-        other_name = esp_idf_contract.profile_define(esp_idf_contract.other_profile(profile))
-        own_values = env_defines.get(own_name, [])
-        if own_values != ["1"]:
-            violations.append(
-                f"{section}: erwartete genau eine Definition -D{own_name}=1, "
-                f"gefunden {own_values or '(fehlt)'}"
-            )
-        other_values = env_defines.get(other_name, [])
-        if other_values:
-            violations.append(
-                f"{section}: unerwartete Definition -D{other_name} zusaetzlich "
-                f"vorhanden ({other_values}) — Profile vertauscht?"
-            )
+    for section in parser.sections():
+        if parser[section].get("framework", "").strip() == "arduino":
+            violations.append(f"{section}: framework = arduino ist nach Commit 5 verboten")
+        if parser[section].get("platform", "").strip().startswith("espressif32"):
+            violations.append(f"{section}: espressif32-Plattform ist nach Commit 5 verboten")
 
     return violations
 
@@ -499,7 +478,7 @@ def check_repository(
     # Reviews).
     violations += check_profiles_are_isolated(build_root)
 
-    violations += check_platformio_parallel_contract(platformio_ini_path)
+    violations += check_platformio_final_contract(platformio_ini_path)
     violations += check_esp_idf_version(
         Path(idf_path), expected_tag=expected_tag, expected_commit=expected_commit,
     )
@@ -511,7 +490,7 @@ def check_repository(
         return 1
 
     profile_names = ", ".join(esp_idf_contract.build_dir_name(p) for p in profiles)
-    print(f"PASS: {profile_names} und der PlatformIO-Parallelvertrag sind korrekt.")
+    print(f"PASS: {profile_names} und der finale PlatformIO-Vertrag sind korrekt.")
     return 0
 
 
@@ -581,7 +560,8 @@ def _make_git_repo(root: Path, *, tag: str | None, dirty: bool = False) -> str:
 
 def _make_platformio_ini(
     *,
-    default_envs: str = "native, esp32_bringup, esp32_release",
+    default_envs: str = "native",
+    profile_cpp_standard: str = "    -std=gnu++17\n",
     profile_build_flags: str = (
         "    -DAPP_TARGET_FLASH_MB=4\n"
         "    -DAPP_REQUIRE_PSRAM=0\n"
@@ -589,18 +569,15 @@ def _make_platformio_ini(
         "    -DAPP_REAL_ACTUATORS_ENABLED=0\n"
     ),
     native_platform: str = "native",
+    native_warnings: str = (
+        "    -Wall\n"
+        "    -Wextra\n"
+        "    -Wpedantic\n"
+        "    -Werror\n"
+    ),
     native_extra_flags: str = "    -DAPP_PROFILE_NATIVE=1\n",
-    bringup_platform: str = "espressif32@7.0.1",
-    bringup_framework: str = "arduino",
-    bringup_board: str = "esp32dev",
-    bringup_extra_flags: str = "    -DAPP_PROFILE_ESP32_BRINGUP=1\n",
-    release_platform: str = "espressif32@7.0.1",
-    release_framework: str = "arduino",
-    release_board: str = "esp32dev",
-    release_extra_flags: str = "    -DAPP_PROFILE_ESP32_RELEASE=1\n",
+    native_framework: str | None = None,
     include_native: bool = True,
-    include_bringup: bool = True,
-    include_release: bool = True,
     extra_sections: str = "",
 ) -> str:
     """Baut ein minimales, aber strukturell reales platformio.ini-Fixture
@@ -608,23 +585,21 @@ def _make_platformio_ini(
     tatsaechliche Repository) mit gezielt ueberschreibbaren Feldern, statt
     fragiler Textersetzung an einer festen Konstante."""
     sections = [f"[platformio]\ndefault_envs = {default_envs}\n"]
-    sections.append(f"[profile]\nbuild_flags =\n    -std=gnu++17\n{profile_build_flags}")
+    sections.append(
+        f"[profile]\nbuild_flags =\n{profile_cpp_standard}{profile_build_flags}"
+        f"native_warnings =\n{native_warnings}"
+    )
     if include_native:
-        sections.append(
-            f"[env:native]\nplatform = {native_platform}\ntest_framework = unity\n"
-            f"build_flags =\n    ${{profile.build_flags}}\n{native_extra_flags}"
+        native_framework_line = (
+            f"framework = {native_framework}\n" if native_framework is not None else ""
         )
-    if include_bringup:
         sections.append(
-            f"[env:esp32_bringup]\nplatform = {bringup_platform}\n"
-            f"framework = {bringup_framework}\nboard = {bringup_board}\n"
-            f"build_flags =\n    ${{profile.build_flags}}\n{bringup_extra_flags}"
-        )
-    if include_release:
-        sections.append(
-            f"[env:esp32_release]\nplatform = {release_platform}\n"
-            f"framework = {release_framework}\nboard = {release_board}\n"
-            f"build_flags =\n    ${{profile.build_flags}}\n{release_extra_flags}"
+            f"[env:native]\nplatform = {native_platform}\n{native_framework_line}"
+            "test_framework = unity\n"
+            "build_flags =\n"
+            "    ${profile.build_flags}\n"
+            "    ${profile.native_warnings}\n"
+            f"{native_extra_flags}"
         )
     if extra_sections:
         sections.append(extra_sections)
@@ -866,78 +841,94 @@ def run_selftest() -> int:
         violations = check_esp_idf_version(not_a_repo)
         checks.append(("Fehlgeschlagener Git-Befehl (kein Git-Repository) wird als Fehler behandelt", bool(violations)))
 
-    # --- PlatformIO-Parallelvertrag -------------------------------------
+    # --- Finaler PlatformIO-Vertrag --------------------------------------
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
         ini_path.write_text(_make_platformio_ini(), encoding="utf-8")
-        violations = check_platformio_parallel_contract(ini_path)
-        checks.append(("Korrekter PlatformIO-Parallelvertrag wird akzeptiert", not violations))
-
-    with tempfile.TemporaryDirectory() as tmp:
-        ini_path = Path(tmp) / "platformio.ini"
-        ini_path.write_text(_make_platformio_ini(bringup_framework="espidf"), encoding="utf-8")
-        violations = check_platformio_parallel_contract(ini_path)
-        checks.append(("Veraendertes framework im Arduino-Environment wird erkannt", bool(violations)))
-
-    with tempfile.TemporaryDirectory() as tmp:
-        ini_path = Path(tmp) / "platformio.ini"
-        ini_path.write_text(_make_platformio_ini(bringup_platform="espressif32@7.1.0"), encoding="utf-8")
-        violations = check_platformio_parallel_contract(ini_path)
-        checks.append(("Veraendertes platform im Arduino-Environment wird erkannt", bool(violations)))
-
-    with tempfile.TemporaryDirectory() as tmp:
-        ini_path = Path(tmp) / "platformio.ini"
-        ini_path.write_text(_make_platformio_ini(bringup_board="esp32-s3-devkitc-1"), encoding="utf-8")
-        violations = check_platformio_parallel_contract(ini_path)
-        checks.append(("Veraendertes board im Arduino-Environment wird erkannt", bool(violations)))
+        violations = check_platformio_final_contract(ini_path)
+        checks.append(("Korrekter finaler PlatformIO-Vertrag wird akzeptiert", not violations))
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
         ini_path.write_text(
-            _make_platformio_ini(include_bringup=False, default_envs="native, esp32_release"),
-            encoding="utf-8",
+            _make_platformio_ini(profile_cpp_standard=""), encoding="utf-8"
         )
-        violations = check_platformio_parallel_contract(ini_path)
-        checks.append(("Vorzeitig entferntes Arduino-Environment wird in der Parallelphase erkannt", bool(violations)))
+        violations = check_platformio_final_contract(ini_path)
+        checks.append(("Fehlender C++17-Vertrag wird erkannt", bool(violations)))
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
         ini_path.write_text(
             _make_platformio_ini(
-                default_envs="native, esp32_bringup, esp32_release, esp32_unexpected",
+                native_warnings=(
+                    "    -Wall\n"
+                    "    -Wextra\n"
+                    "    -Werror\n"
+                ),
+            ),
+            encoding="utf-8",
+        )
+        violations = check_platformio_final_contract(ini_path)
+        checks.append(("Fehlender nativer Warning-Flag wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(
+            _make_platformio_ini(
+                extra_sections=(
+                    "[env:esp32_bringup]\nplatform = espressif32@7.0.1\n"
+                    "framework = arduino\n"
+                ),
+            ),
+            encoding="utf-8",
+        )
+        violations = check_platformio_final_contract(ini_path)
+        checks.append(("Erneut eingefuehrtes Arduino-Environment wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(
+            _make_platformio_ini(native_platform="espressif32@7.0.1"),
+            encoding="utf-8",
+        )
+        violations = check_platformio_final_contract(ini_path)
+        checks.append(("espressif32-Plattform im nativen Pfad wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(_make_platformio_ini(native_framework="arduino"), encoding="utf-8")
+        violations = check_platformio_final_contract(ini_path)
+        checks.append(("Arduino-Framework im nativen Pfad wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(
+            _make_platformio_ini(default_envs="native, esp32_bringup"),
+            encoding="utf-8",
+        )
+        violations = check_platformio_final_contract(ini_path)
+        checks.append(("Erneut eingefuehrtes Arduino-Default-Environment wird erkannt", bool(violations)))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ini_path = Path(tmp) / "platformio.ini"
+        ini_path.write_text(
+            _make_platformio_ini(
+                default_envs="native, esp32_unexpected",
                 extra_sections="[env:esp32_unexpected]\nplatform = espressif32@7.0.1\n",
             ),
             encoding="utf-8",
         )
-        violations = check_platformio_parallel_contract(ini_path)
+        violations = check_platformio_final_contract(ini_path)
         checks.append(("Unerwartetes zusaetzliches PlatformIO-Environment wird erkannt", bool(violations)))
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
         ini_path.write_text(
-            _make_platformio_ini(include_native=False, default_envs="esp32_bringup, esp32_release"),
+            _make_platformio_ini(include_native=False, default_envs=""),
             encoding="utf-8",
         )
-        violations = check_platformio_parallel_contract(ini_path)
+        violations = check_platformio_final_contract(ini_path)
         checks.append(("Fehlendes env:native wird erkannt", bool(violations)))
-
-    with tempfile.TemporaryDirectory() as tmp:
-        ini_path = Path(tmp) / "platformio.ini"
-        ini_path.write_text(_make_platformio_ini(native_platform="espressif32@7.0.1"), encoding="utf-8")
-        violations = check_platformio_parallel_contract(ini_path)
-        checks.append(("env:native mit falscher Plattform wird erkannt", bool(violations)))
-
-    with tempfile.TemporaryDirectory() as tmp:
-        ini_path = Path(tmp) / "platformio.ini"
-        ini_path.write_text(
-            _make_platformio_ini(
-                bringup_extra_flags="    -DAPP_PROFILE_ESP32_RELEASE=1\n",
-                release_extra_flags="    -DAPP_PROFILE_ESP32_BRINGUP=1\n",
-            ),
-            encoding="utf-8",
-        )
-        violations = check_platformio_parallel_contract(ini_path)
-        checks.append(("Vertauschte Bring-up-/Release-Profilzuordnung wird erkannt", bool(violations)))
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
@@ -951,7 +942,7 @@ def run_selftest() -> int:
             ),
             encoding="utf-8",
         )
-        violations = check_platformio_parallel_contract(ini_path)
+        violations = check_platformio_final_contract(ini_path)
         checks.append(("Fehlender gemeinsamer Safetywert in [profile] wird erkannt", bool(violations)))
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -967,7 +958,7 @@ def run_selftest() -> int:
             ),
             encoding="utf-8",
         )
-        violations = check_platformio_parallel_contract(ini_path)
+        violations = check_platformio_final_contract(ini_path)
         checks.append(("APP_REAL_ACTUATORS_ENABLED=1 in [profile] wird erkannt", bool(violations)))
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -984,17 +975,17 @@ def run_selftest() -> int:
             ),
             encoding="utf-8",
         )
-        violations = check_platformio_parallel_contract(ini_path)
+        violations = check_platformio_final_contract(ini_path)
         checks.append(("Doppelter widerspruechlicher Safetywert in [profile] wird erkannt", bool(violations)))
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
         ini_path.write_text(
-            _make_platformio_ini(default_envs="native, esp32_bringup"),
+            _make_platformio_ini(default_envs=""),
             encoding="utf-8",
         )
-        violations = check_platformio_parallel_contract(ini_path)
-        checks.append(("Unvollstaendiges default_envs wird erkannt", bool(violations)))
+        violations = check_platformio_final_contract(ini_path)
+        checks.append(("Fehlendes native-Default-Environment wird erkannt", bool(violations)))
 
     with tempfile.TemporaryDirectory() as tmp:
         ini_path = Path(tmp) / "platformio.ini"
@@ -1004,7 +995,7 @@ def run_selftest() -> int:
             ),
             encoding="utf-8",
         )
-        violations = check_platformio_parallel_contract(ini_path)
+        violations = check_platformio_final_contract(ini_path)
         checks.append(("ESP32-Profildefinition in env:native wird erkannt", bool(violations)))
 
     # --- check_repository: Profilisolation auch bei Einzelprofil-Aufrufen ---

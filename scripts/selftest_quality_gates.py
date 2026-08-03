@@ -95,8 +95,8 @@ def main() -> int:
         "Buildtreiber meldet Erfolg erst nach bestandenem Guard": run_script_selftest(
             repo_root, "build_esp_idf_profiles.py"
         ),
-        "Ressourcenbericht trennt Arduino- und ESP-IDF-Messungen, erkennt "
-        "fehlende Artefakte": run_script_selftest(repo_root, "build_report.py"),
+        "Ressourcenbericht kombiniert nativen Host- und ESP-IDF-Bericht, "
+        "erkennt fehlende Artefakte": run_script_selftest(repo_root, "build_report.py"),
         "CI-Artefakt-Scanabdeckung erkennt ungescannt hochgeladene "
         "Textartefakte": run_script_selftest(
             repo_root, "check_ci_artifact_scan_coverage.py"
