@@ -975,26 +975,36 @@ def run_selftest() -> int:
         stale_target.parent.mkdir(parents=True, exist_ok=True)
         stale_target.write_text("veralteter Stand\n", encoding="utf-8")
         stale_entries = _synthetic_compile_commands_entries(stale_root)
+        stale_target_seen_before_fresh_output: list[bool] = []
+
+        def _profile_cleanup_reconfigure(profile: str, directory: Path, root_arg: Path) -> None:
+            stale_target_seen_before_fresh_output.append(
+                warnings_txt_target(directory).exists(),
+            )
 
         def _fresh_profile_clang_check(
             profile: str, directory: Path, root_arg: Path, patterns: str,
         ) -> int:
+            stale_target_seen_before_fresh_output.append(
+                warnings_txt_target(directory).exists(),
+            )
             warnings_txt_source(root_arg).write_text("frischer Profilstand\n", encoding="utf-8")
             return 0
 
         analyze_profile(
             "bringup", root=stale_root, directory=stale_dir,
             verify_toolchain_fn=_fake_verify_ok,
-            reconfigure_fn=_fake_reconfigure_ok,
+            reconfigure_fn=_profile_cleanup_reconfigure,
             read_compile_commands_fn=lambda path: stale_entries,
             run_clang_check_fn=_fresh_profile_clang_check,
             secure_warnings_fn=secure_warnings,
         )
         checks.append((
             "Ein bereits vorhandener, veralteter warnings.txt-Zielnachweis "
-            "wird vor einem neuen Profillauf entfernt und nicht als aktueller "
-            "Nachweis stehen gelassen",
-            stale_target.read_text(encoding="utf-8") == "frischer Profilstand\n",
+            "wird vor reconfigure und clang-check entfernt und nicht als "
+            "aktueller Nachweis stehen gelassen",
+            stale_target_seen_before_fresh_output == [False, False]
+            and stale_target.read_text(encoding="utf-8") == "frischer Profilstand\n",
         ))
 
     # Fall 27: ein veralteter Rootnachweis wird vor reconfigure und clang-check entfernt.
@@ -1037,14 +1047,18 @@ def run_selftest() -> int:
             "veralteter Rootstand\n", encoding="utf-8",
         )
         missing_entries = _synthetic_compile_commands_entries(missing_root)
-        missing_evidence = _raises_analysis_error(lambda: analyze_profile(
-            "bringup", root=missing_root, directory=missing_dir,
-            verify_toolchain_fn=_fake_verify_ok,
-            reconfigure_fn=_fake_reconfigure_ok,
-            read_compile_commands_fn=lambda path: missing_entries,
-            run_clang_check_fn=lambda profile, directory, root_arg, patterns: 0,
-            secure_warnings_fn=secure_warnings,
-        ))
+        missing_error: AnalysisError | None = None
+        try:
+            analyze_profile(
+                "bringup", root=missing_root, directory=missing_dir,
+                verify_toolchain_fn=_fake_verify_ok,
+                reconfigure_fn=_fake_reconfigure_ok,
+                read_compile_commands_fn=lambda path: missing_entries,
+                run_clang_check_fn=lambda profile, directory, root_arg, patterns: 0,
+                secure_warnings_fn=secure_warnings,
+            )
+        except AnalysisError as error:
+            missing_error = error
         no_stale_evidence = (
             not warnings_txt_source(missing_root).exists()
             and not warnings_txt_target(missing_dir).exists()
@@ -1053,7 +1067,10 @@ def run_selftest() -> int:
             "Ein fehlender neuer Root-warnings.txt-Nachweis nach der "
             "Bereinigung fuehrt zu einem harten Fehler statt zur Uebernahme "
             "des alten Nachweises",
-            missing_evidence and no_stale_evidence,
+            missing_error is not None
+            and missing_error.profile == "bringup"
+            and missing_error.phase == "warnings-secure"
+            and no_stale_evidence,
         ))
 
     # Fall 29: ein frischer Nachweis wird vollstaendig in seinen Profilpfad verschoben.
