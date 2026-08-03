@@ -96,6 +96,20 @@ Ownerentscheidung.
    Touchkalibrierungs-Recovery. Es darf nicht den Splash ersetzen und keinen
    fruehen separaten Grafikpfad begruenden.
 
+## Repositoryweite Pruefung physischer Bedienelemente
+
+| Fundklasse | Artefakte | Klassifikation | Massnahme |
+|---|---|---|---|
+| verbindlicher Ausschluss | `docs/audits/OPEN_BACKLOG_CLASSIFICATION.md`, `docs/audits/RELEASE_1_FUNCTION_MATRIX.md`, `docs/audits/PROPOSED_RELEASE_1_ROADMAP.md`, `docs/audits/HARDWARE_SPIKE_PLAN.md`, `docs/audits/COMPONENT_EVALUATIONS.md`, `docs/audits/RELEASE_1_ADOPT_OR_BUILD_AUDIT.md` | aktuell und korrekt: Encoder, Programmwahlschalter, Start-/Stop-Taster und Status-LED gehoeren nicht zu R1 | mit UI-24 gegen `HARDWARE.md`, lokale UI und Issue #31 zentral verlinken; keine Ports, Pins oder Ersatzabläufe hinzufuegen |
+| Summer | `docs/HARDWARE.md`, `docs/audits/RELEASE_1_FUNCTION_MATRIX.md`, #32 | aktuell: einziger weiterer lokaler Ausgabekanal, Hardwaredetails offen | semantische UI-Signale aus UI-23; reale Rolle/Pegel/Hardwaretest bleiben #32 |
+| Start/Stop-Text | `Agent-Auftraege/.../Issue#32.md` | nicht physisch: beschreibt Aktor-Testablauf Start/Stop/Nachlauf | keine Korrektur |
+| `Encoder` in Code/Persistenz | `CHANGELOG.md`, `docs/CONFIGURATION_PERSISTENCE.md`, `docs/tasks/issue-56-implementation-plan.md`, `docs/tasks/issue-57-implementation-plan.md`, `lib/**`, `test/**` | nicht physisch: Serialisierungsencoder | keine Korrektur |
+
+Die Suche nach deutsch- und englischsprachigen Varianten von Taster, Button,
+Encoder, Rotary, Selector, Switch und LED erzeugte keine produktive Annahme
+eines lokalen Hardware-Bedienelements. `enabled`, `switch` und gleichlautende
+Codebegriffe wurden als technische Fehlertreffer ausgeschlossen.
+
 ## Issue-Schnitt und Abhaengigkeitsgraph
 
 ```text
