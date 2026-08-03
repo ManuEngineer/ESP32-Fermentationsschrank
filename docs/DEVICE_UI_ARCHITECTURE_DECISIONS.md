@@ -452,12 +452,3 @@ einzelne Implementierungs-Issue weiterhin nur mit einem eigenen Plan-first-
 Draft-PR und einer commitgebundenen Ownerfreigabe. Insbesondere bleiben
 Rendererwahl, Treiberstack, Ressourcenmessung, Font-/Assets, Helligkeitswerte
 und reale Hardwareverifikation vor ihrer jeweiligen Freigabe offen.
-
-1. den Live-Stand des Repositorys und der Issues #25, #26 und #31 vollständig prüft,
-2. diese Entscheidungen mit Spezifikationen, ADRs, Plänen und Abhängigkeiten abgleicht,
-3. Widersprüche und veraltete Hardwareannahmen vollständig auflistet,
-4. einen sauberen Issue-Schnitt und Abhängigkeitsgraphen vorschlägt,
-5. notwendige Änderungen an Issues und Dokumentation plant,
-6. die Renderer-/LVGL-Evaluation einordnet,
-7. noch keine UI implementiert,
-8. nach Vorlage des Plans auf explizite Ownerfreigabe wartet.
