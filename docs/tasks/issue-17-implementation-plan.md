@@ -66,6 +66,8 @@ Nicht Scope:
    `fermentation_app`, ohne produktive Plattformverkabelung.
 4. Es gibt exakt zwei Kontrollpunktslots und einen separaten Headrecord.
 5. Lauf-IDs sind 1 bis 48 Bytes lang; der Tombstone besitzt keine Lauf-ID.
+   Die Grenze liegt in einem gemeinsamen fachlichen `run_limits.hpp`, nicht
+   in einem Persistenzmodul.
 
 ## 4. Persistenzprojektion
 
@@ -263,14 +265,26 @@ Keys: rc0, rc1, rh0
 `rc0` und `rc1` sind die einzigen Kontrollpunktslots. `rh0` ist der
 Head-/Transaktionsrecord.
 
-Der Head ist `Prepared` oder `Committed` und referenziert Slots exakt durch:
+Der Head ist `Prepared` oder `Committed`. Eine `CheckpointReference` bindet
+Slot-ID, Checkpointrevision, Schema, `StorageEpoch`, Payloadlaenge, CRC und
+Checkpointvariante.
 
-- Slot-ID;
-- Checkpointrevision;
-- Schema;
-- `StorageEpoch`;
-- Payloadlaenge und CRC;
-- Checkpointvariante.
+Headpayloads:
+
+```text
+Prepared:
+  bisheriger current optional
+  bisheriger fallback optional
+  target
+  MutationKind Command oder Transition
+  CommandId optional
+  alte/neue runRevision
+  alte/neue transitionSequence
+
+Committed:
+  current
+  fallback optional
+```
 
 Unreferenzierte Slots sind Orphans und werden nie als Wahrheit geraten.
 
@@ -335,6 +349,8 @@ current rc1 -> rc0
 - Ein bestaetigter Zielcheckpoint verbraucht eine Checkpointrevision.
 - Mutation: `Prepared=N`, `Committed=N+1`.
 - Periodisch: eine neue Committed-Headrevision.
+- Nur bestaetigte Writes schreiten Zaehler fort; sicher fehlgeschlagene Writes
+  nicht.
 - Ueberlauf wird vor dem ersten Write abgelehnt.
 - Nach aktivem Commit wird der bisherige current zum Fallback.
 - Ein Tombstone hat keinen aktiven Fallback.
@@ -423,17 +439,18 @@ NoActiveRun:
 redundant gespeichert. Die Manual-Run-ID wird beim Restore aus dem Header in
 den Plan eingesetzt und danach validiert.
 
-Der bestehende interne Einzelprogrammcodec wird aus
-`configuration_document_codec.cpp` als gemeinsame bytegleiche Hilfe
-extrahiert. Es entsteht keine zweite ProgramDocument-Kodierung.
+Der bestehende interne Einzelprogrammcodec wird bytegleich in
+`program_document_codec.hpp/.cpp` extrahiert. Katalog- und
+Run-Persistenzcodec verwenden danach dieselbe Hilfe; es entsteht keine zweite
+ProgramDocument-Kodierung.
 
 Neue Enums erhalten explizite stabile Werte:
 
 ```text
 CheckpointVariant: ProgramRun=1, ManualRun=2, NoActiveRun=3
-CheckpointTrigger: Command=1, Transition=2, Periodic=3, Tombstone=4
+CheckpointTrigger: Command=1, Transition=2, Periodic=3
 HeadState: Prepared=1, Committed=2
-MutationKind: Command=1, Transition=2, Tombstone=3
+MutationKind: Command=1, Transition=2
 ```
 
 Bestehende persistierte Domain-Enums erhalten im Codec explizite,
@@ -488,6 +505,8 @@ Wirkung:
 Neue Dateien unter `lib/fermentation_app/src/`:
 
 ```text
+run_limits.hpp
+program_document_codec.hpp/.cpp
 run_persistence_contract.hpp
 run_persistence_codec.hpp/.cpp
 run_persistence_store.hpp/.cpp
@@ -504,16 +523,17 @@ scripts/check_architecture_boundaries.py
 scripts/selftest_quality_gates.py
 ```
 
-`run_commands.*` erhaelt nur die gemeinsame Lauf-ID-Grenze; die bestehende
-Decision-/Apply-Logik wird wiederverwendet.
+`run_commands.*` verwendet nur die gemeinsame Lauf-ID-Grenze aus
+`run_limits.hpp`; die bestehende Decision-/Apply-Logik wird wiederverwendet.
 
 Keine Aenderung an `device_platform`, `device_platform_esp_idf`,
 `FermentationApplication` oder den Composition Roots.
 
 ## 16. Tests und Gates
 
-Native Tests fuer Codec, Storeprotokoll, Coordinator, Schedule und
-Lauf-ID-Grenzen decken mindestens ab:
+Native Tests verwenden den bestehenden persistenten Test-Store aus #54.
+Codec, Storeprotokoll, Coordinator, Schedule und Lauf-ID-Grenzen decken
+mindestens ab:
 
 - alle Varianten, Goldenbytes und ungueltige Wirewerte;
 - zwei Slots, Revisionen, Fallback und Tombstone;
