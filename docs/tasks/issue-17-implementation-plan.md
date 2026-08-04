@@ -1,441 +1,588 @@
 # Implementierungsplan fuer Issue #17
 
-## Planstatus
+## Status
 
-- Issue: `#17 – [E2.2] Laufpersistenz und Kontrollpunkte implementieren`
+- Issue: `#17 – Laufpersistenz und Kontrollpunkte`
 - Basis: `main@6909b90f518190131eb41c1c707a5b8738d5ba3f`
-- Planbranch: `plan/issue-17-run-persistence-checkpoints`
-- Ersetzter V4-Plan-Head: `6de87ea55258a6af7eb7c14166d82af459b242a5`
-- Planstatus: `PLAN_DRAFT_REVIEW_REQUIRED`
-- Harte Grundlagen: #13, #14, #15 und #54 abgeschlossen.
+- Branch: `plan/issue-17-run-persistence-checkpoints`
+- Diese Fassung ersetzt alle frueheren Plantexte in PR #84.
+- Implementierung bleibt bis zur Freigabe dieses exakten Plan-Commits gesperrt.
 
 ```text
-IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL
+PLAN_STATUS: PLAN_DRAFT_REVIEW_REQUIRED
+IMPLEMENTATION: NOT_STARTED
+DRAFT_PR: OPEN
 ```
+
+Die additive Planhistorie wird transparent beibehalten; kein Rebase und kein
+Force-Push.
+
+## 1. Quellen und Auslegungsregel
+
+Vor Umsetzung sind Issue #17 sowie die aktuellen Fassungen von
+`RUN_PERSISTENCE.md`, `ARCHITECTURE.md`, `DECISIONS.md` und der bestehende Code
+in `run_snapshot.*`, `process_state_machine.*`, `run_commands.*`,
+`configuration_document_codec.*` und `device_platform` zu pruefen.
+
+Bestehende Modelle und Validierungen sind die Quelle der Wahrheit. Dieser Plan
+definiert nur die neuen #17-Vertraege. Bei einem materiellen Widerspruch wird
+vor Implementierung angehalten.
+
+## 2. Ziel und Grenzen
+
+#17 liefert ein nativ testbares Fundament, das den technischen Speicherzustand
+nach Neustart eindeutig klassifiziert als:
+
+- kein Lauf;
+- aktueller Lauf;
+- `NoActiveRun`-Tombstone;
+- gueltiger Rueckfall;
+- unterbrochene Transaktion;
+- nicht rekonstruierbarer Zustand.
+
+Architektur:
 
 ```text
-PROCESS_DEVIATION:
-Der ursprünglich verlangte Ein-Korrekturcommit-Prozess wurde überschritten.
-Die Historie bleibt unverändert; Bereinigung per Rebase/Force-Push ist unzulässig.
-Der Owner entscheidet später über die Annahme dieser transparent dokumentierten Abweichung.
+fermentation_app -> device_platform::IStateStore
+device_platform_esp_idf -> device_platform
 ```
 
-Der V5-Korrekturcommit erhöht die additive PR-Historie transparent auf neun
-Commits; sie wird weder bereinigt noch umgeschrieben.
+Nicht Scope:
 
-Dieser V5-Plan wird in genau einem weiteren additiven Commit dokumentiert.
-Implementierung ist ausschliesslich nach `PLAN APPROVED` mit dem exakten SHA
-dieses Commits erlaubt.
+- NVS, ESP-IDF, Arduino, GPIO oder Hardware;
+- `FermentationApplication`, `IPlatformServices` und Composition Roots;
+- Recovery-/Fortschrittslogik aus #18;
+- Sensorqualitaet aus #20/#21;
+- Fault, Latch, `SAFE_BOOT` und Aktorsperren aus #24;
+- Journal und Historie aus #19;
+- direkte Aktorzustaende.
 
-## Ziel, Architektur und Grenzen
+## 3. Ownerentscheidungen
 
-#17 bindet #13/#14/#15 crash-konsistent an `device_platform::IStateStore` aus
-#54. Es implementiert später innerhalb `fermentation_app` Fachmodell, Codec,
-Zwei-Slot-/Headprotokoll und `RunPersistenceCoordinator`; `device_platform`
-bleibt bei vorhandenem Store und technischen Wirebausteinen,
-`device_platform_esp_idf` enthält später den realen Adapter.
+1. #17 enthaelt den minimalen persistenten Lauf-Transaktionsmechanismus.
+2. Schema 1 persistiert nur heutige #13/#14/#15-Modelle und technische
+   #17-Metadaten. Spaetere Fachmodelle erhalten eine neue Schemaversion.
+3. Die Integration erfolgt ueber einen `RunPersistenceCoordinator` in
+   `fermentation_app`, ohne produktive Plattformverkabelung.
+4. Es gibt exakt zwei Kontrollpunktslots und einen separaten Headrecord.
+5. Lauf-IDs sind 1 bis 48 Bytes lang; der Tombstone besitzt keine Lauf-ID.
+
+## 4. Persistenzprojektion
+
+#17 persistiert eine `RunPersistenceSnapshot`, nicht den vollstaendigen
+`RunCommandState`.
+
+Enthalten:
+
+- Variante `ProgramRun`, `ManualRun` oder `NoActiveRun`;
+- `runRevision`;
+- `ProcessRuntimeState`;
+- Trigger, Intervall und Kontrollpunktzeit;
+- optionaler UTC-Anker im bestehenden Envelope;
+- maximal 32 bestaetigte eligible Laufkommando-IDs;
+- bei `ProgramRun`: Lauf-ID, `RunProgramSnapshot`, `RunRevision`-Folge,
+  `ProcessRunSnapshot`;
+- bei `ManualRun`: Lauf-ID, `ManualRunPlan`, `ProcessRunSnapshot`.
+
+`NoActiveRun` enthaelt nur leere Lauf-ID, `ProcessState::Standby`,
+`runRevision` und das persistierte Laufkommando-Fenster.
+
+Nicht enthalten:
+
+- Meldungs-, Fault-, Safety- oder Journaldaten;
+- das globale #15-`processedCommandIds`-Fenster;
+- `commandSequence`, `lastCommandMonotonicMillis`;
+- Sensor-, Recovery-, Fortschritts- oder Aktordaten.
+
+Ein Restore aus #17 veraendert nur diese Laufprojektion. Andere
+`RunCommandState`-Domaenen bleiben unangetastet.
+
+Verbindlich ist:
 
 ```text
-kanonischen Post-Apply-Zielzustand bilden und vollständig kodieren
--> Prepared-Head dauerhaft bestätigen
--> Zielkontrollpunkt im inaktiven Slot dauerhaft bestätigen
--> Committed-Head dauerhaft bestätigen
--> exakt den persistierten Zielzustand im RAM anwenden
+Projektion aus dem validierten RAM-Kandidaten
+=
+persistierte Projektion
+=
+dekodierte Projektion nach Neustart
 ```
 
-Es gibt keinen Completed-Write nach RAM-Apply. `Committed` bedeutet dauerhaft
-bestätigt und zur RAM-Anwendung freigegeben, nicht bereits angewandt. Fällt die
-Stromversorgung danach aus, ist der committed Zustand die Bootwahrheit.
+## 5. Laufkommando-Idempotenz
 
-Nicht Scope: #18-Recovery/Fortschritts- und Zeitintervallentscheidung,
-#20/#21-Sensormodelle, #24-Fault/Latch/SAFE_BOOT/Aktorsperre, #19-Journal und
-Historie, Konfigurationspersistenz, NVS/ESP-IDF/Preferences/Arduino/GPIO,
-neue Plattformports oder produktive Verkabelung in `FermentationApplication`,
-`IPlatformServices`, `src/main.cpp` und `main/app_main.cpp`.
-
-## Autoritative Grenzen und kanonischer Zustand
-
-`run_persistence_limits.hpp` definiert die alleinige Lauf-ID-Grenze: 1..48
-Bytes, nicht leer und nicht aus Program-ID abgeleitet. Exakt dieselbe
-Validierung wird an Programmstart, manuellem Start, Restore und Codec benutzt.
-
-Die spätere #15-Korrektur schreibt bei jeder vorgeschlagenen `CommandDecision`
-bereits in `after` das aktualisierte 32er-`processedCommandIds`-Fenster,
-`processedCommandCount`, `lastCommandMonotonicMillis` und jede sonstige
-fachliche Änderung. `applyRunCommand()` prüft danach nur `before` und übernimmt
-exakt `after`; es ergänzt nichts. Damit gilt:
+Persistiert werden nur IDs dieser Kommandos:
 
 ```text
-persistierter Zielzustand = RAM nach applyRunCommand() = Restorezustand
+StartProgram
+StartManualHolding
+AbortAndTurnOff
+AbortAndCool
+AcknowledgeCompletion
+CoolAfterCompletion
+AdjustRun
 ```
 
-Das globale #15-In-Memory-Fenster bleibt Bestandteil von `CommandDecision.after`,
-wird aber nie als gemischtes Fenster persistiert. Die persistierte
-Laufprojektion besitzt ein getrenntes 32er-Fenster ausschliesslich für
-eligible Laufkommandos; kein unbegrenztes Journal oder Transport-Replay entsteht.
-
-## Kennungen, Slots und Coordinator
-
-Nächste IDs: `RunCheckpoint=7`, `RunPersistenceHead=8`, beide Schema 1; Keys
-`rc0`, `rc1`, `rh0`. `rc0` und `rc1` sind exakt zwei logische
-Kontrollpunktslots. `rh0` ist ein separater Head-/Transaktionsrecord, kein
-dritter Slot. Headreferenzen bestimmen aktuellen und optionalen Rückfallslot;
-Orphans werden nie geraten.
+Nicht eligible:
 
 ```text
-struct RunCheckpointTime { std::uint64_t monotonicMillis;
-                           std::optional<std::int64_t> utcUnixSeconds; }
-RunPersistenceCoordinator(device_platform::IStateStore& store,
-                          device_platform::StorageEpoch epoch,
-                          RunCheckpointSchedule schedule) noexcept
-persistCommand(RunCommandState&, const CommandDecision&,
-               const RunCheckpointTime&) -> RunPersistenceResult
-persistTransition(RunCommandState&, const TransitionDecision&,
-                  const RunCheckpointTime&) -> RunPersistenceResult
-checkpointPeriodic(const RunCommandState&, const RunCheckpointTime&)
-  -> RunPersistenceResult
-loadConfirmed() const -> RunPersistenceLoadResult
-state() const -> RunPersistenceCoordinatorState
+AcknowledgeMessage
+MuteMessage
+ResetFault
 ```
 
-Der Store ist injiziert und überlebt den nicht kopier-/bewegbaren Coordinator.
-Er ist single-threaded, nicht reentrant, hat höchstens eine Transaktion und
-keine globale Instanz. Busy liefert `MutationBusy`. Ein unerwartet abgelehnter
-RAM-Apply nach Committed setzt `PersistenceCommittedApplyFailed` und liefert
-einen typisierten internen Vertragsfehler. Bis später #18/#24 ihn behandelt,
-sperrt er neue Kommando-/Prozessmutationen, periodische Writes,
-Transaktionen, Effects, Aktorabsichten und Runtimeweitergabe, ohne selbst
-Fault, SAFE_BOOT, Latch oder Aktorbefehl zu erzeugen.
+Regeln:
 
-## Vollständiger Schema-1-Wirevertrag
+- bereits persistierte ID -> `AlreadyPersisted`, kein Write, kein Apply,
+  keine Effects;
+- nicht eligible -> `NotEligible`, kein Write und kein Apply;
+- neue ID wird in den Zielcheckpoint aufgenommen;
+- bei 32 Eintraegen wird die aelteste ID verdraengt;
+- das Fenster wird erst nach bestaetigtem Commit intern aktualisiert.
 
-Alle Integer sind Big-Endian. Bool ist nur `0`/`1`; jedes Optionalfeld hat u8
-Tag `0=absent`, `1=present`. String/embedded record ist u16-Länge plus Bytes.
-Zähl- und Indexfelder sind feste Breiten, nie `std::size_t`. Decoder prüfen vor
-Allokation Länge, Grenzen, Ende des Records und Cross-Field-Invarianten.
-Unbekannte Enums/Tags, Trunkierung, Zusatzbytes, NaN, Infinity, negative Null,
-0-Revision und jede ungültige Invariante werden typisiert abgelehnt.
+## 6. Coordinator
 
-| Reihenfolge / Typ | Wire, Grenzen, Enumwerte | Cross-Field / Ablehnung |
-| --- | --- | --- |
-| Checkpointheader | variant u8: Program=1, Manual=2, Tombstone=3; trigger u8: Command=1, Transition=2, Periodic=3, Tombstone=4; checkpointRevision u64>=1; monotonic u64; interval u16 1..60; runId u16+Bytes; commandSequence/runRevision u32 | aktive Variante: Run-ID 1..48; Tombstone: Länge exakt 0; Revision = Envelope.versionValue |
-| RunProgramSnapshot | u16+ProgramDocument-Bytes; sourceKind u8 Factory=1/User=2; sourceRevision u32>=1 | `ActiveRun::start/restore()` akzeptiert |
-| ProgramDocument | u32 schema, u64 field mask, id/name/notes je u16+Bytes, 7 bool, Sensor-/Failure-u8, optional u32 Fallback, stageCount u8, je Stage optional binary64/u32, optionale Qualifikation/Limits, Completion-u8 plus optionale Werte | exakt `writeProgram/readProgram` aus `configuration_document_codec.cpp`; bestehende Schema-4/5-, String-, Stage-, Enum- und `validateProgram(Runnable)`-Prüfungen; Byteformat des Catalog unverändert |
-| EffectiveRunValues | nicht serialisiert | ausschliesslich `ActiveRun::restore()` aus Snapshot+Revisionen |
-| RunTimestamp | monotonic u64, optional unix i64 | jede historische UTC bleibt erhalten; Envelope UTC ist nur Kontrollpunktanker |
-| RunRevision | sequence/epoch/stageIndex/completedCount je u32; before/after je binary64+u32; 2 bool; Effect/Source/Reason je u8; Timestamp | count u8 0..32; keine `size_t`; volle `ActiveRun::restore()`-Folge gültig |
-| ManualRunPlan | kein Run-ID-Feld; target binary64; sensor u8 Product=1/Air=2; preheat bool; optional wait u32; band binary64; qualification/reach u32; CommandSource-u8; createdAt u64; ProcessKind-u8 Manual=2 | beim Restore Run-ID einmalig aus Header einsetzen, dann `validateManualRunPlan()` |
-| ProcessRunSnapshot | kind u8 Timed=1/Manual=2; preheat bool; Completion u8 1..4; qualification/reach u32; optional wait/fermentation/hold u32 | `validateProcessRunSnapshot()` |
-| ProcessRuntimeState | state u8 1..15; entered/targetReach u64; optional qualificationSince u64; warning bool; transitionSequence u32 | Form, Zeit und Snapshotbezug gültig |
-| PersistedRunCommandIds | count u8 0..32, danach count*u64 | nur eligible Laufkommandos, keine 0/duplikate; nie aus globalem #15-Fenster kopiert |
-| CheckpointReference | slot u8 0/1, revision u64>=1, schema u32=1, epoch u64>=1, length u32<=8192, crc u32, variant u8 1..3 | stimmt exakt mit referenziertem Envelope/Payload überein |
-| Head | state u8 Prepared=1/Committed=2, headRevision u64>=1 | = Envelope.versionValue |
-| Prepared | old current/fallback, target reference, mutation u8 Command=1/Transition=2/Tombstone=3, optional CommandId u64, alte/neue runRevision/transitionSequence u32 | Ziel inaktiv, Referenzen kollisionsfrei |
-| Committed | current reference, optional fallback reference | Slots verschieden; aktiver Tombstone hat keinen aktiven Fallback |
+Vorgesehene API:
 
-ProgramRun enthält Snapshot und Revisionsfolge; ManualRun nur ManualPlan;
-Tombstone keine aktive Laufstruktur. Es werden keine Sensorwerte/-qualität,
-Fortschrittsmodelle, Recoverywerte oder Aktorpegel gespeichert. Checkpoint-
-Payload <=8192 / Envelope <=8237, Headpayload <=256 / Envelope <=301 Bytes;
-Überschreitung stoppt mit Messwerten, nie durch Grenzerhöhung.
+```cpp
+struct RunCheckpointTime {
+    std::uint64_t monotonicMillis;
+    std::optional<std::int64_t> utcUnixSeconds;
+};
 
-## Write-, Readback- und Cut-Point-Vertrag
+RunPersistenceLoadResult loadAndInitialize();
 
-Jeder Write und jeder Unknown-Outcome wird mit den erwarteten exakten
-Envelopbytes zurückgelesen. Neue Bytes bestätigen den Schritt; alte Bytes
-bedeuten nicht erfolgt; NotFound, ReadError, CapacityError, korruptes,
-fremdes oder widersprüchliches Bytebild sind unauflösbar und niemals Erfolg.
+RunPersistenceResult persistCommand(
+    RunCommandState& current,
+    const CommandDecision& decision,
+    const RunCheckpointTime& time);
 
-| Schritt | erwartete Bytes | alt / neu / unauflösbar |
-| --- | --- | --- |
-| Prepared | Head mit bisherigem Stand und Zielreferenz | abbrechen ohne Apply / weiter / `PersistenceIndeterminate` |
-| Zielslot | vollständiger Zielcheckpoint im inaktiven Slot | Prepared bleibt, kein Apply / weiter / blockiert |
-| Committed | Head mit Ziel aktuell und Altstand fallback | kein Apply / Apply freigegeben / blockiert |
-| Periodenslot | Snapshot im inaktiven Slot | kein Headwrite / Head aktualisieren / blockiert |
-| Periodenhead | Committed mit neuem aktuell | Orphan, RAM unverändert / Erfolg / blockiert |
+RunPersistenceResult persistTransition(
+    RunCommandState& current,
+    const TransitionDecision& decision,
+    const RunCheckpointTime& time);
 
-Tests decken vor Prepared, WriteError/CapacityError, Unknown alt/neu/
-unauflösbar für jeden Schritt, nach Prepared, nach Zielslot, nach Committed
-vor Apply, erfolgreichen/abgelehnten Apply und Neustart an jedem Cut-Point ab.
-Periodisch werden Slot/Head-Unknown, Orphan und unveränderter RAM geprüft.
+RunPersistenceResult checkpointPeriodic(
+    const RunCommandState& current,
+    const RunCheckpointTime& time);
+```
 
-## Laden und Transition-Grenze
+Der Coordinator haelt eine nicht besessene `IStateStore&`, ist nicht
+kopier-/verschiebbar, single-threaded und nicht reentrant.
 
-Laden ist strikt head-first: Head lesen/validieren, nur seinen aktuellen Slot
-laden, bei zulässigem Fehler exakt seinen Fallback prüfen, nie höchste
-unreferenzierte Revision raten.
+Lebenszyklus:
 
-| Fall | Ergebnis |
+```text
+Uninitialized
+ReadyEmpty
+Ready
+Busy
+Blocked
+PersistenceCommittedApplyFailed
+```
+
+Vor `loadAndInitialize()` wird nie geschrieben. Rueckfall, Prepared-Head und
+nicht rekonstruierbare Daten liefern einen typisierten Ladebefund und setzen
+`Blocked`; #18/#24 entscheiden spaeter ueber das weitere Vorgehen.
+
+### Kandidatenpruefung
+
+Vor dem ersten Write:
+
+```text
+candidate = current
+bestehende apply-Funktion auf candidate ausfuehren
+RunPersistenceSnapshot aus candidate bilden und validieren
+```
+
+Nur ein erfolgreicher Kandidaten-Apply darf persistiert werden. Nach
+bestaetigtem Commit wird dieselbe Decision auf den bis dahin unveraenderten
+realen Zustand angewendet. Ein dortiger Fehlschlag setzt fail-closed
+`PersistenceCommittedApplyFailed`.
+
+`ProductWaitExpired` entfernt im Kandidaten den aktiven Lauf und erzeugt den
+Tombstone.
+
+### Wirkungsfreigabe
+
+Effects und `ProcessMessage` werden nur nach bestaetigtem Commit und
+erfolgreichem RAM-Apply ueber das Coordinatorresultat freigegeben. Bei jedem
+anderen Ergebnis bleiben sie leer.
+
+Ein Architekturguard verhindert spaetere produktive Direktaufrufe der
+`apply*`-Funktionen sowie die Vorabnutzung von Effects und Messages. Reine
+Domain-Unit-Tests bleiben erlaubt.
+
+## 7. Erfasste Prozessuebergaenge
+
+Eigenstaendig persistiert:
+
+```text
+QualificationTrackingStarted
+QualificationReset
+PreheatQualified
+ProductInserted
+ProductWaitExpired
+TargetReachTimeExceeded
+TargetQualified
+FermentationCompleted
+CoolingTargetReached
+HoldDurationCompleted
+```
+
+Nicht separat, weil bereits Teil einer eligible `CommandDecision`:
+
+```text
+RunStarted
+RunAborted
+CompletionAcknowledged
+HoldFinishedByUser
+TargetChangedReevaluation
+```
+
+Alle Boot-, Recovery-, Service-, Fault- und Safety-Uebergaenge sind
+ausgeschlossen.
+
+Zulaessige Zustandskombinationen:
+
+| Variante | `ProcessState` |
 | --- | --- |
-| Head NotFound, rc0 NotFound, rc1 NotFound | NoPersistedRun |
-| Head NotFound und mindestens ein Slot vorhanden | NotReconstructibleOrphanedState |
-| Head NotFound und ein Slot ReadError/CapacityError | NotReconstructible |
-| vorhandener Head, beide Slots NotFound | NotReconstructible |
-| Head Read/Capacity/CRC/Epoch/Schemafehler, Kollision, Widerspruch | NotReconstructible |
-| Prepared | PreparedInterrupted, niemals Apply |
-| Committed/current gültig | Current oder NoActiveRun |
-| current ungültig, referenzierter Fallback gültig | FallbackRecovered |
-| beide ungültig, fremde Epoch, neues Schema | NotReconstructible |
-| Orphan | Diagnose, nie Wahrheit |
-| Tombstone gültig / beschädigt | NoActiveRun / NotReconstructible, nie alten Lauf beleben |
+| `ProgramRun` | `Preheating`, `WaitingForProduct`, `ReachingTarget`, `QualifyingTarget`, `Fermenting`, `Cooling`, `CoolHolding`, `Completed` |
+| `ManualRun` | `Preheating`, `WaitingForProduct`, `ReachingTarget`, `QualifyingTarget`, `ManualHolding` |
+| `NoActiveRun` | nur `Standby` |
 
-Eigenständige automatische aktive Übergänge: `QualificationTrackingStarted`,
-`QualificationReset`, `PreheatQualified`, `ProductInserted`, `ProductWaitExpired`,
-`TargetReachTimeExceeded`, `TargetQualified`, `FermentationCompleted`,
-`CoolingTargetReached`, `HoldDurationCompleted`. Nicht separat, weil bereits
-in CommandDecision.after: `RunStarted`, `RunAborted`,
-`CompletionAcknowledged`, `HoldFinishedByUser`, `TargetChangedReevaluation`.
-Ausgeschlossen: BootReady/BootSafe/BootRestoreCompleted/BootRecoverRun,
-RecoveryResume/RecoveryReject, Enter/ExitServiceMode, CriticalFault sowie alle
-Boot-, Recovery-, Fault- und #18/#24-Entscheidungen.
+## 8. Speicherprotokoll
 
-## Umgehungssicherung, Tests und Ressourcen
+Stabile Kennungen:
 
-Nach Umsetzung sind direkte produktive Apply-Aufrufe nur in
-`run_commands.cpp`, `process_state_machine.cpp` und
-`run_persistence_coordinator.cpp` erlaubt. Verboten sind Runtime/UI/
-Composition-Root-Aufrufe in `FermentationApplication`, `src/`, `main/`,
-Adaptern und allen anderen Produktionsdateien. Unit-Tests bleiben erlaubt.
-`scripts/check_architecture_boundaries.py` erhält den Call-site-Guard;
-`scripts/selftest_quality_gates.py` negative Fixtures für Runtime-, UI- und
-Composition-Verstösse. Kein Friend-Netz, breites Interface oder Framework.
+```text
+RecordTypeId 7: RunCheckpoint
+RecordTypeId 8: RunPersistenceHead
+Schema: 1
+Keys: rc0, rc1, rh0
+```
 
-Neue Tests: `test_run_checkpoint_codec`, `test_run_persistence_head_codec`,
-`test_run_checkpoint_store`, `test_run_persistence_coordinator`,
-`test_run_checkpoint_schedule`, #15-Post-Apply-Regression, Architekturguard-
-Negativtests und Quality-Gate-Selftests. Neue Dateien: Limits, Contract,
-Checkpoint/Codec, Head/Codec, Store, Schedule und Coordinator. Nur
-`run_commands.*` (Post-Apply/Lauf-ID) und `configuration_document_codec.*`
-(interne bytegleiche Einzelprogrammhilfe) dürfen zusätzlich ändern.
+`rc0` und `rc1` sind die einzigen Kontrollpunktslots. `rh0` ist der
+Head-/Transaktionsrecord.
 
-Historisch x86-64: `RunCommandState=4520`, `CommandDecision=9264` Byte;
-historisch Xtensa/ESP32: `4200` und `8608` Byte. Dies sind getrennte ABI-
-Messreihen derselben Messung. Aktueller ESP-IDF-6.0.2-Nachweis: ausstehend.
-Das PR-#53-Hardware-Ressourcengate bleibt vor Runtime/UI/Composition-
-Aktivierung zwingend; kein vorsorglicher Delta-Decision-Umbau.
+Der Head ist `Prepared` oder `Committed` und referenziert Slots exakt durch:
 
-SRP trennt Modell, Codec, Head, Store, Schedule und Coordinator. DIP nutzt nur
-IStateStore; kein neuer Port. DRY nutzt Envelope, CRC, Reader/Writer,
-Slotprüfung, ProgramDocument-Wirelogik, `ActiveRun::restore`, `decide*` und
-`apply*`. KISS bleibt bei zwei Slots, einem Head und einem Coordinator ohne
-Journal, Datenbank, Event-Sourcing oder Zukunftsmodelle.
+- Slot-ID;
+- Checkpointrevision;
+- Schema;
+- `StorageEpoch`;
+- Payloadlaenge und CRC;
+- Checkpointvariante.
 
-## Coordinator-Lebenszyklus, Unknown-Outcome und Revisionen
+Unreferenzierte Slots sind Orphans und werden nie als Wahrheit geraten.
 
-`RunPersistenceCoordinatorState` ist exakt `Uninitialized`, `ReadyEmpty`,
-`Ready`, `Busy`, `PersistenceCommittedApplyFailed` oder
-`BlockedIndeterminate`. `loadConfirmed() const` wird durch das nicht-konstante
-`loadAndInitialize()` ersetzt. Vor erfolgreichem Laden liefert jede Mutation
-`NotInitialized` ohne Write. Der Ladepfad initialisiert bei leerem Speicher
-`ReadyEmpty`, Ziel `rc0`, Checkpointrevision 1, Headrevision 1, leere
-PersistedRunCommandIds und deaktivierten Schedule. Bei gültigem Head lädt er
-current/fallback, nächste Slot-/Revisionwerte, Idempotenzfenster und Schedule;
-bei Prepared, Orphan, nicht rekonstruierbar oder unauflösbar wird
-`BlockedIndeterminate` gesetzt. Er liefert nur technischen Snapshotbefund,
-nie Recovery-, Fault- oder SAFE_BOOT-Entscheidung.
+### Mutation
 
-Vor jedem Write wird der erwartete alte Zustand festgehalten:
-`Existing(exakte Bytes)` oder `Absent`. Bei `CommitOutcomeUnknown` bestätigt
-nur exakt neue Bytes. Exakt alte Bytes bei Existing oder `NotFound` bei Absent
-bedeutet „nicht erfolgt“; `NotFound` bei Existing, andere Bytes, ReadError
-oder CapacityError sind `PersistenceIndeterminate`. Dies gilt auch für ersten
-Prepared-Head, ersten Slot/Tombstone, Slotwiederverwendung und periodische
-Slot-/Headwrites.
+```text
+1. Decision auf Kandidat anwenden und Projektion validieren
+2. Zielslot und Revisionen bestimmen
+3. alle Records vorab kodieren
+4. Prepared-Head bestaetigen
+5. Zielcheckpoint bestaetigen
+6. Committed-Head bestaetigen
+7. realen RAM-Zustand anwenden
+8. Effects/Messages freigeben
+```
 
-Slotautomat: ohne current `rc0`, current `rc0 -> rc1`, current `rc1 -> rc0`.
-Jeder Zielcheckpoint erhöht die u64-Checkpointrevision um eins und übernimmt
-sie erst nach bestätigt geschriebenem Zielslot. Jeder Vorgang braucht zwei
-Headrevisionen: Prepared `N`, Committed `N+1`, nächster Vorgang `N+2`;
-periodisch schreibt nur einen neuen Committed Head. `UINT64_MAX` oder fehlender
-Platz für Prepared plus Committed liefert vor jedem Write `CounterOverflow`.
-Nach aktivem Commit ist alter current Fallback; Tombstone besitzt keinen
-aktiven Fallback, darf aber beim neuen Lauf sicherer Fallback sein.
+Kein Post-Apply-Abschlusswrite. `Committed` bedeutet dauerhaft bestaetigt und
+zur RAM-Anwendung freigegeben.
 
-## Kandidatenprüfung, Resultate und Schedule
+- Fehler vor bestaetigtem Prepared: alter Head bleibt autoritativ.
+- Fehler nach bestaetigtem Prepared: kein RAM-Apply, Coordinator `Blocked`.
+- Commit bestaetigt, RAM-Apply fehlgeschlagen: fail-closed.
 
-`persistCommand` verlangt Proposed und eligible Kind; bereits in
-PersistedRunCommandIds liefert `AlreadyPersisted`, nicht eligible `NotEligible`,
-jeweils ohne Write, Apply, Effects oder Mutation. Vor Prepared wird
-`candidate=current; applyRunCommand(candidate, decision)` ausgeführt; nur
-`Applied` plus valide Projektion beginnt die Transaktion. Nach Committed wird
-dieselbe Decision auf den unveränderten realen Zustand angewendet; ein Fehlschlag
-setzt `PersistenceCommittedApplyFailed`. `persistTransition` prüft analog
-Proposed, Positivliste und `applyProcessTransition` auf einem einzigen
-RunCommandState-Kandidaten; ProductWaitExpired leert dessen aktive Laufteile
-und persistiert den Tombstone.
+### Periodisch
 
-Mutationsresultate sind: `Applied` (RAM/durable verändert, Effects/Messages
-freigegeben, Ready), `CheckpointWritten` (nur durable, Ready),
-`AlreadyPersisted`, `NotEligible`, `NotInitialized`, `MutationBusy`,
-`InvalidDecision`, `StaleDecision`, `TimeMismatch`, `TimeWentBackwards`,
-`CounterOverflow`, `WriteFailed`, `CapacityExceeded` (kein RAM-Apply, Ready),
-`PersistenceIndeterminate` (durable möglicherweise geändert, Blocked),
-`PersistenceCommittedApplyFailed` (durable committed, fail-closed) und
-`Blocked` (keine Änderung). Laden liefert `NoPersistedRun`, `Current`,
-`NoActiveRun`, `FallbackRecovered`, `PreparedInterrupted`,
-`NotReconstructible`, `NotReconstructibleOrphanedState`, `ReadFailed`,
-`CapacityExceeded`, `UnsupportedSchema`, `ForeignEpoch` oder
-`CounterOverflow`; nur Current/NoActiveRun initialisieren Ready, Fallback wird
-nicht normal schreibaktiv, die übrigen unklaren Befunde blockieren.
+```text
+aktuelle Projektion validieren
+-> inaktiven Slot bestaetigen
+-> neuen Committed-Head bestaetigen
+```
 
-`RunCheckpointSchedule` speichert Intervall 1..60 (Default 5), letzte
-bestätigte Zeit und nächste Fälligkeit. Current setzt nach Laden die letzte
-Zeit; NoActiveRun/NoPersistedRun deaktivieren periodisch. Ein bestätigter
-Ereignis- oder Periodencheckpoint setzt `confirmedMonotonic + interval`;
-Fehlschlag/Unknown nie. Vor Fälligkeit, bei NoActiveRun oder fail-closed wird
-nicht geschrieben.
+Ein sicher fehlgeschlagener Headwrite laesst den alten Head autoritativ und den
+neuen Slot als Orphan. Ein unaufloesbarer Ausgang blockiert.
 
-## V5-Testergänzungen
+## 9. `CommitOutcomeUnknown`
 
-Die Schema-1-Enumtabelle kodiert jeden Wert einzeln, nie Bereiche: ProcessState
-`1=Boot`, `2=SafeBoot`, `3=Standby`, `4=Preheating`,
-`5=WaitingForProduct`, `6=ReachingTarget`, `7=QualifyingTarget`,
-`8=Fermenting`, `9=Cooling`, `10=CoolHolding`, `11=ManualHolding`,
-`12=Completed`, `13=RecoveryEvaluation`, `14=Fault`, `15=ServiceMode`.
-ProgramRun erlaubt nur 4..12 ohne 11; ManualRun nur 4..7 und 11;
-NoActiveRun exakt 3. Andere Kombinationen und jeder unbekannte Wert werden
-abgelehnt. Der gemeinsame Header kodiert runRevision/commandSequence genau
-einmal; NoActiveRun enthält nur Header, ProcessRuntimeState und
-PersistedRunCommandIds.
+Vor jedem Write ist der alte Zustand bekannt als `Absent` oder
+`Existing(exakte Bytes)`.
 
-Tests ergänzen Unknown Absent/NotFound und Existing/NotFound, Mutation vor
-Initialisierung, Init aus Empty/Current/Tombstone/Fallback und Blocking aus
-Prepared/Orphan/Indeterminate, Restart-AlreadyPersisted, NotEligible, stale
-Command/Transition vor Prepared, Kandidaten-Apply und unerwarteten Real-Apply,
-erste Revision/rc0, rc0/rc1-Rotation, Prepared-/Committed-Revisionen,
-Überläufe, einmalige Tombstone-header-Felder, vollständige einzelne
-ProcessState-Wirewerte und Schedule nach Current/Tombstone/Fallback.
-
-## Abschluss der Planprüfung
-
-## Integrierter Detailvertrag
-Schema 1 persistiert die explizite `RunPersistenceSnapshot`-Projektion, nie
-den vollständigen `RunCommandState`: ProgramRun/ManualRun/NoActiveRun,
-aktive Run-ID, Programsnapshot plus Revisionen oder Manualplan,
-ProcessRunSnapshot, ProcessRuntimeState, runRevision, commandSequence,
-Checkpointrevision/-trigger/-intervall/-zeit und PersistedRunCommandIds. Nicht
-enthalten sind RuntimeMessage, messageCount/messageRevision, faultRevision,
-criticalSafetyEventPending, Fault-/Latch-/SAFE_BOOT-, Journal-, Sensor-,
-Recovery-, Fortschritts- oder Aktordaten.
-
-Eligible für PersistedRunCommandIds sind ausschliesslich StartProgram,
-StartManualHolding, AbortAndTurnOff, AbortAndCool, AcknowledgeCompletion,
-CoolAfterCompletion und AdjustRun. AcknowledgeMessage, MuteMessage und
-ResetFault sind nie eligible. Der Coordinator aktualisiert das getrennte
-Fenster im Zielcheckpoint, lädt es aus dem bestätigten Head und übernimmt es
-erst nach Commit; globale #15-IDs werden nie übernommen.
-
-### Varianten und Head in exakter Feldreihenfolge
-
-| Record | Reihenfolge | Wire und Invarianten |
+| Readback | Alter Zustand | Ergebnis |
 | --- | --- | --- |
-| ProgramRun | Header, ProgramSnapshot, RevisionCount u8, Revisionen, ProcessRunSnapshot, ProcessRuntimeState, PersistedRunCommandIds | Header-ID 1..48; Count <=32; ActiveRun::restore rekonstruiert effektive Werte |
-| ManualRun | Header, ManualPlan ohne ID, ProcessRunSnapshot, ProcessRuntimeState, PersistedRunCommandIds | Header-ID 1..48 wird beim Restore in ManualPlan eingesetzt |
-| NoActiveRun | Header mit ID-Länge 0, nichtaktiver ProcessRuntimeState, runRevision, commandSequence, PersistedRunCommandIds | kein Program-/Manual-/ProcessRunSnapshot, nur Tombstone-Trigger |
-| CheckpointReference | slot u8, revision u64, schema u32, epoch u64, payloadLength u32, payloadCrc u32, variant u8 | Slot nur 0/1, exakt gebundene Bytes |
-| Prepared Head | state u8, headRevision u64, oldCurrent optional Reference, oldFallback optional Reference, target Reference, mutation u8, optional CommandId u64, old/new runRevision u32, old/new transitionSequence u32 | Zielslot inaktiv, alle Referenzen kollisionsfrei |
-| Committed Head | state u8, headRevision u64, current Reference, fallback optional Reference | Slots verschieden; Tombstone kein aktiver Fallback |
+| exakt neue Bytes | beliebig | bestaetigt |
+| exakt alte Bytes | `Existing` | nicht erfolgt |
+| `NotFound` | `Absent` | nicht erfolgt |
+| `NotFound` | `Existing` | unaufloesbar |
+| andere Bytes, `ReadError`, `CapacityError` | beliebig | unaufloesbar |
 
-### Stabile Enum-Wirewerte
+Unaufloesbar wird nie als Erfolg behandelt.
 
-| Wirewert | Enumname | erlaubte Variante | Unbekannt |
-| --- | --- | --- | --- |
-| 1/2/3 | CheckpointVariant ProgramRun/ManualRun/NoActiveRun | wie Variantentabelle | ablehnen |
-| 1/2/3/4 | Trigger Command/Transition/Periodic/Tombstone | Header | ablehnen |
-| 1/2 | ProgramSourceKind FactoryCatalog/UserProgram | ProgramRun | ablehnen |
-| 1/2/3 | RunAdjustmentEffect None/RestartTargetQualification/ContinueFermentationWithoutRequalification | RunRevision | ablehnen |
-| 1/2/3 | RunChangeSource LocalDisplay/WebInterface/Recovery | RunRevision | ablehnen |
-| 1/2 | RunChangeReason UserAdjustment/RecoveryCorrection | RunRevision | ablehnen |
-| 1/2 | RunSensorMode Product/Air | ManualRun | ablehnen |
-| 1/2 | CommandSource LocalDisplay/WebInterface | ManualRun | ablehnen |
-| 1/2 | ProcessKind Timed/ManualHolding | Process snapshots | ablehnen |
-| 1..15 | ProcessState Boot, SafeBoot, Standby, Preheating, WaitingForProduct, ReachingTarget, QualifyingTarget, Fermenting, Cooling, CoolHolding, ManualHolding, Completed, RecoveryEvaluation, Fault, ServiceMode | ProcessRuntimeState, nur variant-zulässig | ablehnen |
-| 1..4 | CompletionMode FinishWithoutCooling, CoolThenFinish, CoolAndHoldForDuration, CoolAndHoldUntilManualStop | ProcessRunSnapshot | ablehnen |
-| 1/2 | HeadState Prepared/Committed | Head | ablehnen |
-| 1/2/3 | MutationKind Command/Transition/Tombstone | Prepared | ablehnen |
+## 10. Revisionen und Rueckfall
 
-### Zeit, Transition, Tombstone und Wirkungsfreigabe
+```text
+erste Checkpointrevision: 1
+erste Headrevision: 1
+erster Zielslot: rc0
 
-`persistCommand` verlangt `time.monotonicMillis ==
-decision.envelope.monotonicMillis`; `persistTransition` verlangt Gleichheit zu
-`decision.monotonicMillis`. `checkpointPeriodic` erhält immer explizite Zeit,
-nie eine versteckte Uhr; UTC ist optionaler Envelopeanker, historische
-RunRevision-UTC bleibt separat erhalten. Rückwärtszeit wird abgelehnt.
+kein current -> rc0
+current rc0 -> rc1
+current rc1 -> rc0
+```
 
-Kein öffentlicher Tombstone-Einstieg existiert: persistCommand erzeugt ihn bei
-inaktivem Ziel, persistTransition bei Endtransition. Bei ProductWaitExpired
-bildet der Coordinator den Kandidaten mit Transition-ProcessState, leert
-activeProgramRun, activeManualRun, processRunSnapshot und activeRunId und
-persistiert erst dann den Tombstone. Standby mit aktivem Lauf ist abzulehnen.
+- Ein bestaetigter Zielcheckpoint verbraucht eine Checkpointrevision.
+- Mutation: `Prepared=N`, `Committed=N+1`.
+- Periodisch: eine neue Committed-Headrevision.
+- Ueberlauf wird vor dem ersten Write abgelehnt.
+- Nach aktivem Commit wird der bisherige current zum Fallback.
+- Ein Tombstone hat keinen aktiven Fallback.
+- Ein neuer Lauf darf den Tombstone als sicheren Fallback referenzieren.
+- Ein beschaedigter Tombstone belebt nie einen alten Lauf.
 
-Nur Commit plus erfolgreicher RAM-Apply gibt im Coordinatorresultat
-CommandEffects und ProcessMessages frei. Jeder Fehler, Busy oder
-PersistenceCommittedApplyFailed liefert leere Wirkungs-/Meldungsmengen.
-Der Architekturguard blockiert neben direkten apply-Aufrufen auch produktive
-Vorabnutzung von `CommandDecision.effects` und `TransitionDecision.messages`;
-Domain-Unit-Tests bleiben ausgenommen.
+## 11. Laden
 
-### Schedule, Dateien und Tests
+`loadAndInitialize()` arbeitet strikt head-first:
 
-RunCheckpointSchedule hält Intervall 1..60 (Default 5), letzte bestätigte
-Zeit und nächste Fälligkeit. Nur ein bestätigter Ereignischeckpoint setzt die
-nächste Fälligkeit neu; Fehlschlag nicht. Vor Fälligkeit kein Write, bei
-NoActiveRun kein periodischer Laufcheckpoint, im fail-closed Zustand kein
-Write und kein Sensorzyklus-Timer.
+| Befund | Ergebnis | Zustand |
+| --- | --- | --- |
+| Head und beide Slots fehlen | `NoPersistedRun` | `ReadyEmpty` |
+| Head fehlt, Slot vorhanden | `OrphanedState` | `Blocked` |
+| `Prepared` | `PreparedInterrupted` | `Blocked` |
+| `Committed`, current gueltig | `Current` oder `NoActiveRun` | `Ready` |
+| current ungueltig, Fallback gueltig | `FallbackRecovered` | `Blocked` |
+| kein gueltiger current/Fallback | `NotReconstructible` | `Blocked` |
+| fremde Epoch, Schema- oder Integritaetsfehler | typisierter Fehler | `Blocked` |
 
-Neue Produktionsdateien: `run_persistence_limits.hpp`,
-`run_persistence_contract.hpp`, `run_checkpoint.hpp/.cpp`,
-`run_checkpoint_codec.hpp/.cpp`, `run_persistence_head.hpp/.cpp`,
-`run_persistence_head_codec.hpp/.cpp`, `run_checkpoint_store.hpp/.cpp`,
-`run_checkpoint_schedule.hpp/.cpp`, `run_persistence_coordinator.hpp/.cpp`.
-Bestehend nur begründet: `run_commands.hpp/.cpp` (kanonisches after/Run-ID),
-`configuration_document_codec.hpp/.cpp` (gemeinsamer Einzelprogrammcodec),
-`scripts/check_architecture_boundaries.py` und
-`scripts/selftest_quality_gates.py` (Guard/Selftests). Keine Änderung an
-device_platform, device_platform_esp_idf, FermentationApplication oder
-Composition Roots.
+Nur vom Head referenzierte Slots duerfen als current oder Fallback gelten.
+Der Load liefert eine optionale Laufprojektion, aber keine Recovery-,
+Fortsetzungs- oder Safetyentscheidung.
 
-Vollständige Tests: `test/test_run_checkpoint_codec/test_run_checkpoint_codec.cpp`,
-`test/test_run_persistence_head_codec/test_run_persistence_head_codec.cpp`,
-`test/test_run_checkpoint_store/test_run_checkpoint_store.cpp`,
-`test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp`,
-`test/test_run_checkpoint_schedule/test_run_checkpoint_schedule.cpp`,
-`test/test_run_commands/test_run_commands.cpp` und
-`test/test_process_state_machine/test_process_state_machine.cpp`. Sie decken
-eligible IDs ohne Message/Fault-IDs, leere Tombstone-ID, ProductInserted,
-ProductWaitExpired-Tombstone, Orphan ohne Head, explizite Zeit, Effects vor
-Commit, Apply-failed, alle Enums/Varianten, size_t-Grenzen, UTC und exakt zwei
-Slots ab.
+## 12. Schedule
+
+- Intervall 1 bis 60 Minuten, Standard 5;
+- explizite monotone Zeit, keine versteckte Uhr;
+- rueckwaerts laufende Zeit wird abgelehnt;
+- nur bestaetigte Ereignis- oder Periodenwrites setzen die naechste
+  Faelligkeit neu;
+- vor Faelligkeit, ohne aktiven Lauf sowie in `Blocked` oder fail-closed kein
+  periodischer Write;
+- kein Write im Sensorzyklus.
+
+## 13. Wireformat Schema 1
+
+Allgemein:
+
+- bestehender Envelope V1;
+- Big-Endian;
+- Bool nur `0/1`;
+- Optionaltag `0/1`;
+- Strings/Records mit u16-Laenge;
+- keine direkte `std::size_t`-Serialisierung;
+- unbekannte Werte, Trunkierung, Zusatzbytes, NaN, Infinity und ungueltige
+  Invarianten werden abgelehnt;
+- Checkpointpayload maximal 8192 Bytes, Headpayload maximal 256 Bytes;
+- `Envelope.versionValue` ist die einzige Recordrevision;
+- `Envelope.utcUnixSeconds` ist der Kontrollpunkt-UTC-Anker.
+
+Checkpointheader, exakt einmal:
+
+```text
+variant u8
+trigger u8
+checkpointMonotonicMillis u64
+intervalMinutes u16
+runRevision u32
+runId u16 + Bytes
+```
+
+Varianten:
+
+```text
+ProgramRun:
+  RunProgramSnapshot
+  revisionCount u8
+  RunRevision[]
+  ProcessRunSnapshot
+  ProcessRuntimeState
+  PersistedRunCommandIds
+
+ManualRun:
+  ManualRunPlan ohne runId
+  ProcessRunSnapshot
+  ProcessRuntimeState
+  PersistedRunCommandIds
+
+NoActiveRun:
+  ProcessRuntimeState
+  PersistedRunCommandIds
+```
+
+`EffectiveRunValues` werden durch `ActiveRun::restore()` rekonstruiert und nicht
+redundant gespeichert. Die Manual-Run-ID wird beim Restore aus dem Header in
+den Plan eingesetzt und danach validiert.
+
+Der bestehende interne Einzelprogrammcodec wird aus
+`configuration_document_codec.cpp` als gemeinsame bytegleiche Hilfe
+extrahiert. Es entsteht keine zweite ProgramDocument-Kodierung.
+
+Neue Enums erhalten explizite stabile Werte:
+
+```text
+CheckpointVariant: ProgramRun=1, ManualRun=2, NoActiveRun=3
+CheckpointTrigger: Command=1, Transition=2, Periodic=3, Tombstone=4
+HeadState: Prepared=1, Committed=2
+MutationKind: Command=1, Transition=2, Tombstone=3
+```
+
+Bestehende persistierte Domain-Enums erhalten im Codec explizite,
+1-basierte Name-zu-Wirewert-Tabellen in heutiger Deklarationsreihenfolge;
+kein ungepruefter `static_cast`. Goldenbytes frieren diese Werte ein.
+
+Verschachtelte Typen folgen den vorhandenen Feldern, aber mit festen
+Wirebreiten. Insbesondere werden `stageIndex`, `completedStageCount` und alle
+Counts als gepruefte u32 beziehungsweise u8 kodiert. Bestehende `validate*()`
+und `ActiveRun::restore()` bleiben die fachliche Invariantenquelle.
+
+## 14. Resultate und Fehlerwirkung
+
+Ein `RunPersistenceResult` enthaelt:
+
+- Status;
+- betroffenen Schritt;
+- technischen Store-/Codecgrund;
+- freigegebene Effects/Messages nur bei Erfolg.
+
+Wesentliche Status:
+
+```text
+Applied
+CheckpointWritten
+AlreadyPersisted
+NotEligible
+NotInitialized
+Busy
+InvalidDecision
+StaleDecision
+TimeRejected
+CounterOverflow
+PersistenceFailure
+PersistenceIndeterminate
+PersistenceCommittedApplyFailed
+Blocked
+```
+
+Wirkung:
+
+- `Applied`: durable Projektion und RAM aktualisiert, Effects/Messages frei.
+- `CheckpointWritten`: nur durable Projektion aktualisiert.
+- Ablehnung vor Prepared: keine Aenderung, Coordinator bleibt bereit.
+- Fehler nach Prepared: kein RAM-Apply, Coordinator blockiert.
+- `PersistenceIndeterminate`: durable Aenderung moeglich, blockiert.
+- `PersistenceCommittedApplyFailed`: durable Zielprojektion ist Wahrheit,
+  fail-closed.
+
+## 15. Dateien
+
+Neue Dateien unter `lib/fermentation_app/src/`:
+
+```text
+run_persistence_contract.hpp
+run_persistence_codec.hpp/.cpp
+run_persistence_store.hpp/.cpp
+run_checkpoint_schedule.hpp
+run_persistence_coordinator.hpp/.cpp
+```
+
+Begruendete Aenderungen:
+
+```text
+run_commands.hpp/.cpp
+configuration_document_codec.hpp/.cpp
+scripts/check_architecture_boundaries.py
+scripts/selftest_quality_gates.py
+```
+
+`run_commands.*` erhaelt nur die gemeinsame Lauf-ID-Grenze; die bestehende
+Decision-/Apply-Logik wird wiederverwendet.
+
+Keine Aenderung an `device_platform`, `device_platform_esp_idf`,
+`FermentationApplication` oder den Composition Roots.
+
+## 16. Tests und Gates
+
+Native Tests fuer Codec, Storeprotokoll, Coordinator, Schedule und
+Lauf-ID-Grenzen decken mindestens ab:
+
+- alle Varianten, Goldenbytes und ungueltige Wirewerte;
+- zwei Slots, Revisionen, Fallback und Tombstone;
+- alle Unknown-Outcome-Faelle;
+- Stromunterbruch an jeder Transaktionsgrenze;
+- Initialisierung, Orphans, Prepared und Rueckfall;
+- Idempotenz nach Neustart;
+- stale/ungueltige Decisions vor Prepared;
+- `ProductInserted` und `ProductWaitExpired`;
+- Effects/Messages erst nach Commit plus Apply;
+- Schedule und kein Sensorzykluswrite;
+- Architekturguard inklusive negativer Fixtures.
+
+Auszufuehren:
+
+```text
+python3 scripts/check_architecture_boundaries.py
+python3 scripts/selftest_quality_gates.py
+pio test -e native
+idf.py build fuer esp32_bringup
+idf.py build fuer esp32_release
+git diff --check
+```
+
+Vor einer spaeteren Runtimeaktivierung bleiben aktuelle ESP-IDF-6.0.2-RAM-,
+Stack-, Payload- und Flashmessungen zwingend. Release 1 bleibt bei 4 MB Flash
+ohne PSRAM. Bei Budgetueberschreitung wird mit Messwerten angehalten und kein
+Delta-Design oder groesserer Record still erfunden.
+
+## 17. SOLID, DRY, KISS
+
+- **SRP:** Contract, Codec, Store, Schedule und Coordinator sind getrennt.
+- **DIP/OCP:** Der Fachkern kennt nur `IStateStore`; das Backend bleibt
+  austauschbar.
+- **ISP:** Kein breites neues Plattforminterface.
+- **DRY:** Bestehende Modelle, Validierungen, Envelope, CRC, Bytehelfer,
+  `ActiveRun::restore()` und ProgramDocument-Codec werden wiederverwendet.
+- **KISS:** Zwei Slots, ein Head, eine Projektion, ein Coordinator; kein
+  Journal, keine Datenbank, kein Event-Sourcing und kein allgemeines
+  Transaktionsframework.
+
+## 18. Stopbedingungen
+
+Anhalten bei:
+
+- Widerspruch zu einer kanonischen Quelle;
+- Bedarf an neuem Plattformport oder ESP-IDF-/NVS-Code;
+- Bedarf an Modellen aus #18/#19/#20/#21/#24;
+- nicht einhaltbarem Ressourcenbudget;
+- fachlich oder sicherheitsrelevant offener Alternative.
+
+## 19. Abschluss
 
 ```text
 FOUR_OWNER_DECISIONS_PRESERVED: PASS
+SINGLE_SOURCE_OF_TRUTH: PASS
 ARCHITECTURE_ALIGNMENT: PASS
 ISSUE_BOUNDARIES: PASS
 RUN_PERSISTENCE_PROJECTION: PASS
-RUN_COMMAND_IDEMPOTENCY_SCOPE: PASS
-COORDINATOR_INITIALIZATION: PASS
-PRECOMMIT_CANDIDATE_VALIDATION: PASS
 RUN_TRANSACTION_CONTRACT: PASS
-UNKNOWN_OUTCOME_ABSENT_STATE: PASS
-REVISION_AND_SLOT_STATE_MACHINE: PASS
-CANONICAL_POST_APPLY_STATE: PASS
-FAIL_CLOSED_CONTRACT: PASS
-RESULT_STATUS_CONTRACT: PASS
+UNKNOWN_OUTCOME_CONTRACT: PASS
+COORDINATOR_LIFECYCLE: PASS
+RUN_COMMAND_IDEMPOTENCY: PASS
 EFFECT_AND_MESSAGE_RELEASE_GATE: PASS
-COORDINATOR_BYPASS_GUARD: PASS
-TOMBSTONE_CONTRACT: PASS
-SCHEMA_1_WIRE_CONTRACT: PASS
-PROCESS_STATE_VARIANT_MATRIX: PASS
-UTC_CONTRACT: PASS
-TRANSITION_SCOPE: PASS
-PRODUCT_INSERTED_PERSISTENCE: PASS
-PRODUCT_WAIT_EXPIRY_TOMBSTONE: PASS
-HEAD_FIRST_LOAD_CONTRACT: PASS
-SCHEDULE_CONTRACT: PASS
-APPLICATION_INTEGRATION: PASS
 TWO_SLOT_CONTRACT: PASS
+HEAD_FIRST_LOAD_CONTRACT: PASS
+SCHEMA_1_WIRE_CONTRACT: PASS
+SCHEDULE_CONTRACT: PASS
 ESP_IDF_BOUNDARY: PASS
-RESOURCE_BASELINE: PASS
 SOLID: PASS
 DRY: PASS
 KISS: PASS
