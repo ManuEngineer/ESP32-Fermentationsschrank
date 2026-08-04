@@ -196,6 +196,18 @@ void test_manual_completed_transition_commits_before_releasing_messages() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(TransitionReason::HoldFinishedByUser),
         static_cast<int>(transition.reason));
+    store.setNextWriteFault(
+        device_platform_test_support::SimulatedPersistentStateStore::
+            WriteFault::FailBeforeBegin);
+    const auto failed = coordinator.persistTransition(
+        state, transition, RunCheckpointTime{200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(failed.status));
+    TEST_ASSERT_EQUAL_UINT32(0U, failed.messageCount);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ManualHolding),
+                          static_cast<int>(state.processState.state));
+
     const auto result = coordinator.persistTransition(
         state, transition, RunCheckpointTime{200U, std::nullopt});
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
