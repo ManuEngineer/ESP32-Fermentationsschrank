@@ -5,7 +5,7 @@
 - Issue: `#17 – [E2.2] Laufpersistenz und Kontrollpunkte implementieren`
 - Basis: `main@6909b90f518190131eb41c1c707a5b8738d5ba3f`
 - Planbranch: `plan/issue-17-run-persistence-checkpoints`
-- Ersetzter V3-Plan-Head: `7ee8b53cb5569251b50347c03cb238b330e96527`
+- Ersetzter V4-Plan-Head: `6de87ea55258a6af7eb7c14166d82af459b242a5`
 - Planstatus: `PLAN_DRAFT_REVIEW_REQUIRED`
 - Harte Grundlagen: #13, #14, #15 und #54 abgeschlossen.
 
@@ -20,10 +20,10 @@ Die Historie bleibt unverändert; Bereinigung per Rebase/Force-Push ist unzuläs
 Der Owner entscheidet später über die Annahme dieser transparent dokumentierten Abweichung.
 ```
 
-Der V4-Korrekturcommit erhöht die additive PR-Historie transparent auf acht
+Der V5-Korrekturcommit erhöht die additive PR-Historie transparent auf neun
 Commits; sie wird weder bereinigt noch umgeschrieben.
 
-Dieser V4-Plan wird in genau einem weiteren additiven Commit dokumentiert.
+Dieser V5-Plan wird in genau einem weiteren additiven Commit dokumentiert.
 Implementierung ist ausschliesslich nach `PLAN APPROVED` mit dem exakten SHA
 dieses Commits erlaubt.
 
@@ -220,11 +220,95 @@ Slotprüfung, ProgramDocument-Wirelogik, `ActiveRun::restore`, `decide*` und
 `apply*`. KISS bleibt bei zwei Slots, einem Head und einem Coordinator ohne
 Journal, Datenbank, Event-Sourcing oder Zukunftsmodelle.
 
+## Coordinator-Lebenszyklus, Unknown-Outcome und Revisionen
+
+`RunPersistenceCoordinatorState` ist exakt `Uninitialized`, `ReadyEmpty`,
+`Ready`, `Busy`, `PersistenceCommittedApplyFailed` oder
+`BlockedIndeterminate`. `loadConfirmed() const` wird durch das nicht-konstante
+`loadAndInitialize()` ersetzt. Vor erfolgreichem Laden liefert jede Mutation
+`NotInitialized` ohne Write. Der Ladepfad initialisiert bei leerem Speicher
+`ReadyEmpty`, Ziel `rc0`, Checkpointrevision 1, Headrevision 1, leere
+PersistedRunCommandIds und deaktivierten Schedule. Bei gültigem Head lädt er
+current/fallback, nächste Slot-/Revisionwerte, Idempotenzfenster und Schedule;
+bei Prepared, Orphan, nicht rekonstruierbar oder unauflösbar wird
+`BlockedIndeterminate` gesetzt. Er liefert nur technischen Snapshotbefund,
+nie Recovery-, Fault- oder SAFE_BOOT-Entscheidung.
+
+Vor jedem Write wird der erwartete alte Zustand festgehalten:
+`Existing(exakte Bytes)` oder `Absent`. Bei `CommitOutcomeUnknown` bestätigt
+nur exakt neue Bytes. Exakt alte Bytes bei Existing oder `NotFound` bei Absent
+bedeutet „nicht erfolgt“; `NotFound` bei Existing, andere Bytes, ReadError
+oder CapacityError sind `PersistenceIndeterminate`. Dies gilt auch für ersten
+Prepared-Head, ersten Slot/Tombstone, Slotwiederverwendung und periodische
+Slot-/Headwrites.
+
+Slotautomat: ohne current `rc0`, current `rc0 -> rc1`, current `rc1 -> rc0`.
+Jeder Zielcheckpoint erhöht die u64-Checkpointrevision um eins und übernimmt
+sie erst nach bestätigt geschriebenem Zielslot. Jeder Vorgang braucht zwei
+Headrevisionen: Prepared `N`, Committed `N+1`, nächster Vorgang `N+2`;
+periodisch schreibt nur einen neuen Committed Head. `UINT64_MAX` oder fehlender
+Platz für Prepared plus Committed liefert vor jedem Write `CounterOverflow`.
+Nach aktivem Commit ist alter current Fallback; Tombstone besitzt keinen
+aktiven Fallback, darf aber beim neuen Lauf sicherer Fallback sein.
+
+## Kandidatenprüfung, Resultate und Schedule
+
+`persistCommand` verlangt Proposed und eligible Kind; bereits in
+PersistedRunCommandIds liefert `AlreadyPersisted`, nicht eligible `NotEligible`,
+jeweils ohne Write, Apply, Effects oder Mutation. Vor Prepared wird
+`candidate=current; applyRunCommand(candidate, decision)` ausgeführt; nur
+`Applied` plus valide Projektion beginnt die Transaktion. Nach Committed wird
+dieselbe Decision auf den unveränderten realen Zustand angewendet; ein Fehlschlag
+setzt `PersistenceCommittedApplyFailed`. `persistTransition` prüft analog
+Proposed, Positivliste und `applyProcessTransition` auf einem einzigen
+RunCommandState-Kandidaten; ProductWaitExpired leert dessen aktive Laufteile
+und persistiert den Tombstone.
+
+Mutationsresultate sind: `Applied` (RAM/durable verändert, Effects/Messages
+freigegeben, Ready), `CheckpointWritten` (nur durable, Ready),
+`AlreadyPersisted`, `NotEligible`, `NotInitialized`, `MutationBusy`,
+`InvalidDecision`, `StaleDecision`, `TimeMismatch`, `TimeWentBackwards`,
+`CounterOverflow`, `WriteFailed`, `CapacityExceeded` (kein RAM-Apply, Ready),
+`PersistenceIndeterminate` (durable möglicherweise geändert, Blocked),
+`PersistenceCommittedApplyFailed` (durable committed, fail-closed) und
+`Blocked` (keine Änderung). Laden liefert `NoPersistedRun`, `Current`,
+`NoActiveRun`, `FallbackRecovered`, `PreparedInterrupted`,
+`NotReconstructible`, `NotReconstructibleOrphanedState`, `ReadFailed`,
+`CapacityExceeded`, `UnsupportedSchema`, `ForeignEpoch` oder
+`CounterOverflow`; nur Current/NoActiveRun initialisieren Ready, Fallback wird
+nicht normal schreibaktiv, die übrigen unklaren Befunde blockieren.
+
+`RunCheckpointSchedule` speichert Intervall 1..60 (Default 5), letzte
+bestätigte Zeit und nächste Fälligkeit. Current setzt nach Laden die letzte
+Zeit; NoActiveRun/NoPersistedRun deaktivieren periodisch. Ein bestätigter
+Ereignis- oder Periodencheckpoint setzt `confirmedMonotonic + interval`;
+Fehlschlag/Unknown nie. Vor Fälligkeit, bei NoActiveRun oder fail-closed wird
+nicht geschrieben.
+
+## V5-Testergänzungen
+
+Die Schema-1-Enumtabelle kodiert jeden Wert einzeln, nie Bereiche: ProcessState
+`1=Boot`, `2=SafeBoot`, `3=Standby`, `4=Preheating`,
+`5=WaitingForProduct`, `6=ReachingTarget`, `7=QualifyingTarget`,
+`8=Fermenting`, `9=Cooling`, `10=CoolHolding`, `11=ManualHolding`,
+`12=Completed`, `13=RecoveryEvaluation`, `14=Fault`, `15=ServiceMode`.
+ProgramRun erlaubt nur 4..12 ohne 11; ManualRun nur 4..7 und 11;
+NoActiveRun exakt 3. Andere Kombinationen und jeder unbekannte Wert werden
+abgelehnt. Der gemeinsame Header kodiert runRevision/commandSequence genau
+einmal; NoActiveRun enthält nur Header, ProcessRuntimeState und
+PersistedRunCommandIds.
+
+Tests ergänzen Unknown Absent/NotFound und Existing/NotFound, Mutation vor
+Initialisierung, Init aus Empty/Current/Tombstone/Fallback und Blocking aus
+Prepared/Orphan/Indeterminate, Restart-AlreadyPersisted, NotEligible, stale
+Command/Transition vor Prepared, Kandidaten-Apply und unerwarteten Real-Apply,
+erste Revision/rc0, rc0/rc1-Rotation, Prepared-/Committed-Revisionen,
+Überläufe, einmalige Tombstone-header-Felder, vollständige einzelne
+ProcessState-Wirewerte und Schedule nach Current/Tombstone/Fallback.
+
 ## Abschluss der Planprüfung
 
-## V4-bindender Detailvertrag
-
-Dieser Abschnitt hat Vorrang vor älteren, weniger präzisen Formulierungen.
+## Integrierter Detailvertrag
 Schema 1 persistiert die explizite `RunPersistenceSnapshot`-Projektion, nie
 den vollständigen `RunCommandState`: ProgramRun/ManualRun/NoActiveRun,
 aktive Run-ID, Programsnapshot plus Revisionen oder Manualplan,
@@ -329,13 +413,19 @@ ARCHITECTURE_ALIGNMENT: PASS
 ISSUE_BOUNDARIES: PASS
 RUN_PERSISTENCE_PROJECTION: PASS
 RUN_COMMAND_IDEMPOTENCY_SCOPE: PASS
+COORDINATOR_INITIALIZATION: PASS
+PRECOMMIT_CANDIDATE_VALIDATION: PASS
 RUN_TRANSACTION_CONTRACT: PASS
+UNKNOWN_OUTCOME_ABSENT_STATE: PASS
+REVISION_AND_SLOT_STATE_MACHINE: PASS
 CANONICAL_POST_APPLY_STATE: PASS
 FAIL_CLOSED_CONTRACT: PASS
+RESULT_STATUS_CONTRACT: PASS
 EFFECT_AND_MESSAGE_RELEASE_GATE: PASS
 COORDINATOR_BYPASS_GUARD: PASS
 TOMBSTONE_CONTRACT: PASS
 SCHEMA_1_WIRE_CONTRACT: PASS
+PROCESS_STATE_VARIANT_MATRIX: PASS
 UTC_CONTRACT: PASS
 TRANSITION_SCOPE: PASS
 PRODUCT_INSERTED_PERSISTENCE: PASS
