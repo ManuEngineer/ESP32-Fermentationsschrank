@@ -1847,6 +1847,11 @@ void test_stale_invalid_and_time_mismatched_transitions_write_nothing() {
                                    RunCheckpointTime{201U, std::nullopt})
                 .status));
     const auto afterSecondWrites = store.writeCount();
+    // applyProcessTransition increments transitionSequence by exactly one on
+    // a real RAM apply and nothing else does; capturing it here proves the
+    // stale attempt below does not apply, regardless of which ProcessState
+    // `second` actually landed on.
+    const auto sequenceAfterSecond = state.processState.transitionSequence;
 
     const auto stale = coordinator.persistTransition(
         state, legitimate, RunCheckpointTime{200U, std::nullopt});
@@ -1859,6 +1864,8 @@ void test_stale_invalid_and_time_mismatched_transitions_write_nothing() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCoordinatorState::Ready),
         static_cast<int>(coordinator.state()));
+    TEST_ASSERT_EQUAL_UINT32(sequenceAfterSecond,
+                             state.processState.transitionSequence);
 }
 
 void test_restart_after_prepared_or_slot_cut_is_interrupted() {
