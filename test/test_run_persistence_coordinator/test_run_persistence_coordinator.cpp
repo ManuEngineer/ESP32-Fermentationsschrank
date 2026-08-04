@@ -1,5 +1,6 @@
 #include <limits>
 #include <map>
+#include <set>
 #include <utility>
 
 #include <unity.h>
@@ -24,6 +25,9 @@ class SequencedWriteStore final : public device_platform::IStateStore {
         const device_platform::StateStoreKey& key,
         const std::string& value) override {
         ++writeCount_;
+        if (unknownWithoutCommit_.find(writeCount_) !=
+            unknownWithoutCommit_.end())
+            return device_platform::StateStoreWriteStatus::CommitOutcomeUnknown;
         const auto fault = faults_.find(writeCount_);
         if (fault != faults_.end()) backing_.setNextWriteFault(fault->second);
         return backing_.write(key, value);
@@ -39,12 +43,17 @@ class SequencedWriteStore final : public device_platform::IStateStore {
         faults_[writeNumber] = fault;
     }
 
+    void unknownWithoutCommitAt(std::size_t writeNumber) {
+        unknownWithoutCommit_.insert(writeNumber);
+    }
+
     [[nodiscard]] std::size_t writeCount() const { return writeCount_; }
 
     void restart() {
         backing_.restart();
         writeCount_ = 0U;
         faults_.clear();
+        unknownWithoutCommit_.clear();
     }
 
     void forceNotFound(const device_platform::StateStoreKey& key, bool force) {
@@ -61,6 +70,7 @@ class SequencedWriteStore final : public device_platform::IStateStore {
    private:
     device_platform_test_support::SimulatedPersistentStateStore backing_;
     std::map<std::size_t, WriteFault> faults_;
+    std::set<std::size_t> unknownWithoutCommit_;
     std::size_t writeCount_{0U};
 };
 
@@ -621,6 +631,60 @@ void test_unknown_outcome_at_each_mutation_write_is_resolved() {
     }
 }
 
+void test_unknown_outcome_with_exact_old_bytes_is_not_written() {
+    for (std::size_t writeNumber = 1U; writeNumber <= 3U; ++writeNumber) {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        static_cast<void>(coordinator.loadAndInitialize());
+        RunCommandState state;
+        state.processState.state = ProcessState::Standby;
+        store.unknownWithoutCommitAt(writeNumber);
+        const auto result = coordinator.persistCommand(
+            state, startDecision(state, 715U + writeNumber),
+            RunCheckpointTime{100U, std::nullopt});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_UINT32(0U, result.effectCount);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                              static_cast<int>(state.processState.state));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                writeNumber == 1U
+                    ? RunPersistenceCoordinatorState::ReadyEmpty
+                    : RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(coordinator.state()));
+    }
+}
+
+void test_capacity_faults_at_each_mutation_cutpoint_are_classified() {
+    using Fault = SequencedWriteStore::WriteFault;
+    for (std::size_t writeNumber = 1U; writeNumber <= 3U; ++writeNumber) {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        static_cast<void>(coordinator.loadAndInitialize());
+        RunCommandState state;
+        state.processState.state = ProcessState::Standby;
+        store.faultAt(writeNumber, Fault::CapacityExceeded);
+        const auto result = coordinator.persistCommand(
+            state, startDecision(state, 718U + writeNumber),
+            RunCheckpointTime{100U, std::nullopt});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::CapacityExceeded),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                              static_cast<int>(state.processState.state));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                writeNumber == 1U
+                    ? RunPersistenceCoordinatorState::ReadyEmpty
+                    : RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(coordinator.state()));
+    }
+}
+
 void test_unknown_outcome_not_found_distinguishes_absent_and_existing_head() {
     using Fault = SequencedWriteStore::WriteFault;
     const auto head = slotKey("rh0");
@@ -851,6 +915,8 @@ int main(int, char**) {
     RUN_TEST(test_empty_boot_always_disarms_injected_schedule);
     RUN_TEST(test_mutation_write_faults_at_each_cutpoint_are_classified);
     RUN_TEST(test_unknown_outcome_at_each_mutation_write_is_resolved);
+    RUN_TEST(test_unknown_outcome_with_exact_old_bytes_is_not_written);
+    RUN_TEST(test_capacity_faults_at_each_mutation_cutpoint_are_classified);
     RUN_TEST(
         test_unknown_outcome_not_found_distinguishes_absent_and_existing_head);
     RUN_TEST(test_restart_after_prepared_or_slot_cut_is_interrupted);
