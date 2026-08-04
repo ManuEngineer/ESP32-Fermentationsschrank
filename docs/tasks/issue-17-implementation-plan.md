@@ -3,195 +3,163 @@
 ## Planstatus
 
 - Issue: `#17 – [E2.2] Laufpersistenz und Kontrollpunkte implementieren`
-- Ausgangsbranch: `main`
-- Ausgangs-Commit: `6909b90f518190131eb41c1c707a5b8738d5ba3f`
+- Ausgangsbasis: `main@6909b90f518190131eb41c1c707a5b8738d5ba3f`
 - Planbranch: `plan/issue-17-run-persistence-checkpoints`
 - Ersetzt den ersten Planstand: `d23a47e3b7451e37e755f670909acc5d90705a3f`
+- Harte Abhaengigkeiten: #13, #14, #15 und #54; abgeschlossen
 - Planstatus: `PLAN_DRAFT_REVIEW_REQUIRED`
-- Harte Abhaengigkeiten: #13, #14, #15 und #54; alle abgeschlossen.
 
 ```text
 IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL
 ```
 
-Dieser Plan autorisiert noch keine Implementierung. Sie darf erst nach einem
-eindeutigen Ownerkommentar fuer genau den Commit mit dieser Planversion
-beginnen:
+Implementierung erst nach:
 
 ```text
 PLAN APPROVED
 Approved plan commit: <commit-sha>
 ```
 
-Jede materielle Abweichung von den unten festgelegten Issuegrenzen, dem
-Schema-1-Vertrag, dem Zwei-Slot-/Head-Protokoll oder der
-Anwendungsintegration macht die Freigabe ungueltig und verlangt einen neuen
-Plancommit.
+Jede materielle Abweichung von Issuegrenzen, Schema 1, dem
+Zwei-Slot-/Head-Protokoll, der Integrationsgrenze oder den Ressourcen-Gates
+verlangt einen neuen Plancommit und eine neue Ownerfreigabe.
 
 ## Ziel
 
-Issue #17 liefert die nativ testbare Laufpersistenz zwischen der bereits
-vorhandenen Fachlogik aus #13/#14/#15 und dem anwendungsneutralen
-`device_platform::IStateStore` aus #54.
+#17 verbindet die vorhandene Fachlogik aus #13/#14/#15 mit dem
+anwendungsneutralen `device_platform::IStateStore` aus #54.
 
-Das Issue soll:
+Geliefert werden:
 
-1. einen begrenzten, typisierten und versionierten Laufkontrollpunkt aus den
-   bereits vorhandenen autoritativen Lauf-, Prozess- und Kommandomodellen
-   bilden;
-2. den Kontrollpunkt deterministisch und unabhaengig von C++-Layout, ABI,
-   Padding, Arduino oder ESP-IDF kodieren;
-3. genau zwei logische Kontrollpunktslots sowie einen kleinen fachlichen
-   Head-/Transaktionsrecord verwenden;
-4. den neuesten bestaetigten Kontrollpunkt und genau einen bestaetigten
-   Rueckfallstand eindeutig referenzieren;
-5. bereits fachlich entschiedene Laufmutationen erst nach bestaetigter
-   Persistenz anwenden;
-6. sofortige fachliche Speichertrigger und periodische Kontrollpunkte von
-   einer bis 60 Minuten, Standard fuenf Minuten, ohne Schreiben im
-   Sensorzyklus abbilden;
-7. technische Speicher-, Integritaets- und Nichtrekonstruierbarkeitsbefunde
-   typisiert melden, ohne eine Recovery-, Fehlerklassen- oder Aktorentscheidung
-   vorwegzunehmen.
+1. ein begrenzter und versionierter Laufkontrollpunkt;
+2. ein deterministischer Schema-1-Codec;
+3. genau zwei logische Kontrollpunktslots;
+4. ein kleiner laufbezogener Head-/Transaktionsrecord;
+5. persistierte Kommando- und Zustandsatomaritaet nach
+   `decide -> persist -> apply`;
+6. sofortige und periodische Kontrollpunkte;
+7. typisierte Lade-, Rueckfall- und Nichtrekonstruierbarkeitsbefunde.
 
-Das Ergebnis bleibt backend- und hardwareunabhaengig. #17 verwendet nur
-`device_platform::IStateStore` und die bereits vorhandenen technischen
-Wire-/Slotbausteine. Ein konkreter NVS-, ESP-IDF-, Preferences- oder
-Hardwareadapter ist nicht Teil dieses Issues.
+#17 bleibt nativ testbar und kennt weder NVS noch ESP-IDF. Das spaetere
+ESP32-Backend implementiert nur den bestehenden `IStateStore`-Port.
 
-## Chronologie und heutige Architektur
+## Chronologie und Architektur
 
-#15 wurde vor der heutigen NVS- und ESP-IDF-Architektur umgesetzt. Es legte
-bewusst nur die fachliche Grenze fest:
+#15 entstand vor der heutigen NVS- und ESP-IDF-Architektur. Es legte bewusst
+nur die fachliche Commit-Grenze fest:
 
 ```text
-Entscheidung vollstaendig und ohne Teilmutation berechnen
+Fachentscheidung ohne Teilmutation berechnen
 -> Persistenz vor Anwendung folgt mit #17
 ```
 
-#15 entschied weder NVS noch ESP-IDF. Diese spaeteren Entscheidungen werden
-heute wie folgt konsumiert:
+Die spaeteren Entscheidungen werden heute so verwendet:
 
-- #54 stellt `IStateStore`, Envelope V1, CRC, begrenzte Bytecodecs,
-  Slotkandidaten und `CommitOutcomeUnknown` bereit;
-- ADR-016 legt NVS als spaeteres produktives ESP32-Backend fest;
-- PR #79 legt ESP-IDF 6.0.2 als einzigen ESP32-Produktionspfad fest;
-- #17 bleibt in `fermentation_app` und kennt weder NVS noch ESP-IDF;
-- ein spaeterer Adapter in `device_platform_esp_idf` implementiert den
-  bestehenden Port, ohne dass #17 geaendert werden muss.
+- #54: `IStateStore`, Envelope V1, CRC, Bytecodecs, Status- und
+  Readbackvertrag;
+- ADR-016: NVS als spaeteres produktives ESP32-Backend;
+- PR #79: ESP-IDF 6.0.2 als einziger ESP32-Produktionspfad;
+- #17: Fach- und Persistenzkoordination in `fermentation_app`;
+- spaeter: konkreter NVS-Adapter in `device_platform_esp_idf`.
 
-## Nicht-Ziele und verbotene Vorwegnahmen
+Die Abhaengigkeitsrichtung bleibt:
 
-Nicht Bestandteil von #17 sind:
-
-- Recoveryentscheidung, Ausfallintervall, Zeitkonfidenz,
-  temperaturgewichteter Fortschritt oder Fortschrittskorrektur aus #18;
-- Sensorqualitaet, primaere Sensorrolle, Ersatzbetrieb oder Rueckkehrlogik aus
-  #20/#21;
-- Fehlerklassen, persistente Verriegelung, `SAFE_BOOT`, Fehlerreset oder
-  systemweite Aktorsperre aus #24;
-- Journale, Messhistorie, Aufbewahrung, Bereinigung, Export, Backup oder Import
-  aus #19;
-- Konfigurationsgraphen, Pending-/Intent-Semantik, Bootstrap, Werksreset,
-  Secret- oder Konfigurationspersistenz aus #16/#56/#57;
-- konkrete NVS-, Preferences-, LittleFS-, Arduino- oder ESP-IDF-APIs;
-- `device_platform_esp_idf`, GPIO, BTS7960, Sensor-, Display-, WLAN- oder
-  Aktoradapter;
-- Erweiterung von `IPlatformServices` zu einem breiten Sammelinterface;
-- produktive Verkabelung in `FermentationApplication`, `src/main.cpp` oder
-  `main/app_main.cpp`;
-- eine allgemeine Datenbank-, Event-Sourcing-, Repository- oder
-  Transaktionsplattform;
-- lokale Ersatztypen fuer spaetere Sensor-, Recovery-, Journal- oder
-  Sicherheitsmodelle;
-- Dummyfelder, reservierte Erweiterungsblobs oder bedeutungslose
-  Zukunftsplatzhalter;
-- Issue-, Label-, Milestone- oder Statusaenderungen.
+```text
+fermentation_app -> device_platform::IStateStore
+device_platform_esp_idf -> device_platform
+```
 
 ## Verbindliche Quellen
 
-Bei Widerspruechen gilt die Prioritaet aus `docs/SPECIFICATION_REVIEW.md`.
-Massgeblich sind:
-
-- Live-Issue #17 und sein Owner-Synchronisationskommentar;
+- Live-Issue #17 und Owner-Synchronisationskommentar;
 - Root-`AGENTS.md` und `lib/fermentation_app/AGENTS.md`;
 - `docs/RUN_PERSISTENCE.md`;
 - `docs/RECOVERY_AND_INTERRUPTION.md`;
 - ADR-013, ADR-016 und ADR-018;
 - `docs/ARCHITECTURE.md`;
 - `docs/ESP_IDF_UPGRADE_CONTRACT.md`;
-- die gemergten Implementierungen und Tests aus #13, #14, #15 und #54;
-- der Ressourcen- und Integrationsbefund aus dem Nachreview PR #53.
+- Implementierungen und Tests aus #13, #14, #15 und #54;
+- Ressourcen-/Integrationsbefund aus PR #53.
 
-## Issuegrenzen
+Bei Widerspruechen gilt `docs/SPECIFICATION_REVIEW.md`.
 
-### Issue #17 verantwortet
+## Scope
 
-- Laufkontrollpunktmodell und Schema-1-Codec;
+### #17 verantwortet
+
+- Kontrollpunktmodell und Schema-1-Codec;
 - zwei logische Kontrollpunktslots;
-- einen kleinen, laufbezogenen Head-/Transaktionsrecord;
-- Write-, Readback-, Commit-, Rueckfall- und Ladeprotokoll;
-- fachliche Koordination `decide -> persist -> apply` innerhalb von
-  `fermentation_app`;
+- laufbezogenen Head-/Transaktionsrecord;
+- Write-, Readback-, Commit-, Lade- und Rueckfallprotokoll;
+- `RunPersistenceCoordinator` innerhalb `fermentation_app`;
 - sofortige und periodische Kontrollpunkte;
-- technische Diagnose, ob kein Lauf, ein rekonstruierbarer Lauf oder ein
-  nicht eindeutig rekonstruierbarer Zustand vorliegt.
+- technische Klassifikation:
+  - kein persistierter Lauf;
+  - aktueller Lauf;
+  - `NoActiveRun`;
+  - Rueckfall;
+  - Prepared/unterbrochen;
+  - nicht eindeutig rekonstruierbar.
 
-### Nachgelagerte Issues verantworten
+### Nicht-Scope
 
-- #18: Bedeutung eines geladenen Laufes fuer Recovery, Unterbrechungsdauer,
-  Zeitkonfidenz und Fortschritt;
-- #20/#21: Sensorrollen und Sensorqualitaet;
-- #24: Zuordnung technischer Persistenzbefunde zu Fehlerklasse,
-  Verriegelung, `SAFE_BOOT` und Aktorsperre;
-- #19: Journal, Historie und Aufbewahrung;
-- der spaetere Adapter-/Hardwarepfad: reales NVS, Flashverhalten,
-  Stromunterbruch, Laufzeitjitter und Watchdogwirkung.
+- Recoveryentscheidung, Ausfallintervall, Zeitkonfidenz und
+  temperaturgewichteter Fortschritt: #18;
+- Sensorrollen, Sensorqualitaet und Ersatzbetrieb: #20/#21;
+- Fehlerklassen, Verriegelung, `SAFE_BOOT`, Fehlerreset und Aktorsperre: #24;
+- Journal, Meldungshistorie, Messhistorie, Aufbewahrung und Export: #19;
+- Konfigurations-Pending/Intent, Bootstrap, Werksreset und Secrets:
+  #16/#56/#57;
+- konkretes NVS, Preferences, LittleFS, Arduino oder ESP-IDF;
+- `device_platform_esp_idf`, GPIO, Sensor-, Display-, WLAN- oder Aktoradapter;
+- Erweiterung von `IPlatformServices`;
+- Verkabelung in `FermentationApplication`, `src/main.cpp` oder
+  `main/app_main.cpp`;
+- allgemeine Datenbank-, Event-Sourcing-, Repository- oder
+  Transaktionsplattform;
+- lokale Ersatzmodelle fuer spaetere Issues;
+- Dummyfelder oder untypisierte Erweiterungsblobs.
 
-#17 darf fuer diese spaeteren Entscheidungen nur typisierte Befunde liefern.
+## Vorhandene Bausteine
 
-## Aktuelle Ausgangslage und Wiederverwendung
+### Fachlogik
 
-### Vorhandene Fachlogik
+- `ActiveRun`, `RunProgramSnapshot`, `RunRevision`,
+  `ActiveRun::restore()` aus #13;
+- `ProcessRunSnapshot`, `ProcessRuntimeState`, `TransitionDecision`,
+  `decideProcessTransition()` und `applyProcessTransition()` aus #14;
+- `RunCommandState`, `CommandDecision`, `decide*()` und
+  `applyRunCommand()` aus #15.
 
-- #13: `ActiveRun`, `RunProgramSnapshot`, `EffectiveRunValues`, bis zu 32
-  `RunRevision`-Eintraege und `ActiveRun::restore()`.
-- #14: `ProcessRunSnapshot`, `ProcessRuntimeState`,
-  `TransitionDecision`, `decideProcessTransition()` und
-  `applyProcessTransition()`.
-- #15: `RunCommandState`, `CommandDecision`, die `decide*`-Funktionen und
-  `applyRunCommand()`. Abgelehnte Entscheidungen veraendern keinen Zustand.
-- #15 besitzt nur ein begrenztes In-Memory-Fenster fuer Kommando-IDs. Die
-  persistierte Commit-Grenze wurde ausdruecklich an #17 delegiert.
+Abgelehnte Decisions mutieren keinen Zustand. Das begrenzte
+In-Memory-Kommando-ID-Fenster aus #15 ist keine persistente
+Wiederholungserkennung.
 
-### Vorhandene Plattformbausteine
+### Plattform
 
-- `IStateStore` mit atomarem Replace pro Schluessel;
-- getrennte Lese- und Schreibstatus;
-- `CommitOutcomeUnknown` mit verpflichtendem Readback;
-- `StateStoreKey` mit 1 bis 15 Bytes aus `[A-Za-z0-9_.-]`;
+- atomarer Replace pro `IStateStore`-Schluessel;
+- `Success`, `WriteError`, `CapacityError`,
+  `CommitOutcomeUnknown`;
+- exakter Readback bei unbekanntem Commit-Ausgang;
+- `StateStoreKey` mit 1..15 Bytes aus `[A-Za-z0-9_.-]`;
+- Envelope V1, CRC-32/ISO-HDLC, Big-Endian-Codecs;
 - starke technische Typen und Ueberlaufpruefung;
-- Envelope V1, CRC-32/ISO-HDLC und begrenzte Byte-Reader/-Writer;
-- technischer Kandidatenscan und gezieltes Payloadladen;
-- `SimulatedPersistentStateStore` mit Cut-Points, Korruption und Neustart.
+- `loadSlotPayload()` und begrenzte technische Slotbausteine;
+- `SimulatedPersistentStateStore` fuer Tests.
 
-Diese Bausteine werden wiederverwendet und nicht in #17 dupliziert.
+#17 dupliziert keinen dieser Vertraege.
 
-## Stabile Speicherkennungen
+## Stabile Kennungen
 
-Der Plan reserviert als naechste freie anwendungsspezifische Recordtypen:
+Naechste freie Anwendungs-Recordtypen:
 
 ```text
 RecordTypeId 7: RunCheckpoint
 RecordTypeId 8: RunPersistenceHead
-SchemaVersion 1 fuer beide Recordtypen
+SchemaVersion 1 fuer beide
 ```
 
-Die bisherigen Konfigurationsrecordtypen verwenden 1 bis 6; die Werte 7 und 8
-sind damit auf dem aktuellen `main` kollisionsfrei. Eine spaetere Aenderung
-bedarf eines neuen Plancommits.
-
-ADR-016-konforme Schluessel:
+Schluessel:
 
 ```text
 rc0   RunCheckpoint Slot 0
@@ -199,262 +167,291 @@ rc1   RunCheckpoint Slot 1
 rh0   RunPersistenceHead
 ```
 
-Alle drei Schluessel liegen innerhalb des verbindlichen 1-bis-15-Byte-
-Schluesselraums. `rh0` ist kein dritter Kontrollpunktslot.
+Die bisherigen Konfigurationsrecordtypen verwenden 1..6. Die neuen IDs und
+Schluessel sind auf der Ausgangsbasis kollisionsfrei.
+
+`Envelope.versionValue` bedeutet:
+
+- bei `RunCheckpoint`: Kontrollpunktrevision `uint64`, Start bei 1;
+- bei `RunPersistenceHead`: Headrevision `uint64`, Start bei 1 und Erhoehung
+  bei jedem bestaetigten Headwrite.
+
+Revision 0 und Ueberlauf werden typisiert abgelehnt.
+
+## Eingespeiste Werte ohne Konfigurationskopplung
+
+#17 erhaelt als bereits validierte Werte vom spaeteren Aufrufer:
+
+- `StorageEpoch`, ungleich 0;
+- Kontrollpunktintervall 1..60 Minuten;
+- monotone Zeit;
+- optionalen verlaesslichen UTC-Wert.
+
+#17 liest oder mutiert keinen ConfigurationRoot und erzeugt keinen
+StorageEpoch. Native Tests verwenden explizite Testwerte. Die spaetere
+Runtime-Composition liefert die Werte ueber schmale Konstruktor-/Methodenwerte,
+nicht ueber ein breites `IPlatformServices`.
 
 ## Genau zwei logische Kontrollpunktslots
 
-Schema 1 verwendet genau zwei logische Kontrollpunktslots.
+Schema 1 verwendet genau zwei logische Slots.
 
-Begruendung:
-
-- Beim Schreiben des inaktiven Slots bleibt der aktuell bestaetigte Slot
-  unangetastet.
+- Der inaktive Slot wird geschrieben; der aktuelle bleibt unangetastet.
 - `WriteError` und `CapacityError` veraendern den alten Slot nicht.
-- `CommitOutcomeUnknown` wird durch exakten Readback aufgeloest.
-- Nach einem erfolgreichen Commit wird der neue Slot aktuell und der bisher
-  aktuelle Slot zum Rueckfall.
-- Mehr als zwei logische Slots wuerden in #17 zusaetzliche Historie oder eine
-  vermeintliche logische Verschleissstrategie einfuehren.
-- Historie gehoert zu #19; physisches Wear-Leveling und reale Flashlebensdauer
-  gehoeren zum NVS-/Hardwarepfad.
+- `CommitOutcomeUnknown` wird exakt zurueckgelesen.
+- Nach bestaetigtem Headcommit wird neu zu aktuell und alt zu Rueckfall.
+- Mehr Slots waeren zusaetzliche Historie oder vermeintliches Wear-Leveling.
+- Historie gehoert zu #19; physisches Wear-Leveling zum NVS-/Hardwarepfad.
 
-Findet die Umsetzung einen belegten Widerspruch, darf sie nicht selbst auf drei
-oder mehr Slots wechseln. Sie muss mit dem konkreten Befund und einer
-Ownerfrage anhalten.
+`rh0` ist kein dritter Kontrollpunktslot.
+
+Ein belegter Widerspruch stoppt die Umsetzung zur Ownerentscheidung; die
+Slotzahl wird nicht eigenmaechtig geaendert.
 
 ## Laufkontrollpunkt Schema 1
 
-### Fachlicher Zustand
-
-Ein Kontrollpunkt besitzt genau eine der folgenden Varianten:
+### Varianten
 
 ```text
-ProgramRun
-ManualRun
-NoActiveRun
+ProgramRun = 1
+ManualRun = 2
+NoActiveRun = 3
 ```
 
-`NoActiveRun` ist ein typisierter Tombstone. Er verhindert, dass ein alter
-aktiver Lauf nach einem bestaetigten Abbruch, einer bestaetigten Rueckkehr nach
-`STANDBY` oder einem neuen Lebenszyklus faelschlich wieder erscheint.
+`NoActiveRun` ist ein Tombstone. Er verhindert die Wiederbelebung eines alten
+Laufs nach bestaetigtem Abbruch oder bestaetigter Rueckkehr nach `STANDBY`.
 
-Schema 1 verwendet nur heute vorhandene autoritative Modelle.
+### Speichertrigger
 
-Gemeinsame Felder in kanonischer Reihenfolge:
+```text
+Periodic = 1
+RunCommand = 2
+ProcessTransition = 3
+LifecycleTombstone = 4
+```
 
-1. Kontrollpunktvariante `uint8`;
-2. Speichertrigger `uint8`;
+Spaetere Sensor- oder Recoveryproduzenten erweitern den Vertrag nicht
+stillschweigend. Eine neue fachliche Bedeutung verlangt eine neue
+Schemaversion oder einen neuen freigegebenen Plan.
+
+### Kanonische Top-Level-Reihenfolge
+
+1. Variante `uint8`;
+2. Trigger `uint8`;
 3. monotone Kontrollpunktzeit `uint64`;
-4. Kontrollpunktintervall in Minuten `uint16`;
-5. Lauf-ID als `uint16`-Laenge plus begrenzte Bytes;
+4. Intervall-Minuten `uint16`;
+5. Lauf-ID: `uint16`-Laenge plus maximal 48 Bytes;
 6. `runRevision` `uint32`;
 7. `commandSequence` `uint32`;
-8. optional letzte atomar uebernommene `CommandId` als Tag plus `uint64`;
-9. `ProcessRunSnapshot` als typisierte optionale Struktur;
-10. `ProcessRuntimeState` mit fester Feldreihenfolge und festen Breiten;
-11. variantenabhaengiger Laufinhalt.
+8. optionale letzte atomar uebernommene `CommandId`:
+   Tag `uint8`, danach optional `uint64`;
+9. optionaler `ProcessRunSnapshot`;
+10. `ProcessRuntimeState`;
+11. variantenabhaengiger Inhalt.
 
-`ProgramRun` enthaelt:
+Der optionale UTC-Wert liegt ausschliesslich im vorhandenen Envelope-Feld.
+
+### ProgramRun
 
 - `RunProgramSnapshot`;
-- den aktuellen `ActiveRun`-Zustand, rekonstruierbar ueber Programmschnappschuss
-  und die begrenzte Folge vorhandener `RunRevision`-Eintraege;
-- keine zweite frei widersprechende Kopie der effektiven Werte.
+- vorhandene, begrenzte `RunRevision`-Folge;
+- Wiederherstellung ueber `ActiveRun::restore()`;
+- keine zweite, frei widersprechende Kopie der effektiven Werte.
 
-`ManualRun` enthaelt:
+### ManualRun
 
-- den vorhandenen `ManualRunPlan`;
-- den zugehoerigen `ProcessRunSnapshot` und `ProcessRuntimeState`;
-- keine neu erfundene Programmdokument- oder Sensorsemantik.
+- vorhandener `ManualRunPlan`;
+- `ProcessRunSnapshot`;
+- `ProcessRuntimeState`.
 
-`NoActiveRun` enthaelt ausser gemeinsamer Lebenszyklus-, Revisions- und
-Zeitinformation keinen aktiven Programm- oder Manuallauf.
+### NoActiveRun
 
-Nicht Teil von Schema 1 sind:
+- keine aktive Programm- oder Manuallaufstruktur;
+- nur notwendige Lebenszyklus-, Revisions- und Zeitinformation.
 
-- `RuntimeMessage`-Historie oder Meldungsjournal;
-- `criticalSafetyEventPending`, Fehlerklassen oder Verriegelungen;
-- das gesamte `processedCommandIds`-Fenster;
-- Sensorwerte, Sensorqualitaet oder primaere Sensorrolle;
+### Ausgeschlossen aus Schema 1
+
+- `RuntimeMessage`-Historie und Meldungsjournal;
+- `criticalSafetyEventPending`, Fehlerklassen und Verriegelungen;
+- gesamtes `processedCommandIds`-Fenster;
+- Sensorwerte, Sensorqualitaet und Sensorrolle;
 - temperaturgewichteter Fortschritt und Recoverykonfidenz;
-- direkte Hardware- oder Aktorzustaende.
+- GPIO- oder Aktorzustaende.
 
-### Zeit
+Acknowledge-/Mute-Kommandos und FaultReset werden in #17 nicht dauerhaft
+koordiniert, weil ihre persistente Zustaendigkeit bei #19 beziehungsweise #24
+liegt. Sie duerfen spaeter nicht ohne den Vertrag ihres owning Issues als
+persistiert gelten.
 
-Der optionale verlaessliche UTC-Wert wird ausschliesslich im vorhandenen
-Envelope-V1-UTC-Feld gespeichert. Schema 1 erfindet keinen neuen
-Zeitqualitaetstyp. Die Bewertung, ob der Wert fuer Recovery verwendbar ist,
-bleibt #18.
+## ProgramDocument-Wirelogik
 
-### Programmdokument-Codec
+Der Programmschnappschuss erhaelt keine zweite abweichende Kodierung.
 
-Der Programmschnappschuss darf nicht mit einer zweiten, abweichenden
-ProgramDocument-Kodierung dupliziert werden.
+Die bereits im ProgramCatalog-Codec vorhandene Einzelprogrammkodierung wird
+klein und bytekompatibel als interne gemeinsame Hilfe in
+`fermentation_app` extrahiert.
 
-Der bestehende kanonische Programmkatalogcodec ist so klein zu refaktorieren,
-dass die Kodierung und Dekodierung genau eines `ProgramDocument` intern von
-Konfigurationskatalog und Laufkontrollpunkt wiederverwendet werden kann.
+- bestehendes ProgramCatalog-Wireformat bleibt bytegenau unveraendert;
+- vorhandene Golden- und Migrationstests bleiben gruen;
+- genau zwei reale Konsumenten: ProgramCatalog und RunCheckpoint;
+- keine allgemeine oeffentliche Universalcodec-Plattform.
 
-Dabei gilt:
-
-- das bestehende ProgramCatalog-Wireformat bleibt bytegenau unveraendert;
-- vorhandene Golden- und Migrationstests bleiben unveraendert gruen;
-- keine neue oeffentliche Universalcodec-Schicht ohne zweiten realen
-  Konsumenten;
-- die gemeinsame Hilfe bleibt innerhalb von `fermentation_app`.
-
-### Grenzen
-
-Verbindliche statische Obergrenzen:
+## Groessengrenzen
 
 ```text
-maximaler RunCheckpoint-Payload: 8192 Byte
-maximaler RunCheckpoint-Envelope mit UTC: 8237 Byte
-maximaler RunPersistenceHead-Payload: 256 Byte
-maximaler RunPersistenceHead-Envelope mit UTC: 301 Byte
-logische Kontrollpunktslots: 2
-maximale RunRevision-Anzahl: bestehende 32
-Intervall: 1..60 Minuten, Standard 5 Minuten
+RunCheckpoint-Payload maximal: 8192 Byte
+RunCheckpoint-Envelope mit UTC maximal: 8237 Byte
+RunPersistenceHead-Payload maximal: 256 Byte
+RunPersistenceHead-Envelope mit UTC maximal: 301 Byte
+RunRevision-Anzahl: bestehende 32
+Intervall: 1..60 Minuten, Standard 5
 ```
 
-Die Implementierung muss die tatsaechliche Worst-Case-Groesse aus den
-bestehenden Feldgrenzen herleiten und als Test dokumentieren. Passt der
-maximale gueltige Zustand nicht in 8192 Byte, wird die Grenze nicht still
-angehoben. Die Umsetzung haelt mit Messwerten zur Ownerentscheidung an.
+Die Implementierung leitet die echte Worst-Case-Groesse aus den vorhandenen
+Feldgrenzen ab und testet sie. Passt ein maximal gueltiger Zustand nicht in
+8192 Byte, wird die Grenze nicht angehoben; die Umsetzung stoppt mit Messwerten
+zur Ownerentscheidung.
 
-## Head- und Transaktionsvertrag
+## Head- und Transaktionsrecord
 
-### Zweck
-
-`rh0` ist ein kleiner laufbezogener Head-/Transaktionsrecord. Er ist weder ein
-allgemeines Transaktionsframework noch die Konfigurations-`Pending`-/`Intent`-
-Semantik aus #16/#56/#57.
-
-Er besitzt zwei Zustandsformen:
+### Zustaende
 
 ```text
-Committed
-Prepared
+Committed = 1
+Prepared = 2
 ```
 
-`Committed` referenziert:
+### CheckpointReference
 
-- den aktuellen bestaetigten Kontrollpunkt;
-- optional den vorherigen bestaetigten Rueckfallkontrollpunkt.
+Jede Referenz bindet:
 
-`Prepared` referenziert:
+- Slot-ID `uint8`;
+- Checkpointrevision `uint64`;
+- Schema-Version `uint32`;
+- StorageEpoch `uint64`;
+- Payloadlaenge `uint32`;
+- Payload-CRC `uint32`;
+- Kontrollpunktvariante `uint8`.
 
-- den bisher bestaetigten aktuellen und optionalen Rueckfallkontrollpunkt;
-- den vollstaendig vorab kodierten Zielkontrollpunkt;
-- Mutationsart;
+### Committed
+
+Enthaelt:
+
+- aktuelle `CheckpointReference`;
+- optionale Rueckfallreferenz.
+
+### Prepared
+
+Enthaelt:
+
+- bisherige aktuelle Referenz;
+- optionale bisherige Rueckfallreferenz;
+- Zielreferenz;
+- MutationKind:
+  - `RunCommand = 1`;
+  - `ProcessTransition = 2`;
 - optionale `CommandId`;
-- erwartete alte und neue Fachrevisionen;
-- Zielslot, Zielrevision, Payloadlaenge und Payload-CRC.
+- erwartete alte und neue `runRevision`;
+- erwartete alte und neue `transitionSequence`.
 
-Jede Referenz bindet mindestens:
+Der Zielkontrollpunkt wird vor dem Prepared-Write vollstaendig in RAM kodiert,
+validiert und per Laenge/CRC gebunden.
 
-- Slot-ID;
-- Kontrollpunktrevision aus `Envelope.versionValue`;
-- Schema-Version;
-- StorageEpoch;
-- Payloadlaenge;
-- Payload-CRC.
+## Mutationsprotokoll
 
-### Mutationsprotokoll
-
-Fuer eine bereits vollstaendig entschiedene laufwirksame Mutation gilt:
+Fuer eine bereits fachlich vorgeschlagene Mutation:
 
 ```text
-1. Zielzustand aus bestehender CommandDecision oder TransitionDecision bilden.
+1. Zielzustand aus CommandDecision oder TransitionDecision verwenden.
 2. Zielkontrollpunkt vollstaendig kodieren und validieren.
-3. Prepared-Head mit altem bestaetigtem Stand und exakter Zielbindung schreiben.
-4. Bei CommitOutcomeUnknown den Prepared-Head exakt zuruecklesen.
-5. Zielkontrollpunkt in den inaktiven Slot schreiben.
-6. Bei CommitOutcomeUnknown den Zielrecord exakt zuruecklesen.
-7. Committed-Head mit Ziel als aktuell und bisher aktuell als Rueckfall schreiben.
-8. Bei CommitOutcomeUnknown den Committed-Head exakt zuruecklesen.
-9. Erst danach die vorhandene apply-Funktion auf den RAM-Zustand anwenden.
+3. Prepared-Head bestaetigt schreiben.
+4. Zielkontrollpunkt in den inaktiven Slot bestaetigt schreiben.
+5. Committed-Head mit Ziel als aktuell und alt als Rueckfall bestaetigt schreiben.
+6. Erst danach bestehende apply-Funktion auf den RAM-Zustand anwenden.
 ```
 
-Kein spaeterer Schritt wird begonnen, solange der vorherige Persistenzstand
-nicht eindeutig bestaetigt ist.
+Bei jedem `CommitOutcomeUnknown` wird exakt derselbe erwartete Record
+zurueckgelesen. Kein Folgeschritt startet ohne eindeutige Bestaetigung.
 
-### Periodischer Kontrollpunkt
+## Periodischer Kontrollpunkt
 
-Ein periodischer Kontrollpunkt veraendert keine Fachentscheidung und braucht
-keinen `Prepared`-Zustand:
+Periodisch wird keine neue Fachmutation erzeugt:
 
 ```text
 1. aktuellen gueltigen RAM-Zustand kodieren;
-2. inaktiven Kontrollpunktslot bestaetigt schreiben;
-3. Committed-Head bestaetigt auf neuen aktuellen und alten Rueckfall umstellen.
+2. inaktiven Slot bestaetigt schreiben;
+3. Committed-Head bestaetigt aktualisieren.
 ```
 
-Scheitert der Headcommit, bleibt der neue Slot ein nicht referenzierter
-technischer Kandidat und wird nicht als bestaetigter aktueller Stand verwendet.
+Scheitert der Headcommit, bleibt der neue Slot unreferenziert und ist nicht
+massgeblich.
+
+## Ladevertrag
+
+Laden ist head-first, nicht highest-revision-first:
+
+1. `rh0` lesen und Envelope/Schema/Epoch validieren;
+2. Headpayload validieren;
+3. exakt referenzierten aktuellen Slot laden;
+4. bei ungueltigem aktuellen Slot exakt referenzierten Rueckfall pruefen;
+5. nicht referenzierte oder hoehere Slots nie still als aktuell waehlen.
+
+`scanTechnicalSlotCandidates()` darf fuer begrenzte Diagnose verwendet werden,
+ist aber keine alternative Recovery-Wahrheit. Ein fehlender oder ungueltiger
+Head wird nicht aus den Slots erraten.
 
 ### Unterbrechungsfaelle
 
-- Unterbrechung vor bestaetigtem `Prepared`: alter Committed-Head bleibt
-  massgeblich.
-- `Prepared`, Ziel fehlt oder passt nicht: Mutation ist nicht bestaetigt; alter
-  Stand bleibt referenziert, der Befund wird sichtbar geliefert.
-- `Prepared`, Ziel passt, aber Committed-Head fehlt: Ziel ist technisch
-  vorhanden, aber die Mutation ist nicht committed; keine stille Anwendung.
-- Committed-Head passt zum Ziel: neuer Zustand ist bestaetigt, auch wenn der
-  RAM-Apply vor dem Stromausfall nicht mehr ausgefuehrt wurde.
-- Head unlesbar, korrupt oder widerspruechlich: kein Raten aus der hoechsten
-  Slotrevision; Ergebnis ist nicht eindeutig rekonstruierbar.
-- aktueller Kontrollpunkt ungueltig, Rueckfallreferenz vollstaendig gueltig:
-  typisierter Rueckfall auf den referenzierten aelteren Stand.
-- aktueller Tombstone ungueltig: kein Rueckfall auf einen alten aktiven Lauf;
-  der Zustand ist nicht eindeutig rekonstruierbar.
+- vor bestaetigtem Prepared: alter Committed-Head bleibt massgeblich;
+- Prepared, Ziel fehlt/abweichend: Mutation nicht committed; alten Stand und
+  Befund liefern;
+- Prepared, Ziel gueltig, Committed fehlt: Ziel technisch vorhanden, aber
+  nicht committed; keine stille Anwendung;
+- Committed passt: neuer Zustand bestaetigt, auch bei Stromausfall vor RAM-Apply;
+- aktueller ungueltig, Rueckfall gueltig: typisierter Rueckfall;
+- aktueller Tombstone ungueltig: keinen alten aktiven Lauf wiederbeleben;
+- Head unlesbar/korrupt/widerspruechlich: nicht eindeutig rekonstruierbar.
 
-Die Zuordnung dieser Befunde zu Recovery, `SAFE_BOOT`, Fault oder Aktorsperre
-bleibt #18/#24.
+#18/#24 entscheiden spaeter ueber Recovery, `SAFE_BOOT`, Fault und
+Aktorfreigabe.
 
-## Anwendungsintegration innerhalb `fermentation_app`
+## Anwendungsintegration
 
-### Erforderlicher Coordinator
+### RunPersistenceCoordinator
 
-#17 implementiert einen kleinen `RunPersistenceCoordinator` als
-Produktionsbaustein in `fermentation_app`.
-
-Seine Aufgabe ist ausschliesslich:
+Neuer Produktionsbaustein in `fermentation_app`:
 
 ```text
-bereits vorhandene Fachentscheidung entgegennehmen
--> Zielkontrollpunkt bilden
--> Head-/Slotprotokoll ausfuehren
--> erst nach bestaetigtem Commit vorhandene apply-Funktion aufrufen
--> typisiertes Ergebnis zurueckgeben
+vorhandene Fachentscheidung
+-> Kontrollpunkt bauen
+-> Head-/Slotprotokoll
+-> bestaetigter Commit
+-> vorhandene apply-Funktion
 ```
 
 Er verwendet:
 
-- `CommandDecision` und `applyRunCommand()` aus #15;
-- `TransitionDecision` und `applyProcessTransition()` aus #14;
-- den neuen Laufpersistenzstore;
-- keinen konkreten Adapter und keine Hardware.
+- `CommandDecision` und `applyRunCommand()`;
+- `TransitionDecision` und `applyProcessTransition()`;
+- RunCheckpointStore;
+- keinen konkreten Adapter.
 
-Er berechnet keine Kommando-, Prozess-, Recovery-, Sensor- oder
-Sicherheitsentscheidung erneut. Die vorhandenen `decide*`-Funktionen bleiben
-die einzige Quelle der Fachentscheidung.
+Er berechnet keine Fachentscheidung erneut und dupliziert keine
+`decide*`-Logik.
 
-Der Coordinator besitzt getrennte Pfade fuer:
+Pfade:
 
-- persistierte `CommandDecision`;
-- persistierte `TransitionDecision`;
-- periodischen Kontrollpunkt ohne neue Fachmutation;
-- expliziten `NoActiveRun`-Tombstone.
+- persistierte laufwirksame `CommandDecision`;
+- persistierte laufwirksame `TransitionDecision`;
+- periodischer Kontrollpunkt;
+- `NoActiveRun`-Tombstone.
 
-Nicht vorgeschlagene oder fachlich abgelehnte Decisions werden nicht
-persistiert und nicht angewendet.
+Nicht vorgeschlagene/abgelehnte Decisions erzeugen keinen Write und keinen
+Apply.
 
 ### Noch keine Runtime-Verkabelung
 
-#17 aendert nicht automatisch:
+#17 aendert nicht:
 
 - `FermentationApplication`;
 - `IPlatformServices`;
@@ -462,308 +459,257 @@ persistiert und nicht angewendet.
 - `main/app_main.cpp`;
 - `device_platform_esp_idf`.
 
-Der Coordinator ist Produktionscode und vollstaendig nativ getestet, besitzt
-aber in #17 noch keinen realen Composition-Root-, UI- oder NVS-Aufrufer.
+Der Coordinator ist Produktionscode und nativ vollstaendig getestet, besitzt
+aber noch keinen realen UI-, Composition-Root- oder NVS-Aufrufer.
 
-Jeder spaetere Produktionspfad fuer Laufkommandos oder Prozessuebergaenge muss
-den Coordinator verwenden. Ein spaeterer direkter Aufruf von
-`applyRunCommand()` oder `applyProcessTransition()` in einem Runtime-, UI- oder
-Adapterpfad waere eine Architekturverletzung. Reine Domain-Unit-Tests duerfen
-die apply-Funktionen weiterhin direkt pruefen.
+Ein spaeterer Produktionspfad muss den Coordinator verwenden. Direkte
+Runtime-Aufrufe von `applyRunCommand()` oder `applyProcessTransition()` waeren
+eine Architekturverletzung. Reine Domain-Unit-Tests duerfen weiterhin direkt
+testen.
 
-## Ressourcen- und Integrationsgate aus #15
+## Ressourcen-Gate aus PR #53
 
-PR #53 hat vor der ersten realen produktiven Nutzung ein verbindliches
-ESP32-Messgate hinterlassen. Die damalige Messung erfolgte noch vor dem
-heutigen ESP-IDF-Produktionspfad und belegte auf dem damaligen Xtensa-ABI etwa:
+Der damalige Risikoindikator lag ungefaehr bei:
 
 ```text
 RunCommandState: 4200 Byte
 CommandDecision: 8608 Byte
 ```
 
-Diese Zahlen sind Risikoindikatoren, kein heutiger Freigabenachweis.
+Er entstand vor dem heutigen ESP-IDF-Produktionspfad und ist kein aktueller
+Freigabenachweis.
 
-Da #17 den Coordinator noch nicht in die Runtime-Composition einbindet, ist das
-Hardware-Messgate kein stillschweigend erfuelltes Mergekriterium fuer den
-reinen Bibliotheksbaustein. Es bleibt jedoch eine harte Sperre vor der ersten
-spaeteren Runtime-, UI- oder Composition-Root-Aktivierung.
+Da #17 noch keinen Runtime-Aufrufer einfuehrt, bleibt das reale Messgate eine
+harte Sperre vor der ersten spaeteren Runtime-/UI-/Composition-Root-Aktivierung.
 
-Der spaetere Aktivierungs-PR muss auf ESP-IDF 6.0.2 ohne PSRAM mit maximalem
-48/96/1024-Programmkandidaten messen:
+Der spaetere Aktivierungs-PR misst unter ESP-IDF 6.0.2 ohne PSRAM mit maximalem
+48/96/1024-Programmkandidaten:
 
-- Task-Stack-High-Water-Mark fuer jeden Kommandoweg;
+- Task-Stack-High-Water-Mark jedes Kommandowegs;
 - freien Heap und groessten zusammenhaengenden Block vor, waehrend und nach
-  Decision-Erzeugung, Persistenz und Anwendung;
-- Verhalten bei fehlgeschlagener Allokation ohne Teilmutation oder
-  Aktorfreigabe.
+  Decision, Persistenz und Apply;
+- Allokationsfehler ohne Teilmutation oder Aktorfreigabe.
 
-Erst anhand dieser Messung entscheidet der Owner, ob die vollstaendigen
-`CommandDecision`-Schnappschuesse bleiben oder ein separater Delta-Decision-
-Umbau erforderlich ist. #17 darf diesen Umbau nicht vorsorglich einziehen.
+Danach entscheidet der Owner ueber Beibehaltung der Vollschnappschuesse oder
+einen separaten Delta-Decision-Umbau. #17 zieht diesen Umbau nicht vor.
 
-In #17 selbst werden dokumentiert:
+#17 dokumentiert bereits:
 
-- `sizeof` der betroffenen Typen im aktuellen nativen und ESP-IDF-Build;
-- maximale kodierte Payload- und Envelopegroesse;
-- native Peakallokation des Codecs/Stores;
+- `sizeof` der Typen im nativen und ESP-IDF-Build;
+- maximale Payload-/Envelopegroessen;
+- native Peakallokation;
 - statische RAM-/Flashdeltas beider ESP-IDF-Profile.
 
-## Geplanter Modul- und Dateischnitt
+## Geplanter Dateischnitt
 
-### `lib/device_platform`
+### Keine Aenderung
 
-Keine Aenderung geplant. Ein neuer Port oder eine neue generische
-Transaktionsschnittstelle waere eine materielle Planabweichung.
+- `lib/device_platform`;
+- Produktionscode in `lib/device_platform_test_support`;
+- `FermentationApplication`;
+- Composition Roots;
+- ESP-IDF-Adapter.
 
-### `lib/device_platform_test_support`
+### Neue Dateien in `lib/fermentation_app`
 
-Keine Produktionsaenderung geplant. Der bestehende
-`SimulatedPersistentStateStore` wird nur aus Tests verwendet.
+- `run_persistence_limits.hpp`;
+- `run_persistence_contract.hpp`;
+- `run_checkpoint.hpp/.cpp`;
+- `run_checkpoint_codec.hpp/.cpp`;
+- `run_persistence_head.hpp/.cpp`;
+- `run_persistence_head_codec.hpp/.cpp`;
+- `run_checkpoint_store.hpp/.cpp`;
+- `run_checkpoint_schedule.hpp/.cpp`;
+- `run_persistence_coordinator.hpp/.cpp`.
 
-### `lib/fermentation_app`
+### Bestehende Dateien nur bei belegtem Bedarf
 
-Neue Dateien:
+- `configuration_document_codec.*`:
+  bytekompatible Extraktion der Einzelprogrammkodierung;
+- `run_snapshot.*`, `run_commands.*`, `process_state_machine.*`:
+  nur schmale read-only Hilfen oder vorhandene Werte.
 
-- `run_persistence_limits.hpp`
-  - statische Groessen-, Slot-, Revisions- und Intervallgrenzen;
-- `run_persistence_contract.hpp`
-  - RecordTypeIds, Schemawerte, Keys und stabile Wirekennungen;
-- `run_checkpoint.hpp/.cpp`
-  - Kontrollpunktvarianten, Validierung und Gleichheit;
-- `run_checkpoint_codec.hpp/.cpp`
-  - Schema-1-Payloadcodec;
-- `run_persistence_head.hpp/.cpp`
-  - Committed-/Prepared-Modell und Validierung;
-- `run_persistence_head_codec.hpp/.cpp`
-  - kleiner Headpayloadcodec;
-- `run_checkpoint_store.hpp/.cpp`
-  - Slotscan, Referenzvalidierung, Write-/Readback- und Ladeprotokoll;
-- `run_checkpoint_schedule.hpp/.cpp`
-  - reine Ereignis-/Intervallfaelligkeit ohne Uhr-, Sensor- oder Aktorport;
-- `run_persistence_coordinator.hpp/.cpp`
-  - `decide -> persist -> apply`-Koordination.
+Neue Fach-, Recovery-, Hardware- oder Plattformsemantik in diesen Dateien ist
+nicht geplant.
 
-Bestehende Dateien nur bei belegtem Bedarf:
+## Ergebnisvertraege
 
-- `configuration_document_codec.*`
-  - kleine bytekompatible Extraktion der bereits vorhandenen
-    Einzelprogrammkodierung;
-- `run_snapshot.*`, `run_commands.*`, `process_state_machine.*`
-  - ausschliesslich schmale read-only Validierungs-/Vergleichshilfen oder
-    Zugriff auf bereits vorhandene Werte;
-  - keine neue Fach-, Recovery- oder Hardwaresemantik.
+Getrennte typisierte Ergebnisse mindestens fuer:
 
-`FermentationApplication`, die Composition Roots und Plattformadapter bleiben
-unveraendert.
-
-## Ergebnis- und Fehlervertraege
-
-Die Implementierung verwendet getrennte typisierte Ergebnisse fuer:
-
-- Encode-/Decode- und Validierungsfehler;
-- Slot-/Head-Lese- und Schreibfehler;
-- CapacityError;
-- CommitOutcomeUnknown, exact-readback bestaetigt oder nicht bestaetigt;
+- Encode-/Decode-/Validierungsfehler;
+- ReadError, WriteError, CapacityError;
+- `CommitOutcomeUnknown` bestaetigt/nicht bestaetigt;
 - kein persistierter Lauf;
-- gueltiger aktueller Lauf;
-- gueltiger `NoActiveRun`-Tombstone;
-- gueltiger Rueckfall;
-- Prepared ohne bestaetigten Zielcommit;
+- aktueller Lauf;
+- `NoActiveRun`;
+- Rueckfall;
+- Prepared/unterbrochen;
 - Head-/Referenz-/Schema-/Epoch-/CRC-Widerspruch;
-- nicht eindeutig rekonstruierbarer Zustand;
+- nicht eindeutig rekonstruierbar;
 - fachlich abgelehnte Decision;
-- Persistenz bestaetigt und RAM-Apply erfolgreich;
-- Persistenz bestaetigt, RAM-Apply wegen Vertragsverletzung abgelehnt.
+- Persistenz und Apply erfolgreich;
+- Persistenz committed, Apply wegen interner Vertragsverletzung abgelehnt.
 
-Der letzte Fall darf bei gueltigen, unveraenderten Decisions nicht auftreten
-und wird als interner Vertragsfehler sichtbar getestet. Er erzeugt in #17
-selbst keine Aktor- oder `SAFE_BOOT`-Entscheidung.
+Der letzte Fall ist ein sichtbarer interner Vertragsfehler, aber #17 erzeugt
+daraus selbst keinen Fault-, `SAFE_BOOT`- oder Aktorbefehl.
 
 ## Teststrategie
 
-### Codec und Wireformat
+### Wire und Modell
 
-- Golden Bytes fuer Checkpoint, Head Committed und Head Prepared;
-- beide Laufvarianten und Tombstone;
-- maximale String-, Program-, Revisions- und Intervallgrenzen;
-- unbekannte Varianten und Enums;
-- Version 0, unbekannte Schema-Version und fremde RecordTypeId;
-- Trunkierung, Zusatzbytes, falsche Laengen und CRC;
-- negative Null, NaN und Unendlichkeit ueber bestehende Double-Codecs;
-- ProgramDocument-Extraktion bleibt bytekompatibel zum ProgramCatalog-Codec;
-- maximal gueltiger Payload bleibt <= 8192 Byte.
+- Golden Bytes: ProgramRun, ManualRun, Tombstone, Committed, Prepared;
+- maximale Strings, Programmdokumente und 32 RunRevisions;
+- unbekannte Varianten/Enums;
+- Schema/RecordType/Epoch/Revision 0 oder falsch;
+- Trunkierung, Zusatzbytes, Laengen- und CRC-Fehler;
+- NaN, Unendlichkeit und negative Null ueber bestehende Double-Codecs;
+- ProgramCatalog-Wireformat nach Codec-Extraktion byteidentisch;
+- Worst-Case-Payload <= 8192 Byte.
 
-### Slot-, Head- und Stromunterbruchsmatrix
+### Store und Cut-Points
 
 - leerer Speicher;
-- erster Laufstart ohne bisherigen Kontrollpunkt;
-- zwei aufeinanderfolgende Kontrollpunkte und Rotation;
+- erster Laufstart;
+- Rotation zwischen zwei Slots;
 - aktueller korrupt, Rueckfall gueltig;
 - beide ungueltig;
-- Head NotFound, ReadError, CapacityError und Korruption;
-- fremde StorageEpoch oder Schema-Version;
-- Prepared vor Zielschreiben;
-- Stromausfall nach Prepared, vor Zielcommit;
-- Zielcommit unbekannt, Readback alt beziehungsweise neu;
-- Stromausfall nach Ziel, vor Committed-Head;
-- Committed-Head unbekannt, Readback alt beziehungsweise neu;
-- Stromausfall nach Committed-Head, vor RAM-Apply;
-- periodischer orphaned Slot bei fehlgeschlagenem Headcommit;
-- Tombstone verhindert Wiederbelebung eines alten aktiven Laufs;
-- keine Teil- oder Mischrecords nach Neustart.
+- Head fehlt, ReadError, CapacityError, korrupt;
+- fremde Epoch/Schema;
+- Prepared vor Ziel;
+- Cut nach Prepared;
+- Zielwrite `CommitOutcomeUnknown`, alt/neu;
+- Cut nach Ziel vor Committed;
+- Headwrite `CommitOutcomeUnknown`, alt/neu;
+- Cut nach Committed vor Apply;
+- periodischer orphaned Slot;
+- Tombstone verhindert Wiederbelebung;
+- keine Teil-/Mischrecords.
 
 ### Coordinator
 
-Fuer jeden laufwirksamen Kommandopfad aus #15 mindestens:
+Laufwirksame Pfade:
 
 - Programmstart;
 - manueller Start;
-- Abbruch und Ausschalten;
-- Abbruch und Kuehlen;
+- Abbruch/Ausschalten;
+- Abbruch/Kuehlen;
 - Abschlussquittierung;
 - Kuehlen nach Abschluss;
-- Laufanpassung.
-
-Zusaetzlich relevante Prozessuebergaenge aus #14.
+- Laufanpassung;
+- relevante Prozessuebergaenge.
 
 Je Pfad:
 
-- fachliche Ablehnung erzeugt keinen Storewrite;
-- Prepared-Fehler verhindert Zielwrite und Apply;
-- Zielwrite-Fehler verhindert Headcommit und Apply;
-- Headcommit-Fehler verhindert Apply;
-- vollstaendig bestaetigter Commit wendet genau einmal an;
-- Wiederholung nach Neustart liefert den bestaetigten Zustand und keine
-  doppelte Laufmutation;
-- Apply-Vertragsfehler nach Persistenz bleibt sichtbar und wird nicht
-  geglaettet.
+- Ablehnung: kein Write, kein Apply;
+- Prepared-Fehler: kein Zielwrite, kein Apply;
+- Ziel-Fehler: kein Commit, kein Apply;
+- Head-Fehler: kein Apply;
+- Erfolg: genau ein Apply;
+- Neustart: keine doppelte Mutation;
+- interner Apply-Vertragsfehler bleibt sichtbar.
 
-### Intervall und Schreiblast
+### Intervall
 
-- 1, 5 und 60 Minuten;
-- 0 und >60 werden abgelehnt;
-- rueckwaertige monotone Zeit wird abgelehnt;
-- Ereigniswrite erfolgt sofort;
-- wiederholte Aufrufe vor Faelligkeit schreiben nicht;
-- kein Schreiben im Zwei-Sekunden-Sensorzyklus;
-- Ereigniswrite setzt die naechste periodische Faelligkeit nachvollziehbar.
+- 1, 5, 60 Minuten;
+- 0 und >60 abgelehnt;
+- rueckwaertige monotone Zeit abgelehnt;
+- Ereignis sofort;
+- keine Wiederholung vor Faelligkeit;
+- kein Write im Zwei-Sekunden-Sensorzyklus;
+- Ereignis setzt naechste Faelligkeit nachvollziehbar.
 
-### Regression und Qualitaet
+### Regression und Quality Gates
 
 - kompletter nativer Testsatz;
 - beide ESP-IDF-Profile mit ESP-IDF 6.0.2;
-- Format, clang-tidy, Architektur-, Secret- und Quality-Gates;
+- Format, clang-tidy, Architektur, Secrets und Quality-Selftests;
 - `git diff --check`;
-- Ressourcenbericht fuer Base und Head;
-- keine Abhaengigkeit von `fermentation_app` auf
-  `device_platform_test_support`;
-- keine Arduino-, NVS- oder ESP-IDF-Header in #17-Produktionsdateien.
+- Base-/Head-Ressourcenbericht;
+- keine Produktionsabhaengigkeit auf `device_platform_test_support`;
+- keine NVS-, Arduino- oder ESP-IDF-Header in #17-Dateien.
 
-## Dokumentation nach freigegebener Implementierung
+## Commitreihenfolge
 
-Nur nach tatsaechlichem Diff anzupassen:
+1. Vertraege, Grenzen, Modelle und bytekompatible ProgramDocument-Hilfe;
+2. Checkpoint-/Headcodecs und Golden-/Negativtests;
+3. Zwei-Slot-/Headstore, Ladevertrag und Cut-Point-Tests;
+4. Coordinator und persistierte Laufmutationen;
+5. Ereignis-/Intervallscheduler;
+6. Dokumentation, Ressourcenbericht und vollstaendige Gates.
 
-- `docs/RUN_PERSISTENCE.md` fuer den implementierten Schema-, Head-, Slot- und
-  Fehlervertrag;
-- `docs/IMPLEMENTATION_ISSUES.md` fuer den realen Umsetzungsstand;
-- `CHANGELOG.md` fuer die gelieferte Funktion und Nachweise.
+Neue Ports, Adapter, Abhaengigkeiten, Composition-Root-Arbeit,
+Delta-Decision-Umbau oder mehr als zwei Slots verlangen einen neuen Plancommit.
 
-Keine dieser Dateien wird in der Planungsphase geaendert.
+## Dokumentation nach Implementierung
 
-## Umsetzungsreihenfolge und Commitschnitt
+- `docs/RUN_PERSISTENCE.md`;
+- `docs/IMPLEMENTATION_ISSUES.md`;
+- `CHANGELOG.md`.
 
-Nach Ownerfreigabe bleibt die Umsetzung im selben Draft-PR:
+Nur anhand des realen Diffs; keine Aenderung in der Planungsphase.
 
-1. Vertraege, Grenzen, Kontrollpunkt-/Headmodelle und ProgramDocument-Codec-
-   Wiederverwendung mit Regressionstests;
-2. Checkpoint- und Headcodec mit Golden-, Grenz- und Negativtests;
-3. Zwei-Slot-/Headstore mit Referenz-, Readback-, Cut-Point- und
-   Rueckfalltests;
-4. `RunPersistenceCoordinator` und persistierte Kommando-/Transitionsatomaritaet;
-5. Ereignis-/Intervallscheduler und Schreiblasttests;
-6. Dokumentation, Ressourcenbericht und vollstaendige Quality Gates.
-
-Nach jedem Commit wird der exakte Scope gegen diesen Plan geprueft. Neue Ports,
-Adapter, Abhaengigkeiten, Composition-Root-Arbeit, ein Delta-Decision-Umbau oder
-mehr als zwei Kontrollpunktslots verlangen vorab einen neuen Plancommit und
-eine neue Ownerfreigabe.
-
-## Offene Mess- und Folgegates
+## Offene Folgegates
 
 ```text
 TBD_IMPLEMENTATION_BUDGET
 ```
 
-- exakte tatsaechliche Payload-, Heap-, RAM- und Flashwerte waehrend der
-  Implementierung messen;
-- statische Obergrenzen dieses Plans nicht ohne Ownerentscheid anheben.
+Tatsaechliche Payload-, Heap-, RAM- und Flashwerte messen. Grenzen nicht
+stillschweigend anheben.
 
 ```text
 MEASUREMENT_REQUIRED_BEFORE_RUNTIME_ACTIVATION
 ```
 
-- reales Stack-/Heap-/Allokationsgate aus PR #53 unter ESP-IDF 6.0.2;
-- muss der spaetere erste Runtime-/UI-/Composition-Root-Aufrufer erfuellen.
+Reales Stack-/Heap-/Allokationsgate aus PR #53 unter ESP-IDF 6.0.2 durch den
+ersten spaeteren Runtime-/UI-/Composition-Root-Aufrufer.
 
 ```text
 MEASUREMENT_REQUIRED
 ```
 
-- reale NVS-Kapazitaet, Atomizitaet, Schreibdauer, Wear-Leveling, Jitter und
-  Watchdogwirkung im spaeteren Adapter-/Hardwarepfad.
+Reale NVS-Kapazitaet, Atomizitaet, Schreibdauer, Wear-Leveling, Jitter und
+Watchdogwirkung im Adapter-/Hardwarepfad.
 
 ```text
 SPIKE_REQUIRED
 ```
 
-- reale Stromunterbrueche mit produktivem NVS-Adapter.
+Reale Stromunterbrueche mit produktivem NVS-Adapter.
 
 ```text
 TBD_COMMISSIONING
 ```
 
-- konkrete Serviceeinstellung innerhalb 1..60 Minuten;
-- Zeit-/Thermikgrenzen aus #18.
+Konkrete Einstellung innerhalb 1..60 Minuten sowie Zeit-/Thermikgrenzen aus
+#18.
 
-Es verbleibt keine offene Slotanzahlentscheidung. Schema 1 verwendet zwei
-logische Kontrollpunktslots.
+## SOLID, DRY und KISS
 
-## SOLID-, DRY- und KISS-Bewertung
-
-| Prinzip | Planbewertung |
+| Prinzip | Bewertung |
 | --- | --- |
-| Single Responsibility | Kontrollpunktmodell, Codecs, Storeprotokoll, Scheduler und Coordinator besitzen getrennte Aufgaben. |
-| Open/Closed | Neue Backends und spaetere Recoveryregeln werden ueber bestehende Ports beziehungsweise neue Konsumenten ergaenzt, ohne Schema-1-Fachlogik an ESP-IDF zu koppeln. |
-| Liskov Substitution | Jeder `IStateStore`, der den dokumentierten Replace-/Statusvertrag erfuellt, ist austauschbar. |
-| Interface Segregation | Kein breites `IPlatformServices`- oder Persistenz-Sammelinterface wird eingefuehrt. |
-| Dependency Inversion | `fermentation_app` haengt nur von `device_platform`-Abstraktionen ab; NVS und ESP-IDF bleiben Adapterdetails. |
-| DRY | Envelope, CRC, Bytecodecs, Slotscan, ProgramDocument-Wirelogik sowie bestehende `decide*`, `restore()` und `apply*`-Funktionen werden wiederverwendet. |
-| KISS | Zwei Kontrollpunktslots, ein kleiner Headrecord und ein Coordinator genuegen; keine Datenbank, kein Journal, kein Event-Sourcing und keine Zukunftsmodelle. |
-
-Eine Vereinfachung darf den Persistenz-vor-Anwendung-Vertrag, den Tombstone,
-die Rueckfallreferenz oder das Ressourcen-/Safetygate nicht entfernen.
+| SRP | Modell, Codecs, Store, Scheduler und Coordinator bleiben getrennt. |
+| OCP | Backend und Recovery werden ueber bestehende Abstraktionen erweitert. |
+| LSP | Jeder vertragskonforme `IStateStore` bleibt austauschbar. |
+| ISP | Kein breites Plattform- oder Persistenz-Sammelinterface. |
+| DIP | Fachlogik kennt nur `device_platform`-Abstraktionen. |
+| DRY | Envelope, CRC, Bytecodecs, ProgramDocument-Wirelogik, `decide*`, `restore()` und `apply*` werden wiederverwendet. |
+| KISS | Zwei Slots, ein kleiner Head und ein Coordinator; keine Datenbank, kein Journal und keine Zukunftsmodelle. |
 
 ## Abnahmekriterien
 
-Der spaetere Implementierungsstand ist erst abnahmefaehig, wenn:
-
-- ein aktiver Programm- und Manuallauf aus einem gueltigen Kontrollpunkt
-  rekonstruiert werden kann;
-- ein bestaetigter Tombstone keinen alten aktiven Lauf wiederbelebt;
-- der aktuelle korrupte Kontrollpunkt nur auf die explizit referenzierte
-  gueltige Rueckfallrevision faellt;
-- ein Head-/Referenz-/Transaktionswiderspruch als nicht eindeutig
-  rekonstruierbar gemeldet wird;
-- keine fachliche Mutation vor bestaetigtem Committed-Head angewendet wird;
-- `CommitOutcomeUnknown` durch exakten Readback aufgeloest wird;
-- keine direkte GPIO-, Aktor-, Sensor-, NVS- oder ESP-IDF-Semantik in #17
-  enthalten ist;
-- periodische und sofortige Writes die Intervallregeln einhalten;
-- Schema 1 keine Modelle aus #18/#20/#21/#24 vorwegnimmt;
-- alle nativen Tests, beide ESP-IDF-Builds und Quality Gates bestanden sind;
-- Ressourcenwirkung dokumentiert ist;
-- der PR Draft bleibt und nicht durch den Agenten gemergt wird.
+- Programm- und Manuallauf rekonstruierbar;
+- Tombstone verhindert Wiederbelebung;
+- Rueckfall nur auf explizit referenzierten gueltigen Stand;
+- Head-/Transaktionswiderspruch wird nicht geraten;
+- keine Mutation vor bestaetigtem Committed-Head;
+- `CommitOutcomeUnknown` immer per Readback aufgeloest;
+- keine Hardware-, NVS-, Sensor- oder Recoveryvorwegnahme;
+- Intervall-/Schreiblastvertrag eingehalten;
+- Schema 1 verwendet keine Modelle aus #18/#20/#21/#24;
+- native Tests, beide ESP-IDF-Builds und Quality Gates gruen;
+- Ressourcenwirkung dokumentiert;
+- PR bleibt Draft; Merge ausschliesslich durch den Owner.
 
 ## Plan-Selbstpruefung
 
@@ -772,8 +718,10 @@ ARCHITECTURE_ALIGNMENT: PASS
 ISSUE_BOUNDARIES: PASS
 RUN_TRANSACTION_CONTRACT: PASS
 SCHEMA_1_SCOPE: PASS
+STORAGE_EPOCH_BOUNDARY: PASS
 APPLICATION_INTEGRATION: PASS
 TWO_SLOT_CONTRACT: PASS
+HEAD_FIRST_LOAD: PASS
 ESP_IDF_BOUNDARY: PASS
 RESOURCE_GATE: PASS_AS_FUTURE_RUNTIME_BLOCKER
 SOLID: PASS
