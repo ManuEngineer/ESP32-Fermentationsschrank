@@ -1,4 +1,4 @@
-name: PlatformIO CI
+name: ESP-IDF + Native CI
 
 on:
   push:
