@@ -74,10 +74,16 @@ RUN_PERSISTENCE_ALLOWED_FILES = frozenset(
         "lib/fermentation_app/src/run_persistence_coordinator.hpp",
     }
 )
-RUN_PERSISTENCE_BYPASS_PATTERN = re.compile(
-    r"\b(?:applyRunCommand|applyProcessTransition)\s*\(|"
-    r"\b(?:\w*[Dd]ecision|decision)\s*(?:\.|->)\s*"
-    r"(?:effects|messages)\b"
+RUN_PERSISTENCE_APPLY_PATTERN = re.compile(
+    r"\b(?:applyRunCommand|applyProcessTransition)\s*\("
+)
+RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN = re.compile(
+    r"\b(?:const\s+)?(?:auto|CommandDecision|TransitionDecision)\s+"
+    r"(?P<name>[A-Za-z_]\w*)\s*=\s*decide[A-Za-z_]\w*\s*\("
+)
+RUN_PERSISTENCE_DECISION_MEMBER_PATTERN = re.compile(
+    r"\b(?P<name>[A-Za-z_]\w*)\s*(?:\.|->)\s*"
+    r"(?P<member>effects|messages)\b"
 )
 
 # Issue #72/#73: exakter idf_component_register()-REQUIRES/PRIV_REQUIRES-
@@ -206,8 +212,23 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                 lines = path.read_text(encoding="utf-8").splitlines()
             except UnicodeDecodeError:
                 continue
+            decision_values = {
+                match.group("name")
+                for line in lines
+                for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(line)
+            }
             for line_number, line in enumerate(lines, start=1):
-                if RUN_PERSISTENCE_BYPASS_PATTERN.search(line):
+                direct_apply = RUN_PERSISTENCE_APPLY_PATTERN.search(line)
+                member = RUN_PERSISTENCE_DECISION_MEMBER_PATTERN.search(line)
+                decision_named_member = (
+                    member is not None
+                    and (
+                        member.group("name") in decision_values
+                        or member.group("name") == "decision"
+                        or member.group("name").endswith("Decision")
+                    )
+                )
+                if direct_apply or decision_named_member:
                     violations.append(
                         f"{path}:{line_number}: produktiver Run-Persistenz-Bypass "
                         "(apply/effects/messages ausserhalb Domain/Coordinator)"
@@ -577,6 +598,14 @@ RUN_PERSISTENCE_BYPASS_CASES = {
     "runtime_effects_arrow": (
         "lib/fermentation_app/src/runtime_path.cpp",
         "void f() { commandDecision->effects; }\n",
+    ),
+    "runtime_effects_from_decide_result": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto result = decideRun(); result.effects; }\n",
+    ),
+    "runtime_messages_from_decide_result": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { const auto result = decideTransition(); result.messages; }\n",
     ),
     "ui_messages_dot": (
         "lib/fermentation_app/src/ui_path.cpp",

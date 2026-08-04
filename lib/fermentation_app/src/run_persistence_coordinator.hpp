@@ -138,7 +138,8 @@ class RunPersistenceCoordinator {
    private:
     [[nodiscard]] RunPersistenceResult writeSnapshot(
         const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
-        bool periodic);
+        bool periodic, const RunCommandState& before,
+        std::optional<CommandId> commandId = std::nullopt);
     [[nodiscard]] RunPersistenceResult unavailableResult() const;
     [[nodiscard]] RunPersistenceResult result(
         RunPersistenceResultStatus status,

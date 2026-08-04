@@ -60,6 +60,9 @@ struct ProcessRuntimeState {
 
 [[nodiscard]] bool equalProcessRuntimeState(const ProcessRuntimeState& left,
                                             const ProcessRuntimeState& right);
+[[nodiscard]] bool validateProcessRuntimeForCheckpoint(
+    const ProcessRuntimeState& state, const ProcessRunSnapshot* runSnapshot,
+    std::uint64_t checkpointMonotonicMillis);
 
 struct ProcessSignals {
     // Bezieht sich immer auf Ziel und Zielband der aktuellen Prozessphase.

@@ -6,7 +6,9 @@
 #include "big_endian_codec.hpp"
 #include "binary64_codec.hpp"
 #include "byte_buffer.hpp"
+#include "crc32.hpp"
 #include "program_document_codec.hpp"
+#include "storage_envelope.hpp"
 
 namespace fermentation {
 namespace {
@@ -16,6 +18,11 @@ using device_platform::ByteWriter;
 namespace be = device_platform::big_endian;
 
 constexpr std::size_t kMaximumCheckpointPayloadBytes = 8192U;
+constexpr std::uint32_t kRunPersistenceSchema = 1U;
+constexpr device_platform::RecordTypeId kCheckpointRecordType{7U};
+constexpr device_platform::RecordTypeId kHeadRecordType{8U};
+constexpr std::size_t kMaximumCheckpointRecordBytes = 8240U;
+constexpr std::size_t kMaximumHeadRecordBytes = 256U;
 
 bool writeString(ByteWriter& writer, const std::string& value) {
     return value.size() <= std::numeric_limits<std::uint16_t>::max() &&
@@ -676,6 +683,207 @@ RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
     if (!validateRunPersistenceSnapshot(s))
         return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
     return {RunPersistenceCodecStatus::Success, std::move(s)};
+}
+
+namespace {
+
+bool writeReference(ByteWriter& writer, const RunCheckpointReference& ref) {
+    return be::writeUint8(writer, ref.slot) &&
+           be::writeUint32(writer, ref.schemaVersion) &&
+           be::writeUint64(writer, ref.storageEpoch) &&
+           be::writeUint64(writer, ref.checkpointRevision) &&
+           be::writeUint32(writer, ref.payloadLength) &&
+           be::writeUint32(writer, ref.payloadCrc) &&
+           writeEnum(writer, ref.variant);
+}
+
+bool readReference(ByteReader& reader, RunCheckpointReference& ref) {
+    if (!be::readUint8(reader, ref.slot) || ref.slot > 1U ||
+        !be::readUint32(reader, ref.schemaVersion) ||
+        !be::readUint64(reader, ref.storageEpoch) ||
+        !be::readUint64(reader, ref.checkpointRevision) ||
+        !be::readUint32(reader, ref.payloadLength) ||
+        !be::readUint32(reader, ref.payloadCrc) ||
+        !readVariant(reader, ref.variant)) {
+        return false;
+    }
+    return ref.schemaVersion == kRunPersistenceSchema &&
+           ref.storageEpoch != 0U && ref.checkpointRevision != 0U;
+}
+
+}  // namespace
+
+std::optional<std::string> encodeRunPersistenceHead(
+    const RunPersistenceHead& head, device_platform::StorageEpoch epoch) {
+    if (head.revision == 0U || epoch.value() == 0U) return std::nullopt;
+    ByteWriter payload(200U);
+    bool ok = be::writeUint8(payload, static_cast<std::uint8_t>(head.state));
+    if (head.state == RunPersistenceHeadState::Prepared) {
+        ok = ok &&
+             be::writeOptionalTag(payload, head.preparedCurrent.has_value()) &&
+             (!head.preparedCurrent.has_value() ||
+              writeReference(payload, *head.preparedCurrent)) &&
+             be::writeOptionalTag(payload, head.preparedFallback.has_value()) &&
+             (!head.preparedFallback.has_value() ||
+              writeReference(payload, *head.preparedFallback)) &&
+             writeReference(payload, head.target) &&
+             be::writeUint8(payload,
+                            static_cast<std::uint8_t>(head.mutationKind)) &&
+             be::writeOptionalTag(payload, head.commandId.has_value()) &&
+             (!head.commandId.has_value() ||
+              (head.commandId.value() != 0U &&
+               be::writeUint64(payload, *head.commandId))) &&
+             be::writeUint32(payload, head.oldRunRevision) &&
+             be::writeUint32(payload, head.newRunRevision) &&
+             be::writeUint32(payload, head.oldTransitionSequence) &&
+             be::writeUint32(payload, head.newTransitionSequence) &&
+             head.newRunRevision >= head.oldRunRevision &&
+             head.newTransitionSequence >= head.oldTransitionSequence &&
+             ((head.mutationKind == RunPersistenceMutationKind::Command) ==
+              head.commandId.has_value());
+    } else if (head.state == RunPersistenceHeadState::Committed) {
+        ok = ok && writeReference(payload, head.current) &&
+             be::writeOptionalTag(payload, head.fallback.has_value()) &&
+             (!head.fallback.has_value() ||
+              writeReference(payload, *head.fallback));
+    } else {
+        ok = false;
+    }
+    if (!ok) return std::nullopt;
+    device_platform::StorageEnvelope envelope{
+        kHeadRecordType, kRunPersistenceSchema, epoch,
+        head.revision,   std::nullopt,          payload.takeBytes()};
+    std::string bytes;
+    if (device_platform::encodeEnvelope(envelope, bytes,
+                                        kMaximumHeadRecordBytes) !=
+        device_platform::EnvelopeEncodeStatus::Success) {
+        return std::nullopt;
+    }
+    return bytes;
+}
+
+std::optional<RunPersistenceHead> decodeRunPersistenceHead(
+    const std::string& bytes, device_platform::StorageEpoch epoch) {
+    const auto envelope = device_platform::decodeEnvelope(bytes);
+    if (!envelope.envelope.has_value() ||
+        envelope.envelope->recordTypeId != kHeadRecordType ||
+        envelope.envelope->schemaVersion != kRunPersistenceSchema ||
+        envelope.envelope->storageEpoch != epoch ||
+        envelope.envelope->versionValue == 0U) {
+        return std::nullopt;
+    }
+    ByteReader reader(envelope.envelope->payload);
+    std::uint8_t state = 0U;
+    bool present = false;
+    RunPersistenceHead head;
+    head.revision = envelope.envelope->versionValue;
+    if (!be::readUint8(reader, state)) return std::nullopt;
+    if (state == static_cast<std::uint8_t>(RunPersistenceHeadState::Prepared)) {
+        head.state = RunPersistenceHeadState::Prepared;
+        if (!be::readOptionalTag(reader, present)) return std::nullopt;
+        if (present) {
+            RunCheckpointReference reference;
+            if (!readReference(reader, reference)) return std::nullopt;
+            head.preparedCurrent = reference;
+        }
+        if (!be::readOptionalTag(reader, present)) return std::nullopt;
+        if (present) {
+            RunCheckpointReference reference;
+            if (!readReference(reader, reference)) return std::nullopt;
+            head.preparedFallback = reference;
+        }
+        std::uint8_t kind = 0U;
+        if (!readReference(reader, head.target) ||
+            !be::readUint8(reader, kind) ||
+            !be::readOptionalTag(reader, present)) {
+            return std::nullopt;
+        }
+        if (kind < static_cast<std::uint8_t>(
+                       RunPersistenceMutationKind::Command) ||
+            kind > static_cast<std::uint8_t>(
+                       RunPersistenceMutationKind::Periodic)) {
+            return std::nullopt;
+        }
+        head.mutationKind = static_cast<RunPersistenceMutationKind>(kind);
+        if (present) {
+            CommandId id = 0U;
+            if (!be::readUint64(reader, id) || id == 0U) return std::nullopt;
+            head.commandId = id;
+        }
+        if (!be::readUint32(reader, head.oldRunRevision) ||
+            !be::readUint32(reader, head.newRunRevision) ||
+            !be::readUint32(reader, head.oldTransitionSequence) ||
+            !be::readUint32(reader, head.newTransitionSequence) ||
+            head.newRunRevision < head.oldRunRevision ||
+            head.newTransitionSequence < head.oldTransitionSequence ||
+            ((head.mutationKind == RunPersistenceMutationKind::Command) !=
+             head.commandId.has_value())) {
+            return std::nullopt;
+        }
+    } else if (state ==
+               static_cast<std::uint8_t>(RunPersistenceHeadState::Committed)) {
+        head.state = RunPersistenceHeadState::Committed;
+        if (!readReference(reader, head.current) ||
+            !be::readOptionalTag(reader, present)) {
+            return std::nullopt;
+        }
+        if (present) {
+            RunCheckpointReference reference;
+            if (!readReference(reader, reference)) return std::nullopt;
+            if (reference.slot == head.current.slot) return std::nullopt;
+            head.fallback = reference;
+        }
+    } else {
+        return std::nullopt;
+    }
+    if (reader.remaining() != 0U) return std::nullopt;
+    head.bytes = bytes;
+    return head;
+}
+
+std::optional<RunPersistenceRawRecord> decodeRunPersistenceRecord(
+    const std::string& bytes, device_platform::StorageEpoch epoch) {
+    const auto envelope = device_platform::decodeEnvelope(bytes);
+    if (!envelope.envelope.has_value() ||
+        envelope.envelope->recordTypeId != kCheckpointRecordType ||
+        envelope.envelope->schemaVersion != kRunPersistenceSchema ||
+        envelope.envelope->storageEpoch != epoch ||
+        envelope.envelope->versionValue == 0U) {
+        return std::nullopt;
+    }
+    const auto snapshot =
+        decodeRunPersistenceSnapshot(envelope.envelope->payload);
+    if (!snapshot.snapshot.has_value()) return std::nullopt;
+    return RunPersistenceRawRecord{bytes, *snapshot.snapshot,
+                                   envelope.envelope->versionValue,
+                                   envelope.envelope->utcUnixSeconds};
+}
+
+bool runCheckpointReferenceMatches(const RunCheckpointReference& reference,
+                                   const RunPersistenceRawRecord& record,
+                                   std::size_t slot) {
+    const auto envelope = device_platform::decodeEnvelope(record.bytes);
+    return envelope.envelope.has_value() && reference.slot == slot &&
+           reference.schemaVersion == envelope.envelope->schemaVersion &&
+           reference.storageEpoch == envelope.envelope->storageEpoch.value() &&
+           reference.checkpointRevision == record.checkpointRevision &&
+           reference.payloadLength == envelope.envelope->payload.size() &&
+           reference.payloadCrc == device_platform::computeCrc32IsoHdlc(
+                                       envelope.envelope->payload) &&
+           reference.variant == record.snapshot.variant;
+}
+
+RunCheckpointReference makeRunCheckpointReference(
+    std::size_t slot, const RunPersistenceRawRecord& record,
+    device_platform::StorageEpoch epoch) {
+    const auto envelope = device_platform::decodeEnvelope(record.bytes);
+    return {static_cast<std::uint8_t>(slot),
+            kRunPersistenceSchema,
+            epoch.value(),
+            record.checkpointRevision,
+            static_cast<std::uint32_t>(envelope.envelope->payload.size()),
+            device_platform::computeCrc32IsoHdlc(envelope.envelope->payload),
+            record.snapshot.variant};
 }
 
 }  // namespace fermentation

@@ -933,6 +933,21 @@ bool equalProcessRuntimeState(const ProcessRuntimeState& left,
            left.transitionSequence == right.transitionSequence;
 }
 
+bool validateProcessRuntimeForCheckpoint(
+    const ProcessRuntimeState& state, const ProcessRunSnapshot* runSnapshot,
+    std::uint64_t checkpointMonotonicMillis) {
+    if (!runtimeShapeIsValid(state) ||
+        !runtimeTimeIsValid(state, checkpointMonotonicMillis)) {
+        return false;
+    }
+    if (stateUsesRunSnapshot(state.state)) {
+        return runSnapshot != nullptr &&
+               validateProcessRunSnapshot(*runSnapshot) &&
+               stateMatchesRunSnapshot(state.state, *runSnapshot);
+    }
+    return runSnapshot == nullptr || validateProcessRunSnapshot(*runSnapshot);
+}
+
 TransitionDecision decideProcessTransition(
     const ProcessRuntimeState& current, const ProcessRunSnapshot* runSnapshot,
     const ProcessSignals& signals, const TransitionRequest& request,

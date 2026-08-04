@@ -30,6 +30,7 @@ bool validStateFor(RunCheckpointVariant variant, ProcessState state) {
                 case ProcessState::ReachingTarget:
                 case ProcessState::QualifyingTarget:
                 case ProcessState::ManualHolding:
+                case ProcessState::Completed:
                     return true;
                 default:
                     return false;
@@ -57,6 +58,20 @@ bool validIds(const RunPersistenceSnapshot& snapshot) {
         }
     }
     return true;
+}
+
+bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
+                             const ProcessRunSnapshot& right) {
+    return left.kind == right.kind &&
+           left.preheatEnabled == right.preheatEnabled &&
+           left.completionMode == right.completionMode &&
+           left.qualificationDurationMinutes ==
+               right.qualificationDurationMinutes &&
+           left.maximumTargetReachMinutes == right.maximumTargetReachMinutes &&
+           left.maximumProductWaitMinutes == right.maximumProductWaitMinutes &&
+           left.fermentationDurationMinutes ==
+               right.fermentationDurationMinutes &&
+           left.holdDurationMinutes == right.holdDurationMinutes;
 }
 
 }  // namespace
@@ -91,7 +106,10 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
                !snapshot.activeRunSensorMode.has_value() &&
                !snapshot.program.has_value() && snapshot.revisionCount == 0U &&
                !snapshot.manual.has_value() &&
-               !snapshot.processRunSnapshot.has_value();
+               !snapshot.processRunSnapshot.has_value() &&
+               validateProcessRuntimeForCheckpoint(
+                   snapshot.processState, nullptr,
+                   snapshot.checkpointMonotonicMillis);
     }
     if (!run_limits::validRunId(snapshot.activeRunId) ||
         !snapshot.activeRunSensorMode.has_value() ||
@@ -104,9 +122,17 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
             snapshot.processRunSnapshot->kind != ProcessKind::Timed) {
             return false;
         }
-        return ActiveRun::restore(*snapshot.program, snapshot.revisions,
-                                  snapshot.revisionCount)
-            .has_value();
+        const auto restored = ActiveRun::restore(
+            *snapshot.program, snapshot.revisions, snapshot.revisionCount);
+        const auto expectedProcess = restored.has_value()
+                                         ? makeProcessRunSnapshot(*restored)
+                                         : std::optional<ProcessRunSnapshot>{};
+        return restored.has_value() && expectedProcess.has_value() &&
+               validateProcessRuntimeForCheckpoint(
+                   snapshot.processState, &*snapshot.processRunSnapshot,
+                   snapshot.checkpointMonotonicMillis) &&
+               equalProcessRunSnapshot(*expectedProcess,
+                                       *snapshot.processRunSnapshot);
     }
     return !snapshot.program.has_value() && snapshot.revisionCount == 0U &&
            snapshot.manual.has_value() &&
@@ -114,7 +140,10 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
            snapshot.manual->values.runId == snapshot.activeRunId &&
            snapshot.manual->values.sensorMode ==
                *snapshot.activeRunSensorMode &&
-           validateManualRunPlan(*snapshot.manual);
+           validateManualRunPlan(*snapshot.manual) &&
+           validateProcessRuntimeForCheckpoint(
+               snapshot.processState, &*snapshot.processRunSnapshot,
+               snapshot.checkpointMonotonicMillis);
 }
 
 std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(

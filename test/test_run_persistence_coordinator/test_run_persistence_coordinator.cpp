@@ -23,11 +23,12 @@ ProgramDocument runnableProgram() {
     return *document;
 }
 
-CommandDecision startDecision(const RunCommandState& state, CommandId id) {
+CommandDecision startDecision(const RunCommandState& state, CommandId id,
+                              std::uint64_t monotonicMillis = 100U) {
     ProgramStartRequest request;
     request.envelope = {id,
                         CommandSource::LocalDisplay,
-                        100U,
+                        monotonicMillis,
                         state.processState.transitionSequence,
                         state.runRevision,
                         std::nullopt,
@@ -40,6 +41,27 @@ CommandDecision startDecision(const RunCommandState& state, CommandId id) {
     request.sensorMode = RunSensorMode::Product;
     request.safetyAllowsStart = true;
     return decideProgramStart(state, request);
+}
+
+CommandDecision manualStartDecision(const RunCommandState& state,
+                                    CommandId id) {
+    ManualStartRequest request;
+    request.envelope = {id,
+                        CommandSource::LocalDisplay,
+                        100U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
+    request.plan.runId = "manual-persisted-run";
+    request.plan.targetTemperatureCelsius = 12.0;
+    request.plan.sensorMode = RunSensorMode::Air;
+    request.plan.qualificationBandCelsius = 0.5;
+    request.plan.qualificationDurationMinutes = 10U;
+    request.plan.maximumTargetReachMinutes = 180U;
+    request.safetyAllowsStart = true;
+    return decideManualStart(state, request);
 }
 
 void test_load_empty_then_commit_and_restore_run_projection() {
@@ -142,6 +164,113 @@ void test_periodic_non_writes_are_truthful_and_do_not_apply() {
                              .status));
 }
 
+void test_manual_completed_transition_commits_before_releasing_messages() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    const auto start = manualStartDecision(state, 303U);
+    TEST_ASSERT_TRUE(start.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, start,
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+
+    // The state machine produces this only after a real manual hold.  The
+    // transition still has to pass the persistence gate before its message is
+    // exposed to a caller.
+    state.processState.state = ProcessState::ManualHolding;
+    state.processState.stateEnteredAtMillis = 100U;
+    state.processState.targetReachStartedAtMillis = 100U;
+    ProcessSignals signals;
+    const auto transition = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, signals,
+        TransitionRequest{ProcessEvent::FinishHoldConfirmed, std::nullopt},
+        200U);
+    TEST_ASSERT_TRUE(transition.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::HoldFinishedByUser),
+        static_cast<int>(transition.reason));
+    const auto result = coordinator.persistTransition(
+        state, transition, RunCheckpointTime{200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
+                          static_cast<int>(state.processState.state));
+    TEST_ASSERT_EQUAL_UINT32(1U, result.messageCount);
+
+    store.restart();
+    RunPersistenceCoordinator restored(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+    const auto loaded = restored.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(loaded.status));
+    TEST_ASSERT_TRUE(loaded.snapshot.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Completed),
+        static_cast<int>(loaded.snapshot->processState.state));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunCheckpointVariant::ManualRun),
+                          static_cast<int>(loaded.snapshot->variant));
+}
+
+void test_tombstone_boot_resets_schedule_to_the_new_boot_timebase() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    const auto start = startDecision(state, 401U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, start,
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    StopRequest stop;
+    stop.envelope = {402U,
+                     CommandSource::LocalDisplay,
+                     200U,
+                     state.processState.transitionSequence,
+                     state.runRevision,
+                     std::nullopt,
+                     std::nullopt,
+                     true};
+    stop.option = StopOption::AbortAndTurnOff;
+    const auto abort = decideStop(state, stop);
+    TEST_ASSERT_TRUE(abort.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, abort,
+                                RunCheckpointTime{200U, std::nullopt})
+                .status));
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoActiveRun),
+        static_cast<int>(afterBoot.loadAndInitialize().status));
+    RunCommandState newRun;
+    newRun.processState.state = ProcessState::Standby;
+    const auto nextStart = startDecision(newRun, 403U, 10U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            afterBoot
+                .persistCommand(newRun, nextStart,
+                                RunCheckpointTime{10U, std::nullopt})
+                .status));
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -151,5 +280,8 @@ int main(int, char**) {
         test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe);
     RUN_TEST(test_mutation_before_initialization_writes_nothing);
     RUN_TEST(test_periodic_non_writes_are_truthful_and_do_not_apply);
+    RUN_TEST(
+        test_manual_completed_transition_commits_before_releasing_messages);
+    RUN_TEST(test_tombstone_boot_resets_schedule_to_the_new_boot_timebase);
     return UNITY_END();
 }

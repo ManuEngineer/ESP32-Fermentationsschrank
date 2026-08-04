@@ -3,18 +3,11 @@
 #include <limits>
 #include <utility>
 
-#include "big_endian_codec.hpp"
-#include "byte_buffer.hpp"
-#include "crc32.hpp"
 #include "run_persistence_codec.hpp"
 #include "storage_envelope.hpp"
 
 namespace fermentation {
 namespace {
-
-using device_platform::ByteReader;
-using device_platform::ByteWriter;
-namespace be = device_platform::big_endian;
 
 constexpr std::uint32_t kRunPersistenceSchema = 1U;
 constexpr device_platform::RecordTypeId kCheckpointRecordType{7U};
@@ -47,131 +40,6 @@ void clearCandidateRun(RunCommandState& state) {
     state.processRunSnapshot.reset();
     state.activeRunId.clear();
     state.activeRunSensorMode.reset();
-}
-
-}  // namespace
-
-namespace {
-
-bool writeReference(ByteWriter& writer, const RunCheckpointReference& ref) {
-    return be::writeUint8(writer, ref.slot) &&
-           be::writeUint64(writer, ref.checkpointRevision) &&
-           be::writeUint32(writer, ref.payloadLength) &&
-           be::writeUint32(writer, ref.payloadCrc) &&
-           be::writeUint8(writer, static_cast<std::uint8_t>(ref.variant));
-}
-
-bool readReference(ByteReader& reader, RunCheckpointReference& ref) {
-    std::uint8_t variant = 0U;
-    if (!be::readUint8(reader, ref.slot) || ref.slot > 1U ||
-        !be::readUint64(reader, ref.checkpointRevision) ||
-        !be::readUint32(reader, ref.payloadLength) ||
-        !be::readUint32(reader, ref.payloadCrc) ||
-        !be::readUint8(reader, variant) || ref.checkpointRevision == 0U)
-        return false;
-    switch (variant) {
-        case 1U:
-            ref.variant = RunCheckpointVariant::ProgramRun;
-            return true;
-        case 2U:
-            ref.variant = RunCheckpointVariant::ManualRun;
-            return true;
-        case 3U:
-            ref.variant = RunCheckpointVariant::NoActiveRun;
-            return true;
-        default:
-            return false;
-    }
-}
-
-std::optional<std::string> encodeHead(const RunPersistenceHead& head,
-                                      device_platform::StorageEpoch epoch) {
-    ByteWriter payload(80U);
-    bool ok =
-        be::writeUint8(payload, static_cast<std::uint8_t>(head.state)) &&
-        writeReference(payload, head.current) &&
-        be::writeOptionalTag(payload, head.fallback.has_value()) &&
-        (!head.fallback.has_value() || writeReference(payload, *head.fallback));
-    if (!ok) return std::nullopt;
-    device_platform::StorageEnvelope envelope{
-        kHeadRecordType, kRunPersistenceSchema, epoch,
-        head.revision,   std::nullopt,          payload.takeBytes()};
-    std::string bytes;
-    if (device_platform::encodeEnvelope(envelope, bytes,
-                                        kMaximumHeadRecordBytes) !=
-        device_platform::EnvelopeEncodeStatus::Success)
-        return std::nullopt;
-    return bytes;
-}
-
-std::optional<RunPersistenceHead> decodeHead(
-    const std::string& bytes, device_platform::StorageEpoch epoch) {
-    const auto envelope = device_platform::decodeEnvelope(bytes);
-    if (!envelope.envelope.has_value() ||
-        envelope.envelope->recordTypeId != kHeadRecordType ||
-        envelope.envelope->schemaVersion != kRunPersistenceSchema ||
-        envelope.envelope->storageEpoch != epoch ||
-        envelope.envelope->versionValue == 0U)
-        return std::nullopt;
-    ByteReader reader(envelope.envelope->payload);
-    std::uint8_t state = 0U;
-    bool fallback = false;
-    RunPersistenceHead h;
-    h.revision = envelope.envelope->versionValue;
-    if (!be::readUint8(reader, state) || !readReference(reader, h.current) ||
-        !be::readOptionalTag(reader, fallback))
-        return std::nullopt;
-    if (state == 1U)
-        h.state = RunPersistenceHeadState::Prepared;
-    else if (state == 2U)
-        h.state = RunPersistenceHeadState::Committed;
-    else
-        return std::nullopt;
-    if (fallback) {
-        RunCheckpointReference ref;
-        if (!readReference(reader, ref)) return std::nullopt;
-        h.fallback = ref;
-    }
-    if (reader.remaining() != 0U) return std::nullopt;
-    h.bytes = bytes;
-    return h;
-}
-
-std::optional<RunPersistenceRawRecord> decodeRecord(
-    const std::string& bytes, device_platform::StorageEpoch epoch) {
-    const auto envelope = device_platform::decodeEnvelope(bytes);
-    if (!envelope.envelope.has_value() ||
-        envelope.envelope->recordTypeId != kCheckpointRecordType ||
-        envelope.envelope->schemaVersion != kRunPersistenceSchema ||
-        envelope.envelope->storageEpoch != epoch ||
-        envelope.envelope->versionValue == 0U)
-        return std::nullopt;
-    const auto snapshot =
-        decodeRunPersistenceSnapshot(envelope.envelope->payload);
-    if (!snapshot.snapshot.has_value()) return std::nullopt;
-    return RunPersistenceRawRecord{bytes, *snapshot.snapshot,
-                                   envelope.envelope->versionValue,
-                                   envelope.envelope->utcUnixSeconds};
-}
-
-bool matches(const RunCheckpointReference& ref,
-             const RunPersistenceRawRecord& record, std::size_t slot) {
-    const auto envelope = device_platform::decodeEnvelope(record.bytes);
-    return envelope.envelope.has_value() && ref.slot == slot &&
-           ref.checkpointRevision == record.checkpointRevision &&
-           ref.payloadLength == envelope.envelope->payload.size() &&
-           ref.payloadCrc == device_platform::computeCrc32IsoHdlc(
-                                 envelope.envelope->payload) &&
-           ref.variant == record.snapshot.variant;
-}
-
-RunCheckpointReference referenceFor(std::size_t slot,
-                                    const RunPersistenceRawRecord& record) {
-    const auto envelope = device_platform::decodeEnvelope(record.bytes);
-    return {static_cast<std::uint8_t>(slot), record.checkpointRevision,
-            static_cast<std::uint32_t>(envelope.envelope->payload.size()),
-            device_platform::computeCrc32IsoHdlc(envelope.envelope->payload),
-            record.snapshot.variant};
 }
 
 }  // namespace
@@ -267,7 +135,7 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
         enterBlockedIndeterminate();
         return {RunPersistenceLoadStatus::UnsupportedSchema, std::nullopt};
     }
-    auto head = decodeHead(read.value, epoch_);
+    auto head = decodeRunPersistenceHead(read.value, epoch_);
     if (!head.has_value()) {
         enterBlockedIndeterminate();
         return {RunPersistenceLoadStatus::NotReconstructible, std::nullopt};
@@ -312,8 +180,9 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
             status = RunPersistenceLoadStatus::UnsupportedSchema;
             return std::nullopt;
         }
-        auto record = decodeRecord(slotRead.value, epoch_);
-        if (!record.has_value() || !matches(reference, *record, slot)) {
+        auto record = decodeRunPersistenceRecord(slotRead.value, epoch_);
+        if (!record.has_value() ||
+            !runCheckpointReferenceMatches(reference, *record, slot)) {
             status = RunPersistenceLoadStatus::NotReconstructible;
             return std::nullopt;
         }
@@ -333,11 +202,9 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
                 : currentRecord->checkpointRevision + 1U;
         persistedIds_ = snap.persistedRunCommandIds;
         persistedIdCount_ = snap.persistedRunCommandCount;
-        if (schedule_.confirm(snap.checkpointMonotonicMillis) !=
-            RunCheckpointScheduleStatus::Success) {
-            enterBlockedIndeterminate();
-            return {RunPersistenceLoadStatus::NotReconstructible, std::nullopt};
-        }
+        // Monotonic milliseconds are boot-local.  A persisted value is
+        // recovery data, never the base for a new boot's schedule.
+        schedule_.reset();
         if (snap.variant == RunCheckpointVariant::NoActiveRun) {
             state_ = RunPersistenceCoordinatorState::ReadyEmpty;
             return {RunPersistenceLoadStatus::NoActiveRun, snap};
@@ -370,7 +237,8 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
 
 RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
     const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
-    bool periodic) {
+    bool periodic, const RunCommandState& before,
+    std::optional<CommandId> commandId) {
     if (state_ != RunPersistenceCoordinatorState::Ready &&
         state_ != RunPersistenceCoordinatorState::ReadyEmpty)
         return unavailableResult();
@@ -414,13 +282,31 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
     }
     RunPersistenceRawRecord record{
         targetBytes, snapshot, nextCheckpointRevision_, time.utcUnixSeconds};
-    const auto ref = referenceFor(target, record);
+    const auto ref = makeRunCheckpointReference(target, record, epoch_);
     const auto oldHead = currentHead_.has_value()
                              ? std::optional<std::string>{currentHead_->bytes}
                              : std::nullopt;
-    const auto oldSlot = slots_[target].has_value()
-                             ? std::optional<std::string>{slots_[target]->bytes}
-                             : std::nullopt;
+    // Read every target before writing.  `slots_` only tracks decoded records;
+    // this read preserves an orphaned or otherwise undecodable old byte value
+    // as Existing rather than silently treating it as Absent.
+    const auto physicalTarget =
+        store_.readSlot(target, kMaximumCheckpointRecordBytes);
+    std::optional<std::string> oldSlot;
+    if (physicalTarget.status ==
+        device_platform::StateStoreReadStatus::Success) {
+        oldSlot = physicalTarget.value;
+    } else if (physicalTarget.status !=
+               device_platform::StateStoreReadStatus::NotFound) {
+        enterBlockedIndeterminate();
+        return result(
+            physicalTarget.status ==
+                    device_platform::StateStoreReadStatus::CapacityError
+                ? RunPersistenceResultStatus::CapacityExceeded
+                : RunPersistenceResultStatus::PersistenceIndeterminate,
+            RunPersistenceStep::CheckpointSlot,
+            RunPersistenceTechnicalReason::StoreReadError,
+            RunPersistenceDurability::Unchanged);
+    }
 
     auto readyState = [this]() {
         state_ = currentHead_.has_value()
@@ -435,7 +321,9 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
             return result(RunPersistenceResultStatus::PersistenceIndeterminate,
                           step,
                           RunPersistenceTechnicalReason::StoreOutcomeUnknown,
-                          RunPersistenceDurability::MayHaveChanged);
+                          durability == RunPersistenceDurability::Unchanged
+                              ? RunPersistenceDurability::MayHaveChanged
+                              : RunPersistenceDurability::Changed);
         }
         if (written == RunPersistenceStoreWriteResult::CapacityError) {
             return result(RunPersistenceResultStatus::CapacityExceeded, step,
@@ -458,6 +346,7 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
             return writeFailure(slotWrite, RunPersistenceStep::CheckpointSlot,
                                 RunPersistenceDurability::Unchanged);
         }
+        slots_[target] = record;
         RunPersistenceHead committed;
         committed.state = RunPersistenceHeadState::Committed;
         committed.revision = nextHeadRevision_;
@@ -466,13 +355,15 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
             currentHead_.has_value()) {
             committed.fallback = currentHead_->current;
         }
-        const auto bytes = encodeHead(committed, epoch_);
+        const auto bytes = encodeRunPersistenceHead(committed, epoch_);
         if (!bytes.has_value()) {
-            readyState();
+            // The target slot is already durably written.  Its orphaned bytes
+            // must not be hidden by returning to normal write operation.
+            enterBlockedIndeterminate();
             return result(RunPersistenceResultStatus::CapacityExceeded,
                           RunPersistenceStep::CommittedHead,
                           RunPersistenceTechnicalReason::CodecError,
-                          RunPersistenceDurability::Unchanged);
+                          RunPersistenceDurability::Changed);
         }
         const auto headWrite =
             store_.writeHeadExact(*bytes, oldHead, kMaximumHeadRecordBytes);
@@ -488,12 +379,21 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
         RunPersistenceHead prepared;
         prepared.state = RunPersistenceHeadState::Prepared;
         prepared.revision = nextHeadRevision_;
-        prepared.current = ref;
-        if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
-            currentHead_.has_value()) {
-            prepared.fallback = currentHead_->current;
+        prepared.target = ref;
+        prepared.mutationKind = commandId.has_value()
+                                    ? RunPersistenceMutationKind::Command
+                                    : RunPersistenceMutationKind::Transition;
+        prepared.commandId = commandId;
+        prepared.oldRunRevision = before.runRevision;
+        prepared.newRunRevision = snapshot.runRevision;
+        prepared.oldTransitionSequence = before.processState.transitionSequence;
+        prepared.newTransitionSequence =
+            snapshot.processState.transitionSequence;
+        if (currentHead_.has_value()) {
+            prepared.preparedCurrent = currentHead_->current;
+            prepared.preparedFallback = currentHead_->fallback;
         }
-        const auto preparedBytes = encodeHead(prepared, epoch_);
+        const auto preparedBytes = encodeRunPersistenceHead(prepared, epoch_);
         if (!preparedBytes.has_value()) {
             readyState();
             return result(RunPersistenceResultStatus::CapacityExceeded,
@@ -516,13 +416,20 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
             return writeFailure(slotWrite, RunPersistenceStep::CheckpointSlot,
                                 RunPersistenceDurability::Changed);
         }
-        RunPersistenceHead committed = prepared;
+        slots_[target] = record;
+        RunPersistenceHead committed;
         committed.state = RunPersistenceHeadState::Committed;
+        committed.current = ref;
+        if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
+            currentHead_.has_value()) {
+            committed.fallback = currentHead_->current;
+        }
+        committed.revision = prepared.revision;
         ++committed.revision;
         if (snapshot.variant == RunCheckpointVariant::NoActiveRun) {
             committed.fallback.reset();
         }
-        const auto committedBytes = encodeHead(committed, epoch_);
+        const auto committedBytes = encodeRunPersistenceHead(committed, epoch_);
         if (!committedBytes.has_value()) {
             enterBlockedIndeterminate();
             return result(RunPersistenceResultStatus::PersistenceIndeterminate,
@@ -608,7 +515,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
-    const auto persisted = writeSnapshot(*snapshot, time, false);
+    const auto persisted =
+        writeSnapshot(*snapshot, time, false, current, decision.envelope.id);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     if (applyRunCommand(current, decision) != CommandStatus::Applied) {
@@ -664,7 +572,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
-    const auto persisted = writeSnapshot(*snapshot, time, false);
+    const auto persisted = writeSnapshot(*snapshot, time, false, current);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     if (!current.processRunSnapshot.has_value() ||
@@ -709,10 +617,24 @@ RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
         !current.activeManualRun.has_value())
         return result(RunPersistenceResultStatus::NoActiveRun);
     if (!currentHead_.has_value() ||
-        current.activeRunId !=
-            slots_[currentHead_->current.slot]->snapshot.activeRunId ||
-        current.runRevision !=
-            slots_[currentHead_->current.slot]->snapshot.runRevision) {
+        !slots_[currentHead_->current.slot].has_value()) {
+        return result(RunPersistenceResultStatus::StaleDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    const auto& confirmed = slots_[currentHead_->current.slot]->snapshot;
+    const auto expected = makeRunPersistenceSnapshot(
+        current, persistedIds_, persistedIdCount_, confirmed.trigger,
+        RunCheckpointTime{confirmed.checkpointMonotonicMillis, std::nullopt},
+        confirmed.intervalMinutes);
+    std::string expectedBytes;
+    std::string confirmedBytes;
+    if (!expected.has_value() ||
+        encodeRunPersistenceSnapshot(*expected, expectedBytes) !=
+            RunPersistenceCodecStatus::Success ||
+        encodeRunPersistenceSnapshot(confirmed, confirmedBytes) !=
+            RunPersistenceCodecStatus::Success ||
+        expectedBytes != confirmedBytes) {
         return result(RunPersistenceResultStatus::StaleDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
@@ -726,7 +648,7 @@ RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
         current, persistedIds_, persistedIdCount_,
         RunCheckpointTrigger::Periodic, time, schedule_.intervalMinutes());
     return snapshot.has_value()
-               ? writeSnapshot(*snapshot, time, true)
+               ? writeSnapshot(*snapshot, time, true, current)
                : result(RunPersistenceResultStatus::InvalidDecision,
                         RunPersistenceStep::CandidateApply,
                         RunPersistenceTechnicalReason::InvalidProjection);
