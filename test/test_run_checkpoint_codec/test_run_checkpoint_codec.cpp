@@ -7,6 +7,26 @@ namespace {
 
 using namespace fermentation;
 
+std::string bytesFromHex(const char* hex) {
+    std::string bytes;
+    for (std::size_t i = 0U; hex[i] != '\0'; i += 2U) {
+        const auto nibble = [](char value) -> unsigned char {
+            if (value >= '0' && value <= '9') return value - '0';
+            if (value >= 'a' && value <= 'f') return value - 'a' + 10U;
+            return 0U;
+        };
+        bytes.push_back(
+            static_cast<char>((nibble(hex[i]) << 4U) | nibble(hex[i + 1U])));
+    }
+    return bytes;
+}
+
+void assertGolden(const std::string& actual, const char* expectedHex) {
+    const auto expected = bytesFromHex(expectedHex);
+    TEST_ASSERT_EQUAL_UINT32(expected.size(), actual.size());
+    TEST_ASSERT_EQUAL_MEMORY(expected.data(), actual.data(), expected.size());
+}
+
 RunPersistenceSnapshot programSnapshot() {
     auto document = FactoryProgramCatalog::find("water-kefir");
     TEST_ASSERT_TRUE(document.has_value());
@@ -44,6 +64,14 @@ void test_program_checkpoint_round_trip_restores_active_run() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(source, encoded)));
+    assertGolden(
+        encoded,
+        "01010000000000000064000500000000000e636865636b706f696e742d72756e010000"
+        "000101005c00000005000000000000ffff000b77617465722d6b65666972000b576173"
+        "7365726b656669720000010101010101000201010000001e0101404300000000000001"
+        "00000078013fe0000000000000010000000a01000000b400010000000100010000000a"
+        "000000b400010000007800060000000000000000000000000000000000000000000001"
+        "0000000000000063");
     const auto decoded = decodeRunPersistenceSnapshot(encoded);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
                           static_cast<int>(decoded.status));
@@ -67,6 +95,13 @@ void test_tombstone_has_empty_run_id_and_rejects_active_data() {
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunCheckpointVariant::NoActiveRun),
                           static_cast<int>(tombstone->variant));
     TEST_ASSERT_EQUAL_UINT32(0U, tombstone->activeRunId.size());
+    std::string encoded;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(*tombstone, encoded)));
+    assertGolden(encoded,
+                 "0302000000000000006400050000000000000300000000000000000000000"
+                 "00000000000000000000000");
     auto invalid = *tombstone;
     invalid.activeRunId = "stale";
     TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(invalid));
@@ -122,6 +157,11 @@ void test_manual_completed_round_trip_is_a_valid_run_projection() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(*snapshot, bytes)));
+    assertGolden(bytes,
+                 "0202000000000000006400050000000000116d616e75616c2d636865636b7"
+                 "06f696e740240280000000000000200003fe00000000000000000000a0000"
+                 "00b401000000000000000a020200010000000a000000b40000000c0000000"
+                 "000000064000000000000000000000000000000");
     const auto decoded = decodeRunPersistenceSnapshot(bytes);
     TEST_ASSERT_TRUE(decoded.snapshot.has_value());
     TEST_ASSERT_EQUAL_INT(
@@ -192,6 +232,13 @@ void test_prepared_head_binds_full_transaction_contract() {
     const auto encoded =
         encodeRunPersistenceHead(prepared, device_platform::StorageEpoch(9U));
     TEST_ASSERT_TRUE(encoded.has_value());
+    assertGolden(
+        *encoded,
+        "445052460001000800000001000000000000000900000000000000140000007700919a"
+        "bca1010100000000010000000000000009000000000000000a0000000b0000000c0101"
+        "0100000001000000000000000900000000000000090000000800000007030100000001"
+        "0000000000000009000000000000000b0000000d0000000e0301010000000000000058"
+        "00000004000000050000000600000007");
     const auto decoded =
         decodeRunPersistenceHead(*encoded, device_platform::StorageEpoch(9U));
     TEST_ASSERT_TRUE(decoded.has_value());
@@ -209,6 +256,10 @@ void test_head_reference_and_mutation_invariants_reject_invalid_contracts() {
         0U, 1U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
     const RunCheckpointReference target{
         1U, 1U, 9U, 11U, 13U, 14U, RunCheckpointVariant::ManualRun};
+    RunPersistenceHead committed;
+    committed.state = RunPersistenceHeadState::Committed;
+    committed.revision = 22U;
+    committed.current = current;
     RunPersistenceHead prepared;
     prepared.state = RunPersistenceHeadState::Prepared;
     prepared.revision = 20U;
@@ -238,14 +289,89 @@ void test_head_reference_and_mutation_invariants_reject_invalid_contracts() {
                           missingCommandId, device_platform::StorageEpoch(9U))
                           .has_value());
 
-    RunPersistenceHead committed;
-    committed.state = RunPersistenceHeadState::Committed;
-    committed.revision = 22U;
-    committed.current = current;
+    auto noCurrentTargetRc1 = prepared;
+    noCurrentTargetRc1.preparedCurrent.reset();
+    noCurrentTargetRc1.preparedFallback.reset();
+    noCurrentTargetRc1.target.slot = 1U;
+    TEST_ASSERT_FALSE(encodeRunPersistenceHead(
+                          noCurrentTargetRc1, device_platform::StorageEpoch(9U))
+                          .has_value());
+
+    auto tombstoneCurrent = committed;
+    tombstoneCurrent.current = RunCheckpointReference{
+        1U, 1U, 9U, 12U, 13U, 14U, RunCheckpointVariant::NoActiveRun};
+    tombstoneCurrent.fallback = current;
+    TEST_ASSERT_FALSE(encodeRunPersistenceHead(
+                          tombstoneCurrent, device_platform::StorageEpoch(9U))
+                          .has_value());
+
+    auto tombstonePrepared = prepared;
+    tombstonePrepared.preparedCurrent = RunCheckpointReference{
+        0U, 1U, 9U, 12U, 13U, 14U, RunCheckpointVariant::NoActiveRun};
+    tombstonePrepared.preparedFallback = current;
+    tombstonePrepared.target.slot = 1U;
+    TEST_ASSERT_FALSE(encodeRunPersistenceHead(
+                          tombstonePrepared, device_platform::StorageEpoch(9U))
+                          .has_value());
+
+    auto oversizedReference = prepared;
+    oversizedReference.target.payloadLength =
+        static_cast<std::uint32_t>(kMaximumRunPersistencePayloadBytes + 1U);
+    TEST_ASSERT_FALSE(encodeRunPersistenceHead(
+                          oversizedReference, device_platform::StorageEpoch(9U))
+                          .has_value());
+
+    auto activeWithTombstoneFallback = committed;
+    activeWithTombstoneFallback.current = current;
+    activeWithTombstoneFallback.fallback = RunCheckpointReference{
+        1U, 1U, 9U, 9U, 8U, 7U, RunCheckpointVariant::NoActiveRun};
+    const auto committedGolden = encodeRunPersistenceHead(
+        activeWithTombstoneFallback, device_platform::StorageEpoch(9U));
+    TEST_ASSERT_TRUE(committedGolden.has_value());
+    assertGolden(
+        *committedGolden,
+        "445052460001000800000001000000000000000900000000000000160000003e009456"
+        "f2af0200000000010000000000000009000000000000000a0000000b0000000c010101"
+        "0000000100000000000000090000000000000009000000080000000703");
+
     committed.fallback = current;
     TEST_ASSERT_FALSE(
         encodeRunPersistenceHead(committed, device_platform::StorageEpoch(9U))
             .has_value());
+}
+
+void test_payload_bounds_and_truncation_are_strict() {
+    const auto source = programSnapshot();
+    std::string encoded;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(source, encoded)));
+    const std::array<std::size_t, 4U> cuts{0U, 1U, encoded.size() / 2U,
+                                           encoded.size() - 1U};
+    for (const std::size_t cut : cuts) {
+        const auto truncated =
+            decodeRunPersistenceSnapshot(encoded.substr(0U, cut));
+        TEST_ASSERT_NOT_EQUAL(
+            static_cast<int>(RunPersistenceCodecStatus::Success),
+            static_cast<int>(truncated.status));
+    }
+    auto withTrailing = encoded;
+    withTrailing.push_back('\0');
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::TrailingBytes),
+        static_cast<int>(decodeRunPersistenceSnapshot(withTrailing).status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::InvalidWireValue),
+        static_cast<int>(
+            decodeRunPersistenceSnapshot(
+                std::string(kMaximumRunPersistencePayloadBytes, '\0'))
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::CapacityExceeded),
+        static_cast<int>(
+            decodeRunPersistenceSnapshot(
+                std::string(kMaximumRunPersistencePayloadBytes + 1U, '\0'))
+                .status));
 }
 
 }  // namespace
@@ -256,6 +382,7 @@ int main(int, char**) {
     RUN_TEST(test_tombstone_has_empty_run_id_and_rejects_active_data);
     RUN_TEST(
         test_projection_rejects_inconsistent_aggregate_instead_of_prioritizing);
+    RUN_TEST(test_payload_bounds_and_truncation_are_strict);
     RUN_TEST(test_manual_completed_round_trip_is_a_valid_run_projection);
     RUN_TEST(test_prepared_head_binds_full_transaction_contract);
     RUN_TEST(

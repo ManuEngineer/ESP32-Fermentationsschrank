@@ -1,3 +1,6 @@
+#include <limits>
+#include <utility>
+
 #include <unity.h>
 
 #include "run_persistence_coordinator.hpp"
@@ -70,6 +73,39 @@ device_platform::StateStoreKey slotKey(const char* name) {
     const auto created = device_platform::StateStoreKey::create(name);
     TEST_ASSERT_TRUE(created.key.has_value());
     return *created.key;
+}
+
+void commitTombstone(
+    device_platform_test_support::SimulatedPersistentStateStore& store) {
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 601U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    StopRequest stop;
+    stop.envelope = {602U,
+                     CommandSource::LocalDisplay,
+                     200U,
+                     state.processState.transitionSequence,
+                     state.runRevision,
+                     std::nullopt,
+                     std::nullopt,
+                     true};
+    stop.option = StopOption::AbortAndTurnOff;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, decideStop(state, stop),
+                                RunCheckpointTime{200U, std::nullopt})
+                .status));
 }
 
 void test_load_empty_then_commit_and_restore_run_projection() {
@@ -389,6 +425,85 @@ void test_orphan_checkpoint_revision_is_never_reused_after_restart() {
     TEST_ASSERT_EQUAL_UINT64(101U, replacementEnvelope.envelope->versionValue);
 }
 
+void test_orphan_max_revision_is_sticky_and_blocks_new_writes() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    commitTombstone(store);
+    const auto existing = store.read(slotKey("rc0"), 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(existing.status));
+    const auto decoded = device_platform::decodeEnvelope(existing.value);
+    TEST_ASSERT_TRUE(decoded.envelope.has_value());
+    auto maxEnvelope = *decoded.envelope;
+    maxEnvelope.versionValue = std::numeric_limits<std::uint64_t>::max();
+    std::string maxBytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+        static_cast<int>(
+            device_platform::encodeEnvelope(maxEnvelope, maxBytes, 8240U)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreWriteStatus::Success),
+        static_cast<int>(store.write(slotKey("rc0"), maxBytes)));
+    store.restart();
+
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoActiveRun),
+        static_cast<int>(afterBoot.loadAndInitialize().status));
+    RunCommandState next;
+    next.processState.state = ProcessState::Standby;
+    const auto result =
+        afterBoot.persistCommand(next, startDecision(next, 603U, 10U),
+                                 RunCheckpointTime{10U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CounterOverflow),
+        static_cast<int>(result.status));
+}
+
+void test_unknown_orphan_high_watermark_blocks_mutation() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    commitTombstone(store);
+    store.restart();
+    store.injectReadFailure(slotKey("rc0"), true);
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::ReadFailed),
+        static_cast<int>(afterBoot.loadAndInitialize().status));
+    RunCommandState next;
+    next.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Blocked),
+        static_cast<int>(
+            afterBoot
+                .persistCommand(next, startDecision(next, 604U, 10U),
+                                RunCheckpointTime{10U, std::nullopt})
+                .status));
+}
+
+void test_empty_boot_always_disarms_injected_schedule() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunCheckpointSchedule schedule{};
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunCheckpointScheduleStatus::Success),
+        static_cast<int>(schedule.confirm(100U)));
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), std::move(schedule));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(coordinator.loadAndInitialize().status));
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 605U, 10U),
+                                RunCheckpointTime{10U, std::nullopt})
+                .status));
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -403,5 +518,8 @@ int main(int, char**) {
         test_manual_completed_transition_commits_before_releasing_messages);
     RUN_TEST(test_tombstone_boot_resets_schedule_to_the_new_boot_timebase);
     RUN_TEST(test_orphan_checkpoint_revision_is_never_reused_after_restart);
+    RUN_TEST(test_orphan_max_revision_is_sticky_and_blocks_new_writes);
+    RUN_TEST(test_unknown_orphan_high_watermark_blocks_mutation);
+    RUN_TEST(test_empty_boot_always_disarms_injected_schedule);
     return UNITY_END();
 }

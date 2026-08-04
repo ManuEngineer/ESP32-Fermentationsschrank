@@ -218,10 +218,36 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
             except UnicodeDecodeError:
                 continue
             source = "\n".join(lines)
-            decision_values = {
-                match.group("name")
-                for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(source)
-            }
+            # Keep names scoped to their brace block. A local `result` from
+            # one function must not taint an unrelated `result` elsewhere.
+            blocks: list[tuple[int, int, set[str]]] = []
+            stack: list[int] = []
+            for index, character in enumerate(source):
+                if character == "{":
+                    stack.append(index)
+                elif character == "}" and stack:
+                    blocks.append((stack.pop(), index, set()))
+            for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(source):
+                containing = [
+                    block
+                    for block in blocks
+                    if block[0] < match.start() < block[1]
+                ]
+                if containing:
+                    scope = min(containing, key=lambda block: block[1] - block[0])
+                    scope[2].add(match.group("name"))
+
+            def decision_name_in_scope(name: str, position: int) -> bool:
+                return any(
+                    name in block[2] and block[0] < position < block[1]
+                    for block in blocks
+                )
+
+            line_offsets: list[int] = []
+            offset = 0
+            for line in lines:
+                line_offsets.append(offset)
+                offset += len(line) + 1
             temporary_member_lines = {
                 source[: match.start()].count("\n") + 1
                 for match in RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN.finditer(source)
@@ -229,12 +255,19 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
             for line_number, line in enumerate(lines, start=1):
                 direct_apply = RUN_PERSISTENCE_APPLY_PATTERN.search(line)
                 member = RUN_PERSISTENCE_DECISION_MEMBER_PATTERN.search(line)
+                member_position = (
+                    line_offsets[line_number - 1] + member.start()
+                    if member is not None
+                    else 0
+                )
                 decision_named_member = (
                     member is not None
                     and (
-                        member.group("name") in decision_values
-                        or member.group("name") == "decision"
+                        member.group("name") == "decision"
                         or member.group("name").endswith("Decision")
+                        or decision_name_in_scope(
+                            member.group("name"), member_position
+                        )
                     )
                 )
                 if direct_apply or decision_named_member or line_number in temporary_member_lines:
@@ -646,6 +679,12 @@ RUN_PERSISTENCE_BYPASS_CASES = {
 # must not turn into a repository-wide ban on unrelated members with the same
 # spelling.
 RUN_PERSISTENCE_CLEAN_CASES = {
+    "reused_result_name_is_not_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void a() { auto result = decideRun(); }\n"
+        "struct RenderResult { int effects; };\n"
+        "void b() { RenderResult result{}; use(result.effects); }\n",
+    ),
     "unrelated_effects_member": (
         "lib/fermentation_app/src/runtime_path.cpp",
         "struct RenderState { int effects; };\n"

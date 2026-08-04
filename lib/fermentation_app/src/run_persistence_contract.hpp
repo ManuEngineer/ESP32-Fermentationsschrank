@@ -10,6 +10,7 @@
 namespace fermentation {
 
 inline constexpr std::size_t kMaximumPersistedRunCommandIds = 32U;
+inline constexpr std::size_t kMaximumRunPersistencePayloadBytes = 8192U;
 inline constexpr std::uint16_t kDefaultRunCheckpointIntervalMinutes = 5U;
 inline constexpr std::uint16_t kMinimumRunCheckpointIntervalMinutes = 1U;
 inline constexpr std::uint16_t kMaximumRunCheckpointIntervalMinutes = 60U;

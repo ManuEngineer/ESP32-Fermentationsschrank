@@ -17,7 +17,8 @@ using device_platform::ByteReader;
 using device_platform::ByteWriter;
 namespace be = device_platform::big_endian;
 
-constexpr std::size_t kMaximumCheckpointPayloadBytes = 8192U;
+constexpr std::size_t kMaximumCheckpointPayloadBytes =
+    kMaximumRunPersistencePayloadBytes;
 constexpr std::uint32_t kRunPersistenceSchema = 1U;
 constexpr device_platform::RecordTypeId kCheckpointRecordType{7U};
 constexpr device_platform::RecordTypeId kHeadRecordType{8U};
@@ -716,7 +717,8 @@ bool validReference(const RunCheckpointReference& reference,
     if (reference.slot > 1U ||
         reference.schemaVersion != kRunPersistenceSchema ||
         reference.storageEpoch != epoch.value() ||
-        reference.checkpointRevision == 0U) {
+        reference.checkpointRevision == 0U ||
+        reference.payloadLength > kMaximumRunPersistencePayloadBytes) {
         return false;
     }
     switch (reference.variant) {
@@ -791,7 +793,12 @@ bool validPreparedHead(const RunPersistenceHead& head,
     if (head.commandId.has_value() && *head.commandId == 0U) return false;
     if (head.preparedCurrent.has_value() &&
         (!validReference(*head.preparedCurrent, epoch) ||
-         head.preparedCurrent->slot == head.target.slot)) {
+         head.preparedCurrent->slot == head.target.slot ||
+         (head.preparedCurrent->variant == RunCheckpointVariant::NoActiveRun &&
+          head.preparedFallback.has_value()))) {
+        return false;
+    }
+    if (!head.preparedCurrent.has_value() && head.target.slot != 0U) {
         return false;
     }
     return !head.preparedFallback.has_value() ||
@@ -808,6 +815,9 @@ bool validCommittedHead(const RunPersistenceHead& head,
         head.oldRunRevision != 0U || head.newRunRevision != 0U ||
         head.oldTransitionSequence != 0U || head.newTransitionSequence != 0U) {
         return false;
+    }
+    if (head.current.variant == RunCheckpointVariant::NoActiveRun) {
+        return !head.fallback.has_value();
     }
     return !head.fallback.has_value() ||
            (validReference(*head.fallback, epoch) &&

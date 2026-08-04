@@ -85,6 +85,9 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
     if (state_ != RunPersistenceCoordinatorState::Uninitialized) {
         return {RunPersistenceLoadStatus::AlreadyInitialized, std::nullopt};
     }
+    // Monotonic time is boot-local.  An injected schedule may already be
+    // armed by its caller, but that state must never cross the boot boundary.
+    schedule_.reset();
     currentHead_.reset();
     slots_[0].reset();
     slots_[1].reset();
@@ -205,24 +208,38 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
                 : currentRecord->checkpointRevision + 1U;
         persistedIds_ = snap.persistedRunCommandIds;
         persistedIdCount_ = snap.persistedRunCommandCount;
-        // Monotonic milliseconds are boot-local.  A persisted value is
-        // recovery data, never the base for a new boot's schedule.
-        schedule_.reset();
-
         // The head is the only source of the recoverable state.  A valid
         // unreferenced checkpoint is therefore never loaded as current or
         // fallback.  Its envelope revision is nevertheless a physical
         // high-watermark: reusing it could overwrite a known orphan with the
         // same revision after a reboot.
+        bool checkpointRevisionOverflow = false;
         for (std::size_t slot = 0U; slot < 2U; ++slot) {
-            const auto physical =
-                store_.readSlot(slot, kMaximumCheckpointRecordBytes);
-            if (physical.status !=
-                device_platform::StateStoreReadStatus::Success) {
-                continue;
+            std::string physicalBytes;
+            if (slot == currentHead_->current.slot) {
+                physicalBytes = currentRecord->bytes;
+            } else {
+                const auto physical =
+                    store_.readSlot(slot, kMaximumCheckpointRecordBytes);
+                if (physical.status ==
+                    device_platform::StateStoreReadStatus::NotFound) {
+                    continue;
+                }
+                if (physical.status ==
+                    device_platform::StateStoreReadStatus::CapacityError) {
+                    enterBlockedIndeterminate();
+                    return {RunPersistenceLoadStatus::CapacityExceeded,
+                            std::nullopt};
+                }
+                if (physical.status !=
+                    device_platform::StateStoreReadStatus::Success) {
+                    enterBlockedIndeterminate();
+                    return {RunPersistenceLoadStatus::ReadFailed, std::nullopt};
+                }
+                physicalBytes = physical.value;
             }
             const auto physicalEnvelope =
-                device_platform::decodeEnvelope(physical.value);
+                device_platform::decodeEnvelope(physicalBytes);
             if (!physicalEnvelope.envelope.has_value() ||
                 physicalEnvelope.envelope->recordTypeId !=
                     kCheckpointRecordType ||
@@ -230,14 +247,21 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
                     kRunPersistenceSchema ||
                 physicalEnvelope.envelope->storageEpoch != epoch_ ||
                 physicalEnvelope.envelope->versionValue == 0U) {
-                continue;
+                enterBlockedIndeterminate();
+                return {RunPersistenceLoadStatus::NotReconstructible,
+                        std::nullopt};
             }
-            nextCheckpointRevision_ =
-                physicalEnvelope.envelope->versionValue ==
-                        std::numeric_limits<std::uint64_t>::max()
-                    ? 0U
-                    : std::max(nextCheckpointRevision_,
-                               physicalEnvelope.envelope->versionValue + 1U);
+            if (physicalEnvelope.envelope->versionValue ==
+                std::numeric_limits<std::uint64_t>::max()) {
+                checkpointRevisionOverflow = true;
+            } else if (!checkpointRevisionOverflow) {
+                nextCheckpointRevision_ =
+                    std::max(nextCheckpointRevision_,
+                             physicalEnvelope.envelope->versionValue + 1U);
+            }
+        }
+        if (checkpointRevisionOverflow) {
+            nextCheckpointRevision_ = 0U;
         }
         if (snap.variant == RunCheckpointVariant::NoActiveRun) {
             state_ = RunPersistenceCoordinatorState::ReadyEmpty;
