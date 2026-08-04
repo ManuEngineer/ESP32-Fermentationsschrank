@@ -187,15 +187,22 @@ Lebenszyklus:
 ```text
 Uninitialized
 ReadyEmpty
+LoadedActiveRun
 Ready
 Busy
 Blocked
 PersistenceCommittedApplyFailed
 ```
 
-Vor `loadAndInitialize()` wird nie geschrieben. Rueckfall, Prepared-Head und
-nicht rekonstruierbare Daten liefern einen typisierten Ladebefund und setzen
-`Blocked`; #18/#24 entscheiden spaeter ueber das weitere Vorgehen.
+Vor `loadAndInitialize()` wird nie geschrieben.
+
+- kein persistierter Lauf oder gueltiger Tombstone -> `ReadyEmpty`;
+- ein gueltiger aktiver Kontrollpunkt nach Boot -> `LoadedActiveRun`;
+- Rueckfall, Prepared-Head oder nicht rekonstruierbare Daten -> `Blocked`.
+
+`LoadedActiveRun` gibt die technische Projektion an #18 weiter, erlaubt aber
+weder Mutation noch periodischen Write. Eine spaetere typisierte
+Recoveryaktivierung wird erst mit #18 ergaenzt; #17 erfindet sie nicht.
 
 ### Kandidatenpruefung
 
@@ -206,6 +213,11 @@ candidate = current
 bestehende apply-Funktion auf candidate ausfuehren
 RunPersistenceSnapshot aus candidate bilden und validieren
 ```
+
+`persistCommand()` verlangt
+`time.monotonicMillis == decision.envelope.monotonicMillis`;
+`persistTransition()` verlangt
+`time.monotonicMillis == decision.monotonicMillis`.
 
 Nur ein erfolgreicher Kandidaten-Apply darf persistiert werden. Nach
 bestaetigtem Commit wird dieselbe Decision auf den bis dahin unveraenderten
@@ -378,7 +390,8 @@ current rc1 -> rc0
 | Head und beide Slots fehlen | `NoPersistedRun` | `ReadyEmpty` |
 | Head fehlt, Slot vorhanden | `OrphanedState` | `Blocked` |
 | `Prepared` | `PreparedInterrupted` | `Blocked` |
-| `Committed`, current gueltig | `Current` oder `NoActiveRun` | `Ready` |
+| `Committed`, aktiver current gueltig | `Current` | `LoadedActiveRun` |
+| `Committed`, Tombstone gueltig | `NoActiveRun` | `ReadyEmpty` |
 | current ungueltig, Fallback gueltig | `FallbackRecovered` | `Blocked` |
 | kein gueltiger current/Fallback | `NotReconstructible` | `Blocked` |
 | fremde Epoch, Schema- oder Integritaetsfehler | typisierter Fehler | `Blocked` |
@@ -392,10 +405,14 @@ Fortsetzungs- oder Safetyentscheidung.
 - Intervall 1 bis 60 Minuten, Standard 5;
 - explizite monotone Zeit, keine versteckte Uhr;
 - rueckwaerts laufende Zeit wird abgelehnt;
+- gespeicherte Monotonzeiten eines frueheren Boots sind Recoverydaten und
+  niemals Schedule-Basis des neuen Boots;
+- nach Boot ist der Schedule unbewaffnet; die erste aktuelle Bootzeit setzt
+  nur die neue Basis, ein erfolgreicher Ereigniswrite darf sie direkt setzen;
 - nur bestaetigte Ereignis- oder Periodenwrites setzen die naechste
   Faelligkeit neu;
-- vor Faelligkeit, ohne aktiven Lauf sowie in `Blocked` oder fail-closed kein
-  periodischer Write;
+- vor Faelligkeit, ohne aktiven Lauf sowie in `LoadedActiveRun`, `Blocked` oder
+  fail-closed kein periodischer Write;
 - kein Write im Sensorzyklus.
 
 ## 13. Wireformat Schema 1
@@ -492,6 +509,7 @@ CheckpointWritten
 AlreadyPersisted
 NotEligible
 NotInitialized
+RecoveryPending
 Busy
 InvalidDecision
 StaleDecision
@@ -507,6 +525,7 @@ Wirkung:
 
 - `Applied`: durable Projektion und RAM aktualisiert, Effects/Messages frei.
 - `CheckpointWritten`: nur durable Projektion aktualisiert.
+- `RecoveryPending`: geladener aktiver Lauf wartet auf #18; keine Aenderung.
 - Ablehnung vor Prepared: keine Aenderung, Coordinator bleibt bereit.
 - Fehler nach Prepared: kein RAM-Apply, Coordinator blockiert.
 - `PersistenceIndeterminate`: durable Aenderung moeglich, blockiert.
@@ -554,6 +573,8 @@ mindestens ab:
 - alle Unknown-Outcome-Faelle;
 - Stromunterbruch an jeder Transaktionsgrenze;
 - Initialisierung, Orphans, Prepared und Rueckfall;
+- aktiver Bootkontrollpunkt bleibt `LoadedActiveRun` und schreibgesperrt;
+- Schedule verwendet nie Monotonzeiten des vorherigen Boots;
 - Idempotenz nach Neustart;
 - stale/ungueltige Decisions vor Prepared;
 - `ProductInserted`, `ProductWaitExpired` und `HoldFinishedByUser`;
