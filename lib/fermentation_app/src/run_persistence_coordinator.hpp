@@ -100,6 +100,7 @@ enum class RunPersistenceLoadStatus : std::uint8_t {
     CapacityExceeded,
     UnsupportedSchema,
     ForeignEpoch,
+    AlreadyInitialized,
 };
 
 struct RunPersistenceLoadResult {

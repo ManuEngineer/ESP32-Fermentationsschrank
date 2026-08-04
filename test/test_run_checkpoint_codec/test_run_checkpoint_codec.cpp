@@ -112,7 +112,7 @@ void test_manual_completed_round_trip_is_a_valid_run_projection() {
     TEST_ASSERT_TRUE(state.processRunSnapshot.has_value());
     state.processState.state = ProcessState::Completed;
     state.processState.stateEnteredAtMillis = 100U;
-    state.processState.targetReachStartedAtMillis = 100U;
+    state.processState.targetReachStartedAtMillis = 0U;
     std::array<CommandId, kMaximumPersistedRunCommandIds> ids{};
     const auto snapshot = makeRunPersistenceSnapshot(
         state, ids, 0U, RunCheckpointTrigger::Transition,
@@ -129,6 +129,45 @@ void test_manual_completed_round_trip_is_a_valid_run_projection() {
         static_cast<int>(decoded.snapshot->processState.state));
     TEST_ASSERT_TRUE(
         restoreRunPersistenceSnapshot(*decoded.snapshot).has_value());
+}
+
+void test_manual_snapshot_and_runtime_shape_must_be_canonical() {
+    ManualRunPlan plan;
+    plan.values.runId = "manual-contract";
+    plan.values.targetTemperatureCelsius = 12.0;
+    plan.values.sensorMode = RunSensorMode::Air;
+    plan.values.qualificationBandCelsius = 0.5;
+    plan.values.qualificationDurationMinutes = 10U;
+    plan.values.maximumTargetReachMinutes = 180U;
+    plan.createdAtMonotonicMillis = 10U;
+    RunCommandState state;
+    state.activeManualRun = plan;
+    state.activeRunId = plan.values.runId;
+    state.activeRunSensorMode = plan.values.sensorMode;
+    state.processRunSnapshot = makeProcessRunSnapshot(plan);
+    state.processState.state = ProcessState::ManualHolding;
+    state.processState.stateEnteredAtMillis = 100U;
+    std::array<CommandId, kMaximumPersistedRunCommandIds> ids{};
+    const auto snapshot = makeRunPersistenceSnapshot(
+        state, ids, 0U, RunCheckpointTrigger::Transition,
+        RunCheckpointTime{100U, std::nullopt}, 5U);
+    TEST_ASSERT_TRUE(snapshot.has_value());
+
+    auto differentProcess = *snapshot;
+    differentProcess.processRunSnapshot->maximumTargetReachMinutes = 181U;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(differentProcess));
+
+    auto staleTimer = *snapshot;
+    staleTimer.processState.targetReachStartedAtMillis = 1U;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(staleTimer));
+
+    auto staleWarning = *snapshot;
+    staleWarning.processState.targetReachWarningIssued = true;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(staleWarning));
+
+    auto futureTime = *snapshot;
+    futureTime.processState.stateEnteredAtMillis = 101U;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(futureTime));
 }
 
 void test_prepared_head_binds_full_transaction_contract() {
@@ -165,6 +204,50 @@ void test_prepared_head_binds_full_transaction_contract() {
     TEST_ASSERT_EQUAL_UINT64(9U, decoded->target.storageEpoch);
 }
 
+void test_head_reference_and_mutation_invariants_reject_invalid_contracts() {
+    const RunCheckpointReference current{
+        0U, 1U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
+    const RunCheckpointReference target{
+        1U, 1U, 9U, 11U, 13U, 14U, RunCheckpointVariant::ManualRun};
+    RunPersistenceHead prepared;
+    prepared.state = RunPersistenceHeadState::Prepared;
+    prepared.revision = 20U;
+    prepared.preparedCurrent = current;
+    prepared.target = target;
+    prepared.mutationKind = RunPersistenceMutationKind::Command;
+    prepared.commandId = 88U;
+    prepared.newRunRevision = 1U;
+    prepared.newTransitionSequence = 1U;
+    TEST_ASSERT_TRUE(
+        encodeRunPersistenceHead(prepared, device_platform::StorageEpoch(9U))
+            .has_value());
+
+    auto wrongTargetSlot = prepared;
+    wrongTargetSlot.target.slot = 0U;
+    TEST_ASSERT_FALSE(encodeRunPersistenceHead(
+                          wrongTargetSlot, device_platform::StorageEpoch(9U))
+                          .has_value());
+    auto wrongEpoch = prepared;
+    wrongEpoch.target.storageEpoch = 8U;
+    TEST_ASSERT_FALSE(
+        encodeRunPersistenceHead(wrongEpoch, device_platform::StorageEpoch(9U))
+            .has_value());
+    auto missingCommandId = prepared;
+    missingCommandId.commandId.reset();
+    TEST_ASSERT_FALSE(encodeRunPersistenceHead(
+                          missingCommandId, device_platform::StorageEpoch(9U))
+                          .has_value());
+
+    RunPersistenceHead committed;
+    committed.state = RunPersistenceHeadState::Committed;
+    committed.revision = 22U;
+    committed.current = current;
+    committed.fallback = current;
+    TEST_ASSERT_FALSE(
+        encodeRunPersistenceHead(committed, device_platform::StorageEpoch(9U))
+            .has_value());
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -175,5 +258,8 @@ int main(int, char**) {
         test_projection_rejects_inconsistent_aggregate_instead_of_prioritizing);
     RUN_TEST(test_manual_completed_round_trip_is_a_valid_run_projection);
     RUN_TEST(test_prepared_head_binds_full_transaction_contract);
+    RUN_TEST(
+        test_head_reference_and_mutation_invariants_reject_invalid_contracts);
+    RUN_TEST(test_manual_snapshot_and_runtime_shape_must_be_canonical);
     return UNITY_END();
 }

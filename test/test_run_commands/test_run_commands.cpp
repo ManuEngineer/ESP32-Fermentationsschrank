@@ -627,6 +627,8 @@ void test_abort_and_cool_validates_replacement_before_commit() {
 void test_completion_can_return_to_standby_or_start_manual_cooling() {
     auto completed = startedProgramState();
     completed.processState.state = ProcessState::Completed;
+    completed.processState.targetReachStartedAtMillis = 0U;
+    completed.processState.targetReachWarningIssued = false;
     CompletionRequest acknowledge{envelope(2U, completed), false, std::nullopt,
                                   false};
     const auto acknowledged = decideCompletion(completed, acknowledge);
@@ -794,6 +796,8 @@ void test_composed_cooling_rejections_discard_the_complete_candidate() {
     {
         auto completed = startedProgramState();
         completed.processState.state = ProcessState::Completed;
+        completed.processState.targetReachStartedAtMillis = 0U;
+        completed.processState.targetReachWarningIssued = false;
         completed.processState.transitionSequence = almostFull;
         CompletionRequest request{envelope(2U, completed), true,
                                   manualPlan("cool"), true};
@@ -1071,6 +1075,8 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
     {
         auto completed = startedProgramState();
         completed.processState.state = ProcessState::Completed;
+        completed.processState.targetReachStartedAtMillis = 0U;
+        completed.processState.targetReachWarningIssued = false;
         completed.runRevision = max;
         CompletionRequest request{envelope(2U, completed), false, std::nullopt,
                                   false};
@@ -1086,6 +1092,8 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
     {
         auto completed = startedProgramState();
         completed.processState.state = ProcessState::Completed;
+        completed.processState.targetReachStartedAtMillis = 0U;
+        completed.processState.targetReachWarningIssued = false;
         completed.runRevision = max;
         CompletionRequest request{envelope(3U, completed), true,
                                   manualPlan("cool"), true};
@@ -1181,6 +1189,8 @@ void test_run_revision_capacity_does_not_mask_prior_domain_results() {
     {
         auto completed = startedProgramState();
         completed.processState.state = ProcessState::Completed;
+        completed.processState.targetReachStartedAtMillis = 0U;
+        completed.processState.targetReachWarningIssued = false;
         completed.runRevision = max;
         CompletionRequest request{envelope(2U, completed), false, std::nullopt,
                                   false};

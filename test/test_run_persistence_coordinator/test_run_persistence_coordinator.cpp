@@ -2,7 +2,9 @@
 
 #include "run_persistence_coordinator.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "state_store_key.hpp"
 #include "standard_program_catalog.hpp"
+#include "storage_envelope.hpp"
 
 namespace {
 
@@ -62,6 +64,12 @@ CommandDecision manualStartDecision(const RunCommandState& state,
     request.plan.maximumTargetReachMinutes = 180U;
     request.safetyAllowsStart = true;
     return decideManualStart(state, request);
+}
+
+device_platform::StateStoreKey slotKey(const char* name) {
+    const auto created = device_platform::StateStoreKey::create(name);
+    TEST_ASSERT_TRUE(created.key.has_value());
+    return *created.key;
 }
 
 void test_load_empty_then_commit_and_restore_run_projection() {
@@ -132,6 +140,27 @@ void test_mutation_before_initialization_writes_nothing() {
         static_cast<int>(result.status));
 }
 
+void test_load_is_single_use_and_does_not_reinitialize_live_state() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(coordinator.loadAndInitialize().status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::AlreadyInitialized),
+        static_cast<int>(coordinator.loadAndInitialize().status));
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 150U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+}
+
 void test_periodic_non_writes_are_truthful_and_do_not_apply() {
     device_platform_test_support::SimulatedPersistentStateStore store;
     RunPersistenceCoordinator coordinator(
@@ -186,7 +215,7 @@ void test_manual_completed_transition_commits_before_releasing_messages() {
     // exposed to a caller.
     state.processState.state = ProcessState::ManualHolding;
     state.processState.stateEnteredAtMillis = 100U;
-    state.processState.targetReachStartedAtMillis = 100U;
+    state.processState.targetReachStartedAtMillis = 0U;
     ProcessSignals signals;
     const auto transition = decideProcessTransition(
         state.processState, &*state.processRunSnapshot, signals,
@@ -283,6 +312,83 @@ void test_tombstone_boot_resets_schedule_to_the_new_boot_timebase() {
                 .status));
 }
 
+void test_orphan_checkpoint_revision_is_never_reused_after_restart() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 501U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    StopRequest stop;
+    stop.envelope = {502U,
+                     CommandSource::LocalDisplay,
+                     200U,
+                     state.processState.transitionSequence,
+                     state.runRevision,
+                     std::nullopt,
+                     std::nullopt,
+                     true};
+    stop.option = StopOption::AbortAndTurnOff;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, decideStop(state, stop),
+                                RunCheckpointTime{200U, std::nullopt})
+                .status));
+
+    // rc1 is the committed tombstone.  rc0 is no longer referenced; inject a
+    // valid physical orphan with a deliberately higher envelope revision.
+    const auto tombstoneBytes = store.read(slotKey("rc1"), 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(tombstoneBytes.status));
+    const auto tombstoneEnvelope =
+        device_platform::decodeEnvelope(tombstoneBytes.value);
+    TEST_ASSERT_TRUE(tombstoneEnvelope.envelope.has_value());
+    auto orphanEnvelope = *tombstoneEnvelope.envelope;
+    orphanEnvelope.versionValue = 100U;
+    std::string orphanBytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+        static_cast<int>(device_platform::encodeEnvelope(orphanEnvelope,
+                                                         orphanBytes, 8240U)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreWriteStatus::Success),
+        static_cast<int>(store.write(slotKey("rc0"), orphanBytes)));
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoActiveRun),
+        static_cast<int>(afterBoot.loadAndInitialize().status));
+    RunCommandState next;
+    next.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            afterBoot
+                .persistCommand(next, startDecision(next, 503U, 10U),
+                                RunCheckpointTime{10U, std::nullopt})
+                .status));
+    const auto replacement = store.read(slotKey("rc0"), 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(replacement.status));
+    const auto replacementEnvelope =
+        device_platform::decodeEnvelope(replacement.value);
+    TEST_ASSERT_TRUE(replacementEnvelope.envelope.has_value());
+    TEST_ASSERT_EQUAL_UINT64(101U, replacementEnvelope.envelope->versionValue);
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -291,9 +397,11 @@ int main(int, char**) {
     RUN_TEST(
         test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe);
     RUN_TEST(test_mutation_before_initialization_writes_nothing);
+    RUN_TEST(test_load_is_single_use_and_does_not_reinitialize_live_state);
     RUN_TEST(test_periodic_non_writes_are_truthful_and_do_not_apply);
     RUN_TEST(
         test_manual_completed_transition_commits_before_releasing_messages);
     RUN_TEST(test_tombstone_boot_resets_schedule_to_the_new_boot_timebase);
+    RUN_TEST(test_orphan_checkpoint_revision_is_never_reused_after_restart);
     return UNITY_END();
 }

@@ -1,5 +1,6 @@
 #include "run_persistence_coordinator.hpp"
 
+#include <algorithm>
 #include <limits>
 #include <utility>
 
@@ -81,7 +82,9 @@ RunPersistenceResult RunPersistenceCoordinator::unavailableResult() const {
 }
 
 RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
-    state_ = RunPersistenceCoordinatorState::Uninitialized;
+    if (state_ != RunPersistenceCoordinatorState::Uninitialized) {
+        return {RunPersistenceLoadStatus::AlreadyInitialized, std::nullopt};
+    }
     currentHead_.reset();
     slots_[0].reset();
     slots_[1].reset();
@@ -205,6 +208,37 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
         // Monotonic milliseconds are boot-local.  A persisted value is
         // recovery data, never the base for a new boot's schedule.
         schedule_.reset();
+
+        // The head is the only source of the recoverable state.  A valid
+        // unreferenced checkpoint is therefore never loaded as current or
+        // fallback.  Its envelope revision is nevertheless a physical
+        // high-watermark: reusing it could overwrite a known orphan with the
+        // same revision after a reboot.
+        for (std::size_t slot = 0U; slot < 2U; ++slot) {
+            const auto physical =
+                store_.readSlot(slot, kMaximumCheckpointRecordBytes);
+            if (physical.status !=
+                device_platform::StateStoreReadStatus::Success) {
+                continue;
+            }
+            const auto physicalEnvelope =
+                device_platform::decodeEnvelope(physical.value);
+            if (!physicalEnvelope.envelope.has_value() ||
+                physicalEnvelope.envelope->recordTypeId !=
+                    kCheckpointRecordType ||
+                physicalEnvelope.envelope->schemaVersion !=
+                    kRunPersistenceSchema ||
+                physicalEnvelope.envelope->storageEpoch != epoch_ ||
+                physicalEnvelope.envelope->versionValue == 0U) {
+                continue;
+            }
+            nextCheckpointRevision_ =
+                physicalEnvelope.envelope->versionValue ==
+                        std::numeric_limits<std::uint64_t>::max()
+                    ? 0U
+                    : std::max(nextCheckpointRevision_,
+                               physicalEnvelope.envelope->versionValue + 1U);
+        }
         if (snap.variant == RunCheckpointVariant::NoActiveRun) {
             state_ = RunPersistenceCoordinatorState::ReadyEmpty;
             return {RunPersistenceLoadStatus::NoActiveRun, snap};
@@ -283,6 +317,66 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
     RunPersistenceRawRecord record{
         targetBytes, snapshot, nextCheckpointRevision_, time.utcUnixSeconds};
     const auto ref = makeRunCheckpointReference(target, record, epoch_);
+    RunPersistenceHead prepared;
+    RunPersistenceHead committed;
+    std::optional<std::string> preparedBytes;
+    std::optional<std::string> committedBytes;
+    if (periodic) {
+        committed.state = RunPersistenceHeadState::Committed;
+        committed.revision = nextHeadRevision_;
+        committed.current = ref;
+        if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
+            currentHead_.has_value()) {
+            committed.fallback = currentHead_->current;
+        }
+        committedBytes = encodeRunPersistenceHead(committed, epoch_);
+        if (!committedBytes.has_value()) {
+            state_ = currentHead_.has_value()
+                         ? RunPersistenceCoordinatorState::Ready
+                         : RunPersistenceCoordinatorState::ReadyEmpty;
+            return result(RunPersistenceResultStatus::CapacityExceeded,
+                          RunPersistenceStep::CommittedHead,
+                          RunPersistenceTechnicalReason::CodecError,
+                          RunPersistenceDurability::Unchanged);
+        }
+    } else {
+        prepared.state = RunPersistenceHeadState::Prepared;
+        prepared.revision = nextHeadRevision_;
+        prepared.target = ref;
+        prepared.mutationKind = commandId.has_value()
+                                    ? RunPersistenceMutationKind::Command
+                                    : RunPersistenceMutationKind::Transition;
+        prepared.commandId = commandId;
+        prepared.oldRunRevision = before.runRevision;
+        prepared.newRunRevision = snapshot.runRevision;
+        prepared.oldTransitionSequence = before.processState.transitionSequence;
+        prepared.newTransitionSequence =
+            snapshot.processState.transitionSequence;
+        if (currentHead_.has_value()) {
+            prepared.preparedCurrent = currentHead_->current;
+            prepared.preparedFallback = currentHead_->fallback;
+        }
+        committed.state = RunPersistenceHeadState::Committed;
+        committed.revision = prepared.revision + 1U;
+        committed.current = ref;
+        if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
+            currentHead_.has_value()) {
+            committed.fallback = currentHead_->current;
+        }
+        preparedBytes = encodeRunPersistenceHead(prepared, epoch_);
+        committedBytes = encodeRunPersistenceHead(committed, epoch_);
+        if (!preparedBytes.has_value() || !committedBytes.has_value()) {
+            state_ = currentHead_.has_value()
+                         ? RunPersistenceCoordinatorState::Ready
+                         : RunPersistenceCoordinatorState::ReadyEmpty;
+            return result(RunPersistenceResultStatus::CapacityExceeded,
+                          !preparedBytes.has_value()
+                              ? RunPersistenceStep::PreparedHead
+                              : RunPersistenceStep::CommittedHead,
+                          RunPersistenceTechnicalReason::CodecError,
+                          RunPersistenceDurability::Unchanged);
+        }
+    }
     const auto oldHead = currentHead_.has_value()
                              ? std::optional<std::string>{currentHead_->bytes}
                              : std::nullopt;
@@ -347,59 +441,22 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
                                 RunPersistenceDurability::Unchanged);
         }
         slots_[target] = record;
-        RunPersistenceHead committed;
-        committed.state = RunPersistenceHeadState::Committed;
-        committed.revision = nextHeadRevision_;
-        committed.current = ref;
-        if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
-            currentHead_.has_value()) {
-            committed.fallback = currentHead_->current;
-        }
-        const auto bytes = encodeRunPersistenceHead(committed, epoch_);
-        if (!bytes.has_value()) {
-            // The target slot is already durably written.  Its orphaned bytes
-            // must not be hidden by returning to normal write operation.
-            enterBlockedIndeterminate();
-            return result(RunPersistenceResultStatus::CapacityExceeded,
-                          RunPersistenceStep::CommittedHead,
-                          RunPersistenceTechnicalReason::CodecError,
-                          RunPersistenceDurability::Changed);
-        }
-        const auto headWrite =
-            store_.writeHeadExact(*bytes, oldHead, kMaximumHeadRecordBytes);
+        nextCheckpointRevision_ =
+            record.checkpointRevision ==
+                    std::numeric_limits<std::uint64_t>::max()
+                ? 0U
+                : record.checkpointRevision + 1U;
+        const auto headWrite = store_.writeHeadExact(*committedBytes, oldHead,
+                                                     kMaximumHeadRecordBytes);
         if (headWrite != RunPersistenceStoreWriteResult::Written) {
             if (headWrite != RunPersistenceStoreWriteResult::Indeterminate)
                 readyState();
             return writeFailure(headWrite, RunPersistenceStep::CommittedHead,
                                 RunPersistenceDurability::Changed);
         }
-        committed.bytes = *bytes;
+        committed.bytes = *committedBytes;
         currentHead_ = std::move(committed);
     } else {
-        RunPersistenceHead prepared;
-        prepared.state = RunPersistenceHeadState::Prepared;
-        prepared.revision = nextHeadRevision_;
-        prepared.target = ref;
-        prepared.mutationKind = commandId.has_value()
-                                    ? RunPersistenceMutationKind::Command
-                                    : RunPersistenceMutationKind::Transition;
-        prepared.commandId = commandId;
-        prepared.oldRunRevision = before.runRevision;
-        prepared.newRunRevision = snapshot.runRevision;
-        prepared.oldTransitionSequence = before.processState.transitionSequence;
-        prepared.newTransitionSequence =
-            snapshot.processState.transitionSequence;
-        if (currentHead_.has_value()) {
-            prepared.preparedCurrent = currentHead_->current;
-            prepared.preparedFallback = currentHead_->fallback;
-        }
-        const auto preparedBytes = encodeRunPersistenceHead(prepared, epoch_);
-        if (!preparedBytes.has_value()) {
-            readyState();
-            return result(RunPersistenceResultStatus::CapacityExceeded,
-                          RunPersistenceStep::PreparedHead,
-                          RunPersistenceTechnicalReason::CodecError);
-        }
         const auto preparedWrite = store_.writeHeadExact(
             *preparedBytes, oldHead, kMaximumHeadRecordBytes);
         if (preparedWrite != RunPersistenceStoreWriteResult::Written) {
@@ -417,26 +474,11 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
                                 RunPersistenceDurability::Changed);
         }
         slots_[target] = record;
-        RunPersistenceHead committed;
-        committed.state = RunPersistenceHeadState::Committed;
-        committed.current = ref;
-        if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
-            currentHead_.has_value()) {
-            committed.fallback = currentHead_->current;
-        }
-        committed.revision = prepared.revision;
-        ++committed.revision;
-        if (snapshot.variant == RunCheckpointVariant::NoActiveRun) {
-            committed.fallback.reset();
-        }
-        const auto committedBytes = encodeRunPersistenceHead(committed, epoch_);
-        if (!committedBytes.has_value()) {
-            enterBlockedIndeterminate();
-            return result(RunPersistenceResultStatus::PersistenceIndeterminate,
-                          RunPersistenceStep::CommittedHead,
-                          RunPersistenceTechnicalReason::CodecError,
-                          RunPersistenceDurability::MayHaveChanged);
-        }
+        nextCheckpointRevision_ =
+            record.checkpointRevision ==
+                    std::numeric_limits<std::uint64_t>::max()
+                ? 0U
+                : record.checkpointRevision + 1U;
         const auto committedWrite = store_.writeHeadExact(
             *committedBytes, std::optional<std::string>{prepared.bytes},
             kMaximumHeadRecordBytes);
@@ -450,10 +492,6 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
         currentHead_ = std::move(committed);
     }
     slots_[target] = std::move(record);
-    nextCheckpointRevision_ =
-        record.checkpointRevision == std::numeric_limits<std::uint64_t>::max()
-            ? 0U
-            : record.checkpointRevision + 1U;
     nextHeadRevision_ =
         currentHead_->revision == std::numeric_limits<std::uint64_t>::max()
             ? 0U

@@ -209,8 +209,15 @@ bool runtimeShapeIsValid(const ProcessRuntimeState& state) {
     const bool mayTrackQualification =
         state.state == ProcessState::Preheating ||
         state.state == ProcessState::QualifyingTarget;
-    return mayTrackQualification ||
-           !state.qualificationValidSinceMillis.has_value();
+    if (!mayTrackQualification &&
+        state.qualificationValidSinceMillis.has_value()) {
+        return false;
+    }
+    if (!stateHasTargetReachTimer(state.state)) {
+        return state.targetReachStartedAtMillis == 0U &&
+               !state.targetReachWarningIssued;
+    }
+    return true;
 }
 
 bool validBootTopology(const TransitionDecision& decision) {

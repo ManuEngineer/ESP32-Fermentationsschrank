@@ -134,13 +134,18 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
                equalProcessRunSnapshot(*expectedProcess,
                                        *snapshot.processRunSnapshot);
     }
+    const auto expectedProcess = snapshot.manual.has_value()
+                                     ? makeProcessRunSnapshot(*snapshot.manual)
+                                     : std::optional<ProcessRunSnapshot>{};
     return !snapshot.program.has_value() && snapshot.revisionCount == 0U &&
-           snapshot.manual.has_value() &&
+           snapshot.manual.has_value() && expectedProcess.has_value() &&
            snapshot.processRunSnapshot->kind == ProcessKind::ManualHolding &&
            snapshot.manual->values.runId == snapshot.activeRunId &&
            snapshot.manual->values.sensorMode ==
                *snapshot.activeRunSensorMode &&
            validateManualRunPlan(*snapshot.manual) &&
+           equalProcessRunSnapshot(*expectedProcess,
+                                   *snapshot.processRunSnapshot) &&
            validateProcessRuntimeForCheckpoint(
                snapshot.processState, &*snapshot.processRunSnapshot,
                snapshot.checkpointMonotonicMillis);

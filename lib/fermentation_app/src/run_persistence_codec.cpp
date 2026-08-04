@@ -711,15 +711,118 @@ bool readReference(ByteReader& reader, RunCheckpointReference& ref) {
            ref.storageEpoch != 0U && ref.checkpointRevision != 0U;
 }
 
+bool validReference(const RunCheckpointReference& reference,
+                    device_platform::StorageEpoch epoch) {
+    if (reference.slot > 1U ||
+        reference.schemaVersion != kRunPersistenceSchema ||
+        reference.storageEpoch != epoch.value() ||
+        reference.checkpointRevision == 0U) {
+        return false;
+    }
+    switch (reference.variant) {
+        case RunCheckpointVariant::ProgramRun:
+        case RunCheckpointVariant::ManualRun:
+        case RunCheckpointVariant::NoActiveRun:
+            return true;
+    }
+    return false;
+}
+
+bool writeHeadState(ByteWriter& writer, RunPersistenceHeadState state) {
+    switch (state) {
+        case RunPersistenceHeadState::Prepared:
+            return be::writeUint8(writer, 1U);
+        case RunPersistenceHeadState::Committed:
+            return be::writeUint8(writer, 2U);
+    }
+    return false;
+}
+
+bool readHeadState(ByteReader& reader, RunPersistenceHeadState& state) {
+    std::uint8_t value = 0U;
+    if (!be::readUint8(reader, value)) return false;
+    switch (value) {
+        case 1U:
+            state = RunPersistenceHeadState::Prepared;
+            return true;
+        case 2U:
+            state = RunPersistenceHeadState::Committed;
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool writeMutationKind(ByteWriter& writer, RunPersistenceMutationKind kind) {
+    switch (kind) {
+        case RunPersistenceMutationKind::Command:
+            return be::writeUint8(writer, 1U);
+        case RunPersistenceMutationKind::Transition:
+            return be::writeUint8(writer, 2U);
+    }
+    return false;
+}
+
+bool readMutationKind(ByteReader& reader, RunPersistenceMutationKind& kind) {
+    std::uint8_t value = 0U;
+    if (!be::readUint8(reader, value)) return false;
+    switch (value) {
+        case 1U:
+            kind = RunPersistenceMutationKind::Command;
+            return true;
+        case 2U:
+            kind = RunPersistenceMutationKind::Transition;
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool validPreparedHead(const RunPersistenceHead& head,
+                       device_platform::StorageEpoch epoch) {
+    if (!validReference(head.target, epoch) || head.fallback.has_value() ||
+        head.current.schemaVersion != 0U ||
+        head.newRunRevision < head.oldRunRevision ||
+        head.newTransitionSequence < head.oldTransitionSequence ||
+        ((head.mutationKind == RunPersistenceMutationKind::Command) !=
+         head.commandId.has_value())) {
+        return false;
+    }
+    if (head.commandId.has_value() && *head.commandId == 0U) return false;
+    if (head.preparedCurrent.has_value() &&
+        (!validReference(*head.preparedCurrent, epoch) ||
+         head.preparedCurrent->slot == head.target.slot)) {
+        return false;
+    }
+    return !head.preparedFallback.has_value() ||
+           (head.preparedCurrent.has_value() &&
+            validReference(*head.preparedFallback, epoch) &&
+            head.preparedFallback->slot != head.preparedCurrent->slot);
+}
+
+bool validCommittedHead(const RunPersistenceHead& head,
+                        device_platform::StorageEpoch epoch) {
+    if (!validReference(head.current, epoch) ||
+        head.preparedCurrent.has_value() || head.preparedFallback.has_value() ||
+        head.target.schemaVersion != 0U || head.commandId.has_value() ||
+        head.oldRunRevision != 0U || head.newRunRevision != 0U ||
+        head.oldTransitionSequence != 0U || head.newTransitionSequence != 0U) {
+        return false;
+    }
+    return !head.fallback.has_value() ||
+           (validReference(*head.fallback, epoch) &&
+            head.fallback->slot != head.current.slot);
+}
+
 }  // namespace
 
 std::optional<std::string> encodeRunPersistenceHead(
     const RunPersistenceHead& head, device_platform::StorageEpoch epoch) {
     if (head.revision == 0U || epoch.value() == 0U) return std::nullopt;
     ByteWriter payload(200U);
-    bool ok = be::writeUint8(payload, static_cast<std::uint8_t>(head.state));
+    bool ok = writeHeadState(payload, head.state);
     if (head.state == RunPersistenceHeadState::Prepared) {
-        ok = ok &&
+        ok = ok && validPreparedHead(head, epoch) &&
              be::writeOptionalTag(payload, head.preparedCurrent.has_value()) &&
              (!head.preparedCurrent.has_value() ||
               writeReference(payload, *head.preparedCurrent)) &&
@@ -727,8 +830,7 @@ std::optional<std::string> encodeRunPersistenceHead(
              (!head.preparedFallback.has_value() ||
               writeReference(payload, *head.preparedFallback)) &&
              writeReference(payload, head.target) &&
-             be::writeUint8(payload,
-                            static_cast<std::uint8_t>(head.mutationKind)) &&
+             writeMutationKind(payload, head.mutationKind) &&
              be::writeOptionalTag(payload, head.commandId.has_value()) &&
              (!head.commandId.has_value() ||
               (head.commandId.value() != 0U &&
@@ -738,11 +840,10 @@ std::optional<std::string> encodeRunPersistenceHead(
              be::writeUint32(payload, head.oldTransitionSequence) &&
              be::writeUint32(payload, head.newTransitionSequence) &&
              head.newRunRevision >= head.oldRunRevision &&
-             head.newTransitionSequence >= head.oldTransitionSequence &&
-             ((head.mutationKind == RunPersistenceMutationKind::Command) ==
-              head.commandId.has_value());
+             head.newTransitionSequence >= head.oldTransitionSequence;
     } else if (head.state == RunPersistenceHeadState::Committed) {
-        ok = ok && writeReference(payload, head.current) &&
+        ok = ok && validCommittedHead(head, epoch) &&
+             writeReference(payload, head.current) &&
              be::writeOptionalTag(payload, head.fallback.has_value()) &&
              (!head.fallback.has_value() ||
               writeReference(payload, *head.fallback));
@@ -773,13 +874,11 @@ std::optional<RunPersistenceHead> decodeRunPersistenceHead(
         return std::nullopt;
     }
     ByteReader reader(envelope.envelope->payload);
-    std::uint8_t state = 0U;
     bool present = false;
     RunPersistenceHead head;
     head.revision = envelope.envelope->versionValue;
-    if (!be::readUint8(reader, state)) return std::nullopt;
-    if (state == static_cast<std::uint8_t>(RunPersistenceHeadState::Prepared)) {
-        head.state = RunPersistenceHeadState::Prepared;
+    if (!readHeadState(reader, head.state)) return std::nullopt;
+    if (head.state == RunPersistenceHeadState::Prepared) {
         if (!be::readOptionalTag(reader, present)) return std::nullopt;
         if (present) {
             RunCheckpointReference reference;
@@ -792,19 +891,11 @@ std::optional<RunPersistenceHead> decodeRunPersistenceHead(
             if (!readReference(reader, reference)) return std::nullopt;
             head.preparedFallback = reference;
         }
-        std::uint8_t kind = 0U;
         if (!readReference(reader, head.target) ||
-            !be::readUint8(reader, kind) ||
+            !readMutationKind(reader, head.mutationKind) ||
             !be::readOptionalTag(reader, present)) {
             return std::nullopt;
         }
-        if (kind < static_cast<std::uint8_t>(
-                       RunPersistenceMutationKind::Command) ||
-            kind > static_cast<std::uint8_t>(
-                       RunPersistenceMutationKind::Periodic)) {
-            return std::nullopt;
-        }
-        head.mutationKind = static_cast<RunPersistenceMutationKind>(kind);
         if (present) {
             CommandId id = 0U;
             if (!be::readUint64(reader, id) || id == 0U) return std::nullopt;
@@ -816,13 +907,10 @@ std::optional<RunPersistenceHead> decodeRunPersistenceHead(
             !be::readUint32(reader, head.newTransitionSequence) ||
             head.newRunRevision < head.oldRunRevision ||
             head.newTransitionSequence < head.oldTransitionSequence ||
-            ((head.mutationKind == RunPersistenceMutationKind::Command) !=
-             head.commandId.has_value())) {
+            !validPreparedHead(head, epoch)) {
             return std::nullopt;
         }
-    } else if (state ==
-               static_cast<std::uint8_t>(RunPersistenceHeadState::Committed)) {
-        head.state = RunPersistenceHeadState::Committed;
+    } else if (head.state == RunPersistenceHeadState::Committed) {
         if (!readReference(reader, head.current) ||
             !be::readOptionalTag(reader, present)) {
             return std::nullopt;
@@ -830,13 +918,16 @@ std::optional<RunPersistenceHead> decodeRunPersistenceHead(
         if (present) {
             RunCheckpointReference reference;
             if (!readReference(reader, reference)) return std::nullopt;
-            if (reference.slot == head.current.slot) return std::nullopt;
             head.fallback = reference;
         }
     } else {
         return std::nullopt;
     }
-    if (reader.remaining() != 0U) return std::nullopt;
+    if (reader.remaining() != 0U ||
+        (head.state == RunPersistenceHeadState::Committed &&
+         !validCommittedHead(head, epoch))) {
+        return std::nullopt;
+    }
     head.bytes = bytes;
     return head;
 }

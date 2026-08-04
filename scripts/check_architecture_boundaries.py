@@ -85,6 +85,11 @@ RUN_PERSISTENCE_DECISION_MEMBER_PATTERN = re.compile(
     r"\b(?P<name>[A-Za-z_]\w*)\s*(?:\.|->)\s*"
     r"(?P<member>effects|messages)\b"
 )
+RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN = re.compile(
+    r"\bdecide[A-Za-z_]\w*\s*\([^;{}]*\)\s*\.\s*"
+    r"(?:effects|messages)\b",
+    re.DOTALL,
+)
 
 # Issue #72/#73: exakter idf_component_register()-REQUIRES/PRIV_REQUIRES-
 # Vertrag je Komponente, getrennt nach oeffentlich (REQUIRES) und privat
@@ -212,10 +217,14 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                 lines = path.read_text(encoding="utf-8").splitlines()
             except UnicodeDecodeError:
                 continue
+            source = "\n".join(lines)
             decision_values = {
                 match.group("name")
-                for line in lines
-                for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(line)
+                for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(source)
+            }
+            temporary_member_lines = {
+                source[: match.start()].count("\n") + 1
+                for match in RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN.finditer(source)
             }
             for line_number, line in enumerate(lines, start=1):
                 direct_apply = RUN_PERSISTENCE_APPLY_PATTERN.search(line)
@@ -228,7 +237,7 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                         or member.group("name").endswith("Decision")
                     )
                 )
-                if direct_apply or decision_named_member:
+                if direct_apply or decision_named_member or line_number in temporary_member_lines:
                     violations.append(
                         f"{path}:{line_number}: produktiver Run-Persistenz-Bypass "
                         "(apply/effects/messages ausserhalb Domain/Coordinator)"
@@ -607,6 +616,14 @@ RUN_PERSISTENCE_BYPASS_CASES = {
         "lib/fermentation_app/src/runtime_path.cpp",
         "void f() { const auto result = decideTransition(); result.messages; }\n",
     ),
+    "runtime_effects_from_multiline_decide_result": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n  auto result =\n      decideRun();\n  result.effects;\n}\n",
+    ),
+    "runtime_messages_from_decide_temporary": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { decideTransition().messages; }\n",
+    ),
     "ui_messages_dot": (
         "lib/fermentation_app/src/ui_path.cpp",
         "void f() { transitionDecision.messages; }\n",
@@ -622,6 +639,22 @@ RUN_PERSISTENCE_BYPASS_CASES = {
     "composition_messages_arrow": (
         "main/app_main.cpp",
         "void f() { transitionDecision->messages; }\n",
+    ),
+}
+
+# The bypass rule deliberately follows values originating from decide*().  It
+# must not turn into a repository-wide ban on unrelated members with the same
+# spelling.
+RUN_PERSISTENCE_CLEAN_CASES = {
+    "unrelated_effects_member": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "struct RenderState { int effects; };\n"
+        "void f() { RenderState state{}; (void)state.effects; }\n",
+    ),
+    "unrelated_messages_member": (
+        "main/app_main.cpp",
+        "struct DisplayState { int messages; };\n"
+        "void f() { DisplayState state{}; (void)state.messages; }\n",
     ),
 }
 
@@ -672,6 +705,14 @@ def selftest() -> int:
         if not _check_clean_fixture_with_extra_file(relative_path, content):
             print(
                 f"{FAILED}: Run-Persistenz-Bypass {name!r} wurde nicht erkannt"
+            )
+            return 1
+
+    for name, (relative_path, content) in RUN_PERSISTENCE_CLEAN_CASES.items():
+        if _check_clean_fixture_with_extra_file(relative_path, content):
+            print(
+                f"{FAILED}: fachfremder Member-Fall {name!r} wurde faelschlich "
+                "als Bypass erkannt"
             )
             return 1
 

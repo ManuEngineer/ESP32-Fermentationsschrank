@@ -51,7 +51,6 @@ enum class RunPersistenceHeadState : std::uint8_t {
 enum class RunPersistenceMutationKind : std::uint8_t {
     Command = 1U,
     Transition = 2U,
-    Periodic = 3U,
 };
 
 struct RunPersistenceHead {
