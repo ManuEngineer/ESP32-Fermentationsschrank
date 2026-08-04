@@ -75,7 +75,13 @@ RUN_PERSISTENCE_ALLOWED_FILES = frozenset(
     }
 )
 RUN_PERSISTENCE_APPLY_PATTERN = re.compile(
-    r"\b(?:applyRunCommand|applyProcessTransition)\s*\("
+    r"(?:\(\s*)?\b(?:applyRunCommand|applyProcessTransition)"
+    r"\s*(?:\)\s*)?\("
+)
+RUN_PERSISTENCE_APPLY_ALIAS_PATTERN = re.compile(
+    r"\b(?:auto|[A-Za-z_]\w*(?:\s*[*&])?)\s+"
+    r"(?P<alias>[A-Za-z_]\w*)\s*=\s*&\s*"
+    r"(?P<target>applyRunCommand|applyProcessTransition)\b"
 )
 RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN = re.compile(
     r"\b(?:const\s+)?(?:auto|CommandDecision|TransitionDecision)\s+"
@@ -299,12 +305,26 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                 if containing:
                     scope = min(containing, key=lambda block: block[1] - block[0])
                     scope[2].add(match.group("name"))
+            for match in RUN_PERSISTENCE_APPLY_ALIAS_PATTERN.finditer(code):
+                containing = [
+                    block
+                    for block in blocks
+                    if block[0] < match.start() < block[1]
+                ]
+                if containing:
+                    scope = min(containing, key=lambda block: block[1] - block[0])
+                    scope[2].add(match.group("alias"))
 
             def decision_name_in_scope(name: str, position: int) -> bool:
-                return any(
-                    name in block[2] and block[0] < position < block[1]
+                containing = [
+                    block
                     for block in blocks
-                )
+                    if block[0] < position < block[1]
+                ]
+                if not containing:
+                    return False
+                nearest = min(containing, key=lambda block: block[1] - block[0])
+                return name in nearest[2]
 
             def line_number(position: int) -> int:
                 return code.count("\n", 0, position) + 1
@@ -315,6 +335,27 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                     "Run-Persistenz-Bypass (apply/effects/messages ausserhalb "
                     "Domain/Coordinator)"
                 )
+
+            for match in RUN_PERSISTENCE_APPLY_ALIAS_PATTERN.finditer(code):
+                alias = match.group("alias")
+                call_pattern = re.compile(rf"\b{re.escape(alias)}\s*\(")
+                for call in call_pattern.finditer(code, match.end()):
+                    containing = [
+                        block
+                        for block in blocks
+                        if block[0] < call.start() < block[1]
+                    ]
+                    if containing:
+                        nearest = min(
+                            containing, key=lambda block: block[1] - block[0]
+                        )
+                        if alias in nearest[2]:
+                            violations.append(
+                                f"{path}:{line_number(call.start())}: produktiver "
+                                "Run-Persistenz-Bypass (apply/effects/messages "
+                                "ausserhalb Domain/Coordinator)"
+                            )
+                            break
 
             for match in RUN_PERSISTENCE_DECISION_MEMBER_PATTERN.finditer(code):
                 member_position = match.start()
@@ -701,6 +742,23 @@ RUN_PERSISTENCE_BYPASS_CASES = {
         "lib/fermentation_app/src/runtime_path.cpp",
         "void f() { applyProcessTransition\n    (state, decision, snapshot); }\n",
     ),
+    "runtime_apply_command_parenthesized": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { (applyRunCommand)(state, decision); }\n",
+    ),
+    "runtime_apply_transition_parenthesized": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { (applyProcessTransition)(state, decision, snapshot); }\n",
+    ),
+    "runtime_apply_command_function_pointer": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto apply = &applyRunCommand; apply(state, decision); }\n",
+    ),
+    "runtime_apply_transition_function_pointer": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto apply = &applyProcessTransition; "
+        "apply(state, decision, snapshot); }\n",
+    ),
     "runtime_effects_dot": (
         "lib/fermentation_app/src/runtime_path.cpp",
         "void f() { decision.effects; }\n",
@@ -767,6 +825,13 @@ RUN_PERSISTENCE_CLEAN_CASES = {
         "void a() { auto result = decideRun(); }\n"
         "struct RenderResult { int effects; };\n"
         "void b() { RenderResult result{}; use(result.effects); }\n",
+    ),
+    "shadowed_result_name_is_not_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "  auto result = decideRun();\n"
+        "  { RenderResult result{}; use(result.effects); }\n"
+        "}\n",
     ),
     "unrelated_effects_member": (
         "lib/fermentation_app/src/runtime_path.cpp",

@@ -6,6 +6,7 @@
 #include <unity.h>
 
 #include "run_persistence_coordinator.hpp"
+#include "run_persistence_codec.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "state_store.hpp"
 #include "state_store_key.hpp"
@@ -21,10 +22,21 @@ class SequencedWriteStore final : public device_platform::IStateStore {
     using WriteFault =
         device_platform_test_support::SimulatedPersistentStateStore::WriteFault;
 
+    enum class ReadFault {
+        None,
+        NotFound,
+        ReadError,
+        CapacityError,
+        ForeignBytes
+    };
+
     device_platform::StateStoreWriteStatus write(
         const device_platform::StateStoreKey& key,
         const std::string& value) override {
         ++writeCount_;
+        const auto readFault = readFaults_.find(writeCount_);
+        if (readFault != readFaults_.end())
+            readFaultByKey_[key] = readFault->second;
         if (unknownWithoutCommit_.find(writeCount_) !=
             unknownWithoutCommit_.end())
             return device_platform::StateStoreWriteStatus::CommitOutcomeUnknown;
@@ -36,6 +48,26 @@ class SequencedWriteStore final : public device_platform::IStateStore {
     device_platform::StateStoreReadResult read(
         const device_platform::StateStoreKey& key,
         std::size_t maxBytes) const override {
+        const auto fault = readFaultByKey_.find(key);
+        if (fault != readFaultByKey_.end()) {
+            switch (fault->second) {
+                case ReadFault::NotFound:
+                    return {device_platform::StateStoreReadStatus::NotFound,
+                            {}};
+                case ReadFault::ReadError:
+                    return {device_platform::StateStoreReadStatus::ReadError,
+                            {}};
+                case ReadFault::CapacityError:
+                    return {
+                        device_platform::StateStoreReadStatus::CapacityError,
+                        {}};
+                case ReadFault::ForeignBytes:
+                    return {device_platform::StateStoreReadStatus::Success,
+                            "foreign-readback"};
+                case ReadFault::None:
+                    break;
+            }
+        }
         return backing_.read(key, maxBytes);
     }
 
@@ -47,6 +79,10 @@ class SequencedWriteStore final : public device_platform::IStateStore {
         unknownWithoutCommit_.insert(writeNumber);
     }
 
+    void readFaultAt(std::size_t writeNumber, ReadFault fault) {
+        readFaults_[writeNumber] = fault;
+    }
+
     [[nodiscard]] std::size_t writeCount() const { return writeCount_; }
 
     void restart() {
@@ -54,6 +90,8 @@ class SequencedWriteStore final : public device_platform::IStateStore {
         writeCount_ = 0U;
         faults_.clear();
         unknownWithoutCommit_.clear();
+        readFaults_.clear();
+        readFaultByKey_.clear();
     }
 
     void forceNotFound(const device_platform::StateStoreKey& key, bool force) {
@@ -71,6 +109,8 @@ class SequencedWriteStore final : public device_platform::IStateStore {
     device_platform_test_support::SimulatedPersistentStateStore backing_;
     std::map<std::size_t, WriteFault> faults_;
     std::set<std::size_t> unknownWithoutCommit_;
+    std::map<std::size_t, ReadFault> readFaults_;
+    mutable std::map<device_platform::StateStoreKey, ReadFault> readFaultByKey_;
     std::size_t writeCount_{0U};
 };
 
@@ -78,6 +118,7 @@ ProgramDocument runnableProgram() {
     auto document = FactoryProgramCatalog::find("water-kefir");
     TEST_ASSERT_TRUE(document.has_value());
     auto& program = document->program;
+    program.preheat = true;
     program.productSensorFailure.fallbackDelaySeconds = 30U;
     program.fermentationStages.front().targetTemperatureCelsius = 38.0;
     program.fermentationStages.front().durationMinutes = 120U;
@@ -632,30 +673,36 @@ void test_unknown_outcome_at_each_mutation_write_is_resolved() {
 }
 
 void test_unknown_outcome_with_exact_old_bytes_is_not_written() {
-    for (std::size_t writeNumber = 1U; writeNumber <= 3U; ++writeNumber) {
-        SequencedWriteStore store;
-        RunPersistenceCoordinator coordinator(
-            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
-        static_cast<void>(coordinator.loadAndInitialize());
-        RunCommandState state;
-        state.processState.state = ProcessState::Standby;
-        store.unknownWithoutCommitAt(writeNumber);
-        const auto result = coordinator.persistCommand(
-            state, startDecision(state, 715U + writeNumber),
-            RunCheckpointTime{100U, std::nullopt});
-        TEST_ASSERT_EQUAL_INT(
-            static_cast<int>(RunPersistenceResultStatus::WriteFailed),
-            static_cast<int>(result.status));
-        TEST_ASSERT_EQUAL_UINT32(0U, result.effectCount);
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
-                              static_cast<int>(state.processState.state));
-        TEST_ASSERT_EQUAL_INT(
-            static_cast<int>(
-                writeNumber == 1U
-                    ? RunPersistenceCoordinatorState::ReadyEmpty
-                    : RunPersistenceCoordinatorState::BlockedIndeterminate),
-            static_cast<int>(coordinator.state()));
-    }
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 715U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    // The sixth write is the next Committed-Head write.  Its old value is the
+    // already committed Prepared-Head bytes, so this is an Existing+old-bytes
+    // readback rather than an absent-key NotFound case.
+    store.unknownWithoutCommitAt(6U);
+    const auto result =
+        coordinator.persistCommand(state, stopDecision(state, 716U),
+                                   RunCheckpointTime{200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Changed),
+                          static_cast<int>(result.durability));
+    TEST_ASSERT_EQUAL_UINT32(0U, result.effectCount);
+    TEST_ASSERT_TRUE(state.activeProgramRun.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(coordinator.state()));
 }
 
 void test_capacity_faults_at_each_mutation_cutpoint_are_classified() {
@@ -738,6 +785,410 @@ void test_unknown_outcome_not_found_distinguishes_absent_and_existing_head() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
         static_cast<int>(existingCoordinator.state()));
+}
+
+void test_unknown_outcome_unresolvable_readbacks_block_every_mutation_step() {
+    using Fault = SequencedWriteStore::WriteFault;
+    using ReadFault = SequencedWriteStore::ReadFault;
+    for (const auto readFault : {ReadFault::ForeignBytes, ReadFault::ReadError,
+                                 ReadFault::CapacityError}) {
+        for (std::size_t writeNumber = 1U; writeNumber <= 3U; ++writeNumber) {
+            SequencedWriteStore store;
+            RunPersistenceCoordinator coordinator(
+                store, device_platform::StorageEpoch(1U),
+                RunCheckpointSchedule{});
+            static_cast<void>(coordinator.loadAndInitialize());
+            RunCommandState state;
+            state.processState.state = ProcessState::Standby;
+            store.faultAt(writeNumber, Fault::PowerCutAfterCommitBeforeReturn);
+            store.readFaultAt(writeNumber, readFault);
+            const auto result = coordinator.persistCommand(
+                state, startDecision(state, 760U + writeNumber),
+                RunCheckpointTime{100U, std::nullopt});
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(
+                    RunPersistenceResultStatus::PersistenceIndeterminate),
+                static_cast<int>(result.status));
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(
+                    RunPersistenceCoordinatorState::BlockedIndeterminate),
+                static_cast<int>(coordinator.state()));
+            TEST_ASSERT_EQUAL_UINT32(0U, result.effectCount);
+            TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                                  static_cast<int>(state.processState.state));
+        }
+    }
+}
+
+void test_unknown_outcome_absent_slot_not_found_is_not_indeterminate() {
+    using Fault = SequencedWriteStore::WriteFault;
+    using ReadFault = SequencedWriteStore::ReadFault;
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    store.faultAt(2U, Fault::PowerCutAfterCommitBeforeReturn);
+    store.readFaultAt(2U, ReadFault::NotFound);
+    const auto result =
+        coordinator.persistCommand(state, startDecision(state, 764U),
+                                   RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Changed),
+                          static_cast<int>(result.durability));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(coordinator.state()));
+}
+
+void test_load_fallback_orphan_and_schema_epoch_matrix() {
+    SequencedWriteStore orphan;
+    RunPersistenceCoordinator seed(orphan, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistCommand(state, startDecision(state, 770U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    orphan.restart();
+    orphan.forceNotFound(slotKey("rh0"), true);
+    RunPersistenceCoordinator orphanBoot(
+        orphan, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            RunPersistenceLoadStatus::NotReconstructibleOrphanedState),
+        static_cast<int>(orphanBoot.loadAndInitialize().status));
+
+    SequencedWriteStore fallback;
+    RunPersistenceCoordinator running(
+        fallback, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(running.loadAndInitialize());
+    RunCommandState active;
+    active.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            running
+                .persistCommand(active, startDecision(active, 771U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            running
+                .checkpointPeriodic(active,
+                                    RunCheckpointTime{300100U, std::nullopt})
+                .status));
+    fallback.backing().injectCorruption(slotKey("rc1"), "damaged-current");
+    fallback.restart();
+    RunPersistenceCoordinator recovered(
+        fallback, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
+        static_cast<int>(recovered.loadAndInitialize().status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(recovered.state()));
+
+    fallback.backing().injectCorruption(slotKey("rc0"), "damaged-fallback");
+    fallback.restart();
+    RunPersistenceCoordinator unrecoverable(
+        fallback, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NotReconstructible),
+        static_cast<int>(unrecoverable.loadAndInitialize().status));
+
+    SequencedWriteStore foreign;
+    RunPersistenceCoordinator foreignSeed(
+        foreign, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(foreignSeed.loadAndInitialize());
+    RunCommandState foreignState;
+    foreignState.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            foreignSeed
+                .persistCommand(foreignState, startDecision(foreignState, 772U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    const auto bytes = foreign.read(slotKey("rc0"), 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(bytes.status));
+    const auto decoded = device_platform::decodeEnvelope(bytes.value);
+    TEST_ASSERT_TRUE(decoded.envelope.has_value());
+    auto foreignEnvelope = *decoded.envelope;
+    foreignEnvelope.storageEpoch = device_platform::StorageEpoch(99U);
+    std::string foreignBytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+        static_cast<int>(device_platform::encodeEnvelope(foreignEnvelope,
+                                                         foreignBytes, 8240U)));
+    foreign.backing().injectCorruption(slotKey("rc0"), foreignBytes);
+    foreign.restart();
+    RunPersistenceCoordinator foreignBoot(
+        foreign, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::ForeignEpoch),
+        static_cast<int>(foreignBoot.loadAndInitialize().status));
+
+    auto unsupportedEnvelope = *decoded.envelope;
+    unsupportedEnvelope.storageEpoch = device_platform::StorageEpoch(1U);
+    unsupportedEnvelope.schemaVersion = 99U;
+    std::string unsupportedBytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+        static_cast<int>(device_platform::encodeEnvelope(
+            unsupportedEnvelope, unsupportedBytes, 8240U)));
+    foreign.backing().injectCorruption(slotKey("rc0"), unsupportedBytes);
+    foreign.restart();
+    RunPersistenceCoordinator unsupportedBoot(
+        foreign, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::UnsupportedSchema),
+        static_cast<int>(unsupportedBoot.loadAndInitialize().status));
+}
+
+void test_loaded_active_run_blocks_all_mutations_after_restart() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 780U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = afterBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(loaded.status));
+    const auto writes = store.writeCount();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::RecoveryPending),
+        static_cast<int>(
+            afterBoot
+                .persistCommand(state, startDecision(state, 780U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    TransitionDecision transition;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::RecoveryPending),
+        static_cast<int>(
+            afterBoot
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{101U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::RecoveryPending),
+        static_cast<int>(
+            afterBoot
+                .checkpointPeriodic(state,
+                                    RunCheckpointTime{400000U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writes),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_TRUE(loaded.snapshot.has_value());
+    TEST_ASSERT_EQUAL_UINT32(1U, loaded.snapshot->persistedRunCommandCount);
+    TEST_ASSERT_EQUAL_UINT64(780U, loaded.snapshot->persistedRunCommandIds[0]);
+}
+
+void test_product_inserted_and_wait_expired_persist_atomically() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 790U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    const auto tracking = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot,
+        ProcessSignals{true, false}, TransitionRequest{}, 100U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::QualificationTrackingStarted),
+        static_cast<int>(tracking.reason));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, tracking,
+                                   RunCheckpointTime{100U, std::nullopt})
+                .status));
+    auto waiting = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot,
+        ProcessSignals{true, false}, TransitionRequest{}, 600100U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::PreheatQualified),
+                          static_cast<int>(waiting.reason));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, waiting,
+                                   RunCheckpointTime{600100U, std::nullopt})
+                .status));
+    auto inserted = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{ProcessEvent::ProductInsertedConfirmed, std::nullopt},
+        600200U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::ProductInserted),
+                          static_cast<int>(inserted.reason));
+    store.faultAt(store.writeCount() + 1U,
+                  SequencedWriteStore::WriteFault::FailBeforeBegin);
+    const auto failed = coordinator.persistTransition(
+        state, inserted, RunCheckpointTime{600200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(failed.status));
+    TEST_ASSERT_EQUAL_UINT32(0U, failed.messageCount);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::WaitingForProduct),
+                          static_cast<int>(state.processState.state));
+    const auto committed = coordinator.persistTransition(
+        state, inserted, RunCheckpointTime{600200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(committed.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
+                          static_cast<int>(state.processState.state));
+    const auto insertedRecord = store.read(slotKey("rc1"), 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(insertedRecord.status));
+    const auto insertedEnvelope =
+        device_platform::decodeEnvelope(insertedRecord.value);
+    TEST_ASSERT_TRUE(insertedEnvelope.envelope.has_value());
+    const auto insertedSnapshot =
+        decodeRunPersistenceSnapshot(insertedEnvelope.envelope->payload);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(insertedSnapshot.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(insertedSnapshot.snapshot->processState.state));
+
+    // Let the state machine produce its automatic ProductWaitExpired decision.
+    auto expired = TransitionDecision{};
+    state.processState.state = ProcessState::WaitingForProduct;
+    state.processState.stateEnteredAtMillis = 600200U;
+    state.processState.targetReachStartedAtMillis = 0U;
+    state.processState.targetReachWarningIssued = false;
+    expired = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{}, 2400201U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::ProductWaitExpired),
+        static_cast<int>(expired.reason));
+    store.faultAt(store.writeCount() + 1U,
+                  SequencedWriteStore::WriteFault::FailBeforeBegin);
+    const auto expiredFailure = coordinator.persistTransition(
+        state, expired, RunCheckpointTime{2400201U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(expiredFailure.status));
+    TEST_ASSERT_TRUE(state.activeProgramRun.has_value());
+    const auto expiredCommit = coordinator.persistTransition(
+        state, expired, RunCheckpointTime{2400201U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(expiredCommit.status));
+    TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
+    TEST_ASSERT_TRUE(state.activeRunId.empty());
+    store.restart();
+    RunPersistenceCoordinator tombstoneBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoActiveRun),
+        static_cast<int>(tombstoneBoot.loadAndInitialize().status));
+}
+
+void test_periodic_unknown_outcomes_at_slot_and_head_are_unresolvable() {
+    using Fault = SequencedWriteStore::WriteFault;
+    using ReadFault = SequencedWriteStore::ReadFault;
+    for (const auto readFault : {ReadFault::ForeignBytes, ReadFault::ReadError,
+                                 ReadFault::CapacityError}) {
+        for (const std::size_t writeNumber : {4U, 5U}) {
+            SequencedWriteStore store;
+            RunPersistenceCoordinator coordinator(
+                store, device_platform::StorageEpoch(1U),
+                RunCheckpointSchedule{});
+            static_cast<void>(coordinator.loadAndInitialize());
+            RunCommandState state;
+            state.processState.state = ProcessState::Standby;
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(RunPersistenceResultStatus::Applied),
+                static_cast<int>(
+                    coordinator
+                        .persistCommand(state, startDecision(state, 810U),
+                                        RunCheckpointTime{100U, std::nullopt})
+                        .status));
+            store.faultAt(writeNumber, Fault::PowerCutAfterCommitBeforeReturn);
+            store.readFaultAt(writeNumber, readFault);
+            const auto result = coordinator.checkpointPeriodic(
+                state, RunCheckpointTime{300100U, std::nullopt});
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(
+                    RunPersistenceResultStatus::PersistenceIndeterminate),
+                static_cast<int>(result.status));
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(
+                    RunPersistenceCoordinatorState::BlockedIndeterminate),
+                static_cast<int>(coordinator.state()));
+        }
+    }
+}
+
+void test_stale_invalid_and_time_mismatched_decisions_write_nothing() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    const auto beforeWrites = store.writeCount();
+    auto stale = startDecision(state, 800U);
+    state.runRevision = 1U;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::StaleDecision),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, stale,
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    CommandDecision invalid;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, invalid,
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    state.runRevision = 0U;
+    auto mismatch = startDecision(state, 801U, 100U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::TimeMismatch),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, mismatch,
+                                RunCheckpointTime{101U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(beforeWrites),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
 }
 
 void test_restart_after_prepared_or_slot_cut_is_interrupted() {
@@ -919,6 +1370,14 @@ int main(int, char**) {
     RUN_TEST(test_capacity_faults_at_each_mutation_cutpoint_are_classified);
     RUN_TEST(
         test_unknown_outcome_not_found_distinguishes_absent_and_existing_head);
+    RUN_TEST(
+        test_unknown_outcome_unresolvable_readbacks_block_every_mutation_step);
+    RUN_TEST(test_unknown_outcome_absent_slot_not_found_is_not_indeterminate);
+    RUN_TEST(test_load_fallback_orphan_and_schema_epoch_matrix);
+    RUN_TEST(test_loaded_active_run_blocks_all_mutations_after_restart);
+    RUN_TEST(test_product_inserted_and_wait_expired_persist_atomically);
+    RUN_TEST(test_periodic_unknown_outcomes_at_slot_and_head_are_unresolvable);
+    RUN_TEST(test_stale_invalid_and_time_mismatched_decisions_write_nothing);
     RUN_TEST(test_restart_after_prepared_or_slot_cut_is_interrupted);
     RUN_TEST(test_periodic_slot_and_head_faults_preserve_cutpoint_truth);
     RUN_TEST(test_invalid_effect_and_message_counts_are_rejected_before_writes);
