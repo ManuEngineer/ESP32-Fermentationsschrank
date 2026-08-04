@@ -348,22 +348,27 @@ void test_run_id_boundary_is_shared_by_program_and_manual_start() {
     auto state = standbyState();
     auto program = programStart(state, 71U);
     program.runId.clear();
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
-                          static_cast<int>(decideProgramStart(state, program).status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(decideProgramStart(state, program).status));
 
     program.runId.assign(49U, 'x');
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
-                          static_cast<int>(decideProgramStart(state, program).status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(decideProgramStart(state, program).status));
 
     program.runId.assign(48U, 'x');
     TEST_ASSERT_TRUE(decideProgramStart(state, program).proposed());
 
-    auto manual = ManualStartRequest{envelope(72U, state), manualPlan(""), true};
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
-                          static_cast<int>(decideManualStart(state, manual).status));
+    auto manual =
+        ManualStartRequest{envelope(72U, state), manualPlan(""), true};
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(decideManualStart(state, manual).status));
     manual.plan.runId.assign(49U, 'x');
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
-                          static_cast<int>(decideManualStart(state, manual).status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(decideManualStart(state, manual).status));
 }
 
 void test_start_summary_is_available_before_confirmation_but_never_masks_rejections() {

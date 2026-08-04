@@ -30,7 +30,6 @@ bool validStateFor(RunCheckpointVariant variant, ProcessState state) {
                 case ProcessState::ReachingTarget:
                 case ProcessState::QualifyingTarget:
                 case ProcessState::ManualHolding:
-                case ProcessState::Completed:
                     return true;
                 default:
                     return false;
@@ -81,11 +80,10 @@ bool isPersistedRunCommand(CommandKind kind) {
 }
 
 bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
-    if (snapshot.checkpointRevision == 0U ||
-        snapshot.intervalMinutes < kMinimumRunCheckpointIntervalMinutes ||
+    if (snapshot.intervalMinutes < kMinimumRunCheckpointIntervalMinutes ||
         snapshot.intervalMinutes > kMaximumRunCheckpointIntervalMinutes ||
-        !validIds(snapshot) || !validStateFor(snapshot.variant,
-                                               snapshot.processState.state)) {
+        !validIds(snapshot) ||
+        !validStateFor(snapshot.variant, snapshot.processState.state)) {
         return false;
     }
     if (snapshot.variant == RunCheckpointVariant::NoActiveRun) {
@@ -114,7 +112,8 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
            snapshot.manual.has_value() &&
            snapshot.processRunSnapshot->kind == ProcessKind::ManualHolding &&
            snapshot.manual->values.runId == snapshot.activeRunId &&
-           snapshot.manual->values.sensorMode == *snapshot.activeRunSensorMode &&
+           snapshot.manual->values.sensorMode ==
+               *snapshot.activeRunSensorMode &&
            validateManualRunPlan(*snapshot.manual);
 }
 
@@ -122,19 +121,26 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
     const RunCommandState& state,
     const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,
     std::size_t idCount, RunCheckpointTrigger trigger,
-    std::uint64_t checkpointRevision, const RunCheckpointTime& time,
-    std::uint16_t intervalMinutes) {
+    const RunCheckpointTime& time, std::uint16_t intervalMinutes) {
+    const bool hasProgram = state.activeProgramRun.has_value();
+    const bool hasManual = state.activeManualRun.has_value();
+    if (hasProgram && hasManual) {
+        return std::nullopt;
+    }
+    if (!hasProgram && !hasManual &&
+        (!state.activeRunId.empty() || state.activeRunSensorMode.has_value() ||
+         state.processRunSnapshot.has_value())) {
+        return std::nullopt;
+    }
     RunPersistenceSnapshot snapshot;
     snapshot.trigger = trigger;
-    snapshot.checkpointRevision = checkpointRevision;
     snapshot.checkpointMonotonicMillis = time.monotonicMillis;
-    snapshot.checkpointUtcUnixSeconds = time.utcUnixSeconds;
     snapshot.intervalMinutes = intervalMinutes;
     snapshot.processState = state.processState;
     snapshot.runRevision = state.runRevision;
     snapshot.persistedRunCommandIds = ids;
     snapshot.persistedRunCommandCount = idCount;
-    if (state.activeProgramRun.has_value()) {
+    if (hasProgram) {
         snapshot.variant = RunCheckpointVariant::ProgramRun;
         snapshot.activeRunId = state.activeRunId;
         snapshot.activeRunSensorMode = state.activeRunSensorMode;
@@ -142,7 +148,7 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
         snapshot.revisions = state.activeProgramRun->revisions();
         snapshot.revisionCount = state.activeProgramRun->revisionCount();
         snapshot.processRunSnapshot = state.processRunSnapshot;
-    } else if (state.activeManualRun.has_value()) {
+    } else if (hasManual) {
         snapshot.variant = RunCheckpointVariant::ManualRun;
         snapshot.activeRunId = state.activeRunId;
         snapshot.activeRunSensorMode = state.activeRunSensorMode;

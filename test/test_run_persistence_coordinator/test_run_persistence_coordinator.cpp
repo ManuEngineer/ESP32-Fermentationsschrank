@@ -25,9 +25,14 @@ ProgramDocument runnableProgram() {
 
 CommandDecision startDecision(const RunCommandState& state, CommandId id) {
     ProgramStartRequest request;
-    request.envelope = {id, CommandSource::LocalDisplay, 100U,
+    request.envelope = {id,
+                        CommandSource::LocalDisplay,
+                        100U,
                         state.processState.transitionSequence,
-                        state.runRevision, std::nullopt, std::nullopt, true};
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
     request.runId = "persisted-run";
     request.program = runnableProgram();
     request.sourceKind = ProgramSourceKind::FactoryCatalog;
@@ -39,11 +44,12 @@ CommandDecision startDecision(const RunCommandState& state, CommandId id) {
 
 void test_load_empty_then_commit_and_restore_run_projection() {
     device_platform_test_support::SimulatedPersistentStateStore store;
-    RunPersistenceCoordinator coordinator(store, device_platform::StorageEpoch(1U),
-                                          RunCheckpointSchedule{});
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
     const auto loaded = coordinator.loadAndInitialize();
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
-                          static_cast<int>(loaded.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(loaded.status));
     RunCommandState state;
     state.processState.state = ProcessState::Standby;
     const auto decision = startDecision(state, 42U);
@@ -70,34 +76,70 @@ void test_load_empty_then_commit_and_restore_run_projection() {
 
 void test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe() {
     device_platform_test_support::SimulatedPersistentStateStore store;
-    RunPersistenceCoordinator coordinator(store, device_platform::StorageEpoch(1U),
-                                          RunCheckpointSchedule{});
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
     static_cast<void>(coordinator.loadAndInitialize());
     RunCommandState state;
     state.processState.state = ProcessState::Standby;
     const auto decision = startDecision(state, 77U);
     store.setNextWriteFault(
-        device_platform_test_support::SimulatedPersistentStateStore::WriteFault::PowerCutAfterCommitBeforeReturn);
+        device_platform_test_support::SimulatedPersistentStateStore::
+            WriteFault::PowerCutAfterCommitBeforeReturn);
     const auto result = coordinator.persistCommand(
         state, decision, RunCheckpointTime{100U, std::nullopt});
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
                           static_cast<int>(result.status));
     const auto retry = coordinator.persistCommand(
         state, decision, RunCheckpointTime{100U, std::nullopt});
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::AlreadyPersisted),
-                          static_cast<int>(retry.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::AlreadyPersisted),
+        static_cast<int>(retry.status));
 }
 
 void test_mutation_before_initialization_writes_nothing() {
     device_platform_test_support::SimulatedPersistentStateStore store;
-    RunPersistenceCoordinator coordinator(store, device_platform::StorageEpoch(1U),
-                                          RunCheckpointSchedule{});
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
     RunCommandState state;
     state.processState.state = ProcessState::Standby;
-    const auto result = coordinator.persistCommand(
-        state, startDecision(state, 101U), RunCheckpointTime{100U, std::nullopt});
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::NotInitialized),
-                          static_cast<int>(result.status));
+    const auto result =
+        coordinator.persistCommand(state, startDecision(state, 101U),
+                                   RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotInitialized),
+        static_cast<int>(result.status));
+}
+
+void test_periodic_non_writes_are_truthful_and_do_not_apply() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState empty;
+    empty.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NoActiveRun),
+        static_cast<int>(
+            coordinator
+                .checkpointPeriodic(empty, RunCheckpointTime{10U, std::nullopt})
+                .status));
+
+    RunCommandState active;
+    active.processState.state = ProcessState::Standby;
+    const auto decision = startDecision(active, 202U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(active, decision,
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotDue),
+        static_cast<int>(coordinator
+                             .checkpointPeriodic(
+                                 active, RunCheckpointTime{101U, std::nullopt})
+                             .status));
 }
 
 }  // namespace
@@ -105,7 +147,9 @@ void test_mutation_before_initialization_writes_nothing() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_load_empty_then_commit_and_restore_run_projection);
-    RUN_TEST(test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe);
+    RUN_TEST(
+        test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe);
     RUN_TEST(test_mutation_before_initialization_writes_nothing);
+    RUN_TEST(test_periodic_non_writes_are_truthful_and_do_not_apply);
     return UNITY_END();
 }

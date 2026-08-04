@@ -631,7 +631,8 @@ ProgramCatalogPayloadSizeResult calculateProgramCatalogPayloadSize(
 
 }  // namespace configuration_codec_internal
 
-ConfigurationCodecStatus encodeProgramDocumentPayload(
+ConfigurationCodecStatus
+configuration_codec_internal::encodeSingleProgramDocumentPayload(
     const ProgramDocument& document, std::string& out) {
     if (!validateProgram(document, ValidationPurpose::Runnable).valid()) {
         return ConfigurationCodecStatus::InvalidDocument;
@@ -645,9 +646,11 @@ ConfigurationCodecStatus encodeProgramDocumentPayload(
     return ConfigurationCodecStatus::Success;
 }
 
-ConfigurationDecodeResult<ProgramDocument> decodeProgramDocumentPayload(
+ConfigurationDecodeResult<ProgramDocument>
+configuration_codec_internal::decodeSingleProgramDocumentPayload(
     const std::string& payload) {
-    if (payload.size() > configuration_limits::kMaximumProgramCatalogPayloadBytes) {
+    if (payload.size() >
+        configuration_limits::kMaximumProgramCatalogPayloadBytes) {
         return {ConfigurationCodecStatus::CapacityExceeded, std::nullopt};
     }
     ByteReader reader(payload);

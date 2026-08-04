@@ -19,9 +19,13 @@ class RunCheckpointSchedule {
     explicit RunCheckpointSchedule(
         std::uint16_t intervalMinutes = kDefaultRunCheckpointIntervalMinutes);
 
-    [[nodiscard]] std::uint16_t intervalMinutes() const { return intervalMinutes_; }
+    [[nodiscard]] std::uint16_t intervalMinutes() const {
+        return intervalMinutes_;
+    }
     [[nodiscard]] RunCheckpointScheduleStatus confirm(
         std::uint64_t monotonicMillis);
+    [[nodiscard]] RunCheckpointScheduleStatus validate(
+        std::uint64_t monotonicMillis) const;
     [[nodiscard]] RunCheckpointScheduleStatus due(
         std::uint64_t monotonicMillis) const;
     void reset();

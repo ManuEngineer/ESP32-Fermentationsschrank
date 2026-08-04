@@ -31,14 +31,35 @@ struct RunCheckpointTime {
     std::optional<std::int64_t> utcUnixSeconds;
 };
 
+// Technical records shared by the persistence codec and store protocol. They
+// deliberately contain no application/coordinator lifetime state.
+struct RunCheckpointReference {
+    std::uint8_t slot{0U};
+    std::uint64_t checkpointRevision{0U};
+    std::uint32_t payloadLength{0U};
+    std::uint32_t payloadCrc{0U};
+    RunCheckpointVariant variant{RunCheckpointVariant::NoActiveRun};
+};
+
+enum class RunPersistenceHeadState : std::uint8_t {
+    Prepared = 1U,
+    Committed = 2U,
+};
+
+struct RunPersistenceHead {
+    RunPersistenceHeadState state{RunPersistenceHeadState::Prepared};
+    std::uint64_t revision{0U};
+    RunCheckpointReference current;
+    std::optional<RunCheckpointReference> fallback;
+    std::string bytes;
+};
+
 // Deliberately only the run-domain projection. Messages, fault/safety state,
 // command-session state and journal history are outside Issue #17.
 struct RunPersistenceSnapshot {
     RunCheckpointVariant variant{RunCheckpointVariant::NoActiveRun};
     RunCheckpointTrigger trigger{RunCheckpointTrigger::Command};
-    std::uint64_t checkpointRevision{0U};
     std::uint64_t checkpointMonotonicMillis{0U};
-    std::optional<std::int64_t> checkpointUtcUnixSeconds;
     std::uint16_t intervalMinutes{kDefaultRunCheckpointIntervalMinutes};
     std::string activeRunId;
     std::optional<RunSensorMode> activeRunSensorMode;
@@ -54,6 +75,13 @@ struct RunPersistenceSnapshot {
     std::size_t persistedRunCommandCount{0U};
 };
 
+struct RunPersistenceRawRecord {
+    std::string bytes;
+    RunPersistenceSnapshot snapshot;
+    std::uint64_t checkpointRevision{0U};
+    std::optional<std::int64_t> utcUnixSeconds;
+};
+
 [[nodiscard]] bool isPersistedRunCommand(CommandKind kind);
 [[nodiscard]] bool validateRunPersistenceSnapshot(
     const RunPersistenceSnapshot& snapshot);
@@ -61,13 +89,11 @@ struct RunPersistenceSnapshot {
 // A projection is constructed only from the canonical candidate state. The
 // separate durable ID window is supplied by the coordinator and never copied
 // from RunCommandState's mixed in-memory window.
-[[nodiscard]] std::optional<RunPersistenceSnapshot>
-makeRunPersistenceSnapshot(
+[[nodiscard]] std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
     const RunCommandState& state,
     const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,
     std::size_t idCount, RunCheckpointTrigger trigger,
-    std::uint64_t checkpointRevision, const RunCheckpointTime& time,
-    std::uint16_t intervalMinutes);
+    const RunCheckpointTime& time, std::uint16_t intervalMinutes);
 
 // Technical restoration only: reconstructs exactly the run projection. It
 // does not make recovery, boot, fault or safety decisions.

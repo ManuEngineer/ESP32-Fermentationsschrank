@@ -7,7 +7,7 @@
 
 #include "run_checkpoint_schedule.hpp"
 #include "run_persistence_contract.hpp"
-#include "state_store.hpp"
+#include "run_persistence_store.hpp"
 #include "storage_types.hpp"
 
 namespace fermentation {
@@ -40,10 +40,47 @@ enum class RunPersistenceResultStatus : std::uint8_t {
     PersistenceIndeterminate,
     PersistenceCommittedApplyFailed,
     Blocked,
+    NotDue,
+    NoActiveRun,
+};
+
+enum class RunPersistenceStep : std::uint8_t {
+    None,
+    CandidateApply,
+    PreparedHead,
+    CheckpointSlot,
+    CommittedHead,
+    RamApply,
+    LoadHead,
+    LoadCurrent,
+    LoadFallback,
+};
+
+enum class RunPersistenceTechnicalReason : std::uint8_t {
+    None,
+    StoreWriteError,
+    StoreCapacityError,
+    StoreReadError,
+    StoreNotWritten,
+    StoreOutcomeUnknown,
+    CodecError,
+    InvalidProjection,
+};
+
+enum class RunPersistenceDurability : std::uint8_t {
+    Unchanged,
+    Changed,
+    MayHaveChanged,
 };
 
 struct RunPersistenceResult {
     RunPersistenceResultStatus status{RunPersistenceResultStatus::Blocked};
+    RunPersistenceStep step{RunPersistenceStep::None};
+    RunPersistenceTechnicalReason technicalReason{
+        RunPersistenceTechnicalReason::None};
+    RunPersistenceDurability durability{RunPersistenceDurability::Unchanged};
+    RunPersistenceCoordinatorState coordinatorState{
+        RunPersistenceCoordinatorState::Uninitialized};
     std::array<CommandEffect, run_command_limits::kMaximumCommandEffects>
         effects{};
     std::size_t effectCount{0U};
@@ -80,7 +117,8 @@ class RunPersistenceCoordinator {
                               RunCheckpointSchedule schedule) noexcept;
     ~RunPersistenceCoordinator() = default;
     RunPersistenceCoordinator(const RunPersistenceCoordinator&) = delete;
-    RunPersistenceCoordinator& operator=(const RunPersistenceCoordinator&) = delete;
+    RunPersistenceCoordinator& operator=(const RunPersistenceCoordinator&) =
+        delete;
     RunPersistenceCoordinator(RunPersistenceCoordinator&&) = delete;
     RunPersistenceCoordinator& operator=(RunPersistenceCoordinator&&) = delete;
 
@@ -93,41 +131,31 @@ class RunPersistenceCoordinator {
         const RunCheckpointTime& time);
     [[nodiscard]] RunPersistenceResult checkpointPeriodic(
         const RunCommandState& current, const RunCheckpointTime& time);
-    [[nodiscard]] RunPersistenceCoordinatorState state() const { return state_; }
-
-    struct RecordReference {
-        std::uint8_t slot{0U};
-        std::uint64_t checkpointRevision{0U};
-        std::uint32_t payloadLength{0U};
-        std::uint32_t payloadCrc{0U};
-        RunCheckpointVariant variant{RunCheckpointVariant::NoActiveRun};
-    };
-    struct Head {
-        enum class State : std::uint8_t { Prepared = 1U, Committed = 2U };
-        State state{State::Prepared};
-        std::uint64_t revision{0U};
-        RecordReference current;
-        std::optional<RecordReference> fallback;
-        std::string bytes;
-    };
-    struct RawRecord {
-        std::string bytes;
-        RunPersistenceSnapshot snapshot;
-    };
+    [[nodiscard]] RunPersistenceCoordinatorState state() const {
+        return state_;
+    }
 
    private:
-
     [[nodiscard]] RunPersistenceResult writeSnapshot(
-        const RunPersistenceSnapshot& snapshot, bool periodic);
+        const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+        bool periodic);
     [[nodiscard]] RunPersistenceResult unavailableResult() const;
+    [[nodiscard]] RunPersistenceResult result(
+        RunPersistenceResultStatus status,
+        RunPersistenceStep step = RunPersistenceStep::None,
+        RunPersistenceTechnicalReason reason =
+            RunPersistenceTechnicalReason::None,
+        RunPersistenceDurability durability =
+            RunPersistenceDurability::Unchanged) const;
     void enterBlockedIndeterminate();
 
-    device_platform::IStateStore& store_;
+    RunPersistenceStore store_;
     device_platform::StorageEpoch epoch_;
     RunCheckpointSchedule schedule_;
-    RunPersistenceCoordinatorState state_{RunPersistenceCoordinatorState::Uninitialized};
-    std::optional<RawRecord> slots_[2];
-    std::optional<Head> currentHead_;
+    RunPersistenceCoordinatorState state_{
+        RunPersistenceCoordinatorState::Uninitialized};
+    std::optional<RunPersistenceRawRecord> slots_[2];
+    std::optional<RunPersistenceHead> currentHead_;
     std::array<CommandId, kMaximumPersistedRunCommandIds> persistedIds_{};
     std::size_t persistedIdCount_{0U};
     std::uint64_t nextCheckpointRevision_{1U};

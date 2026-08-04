@@ -34,4 +34,9 @@ struct ProgramCatalogPayloadSizeResult {
 [[nodiscard]] ProgramCatalogPayloadSizeResult
 calculateProgramCatalogPayloadSize(const ProgramCatalog& catalog);
 
+[[nodiscard]] ConfigurationCodecStatus encodeSingleProgramDocumentPayload(
+    const ProgramDocument& document, std::string& out);
+[[nodiscard]] ConfigurationDecodeResult<ProgramDocument>
+decodeSingleProgramDocumentPayload(const std::string& payload);
+
 }  // namespace fermentation::configuration_codec_internal

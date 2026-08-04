@@ -76,7 +76,8 @@ RUN_PERSISTENCE_ALLOWED_FILES = frozenset(
 )
 RUN_PERSISTENCE_BYPASS_PATTERN = re.compile(
     r"\b(?:applyRunCommand|applyProcessTransition)\s*\(|"
-    r"\b\w+\s*\.\s*(?:effects|messages)\b"
+    r"\b(?:\w*[Dd]ecision|decision)\s*(?:\.|->)\s*"
+    r"(?:effects|messages)\b"
 )
 
 # Issue #72/#73: exakter idf_component_register()-REQUIRES/PRIV_REQUIRES-
@@ -537,9 +538,61 @@ IDF_LEAK_VIOLATION_CASES = {
         "lib/fermentation_app/src/runtime_path.cpp",
         "void f() { decision.effects; }\n",
     ),
+    "runtime_gibt_effects_ueber_zeiger_vor_commit_frei": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { commandDecision->effects; }\n",
+    ),
+    "ui_umgeht_transition_apply": (
+        "lib/fermentation_app/src/ui_path.cpp",
+        "void f() { applyProcessTransition(); }\n",
+    ),
+    "ui_gibt_transition_messages_ueber_zeiger_frei": (
+        "lib/fermentation_app/src/ui_path.cpp",
+        "void f() { transitionDecision->messages; }\n",
+    ),
     "composition_root_gibt_transition_messages_frei": (
         "main/app_main.cpp",
         "void f() { decision.messages; }\n",
+    ),
+    "composition_root_gibt_transition_messages_ueber_zeiger_frei": (
+        "main/app_main.cpp",
+        "void f() { transitionDecision->messages; }\n",
+    ),
+}
+
+
+RUN_PERSISTENCE_BYPASS_CASES = {
+    "runtime_apply_command": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { applyRunCommand(); }\n",
+    ),
+    "runtime_apply_transition": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { applyProcessTransition(); }\n",
+    ),
+    "runtime_effects_dot": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { decision.effects; }\n",
+    ),
+    "runtime_effects_arrow": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { commandDecision->effects; }\n",
+    ),
+    "ui_messages_dot": (
+        "lib/fermentation_app/src/ui_path.cpp",
+        "void f() { transitionDecision.messages; }\n",
+    ),
+    "ui_messages_arrow": (
+        "lib/fermentation_app/src/ui_path.cpp",
+        "void f() { transitionDecision->messages; }\n",
+    ),
+    "composition_messages_dot": (
+        "main/app_main.cpp",
+        "void f() { decision.messages; }\n",
+    ),
+    "composition_messages_arrow": (
+        "main/app_main.cpp",
+        "void f() { transitionDecision->messages; }\n",
     ),
 }
 
@@ -584,6 +637,13 @@ def selftest() -> int:
     for name, (relative_path, content) in IDF_LEAK_VIOLATION_CASES.items():
         if not _check_clean_fixture_with_extra_file(relative_path, content):
             print(f"{FAILED}: IDF-Leak-Verstossfall {name!r} wurde nicht erkannt")
+            return 1
+
+    for name, (relative_path, content) in RUN_PERSISTENCE_BYPASS_CASES.items():
+        if not _check_clean_fixture_with_extra_file(relative_path, content):
+            print(
+                f"{FAILED}: Run-Persistenz-Bypass {name!r} wurde nicht erkannt"
+            )
             return 1
 
     print(f"{PASS}: Architekturpruefung erkennt absichtliche Grenzverletzung")
