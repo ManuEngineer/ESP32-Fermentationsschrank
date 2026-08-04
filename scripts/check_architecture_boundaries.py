@@ -60,6 +60,25 @@ PREPROCESSOR_CONDITION_PATTERN = re.compile(r"^\s*#\s*(?:if|ifdef|ifndef|elif)\b
 PLATFORM_MACRO_PATTERN = re.compile(r"\b(?:ESP_PLATFORM|ARDUINO)\b")
 CONFIG_TOKEN_PATTERN = re.compile(r"\bCONFIG_[A-Za-z0-9_]+\b")
 
+# Issue #17: runtime code may decide commands/transitions, but only the
+# persistence coordinator may apply an eligible mutation or release its
+# effects/messages. Domain implementation and unit tests remain intentionally
+# outside this production-path check.
+RUN_PERSISTENCE_ALLOWED_FILES = frozenset(
+    {
+        "lib/fermentation_app/src/run_commands.cpp",
+        "lib/fermentation_app/src/run_commands.hpp",
+        "lib/fermentation_app/src/process_state_machine.cpp",
+        "lib/fermentation_app/src/process_state_machine.hpp",
+        "lib/fermentation_app/src/run_persistence_coordinator.cpp",
+        "lib/fermentation_app/src/run_persistence_coordinator.hpp",
+    }
+)
+RUN_PERSISTENCE_BYPASS_PATTERN = re.compile(
+    r"\b(?:applyRunCommand|applyProcessTransition)\s*\(|"
+    r"\b\w+\s*\.\s*(?:effects|messages)\b"
+)
+
 # Issue #72/#73: exakter idf_component_register()-REQUIRES/PRIV_REQUIRES-
 # Vertrag je Komponente, getrennt nach oeffentlich (REQUIRES) und privat
 # (PRIV_REQUIRES). Eine gemeinsame Menge wuerde z. B. ein faelschlich
@@ -171,6 +190,26 @@ def add_idf_leak_violations(violations: list[str], root: Path) -> None:
                     violations.append(
                         f"{path}:{line_number}: verbotene Kconfig-Verwendung "
                         f"{token!r} in portabler Wurzel"
+                    )
+
+
+def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> None:
+    """Reject direct productive apply/effect/message paths outside #17's gate."""
+    for relative_root in ("lib/fermentation_app/src", "src", "main"):
+        directory = root / relative_root
+        for path in text_files(directory):
+            relative = path.relative_to(root).as_posix()
+            if relative in RUN_PERSISTENCE_ALLOWED_FILES:
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                continue
+            for line_number, line in enumerate(lines, start=1):
+                if RUN_PERSISTENCE_BYPASS_PATTERN.search(line):
+                    violations.append(
+                        f"{path}:{line_number}: produktiver Run-Persistenz-Bypass "
+                        "(apply/effects/messages ausserhalb Domain/Coordinator)"
                     )
 
 
@@ -353,6 +392,7 @@ def check(root: Path) -> list[str]:
     )
 
     add_idf_leak_violations(violations, root)
+    add_run_persistence_bypass_violations(violations, root)
     add_component_requires_violations(violations, root)
 
     return violations
@@ -488,6 +528,18 @@ IDF_LEAK_VIOLATION_CASES = {
         'idf_component_register(SRCS "app_main.cpp" '
         'PRIV_INCLUDE_DIRS "../include" '
         "PRIV_REQUIRES fermentation_app device_platform_esp_idf)\n",
+    ),
+    "runtime_umgeht_run_persistenz_apply": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { applyRunCommand(); }\n",
+    ),
+    "runtime_gibt_effects_vor_commit_frei": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { decision.effects; }\n",
+    ),
+    "composition_root_gibt_transition_messages_frei": (
+        "main/app_main.cpp",
+        "void f() { decision.messages; }\n",
     ),
 }
 

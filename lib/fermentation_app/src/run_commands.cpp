@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "program_limits.hpp"
+#include "run_limits.hpp"
 
 namespace fermentation {
 namespace {
@@ -151,6 +152,9 @@ CommandDecision beginDecision(const RunCommandState& current,
 // zu `before` identischen `after`-Zustand.
 void beginMutation(CommandDecision& decision) {
     decision.after.commandSequence = decision.before.commandSequence + 1U;
+    rememberProcessedCommand(decision.after, decision.envelope.id);
+    decision.after.lastCommandMonotonicMillis =
+        decision.envelope.monotonicMillis;
 }
 
 bool requireRunRevision(CommandDecision& decision) {
@@ -243,6 +247,7 @@ void clearActiveRun(RunCommandState& state) {
     state.activeManualRun.reset();
     state.processRunSnapshot.reset();
     state.activeRunId.clear();
+    state.activeRunSensorMode.reset();
 }
 
 RunChangeSource changeSource(CommandSource source) {
@@ -270,6 +275,7 @@ bool installManualRun(RunCommandState& state, const CommandEnvelope& envelope,
     }
     state.activeProgramRun.reset();
     state.activeRunId = plan.values.runId;
+    state.activeRunSensorMode = plan.values.sensorMode;
     state.activeManualRun = std::move(plan);
     state.processRunSnapshot = *snapshot;
     return true;
@@ -321,7 +327,8 @@ bool validateManualRunPlan(const ManualRunPlan& plan) {
                                 program_limits::kMinimumProductWaitMinutes &&
                             *values.maximumProductWaitMinutes <=
                                 program_limits::kMaximumProductWaitMinutes);
-    return !values.runId.empty() && validCommandSource(plan.source) &&
+    return run_limits::validRunId(values.runId) &&
+           validCommandSource(plan.source) &&
            validSensorMode(values.sensorMode) &&
            plan.kind == ProcessKind::ManualHolding &&
            std::isfinite(values.targetTemperatureCelsius) &&
@@ -380,7 +387,8 @@ CommandDecision decideProgramStart(const RunCommandState& current,
         decision.status = CommandStatus::NotAllowedInState;
         return decision;
     }
-    if (request.runId.empty() || !validSensorMode(request.sensorMode)) {
+    if (!run_limits::validRunId(request.runId) ||
+        !validSensorMode(request.sensorMode)) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
@@ -429,6 +437,7 @@ CommandDecision decideProgramStart(const RunCommandState& current,
     }
 
     decision.after.activeRunId = request.runId;
+    decision.after.activeRunSensorMode = request.sensorMode;
     decision.after.activeProgramRun = std::move(run);
     decision.after.activeManualRun.reset();
     decision.after.processRunSnapshot = *snapshot;
@@ -576,9 +585,9 @@ CommandDecision decideStop(const RunCommandState& current,
         return decision;
     }
 
-    candidate.commandSequence = decision.before.commandSequence + 1U;
-    ++candidate.runRevision;
     decision.after = std::move(candidate);
+    beginMutation(decision);
+    ++decision.after.runRevision;
     static_cast<void>(addEffect(decision, CommandEffect::RunAborted));
     static_cast<void>(
         addEffect(decision, CommandEffect::SafePeltierStopRequested));
@@ -642,9 +651,9 @@ CommandDecision decideCompletion(const RunCommandState& current,
         return decision;
     }
 
-    candidate.commandSequence = decision.before.commandSequence + 1U;
-    ++candidate.runRevision;
     decision.after = std::move(candidate);
+    beginMutation(decision);
+    ++decision.after.runRevision;
     static_cast<void>(
         addEffect(decision, CommandEffect::CompletionAcknowledged));
     if (request.startCooling) {
@@ -732,9 +741,9 @@ CommandDecision decideRunAdjustment(
             request.envelope.monotonicMillis;
     }
 
-    candidate.commandSequence = decision.before.commandSequence + 1U;
-    ++candidate.runRevision;
     decision.after = std::move(candidate);
+    beginMutation(decision);
+    ++decision.after.runRevision;
     decision.adjustmentPreview = RunAdjustmentPreview{
         beforeValues,
         afterValues,
@@ -855,13 +864,12 @@ CommandStatus applyRunCommand(RunCommandState& current,
         current.criticalSafetyEventPending !=
             decision.before.criticalSafetyEventPending ||
         current.activeRunId != decision.before.activeRunId ||
+        current.activeRunSensorMode != decision.before.activeRunSensorMode ||
         decision.after.commandSequence != current.commandSequence + 1U) {
         return CommandStatus::StaleState;
     }
 
     current = decision.after;
-    rememberProcessedCommand(current, decision.envelope.id);
-    current.lastCommandMonotonicMillis = decision.envelope.monotonicMillis;
     return CommandStatus::Applied;
 }
 

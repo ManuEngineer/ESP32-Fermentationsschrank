@@ -631,6 +631,37 @@ ProgramCatalogPayloadSizeResult calculateProgramCatalogPayloadSize(
 
 }  // namespace configuration_codec_internal
 
+ConfigurationCodecStatus encodeProgramDocumentPayload(
+    const ProgramDocument& document, std::string& out) {
+    if (!validateProgram(document, ValidationPurpose::Runnable).valid()) {
+        return ConfigurationCodecStatus::InvalidDocument;
+    }
+    ByteWriter writer(configuration_limits::kMaximumProgramCatalogPayloadBytes);
+    if (!writeProgram(writer, document)) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    auto encoded = writer.takeBytes();
+    out.swap(encoded);
+    return ConfigurationCodecStatus::Success;
+}
+
+ConfigurationDecodeResult<ProgramDocument> decodeProgramDocumentPayload(
+    const std::string& payload) {
+    if (payload.size() > configuration_limits::kMaximumProgramCatalogPayloadBytes) {
+        return {ConfigurationCodecStatus::CapacityExceeded, std::nullopt};
+    }
+    ByteReader reader(payload);
+    ProgramDocument candidate;
+    const auto status = readProgram(reader, candidate);
+    if (status != ConfigurationCodecStatus::Success) {
+        return {status, std::nullopt};
+    }
+    if (reader.remaining() != 0U) {
+        return {ConfigurationCodecStatus::TrailingBytes, std::nullopt};
+    }
+    return {ConfigurationCodecStatus::Success, std::move(candidate)};
+}
+
 ConfigurationCodecStatus encodeUserConfigurationPayload(
     const UserConfiguration& configuration,
     const device_platform::ITimeZoneResolver& resolver, std::string& out) {
