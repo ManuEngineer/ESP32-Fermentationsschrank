@@ -9,7 +9,7 @@
 - Implementierung bleibt bis zur Freigabe dieses exakten Plan-Commits gesperrt.
 
 ```text
-PLAN_STATUS: PLAN_CORRECTION_READY
+PLAN_STATUS: PLAN_DRAFT_REVIEW_REQUIRED
 IMPLEMENTATION: NOT_STARTED
 DRAFT_PR: OPEN
 ```
@@ -237,39 +237,6 @@ Ein Architekturguard verhindert spaetere produktive Direktaufrufe der
 `apply*`-Funktionen sowie die Vorabnutzung von Effects und Messages. Reine
 Domain-Unit-Tests bleiben erlaubt.
 
-### Schmaler Mutations-Gateway
-
-Die bisherige pauschale Apply-Sperre wird durch genau einen typisierten
-`RunMutationGate` in `run_mutation_gate.hpp/.cpp` ergaenzt. Der Gateway
-klassifiziert jede `CommandKind`- und `TransitionReason`-Variante exhaustiv:
-
-```text
-#17-persistenzpflichtige Laufmutation
-    -> RunPersistenceCoordinator::persistCommand/persistTransition
-    -> persist-before-apply und Wirkungsfreigabe aus dem Coordinatorresultat
-
-nicht von #17 besessene Mutation
-    -> keine #17-Persistenz
-    -> bestehende applyRunCommand/applyProcessTransition-Funktion ueber den Gateway
-    -> Effects/Messages nur nach erfolgreichem Apply aus dem Gatewayresultat
-```
-
-Die nicht von #17 besessenen Varianten umfassen insbesondere
-`AcknowledgeMessage`, `MuteMessage`, `ResetFault`, `BootCompleted`,
-`SafeBootRequired`, `CompletedRunRestored`, `RecoveryRequired`,
-`CriticalFault`, `ServiceModeEntered`, `ServiceModeExited`,
-`RecoveryResumed` und `RecoveryRejected`. Der Gateway routet nur bereits
-entschiedene Domainmutationen und erfindet keine Fault-, Recovery-, Safety-
-oder Servicefachlogik. Jeder `switch` ist vollstaendig; es gibt keinen
-stillschweigenden Defaultpfad fuer neue Enumwerte.
-
-Rohe `applyRunCommand()`- und `applyProcessTransition()`-Aufrufe sind in
-Produktionsdateien ausserhalb von `run_commands.cpp`,
-`process_state_machine.cpp`, `run_mutation_gate.cpp` und dem explizit fuer die
-persistenzpflichtige Koordination erlaubten `run_persistence_coordinator.cpp`
-verboten. Runtime-, UI- und Composition-Root-Code verwendet ausschliesslich
-den Gateway. Unit-Tests der reinen Domain-Apply-Funktionen bleiben zulaessig.
-
 ## 7. Erfasste Prozessuebergaenge
 
 Eigenstaendig persistiert:
@@ -433,30 +400,6 @@ Nur vom Head referenzierte Slots duerfen als current oder Fallback gelten.
 Der Load liefert eine optionale Laufprojektion, aber keine Recovery-,
 Fortsetzungs- oder Safetyentscheidung.
 
-### Technische Metadaten des ausgewaehlten Records
-
-Der oeffentliche Loadbefund liefert neben dem Snapshot eine schmale, an genau
-diesen Snapshot gebundene Struktur:
-
-```cpp
-struct RunLoadedCheckpointMetadata {
-    std::uint64_t checkpointRevision;
-    RunCheckpointTrigger trigger;
-    std::uint64_t checkpointMonotonicMillis;
-    std::optional<std::int64_t> utcUnixSeconds;
-    std::uint16_t intervalMinutes;
-};
-```
-
-`RunPersistenceLoadResult` enthaelt `std::optional<RunLoadedCheckpointMetadata>
-metadata`. `Current`, `NoActiveRun` und `FallbackRecovered` liefern die
-Metadaten des tatsaechlich ausgewaehlten Records; bei Fallback stammen sie
-nicht aus dem defekten Currentrecord. `Envelope.utcUnixSeconds` bleibt die
-einzige persistente UTC-Quelle; im Payload wird kein zweiter UTC-Anker
-gespeichert. Die Metadaten treffen keine Recovery-, Safety- oder
-Fortsetzungsentscheidung und sind der spaetere typisierte Integrationspunkt
-fuer #18.
-
 ## 12. Schedule
 
 - Intervall 1 bis 60 Minuten, Standard 5;
@@ -558,19 +501,6 @@ Ein `RunPersistenceResult` enthaelt:
 - technischen Store-/Codecgrund;
 - freigegebene Effects/Messages nur bei Erfolg.
 
-Vor dem ersten Write werden ausserdem die Resultatgrenzen jeder Decision
-geprueft:
-
-```text
-decision.effectCount <= decision.effects.size()
-decision.messageCount <= decision.messages.size()
-```
-
-Ein verletzter Count liefert `InvalidDecision`, schreibt nichts, wendet nichts
-an, gibt keine Wirkungen frei und laesst den Coordinator im vorherigen
-`Ready`-Zustand. Dies gilt fuer Command- und Transition-Decisions und wird
-vor Candidate-Apply und vor jeder dauerhaften Teilveraenderung geprueft.
-
 Wesentliche Status:
 
 ```text
@@ -613,7 +543,6 @@ run_persistence_contract.hpp
 run_persistence_codec.hpp/.cpp
 run_persistence_store.hpp/.cpp
 run_checkpoint_schedule.hpp
-run_mutation_gate.hpp/.cpp
 run_persistence_coordinator.hpp/.cpp
 ```
 
@@ -654,36 +583,6 @@ mindestens ab:
 - Schedule und kein Sensorzykluswrite;
 - Architekturguard inklusive negativer Fixtures.
 
-Die #17-Transaktionsmatrix wird ausdruecklich und nicht nur ueber die
-Gesamtzahl der Tests nachgewiesen. Die Testdateien erhalten folgende
-tabellengesteuerte Gruppen:
-
-| Pfad | Verbindliche Gruppen |
-| --- | --- |
-| `test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp` | Prepared-Head: WriteError, CapacityError, Unknown mit neuen/alten Bytes, Absent-NotFound, Existing-NotFound, fremde Bytes, ReadError; Zielslot und Committed-Head mit denselben Ausgaengen; Stromunterbruch nach jedem Cut-Point; Neustart bei Prepared, nach Zielslot und nach Commit; Periodic-Write, Slot-/Headfehler, Orphan und neue Revision; Current/Fallback/Tombstone/Prepared/ForeignEpoch/UnsupportedSchema; LoadedActiveRun-Sperre; Idempotenz nach echtem Neustart; `ProductInserted`, `ProductWaitExpired`, `HoldFinishedByUser`; Candidate-/Real-Apply-Fehler; Effect-/Message-Gate; Countgrenzen. |
-| `test/test_run_checkpoint_codec/test_run_checkpoint_codec.cpp` | feste Goldenbytes fuer ProgramRun, ManualRun, NoActiveRun, Prepared und Committed; Trunkierung, Zusatzbytes, Bool-/Optionaltags, NaN/Infinity, 8192/8193 Bytes, Schema/Epoch/Slot/CRC/Laenge/Variante sowie Tombstone-/Prepared-Topologie. |
-| `test/test_run_persistence_head_codec/test_run_persistence_head_codec.cpp` | alle Head-/Reference-Invarianten, explizite Wirewerte, falsche MutationKind-/HeadState-Werte und Referenzbindung. |
-| `test/test_run_checkpoint_store/test_run_checkpoint_store.cpp` | deterministische Fehlerfolgen fuer N-ten Write/Readback, Absent-vs-Existing und physische Orphan-/High-Watermark-Zustaende. Der Test-Support wird dafuer erweitert, kein Produktionsport. |
-| `test/test_run_checkpoint_schedule/test_run_checkpoint_schedule.cpp` | unbewaffneter Boot, fällig/nicht fällig, Zeitruecklauf, Eventreset und kein Write ohne aktiven Lauf. |
-| `scripts/check_architecture_boundaries.py` / `scripts/selftest_quality_gates.py` | Gateway als einzig erlaubter produktiver Applypfad; mehrzeilige Apply-/Memberformen, geklammerte Zugriffe, Pointerzugriffe, Kommentare/Strings und fachfremde Member als Positiv-/Negativfixtures. |
-
-Jeder Fehlerfix erhaelt mindestens einen Regressionstest, der auf dem
-vorherigen Implementierungs-Head `86071aae680701339cfa7488f0da81a540d085d7`
-fehlschlaegt.
-
-### Ressourcenbericht
-
-Die Implementierung dokumentiert mit reproduzierbaren nativen Messungen die
-maximale tatsaechlich erzeugte Checkpointpayloadgroesse der Codec- und
-Transaktionstests sowie `sizeof(RunPersistenceSnapshot)`,
-`sizeof(RunPersistenceRawRecord)`, `sizeof(RunPersistenceCoordinator)`,
-`sizeof(RunCommandState)` und `sizeof(CommandDecision)`. Die Werte werden aus
-dem Build-/Testartefakt uebernommen, nicht geschaetzt. Native `sizeof`-Werte
-sind ABI-spezifische Vergleichswerte und ersetzen keine Xtensa-/ESP32-
-Messung; ein Peak-Heap oder Peak-Stack wird nur behauptet, wenn er real
-gemessen wurde. `TBD_IMPLEMENTATION_BUDGET` bleibt bis zur spaeteren
-Runtime-/Hardwaremessung offen.
-
 Auszufuehren:
 
 ```text
@@ -710,8 +609,7 @@ Delta-Design oder groesserer Record still erfunden.
   `ActiveRun::restore()` und ProgramDocument-Codec werden wiederverwendet.
 - **KISS:** Zwei Slots, ein Head, eine Projektion, ein Coordinator; kein
   Journal, keine Datenbank, kein Event-Sourcing und kein allgemeines
-  Transaktionsframework. Der schmale Gateway ist nur die notwendige
-  typisierte Routinggrenze und keine allgemeine Mutationsplattform.
+  Transaktionsframework.
 
 ## 18. Stopbedingungen
 
@@ -730,8 +628,6 @@ FOUR_OWNER_DECISIONS_PRESERVED: PASS
 SINGLE_SOURCE_OF_TRUTH: PASS
 ARCHITECTURE_ALIGNMENT: PASS
 ISSUE_BOUNDARIES: PASS
-NON_PERSISTED_MUTATION_ROUTE: PASS
-UTC_LOAD_METADATA: PASS
 RUN_PERSISTENCE_PROJECTION: PASS
 RUN_TRANSACTION_CONTRACT: PASS
 UNKNOWN_OUTCOME_CONTRACT: PASS
@@ -742,9 +638,6 @@ TWO_SLOT_CONTRACT: PASS
 HEAD_FIRST_LOAD_CONTRACT: PASS
 SCHEMA_1_WIRE_CONTRACT: PASS
 SCHEDULE_CONTRACT: PASS
-DECISION_COUNT_PREVALIDATION: PASS
-POWER_CUT_TEST_MATRIX: PASS
-RESOURCE_REPORTING: PASS
 ESP_IDF_BOUNDARY: PASS
 SOLID: PASS
 DRY: PASS
