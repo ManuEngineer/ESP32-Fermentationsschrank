@@ -675,7 +675,7 @@ Keine dieser Dateien wird in der Planungsphase geaendert.
 
 Nach Ownerfreigabe bleibt die Umsetzung im selben Draft-PR:
 
-1. Verträge, Grenzen, Kontrollpunkt-/Headmodelle und ProgramDocument-Codec-
+1. Vertraege, Grenzen, Kontrollpunkt-/Headmodelle und ProgramDocument-Codec-
    Wiederverwendung mit Regressionstests;
 2. Checkpoint- und Headcodec mit Golden-, Grenz- und Negativtests;
 3. Zwei-Slot-/Headstore mit Referenz-, Readback-, Cut-Point- und
