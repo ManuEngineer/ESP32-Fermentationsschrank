@@ -82,9 +82,9 @@ Enthalten:
 - Trigger, Intervall und Kontrollpunktzeit;
 - optionaler UTC-Anker im bestehenden Envelope;
 - maximal 32 bestaetigte eligible Laufkommando-IDs;
-- bei `ProgramRun`: Lauf-ID, `RunProgramSnapshot`, `RunRevision`-Folge,
-  `ProcessRunSnapshot`;
-- bei `ManualRun`: Lauf-ID, `ManualRunPlan`, `ProcessRunSnapshot`.
+- bei `ProgramRun`: Lauf-ID, gewaehlter `RunSensorMode`,
+  `RunProgramSnapshot`, `RunRevision`-Folge und `ProcessRunSnapshot`;
+- bei `ManualRun`: Lauf-ID, `ManualRunPlan` und `ProcessRunSnapshot`.
 
 `NoActiveRun` enthaelt nur leere Lauf-ID, `ProcessState::Standby`,
 `runRevision` und das persistierte Laufkommando-Fenster.
@@ -98,6 +98,18 @@ Nicht enthalten:
 
 Ein Restore aus #17 veraendert nur diese Laufprojektion. Andere
 `RunCommandState`-Domaenen bleiben unangetastet.
+
+Der bestehende `ProgramStartRequest::sensorMode` ist bereits ein autoritativer
+#15-Laufparameter, wird im heutigen `RunCommandState` fuer Programmlaeufe aber
+nicht aufbewahrt. Die Umsetzung ergaenzt deshalb ein optionales
+`activeRunSensorMode` im Laufaggregat:
+
+- bei jedem aktiven Programm- oder manuellen Lauf gesetzt;
+- beim manuellen Lauf identisch zu `ManualRunPlan.values.sensorMode`;
+- ueber Laufanpassungen und Phasenwechsel unveraendert;
+- beim Entfernen des aktiven Laufs geleert.
+
+Dies fuehrt keine Sensorqualitaets- oder Fallbacklogik aus #20/#21 vorweg.
 
 Verbindlich ist:
 
@@ -228,6 +240,7 @@ TargetQualified
 FermentationCompleted
 CoolingTargetReached
 HoldDurationCompleted
+HoldFinishedByUser
 ```
 
 Nicht separat, weil bereits Teil einer eligible `CommandDecision`:
@@ -236,7 +249,6 @@ Nicht separat, weil bereits Teil einer eligible `CommandDecision`:
 RunStarted
 RunAborted
 CompletionAcknowledged
-HoldFinishedByUser
 TargetChangedReevaluation
 ```
 
@@ -248,7 +260,7 @@ Zulaessige Zustandskombinationen:
 | Variante | `ProcessState` |
 | --- | --- |
 | `ProgramRun` | `Preheating`, `WaitingForProduct`, `ReachingTarget`, `QualifyingTarget`, `Fermenting`, `Cooling`, `CoolHolding`, `Completed` |
-| `ManualRun` | `Preheating`, `WaitingForProduct`, `ReachingTarget`, `QualifyingTarget`, `ManualHolding` |
+| `ManualRun` | `Preheating`, `WaitingForProduct`, `ReachingTarget`, `QualifyingTarget`, `ManualHolding`, `Completed` |
 | `NoActiveRun` | nur `Standby` |
 
 ## 8. Speicherprotokoll
@@ -417,6 +429,7 @@ Varianten:
 
 ```text
 ProgramRun:
+  RunSensorMode
   RunProgramSnapshot
   revisionCount u8
   RunRevision[]
@@ -523,8 +536,9 @@ scripts/check_architecture_boundaries.py
 scripts/selftest_quality_gates.py
 ```
 
-`run_commands.*` verwendet nur die gemeinsame Lauf-ID-Grenze aus
-`run_limits.hpp`; die bestehende Decision-/Apply-Logik wird wiederverwendet.
+`run_commands.*` verwendet die gemeinsame Lauf-ID-Grenze und bewahrt den
+bereits vorhandenen `RunSensorMode` als run-owned Aggregatzustand. Die
+bestehende Decision-/Apply-Logik wird wiederverwendet.
 
 Keine Aenderung an `device_platform`, `device_platform_esp_idf`,
 `FermentationApplication` oder den Composition Roots.
@@ -542,7 +556,8 @@ mindestens ab:
 - Initialisierung, Orphans, Prepared und Rueckfall;
 - Idempotenz nach Neustart;
 - stale/ungueltige Decisions vor Prepared;
-- `ProductInserted` und `ProductWaitExpired`;
+- `ProductInserted`, `ProductWaitExpired` und `HoldFinishedByUser`;
+- Programmlauf-Sensormodus sowie ManualRun-Konsistenz und Restore;
 - Effects/Messages erst nach Commit plus Apply;
 - Schedule und kein Sensorzykluswrite;
 - Architekturguard inklusive negativer Fixtures.
