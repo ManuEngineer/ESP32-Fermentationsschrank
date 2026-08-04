@@ -87,6 +87,15 @@ RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN = re.compile(
     r"\b(?:const\s+)?(?:auto|CommandDecision|TransitionDecision)\s+"
     r"(?P<name>[A-Za-z_]\w*)\s*=\s*decide[A-Za-z_]\w*\s*\("
 )
+# A typed CommandDecision/TransitionDecision local variable is a decision
+# origin regardless of its initializer (e.g. a default-constructed
+# `CommandDecision decision;`). Kept separate from the assignment pattern
+# above so a fachfremd (unrelated) type with the same declaration shape is
+# never classified as a decision origin.
+RUN_PERSISTENCE_TYPED_DECISION_DECLARATION_PATTERN = re.compile(
+    r"\b(?:const\s+)?(?:CommandDecision|TransitionDecision)\s*[*&]?\s*"
+    r"(?P<name>[A-Za-z_]\w*)\s*(?:=(?!=)|;|\{|\()"
+)
 RUN_PERSISTENCE_DECISION_MEMBER_PATTERN = re.compile(
     r"\b(?P<name>[A-Za-z_]\w*)\s*\)*\s*(?:\.|->)\s*"
     r"(?P<member>effects|messages)\b"
@@ -96,6 +105,28 @@ RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN = re.compile(
     r"(?:effects|messages)\b",
     re.DOTALL,
 )
+# Narrow, non-parsing shadowing detector: a block-local declaration of NAME
+# whose immediately preceding token is not a control-flow/statement keyword
+# (so `return result;` is never mistaken for a declaration of `result`).
+RUN_PERSISTENCE_DECLARATION_KEYWORD_BLOCKLIST = (
+    "return", "if", "while", "for", "switch", "else", "new", "delete",
+    "sizeof", "throw", "case", "break", "continue", "goto", "using",
+    "namespace", "co_return", "co_await", "co_yield", "typedef",
+    "static_assert", "do", "catch", "try", "default",
+)
+RUN_PERSISTENCE_DECLARATION_KEYWORD_ALTERNATION = "|".join(
+    re.escape(keyword)
+    for keyword in RUN_PERSISTENCE_DECLARATION_KEYWORD_BLOCKLIST
+)
+
+
+def _run_persistence_local_declaration_pattern(name: str) -> re.Pattern:
+    escaped = re.escape(name)
+    return re.compile(
+        rf"\b(?!(?:{RUN_PERSISTENCE_DECLARATION_KEYWORD_ALTERNATION})\b)"
+        rf"[A-Za-z_]\w*(?:\s*<[^;{{}}()]*>)?\s*[*&]{{0,2}}\s*"
+        rf"\b{escaped}\b\s*(?:=(?!=)|;|\{{|\()"
+    )
 
 
 def mask_cxx_comments_and_strings(source: str) -> str:
@@ -287,44 +318,66 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                 continue
             source = "\n".join(lines)
             code = mask_cxx_comments_and_strings(source)
-            # Keep names scoped to their brace block. A local `result` from
-            # one function must not taint an unrelated `result` elsewhere.
-            blocks: list[tuple[int, int, set[str]]] = []
+            # Keep names scoped to their brace block, walked from the
+            # innermost enclosing block outward. The first declaration of a
+            # name (in the nearest block that declares it at all) decides
+            # whether a later member/call use is a decision/alias origin or
+            # unrelated (fachfremd) shadowing -- not just the innermost
+            # block, which would miss an outer decision reached through a
+            # nested `if`/`{}` with no declaration of its own.
+            blocks: list[tuple[int, int, dict[str, str]]] = []
             stack: list[int] = []
             for index, character in enumerate(code):
                 if character == "{":
                     stack.append(index)
                 elif character == "}" and stack:
-                    blocks.append((stack.pop(), index, set()))
-            for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(code):
-                containing = [
-                    block
-                    for block in blocks
-                    if block[0] < match.start() < block[1]
-                ]
-                if containing:
-                    scope = min(containing, key=lambda block: block[1] - block[0])
-                    scope[2].add(match.group("name"))
-            for match in RUN_PERSISTENCE_APPLY_ALIAS_PATTERN.finditer(code):
-                containing = [
-                    block
-                    for block in blocks
-                    if block[0] < match.start() < block[1]
-                ]
-                if containing:
-                    scope = min(containing, key=lambda block: block[1] - block[0])
-                    scope[2].add(match.group("alias"))
+                    blocks.append((stack.pop(), index, {}))
 
-            def decision_name_in_scope(name: str, position: int) -> bool:
-                containing = [
+            def containing_blocks(position: int):
+                found = [
                     block
                     for block in blocks
                     if block[0] < position < block[1]
                 ]
-                if not containing:
-                    return False
-                nearest = min(containing, key=lambda block: block[1] - block[0])
-                return name in nearest[2]
+                found.sort(key=lambda block: block[1] - block[0])
+                return found
+
+            for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(code):
+                containing = containing_blocks(match.start())
+                if containing:
+                    containing[0][2].setdefault(match.group("name"), "decision")
+            for match in RUN_PERSISTENCE_TYPED_DECISION_DECLARATION_PATTERN.finditer(
+                code
+            ):
+                containing = containing_blocks(match.start())
+                if containing:
+                    containing[0][2].setdefault(match.group("name"), "decision")
+            for match in RUN_PERSISTENCE_APPLY_ALIAS_PATTERN.finditer(code):
+                containing = containing_blocks(match.start())
+                if containing:
+                    containing[0][2].setdefault(match.group("alias"), "alias")
+
+            local_declaration_cache: dict[tuple[str, int, int], bool] = {}
+
+            def has_other_local_declaration(
+                name: str, block: tuple[int, int, dict[str, str]]
+            ) -> bool:
+                key = (name, block[0], block[1])
+                cached = local_declaration_cache.get(key)
+                if cached is None:
+                    pattern = _run_persistence_local_declaration_pattern(name)
+                    cached = pattern.search(code, block[0], block[1]) is not None
+                    local_declaration_cache[key] = cached
+                return cached
+
+            def first_declared_kind(name: str, position: int) -> str | None:
+                for block in containing_blocks(position):
+                    kind = block[2].get(name)
+                    if kind is not None:
+                        return kind
+                    if has_other_local_declaration(name, block):
+                        return "other"
+                return None
 
             def line_number(position: int) -> int:
                 return code.count("\n", 0, position) + 1
@@ -340,30 +393,21 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                 alias = match.group("alias")
                 call_pattern = re.compile(rf"\b{re.escape(alias)}\s*\(")
                 for call in call_pattern.finditer(code, match.end()):
-                    containing = [
-                        block
-                        for block in blocks
-                        if block[0] < call.start() < block[1]
-                    ]
-                    if containing:
-                        nearest = min(
-                            containing, key=lambda block: block[1] - block[0]
+                    if first_declared_kind(alias, call.start()) == "alias":
+                        violations.append(
+                            f"{path}:{line_number(call.start())}: produktiver "
+                            "Run-Persistenz-Bypass (apply/effects/messages "
+                            "ausserhalb Domain/Coordinator)"
                         )
-                        if alias in nearest[2]:
-                            violations.append(
-                                f"{path}:{line_number(call.start())}: produktiver "
-                                "Run-Persistenz-Bypass (apply/effects/messages "
-                                "ausserhalb Domain/Coordinator)"
-                            )
-                            break
+                        break
 
             for match in RUN_PERSISTENCE_DECISION_MEMBER_PATTERN.finditer(code):
-                member_position = match.start()
-                if (
-                    match.group("name") == "decision"
-                    or match.group("name").endswith("Decision")
-                    or decision_name_in_scope(match.group("name"), member_position)
-                ):
+                name = match.group("name")
+                kind = first_declared_kind(name, match.start())
+                is_bypass = kind == "decision" or (
+                    kind is None and (name == "decision" or name.endswith("Decision"))
+                )
+                if is_bypass:
                     violations.append(
                         f"{path}:{line_number(match.start())}: produktiver "
                         "Run-Persistenz-Bypass (apply/effects/messages ausserhalb "
@@ -814,6 +858,44 @@ RUN_PERSISTENCE_BYPASS_CASES = {
         "main/app_main.cpp",
         "void f() { transitionDecision->messages; }\n",
     ),
+    "outer_decision_used_in_nested_block": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto result = decideRun();\n"
+        "    if (ready) {\n"
+        "        consume(result.effects);\n"
+        "    }\n"
+        "}\n",
+    ),
+    "outer_apply_alias_used_in_nested_block": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto apply = &applyRunCommand;\n"
+        "    if (ready) {\n"
+        "        apply(state, decision);\n"
+        "    }\n"
+        "}\n",
+    ),
+    "outer_decision_used_in_multi_level_nested_block": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto result = decideRun();\n"
+        "    if (a) {\n"
+        "        if (b) {\n"
+        "            consume(result.effects);\n"
+        "        }\n"
+        "    }\n"
+        "}\n",
+    ),
+    "typed_decision_without_decide_call_is_still_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    CommandDecision pending;\n"
+        "    if (ready) {\n"
+        "        consume(pending.effects);\n"
+        "    }\n"
+        "}\n",
+    ),
 }
 
 # The bypass rule deliberately follows values originating from decide*().  It
@@ -851,6 +933,27 @@ RUN_PERSISTENCE_CLEAN_CASES = {
     "gateway_call_is_the_allowed_route": (
         "lib/fermentation_app/src/runtime_path.cpp",
         "void f() { RunMutationGate gate; gate.route(state, decision); }\n",
+    ),
+    "multi_level_nested_shadow_is_not_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "  auto result = decideRun();\n"
+        "  if (a) {\n"
+        "    if (b) {\n"
+        "      RenderResult result{};\n"
+        "      use(result.effects);\n"
+        "    }\n"
+        "  }\n"
+        "}\n",
+    ),
+    "unrelated_type_named_decision_is_not_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "  DisplayState decision{};\n"
+        "  if (ready) {\n"
+        "    use(decision.effects);\n"
+        "  }\n"
+        "}\n",
     ),
 }
 
