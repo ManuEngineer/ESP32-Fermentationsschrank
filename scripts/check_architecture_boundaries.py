@@ -82,7 +82,7 @@ RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN = re.compile(
     r"(?P<name>[A-Za-z_]\w*)\s*=\s*decide[A-Za-z_]\w*\s*\("
 )
 RUN_PERSISTENCE_DECISION_MEMBER_PATTERN = re.compile(
-    r"\b(?P<name>[A-Za-z_]\w*)\s*(?:\.|->)\s*"
+    r"\b(?P<name>[A-Za-z_]\w*)\s*\)*\s*(?:\.|->)\s*"
     r"(?P<member>effects|messages)\b"
 )
 RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN = re.compile(
@@ -90,6 +90,68 @@ RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN = re.compile(
     r"(?:effects|messages)\b",
     re.DOTALL,
 )
+
+
+def mask_cxx_comments_and_strings(source: str) -> str:
+    """Mask comments and literals while preserving offsets and line breaks."""
+    masked = list(source)
+    state = "code"
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(source):
+        character = source[index]
+        next_character = source[index + 1] if index + 1 < len(source) else ""
+        if state == "code":
+            if character == "/" and next_character == "/":
+                masked[index] = masked[index + 1] = " "
+                state = "line_comment"
+                index += 2
+                continue
+            if character == "/" and next_character == "*":
+                masked[index] = masked[index + 1] = " "
+                state = "block_comment"
+                index += 2
+                continue
+            if character == '"':
+                masked[index] = " "
+                state = "string"
+                quote = character
+                escaped = False
+            elif character == "'":
+                masked[index] = " "
+                state = "character"
+                quote = character
+                escaped = False
+        elif state == "line_comment":
+            if character == "\n":
+                state = "code"
+            else:
+                masked[index] = " "
+        elif state == "block_comment":
+            if character == "*" and next_character == "/":
+                masked[index] = masked[index + 1] = " "
+                state = "code"
+                index += 2
+                continue
+            if character != "\n":
+                masked[index] = " "
+        else:
+            if character == "\n":
+                masked[index] = " "
+            elif escaped:
+                masked[index] = " "
+                escaped = False
+            elif character == "\\":
+                masked[index] = " "
+                escaped = True
+            elif character == quote:
+                masked[index] = " "
+                state = "code"
+            else:
+                masked[index] = " "
+        index += 1
+    return "".join(masked)
 
 # Issue #72/#73: exakter idf_component_register()-REQUIRES/PRIV_REQUIRES-
 # Vertrag je Komponente, getrennt nach oeffentlich (REQUIRES) und privat
@@ -218,16 +280,17 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
             except UnicodeDecodeError:
                 continue
             source = "\n".join(lines)
+            code = mask_cxx_comments_and_strings(source)
             # Keep names scoped to their brace block. A local `result` from
             # one function must not taint an unrelated `result` elsewhere.
             blocks: list[tuple[int, int, set[str]]] = []
             stack: list[int] = []
-            for index, character in enumerate(source):
+            for index, character in enumerate(code):
                 if character == "{":
                     stack.append(index)
                 elif character == "}" and stack:
                     blocks.append((stack.pop(), index, set()))
-            for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(source):
+            for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(code):
                 containing = [
                     block
                     for block in blocks
@@ -243,38 +306,35 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                     for block in blocks
                 )
 
-            line_offsets: list[int] = []
-            offset = 0
-            for line in lines:
-                line_offsets.append(offset)
-                offset += len(line) + 1
-            temporary_member_lines = {
-                source[: match.start()].count("\n") + 1
-                for match in RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN.finditer(source)
-            }
-            for line_number, line in enumerate(lines, start=1):
-                direct_apply = RUN_PERSISTENCE_APPLY_PATTERN.search(line)
-                member = RUN_PERSISTENCE_DECISION_MEMBER_PATTERN.search(line)
-                member_position = (
-                    line_offsets[line_number - 1] + member.start()
-                    if member is not None
-                    else 0
+            def line_number(position: int) -> int:
+                return code.count("\n", 0, position) + 1
+
+            for match in RUN_PERSISTENCE_APPLY_PATTERN.finditer(code):
+                violations.append(
+                    f"{path}:{line_number(match.start())}: produktiver "
+                    "Run-Persistenz-Bypass (apply/effects/messages ausserhalb "
+                    "Domain/Coordinator)"
                 )
-                decision_named_member = (
-                    member is not None
-                    and (
-                        member.group("name") == "decision"
-                        or member.group("name").endswith("Decision")
-                        or decision_name_in_scope(
-                            member.group("name"), member_position
-                        )
-                    )
-                )
-                if direct_apply or decision_named_member or line_number in temporary_member_lines:
+
+            for match in RUN_PERSISTENCE_DECISION_MEMBER_PATTERN.finditer(code):
+                member_position = match.start()
+                if (
+                    match.group("name") == "decision"
+                    or match.group("name").endswith("Decision")
+                    or decision_name_in_scope(match.group("name"), member_position)
+                ):
                     violations.append(
-                        f"{path}:{line_number}: produktiver Run-Persistenz-Bypass "
-                        "(apply/effects/messages ausserhalb Domain/Coordinator)"
+                        f"{path}:{line_number(match.start())}: produktiver "
+                        "Run-Persistenz-Bypass (apply/effects/messages ausserhalb "
+                        "Domain/Coordinator)"
                     )
+
+            for match in RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN.finditer(code):
+                violations.append(
+                    f"{path}:{line_number(match.start())}: produktiver "
+                    "Run-Persistenz-Bypass (apply/effects/messages ausserhalb "
+                    "Domain/Coordinator)"
+                )
 
 
 def strip_cmake_line_comments(text: str) -> str:
@@ -633,6 +693,14 @@ RUN_PERSISTENCE_BYPASS_CASES = {
         "lib/fermentation_app/src/runtime_path.cpp",
         "void f() { applyProcessTransition(); }\n",
     ),
+    "runtime_apply_command_multiline": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { applyRunCommand\n    (state, decision); }\n",
+    ),
+    "runtime_apply_transition_multiline": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { applyProcessTransition\n    (state, decision, snapshot); }\n",
+    ),
     "runtime_effects_dot": (
         "lib/fermentation_app/src/runtime_path.cpp",
         "void f() { decision.effects; }\n",
@@ -652,6 +720,21 @@ RUN_PERSISTENCE_BYPASS_CASES = {
     "runtime_effects_from_multiline_decide_result": (
         "lib/fermentation_app/src/runtime_path.cpp",
         "void f() {\n  auto result =\n      decideRun();\n  result.effects;\n}\n",
+    ),
+    "runtime_effects_multiline_member": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto result = decideRun(); consume(result\n"
+        "    .effects); }\n",
+    ),
+    "runtime_messages_parenthesized_member": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto result = decideTransition(); consume((result)\n"
+        "    .messages); }\n",
+    ),
+    "runtime_messages_multiline_pointer_member": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto result = decideTransition(); consume(result\n"
+        "    ->messages); }\n",
     ),
     "runtime_messages_from_decide_temporary": (
         "lib/fermentation_app/src/runtime_path.cpp",
@@ -694,6 +777,15 @@ RUN_PERSISTENCE_CLEAN_CASES = {
         "main/app_main.cpp",
         "struct DisplayState { int messages; };\n"
         "void f() { DisplayState state{}; (void)state.messages; }\n",
+    ),
+    "comments_and_strings_are_not_code": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        '// applyRunCommand(state, decision);\n'
+        'const char* text = "result.effects applyProcessTransition(";\n',
+    ),
+    "gateway_call_is_the_allowed_route": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { RunMutationGate gate; gate.route(state, decision); }\n",
     ),
 }
 

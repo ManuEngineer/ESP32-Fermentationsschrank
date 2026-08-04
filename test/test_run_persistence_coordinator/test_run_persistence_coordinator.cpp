@@ -1,10 +1,12 @@
 #include <limits>
+#include <map>
 #include <utility>
 
 #include <unity.h>
 
 #include "run_persistence_coordinator.hpp"
 #include "simulated_persistent_state_store.hpp"
+#include "state_store.hpp"
 #include "state_store_key.hpp"
 #include "standard_program_catalog.hpp"
 #include "storage_envelope.hpp"
@@ -12,6 +14,55 @@
 namespace {
 
 using namespace fermentation;
+
+class SequencedWriteStore final : public device_platform::IStateStore {
+   public:
+    using WriteFault =
+        device_platform_test_support::SimulatedPersistentStateStore::WriteFault;
+
+    device_platform::StateStoreWriteStatus write(
+        const device_platform::StateStoreKey& key,
+        const std::string& value) override {
+        ++writeCount_;
+        const auto fault = faults_.find(writeCount_);
+        if (fault != faults_.end()) backing_.setNextWriteFault(fault->second);
+        return backing_.write(key, value);
+    }
+
+    device_platform::StateStoreReadResult read(
+        const device_platform::StateStoreKey& key,
+        std::size_t maxBytes) const override {
+        return backing_.read(key, maxBytes);
+    }
+
+    void faultAt(std::size_t writeNumber, WriteFault fault) {
+        faults_[writeNumber] = fault;
+    }
+
+    [[nodiscard]] std::size_t writeCount() const { return writeCount_; }
+
+    void restart() {
+        backing_.restart();
+        writeCount_ = 0U;
+        faults_.clear();
+    }
+
+    void forceNotFound(const device_platform::StateStoreKey& key, bool force) {
+        backing_.forceNotFound(key, force);
+    }
+
+    void injectReadFailure(const device_platform::StateStoreKey& key,
+                           bool fail) {
+        backing_.injectReadFailure(key, fail);
+    }
+
+    [[nodiscard]] auto& backing() { return backing_; }
+
+   private:
+    device_platform_test_support::SimulatedPersistentStateStore backing_;
+    std::map<std::size_t, WriteFault> faults_;
+    std::size_t writeCount_{0U};
+};
 
 ProgramDocument runnableProgram() {
     auto document = FactoryProgramCatalog::find("water-kefir");
@@ -67,6 +118,21 @@ CommandDecision manualStartDecision(const RunCommandState& state,
     request.plan.maximumTargetReachMinutes = 180U;
     request.safetyAllowsStart = true;
     return decideManualStart(state, request);
+}
+
+CommandDecision stopDecision(const RunCommandState& state, CommandId id,
+                             std::uint64_t monotonicMillis = 200U) {
+    StopRequest request;
+    request.envelope = {id,
+                        CommandSource::LocalDisplay,
+                        monotonicMillis,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
+    request.option = StopOption::AbortAndTurnOff;
+    return decideStop(state, request);
 }
 
 device_platform::StateStoreKey slotKey(const char* name) {
@@ -504,6 +570,268 @@ void test_empty_boot_always_disarms_injected_schedule() {
                 .status));
 }
 
+void test_mutation_write_faults_at_each_cutpoint_are_classified() {
+    using Fault = SequencedWriteStore::WriteFault;
+    for (std::size_t writeNumber = 1U; writeNumber <= 3U; ++writeNumber) {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+            static_cast<int>(coordinator.loadAndInitialize().status));
+        RunCommandState state;
+        state.processState.state = ProcessState::Standby;
+        store.faultAt(writeNumber, Fault::FailBeforeBegin);
+        const auto result = coordinator.persistCommand(
+            state, startDecision(state, 700U + writeNumber),
+            RunCheckpointTime{100U, std::nullopt});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_UINT32(0U, result.effectCount);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                              static_cast<int>(state.processState.state));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                writeNumber == 1U
+                    ? RunPersistenceCoordinatorState::ReadyEmpty
+                    : RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(coordinator.state()));
+    }
+}
+
+void test_unknown_outcome_at_each_mutation_write_is_resolved() {
+    using Fault = SequencedWriteStore::WriteFault;
+    for (std::size_t writeNumber = 1U; writeNumber <= 3U; ++writeNumber) {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        static_cast<void>(coordinator.loadAndInitialize());
+        RunCommandState state;
+        state.processState.state = ProcessState::Standby;
+        store.faultAt(writeNumber, Fault::PowerCutAfterCommitBeforeReturn);
+        const auto result = coordinator.persistCommand(
+            state, startDecision(state, 710U + writeNumber),
+            RunCheckpointTime{100U, std::nullopt});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(result.status));
+        TEST_ASSERT_TRUE(state.activeProgramRun.has_value());
+        TEST_ASSERT_EQUAL_UINT32(1U, result.effectCount);
+    }
+}
+
+void test_unknown_outcome_not_found_distinguishes_absent_and_existing_head() {
+    using Fault = SequencedWriteStore::WriteFault;
+    const auto head = slotKey("rh0");
+
+    SequencedWriteStore absent;
+    RunPersistenceCoordinator emptyCoordinator(
+        absent, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(emptyCoordinator.loadAndInitialize());
+    absent.forceNotFound(head, true);
+    absent.faultAt(1U, Fault::PowerCutAfterCommitBeforeReturn);
+    RunCommandState emptyState;
+    emptyState.processState.state = ProcessState::Standby;
+    const auto absentResult = emptyCoordinator.persistCommand(
+        emptyState, startDecision(emptyState, 720U),
+        RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(absentResult.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Unchanged),
+                          static_cast<int>(absentResult.durability));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::ReadyEmpty),
+        static_cast<int>(emptyCoordinator.state()));
+
+    SequencedWriteStore existing;
+    RunPersistenceCoordinator existingCoordinator(
+        existing, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(existingCoordinator.loadAndInitialize());
+    RunCommandState active;
+    active.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            existingCoordinator
+                .persistCommand(active, startDecision(active, 721U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    existing.forceNotFound(head, true);
+    existing.faultAt(existing.writeCount() + 1U,
+                     Fault::PowerCutAfterCommitBeforeReturn);
+    const auto existingResult = existingCoordinator.persistCommand(
+        active, stopDecision(active, 722U),
+        RunCheckpointTime{200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::PersistenceIndeterminate),
+        static_cast<int>(existingResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceDurability::MayHaveChanged),
+        static_cast<int>(existingResult.durability));
+    TEST_ASSERT_EQUAL_UINT32(0U, existingResult.effectCount);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(existingCoordinator.state()));
+}
+
+void test_restart_after_prepared_or_slot_cut_is_interrupted() {
+    using Fault = SequencedWriteStore::WriteFault;
+    for (std::size_t writeNumber : {2U, 3U}) {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        static_cast<void>(coordinator.loadAndInitialize());
+        RunCommandState state;
+        state.processState.state = ProcessState::Standby;
+        store.faultAt(writeNumber, Fault::FailBeforeBegin);
+        const auto result = coordinator.persistCommand(
+            state, startDecision(state, 730U + writeNumber),
+            RunCheckpointTime{100U, std::nullopt});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(coordinator.state()));
+        store.restart();
+        RunPersistenceCoordinator afterBoot(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceLoadStatus::PreparedInterrupted),
+            static_cast<int>(afterBoot.loadAndInitialize().status));
+    }
+}
+
+void test_periodic_slot_and_head_faults_preserve_cutpoint_truth() {
+    using Fault = SequencedWriteStore::WriteFault;
+
+    SequencedWriteStore slotFailure;
+    RunPersistenceCoordinator slotCoordinator(slotFailure,
+                                              device_platform::StorageEpoch(1U),
+                                              RunCheckpointSchedule{});
+    static_cast<void>(slotCoordinator.loadAndInitialize());
+    RunCommandState slotState;
+    slotState.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            slotCoordinator
+                .persistCommand(slotState, startDecision(slotState, 740U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    slotFailure.faultAt(4U, Fault::FailBeforeBegin);
+    const auto slotResult = slotCoordinator.checkpointPeriodic(
+        slotState, RunCheckpointTime{300100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(slotResult.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Unchanged),
+                          static_cast<int>(slotResult.durability));
+
+    SequencedWriteStore headFailure;
+    RunPersistenceCoordinator headCoordinator(headFailure,
+                                              device_platform::StorageEpoch(1U),
+                                              RunCheckpointSchedule{});
+    static_cast<void>(headCoordinator.loadAndInitialize());
+    RunCommandState headState;
+    headState.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            headCoordinator
+                .persistCommand(headState, startDecision(headState, 741U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    headFailure.faultAt(5U, Fault::FailBeforeBegin);
+    const auto headResult = headCoordinator.checkpointPeriodic(
+        headState, RunCheckpointTime{300100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(headResult.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Changed),
+                          static_cast<int>(headResult.durability));
+    const auto orphan = headFailure.read(slotKey("rc1"), 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(orphan.status));
+    const auto orphanEnvelope = device_platform::decodeEnvelope(orphan.value);
+    TEST_ASSERT_TRUE(orphanEnvelope.envelope.has_value());
+    const auto orphanRevision = orphanEnvelope.envelope->versionValue;
+    const auto retry = headCoordinator.checkpointPeriodic(
+        headState, RunCheckpointTime{300200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(retry.status));
+    const auto replacement = headFailure.read(slotKey("rc1"), 8240U);
+    const auto replacementEnvelope =
+        device_platform::decodeEnvelope(replacement.value);
+    TEST_ASSERT_TRUE(replacementEnvelope.envelope.has_value());
+    TEST_ASSERT_TRUE(replacementEnvelope.envelope->versionValue >
+                     orphanRevision);
+}
+
+void test_invalid_effect_and_message_counts_are_rejected_before_writes() {
+    device_platform_test_support::SimulatedPersistentStateStore commandStore;
+    RunPersistenceCoordinator commandCoordinator(
+        commandStore, device_platform::StorageEpoch(1U),
+        RunCheckpointSchedule{});
+    static_cast<void>(commandCoordinator.loadAndInitialize());
+    RunCommandState commandState;
+    commandState.processState.state = ProcessState::Standby;
+    auto command = startDecision(commandState, 750U);
+    command.effectCount = command.effects.size() + 1U;
+    const auto commandResult = commandCoordinator.persistCommand(
+        commandState, command, RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(commandResult.status));
+    TEST_ASSERT_EQUAL_UINT32(0U, commandResult.effectCount);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::ReadyEmpty),
+        static_cast<int>(commandCoordinator.state()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::NotFound),
+        static_cast<int>(commandStore.read(slotKey("rh0"), 256U).status));
+
+    device_platform_test_support::SimulatedPersistentStateStore transitionStore;
+    RunPersistenceCoordinator transitionCoordinator(
+        transitionStore, device_platform::StorageEpoch(1U),
+        RunCheckpointSchedule{});
+    static_cast<void>(transitionCoordinator.loadAndInitialize());
+    RunCommandState transitionState;
+    transitionState.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            transitionCoordinator
+                .persistCommand(transitionState,
+                                manualStartDecision(transitionState, 751U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    transitionState.processState.state = ProcessState::ManualHolding;
+    transitionState.processState.stateEnteredAtMillis = 100U;
+    transitionState.processState.targetReachStartedAtMillis = 0U;
+    ProcessSignals signals;
+    auto transition = decideProcessTransition(
+        transitionState.processState, &*transitionState.processRunSnapshot,
+        signals,
+        TransitionRequest{ProcessEvent::FinishHoldConfirmed, std::nullopt},
+        200U);
+    TEST_ASSERT_TRUE(transition.proposed());
+    transition.messageCount = transition.messages.size() + 1U;
+    const auto transitionResult = transitionCoordinator.persistTransition(
+        transitionState, transition, RunCheckpointTime{200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(transitionResult.status));
+    TEST_ASSERT_EQUAL_UINT32(0U, transitionResult.messageCount);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ManualHolding),
+                          static_cast<int>(transitionState.processState.state));
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -521,5 +849,12 @@ int main(int, char**) {
     RUN_TEST(test_orphan_max_revision_is_sticky_and_blocks_new_writes);
     RUN_TEST(test_unknown_orphan_high_watermark_blocks_mutation);
     RUN_TEST(test_empty_boot_always_disarms_injected_schedule);
+    RUN_TEST(test_mutation_write_faults_at_each_cutpoint_are_classified);
+    RUN_TEST(test_unknown_outcome_at_each_mutation_write_is_resolved);
+    RUN_TEST(
+        test_unknown_outcome_not_found_distinguishes_absent_and_existing_head);
+    RUN_TEST(test_restart_after_prepared_or_slot_cut_is_interrupted);
+    RUN_TEST(test_periodic_slot_and_head_faults_preserve_cutpoint_truth);
+    RUN_TEST(test_invalid_effect_and_message_counts_are_rejected_before_writes);
     return UNITY_END();
 }

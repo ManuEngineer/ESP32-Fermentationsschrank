@@ -548,6 +548,10 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
         return result(decision.proposed()
                           ? RunPersistenceResultStatus::NotEligible
                           : RunPersistenceResultStatus::InvalidDecision);
+    if (decision.effectCount > decision.effects.size())
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
     if (time.monotonicMillis != decision.envelope.monotonicMillis)
         return result(RunPersistenceResultStatus::TimeMismatch);
     for (std::size_t i = 0U; i < persistedIdCount_; ++i)
@@ -596,15 +600,6 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     result.step = RunPersistenceStep::RamApply;
     result.durability = RunPersistenceDurability::Changed;
     result.coordinatorState = state_;
-    if (decision.effectCount > result.effects.size()) {
-        state_ =
-            RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed;
-        return this->result(
-            RunPersistenceResultStatus::PersistenceCommittedApplyFailed,
-            RunPersistenceStep::RamApply,
-            RunPersistenceTechnicalReason::InvalidProjection,
-            RunPersistenceDurability::Changed);
-    }
     result.effects = decision.effects;
     result.effectCount = decision.effectCount;
     return result;
@@ -617,6 +612,10 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
         return unavailableResult();
     if (!decision.proposed() || !eligibleTransition(decision.reason))
         return result(RunPersistenceResultStatus::InvalidDecision);
+    if (decision.messageCount > decision.messages.size())
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
     if (time.monotonicMillis != decision.monotonicMillis)
         return result(RunPersistenceResultStatus::TimeMismatch);
     auto candidate = current;
@@ -654,15 +653,6 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
     result.step = RunPersistenceStep::RamApply;
     result.durability = RunPersistenceDurability::Changed;
     result.coordinatorState = state_;
-    if (decision.messageCount > result.messages.size()) {
-        state_ =
-            RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed;
-        return this->result(
-            RunPersistenceResultStatus::PersistenceCommittedApplyFailed,
-            RunPersistenceStep::RamApply,
-            RunPersistenceTechnicalReason::InvalidProjection,
-            RunPersistenceDurability::Changed);
-    }
     result.messages = decision.messages;
     result.messageCount = decision.messageCount;
     return result;
