@@ -14,7 +14,7 @@ benötigen weiterhin einen Ownerentscheid.
 
 Der ausführliche historische Audittext weiter unten bleibt als Begründungs- und
 Nachweistext erhalten. Die folgende aktuelle Synchronisierung ist für den
-heutigen Arbeitsstand maßgeblich.
+heutigen Arbeitsstand massgeblich.
 
 ## Aktuelle Synchronisierung
 
@@ -65,39 +65,35 @@ identische Matrix ausfuehren. Danach entscheidet der Owner ueber bevorzugten
 Treiber und Rueckfallkandidat. Reservekandidaten werden nur bei dokumentiertem
 Ausloeser nachgezogen.
 
-## Phase 1: Audit- und Persistenzbereinigung (abgeschlossen)
+## Phase 1: Audit- und Persistenzkern abgeschlossen; Backlog-Teilschnitte offen
 
-Die Phase wurde mit den gemergten Audit-/Synchronisierungs-PRs und den
-abgeschlossenen Persistenz-PRs ausgeführt. Die Ergebnisse sind:
+### Abgeschlossen
 
-1. Auditdokumente, Roadmap und Evaluations-Backlog sind ownerfreigegeben
-   synchronisiert.
-2. Der OD-01-Variante-B-Vertrag ist in #16, #56 und #57 umgesetzt; #57 ist
-   durch PR #68 abgeschlossen.
-3. #56 enthält Active/Fallback, Graphvalidierung, flüchtige Vorschau,
-   Konfliktschutz und Runtime-Publish; #57 enthält Bootstrap, `StorageEpoch`,
-   Korruptionssperre und wiederaufnehmbaren Werksreset.
-4. Persistentes Pending sowie echte Connectivity-/Authentication-Domaenen als
-   spaetere eigene Arbeit mit ihrem ersten fachlichen Konsumenten planen, nicht
-   als leere R1-Infrastruktur.
-5. #24 bleibt ein nachgelagertes Integrations- und Safety-Gate; #17 ist durch
-   PR #84 abgeschlossen und benötigt keine weitere #16-Abhängigkeitskorrektur.
-6. Treiber/Frameworkdienste werden adoptiert, Safety-/Fachlogik wird selbst
-   entwickelt.
-7. Der verbindliche OD-07-Teilschnitt von #19 ist in Journal/Retention,
-   Laufhistorie/Bereinigung, nur lesenden Laufexport/secret-freies Backup und
-   Importvorschau/atomare Aktivierung in einem separaten ownerfreigegebenen
-   Planungsschritt umsetzen; #25 ebenso in oberflaechenneutrale
-   Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen
-   schneiden; #26 in lokale Navigation, Start, Programmeditor,
-   Lauf-/Meldungsbedienung und Service-/Recovery-UI schneiden; #27 in
-   HTTP-Transport/API, Status/Polling/Laufchart, schreibende Kommandos,
-   responsive Webassets und Authentisierung gemaess OD-09 schneiden; #28 in
-   passive Diagnose/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose,
-   gefuehrten Serviceablauf und nur lesenden Diagnose-/Servicebericht
-   schneiden. OD-07 ist damit vollstaendig entschieden.
+- Audit und Espressif-first-Synchronisierung durch PR #88;
+- #54–#57 als direkter Variante-B-Konfigurations- und Persistenzkern, #57
+  abgeschlossen durch PR #68;
+- #17 als Laufpersistenz und Kontrollpunkte, abgeschlossen durch PR #84;
+- #24 bleibt ein nachgelagertes Integrations- und Safety-Gate; #17 benötigt
+  keine weitere #16-Abhängigkeitskorrektur.
 
-Keine Empfehlung aus dem Audit wird im Audit-PR selbst implementiert.
+### Noch offen
+
+- ownerfreigegebener Planungsschnitt von #19 in Journal/Retention,
+  Laufhistorie/Bereinigung, lesenden Laufexport/secret-freies Backup und
+  Importvorschau/atomare Aktivierung;
+- ownerfreigegebene Teilschnitte von #25–#28 für Präsentationsmodelle,
+  lokale Bedienung, Web und Diagnose/Service;
+- die jeweiligen technischen Pläne und Abnahmekriterien dieser Teilschnitte.
+
+Der OD-07-Rahmen ist dokumentiert, ersetzt aber nicht die noch ausstehenden
+ownerfreigegebenen Planungsschritte. Persistentes Pending sowie echte
+Connectivity-/Authentication-Domaenen werden weiterhin erst mit ihrem ersten
+fachlichen Konsumenten geplant und nicht als leere R1-Infrastruktur vorbereitet.
+Treiber/Frameworkdienste werden adoptiert, Safety-/Fachlogik wird selbst
+entwickelt.
+
+Der Audit-PR hat selbst keine Audit-Empfehlungen implementiert; das ist eine
+historische Einordnung und keine aktuelle Handlungsanweisung für PR #94.
 
 ## Phase 2: zwingende hardwareunabhaengige Safety-, Persistenz- und Fachlogik
 
