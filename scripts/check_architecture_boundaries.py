@@ -74,29 +74,22 @@ RUN_PERSISTENCE_ALLOWED_FILES = frozenset(
         "lib/fermentation_app/src/run_persistence_coordinator.hpp",
     }
 )
-RUN_PERSISTENCE_APPLY_PATTERN = re.compile(
-    r"(?:\(\s*)?\b(?:applyRunCommand|applyProcessTransition)"
-    r"\s*(?:\)\s*)?\("
+# applyRunCommand/applyProcessTransition are two exact, internal domain
+# symbols never legitimately spelled outside the allowlisted files above.
+# Any textual occurrence of either token (direct call, qualified call,
+# address-of with or without `&`, parenthesized, passed as a callback, or
+# aliased under any local name) is already a bypass, so a single token guard
+# on the masked source supersedes tracking every C++ spelling of "take this
+# function's address" individually.
+RUN_PERSISTENCE_APPLY_SYMBOL_PATTERN = re.compile(
+    r"\b(?:applyRunCommand|applyProcessTransition)\b"
 )
-RUN_PERSISTENCE_APPLY_ALIAS_PATTERN = re.compile(
-    r"\b(?:auto|[A-Za-z_]\w*(?:\s*[*&])?)\s+"
-    r"(?P<alias>[A-Za-z_]\w*)\s*=\s*&\s*"
-    r"(?P<target>applyRunCommand|applyProcessTransition)\b"
-)
-# C++ decays a bare function name to a function pointer without requiring an
-# explicit `&`; `auto apply = applyRunCommand;` is exactly as much of a
-# bypass route as the `&`-spelled form above. The negative lookahead excludes
-# a direct call (`= applyRunCommand(...)`), which RUN_PERSISTENCE_APPLY_PATTERN
-# already catches on its own.
-RUN_PERSISTENCE_APPLY_ALIAS_NO_AMPERSAND_PATTERN = re.compile(
-    r"\b(?:auto|[A-Za-z_]\w*(?:\s*[*&])?)\s+"
-    r"(?P<alias>[A-Za-z_]\w*)\s*=\s*"
-    r"(?P<target>applyRunCommand|applyProcessTransition)"
-    r"(?!\s*\()\b"
-)
+# `auto`/`const auto`, optionally bound as `&`/`&&`, assigned from a
+# (possibly namespace-qualified) decide*() call.
 RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN = re.compile(
-    r"\b(?:const\s+)?(?:auto|CommandDecision|TransitionDecision)\s+"
-    r"(?P<name>[A-Za-z_]\w*)\s*=\s*decide[A-Za-z_]\w*\s*\("
+    r"\b(?:const\s+)?(?:auto(?:\s*&{1,2})?|CommandDecision|TransitionDecision)"
+    r"\s+(?P<name>[A-Za-z_]\w*)\s*=\s*"
+    r"(?:[A-Za-z_]\w*\s*::\s*)*decide[A-Za-z_]\w*\s*\("
 )
 # A typed CommandDecision/TransitionDecision local variable is a decision
 # origin regardless of its initializer (e.g. a default-constructed
@@ -111,24 +104,94 @@ RUN_PERSISTENCE_DECISION_MEMBER_PATTERN = re.compile(
     r"\b(?P<name>[A-Za-z_]\w*)\s*\)*\s*(?:\.|->)\s*"
     r"(?P<member>effects|messages)\b"
 )
-# Narrow function-signature detector: a parenthesized, non-nested argument
-# list immediately followed by a recognized block's opening brace. Excludes
-# control-flow parentheses (`if (...) {`, `for (...) {`, ...), which are not
-# parameter lists even though they share the same textual shape.
-RUN_PERSISTENCE_FUNCTION_SIGNATURE_PATTERN = re.compile(r"\(([^()]*)\)\s*\{")
+# Control-flow parentheses (`if (...) {`, `for (...) {`, ...) share the same
+# `(...)  {` textual shape as a function signature but are never a
+# parameter list.
 RUN_PERSISTENCE_CONTROL_FLOW_BEFORE_PAREN = re.compile(
     r"\b(?:if|while|for|switch|catch)\s*$"
 )
-# A single `[const] Type[ &|*] name [= default]` parameter. Deliberately does
-# not handle multi-name declarations, templates with commas, or nested
-# parentheses in default arguments -- out of scope for this narrow guard.
+# Method qualifiers a signature's `)` may be followed by before `{`:
+# `const`, `noexcept`, `override`, `final`, and ref-qualifiers `&`/`&&`, in
+# any combination and order.
+RUN_PERSISTENCE_METHOD_QUALIFIER_SUFFIX_PATTERN = re.compile(
+    r"\)(?:\s*(?:const|noexcept|override|final|&&|&))*\s*$"
+)
+# A single `[const] [Namespace::]* Type[ &|*] name [= default]` parameter.
+# The base type is captured after stripping any namespace qualification
+# (`fermentation::CommandDecision` -> `CommandDecision`). Deliberately does
+# not handle multi-name declarations or nested parentheses in default
+# arguments -- out of scope for this narrow guard.
 RUN_PERSISTENCE_PARAM_DECLARATION_PATTERN = re.compile(
-    r"^(?:const\s+)?([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)\s*[&*]{0,2}\s*"
+    r"^(?:const\s+)?(?:[A-Za-z_]\w*\s*::\s*)*([A-Za-z_]\w*)\s*[&*]{0,2}\s*"
     r"([A-Za-z_]\w*)\s*(?:=.*)?$"
 )
 RUN_PERSISTENCE_DECISION_PARAMETER_TYPES = frozenset(
     {"CommandDecision", "TransitionDecision"}
 )
+
+
+def _run_persistence_function_parameter_list(
+    code: str, brace_index: int
+) -> str | None:
+    """Return a function/method body's parameter-list text given the index
+    of its opening `{`, or None if `brace_index` does not open one.
+
+    A small balanced-delimiter scan, not a general C++ parser: walk
+    backward from `{` over whitespace and method qualifiers to the
+    parameter list's `)`, then backward again by paren balance to its `(`,
+    and reject control-flow parentheses sharing the same shape.
+
+    Known gap: a constructor with a member-initializer list
+    (`Foo::Foo(const CommandDecision& pending) : cached_(pending) {`) has no
+    qualifier suffix directly before `{`, so this scan does not resolve the
+    real parameter list for that shape; it registers nothing for that block
+    rather than mis-registering a wrong one. No current production file has
+    this shape.
+    """
+    window_start = max(0, brace_index - 80)
+    qualifier_match = RUN_PERSISTENCE_METHOD_QUALIFIER_SUFFIX_PATTERN.search(
+        code[window_start:brace_index]
+    )
+    if not qualifier_match:
+        return None
+    close_paren = window_start + qualifier_match.start()
+    depth = 0
+    index = close_paren
+    while index >= 0:
+        if code[index] == ")":
+            depth += 1
+        elif code[index] == "(":
+            depth -= 1
+            if depth == 0:
+                break
+        index -= 1
+    if index < 0:
+        return None
+    open_paren = index
+    preceding = code[max(0, open_paren - 10) : open_paren]
+    if RUN_PERSISTENCE_CONTROL_FLOW_BEFORE_PAREN.search(preceding):
+        return None
+    return code[open_paren + 1 : close_paren]
+
+
+def _run_persistence_split_top_level(text: str) -> list[str]:
+    """Split a parameter list at top-level commas, respecting nesting in
+    `()`/`[]`/`<>` (default arguments, templates) without a general parser."""
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for character in text:
+        if character in "([<":
+            depth += 1
+        elif character in ")]>":
+            depth = max(0, depth - 1)
+        if character == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(character)
+    parts.append("".join(current))
+    return parts
 RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN = re.compile(
     r"\bdecide[A-Za-z_]\w*\s*\([^;{}]*\)\s*\.\s*"
     r"(?:effects|messages)\b",
@@ -352,8 +415,10 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
             # declarations positioned before the use are visible (so a
             # shadowing declaration written AFTER a use does not retroactively
             # cover it); the nearest visible declaration in the first block
-            # that has one decides whether a member/call use is a
-            # decision/alias origin or unrelated (fachfremd) shadowing.
+            # that has one decides whether a member use is a decision origin
+            # or unrelated (fachfremd) shadowing. (Apply-alias tracking was
+            # removed: RUN_PERSISTENCE_APPLY_SYMBOL_PATTERN below already
+            # flags every spelling of the two apply symbols directly.)
             blocks: list[tuple[int, int, dict[str, list[tuple[int, str]]]]] = []
             stack: list[int] = []
             for index, character in enumerate(code):
@@ -383,30 +448,21 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                 code
             ):
                 register(match.group("name"), match.start(), "decision")
-            for alias_pattern in (
-                RUN_PERSISTENCE_APPLY_ALIAS_PATTERN,
-                RUN_PERSISTENCE_APPLY_ALIAS_NO_AMPERSAND_PATTERN,
-            ):
-                for match in alias_pattern.finditer(code):
-                    register(match.group("alias"), match.start(), "alias")
 
-            # Typed CommandDecision/TransitionDecision function parameters are
+            # Typed CommandDecision/TransitionDecision function parameters
+            # (including namespace-qualified and method-qualified forms) are
             # decision origins for their whole body (registered at the
             # block's own opening brace, i.e. visible from the first
             # statement on); other typed parameters register as "other" so a
             # fachfremd parameter merely named `decision` stays clean instead
             # of falling through to the bare-name fallback below.
-            for signature_match in RUN_PERSISTENCE_FUNCTION_SIGNATURE_PATTERN.finditer(
-                code
-            ):
-                preceding = code[max(0, signature_match.start() - 10) : signature_match.start()]
-                if RUN_PERSISTENCE_CONTROL_FLOW_BEFORE_PAREN.search(preceding):
+            for block in blocks:
+                parameter_list = _run_persistence_function_parameter_list(
+                    code, block[0]
+                )
+                if parameter_list is None:
                     continue
-                brace_index = signature_match.end() - 1
-                block = block_by_open_brace.get(brace_index)
-                if block is None:
-                    continue
-                for raw_param in signature_match.group(1).split(","):
+                for raw_param in _run_persistence_split_top_level(parameter_list):
                     param = raw_param.strip()
                     if not param:
                         continue
@@ -447,7 +503,7 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                         if decl_position < position
                     ]
                     if specific:
-                        # A decision/alias/parameter registration and the
+                        # A decision/parameter registration and the
                         # generic "other" fallback pattern can both match the
                         # same declaration statement, sometimes at different
                         # offsets (e.g. the specific pattern captures a
@@ -468,28 +524,12 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
             def line_number(position: int) -> int:
                 return code.count("\n", 0, position) + 1
 
-            for match in RUN_PERSISTENCE_APPLY_PATTERN.finditer(code):
+            for match in RUN_PERSISTENCE_APPLY_SYMBOL_PATTERN.finditer(code):
                 violations.append(
                     f"{path}:{line_number(match.start())}: produktiver "
                     "Run-Persistenz-Bypass (apply/effects/messages ausserhalb "
                     "Domain/Coordinator)"
                 )
-
-            for alias_pattern in (
-                RUN_PERSISTENCE_APPLY_ALIAS_PATTERN,
-                RUN_PERSISTENCE_APPLY_ALIAS_NO_AMPERSAND_PATTERN,
-            ):
-                for match in alias_pattern.finditer(code):
-                    alias = match.group("alias")
-                    call_pattern = re.compile(rf"\b{re.escape(alias)}\s*\(")
-                    for call in call_pattern.finditer(code, match.end()):
-                        if declared_kind_before(alias, call.start()) == "alias":
-                            violations.append(
-                                f"{path}:{line_number(call.start())}: produktiver "
-                                "Run-Persistenz-Bypass (apply/effects/messages "
-                                "ausserhalb Domain/Coordinator)"
-                            )
-                            break
 
             for match in RUN_PERSISTENCE_DECISION_MEMBER_PATTERN.finditer(code):
                 name = match.group("name")
@@ -1015,6 +1055,59 @@ RUN_PERSISTENCE_BYPASS_CASES = {
         "    apply(state, decision);\n"
         "}\n",
     ),
+    "qualified_const_method_command_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void Controller::publish(const CommandDecision& pending) const {\n"
+        "    consume(pending.effects);\n"
+        "}\n",
+    ),
+    "qualified_noexcept_method_transition_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void Controller::publish(\n"
+        "    const TransitionDecision* pending) noexcept {\n"
+        "    consume(pending->messages);\n"
+        "}\n",
+    ),
+    "namespaced_command_decision_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void publish(const fermentation::CommandDecision& pending) {\n"
+        "    consume(pending.effects);\n"
+        "}\n",
+    ),
+    "namespaced_apply_alias_without_ampersand": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto apply = fermentation::applyRunCommand;\n"
+        "    apply(state, decision);\n"
+        "}\n",
+    ),
+    "namespaced_apply_alias_with_ampersand": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto apply = &fermentation::applyProcessTransition;\n"
+        "    apply(state, decision, snapshot);\n"
+        "}\n",
+    ),
+    "const_auto_reference_decide_result": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    const auto& result = decideRun();\n"
+        "    consume(result.effects);\n"
+        "}\n",
+    ),
+    "namespaced_decide_result": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto result = fermentation::decideTransition();\n"
+        "    consume(result.messages);\n"
+        "}\n",
+    ),
+    "trailing_unrelated_parameter_does_not_hide_decision_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void publish(const CommandDecision& pending, int retries) {\n"
+        "    consume(pending.effects);\n"
+        "}\n",
+    ),
 }
 
 # The bypass rule deliberately follows values originating from decide*().  It
@@ -1078,6 +1171,19 @@ RUN_PERSISTENCE_CLEAN_CASES = {
         "lib/fermentation_app/src/runtime_path.cpp",
         "void render(const DisplayState& decision) {\n"
         "    consume(decision.effects);\n"
+        "}\n",
+    ),
+    "qualified_const_method_unrelated_decision_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void Controller::render(const DisplayState& decision) const {\n"
+        "    consume(decision.effects);\n"
+        "}\n",
+    ),
+    "qualified_noexcept_method_unrelated_messages_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void Controller::render(\n"
+        "    const DisplayMessages* transitionDecision) noexcept {\n"
+        "    consume(transitionDecision->messages);\n"
         "}\n",
     ),
 }
