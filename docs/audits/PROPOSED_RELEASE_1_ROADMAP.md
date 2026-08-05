@@ -253,8 +253,9 @@ warten:
    [`HARDWARE_SPIKE_PLAN.md`](HARDWARE_SPIKE_PLAN.md).
 4. Beide DS18B20-/1-Wire-Stacks gestuft pruefen: Stufe 1 Quelle/Lizenz/Build,
    Stufe 2 Sensorsmoke-Test mit einem realen Sensor und nur nach Erfolg Stufe 3
-   mit identischer Topologie- und Fehlermatrix. Ein nicht mit der fixierten
-   Toolchain reproduzierbar baubarer Espressif-Kandidat endet als
+   mit identischer Topologie- und Fehlermatrix. Die fixierte ESP-IDF-`6.0.2`-
+   Toolchain erfuellt die `onewire_bus`-Mindestanforderung IDF >=5.0; ein
+   dennoch nicht reproduzierbar baubarer Espressif-Kandidat endet als
    `INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`, nicht als allgemein ungeeignet.
    Softwarestack und Bustopologie getrennt entscheiden: Produktfuehler immer
    separat, Topologie A mit drei Bussen bevorzugt, Topologie B mit gemeinsamem
@@ -262,25 +263,29 @@ warten:
    negativer Referenztest. Allgemeine Trennungs-, Unterbruch-, Fehler- und
    Wiederkehrtests bleiben erhalten; Anschlussart, Anschlussbelegung, drei
    GPIOs und Schutzbauteilwerte werden in diesem Softwareaudit nicht festgelegt.
-5. Den `FIRST_EVALUATION_CANDIDATE` Arduino-ESP32 `WebServer` in einem kleinen
+5. Den `FIRST_EVALUATION_CANDIDATE` ESP-IDF `esp_http_server` in einem kleinen
    aktorfreien, `SPIKE_REQUIRED`-Baselineprototyp
    fuer statische Ressourcen, begrenzte API-/Import-/Exportpfade, wenige
    Clients, Abbruch-, WLAN-, Jitter- und Ressourcenmessung vorbereiten, ohne
    #27 vorwegzunehmen. Die endgueltige Produktivauswahl bleibt
-   `FINAL_SELECTION_PENDING`. `ESPAsyncWebServer` ist
-   `CONDITIONAL_FALLBACK`/`EVALUATE_LATER` und wird nur dann mit identischem
+   `FINAL_SELECTION_PENDING`. `ESPAsyncWebServer` bleibt ein ergebnisoffener
+   Evaluationskandidat mit `EVALUATE_LATER` und wird nur dann mit identischem
    Umfang nachgezogen, wenn der Baselineprototyp ein konkretes Release-1-Risiko
    offen laesst.
 6. Davon fachlich getrennt, aber mit dem Webserver-Baselineprototyp koordiniert,
-   WiFiManager zuerst als begrenzten WLAN-Onboardingkandidaten pruefen:
+   gemaess Espressif-first drei gleichwertige ESP-IDF-`6.0.2`-Pfade
+   (`espressif/network_provisioning` auf `protocomm`, ein direkter
+   `protocomm`-/SoftAP-Ansatz und ein kleiner eigener nativer
+   SoftAP-/DNS-/HTTP-Adapter) sowie WiFiManager als ergebnisoffenen
+   konditionalen Evaluationskandidaten unter demselben Evaluationsgate pruefen:
    Toolchain, Quellen/Lizenz/Webassets, ausdruecklicher Portalstart, reale
    Android-/iOS-/Windows-Clients, primaerer QR mit individuellen SoftAP-
    Zugangsdaten, sichtbarer direkter IP-Rueckfall, Credential-Erhalt,
-   Secret-/Fehler-/Lifecyclegrenzen, Cut-Points, Jitter und Ressourcen. Einen
-   Adapter aus `WiFi`, `DNSServer`, SoftAP und `WebServer` nur bei einem
-   dokumentierten WiFiManager-Problem mit identischem Umfang nachziehen. Dieser
-   Spike setzt weder #27 um noch nimmt er eine endgueltige Bibliothekswahl
-   vorweg.
+   Secret-/Fehler-/Lifecyclegrenzen, Cut-Points, Jitter, Ressourcen sowie den
+   Nachweis des browserbasierten R1-Vertrags ohne verpflichtende App, Cloud
+   oder Kommandozeilenwerkzeug. Dieser Spike setzt weder #27 um noch nimmt er
+   eine endgueltige Bibliothekswahl vorweg; Details stehen im Backlog-Issue
+   `[E5.6]`.
 7. ArduinoJson `7.4.3` als `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
    `FINAL_SELECTION_PENDING` in
    einem kleinen aktorfreien Prototyp pruefen: isolierter Build, konkrete
@@ -332,9 +337,8 @@ Messungen:
 - davon getrennt Topologie A oder den begruendeten Rueckfall B nach realem
   GPIO-/Pin- und Fehlerisolationsvergleich; der Produktfuehler bleibt immer auf
   eigenem Bus und Topologie C bleibt ausgeschlossen;
-- WiFiManager als bevorzugten Onboardingkandidaten endgueltig uebernehmen oder
-  bei dokumentiertem Spikeausloeser den identischen kleinen
-  Frameworkgegenprototyp bewerten und danach den Owner entscheiden lassen;
+- nach der gemeinsamen Messmatrix der drei Espressif-Pfade und WiFiManager
+  genau einen WLAN-Onboardingkandidaten endgueltig uebernehmen;
 - ArduinoJson `7.4.3` als bevorzugten Kandidaten erst nach bestandenem
   Build-, Grenzwert-, Fuzz- und Ressourcennachweis endgueltig uebernehmen;
   Alternative nur bei dokumentiertem Problem;
@@ -352,11 +356,11 @@ nach Treiberauswahl, schmalem Adaptervertrag und einem repraesentativen
 Release-1-Screen.
 
 Beim Webserver besteht keine offene Gleichwahl: Der kleine lokale HTTP-Dienst
-ist `REQUIREMENT_DECIDED`; Arduino-ESP32 `WebServer` ist der
+ist `REQUIREMENT_DECIDED`; ESP-IDF `esp_http_server` ist der
 `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und die bedingte
 Produktivrichtung. Die endgueltige Auswahl bleibt `FINAL_SELECTION_PENDING`.
 Nur wenn sein begrenzter Prototyp eine konkrete R1-Anforderung nicht stabil und
-ressourcengerecht erfuellt, wird der `CONDITIONAL_FALLBACK`
+ressourcengerecht erfuellt, wird der ergebnisoffene Evaluationskandidat
 `ESPAsyncWebServer` unter identischen Bedingungen evaluiert. Ein
 vollstaendiger Zweifachprototyp ist keine Pflicht.
 
@@ -364,16 +368,18 @@ vollstaendiger Zweifachprototyp ist keine Pflicht.
 
 Kleine adapterbezogene PRs:
 
-1. NVS-/Preferences-Adapter fuer den vorhandenen `IStateStore`, sofern nicht
-   bereits in einem zuvor ownerfreigegebenen Persistenzpaket enthalten;
+1. ESP-IDF-NVS-Adapter fuer den vorhandenen `IStateStore` (Backlog-Issue
+   `[E5.7]`), sofern nicht bereits in einem zuvor ownerfreigegebenen
+   Persistenzpaket enthalten;
 2. #30 DS18B20-/1-Wire-Adapter hinter `ITemperatureSource`;
 3. #31 Display- und Touchadapter hinter getrennten schmalen Grenzen;
 4. WLAN-, Zeit-/Zeitzonenadapter und nach bestandenem Server-Spike genau ein
-   kleiner konkreter lokaler HTTP-Adapter; die Zeile waehlt `WebServer` noch
-   nicht produktiv aus;
-5. nach bestandenem OD-06-Spike genau eine konkrete Onboardingintegration;
-   WiFiManager bleibt technischer Portalbaustein, der Frameworkadapter bleibt
-   ein nur bei dokumentiertem Ausloeser gepruefter Rueckfall;
+   kleiner konkreter lokaler HTTP-Adapter; die Zeile waehlt `esp_http_server`
+   noch nicht produktiv aus;
+5. nach bestandenem OD-06-Spike genau eine konkrete Onboardingintegration aus
+   den drei Espressif-Pfaden oder WiFiManager (Backlog-Issue `[E5.6]`); der
+   gewaehlte Kandidat bleibt technischer Portalbaustein, die uebrigen bleiben
+   nur bei dokumentiertem Ausloeser erneut gepruefte Alternativen;
 6. nach bestandenem JSON-Spike einen kleinen konkreten ArduinoJson-Codec nur an
    begrenzten API-, Konfigurations-, Programm-, Diagnose-, Export-,
    secret-freien Backup- und Importgrenzen; interne Persistenz bleibt binaer;
@@ -464,11 +470,11 @@ Nach stabilen Fachvertraegen und den relevanten Adapterentscheiden:
   Technikgates. Es gibt keine
   Last-write-wins-Strategie, globale Bearbeitungssperre oder versprochene
   oeffentliche externe Schreib-API;
-- OD-06-Onboarding getrennt von #27 nach dem begrenzten WiFiManager-Spike
-  umsetzen: kein Portalstart bei gewoehnlichem temporaerem WLAN-Ausfall, neue
-  Zugangsdaten bis zum Nachweis nur als Kandidat behandeln und den bisherigen
-  funktionierenden Stand bei Fehler, Timeout oder Abbruch erhalten; den
-  Frameworkadapter nur bei dokumentiertem Ausloeser identisch vergleichen;
+- OD-06-Onboarding getrennt von #27 nach dem begrenzten gleichwertigen Spike
+  der drei Espressif-Pfade und WiFiManager umsetzen: kein Portalstart bei
+  gewoehnlichem temporaerem WLAN-Ausfall, neue Zugangsdaten bis zum Nachweis
+  nur als Kandidat behandeln und den bisherigen funktionierenden Stand bei
+  Fehler, Timeout oder Abbruch erhalten;
 - den akzeptierten geschuetzten Ersatz-WLAN-Lebenszyklus getrennt vom
   Onboarding umsetzen und pruefen: kurzer Ausfall startet nichts; langer
   Ausfall startet nach `TBD_COMMISSIONING`, waehrend Heim-Reconnect, Lauf,
@@ -622,11 +628,11 @@ Pruefung darf die Sequenz nicht ohne Gleichwertigkeitsnachweis entfernen und
 oeffnet OD-01 nicht erneut.
 
 OD-04 ist als Evaluationsrichtung entschieden: Der lokale HTTP-Dienst ist
-`REQUIREMENT_DECIDED`; Arduino-ESP32 `WebServer` ist
+`REQUIREMENT_DECIDED`; ESP-IDF `esp_http_server` ist
 `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und bedingte Produktivrichtung,
-aber `FINAL_SELECTION_PENDING`. `ESPAsyncWebServer` bleibt
-`CONDITIONAL_FALLBACK`/`EVALUATE_LATER`; nur ein konkretes offenes R1-Risiko
-loest den identischen Vergleich aus.
+aber `FINAL_SELECTION_PENDING`. `ESPAsyncWebServer` bleibt ein
+ergebnisoffener Evaluationskandidat mit `EVALUATE_LATER`; nur ein konkretes
+offenes R1-Risiko loest den identischen Vergleich aus.
 
 OD-07 ist vollstaendig entschieden. #19 ist mit vier, #25 mit zwei, #26 mit
 fuenf lokalen, #27 mit fuenf Web- und #28 mit vier Diagnose-/Servicebereichen
@@ -635,11 +641,14 @@ bleibt im zentralen #57-Recoveryvertrag und behaelt gemaess ADR-010 die
 geraetespezifische Touchkalibrierung; #19 veraendert sie nicht. Ein gesonderter
 Recoveryfall fuer unbrauchbare Kalibrierung bleibt davon getrennt.
 
-OD-06 ist als Richtungsentscheid entschieden: WiFiManager ist der bevorzugte
-Release-1-Onboardingkandidat und wird zuerst begrenzt geprueft. Die
-endgueltige Uebernahme bleibt das Ergebnis dieses Spike-Gates. Der kleine
-Frameworkadapter wird nur bei einem dokumentierten Ausloeser als identischer
-Gegenprototyp nachgezogen; eine offene vorsorgliche Gleichwahl besteht nicht.
+OD-06 ist als Richtungsentscheid entschieden: Gemaess Espressif-first werden
+drei gleichwertige ESP-IDF-`6.0.2`-Pfade (`espressif/network_provisioning`
+auf `protocomm`, ein direkter `protocomm`-/SoftAP-Ansatz und ein kleiner
+eigener nativer SoftAP-/DNS-/HTTP-Adapter) sowie WiFiManager als
+ergebnisoffener konditionaler Evaluationskandidat unter demselben
+Evaluationsgate begrenzt geprueft. Die endgueltige Uebernahme bleibt das
+Ergebnis dieses Spike-Gates; eine offene vorsorgliche Vollimplementierung
+aller Kandidaten besteht nicht. Details stehen im Backlog-Issue `[E5.6]`.
 
 Der JSON-Richtungsentscheid besitzt bewusst kein neues OD-Kuerzel:
 ArduinoJson `7.4.3` ist der bevorzugte Kandidat. Die endgueltige Uebernahme
