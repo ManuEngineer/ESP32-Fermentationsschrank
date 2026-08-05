@@ -10,6 +10,32 @@ Der verbindliche technische Speicher-, Wire-, Root-, Preview- und
 Recoveryvertrag fuer Issue #16 steht in
 [`CONFIGURATION_PERSISTENCE.md`](CONFIGURATION_PERSISTENCE.md).
 
+## Kanonische Grenze zwischen NVS und LittleFS
+
+Für Release 1 ist ESP-IDF NVS das produktive Backend für kleine, strukturierte
+und betriebsrelevante Persistenzdaten:
+
+```text
+NVS
+├── Gerätekonfiguration
+├── Kalibrierung
+├── UI-Einstellungen
+├── Regelparameter
+└── kleine persistente Zustände
+
+LittleFS – zunächst nicht erforderlich
+└── später optional für Dateien, Webassets oder Logs
+```
+
+LittleFS ist damit keine aktuelle Alternative zu `IStateStore`, Schema 1 oder
+dem produktiven NVS-Adapter aus #90. Es ist für Release 1 zunächst nicht
+erforderlich, aber nicht dauerhaft ausgeschlossen. Ein späterer Einsatz
+benötigt einen realen Datei-Use-Case, ein eigenes ownerfreigegebenes Issue,
+Partitions- und Ressourcenmessungen sowie einen dokumentierten Abnahmepfad.
+Kleine kritische Zustände werden nicht vorsorglich in ein Dateisystem
+verschoben. Die reale NVS-/Partitions-/Flashverifikation bleibt ein Gate aus
+#29/#90 und wird durch diese Einordnung nicht vorweggenommen.
+
 ## Grundsaetze
 
 - Werkseinstellungen, typisierte Konfigurationsdokumente, Geheimnisse und aktive

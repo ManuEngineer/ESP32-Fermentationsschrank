@@ -4,23 +4,53 @@ Zur Auditnavigation: [`RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`](RELEASE_1_ADOPT_OR_BU
 
 ## Status
 
-Auditentwurf, Ownerfreigabe ausstehend. Diese Roadmap ersetzt weder
-`docs/IMPLEMENTATION_PLAN.md` noch bestehende Issues oder akzeptierte ADRs. Sie
-zeigt eine risikoorientierte Reihenfolge und die Stellen, an denen der aktuelle
-Backlog vor Umsetzung verkleinert oder geteilt werden sollte.
+Ownerfreigegebene risikoorientierte Arbeitsreihenfolge. Der Adopt-or-build-
+Audit und die Espressif-first-Synchronisierung wurden mit PR #88 gemergt; PR #92
+regelt das Überspringen vollständiger CI bei ausschliesslichen Markdown-
+Änderungen. Diese Roadmap ersetzt weder `docs/IMPLEMENTATION_PLAN.md` noch
+bestehende Issues oder akzeptierte ADRs. Bei Widersprüchen bleiben Live-Issues
+und später akzeptierte ADRs vorrangig. Änderungen an Scope oder Reihenfolge
+benötigen weiterhin einen Ownerentscheid.
+
+Der ausführliche historische Audittext weiter unten bleibt als Begründungs- und
+Nachweistext erhalten. Die folgende aktuelle Synchronisierung ist für den
+heutigen Arbeitsstand massgeblich.
+
+## Aktuelle Synchronisierung
+
+Die direkte Variante-B-Konfigurations- und Persistenzgrundlage ist abgeschlossen:
+
+| Arbeit | aktueller Stand |
+|---|---|
+| #54 – IStateStore und Wireformat | abgeschlossen |
+| #55 – typisierte Konfigurationsdokumente | abgeschlossen |
+| #56 – Active-/Fallback-Graph und Runtimeaktivierung | abgeschlossen |
+| #57 – Bootstrap, StorageEpoch und Recovery | abgeschlossen durch PR #68 (`b6d2385934db288cb25b125abbcbe5e307aca294`) |
+| #17 – Laufpersistenz und Kontrollpunkte | abgeschlossen durch PR #84 |
+| #16 | nur noch Trackingcontainer für übergreifende Abnahmegates |
+| #90 | produktiver ESP-IDF-NVS-Adapter und reale Messungen |
+
+Der abgeschlossene Kern #54–#57 wird nicht erneut eingeplant. Das
+`CONFIGURATION_SAFETY_INTEGRATION_GATE` bleibt ein Abschlussbestandteil von
+#24; #90 bleibt für den produktiven ESP-IDF-NVS-Adapter und die reale
+Flash-/Partitionsverifikation zuständig.
 
 ## Leitende Reihenfolge
 
 ```text
-Auditfreigabe und Spezifikations-/Issue-Bereinigung
-  -> minimale sichere ESP32-Hardwarebaseline
-  -> aktorfreie Display-/Touch-, DS18B20-/1-Wire-, Webserver-,
-     WLAN-Onboarding- und JSON-Codec-Spikes
-  -> Bibliotheksentscheidungen und produktive Adapter
+#20 Sensorqualität
+  -> #21 Regelsensorauswahl
+  -> #22 PI-Regelung
+  -> #23 Aktorplaner
+  -> #24 Fehlerkern und SAFE_BOOT
 
-parallel zur Baseline und zu den Spikes:
-#20 -> #21 -> #22 -> #23 -> #24
+#17 abgeschlossen + #20
+  -> #18 Wiederanlauf
 
+#20 + #21 + sichere #29-Baseline
+  -> #30 reale DS18B20-Integration
+
+parallel: #29 sichere, aktorfreie Minimalbaseline (eigener Plan-first-PR)
 erst nach den jeweiligen Safety-Gates:
 produktive Aktoren -> thermische Abnahme -> Releasegate
 ```
@@ -35,39 +65,35 @@ identische Matrix ausfuehren. Danach entscheidet der Owner ueber bevorzugten
 Treiber und Rueckfallkandidat. Reservekandidaten werden nur bei dokumentiertem
 Ausloeser nachgezogen.
 
-## Phase 1: Auditfreigabe und verbindlicher Persistenz-Neuschnitt
+## Phase 1: Audit- und Persistenzkern abgeschlossen; Backlog-Teilschnitte offen
 
-Vor weiterer Architekturverbreiterung:
+### Abgeschlossen
 
-1. Auditdokumente fachlich freigeben oder korrigieren.
-2. Den entschiedenen OD-01-Vertrag in einem separaten ownerfreigegebenen
-   Planungs-/ADR-Schritt in Spezifikation, #16, #56 und #57 ueberfuehren. Der
-   Audit-PR aendert diese Quellen nicht.
-3. #56 auf Active/Fallback, Graphvalidierung, fluechtige Vorschau,
-   Konfliktschutz und Runtime-Publish reduzieren; #57 auf Bootstrap,
-   `StorageEpoch`, Korruptionssperre und wiederaufnehmbaren Werksreset.
-4. Persistentes Pending sowie echte Connectivity-/Authentication-Domaenen als
-   spaetere eigene Arbeit mit ihrem ersten fachlichen Konsumenten planen, nicht
-   als leere R1-Infrastruktur.
-5. Abhaengigkeit von #24 auf #16 anhand der tatsaechlich benoetigten schmalen
-   Variante-B-Vertraege korrigieren; #17 ist durch PR #84 bereits
-   abgeschlossen und benoetigt keine weitere #16-Abhaengigkeitskorrektur.
-6. Grundsatz bestaetigen, dass Treiber/Frameworkdienste adoptiert und
-   Safety-/Fachlogik selbst entwickelt werden.
-7. den verbindlichen OD-07-Teilschnitt von #19 in Journal/Retention,
-   Laufhistorie/Bereinigung, nur lesenden Laufexport/secret-freies Backup und
-   Importvorschau/atomare Aktivierung in einem separaten ownerfreigegebenen
-   Planungsschritt umsetzen; #25 ebenso in oberflaechenneutrale
-   Praesentationsmodelle und gemeinsame Sprach-/Formatierungsressourcen
-   schneiden; #26 in lokale Navigation, Start, Programmeditor,
-   Lauf-/Meldungsbedienung und Service-/Recovery-UI schneiden; #27 in
-   HTTP-Transport/API, Status/Polling/Laufchart, schreibende Kommandos,
-   responsive Webassets und Authentisierung gemaess OD-09 schneiden; #28 in
-   passive Diagnose/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose,
-   gefuehrten Serviceablauf und nur lesenden Diagnose-/Servicebericht
-   schneiden. OD-07 ist damit vollstaendig entschieden.
+- Audit und Espressif-first-Synchronisierung durch PR #88;
+- #54–#57 als direkter Variante-B-Konfigurations- und Persistenzkern, #57
+  abgeschlossen durch PR #68;
+- #17 als Laufpersistenz und Kontrollpunkte, abgeschlossen durch PR #84;
+- #24 bleibt ein nachgelagertes Integrations- und Safety-Gate; #17 benötigt
+  keine weitere #16-Abhängigkeitskorrektur.
 
-Keine Empfehlung aus dem Audit wird im Audit-PR selbst implementiert.
+### Noch offen
+
+- ownerfreigegebener Planungsschnitt von #19 in Journal/Retention,
+  Laufhistorie/Bereinigung, lesenden Laufexport/secret-freies Backup und
+  Importvorschau/atomare Aktivierung;
+- ownerfreigegebene Teilschnitte von #25–#28 für Präsentationsmodelle,
+  lokale Bedienung, Web und Diagnose/Service;
+- die jeweiligen technischen Pläne und Abnahmekriterien dieser Teilschnitte.
+
+Der OD-07-Rahmen ist dokumentiert, ersetzt aber nicht die noch ausstehenden
+ownerfreigegebenen Planungsschritte. Persistentes Pending sowie echte
+Connectivity-/Authentication-Domaenen werden weiterhin erst mit ihrem ersten
+fachlichen Konsumenten geplant und nicht als leere R1-Infrastruktur vorbereitet.
+Treiber/Frameworkdienste werden adoptiert, Safety-/Fachlogik wird selbst
+entwickelt.
+
+Der Audit-PR hat selbst keine Audit-Empfehlungen implementiert; das ist eine
+historische Einordnung und keine aktuelle Handlungsanweisung für PR #94.
 
 ## Phase 2: zwingende hardwareunabhaengige Safety-, Persistenz- und Fachlogik
 
@@ -81,10 +107,9 @@ abgeschlossen werden:
   -> #22 PI und Luftbegrenzung
   -> #23 Aktorplaner
 
-Persistenzbasis #54/#55
-  -> separater Variante-B-Neuschnitt #16/#56/#57
-  -> #56 Active/Fallback und atomarer Runtime-Publish
-  -> #57 Bootstrap, StorageEpoch und Werksreset
+abgeschlossene Persistenzbasis #54/#55
+  -> abgeschlossener Variante-B-Kern #56/#57
+  -> #16 bleibt Tracking für übergreifende Gates
 
 schmale benoetigte Variante-B-Vertraege
   -> #17 Laufpersistenz [ABGESCHLOSSEN, PR #84]
