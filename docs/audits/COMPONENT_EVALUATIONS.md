@@ -4,15 +4,22 @@ Zur Auditnavigation: [`RELEASE_1_ADOPT_OR_BUILD_AUDIT.md`](RELEASE_1_ADOPT_OR_BU
 
 ## Einordnung
 
-Stand: 2026-07-27. Repository-Basis:
+Stand: 2026-07-27 (Original-Audit). Repository-Basis:
 `7713a66cbf51eb078bd0f5e43c1163d1e0f47e1f`.
+
+Synchronisiert am: 2026-08-05 gemaess der Espressif-first-Regel
+(`docs/ENGINEERING_PRINCIPLES.md`) nach dem Wechsel der Produktionstoolchain auf
+ESP-IDF `6.0.2` (Issue #71 / PR #79, Basis-Commit
+`7101770dc6db2667b3c477cc31365dd1acd6db4e`).
 
 Dieses Dokument bewertet Kandidaten, bindet aber keine Bibliothek ein und trifft
 keine endgueltige Auswahl. "Unterstuetzt" bezeichnet eine Aussage der
 offiziellen Projektquelle; reale Kompatibilitaet mit dem bestellten Board ist
-bis zum Spike unbestaetigt. Die Zieltoolchain ist PlatformIO
-`espressif32@7.0.1` mit Arduino-ESP32 `2.0.17` (`dcc1105b`), ESP32-32E, 4 MB
-Flash und ohne PSRAM. Herkunft und Lizenzen stehen im
+bis zum Spike unbestaetigt. Die Zieltoolchain fuer Produktionsprofile ist
+ESP-IDF `6.0.2` (`esp32_bringup`/`esp32_release`, Composition Root
+`main/app_main.cpp`); PlatformIO ist ausschliesslich der native Hosttestpfad.
+Ein Arduino-Produktionspfad besteht nicht (`AGENTS.md`). Zielhardware bleibt
+ESP32-32E, 4 MB Flash und ohne PSRAM. Herkunft und Lizenzen stehen im
 [`Third-Party-Review`](THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md), die Spikes im
 [`Hardware-Spike-Plan`](HARDWARE_SPIKE_PLAN.md).
 
@@ -60,28 +67,39 @@ SPI-Topologie, reale Modulbelegung und Bootzustaende. Controller, Pins,
 Rotation, Reset, gemeinsamer SPI-Bus, Kalibrierung, Boot-Recovery und Ressourcen
 bleiben bis zu diesem Nachweis `TBD_HARDWARE`.
 
-Alle drei Hauptkandidaten durchlaufen Stufe 1 fuer Quellen, konkret benoetigte
-Dateien, Lizenzen, Abhaengigkeiten und reproduzierbaren Build. Nur ausreichend
-erfolgreiche Kandidaten erreichen den kurzen identischen Hardware-Smoke-Test in
-Stufe 2; nur `PASS_SMOKE_TEST` fuehrt zur vollstaendigen Matrix in Stufe 3.
-Stufe 4 benennt genau einen bevorzugten Treiberstack und einen
-Rueckfallkandidaten. Die zwei Reservekombinationen werden nur bei einem
+Vier gleichrangig zu vergleichende Kandidatengruppen durchlaufen Stufe 1 fuer
+Quellen, konkret benoetigte Dateien, Lizenzen, Abhaengigkeiten und
+reproduzierbaren Build: der Espressif-Stack (`esp_lcd` als Built-in plus
+`espressif/esp_lcd_ili9341`, `espressif/esp_lcd_touch` und
+`atanisoft/esp_lcd_touch_xpt2046`) als Espressif-first-Erstkandidat sowie
+LovyanGFX, TFT_eSPI und LCDWiki als ergebnisoffene Evaluationskandidaten unter
+demselben Espressif-first-Evaluationsgate (direkter ESP-IDF-6.0.2-Build/
+-Betrieb oder dokumentierter Integrationspfad ohne Wiedereinfuehrung eines
+Arduino-Produktionspfads, `AGENTS.md`). Espressif-first bestimmt nur die
+Pruefreihenfolge, nicht die Auswahl. Nur ausreichend erfolgreiche Kandidaten
+erreichen den kurzen identischen Hardware-Smoke-Test in Stufe 2; nur
+`PASS_SMOKE_TEST` fuehrt zur vollstaendigen Matrix in Stufe 3. Stufe 4 benennt
+genau einen bevorzugten Treiberstack und einen Rueckfallkandidaten. Arduino_GFX
+und Adafruit GFX/ILI9341 bleiben Reservekombinationen und werden nur bei einem
 dokumentierten Ausloeser nachgezogen und nicht vorsorglich voll implementiert.
+Details und Quellen der Espressif-Kandidaten stehen im
+[Third-Party-Components-Register](../THIRD_PARTY_COMPONENTS.md).
 
-| Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP32-/PlatformIO-Aussage | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
+| Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP-IDF-6.0.2-/ESP32-Kompatibilitaet | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
 |---|---|---|---|---|---|---|---|
-| LovyanGFX | Projekt nennt ILI9341, ESP32 und Touchunterstuetzung | `1.2.26`, `3f78b705`; FreeBSD plus dokumentierte Ursprungslizenzen | `architectures=esp32`; konkrete Kompatibilitaet mit Arduino-ESP32 2.0.17 messen | Treiber, Fonts und optionale Sprites; kein Vollbildpuffer erzwingen | schmaler Display-/Touchadapter, feste Bus- und Pufferkonfiguration | Boardprofil, XPT2046, Shared-SPI, Heap und Reset real pruefen | verbindlicher Hauptkandidat fuer Stufe 1; nicht ausgewaehlt |
-| TFT_eSPI | Projekt nennt ILI9341 und ESP32 | Manifest `2.5.44`, `16e37595`; FreeBSD plus Ursprungsbestandteile | `architectures=*`; User-Setup ist buildzeitnah und muss reproduzierbar gekapselt werden | optimierter Treiber und Fonts; Konfiguration kann ungenutzte Treiber einbeziehen | Displayadapter plus projektspezifische, versionierte Setupdatei; Touch separat oder integriert pruefen | globale Konfiguration, Shared-SPI, Touchkalibrierung und Upstream-Updates | verbindlicher Hauptkandidat fuer Stufe 1; nicht ausgewaehlt |
-| LCDWiki-Paket | lokale Kopie der zum MSP2807 gelieferten Demos und Treiber | Paketdateien 2018; MIT-Dateien in `LCDWIKI_GUI`, `LCDWIKI_SPI`, `LCDWIKI_TOUCH`; Paketherkunft/Abdeckung erneut pruefen | Demos zielen vorwiegend auf Arduino UNO/Mega; ESP32- und PlatformIO-Tauglichkeit unbestaetigt | unbekannt; altes Paket mit mehreren Demos, Fonts und Controllerpfaden | bei positiver Untersuchung nur kleinster klar lizenzierter Teil hinter Adapter; keine direkte Gesamtuebernahme | fehlende moderne ESP32-Referenz, Paketalter, Abdeckung aller Dateien, Pins und Touch real pruefen | verbindlicher Hauptkandidat fuer Stufe 1 und interne Herstellerreferenz; keine allgemeine rechtliche oder technische Freigabe |
-| Arduino_GFX plus geeigneter Touchadapter | Arduino_GFX nennt ILI9341 und ESP32-SPI; separater Touchadapter nach bestaetigtem Controller | `1.6.7`, `fe33cad8`, BSD; XPT2046-Touch `1.4`, `f956c5d8`, MIT im Header, falls der Controller bestaetigt wird | Arduino-Manifeste `architectures=*`; konkrete alte-Core-Kompatibilitaet messen | zwei Bibliotheken, Adapterschicht und moeglicherweise weniger integrierte Shared-SPI-Koordination | getrennte Display- und Touchadapter | zwei Lebenszyklen, Kalibrierung, Busarbitrierung, Reset | Reservekandidat; nur bei dokumentiertem Ausloeser nachziehen |
-| Adafruit GFX + ILI9341 + geeigneter XPT2046-Touchadapter | Adafruit-Treiber dokumentiert ILI9341/ESP32; Touchadapter erst nach Controllerbestaetigung | GFX `1.12.6`/`ac6d7c38`, ILI9341 `1.6.3`/`dbb447af`, BSD; XPT2046-Touch MIT | `architectures=*`; zusaetzliche Adafruit-Abhaengigkeiten und Core-Kompatibilitaet pruefen | mehrere Bibliotheken und BusIO; Referenz eher Portabilitaet als minimales ESP32-Profil | Display- und Touchadapter, ungenutzte Abhaengigkeiten vermeiden | Abhaengigkeitsumfang, Shared-SPI und Performance messen | Reservekandidat; nur bei dokumentiertem Ausloeser nachziehen |
+| Espressif-Stack: `esp_lcd` + `esp_lcd_ili9341` + `esp_lcd_touch` + `atanisoft/esp_lcd_touch_xpt2046` | offizielle Espressif-Komponenten (Touch-XPT2046-Treiber ohne eigenen `espressif/*`-Namespace) | `esp_lcd` Built-in; `esp_lcd_ili9341 2.0.2`, Apache-2.0; `esp_lcd_touch 1.2.1`, Apache-2.0; `esp_lcd_touch_xpt2046 1.0.6`, MIT | ESP-IDF >=4.4 (`esp_lcd_ili9341`), >=4.4.2 (`esp_lcd_touch`), >=4.4 + `esp_lcd_touch` >=1.0.4 (`esp_lcd_touch_xpt2046`); durch ESP-IDF 6.0.2 erfuellt | schmaler Panel-/IO-Treiber; Fonts/Rendering bleibt Projektsache | schmaler Display-/Touchadapter auf `esp_lcd`-Handles | Boardprofil, gemeinsamer SPI-Bus, Heap und Reset real pruefen; kein offizieller `espressif/*`-XPT2046-Treiber | Espressif-first-Erstkandidat fuer Stufe 1; `SPIKE_REQUIRED`, nicht ausgewaehlt |
+| LovyanGFX | Projekt nennt ILI9341, ESP32 und Touchunterstuetzung | `1.2.26`, `3f78b705`; FreeBSD plus dokumentierte Ursprungslizenzen | `architectures=esp32`; Arduino-Manifest setzt eine Arduino-Laufzeit voraus, die kein aktueller Produktionspfad ist (`AGENTS.md`); Eignung nur ueber das Espressif-first-Evaluationsgate messen | Treiber, Fonts und optionale Sprites; kein Vollbildpuffer erzwingen | schmaler Display-/Touchadapter, feste Bus- und Pufferkonfiguration | Boardprofil, XPT2046, Shared-SPI, Heap und Reset real pruefen | ergebnisoffener Evaluationskandidat fuer Stufe 1; nicht ausgewaehlt |
+| TFT_eSPI | Projekt nennt ILI9341 und ESP32 | Manifest `2.5.44`, `16e37595`; FreeBSD plus Ursprungsbestandteile | `architectures=*`; Arduino-Manifest, kein aktueller Produktionspfad (`AGENTS.md`); User-Setup, Reproduzierbarkeit und dasselbe Espressif-first-Evaluationsgate gemeinsam pruefen | optimierter Treiber und Fonts; Konfiguration kann ungenutzte Treiber einbeziehen | Displayadapter plus projektspezifische, versionierte Setupdatei; Touch separat oder integriert pruefen | globale Konfiguration, Shared-SPI, Touchkalibrierung und Upstream-Updates | ergebnisoffener Evaluationskandidat fuer Stufe 1; nicht ausgewaehlt |
+| LCDWiki-Paket | lokale Kopie der zum MSP2807 gelieferten Demos und Treiber | Paketdateien 2018; MIT-Dateien in `LCDWIKI_GUI`, `LCDWIKI_SPI`, `LCDWIKI_TOUCH`; Paketherkunft/Abdeckung erneut pruefen | Demos zielen vorwiegend auf Arduino UNO/Mega; ESP-IDF-6.0.2-/ESP32-Tauglichkeit unbestaetigt | unbekannt; altes Paket mit mehreren Demos, Fonts und Controllerpfaden | bei positiver Untersuchung nur kleinster klar lizenzierter Teil hinter Adapter; keine direkte Gesamtuebernahme | fehlende moderne ESP32-Referenz, Paketalter, Abdeckung aller Dateien, Pins und Touch real pruefen | ergebnisoffene Hersteller-/Referenzoption fuer Stufe 1, `LICENSE_REVIEW_REQUIRED`; keine allgemeine rechtliche oder technische Freigabe |
+| Arduino_GFX plus geeigneter Touchadapter | Arduino_GFX nennt ILI9341 und ESP32-SPI; separater Touchadapter nach bestaetigtem Controller | `1.6.7`, `fe33cad8`, BSD; XPT2046-Touch `1.4`, `f956c5d8`, MIT im Header, falls der Controller bestaetigt wird | Arduino-Manifeste `architectures=*`; kein aktueller Produktionspfad (`AGENTS.md`); Espressif-first-Evaluationsgate pruefen | zwei Bibliotheken, Adapterschicht und moeglicherweise weniger integrierte Shared-SPI-Koordination | getrennte Display- und Touchadapter | zwei Lebenszyklen, Kalibrierung, Busarbitrierung, Reset | Reservekandidat; nur bei dokumentiertem Ausloeser nachziehen |
+| Adafruit GFX + ILI9341 + geeigneter XPT2046-Touchadapter | Adafruit-Treiber dokumentiert ILI9341/ESP32; Touchadapter erst nach Controllerbestaetigung | GFX `1.12.6`/`ac6d7c38`, ILI9341 `1.6.3`/`dbb447af`, BSD; XPT2046-Touch MIT | `architectures=*`; kein aktueller Produktionspfad (`AGENTS.md`); zusaetzliche Adafruit-Abhaengigkeiten und Espressif-first-Evaluationsgate pruefen | mehrere Bibliotheken und BusIO; Referenz eher Portabilitaet als minimales ESP32-Profil | Display- und Touchadapter, ungenutzte Abhaengigkeiten vermeiden | Abhaengigkeitsumfang, Shared-SPI und Performance messen | Reservekandidat; nur bei dokumentiertem Ausloeser nachziehen |
 
-Reservekandidaten werden nur nachgezogen, wenn weniger als zwei Hauptkandidaten
-Stufe 2 bestehen, alle Hauptkandidaten ein wesentliches Ressourcen-, Wartungs-,
-Stabilitaets- oder Integrationsproblem besitzen, der erforderliche publizierte
-Dateisatz eine ungeklaerte Lizenz-/Herkunftsfrage behaelt, keine belastbare
-Auswahl moeglich ist oder ein Reservekandidat einen nachgewiesenen wesentlichen
-R1-Vorteil besitzt.
+Reservekandidaten werden nur nachgezogen, wenn weniger als zwei der vier
+gleichrangigen Kandidatengruppen Stufe 2 bestehen, alle diese Kandidaten ein
+wesentliches Ressourcen-, Wartungs-, Stabilitaets- oder Integrationsproblem
+besitzen, der erforderliche publizierte Dateisatz eine ungeklaerte
+Lizenz-/Herkunftsfrage behaelt, keine belastbare Auswahl moeglich ist oder ein
+Reservekandidat einen nachgewiesenen wesentlichen R1-Vorteil besitzt.
 
 Verbleibende eigene Logik: Touchkalibrierung, Ereignisentprellung,
 Aufweckschutz, UI-Navigation, Sicherheits- und Kommandosemantik. Kein Treiber
@@ -127,10 +145,10 @@ Dabei werden Topologie A mit drei getrennten Bussen und Topologie B mit separate
 Produktfuehler sowie gemeinsamem festen Bus identisch verglichen. Topologie C
 mit allen Sensoren auf einem Bus ist keine regulaere Zielvariante.
 
-| Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP32-/PlatformIO-Aussage | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
+| Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP-IDF-6.0.2-/ESP32-Kompatibilitaet | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
 |---|---|---|---|---|---|---|---|
-| DallasTemperature + OneWire | verbreitete Arduino-Abstraktion ueber den DS18B20- und 1-Wire-Vertrag | DallasTemperature `4.0.6`, `dadbbf7d`, MIT; OneWire `2.3.8`, `800f26f3`, MIT im Quelltext | beide `architectures=*`; OneWire nennt ESP32-Anpassungen | zwei kleine Bibliotheken; Flash-/RAM-/Heapwirkung in Stufe 1 und 3 messen | technischer Adapter mit Bus-ID, ROM, Mess-/Zeit-/CRC-/Anwesenheits-/Timeout-/Fehlerstatus | neue DallasTemperature-Hauptversion, alter Arduino-Core, Mehrbus/Mehrsensor, Trennung/Wiederkehr und Timing pruefen | verbindlicher Kandidat 1; keine Auswahl vor Stufe 3 |
-| Espressif onewire_bus + ds18b20 | offizielle Espressif-Komponenten, RMT/UART-Backend, Enumeration und CRC8 | `onewire_bus 1.1.1`, `a269e1fe`; `ds18b20 0.4.0`, `bf92b0b3`; Apache-2.0 | Registry fordert fuer onewire_bus ESP-IDF >=5.0; aktuelles Projekt nutzt Arduino-ESP32 2.0.17 auf IDF 4.4, direkte Integration daher unbestaetigt | RMT/UART-Ressourcen und optionale Sensor-Hub-Abhaengigkeit; messen | derselbe technische Plattformport; keine IDF-Typen in der Anwendung | Toolchain-Mismatch, Komponentenmanager in PlatformIO-Arduino, Mehrbus/Mehrsensor und optionale Sensor-Hub-Grenze pruefen | verbindlicher Kandidat 2; bei Toolchainkonflikt `INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`, keine allgemeine Untauglichkeitsaussage |
+| DallasTemperature + OneWire | verbreitete Arduino-Abstraktion ueber den DS18B20- und 1-Wire-Vertrag | DallasTemperature `4.0.6`, `dadbbf7d`, MIT; OneWire `2.3.8`, `800f26f3`, MIT im Quelltext | beide `architectures=*`; Arduino-Manifest setzt eine Arduino-Laufzeit voraus, die kein aktueller Produktionspfad ist (`AGENTS.md`); Eignung nur ueber das Espressif-first-Evaluationsgate (direkter ESP-IDF-6.0.2-Build/-Betrieb oder dokumentierter Integrationspfad ohne Arduino-Produktionspfad) messen | zwei kleine Bibliotheken; Flash-/RAM-/Heapwirkung in Stufe 1 und 3 messen | technischer Adapter mit Bus-ID, ROM, Mess-/Zeit-/CRC-/Anwesenheits-/Timeout-/Fehlerstatus | neue DallasTemperature-Hauptversion, Espressif-first-Evaluationsgate, Mehrbus/Mehrsensor, Trennung/Wiederkehr und Timing pruefen | ergebnisoffener konditionaler Evaluationskandidat neben dem Espressif-first-Erstkandidaten `onewire_bus`/`ds18b20`; gleicher Funktions-, Ressourcen- und Hardwarevergleich, keine Auswahl vor Stufe 3; ein Arduino-basierter Integrationsweg benoetigt weiterhin den dokumentierten Ownerentscheid |
+| Espressif onewire_bus + ds18b20 | offizielle Espressif-Komponenten, RMT/UART-Backend, Enumeration und CRC8 | `onewire_bus 1.1.1`, `a269e1fe`; `ds18b20 0.4.0`, `bf92b0b3`; Apache-2.0 | Registry fordert fuer onewire_bus ESP-IDF >=5.0; die Produktionstoolchain ist seit Issue #71/PR #79 ESP-IDF `6.0.2`, die Mindestanforderung ist damit erfuellt | RMT/UART-Ressourcen und optionale Sensor-Hub-Abhaengigkeit; messen | derselbe technische Plattformport; keine IDF-Typen in der Anwendung | ESP-Component-Manager-Integration in `main/app_main.cpp`, Mehrbus/Mehrsensor und optionale Sensor-Hub-Grenze real pruefen | Espressif-first-Erstkandidat fuer Stufe 1; `SPIKE_REQUIRED`, keine ausgewaehlte Abhaengigkeit |
 
 Der Produktfuehler erhaelt verbindlich einen eigenen Bus. Ein eigener Bus auch
 fuer den Schutzsensor ist bevorzugt; der gemeinsame feste Bus aus Topologie B
@@ -164,10 +182,10 @@ Abgerufen am 2026-07-27.
 |---|---|
 | Aufgabe | H-Brueckenadapter fuer exklusive Vorwaerts-/Rueckwaertsanforderung |
 | Release-1-Anforderung | Boot AUS, beide Richtungen nie gleichzeitig, Pulldowns, Totzeit, begrenzte Servicepulse, optional R_IS/L_IS nach Messung |
-| Kandidaten | Arduino-GPIO/LEDC aus dem fixierten Framework; kein hochstufiger BTS7960-Treiber erforderlich |
+| Kandidaten | ESP-IDF-GPIO/LEDC-Built-ins der fixierten ESP-IDF-`6.0.2`-Toolchain; kein hochstufiger BTS7960-Treiber erforderlich |
 | Herstellerquelle | [Infineon BTS7960-Datenblatt](https://www.infineon.com/assets/row/public/documents/10/57/infineon-bts7960-ds-en.pdf), lokale Kopie unter `references/datasheets/` |
-| Version/Lizenz | Framework Arduino-ESP32 `2.0.17`; Herstellerdatenblatt ist Referenz, kein uebernommener Code |
-| Kompatibilitaet | Framework ist Teil des Zielbuilds; Modulvariante, Pegel und Beschaltung bleiben unbestaetigt |
+| Version/Lizenz | ESP-IDF `6.0.2`; Herstellerdatenblatt ist Referenz, kein uebernommener Code |
+| Kompatibilitaet | Built-in ist Teil des Zielbuilds; Modulvariante, Pegel und Beschaltung bleiben unbestaetigt |
 | Ressourcen | kleiner GPIO-/Timeradapter; reale Timerbelegung und Builddelta messen |
 | Adapter | `IBidirectionalActuatorSink`-Implementierung mit sicherer Initialisierung; keine Rollenbegriffe im Plattformport |
 | Eigene Logik | gesamte Safety-Freigabe, Mindestzeiten, Totzeit, Fehlerreaktion und Servicebegrenzung |
@@ -180,8 +198,8 @@ Abgerufen am 2026-07-27.
 |---|---|
 | Aufgabe | zwei 12-V-Luefter und der aktive Summer als einziges zusaetzliches lokales Ausgabeelement ueber bestaetigte binaere Ausgaenge |
 | Release-1-Anforderung | sichere Bootpegel, Innenluefterbetrieb, Aussenluefter ohne absichtlichen Vorlauf und mit Nachlauf, Summer fuer nicht blockierende akustische Warnungen und Hinweise; keine Status-LED |
-| Kandidaten | Arduino-ESP32 GPIO/LEDC; keine Geraeterollen in der Plattform |
-| Quelle/Stand/Lizenz | [Arduino-ESP32](https://github.com/espressif/arduino-esp32), Projektstand `2.0.17`/`dcc1105b`, LGPL-2.1 mit Drittbestandteilen |
+| Kandidaten | ESP-IDF-GPIO/LEDC-Built-ins; keine Geraeterollen in der Plattform |
+| Quelle/Stand/Lizenz | ESP-IDF `6.0.2` (Issue #71 / PR #79, Basis-Commit `7101770dc6db2667b3c477cc31365dd1acd6db4e`), Apache-2.0 |
 | Ressourcen | kleine `IBinaryOutputSink`-Adapter; Timer/PWM nur falls reale Hardware es verlangt |
 | Eigene Logik | Nachlauf, Sicherheitsprioritaet, Meldungsmuster und Rollenbindung |
 | Risiken/Hardwaretest | Kanalbelegung und aktive Pegel der Quad-MOSFET-Platine sind nur `confirmed_order`; Strom, Anlauf und Reset messen |
@@ -190,14 +208,14 @@ Abgerufen am 2026-07-27.
 Der 230-V-AC-Hauptschalter gehoert nicht zu diesen Ausgaengen und erhaelt auch
 keinen Eingangsadapter. Er schaltet das Geraet rein elektrisch ein oder aus.
 
-## NVS beziehungsweise Preferences
+## ESP-IDF NVS
 
 | Merkmal | Bewertung |
 |---|---|
 | Aufgabe | produktives Blob-Backend fuer den vorhandenen `IStateStore` |
 | Release-1-Anforderung | kurze ADR-016-Schluessel, binaersichere Werte, typisierte Read-/Writefehler, atomarer einzelner Commit und Rueckfalllogik oberhalb des Backends |
-| Kandidaten | Arduino-ESP32 Preferences ueber NVS; direkter ESP-IDF-NVS-Adapter nur bei nachgewiesenem Vertragsvorteil |
-| Quelle/Stand/Lizenz | [Preferences-Dokumentation](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/preferences.html), Projektstand Arduino-ESP32 `2.0.17`; Framework-/ESP-IDF-Lizenzen |
+| Kandidaten | durch ADR-016 festgelegtes produktives Backend: direkter ESP-IDF-`nvs_flash`-Adapter, da kein Arduino-Produktionspfad besteht (`AGENTS.md`); keine offene Produktauswahl mehr, Adapterimplementierung und reale Verifikation in Backlog-Issue #90 |
+| Quelle/Stand/Lizenz | [NVS-Dokumentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/nvs_flash.html), ESP-IDF `6.0.2`, Apache-2.0 |
 | Wartung/Kompatibilitaet | offizieller Plattformbestandteil; Keys bis 15 Zeichen und Bytewerte dokumentiert |
 | Ressourcen | NVS-Partition und Runtime-Handles; Groesse bleibt bis #29 `TBD_IMPLEMENTATION_BUDGET` |
 | Adapter | vorhandenen `IStateStore` implementieren; `CommitOutcomeUnknown` und Limits explizit uebersetzen |
@@ -234,7 +252,7 @@ diesen Teilschnitt wird keine neue Bibliothek ausgewaehlt.
 | Release-1-Anforderung | korrekte UTF-8-/Escape-/Zahlenverarbeitung, feste Byte-/Struktur-/Feldgrenzen, stabile Projektfehler, Redaction, Importvorschau ohne Aktivierung und Streaming/Pagination grosser Ausgaben |
 | Bevorzugter Kandidat | ArduinoJson `7.4.3`, Tag-Commit `77771d3c07668e01d8f52acb03910c1110bb373f`; `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` |
 | Quelle/Lizenz | [ArduinoJson](https://github.com/bblanchon/ArduinoJson), offizieller Tag `v7.4.3`, MIT; Paketmanifest, konkret verwendete Header/Features, transitive Bestandteile und Notices im Spike pruefen |
-| Kompatibilitaet | isolierter reproduzierbarer Build mit PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17`, C++17, ESP32-32E, 4 MB Flash und ohne PSRAM-Abhaengigkeit erforderlich |
+| Kompatibilitaet | isolierter reproduzierbarer Build mit ESP-IDF `6.0.2` (`esp32_bringup`/`esp32_release`, Composition Root `main/app_main.cpp`), C++17, ESP32-32E, 4 MB Flash und ohne PSRAM-Abhaengigkeit erforderlich |
 | Ressourcen | ArduinoJson 7 verwaltet Dokumente dynamisch; Modell, alter Ausgabezustand und neuer Serialisierungspfad koennen gleichzeitig leben. Flash, statisches RAM, Heapspitze/-minimum/-blockgroesse, Fragmentierung und Zeiten pro Profil real messen |
 | Adapter | kleine konkrete DTO-/Codecgrenze in ESP32-/Transportintegration; Bibliotheksfehler vollstaendig in stabile Projektfehler uebersetzen; kein `IJsonProvider`, Pluginregister oder Dummy-Zweitcodec |
 | Eigene Logik | Endpunkt- und Feldschema, Root-Typ, String-/Array-/Wertebereiche, Berechtigung, Redaction, Konflikte, Secretgrenzen, Trennung von Export/Backup und Import, vollstaendiger Importkandidat, Vorschau, Bestaetigung und atomare OD-01-Aktivierung |
@@ -381,8 +399,8 @@ Hardwarefreigabe `HARDWARE_GATE_PENDING`.
 
 | Kandidat | Gepruefter Stand/Lizenz | Eignung | Ressourcen/Risiken | Empfehlung |
 |---|---|---|---|---|
-| Arduino-ESP32 `WebServer` | Teil der fixierten Arduino-ESP32-Toolchain `2.0.17`; Framework-/Drittkomponentenlizenzen | synchroner lokaler HTTP-Server fuer statische Ressourcen, begrenzte JSON-Endpunkte und wenige Clients; keine zusaetzliche Serverbibliothek | langsame/abgebrochene Clients, Parallelitaet, Import/Export, Antwortzeit, Regelzyklus-Jitter, Watchdog, Flash/RAM/Heap und Verbindungslebenszyklus begrenzt messen | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, bedingte Produktivrichtung und `FINAL_SELECTION_PENDING`; nur nach bestandenem begrenztem Prototyp produktiv integrieren |
-| ESPAsyncWebServer | `3.12.0`, `a008cccf`, LGPL-3.0; asynchrone TCP- und optionale JSON-Abhaengigkeiten separat | kann bei belegtem Bedarf parallele Verbindungen oder Ereignis-/Streamingpfade anders behandeln; fuer R1 sind WebSocket und SSE nicht vorausgesetzt | zusaetzliche Abhaengigkeit, Callback-/Lebensdauerkomplexitaet, Heaplast, transitive Komponenten und LGPL-Pflichten | `CONDITIONAL_FALLBACK`, `EVALUATE_LATER`; nur bei konkretem Scheitern des ersten Kandidaten und klarem Vorteil im identischen Prototyp uebernehmen |
+| ESP-IDF `esp_http_server` | ESP-IDF-Built-in, ESP-IDF `6.0.2`, Apache-2.0 | synchroner lokaler HTTP-Server fuer statische Ressourcen, begrenzte JSON-Endpunkte und wenige Clients; keine zusaetzliche Serverbibliothek | langsame/abgebrochene Clients, Parallelitaet, Import/Export, Antwortzeit, Regelzyklus-Jitter, Watchdog, Flash/RAM/Heap und Verbindungslebenszyklus begrenzt messen | `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, bedingte Produktivrichtung und `FINAL_SELECTION_PENDING`; nur nach bestandenem begrenztem Prototyp produktiv integrieren |
+| ESPAsyncWebServer | `3.12.0`, `a008cccf`, LGPL-3.0; asynchrone TCP- und optionale JSON-Abhaengigkeiten separat; setzt eine Arduino-Laufzeit voraus, die kein aktueller Produktionspfad ist (`AGENTS.md`) | kann bei belegtem Bedarf parallele Verbindungen oder Ereignis-/Streamingpfade anders behandeln; fuer R1 sind WebSocket und SSE nicht vorausgesetzt | zusaetzliche Abhaengigkeit, Callback-/Lebensdauerkomplexitaet, Heaplast, transitive Komponenten, LGPL-Pflichten und ein dokumentierter Integrationspfad ohne Arduino-Produktionspfad | ergebnisoffener Evaluationskandidat, `EVALUATE_LATER`; nur bei konkretem Scheitern des ersten Kandidaten und klarem Vorteil im identischen Prototyp uebernehmen |
 
 ### Release-1-Bedarf und Nichtbedarf
 
@@ -413,8 +431,8 @@ Der Frameworkserver-Prototyp muss nachweisen:
   Heapblock-, Antwortzeit-, Bearbeitungszeit-, Jitter-, Watchdog- und
   Resetwerte.
 
-Nur wenn dabei ein konkretes R1-Risiko offenbleibt, erhalten `WebServer` und
-`ESPAsyncWebServer` denselben begrenzten Vergleich mit Testseite,
+Nur wenn dabei ein konkretes R1-Risiko offenbleibt, erhalten `esp_http_server`
+und `ESPAsyncWebServer` denselben begrenzten Vergleich mit Testseite,
 `GET /api/status`, `GET /api/config`, simuliertem begrenztem
 Aenderungsrequest, Export, Import/Upload, normalen und parallelen Clients,
 langsamem und abgebrochenem Client, ungueltiger/uebergrosser Anfrage,
@@ -446,15 +464,15 @@ beendet keinen Lauf. Webanfragen wirken nur ueber normale fachliche Kommando-
 und Safety-Pfade. Authentisierung, CSRF, Sessions, Sperrlogik, Redaction und
 Importvalidierung bleiben eigene Vertraege. Secrets gelangen nicht in Logs,
 Exporte oder Fehlermeldungen. Entscheidungsstatus: Der lokale HTTP-Dienst ist
-`REQUIREMENT_DECIDED`. Arduino-ESP32 `WebServer` ist
+`REQUIREMENT_DECIDED`. ESP-IDF `esp_http_server` ist
 `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
-`FINAL_SELECTION_PENDING`; `ESPAsyncWebServer` bleibt
-`CONDITIONAL_FALLBACK`/`EVALUATE_LATER`. Die Evaluationsrichtung ist
+`FINAL_SELECTION_PENDING`; `ESPAsyncWebServer` bleibt ein ergebnisoffener
+Evaluationskandidat mit `EVALUATE_LATER`. Die Evaluationsrichtung ist
 entschieden, die Produktivauswahl nicht.
 
-Quellen: [Arduino-ESP32](https://github.com/espressif/arduino-esp32),
+Quellen: [ESP-IDF esp_http_server](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/esp_http_server.html),
 [ESPAsyncWebServer](https://github.com/ESP32Async/ESPAsyncWebServer). Abgerufen
-am 2026-07-27.
+am 2026-08-05.
 
 ### Grenze zum OD-07-Teilentscheid fuer #27
 
@@ -482,10 +500,25 @@ selbst wenn technische Frameworkbausteine geteilt werden.
 
 ## WLAN-Onboarding
 
+Espressif-first (`docs/ENGINEERING_PRINCIPLES.md`) verlangt, dass drei
+ESP-IDF-6.0.2-Pfade gleichwertig gemessen werden, bevor ein
+Drittanbieter-Fallback zur Auswahl steht. Details und Quellen der drei
+Espressif-Pfade stehen im
+[Third-Party-Components-Register](../THIRD_PARTY_COMPONENTS.md) und in
+[`ADOPT_OR_BUILD.md`](../ADOPT_OR_BUILD.md#wlan-onboarding).
+
 | Kandidat | Stand/Lizenz | Eignung und Grenzen | Empfehlung |
 |---|---|---|---|
-| WiFiManager | `v2.0.17`, `d82d0a1b`, MIT | stellt den standardisierten Portalteil fuer SoftAP, DNS-Umleitung, Captive Portal, Netzwerkscan, Formulare, Timeouts und Clientverhalten bereit; projektspezifische Start-, Secret-, Commit-, Recovery- und Safetysemantik bleibt ausserhalb | bevorzugter `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING`; zuerst allein begrenzt pruefen |
-| Arduino-ESP32 `WiFi` + `DNSServer` + SoftAP + `WebServer` | Framework `2.0.17` | keine zusaetzliche Portalbibliothek, aber mehr eigener technischer Portal-, DNS- und Clientlebenszykluscode; kann den zuerst evaluierten Frameworkserver technisch mitverwenden | konditionaler Rueckfall; nur bei einem dokumentierten Problem des WiFiManager-Spikes mit identischem Ablauf als Gegenprototyp nachziehen |
+| `espressif/network_provisioning` auf `protocomm` | `network_provisioning 1.2.4`, ESP-IDF >=5.1, Apache-2.0; `protocomm` offizielle ESP-IDF-Komponente ohne separate Registry-Version | offizieller Espressif-Provisioning-Stack; ersetzt das in ESP-IDF 6.0 entfernte `wifi_provisioning`; BLE-Pfad fuer R1 nicht verpflichtend | Espressif-first-Erstkandidat; `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` |
+| direkter `protocomm`-/ESP-IDF-SoftAP-/HTTP-/DNS-Ansatz ohne `network_provisioning` | ESP-IDF `6.0.2`, Apache-2.0 | mehr eigener Integrationscode, aber keine zusaetzliche High-Level-Abhaengigkeit; nutzt denselben `esp_http_server`-Kandidaten | gleichwertiger Espressif-first-Kandidat; `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` |
+| kleiner eigener nativer ESP-IDF-SoftAP-/DNS-/HTTP-Adapter | ESP-IDF `6.0.2`, kein Drittanbieter | keine zusaetzliche Portalbibliothek, aber voller eigener technischer Portal-, DNS- und Clientlebenszykluscode; nutzt denselben `esp_http_server`-Kandidaten | gleichwertiger Espressif-first-Kandidat; `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING` |
+| WiFiManager | `v2.0.17`, `d82d0a1b`, MIT | stellt den standardisierten Portalteil fuer SoftAP, DNS-Umleitung, Captive Portal, Netzwerkscan, Formulare, Timeouts und Clientverhalten bereit; setzt eine Arduino-Laufzeit voraus, die kein aktueller Produktionspfad ist (`AGENTS.md`); projektspezifische Start-, Secret-, Commit-, Recovery- und Safetysemantik bleibt ausserhalb | ergebnisoffener konditionaler Evaluationskandidat, `SPIKE_REQUIRED`, `FINAL_SELECTION_PENDING`; dasselbe Evaluationsgate wie die drei Espressif-Pfade (direkter ESP-IDF-6.0.2-Build/-Betrieb oder dokumentierter Integrationspfad ohne stilles Wiedereinfuehren eines Arduino-Produktionspfads) |
+
+Jeder Kandidat muss im identischen Spike zusaetzlich nachweisen, ob und wie er
+den browserbasierten R1-Vertrag ohne verpflichtende App, Cloud oder separates
+Kommandozeilenwerkzeug erfuellt; offizielle Espressif-Herkunft allein
+qualifiziert dafuer nicht. Die Bewertung dieses Abschnitts ist Teil des
+Backlog-Issues #89.
 
 ### Release-1-Bedarf und Grenze
 
@@ -511,30 +544,33 @@ erneuten QR-Anzeige bleiben separat sichtbar; die Portaladresse ist der
 manuelle Rueckfall nach dem WLAN-Beitritt, nicht der primaere QR-Inhalt. Diese
 Anforderung waehlt keine QR-Bibliothek aus.
 
-WiFiManager dient ausschliesslich als technischer Portalbaustein. Ausserhalb
-der Bibliothek bleiben Startentscheidung, Touchstatus und Abbruch, der
-unbestaetigte Credential-Kandidat, Verbindungsnachweis und ausdruecklicher
-Commit, Secret-Lebenszyklus, Redaction, Recovery, Fehlersemantik sowie die
-Isolation von Regelung und Safety. WiFiManager-, SoftAP-, DNS-, HTTP-,
-Callback- und Frameworktypen enden in der konkreten ESP32-Integrationsschicht.
-Es entsteht weder ein allgemeines `IProvisioningProvider` noch eine Provider-,
-Plugin- oder vorsorgliche Mehradapterarchitektur.
+Jeder der vier Kandidaten dient ausschliesslich als technischer Portalbaustein.
+Ausserhalb der jeweiligen Komponente bleiben Startentscheidung, Touchstatus
+und Abbruch, der unbestaetigte Credential-Kandidat, Verbindungsnachweis und
+ausdruecklicher Commit, Secret-Lebenszyklus, Redaction, Recovery,
+Fehlersemantik sowie die Isolation von Regelung und Safety. Portal-, SoftAP-,
+DNS-, HTTP-, Callback- und Frameworktypen enden in der konkreten
+ESP32-Integrationsschicht. Es entsteht weder ein allgemeines
+`IProvisioningProvider` noch eine Provider-, Plugin- oder vorsorgliche
+Mehradapterarchitektur.
 
 ### Stufe 1 – Quelle, Lizenz und Toolchain
 
-Fuer WiFiManager werden die exakte Version beziehungsweise der Commit, MIT-
-Lizenz, eingebettete Webassets, transitive Abhaengigkeiten und verwendete sowie
-deaktivierte Funktionen dokumentiert. Der isolierte Build muss mit PlatformIO
-`espressif32@7.0.1`, Arduino-ESP32 `2.0.17`, ESP32-32E, 4 MB Flash und ohne
-PSRAM reproduzierbar sein. Insbesondere ist zu pruefen, wie framework- oder
-bibliotheksseitig gespeicherte WLAN-Daten verhindert beziehungsweise
-kontrolliert gekapselt werden und ob automatischer Portalfallback sowie
-automatischer Credential-Commit abschaltbar sind. Ein erfolgreicher Build ist
-noch keine Uebernahmeentscheidung.
+Fuer alle vier Kandidaten werden die exakte Version beziehungsweise der
+Commit, Lizenz, eingebettete Webassets, transitive Abhaengigkeiten und
+verwendete sowie deaktivierte Funktionen dokumentiert. Der isolierte Build
+muss mit ESP-IDF `6.0.2` (`esp32_bringup`/`esp32_release`), ESP32-32E, 4 MB
+Flash und ohne PSRAM reproduzierbar sein; fuer WiFiManager gilt zusaetzlich das
+Espressif-first-Evaluationsgate (direkter ESP-IDF-6.0.2-Build/-Betrieb oder
+dokumentierter Integrationspfad ohne Arduino-Produktionspfad). Insbesondere ist
+zu pruefen, wie framework- oder bibliotheksseitig gespeicherte WLAN-Daten
+verhindert beziehungsweise kontrolliert gekapselt werden und ob automatischer
+Portalfallback sowie automatischer Credential-Commit abschaltbar sind. Ein
+erfolgreicher Build ist noch keine Uebernahmeentscheidung.
 
-### Stufe 2 – begrenzter WiFiManager-Prototyp
+### Stufe 2 – identischer begrenzter Prototyp je Kandidat
 
-Der konkrete Prototyp prueft mindestens:
+Jeder der vier Prototypen prueft mindestens:
 
 - ausdruecklich gesteuerten Portalstart und keinen Portalstart bei gewoehnlichem
   temporaerem WLAN-Ausfall;
@@ -558,40 +594,35 @@ groesster freier Heapblock, Portalstart-, Verbindungs- und Antwortzeiten,
 Regelzyklus-Jitter, Watchdog-/Resetereignisse, Abhaengigkeiten und Umfang des
 projektspezifischen Integrationscodes.
 
-### Stufe 3 – konditionaler Frameworkgegenprototyp
+### Stufe 3 – gemeinsame Messmatrix
 
-Der Adapter aus `WiFi`, `DNSServer`, SoftAP und `WebServer` wird nur
-nachgezogen, wenn der WiFiManager-Prototyp mindestens einen dieser Ausloeser
-belegt:
-
-- automatischer Portalstart oder Credential-Commit ist nicht sauber
-  kontrollierbar;
-- Secret-, DNS-, AP- oder Serverlebenszyklus ist nicht beherrschbar;
-- relevante Clients sind reproduzierbar instabil;
-- Toolchain, Flash, RAM, Heap, Regelzyklus oder Safety werden unvertretbar
-  belastet;
-- Abhaengigkeits-, Wartungs- oder Publikationsrisiken erfordern wesentliche
-  Bibliotheksaenderungen;
-- eine konkrete Release-1-Anforderung ist nicht robust abbildbar.
-
-Der Gegenprototyp verwendet denselben begrenzten Ablauf, dieselben Clients und
-dieselbe Messmatrix. Er wird nicht zu einem allgemeinen eigenen
-Captive-Portal-Framework ausgebaut.
+Alle Kandidaten, die Stufe 2 bestehen, durchlaufen dieselbe Messmatrix aus
+Firmwaregroesse, statischem RAM, freiem/niedrigstem Heap, groesstem freien
+Heapblock, Portalstart-/Verbindungs-/Antwortzeiten, Regelzyklus-Jitter,
+Watchdog-/Resetereignissen, Abhaengigkeiten, Umfang des projektspezifischen
+Integrationscodes und dem Nachweis des browserbasierten R1-Vertrags ohne
+verpflichtende App, Cloud oder Kommandozeilenwerkzeug. Kein Kandidat wird
+vorab wegen blosser Espressif- oder Drittanbieterherkunft ausgeschlossen oder
+vorsorglich voll implementiert.
 
 ### Stufe 4 – endgueltiger Ownerentscheid
 
-Erst anhand des Spikeberichts entscheidet der Owner zwischen WiFiManager und
-dem kleinen Frameworkadapter. Bis dahin gilt WiFiManager als bevorzugter
-Kandidat mit `SPIKE_REQUIRED`, nicht als ausgewaehlte Abhaengigkeit. Ein
-spaeterer Wechsel ersetzt nur Portalinitialisierung, konkrete Callbackbindung
-und Frameworklebenszyklus an der Composition Root; fachliche Connectivity-,
-Secret-, Recovery- und Safetyvertraege bleiben erhalten. Ein Dummy-Zweitadapter
-wird nicht erstellt.
+Erst anhand des Spikeberichts entscheidet der Owner zwischen den drei
+Espressif-Pfaden und WiFiManager. Bis dahin gelten alle vier als
+gleichrangige Kandidaten mit `SPIKE_REQUIRED`, keiner ist ausgewaehlte
+Abhaengigkeit. Ein spaeterer Wechsel ersetzt nur Portalinitialisierung,
+konkrete Callbackbindung und Frameworklebenszyklus an der Composition Root;
+fachliche Connectivity-, Secret-, Recovery- und Safetyvertraege bleiben
+erhalten. Ein Dummy-Zweitadapter wird nicht erstellt.
 
-Quelle: [WiFiManager](https://github.com/tzapu/WiFiManager). Abgerufen am
-2026-07-27. Entscheidungsstatus: OD-06-Richtung entschieden, endgueltige
-Uebernahme `SPIKE_REQUIRED` und `FINAL_SELECTION_PENDING` fuer den von #27
-getrennten Onboarding-Arbeitsbereich.
+Quellen: [network_provisioning 1.2.4](https://components.espressif.com/components/espressif/network_provisioning/versions/1.2.4/readme?language=en),
+[protocomm (ESP-IDF)](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/provisioning/protocomm.html),
+[WiFiManager](https://github.com/tzapu/WiFiManager). Abgerufen am 2026-08-05.
+Entscheidungsstatus: OD-06-Richtung entschieden (drei gleichwertige
+Espressif-first-Pfade plus WiFiManager als ergebnisoffener konditionaler
+Kandidat), endgueltige Uebernahme `SPIKE_REQUIRED` und
+`FINAL_SELECTION_PENDING` fuer den von #27 getrennten, im Backlog-Issue
+#89 gefuehrten Onboarding-Arbeitsbereich.
 
 ### Getrennter Ersatz-WLAN-Lebenszyklus
 

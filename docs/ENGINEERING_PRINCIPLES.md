@@ -93,3 +93,22 @@ Komplexitaet ist nur gerechtfertigt, wenn sie einen nachweisbaren Vorteil bringt
 - notwendige Hardwareabstraktion
 
 Einfacher, verstaendlicher und gut getesteter Code ist gegenueber unnoetig abstrakten Loesungen zu bevorzugen.
+
+## Espressif-first
+
+Vor der Eigenentwicklung einer Standardfaehigkeit werden in dieser Reihenfolge geprueft:
+
+1. Built-ins der fixierten ESP-IDF-Version;
+2. offizieller Namespace `espressif/*` im ESP Component Registry;
+3. offizielle Repositories unter `github.com/espressif`;
+4. geeignete gepflegte Drittkomponenten;
+5. kleine Eigenentwicklung nur bei nachgewiesener Luecke.
+
+- Ein Framework- oder Toolchainwechsel loest eine inkrementelle Neubewertung zuvor ausgeschlossener oder zurueckgestellter Kandidaten aus.
+- Die Neubewertung aktualisiert den bestehenden Audit und erzeugt nicht automatisch einen zweiten Gesamtaudit.
+- Eine README-Aussage ersetzt weder Lizenzpruefung noch Build-, Ressourcen- oder Hardwaretest.
+- Espressif-first bestimmt die Recherche- und Pruefprioritaet, nicht automatisch die spaetere Produktauswahl.
+
+### Espressif-MCP
+
+Die Espressif-MCP-Dienste duerfen als Recherchewerkzeug fuer Agenten verwendet werden. Sie werden weder Firmwareabhaengigkeit noch CI-Dienst noch produktiver Laufzeitbestandteil.
