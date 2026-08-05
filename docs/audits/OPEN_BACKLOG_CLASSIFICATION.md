@@ -108,7 +108,7 @@ Kuehlkoerper-/Peltier-Schutzsensor verpflichtende Freigabegrundlage.
    OD-07 ist damit vollstaendig entschieden. Erst ein ownerfreigegebener
    Planungsschritt aendert oder erstellt Issues.
 9. Das WLAN-Onboarding bleibt als OD-06-Arbeitsbereich getrennt von #27
-   (Backlog-Issue `[E5.6]`). Es prueft gemaess Espressif-first drei
+   (Backlog-Issue #89). Es prueft gemaess Espressif-first drei
    gleichwertige ESP-IDF-`6.0.2`-Pfade sowie WiFiManager als ergebnisoffenen
    konditionalen Evaluationskandidaten begrenzt. Ein temporaerer WLAN-Ausfall
    startet kein Portal, und ein fehlgeschlagener Credential-Kandidat

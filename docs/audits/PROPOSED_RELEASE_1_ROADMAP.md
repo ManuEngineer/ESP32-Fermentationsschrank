@@ -285,7 +285,7 @@ warten:
    Nachweis des browserbasierten R1-Vertrags ohne verpflichtende App, Cloud
    oder Kommandozeilenwerkzeug. Dieser Spike setzt weder #27 um noch nimmt er
    eine endgueltige Bibliothekswahl vorweg; Details stehen im Backlog-Issue
-   `[E5.6]`.
+   #89.
 7. ArduinoJson `7.4.3` als `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
    `FINAL_SELECTION_PENDING` in
    einem kleinen aktorfreien Prototyp pruefen: isolierter Build, konkrete
@@ -369,7 +369,7 @@ vollstaendiger Zweifachprototyp ist keine Pflicht.
 Kleine adapterbezogene PRs:
 
 1. ESP-IDF-NVS-Adapter fuer den vorhandenen `IStateStore` (Backlog-Issue
-   `[E5.7]`), sofern nicht bereits in einem zuvor ownerfreigegebenen
+   #90), sofern nicht bereits in einem zuvor ownerfreigegebenen
    Persistenzpaket enthalten;
 2. #30 DS18B20-/1-Wire-Adapter hinter `ITemperatureSource`;
 3. #31 Display- und Touchadapter hinter getrennten schmalen Grenzen;
@@ -377,7 +377,7 @@ Kleine adapterbezogene PRs:
    kleiner konkreter lokaler HTTP-Adapter; die Zeile waehlt `esp_http_server`
    noch nicht produktiv aus;
 5. nach bestandenem OD-06-Spike genau eine konkrete Onboardingintegration aus
-   den drei Espressif-Pfaden oder WiFiManager (Backlog-Issue `[E5.6]`); der
+   den drei Espressif-Pfaden oder WiFiManager (Backlog-Issue #89); der
    gewaehlte Kandidat bleibt technischer Portalbaustein, die uebrigen bleiben
    nur bei dokumentiertem Ausloeser erneut gepruefte Alternativen;
 6. nach bestandenem JSON-Spike einen kleinen konkreten ArduinoJson-Codec nur an
@@ -648,7 +648,7 @@ eigener nativer SoftAP-/DNS-/HTTP-Adapter) sowie WiFiManager als
 ergebnisoffener konditionaler Evaluationskandidat unter demselben
 Evaluationsgate begrenzt geprueft. Die endgueltige Uebernahme bleibt das
 Ergebnis dieses Spike-Gates; eine offene vorsorgliche Vollimplementierung
-aller Kandidaten besteht nicht. Details stehen im Backlog-Issue `[E5.6]`.
+aller Kandidaten besteht nicht. Details stehen im Backlog-Issue #89.
 
 Der JSON-Richtungsentscheid besitzt bewusst kein neues OD-Kuerzel:
 ArduinoJson `7.4.3` ist der bevorzugte Kandidat. Die endgueltige Uebernahme

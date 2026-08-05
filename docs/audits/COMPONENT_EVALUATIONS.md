@@ -212,7 +212,7 @@ keinen Eingangsadapter. Er schaltet das Geraet rein elektrisch ein oder aus.
 |---|---|
 | Aufgabe | produktives Blob-Backend fuer den vorhandenen `IStateStore` |
 | Release-1-Anforderung | kurze ADR-016-Schluessel, binaersichere Werte, typisierte Read-/Writefehler, atomarer einzelner Commit und Rueckfalllogik oberhalb des Backends |
-| Kandidaten | direkter ESP-IDF-`nvs_flash`-Adapter, da kein Arduino-Produktionspfad besteht (`AGENTS.md`); Espressif-first-Erstkandidat, siehe Backlog-Issue `[E5.7]` |
+| Kandidaten | direkter ESP-IDF-`nvs_flash`-Adapter, da kein Arduino-Produktionspfad besteht (`AGENTS.md`); Espressif-first-Erstkandidat, siehe Backlog-Issue #90 |
 | Quelle/Stand/Lizenz | [NVS-Dokumentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/nvs_flash.html), ESP-IDF `6.0.2`, Apache-2.0 |
 | Wartung/Kompatibilitaet | offizieller Plattformbestandteil; Keys bis 15 Zeichen und Bytewerte dokumentiert |
 | Ressourcen | NVS-Partition und Runtime-Handles; Groesse bleibt bis #29 `TBD_IMPLEMENTATION_BUDGET` |
@@ -516,7 +516,7 @@ Jeder Kandidat muss im identischen Spike zusaetzlich nachweisen, ob und wie er
 den browserbasierten R1-Vertrag ohne verpflichtende App, Cloud oder separates
 Kommandozeilenwerkzeug erfuellt; offizielle Espressif-Herkunft allein
 qualifiziert dafuer nicht. Die Bewertung dieses Abschnitts ist Teil des
-Backlog-Issues `[E5.6]`.
+Backlog-Issues #89.
 
 ### Release-1-Bedarf und Grenze
 
@@ -620,7 +620,7 @@ Entscheidungsstatus: OD-06-Richtung entschieden (drei gleichwertige
 Espressif-first-Pfade plus WiFiManager als ergebnisoffener konditionaler
 Kandidat), endgueltige Uebernahme `SPIKE_REQUIRED` und
 `FINAL_SELECTION_PENDING` fuer den von #27 getrennten, im Backlog-Issue
-`[E5.6]` gefuehrten Onboarding-Arbeitsbereich.
+#89 gefuehrten Onboarding-Arbeitsbereich.
 
 ### Getrennter Ersatz-WLAN-Lebenszyklus
 

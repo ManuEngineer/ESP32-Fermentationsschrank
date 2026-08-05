@@ -748,7 +748,7 @@ demselben Espressif-first-Evaluationsgate (direkter ESP-IDF-6.0.2-Build/
 `AGENTS.md`). Alle vier Kandidaten sind `SPIKE_REQUIRED` und
 `FINAL_SELECTION_PENDING`; der Spike waehlt noch keinen als
 Produktionsabhaengigkeit aus. Es wird kein Kandidat vorsorglich voll
-implementiert. Details stehen im Backlog-Issue `[E5.6]` und im
+implementiert. Details stehen im Backlog-Issue #89 und im
 [Third-Party-Components-Register](../THIRD_PARTY_COMPONENTS.md).
 
 Der Portalbaustein entscheidet weder ueber den erlaubten Start noch ueber
@@ -1087,7 +1087,7 @@ Hardwaregates.
    aktualisieren.
 8. Die drei Espressif-Pfade und WiFiManager gleichwertig durch Stufe 1 und 2
    fuehren, in Stufe 3 gemeinsam messen und danach die endgueltige
-   Onboardingauswahl dem Owner vorlegen (Backlog-Issue `[E5.6]`).
+   Onboardingauswahl dem Owner vorlegen (Backlog-Issue #89).
 9. Den `esp_http_server`-Baselineprototyp ausfuehren. `ESPAsyncWebServer` nur
    bei dokumentiertem R1-Problem mit identischem Umfang nachziehen und danach
    die endgueltige Serverauswahl dem Owner vorlegen.
