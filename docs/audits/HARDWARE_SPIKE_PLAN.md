@@ -26,7 +26,8 @@ dokumentiert und nachgewiesen:
 - reproduzierbarer Flash-, Boot- und Resetablauf;
 - reale Flashgroesse;
 - Versorgungsspannungen und sichere Einspeisung;
-- verwendete PlatformIO- und Arduino-ESP32-Version;
+- verwendete ESP-IDF-Version (`6.0.2`, Produktionsprofile `esp32_bringup`/
+  `esp32_release`);
 - Betrieb ohne PSRAM;
 - Baselinewerte fuer Firmwaregroesse, statisches RAM, freien Heap und groessten
   freien Heapblock;
@@ -67,8 +68,10 @@ identische Hardwarematrix. Der DS18B20-/1-Wire-Spike verwendet analog die
 Stufen 1 bis 3: Quellen-/Lizenz-/Buildpruefung, Sensorsmoke-Test und erst danach
 die vollstaendige identische Topologie- und Fehlermatrix.
 Der WLAN-Onboardingspike verwendet die Stufen 1 bis 4 fuer Quellen-/Lizenz-/
-Toolchainpruefung, begrenzten WiFiManager-Prototyp, nur konditionalen
-Frameworkgegenprototyp und endgueltigen Ownerentscheid.
+Toolchainpruefung, einen identischen begrenzten Prototyp je Kandidat (drei
+Espressif-Pfade plus WiFiManager als ergebnisoffener konditionaler
+Evaluationskandidat), eine gemeinsame Messmatrix und den endgueltigen
+Ownerentscheid.
 Der aktorfreie JSON-Codecspike verwendet eigene Stufen 1 bis 5 fuer
 Quelle/Lizenz/Toolchain, begrenzten Codecprototyp, Grenz-/Fuzztests, reale
 ESP32-Ressourcenmessung und den endgueltigen Ownerentscheid. Seine Hosttests
@@ -84,7 +87,7 @@ Zu dokumentieren sind:
 - transitive Abhaengigkeiten;
 - deklarierte ESP32-Unterstuetzung;
 - Unterstuetzung der benoetigten Controller beziehungsweise Sensoren;
-- erwartete Kompatibilitaet mit der fixierten Toolchain;
+- erwartete Kompatibilitaet mit der fixierten ESP-IDF-`6.0.2`-Toolchain;
 - erforderliche Konfigurationsdateien oder Buildflags;
 - moegliche Veroeffentlichungseinschraenkungen.
 
@@ -98,9 +101,13 @@ erteilt keine allgemeine Publikationsfreigabe.
 ### Gate 2 – Reproduzierbarer Build ohne reale Aktoren
 
 Der Kandidat wird in einem isolierten Spike-Build mit der bestehenden
-PlatformIO-/Arduino-ESP32-Toolchain eingebunden. Konfiguration, Buildflags und
+ESP-IDF-`6.0.2`-Toolchain eingebunden. Konfiguration, Buildflags und
 transitive Abhaengigkeiten muessen reproduzierbar sein. Ein Toolchain- oder
-Frameworkwechsel ist nicht zulaessig. Der Build und jeder Lauf bleiben ohne
+Frameworkwechsel im Rahmen eines einzelnen Spikes ist nicht zulaessig; ein
+projektweiter Toolchainwechsel bleibt ein separater Ownerentscheid und loest
+gemaess Espressif-first (`docs/ENGINEERING_PRINCIPLES.md`) eine inkrementelle
+Neubewertung zuvor ausgeschlossener Kandidaten aus, wie beim Wechsel auf
+ESP-IDF 6.0.2 selbst geschehen. Der Build und jeder Lauf bleiben ohne
 Peltier-, BTS7960-, Innen-/Aussenluefter-, MOSFET- oder Summeraktivierung und
 ermoeglichen einen Base-/Kandidaten-Ressourcenvergleich.
 
@@ -133,7 +140,7 @@ gleich:
 
 Zusaetzlich gilt:
 
-- PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17` (`dcc1105b`), C++17;
+- ESP-IDF `6.0.2` (Produktionsprofile `esp32_bringup`/`esp32_release`), C++17;
 - 4 MB Flash, keine PSRAM-Nutzung;
 - je Kandidat ein isolierter Build, keine Vermischung der Kandidaten;
 - identische Compilerflags, Displayinhalte, Sensorablaeufe und Messmethode;
@@ -220,8 +227,10 @@ Reservekandidaten werden geprueft:
 - transitive Abhaengigkeiten;
 - benoetigte Konfigurationsdateien und Buildflags;
 - Unterstuetzung des in Stufe 0 bestaetigten Display- und Touchcontrollers;
-- Kompatibilitaet mit PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17`,
-  C++17, ESP32-32E, 4 MB Flash und Betrieb ohne PSRAM;
+- Kompatibilitaet mit ESP-IDF `6.0.2`, C++17, ESP32-32E, 4 MB Flash und Betrieb
+  ohne PSRAM; fuer Arduino-Bibliothekskandidaten zusaetzlich das
+  Espressif-first-Evaluationsgate (direkter ESP-IDF-6.0.2-Build/-Betrieb oder
+  dokumentierter Integrationspfad ohne Arduino-Produktionspfad, `AGENTS.md`);
 - reproduzierbarer isolierter Build und dessen Compilerwarnungen;
 - Base-/Kandidatenvergleich fuer Flash, statisches RAM, `firmware.bin`,
   `firmware.elf` und transitive Abhaengigkeiten.
@@ -488,9 +497,11 @@ Peltierfreigabe bleiben vollstaendig ausserhalb.
 2. Espressif `onewire_bus 1.1.1` (`a269e1fe`) plus `ds18b20 0.4.0`
    (`bf92b0b3`)
 
-Der Espressif-Kandidat wird nur weitergefuehrt, wenn er mit der bestehenden
-Toolchain ohne verdeckten Wechsel von Arduino-ESP32, ESP-IDF oder PlatformIO
-reproduzierbar gebaut werden kann. Ein Konflikt lautet
+Die bestehende Produktionstoolchain ist ESP-IDF `6.0.2`; die
+`onewire_bus`-Mindestanforderung ESP-IDF >=5.0 ist damit erfuellt. Der
+Espressif-Kandidat wird dennoch nur weitergefuehrt, wenn er ohne verdeckten
+Toolchain- oder Frameworkwechsel reproduzierbar in `main/app_main.cpp`
+gebaut werden kann. Ein Konflikt lautet weiterhin
 `INCOMPATIBLE_WITH_CURRENT_TOOLCHAIN`; dies ist keine Aussage, dass der Treiber
 allgemein technisch ungeeignet waere.
 
@@ -695,12 +706,12 @@ Hardwareentscheidung.
 
 ## Aktorfreier Webserver-Baselineprototyp fuer #27
 
-Der kleine lokale HTTP-Dienst ist `REQUIREMENT_DECIDED`. Arduino-ESP32
-`WebServer` ist `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und die bedingte
-Produktivrichtung; seine endgueltige Auswahl bleibt `FINAL_SELECTION_PENDING`.
-`ESPAsyncWebServer` ist `CONDITIONAL_FALLBACK`/`EVALUATE_LATER` und wird nur
-bei einem dokumentierten R1-Problem des ersten Prototyps unter identischen
-Bedingungen nachgezogen.
+Der kleine lokale HTTP-Dienst ist `REQUIREMENT_DECIDED`. ESP-IDF
+`esp_http_server` ist `FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und die
+bedingte Produktivrichtung; seine endgueltige Auswahl bleibt
+`FINAL_SELECTION_PENDING`. `ESPAsyncWebServer` bleibt ein ergebnisoffener
+Evaluationskandidat mit `EVALUATE_LATER` und wird nur bei einem dokumentierten
+R1-Problem des ersten Prototyps unter identischen Bedingungen nachgezogen.
 
 Der erste Prototyp prueft statische lokale HTML-/CSS-/JavaScript-Testassets,
 eine begrenzte Statusabfrage, eine Konfigurationsabfrage, einen simulierten
@@ -725,13 +736,20 @@ fachlichen Lebenszyklus.
 
 ### Ziel und feste Grenze
 
-WiFiManager `v2.0.17` (`d82d0a1b`) ist der bevorzugte
-`FIRST_EVALUATION_CANDIDATE`, `SPIKE_REQUIRED` und
-`FINAL_SELECTION_PENDING`. Der Spike waehlt ihn noch nicht als
-Produktionsabhaengigkeit aus. Ein kleiner Gegenprototyp aus Arduino-ESP32
-`WiFi`, `DNSServer`, SoftAP und dem zuerst evaluierten `WebServer`
-entsteht nur bei einem dokumentierten WiFiManager-Problem. Es werden nie beide
-Loesungen vorsorglich produktiv implementiert.
+Espressif-first (`docs/ENGINEERING_PRINCIPLES.md`) verlangt drei gleichwertig
+zu messende ESP-IDF-`6.0.2`-Pfade: `espressif/network_provisioning` auf
+`protocomm`, ein direkter `protocomm`-/SoftAP-/HTTP-/DNS-Ansatz ohne
+`network_provisioning`, sowie ein kleiner eigener nativer
+ESP-IDF-SoftAP-/DNS-/HTTP-Adapter (nutzt denselben zuerst evaluierten
+`esp_http_server`-Kandidaten). WiFiManager `v2.0.17` (`d82d0a1b`) bleibt ein
+zusaetzlicher ergebnisoffener konditionaler Evaluationskandidat unter
+demselben Espressif-first-Evaluationsgate (direkter ESP-IDF-6.0.2-Build/
+-Betrieb oder dokumentierter Integrationspfad ohne Arduino-Produktionspfad,
+`AGENTS.md`). Alle vier Kandidaten sind `SPIKE_REQUIRED` und
+`FINAL_SELECTION_PENDING`; der Spike waehlt noch keinen als
+Produktionsabhaengigkeit aus. Es wird kein Kandidat vorsorglich voll
+implementiert. Details stehen im Backlog-Issue `[E5.6]` und im
+[Third-Party-Components-Register](../THIRD_PARTY_COMPONENTS.md).
 
 Der Portalbaustein entscheidet weder ueber den erlaubten Start noch ueber
 Credential-Kandidaten, Commit, Secrets, Recovery oder Safety. Ein Portal darf
@@ -743,18 +761,18 @@ und Touchbedienung laufen ohne WLAN, Portal oder Browser weiter.
 
 ### Stufe 1 – Quelle, Lizenz und Toolchain
 
-Fuer WiFiManager werden Version/Commit, MIT-Lizenz, eingebettete Webassets,
-transitive Abhaengigkeiten sowie verwendete und deaktivierte Funktionen
-dokumentiert. Der isolierte Build verwendet PlatformIO
-`espressif32@7.0.1`, Arduino-ESP32 `2.0.17`, ESP32-32E, 4 MB Flash und kein
-PSRAM. Zu pruefen sind insbesondere kontrollierbarer Portalstart, abschaltbarer
-automatischer Fallback und Credential-Commit sowie die Behandlung
-frameworkseitig gespeicherter WLAN-Daten. Ein bestandener Build ist noch keine
-Auswahl.
+Fuer alle vier Kandidaten werden Version/Commit, Lizenz, eingebettete
+Webassets (soweit vorhanden), transitive Abhaengigkeiten sowie verwendete und
+deaktivierte Funktionen dokumentiert. Der isolierte Build verwendet ESP-IDF
+`6.0.2`, ESP32-32E, 4 MB Flash und kein PSRAM; fuer WiFiManager gilt
+zusaetzlich das Espressif-first-Evaluationsgate. Zu pruefen sind insbesondere
+kontrollierbarer Portalstart, abschaltbarer automatischer Fallback und
+Credential-Commit sowie die Behandlung framework- oder bibliotheksseitig
+gespeicherter WLAN-Daten. Ein bestandener Build ist noch keine Auswahl.
 
-### Stufe 2 – begrenzter WiFiManager-Prototyp
+### Stufe 2 – identischer begrenzter Prototyp je Kandidat
 
-Der identisch reproduzierbare Ablauf prueft:
+Der identisch reproduzierbare Ablauf prueft fuer jeden der vier Kandidaten:
 
 1. normalen Verbindungsversuch mit bestaetigten Zugangsdaten;
 2. ausdruecklich gesteuerten Portalstart und keinen automatischen Start bei
@@ -795,27 +813,20 @@ groesster freier Heapblock, Portalstart-, Verbindungs- und Antwortzeiten,
 Regelzyklus-Jitter, Watchdog-/Resetereignisse, Zahl und Umfang der
 Abhaengigkeiten sowie der notwendige projektspezifische Integrationscode.
 
-### Stufe 3 – konditionaler Frameworkgegenprototyp
+### Stufe 3 – gemeinsame Messmatrix
 
-Der Frameworkadapter wird nur bei mindestens einem belegten Ausloeser erstellt:
-
-- automatischer Portalstart oder Credential-Commit ist nicht kontrollierbar;
-- Secret-, DNS-, AP- oder Webserverlebenszyklus ist nicht sauber begrenzbar;
-- relevante reale Clients sind reproduzierbar instabil;
-- Toolchainkonflikt oder unvertretbare Flash-, RAM- oder Heapwirkung;
-- relevante Regelzyklus-/Safetybeeintraechtigung;
-- nicht beherrschbare Abhaengigkeits-, Wartungs- oder Publikationsrisiken;
-- eine konkrete Release-1-Anforderung ist nicht robust abbildbar.
-
-Der Gegenprototyp verwendet denselben Ablauf, dieselben Clients, Cut-Points und
-Messungen. Er wird nicht zu einem allgemeinen Captive-Portal-, Provisioning-,
-Provider- oder Pluginframework ausgebaut. BLE, SmartConfig, Cloud- und
-App-Provisioning bleiben ausserhalb Release 1.
+Alle Kandidaten, die Stufe 2 bestehen, durchlaufen dieselbe Messmatrix aus
+denselben Clients, Cut-Points und Messungen sowie dem Nachweis des
+browserbasierten R1-Vertrags ohne verpflichtende App, Cloud oder
+Kommandozeilenwerkzeug. Kein Kandidat wird vorab wegen blosser Espressif- oder
+Drittanbieterherkunft ausgeschlossen. Es entsteht kein allgemeines
+Captive-Portal-, Provisioning-, Provider- oder Pluginframework. BLE,
+SmartConfig, Cloud- und App-Provisioning bleiben ausserhalb Release 1.
 
 ### Stufe 4 – endgueltiger Ownerentscheid und Artefakte
 
-Erst nach dem Spike waehlt der Owner WiFiManager oder den kleinen
-Frameworkadapter. Der Bericht enthaelt Quell-/Lizenznachweis, reproduzierbare
+Erst nach dem Spike waehlt der Owner zwischen den drei Espressif-Pfaden und
+WiFiManager. Der Bericht enthaelt Quell-/Lizenznachweis, reproduzierbare
 Buildkonfiguration, Client-/Fehler-/Cut-Protokoll, Redactionnachweis,
 Base-/Kandidaten-Ressourcenvergleich, Lebenszyklus- und Jittermessung,
 festgestellte Ausloeser sowie eine begruendete Empfehlung. Ein spaeterer
@@ -845,9 +856,8 @@ logik bleiben projektspezifisch. Es entstehen weder ein Eigenparser noch ein
 Zu dokumentieren sind offizieller Tag und Commit, MIT-Lizenz, Paketmanifest,
 tatsaechlich verwendete Header/Features, deaktivierte Funktionen, transitive
 Bestandteile und Notices. Der isolierte reproduzierbare Build verwendet
-PlatformIO `espressif32@7.0.1`, Arduino-ESP32 `2.0.17`, C++17, ESP32-32E,
-4 MB Flash und keine PSRAM-Abhaengigkeit. Ein bestandener Build ist noch keine
-Auswahl.
+ESP-IDF `6.0.2`, C++17, ESP32-32E, 4 MB Flash und keine
+PSRAM-Abhaengigkeit. Ein bestandener Build ist noch keine Auswahl.
 
 ### Stufe 2 – begrenzter Codecprototyp
 
@@ -1075,12 +1085,12 @@ Hardwaregates.
    planen.
 7. Herkunfts-/Lizenzpruefung fuer die technisch geeigneten Kandidaten
    aktualisieren.
-8. WiFiManager durch Stufe 1 und 2 fuehren. Den Frameworkgegenprototyp nur bei
-   dokumentiertem Ausloeser in Stufe 3 nachziehen; danach die endgueltige
-   Onboardingauswahl dem Owner vorlegen.
-9. Den `WebServer`-Baselineprototyp ausfuehren. `ESPAsyncWebServer` nur bei
-   dokumentiertem R1-Problem mit identischem Umfang nachziehen und danach die
-   endgueltige Serverauswahl dem Owner vorlegen.
+8. Die drei Espressif-Pfade und WiFiManager gleichwertig durch Stufe 1 und 2
+   fuehren, in Stufe 3 gemeinsam messen und danach die endgueltige
+   Onboardingauswahl dem Owner vorlegen (Backlog-Issue `[E5.6]`).
+9. Den `esp_http_server`-Baselineprototyp ausfuehren. `ESPAsyncWebServer` nur
+   bei dokumentiertem R1-Problem mit identischem Umfang nachziehen und danach
+   die endgueltige Serverauswahl dem Owner vorlegen.
 10. ArduinoJson durch Quelle-/Toolchain-, Codec-, Grenz-/Fuzz- und
    Ressourcenstufen pruefen. Eine Alternative nur bei dokumentiertem Problem
    untersuchen und die endgueltige Codec-Uebernahme dem Owner vorlegen.
