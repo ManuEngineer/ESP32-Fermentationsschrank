@@ -646,10 +646,13 @@ Drei Eintrittspunkte, alle mit explizitem Zeitbezug:
   SensorQualityPipeline::ingest(const TemperatureReading& sample,
                                  uint64_t nowMonotonicMs) -> SampleDisposition
     - nowMonotonicMs ist derselbe Uhrwert, zum Zeitpunkt des ingest()-Aufrufs
-      vom Aufrufer gelesen; dient AUSSCHLIESSLICH der Zukunftspruefung
-      (Abschnitt 9b) und wird nicht gespeichert. Rueckgabewert: die klar
-      definierte SampleDisposition dieser einen Probe (Abschnitt 9b/12) -
-      kein `void`, kein unklarer Seiteneffekt.
+      vom Aufrufer gelesen; dient der Zukunftspruefung (Abschnitt 9b) UND
+      (Korrektur Runde 5) als Referenzzeitpunkt fuer die interne
+      deriveQuality(nowMonotonicMs)-Vorzustandsermittlung (siehe unten,
+      "Eine Ableitungsfunktion, zwei Aufrufstellen") - wird selbst NICHT
+      gespeichert. Rueckgabewert: die klar definierte SampleDisposition
+      dieser einen Probe (Abschnitt 9b/12) - kein `void`, kein unklarer
+      Seiteneffekt.
 
   SensorQualityPipeline::snapshot(uint64_t nowMonotonicMs) const
     -> SensorQualitySnapshot
@@ -665,8 +668,9 @@ Der Tiefpass (Abschnitt 10.5) verwendet AUSSCHLIESSLICH die Zeitstempel der
 akzeptierten Proben (`TemperatureReading::monotonicTimestampMs()`) fuer
 `dtSeconds` - NICHT `nowMonotonicMs` und NICHT irgendeine andere
 ITimeSource-Quelle. `nowMonotonicMs` wird ausschliesslich fuer
-Zukunftspruefung (ingest) und Altersberechnung (snapshot) verwendet, niemals
-fuer die Filterdynamik selbst.
+Zukunftspruefung UND die interne Vorzustandsermittlung (beide in ingest(),
+Korrektur Runde 5) sowie fuer die Altersberechnung (snapshot) verwendet,
+niemals fuer die Filterdynamik selbst.
 
 ### Eine Ableitungsfunktion, zwei Aufrufstellen, keine zweite Qualitaetswahrheit
 
@@ -685,24 +689,62 @@ mehr aufgerufen wird. Deshalb ist `quality` eine ABGELEITETE Groesse:
     bleibt dadurch eine reine, lesende (`const`) Ableitung - kein
     verstecktes Mutieren bei reinem Lesezugriff.
 
-  - ingest(sample, nowMonotonicMs) DARF intern deriveQuality(sample.
-    monotonicTimestampMs()) aufrufen, um zu entscheiden, ob die neu
-    eingetroffene, plausible Probe eine FORTSETZUNG eines bereits Valid
-    laufenden Zustands ist (Filter normal fortfuehren) oder den BEGINN
-    einer Wiedererkennung nach Stale/Failed markiert (recoveryProgressCount
-    beginnt in BEIDEN Faellen bei 1). Der FILTERZUSTAND selbst wird dabei
-    NUR verworfen, wenn die Wiedererkennung von FAILED aus beginnt oder ein
-    bestaetigter ROM-Wechsel vorliegt - eine Wiedererkennung aus einem
-    kurzen STALE heraus (ohne je FAILED erreicht zu haben) fuehrt den
-    bestehenden Filterzustand unveraendert fort (Korrektur Runde 4, siehe
-    Abschnitt 8 "Reset/Fortfuehrung der Filterzustaende" fuer die
-    vollstaendige, vorher widerspruechliche Regel). Diese interne Berechnung
-    wird NICHT als zweites, persistentes
+  - ingest(sample, nowMonotonicMs) DARF intern deriveQuality(nowMonotonicMs)
+    aufrufen, um zu entscheiden, ob die neu eingetroffene, plausible Probe
+    eine FORTSETZUNG eines bereits Valid laufenden Zustands ist (Filter
+    normal fortfuehren) oder den BEGINN einer Wiedererkennung nach
+    Stale/Failed markiert (recoveryProgressCount beginnt in BEIDEN Faellen
+    bei 1). Der FILTERZUSTAND selbst wird dabei NUR verworfen, wenn die
+    Wiedererkennung von FAILED aus beginnt oder ein bestaetigter ROM-Wechsel
+    vorliegt - eine Wiedererkennung aus einem kurzen STALE heraus (ohne je
+    FAILED erreicht zu haben) fuehrt den bestehenden Filterzustand
+    unveraendert fort (Korrektur Runde 4, siehe Abschnitt 8 "Reset/
+    Fortfuehrung der Filterzustaende" fuer die vollstaendige, vorher
+    widerspruechliche Regel).
+
+    KORREKTUR RUNDE 5 (behebt einen Fehler in der Referenzzeit dieser
+    internen Ableitung): Die Referenzzeit fuer diese EINE Entscheidung
+    ("war der Zustand gerade eben, JETZT, bereits FAILED?") muss
+    `nowMonotonicMs` sein, NICHT `sample.monotonicTimestampMs()`. Eine
+    geordnete, aber gegenueber der tatsaechlichen Uhrzeit stark verspaetet
+    zugestellte Probe hat einen Zeitstempel deutlich VOR `nowMonotonicMs`
+    (aber immer noch NACH dem zuletzt akzeptierten Zeitstempel, sonst waere
+    sie RejectedRetrograde, Abschnitt 9b). Mit `sample.
+    monotonicTimestampMs()` als Referenz wuerde das seit der letzten Probe
+    verstrichene Alter SYSTEMATISCH UNTERSCHAETZT (da
+    sample.monotonicTimestampMs() <= nowMonotonicMs immer gilt) - ein
+    Zustand, der gemessen an der tatsaechlichen aktuellen Zeit laengst
+    FAILED waere, koennte so faelschlich noch als blosses STALE erkannt und
+    dadurch der notwendige Filterreset (Abschnitt 8) uebersprungen werden.
+    `nowMonotonicMs` bleibt dagegen ausschliesslich fuer DIESE EINE
+    Vorzustands-Entscheidung zustaendig; Reihenfolge/Duplikate (9b),
+    Aenderungsrate (10.2), Median-/Tiefpass-Zeitabstand (10.3/10.5) und die
+    Altersfelder im Snapshot (12) bleiben unveraendert
+    `sample.monotonicTimestampMs()`-basiert (bzw. bei den Snapshot-
+    Altersfeldern selbst wieder relativ zum spaeteren snapshot(now)-Aufruf).
+
+    Diese interne Berechnung wird NICHT als zweites, persistentes
     `quality`-Feld gespeichert - sie ist ein einmaliger Entscheidungsschritt
     innerhalb des ingest()-Aufrufs, der dieselbe deriveQuality()-Funktion
-    wiederverwendet, nur mit der Probenzeit statt der Aufrufer-"now" als
-    Referenzzeitpunkt. Ein anschliessender snapshot(now)-Aufruf leitet
-    quality unabhaengig und konsistent aus denselben rohen Groessen neu ab.
+    wiederverwendet, nur mit der Aufrufer-"now" statt eines spaeteren,
+    separaten snapshot(now)-Aufrufs als Referenzzeitpunkt. Ein
+    anschliessender snapshot(now)-Aufruf leitet quality unabhaengig und
+    konsistent aus denselben rohen Groessen neu ab.
+
+    VERBINDLICHE REIHENFOLGE innerhalb von ingest() (praezisiert Runde 5 -
+    diese Reihenfolge ist die tragende Voraussetzung der obigen Korrektur
+    und war vorher nicht explizit festgelegt): deriveQuality(nowMonotonicMs)
+    wird AUSGEWERTET, BEVOR irgendein gespeicherter Zaehl-/Zeitwert dieser
+    Probe (letzter akzeptierter/gueltiger Zeitstempel,
+    consecutiveInvalidCount, recoveryProgressCount) durch die aktuelle Probe
+    aktualisiert wird. Wuerde stattdessen zuerst z. B. der letzte
+    akzeptierte Zeitstempel auf sample.monotonicTimestampMs() vorgezogen
+    und ERST DANACH deriveQuality(nowMonotonicMs) ausgewertet, ergaebe die
+    Ableitung faelschlich ein Alter nahe Null (Valid/Stale statt des real
+    erreichten Failed) - genau die soeben behobene Fehlklassifikation waere
+    dann durch die Aktualisierungsreihenfolge wieder eingefuehrt, nur mit
+    korrektem `nowMonotonicMs`-Parameter. Der Vorzustand wird also IMMER aus
+    den Groessen VOR dieser Probe ermittelt.
 
 Damit erkennt JEDER spaetere snapshot(now)-Aufruf einen laengst verstummten
 Sensor korrekt als Failed, unabhaengig davon, wie lange zuvor kein ingest()
@@ -713,6 +755,7 @@ speichern.
 
 `SINGLE_MONOTONIC_TIME_CONTRACT: PASS`
 `INGEST_RESULT_DEFINED: PASS`
+`INGEST_PREVIOUS_QUALITY_USES_NOW: PASS`
 `TIME_AND_DERIVED_QUALITY_CONSISTENT: PASS`
 
 ### 9b. Zeitstempel- und Dispositionsregeln
@@ -861,8 +904,10 @@ enum class SensorQualityConfigStatus : uint8_t {
     InvalidRateOfChangeLimit,      // <= 0.0
     InvalidStaleAgeThreshold,      // 0, oder > sensor_limits::kMaxStaleAgeCeilingMs
     InvalidConsecutiveInvalidLimit, // 0, oder > sensor_limits-Obergrenze
-    // minConsecutiveValidSamples == 0, ODER minRecoveryStabilityDurationMs
-    // == 0, ODER minRecoveryStabilityDurationMs >
+    // minConsecutiveValidSamples < 2 (KORREKTUR RUNDE 5: vorher nur == 0,
+    // aber die kanonische Spezifikation verlangt "MEHRERE gueltige Proben",
+    // 1 ist keine Mehrzahl), ODER minRecoveryStabilityDurationMs == 0, ODER
+    // minRecoveryStabilityDurationMs >
     // sensor_limits::kMaxRecoveryStabilityDurationCeilingMs (Korrektur
     // Runde 4: vorher wurde nur minConsecutiveValidSamples == 0 geprueft,
     // minRecoveryStabilityDurationMs blieb vollstaendig unvalidiert - ein
@@ -906,12 +951,12 @@ Validierungsreihenfolge in `create()`: (1) `std::isfinite()` auf
 (4) `minPlausibleCelsius >= maxPlausibleCelsius` ODER ausserhalb der
 firmwarefesten Aussengrenze aus `sensor_limits.hpp`; (5)
 `maxRateOfChangeCelsiusPerSecond <= 0`; (6) `maxStaleAgeMs`; (7)
-`maxConsecutiveInvalid`; (8) `minConsecutiveValidSamples == 0` ODER
+`maxConsecutiveInvalid`; (8) `minConsecutiveValidSamples < 2` ODER
 `minRecoveryStabilityDurationMs == 0` ODER `minRecoveryStabilityDurationMs
-> sensor_limits::kMaxRecoveryStabilityDurationCeilingMs` (Korrektur Runde 4
-- vorher pruefte Schritt 8 nur `minConsecutiveValidSamples`, siehe unten).
-Jede Stufe prueft nur, was vorher nicht schon verworfen wurde - keine
-doppelte Fehlerklassifikation.
+> sensor_limits::kMaxRecoveryStabilityDurationCeilingMs` (Korrektur Runde 5:
+`< 2` statt `== 0` - siehe unten; Korrektur Runde 4 - vorher pruefte Schritt
+8 nur `minConsecutiveValidSamples`, siehe unten). Jede Stufe prueft nur, was
+vorher nicht schon verworfen wurde - keine doppelte Fehlerklassifikation.
 
 Wiedererkennungsparameter vollstaendig validiert (Korrektur Runde 4,
 `docs/SENSOR_TUNING_COMMISSIONING.md` verlangt ausdruecklich "mehrere
@@ -919,9 +964,14 @@ gueltige Proben UND eine Stabilitaetszeit" - beide Grenzen muessen daher
 tatsaechlich existieren, nicht nur eine):
 
 ```text
-minConsecutiveValidSamples > 0
-  (0 wuerde bedeuten: Wiedererkennung ohne eine einzige neue Probe -
-  widerspricht dem Auftrag "mehrere gueltige Proben")
+minConsecutiveValidSamples >= 2 (KORREKTUR RUNDE 5: vorher nur > 0,
+  also 1 als Untergrenze zugelassen)
+  (0 wuerde bedeuten: Wiedererkennung ohne eine einzige neue Probe; 1
+  waere ebenfalls unzulaessig, denn die kanonische Spezifikation
+  (docs/SENSOR_TUNING_COMMISSIONING.md) verlangt woertlich "mehrere
+  gueltige Proben" - eine einzelne Probe ist keine Mehrzahl. 0 UND 1
+  werden daher gleichermassen abgelehnt, ab 2 gilt die Anforderung als
+  erfuellt)
 minRecoveryStabilityDurationMs > 0
   (0 wuerde die Stabilitaetszeit-Anforderung vollstaendig entwerten -
   vorher UNVALIDIERT, echte Luecke gegenueber SENSOR_TUNING_COMMISSIONING.md)
@@ -956,6 +1006,7 @@ Kalibrierwert pro Probe/Sensorinstanz, keine Pipeline-Verhaltensparametrierung
 `SENSOR_QUALITY_CONFIG_DEFINED: PASS`
 `NONFINITE_CONFIG_REJECTED: PASS`
 `RECOVERY_DURATION_VALIDATED: PASS`
+`RECOVERY_REQUIRES_MULTIPLE_SAMPLES: PASS`
 
 ### 10.1 Transport-/CRC-/Messstatusstufe (generisch, keine sensor-/treiberspezifischen Konstanten)
 
@@ -1048,6 +1099,82 @@ einer Vermischung unterschiedlich korrigierter Werte innerhalb eines
 Medianfensters fuehren).
 ```
 
+Effektiver Offsetwechsel bei gleichbleibender Identitaet (KORREKTUR RUNDE
+5 - vorher unspezifiziert):
+
+```text
+"effektiver Offset" (interne Rechengroesse, NICHT dasselbe wie das
+Snapshot-Feld appliedOffset - siehe Begriffsklaerung unten) ist der Offset-
+Wert, der tatsaechlich zur Korrektur des Medianfilter-Ausgangs verwendet
+wird: entweder calibration->offset().celsius() bei passender identity(),
+oder 0.0 (neutraler Fallback) bei fehlender/nicht passender Kalibrierung -
+siehe Abschnitt 13b. Der zuletzt fuer den Tiefpass verwendete effektive
+Offset wird als interner Zustand `lastFilterEffectiveOffsetCelsius`
+zusammen mit gefiltert_alt gefuehrt (Abschnitt 10.5).
+
+Der Medianpuffer enthaelt ausschliesslich ROHWERTE (Abschnitt 10.3); der
+Tiefpasszustand gefiltert_alt (Abschnitt 10.5) enthaelt dagegen bereits
+offsetkorrigierte Werte. Ein reiner Offsetwechsel bei GLEICHER
+Sensoridentitaet ist deshalb, anders als ein physischer ROM-Wechsel, KEIN
+Grund fuer einen vollstaendigen Filterreset.
+
+REIHENFOLGE-/VORRANGREGEL (praezisiert gegenueber der ersten Fassung dieser
+Korrektur, die den Vorrang nur in Prosa, nicht operational festlegte): Fuer
+JEDE Probe, die den Filter aktualisiert, wird ZUERST wie bisher (Abschnitt
+8/9a) geprueft, ob diese Probe einen VOLLSTAENDIGEN Filterreset ausloest
+(Wiedererkennung aus FAILED heraus ODER bestaetigter ROM-Wechsel/
+IdentityMismatch). Nur wenn KEINER der beiden Faelle zutrifft, kommt die
+folgende Verschiebungsregel ueberhaupt zur Anwendung - sie ist also nicht
+nebenlaeufig zum vollstaendigen Reset, sondern dessen ausdruecklicher
+ELSE-Zweig:
+
+  KEIN vollstaendiger Reset fuer diese Probe (siehe oben) UND effektiver
+  Offset aendert sich zwischen dieser und der vorherigen, tatsaechlich in
+  den Filter eingeflossenen Probe (delta = neuer_effektiver_Offset -
+  alter_effektiver_Offset, delta != 0):
+    VOR der ueblichen Tiefpass-Berechnung (Abschnitt 10.5) wird
+    gefiltert_alt um delta verschoben (gefiltert_alt' = gefiltert_alt +
+    delta), ERST DANACH erfolgt die normale Exponentialglaettung mit dem
+    neuen korrigierten Wert. Ohne diese Verschiebung wuerde eine reine
+    Rekalibrierung dem Tiefpass wie ein echter Temperatursprung erscheinen
+    und langsam statt sofort korrekt "eingeschwungen" wirken - genau der im
+    Auftrag beschriebene Fehler.
+
+  KEIN vollstaendiger Reset UND delta == 0 (kein tatsaechlicher Wechsel,
+  z. B. Wechsel von "keine Kalibrierung" zu einer expliziten Kalibrierung
+  mit Offset 0.0, oder gar kein setCalibration()-Aufruf zwischen zwei
+  Proben): keine Verschiebung, normale Fortsetzung.
+
+  VOLLSTAENDIGER Reset fuer diese Probe (FAILED-Wiedererkennung ODER
+  ROM-Wechsel): die Verschiebungsregel entfaellt vollstaendig - sowohl
+  gefiltert_alt ALS AUCH `lastFilterEffectiveOffsetCelsius` werden
+  gemeinsam verworfen (Abschnitt 8) und beim ersten neuen
+  Wiedererkennungswert direkt neu gesetzt (kein "Nachschleppen" eines
+  Deltas aus dem Zustand vor dem Reset in den neuen). Ein delta, das
+  ALLEIN aus dem Identitaetswechsel selbst entstuende (z. B. weil der neue
+  Sensor keine passende Kalibrierung hat und der effektive Offset dadurch
+  auf 0.0 faellt), wird NICHT als Verschiebung interpretiert - der volle
+  Reset hat in jedem Fall Vorrang und macht die Delta-Berechnung fuer
+  diese Probe gegenstandslos.
+
+  erste Probe, die ueberhaupt den Filter initialisiert (kein vorheriges
+  gefiltert_alt vorhanden): keine Verschiebung noetig - gefiltert_alt wird
+  wie bisher direkt auf den korrigierten Rohwert gesetzt (Abschnitt 10.5).
+
+Begriffsklaerung (verhindert ein Wiederaufleben der in Runde 4 behobenen
+Sentinel-Mehrdeutigkeit): "effektiver Offset" ist eine interne, immer
+konkrete double-Rechengroesse (0.0 bei fehlender Kalibrierung ist hier
+gleichbedeutend mit einer expliziten Kalibrierung auf 0.0 - beide fuehren
+zu delta == 0 im obigen Vergleich, wenn sich sonst nichts aendert). Das
+Snapshot-Feld `appliedOffset` (Abschnitt 12/13b) bleibt UNVERAENDERT
+std::optional<double> und zeigt weiterhin ausschliesslich, OB eine
+tatsaechlich passende Kalibrierung vorlag - diese beiden Groessen duerfen
+nicht verwechselt werden.
+```
+
+`CALIBRATION_CHANGE_FILTER_STATE_CONSISTENT: PASS`
+`MISSING_VS_ZERO_CALIBRATION_DISTINCT: PASS`
+
 ### 10.5 Sensorbezogener Tiefpass
 
 ```text
@@ -1090,10 +1217,16 @@ Bei Messluecke (grosse dtSeconds): Filter konvergiert entsprechend der
 Rohpfad (10.1-10.2, Sicherheitspruefung) bleibt strikt getrennt vom
   gefilterten Regelwert: die Diagnoseausgabe zeigt beide, ein extremer
   Rohwert wird nie allein durch den Tiefpass verdeckt.
+Effektiver Offsetwechsel bei GLEICHER Sensoridentitaet (kein FAILED/ROM-
+  Wechsel): gefiltert_alt wird VOR der obigen Formel um die Differenz des
+  effektiven Offsets verschoben, NICHT komplett zurueckgesetzt - siehe
+  Abschnitt 10.4 fuer die vollstaendige Regel und Begruendung (Korrektur
+  Runde 5).
 ```
 
 `FILTER_PIPELINE_DEFINED: PASS`
 `ITIME_SOURCE_CONTRADICTIONS: 0`
+`CALIBRATION_CHANGE_FILTER_STATE_CONSISTENT: PASS`
 
 ## 11. Widerspruchs- und Plausibilitaetsbewertung (rollenuebergreifend)
 
@@ -1364,8 +1497,18 @@ struct SensorOffsetCreateResult {
 `SensorOffset::create()` prueft zuerst `std::isfinite(celsius)` (sonst
 `NonFinite`), danach den Betrag gegen
 `[-kMaxAbsoluteOffsetCelsius, +kMaxAbsoluteOffsetCelsius]`
-(`sensor_limits.hpp`, sonst `OutOfFirmwareRange`). Ein fehlender Offset
-bleibt `SensorOffset::create(0.0)` (immer erfolgreich).
+(`sensor_limits.hpp`, sonst `OutOfFirmwareRange`). `SensorOffset::create(0.0)`
+ist eine gewoehnliche, immer erfolgreiche Konstruktion wie jeder andere
+Wert innerhalb der Firmwaregrenze - KEIN impliziter Default fuer "kein
+Offset gesetzt" (KORREKTUR RUNDE 5: die vorherige Formulierung "Ein
+fehlender Offset bleibt SensorOffset::create(0.0)" suggerierte, eine FEHLENDE
+Kalibrierung wuerde automatisch zu einer echten `SensorOffset(0.0)`-Instanz
+werden - das widerspricht der in Abschnitt 13b eingefuehrten Unterscheidung
+zwischen "keine Kalibrierung" (`std::nullopt` auf SensorCalibration-Ebene)
+und "explizite Kalibrierung mit Offset 0.0" (`SensorCalibration(identity,
+SensorOffset::create(0.0))`). Ein SensorOffset-Wert entsteht ausschliesslich
+durch einen expliziten `create()`-Aufruf mit einem konkreten Kalibrierwert;
+er wird nie implizit fuer eine fehlende Kalibrierung erzeugt).
 
 `sensor_offset.hpp` und `sensor_identity.hpp` haengen bewusst NICHT auf
 `storage_types.hpp`, sondern `sensor_offset.hpp` nur auf `sensor_limits.hpp`
@@ -1714,7 +1857,13 @@ Eingangsvertrag (Orakel: Abschnitt 9.0/9.1, neu in Runde 2):
   - SensorIdentity::create(0) -> abgelehnt (ZeroIsNotAValidIdentity)
   - SensorIdentity::create(<positiver Wert>) -> erfolgreich
   - SensorQualityConfig::create() mit minConsecutiveValidSamples == 0 ->
-    abgelehnt (InvalidRecoveryThresholds, neu Runde 4)
+    abgelehnt (InvalidRecoveryThresholds)
+  - SensorQualityConfig::create() mit minConsecutiveValidSamples == 1 ->
+    abgelehnt (InvalidRecoveryThresholds, neu Runde 5 - Korrektur von `> 0`
+    auf `>= 2`: "mehrere gueltige Proben" per
+    SENSOR_TUNING_COMMISSIONING.md ist keine Einzelprobe)
+  - SensorQualityConfig::create() mit minConsecutiveValidSamples == 2
+    (Randwert) -> erfolgreich (neu Runde 5)
   - SensorQualityConfig::create() mit minRecoveryStabilityDurationMs == 0 ->
     abgelehnt (InvalidRecoveryThresholds, neu Runde 4 - vorher UNGEPRUEFT)
   - SensorQualityConfig::create() mit minRecoveryStabilityDurationMs >
@@ -1762,6 +1911,18 @@ Sensorzustandsfolge):
   - grosse Messluecke -> Uebergang wie in Abschnitt 8 beschrieben
   - Wiederaufnahme nach Luecke: erste Probe nach Luecke wird nicht als
     "Sprung" gegen den (veralteten) Vorwert bewertet
+  - geordnete, aber gegenueber nowMonotonicMs stark verspaetet zugestellte
+    Probe (neu Runde 5, behebt Abschnitt 9a): letzte akzeptierte Probe bei
+    t=0, kMaxStaleAgeMs klein, naechste Probe erst bei
+    sample.monotonicTimestampMs() = t=1 (also chronologisch geordnet,
+    RejectedRetrograde greift NICHT), aber ingest() wird erst bei
+    nowMonotonicMs weit jenseits von kMaxStaleAgeMs nach t=0 aufgerufen ->
+    ingest() erkennt den VOR dieser Probe bereits real erreichten
+    FAILED-Zustand (deriveQuality(nowMonotonicMs), NICHT
+    deriveQuality(sample.monotonicTimestampMs())) und loest den
+    Filterreset/die Wiedererkennungslogik wie bei einer regulaeren
+    FAILED->Valid-Erkennung aus, statt die Probe faelschlich als blosse
+    Fortsetzung eines noch-Stale-Zustands zu behandeln
   - ingest() gibt in jedem der obigen Faelle die jeweils korrekte
     SampleDisposition zurueck (expliziter Rueckgabewert, kein void)
 
@@ -1814,8 +1975,9 @@ Median und Tiefpass (Orakel: Abschnitt 10.3/10.5):
     entstandenen Fehler in Abschnitt 10.5 - Test belegt den korrekten,
     groesseren dt-Wert statt einer Unterschaetzung)
 
-Kalibrierung, Offset und Identitaet (Orakel: Abschnitt 10.4, 13b, 8, 11 -
-Gruppe umbenannt Runde 4, da Kalibrierung jetzt identitaetsgebunden ist):
+Kalibrierung, Offset und Identitaet (Orakel: Abschnitt 10.4, 10.5, 13a,
+13b, 8, 11 - Gruppe seit Runde 4 identitaetsgebunden, seit Runde 5 inkl.
+Tiefpass-Verschiebung bei Offsetwechsel):
   - Offset 0.0 -> correctedCelsius == Medianfilter-Ausgang unveraendert
   - positiver und negativer Offset veraendern correctedCelsius korrekt
   - Offset am Rand von kMaxAbsoluteOffsetCelsius wird noch akzeptiert
@@ -1855,7 +2017,30 @@ Gruppe umbenannt Runde 4, da Kalibrierung jetzt identitaetsgebunden ist):
     dieser Testgruppe; stattdessen zeigt eine zweite unabhaengige
     Pipeline-Instanz, dass sich zwei Instanzen nicht gegenseitig
     beeinflussen
-  - fehlender Offset entspricht SensorOffset::create(0.0)
+  - gleiche Sensoridentitaet, effektiver Offset wechselt zwischen zwei
+    tatsaechlich in den Filter einfliessenden Proben (z. B. von 0.0
+    neutral auf einen gesetzten Kalibrierwert) -> gefiltert_alt wird exakt
+    um delta verschoben, filteredCelsius springt NICHT auf den neuen
+    korrigierten Rohwert und schwingt NICHT langsam ein (neu Runde 5)
+  - gleiche Sensoridentitaet, setCalibration(nullopt) -> explizite
+    SensorCalibration(identity, SensorOffset::create(0.0)) (delta == 0,
+    beide effektiv 0.0) -> KEINE Verschiebung, filteredCelsius unveraendert,
+    OBWOHL appliedOffset im Snapshot von nullopt auf has_value(0.0) wechselt
+    (neu Runde 5 - Unterscheidungsfall zwischen interner Rechengroesse und
+    Snapshot-Evidenz, siehe Abschnitt 10.4)
+  - ROM-Wechsel UEBERSTIMMT die Verschiebungsregel: bei erkanntem
+    Identitaetswechsel voller Filterreset wie in Abschnitt 8 (KEINE
+    Verschiebung, auch wenn sich der effektive Offset gleichzeitig aendert)
+  - nach einem ROM-Wechsel-Reset wird `lastFilterEffectiveOffsetCelsius`
+    GEMEINSAM mit gefiltert_alt verworfen (Abschnitt 10.4): die erste
+    plausible Probe des neuen Sensors nach dem Reset berechnet KEIN delta
+    gegenueber dem vor dem Reset zuletzt verwendeten effektiven Offset des
+    ALTEN Sensors (neu Runde 5 - belegt die zweite Haelfte der
+    Reihenfolge-/Vorrangregel, nicht nur, dass keine Verschiebung
+    stattfindet, sondern dass kein stale delta ueber den Reset hinweg
+    ueberlebt)
+  - erste den Filter ueberhaupt initialisierende Probe: keine Verschiebung
+    (gefiltert_alt existiert noch nicht), unabhaengig vom effektiven Offset
 
 Zustandsmaschine und Wiedererkennung (Orakel: Abschnitt 8):
   - Valid -> Stale bei einzelner ungueltiger Probe
@@ -1903,6 +2088,7 @@ Robustheit (Orakel: allgemein, AGENTS.md Ressourcenregeln):
 ```
 
 `TEST_MATRIX_COMPLETE: PASS`
+`DELAYED_ORDERED_SAMPLE_TEST_DEFINED: PASS`
 
 ### 17a. Testdatei-Aufteilung (KISS, keine Monsterdatei, keine verfrueht ausgelagerte Testhilfe)
 
@@ -2100,7 +2286,11 @@ Slice 2 (Median + Offset + Tiefpass + vollstaendige Integration):
   16. sensor_lowpass_filter.hpp/.cpp
   17. sensor_quality_pipeline.hpp/.cpp: setCalibration(), Integration von
       Offset/Median/Tiefpass, ROM-Wechsel-/FAILED-Filterreset (transiente
-      STALE-Wiedererkennung erhaelt den Filterzustand, Abschnitt 8);
+      STALE-Wiedererkennung erhaelt den Filterzustand, Abschnitt 8),
+      Tiefpass-Verschiebung um das Offset-Delta bei gleichbleibender
+      Identitaet (Abschnitt 10.4/10.5, Korrektur Runde 5),
+      deriveQuality(nowMonotonicMs) als Referenzzeit fuer die interne
+      Vorzustandsermittlung in ingest() (Abschnitt 9a, Korrektur Runde 5);
       correctedCelsius/filteredCelsius werden ab hier ab dem ersten
       plausiblen Beitrag tatsaechlich gesetzt
   18. test/test_sensor_offset/ (jetzt inkl. SensorCalibration-
