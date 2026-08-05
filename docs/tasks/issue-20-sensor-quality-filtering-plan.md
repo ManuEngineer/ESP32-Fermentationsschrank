@@ -490,7 +490,7 @@ struct SensorIdentityCreateResult {
 ```
 
 `sensor_identity.hpp` haengt weiterhin bewusst NICHT auf `storage_types.hpp`
-(siehe Abschnitt 13a fuer die unveraendert guelitge Begruendung der
+(siehe Abschnitt 13a fuer die unveraendert gueltige Begruendung der
 Domaenentrennung).
 
 ### 9.1 TemperatureReading (erweitert, gueltig-by-construction)
@@ -579,6 +579,15 @@ feinere Unterscheidung; sie gehoert an genau die Stelle, an der #30 sie
 spaeter ohnehin liefern muss - den Port selbst. `driverFaultCode` (aus der
 ersten Nachkorrekturrunde erwogen) bleibt weiterhin entfernt: kein
 Konsument innerhalb von #20 verwendet ein solches Feld.
+
+Verdrahtung (KORREKTUR RUNDE 3, macht "kanonischer Port" konkret): #20
+selbst ruft `read()` nirgends auf und verdrahtet keine Composition Root.
+Die spaetere Composition Root (#21/#24) erzeugt den Aufrufpfad
+`pipeline.ingest(source.read(), now)` - `source` ist ein konkreter,
+in #30 gelieferter `ITemperatureSource`. Innerhalb von #20 werden
+`TemperatureReading`-Werte fuer Pipeline-Tests ausschliesslich direkt ueber
+`TemperatureReading::create(...)` konstruiert (siehe Abschnitt 17a), nicht
+ueber einen echten oder gemockten Port gelesen.
 
 `CANONICAL_TEMPERATURE_INPUT_PORT: PASS`
 `PARALLEL_INPUT_CONTRACTS: 0`
@@ -1050,7 +1059,7 @@ enum class SensorFaultReason : uint8_t {
 struct SensorQualitySnapshot {
     std::optional<SensorIdentity> identity;         // zuletzt bekannte Identitaet, nullopt falls nie eine akzeptierte Probe mit bekannter Identitaet vorlag
     SensorQuality quality;
-    std::optional<double> rawCelsius;               // nullopt vor der ersten Accepted-und-plausiblen Probe
+    std::optional<double> rawCelsius;               // Wert der letzten AKZEPTIERTEN Probe mit Messwert (status==Ok), UNABHAENGIG von Plausibilitaet; nullopt nur vor der allerersten solchen Probe. KORREKTUR RUNDE 3: vorher faelschlich an "Accepted-und-plausibel" gekoppelt - das haette OutOfRange-/RateOfChangeExceeded-Proben trotz vorhandenem Rohwert verschwiegen und Abschnitt 10.5 sowie SENSOR_TUNING_COMMISSIONING.md widersprochen ("ein extremer Rohwert darf nicht durch einen langsamen Filter verdeckt werden").
     std::optional<double> correctedCelsius;         // Medianfilter-Ausgang + Offset; bereits ab dem ERSTEN plausiblen Medianbeitrag vorhanden (nicht erst bei vollem Fenster, siehe Abschnitt 10.3), NICHT rawCelsius + Offset
     std::optional<double> filteredCelsius;          // Tiefpass-Ausgang; ab demselben ersten Beitrag wie correctedCelsius vorhanden (Tiefpass ist ab der ersten Probe wohldefiniert)
     double appliedOffset;
@@ -1079,6 +1088,20 @@ Regelwert verwendbar  <=>  quality == SensorQuality::Valid
 Kein Trend-/Aenderungsratenfeld wird weggelassen: `SAFETY_COMPONENT_FAULTS.md`
 verlangt fuer den Kuehlkoerpersensor ausdruecklich eine Aenderungsraten-
 /Trendueberwachung - das Feld ist daher verpflichtend (als `optional`).
+
+KORREKTUR RUNDE 3 - Reichweite des `filteredCelsius.has_value()`-Konjunkts:
+Seit Abschnitt 10.3/12 den Medianbeitrag ab der ERSTEN plausiblen Probe
+liefern und `quality` erst nach `kMinConsecutiveValidSamples` aufeinander-
+folgenden gueltigen Proben `Valid` erreicht, gibt es nach Slice 2 keinen
+erreichbaren Zustand mit `quality == Valid` UND `filteredCelsius == nullopt`
+mehr - der Konjunkt ist dort eine defensive Invariante, kein tatsaechlicher
+Unterscheider. In Slice 1 dagegen existiert `filteredCelsius` ueberhaupt noch
+nicht (kein Tiefpass implementiert, kein Konsument verdrahtet), daher ist die
+Regel dort bewusst und dauerhaft `false`, bis Slice 2 den Filter liefert. Die
+Regel bleibt trotzdem so formuliert (nicht auf `quality == Valid` allein
+verkuerzt), weil sie ohne Codeaenderung automatisch korrekt wird, sobald
+Slice 2 landet - keine zwei getrennten Definitionen fuer "vor" und "nach"
+Slice 2 noetig.
 
 `DIAGNOSTIC_CONTRACT_DEFINED: PASS`
 `OPTIONAL_DIAGNOSTIC_VALUES: PASS`
@@ -1593,7 +1616,7 @@ test/test_sensor_quality_pipeline/test_sensor_quality_pipeline.cpp
   Modul geplante sensor_fault_sequence.hpp/.cpp - KORREKTUR RUNDE 2: solange
   nur dieses eine Testtopic eine solche Folge braucht, ist ein eigenes,
   produktionsnahes Testhilfsmodul verfrueht; die Datei kann bei einem
-  zweiten realen Konsumenten spaeter alsy device_platform_test_support-
+  zweiten realen Konsumenten spaeter als device_platform_test_support-
   Modul herausgezogen werden, KISS/YAGNI).
 
 test/test_sensor_actuator_mocks/test_sensor_actuator_mocks.cpp  [BESTEHEND, TEILWEISE ANGEPASST]
