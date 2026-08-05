@@ -310,6 +310,12 @@ Der Startzustand wird deshalb intern als `Stale` mit leerem
 
 ### Zustandsuebergaenge
 
+Alle folgenden Uebergaenge beschreiben das FACHLICHE Verhalten; wann genau
+`quality` diesen Wert widerspiegelt, regelt Abschnitt 9a (dort als
+`snapshot(now)`-Ableitung aus rohen, bei `ingest()` fortgeschriebenen
+Zaehl-/Zeitgroessen definiert - kein Hintergrundprozess, kein bei jedem
+Uebergang separat gesetztes Feld).
+
 ```text
 Start (keine Probe) = Stale, kein letzter gueltiger Wert, Alter = unendlich
 
@@ -448,6 +454,30 @@ SensorQualityPipeline selbst haelt KEIN ITimeSource-Feld, keine Referenz und
 keinen Zeiger auf eine Uhr - sie ist bezueglich Zeit eine reine Funktion der
 uebergebenen Werte. Das erfuellt Dependency Inversion (Abschnitt 15, Punkt D)
 sogar staerker als in der Vorversion.
+
+WICHTIGE FOLGE fuer die Alters-/Failed-Eskalation (Abschnitt 8): Ohne
+gespeicherte Uhr kann `quality` nicht als Hintergrundprozess "von selbst"
+nach kMaxStaleAgeMs auf Failed wechseln, waehrend gar kein ingest() mehr
+aufgerufen wird (z. B. weil der Sensor komplett verstummt ist). Deshalb ist
+`quality` in dieser Pipeline eine in `snapshot(nowMonotonicMs)` ABGELEITETE
+Groesse, kein bei ingest() separat fortgeschriebener gespeicherter Zustand:
+
+  - ingest() aktualisiert ausschliesslich die rohen Zaehl-/Zeitgroessen:
+    letzter akzeptierter Zeitstempel/Rohwert, letzter gueltiger Zeitstempel/
+    Rohwert, consecutiveInvalidCount, recoveryProgressCount, Filterzustand.
+    ingest() selbst trifft KEINE Stale/Failed-Entscheidung.
+  - snapshot(nowMonotonicMs) berechnet `quality` jedes Mal frisch aus diesen
+    gespeicherten Groessen KOMBINIERT MIT dem uebergebenen nowMonotonicMs
+    (insbesondere: nowMonotonicMs - letzter gueltiger Zeitstempel >
+    kMaxStaleAgeMs -> Failed). snapshot() bleibt dadurch eine reine,
+    lesende (`const`) Ableitung - kein verstecktes Mutieren bei reinem
+    Lesezugriff.
+
+Damit erkennt JEDER spaetere snapshot(now)-Aufruf einen laengst verstummten
+Sensor korrekt als Failed, unabhaengig davon, wie lange zuvor kein ingest()
+mehr aufgerufen wurde - #20 zwingt dem Aufrufer keine "es muss jeden Zyklus
+mindestens ein MissingSample-ingest() erfolgen"-Pflicht auf, die andernfalls
+still vorausgesetzt und leicht verletzt werden koennte.
 ```
 
 ### 9b. Zeitstempel- und Dispositionsregeln
@@ -799,7 +829,7 @@ struct SensorQualitySnapshot {
     SensorIdentity identity;
     SensorQuality quality;
     std::optional<double> rawCelsius;              // nullopt vor der ersten Accepted-Probe mit Rohwert
-    std::optional<double> correctedCelsius;         // rawCelsius + Offset; nullopt wenn rawCelsius nullopt ist
+    std::optional<double> correctedCelsius;         // Medianfilter-Ausgang + Offset (NICHT rawCelsius + Offset - Pipelinereihenfolge ist Median->Offset->Tiefpass, Abschnitt 10); nullopt vor dem ersten gefuellten Medianfenster
     std::optional<double> filteredCelsius;          // nullopt bis der Tiefpass einen ersten Wert erzeugt hat
     double appliedOffset;
     std::optional<uint64_t> lastSampleAgeMs;        // nullopt vor der ersten jemals eingegangenen Probe
@@ -1194,9 +1224,10 @@ COMMISSIONING.md "Messzyklus"):
     changeRateCelsiusPerSecond alle == std::nullopt (keine erfundenen
     Platzhalterwerte)
   - erste gueltige Probe -> weiterhin Stale (noch nicht genug Folgeproben),
-    rawCelsius/correctedCelsius/lastSampleAgeMs jetzt gesetzt,
-    filteredCelsius bleibt nullopt bis Slice B einen ersten Tiefpasswert
-    erzeugt
+    rawCelsius/lastSampleAgeMs jetzt gesetzt; correctedCelsius UND
+    filteredCelsius bleiben nullopt bis Slice 2 Medianfilter und Tiefpass
+    liefert (correctedCelsius haengt vom Medianfilter-Ausgang ab, nicht von
+    rawCelsius direkt - siehe Abschnitt 12)
   - kMinConsecutiveValidSamples Folgeproben -> Valid
   - stabiler ~2s-Zyklus ueber mehrere Minuten (virtuelle Zeit) -> Valid
     bleibt stabil
@@ -1280,7 +1311,7 @@ Median und Tiefpass (Orakel: Abschnitt 10.3/10.5):
     filteredCelsius (noch) nicht nachgezogen ist
 
 Offset und Identitaet (Orakel: Abschnitt 10.4, 8, 11):
-  - Offset 0.0 -> correctedCelsius == gefilterte Eingabe vor Offset
+  - Offset 0.0 -> correctedCelsius == Medianfilter-Ausgang unveraendert
   - positiver und negativer Offset veraendern correctedCelsius korrekt
   - Offset am Rand von kMaxAbsoluteOffsetCelsius wird noch akzeptiert
   - Offset ausserhalb der Grenze: Testfall dokumentiert den definierten
@@ -1514,11 +1545,15 @@ Slice 1 (Qualitaetszustand + Plausibilitaet):
   4. sensor_quality.hpp
   5. sensor_quality_config.hpp (Abschnitt 10.0)
   6. sensor_quality_snapshot.hpp (SensorFaultReason, SensorQualitySnapshot;
-     filteredCelsius als std::optional<double>, bleibt in Slice 1 stets
-     std::nullopt, da MedianFilter/LowPassFilter noch nicht existieren)
+     correctedCelsius UND filteredCelsius als std::optional<double>, bleiben
+     in Slice 1 stets std::nullopt, da MedianFilter/LowPassFilter noch nicht
+     existieren - correctedCelsius haengt vom Medianfilter-Ausgang ab, nicht
+     von rawCelsius direkt, siehe Abschnitt 12)
   7. sensor_quality_pipeline.hpp/.cpp: Zeitstempel-/Dispositionspruefung
      (9b), Transport-/Wertebereichs-/Aenderungsratenpruefung (10.1/10.2),
-     Zustandsmaschine (Abschnitt 8); ingest(sample, now) und snapshot(now)
+     Zustandsmaschine (Abschnitt 8, quality als in snapshot(now) ABGELEITETE
+     Groesse - siehe Abschnitt 9a-Ergaenzung unten, nicht als bei ingest()
+     separat fortgeschriebener Zustand); ingest(sample, now) und snapshot(now)
      mit explizitem Zeitparameter, keine gespeicherte ITimeSource (9a)
   8. sensor_fault_sequence.hpp/.cpp (so weit fuer Slice-1-Tests benoetigt)
   9. test/test_sensor_identity/, test/test_sensor_quality_config/,
