@@ -208,13 +208,13 @@ Abgerufen am 2026-07-27.
 Der 230-V-AC-Hauptschalter gehoert nicht zu diesen Ausgaengen und erhaelt auch
 keinen Eingangsadapter. Er schaltet das Geraet rein elektrisch ein oder aus.
 
-## NVS beziehungsweise Preferences
+## ESP-IDF NVS
 
 | Merkmal | Bewertung |
 |---|---|
 | Aufgabe | produktives Blob-Backend fuer den vorhandenen `IStateStore` |
 | Release-1-Anforderung | kurze ADR-016-Schluessel, binaersichere Werte, typisierte Read-/Writefehler, atomarer einzelner Commit und Rueckfalllogik oberhalb des Backends |
-| Kandidaten | direkter ESP-IDF-`nvs_flash`-Adapter, da kein Arduino-Produktionspfad besteht (`AGENTS.md`); Espressif-first-Erstkandidat, siehe Backlog-Issue #90 |
+| Kandidaten | durch ADR-016 festgelegtes produktives Backend: direkter ESP-IDF-`nvs_flash`-Adapter, da kein Arduino-Produktionspfad besteht (`AGENTS.md`); keine offene Produktauswahl mehr, Adapterimplementierung und reale Verifikation in Backlog-Issue #90 |
 | Quelle/Stand/Lizenz | [NVS-Dokumentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/storage/nvs_flash.html), ESP-IDF `6.0.2`, Apache-2.0 |
 | Wartung/Kompatibilitaet | offizieller Plattformbestandteil; Keys bis 15 Zeichen und Bytewerte dokumentiert |
 | Ressourcen | NVS-Partition und Runtime-Handles; Groesse bleibt bis #29 `TBD_IMPLEMENTATION_BUDGET` |

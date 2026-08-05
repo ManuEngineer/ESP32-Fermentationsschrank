@@ -8,9 +8,14 @@ verhindern, dass Standardtreiber und Frameworkdienste unnoetig neu entwickelt
 werden, ohne den projektspezifischen Safety- und Fachkern an externe
 Bibliotheken abzugeben.
 
-Der Audit implementiert keine Empfehlung. Er aendert weder Produktionscode,
-Tests, Abhaengigkeiten, Buildflags, Hardwarekonfigurationen, bestehende Issues,
-Issue-Status noch akzeptierte ADRs.
+Der Audit implementiert keine Empfehlung. Der urspruengliche Audit vom
+2026-07-27 aenderte weder Produktionscode, Tests, Abhaengigkeiten,
+Buildflags, Hardwarekonfigurationen, bestehende Issues, Issue-Status noch
+akzeptierte ADRs. Die Espressif-first-Synchronisierung vom 2026-08-05 bildet
+davon eine ausdruecklich ownerfreigegebene Ausnahme: #27, #30 und #31 wurden
+gezielt ergaenzt und #89 sowie #90 neu erstellt. Produktionscode, Tests,
+Buildkonfigurationen, Hardwarekonfigurationen, Issue-Status und ADRs wurden
+dabei nicht geaendert.
 
 ## Gepruefter Stand
 
@@ -114,7 +119,7 @@ stabilen Active-/Fallback-Kerns offen, nicht als alternativer R1-Auftrag.
 
 ### 1. Adoptieren unter schmaler Kontrolle
 
-- NVS/Preferences ist durch ADR-016 bereits als produktives Backend festgelegt;
+- ESP-IDF NVS ist durch ADR-016 bereits als produktives Backend festgelegt;
   eine eigene Flashdatenbank waere unnoetige Risiko- und Wartungslast.
 - Display-, Touch- und 1-Wire-Protokolltreiber sollen adoptiert, nicht neu
   geschrieben werden.
@@ -188,8 +193,10 @@ mehrere Diagnose- und Serviceverantwortungen und wird nach dem verbindlichen
 OD-07-Teilentscheid in vier kleine Bereiche geschnitten: passive
 Diagnosemodelle/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose, gefuehrter
 Serviceablauf sowie ein nur lesender Diagnose-/Servicebericht. Damit ist OD-07
-fachlich vollstaendig entschieden; die Live-Issues bleiben in diesem Audit
-unveraendert.
+fachlich vollstaendig entschieden; im urspruenglichen Audit vom 2026-07-27
+blieben die Live-Issues dabei unveraendert. Die Espressif-first-
+Synchronisierung vom 2026-08-05 bildet davon die an anderer Stelle
+dokumentierte, ausdruecklich ownerfreigegebene Ausnahme fuer #27, #30 und #31.
 
 ### 5. Hardwarequellen sind keine Hardwarebestaetigung
 
@@ -1254,8 +1261,10 @@ Die vollstaendige Zuordnung steht in der
 4. #16/#56/#57 vor Implementierung in einem separaten ownerfreigegebenen
    Planungs-/ADR-Schritt auf Variante B zuschneiden; die Issues nicht
    unveraendert umsetzen.
-5. #17 und #24 nur von den tatsaechlich benoetigten schmalen R1-Vertraegen
-   abhaengig machen, nicht von spaeterem Pending oder leeren Secret-Domaenen.
+5. #17 hat die schmale Abhaengigkeitsgrenze durch PR #84 bereits umgesetzt.
+   Fuer #24 und weitere Konsumenten bleibt dieselbe Grenze verbindlich: nur
+   von den tatsaechlich benoetigten schmalen R1-Vertraegen abhaengig machen,
+   nicht von spaeterem Pending oder leeren Secret-Domaenen.
 6. Display-/Touchtreiber erst nach den Stufen 0 bis 4 und
    DS18B20-/1-Wire-Treiber erst nach den Sensorstufen 1 bis 3 fixieren. Beim
    Sensorpfad Softwarestack und Topologie A/B getrennt entscheiden; Produktbus
@@ -1308,7 +1317,9 @@ Die vollstaendige Zuordnung steht in der
   Korruptionssperre und wiederaufnehmbaren Werksreset. Connectivity- und
   Authentication-Domaenen entstehen erst mit realen Konsumenten in eigener
   spaeterer Planung.
-- **#17/#24:** duerfen nur von den tatsaechlich benoetigten schmalen
+- **#17:** hat die schmale Abhaengigkeitsgrenze durch PR #84 bereits
+  umgesetzt; kein weiterer Scope.
+- **#24:** darf nur von den tatsaechlich benoetigten schmalen
   Variante-B-Vertraegen abhaengen, nicht von Pending-, Intent- oder vorbereiteter
   Secret-Infrastruktur.
 
@@ -1358,13 +1369,14 @@ die endgueltige Uebernahme nach dem dokumentierten Build-, Grenzwert-, Fuzz-
 und Ressourcenspike; eine vorsorgliche Gleichwahl besteht nicht.
 
 OD-07 ist fachlich vollstaendig entschieden: #19, #25, #26, #27 und #28 sind
-in kleine, ownerfreizugebende Umsetzungsbereiche geschnitten. Der ursprueng-
-liche Audit aenderte oder erstellte keine Issues. Die Espressif-first-
-Synchronisierung dieses Dokuments (2026-08-05) bildet eine ausdruecklich
-ownerfreigegebene Ausnahme: #27, #30 und #31 wurden gezielt um
-Espressif-first-Kandidaten ergaenzt, ohne ihren fachlichen Scope neu zu
-schreiben, und die neuen Backlog-Issues #89 und #90 wurden erstellt. OD-09
-legt nun den fachlichen Authvertrag
+in kleine, ownerfreizugebende Umsetzungsbereiche geschnitten. Der
+urspruengliche Audit vom 2026-07-27 aenderte keine Live-Issues. Die
+Espressif-first-Synchronisierung vom 2026-08-05 bildet eine ausdruecklich
+ownerfreigegebene Ausnahme: #27, #30 und #31 wurden gezielt ergaenzt, ohne
+ihren fachlichen Scope neu zu schreiben, und die neuen Backlog-Issues #89
+und #90 wurden erstellt. Produktionscode, Tests, Buildkonfigurationen,
+Hardwarekonfigurationen, Issue-Status und ADRs wurden dabei nicht geaendert.
+OD-09 legt nun den fachlichen Authvertrag
 fest; produktive schreibende Webendpunkte und authentisierte Serviceablaeufe
 bleiben hinter seinen technischen Spike- und Integrationsgates.
 

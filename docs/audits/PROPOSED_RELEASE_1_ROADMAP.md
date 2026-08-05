@@ -49,8 +49,9 @@ Vor weiterer Architekturverbreiterung:
 4. Persistentes Pending sowie echte Connectivity-/Authentication-Domaenen als
    spaetere eigene Arbeit mit ihrem ersten fachlichen Konsumenten planen, nicht
    als leere R1-Infrastruktur.
-5. Abhaengigkeiten von #17/#24 auf #16 anhand der tatsaechlich benoetigten
-   schmalen Variante-B-Vertraege korrigieren.
+5. Abhaengigkeit von #24 auf #16 anhand der tatsaechlich benoetigten schmalen
+   Variante-B-Vertraege korrigieren; #17 ist durch PR #84 bereits
+   abgeschlossen und benoetigt keine weitere #16-Abhaengigkeitskorrektur.
 6. Grundsatz bestaetigen, dass Treiber/Frameworkdienste adoptiert und
    Safety-/Fachlogik selbst entwickelt werden.
 7. den verbindlichen OD-07-Teilschnitt von #19 in Journal/Retention,
@@ -86,16 +87,16 @@ Persistenzbasis #54/#55
   -> #57 Bootstrap, StorageEpoch und Werksreset
 
 schmale benoetigte Variante-B-Vertraege
-  -> #17 Laufpersistenz
+  -> #17 Laufpersistenz [ABGESCHLOSSEN, PR #84]
   -> #18 Wiederanlauf
 
-#17 + stabiler Variante-B-Kern
+#17 [abgeschlossen] + stabiler Variante-B-Kern
   -> #19-A typisiertes Ereignisjournal und Retention
   -> #19-B begrenzte Laufhistorie und stromausfallsichere Bereinigung
   -> #19-C nur lesender Laufexport und secret-freies Backup
   -> #19-D Importvorschau und atomare Aktivierung mit synchronem Run-Gate
 
-#17 + #20..#23 + bestehender Laufkern
+#17 [abgeschlossen] + #20..#23 + bestehender Laufkern
   -> #24 Fehlerkern und SAFE_BOOT
   -> #25-A kleine oberflaechenneutrale Praesentationsmodelle
   -> #25-B gemeinsame Sprachressourcen und Formatierungsregeln
@@ -145,8 +146,10 @@ Vorgeschlagene kleine PRs:
   Kuehlkoerper-/Peltier-Schutzsensor bleibt unabhaengige Freigabegrundlage;
 - #22: begrenzter PI-Kern, danach Luftbegrenzung/Diagnose;
 - #23: Peltierplaner, danach Luefter/Nachlauf;
-- #17: Kontrollpunktcodec/-slots, danach Ereignis-/Rueckfallservice;
-- #18: phasenbezogener Restart, danach Zeit-/Fortschrittskorrektur;
+- #17: abgeschlossen durch PR #84 (Kontrollpunktcodec, Revisionen,
+  Rueckfall, Korruptionserkennung); kein weiterer PR in diesem Scope;
+- #18: phasenbezogener Restart, danach Zeit-/Fortschrittskorrektur, auf dem
+  abgeschlossenen #17-Fundament;
 - #19-A: stabile Ereignistypen, Prioritaeten, feste Recordgrenzen und native
   Retention-/Recoverytests; keine einzelne Journalisierung jeder periodischen
   Temperaturmessung und keine Secrets;
@@ -639,7 +642,10 @@ offenes R1-Risiko loest den identischen Vergleich aus.
 
 OD-07 ist vollstaendig entschieden. #19 ist mit vier, #25 mit zwei, #26 mit
 fuenf lokalen, #27 mit fuenf Web- und #28 mit vier Diagnose-/Servicebereichen
-geschnitten. Die Live-Issues bleiben im Audit unveraendert. Der Werksreset
+geschnitten. Im urspruenglichen Audit vom 2026-07-27 blieben die Live-Issues
+dabei unveraendert; die Espressif-first-Synchronisierung vom 2026-08-05
+ergaenzte #27 spaeter gezielt um technische Kandidaten, ohne diesen
+Fuenferschnitt zu aendern. Der Werksreset
 bleibt im zentralen #57-Recoveryvertrag und behaelt gemaess ADR-010 die
 geraetespezifische Touchkalibrierung; #19 veraendert sie nicht. Ein gesonderter
 Recoveryfall fuer unbrauchbare Kalibrierung bleibt davon getrennt.
