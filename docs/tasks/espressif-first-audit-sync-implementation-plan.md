@@ -2,7 +2,7 @@
 
 CONTEXT_BASELINE_SHA: 8d65b50326c4419dc45bbc024615c0a1c592e1aa (main, = Merge-Commit PR #84)
 CONTEXT_HEAD_SHA: 8d65b50326c4419dc45bbc024615c0a1c592e1aa
-CONTEXT_REFRESH_MODE: FULL (Toolchainwechsel-Synchronisierung; volle Erstorientierung dieser Sitzung)
+CONTEXT_REFRESH_MODE: INCREMENTAL (bestehender Audit wird inkrementell auf die bereits gemergte ESP-IDF-6.0.2-Produktionsbasis synchronisiert; kein neuer Gesamtaudit)
 PLAN_STATUS: DRAFT – wartet auf Ownerfreigabe dieses Plan-Commits
 
 ## Ziel
@@ -106,7 +106,7 @@ dieser Sitzung):
 | `atanisoft/esp_lcd_touch_xpt2046` | `1.0.6` | `>=4.4` + `esp_lcd_touch >=1.0.4` | MIT | kein offizieller `espressif/*`-XPT2046-Treiber vorhanden; dies ist der am besten belegte kompatible Registry-Kandidat, wie im Auftrag als Rueckfall vorgesehen |
 | `espressif/esp_lvgl_port` | `2.8.0~1` | `>=5.2` | Apache-2.0 | erfuellt; unterstuetzt LVGL `>=8, <10` |
 | `espressif/network_provisioning` | `1.2.4` | `>=5.1` | Apache-2.0 | `wifi_provisioning` wurde in der ESP-IDF-6.0-Linie vollstaendig entfernt und durch dieses Out-of-Tree-Registrypaket ersetzt (`wifi_prov_*` → `network_prov_*`); SoftAP+HTTP-Provisioning bestaetigt, kein eingebauter DNS-Captive-Redirect |
-| `protocomm` | nicht als eigenstaendiges Registrypaket auffindbar (404) | – | – | als interner Baustein von `network_provisioning` referenziert, nicht separat versioniert auffindbar; **ungeklaert, in Phase 2 als Fussnote statt harter Versionsangabe aufnehmen** |
+| `protocomm` | offizielle ESP-IDF-Komponente, an ESP-IDF 6.0.2 gebunden (keine eigene Component-Registry-Version) | ESP-IDF 6.0.2 (Bestandteil) | Apache-2.0 (ESP-IDF) | `network_provisioning` nutzt `protocomm` fuer sichere Sessions; `protocomm` kann zusaetzlich direkt fuer einen eigenen SoftAP-/HTTP-/DNS-Provisionierungsweg evaluiert werden (siehe neues Issue `[E5.6]`, Pfad 2) |
 | ESP-IDF `esp_http_server` | Bestandteil ESP-IDF 6.0.2 | – | Apache-2.0 (ESP-IDF) | synchroner eingebetteter HTTP-Server |
 
 ## Aktuelle Ausgangslage
@@ -136,17 +136,23 @@ dieser Sitzung):
   gelieferte Frameworkfunktion" (Zeile 19) — abweichend von der im Auftrag
   vorgegebenen 5-stufigen Espressif-first-Reihenfolge.
 - `docs/ENGINEERING_PRINCIPLES.md` enthaelt noch keine Espressif-first-Regel.
-- **Wichtiger, nicht mechanisch aufloesbarer Befund** (siehe "Offene
-  Entscheidungen" Punkt 1): Root-`AGENTS.md` schliesst einen
+- **Durch Ownerklarstellung entschiedene Rueckfallkandidatenregel** (siehe
+  "Offene Entscheidungen" Punkt 1): Root-`AGENTS.md` schliesst einen
   Arduino-Produktionspfad ausdruecklich aus ("Ein Arduino-Produktionspfad
   besteht nicht"). Ein grosser Teil der bisherigen Rueckfallkandidaten
   (LovyanGFX, TFT_eSPI, Arduino_GFX, Adafruit GFX/ILI9341,
   XPT2046_Touchscreen, DallasTemperature+OneWire, WiFiManager, ArduinoJson,
-  ESPAsyncWebServer, Arduino PID/QuickPID) sind Arduino-Kernbibliotheken. Ob
-  sie unter reinem ESP-IDF 6.0.2 ueberhaupt technisch nutzbar waeren (z. B.
-  nur ueber die offizielle "Arduino als ESP-IDF-Komponente"-Integration),
-  ist eine neue, bisher ungeklaerte Architekturfrage, die dieser
-  Synchronisierungsauftrag nicht entscheidet.
+  ESPAsyncWebServer, Arduino PID/QuickPID) sind Arduino-Kernbibliotheken.
+  Espressif-first bestimmt jedoch nur die Recherche-/Pruefprioritaet, nicht
+  das Ergebnis: diese Kandidaten bleiben ergebnisoffene
+  Evaluationskandidaten, solange ihre technische Nutzbarkeit mit dem
+  fixierten ESP-IDF-6.0.2-Produktionspfad nachweisbar ist oder ein
+  dokumentierter Integrationsweg ohne stilles Wiedereinfuehren eines
+  Arduino-Produktionspfads besteht; ein Kandidat, der Arduino als produktive
+  ESP-IDF-Komponente benoetigt, ist deshalb keine automatische Ablehnung,
+  sondern eine separate, vor Auswahl ownerpflichtige Architekturabweichung.
+  Die konkrete Auswahl eines einzelnen Kandidaten bleibt weiterhin offen und
+  wird von diesem Synchronisierungsauftrag nicht getroffen.
 
 ## Betroffene Module und voraussichtlich betroffene Dateien
 
@@ -166,7 +172,9 @@ Ausschliesslich Dokumentation und Backlog, keine Firmware-/Testdateien:
    Toolchainwechsel im Audit"), Zeile 62–63 (Espressif onewire_bus/ds18b20,
    Prioritaet anheben), Zeile 67 (mbedTLS-Pfad auf ESP-IDF direkt statt via
    Arduino-ESP32), neue Zeilen fuer `esp_lcd_ili9341`, `esp_lcd_touch`,
-   `atanisoft/esp_lcd_touch_xpt2046`, `esp_lvgl_port`, `network_provisioning`.
+   `atanisoft/esp_lcd_touch_xpt2046`, `esp_lvgl_port`, `network_provisioning`
+   und `protocomm` (als ESP-IDF-6.0.2-Bestandteil ohne eigene
+   Registry-Version, siehe Tabelle oben).
 4. `docs/audits/RELEASE_1_ADOPT_OR_BUILD_AUDIT.md` — Kopfzeilen (Basis-Commit/
    Toolchain, Zeilen 19–23), Abschnitt 3 "Toolchainkompatibilitaet"
    (Zeilen 145–152, die `onewire_bus`/`ds18b20`-Inkompatibilitaetsaussage),
@@ -205,11 +213,12 @@ Ausschliesslich Dokumentation und Backlog, keine Firmware-/Testdateien:
    unqualifiziert).
 10. `docs/ENGINEERING_PRINCIPLES.md` — neuer Abschnitt Espressif-first-Regel
     (Ende der Datei, nach "KISS").
-11. `AGENTS.md` (Root) — **voraussichtlich keine Aenderung**; die bestehende
-    Bindung im Abschnitt "Verbindliche Software-Engineering-Grundsaetze"
-    verweist bereits verbindlich auf `docs/ENGINEERING_PRINCIPLES.md` fuer die
-    ausfuehrliche Erlaeuterung. Endgueltige Bestaetigung erfolgt am Anfang von
-    Phase 2 durch erneuten Blick auf den dann aktualisierten Abschnitt.
+11. `AGENTS.md` (Root) — **keine Aenderung** (durch Ownerklarstellung
+    entschieden); die bestehende Bindung im Abschnitt "Verbindliche
+    Software-Engineering-Grundsaetze" verweist bereits verbindlich auf
+    `docs/ENGINEERING_PRINCIPLES.md` fuer die ausfuehrliche Erlaeuterung und
+    deckt damit die neue Espressif-first-Regel ab. Kein Commit auf dieser
+    Datei.
 12. Issue #30 (GitHub, `gh issue edit`) — Ergaenzung eines Abschnitts mit den
     Primaer-/Rueckfallkandidaten und Vergleichskriterien (Entwurf unten).
 13. Issue #31 (GitHub, `gh issue edit`) — Ergaenzung der konkreten
@@ -264,10 +273,13 @@ kleinen, je Datei/Thema getrennten Commits:
    (`docs/audits/OPEN_BACKLOG_CLASSIFICATION.md`)
 10. `docs: sync function matrix to ESP-IDF 6.0.2 baseline`
     (`docs/audits/RELEASE_1_FUNCTION_MATRIX.md`)
-11. `docs: confirm AGENTS.md needs no direct change` (nur falls Phase-2-Check
-    dies bestaetigt; sonst entfaellt dieser Commit ersatzlos)
-12. Live-Issue-Aktualisierungen #30/#31/#27 (`gh issue edit`, kein Commit)
-13. Zwei neue Live-Issues (`gh issue create`, kein Commit)
+11. Live-Issue-Aktualisierungen #30/#31/#27 (`gh issue edit`, kein Commit)
+12. Zwei neue Live-Issues `[E5.6]`/`[E5.7]` (`gh issue create`, kein Commit)
+
+`AGENTS.md` erhaelt keinen eigenen Commit (siehe "Offene Entscheidungen"
+Punkt 3: keine Aenderung erforderlich, kein leerer Bestaetigungscommit). Die
+Nichtaenderung wird ausschliesslich in der PR-Beschreibung und der
+Abschlussmatrix (`AGENTS_CHANGE_REQUIRED: NO`) dokumentiert.
 
 Jeder Dokumenten-Commit wendet zwei Arten von Aenderungen an:
 
@@ -291,6 +303,16 @@ Wahrheit").
 
 ## Entwuerfe fuer Issue-Ergaenzungen (Phase 2, nach Freigabe unveraendert zu uebernehmen)
 
+Jeder unten neu genannte Kandidat erhaelt in Phase 2 zusaetzlich in den
+betroffenen kanonischen Repositorydokumenten (`docs/THIRD_PARTY_COMPONENTS.md`,
+`docs/audits/THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md`,
+`docs/audits/COMPONENT_EVALUATIONS.md`) einen dauerhaften Eintrag mit:
+kanonischer Component-Registry-/ESP-IDF-Dokumentations-/Repositoryquelle,
+konkret evaluierter Version bzw. ESP-IDF-Built-in-Zuordnung, Lizenz und
+Notice-Pflicht, ESP-IDF-6.0.2-Kompatibilitaetsangabe und
+Pruef-/Synchronisierungsdatum. Der Recherche-Agentenbericht dieser Sitzung ist
+nur Arbeitsgrundlage fuer Phase 2, keine dauerhafte Repositoryquelle.
+
 ### Issue #30 – neuer Abschnitt "## Espressif-first-Kandidaten (Sync)"
 
 ```text
@@ -298,8 +320,10 @@ Primaerkandidat (Espressif-first, ESP-IDF 6.0.2 nativ):
 - espressif/onewire_bus 1.1.1 (ESP-IDF >=5.0, Apache-2.0)
 - espressif/ds18b20 0.4.0 (transitiv >=5.0, Apache-2.0)
 
-Rueckfallkandidat (Arduino-Bibliothek; Nutzbarkeit unter reinem ESP-IDF
-6.0.2 ungeklaert, siehe Auditfussnote):
+Ergebnisoffener Evaluationskandidat (Evaluationsgate: direkter Build/Betrieb
+mit ESP-IDF 6.0.2 oder dokumentierter Integrationsweg ohne stilles
+Wiedereinfuehren eines Arduino-Produktionspfads; sonst ownerpflichtige
+Architekturabweichung):
 - DallasTemperature 4.0.6 + OneWire 2.3.8 (beide MIT)
 
 Zu vergleichen: ESP-IDF-6.0.2-/ESP32-Kompatibilitaet, RMT-/UART-Backend,
@@ -325,9 +349,11 @@ Espressif-first-Kandidatenmatrix (Sync):
   LVGL 8/9) ueber LVGL als bevorzugten, nicht vorentschiedenen Kandidaten
 
 Weiterhin ergebnisoffen gegen vorhandene Rueckfallkandidaten (LovyanGFX,
-TFT_eSPI, LCDWiki) und gegen schlanke eigene Views vergleichen; LVGL nicht
-automatisch auswaehlen. Details im Audit
-(`docs/audits/COMPONENT_EVALUATIONS.md`, `docs/audits/HARDWARE_SPIKE_PLAN.md`).
+TFT_eSPI, LCDWiki) und gegen schlanke eigene Views vergleichen (gleiches
+Evaluationsgate wie bei #30: ESP-IDF-6.0.2-Build/-Betrieb oder dokumentierter
+Integrationsweg ohne Arduino-Produktionspfad); LVGL nicht automatisch
+auswaehlen. Details im Audit (`docs/audits/COMPONENT_EVALUATIONS.md`,
+`docs/audits/HARDWARE_SPIKE_PLAN.md`).
 ```
 
 ### Issue #27 – Ergaenzung im bestehenden Scope-Abschnitt
@@ -335,30 +361,52 @@ automatisch auswaehlen. Details im Audit
 ```text
 Technischer HTTP-Primaerkandidat (Sync): ESP-IDF esp_http_server
 (eingebaut, ESP-IDF 6.0.2). Arduino-ESP32 WebServer ist keine aktive
-Produktionsrichtung mehr. ESPAsyncWebServer bleibt hoechstens konditionaler
-Rueckfall nach einem konkret belegten Problem.
+Produktionsrichtung mehr. ESPAsyncWebServer bleibt ergebnisoffener
+konditionaler Rueckfallkandidat nach einem konkret belegten Problem
+(gleiches Evaluationsgate wie bei #30/#31).
 
-WLAN-Onboarding ist ausdruecklich nicht Bestandteil von #27 (siehe separates
-neues Issue).
+WLAN-Onboarding ist ausdruecklich nicht Bestandteil von #27 (siehe neues
+Issue [E5.6]).
 ```
 
-### Neues Issue A – WLAN-Onboarding-Evaluation
+### Neues Issue [E5.6] – WLAN-Onboarding-Evaluation
 
 ```text
-Titel: [E5.x] ESP-IDF-WLAN-Onboarding und Provisionierung evaluieren
+Titel: [E5.6] ESP-IDF-WLAN-Onboarding und Provisionierung evaluieren
 
 ## Status
 
 `PLANNED_SPEC_PENDING`
 
+## Epic
+
+#7 – ESP32- und Hardwareintegration
+
+## Abhaengigkeiten
+
+Harte Grundlagen:
+- #29 – ESP32-Bring-up, Partition und reale Ressourcen
+- #57 – StorageEpoch, Reset- und Recoveryvertrag fuer den ersten realen
+  Connectivity-/Credential-Konsumenten
+
+Verwandt, aber getrennt (keine Sammelzustaendigkeit):
+- #27 – Web-API/Weboberflaeche
+
 ## Scope
 
 - browserbasierter SoftAP-/Captive-Portal-Vertrag
-- ESP-IDF network_provisioning (ESP-IDF >=5.1, Apache-2.0; Nachfolger des in
-  der ESP-IDF-6.0-Linie entfernten wifi_provisioning) als offizieller
-  Pflichtkandidat, ergebnisoffen gegen WiFiManager (Arduino-Bibliothek;
-  Nutzbarkeit unter reinem ESP-IDF 6.0.2 ungeklaert) verglichen
-- kleiner eigener SoftAP-/DNS-/HTTP-Adapter auf ESP-IDF als Gegenkandidat
+- drei gleichwertig zu messende technische Pfade:
+  1. `espressif/network_provisioning` 1.2.4 (ESP-IDF >=5.1, Apache-2.0;
+     Nachfolger des in der ESP-IDF-6.0-Linie entfernten `wifi_provisioning`)
+     auf Basis von `protocomm` (offizielle ESP-IDF-6.0.2-Komponente ohne
+     eigene Registry-Version, an die ESP-IDF-Version gebunden)
+  2. direkter `protocomm`-/ESP-IDF-SoftAP-/HTTP-/DNS-Ansatz ohne
+     `network_provisioning`
+  3. kleiner eigener nativer ESP-IDF-SoftAP-/DNS-/HTTP-Adapter
+- WiFiManager (Arduino-Bibliothek) bleibt zusaetzlicher konditionaler
+  Drittanbieter-Evaluationskandidat (Evaluationsgate wie bei #30/#31/#27);
+  ersetzt weder die offiziellen Espressif-Pflichtkandidaten (Pfad 1/2) noch
+  den nativen Eigenbau-Gegenkandidaten (Pfad 3)
 - ausdruecklicher Portalstart; individuelle SoftAP-Zugangsdaten; WLAN-QR;
   sichtbarer direkter IP-Rueckfall
 - Credential-Kandidat, Validierung und atomarer Commit; Secret-Redaction
@@ -369,26 +417,37 @@ Titel: [E5.x] ESP-IDF-WLAN-Onboarding und Provisionierung evaluieren
 - keine Cloud- oder Apppflicht fuer den gewaehlten R1-Pfad
 
 Keine Auswahl vor identischem Spike und Ownerentscheid.
-
-## Abhaengigkeiten
-
-- getrennt von #27 (Web-API/Weboberflaeche)
-- Epic: [passendes E5-Epic, siehe #29–#31]
 ```
 
-### Neues Issue B – ESP-IDF-NVS-`IStateStore`-Adapter
+### Neues Issue [E5.7] – ESP-IDF-NVS-`IStateStore`-Adapter
 
 ```text
-Titel: [E5.x] ESP-IDF-NVS-Adapter fuer IStateStore implementieren und
+Titel: [E5.7] ESP-IDF-NVS-Adapter fuer IStateStore implementieren und
 verifizieren
 
 ## Status
 
 `PLANNED_SPEC_PENDING`
 
+## Epic
+
+#7 – ESP32- und Hardwareintegration
+
+## Abhaengigkeiten
+
+Harte Grundlagen:
+- #29 – ESP32-Bring-up, Partition und reale Ressourcen
+- #54 – IStateStore-, Schluessel-, Wire- und technischer Storevertrag
+
+Verbraucher-/Kompatibilitaetsreferenz (kein Umsetzungsgrund fuer
+laufpersistenzspezifische Anpassungen):
+- gemergter PR #84 / abgeschlossenes Issue #17
+
 ## Scope
 
 - produktiver Adapter von ESP-IDF NVS auf vorhandenes IStateStore
+  (generischer Adapter fuer den bestehenden Vertrag, nicht
+  laufpersistenzspezifisch)
 - Namespace- und Schluesselabbildung; begrenzte Blobgroessen; nvs_commit
 - exakter Ruecklesevertrag; Uebersetzung aller NVS-Fehler in bestehende
   Store-Ergebnisse
@@ -405,16 +464,18 @@ verifizieren
   Ownerentscheid
 - keine Aenderung des Schema-1-Wireformats aus PR #84
 - keine CBOR- oder LittleFS-Migration in diesem Issue
-
-## Abhaengigkeiten
-
-- #29 (ESP32-Bring-up), bestehende Persistenzgrundlagen aus PR #84
-- Epic: [passendes E5-Epic]
 ```
 
-Owner entscheidet in der Planfreigabe ueber exakten Epic-Bezug, finalen
-Titel-Praefix (`[E5.x]`) und ob weitere Abhaengigkeiten (z. B. #17) ergaenzt
-werden sollen; obige Entwuerfe sind Vorschlaege, keine endgueltige Fassung.
+`[E5.6]`/`[E5.7]` sind vom Owner vorgegebene Backlogpraefixe, keine
+GitHub-Issue-Nummern; die tatsaechliche GitHub-Nummer wird erst nach
+`gh issue create` in Phase 2 bekannt und danach in den betroffenen
+Dokumenten nachgetragen — keine erfundene Nummer vor Zuteilung.
+
+Epic-Bezug (#7), Titel-Praefixe (`[E5.6]`/`[E5.7]`) und harte Abhaengigkeiten
+sind durch Ownerklarstellung entschieden (siehe Issue-Entwuerfe oben); Issue
+#17/PR #84 dienen dabei ausdruecklich nur als Verbraucher-/
+Kompatibilitaetsreferenz fuer `[E5.7]`, nicht als Grund fuer eine
+laufpersistenzspezifische Anpassung des generischen Adapters.
 
 ## Daten-, Zustands- und Schnittstellenvertraege
 
@@ -425,7 +486,7 @@ dokumentiert wird an mehreren Stellen:
 PR #84: MERGED
 IStateStore-Vertrag: BESTEHEND
 Schema-1-Wireformat: BESTEHEND UND UNVERAENDERT
-Produktiver NVS-Adapter: SEPARATES FOLGEISSUE (neues Issue B oben)
+Produktiver NVS-Adapter: SEPARATES FOLGEISSUE (neues Issue [E5.7] oben)
 ```
 
 ## Fehler-, Recovery-, Security- und Safetygrenzen
@@ -450,47 +511,90 @@ Firmware.
   geaendert); wird trotzdem einmal am finalen Head laufen gelassen, um
   `REPOSITORY_CHANGED`-Nachweise fuer den Abschlussbericht zu erhaeten, falls
   der Owner das verlangt.
-- finaler Remote-CI-Lauf (`ESP-IDF + Native CI`) auf dem letzten Commit vor
-  Ready-for-Review muss gruen sein.
+- Die Abschlussmatrix am Ende von Phase 3/4 verwendet ebenfalls
+  `CONTEXT_REFRESH_MODE: INCREMENTAL`, nicht `FULL` — diese Aufgabe erstellt
+  keinen neuen Gesamtaudit, sondern traegt eine bereits gemergte
+  Toolchainentscheidung inkrementell in die betroffenen Dokumente nach.
+- finaler Remote-CI-Lauf (`ESP-IDF + Native CI`) auf dem finalen Head muss vor
+  dem vollstaendigen Ownerreview gruen sein. PR #88 bleibt dabei durchgehend
+  Draft; "finaler Head vor dem Ownerreview" ist kein Ready-for-Review-Schritt.
 
 ## Dokumentationsaenderungen
 
 Siehe "Betroffene Module und voraussichtlich betroffene Dateien" oben —
 diese Aufgabe besteht vollstaendig aus Dokumentationsaenderungen.
 
-## Offene Entscheidungen
+## Offene Entscheidungen (durch diese Nachkorrektur entschieden)
 
-1. **Arduino-Rueckfallkandidaten unter "kein Arduino-Produktionspfad".**
-   Root-`AGENTS.md` schliesst einen Arduino-Produktionspfad ausdruecklich aus.
-   Mehrere bisherige Rueckfallkandidaten (LovyanGFX, TFT_eSPI, LCDWiki,
-   Arduino_GFX, Adafruit GFX/ILI9341, XPT2046_Touchscreen,
-   DallasTemperature+OneWire, WiFiManager, ArduinoJson, ESPAsyncWebServer,
-   Arduino PID/QuickPID) sind Arduino-Kernbibliotheken. Ob sie unter reinem
-   ESP-IDF 6.0.2 ueberhaupt technisch nutzbar waeren (z. B. nur ueber die
-   offizielle "Arduino als ESP-IDF-Komponente"-Integration von Espressif),
-   ist eine neue Architekturfrage. **Vorschlag fuer diese Synchronisierung:**
-   Diese Kandidaten bleiben im Audit als Rueckfall/`AUDIT_ONLY` sichtbar,
-   erhalten aber an jeder relevanten Stelle eine kurze Fussnote, dass ihre
-   technische Nutzbarkeit unter dem reinen ESP-IDF-6.0.2-Produktionspfad
-   ungeklaert ist und vor einem Spike zuerst zu pruefen waere. Diese
-   Aufgabe trifft **keine** Auswahl oder Ausschlussentscheidung — das bleibt
-   dem Owner vorbehalten. Owner-Feedback zu diesem Vorschlag wird mit der
-   Planfreigabe erbeten.
-2. **`protocomm` als Registrypaket nicht auffindbar.** Fuer das neue
-   WLAN-Onboarding-Issue wird deshalb nur `network_provisioning` mit
-   versionierter Quelle genannt; `protocomm` wird als intern gebuendelter
-   Baustein erwaehnt, nicht mit einer eigenen (moeglicherweise falschen)
-   Versionsnummer versehen.
-3. **AGENTS.md-Aenderung.** Vorlaeufige Einschaetzung: keine Aenderung noetig,
-   da die bestehende Bindung an `docs/ENGINEERING_PRINCIPLES.md` ausreicht.
-   Wird zu Beginn von Phase 2 am dann aktuellen Text erneut bestaetigt.
-4. **Epic-Zuordnung und Titel-Praefix der zwei neuen Issues.** Vorschlag
-   `[E5.x]` in Anlehnung an #29–#31 (Epic #7); Owner kann bei Freigabe einen
-   anderen Epic-Bezug vorgeben.
-5. **Umgang mit dem urspruenglichen Auditdatum/-Basis-Commit.** Vorschlag:
-   nicht loeschen, sondern durch eine zusaetzliche Sync-Zeile ergaenzen (siehe
-   "Geplanter kleiner PR-/Commit-Schnitt"). Owner kann stattdessen ein
-   vollstaendiges Ersetzen verlangen.
+1. **Rueckfallkandidatenregel (durch Ownerklarstellung entschieden, nicht
+   mehr offen).** Root-`AGENTS.md` schliesst einen Arduino-Produktionspfad
+   ausdruecklich aus. Espressif-first bestimmt jedoch nur die Recherche- und
+   Pruefpriorisierung, nicht das Ergebnis:
+
+   ```text
+   Espressif-first bestimmt Recherche- und Pruefprioritaet, nicht das
+   Ergebnis. Geeignete Drittkomponenten und bisherige Rueckfallkandidaten
+   bleiben ergebnisoffene Evaluationskandidaten, sofern ihre technische
+   Nutzbarkeit mit dem fixierten ESP-IDF-6.0.2-Produktionspfad nachweisbar
+   ist.
+   ```
+
+   Fuer WiFiManager, DallasTemperature/OneWire, LovyanGFX, TFT_eSPI,
+   ESPAsyncWebServer und aehnliche bisherige Rueckfallkandidaten gilt als
+   erstes Evaluationsgate:
+
+   ```text
+   - direkter Build und Betrieb mit ESP-IDF 6.0.2 oder
+   - klar dokumentierter Integrationsweg ohne stilles Wiedereinfuehren eines
+     Arduino-Produktionspfads.
+   ```
+
+   Wuerde ein Kandidat Arduino als produktive ESP-IDF-Komponente benoetigen,
+   ist das keine automatische Ablehnung, aber eine separate
+   Architekturabweichung, die vor Auswahl einen ausdruecklichen
+   Ownerentscheid benoetigt. Diese Aufgabe trifft weiterhin **keine**
+   endgueltige Auswahl- oder Ausschlussentscheidung fuer einen konkreten
+   Kandidaten — nur die Evaluationsgate-Regel selbst ist mit dieser
+   Klarstellung entschieden. In Phase 2 erhaelt jede betroffene Kandidatenzeile
+   (Display/Touch, DS18B20-Rueckfall, WLAN-Onboarding-WiFiManager, Webserver-
+   ESPAsyncWebServer) einen kurzen Verweis auf dieses Evaluationsgate statt
+   einer Ausschluss- oder `AUDIT_ONLY`-Abwertung.
+2. **`protocomm` fachlich eingeordnet (nicht mehr offen).** `protocomm` ist
+   keine fehlende oder unklare Komponente, sondern eine offizielle
+   ESP-IDF-Komponente der fixierten ESP-IDF-Version 6.0.2 ohne eigene
+   Component-Registry-Version (ihre Version ist an ESP-IDF 6.0.2 gebunden,
+   daher kein 404 im Sinne einer fehlenden Quelle, sondern eine andere
+   Vertriebsform als ein `espressif/*`-Registrypaket). `network_provisioning`
+   nutzt `protocomm` fuer sichere Sessions; `protocomm` kann zusaetzlich
+   direkt fuer einen eigenen SoftAP-/HTTP-/DNS-Provisionierungsweg evaluiert
+   werden. Das neue WLAN-Onboarding-Issue `[E5.6]` nennt deshalb drei
+   gleichwertig messbare Pfade (siehe Issue-Entwurf unten), nicht nur
+   `network_provisioning` allein.
+3. **AGENTS.md-Aenderung (durch Ownerklarstellung entschieden, nicht mehr
+   offen): keine Aenderung erforderlich.** Root-`AGENTS.md` bindet
+   `docs/ENGINEERING_PRINCIPLES.md` bereits ausdruecklich und verbindlich ein;
+   diese Bindung deckt die neue Espressif-first-Regel ab. `AGENTS.md` bleibt
+   in Phase 2 unveraendert; es gibt dafuer keinen eigenen Commit (siehe
+   "Geplanter kleiner PR-/Commit-Schnitt").
+4. **Epic-Zuordnung und Titel-Praefix der zwei neuen Issues (durch
+   Ownerklarstellung entschieden, nicht mehr offen).** `[E5.6]`
+   (WLAN-Onboarding) und `[E5.7]` (NVS-`IStateStore`-Adapter), beide Epic #7,
+   mit den in den Issue-Entwuerfen oben genannten harten Abhaengigkeiten.
+5. **Umgang mit dem urspruenglichen Auditdatum/-Basis-Commit (durch
+   Ownerklarstellung bestaetigt).** Urspruengliches Auditdatum und
+   urspruenglicher Basis-Commit bleiben erhalten; zusaetzlich werden
+   Synchronisierungsdatum und neue `main`-Baseline ergaenzt (siehe "Geplanter
+   kleiner PR-/Commit-Schnitt"). Keine historische Grundlage wird still
+   ueberschrieben.
+
+Damit bestehen aus dieser Nachkorrektur heraus keine offenen Punkte mehr; alle
+fuenf vorherigen Punkte sind durch die Ownerklarstellung vom Owner selbst
+entschieden. Verbleibend offen bleibt ausschliesslich die in Punkt 1
+beschriebene *konkrete* Kandidatenauswahl je Funktionsbereich (z. B. welcher
+DS18B20- oder Display-Stack am Ende gewaehlt wird) — das ist keine
+Planungsluecke, sondern der beabsichtigte, im Auftrag selbst mehrfach
+betonte Spike- und Ownerentscheid-Vorbehalt fuer jede einzelne
+Produktivauswahl.
 
 ## Bewertung gegen SOLID, DRY und KISS
 
@@ -528,8 +632,10 @@ Kandidatenfakten.
 
 - keine Produktivauswahl fuer DS18B20-Stack, Display-/Touch-Treiber,
   Webserver, WLAN-Onboarding, UI-Framework oder Auth-KDF;
-- keine Entscheidung ueber die Arduino-Rueckfallkandidaten-Frage (offene
-  Entscheidung 1);
+- keine Entscheidung, welcher konkrete Rueckfallkandidat (WiFiManager,
+  DallasTemperature/OneWire, LovyanGFX, TFT_eSPI, ESPAsyncWebServer o. ae.)
+  am Ende gewaehlt wird — nur die Evaluationsgate-Regel selbst ist entschieden
+  (siehe "Offene Entscheidungen" Punkt 1);
 - kein Commit oder keine Aenderung auf dem Branch von PR #84;
 - keine ADR-Erstellung oder -Aenderung;
 - keine Firmware-, Test- oder Build-Aenderung.
