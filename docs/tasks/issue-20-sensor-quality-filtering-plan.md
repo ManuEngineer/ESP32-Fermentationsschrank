@@ -404,12 +404,43 @@ Sensoridentitaetswechsel (ROM-Wechsel):
   "Identitaet unbekannt" (nullopt) ist fuer sich allein KEIN ROM-Wechsel
   (fehlende Evidenz in beide Richtungen, siehe Abschnitt 9b).
 
-Reset/Fortfuehrung der Filterzustaende:
-  Valid -> Stale (kurzzeitig): Filterzustand bleibt erhalten (einzelne
-    ungueltige Probe soll keinen bereits eingeschwungenen Filter verwerfen)
-  Stale/Failed -> Valid (nach Wiedererkennung) ODER ROM-Wechsel:
-    Filterzustand wird verworfen und beginnt mit den Proben der erfolgreichen
-    Wiedererkennungsfolge neu
+Reset/Fortfuehrung der Filterzustaende (KORREKTUR RUNDE 4 - vorher
+widerspruechlich, siehe unten):
+  kurzer STALE-Zustand durch einzelne/kurze Fehler (Valid -> Stale ->
+    Valid, OHNE dass FAILED zwischenzeitlich erreicht wurde): Filterzustand
+    bleibt WAEHREND UND NACH der Wiedererkennung vollstaendig erhalten,
+    Median-/Tiefpassberechnung wird mit den bestehenden Werten fortgesetzt.
+  FAILED -> Valid (nach Wiedererkennung) ODER bestaetigter
+    Sensoridentitaetswechsel (ROM-Wechsel, Abschnitt 9b/11): Filterzustand
+    wird verworfen und beginnt mit den Proben der erfolgreichen
+    Wiedererkennungsfolge neu.
+
+  Widerspruch der Vorversion: Dort hiess es gleichzeitig "Valid -> Stale
+  (kurzzeitig): Filterzustand bleibt erhalten" UND "Stale/Failed -> Valid
+  (nach Wiedererkennung) ... Filterzustand wird verworfen" - fuer den
+  haeufigsten Fall (eine einzelne ungueltige Probe fuehrt kurz nach Stale,
+  direkt gefolgt von kMinConsecutiveValidSamples gueltigen Proben zurueck zu
+  Valid, OHNE je Failed zu erreichen) widersprachen sich diese beiden Regeln:
+  die erste verspricht Erhalt, die zweite verlangt Verwerfen desselben
+  Zustands beim Ruecksprung nach Valid. Jetzt eindeutig: NUR ein
+  tatsaechlich erreichtes FAILED oder ein bestaetigter ROM-Wechsel loest den
+  Reset aus - deckungsgleich mit Abschnitt 10.3 ("Nach FAILED/ROM-Wechsel:
+  Fenster wird geleert") und Abschnitt 10.5 ("nach FAILED/ROM-Wechsel wird
+  gefiltert_alt ... gesetzt"), die beide von jeher nur FAILED/ROM-Wechsel
+  nannten, nie ein einfaches Stale->Valid.
+
+  Kein zusaetzlicher zeitbasierter Reset INNERHALB von STALE noetig: Ein
+  STALE-Zustand kann strukturell nicht unbegrenzt andauern, ohne FAILED zu
+  erreichen - Abschnitt 8 definiert bereits zwei firmwarefeste, in
+  SensorQualityConfig validierte Obergrenzen (kMaxStaleAgeMs,
+  kMaxConsecutiveInvalid, siehe Abschnitt 10.0), von denen JEDE
+  ueberschritten STALE zwingend nach FAILED ueberfuehrt. Ein Filter kann
+  also nie "beliebig lange in STALE mit stillschweigend veraltetem
+  Filterzustand verharren" - er erreicht spaetestens bei einer dieser
+  Grenzen FAILED und wird dort regulaer zurueckgesetzt. Eine zusaetzliche,
+  dritte Schwelle nur fuer einen Reset "innerhalb" STALE waere redundant zu
+  bereits vorhandenen, bereits validierten Grenzen (DRY/KISS) und wird
+  deshalb NICHT eingefuehrt.
 ```
 
 Sicherheitsgrenze (firmwarefest, nicht parametrierbar):
@@ -423,6 +454,8 @@ Diagnosezwecken" (bei Stale/Failed, mit explizitem Alter und Status).
 
 `STATE_MACHINE_DEFINED: PASS`
 `RECOVERY_RULES_DEFINED: PASS`
+`TRANSIENT_STALE_PRESERVES_FILTER: PASS`
+`FAILED_OR_IDENTITY_CHANGE_RESETS_FILTER: PASS`
 
 ## 9. Eingangsvertrag: Erweiterung des bestehenden ITemperatureSource-Ports
 
@@ -656,9 +689,15 @@ mehr aufgerufen wird. Deshalb ist `quality` eine ABGELEITETE Groesse:
     monotonicTimestampMs()) aufrufen, um zu entscheiden, ob die neu
     eingetroffene, plausible Probe eine FORTSETZUNG eines bereits Valid
     laufenden Zustands ist (Filter normal fortfuehren) oder den BEGINN
-    einer Wiedererkennung nach Stale/Failed markiert (Filterzustand
-    verwerfen, recoveryProgressCount bei 1 beginnen, siehe Abschnitt 8/10.3/
-    10.5). Diese interne Berechnung wird NICHT als zweites, persistentes
+    einer Wiedererkennung nach Stale/Failed markiert (recoveryProgressCount
+    beginnt in BEIDEN Faellen bei 1). Der FILTERZUSTAND selbst wird dabei
+    NUR verworfen, wenn die Wiedererkennung von FAILED aus beginnt oder ein
+    bestaetigter ROM-Wechsel vorliegt - eine Wiedererkennung aus einem
+    kurzen STALE heraus (ohne je FAILED erreicht zu haben) fuehrt den
+    bestehenden Filterzustand unveraendert fort (Korrektur Runde 4, siehe
+    Abschnitt 8 "Reset/Fortfuehrung der Filterzustaende" fuer die
+    vollstaendige, vorher widerspruechliche Regel). Diese interne Berechnung
+    wird NICHT als zweites, persistentes
     `quality`-Feld gespeichert - sie ist ein einmaliger Entscheidungsschritt
     innerhalb des ingest()-Aufrufs, der dieselbe deriveQuality()-Funktion
     wiederverwendet, nur mit der Probenzeit statt der Aufrufer-"now" als
@@ -683,20 +722,45 @@ Jede eingehende Probe erhaelt GENAU EINE der folgenden Dispositionen (siehe
 SampleDisposition, Abschnitt 12); erst bei Accepted durchlaeuft sie die
 Plausibilitaetsstufen aus Abschnitt 10:
 
-  identischer Zeitstempel + identischer Rohwert (inkl. identischem status)
-    wie die zuletzt akzeptierte Probe -> DuplicateIgnored. Kein Effekt auf
-    Alter, Zustandsmaschine oder Filterinhalt (reiner Doppelversand, keine
-    neue Information).
+  identischer Zeitstempel + VOLLSTAENDIG identische semantische Felder
+    (identity() UND status() UND celsius()/Abwesenheit, siehe
+    sampleValuesEqual() unten) wie die zuletzt akzeptierte Probe ->
+    DuplicateIgnored. Kein Effekt auf Alter, Zustandsmaschine oder
+    Filterinhalt (reiner Doppelversand, keine neue Information). KORREKTUR
+    RUNDE 4: vorher verglich diese Regel nur Rohwert und status, NICHT
+    identity() - zwei Proben mit gleichem Zeitstempel, gleichem Messwert,
+    aber UNTERSCHIEDLICHER Identitaet waeren faelschlich als reiner
+    Doppelversand durchgegangen, obwohl ein ROM-Wechsel exakt zum selben
+    Erfassungszeitpunkt keine plausible Dopplung, sondern ein
+    widerspruechliches Signal ist.
 
-  identischer Zeitstempel + abweichender Rohwert (oder abweichender status)
-    wie die zuletzt akzeptierte Probe -> RejectedTimestampConflict. Zwei
-    widerspruechliche Werte fuer denselben Erfassungszeitpunkt sind kein
-    gueltiger Messvorgang; es wird KEINE der beiden Varianten bevorzugt
-    akzeptiert. Da RejectedTimestampConflict-Proben nie akzeptiert werden,
-    bleiben aufeinanderfolgende akzeptierte Zeitstempel immer strikt
-    steigend; die Aenderungsratenpruefung (Abschnitt 10.2) braucht deshalb
-    keine erfundene Mindest-Zeitdifferenz, sondern kann echte Division durch
-    Null durch Konstruktion ausschliessen.
+  identischer Zeitstempel UND (identity() ODER status() ODER
+    celsius()/Abwesenheit weicht ab) wie die zuletzt akzeptierte Probe ->
+    RejectedTimestampConflict. Zwei widerspruechliche Werte fuer denselben
+    Erfassungszeitpunkt sind kein gueltiger Messvorgang; es wird KEINE der
+    beiden Varianten bevorzugt akzeptiert. Da RejectedTimestampConflict-
+    Proben nie akzeptiert werden, bleiben aufeinanderfolgende akzeptierte
+    Zeitstempel immer strikt steigend; die Aenderungsratenpruefung
+    (Abschnitt 10.2) braucht deshalb keine erfundene Mindest-Zeitdifferenz,
+    sondern kann echte Division durch Null durch Konstruktion ausschliessen.
+
+  sampleValuesEqual(a, b) (Korrektur Runde 4 - Definition der
+    "identischer Rohwert"-Vergleichsfunktion fuer die beiden Regeln oben,
+    damit sie NICHT unkommentiert von gewoehnlicher double-Gleichheit
+    abhaengt):
+    a.celsius() und b.celsius() sind gleich, wenn
+      (a) beide nullopt sind, ODER
+      (b) beide einen Wert tragen UND
+          (std::isnan(*a.celsius()) UND std::isnan(*b.celsius())) ODER
+          *a.celsius() == *b.celsius() (gewoehnlicher double-Vergleich,
+          fuer endliche Werte UND fuer +Inf/+Inf bzw. -Inf/-Inf bereits
+          korrekt gemaess IEEE 754 - NUR NaN == NaN ist in IEEE 754 false
+          und wird deshalb explizit als Sonderfall behandelt: zwei NaN-
+          Proben zum selben Zeitstempel sind semantisch "derselbe defekte
+          Messwert nochmal gesendet", kein neuer Widerspruch).
+    identity() wird ueber std::optional<SensorIdentity>::operator==
+    verglichen (SensorIdentity ist ein einfacher Werttyp ohne NaN-Analogon).
+    status() wird ueber gewoehnliche Enum-Gleichheit verglichen.
 
   Zeitstempel < zuletzt akzeptierter Zeitstempel (ruecklaeufig/verspaetet)
     -> RejectedRetrograde.
@@ -704,8 +768,19 @@ Plausibilitaetsstufen aus Abschnitt 10:
   Zeitstempel > nowMonotonicMs (aus der Zukunft, siehe Abschnitt 9a) ->
     RejectedFuture.
 
-  sonst (Zeitstempel > zuletzt akzeptierter Zeitstempel UND
-    <= nowMonotonicMs) -> Accepted, durchlaeuft Abschnitt 10.
+  ERSTE Probe ueberhaupt (kein vorheriges Accepted vorhanden) -> die
+    Duplikat-/Konflikt-/Retrograde-Regeln oben SETZEN alle eine
+    "zuletzt akzeptierte Probe" voraus und sind daher auf die erste Probe
+    nicht anwendbar (kein Vergleichspartner). Es verbleibt ausschliesslich
+    die Zukunftspruefung: Zeitstempel <= nowMonotonicMs -> Accepted;
+    Zeitstempel > nowMonotonicMs -> RejectedFuture. KORREKTUR RUNDE 4: diese
+    Randbedingung war vorher nicht explizit benannt - "Zeitstempel >
+    zuletzt akzeptierter Zeitstempel" ist ohne einen vorherigen Wert
+    unterspezifiziert.
+
+  sonst, mit vorhandener zuletzt akzeptierter Probe (Zeitstempel > zuletzt
+    akzeptierter Zeitstempel UND <= nowMonotonicMs) -> Accepted, durchlaeuft
+    Abschnitt 10.
 
 Keine der Ablehnungsdispositionen (DuplicateIgnored, RejectedTimestampConflict,
 RejectedRetrograde, RejectedFuture) zaehlt als "ungueltige Probe" im Sinne der
@@ -722,7 +797,16 @@ identity()-Werte gesetzt (nicht nullopt) und unterschiedlich ->
 IdentityMismatch (Abschnitt 8/11). Ist mindestens einer der beiden nullopt,
 wird KEIN ROM-Wechsel gemeldet (fehlende Evidenz; ein Uebergang von
 "unbekannt" zu "erstmals bekannt" ist normales Anlaufverhalten, kein
-Fehler).
+Fehler). Explizit (Korrektur Runde 4, Klarstellung statt Verhaltensaenderung):
+Ein Identitaetswechsel zum EXAKT GLEICHEN Zeitstempel wie die zuletzt
+akzeptierte Probe erreicht diese Pruefung nie, weil die abweichende
+identity() bereits oben als RejectedTimestampConflict disponiert wurde und
+damit gar nicht erst akzeptiert wird - IdentityMismatch setzt zwei
+AKZEPTIERTE, also zeitlich verschiedene Proben voraus. Das ist beabsichtigt,
+nicht lueckenhaft: zwei widerspruechliche Identitaeten zum selben
+Erfassungszeitpunkt sind ein Zeitstempel-/Protokollproblem der Zufuhr
+(Abschnitt 9b), kein sachlicher Beleg fuer einen echten physischen
+ROM-Wechsel.
 
 Weitere behandelte Faelle:
 
@@ -739,6 +823,9 @@ Weitere behandelte Faelle:
 ```
 
 `GENERIC_INPUT_CONTRACT: PASS`
+`DUPLICATE_COMPARES_FULL_SAMPLE: PASS`
+`NONFINITE_DUPLICATE_SEMANTICS_DEFINED: PASS`
+`FIRST_SAMPLE_DISPOSITION_DEFINED: PASS`
 
 ## 10. Verarbeitungspipeline
 
@@ -774,7 +861,15 @@ enum class SensorQualityConfigStatus : uint8_t {
     InvalidRateOfChangeLimit,      // <= 0.0
     InvalidStaleAgeThreshold,      // 0, oder > sensor_limits::kMaxStaleAgeCeilingMs
     InvalidConsecutiveInvalidLimit, // 0, oder > sensor_limits-Obergrenze
-    InvalidRecoveryThresholds,     // minConsecutiveValidSamples == 0
+    // minConsecutiveValidSamples == 0, ODER minRecoveryStabilityDurationMs
+    // == 0, ODER minRecoveryStabilityDurationMs >
+    // sensor_limits::kMaxRecoveryStabilityDurationCeilingMs (Korrektur
+    // Runde 4: vorher wurde nur minConsecutiveValidSamples == 0 geprueft,
+    // minRecoveryStabilityDurationMs blieb vollstaendig unvalidiert - ein
+    // Aufrufer haette 0 oder eine willkuerlich grosse Zahl uebergeben
+    // koennen, obwohl docs/SENSOR_TUNING_COMMISSIONING.md ausdruecklich
+    // "mehrere gueltige Proben UND eine Stabilitaetszeit" verlangt).
+    InvalidRecoveryThresholds,
 };
 
 struct SensorQualityConfigCreateResult;  // vorwaertsdeklariert
@@ -811,9 +906,42 @@ Validierungsreihenfolge in `create()`: (1) `std::isfinite()` auf
 (4) `minPlausibleCelsius >= maxPlausibleCelsius` ODER ausserhalb der
 firmwarefesten Aussengrenze aus `sensor_limits.hpp`; (5)
 `maxRateOfChangeCelsiusPerSecond <= 0`; (6) `maxStaleAgeMs`; (7)
-`maxConsecutiveInvalid`; (8) `minConsecutiveValidSamples == 0`. Jede Stufe
-prueft nur, was vorher nicht schon verworfen wurde - keine doppelte
-Fehlerklassifikation.
+`maxConsecutiveInvalid`; (8) `minConsecutiveValidSamples == 0` ODER
+`minRecoveryStabilityDurationMs == 0` ODER `minRecoveryStabilityDurationMs
+> sensor_limits::kMaxRecoveryStabilityDurationCeilingMs` (Korrektur Runde 4
+- vorher pruefte Schritt 8 nur `minConsecutiveValidSamples`, siehe unten).
+Jede Stufe prueft nur, was vorher nicht schon verworfen wurde - keine
+doppelte Fehlerklassifikation.
+
+Wiedererkennungsparameter vollstaendig validiert (Korrektur Runde 4,
+`docs/SENSOR_TUNING_COMMISSIONING.md` verlangt ausdruecklich "mehrere
+gueltige Proben UND eine Stabilitaetszeit" - beide Grenzen muessen daher
+tatsaechlich existieren, nicht nur eine):
+
+```text
+minConsecutiveValidSamples > 0
+  (0 wuerde bedeuten: Wiedererkennung ohne eine einzige neue Probe -
+  widerspricht dem Auftrag "mehrere gueltige Proben")
+minRecoveryStabilityDurationMs > 0
+  (0 wuerde die Stabilitaetszeit-Anforderung vollstaendig entwerten -
+  vorher UNVALIDIERT, echte Luecke gegenueber SENSOR_TUNING_COMMISSIONING.md)
+minRecoveryStabilityDurationMs <= sensor_limits::kMaxRecoveryStabilityDurationCeilingMs
+  (firmwarefeste Obergrenze nach demselben Muster wie
+  kMaxStaleAgeCeilingMs, verhindert eine versehentlich praktisch nie
+  erfuellbare Wiedererkennungsbedingung)
+```
+
+Keine weitere Beziehung zwischen den Wiedererkennungsparametern und den
+uebrigen Config-Feldern ist fachlich zwingend: `minConsecutiveValidSamples`
+(Laenge der geforderten GUELTIGEN Folge fuer eine Rueckkehr zu Valid) und
+`maxConsecutiveInvalid` (Laenge der zulaessigen UNGUELTIGEN Folge WAEHREND
+Valid, bevor Failed erreicht wird) zaehlen strukturell unterschiedliche
+Ereignisse in unterschiedlichen Zustaenden und muessen einander nicht
+beschraenken; `minRecoveryStabilityDurationMs` misst ab dem Beginn der
+Wiedererkennungsfolge selbst und ist damit unabhaengig von
+`maxStaleAgeMs` (das das Alter des LETZTEN gueltigen Werts vor Beginn der
+Folge misst). Eine erzwungene numerische Kopplung ohne fachlichen Grund
+waere ein KISS-Verstoss (unnoetige Kopplung ohne Nutzen).
 
 `create()` prueft ausserdem gegen firmwarefeste Aussengrenzen aus
 `sensor_limits.hpp` (siehe Abschnitt 14); die konkreten Tuning-Werte selbst
@@ -827,6 +955,7 @@ Kalibrierwert pro Probe/Sensorinstanz, keine Pipeline-Verhaltensparametrierung
 
 `SENSOR_QUALITY_CONFIG_DEFINED: PASS`
 `NONFINITE_CONFIG_REJECTED: PASS`
+`RECOVERY_DURATION_VALIDATED: PASS`
 
 ### 10.1 Transport-/CRC-/Messstatusstufe (generisch, keine sensor-/treiberspezifischen Konstanten)
 
@@ -895,20 +1024,28 @@ std::vector).
 ### 10.4 Kalibrier-Offset
 
 `SensorOffset` ist bereits in Abschnitt 13a vollstaendig,
-gueltig-by-construction und NaN/Inf-sicher definiert (keine erneute
-Definition hier).
+gueltig-by-construction und NaN/Inf-sicher definiert; die Bindung an eine
+`SensorIdentity` erfolgt ueber `SensorCalibration` (Abschnitt 13b, Korrektur
+Runde 4 - keine erneute Definition hier).
 
 ```text
-#20 nimmt ausschliesslich einen bereits erfolgreich per
-SensorOffset::create() erzeugten Wert entgegen; #20 selbst validiert nicht
-erneut und nimmt keine Persistenz- oder UI-Validierung vor (siehe
-Nicht-Scope). Fehlender Offset = SensorOffset::create(0.0) (neutral, immer
-erfolgreich). Ein Offsetwechsel waehrend laufender Filterung wirkt erst auf
-die naechste eingehende Probe; bereits im Medianfenster befindliche
-Rohwerte werden NICHT rueckwirkend korrigiert (Medianfenster enthaelt
-Rohwerte, Offset wird NACH dem Medianfilter angewendet, siehe Reihenfolge
-oben – ein Offsetwechsel kann daher nie zu einer Vermischung unterschiedlich
-korrigierter Werte innerhalb eines Medianfensters fuehren).
+#20 nimmt ausschliesslich eine bereits erfolgreich konstruierte, optionale
+SensorCalibration entgegen (SensorQualityPipeline::setCalibration(), siehe
+Abschnitt 13b); #20 selbst validiert nicht erneut und nimmt keine
+Persistenz- oder UI-Validierung vor (siehe Nicht-Scope). Der PRO PROBE
+tatsaechlich angewendete Offset wird bei jeder akzeptierten Probe neu
+bestimmt (Regel siehe Abschnitt 13b: identity()-Uebereinstimmung noetig,
+sonst intern 0.0 neutral auf den Medianfilter-Ausgang angewendet OHNE dies
+als appliedOffset im Snapshot auszuweisen - appliedOffset bleibt in diesem
+Fall nullopt statt 0.0, Abschnitt 12/13b) - nicht einmalig
+zwischengespeichert. Ein Wechsel der gesetzten Kalibrierung (setCalibration())
+waehrend laufender
+Filterung wirkt erst auf die naechste eingehende Probe; bereits im
+Medianfenster befindliche Rohwerte werden NICHT rueckwirkend korrigiert
+(Medianfenster enthaelt Rohwerte, Offset wird NACH dem Medianfilter
+angewendet, siehe Reihenfolge oben – ein Offsetwechsel kann daher nie zu
+einer Vermischung unterschiedlich korrigierter Werte innerhalb eines
+Medianfensters fuehren).
 ```
 
 ### 10.5 Sensorbezogener Tiefpass
@@ -917,13 +1054,31 @@ korrigierter Werte innerhalb eines Medianfensters fuehren).
 Einfacher zeitkonstantenbasierter Exponentialfilter:
   gefiltert_neu = gefiltert_alt + (korrigierterWert - gefiltert_alt) *
                   (1 - exp(-dtSeconds / tauSeconds))
-  dtSeconds = Differenz zwischen den monotonicTimestampMs()-Werten der
-  aktuellen und der vorherigen AKZEPTIERTEN Probe, NICHT aus
-  nowMonotonicMs oder irgendeiner anderen Zeitquelle (Korrektur Runde 2 -
-  siehe Abschnitt 9a: die Pipeline haelt ohnehin keine ITimeSource-
-  Referenz; "aus ITimeSource-Zeitstempeln" war eine irrefuehrende
-  Restformulierung). Keine feste Zykluszeit-Annahme, auch wenn der
-  Regelzyklus nominal ~2 s betraegt (robust gegen Jitter/Luecken).
+  dtSeconds = Differenz zwischen dem monotonicTimestampMs() der aktuellen
+  PLAUSIBLEN Probe (die den Tiefpass ueberhaupt erreicht, siehe 10.1-10.3)
+  und dem monotonicTimestampMs() der VORHERIGEN Probe, die tatsaechlich in
+  den Filter eingeflossen ist - NICHT einfach der vorherigen AKZEPTIERTEN
+  Probe. NICHT aus nowMonotonicMs oder irgendeiner anderen Zeitquelle
+  (Korrektur Runde 2 - siehe Abschnitt 9a: die Pipeline haelt ohnehin keine
+  ITimeSource-Referenz; "aus ITimeSource-Zeitstempeln" war eine
+  irrefuehrende Restformulierung). KORREKTUR RUNDE 4 (behebt einen durch die
+  Filterreset-Korrektur in Abschnitt 8 neu entstandenen Fehler): "vorherige
+  AKZEPTIERTE Probe" ist seit der transienten-STALE-Filtererhaltung
+  (Abschnitt 8) NICHT mehr dasselbe wie "vorherige Probe, die den Filter
+  aktualisiert hat" - eine akzeptierte, aber unplausible Probe (z. B.
+  OutOfRange/RateOfChangeExceeded) durchlaeuft 10.1/10.2 und erreicht den
+  Tiefpass gar nicht (10.3: "Nur PLAUSIBLE Proben ... gelangen ins Fenster").
+  Bei Verwendung von "letzte akzeptierte" statt "letzte tatsaechlich in den
+  Filter eingeflossene" Probe wuerde dtSeconds bei Valid -> kurz Stale (eine
+  oder mehrere unplausible Proben, Filter bleibt erhalten) -> Valid die
+  Zeitluecke systematisch UNTERSCHAETZEN (dt gemessen ab der letzten
+  unplausiblen statt der letzten tatsaechlich verarbeiteten Probe), der
+  Filter wuerde dadurch zu LANGSAM statt korrekt auf die neue Probe
+  reagieren. Deckungsgleich mit Abschnitt 10.2, das fuer die
+  Aenderungsratenpruefung bereits korrekt "letzterGueltigerTimestampMs"
+  verwendet, nicht "letzter akzeptierter Zeitstempel". Keine feste
+  Zykluszeit-Annahme, auch wenn der Regelzyklus nominal ~2 s betraegt
+  (robust gegen Jitter/Luecken).
 Rollenabhaengige Parametrierung ausschliesslich ueber unterschiedliche
   tauSeconds-Werte in der je Instanz uebergebenen SensorQualityConfig (siehe
   Abschnitt 10.0) – keine rollenspezifische Codeverzweigung (DRY).
@@ -1062,7 +1217,19 @@ struct SensorQualitySnapshot {
     std::optional<double> rawCelsius;               // Wert der letzten AKZEPTIERTEN Probe mit Messwert (status==Ok), UNABHAENGIG von Plausibilitaet; nullopt nur vor der allerersten solchen Probe. KORREKTUR RUNDE 3: vorher faelschlich an "Accepted-und-plausibel" gekoppelt - das haette OutOfRange-/RateOfChangeExceeded-Proben trotz vorhandenem Rohwert verschwiegen und Abschnitt 10.5 sowie SENSOR_TUNING_COMMISSIONING.md widersprochen ("ein extremer Rohwert darf nicht durch einen langsamen Filter verdeckt werden").
     std::optional<double> correctedCelsius;         // Medianfilter-Ausgang + Offset; bereits ab dem ERSTEN plausiblen Medianbeitrag vorhanden (nicht erst bei vollem Fenster, siehe Abschnitt 10.3), NICHT rawCelsius + Offset
     std::optional<double> filteredCelsius;          // Tiefpass-Ausgang; ab demselben ersten Beitrag wie correctedCelsius vorhanden (Tiefpass ist ab der ersten Probe wohldefiniert)
-    double appliedOffset;
+    // std::optional statt double (KORREKTUR RUNDE 4): nullopt bedeutet
+    // "keine zur aktuellen Identitaet passende Kalibrierung angewendet"
+    // (Abschnitt 13b); hat einen Wert genau dann, wenn eine tatsaechlich
+    // passende SensorCalibration angewendet wurde (auch wenn dieser Wert
+    // zufaellig 0.0 ist). Ein reines `double appliedOffset` koennte
+    // "kalibriert auf 0.0" nicht von "keine passende Kalibrierung, neutraler
+    // Fallback" unterscheiden - genau der 0-Sentinel-Fehler, der in Runde 3
+    // bereits fuer SensorIdentity vermieden wurde. correctedCelsius (oben)
+    // verwendet INTERN unabhaengig davon immer 0.0 als Fallback, wenn
+    // appliedOffset == nullopt ist - der Regelpfad wird durch eine fehlende
+    // Kalibrierung nicht blockiert, nur die Diagnoseevidenz macht den
+    // Unterschied sichtbar.
+    std::optional<double> appliedOffset;
     // Alter der letzten AKZEPTIERTEN Probe (Abschnitt 9b) - abgelehnte und
     // doppelte Proben (DuplicateIgnored/RejectedTimestampConflict/
     // RejectedRetrograde/RejectedFuture) aktualisieren dieses Feld NICHT.
@@ -1142,6 +1309,7 @@ lib/device_platform/src/
   sensor_quality_config.hpp        (neu, Abschnitt 10.0)
   sensor_quality_snapshot.hpp      (neu, enum SensorFaultReason + Snapshot)
   sensor_offset.hpp                (neu, Abschnitt 13a)
+  sensor_calibration.hpp           (neu, Abschnitt 13b, Korrektur Runde 4)
   sensor_median_filter.hpp/.cpp    (neu)
   sensor_lowpass_filter.hpp/.cpp   (neu)
   sensor_quality_pipeline.hpp/.cpp (neu, Orchestrator + SampleDisposition)
@@ -1210,6 +1378,83 @@ oberflaechlich aehnlichen, fachlich fremden Code).
 `NONFINITE_CONFIG_REJECTED: PASS` (gilt fuer SensorQualityConfig UND
 SensorOffset, siehe Abschnitt 10.0/13a)
 
+### 13b. SensorCalibration: bindet SensorOffset an eine SensorIdentity (Korrektur Runde 4)
+
+`SensorOffset` allein (13a) erfuellt den im urspruenglichen Auftrag
+geforderten Scope "individueller Offset je ROM-Adresse" NICHT: Ein reiner
+`double celsius_`-Offset ohne Identitaetsbezug kann nicht unterscheiden,
+FUER WELCHEN physischen Sensor er gilt - bei einem ROM-Wechsel (Abschnitt
+8/9b/11) wuerde ein zuvor gesetzter Offset unveraendert auf einen komplett
+anderen physischen Sensor weiterwirken, ohne dass die Pipeline dies erkennen
+koennte. Deshalb ein kleiner, eigenstaendiger Kalibriervertrag, der beide
+Werte verbindlich zusammen fuehrt:
+
+```cpp
+// sensor_calibration.hpp
+// Bindet einen bereits gueltigen SensorOffset an eine bereits gueltige
+// SensorIdentity. Beide Bestandteile sind schon einzeln gueltig-by-
+// construction (Abschnitt 9.0/13a); die Kombination zweier bereits
+// gueltiger Werte kann selbst nicht ungueltig werden - deshalb bewusst KEIN
+// eigenes CreateResult/create() nach dem StateStoreKey-Muster (das waere
+// Overhead ohne fachlichen Grund, KISS).
+class SensorCalibration {
+   public:
+    SensorCalibration(SensorIdentity identity, SensorOffset offset)
+        : identity_(identity), offset_(offset) {}
+    [[nodiscard]] SensorIdentity identity() const { return identity_; }
+    [[nodiscard]] SensorOffset offset() const { return offset_; }
+   private:
+    SensorIdentity identity_;
+    SensorOffset offset_;
+};
+```
+
+Uebergabe an die Pipeline: `SensorQualityPipeline::setCalibration(
+std::optional<SensorCalibration> calibration)`. #20 selbst beschafft,
+persistiert oder validiert keine Kalibrierdaten (Nicht-Scope, siehe
+Abschnitt 7) - der Aufrufer (spaeter #21/#24 bzw. die Composition Root)
+liest die passende Kalibrierung aus ihrer eigenen Quelle (z. B. NVS) und
+setzt sie explizit. Ein Aufruf ersetzt eine vorherige Kalibrierung
+vollstaendig; `nullopt` bedeutet "keine Kalibrierung vorhanden" (z. B. vor
+der ersten Zuweisung durch die Composition Root).
+
+Verhalten bei fehlender oder nicht passender Kalibrierung (Abschnitt 10.4
+verwendet dies bei der Offset-Anwendung):
+
+```text
+calibration hat einen Wert UND calibration->identity() == identity() der
+  aktuellen akzeptierten Probe (sofern deren identity() bekannt ist) ->
+  calibration->offset().celsius() wird auf den Medianfilter-Ausgang
+  angewendet UND appliedOffset (Abschnitt 12) wird auf diesen Wert gesetzt
+  (has_value() == true, auch wenn der Wert zufaellig 0.0 ist).
+
+calibration ist nullopt, ODER die aktuelle Probe hat identity() == nullopt,
+  ODER calibration->identity() != identity() der aktuellen Probe -> INTERN
+  wird 0.0 (neutral) auf den Medianfilter-Ausgang angewendet (der Regelpfad/
+  correctedCelsius wird NICHT blockiert), ABER appliedOffset wird auf
+  nullopt gesetzt. KEIN Fehlerzustand, KEINE Plausibilitaetsverletzung,
+  KEINE eigene SensorFaultReason: eine fehlende passende Kalibrierung ist
+  kein Sensorfehler.
+
+KORREKTUR RUNDE 4 (behebt einen im vorherigen Entwurf dieser Regel selbst
+eingefuehrten Fehler): `appliedOffset` als reines `double` haette
+"kalibriert auf 0.0" nicht von "keine passende Kalibrierung, neutraler
+Fallback" unterscheiden koennen - beide Faelle haetten denselben Snapshot
+erzeugt, obwohl der zweite Fall bedeutet, dass der Regelwert um bis zu
+kMaxAbsoluteOffsetCelsius falsch sein kann, waehrend keine Diagnoseevidenz
+dies zeigt (genau der 0-Sentinel-Fehler, den Runde 3 fuer SensorIdentity
+bereits vermieden hat). appliedOffset ist deshalb std::optional<double>
+(Abschnitt 12): nullopt macht "keine passende Kalibrierung angewendet" fuer
+JEDEN Konsumenten direkt und ohne zusaetzliches Flag sichtbar. OB eine
+fehlende Kalibrierung selbst ein Problem darstellt (z. B. verriegelungs-
+wuerdig), ist eine Bewertungsfrage, die wie jede rollenuebergreifende
+Bewertung ausserhalb von #20 liegt (Abschnitt 11) - #20 liefert nur die
+Evidenz.
+```
+
+`ROM_BOUND_CALIBRATION_CONTRACT: PASS`
+`CALIBRATION_MISMATCH_BEHAVIOR_DEFINED: PASS`
+
 ## 14. Geplante Dateien mit Begruendung
 
 ```text
@@ -1240,6 +1485,11 @@ lib/device_platform/src/sensor_offset.hpp
   SensorOffset-Werttyp, gueltig-by-construction, NaN/Inf-sicher
   (Abschnitt 13a).
 
+lib/device_platform/src/sensor_calibration.hpp
+  SensorCalibration: bindet SensorOffset an eine SensorIdentity (Abschnitt
+  13b, Korrektur Runde 4). Kein eigenes CreateResult (Kombination bereits
+  gueltiger Werte).
+
 lib/device_platform/src/sensor_median_filter.hpp/.cpp
   Medianfilter mit fester Kapazitaet (Abschnitt 10.3), eigene SRP-Einheit,
   eigenstaendig testbar (rohe double-Folgen, kein TemperatureReading noetig).
@@ -1252,13 +1502,18 @@ lib/device_platform/src/sensor_quality_pipeline.hpp/.cpp
   Zustandsmaschine (Abschnitt 8, quality als deriveQuality()-Ableitung,
   Abschnitt 9a) und erzeugt SensorQualitySnapshot. Nimmt SensorQualityConfig
   im Konstruktor entgegen; haelt selbst KEINE ITimeSource-Referenz -
-  ingest(sample, now) -> SampleDisposition und snapshot(now) ->
-  SensorQualitySnapshot sind die einzigen oeffentlichen Methoden.
+  ingest(sample, now) -> SampleDisposition, snapshot(now) ->
+  SensorQualitySnapshot UND setCalibration(optional<SensorCalibration>)
+  (Abschnitt 13b, Korrektur Runde 4) sind die einzigen oeffentlichen
+  Methoden.
 
 lib/device_platform/src/sensor_limits.hpp
   Firmwarefeste Obergrenzen (max. Medianfenster, absoluter
   Temperaturbereich, max. Offsetbetrag, max. STALE-Alter-Obergrenze, max.
-  Wiedererkennungs-Probenzahl-Obergrenze) nach dem Muster von
+  Wiedererkennungs-Probenzahl-Obergrenze, max.
+  Wiedererkennungs-Stabilitaetszeit-Obergrenze
+  `kMaxRecoveryStabilityDurationCeilingMs` - Korrektur Runde 4, Abschnitt
+  10.0) nach dem Muster von
   storage_slot_limits.hpp. Enthaelt bewusst KEINE sensor-/
   treiberspezifischen Zahlenkonstanten. Konkrete, am realen Schrank
   ermittelte Werte bleiben TBD_COMMISSIONING (Abschnitt 18).
@@ -1313,9 +1568,12 @@ L (Liskov Substitution):
 
 I (Interface Segregation):
   TemperatureReading und SensorQualitySnapshot sind reine Werttypen ohne
-  virtuelle Schnittstelle; SensorQualityPipeline hat genau eine
-  oeffentliche Verarbeitungs- (ingest) und eine Abfragemethode (snapshot).
-  ITemperatureSource bleibt mit genau einer Methode (read()) minimal.
+  virtuelle Schnittstelle; SensorQualityPipeline hat genau drei
+  oeffentliche Methoden - eine Verarbeitungs- (ingest), eine Abfrage-
+  (snapshot) und eine schmale Konfigurationsmethode (setCalibration,
+  Abschnitt 13b, Korrektur Runde 4) - keine davon ueberfluessig oder mit
+  Verantwortung einer anderen ueberlappend. ITemperatureSource bleibt mit
+  genau einer Methode (read()) minimal.
 
 D (Dependency Inversion):
   Die Pipeline haengt auf KEINE Zeitabstraktion ab - weder ITimeSource noch
@@ -1384,10 +1642,11 @@ Verhalten bei Bursts/zu schnellen Proben:
 
 statisches RAM/Flash:
   std::array statt std::vector fuer den Medianpuffer; keine dynamische
-  Allokation im Verarbeitungspfad. Flash-Wirkung durch 9 neue kleine
-  Header/Source-Dateien plus die Erweiterung einer bestehenden Datei wird
-  als gering eingeschaetzt, aber erst durch scripts/build_report.py
-  belastbar.
+  Allokation im Verarbeitungspfad. Flash-Wirkung durch die 13 neuen kleinen
+  Header/Source-Dateien aus Abschnitt 14 (Korrektur Runde 4: Zaehlung
+  berichtigt und um sensor_calibration.hpp ergaenzt) plus die Erweiterung
+  einer bestehenden Datei wird als gering eingeschaetzt, aber erst durch
+  scripts/build_report.py belastbar.
 
 Auswirkung auf native Tests und beide ESP32-Profile:
   Reiner device_platform-Code, im native-Profil ohne Aenderung testbar.
@@ -1454,6 +1713,15 @@ Eingangsvertrag (Orakel: Abschnitt 9.0/9.1, neu in Runde 2):
     -> erfolgreich (Identitaet optional und unabhaengig)
   - SensorIdentity::create(0) -> abgelehnt (ZeroIsNotAValidIdentity)
   - SensorIdentity::create(<positiver Wert>) -> erfolgreich
+  - SensorQualityConfig::create() mit minConsecutiveValidSamples == 0 ->
+    abgelehnt (InvalidRecoveryThresholds, neu Runde 4)
+  - SensorQualityConfig::create() mit minRecoveryStabilityDurationMs == 0 ->
+    abgelehnt (InvalidRecoveryThresholds, neu Runde 4 - vorher UNGEPRUEFT)
+  - SensorQualityConfig::create() mit minRecoveryStabilityDurationMs >
+    sensor_limits::kMaxRecoveryStabilityDurationCeilingMs -> abgelehnt
+    (InvalidRecoveryThresholds, neu Runde 4)
+  - SensorQualityConfig::create() mit minRecoveryStabilityDurationMs ==
+    kMaxRecoveryStabilityDurationCeilingMs (Randwert) -> erfolgreich
 
 Zeit und Alter (Orakel: Abschnitt 9, SAFETY_COMPONENT_FAULTS.md
 Sensorzustandsfolge):
@@ -1463,12 +1731,31 @@ Sensorzustandsfolge):
     Zustand/Filter/lastAcceptedSampleAgeMs unveraendert
   - Zeitstempel > nowMonotonicMs (an ingest() uebergeben) -> RejectedFuture,
     gleiche Wirkungslosigkeit wie oben
-  - identischer Zeitstempel + identischer Wert -> DuplicateIgnored,
-    lastAcceptedSampleAgeMs unveraendert
-  - identischer Zeitstempel + unterschiedlicher Wert ->
-    RejectedTimestampConflict (nicht akzeptiert), lastAcceptedSampleAgeMs
-    unveraendert; Test belegt, dass danach weiterhin nur der vorherige Wert
-    als "letzter akzeptierter" gilt
+  - identischer Zeitstempel + identischer Wert + identische identity() +
+    identischer status() -> DuplicateIgnored, lastAcceptedSampleAgeMs
+    unveraendert
+  - identischer Zeitstempel + unterschiedlicher Wert -> RejectedTimestampConflict
+    (nicht akzeptiert), lastAcceptedSampleAgeMs unveraendert; Test belegt,
+    dass danach weiterhin nur der vorherige Wert als "letzter akzeptierter"
+    gilt
+  - identischer Zeitstempel + identischer Wert + identischer status(), aber
+    ABWEICHENDE identity() -> RejectedTimestampConflict, NICHT
+    DuplicateIgnored (neu Runde 4 - Identitaet ist jetzt Teil des
+    Duplikatvergleichs, siehe Abschnitt 9b)
+  - identischer Zeitstempel + BEIDE Proben celsius() == NaN (unterschiedliche
+    NaN-Bitmuster erlaubt), identische identity()/status() ->
+    DuplicateIgnored (neu Runde 4 - sampleValuesEqual() behandelt NaN==NaN
+    explizit als gleich, nicht als IEEE-754-Ungleichheit)
+  - identischer Zeitstempel, eine Probe celsius() == NaN, die andere ein
+    endlicher Wert -> RejectedTimestampConflict (neu Runde 4 - keine
+    zufaellige Gleichheit zwischen NaN und einem endlichen Wert)
+  - ALLERERSTE Probe ueberhaupt (kein vorheriges Accepted), Zeitstempel <=
+    nowMonotonicMs -> Accepted (neu Runde 4 - Duplikat-/Konflikt-/
+    Retrograde-Pruefung ist auf die erste Probe nicht anwendbar, siehe
+    Abschnitt 9b)
+  - ALLERERSTE Probe ueberhaupt MIT Zeitstempel > nowMonotonicMs ->
+    RejectedFuture (neu Runde 4 - Zukunftspruefung gilt auch ohne
+    Vorgaenger)
   - keine der vier Ablehnungsdispositionen erhoeht consecutiveInvalidCount
     ODER aktualisiert lastAcceptedSampleAgeMs (je Disposition ein
     eigener Testfall)
@@ -1505,6 +1792,12 @@ Median und Tiefpass (Orakel: Abschnitt 10.3/10.5):
   - ungueltige Probe gelangt nachweislich NICHT ins Medianfenster
   - Reset des Filterzustands nach Failed->Valid-Wiedererkennung und nach
     ROM-Wechsel (kein "Nachschleppen" alter Werte)
+  - Filterzustand bleibt VOLLSTAENDIG erhalten bei Valid -> Stale (einzelne
+    ungueltige Probe) -> Valid (Wiedererkennung), OHNE dass Failed
+    zwischenzeitlich erreicht wurde: derselbe Median-/Tiefpasszustand wird
+    fortgesetzt, kein Neustart der Einschwingphase (neu Runde 4, behebt den
+    vorherigen Widerspruch aus Abschnitt 8 - Test unterscheidet diesen Fall
+    explizit vom direkt darueberliegenden Failed/ROM-Wechsel-Resettest)
   - unterschiedliche tau-Werte zweier Konfigurationen ergeben messbar
     unterschiedliche Einschwingzeit bei identischer Sprungeingabe
   - extremer Rohwert bleibt in rawCelsius sichtbar, auch wenn
@@ -1513,14 +1806,47 @@ Median und Tiefpass (Orakel: Abschnitt 10.3/10.5):
     Probenzeitstempeln (nicht aus nowMonotonicMs): zwei ingest()-Aufrufe
     mit identischem nowMonotonicMs, aber unterschiedlichen
     Probenzeitstempeln, ergeben unterschiedliche Filterreaktionen
+  - dtSeconds bei Valid -> kurz Stale (eine akzeptierte, aber UNPLAUSIBLE
+    Probe, Filter bleibt erhalten) -> Valid wird ab der letzten Probe
+    berechnet, die TATSAECHLICH in den Filter eingeflossen ist, NICHT ab
+    der dazwischenliegenden unplausiblen akzeptierten Probe (neu Runde 4,
+    behebt einen durch die Filtererhaltungs-Korrektur in Abschnitt 8 neu
+    entstandenen Fehler in Abschnitt 10.5 - Test belegt den korrekten,
+    groesseren dt-Wert statt einer Unterschaetzung)
 
-Offset und Identitaet (Orakel: Abschnitt 10.4, 8, 11):
+Kalibrierung, Offset und Identitaet (Orakel: Abschnitt 10.4, 13b, 8, 11 -
+Gruppe umbenannt Runde 4, da Kalibrierung jetzt identitaetsgebunden ist):
   - Offset 0.0 -> correctedCelsius == Medianfilter-Ausgang unveraendert
   - positiver und negativer Offset veraendern correctedCelsius korrekt
   - Offset am Rand von kMaxAbsoluteOffsetCelsius wird noch akzeptiert
   - Offset NaN/Inf -> SensorOffset::create() liefert NonFinite
   - Offset ausserhalb der Firmwaregrenze -> OutOfFirmwareRange
-  - fehlender Offset entspricht SensorOffset::create(0.0)
+  - SensorCalibration(identity, offset).identity()/.offset() liefern die
+    uebergebenen Werte unveraendert zurueck (neu Runde 4)
+  - setCalibration(calibration) mit calibration->identity() ==
+    identity() der aktuellen Probe -> appliedOffset.has_value() == true UND
+    appliedOffset == calibration->offset().celsius() (neu Runde 4)
+  - setCalibration(calibration) mit calibration->offset().celsius() == 0.0
+    UND passender identity() -> appliedOffset.has_value() == true UND
+    appliedOffset == 0.0 (neu Runde 4 - UNTERSCHEIDUNGSFALL: dieselbe
+    correctedCelsius-Wirkung wie der naechste Testfall unten, aber
+    appliedOffset macht sichtbar, DASS eine passende Kalibrierung
+    tatsaechlich angewendet wurde, statt nur zufaellig neutral zu sein)
+  - setCalibration(nullopt) (keine Kalibrierung gesetzt) -> appliedOffset ==
+    std::nullopt (Korrektur Runde 4 - appliedOffset ist std::optional<double>
+    genau damit dieser Fall vom vorherigen Testfall unterscheidbar bleibt,
+    siehe Abschnitt 12/13b)
+  - setCalibration(calibration) mit calibration->identity() !=
+    identity() der aktuellen Probe -> appliedOffset == std::nullopt (KEINE
+    SensorFaultReason, KEINE Plausibilitaetsverletzung, neu Runde 4)
+  - Probe mit identity() == nullopt UND gesetzter Kalibrierung ->
+    appliedOffset == std::nullopt (keine Identitaet zum Abgleich vorhanden,
+    neu Runde 4)
+  - in JEDEM appliedOffset == std::nullopt-Testfall bleibt correctedCelsius
+    dennoch gesetzt (Medianfilter-Ausgang + intern 0.0, Regelpfad nicht
+    blockiert, neu Runde 4)
+  - setCalibration() waehrend laufender Filterung wirkt erst auf die
+    naechste eingehende Probe, nicht rueckwirkend (neu Runde 4)
   - identity()-Wechsel zwischen zwei bekannten Werten -> IdentityMismatch,
     Filterzustand verworfen, Wiedererkennung wie nach Failed erforderlich
   - identity()-Uebergang von/zu nullopt -> KEIN IdentityMismatch (fehlende
@@ -1529,13 +1855,17 @@ Offset und Identitaet (Orakel: Abschnitt 10.4, 8, 11):
     dieser Testgruppe; stattdessen zeigt eine zweite unabhaengige
     Pipeline-Instanz, dass sich zwei Instanzen nicht gegenseitig
     beeinflussen
-  - Offsetaenderung waehrend laufender Filterung wirkt erst auf die naechste
-    Probe
+  - fehlender Offset entspricht SensorOffset::create(0.0)
 
 Zustandsmaschine und Wiedererkennung (Orakel: Abschnitt 8):
   - Valid -> Stale bei einzelner ungueltiger Probe
   - Stale -> Valid nach kMinConsecutiveValidSamples UND
     kMinRecoveryStabilityDurationMs
+  - Stale -> Valid (ohne dass Failed zwischenzeitlich erreicht wurde) setzt
+    die Einschwingphase des Filters NICHT zurueck (neu Runde 4 - auf
+    Zustandsmaschinenebene derselbe Nachweis wie der Filterinhaltstest in
+    der Gruppe "Median und Tiefpass", hier zusaetzlich am
+    SensorQuality-Uebergang selbst verifiziert, siehe Abschnitt 8)
   - Stale -> Failed bei Altersueberschreitung
   - Failed -> Wiedererkennung -> Valid (gleiche Bedingung wie Stale->Valid)
   - erneute ungueltige Probe waehrend Wiedererkennung setzt Fortschritt
@@ -1591,7 +1921,17 @@ test/test_sensor_identity/test_sensor_identity.cpp
 
 test/test_sensor_offset/test_sensor_offset.cpp
   SensorOffset::create(): Erfolg innerhalb der Grenze, NaN/Inf-Ablehnung,
-  Ablehnung ausserhalb der Firmwaregrenze, Randwerte.
+  Ablehnung ausserhalb der Firmwaregrenze, Randwerte. Zusaetzlich (Korrektur
+  Runde 4): SensorCalibration-Konstruktion (identity()/offset() liefern die
+  uebergebenen Werte unveraendert zurueck) - KEIN eigenes Testtopic fuer
+  SensorCalibration, da der Typ selbst kein create()/keine eigene
+  Validierung besitzt (reine Bindung zweier bereits gueltiger Werte, siehe
+  Abschnitt 13b) und damit kein eigenstaendig zu testendes Verhalten ausser
+  den Beziehungen hat, die ohnehin schon hier bzw. integrativ in
+  test_sensor_quality_pipeline.cpp (Kalibrierungs-Anwendung) geprueft
+  werden - ein eigenes fast-leeres Testtopic waere ein KISS-Verstoss
+  (dieselbe Abwaegung wie bei der lokalen sensor_fault_sequence-Testhilfe,
+  siehe test_sensor_quality_pipeline.cpp unten in diesem Abschnitt).
 
 test/test_sensor_quality_config/test_sensor_quality_config.cpp
   SensorQualityConfig::create(): NaN/Inf-Ablehnung, jede InvalidXxx-
@@ -1754,17 +2094,23 @@ Slice 1 (Qualitaetszustand + Plausibilitaet, inkl. Porterweiterung):
 Slice 2 (Median + Offset + Tiefpass + vollstaendige Integration):
   13. sensor_offset.hpp (gueltig-by-construction, NaN/Inf-sicher,
       Abschnitt 13a)
-  14. sensor_median_filter.hpp/.cpp
-  15. sensor_lowpass_filter.hpp/.cpp
-  16. sensor_quality_pipeline.hpp/.cpp: Integration von Offset/Median/
-      Tiefpass, ROM-Wechsel-Filterreset; correctedCelsius/filteredCelsius
-      werden ab hier ab dem ersten plausiblen Beitrag tatsaechlich gesetzt
-  17. test/test_sensor_offset/, test/test_sensor_median_filter/,
+  14. sensor_calibration.hpp (bindet SensorOffset an SensorIdentity,
+      Abschnitt 13b, Korrektur Runde 4)
+  15. sensor_median_filter.hpp/.cpp
+  16. sensor_lowpass_filter.hpp/.cpp
+  17. sensor_quality_pipeline.hpp/.cpp: setCalibration(), Integration von
+      Offset/Median/Tiefpass, ROM-Wechsel-/FAILED-Filterreset (transiente
+      STALE-Wiedererkennung erhaelt den Filterzustand, Abschnitt 8);
+      correctedCelsius/filteredCelsius werden ab hier ab dem ersten
+      plausiblen Beitrag tatsaechlich gesetzt
+  18. test/test_sensor_offset/ (jetzt inkl. SensorCalibration-
+      Konstruktionsfaellen, siehe Abschnitt 17a), test/test_sensor_median_filter/,
       test/test_sensor_lowpass_filter/, verbleibende Faelle in
       test/test_sensor_quality_pipeline/ (Median/Tiefpass-Integration,
-      Offset, Identitaet/ROM-Wechsel, Widersprueche/Scopegrenzen)
-  18. Dokumentation/Changelog-Eintrag fuer Slice 2
-  19. Ressourcen-/CI-Nachweise fuer Slice 2, vollstaendiger Testlauf
+      Kalibrierung/Offset, Identitaet/ROM-Wechsel, Filterreset-
+      Feinunterscheidung, Widersprueche/Scopegrenzen)
+  19. Dokumentation/Changelog-Eintrag fuer Slice 2
+  20. Ressourcen-/CI-Nachweise fuer Slice 2, vollstaendiger Testlauf
 ```
 
 ## 21. Stopbedingung und freizugebender Plan-Commit
