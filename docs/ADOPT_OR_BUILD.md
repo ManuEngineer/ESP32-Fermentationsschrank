@@ -14,12 +14,15 @@ und in den
 ## Grundsatz
 
 Vor jeder Eigenentwicklung wird geprueft, ob eine gepflegte vorhandene Loesung
-die technische Aufgabe bereits erfuellt. Geprueft werden in dieser Reihenfolge:
+die technische Aufgabe bereits erfuellt. Geprueft werden in dieser Reihenfolge
+(Espressif-first, siehe `docs/ENGINEERING_PRINCIPLES.md`):
 
-1. mit der fixierten ESP32-/Arduino-Toolchain gelieferte Frameworkfunktion;
-2. offizielles Herstellerpaket oder offizieller Referenzcode;
-3. gepflegte Bibliothek mit nachvollziehbarer Herkunft und Lizenz;
-4. kleine eigene Implementierung, wenn die vorherigen Varianten den Vertrag
+1. Built-ins der fixierten ESP-IDF-Version;
+2. offizieller Namespace `espressif/*` im ESP Component Registry;
+3. offizielle Repositories unter `github.com/espressif`;
+4. geeignete gepflegte Drittkomponente mit nachvollziehbarer Herkunft und
+   Lizenz;
+5. kleine eigene Implementierung, wenn die vorherigen Varianten den Vertrag
    nicht sicher, nicht ressourcengerecht oder nicht wartbar erfuellen.
 
 Eine externe Loesung wird nicht direkt zur Facharchitektur. Sie bleibt hinter
@@ -93,11 +96,22 @@ fachlichen Konsumenten.
 
 Standardisierte Portaltechnik soll zuerst adoptiert werden, waehrend
 Connectivity-Ablauf, Credential-Kandidaten und -Commit, Secrets, Recovery,
-Redaction und Safetyisolation projektspezifisch bleiben. Fuer Release 1 wird
-WiFiManager zuerst begrenzt geprueft. Ein eigener Adapter aus den
-Arduino-ESP32-Frameworkbausteinen wird nur bei einem nachgewiesenen Problem als
-identischer Gegenprototyp nachgezogen. Weder dieser Rueckfall noch ein
-spaeterer Wechsel rechtfertigt eine vorsorgliche Provisioning-, Provider-,
+Redaction und Safetyisolation projektspezifisch bleiben. Fuer Release 1 werden
+zuerst drei gleichwertig zu messende ESP-IDF-6.0.2-Pfade geprueft:
+`espressif/network_provisioning` auf Basis der offiziellen ESP-IDF-Komponente
+`protocomm`, ein direkter `protocomm`-/ESP-IDF-SoftAP-/HTTP-/DNS-Ansatz ohne
+`network_provisioning`, und ein kleiner eigener nativer
+ESP-IDF-SoftAP-/DNS-/HTTP-Adapter. WiFiManager (Arduino-Bibliothek) bleibt ein
+zusaetzlicher konditionaler Drittanbieter-Evaluationskandidat mit demselben
+Evaluationsgate wie andere bisherige Rueckfallkandidaten (direkter
+Build/Betrieb mit ESP-IDF 6.0.2 oder dokumentierter Integrationsweg ohne
+stilles Wiedereinfuehren eines Arduino-Produktionspfads); er ersetzt weder die
+offiziellen Espressif-Pflichtkandidaten noch den nativen
+Eigenbau-Gegenkandidaten. Jeder Kandidat muss im identischen Spike zusaetzlich
+nachweisen, ob und wie er den browserbasierten R1-Vertrag ohne verpflichtende
+App, Cloud oder separates Kommandozeilenwerkzeug erfuellt; offizielle
+Espressif-Herkunft allein qualifiziert dafuer nicht. Weder ein Rueckfall noch
+ein spaeterer Wechsel rechtfertigt eine vorsorgliche Provisioning-, Provider-,
 Plugin- oder Mehradapterarchitektur; die konkrete Integration bleibt an der
 Composition Root austauschbar.
 
@@ -137,12 +151,18 @@ vollstaendigen typisierten Kandidaten.
 ## Lokaler HTTP-Transport und Weboberflaeche
 
 Der kleine lokale HTTP-Dienst ist als Release-1-Anforderung entschieden, nicht
-aber seine endgueltige Produktivimplementierung. Arduino-ESP32 `WebServer` wird
+aber seine endgueltige Produktivimplementierung. ESP-IDF `esp_http_server`
+(eingebauter Bestandteil der fixierten ESP-IDF-6.0.2-Produktionsbasis) wird
 als erster Evaluationskandidat und bedingte Produktivrichtung begrenzt
-geprueft. `ESPAsyncWebServer` wird nur bei einem dokumentierten Problem mit
-demselben Umfang als konditionaler Rueckfall bewertet. Ein zweiter Adapter,
-WebSocket, SSE oder eine allgemeine `IWebTransport`-, Middleware-, Provider-
-oder Pluginplattform entsteht nicht auf Vorrat.
+geprueft; Arduino-ESP32 `WebServer` ist keine aktive Produktionsrichtung mehr.
+`ESPAsyncWebServer` bleibt ein ergebnisoffener konditionaler
+Evaluationskandidat mit demselben Evaluationsgate wie andere bisherige
+Rueckfallkandidaten (direkter Build/Betrieb mit ESP-IDF 6.0.2 oder
+dokumentierter Integrationsweg ohne stilles Wiedereinfuehren eines
+Arduino-Produktionspfads) und wird nur bei einem dokumentierten Problem mit
+demselben Umfang bewertet. Ein zweiter Adapter, WebSocket, SSE oder eine
+allgemeine `IWebTransport`-, Middleware-, Provider- oder Pluginplattform
+entsteht nicht auf Vorrat.
 
 Frameworkdienste duerfen HTTP-Lebenszyklus, Routing und begrenzte
 Request-/Responseuebersetzung uebernehmen. Endpunkt-/DTO-Vertraege,
