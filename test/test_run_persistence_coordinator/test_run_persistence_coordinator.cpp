@@ -1242,6 +1242,135 @@ void test_periodic_unknown_outcome_old_bytes_preserve_existing_slot_and_head() {
     }
 }
 
+// Periodic target slot was never written (Absent): a fresh read precedes the
+// write, so the ambiguous status resolves via the NotFound+Absent branch to
+// a clean, fully recoverable rejection.
+void test_periodic_target_slot_absent_not_found_resolves_cleanly() {
+    using Fault = SequencedWriteStore::WriteFault;
+    using ReadFault = SequencedWriteStore::ReadFault;
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 910U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    store.faultAt(4U, Fault::PowerCutAfterCommitBeforeReturn);
+    store.readFaultAt(4U, ReadFault::NotFound);
+    const auto result = coordinator.checkpointPeriodic(
+        state, RunCheckpointTime{300100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceStep::CheckpointSlot),
+                          static_cast<int>(result.step));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Unchanged),
+                          static_cast<int>(result.durability));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(coordinator.state()));
+    TEST_ASSERT_EQUAL_UINT32(0U, result.effectCount);
+    TEST_ASSERT_EQUAL_UINT32(0U, result.messageCount);
+    TEST_ASSERT_TRUE(state.activeProgramRun.has_value());
+    // Proves the head write never even started: WriteFailed at the slot
+    // cutpoint is exactly one write, not two.
+    TEST_ASSERT_EQUAL_UINT(4U, static_cast<unsigned>(store.writeCount()));
+}
+
+// Periodic Committed-Head old value is always Existing once currentHead_ is
+// set (it is read from memory, never re-read live): an ambiguous status
+// resolved by a NotFound readback is a genuine, unresolvable mismatch.
+void test_periodic_committed_head_existing_not_found_is_indeterminate() {
+    using Fault = SequencedWriteStore::WriteFault;
+    using ReadFault = SequencedWriteStore::ReadFault;
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 911U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    store.faultAt(5U, Fault::PowerCutAfterCommitBeforeReturn);
+    store.readFaultAt(5U, ReadFault::NotFound);
+    const auto result = coordinator.checkpointPeriodic(
+        state, RunCheckpointTime{300100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::PersistenceIndeterminate),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceStep::CommittedHead),
+                          static_cast<int>(result.step));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Changed),
+                          static_cast<int>(result.durability));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(coordinator.state()));
+    TEST_ASSERT_EQUAL_UINT32(0U, result.effectCount);
+    TEST_ASSERT_EQUAL_UINT32(0U, result.messageCount);
+    TEST_ASSERT_TRUE(state.activeProgramRun.has_value());
+    TEST_ASSERT_EQUAL_UINT(5U, static_cast<unsigned>(store.writeCount()));
+}
+
+// Periodic target slot was already occupied by an earlier periodic
+// checkpoint's counterpart (slot rotation 0 -> 1 -> 0): a fresh read
+// precedes the write and genuinely observes real old content, so a
+// NotFound readback after the ambiguous write is an unresolvable mismatch,
+// not a clean rollback -- unlike the Absent case above.
+void test_periodic_target_slot_existing_not_found_is_indeterminate() {
+    using Fault = SequencedWriteStore::WriteFault;
+    using ReadFault = SequencedWriteStore::ReadFault;
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 912U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            coordinator
+                .checkpointPeriodic(state,
+                                    RunCheckpointTime{300100U, std::nullopt})
+                .status));
+    store.faultAt(6U, Fault::PowerCutAfterCommitBeforeReturn);
+    store.readFaultAt(6U, ReadFault::NotFound);
+    const auto result = coordinator.checkpointPeriodic(
+        state, RunCheckpointTime{600200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::PersistenceIndeterminate),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceStep::CheckpointSlot),
+                          static_cast<int>(result.step));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceDurability::MayHaveChanged),
+        static_cast<int>(result.durability));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(coordinator.state()));
+    TEST_ASSERT_EQUAL_UINT32(0U, result.effectCount);
+    TEST_ASSERT_EQUAL_UINT32(0U, result.messageCount);
+    TEST_ASSERT_TRUE(state.activeProgramRun.has_value());
+    TEST_ASSERT_EQUAL_UINT(6U, static_cast<unsigned>(store.writeCount()));
+}
+
 void test_load_fallback_orphan_and_schema_epoch_matrix() {
     SequencedWriteStore orphan;
     RunPersistenceCoordinator seed(orphan, device_platform::StorageEpoch(1U),
@@ -2060,6 +2189,9 @@ int main(int, char**) {
         test_periodic_unknown_outcome_resolves_to_written_for_slot_and_head);
     RUN_TEST(
         test_periodic_unknown_outcome_old_bytes_preserve_existing_slot_and_head);
+    RUN_TEST(test_periodic_target_slot_absent_not_found_resolves_cleanly);
+    RUN_TEST(test_periodic_committed_head_existing_not_found_is_indeterminate);
+    RUN_TEST(test_periodic_target_slot_existing_not_found_is_indeterminate);
     RUN_TEST(test_load_fallback_orphan_and_schema_epoch_matrix);
     RUN_TEST(
         test_load_rejects_a_structurally_valid_but_mismatched_current_reference);

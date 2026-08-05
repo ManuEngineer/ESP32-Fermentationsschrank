@@ -83,6 +83,17 @@ RUN_PERSISTENCE_APPLY_ALIAS_PATTERN = re.compile(
     r"(?P<alias>[A-Za-z_]\w*)\s*=\s*&\s*"
     r"(?P<target>applyRunCommand|applyProcessTransition)\b"
 )
+# C++ decays a bare function name to a function pointer without requiring an
+# explicit `&`; `auto apply = applyRunCommand;` is exactly as much of a
+# bypass route as the `&`-spelled form above. The negative lookahead excludes
+# a direct call (`= applyRunCommand(...)`), which RUN_PERSISTENCE_APPLY_PATTERN
+# already catches on its own.
+RUN_PERSISTENCE_APPLY_ALIAS_NO_AMPERSAND_PATTERN = re.compile(
+    r"\b(?:auto|[A-Za-z_]\w*(?:\s*[*&])?)\s+"
+    r"(?P<alias>[A-Za-z_]\w*)\s*=\s*"
+    r"(?P<target>applyRunCommand|applyProcessTransition)"
+    r"(?!\s*\()\b"
+)
 RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN = re.compile(
     r"\b(?:const\s+)?(?:auto|CommandDecision|TransitionDecision)\s+"
     r"(?P<name>[A-Za-z_]\w*)\s*=\s*decide[A-Za-z_]\w*\s*\("
@@ -99,6 +110,24 @@ RUN_PERSISTENCE_TYPED_DECISION_DECLARATION_PATTERN = re.compile(
 RUN_PERSISTENCE_DECISION_MEMBER_PATTERN = re.compile(
     r"\b(?P<name>[A-Za-z_]\w*)\s*\)*\s*(?:\.|->)\s*"
     r"(?P<member>effects|messages)\b"
+)
+# Narrow function-signature detector: a parenthesized, non-nested argument
+# list immediately followed by a recognized block's opening brace. Excludes
+# control-flow parentheses (`if (...) {`, `for (...) {`, ...), which are not
+# parameter lists even though they share the same textual shape.
+RUN_PERSISTENCE_FUNCTION_SIGNATURE_PATTERN = re.compile(r"\(([^()]*)\)\s*\{")
+RUN_PERSISTENCE_CONTROL_FLOW_BEFORE_PAREN = re.compile(
+    r"\b(?:if|while|for|switch|catch)\s*$"
+)
+# A single `[const] Type[ &|*] name [= default]` parameter. Deliberately does
+# not handle multi-name declarations, templates with commas, or nested
+# parentheses in default arguments -- out of scope for this narrow guard.
+RUN_PERSISTENCE_PARAM_DECLARATION_PATTERN = re.compile(
+    r"^(?:const\s+)?([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)\s*[&*]{0,2}\s*"
+    r"([A-Za-z_]\w*)\s*(?:=.*)?$"
+)
+RUN_PERSISTENCE_DECISION_PARAMETER_TYPES = frozenset(
+    {"CommandDecision", "TransitionDecision"}
 )
 RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN = re.compile(
     r"\bdecide[A-Za-z_]\w*\s*\([^;{}]*\)\s*\.\s*"
@@ -319,19 +348,20 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
             source = "\n".join(lines)
             code = mask_cxx_comments_and_strings(source)
             # Keep names scoped to their brace block, walked from the
-            # innermost enclosing block outward. The first declaration of a
-            # name (in the nearest block that declares it at all) decides
-            # whether a later member/call use is a decision/alias origin or
-            # unrelated (fachfremd) shadowing -- not just the innermost
-            # block, which would miss an outer decision reached through a
-            # nested `if`/`{}` with no declaration of its own.
-            blocks: list[tuple[int, int, dict[str, str]]] = []
+            # innermost enclosing block outward. Within each block, only
+            # declarations positioned before the use are visible (so a
+            # shadowing declaration written AFTER a use does not retroactively
+            # cover it); the nearest visible declaration in the first block
+            # that has one decides whether a member/call use is a
+            # decision/alias origin or unrelated (fachfremd) shadowing.
+            blocks: list[tuple[int, int, dict[str, list[tuple[int, str]]]]] = []
             stack: list[int] = []
             for index, character in enumerate(code):
                 if character == "{":
                     stack.append(index)
                 elif character == "}" and stack:
                     blocks.append((stack.pop(), index, {}))
+            block_by_open_brace = {block[0]: block for block in blocks}
 
             def containing_blocks(position: int):
                 found = [
@@ -342,40 +372,96 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                 found.sort(key=lambda block: block[1] - block[0])
                 return found
 
-            for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(code):
-                containing = containing_blocks(match.start())
+            def register(name: str, position: int, kind: str) -> None:
+                containing = containing_blocks(position)
                 if containing:
-                    containing[0][2].setdefault(match.group("name"), "decision")
+                    containing[0][2].setdefault(name, []).append((position, kind))
+
+            for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(code):
+                register(match.group("name"), match.start(), "decision")
             for match in RUN_PERSISTENCE_TYPED_DECISION_DECLARATION_PATTERN.finditer(
                 code
             ):
-                containing = containing_blocks(match.start())
-                if containing:
-                    containing[0][2].setdefault(match.group("name"), "decision")
-            for match in RUN_PERSISTENCE_APPLY_ALIAS_PATTERN.finditer(code):
-                containing = containing_blocks(match.start())
-                if containing:
-                    containing[0][2].setdefault(match.group("alias"), "alias")
+                register(match.group("name"), match.start(), "decision")
+            for alias_pattern in (
+                RUN_PERSISTENCE_APPLY_ALIAS_PATTERN,
+                RUN_PERSISTENCE_APPLY_ALIAS_NO_AMPERSAND_PATTERN,
+            ):
+                for match in alias_pattern.finditer(code):
+                    register(match.group("alias"), match.start(), "alias")
 
-            local_declaration_cache: dict[tuple[str, int, int], bool] = {}
+            # Typed CommandDecision/TransitionDecision function parameters are
+            # decision origins for their whole body (registered at the
+            # block's own opening brace, i.e. visible from the first
+            # statement on); other typed parameters register as "other" so a
+            # fachfremd parameter merely named `decision` stays clean instead
+            # of falling through to the bare-name fallback below.
+            for signature_match in RUN_PERSISTENCE_FUNCTION_SIGNATURE_PATTERN.finditer(
+                code
+            ):
+                preceding = code[max(0, signature_match.start() - 10) : signature_match.start()]
+                if RUN_PERSISTENCE_CONTROL_FLOW_BEFORE_PAREN.search(preceding):
+                    continue
+                brace_index = signature_match.end() - 1
+                block = block_by_open_brace.get(brace_index)
+                if block is None:
+                    continue
+                for raw_param in signature_match.group(1).split(","):
+                    param = raw_param.strip()
+                    if not param:
+                        continue
+                    param_match = RUN_PERSISTENCE_PARAM_DECLARATION_PATTERN.match(
+                        param
+                    )
+                    if not param_match:
+                        continue
+                    param_type, param_name = param_match.group(1), param_match.group(2)
+                    kind = (
+                        "decision"
+                        if param_type in RUN_PERSISTENCE_DECISION_PARAMETER_TYPES
+                        else "other"
+                    )
+                    block[2].setdefault(param_name, []).append((block[0], kind))
 
-            def has_other_local_declaration(
-                name: str, block: tuple[int, int, dict[str, str]]
-            ) -> bool:
+            other_declaration_cache: dict[tuple[str, int, int], list[int]] = {}
+
+            def other_declaration_positions(
+                name: str, block: tuple[int, int, dict[str, list[tuple[int, str]]]]
+            ) -> list[int]:
                 key = (name, block[0], block[1])
-                cached = local_declaration_cache.get(key)
+                cached = other_declaration_cache.get(key)
                 if cached is None:
                     pattern = _run_persistence_local_declaration_pattern(name)
-                    cached = pattern.search(code, block[0], block[1]) is not None
-                    local_declaration_cache[key] = cached
+                    cached = [
+                        found.start()
+                        for found in pattern.finditer(code, block[0], block[1])
+                    ]
+                    other_declaration_cache[key] = cached
                 return cached
 
-            def first_declared_kind(name: str, position: int) -> str | None:
+            def declared_kind_before(name: str, position: int) -> str | None:
                 for block in containing_blocks(position):
-                    kind = block[2].get(name)
-                    if kind is not None:
-                        return kind
-                    if has_other_local_declaration(name, block):
+                    specific = [
+                        (decl_position, kind)
+                        for decl_position, kind in block[2].get(name, ())
+                        if decl_position < position
+                    ]
+                    if specific:
+                        # A decision/alias/parameter registration and the
+                        # generic "other" fallback pattern can both match the
+                        # same declaration statement, sometimes at different
+                        # offsets (e.g. the specific pattern captures a
+                        # leading `const` that the generic type-token does
+                        # not). A real C++ block cannot validly hold a second,
+                        # different declaration of the same name, so a
+                        # visible specific registration is authoritative for
+                        # this block; the generic pattern is not consulted.
+                        specific.sort(key=lambda candidate: candidate[0])
+                        return specific[-1][1]
+                    if any(
+                        decl_position < position
+                        for decl_position in other_declaration_positions(name, block)
+                    ):
                         return "other"
                 return None
 
@@ -389,21 +475,25 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                     "Domain/Coordinator)"
                 )
 
-            for match in RUN_PERSISTENCE_APPLY_ALIAS_PATTERN.finditer(code):
-                alias = match.group("alias")
-                call_pattern = re.compile(rf"\b{re.escape(alias)}\s*\(")
-                for call in call_pattern.finditer(code, match.end()):
-                    if first_declared_kind(alias, call.start()) == "alias":
-                        violations.append(
-                            f"{path}:{line_number(call.start())}: produktiver "
-                            "Run-Persistenz-Bypass (apply/effects/messages "
-                            "ausserhalb Domain/Coordinator)"
-                        )
-                        break
+            for alias_pattern in (
+                RUN_PERSISTENCE_APPLY_ALIAS_PATTERN,
+                RUN_PERSISTENCE_APPLY_ALIAS_NO_AMPERSAND_PATTERN,
+            ):
+                for match in alias_pattern.finditer(code):
+                    alias = match.group("alias")
+                    call_pattern = re.compile(rf"\b{re.escape(alias)}\s*\(")
+                    for call in call_pattern.finditer(code, match.end()):
+                        if declared_kind_before(alias, call.start()) == "alias":
+                            violations.append(
+                                f"{path}:{line_number(call.start())}: produktiver "
+                                "Run-Persistenz-Bypass (apply/effects/messages "
+                                "ausserhalb Domain/Coordinator)"
+                            )
+                            break
 
             for match in RUN_PERSISTENCE_DECISION_MEMBER_PATTERN.finditer(code):
                 name = match.group("name")
-                kind = first_declared_kind(name, match.start())
+                kind = declared_kind_before(name, match.start())
                 is_bypass = kind == "decision" or (
                     kind is None and (name == "decision" or name.endswith("Decision"))
                 )
@@ -896,6 +986,35 @@ RUN_PERSISTENCE_BYPASS_CASES = {
         "    }\n"
         "}\n",
     ),
+    "use_before_later_shadow_is_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto result = decideRun();\n"
+        "    if (ready) {\n"
+        "        consume(result.effects);\n"
+        "        RenderResult result{};\n"
+        "    }\n"
+        "}\n",
+    ),
+    "typed_command_decision_parameter_is_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void publish(const CommandDecision& pending) {\n"
+        "    consume(pending.effects);\n"
+        "}\n",
+    ),
+    "typed_transition_decision_pointer_parameter_is_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void publish(const TransitionDecision* pending) {\n"
+        "    consume(pending->messages);\n"
+        "}\n",
+    ),
+    "apply_alias_without_ampersand_is_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto apply = applyRunCommand;\n"
+        "    apply(state, decision);\n"
+        "}\n",
+    ),
 }
 
 # The bypass rule deliberately follows values originating from decide*().  It
@@ -953,6 +1072,12 @@ RUN_PERSISTENCE_CLEAN_CASES = {
         "  if (ready) {\n"
         "    use(decision.effects);\n"
         "  }\n"
+        "}\n",
+    ),
+    "unrelated_parameter_named_decision_is_clean": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void render(const DisplayState& decision) {\n"
+        "    consume(decision.effects);\n"
         "}\n",
     ),
 }
