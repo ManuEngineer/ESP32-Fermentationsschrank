@@ -1233,11 +1233,11 @@ Approved plan commit: <exakter Commit-SHA dieser Datei>
 [x] vollständige Test- und Fehlermatrix planen
 [x] Ressourcen-, Laufzeit- und Speichergrenzen planen
 [x] erwarteten Datei- und Modul-Diff begründen
-[ ] versionierte Plan-Datei erstellen und committen
-[ ] Draft-PR gegen main erstellen
-[ ] PR-Beschreibung mit vollständiger Abschlussmatrix ergänzen
-[ ] git diff --check ausführen
-[ ] reinen Markdown-Diff nachweisen
-[ ] PR als Draft belassen
-[ ] HALTED_FOR_OWNER_REVIEW
+[x] versionierte Plan-Datei erstellen und committen
+[x] Draft-PR gegen main erstellen
+[x] PR-Beschreibung mit vollständiger Abschlussmatrix ergänzen
+[x] git diff --check ausführen
+[x] reinen Markdown-Diff nachweisen
+[x] PR als Draft belassen
+[x] HALTED_FOR_OWNER_REVIEW
 ```
