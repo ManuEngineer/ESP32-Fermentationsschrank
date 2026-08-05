@@ -67,37 +67,39 @@ SPI-Topologie, reale Modulbelegung und Bootzustaende. Controller, Pins,
 Rotation, Reset, gemeinsamer SPI-Bus, Kalibrierung, Boot-Recovery und Ressourcen
 bleiben bis zu diesem Nachweis `TBD_HARDWARE`.
 
-Alle drei Hauptkandidaten durchlaufen Stufe 1 fuer Quellen, konkret benoetigte
-Dateien, Lizenzen, Abhaengigkeiten und reproduzierbaren Build. Nur ausreichend
-erfolgreiche Kandidaten erreichen den kurzen identischen Hardware-Smoke-Test in
-Stufe 2; nur `PASS_SMOKE_TEST` fuehrt zur vollstaendigen Matrix in Stufe 3.
-Stufe 4 benennt genau einen bevorzugten Treiberstack und einen
-Rueckfallkandidaten. Die zwei Reservekombinationen werden nur bei einem
+Vier gleichrangig zu vergleichende Kandidatengruppen durchlaufen Stufe 1 fuer
+Quellen, konkret benoetigte Dateien, Lizenzen, Abhaengigkeiten und
+reproduzierbaren Build: der Espressif-Stack (`esp_lcd` als Built-in plus
+`espressif/esp_lcd_ili9341`, `espressif/esp_lcd_touch` und
+`atanisoft/esp_lcd_touch_xpt2046`) als Espressif-first-Erstkandidat sowie
+LovyanGFX, TFT_eSPI und LCDWiki als ergebnisoffene Evaluationskandidaten unter
+demselben Espressif-first-Evaluationsgate (direkter ESP-IDF-6.0.2-Build/
+-Betrieb oder dokumentierter Integrationspfad ohne Wiedereinfuehrung eines
+Arduino-Produktionspfads, `AGENTS.md`). Espressif-first bestimmt nur die
+Pruefreihenfolge, nicht die Auswahl. Nur ausreichend erfolgreiche Kandidaten
+erreichen den kurzen identischen Hardware-Smoke-Test in Stufe 2; nur
+`PASS_SMOKE_TEST` fuehrt zur vollstaendigen Matrix in Stufe 3. Stufe 4 benennt
+genau einen bevorzugten Treiberstack und einen Rueckfallkandidaten. Arduino_GFX
+und Adafruit GFX/ILI9341 bleiben Reservekombinationen und werden nur bei einem
 dokumentierten Ausloeser nachgezogen und nicht vorsorglich voll implementiert.
+Details und Quellen der Espressif-Kandidaten stehen im
+[Third-Party-Components-Register](../THIRD_PARTY_COMPONENTS.md).
 
-Espressif-first (`docs/ENGINEERING_PRINCIPLES.md`) verlangt zusaetzlich, dass
-die offiziellen ESP-IDF-6.0.2-Kandidaten `esp_lcd` (Built-in),
-`espressif/esp_lcd_ili9341` und `espressif/esp_lcd_touch` (mit
-`atanisoft/esp_lcd_touch_xpt2046` als einzigem bekannten XPT2046-Treiber ohne
-offiziellen `espressif/*`-Namespace) mit derselben Stufe 1 beginnen; Details und
-Quellen stehen im [Third-Party-Components-Register](../THIRD_PARTY_COMPONENTS.md).
-Die Espressif-first-Regel bestimmt nur die Pruefreihenfolge; ueber die
-tatsaechliche Auswahl entscheidet weiterhin Stufe 4.
-
-| Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP32-/PlatformIO-Aussage | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
+| Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP-IDF-6.0.2-/ESP32-Kompatibilitaet | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
 |---|---|---|---|---|---|---|---|
-| LovyanGFX | Projekt nennt ILI9341, ESP32 und Touchunterstuetzung | `1.2.26`, `3f78b705`; FreeBSD plus dokumentierte Ursprungslizenzen | `architectures=esp32`; Arduino-Manifest setzt eine Arduino-Laufzeit voraus, die kein aktueller Produktionspfad ist (`AGENTS.md`); Eignung nur ueber das Espressif-first-Evaluationsgate (direkter ESP-IDF-6.0.2-Build oder dokumentierter Integrationspfad ohne Wiedereinfuehrung eines Arduino-Produktionspfads) messen | Treiber, Fonts und optionale Sprites; kein Vollbildpuffer erzwingen | schmaler Display-/Touchadapter, feste Bus- und Pufferkonfiguration | Boardprofil, XPT2046, Shared-SPI, Heap und Reset real pruefen | ergebnisoffener Evaluationskandidat fuer Stufe 1 neben den Espressif-Kandidaten `esp_lcd_ili9341`/`esp_lcd_touch`; nicht ausgewaehlt |
-| TFT_eSPI | Projekt nennt ILI9341 und ESP32 | Manifest `2.5.44`, `16e37595`; FreeBSD plus Ursprungsbestandteile | `architectures=*`; Arduino-Manifest, kein aktueller Produktionspfad (`AGENTS.md`); User-Setup, Reproduzierbarkeit und dasselbe Espressif-first-Evaluationsgate gemeinsam pruefen | optimierter Treiber und Fonts; Konfiguration kann ungenutzte Treiber einbeziehen | Displayadapter plus projektspezifische, versionierte Setupdatei; Touch separat oder integriert pruefen | globale Konfiguration, Shared-SPI, Touchkalibrierung und Upstream-Updates | ergebnisoffener Evaluationskandidat fuer Stufe 1 neben den Espressif-Kandidaten `esp_lcd_ili9341`/`esp_lcd_touch`; nicht ausgewaehlt |
-| LCDWiki-Paket | lokale Kopie der zum MSP2807 gelieferten Demos und Treiber | Paketdateien 2018; MIT-Dateien in `LCDWIKI_GUI`, `LCDWIKI_SPI`, `LCDWIKI_TOUCH`; Paketherkunft/Abdeckung erneut pruefen | Demos zielen vorwiegend auf Arduino UNO/Mega; ESP32- und PlatformIO-Tauglichkeit unbestaetigt | unbekannt; altes Paket mit mehreren Demos, Fonts und Controllerpfaden | bei positiver Untersuchung nur kleinster klar lizenzierter Teil hinter Adapter; keine direkte Gesamtuebernahme | fehlende moderne ESP32-Referenz, Paketalter, Abdeckung aller Dateien, Pins und Touch real pruefen | verbindlicher Hauptkandidat fuer Stufe 1 und interne Herstellerreferenz; keine allgemeine rechtliche oder technische Freigabe |
-| Arduino_GFX plus geeigneter Touchadapter | Arduino_GFX nennt ILI9341 und ESP32-SPI; separater Touchadapter nach bestaetigtem Controller | `1.6.7`, `fe33cad8`, BSD; XPT2046-Touch `1.4`, `f956c5d8`, MIT im Header, falls der Controller bestaetigt wird | Arduino-Manifeste `architectures=*`; konkrete alte-Core-Kompatibilitaet messen | zwei Bibliotheken, Adapterschicht und moeglicherweise weniger integrierte Shared-SPI-Koordination | getrennte Display- und Touchadapter | zwei Lebenszyklen, Kalibrierung, Busarbitrierung, Reset | Reservekandidat; nur bei dokumentiertem Ausloeser nachziehen |
-| Adafruit GFX + ILI9341 + geeigneter XPT2046-Touchadapter | Adafruit-Treiber dokumentiert ILI9341/ESP32; Touchadapter erst nach Controllerbestaetigung | GFX `1.12.6`/`ac6d7c38`, ILI9341 `1.6.3`/`dbb447af`, BSD; XPT2046-Touch MIT | `architectures=*`; zusaetzliche Adafruit-Abhaengigkeiten und Core-Kompatibilitaet pruefen | mehrere Bibliotheken und BusIO; Referenz eher Portabilitaet als minimales ESP32-Profil | Display- und Touchadapter, ungenutzte Abhaengigkeiten vermeiden | Abhaengigkeitsumfang, Shared-SPI und Performance messen | Reservekandidat; nur bei dokumentiertem Ausloeser nachziehen |
+| Espressif-Stack: `esp_lcd` + `esp_lcd_ili9341` + `esp_lcd_touch` + `atanisoft/esp_lcd_touch_xpt2046` | offizielle Espressif-Komponenten (Touch-XPT2046-Treiber ohne eigenen `espressif/*`-Namespace) | `esp_lcd` Built-in; `esp_lcd_ili9341 2.0.2`, Apache-2.0; `esp_lcd_touch 1.2.1`, Apache-2.0; `esp_lcd_touch_xpt2046 1.0.6`, MIT | ESP-IDF >=4.4 (`esp_lcd_ili9341`), >=4.4.2 (`esp_lcd_touch`), >=4.4 + `esp_lcd_touch` >=1.0.4 (`esp_lcd_touch_xpt2046`); durch ESP-IDF 6.0.2 erfuellt | schmaler Panel-/IO-Treiber; Fonts/Rendering bleibt Projektsache | schmaler Display-/Touchadapter auf `esp_lcd`-Handles | Boardprofil, gemeinsamer SPI-Bus, Heap und Reset real pruefen; kein offizieller `espressif/*`-XPT2046-Treiber | Espressif-first-Erstkandidat fuer Stufe 1; `SPIKE_REQUIRED`, nicht ausgewaehlt |
+| LovyanGFX | Projekt nennt ILI9341, ESP32 und Touchunterstuetzung | `1.2.26`, `3f78b705`; FreeBSD plus dokumentierte Ursprungslizenzen | `architectures=esp32`; Arduino-Manifest setzt eine Arduino-Laufzeit voraus, die kein aktueller Produktionspfad ist (`AGENTS.md`); Eignung nur ueber das Espressif-first-Evaluationsgate messen | Treiber, Fonts und optionale Sprites; kein Vollbildpuffer erzwingen | schmaler Display-/Touchadapter, feste Bus- und Pufferkonfiguration | Boardprofil, XPT2046, Shared-SPI, Heap und Reset real pruefen | ergebnisoffener Evaluationskandidat fuer Stufe 1; nicht ausgewaehlt |
+| TFT_eSPI | Projekt nennt ILI9341 und ESP32 | Manifest `2.5.44`, `16e37595`; FreeBSD plus Ursprungsbestandteile | `architectures=*`; Arduino-Manifest, kein aktueller Produktionspfad (`AGENTS.md`); User-Setup, Reproduzierbarkeit und dasselbe Espressif-first-Evaluationsgate gemeinsam pruefen | optimierter Treiber und Fonts; Konfiguration kann ungenutzte Treiber einbeziehen | Displayadapter plus projektspezifische, versionierte Setupdatei; Touch separat oder integriert pruefen | globale Konfiguration, Shared-SPI, Touchkalibrierung und Upstream-Updates | ergebnisoffener Evaluationskandidat fuer Stufe 1; nicht ausgewaehlt |
+| LCDWiki-Paket | lokale Kopie der zum MSP2807 gelieferten Demos und Treiber | Paketdateien 2018; MIT-Dateien in `LCDWIKI_GUI`, `LCDWIKI_SPI`, `LCDWIKI_TOUCH`; Paketherkunft/Abdeckung erneut pruefen | Demos zielen vorwiegend auf Arduino UNO/Mega; ESP-IDF-6.0.2-/ESP32-Tauglichkeit unbestaetigt | unbekannt; altes Paket mit mehreren Demos, Fonts und Controllerpfaden | bei positiver Untersuchung nur kleinster klar lizenzierter Teil hinter Adapter; keine direkte Gesamtuebernahme | fehlende moderne ESP32-Referenz, Paketalter, Abdeckung aller Dateien, Pins und Touch real pruefen | ergebnisoffene Hersteller-/Referenzoption fuer Stufe 1, `LICENSE_REVIEW_REQUIRED`; keine allgemeine rechtliche oder technische Freigabe |
+| Arduino_GFX plus geeigneter Touchadapter | Arduino_GFX nennt ILI9341 und ESP32-SPI; separater Touchadapter nach bestaetigtem Controller | `1.6.7`, `fe33cad8`, BSD; XPT2046-Touch `1.4`, `f956c5d8`, MIT im Header, falls der Controller bestaetigt wird | Arduino-Manifeste `architectures=*`; kein aktueller Produktionspfad (`AGENTS.md`); Espressif-first-Evaluationsgate pruefen | zwei Bibliotheken, Adapterschicht und moeglicherweise weniger integrierte Shared-SPI-Koordination | getrennte Display- und Touchadapter | zwei Lebenszyklen, Kalibrierung, Busarbitrierung, Reset | Reservekandidat; nur bei dokumentiertem Ausloeser nachziehen |
+| Adafruit GFX + ILI9341 + geeigneter XPT2046-Touchadapter | Adafruit-Treiber dokumentiert ILI9341/ESP32; Touchadapter erst nach Controllerbestaetigung | GFX `1.12.6`/`ac6d7c38`, ILI9341 `1.6.3`/`dbb447af`, BSD; XPT2046-Touch MIT | `architectures=*`; kein aktueller Produktionspfad (`AGENTS.md`); zusaetzliche Adafruit-Abhaengigkeiten und Espressif-first-Evaluationsgate pruefen | mehrere Bibliotheken und BusIO; Referenz eher Portabilitaet als minimales ESP32-Profil | Display- und Touchadapter, ungenutzte Abhaengigkeiten vermeiden | Abhaengigkeitsumfang, Shared-SPI und Performance messen | Reservekandidat; nur bei dokumentiertem Ausloeser nachziehen |
 
-Reservekandidaten werden nur nachgezogen, wenn weniger als zwei Hauptkandidaten
-Stufe 2 bestehen, alle Hauptkandidaten ein wesentliches Ressourcen-, Wartungs-,
-Stabilitaets- oder Integrationsproblem besitzen, der erforderliche publizierte
-Dateisatz eine ungeklaerte Lizenz-/Herkunftsfrage behaelt, keine belastbare
-Auswahl moeglich ist oder ein Reservekandidat einen nachgewiesenen wesentlichen
-R1-Vorteil besitzt.
+Reservekandidaten werden nur nachgezogen, wenn weniger als zwei der vier
+gleichrangigen Kandidatengruppen Stufe 2 bestehen, alle diese Kandidaten ein
+wesentliches Ressourcen-, Wartungs-, Stabilitaets- oder Integrationsproblem
+besitzen, der erforderliche publizierte Dateisatz eine ungeklaerte
+Lizenz-/Herkunftsfrage behaelt, keine belastbare Auswahl moeglich ist oder ein
+Reservekandidat einen nachgewiesenen wesentlichen R1-Vorteil besitzt.
 
 Verbleibende eigene Logik: Touchkalibrierung, Ereignisentprellung,
 Aufweckschutz, UI-Navigation, Sicherheits- und Kommandosemantik. Kein Treiber
@@ -143,9 +145,9 @@ Dabei werden Topologie A mit drei getrennten Bussen und Topologie B mit separate
 Produktfuehler sowie gemeinsamem festen Bus identisch verglichen. Topologie C
 mit allen Sensoren auf einem Bus ist keine regulaere Zielvariante.
 
-| Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP32-/PlatformIO-Aussage | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
+| Kandidat | Hersteller-/Referenzbezug | Gepruefter Stand und Lizenz | ESP-IDF-6.0.2-/ESP32-Kompatibilitaet | Erwartete Ressourcenwirkung | Notwendiger Adapter | Risiken und Hardwaretest | Vorlaeufige Empfehlung |
 |---|---|---|---|---|---|---|---|
-| DallasTemperature + OneWire | verbreitete Arduino-Abstraktion ueber den DS18B20- und 1-Wire-Vertrag | DallasTemperature `4.0.6`, `dadbbf7d`, MIT; OneWire `2.3.8`, `800f26f3`, MIT im Quelltext | beide `architectures=*`; OneWire nennt ESP32-Anpassungen | zwei kleine Bibliotheken; Flash-/RAM-/Heapwirkung in Stufe 1 und 3 messen | technischer Adapter mit Bus-ID, ROM, Mess-/Zeit-/CRC-/Anwesenheits-/Timeout-/Fehlerstatus | neue DallasTemperature-Hauptversion, alter Arduino-Core, Mehrbus/Mehrsensor, Trennung/Wiederkehr und Timing pruefen | verbindlicher Kandidat 1; keine Auswahl vor Stufe 3 |
+| DallasTemperature + OneWire | verbreitete Arduino-Abstraktion ueber den DS18B20- und 1-Wire-Vertrag | DallasTemperature `4.0.6`, `dadbbf7d`, MIT; OneWire `2.3.8`, `800f26f3`, MIT im Quelltext | beide `architectures=*`; Arduino-Manifest setzt eine Arduino-Laufzeit voraus, die kein aktueller Produktionspfad ist (`AGENTS.md`); Eignung nur ueber das Espressif-first-Evaluationsgate (direkter ESP-IDF-6.0.2-Build/-Betrieb oder dokumentierter Integrationspfad ohne Arduino-Produktionspfad) messen | zwei kleine Bibliotheken; Flash-/RAM-/Heapwirkung in Stufe 1 und 3 messen | technischer Adapter mit Bus-ID, ROM, Mess-/Zeit-/CRC-/Anwesenheits-/Timeout-/Fehlerstatus | neue DallasTemperature-Hauptversion, Espressif-first-Evaluationsgate, Mehrbus/Mehrsensor, Trennung/Wiederkehr und Timing pruefen | ergebnisoffener konditionaler Evaluationskandidat neben dem Espressif-first-Erstkandidaten `onewire_bus`/`ds18b20`; gleicher Funktions-, Ressourcen- und Hardwarevergleich, keine Auswahl vor Stufe 3; ein Arduino-basierter Integrationsweg benoetigt weiterhin den dokumentierten Ownerentscheid |
 | Espressif onewire_bus + ds18b20 | offizielle Espressif-Komponenten, RMT/UART-Backend, Enumeration und CRC8 | `onewire_bus 1.1.1`, `a269e1fe`; `ds18b20 0.4.0`, `bf92b0b3`; Apache-2.0 | Registry fordert fuer onewire_bus ESP-IDF >=5.0; die Produktionstoolchain ist seit Issue #71/PR #79 ESP-IDF `6.0.2`, die Mindestanforderung ist damit erfuellt | RMT/UART-Ressourcen und optionale Sensor-Hub-Abhaengigkeit; messen | derselbe technische Plattformport; keine IDF-Typen in der Anwendung | ESP-Component-Manager-Integration in `main/app_main.cpp`, Mehrbus/Mehrsensor und optionale Sensor-Hub-Grenze real pruefen | Espressif-first-Erstkandidat fuer Stufe 1; `SPIKE_REQUIRED`, keine ausgewaehlte Abhaengigkeit |
 
 Der Produktfuehler erhaelt verbindlich einen eigenen Bus. Ein eigener Bus auch

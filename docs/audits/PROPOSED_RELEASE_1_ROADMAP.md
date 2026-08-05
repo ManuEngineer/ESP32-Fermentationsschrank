@@ -26,8 +26,10 @@ produktive Aktoren -> thermische Abnahme -> Releasegate
 ```
 
 Der Display-/Touchpfad ist innerhalb des aktorfreien Spikes weiter gestuft:
-reale Hardware identifizieren, alle drei Hauptkandidaten durch Quellen-/Lizenz-
-und Buildpruefung fuehren, ausreichend erfolgreiche Kandidaten kurz auf der
+reale Hardware identifizieren, alle vier gleichrangigen Kandidatengruppen
+(Espressif-Stack als Espressif-first-Erstkandidat, LovyanGFX, TFT_eSPI,
+LCDWiki) durch Quellen-/Lizenz- und Buildpruefung fuehren, ausreichend
+erfolgreiche Kandidaten kurz auf der
 Hardware pruefen und nur nach bestandenem Smoke-Test die vollstaendige
 identische Matrix ausfuehren. Danach entscheidet der Owner ueber bevorzugten
 Treiber und Rueckfallkandidat. Reservekandidaten werden nur bei dokumentiertem
@@ -240,7 +242,8 @@ warten:
 2. Peltier, BTS7960, Innen-/Aussenluefter, MOSFET-Verbraucher und Summer physisch
    trennen oder nachweislich inaktiv halten. Der Summer wird nicht angesteuert.
 3. Beim Display-/Touch-Spike zuerst die reale Modulvariante, Controller, Pegel,
-   Leitungen und Bootzustaende identifizieren. Danach alle drei Hauptkandidaten
+   Leitungen und Bootzustaende identifizieren. Danach alle vier gleichrangigen
+   Kandidatengruppen (Espressif-Stack, LovyanGFX, TFT_eSPI, LCDWiki)
    durch Stufe 1, ausreichend erfolgreiche Kandidaten durch den kurzen
    Hardware-Smoke-Test der Stufe 2 und nur `PASS_SMOKE_TEST`-Kandidaten durch
    die vollstaendige identische Matrix der Stufe 3 fuehren. Stufe 4 benennt
@@ -295,7 +298,7 @@ warten:
    String-/Array-/Feld-/Schemagrenzen, Importvorschau ohne Aktivierung,
    Streaming/Pagination, reproduzierbare Negativ-/Fuzztests sowie ESP32-
    Ressourcen-, Laufzeit- und Jittermessung. Dieser Spike wird mit dem
-   `WebServer`-Baselineprototyp und dem spaeteren Schnitt von #19/#27/#28
+   `esp_http_server`-Baselineprototyp und dem spaeteren Schnitt von #19/#27/#28
    koordiniert, implementiert aber keines dieser breiten Issues. Eine
    Alternative wird nur bei einem konkret belegten R1-Problem untersucht.
 8. Den OD-09-Authspike ohne produktive Endpunkte ausfuehren: PBKDF2-HMAC-

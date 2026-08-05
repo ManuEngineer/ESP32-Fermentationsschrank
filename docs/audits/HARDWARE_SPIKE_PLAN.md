@@ -195,26 +195,35 @@ aussehenden Moduls werden nicht uebernommen.
 
 ### Haupt- und Reservekandidaten
 
-1. LovyanGFX `1.2.26` (`3f78b705`)
-2. TFT_eSPI Manifest `2.5.44` (`16e37595`)
-3. LCDWiki-Paket aus
+1. Espressif-Stack: `esp_lcd` (Built-in) + `espressif/esp_lcd_ili9341 2.0.2`
+   + `espressif/esp_lcd_touch 1.2.1` + `atanisoft/esp_lcd_touch_xpt2046
+   1.0.6` (Espressif-first-Erstkandidat)
+2. LovyanGFX `1.2.26` (`3f78b705`)
+3. TFT_eSPI Manifest `2.5.44` (`16e37595`)
+4. LCDWiki-Paket aus
    `references/datasheets/Display/2.8inch_SPI_Module_ILI9341_MSP2807_V1.1.zip`
 
-Arduino_GFX plus geeigneter Touchadapter und Adafruit GFX plus ILI9341 plus
-geeigneter XPT2046-Touchadapter sind Reservekandidaten. Sie werden nur
-einbezogen, wenn mindestens eine der folgenden Bedingungen eintritt:
+Kandidaten 2–4 sind ergebnisoffene Evaluationskandidaten unter demselben
+Espressif-first-Evaluationsgate wie Kandidat 1 (direkter ESP-IDF-6.0.2-Build/
+-Betrieb oder dokumentierter Integrationspfad ohne Arduino-Produktionspfad,
+`AGENTS.md`); Espressif-first bestimmt nur die Pruefreihenfolge, nicht die
+Auswahl. Arduino_GFX plus geeigneter Touchadapter und Adafruit GFX plus
+ILI9341 plus geeigneter XPT2046-Touchadapter sind Reservekandidaten. Sie
+werden nur einbezogen, wenn mindestens eine der folgenden Bedingungen
+eintritt:
 
-- weniger als zwei Hauptkandidaten bestehen den Hardware-Smoke-Test der Stufe 2;
-- alle Hauptkandidaten besitzen ein wesentliches Ressourcen-, Wartungs-,
+- weniger als zwei der vier Kandidaten 1–4 bestehen den
+  Hardware-Smoke-Test der Stufe 2;
+- alle vier Kandidaten 1–4 besitzen ein wesentliches Ressourcen-, Wartungs-,
   Stabilitaets- oder Integrationsproblem;
 - fuer den konkret benoetigten, spaeter zu veroeffentlichenden Dateisatz bleibt
   eine nicht aufloesbare Lizenz- oder Herkunftsfrage;
-- der Vergleich der Hauptkandidaten erlaubt keine belastbare Auswahl;
+- der Vergleich der Kandidaten 1–4 erlaubt keine belastbare Auswahl;
 - ein Reservekandidat besitzt nachweislich einen fuer Release 1 wesentlichen
-  Vorteil, den kein Hauptkandidat erfuellt.
+  Vorteil, den kein Kandidat aus 1–4 erfuellt.
 
-Es werden nicht vorsorglich fuenf vollstaendige Implementierungen erstellt. Alle
-drei Hauptkandidaten durchlaufen dagegen zunaechst Stufe 1.
+Es werden nicht vorsorglich sechs vollstaendige Implementierungen erstellt.
+Alle vier Kandidaten 1–4 durchlaufen dagegen zunaechst Stufe 1.
 
 ### Stufe 1 – Quellen-, Lizenz- und Buildpruefung
 
@@ -1071,7 +1080,8 @@ Hardwaregates.
 2. Den minimalen Baseline-Anteil von #29 nachweisen; der vollstaendige Abschluss
    von #24 oder #29 ist keine Voraussetzung fuer die aktorfreien Spikes.
 3. Beim Display-/Touch-Spike zuerst die reale Hardware in Stufe 0
-   identifizieren und alle drei Hauptkandidaten durch Stufe 1 fuehren.
+   identifizieren und alle vier gleichrangigen Kandidatengruppen (Espressif-
+   Stack, LovyanGFX, TFT_eSPI, LCDWiki) durch Stufe 1 fuehren.
 4. Nur ausreichend erfolgreiche Display-/Touchkandidaten in Stufe 2 kurz auf
    der Hardware pruefen; ausschliesslich Kandidaten mit `PASS_SMOKE_TEST`
    durchlaufen die vollstaendige identische Matrix der Stufe 3.

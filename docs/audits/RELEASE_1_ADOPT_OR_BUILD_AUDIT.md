@@ -24,7 +24,7 @@ Issue-Status noch akzeptierte ADRs.
 | Synchronisiert am | 2026-08-05 gegen Baseline `8d65b50326c4419dc45bbc024615c0a1c592e1aa` (Espressif-first-Audit-Sync) |
 | Toolchain im Repository (aktuell) | ESP-IDF `v6.0.2` (`7101770dc6db2667b3c477cc31365dd1acd6db4e`, Issue #71 / PR #79); PlatformIO ausschliesslich nativer Hosttestpfad; Arduino-ESP32 keine aktive Produktionsbasis |
 | Zielbasis | ESP32-32E, 4 MB Flash, keine PSRAM-Abhaengigkeit |
-| offene Implementierungs-/Tracking-Issues | #16–#37 sowie #56/#57: 24 Eintraege |
+| betrachtete Implementierungs-/Tracking-Issues | #16–#37, #56/#57 sowie #89/#90: 26 Eintraege; nicht alle zwingend aktuell offen, z. B. ist #17 nach PR #84 abgeschlossen |
 | Konfigurationsstand | #54 und #55 gemergt; #16 bleibt Tracking; #56/#57 `BLOCKED_DEPENDENCY` |
 | Audit-Issue | #62 |
 
@@ -82,10 +82,13 @@ und Berechtigungslogik eigene deterministische Module.
 
 Zwei Hardwarebereiche duerfen nicht am Schreibtisch entschieden werden:
 
-- Display/Touch: LovyanGFX, TFT_eSPI und das LCDWiki-Paket durchlaufen alle die
-  Quellen-/Lizenz- und Buildpruefung. Ausreichend erfolgreiche Kandidaten
-  erhalten einen kurzen identischen Smoke-Test; nur dessen erfolgreiche
-  Kandidaten erreichen die vollstaendige identische Hardwarematrix.
+- Display/Touch: der Espressif-Stack (`esp_lcd`/`esp_lcd_ili9341`/
+  `esp_lcd_touch`/`atanisoft/esp_lcd_touch_xpt2046`) als Espressif-first-
+  Erstkandidat sowie LovyanGFX, TFT_eSPI und das LCDWiki-Paket als
+  ergebnisoffene Evaluationskandidaten durchlaufen alle die Quellen-/Lizenz-
+  und Buildpruefung. Ausreichend erfolgreiche Kandidaten erhalten einen
+  kurzen identischen Smoke-Test; nur dessen erfolgreiche Kandidaten erreichen
+  die vollstaendige identische Hardwarematrix.
 - DS18B20: Die Espressif-Komponenten `onewire_bus`/`ds18b20` sind der
   Espressif-first-Primaerkandidat und durch die aktuelle ESP-IDF-6.0.2-
   Produktionsbasis bereits toolchainkompatibel (Registryanforderung
@@ -209,8 +212,10 @@ getrennt oder nachweislich inaktiv; der Summer wird nicht angesteuert.
 Die Baseline bestimmt keine finalen Pins, Partitionierung, Bibliotheken,
 Sensorbustopologie, Aktoradapter, Safety-Grenzen oder PI-Parameter. Der
 Display-/Touchvergleich beginnt danach mit der realen Hardwareidentifikation in
-Stufe 0. Alle drei Hauptkandidaten durchlaufen Stufe 1 fuer Quellen, Lizenzen,
-Kompatibilitaet und reproduzierbaren Build. Nur ausreichend erfolgreiche
+Stufe 0. Vier gleichrangige Kandidatengruppen (Espressif-Stack als
+Espressif-first-Erstkandidat, LovyanGFX, TFT_eSPI, LCDWiki) durchlaufen
+Stufe 1 fuer Quellen, Lizenzen, Kompatibilitaet und reproduzierbaren Build.
+Nur ausreichend erfolgreiche
 Kandidaten erreichen den kurzen Hardware-Smoke-Test in Stufe 2, und nur
 `PASS_SMOKE_TEST` erreicht die vollstaendige identische Matrix in Stufe 3.
 Stufe 4 bestimmt bevorzugten Treiber und Rueckfallkandidat. Reservekandidaten
@@ -1190,9 +1195,11 @@ Variante A erweitert den R1-Kern spaeter additiv:
   Fallback; Touch- und Webnavigation bleiben getrennt; die lokale Navigation,
   Start-/Programmbedienung, Lauf-/Meldungsbedienung und Service-/Recovery-UI
   bleiben ohne WLAN vollstaendig nutzbar;
-- WLAN-Onboarding mit zuerst begrenzt geprueftem WiFiManager als bevorzugtem
-  Kandidaten und einem nur bei dokumentiertem Ausloeser nachgezogenen lokalen
-  Frameworkadapter als Rueckfall; primaer ein WLAN-Credential-QR mit sichtbarem
+- WLAN-Onboarding mit drei gleichwertig geprueften ESP-IDF-6.0.2-Pfaden
+  (`network_provisioning`/`protocomm`, direkter `protocomm`-Ansatz, nativer
+  Adapter) sowie WiFiManager als ergebnisoffenem konditionalem
+  Evaluationskandidaten unter demselben Gate; primaer ein WLAN-Credential-QR
+  mit sichtbarem
   manuellem Portaladress-Rueckfall; geschuetztes Ersatz-WLAN als eigener
   Netzwerklebenszyklus bei langem Heim-WLAN-Ausfall; lokale Zeit/NTP und
   Zeitzonenanzeige;
@@ -1281,8 +1288,8 @@ Die vollstaendige Zuordnung steht in der
 | #27 | HTTP-Transport/API, Status/Polling/aktueller Laufchart, Mutationen, Webassets und Authentisierung sind fuer einen PR zu breit | nach Auditfreigabe in die fuenf entschiedenen Bereiche schneiden; Onboarding bleibt OD-06, produktive Mutationen bleiben bis zum erfolgreichen technischen Auth-/CSRF-/Credential-/Ressourcen-, Webserver- und JSON-Nachweis gesperrt, Issue im Audit nicht aendern |
 | #28 | passive Diagnose, Ressourcenueberwachung, Serviceablauf, Bericht, Charts, Historie und Exportmechanik sind vermischt | nach Auditfreigabe in vier Bereiche schneiden: passive Diagnose/Boot-Selbsttest, Ressourcen-/Gesundheitsdiagnose, gefuehrter Serviceablauf und nur lesender Diagnose-/Servicebericht; aktuellen Chart nach #27-B, Historie nach #19-B und Exportinfrastruktur nach #19-C abgrenzen |
 | LVGL | vollstaendiges UI-Framework fuer wenige feste 320-x-240-Screens waere vorsorglich und ist kein Treiberkandidat | erst nach Treiberauswahl, Adaptervertrag und identischem repraesentativem Screen gegen schlanke Views messen |
-| ESPAsyncWebServer | Async-/WebSocket-/SSE-Umfang koennte groesser als der reale R1-Bedarf sein | ersten `WebServer`-Kandidaten messen; Async nur bei belegtem Vorteil |
-| Vorsorgliche Mehradapter-/Provisioningarchitektur | zwei produktive Portalwege oder allgemeine Provider-/Pluginvertraege waeren ohne zweiten realen Bedarf ueberdimensioniert | WiFiManager zuerst begrenzt pruefen; Frameworkadapter nur bei dokumentiertem Ausloeser als identischen Gegenprototyp nachziehen |
+| ESPAsyncWebServer | Async-/WebSocket-/SSE-Umfang koennte groesser als der reale R1-Bedarf sein | ersten `esp_http_server`-Kandidaten messen; Async nur bei belegtem Vorteil |
+| Vorsorgliche Mehradapter-/Provisioningarchitektur | vier produktive Portalwege oder allgemeine Provider-/Pluginvertraege waeren ohne zweiten realen Bedarf ueberdimensioniert | die drei Espressif-Pfade und WiFiManager gleichwertig im identischen Spike messen; keinen der vier Wege vorsorglich voll implementieren |
 | Eigener JSON-Parser oder allgemeine JSON-Providerarchitektur | Standardparser-, UTF-8-, Escape-, Zahlen-, Ressourcen- und Serialisierungsprobleme wuerden ohne zweiten realen Codecbedarf dupliziert | ArduinoJson `7.4.3` zuerst begrenzt pruefen; Fachschema selbst validieren, Alternative nur bei belegtem Problem |
 | PID-Bibliotheken | allgemeine PID-/Autotune-Funktionen passen nicht zum spezifizierten begrenzten PI-/Safety-Vertrag | kleinen deterministischen PI-Kern selbst implementieren |
 
@@ -1351,8 +1358,13 @@ die endgueltige Uebernahme nach dem dokumentierten Build-, Grenzwert-, Fuzz-
 und Ressourcenspike; eine vorsorgliche Gleichwahl besteht nicht.
 
 OD-07 ist fachlich vollstaendig entschieden: #19, #25, #26, #27 und #28 sind
-in kleine, ownerfreizugebende Umsetzungsbereiche geschnitten. Dieser Auditstand
-aendert oder erstellt keine Issues. OD-09 legt nun den fachlichen Authvertrag
+in kleine, ownerfreizugebende Umsetzungsbereiche geschnitten. Der ursprueng-
+liche Audit aenderte oder erstellte keine Issues. Die Espressif-first-
+Synchronisierung dieses Dokuments (2026-08-05) bildet eine ausdruecklich
+ownerfreigegebene Ausnahme: #27, #30 und #31 wurden gezielt um
+Espressif-first-Kandidaten ergaenzt, ohne ihren fachlichen Scope neu zu
+schreiben, und die neuen Backlog-Issues #89 und #90 wurden erstellt. OD-09
+legt nun den fachlichen Authvertrag
 fest; produktive schreibende Webendpunkte und authentisierte Serviceablaeufe
 bleiben hinter seinen technischen Spike- und Integrationsgates.
 
