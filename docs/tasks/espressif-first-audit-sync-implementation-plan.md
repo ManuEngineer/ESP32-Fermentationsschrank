@@ -301,6 +301,51 @@ ergaenzt — Widersprueche werden offen benannt statt still aufgeloest
 (`docs/ENGINEERING_PRINCIPLES.md`, Abschnitt "Repository als Quelle der
 Wahrheit").
 
+## Entwurf: Espressif-first-Regel in `docs/ENGINEERING_PRINCIPLES.md` (Phase 2, nach Freigabe unveraendert zu uebernehmen)
+
+Neuer Abschnitt am Ende der Datei, nach "KISS", mit folgendem verbindlichem
+Inhalt:
+
+```text
+Vor der Eigenentwicklung einer Standardfaehigkeit werden in dieser
+Reihenfolge geprueft:
+
+1. Built-ins der fixierten ESP-IDF-Version;
+2. offizieller Namespace espressif/* im ESP Component Registry;
+3. offizielle Repositories unter github.com/espressif;
+4. geeignete gepflegte Drittkomponenten;
+5. kleine Eigenentwicklung nur bei nachgewiesener Luecke.
+
+- Ein Framework- oder Toolchainwechsel loest eine inkrementelle Neubewertung
+  zuvor ausgeschlossener oder zurueckgestellter Kandidaten aus.
+- Die Neubewertung aktualisiert den bestehenden Audit und erzeugt nicht
+  automatisch einen zweiten Gesamtaudit.
+- Eine README-Aussage ersetzt weder Lizenzpruefung noch Build-, Ressourcen-
+  oder Hardwaretest.
+- Espressif-first bestimmt die Recherche- und Pruefprioritaet, nicht
+  automatisch die spaetere Produktauswahl.
+```
+
+Der letzte Satz bindet die in "Offene Entscheidungen" Punkt 1 festgehaltene
+Rueckfallkandidatenregel direkt in die dauerhafte Projektregel ein, statt sie
+nur im Plan zu belassen.
+
+Zusaetzlich, an geeigneter Stelle im selben neuen Abschnitt oder direkt im
+Anschluss daran (z. B. als eigener kurzer Unterabschnitt "Espressif-MCP"),
+folgende Grenze aufnehmen:
+
+```text
+Die Espressif-MCP-Dienste duerfen als Recherchewerkzeug fuer Agenten
+verwendet werden. Sie werden weder Firmwareabhaengigkeit noch CI-Dienst
+noch produktiver Laufzeitbestandteil.
+```
+
+Diese Grenze verhindert, dass die im urspruenglichen Auftrag genannten
+MCP-Quellen (`mcp.espressif.com`, `components.espressif.com/mcp`) spaeter
+versehentlich als Projekt- oder CI-Abhaengigkeit dokumentiert werden; sie
+waren in dieser Sitzung ausschliesslich Recherchequelle fuer den
+Kandidatenvergleich, nie ein Build- oder Laufzeitbestandteil.
+
 ## Entwuerfe fuer Issue-Ergaenzungen (Phase 2, nach Freigabe unveraendert zu uebernehmen)
 
 Jeder unten neu genannte Kandidat erhaelt in Phase 2 zusaetzlich in den
@@ -415,6 +460,13 @@ Verwandt, aber getrennt (keine Sammelzustaendigkeit):
 - Flash-/RAM-/Heap-/Stack-/Jittermessung
 - Lizenz und Notices
 - keine Cloud- oder Apppflicht fuer den gewaehlten R1-Pfad
+- Auswahlgate: jeder Kandidat (Pfad 1–3 und WiFiManager) muss im identischen
+  Spike nachweisen, ob und wie der browserbasierte R1-Vertrag ohne
+  verpflichtende App, Cloud oder separates Kommandozeilenwerkzeug erfuellt
+  wird; ein offizieller Espressif-Kandidat gilt nicht allein aufgrund seiner
+  Herkunft als fuer diesen Browservertrag geeignet — dies ist keine
+  Vorentscheidung gegen `network_provisioning` oder `protocomm`, sondern die
+  vom Owner gewuenschte echte, ergebnisoffene Evaluation
 
 Keine Auswahl vor identischem Spike und Ownerentscheid.
 ```
@@ -639,6 +691,88 @@ Kandidatenfakten.
 - kein Commit oder keine Aenderung auf dem Branch von PR #84;
 - keine ADR-Erstellung oder -Aenderung;
 - keine Firmware-, Test- oder Build-Aenderung.
+
+## Verbindliche Umsetzungs-Taskliste
+
+Bei Umsetzungsbeginn in Phase 2 (erst nach exakter Ownerfreigabe dieses
+Plan-Commits) legt der Agent unmittelbar folgende Claude-`/task`-Liste an und
+haelt sie waehrend der gesamten Umsetzung aktuell:
+
+```text
+/task
+[ ] Plan-SHA und Ownerfreigabe verifizieren
+[ ] alle verbindlichen Quellen gegen den aktuellen Head erneut pruefen
+[ ] Engineering-Principles und Adopt-or-Build-Reihenfolge aktualisieren
+[ ] Third-Party- und Lizenzregister aktualisieren
+[ ] bestehende Auditdokumente inkrementell synchronisieren
+[ ] Issue #30 gezielt ergaenzen
+[ ] Issue #31 gezielt ergaenzen
+[ ] Issue #27 gezielt ergaenzen
+[ ] genau Issue [E5.6] erstellen
+[ ] genau Issue [E5.7] erstellen
+[ ] reale GitHub-Issue-Nummern in Dokumenten nachtragen
+[ ] Quellen, Versionen, Lizenzen, Notices und Datum vollstaendig pruefen
+[ ] PR #84, Schema 1 und IStateStore als unveraendert nachweisen
+[ ] keine Firmwaredatei geaendert nachweisen
+[ ] Dokumentkonsistenz und alle Quality-Gates pruefen
+[ ] finalen CI-Lauf auf exaktem Head pruefen
+[ ] PR-Beschreibung und Abschlussmatrix aktualisieren
+[ ] HALTED_FOR_OWNER_REVIEW
+```
+
+Regeln fuer diese Taskliste:
+
+- Aufgaben werden erst nach realem Nachweis im Repository, im Live-Issue oder
+  im ausgefuehrten Gate abgehakt, nicht nach blosser Absicht.
+- Neue relevante Funde waehrend der Umsetzung werden als zusaetzliche
+  Untertasks aufgenommen, nicht nur im Fliesstext erwaehnt.
+- Blockierte Aufgaben bleiben offen und erhalten einen kurzen
+  Blockierungsgrund statt eines falschen Haekchens.
+- Taskliste, Repository, Live-Issues und PR-Beschreibung muessen vor jeder
+  Abschlussmeldung uebereinstimmen.
+- Kein Ready-for-Review und kein Merge durch den Agenten, unabhaengig vom
+  Tasklistenstand.
+
+Diese operative Liste ist eine Konkretisierung der Phasen 2–4 aus dem
+Auftrag, keine Erweiterung des in diesem Plan freigegebenen Umfangs.
+
+## Abschlussmatrix (Vorlage fuer Phase 4)
+
+Am Ende von Phase 3/4 fuellt der Agent folgende Vorlage mit den dann
+tatsaechlich nachgewiesenen Werten aus und gibt sie als Abschlussmeldung aus:
+
+```text
+CONTEXT_BASELINE_SHA: <main sha>
+CONTEXT_HEAD_SHA: <final sha>
+CONTEXT_REFRESH_MODE: INCREMENTAL
+
+NEW_GLOBAL_AUDIT_CREATED: NO
+EXISTING_AUDIT_SYNCHRONIZED: PASS/FAIL
+ESP_IDF_6_0_2_BASELINE: PASS/FAIL
+ISSUE_30_UPDATED: PASS/FAIL
+ISSUE_31_UPDATED: PASS/FAIL
+ISSUE_27_UPDATED: PASS/FAIL
+WLAN_ONBOARDING_ISSUE_CREATED: PASS/FAIL (#<number>)
+NVS_ISTATESTORE_ISSUE_CREATED: PASS/FAIL (#<number>)
+ENGINEERING_RULE_UPDATED: PASS/FAIL
+AGENTS_CHANGE_REQUIRED: NO
+PR84_CHANGED: NO
+FIRMWARE_CHANGED: NO
+LICENSE_REVIEW: PASS/FAIL
+REMOTE_CI: PASS/FAIL
+PR_REMAINS_DRAFT: PASS/FAIL
+
+TASKS_TOTAL: <number>
+TASKS_COMPLETED: <number>
+TASKS_BLOCKED: <number>
+TASKS_OPEN: <number>
+TASK_LIST_CONSISTENT_WITH_REPOSITORY: PASS/FAIL
+
+HALTED_FOR_OWNER_REVIEW
+```
+
+`AGENTS_CHANGE_REQUIRED: NO` ist bereits durch die Ownerklarstellung in
+"Offene Entscheidungen" Punkt 3 feststehend und wird nicht neu bewertet.
 
 ## Abnahmekriterien
 
