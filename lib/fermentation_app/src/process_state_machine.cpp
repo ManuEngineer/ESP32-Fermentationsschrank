@@ -209,8 +209,15 @@ bool runtimeShapeIsValid(const ProcessRuntimeState& state) {
     const bool mayTrackQualification =
         state.state == ProcessState::Preheating ||
         state.state == ProcessState::QualifyingTarget;
-    return mayTrackQualification ||
-           !state.qualificationValidSinceMillis.has_value();
+    if (!mayTrackQualification &&
+        state.qualificationValidSinceMillis.has_value()) {
+        return false;
+    }
+    if (!stateHasTargetReachTimer(state.state)) {
+        return state.targetReachStartedAtMillis == 0U &&
+               !state.targetReachWarningIssued;
+    }
+    return true;
 }
 
 bool validBootTopology(const TransitionDecision& decision) {
@@ -931,6 +938,21 @@ bool equalProcessRuntimeState(const ProcessRuntimeState& left,
                right.qualificationValidSinceMillis &&
            left.targetReachWarningIssued == right.targetReachWarningIssued &&
            left.transitionSequence == right.transitionSequence;
+}
+
+bool validateProcessRuntimeForCheckpoint(
+    const ProcessRuntimeState& state, const ProcessRunSnapshot* runSnapshot,
+    std::uint64_t checkpointMonotonicMillis) {
+    if (!runtimeShapeIsValid(state) ||
+        !runtimeTimeIsValid(state, checkpointMonotonicMillis)) {
+        return false;
+    }
+    if (stateUsesRunSnapshot(state.state)) {
+        return runSnapshot != nullptr &&
+               validateProcessRunSnapshot(*runSnapshot) &&
+               stateMatchesRunSnapshot(state.state, *runSnapshot);
+    }
+    return runSnapshot == nullptr || validateProcessRunSnapshot(*runSnapshot);
 }
 
 TransitionDecision decideProcessTransition(

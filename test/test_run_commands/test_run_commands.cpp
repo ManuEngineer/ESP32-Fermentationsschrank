@@ -274,6 +274,7 @@ bool equalRunCommandStates(const RunCommandState& left,
         !equalProcessRunSnapshots(left.processRunSnapshot,
                                   right.processRunSnapshot) ||
         left.activeRunId != right.activeRunId ||
+        left.activeRunSensorMode != right.activeRunSensorMode ||
         left.runRevision != right.runRevision ||
         left.messageCount != right.messageCount ||
         left.messageRevision != right.messageRevision ||
@@ -341,6 +342,33 @@ void test_program_start_requires_confirmation_safety_and_current_context() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(CommandStatus::InvalidInput),
         static_cast<int>(decideProgramStart(state, request).status));
+}
+
+void test_run_id_boundary_is_shared_by_program_and_manual_start() {
+    auto state = standbyState();
+    auto program = programStart(state, 71U);
+    program.runId.clear();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(decideProgramStart(state, program).status));
+
+    program.runId.assign(49U, 'x');
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(decideProgramStart(state, program).status));
+
+    program.runId.assign(48U, 'x');
+    TEST_ASSERT_TRUE(decideProgramStart(state, program).proposed());
+
+    auto manual =
+        ManualStartRequest{envelope(72U, state), manualPlan(""), true};
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(decideManualStart(state, manual).status));
+    manual.plan.runId.assign(49U, 'x');
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(decideManualStart(state, manual).status));
 }
 
 void test_start_summary_is_available_before_confirmation_but_never_masks_rejections() {
@@ -599,6 +627,8 @@ void test_abort_and_cool_validates_replacement_before_commit() {
 void test_completion_can_return_to_standby_or_start_manual_cooling() {
     auto completed = startedProgramState();
     completed.processState.state = ProcessState::Completed;
+    completed.processState.targetReachStartedAtMillis = 0U;
+    completed.processState.targetReachWarningIssued = false;
     CompletionRequest acknowledge{envelope(2U, completed), false, std::nullopt,
                                   false};
     const auto acknowledged = decideCompletion(completed, acknowledge);
@@ -766,6 +796,8 @@ void test_composed_cooling_rejections_discard_the_complete_candidate() {
     {
         auto completed = startedProgramState();
         completed.processState.state = ProcessState::Completed;
+        completed.processState.targetReachStartedAtMillis = 0U;
+        completed.processState.targetReachWarningIssued = false;
         completed.processState.transitionSequence = almostFull;
         CompletionRequest request{envelope(2U, completed), true,
                                   manualPlan("cool"), true};
@@ -1043,6 +1075,8 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
     {
         auto completed = startedProgramState();
         completed.processState.state = ProcessState::Completed;
+        completed.processState.targetReachStartedAtMillis = 0U;
+        completed.processState.targetReachWarningIssued = false;
         completed.runRevision = max;
         CompletionRequest request{envelope(2U, completed), false, std::nullopt,
                                   false};
@@ -1058,6 +1092,8 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
     {
         auto completed = startedProgramState();
         completed.processState.state = ProcessState::Completed;
+        completed.processState.targetReachStartedAtMillis = 0U;
+        completed.processState.targetReachWarningIssued = false;
         completed.runRevision = max;
         CompletionRequest request{envelope(3U, completed), true,
                                   manualPlan("cool"), true};
@@ -1153,6 +1189,8 @@ void test_run_revision_capacity_does_not_mask_prior_domain_results() {
     {
         auto completed = startedProgramState();
         completed.processState.state = ProcessState::Completed;
+        completed.processState.targetReachStartedAtMillis = 0U;
+        completed.processState.targetReachWarningIssued = false;
         completed.runRevision = max;
         CompletionRequest request{envelope(2U, completed), false, std::nullopt,
                                   false};
@@ -1299,6 +1337,7 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(
         test_program_start_requires_confirmation_safety_and_current_context);
+    RUN_TEST(test_run_id_boundary_is_shared_by_program_and_manual_start);
     RUN_TEST(
         test_start_summary_is_available_before_confirmation_but_never_masks_rejections);
     RUN_TEST(

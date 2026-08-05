@@ -271,6 +271,10 @@ struct RunCommandState {
     std::optional<ManualRunPlan> activeManualRun;
     std::optional<ProcessRunSnapshot> processRunSnapshot;
     std::string activeRunId;
+    // Der Modus gehoert zum aktiven Laufvertrag und wird zusammen mit dem
+    // Programmschnappschuss beziehungsweise dem manuellen Plan gesetzt. Er
+    // ist keine Sensorqualitaets- oder Hardwareentscheidung.
+    std::optional<RunSensorMode> activeRunSensorMode;
     std::uint32_t runRevision{0U};
     std::array<RuntimeMessage, run_command_limits::kMaximumRuntimeMessages>
         messages{};

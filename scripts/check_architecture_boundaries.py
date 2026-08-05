@@ -60,6 +60,228 @@ PREPROCESSOR_CONDITION_PATTERN = re.compile(r"^\s*#\s*(?:if|ifdef|ifndef|elif)\b
 PLATFORM_MACRO_PATTERN = re.compile(r"\b(?:ESP_PLATFORM|ARDUINO)\b")
 CONFIG_TOKEN_PATTERN = re.compile(r"\bCONFIG_[A-Za-z0-9_]+\b")
 
+# Issue #17: runtime code may decide commands/transitions, but only the
+# persistence coordinator may apply an eligible mutation or release its
+# effects/messages. Domain implementation and unit tests remain intentionally
+# outside this production-path check.
+RUN_PERSISTENCE_ALLOWED_FILES = frozenset(
+    {
+        "lib/fermentation_app/src/run_commands.cpp",
+        "lib/fermentation_app/src/run_commands.hpp",
+        "lib/fermentation_app/src/process_state_machine.cpp",
+        "lib/fermentation_app/src/process_state_machine.hpp",
+        "lib/fermentation_app/src/run_persistence_coordinator.cpp",
+        "lib/fermentation_app/src/run_persistence_coordinator.hpp",
+    }
+)
+# applyRunCommand/applyProcessTransition are two exact, internal domain
+# symbols never legitimately spelled outside the allowlisted files above.
+# Any textual occurrence of either token (direct call, qualified call,
+# address-of with or without `&`, parenthesized, passed as a callback, or
+# aliased under any local name) is already a bypass, so a single token guard
+# on the masked source supersedes tracking every C++ spelling of "take this
+# function's address" individually.
+RUN_PERSISTENCE_APPLY_SYMBOL_PATTERN = re.compile(
+    r"\b(?:applyRunCommand|applyProcessTransition)\b"
+)
+# `auto`/`const auto`, optionally bound as `&`/`&&`, assigned from a
+# (possibly namespace-qualified) decide*() call.
+RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN = re.compile(
+    r"\b(?:const\s+)?(?:auto(?:\s*&{1,2})?|CommandDecision|TransitionDecision)"
+    r"\s+(?P<name>[A-Za-z_]\w*)\s*=\s*"
+    r"(?:[A-Za-z_]\w*\s*::\s*)*decide[A-Za-z_]\w*\s*\("
+)
+# A typed CommandDecision/TransitionDecision local variable is a decision
+# origin regardless of its initializer (e.g. a default-constructed
+# `CommandDecision decision;`). Kept separate from the assignment pattern
+# above so a fachfremd (unrelated) type with the same declaration shape is
+# never classified as a decision origin.
+RUN_PERSISTENCE_TYPED_DECISION_DECLARATION_PATTERN = re.compile(
+    r"\b(?:const\s+)?(?:CommandDecision|TransitionDecision)\s*[*&]?\s*"
+    r"(?P<name>[A-Za-z_]\w*)\s*(?:=(?!=)|;|\{|\()"
+)
+RUN_PERSISTENCE_DECISION_MEMBER_PATTERN = re.compile(
+    r"\b(?P<name>[A-Za-z_]\w*)\s*\)*\s*(?:\.|->)\s*"
+    r"(?P<member>effects|messages)\b"
+)
+# Control-flow parentheses (`if (...) {`, `for (...) {`, ...) share the same
+# `(...)  {` textual shape as a function signature but are never a
+# parameter list.
+RUN_PERSISTENCE_CONTROL_FLOW_BEFORE_PAREN = re.compile(
+    r"\b(?:if|while|for|switch|catch)\s*$"
+)
+# Method qualifiers a signature's `)` may be followed by before `{`:
+# `const`, `noexcept`, `override`, `final`, and ref-qualifiers `&`/`&&`, in
+# any combination and order.
+RUN_PERSISTENCE_METHOD_QUALIFIER_SUFFIX_PATTERN = re.compile(
+    r"\)(?:\s*(?:const|noexcept|override|final|&&|&))*\s*$"
+)
+# A single `[const] [Namespace::]* Type[ &|*] name [= default]` parameter.
+# The base type is captured after stripping any namespace qualification
+# (`fermentation::CommandDecision` -> `CommandDecision`). Deliberately does
+# not handle multi-name declarations or nested parentheses in default
+# arguments -- out of scope for this narrow guard.
+RUN_PERSISTENCE_PARAM_DECLARATION_PATTERN = re.compile(
+    r"^(?:const\s+)?(?:[A-Za-z_]\w*\s*::\s*)*([A-Za-z_]\w*)\s*[&*]{0,2}\s*"
+    r"([A-Za-z_]\w*)\s*(?:=.*)?$"
+)
+RUN_PERSISTENCE_DECISION_PARAMETER_TYPES = frozenset(
+    {"CommandDecision", "TransitionDecision"}
+)
+
+
+def _run_persistence_function_parameter_list(
+    code: str, brace_index: int
+) -> str | None:
+    """Return a function/method body's parameter-list text given the index
+    of its opening `{`, or None if `brace_index` does not open one.
+
+    A small balanced-delimiter scan, not a general C++ parser: walk
+    backward from `{` over whitespace and method qualifiers to the
+    parameter list's `)`, then backward again by paren balance to its `(`,
+    and reject control-flow parentheses sharing the same shape.
+
+    Known gap: a constructor with a member-initializer list
+    (`Foo::Foo(const CommandDecision& pending) : cached_(pending) {`) has no
+    qualifier suffix directly before `{`, so this scan does not resolve the
+    real parameter list for that shape; it registers nothing for that block
+    rather than mis-registering a wrong one. No current production file has
+    this shape.
+    """
+    window_start = max(0, brace_index - 80)
+    qualifier_match = RUN_PERSISTENCE_METHOD_QUALIFIER_SUFFIX_PATTERN.search(
+        code[window_start:brace_index]
+    )
+    if not qualifier_match:
+        return None
+    close_paren = window_start + qualifier_match.start()
+    depth = 0
+    index = close_paren
+    while index >= 0:
+        if code[index] == ")":
+            depth += 1
+        elif code[index] == "(":
+            depth -= 1
+            if depth == 0:
+                break
+        index -= 1
+    if index < 0:
+        return None
+    open_paren = index
+    preceding = code[max(0, open_paren - 10) : open_paren]
+    if RUN_PERSISTENCE_CONTROL_FLOW_BEFORE_PAREN.search(preceding):
+        return None
+    return code[open_paren + 1 : close_paren]
+
+
+def _run_persistence_split_top_level(text: str) -> list[str]:
+    """Split a parameter list at top-level commas, respecting nesting in
+    `()`/`[]`/`<>` (default arguments, templates) without a general parser."""
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for character in text:
+        if character in "([<":
+            depth += 1
+        elif character in ")]>":
+            depth = max(0, depth - 1)
+        if character == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(character)
+    parts.append("".join(current))
+    return parts
+RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN = re.compile(
+    r"\bdecide[A-Za-z_]\w*\s*\([^;{}]*\)\s*\.\s*"
+    r"(?:effects|messages)\b",
+    re.DOTALL,
+)
+# Narrow, non-parsing shadowing detector: a block-local declaration of NAME
+# whose immediately preceding token is not a control-flow/statement keyword
+# (so `return result;` is never mistaken for a declaration of `result`).
+RUN_PERSISTENCE_DECLARATION_KEYWORD_BLOCKLIST = (
+    "return", "if", "while", "for", "switch", "else", "new", "delete",
+    "sizeof", "throw", "case", "break", "continue", "goto", "using",
+    "namespace", "co_return", "co_await", "co_yield", "typedef",
+    "static_assert", "do", "catch", "try", "default",
+)
+RUN_PERSISTENCE_DECLARATION_KEYWORD_ALTERNATION = "|".join(
+    re.escape(keyword)
+    for keyword in RUN_PERSISTENCE_DECLARATION_KEYWORD_BLOCKLIST
+)
+
+
+def _run_persistence_local_declaration_pattern(name: str) -> re.Pattern:
+    escaped = re.escape(name)
+    return re.compile(
+        rf"\b(?!(?:{RUN_PERSISTENCE_DECLARATION_KEYWORD_ALTERNATION})\b)"
+        rf"[A-Za-z_]\w*(?:\s*<[^;{{}}()]*>)?\s*[*&]{{0,2}}\s*"
+        rf"\b{escaped}\b\s*(?:=(?!=)|;|\{{|\()"
+    )
+
+
+def mask_cxx_comments_and_strings(source: str) -> str:
+    """Mask comments and literals while preserving offsets and line breaks."""
+    masked = list(source)
+    state = "code"
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(source):
+        character = source[index]
+        next_character = source[index + 1] if index + 1 < len(source) else ""
+        if state == "code":
+            if character == "/" and next_character == "/":
+                masked[index] = masked[index + 1] = " "
+                state = "line_comment"
+                index += 2
+                continue
+            if character == "/" and next_character == "*":
+                masked[index] = masked[index + 1] = " "
+                state = "block_comment"
+                index += 2
+                continue
+            if character == '"':
+                masked[index] = " "
+                state = "string"
+                quote = character
+                escaped = False
+            elif character == "'":
+                masked[index] = " "
+                state = "character"
+                quote = character
+                escaped = False
+        elif state == "line_comment":
+            if character == "\n":
+                state = "code"
+            else:
+                masked[index] = " "
+        elif state == "block_comment":
+            if character == "*" and next_character == "/":
+                masked[index] = masked[index + 1] = " "
+                state = "code"
+                index += 2
+                continue
+            if character != "\n":
+                masked[index] = " "
+        else:
+            if character == "\n":
+                masked[index] = " "
+            elif escaped:
+                masked[index] = " "
+                escaped = False
+            elif character == "\\":
+                masked[index] = " "
+                escaped = True
+            elif character == quote:
+                masked[index] = " "
+                state = "code"
+            else:
+                masked[index] = " "
+        index += 1
+    return "".join(masked)
+
 # Issue #72/#73: exakter idf_component_register()-REQUIRES/PRIV_REQUIRES-
 # Vertrag je Komponente, getrennt nach oeffentlich (REQUIRES) und privat
 # (PRIV_REQUIRES). Eine gemeinsame Menge wuerde z. B. ein faelschlich
@@ -172,6 +394,162 @@ def add_idf_leak_violations(violations: list[str], root: Path) -> None:
                         f"{path}:{line_number}: verbotene Kconfig-Verwendung "
                         f"{token!r} in portabler Wurzel"
                     )
+
+
+def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> None:
+    """Reject direct productive apply/effect/message paths outside #17's gate."""
+    for relative_root in ("lib/fermentation_app/src", "src", "main"):
+        directory = root / relative_root
+        for path in text_files(directory):
+            relative = path.relative_to(root).as_posix()
+            if relative in RUN_PERSISTENCE_ALLOWED_FILES:
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                continue
+            source = "\n".join(lines)
+            code = mask_cxx_comments_and_strings(source)
+            # Keep names scoped to their brace block, walked from the
+            # innermost enclosing block outward. Within each block, only
+            # declarations positioned before the use are visible (so a
+            # shadowing declaration written AFTER a use does not retroactively
+            # cover it); the nearest visible declaration in the first block
+            # that has one decides whether a member use is a decision origin
+            # or unrelated (fachfremd) shadowing. (Apply-alias tracking was
+            # removed: RUN_PERSISTENCE_APPLY_SYMBOL_PATTERN below already
+            # flags every spelling of the two apply symbols directly.)
+            blocks: list[tuple[int, int, dict[str, list[tuple[int, str]]]]] = []
+            stack: list[int] = []
+            for index, character in enumerate(code):
+                if character == "{":
+                    stack.append(index)
+                elif character == "}" and stack:
+                    blocks.append((stack.pop(), index, {}))
+            block_by_open_brace = {block[0]: block for block in blocks}
+
+            def containing_blocks(position: int):
+                found = [
+                    block
+                    for block in blocks
+                    if block[0] < position < block[1]
+                ]
+                found.sort(key=lambda block: block[1] - block[0])
+                return found
+
+            def register(name: str, position: int, kind: str) -> None:
+                containing = containing_blocks(position)
+                if containing:
+                    containing[0][2].setdefault(name, []).append((position, kind))
+
+            for match in RUN_PERSISTENCE_DECISION_ASSIGNMENT_PATTERN.finditer(code):
+                register(match.group("name"), match.start(), "decision")
+            for match in RUN_PERSISTENCE_TYPED_DECISION_DECLARATION_PATTERN.finditer(
+                code
+            ):
+                register(match.group("name"), match.start(), "decision")
+
+            # Typed CommandDecision/TransitionDecision function parameters
+            # (including namespace-qualified and method-qualified forms) are
+            # decision origins for their whole body (registered at the
+            # block's own opening brace, i.e. visible from the first
+            # statement on); other typed parameters register as "other" so a
+            # fachfremd parameter merely named `decision` stays clean instead
+            # of falling through to the bare-name fallback below.
+            for block in blocks:
+                parameter_list = _run_persistence_function_parameter_list(
+                    code, block[0]
+                )
+                if parameter_list is None:
+                    continue
+                for raw_param in _run_persistence_split_top_level(parameter_list):
+                    param = raw_param.strip()
+                    if not param:
+                        continue
+                    param_match = RUN_PERSISTENCE_PARAM_DECLARATION_PATTERN.match(
+                        param
+                    )
+                    if not param_match:
+                        continue
+                    param_type, param_name = param_match.group(1), param_match.group(2)
+                    kind = (
+                        "decision"
+                        if param_type in RUN_PERSISTENCE_DECISION_PARAMETER_TYPES
+                        else "other"
+                    )
+                    block[2].setdefault(param_name, []).append((block[0], kind))
+
+            other_declaration_cache: dict[tuple[str, int, int], list[int]] = {}
+
+            def other_declaration_positions(
+                name: str, block: tuple[int, int, dict[str, list[tuple[int, str]]]]
+            ) -> list[int]:
+                key = (name, block[0], block[1])
+                cached = other_declaration_cache.get(key)
+                if cached is None:
+                    pattern = _run_persistence_local_declaration_pattern(name)
+                    cached = [
+                        found.start()
+                        for found in pattern.finditer(code, block[0], block[1])
+                    ]
+                    other_declaration_cache[key] = cached
+                return cached
+
+            def declared_kind_before(name: str, position: int) -> str | None:
+                for block in containing_blocks(position):
+                    specific = [
+                        (decl_position, kind)
+                        for decl_position, kind in block[2].get(name, ())
+                        if decl_position < position
+                    ]
+                    if specific:
+                        # A decision/parameter registration and the
+                        # generic "other" fallback pattern can both match the
+                        # same declaration statement, sometimes at different
+                        # offsets (e.g. the specific pattern captures a
+                        # leading `const` that the generic type-token does
+                        # not). A real C++ block cannot validly hold a second,
+                        # different declaration of the same name, so a
+                        # visible specific registration is authoritative for
+                        # this block; the generic pattern is not consulted.
+                        specific.sort(key=lambda candidate: candidate[0])
+                        return specific[-1][1]
+                    if any(
+                        decl_position < position
+                        for decl_position in other_declaration_positions(name, block)
+                    ):
+                        return "other"
+                return None
+
+            def line_number(position: int) -> int:
+                return code.count("\n", 0, position) + 1
+
+            for match in RUN_PERSISTENCE_APPLY_SYMBOL_PATTERN.finditer(code):
+                violations.append(
+                    f"{path}:{line_number(match.start())}: produktiver "
+                    "Run-Persistenz-Bypass (apply/effects/messages ausserhalb "
+                    "Domain/Coordinator)"
+                )
+
+            for match in RUN_PERSISTENCE_DECISION_MEMBER_PATTERN.finditer(code):
+                name = match.group("name")
+                kind = declared_kind_before(name, match.start())
+                is_bypass = kind == "decision" or (
+                    kind is None and (name == "decision" or name.endswith("Decision"))
+                )
+                if is_bypass:
+                    violations.append(
+                        f"{path}:{line_number(match.start())}: produktiver "
+                        "Run-Persistenz-Bypass (apply/effects/messages ausserhalb "
+                        "Domain/Coordinator)"
+                    )
+
+            for match in RUN_PERSISTENCE_TEMPORARY_MEMBER_PATTERN.finditer(code):
+                violations.append(
+                    f"{path}:{line_number(match.start())}: produktiver "
+                    "Run-Persistenz-Bypass (apply/effects/messages ausserhalb "
+                    "Domain/Coordinator)"
+                )
 
 
 def strip_cmake_line_comments(text: str) -> str:
@@ -353,6 +731,7 @@ def check(root: Path) -> list[str]:
     )
 
     add_idf_leak_violations(violations, root)
+    add_run_persistence_bypass_violations(violations, root)
     add_component_requires_violations(violations, root)
 
     return violations
@@ -489,6 +868,324 @@ IDF_LEAK_VIOLATION_CASES = {
         'PRIV_INCLUDE_DIRS "../include" '
         "PRIV_REQUIRES fermentation_app device_platform_esp_idf)\n",
     ),
+    "runtime_umgeht_run_persistenz_apply": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { applyRunCommand(); }\n",
+    ),
+    "runtime_gibt_effects_vor_commit_frei": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { decision.effects; }\n",
+    ),
+    "runtime_gibt_effects_ueber_zeiger_vor_commit_frei": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { commandDecision->effects; }\n",
+    ),
+    "ui_umgeht_transition_apply": (
+        "lib/fermentation_app/src/ui_path.cpp",
+        "void f() { applyProcessTransition(); }\n",
+    ),
+    "ui_gibt_transition_messages_ueber_zeiger_frei": (
+        "lib/fermentation_app/src/ui_path.cpp",
+        "void f() { transitionDecision->messages; }\n",
+    ),
+    "composition_root_gibt_transition_messages_frei": (
+        "main/app_main.cpp",
+        "void f() { decision.messages; }\n",
+    ),
+    "composition_root_gibt_transition_messages_ueber_zeiger_frei": (
+        "main/app_main.cpp",
+        "void f() { transitionDecision->messages; }\n",
+    ),
+}
+
+
+RUN_PERSISTENCE_BYPASS_CASES = {
+    "runtime_apply_command": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { applyRunCommand(); }\n",
+    ),
+    "runtime_apply_transition": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { applyProcessTransition(); }\n",
+    ),
+    "runtime_apply_command_multiline": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { applyRunCommand\n    (state, decision); }\n",
+    ),
+    "runtime_apply_transition_multiline": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { applyProcessTransition\n    (state, decision, snapshot); }\n",
+    ),
+    "runtime_apply_command_parenthesized": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { (applyRunCommand)(state, decision); }\n",
+    ),
+    "runtime_apply_transition_parenthesized": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { (applyProcessTransition)(state, decision, snapshot); }\n",
+    ),
+    "runtime_apply_command_function_pointer": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto apply = &applyRunCommand; apply(state, decision); }\n",
+    ),
+    "runtime_apply_transition_function_pointer": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto apply = &applyProcessTransition; "
+        "apply(state, decision, snapshot); }\n",
+    ),
+    "runtime_effects_dot": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { decision.effects; }\n",
+    ),
+    "runtime_effects_arrow": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { commandDecision->effects; }\n",
+    ),
+    "runtime_effects_from_decide_result": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto result = decideRun(); result.effects; }\n",
+    ),
+    "runtime_messages_from_decide_result": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { const auto result = decideTransition(); result.messages; }\n",
+    ),
+    "runtime_effects_from_multiline_decide_result": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n  auto result =\n      decideRun();\n  result.effects;\n}\n",
+    ),
+    "runtime_effects_multiline_member": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto result = decideRun(); consume(result\n"
+        "    .effects); }\n",
+    ),
+    "runtime_messages_parenthesized_member": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto result = decideTransition(); consume((result)\n"
+        "    .messages); }\n",
+    ),
+    "runtime_messages_multiline_pointer_member": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { auto result = decideTransition(); consume(result\n"
+        "    ->messages); }\n",
+    ),
+    "runtime_messages_from_decide_temporary": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { decideTransition().messages; }\n",
+    ),
+    "ui_messages_dot": (
+        "lib/fermentation_app/src/ui_path.cpp",
+        "void f() { transitionDecision.messages; }\n",
+    ),
+    "ui_messages_arrow": (
+        "lib/fermentation_app/src/ui_path.cpp",
+        "void f() { transitionDecision->messages; }\n",
+    ),
+    "composition_messages_dot": (
+        "main/app_main.cpp",
+        "void f() { decision.messages; }\n",
+    ),
+    "composition_messages_arrow": (
+        "main/app_main.cpp",
+        "void f() { transitionDecision->messages; }\n",
+    ),
+    "outer_decision_used_in_nested_block": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto result = decideRun();\n"
+        "    if (ready) {\n"
+        "        consume(result.effects);\n"
+        "    }\n"
+        "}\n",
+    ),
+    "outer_apply_alias_used_in_nested_block": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto apply = &applyRunCommand;\n"
+        "    if (ready) {\n"
+        "        apply(state, decision);\n"
+        "    }\n"
+        "}\n",
+    ),
+    "outer_decision_used_in_multi_level_nested_block": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto result = decideRun();\n"
+        "    if (a) {\n"
+        "        if (b) {\n"
+        "            consume(result.effects);\n"
+        "        }\n"
+        "    }\n"
+        "}\n",
+    ),
+    "typed_decision_without_decide_call_is_still_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    CommandDecision pending;\n"
+        "    if (ready) {\n"
+        "        consume(pending.effects);\n"
+        "    }\n"
+        "}\n",
+    ),
+    "use_before_later_shadow_is_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto result = decideRun();\n"
+        "    if (ready) {\n"
+        "        consume(result.effects);\n"
+        "        RenderResult result{};\n"
+        "    }\n"
+        "}\n",
+    ),
+    "typed_command_decision_parameter_is_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void publish(const CommandDecision& pending) {\n"
+        "    consume(pending.effects);\n"
+        "}\n",
+    ),
+    "typed_transition_decision_pointer_parameter_is_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void publish(const TransitionDecision* pending) {\n"
+        "    consume(pending->messages);\n"
+        "}\n",
+    ),
+    "apply_alias_without_ampersand_is_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto apply = applyRunCommand;\n"
+        "    apply(state, decision);\n"
+        "}\n",
+    ),
+    "qualified_const_method_command_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void Controller::publish(const CommandDecision& pending) const {\n"
+        "    consume(pending.effects);\n"
+        "}\n",
+    ),
+    "qualified_noexcept_method_transition_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void Controller::publish(\n"
+        "    const TransitionDecision* pending) noexcept {\n"
+        "    consume(pending->messages);\n"
+        "}\n",
+    ),
+    "namespaced_command_decision_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void publish(const fermentation::CommandDecision& pending) {\n"
+        "    consume(pending.effects);\n"
+        "}\n",
+    ),
+    "namespaced_apply_alias_without_ampersand": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto apply = fermentation::applyRunCommand;\n"
+        "    apply(state, decision);\n"
+        "}\n",
+    ),
+    "namespaced_apply_alias_with_ampersand": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto apply = &fermentation::applyProcessTransition;\n"
+        "    apply(state, decision, snapshot);\n"
+        "}\n",
+    ),
+    "const_auto_reference_decide_result": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    const auto& result = decideRun();\n"
+        "    consume(result.effects);\n"
+        "}\n",
+    ),
+    "namespaced_decide_result": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "    auto result = fermentation::decideTransition();\n"
+        "    consume(result.messages);\n"
+        "}\n",
+    ),
+    "trailing_unrelated_parameter_does_not_hide_decision_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void publish(const CommandDecision& pending, int retries) {\n"
+        "    consume(pending.effects);\n"
+        "}\n",
+    ),
+}
+
+# The bypass rule deliberately follows values originating from decide*().  It
+# must not turn into a repository-wide ban on unrelated members with the same
+# spelling.
+RUN_PERSISTENCE_CLEAN_CASES = {
+    "reused_result_name_is_not_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void a() { auto result = decideRun(); }\n"
+        "struct RenderResult { int effects; };\n"
+        "void b() { RenderResult result{}; use(result.effects); }\n",
+    ),
+    "shadowed_result_name_is_not_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "  auto result = decideRun();\n"
+        "  { RenderResult result{}; use(result.effects); }\n"
+        "}\n",
+    ),
+    "unrelated_effects_member": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "struct RenderState { int effects; };\n"
+        "void f() { RenderState state{}; (void)state.effects; }\n",
+    ),
+    "unrelated_messages_member": (
+        "main/app_main.cpp",
+        "struct DisplayState { int messages; };\n"
+        "void f() { DisplayState state{}; (void)state.messages; }\n",
+    ),
+    "comments_and_strings_are_not_code": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        '// applyRunCommand(state, decision);\n'
+        'const char* text = "result.effects applyProcessTransition(";\n',
+    ),
+    "gateway_call_is_the_allowed_route": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() { RunMutationGate gate; gate.route(state, decision); }\n",
+    ),
+    "multi_level_nested_shadow_is_not_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "  auto result = decideRun();\n"
+        "  if (a) {\n"
+        "    if (b) {\n"
+        "      RenderResult result{};\n"
+        "      use(result.effects);\n"
+        "    }\n"
+        "  }\n"
+        "}\n",
+    ),
+    "unrelated_type_named_decision_is_not_a_bypass": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void f() {\n"
+        "  DisplayState decision{};\n"
+        "  if (ready) {\n"
+        "    use(decision.effects);\n"
+        "  }\n"
+        "}\n",
+    ),
+    "unrelated_parameter_named_decision_is_clean": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void render(const DisplayState& decision) {\n"
+        "    consume(decision.effects);\n"
+        "}\n",
+    ),
+    "qualified_const_method_unrelated_decision_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void Controller::render(const DisplayState& decision) const {\n"
+        "    consume(decision.effects);\n"
+        "}\n",
+    ),
+    "qualified_noexcept_method_unrelated_messages_parameter": (
+        "lib/fermentation_app/src/runtime_path.cpp",
+        "void Controller::render(\n"
+        "    const DisplayMessages* transitionDecision) noexcept {\n"
+        "    consume(transitionDecision->messages);\n"
+        "}\n",
+    ),
 }
 
 
@@ -532,6 +1229,21 @@ def selftest() -> int:
     for name, (relative_path, content) in IDF_LEAK_VIOLATION_CASES.items():
         if not _check_clean_fixture_with_extra_file(relative_path, content):
             print(f"{FAILED}: IDF-Leak-Verstossfall {name!r} wurde nicht erkannt")
+            return 1
+
+    for name, (relative_path, content) in RUN_PERSISTENCE_BYPASS_CASES.items():
+        if not _check_clean_fixture_with_extra_file(relative_path, content):
+            print(
+                f"{FAILED}: Run-Persistenz-Bypass {name!r} wurde nicht erkannt"
+            )
+            return 1
+
+    for name, (relative_path, content) in RUN_PERSISTENCE_CLEAN_CASES.items():
+        if _check_clean_fixture_with_extra_file(relative_path, content):
+            print(
+                f"{FAILED}: fachfremder Member-Fall {name!r} wurde faelschlich "
+                "als Bypass erkannt"
+            )
             return 1
 
     print(f"{PASS}: Architekturpruefung erkennt absichtliche Grenzverletzung")
