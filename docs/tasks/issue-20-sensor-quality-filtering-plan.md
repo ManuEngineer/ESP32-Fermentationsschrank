@@ -23,48 +23,57 @@ zusammengefasst/umbenannt, aber vollstaendig): 1=Abschnitt 1, 2=Abschnitt 2,
 Diagnosevertrag), 12=Abschnitt 13 (Modul-/Abhaengigkeitsrichtung),
 13=Abschnitt 15 (SOLID/DRY/KISS), 14=Abschnitt 14 (geplante Dateien),
 15=Abschnitt 17 (Testmatrix), 16=Abschnitt 16 (Ressourcen/CI),
-17=Abschnitt 18 (Risiken), 18=Abschnitt 19 (Punkte A/B/C - inzwischen
-entschieden, siehe unten), 19=Abschnitt 20 (Implementierungsreihenfolge),
+17=Abschnitt 18 (Risiken), 18=Abschnitt 19 (Punkte A/B/C - entschieden,
+siehe unten), 19=Abschnitt 20 (Implementierungsreihenfolge),
 20=Abschnitt 21 (Stopbedingung), 21=Taskleiste am Dateiende. Abschnitt 11
 dieser Datei (Widerspruchs-/Plausibilitaetsbewertung) ist eine
 Praezisierung von Abschnitt 8/10 des urspruenglichen Auftrags (dort explizit
 als Pflichtinhalt "Zustandsmodell" und "Verarbeitungspipeline" gefordert)
 und keine eigene der 21 Pflichtnummern.
 
-### Nachkorrektur (PR #95, "Kurze Nachkorrektur")
+### Nachkorrektur-Historie
 
 ```text
-PREVIOUS_PLAN_COMMIT: f52741170726dafc6d6ea056f55c3cb04c095de2
-PREVIOUS_HEAD: 16dc12d661a7c387193c141ba1f0d18bc556ee25
+Runde 1 (Kurze Nachkorrektur):
+  PREVIOUS_PLAN_COMMIT: f52741170726dafc6d6ea056f55c3cb04c095de2
+  PREVIOUS_HEAD:        16dc12d661a7c387193c141ba1f0d18bc556ee25
+  -> Entscheidungen A/B/C entschieden; filteredCelsius-Platzhalter entfernt;
+     SensorQualityConfig definiert; einziger Zeitvertrag; Zeitstempelregeln
+     korrigiert; DS18B20-Konstanten aus generischer Plattform entfernt;
+     generischer Eingangsvertrag; optionaler/redundanzfreier Diagnosevertrag;
+     Disposition/Fault-Enums getrennt; SensorIdentity/SensorOffset ohne
+     storage_types.hpp; Teststruktur aufgeteilt.
+  Ergebnis dieser Runde: 6805df1, dann Advisor-Fix auf 75f6a168fd11f30dc35000df8f93b7d2b675bc19
+  (STALE/FAILED-Ableitung ueber snapshot(now) statt gespeichertem Zustand;
+  correctedCelsius als Medianfilter-Ausgang + Offset statt Rohwert + Offset).
+
+Runde 2 (Letzte Plan-Nachkorrektur, dieser Stand):
+  PREVIOUS_PLAN_COMMIT: 75f6a168fd11f30dc35000df8f93b7d2b675bc19
+  PREVIOUS_HEAD:        75f6a168fd11f30dc35000df8f93b7d2b675bc19
+  Ausgeloest durch "AUFTRAG_PR95_Letzte_Plan_Nachkorrektur.md".
 ```
 
-Dieser Plan-Stand ist eine gezielte Nachkorrektur des oben genannten
-vorherigen Plan-Commits, ausgeloest durch den Auftrag
-"AUFTRAG_PR95_Kurze_Nachkorrektur.md". Die vorherige Version wurde noch
-nicht freigegeben (keine "PLAN APPROVED"-Ownerfreigabe lag vor); es handelt
-sich daher um eine gewoehnliche Plankorrektur vor Erstfreigabe, nicht um
-eine materielle Abweichung von einem bereits freigegebenen Plan. Jede
-inhaltliche Aenderung ist an ihrer jeweiligen Stelle im Dokument als
-"Korrektur gegenueber der Vorversion" markiert. Entscheidungen A, B und C
-(vormals Abschnitt 19 "Offene Ownerentscheidungen") sind seit dieser
-Nachkorrektur verbindlich entschieden, siehe Abschnitt 19.
+Beide Runden korrigieren einen noch NICHT freigegebenen Plan (keine
+"PLAN APPROVED"-Ownerfreigabe lag je vor); es handelt sich um gewoehnliche
+Plankorrekturen vor Erstfreigabe, nicht um materielle Abweichungen von einem
+bereits freigegebenen Plan. Jede inhaltliche Aenderung dieser zweiten Runde
+ist an ihrer jeweiligen Stelle im Dokument als "Korrektur Runde 2" markiert.
 
 ## 2. Live-Issue- und Abhaengigkeitspruefung
 
 ```text
-#20: state="OPEN", Status-Feld im Body="READY"
+#20: state="OPEN", Status-Feld im Body="READY", 0 Kommentare (erneut geprueft)
+#30: state="OPEN", Status-Feld im Body="BLOCKED_HARDWARE", 0 Kommentare (erneut geprueft)
 #10: state="CLOSED" (Body-Statusfeld "READY" ist redaktionell veraltet;
      massgeblich ist der GitHub-Issue-Zustand CLOSED)
 #11: state="CLOSED" (Body-Statusfeld "PLANNED_SPEC_PENDING" ebenso veraltet;
      massgeblich ist CLOSED)
 ```
 
-`#20` traegt keine Kommentare. Beide Abhaengigkeiten `#10` und `#11` sind ueber
-den GitHub-Issue-Zustand (nicht ueber das interne Body-Statusfeld) als
-abgeschlossen verifiziert. Zusaetzlich gelesen: `#5` (Epic, `OPEN`), `#21`
-(`OPEN`, `PLANNED_SPEC_PENDING`), `#24` (`OPEN`, `PLANNED_SPEC_PENDING`), `#30`
-(`OPEN`, `BLOCKED_HARDWARE`, bereits mit einem "Espressif-first-Kandidaten
-(Sync)"-Abschnitt aus PR #88 versehen).
+Beide Abhaengigkeiten `#10` und `#11` sind ueber den GitHub-Issue-Zustand
+(nicht ueber das interne Body-Statusfeld) als abgeschlossen verifiziert.
+Zusaetzlich gelesen: `#5` (Epic, `OPEN`), `#21` (`OPEN`,
+`PLANNED_SPEC_PENDING`), `#24` (`OPEN`, `PLANNED_SPEC_PENDING`).
 
 Keines dieser Live-Issues wird durch diesen Plan-PR veraendert.
 
@@ -75,6 +84,7 @@ Keines dieser Live-Issues wird durch diesen Plan-PR veraendert.
 - lib/device_platform/AGENTS.md
 - lib/device_platform_test_support/AGENTS.md
 - lib/fermentation_app/AGENTS.md
+- docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md (erneut, wortwoertlich fuer Runde 2)
 - docs/SPECIFICATION_REVIEW.md
 - docs/DECISIONS.md (alle 19 ADR-Titel/-Status gepruept)
 - docs/ARCHITECTURE.md
@@ -88,10 +98,14 @@ Keines dieser Live-Issues wird durch diesen Plan-PR veraendert.
 - docs/audits/PROPOSED_RELEASE_1_ROADMAP.md
 - docs/CI_AND_QUALITY_GATES.md (Ressourcenbericht-Mechanismus)
 - Live-Issues #5, #10, #11, #20, #21, #24, #30
-- Code: siehe Abschnitt 4
+- Code: lib/device_platform/src/temperature_source.hpp,
+  lib/device_platform_test_support/src/mock_temperature_source.hpp/.cpp,
+  test/test_sensor_actuator_mocks/test_sensor_actuator_mocks.cpp (erneut,
+  woertlich fuer Runde 2), siehe Abschnitt 4 fuer den vollstaendigen
+  Codebestand
 ```
 
-`SOURCES_READ: 20`
+`SOURCES_READ: 21`
 
 ## 4. Bestandsaufnahme des Codes
 
@@ -105,7 +119,10 @@ lib/device_platform/src/virtual_time_source.hpp/.cpp
 lib/device_platform/src/temperature_source.hpp
   TemperatureReading{bool available; double celsius;}
   ITemperatureSource::read() – Kommentar im Header stellt bereits klar, dass
-  VALID/STALE/FAILED und Filterung NICHT Aufgabe dieses Ports sind.
+  VALID/STALE/FAILED und Filterung NICHT Aufgabe dieses Ports sind. DIESE
+  DATEI WIRD VON #20 GEZIELT ERWEITERT (Korrektur Runde 2, siehe Abschnitt 9:
+  kein paralleler Eingangstyp mehr, sondern Weiterentwicklung dieses
+  bestehenden Ports zum kanonischen Rohprobenvertrag).
 lib/device_platform/src/storage_types.hpp
   StrongId<Tag,Underlying>-Template (u. a. StorageEpoch, Revision, SlotId),
   CheckedIncrementStatus, checkedIncrement() – etabliertes Muster fuer starke,
@@ -125,7 +142,8 @@ lib/device_platform/src/storage_slot_limits.hpp
 lib/device_platform_test_support/src/mock_temperature_source.hpp/.cpp
   MockTemperatureSource: setCelsius(), setAvailable() – nur binaerer
   Verfuegbarkeits-Fehlerinjektor, keine Zeitstempel-, CRC- oder
-  Mehrfachfehlerinjektion.
+  Mehrfachfehlerinjektion. WIRD VON #20 AUF DEN ERWEITERTEN PORT NACHGEZOGEN
+  (Korrektur Runde 2, siehe Abschnitt 9/14).
 lib/device_platform_test_support/src/thermal_simulation_model.hpp
   ThermalSimulationModel: explizit unkalibriertes Driftmodell, nur fuer
   Softwareablauf-Tests.
@@ -139,16 +157,34 @@ lib/fermentation_app/src/process_state_machine.hpp
   App-Ebenen-Stil, aber fachlich nicht wiederverwendbar fuer #20.
 ```
 
+### Bereits vorhanden (Tests, betroffen von Runde 2)
+
+```text
+test/test_sensor_actuator_mocks/test_sensor_actuator_mocks.cpp
+  Enthaelt genau drei temperaturbezogene Testfunktionen
+  (test_temperature_source_reports_configured_value,
+  test_temperature_source_can_change_value,
+  test_temperature_source_fault_injection_marks_unavailable), die auf der
+  heutigen {available,celsius}-Form aufsetzen. WERDEN VON #20 AUF DEN
+  ERWEITERTEN PORT NACHGEZOGEN (Abschnitt 14/17a). Alle uebrigen
+  Testfunktionen dieser Datei (Aktuator-Mocks) sind nicht betroffen.
+```
+
+Repository-weite Pruefung (Runde 2): `ITemperatureSource`/`TemperatureReading`
+werden ausserhalb dieser drei Dateien nirgends verwendet - insbesondere nicht
+in `src/main.cpp`, `main/app_main.cpp` oder `lib/fermentation_app/`. Die
+Erweiterung des Ports hat damit einen vollstaendig bekannten, auf drei
+Dateien begrenzten Blastradius (siehe Abschnitt 18).
+
 ### Nicht vorhanden (greenfield fuer #20)
 
 ```text
-- kein Temperatur-Werttyp (nur roher double in TemperatureReading)
 - kein Sensorqualitaets-/Diagnosezustand (VALID/STALE/FAILED) irgendwo im Code
 - kein Medianfilter, kein Tiefpassfilter irgendwo in lib/
 - kein ROM-/Sensoridentitaetstyp
 - kein Fehlerursachen- oder Trendmodell fuer Sensoren
-- kein Fehlersequenz-Injektor in device_platform_test_support (nur binaeres
-  available/unavailable)
+- kein Fehlersequenz-Injektor (nur binaeres available/unavailable im
+  bestehenden Mock)
 ```
 
 ### Testkonventionen
@@ -168,17 +204,19 @@ im native-Profil. library.json je lib/*-Verzeichnis setzt
 ```text
 - ITimeSource / VirtualTimeSource: direkt fuer Alters- und
   Aenderungsratenberechnung wiederverwenden, kein neuer Zeitport.
-- ITemperatureSource / TemperatureReading: bleibt unveraendert; #20 baut eine
-  neue Schicht OBERHALB dieses Ports, ersetzt ihn nicht.
+- ITemperatureSource / TemperatureReading: KORREKTUR RUNDE 2 - wird NICHT
+  unveraendert gelassen, sondern gezielt zum kanonischen, generischen
+  Rohprobenvertrag weiterentwickelt (siehe Abschnitt 9). Kein paralleler
+  Eingangstyp neben diesem Port.
 - StrongId<Tag,Underlying>-Muster (storage_types.hpp): dient nur als
   STILISTISCHE Vorlage fuer den neuen, eigenstaendigen SensorIdentity-Typ;
   SensorIdentity haengt bewusst NICHT auf storage_types.hpp (siehe
   Abschnitt 13a – unpassende Domaenenkopplung, AGENTS.md-DRY-Ausnahme fuer
   oberflaechlich aehnlichen, fachlich fremden Code).
 - StateStoreKey-Muster ("gueltig-by-construction" mit privatem Konstruktor und
-  statischem create()): Vorlage fuer den Kalibrier-Offset-Werttyp
-  SensorOffset (Abschnitt 13a), das die firmwarefeste Offsetgrenze bereits
-  bei Erzeugung durchsetzt.
+  statischem create()): Vorlage fuer SensorIdentity, TemperatureReading
+  (Abschnitt 9) und den Kalibrier-Offset-Werttyp SensorOffset (Abschnitt
+  13a) - alle drei setzen ihre Invarianten jetzt bereits bei Erzeugung durch.
 - storage_slot_limits.hpp-Muster: Vorlage fuer eine neue
   lib/device_platform/src/sensor_limits.hpp mit firmwarefesten Obergrenzen.
 - enum class ... : uint8_t mit Pro-Variante-Dokumentationskommentar
@@ -188,10 +226,10 @@ im native-Profil. library.json je lib/*-Verzeichnis setzt
   uebernehmen.
 ```
 
-`DUPLICATE_TYPES_AVOIDED: PASS` – keiner der oben genannten Bausteine wird
-dupliziert; #20 erweitert `device_platform` um neue, bislang nicht
-existierende fachliche Typen (Qualitaetszustand, Filter, Sensorwert), ohne
-etwas bereits Vorhandenes zu duplizieren.
+`DUPLICATE_TYPES_AVOIDED: PASS` – #20 erweitert `device_platform` um neue,
+bislang nicht existierende fachliche Typen (Qualitaetszustand, Filter) und
+evolviert genau einen bestehenden Port (`ITemperatureSource`/
+`TemperatureReading`), statt ihn zu duplizieren.
 
 ## 6. Fehlende Akzeptanzkriterien (Ausgangslage vs. #20)
 
@@ -213,9 +251,9 @@ Akzeptanzkriterien aus dem Issue sind vollstaendig offen:
 Vollstaendige Verarbeitungskette auf abstrakten, nativ testbaren Eingaben:
 
 ```text
-Rohprobe
+Rohprobe (ueber den erweiterten ITemperatureSource-Port, Abschnitt 9)
 -> Zeitstempel-/Dispositionspruefung (Abschnitt 9b)
--> Bus-/Transportstatus (generisch, keine sensor-/treiberspezifischen
+-> Transport-/Messstatus (generisch, keine sensor-/treiberspezifischen
    Konstanten, Abschnitt 10.1)
 -> physikalischer Wertebereich
 -> Zeit- und Aenderungsratenpruefung
@@ -228,7 +266,8 @@ Rohprobe
 
 ### Nicht-Scope (#20)
 
-Wortgleich aus Abschnitt 15 des Auftrags uebernommen und verbindlich:
+Wortgleich aus Abschnitt 15 des urspruenglichen Auftrags uebernommen und
+verbindlich:
 
 ```text
 - keine Implementierung in diesem Plan-PR
@@ -251,7 +290,9 @@ Wortgleich aus Abschnitt 15 des Auftrags uebernommen und verbindlich:
 - keine Aenderungen an Live-Issue-Bodies
 - keine Aenderung an Firmware-, Test-, Build-, Workflow- oder Scriptdateien
   (gilt fuer DIESEN Plan-PR; die spaetere Implementierung aendert
-  ausschliesslich Dateien aus Abschnitt 14)
+  ausschliesslich Dateien aus Abschnitt 14 - EINSCHLIESSLICH der drei
+  bestehenden Dateien um ITemperatureSource/MockTemperatureSource, siehe
+  Korrektur Runde 2)
 ```
 
 `SCOPE_21_BOUNDARY_DEFINED: PASS`
@@ -263,9 +304,12 @@ Konkrete Grenzziehung:
 ```text
 zu #21 (Regelsensorauswahl/Ersatzbetrieb):
   #20 liefert je Sensorrolle einen Qualitaets- und Diagnosevertrag
-  (VALID/STALE/FAILED, gefilterter Wert, Fehlerursache, Verdachtsmarkierung
-  bei Sensorwiderspruch). #20 entscheidet NICHT, welcher Sensor gerade der
-  primaere Regelsensor ist, wechselt NICHT automatisch zwischen Produkt- und
+  (VALID/STALE/FAILED, gefilterter Wert, Fehlerursache). KORREKTUR RUNDE 2:
+  #20 liefert KEINE Verdachtsmarkierung bei rollenuebergreifendem
+  Sensorwiderspruch - das war ein Restwiderspruch zu Abschnitt 11 Punkt 4
+  (dort bereits korrekt als ausserhalb #20 liegend beschrieben) und wird
+  hier entfernt. #20 entscheidet NICHT, welcher Sensor gerade der primaere
+  Regelsensor ist, wechselt NICHT automatisch zwischen Produkt- und
   Luftfuehrung und implementiert KEINE Rueckkehrstrategie
   (automatic_validated_return_to_product usw.). Diese Entscheidungen
   konsumieren #20s Output, liegen aber vollstaendig in #21.
@@ -279,13 +323,16 @@ zu #24 (Fehlerklassen/Verriegelung/SAFE_BOOT):
   Sicherheitsfehler ist #24s Aufgabe.
 
 zu #30 (reale DS18B20-Busse):
-  #20 verarbeitet ausschliesslich abstrakte, direkt im Test konstruierte
-  Eingabewerte (RawSensorSample, siehe Abschnitt 9). #20 verwendet und
-  aendert NICHT das bestehende ITemperatureSource/TemperatureReading (Port
-  bleibt fuer #20 unangetastet, siehe Abschnitt 18 Punkt "Portgrenze"). Wie
-  ein spaeterer realer DS18B20-Adapter aus #30 Bus-/CRC-/Fehlerdetails in
-  RawSensorSample-Werte uebersetzt, ist ausdruecklich #30s Aufgabe und nicht
-  Teil dieses Plans.
+  KORREKTUR RUNDE 2 (ersetzt die Vorversion vollstaendig): #20 verarbeitet
+  Proben ueber den kanonischen, in Abschnitt 9 erweiterten
+  `ITemperatureSource`-Port (`TemperatureReading`). #30 implementiert
+  GENAU DIESEN Port mit einem realen DS18B20-Adapter - es gibt keine
+  zweite, parallele Eingangsform mehr, die #30 zusaetzlich uebersetzen
+  muesste. #20 selbst enthaelt weiterhin keine 1-Wire-, GPIO- oder
+  DS18B20-Bibliothekskenntnis; die reale Bus-/CRC-Erkennung bleibt
+  vollstaendig #30s Aufgabe, sie muss nur auf denselben, bereits von #20
+  definierten Vertrag (Ok/BusFault/CrcFault/MissingSample/
+  KnownInvalidMeasurement, Abschnitt 9) abbilden.
 ```
 
 ## 8. Fachliches Zustandsmodell
@@ -314,7 +361,9 @@ Alle folgenden Uebergaenge beschreiben das FACHLICHE Verhalten; wann genau
 `quality` diesen Wert widerspiegelt, regelt Abschnitt 9a (dort als
 `snapshot(now)`-Ableitung aus rohen, bei `ingest()` fortgeschriebenen
 Zaehl-/Zeitgroessen definiert - kein Hintergrundprozess, kein bei jedem
-Uebergang separat gesetztes Feld).
+Uebergang separat gesetztes Feld, keine ITimeSource-Abhaengigkeit der
+Pipeline selbst, siehe Abschnitt 9a fuer die vollstaendige Praezisierung
+aus Runde 2).
 
 ```text
 Start (keine Probe) = Stale, kein letzter gueltiger Wert, Alter = unendlich
@@ -348,7 +397,12 @@ Sensoridentitaetswechsel (ROM-Wechsel):
   NICHT automatisch zu Valid; die Wiedererkennungsbedingung muss danach neu
   und vollstaendig erfuellt werden. Filterzustand wird bei erkanntem
   ROM-Wechsel verworfen (ein alter Medianpuffer/Tiefpasswert eines anderen
-  physischen Sensors darf nicht in den neuen Sensor hineinwirken).
+  physischen Sensors darf nicht in den neuen Sensor hineinwirken). KORREKTUR
+  RUNDE 2 (siehe Abschnitt 9): ein ROM-Wechsel wird nur erkannt, wenn ZWEI
+  aufeinanderfolgende akzeptierte Proben je eine BEKANNTE (nicht-nullopt)
+  Identitaet tragen und diese sich unterscheiden. Ein Wechsel von/zu
+  "Identitaet unbekannt" (nullopt) ist fuer sich allein KEIN ROM-Wechsel
+  (fehlende Evidenz in beide Richtungen, siehe Abschnitt 9b).
 
 Reset/Fortfuehrung der Filterzustaende:
   Valid -> Stale (kurzzeitig): Filterzustand bleibt erhalten (einzelne
@@ -370,115 +424,248 @@ Diagnosezwecken" (bei Stale/Failed, mit explizitem Alter und Status).
 `STATE_MACHINE_DEFINED: PASS`
 `RECOVERY_RULES_DEFINED: PASS`
 
-## 9. Eingangsvertrag
+## 9. Eingangsvertrag: Erweiterung des bestehenden ITemperatureSource-Ports
 
-Kein bestehender Typ deckt den geforderten Eingangsvertrag ab (siehe
-Abschnitt 4/18 "Portgrenze"). Neuer, von `ITemperatureSource` entkoppelter,
-bewusst generischer Werttyp in `device_platform` (Korrektur gegenueber der
-Vorversion: kein `StrongId`-Import aus `storage_types.hpp`, kein
-`driverFaultCode` ohne nachgewiesenen Konsumenten, roher Messwert optional
-statt eines immer-vorhandenen, nur bedingt gueltigen `double` – siehe
-Abschnitt 9a/9b und Abschnitt 13 fuer die Begruendung der
-`SensorIdentity`-Eigenstaendigkeit):
+KORREKTUR RUNDE 2 (ersetzt die Vorversion vollstaendig): Die Vorversion
+plante einen neuen, von `ITemperatureSource`/`TemperatureReading`
+entkoppelten Typ `RawSensorSample`. Das ist eine unzulaessige PARALLELE
+Eingangsarchitektur: zwei konkurrierende Vorstellungen davon, "was eine
+Temperaturprobe ist", von denen eine (der bestehende Port) faktisch
+unbenutzt verkuemmert waere. Stattdessen wird der bestehende Port GEZIELT
+zum kanonischen, generischen Rohprobenvertrag weiterentwickelt. Der spaetere
+Adapter aus #30 implementiert genau diesen (dann bereits existierenden)
+Port. `RawSensorSample` entfaellt ersatzlos; alle seine Faelle werden vom
+erweiterten `TemperatureReading` abgedeckt.
+
+Betroffene, im Diff dieses Issues zu aendernde BESTEHENDE Dateien (siehe
+Abschnitt 14): `lib/device_platform/src/temperature_source.hpp`,
+`lib/device_platform_test_support/src/mock_temperature_source.hpp/.cpp`,
+`test/test_sensor_actuator_mocks/test_sensor_actuator_mocks.cpp` (nur die
+drei temperaturbezogenen Testfunktionen).
+
+### 9.0 SensorIdentity (eigenstaendig, gueltig-by-construction, kein 0-Sentinel)
+
+KORREKTUR RUNDE 2: `SensorIdentity` liess in der Vorversion `0` als
+"unbekannte Identitaet" konstruierbar zu - ein unklarer Sentinel innerhalb
+eines Typs, der ansonsten wie eine echte Sensor-ID aussieht (nichts an
+`SensorIdentity(0)` unterscheidet sich strukturell von einer echten,
+zufaellig auf `0` lautenden ID). Jetzt gueltig-by-construction, `0` wird
+abgelehnt; "Identitaet (noch) nicht bekannt" wird stattdessen ausschliesslich
+ueber `std::optional<SensorIdentity>` auf der naechsthoeheren Ebene
+(`TemperatureReading`, Abschnitt 9.1) modelliert - niemals als Sonderwert
+innerhalb von `SensorIdentity` selbst:
 
 ```cpp
-// sensor_sample.hpp
-enum class SensorTransportStatus : uint8_t {
+// sensor_identity.hpp – eigenstaendig, keine Abhaengigkeit auf storage_types.hpp
+enum class SensorIdentityStatus : uint8_t {
+    Success,
+    // 0 ist kein gueltiger Identitaetswert - er waere von einer "unbekannt"-
+    // Bedeutung nicht unterscheidbar. "Unbekannt" wird ausschliesslich durch
+    // Abwesenheit (std::optional<SensorIdentity>) dargestellt, nie durch
+    // einen Wert innerhalb dieses Typs.
+    ZeroIsNotAValidIdentity,
+};
+
+struct SensorIdentityCreateResult;  // vorwaertsdeklariert
+
+class SensorIdentity {
+   public:
+    [[nodiscard]] static SensorIdentityCreateResult create(uint64_t value);
+    [[nodiscard]] constexpr uint64_t value() const { return value_; }
+    friend constexpr bool operator==(SensorIdentity a, SensorIdentity b) {
+        return a.value_ == b.value_;
+    }
+    friend constexpr bool operator!=(SensorIdentity a, SensorIdentity b) {
+        return !(a == b);
+    }
+   private:
+    constexpr explicit SensorIdentity(uint64_t value) : value_(value) {}
+    uint64_t value_;
+};
+
+struct SensorIdentityCreateResult {
+    SensorIdentityStatus status{SensorIdentityStatus::ZeroIsNotAValidIdentity};
+    std::optional<SensorIdentity> identity;
+};
+```
+
+`sensor_identity.hpp` haengt weiterhin bewusst NICHT auf `storage_types.hpp`
+(siehe Abschnitt 13a fuer die unveraendert guelitge Begruendung der
+Domaenentrennung).
+
+### 9.1 TemperatureReading (erweitert, gueltig-by-construction)
+
+```cpp
+// temperature_source.hpp (ERWEITERUNG der bestehenden Datei)
+enum class TemperatureSampleStatus : uint8_t {
     Ok,
     BusFault,
     CrcFault,
     MissingSample,
-    // Der (spaetere) Adapter hat den Rohwert bereits selbst als einen ihm
-    // bekannten ungueltigen Messwert erkannt (z. B. einen
-    // Sensor-/Treiber-spezifischen Einschalt- oder Diskonnektwert). Die
-    // KONKRETE Erkennung bleibt Aufgabe des jeweiligen Adapters (#30);
-    // #20 kennt nur diesen generischen Status, keine Sensor-/
-    // Treiberkonstanten (siehe Abschnitt 10.1).
+    // Der Adapter hat den Rohwert bereits selbst als einen ihm bekannten
+    // ungueltigen Messwert erkannt (z. B. einen Sensor-/Treiber-
+    // spezifischen Einschalt- oder Diskonnektwert). Die KONKRETE Erkennung
+    // bleibt Aufgabe des jeweiligen Adapters (#30); #20 kennt nur diesen
+    // generischen Status, keine Sensor-/Treiberkonstanten (Abschnitt 10.1).
     KnownInvalidMeasurement,
 };
 
-struct RawSensorSample {
-    SensorIdentity identity;
-    uint64_t monotonicTimestampMs;      // Erfassungszeit dieser Probe
-    std::optional<double> rawCelsius;   // nullopt, wenn transportStatus != Ok
-    SensorTransportStatus transportStatus;
+enum class TemperatureReadingStatus : uint8_t {
+    Success,
+    // status == Ok, aber celsius fehlt, ODER status != Ok, aber celsius ist
+    // gesetzt. Genau eine der beiden Kombinationen ist gueltig.
+    InconsistentValuePresence,
+};
+
+struct TemperatureReadingCreateResult;  // vorwaertsdeklariert
+
+// Kanonischer Rohprobenvertrag: gueltig-by-construction erzwingt
+//   status == Ok             <=> celsius().has_value() == true
+//   status != Ok              <=> celsius().has_value() == false
+// identity ist unabhaengig davon optional (nullopt = dem Adapter noch nicht
+// bekannt, z. B. vor erster Busenumeration); wenn gesetzt, ist es bereits
+// ein gueltiges SensorIdentity (Abschnitt 9.0, kein 0-Sentinel moeglich).
+class TemperatureReading {
+   public:
+    [[nodiscard]] static TemperatureReadingCreateResult create(
+        std::optional<SensorIdentity> identity,
+        uint64_t monotonicTimestampMs,
+        TemperatureSampleStatus status,
+        std::optional<double> celsius);
+
+    [[nodiscard]] std::optional<SensorIdentity> identity() const { return identity_; }
+    [[nodiscard]] uint64_t monotonicTimestampMs() const { return monotonicTimestampMs_; }
+    [[nodiscard]] TemperatureSampleStatus status() const { return status_; }
+    [[nodiscard]] std::optional<double> celsius() const { return celsius_; }
+
+   private:
+    TemperatureReading(std::optional<SensorIdentity> identity,
+                        uint64_t monotonicTimestampMs,
+                        TemperatureSampleStatus status,
+                        std::optional<double> celsius);
+    std::optional<SensorIdentity> identity_;
+    uint64_t monotonicTimestampMs_;
+    TemperatureSampleStatus status_;
+    std::optional<double> celsius_;
+};
+
+struct TemperatureReadingCreateResult {
+    TemperatureReadingStatus status{TemperatureReadingStatus::InconsistentValuePresence};
+    std::optional<TemperatureReading> reading;
+};
+
+// Anwendungsneutraler Port fuer eine einzelne Temperaturfuehlerrolle.
+// Signatur UNVERAENDERT gegenueber der bisherigen Fassung (kein Konsument
+// ausserhalb dieser drei Dateien existiert, siehe Abschnitt 4); nur der
+// Rueckgabewerttyp TemperatureReading ist jetzt reichhaltiger.
+class ITemperatureSource {
+   public:
+    ITemperatureSource() = default;
+    virtual ~ITemperatureSource() = default;
+    ITemperatureSource(const ITemperatureSource&) = delete;
+    ITemperatureSource& operator=(const ITemperatureSource&) = delete;
+    ITemperatureSource(ITemperatureSource&&) = delete;
+    ITemperatureSource& operator=(ITemperatureSource&&) = delete;
+
+    [[nodiscard]] virtual TemperatureReading read() const = 0;
 };
 ```
 
-Begruendung: `TemperatureReading{available,celsius}` unterscheidet weder
+Begruendung fuer die Erweiterung statt Neubau: Die bisherige
+`TemperatureReading{bool available; double celsius;}` unterscheidet weder
 Bus- von CRC-Fehlern noch eine fehlende von einer verfuegbaren, aber
-unplausiblen Probe, und traegt keinen Zeitstempel. Der Auftrag verlangt in
-Abschnitt 6 ausdruecklich diese feinere Unterscheidung. `RawSensorSample`
-ist ein reiner Werttyp ohne Bus-/Treiberabhaengigkeit; die Uebersetzung von
-`ITemperatureSource`/einem spaeteren realen DS18B20-Adapter in
-`RawSensorSample` ist Aufgabe der Komposition bzw. von #30 und nicht Teil
-dieses Plans (siehe Abschnitt 18, Portgrenze).
+unplausiblen Probe, und traegt keinen Zeitstempel. #20 braucht diese
+feinere Unterscheidung; sie gehoert an genau die Stelle, an der #30 sie
+spaeter ohnehin liefern muss - den Port selbst. `driverFaultCode` (aus der
+ersten Nachkorrekturrunde erwogen) bleibt weiterhin entfernt: kein
+Konsument innerhalb von #20 verwendet ein solches Feld.
 
-`driverFaultCode` (Vorversion) entfaellt ersatzlos: kein Konsument innerhalb
-von #20 verwendet dieses Feld (auch der bisherige Diagnosevertrag,
-Abschnitt 12, hat es nie gelesen). Ein roher Treibercode ohne nachgewiesenen
-heutigen Konsumenten ist spekulative Flaeche und wird bei Bedarf mit dem
-Issue ergaenzt, das ihn tatsaechlich braucht (voraussichtlich #30).
+`CANONICAL_TEMPERATURE_INPUT_PORT: PASS`
+`PARALLEL_INPUT_CONTRACTS: 0`
+`RAW_SAMPLE_VALID_BY_CONSTRUCTION: PASS`
+`SENSOR_IDENTITY_SENTINEL_FREE: PASS`
 
 ### 9a. Einziger monotoner Zeitvertrag
 
 ```text
 Es existiert GENAU EINE Uhr im Gesamtsystem (produktiv: die konkrete
-ITimeSource-Instanz der Composition Root; nativ: VirtualTimeSource). Ihr
-monotoner Millisekundenwert fliesst AUSSCHLIESSLICH als expliziter Parameter
-in die neuen #20-Typen ein - niemals als gespeicherte/injizierte
-ITimeSource-Abhaengigkeit innerhalb von SensorQualityPipeline (Korrektur:
-die Vorversion nannte in Abschnitt 14 faelschlich eine zusaetzliche, in der
-Pipeline gehaltene "ITimeSource-Referenz" - das war eine versteckte zweite
-Zeitquelle und entfaellt ersatzlos).
+ITimeSource-Instanz der Composition Root bzw. des #30-Adapters; nativ:
+VirtualTimeSource). Ihr monotoner Millisekundenwert fliesst AUSSCHLIESSLICH
+als expliziter Parameter oder als Feld einer bereits konstruierten
+TemperatureReading in die #20-Typen ein - niemals als gespeicherte/
+injizierte ITimeSource-Abhaengigkeit innerhalb von SensorQualityPipeline.
 
-Zwei Eintrittspunkte, beide mit explizitem Zeitbezug:
+Drei Eintrittspunkte, alle mit explizitem Zeitbezug:
 
-  RawSensorSample.monotonicTimestampMs
-    - die Erfassungszeit EINER Probe, vom Aufrufer beim Erzeugen der Probe
-      aus der einen Uhr gelesen.
+  TemperatureReading::monotonicTimestampMs()
+    - die Erfassungszeit EINER Probe, vom erzeugenden Adapter/Mock/Test aus
+      der einen Uhr gelesen und beim create()-Aufruf uebergeben.
 
-  SensorQualityPipeline::ingest(const RawSensorSample& sample,
-                                 uint64_t nowMonotonicMs)
+  SensorQualityPipeline::ingest(const TemperatureReading& sample,
+                                 uint64_t nowMonotonicMs) -> SampleDisposition
     - nowMonotonicMs ist derselbe Uhrwert, zum Zeitpunkt des ingest()-Aufrufs
       vom Aufrufer gelesen; dient AUSSCHLIESSLICH der Zukunftspruefung
-      (Abschnitt 9b) und wird nicht gespeichert.
+      (Abschnitt 9b) und wird nicht gespeichert. Rueckgabewert: die klar
+      definierte SampleDisposition dieser einen Probe (Abschnitt 9b/12) -
+      kein `void`, kein unklarer Seiteneffekt.
 
   SensorQualityPipeline::snapshot(uint64_t nowMonotonicMs) const
-    - liefert Altersfelder (lastSampleAgeMs/lastValidSampleAgeMs) relativ zu
-      diesem explizit uebergebenen "jetzt", nicht relativ zu einer intern
-      gespeicherten Uhr. Ein Aufrufer, der lange nicht snapshot() aufruft,
-      bekommt beim naechsten Aufruf trotzdem ein korrektes, aktuelles Alter.
+    -> SensorQualitySnapshot
+    - liefert Qualitaet und Altersfelder relativ zu diesem explizit
+      uebergebenen "jetzt", nicht relativ zu einer intern gespeicherten Uhr.
 
 SensorQualityPipeline selbst haelt KEIN ITimeSource-Feld, keine Referenz und
 keinen Zeiger auf eine Uhr - sie ist bezueglich Zeit eine reine Funktion der
-uebergebenen Werte. Das erfuellt Dependency Inversion (Abschnitt 15, Punkt D)
-sogar staerker als in der Vorversion.
+uebergebenen Werte (siehe Abschnitt 15, Punkt D: KEINE Abhaengigkeit auf
+ITimeSource, auch nicht als Abstraktion).
 
-WICHTIGE FOLGE fuer die Alters-/Failed-Eskalation (Abschnitt 8): Ohne
-gespeicherte Uhr kann `quality` nicht als Hintergrundprozess "von selbst"
-nach kMaxStaleAgeMs auf Failed wechseln, waehrend gar kein ingest() mehr
-aufgerufen wird (z. B. weil der Sensor komplett verstummt ist). Deshalb ist
-`quality` in dieser Pipeline eine in `snapshot(nowMonotonicMs)` ABGELEITETE
-Groesse, kein bei ingest() separat fortgeschriebener gespeicherter Zustand:
+Der Tiefpass (Abschnitt 10.5) verwendet AUSSCHLIESSLICH die Zeitstempel der
+akzeptierten Proben (`TemperatureReading::monotonicTimestampMs()`) fuer
+`dtSeconds` - NICHT `nowMonotonicMs` und NICHT irgendeine andere
+ITimeSource-Quelle. `nowMonotonicMs` wird ausschliesslich fuer
+Zukunftspruefung (ingest) und Altersberechnung (snapshot) verwendet, niemals
+fuer die Filterdynamik selbst.
 
-  - ingest() aktualisiert ausschliesslich die rohen Zaehl-/Zeitgroessen:
-    letzter akzeptierter Zeitstempel/Rohwert, letzter gueltiger Zeitstempel/
-    Rohwert, consecutiveInvalidCount, recoveryProgressCount, Filterzustand.
-    ingest() selbst trifft KEINE Stale/Failed-Entscheidung.
-  - snapshot(nowMonotonicMs) berechnet `quality` jedes Mal frisch aus diesen
-    gespeicherten Groessen KOMBINIERT MIT dem uebergebenen nowMonotonicMs
-    (insbesondere: nowMonotonicMs - letzter gueltiger Zeitstempel >
-    kMaxStaleAgeMs -> Failed). snapshot() bleibt dadurch eine reine,
-    lesende (`const`) Ableitung - kein verstecktes Mutieren bei reinem
-    Lesezugriff.
+### Eine Ableitungsfunktion, zwei Aufrufstellen, keine zweite Qualitaetswahrheit
+
+Ohne gespeicherte Uhr kann `quality` nicht als Hintergrundprozess "von
+selbst" nach kMaxStaleAgeMs auf Failed wechseln, waehrend gar kein ingest()
+mehr aufgerufen wird. Deshalb ist `quality` eine ABGELEITETE Groesse:
+
+  - Eine einzige interne Hilfsfunktion `deriveQuality(referenceTimeMs)`
+    berechnet quality/Alter/Regelwertfaehigkeit ausschliesslich aus den
+    gespeicherten rohen Zaehl-/Zeitgroessen (letzter akzeptierter/gueltiger
+    Zeitstempel, consecutiveInvalidCount, recoveryProgressCount) KOMBINIERT
+    MIT dem uebergebenen referenceTimeMs. Es gibt NUR diese eine
+    Implementierung.
+
+  - snapshot(nowMonotonicMs) ruft deriveQuality(nowMonotonicMs) auf und
+    bleibt dadurch eine reine, lesende (`const`) Ableitung - kein
+    verstecktes Mutieren bei reinem Lesezugriff.
+
+  - ingest(sample, nowMonotonicMs) DARF intern deriveQuality(sample.
+    monotonicTimestampMs()) aufrufen, um zu entscheiden, ob die neu
+    eingetroffene, plausible Probe eine FORTSETZUNG eines bereits Valid
+    laufenden Zustands ist (Filter normal fortfuehren) oder den BEGINN
+    einer Wiedererkennung nach Stale/Failed markiert (Filterzustand
+    verwerfen, recoveryProgressCount bei 1 beginnen, siehe Abschnitt 8/10.3/
+    10.5). Diese interne Berechnung wird NICHT als zweites, persistentes
+    `quality`-Feld gespeichert - sie ist ein einmaliger Entscheidungsschritt
+    innerhalb des ingest()-Aufrufs, der dieselbe deriveQuality()-Funktion
+    wiederverwendet, nur mit der Probenzeit statt der Aufrufer-"now" als
+    Referenzzeitpunkt. Ein anschliessender snapshot(now)-Aufruf leitet
+    quality unabhaengig und konsistent aus denselben rohen Groessen neu ab.
 
 Damit erkennt JEDER spaetere snapshot(now)-Aufruf einen laengst verstummten
 Sensor korrekt als Failed, unabhaengig davon, wie lange zuvor kein ingest()
-mehr aufgerufen wurde - #20 zwingt dem Aufrufer keine "es muss jeden Zyklus
-mindestens ein MissingSample-ingest() erfolgen"-Pflicht auf, die andernfalls
-still vorausgesetzt und leicht verletzt werden koennte.
+mehr aufgerufen wurde, UND der Filterreset bei Wiedererkennung funktioniert
+korrekt, ohne eine zweite, potenziell abweichende Qualitaetswahrheit zu
+speichern.
 ```
+
+`SINGLE_MONOTONIC_TIME_CONTRACT: PASS`
+`INGEST_RESULT_DEFINED: PASS`
+`TIME_AND_DERIVED_QUALITY_CONSISTENT: PASS`
 
 ### 9b. Zeitstempel- und Dispositionsregeln
 
@@ -487,18 +674,16 @@ Jede eingehende Probe erhaelt GENAU EINE der folgenden Dispositionen (siehe
 SampleDisposition, Abschnitt 12); erst bei Accepted durchlaeuft sie die
 Plausibilitaetsstufen aus Abschnitt 10:
 
-  identischer Zeitstempel + identischer Rohwert wie die zuletzt akzeptierte
-    Probe -> DuplicateIgnored. Kein Effekt auf Alter, Zustandsmaschine oder
-    Filterinhalt (reiner Doppelversand, keine neue Information).
+  identischer Zeitstempel + identischer Rohwert (inkl. identischem status)
+    wie die zuletzt akzeptierte Probe -> DuplicateIgnored. Kein Effekt auf
+    Alter, Zustandsmaschine oder Filterinhalt (reiner Doppelversand, keine
+    neue Information).
 
-  identischer Zeitstempel + abweichender Rohwert (oder abweichender
-    transportStatus) wie die zuletzt akzeptierte Probe -> RejectedTimestampConflict.
-    Zwei widerspruechliche Werte fuer denselben Erfassungszeitpunkt sind kein
+  identischer Zeitstempel + abweichender Rohwert (oder abweichender status)
+    wie die zuletzt akzeptierte Probe -> RejectedTimestampConflict. Zwei
+    widerspruechliche Werte fuer denselben Erfassungszeitpunkt sind kein
     gueltiger Messvorgang; es wird KEINE der beiden Varianten bevorzugt
-    akzeptiert (Korrektur gegenueber der Vorversion, die dies faelschlich als
-    naechste Probe akzeptiert und dafuer eine kuenstliche
-    Mindest-Zeitdifferenz fuer die Aenderungsratenpruefung noetig gemacht
-    haette). Da RejectedTimestampConflict-Proben nie akzeptiert werden,
+    akzeptiert. Da RejectedTimestampConflict-Proben nie akzeptiert werden,
     bleiben aufeinanderfolgende akzeptierte Zeitstempel immer strikt
     steigend; die Aenderungsratenpruefung (Abschnitt 10.2) braucht deshalb
     keine erfundene Mindest-Zeitdifferenz, sondern kann echte Division durch
@@ -515,10 +700,20 @@ Plausibilitaetsstufen aus Abschnitt 10:
 
 Keine der Ablehnungsdispositionen (DuplicateIgnored, RejectedTimestampConflict,
 RejectedRetrograde, RejectedFuture) zaehlt als "ungueltige Probe" im Sinne der
-Zustandsmaschine (Abschnitt 8): Es sind Transport-/Protokollanomalien der
-Zufuhr, keine Evidenz gegen die Sensorgesundheit. Nur eine tatsaechlich
-Accepted, aber danach in Abschnitt 10.1/10.2 als unplausibel erkannte Probe
-zaehlt in consecutiveInvalidCount.
+Zustandsmaschine (Abschnitt 8) UND KEINE aktualisiert
+lastAcceptedSampleAgeMs (Abschnitt 12) - es sind Transport-/
+Protokollanomalien der Zufuhr, keine Evidenz gegen die Sensorgesundheit und
+keine neue "letzte Probe" im Sinne des Diagnosevertrags. Nur eine
+tatsaechlich Accepted, aber danach in Abschnitt 10.1/10.2 als unplausibel
+erkannte Probe zaehlt in consecutiveInvalidCount.
+
+ROM-Wechsel-Erkennung (Praezisierung Runde 2): identity() zweier
+aufeinanderfolgender AKZEPTIERTER Proben wird verglichen. Sind BEIDE
+identity()-Werte gesetzt (nicht nullopt) und unterschiedlich ->
+IdentityMismatch (Abschnitt 8/11). Ist mindestens einer der beiden nullopt,
+wird KEIN ROM-Wechsel gemeldet (fehlende Evidenz; ein Uebergang von
+"unbekannt" zu "erstmals bekannt" ist normales Anlaufverhalten, kein
+Fehler).
 
 Weitere behandelte Faelle:
 
@@ -528,46 +723,49 @@ Weitere behandelte Faelle:
     Aenderungsratenpruefung ohne Vorwert (erste Probe nach Luecke kann nicht
     als "Sprung" bewertet werden, da kein unmittelbar vorheriger gueltiger
     Wert existiert).
-  Sensor-/ROM-Wechsel: siehe Abschnitt 8 und 11.
-  nicht endlicher Wert (NaN/Inf) in rawCelsius: Accepted auf Zeitstempelebene
-    (Zeitstempelregeln kennen den Rohwert nicht), aber in Abschnitt 10.2 als
-    eigene SensorFaultReason::NonFinite erkannt (std::isfinite) - siehe
-    Abschnitt 12 fuer den vervollstaendigten Enum.
+  nicht endlicher Wert (NaN/Inf) in celsius(): Accepted auf
+    Zeitstempelebene (Zeitstempelregeln kennen den Rohwert nicht), aber in
+    Abschnitt 10.2 als eigene SensorFaultReason::NonFinite erkannt
+    (std::isfinite) - siehe Abschnitt 12 fuer den vollstaendigen Enum.
 ```
 
-`INPUT_CONTRACT_DEFINED: PASS`
 `GENERIC_INPUT_CONTRACT: PASS`
-`SINGLE_MONOTONIC_TIME_CONTRACT: PASS`
 
 ## 10. Verarbeitungspipeline
 
-Reihenfolge exakt wie in Abschnitt 5 des Auftrags und in
+Reihenfolge exakt wie in Abschnitt 5 des urspruenglichen Auftrags und in
 `docs/ARCHITECTURE.md`/`docs/SENSOR_TUNING_COMMISSIONING.md` vorgegeben.
 Jede Stufe ist eine eigene kleine, testbare Komponente (SRP), orchestriert
 von einer duennen `SensorQualityPipeline`. Eine Probe durchlaeuft Abschnitt
 10 ueberhaupt nur, wenn sie gemaess Abschnitt 9b als `Accepted` disponiert
 wurde.
 
-### 10.0 SensorQualityConfig (vollstaendig, gueltig-by-construction)
+### 10.0 SensorQualityConfig (vollstaendig, gueltig-by-construction, NaN/Inf-sicher)
 
-Korrektur gegenueber der Vorversion: `SensorQualityConfig` wurde bisher nur
-an mehreren Stellen ERWAEHNT, aber nie als konkreter Typ definiert. Nach dem
-`StateStoreKey`-Muster (privater Konstruktor, statisches `create()`,
+Nach dem `StateStoreKey`-Muster (privater Konstruktor, statisches `create()`,
 `...CreateResult{status; optional<T>}`) validiert die Konfiguration alle
 Instanzparameter bereits bei Erzeugung, statt fehlerhafte Kombinationen erst
-zur Laufzeit der Pipeline zu bemerken:
+zur Laufzeit der Pipeline zu bemerken. KORREKTUR RUNDE 2: `create()` prueft
+JEDEN `double`-Parameter zuerst explizit mit `std::isfinite()`, bevor
+irgendeine Bereichs-/Beziehungspruefung erfolgt - NaN oder Inf duerfen keine
+der nachfolgenden Vergleiche (z. B. `min >= max`) unbemerkt passieren
+lassen (`NaN >= x` ist immer `false`, wuerde also eine Bereichsverletzung
+verschleiern):
 
 ```cpp
 // sensor_quality_config.hpp
 enum class SensorQualityConfigStatus : uint8_t {
     Success,
-    InvalidMedianWindowSize,     // 0, gerade, oder > sensor_limits::kMaxMedianWindowSize
-    InvalidLowPassTimeConstant,  // <= 0.0
-    InvalidPlausibleRange,       // min >= max, oder ausserhalb sensor_limits-Aussengrenze
-    InvalidRateOfChangeLimit,    // <= 0.0
-    InvalidStaleAgeThreshold,    // 0, oder > sensor_limits::kMaxStaleAgeCeilingMs
+    InvalidMedianWindowSize,       // 0, gerade, oder > sensor_limits::kMaxMedianWindowSize
+    // Mindestens einer der double-Parameter ist NaN oder Inf. Wird VOR
+    // jeder Bereichs-/Beziehungspruefung erkannt.
+    NonFiniteParameter,
+    InvalidLowPassTimeConstant,    // <= 0.0
+    InvalidPlausibleRange,         // min >= max, oder ausserhalb sensor_limits-Aussengrenze
+    InvalidRateOfChangeLimit,      // <= 0.0
+    InvalidStaleAgeThreshold,      // 0, oder > sensor_limits::kMaxStaleAgeCeilingMs
     InvalidConsecutiveInvalidLimit, // 0, oder > sensor_limits-Obergrenze
-    InvalidRecoveryThresholds,   // minConsecutiveValidSamples == 0
+    InvalidRecoveryThresholds,     // minConsecutiveValidSamples == 0
 };
 
 struct SensorQualityConfigCreateResult;  // vorwaertsdeklariert
@@ -597,7 +795,18 @@ struct SensorQualityConfigCreateResult {
 };
 ```
 
-`create()` prueft ausschliesslich gegen firmwarefeste Aussengrenzen aus
+Validierungsreihenfolge in `create()`: (1) `std::isfinite()` auf
+`lowPassTauSeconds`, `minPlausibleCelsius`, `maxPlausibleCelsius`,
+`maxRateOfChangeCelsiusPerSecond` - jede Verletzung -> `NonFiniteParameter`;
+(2) `medianWindowSize` (0/gerade/zu gross); (3) `lowPassTauSeconds <= 0`;
+(4) `minPlausibleCelsius >= maxPlausibleCelsius` ODER ausserhalb der
+firmwarefesten Aussengrenze aus `sensor_limits.hpp`; (5)
+`maxRateOfChangeCelsiusPerSecond <= 0`; (6) `maxStaleAgeMs`; (7)
+`maxConsecutiveInvalid`; (8) `minConsecutiveValidSamples == 0`. Jede Stufe
+prueft nur, was vorher nicht schon verworfen wurde - keine doppelte
+Fehlerklassifikation.
+
+`create()` prueft ausserdem gegen firmwarefeste Aussengrenzen aus
 `sensor_limits.hpp` (siehe Abschnitt 14); die konkreten Tuning-Werte selbst
 (Fenstergroesse, Tau, Plausibilitaetsband, Ratenlimit, Alters-/
 Wiedererkennungsschwellen) bleiben `TBD_COMMISSIONING` (Abschnitt 18) und
@@ -608,20 +817,21 @@ Kalibrierwert pro Probe/Sensorinstanz, keine Pipeline-Verhaltensparametrierung
 (SRP-Trennung).
 
 `SENSOR_QUALITY_CONFIG_DEFINED: PASS`
+`NONFINITE_CONFIG_REJECTED: PASS`
 
 ### 10.1 Transport-/CRC-/Messstatusstufe (generisch, keine sensor-/treiberspezifischen Konstanten)
 
 ```text
-transportStatus != Ok -> Probe ungueltig, Ursache uebernimmt direkt den
-  Transportstatus (BusFault/CrcFault/MissingSample/KnownInvalidMeasurement,
-  siehe Abschnitt 9/12), keine weitere Stufe verarbeitet rawCelsius.
+status() != Ok -> Probe ungueltig, Ursache uebernimmt direkt den
+  TemperatureSampleStatus (BusFault/CrcFault/MissingSample/
+  KnownInvalidMeasurement, siehe Abschnitt 9.1/12), keine weitere Stufe
+  verarbeitet celsius().
 
-Korrektur gegenueber der Vorversion: #20 selbst kennt KEINE
-sensor-/treiberspezifischen Zahlenkonstanten (z. B. keinen DS18B20-
-Einschalt- oder Diskonnektwert) und sensor_limits.hpp enthaelt keine solche
-Konstante. Ein spaeterer Adapter (#30) erkennt sensor-/treiberspezifische
-bekannte Fehlerwerte selbst und liefert dafuer bereits
-transportStatus = KnownInvalidMeasurement; #20 behandelt diesen Status
+#20 selbst kennt KEINE sensor-/treiberspezifischen Zahlenkonstanten (z. B.
+keinen DS18B20-Einschalt- oder Diskonnektwert) und sensor_limits.hpp
+enthaelt keine solche Konstante. Ein spaeterer Adapter (#30) erkennt
+sensor-/treiberspezifische bekannte Fehlerwerte selbst und liefert dafuer
+bereits status = KnownInvalidMeasurement; #20 behandelt diesen Status
 generisch wie jeden anderen Transportfehler. Damit bleibt device_platform
 frei von Sensor-/Treiberkenntnis (ADR-013, lib/device_platform/AGENTS.md).
 ```
@@ -631,23 +841,23 @@ frei von Sensor-/Treiberkenntnis (ADR-013, lib/device_platform/AGENTS.md).
 ### 10.2 Physikalischer Wertebereich und Aenderungsrate
 
 ```text
-Nur erreicht, wenn transportStatus == Ok UND rawCelsius.has_value() (durch
-Konstruktion immer gemeinsam wahr, siehe Abschnitt 9).
+Nur erreicht, wenn status() == Ok UND celsius().has_value() (durch
+Konstruktion immer gemeinsam wahr, siehe Abschnitt 9.1).
 
-nicht endlicher Rohwert (!std::isfinite(*rawCelsius)) -> ungueltig,
+nicht endlicher Rohwert (!std::isfinite(*celsius())) -> ungueltig,
   Ursache = NonFinite.
-rawCelsius ausserhalb [kAbsoluteMinCelsius, kAbsoluteMaxCelsius]
+celsius() ausserhalb [kAbsoluteMinCelsius, kAbsoluteMaxCelsius]
   (firmwarefest, sensor_limits.hpp) -> ungueltig, Ursache = OutOfRange.
-Aenderungsrate = |rawCelsius - letzterGueltigerRohwert| /
-  ((timestampMs - letzterGueltigerTimestampMs) / 1000.0), nur berechnet wenn
-  ein unmittelbar vorheriger gueltiger Wert existiert. Da RejectedTimestampConflict-
-  Proben (Abschnitt 9b) nie akzeptiert werden, ist die Zeitdifferenz zwischen
-  zwei aufeinanderfolgenden akzeptierten Proben immer echt > 0 - keine
-  kuenstliche Mindest-Zeitdifferenz noetig (Korrektur gegenueber der
-  Vorversion). Ueberschreitet die Rate den in SensorQualityConfig
-  konfigurierten kMaxRateOfChangeCelsiusPerSecond -> ungueltig,
-  Ursache = RateOfChangeExceeded. Ein einzelner Sprung fuehrt NICHT sofort zu
-  FAILED (siehe Akzeptanzkriterium "einzelne Fehlerwerte stoppen nicht sofort
+Aenderungsrate = |celsius() - letzterGueltigerRohwert| /
+  ((monotonicTimestampMs() - letzterGueltigerTimestampMs) / 1000.0), nur
+  berechnet wenn ein unmittelbar vorheriger gueltiger Wert existiert. Da
+  RejectedTimestampConflict-Proben (Abschnitt 9b) nie akzeptiert werden,
+  ist die Zeitdifferenz zwischen zwei aufeinanderfolgenden akzeptierten
+  Proben immer echt > 0 - keine kuenstliche Mindest-Zeitdifferenz noetig.
+  Ueberschreitet die Rate den in SensorQualityConfig konfigurierten
+  kMaxRateOfChangeCelsiusPerSecond -> ungueltig, Ursache =
+  RateOfChangeExceeded. Ein einzelner Sprung fuehrt NICHT sofort zu FAILED
+  (siehe Akzeptanzkriterium "einzelne Fehlerwerte stoppen nicht sofort
   dauerhaft"), sondern zaehlt als eine ungueltige Probe im Sinne von
   Abschnitt 8.
 ```
@@ -663,7 +873,10 @@ gemessener Wert ist (kein Mittelwert zweier mittlerer Werte), was
 Testorakel und Nachvollziehbarkeit vereinfacht (KISS).
 Vor gefuelltem Fenster: Median aus den bisher vorhandenen (< voller
   Fenstergroesse) gueltigen Werten, NICHT aus mit 0 aufgefuellten
-  Phantomwerten.
+  Phantomwerten. Bereits NACH DEM ERSTEN gueltigen Beitrag liefert der
+  Median einen echten Wert (den einzigen bisher vorhandenen) - er ist NICHT
+  erst nach vollstaendig gefuelltem Fenster verfuegbar (Korrektur Runde 2,
+  siehe Abschnitt 12).
 Nur PLAUSIBLE Proben (nach 10.1/10.2 gueltig) gelangen ins Fenster.
 Nach FAILED/ROM-Wechsel: Fenster wird geleert (siehe Abschnitt 8).
 Feste Ringpuffer-Kapazitaet, keine Heapallokation (std::array, kein
@@ -672,8 +885,9 @@ std::vector).
 
 ### 10.4 Kalibrier-Offset
 
-`SensorOffset` ist bereits in Abschnitt 13a vollstaendig und
-gueltig-by-construction definiert (keine erneute Definition hier).
+`SensorOffset` ist bereits in Abschnitt 13a vollstaendig,
+gueltig-by-construction und NaN/Inf-sicher definiert (keine erneute
+Definition hier).
 
 ```text
 #20 nimmt ausschliesslich einen bereits erfolgreich per
@@ -694,9 +908,13 @@ korrigierter Werte innerhalb eines Medianfensters fuehren).
 Einfacher zeitkonstantenbasierter Exponentialfilter:
   gefiltert_neu = gefiltert_alt + (korrigierterWert - gefiltert_alt) *
                   (1 - exp(-dtSeconds / tauSeconds))
-  dtSeconds = tatsaechlich vergangene Zeit seit letztem Filterschritt
-  (aus ITimeSource-Zeitstempeln), keine feste Zykluszeit-Annahme, auch wenn
-  der Regelzyklus nominal ~2 s betraegt (robust gegen Jitter/Luecken).
+  dtSeconds = Differenz zwischen den monotonicTimestampMs()-Werten der
+  aktuellen und der vorherigen AKZEPTIERTEN Probe, NICHT aus
+  nowMonotonicMs oder irgendeiner anderen Zeitquelle (Korrektur Runde 2 -
+  siehe Abschnitt 9a: die Pipeline haelt ohnehin keine ITimeSource-
+  Referenz; "aus ITimeSource-Zeitstempeln" war eine irrefuehrende
+  Restformulierung). Keine feste Zykluszeit-Annahme, auch wenn der
+  Regelzyklus nominal ~2 s betraegt (robust gegen Jitter/Luecken).
 Rollenabhaengige Parametrierung ausschliesslich ueber unterschiedliche
   tauSeconds-Werte in der je Instanz uebergebenen SensorQualityConfig (siehe
   Abschnitt 10.0) – keine rollenspezifische Codeverzweigung (DRY).
@@ -711,11 +929,13 @@ Rohpfad (10.1-10.2, Sicherheitspruefung) bleibt strikt getrennt vom
 ```
 
 `FILTER_PIPELINE_DEFINED: PASS`
+`ITIME_SOURCE_CONTRADICTIONS: 0`
 
 ## 11. Widerspruchs- und Plausibilitaetsbewertung (rollenuebergreifend)
 
-Der Auftrag (Abschnitt 8) verlangt, vier Faelle zu unterscheiden. Diese
-werden hier vollstaendig durchdekliniert, statt implizit zu bleiben:
+Der urspruengliche Auftrag (Abschnitt 8) verlangt, vier Faelle zu
+unterscheiden. Diese werden hier vollstaendig durchdekliniert, statt
+implizit zu bleiben:
 
 ```text
 1. sicher erkannter technischer Fehler
@@ -751,14 +971,16 @@ werden hier vollstaendig durchdekliniert, statt implizit zu bleiben:
       -verriegelung (Punkte 1-5 im Abschnitt "Widerspruechliche
       Sensorwerte") und damit inhaltlich zu #21/#24. #20 liefert dafuer NUR
       die notwendige Evidenz je Rolle - rawCelsius, filteredCelsius,
-      changeRateCelsiusPerSecond, lastSampleAgeMs/lastValidSampleAgeMs,
-      lastFaultReason (alle bereits Teil des Diagnosevertrags, Abschnitt
-      12) - und trifft selbst KEINE Schuldzuweisung/Verdaechtigung
-      zwischen Rollen, da #20 (siehe Abschnitt 13) keine Rollenkenntnis
-      besitzt und daher strukturell nicht wissen kann, welche andere
-      Pipeline-Instanz "die andere Rolle" ist. #21/#24 berechnen Punkt 4
-      ausschliesslich aus den hier bereits bereitgestellten Feldern
-      mehrerer Instanzen, ohne dass #20 dafuer erweitert werden muss.
+      changeRateCelsiusPerSecond, lastAcceptedSampleAgeMs/
+      lastValidSampleAgeMs, lastFaultReason (alle bereits Teil des
+      Diagnosevertrags, Abschnitt 12) - und trifft selbst KEINE
+      Schuldzuweisung/Verdaechtigung zwischen Rollen (KEINE
+      Verdachtsmarkierung, siehe Korrektur in Abschnitt 7), da #20 (siehe
+      Abschnitt 13) keine Rollenkenntnis besitzt und daher strukturell nicht
+      wissen kann, welche andere Pipeline-Instanz "die andere Rolle" ist.
+      #21/#24 berechnen Punkt 4 ausschliesslich aus den hier bereits
+      bereitgestellten Feldern mehrerer Instanzen, ohne dass #20 dafuer
+      erweitert werden muss.
 ```
 
 Zusaetzlich, innerhalb einer einzelnen Rolle: Eine dauerhaft dem Prozess
@@ -768,17 +990,19 @@ Wert"-Kriterium in der Aenderungsratenpruefung – nur Sprung-, nicht
 Stillstandserkennung, siehe 10.2).
 
 Sensoridentitaets-/ROM-Wechsel (innerhalb einer Rolle) IST Teil von #20:
-RawSensorSample.identity aendert sich gegenueber der zuletzt bekannten
-Identitaet -> als Plausibilitaetsereignis markiert, Filterzustand wird
-verworfen (Abschnitt 8/10.3), Wiedererkennung wie nach FAILED erforderlich.
+identity() aendert sich zwischen zwei aufeinanderfolgenden akzeptierten
+Proben, sofern BEIDE bekannt sind (Abschnitt 9b) -> als
+Plausibilitaetsereignis markiert, Filterzustand wird verworfen (Abschnitt
+8/10.3), Wiedererkennung wie nach FAILED erforderlich.
 
-Zusammengefasst (Klarstellung gemaess Nachkorrekturauftrag Punkt 11): #20
-liefert ausschliesslich Evidenz je EINZELNER Pipeline-Instanz. Jede
+Zusammengefasst (Klarstellung, unveraendert gueltig): #20 liefert
+ausschliesslich Evidenz je EINZELNER Pipeline-Instanz. Jede
 rollenuebergreifende Bewertung, jeder Vergleich zweier Rollen und jede
 daraus abgeleitete Schuldzuweisung oder Verdaechtigung bleibt vollstaendig
 bei #21/#24 (siehe auch Abschnitt 7, Scopegrenzen).
 
 `CROSS_ROLE_SCOPE_CONSISTENT: PASS`
+`CROSS_ROLE_CONTRADICTIONS: 0`
 
 ## 12. Ausgabe- und Diagnosevertrag
 
@@ -786,24 +1010,22 @@ Bewertung Mega-Struktur vs. mehrere kleine Typen: Ein einzelner
 `SensorQualitySnapshot` pro Pipeline-Instanz (nicht pro Rolle als
 Sammelstruktur ueber alle drei Sensoren) ist gerechtfertigt, weil alle
 Felder zu GENAU EINER Sensorrolle gehoeren und immer gemeinsam als ein
-konsistenter Zustand entstehen (ein Snapshot = ein Verarbeitungsschritt
-einer Probe). Eine Aufteilung in mehrere Kleintypen wuerde hier nur
-kuenstliche Kopplung zwischen Aufrufern erzeugen, ohne eine echte
-Verantwortungsgrenze abzubilden (KISS). Eine Sammelstruktur ueber ALLE
-Sensorrollen wird bewusst NICHT gebaut, weil "welche Rollen es gibt" ein
-fermentation_app-Konzept ist (siehe Abschnitt 13) – `device_platform`
-kennt nur "eine Pipeline-Instanz pro injizierter Quelle".
+konsistenter Zustand entstehen (ein Snapshot = eine Momentaufnahme).
+Eine Aufteilung in mehrere Kleintypen wuerde hier nur kuenstliche Kopplung
+zwischen Aufrufern erzeugen, ohne eine echte Verantwortungsgrenze
+abzubilden (KISS). Eine Sammelstruktur ueber ALLE Sensorrollen wird bewusst
+NICHT gebaut, weil "welche Rollen es gibt" ein fermentation_app-Konzept ist
+(siehe Abschnitt 13) – `device_platform` kennt nur "eine Pipeline-Instanz
+pro injizierter Quelle".
 
-Korrektur gegenueber der Vorversion, zwei getrennte kleine Enums statt
-eines vermischten (Punkt 9 des Nachkorrekturauftrags): `SampleDisposition`
-beschreibt, was mit EINER eingehenden Probe auf Zeitstempel-/Protokollebene
-geschah (Abschnitt 9b); `SensorFaultReason` beschreibt den zuletzt
-massgeblichen fachlichen Grund, warum der SENSOR aktuell nicht `Valid` ist
-(Abschnitt 8/10). Beides zu vermischen wuerde SRP verletzen (zwei
-unterschiedliche Fragen in einem Typ).
+`SampleDisposition` (Zeitstempel-/Zufuhranomalien, Abschnitt 9b) und
+`SensorFaultReason` (fachliche Sensorfehlerursachen, Abschnitt 10) bleiben
+zwei getrennte kleine Enums, keine vermischte Klassifikation (SRP):
 
 ```cpp
-// sensor_sample.hpp (Ergaenzung zu Abschnitt 9)
+// sensor_quality_pipeline.hpp (SampleDisposition ist ingest()s
+// Rueckgabewert - hier co-lokalisiert statt in einer separaten
+// Eingangsvertragsdatei, siehe Abschnitt 9a)
 enum class SampleDisposition : uint8_t {
     Accepted,
     DuplicateIgnored,
@@ -826,14 +1048,18 @@ enum class SensorFaultReason : uint8_t {
 };
 
 struct SensorQualitySnapshot {
-    SensorIdentity identity;
+    std::optional<SensorIdentity> identity;         // zuletzt bekannte Identitaet, nullopt falls nie eine akzeptierte Probe mit bekannter Identitaet vorlag
     SensorQuality quality;
-    std::optional<double> rawCelsius;              // nullopt vor der ersten Accepted-Probe mit Rohwert
-    std::optional<double> correctedCelsius;         // Medianfilter-Ausgang + Offset (NICHT rawCelsius + Offset - Pipelinereihenfolge ist Median->Offset->Tiefpass, Abschnitt 10); nullopt vor dem ersten gefuellten Medianfenster
-    std::optional<double> filteredCelsius;          // nullopt bis der Tiefpass einen ersten Wert erzeugt hat
+    std::optional<double> rawCelsius;               // nullopt vor der ersten Accepted-und-plausiblen Probe
+    std::optional<double> correctedCelsius;         // Medianfilter-Ausgang + Offset; bereits ab dem ERSTEN plausiblen Medianbeitrag vorhanden (nicht erst bei vollem Fenster, siehe Abschnitt 10.3), NICHT rawCelsius + Offset
+    std::optional<double> filteredCelsius;          // Tiefpass-Ausgang; ab demselben ersten Beitrag wie correctedCelsius vorhanden (Tiefpass ist ab der ersten Probe wohldefiniert)
     double appliedOffset;
-    std::optional<uint64_t> lastSampleAgeMs;        // nullopt vor der ersten jemals eingegangenen Probe
-    std::optional<uint64_t> lastValidSampleAgeMs;   // nullopt vor der ersten gueltigen Probe
+    // Alter der letzten AKZEPTIERTEN Probe (Abschnitt 9b) - abgelehnte und
+    // doppelte Proben (DuplicateIgnored/RejectedTimestampConflict/
+    // RejectedRetrograde/RejectedFuture) aktualisieren dieses Feld NICHT.
+    // Umbenannt gegenueber der Vorversion (dort "lastSampleAgeMs", mehrdeutig).
+    std::optional<uint64_t> lastAcceptedSampleAgeMs;
+    std::optional<uint64_t> lastValidSampleAgeMs;   // Alter der letzten ZUSAETZLICH plausiblen (10.1/10.2-gueltigen) Probe
     SensorFaultReason lastFaultReason;
     uint16_t consecutiveInvalidCount;
     uint16_t recoveryProgressCount;   // aufeinanderfolgende gueltige Proben waehrend Wiedererkennung
@@ -841,42 +1067,29 @@ struct SensorQualitySnapshot {
 };
 ```
 
-Korrektur gegenueber der Vorversion (Punkt 8 des Nachkorrekturauftrags):
-`controlValueUsable` und `diagnosticOnly` entfallen ersatzlos. Beide waren
-redundant zu bereits vorhandenen Feldern und haetten bei unsorgfaeltiger
-Pflege der Pipeline-Implementierung aus dem Takt geraten koennen (zwei
-Quellen der Wahrheit fuer dieselbe Aussage, DRY-Verstoss). Der Regelwert
-wird stattdessen von JEDEM Konsumenten direkt und ausschliesslich aus
-bereits vorhandenen Feldern abgeleitet:
+`controlValueUsable`/`diagnosticOnly` bleiben entfallen (bereits in Runde 1
+entfernt): Der Regelwert wird von JEDEM Konsumenten direkt und
+ausschliesslich aus bereits vorhandenen Feldern abgeleitet:
 
 ```text
 Regelwert verwendbar  <=>  quality == SensorQuality::Valid
                            UND filteredCelsius.has_value()
 ```
 
-Kein Konsument darf einen Regelwert verwenden, wenn diese Bedingung nicht
-erfuellt ist; `quality != Valid` ODER ein (noch) fehlender Filterwert
-(z. B. unmittelbar nach einer Wiedererkennung, bevor der Tiefpass erneut
-eingeschwungen ist) bedeuten beide "kein Regelwert", ohne dass ein
-zusaetzliches gespeichertes Flag dafuer noetig ist.
-
 Kein Trend-/Aenderungsratenfeld wird weggelassen: `SAFETY_COMPONENT_FAULTS.md`
 verlangt fuer den Kuehlkoerpersensor ausdruecklich eine Aenderungsraten-
-/Trendueberwachung ("ueberwacht Temperatur und Aenderungsrate der
-Leistungsbaugruppe") – das Feld ist daher verpflichtend (als `optional`,
-siehe oben), nicht ersatzlos gestrichen.
+/Trendueberwachung - das Feld ist daher verpflichtend (als `optional`).
 
 `DIAGNOSTIC_CONTRACT_DEFINED: PASS`
 `OPTIONAL_DIAGNOSTIC_VALUES: PASS`
 `REDUNDANT_STATUS_FLAGS_REMOVED: PASS`
+`SNAPSHOT_SEMANTICS_CONSISTENT: PASS`
 
 ## 13. Modul- und Abhaengigkeitsrichtung
 
 Die GESAMTE fachliche Pipeline aus #20 (Zustandsmaschine, Plausibilitaet,
 Filter, Diagnosevertrag) wird in `lib/device_platform/` verortet, nicht in
-`lib/fermentation_app/`. Dies ist Entscheidung C aus Abschnitt 19 und durch
-den Nachkorrekturauftrag zu PR #95 ausdruecklich entschieden (nicht mehr nur
-eine vom Plan selbst vorgeschlagene Default-Lesart).
+`lib/fermentation_app/` - Entscheidung C, siehe Abschnitt 19.
 
 Begruendung:
 
@@ -885,47 +1098,35 @@ Begruendung:
   "allgemeine Sensorqualitaet, Filter und begrenzte Reglerbausteine".
 - Keine der #20-Bullet-Points (Zustaende, CRC/Bus, Wertebereich, Median,
   Tiefpass, ROM-Offset, Wiedererkennung) nennt Joghurt, Kefir, Kombucha oder
-  eine Fermentationsphase. Die eigene Qualitaetsregel des Moduls verlangt,
-  dass Namen/APIs auch fuer Smoker, Gewaechshaus oder Temperaturueberwachung
-  sinnvoll bleiben – #20 erfuellt das unveraendert.
+  eine Fermentationsphase.
 - ADR-013 (Wiederverwendbare ESP32-Geraeteplattform) begruendet exakt diesen
-  Schnitt: generische, hardwareunabhaengige Geraetedienste gehoeren nach
-  device_platform.
+  Schnitt und nennt "Sensorqualitaet" explizit als geraeteuebergreifende
+  Grundfunktion.
 - KEIN geraetespezifischer Name (z. B. "Schrankluft", "Produkt") wird als
-  Typ oder Methode in device_platform verwendet, da
-  device_platform/AGENTS.md geraetespezifische ROLLEN als allgemeine
-  Plattform-API ausdruecklich verbietet. Die drei konkreten Rollen
-  Schrankluft/Produkt/Kuehlkoerper bleiben deshalb ein fermentation_app-
-  bzw. Composition-Root-Konzept: fermentation_app haelt (spaeter, nicht in
-  #20) drei benannte SensorQualityPipeline-Instanzen mit rollenspezifischer
-  Konfiguration; #20 selbst kennt "Rollen" nicht als Typ.
-- SensorQuality-Ausgabe (Abschnitt 12) enthaelt bewusst KEIN Rollenfeld,
-  nur eine anwendungsneutrale SensorIdentity – konsistent mit der obigen
-  Regel.
+  Typ oder Methode in device_platform verwendet. Die drei konkreten Rollen
+  bleiben ein fermentation_app-/Composition-Root-Konzept.
+- SensorQualitySnapshot (Abschnitt 12) enthaelt bewusst KEIN Rollenfeld, nur
+  eine anwendungsneutrale SensorIdentity.
 ```
 
 Datei-Zuordnung:
 
 ```text
 lib/device_platform/src/
-  sensor_identity.hpp            (neu, eigenstaendig, siehe Abschnitt 13a)
-  sensor_sample.hpp               (neu, RawSensorSample + SampleDisposition)
-  sensor_quality.hpp              (neu, enum SensorQuality)
-  sensor_quality_config.hpp       (neu, siehe Abschnitt 10.0)
-  sensor_quality_snapshot.hpp     (neu, enum SensorFaultReason + Snapshot)
-  sensor_offset.hpp               (neu, siehe Abschnitt 13a)
-  sensor_median_filter.hpp/.cpp   (neu)
-  sensor_lowpass_filter.hpp/.cpp  (neu)
-  sensor_quality_pipeline.hpp/.cpp (neu, Orchestrator)
-  sensor_limits.hpp               (neu, firmwarefeste Grenzen)
+  temperature_source.hpp          (BESTEHEND, erweitert - Abschnitt 9.1)
+  sensor_identity.hpp              (neu, eigenstaendig, Abschnitt 9.0/13a)
+  sensor_quality.hpp               (neu, enum SensorQuality)
+  sensor_quality_config.hpp        (neu, Abschnitt 10.0)
+  sensor_quality_snapshot.hpp      (neu, enum SensorFaultReason + Snapshot)
+  sensor_offset.hpp                (neu, Abschnitt 13a)
+  sensor_median_filter.hpp/.cpp    (neu)
+  sensor_lowpass_filter.hpp/.cpp   (neu)
+  sensor_quality_pipeline.hpp/.cpp (neu, Orchestrator + SampleDisposition)
+  sensor_limits.hpp                (neu, firmwarefeste Grenzen)
 
 lib/device_platform_test_support/src/
-  sensor_fault_sequence.hpp/.cpp (neu, deterministischer Mehrfach-
-                                   Fehlerinjektor: geskriptete Folge von
-                                   RawSensorSample inkl. Bus-/CRC-/
-                                   Zeitstempelanomalien fuer Tests; wird
-                                   ausschliesslich vom Pipeline-Testtopic
-                                   verwendet, siehe Abschnitt 17a)
+  mock_temperature_source.hpp/.cpp (BESTEHEND, auf erweiterten Port
+                                     nachgezogen - Abschnitt 9.1/14)
 
 test/ (siehe Abschnitt 17a fuer die vollstaendige, nach Topics aufgeteilte
        Liste statt einer einzelnen Testdatei)
@@ -934,61 +1135,20 @@ test/ (siehe Abschnitt 17a fuer die vollstaendige, nach Topics aufgeteilte
 `fermentation_app` und `src/main.cpp`/`main/app_main.cpp` werden von #20
 NICHT geaendert: Es gibt noch keinen Verbraucher (die Verdrahtung von drei
 rollenbenannten Pipeline-Instanzen ist #21s bzw. der spaeteren Composition-
-Root-Aufgabe, sobald #21 tatsaechlich einen primaeren Regelsensor waehlt).
-Dies vermeidet totes/verfrueht verdrahtetes Produktionsglue-Code ohne
-Verbraucher.
+Root-Aufgabe).
 
-`fermentation_app`-Regeln (`AGENTS.md`) bleiben unberuehrt, da #20 dort
-nichts aendert. `device_platform_test_support`-Regeln bleiben eingehalten:
-Der neue Fehlerinjektor ist eine Mockimplementierung/Testhilfe, keine reale
-Bus-/Aktorlogik, und wird nicht von `src/main.cpp` oder einem
-ESP32-Produktionsbuild eingebunden.
+### 13a. SensorOffset: gueltig-by-construction, NaN/Inf-sicher, ohne storage_types.hpp-Abhaengigkeit
 
-### 13a. SensorIdentity und SensorOffset: gueltig-by-construction, ohne storage_types.hpp-Abhaengigkeit
-
-Korrektur gegenueber der Vorversion: `SensorIdentity` wurde bisher als
-`using SensorIdentity = StrongId<detail::SensorIdentityTag, uint64_t>;`
-geplant und haette damit `storage_types.hpp` (thematisch: Speicher-/
-Persistenzbezeichner wie `StorageEpoch`, `Revision`, `SlotId`) in den
-Sensorcode importiert. Das ist eine unpassende Modulabhaengigkeit: ein Leser
-von `sensor_identity.hpp` muesste sich fragen, warum ein Sensorwerttyp vom
-Speichermodul abhaengt, obwohl beide Domaenen nichts miteinander zu tun
-haben. AGENTS.md haelt fuer genau diesen Fall fest: "DRY verlangt keine
-gemeinsame Abstraktion fuer nur oberflaechlich aehnlichen Code mit
-unterschiedlichen fachlichen Verantwortungen." Die oberflaechliche
-Aehnlichkeit ("beides ist ein starker Ganzzahl-Wrapper") rechtfertigt hier
-keine Modulkopplung.
-
-```cpp
-// sensor_identity.hpp – eigenstaendig, keine Abhaengigkeit auf storage_types.hpp
-class SensorIdentity {
-   public:
-    constexpr SensorIdentity() = default;              // 0 = unbekannte Identitaet
-    constexpr explicit SensorIdentity(uint64_t value) : value_(value) {}
-    [[nodiscard]] constexpr uint64_t value() const { return value_; }
-    friend constexpr bool operator==(SensorIdentity a, SensorIdentity b) {
-        return a.value_ == b.value_;
-    }
-    friend constexpr bool operator!=(SensorIdentity a, SensorIdentity b) {
-        return !(a == b);
-    }
-   private:
-    uint64_t value_{0};
-};
-```
-
-Kein `create()`/Validierungsvertrag noetig: jeder darstellbare `uint64_t`-Wert
-ist eine gueltige Identitaet (0 eingeschlossen, als bewusst gueltiger
-"unbekannt"-Sentinel, analog zum bestehenden `StorageEpoch`-Muster, aber
-lokal reimplementiert statt importiert). "Gueltig-by-construction" bedeutet
-hier: ein eigenstaendiger, nicht mit rohen `uint64_t` verwechselbarer Typ
-ohne jede erreichbare inkonsistente Zwischenrepraesentation – nicht
-zusaetzliche Ablehnungslogik, fuer die es keinen fachlichen Grund gibt.
+`SensorIdentity` ist bereits vollstaendig in Abschnitt 9.0 definiert
+(dorthin verschoben, da sie jetzt Teil des kanonischen Eingangsvertrags
+ist, nicht mehr eines separaten `sensor_sample.hpp`).
 
 ```cpp
 // sensor_offset.hpp – gueltig-by-construction wie StateStoreKey
 enum class SensorOffsetStatus : uint8_t {
     Success,
+    // celsius ist NaN oder Inf. Wird VOR der Bereichspruefung erkannt.
+    NonFinite,
     // |value| > sensor_limits::kMaxAbsoluteOffsetCelsius.
     OutOfFirmwareRange,
 };
@@ -1005,80 +1165,96 @@ class SensorOffset {
 };
 
 struct SensorOffsetCreateResult {
-    SensorOffsetStatus status{SensorOffsetStatus::OutOfFirmwareRange};
+    SensorOffsetStatus status{SensorOffsetStatus::NonFinite};
     std::optional<SensorOffset> offset;
 };
 ```
 
-`SensorOffset::create()` lehnt jeden Betrag ausserhalb
+`SensorOffset::create()` prueft zuerst `std::isfinite(celsius)` (sonst
+`NonFinite`), danach den Betrag gegen
 `[-kMaxAbsoluteOffsetCelsius, +kMaxAbsoluteOffsetCelsius]`
-(`sensor_limits.hpp`) bereits bei der Erzeugung ab (Korrektur gegenueber der
-Vorversion, die dies nur als unspezifizierte "Programmfehler"-Konvention an
-der Aufrufstelle behandelt hatte, ohne den Typ selbst zu schuetzen). Ein
-fehlender Offset bleibt `SensorOffset::create(0.0)` (immer erfolgreich, da
-`0.0` firmwarefest immer innerhalb der Grenze liegt).
+(`sensor_limits.hpp`, sonst `OutOfFirmwareRange`). Ein fehlender Offset
+bleibt `SensorOffset::create(0.0)` (immer erfolgreich).
 
-`sensor_offset.hpp` haengt bewusst NICHT auf `storage_types.hpp`, sondern nur
-auf `sensor_limits.hpp` (dieselbe fachliche Domaene) – dieselbe Abgrenzung
-wie bei `SensorIdentity`.
+`sensor_offset.hpp` und `sensor_identity.hpp` haengen bewusst NICHT auf
+`storage_types.hpp`, sondern `sensor_offset.hpp` nur auf `sensor_limits.hpp`
+(dieselbe fachliche Domaene). Begruendung unveraendert aus Runde 1: Ein
+Leser von `sensor_identity.hpp`/`sensor_offset.hpp` muesste sich sonst
+fragen, warum ein Sensorwerttyp vom Speichermodul abhaengt, obwohl beide
+Domaenen nichts miteinander zu tun haben (AGENTS.md-DRY-Ausnahme fuer
+oberflaechlich aehnlichen, fachlich fremden Code).
+
+`NONFINITE_CONFIG_REJECTED: PASS` (gilt fuer SensorQualityConfig UND
+SensorOffset, siehe Abschnitt 10.0/13a)
 
 ## 14. Geplante Dateien mit Begruendung
 
 ```text
-lib/device_platform/src/sensor_identity.hpp
-  Eigenstaendiger, minimaler Sensoridentitaetstyp (Abschnitt 13a, KEINE
-  Abhaengigkeit auf storage_types.hpp); noetig fuer ROM-Wechsel-Erkennung
-  (Abschnitt 8/11), reine Wertsemantik, keine 1-Wire-Kenntnis.
+lib/device_platform/src/temperature_source.hpp  [BESTEHENDE DATEI, ERWEITERT]
+  TemperatureSampleStatus + TemperatureReading (gueltig-by-construction,
+  Abschnitt 9.1) ersetzen die bisherige {bool available; double celsius;}
+  -Form. ITemperatureSource-Interface bleibt in Signatur unveraendert
+  (gleiche read()-Methode, reichhaltigerer Rueckgabewert). Einziger
+  betroffener Blastradius: siehe Abschnitt 4 (repository-weit verifiziert,
+  nur 3 Dateien).
 
-lib/device_platform/src/sensor_sample.hpp
-  RawSensorSample + SensorTransportStatus + SampleDisposition;
-  Eingangsvertrag (Abschnitt 9/9a/9b).
+lib/device_platform/src/sensor_identity.hpp
+  Eigenstaendiger, gueltig-by-construction Sensoridentitaetstyp (Abschnitt
+  9.0, KEINE Abhaengigkeit auf storage_types.hpp, kein 0-Sentinel); noetig
+  fuer ROM-Wechsel-Erkennung (Abschnitt 8/11).
 
 lib/device_platform/src/sensor_quality.hpp
   SensorQuality-Enum (Abschnitt 8).
 
 lib/device_platform/src/sensor_quality_config.hpp
-  SensorQualityConfig, gueltig-by-construction (Abschnitt 10.0).
+  SensorQualityConfig, gueltig-by-construction, NaN/Inf-sicher
+  (Abschnitt 10.0).
 
 lib/device_platform/src/sensor_quality_snapshot.hpp
   SensorFaultReason + SensorQualitySnapshot; Ausgabevertrag (Abschnitt 12).
 
 lib/device_platform/src/sensor_offset.hpp
-  SensorOffset-Werttyp, gueltig-by-construction (Abschnitt 13a).
+  SensorOffset-Werttyp, gueltig-by-construction, NaN/Inf-sicher
+  (Abschnitt 13a).
 
 lib/device_platform/src/sensor_median_filter.hpp/.cpp
   Medianfilter mit fester Kapazitaet (Abschnitt 10.3), eigene SRP-Einheit,
-  eigenstaendig testbar.
+  eigenstaendig testbar (rohe double-Folgen, kein TemperatureReading noetig).
 
 lib/device_platform/src/sensor_lowpass_filter.hpp/.cpp
   Tiefpassfilter mit Zeitkonstante (Abschnitt 10.5), eigene SRP-Einheit.
 
 lib/device_platform/src/sensor_quality_pipeline.hpp/.cpp
-  Orchestrator: verkettet 9b/10.1-10.5, fuehrt Zustandsmaschine (Abschnitt 8)
-  und erzeugt SensorQualitySnapshot. Nimmt SensorQualityConfig im
-  Konstruktor entgegen; haelt selbst KEINE ITimeSource-Referenz (Abschnitt
-  9a) - Zeit kommt ausschliesslich explizit ueber ingest(sample, now) und
-  snapshot(now) herein.
+  SampleDisposition-Enum + Orchestrator: verkettet 9b/10.1-10.5, fuehrt
+  Zustandsmaschine (Abschnitt 8, quality als deriveQuality()-Ableitung,
+  Abschnitt 9a) und erzeugt SensorQualitySnapshot. Nimmt SensorQualityConfig
+  im Konstruktor entgegen; haelt selbst KEINE ITimeSource-Referenz -
+  ingest(sample, now) -> SampleDisposition und snapshot(now) ->
+  SensorQualitySnapshot sind die einzigen oeffentlichen Methoden.
 
 lib/device_platform/src/sensor_limits.hpp
   Firmwarefeste Obergrenzen (max. Medianfenster, absoluter
   Temperaturbereich, max. Offsetbetrag, max. STALE-Alter-Obergrenze, max.
   Wiedererkennungs-Probenzahl-Obergrenze) nach dem Muster von
   storage_slot_limits.hpp. Enthaelt bewusst KEINE sensor-/
-  treiberspezifischen Zahlenkonstanten (Abschnitt 10.1). Konkrete, am realen
-  Schrank ermittelte Werte bleiben TBD_COMMISSIONING (siehe Abschnitt 18);
-  diese Datei liefert nur die aeusseren, nie ueberschreitbaren
-  Sicherheitsgrenzen.
+  treiberspezifischen Zahlenkonstanten. Konkrete, am realen Schrank
+  ermittelte Werte bleiben TBD_COMMISSIONING (Abschnitt 18).
 
-lib/device_platform_test_support/src/sensor_fault_sequence.hpp/.cpp
-  Deterministischer, skriptbarer Mehrfach-Fehlerinjektor: liefert eine
-  vordefinierte Folge von RawSensorSample-Werten (inkl. Transportstatus-,
-  Zeitstempelanomalien, ROM-Wechseln) fuer die Testmatrix aus Abschnitt 17.
-  Ersetzt/ergaenzt NICHT MockTemperatureSource (bleibt fuer #20 unberuehrt,
-  da #20 nicht ueber ITemperatureSource einspeist, siehe Abschnitt 9). Wird
-  ausschliesslich vom Pipeline-Testtopic verwendet (Abschnitt 17a) - echte
-  Wiederverwendung, kein erzwungenes gemeinsames Testhilfsmittel fuer
-  Topics, die es nicht brauchen.
+lib/device_platform_test_support/src/mock_temperature_source.hpp/.cpp  [BESTEHENDE DATEIEN, ANGEPASST]
+  API auf den erweiterten Port nachgezogen: setCelsius()/setAvailable()
+  werden durch setReading(identity, timestampMs, celsius) (Ok-Fall) und
+  setFault(identity, timestampMs, status) (Fehlerfall) ersetzt - beide
+  konstruieren intern eine gueltige TemperatureReading ueber deren create().
+  Konstruktor entsprechend erweitert. Reine Testhilfe, unveraendert nicht
+  von fermentation_app/src/main.cpp/main/app_main.cpp eingebunden.
+
+test/test_sensor_actuator_mocks/test_sensor_actuator_mocks.cpp  [BESTEHENDE DATEI, TEILWEISE ANGEPASST]
+  Ausschliesslich die drei temperaturbezogenen Testfunktionen
+  (test_temperature_source_reports_configured_value,
+  test_temperature_source_can_change_value,
+  test_temperature_source_fault_injection_marks_unavailable) werden auf die
+  neue Mock-API/den neuen Snapshot-Zugriff (status()/celsius()) nachgezogen.
+  Alle Aktuator-Mock-Testfunktionen dieser Datei bleiben unveraendert.
 
 test/
   siehe Abschnitt 17a fuer die vollstaendige, nach Topics aufgeteilte Liste.
@@ -1087,84 +1263,80 @@ docs/tasks/issue-20-sensor-quality-filtering-plan.md
   Dieser Plan (bereits Teil des Plan-PR-Diffs).
 ```
 
-Kein bestehender Header wird veraendert (`temperature_source.hpp`,
-`time_source.hpp`, `storage_types.hpp`, `state_store_key.hpp` bleiben exakt
-wie heute).
-
 `EXPECTED_FILE_DIFF_DEFINED: PASS`
+`PARALLEL_INPUT_CONTRACTS: 0`
 
 ## 15. SOLID-/DRY-/KISS-Bewertung
 
 ```text
 S (Single Responsibility):
-  Vier klar getrennte Klassen (MedianFilter, LowPassFilter, die
-  Zustandsmaschine/Plausibilitaetslogik innerhalb der Pipeline, und der
-  reine Diagnose-Snapshot-Typ) statt einer Monsterklasse. Jede Klasse ist
-  unabhaengig mit synthetischen Werten testbar (siehe Testmatrix,
-  Abschnitt 17 nennt Filter-Tests getrennt von Zustandsmaschinen-Tests).
+  Getrennte Klassen (MedianFilter, LowPassFilter, die Zustandsmaschine/
+  Plausibilitaetslogik innerhalb der Pipeline, der reine Diagnose-Snapshot-
+  Typ, TemperatureReading als reiner Werttyp) statt einer Monsterklasse.
+  Jede Klasse ist unabhaengig mit synthetischen Werten testbar.
 
 O (Open/Closed):
   Neue Sensorrollen entstehen ausschliesslich durch eine neue
   SensorQualityConfig-Instanz (unterschiedliche tau/Fensterwerte), NICHT
-  durch neue Codepfade oder if/switch auf eine Rolle. Eine vierte
-  Sensorrolle (falls je gebraucht) erfordert keine Aenderung an
-  SensorQualityPipeline.
+  durch neue Codepfade oder if/switch auf eine Rolle.
 
 L (Liskov Substitution):
-  Betrifft #20 nur mittelbar (keine neue Portabstraktion mit mehreren
-  Implementierungen). Falls der spaetere reale DS18B20-Adapter (#30)
-  RawSensorSample erzeugt, muss er exakt dieselbe Wertsemantik einhalten
-  wie der in #20 gebaute Testinjektor (sensor_fault_sequence.hpp) – das wird
-  hier bereits als Vertrag festgeschrieben (Abschnitt 9), nicht erst in #30.
+  Jede Implementierung von ITemperatureSource (MockTemperatureSource JETZT,
+  der reale DS18B20-Adapter aus #30 SPAETER) muss ausschliesslich ueber
+  TemperatureReading::create() gueltige Werte erzeugen und denselben Vertrag
+  (Abschnitt 9.1) einhalten - austauschbar ohne Vertragsverletzung, weil es
+  nur EINEN Vertrag gibt (kein paralleler Typ, den #30 zusaetzlich haette
+  einhalten muessen).
 
 I (Interface Segregation):
-  RawSensorSample und SensorQualitySnapshot sind reine Werttypen ohne
+  TemperatureReading und SensorQualitySnapshot sind reine Werttypen ohne
   virtuelle Schnittstelle; SensorQualityPipeline hat genau eine
-  oeffentliche Verarbeitungs- und eine Snapshot-Abfragemethode. Kein
-  Konsument wird gezwungen, mehr zu kennen als er braucht.
+  oeffentliche Verarbeitungs- (ingest) und eine Abfragemethode (snapshot).
+  ITemperatureSource bleibt mit genau einer Methode (read()) minimal.
 
 D (Dependency Inversion):
-  Die Pipeline haengt nur von ITimeSource (Abstraktion) ab, nie von
-  DS18B20-, Arduino- oder ESP-IDF-Typen. Ein spaeterer DS18B20-Adapter
-  haengt in Richtung device_platform, nicht umgekehrt.
+  Die Pipeline haengt auf KEINE Zeitabstraktion ab - weder ITimeSource noch
+  eine andere Uhr-Schnittstelle; Zeit fliesst ausschliesslich als expliziter
+  Wert (Abschnitt 9a). Sie haengt nie von DS18B20-, Arduino- oder
+  ESP-IDF-Typen ab. Ein spaeterer DS18B20-Adapter haengt in Richtung
+  device_platform (ueber ITemperatureSource), nicht umgekehrt.
 
 DRY:
   Eine einzige parametrisierte SensorQualityPipeline-Implementierung fuer
-  alle drei Rollen (Luft/Produkt/Kuehlkoerper); keine kopierten
-  Filter-/Zustandsmaschinen-Implementierungen pro Rolle. Firmwarefeste
-  Grenzen liegen zentral in sensor_limits.hpp, nicht als verstreute Magic
-  Numbers (siehe AGENTS.md "Werte und Parametrierung").
+  alle drei Rollen; keine kopierten Filter-/Zustandsmaschinen-
+  Implementierungen pro Rolle. Firmwarefeste Grenzen liegen zentral in
+  sensor_limits.hpp. Genau EIN kanonischer Eingangstyp
+  (TemperatureReading) statt einer parallelen Architektur.
 
 KISS:
-  Deterministischer, linearer Datenfluss (siehe Abschnitt 10) ohne
-  generische Rules-Engine, ohne Plugin-/Registrierungsmechanismus, ohne
-  externe Filterbibliothek fuer die vergleichsweise einfachen Median-/
-  Tiefpassalgorithmen (kein realer Bedarf fuer eine Abhaengigkeit belegt).
-  Genau drei oeffentliche Qualitaetszustaende statt vier (siehe Abschnitt 8).
+  Deterministischer, linearer Datenfluss ohne generische Rules-Engine, ohne
+  Plugin-/Registrierungsmechanismus, ohne externe Filterbibliothek. Genau
+  drei oeffentliche Qualitaetszustaende statt vier. Testhilfe fuer
+  geskriptete Fehlerfolgen bleibt lokal im einzigen tatsaechlichen
+  Konsumenten (Abschnitt 17a), nicht als vorzeitig herausgezogenes Modul.
 
 Modulzuordnung (Entscheidung C):
-  device_platform statt fermentation_app, durch den Nachkorrekturauftrag zu
-  PR #95 ausdruecklich entschieden und durch ADR-013 (Abschnitt "Regeln fuer
-  neue Module") sowie lib/device_platform/AGENTS.md wortwoertlich gedeckt
-  (siehe Abschnitt 13/19).
+  device_platform statt fermentation_app, durch ADR-013 (Abschnitt "Regeln
+  fuer neue Module") sowie lib/device_platform/AGENTS.md wortwoertlich
+  gedeckt (siehe Abschnitt 13/19).
 ```
 
 `SOLID_REVIEW: PASS`
 `DRY_REVIEW: PASS`
 `KISS_REVIEW: PASS`
+`TEST_HELPER_KISS: PASS`
 
 ## 16. Ressourcen-, Laufzeit- und CI-Nachweise der spaeteren Umsetzung
 
 ```text
 Speicher pro Pipeline-Instanz (Schaetzung, spaeter im Implementierungs-PR
   per scripts/build_report.py nachzuweisen):
-  - RawSensorSample: ~40 Byte (std::optional<double> statt double, siehe
-    Korrektur Abschnitt 9 - typabhaengig groesser als in der Vorversion
-    geschaetzt)
+  - TemperatureReading: ~40-48 Byte (optional<SensorIdentity>,
+    optional<double>, uint64_t Zeitstempel, Statusbyte)
   - Medianpuffer: kMaxMedianWindowSize * sizeof(double), bei einer
     erwarteten Obergrenze von z. B. 9 Werten ~72 Byte
   - SensorQualitySnapshot: ~130-160 Byte (mehrere optional<double>/
-    optional<uint64_t>-Felder, Korrektur Abschnitt 12)
+    optional<uint64_t>-Felder)
   - Pipeline-interner Zustand (letzter Wert, Zaehler, Zeitstempel):
     < 100 Byte
   - Gesamt < 500 Byte je Instanz, statisch (kein Heap), 3 Instanzen (Luft,
@@ -1179,12 +1351,10 @@ maximale Anzahl gleichzeitig unterstuetzter Sensorrollen:
 worst-case Laufzeit pro eingehender Probe:
   O(kMedianWindowSize) fuer die Medianberechnung (Sortierung eines festen,
   kleinen Fensters, z. B. Insertion Sort fuer < 10 Elemente), alle anderen
-  Stufen O(1). Kein Sensorzyklus schreibt in Flash (AGENTS.md-Vorgabe
-  "es wird nicht in jedem Sensorzyklus in Flash geschrieben" ist fuer #20
-  automatisch erfuellt, da #20 keine Persistenz durchfuehrt).
+  Stufen O(1). Kein Sensorzyklus schreibt in Flash.
 
 Verhalten bei Bursts/zu schnellen Proben:
-  Wird ausschliesslich ueber den Zeitstempelvertrag (Abschnitt 9) geregelt,
+  Wird ausschliesslich ueber den Zeitstempelvertrag (Abschnitt 9b) geregelt,
   keine zusaetzliche Ratenbegrenzung noetig; ein zu kurzer dt fuehrt
   hoechstens zu einer grossen Aenderungsrate (10.2), nicht zu einem
   Pufferueberlauf, da alle Puffer fest dimensioniert sind.
@@ -1192,14 +1362,15 @@ Verhalten bei Bursts/zu schnellen Proben:
 statisches RAM/Flash:
   std::array statt std::vector fuer den Medianpuffer; keine dynamische
   Allokation im Verarbeitungspfad. Flash-Wirkung durch 9 neue kleine
-  Header/Source-Dateien wird als gering eingeschaetzt, aber erst durch
-  scripts/build_report.py belastbar.
+  Header/Source-Dateien plus die Erweiterung einer bestehenden Datei wird
+  als gering eingeschaetzt, aber erst durch scripts/build_report.py
+  belastbar.
 
 Auswirkung auf native Tests und beide ESP32-Profile:
   Reiner device_platform-Code, im native-Profil ohne Aenderung testbar.
   Kein neuer Code in main/app_main.cpp oder src/main.cpp -> keine
   Auswirkung auf esp32_bringup/esp32_release ausser dem zusaetzlichen
-  (unverdrahteten) Uebersetzungsergebnis der neuen Header/Source-Dateien.
+  (unverdrahteten) Uebersetzungsergebnis der neuen/erweiterten Dateien.
 
 Base-/Head-Ressourcenvergleich:
   Im Implementierungs-PR mit
@@ -1213,21 +1384,21 @@ Base-/Head-Ressourcenvergleich:
 
 ## 17. Vollstaendige Testmatrix
 
-Jede Gruppe nennt Testsuite (neu: `test/test_sensor_quality/`) und
+Jede Gruppe nennt Testsuite (siehe Abschnitt 17a fuer die Aufteilung) und
 fachliches Orakel.
 
 ```text
 Start/Normalbetrieb (Orakel: Abschnitt 8 Zustandsmaschine, SENSOR_TUNING_
 COMMISSIONING.md "Messzyklus"):
   - Start ohne Probe -> Stale, kein Regelwert, rawCelsius/correctedCelsius/
-    filteredCelsius/lastSampleAgeMs/lastValidSampleAgeMs/
+    filteredCelsius/lastAcceptedSampleAgeMs/lastValidSampleAgeMs/
     changeRateCelsiusPerSecond alle == std::nullopt (keine erfundenen
     Platzhalterwerte)
   - erste gueltige Probe -> weiterhin Stale (noch nicht genug Folgeproben),
-    rawCelsius/lastSampleAgeMs jetzt gesetzt; correctedCelsius UND
+    rawCelsius/lastAcceptedSampleAgeMs jetzt gesetzt; correctedCelsius UND
     filteredCelsius bleiben nullopt bis Slice 2 Medianfilter und Tiefpass
-    liefert (correctedCelsius haengt vom Medianfilter-Ausgang ab, nicht von
-    rawCelsius direkt - siehe Abschnitt 12)
+    liefert (danach: bereits ab dem ERSTEN plausiblen Beitrag gesetzt,
+    nicht erst bei vollem Medianfenster, siehe Abschnitt 10.3/12)
   - kMinConsecutiveValidSamples Folgeproben -> Valid
   - stabiler ~2s-Zyklus ueber mehrere Minuten (virtuelle Zeit) -> Valid
     bleibt stabil
@@ -1245,33 +1416,44 @@ Transport-/Messfehler (Orakel: Abschnitt 10.1, ACCEPTANCE_TESTS.md
     ueberschritten -> Failed
   - BusFault-Sample -> gleiche Behandlung wie CRC, getrennt geloggte Ursache
   - MissingSample -> wie oben, eigene FaultReason
-  - KnownInvalidMeasurement-Sample (transportStatus direkt so geskriptet,
+  - KnownInvalidMeasurement-Sample (status direkt so geskriptet,
     unabhaengig vom konkreten Rohwert - #20 kennt keine sensor-/
-    treiberspezifischen Zahlenkonstanten, siehe Abschnitt 10.1) -> ungueltig,
-    Ursache KnownInvalidMeasurement
-  - NaN/Inf als rawCelsius (durch den Testinjektor konstruierbar, da
-    rawCelsius ein optional<double> ist und ein nicht endlicher Wert
-    weiterhin ein technisch darstellbarer double bleibt) -> ungueltig,
-    Ursache NonFinite (nicht OutOfRange - eigene Ursache, siehe Abschnitt 12)
+    treiberspezifischen Zahlenkonstanten) -> ungueltig, Ursache
+    KnownInvalidMeasurement
+  - NaN/Inf als celsius() (durch die lokale Testhilfe konstruierbar) ->
+    ungueltig, Ursache NonFinite (eigene Ursache, nicht OutOfRange)
+
+Eingangsvertrag (Orakel: Abschnitt 9.0/9.1, neu in Runde 2):
+  - TemperatureReading::create(): status=Ok ohne celsius -> abgelehnt
+    (InconsistentValuePresence)
+  - TemperatureReading::create(): status!=Ok mit celsius -> abgelehnt
+  - TemperatureReading::create(): status=Ok mit celsius, identity=nullopt
+    -> erfolgreich (Identitaet optional und unabhaengig)
+  - SensorIdentity::create(0) -> abgelehnt (ZeroIsNotAValidIdentity)
+  - SensorIdentity::create(<positiver Wert>) -> erfolgreich
 
 Zeit und Alter (Orakel: Abschnitt 9, SAFETY_COMPONENT_FAULTS.md
 Sensorzustandsfolge):
   - Stale durch Altersgrenze (kMaxStaleAgeMs) ueberschritten -> Failed
   - Failed durch maximale Fehlerdauer -> bleibt Failed bis Wiedererkennung
   - Zeitstempel < letztem akzeptierten Zeitstempel -> RejectedRetrograde,
-    Zustand/Filter/Alter unveraendert (kein Effekt auf consecutiveInvalidCount)
+    Zustand/Filter/lastAcceptedSampleAgeMs unveraendert
   - Zeitstempel > nowMonotonicMs (an ingest() uebergeben) -> RejectedFuture,
     gleiche Wirkungslosigkeit wie oben
-  - identischer Zeitstempel + identischer Wert -> DuplicateIgnored
-  - identischer Zeitstempel + unterschiedlicher Wert -> RejectedTimestampConflict
-    (NICHT akzeptiert - Korrektur gegenueber der Vorversion, siehe Abschnitt 9b);
-    Test belegt, dass danach weiterhin nur der vorherige Wert als "letzter
-    akzeptierter" gilt
-  - keine der vier obigen Dispositionen erhoeht consecutiveInvalidCount
-    (eigener Testfall je Disposition)
+  - identischer Zeitstempel + identischer Wert -> DuplicateIgnored,
+    lastAcceptedSampleAgeMs unveraendert
+  - identischer Zeitstempel + unterschiedlicher Wert ->
+    RejectedTimestampConflict (nicht akzeptiert), lastAcceptedSampleAgeMs
+    unveraendert; Test belegt, dass danach weiterhin nur der vorherige Wert
+    als "letzter akzeptierter" gilt
+  - keine der vier Ablehnungsdispositionen erhoeht consecutiveInvalidCount
+    ODER aktualisiert lastAcceptedSampleAgeMs (je Disposition ein
+    eigener Testfall)
   - grosse Messluecke -> Uebergang wie in Abschnitt 8 beschrieben
   - Wiederaufnahme nach Luecke: erste Probe nach Luecke wird nicht als
     "Sprung" gegen den (veralteten) Vorwert bewertet
+  - ingest() gibt in jedem der obigen Faelle die jeweils korrekte
+    SampleDisposition zurueck (expliziter Rueckgabewert, kein void)
 
 Wertebereich und Dynamik (Orakel: Abschnitt 10.2,
 SENSOR_TUNING_COMMISSIONING.md "Plausibilitaetspruefungen"):
@@ -1283,48 +1465,49 @@ SENSOR_TUNING_COMMISSIONING.md "Plausibilitaetspruefungen"):
     filteredCelsius zeigt keinen Ausschlag, rawCelsius im Snapshot zeigt
     den Ausreisser weiterhin (Rohpfad bleibt sichtbar)
   - echter dauerhafter Sprung (mehrere Folgeproben auf neuem Niveau) bleibt
-    NACH Einschwingen des Medianfensters sichtbar (kein dauerhaftes
-    Verstecken eines echten Trends)
+    sichtbar (kein dauerhaftes Verstecken eines echten Trends)
   - Aenderungsrate mit kurzem vs. langem Zeitabstand ergibt unterschiedliche
     Bewertung desselben absoluten Delta
   - dauerhaft nahezu unveraenderte "Produkt"-Konfiguration (dt gross, sehr
-    kleines Delta ueber lange Zeit) bleibt erlaubt/Valid (kein
-    Stillstands-als-Fehler-Kriterium in #20, siehe Abschnitt 11)
+    kleines Delta ueber lange Zeit) bleibt erlaubt/Valid
 
 Median und Tiefpass (Orakel: Abschnitt 10.3/10.5):
-  - ungefuelltes Medianfenster liefert Median aus den vorhandenen Werten
-  - ungerade/gerade Fensterentscheidung: Test belegt, dass ein
-    konfiguriertes gerades Fenster (falls ueberhaupt konstruierbar) entweder
-    abgelehnt oder auf ungerade normalisiert wird (Entscheidung: nur
-    ungerade Fenstergroessen sind gueltige Konfiguration, siehe Abschnitt
-    10.3) – Test prueft die Ablehnung/den dokumentierten Vertrag
-  - Einzelspitze wird entfernt (siehe oben, hier isoliert fuer den
-    MedianFilter als Einzelkomponente getestet)
+  - ungefuelltes Medianfenster liefert Median aus den vorhandenen Werten;
+    bereits nach dem ERSTEN gueltigen Beitrag ein echter Wert (kein
+    "wartet auf volles Fenster")
+  - ungerade/gerade Fensterentscheidung: nur ungerade Fenstergroessen sind
+    gueltige Konfiguration (Abschnitt 10.3); Test prueft die Ablehnung
+  - Einzelspitze wird entfernt (isoliert fuer MedianFilter getestet)
   - echter Trend bleibt ueber mehrere Zyklen im gefilterten Wert sichtbar
   - ungueltige Probe gelangt nachweislich NICHT ins Medianfenster
-    (Fenster-Inhalt vor/nach einer ungueltigen Probe unveraendert)
   - Reset des Filterzustands nach Failed->Valid-Wiedererkennung und nach
     ROM-Wechsel (kein "Nachschleppen" alter Werte)
   - unterschiedliche tau-Werte zweier Konfigurationen ergeben messbar
     unterschiedliche Einschwingzeit bei identischer Sprungeingabe
   - extremer Rohwert bleibt in rawCelsius sichtbar, auch wenn
     filteredCelsius (noch) nicht nachgezogen ist
+  - dtSeconds fuer den Tiefpass stammt nachweislich aus den
+    Probenzeitstempeln (nicht aus nowMonotonicMs): zwei ingest()-Aufrufe
+    mit identischem nowMonotonicMs, aber unterschiedlichen
+    Probenzeitstempeln, ergeben unterschiedliche Filterreaktionen
 
 Offset und Identitaet (Orakel: Abschnitt 10.4, 8, 11):
   - Offset 0.0 -> correctedCelsius == Medianfilter-Ausgang unveraendert
   - positiver und negativer Offset veraendern correctedCelsius korrekt
   - Offset am Rand von kMaxAbsoluteOffsetCelsius wird noch akzeptiert
-  - Offset ausserhalb der Grenze: Testfall dokumentiert den definierten
-    Umgang (Konstruktionsstelle/Aufrufer, siehe Abschnitt 10.4)
-  - fehlender Offset entspricht SensorOffset{0.0}
-  - ROM-Wechsel (SensorIdentity aendert sich) -> IdentityMismatch-Ereignis,
+  - Offset NaN/Inf -> SensorOffset::create() liefert NonFinite
+  - Offset ausserhalb der Firmwaregrenze -> OutOfFirmwareRange
+  - fehlender Offset entspricht SensorOffset::create(0.0)
+  - identity()-Wechsel zwischen zwei bekannten Werten -> IdentityMismatch,
     Filterzustand verworfen, Wiedererkennung wie nach Failed erforderlich
-  - Rollenwechsel ist kein #20-Konzept (siehe Abschnitt 13) und daher NICHT
-    Teil dieser Testgruppe; stattdessen wird eine zweite unabhaengige
-    Pipeline-Instanz mit eigener Konfiguration als Ersatztest verwendet, um
-    zu zeigen, dass zwei Instanzen sich nicht gegenseitig beeinflussen
+  - identity()-Uebergang von/zu nullopt -> KEIN IdentityMismatch (fehlende
+    Evidenz, siehe Abschnitt 9b)
+  - Rollenwechsel ist kein #20-Konzept (Abschnitt 13) und daher NICHT Teil
+    dieser Testgruppe; stattdessen zeigt eine zweite unabhaengige
+    Pipeline-Instanz, dass sich zwei Instanzen nicht gegenseitig
+    beeinflussen
   - Offsetaenderung waehrend laufender Filterung wirkt erst auf die naechste
-    Probe (siehe 10.4), Testfall vergleicht Snapshot vor/nach Aenderung
+    Probe
 
 Zustandsmaschine und Wiedererkennung (Orakel: Abschnitt 8):
   - Valid -> Stale bei einzelner ungueltiger Probe
@@ -1333,72 +1516,67 @@ Zustandsmaschine und Wiedererkennung (Orakel: Abschnitt 8):
   - Stale -> Failed bei Altersueberschreitung
   - Failed -> Wiedererkennung -> Valid (gleiche Bedingung wie Stale->Valid)
   - erneute ungueltige Probe waehrend Wiedererkennung setzt Fortschritt
-    zurueck (recoveryProgressCount faellt auf 0, Zustand bleibt
-    Stale/Failed)
+    zurueck
   - abgeleitete Regelwertfreigabe (quality == Valid UND
-    filteredCelsius.has_value(), Abschnitt 12) ist in Stale/Failed in jedem
-    einzelnen Testfall dieser Gruppe explizit false
-  - letzter gueltiger Wert (rawCelsius/correctedCelsius/filteredCelsius)
-    bleibt im Snapshot sichtbar, auch waehrend Stale/Failed, obwohl die
-    abgeleitete Regelwertfreigabe dort false ist
+    filteredCelsius.has_value()) ist in Stale/Failed in jedem Testfall
+    dieser Gruppe explizit false
+  - letzter gueltiger Wert bleibt im Snapshot sichtbar, auch waehrend
+    Stale/Failed
+  - EIN snapshot(now)-Aufruf mit weit in der Zukunft liegendem now, OHNE
+    zwischenzeitlichen ingest()-Aufruf, erkennt einen zuvor Valid/Stale
+    gemeldeten Sensor korrekt als Failed (Nachweis fuer die
+    snapshot(now)-Ableitung aus Abschnitt 9a, nicht auf ingest() angewiesen)
 
 Widersprueche und Scopegrenzen (Orakel: Abschnitt 11, 7):
   - #20 trifft bei zwei unabhaengigen Pipeline-Instanzen mit stark
-    abweichenden Werten (simuliert "Produkt" vs. "Luft") KEINE
-    Schuldzuweisung – Test prueft, dass keine Pipeline-Instanz allein durch
-    den Wert der anderen beeinflusst wird (Unabhaengigkeitsnachweis)
+    abweichenden Werten KEINE Schuldzuweisung - Test prueft, dass keine
+    Pipeline-Instanz allein durch den Wert der anderen beeinflusst wird
   - Test/Kommentar dokumentiert explizit, dass #20 keinen Ersatzsensor
-    waehlt, keine Verriegelung setzt und keinen Aktorbefehl erzeugt (durch
-    Abwesenheit entsprechender oeffentlicher API nachgewiesen, kein
-    Laufzeittest noetig)
+    waehlt, keine Verriegelung setzt, keinen Aktorbefehl erzeugt und KEINE
+    Verdachtsmarkierung fuer rollenuebergreifende Widersprueche liefert
+    (durch Abwesenheit entsprechender oeffentlicher API nachgewiesen)
 
 Robustheit (Orakel: allgemein, AGENTS.md Ressourcenregeln):
-  - Parametergrenzen (kMaxMedianWindowSize, kMaxAbsoluteOffsetCelsius usw.)
-    werden bei Konfiguration geprueft
+  - Parametergrenzen werden bei Konfiguration geprueft
   - Zaehlerueberlauf: consecutiveInvalidCount/recoveryProgressCount als
-    uint16_t mit Saettigung statt Wraparound bewiesen (analoges Muster zu
-    checkedIncrement, aber lokal einfacher: Saettigung reicht, da nur
-    Vergleich gegen Schwellwerte noetig ist, kein persistenter Zaehler)
-  - Zeitdifferenzueberlauf: monotonicTimestampMs nahe UINT64_MAX wird nicht
-    fehlerhaft (Differenzbildung mit vorherigem Wert bleibt korrekt/saturiert
-    analog VirtualTimeSource-Vertrag)
+    uint16_t mit Saettigung statt Wraparound bewiesen
+  - Zeitdifferenzueberlauf: monotonicTimestampMs nahe UINT64_MAX bleibt
+    korrekt/saturiert
   - deterministische Wiederholung derselben Eingabefolge liefert exakt
-    denselben Snapshot-Verlauf (reine Funktion der Eingabefolge + Konfig)
+    denselben Snapshot-Verlauf
   - keine Abhaengigkeit von realer Uhrzeit oder Hardware (nur
-    VirtualTimeSource in Tests)
+    VirtualTimeSource im Test, nie in der Pipeline selbst)
   - keine deaktivierten/uebersprungenen Tests (Unity ohne TEST_IGNORE)
 ```
 
 `TEST_MATRIX_COMPLETE: PASS`
 
-### 17a. Testdatei-Aufteilung (KISS, keine Monsterdatei)
+### 17a. Testdatei-Aufteilung (KISS, keine Monsterdatei, keine verfrueht ausgelagerte Testhilfe)
 
-Korrektur gegenueber der Vorversion: Statt einer einzigen
-`test/test_sensor_quality/test_sensor_quality.cpp`, die alle neun
-Testgruppen aus Abschnitt 17 (voraussichtlich 40+ Einzeltests) buendeln
-wuerde, folgt die Testaufteilung derselben SRP-Trennung wie der
-Produktionscode (Abschnitt 13/14) – ein Testtopic pro eigenstaendig
-testbarer Komponente, wie es die bestehende Konvention
-(`test/<thema>/test_<thema>.cpp`) bereits fuer andere Module vorsieht:
+Testaufteilung folgt derselben SRP-Trennung wie der Produktionscode - ein
+Testtopic pro eigenstaendig testbarer Komponente:
 
 ```text
+test/test_temperature_source/test_temperature_source.cpp
+  TemperatureReading::create() (Abschnitt 9.1): Ok<=>Wert-Konsistenz,
+  optionale Identitaet. Neues Topic (Runde 2), da der Port jetzt eine
+  eigene Gueltigkeitspruefung besitzt.
+
 test/test_sensor_identity/test_sensor_identity.cpp
-  SensorIdentity: Gleichheit, Default (0/"unbekannt"), keine
-  Fremdtypvermischung. Klein, unabhaengig, keine sensor_fault_sequence.hpp
-  noetig.
+  SensorIdentity::create(): Ablehnung von 0, Erfolg fuer positive Werte,
+  Gleichheit, keine Fremdtypvermischung.
 
 test/test_sensor_offset/test_sensor_offset.cpp
-  SensorOffset::create(): Erfolg innerhalb der Grenze, Ablehnung ausserhalb,
-  Randwerte. Unabhaengig, keine sensor_fault_sequence.hpp noetig.
+  SensorOffset::create(): Erfolg innerhalb der Grenze, NaN/Inf-Ablehnung,
+  Ablehnung ausserhalb der Firmwaregrenze, Randwerte.
 
 test/test_sensor_quality_config/test_sensor_quality_config.cpp
-  SensorQualityConfig::create(): jede InvalidXxx-Ablehnung einzeln,
-  Erfolgsfall. Unabhaengig, keine sensor_fault_sequence.hpp noetig.
+  SensorQualityConfig::create(): NaN/Inf-Ablehnung, jede InvalidXxx-
+  Ablehnung einzeln, Erfolgsfall.
 
 test/test_sensor_median_filter/test_sensor_median_filter.cpp
-  MedianFilter isoliert mit rohen double-Folgen (kein RawSensorSample
-  noetig): ungefuelltes Fenster, Einzelspitze, Trend, gerade/ungerade
-  Konfiguration.
+  MedianFilter isoliert mit rohen double-Folgen: ungefuelltes Fenster,
+  Einzelspitze, Trend, gerade/ungerade Konfiguration.
 
 test/test_sensor_lowpass_filter/test_sensor_lowpass_filter.cpp
   LowPassFilter isoliert mit rohen double-Folgen + dt-Werten: Einschwingen,
@@ -1407,33 +1585,36 @@ test/test_sensor_lowpass_filter/test_sensor_lowpass_filter.cpp
 test/test_sensor_quality_pipeline/test_sensor_quality_pipeline.cpp
   SensorQualityPipeline als Orchestrator: Start/Normalbetrieb, Transport-/
   Messfehler, Zeit/Alter/Disposition, Wertebereich/Dynamik, Median-/
-  Tiefpass-INTEGRATION (nicht die Filter-Algorithmen selbst - die sind
-  bereits in den beiden Filtertests oben abgedeckt), Offset-Integration,
-  Zustandsmaschine/Wiedererkennung, Widersprueche/Scopegrenzen, Robustheit.
-  Einziger tatsaechlicher Konsument von sensor_fault_sequence.hpp - echte
-  Wiederverwendung ueber mehrere Testgruppen dieser einen Datei hinweg,
-  nicht ueber alle sechs Testtopics erzwungen.
+  Tiefpass-INTEGRATION, Offset-Integration, Zustandsmaschine/
+  Wiedererkennung, Widersprueche/Scopegrenzen, Robustheit. Enthaelt eine
+  LOKALE (nur in dieser Datei definierte, nicht exportierte) kleine
+  Testhilfsfunktion/-tabelle fuer geskriptete TemperatureReading-Folgen
+  (ersetzt das in der Vorversion als eigenes device_platform_test_support-
+  Modul geplante sensor_fault_sequence.hpp/.cpp - KORREKTUR RUNDE 2: solange
+  nur dieses eine Testtopic eine solche Folge braucht, ist ein eigenes,
+  produktionsnahes Testhilfsmodul verfrueht; die Datei kann bei einem
+  zweiten realen Konsumenten spaeter alsy device_platform_test_support-
+  Modul herausgezogen werden, KISS/YAGNI).
+
+test/test_sensor_actuator_mocks/test_sensor_actuator_mocks.cpp  [BESTEHEND, TEILWEISE ANGEPASST]
+  Nur die drei temperaturbezogenen Testfunktionen werden auf die neue
+  Mock-API (setReading/setFault, status()/celsius()) nachgezogen.
 ```
 
-Diese sechs Topics wachsen ueber Slice 1/2 (Abschnitt 20) inkrementell,
-bleiben aber jeweils bei ihrem eigenen abgegrenzten Thema – kein einzelnes
-Testtopic deckt mehr als eine Komponente ab.
-
 `TEST_STRUCTURE_KISS: PASS`
+`TEST_HELPER_KISS: PASS`
 
 ## 18. Risiken und Gegenmassnahmen
 
 ```text
-Risiko: RawSensorSample divergiert spaeter von dem, was ein realer
-  DS18B20-Adapter (#30) tatsaechlich liefern kann (z. B. wenn CRC- und
-  Busfehler auf Treiberebene nicht sauber trennbar sind).
-  Gegenmassnahme: RawSensorSample bleibt ein reiner, absichtlich
-  entkoppelter Werttyp; die Uebersetzung ist ausdruecklich #30s Aufgabe und
-  dort mit dem dann echten Treiberverhalten abzugleichen. Portgrenze:
-  ITemperatureSource bleibt unveraendert; #20 zwingt #30 NICHT, diesen Port
-  zu erweitern, sondern laesst offen, ob #30 direkt RawSensorSample erzeugt
-  oder ITemperatureSource dafuer erweitert wird - das ist explizit eine
-  spaetere, in #30 zu treffende Entscheidung.
+Risiko: Die Erweiterung von ITemperatureSource/TemperatureReading trifft
+  einen heute unbekannten Konsumenten, der von der alten {available,
+  celsius}-Form abhaengt.
+  Gegenmassnahme: repository-weit verifiziert (Abschnitt 4) - genau drei
+  Dateien verwenden den Port (der Header selbst, der Mock, ein Testfile);
+  keine Verwendung in src/main.cpp, main/app_main.cpp oder
+  lib/fermentation_app/. Alle drei betroffenen Dateien sind explizit im
+  Plan-Diff (Abschnitt 14) aufgefuehrt.
 
 Risiko: Firmwarefeste Grenzen in sensor_limits.hpp werden ohne reale
   Messung zu eng oder zu weit gewaehlt.
@@ -1443,44 +1624,35 @@ Risiko: Firmwarefeste Grenzen in sensor_limits.hpp werden ohne reale
   Codeaenderung) erfolgt.
 
 Risiko: Der Umfang (Zustandsmaschine + Plausibilitaet + 2 Filter +
-  Diagnosevertrag + vollstaendige Testmatrix) ist fuer eine einzelne
-  Reviewrunde zu gross.
-  Gegenmassnahme: entschiedene Teilung A/B in zwei interne Reviewslices
-  innerhalb desselben Draft-PR (Entscheidung A, Abschnitt 19/20).
+  Diagnosevertrag + vollstaendige Testmatrix + Porterweiterung) ist fuer
+  eine einzelne Reviewrunde zu gross.
+  Gegenmassnahme: entschiedene Teilung in zwei interne Reviewslices
+  innerhalb desselben Draft-PR (Entscheidung A, Abschnitt 19/20); die
+  Porterweiterung (Abschnitt 9) gehoert zu Slice 1, da Slice 1 der erste
+  tatsaechliche Konsument des neuen Vertrags ist.
 
 Risiko: Eine spaetere ADR-Notwendigkeit wird uebersehen.
   Gegenmassnahme: bereits durch Entscheidung B (Abschnitt 19) explizit
-  gepruft und verneint; sollte eine tatsaechlich neue Grundsatzfrage waehrend
-  der Implementierung auftauchen, ist das eine materielle Planabweichung
-  (AGENTS.md) und erfordert einen neuen Plan-Commit samt erneuter Freigabe.
+  gepruft und verneint; eine tatsaechlich neue Grundsatzfrage waehrend der
+  Implementierung waere eine materielle Planabweichung (AGENTS.md) und
+  erfordert einen neuen Plan-Commit samt erneuter Freigabe.
 ```
 
-## 19. Bereits entschiedene Punkte (vormals "Offene Ownerentscheidungen")
-
-Korrektur: Der Nachkorrekturauftrag zu PR #95 entscheidet A, B und C
-ausdruecklich und verbindlich. Diese drei Punkte werden hier nicht mehr als
-offene Ownerentscheidungen gefuehrt; `OWNER_DECISIONS_OPEN: 0`. Die
-folgenden Unterabschnitte dokumentieren die Entscheidung samt Begruendung,
-nicht mehr Optionen/Empfehlung.
+## 19. Bereits entschiedene Punkte
 
 ### Entscheidung A (entschieden): ein Issue, ein Branch, derselbe Draft-PR, zwei interne Reviewslices
 
 ```text
 Entschieden: #20 wird in genau einem Issue, einem Branch und demselben
-  Draft-PR (#95) umgesetzt. Innerhalb dieses einen PR gibt es zwei interne
-  Reviewslices:
-    1. Qualitaetszustand + Plausibilitaet (SensorIdentity, RawSensorSample,
-       SampleDisposition, SensorQuality-Zustandsmaschine, Plausibilitaet
-       10.1/10.2, SensorQualityConfig, Diagnosevertrag - filteredCelsius
-       bleibt hier std::nullopt, da der Tiefpass noch nicht existiert, KEIN
-       Platzhalterverhalten, siehe Korrektur in Abschnitt 12/20).
-    2. Median + Offset + Tiefpass + vollstaendige Integration
-       (SensorOffset, MedianFilter, LowPassFilter, vollstaendige
-       Pipelineintegration, verbleibende Tests).
-  Kein zweiter PR, keine Uebergangs-/Platzhalter-API zwischen den Slices
-  (siehe Abschnitt 20 fuer die korrigierte Reihenfolge).
-Begruendung: So vom Nachkorrekturauftrag ausdruecklich festgelegt; deckt
-  sich mit der bereits im Ursprungsplan zitierten, unabhaengig
+  Draft-PR (#95) umgesetzt. Zwei interne Reviewslices:
+    1. Qualitaetszustand + Plausibilitaet (Porterweiterung Abschnitt 9,
+       SensorIdentity, SampleDisposition, SensorQuality-Zustandsmaschine,
+       Plausibilitaet 10.1/10.2, SensorQualityConfig, Diagnosevertrag -
+       filteredCelsius/correctedCelsius bleiben hier std::nullopt, da Median
+       und Tiefpass noch nicht existieren, KEIN Platzhalterverhalten).
+    2. Median + Offset + Tiefpass + vollstaendige Integration.
+  Kein zweiter PR, keine Uebergangs-/Platzhalter-API zwischen den Slices.
+Begruendung: So festgelegt; deckt sich mit der unabhaengig
   uebereinstimmenden Empfehlung aus
   docs/audits/PROPOSED_RELEASE_1_ROADMAP.md ("#20: Status-/
   Plausibilitaetsmodell, danach Filterpipeline").
@@ -1492,10 +1664,11 @@ Begruendung: So vom Nachkorrekturauftrag ausdruecklich festgelegt; deckt
 
 ```text
 Entschieden: Die Umsetzung von #20 legt KEINE neue ADR in docs/DECISIONS.md
-  an. #20 setzt bereits akzeptierte Architektur und Spezifikation um
-  (ARCHITECTURE.md, SENSOR_TUNING_COMMISSIONING.md, SAFETY_COMPONENT_
-  FAULTS.md, ADR-013); es gibt keine neue, bisher unentschiedene
-  Grundsatzfrage, die eine eigene ADR rechtfertigen wuerde.
+  an. #20 setzt bereits akzeptierte Architektur und Spezifikation um; es
+  gibt keine neue, bisher unentschiedene Grundsatzfrage. Die Porterweiterung
+  aus Runde 2 ist eine additive, ruecksichtsvolle Evolution eines bereits
+  bestehenden, noch nicht produktiv verdrahteten Ports - keine neue
+  Architekturentscheidung.
 ```
 
 `DECISION_B_NO_NEW_ADR: PASS`
@@ -1504,78 +1677,69 @@ Entschieden: Die Umsetzung von #20 legt KEINE neue ADR in docs/DECISIONS.md
 
 ```text
 Entschieden: Die anwendungsneutrale Sensorqualitaets- und Filterpipeline aus
-  #20 gehoert nach lib/device_platform/ (wie in Abschnitt 13/13a bereits
-  ausgearbeitet). Konkrete Rollen wie Schrankluft, Produkt und Kuehlkoerper
-  bleiben ausserhalb der Plattform, in Anwendung beziehungsweise Composition
-  Root.
-Begruendung (durch den Nachkorrekturauftrag bestaetigt und durch ADR-013
-  wortwoertlich gedeckt): ADR-013, Abschnitt "Regeln fuer neue Module",
-  zaehlt "Sensorqualitaet, Filter, begrenzte Reglerbausteine" ausdruecklich
-  zu den "Allgemeine[n] Bausteine[n]", die "in der Plattform liegen"
-  duerfen; ADR-013 nennt in seinem Kontextabschnitt "Sensorqualitaet" sogar
-  explizit als Beispiel fuer eine ueber Fermentationsschrank UND eine
-  zukuenftige Smokersteuerung hinweg gemeinsam benoetigte Grundfunktion.
-  lib/device_platform/AGENTS.md deckt sich damit ("allgemeine
-  Sensorqualitaet, Filter und begrenzte Reglerbausteine" im Abschnitt
-  "Erlaubt"). Diese Quellen entscheiden die Frage eindeutig zugunsten von
-  device_platform; die vormals in dieser Datei dokumentierte Gegenlesart
-  von Abschnitt 11 des urspruenglichen Auftrags ("nur vorhandene generische
-  Ports") gilt als durch den Nachkorrekturauftrag ausdruecklich aufgeloest.
+  #20 gehoert nach lib/device_platform/. Konkrete Rollen wie Schrankluft,
+  Produkt und Kuehlkoerper bleiben ausserhalb der Plattform, in Anwendung
+  beziehungsweise Composition Root.
+Begruendung: ADR-013, Abschnitt "Regeln fuer neue Module", zaehlt
+  "Sensorqualitaet, Filter, begrenzte Reglerbausteine" ausdruecklich zu den
+  "Allgemeine[n] Bausteine[n]", die "in der Plattform liegen" duerfen;
+  ADR-013 nennt "Sensorqualitaet" im Kontextabschnitt sogar explizit als
+  Beispiel fuer eine ueber Fermentationsschrank UND eine zukuenftige
+  Smokersteuerung hinweg gemeinsam benoetigte Grundfunktion.
+  lib/device_platform/AGENTS.md deckt sich damit.
 ```
 
 `DECISION_C_DEVICE_PLATFORM: PASS`
 `OWNER_DECISIONS_OPEN: 0`
-`IMPLEMENTATION_BLOCKED_BY_OWNER_DECISION: NO`
 
 ## 20. Genaue Implementierungsreihenfolge (nach Planfreigabe)
 
-Zwei interne Reviewslices im selben Draft-PR #95 (Entscheidung A, Abschnitt
-19), kein zweiter PR, keine Uebergangs-/Platzhalter-API zwischen den
-Slices: `filteredCelsius` ist waehrend Slice A schlicht `std::nullopt`
-(echtes "noch nicht vorhanden", kein erfundener Gleichstand mit
-`correctedCelsius`, siehe Abschnitt 12).
+Zwei interne Reviewslices im selben Draft-PR #95, kein zweiter PR, keine
+Uebergangs-/Platzhalter-API zwischen den Slices.
 
 ```text
-Slice 1 (Qualitaetszustand + Plausibilitaet):
+Slice 1 (Qualitaetszustand + Plausibilitaet, inkl. Porterweiterung):
   1. sensor_limits.hpp (firmwarefeste Grenzen, ohne sensor-/
      treiberspezifische Konstanten)
-  2. sensor_identity.hpp (eigenstaendig, Abschnitt 13a)
-  3. sensor_sample.hpp (RawSensorSample, SensorTransportStatus,
-     SampleDisposition)
-  4. sensor_quality.hpp
-  5. sensor_quality_config.hpp (Abschnitt 10.0)
-  6. sensor_quality_snapshot.hpp (SensorFaultReason, SensorQualitySnapshot;
-     correctedCelsius UND filteredCelsius als std::optional<double>, bleiben
-     in Slice 1 stets std::nullopt, da MedianFilter/LowPassFilter noch nicht
-     existieren - correctedCelsius haengt vom Medianfilter-Ausgang ab, nicht
-     von rawCelsius direkt, siehe Abschnitt 12)
-  7. sensor_quality_pipeline.hpp/.cpp: Zeitstempel-/Dispositionspruefung
-     (9b), Transport-/Wertebereichs-/Aenderungsratenpruefung (10.1/10.2),
-     Zustandsmaschine (Abschnitt 8, quality als in snapshot(now) ABGELEITETE
-     Groesse - siehe Abschnitt 9a-Ergaenzung unten, nicht als bei ingest()
-     separat fortgeschriebener Zustand); ingest(sample, now) und snapshot(now)
-     mit explizitem Zeitparameter, keine gespeicherte ITimeSource (9a)
-  8. sensor_fault_sequence.hpp/.cpp (so weit fuer Slice-1-Tests benoetigt)
-  9. test/test_sensor_identity/, test/test_sensor_quality_config/,
-     test/test_sensor_quality_pipeline/ (Teilmenge: Start/Normalbetrieb,
-     Transport-/Messfehler, Zeit/Alter/Disposition, Wertebereich,
-     Zustandsmaschine/Wiedererkennung, Robustheit - siehe Abschnitt 17a)
-  10. Dokumentation/Changelog-Eintrag fuer Slice 1
-  11. Ressourcen-/CI-Nachweise fuer Slice 1
+  2. temperature_source.hpp erweitern: TemperatureSampleStatus,
+     TemperatureReading (gueltig-by-construction), ITemperatureSource
+     unveraendert in der Signatur (Abschnitt 9.1)
+  3. sensor_identity.hpp (eigenstaendig, gueltig-by-construction,
+     Abschnitt 9.0)
+  4. mock_temperature_source.hpp/.cpp auf den erweiterten Port nachziehen
+     (setReading/setFault statt setCelsius/setAvailable)
+  5. test_sensor_actuator_mocks.cpp: die drei temperaturbezogenen
+     Testfunktionen nachziehen
+  6. sensor_quality.hpp
+  7. sensor_quality_config.hpp (NaN/Inf-sicher, Abschnitt 10.0)
+  8. sensor_quality_snapshot.hpp (SensorFaultReason, SensorQualitySnapshot;
+     correctedCelsius UND filteredCelsius bleiben in Slice 1 stets
+     std::nullopt)
+  9. sensor_quality_pipeline.hpp/.cpp: SampleDisposition, Zeitstempel-/
+     Dispositionspruefung (9b), Transport-/Wertebereichs-/
+     Aenderungsratenpruefung (10.1/10.2), Zustandsmaschine mit
+     deriveQuality() (Abschnitt 8/9a); ingest(sample, now) ->
+     SampleDisposition, snapshot(now) -> SensorQualitySnapshot
+  10. test/test_temperature_source/, test/test_sensor_identity/,
+      test/test_sensor_quality_config/, test/test_sensor_quality_pipeline/
+      (Teilmenge: Start/Normalbetrieb, Transport-/Messfehler, Zeit/Alter/
+      Disposition, Wertebereich, Zustandsmaschine/Wiedererkennung,
+      Robustheit - inkl. lokaler Testhilfe fuer geskriptete Folgen)
+  11. Dokumentation/Changelog-Eintrag fuer Slice 1
+  12. Ressourcen-/CI-Nachweise fuer Slice 1
 
 Slice 2 (Median + Offset + Tiefpass + vollstaendige Integration):
-  12. sensor_offset.hpp (gueltig-by-construction, Abschnitt 13a)
-  13. sensor_median_filter.hpp/.cpp
-  14. sensor_lowpass_filter.hpp/.cpp
-  15. sensor_quality_pipeline.hpp/.cpp: Integration von Offset/Median/
-      Tiefpass, ROM-Wechsel-Filterreset; filteredCelsius wird ab hier fuer
-      Valid-Proben tatsaechlich gesetzt
-  16. verbleibende sensor_fault_sequence.hpp/.cpp-Ergaenzungen
+  13. sensor_offset.hpp (gueltig-by-construction, NaN/Inf-sicher,
+      Abschnitt 13a)
+  14. sensor_median_filter.hpp/.cpp
+  15. sensor_lowpass_filter.hpp/.cpp
+  16. sensor_quality_pipeline.hpp/.cpp: Integration von Offset/Median/
+      Tiefpass, ROM-Wechsel-Filterreset; correctedCelsius/filteredCelsius
+      werden ab hier ab dem ersten plausiblen Beitrag tatsaechlich gesetzt
   17. test/test_sensor_offset/, test/test_sensor_median_filter/,
       test/test_sensor_lowpass_filter/, verbleibende Faelle in
       test/test_sensor_quality_pipeline/ (Median/Tiefpass-Integration,
-      Offset, Identitaet/ROM-Wechsel, Widersprueche/Scopegrenzen -
-      Abschnitt 17a)
+      Offset, Identitaet/ROM-Wechsel, Widersprueche/Scopegrenzen)
   18. Dokumentation/Changelog-Eintrag fuer Slice 2
   19. Ressourcen-/CI-Nachweise fuer Slice 2, vollstaendiger Testlauf
 ```
@@ -1583,7 +1747,7 @@ Slice 2 (Median + Offset + Tiefpass + vollstaendige Integration):
 ## 21. Stopbedingung und freizugebender Plan-Commit
 
 ```text
-Nach Commit und Push dieser Plan-Datei sowie Erstellung des Draft-PR:
+Nach Commit und Push dieser Plan-Datei sowie Aktualisierung des Draft-PR:
 HALTED_FOR_OWNER_REVIEW
 
 Die Implementierung beginnt erst nach einem Ownerkommentar der Form:
@@ -1617,3 +1781,9 @@ Approved plan commit: <exakter Commit-SHA dieser Datei>
 [x] PR als Draft belassen
 [x] HALTED_FOR_OWNER_REVIEW
 ```
+
+Hinweis: Diese Taskleiste ist die urspruengliche 20-Punkte-
+Planerstellungs-Checkliste aus dem ersten Plan-Auftrag (unveraendert
+abgeschlossen). Die Taskleisten der beiden Nachkorrekturrunden sind ein
+jeweils eigener, in der PR-Beschreibung #95 gezaehlter Scope und werden
+nicht zusaetzlich hier eingetragen.
