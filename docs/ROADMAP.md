@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | PR #98 – Agentenregeln und Statusquellen konsolidieren | Draft; Umsetzung, Main-Synchronisierung und vollstaendiges Diffreview abgeschlossen; keine offenen Reviewbefunde | Ownerreview; Entscheidung zur erforderlichen externen Approval-Regel; danach Ownerwechsel auf `Ready for review` und GitHub-CI |
+| 1 | PR #98 – Agentenregeln und Statusquellen konsolidieren | Draft; Umsetzung und Main-Synchronisierung abgeschlossen; drei Reviewbefunde korrigiert; zweites vollstaendiges Diffreview laeuft | Reviewkorrekturen und finalen Diff erneut vollstaendig pruefen; danach Ownerreview und Entscheidung zur externen Approval-Regel |
 
 ## Naechste fachliche Arbeit
 
