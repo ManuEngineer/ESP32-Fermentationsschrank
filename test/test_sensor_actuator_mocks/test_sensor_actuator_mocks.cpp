@@ -18,28 +18,41 @@ constexpr device_platform_test_support::ThermalSimulationConfig kTestConfig{
 }  // namespace
 
 void test_temperature_source_reports_configured_value() {
-    device_platform_test_support::MockTemperatureSource sensor(4.0);
+    device_platform_test_support::MockTemperatureSource sensor(
+        /*identity=*/std::nullopt, /*monotonicTimestampMs=*/0U,
+        /*celsius=*/4.0);
 
     const auto reading = sensor.read();
 
-    TEST_ASSERT_TRUE(reading.available);
-    TEST_ASSERT_EQUAL_DOUBLE(4.0, reading.celsius);
+    TEST_ASSERT_TRUE(reading.status() ==
+                      device_platform::TemperatureSampleStatus::Ok);
+    TEST_ASSERT_TRUE(reading.celsius().has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(4.0, reading.celsius().value());
 }
 
 void test_temperature_source_can_change_value() {
-    device_platform_test_support::MockTemperatureSource sensor(4.0);
+    device_platform_test_support::MockTemperatureSource sensor(
+        /*identity=*/std::nullopt, /*monotonicTimestampMs=*/0U,
+        /*celsius=*/4.0);
 
-    sensor.setCelsius(6.5);
+    sensor.setReading(/*identity=*/std::nullopt,
+                       /*monotonicTimestampMs=*/1000U, /*celsius=*/6.5);
 
-    TEST_ASSERT_EQUAL_DOUBLE(6.5, sensor.read().celsius);
+    TEST_ASSERT_EQUAL_DOUBLE(6.5, sensor.read().celsius().value());
 }
 
 void test_temperature_source_fault_injection_marks_unavailable() {
-    device_platform_test_support::MockTemperatureSource sensor(4.0);
+    device_platform_test_support::MockTemperatureSource sensor(
+        /*identity=*/std::nullopt, /*monotonicTimestampMs=*/0U,
+        /*celsius=*/4.0);
 
-    sensor.setAvailable(false);
+    sensor.setFault(/*identity=*/std::nullopt, /*monotonicTimestampMs=*/1000U,
+                     device_platform::TemperatureSampleStatus::BusFault);
 
-    TEST_ASSERT_FALSE(sensor.read().available);
+    const auto reading = sensor.read();
+    TEST_ASSERT_FALSE(reading.status() ==
+                       device_platform::TemperatureSampleStatus::Ok);
+    TEST_ASSERT_FALSE(reading.celsius().has_value());
 }
 
 void test_bidirectional_actuator_sink_tracks_current_state() {

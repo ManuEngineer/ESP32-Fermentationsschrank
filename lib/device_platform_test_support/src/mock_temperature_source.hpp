@@ -1,27 +1,38 @@
 #pragma once
 
+#include <cstdint>
+#include <optional>
+
+#include "sensor_identity.hpp"
 #include "temperature_source.hpp"
 
 namespace device_platform_test_support {
 
-// Deterministisch steuerbarer Mock fuer eine Temperaturfuehlerrolle. Tests und
-// das thermische Simulationsmodell setzen den Messwert direkt; es findet kein
-// realer Bus- oder Zeitzugriff statt.
-class MockTemperatureSource final : public device_platform::ITemperatureSource {
+// Deterministisch steuerbarer Mock fuer eine Temperaturfuehlerrolle. Tests
+// und das thermische Simulationsmodell setzen die Probe direkt; es findet
+// kein realer Bus- oder Zeitzugriff statt.
+class MockTemperatureSource final
+    : public device_platform::ITemperatureSource {
    public:
-    explicit MockTemperatureSource(double initialCelsius);
+    MockTemperatureSource(
+        std::optional<device_platform::SensorIdentity> identity,
+        uint64_t monotonicTimestampMs, double celsius);
 
     [[nodiscard]] device_platform::TemperatureReading read() const override;
 
-    void setCelsius(double celsius);
+    // Setzt eine erfolgreiche Messung (status == Ok).
+    void setReading(std::optional<device_platform::SensorIdentity> identity,
+                     uint64_t monotonicTimestampMs, double celsius);
 
-    // Simuliert einen Bus-/CRC-Ausfall dieser Fuehlerrolle. Waehrend nicht
-    // verfuegbar liefert `read()` `available = false`.
-    void setAvailable(bool available);
+    // Simuliert einen Mess-/Transportfehler dieser Fuehlerrolle (status !=
+    // Ok, kein Messwert). Waehrend eines Fehlers liefert `read()` diese
+    // fehlerhafte Probe.
+    void setFault(std::optional<device_platform::SensorIdentity> identity,
+                  uint64_t monotonicTimestampMs,
+                  device_platform::TemperatureSampleStatus status);
 
    private:
-    double celsius_;
-    bool available_{true};
+    device_platform::TemperatureReading reading_;
 };
 
 }  // namespace device_platform_test_support

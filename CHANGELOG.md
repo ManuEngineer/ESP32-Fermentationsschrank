@@ -61,6 +61,28 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Added
 
+- Sensorqualitaet und Plausibilitaet fuer Issue #20, Slice 1 (Qualitaetszustand
+  + Plausibilitaet, ohne Filter/Kalibrierung): `SensorQualityPipeline` in
+  `lib/device_platform/` fuehrt fuer eine einzelne Sensorrolle Disposition
+  (`Accepted`/`DuplicateIgnored`/`RejectedTimestampConflict`/
+  `RejectedRetrograde`/`RejectedFuture`), Wertebereichs- und
+  Aenderungsratenpruefung sowie die Zustandsmaschine
+  `Valid`/`Stale`/`Failed` rein aus expliziten monotonen Zeitstempeln
+  (kein gehaltener `ITimeSource`-Zeiger). Recovery aus `Failed` erfordert
+  dieselbe vollstaendige Bedingung wie aus `Stale` (mehrere aufeinander-
+  folgende gueltige Proben plus Stabilitaetsdauer); ein einzelner erneuter
+  Fehler waehrend einer unvollstaendigen Wiedererkennung setzt den
+  Fortschritt zurueck, ohne eine zweite, separat gespeicherte
+  Qualitaetswahrheit einzufuehren. `ITemperatureSource`/`TemperatureReading`
+  um optionale `SensorIdentity` und einen `TemperatureSampleStatus`
+  (`Ok`/`BusFault`/`CrcFault`/`MissingSample`/`KnownInvalidMeasurement`)
+  erweitert; `MockTemperatureSource` entsprechend angepasst. Neue
+  guelig-by-construction-Typen `SensorIdentity`, `TemperatureReading`,
+  `SensorQualityConfig` sowie `sensor_limits.hpp` mit den firmwarefesten
+  Aussengrenzen. `correctedCelsius`/`filteredCelsius`/`appliedOffset`
+  bleiben in diesem Slice bewusst `nullopt`; Medianfilter, Offset/
+  Kalibrierung, Tiefpass und die vollstaendige Pipelineintegration folgen in
+  Slice 2.
 - Echter ESP-IDF-6.0.2-Laufzeitpfad fuer Issue #73: `main/app_main.cpp`
   ersetzt den produktionslosen `#72`-Buildstub durch einen
   `app_main()`-Composition-Root mit derselben Sicherheitsparitaet wie der
