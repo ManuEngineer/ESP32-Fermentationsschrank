@@ -54,7 +54,8 @@ Recovery- oder Owner-Gates zu kürzen.
 | R-07a | `docs/CODEX_TASK_TEMPLATE.md` entfernen. |
 | R-08 | Root-Zielgrösse etwa 5–7 KB, lokale Regeln möglichst unter 20 Zeilen; bedingte Lesematrix freigegeben. |
 | R-08a | Alle notwendigen lokalen `CLAUDE.md` bleiben einzeilige Importbrücken; ESP-IDF-Adapterbaum erhält lokale Regeln. |
-| R-09 | README kompakt; `SPECIFICATION_PLAN.md` entfernen; `SPECIFICATION_REVIEW.md` kanonisch aktualisieren; einzigartige PR-38-Korrekturen in Fachverträge übernehmen und alte Korrekturdatei entfernen. |
+| R-09 | README kompakt; `SPECIFICATION_PLAN.md` entfernen; `SPECIFICATION_REVIEW.md` kanonisch aktualisieren; einzigartige PR-38-Korrekturen in Fachverträge übernehmen. |
+| R-09a | `PR38_REVIEW_CORRECTIONS.md` bleibt als kurzer nicht normativer Kompatibilitätshinweis für historische Links bestehen; alle Regeln liegen in aktuellen Fachquellen. |
 
 ## Freigegebene Lesematrix
 
@@ -99,23 +100,28 @@ Recovery- oder Owner-Gates zu kürzen.
 
 ### A9.3 – README, Spezifikation und PR-38-Korrekturen
 
-`NEXT`
+`COMPLETED`
 
-- README zum kurzen nicht normativen Einstieg reduzieren.
-- `SPECIFICATION_REVIEW.md` kanonisch aktualisieren.
-- einzigartige Persistenz-/Safety-Regeln aus PR #38 in aktuelle Fachverträge
-  und Akzeptanztests übertragen.
-- `SPECIFICATION_PLAN.md` und danach `PR38_REVIEW_CORRECTIONS.md` entfernen.
-- historische Audit-Roadmap klar markieren.
+- README zum kurzen nicht normativen Einstieg reduziert.
+- `SPECIFICATION_REVIEW.md` als kanonische Release-/Prioritätsquelle aktualisiert.
+- neue `docs/ROADMAP.md` als einzige Live-Statusquelle erstellt.
+- `SPECIFICATION_PLAN.md` entfernt.
+- Audit-Verzeichnis als historisch gekennzeichnet.
+- kritischer Persistenzfehlervertrag vollständig in
+  `SYSTEM_SAFETY_AND_RECOVERY.md` verankert.
+- diskriminierende Persistenz-Latch-, Transaktions- und Reset-Orakel in
+  `ACCEPTANCE_TESTS.md` ergänzt.
+- `PR38_REVIEW_CORRECTIONS.md` auf einen nicht normativen historischen
+  Kompatibilitätshinweis reduziert.
 
 ### A9.4 – Statusquellen
 
-`PENDING_REVIEW`
+`NEXT`
 
-- neue `docs/ROADMAP.md` aus Live-GitHub-Stand erstellen;
 - `IMPLEMENTATION_PLAN.md` auf stabile Phasen/Reihenfolge kürzen;
 - `IMPLEMENTATION_ISSUES.md` auf Struktur/Abhängigkeiten kürzen;
-- `OPEN_POINTS.md` nur anhand belegter Nachweise bereinigen.
+- `OPEN_POINTS.md` nur anhand belegter Nachweise bereinigen;
+- verbleibende Live-Statusangaben ausserhalb von `ROADMAP.md` entfernen.
 
 ## Abschlussprüfungen
 
@@ -129,5 +135,5 @@ Recovery- oder Owner-Gates zu kürzen.
 
 ## Nächster Schritt
 
-A9.3 umsetzen und dabei jede einzigartige PR-38-Regel vor der Löschung ihrer
-aktuellen kanonischen Fachquelle zuordnen.
+A9.4 prüfen und umsetzen. `OPEN_POINTS.md` wird nur bei konkretem Nachweis
+verändert; unbestätigte Hardware- oder Inbetriebnahmepunkte bleiben offen.
