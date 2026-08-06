@@ -24,7 +24,7 @@ fachlich zuständigen Stelle.
 | Quelle | Rolle |
 |---|---|
 | `AGENTS.md` | kompakte globale Pflichten, Owner-Gates, Quellenzugang und Lesematrix |
-| `CLAUDE.md` | ausschliesslich `@AGENTS.md` |
+| Root- und lokale `CLAUDE.md` | reine Importbrücken mit exakt `@AGENTS.md` |
 | lokale `AGENTS.md` | nur zusätzliche Regeln des jeweiligen Verzeichnisbaums |
 | `docs/ROADMAP.md` | einzige aktuelle Status- und Taskübersicht |
 | `docs/IMPLEMENTATION_PLAN.md` | stabiler technischer Phasenplan ohne Live-Status |
@@ -56,6 +56,7 @@ fachlich zuständigen Stelle.
 | R-07 | `DECISIONS.md` bleibt ADR-Register. Historischen Codex-Handover und Auftragspaket #9 bis #37 entfernen. `Agent-Auftraege/Auftrag.md` kompakt neu aufbauen. |
 | R-07a | `docs/CODEX_TASK_TEMPLATE.md` entfernen; keine zweite oder agentspezifische Auftragsvorlage. |
 | R-08 | Zielentwurf der Root-`AGENTS.md`, Zielgrösse von etwa 5–7 KB beziehungsweise 90–130 Zeilen und bedingte Lesematrix sind freigegeben. Lokale `AGENTS.md` sollen möglichst unter 20 Zeilen bleiben. |
+| R-08a | Root- und notwendige lokale `CLAUDE.md` bleiben als einzeilige Importbrücken bestehen und enthalten exakt `@AGENTS.md`; lokale Regeln stehen ausschliesslich in der jeweiligen `AGENTS.md`. Für `device_platform_esp_idf` werden beide lokalen Dateien ergänzt. |
 
 ## Freigegebener Zielaufbau der Root-`AGENTS.md`
 
@@ -126,9 +127,11 @@ Die Historie bleibt in Git und den zugehörigen PRs erhalten.
 
 ## Bestätigte Korrekturen
 
+- Root- und lokale `CLAUDE.md` werden auf exakt `@AGENTS.md` reduziert.
 - `lib/device_platform/AGENTS.md` darf keine ESP32-spezifischen Adapter erlauben;
   diese gehören nach `lib/device_platform_esp_idf/`.
-- Für `lib/device_platform_esp_idf/` fehlt eine kurze lokale Delta-Regel.
+- Für `lib/device_platform_esp_idf/` fehlen eine kurze lokale Delta-Regel und
+  die zugehörige `CLAUDE.md`-Importbrücke.
 - Die aktuelle PR-Vorlage und der GitHub-Workflow entsprechen nicht dem
   beschlossenen Plan-/Review-/CI-Vertrag.
 - `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_ISSUES.md`, der alte Auftragsindex
