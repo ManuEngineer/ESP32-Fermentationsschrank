@@ -16,7 +16,7 @@ WLAN- und Authentifizierungsdaten aus Issue #27 vorweg.
 Der Release-1-Vertrag folgt ADR-018 (Variante B). Die Umsetzung ist in die
 Teilpakete #54 bis #57 geschnitten. Jedes Paket besitzt einen eigenen Scope und
 verwendet einen eigenen Plan-first-PR. Der aktuelle Arbeitsstand steht
-­ausschliesslich in `ROADMAP.md` und den Live-Issues.
+ausschliesslich in `ROADMAP.md` und den Live-Issues.
 
 Reale Flash-Atomizitaet, reale Heapreserve und Belastungsmessungen bleiben
 spaetere Hardware- beziehungsweise Release-Gates.
@@ -413,7 +413,7 @@ ungueltig.
 #### ProgramCatalog Schema 1
 
 | Reihenfolge | Feld | Wirebreite | Teilgrenze |
-|---:|---|---|
+|---:|---|---|---:|
 | 1 | Programmanzahl | `uint8` | 4..16 |
 | 2 | ProgramDocument 0..n-1 | variable Struktur unten | zuerst exakt 4 Factorykopien, danach hoechstens 12 Benutzerprogramme |
 
