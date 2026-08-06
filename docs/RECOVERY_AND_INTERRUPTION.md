@@ -4,8 +4,8 @@
 
 Dieses Dokument definiert die Release-1-Regeln fuer Stromunterbrechungen,
 Sensorersatz, phasenbezogenen Wiederanlauf und Zeitbewertung. Es ergaenzt
-[`STATE_MACHINE.md`](STATE_MACHINE.md) und wird durch
-[`PR38_REVIEW_CORRECTIONS.md`](PR38_REVIEW_CORRECTIONS.md) praezisiert.
+[`STATE_MACHINE.md`](STATE_MACHINE.md) und
+[`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md).
 
 ## Grundsatz: autonom, aber nicht blind
 
