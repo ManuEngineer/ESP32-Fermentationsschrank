@@ -13,22 +13,22 @@ Vorherige, NICHT freigegebene Plan-Commits:
   2e3a041131996d73cb0ce342f256f06f79f694bd (Revision 3)
   6a85c331cf17673d03ec2a231100e5f3af7b916b (Revision 4)
   286ebacda05a202ea203789421e2398a7a868905 (Revision 5)
+  e1bcae79471eac508b58bd6823b76fe46744ee0c (Revision 6)
 PLAN_ONLY: YES
 IMPLEMENTATION_STARTED: NO
 PLAN_STATUS: PLAN_DRAFT_REVIEW_REQUIRED
 IMPLEMENTATION_STATUS: IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL
 CONTEXT_BASELINE_BRANCH: plan/issue-21-sensor-selection-fallback-return
-CONTEXT_BASELINE_SHA: 286ebacda05a202ea203789421e2398a7a868905
-CONTEXT_HEAD_SHA: 286ebacda05a202ea203789421e2398a7a868905
-CONTEXT_PLAN_SHA: 286ebacda05a202ea203789421e2398a7a868905
+CONTEXT_BASELINE_SHA: e1bcae79471eac508b58bd6823b76fe46744ee0c
+CONTEXT_HEAD_SHA: e1bcae79471eac508b58bd6823b76fe46744ee0c
+CONTEXT_PLAN_SHA: e1bcae79471eac508b58bd6823b76fe46744ee0c
 CONTEXT_REFRESH_MODE: INCREMENTAL
-CONTEXT_DELTA: Revision-6-Planpruefung von Include-Schichtung, Apply-Status,
-  Clear-/Startpfaden, Safety-Pending, Ready-only-Persistenz, Re-Arm-Zeit und
-  Architektur-/Testguards
+CONTEXT_DELTA: Revision-7-Konsistenzpruefung des manuellen Sensoraktionspfads,
+  Status-Transportzuordnung, RAM-only-Recheck und Release-1-Re-Arm-Vertrag
 SOURCE_OF_TRUTH_CONFLICT: NONE
 ```
 
-Dies ist Revision 6, die fuenfte und abschliessende Plankorrektur. Sie behebt
+Dies ist Revision 7, die letzte Konsistenzkorrektur. Sie behebt
 die im PR-#99-Review vom 2026-08-06 zu
 Revision 4 benannten Luecken bei neu konkretisierten Integrationsstellen:
 fehlender Eigentuemer und fehlende kanonische Anwendungsfunktion fuer den
@@ -41,11 +41,14 @@ Effektbezeichnung, fehlende thermische Evidenz-Invarianten sowie eine an
 der #17/#18-Grenze zu optimistische Testbehauptung. Produktionscode,
 produktive Tests, Toolchain, Buildkonfiguration, Hardwarekonfiguration und
 Abhaengigkeiten werden weiterhin in dieser Planungsphase nicht geaendert.
-Revision 6 korrigiert zusaetzlich die daraus entstandene Include-Schichtung,
+Revision 6 korrigierte zusaetzlich die daraus entstandene Include-Schichtung,
 den typisierten Status des RAM-only-Apply, die vollstaendigen Clear-/Start-
 Pfade, das Safety-Gate der drei manuellen Aktionen, den Geltungsbereich von
 `persistSensorSelection`, den Re-Arm im Luftbetrieb und den
-Release-1-Zeitvertrag.
+Release-1-Zeitvertrag. Zusaetzlich wird der manuelle Sensoraktionspfad jetzt
+vollstaendig ueber `SensorSelectionApplyStatus` transportiert: ohne
+redundantes Persistenzflag, mit stale-geprueftem RAM-only-Apply und einem
+expliziten, einmaligen RAM-only-`RecheckProduct` aus `AirFallbackActive`.
 
 ## 2. Live-Issue- und Abhaengigkeitsabgleich
 
@@ -57,7 +60,7 @@ Release-1-Zeitvertrag.
 | Issue #18 | OPEN | zustaendig fuer `LoadedActiveRun -> Ready`; #21 liefert nur Daten und eine reine Entscheidungsfunktion |
 | Issue #20 | CLOSED | `SensorQualitySnapshot`/`SensorQualityPipeline` bleiben Qualitaetsquelle |
 | Epic #5 | OPEN | Issue bleibt Teil des E3-Sensor-/Regel-/Safety-Kerns |
-| PR #99 | OPEN, Draft, dieser Plan ist die sechste Revision | Reviewbefunde vom 2026-08-06 zu Revision 4 sowie die Folgepruefung zu Revision 5 sind Grundlage dieser Ueberarbeitung |
+| PR #99 | OPEN, Draft, dieser Plan ist die siebte Revision | Konsistenzkorrektur auf Basis des Plan-Commits e1bcae7 und der Folgepruefung des manuellen Sensoraktionspfads |
 
 Issue #21 hat weiterhin keine Kommentare mit zusaetzlichen Anforderungen.
 Issue #17 und #18 werden nicht veraendert.
@@ -102,7 +105,8 @@ Ueberarbeitung konkret nachvollzogen:
   wird von der aufrufenden Schicht direkt beantwortet, ohne
   `persistCommand` ueberhaupt aufzurufen - das bestehende, bereits an
   mehreren Stellen genutzte Muster fuer eine bestaetigte, aber wirkungslose
-  Anfrage passt exakt auf einen wirkungslosen `RecheckProduct`.
+  Anfrage passt auf einen `RecheckProduct`-Durchlauf ohne wirksame
+  Zustandsaenderung.
 - `lib/fermentation_app/src/run_commands.cpp::clearActiveRun` entfernt heute
   nur die bestehenden Laufdaten; `run_persistence_coordinator.cpp::
   clearCandidateRun` wiederholt denselben unvollstaendigen Clear. Beide
@@ -205,7 +209,7 @@ im Programmmodell (6.2), Ausgabewert und Zustandsseparation (6.3).
 Zustandsliste und Grundtabelle bleiben seit Revision 4 unveraendert fuer die
 aktiven Laufphasen (`NormalProduct`, `NormalAir`, `ProductFailureDetected`,
 `UserDecisionRequired`, `AirFallbackActive`, `ReturnValidationPending`,
-`SafeLocked`, `RestartRevalidationPending`). Revision 6 ergaenzt
+`SafeLocked`, `RestartRevalidationPending`). Revision 7 bestaetigt
 `NoActiveRun` ausschliesslich als expliziten Inaktivzustand ausserhalb des
 aktiven Automaten. Es gelten die in 6.4.9-6.4.12 dieser Revision
 praezisierten Uebergangs-, Zeit- und Persistenzregeln.
@@ -327,7 +331,7 @@ Fuer produktgefuehrte manuelle Laeufe (6.8) gilt derselbe `WaitForUser`-
 Ablauf ohne erfundene Wartezeit - unveraendert in der Substanz, jetzt am
 korrigierten Automaten nachvollziehbar.
 
-#### 6.4.11 Kanonischer Laufzeitzustand, Include-Schichtung und Mutation (Revision 6)
+#### 6.4.11 Kanonischer Laufzeitzustand, Include-Schichtung und Mutation (Revision 7)
 
 Die Typen werden in einer eigenen, werttypenreinen Schicht definiert. Damit
 bleibt der bestehende Persistenzvertrag kompatibel, ohne einen Zyklus zu
@@ -383,8 +387,6 @@ enum class SensorPeltierPermission : std::uint8_t { Allowed, Blocked };
 struct ReturnValidationRuntimeState {
     std::optional<std::uint64_t> enteredAtMonotonicMillis;
     std::optional<std::uint32_t> lastObservedProfileRevision;
-    // In Release 1 immer leer; zeitbasierter Re-Arm ist deaktiviert.
-    std::optional<std::uint64_t> retryNotBeforeMonotonicMillis;
 };
 
 struct SensorSelectionRuntimeState {
@@ -397,7 +399,7 @@ struct SensorSelectionRuntimeState {
 ```
 
 Der explizite `NoActiveRun`-Wert ist der einzige Inaktivzustand:
-`permission == Blocked`, alle Timer-/Evidenz-/Retry-Felder sind leer,
+`permission == Blocked`, alle Timer-/Evidenzfelder sind leer,
 `activeRunSensorMode == nullopt` und `sensorSelection == nullopt`. Der
 Start- und Restore-Pfad setzt fuer einen aktiven Lauf alle Werte vollstaendig
 neu; er uebernimmt niemals Runtimezustand eines vorherigen Laufs.
@@ -434,7 +436,6 @@ struct SensorSelectionStateMutation {
     std::uint32_t resultingRunRevision{0U};
     std::optional<SensorSelectionEvent> event;
     std::optional<SensorSelectionNotice> notice;
-    bool persistWorthy{false};
 };
 
 [[nodiscard]] SensorSelectionStateMutation applySensorSelectionDecision(
@@ -458,19 +459,46 @@ Revision liefert den typisierten Status und laesst alle Werte unveraendert.
 aus 6.4.9 (a)-(d) zulaessig und erhoeht `resultingRunRevision` checked.
 `AppliedRamOnly` ist nur fuer eine gueltige fluechtige Unterphasenmutation
 ohne Laufrevision und ohne Flashwrite zulaessig; `NoChange` erzeugt keine
-Mutation. Bei den ablehnenden Statuswerten wird der Rueckgabewert nie blind
-uebernommen.
+Mutation. `SensorSelectionStateMutation::status` ist die einzige Quelle fuer
+die Transportentscheidung. Das optionale `persisted`-Feld ist nur die
+Nutzlast des Kandidaten und kein zusaetzliches Persistenzsignal; ein
+zweites Persistenz-Boolean wird nicht eingefuehrt. Bei den ablehnenden
+Statuswerten wird der Rueckgabewert nie blind uebernommen und weder RAM noch
+Store veraendert.
 
 Der automatische Aufrufer bildet eine `SensorSelectionStateView` aus
 `current`, ruft die Funktion auf und uebernimmt bei Erfolg nur die benannten
 Mutationsfelder ueber einen mechanischen, gemeinsamen Mutationshelfer. Er
 setzt nie `current = result.state` und uebernimmt keinen alten
 Gesamtaggregatsnapshot. Der manuelle Kommandoaufbau verwendet dieselbe
-Funktion, traegt die Mutation in `CommandDecision::after` ein und wird durch
-die erweiterte `applyRunCommand`-Stale-Pruefung abgesichert. Die einzige
-fachliche Entscheidungsimplementierung bleibt damit gemeinsam.
+Funktion, traegt die Mutation in `CommandDecision::after` und deren
+`sensorSelectionApplyStatus` ein und wird durch die erweiterte
+`applyRunCommand`-Stale-Pruefung abgesichert. Die einzige fachliche
+Entscheidungsimplementierung bleibt damit gemeinsam.
 
-#### 6.4.12 Re-Arm-Regel fuer die automatische Rueckkehrvalidierung (Revision 6)
+Die Transportzuordnung ist verbindlich und statusgetrieben:
+
+```text
+automatischer Pfad:
+  AppliedPersistentCandidate -> persistSensorSelection
+  AppliedRamOnly             -> benannte, stale-gepruefte RAM-Mutation ohne Write
+  NoChange oder Ablehnungsstatus -> keine Mutation, kein Write
+
+manueller Pfad:
+  AppliedPersistentCandidate -> persistCommand
+  AppliedRamOnly             -> stale-geprueftes RAM-Apply ohne Store-Write;
+                                 CommandId nur im fluechtigen Kommandozustand merken
+  NoChange oder Ablehnungsstatus -> keine Mutation, kein Write
+```
+
+Nur `AppliedRamOnly` darf im manuellen Pfad als vorgeschlagenes Kommando
+weitergereicht werden, damit `applyRunCommand` die Before-/Revisionspruefung
+und die fluechtige Command-ID-Idempotenz ausfuehrt. `AppliedPersistentCandidate`
+geht in den bestehenden persistenten Command-ID-/Store-Pfad. Kein Aufrufer
+leitet die Transportwahl aus einem zweiten Feld oder aus dem Vorhandensein
+eines optionalen Payload-Feldes ab.
+
+#### 6.4.12 Re-Arm-Regel fuer die automatische Rueckkehrvalidierung (Revision 7)
 
 Verschleisssicherer, terminierender Ablauf fuer `ReturnValidationPending`.
 Der zeitbasierte automatische Re-Arm ist in Release 1 vor der
@@ -494,9 +522,9 @@ Waehrend ReturnValidationPending, pro Bewertungszyklus:
     -> genau EIN ReturnValidationAborted (6.4.9), Uebergang nach
        AirFallbackActive (oder SafeLocked bei gleichzeitigem Air-/
        Cooling-Ausfall, Vorrangregel 6.4.9)
-    -> keine zeitbasierte Retry-Sperre in Release 1; der aktive Luftmodus
-       und seine Permission bleiben erhalten, sofern Air/Cooling gueltig
-       sind
+    -> kein zeitbasierter automatischer Re-Arm in Release 1; der aktive
+       Luftmodus und seine Permission bleiben erhalten, sofern Air/Cooling
+       gueltig sind
   Evidenz Compatible UND alle uebrigen 6.7/6.10-Kriterien erfuellt:
     -> genau EIN AutomaticValidatedReturn (6.4.9), Uebergang nach
        NormalProduct
@@ -510,7 +538,7 @@ ist in Release 1 nur zulaessig, wenn MINDESTENS eine Bedingung gilt:
   (iii) das Produkt war waehrend des Luftbetriebs zwischenzeitlich erneut
         ungueltig und ist danach erneut valide geworden - ohne einen
         Ruecksprung nach `ProductFailureDetected`; dieser Fall gilt als
-        neue, unabhaengige Gelegenheit und hebt die Sperre sofort auf.
+        neue, unabhaengige Evidenzgeneration.
 
 Ohne erfuellte Re-Arm-Bedingung bleibt der Zustand nach einem Abbruch in
 AirFallbackActive, auch wenn Produkt weiterhin valide ist - kein
@@ -531,7 +559,8 @@ weiterhin gueltig sind.
 Es gibt in Release 1 keinen produktiven
 `kReturnValidationRetryIntervalMillis` und keinen operativen
 `TBD_COMMISSIONING`-Wert. Eine spaetere Aktivierung des zeitbasierten Re-Arms
-benoetigt einen eigenen, erneut freizugebenden Plan mit einem konkreten,
+gehoert in einen neuen, erneut freizugebenden Plan und benoetigt dort einen
+konkreten,
 begruendeten Factory-Wert sowie firmwarefesten positiven Mindest- und
 Hoechstgrenzen. Ein deaktivierter oder nicht freigegebener Wert ist
 `NotEligible`/`InvalidContext`, erzeugt keinen Retry und keinen Write.
@@ -542,6 +571,16 @@ ersten beiden fuer eine sofortige Neubewertung des Produktfuehlers, der
 dritte fuer eine neue Rueckkehrchance im Luftbetrieb. Die neue Bewertung
 erfolgt innerhalb derselben Kandidatenentscheidung. Aus jedem anderen
 Zustand liefert `RecheckProduct` `CommandStatus::NotAllowedInState`.
+
+Sonderfall `RecheckProduct` aus `AirFallbackActive`: Ist das Produkt gueltig,
+aber die Rueckkehrevidenz noch unvollstaendig, `Unavailable` oder `Stale`,
+liefert die Entscheidung eine RAM-only-Mutation nach
+`ReturnValidationPending` mit `SensorSelectionApplyStatus::AppliedRamOnly`.
+Sie erhoeht keine Laufrevision und erzeugt keinen Store-Write. Die
+aufrufende Schicht uebergibt genau diese Mutation an das stale-gepruefte
+RAM-Apply; dieselbe `CommandId` wird danach innerhalb dieses Boots nur noch
+als `AlreadyProcessed` beantwortet. Eine vollstaendige kompatible Evidenz
+bleibt davon getrennt und folgt dem persistenten Rueckkehrpfad.
 
 Checked-Zeitvertrag fuer alle Zeitberechnungen:
 
@@ -718,6 +757,8 @@ struct CommandDecision {
     std::optional<StartSensorSelectionNotice> startSensorSelectionNotice;
     std::optional<SensorSelectionEvent> sensorSelectionEvent;
     std::optional<SensorSelectionNotice> sensorSelectionNotice;
+    // Bei ApplySensorSelectionAction gesetzt; alleinige Transportquelle.
+    std::optional<SensorSelectionApplyStatus> sensorSelectionApplyStatus;
 };
 
 struct RunPersistenceResult {
@@ -727,6 +768,11 @@ struct RunPersistenceResult {
     std::optional<SensorSelectionNotice> sensorSelectionNotice;
 };
 ```
+
+Bei `CommandKind::ApplySensorSelectionAction` ist dieses Feld immer gesetzt;
+bei allen anderen Kommandos bleibt es `std::nullopt`. Das Feld wird nicht
+persistiert und dient ausschliesslich als Ergebnis der fachlichen
+Entscheidung fuer die Transportauswahl.
 
 `decideProgramStart`/`decideManualStart` fuellen
 `CommandDecision::startSensorSelectionNotice` analog zu `startSummary` -
@@ -898,19 +944,39 @@ Loesung):
 
 ```text
 decide command
--> ruft applySensorSelectionDecision(current, decision) auf derselben
+-> ruft applySensorSelectionDecision(current, decision, nowMonotonicMillis)
+   auf derselben
    Kandidatenkopie auf wie der automatische Pfad (6.4.11) - keine zweite
    Regelimplementierung
--> bei persistWorthy == false: CommandStatus::NoChange, kein persistCommand-
-   Aufruf durch die aufrufende Schicht (bestehendes Muster, siehe 3)
--> bei persistWorthy == true: CommandStatus::Proposed, `after` traegt den
+-> SensorSelectionApplyStatus wird unveraendert in
+   CommandDecision::sensorSelectionApplyStatus transportiert; kein
+   zweites Persistenz-Boolean
+-> AppliedPersistentCandidate: CommandStatus::Proposed, `after` traegt den
    aktualisierten Kandidaten inklusive sensorSelectionRuntime/
-   sensorSelection
--> persistCommand mit CommandId (bestehender Pfad, RunPersistenceMutationKind::
-   Command, KEIN neuer Mutationskind)
--> RAM apply ueber applyRunCommand (6.14.2, mit den neuen Vergleichsfeldern)
+   sensorSelection; anschliessend persistCommand mit CommandId (bestehender
+   Pfad, RunPersistenceMutationKind::Command, KEIN neues Mutationskind)
+-> AppliedRamOnly: CommandStatus::Proposed, die Kommando-Schicht baut
+   `after` aus der schmalen Mutation als bestehenden Aggregat-Kandidaten;
+   applySensorSelectionDecision liefert weiterhin nie einen
+   RunCommandState. applyRunCommand wendet den Kandidaten stale-geprueft ohne
+   Store-Write an und merkt die CommandId nur im fluechtigen
+   `RunCommandState`-Kommandozustand (`processedCommandIds`/
+   `commandSequence`), nicht in persistierten Command-IDs
+-> NoChange: CommandStatus::NoChange; kein applyRunCommand, kein
+   persistCommand, keine Mutation und keine CommandId-Aufzeichnung
+-> StaleDecision, InvalidDecision, InvalidContext, TimeWentBackwards oder
+   CapacityReached: typisierter Ablehnungsstatus, keine Mutation und kein
+   Write
 -> Event/Notice/Permission-Effekt erst nach Commit (unveraendertes Muster)
 ```
+
+Der manuelle Transport liest ausschliesslich
+`CommandDecision::sensorSelectionApplyStatus`; `persisted`, `after` oder ein
+anderes Boolean-Feld duerfen die Statusentscheidung nicht ersetzen. Fuer
+`AppliedRamOnly` bleibt `CommandStatus::Proposed` zulaessig, weil damit die
+stale-gepruefte fluechtige Anwendung und die bootlokale Command-ID-Idempotenz
+ausgefuehrt werden. Fuer `NoChange` und jeden Ablehnungsstatus bleibt der
+aktuelle Zustand einschliesslich der Command-ID-Fenster unveraendert.
 
 Bei `criticalSafetyEventPending` wird diese Ablaufbeschreibung
 aktionsspezifisch eingeschraenkt: `ContinueWithAir` und `ReturnToProduct`
@@ -971,7 +1037,7 @@ Notice.
   `test/test_run_persistence_coordinator/`, `test/test_run_checkpoint_codec/`,
   `test/test_sensor_selection/`.
 
-#### 6.14.6 Gemeinsamer Clear-/Start-Lebenszyklus (Revision 6)
+#### 6.14.6 Gemeinsamer Clear-/Start-Lebenszyklus (Revision 7)
 
 Die beiden bestehenden Pfade `run_commands.cpp::clearActiveRun` und
 `run_persistence_coordinator.cpp::clearCandidateRun` werden zu einem
@@ -989,8 +1055,7 @@ und setzt `sensorSelectionRuntime` atomar auf den definierten
 `NoActiveRun`-/`Blocked`-Default zurueck. Dabei werden
 `fallbackWaitStartedAtMonotonicMillis`, `lastAppliedMonotonicMillis`,
 `returnValidation.enteredAtMonotonicMillis`,
-`returnValidation.lastObservedProfileRevision` und
-`returnValidation.retryNotBeforeMonotonicMillis` geleert. Ein
+`returnValidation.lastObservedProfileRevision` geleert. Ein
 `NoActiveRun`-Snapshot darf danach keinen aktiven Sensorselektionswert
 enthalten.
 
@@ -1128,8 +1193,10 @@ Unveraendert seit Revision 4, ergaenzt um:
   Stabilitaet erzeugt genau eine Rueckkehr; Produkt faellt waehrend
   `ReturnValidationPending` aus und rearmt erst nach einer neuen gueltigen
   Wiedererkennung;
-- `RecheckProduct` hebt die Retry-Sperre innerhalb derselben Entscheidung
-  auf, bevor die ausgeloeste Neubewertung erfolgt (Reihenfolge-Testfall);
+- `RecheckProduct` aus `AirFallbackActive` mit gueltigem Produkt, aber
+  unvollstaendiger, `Unavailable`- oder `Stale`-Rueckkehrevidenz, liefert
+  genau eine `AppliedRamOnly`-Mutation nach `ReturnValidationPending` ohne
+  Laufrevision und ohne Store-Write;
 - `RecheckProduct` aus einem nicht zulaessigen Zustand liefert
   `CommandStatus::NotAllowedInState`;
 - **typisierte Apply-Status-/Stale-Tests:** eine vorab erzeugte Entscheidung
@@ -1140,9 +1207,14 @@ Unveraendert seit Revision 4, ergaenzt um:
 - RAM-only-Unterphasenwechsel liefert `AppliedRamOnly`, veraendert keine
   Laufrevision und schreibt nicht; eine persistenzwuerdige Entscheidung
   liefert `AppliedPersistentCandidate`. `NoChange` erzeugt keine Mutation;
+- der RAM-only-Recheck wird genau einmal angewendet; die Wiederholung derselben
+  `CommandId` innerhalb eines Boots liefert `AlreadyProcessed` ohne zweite
+  Wirkung, ein Reboot verwirft den fluechtigen Zustand fail-closed und
+  `NoChange` veraendert weiterhin weder Zustand noch Command-ID-Fenster;
 - monotone Zeit rueckwaerts sowie checked-Addition/Millisekundenueberlauf
-  fuer Fallback- und Retry-Berechnung werden jeweils fail-closed ohne
-  Zustandsaenderung und ohne sofortigen Retry belegt;
+  fuer Fallback- und die spaetere, noch nicht freigegebene Retry-Berechnung
+  werden jeweils fail-closed ohne Zustandsaenderung und ohne sofortigen
+  Retry belegt;
 - `ThermalCompatibilityEvidence`-Invarianten (6.10): `profileRevision == 0`
   bei `Compatible`/`Incompatible`/`Stale` -> `InvalidContext`;
   `evaluatedAtMonotonicMillis` in der Zukunft -> `InvalidContext`; #21
@@ -1204,6 +1276,15 @@ NoActiveRun-Schema-2-Tombstone enthaelt keinen aktiven Sensorselektionswert
   zulaessigen und mindestens einem unzulaessigen Ausgangszustand;
 - Wiederholungsversuch derselben `CommandId` liefert `AlreadyProcessed`,
   keine zweite Wirkung;
+- **RAM-only-Recheck-Transport:** `AirFallbackActive` + gueltiges Produkt +
+  unvollstaendige/`Unavailable`/`Stale`-Rueckkehrevidenz liefert
+  `AppliedRamOnly` nach `ReturnValidationPending`, wird genau einmal
+  stale-geprueft angewendet und erzeugt keinen Flash-/Store-Write;
+- Wiederholung derselben RAM-only-`CommandId` innerhalb eines Boots liefert
+  `AlreadyProcessed` ohne zweite RAM-Mutation; nach Reboot ist der
+  bootlokale RAM-only-Zustand verworfen und der Zustand fail-closed;
+- `NoChange` laesst alle Sensorselektionsfelder, Laufrevision, Persistenz und
+  Command-ID-Fenster unveraendert;
 - **`applyRunCommand`-Staleness-Regressionstest** (Review-Blocking 1):
   `ContinueWithAir` wird gegen `UserDecisionRequired` entschieden; eine
   zwischenzeitliche automatische Bewertung fuehrt zu `SafeLocked`; die
@@ -1267,11 +1348,19 @@ vorgesehenen Reihenfolge kompilieren; kein gegenseitiger Include-Zyklus
 device_platform enthaelt keinen Fermentationsbegriff
 genau eine kanonische applySensorSelectionDecision-Deklaration/Definition;
 keine Parallelfunktion und kein vollstaendiger RunCommandState-Rueckgabewert
+SensorSelectionApplyStatus ist die einzige Transportquelle; kein zweites
+Persistenz-Boolean und keine persistWorthy-Parallelentscheidung
+AppliedPersistentCandidate -> persistCommand im manuellen Pfad;
+AppliedRamOnly -> stale-geprueftes RAM-Apply ohne Store-Write und
+  CommandId nur fluechtig; NoChange/Ablehnung -> keine Mutation/kein Write
 aktiver Lauf => Runtime, activeRunSensorMode und sensorSelection vorhanden
 NoActiveRun => alle drei aktiven Sensorwerte fehlen bzw. sind Inaktiv-Default
 persistSensorSelection aus ReadyEmpty schreibt nichts und aendert kein RAM
 Safety-Pending-Matrix deckt alle drei Aktionen ab
-Clear-/Startpfade und Retry-/Zeitfehlerfaelle sind abgedeckt
+Clear-/Startpfade sowie Release-1-Zeitfehler und die spaetere Retry-
+Vertragsgrenze sind abgedeckt
+RAM-only-Recheck genau einmal, gleiche CommandId im Boot idempotent, Reboot
+verwirft den RAM-only-Zustand fail-closed, NoChange ohne Mutation
 ```
 
 Dazu werden der bestehende Architektur-Checker, Compile-only-Header-TUs und
@@ -1285,7 +1374,7 @@ Unveraendert seit Revision 4, ergaenzt um:
 - die Vorrangregel (6.4.9) garantiert, dass ein sicherheitsrelevanter
   Zustand (`SafeLocked`) nie durch eine gleichzeitig moegliche schwaechere
   Klassifikation verdraengt wird;
-- die Re-Arm-Sperre (6.4.12) verhindert eine unbegrenzte automatische
+- die Re-Arm-Regel (6.4.12) verhindert eine unbegrenzte automatische
   Wiederholung derselben abgelehnten Rueckkehr; in Release 1 ist der
   zeitbasierte Re-Arm deaktiviert, sodass kein unfreigegebener
   Commissioning-Wert eine Flash-Schreibschleife erzeugen kann;
@@ -1310,7 +1399,7 @@ Unveraendert seit Revision 4, ergaenzt um:
 Unveraendert seit Revision 4, ergaenzt um:
 
 - `SensorSelectionRuntimeState` ist RAM-only und konstant gross (ein Phase-
-  Enum, ein Permission-Enum, vier `optional<uint64_t>` und ein
+  Enum, ein Permission-Enum, drei `optional<uint64_t>` und ein
   `optional<uint32_t>`)
   - keine Wireformat-Wirkung, keine Aenderung am 8-KB-Checkpoint-Budget;
   - ein zeitbasierter automatischer Retry ist in Release 1 deaktiviert;
@@ -1352,7 +1441,7 @@ Zeitverhalten) und P21-M2 (Laufzeitzustand/Persistenzweg):
   (6.4.10);
 - manuelle Moduswechsel ueber `persistCommand`/neuen `CommandKind`, nicht
   ueber `persistSensorSelection` (6.14.3);
-- Re-Arm-Bedingungen (i)-(iv) fuer die automatische Rueckkehrvalidierung
+- Re-Arm-Bedingungen (i)-(iii) fuer die automatische Rueckkehrvalidierung
   (6.4.12);
 - Stale-Eigentuemerschaft beim Produzenten, keine #21-eigene
   Altersarithmetik (6.10).
@@ -1493,6 +1582,26 @@ Remote-CI, merged nicht und loescht den Branch nicht.
 [x] Architektur-/Compile-Guards und die vollstaendige neue Testmatrix ergaenzen
 [x] Planungs-Taskliste fuer Revision 6 mit eigenen Abschlusszeilen aktualisieren
 [x] Plan Revision 6 committen und pushen; exakte SHA im PR/Handover eintragen
+[x] Draft-PR #99 mit exakter Plan-SHA, aktuellem HEAD, Tests, offenen Gates
+    und `IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL` aktualisieren
+[x] bestehenden SESSION-HANDOVER-Kommentar in-place auf den neuen HEAD
+    aktualisieren (kein zweiter Handover-Kommentar)
+[x] Revision 7: manuellen Sensoraktionspfad vollstaendig auf
+    SensorSelectionApplyStatus als alleinige Transportquelle umgestellt;
+    redundantes Persistenz-Boolean entfernt
+[x] Revision 7: AppliedPersistentCandidate/AppliedRamOnly/NoChange und
+    typisierte Ablehnungen verbindlich auf persistCommand, stale-geprueftes
+    RAM-Apply oder keine Mutation/kein Write abgebildet
+[x] Revision 7: RAM-only-RecheckProduct aus AirFallbackActive bei gueltigem
+    Produkt und unvollstaendiger Evidenz nach ReturnValidationPending als
+    AppliedRamOnly mit einmaliger Boot-Idempotenz geplant
+[x] Revision 7: das alte Retry-Zeitfeld und die Release-1-Aussage zum
+    Aufheben einer zeitbasierten Sperre entfernt; zeitbasierter Re-Arm bleibt bis zu
+    einem neuen Plan deaktiviert
+[x] Revision 7: RAM-only-Recheck-, CommandId-, Reboot-fail-closed- und
+    NoChange-Tests sowie die zugehoerigen Architektur-/Compile-Guards ergaenzt
+[x] Plan Revision 7 committen und pushen; exakte SHA in PR und Handover
+    eintragen
 [x] Draft-PR #99 mit exakter Plan-SHA, aktuellem HEAD, Tests, offenen Gates
     und `IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL` aktualisieren
 [x] bestehenden SESSION-HANDOVER-Kommentar in-place auf den neuen HEAD
