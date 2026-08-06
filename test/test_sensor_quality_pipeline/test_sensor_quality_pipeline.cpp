@@ -603,19 +603,19 @@ void test_recovery_needs_sample_timestamp_span() {
     // Zwei gueltige Proben reichen fuer die Anzahl, aber ihre eigene
     // Erfassungszeitspanne betraegt nur 1000 ms (< 2000 ms). Die Zustellzeit
     // darf die fehlende Probenzeitspanne nicht ersetzen.
-    TEST_ASSERT_TRUE(pipeline.snapshot(6000U).quality != SensorQuality::Valid);
+    TEST_ASSERT_TRUE(pipeline.snapshot(6000U).quality == SensorQuality::Failed);
 }
 
 void test_snapshot_without_new_sample_cannot_complete_recovery() {
     SensorQualityPipeline pipeline = failedPipelineForRecovery();
 
     (void)pipeline.ingest(okReading(std::nullopt, 5000U, 20.0), 5000U);
-    const auto beforeWait = pipeline.snapshot(5000U);
+    (void)pipeline.ingest(okReading(std::nullopt, 6000U, 20.1), 6000U);
+    const auto beforeWait = pipeline.snapshot(6000U);
     const auto afterWait = pipeline.snapshot(8000U);
 
-    TEST_ASSERT_TRUE(beforeWait.quality != SensorQuality::Valid);
-    TEST_ASSERT_TRUE(afterWait.quality != SensorQuality::Valid);
-    TEST_ASSERT_EQUAL_UINT16(1U, afterWait.recoveryProgressCount);
+    TEST_ASSERT_TRUE(beforeWait.quality == SensorQuality::Failed);
+    TEST_ASSERT_TRUE(afterWait.quality == SensorQuality::Failed);
 }
 
 void test_delayed_delivery_does_not_count_after_sample_timestamp() {
@@ -626,7 +626,7 @@ void test_delayed_delivery_does_not_count_after_sample_timestamp() {
     // die Wiedererkennung zaehlt nur 6000 - 5000 = 1000 ms.
     (void)pipeline.ingest(okReading(std::nullopt, 6000U, 20.1), 8000U);
 
-    TEST_ASSERT_TRUE(pipeline.snapshot(8000U).quality != SensorQuality::Valid);
+    TEST_ASSERT_TRUE(pipeline.snapshot(8000U).quality == SensorQuality::Failed);
 }
 
 void test_next_valid_sample_with_sufficient_sample_span_completes_recovery() {
@@ -640,6 +640,16 @@ void test_next_valid_sample_with_sufficient_sample_span_completes_recovery() {
     // die volle 2000-ms-Spanne seit der Recovery-Startprobe.
     (void)pipeline.ingest(okReading(std::nullopt, 7000U, 20.2), 9000U);
     TEST_ASSERT_TRUE(pipeline.snapshot(9000U).quality == SensorQuality::Valid);
+
+    // Nach vollstaendiger Wiedererkennung muss eine einzelne ungueltige Probe
+    // den Zustand exakt auf Stale senken. Das belegt, dass failedLatched_
+    // freigegeben wurde und nicht nur recoveryComplete == true die Failed-
+    // Anzeige verdeckt.
+    (void)pipeline.ingest(
+        faultReading(std::nullopt, 10'000U, TemperatureSampleStatus::CrcFault),
+        10'000U);
+    TEST_ASSERT_TRUE(pipeline.snapshot(10'000U).quality ==
+                     SensorQuality::Stale);
 }
 
 void test_renewed_invalid_sample_during_recovery_resets_progress() {
