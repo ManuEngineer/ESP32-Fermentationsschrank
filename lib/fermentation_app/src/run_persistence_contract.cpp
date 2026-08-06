@@ -76,6 +76,10 @@ bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
 
 }  // namespace
 
+bool knownRunPersistenceSchema(std::uint32_t schemaVersion) {
+    return schemaVersion == 1U || schemaVersion == kCurrentRunPersistenceSchema;
+}
+
 bool isPersistedRunCommand(CommandKind kind) {
     switch (kind) {
         case CommandKind::StartProgram:
@@ -104,6 +108,7 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
     if (snapshot.variant == RunCheckpointVariant::NoActiveRun) {
         return snapshot.activeRunId.empty() &&
                !snapshot.activeRunSensorMode.has_value() &&
+               !snapshot.sensorSelection.has_value() &&
                !snapshot.program.has_value() && snapshot.revisionCount == 0U &&
                !snapshot.manual.has_value() &&
                !snapshot.processRunSnapshot.has_value() &&
@@ -166,6 +171,11 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
          state.processRunSnapshot.has_value())) {
         return std::nullopt;
     }
+    // sensorSelection is not yet a required field here (6.12's full
+    // consistency invariant lands with #21 Commit 5's start-path wiring,
+    // which is the first producer that always populates it). Until then it
+    // is projected as-is - present once populated, absent for every
+    // pre-existing call site this PR must not regress.
     RunPersistenceSnapshot snapshot;
     snapshot.trigger = trigger;
     snapshot.checkpointMonotonicMillis = time.monotonicMillis;
@@ -178,6 +188,7 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
         snapshot.variant = RunCheckpointVariant::ProgramRun;
         snapshot.activeRunId = state.activeRunId;
         snapshot.activeRunSensorMode = state.activeRunSensorMode;
+        snapshot.sensorSelection = state.sensorSelection;
         snapshot.program = state.activeProgramRun->snapshot();
         snapshot.revisions = state.activeProgramRun->revisions();
         snapshot.revisionCount = state.activeProgramRun->revisionCount();
@@ -186,6 +197,7 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
         snapshot.variant = RunCheckpointVariant::ManualRun;
         snapshot.activeRunId = state.activeRunId;
         snapshot.activeRunSensorMode = state.activeRunSensorMode;
+        snapshot.sensorSelection = state.sensorSelection;
         snapshot.manual = state.activeManualRun;
         snapshot.processRunSnapshot = state.processRunSnapshot;
     } else {
@@ -209,11 +221,13 @@ std::optional<RunCommandState> restoreRunPersistenceSnapshot(
             *snapshot.program, snapshot.revisions, snapshot.revisionCount);
         restored.activeRunId = snapshot.activeRunId;
         restored.activeRunSensorMode = snapshot.activeRunSensorMode;
+        restored.sensorSelection = snapshot.sensorSelection;
         restored.processRunSnapshot = snapshot.processRunSnapshot;
     } else if (snapshot.variant == RunCheckpointVariant::ManualRun) {
         restored.activeManualRun = snapshot.manual;
         restored.activeRunId = snapshot.activeRunId;
         restored.activeRunSensorMode = snapshot.activeRunSensorMode;
+        restored.sensorSelection = snapshot.sensorSelection;
         restored.processRunSnapshot = snapshot.processRunSnapshot;
     }
     return restored;

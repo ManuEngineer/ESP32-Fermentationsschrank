@@ -15,6 +15,15 @@ inline constexpr std::uint16_t kDefaultRunCheckpointIntervalMinutes = 5U;
 inline constexpr std::uint16_t kMinimumRunCheckpointIntervalMinutes = 1U;
 inline constexpr std::uint16_t kMaximumRunCheckpointIntervalMinutes = 60U;
 
+// Single source of truth for both head- and checkpoint-record schema
+// versioning (#21, 6.12/6.14.1). New writes always stamp
+// kCurrentRunPersistenceSchema; every read path (head, checkpoint reference,
+// checkpoint payload) must accept every version knownRunPersistenceSchema
+// reports, not just the current one, so a not-yet-migrated schema-1 slot
+// written before this PR stays decodable across the upgrade boundary.
+inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 2U;
+[[nodiscard]] bool knownRunPersistenceSchema(std::uint32_t schemaVersion);
+
 enum class RunCheckpointVariant : std::uint8_t {
     ProgramRun = 1U,
     ManualRun = 2U,
@@ -25,6 +34,7 @@ enum class RunCheckpointTrigger : std::uint8_t {
     Command = 1U,
     Transition = 2U,
     Periodic = 3U,
+    SensorSelection = 4U,
 };
 
 struct RunCheckpointTime {
@@ -52,6 +62,7 @@ enum class RunPersistenceHeadState : std::uint8_t {
 enum class RunPersistenceMutationKind : std::uint8_t {
     Command = 1U,
     Transition = 2U,
+    SensorSelection = 3U,
 };
 
 struct RunPersistenceHead {
@@ -81,6 +92,11 @@ struct RunPersistenceSnapshot {
     std::uint16_t intervalMinutes{kDefaultRunCheckpointIntervalMinutes};
     std::string activeRunId;
     std::optional<RunSensorMode> activeRunSensorMode;
+    // Persisted sensor-selection provenance (#21, 6.12). Present iff variant
+    // != NoActiveRun for a schema-2-written snapshot; a decoded schema-1
+    // active-run snapshot legitimately has no value here (field did not
+    // exist yet), see kSensorSelectionFieldIntroducedInSchema.
+    std::optional<PersistedSensorSelectionState> sensorSelection;
     std::optional<RunProgramSnapshot> program;
     std::array<RunRevision, kMaximumRunRevisions> revisions{};
     std::size_t revisionCount{0U};

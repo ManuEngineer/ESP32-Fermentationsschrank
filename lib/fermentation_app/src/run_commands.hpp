@@ -259,6 +259,12 @@ enum class CommandEffect : std::uint8_t {
     MessageAcknowledged,
     AcousticMuted,
     FaultResetAuthorized,
+    // #21, 6.14.4: transports only that #21's factual precondition for
+    // Peltier control changed (peltierPermission). It is NOT a direct actor
+    // release - #23/#24 still evaluate every remaining actor safety gate
+    // (control dead time, interlocks) before actually switching anything.
+    SensorSelectionPermissionBlocked,
+    SensorSelectionPermissionRestored,
 };
 
 struct RunCommandState {
@@ -271,6 +277,11 @@ struct RunCommandState {
     // Programmschnappschuss beziehungsweise dem manuellen Plan gesetzt. Er
     // ist keine Sensorqualitaets- oder Hardwareentscheidung.
     std::optional<RunSensorMode> activeRunSensorMode;
+    // Persisted sensor-selection provenance (#21, 6.12). RAM-only fields
+    // (SensorSelectionRuntimeState) are added by #21 Commit 4 - the wire
+    // format never carries them (6.12: "ausdruecklich ausserhalb des
+    // Wireformats").
+    std::optional<PersistedSensorSelectionState> sensorSelection;
     std::uint32_t runRevision{0U};
     std::array<RuntimeMessage, run_command_limits::kMaximumRuntimeMessages>
         messages{};

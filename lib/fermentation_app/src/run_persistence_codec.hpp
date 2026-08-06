@@ -26,8 +26,12 @@ struct RunPersistenceDecodeResult {
 
 [[nodiscard]] RunPersistenceCodecStatus encodeRunPersistenceSnapshot(
     const RunPersistenceSnapshot& snapshot, std::string& out);
+// `schemaVersion` gates the #21 sensor-selection field (introduced in
+// schema 2): a schema-1 payload never carries it, so schemaVersion must be
+// the version the enclosing envelope actually declared, not always the
+// current one.
 [[nodiscard]] RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
-    const std::string& payload);
+    const std::string& payload, std::uint32_t schemaVersion);
 
 // Schema-1 record codecs are deliberately separate from the coordinator.  The
 // coordinator supplies transaction ordering; these functions own only stable

@@ -47,6 +47,9 @@ RunPersistenceSnapshot programSnapshot() {
     state.activeProgramRun = *run;
     state.activeRunId = "checkpoint-run";
     state.activeRunSensorMode = RunSensorMode::Product;
+    state.sensorSelection = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::StartSelection, 1U};
     state.processRunSnapshot = makeProcessRunSnapshot(*run);
     TEST_ASSERT_TRUE(state.processRunSnapshot.has_value());
     std::array<CommandId, kMaximumPersistedRunCommandIds> ids{};
@@ -66,12 +69,12 @@ void test_program_checkpoint_round_trip_restores_active_run() {
         static_cast<int>(encodeRunPersistenceSnapshot(source, encoded)));
     assertGolden(
         encoded,
-        "01010000000000000064000500000000000e636865636b706f696e742d72756e0100000001"
-        "01005d00000006000000000001ffff000b77617465722d6b65666972000b5761737365726b"
-        "656669720000010101010101000201010000001e0301014043000000000000010000007801"
-        "3fe0000000000000010000000a01000000b400010000000100010000000a000000b4000100"
-        "000078000600000000000000000000000000000000000000000000010000000000000063");
-    const auto decoded = decodeRunPersistenceSnapshot(encoded);
+        "01010000000000000064000500000000000e636865636b706f696e742d72756e01010102000000"
+        "010000000101005d00000006000000000001ffff000b77617465722d6b65666972000b57617373"
+        "65726b656669720000010101010101000201010000001e03010140430000000000000100000078"
+        "013fe0000000000000010000000a01000000b400010000000100010000000a000000b400010000"
+        "0078000600000000000000000000000000000000000000000000010000000000000063");
+    const auto decoded = decodeRunPersistenceSnapshot(encoded, kCurrentRunPersistenceSchema);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
                           static_cast<int>(decoded.status));
     TEST_ASSERT_TRUE(decoded.snapshot.has_value());
@@ -122,7 +125,7 @@ void test_projection_rejects_inconsistent_aggregate_instead_of_prioritizing() {
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(valid, bytes)));
     bytes[0] = '\0';
-    const auto invalidWire = decodeRunPersistenceSnapshot(bytes);
+    const auto invalidWire = decodeRunPersistenceSnapshot(bytes, kCurrentRunPersistenceSchema);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::InvalidWireValue),
         static_cast<int>(invalidWire.status));
@@ -142,6 +145,9 @@ void test_manual_completed_round_trip_is_a_valid_run_projection() {
     state.activeManualRun = plan;
     state.activeRunId = plan.values.runId;
     state.activeRunSensorMode = plan.values.sensorMode;
+    state.sensorSelection = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::StartSelection, 1U};
     state.processRunSnapshot = makeProcessRunSnapshot(plan);
     TEST_ASSERT_TRUE(state.processRunSnapshot.has_value());
     state.processState.state = ProcessState::Completed;
@@ -157,11 +163,11 @@ void test_manual_completed_round_trip_is_a_valid_run_projection() {
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(*snapshot, bytes)));
     assertGolden(bytes,
-                 "0202000000000000006400050000000000116d616e75616c2d636865636b7"
-                 "06f696e740240280000000000000200003fe00000000000000000000a0000"
-                 "00b401000000000000000a020200010000000a000000b40000000c0000000"
-                 "000000064000000000000000000000000000000");
-    const auto decoded = decodeRunPersistenceSnapshot(bytes);
+                 "0202000000000000006400050000000000116d616e75616c2d636865636b706f696e74020101"
+                 "020000000140280000000000000200003fe00000000000000000000a000000b4010000000000"
+                 "00000a020200010000000a000000b40000000c00000000000000640000000000000000000000"
+                 "00000000");
+    const auto decoded = decodeRunPersistenceSnapshot(bytes, kCurrentRunPersistenceSchema);
     TEST_ASSERT_TRUE(decoded.snapshot.has_value());
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(ProcessState::Completed),
@@ -183,6 +189,9 @@ void test_manual_snapshot_and_runtime_shape_must_be_canonical() {
     state.activeManualRun = plan;
     state.activeRunId = plan.values.runId;
     state.activeRunSensorMode = plan.values.sensorMode;
+    state.sensorSelection = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::StartSelection, 1U};
     state.processRunSnapshot = makeProcessRunSnapshot(plan);
     state.processState.state = ProcessState::ManualHolding;
     state.processState.stateEnteredAtMillis = 100U;
@@ -233,11 +242,11 @@ void test_prepared_head_binds_full_transaction_contract() {
     TEST_ASSERT_TRUE(encoded.has_value());
     assertGolden(
         *encoded,
-        "445052460001000800000001000000000000000900000000000000140000007700919a"
-        "bca1010100000000010000000000000009000000000000000a0000000b0000000c0101"
-        "0100000001000000000000000900000000000000090000000800000007030100000001"
-        "0000000000000009000000000000000b0000000d0000000e0301010000000000000058"
-        "00000004000000050000000600000007");
+        "4450524600010008000000020000000000000009000000000000001400000077004b4c6c7c01"
+        "0100000000010000000000000009000000000000000a0000000b0000000c0101010000000100"
+        "0000000000000900000000000000090000000800000007030100000001000000000000000900"
+        "0000000000000b0000000d0000000e0301010000000000000058000000040000000500000006"
+        "00000007");
     const auto decoded =
         decodeRunPersistenceHead(*encoded, device_platform::StorageEpoch(9U));
     TEST_ASSERT_TRUE(decoded.has_value());
@@ -329,9 +338,9 @@ void test_head_reference_and_mutation_invariants_reject_invalid_contracts() {
     TEST_ASSERT_TRUE(committedGolden.has_value());
     assertGolden(
         *committedGolden,
-        "445052460001000800000001000000000000000900000000000000160000003e009456"
-        "f2af0200000000010000000000000009000000000000000a0000000b0000000c010101"
-        "0000000100000000000000090000000000000009000000080000000703");
+        "445052460001000800000002000000000000000900000000000000160000003e007a5213fe02"
+        "00000000010000000000000009000000000000000a0000000b0000000c010101000000010000"
+        "0000000000090000000000000009000000080000000703");
 
     committed.fallback = current;
     TEST_ASSERT_FALSE(
@@ -349,7 +358,7 @@ void test_payload_bounds_and_truncation_are_strict() {
                                            encoded.size() - 1U};
     for (const std::size_t cut : cuts) {
         const auto truncated =
-            decodeRunPersistenceSnapshot(encoded.substr(0U, cut));
+            decodeRunPersistenceSnapshot(encoded.substr(0U, cut), kCurrentRunPersistenceSchema);
         TEST_ASSERT_NOT_EQUAL(
             static_cast<int>(RunPersistenceCodecStatus::Success),
             static_cast<int>(truncated.status));
@@ -358,19 +367,101 @@ void test_payload_bounds_and_truncation_are_strict() {
     withTrailing.push_back('\0');
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::TrailingBytes),
-        static_cast<int>(decodeRunPersistenceSnapshot(withTrailing).status));
+        static_cast<int>(decodeRunPersistenceSnapshot(withTrailing, kCurrentRunPersistenceSchema).status));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::InvalidWireValue),
         static_cast<int>(
             decodeRunPersistenceSnapshot(
-                std::string(kMaximumRunPersistencePayloadBytes, '\0'))
+                std::string(kMaximumRunPersistencePayloadBytes, '\0'),
+                kCurrentRunPersistenceSchema)
                 .status));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::CapacityExceeded),
         static_cast<int>(
             decodeRunPersistenceSnapshot(
-                std::string(kMaximumRunPersistencePayloadBytes + 1U, '\0'))
+                std::string(kMaximumRunPersistencePayloadBytes + 1U, '\0'),
+                kCurrentRunPersistenceSchema)
                 .status));
+}
+
+// #21, 9.3: a genuine schema-1 payload (captured before the sensor-selection
+// field existed - no presence tag, no PersistedSensorSelectionState bytes)
+// must still decode. Decoding it with schemaVersion 1 must never attempt to
+// read the field at all.
+void test_schema_one_payload_decodes_without_sensor_selection_field() {
+    const auto schemaOnePayload = bytesFromHex(
+        "01010000000000000064000500000000000e636865636b706f696e742d72756e0100000001"
+        "01005d00000006000000000001ffff000b77617465722d6b65666972000b5761737365726b"
+        "656669720000010101010101000201010000001e0301014043000000000000010000007801"
+        "3fe0000000000000010000000a01000000b400010000000100010000000a000000b4000100"
+        "000078000600000000000000000000000000000000000000000000010000000000000063");
+    const auto decoded = decodeRunPersistenceSnapshot(schemaOnePayload, 1U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(decoded.status));
+    TEST_ASSERT_TRUE(decoded.snapshot.has_value());
+    TEST_ASSERT_EQUAL_STRING("checkpoint-run",
+                             decoded.snapshot->activeRunId.c_str());
+    TEST_ASSERT_FALSE(decoded.snapshot->sensorSelection.has_value());
+    // Decoding the identical bytes as schema 2 misreads the following field
+    // boundary (there is no presence tag at this offset in a schema-1
+    // payload) and must not silently succeed with the wrong shape.
+    const auto misread =
+        decodeRunPersistenceSnapshot(schemaOnePayload, kCurrentRunPersistenceSchema);
+    TEST_ASSERT_NOT_EQUAL(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(misread.status));
+}
+
+// #21, 9.3: readReference/validReference accept exactly the known schema set
+// {1U, 2U} and reject anything else, exercised via the public head codec
+// (encodeRunPersistenceHead stamps kCurrentRunPersistenceSchema on the head
+// envelope itself; the embedded RunCheckpointReference::schemaVersion is
+// independently checked by readReference/validReference).
+void test_head_reference_accepts_known_schemas_and_rejects_unknown_ones() {
+    const auto epoch = device_platform::StorageEpoch(9U);
+    for (const std::uint32_t schema : {1U, 2U}) {
+        RunPersistenceHead committed;
+        committed.state = RunPersistenceHeadState::Committed;
+        committed.revision = 5U;
+        committed.current = RunCheckpointReference{
+            0U, schema, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
+        const auto encoded = encodeRunPersistenceHead(committed, epoch);
+        TEST_ASSERT_TRUE(encoded.has_value());
+        const auto decoded = decodeRunPersistenceHead(*encoded, epoch);
+        TEST_ASSERT_TRUE(decoded.has_value());
+        TEST_ASSERT_EQUAL_UINT32(schema, decoded->current.schemaVersion);
+    }
+    RunPersistenceHead unknownSchema;
+    unknownSchema.state = RunPersistenceHeadState::Committed;
+    unknownSchema.revision = 5U;
+    unknownSchema.current = RunCheckpointReference{
+        0U, 3U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
+    TEST_ASSERT_FALSE(
+        encodeRunPersistenceHead(unknownSchema, epoch).has_value());
+}
+
+// #21, 9.3: "Codec-/Contract-Test mit gemischtem Schema-2-Current und
+// Schema-1-Fallback" - the two references inside one committed head may
+// legitimately carry different schema versions (current freshly written
+// under schema 2, fallback still the not-yet-superseded schema-1 checkpoint
+// from before the upgrade).
+void test_committed_head_accepts_mixed_current_and_fallback_schema() {
+    const auto epoch = device_platform::StorageEpoch(9U);
+    RunPersistenceHead committed;
+    committed.state = RunPersistenceHeadState::Committed;
+    committed.revision = 6U;
+    committed.current = RunCheckpointReference{
+        0U, kCurrentRunPersistenceSchema, 9U,
+        11U, 13U, 14U, RunCheckpointVariant::ProgramRun};
+    committed.fallback = RunCheckpointReference{
+        1U, 1U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
+    const auto encoded = encodeRunPersistenceHead(committed, epoch);
+    TEST_ASSERT_TRUE(encoded.has_value());
+    const auto decoded = decodeRunPersistenceHead(*encoded, epoch);
+    TEST_ASSERT_TRUE(decoded.has_value());
+    TEST_ASSERT_EQUAL_UINT32(kCurrentRunPersistenceSchema,
+                             decoded->current.schemaVersion);
+    TEST_ASSERT_TRUE(decoded->fallback.has_value());
+    TEST_ASSERT_EQUAL_UINT32(1U, decoded->fallback->schemaVersion);
 }
 
 }  // namespace
@@ -387,5 +478,8 @@ int main(int, char**) {
     RUN_TEST(
         test_head_reference_and_mutation_invariants_reject_invalid_contracts);
     RUN_TEST(test_manual_snapshot_and_runtime_shape_must_be_canonical);
+    RUN_TEST(test_schema_one_payload_decodes_without_sensor_selection_field);
+    RUN_TEST(test_head_reference_accepts_known_schemas_and_rejects_unknown_ones);
+    RUN_TEST(test_committed_head_accepts_mixed_current_and_fallback_schema);
     return UNITY_END();
 }
