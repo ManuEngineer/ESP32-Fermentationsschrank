@@ -61,6 +61,14 @@ void test_invalid_value_does_not_change_window() {
     TEST_ASSERT_EQUAL_size_t(2U, filter.size());
 }
 
+void test_even_capacity_is_rejected_defensively() {
+    MedianFilter filter(4U);
+
+    TEST_ASSERT_FALSE(filter.add(20.0));
+    TEST_ASSERT_FALSE(filter.median().has_value());
+    TEST_ASSERT_EQUAL_size_t(0U, filter.size());
+}
+
 void test_reset_discards_all_values() {
     MedianFilter filter(3U);
     TEST_ASSERT_TRUE(filter.add(20.0));
@@ -79,6 +87,7 @@ int main() {
     RUN_TEST(test_single_spike_is_removed_after_window_is_full);
     RUN_TEST(test_real_trend_remains_visible);
     RUN_TEST(test_invalid_value_does_not_change_window);
+    RUN_TEST(test_even_capacity_is_rejected_defensively);
     RUN_TEST(test_reset_discards_all_values);
     return UNITY_END();
 }

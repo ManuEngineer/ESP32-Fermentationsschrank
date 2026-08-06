@@ -13,7 +13,7 @@
 
 // Orchestrator einer einzelnen Sensorqualitaets-/Plausibilitaetspipeline.
 // Siehe docs/tasks/issue-20-sensor-quality-filtering-plan.md, Abschnitt 8-12,
-// fuer die vollstaendige fachliche Herleitung. Slice 1 (dieser Stand) deckt
+// fuer die vollstaendige fachliche Herleitung. Slice 1 und Slice 2 decken
 // Zeitstempel-/Dispositionspruefung (9b), Transport-/Wertebereichs-/
 // Aenderungsratenpruefung (10.1/10.2), Median-/Offset-/Tiefpassintegration
 // (10.3-10.5) und die Zustandsmaschine (8/9a) ab.
