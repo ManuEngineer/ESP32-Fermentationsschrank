@@ -126,18 +126,20 @@ offene Befunde, auf dem finalen `HEAD` und nach ausdruecklicher Owner-Anweisung.
 
 GitHub-CI fuehrt waehrend eines Draft-PR keine Firmwaretests aus. Der Owner setzt
 den PR nach dem Review auf `Ready for review`; dadurch startet der vollstaendige
-CI-Lauf. Spaetere Pushes auf einen nicht als Draft markierten PR starten CI
-erneut. Reine Markdown- oder Kommentaraenderungen bleiben von der
-vollstaendigen Firmware-CI ausgenommen.
+CI-Lauf. Spaetere semantische Pushes auf einen nicht als Draft markierten PR
+starten CI erneut.
 
-Nach einem CI-Fehlschlag wird der PR wieder als Draft gefuehrt. Der konkrete
-Fehler und direkt abhaengige Tests werden gezielt korrigiert und geprueft;
-danach folgen erneut ein vollstaendiges Review und der Ownerwechsel auf
-`Ready for review`.
+Markdown-only- und Kommentaraenderungen bleiben von der Firmware-CI ausgenommen.
+Das ist keine Ausnahme vom Review: Jede semantische Aenderung, auch an
+normativer Dokumentation, verwirft den bisherigen Reviewnachweis. Nur rein
+redaktionelle Korrekturen ohne Bedeutungs-, Scope-, Vertrags- oder
+Akzeptanzwirkung duerfen den Reviewnachweis behalten.
 
-Jede semantische Aenderung nach einer gruenen Vollpruefung verwirft den
-bisherigen Review- und Pruefnachweis. Reine Dokumentations- oder
-Kommentaraenderungen tun dies nicht.
+Nach einem CI-Fehlschlag dokumentiert der Agent Fehler, Auswirkung und gezielte
+Korrektur. Nur der Owner entscheidet, ob der PR wieder als Draft gefuehrt wird.
+Nach Korrektur und direkt abhaengigen Tests folgt erneut ein vollstaendiges
+Review; den neuen Wechsel auf `Ready for review` fuehrt ebenfalls nur der Owner
+aus.
 
 ## 9. Handover
 
@@ -159,9 +161,9 @@ Text im Chat als nicht veroeffentlicht ausgegeben.
 ## 10. Abschluss und Ownerrechte
 
 Der Agent aktualisiert Nachweise und haelt fuer das Ownerreview an. Er setzt
-einen PR nicht selbst auf `Ready for review`, mergt nicht, aktiviert kein
-Auto-Merge, verwendet keinen Force-Push, loescht keinen Branch und schliesst
-kein Issue eigenmaechtig.
+einen PR nicht selbst auf `Ready for review` oder Draft, mergt nicht, aktiviert
+kein Auto-Merge, verwendet keinen Force-Push, loescht keinen Branch und
+schliesst kein Issue eigenmaechtig.
 
 Nach einem Owner-Merge wird `docs/ROADMAP.md` auf dem naechsten passenden Branch
 aktualisiert, bevor neue Arbeit gestartet wird.
