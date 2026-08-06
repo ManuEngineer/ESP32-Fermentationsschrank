@@ -2,11 +2,11 @@
 
 ## Status
 
-`TARGET_STRUCTURE_REVIEW`
+`FINAL_COMPLETENESS_SWEEP`
 
 Der Draft-PR inventarisiert, entscheidet und plant zuerst. Normative Regeln,
-Statusdokumente und Workflows werden erst nach Freigabe der vollständigen
-Zielstruktur geändert.
+Statusdokumente und Workflows werden erst nach Abschluss des Vollständigkeitssweeps
+und der Freigabe des endgültigen Umsetzungsplans geändert.
 
 ## Ziel
 
@@ -55,6 +55,40 @@ fachlich zuständigen Stelle.
 | R-06 | Während Draft nur gezielte lokale Tests und keine GitHub-CI. Vollständige CI startet bei `Ready for review` und erneut bei späteren Pushes eines nicht als Draft markierten PR. Vollständiger lokaler Lauf nur auf Owner-Anweisung. |
 | R-07 | `DECISIONS.md` bleibt ADR-Register. Historischen Codex-Handover und Auftragspaket #9 bis #37 entfernen. `Agent-Auftraege/Auftrag.md` kompakt neu aufbauen. |
 | R-07a | `docs/CODEX_TASK_TEMPLATE.md` entfernen; keine zweite oder agentspezifische Auftragsvorlage. |
+| R-08 | Zielentwurf der Root-`AGENTS.md`, Zielgrösse von etwa 5–7 KB beziehungsweise 90–130 Zeilen und bedingte Lesematrix sind freigegeben. Lokale `AGENTS.md` sollen möglichst unter 20 Zeilen bleiben. |
+
+## Freigegebener Zielaufbau der Root-`AGENTS.md`
+
+1. Projektauftrag und fail-closed-Grundsatz
+2. aktueller Stand, Quellen und Widerspruchsbehandlung
+3. kurzer verbindlicher Verweis auf `ENGINEERING_PRINCIPLES.md`
+4. Safety-, Hardware- und Release-Grenzen ohne Detailkopien
+5. kurze Modularchitektur mit ADR-013-Verweis
+6. Branch-, Plan- und Owner-Gates
+7. Tests, CI und vollständiges Review
+8. Session-Handover
+9. bedingte Lesematrix
+
+Nicht enthalten werden historische Statusangaben, Hardwarestücklisten,
+vollständige Release-Listen, konkrete Testbefehle, Detaildefinitionen von
+SOLID/DRY/KISS, vollständige Architekturmatrizen oder der gesamte Plan-first-
+Ablauf.
+
+## Freigegebene Lesematrix
+
+| Aufgabe | Zusätzlich zu lesen |
+|---|---|
+| jede Aufgabe | konkrete Markdown-Auftragsdatei, Live-Issue/PR, `docs/ROADMAP.md`, geltende lokale `AGENTS.md` |
+| Planung, Umsetzung oder Review | `docs/AGENT_WORKFLOW.md`, `docs/ENGINEERING_PRINCIPLES.md`; bei Code, Build oder Tests zusätzlich `docs/CI_AND_QUALITY_GATES.md` |
+| Produkt-, Release- oder Scopeentscheidung | `docs/SPECIFICATION_REVIEW.md`, aktuelles Issue und relevante akzeptierte ADRs |
+| Architektur-, Modul- oder Abhängigkeitsänderung | `docs/DECISIONS.md`, relevante ADRs, `lib/README.md` und lokale `AGENTS.md` |
+| Bibliotheks- oder Komponentenauswahl | `docs/ENGINEERING_PRINCIPLES.md`, `docs/ADOPT_OR_BUILD.md` und relevante Lizenz-/Herstellerquellen |
+| Safety-, Fehler-, Recovery-, Aktor- oder kritische Persistenzarbeit | betroffene spezialisierte Safety-, Recovery-, Aktor- und Persistenzdokumente sowie relevante Akzeptanztests |
+| Hardware, Bring-up oder Inbetriebnahme | `docs/HARDWARE.md`, `docs/OPEN_POINTS.md`; bei Toolchain oder ESP-IDF zusätzlich `docs/ESP_IDF_UPGRADE_CONTRACT.md` |
+| UI, Web, Netzwerk, Konfiguration oder Fachlogik | nur die vom Issue, Plan, ADR oder betroffenen Code direkt referenzierten Fachdokumente |
+
+Der freigegebene Plan nennt die konkret benötigten Fachquellen. Das gesamte
+Dokumentationsverzeichnis wird nicht pauschal vollständig gelesen.
 
 ## Roadmap-Pflegevertrag
 
@@ -111,7 +145,7 @@ Die Historie bleibt in Git und den zugehörigen PRs erhalten.
 - [x] A4: zentrale veraltete Statusquellen identifiziert.
 - [ ] A5: endgültige Quellen-/Lesematrix fertigstellen.
 - [x] A6: bisherige materielle Widersprüche mit dem Owner entschieden.
-- [ ] A7: Zielinhalt und Zielgrösse von Root- und lokalen `AGENTS.md` freigeben.
+- [x] A7: Zielinhalt und Zielgrösse von Root- und lokalen `AGENTS.md` freigegeben.
 - [x] A8: Roadmap-Rolle und Pflegevertrag festgelegt.
 - [ ] A9: freigegebene Konsolidierung umsetzen.
 - [ ] A10: typische Planungs-, Umsetzungs-, Review- und Handoverabläufe prüfen.
@@ -133,6 +167,7 @@ Die Historie bleibt in Git und den zugehörigen PRs erhalten.
 
 ## Nächster Schritt
 
-R-08/A7: vollständigen Zielentwurf der Root-`AGENTS.md`, Zielgrösse und
-bedingte Lesematrix mit dem Owner freigeben. Danach folgt vor der Umsetzung noch
-der abschliessende Vollständigkeitssweep A3/A5.
+A3/A5: abschliessender Vollständigkeitssweep aller verbliebenen Regel-,
+Template-, Status- und Verweisquellen. Neue materielle Abweichungen werden vor
+jeder Umsetzung dem Owner vorgelegt. Falls keine weiteren Entscheidungen nötig
+sind, wird daraus der endgültige Umsetzungsplan erstellt.
