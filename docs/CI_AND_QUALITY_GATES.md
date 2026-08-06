@@ -21,8 +21,9 @@ unterstuetzen.
 ### Draft-Umsetzung
 
 Nur gezielte lokale Tests und Pruefungen fuer den tatsaechlich geaenderten
-Bereich. Nicht betroffene Profile und der vollstaendige Gesamtlauf werden nicht
-ritualistisch wiederholt.
+Bereich. Bei geaenderten gemeinsamen Vertraegen gehoeren die direkt betroffenen
+Konsumententests zum gezielten Umfang. Nicht betroffene Profile und der
+vollstaendige Gesamtlauf werden nicht ritualistisch wiederholt.
 
 ### Vollstaendiger lokaler Lauf
 
@@ -36,6 +37,7 @@ Nur wenn:
 
 `.github/workflows/build.yml` reagiert auf:
 
+- `pull_request.opened`;
 - `pull_request.ready_for_review`;
 - `pull_request.synchronize`;
 - `pull_request.reopened`.
@@ -44,9 +46,18 @@ Der Firmwarejob laeuft nur, wenn der Pull Request kein Draft ist. Draft-Pushes
 koennen einen sofort uebersprungenen Workfloweintrag erzeugen, fuehren aber
 keine Builds oder Tests aus.
 
-Reine Markdown-Aenderungen sind durch `paths-ignore` von der vollstaendigen
-Firmware-CI ausgenommen. Es gibt keinen `push`-Trigger und damit keinen
-identischen automatischen Wiederholungslauf nach dem Merge.
+Der Ownerwechsel auf `Ready for review` startet die vollstaendige CI fuer den
+reviewten Head. Jeder spaetere semantische Push auf einen Nicht-Draft-PR startet
+sie erneut und verwirft den vorherigen Review- und Pruefnachweis. Reine
+Markdown- oder Kommentaraenderungen sind durch `paths-ignore` ausgenommen und
+verwerfen den Nachweis nicht.
+
+Nach einem CI-Fehlschlag wird der PR wieder als Draft gefuehrt. Es folgen nur
+die gezielte Fehlerkorrektur und direkt abhaengige Tests, danach erneut ein
+vollstaendiges Review und ein neuer Ownerwechsel auf `Ready for review`.
+
+Es gibt keinen `push`-Trigger und damit keinen automatischen identischen
+Wiederholungslauf nach dem Merge.
 
 ## Buildprofile
 
