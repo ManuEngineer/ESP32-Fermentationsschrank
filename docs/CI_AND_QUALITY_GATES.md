@@ -9,6 +9,70 @@ die ESP32-Produktionsprofile verwenden verbindlich ESP-IDF `v6.0.2`
 `docs/ACCEPTANCE_TESTS.md` und `docs/IMPLEMENTATION_PLAN.md` um die konkrete
 lokale und CI-seitige Umsetzung.
 
+## Owner-gesteuerte Vollpruefung und CI-Trigger
+
+Die verbindliche Regel steht in `AGENTS.md`, Abschnitt 3a; dieser Abschnitt
+beschreibt nur deren technische Umsetzung und dupliziert die Regel nicht.
+
+Waehrend der Umsetzung eines freigegebenen Plans laeuft ausschliesslich
+lokal, gezielt fuer die tatsaechlich betroffene(n) Testsuite(s):
+
+```bash
+pio test -e native -f "test_<betroffene_suite>"
+```
+
+Kein vollstaendiger `pio test -e native`, keine ESP-IDF-Profile, keine
+`run_esp_idf_static_analysis.py` und kein `build_report.py` waehrend dieser
+Phase.
+
+`.github/workflows/build.yml` loest die schwere CI (native Volltest,
+Static Analysis, beide ESP-IDF-Profile, Ressourcenbericht) ausschliesslich
+aus bei:
+
+```yaml
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - synchronize
+    paths-ignore:
+      - "**/*.md"
+
+jobs:
+  firmware:
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+```
+
+Damit gilt:
+
+- ein `push` auf einen Feature-/Plan-Branch mit offenem Draft-PR loest die
+  schwere CI NICHT zusaetzlich zum `pull_request`-Event aus (kein doppelter
+  Volllauf desselben Commits);
+- `opened`/`reopened`/`synchronize` auf einem weiterhin als Draft gefuehrten
+  PR ueberspringt den schweren Job (`github.event.pull_request.draft ==
+  true`);
+- der Owner setzt den Draft-PR auf `Ready for Review` - `ready_for_review`
+  loest genau einen vollstaendigen Lauf fuer den reviewten Head aus;
+- ein weiterer Push NACH `Ready for Review` (`synchronize`, `draft ==
+  false`) loest erneut die volle CI aus - jede semantische Aenderung nach
+  einer gruenen Vollpruefung verwirft den vorherigen Pruefnachweis
+  (`AGENTS.md` 3a);
+- `push` auf `main` (nach Merge) baut weiterhin vollstaendig, da der
+  gemergte Commit ein neuer, zuvor nicht einzeln als Merge-Ergebnis
+  gepruefter Stand ist und den Ressourcenbericht auf `main` fuer spaetere
+  Basisvergleiche aktuell haelt.
+
+Nach einem CI-Fehlschlag geht der PR zurueck auf Draft; nur der Fehler und
+direkt abhaengige Tests werden lokal geprueft, danach erneutes Review und
+erneutes `Ready for Review` durch den Owner (`AGENTS.md` 3a).
+
 ## Native Tests lokal ausfuehren
 
 ```bash

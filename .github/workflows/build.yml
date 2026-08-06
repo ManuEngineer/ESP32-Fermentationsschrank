@@ -2,9 +2,16 @@ name: ESP-IDF + Native CI
 
 on:
   push:
+    branches:
+      - main
     paths-ignore:
       - "**/*.md"
   pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - synchronize
     paths-ignore:
       - "**/*.md"
 
@@ -13,6 +20,12 @@ permissions:
 
 jobs:
   firmware:
+    # Owner-gesteuerte Vollpruefung (AGENTS.md 3a, docs/CI_AND_QUALITY_GATES.md
+    # "Owner-gesteuerte Vollpruefung und CI-Trigger"): die schwere CI laeuft
+    # fuer einen Pull Request erst, sobald er nicht mehr als Draft gefuehrt
+    # wird (Ready for Review oder ein weiterer Push danach); ein push auf
+    # main (nach Merge) baut immer, da dort kein PR-Draftstatus existiert.
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
 
     env:
