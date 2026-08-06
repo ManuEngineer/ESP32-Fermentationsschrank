@@ -1,102 +1,99 @@
-# Engineering Principles
+# Engineering-Grundsaetze
 
-Diese Prinzipien gelten fuer Entwicklung, Architekturentscheidungen und Reviews im Repository.
+Diese Grundsaetze sind fuer Planung, Architektur, Implementierung, Tests und
+Reviews verbindlich. Spezifische Safety-, Security-, Recovery-, Workflow- und
+Architekturvertraege bleiben vorrangig und werden dadurch nicht ersetzt.
 
-Sie ergaenzen die bestehenden Architektur-, Sicherheits- und Workflowregeln in `AGENTS.md`.
+## Repository-first und keine Parallelwahrheit
 
-## Repository als Quelle der Wahrheit
-
-Bestehender Code, bestehende Modelle, Tests, akzeptierte ADRs und kanonische
-Dokumente sind vor jeder Planung, Implementierung und jedem Review die erste
-Quelle der Wahrheit.
+Bestehender Code, Modelle, Tests, akzeptierte ADRs und kanonische Dokumente sind
+vor jeder Planung, Umsetzung und jedem Review die erste Quelle der Wahrheit.
 
 - Vorhandene Typen, APIs, Validierungen und Architekturgrenzen werden
   wiederverwendet.
 - Ersatzmodelle, Parallelvertraege und erfundene Abstraktionen sind unzulaessig,
-  solange der bestehende Code die Verantwortung bereits abdeckt.
-- Bestehende Logik wird in Plaenen und Auftraegen nicht nochmals vollstaendig
-  definiert, wenn ein eindeutiger Verweis genuegt.
-- Aenderungen werden nur fuer eine nachweisliche Luecke geplant.
+  solange die bestehende Verantwortung bereits abgedeckt ist.
+- Bestehende Logik wird in Plaenen und Auftraegen nicht kopiert, wenn ein
+  eindeutiger Verweis genuegt.
+- Nur nachweisliche Luecken werden geplant oder implementiert.
 - Widersprueche werden offen benannt und nicht still aufgeloest.
 - Neue fachliche, persistente, Security-, Safety-, Recovery- oder
-  Hardwareentscheidungen benoetigen die vorgesehene Ownerfreigabe.
-
-Die ausfuehrliche Herleitung steht in `docs/ENGINEERING_LEARNINGS.md`.
+  Hardwareentscheidungen benoetigen das vorgesehene Owner-Gate.
 
 ## Inkrementelle Kontextaktualisierung
 
-Repositorypruefung bedeutet nicht, dass bei jeder Folgeaenderung das gesamte
-Repository erneut gelesen werden muss.
+Nach einer vollstaendigen Erstorientierung werden Repository, Branch und
+gepruefter Commit als Kontextbaseline dokumentiert.
 
-Nach einer vollstaendigen Erstorientierung wird der gepruefte Branch und
-Commit-SHA als Kontextbaseline dokumentiert.
-
-- Ist Branch und `HEAD` unveraendert, darf der gelesene Kontext wiederverwendet
-  werden.
-- Hat sich `HEAD` geaendert, werden zuerst Diff, Commitliste und Dateiliste seit
-  der Baseline ermittelt.
-- Danach werden die geaenderten Dateien sowie direkt betroffene Schnittstellen,
-  Modelle, Tests, Architekturguards und geltende `AGENTS.md` gezielt neu
-  geprueft.
-- Unveraenderte, nicht betroffene Dateien werden nicht rein ritualistisch erneut
+- Unveraenderter Branch und `HEAD`: gelesenen Kontext wiederverwenden.
+- Geaenderter `HEAD`: zuerst Commitliste, Dateiliste und Diff seit der Baseline
+  pruefen; danach geaenderte Dateien und direkt betroffene Schnittstellen,
+  Modelle, Tests, Architekturguards und lokale Regeln gezielt neu lesen.
+- Unveraenderte, nicht betroffene Dateien werden nicht ritualistisch erneut
   vollstaendig gelesen.
-- Ein Full Refresh ist erforderlich, wenn die Baseline unbekannt ist oder sich
-  Branch, Architektur, Modulgrenzen, Buildsystem, oeffentliche APIs,
-  Wireformate, Persistenzschemas oder Security-/Safety-/Recoverygrenzen
-  materiell geaendert haben.
+- Ein Full Refresh ist erforderlich bei unbekannter Baseline, Branchwechsel,
+  Rebase oder Merge sowie materiellen Aenderungen an Regeln, ADRs, Architektur,
+  Modulgrenzen, Buildsystem, Toolchain, oeffentlichen APIs, Wireformaten,
+  Persistenzschemas oder Security-, Safety-, Recovery- und Hardwaregrenzen.
+- Bei breitem Diff, Widerspruch oder begruendetem Zweifel wird ebenfalls ein
+  Full Refresh durchgefuehrt.
 
-Der Agent dokumentiert Baseline-SHA, aktuellen SHA und den Modus `REUSED`,
-`INCREMENTAL` oder `FULL`. Die vollstaendige Regel steht in
-`docs/ENGINEERING_LEARNINGS.md`.
+Der Nachweis verwendet mindestens:
+
+```text
+CONTEXT_BASELINE_BRANCH: <branch>
+CONTEXT_BASELINE_SHA: <sha>
+CONTEXT_HEAD_SHA: <sha>
+CONTEXT_PLAN_SHA: <sha oder NONE>
+CONTEXT_REFRESH_MODE: REUSED | INCREMENTAL | FULL
+CONTEXT_DELTA: <gepruefte Commits und Dateien>
+SOURCE_OF_TRUTH_CONFLICT: NONE | <Beschreibung>
+```
+
+Eine neue Agentensitzung uebernimmt frueheren Kontext nicht automatisch.
+Branch, Baseline, freigegebener Plan und offene Befunde muessen deshalb in PR,
+Auftrag oder aktuellem Handover nachvollziehbar sein.
 
 ## SOLID
 
-Die Software soll nach Moeglichkeit die SOLID-Prinzipien einhalten.
+- **Single Responsibility:** Funktionen, Klassen und Module besitzen eine klar
+  abgegrenzte Verantwortung.
+- **Open/Closed:** Stabile Kernlogik wird bevorzugt ueber vorhandene
+  Abstraktionen erweitert, statt fuer jede Erweiterung wiederholt veraendert.
+- **Liskov Substitution:** Implementierungen einer Schnittstelle bleiben ohne
+  Verletzung ihres dokumentierten Vertrags austauschbar.
+- **Interface Segregation:** Kleine zweckgebundene Schnittstellen sind grossen
+  universellen Schnittstellen vorzuziehen.
+- **Dependency Inversion:** Fachlogik haengt von Abstraktionen ab, nicht direkt
+  von Hardware-, Framework-, Bibliotheks- oder Infrastrukturklassen.
 
-### Single Responsibility Principle (SRP)
+## DRY
 
-Jede Klasse, jedes Modul und jede Funktion soll eine klar abgegrenzte Verantwortung besitzen.
+Fachliche Regeln, Validierungen und Vertraege besitzen eine eindeutige Quelle.
+Copy-and-paste-Logik, parallele Implementierungen und semantisch doppelte
+Dokumentation werden vermieden.
 
-### Open/Closed Principle (OCP)
+DRY verlangt keine gemeinsame Abstraktion fuer nur oberflaechlich aehnlichen
+Code mit unterschiedlichen fachlichen Verantwortungen.
 
-Erweiterungen sollen bevorzugt durch neue Implementierungen oder Erweiterungen von Abstraktionen erfolgen und nicht durch wiederholte Aenderungen stabiler Kernlogik.
+## KISS
 
-### Liskov Substitution Principle (LSP)
+Bevorzugt wird die einfachste verstaendliche, testbare und wartbare Loesung,
+welche Anforderungen sowie Safety-, Security- und Recoverygrenzen vollstaendig
+erfuellt.
 
-Implementierungen einer Schnittstelle muessen austauschbar bleiben, ohne erwartetes Verhalten der Anwendung zu verletzen.
+SOLID rechtfertigt keine vorsorgliche Ueberabstraktion. KISS rechtfertigt keine
+Vereinfachung von Safety, Security, Recovery, Testbarkeit oder dokumentierten
+Vertraegen. Bewusste Abweichungen werden im freigegebenen Plan konkret
+begruendet und im Review gegen den tatsaechlichen Diff bewertet.
 
-### Interface Segregation Principle (ISP)
+## Adopt-or-build und Espressif-first
 
-Kleine, spezifische Schnittstellen sind grossen universellen Schnittstellen vorzuziehen.
+Vor einer Eigenentwicklung wird geprueft, ob eine bestehende Komponente die
+Anforderung sicher, wartbar und ressourcengerecht erfuellt. Die detaillierten
+Bewertungskriterien stehen in `ADOPT_OR_BUILD.md`.
 
-### Dependency Inversion Principle (DIP)
-
-Fachlogik soll von Abstraktionen abhaengen und nicht direkt von konkreten Hardware-, Bibliotheks- oder Infrastrukturimplementierungen.
-
-## DRY (Don't Repeat Yourself)
-
-Funktionalitaet soll nicht mehrfach unabhaengig implementiert werden.
-
-Duplizierte Logik, widerspruechliche Implementierungen und Copy/Paste-Code sollen vermieden werden.
-
-Gemeinsame Funktionalitaet soll eine eindeutige Zustaendigkeit besitzen.
-
-## KISS (Keep It Simple)
-
-Loesungen sollen so einfach wie moeglich bleiben.
-
-Komplexitaet ist nur gerechtfertigt, wenn sie einen nachweisbaren Vorteil bringt, beispielsweise:
-
-- hoehere Sicherheit
-- bessere Testbarkeit
-- klare Erweiterbarkeit
-- notwendige Hardwareabstraktion
-
-Einfacher, verstaendlicher und gut getesteter Code ist gegenueber unnoetig abstrakten Loesungen zu bevorzugen.
-
-## Espressif-first
-
-Vor der Eigenentwicklung einer Standardfaehigkeit werden in dieser Reihenfolge geprueft:
+Bei ESP32-Standardfaehigkeiten gilt folgende Rechercheprioritaet:
 
 1. Built-ins der fixierten ESP-IDF-Version;
 2. offizieller Namespace `espressif/*` im ESP Component Registry;
@@ -104,11 +101,14 @@ Vor der Eigenentwicklung einer Standardfaehigkeit werden in dieser Reihenfolge g
 4. geeignete gepflegte Drittkomponenten;
 5. kleine Eigenentwicklung nur bei nachgewiesener Luecke.
 
-- Ein Framework- oder Toolchainwechsel loest eine inkrementelle Neubewertung zuvor ausgeschlossener oder zurueckgestellter Kandidaten aus.
-- Die Neubewertung aktualisiert den bestehenden Audit und erzeugt nicht automatisch einen zweiten Gesamtaudit.
-- Eine README-Aussage ersetzt weder Lizenzpruefung noch Build-, Ressourcen- oder Hardwaretest.
-- Espressif-first bestimmt die Recherche- und Pruefprioritaet, nicht automatisch die spaetere Produktauswahl.
+Jeder Kandidat wird mindestens auf Funktionsumfang, Lizenz, Wartung,
+Abhaengigkeiten, Ressourcenbedarf, Testbarkeit, Hardwareeignung und
+Integrationsrisiko geprueft. Eine README-Aussage ersetzt keinen Nachweis.
 
-### Espressif-MCP
+Ein Framework- oder Toolchainwechsel fuehrt zu einer inkrementellen
+Neubewertung betroffener Kandidaten im bestehenden Audit, nicht automatisch zu
+einem neuen Gesamtaudit. Espressif-first bestimmt die Pruefreihenfolge, nicht
+automatisch die Produktauswahl.
 
-Die Espressif-MCP-Dienste duerfen als Recherchewerkzeug fuer Agenten verwendet werden. Sie werden weder Firmwareabhaengigkeit noch CI-Dienst noch produktiver Laufzeitbestandteil.
+Espressif-MCP darf als Recherchewerkzeug verwendet werden. Es wird weder
+Firmwareabhaengigkeit noch CI-Dienst noch produktiver Laufzeitbestandteil.
