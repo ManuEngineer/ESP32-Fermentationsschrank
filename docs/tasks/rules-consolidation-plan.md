@@ -53,6 +53,7 @@ Abhängigkeiten.
 | `docs/audits/PROPOSED_RELEASE_1_ROADMAP.md` | historischer Audit- und Begründungsnachweis, kein Live-Status |
 | `docs/ENGINEERING_PRINCIPLES.md` | einzige kanonische Quelle für Repository-first, Kontextaktualisierung, SOLID, DRY, KISS und Espressif-first |
 | `docs/ENGINEERING_LEARNINGS.md` | nach Übernahme einzigartiger Inhalte entfernen; Historie bleibt in Git/PR nachvollziehbar |
+| `docs/DECISIONS.md` | zentrales ADR-Register; ausführliche ADRs nur bei notwendiger Detailtiefe |
 | `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` | alleinige vollständige Definition der Modulrollen und Abhängigkeitsrichtung |
 | `lib/README.md` | kurzer nicht normativer Modulindex mit Verweis auf ADR-013 |
 | `docs/SPECIFICATION_REVIEW.md` | Dokumentationspriorität, verbindliche Release-1-Basis und alleinige vollständige Release-1-Abgrenzung |
@@ -61,9 +62,13 @@ Abhängigkeiten.
 | `docs/AGENT_WORKFLOW.md` | alleinige vollständige Beschreibung von Plan-first, Planfreigabe, Umsetzung, Abweichung, Review, Abschluss, Tests und Handover |
 | `docs/CI_AND_QUALITY_GATES.md` | Testbefehle, Buildprofile, Werkzeuge, CI-Schritte und PASS/FAILED/BLOCKED |
 | `.github/pull_request_template.md` | kompakte Nachweisliste ohne kopierte Testbefehle oder Prozessregeln |
-| akzeptierte ADRs | kanonische dauerhafte Architekturentscheidungen |
-| Engineering-/Fachdokumente | bedarfsweise gelesene Detailverträge |
+| `Agent-Auftraege/Auftrag.md` | kurze konkrete Auftragsdatei mit Verweisen, ohne kopierte Projekt- oder Workflowregeln |
 | PR, Issue, freigegebener Plan, neuester Handover | aktueller auftragsbezogener Arbeitsstand |
+
+Zu entfernen sind `docs/CODEX_HANDOFF.md`, das historische Auftragspaket
+`Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/`
+und nach Übernahme einzigartiger Inhalte `docs/ENGINEERING_LEARNINGS.md`.
+Die Historie bleibt über Git und die zugehörigen PRs nachvollziehbar.
 
 ### Pflegevertrag für `docs/ROADMAP.md`
 
@@ -143,6 +148,10 @@ Issue-Inhalte werden nicht kopiert.
   weiteren Draft-Pushes.
 - `docs/CODEX_HANDOFF.md` enthält einen historischen Stand ab PR #38/Issue #9
   und wiederholt Architektur-, Safety- und Hardwareinformationen.
+- Das historische Auftragspaket #9 bis #37 und sein INDEX sind veraltet und
+  bilden eine zusätzliche Status- und Regelquelle.
+- `Agent-Auftraege/Auftrag.md` erzwingt noch den alten INDEX-Workflow,
+  Volllektüre und vollständige Tests vor jedem PR.
 - `IMPLEMENTATION_PLAN.md` und `IMPLEMENTATION_ISSUES.md` enthalten veraltete
   Statusangaben.
 - `docs/audits/PROPOSED_RELEASE_1_ROADMAP.md` ist derzeit faktisch die
@@ -162,6 +171,7 @@ Issue-Inhalte werden nicht kopiert.
 | R-04 | Modularchitektur | ADR-013 bleibt alleinige vollständige Quelle; Root fasst nur Kernrichtung und Lesepflicht zusammen; lokale `AGENTS.md` enthalten nur Deltas; neue kurze Delta-Regel für `device_platform_esp_idf`; `lib/README.md` wird zum knappen Index |
 | R-05 | Safety, Hardware und Release-Scope | Root enthält nur fail-closed-Grundsatz und Lesepflicht; Details bleiben in den Fachquellen; `SPECIFICATION_REVIEW.md` führt die alleinige vollständige Release-1-Abgrenzung; OTA und automatischer Firmwaredownload sind nicht Teil von Release 1, aber für ein späteres Release vorgesehen; jetzt keine vorsorglichen Slots, Bibliotheken oder Ressourcen reservieren |
 | R-06 | Workflow, Tests und CI | vollständiger Prozess nach `AGENT_WORKFLOW.md`; Root enthält nur Owner-Gates; während Draft nur gezielte lokale Tests und keine GitHub-CI; vollständiger lokaler Lauf nur auf Owner-Anweisung nach Review; vollständige GitHub-CI startet beim Ownerwechsel auf `Ready for review` und erneut bei späteren Pushes eines nicht als Draft markierten PR; kein automatischer Wiederholungslauf nach Merge |
+| R-07 | ADRs, Handovers und Aufträge | `DECISIONS.md` bleibt zentrales ADR-Register; Dokumentationspriorität bleibt nur in `SPECIFICATION_REVIEW.md`; historischen Codex-Handover und Auftragspaket #9 bis #37 entfernen; `Agent-Auftraege/Auftrag.md` als kurze aktuelle Auftragsdatei mit Verweisen neu aufbauen |
 
 ## Abnahmekriterien
 
@@ -181,6 +191,6 @@ Issue-Inhalte werden nicht kopiert.
 
 ## Nächster Schritt
 
-A3/A5: Dokumentationspriorität, ADR-Register, historische Handovers und
-Auftragsdateien prüfen. Abweichungen werden vor jeder Änderung dem Owner
-vorgelegt.
+A7: vollständigen Zielaufbau und Zielgrösse der Root-`AGENTS.md` sowie die
+bedingte Lesematrix dem Owner vorlegen. Erst nach Freigabe beginnt die
+Konsolidierung.
