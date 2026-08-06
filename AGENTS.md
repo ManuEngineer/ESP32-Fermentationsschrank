@@ -249,53 +249,25 @@ Jedes Issue erfuellt alle zutreffenden Punkte:
 Hardwareunabhaengige Logik darf vor Hardwareankunft abgeschlossen werden. Die
 reale Verifikation bleibt in einem verknuepften `BLOCKED_HARDWARE`-Issue sichtbar.
 
-## Verbindliche Session- und Auftragsuebergabe
+## Session-Handover
 
-Diese Regel gilt fuer alle Agenten. Bei Arbeiten an einem bestehenden Branch
-oder Pull Request muss der Agent am Ende jedes Auftrags oder abgeschlossenen
-Arbeitsslices automatisch eine aktuelle, eigenstaendig verstaendliche Uebergabe
-als Kommentar im zugehoerigen Pull Request veroeffentlichen. Der Owner muss die
-Uebergabe nicht gesondert anfordern.
+Vor einem Sessionende, Kontextreset oder Agentenwechsel muss der Agent bei
+einem offenen PR genau einen aktuellen `SESSION HANDOVER`-Kommentar erstellen
+und danach anhalten. Nicht nach jedem kleinen Zwischenschritt kommentieren.
 
-Eine Uebergabe ist insbesondere zwingend vor:
+Vorher sind PR, Branch, HEAD, Diff, Tests und offene Befunde am Live-Stand zu
+pruefen. Der Kommentar bleibt normalerweise unter 300 Woertern und nennt nur:
 
-- dem Anhalten nach einer Planungsphase;
-- dem Wechsel von Planung zu Umsetzung;
-- dem Wechsel von Umsetzung zu Review oder Nachreview;
-- der Uebergabe an einen anderen Agenten;
-- einer laengeren Unterbrechung;
-- einem empfohlenen Kontextreset oder `/clear`;
-- dem Ende eines in sich abgeschlossenen Umsetzungsslices.
+- aktuellen HEAD und freigegebenen Plan-Commit;
+- erledigte sowie geaenderte Bereiche;
+- ausgefuehrte Tests mit Ergebnis;
+- offene Risiken oder Befunde;
+- den naechsten konkreten Schritt.
 
-Vor dem Kommentar muss der Agent den aktuellen PR, Branch, HEAD, Arbeitsbaum,
-Diff, Commit- und Push-Status, ausgefuehrte Pruefungen sowie offene
-Reviewthreads erneut anhand des Live-Stands verifizieren.
-
-Der neueste Uebergabekommentar muss den aktuellen Gesamtstand enthalten und
-ersetzt fuer die Fortsetzung alle frueheren Session-Uebergaben. Weiterhin
-relevante Informationen aus aelteren Uebergaben werden knapp uebernommen. Die
-Uebergabe nennt mindestens:
-
-- Auftrag oder Slice, PR, Branch, aktuellen HEAD und freigegebenen Plan-Commit;
-- erledigte Arbeiten und geaenderte Bereiche;
-- ausgefuehrte Pruefungen mit exakten Befehlen und realem Ergebnis;
-- offene Punkte, Risiken, Blocker und bewusst nicht begonnene Arbeiten;
-- den naechsten konkreten Schritt fuer eine neue Session.
-
-Kann der Agent den PR-Kommentar technisch nicht veroeffentlichen, gibt er den
-vollstaendigen, sofort einsetzbaren Kommentar im Chat aus, nennt den Grund und
-haelt an. Er darf nicht behaupten, die Uebergabe sei veroeffentlicht worden.
-
-Nach der veroeffentlichten Uebergabe haelt der Agent an und teilt dem Owner mit,
-dass der Kontext nun gefahrlos zurueckgesetzt werden kann. Der Agent fuehrt
-`/clear` nicht selbst aus und setzt keinen alten Chatverlauf als verbindliche
-Quelle voraus.
-
-Die verbindliche Vorlage, Nachweisanforderungen und Review-Zusatzangaben stehen
-in `docs/SESSION_HANDOVER.md`. Diese Datei muss vor dem Erstellen einer
-Uebergabe gelesen und eingehalten werden. Session-Uebergaben ersetzen weder die
-abschliessende PR-Beschreibung noch den freigegebenen Plan oder die
-Abschlussdokumentation vor `Ready for Review`.
+Der neueste Handover ersetzt fruehere Handovers. Plaene, Diffs und Logs werden
+verlinkt oder knapp referenziert, nicht kopiert. Kann der Agent nicht im PR
+kommentieren, gibt er den fertigen Kommentar im Chat aus und kennzeichnet ihn
+als nicht veroeffentlicht. `/clear` fuehrt ausschliesslich der Owner aus.
 
 ## Plan-first-Workflow fuer Implementierungsarbeit
 
