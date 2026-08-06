@@ -74,15 +74,21 @@ Commit `fdf53e4cc31f1793659825e3150273400d22f315` freigegeben
 ```text
 Runde 6 (Nachkorrektur eines bereits freigegebenen Plans):
   PREVIOUS_PLAN_COMMIT: fdf53e4cc31f1793659825e3150273400d22f315
-  PREVIOUS_HEAD:        <wird mit dem Commit dieser Runde eingetragen>
+  PREVIOUS_HEAD:        9feb2051482d6af8e8e558ff229f990065966de4
   Ausgeloest durch "AUFTRAG_PR95_Owner_CI_und_Recovery_Plan.md" (Owner-
-  Review der Slice-1-Umsetzung in PR #95, Commit 627d2aa).
+  Review der Slice-1-Umsetzung in PR #95, Commit 627d2aa). PREVIOUS_HEAD
+  liegt nach PREVIOUS_PLAN_COMMIT, da zwischen der Planfreigabe und dieser
+  Runde die Slice-1-Umsetzung (e9f567f, 627d2aa) und eine vorgelagerte,
+  eigene Governance-Korrektur (9feb205, Teil A desselben Auftrags,
+  AGENTS.md/docs/CI_AND_QUALITY_GATES.md/.github/workflows/build.yml, kein
+  Plan-Dateiinhalt) erfolgten.
   -> Wiedererkennungsvertrag (Abschnitt 8 "Stale -> Valid", Abschnitt 9a)
      korrigiert: die Wiedererkennungs-Stabilitaetsdauer wird ausschliesslich
      durch die Zeitspanne zwischen den Erfassungszeitstempeln der
      Recovery-Start- und der letzten Recovery-Probe belegt, niemals durch
      nowMonotonicMs/den Zustellzeitpunkt. Testmatrix (Abschnitt 17) um die
      vier daraus folgenden Testfaelle ergaenzt.
+  Ergebnis dieser Runde: d6a1a9d73fd707e9d512975943c97e5bdf5b4665
 ```
 
 ANDERS ALS Runde 1-2 korrigiert Runde 6 einen bereits durch den Owner
