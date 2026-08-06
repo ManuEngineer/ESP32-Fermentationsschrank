@@ -249,6 +249,54 @@ Jedes Issue erfuellt alle zutreffenden Punkte:
 Hardwareunabhaengige Logik darf vor Hardwareankunft abgeschlossen werden. Die
 reale Verifikation bleibt in einem verknuepften `BLOCKED_HARDWARE`-Issue sichtbar.
 
+## Verbindliche Session- und Auftragsuebergabe
+
+Diese Regel gilt fuer alle Agenten. Bei Arbeiten an einem bestehenden Branch
+oder Pull Request muss der Agent am Ende jedes Auftrags oder abgeschlossenen
+Arbeitsslices automatisch eine aktuelle, eigenstaendig verstaendliche Uebergabe
+als Kommentar im zugehoerigen Pull Request veroeffentlichen. Der Owner muss die
+Uebergabe nicht gesondert anfordern.
+
+Eine Uebergabe ist insbesondere zwingend vor:
+
+- dem Anhalten nach einer Planungsphase;
+- dem Wechsel von Planung zu Umsetzung;
+- dem Wechsel von Umsetzung zu Review oder Nachreview;
+- der Uebergabe an einen anderen Agenten;
+- einer laengeren Unterbrechung;
+- einem empfohlenen Kontextreset oder `/clear`;
+- dem Ende eines in sich abgeschlossenen Umsetzungsslices.
+
+Vor dem Kommentar muss der Agent den aktuellen PR, Branch, HEAD, Arbeitsbaum,
+Diff, Commit- und Push-Status, ausgefuehrte Pruefungen sowie offene
+Reviewthreads erneut anhand des Live-Stands verifizieren.
+
+Der neueste Uebergabekommentar muss den aktuellen Gesamtstand enthalten und
+ersetzt fuer die Fortsetzung alle frueheren Session-Uebergaben. Weiterhin
+relevante Informationen aus aelteren Uebergaben werden knapp uebernommen. Die
+Uebergabe nennt mindestens:
+
+- Auftrag oder Slice, PR, Branch, aktuellen HEAD und freigegebenen Plan-Commit;
+- erledigte Arbeiten und geaenderte Bereiche;
+- ausgefuehrte Pruefungen mit exakten Befehlen und realem Ergebnis;
+- offene Punkte, Risiken, Blocker und bewusst nicht begonnene Arbeiten;
+- den naechsten konkreten Schritt fuer eine neue Session.
+
+Kann der Agent den PR-Kommentar technisch nicht veroeffentlichen, gibt er den
+vollstaendigen, sofort einsetzbaren Kommentar im Chat aus, nennt den Grund und
+haelt an. Er darf nicht behaupten, die Uebergabe sei veroeffentlicht worden.
+
+Nach der veroeffentlichten Uebergabe haelt der Agent an und teilt dem Owner mit,
+dass der Kontext nun gefahrlos zurueckgesetzt werden kann. Der Agent fuehrt
+`/clear` nicht selbst aus und setzt keinen alten Chatverlauf als verbindliche
+Quelle voraus.
+
+Die verbindliche Vorlage, Nachweisanforderungen und Review-Zusatzangaben stehen
+in `docs/SESSION_HANDOVER.md`. Diese Datei muss vor dem Erstellen einer
+Uebergabe gelesen und eingehalten werden. Session-Uebergaben ersetzen weder die
+abschliessende PR-Beschreibung noch den freigegebenen Plan oder die
+Abschlussdokumentation vor `Ready for Review`.
+
 ## Plan-first-Workflow fuer Implementierungsarbeit
 
 Fuer jede nicht triviale Implementierungs-, Architektur-, Persistenz-,
@@ -357,9 +405,9 @@ Der Agent muss:
 Kleine technische Detailentscheidungen sind erlaubt, wenn:
 
 - sie keine sichtbare Produktwirkung besitzen;
-- sie keine oeffentliche oder persistente Schnittstelle veraendern;
+- sie keine oeffentliche oder persistente Schnittstelle veraendert;
 - sie keine neue Abhaengigkeit erzeugen;
-- sie keine Security-, Safety-, Recovery- oder Hardwaregrenze veraendern;
+- sie keine Security-, Safety-, Recovery- oder Hardwaregrenze veraendert;
 - sie eindeutig innerhalb des freigegebenen Plans liegen.
 
 ### 4. Materielle Planabweichungen
