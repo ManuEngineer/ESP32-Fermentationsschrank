@@ -58,6 +58,9 @@ Abhängigkeiten.
 | `docs/SPECIFICATION_REVIEW.md` | Dokumentationspriorität, verbindliche Release-1-Basis und alleinige vollständige Release-1-Abgrenzung |
 | `docs/HARDWARE.md` | konkrete Hardware, Statuskennzeichnung und Verifikationsreihenfolge |
 | spezialisierte Safety-/Recovery-Dokumente | vollständige Fehler-, Safety-, Boot-, Persistenz- und Recovery-Verträge |
+| `docs/AGENT_WORKFLOW.md` | alleinige vollständige Beschreibung von Plan-first, Planfreigabe, Umsetzung, Abweichung, Review, Abschluss, Tests und Handover |
+| `docs/CI_AND_QUALITY_GATES.md` | Testbefehle, Buildprofile, Werkzeuge, CI-Schritte und PASS/FAILED/BLOCKED |
+| `.github/pull_request_template.md` | kompakte Nachweisliste ohne kopierte Testbefehle oder Prozessregeln |
 | akzeptierte ADRs | kanonische dauerhafte Architekturentscheidungen |
 | Engineering-/Fachdokumente | bedarfsweise gelesene Detailverträge |
 | PR, Issue, freigegebener Plan, neuester Handover | aktueller auftragsbezogener Arbeitsstand |
@@ -76,6 +79,23 @@ Die Roadmap enthält nur:
 Sie wird zu Beginn jedes neuen PR, nach jedem Merge und bei einer materiellen
 Reihenfolgeänderung aktualisiert. Anforderungen, Begründungen und vollständige
 Issue-Inhalte werden nicht kopiert.
+
+### Test- und CI-Vertrag
+
+- In der Planungsphase werden keine Builds oder vollständigen Tests ausgeführt.
+- Während der Draft-Umsetzung laufen nur gezielte Tests für den geänderten
+  Bereich.
+- Nach vollständigem Review ohne Befund führt der Agent einen vollständigen
+  lokalen Testlauf nur auf ausdrückliche Owner-Anweisung und nur auf dem finalen
+  Head aus.
+- GitHub-CI läuft nicht während der Draft-Phase.
+- Der Owner setzt den PR nach abgeschlossenem Review auf `Ready for review`;
+  dieses Ereignis startet den vollständigen GitHub-Testlauf.
+- Spätere Pushes auf einen nicht mehr als Draft markierten PR lösen den Lauf
+  erneut aus. Nach Rückstufung auf Draft bleibt CI wieder aus.
+- Reine Markdown-Änderungen bleiben von der vollständigen CI ausgenommen.
+- Kein erneuter vollständiger Lauf nach dem Merge; ein manueller Lauf bleibt für
+  begründete Sonderfälle möglich.
 
 ## Audit-Taskliste
 
@@ -114,6 +134,13 @@ Issue-Inhalte werden nicht kopiert.
 - Die Release-1-Ausschlusslisten sind nicht vollständig identisch; OTA und
   automatischer Firmwaredownload sind für Release 1 ausgeschlossen, bleiben
   aber ausdrücklich für ein späteres Release vorgesehen.
+- Der vollständige Plan-first-Workflow steht derzeit in der automatisch
+  geladenen Root-`AGENTS.md` statt in einer bedarfsweise gelesenen Workflowquelle.
+- Die PR-Vorlage enthält veraltete pauschale PlatformIO-Prüfpunkte und kennt
+  Plan-Commit, gezielte Tests, Roadmap-Pflege und offene Gates nicht.
+- Der aktuelle GitHub-Workflow startet bei jedem nicht reinen Markdown-Push auf
+  einen Draft-PR und wiederholt den vollständigen Testlauf zusätzlich nach
+  weiteren Draft-Pushes.
 - `docs/CODEX_HANDOFF.md` enthält einen historischen Stand ab PR #38/Issue #9
   und wiederholt Architektur-, Safety- und Hardwareinformationen.
 - `IMPLEMENTATION_PLAN.md` und `IMPLEMENTATION_ISSUES.md` enthalten veraltete
@@ -134,6 +161,7 @@ Issue-Inhalte werden nicht kopiert.
 | R-03 | Engineering-Grundsätze | `ENGINEERING_PRINCIPLES.md` ist alleinige kanonische Regelquelle; Root verweist kurz darauf; `ENGINEERING_LEARNINGS.md` wird nach Übernahme einzigartiger Inhalte entfernt |
 | R-04 | Modularchitektur | ADR-013 bleibt alleinige vollständige Quelle; Root fasst nur Kernrichtung und Lesepflicht zusammen; lokale `AGENTS.md` enthalten nur Deltas; neue kurze Delta-Regel für `device_platform_esp_idf`; `lib/README.md` wird zum knappen Index |
 | R-05 | Safety, Hardware und Release-Scope | Root enthält nur fail-closed-Grundsatz und Lesepflicht; Details bleiben in den Fachquellen; `SPECIFICATION_REVIEW.md` führt die alleinige vollständige Release-1-Abgrenzung; OTA und automatischer Firmwaredownload sind nicht Teil von Release 1, aber für ein späteres Release vorgesehen; jetzt keine vorsorglichen Slots, Bibliotheken oder Ressourcen reservieren |
+| R-06 | Workflow, Tests und CI | vollständiger Prozess nach `AGENT_WORKFLOW.md`; Root enthält nur Owner-Gates; während Draft nur gezielte lokale Tests und keine GitHub-CI; vollständiger lokaler Lauf nur auf Owner-Anweisung nach Review; vollständige GitHub-CI startet beim Ownerwechsel auf `Ready for review` und erneut bei späteren Pushes eines nicht als Draft markierten PR; kein automatischer Wiederholungslauf nach Merge |
 
 ## Abnahmekriterien
 
@@ -153,6 +181,6 @@ Issue-Inhalte werden nicht kopiert.
 
 ## Nächster Schritt
 
-A3/A5: Plan-first-, Review-, Test-, Abschluss- und Handover-Regeln in
-Root-`AGENTS.md`, CI-/Quality-Dokumenten und Templates vergleichen. Abweichungen
-werden vor jeder Änderung dem Owner vorgelegt.
+A3/A5: Dokumentationspriorität, ADR-Register, historische Handovers und
+Auftragsdateien prüfen. Abweichungen werden vor jeder Änderung dem Owner
+vorgelegt.
