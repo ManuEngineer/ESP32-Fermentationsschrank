@@ -91,7 +91,9 @@ werden dort nicht kopiert.
 ## Tests, CI und Review
 
 Waehrend der Draft-Umsetzung werden nur gezielte lokale Tests fuer den
-tatsaechlich geaenderten Bereich ausgefuehrt.
+tatsaechlich geaenderten Bereich ausgefuehrt. Werden gemeinsame Vertraege
+geaendert, gehoeren auch die direkt betroffenen Konsumententests zum gezielten
+Umfang.
 
 Ein Review prueft den vollstaendigen aktuellen Diff gegen Plan, Anforderungen,
 Architektur, Tests, Dokumentation sowie SOLID, DRY und KISS. Es darf sich nicht
@@ -103,7 +105,13 @@ offene Befunde, auf dem finalen `HEAD` und nach ausdruecklicher Owner-Anweisung.
 GitHub-CI laeuft nicht waehrend der Draft-Phase. Der Owner setzt den PR nach dem
 Review auf `Ready for review`; dadurch startet der vollstaendige CI-Lauf.
 Spaetere Pushes auf einen nicht als Draft markierten PR starten CI erneut.
-Reine Markdown-Aenderungen loesen keine vollstaendige Firmware-CI aus.
+Reine Markdown- oder Kommentaraenderungen loesen keine vollstaendige
+Firmware-CI aus und verwerfen einen vorhandenen Pruefnachweis nicht.
+
+Nach einem CI-Fehler wird der PR wieder als Draft gefuehrt. Es folgen gezielte
+Korrekturtests, ein erneutes vollstaendiges Review und danach ein neuer
+Ownerwechsel auf `Ready for review`. Jede semantische Aenderung nach einer
+gruenen Vollpruefung verwirft den bisherigen Review- und Pruefnachweis.
 
 Testbefehle, Buildprofile, Werkzeuge und Ergebnisstatus stehen ausschliesslich
 in `docs/CI_AND_QUALITY_GATES.md`. Nicht ausgefuehrte Tests duerfen nicht als
