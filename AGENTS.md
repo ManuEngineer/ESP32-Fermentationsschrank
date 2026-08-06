@@ -249,6 +249,26 @@ Jedes Issue erfuellt alle zutreffenden Punkte:
 Hardwareunabhaengige Logik darf vor Hardwareankunft abgeschlossen werden. Die
 reale Verifikation bleibt in einem verknuepften `BLOCKED_HARDWARE`-Issue sichtbar.
 
+## Session-Handover
+
+Vor einem Sessionende, Kontextreset oder Agentenwechsel muss der Agent bei
+einem offenen PR genau einen aktuellen `SESSION HANDOVER`-Kommentar erstellen
+und danach anhalten. Nicht nach jedem kleinen Zwischenschritt kommentieren.
+
+Vorher sind PR, Branch, HEAD, Diff, Tests und offene Befunde am Live-Stand zu
+pruefen. Der Kommentar bleibt normalerweise unter 300 Woertern und nennt nur:
+
+- aktuellen HEAD und freigegebenen Plan-Commit;
+- erledigte sowie geaenderte Bereiche;
+- ausgefuehrte Tests mit Ergebnis;
+- offene Risiken oder Befunde;
+- den naechsten konkreten Schritt.
+
+Der neueste Handover ersetzt fruehere Handovers. Plaene, Diffs und Logs werden
+verlinkt oder knapp referenziert, nicht kopiert. Kann der Agent nicht im PR
+kommentieren, gibt er den fertigen Kommentar im Chat aus und kennzeichnet ihn
+als nicht veroeffentlicht. `/clear` fuehrt ausschliesslich der Owner aus.
+
 ## Plan-first-Workflow fuer Implementierungsarbeit
 
 Fuer jede nicht triviale Implementierungs-, Architektur-, Persistenz-,
