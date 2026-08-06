@@ -2194,6 +2194,22 @@ Zustandsmaschine und Wiedererkennung (Orakel: Abschnitt 8):
     EIGENER Zeitstempel die geforderte Zeitspanne seit der Recovery-
     Startprobe belegt, loest Valid aus (Korrektur Runde 6 - belegt
     DELAYED_DELIVERY_NOT_COUNTED_AS_STABILITY)
+  - KORREKTUR RUNDE 6, konkret zu ersetzender Bestandstest: der in Runde 2
+    entstandene Test `test_failed_latch_clears_using_now_not_sample_
+    timestamp_on_delayed_completion` (`test/test_sensor_quality_pipeline/
+    test_sensor_quality_pipeline.cpp`) asserted aktuell noch den durch
+    Runde 6 verworfenen Vertrag: er akzeptiert bei Probenzeitstempeln 5000/
+    6000 (Spanne 1000 ms, < kMinRecoveryStabilityDurationMs = 2000 ms) und
+    Zustellung erst bei nowMonotonicMs = 8000 (Spanne 3000 ms) Valid bei
+    `snapshot(8000)` - genau die durch Runde 6 verbotene
+    Zustellzeitpunkt-Auswertung. Dieser Bestandstest ist bei der Umsetzung
+    von Runde 6 zu ERSETZEN, nicht zu reparieren: durch die vier oben
+    aufgefuehrten neuen Faelle (RECOVERY_STABILITY_USES_SAMPLE_SPAN,
+    SNAPSHOT_CANNOT_COMPLETE_RECOVERY, DELAYED_DELIVERY_NOT_COUNTED_AS_
+    STABILITY sowie einen Nachfolgetest fuer die urspruengliche Regression
+    "Failed-Merkbit einheitlich ueber dieselbe Ableitungsfunktion loesen",
+    diesmal mit einer Probenspanne >= 2000 ms statt einer blossen
+    Zustellverzoegerung als Stabilitaetsnachweis)
   - Stale -> Valid (ohne dass Failed zwischenzeitlich erreicht wurde) setzt
     die Einschwingphase des Filters NICHT zurueck (neu Runde 4 - auf
     Zustandsmaschinenebene derselbe Nachweis wie der Filterinhaltstest in

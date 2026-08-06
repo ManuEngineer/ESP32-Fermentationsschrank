@@ -67,13 +67,24 @@ Damit gilt:
 - `push` auf `main` (nach Merge) baut weiterhin vollstaendig, da der
   gemergte Commit ein neuer, zuvor nicht einzeln als Merge-Ergebnis
   gepruefter Stand ist und den Ressourcenbericht auf `main` fuer spaetere
-  Basisvergleiche aktuell haelt.
+  Basisvergleiche aktuell haelt. Dies ist eine Auslegung des Auftrags
+  "keinen automatischen vollstaendigen `push`-Lauf nach Merge beibehalten,
+  wenn dadurch derselbe bereits gruen geprueften Head nur nochmals geprueft
+  wuerde" (der Merge-Commit ist ein anderer Head als der zuvor gepruefte
+  PR-Head) und keine abschliessend entschiedene Owner-Vorgabe; der Owner
+  kann diese Auslegung bei Bedarf ausdruecklich verwerfen.
 
 Nach einem CI-Fehlschlag geht der PR zurueck auf Draft; nur der Fehler und
 direkt abhaengige Tests werden lokal geprueft, danach erneutes Review und
 erneutes `Ready for Review` durch den Owner (`AGENTS.md` 3a).
 
 ## Native Tests lokal ausfuehren
+
+Der vollstaendige Lauf in diesem Abschnitt gilt ausserhalb einer laufenden
+Planumsetzung (z. B. bei eigenstaendiger lokaler Fehlersuche oder vor dem
+allerersten Commit eines neuen Plans). Waehrend der Umsetzung eines
+freigegebenen Plans gilt stattdessen ausschliesslich der gezielte Lauf aus
+"Owner-gesteuerte Vollpruefung und CI-Trigger" oben.
 
 ```bash
 pio run -e native
