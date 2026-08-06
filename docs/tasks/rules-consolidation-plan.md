@@ -51,6 +51,8 @@ Abhängigkeiten.
 | `IMPLEMENTATION_ISSUES.md` | Issue-, Epic- und Abhängigkeitsstruktur, ohne laufende PR-Chronik |
 | `OPEN_POINTS.md` | nachweisgebundene Hardware-, Commissioning- und Budgetcheckliste |
 | `docs/audits/PROPOSED_RELEASE_1_ROADMAP.md` | historischer Audit- und Begründungsnachweis, kein Live-Status |
+| `docs/ENGINEERING_PRINCIPLES.md` | einzige kanonische Quelle für Repository-first, Kontextaktualisierung, SOLID, DRY, KISS und Espressif-first |
+| `docs/ENGINEERING_LEARNINGS.md` | nach Übernahme einzigartiger Inhalte entfernen; Historie bleibt in Git/PR nachvollziehbar |
 | akzeptierte ADRs | kanonische dauerhafte Architekturentscheidungen |
 | Engineering-/Fachdokumente | bedarfsweise gelesene Detailverträge |
 | PR, Issue, freigegebener Plan, neuester Handover | aktueller auftragsbezogener Arbeitsstand |
@@ -116,6 +118,7 @@ Issue-Inhalte werden nicht kopiert.
 | R-00 | `CLAUDE.md` | im Zielstand nur `@AGENTS.md` |
 | R-01 | Live-Roadmap | neue kompakte `docs/ROADMAP.md` als einzige aktuelle Statusquelle |
 | R-02 | Dokumentationsprinzip | notwendige Information vollständig, aber kompakt, nicht doppelt und nicht an fachfremden Stellen |
+| R-03 | Engineering-Grundsätze | `ENGINEERING_PRINCIPLES.md` ist alleinige kanonische Regelquelle; Root verweist kurz darauf; `ENGINEERING_LEARNINGS.md` wird nach Übernahme einzigartiger Inhalte entfernt |
 
 ## Abnahmekriterien
 
@@ -135,6 +138,5 @@ Issue-Inhalte werden nicht kopiert.
 
 ## Nächster Schritt
 
-A3/A5: normative Aussagen aus Root-`AGENTS.md`, Engineering-Dokumenten,
-Workflows und Templates thematisch erfassen. Der nächste Themenblock wird erst
-nach Darstellung seiner Doppelungen oder Abweichungen verändert.
+A3/A5: Architekturregeln in Root-`AGENTS.md`, ADR-013 und lokalen `AGENTS.md`
+vergleichen. Abweichungen werden vor jeder Änderung dem Owner vorgelegt.
