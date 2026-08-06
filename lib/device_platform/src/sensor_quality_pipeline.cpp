@@ -108,18 +108,24 @@ SensorQualityPipeline::computeRawFailureConditions(
     return RawFailureConditions{ageFailed, countFailed};
 }
 
-bool SensorQualityPipeline::isRecoveryComplete(uint64_t referenceTimeMs) const {
-    return recoveryProgressCount_ >= config_.minConsecutiveValidSamples() &&
-           recoveryStreakStartTimestampMs_.has_value() &&
-           saturatingAgeMs(referenceTimeMs, *recoveryStreakStartTimestampMs_) >=
-               config_.minRecoveryStabilityDurationMs();
+bool SensorQualityPipeline::isRecoveryComplete() const {
+    if (recoveryProgressCount_ < config_.minConsecutiveValidSamples() ||
+        !recoveryStreakStartTimestampMs_.has_value() ||
+        !recoveryStreakLastTimestampMs_.has_value()) {
+        return false;
+    }
+    if (*recoveryStreakLastTimestampMs_ < *recoveryStreakStartTimestampMs_) {
+        return false;
+    }
+    return *recoveryStreakLastTimestampMs_ - *recoveryStreakStartTimestampMs_ >=
+           config_.minRecoveryStabilityDurationMs();
 }
 
 SensorQualityPipeline::DerivedQuality SensorQualityPipeline::deriveQuality(
     uint64_t referenceTimeMs) const {
     const RawFailureConditions raw =
         computeRawFailureConditions(referenceTimeMs);
-    const bool recoveryComplete = isRecoveryComplete(referenceTimeMs);
+    const bool recoveryComplete = isRecoveryComplete();
 
     SensorQuality quality;
     // Failed-durch-Alter und Failed-durch-Zaehler haben unbedingten Vorrang:
@@ -167,18 +173,16 @@ void SensorQualityPipeline::recordValidSample(double celsius,
     if (recoveryProgressCount_ == 0U) {
         recoveryStreakStartTimestampMs_ = monotonicTimestampMs;
     }
+    recoveryStreakLastTimestampMs_ = monotonicTimestampMs;
     recoveryProgressCount_ = saturatingIncrement(recoveryProgressCount_);
     // Aenderungsratenreferenz (10.2): diese Probe IST jetzt der neue
     // "unmittelbar vorherige gueltige Wert".
     rateReferenceCelsius_ = celsius;
     rateReferenceTimestampMs_ = monotonicTimestampMs;
-    // Das Failed-Merkbit wird bewusst NICHT hier freigegeben (Nachkorrektur
-    // PR #95): eine zweite, hier mit monotonicTimestampMs statt
-    // nowMonotonicMs ausgewertete Kopie der Wiedererkennungsbedingung wuerde
-    // bei einer verspaetet zugestellten Probe ein anderes Ergebnis liefern
-    // als deriveQuality(nowMonotonicMs) - siehe ingest(), das die Freigabe
-    // nach diesem Aufruf einheitlich ueber isRecoveryComplete(nowMonotonicMs)
-    // entscheidet.
+    // Das Failed-Merkbit wird bewusst NICHT hier freigegeben. ingest() wertet
+    // die einzige Wiedererkennungsbedingung nach diesem Aufruf erneut aus;
+    // diese haengt nur von den Erfassungszeitstempeln der aktuellen Folge ab,
+    // nicht vom Zustellzeitpunkt.
 }
 
 void SensorQualityPipeline::recordInvalidSample(SensorFaultReason reason) {
@@ -188,6 +192,7 @@ void SensorQualityPipeline::recordInvalidSample(SensorFaultReason reason) {
     }
     recoveryProgressCount_ = 0U;
     recoveryStreakStartTimestampMs_ = std::nullopt;
+    recoveryStreakLastTimestampMs_ = std::nullopt;
     // Jede akzeptierte, aber ungueltige Probe bricht die "unmittelbar
     // vorherige gueltige Wert"-Eigenschaft fuer die naechste Aenderungsraten-
     // pruefung (10.2, Nachkorrektur PR #95).
@@ -312,10 +317,10 @@ SampleDisposition SensorQualityPipeline::ingest(
     }
 
     recordValidSample(celsius, sample.monotonicTimestampMs());
-    // Failed-Merkbit-Freigabe (Abschnitt 8) einheitlich ueber
-    // isRecoveryComplete(nowMonotonicMs) - derselbe Referenzzeitpunkt und
-    // dieselbe einzige Formel wie in deriveQuality() (Nachkorrektur PR #95).
-    if (isRecoveryComplete(nowMonotonicMs)) {
+    // Failed-Merkbit-Freigabe (Abschnitt 8) ueber dieselbe einzige Formel wie
+    // in deriveQuality(), ausschliesslich anhand der Erfassungszeitstempel
+    // der aktuellen gueltigen Folge.
+    if (isRecoveryComplete()) {
         failedLatched_ = false;
     }
     return SampleDisposition::Accepted;

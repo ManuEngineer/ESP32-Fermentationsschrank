@@ -75,6 +75,23 @@ SensorQualityPipeline warmedUpValidPipeline() {
     return pipeline;
 }
 
+SensorQualityPipeline failedPipelineForRecovery() {
+    SensorQualityPipeline pipeline(makeTestConfig());
+    (void)pipeline.ingest(
+        faultReading(std::nullopt, 1000U, TemperatureSampleStatus::CrcFault),
+        1000U);
+    (void)pipeline.ingest(
+        faultReading(std::nullopt, 2000U, TemperatureSampleStatus::CrcFault),
+        2000U);
+    (void)pipeline.ingest(
+        faultReading(std::nullopt, 3000U, TemperatureSampleStatus::CrcFault),
+        3000U);
+    (void)pipeline.ingest(
+        faultReading(std::nullopt, 4000U, TemperatureSampleStatus::CrcFault),
+        4000U);
+    return pipeline;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------
@@ -577,47 +594,52 @@ void test_failed_recovers_to_valid_under_the_same_condition_as_stale() {
     TEST_ASSERT_TRUE(pipeline.snapshot(7000U).quality == SensorQuality::Valid);
 }
 
-void test_failed_latch_clears_using_now_not_sample_timestamp_on_delayed_completion() {
-    // Regression (Nachreview PR #95): recoveryComplete() durfte nur EINMAL
-    // implementiert und ausschliesslich mit nowMonotonicMs ausgewertet
-    // werden. Eine zweite Kopie mit sample.monotonicTimestampMs() als
-    // Referenzzeitpunkt haette das Failed-Merkbit bei einer verspaetet
-    // zugestellten, die Folge abschliessenden Probe NICHT freigegeben,
-    // obwohl deriveQuality() (mit nowMonotonicMs) bereits Valid meldet - ein
-    // nachfolgender einzelner Fehler waere dann faelschlich wieder Failed
-    // statt Stale gewesen.
-    SensorQualityPipeline pipeline(makeTestConfig());
-    (void)pipeline.ingest(
-        faultReading(std::nullopt, 1000U, TemperatureSampleStatus::CrcFault),
-        1000U);
-    (void)pipeline.ingest(
-        faultReading(std::nullopt, 2000U, TemperatureSampleStatus::CrcFault),
-        2000U);
-    (void)pipeline.ingest(
-        faultReading(std::nullopt, 3000U, TemperatureSampleStatus::CrcFault),
-        3000U);
-    (void)pipeline.ingest(
-        faultReading(std::nullopt, 4000U, TemperatureSampleStatus::CrcFault),
-        4000U);
-    TEST_ASSERT_TRUE(pipeline.snapshot(4000U).quality == SensorQuality::Failed);
+void test_recovery_needs_sample_timestamp_span() {
+    SensorQualityPipeline pipeline = failedPipelineForRecovery();
 
     (void)pipeline.ingest(okReading(std::nullopt, 5000U, 20.0), 5000U);
-    // Zeitstempel 6000, aber erst bei nowMonotonicMs = 8000 zugestellt: die
-    // Folgedauer seit Streakbeginn (5000) betraegt am Probenzeitstempel
-    // (6000-5000=1000 ms) noch NICHT die geforderten 2000 ms, wohl aber am
-    // tatsaechlichen Zustellzeitpunkt (8000-5000=3000 ms >= 2000 ms).
+    (void)pipeline.ingest(okReading(std::nullopt, 6000U, 20.1), 6000U);
+
+    // Zwei gueltige Proben reichen fuer die Anzahl, aber ihre eigene
+    // Erfassungszeitspanne betraegt nur 1000 ms (< 2000 ms). Die Zustellzeit
+    // darf die fehlende Probenzeitspanne nicht ersetzen.
+    TEST_ASSERT_TRUE(pipeline.snapshot(6000U).quality != SensorQuality::Valid);
+}
+
+void test_snapshot_without_new_sample_cannot_complete_recovery() {
+    SensorQualityPipeline pipeline = failedPipelineForRecovery();
+
+    (void)pipeline.ingest(okReading(std::nullopt, 5000U, 20.0), 5000U);
+    const auto beforeWait = pipeline.snapshot(5000U);
+    const auto afterWait = pipeline.snapshot(8000U);
+
+    TEST_ASSERT_TRUE(beforeWait.quality != SensorQuality::Valid);
+    TEST_ASSERT_TRUE(afterWait.quality != SensorQuality::Valid);
+    TEST_ASSERT_EQUAL_UINT16(1U, afterWait.recoveryProgressCount);
+}
+
+void test_delayed_delivery_does_not_count_after_sample_timestamp() {
+    SensorQualityPipeline pipeline = failedPipelineForRecovery();
+
+    (void)pipeline.ingest(okReading(std::nullopt, 5000U, 20.0), 5000U);
+    // Die Probe mit Erfassungszeit 6000 wird erst bei 8000 zugestellt. Fuer
+    // die Wiedererkennung zaehlt nur 6000 - 5000 = 1000 ms.
     (void)pipeline.ingest(okReading(std::nullopt, 6000U, 20.1), 8000U);
-    TEST_ASSERT_TRUE(pipeline.snapshot(8000U).quality == SensorQuality::Valid);
 
-    (void)pipeline.ingest(
-        faultReading(std::nullopt, 9000U, TemperatureSampleStatus::CrcFault),
-        9000U);
+    TEST_ASSERT_TRUE(pipeline.snapshot(8000U).quality != SensorQuality::Valid);
+}
 
-    // War die Wiedererkennung tatsaechlich (und einheitlich) abgeschlossen,
-    // faellt ein einzelner erneuter Fehler auf Stale zurueck - nicht auf
-    // Failed (Abschnitt 8: "einzelne ungueltige Probe (Valid-Zustand) ->
-    // Stale").
-    TEST_ASSERT_TRUE(pipeline.snapshot(9000U).quality == SensorQuality::Stale);
+void test_next_valid_sample_with_sufficient_sample_span_completes_recovery() {
+    SensorQualityPipeline pipeline = failedPipelineForRecovery();
+
+    (void)pipeline.ingest(okReading(std::nullopt, 5000U, 20.0), 5000U);
+    (void)pipeline.ingest(okReading(std::nullopt, 6000U, 20.1), 8000U);
+    TEST_ASSERT_TRUE(pipeline.snapshot(8000U).quality != SensorQuality::Valid);
+
+    // Erst die naechste gueltige Probe belegt mit ihrem eigenen Zeitstempel
+    // die volle 2000-ms-Spanne seit der Recovery-Startprobe.
+    (void)pipeline.ingest(okReading(std::nullopt, 7000U, 20.2), 9000U);
+    TEST_ASSERT_TRUE(pipeline.snapshot(9000U).quality == SensorQuality::Valid);
 }
 
 void test_renewed_invalid_sample_during_recovery_resets_progress() {
@@ -842,8 +864,11 @@ int main() {
     RUN_TEST(test_failed_stays_failed_during_incomplete_recovery);
     RUN_TEST(test_first_sample_after_aged_failed_is_not_immediately_valid);
     RUN_TEST(test_failed_recovers_to_valid_under_the_same_condition_as_stale);
+    RUN_TEST(test_recovery_needs_sample_timestamp_span);
+    RUN_TEST(test_snapshot_without_new_sample_cannot_complete_recovery);
+    RUN_TEST(test_delayed_delivery_does_not_count_after_sample_timestamp);
     RUN_TEST(
-        test_failed_latch_clears_using_now_not_sample_timestamp_on_delayed_completion);
+        test_next_valid_sample_with_sufficient_sample_span_completes_recovery);
     RUN_TEST(test_renewed_invalid_sample_during_recovery_resets_progress);
     RUN_TEST(test_last_valid_value_remains_visible_during_stale_and_failed);
     RUN_TEST(

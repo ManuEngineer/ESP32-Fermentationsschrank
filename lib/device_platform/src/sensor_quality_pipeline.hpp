@@ -76,13 +76,11 @@ class SensorQualityPipeline {
     [[nodiscard]] RawFailureConditions computeRawFailureConditions(
         uint64_t referenceTimeMs) const;
     // Einzige Implementierung der Wiedererkennungsbedingung (Abschnitt 8:
-    // kMinConsecutiveValidSamples + kMinRecoveryStabilityDurationMs seit
-    // Folgebeginn) - von deriveQuality() UND von ingest() (Merkbit-Freigabe
-    // nach einer akzeptierten Probe, beide mit nowMonotonicMs als
-    // Referenzzeitpunkt) genutzt, damit keine zwei Formeln mit
-    // unterschiedlichem Referenzzeitpunkt auseinanderlaufen koennen
-    // (Nachkorrektur PR #95).
-    [[nodiscard]] bool isRecoveryComplete(uint64_t referenceTimeMs) const;
+    // kMinConsecutiveValidSamples plus Stabilitaetsdauer zwischen der ersten
+    // und letzten gueltigen Probe der aktuellen Folge). Sie wird von
+    // deriveQuality() und ingest() gemeinsam genutzt und haengt niemals vom
+    // Zustell-/snapshot-Zeitpunkt ab.
+    [[nodiscard]] bool isRecoveryComplete() const;
     [[nodiscard]] DerivedQuality deriveQuality(uint64_t referenceTimeMs) const;
     void recordValidSample(double celsius, uint64_t monotonicTimestampMs);
     void recordInvalidSample(SensorFaultReason reason);
@@ -141,6 +139,10 @@ class SensorQualityPipeline {
     // Zeitstempel der ERSTEN Probe der aktuellen ununterbrochenen gueltigen
     // Folge - Grundlage fuer die Stabilitaetszeitpruefung (Abschnitt 8).
     std::optional<uint64_t> recoveryStreakStartTimestampMs_;
+    // Zeitstempel der LETZTEN gueltigen Probe derselben Folge. Nur die Spanne
+    // zwischen diesem und recoveryStreakStartTimestampMs_ darf die
+    // Wiedererkennung abschliessen; snapshot(now) kann sie nicht fortschreiben.
+    std::optional<uint64_t> recoveryStreakLastTimestampMs_;
 
     // Minimale rohe Zustandsinformation (KEINE zweite, unabhaengig
     // gepflegte Qualitaetszustandsmaschine): haelt fest, dass Failed bereits
