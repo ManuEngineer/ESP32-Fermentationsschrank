@@ -53,6 +53,8 @@ Abhängigkeiten.
 | `docs/audits/PROPOSED_RELEASE_1_ROADMAP.md` | historischer Audit- und Begründungsnachweis, kein Live-Status |
 | `docs/ENGINEERING_PRINCIPLES.md` | einzige kanonische Quelle für Repository-first, Kontextaktualisierung, SOLID, DRY, KISS und Espressif-first |
 | `docs/ENGINEERING_LEARNINGS.md` | nach Übernahme einzigartiger Inhalte entfernen; Historie bleibt in Git/PR nachvollziehbar |
+| `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` | alleinige vollständige Definition der Modulrollen und Abhängigkeitsrichtung |
+| `lib/README.md` | kurzer nicht normativer Modulindex mit Verweis auf ADR-013 |
 | akzeptierte ADRs | kanonische dauerhafte Architekturentscheidungen |
 | Engineering-/Fachdokumente | bedarfsweise gelesene Detailverträge |
 | PR, Issue, freigegebener Plan, neuester Handover | aktueller auftragsbezogener Arbeitsstand |
@@ -93,14 +95,17 @@ Issue-Inhalte werden nicht kopiert.
   historische Zustände, Engineering-Erklärungen, Architekturdetails und
   Workflowregeln.
 - Drei lokale `AGENTS.md` sind sinnvoll, wiederholen aber Teile von Root und
-  ADR-013.
+  ADR-013; für `device_platform_esp_idf` fehlt eine lokale Delta-Regel.
+- `lib/device_platform/AGENTS.md` erlaubt noch ESP32-spezifische Adapter, obwohl
+  ADR-013, Modulindex und Architekturguard sie nach `device_platform_esp_idf`
+  trennen.
 - `CLAUDE.md` lädt `@AGENTS.md`, enthält aktuell zusätzlich drei
   Claude-spezifische Hinweise.
 - SOLID, DRY, KISS, Repository-first und Kontextaktualisierung stehen teilweise
   parallel in Root-`AGENTS.md`, `ENGINEERING_PRINCIPLES.md` und
   `ENGINEERING_LEARNINGS.md`.
-- Modulrollen und Abhängigkeitsrichtung stehen mehrfach in Root, ADR-013 und
-  lokalen `AGENTS.md`.
+- Modulrollen und Abhängigkeitsrichtung stehen mehrfach in Root, ADR-013,
+  `lib/README.md` und lokalen `AGENTS.md`.
 - `docs/CODEX_HANDOFF.md` enthält einen historischen Stand ab PR #38/Issue #9
   und wiederholt Architektur-, Safety- und Hardwareinformationen.
 - `IMPLEMENTATION_PLAN.md` und `IMPLEMENTATION_ISSUES.md` enthalten veraltete
@@ -119,6 +124,7 @@ Issue-Inhalte werden nicht kopiert.
 | R-01 | Live-Roadmap | neue kompakte `docs/ROADMAP.md` als einzige aktuelle Statusquelle |
 | R-02 | Dokumentationsprinzip | notwendige Information vollständig, aber kompakt, nicht doppelt und nicht an fachfremden Stellen |
 | R-03 | Engineering-Grundsätze | `ENGINEERING_PRINCIPLES.md` ist alleinige kanonische Regelquelle; Root verweist kurz darauf; `ENGINEERING_LEARNINGS.md` wird nach Übernahme einzigartiger Inhalte entfernt |
+| R-04 | Modularchitektur | ADR-013 bleibt alleinige vollständige Quelle; Root fasst nur Kernrichtung und Lesepflicht zusammen; lokale `AGENTS.md` enthalten nur Deltas; neue kurze Delta-Regel für `device_platform_esp_idf`; `lib/README.md` wird zum knappen Index |
 
 ## Abnahmekriterien
 
@@ -138,5 +144,7 @@ Issue-Inhalte werden nicht kopiert.
 
 ## Nächster Schritt
 
-A3/A5: Architekturregeln in Root-`AGENTS.md`, ADR-013 und lokalen `AGENTS.md`
-vergleichen. Abweichungen werden vor jeder Änderung dem Owner vorgelegt.
+A3/A5: globale Safety-, Hardware- und Release-1-Regeln in Root-`AGENTS.md`
+gegen `SPECIFICATION_REVIEW.md`, `HARDWARE.md` und die spezialisierten
+Safety-/Recovery-Dokumente prüfen. Abweichungen werden vor jeder Änderung dem
+Owner vorgelegt.
