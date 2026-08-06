@@ -1,17 +1,27 @@
-# Offene Punkte und Inbetriebnahme-Checkliste
+# Offene Hardware-, Inbetriebnahme- und Budgetpunkte
 
-## Status
+## Zweck
 
-Nach Phase 10C sind keine bekannten offenen Produktentscheidungen fuer Release 1
-mehr vorhanden. Die verbleibenden Punkte benoetigen reale Hardware, thermische
-Messungen oder reale Build- und Ressourcenwerte.
+Diese Datei ist die nachweisgebundene Checkliste fuer Punkte, die reale
+Hardware, thermische Messungen oder reproduzierbare Build- und
+Ressourcenergebnisse benoetigen.
+
+Ein Punkt wird nur abgehakt, wenn der konkrete Nachweis im zugehoerigen Issue,
+PR, Messprotokoll, Hardwarebericht oder Buildartefakt verlinkt ist. Annahmen,
+Lieferantenangaben zu aehnlicher Hardware und erfolgreiche Simulationen ersetzen
+keinen realen Nachweis.
 
 Kennzeichnungen:
 
-- `TBD_HARDWARE`: durch Issues #29 bis #33 zu klaeren
-- `TBD_COMMISSIONING`: durch Issues #34 bis #36 zu klaeren
-- `TBD_IMPLEMENTATION_BUDGET`: durch reale Builds und Belastungstests zu klaeren
-- `FUTURE_RELEASE`: bewusst ausserhalb von Release 1
+- `TBD_HARDWARE`: durch reale Komponente, Datenblatt und praktische Pruefung zu
+  klaeren;
+- `TBD_COMMISSIONING`: durch dokumentierte thermische oder regelungstechnische
+  Messung zu klaeren;
+- `TBD_IMPLEMENTATION_BUDGET`: durch reproduzierbare Builds und Belastungstests
+  zu klaeren.
+
+Die vollstaendige Abgrenzung zu Zukunftsfunktionen steht ausschliesslich in
+[`SPECIFICATION_REVIEW.md`](SPECIFICATION_REVIEW.md).
 
 ## `TBD_HARDWARE`
 
@@ -139,9 +149,7 @@ Nachverfolgung: #36
 - [ ] NVS-Partitionsgroesse fuer Konfiguration, Slots und Secrets bestimmen
       (Backend gemaess ADR-016)
 
-Release 1 reserviert keine dualen OTA-Slots. Web-OTA ist `FUTURE_RELEASE`.
-
-Nachverfolgung: #9, #10, #19, #28 und #29
+Nachverfolgung: #9, #10, #19, #28, #29 und #90
 
 ### RAM und Laufzeit
 
@@ -174,23 +182,3 @@ Nachverfolgung: #19 und #37
 - [ ] alle Release-Gates bewerten
 
 Nachverfolgung: #36 und #37
-
-## `FUTURE_RELEASE`
-
-Bewusst nicht fuer Release 1 zu erledigen:
-
-- Web-OTA, duale Slots und automatisches Firmware-Rollback
-- benutzeraktivierbare UART-Diagnose
-- Produkt-Luft-Kaskadenregelung
-- PID-Autotuning
-- direkte 12-V-ADC-Messung
-- batteriegepufferte RTC als Pflicht
-- Tuerkontakt
-- Luefter-Tachosignal
-- externe Strommessung ausser optional verifiziertem R_IS/L_IS
-- Push- oder Telegram-Benachrichtigungen
-- eigener WireGuard-Client
-- automatische Wartungserinnerungen
-
-Diese Punkte duerfen in Release 1 keine ungenutzten grossen Bibliotheken,
-Partitionen oder aktorfaehigen versteckten Funktionen verursachen.
