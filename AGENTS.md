@@ -15,8 +15,9 @@ Auftraege an Agenten werden immer als Markdown-Datei bereitgestellt.
 ## Aktueller Stand und Quellen
 
 Vor Planung, Umsetzung, Fortsetzung oder Review sind mindestens Repository,
-Branch, aktueller `HEAD`, Live-Issue, vorhandener Pull Request, freigegebener
-Plan-Commit, neuester `SESSION HANDOVER` und `docs/ROADMAP.md` zu pruefen.
+Branch, aktueller `HEAD`, Live-Issue, vorhandener Pull Request,
+`docs/ROADMAP.md` sowie freigegebener Plan-Commit und neuester
+`SESSION HANDOVER`, soweit vorhanden, zu pruefen.
 
 Bestehender Code, Modelle, Tests, akzeptierte ADRs und kanonische Dokumente
 werden vor neuen Modellen oder Vertraegen verwendet. Parallelvertraege und
@@ -89,7 +90,7 @@ werden dort nicht kopiert.
 
 ## Tests, CI und Review
 
-Waehren der Draft-Umsetzung werden nur gezielte lokale Tests fuer den
+Waehrend der Draft-Umsetzung werden nur gezielte lokale Tests fuer den
 tatsaechlich geaenderten Bereich ausgefuehrt.
 
 Ein Review prueft den vollstaendigen aktuellen Diff gegen Plan, Anforderungen,
