@@ -10,19 +10,19 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | PR #98 – Agentenregeln und Statusquellen konsolidieren | Draft; Umsetzung und Main-Synchronisierung abgeschlossen; drei Befunde aus dem ersten vollständigen Review korrigiert; zweites vollständiges Review ohne neuen Befund; Owner bestätigt Einzelentwickler-Workflow | Owner entfernt die unpassende GitHub-Regel `1 approving review`; danach Ownerwechsel auf `Ready for review` und vollständige GitHub-CI |
+| 1 | Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Planungsphase auf aktuellem `main`; Branch `plan/issue-21-sensor-selection-fallback-return`; Produktionsimplementierung gesperrt | Plan committen und pushen; Ownerfreigabe mit exakter Plan-SHA |
 
 ## Naechste fachliche Arbeit
 
-Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist die
-naechste fachliche Arbeit. Sie beginnt erst nach Abschluss von PR #98 und einem
-erneuten Live-Abgleich. Vor jeder Umsetzung ist ein eigener Plan-first-Draft-PR
-erforderlich.
+Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist nach dem
+Merge von PR #98 die aktuelle Planungsarbeit. Die Abhaengigkeiten #14 und #20
+sind live abgeschlossen. Vor jeder Umsetzung ist ein eigener Plan-first-Draft-
+PR mit commitgebundener Ownerfreigabe erforderlich.
 
 ## Zulaessige Parallelitaet
 
-- Keine weitere Produktionsimplementierung soll PR #98 und die danach geltenden
-  konsolidierten Arbeitsregeln ueberholen.
+- Keine Produktionsimplementierung beginnt fuer Issue #21 vor der exakten
+  Ownerfreigabe des Plan-Commits.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder
@@ -41,6 +41,7 @@ erforderlich.
 
 ## Zuletzt abgeschlossene groessere Grundlagen
 
+- PR #98: Agentenregeln und Statusquellen konsolidiert und nach `main` gemergt;
 - PR #79: ESP-IDF 6.0.2 als einziger ESP32-Produktionspfad;
 - PR #84: Laufpersistenz und Kontrollpunkte;
 - PR #88: Espressif-first-Synchronisierung des Adopt-or-build-Audits;
