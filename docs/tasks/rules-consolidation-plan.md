@@ -2,11 +2,18 @@
 
 ## Status
 
-`FINAL_COMPLETENESS_SWEEP`
+`AUDIT_AND_IMPLEMENTATION_IN_PROGRESS`
 
-Der Draft-PR inventarisiert, entscheidet und plant zuerst. Normative Regeln,
-Statusdokumente und Workflows werden erst nach Abschluss des Vollständigkeitssweeps
-und der Freigabe des endgültigen Umsetzungsplans geändert.
+Audit, Ownerentscheidungen und Umsetzung erfolgen ab jetzt blockweise:
+
+1. einen zusammenhängenden Themenblock vollständig prüfen;
+2. materielle Abweichungen mit dem Owner entscheiden;
+3. den freigegebenen Block unmittelbar umsetzen;
+4. Diff, Links und Doppelungen des Blocks prüfen;
+5. danach mit dem nächsten Themenblock fortfahren.
+
+Der Draft-PR bleibt währenddessen Draft. GitHub-CI läuft erst nach dem
+Ownerwechsel auf `Ready for review`.
 
 ## Ziel
 
@@ -42,11 +49,11 @@ fachlich zuständigen Stelle.
 | `Agent-Auftraege/Auftrag.md` | einzige allgemeine Markdown-Auftragsvorlage; nur auftragsspezifischer Inhalt und Verweise |
 | PR, Issue, freigegebener Plan, neuester Handover | aktueller auftragsbezogener Arbeitsstand |
 
-## Beschlossene Entscheidungen
+## Ownerentscheidungen
 
 | ID | Entscheidung |
 |---|---|
-| R-00 | `CLAUDE.md` enthält im Zielstand nur `@AGENTS.md`. |
+| R-00 | Root-`CLAUDE.md` enthält nur `@AGENTS.md`. |
 | R-01 | `docs/ROADMAP.md` wird die einzige aktuelle Status- und Taskquelle. |
 | R-02 | Notwendige Information bleibt vollständig, aber kompakt, nicht doppelt und nicht fachfremd. |
 | R-03 | `ENGINEERING_PRINCIPLES.md` wird alleinige Engineering-Regelquelle; `ENGINEERING_LEARNINGS.md` wird nach Übernahme einzigartiger Inhalte entfernt. |
@@ -57,6 +64,7 @@ fachlich zuständigen Stelle.
 | R-07a | `docs/CODEX_TASK_TEMPLATE.md` entfernen; keine zweite oder agentspezifische Auftragsvorlage. |
 | R-08 | Zielentwurf der Root-`AGENTS.md`, Zielgrösse von etwa 5–7 KB beziehungsweise 90–130 Zeilen und bedingte Lesematrix sind freigegeben. Lokale `AGENTS.md` sollen möglichst unter 20 Zeilen bleiben. |
 | R-08a | Root- und notwendige lokale `CLAUDE.md` bleiben als einzeilige Importbrücken bestehen und enthalten exakt `@AGENTS.md`; lokale Regeln stehen ausschliesslich in der jeweiligen `AGENTS.md`. Für `device_platform_esp_idf` werden beide lokalen Dateien ergänzt. |
+| R-09 | `README.md` wird ein kurzer nicht normativer Einstieg; `SPECIFICATION_PLAN.md` wird entfernt; `SPECIFICATION_REVIEW.md` wird die aktuelle kanonische Release-/Prioritätsquelle; einzigartige Regeln aus `PR38_REVIEW_CORRECTIONS.md` werden in Fachverträge übertragen und die Datei danach entfernt. Historische Audit-Roadmaps werden klar als historisch markiert. |
 
 ## Freigegebener Zielaufbau der Root-`AGENTS.md`
 
@@ -121,6 +129,8 @@ kopiert.
 - `docs/CODEX_HANDOFF.md`
 - `docs/CODEX_TASK_TEMPLATE.md`
 - `docs/ENGINEERING_LEARNINGS.md` nach Übernahme einzigartiger Inhalte
+- `docs/SPECIFICATION_PLAN.md`
+- `docs/PR38_REVIEW_CORRECTIONS.md` nach Übernahme einzigartiger Inhalte
 - `Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/`
 
 Die Historie bleibt in Git und den zugehörigen PRs erhalten.
@@ -134,23 +144,31 @@ Die Historie bleibt in Git und den zugehörigen PRs erhalten.
   die zugehörige `CLAUDE.md`-Importbrücke.
 - Die aktuelle PR-Vorlage und der GitHub-Workflow entsprechen nicht dem
   beschlossenen Plan-/Review-/CI-Vertrag.
+- `README.md`, `SPECIFICATION_PLAN.md` und `SPECIFICATION_REVIEW.md` enthalten
+  noch veraltete PR-38-/Issue-9-Stände.
+- `PR38_REVIEW_CORRECTIONS.md` enthält noch einzigartige Regeln zu kritischen
+  Persistenzfehlern; diese müssen vor der Löschung in die zuständigen aktuellen
+  Fachverträge und Akzeptanztests übertragen werden.
 - `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_ISSUES.md`, der alte Auftragsindex
   und die Audit-Roadmap enthalten konkurrierende oder veraltete Statusstände.
 - `OPEN_POINTS.md` wird nur anhand konkreter Mess-, Test- oder PR-Nachweise
   verändert; nichts wird durch Annahme abgehakt.
 
-## Audit-Taskliste
+## Audit- und Umsetzungstaskliste
 
 - [x] A0: Branch und Draft-PR erstellt.
 - [x] A1: Ziel, Scope und Arbeitsweise festgelegt.
 - [x] A2: automatisch und hierarchisch geladene Agentendateien erfasst.
-- [ ] A3: abschliessender Vollständigkeitssweep aller verlinkten Regel- und Templatequellen.
+- [ ] A3: Vollständigkeitssweep der noch nicht entschiedenen Status- und Fachquellen fortsetzen.
 - [x] A4: zentrale veraltete Statusquellen identifiziert.
-- [ ] A5: endgültige Quellen-/Lesematrix fertigstellen.
+- [ ] A5: endgültige Quellen-/Lesematrix nach jeder Blockumsetzung nachführen.
 - [x] A6: bisherige materielle Widersprüche mit dem Owner entschieden.
 - [x] A7: Zielinhalt und Zielgrösse von Root- und lokalen `AGENTS.md` freigegeben.
 - [x] A8: Roadmap-Rolle und Pflegevertrag festgelegt.
-- [ ] A9: freigegebene Konsolidierung umsetzen.
+- [ ] A9.1: Agenten-, Engineering- und Modulregelblock R-00/R-03/R-04/R-08/R-08a umsetzen und prüfen.
+- [ ] A9.2: Workflow-, CI-, PR-Template- und Auftragsblock R-06/R-07/R-07a umsetzen und prüfen.
+- [ ] A9.3: README-, Spezifikations- und historische Quellen R-09 umsetzen und prüfen.
+- [ ] A9.4: Roadmap und getrennte Rollen von Implementierungsplan, Issue-Struktur und Open Points umsetzen.
 - [ ] A10: typische Planungs-, Umsetzungs-, Review- und Handoverabläufe prüfen.
 - [ ] A11: finale Grössen-, Link-, Doppelungs- und Widerspruchsprüfung.
 
@@ -170,7 +188,6 @@ Die Historie bleibt in Git und den zugehörigen PRs erhalten.
 
 ## Nächster Schritt
 
-A3/A5: abschliessender Vollständigkeitssweep aller verbliebenen Regel-,
-Template-, Status- und Verweisquellen. Neue materielle Abweichungen werden vor
-jeder Umsetzung dem Owner vorgelegt. Falls keine weiteren Entscheidungen nötig
-sind, wird daraus der endgültige Umsetzungsplan erstellt.
+A9.1 umsetzen: Root- und lokale Agentendateien, Engineering-Grundsätze und
+Modulindex konsolidieren. Danach Link-/Doppelungsprüfung dieses Blocks und
+Fortsetzung des Sweeps bei Workflow- und Statusquellen.
