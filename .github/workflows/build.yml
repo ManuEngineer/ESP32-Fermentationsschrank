@@ -1,18 +1,21 @@
 name: ESP-IDF + Native CI
 
 on:
-  push:
-    paths-ignore:
-      - "**/*.md"
   pull_request:
+    types: [ready_for_review, synchronize, reopened]
     paths-ignore:
       - "**/*.md"
 
 permissions:
   contents: read
 
+concurrency:
+  group: firmware-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   firmware:
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-24.04
 
     env:
@@ -20,13 +23,12 @@ jobs:
       # Merge-Commit aus; github.sha zeigt dann auf diese nicht im
       # sichtbaren PR-Commit-Verlauf vorkommende SHA. SOURCE_GIT_SHA
       # verwendet stattdessen den tatsaechlichen PR-Head-Commit fuer
-      # Artefaktname und Manifest-Feld "git_sha" (bei push-Events sind
-      # beide SHAs ohnehin identisch). Der tatsaechlich ausgecheckte und
-      # gebaute Commit bleibt davon unabhaengig und wird im Ressourcen-
-      # bericht separat als "Build-Commit" ausgegeben (build_report.py,
-      # immer per `git rev-parse HEAD`) — beide Werte duerfen nicht
-      # zusammengelegt werden.
-      SOURCE_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      # Artefaktname und Manifest-Feld "git_sha". Der tatsaechlich
+      # ausgecheckte und gebaute Commit bleibt davon unabhaengig und wird im
+      # Ressourcenbericht separat als "Build-Commit" ausgegeben
+      # (build_report.py, immer per `git rev-parse HEAD`) — beide Werte duerfen
+      # nicht zusammengelegt werden.
+      SOURCE_GIT_SHA: ${{ github.event.pull_request.head.sha }}
 
     steps:
       - name: Repository auschecken
