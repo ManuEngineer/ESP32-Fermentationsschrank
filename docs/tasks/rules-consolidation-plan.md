@@ -55,6 +55,9 @@ Abhängigkeiten.
 | `docs/ENGINEERING_LEARNINGS.md` | nach Übernahme einzigartiger Inhalte entfernen; Historie bleibt in Git/PR nachvollziehbar |
 | `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` | alleinige vollständige Definition der Modulrollen und Abhängigkeitsrichtung |
 | `lib/README.md` | kurzer nicht normativer Modulindex mit Verweis auf ADR-013 |
+| `docs/SPECIFICATION_REVIEW.md` | Dokumentationspriorität, verbindliche Release-1-Basis und alleinige vollständige Release-1-Abgrenzung |
+| `docs/HARDWARE.md` | konkrete Hardware, Statuskennzeichnung und Verifikationsreihenfolge |
+| spezialisierte Safety-/Recovery-Dokumente | vollständige Fehler-, Safety-, Boot-, Persistenz- und Recovery-Verträge |
 | akzeptierte ADRs | kanonische dauerhafte Architekturentscheidungen |
 | Engineering-/Fachdokumente | bedarfsweise gelesene Detailverträge |
 | PR, Issue, freigegebener Plan, neuester Handover | aktueller auftragsbezogener Arbeitsstand |
@@ -106,6 +109,11 @@ Issue-Inhalte werden nicht kopiert.
   `ENGINEERING_LEARNINGS.md`.
 - Modulrollen und Abhängigkeitsrichtung stehen mehrfach in Root, ADR-013,
   `lib/README.md` und lokalen `AGENTS.md`.
+- Root-`AGENTS.md` kopiert Hardware-, Safety- und Release-1-Listen, obwohl die
+  vollständigen Verträge bereits in spezialisierten Fachquellen stehen.
+- Die Release-1-Ausschlusslisten sind nicht vollständig identisch; OTA und
+  automatischer Firmwaredownload sind für Release 1 ausgeschlossen, bleiben
+  aber ausdrücklich für ein späteres Release vorgesehen.
 - `docs/CODEX_HANDOFF.md` enthält einen historischen Stand ab PR #38/Issue #9
   und wiederholt Architektur-, Safety- und Hardwareinformationen.
 - `IMPLEMENTATION_PLAN.md` und `IMPLEMENTATION_ISSUES.md` enthalten veraltete
@@ -125,6 +133,7 @@ Issue-Inhalte werden nicht kopiert.
 | R-02 | Dokumentationsprinzip | notwendige Information vollständig, aber kompakt, nicht doppelt und nicht an fachfremden Stellen |
 | R-03 | Engineering-Grundsätze | `ENGINEERING_PRINCIPLES.md` ist alleinige kanonische Regelquelle; Root verweist kurz darauf; `ENGINEERING_LEARNINGS.md` wird nach Übernahme einzigartiger Inhalte entfernt |
 | R-04 | Modularchitektur | ADR-013 bleibt alleinige vollständige Quelle; Root fasst nur Kernrichtung und Lesepflicht zusammen; lokale `AGENTS.md` enthalten nur Deltas; neue kurze Delta-Regel für `device_platform_esp_idf`; `lib/README.md` wird zum knappen Index |
+| R-05 | Safety, Hardware und Release-Scope | Root enthält nur fail-closed-Grundsatz und Lesepflicht; Details bleiben in den Fachquellen; `SPECIFICATION_REVIEW.md` führt die alleinige vollständige Release-1-Abgrenzung; OTA und automatischer Firmwaredownload sind nicht Teil von Release 1, aber für ein späteres Release vorgesehen; jetzt keine vorsorglichen Slots, Bibliotheken oder Ressourcen reservieren |
 
 ## Abnahmekriterien
 
@@ -144,7 +153,6 @@ Issue-Inhalte werden nicht kopiert.
 
 ## Nächster Schritt
 
-A3/A5: globale Safety-, Hardware- und Release-1-Regeln in Root-`AGENTS.md`
-gegen `SPECIFICATION_REVIEW.md`, `HARDWARE.md` und die spezialisierten
-Safety-/Recovery-Dokumente prüfen. Abweichungen werden vor jeder Änderung dem
-Owner vorgelegt.
+A3/A5: Plan-first-, Review-, Test-, Abschluss- und Handover-Regeln in
+Root-`AGENTS.md`, CI-/Quality-Dokumenten und Templates vergleichen. Abweichungen
+werden vor jeder Änderung dem Owner vorgelegt.
