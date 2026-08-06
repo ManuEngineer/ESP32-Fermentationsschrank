@@ -7,17 +7,16 @@ von Issue #16. Es konkretisiert:
 
 - [`SETTINGS_AND_STORAGE.md`](SETTINGS_AND_STORAGE.md)
 - [`BACKUP_SECURITY_RETENTION.md`](BACKUP_SECURITY_RETENTION.md)
-- [`PR38_REVIEW_CORRECTIONS.md`](PR38_REVIEW_CORRECTIONS.md)
+- [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md)
 
 Es nimmt weder Laufpersistenz aus Issue #17, das portable Backupformat aus
 Issue #19, die Fehler- und Verriegelungspolitik aus Issue #24 noch konkrete
 WLAN- und Authentifizierungsdaten aus Issue #27 vorweg.
 
-Der Release-1-Vertrag folgt ADR-018 (Variante B). Der gesamte Vertrag wird nicht
-als ein einziger Implementierungs-PR umgesetzt. Issue #16 bleibt ein
-Tracking-Issue; #54 und #55 bilden das bereits umgesetzte Fundament, #56 und
-#57 sind die verbleibenden kleinen Umsetzungspakete. Jedes Paket benoetigt vor
-seiner Implementierung einen eigenen freigegebenen Plan.
+Der Release-1-Vertrag folgt ADR-018 (Variante B). Die Umsetzung ist in die
+Teilpakete #54 bis #57 geschnitten. Jedes Paket besitzt einen eigenen Scope und
+verwendet einen eigenen Plan-first-PR. Der aktuelle Arbeitsstand steht
+­ausschliesslich in `ROADMAP.md` und den Live-Issues.
 
 Reale Flash-Atomizitaet, reale Heapreserve und Belastungsmessungen bleiben
 spaetere Hardware- beziehungsweise Release-Gates.
@@ -414,7 +413,7 @@ ungueltig.
 #### ProgramCatalog Schema 1
 
 | Reihenfolge | Feld | Wirebreite | Teilgrenze |
-|---:|---|---|---:|
+|---:|---|---|
 | 1 | Programmanzahl | `uint8` | 4..16 |
 | 2 | ProgramDocument 0..n-1 | variable Struktur unten | zuerst exakt 4 Factorykopien, danach hoechstens 12 Benutzerprogramme |
 
@@ -1407,15 +1406,11 @@ ausschliesslich den Kapazitaetsfehler eines tatsaechlich gelesenen Slots.
 - keine leeren Connectivity-/Authentication-Manifeste, -Roots oder -Slots
 - vollstaendige Cut-Point- und Ressourcenmatrix
 
-Jedes Paket erhaelt einen eigenen kleinen PR. Issue #16 bleibt als
-Tracking-Issue offen und wird erst abgeschlossen, wenn alle Teilissues gemergt
-und die End-to-End-Akzeptanzkriterien erfuellt sind.
-
-#54 und #55 sind abgeschlossen; #56 wurde mit PR #65 gemergt. #57 wird im
-Draft-PR #68 als eigenes Implementierungsvorhaben umgesetzt. Reale ESP32-NVS-,
-Heap-, Jitter-, Watchdog-, Flashatomizitaets- und Lebensdauermessungen bleiben
-sichtbare nachgelagerte Gates; fuer den Gesamtvertrag wird kein einzelner
-Implementierungsbranch erstellt.
+Die Paketstruktur wird durch #16 sowie die Teilissues #54 bis #57
+nachverfolgt. Jedes Paket besitzt seinen eigenen Scope, Plan und Pull Request.
+Reale ESP32-NVS-, Heap-, Jitter-, Watchdog-, Flashatomizitaets- und
+Lebensdauermessungen bleiben sichtbare nachgelagerte Gates; fuer den
+Gesamtvertrag wird kein einzelner Implementierungsbranch erstellt.
 
 ## Ausdruecklicher Nicht-Scope
 
