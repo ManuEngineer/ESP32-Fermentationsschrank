@@ -58,9 +58,9 @@ class TemperatureReading {
 
    private:
     TemperatureReading(std::optional<SensorIdentity> identity,
-                        uint64_t monotonicTimestampMs,
-                        TemperatureSampleStatus status,
-                        std::optional<double> celsius)
+                       uint64_t monotonicTimestampMs,
+                       TemperatureSampleStatus status,
+                       std::optional<double> celsius)
         : identity_(identity),
           monotonicTimestampMs_(monotonicTimestampMs),
           status_(status),
@@ -85,8 +85,7 @@ inline TemperatureReadingCreateResult TemperatureReading::create(
     const bool statusIsOk = (status == TemperatureSampleStatus::Ok);
     if (statusIsOk != celsiusPresent) {
         return TemperatureReadingCreateResult{
-            TemperatureReadingStatus::InconsistentValuePresence,
-            std::nullopt};
+            TemperatureReadingStatus::InconsistentValuePresence, std::nullopt};
     }
     return TemperatureReadingCreateResult{
         TemperatureReadingStatus::Success,

@@ -13,7 +13,7 @@ void test_zero_is_rejected() {
     const auto result = SensorIdentity::create(0U);
 
     TEST_ASSERT_TRUE(result.status ==
-                      SensorIdentityStatus::ZeroIsNotAValidIdentity);
+                     SensorIdentityStatus::ZeroIsNotAValidIdentity);
     TEST_ASSERT_FALSE(result.identity.has_value());
 }
 

@@ -50,4 +50,13 @@ inline constexpr uint16_t kMaxConsecutiveInvalidCeiling = 1000U;
 inline constexpr uint64_t kMaxRecoveryStabilityDurationCeilingMs =
     3'600'000ULL;  // 1 h
 
+// Obergrenze fuer die Anzahl aufeinanderfolgender gueltiger Proben, die fuer
+// eine Wiedererkennung (Stale/Failed -> Valid, Abschnitt 8/10.0) verlangt
+// werden duerfen. Dasselbe Prinzip wie kMaxConsecutiveInvalidCeiling oben -
+// derselbe Wertebereich (Anzahl aufeinanderfolgender Proben), daher derselbe
+// Zahlenwert - verhindert eine versehentlich praktisch nie erfuellbare
+// Wiedererkennungsbedingung; die tatsaechliche Tuningschwelle bleibt
+// TBD_COMMISSIONING und liegt weit darunter.
+inline constexpr uint16_t kMaxConsecutiveValidSamplesCeiling = 1000U;
+
 }  // namespace device_platform::sensor_limits

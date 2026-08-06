@@ -68,21 +68,35 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
   `RejectedRetrograde`/`RejectedFuture`), Wertebereichs- und
   Aenderungsratenpruefung sowie die Zustandsmaschine
   `Valid`/`Stale`/`Failed` rein aus expliziten monotonen Zeitstempeln
-  (kein gehaltener `ITimeSource`-Zeiger). Recovery aus `Failed` erfordert
-  dieselbe vollstaendige Bedingung wie aus `Stale` (mehrere aufeinander-
-  folgende gueltige Proben plus Stabilitaetsdauer); ein einzelner erneuter
-  Fehler waehrend einer unvollstaendigen Wiedererkennung setzt den
-  Fortschritt zurueck, ohne eine zweite, separat gespeicherte
-  Qualitaetswahrheit einzufuehren. `ITemperatureSource`/`TemperatureReading`
-  um optionale `SensorIdentity` und einen `TemperatureSampleStatus`
+  (kein gehaltener `ITimeSource`-Zeiger). Der Vorzustand wird in `ingest()`
+  aus `nowMonotonicMs` ermittelt, BEVOR die aktuelle Probe irgendeinen
+  Zaehler/Zeitstempel aktualisiert, damit eine altersbedingt bereits
+  erreichte `Failed`-Lage nicht durch die naechste Probe verschleiert wird.
+  Recovery aus `Failed` erfordert dieselbe vollstaendige Bedingung wie aus
+  `Stale` (mehrere aufeinanderfolgende gueltige Proben plus
+  Stabilitaetsdauer); die oeffentliche Qualitaet bleibt bis dahin `Failed`
+  (nicht `Stale`) - ein einzelner erneuter Fehler waehrend einer
+  unvollstaendigen Wiedererkennung setzt nur den Fortschritt zurueck, ueber
+  ein minimales, ausschliesslich intern gelesenes Merkbit, keine zweite
+  separat gepflegte Qualitaetszustandsmaschine. Die Aenderungsratenpruefung
+  verwendet eine von der Diagnosegroesse getrennte Referenz auf den
+  unmittelbar vorherigen gueltigen Wert, die bei jeder akzeptierten, aber
+  ungueltigen Probe, bei bereits erreichtem `Failed` und bei bestaetigtem
+  Sensoridentitaetswechsel verworfen wird. Neben der firmwarefesten
+  Aussengrenze wertet die Pipeline zusaetzlich das konfigurierte
+  Plausibilitaetsband (`SensorQualityConfig::minPlausibleCelsius()`/
+  `maxPlausibleCelsius()`) aus. `ITemperatureSource`/`TemperatureReading` um
+  optionale `SensorIdentity` und einen `TemperatureSampleStatus`
   (`Ok`/`BusFault`/`CrcFault`/`MissingSample`/`KnownInvalidMeasurement`)
-  erweitert; `MockTemperatureSource` entsprechend angepasst. Neue
-  guelig-by-construction-Typen `SensorIdentity`, `TemperatureReading`,
-  `SensorQualityConfig` sowie `sensor_limits.hpp` mit den firmwarefesten
-  Aussengrenzen. `correctedCelsius`/`filteredCelsius`/`appliedOffset`
-  bleiben in diesem Slice bewusst `nullopt`; Medianfilter, Offset/
-  Kalibrierung, Tiefpass und die vollstaendige Pipelineintegration folgen in
-  Slice 2.
+  erweitert; `MockTemperatureSource` entsprechend angepasst,
+  `setFault(..., Ok)` schlaegt dabei kontrolliert (unveraenderte Probe) statt
+  unkontrolliert fehl. Neue gueltig-by-construction-Typen `SensorIdentity`,
+  `TemperatureReading`, `SensorQualityConfig` sowie `sensor_limits.hpp` mit
+  den firmwarefesten Aussengrenzen, inklusive einer Obergrenze fuer
+  `minConsecutiveValidSamples`. `correctedCelsius`/`filteredCelsius`/
+  `appliedOffset` bleiben in diesem Slice bewusst `nullopt`; Medianfilter,
+  Offset/Kalibrierung, Tiefpass und die vollstaendige Pipelineintegration
+  folgen in Slice 2.
 - Echter ESP-IDF-6.0.2-Laufzeitpfad fuer Issue #73: `main/app_main.cpp`
   ersetzt den produktionslosen `#72`-Buildstub durch einen
   `app_main()`-Composition-Root mit derselben Sicherheitsparitaet wie der

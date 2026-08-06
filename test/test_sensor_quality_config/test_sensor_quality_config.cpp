@@ -70,57 +70,57 @@ void test_nonfinite_lowpass_tau_is_rejected() {
     Args a{};
     a.lowPassTauSeconds = kNan;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::NonFiniteParameter);
+                     SensorQualityConfigStatus::NonFiniteParameter);
 }
 
 void test_nonfinite_min_plausible_celsius_is_rejected() {
     Args a{};
     a.minPlausibleCelsius = kInf;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::NonFiniteParameter);
+                     SensorQualityConfigStatus::NonFiniteParameter);
 }
 
 void test_nonfinite_max_plausible_celsius_is_rejected() {
     Args a{};
     a.maxPlausibleCelsius = kNan;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::NonFiniteParameter);
+                     SensorQualityConfigStatus::NonFiniteParameter);
 }
 
 void test_nonfinite_rate_of_change_limit_is_rejected() {
     Args a{};
     a.maxRateOfChangeCelsiusPerSecond = -kInf;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::NonFiniteParameter);
+                     SensorQualityConfigStatus::NonFiniteParameter);
 }
 
 void test_zero_median_window_size_is_rejected() {
     Args a{};
     a.medianWindowSize = 0U;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidMedianWindowSize);
+                     SensorQualityConfigStatus::InvalidMedianWindowSize);
 }
 
 void test_even_median_window_size_is_rejected() {
     Args a{};
     a.medianWindowSize = 4U;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidMedianWindowSize);
+                     SensorQualityConfigStatus::InvalidMedianWindowSize);
 }
 
 void test_median_window_size_above_ceiling_is_rejected() {
     Args a{};
     a.medianWindowSize = device_platform::sensor_limits::kMaxMedianWindowSize +
-                          2U;  // naechster ungerader Wert oberhalb der Grenze
+                         2U;  // naechster ungerader Wert oberhalb der Grenze
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidMedianWindowSize);
+                     SensorQualityConfigStatus::InvalidMedianWindowSize);
 }
 
 void test_nonpositive_lowpass_tau_is_rejected() {
     Args a{};
     a.lowPassTauSeconds = 0.0;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidLowPassTimeConstant);
+                     SensorQualityConfigStatus::InvalidLowPassTimeConstant);
 }
 
 void test_inverted_plausible_range_is_rejected() {
@@ -128,35 +128,37 @@ void test_inverted_plausible_range_is_rejected() {
     a.minPlausibleCelsius = 10.0;
     a.maxPlausibleCelsius = 10.0;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidPlausibleRange);
+                     SensorQualityConfigStatus::InvalidPlausibleRange);
 }
 
 void test_plausible_range_below_firmware_outer_bound_is_rejected() {
     Args a{};
-    a.minPlausibleCelsius = device_platform::sensor_limits::kAbsoluteMinCelsius - 1.0;
+    a.minPlausibleCelsius =
+        device_platform::sensor_limits::kAbsoluteMinCelsius - 1.0;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidPlausibleRange);
+                     SensorQualityConfigStatus::InvalidPlausibleRange);
 }
 
 void test_plausible_range_above_firmware_outer_bound_is_rejected() {
     Args a{};
-    a.maxPlausibleCelsius = device_platform::sensor_limits::kAbsoluteMaxCelsius + 1.0;
+    a.maxPlausibleCelsius =
+        device_platform::sensor_limits::kAbsoluteMaxCelsius + 1.0;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidPlausibleRange);
+                     SensorQualityConfigStatus::InvalidPlausibleRange);
 }
 
 void test_nonpositive_rate_of_change_limit_is_rejected() {
     Args a{};
     a.maxRateOfChangeCelsiusPerSecond = 0.0;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidRateOfChangeLimit);
+                     SensorQualityConfigStatus::InvalidRateOfChangeLimit);
 }
 
 void test_zero_stale_age_threshold_is_rejected() {
     Args a{};
     a.maxStaleAgeMs = 0U;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidStaleAgeThreshold);
+                     SensorQualityConfigStatus::InvalidStaleAgeThreshold);
 }
 
 void test_stale_age_threshold_above_ceiling_is_rejected() {
@@ -164,51 +166,67 @@ void test_stale_age_threshold_above_ceiling_is_rejected() {
     a.maxStaleAgeMs =
         device_platform::sensor_limits::kMaxStaleAgeCeilingMs + 1U;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidStaleAgeThreshold);
+                     SensorQualityConfigStatus::InvalidStaleAgeThreshold);
 }
 
 void test_zero_consecutive_invalid_limit_is_rejected() {
     Args a{};
     a.maxConsecutiveInvalid = 0U;
-    TEST_ASSERT_TRUE(
-        createFrom(a).status ==
-        SensorQualityConfigStatus::InvalidConsecutiveInvalidLimit);
+    TEST_ASSERT_TRUE(createFrom(a).status ==
+                     SensorQualityConfigStatus::InvalidConsecutiveInvalidLimit);
 }
 
 void test_consecutive_invalid_limit_above_ceiling_is_rejected() {
     Args a{};
     a.maxConsecutiveInvalid =
         device_platform::sensor_limits::kMaxConsecutiveInvalidCeiling + 1U;
-    TEST_ASSERT_TRUE(
-        createFrom(a).status ==
-        SensorQualityConfigStatus::InvalidConsecutiveInvalidLimit);
+    TEST_ASSERT_TRUE(createFrom(a).status ==
+                     SensorQualityConfigStatus::InvalidConsecutiveInvalidLimit);
 }
 
 void test_zero_min_consecutive_valid_samples_is_rejected() {
     Args a{};
     a.minConsecutiveValidSamples = 0U;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidRecoveryThresholds);
+                     SensorQualityConfigStatus::InvalidRecoveryThresholds);
 }
 
 void test_single_min_consecutive_valid_sample_is_rejected() {
     Args a{};
     a.minConsecutiveValidSamples = 1U;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidRecoveryThresholds);
+                     SensorQualityConfigStatus::InvalidRecoveryThresholds);
 }
 
 void test_two_min_consecutive_valid_samples_succeeds() {
     Args a{};
     a.minConsecutiveValidSamples = 2U;
-    TEST_ASSERT_TRUE(createFrom(a).status == SensorQualityConfigStatus::Success);
+    TEST_ASSERT_TRUE(createFrom(a).status ==
+                     SensorQualityConfigStatus::Success);
+}
+
+void test_min_consecutive_valid_samples_above_ceiling_is_rejected() {
+    Args a{};
+    a.minConsecutiveValidSamples = static_cast<uint16_t>(
+        device_platform::sensor_limits::kMaxConsecutiveValidSamplesCeiling +
+        1U);
+    TEST_ASSERT_TRUE(createFrom(a).status ==
+                     SensorQualityConfigStatus::InvalidRecoveryThresholds);
+}
+
+void test_min_consecutive_valid_samples_at_ceiling_succeeds() {
+    Args a{};
+    a.minConsecutiveValidSamples =
+        device_platform::sensor_limits::kMaxConsecutiveValidSamplesCeiling;
+    TEST_ASSERT_TRUE(createFrom(a).status ==
+                     SensorQualityConfigStatus::Success);
 }
 
 void test_zero_recovery_stability_duration_is_rejected() {
     Args a{};
     a.minRecoveryStabilityDurationMs = 0U;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidRecoveryThresholds);
+                     SensorQualityConfigStatus::InvalidRecoveryThresholds);
 }
 
 void test_recovery_stability_duration_above_ceiling_is_rejected() {
@@ -217,14 +235,15 @@ void test_recovery_stability_duration_above_ceiling_is_rejected() {
         device_platform::sensor_limits::kMaxRecoveryStabilityDurationCeilingMs +
         1U;
     TEST_ASSERT_TRUE(createFrom(a).status ==
-                      SensorQualityConfigStatus::InvalidRecoveryThresholds);
+                     SensorQualityConfigStatus::InvalidRecoveryThresholds);
 }
 
 void test_recovery_stability_duration_at_ceiling_succeeds() {
     Args a{};
     a.minRecoveryStabilityDurationMs =
         device_platform::sensor_limits::kMaxRecoveryStabilityDurationCeilingMs;
-    TEST_ASSERT_TRUE(createFrom(a).status == SensorQualityConfigStatus::Success);
+    TEST_ASSERT_TRUE(createFrom(a).status ==
+                     SensorQualityConfigStatus::Success);
 }
 
 int main() {
@@ -249,6 +268,8 @@ int main() {
     RUN_TEST(test_zero_min_consecutive_valid_samples_is_rejected);
     RUN_TEST(test_single_min_consecutive_valid_sample_is_rejected);
     RUN_TEST(test_two_min_consecutive_valid_samples_succeeds);
+    RUN_TEST(test_min_consecutive_valid_samples_above_ceiling_is_rejected);
+    RUN_TEST(test_min_consecutive_valid_samples_at_ceiling_succeeds);
     RUN_TEST(test_zero_recovery_stability_duration_is_rejected);
     RUN_TEST(test_recovery_stability_duration_above_ceiling_is_rejected);
     RUN_TEST(test_recovery_stability_duration_at_ceiling_succeeds);

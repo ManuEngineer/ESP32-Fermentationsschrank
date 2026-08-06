@@ -15,7 +15,8 @@ namespace device_platform {
 
 enum class SensorQualityConfigStatus : uint8_t {
     Success,
-    // medianWindowSize == 0, gerade, oder > sensor_limits::kMaxMedianWindowSize.
+    // medianWindowSize == 0, gerade, oder >
+    // sensor_limits::kMaxMedianWindowSize.
     InvalidMedianWindowSize,
     // Mindestens einer der double-Parameter ist NaN oder Inf. Wird VOR jeder
     // Bereichs-/Beziehungspruefung erkannt, da z. B. `NaN >= x` immer false
@@ -34,7 +35,8 @@ enum class SensorQualityConfigStatus : uint8_t {
     // sensor_limits::kMaxConsecutiveInvalidCeiling.
     InvalidConsecutiveInvalidLimit,
     // minConsecutiveValidSamples < 2 (die kanonische Spezifikation verlangt
-    // "mehrere gueltige Proben" - eine Einzelprobe ist keine Mehrzahl), ODER
+    // "mehrere gueltige Proben" - eine Einzelprobe ist keine Mehrzahl) ODER
+    // > sensor_limits::kMaxConsecutiveValidSamplesCeiling, ODER
     // minRecoveryStabilityDurationMs == 0, ODER minRecoveryStabilityDurationMs
     // > sensor_limits::kMaxRecoveryStabilityDurationCeilingMs.
     InvalidRecoveryThresholds,
@@ -78,14 +80,12 @@ class SensorQualityConfig {
     }
 
    private:
-    SensorQualityConfig(std::size_t medianWindowSize,
-                         double lowPassTauSeconds, double minPlausibleCelsius,
-                         double maxPlausibleCelsius,
-                         double maxRateOfChangeCelsiusPerSecond,
-                         uint64_t maxStaleAgeMs,
-                         uint16_t maxConsecutiveInvalid,
-                         uint16_t minConsecutiveValidSamples,
-                         uint64_t minRecoveryStabilityDurationMs)
+    SensorQualityConfig(std::size_t medianWindowSize, double lowPassTauSeconds,
+                        double minPlausibleCelsius, double maxPlausibleCelsius,
+                        double maxRateOfChangeCelsiusPerSecond,
+                        uint64_t maxStaleAgeMs, uint16_t maxConsecutiveInvalid,
+                        uint16_t minConsecutiveValidSamples,
+                        uint64_t minRecoveryStabilityDurationMs)
         : medianWindowSize_(medianWindowSize),
           lowPassTauSeconds_(lowPassTauSeconds),
           minPlausibleCelsius_(minPlausibleCelsius),
@@ -152,15 +152,13 @@ inline SensorQualityConfigCreateResult SensorQualityConfig::create(
     // (5) Aenderungsratenlimit.
     if (maxRateOfChangeCelsiusPerSecond <= 0.0) {
         return SensorQualityConfigCreateResult{
-            SensorQualityConfigStatus::InvalidRateOfChangeLimit,
-            std::nullopt};
+            SensorQualityConfigStatus::InvalidRateOfChangeLimit, std::nullopt};
     }
     // (6) Stale-Altersschwelle.
     if (maxStaleAgeMs == 0U ||
         maxStaleAgeMs > sensor_limits::kMaxStaleAgeCeilingMs) {
         return SensorQualityConfigCreateResult{
-            SensorQualityConfigStatus::InvalidStaleAgeThreshold,
-            std::nullopt};
+            SensorQualityConfigStatus::InvalidStaleAgeThreshold, std::nullopt};
     }
     // (7) Obergrenze aufeinanderfolgender ungueltiger Proben.
     if (maxConsecutiveInvalid == 0U ||
@@ -169,23 +167,25 @@ inline SensorQualityConfigCreateResult SensorQualityConfig::create(
             SensorQualityConfigStatus::InvalidConsecutiveInvalidLimit,
             std::nullopt};
     }
-    // (8) Wiedererkennungsschwellen: mehrere gueltige Proben (>= 2) UND eine
-    // echte, firmwarefest begrenzte Stabilitaetszeit.
+    // (8) Wiedererkennungsschwellen: mehrere gueltige Proben (>= 2,
+    // firmwarefest begrenzte Obergrenze) UND eine echte, firmwarefest begrenzte
+    // Stabilitaetszeit.
     if (minConsecutiveValidSamples < 2U ||
+        minConsecutiveValidSamples >
+            sensor_limits::kMaxConsecutiveValidSamplesCeiling ||
         minRecoveryStabilityDurationMs == 0U ||
         minRecoveryStabilityDurationMs >
             sensor_limits::kMaxRecoveryStabilityDurationCeilingMs) {
         return SensorQualityConfigCreateResult{
-            SensorQualityConfigStatus::InvalidRecoveryThresholds,
-            std::nullopt};
+            SensorQualityConfigStatus::InvalidRecoveryThresholds, std::nullopt};
     }
     return SensorQualityConfigCreateResult{
         SensorQualityConfigStatus::Success,
         SensorQualityConfig(medianWindowSize, lowPassTauSeconds,
-                             minPlausibleCelsius, maxPlausibleCelsius,
-                             maxRateOfChangeCelsiusPerSecond, maxStaleAgeMs,
-                             maxConsecutiveInvalid, minConsecutiveValidSamples,
-                             minRecoveryStabilityDurationMs)};
+                            minPlausibleCelsius, maxPlausibleCelsius,
+                            maxRateOfChangeCelsiusPerSecond, maxStaleAgeMs,
+                            maxConsecutiveInvalid, minConsecutiveValidSamples,
+                            minRecoveryStabilityDurationMs)};
 }
 
 }  // namespace device_platform
