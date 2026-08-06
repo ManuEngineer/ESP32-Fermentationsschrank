@@ -2,9 +2,9 @@
 
 ## Status
 
-`AUDIT_AND_IMPLEMENTATION_IN_PROGRESS`
+`IMPLEMENTATION_COMPLETE_REVIEW_IN_PROGRESS`
 
-Audit und Umsetzung erfolgen blockweise: prüfen, materielle Abweichungen mit
+Audit und Umsetzung erfolgten blockweise: prüfen, materielle Abweichungen mit
 dem Owner entscheiden, freigegebenen Block umsetzen, Diff/Links/Doppelungen
 prüfen und erst danach fortfahren.
 
@@ -93,7 +93,7 @@ Recovery- oder Owner-Gates zu kürzen.
 - `docs/AGENT_WORKFLOW.md` als kanonischer Ablauf ergänzt.
 - `docs/CI_AND_QUALITY_GATES.md` auf Teststrategie und Ready-for-review-CI
   konsolidiert.
-- Workflow ohne `push`-Trigger; Firmwarejob nur bei Nicht-Draft-PR.
+- Workflow ohne Push-CI; Firmwarejob nur bei Nicht-Draft-PR.
 - PR-Vorlage und `Agent-Auftraege/Auftrag.md` kompakt neu aufgebaut.
 - `docs/CODEX_HANDOFF.md`, `docs/CODEX_TASK_TEMPLATE.md` und historisches
   Issue-Auftragspaket entfernt.
@@ -116,24 +116,31 @@ Recovery- oder Owner-Gates zu kürzen.
 
 ### A9.4 – Statusquellen
 
-`NEXT`
+`COMPLETED`
 
-- `IMPLEMENTATION_PLAN.md` auf stabile Phasen/Reihenfolge kürzen;
-- `IMPLEMENTATION_ISSUES.md` auf Struktur/Abhängigkeiten kürzen;
-- `OPEN_POINTS.md` nur anhand belegter Nachweise bereinigen;
-- verbleibende Live-Statusangaben ausserhalb von `ROADMAP.md` entfernen.
+- `IMPLEMENTATION_PLAN.md` enthält nur stabile Software-, Hardware- und
+  Inbetriebnahmephasen sowie Gates.
+- `IMPLEMENTATION_ISSUES.md` enthält nur Epic-/Issue-/Abhängigkeitsstruktur.
+- `OPEN_POINTS.md` bleibt vollständig offen, soweit kein konkreter Nachweis
+  verlinkt ist; keine Annahme wurde als erledigt markiert.
+- historische Audit-Roadmap auf kurzen nicht normativen Index reduziert;
+  frühere Fassung bleibt in Git.
+- Live-Status und aktuelle Reihenfolge stehen ausschliesslich in `ROADMAP.md`.
 
 ## Abschlussprüfungen
 
-- [ ] verbleibende Status- und Fachquellen vollständig prüfen;
+- [ ] vollständige Liste aller geänderten und gelöschten Dateien prüfen;
 - [ ] typische Planungs-, Umsetzungs-, Review- und Handoverabläufe simulieren;
 - [ ] Links, Dateinamen und gelöschte Quellen prüfen;
 - [ ] Grössen- und Doppelungsprüfung;
 - [ ] vollständiges Review des finalen Diffs;
+- [ ] PR-Beschreibung und Roadmap auf finalen Stand bringen;
 - [ ] vollständiger lokaler Lauf nur auf Owner-Anweisung;
+- [ ] Owner entscheidet über die externe GitHub-Regel „1 approving review“;
 - [ ] Owner setzt danach bei Bedarf auf `Ready for review`.
 
 ## Nächster Schritt
 
-A9.4 prüfen und umsetzen. `OPEN_POINTS.md` wird nur bei konkretem Nachweis
-verändert; unbestätigte Hardware- oder Inbetriebnahmepunkte bleiben offen.
+A10/A11: vollständiger Diff-, Link-, Workflow- und Doppelungsreview. Materielle
+Befunde werden vor weiteren Aenderungen dem Owner vorgelegt; rein redaktionelle
+oder eindeutig beschlossene Korrekturen werden direkt bereinigt.
