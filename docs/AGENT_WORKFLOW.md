@@ -116,7 +116,7 @@ der vollstaendige verbleibende Diff erneut geprueft.
 
 ## 8. Tests und GitHub-CI
 
-Waehren der Draft-Phase werden nur passende gezielte lokale Tests ausgefuehrt.
+Waehrend der Draft-Phase werden nur passende gezielte lokale Tests ausgefuehrt.
 Die konkreten Befehle und Werkzeuge stehen in `CI_AND_QUALITY_GATES.md`.
 
 Ein vollstaendiger lokaler Lauf erfolgt nur nach abgeschlossenem Review ohne
