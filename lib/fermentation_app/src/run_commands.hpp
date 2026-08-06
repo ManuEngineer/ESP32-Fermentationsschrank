@@ -9,6 +9,7 @@
 #include "process_state_machine.hpp"
 #include "run_command_limits.hpp"
 #include "run_snapshot.hpp"
+#include "sensor_selection_types.hpp"
 
 namespace fermentation {
 
@@ -60,11 +61,6 @@ enum class CommandKind : std::uint8_t {
     AcknowledgeMessage,
     MuteMessage,
     ResetFault,
-};
-
-enum class RunSensorMode : std::uint8_t {
-    Product,
-    Air,
 };
 
 struct ManualRunPlanRequest {
