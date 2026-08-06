@@ -61,6 +61,55 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Added
 
+- Sensorqualitaet und Plausibilitaet fuer Issue #20, Slice 2: `SensorOffset`
+  und ROM-gebundene `SensorCalibration` als gueltig-by-construction-Werte,
+  heapfreier Medianfilter mit fester Kapazitaet und zeitbasierter Tiefpass
+  auf den Erfassungszeitstempeln. Die `SensorQualityPipeline` fuehrt nur
+  plausible Proben durch Median, Offset und Tiefpass, weist korrigierte und
+  gefilterte Werte ab dem ersten Beitrag aus, unterscheidet eine passende
+  Nullkalibrierung von fehlender Kalibrierung und verschiebt den bestehenden
+  Tiefpasszustand bei einem Offsetwechsel um das Offset-Delta. Transientes
+  Stale erhaelt den Filterzustand; tatsaechliches Failed und bestaetigte
+  ROM-Wechsel verwerfen Median, Tiefpass und Offset-Rechenzustand. Isolierte
+  sowie integrative Native-Tests decken Teilfenster, Ausreisser, Trends,
+  Tau-/Zeitstempelverhalten, Kalibrierungsbindung und Resetvorrang ab.
+
+- Sensorqualitaet und Plausibilitaet fuer Issue #20, Slice 1 (Qualitaetszustand
+  + Plausibilitaet, ohne Filter/Kalibrierung): `SensorQualityPipeline` in
+  `lib/device_platform/` fuehrt fuer eine einzelne Sensorrolle Disposition
+  (`Accepted`/`DuplicateIgnored`/`RejectedTimestampConflict`/
+  `RejectedRetrograde`/`RejectedFuture`), Wertebereichs- und
+  Aenderungsratenpruefung sowie die Zustandsmaschine
+  `Valid`/`Stale`/`Failed` rein aus expliziten monotonen Zeitstempeln
+  (kein gehaltener `ITimeSource`-Zeiger). Der Vorzustand wird in `ingest()`
+  aus `nowMonotonicMs` ermittelt, BEVOR die aktuelle Probe irgendeinen
+  Zaehler/Zeitstempel aktualisiert, damit eine altersbedingt bereits
+  erreichte `Failed`-Lage nicht durch die naechste Probe verschleiert wird.
+  Recovery aus `Failed` erfordert dieselbe vollstaendige Bedingung wie aus
+  `Stale` (mehrere aufeinanderfolgende gueltige Proben plus
+  Stabilitaetsdauer); die oeffentliche Qualitaet bleibt bis dahin `Failed`
+  (nicht `Stale`) - ein einzelner erneuter Fehler waehrend einer
+  unvollstaendigen Wiedererkennung setzt nur den Fortschritt zurueck, ueber
+  ein minimales, ausschliesslich intern gelesenes Merkbit, keine zweite
+  separat gepflegte Qualitaetszustandsmaschine. Die Aenderungsratenpruefung
+  verwendet eine von der Diagnosegroesse getrennte Referenz auf den
+  unmittelbar vorherigen gueltigen Wert, die bei jeder akzeptierten, aber
+  ungueltigen Probe, bei bereits erreichtem `Failed` und bei bestaetigtem
+  Sensoridentitaetswechsel verworfen wird. Neben der firmwarefesten
+  Aussengrenze wertet die Pipeline zusaetzlich das konfigurierte
+  Plausibilitaetsband (`SensorQualityConfig::minPlausibleCelsius()`/
+  `maxPlausibleCelsius()`) aus. `ITemperatureSource`/`TemperatureReading` um
+  optionale `SensorIdentity` und einen `TemperatureSampleStatus`
+  (`Ok`/`BusFault`/`CrcFault`/`MissingSample`/`KnownInvalidMeasurement`)
+  erweitert; `MockTemperatureSource` entsprechend angepasst,
+  `setFault(..., Ok)` schlaegt dabei kontrolliert (unveraenderte Probe) statt
+  unkontrolliert fehl. Neue gueltig-by-construction-Typen `SensorIdentity`,
+  `TemperatureReading`, `SensorQualityConfig` sowie `sensor_limits.hpp` mit
+  den firmwarefesten Aussengrenzen, inklusive einer Obergrenze fuer
+  `minConsecutiveValidSamples`. `correctedCelsius`/`filteredCelsius`/
+  `appliedOffset` bleiben in diesem Slice bewusst `nullopt`; Medianfilter,
+  Offset/Kalibrierung, Tiefpass und die vollstaendige Pipelineintegration
+  folgen in Slice 2.
 - Echter ESP-IDF-6.0.2-Laufzeitpfad fuer Issue #73: `main/app_main.cpp`
   ersetzt den produktionslosen `#72`-Buildstub durch einen
   `app_main()`-Composition-Root mit derselben Sicherheitsparitaet wie der

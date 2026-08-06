@@ -382,6 +382,37 @@ Kleine technische Detailentscheidungen sind erlaubt, wenn:
 - sie keine Security-, Safety-, Recovery- oder Hardwaregrenze veraendern;
 - sie eindeutig innerhalb des freigegebenen Plans liegen.
 
+### 3a. Teststrategie waehrend der Umsetzung und Owner-gesteuerte Vollpruefung
+
+Waehrend der Umsetzung:
+
+- nur direkt betroffene Tests;
+- bei gemeinsamen Vertraegen zusaetzlich betroffene Konsumententests;
+- kein vollstaendiger lokaler Testlauf;
+- keine vollstaendige ESP-IDF-/Static-Analysis-/Ressourcenpruefung;
+- Agent haelt nach gezielten gruenen Tests zum Review an.
+
+Nach befundleerem unabhaengigem Review:
+
+- Owner setzt den Draft-PR auf Ready for Review;
+- dadurch startet genau eine vollstaendige Remote-CI fuer den reviewten Head;
+- lokaler Volltest und vollstaendige Remote-CI werden nicht doppelt
+  ausgefuehrt, ausser der Owner verlangt dies ausdruecklich.
+
+Nach einem CI-Fehler:
+
+- PR zurueck auf Draft;
+- nur Fehler und direkt abhaengige Tests lokal pruefen;
+- erneut vollstaendiges Review;
+- Owner setzt erneut auf Ready.
+
+Jede semantische Aenderung nach einer gruenen Vollpruefung verwirft Review und
+Pruefnachweis. Reine Dokumentations- oder Kommentaraenderungen tun dies nicht.
+
+Die technische Ausfuehrung (Trigger, CI-Gates, Werkzeuge) steht in
+`docs/CI_AND_QUALITY_GATES.md`; diese Regel bleibt die verbindliche,
+uebergeordnete Vorgabe bei einem Widerspruch.
+
 ### 4. Materielle Planabweichungen
 
 Eine materielle Planabweichung liegt insbesondere vor bei:
@@ -427,7 +458,9 @@ Vor Ready for Review dokumentiert der Agent:
 
 Der Agent fuehrt mindestens aus:
 
-- projektspezifische Tests;
+- gezielte, direkt betroffene Tests (Abschnitt 3a) - kein zusaetzlicher
+  vollstaendiger lokaler Testlauf; dieser wird durch die anschliessende,
+  Owner-ausgeloeste Remote-CI abgedeckt, nicht durch den Agenten dupliziert;
 - Format- und Konsistenzpruefungen;
 - `git diff --check`;
 - Secretpruefung;
@@ -435,7 +468,9 @@ Der Agent fuehrt mindestens aus:
 - Pruefung des tatsaechlichen Diffs gegen den freigegebenen Plan;
 - konkrete Pruefung des tatsaechlichen Diffs gegen SOLID, DRY und KISS.
 
-Der PR bleibt Draft, bis ein unabhaengiges Abschlussreview erfolgt ist.
+Der PR bleibt Draft, bis ein unabhaengiges Abschlussreview erfolgt ist. Der
+Owner setzt den PR danach auf Ready for Review (Abschnitt 3a); dies loest die
+einzige vollstaendige Remote-CI-Pruefung aus.
 
 Der Agent:
 
