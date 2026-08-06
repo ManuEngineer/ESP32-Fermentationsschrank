@@ -405,9 +405,9 @@ Der Agent muss:
 Kleine technische Detailentscheidungen sind erlaubt, wenn:
 
 - sie keine sichtbare Produktwirkung besitzen;
-- sie keine oeffentliche oder persistente Schnittstelle veraendert;
+- sie keine oeffentliche oder persistente Schnittstelle veraendern;
 - sie keine neue Abhaengigkeit erzeugen;
-- sie keine Security-, Safety-, Recovery- oder Hardwaregrenze veraendert;
+- sie keine Security-, Safety-, Recovery- oder Hardwaregrenze veraendern;
 - sie eindeutig innerhalb des freigegebenen Plans liegen.
 
 ### 4. Materielle Planabweichungen
