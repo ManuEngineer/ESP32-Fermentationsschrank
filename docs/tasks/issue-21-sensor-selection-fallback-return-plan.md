@@ -12,13 +12,24 @@ Vorherige, NICHT freigegebene Plan-Commits:
   aaeefbdf6997bbbbd9359985ed00f9b75ab6283e (Revision 2)
   2e3a041131996d73cb0ce342f256f06f79f694bd (Revision 3)
   6a85c331cf17673d03ec2a231100e5f3af7b916b (Revision 4)
+  286ebacda05a202ea203789421e2398a7a868905 (Revision 5)
 PLAN_ONLY: YES
 IMPLEMENTATION_STARTED: NO
 PLAN_STATUS: PLAN_DRAFT_REVIEW_REQUIRED
 IMPLEMENTATION_STATUS: IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL
+CONTEXT_BASELINE_BRANCH: plan/issue-21-sensor-selection-fallback-return
+CONTEXT_BASELINE_SHA: 286ebacda05a202ea203789421e2398a7a868905
+CONTEXT_HEAD_SHA: 286ebacda05a202ea203789421e2398a7a868905
+CONTEXT_PLAN_SHA: 286ebacda05a202ea203789421e2398a7a868905
+CONTEXT_REFRESH_MODE: INCREMENTAL
+CONTEXT_DELTA: Revision-6-Planpruefung von Include-Schichtung, Apply-Status,
+  Clear-/Startpfaden, Safety-Pending, Ready-only-Persistenz, Re-Arm-Zeit und
+  Architektur-/Testguards
+SOURCE_OF_TRUTH_CONFLICT: NONE
 ```
 
-Dies ist Revision 5. Sie behebt die im PR-#99-Review vom 2026-08-06 zu
+Dies ist Revision 6, die fuenfte und abschliessende Plankorrektur. Sie behebt
+die im PR-#99-Review vom 2026-08-06 zu
 Revision 4 benannten Luecken bei neu konkretisierten Integrationsstellen:
 fehlender Eigentuemer und fehlende kanonische Anwendungsfunktion fuer den
 fluechtigen Sensorselektions-Laufzeitzustand, fehlender persistierter
@@ -30,6 +41,11 @@ Effektbezeichnung, fehlende thermische Evidenz-Invarianten sowie eine an
 der #17/#18-Grenze zu optimistische Testbehauptung. Produktionscode,
 produktive Tests, Toolchain, Buildkonfiguration, Hardwarekonfiguration und
 Abhaengigkeiten werden weiterhin in dieser Planungsphase nicht geaendert.
+Revision 6 korrigiert zusaetzlich die daraus entstandene Include-Schichtung,
+den typisierten Status des RAM-only-Apply, die vollstaendigen Clear-/Start-
+Pfade, das Safety-Gate der drei manuellen Aktionen, den Geltungsbereich von
+`persistSensorSelection`, den Re-Arm im Luftbetrieb und den
+Release-1-Zeitvertrag.
 
 ## 2. Live-Issue- und Abhaengigkeitsabgleich
 
@@ -41,7 +57,7 @@ Abhaengigkeiten werden weiterhin in dieser Planungsphase nicht geaendert.
 | Issue #18 | OPEN | zustaendig fuer `LoadedActiveRun -> Ready`; #21 liefert nur Daten und eine reine Entscheidungsfunktion |
 | Issue #20 | CLOSED | `SensorQualitySnapshot`/`SensorQualityPipeline` bleiben Qualitaetsquelle |
 | Epic #5 | OPEN | Issue bleibt Teil des E3-Sensor-/Regel-/Safety-Kerns |
-| PR #99 | OPEN, Draft, dieser Plan ist die fuenfte Revision | Reviewbefunde vom 2026-08-06 zu Revision 4 sind Grundlage dieser Ueberarbeitung |
+| PR #99 | OPEN, Draft, dieser Plan ist die sechste Revision | Reviewbefunde vom 2026-08-06 zu Revision 4 sowie die Folgepruefung zu Revision 5 sind Grundlage dieser Ueberarbeitung |
 
 Issue #21 hat weiterhin keine Kommentare mit zusaetzlichen Anforderungen.
 Issue #17 und #18 werden nicht veraendert.
@@ -51,7 +67,7 @@ Issue #17 und #18 werden nicht veraendert.
 Bei Widerspruechen gilt die in `docs/SPECIFICATION_REVIEW.md` festgelegte
 Reihenfolge (unveraendert seit Revision 1).
 
-Zusaetzlich zu den in Revision 1-4 gelesenen Quellen wurden fuer diese
+Zusaetzlich zu den in Revision 1-5 gelesenen Quellen wurden fuer diese
 Ueberarbeitung konkret nachvollzogen:
 
 - `lib/fermentation_app/src/run_commands.hpp`, `struct CommandDecision`
@@ -87,23 +103,43 @@ Ueberarbeitung konkret nachvollzogen:
   `persistCommand` ueberhaupt aufzurufen - das bestehende, bereits an
   mehreren Stellen genutzte Muster fuer eine bestaetigte, aber wirkungslose
   Anfrage passt exakt auf einen wirkungslosen `RecheckProduct`.
+- `lib/fermentation_app/src/run_commands.cpp::clearActiveRun` entfernt heute
+  nur die bestehenden Laufdaten; `run_persistence_coordinator.cpp::
+  clearCandidateRun` wiederholt denselben unvollstaendigen Clear. Beide
+  Pfade werden durch den in 6.14.6 beschriebenen gemeinsamen Helfer ersetzt.
+- `applyTransition` behandelt `TransitionReason::ProductWaitExpired` heute
+  zweimal getrennt (Candidate vor dem Write und current danach); beide
+  Stellen muessen denselben neuen Sensor-Clear aufrufen. Der bestehende
+  `ReadyEmpty`-Pfad liefert bereits `NoActiveRun` fuer laufbezogene
+  Operationen und ist der Guard fuer den korrigierten automatischen
+  Sensorpfad.
 
 Roadmaps und historische Plaene werden nicht als implementierter Ist-Stand
 behandelt.
+
+Die aktuelle Revision hat ausserdem die Include- und Typgrenzen des geplanten
+Diffs gegen den bestehenden Code abzugleichen: `run_commands.hpp` definiert
+heute `RunSensorMode` und wird von `run_persistence_contract.hpp` eingebunden;
+ein Sensorselektionsvertrag darf deshalb keinen vollstaendigen
+`RunCommandState` in `sensor_selection.hpp` zurueckgeben und keine
+`PersistedSensorSelectionState` im Persistenzvertrag definieren, wenn sie
+zugleich Feldtyp von `RunCommandState` ist.
 
 ## 4. Ziel und Nicht-Ziele
 
 ### Ziel
 
-Zusaetzlich zu den in Revision 1-4 etablierten Zielen macht diese Revision
+Zusaetzlich zu den in Revision 1-5 etablierten Zielen macht diese Revision
 explizit:
 
 - ein genau benannter, RAM-only Eigentuemer (`RunCommandState::
   sensorSelectionRuntime`) fuer die flüchtige Auswahlphase, Peltier-
   Permission-Momentaufnahme, Fallback-Wartezeit-Start und den
   Rueckkehrvalidierungs-/Re-Arm-Zustand, angewendet durch **genau eine**
-  kanonische Funktion (`applySensorSelectionDecision`, 6.4.11) fuer sowohl
-  automatische als auch manuelle Aenderungen;
+  kanonische Entscheidungsfunktion (`applySensorSelectionDecision`, 6.4.11)
+  fuer sowohl automatische als auch manuelle Aenderungen; die Funktion
+  liefert ausschliesslich eine schmale Mutation und niemals einen
+  vollstaendigen `RunCommandState`;
 - manuelle Sensorentscheidungen (mit Luft fortsetzen, zum Produkt
   zurueckkehren, Produkt erneut pruefen) sind echte, persistierte,
   idempotente Kommandos ueber den bestehenden `persistCommand`-Pfad, nicht
@@ -123,6 +159,14 @@ explizit:
 - eine Testmatrix, die zwischen dem in #21 tatsaechlich testbaren Teil des
   Zwei-Slot-/Recovery-Vertrags und dem erst in #18 erfuellbaren Teil
   unterscheidet, ohne private Coordinatorzustaende zu umgehen.
+- eine kompilierbare Include-Schichtung ohne gegenseitige Abhaengigkeit von
+  `run_commands.hpp`, `sensor_selection.hpp` und
+  `run_persistence_contract.hpp` sowie mit einer einzigen Definition der
+  Sensorselektions-Werttypen;
+- einen expliziten Inaktivzustand fuer `NoActiveRun`, vollstaendige
+  Abbruch-/Abschluss-/Tombstone-Bereinigung und einen Release-1-Vertrag, in
+  dem ein zeitbasierter automatischer Re-Arm vor Commissioning deaktiviert
+  bleibt.
 
 ### Nicht-Ziele
 
@@ -131,6 +175,8 @@ Unveraendert seit Revision 4, ergaenzt um:
 - keine Erweiterung von `applyRunCommand` ueber die in 6.14.3 konkret
   benannten zwei neuen Felder hinaus - keine generelle Ueberarbeitung der
   bestehenden Staleness-Pruefung;
+- kein vollstaendiger Aggregatsnapshot als Rueckgabewert der
+  Sensorselektionsfunktion und keine gegenseitige Include-Abhaengigkeit;
 - keine zweite, #21-eigene Altersarithmetik auf
   `ThermalCompatibilityEvidence::evaluatedAtMonotonicMillis` - die
   inhaltliche Alters-/`Stale`-Bewertung bleibt Sache des Produzenten
@@ -156,11 +202,13 @@ im Programmmodell (6.2), Ausgabewert und Zustandsseparation (6.3).
 
 #### 6.4.1 Zustaende
 
-Zustandsliste und Grundtabelle unveraendert seit Revision 4 (`NormalProduct`,
-`NormalAir`, `ProductFailureDetected`, `UserDecisionRequired`,
-`AirFallbackActive`, `ReturnValidationPending`, `SafeLocked`,
-`RestartRevalidationPending`), mit den in 6.4.9-6.4.12 dieser Revision
-przisierten Uebergangs-, Zeit- und Persistenzregeln.
+Zustandsliste und Grundtabelle bleiben seit Revision 4 unveraendert fuer die
+aktiven Laufphasen (`NormalProduct`, `NormalAir`, `ProductFailureDetected`,
+`UserDecisionRequired`, `AirFallbackActive`, `ReturnValidationPending`,
+`SafeLocked`, `RestartRevalidationPending`). Revision 6 ergaenzt
+`NoActiveRun` ausschliesslich als expliziten Inaktivzustand ausserhalb des
+aktiven Automaten. Es gelten die in 6.4.9-6.4.12 dieser Revision
+praezisierten Uebergangs-, Zeit- und Persistenzregeln.
 
 #### 6.4.2-6.4.8
 
@@ -279,12 +327,52 @@ Fuer produktgefuehrte manuelle Laeufe (6.8) gilt derselbe `WaitForUser`-
 Ablauf ohne erfundene Wartezeit - unveraendert in der Substanz, jetzt am
 korrigierten Automaten nachvollziehbar.
 
-#### 6.4.11 Kanonischer Laufzeitzustand und Anwendungsfunktion (Review-Befund 1)
+#### 6.4.11 Kanonischer Laufzeitzustand, Include-Schichtung und Mutation (Revision 6)
 
-**Neuer Abschnitt.** Eigentuemer des fluechtigen Auswahlzustands:
+Die Typen werden in einer eigenen, werttypenreinen Schicht definiert. Damit
+bleibt der bestehende Persistenzvertrag kompatibel, ohne einen Zyklus zu
+erzeugen:
+
+```text
+sensor_selection_types.hpp
+  - RunSensorMode
+  - SensorSelectionPhase (einschliesslich NoActiveRun)
+  - SensorPeltierPermission
+  - ReturnValidationRuntimeState
+  - SensorSelectionRuntimeState
+  - SensorSelectionProvenance
+  - PersistedSensorSelectionState
+  - SensorSelectionDecisionCause, BlockReason, Event, Notice,
+    StartSensorSelectionNotice und schmale weitere Werttypen
+
+run_commands.hpp
+  -> sensor_selection_types.hpp
+  -> besitzt RunCommandState::sensorSelectionRuntime und
+     optional<PersistedSensorSelectionState> sensorSelection
+
+sensor_selection.hpp/.cpp
+  -> sensor_selection_types.hpp und nur schmale bestehende Fachtypen
+  -> enthaelt die fachliche Entscheidung und die kanonische
+     applySensorSelectionDecision-Funktion
+
+run_persistence_contract.hpp
+  -> run_commands.hpp (bestehende Richtung)
+  -> definiert keine Sensorselektions-Werttypen
+```
+
+`sensor_selection_types.hpp` darf weder `run_commands.hpp` noch
+`run_persistence_contract.hpp` einbinden. `sensor_selection.hpp` darf keinen
+vollstaendigen `RunCommandState` und keinen Persistenzkoordinator einbinden.
+`RunSensorMode` wird aus `run_commands.hpp` in den Werttyp-Header verschoben;
+damit koennen Mutation, Persistenzsnapshot und Kommandozustand denselben
+vollstaendigen Typ verwenden. Es gibt genau eine Definition jedes genannten
+Werttyps und genau eine kanonische fachliche Apply-Funktion.
+
+Der RAM-Eigentuemer bleibt `RunCommandState::sensorSelectionRuntime`:
 
 ```cpp
 enum class SensorSelectionPhase : std::uint8_t {
+    NoActiveRun,
     NormalProduct, NormalAir, ProductFailureDetected, UserDecisionRequired,
     AirFallbackActive, ReturnValidationPending, SafeLocked,
     RestartRevalidationPending,
@@ -295,68 +383,98 @@ enum class SensorPeltierPermission : std::uint8_t { Allowed, Blocked };
 struct ReturnValidationRuntimeState {
     std::optional<std::uint64_t> enteredAtMonotonicMillis;
     std::optional<std::uint32_t> lastObservedProfileRevision;
-    // begrenzte monotone Retry-Sperre, siehe 6.4.12
+    // In Release 1 immer leer; zeitbasierter Re-Arm ist deaktiviert.
     std::optional<std::uint64_t> retryNotBeforeMonotonicMillis;
 };
 
 struct SensorSelectionRuntimeState {
-    SensorSelectionPhase phase{SensorSelectionPhase::RestartRevalidationPending};
+    SensorSelectionPhase phase{SensorSelectionPhase::NoActiveRun};
     SensorPeltierPermission permission{SensorPeltierPermission::Blocked};
     std::optional<std::uint64_t> fallbackWaitStartedAtMonotonicMillis;
+    std::optional<std::uint64_t> lastAppliedMonotonicMillis;
     ReturnValidationRuntimeState returnValidation;
 };
 ```
 
-`RunCommandState` erhaelt `SensorSelectionRuntimeState sensorSelectionRuntime`.
-Der Default (`RestartRevalidationPending`/`Blocked`) gilt nur, solange kein
-Start- oder Restore-Pfad ihn explizit setzt - `decideProgramStart`/
-`decideManualStart` setzen ihn wie `activeRunSensorMode` explizit auf den
-tatsaechlichen Startwert (`NormalProduct`/`NormalAir`, `Allowed`).
-Bootlokale Timer (`fallbackWaitStartedAtMonotonicMillis`,
-`returnValidation.*`) sind **nicht** Teil von `PersistedSensorSelectionState`
-(6.12.1) und ausdruecklich ausserhalb des Wireformats - unveraendert seit
-Revision 3/4.
+Der explizite `NoActiveRun`-Wert ist der einzige Inaktivzustand:
+`permission == Blocked`, alle Timer-/Evidenz-/Retry-Felder sind leer,
+`activeRunSensorMode == nullopt` und `sensorSelection == nullopt`. Der
+Start- und Restore-Pfad setzt fuer einen aktiven Lauf alle Werte vollstaendig
+neu; er uebernimmt niemals Runtimezustand eines vorherigen Laufs.
 
-**Genau eine kanonische Anwendungsfunktion**, verwendet von *beiden* Wegen:
+Die Apply-Funktion arbeitet nur auf einem schmalen Sensorselektionssichtwert,
+nicht auf dem Gesamtaggregat:
 
 ```cpp
-struct SensorSelectionApplyResult {
-    RunCommandState state;   // Kandidat mit aktualisiertem Runtime- und
-                              // ggf. persistiertem Zustand
-    bool persistWorthy;      // true genau dann, wenn 6.4.9 (a)-(d) erfuellt
-    // Event-/Notice-Nutzlast gemaess 6.11
+struct SensorSelectionStateView {
+    std::string activeRunId;
+    SensorSelectionRuntimeState runtime;
+    std::optional<RunSensorMode> activeMode;
+    std::optional<PersistedSensorSelectionState> persisted;
+    std::uint32_t runRevision{0U};
 };
 
-[[nodiscard]] SensorSelectionApplyResult applySensorSelectionDecision(
-    const RunCommandState& current, const SensorSelectionDecision& decision);
+enum class SensorSelectionApplyStatus : std::uint8_t {
+    AppliedPersistentCandidate,
+    AppliedRamOnly,
+    NoChange,
+    StaleDecision,
+    InvalidDecision,
+    TimeWentBackwards,
+    CapacityReached,
+    InvalidContext,
+};
+
+struct SensorSelectionStateMutation {
+    SensorSelectionApplyStatus status{
+        SensorSelectionApplyStatus::InvalidDecision};
+    SensorSelectionRuntimeState runtime;
+    std::optional<RunSensorMode> activeMode;
+    std::optional<PersistedSensorSelectionState> persisted;
+    std::uint32_t resultingRunRevision{0U};
+    std::optional<SensorSelectionEvent> event;
+    std::optional<SensorSelectionNotice> notice;
+    bool persistWorthy{false};
+};
+
+[[nodiscard]] SensorSelectionStateMutation applySensorSelectionDecision(
+    const SensorSelectionStateView& current,
+    const SensorSelectionDecision& decision,
+    std::uint64_t nowMonotonicMillis);
 ```
 
-```text
-Weg 1 - automatische periodische Bewertung:
-  applySensorSelectionDecision(current, decision)
-  -> persistWorthy == true:  Kandidat via persistSensorSelection committen
-     (6.14.2), danach current = committed state
-  -> persistWorthy == false: current = result.state direkt (RAM-only,
-     keine Laufrevision, kein Flashwrite, keine Aktorfreigabeaenderung)
+`SensorSelectionDecision` traegt eine vollstaendige erwartete
+`SensorSelectionStateView` (Lauf-ID, Runtime einschliesslich Phase, Permission
+und Provenienz, aktiven Modus, persistierten Selektionswert und
+Laufrevision).
+Vor jeder Mutation vergleicht die Funktion diese Before-Werte, prueft die
+Cross-Field-Invarianten und validiert die monotone Zeit. Ein veralteter
+`expectedRunRevision`, eine abweichende Before-Phase, geaenderte
+Provenienz/Selektionswerte, eine ungueltige Runtimekombination,
+`nowMonotonicMillis < lastAppliedMonotonicMillis` oder eine ueberlaufende
+Revision liefert den typisierten Status und laesst alle Werte unveraendert.
 
-Weg 2 - manuelle Aktion (decideApplySensorSelectionAction, 6.14.3):
-  ruft applySensorSelectionDecision(current, decision) auf DERSELBEN
-  Kandidatenkopie auf, um CommandDecision::after zu bilden
-  -> Kommando durchlaeuft persistCommand wie jedes andere Kommando; bei
-     persistWorthy == false liefert die decide-Funktion
-     CommandStatus::NoChange und persistCommand wird von der aufrufenden
-     Schicht gar nicht erst aufgerufen (bestehendes Muster, siehe 3)
-```
+`AppliedPersistentCandidate` ist nur fuer eine Mutation mit den Bedingungen
+aus 6.4.9 (a)-(d) zulaessig und erhoeht `resultingRunRevision` checked.
+`AppliedRamOnly` ist nur fuer eine gueltige fluechtige Unterphasenmutation
+ohne Laufrevision und ohne Flashwrite zulaessig; `NoChange` erzeugt keine
+Mutation. Bei den ablehnenden Statuswerten wird der Rueckgabewert nie blind
+uebernommen.
 
-Direkte produktive Nebenpfade, die `sensorSelectionRuntime` ausserhalb
-dieser Funktion veraendern, sind unzulaessig - dieselbe Ein-Implementierung
-verhindert, dass Automat-Regeln an zwei Stellen auseinanderlaufen (loest
-den in Blocking 2 des Reviews benannten Zwei-Schreiber-Zustand).
+Der automatische Aufrufer bildet eine `SensorSelectionStateView` aus
+`current`, ruft die Funktion auf und uebernimmt bei Erfolg nur die benannten
+Mutationsfelder ueber einen mechanischen, gemeinsamen Mutationshelfer. Er
+setzt nie `current = result.state` und uebernimmt keinen alten
+Gesamtaggregatsnapshot. Der manuelle Kommandoaufbau verwendet dieselbe
+Funktion, traegt die Mutation in `CommandDecision::after` ein und wird durch
+die erweiterte `applyRunCommand`-Stale-Pruefung abgesichert. Die einzige
+fachliche Entscheidungsimplementierung bleibt damit gemeinsam.
 
-#### 6.4.12 Re-Arm-Regel fuer die automatische Rueckkehrvalidierung (Review-Befund 4)
+#### 6.4.12 Re-Arm-Regel fuer die automatische Rueckkehrvalidierung (Revision 6)
 
-**Neuer Abschnitt.** Verschleisssicherer, terminierender Ablauf fuer
-`ReturnValidationPending`:
+Verschleisssicherer, terminierender Ablauf fuer `ReturnValidationPending`.
+Der zeitbasierte automatische Re-Arm ist in Release 1 vor der
+Commissioning-Entscheidung deaktiviert:
 
 ```text
 Eintritt (Produkt wird waehrend AirFallbackActive valide, ReturnStrategy =
@@ -376,49 +494,68 @@ Waehrend ReturnValidationPending, pro Bewertungszyklus:
     -> genau EIN ReturnValidationAborted (6.4.9), Uebergang nach
        AirFallbackActive (oder SafeLocked bei gleichzeitigem Air-/
        Cooling-Ausfall, Vorrangregel 6.4.9)
-    -> returnValidation.retryNotBeforeMonotonicMillis = jetzt +
-       kReturnValidationRetryIntervalMillis (firmwarefeste, begrenzte
-       Sperre; realer Wert TBD_COMMISSIONING, Obergrenze firmwarefest)
+    -> keine zeitbasierte Retry-Sperre in Release 1; der aktive Luftmodus
+       und seine Permission bleiben erhalten, sofern Air/Cooling gueltig
+       sind
   Evidenz Compatible UND alle uebrigen 6.7/6.10-Kriterien erfuellt:
     -> genau EIN AutomaticValidatedReturn (6.4.9), Uebergang nach
        NormalProduct
 
 Re-Arm - ein NEUER Eintritt in ReturnValidationPending nach einem Abbruch
-ist erst zulaessig, wenn MINDESTENS eine Bedingung gilt:
+ist in Release 1 nur zulaessig, wenn MINDESTENS eine Bedingung gilt:
   (i)   thermalCompatibility.profileRevision hat sich gegenueber
         returnValidation.lastObservedProfileRevision geaendert;
-  (ii)  returnValidation.retryNotBeforeMonotonicMillis ist erreicht oder
-        nicht gesetzt;
-  (iii) eine explizite RecheckProduct-Benutzeraktion (6.14.3) hat die
-        Sperre im selben Kommandodurchlauf aufgehoben (siehe unten);
-  (iv)  das Produkt war zwischenzeitlich erneut ungueltig (Ruecksprung
-        AirFallbackActive -> ProductFailureDetected oder direkt erneuter
-        Ausfall) und ist danach erneut valide geworden - dieser Fall
-        gilt als neue, unabhaengige Gelegenheit und hebt die Sperre sofort
-        auf, ohne auf (i)/(ii) zu warten.
+  (ii)  eine explizite RecheckProduct-Benutzeraktion (6.14.3) loest eine
+        neue Pruefung im selben Kommandodurchlauf aus;
+  (iii) das Produkt war waehrend des Luftbetriebs zwischenzeitlich erneut
+        ungueltig und ist danach erneut valide geworden - ohne einen
+        Ruecksprung nach `ProductFailureDetected`; dieser Fall gilt als
+        neue, unabhaengige Gelegenheit und hebt die Sperre sofort auf.
 
 Ohne erfuellte Re-Arm-Bedingung bleibt der Zustand nach einem Abbruch in
 AirFallbackActive, auch wenn Produkt weiterhin valide ist - kein
-sofortiger erneuter Eintritt.
+sofortiger erneuter Eintritt. Ein ungueltiger optionaler Produktfuehler
+waehrend `AirFallbackActive` ist nur ein beobachtetes
+Produkt-Recovery-Ereignis; er setzt weder `ProductFailureDetected` noch
+den aktiven Luftmodus oder dessen Permission zurueck. `ProductFailureDetected`
+wird ausschliesslich betreten, wenn Product tatsaechlich der aktive Modus ist.
+`ReturnValidationPending` wird bei erneut ungueltigem Produkt genau einmal
+nach `AirFallbackActive` abgebrochen.
+
+Eine spaetere neue gueltige Produkt-Wiedererkennung ist eine neue Evidenz-
+generation und darf den Re-Arm ausloesen. Die Tests pruefen dabei explizit,
+dass Air-Regelung und Permission erhalten bleiben, solange Air/Cooling
+weiterhin gueltig sind.
 ```
 
-`kReturnValidationRetryIntervalMillis` ist ein neuer firmwarefester
-Grenzwert in `sensor_selection_limits.hpp`, analog zu bestehenden
-firmwarefesten Obergrenzen (z. B. `kMaximumFallbackDelaySeconds`); der
-reale operative Wert bleibt `TBD_COMMISSIONING`, die Obergrenze selbst ist
-kein TBD.
+Es gibt in Release 1 keinen produktiven
+`kReturnValidationRetryIntervalMillis` und keinen operativen
+`TBD_COMMISSIONING`-Wert. Eine spaetere Aktivierung des zeitbasierten Re-Arms
+benoetigt einen eigenen, erneut freizugebenden Plan mit einem konkreten,
+begruendeten Factory-Wert sowie firmwarefesten positiven Mindest- und
+Hoechstgrenzen. Ein deaktivierter oder nicht freigegebener Wert ist
+`NotEligible`/`InvalidContext`, erzeugt keinen Retry und keinen Write.
 
-**`RecheckProduct` und die Sperre - Reihenfolge (Review-Blocking 3):** die
-`RecheckProduct`-Kommandoverarbeitung (6.14.3) hebt
-`retryNotBeforeMonotonicMillis` als Teil ihres eigenen Kandidaten-Apply-
-Schritts auf, **bevor** dieselbe Kandidatenkopie erneut bewertet wird - die
-durch `RecheckProduct` ausgeloeste Bewertung sieht also bereits die
-aufgehobene Sperre innerhalb derselben Entscheidung, nicht erst im
-naechsten Zyklus. `RecheckProduct` ist gueltig aus `{ProductFailureDetected,
-UserDecisionRequired, AirFallbackActive}` - die ersten beiden fuer eine
-sofortige Neubewertung des Produktfuehlers, der dritte spezifisch fuer die
-Re-Arm-Aufhebung bei `AirFallbackActive`. Aus jedem anderen Zustand liefert
-`RecheckProduct` `CommandStatus::NotAllowedInState`.
+**`RecheckProduct` und die Reihenfolge:** die Aktion ist gueltig aus
+`{ProductFailureDetected, UserDecisionRequired, AirFallbackActive}` - die
+ersten beiden fuer eine sofortige Neubewertung des Produktfuehlers, der
+dritte fuer eine neue Rueckkehrchance im Luftbetrieb. Die neue Bewertung
+erfolgt innerhalb derselben Kandidatenentscheidung. Aus jedem anderen
+Zustand liefert `RecheckProduct` `CommandStatus::NotAllowedInState`.
+
+Checked-Zeitvertrag fuer alle Zeitberechnungen:
+
+```text
+checkedMillisFromSeconds(fallbackDelaySeconds)
+checkedAdd(nowMonotonicMillis, durationMillis)
+```
+
+Eine Multiplikations- oder Additionsueberlaufpruefung, ebenso wie
+`nowMonotonicMillis < runtime.lastAppliedMonotonicMillis`, liefert
+`InvalidContext` beziehungsweise `TimeWentBackwards`, veraendert keinen
+Zustand und erzeugt keinen sofortigen Retry. Dieselben Regeln gelten fuer
+die Fallback-Wartezeitberechnung und fuer jeden spaeter freigegebenen
+Retry-Timer.
 
 #### 6.4.13 `ProductRequired` schliesst jeden Luftfallback strukturell aus
 
@@ -434,15 +571,22 @@ unabhaengig von Zustand und Policy abgelehnt (`CommandStatus::InvalidInput`).
 | FallbackToAirAfterTimeout | ja | `ProductFailureDetected` (vor Timeout) | keine | ja | bleibt `ProductFailureDetected`, Blocked |
 | FallbackToAirAfterTimeout | ja | `ProductFailureDetected` (vor Timeout) | `ContinueWithAir` | ja | -> `AirFallbackActive`, `ManualUserFallback` |
 | FallbackToAirAfterTimeout | ja | `ProductFailureDetected` (vor Timeout) | `ContinueWithAir` | nein | `CommandStatus::InvalidInput` |
+| FallbackToAirAfterTimeout | ja | beliebig | `ContinueWithAir` + `criticalSafetyEventPending` | egal | `SafetyRejected`, keine Mutation |
+| FallbackToAirAfterTimeout | ja | beliebig | `ReturnToProduct` + `criticalSafetyEventPending` | egal | `SafetyRejected`, keine Mutation |
+| FallbackToAirAfterTimeout | ja | beliebig | `RecheckProduct` + `criticalSafetyEventPending` | egal | reine Pruefung; kein Moduswechsel, keine `PermissionRestored`, kein Write |
 | FallbackToAirAfterTimeout | ja | `ProductFailureDetected` | Timeout erreicht | ja | -> `AirFallbackActive`, `FallbackToAir` |
 | FallbackToAirAfterTimeout | ja | `ProductFailureDetected` | Timeout erreicht | nein | -> `SafeLocked`, `SafeStateEntry` (Vorrang) |
 | FallbackToAirAfterTimeout | nein (`ProductRequired`) | - | - | - | durch 6.13 Regel 1 bereits validierungsseitig ausgeschlossen |
 | WaitForUser | ja | `ProductFailureDetected` | sofort (kein Timeout) | - | -> `UserDecisionRequired`, fluechtig |
 | WaitForUser | ja | `UserDecisionRequired` | `ContinueWithAir` | ja | -> `AirFallbackActive`, `ManualUserFallback` |
 | WaitForUser | ja | `UserDecisionRequired` | `ContinueWithAir` | nein | `CommandStatus::InvalidInput` |
+| WaitForUser | ja | beliebig | `ContinueWithAir` + `criticalSafetyEventPending` | egal | `SafetyRejected`, keine Mutation |
+| WaitForUser | ja | beliebig | `ReturnToProduct` + `criticalSafetyEventPending` | egal | `SafetyRejected`, keine Mutation |
+| WaitForUser | ja | beliebig | `RecheckProduct` + `criticalSafetyEventPending` | egal | reine Pruefung; kein Moduswechsel, keine `PermissionRestored`, kein Write |
 | WaitForUser | nein (`ProductRequired`) | `UserDecisionRequired` | `ContinueWithAir` | - | `CommandStatus::InvalidInput` (6.4.13) |
 | WaitForUser | egal | `ProductFailureDetected`/`UserDecisionRequired` | Produkt wieder gueltig | - | -> `NormalProduct`, `RecoveryRevalidation`, keine Benutzeraktion noetig |
 | WaitForUser | egal | `ProductFailureDetected`/`UserDecisionRequired` | `RecheckProduct`, weiterhin ungueltig | - | `CommandStatus::NoChange` |
+| WaitForUser | egal | `AirFallbackActive` | Produkt erneut ungueltig | Air/Cooling gueltig | bleibt `AirFallbackActive`, Air-Modus und Permission erhalten |
 | StopToSafeState | egal | `NormalProduct` | Produktausfall erkannt | egal | -> `SafeLocked`, genau eine `SafeStateEntry` (kein `ProductFailureBlock`-Vorlauf) |
 
 ### 6.5-6.9
@@ -485,7 +629,9 @@ Owner-Gate) bleibt unveraendert.
 
 **Erweiterung gegenueber Revision 4:** neue Ursachen fuer manuelle
 Aktionen, korrigierte Kardinalitaetsaussage, vollstaendiger Anschluss der
-Start-Notice, umbenannte Effekte.
+Start-Notice, umbenannte Effekte. Alle schmalen Event-/Notice-Werttypen
+liegen in `sensor_selection_types.hpp`; weder diese Typen noch
+`sensor_selection.hpp` benoetigen `RunCommandState`.
 
 ```cpp
 enum class SensorSelectionDecisionCause : std::uint8_t {
@@ -552,7 +698,7 @@ enum class SensorSelectionUserAction : std::uint8_t {
 struct SensorSelectionCommandRequest {
     CommandEnvelope envelope;
     SensorSelectionUserAction action;
-    bool safetyAllowsChange{false};  // analog zu RunAdjustmentCommandRequest
+    bool safetyAllowsChange{false};  // nur Zusatzsignal, kein Safety-Gate
 };
 ```
 
@@ -601,13 +747,53 @@ Zahl an den Lauf gebunden, nicht ueber `RunRevision`/`RunChangeReason`.
 
 ### 6.12 Persistierter Sensorselektionszustand und die #17/#18-Recoverygrenze
 
-Unveraendert seit Revision 4 (Provenienzmodell 6.12.1, Schema-Bump und
-Zwei-Slot-Migration 6.12.2, #17/#18-Abgrenzung/Variante B 6.12.3). **Neuer
-Querverweis:** `restoreRunPersistenceSnapshot` setzt
-`sensorSelectionRuntime` (6.4.11) beim Restore auf den Default
-(`RestartRevalidationPending`/`Blocked`) - dieselbe RAM-Default-
-Initialisierung, die bereits in Revision 3/4 fuer den Restart-Vertrag
-vorausgesetzt wurde, jetzt am konkret benannten Feld.
+Die bereits entschiedene Provenienz- und Zwei-Slot-Regel bleibt bestehen; die
+Typen liegen jetzt aber ausschliesslich in `sensor_selection_types.hpp`:
+
+```cpp
+enum class SensorSelectionProvenance : std::uint8_t {
+    InitialSelection,
+    FallbackActive,
+    ReturnedToProduct,
+    LegacyUnknown,
+};
+
+struct PersistedSensorSelectionState {
+    SensorSelectionProvenance provenance;
+    SensorSelectionDecisionCause lastDecisionCause;
+    std::uint32_t lastDecisionRunRevision;
+};
+```
+
+`RunCommandState` besitzt `std::optional<PersistedSensorSelectionState>
+sensorSelection`; der `RunPersistenceSnapshot` verwendet denselben optionalen
+Wert. `RunCommandState::activeRunSensorMode` bleibt die einzige kanonische
+Quelle des aktiven Modus; `PersistedSensorSelectionState` dupliziert keinen
+Modus. Ein aktiver Lauf ist nur gueltig, wenn `activeRunSensorMode`,
+`sensorSelectionRuntime` in einer aktiven Phase und `sensorSelection`
+konsistent vorhanden sind. Ein `NoActiveRun`-Snapshot enthaelt keinen dieser
+aktiven Sensorselektionswerte; das Validator-/Codec-Orakel prueft diese
+Schema-2-Invariante auch fuer den Tombstone.
+
+Bootlokale Timer (`fallbackWaitStartedAtMonotonicMillis`,
+`lastAppliedMonotonicMillis` und `returnValidation.*`) sind **nicht** Teil von
+`PersistedSensorSelectionState` und ausdruecklich ausserhalb des Wireformats.
+`restoreRunPersistenceSnapshot` setzt bei einem aktiven Restore die
+persistierte Auswahl, aber `sensorSelectionRuntime` fail-closed auf
+`RestartRevalidationPending`/`Blocked` und verwirft alle bootlokalen Timer.
+Bei `NoActiveRun` setzt es den expliziten `NoActiveRun`-Default.
+
+Die bestehenden Provenienz-Invarianten bleiben unveraendert: ein neuer
+Entscheid darf `LegacyUnknown` nicht erzeugen; die Legacy-Provenienz darf
+nach Schema-1-Decode weiterhin fuer unveraenderte Checkpoints codiert werden.
+`lastDecisionRunRevision <= runRevision`, `None` und Revision 0 treten genau
+gemeinsam auf, und `FallbackActive`/`ReturnedToProduct` sind nur mit dem
+jeweils passenden aktiven Modus gueltig. Start, Fallback, Rueckkehr und
+Schema-1-Migration setzen die bereits entschiedenen Provenienzwerte.
+
+Die bisherige #17/#18-Abgrenzung und Variante B bleiben unveraendert: #21
+liefert die Daten und die reine Entscheidungsfunktion, #18 aktiviert keinen
+Recoveryzustand vorweg durch diesen Plan.
 
 ### 6.13 Zentrale Cross-Field-Validierung
 
@@ -633,11 +819,27 @@ enum class CommandKind : std::uint8_t {
 `CommandKind` wird an mehreren Stellen erschoepfend geschaltet
 (`isRunComfortCommand`, siehe 3); der neue Wert erzwingt dort eine bewusste
 Entscheidung. `isRunComfortCommand(CommandKind::ApplySensorSelectionAction)
-= false`: eine Blockierung waehrend `criticalSafetyEventPending` wuerde
-einen Lauf ohne jeden Ausweg in `UserDecisionRequired` einfrieren, obwohl
-gerade diese Aktion der vorgesehene Weg aus dieser Lage ist - dieselbe
-Begruendung, aus der `ResetFault`/`AcknowledgeMessage`/`MuteMessage` bereits
-`false` sind.
+= false` bleibt als Klassifikation bestehen, damit der bestehende generische
+Command-Dispatcher die Aktion nicht pauschal vor der aktionsspezifischen
+Pruefung verwirft. Das ist **kein** Safety-Bypass: `decideApplySensorSelectionAction`
+prueft intern den autoritativen
+`decision.before.criticalSafetyEventPending`-Zustand.
+
+Aktionsspezifische Matrix bei `criticalSafetyEventPending`:
+
+```text
+ContinueWithAir -> SafetyRejected, keine Mutation und kein Write
+ReturnToProduct -> SafetyRejected, keine Mutation und kein Write
+RecheckProduct -> reine Pruefung darf laufen; keine PermissionRestored-,
+                  Permission- oder Modusmutation und kein Write, solange
+                  das kritische Safety-Ereignis aktiv ist
+```
+
+`request.safetyAllowsChange` ist nur ein zusaetzliches, von aussen geliefertes
+Pruefsignal und ersetzt die interne Invariante nicht. Ein Ausweg aus
+`UserDecisionRequired` entsteht bei offenem kritischem Safety-Ereignis nicht
+durch eine Komfortaktion, sondern erst ueber den vorgesehenen Fault-/Reset-
+Pfad oder einen eindeutig sicheren Abbruch.
 
 `isPersistedRunCommand(CommandKind::ApplySensorSelectionAction) = true`
 (analog zu allen anderen laufwirksamen Kommandos).
@@ -674,8 +876,16 @@ mit korrigiertem Geltungsbereich: transportiert genau die **sechs**
 automatischen Ursachen (`ProductFailureBlock`, `FallbackToAir`,
 `AutomaticValidatedReturn`, `RecoveryRevalidation`, `SafeStateEntry`,
 `ReturnValidationAborted`), nicht die beiden manuellen
-(`ManualUserFallback`, `ManualUserReturn`). Nur aus `Ready`/`ReadyEmpty`
-aufrufbar.
+(`ManualUserFallback`, `ManualUserReturn`). Der automatische laufrelevante
+Pfad ist **nur** aus `RunPersistenceCoordinatorState::Ready` und nur fuer
+einen aktiven Programm- oder manuellen Lauf aufrufbar. Vor dem Aufruf muessen
+`activeRunId`, `activeRunSensorMode`, `sensorSelectionRuntime` in einer
+aktiven Phase und `sensorSelection` konsistent vorhanden sein. Aus
+`ReadyEmpty` liefert `persistSensorSelection` stabil
+`RunPersistenceResultStatus::NoActiveRun` (alternativ der gleichwertig
+typisierte `NotEligible`-Status des Fachvertrags), schreibt nichts und hat
+keine RAM-Wirkung. Die bestehenden `ReadyEmpty`-Startwege bleiben
+`persistCommand` vorbehalten.
 
 **Neu: `decideApplySensorSelectionAction`** (Review-Befund 2, empfohlene
 Loesung):
@@ -701,6 +911,13 @@ decide command
 -> RAM apply ueber applyRunCommand (6.14.2, mit den neuen Vergleichsfeldern)
 -> Event/Notice/Permission-Effekt erst nach Commit (unveraendertes Muster)
 ```
+
+Bei `criticalSafetyEventPending` wird diese Ablaufbeschreibung
+aktionsspezifisch eingeschraenkt: `ContinueWithAir` und `ReturnToProduct`
+enden vor einer Mutation mit `SafetyRejected`; `RecheckProduct` darf nur die
+Pruefung ausfuehren und verwirft jede daraus entstehende Modus- oder
+Permissionmutation. Der externe Boolean `safetyAllowsChange` darf diese
+Regel nicht ueberschreiben.
 
 Damit landet die `CommandId` regulaer im bestehenden, begrenzten
 persistierten Kommando-ID-Fenster (`persistedRunCommandIds`), ein
@@ -735,29 +952,90 @@ Notice.
 
 #### 6.14.5 Datei- und Testschnitt
 
-- `run_persistence_contract.hpp/.cpp`, `run_commands.hpp`,
+- `sensor_selection_types.hpp` (neu), `run_persistence_contract.hpp/.cpp`,
+  `run_commands.hpp`,
   `run_persistence_codec.hpp/.cpp`, `run_persistence_coordinator.hpp/.cpp`:
   unveraendert seit Revision 4 benannte Dateien, jetzt zusaetzlich mit den
   umbenannten `CommandEffect`-Werten und den neuen
-  `RunPersistenceResult`-Feldern.
+`RunPersistenceResult`-Feldern.
 - **neu:** `run_commands.hpp/.cpp`: `CommandKind::ApplySensorSelectionAction`,
   `SensorSelectionUserAction`, `SensorSelectionCommandRequest`,
   `decideApplySensorSelectionAction`, `SensorSelectionRuntimeState`,
   `RunCommandState::sensorSelectionRuntime`, `applyRunCommand`-Erweiterung
   (isoliert ueberpruefbar, siehe 8).
 - `sensor_selection.hpp/.cpp`: `applySensorSelectionDecision` als die eine
-  kanonische Anwendungsfunktion (6.4.11), `computeRestartSensorSelection`
-  (6.12.3) unveraendert.
+  kanonische Entscheidungs-/Mutationsfunktion (6.4.11),
+  `computeRestartSensorSelection` (6.12.3) unveraendert; kein
+  `RunCommandState`-Include.
 - direkt betroffene Tests: `test/test_run_commands/`,
   `test/test_run_persistence_coordinator/`, `test/test_run_checkpoint_codec/`,
   `test/test_sensor_selection/`.
 
+#### 6.14.6 Gemeinsamer Clear-/Start-Lebenszyklus (Revision 6)
+
+Die beiden bestehenden Pfade `run_commands.cpp::clearActiveRun` und
+`run_persistence_coordinator.cpp::clearCandidateRun` werden zu einem
+gemeinsamen, oeffentlich erklaerten fachlichen Helfer zusammengefuehrt, zum
+Beispiel `clearActiveRunState(RunCommandState&)`, der genau einmal
+implementiert wird und von beiden Schichten verwendet wird. Er entfernt
+vollstaendig:
+
+```text
+activeProgramRun, activeManualRun, processRunSnapshot, activeRunId,
+activeRunSensorMode, sensorSelection
+```
+
+und setzt `sensorSelectionRuntime` atomar auf den definierten
+`NoActiveRun`-/`Blocked`-Default zurueck. Dabei werden
+`fallbackWaitStartedAtMonotonicMillis`, `lastAppliedMonotonicMillis`,
+`returnValidation.enteredAtMonotonicMillis`,
+`returnValidation.lastObservedProfileRevision` und
+`returnValidation.retryNotBeforeMonotonicMillis` geleert. Ein
+`NoActiveRun`-Snapshot darf danach keinen aktiven Sensorselektionswert
+enthalten.
+
+Die Deklaration liegt bei `RunCommandState` in `run_commands.hpp`, die einzige
+Definition in `run_commands.cpp`; der Coordinator verwendet sie ueber seine
+bestehende `run_commands`-Abhaengigkeit. `clearCandidateRun` bleibt nicht als
+zweite Implementierung bestehen.
+
+Der Helfer wird in allen bestehenden und neuen terminalen Pfaden verwendet:
+`AbortAndTurnOff`, `AbortAndCool`, `AcknowledgeCompletion` beziehungsweise
+regulaerer Abschluss, jeder Tombstone-Pfad sowie
+`TransitionReason::ProductWaitExpired`; Candidate und aktueller RAM-Zustand
+werden mit denselben Invarianten bereinigt. Der Test fuer einen neuen Start
+unmittelbar nach einem beendeten Lauf belegt, dass kein Modus, keine
+Provenienz, keine Phase und kein Timer des vorherigen Laufs uebernommen wird.
+Startpfade setzen `activeRunSensorMode`, `sensorSelectionRuntime` und
+`sensorSelection` immer als vollstaendige neue Gruppe.
+
 ## 7. Modul- und Abhaengigkeitsgrenzen
 
-Unveraendert seit Revision 3/4. `applySensorSelectionDecision` lebt im
-`sensor_selection`-Kern und wird von `run_commands.cpp`
-(`decideApplySensorSelectionAction`) sowie vom automatischen
-Bewertungsaufrufer aufgerufen - keine neue Abhaengigkeitsrichtung.
+Die Architekturpruefung folgt ADR-013 und erzwingt diese gerichtete
+Abhaengigkeit:
+
+```text
+device_platform
+  <- fermentation_app Werttypen/Fachlogik
+
+sensor_selection_types.hpp
+  <- run_commands.hpp
+  <- sensor_selection.hpp
+  <- run_persistence_contract.hpp indirekt ueber run_commands.hpp
+
+sensor_selection.hpp/.cpp
+  <- run_commands.cpp und der automatische Coordinator-Aufrufer
+
+run_commands.hpp <-> sensor_selection.hpp       NICHT zulaessig
+sensor_selection.hpp <-> run_persistence_contract.hpp  NICHT zulaessig
+```
+
+`device_platform` bleibt frei von Fermentationsbegriffen. `run_commands.hpp`
+enthaelt den Aggregatfeldbesitz, `sensor_selection.hpp` nur Fachentscheidung
+und schmale Mutations-/Werttypen, `run_persistence_contract.hpp` nur den
+Persistenzvertrag. Es gibt keine Parallelfunktion und keine verdeckte zweite
+Apply-Implementierung; mechanisches Feldanwenden nach dem kanonischen
+Ergebnis ist kein zweiter Fachautomat.
 
 ## 8. Voraussichtlicher Datei- und Commit-Schnitt
 
@@ -772,22 +1050,26 @@ Unveraendert seit Revision 3/4.
 
 ### Commit 2 - Auswahlkern (6.1, 6.3, 6.4, 6.7, 6.10)
 
-- `sensor_selection.hpp/.cpp`: Werttypen, `SensorSelectionRuntimeState`-
-  Definition (Typ; die tatsaechliche RAM-Feldhaltung liegt in
-  `RunCommandState`, siehe Commit 4), `applySensorSelectionDecision` als
-  reine Funktion, vollstaendiger Zustandsautomat inklusive 6.4.9-6.4.14,
+- `sensor_selection_types.hpp`: ausschliessliche Definition der gemeinsamen
+  Sensorselektions-Werttypen, einschliesslich `RunSensorMode`,
+  `PersistedSensorSelectionState` und `SensorSelectionRuntimeState`;
+- `sensor_selection.hpp/.cpp`: Fachentscheidung und
+  `applySensorSelectionDecision` als schmale Mutation, vollstaendiger
+  Zustandsautomat inklusive 6.4.9-6.4.14,
   Re-Arm-Regel (6.4.12), `ThermalCompatibility`-Invarianten (6.10),
   `computeRestartSensorSelection`;
 - `test/test_sensor_selection/test_sensor_selection.cpp`.
 
 ### Commit 3 - Persistenzmechanik: Schema, Migration, automatischer Sensorpfad (6.12, 6.14.1-6.14.2 Codec-Teil, 6.14.4)
 
-Unveraendert seit Revision 4 im Kern (`PersistedSensorSelectionState`,
-Schema-Bump, `persistSensorSelection`, `RunCheckpointTrigger`/
+Unveraendert seit Revision 4 im Kern (Schema-Bump, `persistSensorSelection`,
+`RunCheckpointTrigger`/
 `RunPersistenceMutationKind::SensorSelection`), jetzt mit korrigiertem
 Geltungsbereich (sechs statt acht Ursachen) und den umbenannten
 `CommandEffect`-Werten sowie den neuen `RunPersistenceResult`-Feldern.
-Weiterhin **kein** `LoadedActiveRun`-Mutationspfad.
+Weiterhin **kein** `LoadedActiveRun`-Mutationspfad. Die Snapshot-/Validator-
+Invarianten fuer `sensorSelection` und den `NoActiveRun`-Tombstone werden in
+diesem Schnitt mit abgedeckt.
 
 ### Commit 4 - Kommandovertrag fuer manuelle Sensorentscheidungen (6.4.11, 6.14.2 `applyRunCommand`-Teil, 6.14.3)
 
@@ -798,7 +1080,8 @@ Weiterhin **kein** `LoadedActiveRun`-Mutationspfad.
   `decideApplySensorSelectionAction`, `isRunComfortCommand`/
   `isPersistedRunCommand`-Erweiterung, **`applyRunCommand`-Staleness-Fix**
   (eigener, kompakter Diff mit eigenem Test gegen jeden bestehenden
-  Kommandopfad, nicht nur den neuen);
+  Kommandopfad, nicht nur den neuen) sowie der gemeinsame
+  `clearActiveRunState`-Aufruf;
 - `test/test_run_commands/test_run_commands.cpp`.
 
 ### Commit 5 - Startvertragsanschluss (6.5, 6.8, 6.9, 6.11 Start-Notice)
@@ -812,6 +1095,9 @@ Weiterhin **kein** `LoadedActiveRun`-Mutationspfad.
 
 Unveraendert seit Revision 3/4, ergaenzt um die explizite #18-Handover-Notiz
 (siehe 9.3) in `docs/RUN_PERSISTENCE.md`/`docs/RECOVERY_AND_INTERRUPTION.md`.
+Zusaetzlich wird ein Compile-/Architektur-Guard fuer die Include-Richtung und
+die Schema-/Runtime-Invarianten (9.7) ergaenzt. Dieser Guard darf keine
+Produktionsabhaengigkeit aus `device_platform_test_support` erzeugen.
 
 ## 9. Teststrategie und Testmatrix
 
@@ -846,6 +1132,17 @@ Unveraendert seit Revision 4, ergaenzt um:
   auf, bevor die ausgeloeste Neubewertung erfolgt (Reihenfolge-Testfall);
 - `RecheckProduct` aus einem nicht zulaessigen Zustand liefert
   `CommandStatus::NotAllowedInState`;
+- **typisierte Apply-Status-/Stale-Tests:** eine vorab erzeugte Entscheidung
+  wird nach Aenderung von Runtimephase, Provenienz, aktivem Selektionswert
+  oder Laufrevision mit `StaleDecision` abgelehnt; der aktuelle Zustand bleibt
+  byteweise unveraendert. Gleiches gilt fuer `InvalidDecision`,
+  `InvalidContext`, `TimeWentBackwards` und `CapacityReached`;
+- RAM-only-Unterphasenwechsel liefert `AppliedRamOnly`, veraendert keine
+  Laufrevision und schreibt nicht; eine persistenzwuerdige Entscheidung
+  liefert `AppliedPersistentCandidate`. `NoChange` erzeugt keine Mutation;
+- monotone Zeit rueckwaerts sowie checked-Addition/Millisekundenueberlauf
+  fuer Fallback- und Retry-Berechnung werden jeweils fail-closed ohne
+  Zustandsaenderung und ohne sofortigen Retry belegt;
 - `ThermalCompatibilityEvidence`-Invarianten (6.10): `profileRevision == 0`
   bei `Compatible`/`Incompatible`/`Stale` -> `InvalidContext`;
   `evaluatedAtMonotonicMillis` in der Zukunft -> `InvalidContext`; #21
@@ -889,6 +1186,16 @@ Diese Uebergabe wird zusaetzlich zu diesem Plan als benannter Abschnitt in
 dokumentiert (Commit 6), damit sie bei der #18-Planung nicht erneut
 recherchiert werden muss.
 
+Zusaetzliche laufbezogene Pflichttests pruefen den aktiven-only-Vertrag:
+
+```text
+persistSensorSelection aus ReadyEmpty -> NoActiveRun/NotEligible,
+  kein Store-Write und keine RAM-Aenderung
+Ready ohne activeRunId, activeRunSensorMode, sensorSelectionRuntime oder
+  sensorSelection -> InvalidDecision/NotEligible, kein Write
+NoActiveRun-Schema-2-Tombstone enthaelt keinen aktiven Sensorselektionswert
+```
+
 ### 9.4 Kommandovertrag fuer manuelle Sensorentscheidungen (Commit 4)
 
 **Neuer Abschnitt.**
@@ -911,6 +1218,19 @@ recherchiert werden muss.
   `CommandEffect::SensorSelectionPermissionBlocked`/`-Restored` korrekt
   gesetzt, keine Verwechslung mit einer direkten Aktorfreigabe (Testname
   spiegelt das wider).
+- **vollstaendige Safety-Pending-Matrix:** `criticalSafetyEventPending` mit
+  `ContinueWithAir` und `ReturnToProduct` liefert jeweils
+  `SafetyRejected`; `RecheckProduct` darf pruefen, aber weder Modus noch
+  Permission restaurieren und nichts persistieren. Der Test setzt den
+  externen `safetyAllowsChange`-Wert sowohl `true` als auch `false`, um zu
+  belegen, dass er die interne Safety-Invariante nicht ersetzt;
+- **Clear-/Tombstone-/Start-Regressionen:** `AbortAndTurnOff`,
+  `AbortAndCool`, `AcknowledgeCompletion`/regulaerer Abschluss,
+  `ProductWaitExpired` und `NoActiveRun`-Tombstone pruefen alle neuen
+  Felder (`sensorSelectionRuntime`, `sensorSelection`,
+  `activeRunSensorMode`) sowie Timer, Provenienz und Schema-2-Projektion;
+  ein neuer Start unmittelbar danach beginnt mit einer vollstaendigen neuen
+  Sensorselektion.
 
 ### 9.5 Startvertragsanschluss (Commit 5)
 
@@ -935,6 +1255,29 @@ python scripts/check_secrets.py
 git diff --check
 ```
 
+### 9.7 Architektur-, Compile- und Invariant-Guards (Commit 6)
+
+Der Implementierer ergaenzt einen gezielten Guard, der ohne Produktionslogik
+folgendes nachweist:
+
+```text
+sensor_selection_types.hpp, sensor_selection.hpp, run_commands.hpp und
+run_persistence_contract.hpp lassen sich in isolierten Include-TUs in jeder
+vorgesehenen Reihenfolge kompilieren; kein gegenseitiger Include-Zyklus
+device_platform enthaelt keinen Fermentationsbegriff
+genau eine kanonische applySensorSelectionDecision-Deklaration/Definition;
+keine Parallelfunktion und kein vollstaendiger RunCommandState-Rueckgabewert
+aktiver Lauf => Runtime, activeRunSensorMode und sensorSelection vorhanden
+NoActiveRun => alle drei aktiven Sensorwerte fehlen bzw. sind Inaktiv-Default
+persistSensorSelection aus ReadyEmpty schreibt nichts und aendert kein RAM
+Safety-Pending-Matrix deckt alle drei Aktionen ab
+Clear-/Startpfade und Retry-/Zeitfehlerfaelle sind abgedeckt
+```
+
+Dazu werden der bestehende Architektur-Checker, Compile-only-Header-TUs und
+die nativen Fachtests verwendet; es wird kein `#include` aus
+`device_platform_test_support` in Produktionsheader eingebracht.
+
 ## 10. Safety-, Security-, Recovery- und Hardwaregrenzen
 
 Unveraendert seit Revision 4, ergaenzt um:
@@ -943,24 +1286,35 @@ Unveraendert seit Revision 4, ergaenzt um:
   Zustand (`SafeLocked`) nie durch eine gleichzeitig moegliche schwaechere
   Klassifikation verdraengt wird;
 - die Re-Arm-Sperre (6.4.12) verhindert eine unbegrenzte automatische
-  Wiederholung derselben abgelehnten Rueckkehr und begrenzt damit auch die
-  Flash-Schreibfrequenz;
+  Wiederholung derselben abgelehnten Rueckkehr; in Release 1 ist der
+  zeitbasierte Re-Arm deaktiviert, sodass kein unfreigegebener
+  Commissioning-Wert eine Flash-Schreibschleife erzeugen kann;
 - `SensorSelectionPermissionRestored` ist ausdruecklich **keine**
   Aktorfreigabe - nachgelagerte Safety-/Regel-/Aktorlogik (#23/#24) prueft
   weiterhin alle uebrigen Bedingungen, bevor ein Aktor schaltet;
 - die `applyRunCommand`-Erweiterung (6.14.2) verhindert, dass eine
   zwischenzeitlich eingetretene Sicherheitssperre durch eine veraltete
   manuelle Kommandoentscheidung stillschweigend rueckgaengig gemacht wird.
+- `ContinueWithAir` und `ReturnToProduct` sind bei
+  `criticalSafetyEventPending` immer `SafetyRejected`; `RecheckProduct` ist
+  nur eine Pruefung ohne Modus-/Permissionwirkung. Der externe
+  `safetyAllowsChange`-Boolean ist kein Ersatz fuer diese interne Invariante.
+- Jede Ablehnung des typisierten Apply-Status ist fail-closed: keine
+  Teilmutation, kein alter Aggregatsnapshot und kein Write.
+- Alle aktiven Sensorselektionsfelder werden bei Abbruch, Abschluss,
+  `ProductWaitExpired` und Tombstone entfernt; ein neuer Lauf setzt sie
+  vollstaendig neu.
 
 ## 11. Ressourcen- und Betriebsbudget
 
 Unveraendert seit Revision 4, ergaenzt um:
 
 - `SensorSelectionRuntimeState` ist RAM-only und konstant gross (ein Phase-
-  Enum, ein Permission-Enum, zwei `optional<uint64_t>`, ein `optional<uint32_t>`)
+  Enum, ein Permission-Enum, vier `optional<uint64_t>` und ein
+  `optional<uint32_t>`)
   - keine Wireformat-Wirkung, keine Aenderung am 8-KB-Checkpoint-Budget;
-  - `kReturnValidationRetryIntervalMillis` ist ein einzelner firmwarefester
-  Grenzwert, keine neue Datenstruktur.
+  - ein zeitbasierter automatischer Retry ist in Release 1 deaktiviert;
+    `TBD_COMMISSIONING` wird nicht als Laufzeitwert eingebaut.
 
 ## 12. SOLID-, DRY- und KISS-Bewertung des geplanten Diffs
 
@@ -971,13 +1325,18 @@ Unveraendert seit Revision 4, ergaenzt um:
   `decideApplySensorSelectionAction` sind duenne Transport-/
   Persistenzwrapper darum (Korrektur ggue. Revision 4, die implizit zwei
   Schreiber zuliess).
+- **Dependency inversion:** die Fachfunktion kennt weder `RunCommandState`
+  noch den Persistenzkoordinator; beide Aufrufschichten adaptieren die
+  schmale Mutation. Der Werttyp-Header verhindert den Include-Zyklus.
 - **DRY:** die Vorrangregel (6.4.9) ersetzt mehrere Einzelfall-
   Entscheidungen (`StopToSafeState`, gleichzeitiger Air-/Cooling-Ausfall)
   durch eine einzige Regel; `RecoveryRevalidation`/`SafeStateEntry` teilen
   sich dieselbe Anwendungsfunktion unabhaengig vom Ausloeser.
 - **KISS:** die Re-Arm-Regel nutzt ausschliesslich bereits vorhandene
-  Bausteine (Evidenzgeneration, monotone Zeit, bestehendes
-  Kommandovokabular) statt einer neuen Zustandsmaschine fuer sich genommen.
+  Bausteine (Evidenzgeneration und bestehendes Kommandovokabular); die
+  zeitbasierte Variante bleibt bis zu einem konkreten Commissioning-Wert
+  deaktiviert. Checked-Zeitberechnung ist ein gemeinsamer Guard fuer
+  Fallback und spaetere Retry-Aktivierung.
 
 ## 13. Offene Ownerentscheidungen und Gates
 
@@ -997,12 +1356,19 @@ Zeitverhalten) und P21-M2 (Laufzeitzustand/Persistenzweg):
   (6.4.12);
 - Stale-Eigentuemerschaft beim Produzenten, keine #21-eigene
   Altersarithmetik (6.10).
+- Include-Schichtung und schmale Mutation gemaess 6.4.11/7;
+- typisierte Apply-Statuswerte mit unveraenderlicher Ablehnung;
+- Clear-/Start-/Tombstone-Invarianten und Safety-Pending-Matrix;
+- Release-1-Deaktivierung des zeitbasierten Re-Arms sowie checked
+  monotone Zeitberechnung.
 
 ## 14. Dokumentations- und Abschlussnachweise
 
 Unveraendert seit Revision 4, ergaenzt um: die #18-Handover-Notiz (9.3)
 wird als eigener, benannter Abschnitt in einem Fachvertrag nachgewiesen,
-nicht nur im Plan-PR erwaehnt.
+nicht nur im Plan-PR erwaehnt. Die neue Revision dokumentiert ausserdem die
+Include-/Compile-Guards, den NoActiveRun-Tombstone-Vertrag, die
+Safety-Pending-Matrix und den deaktivierten Release-1-Retry im PR-Nachweis.
 
 ## 15. Verbindliche `/task`-Taskliste fuer die Umsetzung
 
@@ -1014,12 +1380,26 @@ nicht nur im Plan-PR erwaehnt.
 [ ] P21-01, P21-M1 bis P21-M3 aufgeloeste Ownerentscheidungen gegen den Plan abgleichen
 [ ] ReturnStrategy-Enum, Feldmaske, Schema 6, verkettete Migration implementieren
 [ ] Codec-/Katalog-/Beispielkonfigurationsaenderungen implementieren
-[ ] SensorSelectionRuntimeState, applySensorSelectionDecision und vollstaendigen Zustandsautomaten (6.4.9-6.4.14) implementieren
+[ ] sensor_selection_types.hpp als einzige Werttypquelle ohne Include-Zyklus
+    einfuehren und die vier Header in isolierten Compile-TUs absichern
+[ ] SensorSelectionRuntimeState, typisierte Apply-Statuswerte,
+    applySensorSelectionDecision als schmale Mutation und vollstaendigen
+    Zustandsautomaten (6.4.9-6.4.14) implementieren
 [ ] Vorrangregel und Re-Arm-Regel implementieren und mit den Pflichttests belegen
+[ ] Release-1-Zeit-Re-Arm deaktiviert halten; checked Zeit-/Ueberlauf- und
+    TimeWentBackwards-Vertrag fuer Fallback und spaetere Retry-Aktivierung
+    implementieren
 [ ] ThermalCompatibilityEvidence-Invarianten implementieren, keine eigene Altersarithmetik ergaenzen
-[ ] PersistedSensorSelectionState, kRunPersistenceSchema-Bump, persistSensorSelection fuer die sechs automatischen Ursachen implementieren
+[ ] PersistedSensorSelectionState, kRunPersistenceSchema-Bump,
+    persistSensorSelection nur aus Ready mit aktivem Lauf fuer die sechs
+    automatischen Ursachen implementieren; ReadyEmpty ohne Write/RAM-Wirkung
 [ ] CommandKind::ApplySensorSelectionAction, SensorSelectionCommandRequest, decideApplySensorSelectionAction implementieren
 [ ] applyRunCommand um sensorSelectionRuntime/sensorSelection erweitern und gegen bestehende Kommandopfade regressionstesten
+[ ] gemeinsame clearActiveRunState-Invarianten in allen Abbruch-, Abschluss-,
+    ProductWaitExpired- und Tombstonepfaden sowie vollstaendige neue Starts
+    implementieren
+[ ] Safety-Pending-Matrix intern gegen criticalSafetyEventPending pruefen;
+    safetyAllowsChange nicht als Ersatz verwenden
 [ ] StartSensorSelectionNotice an CommandDecision/RunPersistenceResult anschliessen
 [ ] CommandEffect auf SensorSelectionPermissionBlocked/-Restored umbenennen und dokumentieren, dass dies keine Aktorfreigabe ist
 [ ] Startmatrix (6.5) in decideProgramStart durchsetzen, ProductRequired-Aktionsausschluss (6.4.13) implementieren
@@ -1027,7 +1407,7 @@ nicht nur im Plan-PR erwaehnt.
 [ ] verifizieren, dass LoadedActiveRun unveraendert RecoveryPending bleibt
 [ ] computeRestartSensorSelection als reine Funktion fuer die spaetere #18-Integration implementieren
 [ ] direkte, gezielte Unit-Tests fuer alle in Abschnitt 9 gelisteten Faelle ausfuehren
-[ ] gezielte Architektur-, Secret-, Format- und git diff --check-Pruefungen ausfuehren
+[ ] gezielte Architektur-, Compile-, Invariant-, Secret-, Format- und git diff --check-Pruefungen ausfuehren
 [ ] betroffene Fachvertraege inklusive #18-Handover-Notiz und docs/ACCEPTANCE_TESTS.md aktualisieren
 [ ] docs/ROADMAP.md nur bei tatsaechlicher Status- oder Gatewirkung synchronisieren
 [ ] Review des vollstaendigen aktuellen Diffs gegen Issue, Plan, ADRs und Fachvertraege durchfuehren
@@ -1095,8 +1475,27 @@ Remote-CI, merged nicht und loescht den Branch nicht.
 [x] Ursachenzahl korrigiert (acht Nicht-Start-Ursachen, sechs automatisch/zwei manuell)
 [x] Planungs-Taskliste bereinigt (Commit/Push/Handover/PR-Aktualisierung fuer Revision 1-4 als erledigt markiert)
 [x] ausschliesslich Plan und notwendige Roadmap-/PR-/Handover-Aktualisierung geaendert
-[ ] Plan committen und pushen
-[ ] SESSION-HANDOVER-Kommentar auf neuen HEAD aktualisieren (ersetzt den bestehenden Kommentar, keinen zweiten anlegen)
-[ ] Draft-PR mit exakter neuer Plan-SHA, aktuellem HEAD und aufgeloesten/verbleibenden Ownerentscheidungen aktualisieren
-[ ] HALTED_FOR_OWNER_REVIEW
+[x] Plan Revision 5 committen und pushen (Plan-Commit 286ebacda05a202ea203789421e2398a7a868905)
+[x] SESSION HANDOVER fuer Revision 5 auf diesem Plan-Commit aktualisieren
+[x] Draft-PR #99 fuer Revision 5 mit Plan-SHA und aktuellem HEAD aktualisieren
+[x] Revision 5 nach PR-#99-Review erneut gegen Include-/Typ-, Apply-,
+    Clear-/Start-, Safety-, Persistenz-, Re-Arm-, Zeit- und Testbefunde pruefen
+[x] Include-/Typ-Schichtung mit sensor_selection_types.hpp und schmaler
+    SensorSelectionStateMutation planen
+[x] typisierte Apply-Statuswerte, Before-/Revisionspruefung und
+    unveraenderliche Ablehnungspfade planen
+[x] vollstaendige Clear-/Tombstone-/Start-Invarianten fuer beide bestehenden
+    Laufpfade planen
+[x] aktionsspezifische Safety-Pending-Matrix und aktiven-only-
+    persistSensorSelection-Vertrag planen
+[x] AirFallback-Re-Arm ohne Rueckfall nach ProductFailureDetected sowie
+    Release-1-Zeitvertrag mit checked Zeitberechnung planen
+[x] Architektur-/Compile-Guards und die vollstaendige neue Testmatrix ergaenzen
+[x] Planungs-Taskliste fuer Revision 6 mit eigenen Abschlusszeilen aktualisieren
+[x] Plan Revision 6 committen und pushen; exakte SHA im PR/Handover eintragen
+[x] Draft-PR #99 mit exakter Plan-SHA, aktuellem HEAD, Tests, offenen Gates
+    und `IMPLEMENTATION_BLOCKED_PENDING_PLAN_APPROVAL` aktualisieren
+[x] bestehenden SESSION-HANDOVER-Kommentar in-place auf den neuen HEAD
+    aktualisieren (kein zweiter Handover-Kommentar)
+[x] HALTED_FOR_OWNER_REVIEW
 ```
