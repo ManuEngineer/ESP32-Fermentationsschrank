@@ -76,7 +76,7 @@ Recovery- oder Owner-Gates zu kürzen.
 
 `COMPLETED`
 
-- Root-`AGENTS.md` konsolidiert und um rund 350 Zeilen reduziert.
+- Root-`AGENTS.md` auf 125 Zeilen und rund 5,9 KB konsolidiert.
 - `ENGINEERING_PRINCIPLES.md` verbindlich konsolidiert; einzigartige
   Kontextbaseline-/Refreshregeln übernommen.
 - `ENGINEERING_LEARNINGS.md` entfernt.
@@ -131,30 +131,36 @@ Recovery- oder Owner-Gates zu kürzen.
 
 `COMPLETED`
 
-- alle 75 geänderten beziehungsweise gelöschten Pfade gegen Plan und
-  Quellenrollen geprüft;
+- alle 76 geänderten beziehungsweise gelöschten Pfade geprüft;
+- 40 historische oder doppelte Dateien entfernt;
 - Importbrücken, lokale Regeln, Workflow, CI-Trigger, Safety-/Persistenzvertrag,
-  Statusquellen und historische Indizes vollständig geprüft;
-- tote Verweise und veraltete PR-/Live-Statusangaben bereinigt;
+  Statusquellen, historische Indizes und Löschungen vollständig geprüft;
 - PR #95 / Issue #20 aus aktuellem `main` übernommen;
 - Konflikte in `AGENTS.md`, `.github/workflows/build.yml` und
   `docs/CI_AND_QUALITY_GATES.md` ohne Force-Push aufgelöst;
 - echter Merge-Commit `fda29dd5be0467997e8de005881c2d02e4cb1cee` mit beiden
   Eltern erstellt;
-- PR #98 ist wieder mergebar und bleibt Draft;
-- vollständiges finales Diffreview ohne offenen Befund abgeschlossen.
+- erstes vollständiges Review fand drei Punkte: zu breite Gültigkeit von
+  Markdown-Reviewnachweisen, unklare Draft-Rückstufung und zu grosse Root-Regeln;
+- alle drei Befunde korrigiert;
+- zweites vollständiges Review des verbleibenden Diffs ohne neuen Befund;
+- GitHub hat den Workflow erfolgreich geladen; der Lauf auf Head
+  `69f369d43c784fdbe35438484f8c09d9ce5b32e9` wurde erwartungsgemäss wegen Draft
+  als `skipped` abgeschlossen;
+- PR #98 ist mergebar und bleibt Draft.
 
 ## Abschlussprüfungen
 
-- [x] vollständige Liste aller geänderten und gelöschten Dateien geprüft;
+- [x] vollständige Liste aller 76 geänderten und gelöschten Pfade geprüft;
 - [x] typische Planungs-, Umsetzungs-, Review- und Handoverabläufe simuliert;
-- [x] Links, Dateinamen und gelöschte Quellen geprüft;
+- [x] Dateibaum, Dateinamen, Löschungen und kanonische Zielquellen über GitHub geprüft;
 - [x] Grössen- und Doppelungsprüfung abgeschlossen;
-- [x] vollständiges Review des finalen Diffs abgeschlossen;
-- [x] PR-Beschreibung und Roadmap auf finalen Stand gebracht;
-- [ ] vollständiger lokaler Lauf nur auf Owner-Anweisung;
+- [x] zwei vollständige Reviewdurchgänge abgeschlossen;
+- [x] GitHub-Workflow syntaktisch geladen und Draft-Skip bestätigt;
+- [ ] lokaler Checkout-basierter Link-/YAML-/`git diff --check`-Lauf: `NOT_RUN`, da die Ausführungsumgebung den GitHub-Host nicht auflösen konnte;
+- [ ] vollständiger lokaler Build-/Testlauf: `NOT_RUN`, nicht vom Owner angeordnet;
 - [ ] Owner entscheidet über die externe GitHub-Regel „1 approving review“;
-- [ ] Owner setzt danach bei Bedarf auf `Ready for review`.
+- [ ] Owner setzt den PR danach bei Bedarf auf `Ready for review` und löst die vollständige CI aus.
 
 ## Nächster Schritt
 
