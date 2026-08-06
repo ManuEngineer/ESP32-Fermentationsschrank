@@ -766,14 +766,32 @@ void test_identity_change_between_two_known_identities_is_identity_mismatch() {
 }
 
 void test_identity_transition_from_or_to_unknown_is_not_identity_mismatch() {
-    SensorQualityPipeline pipeline(makeTestConfig());
+    SensorQualityPipeline unknownToKnown(makeTestConfig());
     const auto identityA = SensorIdentity::create(11U).identity;
-    (void)pipeline.ingest(okReading(std::nullopt, 0U, 20.0), 0U);
+    (void)unknownToKnown.ingest(okReading(std::nullopt, 0U, 20.0), 0U);
 
-    (void)pipeline.ingest(okReading(identityA, 1000U, 20.5), 1000U);
-
-    TEST_ASSERT_TRUE(pipeline.snapshot(1000U).lastFaultReason !=
+    const auto unknownToKnownDisposition =
+        unknownToKnown.ingest(okReading(identityA, 1000U, 20.5), 1000U);
+    const auto unknownToKnownSnapshot = unknownToKnown.snapshot(1000U);
+    TEST_ASSERT_TRUE(unknownToKnownDisposition == SampleDisposition::Accepted);
+    TEST_ASSERT_TRUE(unknownToKnownSnapshot.lastFaultReason !=
                      SensorFaultReason::IdentityMismatch);
+    TEST_ASSERT_EQUAL_DOUBLE(20.5, unknownToKnownSnapshot.rawCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(20.5,
+                             unknownToKnownSnapshot.correctedCelsius.value());
+
+    SensorQualityPipeline knownToUnknown(makeTestConfig());
+    (void)knownToUnknown.ingest(okReading(identityA, 0U, 20.0), 0U);
+
+    const auto knownToUnknownDisposition =
+        knownToUnknown.ingest(okReading(std::nullopt, 1000U, 20.5), 1000U);
+    const auto knownToUnknownSnapshot = knownToUnknown.snapshot(1000U);
+    TEST_ASSERT_TRUE(knownToUnknownDisposition == SampleDisposition::Accepted);
+    TEST_ASSERT_TRUE(knownToUnknownSnapshot.lastFaultReason !=
+                     SensorFaultReason::IdentityMismatch);
+    TEST_ASSERT_EQUAL_DOUBLE(20.5, knownToUnknownSnapshot.rawCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(20.5,
+                             knownToUnknownSnapshot.correctedCelsius.value());
 }
 
 void test_two_independent_pipelines_do_not_influence_each_other() {
@@ -891,6 +909,21 @@ void test_pipeline_matching_calibration_changes_corrected_value_and_evidence() {
     TEST_ASSERT_EQUAL_DOUBLE(22.5, snapshot.correctedCelsius.value());
     TEST_ASSERT_TRUE(snapshot.appliedOffset.has_value());
     TEST_ASSERT_EQUAL_DOUBLE(2.5, snapshot.appliedOffset.value());
+}
+
+void test_pipeline_negative_calibration_offset_is_applied() {
+    SensorQualityPipeline pipeline(makeFilterConfig());
+    const auto identity = SensorIdentity::create(7U).identity;
+    pipeline.setCalibration(makeCalibration(7U, -2.5));
+
+    (void)pipeline.ingest(okReading(identity, 0U, 20.0), 0U);
+
+    const auto snapshot = pipeline.snapshot(0U);
+    TEST_ASSERT_EQUAL_DOUBLE(20.0, snapshot.rawCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(17.5, snapshot.correctedCelsius.value());
+    TEST_ASSERT_TRUE(snapshot.appliedOffset.has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(-2.5, snapshot.appliedOffset.value());
+    TEST_ASSERT_TRUE(snapshot.lastFaultReason == SensorFaultReason::None);
 }
 
 void test_pipeline_missing_and_unknown_calibration_use_neutral_offset() {
@@ -1076,20 +1109,27 @@ void test_pipeline_identity_change_resets_filter_and_discards_old_offset_delta()
     pipeline.setCalibration(makeCalibration(7U, 2.0));
 
     (void)pipeline.ingest(okReading(identityA, 0U, 20.0), 0U);
-    TEST_ASSERT_EQUAL_DOUBLE(22.0,
-                             pipeline.snapshot(0U).filteredCelsius.value());
+    (void)pipeline.ingest(okReading(identityA, 1000U, 30.0), 1000U);
+    const auto beforeIdentityChange = pipeline.snapshot(1000U);
+    TEST_ASSERT_TRUE(beforeIdentityChange.filteredCelsius.value() !=
+                     beforeIdentityChange.correctedCelsius.value());
 
-    (void)pipeline.ingest(okReading(identityB, 1000U, 20.0), 1000U);
-    TEST_ASSERT_TRUE(pipeline.snapshot(1000U).lastFaultReason ==
+    (void)pipeline.ingest(okReading(identityB, 2000U, 40.0), 2000U);
+    TEST_ASSERT_TRUE(pipeline.snapshot(2000U).lastFaultReason ==
                      SensorFaultReason::IdentityMismatch);
 
-    (void)pipeline.ingest(okReading(identityB, 2000U, 20.0), 2000U);
-    (void)pipeline.ingest(okReading(identityB, 4000U, 20.0), 4000U);
+    (void)pipeline.ingest(okReading(identityB, 3000U, 40.0), 3000U);
+    const auto firstPlausibleB = pipeline.snapshot(3000U);
+    TEST_ASSERT_EQUAL_DOUBLE(40.0, firstPlausibleB.correctedCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(40.0, firstPlausibleB.filteredCelsius.value());
+    TEST_ASSERT_FALSE(firstPlausibleB.appliedOffset.has_value());
 
-    const auto snapshot = pipeline.snapshot(4000U);
+    (void)pipeline.ingest(okReading(identityB, 5000U, 40.0), 5000U);
+
+    const auto snapshot = pipeline.snapshot(5000U);
     TEST_ASSERT_TRUE(snapshot.quality == SensorQuality::Valid);
-    TEST_ASSERT_EQUAL_DOUBLE(20.0, snapshot.correctedCelsius.value());
-    TEST_ASSERT_EQUAL_DOUBLE(20.0, snapshot.filteredCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(40.0, snapshot.correctedCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(40.0, snapshot.filteredCelsius.value());
     TEST_ASSERT_FALSE(snapshot.appliedOffset.has_value());
 }
 
@@ -1229,6 +1269,7 @@ int main() {
     RUN_TEST(test_pipeline_lowpass_uses_sample_timestamps_not_delivery_time);
     RUN_TEST(
         test_pipeline_matching_calibration_changes_corrected_value_and_evidence);
+    RUN_TEST(test_pipeline_negative_calibration_offset_is_applied);
     RUN_TEST(test_pipeline_missing_and_unknown_calibration_use_neutral_offset);
     RUN_TEST(test_pipeline_wrong_known_rom_calibration_uses_neutral_offset);
     RUN_TEST(
