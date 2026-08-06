@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTATION_COMPLETE_REVIEW_IN_PROGRESS`
+`REVIEW_COMPLETE_OWNER_GATE_PENDING`
 
 Audit und Umsetzung erfolgten blockweise: prüfen, materielle Abweichungen mit
 dem Owner entscheiden, freigegebenen Block umsetzen, Diff/Links/Doppelungen
@@ -127,20 +127,38 @@ Recovery- oder Owner-Gates zu kürzen.
   frühere Fassung bleibt in Git.
 - Live-Status und aktuelle Reihenfolge stehen ausschliesslich in `ROADMAP.md`.
 
+### A10/A11 – Abschlussreview und Main-Synchronisierung
+
+`COMPLETED`
+
+- alle 75 geänderten beziehungsweise gelöschten Pfade gegen Plan und
+  Quellenrollen geprüft;
+- Importbrücken, lokale Regeln, Workflow, CI-Trigger, Safety-/Persistenzvertrag,
+  Statusquellen und historische Indizes vollständig geprüft;
+- tote Verweise und veraltete PR-/Live-Statusangaben bereinigt;
+- PR #95 / Issue #20 aus aktuellem `main` übernommen;
+- Konflikte in `AGENTS.md`, `.github/workflows/build.yml` und
+  `docs/CI_AND_QUALITY_GATES.md` ohne Force-Push aufgelöst;
+- echter Merge-Commit `fda29dd5be0467997e8de005881c2d02e4cb1cee` mit beiden
+  Eltern erstellt;
+- PR #98 ist wieder mergebar und bleibt Draft;
+- vollständiges finales Diffreview ohne offenen Befund abgeschlossen.
+
 ## Abschlussprüfungen
 
-- [ ] vollständige Liste aller geänderten und gelöschten Dateien prüfen;
-- [ ] typische Planungs-, Umsetzungs-, Review- und Handoverabläufe simulieren;
-- [ ] Links, Dateinamen und gelöschte Quellen prüfen;
-- [ ] Grössen- und Doppelungsprüfung;
-- [ ] vollständiges Review des finalen Diffs;
-- [ ] PR-Beschreibung und Roadmap auf finalen Stand bringen;
+- [x] vollständige Liste aller geänderten und gelöschten Dateien geprüft;
+- [x] typische Planungs-, Umsetzungs-, Review- und Handoverabläufe simuliert;
+- [x] Links, Dateinamen und gelöschte Quellen geprüft;
+- [x] Grössen- und Doppelungsprüfung abgeschlossen;
+- [x] vollständiges Review des finalen Diffs abgeschlossen;
+- [x] PR-Beschreibung und Roadmap auf finalen Stand gebracht;
 - [ ] vollständiger lokaler Lauf nur auf Owner-Anweisung;
 - [ ] Owner entscheidet über die externe GitHub-Regel „1 approving review“;
 - [ ] Owner setzt danach bei Bedarf auf `Ready for review`.
 
 ## Nächster Schritt
 
-A10/A11: vollständiger Diff-, Link-, Workflow- und Doppelungsreview. Materielle
-Befunde werden vor weiteren Aenderungen dem Owner vorgelegt; rein redaktionelle
-oder eindeutig beschlossene Korrekturen werden direkt bereinigt.
+Ownerreview auf dem finalen `HEAD`. Ohne neuen Befund sind keine weiteren
+Agentenänderungen vorgesehen. Der Owner entscheidet über die externe
+Approval-Regel und setzt den PR anschliessend bei Bedarf auf `Ready for review`,
+wodurch die vollständige GitHub-CI startet.
