@@ -1,5 +1,6 @@
 #include <unity.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -100,10 +101,17 @@ void maximizeProgramPayload(fermentation::ProgramDocument& document) {
     program.name = repeatedUmlaut(48U);
     program.notes = repeatedUmlaut(512U);
     program.preheat = true;
-    program.sensorPreference = fermentation::SensorPreference::AirOnly;
+    // AirOnly ist nach der 6.13-Cross-Field-Regel nur mit einer festen,
+    // schlankeren Kombination gueltig (kein fallback_delay_s). Fuer die
+    // maximale Katalog-Payload wird stattdessen eine Praeferenz gewaehlt,
+    // die fallback_delay_s UND jede ReturnStrategy zulaesst.
+    program.sensorPreference =
+        fermentation::SensorPreference::ProductIfAvailableElseAir;
     program.productSensorFailure.policy =
         fermentation::ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
     program.productSensorFailure.fallbackDelaySeconds = 0U;
+    program.productSensorFailure.returnStrategy =
+        fermentation::ReturnStrategy::AutomaticValidatedReturnToProduct;
     program.fermentationStages.front().targetTemperatureCelsius = 20.0;
     program.fermentationStages.front().durationMinutes = 60U;
     program.targetQualification.bandCelsius = 0.5;
@@ -160,7 +168,11 @@ std::string schemaFourCatalogFixture(const std::string& current) {
     TEST_ASSERT_TRUE(device_platform::big_endian::readUint8(reader, count));
     std::vector<std::size_t> schemas;
     std::vector<std::size_t> masks;
-    std::vector<std::size_t> productWaitTags;
+    // Beide Listen werden am Ende gemeinsam absteigend entfernt, weil ihre
+    // Positionen je Programm ineinander verschachtelt sind (returnStrategy
+    // liegt vor maximumProductWaitMinutes) - getrennte Schleifen wuerden bei
+    // mehreren Programmen bereits entfernte Bytes vorzeitig verschieben.
+    std::vector<std::size_t> singleByteRemovals;
     for (std::uint8_t program = 0U; program < count; ++program) {
         schemas.push_back(reader.position());
         std::uint32_t schema = 0U;
@@ -182,6 +194,11 @@ std::string schemaFourCatalogFixture(const std::string& current) {
                 device_platform::big_endian::readUint8(reader, ignoredByte));
         }
         TEST_ASSERT_TRUE(skipOptional(reader, 4U));
+        // returnStrategy: seit Schema 6 ein unbedingtes Einzelbyte (kein
+        // optional-Tag), in Schema 4 nicht vorhanden.
+        singleByteRemovals.push_back(reader.position());
+        TEST_ASSERT_TRUE(
+            device_platform::big_endian::readUint8(reader, ignoredByte));
         std::uint8_t stages = 0U;
         TEST_ASSERT_TRUE(
             device_platform::big_endian::readUint8(reader, stages));
@@ -192,8 +209,11 @@ std::string schemaFourCatalogFixture(const std::string& current) {
         TEST_ASSERT_TRUE(skipOptional(reader, 8U));
         TEST_ASSERT_TRUE(skipOptional(reader, 4U));
         TEST_ASSERT_TRUE(skipOptional(reader, 4U));
-        productWaitTags.push_back(reader.position());
+        const auto productWaitTag = reader.position();
         TEST_ASSERT_TRUE(skipOptional(reader, 4U));
+        TEST_ASSERT_EQUAL_UINT8(
+            0U, static_cast<std::uint8_t>(current[productWaitTag]));
+        singleByteRemovals.push_back(productWaitTag);
         TEST_ASSERT_TRUE(
             device_platform::big_endian::readUint8(reader, ignoredByte));
         TEST_ASSERT_TRUE(skipOptional(reader, 8U));
@@ -204,7 +224,7 @@ std::string schemaFourCatalogFixture(const std::string& current) {
     std::string legacy = current;
     for (const auto offset : schemas) {
         legacy[offset + 3U] =
-            static_cast<char>(fermentation::kMigratableProgramSchemaVersion);
+            static_cast<char>(fermentation::kMinimumMigratableProgramSchemaVersion);
     }
     for (const auto offset : masks) {
         const auto mask = fermentation::kSchema4RequiredProgramFields;
@@ -213,10 +233,9 @@ std::string schemaFourCatalogFixture(const std::string& current) {
                 mask >> static_cast<unsigned>((7U - byte) * 8U));
         }
     }
-    for (auto iterator = productWaitTags.rbegin();
-         iterator != productWaitTags.rend(); ++iterator) {
-        TEST_ASSERT_EQUAL_UINT8(0U,
-                                static_cast<std::uint8_t>(legacy[*iterator]));
+    std::sort(singleByteRemovals.begin(), singleByteRemovals.end());
+    for (auto iterator = singleByteRemovals.rbegin();
+         iterator != singleByteRemovals.rend(); ++iterator) {
         legacy.erase(*iterator, 1U);
     }
     return legacy;
@@ -450,15 +469,13 @@ void test_program_catalog_factory_payload_has_fixed_golden_bytes() {
         fermentation::encodeProgramCatalogPayload(catalog, encoded) ==
         ConfigurationCodecStatus::Success);
     const auto expected = bytesFromHex(
-        "0400000005000000000000ffff000b796f677572742d6d696c64000c4a6f6768757274"
-        "206d696c64000001010101010101010100010000000000000400000000000500000000"
-        "0000ffff000b796f677572742d6669726d00114a6f6768757274207374696368666573"
-        "74"
-        "0000010101010101010101000100000000000004000000000005000000000000ffff00"
-        "0a6d696c6b2d6b65666972000a4d696c63686b65666972000001010101010100020100"
-        "0100000000000004000000000005000000000000ffff000b77617465722d6b65666972"
-        "000b5761737365726b656669720000010101010101000201000100000000000001000"
-        "0");
+        "0400000006000000000001ffff000b796f677572742d6d696c64000c4a6f6768757274206d"
+        "696c64000001010101010101010100030100000000000004000000000006000000000001ff"
+        "ff000b796f677572742d6669726d00114a6f67687572742073746963686665737400000101"
+        "0101010101010100030100000000000004000000000006000000000001ffff000a6d696c6b"
+        "2d6b65666972000a4d696c63686b6566697200000101010101010002010003010000000000"
+        "0004000000000006000000000001ffff000b77617465722d6b65666972000b576173736572"
+        "6b656669720000010101010101000201000301000000000000010000");
     TEST_ASSERT_EQUAL_UINT32(expected.size(), encoded.size());
     TEST_ASSERT_EQUAL_MEMORY(expected.data(), encoded.data(), expected.size());
 }
@@ -490,7 +507,7 @@ void test_program_catalog_rejects_unknown_schema_mask_and_enum() {
     futureSchema[1] = 0;
     futureSchema[2] = 0;
     futureSchema[3] = 0;
-    futureSchema[4] = 6;
+    futureSchema[4] = 7;
     TEST_ASSERT_TRUE(
         fermentation::decodeProgramCatalogPayload(1U, futureSchema).status ==
         ConfigurationCodecStatus::UnsupportedSchema);
@@ -543,7 +560,12 @@ void test_schema_four_programs_migrate_to_schema_five_deterministically() {
         fermentation::encodeProgramCatalogPayload(catalog, current) ==
         ConfigurationCodecStatus::Success);
     const auto legacy = schemaFourCatalogFixture(current);
-    TEST_ASSERT_TRUE(legacy.size() + 4U == current.size());
+    // Zwei entfernte Einzelbytes je Programm: returnStrategy (seit Schema 6)
+    // und der optional-Tag von maximumProductWaitMinutes (seit Schema 5).
+    TEST_ASSERT_TRUE(legacy.size() +
+                         2U * fermentation::configuration_limits::
+                                  kFactoryProgramCount ==
+                     current.size());
     const auto decoded = fermentation::decodeProgramCatalogPayload(1U, legacy);
     TEST_ASSERT_TRUE(decoded.status == ConfigurationCodecStatus::Success);
     for (const auto& document : decoded.document->programs) {
@@ -615,19 +637,19 @@ void test_maximum_valid_catalog_has_exact_canonical_payload_size() {
     const auto calculated = fermentation::configuration_codec_internal::
         calculateProgramCatalogPayloadSize(catalog);
     TEST_ASSERT_TRUE(calculated.status == ConfigurationCodecStatus::Success);
-    TEST_ASSERT_EQUAL_UINT32(19916U, calculated.payloadSize);
+    TEST_ASSERT_EQUAL_UINT32(19932U, calculated.payloadSize);
     std::string encoded;
     TEST_ASSERT_TRUE(
         fermentation::encodeProgramCatalogPayload(catalog, encoded) ==
         ConfigurationCodecStatus::Success);
-    TEST_ASSERT_EQUAL_UINT32(19916U, encoded.size());
+    TEST_ASSERT_EQUAL_UINT32(19932U, encoded.size());
 }
 
 void test_global_payload_boundary_uses_production_size_calculation() {
     auto exact = maximumValidCatalog();
     const auto validSize = fermentation::configuration_codec_internal::
         calculateProgramCatalogPayloadSize(exact);
-    TEST_ASSERT_EQUAL_UINT32(19916U, validSize.payloadSize);
+    TEST_ASSERT_EQUAL_UINT32(19932U, validSize.payloadSize);
     exact.programs.back().program.notes.append(
         fermentation::configuration_limits::kMaximumProgramCatalogPayloadBytes -
             validSize.payloadSize,
@@ -691,7 +713,7 @@ void test_large_catalog_decode_does_not_materialize_a_second_full_catalog() {
 void test_large_catalog_copy_migration_keeps_only_source_and_candidate() {
     auto source = largeCatalog();
     for (auto& document : source.programs) {
-        document.schema.version = fermentation::kMigratableProgramSchemaVersion;
+        document.schema.version = fermentation::kMinimumMigratableProgramSchemaVersion;
         document.schema.presentFields =
             fermentation::kSchema4RequiredProgramFields;
         document.program.maximumProductWaitMinutes.reset();

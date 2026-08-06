@@ -14,7 +14,7 @@ struct RequiredField {
     const char* name;
 };
 
-constexpr std::array<RequiredField, 16> kRequiredFields{{
+constexpr std::array<RequiredField, 17> kRequiredFields{{
     {ProgramField::Id, "id"},
     {ProgramField::Name, "name"},
     {ProgramField::BuiltIn, "built_in"},
@@ -31,6 +31,8 @@ constexpr std::array<RequiredField, 16> kRequiredFields{{
     {ProgramField::MaximumTargetReach, "defaults.max_target_reach_min"},
     {ProgramField::MaximumProductWait, "defaults.max_product_wait_min"},
     {ProgramField::Completion, "defaults.completion"},
+    {ProgramField::ReturnStrategy,
+     "defaults.product_sensor_failure.return_strategy"},
 }};
 
 // Haelt kRequiredFields synchron mit den in program_model.hpp deklarierten
@@ -107,6 +109,16 @@ bool validFailurePolicy(ProductSensorFailurePolicy policy) {
     return false;
 }
 
+bool validReturnStrategy(ReturnStrategy strategy) {
+    switch (strategy) {
+        case ReturnStrategy::RemainOnAirUntilEnd:
+        case ReturnStrategy::ManualReturnToProduct:
+        case ReturnStrategy::AutomaticValidatedReturnToProduct:
+            return true;
+    }
+    return false;
+}
+
 bool validCompletionMode(CompletionMode mode) {
     switch (mode) {
         case CompletionMode::FinishWithoutCooling:
@@ -116,6 +128,48 @@ bool validCompletionMode(CompletionMode mode) {
             return true;
     }
     return false;
+}
+
+MigrationResult migrateProgramSchema4To5(const ProgramDocument& source) {
+    if ((source.schema.presentFields & ~kSchema4RequiredProgramFields) !=
+            0U ||
+        (source.schema.presentFields & kSchema4RequiredProgramFields) !=
+            kSchema4RequiredProgramFields) {
+        return {MigrationStatus::InvalidSourceDocument, std::nullopt};
+    }
+    ProgramDocument migrated = source;
+    migrated.schema.version = 5U;
+    migrated.schema.presentFields = kSchema5RequiredProgramFields;
+    migrated.program.maximumProductWaitMinutes = std::nullopt;
+    return {MigrationStatus::Migrated, std::move(migrated)};
+}
+
+MigrationResult migrateProgramSchema5To6(const ProgramDocument& source) {
+    if ((source.schema.presentFields & ~kSchema5RequiredProgramFields) !=
+            0U ||
+        (source.schema.presentFields & kSchema5RequiredProgramFields) !=
+            kSchema5RequiredProgramFields) {
+        return {MigrationStatus::InvalidSourceDocument, std::nullopt};
+    }
+    ProgramDocument migrated = source;
+    migrated.schema.version = 6U;
+    migrated.schema.presentFields = kCurrentRequiredProgramFields;
+    if (migrated.program.sensorPreference == SensorPreference::AirOnly) {
+        // AirOnly-Normalisierung (6.2.2): inert, weil AirOnly Luft nie
+        // verlaesst - bewahrt ein vor diesem Update gueltiges Dokument als
+        // weiterhin gueltig, statt es an der neuen 6.13-Cross-Field-Regel
+        // scheitern zu lassen.
+        migrated.program.productSensorFailure.returnStrategy =
+            ReturnStrategy::RemainOnAirUntilEnd;
+        migrated.program.productSensorFailure.policy =
+            ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+        migrated.program.productSensorFailure.fallbackDelaySeconds =
+            std::nullopt;
+    } else {
+        migrated.program.productSensorFailure.returnStrategy =
+            ReturnStrategy::AutomaticValidatedReturnToProduct;
+    }
+    return {MigrationStatus::Migrated, std::move(migrated)};
 }
 
 }  // namespace
@@ -154,6 +208,48 @@ ValidationResult validateProgram(const ProgramDocument& document,
     if (!validFailurePolicy(program.productSensorFailure.policy)) {
         addError(result, ValidationErrorCode::InvalidEnumValue,
                  "defaults.product_sensor_failure.policy");
+    }
+    if (!validReturnStrategy(program.productSensorFailure.returnStrategy)) {
+        addError(result, ValidationErrorCode::InvalidEnumValue,
+                 "defaults.product_sensor_failure.return_strategy");
+    }
+    // 6.13 Regel 1: ProductRequired lehnt einen automatischen Luftfallback
+    // strukturell ab - dieselbe Praeferenz schliesst spaeter (sensor_selection)
+    // auch jeden manuellen Luftfallback aus (6.4.13).
+    if (program.sensorPreference == SensorPreference::ProductRequired &&
+        program.productSensorFailure.policy ==
+            ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
+        addError(result, ValidationErrorCode::IncompatibleCombination,
+                 "defaults.product_sensor_failure.policy");
+    }
+    // 6.13 Regel 2/3: AirOnly hat genau eine gueltige Kombination - Luft wird
+    // nie verlassen, die Rueckkehrstrategie und die Ausfallpolicy sind fest.
+    if (program.sensorPreference == SensorPreference::AirOnly) {
+        if (program.productSensorFailure.returnStrategy !=
+            ReturnStrategy::RemainOnAirUntilEnd) {
+            addError(result, ValidationErrorCode::IncompatibleCombination,
+                     "defaults.product_sensor_failure.return_strategy");
+        }
+        if (program.productSensorFailure.policy !=
+            ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
+            addError(result, ValidationErrorCode::IncompatibleCombination,
+                     "defaults.product_sensor_failure.policy");
+        }
+    }
+    // 6.13 Regel 4: fuer AirOnly ist fallbackDelaySeconds unabhaengig von der
+    // Policy ein toter Wert - ProductFailureDetected wird nie betreten.
+    if (program.sensorPreference == SensorPreference::AirOnly &&
+        program.productSensorFailure.fallbackDelaySeconds.has_value()) {
+        addError(result, ValidationErrorCode::UnexpectedValue,
+                 "defaults.product_sensor_failure.fallback_delay_s");
+    }
+    // 6.13 Regel 5: generelle Regel fuer jede nicht-FallbackToAirAfterTimeout-
+    // Policy (bewusst nicht mit Regel 4 zusammengelegt, siehe 6.4.10).
+    if (program.productSensorFailure.policy !=
+            ProductSensorFailurePolicy::FallbackToAirAfterTimeout &&
+        program.productSensorFailure.fallbackDelaySeconds.has_value()) {
+        addError(result, ValidationErrorCode::UnexpectedValue,
+                 "defaults.product_sensor_failure.fallback_delay_s");
     }
     if (!validCompletionMode(program.completion.mode)) {
         addError(result, ValidationErrorCode::InvalidEnumValue,
@@ -207,7 +303,8 @@ ValidationResult validateProgram(const ProgramDocument& document,
     }
 
     if (program.productSensorFailure.policy ==
-        ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
+            ProductSensorFailurePolicy::FallbackToAirAfterTimeout &&
+        program.sensorPreference != SensorPreference::AirOnly) {
         validateOptionalDuration(
             result, program.productSensorFailure.fallbackDelaySeconds,
             "defaults.product_sensor_failure.fallback_delay_s",
@@ -245,22 +342,26 @@ MigrationResult migrateProgramToCurrentSchema(const ProgramDocument& source) {
     if (source.schema.version == kCurrentProgramSchemaVersion) {
         return {MigrationStatus::NotRequired, source};
     }
-    if (source.schema.version != kMigratableProgramSchemaVersion ||
-        (source.schema.presentFields & ~kSchema4RequiredProgramFields) != 0U ||
-        (source.schema.presentFields & kSchema4RequiredProgramFields) !=
-            kSchema4RequiredProgramFields) {
-        const auto status =
-            source.schema.version == kMigratableProgramSchemaVersion
-                ? MigrationStatus::InvalidSourceDocument
-                : MigrationStatus::UnsupportedSourceVersion;
-        return {status, std::nullopt};
+    if (source.schema.version < kMinimumMigratableProgramSchemaVersion ||
+        source.schema.version > kCurrentProgramSchemaVersion) {
+        return {MigrationStatus::UnsupportedSourceVersion, std::nullopt};
     }
 
-    ProgramDocument migrated = source;
-    migrated.schema.version = kCurrentProgramSchemaVersion;
-    migrated.schema.presentFields = kCurrentRequiredProgramFields;
-    migrated.program.maximumProductWaitMinutes = std::nullopt;
-    return {MigrationStatus::Migrated, std::move(migrated)};
+    // Kanonische Copy-Migrationskette (docs/CONFIGURATION_PERSISTENCE.md):
+    // jeder Schritt einzeln auf einer Kopie, exakt die zwei existierenden
+    // Schritte 4->5 und 5->6 - kein generischer Schrittregistry-Mechanismus.
+    ProgramDocument current = source;
+    while (current.schema.version < kCurrentProgramSchemaVersion) {
+        auto step = current.schema.version == 4U
+                        ? migrateProgramSchema4To5(current)
+                        : migrateProgramSchema5To6(current);
+        if (step.status != MigrationStatus::Migrated ||
+            !step.document.has_value()) {
+            return step;
+        }
+        current = std::move(*step.document);
+    }
+    return {MigrationStatus::Migrated, std::move(current)};
 }
 
 }  // namespace fermentation

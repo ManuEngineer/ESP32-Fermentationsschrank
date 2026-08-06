@@ -496,10 +496,17 @@ void maximizeProgramPayload(fermentation::ProgramDocument& document) {
     program.name = repeatedUmlaut(48U);
     program.notes = repeatedUmlaut(512U);
     program.preheat = true;
-    program.sensorPreference = fermentation::SensorPreference::AirOnly;
+    // AirOnly ist nach der 6.13-Cross-Field-Regel nur mit einer festen,
+    // schlankeren Kombination gueltig (kein fallback_delay_s). Fuer die
+    // maximale Katalog-Payload wird stattdessen eine Praeferenz gewaehlt,
+    // die fallback_delay_s UND jede ReturnStrategy zulaesst.
+    program.sensorPreference =
+        fermentation::SensorPreference::ProductIfAvailableElseAir;
     program.productSensorFailure.policy =
         fermentation::ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
     program.productSensorFailure.fallbackDelaySeconds = 0U;
+    program.productSensorFailure.returnStrategy =
+        fermentation::ReturnStrategy::AutomaticValidatedReturnToProduct;
     program.fermentationStages.front().targetTemperatureCelsius = 20.0;
     program.fermentationStages.front().durationMinutes = 60U;
     program.targetQualification.bandCelsius = 0.5;
