@@ -48,13 +48,19 @@ keine Builds oder Tests aus.
 
 Der Ownerwechsel auf `Ready for review` startet die vollstaendige CI fuer den
 reviewten Head. Jeder spaetere semantische Push auf einen Nicht-Draft-PR startet
-sie erneut und verwirft den vorherigen Review- und Pruefnachweis. Reine
-Markdown- oder Kommentaraenderungen sind durch `paths-ignore` ausgenommen und
-verwerfen den Nachweis nicht.
+sie erneut und verwirft den vorherigen Firmware-Pruefnachweis.
 
-Nach einem CI-Fehlschlag wird der PR wieder als Draft gefuehrt. Es folgen nur
-die gezielte Fehlerkorrektur und direkt abhaengige Tests, danach erneut ein
-vollstaendiges Review und ein neuer Ownerwechsel auf `Ready for review`.
+Markdown-only- und Kommentaraenderungen sind durch `paths-ignore` von der
+Firmware-CI ausgenommen. Das bedeutet nicht, dass ihr Reviewnachweis automatisch
+gueltig bleibt: Jede semantische Aenderung, auch an normativer Dokumentation,
+verlangt ein erneutes vollstaendiges Review. Nur rein redaktionelle Korrekturen
+ohne Bedeutungs-, Scope-, Vertrags- oder Akzeptanzwirkung duerfen den
+Reviewnachweis behalten.
+
+Nach einem CI-Fehlschlag dokumentiert der Agent Fehler, Auswirkung und gezielte
+Korrektur. Nur der Owner entscheidet ueber eine Rueckstufung auf Draft. Nach
+Korrektur, direkt abhaengigen Tests und erneutem vollstaendigem Review fuehrt
+nur der Owner den neuen Wechsel auf `Ready for review` aus.
 
 Es gibt keinen `push`-Trigger und damit keinen automatischen identischen
 Wiederholungslauf nach dem Merge.
