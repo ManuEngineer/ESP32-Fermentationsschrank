@@ -2,7 +2,7 @@ name: ESP-IDF + Native CI
 
 on:
   pull_request:
-    types: [ready_for_review, synchronize, reopened]
+    types: [opened, ready_for_review, synchronize, reopened]
     paths-ignore:
       - "**/*.md"
 
@@ -15,6 +15,10 @@ concurrency:
 
 jobs:
   firmware:
+    # Draft-Pull-Requests erzeugen hoechstens einen sofort uebersprungenen
+    # Workfloweintrag. Die schwere Vollpruefung startet erst nach dem
+    # Ownerwechsel auf Ready for review und bei spaeteren semantischen Pushes
+    # auf einen nicht mehr als Draft markierten PR.
     if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-24.04
 
