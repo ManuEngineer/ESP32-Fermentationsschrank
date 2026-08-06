@@ -173,11 +173,18 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
          state.processRunSnapshot.has_value())) {
         return std::nullopt;
     }
-    // sensorSelection is not yet a required field here (6.12's full
-    // consistency invariant lands with #21 Commit 5's start-path wiring,
-    // which is the first producer that always populates it). Until then it
-    // is projected as-is - present once populated, absent for every
-    // pre-existing call site this PR must not regress.
+    // #21, 6.12 (closed by Commit 5): every write goes through this function
+    // and always stamps kCurrentRunPersistenceSchema (encodeRunPersistenceHead),
+    // so the mandatory-presence rule belongs here, not in the schema-agnostic
+    // validateRunPersistenceSnapshot - a schema-1-decoded active-run snapshot
+    // legitimately lacks the field and must still validate for restore/
+    // migration. All start paths (decideProgramStart, decideManualStart,
+    // incl. the AbortAndCool/CoolAfterCompletion cooling-replacement runs)
+    // populate sensorSelection unconditionally, so this can never legitimately
+    // fail for a freshly-built candidate.
+    if ((hasProgram || hasManual) && !state.sensorSelection.has_value()) {
+        return std::nullopt;
+    }
     RunPersistenceSnapshot snapshot;
     snapshot.trigger = trigger;
     snapshot.checkpointMonotonicMillis = time.monotonicMillis;

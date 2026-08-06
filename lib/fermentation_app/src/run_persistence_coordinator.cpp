@@ -598,6 +598,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     // dasselbe bestehende Muster wie result.effects oben.
     result.sensorSelectionEvent = decision.sensorSelectionEvent;
     result.sensorSelectionNotice = decision.sensorSelectionNotice;
+    result.startSensorSelectionNotice = decision.startSensorSelectionNotice;
     return result;
 }
 

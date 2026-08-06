@@ -83,6 +83,25 @@ ProgramStartRequest programStart(
     request.sourceProgramRevision = 1U;
     request.sensorMode = RunSensorMode::Product;
     request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = true;
+    return request;
+}
+
+ManualStartRequest manualStart(const RunCommandState& state, CommandId id,
+                               ManualRunPlanRequest plan,
+                               bool safetyAllowsStart = true,
+                               bool airSensorValid = true,
+                               bool coolingSensorValid = true,
+                               bool productSensorValid = true) {
+    ManualStartRequest request;
+    request.envelope = envelope(id, state);
+    request.plan = std::move(plan);
+    request.safetyAllowsStart = safetyAllowsStart;
+    request.airSensorValid = airSensorValid;
+    request.coolingSensorValid = coolingSensorValid;
+    request.productSensorValid = productSensorValid;
     return request;
 }
 
@@ -366,8 +385,7 @@ void test_run_id_boundary_is_shared_by_program_and_manual_start() {
     program.runId.assign(48U, 'x');
     TEST_ASSERT_TRUE(decideProgramStart(state, program).proposed());
 
-    auto manual =
-        ManualStartRequest{envelope(72U, state), manualPlan(""), true};
+    auto manual = manualStart(state, 72U, manualPlan(""));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(CommandStatus::InvalidInput),
         static_cast<int>(decideManualStart(state, manual).status));
@@ -451,8 +469,7 @@ void test_manual_start_summary_is_available_before_confirmation_but_never_masks_
     // Gueltig, unbestaetigt: Zusammenfassung vorhanden, keine Mutation.
     {
         auto state = standbyState();
-        ManualStartRequest request{envelope(1U, state), manualPlan("hold"),
-                                   true};
+        auto request = manualStart(state, 1U, manualPlan("hold"));
         request.envelope.confirmed = false;
         const auto decision = decideManualStart(state, request);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
@@ -470,7 +487,7 @@ void test_manual_start_summary_is_available_before_confirmation_but_never_masks_
         auto state = standbyState();
         auto plan = manualPlan("preheat-hold", true);
         plan.maximumProductWaitMinutes.reset();
-        ManualStartRequest request{envelope(1U, state), plan, true};
+        auto request = manualStart(state, 1U, plan);
         request.envelope.confirmed = false;
         const auto decision = decideManualStart(state, request);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
@@ -481,8 +498,7 @@ void test_manual_start_summary_is_available_before_confirmation_but_never_masks_
     // durch NotConfirmed maskiert werden.
     {
         auto state = standbyState();
-        ManualStartRequest request{envelope(1U, state), manualPlan("hold"),
-                                   false};
+        auto request = manualStart(state, 1U, manualPlan("hold"), false);
         request.envelope.confirmed = false;
         const auto decision = decideManualStart(state, request);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
@@ -513,16 +529,15 @@ void test_program_start_is_two_stage_and_contains_summary() {
 
 void test_manual_plans_have_no_duration_and_use_canonical_start_states() {
     auto state = standbyState();
-    ManualStartRequest withoutPreheat{envelope(1U, state), manualPlan("hold"),
-                                      true};
+    auto withoutPreheat = manualStart(state, 1U, manualPlan("hold"));
     const auto direct = decideManualStart(state, withoutPreheat);
     TEST_ASSERT_TRUE(direct.proposed());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(direct.after.processState.state));
     TEST_ASSERT_FALSE(direct.startSummary->durationMinutes.has_value());
 
-    ManualStartRequest withPreheat{envelope(2U, state),
-                                   manualPlan("preheat-hold", true), true};
+    auto withPreheat =
+        manualStart(state, 2U, manualPlan("preheat-hold", true));
     const auto preheated = decideManualStart(state, withPreheat);
     TEST_ASSERT_TRUE(preheated.proposed());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
@@ -1036,8 +1051,7 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
     {
         auto state = standbyState();
         state.runRevision = max;
-        ManualStartRequest request{envelope(1U, state), manualPlan("hold"),
-                                   true};
+        auto request = manualStart(state, 1U, manualPlan("hold"));
         const auto decision = decideManualStart(state, request);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
                               static_cast<int>(decision.status));
@@ -1046,8 +1060,7 @@ void test_run_revision_overflow_is_rejected_for_every_run_mutating_command() {
         assertRejectedWithoutStateMutation(decision);
 
         state.runRevision = max - 1U;
-        ManualStartRequest okRequest{envelope(1U, state), manualPlan("hold"),
-                                     true};
+        auto okRequest = manualStart(state, 1U, manualPlan("hold"));
         const auto ok = decideManualStart(state, okRequest);
         TEST_ASSERT_TRUE(ok.proposed());
         TEST_ASSERT_EQUAL_UINT32(max, ok.after.runRevision);
@@ -1162,8 +1175,7 @@ void test_run_revision_capacity_does_not_mask_prior_domain_results() {
     {
         auto state = standbyState();
         state.runRevision = max;
-        ManualStartRequest request{envelope(1U, state), manualPlan("hold"),
-                                   true};
+        auto request = manualStart(state, 1U, manualPlan("hold"));
         request.envelope.confirmed = false;
         const auto decision = decideManualStart(state, request);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NotConfirmed),
@@ -1384,7 +1396,7 @@ RunCommandState startedManualProductState() {
     auto state = standbyState();
     auto plan = manualPlan("manual-product-1");
     plan.sensorMode = RunSensorMode::Product;
-    ManualStartRequest request{envelope(1U, state), plan, true};
+    auto request = manualStart(state, 1U, plan);
     const auto decision = decideManualStart(state, request);
     TEST_ASSERT_TRUE(decision.proposed());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Applied),
@@ -1778,17 +1790,22 @@ void test_clear_active_run_state_regressions_across_terminal_paths() {
             static_cast<int>(decision.after.sensorSelectionRuntime.permission));
         TEST_ASSERT_FALSE(decision.after.sensorSelection.has_value());
 
-        // Ein neuer Start unmittelbar danach beginnt nicht mit der
-        // uebernommenen Sensorselektion des vorherigen Laufs.
+        // Ein neuer Start unmittelbar danach beginnt mit einer vollstaendig
+        // neuen Sensorselektion (#21, 6.14.6/9.4), nicht mit der
+        // uebernommenen des vorherigen (AirFallbackActive/FallbackActive)
+        // Laufs.
         auto afterAbort = state;
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Applied),
                               static_cast<int>(applyRunCommand(afterAbort, decision)));
         const auto restart =
             decideProgramStart(afterAbort, programStart(afterAbort, 201U));
         TEST_ASSERT_TRUE(restart.proposed());
-        TEST_ASSERT_FALSE(restart.after.sensorSelection.has_value());
+        TEST_ASSERT_TRUE(restart.after.sensorSelection.has_value());
         TEST_ASSERT_EQUAL_INT(
-            static_cast<int>(SensorSelectionPhase::NoActiveRun),
+            static_cast<int>(SensorSelectionProvenance::InitialSelection),
+            static_cast<int>(restart.after.sensorSelection->provenance));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::NormalProduct),
             static_cast<int>(restart.after.sensorSelectionRuntime.phase));
     }
     // AcknowledgeCompletion (regulaerer Abschluss).
@@ -1809,6 +1826,277 @@ void test_clear_active_run_state_regressions_across_terminal_paths() {
             static_cast<int>(decision.after.sensorSelectionRuntime.phase));
         TEST_ASSERT_FALSE(decision.after.sensorSelection.has_value());
     }
+}
+
+// ---------------------------------------------------------------------------
+// #21, 6.5/6.8/6.11: Startvertragsanschluss (Commit 5)
+// ---------------------------------------------------------------------------
+
+ProgramStartRequest programStartWithPreference(
+    const RunCommandState& state, CommandId id, SensorPreference preference,
+    RunSensorMode requestedMode, bool productSensorValid,
+    bool airSensorValid = true, bool coolingSensorValid = true) {
+    auto request = programStart(state, id);
+    request.program.program.sensorPreference = preference;
+    // 6.13 Regel 1/2/3/4: ProductRequired/AirOnly verlangen eine dazu
+    // passende Policy/Ruecklaufstrategie, sonst waere schon das
+    // ProgramDocument (nicht die Startmatrix) ungueltig.
+    if (preference == SensorPreference::ProductRequired) {
+        request.program.program.productSensorFailure.policy =
+            ProductSensorFailurePolicy::WaitForUser;
+        request.program.program.productSensorFailure.fallbackDelaySeconds =
+            std::nullopt;
+    } else if (preference == SensorPreference::AirOnly) {
+        request.program.program.productSensorFailure.returnStrategy =
+            ReturnStrategy::RemainOnAirUntilEnd;
+        request.program.program.productSensorFailure.fallbackDelaySeconds =
+            std::nullopt;
+    }
+    request.sensorMode = requestedMode;
+    request.productSensorValid = productSensorValid;
+    request.airSensorValid = airSensorValid;
+    request.coolingSensorValid = coolingSensorValid;
+    return request;
+}
+
+// #21, 6.5: alle elf Zeilen der Startmatrix.
+void test_program_start_sensor_matrix_covers_all_eleven_rows() {
+    // Zeile 1: ProductIfAvailableElseAir + Product + Valid -> Product.
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, programStartWithPreference(
+                       state, 1U, SensorPreference::ProductIfAvailableElseAir,
+                       RunSensorMode::Product, true));
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
+                              static_cast<int>(*decision.after.activeRunSensorMode));
+        TEST_ASSERT_FALSE(decision.startSensorSelectionNotice.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::NormalProduct),
+            static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+    }
+    // Zeile 2: ProductIfAvailableElseAir + Product + nicht Valid ->
+    // automatischer Ersatz auf Air, StartSensorSelectionNotice gesetzt.
+    {
+        auto state = standbyState();
+        auto request = programStartWithPreference(
+            state, 2U, SensorPreference::ProductIfAvailableElseAir,
+            RunSensorMode::Product, false);
+        const auto preview = decideProgramStart(state, request);
+        // Vorschau vor Bestaetigung: bereits sichtbar (6.11), wie startSummary.
+        request.envelope.confirmed = true;
+        const auto decision = decideProgramStart(state, request);
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
+                              static_cast<int>(*decision.after.activeRunSensorMode));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::AirFallbackActive),
+            static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionProvenance::FallbackActive),
+            static_cast<int>(decision.after.sensorSelection->provenance));
+        TEST_ASSERT_TRUE(decision.startSensorSelectionNotice.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunSensorMode::Product),
+            static_cast<int>(decision.startSensorSelectionNotice->requestedMode));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunSensorMode::Air),
+            static_cast<int>(decision.startSensorSelectionNotice->effectiveMode));
+        TEST_ASSERT_EQUAL_UINT32(decision.after.runRevision,
+                                 decision.startSensorSelectionNotice->runRevision);
+        // Bereits vor Bestaetigung sichtbar (6.11), mit demselben Wert.
+        TEST_ASSERT_TRUE(preview.startSensorSelectionNotice.has_value());
+        TEST_ASSERT_EQUAL_UINT32(
+            decision.startSensorSelectionNotice->runRevision,
+            preview.startSensorSelectionNotice->runRevision);
+    }
+    // Zeile 3: ProductIfAvailableElseAir + Air -> Air, keine Notice.
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, programStartWithPreference(
+                       state, 3U, SensorPreference::ProductIfAvailableElseAir,
+                       RunSensorMode::Air, false));
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
+                              static_cast<int>(*decision.after.activeRunSensorMode));
+        TEST_ASSERT_FALSE(decision.startSensorSelectionNotice.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::NormalAir),
+            static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+    }
+    // Zeile 4: AirProductOptional + Product + Valid -> Product.
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, programStartWithPreference(state, 4U,
+                                              SensorPreference::AirProductOptional,
+                                              RunSensorMode::Product, true));
+        TEST_ASSERT_TRUE(decision.proposed());
+    }
+    // Zeile 5: AirProductOptional + Product + nicht Valid -> abgelehnt.
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, programStartWithPreference(state, 5U,
+                                              SensorPreference::AirProductOptional,
+                                              RunSensorMode::Product, false));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(decision.status));
+        assertRejectedWithoutStateMutation(decision);
+    }
+    // Zeile 6: AirProductOptional + Air -> Air.
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, programStartWithPreference(state, 6U,
+                                              SensorPreference::AirProductOptional,
+                                              RunSensorMode::Air, false));
+        TEST_ASSERT_TRUE(decision.proposed());
+    }
+    // Zeile 7: ProductRequired + Product + Valid -> Product.
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, programStartWithPreference(
+                       state, 7U, SensorPreference::ProductRequired,
+                       RunSensorMode::Product, true));
+        TEST_ASSERT_TRUE(decision.proposed());
+    }
+    // Zeile 8: ProductRequired + Product + nicht Valid -> abgelehnt.
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, programStartWithPreference(
+                       state, 8U, SensorPreference::ProductRequired,
+                       RunSensorMode::Product, false));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(decision.status));
+        assertRejectedWithoutStateMutation(decision);
+    }
+    // Zeile 9: ProductRequired + Air -> abgelehnt.
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, programStartWithPreference(
+                       state, 9U, SensorPreference::ProductRequired,
+                       RunSensorMode::Air, false));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(decision.status));
+        assertRejectedWithoutStateMutation(decision);
+    }
+    // Zeile 10: AirOnly + Product -> abgelehnt.
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, programStartWithPreference(state, 10U, SensorPreference::AirOnly,
+                                              RunSensorMode::Product, true));
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
+                              static_cast<int>(decision.status));
+        assertRejectedWithoutStateMutation(decision);
+    }
+    // Zeile 11: AirOnly + Air -> Air.
+    {
+        auto state = standbyState();
+        const auto decision = decideProgramStart(
+            state, programStartWithPreference(state, 11U, SensorPreference::AirOnly,
+                                              RunSensorMode::Air, false));
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::NormalAir),
+            static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+    }
+}
+
+// #21, 6.5: Vorbedingung gilt unabhaengig von SensorPreference/Modus - kein
+// Sonderfall pro Zeile.
+void test_program_start_rejects_uniformly_without_air_or_cooling() {
+    auto state = standbyState();
+    auto request = programStartWithPreference(
+        state, 1U, SensorPreference::AirOnly, RunSensorMode::Air, false,
+        false, true);
+    auto decision = decideProgramStart(state, request);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
+                          static_cast<int>(decision.status));
+    assertRejectedWithoutStateMutation(decision);
+
+    request = programStartWithPreference(state, 2U, SensorPreference::AirOnly,
+                                         RunSensorMode::Air, false, true, false);
+    decision = decideProgramStart(state, request);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
+                          static_cast<int>(decision.status));
+    assertRejectedWithoutStateMutation(decision);
+}
+
+// #21, 6.8: produktgefuehrter manueller Lauf - fester, nicht konfigurierbarer
+// Vertrag (kein automatischer Ersatz, WaitForUser-artiges Verhalten).
+void test_manual_start_product_mode_fixed_contract() {
+    // Produkt gueltig: NormalProduct/Allowed.
+    {
+        auto state = standbyState();
+        auto plan = manualPlan("manual-product-ok");
+        plan.sensorMode = RunSensorMode::Product;
+        const auto decision =
+            decideManualStart(state, manualStart(state, 1U, plan));
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::NormalProduct),
+            static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorPeltierPermission::Allowed),
+            static_cast<int>(decision.after.sensorSelectionRuntime.permission));
+        TEST_ASSERT_FALSE(decision.startSensorSelectionNotice.has_value());
+    }
+    // Produkt zum Startzeitpunkt ungueltig: kein Ersatz, direkt
+    // UserDecisionRequired/Blocked (6.8, fest wie WaitForUser).
+    {
+        auto state = standbyState();
+        auto plan = manualPlan("manual-product-fail");
+        plan.sensorMode = RunSensorMode::Product;
+        auto request = manualStart(state, 2U, plan, true, true, true, false);
+        const auto decision = decideManualStart(state, request);
+        TEST_ASSERT_TRUE(decision.proposed());
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
+                              static_cast<int>(*decision.after.activeRunSensorMode));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::UserDecisionRequired),
+            static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorPeltierPermission::Blocked),
+            static_cast<int>(decision.after.sensorSelectionRuntime.permission));
+        TEST_ASSERT_FALSE(decision.startSensorSelectionNotice.has_value());
+    }
+    // Vorbedingung gilt auch fuer manuelle Starts.
+    {
+        auto state = standbyState();
+        auto request =
+            manualStart(state, 3U, manualPlan("manual-air"), true, false, true);
+        const auto decision = decideManualStart(state, request);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
+                              static_cast<int>(decision.status));
+        assertRejectedWithoutStateMutation(decision);
+    }
+}
+
+// #21, 6.5/6.14.6: der Kuehl-Ersatzlauf nach Abbruch/Abschluss ist ebenfalls
+// ein aktiver Lauf und bekommt dieselbe Erstbefuellung wie jeder Start.
+void test_cooling_replacement_run_gets_fresh_sensor_selection() {
+    auto state = startedProgramState();
+    StopRequest request{envelope(2U, state), StopOption::AbortAndCool,
+                        manualPlan("cool-after-abort"), true};
+    const auto decision = decideStop(state, request);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_TRUE(decision.after.activeManualRun.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(SensorSelectionPhase::NormalAir),
+                          static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Allowed),
+        static_cast<int>(decision.after.sensorSelectionRuntime.permission));
+    TEST_ASSERT_TRUE(decision.after.sensorSelection.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionProvenance::InitialSelection),
+        static_cast<int>(decision.after.sensorSelection->provenance));
 }
 
 }  // namespace
@@ -1857,5 +2145,9 @@ int main() {
     RUN_TEST(
         test_apply_run_command_staleness_regression_for_sensor_selection_and_other_commands);
     RUN_TEST(test_clear_active_run_state_regressions_across_terminal_paths);
+    RUN_TEST(test_program_start_sensor_matrix_covers_all_eleven_rows);
+    RUN_TEST(test_program_start_rejects_uniformly_without_air_or_cooling);
+    RUN_TEST(test_manual_start_product_mode_fixed_contract);
+    RUN_TEST(test_cooling_replacement_run_gets_fresh_sensor_selection);
     return UNITY_END();
 }

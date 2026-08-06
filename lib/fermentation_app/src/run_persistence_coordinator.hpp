@@ -91,6 +91,9 @@ struct RunPersistenceResult {
     // notice - never both, mirrors SensorSelectionStateMutation).
     std::optional<SensorSelectionEvent> sensorSelectionEvent{};
     std::optional<SensorSelectionNotice> sensorSelectionNotice{};
+    // #21, 6.11: nur bei tatsaechlichem requestedMode != effectiveMode
+    // (Startmatrix Zeile 2), erst nach erfolgreichem Commit sichtbar.
+    std::optional<StartSensorSelectionNotice> startSensorSelectionNotice{};
 };
 
 enum class RunPersistenceLoadStatus : std::uint8_t {

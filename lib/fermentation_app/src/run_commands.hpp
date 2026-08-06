@@ -125,6 +125,10 @@ struct StartSummary {
 //
 // Diese PR fuehrt weder `ConfigurationService` noch eine provisorische
 // Katalogpersistenz ein; das bleibt Scope von #16.
+// #21, 6.5: Vorbedingung fuer jede Zeile der Startmatrix - Luft und
+// Kuehlkoerpersensor muessen zum Startzeitpunkt gueltig sein, unabhaengig von
+// `SensorPreference` und angefordertem Modus. `productSensorValid` wird nur
+// konsultiert, wenn `sensorMode == RunSensorMode::Product` angefordert wird.
 struct ProgramStartRequest {
     CommandEnvelope envelope;
     std::string runId;
@@ -133,12 +137,18 @@ struct ProgramStartRequest {
     std::uint32_t sourceProgramRevision{0U};
     RunSensorMode sensorMode{RunSensorMode::Air};
     bool safetyAllowsStart{false};
+    bool airSensorValid{false};
+    bool coolingSensorValid{false};
+    bool productSensorValid{false};
 };
 
 struct ManualStartRequest {
     CommandEnvelope envelope;
     ManualRunPlanRequest plan;
     bool safetyAllowsStart{false};
+    bool airSensorValid{false};
+    bool coolingSensorValid{false};
+    bool productSensorValid{false};
 };
 
 enum class StopOption : std::uint8_t {
@@ -347,6 +357,10 @@ struct CommandDecision {
     std::optional<SensorSelectionApplyStatus> sensorSelectionApplyStatus;
     std::optional<SensorSelectionEvent> sensorSelectionEvent;
     std::optional<SensorSelectionNotice> sensorSelectionNotice;
+    // #21, 6.5/6.11: von decideProgramStart/decideManualStart bereits vor
+    // der Bestaetigungspruefung gefuellt (analog startSummary) - nur bei
+    // tatsaechlichem requestedMode != effectiveMode (Startmatrix Zeile 2).
+    std::optional<StartSensorSelectionNotice> startSensorSelectionNotice;
 
     [[nodiscard]] bool proposed() const {
         return status == CommandStatus::Proposed;

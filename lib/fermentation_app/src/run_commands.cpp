@@ -380,6 +380,88 @@ CommandStatus mapSensorSelectionRejection(SensorSelectionApplyStatus status) {
     return CommandStatus::InvalidInput;
 }
 
+// #21, 6.5: vollstaendige Startmatrix. `valid=false` bedeutet Ablehnung
+// (InvalidInput); `substituted=true` markiert genau Zeile 2 (angefordertes
+// Produkt bei ProductIfAvailableElseAir, aber zum Startzeitpunkt nicht
+// gueltig - automatischer Ersatz auf Luft). Die Luft-/Kuehlkoerper-
+// Vorbedingung (Zeile-uebergreifend) wird vom Aufrufer separat geprueft.
+struct ProgramStartSensorResolution {
+    bool valid{false};
+    RunSensorMode effectiveMode{RunSensorMode::Air};
+    bool substituted{false};
+};
+
+ProgramStartSensorResolution resolveProgramStartSensorMode(
+    SensorPreference preference, RunSensorMode requestedMode,
+    bool productSensorValid) {
+    switch (preference) {
+        case SensorPreference::ProductIfAvailableElseAir:
+            if (requestedMode == RunSensorMode::Air) {
+                return {true, RunSensorMode::Air, false};
+            }
+            return productSensorValid ? ProgramStartSensorResolution{
+                                            true, RunSensorMode::Product, false}
+                                      : ProgramStartSensorResolution{
+                                            true, RunSensorMode::Air, true};
+        case SensorPreference::AirProductOptional:
+            if (requestedMode == RunSensorMode::Air) {
+                return {true, RunSensorMode::Air, false};
+            }
+            return {productSensorValid, RunSensorMode::Product, false};
+        case SensorPreference::ProductRequired:
+            if (requestedMode == RunSensorMode::Air) {
+                return {false, RunSensorMode::Air, false};
+            }
+            return {productSensorValid, RunSensorMode::Product, false};
+        case SensorPreference::AirOnly:
+            if (requestedMode == RunSensorMode::Product) {
+                return {false, RunSensorMode::Product, false};
+            }
+            return {true, RunSensorMode::Air, false};
+    }
+    return {false, RunSensorMode::Air, false};
+}
+
+struct StartSensorSelectionOutcome {
+    SensorSelectionRuntimeState runtime;
+    PersistedSensorSelectionState persisted;
+};
+
+// #21, 6.5/6.8: gemeinsame Erstbefuellung fuer Programm- und manuelle
+// Starts. `substitutedFromProduct` ist nur fuer Zeile 2 der Startmatrix
+// true (Programmstart); manuelle Starts uebergeben immer false, da 6.8
+// keinen automatischen Ersatz bei Start kennt. Ein produktgefuehrter
+// manueller Start mit zum Startzeitpunkt ungueltigem Produkt startet - anders
+// als ein abgelehnter Programmstart derselben Konstellation - direkt in
+// UserDecisionRequired (6.8: fest wie ProductSensorFailurePolicy::WaitForUser,
+// kein Wartetimer).
+StartSensorSelectionOutcome startSensorSelectionOutcome(
+    RunSensorMode effectiveMode, bool substitutedFromProduct,
+    bool productSensorValid, std::uint32_t startRunRevision) {
+    StartSensorSelectionOutcome outcome;
+    outcome.runtime.permission = SensorPeltierPermission::Allowed;
+    if (effectiveMode == RunSensorMode::Air) {
+        if (substitutedFromProduct) {
+            outcome.runtime.phase = SensorSelectionPhase::AirFallbackActive;
+            outcome.persisted.provenance = SensorSelectionProvenance::FallbackActive;
+        } else {
+            outcome.runtime.phase = SensorSelectionPhase::NormalAir;
+            outcome.persisted.provenance = SensorSelectionProvenance::InitialSelection;
+        }
+    } else {
+        outcome.persisted.provenance = SensorSelectionProvenance::InitialSelection;
+        if (productSensorValid) {
+            outcome.runtime.phase = SensorSelectionPhase::NormalProduct;
+        } else {
+            outcome.runtime.phase = SensorSelectionPhase::UserDecisionRequired;
+            outcome.runtime.permission = SensorPeltierPermission::Blocked;
+        }
+    }
+    outcome.persisted.lastDecisionCause = SensorSelectionDecisionCause::StartSelection;
+    outcome.persisted.lastDecisionRunRevision = startRunRevision;
+    return outcome;
+}
+
 }  // namespace
 
 // #21, 6.14.6: einzige Implementierung; ersetzt das vormalige
@@ -472,6 +554,20 @@ CommandDecision decideProgramStart(const RunCommandState& current,
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
+    // #21, 6.5: Vorbedingung fuer jede Zeile der Startmatrix - gilt
+    // unabhaengig von SensorPreference und angefordertem Modus, kein
+    // Sonderfall pro Zeile.
+    if (!request.airSensorValid || !request.coolingSensorValid) {
+        decision.status = CommandStatus::SafetyRejected;
+        return decision;
+    }
+    const auto resolution = resolveProgramStartSensorMode(
+        request.program.program.sensorPreference, request.sensorMode,
+        request.productSensorValid);
+    if (!resolution.valid) {
+        decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
 
     auto run = ActiveRun::start(request.program, request.sourceKind,
                                 request.sourceProgramRevision);
@@ -489,17 +585,32 @@ CommandDecision decideProgramStart(const RunCommandState& current,
     // steht deshalb auch fuer eine noch unbestaetigte, aber gueltige Anfrage
     // zur Verfuegung (siehe docs/RUN_COMMANDS.md, "Zusammenfassung vor
     // Bestaetigung"). `before`/`after` bleiben bis hierher identisch mit
-    // `current`.
+    // `current`. `sensorMode` ist ab hier der effektive, bereits gegen die
+    // Programmpraeferenz validierte Modus (6.5), nicht mehr der angeforderte.
     decision.startSummary = StartSummary{
         request.runId,
         request.program.program.name,
         run->effectiveValues().targetTemperatureCelsius,
         run->effectiveValues().remainingDurationMinutes,
-        request.sensorMode,
+        resolution.effectiveMode,
         request.program.program.preheat,
         request.program.program.completion.mode,
         ProcessKind::Timed,
     };
+    if (resolution.substituted) {
+        // #21, 6.5 Zeile 2/6.11: Vorschau vor Bestaetigung - die Laufrevision
+        // ist die ohnehin beim Start erzeugte erste Revision, hier noch
+        // prospektiv (keine zweite Revision, kein zusaetzlicher Mutations-
+        // schritt). Bei bereits erschoepfter Kapazitaet bleibt der Wert
+        // unveraendert; requireRevisionCapacity lehnt die Anfrage unten
+        // ohnehin ab, bevor irgendetwas commitfaehig wird.
+        const auto max = std::numeric_limits<std::uint32_t>::max();
+        const auto previewRevision = decision.before.runRevision == max
+                                         ? max
+                                         : decision.before.runRevision + 1U;
+        decision.startSensorSelectionNotice = StartSensorSelectionNotice{
+            request.sensorMode, resolution.effectiveMode, previewRevision};
+    }
 
     if (!request.envelope.confirmed) {
         decision.status = CommandStatus::NotConfirmed;
@@ -517,12 +628,17 @@ CommandDecision decideProgramStart(const RunCommandState& current,
     }
 
     decision.after.activeRunId = request.runId;
-    decision.after.activeRunSensorMode = request.sensorMode;
+    decision.after.activeRunSensorMode = resolution.effectiveMode;
     decision.after.activeProgramRun = std::move(run);
     decision.after.activeManualRun.reset();
     decision.after.processRunSnapshot = *snapshot;
     beginMutation(decision);
     ++decision.after.runRevision;
+    const auto outcome = startSensorSelectionOutcome(
+        resolution.effectiveMode, resolution.substituted,
+        request.productSensorValid, decision.after.runRevision);
+    decision.after.sensorSelectionRuntime = outcome.runtime;
+    decision.after.sensorSelection = outcome.persisted;
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     return decision;
 }
@@ -547,6 +663,12 @@ CommandDecision decideManualStart(const RunCommandState& current,
     auto plan = makeManualPlan(request.plan, request.envelope);
     if (!plan.has_value()) {
         decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
+    // #21, 6.5/6.8: dieselbe Vorbedingung wie fuer Programmstarts - gilt fuer
+    // jeden Start, nicht nur programmgefuehrte.
+    if (!request.airSensorValid || !request.coolingSensorValid) {
+        decision.status = CommandStatus::SafetyRejected;
         return decision;
     }
 
@@ -582,6 +704,15 @@ CommandDecision decideManualStart(const RunCommandState& current,
     }
     beginMutation(decision);
     ++decision.after.runRevision;
+    // #21, 6.8: kein automatischer Ersatz bei manuellem Start - substituted
+    // ist immer false. Ein produktgefuehrter Start mit ungueltigem Produkt
+    // startet direkt in UserDecisionRequired (siehe
+    // startSensorSelectionOutcome), kein Wartetimer, keine StartSensorSelectionNotice.
+    const auto outcome = startSensorSelectionOutcome(
+        request.plan.sensorMode, false, request.productSensorValid,
+        decision.after.runRevision);
+    decision.after.sensorSelectionRuntime = outcome.runtime;
+    decision.after.sensorSelection = outcome.persisted;
     static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
     return decision;
@@ -668,6 +799,20 @@ CommandDecision decideStop(const RunCommandState& current,
     decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
+    // #21, 6.5/6.14.6: der Kuehl-Ersatzlauf ist ebenfalls ein aktiver Lauf
+    // und braucht deshalb dieselbe Erstbefuellung wie jeder andere Start
+    // (clearActiveRunState hat sie oben geleert). Kein neues externes
+    // Sensorsignal fuer diesen Pfad (kein productSensorValid); Kuehlplaene
+    // sind konventionell Luft-gefuehrt, und startSensorSelectionOutcome
+    // faellt fuer einen (strukturell weiterhin moeglichen) Produktmodus
+    // fail-closed auf UserDecisionRequired/Blocked zurueck.
+    if (decision.after.activeManualRun.has_value()) {
+        const auto outcome = startSensorSelectionOutcome(
+            decision.after.activeManualRun->values.sensorMode, false, false,
+            decision.after.runRevision);
+        decision.after.sensorSelectionRuntime = outcome.runtime;
+        decision.after.sensorSelection = outcome.persisted;
+    }
     static_cast<void>(addEffect(decision, CommandEffect::RunAborted));
     static_cast<void>(
         addEffect(decision, CommandEffect::SafePeltierStopRequested));
@@ -734,6 +879,15 @@ CommandDecision decideCompletion(const RunCommandState& current,
     decision.after = std::move(candidate);
     beginMutation(decision);
     ++decision.after.runRevision;
+    // #21, 6.5/6.14.6: siehe decideStop - derselbe Kuehl-Ersatzlauf-Fall
+    // nach regulaerem Abschluss.
+    if (decision.after.activeManualRun.has_value()) {
+        const auto outcome = startSensorSelectionOutcome(
+            decision.after.activeManualRun->values.sensorMode, false, false,
+            decision.after.runRevision);
+        decision.after.sensorSelectionRuntime = outcome.runtime;
+        decision.after.sensorSelection = outcome.persisted;
+    }
     static_cast<void>(
         addEffect(decision, CommandEffect::CompletionAcknowledged));
     if (request.startCooling) {

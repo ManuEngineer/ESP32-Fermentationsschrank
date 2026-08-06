@@ -157,6 +157,9 @@ CommandDecision startDecision(
     request.sourceProgramRevision = 1U;
     request.sensorMode = RunSensorMode::Product;
     request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = true;
     return decideProgramStart(state, request);
 }
 
@@ -178,6 +181,9 @@ CommandDecision manualStartDecision(const RunCommandState& state,
     request.plan.qualificationDurationMinutes = 10U;
     request.plan.maximumTargetReachMinutes = 180U;
     request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = true;
     return decideManualStart(state, request);
 }
 
@@ -2433,10 +2439,11 @@ void test_persist_sensor_selection_requires_active_run_fields() {
                 .persistCommand(state, startDecision(state, 901U),
                                 RunCheckpointTime{100U, std::nullopt})
                 .status));
-    // Deliberately not set - decideProgramStart alone does not populate it
-    // yet (that is #21 Commit 5's job), so this is the state every existing
-    // caller produces today.
-    TEST_ASSERT_FALSE(state.sensorSelection.has_value());
+    // #21 Commit 5: decideProgramStart now always populates sensorSelection,
+    // so this eligibility gate is exercised directly against a state that
+    // deliberately lacks it (e.g. a not-yet-#18-reactivated restore) rather
+    // than relying on it being absent by default.
+    state.sensorSelection.reset();
     const auto mutation = productFailureBlockMutation(state, 500U);
     const auto writesBefore = store.writeCount();
 
@@ -2520,6 +2527,72 @@ void test_persist_sensor_selection_rejects_non_persistent_status() {
                            static_cast<unsigned>(store.writeCount()));
 }
 
+// #21, 6.5 Zeile 2/6.11: decideProgramStart's automatischer Ersatz auf Luft.
+CommandDecision substitutedStartDecision(const RunCommandState& state,
+                                         CommandId id) {
+    auto program = runnableProgram();
+    program.program.sensorPreference = SensorPreference::ProductIfAvailableElseAir;
+    ProgramStartRequest request;
+    request.envelope = {id,
+                        CommandSource::LocalDisplay,
+                        100U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
+    request.runId = "persisted-run";
+    request.program = program;
+    request.sourceKind = ProgramSourceKind::FactoryCatalog;
+    request.sourceProgramRevision = 1U;
+    request.sensorMode = RunSensorMode::Product;
+    request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = false;
+    return decideProgramStart(state, request);
+}
+
+// #21, 6.11: RunPersistenceResult::startSensorSelectionNotice nur nach
+// erfolgreichem Commit sichtbar - ein Schreibfehler beim Start darf keine
+// scheinbar ausgefuehrte Start-Notice erzeugen.
+void test_start_sensor_selection_notice_only_visible_after_successful_commit() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+
+    const auto decision = substitutedStartDecision(state, 910U);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_TRUE(decision.startSensorSelectionNotice.has_value());
+
+    store.faultAt(store.writeCount() + 1U,
+                  SequencedWriteStore::WriteFault::FailBeforeBegin);
+    const auto failed = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+                          static_cast<int>(failed.status));
+    TEST_ASSERT_FALSE(failed.startSensorSelectionNotice.has_value());
+    TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
+
+    const auto retryDecision = substitutedStartDecision(state, 910U);
+    const auto committed = coordinator.persistCommand(
+        state, retryDecision, RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(committed.status));
+    TEST_ASSERT_TRUE(committed.startSensorSelectionNotice.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Product),
+        static_cast<int>(committed.startSensorSelectionNotice->requestedMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Air),
+        static_cast<int>(committed.startSensorSelectionNotice->effectiveMode));
+    TEST_ASSERT_EQUAL_UINT32(
+        state.runRevision, committed.startSensorSelectionNotice->runRevision);
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -2583,5 +2656,6 @@ int main(int, char**) {
         test_persist_sensor_selection_from_loaded_active_run_stays_recovery_pending);
     RUN_TEST(test_persist_sensor_selection_rejects_manual_causes);
     RUN_TEST(test_persist_sensor_selection_rejects_non_persistent_status);
+    RUN_TEST(test_start_sensor_selection_notice_only_visible_after_successful_commit);
     return UNITY_END();
 }
