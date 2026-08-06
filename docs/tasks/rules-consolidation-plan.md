@@ -2,7 +2,7 @@
 
 ## Status
 
-`REVIEW_COMPLETE_OWNER_GATE_PENDING`
+`REVIEW_COMPLETE_OWNER_CONFIGURATION_PENDING`
 
 Audit und Umsetzung erfolgten blockweise: prüfen, materielle Abweichungen mit
 dem Owner entscheiden, freigegebenen Block umsetzen, Diff/Links/Doppelungen
@@ -56,6 +56,7 @@ Recovery- oder Owner-Gates zu kürzen.
 | R-08a | Alle notwendigen lokalen `CLAUDE.md` bleiben einzeilige Importbrücken; ESP-IDF-Adapterbaum erhält lokale Regeln. |
 | R-09 | README kompakt; `SPECIFICATION_PLAN.md` entfernen; `SPECIFICATION_REVIEW.md` kanonisch aktualisieren; einzigartige PR-38-Korrekturen in Fachverträge übernehmen. |
 | R-09a | `PR38_REVIEW_CORRECTIONS.md` bleibt als kurzer nicht normativer Kompatibilitätshinweis für historische Links bestehen; alle Regeln liegen in aktuellen Fachquellen. |
+| R-10 | Einzelentwickler-Workflow: Nur der Owner gibt PRs frei, setzt sie auf `Ready for review` und mergt. Agenten tun keines davon. Eine verpflichtende Freigabe durch eine zweite Person ist unpassend und muss aus der GitHub-Branch-Protection entfernt werden; PR- und CI-Gates bleiben bestehen. |
 
 ## Freigegebene Lesematrix
 
@@ -159,12 +160,13 @@ Recovery- oder Owner-Gates zu kürzen.
 - [x] GitHub-Workflow syntaktisch geladen und Draft-Skip bestätigt;
 - [ ] lokaler Checkout-basierter Link-/YAML-/`git diff --check`-Lauf: `NOT_RUN`, da die Ausführungsumgebung den GitHub-Host nicht auflösen konnte;
 - [ ] vollständiger lokaler Build-/Testlauf: `NOT_RUN`, nicht vom Owner angeordnet;
-- [ ] Owner entscheidet über die externe GitHub-Regel „1 approving review“;
-- [ ] Owner setzt den PR danach bei Bedarf auf `Ready for review` und löst die vollständige CI aus.
+- [x] Owner bestätigt den Einzelentwickler-Workflow und verwirft die Pflicht zu einer zweiten Freigabe;
+- [ ] Owner entfernt die GitHub-Regel `1 approving review` aus der Branch-Protection;
+- [ ] Owner setzt den PR danach auf `Ready for review` und löst die vollständige CI aus.
 
 ## Nächster Schritt
 
-Ownerreview auf dem finalen `HEAD`. Ohne neuen Befund sind keine weiteren
-Agentenänderungen vorgesehen. Der Owner entscheidet über die externe
-Approval-Regel und setzt den PR anschliessend bei Bedarf auf `Ready for review`,
-wodurch die vollständige GitHub-CI startet.
+Owner entfernt die unpassende GitHub-Regel `1 approving review` aus der
+Branch-Protection für `main`. Danach setzt ausschliesslich der Owner PR #98 auf
+`Ready for review`, wodurch die vollständige GitHub-CI startet. Ohne neuen
+Befund sind keine weiteren Agentenänderungen vorgesehen.
