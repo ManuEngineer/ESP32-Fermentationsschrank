@@ -18,13 +18,13 @@
 // Disposition, Wertebereich, Zustandsmaschine/Wiedererkennung und
 // Robustheit ab. Median-/Tiefpass-/Kalibrierungsintegration, die
 // vollstaendige "verspaetete Probe erkennt Failed innerhalb von ingest()"-
-// Filterreset-Feinunterscheidung sowie die vollstaendige ROM-Wechsel-
-// Filterreset-Verifikation folgen mit Slice 2 (Abschnitt 20, Schritt 18:
-// "Filterreset-Feinunterscheidung" als expliziter Slice-2-Testzusatz).
+// und Kalibrierungsintegration sowie die vollstaendige ROM-Wechsel-
+// Filterreset-Verifikation folgen mit Slice 2 (Abschnitt 20, Schritte 17/18).
 
 namespace {
 
 using device_platform::SampleDisposition;
+using device_platform::SensorCalibration;
 using device_platform::SensorFaultReason;
 using device_platform::SensorIdentity;
 using device_platform::SensorQuality;
@@ -47,6 +47,26 @@ SensorQualityConfig makeTestConfig() {
                /*minConsecutiveValidSamples=*/2U,
                /*minRecoveryStabilityDurationMs=*/2'000U)
         .config.value();
+}
+
+SensorQualityConfig makeFilterConfig(double tauSeconds = 5.0,
+                                     double maxRateCelsiusPerSecond = 100.0,
+                                     uint16_t maxConsecutiveInvalid = 3U) {
+    return SensorQualityConfig::create(
+               /*medianWindowSize=*/3U, tauSeconds,
+               /*minPlausibleCelsius=*/-20.0,
+               /*maxPlausibleCelsius=*/80.0, maxRateCelsiusPerSecond,
+               /*maxStaleAgeMs=*/10'000U, maxConsecutiveInvalid,
+               /*minConsecutiveValidSamples=*/2U,
+               /*minRecoveryStabilityDurationMs=*/2'000U)
+        .config.value();
+}
+
+SensorCalibration makeCalibration(uint64_t identityValue,
+                                  double offsetCelsius) {
+    return SensorCalibration(
+        SensorIdentity::create(identityValue).identity.value(),
+        device_platform::SensorOffset::create(offsetCelsius).offset.value());
 }
 
 TemperatureReading okReading(std::optional<SensorIdentity> identity,
@@ -130,8 +150,11 @@ void test_first_valid_sample_stays_stale_but_updates_raw_evidence() {
     TEST_ASSERT_EQUAL_DOUBLE(20.0, snapshot.rawCelsius.value());
     TEST_ASSERT_TRUE(snapshot.lastAcceptedSampleAgeMs.has_value());
     TEST_ASSERT_EQUAL_UINT64(0U, snapshot.lastAcceptedSampleAgeMs.value());
-    TEST_ASSERT_FALSE(snapshot.correctedCelsius.has_value());
-    TEST_ASSERT_FALSE(snapshot.filteredCelsius.has_value());
+    TEST_ASSERT_TRUE(snapshot.correctedCelsius.has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(20.0, snapshot.correctedCelsius.value());
+    TEST_ASSERT_TRUE(snapshot.filteredCelsius.has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(20.0, snapshot.filteredCelsius.value());
+    TEST_ASSERT_FALSE(snapshot.appliedOffset.has_value());
 }
 
 void test_min_consecutive_valid_samples_reach_valid() {
@@ -761,6 +784,225 @@ void test_two_independent_pipelines_do_not_influence_each_other() {
 }
 
 // ---------------------------------------------------------------------
+// Median, Kalibrierung und Tiefpass (Slice 2)
+// ---------------------------------------------------------------------
+
+void test_pipeline_median_removes_spike_but_keeps_raw_visible() {
+    SensorQualityPipeline pipeline(makeFilterConfig());
+
+    (void)pipeline.ingest(okReading(std::nullopt, 0U, 20.0), 0U);
+    (void)pipeline.ingest(okReading(std::nullopt, 1000U, 21.0), 1000U);
+    (void)pipeline.ingest(okReading(std::nullopt, 2000U, 24.0), 2000U);
+
+    const auto snapshot = pipeline.snapshot(2000U);
+    TEST_ASSERT_EQUAL_DOUBLE(24.0, snapshot.rawCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(21.0, snapshot.correctedCelsius.value());
+    TEST_ASSERT_TRUE(snapshot.filteredCelsius.value() < 21.0);
+    TEST_ASSERT_TRUE(snapshot.lastFaultReason == SensorFaultReason::None);
+}
+
+void test_pipeline_median_keeps_a_real_trend_visible() {
+    SensorQualityPipeline pipeline(makeFilterConfig());
+
+    (void)pipeline.ingest(okReading(std::nullopt, 0U, 20.0), 0U);
+    (void)pipeline.ingest(okReading(std::nullopt, 1000U, 21.0), 1000U);
+    (void)pipeline.ingest(okReading(std::nullopt, 2000U, 22.0), 2000U);
+    (void)pipeline.ingest(okReading(std::nullopt, 3000U, 23.0), 3000U);
+
+    const auto snapshot = pipeline.snapshot(3000U);
+    TEST_ASSERT_EQUAL_DOUBLE(23.0, snapshot.rawCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(22.0, snapshot.correctedCelsius.value());
+    TEST_ASSERT_TRUE(snapshot.filteredCelsius.value() > 20.0);
+}
+
+void test_pipeline_invalid_sample_does_not_change_filter_state() {
+    SensorQualityPipeline pipeline(makeFilterConfig());
+    (void)pipeline.ingest(okReading(std::nullopt, 0U, 20.0), 0U);
+    (void)pipeline.ingest(okReading(std::nullopt, 1000U, 21.0), 1000U);
+    const auto before = pipeline.snapshot(1000U);
+
+    (void)pipeline.ingest(okReading(std::nullopt, 2000U, 100.0), 2000U);
+
+    const auto after = pipeline.snapshot(2000U);
+    TEST_ASSERT_TRUE(after.quality == SensorQuality::Stale);
+    TEST_ASSERT_EQUAL_DOUBLE(100.0, after.rawCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(before.correctedCelsius.value(),
+                             after.correctedCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(before.filteredCelsius.value(),
+                             after.filteredCelsius.value());
+}
+
+void test_pipeline_tau_changes_filter_dynamics() {
+    SensorQualityPipeline fast(makeFilterConfig(1.0));
+    SensorQualityPipeline slow(makeFilterConfig(10.0));
+
+    for (SensorQualityPipeline* pipeline : {&fast, &slow}) {
+        (void)pipeline->ingest(okReading(std::nullopt, 0U, 0.0), 0U);
+        (void)pipeline->ingest(okReading(std::nullopt, 1000U, 10.0), 1000U);
+    }
+
+    TEST_ASSERT_TRUE(fast.snapshot(1000U).filteredCelsius.value() >
+                     slow.snapshot(1000U).filteredCelsius.value());
+}
+
+void test_pipeline_lowpass_uses_sample_timestamps_not_delivery_time() {
+    SensorQualityPipeline oneSecond(makeFilterConfig());
+    SensorQualityPipeline halfSecond(makeFilterConfig());
+
+    (void)oneSecond.ingest(okReading(std::nullopt, 0U, 0.0), 0U);
+    (void)halfSecond.ingest(okReading(std::nullopt, 0U, 0.0), 0U);
+    (void)oneSecond.ingest(okReading(std::nullopt, 1000U, 10.0), 5000U);
+    (void)halfSecond.ingest(okReading(std::nullopt, 500U, 10.0), 5000U);
+
+    TEST_ASSERT_TRUE(oneSecond.snapshot(5000U).filteredCelsius.value() >
+                     halfSecond.snapshot(5000U).filteredCelsius.value());
+}
+
+void test_pipeline_matching_calibration_changes_corrected_value_and_evidence() {
+    SensorQualityPipeline pipeline(makeFilterConfig());
+    pipeline.setCalibration(makeCalibration(7U, 2.5));
+
+    (void)pipeline.ingest(
+        okReading(SensorIdentity::create(7U).identity, 0U, 20.0), 0U);
+
+    const auto snapshot = pipeline.snapshot(0U);
+    TEST_ASSERT_EQUAL_DOUBLE(22.5, snapshot.correctedCelsius.value());
+    TEST_ASSERT_TRUE(snapshot.appliedOffset.has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(2.5, snapshot.appliedOffset.value());
+}
+
+void test_pipeline_missing_wrong_and_unknown_calibration_use_neutral_offset() {
+    SensorQualityPipeline pipeline(makeFilterConfig());
+    const auto identity = SensorIdentity::create(7U).identity;
+    pipeline.setCalibration(std::nullopt);
+    (void)pipeline.ingest(okReading(identity, 0U, 20.0), 0U);
+    auto snapshot = pipeline.snapshot(0U);
+    TEST_ASSERT_EQUAL_DOUBLE(20.0, snapshot.correctedCelsius.value());
+    TEST_ASSERT_FALSE(snapshot.appliedOffset.has_value());
+
+    pipeline.setCalibration(makeCalibration(8U, 2.5));
+
+    (void)pipeline.ingest(okReading(std::nullopt, 1000U, 21.0), 1000U);
+    snapshot = pipeline.snapshot(1000U);
+    TEST_ASSERT_EQUAL_DOUBLE(21.0, snapshot.correctedCelsius.value());
+    TEST_ASSERT_FALSE(snapshot.appliedOffset.has_value());
+}
+
+void test_pipeline_explicit_zero_calibration_is_distinct_from_missing() {
+    SensorQualityPipeline pipeline(makeFilterConfig());
+    const auto identity = SensorIdentity::create(7U).identity;
+
+    (void)pipeline.ingest(okReading(identity, 0U, 20.0), 0U);
+    TEST_ASSERT_FALSE(pipeline.snapshot(0U).appliedOffset.has_value());
+
+    pipeline.setCalibration(makeCalibration(7U, 0.0));
+    (void)pipeline.ingest(okReading(identity, 1000U, 20.0), 1000U);
+
+    const auto snapshot = pipeline.snapshot(1000U);
+    TEST_ASSERT_EQUAL_DOUBLE(20.0, snapshot.correctedCelsius.value());
+    TEST_ASSERT_TRUE(snapshot.appliedOffset.has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(0.0, snapshot.appliedOffset.value());
+}
+
+void test_pipeline_calibration_change_applies_on_next_sample_only() {
+    SensorQualityPipeline pipeline(makeFilterConfig());
+    const auto identity = SensorIdentity::create(7U).identity;
+
+    (void)pipeline.ingest(okReading(identity, 0U, 20.0), 0U);
+    pipeline.setCalibration(makeCalibration(7U, 2.0));
+
+    const auto beforeNextSample = pipeline.snapshot(0U);
+    TEST_ASSERT_EQUAL_DOUBLE(20.0, beforeNextSample.correctedCelsius.value());
+    TEST_ASSERT_FALSE(beforeNextSample.appliedOffset.has_value());
+
+    (void)pipeline.ingest(okReading(identity, 1000U, 20.0), 1000U);
+    const auto afterNextSample = pipeline.snapshot(1000U);
+    TEST_ASSERT_EQUAL_DOUBLE(22.0, afterNextSample.correctedCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(2.0, afterNextSample.appliedOffset.value());
+}
+
+void test_pipeline_offset_change_shifts_lowpass_state_instead_of_resetting() {
+    SensorQualityPipeline pipeline(makeFilterConfig());
+    const auto identity = SensorIdentity::create(7U).identity;
+
+    (void)pipeline.ingest(okReading(identity, 0U, 20.0), 0U);
+    pipeline.setCalibration(makeCalibration(7U, 2.0));
+    (void)pipeline.ingest(okReading(identity, 1000U, 20.0), 1000U);
+
+    const auto snapshot = pipeline.snapshot(1000U);
+    TEST_ASSERT_EQUAL_DOUBLE(22.0, snapshot.correctedCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(22.0, snapshot.filteredCelsius.value());
+}
+
+void test_pipeline_transient_stale_preserves_filter_state() {
+    SensorQualityPipeline withStale(makeFilterConfig());
+    SensorQualityPipeline withoutStale(makeFilterConfig());
+
+    for (SensorQualityPipeline* pipeline : {&withStale, &withoutStale}) {
+        (void)pipeline->ingest(okReading(std::nullopt, 0U, 20.0), 0U);
+        (void)pipeline->ingest(okReading(std::nullopt, 1000U, 21.0), 1000U);
+    }
+    (void)withStale.ingest(
+        faultReading(std::nullopt, 2000U, TemperatureSampleStatus::CrcFault),
+        2000U);
+    (void)withStale.ingest(okReading(std::nullopt, 3000U, 22.0), 3000U);
+    (void)withoutStale.ingest(okReading(std::nullopt, 3000U, 22.0), 3000U);
+
+    const auto staleSnapshot = withStale.snapshot(3000U);
+    const auto directSnapshot = withoutStale.snapshot(3000U);
+    TEST_ASSERT_TRUE(staleSnapshot.quality == SensorQuality::Stale);
+    TEST_ASSERT_EQUAL_DOUBLE(directSnapshot.correctedCelsius.value(),
+                             staleSnapshot.correctedCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(directSnapshot.filteredCelsius.value(),
+                             staleSnapshot.filteredCelsius.value());
+}
+
+void test_pipeline_failed_recovery_starts_filter_from_new_sample() {
+    SensorQualityPipeline pipeline(makeFilterConfig(5.0, 100.0, 1U));
+
+    (void)pipeline.ingest(okReading(std::nullopt, 0U, 20.0), 0U);
+    (void)pipeline.ingest(
+        faultReading(std::nullopt, 1000U, TemperatureSampleStatus::CrcFault),
+        1000U);
+    (void)pipeline.ingest(
+        faultReading(std::nullopt, 2000U, TemperatureSampleStatus::CrcFault),
+        2000U);
+    TEST_ASSERT_TRUE(pipeline.snapshot(2000U).quality == SensorQuality::Failed);
+
+    (void)pipeline.ingest(okReading(std::nullopt, 3000U, 30.0), 3000U);
+    (void)pipeline.ingest(okReading(std::nullopt, 5000U, 30.0), 5000U);
+
+    const auto snapshot = pipeline.snapshot(5000U);
+    TEST_ASSERT_TRUE(snapshot.quality == SensorQuality::Valid);
+    TEST_ASSERT_EQUAL_DOUBLE(30.0, snapshot.correctedCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(30.0, snapshot.filteredCelsius.value());
+}
+
+void test_pipeline_identity_change_resets_filter_and_discards_old_offset_delta() {
+    SensorQualityPipeline pipeline(makeFilterConfig());
+    const auto identityA = SensorIdentity::create(7U).identity;
+    const auto identityB = SensorIdentity::create(8U).identity;
+    pipeline.setCalibration(makeCalibration(7U, 2.0));
+
+    (void)pipeline.ingest(okReading(identityA, 0U, 20.0), 0U);
+    TEST_ASSERT_EQUAL_DOUBLE(22.0,
+                             pipeline.snapshot(0U).filteredCelsius.value());
+
+    (void)pipeline.ingest(okReading(identityB, 1000U, 20.0), 1000U);
+    TEST_ASSERT_TRUE(pipeline.snapshot(1000U).lastFaultReason ==
+                     SensorFaultReason::IdentityMismatch);
+
+    (void)pipeline.ingest(okReading(identityB, 2000U, 20.0), 2000U);
+    (void)pipeline.ingest(okReading(identityB, 4000U, 20.0), 4000U);
+
+    const auto snapshot = pipeline.snapshot(4000U);
+    TEST_ASSERT_TRUE(snapshot.quality == SensorQuality::Valid);
+    TEST_ASSERT_EQUAL_DOUBLE(20.0, snapshot.correctedCelsius.value());
+    TEST_ASSERT_EQUAL_DOUBLE(20.0, snapshot.filteredCelsius.value());
+    TEST_ASSERT_FALSE(snapshot.appliedOffset.has_value());
+}
+
+// ---------------------------------------------------------------------
 // Robustheit
 // ---------------------------------------------------------------------
 
@@ -888,6 +1130,24 @@ int main() {
     RUN_TEST(
         test_identity_transition_from_or_to_unknown_is_not_identity_mismatch);
     RUN_TEST(test_two_independent_pipelines_do_not_influence_each_other);
+
+    RUN_TEST(test_pipeline_median_removes_spike_but_keeps_raw_visible);
+    RUN_TEST(test_pipeline_median_keeps_a_real_trend_visible);
+    RUN_TEST(test_pipeline_invalid_sample_does_not_change_filter_state);
+    RUN_TEST(test_pipeline_tau_changes_filter_dynamics);
+    RUN_TEST(test_pipeline_lowpass_uses_sample_timestamps_not_delivery_time);
+    RUN_TEST(
+        test_pipeline_matching_calibration_changes_corrected_value_and_evidence);
+    RUN_TEST(
+        test_pipeline_missing_wrong_and_unknown_calibration_use_neutral_offset);
+    RUN_TEST(test_pipeline_explicit_zero_calibration_is_distinct_from_missing);
+    RUN_TEST(test_pipeline_calibration_change_applies_on_next_sample_only);
+    RUN_TEST(
+        test_pipeline_offset_change_shifts_lowpass_state_instead_of_resetting);
+    RUN_TEST(test_pipeline_transient_stale_preserves_filter_state);
+    RUN_TEST(test_pipeline_failed_recovery_starts_filter_from_new_sample);
+    RUN_TEST(
+        test_pipeline_identity_change_resets_filter_and_discards_old_offset_delta);
 
     RUN_TEST(test_consecutive_invalid_count_saturates_instead_of_wrapping);
     RUN_TEST(test_recovery_progress_count_saturates_instead_of_wrapping);

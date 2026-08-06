@@ -61,6 +61,19 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Added
 
+- Sensorqualitaet und Plausibilitaet fuer Issue #20, Slice 2: `SensorOffset`
+  und ROM-gebundene `SensorCalibration` als gueltig-by-construction-Werte,
+  heapfreier Medianfilter mit fester Kapazitaet und zeitbasierter Tiefpass
+  auf den Erfassungszeitstempeln. Die `SensorQualityPipeline` fuehrt nur
+  plausible Proben durch Median, Offset und Tiefpass, weist korrigierte und
+  gefilterte Werte ab dem ersten Beitrag aus, unterscheidet eine passende
+  Nullkalibrierung von fehlender Kalibrierung und verschiebt den bestehenden
+  Tiefpasszustand bei einem Offsetwechsel um das Offset-Delta. Transientes
+  Stale erhaelt den Filterzustand; tatsaechliches Failed und bestaetigte
+  ROM-Wechsel verwerfen Median, Tiefpass und Offset-Rechenzustand. Isolierte
+  sowie integrative Native-Tests decken Teilfenster, Ausreisser, Trends,
+  Tau-/Zeitstempelverhalten, Kalibrierungsbindung und Resetvorrang ab.
+
 - Sensorqualitaet und Plausibilitaet fuer Issue #20, Slice 1 (Qualitaetszustand
   + Plausibilitaet, ohne Filter/Kalibrierung): `SensorQualityPipeline` in
   `lib/device_platform/` fuehrt fuer eine einzelne Sensorrolle Disposition

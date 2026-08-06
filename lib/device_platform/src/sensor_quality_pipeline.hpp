@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <optional>
 
+#include "sensor_calibration.hpp"
+#include "sensor_lowpass_filter.hpp"
+#include "sensor_median_filter.hpp"
 #include "sensor_quality.hpp"
 #include "sensor_quality_config.hpp"
 #include "sensor_quality_snapshot.hpp"
@@ -12,10 +15,8 @@
 // Siehe docs/tasks/issue-20-sensor-quality-filtering-plan.md, Abschnitt 8-12,
 // fuer die vollstaendige fachliche Herleitung. Slice 1 (dieser Stand) deckt
 // Zeitstempel-/Dispositionspruefung (9b), Transport-/Wertebereichs-/
-// Aenderungsratenpruefung (10.1/10.2) und die Zustandsmaschine (8/9a) ab;
-// Median, Kalibrier-Offset und Tiefpass folgen in Slice 2
-// (correctedCelsius/filteredCelsius/appliedOffset bleiben bis dahin stets
-// std::nullopt).
+// Aenderungsratenpruefung (10.1/10.2), Median-/Offset-/Tiefpassintegration
+// (10.3-10.5) und die Zustandsmaschine (8/9a) ab.
 namespace device_platform {
 
 // Disposition einer einzelnen eingehenden Probe (Abschnitt 9b) - reine
@@ -40,6 +41,10 @@ class SensorQualityPipeline {
     // gespeichert (Abschnitt 9a).
     [[nodiscard]] SampleDisposition ingest(const TemperatureReading& sample,
                                            uint64_t nowMonotonicMs);
+
+    // Ersetzt die bisher gesetzte Kalibrierung vollstaendig. Die neue
+    // Kalibrierung wirkt erst auf die naechste plausible Probe.
+    void setCalibration(std::optional<SensorCalibration> calibration);
 
     // Liefert Qualitaet und Altersfelder relativ zum explizit uebergebenen
     // `nowMonotonicMs`, nicht relativ zu einer intern gespeicherten Uhr
@@ -84,8 +89,20 @@ class SensorQualityPipeline {
     [[nodiscard]] DerivedQuality deriveQuality(uint64_t referenceTimeMs) const;
     void recordValidSample(double celsius, uint64_t monotonicTimestampMs);
     void recordInvalidSample(SensorFaultReason reason);
+    void resetFilterState();
+    [[nodiscard]] std::optional<double> effectiveOffsetFor(
+        const TemperatureReading& sample) const;
 
     SensorQualityConfig config_;
+    MedianFilter medianFilter_;
+    LowPassFilter lowPassFilter_;
+    std::optional<SensorCalibration> calibration_;
+    std::optional<double> correctedCelsius_;
+    std::optional<double> appliedOffset_;
+    // Interner Offset fuer die Tiefpass-Rechnung. Anders als
+    // appliedOffset_ ist 0.0 auch bei fehlender Kalibrierung ein gueltiger
+    // Rechenwert.
+    std::optional<double> lastFilterEffectiveOffsetCelsius_;
 
     // Letzte AKZEPTIERTE Probe (jeder Disposition-Ausgang ausser Accepted
     // aendert diesen Zustand nicht) - Grundlage fuer Duplikat-/Konflikt-/

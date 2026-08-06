@@ -69,7 +69,31 @@ SensorFaultReason faultReasonForStatus(TemperatureSampleStatus status) {
 }  // namespace
 
 SensorQualityPipeline::SensorQualityPipeline(SensorQualityConfig config)
-    : config_(config) {}
+    : config_(config),
+      medianFilter_(config.medianWindowSize()),
+      lowPassFilter_(config.lowPassTauSeconds()) {}
+
+void SensorQualityPipeline::setCalibration(
+    std::optional<SensorCalibration> calibration) {
+    calibration_ = calibration;
+}
+
+void SensorQualityPipeline::resetFilterState() {
+    medianFilter_.reset();
+    lowPassFilter_.reset();
+    correctedCelsius_ = std::nullopt;
+    appliedOffset_ = std::nullopt;
+    lastFilterEffectiveOffsetCelsius_ = std::nullopt;
+}
+
+std::optional<double> SensorQualityPipeline::effectiveOffsetFor(
+    const TemperatureReading& sample) const {
+    if (calibration_.has_value() && sample.identity().has_value() &&
+        calibration_->identity() == *sample.identity()) {
+        return calibration_->offset().celsius();
+    }
+    return std::nullopt;
+}
 
 SampleDisposition SensorQualityPipeline::determineDisposition(
     const TemperatureReading& sample, uint64_t nowMonotonicMs) const {
@@ -187,7 +211,17 @@ void SensorQualityPipeline::recordValidSample(double celsius,
 
 void SensorQualityPipeline::recordInvalidSample(SensorFaultReason reason) {
     consecutiveInvalidCount_ = saturatingIncrement(consecutiveInvalidCount_);
-    if (consecutiveInvalidCount_ > config_.maxConsecutiveInvalid()) {
+    const bool countFailed =
+        consecutiveInvalidCount_ > config_.maxConsecutiveInvalid();
+    if (countFailed || failedLatched_ ||
+        reason == SensorFaultReason::IdentityMismatch) {
+        // Ein einzelner Fehler waehrend VALID/STALE behaelt den Filter. Ein
+        // tatsaechlich erreichtes Failed, eine laufende unvollstaendige
+        // Failed-Wiedererkennung oder ein bestaetigter ROM-Wechsel beginnen
+        // dagegen mit einem vollstaendig neuen Filterzustand.
+        resetFilterState();
+    }
+    if (countFailed) {
         failedLatched_ = true;
     }
     recoveryProgressCount_ = 0U;
@@ -232,6 +266,7 @@ SampleDisposition SensorQualityPipeline::ingest(
         recoveryProgressCount_ = 0U;
         recoveryStreakStartTimestampMs_ = std::nullopt;
         failedLatched_ = true;
+        resetFilterState();
         // Kein "unmittelbar vorheriger gueltiger Wert" mehr im Sinne von
         // Abschnitt 10.2.
         rateReferenceCelsius_ = std::nullopt;
@@ -323,6 +358,32 @@ SampleDisposition SensorQualityPipeline::ingest(
     if (isRecoveryComplete()) {
         failedLatched_ = false;
     }
+
+    // Nur plausible Proben erreichen die drei Filterstufen. Das Medianfenster
+    // enthaelt Rohwerte; Kalibrierung und Tiefpass folgen danach.
+    (void)medianFilter_.add(celsius);
+    const std::optional<double> median = medianFilter_.median();
+    if (!median.has_value()) {
+        return SampleDisposition::Accepted;
+    }
+
+    const std::optional<double> matchingOffset = effectiveOffsetFor(sample);
+    const double effectiveOffset = matchingOffset.value_or(0.0);
+    if (lastFilterEffectiveOffsetCelsius_.has_value() &&
+        effectiveOffset != *lastFilterEffectiveOffsetCelsius_) {
+        // Bei einem reinen Rekalibrierungswechsel wird der bereits
+        // offsetkorrigierte Tiefpasszustand vor der normalen Zeitglattung um
+        // dasselbe Delta verschoben. Ein Reset hat diesen Zustand vorher
+        // verworfen und gewinnt deshalb automatisch Vorrang.
+        lowPassFilter_.shiftState(effectiveOffset -
+                                  *lastFilterEffectiveOffsetCelsius_);
+    }
+
+    correctedCelsius_ = *median + effectiveOffset;
+    appliedOffset_ = matchingOffset;
+    (void)lowPassFilter_.update(*correctedCelsius_,
+                                sample.monotonicTimestampMs());
+    lastFilterEffectiveOffsetCelsius_ = effectiveOffset;
     return SampleDisposition::Accepted;
 }
 
@@ -334,11 +395,18 @@ SensorQualitySnapshot SensorQualityPipeline::snapshot(
     result.identity = lastKnownIdentity_;
     result.quality = derived.quality;
     result.rawCelsius = rawCelsius_;
-    // Slice 1: kein Medianfilter/Tiefpass/Kalibrierung -> stets nullopt
-    // (siehe sensor_quality_snapshot.hpp).
-    result.correctedCelsius = std::nullopt;
-    result.filteredCelsius = std::nullopt;
-    result.appliedOffset = std::nullopt;
+    // Bei Failed wird kein alter Filterwert als weiter nutzbarer Ausgang
+    // ausgewiesen. Transientes Stale behaelt dagegen den letzten
+    // tatsaechlichen Filterbeitrag sichtbar.
+    if (derived.quality == SensorQuality::Failed) {
+        result.correctedCelsius = std::nullopt;
+        result.filteredCelsius = std::nullopt;
+        result.appliedOffset = std::nullopt;
+    } else {
+        result.correctedCelsius = correctedCelsius_;
+        result.filteredCelsius = lowPassFilter_.value();
+        result.appliedOffset = appliedOffset_;
+    }
     result.lastAcceptedSampleAgeMs = derived.lastAcceptedSampleAgeMs;
     result.lastValidSampleAgeMs = derived.lastValidSampleAgeMs;
     result.lastFaultReason = lastFaultReason_;
