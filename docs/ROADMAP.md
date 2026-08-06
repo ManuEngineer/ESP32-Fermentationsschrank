@@ -10,24 +10,23 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | PR #95 / Issue #20 – Sensorqualitaet, Filterung und Plausibilitaet | Draft, Umsetzung und gezielte Tests abgeschlossen | vollstaendiges Ownerreview; danach Ownerentscheid zu `Ready for review` und CI |
-| 2 | PR #98 – Agentenregeln und Statusquellen konsolidieren | Draft, A9.1/A9.2 abgeschlossen; A9.3 in Umsetzung | Spezifikations-/Statusquellen konsolidieren, kompletter Diffreview |
+| 1 | PR #98 – Agentenregeln und Statusquellen konsolidieren | Draft; Umsetzung, Main-Synchronisierung und vollstaendiges Diffreview abgeschlossen; keine offenen Reviewbefunde | Ownerreview; Entscheidung zur erforderlichen externen Approval-Regel; danach Ownerwechsel auf `Ready for review` und GitHub-CI |
 
 ## Naechste fachliche Arbeit
 
-Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – folgt erst,
-wenn PR #95 beziehungsweise Issue #20 abgeschlossen und der Live-Stand erneut
-geprueft ist. Vor jeder Umsetzung ist ein eigener Plan-first-Draft-PR
+Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist die
+naechste fachliche Arbeit. Sie beginnt erst nach Abschluss von PR #98 und einem
+erneuten Live-Abgleich. Vor jeder Umsetzung ist ein eigener Plan-first-Draft-PR
 erforderlich.
 
 ## Zulaessige Parallelitaet
 
-- PR #98 darf als reine Governance-/Dokumentationsarbeit parallel zu PR #95
-  fortgesetzt werden.
-- Keine weitere Produktionsimplementierung darf den Scope von #20 oder die
-  darauf aufbauende #21-Planung parallel vorwegnehmen.
+- Keine weitere Produktionsimplementierung soll PR #98 und die danach geltenden
+  konsolidierten Arbeitsregeln ueberholen.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
+- Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder
+  Hardwarefreigabe vorwegnehmen.
 
 ## Blocker und spaetere Gates
 
@@ -46,6 +45,7 @@ erforderlich.
 - PR #84: Laufpersistenz und Kontrollpunkte;
 - PR #88: Espressif-first-Synchronisierung des Adopt-or-build-Audits;
 - PR #92: Markdown-only-Aenderungen ohne vollstaendige Firmware-CI;
+- PR #95 / Issue #20: Sensorqualitaet, Filterung und Plausibilitaet;
 - PR #96: kompakter Session-Handover-Vertrag.
 
 ## Pflege
