@@ -1,236 +1,167 @@
-# Gesamtreview der Softwarespezifikation
+# Release-1-Spezifikationsreview
 
-## Ergebnis
+## Zweck
 
-Phase 10C hat die Spezifikation fuer Release 1 auf Konsistenz, Umfang,
-Hardwareannahmen, Ressourcenrahmen und Implementierbarkeit geprueft. Die beiden
-Reviews von PR #38 wurden anschliessend nochmals ausgewertet. Ihre verbindlichen
-Korrekturen stehen in
-[`PR38_REVIEW_CORRECTIONS.md`](PR38_REVIEW_CORRECTIONS.md).
+Dieses Dokument ist die kanonische Quelle fuer:
 
-Ergebnis des Reviews:
+- die Reihenfolge bei Dokumentationswiderspruechen;
+- die verbindliche Release-1-Basis;
+- die vollstaendige Abgrenzung zu spaeteren Funktionen;
+- die Bedeutung offener Hardware-, Inbetriebnahme- und Ressourcenwerte.
 
-- Die fachlichen Produktentscheidungen fuer Release 1 sind ausreichend festgelegt.
-- Die Hardwarearchitektur verwendet drei DS18B20 und keine Referenzflasche als
-  allgemeines Regelkonzept.
-- Release 1 verwendet UART/FT232RL fuer Updates und reserviert keine dualen
-  OTA-Slots.
-- Die Software wird vor der Hardwareintegration als nativ testbarer Kern mit
-  Mockadaptern entwickelt.
-- Unbestaetigte GPIOs, Pegel, Controllerdetails und reale Grenzwerte bleiben
-  sichtbar offen.
-- Die in den PR-Reviews gefundenen sicherheitsrelevanten Widersprueche wurden als
-  verbindliche Korrekturen dokumentiert und in die betroffenen Kerndokumente
-  uebernommen.
-- Es sind nach Einbezug dieser Korrekturen keine bekannten ungeklaerten
-  sicherheitsrelevanten Produktentscheidungen zur Implementierung freigegeben.
-- Verbleibende Unsicherheiten sind Hardware-, Inbetriebnahme- oder
-  Ressourcenmessungen und besitzen eigene Issues.
-
-Die Spezifikation ist nach abgeschlossenem Owner-Review und Merge von PR #38
-bereit fuer die issueweise Implementierung ab #9.
+Fachliche Details stehen in den jeweils spezialisierten Dokumenten und
+akzeptierten ADRs. Dieses Review kopiert deren vollstaendige Vertraege nicht.
 
 ## Dokumentationsprioritaet
 
-Bei scheinbaren Widerspruechen gilt folgende Reihenfolge:
+Bei einem scheinbaren Widerspruch gilt:
 
-1. spaeter datierte akzeptierte ADRs in `DECISIONS.md`
-2. [`PR38_REVIEW_CORRECTIONS.md`](PR38_REVIEW_CORRECTIONS.md)
-3. dieses Reviewdokument
-4. thematisch spezialisierte Spezifikationsdokumente
-5. `REQUIREMENTS.md`, `ARCHITECTURE.md` und `HARDWARE.md`
-6. Beispielkonfigurationen
-7. historische Phasen- und Revisionsnotizen
+1. spaeter akzeptierte ADRs im Register `DECISIONS.md`;
+2. dieses Dokument fuer Release-Scope, Quellenrollen und TBD-Kategorien;
+3. der thematisch zustaendige spezialisierte Fachvertrag;
+4. `REQUIREMENTS.md`, `ARCHITECTURE.md` und `HARDWARE.md`;
+5. Beispielkonfigurationen;
+6. klar historische Audit-, Plan- und Revisionsdokumente.
 
-Historische Abschnitte mit Titeln wie `Noch offen fuer Phase ...` dokumentieren
-den damaligen Stand. Sie definieren nach Phase 10C keine aktuelle Release-Luecke,
-sofern der Punkt in einem spaeteren Dokument entschieden wurde.
+Bestehender Code und Tests belegen den implementierten Stand, duerfen aber eine
+dokumentierte Produkt-, Safety- oder Architekturentscheidung nicht still
+ersetzen. Ein Live-Issue und ein freigegebener Plan definieren den konkreten
+Arbeitsscope; materielle neue Entscheidungen werden in der zustaendigen
+kanonischen Quelle oder einem akzeptierten ADR festgehalten.
 
-Die aktuelle Liste echter offener Punkte steht ausschliesslich in
-[`OPEN_POINTS.md`](OPEN_POINTS.md), den verbindlichen Reviewkorrekturen und den
-Issues #29 bis #37.
+Aktueller Projekt- und Arbeitsstatus steht ausschliesslich in `ROADMAP.md`.
 
 ## Verbindliche Release-1-Basis
 
 ### Plattform
 
-- ESP32-32E
-- 4 MB Flash als harte Planungsbasis
-- keine PSRAM-Abhaengigkeit
-- Profile `native`, `esp32_bringup`, `esp32_release`
-- Single-App-Partitionsplan fuer Release 1 zulaessig
-- UART/FT232RL als Update- und Recoveryweg
+- ESP32-32E mit 4 MB Flash;
+- keine PSRAM-Abhaengigkeit;
+- `native` als PlatformIO-Hosttestprofil;
+- `esp32_bringup` und `esp32_release` als ESP-IDF-6.0.2-Produktionsprofile;
+- UART/FT232RL als Update- und Recoveryweg;
+- keine OTA-Partitionen oder dualen Firmware-Slots.
 
-### Temperaturhardware
+### Temperatur- und Aktorhardware
 
-- Peltier etwa 12 V / 60 W ueber BTS7960
-- Innen- und Aussenluefter
-- 7,5-A-Ueberstromsicherung
-- einmalige Temperatursicherung
-- drei DS18B20:
-  - Schrankluft
-  - abnehmbares Produkt
-  - Kuehlkoerper/Aussenwaermetauscher
+- Peltier mit etwa 12 V / 60 W ueber BTS7960;
+- Innen- und Aussenluefter;
+- 7,5-A-Ueberstromsicherung;
+- einmalige Temperatursicherung als firmwareunabhaengige Rueckfallebene;
+- drei DS18B20-Rollen:
+  - Schrankluft;
+  - abnehmbarer Produktfuehler;
+  - Kuehlkoerper beziehungsweise Aussenwaermetauscher.
 
-Schrankluft- und Kuehlkoerpersensor sind fuer jede Peltierfreigabe erforderlich.
-Die einmalige Temperatursicherung muss bereits vor dem ersten realen Peltier-Puls
-montiert und geprueft sein; Rating und Montageort bleiben bis zur Inbetriebnahme
-offen.
+Schrankluft- und Kuehlkoerpersensor sind fuer jede Peltierfreigabe
+erforderlich. Unbestaetigte GPIOs, Pegel, Controller, Verdrahtung und
+Grenzwerte werden nicht geraten.
 
-### Prozess
+### Prozess und Regelung
 
-- vier Standardprogramme
-- produkt- oder luftgefuehrter Betrieb
-- optionales Vorheizen
-- Zielqualifikation vor Timerstart
-- zeitproportionale PI-Regelung
-- Heizen, neutraler Bereich und Kuehlen auch waehrend der Fermentation
-- unveraenderlicher Programmschnappschuss
-- Zieltemperatur und Restdauer nur als explizite protokollierte Laufanpassung
-- phasenbezogener sicherer Wiederanlauf nach Unterbrechung
-- unbekannte Ausfallzeit wird nicht als exakter Fortschrittswert erfunden
-- spaeter bestimmte Ausfallzeit wird als Unsicherheitsintervall bewertet
+- vier allgemeine Standardprogramme;
+- dynamisch erweiterbare Benutzerprogramme;
+- produkt- oder luftgefuehrter Betrieb;
+- optionales Vorheizen;
+- Zielqualifikation vor Timerstart;
+- zeitproportionale PI-Regelung fuer Heizen, neutralen Bereich und Kuehlen;
+- unveraenderlicher Programmschnappschuss je Lauf;
+- Zieltemperatur und Restdauer nur als ausdrueckliche, validierte und
+  protokollierte Laufanpassung;
+- phasenbezogener sicherer Wiederanlauf nach Unterbrechung;
+- kein erfundener Fortschritt bei unbekannter Ausfallzeit;
+- spaeter bestimmte Ausfallzeit als Unsicherheitsintervall.
 
-### Bedienung
+### Bedienung und Konnektivitaet
 
-- lokale Touchbedienung 320 x 240 im Querformat
-- lokale responsive Weboberflaeche
-- Deutsch, Spanisch und Englisch
-- kein Cloudzwang
-- gemeinsame fachliche Kommandos fuer Display und Web
-- PIN-unabhaengiger lokaler Vollreset als Recoveryweg bei vergessener Service-PIN
+- lokale Touchbedienung mit 320 x 240 Pixel im Querformat;
+- lokale responsive Weboberflaeche;
+- Deutsch, Spanisch und Englisch;
+- Betrieb ohne Cloud, Internet, Heimserver oder funktionierendes WLAN;
+- gemeinsame fachliche Kommandos fuer Touch und Web;
+- PIN-unabhaengiger lokaler Vollreset als Recoveryweg bei vergessener
+  Service-PIN.
 
-### Sicherheit
+Netzwerk, Web und Anzeige sind keine Voraussetzung fuer Regelung oder Safety.
 
-- vier Fehlerklassen
-- Quittierung getrennt von Fehlerreset
-- persistente Verriegelungen
-- `SAFE_BOOT` nach wiederholten abnormalen Neustarts
-- Boot bewertet Verriegelungen und Speicherintegritaet vor `STANDBY` oder Recovery
-- `SAFE_BOOT` erlaubt keine Aktortests
-- keine Wiederherstellung direkter GPIO- oder H-Brueckenzustaende
-- Richtungswechsel nur nach Abschaltung und Totzeit
-- Sicherheitsabschaltung ueberstimmt Mindest-Einschaltzeit
-- kritischer Persistenzfehler verhindert Recovery-Aktorfreigabe
-- ein persistiertes `COMPLETED` wird nach Neustart wieder als `COMPLETED` angezeigt
+### Persistenz und Recovery
 
-## Bewusst offene Kategorien
+- atomare, versionierte Konfiguration mit gueltiger Rueckfallgeneration;
+- atomare Laufkontrollpunkte und klarer Recoveryzustand;
+- kein Wiederherstellen direkter GPIO- oder H-Brueckenzustaende;
+- ein Neustart ist kein Fehlerreset;
+- kritische Persistenz- oder Integritaetsfehler verhindern normale
+  Aktorfreigabe und Lauf-Recovery;
+- ein unbestimmter oder unvollstaendiger kritischer Commit bleibt fail-closed;
+- ein persistiertes `COMPLETED` wird nach Neustart wieder als `COMPLETED`
+  angezeigt.
+
+### Safety
+
+- Peltier und beide Richtungen bleiben bei Boot, Reset, Fehler und unbekanntem
+  Zustand AUS;
+- Heizen und Kuehlen sind nie gleichzeitig freigegeben;
+- Richtungswechsel erzwingt Abschaltung und Totzeit;
+- Sicherheitsabschaltungen ueberstimmen Mindestlaufzeiten;
+- Quittierung und Fehlerreset bleiben getrennt;
+- persistente Verriegelungen ueberleben einen Neustart;
+- wiederholte abnormale Neustarts fuehren zu `SAFE_BOOT`;
+- `SAFE_BOOT` erlaubt keine leistungsbezogenen Aktortests;
+- firmwarefeste Grenzen koennen durch Konfiguration nur verschaerft werden;
+- der erste reale Peltier-Puls verlangt die dokumentierten elektrischen,
+  thermischen und sensorischen Vorbedingungen.
+
+Die vollstaendigen Regeln stehen in den spezialisierten Safety-, Recovery-,
+Persistenz- und Akzeptanzdokumenten.
+
+## Offene Kategorien
 
 ### `TBD_HARDWARE`
 
-Betrifft reale Board-, Pin-, Pegel-, Bus-, Stecker- und Moduldetails. Diese Werte
-werden nicht aus Datenblaettern aehnlicher Boards geraten.
-
-Nachverfolgung: #29 bis #33.
+Reale Board-, GPIO-, Pegel-, Bus-, Stecker-, Controller- oder Moduldaten fehlen.
+Sie werden nur durch Datenblatt der exakten Komponente und praktische
+Verifikation geschlossen.
 
 ### `TBD_COMMISSIONING`
 
-Betrifft Temperaturen, Zeiten, PI-Werte, Filter, Nachlaeufe,
-Sicherheitsgrenzen, Sensoroffsets und Standardprogrammwerte. Diese Werte werden
-am realen Schrank bestimmt.
-
-Nachverfolgung: #34 bis #36.
+Thermische, regelungstechnische oder prozessbezogene Werte werden am realen
+Schrank bestimmt, beispielsweise PI-Parameter, Grenzwerte, Nachlaufzeiten,
+Sensoroffsets und Standardprogrammwerte.
 
 ### `TBD_IMPLEMENTATION_BUDGET`
 
-Betrifft reale Firmwaregroesse, Partitionsaufteilung, Heapreserve,
-Puffergroessen, Historienumfang und Exportgrenzen.
+Reale Firmwaregroesse, Partitionen, Heapreserve, Puffer, Historien- und
+Exportgrenzen benoetigen reproduzierbare Builds und Belastungsmessungen.
 
-Nachverfolgung: #9, #10, #19, #28, #29 und #37.
-
-Kein `TBD` darf als gueltiger produktiver Laufzeitwert akzeptiert werden.
+Kein TBD-Wert darf als gueltiger produktiver Laufzeitwert oder bestaetigte
+Tatsache verwendet werden. Die nachweisgebundene Checkliste steht in
+`OPEN_POINTS.md`.
 
 ## Zukunftsfunktionen ausserhalb von Release 1
 
-- Web-OTA, duale Slots und automatisches Firmware-Rollback
-- benutzeraktivierbare UART-Diagnose
-- Produkt-Luft-Kaskadenregelung
-- PID-Autotuning
-- direkte 12-V-ADC-Messung
-- batteriegepufferte RTC als Pflicht
-- Tuerkontakt
-- Luefter-Tachosignal
-- Push- oder Telegram-Benachrichtigungen
-- eigener WireGuard-Client
-- automatische Wartungserinnerungen
+- Web-OTA, duale OTA-Slots, automatischer Firmwaredownload und automatisches
+  Firmware-Rollback;
+- benutzeraktivierbare UART-Diagnose;
+- Produkt-Luft-Kaskadenregelung;
+- PID-Autotuning;
+- direkte 12-V-ADC-Messung;
+- batteriegepufferte RTC als Pflicht;
+- Tuerkontakt;
+- Luefter-Tachosignal;
+- externe Strommessung ausser optional verifiziertem R_IS/L_IS;
+- Push- oder Telegram-Benachrichtigungen;
+- eigener WireGuard-Client;
+- automatische Wartungserinnerungen.
 
-Diese Funktionen duerfen Release 1 nicht durch ungenutzte grosse Bibliotheken,
-Partitionen, Puffer oder versteckte Aktorpfade belasten.
+OTA ist fuer ein spaeteres Release ausdruecklich vorgesehen. Release 1 baut
+dafuer jedoch keine Bibliotheken, dualen Slots, Speicherreserven, Puffer oder
+versteckten Updatepfade vor.
 
-## Konsolidierte Korrekturen aus Phase 10C
+Zukunftsfunktionen duerfen erst mit eigenem Scope, Ressourcenbudget,
+Safety-/Securityanalyse, Testvertrag und Ownerfreigabe umgesetzt werden.
 
-Folgende Altannahmen wurden ersetzt:
+## Dauerhaft nicht vorgesehene lokale Bedienelemente
 
-- zwei DS18B20 und Referenzflasche -> drei Sensorrollen mit abnehmbarem
-  Produktfuehler und Kuehlkoerpersensor
-- Release-1-Web-OTA -> UART/FT232RL, Web-OTA spaeter
-- automatische Wiederaufnahme erst nach NTP -> sicherer phasenbezogener
-  Wiederanlauf vor/ohne NTP mit spaeterer Korrektur
-- keine Laufwertaenderung -> ausdrueckliche validierte Aenderung von Zieltemperatur
-  und Restdauer ist erlaubt
-- separate Wegwerf-Testfirmware -> gemeinsame Codebasis mit geschuetztem
-  `esp32_bringup`
-- Hardwarearbeit als Entwicklungsblockade -> Software-first mit getrennten
-  `BLOCKED_HARDWARE`-Issues
-
-## Zusaetzliche Korrekturen aus den PR-Reviews
-
-- BOOT wertet Bootschleifen, persistierte Sperren und Speicherintegritaet vor
-  jedem Wechsel nach `STANDBY` oder in die Recovery aus.
-- Unbekannte Ausfallzeit erlaubt sichere phasenbezogene Regelung, aber keinen
-  erfundenen Fortschritt oder automatischen Abschluss.
-- NTP-basierte Unterbrechungsdauer wird als Unter-/Obergrenze und nicht als
-  scheinbar exakter Wert behandelt.
-- `SAFE_BOOT` bleibt aktorfrei; Servicepulse sind nur aus validiertem `STANDBY`
-  erreichbar.
-- Die einmalige Temperatursicherung ist Voraussetzung des ersten Peltier-Pulses.
-- Kritische Persistenzfehler besitzen transaktionale Sperr- und Bootregeln.
-- Der Vollreset bei vergessener Service-PIN besitzt einen PIN-unabhaengigen
-  lokalen Ausloeseweg.
-- `COMPLETED` wird beim Boot explizit wiederhergestellt.
-- Zustandsnamen und die Begriffe Mindest-Einschaltzeit/Mindest-Ausschaltzeit sind
-  vereinheitlicht.
-
-Details und Abnahmetests stehen in `PR38_REVIEW_CORRECTIONS.md`.
-
-## Verzeichnis- und Linkkonsolidierung
-
-Verbindliche Dateinamen:
-
-- `LOCAL_UI_PROGRAMS.md`
-- `ACTUATOR_TIMING.md`
-
-Aeltere Verweise auf `LOCAL_PROGRAMS.md` oder
-`ACTUATOR_TIMING_AND_FANS.md` sind nicht verbindlich. Ein eventueller
-Kompatibilitaetshinweis darf nur auf den kanonischen Dateinamen verweisen.
-
-## Implementierungsfreigabe
-
-Nach Merge des Spezifikations-PRs:
-
-1. Issue #1 wird durch den PR geschlossen.
-2. Issue #9 wird von `PLANNED_SPEC_PENDING` auf `READY` gesetzt.
-3. Branch `foundation/platformio-profiles` wird von aktuellem `main` erstellt.
-4. Implementierung erfolgt nur im Scope von #9.
-5. Nachfolgende Issues werden gemaess `IMPLEMENTATION_ISSUES.md` freigegeben.
-
-Hardware-Issues bleiben bis zum realen Aufbau `BLOCKED_HARDWARE`.
-Inbetriebnahme-Issues bleiben bis zur thermischen Verifikation
-`TBD_COMMISSIONING`.
-
-## Review-Gate
-
-Die Spezifikation gilt als reviewbereit, wenn:
-
-- [x] zentrale Alt-Dokumente konsolidiert sind
-- [x] drei Sensorrollen durchgaengig als Release-1-Basis festgelegt sind
-- [x] UART-Update und fehlende Release-1-OTA-Reserve festgelegt sind
-- [x] software-first Architektur und Bring-up-Profil festgelegt sind
-- [x] offene Punkte nach Typ und Issue nachverfolgt sind
-- [x] Akzeptanztests und Release-Gates dokumentiert sind
-- [x] Epics und Arbeits-Issues erstellt sind
-- [x] Draft-PR #38 erstellt ist
-- [x] beide PR-Reviews ausgewertet und verbindliche Korrekturen dokumentiert
-- [x] alle Inline-Reviewthreads beantwortet und geschlossen
-- [ ] PR-Review durch den Repository-Owner abgeschlossen
-- [ ] PR #38 nach `main` gemergt
+Encoder, Programmwahlschalter, Start-/Stop-Taster und Status-LED gehoeren nicht
+zum Projekt. Das Touchdisplay bleibt die lokale Bedienoberflaeche; der
+230-V-Hauptschalter ist kein Firmwareeingang.

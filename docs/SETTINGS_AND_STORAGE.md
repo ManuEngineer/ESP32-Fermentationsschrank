@@ -5,7 +5,7 @@
 Dieses Dokument definiert Konfigurationsebenen, Aenderungsrechte, Vorschau,
 Neustartbedarf, Zeitdarstellung und atomare Speicherung. Laufpersistenz,
 Sicherungen und Recovery werden in `RUN_PERSISTENCE.md`,
-`BACKUP_SECURITY_RETENTION.md` und `PR38_REVIEW_CORRECTIONS.md` ergaenzt.
+`BACKUP_SECURITY_RETENTION.md` und `SYSTEM_SAFETY_AND_RECOVERY.md` ergaenzt.
 Der verbindliche technische Speicher-, Wire-, Root-, Preview- und
 Recoveryvertrag fuer Issue #16 steht in
 [`CONFIGURATION_PERSISTENCE.md`](CONFIGURATION_PERSISTENCE.md).

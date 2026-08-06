@@ -1,7 +1,7 @@
 # Device-UI-Architekturentscheidungen
 
 **Projekt:** ESP32-Fermentationsschrank / wiederverwendbare Device Platform
-**Status:** Vom Owner bestätigt; Roadmap- und Spezifikationsintegration in PR #80 umgesetzt, Ownerreview ausstehend
+**Status:** Vom Owner bestaetigte und mit PR #80 integrierte R1-Architekturgrundlage
 **Zweck:** Verbindliche Grundlage für die spätere Prüfung und Anpassung der Issues #25, #26 und #31 sowie für die Implementierungsplanung
 **Hinweis:** Dieses Dokument enthält Architektur- und Produktentscheide. Es ist noch kein Implementierungsauftrag und greift der vorgesehenen Issue-Reihenfolge nicht vor.
 
@@ -450,10 +450,9 @@ Alle lokalen Benutzeraktionen erfolgen über das Touchdisplay und typisierte Com
   Status-LEDs sind in Spezifikation, Hardware- und Roadmapdokumentation
   bereinigt beziehungsweise als Ausschluss dokumentiert.
 
-## Nächster verbindlicher Schritt
+## Weiterer Implementierungsweg
 
-PR #80 wartet auf unabhängiges Ownerreview. Nach seinem Abschluss startet jedes
-einzelne Implementierungs-Issue weiterhin nur mit einem eigenen Plan-first-
+Jedes einzelne Implementierungs-Issue startet mit einem eigenen Plan-first-
 Draft-PR und einer commitgebundenen Ownerfreigabe. Insbesondere bleiben
 Rendererwahl, Treiberstack, Ressourcenmessung, Font-/Assets, Helligkeitswerte
 und reale Hardwareverifikation vor ihrer jeweiligen Freigabe offen.

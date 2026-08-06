@@ -1,260 +1,50 @@
 # ESP32-Fermentationsschrank
 
-Universeller, lokal bedienbarer Fermentationsschrank zum geregelten Heizen und
-Kuehlen von Joghurt, Milch- und Wasserkefir sowie eigenen Fermentationsprozessen.
+Sichere, lokal bedienbare ESP32-Firmware fuer einen Fermentationsschrank zum
+geregelten Heizen und Kuehlen. Regelung und Safety bleiben ohne Cloud, Internet,
+WLAN oder Weboberflaeche funktionsfaehig.
 
-Owner: `ManuEngineer`
+## Projektstand
+
+Der aktuelle Arbeitsstand, laufende Pull Requests, naechste Schritte, Blocker
+und Ownerentscheidungen stehen ausschliesslich in
+[`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+## Technische Einordnung
+
+- ESP-IDF `v6.0.2` ist der einzige ESP32-Produktionspfad.
+- PlatformIO dient ausschliesslich dem nativen Hosttestpfad.
+- Fachlogik, Plattformports, ESP-IDF-Adapter und Test-Support sind getrennt.
+- Unbestaetigte Hardware und offene Safety-Gates bleiben fail-closed.
+
+Die verbindliche Modularchitektur steht in
+[`ADR-013`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md).
+
+## Dokumentationseinstieg
+
+| Thema | Quelle |
+|---|---|
+| aktueller Stand und Reihenfolge | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
+| Release-1-Basis und Dokumentationsprioritaet | [`docs/SPECIFICATION_REVIEW.md`](docs/SPECIFICATION_REVIEW.md) |
+| Architekturentscheidungen | [`docs/DECISIONS.md`](docs/DECISIONS.md) |
+| Engineering-Grundsaetze | [`docs/ENGINEERING_PRINCIPLES.md`](docs/ENGINEERING_PRINCIPLES.md) |
+| Agentenworkflow | [`docs/AGENT_WORKFLOW.md`](docs/AGENT_WORKFLOW.md) |
+| Builds, Tests und CI | [`docs/CI_AND_QUALITY_GATES.md`](docs/CI_AND_QUALITY_GATES.md) |
+| reale Hardware | [`docs/HARDWARE.md`](docs/HARDWARE.md) |
+| offene Mess- und Abnahmepunkte | [`docs/OPEN_POINTS.md`](docs/OPEN_POINTS.md) |
+| Modulindex | [`lib/README.md`](lib/README.md) |
+
+Aufgabenspezifische Fachvertraege werden ueber Issue, freigegebenen Plan,
+relevante ADRs und die Lesematrix in `AGENTS.md` bestimmt. Das gesamte
+Dokumentationsverzeichnis ist keine pauschale Pflichtlektuere.
 
 ## Lizenzstatus
 
-Die allgemeine Projektlizenz ist bewusst noch nicht festgelegt. Soweit fuer
-einzelne Dateien oder Pfade nichts anderes angegeben ist, erteilt der
-Projekteigentuemer fuer selbst erstellte Projektinhalte keine allgemeine
-Freigabe zur Nutzung, Veraenderung, Weitergabe oder kommerziellen Verwertung.
-Drittanbieterinhalte bleiben unter ihren jeweiligen Originallizenzen und
-Rechten. Das Repository wird bis zu einem ausdruecklichen spaeteren Entscheid
-nicht als Open-Source-Projekt bezeichnet.
+Die allgemeine Projektlizenz ist noch nicht festgelegt. Bis zu einem
+ausdruecklichen Entscheid besteht keine allgemeine Freigabe zur Nutzung,
+Veraenderung, Weitergabe oder kommerziellen Verwertung der selbst erstellten
+Projektinhalte. Drittanbieterinhalte behalten ihre jeweiligen Originallizenzen
+und Rechte.
 
-Der kanonische vorlaeufige Stand und die spaeteren Entscheidungs-Gates stehen in
+Der kanonische vorlaeufige Stand steht in
 [`docs/LICENSE_STATUS.md`](docs/LICENSE_STATUS.md).
-
-## Projektstatus
-
-Die Anforderungen fuer Release 1 sind spezifiziert und mit Pull Request #38 nach
-`main` uebernommen. Die Implementierung erfolgt issueweise, beginnend mit der
-ESP-IDF-Produktions- und native Hosttestgrundlage aus Issue #9.
-
-Die geplante Implementierung ist in den Epics #2 bis #8 und den Arbeits- und
-Abnahme-Issues #9 bis #37 strukturiert. Das erste Implementierungs-Issue ist #9.
-
-## Zielhardware
-
-Verbindliche Planungsbasis:
-
-- ESP32-WROOM-32E beziehungsweise bestellte ESP32-32E-Boardvariante
-- 4 MB Flash
-- keine PSRAM-Abhaengigkeit
-- vier Onboard-MOSFET-Ausgaenge, Belegung und aktive Pegel noch zu messen
-- Peltier mit etwa 12 V / 60 W ueber BTS7960-H-Bruecke
-- Innen- und Aussenluefter
-- 2,8-Zoll-Touchdisplay, 320 x 240 Pixel, ILI9341; Touchcontroller praktisch zu
-  bestaetigen
-- drei DS18B20 im ersten Aufbau:
-  1. Schrankluft
-  2. abnehmbarer Produktfuehler
-  3. Aussenwaermetauscher beziehungsweise Kuehlkoerper
-- 7,5-A-Ueberstromsicherung im Peltierpfad
-- einmalige Temperatursicherung als unabhaengige thermische Notabschaltung
-- aktiver Summer fuer lokale Meldungen
-- FT232RL/UART fuer initiales Flashen, Updates und Wiederherstellung
-
-Keine GPIO-Zuordnung und kein aktiver Pegel gilt vor der realen Messung als
-bestaetigt.
-
-## Funktionsumfang von Release 1
-
-- vier allgemeine Standardprogramme:
-  - Joghurt mild
-  - Joghurt stichfest
-  - Milchkefir
-  - Wasserkefir
-- dynamisch erweiterbare Benutzerprogramme
-- produkt- oder luftgefuehrte Temperaturregelung
-- optionales Vorheizen und getrennte Zielqualifikation
-- zeitproportionale PI-Regelung fuer Heizen, neutralen Bereich und Kuehlen
-- vollstaendige lokale Bedienung am Touchdisplay
-- responsive lokale Weboberflaeche
-- Deutsch, Spanisch und Englisch
-- Betrieb ohne Cloud, Internet, Heimserver oder funktionierendes WLAN
-- phasenbezogener automatischer Wiederanlauf nach Stromunterbrechung
-- atomare Konfiguration und Laufpersistenz mit Rueckfallrevisionen
-- Fehlerklassen, Verriegelungen, `SAFE_BOOT` und gefuehrte Servicepruefungen
-- Lauf-, Diagnose- und Servicebericht-Exporte ohne Geheimnisse
-
-Nicht Bestandteil von Release 1 sind unter anderem Web-OTA, Cloud- oder
-Push-Benachrichtigungen, ein Tuerkontakt, ein eigener WireGuard-Client, eine
-Pflicht-RTC, eine 12-V-ADC-Messung, Kaskadenregelung, PID-Autotuning und
-automatische Wartungserinnerungen.
-
-## Entwicklungsstrategie
-
-Die Software wird vor der Hardwareintegration weitgehend als nativ testbarer
-fachlicher Kern entwickelt.
-
-Vorgesehene Profile:
-
-```text
-native          Fachlicher Kern, Simulation und automatische Tests
-esp32_bringup   Reale Hardwarepruefung mit gesperrten Aktoren
-esp32_release   Freigegebene Zielkonfiguration nach Hardwareabnahme
-```
-
-Die Projektgrundlage setzt diese Profile wie folgt um:
-
-| Profil | Ziel und sichere Startpolitik |
-|---|---|
-| `native` | PlatformIO-Hostbuild ohne Hardware; nur Fachlogik und Tests |
-| `esp32_bringup` | ESP-IDF-Produktionsprofil, Start als `HARDWARE_UNVERIFIED`, Aktoren gesperrt |
-| `esp32_release` | ESP-IDF-Produktionsprofil; verlangt ein spaeter bestaetigtes Hardwareprofil, Aktoren bleiben standardmaessig gesperrt |
-
-Beide ESP32-Profile planen mit 4 MB Flash und setzen keine PSRAM voraus. Web-OTA
-ist als `FUTURE_RELEASE` deaktiviert. Es ist noch keine projektspezifische
-Partitionstabelle festgelegt; Layout und Budgets bleiben bis zu realen Build- und
-Hardwaremessungen `TBD_IMPLEMENTATION_BUDGET`. Ebenso sind keine Hardwaretreiber,
-GPIOs oder aktiven Pegel Bestandteil dieser Grundlage.
-
-Die Grundlage trennt Projektkonfiguration, wiederverwendbare Plattform und
-konkrete Anwendung:
-
-```text
-include/
-    gemeinsame Projekt- und Buildkonfiguration
-
-src/main.cpp
-    native-only Composition Root
-
-main/app_main.cpp
-    ESP-IDF Composition Root; verbindet die Produktionsadapter und Anwendung
-
-lib/device_platform/
-    anwendungsneutrale Geraetedienste und Schnittstellen
-
-lib/fermentation_app/
-    Fermentationsprogramme und konkrete Prozesslogik
-
-test/
-    native Unit-, Integrations- und Konfigurationspruefungen
-```
-
-Die Fermentations-App verwendet nur die Schnittstelle `IPlatformServices` und
-kennt weder Arduino noch die konkrete Klasse `DevicePlatform`. Die
-projektspezifische Datei `include/app_config.hpp` bleibt ausserhalb der
-wiederverwendbaren Plattform und wird von den passenden Composition Roots
-beziehungsweise Builds eingebunden. Sie enthaelt keine Zugangsdaten oder
-Geheimnisse. Verbindliche Details und die spaetere Auslagerungsstrategie stehen in
-[`ADR-013`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md).
-
-Der fachliche Zustandsautomat in `lib/fermentation_app` ist ebenfalls frei von
-Hardware- und Persistenzzugriffen. Er berechnet mit monotoner virtueller Zeit
-reversible Uebergangsentscheidungen fuer Vorheizen, Produktwartephase,
-Zielqualifikation, Fermentation, Kuehlen und Halten. Erst eine getrennte
-Bestaetigung uebernimmt den neuen Zustand; veraltete Entscheidungen werden ohne
-Teilmutation abgelehnt.
-
-Darauf aufbauend verarbeitet die fachliche Kommandoschicht bestaetigte Starts,
-manuelle Laufplaene, Stoppen, Abschluss, Laufanpassungen, Meldungsaktionen und
-qualifizierte Fehlerresetabsichten ebenfalls zweistufig. Display und Web sind
-gleichberechtigte Quellen; Kommando-IDs sowie Zustands- und Fachrevisionen
-verhindern doppelte oder veraltete Anwendungen. Persistenz, konkrete UI und
-Aktorwirkung bleiben getrennten Folge-Issues vorbehalten.
-
-Der native Hostpfad baut und testet mit:
-
-```bash
-pio run -e native
-pio test -e native
-```
-
-Die beiden ESP-IDF-Produktionsprofile werden mit einer aktivierten,
-festgelegten ESP-IDF-`v6.0.2`-Umgebung gebaut:
-
-```bash
-. "$IDF_PATH/export.sh"
-python scripts/build_esp_idf_profiles.py all
-```
-
-Seit Issue #10 pruefen CI und lokal zusaetzlich Formatierung, Static Analysis,
-Geheimnisse und einen Firmware-/Ressourcen-Groessenbericht:
-
-```bash
-clang-format --dry-run --Werror $(find src include lib test main -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
-pio run -e native -t compiledb && clang-tidy -p . include/app_config.hpp \
-  lib/device_platform/src/device_platform.cpp \
-  lib/device_platform/src/virtual_time_source.cpp \
-  lib/fermentation_app/src/fermentation_application.cpp \
-  lib/fermentation_app/src/process_state_machine.cpp \
-  lib/fermentation_app/src/run_commands.cpp src/main.cpp
-python scripts/check_secrets.py
-python scripts/build_report.py --output build-report.md
-```
-
-Details, Werkzeugversionen, die virtuelle Zeitquelle `ITimeSource`/
-`VirtualTimeSource` sowie die PASS-/FAILED-/BLOCKED-Konvention stehen in
-[`docs/CI_AND_QUALITY_GATES.md`](docs/CI_AND_QUALITY_GATES.md).
-
-Die reproduzierbare Produktionsgrundlage verwendet ESP-IDF `v6.0.2`
-(`7101770dc6db2667b3c477cc31365dd1acd6db4e`) in getrennten Bring-up- und
-Release-Buildverzeichnissen. PlatformIO Core `6.1.19` bleibt ausschliesslich
-fuer den nativen Hostpfad. Der Profilguard prueft die generierten ESP-IDF-
-Konfigurationen und effektiven Compile-Definitionen, damit 4 MB Flash, keine
-PSRAM-Abhaengigkeit, deaktiviertes Web-OTA und gesperrte reale Aktoren nicht
-allein von Anwendungs-Makros abhaengen. Bei einem fehlgeschlagenen ESP-IDF-Build
-sichert CI die profilspezifischen Logs; erfolgreiche Builds liefern getrennte
-Artefakte und Ressourcenberichte.
-
-Der Kern greift nicht direkt auf GPIO, 1-Wire, Display, WLAN oder Flash zu,
-sondern verwendet klar getrennte Adapter. Dadurch koennen Zustandsmaschine,
-Persistenz, Sensorlogik, PI-Regler, Sicherheit, UI-Modelle und Weboberflaeche
-bereits vor Eintreffen der Hardware gegen simulierte Sensoren und Aktoren getestet
-werden.
-
-Bei der realen Inbetriebnahme werden Ausgaenge zuerst unbelastet gemessen. Danach
-werden Sensoren, Display, Luefter und Summer einzeln integriert. Die BTS7960 wird
-ohne Peltier geprueft. Erst anschliessend sind zeitlich und leistungsmassig
-begrenzte Peltierpulse im geschuetzten Bring-up-/Servicemodus erlaubt.
-
-## Verbindliche Dokumentation
-
-Einstieg:
-
-- [`docs/SPECIFICATION_PLAN.md`](docs/SPECIFICATION_PLAN.md)
-- [`docs/SPECIFICATION_REVIEW.md`](docs/SPECIFICATION_REVIEW.md)
-- [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
-- [`docs/IMPLEMENTATION_ISSUES.md`](docs/IMPLEMENTATION_ISSUES.md)
-- [`docs/ACCEPTANCE_TESTS.md`](docs/ACCEPTANCE_TESTS.md)
-- [`docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`](docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md)
-- [`docs/CI_AND_QUALITY_GATES.md`](docs/CI_AND_QUALITY_GATES.md)
-- [`docs/ESP_IDF_UPGRADE_CONTRACT.md`](docs/ESP_IDF_UPGRADE_CONTRACT.md)
-- [`lib/README.md`](lib/README.md)
-
-Fachliche Spezifikation:
-
-- [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md)
-- [`docs/PROGRAMS.md`](docs/PROGRAMS.md)
-- [`docs/STANDARD_PROGRAMS.md`](docs/STANDARD_PROGRAMS.md)
-- [`docs/STATE_MACHINE.md`](docs/STATE_MACHINE.md)
-- [`docs/RECOVERY_AND_INTERRUPTION.md`](docs/RECOVERY_AND_INTERRUPTION.md)
-- [`docs/LOCAL_UI.md`](docs/LOCAL_UI.md)
-- [`docs/LOCAL_UI_PROGRAMS.md`](docs/LOCAL_UI_PROGRAMS.md)
-- [`docs/LOCAL_RUNTIME_UI.md`](docs/LOCAL_RUNTIME_UI.md)
-- [`docs/WEB_UI.md`](docs/WEB_UI.md)
-- [`docs/NETWORK.md`](docs/NETWORK.md)
-- [`docs/SETTINGS_AND_STORAGE.md`](docs/SETTINGS_AND_STORAGE.md)
-- [`docs/CONFIGURATION_PERSISTENCE.md`](docs/CONFIGURATION_PERSISTENCE.md)
-- [`docs/RUN_PERSISTENCE.md`](docs/RUN_PERSISTENCE.md)
-- [`docs/TEMPERATURE_CONTROL.md`](docs/TEMPERATURE_CONTROL.md)
-- [`docs/ACTUATOR_TIMING.md`](docs/ACTUATOR_TIMING.md)
-- [`docs/SENSOR_TUNING_COMMISSIONING.md`](docs/SENSOR_TUNING_COMMISSIONING.md)
-- [`docs/SAFETY_AND_FAULTS.md`](docs/SAFETY_AND_FAULTS.md)
-- [`docs/SAFETY_COMPONENT_FAULTS.md`](docs/SAFETY_COMPONENT_FAULTS.md)
-- [`docs/SYSTEM_SAFETY_AND_RECOVERY.md`](docs/SYSTEM_SAFETY_AND_RECOVERY.md)
-
-Hardware und offene Punkte:
-
-- [`docs/HARDWARE.md`](docs/HARDWARE.md)
-- [`docs/OPEN_POINTS.md`](docs/OPEN_POINTS.md)
-- [`references/LINKS.md`](references/LINKS.md) – Hardwarequellen und lokal
-  archivierte Datenblaetter
-- [`config/hardware.example.yaml`](config/hardware.example.yaml)
-- [`config/pins.example.yaml`](config/pins.example.yaml)
-
-## Prioritaet bei Widerspruechen
-
-Die verbindliche und vollstaendige Reihenfolge steht ausschliesslich in
-[`docs/SPECIFICATION_REVIEW.md`](docs/SPECIFICATION_REVIEW.md) im Abschnitt
-`Dokumentationsprioritaet`. Dadurch gibt es keine zweite, verkuerzte Liste, die
-spaeter von der kanonischen Reihenfolge abweichen kann.
-
-Unbestaetigte Hardwarewerte bleiben `TBD_HARDWARE`; thermische Werte bleiben
-`TBD_COMMISSIONING`; Speicher- und Ressourcengrenzen bleiben
-`TBD_IMPLEMENTATION_BUDGET`.

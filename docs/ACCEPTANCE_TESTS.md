@@ -46,6 +46,17 @@ Mindestens:
 - Persistenzschema, atomare Revisionen und Rueckfall
 - Transaktionsabsicht vor aktorwirksamer Zustandsaenderung
 - Persistenzfehler-Latch und Bootauswertung
+- kritischer Schreibfehler sperrt neue Aktoranforderungen vor weiteren
+  Persistenzversuchen und setzt den RAM-seitigen Latch
+- minimaler persistenter Latch wird ausserhalb des normalen Laufjournals versucht;
+  auch sein Schreibfehler bleibt fail-closed
+- unvollstaendiger Transaktionsmarker fuehrt beim Boot zu `SAFE_BOOT`
+- Recovery-Aktorfreigabe erst nach bestandener Lesen-Schreiben-Pruefung und
+  erfolgreich persistierter, wieder verifizierter Recoveryrevision
+- Persistenzfehler-Latch bleibt bei Quittierung, Neustart und isoliert
+  erfolgreichem Schreibversuch gesetzt
+- Latch-Reset nur im geschuetzten Serviceablauf nach bestandener
+  Speicherpruefung, aufgeloestem Transaktionsmarker und dokumentiertem Reset
 - Aufbewahrung und Bereinigung
 - PIN-unabhaengiger Vollreset-Ablauf als Zustands- und Berechtigungslogik
 - Device-Shell mit Header, exakt vier festen Slots, Home-/Zurueck-Hierarchie
@@ -76,7 +87,15 @@ Mindestens:
 - persistierte Verriegelung plus Neustart -> `SAFE_BOOT`
 - wiederholter Watchdog oder Bootschleife -> `SAFE_BOOT`
 - unvollstaendige Persistenztransaktion -> `SAFE_BOOT`
-- kritischer Persistenzschreibfehler -> sichere Abschaltung
+- kritischer Persistenzschreibfehler -> sofortige Aktorsperre, sichere
+  Abschaltung und RAM-Latch
+- erfolgreicher minimaler Persistenzfehler-Latch -> Neustart bleibt verriegelt
+- fehlgeschlagener minimaler Latch-Schreibversuch -> keine Fortsetzung in
+  derselben Laufzeit und beim naechsten unklaren Boot `SAFE_BOOT`
+- Recoveryfreigabe ohne bestandene Lesen-Schreiben-Pruefung oder ohne verifizierte
+  neue Recoveryrevision wird abgelehnt
+- verfruehter Latch-Reset ausserhalb des Serviceablaufs oder vor bestandener
+  Speicherpruefung wird abgelehnt
 - korrupter Kontrollpunkt mit sicherem Rueckfall
 - `COMPLETED` bleibt nach Neustart `COMPLETED`
 - kein Service- oder Aktortest aus `SAFE_BOOT`
@@ -183,7 +202,7 @@ Vor Implementierungsfreigabe:
 - verbindliche Anforderung oder Entscheidung vorhanden
 - zugehoerige Testidee vorhanden
 - Hardware-, Inbetriebnahme- und Budget-TBDs sichtbar
-- Reviewkorrekturen von PR #38 eingebunden
+- Reviewkorrekturen von PR #38 in aktuelle kanonische Fachquellen integriert
 - keine sicherheitskritische Annahme als bestaetigte Tatsache
 
 ### Gate 1: Softwarekern
@@ -197,6 +216,10 @@ Vor realem Aktorbetrieb:
 - Aktorfreigabelogik getestet
 - Mindestzeiten, Totzeit und Watchdog getestet
 - Persistenz, Transaktionsmarker und Rueckfall getestet
+- kritischer Schreibfehler sperrt Aktoren und setzt den RAM-Latch
+- minimaler persistenter Latch und dessen Fehlerpfad getestet
+- Latch-Reset-Gate nach Speicherpruefung getestet
+- Recoveryfreigabe verlangt verifizierte neue Revision
 - Ausfallintervall und Zeitunsicherheit getestet
 - kein Aktortest aus `SAFE_BOOT` erreichbar
 - alle sicherheitsrelevanten automatischen Tests bestanden
@@ -313,9 +336,19 @@ Vor Release 1:
 - neueste Konfigurationsrevision beschaedigen
 - Rueckfallrevision pruefen
 - Unterbrechung waehrend kritischem Schreibvorgang
+- kritischen Schreibfehler bei aktiver Aktoranforderung injizieren und sofortige
+  Sperre vor einem weiteren Aktorbefehl nachweisen
 - unvollstaendigen Transaktionsmarker hinterlassen
 - kritischen Speicher nicht lesbar oder nicht schreibbar simulieren
 - Persistenzfehler-Latch setzen und Neustart ausfuehren
+- Schreiben des minimalen persistenten Latches zusaetzlich fehlschlagen lassen;
+  RAM-Latch und fail-closed-Verhalten muessen bestehen bleiben
+- Recoveryentscheidung erfolgreich schreiben, aber Ruecklesen beziehungsweise
+  Verifikation fehlschlagen lassen; Aktorfreigabe bleibt gesperrt
+- Latch-Reset vor Speicherpruefung, ausserhalb des Serviceablaufs und bei
+  verbleibendem Transaktionsmarker ablehnen
+- Latch-Reset nach bestandener Lesen-Schreiben-Pruefung und dokumentiertem
+  Serviceereignis zulassen
 - Historienspeicher bis zur Bereinigung fuellen
 - nichtkritischen RAM- oder Exportfehler erzeugen
 
@@ -441,6 +474,9 @@ formellen Gate aber kein `PASS`, wenn die Warnung eine Gate-Anforderung betrifft
 - [x] Boot bewertet Verriegelungen und Persistenz vor Recovery
 - [x] Ausfallzeit wird als Intervall getestet
 - [x] `COMPLETED` wird nach Neustart wiederhergestellt
+- [x] kritischer Persistenzfehler sperrt Aktoren und setzt RAM-/Persistenz-Latch
+- [x] fehlgeschlagener minimaler Latch-Schreibversuch bleibt fail-closed
+- [x] Latch-Reset nur nach bestandenem Service- und Speicher-Gate
 - [x] PIN-unabhaengiger lokaler Vollreset wird getestet
 - [x] mindestens siebentaegiger Dauer- und Belastungstest
 - [x] formeller versionierter Testnachweis

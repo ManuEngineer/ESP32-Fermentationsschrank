@@ -1,90 +1,98 @@
-# CI, Tests, virtuelle Zeit und Qualitaetspruefungen
+# CI und Qualitaets-Gates
 
-## Status
+## Zweck
 
-Dieses Dokument beschreibt die Testausfuehrung, virtuelle Zeitquelle,
-CI-Pipeline und Qualitaetswerkzeuge. Der native Hostpfad verwendet PlatformIO;
-die ESP32-Produktionsprofile verwenden verbindlich ESP-IDF `v6.0.2`
-(`7101770dc6db2667b3c477cc31365dd1acd6db4e`). Es ergaenzt
-`docs/ACCEPTANCE_TESTS.md` und `docs/IMPLEMENTATION_PLAN.md` um die konkrete
-lokale und CI-seitige Umsetzung.
+Dieses Dokument ist die kanonische Quelle fuer Testbefehle, Buildprofile,
+Werkzeuge, CI-Ausloesung und die Ergebnisbegriffe `PASS`, `FAILED` und
+`BLOCKED`.
 
-## Owner-gesteuerte Vollpruefung und CI-Trigger
+Der native Hostpfad verwendet PlatformIO `6.1.19`. Die ESP32-Produktionsprofile
+verwenden ESP-IDF `v6.0.2` am Commit
+`7101770dc6db2667b3c477cc31365dd1acd6db4e`.
 
-Die verbindliche Regel steht in `AGENTS.md`, Abschnitt 3a; dieser Abschnitt
-beschreibt nur deren technische Umsetzung und dupliziert die Regel nicht.
+## Ausfuehrungszeitpunkt
 
-Waehrend der Umsetzung eines freigegebenen Plans laeuft ausschliesslich
-lokal, gezielt fuer die tatsaechlich betroffene(n) Testsuite(s):
+### Planung
+
+Keine Builds und keine vollstaendigen Testlaeufe. Zulaessig sind nur
+Repository-, Diff-, Link- und Dokumentationspruefungen, die den Plan
+unterstuetzen.
+
+### Draft-Umsetzung
+
+Nur gezielte lokale Tests und Pruefungen fuer den tatsaechlich geaenderten
+Bereich. Bei geaenderten gemeinsamen Vertraegen gehoeren die direkt betroffenen
+Konsumententests zum gezielten Umfang. Nicht betroffene Profile und der
+vollstaendige Gesamtlauf werden nicht ritualistisch wiederholt.
+
+### Vollstaendiger lokaler Lauf
+
+Nur wenn:
+
+- das vollstaendige Review keine offenen Befunde mehr hat;
+- der zu pruefende `HEAD` final ist;
+- der Owner den Lauf ausdruecklich anordnet.
+
+### GitHub-CI
+
+`.github/workflows/build.yml` reagiert auf:
+
+- `pull_request.opened`;
+- `pull_request.ready_for_review`;
+- `pull_request.synchronize`;
+- `pull_request.reopened`.
+
+Der Firmwarejob laeuft nur, wenn der Pull Request kein Draft ist. Draft-Pushes
+koennen einen sofort uebersprungenen Workfloweintrag erzeugen, fuehren aber
+keine Builds oder Tests aus.
+
+Der Ownerwechsel auf `Ready for review` startet die vollstaendige CI fuer den
+reviewten Head. Jeder spaetere semantische Push auf einen Nicht-Draft-PR startet
+sie erneut und verwirft den vorherigen Firmware-Pruefnachweis.
+
+Markdown-only- und Kommentaraenderungen sind durch `paths-ignore` von der
+Firmware-CI ausgenommen. Das bedeutet nicht, dass ihr Reviewnachweis automatisch
+gueltig bleibt: Jede semantische Aenderung, auch an normativer Dokumentation,
+verlangt ein erneutes vollstaendiges Review. Nur rein redaktionelle Korrekturen
+ohne Bedeutungs-, Scope-, Vertrags- oder Akzeptanzwirkung duerfen den
+Reviewnachweis behalten.
+
+Nach einem CI-Fehlschlag dokumentiert der Agent Fehler, Auswirkung und gezielte
+Korrektur. Nur der Owner entscheidet ueber eine Rueckstufung auf Draft. Nach
+Korrektur, direkt abhaengigen Tests und erneutem vollstaendigem Review fuehrt
+nur der Owner den neuen Wechsel auf `Ready for review` aus.
+
+Es gibt keinen `push`-Trigger und damit keinen automatischen identischen
+Wiederholungslauf nach dem Merge.
+
+## Buildprofile
+
+| Profil | Werkzeug | Zweck |
+|---|---|---|
+| `native` | PlatformIO/Host-Compiler | Fachlogik, Simulation und native Tests |
+| `esp32_bringup` | ESP-IDF 6.0.2 | Produktionsbuild mit gesperrten Aktoren und unbestaetigter Hardware |
+| `esp32_release` | ESP-IDF 6.0.2 | Releaseprofil; keine automatische Hardwarefreigabe |
+
+`src/main.cpp` ist der native Composition Root. `main/app_main.cpp` ist der
+ESP-IDF Composition Root.
+
+## Gezielte lokale Pruefungen
+
+Der konkrete Umfang wird aus Diff, Plan und betroffenen Tests abgeleitet.
+Beispiele:
 
 ```bash
-pio test -e native -f "test_<betroffene_suite>"
+pio test -e native --filter <test-verzeichnis-oder-muster>
+clang-format --dry-run --Werror <geaenderte-cpp-hpp-h-dateien>
+python scripts/check_architecture_boundaries.py
+python scripts/check_secrets.py
+git diff --check
 ```
 
-Kein vollstaendiger `pio test -e native`, keine ESP-IDF-Profile, keine
-`run_esp_idf_static_analysis.py` und kein `build_report.py` waehrend dieser
-Phase.
+Ein gezielter Lauf muss im PR mit Befehl, Umfang und Ergebnis dokumentiert
+werden.
 
-`.github/workflows/build.yml` loest die schwere CI (native Volltest,
-Static Analysis, beide ESP-IDF-Profile, Ressourcenbericht) ausschliesslich
-aus bei:
-
-```yaml
-on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "**/*.md"
-  pull_request:
-    types:
-      - opened
-      - reopened
-      - ready_for_review
-      - synchronize
-    paths-ignore:
-      - "**/*.md"
-
-jobs:
-  firmware:
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
-```
-
-Damit gilt:
-
-- ein `push` auf einen Feature-/Plan-Branch mit offenem Draft-PR loest die
-  schwere CI NICHT zusaetzlich zum `pull_request`-Event aus (kein doppelter
-  Volllauf desselben Commits);
-- `opened`/`reopened`/`synchronize` auf einem weiterhin als Draft gefuehrten
-  PR ueberspringt den schweren Job (`github.event.pull_request.draft ==
-  true`);
-- der Owner setzt den Draft-PR auf `Ready for Review` - `ready_for_review`
-  loest genau einen vollstaendigen Lauf fuer den reviewten Head aus;
-- ein weiterer Push NACH `Ready for Review` (`synchronize`, `draft ==
-  false`) loest erneut die volle CI aus - jede semantische Aenderung nach
-  einer gruenen Vollpruefung verwirft den vorherigen Pruefnachweis
-  (`AGENTS.md` 3a);
-- `push` auf `main` (nach Merge) baut weiterhin vollstaendig, da der
-  gemergte Commit ein neuer, zuvor nicht einzeln als Merge-Ergebnis
-  gepruefter Stand ist und den Ressourcenbericht auf `main` fuer spaetere
-  Basisvergleiche aktuell haelt. Dies ist eine Auslegung des Auftrags
-  "keinen automatischen vollstaendigen `push`-Lauf nach Merge beibehalten,
-  wenn dadurch derselbe bereits gruen geprueften Head nur nochmals geprueft
-  wuerde" (der Merge-Commit ist ein anderer Head als der zuvor gepruefte
-  PR-Head) und keine abschliessend entschiedene Owner-Vorgabe; der Owner
-  kann diese Auslegung bei Bedarf ausdruecklich verwerfen.
-
-Nach einem CI-Fehlschlag geht der PR zurueck auf Draft; nur der Fehler und
-direkt abhaengige Tests werden lokal geprueft, danach erneutes Review und
-erneutes `Ready for Review` durch den Owner (`AGENTS.md` 3a).
-
-## Native Tests lokal ausfuehren
-
-Der vollstaendige Lauf in diesem Abschnitt gilt ausserhalb einer laufenden
-Planumsetzung (z. B. bei eigenstaendiger lokaler Fehlersuche oder vor dem
-allerersten Commit eines neuen Plans). Waehrend der Umsetzung eines
-freigegebenen Plans gilt stattdessen ausschliesslich der gezielte Lauf aus
-"Owner-gesteuerte Vollpruefung und CI-Trigger" oben.
+## Vollstaendiger nativer Lauf
 
 ```bash
 pio run -e native
@@ -94,8 +102,9 @@ python scripts/check_secrets.py
 python scripts/selftest_quality_gates.py
 ```
 
-Die beiden ESP-IDF-Produktionsprofile werden nach Aktivierung der festgelegten
-Toolchain gebaut und validiert:
+## ESP-IDF-Profile
+
+Nach Aktivierung der festgelegten Toolchain:
 
 ```bash
 . "$IDF_PATH/export.sh"
@@ -103,198 +112,69 @@ python scripts/build_esp_idf_profiles.py all
 python scripts/run_esp_idf_static_analysis.py all
 ```
 
-Die native Testausfuehrung ist reproduzierbar: Sie verwendet ausschliesslich
-den Host-Compiler, keine reale Uhrzeit und keine Netzwerkzugriffe. Jede
-Testsuite liegt in einem eigenen Verzeichnis unter `test/`, unter anderem:
+Der Upgrade-, Herkunfts- und Hardware-Smoke-Vertrag steht in
+`ESP_IDF_UPGRADE_CONTRACT.md`.
 
-- `test/test_smoke/` — Projektmetadaten, Profile und Plattform-/App-Grenze
-- `test/test_time_source/` — virtuelle Zeitquelle
-- `test/test_sensor_actuator_mocks/` — Sensor-, Aktor- und Simulationsadapter
-- `test/test_persistence_journal_mocks/` — Persistenz- und Journaladapter
-- `test/test_network_notification_mocks/` — Netzwerk- und Benachrichtigungsadapter
-- `test/test_configuration_documents/` — Dokumentmodelle, Firmwarekataloge,
-  UTF-8-/Unicode-, ID- und Zeitzonenvalidierung
-- `test/test_configuration_codecs/` — feste Golden-Bytes, Grenzfaelle und
-  native Allokationsregression grosser ProgramCatalog-Payloads
-- `test/test_configuration_migration/` — Copy-Migration und Abbruch ohne
-  Teilwirkung
+## Formatierung und Static Analysis
 
-## Virtuelle Zeitquelle
+| Werkzeug | Version | Umfang |
+|---|---:|---|
+| clang-format | 18 | C/C++ unter `src/`, `include/`, `lib/`, `test/`, `main/` |
+| clang-tidy | 18.1.8 | hardwareunabhaengiger Produktionskern ueber die native Kompilierungsdatenbank |
+| esp-clang | zur ESP-IDF-6.0.2-Toolchain passend | beide ESP-IDF-Profile |
 
-`lib/device_platform/src/time_source.hpp` definiert den anwendungsneutralen
-Port `ITimeSource` mit zwei Werten:
-
-- `monotonicMillis()`: monoton steigende Millisekunden seit Erstellung der
-  Instanz. Faellt nie zurueck, wird von Aenderungen der absoluten Zeit nicht
-  beeinflusst. Eine neue Instanz beginnt wieder bei 0.
-- `unixTimeSeconds()`: optionale absolute UTC-Zeit. `std::nullopt`, solange
-  keine verlaessliche Zeitquelle vorliegt.
-
-`lib/device_platform/src/virtual_time_source.hpp` implementiert
-`VirtualTimeSource` als anwendungsneutralen, deterministischen Plattformdienst:
-Die Zeit schreitet ausschliesslich durch expliziten Aufruf von
-`advanceMonotonicMillis(deltaMs)` voran; es wird nie auf reale Systemzeit oder
-das Netzwerk zugegriffen. Ein Neustart wird durch eine neue Instanz simuliert.
-
-`EspTimerTimeSource` existiert bereits unter
-`lib/device_platform_esp_idf/` und ist in `main/app_main.cpp` fuer monotone
-Laufzeit-, Heartbeat- und Ressourcen-Telemetrie eingebunden. Eine weitergehende
-Verwendung durch Fachlogik oder `DevicePlatform` wird hier nicht behauptet und
-bedarf eines tatsaechlich implementierten Verbrauchers.
-
-## Compilerwarnungen
-
-`native` baut mit `-Wall -Wextra -Werror -Wpedantic`; beide ESP-IDF-Profile
-bauen mit `-Wall -Wextra -Werror`. Neue Warnungen im Projektcode werden damit
-zu Buildfehlern, nicht still akzeptiert.
-
-PlatformIOs `build_src_flags` gilt nur fuer `src/`, nicht fuer `lib/`. Deshalb
-besitzen `lib/device_platform/`, `lib/device_platform_test_support/` und
-`lib/fermentation_app/` je eine `library.json` mit denselben verbindlichen
-Warnungsflags. `device_platform_test_support` wird nur durch native Tests
-verwendet und nicht in die ESP32-Produktionsbuilds eingebunden.
-
-## Format- und Static-Analysis-Strategie
-
-| Werkzeug | Version | Konfiguration | Umfang |
-|---|---|---|---|
-| clang-format | 18 | `.clang-format` | `src/`, `include/`, `lib/`, `test/`, `main/` |
-| clang-tidy | 18.1.8 | `.clang-tidy` | Produktions-Kompilierungsdatenbank des Profils `native` |
-
-Lokale Ausfuehrung:
+Vollstaendige Formatpruefung:
 
 ```bash
-clang-format --dry-run --Werror $(find src include lib test main -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
-clang-format -i <datei>
-
-pio run -e native -t compiledb
-clang-tidy -p . include/app_config.hpp \
-  lib/device_platform/src/device_platform.cpp \
-  lib/device_platform/src/virtual_time_source.cpp \
-  lib/fermentation_app/src/configuration_document_codec.cpp \
-  lib/fermentation_app/src/configuration_documents.cpp \
-  lib/fermentation_app/src/configuration_migration.cpp \
-  lib/fermentation_app/src/configuration_text.cpp \
-  lib/fermentation_app/src/fermentation_application.cpp \
-  lib/fermentation_app/src/firmware_configuration_catalog.cpp \
-  lib/fermentation_app/src/process_state_machine.cpp \
-  lib/fermentation_app/src/program_model.cpp \
-  lib/fermentation_app/src/run_commands.cpp \
-  lib/fermentation_app/src/run_snapshot.cpp \
-  lib/fermentation_app/src/standard_program_catalog.cpp \
-  src/main.cpp
+clang-format --dry-run --Werror \
+  $(find src include lib test main -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \))
 ```
 
-`clang-tidy` analysiert den hardwareunabhaengigen Produktionskern ueber die
-`native`-Kompilierungsdatenbank. Dokumentierte Ausnahmen:
+Native Kompilierungsdatenbank:
 
-- `test/` und `lib/device_platform_test_support/` sind nicht im Scope, da
-  PlatformIOs `compiledb`-Ziel nur den Produktionsbuild und nicht den
-  Test-Build-Graphen abbildet. Beide Bereiche werden mit denselben
-  Compilerwarnungen gebaut und vollstaendig durch `clang-format` geprueft.
-- Einzelne Checks sind projektweit deaktiviert; die Begruendung steht als
-  Kommentar in `.clang-tidy`.
+```bash
+pio run -e native -t compiledb
+```
 
-Eine punktuelle Unterdrueckung im Code erfolgt ausschliesslich mit
-`// NOLINT(check-name): Begruendung` und muss die Begruendung enthalten.
+Die kanonische clang-tidy-Dateiliste und die CI-Schritte stehen im
+versionierten Workflow `.github/workflows/build.yml`. Eine punktuelle
+Unterdrueckung verwendet ausschliesslich:
 
-## Architekturgrenzen nach ADR-013
+```cpp
+// NOLINT(check-name): konkrete Begruendung
+```
+
+## Architektur-, Secret- und Gate-Selbsttests
 
 ```bash
 python scripts/check_architecture_boundaries.py
-```
-
-Die Pruefung erzwingt die in `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md`
-festgelegte Abhaengigkeitsrichtung:
-
-```text
-device_platform_test_support -> device_platform
-fermentation_app -> Plattform-Schnittstellen
-main -> konkrete Plattform + konkrete Anwendung
-```
-
-Sie blockiert insbesondere:
-
-- Abhaengigkeiten von `device_platform` auf `fermentation_app` oder
-  `device_platform_test_support`,
-- Abhaengigkeiten von `fermentation_app` oder `src/main.cpp` auf
-  `device_platform_test_support`,
-- Arduino-Abhaengigkeiten im Test-Support,
-- reine Mock- oder Simulationsmodelle unter `lib/device_platform/src/`,
-- offensichtliche Fermentationsbegriffe und schrankbezogene Aktorrollen in der
-  allgemeinen Plattform-API.
-
-Die Pruefung ersetzt kein Architekturreview. Sie sichert die klar automatisch
-erkennbaren Grenzen ab und liefert bei einer Verletzung Datei und Zeile.
-
-## ESP-IDF-6.0.2-Produktionspfad
-
-ESP-IDF `v6.0.2` ist der einzige ESP32-Produktionspfad und wird in
-`.github/workflows/build.yml` fuer `esp32_bringup` und `esp32_release`
-getrennt gebaut. `main/app_main.cpp` ist die ESP-IDF Composition Root und
-`lib/device_platform_esp_idf/` enthaelt die konkreten ESP-IDF-Adapter.
-`src/main.cpp` und PlatformIO bleiben ausschliesslich fuer den nativen
-Hosttestpfad.
-
-Voraussetzung ist eine bereits installierte native ESP-IDF-6.0.2-Umgebung
-(offizieller Tag `v6.0.2`, `--recursive` geklont). Aktivierung in der
-jeweiligen Shell:
-
-```bash
-. ${IDF_PATH:-<pfad-zum-esp-idf-v6.0.2-checkout>}/export.sh
-```
-
-Lokaler Build und Profilnachweis:
-
-```bash
-python scripts/build_esp_idf_profiles.py all
-```
-
-`app_main()` startet keine reale Hardware; alle Aktoren bleiben deaktiviert.
-Der kanonische Buildtreiber und Profilguard pruefen Herkunft, getrennte
-`sdkconfig`-Pfade, Profilkonfiguration und Compile-Definitionen. Ein
-`IDF_VER`-Guard im Root-`CMakeLists.txt` ist eine zusaetzliche Verteidigung.
-
-Nach Hinzufuegen oder Entfernen einer Quelldatei unter `lib/device_platform/src/`,
-`lib/fermentation_app/src/` oder `lib/device_platform_esp_idf/src/` kann
-lokal `idf.py reconfigure` noetig sein, da diese Komponenten ueber
-`SRC_DIRS` automatisch alle Quellen ihres Verzeichnisses einsammeln.
-
-Generierte Bestaende (`build/`, `sdkconfig`, `sdkconfig.old`,
-`managed_components/`) sind gitignored. `dependencies.lock` wird nicht
-ignoriert: `#72`/`#73` binden keine Fremdkomponente ein, sobald eine reale
-Component-Manager-Abhaengigkeit entsteht, wird das dabei erzeugte Lockfile
-grundsaetzlich versioniert.
-
-Die um eine schmale IDF-Leak-Pruefung erweiterte
-`scripts/check_architecture_boundaries.py` (siehe oben) stellt sicher, dass
-`lib/device_platform/src/` und `lib/fermentation_app/src/` keinen direkten
-ESP-IDF-/RTOS-/Arduino-/Adapter-Include, keine `ESP_PLATFORM`-/`ARDUINO`-/
-Kconfig-Praeprozessorverwendung und keine unautorisierte direkte IDF-
-Komponentenabhaengigkeit in `REQUIRES`/`PRIV_REQUIRES` enthalten. Seit
-Issue #73 prueft sie zusaetzlich, dass `lib/device_platform_esp_idf/` weder
-`fermentation_app` noch Test-Support referenziert, dass `main/` keinen
-Test-Support verwendet, und dass die `REQUIRES`/`PRIV_REQUIRES`-Eintraege
-von `lib/device_platform_esp_idf/CMakeLists.txt` und `main/CMakeLists.txt`
-getrennt nach oeffentlich/privat einer festen Allowlist entsprechen.
-
-Die zwei Hardware-Smoke-Tests fuer Bring-up und Release sind ein verbindliches
-Merge-Gate. Sie werden ausschliesslich auf dem exakten finalen
-Implementierungs-Head ausgefuehrt; genaue Kriterien und der Upgradeprozess
-stehen in [`ESP_IDF_UPGRADE_CONTRACT.md`](ESP_IDF_UPGRADE_CONTRACT.md).
-
-## Geheimnis- und Lokalkonfigurationspruefung
-
-```bash
 python scripts/check_secrets.py
+python scripts/selftest_quality_gates.py
+python scripts/check_ci_artifact_scan_coverage.py
 ```
 
-Die Pruefung stellt sicher, dass gitignorierte lokale Dateien nicht eingecheckt
-sind, und durchsucht getrackte Textdateien nach typischen Geheimnismustern.
-Dateien mit `example` im Namen sind von der musterbasierten
-Zuweisungspruefung ausgenommen, da sie absichtlich Platzhalterwerte enthalten.
+Der Architekturguard erzwingt die in ADR-013 festgelegte Richtung und ersetzt
+kein vollstaendiges Architekturreview.
 
-## Firmware- und Ressourcen-Groessenbericht
+Die Secretpruefung kontrolliert getrackte Textdateien, lokale Konfigurationen
+und in CI zusaetzlich die erzeugten Artefakte. Beispielkonfigurationen duerfen
+nur klar erkennbare Platzhalter enthalten.
+
+Der Gate-Selbsttest beweist anhand temporaerer fehlerhafter Fixtures, dass die
+Qualitaetspruefungen echte Verstoesse erkennen.
+
+## Determinismus und Zeit
+
+Native Tests verwenden keine reale Uhrzeit und keine Netzwerkabhaengigkeit.
+`ITimeSource` trennt monotone Laufzeit von optionaler UTC-Zeit.
+`VirtualTimeSource` schreitet nur durch explizite Testaktionen voran; ein
+Neustart wird durch eine neue Instanz simuliert.
+
+Der ESP-IDF-Adapter `EspTimerTimeSource` liefert monotone Laufzeit ueber
+`esp_timer`. Eine fachliche Nutzung wird nur behauptet, wenn ein realer
+Produktionskonsument existiert.
+
+## Ressourcenbericht und Artefakte
 
 ```bash
 python scripts/build_report.py --output build-report.md
@@ -303,35 +183,58 @@ python scripts/build_report.py --output build-report.md --append \
   --esp-idf-profiles bringup release
 ```
 
-Der erste Befehl baut den nativen Hostpfad; der zweite wertet die bereits
-gebauten ESP-IDF-Profile aus und ergaenzt ihre maschinenlesbaren
-RAM-/Flash- und Artefaktdaten. Der Bericht ist informativ; verbindliche
-Byte-Budgets bleiben
-`TBD_IMPLEMENTATION_BUDGET` bis zu realen Hardware- und Belastungsmessungen. CI
-sichert den Bericht als Artefakt `build-report`.
+Reale Byte-, Heap-, Partitions- und Puffergrenzen bleiben
+`TBD_IMPLEMENTATION_BUDGET`, bis reale Builds und Belastungsmessungen
+vorliegen.
 
-## PASS / FAILED / BLOCKED
+Bei erfolgreicher GitHub-CI werden getrennt gesichert:
 
-Jeder CI-Schritt liefert ein eindeutiges Ergebnis:
+- finaler Ressourcenbericht;
+- Bring-up-Binaer-, ELF-, Map-, Bootloader-, Partition-, Konfigurations-,
+  Compile-Database-, Groessen-, Log- und Manifestartefakte;
+- entsprechende Releaseartefakte.
 
-- **PASS**: Schritt erfolgreich.
-- **FAILED**: Schritt schlaegt fehl und blockiert den Merge.
-- **BLOCKED**: Eine Pruefung kann mangels Voraussetzung lokal nicht ausgefuehrt
-  werden. In CI sind die benoetigten Werkzeuge fest installiert.
+Fehlgeschlagene Builds sichern den verfuegbaren Buildlog.
 
-`scripts/selftest_quality_gates.py` beweist bei jedem CI-Lauf anhand temporaerer,
-absichtlich fehlerhafter Fixtures, dass Format-, Static-Analysis-, Geheimnis- und
-Architekturpruefung echte Verstoesse erkennen, ohne einen fehlerhaften Fall in
-das Repository einzuchecken.
+## CI-Pipeline
 
-## Ausnahmen und Fehlalarme
+Der Firmwarejob fuehrt in dieser Reihenfolge aus:
 
-Jede Ausnahme muss begruendet sein:
+1. Checkout und Python;
+2. PlatformIO, clang-format und clang-tidy installieren;
+3. Formatpruefung;
+4. nativen Build und Ressourcenbericht;
+5. native Tests;
+6. native Static Analysis;
+7. Architektur-, Secret- und Gate-Selbsttests;
+8. ESP-IDF 6.0.2 am exakten Commit installieren und verifizieren;
+9. Bring-up- und Releaseprofil bauen;
+10. Ressourcenbericht ergaenzen;
+11. ESP-IDF-Static-Analysis;
+12. Artefakt-Scanabdeckung und Secretpruefung;
+13. Berichte und Buildartefakte sichern.
 
-- projektweite Ausnahmen: als Kommentar in der Werkzeugkonfiguration oder in
-  diesem Dokument,
-- punktuelle clang-tidy-Ausnahmen: als
-  `// NOLINT(check-name): Begruendung` im Code.
+`concurrency` bricht einen veralteten Lauf desselben Pull Requests ab, sobald
+ein neuerer Lauf startet.
 
-Eine unbegruendete Unterdrueckung eines Sicherheits-, Architektur- oder
-Kernfunktionstests ist nicht zulaessig.
+## Ergebnisstatus
+
+- **PASS:** Pruefung wurde ausgefuehrt und war erfolgreich.
+- **FAILED:** Pruefung wurde ausgefuehrt, ist fehlgeschlagen und blockiert den
+  Abschluss.
+- **BLOCKED:** Pruefung konnte wegen einer konkret benannten fehlenden
+  Voraussetzung nicht ausgefuehrt werden.
+
+`SKIPPED`, `NOT_RUN` oder eine fehlende Angabe duerfen nicht als `PASS`
+bezeichnet werden.
+
+## Ausnahmen
+
+Jede Ausnahme benoetigt eine konkrete Begruendung:
+
+- projektweit in Werkzeugkonfiguration oder diesem Dokument;
+- punktuell direkt an der Unterdrueckung;
+- auftragsbezogen im freigegebenen Plan und PR-Nachweis.
+
+Unbegruendete Unterdrueckungen von Safety-, Security-, Architektur- oder
+Kernfunktionstests sind unzulaessig.

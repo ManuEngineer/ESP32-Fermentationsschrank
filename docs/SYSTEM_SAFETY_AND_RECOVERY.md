@@ -296,17 +296,54 @@ Beispiele:
 - Konfigurationsspeicher oder Rueckfallrevision ist kritisch beschaedigt
 - keine sichere Speicherrevision mehr aktivierbar
 
-Reaktion:
+Die unmittelbare Reaktion ist verbindlich:
 
-- Peltier sofort AUS,
-- beide Richtungen sperren,
-- notwendige Luefterreaktion ausfuehren,
-- schwerer beziehungsweise verriegelter Systemfehler,
-- keine automatische Prozessfortsetzung,
-- Service und Diagnose erforderlich.
+1. neue Aktoranforderungen sperren;
+2. Peltier und beide H-Brueckenrichtungen AUS;
+3. erforderlichen sicheren Luefternachlauf ausfuehren;
+4. einen RAM-seitigen Persistenzfehler-Latch setzen;
+5. versuchen, einen minimalen Fehler-Latch in einem reservierten, redundant
+   ausgelegten Bereich ausserhalb des normalen Laufjournals zu persistieren;
+6. in einen schweren verriegelten Systemfehler wechseln;
+7. automatische Prozessfortsetzung und Lauf-Recovery sperren.
+
+Scheitert auch das Schreiben des minimalen persistenten Latches, bleibt die
+RAM-seitige Verriegelung bis zum Neustart wirksam. Beim naechsten Boot verhindert
+jeder nicht eindeutig gueltige kritische Speicherzustand die Aktorfreigabe und
+fuehrt zu `SAFE_BOOT`. Ein fehlgeschlagener Latch-Schreibversuch darf niemals als
+Entwarnung behandelt werden.
+
+Der reservierte Latch liegt getrennt vom normalen Laufjournal, aber weiterhin im
+selben physischen ESP32-Flash. Ein vollstaendiger physischer Flashdefekt kann ohne
+unabhaengigen externen Speicher nicht redundant ueberlebt werden. Die Firmware
+darf keine hoehere Ausfallsicherheit behaupten, als die Hardware bietet.
 
 Der sichere Ausgangszustand hat Vorrang vor weiteren wiederholten
 Flash-Schreibversuchen.
+
+### Transaktionale Freigabe und Reset des Persistenzfehlers
+
+Ein zustandsaendernder Schritt, der unmittelbar oder spaeter Aktoren freigeben
+kann, wird erst angewendet, nachdem Transaktionsabsicht und neue Revision
+erfolgreich persistiert wurden. Ein unvollstaendiger oder nicht eindeutig
+aufgeloester Transaktionsmarker fuehrt beim Boot zu `SAFE_BOOT`.
+
+Vor jeder Recovery-Aktorfreigabe muessen beide Bedingungen erfuellt sein:
+
+1. der kritische Speicher besteht eine Lesen-Schreiben-Integritaetspruefung;
+2. die Recoveryentscheidung ist als neue Revision erfolgreich gespeichert und
+   wieder gelesen beziehungsweise verifiziert.
+
+Ein Persistenzfehler-Latch darf nur in einem geschuetzten Serviceablauf
+zurueckgesetzt werden, nachdem:
+
+- die Ursache behoben oder eindeutig eingegrenzt wurde;
+- die kritische Lesen-Schreiben-Integritaetspruefung bestanden ist;
+- kein unvollstaendiger Transaktionsmarker verbleibt;
+- der Reset als eigenes Ereignis dokumentiert wurde.
+
+Quittierung, Neustart oder ein erfolgreicher einzelner Schreibversuch allein
+setzen den Latch nicht zurueck.
 
 ## Fehler- und Resetprotokoll
 
@@ -395,6 +432,8 @@ Verbindliche Regeln:
       zu loeschen
 - [x] nichtkritische Historienfehler erlauben Weiterbetrieb mit Warnung
 - [x] kritische Persistenzfehler schalten das Peltier aus und verriegeln das System
+- [x] Persistenzfehler-Latch und unvollstaendige Transaktionen sperren Recovery
+- [x] Latch-Reset nur im Service nach bestandener Speicherpruefung
 - [x] begrenztes priorisiertes Fehler- und Resetjournal
 - [x] nach jedem relevanten Neustart vollstaendig validierter Wiederanlauf
 - [x] alte GPIO-Zustaende werden niemals wiederhergestellt

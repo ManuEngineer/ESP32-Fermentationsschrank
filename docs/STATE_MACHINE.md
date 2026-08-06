@@ -6,7 +6,7 @@ Dieses Dokument definiert die kanonischen Betriebszustaende und Uebergaenge fuer
 Release 1. Ergaenzende Detailregeln stehen in
 [`RECOVERY_AND_INTERRUPTION.md`](RECOVERY_AND_INTERRUPTION.md),
 [`SAFETY_AND_FAULTS.md`](SAFETY_AND_FAULTS.md) und
-[`PR38_REVIEW_CORRECTIONS.md`](PR38_REVIEW_CORRECTIONS.md).
+[`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md).
 
 ## Grundsaetze
 
