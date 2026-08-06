@@ -4,194 +4,137 @@
 
 `INVENTORY_IN_PROGRESS`
 
-Dieser PR ist zunaechst ausschliesslich ein Audit- und Plan-PR. Normative Regeln,
-Loader, Workflows und Projektdokumente werden erst nach ausdruecklicher
-Ownerfreigabe geaendert.
+Dieser Draft-PR inventarisiert und plant zuerst. Normative Regeln und bestehende
+Statusdokumente werden erst nach der jeweiligen Ownerentscheidung geändert.
 
-## Ziel
+## Ziel und Leitprinzip
 
-- Jede verbindliche Regel besitzt genau eine kanonische Quelle.
-- `AGENTS.md` wird eine kompakte, agentenuebergreifende Projektverfassung und
-  Lesematrix statt eines vollstaendigen Handbuchs.
-- `CLAUDE.md` wird im Zielstand ausschliesslich `@AGENTS.md` laden.
-- Lokale `AGENTS.md` enthalten nur bereichsspezifische Zusatzgrenzen.
-- Historische, informative und normative Inhalte werden klar getrennt.
-- Pflichtlekture wird auf den tatsaechlichen Auftrag begrenzt.
-- Eine kurze, aktuelle Roadmap beziehungsweise Taskliste zeigt sichtbar, was
-  erledigt, in Arbeit und als Naechstes vorgesehen ist.
+Jede notwendige Information bleibt verfügbar, aber genau einmal und an der
+fachlich zuständigen Stelle.
 
-## Nicht-Ziele
+- keine doppelten Regeln oder Statusangaben;
+- keine historischen Projektstände in automatisch geladenen Dateien;
+- keine Detailkopien in Roadmap, Aufträgen oder Handovers;
+- kurze Verweise statt wiederholter Verträge;
+- Pflichtlektüre nur für den betroffenen Aufgabentyp;
+- Kürzung nie auf Kosten von Safety-, Security-, Recovery- oder Owner-Gates.
 
-- keine neue Produkt-, Architektur-, Safety-, Security- oder
-  Hardwareentscheidung;
-- keine Aenderung von Produktionscode, Tests, Build oder Abhaengigkeiten;
-- keine stille Aufloesung widerspruechlicher Regeln;
-- keine Loeschung historischer Dokumente, bevor relevanter Inhalt nachweislich
-  erhalten oder bewusst als ueberholt freigegeben wurde;
-- keine Zusammenlegung dieses Audits mit einem fachlichen Implementierungs-PR.
+## Scope
 
-## Verbindliche Arbeitsweise
+- Root- und lokale `AGENTS.md`, `CLAUDE.md` und verlinkte Regelquellen;
+- Workflow-, Plan-, Roadmap-, Handover- und Auftragstemplates;
+- Abgrenzung zwischen normativen, informativen und historischen Dokumenten;
+- eine kompakte, zuverlässig gepflegte Status-/Taskübersicht.
 
-1. Regelquellen inventarisieren.
-2. Jede normative Aussage einer Themenkategorie zuordnen.
-3. Doppelungen, Widersprueche, historische Aussagen und unklare Prioritaeten
-   dokumentieren.
-4. Bei jeder materiellen Unstimmigkeit den Owner fragen; keine stille Auswahl.
-5. Pro Themenblock eine Zielquelle und geplante Bereinigung vorschlagen.
-6. Erst nach Ownerentscheid die betroffenen Dateien aendern.
-7. Nach jedem Schritt Plan, Entscheidungsliste und Taskstatus aktualisieren.
+Nicht enthalten sind neue Produkt-, Architektur-, Hardware- oder
+Implementierungsentscheidungen sowie Änderungen an Code, Tests, Build oder
+Abhängigkeiten.
 
-## Geplante Zielarchitektur
+## Arbeitsweise
 
-### Automatisch geladene Regeln
+1. Quellen und normative Aussagen vollständig erfassen.
+2. Doppelungen, Widersprüche und veraltete Aussagen markieren.
+3. Materielle Abweichungen einzeln dem Owner vorlegen.
+4. Pro Thema genau eine kanonische Quelle festlegen.
+5. Erst nach Entscheidung konsolidieren oder entfernen.
+6. Nach jedem Schritt Entscheidungsliste und Taskstatus aktualisieren.
 
-- `AGENTS.md`: kurze globale Pflichten, unverhandelbare Grenzen, Owner-Gates,
-  Quellenprioritaet und bedingte Lesematrix.
-- `CLAUDE.md`: nur `@AGENTS.md`.
-- lokale `AGENTS.md`: nur Deltas zur Root-Datei fuer den jeweiligen Verzeichnisbaum.
+## Beschlossene Zielarchitektur
 
-### Bedarfsweise gelesene Quellen
+| Quelle | Künftige Rolle |
+|---|---|
+| Root-`AGENTS.md` | kompakte globale Pflichten, unverhandelbare Grenzen, Owner-Gates, Quellenpriorität und Lesematrix |
+| `CLAUDE.md` | ausschliesslich `@AGENTS.md` |
+| lokale `AGENTS.md` | nur zusätzliche Regeln für den jeweiligen Verzeichnisbaum |
+| `docs/ROADMAP.md` | einzige aktuelle Status- und Taskübersicht |
+| `IMPLEMENTATION_PLAN.md` | stabiler technischer Phasen- und Reihenfolgeplan, ohne Live-Status |
+| `IMPLEMENTATION_ISSUES.md` | Issue-, Epic- und Abhängigkeitsstruktur, ohne laufende PR-Chronik |
+| `OPEN_POINTS.md` | nachweisgebundene Hardware-, Commissioning- und Budgetcheckliste |
+| `docs/audits/PROPOSED_RELEASE_1_ROADMAP.md` | historischer Audit- und Begründungsnachweis, kein Live-Status |
+| akzeptierte ADRs | kanonische dauerhafte Architekturentscheidungen |
+| Engineering-/Fachdokumente | bedarfsweise gelesene Detailverträge |
+| PR, Issue, freigegebener Plan, neuester Handover | aktueller auftragsbezogener Arbeitsstand |
 
-- Engineering-Prinzipien;
-- akzeptierte ADRs und Architekturvertraege;
-- CI- und Quality-Gates;
-- Hardware-, Safety-, Persistenz- und Security-Vertraege;
-- freigegebener Aufgabenplan und aktueller PR-Diff.
+### Pflegevertrag für `docs/ROADMAP.md`
 
-Diese Dokumente werden nicht pauschal fuer jeden Auftrag gelesen, sondern nur
-ueber eine Lesematrix in `AGENTS.md` fuer passende Aufgabentypen verlangt.
+Die Roadmap enthält nur:
 
-## Roadmap und laufender Arbeitsstatus
+- zuletzt abgeschlossene grössere Arbeitspakete;
+- aktuellen PR und Phase;
+- nächste startbereite Arbeit;
+- zulässige parallele Arbeit;
+- Blocker und offene Ownerentscheidungen;
+- Links auf kanonische Details.
 
-Die Roadmap soll keine zweite Spezifikation und keine Kopie aller Issues sein.
-Sie soll als knapper Statusindex enthalten:
+Sie wird zu Beginn jedes neuen PR, nach jedem Merge und bei einer materiellen
+Reihenfolgeänderung aktualisiert. Anforderungen, Begründungen und vollständige
+Issue-Inhalte werden nicht kopiert.
 
-- abgeschlossene Meilensteine beziehungsweise groessere Arbeitspakete;
-- aktuell aktiven PR und dessen Phase;
-- naechste startbereite Arbeitspakete in geplanter Reihenfolge;
-- benannte Blocker und Ownerentscheidungen;
-- Links auf GitHub-Issues, PRs und kanonische Detailquellen.
+## Audit-Taskliste
 
-Pflegepflicht:
-
-- zu Beginn jedes neuen PR aktualisieren;
-- nach jedem PR-Merge aktualisieren;
-- Status nur aus dem aktuellen GitHub- und Repository-Stand ableiten;
-- keine detaillierten Anforderungen oder Vertraege duplizieren.
-
-### Offene Strukturentscheidung R-01
-
-Es existieren bereits drei teilweise ueberlappende Statusquellen:
-
-- `docs/IMPLEMENTATION_PLAN.md`: technische Entwicklungsreihenfolge, aber mit
-  historischen Statusangaben;
-- `docs/IMPLEMENTATION_ISSUES.md`: geplante Issue- und Abhaengigkeitsstruktur
-  sowie Status, aktuell teilweise veraltet;
-- `docs/OPEN_POINTS.md`: Hardware-, Commissioning- und Budget-Checkliste, keine
-  laufende PR-/Taskuebersicht.
-
-Zu entscheiden ist, ob:
-
-A. `IMPLEMENTATION_ISSUES.md` bereinigt und als alleinige Roadmap/Taskliste
-   weiterentwickelt wird; oder
-B. eine neue knappe `docs/ROADMAP.md` als aktueller Statusindex entsteht,
-   waehrend `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_ISSUES.md` und
-   `OPEN_POINTS.md` nur ihre fachlichen Detailrollen behalten.
-
-Vorlaeufige Empfehlung: **B**, weil eine kurze Statusseite leichter aktuell zu
-halten ist und die umfangreiche Abhaengigkeitsstruktur nicht bei jedem PR
-umgeschrieben werden muss. Die Roadmap darf jedoch nur Links und Status fuehren,
-keine Regel- oder Anforderungsduplikate.
-
-## Audit-Arbeitspakete
-
-- [x] A0: neuen Branch vom aktuellen `main` erstellen.
-- [x] A1: Scope und Plan-first-Vorgehen festlegen.
-- [ ] A2: alle automatisch oder hierarchisch geladenen Agentendateien erfassen.
-- [ ] A3: normative Aussagen in `docs/` und Templates erfassen.
-- [ ] A4: historische oder veraltete Statusdokumente erfassen.
-- [ ] A5: Regelmatrix mit Fundstellen und vorgeschlagener kanonischer Quelle
-      erstellen.
-- [ ] A6: Widersprueche einzeln mit dem Owner entscheiden.
-- [ ] A7: Zielgroesse und Zielstruktur von Root- und lokalen `AGENTS.md`
-      freigeben.
-- [ ] A8: Roadmap-Struktur und Pflegevertrag freigeben.
+- [x] A0: Branch vom aktuellen `main` erstellt.
+- [x] A1: Audit- und Plan-first-Scope festgelegt.
+- [x] A2: Grundstruktur der automatisch und hierarchisch geladenen Agentendateien erfasst.
+- [ ] A3: normative Aussagen in Regeln, Workflows und Templates vollständig erfassen.
+- [x] A4: zentrale veraltete Statusquellen identifiziert.
+- [ ] A5: Regelmatrix mit Fundstellen und kanonischer Zielquelle erstellen.
+- [ ] A6: Widersprüche blockweise mit dem Owner entscheiden.
+- [ ] A7: Zielinhalt und Zielgrösse von Root- und lokalen `AGENTS.md` freigeben.
+- [x] A8: Roadmap-Rolle und Pflegevertrag festgelegt.
 - [ ] A9: genehmigte Konsolidierung umsetzen.
-- [ ] A10: typische Agentenablaeufe gegen die neue Struktur pruefen.
-- [ ] A11: finale Groessen-, Doppelungs- und Widerspruchspruefung.
+- [ ] A10: typische Claude- und Codex-Abläufe gegen die neue Struktur prüfen.
+- [ ] A11: finale Grössen-, Doppelungs- und Widerspruchsprüfung.
 
-## Bisherige Inventarfunde
+## Bestätigte Inventarfunde
 
-### I-01 Root-AGENTS
-
-Die Root-`AGENTS.md` ist rund 18 KB gross und enthaelt neben globalen Pflichten
-auch historische Projektstaende, ausfuehrliche Engineering-Erklaerungen,
-Architekturdetails und einen umfangreichen Plan-first-Workflow.
-
-### I-02 Lokale AGENTS
-
-Es bestehen lokale Dateien fuer:
-
-- `lib/device_platform/`;
-- `lib/device_platform_test_support/`;
-- `lib/fermentation_app/`.
-
-Sie sind grundsaetzlich sinnvoll, wiederholen aber Teile von Root-`AGENTS.md`
-und ADR-013.
-
-### I-03 CLAUDE Loader
-
-`CLAUDE.md` laedt `@AGENTS.md`, enthaelt aktuell aber noch drei zusaetzliche
-Claude-spezifische Hinweise. Der Owner hat bereits entschieden, dass der
-Zielstand ein reiner Loader sein soll.
-
-### I-04 Engineering-Regeln
-
-SOLID, DRY, KISS, Repository-first und Kontextaktualisierung sind teilweise in
-Root-`AGENTS.md`, `ENGINEERING_PRINCIPLES.md` und `ENGINEERING_LEARNINGS.md`
-parallel beschrieben.
-
-### I-05 Architektur
-
-Modulrollen und Abhaengigkeitsrichtung sind in Root-`AGENTS.md`, ADR-013 und den
-lokalen `AGENTS.md` mehrfach formuliert.
-
-### I-06 Historische Uebergabe
-
-`docs/CODEX_HANDOFF.md` beschreibt einen fruehen Projektstand mit PR #38 und
-Issue #9 und wiederholt zusaetzlich Architektur-, Safety- und Hardwareregeln.
-
-### I-07 Statusdokumente
-
-`IMPLEMENTATION_PLAN.md` und `IMPLEMENTATION_ISSUES.md` enthalten bereits
-veraltete Aussagen zu fruehen Issues und Draft-PRs. Eine zentrale, konsequent
-aktualisierte Statusquelle fehlt.
+- Root-`AGENTS.md` ist rund 18 KB gross und mischt globale Pflichten,
+  historische Zustände, Engineering-Erklärungen, Architekturdetails und
+  Workflowregeln.
+- Drei lokale `AGENTS.md` sind sinnvoll, wiederholen aber Teile von Root und
+  ADR-013.
+- `CLAUDE.md` lädt `@AGENTS.md`, enthält aktuell zusätzlich drei
+  Claude-spezifische Hinweise.
+- SOLID, DRY, KISS, Repository-first und Kontextaktualisierung stehen teilweise
+  parallel in Root-`AGENTS.md`, `ENGINEERING_PRINCIPLES.md` und
+  `ENGINEERING_LEARNINGS.md`.
+- Modulrollen und Abhängigkeitsrichtung stehen mehrfach in Root, ADR-013 und
+  lokalen `AGENTS.md`.
+- `docs/CODEX_HANDOFF.md` enthält einen historischen Stand ab PR #38/Issue #9
+  und wiederholt Architektur-, Safety- und Hardwareinformationen.
+- `IMPLEMENTATION_PLAN.md` und `IMPLEMENTATION_ISSUES.md` enthalten veraltete
+  Statusangaben.
+- `docs/audits/PROPOSED_RELEASE_1_ROADMAP.md` ist derzeit faktisch die
+  aktuellste Roadmap, obwohl sie die zentralen Plandokumente ausdrücklich nicht
+  ersetzt.
+- `OPEN_POINTS.md` muss Punkt für Punkt gegen reale Mess-, Test- oder
+  PR-Nachweise geprüft werden; unbelegte Punkte werden nicht abgehakt.
 
 ## Ownerentscheidungen
 
-| ID | Thema | Status | Entscheidung |
-|---|---|---|---|
-| R-00 | `CLAUDE.md` im Zielstand | entschieden | nur `@AGENTS.md` |
-| R-01 | kuenftige Roadmap-/Tasklistenquelle | offen | Variante A oder B |
+| ID | Thema | Entscheidung |
+|---|---|---|
+| R-00 | `CLAUDE.md` | im Zielstand nur `@AGENTS.md` |
+| R-01 | Live-Roadmap | neue kompakte `docs/ROADMAP.md` als einzige aktuelle Statusquelle |
+| R-02 | Dokumentationsprinzip | notwendige Information vollständig, aber kompakt, nicht doppelt und nicht an fachfremden Stellen |
 
-## Abnahmekriterien des Gesamtvorhabens
+## Abnahmekriterien
 
-- jede verbindliche Regel besitzt eine kanonische Quelle;
-- keine widerspruechlichen Regelkopien verbleiben;
-- historische Projektstaende sind nicht Teil automatisch geladener Regeln;
-- `CLAUDE.md` ist ein reiner Loader;
-- lokale `AGENTS.md` enthalten nur lokale Zusatzgrenzen;
-- eine bedingte Lesematrix verhindert unnoetige Pflichtlekture;
-- Safety-, Security-, Recovery- und Owner-Gates bleiben vollstaendig erhalten;
-- Roadmap/Taskliste zeigt aktuellen Stand, naechste Schritte und Blocker, ohne
-  Anforderungen zu duplizieren;
-- der Pflegepunkt fuer Roadmap und Handover ist im PR-Workflow eindeutig;
-- typische Claude- und Codex-Aufgaben koennen ohne alten Chatverlauf korrekt
-  gestartet, umgesetzt und reviewed werden.
+- Jede verbindliche Regel und jede aktuelle Statusangabe besitzt genau eine
+  kanonische Quelle.
+- Automatisch geladene Regeln enthalten nur dauerhaft notwendige Pflichten.
+- Bedingte Lesematrix verhindert pauschale Pflichtlektüre.
+- Lokale `AGENTS.md` enthalten nur echte lokale Deltas.
+- Historische Dokumente sind klar als historisch erkennbar und keine
+  Handlungsquelle.
+- `docs/ROADMAP.md` ist kurz, aktuell und verweist statt zu duplizieren.
+- Safety-, Security-, Recovery- und Owner-Gates bleiben vollständig erhalten.
+- Claude und Codex können Planung, Umsetzung, Review und Fortsetzung nach
+  Kontextreset ohne alten Chatverlauf korrekt durchführen.
+- Die endgültige Fassung ist messbar kleiner und enthält keine semantischen
+  Doppeldefinitionen.
 
-## Planfreigabe
+## Nächster Schritt
 
-Die Inventur darf fortgesetzt und dieser Plan iterativ ergaenzt werden.
-Normative Dateien werden erst geaendert, wenn die zugehoerigen
-Ownerentscheidungen dokumentiert und der Umsetzungsstand ausdruecklich
-freigegeben wurde.
+A3/A5: normative Aussagen aus Root-`AGENTS.md`, Engineering-Dokumenten,
+Workflows und Templates thematisch erfassen. Der nächste Themenblock wird erst
+nach Darstellung seiner Doppelungen oder Abweichungen verändert.
