@@ -59,6 +59,47 @@ Plankorrekturen vor Erstfreigabe, nicht um materielle Abweichungen von einem
 bereits freigegebenen Plan. Jede inhaltliche Aenderung dieser zweiten Runde
 ist an ihrer jeweiligen Stelle im Dokument als "Korrektur Runde 2" markiert.
 
+Hinweis zur Rundenzaehlung: Zwischen dieser Uebersicht (Runde 1-2) und den
+im Dokumenttext verwendeten Inline-Markierungen "KORREKTUR RUNDE N" besteht
+eine Luecke - die Runden 3-5 (u. a. Identitaets-/Dispositions-, Kalibrier-/
+Filterreset- und Vorzustandskorrekturen) wurden bei ihrer jeweiligen
+Entstehung inline markiert, aber nie hier oben nachgetragen. Diese Uebersicht
+wird an dieser Stelle nicht rueckwirkend vervollstaendigt (ausserhalb des
+Scopes dieser Korrektur); massgeblich fuer den Inhalt jeder Runde bleiben die
+Inline-Markierungen im Dokument selbst. Der Plan wurde nach Runde 5 mit
+Commit `fdf53e4cc31f1793659825e3150273400d22f315` freigegeben
+(`PLAN APPROVED`, siehe PR #95); Slice 1 wurde daraufhin umgesetzt (Commits
+`e9f567f`, `627d2aa`).
+
+```text
+Runde 6 (Nachkorrektur eines bereits freigegebenen Plans):
+  PREVIOUS_PLAN_COMMIT: fdf53e4cc31f1793659825e3150273400d22f315
+  PREVIOUS_HEAD:        <wird mit dem Commit dieser Runde eingetragen>
+  Ausgeloest durch "AUFTRAG_PR95_Owner_CI_und_Recovery_Plan.md" (Owner-
+  Review der Slice-1-Umsetzung in PR #95, Commit 627d2aa).
+  -> Wiedererkennungsvertrag (Abschnitt 8 "Stale -> Valid", Abschnitt 9a)
+     korrigiert: die Wiedererkennungs-Stabilitaetsdauer wird ausschliesslich
+     durch die Zeitspanne zwischen den Erfassungszeitstempeln der
+     Recovery-Start- und der letzten Recovery-Probe belegt, niemals durch
+     nowMonotonicMs/den Zustellzeitpunkt. Testmatrix (Abschnitt 17) um die
+     vier daraus folgenden Testfaelle ergaenzt.
+```
+
+ANDERS ALS Runde 1-2 korrigiert Runde 6 einen bereits durch den Owner
+freigegebenen Plan (`PLAN APPROVED`, Commit `fdf53e4`) und betrifft
+Safety-/Recovery-Verhalten - das ist eine materielle Planabweichung im Sinne
+von `AGENTS.md` Abschnitt 4. Die bisherige Freigabe gilt daher NUR NOCH fuer
+alle UEBRIGEN, von Runde 6 nicht beruehrten Planinhalte fort; fuer den in
+Runde 6 korrigierten Wiedererkennungsvertrag selbst (Abschnitt 8
+"Stale -> Valid"/"Failed -> Valid", Abschnitt 9a "Eine Ableitungsfunktion,
+zwei Aufrufstellen") ist sie ausdruecklich UEBERHOLT. Vor jeder darauf
+aufbauenden Codeaenderung (insbesondere an `SensorQualityPipeline::
+recordValidSample()`/`deriveQuality()` in `lib/device_platform/src/
+sensor_quality_pipeline.cpp`, Stand Commit `627d2aa`) ist eine neue,
+ausdrueckliche Ownerfreigabe mit Bezug auf den Runde-6-Plan-Commit
+erforderlich. Diese Nachkorrektur selbst aendert KEINEN Produktions- oder
+Testcode.
+
 ## 2. Live-Issue- und Abhaengigkeitspruefung
 
 ```text
@@ -372,6 +413,55 @@ Stale -> Valid:
   kMinConsecutiveValidSamples aufeinanderfolgende plausible Proben UND
   Zeitspanne >= kMinRecoveryStabilityDurationMs seit Beginn der Folge UND
   (bei vorherigem ROM-Wechsel) Identitaet entspricht der erwarteten Rolle
+
+  KORREKTUR RUNDE 6 (behebt einen verbleibenden Fehler im
+  Wiedererkennungsvertrag, gefunden bei der Nachpruefung der Slice-1-
+  Umsetzung in PR #95; ausgeloest durch
+  "AUFTRAG_PR95_Owner_CI_und_Recovery_Plan.md"): "Zeitspanne ... seit Beginn
+  der Folge" war bisher nicht praezisiert, WORAN diese Zeitspanne gemessen
+  wird. Die Slice-1-Umsetzung (Commit 627d2aa) mass sie faelschlich relativ
+  zu nowMonotonicMs (dem Zustellzeitpunkt des ingest()-Aufrufs) statt relativ
+  zu den tatsaechlichen Erfassungszeitstempeln der Wiedererkennungsproben
+  selbst. Dadurch konnte eine verspaetet zugestellte, die Folge
+  abschliessende Probe eine laengere Stabilitaetsdauer vortaeuschen, als die
+  Probendaten selbst belegen - die Wiedererkennung wurde faktisch (auch) durch
+  Zustellverzoegerung statt ausschliesslich durch Probendaten bewiesen.
+
+  VERBINDLICHER VERTRAG (ersetzt die bisherige, unpraezise Formulierung):
+
+  ```text
+  recoveryComplete <=>
+    recoveryProgressCount >= minConsecutiveValidSamples
+    UND Recovery-Startprobe vorhanden
+    UND letzte gueltige Recovery-Probe vorhanden
+    UND letzteProbe.timestamp - startProbe.timestamp >= Stabilitaetsdauer
+  ```
+
+  "Recovery-Startprobe" ist die erste Probe der aktuellen ununterbrochenen
+  gueltigen Folge (identisch mit der bisherigen recoveryStreakStartTimestampMs-
+  Semantik); "letzte gueltige Recovery-Probe" ist die zuletzt akzeptierte
+  gueltige Probe DIESER Folge - beide Zeitpunkte sind
+  TemperatureReading::monotonicTimestampMs()-Werte tatsaechlich verarbeiteter
+  Proben, NIEMALS nowMonotonicMs/referenceTimeMs. Damit gilt zwingend:
+
+  - eine ausreichende Probenzahl bei zu kurzer Zeitspanne ZWISCHEN den Proben
+    selbst erreicht Valid NICHT;
+  - ein blosses Warten oder ein wiederholter snapshot(now)-Aufruf OHNE neue
+    gueltige Probe kann recoveryComplete niemals selbst herbeifuehren - die
+    Formel haengt nicht von referenceTimeMs ab;
+  - eine verspaetet zugestellte Probe zaehlt ausschliesslich bis zu ihrem
+    EIGENEN Erfassungszeitstempel, nicht bis zum tatsaechlichen
+    ingest()-Aufrufzeitpunkt;
+  - erst die naechste gueltige Probe, deren EIGENER Zeitstempel die
+    geforderte Zeitspanne seit der Recovery-Startprobe belegt, darf Valid
+    ausloesen.
+
+  `nowMonotonicMs` bleibt fuer die in Abschnitt 9a (Korrektur Runde 5)
+  beschriebene, DAVON UNABHAENGIGE Vorzustandsermittlung ("war die Pipeline
+  JETZT, referenziert auf nowMonotonicMs, bereits Failed?") weiterhin
+  zustaendig und weiterhin gueltig - diese Korrektur betrifft ausschliesslich
+  die Stabilitaetsdauer-Formel innerhalb von recoveryComplete, nicht die
+  Failed-Erkennung selbst.
 
 einzelne ungueltige Probe (Valid-Zustand):
   -> Stale, letzter gueltiger Wert und dessen Alter bleiben fuer Diagnose
@@ -746,17 +836,45 @@ mehr aufgerufen wird. Deshalb ist `quality` eine ABGELEITETE Groesse:
     korrektem `nowMonotonicMs`-Parameter. Der Vorzustand wird also IMMER aus
     den Groessen VOR dieser Probe ermittelt.
 
+    KORREKTUR RUNDE 6 (praezisiert, WELCHER Teil von deriveQuality()
+    referenceTimeMs tatsaechlich verwendet - behebt einen verbleibenden
+    Fehler in der Slice-1-Umsetzung, siehe Abschnitt 8 "Stale -> Valid"
+    fuer den vollstaendigen recoveryComplete-Vertrag): Der einleitende Satz
+    oben ("... KOMBINIERT MIT dem uebergebenen referenceTimeMs") gilt fuer
+    die Failed-Ableitung (Alter des letzten gueltigen Werts relativ zu
+    referenceTimeMs) und fuer die Snapshot-Altersfelder, NICHT fuer die
+    recoveryComplete-Teilberechnung. recoveryComplete haengt AUSSCHLIESSLICH
+    von den gespeicherten Erfassungszeitstempeln der Recovery-Startprobe und
+    der zuletzt akzeptierten gueltigen Recovery-Probe ab - niemals von
+    referenceTimeMs/nowMonotonicMs. Diese Trennung ist zwingend: wuerde
+    recoveryComplete stattdessen (wie in der urspruenglichen Slice-1-
+    Umsetzung, Commit 627d2aa) die Zeitspanne zwischen Recovery-Beginn und
+    referenceTimeMs messen, koennte eine verspaetet zugestellte, die Folge
+    abschliessende Probe die Stabilitaetsdauer allein durch die
+    Zustellverzoegerung faelschlich als erfuellt ausweisen, obwohl die
+    Probendaten selbst die geforderte Zeitspanne nicht belegen - und ein
+    blosser snapshot(now)-Aufruf mit fortschreitendem now koennte
+    recoveryComplete sogar OHNE jede neue Probe nachtraeglich wahr werden
+    lassen, was Abschnitt 8 ausdruecklich ausschliesst ("snapshot(now) darf
+    ohne neue gueltige Probe nie Stale/Failed -> Valid ausloesen").
+
 Damit erkennt JEDER spaetere snapshot(now)-Aufruf einen laengst verstummten
 Sensor korrekt als Failed, unabhaengig davon, wie lange zuvor kein ingest()
 mehr aufgerufen wurde, UND der Filterreset bei Wiedererkennung funktioniert
 korrekt, ohne eine zweite, potenziell abweichende Qualitaetswahrheit zu
-speichern.
+speichern. Ein blosser snapshot(now)-Aufruf kann wegen der referenceTimeMs-
+Unabhaengigkeit von recoveryComplete (Korrektur Runde 6) niemals selbst eine
+Wiedererkennung abschliessen - nur eine tatsaechliche, neu verarbeitete
+gueltige Probe kann das.
 ```
 
 `SINGLE_MONOTONIC_TIME_CONTRACT: PASS`
 `INGEST_RESULT_DEFINED: PASS`
 `INGEST_PREVIOUS_QUALITY_USES_NOW: PASS`
 `TIME_AND_DERIVED_QUALITY_CONSISTENT: PASS`
+`RECOVERY_STABILITY_USES_SAMPLE_SPAN: PASS` (Korrektur Runde 6)
+`SNAPSHOT_CANNOT_COMPLETE_RECOVERY: PASS` (Korrektur Runde 6)
+`DELAYED_DELIVERY_NOT_COUNTED_AS_STABILITY: PASS` (Korrektur Runde 6)
 
 ### 9b. Zeitstempel- und Dispositionsregeln
 
@@ -2045,7 +2163,26 @@ Tiefpass-Verschiebung bei Offsetwechsel):
 Zustandsmaschine und Wiedererkennung (Orakel: Abschnitt 8):
   - Valid -> Stale bei einzelner ungueltiger Probe
   - Stale -> Valid nach kMinConsecutiveValidSamples UND
-    kMinRecoveryStabilityDurationMs
+    kMinRecoveryStabilityDurationMs, belegt durch die Zeitspanne ZWISCHEN
+    dem Erfassungszeitstempel der Recovery-Startprobe und dem
+    Erfassungszeitstempel der letzten Recovery-Probe selbst (Korrektur
+    Runde 6, Abschnitt 8/9a) - NICHT durch nowMonotonicMs/den
+    ingest()-Aufrufzeitpunkt
+  - ausreichende Probenzahl (>= kMinConsecutiveValidSamples), aber zu kurze
+    Zeitspanne ZWISCHEN Recovery-Startprobe und letzter Recovery-Probe ->
+    NICHT Valid (Korrektur Runde 6 - belegt RECOVERY_STABILITY_USES_SAMPLE_SPAN)
+  - blosses Warten bzw. ein oder mehrere snapshot(now)-Aufrufe mit
+    fortschreitendem now, OHNE zwischenzeitlichen ingest() einer neuen
+    gueltigen Probe, koennen eine begonnene Wiedererkennung niemals
+    selbststaendig abschliessen (Korrektur Runde 6 - belegt
+    SNAPSHOT_CANNOT_COMPLETE_RECOVERY)
+  - eine geordnete, aber gegenueber nowMonotonicMs verspaetet zugestellte
+    Probe zaehlt fuer die Stabilitaetsdauer NUR bis zu ihrem EIGENEN
+    Erfassungszeitstempel, nicht bis zum tatsaechlichen
+    ingest()-Aufrufzeitpunkt; erst die naechste gueltige Probe, deren
+    EIGENER Zeitstempel die geforderte Zeitspanne seit der Recovery-
+    Startprobe belegt, loest Valid aus (Korrektur Runde 6 - belegt
+    DELAYED_DELIVERY_NOT_COUNTED_AS_STABILITY)
   - Stale -> Valid (ohne dass Failed zwischenzeitlich erreicht wurde) setzt
     die Einschwingphase des Filters NICHT zurueck (neu Runde 4 - auf
     Zustandsmaschinenebene derselbe Nachweis wie der Filterinhaltstest in
