@@ -34,14 +34,6 @@ bool eligibleTransition(TransitionReason reason) {
     }
 }
 
-void clearCandidateRun(RunCommandState& state) {
-    state.activeProgramRun.reset();
-    state.activeManualRun.reset();
-    state.processRunSnapshot.reset();
-    state.activeRunId.clear();
-    state.activeRunSensorMode.reset();
-}
-
 }  // namespace
 
 RunPersistenceCoordinator::RunPersistenceCoordinator(
@@ -602,6 +594,10 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     result.coordinatorState = state_;
     result.effects = decision.effects;
     result.effectCount = decision.effectCount;
+    // #21, 6.11: Event/Notice erst nach erfolgreichem Commit sichtbar -
+    // dasselbe bestehende Muster wie result.effects oben.
+    result.sensorSelectionEvent = decision.sensorSelectionEvent;
+    result.sensorSelectionNotice = decision.sensorSelectionNotice;
     return result;
 }
 
@@ -625,7 +621,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
         return result(RunPersistenceResultStatus::StaleDecision,
                       RunPersistenceStep::CandidateApply);
     if (decision.reason == TransitionReason::ProductWaitExpired)
-        clearCandidateRun(candidate);
+        clearActiveRunState(candidate);
     const auto snapshot = makeRunPersistenceSnapshot(
         candidate, persistedIds_, persistedIdCount_,
         RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes());
@@ -649,7 +645,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
             RunPersistenceDurability::Changed);
     }
     if (decision.reason == TransitionReason::ProductWaitExpired)
-        clearCandidateRun(current);
+        clearActiveRunState(current);
     RunPersistenceResult result{RunPersistenceResultStatus::Applied};
     result.step = RunPersistenceStep::RamApply;
     result.durability = RunPersistenceDurability::Changed;

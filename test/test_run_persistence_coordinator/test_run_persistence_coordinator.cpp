@@ -1797,6 +1797,13 @@ void test_product_wait_expired_tombstones_and_does_not_revive_after_restart() {
         store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
     static_cast<void>(coordinator.loadAndInitialize());
     auto state = reachDurablyWaitingForProduct(coordinator, 791U);
+    // #21, 6.14.6: clearActiveRunState must reset these too - populate them
+    // first so the assertions below are not a vacuous no-op check.
+    state.sensorSelectionRuntime.phase = SensorSelectionPhase::NormalProduct;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Allowed;
+    state.sensorSelection = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::StartSelection, state.runRevision};
 
     // Let the state machine produce its automatic ProductWaitExpired
     // decision from the genuinely reached WaitingForProduct state -- no
@@ -1825,6 +1832,15 @@ void test_product_wait_expired_tombstones_and_does_not_revive_after_restart() {
                           static_cast<int>(expiredCommit.status));
     TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
     TEST_ASSERT_TRUE(state.activeRunId.empty());
+    // #21, 6.14.6: clearActiveRunState resets the sensor-selection fields on
+    // this terminal path too, not just on the command-layer abort/complete
+    // paths (test_run_commands.cpp already covers those).
+    TEST_ASSERT_FALSE(state.sensorSelection.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(SensorSelectionPhase::NoActiveRun),
+                          static_cast<int>(state.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(state.sensorSelectionRuntime.permission));
 
     store.restart();
     RunPersistenceCoordinator tombstoneBoot(

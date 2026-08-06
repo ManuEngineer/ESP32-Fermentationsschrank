@@ -13,6 +13,14 @@
 
 namespace fermentation {
 
+// Vorwaertsdeklaration statt Include: `run_commands.hpp <-> sensor_selection.hpp`
+// ist per Plan Abschnitt 7 NICHT zulaessig. `decideApplySensorSelectionAction`
+// braucht die externe Sensorevidenz dennoch als Parameter (weder
+// `RunCommandState` noch `SensorSelectionCommandRequest` koennen sie tragen -
+// #21, 6.14.3). Die vollstaendige Definition ist ausschliesslich in
+// `run_commands.cpp` sichtbar, das `sensor_selection.hpp` regulaer einbindet.
+struct CrossRolePlausibilityContext;
+
 using CommandId = std::uint64_t;
 
 enum class CommandSource : std::uint8_t {
@@ -61,6 +69,7 @@ enum class CommandKind : std::uint8_t {
     AcknowledgeMessage,
     MuteMessage,
     ResetFault,
+    ApplySensorSelectionAction,
 };
 
 struct ManualRunPlanRequest {
@@ -165,6 +174,18 @@ struct RunAdjustmentPreview {
     ProcessState phase{ProcessState::Standby};
     bool targetRequalificationRequired{false};
     bool timerContinuesWithoutBiologicalCorrection{false};
+};
+
+// Manuelle Sensoraktion (#21, 6.11/6.14.3). `action` liegt in
+// sensor_selection_types.hpp (dependency-frei); dieser Vertrag bindet
+// zusaetzlich CommandEnvelope und gehoert deshalb hierher, nicht dorthin.
+// `safetyAllowsChange` ist wie `ProgramStartRequest::safetyAllowsStart` ein
+// zusaetzliches externes Pruefsignal - es ersetzt weder die interne
+// `criticalSafetyEventPending`-Invariante noch wird es von ihr ersetzt.
+struct SensorSelectionCommandRequest {
+    CommandEnvelope envelope;
+    SensorSelectionUserAction action{SensorSelectionUserAction::RecheckProduct};
+    bool safetyAllowsChange{false};
 };
 
 enum class MessageCode : std::uint8_t {
@@ -282,6 +303,11 @@ struct RunCommandState {
     // format never carries them (6.12: "ausdruecklich ausserhalb des
     // Wireformats").
     std::optional<PersistedSensorSelectionState> sensorSelection;
+    // RAM-only Laufzeitzustand der Sensorselektion (#21, 6.4.11/6.14.6). Der
+    // Default entspricht bereits dem einzigen NoActiveRun-Inaktivzustand
+    // (siehe sensor_selection_types.hpp), deshalb kein weiterer expliziter
+    // Reset noetig ausser durch clearActiveRunState().
+    SensorSelectionRuntimeState sensorSelectionRuntime;
     std::uint32_t runRevision{0U};
     std::array<RuntimeMessage, run_command_limits::kMaximumRuntimeMessages>
         messages{};
@@ -315,6 +341,12 @@ struct CommandDecision {
     std::array<CommandEffect, run_command_limits::kMaximumCommandEffects>
         effects{};
     std::size_t effectCount{0U};
+    // #21, 6.11/6.14.3: bei ApplySensorSelectionAction immer gesetzt, sonst
+    // immer std::nullopt. Alleinige Transportquelle des manuellen Pfads;
+    // `status`/`after` duerfen diese Entscheidung nicht ersetzen.
+    std::optional<SensorSelectionApplyStatus> sensorSelectionApplyStatus;
+    std::optional<SensorSelectionEvent> sensorSelectionEvent;
+    std::optional<SensorSelectionNotice> sensorSelectionNotice;
 
     [[nodiscard]] bool proposed() const {
         return status == CommandStatus::Proposed;
@@ -337,10 +369,24 @@ struct CommandDecision {
     const RunCommandState& current, const MessageCommandRequest& request);
 [[nodiscard]] CommandDecision decideFaultReset(
     const RunCommandState& current, const FaultResetRequest& request);
+// #21, 6.14.3: ruft applySensorSelectionDecision (sensor_selection.hpp) auf
+// derselben Kandidatenkopie wie der automatische Coordinator-Pfad auf - keine
+// zweite Regelimplementierung. `plausibility` ist ein eigener Parameter statt
+// eines Felds von SensorSelectionCommandRequest, weil weder RunCommandState
+// noch dieser Vertrag den Typ (sensor_selection.hpp) ohne einen nach 7
+// unzulaessigen Include tragen koennen.
+[[nodiscard]] CommandDecision decideApplySensorSelectionAction(
+    const RunCommandState& current, const SensorSelectionCommandRequest& request,
+    const CrossRolePlausibilityContext& plausibility);
 
 [[nodiscard]] CommandStatus applyRunCommand(RunCommandState& current,
                                             const CommandDecision& decision);
 [[nodiscard]] const RuntimeMessage* highestPriorityActiveMessage(
     const RunCommandState& state);
+// #21, 6.14.6: einzige Implementierung fuer jeden terminalen Laufpfad
+// (Abort/Complete/Tombstone/ProductWaitExpired); ersetzt die vormals
+// getrennten run_commands.cpp::clearActiveRun und
+// run_persistence_coordinator.cpp::clearCandidateRun.
+void clearActiveRunState(RunCommandState& state);
 
 }  // namespace fermentation

@@ -6,6 +6,7 @@
 
 #include "program_limits.hpp"
 #include "run_limits.hpp"
+#include "sensor_selection.hpp"
 
 namespace fermentation {
 namespace {
@@ -64,6 +65,12 @@ bool isRunComfortCommand(CommandKind kind) {
         case CommandKind::AcknowledgeMessage:
         case CommandKind::MuteMessage:
         case CommandKind::ResetFault:
+        // #21, 6.14.1: false, damit der generische criticalSafetyEventPending-
+        // Gate in beginDecision() die Aktion nicht pauschal vor der
+        // aktionsspezifischen Pruefung verwirft. Kein Safety-Bypass -
+        // decideApplySensorSelectionAction prueft denselben Zustand intern
+        // selbst (siehe dort).
+        case CommandKind::ApplySensorSelectionAction:
             return false;
     }
     return true;
@@ -242,14 +249,6 @@ bool applyTransition(RunCommandState& state, ProcessEvent event,
            applyProcessTransition(state.processState, transition, snapshot);
 }
 
-void clearActiveRun(RunCommandState& state) {
-    state.activeProgramRun.reset();
-    state.activeManualRun.reset();
-    state.processRunSnapshot.reset();
-    state.activeRunId.clear();
-    state.activeRunSensorMode.reset();
-}
-
 RunChangeSource changeSource(CommandSource source) {
     return source == CommandSource::WebInterface
                ? RunChangeSource::WebInterface
@@ -316,7 +315,88 @@ CommandStatus mapAdjustmentStatus(RunAdjustmentStatus status) {
     return CommandStatus::InvalidInput;
 }
 
+// #21, 6.14.3: schmale Projektion auf SensorSelectionStateView - kein
+// vollstaendiger RunCommandState wird an sensor_selection.hpp weitergereicht.
+SensorSelectionStateView sensorSelectionViewFrom(const RunCommandState& state) {
+    SensorSelectionStateView view;
+    view.activeRunId = state.activeRunId;
+    view.runtime = state.sensorSelectionRuntime;
+    view.activeMode = state.activeRunSensorMode;
+    view.persisted = state.sensorSelection;
+    view.runRevision = state.runRevision;
+    return view;
+}
+
+// #21, 6.8: fuer einen Programmlauf direkt aus dem vertrauenswuerdigen
+// Startvertrag (ProgramDocument) abgeleitet. Ein produktgefuehrter manueller
+// Lauf hat keine eigene Policy-/Ruecklaufkonfiguration und folgt deshalb
+// demselben WaitForUser-Ablauf wie ein entsprechend konfigurierter
+// Programmlauf (6.8) - ManualReturnToProduct, da es keine automatisch
+// validierte Rueckkehr ohne Programmkonfiguration gibt.
+SensorSelectionProgramContext sensorSelectionProgramContextFor(
+    const RunCommandState& state) {
+    if (state.activeProgramRun.has_value()) {
+        const auto& program =
+            state.activeProgramRun->snapshot().sourceProgram.program;
+        SensorSelectionProgramContext context;
+        context.sensorPreference = program.sensorPreference;
+        context.policy = program.productSensorFailure.policy;
+        context.returnStrategy = program.productSensorFailure.returnStrategy;
+        context.fallbackDelaySeconds =
+            program.productSensorFailure.fallbackDelaySeconds;
+        return context;
+    }
+    SensorSelectionProgramContext context;
+    context.sensorPreference = SensorPreference::ProductIfAvailableElseAir;
+    context.policy = ProductSensorFailurePolicy::WaitForUser;
+    context.returnStrategy = ReturnStrategy::ManualReturnToProduct;
+    context.fallbackDelaySeconds = std::nullopt;
+    return context;
+}
+
+// #21, 6.14.3: Der manuelle Transport liest ausschliesslich
+// CommandDecision::sensorSelectionApplyStatus fuer die Detailursache; dieser
+// generische CommandStatus dient nur der bestehenden dispatcherweiten
+// proposed()-Konvention (persistCommand/applyRunCommand). Wiederverwendung
+// bestehender Werte statt neuer CommandStatus-Auspraegungen: StaleDecision
+// und CapacityReached haben bereits ein exaktes Gegenstueck; InvalidDecision/
+// InvalidContext/TimeWentBackwards teilen sich InvalidInput als bestehenden
+// generischen Ablehnungswert (analog zum Muster in mapAdjustmentStatus).
+CommandStatus mapSensorSelectionRejection(SensorSelectionApplyStatus status) {
+    switch (status) {
+        case SensorSelectionApplyStatus::StaleDecision:
+            return CommandStatus::StaleState;
+        case SensorSelectionApplyStatus::CapacityReached:
+            return CommandStatus::CapacityReached;
+        case SensorSelectionApplyStatus::InvalidDecision:
+        case SensorSelectionApplyStatus::InvalidContext:
+        case SensorSelectionApplyStatus::TimeWentBackwards:
+            return CommandStatus::InvalidInput;
+        case SensorSelectionApplyStatus::AppliedPersistentCandidate:
+        case SensorSelectionApplyStatus::AppliedRamOnly:
+        case SensorSelectionApplyStatus::NoChange:
+            return CommandStatus::InvalidInput;
+    }
+    return CommandStatus::InvalidInput;
+}
+
 }  // namespace
+
+// #21, 6.14.6: einzige Implementierung; ersetzt das vormalige
+// run_commands.cpp::clearActiveRun (nur intern sichtbar) und
+// run_persistence_coordinator.cpp::clearCandidateRun (zweite, getrennte
+// Implementierung). Der Default von SensorSelectionRuntimeState ist bereits
+// der einzige NoActiveRun-/Blocked-Inaktivzustand (sensor_selection_types.hpp),
+// daher genuegt die Zuweisung eines frischen Default-Werts.
+void clearActiveRunState(RunCommandState& state) {
+    state.activeProgramRun.reset();
+    state.activeManualRun.reset();
+    state.processRunSnapshot.reset();
+    state.activeRunId.clear();
+    state.activeRunSensorMode.reset();
+    state.sensorSelection.reset();
+    state.sensorSelectionRuntime = SensorSelectionRuntimeState{};
+}
 
 bool validateManualRunPlan(const ManualRunPlan& plan) {
     const auto& values = plan.values;
@@ -576,7 +656,7 @@ CommandDecision decideStop(const RunCommandState& current,
         decision.status = CommandStatus::NotAllowedInState;
         return decision;
     }
-    clearActiveRun(candidate);
+    clearActiveRunState(candidate);
 
     if (coolingPlan.has_value() &&
         !installManualRun(candidate, decision.envelope,
@@ -643,7 +723,7 @@ CommandDecision decideCompletion(const RunCommandState& current,
         decision.status = CommandStatus::NotAllowedInState;
         return decision;
     }
-    clearActiveRun(candidate);
+    clearActiveRunState(candidate);
     if (coolingPlan.has_value() &&
         !installManualRun(candidate, decision.envelope,
                           std::move(*coolingPlan))) {
@@ -845,6 +925,128 @@ CommandDecision decideFaultReset(const RunCommandState& current,
     return decision;
 }
 
+CommandDecision decideApplySensorSelectionAction(
+    const RunCommandState& current, const SensorSelectionCommandRequest& request,
+    const CrossRolePlausibilityContext& plausibility) {
+    auto decision = beginDecision(current, request.envelope,
+                                  CommandKind::ApplySensorSelectionAction);
+    if (!requireRunRevision(decision)) {
+        return decision;
+    }
+    if (!request.envelope.confirmed) {
+        decision.status = CommandStatus::NotConfirmed;
+        return decision;
+    }
+    if (!current.activeProgramRun.has_value() &&
+        !current.activeManualRun.has_value()) {
+        decision.status = CommandStatus::NotAllowedInState;
+        return decision;
+    }
+    if (current.activeRunId.empty() || !current.activeRunSensorMode.has_value()) {
+        decision.status = CommandStatus::ContextMissing;
+        return decision;
+    }
+    // 6.14.1: `safetyAllowsChange` ist ein zusaetzliches externes
+    // Pruefsignal (analog `safetyAllowsStart`/`safetyAllowsCooling`) und wird
+    // unabhaengig von der folgenden internen Matrix verlangt.
+    if (!request.safetyAllowsChange) {
+        decision.status = CommandStatus::SafetyRejected;
+        decision.sensorSelectionApplyStatus =
+            SensorSelectionApplyStatus::InvalidDecision;
+        return decision;
+    }
+    // 6.14.1 Aktionsspezifische Matrix bei criticalSafetyEventPending:
+    // ContinueWithAir/ReturnToProduct enden hier fail-closed, bevor der
+    // Automat ueberhaupt aufgerufen wird - kein Ausweg aus einer offenen
+    // Sicherheitslage ueber eine Komfortaktion. RecheckProduct darf die reine
+    // Pruefung ausfuehren (unten); eine daraus entstehende Mutation wird dort
+    // verworfen.
+    if (current.criticalSafetyEventPending &&
+        (request.action == SensorSelectionUserAction::ContinueWithAir ||
+         request.action == SensorSelectionUserAction::ReturnToProduct)) {
+        decision.status = CommandStatus::SafetyRejected;
+        decision.sensorSelectionApplyStatus =
+            SensorSelectionApplyStatus::InvalidDecision;
+        return decision;
+    }
+
+    const auto view = sensorSelectionViewFrom(current);
+    SensorSelectionDecision selectionDecision;
+    selectionDecision.expected = view;
+    selectionDecision.program = sensorSelectionProgramContextFor(current);
+    selectionDecision.plausibility = plausibility;
+    selectionDecision.userAction = request.action;
+
+    const auto mutation = applySensorSelectionDecision(
+        view, selectionDecision, request.envelope.monotonicMillis);
+    decision.sensorSelectionApplyStatus = mutation.status;
+
+    if (current.criticalSafetyEventPending &&
+        request.action == SensorSelectionUserAction::RecheckProduct &&
+        mutation.status != SensorSelectionApplyStatus::NoChange) {
+        // Pruefung durfte laufen (6.14.1); jede daraus entstehende Modus-
+        // oder Permissionmutation bleibt bei offenem kritischem Safety-
+        // Ereignis verworfen - kein Write, kein RAM-Apply.
+        decision.status = CommandStatus::SafetyRejected;
+        return decision;
+    }
+
+    switch (mutation.status) {
+        case SensorSelectionApplyStatus::NoChange:
+            decision.status = CommandStatus::NoChange;
+            return decision;
+        case SensorSelectionApplyStatus::AppliedPersistentCandidate:
+        case SensorSelectionApplyStatus::AppliedRamOnly: {
+            auto candidate = decision.before;
+            candidate.sensorSelectionRuntime = mutation.runtime;
+            candidate.activeRunSensorMode = mutation.activeMode;
+            candidate.sensorSelection = mutation.persisted;
+            candidate.runRevision = mutation.resultingRunRevision;
+            // Siehe run_persistence_coordinator.cpp::persistSensorSelection:
+            // ManualRunPlan::values.sensorMode dupliziert den Modus und muss
+            // bei jedem Moduswechsel mitgefuehrt werden.
+            if (candidate.activeManualRun.has_value() &&
+                mutation.activeMode.has_value()) {
+                candidate.activeManualRun->values.sensorMode =
+                    *mutation.activeMode;
+            }
+            decision.after = std::move(candidate);
+            beginMutation(decision);
+            if (mutation.event.has_value()) {
+                decision.sensorSelectionEvent = mutation.event;
+            } else if (mutation.notice.has_value()) {
+                decision.sensorSelectionNotice = mutation.notice;
+            }
+            // Permission-Uebergang statt Ursachenliste: anders als im
+            // automatischen Pfad (persistSensorSelection, genau sechs
+            // bekannte Ursachen) kann der manuelle Pfad ueber
+            // ManualUserFallback/ManualUserReturn ebenfalls Blocked<->Allowed
+            // aendern - eine Ursachenliste wuerde diese Uebergaenge verfehlen.
+            // #21, 6.14.4: der Effekt transportiert ausschliesslich, dass
+            // peltierPermission sich geaendert hat, keine direkte
+            // Aktorfreigabe.
+            if (decision.before.sensorSelectionRuntime.permission !=
+                mutation.runtime.permission) {
+                const auto effect =
+                    mutation.runtime.permission == SensorPeltierPermission::Blocked
+                        ? CommandEffect::SensorSelectionPermissionBlocked
+                        : CommandEffect::SensorSelectionPermissionRestored;
+                static_cast<void>(addEffect(decision, effect));
+            }
+            return decision;
+        }
+        case SensorSelectionApplyStatus::StaleDecision:
+        case SensorSelectionApplyStatus::InvalidDecision:
+        case SensorSelectionApplyStatus::InvalidContext:
+        case SensorSelectionApplyStatus::TimeWentBackwards:
+        case SensorSelectionApplyStatus::CapacityReached:
+            decision.status = mapSensorSelectionRejection(mutation.status);
+            return decision;
+    }
+    decision.status = CommandStatus::InvalidInput;
+    return decision;
+}
+
 CommandStatus applyRunCommand(RunCommandState& current,
                               const CommandDecision& decision) {
     if (containsProcessedCommand(current, decision.envelope.id)) {
@@ -865,6 +1067,15 @@ CommandStatus applyRunCommand(RunCommandState& current,
             decision.before.criticalSafetyEventPending ||
         current.activeRunId != decision.before.activeRunId ||
         current.activeRunSensorMode != decision.before.activeRunSensorMode ||
+        // #21, 6.14.2 (Review-Blocking 1): ohne diese zwei Felder wuerde ein
+        // zwischen Entscheidung und Anwendung durch eine parallele
+        // automatische Bewertung veraenderter Auswahlzustand (z. B. ein
+        // inzwischen eingetretener SafeLocked-Zustand) von einer noch auf
+        // dem alten Zustand basierenden Kommandoentscheidung stillschweigend
+        // ueberschrieben - ein Sicherheits-Lock koennte verloren gehen. Gilt
+        // fuer jeden CommandKind, nicht nur ApplySensorSelectionAction.
+        current.sensorSelectionRuntime != decision.before.sensorSelectionRuntime ||
+        current.sensorSelection != decision.before.sensorSelection ||
         decision.after.commandSequence != current.commandSequence + 1U) {
         return CommandStatus::StaleState;
     }
