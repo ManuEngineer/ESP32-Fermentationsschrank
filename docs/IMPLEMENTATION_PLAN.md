@@ -1,336 +1,211 @@
 # Implementierungsplan und Entwicklungsreihenfolge
 
-## Status
+## Zweck
 
-Die Software wird vor Eintreffen der Hardware weitgehend als nativ testbarer
-Kern entwickelt. Reale Hardware wird spaeter ueber dieselben klar getrennten
-Adapter integriert.
+Dieses Dokument beschreibt die stabile technische Reihenfolge bis Release 1.
+Aktueller Arbeitsstand, laufende Pull Requests, Blocker und naechste Aufgaben
+stehen ausschliesslich in [`ROADMAP.md`](ROADMAP.md) und den Live-Issues.
 
-Die konkrete Issue-Struktur steht in
-[`IMPLEMENTATION_ISSUES.md`](IMPLEMENTATION_ISSUES.md). Die verbindlichen
-Korrekturen aus den Reviews von PR #38 stehen in
-[`PR38_REVIEW_CORRECTIONS.md`](PR38_REVIEW_CORRECTIONS.md).
+Die konkrete Issue- und Epic-Struktur steht in
+[`IMPLEMENTATION_ISSUES.md`](IMPLEMENTATION_ISSUES.md). Produkt- und
+Releasegrenzen stehen in [`SPECIFICATION_REVIEW.md`](SPECIFICATION_REVIEW.md).
+Architektur, Safety und Tests werden nicht hier dupliziert, sondern durch die
+zustaendigen ADRs und Fachvertraege festgelegt.
 
-Die Implementierung beginnt erst nach Merge von PR #38. Erstes Issue ist #9.
-
-## Grundentscheidung
+## Grundrichtung
 
 ```text
-Softwarekern zuerst und mit Simulation entwickeln
-+ reale Hardware hinter klaren Schnittstellen kapseln
-+ dieselbe Codebasis spaeter in einem geschuetzten Bring-up-Profil verwenden
-+ Aktoren erst nach elektrischer und thermischer Verifikation freigeben
+hardwareunabhaengigen Kern nativ entwickeln und testen
+-> reale Plattform hinter schmalen Ports integrieren
+-> aktorfreie Hardwarebaseline nachweisen
+-> Hardware schrittweise und messbar freigeben
+-> thermisch abstimmen und Release-Gates abnehmen
 ```
 
-Es gibt kein separates Wegwerf-Testprojekt.
+Es gibt kein separates Wegwerf-Testprojekt. Native Simulation,
+ESP-IDF-Produktionspfad und reale Hardware verwenden dieselben fachlichen
+Vertraege.
 
 ## Entwicklungsprofile
 
-### `native`
+| Profil | Rolle |
+|---|---|
+| `native` | Fachlogik, Simulation, Mocks und deterministische Hosttests |
+| `esp32_bringup` | aktorfreie beziehungsweise explizit gesperrte Hardwareintegration |
+| `esp32_release` | Produktionsprofil; Hardwarefreigabe nur nach bestandenen Gates |
 
-- fachliches Datenmodell
-- Zustandsmaschine
-- Zeit- und Phasenlogik
-- Programmvalidierung
-- Sensorstatus und Filterlogik
-- PI-Reglerkern
-- Aktorplaner ohne GPIOs
-- Fehler-, Persistenz- und Wiederherstellungslogik
-- Simulation mit virtueller Zeit
-- Fehlerinjektionen fuer Boot, Speicher und Unterbrechungen
+Konkrete Build-, Test- und CI-Regeln stehen in
+[`CI_AND_QUALITY_GATES.md`](CI_AND_QUALITY_GATES.md). Ein Profilwechsel darf
+unbestaetigte Hardware niemals freigeben.
 
-### `esp32_bringup`
+## Softwarephasen
 
-- alle Aktoren nach Boot gesperrt
-- sichtbarer Zustand `HARDWARE_UNVERIFIED`
-- kein automatischer Fermentationsstart
-- keine automatische Peltier-, Luefter- oder Summerpruefung
-- keine Aktortests aus `SAFE_BOOT`
-- einzelne Hardwaretests nur aus validiertem `STANDBY` ueber den geschuetzten
-  Serviceablauf
-- noch nicht bestaetigte Ausgaenge bleiben gesperrt
-- Diagnose von Flash, Heap, Resetursache, Sensorbussen, Display und Eingaben
+### SW0 – Plattformgrundlage
 
-### `esp32_release`
+- Buildprofile und reproduzierbare Tests;
+- portable Plattformports und native Testadapter;
+- virtuelle monotone und optionale absolute Zeit;
+- Architektur-, Secret- und Ressourcenpruefungen.
 
-Aktoren sind nur zulaessig, wenn Hardwareprofil, GPIOs, aktive Pegel,
-Bootverhalten, Pflichtsensoren, Luefter und Hardwareabnahme bestaetigt sind. Ein
-Wechsel des Buildprofils darf unbekannte Hardware nicht automatisch freigeben.
+### SW1 – Fachlicher Laufkern
 
-## Architektur fuer Entwicklung ohne Hardware
+- Programmmodelle und Standardkatalog;
+- unveraenderlicher Laufschnappschuss;
+- Zustandsmaschine, Laufkommandos und Abschluss;
+- Meldungen, Quittierung und Fehlerreset;
+- Wiederherstellung eines persistierten `COMPLETED`.
 
-Der fachliche Kern verwendet keine direkten Aufrufe von GPIO, 1-Wire, Display,
-WLAN, Dateisystem oder realer Systemzeit.
+### SW2 – Persistenz und Recovery
 
-Konzeptionelle Ports:
+- typisierte Konfigurations- und Laufdaten;
+- atomare Revisionen, Rueckfall und Kontrollpunkte;
+- Transaktionsabsicht vor aktorwirksamer Zustandsaenderung;
+- kritischer Persistenzfehler-Latch und Bootauswertung;
+- sichere Unterbrechungs- und Wiederanlauflogik;
+- Journale, Aufbewahrung, Backup und Import.
 
-```text
-ITimeSource
-ITemperatureSource
-IActuatorSink
-IStateStore
-IEventJournal
-INetworkStatus
-IUserNotificationSink
-IResourceMonitor
-```
+### SW3 – Sensor, Regelung und Safety
 
-ESP32-Adapter und native Mockadapter implementieren dieselben Schnittstellen.
+- Sensorqualitaet, Filterung und Plausibilitaet;
+- Regelsensorauswahl, Ersatzbetrieb und Rueckkehr;
+- PI-Regelung und Luftbegrenzung;
+- Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik;
+- Fehlerklassen, persistente Verriegelungen und `SAFE_BOOT`;
+- reproduzierbare Fehlerinjektionen.
 
-## Simulierte Hardware und Fehler
+Alle Ausgaenge enden in dieser Phase bei abstrakten Aktorbefehlen und Mocks.
 
-Vor Hardwareankunft werden mindestens simuliert:
+### SW4 – Bedienung und Netzwerk
 
-- Schrankluft-, Produkt- und Kuehlkoerpersensor
-- Sensorstatus `VALID`, `STALE`, `FAILED`
-- langsame und schnelle Temperaturverlaeufe
-- Heizen, Neutralbereich und Kuehlen
-- Innen- und Aussenluefter
-- BTS7960 als abstrakter Aktor
-- Stromausfall und Neustart
-- fehlende und spaeter eintreffende NTP-Zeit
-- Ausfallzeit als Unter-/Obergrenze
-- persistierte Verriegelung und Bootschleife
-- unvollstaendige Persistenztransaktion
-- kritischer Persistenzschreibfehler
-- Wiederherstellung von `COMPLETED`
-- Aktionen von Display und Web
+- gemeinsame rendererunabhaengige UI-Modelle und Kommandos;
+- lokale Touch-Shell gegen den Simulator;
+- Web-API und Weboberflaeche;
+- Anmeldung, Sitzungen und Bedienkonflikte;
+- Mehrsprachigkeit, Branding und Themevertraege;
+- PIN-unabhaengiger lokaler Vollreset als Recoveryablauf.
 
-Das thermische Simulationsmodell prueft Softwareablaeufe. Es liefert keine realen
-PI-, Prozess- oder Sicherheitsparameter.
+### SW5 – Diagnose, Exporte und Service
 
-## Aktorkette vor Hardwareankunft
+- Diagnosemodelle und Fehlerberichte;
+- Lauf-, Diagnose- und Serviceexporte;
+- gefuehrter Serviceablauf mit gesperrtem Mockbackend;
+- passive `SAFE_BOOT`-Diagnose;
+- Ressourcen- und Aufbewahrungsnachweise.
 
-```text
-Regleranforderung
--> Luftbegrenzung
--> Sicherheitsfreigabe
--> Mindest-Einschaltzeit und Mindest-Ausschaltzeit
--> Richtungswechselbestaetigung
--> Totzeit
--> Impulsakkumulator
--> abstrakter Aktorbefehl
-```
+Softwarephasen werden in kleinen vertikalen Funktionsscheiben umgesetzt.
+Parallelitaet ist nur zulaessig, wenn Abhaengigkeiten, Schnittstellen und
+Owner-Gates nicht vorweggenommen werden.
 
-Der letzte Schritt endet bei einem Mock oder Ereignisprotokoll.
+## Hardwarephasen
 
-## Verbindliche Boot- und Persistenzkette
+### H0 – Sicht- und Aufbaupruefung
 
-```text
-BOOT
--> alle Ausgaenge AUS
--> Resetursache und Bootschleife pruefen
--> persistierte Verriegelungen pruefen
--> kritischen Speicher und Transaktionsmarker pruefen
--> Konfiguration und Laufrevisionen validieren
--> COMPLETED wiederherstellen oder aktive Recovery bewerten
--> Recoveryentscheidung atomar speichern
--> erst danach eine neue Aktoraktion freigeben
-```
+- reale Board- und Modulrevisionen erfassen;
+- Verdrahtung, Versorgung, Masse, Stecker und Sicherungen dokumentieren;
+- Kuehlkoerper, Waermetauscher und Temperatursicherung planen;
+- unbekannte Ausgaenge physisch getrennt oder sicher inaktiv halten.
 
-Ein Neustart ist kein Fehlerreset. `SAFE_BOOT` bleibt aktorfrei.
+### H1 – Aktorfreie Controllerbaseline
 
-## Softwarefolge vor der Hardware
+- ESP-IDF-Firmware reproduzierbar flashen, booten und zuruecksetzen;
+- ROM-Bootloader- und UART-Recovery nachweisen;
+- Flash, Partition, Heap und Resetursachen erfassen;
+- GPIO- und Businventar erstellen;
+- Boot-, Reset- und Bootloaderpegel unbelastet messen.
 
-### SW0: Grundlage
+### H2 – Sensoren, Display und Touch
 
-- Profile `native`, `esp32_bringup`, `esp32_release`
-- CI und native Tests
-- Hardwareabstraktionen und Mocks
-- virtuelle monotone und optionale UTC-Zeit
-- Fehler-, Ergebnis- und Revisionsmodelle
+- DS18B20-Busse, ROM-Adressen und Produkt-Hot-Plug verifizieren;
+- Display- und Touchcontroller praktisch bestaetigen;
+- Rotation, Kalibrierung, Recovery und Ressourcen messen;
+- Renderer- und Treiberauswahl nach Adopt-or-build und Espressif-first treffen.
 
-### SW1: Fachlicher Kern
+### H3 – Luefter, Summer und MOSFET-Ausgaenge
 
-- Programme und unveraenderlicher Laufschnappschuss
-- kanonische Zustandsmaschine
-- Start, Stop und Abschluss
-- Meldungen, Quittierung und Fehlerreset
-- `COMPLETED`-Wiederherstellung
-- simulierte Standardablaeufe
+- Kanaele und aktive Pegel unbelastet messen;
+- Verbraucher einzeln anschliessen;
+- Strom, Anlauf, Nachlauf und Bootverhalten dokumentieren;
+- Aussenluefter fuer spaetere Peltierpruefung freigeben.
 
-### SW2: Persistenz und Recovery
+### H4 – BTS7960 ohne Peltier
 
-- Factory-, Benutzer- und Laufdaten
-- atomare Revisionen und Rueckfall
-- Transaktionsabsicht vor aktorwirksamen Zustandsaenderungen
-- Kontrollpunkte
-- reservierter Persistenzfehler-Latch
-- Bootpruefung auf unvollstaendige Transaktionen
-- Ausfallzeit als Unsicherheitsintervall
-- Recovery ohne erfundenen Fortschritt
-- Aufbewahrung und Bereinigung
+- Enable, Richtungen, Pulldowns und Ausgangspolaritaet verifizieren;
+- gleichzeitige Richtungsfreigabe ausschliessen;
+- Reset und `SAFE_BOOT` mit sicher deaktivierter H-Bruecke pruefen;
+- R_IS/L_IS nur nach Pegel- und Nutzbarkeitsnachweis integrieren.
 
-### SW3: Sensor, Regelung und Sicherheit
+### H5 – Begrenzte Peltierpruefung
 
-- Sensorqualitaet und Filter
-- PI-Regler und Luftbegrenzung
-- Aktorplaner, Mindestzeiten und Totzeit
-- Fehlerklassen und persistente Verriegelung
-- `SAFE_BOOT`
-- Fehlerinjektionen
+Vor dem ersten realen Peltierpuls muessen alle Gates aus
+[`ACCEPTANCE_TESTS.md`](ACCEPTANCE_TESTS.md) erfuellt sein, insbesondere:
 
-### SW4: Bedienung
+- geeignete Ueberstromsicherung;
+- montierte und gepruefte einmalige Temperatursicherung;
+- Kuehlkoerper und funktionsgepruefter Aussenluefter;
+- gueltige Pflichtsensoren;
+- bestaetigte BTS7960-Pinbelegung, AUS-Pegel und Polaritaet;
+- stabile Versorgung und jederzeitiger Abbruch;
+- validiertes `STANDBY` und geschuetzter Serviceablauf.
 
-- lokale View-Modelle und Navigation
-- Programmeditor und Laufanzeige
-- Weboberflaeche und lokale API
-- Mehrsprachigkeit
-- Bedienkonflikte und Berechtigungen
-- Anzeige des Ausfallintervalls und ausstehender Benutzerentscheidung
-- PIN-unabhaengiger lokaler Vollreset als Recoveryablauf
-
-### SW5: Diagnose und Exporte
-
-- Diagnosemodell
-- Lauf-, Diagnose- und Servicebericht
-- gefuehrter Serviceablauf mit Mockbackend
-- passive `SAFE_BOOT`-Diagnose
-- Testprotokoll fuer elektrische und thermische Freigaben
-- vorlaeufige Ressourcenbudgets
-
-Die Abschnitte werden in kleinen vertikalen Funktionsscheiben umgesetzt und
-duerfen teilweise parallel laufen.
-
-## Hardware-Bring-up
-
-### H0: Sichtpruefung
-
-- Platinenrevision und Modulbeschriftung
-- Verdrahtungsplan und Fotos
-- Versorgung, Masse, Stecker, Sicherungen und Leitungen
-- Montagekonzept fuer Kuehlkoerper und einmalige Temperatursicherung
-
-### H1: Controller ohne Aktoren
-
-- Flashen und UART-Recovery
-- Flash, Partition und Ressourcen
-- GPIOs unbelastet messen
-- Boot-, Reset- und Bootloaderpegel
-- Onboard-MOSFET-Ausgaenge unbelastet
-- `SAFE_BOOT` und PIN-unabhaengigen Vollreset ohne Aktorwirkung pruefen
-
-### H2: Sensoren, Display und Touch
-
-- drei DS18B20 und ROM-Adressen
-- Bustopologie und Produkt-Hot-Plug
-- Displaycontroller und Rotation
-- Touchcontroller und Kalibrierung
-- physische Recoverygeste beziehungsweise alternativen lokalen Resetweg
-  verifizieren
-
-### H3: Luefter und Summer
-
-- Ausgang unbelastet messen
-- Verbraucher einzeln anschliessen
-- Strom, Anlauf, Pegel und Nachlauf
-- Boot und Reset mit Verbraucher
-- Aussenluefter als Voraussetzung fuer den spaeteren Peltier-Test abnehmen
-
-### H4: BTS7960 ohne Peltier
-
-- Logikversorgung und Masse
-- Enable- und Richtungseingaenge
-- Pulldowns
-- Ausgang und Polaritaet mit Multimeter
-- gleichzeitige Richtungen hardware- und softwareseitig ausschliessen
-- R_IS/L_IS erst nach Pegelpruefung
-- Reset und `SAFE_BOOT` mit sicher deaktivierter H-Bruecke pruefen
-
-### H5: Begrenzte Peltierpulse
-
-Vor **jeder ersten realen Bestromung des Peltiers** muessen vorhanden und
-geprueft sein:
-
-- geeignete 7,5-A-Ueberstromsicherung
-- montierte einmalige Temperatursicherung als von der Firmware unabhaengige
-  thermische Abschaltung
-- dokumentierter Montageort und bestandene Durchgangspruefung der
-  Temperatursicherung
-- korrekt montierter Kuehlkoerper und Waermetauscher
-- funktionsgepruefter Aussenluefter; Innenluefter gemaess Testaufbau
-- gueltiger Schrankluft- und Kuehlkoerpersensor
-- bestaetigte BTS7960-Pinbelegung, AUS-Pegel, Enable-Verhalten und Polaritaet
-- stabile, abgesicherte Versorgung
-- validiertes `STANDBY` und PIN-geschuetzter Serviceablauf
-
-Rating und genauer Montageort der Temperatursicherung bleiben
-`TBD_COMMISSIONING`; ihre Installation vor dem ersten Puls ist verbindlich.
-
-Ablauf:
+Der Ablauf bleibt begrenzt und geordnet:
 
 ```text
-alle Vorbedingungen erneut pruefen
--> begrenzter Heizpuls
--> Peltier und beide Richtungen AUS
--> Aussenluefternachlauf
--> Mindest-Ausschaltzeit und Totzeit
--> begrenzter Kuehlpuls
--> Peltier und beide Richtungen AUS
--> Nachlauf
--> thermische Reaktion und Fehlerpfade dokumentieren
+Vorbedingungen pruefen
+-> kurzer Heizpuls
+-> AUS, Nachlauf, Mindest-Auszeit und Totzeit
+-> kurzer Kuehlpuls
+-> AUS und Nachlauf
+-> Messwerte, Fehlerpfade und Abbruch dokumentieren
 ```
 
-Die erste reale Peltierfreigabe erfolgt ausschliesslich im Bring-up-/Servicemodus
-aus validiertem `STANDBY`. `SAFE_BOOT` kann keinen solchen Puls ausloesen.
+`SAFE_BOOT` kann keinen Aktortest oder Peltierpuls ausloesen.
 
-## Entwicklungsstil
+## Inbetriebnahmephasen
 
-Kleine vertikale Funktionsscheiben, beispielsweise:
+### C0 – Thermische Grundvermessung
 
-```text
-Produktfuehler-Mock
--> Messung und Qualitaet
--> VALID/STALE/FAILED
--> Ersatzbetrieb
--> Diagnosemodell
--> UI-Anzeige
--> automatische Tests
-```
+Sensorvergleich, Offsets, leerer Schrank, kleine und grosse Referenzmasse,
+Temperaturverteilung sowie Heiz- und Kuehlreaktion messen.
 
-Der reale Adapter wird spaeter hinter derselben Schnittstelle ergaenzt.
+### C1 – Regel- und Sicherheitsparameter
 
-## Branch- und PR-Strategie
+PI-Parameter, Luftbegrenzungen, Mindestzeiten, Totzeit, Nachlauf,
+Zielqualifikation und Safetygrenzen anhand dokumentierter Messreihen festlegen.
 
-- PR #38 zuerst nach `main` mergen
-- danach ein Branch pro Implementierungs-Issue
-- kleine pruefbare PRs
-- keine umfangreiche direkte Implementierung auf `main`
-- Hardwareblockaden als `BLOCKED_HARDWARE` sichtbar lassen
+### C2 – Hardware- und Prozessabnahme
 
-Erster Branch:
+Hardwarematrix, verpflichtende Fehlerinjektionen, Stromunterbrechungen,
+Bedienung und Standardprogramme am realen Aufbau validieren.
 
-```text
-foundation/platformio-profiles
-```
+### C3 – Dauer- und Releaseabnahme
 
-zu Issue #9.
-
-## Definition of Done
-
-- Implementierung vollstaendig
-- passende native, simulierte oder reale Tests bestanden
-- ESP32-Build erfolgreich, soweit relevant
-- Ressourcenwirkung geprueft oder sichtbar offen
-- Fehlerfaelle und Reviewkorrekturen behandelt
-- Dokumentation aktualisiert
-- keine Geheimnisse
-- keine unbestaetigten Hardwareannahmen als Fakten
-- Akzeptanzkriterien erfuellt
-
-Ein hardwareunabhaengiges Issue darf vor Hardwareankunft abgeschlossen werden,
-wenn die reale Verifikation in einem separaten Issue sichtbar bleibt.
+Mindestens sieben zusammenhaengende Tage unter paralleler Regelungs-, UI-,
+Web-, Speicher- und Exportlast testen und alle Release-Gates bewerten.
 
 ## Meilensteine
 
 | Meilenstein | Ergebnis |
 |---|---|
 | M0 | Softwaregrundlage und simuliertes System |
-| M1 | Getesteter Softwarekern inklusive Boot-, Persistenz- und Recoveryregeln |
-| M2 | Bedienbarer Simulator |
-| M3 | Hardware-Bring-up ohne ungesicherte Peltierfreigabe |
-| M4 | Sichere reale Temperatursteuerung |
-| M5 | Vollstaendige Integration |
-| M6 | Release 1 nach thermischer Abnahme und siebentaegigem Test |
+| M1 | getesteter fachlicher, persistenter und sicherer Softwarekern |
+| M2 | bedienbarer Simulator mit Diagnose und Exportschnittstellen |
+| M3 | dokumentierte aktorfreie und schrittweise freigegebene Hardwarebaseline |
+| M4 | sichere reale Temperatursteuerung |
+| M5 | vollstaendige Integration und praktische Programmvalidierung |
+| M6 | Release 1 nach Dauer- und Releaseabnahme |
 
-Die konkrete Issuezuordnung steht in `IMPLEMENTATION_ISSUES.md`.
+## Verbindliche Gates
+
+- Ein spaeterer Softwareblock darf einen fehlenden fachlichen oder Safetyvertrag
+  nicht still ersetzen.
+- Reale Adapter werden erst nach dem zugehoerigen portseitigen Vertrag gebaut.
+- Produktive Aktorfreigabe verlangt den Fehler-/Safetykern sowie die elektrischen
+  Hardwaregates.
+- Thermische Parameter bleiben `TBD_COMMISSIONING`, bis Messnachweise vorliegen.
+- Ressourcenwerte bleiben `TBD_IMPLEMENTATION_BUDGET`, bis reproduzierbare Builds
+  und Belastungsmessungen vorliegen.
+- Ein Neustart, Profilwechsel oder erfolgreicher Einzeltest hebt kein offenes Gate
+  auf.
+
+Planung, Branch-, Review- und Owner-Gates stehen ausschliesslich in
+[`AGENT_WORKFLOW.md`](AGENT_WORKFLOW.md) und der Root-`AGENTS.md`.
