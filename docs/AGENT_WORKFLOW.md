@@ -71,6 +71,8 @@ Die Umsetzung folgt dem freigegebenen Plan in kleinen, pruefbaren Schnitten.
 - Es werden keine Parallelvertraege oder vorsorglichen Erweiterungen erzeugt.
 - Nach jedem Schnitt werden die gezielten Tests des betroffenen Bereichs
   ausgefuehrt.
+- Bei gemeinsamen Vertraegen werden zusaetzlich die direkt betroffenen
+  Konsumententests ausgefuehrt.
 - Plan, PR-Beschreibung und `docs/ROADMAP.md` werden nur bei tatsaechlicher
   Status- oder Scopewirkung aktualisiert.
 - Nicht ausgefuehrte Nachweise werden nicht als bestanden bezeichnet.
@@ -125,8 +127,17 @@ offene Befunde, auf dem finalen `HEAD` und nach ausdruecklicher Owner-Anweisung.
 GitHub-CI fuehrt waehrend eines Draft-PR keine Firmwaretests aus. Der Owner setzt
 den PR nach dem Review auf `Ready for review`; dadurch startet der vollstaendige
 CI-Lauf. Spaetere Pushes auf einen nicht als Draft markierten PR starten CI
-erneut. Reine Markdown-Aenderungen bleiben von der vollstaendigen Firmware-CI
-ausgenommen.
+erneut. Reine Markdown- oder Kommentaraenderungen bleiben von der
+vollstaendigen Firmware-CI ausgenommen.
+
+Nach einem CI-Fehlschlag wird der PR wieder als Draft gefuehrt. Der konkrete
+Fehler und direkt abhaengige Tests werden gezielt korrigiert und geprueft;
+danach folgen erneut ein vollstaendiges Review und der Ownerwechsel auf
+`Ready for review`.
+
+Jede semantische Aenderung nach einer gruenen Vollpruefung verwirft den
+bisherigen Review- und Pruefnachweis. Reine Dokumentations- oder
+Kommentaraenderungen tun dies nicht.
 
 ## 9. Handover
 
