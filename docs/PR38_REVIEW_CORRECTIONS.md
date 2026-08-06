@@ -12,9 +12,7 @@ folgenden Quellen:
 
 - Release-Scope und Dokumentationsprioritaet:
   [`SPECIFICATION_REVIEW.md`](SPECIFICATION_REVIEW.md)
-- kritische Persistenzfehler, Transaktionsmarker und Persistenzfehler-Latch:
-  [`CRITICAL_PERSISTENCE_SAFETY.md`](CRITICAL_PERSISTENCE_SAFETY.md)
-- Boot, Brownout, Watchdog und `SAFE_BOOT`:
+- Boot, Brownout, Watchdog, kritische Persistenzfehler und `SAFE_BOOT`:
   [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md)
 - Laufkontrollpunkte und Transaktionsvertrag:
   [`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md)
