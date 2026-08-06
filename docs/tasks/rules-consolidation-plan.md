@@ -4,190 +4,130 @@
 
 `AUDIT_AND_IMPLEMENTATION_IN_PROGRESS`
 
-Audit, Ownerentscheidungen und Umsetzung erfolgen ab jetzt blockweise:
+Audit und Umsetzung erfolgen blockweise: prüfen, materielle Abweichungen mit
+dem Owner entscheiden, freigegebenen Block umsetzen, Diff/Links/Doppelungen
+prüfen und erst danach fortfahren.
 
-1. einen zusammenhängenden Themenblock vollständig prüfen;
-2. materielle Abweichungen mit dem Owner entscheiden;
-3. den freigegebenen Block unmittelbar umsetzen;
-4. Diff, Links und Doppelungen des Blocks prüfen;
-5. danach mit dem nächsten Themenblock fortfahren.
-
-Der Draft-PR bleibt währenddessen Draft. GitHub-CI läuft erst nach dem
-Ownerwechsel auf `Ready for review`.
+Der PR bleibt Draft. GitHub-CI läuft erst nach dem Ownerwechsel auf
+`Ready for review`.
 
 ## Ziel
 
 Jede notwendige Information bleibt verfügbar, aber genau einmal und an der
-fachlich zuständigen Stelle.
+fachlich zuständigen Stelle. Historische Stände, doppelte Verträge und
+ritualistische Pflichtlektüre werden entfernt, ohne Safety-, Security-,
+Recovery- oder Owner-Gates zu kürzen.
 
-- keine doppelten Regeln, Verträge oder Statusangaben;
-- keine historischen Projektstände in automatisch geladenen Dateien;
-- kurze Verweise statt kopierter Detailverträge;
-- Pflichtlektüre nur für den betroffenen Aufgabentyp;
-- keine Kürzung von Safety-, Security-, Recovery- oder Owner-Gates.
-
-## Beschlossene Quellenrollen
+## Kanonische Quellenrollen
 
 | Quelle | Rolle |
 |---|---|
-| `AGENTS.md` | kompakte globale Pflichten, Owner-Gates, Quellenzugang und Lesematrix |
-| Root- und lokale `CLAUDE.md` | reine Importbrücken mit exakt `@AGENTS.md` |
-| lokale `AGENTS.md` | nur zusätzliche Regeln des jeweiligen Verzeichnisbaums |
+| Root-`AGENTS.md` | globale Pflichten, Owner-Gates und Lesematrix |
+| Root-/lokale `CLAUDE.md` | reine Importbrücken mit exakt `@AGENTS.md` |
+| lokale `AGENTS.md` | nur Verzeichnis-Deltas |
 | `docs/ROADMAP.md` | einzige aktuelle Status- und Taskübersicht |
 | `docs/IMPLEMENTATION_PLAN.md` | stabiler technischer Phasenplan ohne Live-Status |
-| `docs/IMPLEMENTATION_ISSUES.md` | Issue-/Abhängigkeitsstruktur ohne PR-Chronik |
+| `docs/IMPLEMENTATION_ISSUES.md` | Epic-/Issue-/Abhängigkeitsstruktur ohne PR-Chronik |
 | `docs/OPEN_POINTS.md` | nachweisgebundene Hardware-, Commissioning- und Budgetcheckliste |
-| `docs/SPECIFICATION_REVIEW.md` | Dokumentationspriorität, Release-1-Basis und vollständige Release-1-Abgrenzung |
+| `docs/SPECIFICATION_REVIEW.md` | Dokumentationspriorität, Release-1-Basis und Zukunftsabgrenzung |
 | `docs/DECISIONS.md` | zentrales ADR-Register |
-| ausführliche ADRs | notwendige Detailverträge komplexer Architekturentscheidungen |
-| `docs/ENGINEERING_PRINCIPLES.md` | Repository-first, Kontextaktualisierung, SOLID, DRY, KISS und Espressif-first |
-| `docs/AGENT_WORKFLOW.md` | Plan-first, Freigabe, Umsetzung, Abweichung, Review, Tests und Handover |
+| `docs/ENGINEERING_PRINCIPLES.md` | Repository-first, Kontextrefresh, SOLID, DRY, KISS, Espressif-first |
+| `docs/AGENT_WORKFLOW.md` | Plan-first, Umsetzung, Review, Tests und Handover |
 | `docs/CI_AND_QUALITY_GATES.md` | Testbefehle, Buildprofile, Werkzeuge und CI-Verhalten |
-| `docs/HARDWARE.md` | konkrete Hardware, Statuskennzeichnung und Verifikationsreihenfolge |
-| spezialisierte Fachdokumente | vollständige fachliche, Safety-, Recovery-, Persistenz- und UI-Verträge |
+| Fachverträge/ADRs | vollständige fachliche und architektonische Details |
 | `lib/README.md` | kurzer nicht normativer Modulindex |
-| `Agent-Auftraege/Auftrag.md` | einzige allgemeine Markdown-Auftragsvorlage; nur auftragsspezifischer Inhalt und Verweise |
-| PR, Issue, freigegebener Plan, neuester Handover | aktueller auftragsbezogener Arbeitsstand |
+| `Agent-Auftraege/Auftrag.md` | einzige allgemeine Markdown-Auftragsvorlage |
+| PR, Issue, freigegebener Plan, neuester Handover | aktueller auftragsbezogener Stand |
 
 ## Ownerentscheidungen
 
 | ID | Entscheidung |
 |---|---|
 | R-00 | Root-`CLAUDE.md` enthält nur `@AGENTS.md`. |
-| R-01 | `docs/ROADMAP.md` wird die einzige aktuelle Status- und Taskquelle. |
-| R-02 | Notwendige Information bleibt vollständig, aber kompakt, nicht doppelt und nicht fachfremd. |
-| R-03 | `ENGINEERING_PRINCIPLES.md` wird alleinige Engineering-Regelquelle; `ENGINEERING_LEARNINGS.md` wird nach Übernahme einzigartiger Inhalte entfernt. |
-| R-04 | ADR-013 bleibt alleinige vollständige Modularchitektur; Root und lokale `AGENTS.md` enthalten nur Kurzfassung beziehungsweise Deltas. |
-| R-05 | Root enthält nur den fail-closed-Grundsatz; Safety-, Hardware- und Release-Details bleiben in Fachquellen. OTA ist nicht Release 1, aber für ein späteres Release vorgesehen; jetzt keine vorsorglichen Ressourcen. |
-| R-06 | Während Draft nur gezielte lokale Tests und keine GitHub-CI. Vollständige CI startet bei `Ready for review` und erneut bei späteren Pushes eines nicht als Draft markierten PR. Vollständiger lokaler Lauf nur auf Owner-Anweisung. |
-| R-07 | `DECISIONS.md` bleibt ADR-Register. Historischen Codex-Handover und Auftragspaket #9 bis #37 entfernen. `Agent-Auftraege/Auftrag.md` kompakt neu aufbauen. |
-| R-07a | `docs/CODEX_TASK_TEMPLATE.md` entfernen; keine zweite oder agentspezifische Auftragsvorlage. |
-| R-08 | Zielentwurf der Root-`AGENTS.md`, Zielgrösse von etwa 5–7 KB beziehungsweise 90–130 Zeilen und bedingte Lesematrix sind freigegeben. Lokale `AGENTS.md` sollen möglichst unter 20 Zeilen bleiben. |
-| R-08a | Root- und notwendige lokale `CLAUDE.md` bleiben als einzeilige Importbrücken bestehen und enthalten exakt `@AGENTS.md`; lokale Regeln stehen ausschliesslich in der jeweiligen `AGENTS.md`. Für `device_platform_esp_idf` werden beide lokalen Dateien ergänzt. |
-| R-09 | `README.md` wird ein kurzer nicht normativer Einstieg; `SPECIFICATION_PLAN.md` wird entfernt; `SPECIFICATION_REVIEW.md` wird die aktuelle kanonische Release-/Prioritätsquelle; einzigartige Regeln aus `PR38_REVIEW_CORRECTIONS.md` werden in Fachverträge übertragen und die Datei danach entfernt. Historische Audit-Roadmaps werden klar als historisch markiert. |
-
-## Freigegebener Zielaufbau der Root-`AGENTS.md`
-
-1. Projektauftrag und fail-closed-Grundsatz
-2. aktueller Stand, Quellen und Widerspruchsbehandlung
-3. kurzer verbindlicher Verweis auf `ENGINEERING_PRINCIPLES.md`
-4. Safety-, Hardware- und Release-Grenzen ohne Detailkopien
-5. kurze Modularchitektur mit ADR-013-Verweis
-6. Branch-, Plan- und Owner-Gates
-7. Tests, CI und vollständiges Review
-8. Session-Handover
-9. bedingte Lesematrix
-
-Nicht enthalten werden historische Statusangaben, Hardwarestücklisten,
-vollständige Release-Listen, konkrete Testbefehle, Detaildefinitionen von
-SOLID/DRY/KISS, vollständige Architekturmatrizen oder der gesamte Plan-first-
-Ablauf.
+| R-01 | `docs/ROADMAP.md` wird einzige Live-Statusquelle. |
+| R-02 | Notwendige Information vollständig, kompakt und nicht doppelt. |
+| R-03 | `ENGINEERING_PRINCIPLES.md` ist alleinige Engineering-Regelquelle; Learnings nach Übernahme einzigartiger Inhalte entfernen. |
+| R-04 | ADR-013 bleibt alleinige vollständige Modularchitektur; Root/lokale Regeln nur Kurzfassung/Deltas. |
+| R-05 | Root behält fail-closed; Details bleiben in Fachquellen. OTA ist später vorgesehen, aber nicht Release 1 und wird jetzt nicht vorgebaut. |
+| R-06 | Draft: nur gezielte lokale Tests, keine Firmware-CI. Vollständige CI bei `Ready for review` und späteren Pushes eines Nicht-Draft-PR. Vollständiger lokaler Lauf nur auf Owner-Anweisung. |
+| R-07 | Historischen Codex-Handover und Auftragspaket entfernen; eine kompakte allgemeine Auftragsvorlage behalten. |
+| R-07a | `docs/CODEX_TASK_TEMPLATE.md` entfernen. |
+| R-08 | Root-Zielgrösse etwa 5–7 KB, lokale Regeln möglichst unter 20 Zeilen; bedingte Lesematrix freigegeben. |
+| R-08a | Alle notwendigen lokalen `CLAUDE.md` bleiben einzeilige Importbrücken; ESP-IDF-Adapterbaum erhält lokale Regeln. |
+| R-09 | README kompakt; `SPECIFICATION_PLAN.md` entfernen; `SPECIFICATION_REVIEW.md` kanonisch aktualisieren; einzigartige PR-38-Korrekturen in Fachverträge übernehmen und alte Korrekturdatei entfernen. |
 
 ## Freigegebene Lesematrix
 
 | Aufgabe | Zusätzlich zu lesen |
 |---|---|
-| jede Aufgabe | konkrete Markdown-Auftragsdatei, Live-Issue/PR, `docs/ROADMAP.md`, geltende lokale `AGENTS.md` |
-| Planung, Umsetzung oder Review | `docs/AGENT_WORKFLOW.md`, `docs/ENGINEERING_PRINCIPLES.md`; bei Code, Build oder Tests zusätzlich `docs/CI_AND_QUALITY_GATES.md` |
-| Produkt-, Release- oder Scopeentscheidung | `docs/SPECIFICATION_REVIEW.md`, aktuelles Issue und relevante akzeptierte ADRs |
-| Architektur-, Modul- oder Abhängigkeitsänderung | `docs/DECISIONS.md`, relevante ADRs, `lib/README.md` und lokale `AGENTS.md` |
-| Bibliotheks- oder Komponentenauswahl | `docs/ENGINEERING_PRINCIPLES.md`, `docs/ADOPT_OR_BUILD.md` und relevante Lizenz-/Herstellerquellen |
-| Safety-, Fehler-, Recovery-, Aktor- oder kritische Persistenzarbeit | betroffene spezialisierte Safety-, Recovery-, Aktor- und Persistenzdokumente sowie relevante Akzeptanztests |
-| Hardware, Bring-up oder Inbetriebnahme | `docs/HARDWARE.md`, `docs/OPEN_POINTS.md`; bei Toolchain oder ESP-IDF zusätzlich `docs/ESP_IDF_UPGRADE_CONTRACT.md` |
-| UI, Web, Netzwerk, Konfiguration oder Fachlogik | nur die vom Issue, Plan, ADR oder betroffenen Code direkt referenzierten Fachdokumente |
+| jede Aufgabe | Markdown-Auftrag, Live-Issue/PR, Roadmap, lokale `AGENTS.md` |
+| Planung, Umsetzung, Review | Agent-Workflow und Engineering-Grundsätze; bei Code/Build/Tests CI-Dokument |
+| Produkt/Release/Scope | Spezifikationsreview und relevante ADRs |
+| Architektur/Module | ADR-Register, relevante ADRs, Modulindex, lokale Regeln |
+| Bibliotheken/Komponenten | Engineering-Grundsätze, Adopt-or-build, Lizenz-/Herstellerquellen |
+| Safety/Recovery/Aktoren/Persistenz | betroffene Fachverträge und Akzeptanztests |
+| Hardware/Bring-up | Hardware, Open Points, bei ESP-IDF zusätzlich Upgradevertrag |
+| UI/Web/Netzwerk/Fachlogik | nur direkt betroffene Fachquellen |
 
-Der freigegebene Plan nennt die konkret benötigten Fachquellen. Das gesamte
-Dokumentationsverzeichnis wird nicht pauschal vollständig gelesen.
+## Blockstatus
 
-## Roadmap-Pflegevertrag
+### A9.1 – Agenten-, Engineering- und Modulregeln
 
-`docs/ROADMAP.md` enthält nur:
+`COMPLETED`
 
-- zuletzt abgeschlossene grössere Arbeitspakete;
-- aktuellen PR und Phase;
-- nächste startbereite und zulässige parallele Arbeit;
-- Blocker und offene Ownerentscheidungen;
-- Links auf kanonische Details.
+- Root-`AGENTS.md` konsolidiert und um rund 350 Zeilen reduziert.
+- `ENGINEERING_PRINCIPLES.md` verbindlich konsolidiert; einzigartige
+  Kontextbaseline-/Refreshregeln übernommen.
+- `ENGINEERING_LEARNINGS.md` entfernt.
+- Root-/lokale Claude-Brücken auf exakt `@AGENTS.md` reduziert.
+- Lokale Modulregeln auf Deltas gekürzt; falsche ESP32-Adaptererlaubnis aus
+  `device_platform` entfernt.
+- Neue lokale Regeln/Claude-Brücke für `device_platform_esp_idf` ergänzt.
+- `lib/README.md` zum nicht normativen Index gekürzt.
 
-Sie wird zu Beginn jedes neuen PR, nach jedem Merge und bei materiellen
-Reihenfolgeänderungen aktualisiert. Anforderungen und Issue-Inhalte werden nicht
-kopiert.
+### A9.2 – Workflow, CI, PR und Agent-Aufträge
 
-## Test- und CI-Vertrag
+`COMPLETED`
 
-- Planung: keine Builds oder vollständigen Tests.
-- Draft-Umsetzung: nur gezielte Tests des geänderten Bereichs.
-- Nach vollständigem Review: vollständiger lokaler Lauf nur auf ausdrückliche
-  Owner-Anweisung und auf dem finalen Head.
-- GitHub-CI: nicht während Draft; vollständiger Lauf bei `Ready for review` und
-  bei späteren Pushes, solange der PR nicht Draft ist.
-- Markdown-only: keine vollständige Firmware-CI.
-- Nach Merge: kein identischer automatischer Wiederholungslauf.
+- `docs/AGENT_WORKFLOW.md` als kanonischer Ablauf ergänzt.
+- `docs/CI_AND_QUALITY_GATES.md` auf Teststrategie und Ready-for-review-CI
+  konsolidiert.
+- Workflow ohne `push`-Trigger; Firmwarejob nur bei Nicht-Draft-PR.
+- PR-Vorlage und `Agent-Auftraege/Auftrag.md` kompakt neu aufgebaut.
+- `docs/CODEX_HANDOFF.md`, `docs/CODEX_TASK_TEMPLATE.md` und historisches
+  Issue-Auftragspaket entfernt.
 
-## Zu entfernende historische oder doppelte Quellen
+### A9.3 – README, Spezifikation und PR-38-Korrekturen
 
-- `docs/CODEX_HANDOFF.md`
-- `docs/CODEX_TASK_TEMPLATE.md`
-- `docs/ENGINEERING_LEARNINGS.md` nach Übernahme einzigartiger Inhalte
-- `docs/SPECIFICATION_PLAN.md`
-- `docs/PR38_REVIEW_CORRECTIONS.md` nach Übernahme einzigartiger Inhalte
-- `Agent-Auftraege/ESP32-Fermentationsschrank_Agent-Auftraege_Issues_09-37/`
+`NEXT`
 
-Die Historie bleibt in Git und den zugehörigen PRs erhalten.
+- README zum kurzen nicht normativen Einstieg reduzieren.
+- `SPECIFICATION_REVIEW.md` kanonisch aktualisieren.
+- einzigartige Persistenz-/Safety-Regeln aus PR #38 in aktuelle Fachverträge
+  und Akzeptanztests übertragen.
+- `SPECIFICATION_PLAN.md` und danach `PR38_REVIEW_CORRECTIONS.md` entfernen.
+- historische Audit-Roadmap klar markieren.
 
-## Bestätigte Korrekturen
+### A9.4 – Statusquellen
 
-- Root- und lokale `CLAUDE.md` werden auf exakt `@AGENTS.md` reduziert.
-- `lib/device_platform/AGENTS.md` darf keine ESP32-spezifischen Adapter erlauben;
-  diese gehören nach `lib/device_platform_esp_idf/`.
-- Für `lib/device_platform_esp_idf/` fehlen eine kurze lokale Delta-Regel und
-  die zugehörige `CLAUDE.md`-Importbrücke.
-- Die aktuelle PR-Vorlage und der GitHub-Workflow entsprechen nicht dem
-  beschlossenen Plan-/Review-/CI-Vertrag.
-- `README.md`, `SPECIFICATION_PLAN.md` und `SPECIFICATION_REVIEW.md` enthalten
-  noch veraltete PR-38-/Issue-9-Stände.
-- `PR38_REVIEW_CORRECTIONS.md` enthält noch einzigartige Regeln zu kritischen
-  Persistenzfehlern; diese müssen vor der Löschung in die zuständigen aktuellen
-  Fachverträge und Akzeptanztests übertragen werden.
-- `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_ISSUES.md`, der alte Auftragsindex
-  und die Audit-Roadmap enthalten konkurrierende oder veraltete Statusstände.
-- `OPEN_POINTS.md` wird nur anhand konkreter Mess-, Test- oder PR-Nachweise
-  verändert; nichts wird durch Annahme abgehakt.
+`PENDING_REVIEW`
 
-## Audit- und Umsetzungstaskliste
+- neue `docs/ROADMAP.md` aus Live-GitHub-Stand erstellen;
+- `IMPLEMENTATION_PLAN.md` auf stabile Phasen/Reihenfolge kürzen;
+- `IMPLEMENTATION_ISSUES.md` auf Struktur/Abhängigkeiten kürzen;
+- `OPEN_POINTS.md` nur anhand belegter Nachweise bereinigen.
 
-- [x] A0: Branch und Draft-PR erstellt.
-- [x] A1: Ziel, Scope und Arbeitsweise festgelegt.
-- [x] A2: automatisch und hierarchisch geladene Agentendateien erfasst.
-- [ ] A3: Vollständigkeitssweep der noch nicht entschiedenen Status- und Fachquellen fortsetzen.
-- [x] A4: zentrale veraltete Statusquellen identifiziert.
-- [ ] A5: endgültige Quellen-/Lesematrix nach jeder Blockumsetzung nachführen.
-- [x] A6: bisherige materielle Widersprüche mit dem Owner entschieden.
-- [x] A7: Zielinhalt und Zielgrösse von Root- und lokalen `AGENTS.md` freigegeben.
-- [x] A8: Roadmap-Rolle und Pflegevertrag festgelegt.
-- [ ] A9.1: Agenten-, Engineering- und Modulregelblock R-00/R-03/R-04/R-08/R-08a umsetzen und prüfen.
-- [ ] A9.2: Workflow-, CI-, PR-Template- und Auftragsblock R-06/R-07/R-07a umsetzen und prüfen.
-- [ ] A9.3: README-, Spezifikations- und historische Quellen R-09 umsetzen und prüfen.
-- [ ] A9.4: Roadmap und getrennte Rollen von Implementierungsplan, Issue-Struktur und Open Points umsetzen.
-- [ ] A10: typische Planungs-, Umsetzungs-, Review- und Handoverabläufe prüfen.
-- [ ] A11: finale Grössen-, Link-, Doppelungs- und Widerspruchsprüfung.
+## Abschlussprüfungen
 
-## Abnahmekriterien
-
-- Jede verbindliche Regel und jede aktuelle Statusangabe besitzt genau eine
-  kanonische Quelle.
-- Root- und lokale `AGENTS.md` enthalten nur dauerhaft notwendige Pflichten.
-- Die Lesematrix verhindert pauschale Volllektüre, ohne relevante Verträge
-  auszulassen.
-- Historische Dokumente sind keine aktuelle Handlungsquelle.
-- Safety-, Security-, Recovery- und Owner-Gates bleiben vollständig.
-- Claude und Codex können nach Kontextreset anhand Repository, PR, Plan und
-  neuestem Handover korrekt weiterarbeiten.
-- Die endgültige Struktur ist messbar kleiner und frei von semantischen
-  Doppeldefinitionen.
+- [ ] verbleibende Status- und Fachquellen vollständig prüfen;
+- [ ] typische Planungs-, Umsetzungs-, Review- und Handoverabläufe simulieren;
+- [ ] Links, Dateinamen und gelöschte Quellen prüfen;
+- [ ] Grössen- und Doppelungsprüfung;
+- [ ] vollständiges Review des finalen Diffs;
+- [ ] vollständiger lokaler Lauf nur auf Owner-Anweisung;
+- [ ] Owner setzt danach bei Bedarf auf `Ready for review`.
 
 ## Nächster Schritt
 
-A9.1 umsetzen: Root- und lokale Agentendateien, Engineering-Grundsätze und
-Modulindex konsolidieren. Danach Link-/Doppelungsprüfung dieses Blocks und
-Fortsetzung des Sweeps bei Workflow- und Statusquellen.
+A9.3 umsetzen und dabei jede einzigartige PR-38-Regel vor der Löschung ihrer
+aktuellen kanonischen Fachquelle zuordnen.
