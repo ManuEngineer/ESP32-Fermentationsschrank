@@ -14,8 +14,8 @@ Produktcode.
 
 - [Issue #81](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/81)
   legt diese Designbasis fest.
-- [Draft-PR #83](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/83)
-  versioniert Masterassets und Spezifikation.
+- [PR #83](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/83)
+  versionierte Masterassets und Spezifikation.
 - [PR #80](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/80)
   integrierte die Device-UI-Architekturentscheidungen UI-01 bis UI-24.
 - [ADR-019](DECISIONS.md#adr-019-rendererunabhaengige-device-ui-shell) definiert
