@@ -10,14 +10,15 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Planungsphase auf aktuellem `main`; Branch `plan/issue-21-sensor-selection-fallback-return`; Produktionsimplementierung gesperrt | Plan committen und pushen; Ownerfreigabe mit exakter Plan-SHA |
+| 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan committed und gepusht; Plan-only; Produktionsimplementierung gesperrt bis zur exakten Ownerfreigabe | Ownerkommentar `PLAN APPROVED` mit exakter Plan-SHA |
 
 ## Naechste fachliche Arbeit
 
 Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist nach dem
-Merge von PR #98 die aktuelle Planungsarbeit. Die Abhaengigkeiten #14 und #20
-sind live abgeschlossen. Vor jeder Umsetzung ist ein eigener Plan-first-Draft-
-PR mit commitgebundener Ownerfreigabe erforderlich.
+Merge von PR #98 die aktuelle Planungsarbeit. Der Plan liegt im Draft-PR #99
+auf dem Branch `plan/issue-21-sensor-selection-fallback-return`; die
+Abhaengigkeiten #14 und #20 sind live abgeschlossen. Vor jeder Umsetzung ist
+die commitgebundene Ownerfreigabe des Plans erforderlich.
 
 ## Zulaessige Parallelitaet
 
