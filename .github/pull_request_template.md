@@ -1,23 +1,37 @@
-## Ziel
+## Ziel und Scope
 
-<!-- Was wird mit diesem Pull Request geaendert? -->
+<!-- Was wird geaendert, und was bleibt ausdruecklich ausserhalb des PR? -->
 
-## Hardwarebezug
+Closes #
 
-- [ ] Kein Hardwarebezug
-- [ ] Pinbelegung geaendert
-- [ ] Aktorsteuerung geaendert
-- [ ] Sensorik geaendert
-- [ ] Stromversorgung oder Schutz geaendert
+## Plan und Stand
 
-## Pruefungen
+- Plan-Datei:
+- freigegebener Plan-Commit:
+- aktueller `HEAD`:
+- materielle Abweichungen: keine / siehe unten
 
-- [ ] `pio run`
-- [ ] `pio test -e native`
-- [ ] sichere Bootzustaende geprueft
-- [ ] Dokumentation aktualisiert
-- [ ] keine Geheimnisse committed
+## Nachweise
 
-## Risiken und offene Punkte
+<!-- Nur tatsaechlich ausgefuehrte gezielte Tests und Pruefungen auffuehren. -->
 
-<!-- Verbleibende Risiken oder notwendige Hardwaretests -->
+- gezielte Tests:
+- Diff-/Architektur-/Secretpruefung:
+- vollstaendiger lokaler Lauf: nicht angeordnet / Ergebnis
+- GitHub-CI: wartet auf `Ready for review` / Ergebnis
+
+## Risiken und offene Gates
+
+<!-- Hardware-, Safety-, Ressourcen-, Lizenz- oder Owner-Gates -->
+
+## Dokumentation
+
+- [ ] kanonische Dokumente aktualisiert oder nicht betroffen
+- [ ] `docs/ROADMAP.md` aktualisiert
+- [ ] keine Anforderungen oder Statusangaben dupliziert
+
+## Abschluss
+
+- [ ] vollstaendiges Review des aktuellen Diffs abgeschlossen
+- [ ] keine offenen Reviewbefunde
+- [ ] PR bleibt bis zur Ownerentscheidung Draft
