@@ -88,7 +88,12 @@ Runde 6 (Nachkorrektur eines bereits freigegebenen Plans):
      Recovery-Start- und der letzten Recovery-Probe belegt, niemals durch
      nowMonotonicMs/den Zustellzeitpunkt. Testmatrix (Abschnitt 17) um die
      vier daraus folgenden Testfaelle ergaenzt.
-  Ergebnis dieser Runde: d6a1a9d73fd707e9d512975943c97e5bdf5b4665
+  Ergebnis dieser Runde: d6a1a9d73fd707e9d512975943c97e5bdf5b4665, dann
+  eine PREVIOUS_HEAD-Praezisierung ohne inhaltliche Aenderung an der
+  Wiedererkennungskorrektur selbst. Der tatsaechlich finale Commit dieser
+  Runde steht in der PR-Beschreibung #95 (dort nach dem Push exakt
+  nachtragbar, hier durch die Selbstbezugsproblematik eines Commits auf
+  seinen eigenen Hash nicht moeglich).
 ```
 
 ANDERS ALS Runde 1-2 korrigiert Runde 6 einen bereits durch den Owner
