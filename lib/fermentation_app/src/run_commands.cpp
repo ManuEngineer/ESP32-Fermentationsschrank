@@ -427,20 +427,29 @@ struct StartSensorSelectionOutcome {
     PersistedSensorSelectionState persisted;
 };
 
-// #21, 6.5/6.8: gemeinsame Erstbefuellung fuer Programm- und manuelle
-// Starts. `substitutedFromProduct` ist nur fuer Zeile 2 der Startmatrix
-// true (Programmstart); manuelle Starts uebergeben immer false, da 6.8
-// keinen automatischen Ersatz bei Start kennt. Ein produktgefuehrter
+// #21, 6.5/6.8: gemeinsame Erstbefuellung fuer Programm-, manuelle und
+// Kuehl-Ersatzlauf-Starts. `substitutedFromProduct` ist nur fuer Zeile 2 der
+// Startmatrix true (Programmstart); manuelle Starts uebergeben immer false,
+// da 6.8 keinen automatischen Ersatz bei Start kennt. Ein produktgefuehrter
 // manueller Start mit zum Startzeitpunkt ungueltigem Produkt startet - anders
 // als ein abgelehnter Programmstart derselben Konstellation - direkt in
 // UserDecisionRequired (6.8: fest wie ProductSensorFailurePolicy::WaitForUser,
-// kein Wartetimer).
+// kein Wartetimer). Korrekturauftrag Befund 2: `airSensorValid`/
+// `coolingSensorValid` sind jetzt echte Parameter statt einer stillschweigend
+// angenommenen Konvention - decideProgramStart/decideManualStart haben dies
+// bereits als Vorbedingung erzwungen (hier also immer true), der Kuehl-
+// Ersatzlauf (decideStop/decideCompletion) uebergibt jetzt echte Evidenz und
+// bleibt ohne sie fail-closed Blocked.
 StartSensorSelectionOutcome startSensorSelectionOutcome(
     RunSensorMode effectiveMode, bool substitutedFromProduct,
-    bool productSensorValid, std::uint32_t startRunRevision) {
+    bool productSensorValid, bool airSensorValid, bool coolingSensorValid,
+    std::uint32_t startRunRevision) {
     StartSensorSelectionOutcome outcome;
-    outcome.runtime.permission = SensorPeltierPermission::Allowed;
+    const bool fixedSensorsValid = airSensorValid && coolingSensorValid;
     if (effectiveMode == RunSensorMode::Air) {
+        outcome.runtime.permission = fixedSensorsValid
+                                         ? SensorPeltierPermission::Allowed
+                                         : SensorPeltierPermission::Blocked;
         if (substitutedFromProduct) {
             outcome.runtime.phase = SensorSelectionPhase::AirFallbackActive;
             outcome.persisted.provenance = SensorSelectionProvenance::FallbackActive;
@@ -452,6 +461,9 @@ StartSensorSelectionOutcome startSensorSelectionOutcome(
         outcome.persisted.provenance = SensorSelectionProvenance::InitialSelection;
         if (productSensorValid) {
             outcome.runtime.phase = SensorSelectionPhase::NormalProduct;
+            outcome.runtime.permission = fixedSensorsValid
+                                             ? SensorPeltierPermission::Allowed
+                                             : SensorPeltierPermission::Blocked;
         } else {
             outcome.runtime.phase = SensorSelectionPhase::UserDecisionRequired;
             outcome.runtime.permission = SensorPeltierPermission::Blocked;
@@ -478,6 +490,22 @@ void clearActiveRunState(RunCommandState& state) {
     state.activeRunSensorMode.reset();
     state.sensorSelection.reset();
     state.sensorSelectionRuntime = SensorSelectionRuntimeState{};
+}
+
+// Korrekturauftrag Befund 1: siehe Kommentar in run_commands.hpp. Beide Aufrufer
+// (decideApplySensorSelectionAction unten, RunPersistenceCoordinator::
+// persistSensorSelection) rufen ausschliesslich diese Funktion fuer die
+// mechanische Anwendung einer bereits von applySensorSelectionDecision
+// getroffenen Entscheidung auf.
+void applySensorSelectionMutation(RunCommandState& state,
+                                  const SensorSelectionStateMutation& mutation) {
+    state.sensorSelectionRuntime = mutation.runtime;
+    state.activeRunSensorMode = mutation.activeMode;
+    state.sensorSelection = mutation.persisted;
+    state.runRevision = mutation.resultingRunRevision;
+    if (state.activeManualRun.has_value() && mutation.activeMode.has_value()) {
+        state.activeManualRun->values.sensorMode = *mutation.activeMode;
+    }
 }
 
 bool validateManualRunPlan(const ManualRunPlan& plan) {
@@ -636,7 +664,8 @@ CommandDecision decideProgramStart(const RunCommandState& current,
     ++decision.after.runRevision;
     const auto outcome = startSensorSelectionOutcome(
         resolution.effectiveMode, resolution.substituted,
-        request.productSensorValid, decision.after.runRevision);
+        request.productSensorValid, request.airSensorValid,
+        request.coolingSensorValid, decision.after.runRevision);
     decision.after.sensorSelectionRuntime = outcome.runtime;
     decision.after.sensorSelection = outcome.persisted;
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
@@ -710,6 +739,7 @@ CommandDecision decideManualStart(const RunCommandState& current,
     // startSensorSelectionOutcome), kein Wartetimer, keine StartSensorSelectionNotice.
     const auto outcome = startSensorSelectionOutcome(
         request.plan.sensorMode, false, request.productSensorValid,
+        request.airSensorValid, request.coolingSensorValid,
         decision.after.runRevision);
     decision.after.sensorSelectionRuntime = outcome.runtime;
     decision.after.sensorSelection = outcome.persisted;
@@ -802,13 +832,19 @@ CommandDecision decideStop(const RunCommandState& current,
     // #21, 6.5/6.14.6: der Kuehl-Ersatzlauf ist ebenfalls ein aktiver Lauf
     // und braucht deshalb dieselbe Erstbefuellung wie jeder andere Start
     // (clearActiveRunState hat sie oben geleert). Kein neues externes
-    // Sensorsignal fuer diesen Pfad (kein productSensorValid); Kuehlplaene
-    // sind konventionell Luft-gefuehrt, und startSensorSelectionOutcome
-    // faellt fuer einen (strukturell weiterhin moeglichen) Produktmodus
-    // fail-closed auf UserDecisionRequired/Blocked zurueck.
+    // Produktsensorsignal fuer diesen Pfad (kein productSensorValid);
+    // Kuehlplaene sind konventionell Luft-gefuehrt, und
+    // startSensorSelectionOutcome faellt fuer einen (strukturell weiterhin
+    // moeglichen) Produktmodus fail-closed auf UserDecisionRequired/Blocked
+    // zurueck. Korrekturauftrag Befund 2: Air-/Cooling-Permission wird nicht
+    // mehr per Konvention Allowed gesetzt, sondern verlangt jetzt dieselbe
+    // explizite Evidenz wie jeder andere Start (request.airSensorValid/
+    // request.coolingSensorValid) - ohne sie bleibt der Ersatzlauf
+    // fail-closed Blocked.
     if (decision.after.activeManualRun.has_value()) {
         const auto outcome = startSensorSelectionOutcome(
             decision.after.activeManualRun->values.sensorMode, false, false,
+            request.airSensorValid, request.coolingSensorValid,
             decision.after.runRevision);
         decision.after.sensorSelectionRuntime = outcome.runtime;
         decision.after.sensorSelection = outcome.persisted;
@@ -884,6 +920,7 @@ CommandDecision decideCompletion(const RunCommandState& current,
     if (decision.after.activeManualRun.has_value()) {
         const auto outcome = startSensorSelectionOutcome(
             decision.after.activeManualRun->values.sensorMode, false, false,
+            request.airSensorValid, request.coolingSensorValid,
             decision.after.runRevision);
         decision.after.sensorSelectionRuntime = outcome.runtime;
         decision.after.sensorSelection = outcome.persisted;
@@ -1152,18 +1189,10 @@ CommandDecision decideApplySensorSelectionAction(
         case SensorSelectionApplyStatus::AppliedPersistentCandidate:
         case SensorSelectionApplyStatus::AppliedRamOnly: {
             auto candidate = decision.before;
-            candidate.sensorSelectionRuntime = mutation.runtime;
-            candidate.activeRunSensorMode = mutation.activeMode;
-            candidate.sensorSelection = mutation.persisted;
-            candidate.runRevision = mutation.resultingRunRevision;
-            // Siehe run_persistence_coordinator.cpp::persistSensorSelection:
-            // ManualRunPlan::values.sensorMode dupliziert den Modus und muss
-            // bei jedem Moduswechsel mitgefuehrt werden.
-            if (candidate.activeManualRun.has_value() &&
-                mutation.activeMode.has_value()) {
-                candidate.activeManualRun->values.sensorMode =
-                    *mutation.activeMode;
-            }
+            // Korrekturauftrag Befund 1: gemeinsamer mechanischer
+            // Mutationshelfer mit dem automatischen Pfad (siehe
+            // run_persistence_coordinator.cpp::persistSensorSelection).
+            applySensorSelectionMutation(candidate, mutation);
             decision.after = std::move(candidate);
             beginMutation(decision);
             if (mutation.event.has_value()) {

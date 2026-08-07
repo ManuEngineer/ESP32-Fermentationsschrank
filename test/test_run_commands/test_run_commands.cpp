@@ -2085,6 +2085,8 @@ void test_cooling_replacement_run_gets_fresh_sensor_selection() {
     auto state = startedProgramState();
     StopRequest request{envelope(2U, state), StopOption::AbortAndCool,
                         manualPlan("cool-after-abort"), true};
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
     const auto decision = decideStop(state, request);
     TEST_ASSERT_TRUE(decision.proposed());
     TEST_ASSERT_TRUE(decision.after.activeManualRun.has_value());
@@ -2097,6 +2099,43 @@ void test_cooling_replacement_run_gets_fresh_sensor_selection() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(SensorSelectionProvenance::InitialSelection),
         static_cast<int>(decision.after.sensorSelection->provenance));
+}
+
+// Korrekturauftrag Befund 2, Pflichttest "Kuehl-Ersatzlauf ohne gueltige
+// feste Sensoren": der Ersatzlauf darf NormalAir/Allowed nicht per Konvention
+// annehmen. Ohne explizite Air-/Cooling-Evidenz bleibt die Erstbefuellung
+// fail-closed Blocked - auch ueber decideCompletion (derselbe gemeinsame
+// Pfad).
+void test_cooling_replacement_run_without_valid_fixed_sensors_stays_blocked() {
+    auto state = startedProgramState();
+    StopRequest request{envelope(2U, state), StopOption::AbortAndCool,
+                        manualPlan("cool-after-abort"), true};
+    request.airSensorValid = false;
+    request.coolingSensorValid = false;
+    const auto decision = decideStop(state, request);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_TRUE(decision.after.activeManualRun.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(SensorSelectionPhase::NormalAir),
+                          static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(decision.after.sensorSelectionRuntime.permission));
+
+    auto completedState = startedProgramState();
+    completedState.processState.state = ProcessState::Completed;
+    completedState.processState.targetReachStartedAtMillis = 0U;
+    completedState.processState.targetReachWarningIssued = false;
+    CompletionRequest completion{envelope(3U, completedState), true,
+                                 manualPlan("cool-after-completion"), true};
+    completion.airSensorValid = false;
+    completion.coolingSensorValid = true;  // einzeln ungueltig genuegt.
+    const auto completionDecision = decideCompletion(completedState, completion);
+    TEST_ASSERT_TRUE(completionDecision.proposed());
+    TEST_ASSERT_TRUE(completionDecision.after.activeManualRun.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(
+            completionDecision.after.sensorSelectionRuntime.permission));
 }
 
 }  // namespace
@@ -2149,5 +2188,6 @@ int main() {
     RUN_TEST(test_program_start_rejects_uniformly_without_air_or_cooling);
     RUN_TEST(test_manual_start_product_mode_fixed_contract);
     RUN_TEST(test_cooling_replacement_run_gets_fresh_sensor_selection);
+    RUN_TEST(test_cooling_replacement_run_without_valid_fixed_sensors_stays_blocked);
     return UNITY_END();
 }

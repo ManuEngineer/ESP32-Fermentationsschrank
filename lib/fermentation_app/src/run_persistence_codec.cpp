@@ -757,11 +757,13 @@ RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
         if (!readSensor(reader, mode))
             return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
         s.activeRunSensorMode = mode;
-        // A schema-1 payload predates this field entirely (6.12) - it is
-        // absent unconditionally. A schema-2 payload always carries an
-        // explicit presence tag: sensorSelection is only guaranteed
-        // populated for every active run once #21 Commit 5 wires the start
-        // path (6.12), so schema-2 alone does not imply presence yet.
+        // A schema-1 payload predates this field entirely (6.12) and is
+        // mapped onto the explicit LegacyUnknown/None/0 sentinel (Korrektur-
+        // auftrag Befund 4) rather than left absent: this is what lets
+        // validateRunPersistenceSnapshot require sensorSelection presence
+        // unconditionally for every active-run variant, schema-1 included,
+        // instead of carrying a schema-dependent exception. A schema-2
+        // payload always carries an explicit presence tag.
         if (schemaVersion >= kSensorSelectionFieldIntroducedInSchema) {
             bool present = false;
             if (!be::readOptionalTag(reader, present))
@@ -774,6 +776,10 @@ RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
                             std::nullopt};
                 s.sensorSelection = selection;
             }
+        } else {
+            s.sensorSelection = PersistedSensorSelectionState{
+                SensorSelectionProvenance::LegacyUnknown,
+                SensorSelectionDecisionCause::None, 0U};
         }
     }
     if (s.variant == RunCheckpointVariant::ProgramRun) {

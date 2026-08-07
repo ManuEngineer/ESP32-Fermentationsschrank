@@ -208,6 +208,53 @@ void test_continue_with_air_without_air_cooling_is_invalid_input() {
     TEST_ASSERT_TRUE(runtimeAndModeUnchanged(view, result));
 }
 
+// Korrekturauftrag Befund 2, Regressionstest: der 6.4.14-Matrixzeile
+// "ContinueWithAir ohne gueltiges Air/Cooling -> CommandStatus::InvalidInput,
+// keine Mutation" muss auch dann eine reine Ablehnung bleiben, wenn das
+// vorgezogene Air-/Cooling-Sicherheits-Gate (Befund 2) sonst frueher greifen
+// wuerde als die Aktion selbst ausgewertet wird - eine "aufgewertete"
+// SafeLocked-Mutation waere hier eine ungeplante Persistenz fuer ein laut
+// Plan abgelehntes Kommando.
+void test_continue_with_air_from_user_decision_required_with_single_air_failure_is_invalid_input() {
+    auto view = makeView(SensorSelectionPhase::UserDecisionRequired,
+                         SensorPeltierPermission::Blocked, RunSensorMode::Product,
+                         persistedState(SensorSelectionProvenance::InitialSelection,
+                                       SensorSelectionDecisionCause::ProductFailureBlock,
+                                       2U),
+                         2U);
+    auto decision = makeDecision(
+        view, SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::WaitForUser, ReturnStrategy::ManualReturnToProduct,
+        failedSnapshot(), failedSnapshot(), validSnapshot(), std::nullopt,
+        SensorSelectionUserAction::ContinueWithAir);
+
+    const auto result = applySensorSelectionDecision(view, decision, 1200U);
+
+    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::InvalidDecision);
+    TEST_ASSERT_TRUE(runtimeAndModeUnchanged(view, result));
+}
+
+void test_continue_with_air_in_product_failure_detected_with_simultaneous_failure_is_invalid_input() {
+    auto view = makeView(SensorSelectionPhase::ProductFailureDetected,
+                         SensorPeltierPermission::Blocked, RunSensorMode::Product,
+                         persistedState(SensorSelectionProvenance::InitialSelection,
+                                       SensorSelectionDecisionCause::ProductFailureBlock,
+                                       2U),
+                         2U);
+    view.runtime.fallbackWaitStartedAtMonotonicMillis = 1000U;
+    auto decision = makeDecision(
+        view, SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::AutomaticValidatedReturnToProduct, failedSnapshot(),
+        failedSnapshot(), failedSnapshot(), 60U,
+        SensorSelectionUserAction::ContinueWithAir);
+
+    const auto result = applySensorSelectionDecision(view, decision, 1200U);
+
+    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::InvalidDecision);
+    TEST_ASSERT_TRUE(runtimeAndModeUnchanged(view, result));
+}
+
 void test_safety_pending_matrix_is_out_of_scope_for_core_function() {
     // Die criticalSafetyEventPending-Matrix (6.14.3) gehoert zu
     // decideApplySensorSelectionAction (Commit 4), nicht zu
@@ -603,6 +650,54 @@ void test_rearm_product_failure_during_return_validation_needs_new_recognition()
     TEST_ASSERT_TRUE(stayed.status == SensorSelectionApplyStatus::NoChange);
 }
 
+// Korrekturauftrag Befund 3 (6.4.12 Re-Arm-Bedingung iii), Pflichttest
+// "invalid->valid-Re-Arm bei gleicher Profilrevision": nach einem Abbruch
+// wegen erneut ungueltigem Produkt loest ein spaeterer invalid->valid-Zyklus
+// genau eine neue Rueckkehrvalidierung aus - auch ohne geaenderte
+// profileRevision (Bedingung i bleibt hier bewusst unerfuellt).
+void test_rearm_invalid_to_valid_product_cycle_rearms_without_profile_change() {
+    auto view = makeView(SensorSelectionPhase::ReturnValidationPending,
+                         SensorPeltierPermission::Allowed, RunSensorMode::Air,
+                         persistedState(SensorSelectionProvenance::FallbackActive,
+                                       SensorSelectionDecisionCause::FallbackToAir, 2U),
+                         2U);
+    view.runtime.returnValidation.enteredAtMonotonicMillis = 500U;
+    view.runtime.returnValidation.lastObservedProfileRevision = 7U;
+    auto decision = makeDecision(view, SensorPreference::ProductIfAvailableElseAir,
+                                 ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+                                 ReturnStrategy::AutomaticValidatedReturnToProduct,
+                                 validSnapshot(), failedSnapshot(), validSnapshot());
+
+    // Abbruch: Produkt waehrend ReturnValidationPending erneut ungueltig.
+    const auto aborted = applySensorSelectionDecision(view, decision, 600U);
+    TEST_ASSERT_TRUE(aborted.status ==
+                     SensorSelectionApplyStatus::AppliedPersistentCandidate);
+    TEST_ASSERT_TRUE(aborted.runtime.phase == SensorSelectionPhase::AirFallbackActive);
+    TEST_ASSERT_TRUE(aborted.runtime.productReArmPending);
+    TEST_ASSERT_TRUE(
+        aborted.runtime.returnValidation.lastObservedProfileRevision == 7U);
+
+    // Produkt wird wieder valide - dieselbe profileRevision wie zuvor (7U),
+    // Bedingung (i) waere hier NICHT erfuellt.
+    SensorSelectionStateView recovered =
+        makeView(aborted.runtime.phase, aborted.runtime.permission,
+                aborted.activeMode, aborted.persisted, aborted.resultingRunRevision);
+    recovered.runtime = aborted.runtime;
+    auto recoveryDecision = makeDecision(
+        recovered, SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::AutomaticValidatedReturnToProduct, validSnapshot(),
+        validSnapshot(), validSnapshot());
+    recoveryDecision.plausibility.thermalCompatibility.profileRevision = 7U;
+
+    const auto rearmed =
+        applySensorSelectionDecision(recovered, recoveryDecision, 700U);
+
+    TEST_ASSERT_TRUE(rearmed.status == SensorSelectionApplyStatus::AppliedRamOnly);
+    TEST_ASSERT_TRUE(rearmed.runtime.phase == SensorSelectionPhase::ReturnValidationPending);
+    TEST_ASSERT_FALSE(rearmed.runtime.productReArmPending);
+}
+
 // ---------------------------------------------------------------------------
 // RecheckProduct-Sonderfall (6.4.12)
 // ---------------------------------------------------------------------------
@@ -856,11 +951,13 @@ void test_no_change_produces_no_mutation() {
 // ThermalCompatibilityEvidence-Invarianten (6.10)
 // ---------------------------------------------------------------------------
 
-void test_thermal_evidence_zero_profile_revision_with_compatible_stays_pending() {
-    // Strukturell ungueltige Fremdevidenz (Compatible mit profileRevision ==
-    // 0) blockiert ausschliesslich die Rueckkehr, nicht den gesamten
-    // Automaten - fail-closed wie Unavailable (kein InvalidContext, kein
-    // Abbruch, bleibt ReturnValidationPending).
+void test_thermal_evidence_zero_profile_revision_with_compatible_is_invalid_context() {
+    // Korrekturauftrag Befund 6: strukturell ungueltige Fremdevidenz
+    // (Compatible mit profileRevision == 0) liefert an diesem
+    // evidenzverbrauchenden Rueckkehrpfad InvalidContext statt der zuvor
+    // abweichenden NoChange-Auslegung - der Zustand bleibt dabei unveraendert
+    // (ReturnValidationPending, keine Mutation), nur der Status macht das
+    // Evidenzproblem sichtbar statt es stillschweigend zu absorbieren.
     auto view = makeView(SensorSelectionPhase::ReturnValidationPending,
                          SensorPeltierPermission::Allowed, RunSensorMode::Air,
                          persistedState(SensorSelectionProvenance::FallbackActive,
@@ -876,14 +973,15 @@ void test_thermal_evidence_zero_profile_revision_with_compatible_stays_pending()
 
     const auto result = applySensorSelectionDecision(view, decision, 600U);
 
-    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::NoChange);
+    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::InvalidContext);
     TEST_ASSERT_TRUE(result.runtime.phase == SensorSelectionPhase::ReturnValidationPending);
+    TEST_ASSERT_TRUE(result.runtime == view.runtime);
 }
 
-void test_thermal_evidence_future_timestamp_stays_pending() {
+void test_thermal_evidence_future_timestamp_is_invalid_context() {
     // Wie oben: eine strukturell ungueltige Fremdevidenz (Zeitstempel in der
-    // Zukunft) darf den Automaten nicht einfrieren, sondern blockiert nur
-    // die Rueckkehr selbst.
+    // Zukunft) liefert InvalidContext, blockiert aber nur diesen
+    // Rueckkehrversuch - der Automat selbst friert nicht ein.
     auto view = makeView(SensorSelectionPhase::ReturnValidationPending,
                          SensorPeltierPermission::Allowed, RunSensorMode::Air,
                          persistedState(SensorSelectionProvenance::FallbackActive,
@@ -899,8 +997,9 @@ void test_thermal_evidence_future_timestamp_stays_pending() {
 
     const auto result = applySensorSelectionDecision(view, decision, 600U);
 
-    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::NoChange);
+    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::InvalidContext);
     TEST_ASSERT_TRUE(result.runtime.phase == SensorSelectionPhase::ReturnValidationPending);
+    TEST_ASSERT_TRUE(result.runtime == view.runtime);
 }
 
 void test_normal_product_ignores_structurally_invalid_thermal_evidence() {
@@ -1044,6 +1143,201 @@ void test_restart_recommendation_is_fail_closed_for_returned_to_product() {
     TEST_ASSERT_TRUE(recommendation.activeMode == RunSensorMode::Product);
 }
 
+// ---------------------------------------------------------------------------
+// Korrekturauftrag Befund 2: Air-/Cooling-Sicherheitsreaktion vor jeder
+// Rueckkehraktion, auch bei nur einzeln ungueltigem Sensor.
+// ---------------------------------------------------------------------------
+
+void test_return_to_product_blocked_by_single_air_sensor_failure() {
+    auto view = makeView(SensorSelectionPhase::AirFallbackActive,
+                         SensorPeltierPermission::Allowed, RunSensorMode::Air,
+                         persistedState(SensorSelectionProvenance::FallbackActive,
+                                       SensorSelectionDecisionCause::FallbackToAir, 2U),
+                         2U);
+    auto decision = makeDecision(
+        view, SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::ManualReturnToProduct, failedSnapshot(), validSnapshot(),
+        validSnapshot(), std::nullopt, SensorSelectionUserAction::ReturnToProduct);
+
+    const auto result = applySensorSelectionDecision(view, decision, 900U);
+
+    TEST_ASSERT_TRUE(result.status ==
+                     SensorSelectionApplyStatus::AppliedPersistentCandidate);
+    TEST_ASSERT_TRUE(result.runtime.phase == SensorSelectionPhase::SafeLocked);
+    TEST_ASSERT_TRUE(result.runtime.permission == SensorPeltierPermission::Blocked);
+    TEST_ASSERT_TRUE(result.activeMode == RunSensorMode::Air);
+}
+
+void test_return_to_product_blocked_by_single_cooling_sensor_failure() {
+    auto view = makeView(SensorSelectionPhase::AirFallbackActive,
+                         SensorPeltierPermission::Allowed, RunSensorMode::Air,
+                         persistedState(SensorSelectionProvenance::FallbackActive,
+                                       SensorSelectionDecisionCause::FallbackToAir, 2U),
+                         2U);
+    auto decision = makeDecision(
+        view, SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::ManualReturnToProduct, validSnapshot(), validSnapshot(),
+        failedSnapshot(), std::nullopt, SensorSelectionUserAction::ReturnToProduct);
+
+    const auto result = applySensorSelectionDecision(view, decision, 900U);
+
+    TEST_ASSERT_TRUE(result.status ==
+                     SensorSelectionApplyStatus::AppliedPersistentCandidate);
+    TEST_ASSERT_TRUE(result.runtime.phase == SensorSelectionPhase::SafeLocked);
+    TEST_ASSERT_TRUE(result.runtime.permission == SensorPeltierPermission::Blocked);
+}
+
+void test_recheck_product_in_product_failure_detected_blocked_by_single_air_failure() {
+    // ProductFailureDetected haelt die 6.4.1-Asymmetrie (nur gleichzeitiger
+    // Ausfall verlaesst die Phase) - ein einzelner Air-Ausfall blockiert
+    // dennoch die Rueckkehr nach NormalProduct (productReturnEligible).
+    auto view = makeView(SensorSelectionPhase::ProductFailureDetected,
+                         SensorPeltierPermission::Blocked, RunSensorMode::Product,
+                         persistedState(SensorSelectionProvenance::InitialSelection,
+                                       SensorSelectionDecisionCause::ProductFailureBlock, 2U),
+                         2U);
+    view.runtime.fallbackWaitStartedAtMonotonicMillis = 1000U;
+    auto decision = makeDecision(
+        view, SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::AutomaticValidatedReturnToProduct, failedSnapshot(),
+        validSnapshot(), validSnapshot(), 60U,
+        SensorSelectionUserAction::RecheckProduct);
+
+    const auto result = applySensorSelectionDecision(view, decision, 1100U);
+
+    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::NoChange);
+    TEST_ASSERT_TRUE(result.runtime.phase == SensorSelectionPhase::ProductFailureDetected);
+}
+
+void test_recheck_product_in_user_decision_required_blocked_by_single_cooling_failure() {
+    // UserDecisionRequired kennt keinen "gleichzeitig"-Qualifier (6.4.2) - ein
+    // einzelner Cooling-Ausfall fuehrt hier direkt zu SafeLocked, noch vor der
+    // Benutzeraktion.
+    auto view = makeView(SensorSelectionPhase::UserDecisionRequired,
+                         SensorPeltierPermission::Blocked, RunSensorMode::Product,
+                         persistedState(SensorSelectionProvenance::InitialSelection,
+                                       SensorSelectionDecisionCause::ProductFailureBlock, 2U),
+                         2U);
+    auto decision = makeDecision(
+        view, SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::WaitForUser, ReturnStrategy::ManualReturnToProduct,
+        validSnapshot(), validSnapshot(), failedSnapshot(), std::nullopt,
+        SensorSelectionUserAction::RecheckProduct);
+
+    const auto result = applySensorSelectionDecision(view, decision, 1100U);
+
+    TEST_ASSERT_TRUE(result.status ==
+                     SensorSelectionApplyStatus::AppliedPersistentCandidate);
+    TEST_ASSERT_TRUE(result.runtime.phase == SensorSelectionPhase::SafeLocked);
+    TEST_ASSERT_TRUE(result.runtime.permission == SensorPeltierPermission::Blocked);
+}
+
+// ---------------------------------------------------------------------------
+// Korrekturauftrag Befund 5: fail-closed Kernvalidierung.
+// ---------------------------------------------------------------------------
+
+void test_malformed_state_missing_active_mode_on_mode_change_is_invalid_decision() {
+    // Strukturell unmoegliches, aber von der Kernfunktion nicht blind
+    // angenommenes malformed State: activeMode fehlt, obwohl die Phase einen
+    // persistenzwuerdigen Moduswechsel anfordert. Keine Dereferenzierung,
+    // stattdessen InvalidDecision, Zustand unveraendert.
+    auto view = makeView(SensorSelectionPhase::ProductFailureDetected,
+                         SensorPeltierPermission::Blocked, std::nullopt,
+                         persistedState(SensorSelectionProvenance::InitialSelection,
+                                       SensorSelectionDecisionCause::ProductFailureBlock, 2U),
+                         2U);
+    auto decision = makeDecision(
+        view, SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::AutomaticValidatedReturnToProduct, validSnapshot(),
+        failedSnapshot(), validSnapshot(), 60U,
+        SensorSelectionUserAction::ContinueWithAir);
+
+    const auto result = applySensorSelectionDecision(view, decision, 1100U);
+
+    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::InvalidDecision);
+    TEST_ASSERT_TRUE(runtimeAndModeUnchanged(view, result));
+}
+
+void test_malformed_state_unknown_control_direction_never_grants_return() {
+    // Whitelist statt Blacklist - ein unbekannter AbstractControlDirection-
+    // Rohwert (keiner der drei bekannten Nicht-Unknown-Werte) darf trotz
+    // sonst vollstaendig positiver Evidenz keine automatische Rueckkehr
+    // freigeben.
+    auto view = makeView(SensorSelectionPhase::ReturnValidationPending,
+                         SensorPeltierPermission::Allowed, RunSensorMode::Air,
+                         persistedState(SensorSelectionProvenance::FallbackActive,
+                                       SensorSelectionDecisionCause::FallbackToAir, 2U),
+                         2U);
+    view.runtime.returnValidation.enteredAtMonotonicMillis = 500U;
+    auto decision = makeDecision(view, SensorPreference::ProductIfAvailableElseAir,
+                                 ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+                                 ReturnStrategy::AutomaticValidatedReturnToProduct,
+                                 validSnapshot(), validSnapshot(), validSnapshot());
+    decision.plausibility.direction = static_cast<AbstractControlDirection>(99U);
+    decision.plausibility.controlDemandAgeMs = 10U;
+    decision.plausibility.thermalCompatibility.status = ThermalCompatibility::Compatible;
+    decision.plausibility.thermalCompatibility.profileRevision = 7U;
+
+    const auto result = applySensorSelectionDecision(view, decision, 900U);
+
+    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::NoChange);
+    TEST_ASSERT_TRUE(result.runtime.phase == SensorSelectionPhase::ReturnValidationPending);
+}
+
+// ---------------------------------------------------------------------------
+// Korrekturauftrag Befund 6: strukturell ungueltige Evidenz -> InvalidContext
+// an den beiden zusaetzlichen evidenzverbrauchenden Stellen in
+// AirFallbackActive (RecheckProduct und automatischer Re-Arm).
+// ---------------------------------------------------------------------------
+
+void test_air_fallback_recheck_product_with_malformed_evidence_is_invalid_context() {
+    auto view = makeView(SensorSelectionPhase::AirFallbackActive,
+                         SensorPeltierPermission::Allowed, RunSensorMode::Air,
+                         persistedState(SensorSelectionProvenance::FallbackActive,
+                                       SensorSelectionDecisionCause::FallbackToAir, 2U),
+                         2U);
+    auto decision = makeDecision(
+        view, SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::AutomaticValidatedReturnToProduct, validSnapshot(),
+        validSnapshot(), validSnapshot(), std::nullopt,
+        SensorSelectionUserAction::RecheckProduct);
+    decision.plausibility.thermalCompatibility.status = ThermalCompatibility::Compatible;
+    decision.plausibility.thermalCompatibility.profileRevision = 0U;  // malformed
+
+    const auto result = applySensorSelectionDecision(view, decision, 900U);
+
+    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::InvalidContext);
+    TEST_ASSERT_TRUE(runtimeAndModeUnchanged(view, result));
+}
+
+void test_air_fallback_automatic_rearm_with_malformed_evidence_is_invalid_context() {
+    auto view = makeView(SensorSelectionPhase::AirFallbackActive,
+                         SensorPeltierPermission::Allowed, RunSensorMode::Air,
+                         persistedState(SensorSelectionProvenance::FallbackActive,
+                                       SensorSelectionDecisionCause::FallbackToAir, 2U),
+                         2U);
+    view.runtime.returnValidation.lastObservedProfileRevision = 5U;
+    auto decision = makeDecision(view, SensorPreference::ProductIfAvailableElseAir,
+                                 ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+                                 ReturnStrategy::AutomaticValidatedReturnToProduct,
+                                 validSnapshot(), validSnapshot(), validSnapshot());
+    decision.plausibility.thermalCompatibility.status = ThermalCompatibility::Incompatible;
+    // profileRevision 0 ist strukturell ungueltig, aber != 5 - Bedingung (i)
+    // (profileChanged) waere sonst erfuellt und wuerde den Re-Arm-Versuch
+    // auslösen.
+    decision.plausibility.thermalCompatibility.profileRevision = 0U;
+
+    const auto result = applySensorSelectionDecision(view, decision, 900U);
+
+    TEST_ASSERT_TRUE(result.status == SensorSelectionApplyStatus::InvalidContext);
+    TEST_ASSERT_TRUE(runtimeAndModeUnchanged(view, result));
+}
+
 }  // namespace
 
 int main() {
@@ -1053,6 +1347,10 @@ int main() {
     RUN_TEST(test_fallback_after_timeout_reaches_safe_locked_without_air);
     RUN_TEST(test_continue_with_air_before_timeout_is_manual_fallback);
     RUN_TEST(test_continue_with_air_without_air_cooling_is_invalid_input);
+    RUN_TEST(
+        test_continue_with_air_from_user_decision_required_with_single_air_failure_is_invalid_input);
+    RUN_TEST(
+        test_continue_with_air_in_product_failure_detected_with_simultaneous_failure_is_invalid_input);
     RUN_TEST(test_safety_pending_matrix_is_out_of_scope_for_core_function);
     RUN_TEST(test_wait_for_user_transitions_immediately_without_wait);
     RUN_TEST(test_wait_for_user_continue_with_air_from_user_decision_required);
@@ -1069,6 +1367,7 @@ int main() {
     RUN_TEST(test_rearm_without_evidence_change_does_not_reenter);
     RUN_TEST(test_rearm_compatible_after_full_stability_returns_exactly_once);
     RUN_TEST(test_rearm_product_failure_during_return_validation_needs_new_recognition);
+    RUN_TEST(test_rearm_invalid_to_valid_product_cycle_rearms_without_profile_change);
     RUN_TEST(test_recheck_product_from_air_fallback_with_incomplete_evidence_is_ram_only);
     RUN_TEST(test_recheck_product_from_disallowed_state_is_rejected);
     RUN_TEST(test_stale_decision_on_changed_phase_leaves_state_untouched);
@@ -1081,13 +1380,25 @@ int main() {
     RUN_TEST(test_checked_fallback_delay_overflow_is_invalid_context);
     RUN_TEST(test_stale_quality_is_unusable_like_failed);
     RUN_TEST(test_no_change_produces_no_mutation);
-    RUN_TEST(test_thermal_evidence_zero_profile_revision_with_compatible_stays_pending);
-    RUN_TEST(test_thermal_evidence_future_timestamp_stays_pending);
+    RUN_TEST(test_thermal_evidence_zero_profile_revision_with_compatible_is_invalid_context);
+    RUN_TEST(test_thermal_evidence_future_timestamp_is_invalid_context);
     RUN_TEST(test_thermal_evidence_unavailable_never_grants_return);
     RUN_TEST(test_thermal_evidence_no_own_age_threshold_is_evaluated);
     RUN_TEST(test_normal_product_ignores_structurally_invalid_thermal_evidence);
     RUN_TEST(test_restart_recommendation_is_fail_closed_for_legacy_unknown);
     RUN_TEST(test_restart_recommendation_is_fail_closed_for_fallback_active);
     RUN_TEST(test_restart_recommendation_is_fail_closed_for_returned_to_product);
+    RUN_TEST(test_return_to_product_blocked_by_single_air_sensor_failure);
+    RUN_TEST(test_return_to_product_blocked_by_single_cooling_sensor_failure);
+    RUN_TEST(
+        test_recheck_product_in_product_failure_detected_blocked_by_single_air_failure);
+    RUN_TEST(
+        test_recheck_product_in_user_decision_required_blocked_by_single_cooling_failure);
+    RUN_TEST(test_malformed_state_missing_active_mode_on_mode_change_is_invalid_decision);
+    RUN_TEST(test_malformed_state_unknown_control_direction_never_grants_return);
+    RUN_TEST(
+        test_air_fallback_recheck_product_with_malformed_evidence_is_invalid_context);
+    RUN_TEST(
+        test_air_fallback_automatic_rearm_with_malformed_evidence_is_invalid_context);
     return UNITY_END();
 }

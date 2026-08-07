@@ -60,6 +60,32 @@ bool validIds(const RunPersistenceSnapshot& snapshot) {
     return true;
 }
 
+// Korrekturauftrag Befund 4 (6.12.1): lastDecisionCause == None genau mit
+// Revision 0; die Entscheidungsrevision ist niemals neuer als die
+// Laufrevision selbst; FallbackActive/ReturnedToProduct binden den aktiven
+// Modus verbindlich, InitialSelection und LegacyUnknown (Schema-1-Restores,
+// siehe run_persistence_codec.cpp) schraenken den Modus bewusst nicht ein.
+bool validSensorSelectionCrossFields(const PersistedSensorSelectionState& persisted,
+                                     RunSensorMode activeMode,
+                                     std::uint32_t runRevision) {
+    if ((persisted.lastDecisionCause == SensorSelectionDecisionCause::None) !=
+        (persisted.lastDecisionRunRevision == 0U)) {
+        return false;
+    }
+    if (persisted.lastDecisionRunRevision > runRevision) {
+        return false;
+    }
+    if (persisted.provenance == SensorSelectionProvenance::FallbackActive &&
+        activeMode != RunSensorMode::Air) {
+        return false;
+    }
+    if (persisted.provenance == SensorSelectionProvenance::ReturnedToProduct &&
+        activeMode != RunSensorMode::Product) {
+        return false;
+    }
+    return true;
+}
+
 bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
                              const ProcessRunSnapshot& right) {
     return left.kind == right.kind &&
@@ -118,9 +144,17 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
                    snapshot.processState, nullptr,
                    snapshot.checkpointMonotonicMillis);
     }
+    // Korrekturauftrag Befund 4: jeder aktive Snapshot verlangt sensorSelection
+    // unbedingt - nicht mehr nur schema-2-abhaengig. Ein Schema-1-Restore wird
+    // seit der Codec-Korrektur immer auf LegacyUnknown/None/0 abgebildet
+    // (run_persistence_codec.cpp), traegt das Feld also ebenfalls.
     if (!run_limits::validRunId(snapshot.activeRunId) ||
         !snapshot.activeRunSensorMode.has_value() ||
-        !snapshot.processRunSnapshot.has_value()) {
+        !snapshot.processRunSnapshot.has_value() ||
+        !snapshot.sensorSelection.has_value() ||
+        !validSensorSelectionCrossFields(*snapshot.sensorSelection,
+                                         *snapshot.activeRunSensorMode,
+                                         snapshot.runRevision)) {
         return false;
     }
     if (snapshot.variant == RunCheckpointVariant::ProgramRun) {
@@ -173,15 +207,15 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
          state.processRunSnapshot.has_value())) {
         return std::nullopt;
     }
-    // #21, 6.12 (closed by Commit 5): every write goes through this function
-    // and always stamps kCurrentRunPersistenceSchema (encodeRunPersistenceHead),
-    // so the mandatory-presence rule belongs here, not in the schema-agnostic
-    // validateRunPersistenceSnapshot - a schema-1-decoded active-run snapshot
-    // legitimately lacks the field and must still validate for restore/
-    // migration. All start paths (decideProgramStart, decideManualStart,
-    // incl. the AbortAndCool/CoolAfterCompletion cooling-replacement runs)
-    // populate sensorSelection unconditionally, so this can never legitimately
-    // fail for a freshly-built candidate.
+    // #21, 6.12: validateRunPersistenceSnapshot now enforces the mandatory-
+    // presence rule unconditionally (Korrekturauftrag Befund 4 - a schema-1
+    // restore is mapped onto LegacyUnknown/None/0 by the codec, not left
+    // absent, so the schema-agnostic validator can require presence for
+    // every active-run variant). This early check stays as a defensive,
+    // cheaper reject at the write boundary; all start paths (decideProgramStart,
+    // decideManualStart, incl. the AbortAndCool/CoolAfterCompletion cooling-
+    // replacement runs) populate sensorSelection unconditionally, so this can
+    // never legitimately fail for a freshly-built candidate.
     if ((hasProgram || hasManual) && !state.sensorSelection.has_value()) {
         return std::nullopt;
     }
@@ -232,13 +266,34 @@ std::optional<RunCommandState> restoreRunPersistenceSnapshot(
         restored.activeRunSensorMode = snapshot.activeRunSensorMode;
         restored.sensorSelection = snapshot.sensorSelection;
         restored.processRunSnapshot = snapshot.processRunSnapshot;
+        // #21, 6.12: restore uebernimmt die persistierte Auswahl, aber der
+        // RAM-only-Laufzeitzustand ist fail-closed - kein Wireformat traegt
+        // ihn, und bootlokale Timer (fallbackWaitStartedAtMonotonicMillis,
+        // returnValidation) sind ueber einen Boot hinweg nicht gueltig.
+        // #18 (Reaktivierung LoadedActiveRun -> Ready) muss diesen Zustand
+        // explizit neu bewerten (computeRestartSensorSelection), bevor eine
+        // Peltier-Freigabe moeglich ist.
+        restored.sensorSelectionRuntime = SensorSelectionRuntimeState{};
+        restored.sensorSelectionRuntime.phase =
+            SensorSelectionPhase::RestartRevalidationPending;
+        restored.sensorSelectionRuntime.permission =
+            SensorPeltierPermission::Blocked;
     } else if (snapshot.variant == RunCheckpointVariant::ManualRun) {
         restored.activeManualRun = snapshot.manual;
         restored.activeRunId = snapshot.activeRunId;
         restored.activeRunSensorMode = snapshot.activeRunSensorMode;
         restored.sensorSelection = snapshot.sensorSelection;
         restored.processRunSnapshot = snapshot.processRunSnapshot;
+        // Siehe Kommentar im ProgramRun-Zweig.
+        restored.sensorSelectionRuntime = SensorSelectionRuntimeState{};
+        restored.sensorSelectionRuntime.phase =
+            SensorSelectionPhase::RestartRevalidationPending;
+        restored.sensorSelectionRuntime.permission =
+            SensorPeltierPermission::Blocked;
     }
+    // NoActiveRun: restored.sensorSelectionRuntime bleibt der
+    // Default-Inaktivzustand (Phase NoActiveRun, Blocked) - der explizite
+    // NoActiveRun-Default aus 6.12.
     return restored;
 }
 

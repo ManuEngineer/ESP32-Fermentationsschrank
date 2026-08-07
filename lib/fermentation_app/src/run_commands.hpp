@@ -162,6 +162,12 @@ struct StopRequest {
     StopOption option{StopOption::Back};
     std::optional<ManualRunPlanRequest> coolingPlan;
     bool safetyAllowsCooling{false};
+    // Korrekturauftrag Befund 2: der Kuehl-Ersatzlauf darf NormalAir/Allowed
+    // nicht mehr per Konvention annehmen (siehe startSensorSelectionOutcome
+    // in run_commands.cpp) - explizite Air-/Cooling-Evidenz wie bei jedem
+    // anderen Start (6.5), sonst bleibt die Erstbefuellung fail-closed Blocked.
+    bool airSensorValid{false};
+    bool coolingSensorValid{false};
 };
 
 struct CompletionRequest {
@@ -169,6 +175,9 @@ struct CompletionRequest {
     bool startCooling{false};
     std::optional<ManualRunPlanRequest> coolingPlan;
     bool safetyAllowsCooling{false};
+    // Siehe StopRequest.
+    bool airSensorValid{false};
+    bool coolingSensorValid{false};
 };
 
 struct RunAdjustmentCommandRequest {
@@ -402,5 +411,18 @@ struct CommandDecision {
 // getrennten run_commands.cpp::clearActiveRun und
 // run_persistence_coordinator.cpp::clearCandidateRun.
 void clearActiveRunState(RunCommandState& state);
+
+// Korrekturauftrag Befund 1: gemeinsamer mechanischer Mutationshelfer fuer
+// den manuellen Pfad (decideApplySensorSelectionAction) und den
+// automatischen Pfad (RunPersistenceCoordinator::persistSensorSelection,
+// run_persistence_coordinator.cpp) - verhindert, dass Laufzeitzustand,
+// aktiver Modus, Persistenzzustand, Laufrevision und der in
+// ManualRunPlan::values.sensorMode duplizierte Modus auseinanderlaufen. Rein
+// mechanisch: trifft keine Fachentscheidung, die bleibt vollstaendig in
+// sensor_selection.cpp/applySensorSelectionDecision. SensorSelectionStateMutation
+// ist bereits ueber sensor_selection_types.hpp sichtbar (RunCommandState
+// braucht SensorSelectionRuntimeState ohnehin), kein zusaetzlicher Include.
+void applySensorSelectionMutation(RunCommandState& state,
+                                  const SensorSelectionStateMutation& mutation);
 
 }  // namespace fermentation

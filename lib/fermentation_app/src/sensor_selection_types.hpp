@@ -61,6 +61,12 @@ struct SensorSelectionRuntimeState {
     std::optional<std::uint64_t> fallbackWaitStartedAtMonotonicMillis;
     std::optional<std::uint64_t> lastAppliedMonotonicMillis;
     ReturnValidationRuntimeState returnValidation;
+    // Korrekturauftrag Befund 3 (6.4.12 Re-Arm-Bedingung iii): waehrend
+    // AirFallbackActive markiert dies einen zwischenzeitlich beobachteten
+    // Produktausfall als neue, unabhaengige Evidenzgeneration - unabhaengig
+    // von profileRevision. Nur innerhalb AirFallbackActive gueltig; jede
+    // andere Phase haelt dies auf false (validRuntimeCombination).
+    bool productReArmPending{false};
 };
 
 [[nodiscard]] inline bool operator==(const SensorSelectionRuntimeState& lhs,
@@ -70,7 +76,8 @@ struct SensorSelectionRuntimeState {
                rhs.fallbackWaitStartedAtMonotonicMillis &&
            lhs.lastAppliedMonotonicMillis ==
                rhs.lastAppliedMonotonicMillis &&
-           lhs.returnValidation == rhs.returnValidation;
+           lhs.returnValidation == rhs.returnValidation &&
+           lhs.productReArmPending == rhs.productReArmPending;
 }
 
 [[nodiscard]] inline bool operator!=(const SensorSelectionRuntimeState& lhs,

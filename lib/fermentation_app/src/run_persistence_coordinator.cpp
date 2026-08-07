@@ -758,19 +758,31 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     if (mutation.runtime.lastAppliedMonotonicMillis.has_value() &&
         *mutation.runtime.lastAppliedMonotonicMillis != time.monotonicMillis)
         return result(RunPersistenceResultStatus::TimeMismatch);
+    // Korrekturauftrag Befund 1 (dritter Punkt): `mutation` ist eine bereits
+    // ausserhalb berechnete Entscheidung (applySensorSelectionDecision auf
+    // einer fruehreren Kopie von `current`) - vor jedem Write/RAM-Apply wird
+    // die Revisionsfolge stale-sicher gegen den tatsaechlich aktuellen
+    // `current`-Zustand geprueft. Nur AppliedPersistentCandidate erreicht
+    // diesen Punkt (siehe Filter oben), die erwartete Folge ist deshalb immer
+    // genau +1.
+    if (mutation.resultingRunRevision != current.runRevision + 1U)
+        return result(RunPersistenceResultStatus::StaleDecision,
+                      RunPersistenceStep::CandidateApply);
     if (nextCheckpointRevision_ == 0U)
         return result(RunPersistenceResultStatus::CounterOverflow);
+    // Korrekturauftrag Befund 1 (vierter Punkt): der Effekt wird unten aus
+    // dem tatsaechlichen Before/After-Permission-Uebergang abgeleitet, nicht
+    // aus der Ursache - `beforePermission` wird deshalb festgehalten, bevor
+    // der gemeinsame Mutationshelfer `current`/`candidate` veraendert.
+    const auto beforePermission = current.sensorSelectionRuntime.permission;
     auto candidate = current;
-    candidate.sensorSelection = mutation.persisted;
-    candidate.activeRunSensorMode = mutation.activeMode;
-    // A manual run duplicates its sensor mode inside ManualRunPlan::values
-    // (validateRunPersistenceSnapshot cross-checks the two match). A mode
-    // change coming out of the automaton must be mirrored into that copy too
-    // - otherwise a FallbackToAir/AutomaticValidatedReturn mode change on a
-    // manual run would fail projection with InvalidDecision.
-    if (candidate.activeManualRun.has_value() && mutation.activeMode.has_value())
-        candidate.activeManualRun->values.sensorMode = *mutation.activeMode;
-    candidate.runRevision = mutation.resultingRunRevision;
+    // Korrekturauftrag Befund 1 (zweiter Punkt): gemeinsamer mechanischer
+    // Mutationshelfer mit dem manuellen Pfad (run_commands.cpp::
+    // decideApplySensorSelectionAction) - das schliesst die zuvor fehlende
+    // Uebernahme von mutation.runtime (sensorSelectionRuntime blieb bislang
+    // auf dem alten Wert stehen) und haelt den in ManualRunPlan::values
+    // duplizierten Sensormodus konsistent.
+    applySensorSelectionMutation(candidate, mutation);
     const auto snapshot = makeRunPersistenceSnapshot(
         candidate, persistedIds_, persistedIdCount_,
         RunCheckpointTrigger::SensorSelection, time, schedule_.intervalMinutes());
@@ -783,29 +795,24 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
                      RunPersistenceMutationKind::SensorSelection);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
-    current.sensorSelection = mutation.persisted;
-    current.activeRunSensorMode = mutation.activeMode;
-    if (current.activeManualRun.has_value() && mutation.activeMode.has_value())
-        current.activeManualRun->values.sensorMode = *mutation.activeMode;
-    current.runRevision = mutation.resultingRunRevision;
+    applySensorSelectionMutation(current, mutation);
     RunPersistenceResult out{RunPersistenceResultStatus::Applied};
     out.step = RunPersistenceStep::RamApply;
     out.durability = RunPersistenceDurability::Changed;
     out.coordinatorState = state_;
     // 6.14.4: SensorSelectionPermissionRestored != direct actor release -
     // only that #21's own precondition (peltierPermission) is satisfied
-    // again. RecoveryRevalidation is the only cause the automaton ever emits
-    // while transitioning Blocked -> Allowed (sensor_selection.cpp).
-    // ProductFailureBlock/SafeStateEntry always leave permission Blocked
-    // (freshly transitioned or re-confirmed); neither FallbackToAir,
-    // AutomaticValidatedReturn nor ReturnValidationAborted ever change
-    // permission (it stays Allowed throughout the AirFallbackActive family).
-    if (cause == SensorSelectionDecisionCause::ProductFailureBlock ||
-        cause == SensorSelectionDecisionCause::SafeStateEntry) {
-        out.effects[0] = CommandEffect::SensorSelectionPermissionBlocked;
-        out.effectCount = 1U;
-    } else if (cause == SensorSelectionDecisionCause::RecoveryRevalidation) {
-        out.effects[0] = CommandEffect::SensorSelectionPermissionRestored;
+    // again. Korrekturauftrag Befund 1: derived from the actual before/after
+    // transition (mirrors the manual path in run_commands.cpp), not from an
+    // enumerated cause list - the cause list was correct only as long as the
+    // six known automatic causes stayed exhaustive and never changed
+    // behavior; the transition itself is the single source of truth either
+    // way.
+    if (beforePermission != mutation.runtime.permission) {
+        out.effects[0] = mutation.runtime.permission ==
+                                 SensorPeltierPermission::Blocked
+                             ? CommandEffect::SensorSelectionPermissionBlocked
+                             : CommandEffect::SensorSelectionPermissionRestored;
         out.effectCount = 1U;
     }
     if (mutation.event.has_value()) {
