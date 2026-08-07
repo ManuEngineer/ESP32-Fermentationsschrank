@@ -288,11 +288,17 @@ noch zu leisten:
   wird;
 - **Reihenfolge beachten:** ein aktiver Lauf verlangt beim Schreiben
   zwingend einen vorhandenen persistierten Auswahlzustand - dieser ist nach
-  dem Laden zwar bereits vorhanden, wird aber durch jede nachfolgende
-  Speicherung (auch periodische Kontrollpunkte) erneut mitgefuehrt. Wird der
-  laufzeitseitige Zustand bei der Reaktivierung nicht innerhalb desselben
-  Schritts konsistent mitgesetzt, kann die naechste periodische Speicherung
-  oder jede weitere Zustandsaenderung dieses Laufs technisch fehlschlagen;
+  dem Laden bereits vorhanden und wird durch jede nachfolgende Speicherung
+  (auch periodische Kontrollpunkte) unveraendert erneut mitgefuehrt. Ein
+  nicht finalisierter laufzeitseitiger Zustand (`sensorSelectionRuntime`)
+  laesst dadurch fuer sich allein **keinen** periodischen Kontrollpunkt
+  technisch fehlschlagen - dieser Zustand ist ausserhalb des Wireformats und
+  fliesst nicht in die Schreibvoraussetzung ein. Der eigentliche Vertrag ist
+  ein anderer: bleibt die Reaktivierung aus, bleibt der laufzeitseitige
+  Zustand fail-closed bei "Neubewertung nach Neustart erforderlich"
+  (`RestartRevalidationPending`) mit gesperrter Peltier-Freigabe
+  (`Blocked`) stehen - jeder weitere Kontrollpunkt schreibt diesen
+  gesperrten Zustand einfach unveraendert fort, statt zu scheitern;
 - die Peltier-Freigabe bleibt bis zum Abschluss dieser Neubewertung gesperrt;
   eine vorherige Freigabe aus dem Lauf vor dem Neustart wird nie blind
   uebernommen.

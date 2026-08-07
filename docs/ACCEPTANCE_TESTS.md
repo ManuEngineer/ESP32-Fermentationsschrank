@@ -85,13 +85,16 @@ Mindestens:
 - luftgefuehrter Lauf ohne Produktfuehler
 - Produktfuehlerausfall, Luft-Ersatzbetrieb (manuell und automatisch nach
   Wartezeit) sowie manuelle und automatisch validierte Rueckkehr
-  (Issue #21): Sicherheits-Vorrangregel blockiert jede Rueckkehr und jede
-  Freigabe, solange nicht Produkt-, Schrankluft- und Kuehlkoerperfuehler
-  gemeinsam gueltig sind; ein einzelner Schrankluft-/Kuehlkoerperausfall
-  waehrend Ersatzbetrieb sperrt sofort in den sicheren Zustand; Re-Arm nach
-  einem abgebrochenen Rueckkehrversuch nur bei neuer Evidenzgeneration
-  (geaenderte Kompatibilitaetsrevision oder zwischenzeitlicher erneuter
-  Produktausfall), kein unbegrenztes Wiederholen
+  (Issue #21): im aktiven Luft-Ersatzbetrieb (`AirFallbackActive`) bleibt die
+  Regelung ueber Luft weiterhin freigegeben, solange Schrankluft- und
+  Kuehlkoerperfuehler gueltig sind - ein ungueltiger Produktfuehler allein
+  sperrt dort nicht; erst die Rueckkehr zu `NormalProduct` verlangt Produkt-,
+  Schrankluft- und Kuehlkoerperfuehler gemeinsam gueltig
+  (Sicherheits-Vorrangregel). Ein einzelner Schrankluft-/Kuehlkoerperausfall
+  waehrend Ersatzbetrieb sperrt dagegen sofort in den sicheren Zustand
+  (`SafeLocked`); Re-Arm nach einem abgebrochenen Rueckkehrversuch nur bei
+  neuer Evidenzgeneration (geaenderte Kompatibilitaetsrevision oder
+  zwischenzeitlicher erneuter Produktausfall), kein unbegrenztes Wiederholen
 - Heizen, Neutralbereich, Kuehlen und Richtungswechsel
 - Stromunterbrechung in jeder Prozessphase
 - fehlende NTP-Zeit ohne erfundenen Fortschritt

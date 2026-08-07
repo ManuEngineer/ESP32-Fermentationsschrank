@@ -10,19 +10,22 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan freigegeben (Revision 7); Commits 1-5 sowie ein separat beauftragter Korrekturcommit nach Ownerreview umgesetzt; Commit 6 (Dokumentation, Architektur-/Compile-Guards, Abschlussnachweise) in Umsetzung | Owner prueft finalen `HEAD` und entscheidet ueber `Ready for review` |
+| 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan freigegeben (Revision 7); Commits 1-6 sowie zwei separat beauftragte Korrekturrunden nach Ownerreview (Implementierungsreview, Abschlussreview) umgesetzt | Owner-Abschlussreview des finalen `HEAD`; danach Ownerentscheid ueber `Ready for review` |
 
 ## Naechste fachliche Arbeit
 
 Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist im
 Draft-PR #99 auf dem Branch `plan/issue-21-sensor-selection-fallback-return`
-weitgehend umgesetzt: der sechsteilige Commit-Schnitt aus dem freigegebenen
-Plan sowie ein zusaetzlicher, vom Owner separat beauftragter Korrekturcommit
-(sieben Reviewbefunde nach Implementierungsreview) sind abgeschlossen; Commit
-6 schliesst die Umsetzung ab. Nach Commit 6 entscheidet ausschliesslich der
-Owner ueber `Ready for review` und die vollstaendige Remote-CI. Die naechste
-Planungsarbeit danach ist P21-M4 (Abhaengigkeitsaussage zu #22/#23, kein
-Gate).
+umgesetzt: der sechsteilige Commit-Schnitt aus dem freigegebenen Plan
+(Commit 6 abgeschlossen) sowie zwei zusaetzliche, vom Owner separat
+beauftragte Korrekturrunden (sieben Reviewbefunde nach
+Implementierungsreview; Architekturguard-, Transportvertrags- und
+Dokumentationskorrekturen nach Abschlussreview) sind abgeschlossen.
+Naechstes Gate ist das Owner-Abschlussreview des finalen `HEAD`; danach
+entscheidet ausschliesslich der Owner ueber `Ready for review` und die
+vollstaendige Remote-CI. Als naechste fachliche Planungsarbeit nach #21 ist
+Issue #22 zu nennen; P21-M4 bleibt darin nur die zu #22/#23 gehoerende
+Abhaengigkeitsaussage (kein eigenes Gate).
 
 ## Zulaessige Parallelitaet
 

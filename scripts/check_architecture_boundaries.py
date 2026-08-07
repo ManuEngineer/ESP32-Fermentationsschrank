@@ -650,21 +650,28 @@ def add_sensor_selection_include_cycle_violations(
             )
 
 
-# Issue #21, Plan Abschnitt 9.7: applySensorSelectionDecision ist die eine
-# kanonische Entscheidungs-/Mutationsfunktion - genau eine Deklaration
-# (Header) und eine Definition (Quelldatei), keine Parallelfunktion mit
-# demselben Rueckgabetyp-prefixierten Signaturmuster anderswo. Ein reiner
-# Aufruf (`applySensorSelectionDecision(view, decision, now)`) traegt dieses
-# Muster nicht, da ihm das Rueckgabetyp-Praefix fehlt.
-SENSOR_SELECTION_CANONICAL_SIGNATURE_PATTERN = re.compile(
-    r"SensorSelectionStateMutation\s+(?:fermentation\s*::\s*)?"
-    r"applySensorSelectionDecision\s*\("
+# Issue #21, Plan Abschnitt 9.7 (PR-#99-Abschlussreview-Korrektur):
+# applySensorSelectionDecision ist die eine kanonische Entscheidungs-/
+# Mutationsfunktion - exakt eine Deklaration in sensor_selection.hpp und
+# eine Definition in sensor_selection.cpp, beide mit dem Rueckgabetyp
+# SensorSelectionStateMutation. Jede weitere gleichnamige Signatur ist eine
+# verbotene Parallelfunktion - auch innerhalb dieser beiden Dateien selbst
+# (z. B. eine zweite Deklaration), und auch mit einem anderen
+# Rueckgabetyp-Praefix wie dem vollstaendigen RunCommandState. Das
+# Signaturmuster ist daher bewusst nicht auf den kanonischen Rueckgabetyp
+# beschraenkt, sondern erkennt jeden Rueckgabetyp-prefixierten Aufruf; die
+# Klassifikation (kanonisch vs. Parallelfunktion) erfolgt danach getrennt.
+# Ein reiner Aufruf (`applySensorSelectionDecision(view, decision, now)`)
+# traegt kein Rueckgabetyp-Praefix und loest den Guard nicht aus.
+SENSOR_SELECTION_SIGNATURE_PATTERN = re.compile(
+    r"(?P<returntype>[A-Za-z_]\w*(?:\s*::\s*[A-Za-z_]\w*)*\s*[*&]?)\s+"
+    r"(?:fermentation\s*::\s*)?applySensorSelectionDecision\s*\("
 )
+SENSOR_SELECTION_CANONICAL_RETURN_TYPE = "SensorSelectionStateMutation"
+SENSOR_SELECTION_DECLARATION_FILE = "lib/fermentation_app/src/sensor_selection.hpp"
+SENSOR_SELECTION_DEFINITION_FILE = "lib/fermentation_app/src/sensor_selection.cpp"
 SENSOR_SELECTION_CANONICAL_ALLOWED_FILES = frozenset(
-    {
-        "lib/fermentation_app/src/sensor_selection.hpp",
-        "lib/fermentation_app/src/sensor_selection.cpp",
-    }
+    {SENSOR_SELECTION_DECLARATION_FILE, SENSOR_SELECTION_DEFINITION_FILE}
 )
 
 
@@ -674,20 +681,62 @@ def add_sensor_selection_canonical_function_violations(
     lib_dir = root / "lib"
     if not lib_dir.exists():
         return
+    declaration_path = root / SENSOR_SELECTION_DECLARATION_FILE
+    definition_path = root / SENSOR_SELECTION_DEFINITION_FILE
+    canonical_site_found = {declaration_path: False, definition_path: False}
     for path in text_files(lib_dir):
         relative = path.relative_to(root).as_posix()
-        if relative in SENSOR_SELECTION_CANONICAL_ALLOWED_FILES:
-            continue
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        if SENSOR_SELECTION_CANONICAL_SIGNATURE_PATTERN.search(text):
+        # Kommentare und Stringliterale (z. B. "applySensorSelectionDecision
+        # (sensor_selection.hpp)" in einem Fliesstextkommentar) duerfen den
+        # Guard nicht ausloesen - nur echter Code zaehlt.
+        code = mask_cxx_comments_and_strings(text)
+        matches = list(SENSOR_SELECTION_SIGNATURE_PATTERN.finditer(code))
+        if not matches:
+            continue
+        if relative not in SENSOR_SELECTION_CANONICAL_ALLOWED_FILES:
+            violations.append(
+                f"{path}: applySensorSelectionDecision-Signatur ausserhalb "
+                "sensor_selection.hpp/.cpp (Plan #21 Abschnitt 9.7 - keine "
+                "Parallelfunktion)"
+            )
+            continue
+        canonical_matches = [
+            match
+            for match in matches
+            if match.group("returntype").strip()
+            == SENSOR_SELECTION_CANONICAL_RETURN_TYPE
+        ]
+        if len(matches) > len(canonical_matches):
             violations.append(
                 f"{path}: zusaetzliche applySensorSelectionDecision-Signatur "
-                "ausserhalb sensor_selection.hpp/.cpp (Plan #21 Abschnitt 9.7 "
-                "- keine Parallelfunktion)"
+                "mit abweichendem Rueckgabetyp (z. B. RunCommandState) "
+                "erkannt (Plan #21 Abschnitt 9.7 - keine Parallelfunktion)"
             )
+        if len(canonical_matches) > 1:
+            violations.append(
+                f"{path}: applySensorSelectionDecision ist dort mehrfach "
+                "deklariert/definiert (Plan #21 Abschnitt 9.7 - genau eine "
+                "kanonische Signatur je Datei)"
+            )
+        elif len(canonical_matches) == 1:
+            canonical_site_found[path] = True
+
+    if not canonical_site_found[declaration_path]:
+        violations.append(
+            f"{declaration_path}: erwartete kanonische "
+            "applySensorSelectionDecision-Deklaration fehlt (Plan #21 "
+            "Abschnitt 9.7)"
+        )
+    if not canonical_site_found[definition_path]:
+        violations.append(
+            f"{definition_path}: erwartete kanonische "
+            "applySensorSelectionDecision-Definition fehlt (Plan #21 "
+            "Abschnitt 9.7)"
+        )
 
 
 def strip_cmake_line_comments(text: str) -> str:
@@ -913,10 +962,20 @@ def create_clean_fixture(root: Path) -> None:
         # Issue #21, Plan Abschnitt 7/9.7: minimale, in sich saubere Instanz
         # der vier gegenseitig eingeschraenkten Header - Grundlage fuer die
         # SENSOR_SELECTION_INCLUDE_CYCLE_VIOLATION_CASES unten, die einzelne
-        # Dateien durch eine verbotene Include-Variante ersetzen.
+        # Dateien durch eine verbotene Include-Variante ersetzen. hpp/.cpp
+        # tragen zusaetzlich die kanonische applySensorSelectionDecision-
+        # Deklaration/-Definition, damit die genau-eine-Signatur-Pruefung
+        # (SENSOR_SELECTION_CANONICAL_*) an der sauberen Fixture nicht
+        # faelschlich "fehlt" meldet.
         "lib/fermentation_app/src/sensor_selection_types.hpp": "#pragma once\n",
         "lib/fermentation_app/src/sensor_selection.hpp": (
             '#pragma once\n#include "sensor_selection_types.hpp"\n'
+            "SensorSelectionStateMutation applySensorSelectionDecision(int x);\n"
+        ),
+        "lib/fermentation_app/src/sensor_selection.cpp": (
+            '#include "sensor_selection.hpp"\n'
+            "SensorSelectionStateMutation applySensorSelectionDecision(int x) "
+            "{ return {}; }\n"
         ),
         "lib/fermentation_app/src/run_commands.hpp": (
             '#pragma once\n#include "sensor_selection_types.hpp"\n'
@@ -1093,6 +1152,37 @@ SENSOR_SELECTION_CANONICAL_VIOLATION_CASES = {
         "lib/fermentation_app/src/rogue_sensor_selection.cpp",
         "SensorSelectionStateMutation applySensorSelectionDecision(int x) "
         "{ return {}; }\n",
+    ),
+    # PR-#99-Abschlussreview-Korrektur: eine zweite gleichnamige Signatur
+    # innerhalb von sensor_selection.hpp/.cpp selbst muss ebenso erkannt
+    # werden wie eine externe Parallelfunktion.
+    "duplicate_declaration_inside_header": (
+        "lib/fermentation_app/src/sensor_selection.hpp",
+        '#pragma once\n#include "sensor_selection_types.hpp"\n'
+        "SensorSelectionStateMutation applySensorSelectionDecision(int x);\n"
+        "SensorSelectionStateMutation applySensorSelectionDecision(int y);\n",
+    ),
+    "duplicate_definition_inside_source": (
+        "lib/fermentation_app/src/sensor_selection.cpp",
+        '#include "sensor_selection.hpp"\n'
+        "SensorSelectionStateMutation applySensorSelectionDecision(int x) "
+        "{ return {}; }\n"
+        "SensorSelectionStateMutation applySensorSelectionDecision(int y) "
+        "{ return {}; }\n",
+    ),
+    # Ein abweichender Rueckgabetyp (z. B. der vollstaendige
+    # RunCommandState statt der schmalen SensorSelectionStateMutation) ist
+    # ebenfalls eine verbotene Parallelfunktion - sowohl innerhalb der
+    # beiden kanonischen Dateien als auch ausserhalb.
+    "run_command_state_return_type_inside_header": (
+        "lib/fermentation_app/src/sensor_selection.hpp",
+        '#pragma once\n#include "sensor_selection_types.hpp"\n'
+        "SensorSelectionStateMutation applySensorSelectionDecision(int x);\n"
+        "RunCommandState applySensorSelectionDecision(int y);\n",
+    ),
+    "run_command_state_return_type_external_file": (
+        "lib/fermentation_app/src/rogue_run_command_state.cpp",
+        "RunCommandState applySensorSelectionDecision(int x) { return {}; }\n",
     ),
 }
 

@@ -7,6 +7,12 @@
 
 #include "run_persistence_coordinator.hpp"
 #include "run_persistence_codec.hpp"
+// PR-#99-Abschlussreview-Korrektur: der manuelle Transportvertrag-
+// Integrationstest (persistCommand fuer ApplySensorSelectionAction) braucht
+// CrossRolePlausibilityContext/decideApplySensorSelectionAction - beides nur
+// ueber sensor_selection.hpp vollstaendig sichtbar, da run_commands.hpp den
+// Typ laut Plan Abschnitt 7 nur vorwaertsdeklariert.
+#include "sensor_selection.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "state_store.hpp"
 #include "state_store_key.hpp"
@@ -2592,6 +2598,196 @@ void test_persist_sensor_selection_rejects_non_persistent_status() {
                            static_cast<unsigned>(store.writeCount()));
 }
 
+// ---------------------------------------------------------------------------
+// PR-#99-Abschlussreview-Korrektur, Plan 9.7: manueller Transportvertrag -
+// AppliedPersistentCandidate -> persistCommand. Die obigen
+// test_persist_sensor_selection_*-Faelle pruefen ausschliesslich den
+// automatischen Pfad (RunPersistenceCoordinator::persistSensorSelection);
+// bis hierhin gab es keinen Coordinator-Integrationstest fuer den manuellen
+// Pfad (decideApplySensorSelectionAction -> persistCommand). Die folgenden
+// beiden Tests schliessen diese Luecke direkt am Coordinator statt nur auf
+// RunCommandState-Ebene (wie in test_run_commands.cpp).
+// ---------------------------------------------------------------------------
+
+device_platform::SensorQualitySnapshot coordinatorValidSensorSnapshot() {
+    device_platform::SensorQualitySnapshot snapshot;
+    snapshot.quality = device_platform::SensorQuality::Valid;
+    return snapshot;
+}
+
+device_platform::SensorQualitySnapshot coordinatorFailedSensorSnapshot() {
+    device_platform::SensorQualitySnapshot snapshot;
+    snapshot.quality = device_platform::SensorQuality::Failed;
+    snapshot.lastFaultReason =
+        device_platform::SensorFaultReason::MissingSample;
+    return snapshot;
+}
+
+CommandDecision continueWithAirDecision(const RunCommandState& state,
+                                        CommandId id,
+                                        std::uint64_t monotonicMillis) {
+    SensorSelectionCommandRequest request;
+    request.envelope = {id,
+                        CommandSource::LocalDisplay,
+                        monotonicMillis,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
+    request.action = SensorSelectionUserAction::ContinueWithAir;
+    request.safetyAllowsChange = true;
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.product = coordinatorFailedSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = monotonicMillis;
+    return decideApplySensorSelectionAction(state, request, plausibility);
+}
+
+void test_persist_command_applies_and_writes_manual_continue_with_air() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 910U);
+    // Vorbedingung fuer ContinueWithAir: Produkt ausgefallen, Bediener wird
+    // um Entscheidung gebeten, Permission gesperrt.
+    state.sensorSelectionRuntime.phase =
+        SensorSelectionPhase::UserDecisionRequired;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Blocked;
+
+    const auto decision = continueWithAirDecision(state, 911U, 600U);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_TRUE(decision.sensorSelectionApplyStatus.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            SensorSelectionApplyStatus::AppliedPersistentCandidate),
+        static_cast<int>(*decision.sensorSelectionApplyStatus));
+
+    const auto writesBefore = store.writeCount();
+    const auto result = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{600U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(store.writeCount() > writesBefore);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::AirFallbackActive),
+        static_cast<int>(state.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Allowed),
+        static_cast<int>(state.sensorSelectionRuntime.permission));
+    TEST_ASSERT_TRUE(state.activeRunSensorMode.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
+                          static_cast<int>(*state.activeRunSensorMode));
+
+    // Ueberlebt einen Neustart - Beweis fuer den tatsaechlichen Store-Write,
+    // nicht nur die RAM-Mutation.
+    RunPersistenceCoordinator restarted(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto afterBoot = restarted.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(afterBoot.status));
+    TEST_ASSERT_TRUE(afterBoot.snapshot.has_value());
+    TEST_ASSERT_TRUE(afterBoot.snapshot->sensorSelection.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionDecisionCause::ManualUserFallback),
+        static_cast<int>(
+            afterBoot.snapshot->sensorSelection->lastDecisionCause));
+}
+
+// PR-#99-Abschlussreview-Korrektur: RecheckProduct in AirFallbackActive mit
+// unvollstaendiger/veralteter thermischer Evidenz ist der einzige manuelle
+// Pfad, der AppliedRamOnly erreicht (test_recheck_product_from_air_fallback_
+// with_incomplete_evidence_is_ram_only in test_sensor_selection.cpp deckt
+// das auf reiner Kernfunktionsebene ab). Dieser Coordinator-Integrationstest
+// belegt, was persistCommand damit tatsaechlich tut: CommandKind::
+// ApplySensorSelectionAction ist unbedingt isPersistedRunCommand, also
+// versucht persistCommand einen Store-Write auch fuer eine AppliedRamOnly-
+// Mutation - anders als die Automatikseite (persistSensorSelection lehnt
+// AppliedRamOnly explizit mit InvalidDecision ab, siehe
+// test_persist_sensor_selection_rejects_non_persistent_status oben). Das ist
+// kein durch diesen Auftrag zu behebender Fachlogikbefund (keine neue
+// Fachlogik/Scopeerweiterung erlaubt), sondern eine bisher unbelegte
+// Verhaltensluecke im 9.7-Nachweis - hier erstmals tatsaechlich getestet und
+// in der PR-Beschreibung als offener Befund benannt statt weiterhin
+// stillschweigend (falsch) als "kein Store-Write" zitiert.
+void test_persist_command_manual_recheck_product_ram_only_behaviour() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 920U);
+    state.sensorSelectionRuntime.phase =
+        SensorSelectionPhase::AirFallbackActive;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Allowed;
+    state.activeRunSensorMode = RunSensorMode::Air;
+    if (state.activeManualRun.has_value()) {
+        state.activeManualRun->values.sensorMode = RunSensorMode::Air;
+    }
+
+    SensorSelectionCommandRequest request;
+    request.envelope = {921U,
+                        CommandSource::LocalDisplay,
+                        700U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
+    request.action = SensorSelectionUserAction::RecheckProduct;
+    request.safetyAllowsChange = true;
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.product = coordinatorValidSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = 700U;
+    plausibility.thermalCompatibility.status = ThermalCompatibility::Stale;
+    plausibility.thermalCompatibility.profileRevision = 9U;
+
+    const auto decision =
+        decideApplySensorSelectionAction(state, request, plausibility);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_TRUE(decision.sensorSelectionApplyStatus.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionApplyStatus::AppliedRamOnly),
+        static_cast<int>(*decision.sensorSelectionApplyStatus));
+
+    const auto sensorSelectionBefore = state.sensorSelection;
+    const auto runRevisionBefore = state.runRevision;
+
+    const auto result = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{700U, std::nullopt});
+
+    // Dokumentiert das tatsaechliche, nicht das im Plan-9.7-Wortlaut
+    // beschriebene Verhalten (siehe Kommentar oben): persistCommand haelt
+    // CommandKind::ApplySensorSelectionAction fuer unbedingt persistierbar
+    // und versucht den Write auch hier.
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+
+    // Der geschriebene Fachinhalt bleibt unveraendert (AppliedRamOnly
+    // aendert weder sensorSelection noch runRevision) - nur die
+    // CommandId-Buchhaltung des Schreibvorgangs selbst ist neu. Das
+    // begrenzt den Befund auf einen unnoetigen Schreibzyklus plus eine
+    // fluechtig gemeinte CommandId, die dauerhaft verbraucht wird - keine
+    // fehlerhafte Fachzustandspersistierung.
+    TEST_ASSERT_TRUE(state.sensorSelection == sensorSelectionBefore);
+    TEST_ASSERT_EQUAL_UINT32(runRevisionBefore, state.runRevision);
+
+    // "CommandId nur fluechtig" (Plan 9.7) ist damit ebenfalls nicht erfuellt:
+    // dieselbe CommandId gilt jetzt als dauerhaft persistiert, nicht nur
+    // fluechtig verbraucht - ein erneuter Versuch mit derselben CommandId
+    // (z. B. durch eine erneute Bedienhandlung mit demselben Envelope)
+    // schlaegt fehl statt erneut auszufuehren.
+    const auto replay = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{700U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::AlreadyPersisted),
+        static_cast<int>(replay.status));
+}
+
 // #21, 6.5 Zeile 2/6.11: decideProgramStart's automatischer Ersatz auf Luft.
 CommandDecision substitutedStartDecision(const RunCommandState& state,
                                          CommandId id) {
@@ -2727,6 +2923,8 @@ int main(int, char**) {
         test_persist_sensor_selection_from_loaded_active_run_stays_recovery_pending);
     RUN_TEST(test_persist_sensor_selection_rejects_manual_causes);
     RUN_TEST(test_persist_sensor_selection_rejects_non_persistent_status);
+    RUN_TEST(test_persist_command_applies_and_writes_manual_continue_with_air);
+    RUN_TEST(test_persist_command_manual_recheck_product_ram_only_behaviour);
     RUN_TEST(
         test_start_sensor_selection_notice_only_visible_after_successful_commit);
     return UNITY_END();
