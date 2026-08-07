@@ -65,9 +65,9 @@ bool validIds(const RunPersistenceSnapshot& snapshot) {
 // Laufrevision selbst; FallbackActive/ReturnedToProduct binden den aktiven
 // Modus verbindlich, InitialSelection und LegacyUnknown (Schema-1-Restores,
 // siehe run_persistence_codec.cpp) schraenken den Modus bewusst nicht ein.
-bool validSensorSelectionCrossFields(const PersistedSensorSelectionState& persisted,
-                                     RunSensorMode activeMode,
-                                     std::uint32_t runRevision) {
+bool validSensorSelectionCrossFields(
+    const PersistedSensorSelectionState& persisted, RunSensorMode activeMode,
+    std::uint32_t runRevision) {
     if ((persisted.lastDecisionCause == SensorSelectionDecisionCause::None) !=
         (persisted.lastDecisionRunRevision == 0U)) {
         return false;
@@ -212,10 +212,11 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
     // restore is mapped onto LegacyUnknown/None/0 by the codec, not left
     // absent, so the schema-agnostic validator can require presence for
     // every active-run variant). This early check stays as a defensive,
-    // cheaper reject at the write boundary; all start paths (decideProgramStart,
-    // decideManualStart, incl. the AbortAndCool/CoolAfterCompletion cooling-
-    // replacement runs) populate sensorSelection unconditionally, so this can
-    // never legitimately fail for a freshly-built candidate.
+    // cheaper reject at the write boundary; all start paths
+    // (decideProgramStart, decideManualStart, incl. the
+    // AbortAndCool/CoolAfterCompletion cooling- replacement runs) populate
+    // sensorSelection unconditionally, so this can never legitimately fail for
+    // a freshly-built candidate.
     if ((hasProgram || hasManual) && !state.sensorSelection.has_value()) {
         return std::nullopt;
     }

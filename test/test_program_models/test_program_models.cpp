@@ -199,9 +199,9 @@ void test_schema_versions_and_v4_migration_are_explicit() {
                              migrated.document->schema.version);
     TEST_ASSERT_FALSE(
         migrated.document->program.maximumProductWaitMinutes.has_value());
-    TEST_ASSERT_TRUE(migrated.document->program.productSensorFailure
-                         .returnStrategy ==
-                     ReturnStrategy::AutomaticValidatedReturnToProduct);
+    TEST_ASSERT_TRUE(
+        migrated.document->program.productSensorFailure.returnStrategy ==
+        ReturnStrategy::AutomaticValidatedReturnToProduct);
     TEST_ASSERT_TRUE(
         validateProgram(*migrated.document, ValidationPurpose::CatalogTemplate)
             .valid());
@@ -245,7 +245,8 @@ void test_invalid_v4_document_is_not_partially_migrated() {
 
 void test_schema_five_document_migrates_directly_to_current() {
     auto versionFive = makeRunnableProgram();
-    versionFive.schema.version = fermentation::kProductWaitFieldIntroducedInSchema;
+    versionFive.schema.version =
+        fermentation::kProductWaitFieldIntroducedInSchema;
     versionFive.schema.presentFields =
         fermentation::kSchema5RequiredProgramFields;
 
@@ -259,9 +260,9 @@ void test_schema_five_document_migrates_directly_to_current() {
                              migrated.document->schema.version);
     TEST_ASSERT_TRUE(
         migrated.document->program.maximumProductWaitMinutes.has_value());
-    TEST_ASSERT_TRUE(migrated.document->program.productSensorFailure
-                         .returnStrategy ==
-                     ReturnStrategy::AutomaticValidatedReturnToProduct);
+    TEST_ASSERT_TRUE(
+        migrated.document->program.productSensorFailure.returnStrategy ==
+        ReturnStrategy::AutomaticValidatedReturnToProduct);
 }
 
 void test_air_only_migration_normalizes_policy_and_return_strategy() {
@@ -286,8 +287,9 @@ void test_air_only_migration_normalizes_policy_and_return_strategy() {
     TEST_ASSERT_TRUE(migrated.document.has_value());
     TEST_ASSERT_TRUE(migrated.document->program.productSensorFailure.policy ==
                      ProductSensorFailurePolicy::FallbackToAirAfterTimeout);
-    TEST_ASSERT_TRUE(migrated.document->program.productSensorFailure
-                         .returnStrategy == ReturnStrategy::RemainOnAirUntilEnd);
+    TEST_ASSERT_TRUE(
+        migrated.document->program.productSensorFailure.returnStrategy ==
+        ReturnStrategy::RemainOnAirUntilEnd);
     TEST_ASSERT_FALSE(migrated.document->program.productSensorFailure
                           .fallbackDelaySeconds.has_value());
     TEST_ASSERT_TRUE(
@@ -438,9 +440,9 @@ void test_unknown_enum_values_are_rejected() {
     TEST_ASSERT_TRUE(containsError(result,
                                    ValidationErrorCode::InvalidEnumValue,
                                    "defaults.product_sensor_failure.policy"));
-    TEST_ASSERT_TRUE(containsError(
-        result, ValidationErrorCode::InvalidEnumValue,
-        "defaults.product_sensor_failure.return_strategy"));
+    TEST_ASSERT_TRUE(
+        containsError(result, ValidationErrorCode::InvalidEnumValue,
+                      "defaults.product_sensor_failure.return_strategy"));
     TEST_ASSERT_TRUE(containsError(result,
                                    ValidationErrorCode::InvalidEnumValue,
                                    "defaults.completion.mode"));
@@ -452,9 +454,9 @@ void test_product_required_rejects_fallback_to_air_after_timeout() {
     document.program.productSensorFailure.policy =
         ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
 
-    TEST_ASSERT_TRUE(containsError(
-        validateProgram(document), ValidationErrorCode::IncompatibleCombination,
-        "defaults.product_sensor_failure.policy"));
+    TEST_ASSERT_TRUE(containsError(validateProgram(document),
+                                   ValidationErrorCode::IncompatibleCombination,
+                                   "defaults.product_sensor_failure.policy"));
 }
 
 void test_air_only_requires_remain_on_air_and_fallback_policy() {
@@ -469,9 +471,9 @@ void test_air_only_requires_remain_on_air_and_fallback_policy() {
     TEST_ASSERT_TRUE(containsError(result,
                                    ValidationErrorCode::IncompatibleCombination,
                                    "defaults.product_sensor_failure.policy"));
-    TEST_ASSERT_TRUE(containsError(
-        result, ValidationErrorCode::IncompatibleCombination,
-        "defaults.product_sensor_failure.return_strategy"));
+    TEST_ASSERT_TRUE(
+        containsError(result, ValidationErrorCode::IncompatibleCombination,
+                      "defaults.product_sensor_failure.return_strategy"));
 
     auto onlyValid = makeRunnableProgram();
     onlyValid.program.sensorPreference = SensorPreference::AirOnly;
@@ -531,6 +533,7 @@ int main() {
     RUN_TEST(test_product_required_rejects_fallback_to_air_after_timeout);
     RUN_TEST(test_air_only_requires_remain_on_air_and_fallback_policy);
     RUN_TEST(test_air_only_rejects_fallback_delay_seconds);
-    RUN_TEST(test_fallback_delay_seconds_is_dead_value_for_non_fallback_policies);
+    RUN_TEST(
+        test_fallback_delay_seconds_is_dead_value_for_non_fallback_policies);
     return UNITY_END();
 }

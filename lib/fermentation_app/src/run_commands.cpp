@@ -399,10 +399,12 @@ ProgramStartSensorResolution resolveProgramStartSensorMode(
             if (requestedMode == RunSensorMode::Air) {
                 return {true, RunSensorMode::Air, false};
             }
-            return productSensorValid ? ProgramStartSensorResolution{
-                                            true, RunSensorMode::Product, false}
-                                      : ProgramStartSensorResolution{
-                                            true, RunSensorMode::Air, true};
+            return productSensorValid
+                       ? ProgramStartSensorResolution{true,
+                                                      RunSensorMode::Product,
+                                                      false}
+                       : ProgramStartSensorResolution{true, RunSensorMode::Air,
+                                                      true};
         case SensorPreference::AirProductOptional:
             if (requestedMode == RunSensorMode::Air) {
                 return {true, RunSensorMode::Air, false};
@@ -452,13 +454,16 @@ StartSensorSelectionOutcome startSensorSelectionOutcome(
                                          : SensorPeltierPermission::Blocked;
         if (substitutedFromProduct) {
             outcome.runtime.phase = SensorSelectionPhase::AirFallbackActive;
-            outcome.persisted.provenance = SensorSelectionProvenance::FallbackActive;
+            outcome.persisted.provenance =
+                SensorSelectionProvenance::FallbackActive;
         } else {
             outcome.runtime.phase = SensorSelectionPhase::NormalAir;
-            outcome.persisted.provenance = SensorSelectionProvenance::InitialSelection;
+            outcome.persisted.provenance =
+                SensorSelectionProvenance::InitialSelection;
         }
     } else {
-        outcome.persisted.provenance = SensorSelectionProvenance::InitialSelection;
+        outcome.persisted.provenance =
+            SensorSelectionProvenance::InitialSelection;
         if (productSensorValid) {
             outcome.runtime.phase = SensorSelectionPhase::NormalProduct;
             outcome.runtime.permission = fixedSensorsValid
@@ -469,7 +474,8 @@ StartSensorSelectionOutcome startSensorSelectionOutcome(
             outcome.runtime.permission = SensorPeltierPermission::Blocked;
         }
     }
-    outcome.persisted.lastDecisionCause = SensorSelectionDecisionCause::StartSelection;
+    outcome.persisted.lastDecisionCause =
+        SensorSelectionDecisionCause::StartSelection;
     outcome.persisted.lastDecisionRunRevision = startRunRevision;
     return outcome;
 }
@@ -492,13 +498,13 @@ void clearActiveRunState(RunCommandState& state) {
     state.sensorSelectionRuntime = SensorSelectionRuntimeState{};
 }
 
-// Korrekturauftrag Befund 1: siehe Kommentar in run_commands.hpp. Beide Aufrufer
-// (decideApplySensorSelectionAction unten, RunPersistenceCoordinator::
+// Korrekturauftrag Befund 1: siehe Kommentar in run_commands.hpp. Beide
+// Aufrufer (decideApplySensorSelectionAction unten, RunPersistenceCoordinator::
 // persistSensorSelection) rufen ausschliesslich diese Funktion fuer die
 // mechanische Anwendung einer bereits von applySensorSelectionDecision
 // getroffenen Entscheidung auf.
-void applySensorSelectionMutation(RunCommandState& state,
-                                  const SensorSelectionStateMutation& mutation) {
+void applySensorSelectionMutation(
+    RunCommandState& state, const SensorSelectionStateMutation& mutation) {
     state.sensorSelectionRuntime = mutation.runtime;
     state.activeRunSensorMode = mutation.activeMode;
     state.sensorSelection = mutation.persisted;
@@ -736,7 +742,8 @@ CommandDecision decideManualStart(const RunCommandState& current,
     // #21, 6.8: kein automatischer Ersatz bei manuellem Start - substituted
     // ist immer false. Ein produktgefuehrter Start mit ungueltigem Produkt
     // startet direkt in UserDecisionRequired (siehe
-    // startSensorSelectionOutcome), kein Wartetimer, keine StartSensorSelectionNotice.
+    // startSensorSelectionOutcome), kein Wartetimer, keine
+    // StartSensorSelectionNotice.
     const auto outcome = startSensorSelectionOutcome(
         request.plan.sensorMode, false, request.productSensorValid,
         request.airSensorValid, request.coolingSensorValid,
@@ -1117,7 +1124,8 @@ CommandDecision decideFaultReset(const RunCommandState& current,
 }
 
 CommandDecision decideApplySensorSelectionAction(
-    const RunCommandState& current, const SensorSelectionCommandRequest& request,
+    const RunCommandState& current,
+    const SensorSelectionCommandRequest& request,
     const CrossRolePlausibilityContext& plausibility) {
     auto decision = beginDecision(current, request.envelope,
                                   CommandKind::ApplySensorSelectionAction);
@@ -1133,7 +1141,8 @@ CommandDecision decideApplySensorSelectionAction(
         decision.status = CommandStatus::NotAllowedInState;
         return decision;
     }
-    if (current.activeRunId.empty() || !current.activeRunSensorMode.has_value()) {
+    if (current.activeRunId.empty() ||
+        !current.activeRunSensorMode.has_value()) {
         decision.status = CommandStatus::ContextMissing;
         return decision;
     }
@@ -1211,7 +1220,8 @@ CommandDecision decideApplySensorSelectionAction(
             if (decision.before.sensorSelectionRuntime.permission !=
                 mutation.runtime.permission) {
                 const auto effect =
-                    mutation.runtime.permission == SensorPeltierPermission::Blocked
+                    mutation.runtime.permission ==
+                            SensorPeltierPermission::Blocked
                         ? CommandEffect::SensorSelectionPermissionBlocked
                         : CommandEffect::SensorSelectionPermissionRestored;
                 static_cast<void>(addEffect(decision, effect));
@@ -1257,7 +1267,8 @@ CommandStatus applyRunCommand(RunCommandState& current,
         // dem alten Zustand basierenden Kommandoentscheidung stillschweigend
         // ueberschrieben - ein Sicherheits-Lock koennte verloren gehen. Gilt
         // fuer jeden CommandKind, nicht nur ApplySensorSelectionAction.
-        current.sensorSelectionRuntime != decision.before.sensorSelectionRuntime ||
+        current.sensorSelectionRuntime !=
+            decision.before.sensorSelectionRuntime ||
         current.sensorSelection != decision.before.sensorSelection ||
         decision.after.commandSequence != current.commandSequence + 1U) {
         return CommandStatus::StaleState;

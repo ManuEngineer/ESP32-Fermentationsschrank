@@ -61,6 +61,26 @@ Alle wesentlichen Aenderungen dieses Projekts werden hier dokumentiert.
 
 ### Added
 
+- Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik fuer Issue #21: eine
+  kanonische Entscheidungsfunktion (`sensor_selection.hpp`/`.cpp`) traegt den
+  vollstaendigen Zustandsautomaten (Produktausfallerkennung, Luft-
+  Ersatzbetrieb, manuelle und automatisch validierte Rueckkehr, Sicherheits-
+  Vorrangregel, Re-Arm-Schutz gegen unbegrenzte Wiederholung) fuer den
+  automatischen Coordinator-Pfad und den manuellen Kommandopfad
+  (`ApplySensorSelectionAction`) gleichermassen. Die vollstaendige
+  Startmatrix (elf Kombinationen aus Programmpraeferenz, angefordertem Modus
+  und Produktvaliditaet) sowie ein fest verdrahteter Vertrag fuer
+  produktgefuehrte manuelle Laeufe schliessen den Startpfad an; jeder aktive
+  Lauf traegt seinen Auswahlzustand ab dem Start durchgaengig, einschliesslich
+  Kuehl-Ersatzlaeufe nach Abbruch oder Abschluss. Persistenz nutzt Schema 2
+  mit vollstaendiger Schema-1-Abwaertskompatibilitaet (Restore fail-closed
+  auf Neubewertung-nach-Neustart, Aktivierung eines geladenen Laufs bleibt
+  einem spaeteren Vorhaben vorbehalten, siehe `docs/RUN_PERSISTENCE.md`).
+  Ein Architektur-/Compile-Guard (`scripts/check_architecture_boundaries.py`,
+  `test_sensor_selection_architecture_guard`) sichert die geplante
+  Include-Richtung und die kanonische Alleinstellung der
+  Entscheidungsfunktion dauerhaft ab.
+
 - Sensorqualitaet und Plausibilitaet fuer Issue #20, Slice 2: `SensorOffset`
   und ROM-gebundene `SensorCalibration` als gueltig-by-construction-Werte,
   heapfreier Medianfilter mit fester Kapazitaet und zeitbasierter Tiefpass

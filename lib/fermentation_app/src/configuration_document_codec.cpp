@@ -519,7 +519,8 @@ ConfigurationCodecStatus readProgramSchema(ByteReader& reader,
     if (candidate.schema.version == kMinimumMigratableProgramSchemaVersion) {
         knownFields = kSchema4RequiredProgramFields;
         requiredFields = kSchema4RequiredProgramFields;
-    } else if (candidate.schema.version == kProductWaitFieldIntroducedInSchema) {
+    } else if (candidate.schema.version ==
+               kProductWaitFieldIntroducedInSchema) {
         knownFields = kSchema5RequiredProgramFields;
         requiredFields = kSchema5RequiredProgramFields;
     } else if (candidate.schema.version == kCurrentProgramSchemaVersion) {
@@ -609,8 +610,8 @@ ConfigurationCodecStatus readProgram(ByteReader& reader, ProgramDocument& out) {
         return status;
     }
     auto& program = candidate.program;
-    status = readProgramIdentityAndFlags(reader, candidate.schema.version,
-                                         program);
+    status =
+        readProgramIdentityAndFlags(reader, candidate.schema.version, program);
     if (status == ConfigurationCodecStatus::Success) {
         status = readProgramStages(reader, program);
     }

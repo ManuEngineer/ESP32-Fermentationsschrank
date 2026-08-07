@@ -390,8 +390,8 @@ bool readDecisionCause(ByteReader& reader, SensorSelectionDecisionCause& out) {
             return false;
     }
 }
-bool writePersistedSensorSelectionState(ByteWriter& writer,
-                                        const PersistedSensorSelectionState& s) {
+bool writePersistedSensorSelectionState(
+    ByteWriter& writer, const PersistedSensorSelectionState& s) {
     return writeEnum(writer, s.provenance) &&
            writeEnum(writer, s.lastDecisionCause) &&
            be::writeUint32(writer, s.lastDecisionRunRevision);
@@ -704,7 +704,8 @@ RunPersistenceCodecStatus encodeRunPersistenceSnapshot(
               writeString(writer, snapshot.activeRunId);
     if (snapshot.variant != RunCheckpointVariant::NoActiveRun) {
         ok = ok && writeEnum(writer, *snapshot.activeRunSensorMode) &&
-             be::writeOptionalTag(writer, snapshot.sensorSelection.has_value()) &&
+             be::writeOptionalTag(writer,
+                                  snapshot.sensorSelection.has_value()) &&
              (!snapshot.sensorSelection.has_value() ||
               writePersistedSensorSelectionState(writer,
                                                  *snapshot.sensorSelection));
@@ -1009,8 +1010,8 @@ std::optional<std::string> encodeRunPersistenceHead(
     }
     if (!ok) return std::nullopt;
     device_platform::StorageEnvelope envelope{
-        kHeadRecordType, kCurrentRunPersistenceSchema, epoch,
-        head.revision,   std::nullopt,                payload.takeBytes()};
+        kHeadRecordType, kCurrentRunPersistenceSchema, epoch, head.revision,
+        std::nullopt,    payload.takeBytes()};
     std::string bytes;
     if (device_platform::encodeEnvelope(envelope, bytes,
                                         kMaximumHeadRecordBytes) !=

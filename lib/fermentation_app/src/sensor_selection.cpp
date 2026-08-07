@@ -59,10 +59,11 @@ bool thermalEvidenceStructurallyValid(const CrossRolePlausibilityContext& ctx) {
     return true;
 }
 
-// Korrekturauftrag Befund 5: Whitelist statt Blacklist. AbstractControlDirection
-// ist ein std::uint8_t-Enum ohne Bereichspruefung an der #22/#23-Grenze; ein
-// unbekannter Rohwert ist `!= Unknown`, muss aber trotzdem keine Rueckkehr
-// freigeben. Nur die drei bekannten Nicht-Unknown-Werte gelten als belastbar.
+// Korrekturauftrag Befund 5: Whitelist statt Blacklist.
+// AbstractControlDirection ist ein std::uint8_t-Enum ohne Bereichspruefung an
+// der #22/#23-Grenze; ein unbekannter Rohwert ist `!= Unknown`, muss aber
+// trotzdem keine Rueckkehr freigeben. Nur die drei bekannten
+// Nicht-Unknown-Werte gelten als belastbar.
 bool knownControlDirection(AbstractControlDirection direction) {
     switch (direction) {
         case AbstractControlDirection::Heating:
@@ -99,7 +100,8 @@ bool fullyPositiveReturnEvidence(const CrossRolePlausibilityContext& ctx,
 // ReturnValidationAborted).
 bool definitivelyIncompatible(const CrossRolePlausibilityContext& ctx) {
     return thermalEvidenceStructurallyValid(ctx) &&
-           ctx.thermalCompatibility.status == ThermalCompatibility::Incompatible;
+           ctx.thermalCompatibility.status ==
+               ThermalCompatibility::Incompatible;
 }
 
 // Bewusst konservative Strukturpruefung: deckt den in 9.2 explizit
@@ -120,7 +122,8 @@ bool validRuntimeCombination(const SensorSelectionRuntimeState& runtime) {
         runtime.phase == SensorSelectionPhase::ProductFailureDetected ||
         runtime.phase == SensorSelectionPhase::UserDecisionRequired ||
         runtime.phase == SensorSelectionPhase::RestartRevalidationPending;
-    if (mustBeBlocked && runtime.permission != SensorPeltierPermission::Blocked) {
+    if (mustBeBlocked &&
+        runtime.permission != SensorPeltierPermission::Blocked) {
         return false;
     }
     if (runtime.returnValidation.enteredAtMonotonicMillis.has_value() &&
@@ -173,7 +176,7 @@ Proposal reject(SensorSelectionApplyStatus status) {
 }
 
 SensorSelectionBlockReason fixedSensorBlockReason(bool airValid,
-                                                   bool coolingValid) {
+                                                  bool coolingValid) {
     if (!airValid && !coolingValid) {
         return SensorSelectionBlockReason::SimultaneousFixedSensorFailure;
     }
@@ -187,7 +190,8 @@ SensorSelectionBlockReason fixedSensorBlockReason(bool airValid,
 // wieder Allowed werden darf. AirFallbackActive/NormalAir sind davon bewusst
 // nicht betroffen (dort ist Allowed bei ungueltigem Produkt weiterhin
 // zulaessig, 6.4.12).
-bool productReturnEligible(bool productValid, bool airValid, bool coolingValid) {
+bool productReturnEligible(bool productValid, bool airValid,
+                           bool coolingValid) {
     return productValid && airValid && coolingValid;
 }
 
@@ -201,6 +205,18 @@ bool productReturnEligible(bool productValid, bool airValid, bool coolingValid) 
 // Zukunfts-Zeitstempel-Pruefung gilt dagegen unabhaengig vom Status.
 bool thermalEvidenceMalformed(const CrossRolePlausibilityContext& ctx) {
     return !thermalEvidenceStructurallyValid(ctx);
+}
+
+// Korrekturauftrag Befund 2 (DRY, Commit-6-Review): gemeinsame Ausnahme fuer
+// die vorgezogene Air-/Cooling-Sicherheitsreaktion in
+// evaluateProductFailureDetected/evaluateUserDecisionRequired/
+// evaluateAirFallbackActive - ContinueWithAir bleibt in allen drei
+// Funktionen eine reine Ablehnung statt einer durch den Vorrang
+// "aufgewerteten" persistenzwuerdigen Mutation (6.4.14-Matrix).
+bool isContinueWithAirAction(
+    const std::optional<SensorSelectionUserAction>& action) {
+    return action.has_value() &&
+           *action == SensorSelectionUserAction::ContinueWithAir;
 }
 
 // 6.4.1 NormalProduct: Permission verlangt alle drei Rollen gueltig. Ein
@@ -248,15 +264,18 @@ Proposal evaluateNormalProduct(const SensorSelectionStateView& current,
         }
         proposal.runtime.permission = SensorPeltierPermission::Blocked;
         proposal.cause = SensorSelectionDecisionCause::ProductFailureBlock;
-        proposal.blockReason = SensorSelectionBlockReason::ProductSensorUnusable;
+        proposal.blockReason =
+            SensorSelectionBlockReason::ProductSensorUnusable;
         if (decision.program.policy ==
             ProductSensorFailurePolicy::WaitForUser) {
             // 6.4.10-Korrektur: keine Wartezeit fuer WaitForUser - sofortiger
             // fluechtiger Uebergang im selben Bewertungszyklus.
             proposal.runtime.phase = SensorSelectionPhase::UserDecisionRequired;
-            proposal.runtime.fallbackWaitStartedAtMonotonicMillis = std::nullopt;
+            proposal.runtime.fallbackWaitStartedAtMonotonicMillis =
+                std::nullopt;
         } else {
-            proposal.runtime.phase = SensorSelectionPhase::ProductFailureDetected;
+            proposal.runtime.phase =
+                SensorSelectionPhase::ProductFailureDetected;
             proposal.runtime.fallbackWaitStartedAtMonotonicMillis = now;
         }
         return proposal;
@@ -267,7 +286,8 @@ Proposal evaluateNormalProduct(const SensorSelectionStateView& current,
         if (current.runtime.permission == SensorPeltierPermission::Allowed) {
             proposal.runtime.permission = SensorPeltierPermission::Blocked;
             proposal.cause = SensorSelectionDecisionCause::ProductFailureBlock;
-            proposal.blockReason = fixedSensorBlockReason(airValid, coolingValid);
+            proposal.blockReason =
+                fixedSensorBlockReason(airValid, coolingValid);
         }
         return proposal;
     }
@@ -300,21 +320,22 @@ Proposal evaluateNormalAir(const SensorSelectionStateView& current,
     proposal.activeMode = current.activeMode;
 
     const bool allValid = airValid && coolingValid;
-    if (!allValid && current.runtime.permission == SensorPeltierPermission::Allowed) {
+    if (!allValid &&
+        current.runtime.permission == SensorPeltierPermission::Allowed) {
         proposal.runtime.permission = SensorPeltierPermission::Blocked;
         proposal.cause = SensorSelectionDecisionCause::ProductFailureBlock;
         proposal.blockReason = fixedSensorBlockReason(airValid, coolingValid);
     } else if (allValid &&
-              current.runtime.permission == SensorPeltierPermission::Blocked) {
+               current.runtime.permission == SensorPeltierPermission::Blocked) {
         proposal.runtime.permission = SensorPeltierPermission::Allowed;
         proposal.cause = SensorSelectionDecisionCause::RecoveryRevalidation;
     }
     return proposal;
 }
 
-Proposal continueWithAirFromProductPhase(const SensorSelectionStateView& current,
-                                         const SensorSelectionDecision& decision,
-                                         bool airValid, bool coolingValid) {
+Proposal continueWithAirFromProductPhase(
+    const SensorSelectionStateView& current,
+    const SensorSelectionDecision& decision, bool airValid, bool coolingValid) {
     const bool allowed =
         decision.program.sensorPreference != SensorPreference::ProductRequired;
     if (!allowed || !airValid || !coolingValid) {
@@ -358,9 +379,7 @@ Proposal evaluateProductFailureDetected(const SensorSelectionStateView& current,
     // InvalidInput, keine Mutation) - continueWithAirFromProductPhase lehnt
     // diesen Fall selbst ab; ein SafeLocked-Uebergang wuerde die geplante
     // Ablehnung in eine persistenzwuerdige Mutation verwandeln.
-    const bool isContinueWithAir =
-        decision.userAction.has_value() &&
-        *decision.userAction == SensorSelectionUserAction::ContinueWithAir;
+    const bool isContinueWithAir = isContinueWithAirAction(decision.userAction);
     if (!isContinueWithAir && !airValid && !coolingValid) {
         proposal.runtime.phase = SensorSelectionPhase::SafeLocked;
         proposal.runtime.permission = SensorPeltierPermission::Blocked;
@@ -374,8 +393,8 @@ Proposal evaluateProductFailureDetected(const SensorSelectionStateView& current,
     if (decision.userAction.has_value()) {
         switch (*decision.userAction) {
             case SensorSelectionUserAction::ContinueWithAir:
-                return continueWithAirFromProductPhase(current, decision, airValid,
-                                                       coolingValid);
+                return continueWithAirFromProductPhase(current, decision,
+                                                       airValid, coolingValid);
             case SensorSelectionUserAction::RecheckProduct:
                 if (!productValid) {
                     return proposal;  // weiterhin ungueltig -> NoChange
@@ -384,12 +403,16 @@ Proposal evaluateProductFailureDetected(const SensorSelectionStateView& current,
                 // NormalProduct, solange nicht Product, Air UND Cooling
                 // gueltig sind - ein einzelner Air-/Cooling-Ausfall haelt die
                 // Phase, statt blind Allowed zu vergeben.
-                if (productReturnEligible(productValid, airValid, coolingValid)) {
-                    proposal.runtime.phase = SensorSelectionPhase::NormalProduct;
-                    proposal.runtime.permission = SensorPeltierPermission::Allowed;
+                if (productReturnEligible(productValid, airValid,
+                                          coolingValid)) {
+                    proposal.runtime.phase =
+                        SensorSelectionPhase::NormalProduct;
+                    proposal.runtime.permission =
+                        SensorPeltierPermission::Allowed;
                     proposal.runtime.fallbackWaitStartedAtMonotonicMillis =
                         std::nullopt;
-                    proposal.cause = SensorSelectionDecisionCause::RecoveryRevalidation;
+                    proposal.cause =
+                        SensorSelectionDecisionCause::RecoveryRevalidation;
                 }
                 return proposal;
             case SensorSelectionUserAction::ReturnToProduct:
@@ -401,7 +424,8 @@ Proposal evaluateProductFailureDetected(const SensorSelectionStateView& current,
         if (productReturnEligible(productValid, airValid, coolingValid)) {
             proposal.runtime.phase = SensorSelectionPhase::NormalProduct;
             proposal.runtime.permission = SensorPeltierPermission::Allowed;
-            proposal.runtime.fallbackWaitStartedAtMonotonicMillis = std::nullopt;
+            proposal.runtime.fallbackWaitStartedAtMonotonicMillis =
+                std::nullopt;
             proposal.cause = SensorSelectionDecisionCause::RecoveryRevalidation;
         }
         // Produkt valide, aber Air/Cooling (einzeln) noch nicht: bleibt
@@ -411,7 +435,8 @@ Proposal evaluateProductFailureDetected(const SensorSelectionStateView& current,
         return proposal;
     }
 
-    if (decision.program.policy != ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
+    if (decision.program.policy !=
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
         // WaitForUser/StopToSafeState erreichen diesen Zweig strukturell nie
         // (siehe evaluateNormalProduct); fail-closed statt stille Annahme.
         return reject(SensorSelectionApplyStatus::InvalidContext);
@@ -472,9 +497,7 @@ Proposal evaluateUserDecisionRequired(const SensorSelectionStateView& current,
     // ContinueWithAir bleibt ausgenommen (6.4.14-Matrix: "ContinueWithAir
     // ohne gueltiges Air/Cooling" -> CommandStatus::InvalidInput, keine
     // Mutation) - continueWithAirFromProductPhase lehnt diesen Fall selbst ab.
-    const bool isContinueWithAir =
-        decision.userAction.has_value() &&
-        *decision.userAction == SensorSelectionUserAction::ContinueWithAir;
+    const bool isContinueWithAir = isContinueWithAirAction(decision.userAction);
     if (!isContinueWithAir && (!airValid || !coolingValid)) {
         proposal.runtime.phase = SensorSelectionPhase::SafeLocked;
         proposal.runtime.permission = SensorPeltierPermission::Blocked;
@@ -486,13 +509,16 @@ Proposal evaluateUserDecisionRequired(const SensorSelectionStateView& current,
     if (decision.userAction.has_value()) {
         switch (*decision.userAction) {
             case SensorSelectionUserAction::ContinueWithAir:
-                return continueWithAirFromProductPhase(current, decision, airValid,
-                                                       coolingValid);
+                return continueWithAirFromProductPhase(current, decision,
+                                                       airValid, coolingValid);
             case SensorSelectionUserAction::RecheckProduct:
                 if (productValid) {
-                    proposal.runtime.phase = SensorSelectionPhase::NormalProduct;
-                    proposal.runtime.permission = SensorPeltierPermission::Allowed;
-                    proposal.cause = SensorSelectionDecisionCause::RecoveryRevalidation;
+                    proposal.runtime.phase =
+                        SensorSelectionPhase::NormalProduct;
+                    proposal.runtime.permission =
+                        SensorPeltierPermission::Allowed;
+                    proposal.cause =
+                        SensorSelectionDecisionCause::RecoveryRevalidation;
                 }
                 return proposal;
             case SensorSelectionUserAction::ReturnToProduct:
@@ -532,9 +558,7 @@ Proposal evaluateAirFallbackActive(const SensorSelectionStateView& current,
     // (bereits im Luftmodus) und bleibt deshalb unabhaengig von Air/Cooling
     // eine reine Ablehnung ohne Mutation statt einer durch den Vorrang
     // "upgegradeten" SafeLocked-Persistenz.
-    const bool isContinueWithAir =
-        decision.userAction.has_value() &&
-        *decision.userAction == SensorSelectionUserAction::ContinueWithAir;
+    const bool isContinueWithAir = isContinueWithAirAction(decision.userAction);
     if (!isContinueWithAir && (!airValid || !coolingValid)) {
         proposal.runtime.phase = SensorSelectionPhase::SafeLocked;
         proposal.runtime.permission = SensorPeltierPermission::Blocked;
@@ -557,7 +581,8 @@ Proposal evaluateAirFallbackActive(const SensorSelectionStateView& current,
                 }
                 proposal.runtime.phase = SensorSelectionPhase::NormalProduct;
                 proposal.runtime.permission = SensorPeltierPermission::Allowed;
-                proposal.runtime.returnValidation = ReturnValidationRuntimeState{};
+                proposal.runtime.returnValidation =
+                    ReturnValidationRuntimeState{};
                 proposal.runtime.productReArmPending = false;
                 proposal.activeMode = RunSensorMode::Product;
                 proposal.cause = SensorSelectionDecisionCause::ManualUserReturn;
@@ -569,7 +594,8 @@ Proposal evaluateAirFallbackActive(const SensorSelectionStateView& current,
                 }
                 if (decision.program.returnStrategy !=
                     ReturnStrategy::AutomaticValidatedReturnToProduct) {
-                    return proposal;  // keine automatische Strategie -> NoChange
+                    return proposal;  // keine automatische Strategie ->
+                                      // NoChange
                 }
                 // Korrekturauftrag Befund 6: strukturell ungueltige Evidenz
                 // blockiert nur diesen Rueckkehrversuch (InvalidContext),
@@ -579,8 +605,10 @@ Proposal evaluateAirFallbackActive(const SensorSelectionStateView& current,
                 }
                 if (fullyPositiveReturnEvidence(ctx, productValid, airValid,
                                                 coolingValid)) {
-                    proposal.runtime.phase = SensorSelectionPhase::NormalProduct;
-                    proposal.runtime.permission = SensorPeltierPermission::Allowed;
+                    proposal.runtime.phase =
+                        SensorSelectionPhase::NormalProduct;
+                    proposal.runtime.permission =
+                        SensorPeltierPermission::Allowed;
                     proposal.runtime.returnValidation =
                         ReturnValidationRuntimeState{};
                     proposal.runtime.productReArmPending = false;
@@ -590,11 +618,14 @@ Proposal evaluateAirFallbackActive(const SensorSelectionStateView& current,
                     return proposal;
                 }
                 if (definitivelyIncompatible(ctx)) {
-                    return proposal;  // bekannt inkompatibel -> keine neue Chance
+                    return proposal;  // bekannt inkompatibel -> keine neue
+                                      // Chance
                 }
                 // 6.4.12-Sonderfall: unvollstaendige/Unavailable/Stale-Evidenz.
-                proposal.runtime.phase = SensorSelectionPhase::ReturnValidationPending;
-                proposal.runtime.returnValidation.enteredAtMonotonicMillis = now;
+                proposal.runtime.phase =
+                    SensorSelectionPhase::ReturnValidationPending;
+                proposal.runtime.returnValidation.enteredAtMonotonicMillis =
+                    now;
                 proposal.runtime.returnValidation.lastObservedProfileRevision =
                     ctx.thermalCompatibility.profileRevision;
                 return proposal;  // AppliedRamOnly
@@ -631,7 +662,8 @@ Proposal evaluateAirFallbackActive(const SensorSelectionStateView& current,
             if (thermalEvidenceMalformed(ctx)) {
                 return reject(SensorSelectionApplyStatus::InvalidContext);
             }
-            proposal.runtime.phase = SensorSelectionPhase::ReturnValidationPending;
+            proposal.runtime.phase =
+                SensorSelectionPhase::ReturnValidationPending;
             proposal.runtime.returnValidation.enteredAtMonotonicMillis = now;
             proposal.runtime.returnValidation.lastObservedProfileRevision =
                 ctx.thermalCompatibility.profileRevision;
@@ -645,9 +677,9 @@ Proposal evaluateAirFallbackActive(const SensorSelectionStateView& current,
 // (Allowed, solange Air/Cooling gueltig). Einzelner Air-/Cooling-Ausfall
 // gewinnt per Vorrangregel gegenueber einem gleichzeitig moeglichen Abbruch
 // (c vor d).
-Proposal evaluateReturnValidationPending(const SensorSelectionStateView& current,
-                                         const SensorSelectionDecision& decision,
-                                         std::uint64_t /*now*/) {
+Proposal evaluateReturnValidationPending(
+    const SensorSelectionStateView& current,
+    const SensorSelectionDecision& decision, std::uint64_t /*now*/) {
     if (decision.userAction.has_value()) {
         return reject(SensorSelectionApplyStatus::InvalidDecision);
     }
@@ -674,7 +706,8 @@ Proposal evaluateReturnValidationPending(const SensorSelectionStateView& current
         proposal.runtime.phase = SensorSelectionPhase::AirFallbackActive;
         // lastObservedProfileRevision bleibt erhalten (Re-Arm-Grundlage,
         // 6.4.12); nur der Eintrittszeitstempel wird verworfen.
-        proposal.runtime.returnValidation.enteredAtMonotonicMillis = std::nullopt;
+        proposal.runtime.returnValidation.enteredAtMonotonicMillis =
+            std::nullopt;
         // Korrekturauftrag Befund 3: nur ein tatsaechlicher Produktausfall
         // markiert die Re-Arm-Bedingung (iii) - ein Abbruch allein wegen
         // Incompatible-Evidenz bei weiterhin validem Produkt tut das nicht.
@@ -692,7 +725,8 @@ Proposal evaluateReturnValidationPending(const SensorSelectionStateView& current
         return reject(SensorSelectionApplyStatus::InvalidContext);
     }
 
-    if (fullyPositiveReturnEvidence(ctx, productValid, airValid, coolingValid)) {
+    if (fullyPositiveReturnEvidence(ctx, productValid, airValid,
+                                    coolingValid)) {
         proposal.runtime.phase = SensorSelectionPhase::NormalProduct;
         proposal.runtime.permission = SensorPeltierPermission::Allowed;
         proposal.runtime.returnValidation = ReturnValidationRuntimeState{};
@@ -770,7 +804,8 @@ SensorSelectionStateMutation applySensorSelectionDecision(
         return rejected(SensorSelectionApplyStatus::TimeWentBackwards);
     }
 
-    const Proposal proposal = evaluatePhase(current, decision, nowMonotonicMillis);
+    const Proposal proposal =
+        evaluatePhase(current, decision, nowMonotonicMillis);
     if (proposal.rejected) {
         return rejected(proposal.rejectionStatus);
     }
@@ -835,13 +870,13 @@ SensorSelectionStateMutation applySensorSelectionDecision(
         // Werte ist strukturell unmoeglich (jeder aktive Lauf traegt einen
         // Modus), aber ein Automat verlaesst sich dafuer nicht auf eine
         // fremde Invariante - fail-closed statt UB.
-        if (!current.activeMode.has_value() || !proposal.activeMode.has_value()) {
+        if (!current.activeMode.has_value() ||
+            !proposal.activeMode.has_value()) {
             return rejected(SensorSelectionApplyStatus::InvalidDecision);
         }
         mutation.event = SensorSelectionEvent{
-            *current.activeMode,       *proposal.activeMode,
-            proposal.cause,            mutation.resultingRunRevision,
-            nowMonotonicMillis,        std::nullopt};
+            *current.activeMode,           *proposal.activeMode, proposal.cause,
+            mutation.resultingRunRevision, nowMonotonicMillis,   std::nullopt};
     } else {
         mutation.notice = SensorSelectionNotice{
             proposal.cause, nowMonotonicMillis, mutation.resultingRunRevision,
@@ -853,7 +888,8 @@ SensorSelectionStateMutation applySensorSelectionDecision(
 }
 
 RestartSensorSelectionRecommendation computeRestartSensorSelection(
-    const PersistedSensorSelectionState& persisted, RunSensorMode lastActiveMode,
+    const PersistedSensorSelectionState& persisted,
+    RunSensorMode lastActiveMode,
     const SensorSelectionProgramContext& program) {
     // Reine Datenaufbereitung fuer #18: die tatsaechliche Reaktivierung
     // (LoadedActiveRun -> Ready) bleibt vollstaendig #18 vorbehalten (6.12.3).
@@ -863,7 +899,8 @@ RestartSensorSelectionRecommendation computeRestartSensorSelection(
     static_cast<void>(persisted);
     static_cast<void>(program);
     RestartSensorSelectionRecommendation recommendation;
-    recommendation.runtime.phase = SensorSelectionPhase::RestartRevalidationPending;
+    recommendation.runtime.phase =
+        SensorSelectionPhase::RestartRevalidationPending;
     recommendation.runtime.permission = SensorPeltierPermission::Blocked;
     recommendation.activeMode = lastActiveMode;
     return recommendation;

@@ -74,8 +74,7 @@ struct SensorSelectionRuntimeState {
     return lhs.phase == rhs.phase && lhs.permission == rhs.permission &&
            lhs.fallbackWaitStartedAtMonotonicMillis ==
                rhs.fallbackWaitStartedAtMonotonicMillis &&
-           lhs.lastAppliedMonotonicMillis ==
-               rhs.lastAppliedMonotonicMillis &&
+           lhs.lastAppliedMonotonicMillis == rhs.lastAppliedMonotonicMillis &&
            lhs.returnValidation == rhs.returnValidation &&
            lhs.productReArmPending == rhs.productReArmPending;
 }

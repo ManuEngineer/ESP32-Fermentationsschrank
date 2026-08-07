@@ -69,14 +69,19 @@ void test_program_checkpoint_round_trip_restores_active_run() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(source, encoded)));
-    assertGolden(
-        encoded,
-        "01010000000000000064000500000001000e636865636b706f696e742d72756e01010102000000"
-        "010000000101005d00000006000000000001ffff000b77617465722d6b65666972000b57617373"
-        "65726b656669720000010101010101000201010000001e03010140430000000000000100000078"
-        "013fe0000000000000010000000a01000000b400010000000100010000000a000000b400010000"
-        "0078000600000000000000000000000000000000000000000000010000000000000063");
-    const auto decoded = decodeRunPersistenceSnapshot(encoded, kCurrentRunPersistenceSchema);
+    assertGolden(encoded,
+                 "01010000000000000064000500000001000e636865636b706f696e742d727"
+                 "56e01010102000000"
+                 "010000000101005d00000006000000000001ffff000b77617465722d6b656"
+                 "66972000b57617373"
+                 "65726b656669720000010101010101000201010000001e030101404300000"
+                 "00000000100000078"
+                 "013fe0000000000000010000000a01000000b400010000000100010000000"
+                 "a000000b400010000"
+                 "0078000600000000000000000000000000000000000000000000010000000"
+                 "000000063");
+    const auto decoded =
+        decodeRunPersistenceSnapshot(encoded, kCurrentRunPersistenceSchema);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
                           static_cast<int>(decoded.status));
     TEST_ASSERT_TRUE(decoded.snapshot.has_value());
@@ -127,7 +132,8 @@ void test_projection_rejects_inconsistent_aggregate_instead_of_prioritizing() {
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(valid, bytes)));
     bytes[0] = '\0';
-    const auto invalidWire = decodeRunPersistenceSnapshot(bytes, kCurrentRunPersistenceSchema);
+    const auto invalidWire =
+        decodeRunPersistenceSnapshot(bytes, kCurrentRunPersistenceSchema);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::InvalidWireValue),
         static_cast<int>(invalidWire.status));
@@ -167,11 +173,15 @@ void test_manual_completed_round_trip_is_a_valid_run_projection() {
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(*snapshot, bytes)));
     assertGolden(bytes,
-                 "0202000000000000006400050000000100116d616e75616c2d636865636b706f696e74020101"
-                 "020000000140280000000000000200003fe00000000000000000000a000000b4010000000000"
-                 "00000a020200010000000a000000b40000000c00000000000000640000000000000000000000"
+                 "0202000000000000006400050000000100116d616e75616c2d636865636b7"
+                 "06f696e74020101"
+                 "020000000140280000000000000200003fe00000000000000000000a00000"
+                 "0b4010000000000"
+                 "00000a020200010000000a000000b40000000c00000000000000640000000"
+                 "000000000000000"
                  "00000000");
-    const auto decoded = decodeRunPersistenceSnapshot(bytes, kCurrentRunPersistenceSchema);
+    const auto decoded =
+        decodeRunPersistenceSnapshot(bytes, kCurrentRunPersistenceSchema);
     TEST_ASSERT_TRUE(decoded.snapshot.has_value());
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(ProcessState::Completed),
@@ -291,13 +301,16 @@ void test_prepared_head_binds_full_transaction_contract() {
     const auto encoded =
         encodeRunPersistenceHead(prepared, device_platform::StorageEpoch(9U));
     TEST_ASSERT_TRUE(encoded.has_value());
-    assertGolden(
-        *encoded,
-        "4450524600010008000000020000000000000009000000000000001400000077004b4c6c7c01"
-        "0100000000010000000000000009000000000000000a0000000b0000000c0101010000000100"
-        "0000000000000900000000000000090000000800000007030100000001000000000000000900"
-        "0000000000000b0000000d0000000e0301010000000000000058000000040000000500000006"
-        "00000007");
+    assertGolden(*encoded,
+                 "4450524600010008000000020000000000000009000000000000001400000"
+                 "077004b4c6c7c01"
+                 "0100000000010000000000000009000000000000000a0000000b0000000c0"
+                 "101010000000100"
+                 "0000000000000900000000000000090000000800000007030100000001000"
+                 "000000000000900"
+                 "0000000000000b0000000d0000000e0301010000000000000058000000040"
+                 "000000500000006"
+                 "00000007");
     const auto decoded =
         decodeRunPersistenceHead(*encoded, device_platform::StorageEpoch(9U));
     TEST_ASSERT_TRUE(decoded.has_value());
@@ -387,11 +400,12 @@ void test_head_reference_and_mutation_invariants_reject_invalid_contracts() {
     const auto committedGolden = encodeRunPersistenceHead(
         activeWithTombstoneFallback, device_platform::StorageEpoch(9U));
     TEST_ASSERT_TRUE(committedGolden.has_value());
-    assertGolden(
-        *committedGolden,
-        "445052460001000800000002000000000000000900000000000000160000003e007a5213fe02"
-        "00000000010000000000000009000000000000000a0000000b0000000c010101000000010000"
-        "0000000000090000000000000009000000080000000703");
+    assertGolden(*committedGolden,
+                 "4450524600010008000000020000000000000009000000000000001600000"
+                 "03e007a5213fe02"
+                 "00000000010000000000000009000000000000000a0000000b0000000c010"
+                 "101000000010000"
+                 "0000000000090000000000000009000000080000000703");
 
     committed.fallback = current;
     TEST_ASSERT_FALSE(
@@ -408,8 +422,8 @@ void test_payload_bounds_and_truncation_are_strict() {
     const std::array<std::size_t, 4U> cuts{0U, 1U, encoded.size() / 2U,
                                            encoded.size() - 1U};
     for (const std::size_t cut : cuts) {
-        const auto truncated =
-            decodeRunPersistenceSnapshot(encoded.substr(0U, cut), kCurrentRunPersistenceSchema);
+        const auto truncated = decodeRunPersistenceSnapshot(
+            encoded.substr(0U, cut), kCurrentRunPersistenceSchema);
         TEST_ASSERT_NOT_EQUAL(
             static_cast<int>(RunPersistenceCodecStatus::Success),
             static_cast<int>(truncated.status));
@@ -418,7 +432,9 @@ void test_payload_bounds_and_truncation_are_strict() {
     withTrailing.push_back('\0');
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::TrailingBytes),
-        static_cast<int>(decodeRunPersistenceSnapshot(withTrailing, kCurrentRunPersistenceSchema).status));
+        static_cast<int>(decodeRunPersistenceSnapshot(
+                             withTrailing, kCurrentRunPersistenceSchema)
+                             .status));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::InvalidWireValue),
         static_cast<int>(
@@ -441,11 +457,16 @@ void test_payload_bounds_and_truncation_are_strict() {
 // read the field at all.
 void test_schema_one_payload_decodes_without_sensor_selection_field() {
     const auto schemaOnePayload = bytesFromHex(
-        "01010000000000000064000500000000000e636865636b706f696e742d72756e0100000001"
-        "01005d00000006000000000001ffff000b77617465722d6b65666972000b5761737365726b"
-        "656669720000010101010101000201010000001e0301014043000000000000010000007801"
-        "3fe0000000000000010000000a01000000b400010000000100010000000a000000b4000100"
-        "000078000600000000000000000000000000000000000000000000010000000000000063");
+        "01010000000000000064000500000000000e636865636b706f696e742d72756e010000"
+        "0001"
+        "01005d00000006000000000001ffff000b77617465722d6b65666972000b5761737365"
+        "726b"
+        "656669720000010101010101000201010000001e030101404300000000000001000000"
+        "7801"
+        "3fe0000000000000010000000a01000000b400010000000100010000000a000000b400"
+        "0100"
+        "0000780006000000000000000000000000000000000000000000000100000000000000"
+        "63");
     const auto decoded = decodeRunPersistenceSnapshot(schemaOnePayload, 1U);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
                           static_cast<int>(decoded.status));
@@ -468,8 +489,8 @@ void test_schema_one_payload_decodes_without_sensor_selection_field() {
     // Decoding the identical bytes as schema 2 misreads the following field
     // boundary (there is no presence tag at this offset in a schema-1
     // payload) and must not silently succeed with the wrong shape.
-    const auto misread =
-        decodeRunPersistenceSnapshot(schemaOnePayload, kCurrentRunPersistenceSchema);
+    const auto misread = decodeRunPersistenceSnapshot(
+        schemaOnePayload, kCurrentRunPersistenceSchema);
     TEST_ASSERT_NOT_EQUAL(static_cast<int>(RunPersistenceCodecStatus::Success),
                           static_cast<int>(misread.status));
 }
@@ -513,8 +534,8 @@ void test_committed_head_accepts_mixed_current_and_fallback_schema() {
     committed.state = RunPersistenceHeadState::Committed;
     committed.revision = 6U;
     committed.current = RunCheckpointReference{
-        0U, kCurrentRunPersistenceSchema, 9U,
-        11U, 13U, 14U, RunCheckpointVariant::ProgramRun};
+        0U,  kCurrentRunPersistenceSchema,    9U, 11U, 13U,
+        14U, RunCheckpointVariant::ProgramRun};
     committed.fallback = RunCheckpointReference{
         1U, 1U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
     const auto encoded = encodeRunPersistenceHead(committed, epoch);
@@ -543,7 +564,8 @@ int main(int, char**) {
     RUN_TEST(test_manual_snapshot_and_runtime_shape_must_be_canonical);
     RUN_TEST(test_sensor_selection_cross_field_invariants_are_enforced);
     RUN_TEST(test_schema_one_payload_decodes_without_sensor_selection_field);
-    RUN_TEST(test_head_reference_accepts_known_schemas_and_rejects_unknown_ones);
+    RUN_TEST(
+        test_head_reference_accepts_known_schemas_and_rejects_unknown_ones);
     RUN_TEST(test_committed_head_accepts_mixed_current_and_fallback_schema);
     return UNITY_END();
 }

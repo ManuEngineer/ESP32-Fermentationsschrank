@@ -80,6 +80,13 @@ Dabei gilt:
 
 Die Wartezeit bleibt `TBD_COMMISSIONING`.
 
+Die vollstaendige Auswahl-, Ersatzbetriebs- und Rueckkehrlogik (alle drei
+Strategien, gleichzeitiger Schrankluft-/Kuehlkoerperausfall, manuelle
+Aktionen) ist Issue #21. Was davon nach einem Neustart bereits vorliegt und
+was fuer die tatsaechliche Reaktivierung eines geladenen aktiven Laufs noch
+fehlt, steht in `docs/RUN_PERSISTENCE.md`, Abschnitt "Uebergabe an ein
+spaeteres Vorhaben: Regelsensorauswahl bei Reaktivierung".
+
 ## Maximale Wartezeit nach dem Vorheizen
 
 `WAITING_FOR_PRODUCT` besitzt eine programmspezifische Maximalzeit.

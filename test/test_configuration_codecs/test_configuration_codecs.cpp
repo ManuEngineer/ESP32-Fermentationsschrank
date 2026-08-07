@@ -223,8 +223,8 @@ std::string schemaFourCatalogFixture(const std::string& current) {
 
     std::string legacy = current;
     for (const auto offset : schemas) {
-        legacy[offset + 3U] =
-            static_cast<char>(fermentation::kMinimumMigratableProgramSchemaVersion);
+        legacy[offset + 3U] = static_cast<char>(
+            fermentation::kMinimumMigratableProgramSchemaVersion);
     }
     for (const auto offset : masks) {
         const auto mask = fermentation::kSchema4RequiredProgramFields;
@@ -469,12 +469,18 @@ void test_program_catalog_factory_payload_has_fixed_golden_bytes() {
         fermentation::encodeProgramCatalogPayload(catalog, encoded) ==
         ConfigurationCodecStatus::Success);
     const auto expected = bytesFromHex(
-        "0400000006000000000001ffff000b796f677572742d6d696c64000c4a6f6768757274206d"
-        "696c64000001010101010101010100030100000000000004000000000006000000000001ff"
-        "ff000b796f677572742d6669726d00114a6f67687572742073746963686665737400000101"
-        "0101010101010100030100000000000004000000000006000000000001ffff000a6d696c6b"
-        "2d6b65666972000a4d696c63686b6566697200000101010101010002010003010000000000"
-        "0004000000000006000000000001ffff000b77617465722d6b65666972000b576173736572"
+        "0400000006000000000001ffff000b796f677572742d6d696c64000c4a6f6768757274"
+        "206d"
+        "696c640000010101010101010101000301000000000000040000000000060000000000"
+        "01ff"
+        "ff000b796f677572742d6669726d00114a6f6768757274207374696368666573740000"
+        "0101"
+        "0101010101010100030100000000000004000000000006000000000001ffff000a6d69"
+        "6c6b"
+        "2d6b65666972000a4d696c63686b656669720000010101010101000201000301000000"
+        "0000"
+        "0004000000000006000000000001ffff000b77617465722d6b65666972000b57617373"
+        "6572"
         "6b656669720000010101010101000201000301000000000000010000");
     TEST_ASSERT_EQUAL_UINT32(expected.size(), encoded.size());
     TEST_ASSERT_EQUAL_MEMORY(expected.data(), encoded.data(), expected.size());
@@ -562,10 +568,10 @@ void test_schema_four_programs_migrate_to_schema_five_deterministically() {
     const auto legacy = schemaFourCatalogFixture(current);
     // Zwei entfernte Einzelbytes je Programm: returnStrategy (seit Schema 6)
     // und der optional-Tag von maximumProductWaitMinutes (seit Schema 5).
-    TEST_ASSERT_TRUE(legacy.size() +
-                         2U * fermentation::configuration_limits::
-                                  kFactoryProgramCount ==
-                     current.size());
+    TEST_ASSERT_TRUE(
+        legacy.size() +
+            2U * fermentation::configuration_limits::kFactoryProgramCount ==
+        current.size());
     const auto decoded = fermentation::decodeProgramCatalogPayload(1U, legacy);
     TEST_ASSERT_TRUE(decoded.status == ConfigurationCodecStatus::Success);
     for (const auto& document : decoded.document->programs) {
@@ -713,7 +719,8 @@ void test_large_catalog_decode_does_not_materialize_a_second_full_catalog() {
 void test_large_catalog_copy_migration_keeps_only_source_and_candidate() {
     auto source = largeCatalog();
     for (auto& document : source.programs) {
-        document.schema.version = fermentation::kMinimumMigratableProgramSchemaVersion;
+        document.schema.version =
+            fermentation::kMinimumMigratableProgramSchemaVersion;
         document.schema.presentFields =
             fermentation::kSchema4RequiredProgramFields;
         document.program.maximumProductWaitMinutes.reset();

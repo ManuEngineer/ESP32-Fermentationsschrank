@@ -286,8 +286,7 @@ void test_load_empty_then_commit_and_restore_run_projection() {
     TEST_ASSERT_FALSE(runtime->sensorSelectionRuntime
                           .fallbackWaitStartedAtMonotonicMillis.has_value());
     TEST_ASSERT_FALSE(
-        runtime->sensorSelectionRuntime.lastAppliedMonotonicMillis
-            .has_value());
+        runtime->sensorSelectionRuntime.lastAppliedMonotonicMillis.has_value());
 }
 
 void test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe() {
@@ -1799,8 +1798,9 @@ void test_product_inserted_commits_before_advancing_and_restores() {
     const auto insertedEnvelope =
         device_platform::decodeEnvelope(insertedRecord.value);
     TEST_ASSERT_TRUE(insertedEnvelope.envelope.has_value());
-    const auto insertedSnapshot = decodeRunPersistenceSnapshot(
-        insertedEnvelope.envelope->payload, insertedEnvelope.envelope->schemaVersion);
+    const auto insertedSnapshot =
+        decodeRunPersistenceSnapshot(insertedEnvelope.envelope->payload,
+                                     insertedEnvelope.envelope->schemaVersion);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
                           static_cast<int>(insertedSnapshot.status));
     TEST_ASSERT_EQUAL_INT(
@@ -2248,9 +2248,12 @@ SensorSelectionStateMutation modeChangeMutation(
     mutation.persisted = PersistedSensorSelectionState{
         SensorSelectionProvenance::InitialSelection, cause,
         mutation.resultingRunRevision};
-    mutation.event = SensorSelectionEvent{
-        *state.activeRunSensorMode, newMode,           cause,
-        mutation.resultingRunRevision, nowMonotonicMillis, std::nullopt};
+    mutation.event = SensorSelectionEvent{*state.activeRunSensorMode,
+                                          newMode,
+                                          cause,
+                                          mutation.resultingRunRevision,
+                                          nowMonotonicMillis,
+                                          std::nullopt};
     return mutation;
 }
 
@@ -2269,7 +2272,7 @@ SensorSelectionStateMutation recoveryRevalidationMutation(
         mutation.resultingRunRevision};
     mutation.notice = SensorSelectionNotice{
         SensorSelectionDecisionCause::RecoveryRevalidation, nowMonotonicMillis,
-        mutation.resultingRunRevision,      *state.activeRunSensorMode,
+        mutation.resultingRunRevision, *state.activeRunSensorMode,
         SensorSelectionBlockReason::None};
     return mutation;
 }
@@ -2329,14 +2332,16 @@ void test_persist_sensor_selection_writes_schema_two_and_reports_permission_bloc
     TEST_ASSERT_TRUE(state.sensorSelectionRuntime == mutation.runtime);
 
     const auto reference = coordinator.state();
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCoordinatorState::Ready),
-                          static_cast<int>(reference));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(reference));
 
     const auto currentSlotRead = store.read(slotKey("rc1"), 8240U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(device_platform::StateStoreReadStatus::Success),
         static_cast<int>(currentSlotRead.status));
-    const auto envelope = device_platform::decodeEnvelope(currentSlotRead.value);
+    const auto envelope =
+        device_platform::decodeEnvelope(currentSlotRead.value);
     TEST_ASSERT_TRUE(envelope.envelope.has_value());
     TEST_ASSERT_EQUAL_UINT32(kCurrentRunPersistenceSchema,
                              envelope.envelope->schemaVersion);
@@ -2361,9 +2366,9 @@ void test_persist_sensor_selection_mode_change_fills_event_and_updates_mode() {
     auto state = readyActiveRunWithSensorSelection(coordinator, 905U);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
                           static_cast<int>(*state.activeRunSensorMode));
-    const auto mutation = modeChangeMutation(
-        state, RunSensorMode::Air, SensorSelectionDecisionCause::FallbackToAir,
-        500U);
+    const auto mutation =
+        modeChangeMutation(state, RunSensorMode::Air,
+                           SensorSelectionDecisionCause::FallbackToAir, 500U);
 
     const auto result = coordinator.persistSensorSelection(
         state, mutation, RunCheckpointTime{500U, 1700000600});
@@ -2400,8 +2405,9 @@ void test_persist_sensor_selection_mode_change_on_manual_run() {
     TEST_ASSERT_TRUE(state.activeRunSensorMode.has_value());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
                           static_cast<int>(*state.activeRunSensorMode));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
-                          static_cast<int>(state.activeManualRun->values.sensorMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Product),
+        static_cast<int>(state.activeManualRun->values.sensorMode));
 }
 
 void test_persist_sensor_selection_recovery_revalidation_restores_permission() {
@@ -2507,8 +2513,9 @@ void test_persist_sensor_selection_requires_active_run_fields() {
     const auto result = coordinator.persistSensorSelection(
         state, mutation, RunCheckpointTime{500U, std::nullopt});
 
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::NotEligible),
-                          static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotEligible),
+        static_cast<int>(result.status));
     TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
                            static_cast<unsigned>(store.writeCount()));
 }
@@ -2555,8 +2562,9 @@ void test_persist_sensor_selection_rejects_manual_causes() {
     const auto result = coordinator.persistSensorSelection(
         state, mutation, RunCheckpointTime{500U, std::nullopt});
 
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::NotEligible),
-                          static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotEligible),
+        static_cast<int>(result.status));
     TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
                            static_cast<unsigned>(store.writeCount()));
 }
@@ -2588,7 +2596,8 @@ void test_persist_sensor_selection_rejects_non_persistent_status() {
 CommandDecision substitutedStartDecision(const RunCommandState& state,
                                          CommandId id) {
     auto program = runnableProgram();
-    program.program.sensorPreference = SensorPreference::ProductIfAvailableElseAir;
+    program.program.sensorPreference =
+        SensorPreference::ProductIfAvailableElseAir;
     ProgramStartRequest request;
     request.envelope = {id,
                         CommandSource::LocalDisplay,
@@ -2629,8 +2638,9 @@ void test_start_sensor_selection_notice_only_visible_after_successful_commit() {
                   SequencedWriteStore::WriteFault::FailBeforeBegin);
     const auto failed = coordinator.persistCommand(
         state, decision, RunCheckpointTime{100U, std::nullopt});
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::WriteFailed),
-                          static_cast<int>(failed.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(failed.status));
     TEST_ASSERT_FALSE(failed.startSensorSelectionNotice.has_value());
     TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
 
@@ -2646,8 +2656,8 @@ void test_start_sensor_selection_notice_only_visible_after_successful_commit() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunSensorMode::Air),
         static_cast<int>(committed.startSensorSelectionNotice->effectiveMode));
-    TEST_ASSERT_EQUAL_UINT32(
-        state.runRevision, committed.startSensorSelectionNotice->runRevision);
+    TEST_ASSERT_EQUAL_UINT32(state.runRevision,
+                             committed.startSensorSelectionNotice->runRevision);
 }
 
 }  // namespace
@@ -2704,16 +2714,20 @@ int main(int, char**) {
     RUN_TEST(test_invalid_effect_and_message_counts_are_rejected_before_writes);
     RUN_TEST(
         test_persist_sensor_selection_writes_schema_two_and_reports_permission_blocked);
-    RUN_TEST(test_persist_sensor_selection_mode_change_fills_event_and_updates_mode);
+    RUN_TEST(
+        test_persist_sensor_selection_mode_change_fills_event_and_updates_mode);
     RUN_TEST(test_persist_sensor_selection_mode_change_on_manual_run);
-    RUN_TEST(test_persist_sensor_selection_recovery_revalidation_restores_permission);
-    RUN_TEST(test_persist_sensor_selection_from_ready_empty_reports_no_active_run);
+    RUN_TEST(
+        test_persist_sensor_selection_recovery_revalidation_restores_permission);
+    RUN_TEST(
+        test_persist_sensor_selection_from_ready_empty_reports_no_active_run);
     RUN_TEST(test_persist_sensor_selection_same_mutation_is_not_replayed);
     RUN_TEST(test_persist_sensor_selection_requires_active_run_fields);
     RUN_TEST(
         test_persist_sensor_selection_from_loaded_active_run_stays_recovery_pending);
     RUN_TEST(test_persist_sensor_selection_rejects_manual_causes);
     RUN_TEST(test_persist_sensor_selection_rejects_non_persistent_status);
-    RUN_TEST(test_start_sensor_selection_notice_only_visible_after_successful_commit);
+    RUN_TEST(
+        test_start_sensor_selection_notice_only_visible_after_successful_commit);
     return UNITY_END();
 }

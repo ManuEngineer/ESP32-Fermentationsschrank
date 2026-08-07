@@ -13,12 +13,13 @@
 
 namespace fermentation {
 
-// Vorwaertsdeklaration statt Include: `run_commands.hpp <-> sensor_selection.hpp`
-// ist per Plan Abschnitt 7 NICHT zulaessig. `decideApplySensorSelectionAction`
-// braucht die externe Sensorevidenz dennoch als Parameter (weder
-// `RunCommandState` noch `SensorSelectionCommandRequest` koennen sie tragen -
-// #21, 6.14.3). Die vollstaendige Definition ist ausschliesslich in
-// `run_commands.cpp` sichtbar, das `sensor_selection.hpp` regulaer einbindet.
+// Vorwaertsdeklaration statt Include: `run_commands.hpp <->
+// sensor_selection.hpp` ist per Plan Abschnitt 7 NICHT zulaessig.
+// `decideApplySensorSelectionAction` braucht die externe Sensorevidenz dennoch
+// als Parameter (weder `RunCommandState` noch `SensorSelectionCommandRequest`
+// koennen sie tragen - #21, 6.14.3). Die vollstaendige Definition ist
+// ausschliesslich in `run_commands.cpp` sichtbar, das `sensor_selection.hpp`
+// regulaer einbindet.
 struct CrossRolePlausibilityContext;
 
 using CommandId = std::uint64_t;
@@ -399,7 +400,8 @@ struct CommandDecision {
 // noch dieser Vertrag den Typ (sensor_selection.hpp) ohne einen nach 7
 // unzulaessigen Include tragen koennen.
 [[nodiscard]] CommandDecision decideApplySensorSelectionAction(
-    const RunCommandState& current, const SensorSelectionCommandRequest& request,
+    const RunCommandState& current,
+    const SensorSelectionCommandRequest& request,
     const CrossRolePlausibilityContext& plausibility);
 
 [[nodiscard]] CommandStatus applyRunCommand(RunCommandState& current,
@@ -419,9 +421,10 @@ void clearActiveRunState(RunCommandState& state);
 // aktiver Modus, Persistenzzustand, Laufrevision und der in
 // ManualRunPlan::values.sensorMode duplizierte Modus auseinanderlaufen. Rein
 // mechanisch: trifft keine Fachentscheidung, die bleibt vollstaendig in
-// sensor_selection.cpp/applySensorSelectionDecision. SensorSelectionStateMutation
-// ist bereits ueber sensor_selection_types.hpp sichtbar (RunCommandState
-// braucht SensorSelectionRuntimeState ohnehin), kein zusaetzlicher Include.
+// sensor_selection.cpp/applySensorSelectionDecision.
+// SensorSelectionStateMutation ist bereits ueber sensor_selection_types.hpp
+// sichtbar (RunCommandState braucht SensorSelectionRuntimeState ohnehin), kein
+// zusaetzlicher Include.
 void applySensorSelectionMutation(RunCommandState& state,
                                   const SensorSelectionStateMutation& mutation);
 

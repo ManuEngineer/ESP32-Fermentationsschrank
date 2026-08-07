@@ -571,10 +571,9 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
-    const auto persisted =
-        writeSnapshot(*snapshot, time, false, current,
-                      RunPersistenceMutationKind::Command,
-                      decision.envelope.id);
+    const auto persisted = writeSnapshot(*snapshot, time, false, current,
+                                         RunPersistenceMutationKind::Command,
+                                         decision.envelope.id);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     if (applyRunCommand(current, decision) != CommandStatus::Applied) {
@@ -630,8 +629,9 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
-    const auto persisted = writeSnapshot(*snapshot, time, false, current,
-                                         RunPersistenceMutationKind::Transition);
+    const auto persisted =
+        writeSnapshot(*snapshot, time, false, current,
+                      RunPersistenceMutationKind::Transition);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     if (!current.processRunSnapshot.has_value() ||
@@ -698,10 +698,11 @@ RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
         current, persistedIds_, persistedIdCount_,
         RunCheckpointTrigger::Periodic, time, schedule_.intervalMinutes());
     // mutationKind is inert here: a periodic write only ever produces a
-    // Committed head, which carries no mutation-kind field (validCommittedHead).
+    // Committed head, which carries no mutation-kind field
+    // (validCommittedHead).
     return snapshot.has_value()
                ? writeSnapshot(*snapshot, time, true, current,
-                              RunPersistenceMutationKind::Transition)
+                               RunPersistenceMutationKind::Transition)
                : result(RunPersistenceResultStatus::InvalidDecision,
                         RunPersistenceStep::CandidateApply,
                         RunPersistenceTechnicalReason::InvalidProjection);
@@ -746,7 +747,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
         !current.activeRunSensorMode.has_value() ||
         !current.sensorSelection.has_value())
         return result(RunPersistenceResultStatus::NotEligible);
-    if (mutation.status != SensorSelectionApplyStatus::AppliedPersistentCandidate)
+    if (mutation.status !=
+        SensorSelectionApplyStatus::AppliedPersistentCandidate)
         return result(RunPersistenceResultStatus::InvalidDecision);
     if (!mutation.persisted.has_value() || !mutation.activeMode.has_value())
         return result(RunPersistenceResultStatus::InvalidDecision,
@@ -783,16 +785,17 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     // auf dem alten Wert stehen) und haelt den in ManualRunPlan::values
     // duplizierten Sensormodus konsistent.
     applySensorSelectionMutation(candidate, mutation);
-    const auto snapshot = makeRunPersistenceSnapshot(
-        candidate, persistedIds_, persistedIdCount_,
-        RunCheckpointTrigger::SensorSelection, time, schedule_.intervalMinutes());
+    const auto snapshot =
+        makeRunPersistenceSnapshot(candidate, persistedIds_, persistedIdCount_,
+                                   RunCheckpointTrigger::SensorSelection, time,
+                                   schedule_.intervalMinutes());
     if (!snapshot.has_value())
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
     const auto persisted =
         writeSnapshot(*snapshot, time, false, current,
-                     RunPersistenceMutationKind::SensorSelection);
+                      RunPersistenceMutationKind::SensorSelection);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     applySensorSelectionMutation(current, mutation);
@@ -809,10 +812,10 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     // behavior; the transition itself is the single source of truth either
     // way.
     if (beforePermission != mutation.runtime.permission) {
-        out.effects[0] = mutation.runtime.permission ==
-                                 SensorPeltierPermission::Blocked
-                             ? CommandEffect::SensorSelectionPermissionBlocked
-                             : CommandEffect::SensorSelectionPermissionRestored;
+        out.effects[0] =
+            mutation.runtime.permission == SensorPeltierPermission::Blocked
+                ? CommandEffect::SensorSelectionPermissionBlocked
+                : CommandEffect::SensorSelectionPermissionRestored;
         out.effectCount = 1U;
     }
     if (mutation.event.has_value()) {

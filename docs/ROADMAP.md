@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-08-06
+Stand: 2026-08-07
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -10,20 +10,24 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan committed und gepusht; Plan-only; Produktionsimplementierung gesperrt bis zur exakten Ownerfreigabe | Ownerkommentar `PLAN APPROVED` mit exakter Plan-SHA |
+| 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan freigegeben (Revision 7); Commits 1-5 sowie ein separat beauftragter Korrekturcommit nach Ownerreview umgesetzt; Commit 6 (Dokumentation, Architektur-/Compile-Guards, Abschlussnachweise) in Umsetzung | Owner prueft finalen `HEAD` und entscheidet ueber `Ready for review` |
 
 ## Naechste fachliche Arbeit
 
-Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist nach dem
-Merge von PR #98 die aktuelle Planungsarbeit. Der Plan liegt im Draft-PR #99
-auf dem Branch `plan/issue-21-sensor-selection-fallback-return`; die
-Abhaengigkeiten #14 und #20 sind live abgeschlossen. Vor jeder Umsetzung ist
-die commitgebundene Ownerfreigabe des Plans erforderlich.
+Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist im
+Draft-PR #99 auf dem Branch `plan/issue-21-sensor-selection-fallback-return`
+weitgehend umgesetzt: der sechsteilige Commit-Schnitt aus dem freigegebenen
+Plan sowie ein zusaetzlicher, vom Owner separat beauftragter Korrekturcommit
+(sieben Reviewbefunde nach Implementierungsreview) sind abgeschlossen; Commit
+6 schliesst die Umsetzung ab. Nach Commit 6 entscheidet ausschliesslich der
+Owner ueber `Ready for review` und die vollstaendige Remote-CI. Die naechste
+Planungsarbeit danach ist P21-M4 (Abhaengigkeitsaussage zu #22/#23, kein
+Gate).
 
 ## Zulaessige Parallelitaet
 
-- Keine Produktionsimplementierung beginnt fuer Issue #21 vor der exakten
-  Ownerfreigabe des Plan-Commits.
+- Der PR bleibt Draft, bis der Owner ihn selbst auf `Ready for review` setzt;
+  bis dahin beginnt keine vollstaendige Remote-CI.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder

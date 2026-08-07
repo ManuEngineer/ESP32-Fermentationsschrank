@@ -42,6 +42,12 @@ Mindestens:
 - Impulsakkumulator
 - Mindest-Einschaltzeit, Mindest-Ausschaltzeit und Totzeit
 - Sensorstatus `VALID`, `STALE`, `FAILED`
+- Regelsensorauswahl (Issue #21): vollstaendige Startmatrix ueber alle
+  Programmpraeferenzen und Produktvaliditaeten; kanonische
+  Entscheidungsfunktion fuer automatischen und manuellen Pfad identisch;
+  laufzeitseitiger Auswahlzustand ausserhalb des Wireformats, fail-closed
+  nach Restore; strukturell ungueltige externe Kompatibilitaetsevidenz
+  blockiert nur die Rueckkehr, nicht unabhaengige Sicherheitsreaktionen
 - Fehlerklassifikation, Quittierung und Fehlerreset
 - Persistenzschema, atomare Revisionen und Rueckfall
 - Transaktionsabsicht vor aktorwirksamer Zustandsaenderung
@@ -77,7 +83,15 @@ Mindestens:
 
 - Standby -> Vorheizen -> Produkt einsetzen -> Zielqualifikation -> Fermentation
 - luftgefuehrter Lauf ohne Produktfuehler
-- Produktfuehlerausfall, validierter Luft-Ersatzbetrieb und Rueckkehr
+- Produktfuehlerausfall, Luft-Ersatzbetrieb (manuell und automatisch nach
+  Wartezeit) sowie manuelle und automatisch validierte Rueckkehr
+  (Issue #21): Sicherheits-Vorrangregel blockiert jede Rueckkehr und jede
+  Freigabe, solange nicht Produkt-, Schrankluft- und Kuehlkoerperfuehler
+  gemeinsam gueltig sind; ein einzelner Schrankluft-/Kuehlkoerperausfall
+  waehrend Ersatzbetrieb sperrt sofort in den sicheren Zustand; Re-Arm nach
+  einem abgebrochenen Rueckkehrversuch nur bei neuer Evidenzgeneration
+  (geaenderte Kompatibilitaetsrevision oder zwischenzeitlicher erneuter
+  Produktausfall), kein unbegrenztes Wiederholen
 - Heizen, Neutralbereich, Kuehlen und Richtungswechsel
 - Stromunterbrechung in jeder Prozessphase
 - fehlende NTP-Zeit ohne erfundenen Fortschritt

@@ -536,8 +536,7 @@ void test_manual_plans_have_no_duration_and_use_canonical_start_states() {
                           static_cast<int>(direct.after.processState.state));
     TEST_ASSERT_FALSE(direct.startSummary->durationMinutes.has_value());
 
-    auto withPreheat =
-        manualStart(state, 2U, manualPlan("preheat-hold", true));
+    auto withPreheat = manualStart(state, 2U, manualPlan("preheat-hold", true));
     const auto preheated = decideManualStart(state, withPreheat);
     TEST_ASSERT_TRUE(preheated.proposed());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
@@ -1409,7 +1408,8 @@ RunCommandState startedManualProductState() {
 // sensorSelectionRuntime/sensorSelection erst mit #21 Commit 5 - fuer
 // Commit-4-Tests des Kommandovertrags wird der Zielzustand deshalb direkt
 // gesetzt, analog zu den Fixtures in test_sensor_selection.cpp.
-RunCommandState withSensorPhase(RunCommandState base, SensorSelectionPhase phase,
+RunCommandState withSensorPhase(RunCommandState base,
+                                SensorSelectionPhase phase,
                                 SensorPeltierPermission permission,
                                 RunSensorMode activeMode) {
     base.sensorSelectionRuntime.phase = phase;
@@ -1425,8 +1425,8 @@ RunCommandState withSensorPhase(RunCommandState base, SensorSelectionPhase phase
 }
 
 SensorSelectionCommandRequest sensorSelectionRequest(
-    const RunCommandState& state, CommandId id, SensorSelectionUserAction action,
-    bool safetyAllowsChange = true) {
+    const RunCommandState& state, CommandId id,
+    SensorSelectionUserAction action, bool safetyAllowsChange = true) {
     SensorSelectionCommandRequest request;
     request.envelope = envelope(id, state);
     request.action = action;
@@ -1438,12 +1438,13 @@ void test_sensor_selection_action_continue_with_air_valid_and_invalid_states() {
     // Gueltig: UserDecisionRequired, Produkt ausgefallen, Luft/Kuehlung
     // gueltig - Blocked -> Allowed loest den Restored-Effekt aus (keine
     // direkte Aktorfreigabe, nur die #21-Vorbedingung).
-    auto blocked = withSensorPhase(
-        startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-        SensorSelectionPhase::UserDecisionRequired,
-        SensorPeltierPermission::Blocked, RunSensorMode::Product);
-    const auto request =
-        sensorSelectionRequest(blocked, 50U, SensorSelectionUserAction::ContinueWithAir);
+    auto blocked = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                       ReturnStrategy::ManualReturnToProduct),
+                                   SensorSelectionPhase::UserDecisionRequired,
+                                   SensorPeltierPermission::Blocked,
+                                   RunSensorMode::Product);
+    const auto request = sensorSelectionRequest(
+        blocked, 50U, SensorSelectionUserAction::ContinueWithAir);
     const auto plausibility =
         plausibilityWith(validSnapshot(), failedSnapshot(), validSnapshot());
     const auto decision =
@@ -1451,7 +1452,8 @@ void test_sensor_selection_action_continue_with_air_valid_and_invalid_states() {
     TEST_ASSERT_TRUE(decision.proposed());
     TEST_ASSERT_TRUE(decision.sensorSelectionApplyStatus.has_value());
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(SensorSelectionApplyStatus::AppliedPersistentCandidate),
+        static_cast<int>(
+            SensorSelectionApplyStatus::AppliedPersistentCandidate),
         static_cast<int>(*decision.sensorSelectionApplyStatus));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(SensorSelectionPhase::AirFallbackActive),
@@ -1459,21 +1461,26 @@ void test_sensor_selection_action_continue_with_air_valid_and_invalid_states() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(SensorPeltierPermission::Allowed),
         static_cast<int>(decision.after.sensorSelectionRuntime.permission));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
-                          static_cast<int>(*decision.after.activeRunSensorMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Air),
+        static_cast<int>(*decision.after.activeRunSensorMode));
     TEST_ASSERT_TRUE(decision.sensorSelectionEvent.has_value());
     TEST_ASSERT_FALSE(decision.sensorSelectionNotice.has_value());
-    TEST_ASSERT_TRUE(hasEffect(decision, CommandEffect::SensorSelectionPermissionRestored));
-    TEST_ASSERT_FALSE(hasEffect(decision, CommandEffect::SensorSelectionPermissionBlocked));
-    TEST_ASSERT_EQUAL_UINT32(blocked.runRevision + 1U, decision.after.runRevision);
+    TEST_ASSERT_TRUE(
+        hasEffect(decision, CommandEffect::SensorSelectionPermissionRestored));
+    TEST_ASSERT_FALSE(
+        hasEffect(decision, CommandEffect::SensorSelectionPermissionBlocked));
+    TEST_ASSERT_EQUAL_UINT32(blocked.runRevision + 1U,
+                             decision.after.runRevision);
 
     // Ungueltig: NormalProduct nimmt keine Benutzeraktion an.
-    auto normal = withSensorPhase(
-        startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-        SensorSelectionPhase::NormalProduct, SensorPeltierPermission::Allowed,
-        RunSensorMode::Product);
-    const auto invalidRequest =
-        sensorSelectionRequest(normal, 51U, SensorSelectionUserAction::ContinueWithAir);
+    auto normal = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                      ReturnStrategy::ManualReturnToProduct),
+                                  SensorSelectionPhase::NormalProduct,
+                                  SensorPeltierPermission::Allowed,
+                                  RunSensorMode::Product);
+    const auto invalidRequest = sensorSelectionRequest(
+        normal, 51U, SensorSelectionUserAction::ContinueWithAir);
     const auto invalidDecision =
         decideApplySensorSelectionAction(normal, invalidRequest, plausibility);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
@@ -1488,34 +1495,39 @@ void test_sensor_selection_action_return_to_product_valid_and_invalid_states() {
     // Gueltig: AirFallbackActive, ManualReturnToProduct, Produkt wieder
     // gueltig. Permission bleibt Allowed -> kein Effekt (schon vorher
     // freigegeben, kein Uebergang).
-    auto fallback = withSensorPhase(
-        startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-        SensorSelectionPhase::AirFallbackActive, SensorPeltierPermission::Allowed,
-        RunSensorMode::Air);
-    const auto request =
-        sensorSelectionRequest(fallback, 60U, SensorSelectionUserAction::ReturnToProduct);
+    auto fallback =
+        withSensorPhase(startedProgramStateWithReturnStrategy(
+                            ReturnStrategy::ManualReturnToProduct),
+                        SensorSelectionPhase::AirFallbackActive,
+                        SensorPeltierPermission::Allowed, RunSensorMode::Air);
+    const auto request = sensorSelectionRequest(
+        fallback, 60U, SensorSelectionUserAction::ReturnToProduct);
     const auto plausibility =
         plausibilityWith(validSnapshot(), validSnapshot(), validSnapshot());
     const auto decision =
         decideApplySensorSelectionAction(fallback, request, plausibility);
     TEST_ASSERT_TRUE(decision.proposed());
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(SensorSelectionApplyStatus::AppliedPersistentCandidate),
+        static_cast<int>(
+            SensorSelectionApplyStatus::AppliedPersistentCandidate),
         static_cast<int>(*decision.sensorSelectionApplyStatus));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(SensorSelectionPhase::NormalProduct),
-                          static_cast<int>(decision.after.sensorSelectionRuntime.phase));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
-                          static_cast<int>(*decision.after.activeRunSensorMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::NormalProduct),
+        static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Product),
+        static_cast<int>(*decision.after.activeRunSensorMode));
     TEST_ASSERT_TRUE(decision.sensorSelectionEvent.has_value());
     TEST_ASSERT_EQUAL_UINT32(0U, decision.effectCount);
 
     // Ungueltig: NormalProduct nimmt keine Benutzeraktion an.
-    auto normal = withSensorPhase(
-        startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-        SensorSelectionPhase::NormalProduct, SensorPeltierPermission::Allowed,
-        RunSensorMode::Product);
-    const auto invalidRequest =
-        sensorSelectionRequest(normal, 61U, SensorSelectionUserAction::ReturnToProduct);
+    auto normal = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                      ReturnStrategy::ManualReturnToProduct),
+                                  SensorSelectionPhase::NormalProduct,
+                                  SensorPeltierPermission::Allowed,
+                                  RunSensorMode::Product);
+    const auto invalidRequest = sensorSelectionRequest(
+        normal, 61U, SensorSelectionUserAction::ReturnToProduct);
     const auto invalidDecision =
         decideApplySensorSelectionAction(normal, invalidRequest, plausibility);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
@@ -1524,17 +1536,17 @@ void test_sensor_selection_action_return_to_product_valid_and_invalid_states() {
 }
 
 void test_sensor_selection_action_recheck_product_ram_only_transport_and_idempotency() {
-    auto fallback = withSensorPhase(
-        startedProgramStateWithReturnStrategy(
-            ReturnStrategy::AutomaticValidatedReturnToProduct),
-        SensorSelectionPhase::AirFallbackActive, SensorPeltierPermission::Allowed,
-        RunSensorMode::Air);
+    auto fallback =
+        withSensorPhase(startedProgramStateWithReturnStrategy(
+                            ReturnStrategy::AutomaticValidatedReturnToProduct),
+                        SensorSelectionPhase::AirFallbackActive,
+                        SensorPeltierPermission::Allowed, RunSensorMode::Air);
     // Unvollstaendige Rueckkehrevidenz (thermalCompatibility bleibt
     // Unavailable) - 6.4.12-Sonderfall, RAM-only.
     const auto plausibility =
         plausibilityWith(validSnapshot(), validSnapshot(), validSnapshot());
-    const auto request =
-        sensorSelectionRequest(fallback, 70U, SensorSelectionUserAction::RecheckProduct);
+    const auto request = sensorSelectionRequest(
+        fallback, 70U, SensorSelectionUserAction::RecheckProduct);
     const auto decision =
         decideApplySensorSelectionAction(fallback, request, plausibility);
     TEST_ASSERT_TRUE(decision.proposed());
@@ -1569,16 +1581,16 @@ void test_sensor_selection_action_recheck_product_ram_only_transport_and_idempot
 }
 
 void test_sensor_selection_action_no_change_leaves_everything_untouched() {
-    auto fallback = withSensorPhase(
-        startedProgramStateWithReturnStrategy(
-            ReturnStrategy::AutomaticValidatedReturnToProduct),
-        SensorSelectionPhase::AirFallbackActive, SensorPeltierPermission::Allowed,
-        RunSensorMode::Air);
+    auto fallback =
+        withSensorPhase(startedProgramStateWithReturnStrategy(
+                            ReturnStrategy::AutomaticValidatedReturnToProduct),
+                        SensorSelectionPhase::AirFallbackActive,
+                        SensorPeltierPermission::Allowed, RunSensorMode::Air);
     // Produkt weiterhin ungueltig -> RecheckProduct bleibt ohne Wirkung.
     const auto plausibility =
         plausibilityWith(validSnapshot(), failedSnapshot(), validSnapshot());
-    const auto request =
-        sensorSelectionRequest(fallback, 80U, SensorSelectionUserAction::RecheckProduct);
+    const auto request = sensorSelectionRequest(
+        fallback, 80U, SensorSelectionUserAction::RecheckProduct);
     const auto decision =
         decideApplySensorSelectionAction(fallback, request, plausibility);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NoChange),
@@ -1597,17 +1609,18 @@ void test_sensor_selection_action_safety_pending_matrix() {
     // unabhaengig vom externen safetyAllowsChange-Signal.
     for (const auto action : {SensorSelectionUserAction::ContinueWithAir,
                               SensorSelectionUserAction::ReturnToProduct}) {
-        auto state = withSensorPhase(
-            startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-            action == SensorSelectionUserAction::ContinueWithAir
-                ? SensorSelectionPhase::UserDecisionRequired
-                : SensorSelectionPhase::AirFallbackActive,
-            action == SensorSelectionUserAction::ContinueWithAir
-                ? SensorPeltierPermission::Blocked
-                : SensorPeltierPermission::Allowed,
-            action == SensorSelectionUserAction::ContinueWithAir
-                ? RunSensorMode::Product
-                : RunSensorMode::Air);
+        auto state =
+            withSensorPhase(startedProgramStateWithReturnStrategy(
+                                ReturnStrategy::ManualReturnToProduct),
+                            action == SensorSelectionUserAction::ContinueWithAir
+                                ? SensorSelectionPhase::UserDecisionRequired
+                                : SensorSelectionPhase::AirFallbackActive,
+                            action == SensorSelectionUserAction::ContinueWithAir
+                                ? SensorPeltierPermission::Blocked
+                                : SensorPeltierPermission::Allowed,
+                            action == SensorSelectionUserAction::ContinueWithAir
+                                ? RunSensorMode::Product
+                                : RunSensorMode::Air);
         state.criticalSafetyEventPending = true;
         const auto request = sensorSelectionRequest(state, 90U, action, true);
         const auto decision =
@@ -1640,15 +1653,15 @@ void test_sensor_selection_action_safety_pending_matrix() {
         auto state = withSensorPhase(
             startedProgramStateWithReturnStrategy(
                 ReturnStrategy::AutomaticValidatedReturnToProduct),
-            SensorSelectionPhase::AirFallbackActive, SensorPeltierPermission::Allowed,
-            RunSensorMode::Air);
+            SensorSelectionPhase::AirFallbackActive,
+            SensorPeltierPermission::Allowed, RunSensorMode::Air);
         state.criticalSafetyEventPending = true;
         const auto request = sensorSelectionRequest(
-            state, 92U,
-            SensorSelectionUserAction::RecheckProduct, true);
+            state, 92U, SensorSelectionUserAction::RecheckProduct, true);
         const auto decision = decideApplySensorSelectionAction(
-            state, request, plausibilityWith(validSnapshot(), failedSnapshot(),
-                                             validSnapshot()));
+            state, request,
+            plausibilityWith(validSnapshot(), failedSnapshot(),
+                             validSnapshot()));
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::NoChange),
                               static_cast<int>(decision.status));
     }
@@ -1657,10 +1670,11 @@ void test_sensor_selection_action_safety_pending_matrix() {
     // criticalSafetyEventPending - es ersetzt die interne Invariante nicht,
     // wird aber selbst ebenfalls verlangt.
     {
-        auto state = withSensorPhase(
-            startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-            SensorSelectionPhase::UserDecisionRequired,
-            SensorPeltierPermission::Blocked, RunSensorMode::Product);
+        auto state = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                         ReturnStrategy::ManualReturnToProduct),
+                                     SensorSelectionPhase::UserDecisionRequired,
+                                     SensorPeltierPermission::Blocked,
+                                     RunSensorMode::Product);
         TEST_ASSERT_FALSE(state.criticalSafetyEventPending);
         const auto request = sensorSelectionRequest(
             state, 93U, SensorSelectionUserAction::ContinueWithAir, false);
@@ -1680,8 +1694,8 @@ void test_sensor_selection_action_mirrors_mode_into_manual_run_plan() {
         startedManualProductState(), SensorSelectionPhase::UserDecisionRequired,
         SensorPeltierPermission::Blocked, RunSensorMode::Product);
     TEST_ASSERT_TRUE(blocked.activeManualRun.has_value());
-    const auto request =
-        sensorSelectionRequest(blocked, 105U, SensorSelectionUserAction::ContinueWithAir);
+    const auto request = sensorSelectionRequest(
+        blocked, 105U, SensorSelectionUserAction::ContinueWithAir);
     const auto decision = decideApplySensorSelectionAction(
         blocked, request,
         plausibilityWith(validSnapshot(), failedSnapshot(), validSnapshot()));
@@ -1690,19 +1704,21 @@ void test_sensor_selection_action_mirrors_mode_into_manual_run_plan() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunSensorMode::Air),
         static_cast<int>(decision.after.activeManualRun->values.sensorMode));
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
-                          static_cast<int>(*decision.after.activeRunSensorMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Air),
+        static_cast<int>(*decision.after.activeRunSensorMode));
 }
 
 void test_sensor_selection_action_already_processed_repeats_no_second_effect() {
-    auto blocked = withSensorPhase(
-        startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-        SensorSelectionPhase::UserDecisionRequired,
-        SensorPeltierPermission::Blocked, RunSensorMode::Product);
+    auto blocked = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                       ReturnStrategy::ManualReturnToProduct),
+                                   SensorSelectionPhase::UserDecisionRequired,
+                                   SensorPeltierPermission::Blocked,
+                                   RunSensorMode::Product);
     const auto plausibility =
         plausibilityWith(validSnapshot(), failedSnapshot(), validSnapshot());
-    const auto request =
-        sensorSelectionRequest(blocked, 100U, SensorSelectionUserAction::ContinueWithAir);
+    const auto request = sensorSelectionRequest(
+        blocked, 100U, SensorSelectionUserAction::ContinueWithAir);
     const auto decision =
         decideApplySensorSelectionAction(blocked, request, plausibility);
     TEST_ASSERT_TRUE(decision.proposed());
@@ -1725,46 +1741,53 @@ void test_sensor_selection_action_already_processed_repeats_no_second_effect() {
 void test_apply_run_command_staleness_regression_for_sensor_selection_and_other_commands() {
     // Fall 1: das neue Kommando selbst.
     {
-        auto state = withSensorPhase(
-            startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-            SensorSelectionPhase::UserDecisionRequired,
-            SensorPeltierPermission::Blocked, RunSensorMode::Product);
+        auto state = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                         ReturnStrategy::ManualReturnToProduct),
+                                     SensorSelectionPhase::UserDecisionRequired,
+                                     SensorPeltierPermission::Blocked,
+                                     RunSensorMode::Product);
         const auto request = sensorSelectionRequest(
             state, 110U, SensorSelectionUserAction::ContinueWithAir);
         const auto decision = decideApplySensorSelectionAction(
             state, request,
-            plausibilityWith(validSnapshot(), failedSnapshot(), validSnapshot()));
+            plausibilityWith(validSnapshot(), failedSnapshot(),
+                             validSnapshot()));
         TEST_ASSERT_TRUE(decision.proposed());
 
         // Zwischenzeitliche automatische Bewertung: SafeLocked.
         state.sensorSelectionRuntime.phase = SensorSelectionPhase::SafeLocked;
-        state.sensorSelectionRuntime.permission = SensorPeltierPermission::Blocked;
+        state.sensorSelectionRuntime.permission =
+            SensorPeltierPermission::Blocked;
 
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(CommandStatus::StaleState),
             static_cast<int>(applyRunCommand(state, decision)));
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(SensorSelectionPhase::SafeLocked),
-                              static_cast<int>(state.sensorSelectionRuntime.phase));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::SafeLocked),
+            static_cast<int>(state.sensorSelectionRuntime.phase));
     }
     // Fall 2: ein bestehender, unveraenderter Kommandotyp (AdjustRun) -
     // beweist, dass die erweiterte Vergleichsliste jeden Pfad schuetzt.
     {
-        auto state = withSensorPhase(
-            startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-            SensorSelectionPhase::NormalProduct, SensorPeltierPermission::Allowed,
-            RunSensorMode::Product);
+        auto state = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                         ReturnStrategy::ManualReturnToProduct),
+                                     SensorSelectionPhase::NormalProduct,
+                                     SensorPeltierPermission::Allowed,
+                                     RunSensorMode::Product);
         auto request = targetChange(state, 111U, 39.0, 200U);
         const auto decision = decideRunAdjustment(state, request);
         TEST_ASSERT_TRUE(decision.proposed());
 
         state.sensorSelectionRuntime.phase = SensorSelectionPhase::SafeLocked;
-        state.sensorSelectionRuntime.permission = SensorPeltierPermission::Blocked;
+        state.sensorSelectionRuntime.permission =
+            SensorPeltierPermission::Blocked;
 
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(CommandStatus::StaleState),
             static_cast<int>(applyRunCommand(state, decision)));
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(SensorSelectionPhase::SafeLocked),
-                              static_cast<int>(state.sensorSelectionRuntime.phase));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(SensorSelectionPhase::SafeLocked),
+            static_cast<int>(state.sensorSelectionRuntime.phase));
     }
 }
 
@@ -1774,10 +1797,11 @@ void test_apply_run_command_staleness_regression_for_sensor_selection_and_other_
 void test_clear_active_run_state_regressions_across_terminal_paths() {
     // AbortAndTurnOff.
     {
-        auto state = withSensorPhase(
-            startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-            SensorSelectionPhase::AirFallbackActive, SensorPeltierPermission::Allowed,
-            RunSensorMode::Air);
+        auto state = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                         ReturnStrategy::ManualReturnToProduct),
+                                     SensorSelectionPhase::AirFallbackActive,
+                                     SensorPeltierPermission::Allowed,
+                                     RunSensorMode::Air);
         StopRequest request{envelope(200U, state), StopOption::AbortAndTurnOff,
                             std::nullopt, false};
         const auto decision = decideStop(state, request);
@@ -1795,8 +1819,9 @@ void test_clear_active_run_state_regressions_across_terminal_paths() {
         // uebernommenen des vorherigen (AirFallbackActive/FallbackActive)
         // Laufs.
         auto afterAbort = state;
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Applied),
-                              static_cast<int>(applyRunCommand(afterAbort, decision)));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(CommandStatus::Applied),
+            static_cast<int>(applyRunCommand(afterAbort, decision)));
         const auto restart =
             decideProgramStart(afterAbort, programStart(afterAbort, 201U));
         TEST_ASSERT_TRUE(restart.proposed());
@@ -1810,10 +1835,11 @@ void test_clear_active_run_state_regressions_across_terminal_paths() {
     }
     // AcknowledgeCompletion (regulaerer Abschluss).
     {
-        auto state = withSensorPhase(
-            startedProgramStateWithReturnStrategy(ReturnStrategy::ManualReturnToProduct),
-            SensorSelectionPhase::NormalProduct, SensorPeltierPermission::Allowed,
-            RunSensorMode::Product);
+        auto state = withSensorPhase(startedProgramStateWithReturnStrategy(
+                                         ReturnStrategy::ManualReturnToProduct),
+                                     SensorSelectionPhase::NormalProduct,
+                                     SensorPeltierPermission::Allowed,
+                                     RunSensorMode::Product);
         state.processState.state = ProcessState::Completed;
         state.processState.targetReachStartedAtMillis = 0U;
         state.processState.targetReachWarningIssued = false;
@@ -1869,8 +1895,9 @@ void test_program_start_sensor_matrix_covers_all_eleven_rows() {
                        state, 1U, SensorPreference::ProductIfAvailableElseAir,
                        RunSensorMode::Product, true));
         TEST_ASSERT_TRUE(decision.proposed());
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
-                              static_cast<int>(*decision.after.activeRunSensorMode));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunSensorMode::Product),
+            static_cast<int>(*decision.after.activeRunSensorMode));
         TEST_ASSERT_FALSE(decision.startSensorSelectionNotice.has_value());
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(SensorSelectionPhase::NormalProduct),
@@ -1888,8 +1915,9 @@ void test_program_start_sensor_matrix_covers_all_eleven_rows() {
         request.envelope.confirmed = true;
         const auto decision = decideProgramStart(state, request);
         TEST_ASSERT_TRUE(decision.proposed());
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
-                              static_cast<int>(*decision.after.activeRunSensorMode));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunSensorMode::Air),
+            static_cast<int>(*decision.after.activeRunSensorMode));
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(SensorSelectionPhase::AirFallbackActive),
             static_cast<int>(decision.after.sensorSelectionRuntime.phase));
@@ -1899,12 +1927,15 @@ void test_program_start_sensor_matrix_covers_all_eleven_rows() {
         TEST_ASSERT_TRUE(decision.startSensorSelectionNotice.has_value());
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunSensorMode::Product),
-            static_cast<int>(decision.startSensorSelectionNotice->requestedMode));
+            static_cast<int>(
+                decision.startSensorSelectionNotice->requestedMode));
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunSensorMode::Air),
-            static_cast<int>(decision.startSensorSelectionNotice->effectiveMode));
-        TEST_ASSERT_EQUAL_UINT32(decision.after.runRevision,
-                                 decision.startSensorSelectionNotice->runRevision);
+            static_cast<int>(
+                decision.startSensorSelectionNotice->effectiveMode));
+        TEST_ASSERT_EQUAL_UINT32(
+            decision.after.runRevision,
+            decision.startSensorSelectionNotice->runRevision);
         // Bereits vor Bestaetigung sichtbar (6.11), mit demselben Wert.
         TEST_ASSERT_TRUE(preview.startSensorSelectionNotice.has_value());
         TEST_ASSERT_EQUAL_UINT32(
@@ -1919,8 +1950,9 @@ void test_program_start_sensor_matrix_covers_all_eleven_rows() {
                        state, 3U, SensorPreference::ProductIfAvailableElseAir,
                        RunSensorMode::Air, false));
         TEST_ASSERT_TRUE(decision.proposed());
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
-                              static_cast<int>(*decision.after.activeRunSensorMode));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunSensorMode::Air),
+            static_cast<int>(*decision.after.activeRunSensorMode));
         TEST_ASSERT_FALSE(decision.startSensorSelectionNotice.has_value());
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(SensorSelectionPhase::NormalAir),
@@ -1930,18 +1962,18 @@ void test_program_start_sensor_matrix_covers_all_eleven_rows() {
     {
         auto state = standbyState();
         const auto decision = decideProgramStart(
-            state, programStartWithPreference(state, 4U,
-                                              SensorPreference::AirProductOptional,
-                                              RunSensorMode::Product, true));
+            state, programStartWithPreference(
+                       state, 4U, SensorPreference::AirProductOptional,
+                       RunSensorMode::Product, true));
         TEST_ASSERT_TRUE(decision.proposed());
     }
     // Zeile 5: AirProductOptional + Product + nicht Valid -> abgelehnt.
     {
         auto state = standbyState();
         const auto decision = decideProgramStart(
-            state, programStartWithPreference(state, 5U,
-                                              SensorPreference::AirProductOptional,
-                                              RunSensorMode::Product, false));
+            state, programStartWithPreference(
+                       state, 5U, SensorPreference::AirProductOptional,
+                       RunSensorMode::Product, false));
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                               static_cast<int>(decision.status));
         assertRejectedWithoutStateMutation(decision);
@@ -1950,27 +1982,27 @@ void test_program_start_sensor_matrix_covers_all_eleven_rows() {
     {
         auto state = standbyState();
         const auto decision = decideProgramStart(
-            state, programStartWithPreference(state, 6U,
-                                              SensorPreference::AirProductOptional,
-                                              RunSensorMode::Air, false));
+            state, programStartWithPreference(
+                       state, 6U, SensorPreference::AirProductOptional,
+                       RunSensorMode::Air, false));
         TEST_ASSERT_TRUE(decision.proposed());
     }
     // Zeile 7: ProductRequired + Product + Valid -> Product.
     {
         auto state = standbyState();
         const auto decision = decideProgramStart(
-            state, programStartWithPreference(
-                       state, 7U, SensorPreference::ProductRequired,
-                       RunSensorMode::Product, true));
+            state, programStartWithPreference(state, 7U,
+                                              SensorPreference::ProductRequired,
+                                              RunSensorMode::Product, true));
         TEST_ASSERT_TRUE(decision.proposed());
     }
     // Zeile 8: ProductRequired + Product + nicht Valid -> abgelehnt.
     {
         auto state = standbyState();
         const auto decision = decideProgramStart(
-            state, programStartWithPreference(
-                       state, 8U, SensorPreference::ProductRequired,
-                       RunSensorMode::Product, false));
+            state, programStartWithPreference(state, 8U,
+                                              SensorPreference::ProductRequired,
+                                              RunSensorMode::Product, false));
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                               static_cast<int>(decision.status));
         assertRejectedWithoutStateMutation(decision);
@@ -1979,9 +2011,9 @@ void test_program_start_sensor_matrix_covers_all_eleven_rows() {
     {
         auto state = standbyState();
         const auto decision = decideProgramStart(
-            state, programStartWithPreference(
-                       state, 9U, SensorPreference::ProductRequired,
-                       RunSensorMode::Air, false));
+            state, programStartWithPreference(state, 9U,
+                                              SensorPreference::ProductRequired,
+                                              RunSensorMode::Air, false));
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                               static_cast<int>(decision.status));
         assertRejectedWithoutStateMutation(decision);
@@ -1990,8 +2022,9 @@ void test_program_start_sensor_matrix_covers_all_eleven_rows() {
     {
         auto state = standbyState();
         const auto decision = decideProgramStart(
-            state, programStartWithPreference(state, 10U, SensorPreference::AirOnly,
-                                              RunSensorMode::Product, true));
+            state,
+            programStartWithPreference(state, 10U, SensorPreference::AirOnly,
+                                       RunSensorMode::Product, true));
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::InvalidInput),
                               static_cast<int>(decision.status));
         assertRejectedWithoutStateMutation(decision);
@@ -2000,8 +2033,9 @@ void test_program_start_sensor_matrix_covers_all_eleven_rows() {
     {
         auto state = standbyState();
         const auto decision = decideProgramStart(
-            state, programStartWithPreference(state, 11U, SensorPreference::AirOnly,
-                                              RunSensorMode::Air, false));
+            state,
+            programStartWithPreference(state, 11U, SensorPreference::AirOnly,
+                                       RunSensorMode::Air, false));
         TEST_ASSERT_TRUE(decision.proposed());
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(SensorSelectionPhase::NormalAir),
@@ -2013,16 +2047,17 @@ void test_program_start_sensor_matrix_covers_all_eleven_rows() {
 // Sonderfall pro Zeile.
 void test_program_start_rejects_uniformly_without_air_or_cooling() {
     auto state = standbyState();
-    auto request = programStartWithPreference(
-        state, 1U, SensorPreference::AirOnly, RunSensorMode::Air, false,
-        false, true);
+    auto request =
+        programStartWithPreference(state, 1U, SensorPreference::AirOnly,
+                                   RunSensorMode::Air, false, false, true);
     auto decision = decideProgramStart(state, request);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
                           static_cast<int>(decision.status));
     assertRejectedWithoutStateMutation(decision);
 
-    request = programStartWithPreference(state, 2U, SensorPreference::AirOnly,
-                                         RunSensorMode::Air, false, true, false);
+    request =
+        programStartWithPreference(state, 2U, SensorPreference::AirOnly,
+                                   RunSensorMode::Air, false, true, false);
     decision = decideProgramStart(state, request);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
                           static_cast<int>(decision.status));
@@ -2057,8 +2092,9 @@ void test_manual_start_product_mode_fixed_contract() {
         auto request = manualStart(state, 2U, plan, true, true, true, false);
         const auto decision = decideManualStart(state, request);
         TEST_ASSERT_TRUE(decision.proposed());
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
-                              static_cast<int>(*decision.after.activeRunSensorMode));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunSensorMode::Product),
+            static_cast<int>(*decision.after.activeRunSensorMode));
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(SensorSelectionPhase::UserDecisionRequired),
             static_cast<int>(decision.after.sensorSelectionRuntime.phase));
@@ -2090,8 +2126,9 @@ void test_cooling_replacement_run_gets_fresh_sensor_selection() {
     const auto decision = decideStop(state, request);
     TEST_ASSERT_TRUE(decision.proposed());
     TEST_ASSERT_TRUE(decision.after.activeManualRun.has_value());
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(SensorSelectionPhase::NormalAir),
-                          static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::NormalAir),
+        static_cast<int>(decision.after.sensorSelectionRuntime.phase));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(SensorPeltierPermission::Allowed),
         static_cast<int>(decision.after.sensorSelectionRuntime.permission));
@@ -2115,8 +2152,9 @@ void test_cooling_replacement_run_without_valid_fixed_sensors_stays_blocked() {
     const auto decision = decideStop(state, request);
     TEST_ASSERT_TRUE(decision.proposed());
     TEST_ASSERT_TRUE(decision.after.activeManualRun.has_value());
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(SensorSelectionPhase::NormalAir),
-                          static_cast<int>(decision.after.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::NormalAir),
+        static_cast<int>(decision.after.sensorSelectionRuntime.phase));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(SensorPeltierPermission::Blocked),
         static_cast<int>(decision.after.sensorSelectionRuntime.permission));
@@ -2129,7 +2167,8 @@ void test_cooling_replacement_run_without_valid_fixed_sensors_stays_blocked() {
                                  manualPlan("cool-after-completion"), true};
     completion.airSensorValid = false;
     completion.coolingSensorValid = true;  // einzeln ungueltig genuegt.
-    const auto completionDecision = decideCompletion(completedState, completion);
+    const auto completionDecision =
+        decideCompletion(completedState, completion);
     TEST_ASSERT_TRUE(completionDecision.proposed());
     TEST_ASSERT_TRUE(completionDecision.after.activeManualRun.has_value());
     TEST_ASSERT_EQUAL_INT(
@@ -2173,14 +2212,18 @@ int main() {
         test_run_revision_overflow_is_rejected_for_every_run_mutating_command);
     RUN_TEST(test_run_revision_capacity_does_not_mask_prior_domain_results);
     RUN_TEST(test_message_and_fault_revision_overflow_is_rejected);
-    RUN_TEST(test_sensor_selection_action_continue_with_air_valid_and_invalid_states);
-    RUN_TEST(test_sensor_selection_action_return_to_product_valid_and_invalid_states);
+    RUN_TEST(
+        test_sensor_selection_action_continue_with_air_valid_and_invalid_states);
+    RUN_TEST(
+        test_sensor_selection_action_return_to_product_valid_and_invalid_states);
     RUN_TEST(
         test_sensor_selection_action_recheck_product_ram_only_transport_and_idempotency);
-    RUN_TEST(test_sensor_selection_action_no_change_leaves_everything_untouched);
+    RUN_TEST(
+        test_sensor_selection_action_no_change_leaves_everything_untouched);
     RUN_TEST(test_sensor_selection_action_safety_pending_matrix);
     RUN_TEST(test_sensor_selection_action_mirrors_mode_into_manual_run_plan);
-    RUN_TEST(test_sensor_selection_action_already_processed_repeats_no_second_effect);
+    RUN_TEST(
+        test_sensor_selection_action_already_processed_repeats_no_second_effect);
     RUN_TEST(
         test_apply_run_command_staleness_regression_for_sensor_selection_and_other_commands);
     RUN_TEST(test_clear_active_run_state_regressions_across_terminal_paths);
@@ -2188,6 +2231,7 @@ int main() {
     RUN_TEST(test_program_start_rejects_uniformly_without_air_or_cooling);
     RUN_TEST(test_manual_start_product_mode_fixed_contract);
     RUN_TEST(test_cooling_replacement_run_gets_fresh_sensor_selection);
-    RUN_TEST(test_cooling_replacement_run_without_valid_fixed_sensors_stays_blocked);
+    RUN_TEST(
+        test_cooling_replacement_run_without_valid_fixed_sensors_stays_blocked);
     return UNITY_END();
 }

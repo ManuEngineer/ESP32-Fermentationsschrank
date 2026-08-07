@@ -131,8 +131,7 @@ bool validCompletionMode(CompletionMode mode) {
 }
 
 MigrationResult migrateProgramSchema4To5(const ProgramDocument& source) {
-    if ((source.schema.presentFields & ~kSchema4RequiredProgramFields) !=
-            0U ||
+    if ((source.schema.presentFields & ~kSchema4RequiredProgramFields) != 0U ||
         (source.schema.presentFields & kSchema4RequiredProgramFields) !=
             kSchema4RequiredProgramFields) {
         return {MigrationStatus::InvalidSourceDocument, std::nullopt};
@@ -145,8 +144,7 @@ MigrationResult migrateProgramSchema4To5(const ProgramDocument& source) {
 }
 
 MigrationResult migrateProgramSchema5To6(const ProgramDocument& source) {
-    if ((source.schema.presentFields & ~kSchema5RequiredProgramFields) !=
-            0U ||
+    if ((source.schema.presentFields & ~kSchema5RequiredProgramFields) != 0U ||
         (source.schema.presentFields & kSchema5RequiredProgramFields) !=
             kSchema5RequiredProgramFields) {
         return {MigrationStatus::InvalidSourceDocument, std::nullopt};
