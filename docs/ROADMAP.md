@@ -10,29 +10,32 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan freigegeben (Revision 7); Commits 1-6 sowie drei separat beauftragte Korrekturrunden nach Ownerreview (Implementierungsreview, Abschlussreview, letzter Abschlussblocker) umgesetzt; kein offener fachlicher Blocker mehr bekannt | Owner prueft finalen `HEAD` und entscheidet ueber `Ready for review` |
+| 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan freigegeben (Revision 7); Commits 1-6 sowie vier separat beauftragte Korrekturrunden nach Ownerreview (Implementierungsreview, Abschlussreview, letzter Abschlussblocker, CI-Korrektur nach fehlgeschlagenem `clang-tidy` in CI-Run #716) umgesetzt; kein offener fachlicher Blocker mehr bekannt | Owner prueft finalen `HEAD` (erneutes Abschlussreview) und entscheidet ueber erneutes `Ready for review` |
 
 ## Naechste fachliche Arbeit
 
 Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist im
 Draft-PR #99 auf dem Branch `plan/issue-21-sensor-selection-fallback-return`
 umgesetzt: der sechsteilige Commit-Schnitt aus dem freigegebenen Plan
-(Commit 6 abgeschlossen) sowie drei zusaetzliche, vom Owner separat
+(Commit 6 abgeschlossen) sowie vier zusaetzliche, vom Owner separat
 beauftragte Korrekturrunden (sieben Reviewbefunde nach
 Implementierungsreview; Architekturguard-, Transportvertrags- und
 Dokumentationskorrekturen nach Abschlussreview; Korrektur des dabei
-aufgedeckten letzten fachlichen Blockers im manuellen `AppliedRamOnly`-Pfad)
-sind abgeschlossen. Der Draft-PR hat damit keinen bekannten offenen
-#21-Blocker mehr. Naechstes Gate ist die finale Owner-Pruefung des
-`HEAD`; ausschliesslich der Owner entscheidet ueber `Ready for review` und
-die vollstaendige Remote-CI. Als naechste fachliche Planungsarbeit nach #21
-ist Issue #22 zu nennen; P21-M4 bleibt darin nur die zu #22/#23 gehoerende
+aufgedeckten letzten fachlichen Blockers im manuellen `AppliedRamOnly`-Pfad;
+CI-Korrektur zweier `clang-tidy`-Befunde, nachdem CI-Run #716 nach dem
+ersten `Ready for review` an diesem Schritt gescheitert war) sind
+abgeschlossen. Der Draft-PR hat damit keinen bekannten offenen
+#21-Blocker mehr. Naechstes Gate ist ein erneutes Abschlussreview durch den
+Owner auf dem finalen `HEAD`; ausschliesslich der Owner entscheidet ueber
+ein erneutes `Ready for review` und die dadurch neu ausgeloeste vollstaendige
+Remote-CI. Als naechste fachliche Planungsarbeit nach #21 ist Issue #22 zu
+nennen; P21-M4 bleibt darin nur die zu #22/#23 gehoerende
 Abhaengigkeitsaussage (kein eigenes Gate).
 
 ## Zulaessige Parallelitaet
 
 - Der PR bleibt Draft, bis der Owner ihn selbst auf `Ready for review` setzt;
-  bis dahin beginnt keine vollstaendige Remote-CI.
+  bis dahin startet keine erneute vollstaendige Remote-CI.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder
