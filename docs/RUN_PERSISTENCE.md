@@ -254,6 +254,63 @@ Der Wiederanlauf blockiert nicht auf NTP. Ohne absolute Zeit wird kein exakter
 Unterbrechungsfortschritt erfunden und kein automatischer Phasenabschluss allein
 aus einer Schaetzung abgeleitet.
 
+## Uebergabe an ein spaeteres Vorhaben: Regelsensorauswahl bei Reaktivierung
+
+Issue #21 (Regelsensorauswahl, Ersatzbetrieb, Rueckkehrlogik) liefert den
+persistierten und den laufzeitseitigen Auswahlzustand, aktiviert einen nach
+einem Neustart geladenen aktiven Lauf aber bewusst **nicht** selbst. Dieser
+Abschnitt haelt fest, was bereits vorhanden ist und was ein spaeteres
+Vorhaben fuer die tatsaechliche Reaktivierung noch leisten muss, damit dies
+nicht erneut recherchiert werden muss.
+
+Bereits vorhanden:
+
+- der persistierte Auswahlzustand (Herkunft, letzte Ursache, letzte
+  Laufrevision der Entscheidung) wird mit jedem aktiven Lauf gespeichert und
+  beim Laden unveraendert uebernommen; ein Schema-1-Bestand ohne dieses Feld
+  wird auf einen expliziten, unbestimmten Herkunftswert abgebildet, nie als
+  fehlend behandelt;
+- der laufzeitseitige Auswahlzustand (Phase, Peltier-Freigabe, laufende
+  Wartezeiten) ist ausdruecklich ausserhalb des Wireformats und wird bei
+  einem geladenen aktiven Lauf fail-closed auf den Zustand "Neubewertung nach
+  Neustart erforderlich" mit gesperrter Freigabe gesetzt; jede laufende
+  Wartezeit oder Rueckkehrvalidierung wird dabei verworfen;
+- eine reine, seiteneffektfreie Funktion berechnet aus dem persistierten
+  Auswahlzustand und dem konfigurierten Programmkontext eine Empfehlung fuer
+  den reaktivierten Zustand, ohne selbst etwas zu veraendern oder zu
+  speichern.
+
+Fuer die tatsaechliche Reaktivierung (geladener aktiver Lauf -> betriebsbereit)
+noch zu leisten:
+
+- diese Empfehlung anwenden und dabei den laufzeitseitigen Auswahlzustand
+  endgueltig setzen, bevor die Regelung fuer diesen Lauf ueberhaupt bewertet
+  wird;
+- **Reihenfolge beachten:** ein aktiver Lauf verlangt beim Schreiben
+  zwingend einen vorhandenen persistierten Auswahlzustand (`sensorSelection`)
+  - dieser ist nach dem Laden bereits vorhanden und wird durch jede
+  nachfolgende Speicherung (auch periodische Kontrollpunkte) unveraendert
+  erneut mitgefuehrt. `sensorSelectionRuntime` ist davon unabhaengig: er ist
+  ausserhalb des Wireformats, wird von keinem Kontrollpunkt mitgeschrieben
+  und fliesst nicht in die Schreibvoraussetzung ein. Solange die
+  Reaktivierung aussteht, bleibt er einfach fail-closed im RAM stehen -
+  "Neubewertung nach Neustart erforderlich" (`RestartRevalidationPending`)
+  mit gesperrter Peltier-Freigabe (`Blocked`); periodische Kontrollpunkte
+  laufen davon unberuehrt normal weiter;
+- die Peltier-Freigabe bleibt bis zum Abschluss dieser Neubewertung gesperrt;
+  eine vorherige Freigabe aus dem Lauf vor dem Neustart wird nie blind
+  uebernommen.
+
+Test- und Zustaendigkeitsgrenze: Issue #21 prueft ausschliesslich, dass ein
+Schema-1- oder Schema-2-Bestand korrekt geladen wird, dass ein geladener
+aktiver Lauf jede weitere Zustandsaenderung blockiert, und dass der
+laufzeitseitige Zustand beim Laden fail-closed gesetzt wird - ausschliesslich
+ueber die bestehende oeffentliche Schnittstelle, ohne Zugriff auf interne
+Koordinatorzustaende. Die tatsaechliche Reaktivierungsaktion, der erste
+Kontrollpunkt danach und ein anschliessender erneuter Neustart mit dann
+gemischter aktueller/Rueckfallrevision sind in Issue #21 **nicht** geprueft
+und bleiben einem spaeteren Vorhaben vorbehalten.
+
 ## Flashstrategie
 
 - atomare, versionierte Revisionen

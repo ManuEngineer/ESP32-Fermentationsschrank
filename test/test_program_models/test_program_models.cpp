@@ -13,8 +13,10 @@ namespace {
 using fermentation::CompletionMode;
 using fermentation::FactoryProgramCatalog;
 using fermentation::MigrationStatus;
+using fermentation::ProductSensorFailurePolicy;
 using fermentation::ProgramDocument;
 using fermentation::ProgramField;
+using fermentation::ReturnStrategy;
 using fermentation::SensorPreference;
 using fermentation::ValidationErrorCode;
 using fermentation::ValidationPurpose;
@@ -183,7 +185,8 @@ void test_schema_versions_and_v4_migration_are_explicit() {
     TEST_ASSERT_TRUE(unchanged.document.has_value());
 
     auto versionFour = current;
-    versionFour.schema.version = fermentation::kMigratableProgramSchemaVersion;
+    versionFour.schema.version =
+        fermentation::kMinimumMigratableProgramSchemaVersion;
     versionFour.schema.presentFields =
         fermentation::kSchema4RequiredProgramFields;
     versionFour.program.maximumProductWaitMinutes = std::nullopt;
@@ -196,6 +199,9 @@ void test_schema_versions_and_v4_migration_are_explicit() {
                              migrated.document->schema.version);
     TEST_ASSERT_FALSE(
         migrated.document->program.maximumProductWaitMinutes.has_value());
+    TEST_ASSERT_TRUE(
+        migrated.document->program.productSensorFailure.returnStrategy ==
+        ReturnStrategy::AutomaticValidatedReturnToProduct);
     TEST_ASSERT_TRUE(
         validateProgram(*migrated.document, ValidationPurpose::CatalogTemplate)
             .valid());
@@ -222,7 +228,8 @@ void test_schema_versions_and_v4_migration_are_explicit() {
 
 void test_invalid_v4_document_is_not_partially_migrated() {
     auto versionFour = makeRunnableProgram();
-    versionFour.schema.version = fermentation::kMigratableProgramSchemaVersion;
+    versionFour.schema.version =
+        fermentation::kMinimumMigratableProgramSchemaVersion;
     versionFour.schema.presentFields =
         fermentation::kSchema4RequiredProgramFields &
         ~fermentation::fieldMask(ProgramField::Id);
@@ -234,6 +241,60 @@ void test_invalid_v4_document_is_not_partially_migrated() {
         static_cast<int>(MigrationStatus::InvalidSourceDocument),
         static_cast<int>(result.status));
     TEST_ASSERT_FALSE(result.document.has_value());
+}
+
+void test_schema_five_document_migrates_directly_to_current() {
+    auto versionFive = makeRunnableProgram();
+    versionFive.schema.version =
+        fermentation::kProductWaitFieldIntroducedInSchema;
+    versionFive.schema.presentFields =
+        fermentation::kSchema5RequiredProgramFields;
+
+    const auto migrated =
+        fermentation::migrateProgramToCurrentSchema(versionFive);
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(MigrationStatus::Migrated),
+                          static_cast<int>(migrated.status));
+    TEST_ASSERT_TRUE(migrated.document.has_value());
+    TEST_ASSERT_EQUAL_UINT32(fermentation::kCurrentProgramSchemaVersion,
+                             migrated.document->schema.version);
+    TEST_ASSERT_TRUE(
+        migrated.document->program.maximumProductWaitMinutes.has_value());
+    TEST_ASSERT_TRUE(
+        migrated.document->program.productSensorFailure.returnStrategy ==
+        ReturnStrategy::AutomaticValidatedReturnToProduct);
+}
+
+void test_air_only_migration_normalizes_policy_and_return_strategy() {
+    auto versionFour = makeRunnableProgram();
+    versionFour.schema.version =
+        fermentation::kMinimumMigratableProgramSchemaVersion;
+    versionFour.schema.presentFields =
+        fermentation::kSchema4RequiredProgramFields;
+    versionFour.program.maximumProductWaitMinutes = std::nullopt;
+    // Vor dieser Revision technisch zulaessige, jetzt nach 6.13 ungueltige
+    // Kombination: AirOnly mit WaitForUser und gesetztem fallback_delay_s.
+    versionFour.program.sensorPreference = SensorPreference::AirOnly;
+    versionFour.program.productSensorFailure.policy =
+        ProductSensorFailurePolicy::WaitForUser;
+    versionFour.program.productSensorFailure.fallbackDelaySeconds = 42U;
+
+    const auto migrated =
+        fermentation::migrateProgramToCurrentSchema(versionFour);
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(MigrationStatus::Migrated),
+                          static_cast<int>(migrated.status));
+    TEST_ASSERT_TRUE(migrated.document.has_value());
+    TEST_ASSERT_TRUE(migrated.document->program.productSensorFailure.policy ==
+                     ProductSensorFailurePolicy::FallbackToAirAfterTimeout);
+    TEST_ASSERT_TRUE(
+        migrated.document->program.productSensorFailure.returnStrategy ==
+        ReturnStrategy::RemainOnAirUntilEnd);
+    TEST_ASSERT_FALSE(migrated.document->program.productSensorFailure
+                          .fallbackDelaySeconds.has_value());
+    TEST_ASSERT_TRUE(
+        validateProgram(*migrated.document, ValidationPurpose::CatalogTemplate)
+            .valid());
 }
 
 void test_product_wait_is_for_preheating_programs_only() {
@@ -367,6 +428,8 @@ void test_unknown_enum_values_are_rejected() {
     document.program.sensorPreference = static_cast<SensorPreference>(255U);
     document.program.productSensorFailure.policy =
         static_cast<fermentation::ProductSensorFailurePolicy>(255U);
+    document.program.productSensorFailure.returnStrategy =
+        static_cast<ReturnStrategy>(255U);
     document.program.completion.mode = static_cast<CompletionMode>(255U);
 
     const auto result = validateProgram(document);
@@ -377,9 +440,75 @@ void test_unknown_enum_values_are_rejected() {
     TEST_ASSERT_TRUE(containsError(result,
                                    ValidationErrorCode::InvalidEnumValue,
                                    "defaults.product_sensor_failure.policy"));
+    TEST_ASSERT_TRUE(
+        containsError(result, ValidationErrorCode::InvalidEnumValue,
+                      "defaults.product_sensor_failure.return_strategy"));
     TEST_ASSERT_TRUE(containsError(result,
                                    ValidationErrorCode::InvalidEnumValue,
                                    "defaults.completion.mode"));
+}
+
+void test_product_required_rejects_fallback_to_air_after_timeout() {
+    auto document = makeRunnableProgram();
+    document.program.sensorPreference = SensorPreference::ProductRequired;
+    document.program.productSensorFailure.policy =
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+
+    TEST_ASSERT_TRUE(containsError(validateProgram(document),
+                                   ValidationErrorCode::IncompatibleCombination,
+                                   "defaults.product_sensor_failure.policy"));
+}
+
+void test_air_only_requires_remain_on_air_and_fallback_policy() {
+    auto document = makeRunnableProgram();
+    document.program.sensorPreference = SensorPreference::AirOnly;
+    document.program.productSensorFailure.policy =
+        ProductSensorFailurePolicy::WaitForUser;
+    document.program.productSensorFailure.returnStrategy =
+        ReturnStrategy::ManualReturnToProduct;
+
+    const auto result = validateProgram(document);
+    TEST_ASSERT_TRUE(containsError(result,
+                                   ValidationErrorCode::IncompatibleCombination,
+                                   "defaults.product_sensor_failure.policy"));
+    TEST_ASSERT_TRUE(
+        containsError(result, ValidationErrorCode::IncompatibleCombination,
+                      "defaults.product_sensor_failure.return_strategy"));
+
+    auto onlyValid = makeRunnableProgram();
+    onlyValid.program.sensorPreference = SensorPreference::AirOnly;
+    onlyValid.program.productSensorFailure.policy =
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+    onlyValid.program.productSensorFailure.returnStrategy =
+        ReturnStrategy::RemainOnAirUntilEnd;
+    onlyValid.program.productSensorFailure.fallbackDelaySeconds = std::nullopt;
+    TEST_ASSERT_TRUE(validateProgram(onlyValid).valid());
+}
+
+void test_air_only_rejects_fallback_delay_seconds() {
+    auto document = makeRunnableProgram();
+    document.program.sensorPreference = SensorPreference::AirOnly;
+    document.program.productSensorFailure.policy =
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+    document.program.productSensorFailure.returnStrategy =
+        ReturnStrategy::RemainOnAirUntilEnd;
+    document.program.productSensorFailure.fallbackDelaySeconds = 0U;
+
+    TEST_ASSERT_TRUE(containsError(
+        validateProgram(document), ValidationErrorCode::UnexpectedValue,
+        "defaults.product_sensor_failure.fallback_delay_s"));
+}
+
+void test_fallback_delay_seconds_is_dead_value_for_non_fallback_policies() {
+    auto document = makeRunnableProgram();
+    document.program.sensorPreference = SensorPreference::ProductRequired;
+    document.program.productSensorFailure.policy =
+        ProductSensorFailurePolicy::WaitForUser;
+    document.program.productSensorFailure.fallbackDelaySeconds = 5U;
+
+    TEST_ASSERT_TRUE(containsError(
+        validateProgram(document), ValidationErrorCode::UnexpectedValue,
+        "defaults.product_sensor_failure.fallback_delay_s"));
 }
 
 }  // namespace
@@ -392,6 +521,8 @@ int main() {
     RUN_TEST(test_catalog_templates_cannot_silently_become_runnable);
     RUN_TEST(test_schema_versions_and_v4_migration_are_explicit);
     RUN_TEST(test_invalid_v4_document_is_not_partially_migrated);
+    RUN_TEST(test_schema_five_document_migrates_directly_to_current);
+    RUN_TEST(test_air_only_migration_normalizes_policy_and_return_strategy);
     RUN_TEST(test_product_wait_is_for_preheating_programs_only);
     RUN_TEST(test_all_four_factory_programs_load_with_specified_behaviour);
     RUN_TEST(test_active_selection_is_a_copy_separate_from_factory_catalog);
@@ -399,5 +530,10 @@ int main() {
     RUN_TEST(test_user_copy_rejects_factory_program_ids);
     RUN_TEST(test_release_one_stage_count_boundaries_are_enforced);
     RUN_TEST(test_unknown_enum_values_are_rejected);
+    RUN_TEST(test_product_required_rejects_fallback_to_air_after_timeout);
+    RUN_TEST(test_air_only_requires_remain_on_air_and_fallback_policy);
+    RUN_TEST(test_air_only_rejects_fallback_delay_seconds);
+    RUN_TEST(
+        test_fallback_delay_seconds_is_dead_value_for_non_fallback_policies);
     return UNITY_END();
 }

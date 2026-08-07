@@ -10,7 +10,6 @@
 namespace fermentation {
 namespace {
 
-constexpr std::uint32_t kRunPersistenceSchema = 1U;
 constexpr device_platform::RecordTypeId kCheckpointRecordType{7U};
 constexpr device_platform::RecordTypeId kHeadRecordType{8U};
 constexpr std::size_t kMaximumCheckpointRecordBytes = 8240U;
@@ -33,14 +32,6 @@ bool eligibleTransition(TransitionReason reason) {
         default:
             return false;
     }
-}
-
-void clearCandidateRun(RunCommandState& state) {
-    state.activeProgramRun.reset();
-    state.activeManualRun.reset();
-    state.processRunSnapshot.reset();
-    state.activeRunId.clear();
-    state.activeRunSensorMode.reset();
 }
 
 }  // namespace
@@ -137,7 +128,7 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
         return {RunPersistenceLoadStatus::ForeignEpoch, std::nullopt};
     }
     if (headEnvelope.envelope.has_value() &&
-        headEnvelope.envelope->schemaVersion != kRunPersistenceSchema) {
+        !knownRunPersistenceSchema(headEnvelope.envelope->schemaVersion)) {
         enterBlockedIndeterminate();
         return {RunPersistenceLoadStatus::UnsupportedSchema, std::nullopt};
     }
@@ -182,7 +173,7 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
             return std::nullopt;
         }
         if (envelope.envelope.has_value() &&
-            envelope.envelope->schemaVersion != kRunPersistenceSchema) {
+            !knownRunPersistenceSchema(envelope.envelope->schemaVersion)) {
             status = RunPersistenceLoadStatus::UnsupportedSchema;
             return std::nullopt;
         }
@@ -243,8 +234,8 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
             if (!physicalEnvelope.envelope.has_value() ||
                 physicalEnvelope.envelope->recordTypeId !=
                     kCheckpointRecordType ||
-                physicalEnvelope.envelope->schemaVersion !=
-                    kRunPersistenceSchema ||
+                !knownRunPersistenceSchema(
+                    physicalEnvelope.envelope->schemaVersion) ||
                 physicalEnvelope.envelope->storageEpoch != epoch_ ||
                 physicalEnvelope.envelope->versionValue == 0U) {
                 enterBlockedIndeterminate();
@@ -296,6 +287,7 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
 RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
     const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
     bool periodic, const RunCommandState& before,
+    RunPersistenceMutationKind mutationKind,
     std::optional<CommandId> commandId) {
     if (state_ != RunPersistenceCoordinatorState::Ready &&
         state_ != RunPersistenceCoordinatorState::ReadyEmpty)
@@ -325,8 +317,8 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
                       RunPersistenceTechnicalReason::CodecError);
     }
     device_platform::StorageEnvelope env{
-        kCheckpointRecordType,   kRunPersistenceSchema, epoch_,
-        nextCheckpointRevision_, time.utcUnixSeconds,   payload};
+        kCheckpointRecordType,   kCurrentRunPersistenceSchema, epoch_,
+        nextCheckpointRevision_, time.utcUnixSeconds,          payload};
     std::string targetBytes;
     if (device_platform::encodeEnvelope(env, targetBytes,
                                         kMaximumCheckpointRecordBytes) !=
@@ -367,9 +359,7 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
         prepared.state = RunPersistenceHeadState::Prepared;
         prepared.revision = nextHeadRevision_;
         prepared.target = ref;
-        prepared.mutationKind = commandId.has_value()
-                                    ? RunPersistenceMutationKind::Command
-                                    : RunPersistenceMutationKind::Transition;
+        prepared.mutationKind = mutationKind;
         prepared.commandId = commandId;
         prepared.oldRunRevision = before.runRevision;
         prepared.newRunRevision = snapshot.runRevision;
@@ -554,9 +544,48 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
                       RunPersistenceTechnicalReason::InvalidProjection);
     if (time.monotonicMillis != decision.envelope.monotonicMillis)
         return result(RunPersistenceResultStatus::TimeMismatch);
+    // Ein bereits durabel persistiertes CommandId bleibt gesperrt, auch wenn
+    // die neu eintreffende Entscheidung (z. B. nach einer erneuten
+    // Bewertung) diesmal AppliedRamOnly waere - persistedIds_ hat Vorrang
+    // vor der folgenden RAM-only-Sonderbehandlung.
     for (std::size_t i = 0U; i < persistedIdCount_; ++i)
         if (persistedIds_[i] == decision.envelope.id)
             return result(RunPersistenceResultStatus::AlreadyPersisted);
+    // #21, 9.7-Korrektur (letzter Abschlussblocker): AppliedRamOnly ist per
+    // Plan-Vertrag nicht persistierbar - der manuelle Sensorselektionspfad
+    // wendet diese Entscheidung ausschliesslich im RAM an, stale-geprueft
+    // ueber applyRunCommand's bestehende before/after-Pruefung (identisch
+    // zu jedem anderen Kommando), ohne Store-Write, ohne persistierte
+    // CommandId (persistedIds_ bleibt unberuehrt) und ohne
+    // Laufrevisionsaenderung (AppliedRamOnly haelt resultingRunRevision
+    // unveraendert). Dieselbe CommandId bleibt dabei nur innerhalb des
+    // laufenden Boots ueber RunCommandState::processedCommandIds fluechtig
+    // idempotent (AlreadyProcessed) - dieses Feld ist RAM-only und wird bei
+    // keinem Neustart wiederhergestellt, die CommandId gilt danach nicht als
+    // verbraucht. sensorSelectionEvent/-Notice/startSensorSelectionNotice
+    // bleiben in diesem Ergebnis bewusst leer: 6.11 macht sie erst nach
+    // einem erfolgreichen Commit sichtbar, den dieser Pfad nie durchfuehrt,
+    // und AppliedRamOnly fuellt sie ohnehin nie.
+    if (decision.kind == CommandKind::ApplySensorSelectionAction &&
+        decision.sensorSelectionApplyStatus.has_value() &&
+        *decision.sensorSelectionApplyStatus ==
+            SensorSelectionApplyStatus::AppliedRamOnly) {
+        const auto ramApply = applyRunCommand(current, decision);
+        if (ramApply == CommandStatus::AlreadyProcessed)
+            return result(RunPersistenceResultStatus::AlreadyProcessed);
+        if (ramApply != CommandStatus::Applied)
+            return result(ramApply == CommandStatus::StaleState
+                              ? RunPersistenceResultStatus::StaleDecision
+                              : RunPersistenceResultStatus::InvalidDecision,
+                          RunPersistenceStep::CandidateApply);
+        RunPersistenceResult ramResult{RunPersistenceResultStatus::Applied};
+        ramResult.step = RunPersistenceStep::RamApply;
+        ramResult.durability = RunPersistenceDurability::Unchanged;
+        ramResult.coordinatorState = state_;
+        ramResult.effects = decision.effects;
+        ramResult.effectCount = decision.effectCount;
+        return ramResult;
+    }
     auto candidate = current;
     const auto apply = applyRunCommand(candidate, decision);
     if (apply != CommandStatus::Applied)
@@ -581,8 +610,9 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
-    const auto persisted =
-        writeSnapshot(*snapshot, time, false, current, decision.envelope.id);
+    const auto persisted = writeSnapshot(*snapshot, time, false, current,
+                                         RunPersistenceMutationKind::Command,
+                                         decision.envelope.id);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     if (applyRunCommand(current, decision) != CommandStatus::Applied) {
@@ -602,6 +632,11 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     result.coordinatorState = state_;
     result.effects = decision.effects;
     result.effectCount = decision.effectCount;
+    // #21, 6.11: Event/Notice erst nach erfolgreichem Commit sichtbar -
+    // dasselbe bestehende Muster wie result.effects oben.
+    result.sensorSelectionEvent = decision.sensorSelectionEvent;
+    result.sensorSelectionNotice = decision.sensorSelectionNotice;
+    result.startSensorSelectionNotice = decision.startSensorSelectionNotice;
     return result;
 }
 
@@ -625,7 +660,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
         return result(RunPersistenceResultStatus::StaleDecision,
                       RunPersistenceStep::CandidateApply);
     if (decision.reason == TransitionReason::ProductWaitExpired)
-        clearCandidateRun(candidate);
+        clearActiveRunState(candidate);
     const auto snapshot = makeRunPersistenceSnapshot(
         candidate, persistedIds_, persistedIdCount_,
         RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes());
@@ -633,7 +668,9 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
                       RunPersistenceTechnicalReason::InvalidProjection);
-    const auto persisted = writeSnapshot(*snapshot, time, false, current);
+    const auto persisted =
+        writeSnapshot(*snapshot, time, false, current,
+                      RunPersistenceMutationKind::Transition);
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     if (!current.processRunSnapshot.has_value() ||
@@ -648,7 +685,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
             RunPersistenceDurability::Changed);
     }
     if (decision.reason == TransitionReason::ProductWaitExpired)
-        clearCandidateRun(current);
+        clearActiveRunState(current);
     RunPersistenceResult result{RunPersistenceResultStatus::Applied};
     result.step = RunPersistenceStep::RamApply;
     result.durability = RunPersistenceDurability::Changed;
@@ -699,11 +736,135 @@ RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
     const auto snapshot = makeRunPersistenceSnapshot(
         current, persistedIds_, persistedIdCount_,
         RunCheckpointTrigger::Periodic, time, schedule_.intervalMinutes());
+    // mutationKind is inert here: a periodic write only ever produces a
+    // Committed head, which carries no mutation-kind field
+    // (validCommittedHead).
     return snapshot.has_value()
-               ? writeSnapshot(*snapshot, time, true, current)
+               ? writeSnapshot(*snapshot, time, true, current,
+                               RunPersistenceMutationKind::Transition)
                : result(RunPersistenceResultStatus::InvalidDecision,
                         RunPersistenceStep::CandidateApply,
                         RunPersistenceTechnicalReason::InvalidProjection);
+}
+
+namespace {
+
+// 6.14.3: exactly the six automatic causes. ManualUserFallback/
+// ManualUserReturn are excluded on purpose - those route through
+// persistCommand (#21 Commit 4), never through this automatic path.
+bool automaticSensorSelectionCause(SensorSelectionDecisionCause cause) {
+    switch (cause) {
+        case SensorSelectionDecisionCause::ProductFailureBlock:
+        case SensorSelectionDecisionCause::FallbackToAir:
+        case SensorSelectionDecisionCause::AutomaticValidatedReturn:
+        case SensorSelectionDecisionCause::RecoveryRevalidation:
+        case SensorSelectionDecisionCause::SafeStateEntry:
+        case SensorSelectionDecisionCause::ReturnValidationAborted:
+            return true;
+        case SensorSelectionDecisionCause::None:
+        case SensorSelectionDecisionCause::StartSelection:
+        case SensorSelectionDecisionCause::ManualUserFallback:
+        case SensorSelectionDecisionCause::ManualUserReturn:
+            return false;
+    }
+    return false;
+}
+
+}  // namespace
+
+RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
+    RunCommandState& current, const SensorSelectionStateMutation& mutation,
+    const RunCheckpointTime& time) {
+    if (state_ == RunPersistenceCoordinatorState::ReadyEmpty)
+        return result(RunPersistenceResultStatus::NoActiveRun);
+    if (state_ != RunPersistenceCoordinatorState::Ready)
+        return unavailableResult();
+    if (!current.activeProgramRun.has_value() &&
+        !current.activeManualRun.has_value())
+        return result(RunPersistenceResultStatus::NoActiveRun);
+    if (current.activeRunId.empty() ||
+        !current.activeRunSensorMode.has_value() ||
+        !current.sensorSelection.has_value())
+        return result(RunPersistenceResultStatus::NotEligible);
+    if (mutation.status !=
+        SensorSelectionApplyStatus::AppliedPersistentCandidate)
+        return result(RunPersistenceResultStatus::InvalidDecision);
+    if (!mutation.persisted.has_value() || !mutation.activeMode.has_value())
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    const auto cause = mutation.persisted->lastDecisionCause;
+    if (!automaticSensorSelectionCause(cause))
+        return result(RunPersistenceResultStatus::NotEligible);
+    if (mutation.runtime.lastAppliedMonotonicMillis.has_value() &&
+        *mutation.runtime.lastAppliedMonotonicMillis != time.monotonicMillis)
+        return result(RunPersistenceResultStatus::TimeMismatch);
+    // Korrekturauftrag Befund 1 (dritter Punkt): `mutation` ist eine bereits
+    // ausserhalb berechnete Entscheidung (applySensorSelectionDecision auf
+    // einer fruehreren Kopie von `current`) - vor jedem Write/RAM-Apply wird
+    // die Revisionsfolge stale-sicher gegen den tatsaechlich aktuellen
+    // `current`-Zustand geprueft. Nur AppliedPersistentCandidate erreicht
+    // diesen Punkt (siehe Filter oben), die erwartete Folge ist deshalb immer
+    // genau +1.
+    if (mutation.resultingRunRevision != current.runRevision + 1U)
+        return result(RunPersistenceResultStatus::StaleDecision,
+                      RunPersistenceStep::CandidateApply);
+    if (nextCheckpointRevision_ == 0U)
+        return result(RunPersistenceResultStatus::CounterOverflow);
+    // Korrekturauftrag Befund 1 (vierter Punkt): der Effekt wird unten aus
+    // dem tatsaechlichen Before/After-Permission-Uebergang abgeleitet, nicht
+    // aus der Ursache - `beforePermission` wird deshalb festgehalten, bevor
+    // der gemeinsame Mutationshelfer `current`/`candidate` veraendert.
+    const auto beforePermission = current.sensorSelectionRuntime.permission;
+    auto candidate = current;
+    // Korrekturauftrag Befund 1 (zweiter Punkt): gemeinsamer mechanischer
+    // Mutationshelfer mit dem manuellen Pfad (run_commands.cpp::
+    // decideApplySensorSelectionAction) - das schliesst die zuvor fehlende
+    // Uebernahme von mutation.runtime (sensorSelectionRuntime blieb bislang
+    // auf dem alten Wert stehen) und haelt den in ManualRunPlan::values
+    // duplizierten Sensormodus konsistent.
+    applySensorSelectionMutation(candidate, mutation);
+    const auto snapshot =
+        makeRunPersistenceSnapshot(candidate, persistedIds_, persistedIdCount_,
+                                   RunCheckpointTrigger::SensorSelection, time,
+                                   schedule_.intervalMinutes());
+    if (!snapshot.has_value())
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    const auto persisted =
+        writeSnapshot(*snapshot, time, false, current,
+                      RunPersistenceMutationKind::SensorSelection);
+    if (persisted.status != RunPersistenceResultStatus::Applied)
+        return persisted;
+    applySensorSelectionMutation(current, mutation);
+    RunPersistenceResult out{RunPersistenceResultStatus::Applied};
+    out.step = RunPersistenceStep::RamApply;
+    out.durability = RunPersistenceDurability::Changed;
+    out.coordinatorState = state_;
+    // 6.14.4: SensorSelectionPermissionRestored != direct actor release -
+    // only that #21's own precondition (peltierPermission) is satisfied
+    // again. Korrekturauftrag Befund 1: derived from the actual before/after
+    // transition (mirrors the manual path in run_commands.cpp), not from an
+    // enumerated cause list - the cause list was correct only as long as the
+    // six known automatic causes stayed exhaustive and never changed
+    // behavior; the transition itself is the single source of truth either
+    // way.
+    if (beforePermission != mutation.runtime.permission) {
+        out.effects[0] =
+            mutation.runtime.permission == SensorPeltierPermission::Blocked
+                ? CommandEffect::SensorSelectionPermissionBlocked
+                : CommandEffect::SensorSelectionPermissionRestored;
+        out.effectCount = 1U;
+    }
+    if (mutation.event.has_value()) {
+        auto event = *mutation.event;
+        event.utcUnixSeconds = time.utcUnixSeconds;
+        out.sensorSelectionEvent = event;
+    } else if (mutation.notice.has_value()) {
+        out.sensorSelectionNotice = mutation.notice;
+    }
+    return out;
 }
 
 }  // namespace fermentation

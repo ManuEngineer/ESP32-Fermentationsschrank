@@ -9,8 +9,18 @@
 #include "process_state_machine.hpp"
 #include "run_command_limits.hpp"
 #include "run_snapshot.hpp"
+#include "sensor_selection_types.hpp"
 
 namespace fermentation {
+
+// Vorwaertsdeklaration statt Include: `run_commands.hpp <->
+// sensor_selection.hpp` ist per Plan Abschnitt 7 NICHT zulaessig.
+// `decideApplySensorSelectionAction` braucht die externe Sensorevidenz dennoch
+// als Parameter (weder `RunCommandState` noch `SensorSelectionCommandRequest`
+// koennen sie tragen - #21, 6.14.3). Die vollstaendige Definition ist
+// ausschliesslich in `run_commands.cpp` sichtbar, das `sensor_selection.hpp`
+// regulaer einbindet.
+struct CrossRolePlausibilityContext;
 
 using CommandId = std::uint64_t;
 
@@ -60,11 +70,7 @@ enum class CommandKind : std::uint8_t {
     AcknowledgeMessage,
     MuteMessage,
     ResetFault,
-};
-
-enum class RunSensorMode : std::uint8_t {
-    Product,
-    Air,
+    ApplySensorSelectionAction,
 };
 
 struct ManualRunPlanRequest {
@@ -120,6 +126,10 @@ struct StartSummary {
 //
 // Diese PR fuehrt weder `ConfigurationService` noch eine provisorische
 // Katalogpersistenz ein; das bleibt Scope von #16.
+// #21, 6.5: Vorbedingung fuer jede Zeile der Startmatrix - Luft und
+// Kuehlkoerpersensor muessen zum Startzeitpunkt gueltig sein, unabhaengig von
+// `SensorPreference` und angefordertem Modus. `productSensorValid` wird nur
+// konsultiert, wenn `sensorMode == RunSensorMode::Product` angefordert wird.
 struct ProgramStartRequest {
     CommandEnvelope envelope;
     std::string runId;
@@ -128,12 +138,18 @@ struct ProgramStartRequest {
     std::uint32_t sourceProgramRevision{0U};
     RunSensorMode sensorMode{RunSensorMode::Air};
     bool safetyAllowsStart{false};
+    bool airSensorValid{false};
+    bool coolingSensorValid{false};
+    bool productSensorValid{false};
 };
 
 struct ManualStartRequest {
     CommandEnvelope envelope;
     ManualRunPlanRequest plan;
     bool safetyAllowsStart{false};
+    bool airSensorValid{false};
+    bool coolingSensorValid{false};
+    bool productSensorValid{false};
 };
 
 enum class StopOption : std::uint8_t {
@@ -147,6 +163,12 @@ struct StopRequest {
     StopOption option{StopOption::Back};
     std::optional<ManualRunPlanRequest> coolingPlan;
     bool safetyAllowsCooling{false};
+    // Korrekturauftrag Befund 2: der Kuehl-Ersatzlauf darf NormalAir/Allowed
+    // nicht mehr per Konvention annehmen (siehe startSensorSelectionOutcome
+    // in run_commands.cpp) - explizite Air-/Cooling-Evidenz wie bei jedem
+    // anderen Start (6.5), sonst bleibt die Erstbefuellung fail-closed Blocked.
+    bool airSensorValid{false};
+    bool coolingSensorValid{false};
 };
 
 struct CompletionRequest {
@@ -154,6 +176,9 @@ struct CompletionRequest {
     bool startCooling{false};
     std::optional<ManualRunPlanRequest> coolingPlan;
     bool safetyAllowsCooling{false};
+    // Siehe StopRequest.
+    bool airSensorValid{false};
+    bool coolingSensorValid{false};
 };
 
 struct RunAdjustmentCommandRequest {
@@ -169,6 +194,18 @@ struct RunAdjustmentPreview {
     ProcessState phase{ProcessState::Standby};
     bool targetRequalificationRequired{false};
     bool timerContinuesWithoutBiologicalCorrection{false};
+};
+
+// Manuelle Sensoraktion (#21, 6.11/6.14.3). `action` liegt in
+// sensor_selection_types.hpp (dependency-frei); dieser Vertrag bindet
+// zusaetzlich CommandEnvelope und gehoert deshalb hierher, nicht dorthin.
+// `safetyAllowsChange` ist wie `ProgramStartRequest::safetyAllowsStart` ein
+// zusaetzliches externes Pruefsignal - es ersetzt weder die interne
+// `criticalSafetyEventPending`-Invariante noch wird es von ihr ersetzt.
+struct SensorSelectionCommandRequest {
+    CommandEnvelope envelope;
+    SensorSelectionUserAction action{SensorSelectionUserAction::RecheckProduct};
+    bool safetyAllowsChange{false};
 };
 
 enum class MessageCode : std::uint8_t {
@@ -263,6 +300,12 @@ enum class CommandEffect : std::uint8_t {
     MessageAcknowledged,
     AcousticMuted,
     FaultResetAuthorized,
+    // #21, 6.14.4: transports only that #21's factual precondition for
+    // Peltier control changed (peltierPermission). It is NOT a direct actor
+    // release - #23/#24 still evaluate every remaining actor safety gate
+    // (control dead time, interlocks) before actually switching anything.
+    SensorSelectionPermissionBlocked,
+    SensorSelectionPermissionRestored,
 };
 
 struct RunCommandState {
@@ -275,6 +318,16 @@ struct RunCommandState {
     // Programmschnappschuss beziehungsweise dem manuellen Plan gesetzt. Er
     // ist keine Sensorqualitaets- oder Hardwareentscheidung.
     std::optional<RunSensorMode> activeRunSensorMode;
+    // Persisted sensor-selection provenance (#21, 6.12). RAM-only fields
+    // (SensorSelectionRuntimeState) are added by #21 Commit 4 - the wire
+    // format never carries them (6.12: "ausdruecklich ausserhalb des
+    // Wireformats").
+    std::optional<PersistedSensorSelectionState> sensorSelection;
+    // RAM-only Laufzeitzustand der Sensorselektion (#21, 6.4.11/6.14.6). Der
+    // Default entspricht bereits dem einzigen NoActiveRun-Inaktivzustand
+    // (siehe sensor_selection_types.hpp), deshalb kein weiterer expliziter
+    // Reset noetig ausser durch clearActiveRunState().
+    SensorSelectionRuntimeState sensorSelectionRuntime;
     std::uint32_t runRevision{0U};
     std::array<RuntimeMessage, run_command_limits::kMaximumRuntimeMessages>
         messages{};
@@ -308,6 +361,16 @@ struct CommandDecision {
     std::array<CommandEffect, run_command_limits::kMaximumCommandEffects>
         effects{};
     std::size_t effectCount{0U};
+    // #21, 6.11/6.14.3: bei ApplySensorSelectionAction immer gesetzt, sonst
+    // immer std::nullopt. Alleinige Transportquelle des manuellen Pfads;
+    // `status`/`after` duerfen diese Entscheidung nicht ersetzen.
+    std::optional<SensorSelectionApplyStatus> sensorSelectionApplyStatus;
+    std::optional<SensorSelectionEvent> sensorSelectionEvent;
+    std::optional<SensorSelectionNotice> sensorSelectionNotice;
+    // #21, 6.5/6.11: von decideProgramStart/decideManualStart bereits vor
+    // der Bestaetigungspruefung gefuellt (analog startSummary) - nur bei
+    // tatsaechlichem requestedMode != effectiveMode (Startmatrix Zeile 2).
+    std::optional<StartSensorSelectionNotice> startSensorSelectionNotice;
 
     [[nodiscard]] bool proposed() const {
         return status == CommandStatus::Proposed;
@@ -330,10 +393,39 @@ struct CommandDecision {
     const RunCommandState& current, const MessageCommandRequest& request);
 [[nodiscard]] CommandDecision decideFaultReset(
     const RunCommandState& current, const FaultResetRequest& request);
+// #21, 6.14.3: ruft applySensorSelectionDecision (sensor_selection.hpp) auf
+// derselben Kandidatenkopie wie der automatische Coordinator-Pfad auf - keine
+// zweite Regelimplementierung. `plausibility` ist ein eigener Parameter statt
+// eines Felds von SensorSelectionCommandRequest, weil weder RunCommandState
+// noch dieser Vertrag den Typ (sensor_selection.hpp) ohne einen nach 7
+// unzulaessigen Include tragen koennen.
+[[nodiscard]] CommandDecision decideApplySensorSelectionAction(
+    const RunCommandState& current,
+    const SensorSelectionCommandRequest& request,
+    const CrossRolePlausibilityContext& plausibility);
 
 [[nodiscard]] CommandStatus applyRunCommand(RunCommandState& current,
                                             const CommandDecision& decision);
 [[nodiscard]] const RuntimeMessage* highestPriorityActiveMessage(
     const RunCommandState& state);
+// #21, 6.14.6: einzige Implementierung fuer jeden terminalen Laufpfad
+// (Abort/Complete/Tombstone/ProductWaitExpired); ersetzt die vormals
+// getrennten run_commands.cpp::clearActiveRun und
+// run_persistence_coordinator.cpp::clearCandidateRun.
+void clearActiveRunState(RunCommandState& state);
+
+// Korrekturauftrag Befund 1: gemeinsamer mechanischer Mutationshelfer fuer
+// den manuellen Pfad (decideApplySensorSelectionAction) und den
+// automatischen Pfad (RunPersistenceCoordinator::persistSensorSelection,
+// run_persistence_coordinator.cpp) - verhindert, dass Laufzeitzustand,
+// aktiver Modus, Persistenzzustand, Laufrevision und der in
+// ManualRunPlan::values.sensorMode duplizierte Modus auseinanderlaufen. Rein
+// mechanisch: trifft keine Fachentscheidung, die bleibt vollstaendig in
+// sensor_selection.cpp/applySensorSelectionDecision.
+// SensorSelectionStateMutation ist bereits ueber sensor_selection_types.hpp
+// sichtbar (RunCommandState braucht SensorSelectionRuntimeState ohnehin), kein
+// zusaetzlicher Include.
+void applySensorSelectionMutation(RunCommandState& state,
+                                  const SensorSelectionStateMutation& mutation);
 
 }  // namespace fermentation

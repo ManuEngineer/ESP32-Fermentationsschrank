@@ -1,6 +1,6 @@
 # Spezifikationsbeispiel. Exakte Prozesswerte folgen erst bei der Inbetriebnahme.
 # TBD_COMMISSIONING ist kein gueltiger Laufzeitwert der fertigen Firmware.
-schema_version: 4
+schema_version: 6
 
 programs:
   - id: yogurt-mild
@@ -17,11 +17,13 @@ programs:
       product_sensor_failure:
         policy: fallback_to_air_after_timeout
         fallback_delay_s: TBD_COMMISSIONING
+        return_strategy: automatic_validated_return_to_product
       fermentation_temperature_c: TBD_COMMISSIONING
       fermentation_duration_min: TBD_COMMISSIONING
       target_qualification_band_c: TBD_COMMISSIONING
       target_qualification_duration_min: TBD_COMMISSIONING
       max_target_reach_min: TBD_COMMISSIONING
+      max_product_wait_min: TBD_COMMISSIONING
       completion:
         mode: cool_and_hold_until_manual_stop
         cooling_target_c: TBD_COMMISSIONING
@@ -40,11 +42,13 @@ programs:
       product_sensor_failure:
         policy: fallback_to_air_after_timeout
         fallback_delay_s: TBD_COMMISSIONING
+        return_strategy: automatic_validated_return_to_product
       fermentation_temperature_c: TBD_COMMISSIONING
       fermentation_duration_min: TBD_COMMISSIONING
       target_qualification_band_c: TBD_COMMISSIONING
       target_qualification_duration_min: TBD_COMMISSIONING
       max_target_reach_min: TBD_COMMISSIONING
+      max_product_wait_min: TBD_COMMISSIONING
       completion:
         mode: cool_and_hold_until_manual_stop
         cooling_target_c: TBD_COMMISSIONING
@@ -63,6 +67,7 @@ programs:
       product_sensor_failure:
         policy: fallback_to_air_after_timeout
         fallback_delay_s: TBD_COMMISSIONING
+        return_strategy: automatic_validated_return_to_product
       fermentation_temperature_c: TBD_COMMISSIONING
       fermentation_duration_min: TBD_COMMISSIONING
       target_qualification_band_c: TBD_COMMISSIONING
@@ -86,6 +91,7 @@ programs:
       product_sensor_failure:
         policy: fallback_to_air_after_timeout
         fallback_delay_s: TBD_COMMISSIONING
+        return_strategy: automatic_validated_return_to_product
       fermentation_temperature_c: TBD_COMMISSIONING
       fermentation_duration_min: TBD_COMMISSIONING
       target_qualification_band_c: TBD_COMMISSIONING
@@ -120,6 +126,10 @@ allowed_values:
     - fallback_to_air_after_timeout
     - wait_for_user
     - stop_to_safe_state
+  return_strategy:
+    - remain_on_air_until_end
+    - manual_return_to_product
+    - automatic_validated_return_to_product
   completion_mode:
     - finish_without_cooling
     - cool_then_finish

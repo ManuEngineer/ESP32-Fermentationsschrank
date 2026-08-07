@@ -19,7 +19,8 @@ namespace be = device_platform::big_endian;
 
 constexpr std::size_t kMaximumCheckpointPayloadBytes =
     kMaximumRunPersistencePayloadBytes;
-constexpr std::uint32_t kRunPersistenceSchema = 1U;
+// #21, 6.12: the sensor-selection field only exists from schema 2 onward.
+constexpr std::uint32_t kSensorSelectionFieldIntroducedInSchema = 2U;
 constexpr device_platform::RecordTypeId kCheckpointRecordType{7U};
 constexpr device_platform::RecordTypeId kHeadRecordType{8U};
 constexpr std::size_t kMaximumCheckpointRecordBytes = 8240U;
@@ -135,6 +136,46 @@ bool writeEnum(ByteWriter& w, RunCheckpointTrigger v) {
             return be::writeUint8(w, 2U);
         case RunCheckpointTrigger::Periodic:
             return be::writeUint8(w, 3U);
+        case RunCheckpointTrigger::SensorSelection:
+            return be::writeUint8(w, 4U);
+    }
+    return false;
+}
+bool writeEnum(ByteWriter& w, SensorSelectionProvenance v) {
+    switch (v) {
+        case SensorSelectionProvenance::InitialSelection:
+            return be::writeUint8(w, 1U);
+        case SensorSelectionProvenance::FallbackActive:
+            return be::writeUint8(w, 2U);
+        case SensorSelectionProvenance::ReturnedToProduct:
+            return be::writeUint8(w, 3U);
+        case SensorSelectionProvenance::LegacyUnknown:
+            return be::writeUint8(w, 4U);
+    }
+    return false;
+}
+bool writeEnum(ByteWriter& w, SensorSelectionDecisionCause v) {
+    switch (v) {
+        case SensorSelectionDecisionCause::None:
+            return be::writeUint8(w, 1U);
+        case SensorSelectionDecisionCause::StartSelection:
+            return be::writeUint8(w, 2U);
+        case SensorSelectionDecisionCause::ProductFailureBlock:
+            return be::writeUint8(w, 3U);
+        case SensorSelectionDecisionCause::FallbackToAir:
+            return be::writeUint8(w, 4U);
+        case SensorSelectionDecisionCause::ManualUserFallback:
+            return be::writeUint8(w, 5U);
+        case SensorSelectionDecisionCause::AutomaticValidatedReturn:
+            return be::writeUint8(w, 6U);
+        case SensorSelectionDecisionCause::ManualUserReturn:
+            return be::writeUint8(w, 7U);
+        case SensorSelectionDecisionCause::RecoveryRevalidation:
+            return be::writeUint8(w, 8U);
+        case SensorSelectionDecisionCause::SafeStateEntry:
+            return be::writeUint8(w, 9U);
+        case SensorSelectionDecisionCause::ReturnValidationAborted:
+            return be::writeUint8(w, 10U);
     }
     return false;
 }
@@ -284,9 +325,82 @@ bool readTrigger(ByteReader& reader, RunCheckpointTrigger& out) {
         case 3U:
             out = RunCheckpointTrigger::Periodic;
             return true;
+        case 4U:
+            out = RunCheckpointTrigger::SensorSelection;
+            return true;
         default:
             return false;
     }
+}
+bool readProvenance(ByteReader& reader, SensorSelectionProvenance& out) {
+    std::uint8_t value = 0U;
+    if (!be::readUint8(reader, value)) return false;
+    switch (value) {
+        case 1U:
+            out = SensorSelectionProvenance::InitialSelection;
+            return true;
+        case 2U:
+            out = SensorSelectionProvenance::FallbackActive;
+            return true;
+        case 3U:
+            out = SensorSelectionProvenance::ReturnedToProduct;
+            return true;
+        case 4U:
+            out = SensorSelectionProvenance::LegacyUnknown;
+            return true;
+        default:
+            return false;
+    }
+}
+bool readDecisionCause(ByteReader& reader, SensorSelectionDecisionCause& out) {
+    std::uint8_t value = 0U;
+    if (!be::readUint8(reader, value)) return false;
+    switch (value) {
+        case 1U:
+            out = SensorSelectionDecisionCause::None;
+            return true;
+        case 2U:
+            out = SensorSelectionDecisionCause::StartSelection;
+            return true;
+        case 3U:
+            out = SensorSelectionDecisionCause::ProductFailureBlock;
+            return true;
+        case 4U:
+            out = SensorSelectionDecisionCause::FallbackToAir;
+            return true;
+        case 5U:
+            out = SensorSelectionDecisionCause::ManualUserFallback;
+            return true;
+        case 6U:
+            out = SensorSelectionDecisionCause::AutomaticValidatedReturn;
+            return true;
+        case 7U:
+            out = SensorSelectionDecisionCause::ManualUserReturn;
+            return true;
+        case 8U:
+            out = SensorSelectionDecisionCause::RecoveryRevalidation;
+            return true;
+        case 9U:
+            out = SensorSelectionDecisionCause::SafeStateEntry;
+            return true;
+        case 10U:
+            out = SensorSelectionDecisionCause::ReturnValidationAborted;
+            return true;
+        default:
+            return false;
+    }
+}
+bool writePersistedSensorSelectionState(
+    ByteWriter& writer, const PersistedSensorSelectionState& s) {
+    return writeEnum(writer, s.provenance) &&
+           writeEnum(writer, s.lastDecisionCause) &&
+           be::writeUint32(writer, s.lastDecisionRunRevision);
+}
+bool readPersistedSensorSelectionState(ByteReader& reader,
+                                       PersistedSensorSelectionState& s) {
+    return readProvenance(reader, s.provenance) &&
+           readDecisionCause(reader, s.lastDecisionCause) &&
+           be::readUint32(reader, s.lastDecisionRunRevision);
 }
 bool readSensor(ByteReader& reader, RunSensorMode& out) {
     std::uint8_t value = 0U;
@@ -589,7 +703,12 @@ RunPersistenceCodecStatus encodeRunPersistenceSnapshot(
               be::writeUint32(writer, snapshot.runRevision) &&
               writeString(writer, snapshot.activeRunId);
     if (snapshot.variant != RunCheckpointVariant::NoActiveRun) {
-        ok = ok && writeEnum(writer, *snapshot.activeRunSensorMode);
+        ok = ok && writeEnum(writer, *snapshot.activeRunSensorMode) &&
+             be::writeOptionalTag(writer,
+                                  snapshot.sensorSelection.has_value()) &&
+             (!snapshot.sensorSelection.has_value() ||
+              writePersistedSensorSelectionState(writer,
+                                                 *snapshot.sensorSelection));
     }
     if (snapshot.variant == RunCheckpointVariant::ProgramRun) {
         std::string program;
@@ -621,7 +740,7 @@ RunPersistenceCodecStatus encodeRunPersistenceSnapshot(
 }
 
 RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
-    const std::string& payload) {
+    const std::string& payload, std::uint32_t schemaVersion) {
     if (payload.size() > kMaximumCheckpointPayloadBytes)
         return {RunPersistenceCodecStatus::CapacityExceeded, std::nullopt};
     ByteReader reader(payload);
@@ -639,6 +758,30 @@ RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
         if (!readSensor(reader, mode))
             return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
         s.activeRunSensorMode = mode;
+        // A schema-1 payload predates this field entirely (6.12) and is
+        // mapped onto the explicit LegacyUnknown/None/0 sentinel (Korrektur-
+        // auftrag Befund 4) rather than left absent: this is what lets
+        // validateRunPersistenceSnapshot require sensorSelection presence
+        // unconditionally for every active-run variant, schema-1 included,
+        // instead of carrying a schema-dependent exception. A schema-2
+        // payload always carries an explicit presence tag.
+        if (schemaVersion >= kSensorSelectionFieldIntroducedInSchema) {
+            bool present = false;
+            if (!be::readOptionalTag(reader, present))
+                return {RunPersistenceCodecStatus::InvalidWireValue,
+                        std::nullopt};
+            if (present) {
+                PersistedSensorSelectionState selection;
+                if (!readPersistedSensorSelectionState(reader, selection))
+                    return {RunPersistenceCodecStatus::InvalidWireValue,
+                            std::nullopt};
+                s.sensorSelection = selection;
+            }
+        } else {
+            s.sensorSelection = PersistedSensorSelectionState{
+                SensorSelectionProvenance::LegacyUnknown,
+                SensorSelectionDecisionCause::None, 0U};
+        }
     }
     if (s.variant == RunCheckpointVariant::ProgramRun) {
         RunProgramSnapshot p;
@@ -708,14 +851,14 @@ bool readReference(ByteReader& reader, RunCheckpointReference& ref) {
         !readVariant(reader, ref.variant)) {
         return false;
     }
-    return ref.schemaVersion == kRunPersistenceSchema &&
+    return knownRunPersistenceSchema(ref.schemaVersion) &&
            ref.storageEpoch != 0U && ref.checkpointRevision != 0U;
 }
 
 bool validReference(const RunCheckpointReference& reference,
                     device_platform::StorageEpoch epoch) {
     if (reference.slot > 1U ||
-        reference.schemaVersion != kRunPersistenceSchema ||
+        !knownRunPersistenceSchema(reference.schemaVersion) ||
         reference.storageEpoch != epoch.value() ||
         reference.checkpointRevision == 0U ||
         reference.payloadLength > kMaximumRunPersistencePayloadBytes) {
@@ -761,6 +904,8 @@ bool writeMutationKind(ByteWriter& writer, RunPersistenceMutationKind kind) {
             return be::writeUint8(writer, 1U);
         case RunPersistenceMutationKind::Transition:
             return be::writeUint8(writer, 2U);
+        case RunPersistenceMutationKind::SensorSelection:
+            return be::writeUint8(writer, 3U);
     }
     return false;
 }
@@ -774,6 +919,9 @@ bool readMutationKind(ByteReader& reader, RunPersistenceMutationKind& kind) {
             return true;
         case 2U:
             kind = RunPersistenceMutationKind::Transition;
+            return true;
+        case 3U:
+            kind = RunPersistenceMutationKind::SensorSelection;
             return true;
         default:
             return false;
@@ -862,8 +1010,8 @@ std::optional<std::string> encodeRunPersistenceHead(
     }
     if (!ok) return std::nullopt;
     device_platform::StorageEnvelope envelope{
-        kHeadRecordType, kRunPersistenceSchema, epoch,
-        head.revision,   std::nullopt,          payload.takeBytes()};
+        kHeadRecordType, kCurrentRunPersistenceSchema, epoch, head.revision,
+        std::nullopt,    payload.takeBytes()};
     std::string bytes;
     if (device_platform::encodeEnvelope(envelope, bytes,
                                         kMaximumHeadRecordBytes) !=
@@ -878,7 +1026,7 @@ std::optional<RunPersistenceHead> decodeRunPersistenceHead(
     const auto envelope = device_platform::decodeEnvelope(bytes);
     if (!envelope.envelope.has_value() ||
         envelope.envelope->recordTypeId != kHeadRecordType ||
-        envelope.envelope->schemaVersion != kRunPersistenceSchema ||
+        !knownRunPersistenceSchema(envelope.envelope->schemaVersion) ||
         envelope.envelope->storageEpoch != epoch ||
         envelope.envelope->versionValue == 0U) {
         return std::nullopt;
@@ -947,13 +1095,13 @@ std::optional<RunPersistenceRawRecord> decodeRunPersistenceRecord(
     const auto envelope = device_platform::decodeEnvelope(bytes);
     if (!envelope.envelope.has_value() ||
         envelope.envelope->recordTypeId != kCheckpointRecordType ||
-        envelope.envelope->schemaVersion != kRunPersistenceSchema ||
+        !knownRunPersistenceSchema(envelope.envelope->schemaVersion) ||
         envelope.envelope->storageEpoch != epoch ||
         envelope.envelope->versionValue == 0U) {
         return std::nullopt;
     }
-    const auto snapshot =
-        decodeRunPersistenceSnapshot(envelope.envelope->payload);
+    const auto snapshot = decodeRunPersistenceSnapshot(
+        envelope.envelope->payload, envelope.envelope->schemaVersion);
     if (!snapshot.snapshot.has_value()) return std::nullopt;
     return RunPersistenceRawRecord{bytes, *snapshot.snapshot,
                                    envelope.envelope->versionValue,
@@ -979,7 +1127,7 @@ RunCheckpointReference makeRunCheckpointReference(
     device_platform::StorageEpoch epoch) {
     const auto envelope = device_platform::decodeEnvelope(record.bytes);
     return {static_cast<std::uint8_t>(slot),
-            kRunPersistenceSchema,
+            envelope.envelope->schemaVersion,
             epoch.value(),
             record.checkpointRevision,
             static_cast<std::uint32_t>(envelope.envelope->payload.size()),

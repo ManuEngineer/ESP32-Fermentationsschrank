@@ -88,6 +88,37 @@ bool productSensorFailurePolicyFromWireId(std::uint8_t wireId,
     }
 }
 
+bool returnStrategyToWireId(ReturnStrategy value, std::uint8_t& out) {
+    switch (value) {
+        case ReturnStrategy::RemainOnAirUntilEnd:
+            out = 1U;
+            return true;
+        case ReturnStrategy::ManualReturnToProduct:
+            out = 2U;
+            return true;
+        case ReturnStrategy::AutomaticValidatedReturnToProduct:
+            out = 3U;
+            return true;
+    }
+    return false;
+}
+
+bool returnStrategyFromWireId(std::uint8_t wireId, ReturnStrategy& out) {
+    switch (wireId) {
+        case 1U:
+            out = ReturnStrategy::RemainOnAirUntilEnd;
+            return true;
+        case 2U:
+            out = ReturnStrategy::ManualReturnToProduct;
+            return true;
+        case 3U:
+            out = ReturnStrategy::AutomaticValidatedReturnToProduct;
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool completionModeToWireId(CompletionMode value, std::uint8_t& out) {
     switch (value) {
         case CompletionMode::FinishWithoutCooling:
@@ -223,9 +254,16 @@ bool readCompletion(ByteReader& reader, CompletionMode& out) {
            configuration_codec_internal::completionModeFromWireId(raw, out);
 }
 
+bool readReturnStrategy(ByteReader& reader, ReturnStrategy& out) {
+    std::uint8_t raw = 0U;
+    return big_endian::readUint8(reader, raw) &&
+           configuration_codec_internal::returnStrategyFromWireId(raw, out);
+}
+
 bool writeProgramIdentityAndFlags(ByteWriter& writer,
                                   const ProgramDocument& document,
-                                  std::uint8_t sensor, std::uint8_t failure) {
+                                  std::uint8_t sensor, std::uint8_t failure,
+                                  std::uint8_t returnStrategy) {
     const auto& program = document.program;
     bool ok = big_endian::writeUint32(writer, document.schema.version);
     ok = ok && big_endian::writeUint64(writer, document.schema.presentFields);
@@ -243,8 +281,12 @@ bool writeProgramIdentityAndFlags(ByteWriter& writer,
     ok = ok && big_endian::writeBool(writer, program.preheat);
     ok = ok && big_endian::writeUint8(writer, sensor);
     ok = ok && big_endian::writeUint8(writer, failure);
-    return ok && writeOptionalUint32(
-                     writer, program.productSensorFailure.fallbackDelaySeconds);
+    ok = ok && writeOptionalUint32(
+                   writer, program.productSensorFailure.fallbackDelaySeconds);
+    if (document.schema.version >= kReturnStrategyFieldIntroducedInSchema) {
+        ok = ok && big_endian::writeUint8(writer, returnStrategy);
+    }
+    return ok;
 }
 
 bool writeProgramStagesAndLimits(ByteWriter& writer,
@@ -261,7 +303,7 @@ bool writeProgramStagesAndLimits(ByteWriter& writer,
     ok = ok && writeOptionalUint32(writer,
                                    program.targetQualification.durationMinutes);
     ok = ok && writeOptionalUint32(writer, program.maximumTargetReachMinutes);
-    if (document.schema.version >= kCurrentProgramSchemaVersion) {
+    if (document.schema.version >= kProductWaitFieldIntroducedInSchema) {
         ok = ok &&
              writeOptionalUint32(writer, program.maximumProductWaitMinutes);
     }
@@ -273,17 +315,21 @@ bool writeProgram(ByteWriter& writer, const ProgramDocument& document) {
     std::uint8_t sensor = 0U;
     std::uint8_t failure = 0U;
     std::uint8_t completion = 0U;
+    std::uint8_t returnStrategy = 0U;
     if (!configuration_codec_internal::sensorPreferenceToWireId(
             program.sensorPreference, sensor) ||
         !configuration_codec_internal::productSensorFailurePolicyToWireId(
             program.productSensorFailure.policy, failure) ||
         !configuration_codec_internal::completionModeToWireId(
             program.completion.mode, completion) ||
+        !configuration_codec_internal::returnStrategyToWireId(
+            program.productSensorFailure.returnStrategy, returnStrategy) ||
         program.fermentationStages.size() >
             std::numeric_limits<std::uint8_t>::max()) {
         return false;
     }
-    bool ok = writeProgramIdentityAndFlags(writer, document, sensor, failure) &&
+    bool ok = writeProgramIdentityAndFlags(writer, document, sensor, failure,
+                                           returnStrategy) &&
               writeProgramStagesAndLimits(writer, document);
     ok = ok && big_endian::writeUint8(writer, completion);
     ok = ok &&
@@ -351,9 +397,17 @@ ConfigurationCodecStatus addProgramIdentityAndFlagsPayloadSize(
     if (!size.add(7U) || !size.add(2U)) {
         return ConfigurationCodecStatus::CapacityExceeded;
     }
-    return addOptionalPayloadSize(
+    const auto delayStatus = addOptionalPayloadSize(
         size, program.productSensorFailure.fallbackDelaySeconds.has_value(),
         sizeof(std::uint32_t));
+    if (delayStatus != ConfigurationCodecStatus::Success) {
+        return delayStatus;
+    }
+    if (document.schema.version >= kReturnStrategyFieldIntroducedInSchema &&
+        !size.add(sizeof(std::uint8_t))) {
+        return ConfigurationCodecStatus::CapacityExceeded;
+    }
+    return ConfigurationCodecStatus::Success;
 }
 
 ConfigurationCodecStatus addProgramStagesAndLimitsPayloadSize(
@@ -391,7 +445,7 @@ ConfigurationCodecStatus addProgramStagesAndLimitsPayloadSize(
     if (!optionalSizesFit) {
         return ConfigurationCodecStatus::CapacityExceeded;
     }
-    if (document.schema.version >= kCurrentProgramSchemaVersion) {
+    if (document.schema.version >= kProductWaitFieldIntroducedInSchema) {
         return addOptionalPayloadSize(
             size, program.maximumProductWaitMinutes.has_value(),
             sizeof(std::uint32_t));
@@ -408,7 +462,10 @@ ConfigurationCodecStatus addProgramPayloadSize(
         !configuration_codec_internal::productSensorFailurePolicyToWireId(
             document.program.productSensorFailure.policy, ignoredWireId) ||
         !configuration_codec_internal::completionModeToWireId(
-            document.program.completion.mode, ignoredWireId)) {
+            document.program.completion.mode, ignoredWireId) ||
+        !configuration_codec_internal::returnStrategyToWireId(
+            document.program.productSensorFailure.returnStrategy,
+            ignoredWireId)) {
         return ConfigurationCodecStatus::InvalidDocument;
     }
     auto status = addProgramIdentityAndFlagsPayloadSize(size, document);
@@ -459,9 +516,13 @@ ConfigurationCodecStatus readProgramSchema(ByteReader& reader,
     }
     ProgramFieldMask knownFields = 0U;
     ProgramFieldMask requiredFields = 0U;
-    if (candidate.schema.version == kMigratableProgramSchemaVersion) {
+    if (candidate.schema.version == kMinimumMigratableProgramSchemaVersion) {
         knownFields = kSchema4RequiredProgramFields;
         requiredFields = kSchema4RequiredProgramFields;
+    } else if (candidate.schema.version ==
+               kProductWaitFieldIntroducedInSchema) {
+        knownFields = kSchema5RequiredProgramFields;
+        requiredFields = kSchema5RequiredProgramFields;
     } else if (candidate.schema.version == kCurrentProgramSchemaVersion) {
         knownFields = kCurrentKnownProgramFields;
         requiredFields = kCurrentRequiredProgramFields;
@@ -476,7 +537,8 @@ ConfigurationCodecStatus readProgramSchema(ByteReader& reader,
 }
 
 ConfigurationCodecStatus readProgramIdentityAndFlags(
-    ByteReader& reader, ProgramDefinition& program) {
+    ByteReader& reader, std::uint32_t schemaVersion,
+    ProgramDefinition& program) {
     using namespace configuration_limits;
     if (!readString(reader, kMaximumProgramIdBytes, program.id) ||
         !readString(reader, kMaximumVisibleNameBytes, program.name) ||
@@ -494,6 +556,10 @@ ConfigurationCodecStatus readProgramIdentityAndFlags(
     ok = ok && readFailure(reader, program.productSensorFailure.policy);
     ok = ok && readOptionalUint32(
                    reader, program.productSensorFailure.fallbackDelaySeconds);
+    if (ok && schemaVersion >= kReturnStrategyFieldIntroducedInSchema) {
+        ok = readReturnStrategy(reader,
+                                program.productSensorFailure.returnStrategy);
+    }
     return ok ? ConfigurationCodecStatus::Success
               : ConfigurationCodecStatus::InvalidWireValue;
 }
@@ -525,7 +591,7 @@ ConfigurationCodecStatus readProgramLimitsAndCompletion(
         !readOptionalUint32(reader, program.maximumTargetReachMinutes)) {
         return ConfigurationCodecStatus::Truncated;
     }
-    if (schemaVersion >= kCurrentProgramSchemaVersion &&
+    if (schemaVersion >= kProductWaitFieldIntroducedInSchema &&
         !readOptionalUint32(reader, program.maximumProductWaitMinutes)) {
         return ConfigurationCodecStatus::Truncated;
     }
@@ -544,7 +610,8 @@ ConfigurationCodecStatus readProgram(ByteReader& reader, ProgramDocument& out) {
         return status;
     }
     auto& program = candidate.program;
-    status = readProgramIdentityAndFlags(reader, program);
+    status =
+        readProgramIdentityAndFlags(reader, candidate.schema.version, program);
     if (status == ConfigurationCodecStatus::Success) {
         status = readProgramStages(reader, program);
     }
@@ -555,7 +622,7 @@ ConfigurationCodecStatus readProgram(ByteReader& reader, ProgramDocument& out) {
     if (status != ConfigurationCodecStatus::Success) {
         return status;
     }
-    if (candidate.schema.version == kMigratableProgramSchemaVersion) {
+    if (candidate.schema.version < kCurrentProgramSchemaVersion) {
         auto migrated = migrateProgramToCurrentSchema(candidate);
         if (migrated.status != MigrationStatus::Migrated ||
             !migrated.document.has_value()) {

@@ -22,6 +22,8 @@ ProgramDocument makeFactoryProgram(std::string id, std::string name,
     program.sensorPreference = sensorPreference;
     program.productSensorFailure.policy =
         ProductSensorFailurePolicy::FallbackToAirAfterTimeout;
+    program.productSensorFailure.returnStrategy =
+        ReturnStrategy::AutomaticValidatedReturnToProduct;
     program.fermentationStages.push_back({std::nullopt, std::nullopt});
     program.completion.mode = completionMode;
     return {{kCurrentProgramSchemaVersion, kCurrentRequiredProgramFields},

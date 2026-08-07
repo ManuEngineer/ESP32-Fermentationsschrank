@@ -25,6 +25,12 @@ enum class RunPersistenceCoordinatorState : std::uint8_t {
 enum class RunPersistenceResultStatus : std::uint8_t {
     Applied,
     CheckpointWritten,
+    // #21, 9.7-Korrektur (letzter Abschlussblocker): dieselbe CommandId
+    // eines RAM-only angewendeten ApplySensorSelectionAction (AppliedRamOnly)
+    // wurde innerhalb desselben Boots bereits verarbeitet - im Unterschied zu
+    // AlreadyPersisted ist das keine dauerhafte Sperre und ueberlebt keinen
+    // Neustart, da RunCommandState::processedCommandIds RAM-only ist.
+    AlreadyProcessed,
     AlreadyPersisted,
     NotEligible,
     NotInitialized,
@@ -86,6 +92,14 @@ struct RunPersistenceResult {
     std::size_t effectCount{0U};
     std::array<ProcessMessage, kMaximumTransitionMessages> messages{};
     std::size_t messageCount{0U};
+    // #21, 6.14.4: set only after a successful persistSensorSelection commit,
+    // mutually exclusive (a mode change reports an event, everything else a
+    // notice - never both, mirrors SensorSelectionStateMutation).
+    std::optional<SensorSelectionEvent> sensorSelectionEvent{};
+    std::optional<SensorSelectionNotice> sensorSelectionNotice{};
+    // #21, 6.11: nur bei tatsaechlichem requestedMode != effectiveMode
+    // (Startmatrix Zeile 2), erst nach erfolgreichem Commit sichtbar.
+    std::optional<StartSensorSelectionNotice> startSensorSelectionNotice{};
 };
 
 enum class RunPersistenceLoadStatus : std::uint8_t {
@@ -130,6 +144,15 @@ class RunPersistenceCoordinator {
     [[nodiscard]] RunPersistenceResult persistTransition(
         RunCommandState& current, const TransitionDecision& decision,
         const RunCheckpointTime& time);
+    // #21, 6.14.3: transports exactly the six automatic
+    // SensorSelectionDecisionCause values (never ManualUserFallback/
+    // ManualUserReturn, which route through persistCommand once #21 Commit 4
+    // adds the manual command path). `mutation` is the already-computed
+    // decision from applySensorSelectionDecision (sensor_selection.hpp) -
+    // this function contains no second rule implementation.
+    [[nodiscard]] RunPersistenceResult persistSensorSelection(
+        RunCommandState& current, const SensorSelectionStateMutation& mutation,
+        const RunCheckpointTime& time);
     [[nodiscard]] RunPersistenceResult checkpointPeriodic(
         const RunCommandState& current, const RunCheckpointTime& time);
     [[nodiscard]] RunPersistenceCoordinatorState state() const {
@@ -137,9 +160,15 @@ class RunPersistenceCoordinator {
     }
 
    private:
+    // `mutationKind` is explicit (6.14.2) rather than inferred from
+    // commandId presence: persistTransition and persistSensorSelection both
+    // omit commandId, but need distinct RunPersistenceHead::mutationKind
+    // values. Ignored when `periodic` is true (a Committed head never
+    // records a mutation kind).
     [[nodiscard]] RunPersistenceResult writeSnapshot(
         const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
         bool periodic, const RunCommandState& before,
+        RunPersistenceMutationKind mutationKind,
         std::optional<CommandId> commandId = std::nullopt);
     [[nodiscard]] RunPersistenceResult unavailableResult() const;
     [[nodiscard]] RunPersistenceResult result(

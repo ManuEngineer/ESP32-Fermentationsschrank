@@ -7,8 +7,8 @@
 
 namespace fermentation {
 
-inline constexpr std::uint32_t kCurrentProgramSchemaVersion = 5U;
-inline constexpr std::uint32_t kMigratableProgramSchemaVersion = 4U;
+inline constexpr std::uint32_t kCurrentProgramSchemaVersion = 6U;
+inline constexpr std::uint32_t kMinimumMigratableProgramSchemaVersion = 4U;
 
 using ProgramFieldMask = std::uint64_t;
 
@@ -33,6 +33,7 @@ enum class ProgramField : ProgramFieldMask {
     UserDeletable = 1ULL << 13U,
     Installed = 1ULL << 14U,
     MaximumProductWait = 1ULL << 15U,
+    ReturnStrategy = 1ULL << 16U,
 };
 
 [[nodiscard]] constexpr ProgramFieldMask fieldMask(ProgramField field) {
@@ -55,11 +56,21 @@ inline constexpr ProgramFieldMask kSchema4RequiredProgramFields =
     fieldMask(ProgramField::FactoryCatalogEntry) |
     fieldMask(ProgramField::UserDeletable) | fieldMask(ProgramField::Installed);
 
-inline constexpr ProgramFieldMask kCurrentRequiredProgramFields =
+inline constexpr ProgramFieldMask kSchema5RequiredProgramFields =
     kSchema4RequiredProgramFields | fieldMask(ProgramField::MaximumProductWait);
+
+inline constexpr ProgramFieldMask kCurrentRequiredProgramFields =
+    kSchema5RequiredProgramFields | fieldMask(ProgramField::ReturnStrategy);
 
 inline constexpr ProgramFieldMask kCurrentKnownProgramFields =
     kCurrentRequiredProgramFields;
+
+// Absolute Feldeinfuehrungsversionen fuer bedingt codierte Felder. Bindung an
+// die absolute Version, nicht an kCurrentProgramSchemaVersion: sonst wuerde
+// ein weiterer Schema-Bump die bedingte Codec-Lektuere eines bereits auf dem
+// Wire vorhandenen Feldes stillschweigend verschieben (siehe Plan 3/6.2.4).
+inline constexpr std::uint32_t kProductWaitFieldIntroducedInSchema = 5U;
+inline constexpr std::uint32_t kReturnStrategyFieldIntroducedInSchema = 6U;
 
 // Anzahl gesetzter Bits, portabel ohne C++20 std::popcount oder
 // Compiler-Builtins. Dient nur dazu, `kRequiredFields` (program_model.cpp)
@@ -89,6 +100,12 @@ enum class ProductSensorFailurePolicy : std::uint8_t {
     StopToSafeState,
 };
 
+enum class ReturnStrategy : std::uint8_t {
+    RemainOnAirUntilEnd,
+    ManualReturnToProduct,
+    AutomaticValidatedReturnToProduct,
+};
+
 enum class CompletionMode : std::uint8_t {
     FinishWithoutCooling,
     CoolThenFinish,
@@ -100,6 +117,7 @@ struct ProductSensorFailure {
     ProductSensorFailurePolicy policy{
         ProductSensorFailurePolicy::FallbackToAirAfterTimeout};
     std::optional<std::uint32_t> fallbackDelaySeconds;
+    ReturnStrategy returnStrategy{ReturnStrategy::ManualReturnToProduct};
 };
 
 struct FermentationStage {
@@ -164,6 +182,7 @@ enum class ValidationErrorCode : std::uint8_t {
     ValueOutOfRange,
     InvalidEnumValue,
     UnexpectedValue,
+    IncompatibleCombination,
 };
 
 struct ValidationError {

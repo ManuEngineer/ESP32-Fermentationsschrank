@@ -31,6 +31,11 @@ struct ProgramCatalogPayloadSizeResult {
 [[nodiscard]] bool completionModeFromWireId(std::uint8_t wireId,
                                             CompletionMode& out);
 
+[[nodiscard]] bool returnStrategyToWireId(ReturnStrategy value,
+                                          std::uint8_t& out);
+[[nodiscard]] bool returnStrategyFromWireId(std::uint8_t wireId,
+                                            ReturnStrategy& out);
+
 [[nodiscard]] ProgramCatalogPayloadSizeResult
 calculateProgramCatalogPayloadSize(const ProgramCatalog& catalog);
 

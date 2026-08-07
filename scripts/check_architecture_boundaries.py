@@ -552,6 +552,193 @@ def add_run_persistence_bypass_violations(violations: list[str], root: Path) -> 
                 )
 
 
+# Issue #21, Plan Abschnitt 7/9.7: die vier Sensorselektions-/Kommando-
+# vertragsheader duerfen keinen gegenseitigen Include-Zyklus bilden. Nur die
+# beiden explizit ausgeschlossenen Kopplungen sind ueberhaupt erreichbar
+# (siehe Abschnitt 7); jede Richtung wird geprueft.
+SENSOR_SELECTION_GUARDED_HEADERS = (
+    "sensor_selection_types.hpp",
+    "sensor_selection.hpp",
+    "run_commands.hpp",
+    "run_persistence_contract.hpp",
+)
+SENSOR_SELECTION_FORBIDDEN_PAIRS = (
+    ("run_commands.hpp", "sensor_selection.hpp"),
+    ("sensor_selection.hpp", "run_persistence_contract.hpp"),
+)
+
+
+def _local_header_includes(path: Path) -> set[str]:
+    """Nur lokale, unqualifizierte .hpp-Includes (kein <...>, kein Unterpfad)
+    - das ist bereits der vollstaendige Suchraum fuer flache
+    lib/fermentation_app/src-Header."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (UnicodeDecodeError, FileNotFoundError):
+        return set()
+    includes: set[str] = set()
+    for line in lines:
+        match = INCLUDE_PATTERN.match(line)
+        if not match:
+            continue
+        header = match.group(1)
+        if header.endswith(".hpp") and "/" not in header:
+            includes.add(header)
+    return includes
+
+
+def _transitive_includes(start: str, graph: dict[str, set[str]]) -> set[str]:
+    seen: set[str] = set()
+    stack = [start]
+    while stack:
+        current = stack.pop()
+        for included in graph.get(current, ()):
+            if included not in seen:
+                seen.add(included)
+                stack.append(included)
+    return seen
+
+
+def add_sensor_selection_include_cycle_violations(
+    violations: list[str], root: Path
+) -> None:
+    """#21, Plan Abschnitt 7/9.7: kein gegenseitiger Include zwischen
+    run_commands.hpp und sensor_selection.hpp, und keiner zwischen
+    sensor_selection.hpp und run_persistence_contract.hpp - weder direkt noch
+    transitiv ueber einen Zwischenheader. Greift nur, wenn es ueberhaupt ein
+    lib/fermentation_app/src gibt (z. B. nicht fuer ein anderes Repository);
+    fehlt dort jedoch einer der vier vorausgesetzten Vertragsheader, ist das
+    selbst ein Befund statt eines stillen Uebersprungs - sonst wuerde eine
+    Umbenennung/Entfernung eines Headers die Pruefung unbemerkt abschalten."""
+    src_dir = root / "lib" / "fermentation_app" / "src"
+    if not src_dir.is_dir():
+        return
+    guarded_paths = {
+        header: src_dir / header for header in SENSOR_SELECTION_GUARDED_HEADERS
+    }
+    missing = [header for header, path in guarded_paths.items() if not path.exists()]
+    if missing:
+        for header in missing:
+            violations.append(
+                f"{src_dir / header}: von Issue #21 vorausgesetzter "
+                "Vertragsheader fehlt - Include-Zyklus-Pruefung (Plan #21 "
+                "Abschnitt 7/9.7) kann nicht durchgefuehrt werden"
+            )
+        return
+    graph: dict[str, set[str]] = {}
+    to_visit = list(SENSOR_SELECTION_GUARDED_HEADERS)
+    visited = set(to_visit)
+    while to_visit:
+        current = to_visit.pop()
+        if current not in graph:
+            graph[current] = _local_header_includes(src_dir / current)
+        for included in graph[current]:
+            if included not in visited:
+                visited.add(included)
+                to_visit.append(included)
+
+    for left, right in SENSOR_SELECTION_FORBIDDEN_PAIRS:
+        if right in _transitive_includes(left, graph):
+            violations.append(
+                f"{src_dir / left}: verbotene Include-Abhaengigkeit (direkt "
+                f"oder transitiv) auf {right!r} (Plan #21 Abschnitt 7)"
+            )
+        if left in _transitive_includes(right, graph):
+            violations.append(
+                f"{src_dir / right}: verbotene Include-Abhaengigkeit (direkt "
+                f"oder transitiv) auf {left!r} (Plan #21 Abschnitt 7)"
+            )
+
+
+# Issue #21, Plan Abschnitt 9.7 (PR-#99-Abschlussreview-Korrektur):
+# applySensorSelectionDecision ist die eine kanonische Entscheidungs-/
+# Mutationsfunktion - exakt eine Deklaration in sensor_selection.hpp und
+# eine Definition in sensor_selection.cpp, beide mit dem Rueckgabetyp
+# SensorSelectionStateMutation. Jede weitere gleichnamige Signatur ist eine
+# verbotene Parallelfunktion - auch innerhalb dieser beiden Dateien selbst
+# (z. B. eine zweite Deklaration), und auch mit einem anderen
+# Rueckgabetyp-Praefix wie dem vollstaendigen RunCommandState. Das
+# Signaturmuster ist daher bewusst nicht auf den kanonischen Rueckgabetyp
+# beschraenkt, sondern erkennt jeden Rueckgabetyp-prefixierten Aufruf; die
+# Klassifikation (kanonisch vs. Parallelfunktion) erfolgt danach getrennt.
+# Ein reiner Aufruf (`applySensorSelectionDecision(view, decision, now)`)
+# traegt kein Rueckgabetyp-Praefix und loest den Guard nicht aus.
+SENSOR_SELECTION_SIGNATURE_PATTERN = re.compile(
+    r"(?P<returntype>[A-Za-z_]\w*(?:\s*::\s*[A-Za-z_]\w*)*\s*[*&]?)\s+"
+    r"(?:fermentation\s*::\s*)?applySensorSelectionDecision\s*\("
+)
+SENSOR_SELECTION_CANONICAL_RETURN_TYPE = "SensorSelectionStateMutation"
+SENSOR_SELECTION_DECLARATION_FILE = "lib/fermentation_app/src/sensor_selection.hpp"
+SENSOR_SELECTION_DEFINITION_FILE = "lib/fermentation_app/src/sensor_selection.cpp"
+SENSOR_SELECTION_CANONICAL_ALLOWED_FILES = frozenset(
+    {SENSOR_SELECTION_DECLARATION_FILE, SENSOR_SELECTION_DEFINITION_FILE}
+)
+
+
+def add_sensor_selection_canonical_function_violations(
+    violations: list[str], root: Path
+) -> None:
+    lib_dir = root / "lib"
+    if not lib_dir.exists():
+        return
+    declaration_path = root / SENSOR_SELECTION_DECLARATION_FILE
+    definition_path = root / SENSOR_SELECTION_DEFINITION_FILE
+    canonical_site_found = {declaration_path: False, definition_path: False}
+    for path in text_files(lib_dir):
+        relative = path.relative_to(root).as_posix()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        # Kommentare und Stringliterale (z. B. "applySensorSelectionDecision
+        # (sensor_selection.hpp)" in einem Fliesstextkommentar) duerfen den
+        # Guard nicht ausloesen - nur echter Code zaehlt.
+        code = mask_cxx_comments_and_strings(text)
+        matches = list(SENSOR_SELECTION_SIGNATURE_PATTERN.finditer(code))
+        if not matches:
+            continue
+        if relative not in SENSOR_SELECTION_CANONICAL_ALLOWED_FILES:
+            violations.append(
+                f"{path}: applySensorSelectionDecision-Signatur ausserhalb "
+                "sensor_selection.hpp/.cpp (Plan #21 Abschnitt 9.7 - keine "
+                "Parallelfunktion)"
+            )
+            continue
+        canonical_matches = [
+            match
+            for match in matches
+            if match.group("returntype").strip()
+            == SENSOR_SELECTION_CANONICAL_RETURN_TYPE
+        ]
+        if len(matches) > len(canonical_matches):
+            violations.append(
+                f"{path}: zusaetzliche applySensorSelectionDecision-Signatur "
+                "mit abweichendem Rueckgabetyp (z. B. RunCommandState) "
+                "erkannt (Plan #21 Abschnitt 9.7 - keine Parallelfunktion)"
+            )
+        if len(canonical_matches) > 1:
+            violations.append(
+                f"{path}: applySensorSelectionDecision ist dort mehrfach "
+                "deklariert/definiert (Plan #21 Abschnitt 9.7 - genau eine "
+                "kanonische Signatur je Datei)"
+            )
+        elif len(canonical_matches) == 1:
+            canonical_site_found[path] = True
+
+    if not canonical_site_found[declaration_path]:
+        violations.append(
+            f"{declaration_path}: erwartete kanonische "
+            "applySensorSelectionDecision-Deklaration fehlt (Plan #21 "
+            "Abschnitt 9.7)"
+        )
+    if not canonical_site_found[definition_path]:
+        violations.append(
+            f"{definition_path}: erwartete kanonische "
+            "applySensorSelectionDecision-Definition fehlt (Plan #21 "
+            "Abschnitt 9.7)"
+        )
+
+
 def strip_cmake_line_comments(text: str) -> str:
     """Entfernt CMake-Zeilenkommentare (# ausserhalb von Anführungszeichen)."""
     cleaned_lines = []
@@ -733,6 +920,8 @@ def check(root: Path) -> list[str]:
     add_idf_leak_violations(violations, root)
     add_run_persistence_bypass_violations(violations, root)
     add_component_requires_violations(violations, root)
+    add_sensor_selection_include_cycle_violations(violations, root)
+    add_sensor_selection_canonical_function_violations(violations, root)
 
     return violations
 
@@ -769,6 +958,30 @@ def create_clean_fixture(root: Path) -> None:
             'idf_component_register(SRCS "app_main.cpp" '
             'PRIV_INCLUDE_DIRS "../include" PRIV_REQUIRES '
             "device_platform fermentation_app device_platform_esp_idf)\n"
+        ),
+        # Issue #21, Plan Abschnitt 7/9.7: minimale, in sich saubere Instanz
+        # der vier gegenseitig eingeschraenkten Header - Grundlage fuer die
+        # SENSOR_SELECTION_INCLUDE_CYCLE_VIOLATION_CASES unten, die einzelne
+        # Dateien durch eine verbotene Include-Variante ersetzen. hpp/.cpp
+        # tragen zusaetzlich die kanonische applySensorSelectionDecision-
+        # Deklaration/-Definition, damit die genau-eine-Signatur-Pruefung
+        # (SENSOR_SELECTION_CANONICAL_*) an der sauberen Fixture nicht
+        # faelschlich "fehlt" meldet.
+        "lib/fermentation_app/src/sensor_selection_types.hpp": "#pragma once\n",
+        "lib/fermentation_app/src/sensor_selection.hpp": (
+            '#pragma once\n#include "sensor_selection_types.hpp"\n'
+            "SensorSelectionStateMutation applySensorSelectionDecision(int x);\n"
+        ),
+        "lib/fermentation_app/src/sensor_selection.cpp": (
+            '#include "sensor_selection.hpp"\n'
+            "SensorSelectionStateMutation applySensorSelectionDecision(int x) "
+            "{ return {}; }\n"
+        ),
+        "lib/fermentation_app/src/run_commands.hpp": (
+            '#pragma once\n#include "sensor_selection_types.hpp"\n'
+        ),
+        "lib/fermentation_app/src/run_persistence_contract.hpp": (
+            '#pragma once\n#include "run_commands.hpp"\n'
         ),
     }
     for relative_path, content in files.items():
@@ -895,6 +1108,90 @@ IDF_LEAK_VIOLATION_CASES = {
     "composition_root_gibt_transition_messages_ueber_zeiger_frei": (
         "main/app_main.cpp",
         "void f() { transitionDecision->messages; }\n",
+    ),
+}
+
+
+# Issue #21, Plan Abschnitt 7/9.7: jede der beiden verbotenen Kopplungen in
+# beiden Richtungen - direkt fuer run_commands.hpp<->sensor_selection.hpp,
+# und einmal transitiv (ueber einen Zwischenheader) fuer
+# sensor_selection.hpp<->run_persistence_contract.hpp, damit der Guard nicht
+# nur direkte Includes erkennt.
+SENSOR_SELECTION_INCLUDE_CYCLE_VIOLATION_CASES = {
+    "run_commands_includes_sensor_selection": (
+        "lib/fermentation_app/src/run_commands.hpp",
+        '#pragma once\n#include "sensor_selection.hpp"\n',
+    ),
+    "sensor_selection_includes_run_commands": (
+        "lib/fermentation_app/src/sensor_selection.hpp",
+        '#pragma once\n#include "sensor_selection_types.hpp"\n'
+        '#include "run_commands.hpp"\n',
+    ),
+    "sensor_selection_includes_run_persistence_contract": (
+        "lib/fermentation_app/src/sensor_selection.hpp",
+        '#pragma once\n#include "sensor_selection_types.hpp"\n'
+        '#include "run_persistence_contract.hpp"\n',
+    ),
+    "run_persistence_contract_includes_sensor_selection": (
+        "lib/fermentation_app/src/run_persistence_contract.hpp",
+        '#pragma once\n#include "run_commands.hpp"\n'
+        '#include "sensor_selection.hpp"\n',
+    ),
+}
+
+# Issue #21, Advisor-Review zu Commit 6: der Guard darf bei einem fehlenden
+# Vertragsheader nicht still ueberspringen (fail-open), sondern muss das
+# Fehlen selbst als Befund melden. Jeder der vier Header wird einzeln
+# entfernt.
+SENSOR_SELECTION_MISSING_HEADER_VIOLATION_CASES = tuple(
+    f"lib/fermentation_app/src/{header}" for header in SENSOR_SELECTION_GUARDED_HEADERS
+)
+
+SENSOR_SELECTION_CANONICAL_VIOLATION_CASES = {
+    "parallel_apply_sensor_selection_decision_signature": (
+        "lib/fermentation_app/src/rogue_sensor_selection.cpp",
+        "SensorSelectionStateMutation applySensorSelectionDecision(int x) "
+        "{ return {}; }\n",
+    ),
+    # PR-#99-Abschlussreview-Korrektur: eine zweite gleichnamige Signatur
+    # innerhalb von sensor_selection.hpp/.cpp selbst muss ebenso erkannt
+    # werden wie eine externe Parallelfunktion.
+    "duplicate_declaration_inside_header": (
+        "lib/fermentation_app/src/sensor_selection.hpp",
+        '#pragma once\n#include "sensor_selection_types.hpp"\n'
+        "SensorSelectionStateMutation applySensorSelectionDecision(int x);\n"
+        "SensorSelectionStateMutation applySensorSelectionDecision(int y);\n",
+    ),
+    "duplicate_definition_inside_source": (
+        "lib/fermentation_app/src/sensor_selection.cpp",
+        '#include "sensor_selection.hpp"\n'
+        "SensorSelectionStateMutation applySensorSelectionDecision(int x) "
+        "{ return {}; }\n"
+        "SensorSelectionStateMutation applySensorSelectionDecision(int y) "
+        "{ return {}; }\n",
+    ),
+    # Ein abweichender Rueckgabetyp (z. B. der vollstaendige
+    # RunCommandState statt der schmalen SensorSelectionStateMutation) ist
+    # ebenfalls eine verbotene Parallelfunktion - sowohl innerhalb der
+    # beiden kanonischen Dateien als auch ausserhalb.
+    "run_command_state_return_type_inside_header": (
+        "lib/fermentation_app/src/sensor_selection.hpp",
+        '#pragma once\n#include "sensor_selection_types.hpp"\n'
+        "SensorSelectionStateMutation applySensorSelectionDecision(int x);\n"
+        "RunCommandState applySensorSelectionDecision(int y);\n",
+    ),
+    "run_command_state_return_type_external_file": (
+        "lib/fermentation_app/src/rogue_run_command_state.cpp",
+        "RunCommandState applySensorSelectionDecision(int x) { return {}; }\n",
+    ),
+}
+
+# Ein reiner Aufruf traegt kein Rueckgabetyp-Praefix und darf den Guard nicht
+# faelschlich ausloesen.
+SENSOR_SELECTION_CANONICAL_CLEAN_CASES = {
+    "plain_call_is_not_a_parallel_signature": (
+        "lib/fermentation_app/src/caller.cpp",
+        "void f() { auto m = applySensorSelectionDecision(view, decision, now); }\n",
     ),
 }
 
@@ -1199,6 +1496,16 @@ def _check_clean_fixture_with_extra_file(relative_path: str, content: str) -> li
         return check(root)
 
 
+def _check_clean_fixture_without_file(relative_path: str) -> list[str]:
+    """Fuer den #21-Header-Fehlt-Fall: entfernt statt ergaenzt eine Datei aus
+    der ansonsten sauberen Fixture."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        create_clean_fixture(root)
+        (root / relative_path).unlink()
+        return check(root)
+
+
 def selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -1243,6 +1550,39 @@ def selftest() -> int:
             print(
                 f"{FAILED}: fachfremder Member-Fall {name!r} wurde faelschlich "
                 "als Bypass erkannt"
+            )
+            return 1
+
+    for name, (relative_path, content) in (
+        SENSOR_SELECTION_INCLUDE_CYCLE_VIOLATION_CASES.items()
+    ):
+        if not _check_clean_fixture_with_extra_file(relative_path, content):
+            print(
+                f"{FAILED}: #21-Include-Zyklus-Verstossfall {name!r} wurde "
+                "nicht erkannt"
+            )
+            return 1
+
+    for relative_path in SENSOR_SELECTION_MISSING_HEADER_VIOLATION_CASES:
+        if not _check_clean_fixture_without_file(relative_path):
+            print(
+                f"{FAILED}: fehlender #21-Vertragsheader {relative_path!r} "
+                "wurde nicht erkannt (Guard darf nicht fail-open sein)"
+            )
+            return 1
+
+    for name, (relative_path, content) in SENSOR_SELECTION_CANONICAL_VIOLATION_CASES.items():
+        if not _check_clean_fixture_with_extra_file(relative_path, content):
+            print(
+                f"{FAILED}: #21-Parallelfunktionsfall {name!r} wurde nicht erkannt"
+            )
+            return 1
+
+    for name, (relative_path, content) in SENSOR_SELECTION_CANONICAL_CLEAN_CASES.items():
+        if _check_clean_fixture_with_extra_file(relative_path, content):
+            print(
+                f"{FAILED}: sauberer applySensorSelectionDecision-Aufruf "
+                f"{name!r} wurde faelschlich als Parallelfunktion erkannt"
             )
             return 1
 

@@ -60,6 +60,32 @@ bool validIds(const RunPersistenceSnapshot& snapshot) {
     return true;
 }
 
+// Korrekturauftrag Befund 4 (6.12.1): lastDecisionCause == None genau mit
+// Revision 0; die Entscheidungsrevision ist niemals neuer als die
+// Laufrevision selbst; FallbackActive/ReturnedToProduct binden den aktiven
+// Modus verbindlich, InitialSelection und LegacyUnknown (Schema-1-Restores,
+// siehe run_persistence_codec.cpp) schraenken den Modus bewusst nicht ein.
+bool validSensorSelectionCrossFields(
+    const PersistedSensorSelectionState& persisted, RunSensorMode activeMode,
+    std::uint32_t runRevision) {
+    if ((persisted.lastDecisionCause == SensorSelectionDecisionCause::None) !=
+        (persisted.lastDecisionRunRevision == 0U)) {
+        return false;
+    }
+    if (persisted.lastDecisionRunRevision > runRevision) {
+        return false;
+    }
+    if (persisted.provenance == SensorSelectionProvenance::FallbackActive &&
+        activeMode != RunSensorMode::Air) {
+        return false;
+    }
+    if (persisted.provenance == SensorSelectionProvenance::ReturnedToProduct &&
+        activeMode != RunSensorMode::Product) {
+        return false;
+    }
+    return true;
+}
+
 bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
                              const ProcessRunSnapshot& right) {
     return left.kind == right.kind &&
@@ -76,6 +102,10 @@ bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
 
 }  // namespace
 
+bool knownRunPersistenceSchema(std::uint32_t schemaVersion) {
+    return schemaVersion == 1U || schemaVersion == kCurrentRunPersistenceSchema;
+}
+
 bool isPersistedRunCommand(CommandKind kind) {
     switch (kind) {
         case CommandKind::StartProgram:
@@ -85,6 +115,8 @@ bool isPersistedRunCommand(CommandKind kind) {
         case CommandKind::AcknowledgeCompletion:
         case CommandKind::CoolAfterCompletion:
         case CommandKind::AdjustRun:
+        // #21, 6.14.1: analog zu allen anderen laufwirksamen Kommandos.
+        case CommandKind::ApplySensorSelectionAction:
             return true;
         case CommandKind::AcknowledgeMessage:
         case CommandKind::MuteMessage:
@@ -104,6 +136,7 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
     if (snapshot.variant == RunCheckpointVariant::NoActiveRun) {
         return snapshot.activeRunId.empty() &&
                !snapshot.activeRunSensorMode.has_value() &&
+               !snapshot.sensorSelection.has_value() &&
                !snapshot.program.has_value() && snapshot.revisionCount == 0U &&
                !snapshot.manual.has_value() &&
                !snapshot.processRunSnapshot.has_value() &&
@@ -111,9 +144,17 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
                    snapshot.processState, nullptr,
                    snapshot.checkpointMonotonicMillis);
     }
+    // Korrekturauftrag Befund 4: jeder aktive Snapshot verlangt sensorSelection
+    // unbedingt - nicht mehr nur schema-2-abhaengig. Ein Schema-1-Restore wird
+    // seit der Codec-Korrektur immer auf LegacyUnknown/None/0 abgebildet
+    // (run_persistence_codec.cpp), traegt das Feld also ebenfalls.
     if (!run_limits::validRunId(snapshot.activeRunId) ||
         !snapshot.activeRunSensorMode.has_value() ||
-        !snapshot.processRunSnapshot.has_value()) {
+        !snapshot.processRunSnapshot.has_value() ||
+        !snapshot.sensorSelection.has_value() ||
+        !validSensorSelectionCrossFields(*snapshot.sensorSelection,
+                                         *snapshot.activeRunSensorMode,
+                                         snapshot.runRevision)) {
         return false;
     }
     if (snapshot.variant == RunCheckpointVariant::ProgramRun) {
@@ -166,6 +207,19 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
          state.processRunSnapshot.has_value())) {
         return std::nullopt;
     }
+    // #21, 6.12: validateRunPersistenceSnapshot now enforces the mandatory-
+    // presence rule unconditionally (Korrekturauftrag Befund 4 - a schema-1
+    // restore is mapped onto LegacyUnknown/None/0 by the codec, not left
+    // absent, so the schema-agnostic validator can require presence for
+    // every active-run variant). This early check stays as a defensive,
+    // cheaper reject at the write boundary; all start paths
+    // (decideProgramStart, decideManualStart, incl. the
+    // AbortAndCool/CoolAfterCompletion cooling- replacement runs) populate
+    // sensorSelection unconditionally, so this can never legitimately fail for
+    // a freshly-built candidate.
+    if ((hasProgram || hasManual) && !state.sensorSelection.has_value()) {
+        return std::nullopt;
+    }
     RunPersistenceSnapshot snapshot;
     snapshot.trigger = trigger;
     snapshot.checkpointMonotonicMillis = time.monotonicMillis;
@@ -178,6 +232,7 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
         snapshot.variant = RunCheckpointVariant::ProgramRun;
         snapshot.activeRunId = state.activeRunId;
         snapshot.activeRunSensorMode = state.activeRunSensorMode;
+        snapshot.sensorSelection = state.sensorSelection;
         snapshot.program = state.activeProgramRun->snapshot();
         snapshot.revisions = state.activeProgramRun->revisions();
         snapshot.revisionCount = state.activeProgramRun->revisionCount();
@@ -186,6 +241,7 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
         snapshot.variant = RunCheckpointVariant::ManualRun;
         snapshot.activeRunId = state.activeRunId;
         snapshot.activeRunSensorMode = state.activeRunSensorMode;
+        snapshot.sensorSelection = state.sensorSelection;
         snapshot.manual = state.activeManualRun;
         snapshot.processRunSnapshot = state.processRunSnapshot;
     } else {
@@ -209,13 +265,36 @@ std::optional<RunCommandState> restoreRunPersistenceSnapshot(
             *snapshot.program, snapshot.revisions, snapshot.revisionCount);
         restored.activeRunId = snapshot.activeRunId;
         restored.activeRunSensorMode = snapshot.activeRunSensorMode;
+        restored.sensorSelection = snapshot.sensorSelection;
         restored.processRunSnapshot = snapshot.processRunSnapshot;
+        // #21, 6.12: restore uebernimmt die persistierte Auswahl, aber der
+        // RAM-only-Laufzeitzustand ist fail-closed - kein Wireformat traegt
+        // ihn, und bootlokale Timer (fallbackWaitStartedAtMonotonicMillis,
+        // returnValidation) sind ueber einen Boot hinweg nicht gueltig.
+        // #18 (Reaktivierung LoadedActiveRun -> Ready) muss diesen Zustand
+        // explizit neu bewerten (computeRestartSensorSelection), bevor eine
+        // Peltier-Freigabe moeglich ist.
+        restored.sensorSelectionRuntime = SensorSelectionRuntimeState{};
+        restored.sensorSelectionRuntime.phase =
+            SensorSelectionPhase::RestartRevalidationPending;
+        restored.sensorSelectionRuntime.permission =
+            SensorPeltierPermission::Blocked;
     } else if (snapshot.variant == RunCheckpointVariant::ManualRun) {
         restored.activeManualRun = snapshot.manual;
         restored.activeRunId = snapshot.activeRunId;
         restored.activeRunSensorMode = snapshot.activeRunSensorMode;
+        restored.sensorSelection = snapshot.sensorSelection;
         restored.processRunSnapshot = snapshot.processRunSnapshot;
+        // Siehe Kommentar im ProgramRun-Zweig.
+        restored.sensorSelectionRuntime = SensorSelectionRuntimeState{};
+        restored.sensorSelectionRuntime.phase =
+            SensorSelectionPhase::RestartRevalidationPending;
+        restored.sensorSelectionRuntime.permission =
+            SensorPeltierPermission::Blocked;
     }
+    // NoActiveRun: restored.sensorSelectionRuntime bleibt der
+    // Default-Inaktivzustand (Phase NoActiveRun, Blocked) - der explizite
+    // NoActiveRun-Default aus 6.12.
     return restored;
 }
 

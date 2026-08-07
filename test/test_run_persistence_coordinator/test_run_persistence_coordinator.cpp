@@ -7,6 +7,12 @@
 
 #include "run_persistence_coordinator.hpp"
 #include "run_persistence_codec.hpp"
+// PR-#99-Abschlussreview-Korrektur: der manuelle Transportvertrag-
+// Integrationstest (persistCommand fuer ApplySensorSelectionAction) braucht
+// CrossRolePlausibilityContext/decideApplySensorSelectionAction - beides nur
+// ueber sensor_selection.hpp vollstaendig sichtbar, da run_commands.hpp den
+// Typ laut Plan Abschnitt 7 nur vorwaertsdeklariert.
+#include "sensor_selection.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "state_store.hpp"
 #include "state_store_key.hpp"
@@ -157,6 +163,9 @@ CommandDecision startDecision(
     request.sourceProgramRevision = 1U;
     request.sensorMode = RunSensorMode::Product;
     request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = true;
     return decideProgramStart(state, request);
 }
 
@@ -178,6 +187,9 @@ CommandDecision manualStartDecision(const RunCommandState& state,
     request.plan.qualificationDurationMinutes = 10U;
     request.plan.maximumTargetReachMinutes = 180U;
     request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = true;
     return decideManualStart(state, request);
 }
 
@@ -265,6 +277,22 @@ void test_load_empty_then_commit_and_restore_run_projection() {
     TEST_ASSERT_TRUE(runtime.has_value());
     TEST_ASSERT_EQUAL_STRING("persisted-run", runtime->activeRunId.c_str());
     TEST_ASSERT_TRUE(runtime->activeProgramRun.has_value());
+    // #21, 6.12: die persistierte Auswahl (sensorSelection) wird
+    // uebernommen, der RAM-only-Laufzeitzustand (sensorSelectionRuntime)
+    // dagegen fail-closed neu gesetzt - kein Wireformat traegt ihn, und
+    // bootlokale Timer sind ueber einen Boot hinweg nicht gueltig. #18 muss
+    // diesen Zustand vor jeder Peltier-Freigabe explizit neu bewerten.
+    TEST_ASSERT_TRUE(runtime->sensorSelection.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::RestartRevalidationPending),
+        static_cast<int>(runtime->sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(runtime->sensorSelectionRuntime.permission));
+    TEST_ASSERT_FALSE(runtime->sensorSelectionRuntime
+                          .fallbackWaitStartedAtMonotonicMillis.has_value());
+    TEST_ASSERT_FALSE(
+        runtime->sensorSelectionRuntime.lastAppliedMonotonicMillis.has_value());
 }
 
 void test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe() {
@@ -1777,7 +1805,8 @@ void test_product_inserted_commits_before_advancing_and_restores() {
         device_platform::decodeEnvelope(insertedRecord.value);
     TEST_ASSERT_TRUE(insertedEnvelope.envelope.has_value());
     const auto insertedSnapshot =
-        decodeRunPersistenceSnapshot(insertedEnvelope.envelope->payload);
+        decodeRunPersistenceSnapshot(insertedEnvelope.envelope->payload,
+                                     insertedEnvelope.envelope->schemaVersion);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
                           static_cast<int>(insertedSnapshot.status));
     TEST_ASSERT_EQUAL_INT(
@@ -1797,6 +1826,13 @@ void test_product_wait_expired_tombstones_and_does_not_revive_after_restart() {
         store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
     static_cast<void>(coordinator.loadAndInitialize());
     auto state = reachDurablyWaitingForProduct(coordinator, 791U);
+    // #21, 6.14.6: clearActiveRunState must reset these too - populate them
+    // first so the assertions below are not a vacuous no-op check.
+    state.sensorSelectionRuntime.phase = SensorSelectionPhase::NormalProduct;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Allowed;
+    state.sensorSelection = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::StartSelection, state.runRevision};
 
     // Let the state machine produce its automatic ProductWaitExpired
     // decision from the genuinely reached WaitingForProduct state -- no
@@ -1825,6 +1861,15 @@ void test_product_wait_expired_tombstones_and_does_not_revive_after_restart() {
                           static_cast<int>(expiredCommit.status));
     TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
     TEST_ASSERT_TRUE(state.activeRunId.empty());
+    // #21, 6.14.6: clearActiveRunState resets the sensor-selection fields on
+    // this terminal path too, not just on the command-layer abort/complete
+    // paths (test_run_commands.cpp already covers those).
+    TEST_ASSERT_FALSE(state.sensorSelection.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(SensorSelectionPhase::NoActiveRun),
+                          static_cast<int>(state.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(state.sensorSelectionRuntime.permission));
 
     store.restart();
     RunPersistenceCoordinator tombstoneBoot(
@@ -2153,6 +2198,757 @@ void test_invalid_effect_and_message_counts_are_rejected_before_writes() {
                           static_cast<int>(transitionState.processState.state));
 }
 
+// ---------------------------------------------------------------------------
+// #21, 9.3: persistSensorSelection (automatic path)
+// ---------------------------------------------------------------------------
+
+RunCommandState readyActiveRunWithSensorSelection(
+    RunPersistenceCoordinator& coordinator, CommandId startId) {
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, startId),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    TEST_ASSERT_TRUE(state.sensorSelection.has_value());
+    TEST_ASSERT_TRUE(
+        state.sensorSelection ==
+        (PersistedSensorSelectionState{
+            SensorSelectionProvenance::InitialSelection,
+            SensorSelectionDecisionCause::StartSelection, state.runRevision}));
+    return state;
+}
+
+RunCommandState readyActiveManualRunWithSensorSelection(
+    RunPersistenceCoordinator& coordinator, CommandId startId) {
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, manualStartDecision(state, startId),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    TEST_ASSERT_TRUE(state.sensorSelection.has_value());
+    TEST_ASSERT_TRUE(
+        state.sensorSelection ==
+        (PersistedSensorSelectionState{
+            SensorSelectionProvenance::InitialSelection,
+            SensorSelectionDecisionCause::StartSelection, state.runRevision}));
+    return state;
+}
+
+SensorSelectionStateMutation modeChangeMutation(
+    const RunCommandState& state, RunSensorMode newMode,
+    SensorSelectionDecisionCause cause, std::uint64_t nowMonotonicMillis) {
+    SensorSelectionStateMutation mutation;
+    mutation.status = SensorSelectionApplyStatus::AppliedPersistentCandidate;
+    mutation.runtime.phase = SensorSelectionPhase::NormalProduct;
+    mutation.runtime.permission = SensorPeltierPermission::Allowed;
+    mutation.runtime.lastAppliedMonotonicMillis = nowMonotonicMillis;
+    mutation.activeMode = newMode;
+    mutation.resultingRunRevision = state.runRevision + 1U;
+    mutation.persisted = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection, cause,
+        mutation.resultingRunRevision};
+    mutation.event = SensorSelectionEvent{*state.activeRunSensorMode,
+                                          newMode,
+                                          cause,
+                                          mutation.resultingRunRevision,
+                                          nowMonotonicMillis,
+                                          std::nullopt};
+    return mutation;
+}
+
+SensorSelectionStateMutation recoveryRevalidationMutation(
+    const RunCommandState& state, std::uint64_t nowMonotonicMillis) {
+    SensorSelectionStateMutation mutation;
+    mutation.status = SensorSelectionApplyStatus::AppliedPersistentCandidate;
+    mutation.runtime.phase = SensorSelectionPhase::NormalProduct;
+    mutation.runtime.permission = SensorPeltierPermission::Allowed;
+    mutation.runtime.lastAppliedMonotonicMillis = nowMonotonicMillis;
+    mutation.activeMode = *state.activeRunSensorMode;
+    mutation.resultingRunRevision = state.runRevision + 1U;
+    mutation.persisted = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::RecoveryRevalidation,
+        mutation.resultingRunRevision};
+    mutation.notice = SensorSelectionNotice{
+        SensorSelectionDecisionCause::RecoveryRevalidation, nowMonotonicMillis,
+        mutation.resultingRunRevision, *state.activeRunSensorMode,
+        SensorSelectionBlockReason::None};
+    return mutation;
+}
+
+SensorSelectionStateMutation productFailureBlockMutation(
+    const RunCommandState& state, std::uint64_t nowMonotonicMillis) {
+    SensorSelectionStateMutation mutation;
+    mutation.status = SensorSelectionApplyStatus::AppliedPersistentCandidate;
+    mutation.runtime.phase = SensorSelectionPhase::ProductFailureDetected;
+    mutation.runtime.permission = SensorPeltierPermission::Blocked;
+    mutation.runtime.fallbackWaitStartedAtMonotonicMillis = nowMonotonicMillis;
+    mutation.runtime.lastAppliedMonotonicMillis = nowMonotonicMillis;
+    mutation.activeMode = *state.activeRunSensorMode;
+    mutation.resultingRunRevision = state.runRevision + 1U;
+    mutation.persisted = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::ProductFailureBlock,
+        mutation.resultingRunRevision};
+    mutation.notice = SensorSelectionNotice{
+        SensorSelectionDecisionCause::ProductFailureBlock, nowMonotonicMillis,
+        mutation.resultingRunRevision, *state.activeRunSensorMode,
+        SensorSelectionBlockReason::ProductSensorUnusable};
+    return mutation;
+}
+
+void test_persist_sensor_selection_writes_schema_two_and_reports_permission_blocked() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 900U);
+    const auto mutation = productFailureBlockMutation(state, 500U);
+
+    const auto result = coordinator.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, 1700000500});
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_UINT32(1U, result.effectCount);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandEffect::SensorSelectionPermissionBlocked),
+        static_cast<int>(result.effects[0]));
+    TEST_ASSERT_FALSE(result.sensorSelectionEvent.has_value());
+    TEST_ASSERT_TRUE(result.sensorSelectionNotice.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionDecisionCause::ProductFailureBlock),
+        static_cast<int>(result.sensorSelectionNotice->cause));
+    TEST_ASSERT_TRUE(state.sensorSelection.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionDecisionCause::ProductFailureBlock),
+        static_cast<int>(state.sensorSelection->lastDecisionCause));
+    TEST_ASSERT_EQUAL_UINT32(mutation.resultingRunRevision, state.runRevision);
+    // Korrekturauftrag Befund 1, Pflichttest "Kernentscheidung ->
+    // persistSensorSelection -> aktueller RAM-Zustand": vor der Korrektur
+    // uebernahm persistSensorSelection mutation.runtime nie in current -
+    // sensorSelectionRuntime blieb auf dem alten Wert stehen.
+    TEST_ASSERT_TRUE(state.sensorSelectionRuntime == mutation.runtime);
+
+    const auto reference = coordinator.state();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(reference));
+
+    const auto currentSlotRead = store.read(slotKey("rc1"), 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(currentSlotRead.status));
+    const auto envelope =
+        device_platform::decodeEnvelope(currentSlotRead.value);
+    TEST_ASSERT_TRUE(envelope.envelope.has_value());
+    TEST_ASSERT_EQUAL_UINT32(kCurrentRunPersistenceSchema,
+                             envelope.envelope->schemaVersion);
+    const auto decoded = decodeRunPersistenceSnapshot(
+        envelope.envelope->payload, envelope.envelope->schemaVersion);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(decoded.status));
+    TEST_ASSERT_TRUE(decoded.snapshot->sensorSelection.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionDecisionCause::ProductFailureBlock),
+        static_cast<int>(decoded.snapshot->sensorSelection->lastDecisionCause));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunCheckpointTrigger::SensorSelection),
+        static_cast<int>(decoded.snapshot->trigger));
+}
+
+void test_persist_sensor_selection_mode_change_fills_event_and_updates_mode() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 905U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
+                          static_cast<int>(*state.activeRunSensorMode));
+    const auto mutation =
+        modeChangeMutation(state, RunSensorMode::Air,
+                           SensorSelectionDecisionCause::FallbackToAir, 500U);
+
+    const auto result = coordinator.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, 1700000600});
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(result.sensorSelectionEvent.has_value());
+    TEST_ASSERT_FALSE(result.sensorSelectionNotice.has_value());
+    TEST_ASSERT_TRUE(result.sensorSelectionEvent->utcUnixSeconds.has_value());
+    TEST_ASSERT_EQUAL_INT64(1700000600,
+                            *result.sensorSelectionEvent->utcUnixSeconds);
+    TEST_ASSERT_TRUE(state.activeRunSensorMode.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
+                          static_cast<int>(*state.activeRunSensorMode));
+}
+
+void test_persist_sensor_selection_mode_change_on_manual_run() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveManualRunWithSensorSelection(coordinator, 906U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
+                          static_cast<int>(*state.activeRunSensorMode));
+    const auto mutation = modeChangeMutation(
+        state, RunSensorMode::Product,
+        SensorSelectionDecisionCause::AutomaticValidatedReturn, 500U);
+
+    const auto result = coordinator.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(state.activeRunSensorMode.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
+                          static_cast<int>(*state.activeRunSensorMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Product),
+        static_cast<int>(state.activeManualRun->values.sensorMode));
+}
+
+void test_persist_sensor_selection_recovery_revalidation_restores_permission() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 907U);
+    // Korrekturauftrag Befund 1: der Effekt wird jetzt aus dem tatsaechlichen
+    // Before/After-Permission-Uebergang abgeleitet statt aus der Ursache -
+    // die Fixture muss die "vorher Blocked" Ausgangslage einer echten
+    // Wiederherstellung deshalb explizit abbilden.
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Blocked;
+    const auto mutation = recoveryRevalidationMutation(state, 500U);
+
+    const auto result = coordinator.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_UINT32(1U, result.effectCount);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandEffect::SensorSelectionPermissionRestored),
+        static_cast<int>(result.effects[0]));
+    TEST_ASSERT_TRUE(result.sensorSelectionNotice.has_value());
+    TEST_ASSERT_FALSE(result.sensorSelectionEvent.has_value());
+}
+
+void test_persist_sensor_selection_from_ready_empty_reports_no_active_run() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(loaded.status));
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    SensorSelectionStateMutation mutation;
+    mutation.status = SensorSelectionApplyStatus::AppliedPersistentCandidate;
+
+    const auto result = coordinator.persistSensorSelection(
+        state, mutation, RunCheckpointTime{100U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NoActiveRun),
+        static_cast<int>(result.status));
+    TEST_ASSERT_FALSE(state.sensorSelection.has_value());
+}
+
+// Korrekturauftrag Befund 1, Pflichttest "keine Wiederholung desselben
+// automatischen Writes": die zweite Anwendung derselben, bereits
+// verarbeiteten Mutation auf denselben Coordinator wird durch die
+// Revisionsfolgepruefung als StaleDecision abgelehnt statt den Write zu
+// wiederholen - `mutation.resultingRunRevision` passt nach dem ersten Write
+// nicht mehr zu `current.runRevision + 1`.
+void test_persist_sensor_selection_same_mutation_is_not_replayed() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 908U);
+    const auto mutation = productFailureBlockMutation(state, 500U);
+
+    const auto first = coordinator.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(first.status));
+    const auto writesAfterFirst = store.writeCount();
+
+    const auto second = coordinator.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::StaleDecision),
+        static_cast<int>(second.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesAfterFirst),
+                           static_cast<unsigned>(store.writeCount()));
+}
+
+void test_persist_sensor_selection_requires_active_run_fields() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 901U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    // #21 Commit 5: decideProgramStart now always populates sensorSelection,
+    // so this eligibility gate is exercised directly against a state that
+    // deliberately lacks it (e.g. a not-yet-#18-reactivated restore) rather
+    // than relying on it being absent by default.
+    state.sensorSelection.reset();
+    const auto mutation = productFailureBlockMutation(state, 500U);
+    const auto writesBefore = store.writeCount();
+
+    const auto result = coordinator.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotEligible),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+}
+
+void test_persist_sensor_selection_from_loaded_active_run_stays_recovery_pending() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 902U);
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = afterBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(loaded.status));
+    const auto writesBefore = store.writeCount();
+    const auto mutation = productFailureBlockMutation(state, 500U);
+
+    const auto result = afterBoot.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::RecoveryPending),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::LoadedActiveRun),
+        static_cast<int>(afterBoot.state()));
+}
+
+void test_persist_sensor_selection_rejects_manual_causes() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 903U);
+    auto mutation = productFailureBlockMutation(state, 500U);
+    mutation.persisted->lastDecisionCause =
+        SensorSelectionDecisionCause::ManualUserFallback;
+    const auto writesBefore = store.writeCount();
+
+    const auto result = coordinator.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotEligible),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+}
+
+void test_persist_sensor_selection_rejects_non_persistent_status() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 904U);
+    const auto writesBefore = store.writeCount();
+    for (const auto status : {SensorSelectionApplyStatus::NoChange,
+                              SensorSelectionApplyStatus::AppliedRamOnly}) {
+        auto mutation = productFailureBlockMutation(state, 500U);
+        mutation.status = status;
+
+        const auto result = coordinator.persistSensorSelection(
+            state, mutation, RunCheckpointTime{500U, std::nullopt});
+
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+            static_cast<int>(result.status));
+    }
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+}
+
+// ---------------------------------------------------------------------------
+// PR-#99-Abschlussreview-Korrektur, Plan 9.7: manueller Transportvertrag -
+// AppliedPersistentCandidate -> persistCommand. Die obigen
+// test_persist_sensor_selection_*-Faelle pruefen ausschliesslich den
+// automatischen Pfad (RunPersistenceCoordinator::persistSensorSelection);
+// bis hierhin gab es keinen Coordinator-Integrationstest fuer den manuellen
+// Pfad (decideApplySensorSelectionAction -> persistCommand). Die folgenden
+// beiden Tests schliessen diese Luecke direkt am Coordinator statt nur auf
+// RunCommandState-Ebene (wie in test_run_commands.cpp).
+// ---------------------------------------------------------------------------
+
+device_platform::SensorQualitySnapshot coordinatorValidSensorSnapshot() {
+    device_platform::SensorQualitySnapshot snapshot;
+    snapshot.quality = device_platform::SensorQuality::Valid;
+    return snapshot;
+}
+
+device_platform::SensorQualitySnapshot coordinatorFailedSensorSnapshot() {
+    device_platform::SensorQualitySnapshot snapshot;
+    snapshot.quality = device_platform::SensorQuality::Failed;
+    snapshot.lastFaultReason =
+        device_platform::SensorFaultReason::MissingSample;
+    return snapshot;
+}
+
+CommandDecision continueWithAirDecision(const RunCommandState& state,
+                                        CommandId id,
+                                        std::uint64_t monotonicMillis) {
+    SensorSelectionCommandRequest request;
+    request.envelope = {id,
+                        CommandSource::LocalDisplay,
+                        monotonicMillis,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
+    request.action = SensorSelectionUserAction::ContinueWithAir;
+    request.safetyAllowsChange = true;
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.product = coordinatorFailedSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = monotonicMillis;
+    return decideApplySensorSelectionAction(state, request, plausibility);
+}
+
+void test_persist_command_applies_and_writes_manual_continue_with_air() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 910U);
+    // Vorbedingung fuer ContinueWithAir: Produkt ausgefallen, Bediener wird
+    // um Entscheidung gebeten, Permission gesperrt.
+    state.sensorSelectionRuntime.phase =
+        SensorSelectionPhase::UserDecisionRequired;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Blocked;
+
+    const auto decision = continueWithAirDecision(state, 911U, 600U);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_TRUE(decision.sensorSelectionApplyStatus.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            SensorSelectionApplyStatus::AppliedPersistentCandidate),
+        static_cast<int>(*decision.sensorSelectionApplyStatus));
+
+    const auto writesBefore = store.writeCount();
+    const auto result = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{600U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_TRUE(store.writeCount() > writesBefore);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::AirFallbackActive),
+        static_cast<int>(state.sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Allowed),
+        static_cast<int>(state.sensorSelectionRuntime.permission));
+    TEST_ASSERT_TRUE(state.activeRunSensorMode.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
+                          static_cast<int>(*state.activeRunSensorMode));
+
+    // Ueberlebt einen Neustart - Beweis fuer den tatsaechlichen Store-Write,
+    // nicht nur die RAM-Mutation.
+    RunPersistenceCoordinator restarted(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto afterBoot = restarted.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(afterBoot.status));
+    TEST_ASSERT_TRUE(afterBoot.snapshot.has_value());
+    TEST_ASSERT_TRUE(afterBoot.snapshot->sensorSelection.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionDecisionCause::ManualUserFallback),
+        static_cast<int>(
+            afterBoot.snapshot->sensorSelection->lastDecisionCause));
+}
+
+// PR-#99-letzter-Abschlussblocker: RecheckProduct in AirFallbackActive mit
+// unvollstaendiger/veralteter thermischer Evidenz ist der einzige manuelle
+// Pfad, der AppliedRamOnly erreicht (test_recheck_product_from_air_fallback_
+// with_incomplete_evidence_is_ram_only in test_sensor_selection.cpp deckt
+// das auf reiner Kernfunktionsebene ab). Dieser Coordinator-Integrationstest
+// belegt den korrigierten Transportvertrag (Plan 9.7): AppliedRamOnly wird
+// stale-geprueft genau einmal nur im RAM angewendet - kein Store-Write,
+// keine persistierte CommandId, keine Laufrevisionserhoehung; dieselbe
+// CommandId bleibt innerhalb desselben Boots fluechtig idempotent
+// (AlreadyProcessed statt AlreadyPersisted) und ueberlebt keinen Neustart.
+void test_persist_command_manual_recheck_product_ram_only_is_ram_only_and_idempotent() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 920U);
+    state.sensorSelectionRuntime.phase =
+        SensorSelectionPhase::AirFallbackActive;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Allowed;
+    state.activeRunSensorMode = RunSensorMode::Air;
+    if (state.activeManualRun.has_value()) {
+        state.activeManualRun->values.sensorMode = RunSensorMode::Air;
+    }
+
+    SensorSelectionCommandRequest request;
+    request.envelope = {921U,
+                        CommandSource::LocalDisplay,
+                        700U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
+    request.action = SensorSelectionUserAction::RecheckProduct;
+    request.safetyAllowsChange = true;
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.product = coordinatorValidSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = 700U;
+    plausibility.thermalCompatibility.status = ThermalCompatibility::Stale;
+    plausibility.thermalCompatibility.profileRevision = 9U;
+
+    const auto decision =
+        decideApplySensorSelectionAction(state, request, plausibility);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_TRUE(decision.sensorSelectionApplyStatus.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionApplyStatus::AppliedRamOnly),
+        static_cast<int>(*decision.sensorSelectionApplyStatus));
+
+    const auto sensorSelectionBefore = state.sensorSelection;
+    const auto runRevisionBefore = state.runRevision;
+    const auto writesBefore = store.writeCount();
+
+    const auto result = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{700U, std::nullopt});
+
+    // Genau einmal im RAM angewendet, kein Store-Write.
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Unchanged),
+                          static_cast<int>(result.durability));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::ReturnValidationPending),
+        static_cast<int>(state.sensorSelectionRuntime.phase));
+
+    // Fachinhalt (persistierbares Feld und Laufrevision) bleibt unveraendert
+    // - AppliedRamOnly aendert per Definition weder sensorSelection noch
+    // runRevision.
+    TEST_ASSERT_TRUE(state.sensorSelection == sensorSelectionBefore);
+    TEST_ASSERT_EQUAL_UINT32(runRevisionBefore, state.runRevision);
+
+    // Dieselbe CommandId bleibt innerhalb desselben Boots fluechtig
+    // idempotent: der zweite Versuch mit identischer Entscheidung liefert
+    // AlreadyProcessed (RAM-only, ueber RunCommandState::
+    // processedCommandIds), nicht AlreadyPersisted (das wuerde einen
+    // Eintrag in der dauerhaften persistedIds_-Liste voraussetzen, die hier
+    // nie beruehrt wurde).
+    const auto replay = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{700U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::AlreadyProcessed),
+        static_cast<int>(replay.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+
+    // Nach einem Neustart gilt die CommandId nicht als dauerhaft
+    // persistiert: die zuletzt tatsaechlich geschriebene Kommando-CommandId
+    // ist weiterhin die des Laufstarts (920U aus
+    // readyActiveRunWithSensorSelection), nicht die des RAM-only-Versuchs
+    // (921U) - und der laufzeitseitige Zustand ist wie geplant fail-closed
+    // verworfen (RestartRevalidationPending/Blocked statt
+    // ReturnValidationPending/Allowed).
+    RunPersistenceCoordinator restarted(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto afterBoot = restarted.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(afterBoot.status));
+    TEST_ASSERT_TRUE(afterBoot.snapshot.has_value());
+    TEST_ASSERT_EQUAL_UINT32(1U, afterBoot.snapshot->persistedRunCommandCount);
+    TEST_ASSERT_EQUAL_UINT32(920U,
+                             afterBoot.snapshot->persistedRunCommandIds[0]);
+    const auto restoredState =
+        restoreRunPersistenceSnapshot(*afterBoot.snapshot);
+    TEST_ASSERT_TRUE(restoredState.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::RestartRevalidationPending),
+        static_cast<int>(restoredState->sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(restoredState->sensorSelectionRuntime.permission));
+}
+
+// PR-#99-letzter-Abschlussblocker: "stale-geprueft" ist ein eigenstaendiger
+// Teil des Auftrags, nicht nur eine Folge des once-only-Verhaltens oben -
+// dieser Test belegt ihn direkt. Zwischen Entscheidung und Anwendung
+// veraendert sich der laufzeitseitige Zustand (z. B. durch eine
+// zwischenzeitliche automatische Bewertung); applyRunCommand's bestehende
+// before/after-Pruefung muss das erkennen und ablehnen, genau wie fuer jeden
+// anderen Kommandotyp.
+void test_persist_command_manual_recheck_product_ram_only_rejects_stale_decision() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 930U);
+    state.sensorSelectionRuntime.phase =
+        SensorSelectionPhase::AirFallbackActive;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Allowed;
+    state.activeRunSensorMode = RunSensorMode::Air;
+    if (state.activeManualRun.has_value()) {
+        state.activeManualRun->values.sensorMode = RunSensorMode::Air;
+    }
+
+    SensorSelectionCommandRequest request;
+    request.envelope = {931U,
+                        CommandSource::LocalDisplay,
+                        700U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
+    request.action = SensorSelectionUserAction::RecheckProduct;
+    request.safetyAllowsChange = true;
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.product = coordinatorValidSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = 700U;
+    plausibility.thermalCompatibility.status = ThermalCompatibility::Stale;
+    plausibility.thermalCompatibility.profileRevision = 9U;
+
+    const auto decision =
+        decideApplySensorSelectionAction(state, request, plausibility);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionApplyStatus::AppliedRamOnly),
+        static_cast<int>(*decision.sensorSelectionApplyStatus));
+
+    // Zwischenzeitliche Aenderung nach der Entscheidung, vor der Anwendung -
+    // macht `decision` stale gegenueber dem jetzigen `state`.
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Blocked;
+    const auto writesBefore = store.writeCount();
+
+    const auto result = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{700U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::StaleDecision),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+    // Die zwischenzeitliche Aenderung bleibt bestehen - eine abgelehnte
+    // stale Entscheidung darf sie nicht ueberschreiben.
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(state.sensorSelectionRuntime.permission));
+}
+
+// #21, 6.5 Zeile 2/6.11: decideProgramStart's automatischer Ersatz auf Luft.
+CommandDecision substitutedStartDecision(const RunCommandState& state,
+                                         CommandId id) {
+    auto program = runnableProgram();
+    program.program.sensorPreference =
+        SensorPreference::ProductIfAvailableElseAir;
+    ProgramStartRequest request;
+    request.envelope = {id,
+                        CommandSource::LocalDisplay,
+                        100U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
+    request.runId = "persisted-run";
+    request.program = program;
+    request.sourceKind = ProgramSourceKind::FactoryCatalog;
+    request.sourceProgramRevision = 1U;
+    request.sensorMode = RunSensorMode::Product;
+    request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = false;
+    return decideProgramStart(state, request);
+}
+
+// #21, 6.11: RunPersistenceResult::startSensorSelectionNotice nur nach
+// erfolgreichem Commit sichtbar - ein Schreibfehler beim Start darf keine
+// scheinbar ausgefuehrte Start-Notice erzeugen.
+void test_start_sensor_selection_notice_only_visible_after_successful_commit() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+
+    const auto decision = substitutedStartDecision(state, 910U);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_TRUE(decision.startSensorSelectionNotice.has_value());
+
+    store.faultAt(store.writeCount() + 1U,
+                  SequencedWriteStore::WriteFault::FailBeforeBegin);
+    const auto failed = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(failed.status));
+    TEST_ASSERT_FALSE(failed.startSensorSelectionNotice.has_value());
+    TEST_ASSERT_FALSE(state.activeProgramRun.has_value());
+
+    const auto retryDecision = substitutedStartDecision(state, 910U);
+    const auto committed = coordinator.persistCommand(
+        state, retryDecision, RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(committed.status));
+    TEST_ASSERT_TRUE(committed.startSensorSelectionNotice.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Product),
+        static_cast<int>(committed.startSensorSelectionNotice->requestedMode));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Air),
+        static_cast<int>(committed.startSensorSelectionNotice->effectiveMode));
+    TEST_ASSERT_EQUAL_UINT32(state.runRevision,
+                             committed.startSensorSelectionNotice->runRevision);
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -2205,5 +3001,27 @@ int main(int, char**) {
     RUN_TEST(test_restart_after_prepared_or_slot_cut_is_interrupted);
     RUN_TEST(test_periodic_slot_and_head_faults_preserve_cutpoint_truth);
     RUN_TEST(test_invalid_effect_and_message_counts_are_rejected_before_writes);
+    RUN_TEST(
+        test_persist_sensor_selection_writes_schema_two_and_reports_permission_blocked);
+    RUN_TEST(
+        test_persist_sensor_selection_mode_change_fills_event_and_updates_mode);
+    RUN_TEST(test_persist_sensor_selection_mode_change_on_manual_run);
+    RUN_TEST(
+        test_persist_sensor_selection_recovery_revalidation_restores_permission);
+    RUN_TEST(
+        test_persist_sensor_selection_from_ready_empty_reports_no_active_run);
+    RUN_TEST(test_persist_sensor_selection_same_mutation_is_not_replayed);
+    RUN_TEST(test_persist_sensor_selection_requires_active_run_fields);
+    RUN_TEST(
+        test_persist_sensor_selection_from_loaded_active_run_stays_recovery_pending);
+    RUN_TEST(test_persist_sensor_selection_rejects_manual_causes);
+    RUN_TEST(test_persist_sensor_selection_rejects_non_persistent_status);
+    RUN_TEST(test_persist_command_applies_and_writes_manual_continue_with_air);
+    RUN_TEST(
+        test_persist_command_manual_recheck_product_ram_only_is_ram_only_and_idempotent);
+    RUN_TEST(
+        test_persist_command_manual_recheck_product_ram_only_rejects_stale_decision);
+    RUN_TEST(
+        test_start_sensor_selection_notice_only_visible_after_successful_commit);
     return UNITY_END();
 }
