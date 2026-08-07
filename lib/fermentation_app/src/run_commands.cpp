@@ -362,6 +362,10 @@ SensorSelectionProgramContext sensorSelectionProgramContextFor(
 // und CapacityReached haben bereits ein exaktes Gegenstueck; InvalidDecision/
 // InvalidContext/TimeWentBackwards teilen sich InvalidInput als bestehenden
 // generischen Ablehnungswert (analog zum Muster in mapAdjustmentStatus).
+// AppliedPersistentCandidate/AppliedRamOnly/NoChange sind hier nur wegen
+// Exhaustivitaet gelistet - der Aufrufer (siehe Switch bei
+// applySensorSelectionDecision-Auswertung) behandelt diese drei Erfolgsfaelle
+// bereits vor dem Aufruf dieser Funktion und ruft sie fuer sie nie auf.
 CommandStatus mapSensorSelectionRejection(SensorSelectionApplyStatus status) {
     switch (status) {
         case SensorSelectionApplyStatus::StaleDecision:
@@ -371,7 +375,6 @@ CommandStatus mapSensorSelectionRejection(SensorSelectionApplyStatus status) {
         case SensorSelectionApplyStatus::InvalidDecision:
         case SensorSelectionApplyStatus::InvalidContext:
         case SensorSelectionApplyStatus::TimeWentBackwards:
-            return CommandStatus::InvalidInput;
         case SensorSelectionApplyStatus::AppliedPersistentCandidate:
         case SensorSelectionApplyStatus::AppliedRamOnly:
         case SensorSelectionApplyStatus::NoChange:

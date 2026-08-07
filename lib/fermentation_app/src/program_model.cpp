@@ -130,6 +130,52 @@ bool validCompletionMode(CompletionMode mode) {
     return false;
 }
 
+// 6.13: Cross-Field-Regeln zwischen sensor_preference und
+// product_sensor_failure (Sensorpraeferenz, Ausfallpolicy, Rueckkehrstrategie,
+// Fallback-Delay). Aus validateProgram ausgelagert, da diese fuenf Regeln
+// zusammengehoeren und eigenstaendig pruefbar sind.
+void validateSensorFailureCrossFields(ValidationResult& result,
+                                      const ProgramDefinition& program) {
+    // 6.13 Regel 1: ProductRequired lehnt einen automatischen Luftfallback
+    // strukturell ab - dieselbe Praeferenz schliesst spaeter (sensor_selection)
+    // auch jeden manuellen Luftfallback aus (6.4.13).
+    if (program.sensorPreference == SensorPreference::ProductRequired &&
+        program.productSensorFailure.policy ==
+            ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
+        addError(result, ValidationErrorCode::IncompatibleCombination,
+                 "defaults.product_sensor_failure.policy");
+    }
+    // 6.13 Regel 2/3: AirOnly hat genau eine gueltige Kombination - Luft wird
+    // nie verlassen, die Rueckkehrstrategie und die Ausfallpolicy sind fest.
+    if (program.sensorPreference == SensorPreference::AirOnly) {
+        if (program.productSensorFailure.returnStrategy !=
+            ReturnStrategy::RemainOnAirUntilEnd) {
+            addError(result, ValidationErrorCode::IncompatibleCombination,
+                     "defaults.product_sensor_failure.return_strategy");
+        }
+        if (program.productSensorFailure.policy !=
+            ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
+            addError(result, ValidationErrorCode::IncompatibleCombination,
+                     "defaults.product_sensor_failure.policy");
+        }
+    }
+    // 6.13 Regel 4: fuer AirOnly ist fallbackDelaySeconds unabhaengig von der
+    // Policy ein toter Wert - ProductFailureDetected wird nie betreten.
+    if (program.sensorPreference == SensorPreference::AirOnly &&
+        program.productSensorFailure.fallbackDelaySeconds.has_value()) {
+        addError(result, ValidationErrorCode::UnexpectedValue,
+                 "defaults.product_sensor_failure.fallback_delay_s");
+    }
+    // 6.13 Regel 5: generelle Regel fuer jede nicht-FallbackToAirAfterTimeout-
+    // Policy (bewusst nicht mit Regel 4 zusammengelegt, siehe 6.4.10).
+    if (program.productSensorFailure.policy !=
+            ProductSensorFailurePolicy::FallbackToAirAfterTimeout &&
+        program.productSensorFailure.fallbackDelaySeconds.has_value()) {
+        addError(result, ValidationErrorCode::UnexpectedValue,
+                 "defaults.product_sensor_failure.fallback_delay_s");
+    }
+}
+
 MigrationResult migrateProgramSchema4To5(const ProgramDocument& source) {
     if ((source.schema.presentFields & ~kSchema4RequiredProgramFields) != 0U ||
         (source.schema.presentFields & kSchema4RequiredProgramFields) !=
@@ -211,44 +257,7 @@ ValidationResult validateProgram(const ProgramDocument& document,
         addError(result, ValidationErrorCode::InvalidEnumValue,
                  "defaults.product_sensor_failure.return_strategy");
     }
-    // 6.13 Regel 1: ProductRequired lehnt einen automatischen Luftfallback
-    // strukturell ab - dieselbe Praeferenz schliesst spaeter (sensor_selection)
-    // auch jeden manuellen Luftfallback aus (6.4.13).
-    if (program.sensorPreference == SensorPreference::ProductRequired &&
-        program.productSensorFailure.policy ==
-            ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
-        addError(result, ValidationErrorCode::IncompatibleCombination,
-                 "defaults.product_sensor_failure.policy");
-    }
-    // 6.13 Regel 2/3: AirOnly hat genau eine gueltige Kombination - Luft wird
-    // nie verlassen, die Rueckkehrstrategie und die Ausfallpolicy sind fest.
-    if (program.sensorPreference == SensorPreference::AirOnly) {
-        if (program.productSensorFailure.returnStrategy !=
-            ReturnStrategy::RemainOnAirUntilEnd) {
-            addError(result, ValidationErrorCode::IncompatibleCombination,
-                     "defaults.product_sensor_failure.return_strategy");
-        }
-        if (program.productSensorFailure.policy !=
-            ProductSensorFailurePolicy::FallbackToAirAfterTimeout) {
-            addError(result, ValidationErrorCode::IncompatibleCombination,
-                     "defaults.product_sensor_failure.policy");
-        }
-    }
-    // 6.13 Regel 4: fuer AirOnly ist fallbackDelaySeconds unabhaengig von der
-    // Policy ein toter Wert - ProductFailureDetected wird nie betreten.
-    if (program.sensorPreference == SensorPreference::AirOnly &&
-        program.productSensorFailure.fallbackDelaySeconds.has_value()) {
-        addError(result, ValidationErrorCode::UnexpectedValue,
-                 "defaults.product_sensor_failure.fallback_delay_s");
-    }
-    // 6.13 Regel 5: generelle Regel fuer jede nicht-FallbackToAirAfterTimeout-
-    // Policy (bewusst nicht mit Regel 4 zusammengelegt, siehe 6.4.10).
-    if (program.productSensorFailure.policy !=
-            ProductSensorFailurePolicy::FallbackToAirAfterTimeout &&
-        program.productSensorFailure.fallbackDelaySeconds.has_value()) {
-        addError(result, ValidationErrorCode::UnexpectedValue,
-                 "defaults.product_sensor_failure.fallback_delay_s");
-    }
+    validateSensorFailureCrossFields(result, program);
     if (!validCompletionMode(program.completion.mode)) {
         addError(result, ValidationErrorCode::InvalidEnumValue,
                  "defaults.completion.mode");
