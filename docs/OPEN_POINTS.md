@@ -156,11 +156,20 @@ Nachverfolgung: #9, #10, #19, #28, #29 und #90
 - [ ] Warn- und kritische Schwellen fuer freien Heap festlegen
 - [ ] Mindestwert fuer den groessten freien Block festlegen
 - [ ] Ringpuffer- und Warteschlangengroessen dokumentieren
+- [ ] `CommandDecision` mit maximalem 48/96/1024-Kandidaten auf dem realen
+      ESP32 ohne PSRAM messen: Task-Stack-High-Water-Mark fuer die produktiv
+      verwendeten Kommandowege
+- [ ] freien Heap und groessten zusammenhaengenden Block vor, waehrend und
+      nach `CommandDecision`-Erzeugung und -Anwendung messen
+- [ ] Verhalten bei fehlgeschlagener Allokation nachweisen: keine Teilmutation,
+      keine unvollstaendige Persistenzfreigabe und keine neue Aktorfreigabe
 - [ ] Web, Display, Export und Regelung unter Parallelbelastung messen
 - [ ] Betriebszaehler je nach verbleibendem Budget vollstaendig, reduziert oder
       nicht persistent umsetzen
 
-Nachverfolgung: #10, #28, #29 und #37
+Nachverfolgung: #10, #28, #29 und #37; das spezifische
+`CommandDecision`-Ressourcengate aus PR #53 wird in #29 erstmals auf realer
+ESP32-Hardware nachgewiesen und in #37 unter Last abschliessend bestaetigt.
 
 ### Aufbewahrung
 
