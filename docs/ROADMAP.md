@@ -10,7 +10,8 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR / Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt | Planung gestartet auf Basis von `main` (`082fb3f`); Plan committet, Freigabe steht aus | Owner prueft und gibt exakten Plan-Commit frei |
+| 1 | Draft-PR #102 / Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt | Planung laeuft auf Basis von `main` (`17ab3f5`, inkl. PR #103); Revision 3 in Arbeit, Freigabe steht aus | Owner prueft und gibt exakten Plan-Commit frei |
+| 2 | Epic-E1-Abschlussnachfuehrung – offenes `CommandDecision`-Ressourcengate aus PR #53 | triviale Dokumentationsnachfuehrung; Live-Issue #29 ist als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` wird kanonisch synchronisiert; keine Produktionslogik oder Messung | Owner reviewt und mergt den separaten Markdown-only-PR; danach kann Epic #3 als `completed` geschlossen werden |
 
 ## Naechste fachliche Arbeit
 
