@@ -46,6 +46,21 @@ versionierte Plan liegt unter `docs/tasks/` und enthaelt mindestens:
 - Dokumentations- und Roadmapwirkung;
 - offene Fragen und materielle Risiken.
 
+Jede freigegebene Planrevision ist ein vollstaendiges und eigenstaendig
+ausfuehrbares Dokument. Historische Revisionen duerfen zur Nachvollziehbarkeit
+referenziert werden, ersetzen aber keine fuer die Umsetzung notwendigen
+Inhalte. Eine aktuelle Revision darf nicht voraussetzen, dass ein Agent
+mehrere alte Revisionen zusammensetzt. Findet ein Agent einen nicht
+konsolidierten Plan vor, rekonstruiert er ihn nicht aus den historischen
+Revisionen, sondern meldet die fehlende Plan-Konsolidierung als Blocker.
+
+Ein freigegebener Plan enthaelt ausserdem eine nachvollziehbare Struktur fuer
+die Abarbeitung. Dafuer genuegen je nach Umfang kleine Umsetzungs- und
+Commit-Schnitte, nummerierte Schritte, eine Checkliste oder eine vergleichbare
+Struktur. Eine zusaetzliche starre Taskliste ist nicht erforderlich, wenn die
+bestehende Planstruktur eine eigenstaendige und nachvollziehbare Umsetzung
+ermoeglicht.
+
 In der Planungsphase werden ohne ausdrueckliche Ownerfreigabe keine
 Produktionslogik, produktiven Tests, Abhaengigkeiten, ADRs, Build-, Toolchain-,
 Hardware-, GPIO- oder Bibliotheksentscheidungen umgesetzt.
