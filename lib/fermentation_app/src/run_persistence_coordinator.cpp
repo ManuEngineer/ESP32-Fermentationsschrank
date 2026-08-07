@@ -544,9 +544,48 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
                       RunPersistenceTechnicalReason::InvalidProjection);
     if (time.monotonicMillis != decision.envelope.monotonicMillis)
         return result(RunPersistenceResultStatus::TimeMismatch);
+    // Ein bereits durabel persistiertes CommandId bleibt gesperrt, auch wenn
+    // die neu eintreffende Entscheidung (z. B. nach einer erneuten
+    // Bewertung) diesmal AppliedRamOnly waere - persistedIds_ hat Vorrang
+    // vor der folgenden RAM-only-Sonderbehandlung.
     for (std::size_t i = 0U; i < persistedIdCount_; ++i)
         if (persistedIds_[i] == decision.envelope.id)
             return result(RunPersistenceResultStatus::AlreadyPersisted);
+    // #21, 9.7-Korrektur (letzter Abschlussblocker): AppliedRamOnly ist per
+    // Plan-Vertrag nicht persistierbar - der manuelle Sensorselektionspfad
+    // wendet diese Entscheidung ausschliesslich im RAM an, stale-geprueft
+    // ueber applyRunCommand's bestehende before/after-Pruefung (identisch
+    // zu jedem anderen Kommando), ohne Store-Write, ohne persistierte
+    // CommandId (persistedIds_ bleibt unberuehrt) und ohne
+    // Laufrevisionsaenderung (AppliedRamOnly haelt resultingRunRevision
+    // unveraendert). Dieselbe CommandId bleibt dabei nur innerhalb des
+    // laufenden Boots ueber RunCommandState::processedCommandIds fluechtig
+    // idempotent (AlreadyProcessed) - dieses Feld ist RAM-only und wird bei
+    // keinem Neustart wiederhergestellt, die CommandId gilt danach nicht als
+    // verbraucht. sensorSelectionEvent/-Notice/startSensorSelectionNotice
+    // bleiben in diesem Ergebnis bewusst leer: 6.11 macht sie erst nach
+    // einem erfolgreichen Commit sichtbar, den dieser Pfad nie durchfuehrt,
+    // und AppliedRamOnly fuellt sie ohnehin nie.
+    if (decision.kind == CommandKind::ApplySensorSelectionAction &&
+        decision.sensorSelectionApplyStatus.has_value() &&
+        *decision.sensorSelectionApplyStatus ==
+            SensorSelectionApplyStatus::AppliedRamOnly) {
+        const auto ramApply = applyRunCommand(current, decision);
+        if (ramApply == CommandStatus::AlreadyProcessed)
+            return result(RunPersistenceResultStatus::AlreadyProcessed);
+        if (ramApply != CommandStatus::Applied)
+            return result(ramApply == CommandStatus::StaleState
+                              ? RunPersistenceResultStatus::StaleDecision
+                              : RunPersistenceResultStatus::InvalidDecision,
+                          RunPersistenceStep::CandidateApply);
+        RunPersistenceResult ramResult{RunPersistenceResultStatus::Applied};
+        ramResult.step = RunPersistenceStep::RamApply;
+        ramResult.durability = RunPersistenceDurability::Unchanged;
+        ramResult.coordinatorState = state_;
+        ramResult.effects = decision.effects;
+        ramResult.effectCount = decision.effectCount;
+        return ramResult;
+    }
     auto candidate = current;
     const auto apply = applyRunCommand(candidate, decision);
     if (apply != CommandStatus::Applied)

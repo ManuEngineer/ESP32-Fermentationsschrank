@@ -10,21 +10,23 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan freigegeben (Revision 7); Commits 1-6 sowie zwei separat beauftragte Korrekturrunden nach Ownerreview (Implementierungsreview, Abschlussreview) umgesetzt | Owner-Abschlussreview des finalen `HEAD`; danach Ownerentscheid ueber `Ready for review` |
+| 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan freigegeben (Revision 7); Commits 1-6 sowie drei separat beauftragte Korrekturrunden nach Ownerreview (Implementierungsreview, Abschlussreview, letzter Abschlussblocker) umgesetzt; kein offener fachlicher Blocker mehr bekannt | Owner prueft finalen `HEAD` und entscheidet ueber `Ready for review` |
 
 ## Naechste fachliche Arbeit
 
 Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist im
 Draft-PR #99 auf dem Branch `plan/issue-21-sensor-selection-fallback-return`
 umgesetzt: der sechsteilige Commit-Schnitt aus dem freigegebenen Plan
-(Commit 6 abgeschlossen) sowie zwei zusaetzliche, vom Owner separat
+(Commit 6 abgeschlossen) sowie drei zusaetzliche, vom Owner separat
 beauftragte Korrekturrunden (sieben Reviewbefunde nach
 Implementierungsreview; Architekturguard-, Transportvertrags- und
-Dokumentationskorrekturen nach Abschlussreview) sind abgeschlossen.
-Naechstes Gate ist das Owner-Abschlussreview des finalen `HEAD`; danach
-entscheidet ausschliesslich der Owner ueber `Ready for review` und die
-vollstaendige Remote-CI. Als naechste fachliche Planungsarbeit nach #21 ist
-Issue #22 zu nennen; P21-M4 bleibt darin nur die zu #22/#23 gehoerende
+Dokumentationskorrekturen nach Abschlussreview; Korrektur des dabei
+aufgedeckten letzten fachlichen Blockers im manuellen `AppliedRamOnly`-Pfad)
+sind abgeschlossen. Der Draft-PR hat damit keinen bekannten offenen
+#21-Blocker mehr. Naechstes Gate ist die finale Owner-Pruefung des
+`HEAD`; ausschliesslich der Owner entscheidet ueber `Ready for review` und
+die vollstaendige Remote-CI. Als naechste fachliche Planungsarbeit nach #21
+ist Issue #22 zu nennen; P21-M4 bleibt darin nur die zu #22/#23 gehoerende
 Abhaengigkeitsaussage (kein eigenes Gate).
 
 ## Zulaessige Parallelitaet

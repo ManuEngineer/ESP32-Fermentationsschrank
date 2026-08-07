@@ -1405,9 +1405,11 @@ RunCommandState startedManualProductState() {
 
 // Setzt eine gewuenschte Sensorselektionsphase auf einem bereits gestarteten
 // Lauf (Programm oder manuell). Der Startpfad selbst befuellt
-// sensorSelectionRuntime/sensorSelection erst mit #21 Commit 5 - fuer
-// Commit-4-Tests des Kommandovertrags wird der Zielzustand deshalb direkt
-// gesetzt, analog zu den Fixtures in test_sensor_selection.cpp.
+// sensorSelectionRuntime/sensorSelection seit #21 Commit 5 bereits beim
+// Start; diese Hilfsfunktion wird trotzdem gebraucht, um gezielt eine
+// beliebige Zwischenphase (z. B. UserDecisionRequired/Blocked) fuer
+// Kommandovertragstests herzustellen, die eine echte Startsequenz so nicht
+// erreichen wuerde.
 RunCommandState withSensorPhase(RunCommandState base,
                                 SensorSelectionPhase phase,
                                 SensorPeltierPermission permission,

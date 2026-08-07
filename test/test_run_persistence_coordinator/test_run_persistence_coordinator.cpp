@@ -2202,11 +2202,6 @@ void test_invalid_effect_and_message_counts_are_rejected_before_writes() {
 // #21, 9.3: persistSensorSelection (automatic path)
 // ---------------------------------------------------------------------------
 
-// Ready fixture with an active program run, matching what #21 Commit 5's
-// start-path wiring will eventually populate on its own: `state.
-// sensorSelection` is set here by hand because that wiring does not exist
-// yet (out of Commit 3's scope) - decideProgramStart itself still leaves it
-// unset, exercised separately below.
 RunCommandState readyActiveRunWithSensorSelection(
     RunPersistenceCoordinator& coordinator, CommandId startId) {
     RunCommandState state;
@@ -2218,9 +2213,12 @@ RunCommandState readyActiveRunWithSensorSelection(
                 .persistCommand(state, startDecision(state, startId),
                                 RunCheckpointTime{100U, std::nullopt})
                 .status));
-    state.sensorSelection = PersistedSensorSelectionState{
-        SensorSelectionProvenance::InitialSelection,
-        SensorSelectionDecisionCause::StartSelection, state.runRevision};
+    TEST_ASSERT_TRUE(state.sensorSelection.has_value());
+    TEST_ASSERT_TRUE(
+        state.sensorSelection ==
+        (PersistedSensorSelectionState{
+            SensorSelectionProvenance::InitialSelection,
+            SensorSelectionDecisionCause::StartSelection, state.runRevision}));
     return state;
 }
 
@@ -2235,9 +2233,12 @@ RunCommandState readyActiveManualRunWithSensorSelection(
                 .persistCommand(state, manualStartDecision(state, startId),
                                 RunCheckpointTime{100U, std::nullopt})
                 .status));
-    state.sensorSelection = PersistedSensorSelectionState{
-        SensorSelectionProvenance::InitialSelection,
-        SensorSelectionDecisionCause::StartSelection, state.runRevision};
+    TEST_ASSERT_TRUE(state.sensorSelection.has_value());
+    TEST_ASSERT_TRUE(
+        state.sensorSelection ==
+        (PersistedSensorSelectionState{
+            SensorSelectionProvenance::InitialSelection,
+            SensorSelectionDecisionCause::StartSelection, state.runRevision}));
     return state;
 }
 
@@ -2697,23 +2698,17 @@ void test_persist_command_applies_and_writes_manual_continue_with_air() {
             afterBoot.snapshot->sensorSelection->lastDecisionCause));
 }
 
-// PR-#99-Abschlussreview-Korrektur: RecheckProduct in AirFallbackActive mit
+// PR-#99-letzter-Abschlussblocker: RecheckProduct in AirFallbackActive mit
 // unvollstaendiger/veralteter thermischer Evidenz ist der einzige manuelle
 // Pfad, der AppliedRamOnly erreicht (test_recheck_product_from_air_fallback_
 // with_incomplete_evidence_is_ram_only in test_sensor_selection.cpp deckt
 // das auf reiner Kernfunktionsebene ab). Dieser Coordinator-Integrationstest
-// belegt, was persistCommand damit tatsaechlich tut: CommandKind::
-// ApplySensorSelectionAction ist unbedingt isPersistedRunCommand, also
-// versucht persistCommand einen Store-Write auch fuer eine AppliedRamOnly-
-// Mutation - anders als die Automatikseite (persistSensorSelection lehnt
-// AppliedRamOnly explizit mit InvalidDecision ab, siehe
-// test_persist_sensor_selection_rejects_non_persistent_status oben). Das ist
-// kein durch diesen Auftrag zu behebender Fachlogikbefund (keine neue
-// Fachlogik/Scopeerweiterung erlaubt), sondern eine bisher unbelegte
-// Verhaltensluecke im 9.7-Nachweis - hier erstmals tatsaechlich getestet und
-// in der PR-Beschreibung als offener Befund benannt statt weiterhin
-// stillschweigend (falsch) als "kein Store-Write" zitiert.
-void test_persist_command_manual_recheck_product_ram_only_behaviour() {
+// belegt den korrigierten Transportvertrag (Plan 9.7): AppliedRamOnly wird
+// stale-geprueft genau einmal nur im RAM angewendet - kein Store-Write,
+// keine persistierte CommandId, keine Laufrevisionserhoehung; dieselbe
+// CommandId bleibt innerhalb desselben Boots fluechtig idempotent
+// (AlreadyProcessed statt AlreadyPersisted) und ueberlebt keinen Neustart.
+void test_persist_command_manual_recheck_product_ram_only_is_ram_only_and_idempotent() {
     SequencedWriteStore store;
     RunPersistenceCoordinator coordinator(
         store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
@@ -2756,36 +2751,134 @@ void test_persist_command_manual_recheck_product_ram_only_behaviour() {
 
     const auto sensorSelectionBefore = state.sensorSelection;
     const auto runRevisionBefore = state.runRevision;
+    const auto writesBefore = store.writeCount();
 
     const auto result = coordinator.persistCommand(
         state, decision, RunCheckpointTime{700U, std::nullopt});
 
-    // Dokumentiert das tatsaechliche, nicht das im Plan-9.7-Wortlaut
-    // beschriebene Verhalten (siehe Kommentar oben): persistCommand haelt
-    // CommandKind::ApplySensorSelectionAction fuer unbedingt persistierbar
-    // und versucht den Write auch hier.
+    // Genau einmal im RAM angewendet, kein Store-Write.
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
                           static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceDurability::Unchanged),
+                          static_cast<int>(result.durability));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::ReturnValidationPending),
+        static_cast<int>(state.sensorSelectionRuntime.phase));
 
-    // Der geschriebene Fachinhalt bleibt unveraendert (AppliedRamOnly
-    // aendert weder sensorSelection noch runRevision) - nur die
-    // CommandId-Buchhaltung des Schreibvorgangs selbst ist neu. Das
-    // begrenzt den Befund auf einen unnoetigen Schreibzyklus plus eine
-    // fluechtig gemeinte CommandId, die dauerhaft verbraucht wird - keine
-    // fehlerhafte Fachzustandspersistierung.
+    // Fachinhalt (persistierbares Feld und Laufrevision) bleibt unveraendert
+    // - AppliedRamOnly aendert per Definition weder sensorSelection noch
+    // runRevision.
     TEST_ASSERT_TRUE(state.sensorSelection == sensorSelectionBefore);
     TEST_ASSERT_EQUAL_UINT32(runRevisionBefore, state.runRevision);
 
-    // "CommandId nur fluechtig" (Plan 9.7) ist damit ebenfalls nicht erfuellt:
-    // dieselbe CommandId gilt jetzt als dauerhaft persistiert, nicht nur
-    // fluechtig verbraucht - ein erneuter Versuch mit derselben CommandId
-    // (z. B. durch eine erneute Bedienhandlung mit demselben Envelope)
-    // schlaegt fehl statt erneut auszufuehren.
+    // Dieselbe CommandId bleibt innerhalb desselben Boots fluechtig
+    // idempotent: der zweite Versuch mit identischer Entscheidung liefert
+    // AlreadyProcessed (RAM-only, ueber RunCommandState::
+    // processedCommandIds), nicht AlreadyPersisted (das wuerde einen
+    // Eintrag in der dauerhaften persistedIds_-Liste voraussetzen, die hier
+    // nie beruehrt wurde).
     const auto replay = coordinator.persistCommand(
         state, decision, RunCheckpointTime{700U, std::nullopt});
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceResultStatus::AlreadyPersisted),
+        static_cast<int>(RunPersistenceResultStatus::AlreadyProcessed),
         static_cast<int>(replay.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+
+    // Nach einem Neustart gilt die CommandId nicht als dauerhaft
+    // persistiert: die zuletzt tatsaechlich geschriebene Kommando-CommandId
+    // ist weiterhin die des Laufstarts (920U aus
+    // readyActiveRunWithSensorSelection), nicht die des RAM-only-Versuchs
+    // (921U) - und der laufzeitseitige Zustand ist wie geplant fail-closed
+    // verworfen (RestartRevalidationPending/Blocked statt
+    // ReturnValidationPending/Allowed).
+    RunPersistenceCoordinator restarted(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto afterBoot = restarted.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(afterBoot.status));
+    TEST_ASSERT_TRUE(afterBoot.snapshot.has_value());
+    TEST_ASSERT_EQUAL_UINT32(1U, afterBoot.snapshot->persistedRunCommandCount);
+    TEST_ASSERT_EQUAL_UINT32(920U,
+                             afterBoot.snapshot->persistedRunCommandIds[0]);
+    const auto restoredState =
+        restoreRunPersistenceSnapshot(*afterBoot.snapshot);
+    TEST_ASSERT_TRUE(restoredState.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionPhase::RestartRevalidationPending),
+        static_cast<int>(restoredState->sensorSelectionRuntime.phase));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(restoredState->sensorSelectionRuntime.permission));
+}
+
+// PR-#99-letzter-Abschlussblocker: "stale-geprueft" ist ein eigenstaendiger
+// Teil des Auftrags, nicht nur eine Folge des once-only-Verhaltens oben -
+// dieser Test belegt ihn direkt. Zwischen Entscheidung und Anwendung
+// veraendert sich der laufzeitseitige Zustand (z. B. durch eine
+// zwischenzeitliche automatische Bewertung); applyRunCommand's bestehende
+// before/after-Pruefung muss das erkennen und ablehnen, genau wie fuer jeden
+// anderen Kommandotyp.
+void test_persist_command_manual_recheck_product_ram_only_rejects_stale_decision() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 930U);
+    state.sensorSelectionRuntime.phase =
+        SensorSelectionPhase::AirFallbackActive;
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Allowed;
+    state.activeRunSensorMode = RunSensorMode::Air;
+    if (state.activeManualRun.has_value()) {
+        state.activeManualRun->values.sensorMode = RunSensorMode::Air;
+    }
+
+    SensorSelectionCommandRequest request;
+    request.envelope = {931U,
+                        CommandSource::LocalDisplay,
+                        700U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true};
+    request.action = SensorSelectionUserAction::RecheckProduct;
+    request.safetyAllowsChange = true;
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.product = coordinatorValidSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = 700U;
+    plausibility.thermalCompatibility.status = ThermalCompatibility::Stale;
+    plausibility.thermalCompatibility.profileRevision = 9U;
+
+    const auto decision =
+        decideApplySensorSelectionAction(state, request, plausibility);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorSelectionApplyStatus::AppliedRamOnly),
+        static_cast<int>(*decision.sensorSelectionApplyStatus));
+
+    // Zwischenzeitliche Aenderung nach der Entscheidung, vor der Anwendung -
+    // macht `decision` stale gegenueber dem jetzigen `state`.
+    state.sensorSelectionRuntime.permission = SensorPeltierPermission::Blocked;
+    const auto writesBefore = store.writeCount();
+
+    const auto result = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{700U, std::nullopt});
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::StaleDecision),
+        static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+    // Die zwischenzeitliche Aenderung bleibt bestehen - eine abgelehnte
+    // stale Entscheidung darf sie nicht ueberschreiben.
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(state.sensorSelectionRuntime.permission));
 }
 
 // #21, 6.5 Zeile 2/6.11: decideProgramStart's automatischer Ersatz auf Luft.
@@ -2924,7 +3017,10 @@ int main(int, char**) {
     RUN_TEST(test_persist_sensor_selection_rejects_manual_causes);
     RUN_TEST(test_persist_sensor_selection_rejects_non_persistent_status);
     RUN_TEST(test_persist_command_applies_and_writes_manual_continue_with_air);
-    RUN_TEST(test_persist_command_manual_recheck_product_ram_only_behaviour);
+    RUN_TEST(
+        test_persist_command_manual_recheck_product_ram_only_is_ram_only_and_idempotent);
+    RUN_TEST(
+        test_persist_command_manual_recheck_product_ram_only_rejects_stale_decision);
     RUN_TEST(
         test_start_sensor_selection_notice_only_visible_after_successful_commit);
     return UNITY_END();

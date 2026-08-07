@@ -25,6 +25,12 @@ enum class RunPersistenceCoordinatorState : std::uint8_t {
 enum class RunPersistenceResultStatus : std::uint8_t {
     Applied,
     CheckpointWritten,
+    // #21, 9.7-Korrektur (letzter Abschlussblocker): dieselbe CommandId
+    // eines RAM-only angewendeten ApplySensorSelectionAction (AppliedRamOnly)
+    // wurde innerhalb desselben Boots bereits verarbeitet - im Unterschied zu
+    // AlreadyPersisted ist das keine dauerhafte Sperre und ueberlebt keinen
+    // Neustart, da RunCommandState::processedCommandIds RAM-only ist.
+    AlreadyProcessed,
     AlreadyPersisted,
     NotEligible,
     NotInitialized,

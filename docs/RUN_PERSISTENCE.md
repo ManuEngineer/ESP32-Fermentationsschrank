@@ -287,18 +287,16 @@ noch zu leisten:
   endgueltig setzen, bevor die Regelung fuer diesen Lauf ueberhaupt bewertet
   wird;
 - **Reihenfolge beachten:** ein aktiver Lauf verlangt beim Schreiben
-  zwingend einen vorhandenen persistierten Auswahlzustand - dieser ist nach
-  dem Laden bereits vorhanden und wird durch jede nachfolgende Speicherung
-  (auch periodische Kontrollpunkte) unveraendert erneut mitgefuehrt. Ein
-  nicht finalisierter laufzeitseitiger Zustand (`sensorSelectionRuntime`)
-  laesst dadurch fuer sich allein **keinen** periodischen Kontrollpunkt
-  technisch fehlschlagen - dieser Zustand ist ausserhalb des Wireformats und
-  fliesst nicht in die Schreibvoraussetzung ein. Der eigentliche Vertrag ist
-  ein anderer: bleibt die Reaktivierung aus, bleibt der laufzeitseitige
-  Zustand fail-closed bei "Neubewertung nach Neustart erforderlich"
-  (`RestartRevalidationPending`) mit gesperrter Peltier-Freigabe
-  (`Blocked`) stehen - jeder weitere Kontrollpunkt schreibt diesen
-  gesperrten Zustand einfach unveraendert fort, statt zu scheitern;
+  zwingend einen vorhandenen persistierten Auswahlzustand (`sensorSelection`)
+  - dieser ist nach dem Laden bereits vorhanden und wird durch jede
+  nachfolgende Speicherung (auch periodische Kontrollpunkte) unveraendert
+  erneut mitgefuehrt. `sensorSelectionRuntime` ist davon unabhaengig: er ist
+  ausserhalb des Wireformats, wird von keinem Kontrollpunkt mitgeschrieben
+  und fliesst nicht in die Schreibvoraussetzung ein. Solange die
+  Reaktivierung aussteht, bleibt er einfach fail-closed im RAM stehen -
+  "Neubewertung nach Neustart erforderlich" (`RestartRevalidationPending`)
+  mit gesperrter Peltier-Freigabe (`Blocked`); periodische Kontrollpunkte
+  laufen davon unberuehrt normal weiter;
 - die Peltier-Freigabe bleibt bis zum Abschluss dieser Neubewertung gesperrt;
   eine vorherige Freigabe aus dem Lauf vor dem Neustart wird nie blind
   uebernommen.
