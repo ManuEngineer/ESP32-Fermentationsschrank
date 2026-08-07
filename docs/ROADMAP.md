@@ -11,6 +11,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan freigegeben (Revision 7); Commits 1-6 sowie vier separat beauftragte Korrekturrunden nach Ownerreview (Implementierungsreview, Abschlussreview, letzter Abschlussblocker, CI-Korrektur nach fehlgeschlagenem `clang-tidy` in CI-Run #716) umgesetzt; kein offener fachlicher Blocker mehr bekannt | Owner prueft finalen `HEAD` (erneutes Abschlussreview) und entscheidet ueber erneutes `Ready for review` |
+| 2 | Epic-E1-Abschlussnachfuehrung – offenes `CommandDecision`-Ressourcengate aus PR #53 | triviale Dokumentationsnachfuehrung; Live-Issue #29 ist als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` wird kanonisch synchronisiert; keine Produktionslogik oder Messung | Owner reviewt und mergt den separaten Markdown-only-PR; danach kann Epic #3 als `completed` geschlossen werden |
 
 ## Naechste fachliche Arbeit
 
