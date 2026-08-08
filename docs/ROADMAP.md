@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-08-07
+Stand: 2026-08-08
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -10,28 +10,27 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #99 / Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik | Plan freigegeben (Revision 7); Commits 1-6 sowie vier separat beauftragte Korrekturrunden nach Ownerreview (Implementierungsreview, Abschlussreview, letzter Abschlussblocker, CI-Korrektur nach fehlgeschlagenem `clang-tidy` in CI-Run #716) umgesetzt; kein offener fachlicher Blocker mehr bekannt | Owner prueft finalen `HEAD` (erneutes Abschlussreview) und entscheidet ueber erneutes `Ready for review` |
-| 2 | Epic-E1-Abschlussnachfuehrung – offenes `CommandDecision`-Ressourcengate aus PR #53 | triviale Dokumentationsnachfuehrung; Live-Issue #29 ist als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` wird kanonisch synchronisiert; keine Produktionslogik oder Messung | Owner reviewt und mergt den separaten Markdown-only-PR; danach kann Epic #3 als `completed` geschlossen werden |
+| 1 | Draft-PR #102 / Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt | Planung laeuft auf Basis von `main` (`17ab3f5`, inkl. PR #103); Revision 5 in Arbeit, Freigabe steht aus | Owner prueft und gibt exakten Plan-Commit frei |
+| 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
 
-Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist im
-Draft-PR #99 auf dem Branch `plan/issue-21-sensor-selection-fallback-return`
-umgesetzt: der sechsteilige Commit-Schnitt aus dem freigegebenen Plan
-(Commit 6 abgeschlossen) sowie vier zusaetzliche, vom Owner separat
-beauftragte Korrekturrunden (sieben Reviewbefunde nach
-Implementierungsreview; Architekturguard-, Transportvertrags- und
-Dokumentationskorrekturen nach Abschlussreview; Korrektur des dabei
-aufgedeckten letzten fachlichen Blockers im manuellen `AppliedRamOnly`-Pfad;
-CI-Korrektur zweier `clang-tidy`-Befunde, nachdem CI-Run #716 nach dem
-ersten `Ready for review` an diesem Schritt gescheitert war) sind
-abgeschlossen. Der Draft-PR hat damit keinen bekannten offenen
-#21-Blocker mehr. Naechstes Gate ist ein erneutes Abschlussreview durch den
-Owner auf dem finalen `HEAD`; ausschliesslich der Owner entscheidet ueber
-ein erneutes `Ready for review` und die dadurch neu ausgeloeste vollstaendige
-Remote-CI. Als naechste fachliche Planungsarbeit nach #21 ist Issue #22 zu
-nennen; P21-M4 bleibt darin nur die zu #22/#23 gehoerende
-Abhaengigkeitsaussage (kein eigenes Gate).
+Issue #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik – ist ueber
+PR #99 nach `main` gemergt (`082fb3f`). Als naechste fachliche Arbeit hat der
+Owner Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt
+beauftragt; das ersetzt die zuvor genannte Reihenfolge "#22 nach #21".
+Issue #22 (Epic E3, zeitproportionale PI-Regelung) bleibt die naechste
+fachliche Arbeit innerhalb Epic E3 und ist von dieser Umstellung nicht
+inhaltlich betroffen, wird aber nicht vor #18 begonnen.
+
+Issue #18 baut auf der in `docs/RUN_PERSISTENCE.md`, Abschnitt "Uebergabe an
+ein spaeteres Vorhaben: Regelsensorauswahl bei Reaktivierung", dokumentierten
+Grundlage aus #21 auf: der persistierte und laufzeitseitige
+Sensorselektionszustand sowie eine reine Empfehlungsfunktion sind vorhanden,
+die tatsaechliche Reaktivierung eines geladenen aktiven Laufs (inklusive
+Freigabe der Regelung) ist noch offen. Details und Abhaengigkeitsstand
+stehen im Plan unter `docs/tasks/`; offene Ownerentscheidungen bestehen
+aktuell nicht, der Plan wartet auf Freigabe des exakten Commits.
 
 ## Zulaessige Parallelitaet
 
@@ -61,7 +60,8 @@ Abhaengigkeitsaussage (kein eigenes Gate).
 - PR #88: Espressif-first-Synchronisierung des Adopt-or-build-Audits;
 - PR #92: Markdown-only-Aenderungen ohne vollstaendige Firmware-CI;
 - PR #95 / Issue #20: Sensorqualitaet, Filterung und Plausibilitaet;
-- PR #96: kompakter Session-Handover-Vertrag.
+- PR #96: kompakter Session-Handover-Vertrag;
+- PR #99 / Issue #21: Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik.
 
 ## Pflege
 
