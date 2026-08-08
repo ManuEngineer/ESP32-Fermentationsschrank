@@ -2,48 +2,34 @@
 
 ## 1. Status
 
-- Revision: **4** (ersetzt Revision 1, 2 und 3 vollstaendig; kein Abschnitt
-  dieser Datei verweist auf eine fruehere Revision als weiterhin gueltig –
-  jeder Vertrag steht hier eigenstaendig).
+- Revision: **5** (ersetzt Revision 1-4 vollstaendig; kein Abschnitt dieser
+  Datei verweist auf eine fruehere Revision als weiterhin gueltig).
 - Draft-PR: #102 (`plan/issue-18-restart-weighted-progress` -> `main`).
-- Live-Issue: #18 ("[E2.3] Wiederanlauf und temperaturgewichteten Fortschritt
-  implementieren").
-- Plan-Basis: `main` = `17ab3f5399a066465298ac6871b965d176a38d32` (enthaelt
-  PR #103, bereits gemergt). Branch ist 0 Commits hinter `main`.
-- Remote-Verifikation (Pflicht seit dem Vorfall in dieser Session, siehe
-  Abschnitt 13): Nach dem Commit dieser Revision wird `origin/plan/issue-18-restart-weighted-progress`
-  per frischem `git fetch` gegen den lokalen `HEAD` geprueft, bevor die
-  Session als abgeschlossen gemeldet wird.
-- Dieser Plan implementiert noch nichts. Umsetzung beginnt erst nach
-  Freigabe des exakten Commits dieser Datei durch den Owner.
+- Live-Issue: #18.
+- Plan-Basis: `main` = `17ab3f5399a066465298ac6871b965d176a38d32`. Branch ist
+  0 Commits hinter `main`.
+- Nach Commit dieser Revision: `git push`, danach frischer `git fetch` und
+  Abgleich `git rev-parse origin/plan/issue-18-restart-weighted-progress`
+  == lokaler `HEAD` sowie `gh api repos/ManuEngineer/ESP32-Fermentationsschrank/pulls/102`
+  (`head.sha`) und `gh pr view 102 --json headRefOid`, bevor PR-Beschreibung/
+  SESSION HANDOVER als aktuell gemeldet werden.
+- Dieser Plan implementiert noch nichts.
 
-## 2. Live-Status-Pruefung (Basis dieser Revision)
+## 2. Live-Status-Pruefung
 
 - `gh issue view 18`: weiterhin offen, Scope/Akzeptanzkriterien unveraendert.
-- `gh pr view 102`: Draft, Base `main`, Head
-  `plan/issue-18-restart-weighted-progress`.
-- PR #103 ist gemergt; `docs/ROADMAP.md` wird in dieser Revision erneut
-  korrigiert (Abschnitt 5.17), da sie den bereits gemergten PR #103
-  faelschlich noch als zu mergende aktive Arbeit auswies.
-- Alle folgenden Codezeilenangaben wurden in dieser Session erneut direkt am
-  Dateiinhalt verifiziert (nicht aus Revision 3 uebernommen).
+- `gh pr view 102`: Draft, Base `main`.
+- Alle Codezeilenangaben in dieser Revision wurden in dieser Session erneut
+  direkt am Dateiinhalt verifiziert.
 
 ## 3. Owner-Entscheidungen (Gates)
 
-- **Gate A – Restart-Sensorauswahl wird real angewandt.** Der in #21
-  vorbereitete, aktuell durch `computeRestartSensorSelection` (Stub,
-  `sensor_selection.cpp:890-907`) fail-closed blockierte Uebergabepunkt wird
-  in #18 tatsaechlich implementiert.
-- **Gate B – kein neuer allgemeiner Prozesszyklus.** #18 liefert die nativ
-  testbare Recovery-/Reevaluationslogik vollstaendig; produktive
-  ESP-/NVS-Composition inkl. Verdrahtung eines etwaigen periodischen
-  Aufrufers bleibt dem zustaendigen Composition-Issue (nicht #18)
-  vorbehalten. #18 behauptet keinen bestehenden produktiven Aufrufer, den es
-  nicht gibt (siehe 5.16).
-- **Gate C – keine erfundene Aktivitaetskurve.** Es wird keine unkalibrierte
-  biologische Aktivitaetskurve eingefuehrt; kein normaler Sekundenwert wird
-  als "temperaturgewichtet" fehlbezeichnet; unsichere Ausfallzeit wird ohne
-  freigegebenes Modell nicht biologisch gutgeschrieben.
+- **Gate A:** Restart-Sensorauswahl wird real angewandt (5.20).
+- **Gate B:** kein neuer allgemeiner Prozesszyklus; kein produktiver
+  Aufrufer wird behauptet, der nicht existiert (5.21).
+- **Gate C:** keine unkalibrierte biologische Aktivitaetskurve; unsichere
+  Ausfallzeit wird ohne freigegebenes Modell nicht automatisch als
+  Fortschritt gutgeschrieben (5.16, 5.17).
 
 ## 4. Ziel und Nicht-Ziele
 
@@ -53,11 +39,10 @@ ehrlich gekennzeichnetem Fortschritt und ohne jede Aktorfreigabe vor
 abgeschlossener Bewertung.
 
 **Nicht-Ziele (Release 1):** reale Hardware-/NVS-Anbindung (#29/#90);
-Fault-Klassen/SAFE_BOOT-Feinausbau (#24); Web-/Anzeige-UI-Implementierung
-(nur Domain-/Application-Vertrag); kalibrierte biologische
-Temperatur-Aktivitaets-Gewichtung (Gate C); ein neuer periodischer
-Anwendungszyklus (Gate B); produktive Verdrahtung eines automatischen
-UTC-Reevaluationsaufrufers (Gate B, 5.16).
+Fault-Klassen/SAFE_BOOT-Feinausbau (#24); Web-/Anzeige-UI-Implementierung;
+kalibrierte biologische Temperatur-Aktivitaets-Gewichtung (Gate C); ein
+neuer periodischer Anwendungszyklus (Gate B); produktive Verdrahtung eines
+automatischen UTC-Reevaluationsaufrufers (Gate B).
 
 ## 5. Bindende Fachvertraege
 
@@ -65,811 +50,795 @@ UTC-Reevaluationsaufrufers (Gate B, 5.16).
 
 | Bereich | Datei(en) | Aenderungsart |
 |---|---|---|
-| Recovery-Zeitfenster (reine Daten) | `lib/fermentation_app/src/run_recovery_time.hpp/.cpp` | neu |
-| Recovery-Orchestrierung (Hop 1/2, Evidenz, Episoden) | `lib/fermentation_app/src/run_recovery.hpp/.cpp` | neu |
-| Zustandsautomat: neue Reasons, Topologie | `lib/fermentation_app/src/process_state_machine.hpp/.cpp` | erweitert |
+| Ausfallintervall (rein) | `lib/fermentation_app/src/run_recovery_time.hpp/.cpp` | neu |
+| Recovery-Orchestrierung | `lib/fermentation_app/src/run_recovery.hpp/.cpp` | neu |
+| Zustandsautomat: neue Reasons, Topologie, `PriorBootPhaseElapsed`-Parameter | `lib/fermentation_app/src/process_state_machine.hpp/.cpp` | erweitert |
 | Persistenzvertrag: Schema 3 | `lib/fermentation_app/src/run_persistence_contract.hpp/.cpp` | erweitert |
-| Codec: Schema-3-Gate | `lib/fermentation_app/src/run_persistence_codec.cpp` | erweitert |
-| Coordinator: Commit-Kern, `activateLoadedRun`, `activateFallbackRecoveredRun`, `resolveRecoveryOutcome` | `lib/fermentation_app/src/run_persistence_coordinator.hpp/.cpp` | erweitert (inkl. Signaturaenderung der vier Checkpoint-Schreibpfade, 5.12) |
+| Codec: Schema-3-Gate, Legacy-Migration | `lib/fermentation_app/src/run_persistence_codec.cpp` | erweitert |
+| Coordinator: Low-Level-Schreibkern, `activateLoadedRun`, `activateFallbackRecoveredRun`, `resolveRecoveryOutcome`, Episode-Refresh | `lib/fermentation_app/src/run_persistence_coordinator.hpp/.cpp` | erweitert |
 | Kommandos: `ResolveRecoveryUncertainty`, `ApplyRecoveryTimeCorrection` | `lib/fermentation_app/src/run_commands.hpp/.cpp` | erweitert |
 | Restart-Sensorauswahl (Gate A) | `lib/fermentation_app/src/sensor_selection.hpp/.cpp` | erweitert |
 | Tests | `test/test_run_recovery_time/`, `test/test_run_recovery/`, `test/test_process_state_machine/`, `test/test_run_persistence_coordinator/`, `test/test_run_commands/`, `test/test_sensor_selection/` | neu/erweitert |
 
-### 5.2 Recovery-Eintrittsvertrag (Hop 1) – tatsaechlich gueltige Topologie
+### 5.2 `RecoveryOutageBounds` – kanonische Ausfalldauer (Vertrag A)
 
-**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 3):**
-`validBootTopology()` (`process_state_machine.cpp:223-239`) erlaubt
-`TransitionReason::RecoveryRequired` ausschliesslich fuer
-`from == ProcessState::Boot`. `applyProcessTransition()`
-(`process_state_machine.cpp:1006-1021`) verlangt
-`equalProcessRuntimeState(current, decision.before)` – `decision.before`
-muss exakt dem tatsaechlich uebergebenen `current` entsprechen. Eine
-geladene Altphase wie `Fermenting` kann daher **nicht** durch blosses
-Umdeuten ("fachlich wie Boot behandelt") nach `RecoveryEvaluation`
-wechseln; ein `before`, dessen `state`-Feld tatsaechlich `Fermenting` ist,
-besteht die `from == Boot`-Pruefung nicht. Revision 3 hat genau das
-versucht und ist damit nicht ausfuehrbar.
+**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 4):**
+`docs/RUN_PERSISTENCE.md:131-136` legt die Ausfalldauer verbindlich fest als
 
-**Vertrag:** Ein neuer, eng begrenzter Reason mit einer eigenen,
-tatsaechlich zu den restaurierten Altphasen passenden Topologieregel:
-
-```cpp
-// process_state_machine.hpp
-enum class TransitionReason : std::uint8_t {
-    ..., RecoveryReentryRequired,
-};
+```text
+obere Grenze = aktuelle UTC - letzter verlaesslicher UTC-Kontrollpunkt
+untere Grenze = max(0, obere Grenze - maximal moeglicher Kontrollpunktabstand)
 ```
 
-```cpp
-// validControlTopology(), neuer Zweig – erlaubte Quellzustaende sind exakt
-// die recovery-faehigen aktiven Phasen, wiederverwendet aus der bereits
-// bestehenden Praedikatfunktion stateUsesRunSnapshot() (Preheating,
-// WaitingForProduct, ReachingTarget, QualifyingTarget, Fermenting, Cooling,
-// CoolHolding, ManualHolding; verifiziert process_state_machine.cpp:76-97).
-case TransitionReason::RecoveryReentryRequired:
-    return stateUsesRunSnapshot(from) && to == ProcessState::RecoveryEvaluation;
-```
-
-**Ablauf (lokal, auf einer Kopie, keine RAM-Mutation vor Commit):**
-
-1. `auto candidate = restoredState;` (aus `restoreRunPersistenceSnapshot()`,
-   `candidate.processState.state` ist die echte alte Phase, z. B.
-   `Fermenting`, mit dem echten `processRunSnapshot`).
-2. `auto originalRestoredProcessState = candidate.processState;` (unveraenderte
-   Kopie, dient in Abschnitt 5.5 als Grundlage fuer `request.recoveredState` –
-   getrennt von `candidate.processState`, das durch Hop 1 mutiert wird).
-3. `hop1.before = candidate.processState` (identisch zu `candidate.processState`,
-   erfuellt `equalProcessRuntimeState` trivial). `hop1 = propose(candidate.processState,
-   ProcessState::RecoveryEvaluation, TransitionReason::RecoveryReentryRequired,
-   monotonicMillis)`. `propose()` setzt `after.stateEnteredAtMillis = monotonicMillis`
-   (aktueller Boot), zeroed `targetReachStartedAtMillis`/`targetReachWarningIssued`
-   (da `RecoveryEvaluation` keinen Zielfenster-Timer hat,
-   `stateHasTargetReachTimer` liefert `false`, `process_state_machine.cpp:429-432`),
-   und resettet `qualificationValidSinceMillis` (immer, unabhaengig vom
-   Zielzustand, `process_state_machine.cpp:428`) – `runtimeShapeIsValid(after)`
-   ist damit garantiert erfuellt.
-4. `applyProcessTransition(candidate.processState, hop1, &*candidate.processRunSnapshot)`.
-   `transitionMatchesRunSnapshot`: `stateUsesRunSnapshot(before)==true` (alte
-   Phase), verlangt `stateMatchesRunSnapshot(before.state, *runSnapshot)` –
-   erfuellt, da der echte restaurierte Snapshot verwendet wird;
-   `stateUsesRunSnapshot(RecoveryEvaluation)==false`, der `after`-Abgleich
-   entfaellt (`process_state_machine.cpp:356-367`). `ProcessSignals::criticalFault`
-   ist `false` zu setzen (sonst Kurzschluss nach `Fault`,
-   `process_state_machine.cpp:974`). Bei Fehlschlag: Abbruch, kein Schreiben,
-   Coordinator bleibt in `LoadedActiveRun`/`BlockedIndeterminate`
-   (Ausgangszustand), Ergebnis `RunPersistenceResultStatus::InvalidDecision`.
-5. Ab hier: `candidate.processState.state == RecoveryEvaluation`,
-   `transitionSequence == restoredState.processState.transitionSequence + 1U`.
-
-Kein Vorwand, die Altphase sei `Boot`; die alte Phase bleibt ausschliesslich
-ueber `originalRestoredProcessState` als expliziter Recovery-Kontext
-verfuegbar und wird in Abschnitt 5.5 in `request.recoveredState` eingebracht
-– kein direkter Zugriff auf `RunPersistenceCoordinator::current` vor Commit.
-
-Test: `applyProcessTransition()` wird mit der **echten** geladenen Altphase
-(nicht einem synthetischen Sollzustand) fuer jede recovery-faehige Phase
-sowie negativ gegen einen vorgetaeuschten `Boot`-Quellzustand geprueft
-(Testmatrix 8.1/8.2).
-
-### 5.3 Recovery-Zeitfenster – berechenbarer Datenvertrag mit echten UTC-Ankern
-
-**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 3):** Ein
-Zeitfenster laesst sich nicht aus zwei Bool-Werten berechnen; gleichzeitig
-verbietet der Boot-Epochen-Befund (weiterhin gueltig: `runtimeTimeIsValid()`
-kennt keine Boot-Epoche, ein roh kopierter alter Zeitstempel wuerde nach
-Neustart als "Zukunft" erkannt) jeden direkten Vergleich zweier
-`monotonicMillis`-Werte aus unterschiedlichen Boots. Die einzige sichere
-Bruecke ueber die Bootgrenze ist eine **echte UTC-Differenz**, wenn beide
-Seiten sie liefern.
+**auch mit exaktem UTC-Anker auf beiden Seiten bleibt die Ausfalldauer ein
+Intervall**, weil das Geraet nach dem letzten Kontrollpunkt noch bis zum
+naechsten planmaessigen Speicherzeitpunkt weitergelaufen sein kann
+(`docs/RUN_PERSISTENCE.md:119-121`). Revision 4 behandelte eine exakte
+UTC-Differenz faelschlich als exakte Ausfalldauer und vermischte sie mit der
+Alt-Boot-internen Phasenlaufzeit in einem einzigen Objekt.
 
 ```cpp
 // run_recovery_time.hpp
-struct RecoveryTimeBoundsInput {
-    std::uint64_t oldStateEnteredAtMillis;      // restaurierter processState, alter Boot
-    std::uint64_t oldCheckpointMonotonicMillis; // aus Snapshot, alter Boot, >= oldStateEnteredAtMillis
+struct RecoveryOutageBoundsInput {
     std::optional<std::int64_t> utcAtLastCheckpoint;  // RunPersistenceRawRecord.utcUnixSeconds
     std::optional<std::int64_t> utcNowAfterRestart;   // aktuelle Zeitquelle, einmalig zum Recoveryzeitpunkt abgefragt
+    std::uint32_t maxCheckpointGapSeconds;             // aus konfiguriertem Intervall (intervalMinutes) + firmwarefester Toleranz
+    RunCheckpointTrigger lastCheckpointTrigger;        // fuer Konfidenzanzeige, keine Grenzenrolle
 };
 
-struct RecoveryTimeBounds {
-    std::uint64_t elapsedSecondsLowerBound;
-    std::optional<std::uint64_t> elapsedSecondsUpperBound;  // nur gesetzt, wenn beide UTC-Anker vorhanden und nowUtc >= lastUtc
-    bool exact;  // true genau dann, wenn upperBound gesetzt und == lowerBound
+struct RecoveryOutageBounds {
+    std::uint64_t outageSecondsUpperBound;  // = utcNowAfterRestart - utcAtLastCheckpoint
+    std::uint64_t outageSecondsLowerBound;  // = max(0, upperBound - maxCheckpointGapSeconds)
 };
 
-[[nodiscard]] RecoveryTimeBounds computeRecoveryTimeBounds(
-    const RecoveryTimeBoundsInput& input);
+// nullopt genau dann, wenn ein UTC-Anker fehlt oder utcNow < utcAtCheckpoint
+// (Uhr ging zurueck – als unbekannt behandelt, nicht als negative Dauer).
+// Keine erfundene Ausfalldauer ohne beide Anker.
+[[nodiscard]] std::optional<RecoveryOutageBounds> computeRecoveryOutageBounds(
+    const RecoveryOutageBoundsInput& input);
 ```
 
-**Berechnung:**
-- `elapsedSecondsLowerBound = (oldCheckpointMonotonicMillis - oldStateEnteredAtMillis) / 1000`
-  – reine **Alt-Boot-interne** Subtraktion (beide Werte aus demselben Boot),
-  kein Boot-uebergreifender Vergleich. Dies ist die mindestens verstrichene
-  Zeit, unabhaengig von der Ausfalldauer (Ausfall traegt niemals negativ
-  bei).
-- Sind `utcAtLastCheckpoint` und `utcNowAfterRestart` **beide** vorhanden und
-  `utcNowAfterRestart >= utcAtLastCheckpoint`: `outageSeconds =
-  utcNowAfterRestart - utcAtLastCheckpoint`; die Gesamtzeit ist dann exakt
-  bekannt: `elapsedSecondsLowerBound = elapsedSecondsUpperBound =
-  elapsedSecondsLowerBound(oben) + outageSeconds`, `exact = true`.
-- Fehlt ein UTC-Anker oder ist `utcNowAfterRestart < utcAtLastCheckpoint`
-  (Uhr ging zurueck – als unbekannt behandelt, nicht als negative Dauer):
-  `elapsedSecondsUpperBound = nullopt`, `exact = false`. **Keine erfundene
-  Ausfalldauer ohne Anker.**
-- Keine „rebased monotonic“-Fiktion zwischen zwei Boots; die einzige
-  Bootgrenzen-ueberbrueckende Groesse ist die UTC-Differenz.
+Fehlt ein UTC-Anker: `computeRecoveryOutageBounds` liefert `nullopt` – die
+Ausfalldauer ist dann vollstaendig unbekannt (kein Fallback auf eine
+geratene Zahl).
 
-Ausgefallene/verspaetete Kontrollpunkte werden **nicht** als eigener,
-separat gespeicherter Fakt behandelt, sondern folgen direkt aus
-`elapsedSecondsLowerBound` im Verhaeltnis zum konfigurierten
-Checkpoint-Intervall (`RunPersistenceSnapshot.intervalMinutes`,
-`RunPersistenceSnapshot.trigger`) – z. B. als Konfidenzhinweis fuer die
-Anzeige (5.11), nie als harte Grenze und nie als erfundene Tatsache ohne
-Datengrundlage.
+### 5.3 `RecoveredPhaseElapsed` – Phasenlaufzeit, strukturell getrennt (Vertrag B)
 
-### 5.4 Getrennte fachliche Bewertung, mehrere zeitabhaengige Recoverygrenzen
+```cpp
+struct RecoveredPhaseElapsedInput {
+    std::uint64_t oldStateEnteredAtMillis;       // restaurierter processState, alter Boot
+    std::uint64_t oldCheckpointMonotonicMillis;  // aus Snapshot, alter Boot, >= oldStateEnteredAtMillis
+    std::optional<RecoveryOutageBounds> outage;  // aus 5.2, kann nullopt sein
+};
 
-**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 3):** Eine
-Funktion, die sowohl das Zeitfenster berechnet als auch bereits ein
-fachliches Verdikt (inkl. eines `configuredWaitingForProductLimitMinutes`-
-Parameters) liefert, vermischt Datenermittlung und Geschaeftsentscheidung
-wieder. Ausserdem deckt ein reiner `WaitingForProduct`-Fokus nicht alle
-zeitabhaengigen Recoverygrenzen ab, die `ProcessRunSnapshot` tatsaechlich
-traegt (`fermentationDurationMinutes`, `holdDurationMinutes` bei
-`CompletionMode::CoolAndHoldForDuration`).
+struct RecoveredPhaseElapsed {
+    std::uint64_t knownSecondsBeforeCheckpoint;       // = (oldCheckpointMonotonicMillis - oldStateEnteredAtMillis) / 1000, immer bekannt, rein Alt-Boot-intern
+    std::uint64_t totalSecondsLowerBound;             // = knownSecondsBeforeCheckpoint + (outage ? outage->outageSecondsLowerBound : 0)
+    std::optional<std::uint64_t> totalSecondsUpperBound; // = knownSecondsBeforeCheckpoint + outage->outageSecondsUpperBound, nur wenn outage vorhanden
+};
 
-**Vertrag:** `computeRecoveryTimeBounds()` (5.3) liefert ausschliesslich
-Zeitdaten. Eine separate, reine Vergleichsfunktion:
+[[nodiscard]] RecoveredPhaseElapsed computeRecoveredPhaseElapsed(
+    const RecoveredPhaseElapsedInput& input);
+```
+
+Keine Variable bedeutet gleichzeitig "Ausfalldauer" und "gesamte
+Phasenlaufzeit": `RecoveryOutageBounds` beschreibt ausschliesslich die
+Unterbrechung selbst (Vertrag A, kanonisch nach `RUN_PERSISTENCE.md`);
+`RecoveredPhaseElapsed` beschreibt die daraus abgeleitete **gesamte**
+Zeit seit Phaseneintritt (Vertrag B, `Alt-Boot-Anteil + Ausfallintervall`),
+verwendet fuer die fachliche Grenzbewertung (5.4).
+
+### 5.4 `evaluateRecoveryTimeVerdict` – unveraendert als reine Vergleichsfunktion
 
 ```cpp
 enum class RecoveryTimeVerdict : std::uint8_t {
-    DefinitelyStillValid,
-    DefinitelyExpired,
-    Uncertain,
+    DefinitelyStillValid, DefinitelyExpired, Uncertain,
 };
 
 [[nodiscard]] RecoveryTimeVerdict evaluateRecoveryTimeVerdict(
-    const RecoveryTimeBounds& bounds, std::uint32_t limitSeconds) {
-    if (bounds.elapsedSecondsLowerBound >= limitSeconds) {
+    const RecoveredPhaseElapsed& elapsed, std::uint32_t limitSeconds) {
+    if (elapsed.totalSecondsLowerBound >= limitSeconds) {
         return RecoveryTimeVerdict::DefinitelyExpired;
     }
-    if (bounds.elapsedSecondsUpperBound.has_value() &&
-        *bounds.elapsedSecondsUpperBound < limitSeconds) {
+    if (elapsed.totalSecondsUpperBound.has_value() &&
+        *elapsed.totalSecondsUpperBound < limitSeconds) {
         return RecoveryTimeVerdict::DefinitelyStillValid;
     }
     return RecoveryTimeVerdict::Uncertain;
 }
 ```
 
-Liegen beide Bounds auf derselben Seite der Grenze, ist das Ergebnis
-eindeutig, auch ohne exakten UTC-Anker (`lowerBound >= limit` allein
-reicht fuer `DefinitelyExpired`; ein bekannter `upperBound < limit` allein
-reicht fuer `DefinitelyStillValid`). Nur wenn die Grenze zwischen
-`lowerBound` und einem ggf. unbekannten `upperBound` liegt, ist das
-Ergebnis `Uncertain`.
+Anwendung je Phase (Tabelle unveraendert aus Revision 4, jetzt auf korrekt
+komponierten `RecoveredPhaseElapsed`-Bounds statt eines vermischten
+Objekts): `WaitingForProduct` (`maximumProductWaitMinutes*60`, steuert
+Hop-2-Ausgang), `Fermenting` (`fermentationDurationMinutes*60`, rein
+informativ), `CoolHolding` mit `CompletionMode::CoolAndHoldForDuration`
+(`holdDurationMinutes*60`, rein informativ); alle anderen recovery-faehigen
+Phasen ohne snapshot-getragene Grenze.
 
-**Anwendung je Phase (fachliche Zuordnung, nicht Teil der reinen
-Vergleichsfunktion):**
+### 5.5 Boot-unabhaengiger Phasenfortschritt – kein Rebasing-Unterlauf
 
-| Phase | Grenze | Verwendung des Verdikts |
-|---|---|---|
-| `WaitingForProduct` | `maximumProductWaitMinutes * 60` | steuert Hop-2-Ausgang direkt: `DefinitelyExpired` -> Tombstone (5.6), `DefinitelyStillValid`/hinreichend fuer Resume -> `RecoveryResume`, `Uncertain` -> Hop-1-only (5.7) |
-| `Fermenting` | `fermentationDurationMinutes * 60` | rein informativ fuer die Rebasing-Richtung (5.5); blockiert **nicht** den Resume – ein ueberfaelliger Fermenting-Lauf resumiert und wird durch die bereits bestehende `decideFermenting`-Logik beim naechsten automatischen Aufruf reguär abgeschlossen |
-| `CoolHolding` (nur `CompletionMode::CoolAndHoldForDuration`) | `holdDurationMinutes * 60` | wie `Fermenting`, rein informativ |
-| alle anderen recovery-faehigen Phasen (`Preheating`, `ReachingTarget`, `QualifyingTarget`, `Cooling`, `ManualHolding`) | keine snapshot-getragene Grenze | keine Verdikt-Anwendung; einheitliches konservatives Rebasing (5.5) |
+**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 4):**
+`newBootMonotonicMillisNow - elapsedSeconds * 1000` unterlaeuft (unsigned),
+wenn bereits mehr Phasenzeit bekannt ist, als der aktuelle Boot ueberhaupt
+laeuft (z. B. zwei Stunden bekannte Fermenting-Zeit, Boot laeuft erst fuenf
+Sekunden) – das Ergebnis waere ein riesiger Wert, den
+`runtimeTimeIsValid()` als "in der Zukunft" ablehnt. Dieser Fehler wurde in
+einer frueheren Revisionsrunde bereits benannt (kein Boot-uebergreifender
+Rohvergleich monotoner Werte) und ist mit der Rebasing-Subtraktion in
+Revision 4 unbeabsichtigt zurueckgekehrt.
 
-`WaitingForProduct` ist die einzige Phase, bei der ein `DefinitelyExpired`-
-Verdikt den Resume verhindert (Sicherheits-/Produktrelevanz: ein
-faelschlich fortgesetztes Warten auf ein Produkt ist die eigentliche Gefahr,
-die #18 schliesst). Fuer `Fermenting`/`CoolHolding` ist ein ueberfaelliger,
-aber fortgesetzter Lauf unkritisch, da die bereits bestehende
-`decideAutomatic`-Logik (`decideFermenting`/`decideCoolHolding`,
-`process_state_machine.cpp:639-677`) ihn beim naechsten regulaeren Aufruf
-korrekt abschliesst – #18 dupliziert diese Geschaeftslogik nicht.
+**Vertrag:** `stateEnteredAtMillis` wird bei Recovery **immer** auf den
+aktuellen Boot gesetzt (`= monotonicMillis`, niemals zurueckgerechnet).
+Der bereits bekannte Vor-Boot-Anteil wird **separat**, boot-unabhaengig,
+additiv gefuehrt und von den Dauerentscheidungsfunktionen explizit
+hinzugerechnet – niemals durch Subtraktion von `now`:
 
-### 5.5 Hop 2 – Wiederverwendung der bestehenden `decideRecoveryEvent`/`decideProcessTransition`-API
+```cpp
+// process_state_machine.hpp
+struct PriorBootPhaseElapsed {
+    std::uint32_t lowerBoundSeconds{0U};
+    std::optional<std::uint32_t> upperBoundSeconds;
+};
 
-**Wichtiger Befund (in dieser Session neu verifiziert, in Revision 3 nicht
-erkannt):** `decideRecoveryEvent()` (`process_state_machine.cpp:741-780`)
-existiert bereits produktiv und ist bereits **oeffentlich ueber
-`decideProcessTransition()` erreichbar**, sobald `current.state ==
-RecoveryEvaluation` gilt (Dispatch in `decideExplicitEvent()`,
-`process_state_machine.cpp:840-842`). Sie nimmt `request.recoveredState`
-(ein vollstaendiges `ProcessRuntimeState`) entgegen, validiert es
-vollstaendig (`validRecoveryTarget`, `runtimeShapeIsValid`,
-`runtimeTimeIsValid`, `stateMatchesRunSnapshot`, sowie einen eingebauten
-`WaitingForProduct`-Ablaufcheck) und setzt bei Erfolg `decision.after =
-recovered`. `RecoveryReject` (`request.event ==
-ProcessEvent::RecoveryReject`) ist bereits vollstaendig implementiert
-(`RecoveryEvaluation -> Fault`). Hop 2 muss diese Logik daher **nicht**
-neu erfinden, sondern korrekt aufrufen.
+bool elapsedWithPrior(std::uint64_t now, std::uint64_t startedAt,
+                      std::uint32_t durationMinutes,
+                      std::uint32_t priorSeconds) {
+    // now >= startedAt ist innerhalb desselben Boots durch propose()/
+    // Hop-1-Konstruktion garantiert (5.7) - keine Unterlaufgefahr, da hier
+    // ausschliesslich addiert, nie von now subtrahiert wird.
+    return (now - startedAt) / 1000U + priorSeconds >=
+           static_cast<std::uint64_t>(durationMinutes) * 60U;
+}
+```
 
-**Rebasing von `request.recoveredState` (einzige noetige Vorarbeit):**
-Ausgehend von `originalRestoredProcessState` (5.2, Schritt 2) wird **nur**
-`stateEnteredAtMillis` neu gesetzt, alle anderen Felder (`state`,
-`qualificationValidSinceMillis`, `targetReachStartedAtMillis`,
-`targetReachWarningIssued`) bleiben unveraendert aus der Restaurierung
-(`transitionSequence` wird von `decideRecoveryEvent` selbst auf
-`current.transitionSequence + 1U` gesetzt, `process_state_machine.cpp:778`
-– bezogen auf den **Hop-1-Kandidaten**, also insgesamt `alt + 2`, wie in
-5.2 hergeleitet):
+`decideWaitingForProduct`, `decideFermenting`, `decideCoolHolding`
+(`process_state_machine.cpp:537-544,596-604,624-637`) erhalten je einen
+neuen Parameter `PriorBootPhaseElapsed priorElapsed = {}` (Default = kein
+Vor-Boot-Anteil, bestehendes Verhalten fuer alle Nicht-Recovery-Aufrufe
+unveraendert) und verwenden `elapsedWithPrior` statt `elapsedOptional` fuer
+ihre jeweilige Grenze. Der bestehende Vorab-Check in
+`decideProcessTransition` (`process_state_machine.cpp:993-996`,
+`WaitingForProduct`) sowie der eingebaute Check in `decideRecoveryEvent`
+(`process_state_machine.cpp:762-764`) werden ebenso auf `elapsedWithPrior`
+umgestellt. `decideProcessTransition`, `decideAutomatic` und
+`decideExplicitEvent` erhalten dazu einen zusaetzlichen Parameter
+`const PriorBootPhaseElapsed& priorElapsed = {}` (Default erhaelt alle
+bestehenden Aufrufstellen unveraendert lauffaehig) und reichen ihn an die
+drei Funktionen durch.
 
-- **Alle Phasen ausser `WaitingForProduct`:** konservatives Rebasing mit
-  `elapsedSecondsLowerBound` (5.3/5.4): `rebasedStateEnteredAtMillis =
-  newBootMonotonicMillisNow - bounds.elapsedSecondsLowerBound * 1000`.
-  Diese Richtung kreditiert nie mehr Ausfallzeit, als durch Alt-Boot-lokale
-  Daten allein belegt ist – konsistent mit Gate C (keine ungesicherte
-  Zeitgutschrift) und sicher fuer `Fermenting`/`CoolHolding` (verzoegert
-  hoechstens eine ohnehin unkritische automatische Nachbewertung).
-- **`WaitingForProduct` mit Verdikt `DefinitelyStillValid`:** Rebasing mit
-  `elapsedSecondsUpperBound` (in diesem Fall garantiert vorhanden, da die
-  Verdikt-Funktion `DefinitelyStillValid` nur liefert, wenn `upperBound`
-  gesetzt ist) – die konservativere Richtung fuer **diese** Phase, da ein zu
-  niedrig angesetztes `stateEnteredAtMillis` eine bereits abgelaufene
-  Wartezeit verschleiern koennte.
-- **`WaitingForProduct` mit `DefinitelyExpired`/`Uncertain`:** kein Rebasing,
-  kein `RecoveryResume`-Versuch (siehe 5.6/5.7).
+**Herkunft des Werts:** `priorElapsed` wird **nicht** Teil von
+`ProcessRuntimeState` (das bliebe damit phasen-generisch und unveraendert
+in seinen bestehenden Invarianten/Vergleichsfunktionen), sondern lebt als
+`std::optional<TaggedPriorBootPhaseElapsed>` (mit Phasen-Tag) auf Ebene von
+`RunCommandState`/`RunPersistenceSnapshot` (5.10). Der Aufrufer (Recovery-
+Orchestrierung bzw. der automatische Live-Dispatch) liest ihn nur, wenn
+`current.processState.state` mit dem Tag uebereinstimmt – sonst wird `{}`
+(kein Vor-Boot-Anteil) verwendet. Keine Boot-Epochen-Fiktion; keine
+Subtraktion von `now`.
 
-**Ausfuehrung:**
+### 5.6 Vollstaendige phasenbezogene Timertabelle fuer Hop 2
+
+| Phase | `stateEnteredAtMillis` | `targetReachStartedAtMillis` | `targetReachWarningIssued` | `qualificationValidSinceMillis` | boot-unabhaengiger Anteil |
+|---|---|---|---|---|---|
+| `Preheating` | `now` | `0` (kein Timer) | `false` | `nullopt` (bestehende Logik, `process_state_machine.cpp:771-772`) | keiner |
+| `WaitingForProduct` | `now` | `0` | `false` | n/a | `priorElapsed` (Ober- oder Untergrenze, siehe 5.8) |
+| `ReachingTarget` | `now` | `now` (Timer bewusst neu gestartet – konservativ, verzoegert hoechstens eine Warnung) | `false` | n/a | keiner |
+| `QualifyingTarget` | wird von `decideRecoveryEvent` selbst zu `ReachingTarget` umgeleitet, `stateEnteredAtMillis = now` (bestehende Logik, `process_state_machine.cpp:773-777`) | `now` | `false` | `nullopt` | keiner – beginnt vollstaendig neu |
+| `Fermenting` | `now` | `0` | `false` | n/a | `priorElapsed` (Untergrenze) + separat `observedRunSeconds` (5.16, Geschaeftsmetrik, getrennt von der reinen Grenzbewertung) |
+| `Cooling` | `now` | `0` | `false` | n/a | keiner (kein Dauer-Timer, signalbasiert) |
+| `CoolHolding` | `now` | `0` | `false` | n/a | `priorElapsed` (Untergrenze) |
+| `ManualHolding` | `now` | `0` | `false` | n/a | keiner (kein automatisches Limit) |
+
+Kein Feld wird roh aus dem alten Boot uebernommen; jedes Feld ist entweder
+explizit auf `now`/`0`/`nullopt` gesetzt oder ueber `priorElapsed` separat
+gefuehrt.
+
+### 5.7 Hop 1 – Recovery-Eintrittsvertrag (unveraendert aus Revision 4, weiterhin verifiziert korrekt)
+
+`TransitionReason::RecoveryReentryRequired`, `validControlTopology`-Zweig
+`stateUsesRunSnapshot(from) && to == RecoveryEvaluation`
+(`stateUsesRunSnapshot`, `process_state_machine.cpp:76-97`: `Preheating`,
+`WaitingForProduct`, `ReachingTarget`, `QualifyingTarget`, `Fermenting`,
+`Cooling`, `CoolHolding`, `ManualHolding` – **nicht** `Completed`, dazu
+5.18). Ablauf: `candidate = restoredState`; `originalRestoredProcessState`
+als unveraenderte Kopie fuer den spaeteren Recovery-Kontext (5.10);
+`hop1 = propose(candidate.processState, RecoveryEvaluation,
+RecoveryReentryRequired, monotonicMillis)`; `applyProcessTransition(candidate.processState,
+hop1, &*candidate.processRunSnapshot)`. `ProcessSignals::criticalFault =
+false`. Bei Fehlschlag: kein Schreiben, Coordinator bleibt im
+Ausgangszustand, `InvalidDecision`.
+
+### 5.8 Hop 2 – Wiederverwendung der bestehenden `decideRecoveryEvent`-API
+
+`request.recoveredState` wird aus `originalRestoredProcessState` gemaess
+5.6 aufgebaut (alle Felder explizit gesetzt, kein roher Altwert). Aufruf:
 
 ```cpp
 TransitionRequest request;
-request.event = ProcessEvent::RecoveryResume;
+request.event = ProcessEvent::RecoveryResume;  // oder RecoveryReject, siehe 5.20
 request.recoveredState = rebasedRecoveredState;
 const auto hop2 = decideProcessTransition(
-    candidate.processState /* == RecoveryEvaluation, nach Hop 1 */,
-    &*candidate.processRunSnapshot,
-    ProcessSignals{/* criticalFault = false */}, request, monotonicMillis);
+    candidate.processState /* == RecoveryEvaluation */,
+    &*candidate.processRunSnapshot, ProcessSignals{/* criticalFault=false */},
+    request, monotonicMillis, priorElapsedForOldPhase /* 5.5 */);
 ```
 
-Dies durchlaeuft `decideExplicitEvent -> decideRecoveryEvent` unveraendert;
-liefert `hop2.status != Proposed` (z. B. weil die eingebaute
-`WaitingForProduct`-Pruefung – als zusaetzliches, unveraendertes
-Sicherheitsnetz – dennoch ablehnt, obwohl die eigene Vorpruefung
-`DefinitelyStillValid` ergab), wird **kein** Resume erzwungen; Hop 2 gilt
-als nicht durchfuehrbar und der Ablauf faellt auf die Hop-1-only-Behandlung
-(5.7) mit einer Diagnosenachricht zurueck (fail-closed, kein Bypass des
-bestehenden eingebauten Schutzes).
+Rebasing-Richtung fuer `priorElapsedForOldPhase`, das an `decideRecoveryEvent`s
+eingebauten `WaitingForProduct`-Check (`elapsedWithPrior` statt
+`elapsedOptional`, 5.5) sowie an die Snapshot-Struktur selbst
+weitergereicht wird:
 
-Bei Erfolg: `applyProcessTransition(candidate.processState, hop2, &*candidate.processRunSnapshot)`.
+- **Alle Phasen ausser `WaitingForProduct`:** `RecoveredPhaseElapsed.totalSecondsLowerBound`
+  – nie mehr Ausfallzeit kreditiert, als Alt-Boot-lokal belegt ist.
+- **`WaitingForProduct` mit `DefinitelyStillValid`:** `totalSecondsUpperBound`
+  (in diesem Fall garantiert vorhanden) – die fuer diese Phase konservative
+  Richtung.
+- **`WaitingForProduct` mit `DefinitelyExpired`/`Uncertain`:** kein Resume-
+  Versuch (5.9/5.13).
 
-**Gate A-Kopplung:** Zwischen Hop 1 und dem Aufruf von Hop 2 wird die reale
-Restart-Sensorauswahl (5.14) ausgewertet. Liefert sie kein bestaetigtes
-Ergebnis, wird `request.event = ProcessEvent::RecoveryReject` statt
-`RecoveryResume` verwendet – ebenfalls ueber die bestehende,
-bereits implementierte `decideRecoveryEvent`-Logik (`RecoveryEvaluation ->
-Fault`), keine eigene Fault-Konstruktion.
+Liefert `hop2.status != Proposed` (z. B. weil das eingebaute
+`WaitingForProduct`-Sicherheitsnetz trotz eigener Vorpruefung ablehnt), wird
+kein Resume erzwungen; Rueckfall auf Hop-1-only (5.13).
 
-### 5.6 WaitingForProduct: definitiv abgelaufene Wartezeit – Tombstone
+**Gate-A-Kopplung:** Zwischen Hop 1 und Hop 2 wird die reale
+Restart-Sensorauswahl (5.20) ausgewertet; negatives Ergebnis ->
+`request.event = ProcessEvent::RecoveryReject` (bestehende, bereits
+implementierte `RecoveryEvaluation -> Fault`-Logik).
 
-**Vertrag (Reason und Topologie unveraendert gegenueber Revision 3, hier
-im Kontext des korrigierten Ablaufs neu verankert):** Da kein bestehender
-Reason `RecoveryEvaluation -> Standby` erlaubt (`RecoveryRejected` ist hart
-auf `Fault` fixiert, `process_state_machine.cpp:319-321`), bleibt ein
-eigener Reason noetig:
+### 5.9 WaitingForProduct: definitiv abgelaufene Wartezeit – Tombstone
 
-```cpp
-case TransitionReason::RecoveryEndedByExpiredWait:
-    return from == ProcessState::RecoveryEvaluation &&
-           to == ProcessState::Standby;
-```
+Unveraendert aus Revision 4: `TransitionReason::RecoveryEndedByExpiredWait`,
+`validControlTopology`-Zweig `from == RecoveryEvaluation && to == Standby`,
+direkt ueber `propose()` konstruiert (keine wiederverwendbare bestehende
+Funktion dafuer vorhanden), `clearActiveRunState(candidate)` vor der
+Persistierung, Coordinator erreicht `ReadyEmpty`.
 
-Anders als Hop 2 fuer `RecoveryResume`/`RecoveryReject` existiert fuer
-diesen Ausgang **keine** wiederverwendbare bestehende Entscheidungsfunktion
-– er wird direkt ueber `propose(candidate.processState, ProcessState::Standby,
-TransitionReason::RecoveryEndedByExpiredWait, monotonicMillis)` konstruiert
-und lokal angewendet, danach `clearActiveRunState(candidate)` **vor** der
-einmaligen Persistierung (5.8). Ausloeser: alte Phase war
-`WaitingForProduct` **und** `evaluateRecoveryTimeVerdict(bounds,
-maximumProductWaitMinutes*60) == DefinitelyExpired` (5.4). Ergebnis:
-`variant == NoActiveRun`; Coordinator erreicht `ReadyEmpty`, nicht `Ready`
-(Commit-Kern, 5.8).
+### 5.10 Schema-3-Gueltigkeitsvertrag fuer `RecoveryEvaluation` bei aktivem Run
 
-Test: Neustart nach definitiv abgelaufener Frist -> Reboot danach laedt
-`NoActiveRun` (Testmatrix 8.3).
-
-### 5.7 Unsichere Recovery – Hop-1-only, kein Dead-End
-
-**Vertrag:** Bei `RecoveryTimeVerdict::Uncertain` (nur relevant fuer
-`WaitingForProduct`, 5.4) oder wenn Gate A kein bestaetigtes Sensorergebnis
-liefert, ohne dass eine sichere `RecoveryReject`-Entscheidung fachlich
-angezeigt ist, wird **nur Hop 1** committet (`candidate.processState.state ==
-RecoveryEvaluation`, kein Hop-2-Ergebnis). Dies ist eine vollstaendige,
-fuer sich gueltige atomare Revision (5.8) – kein Zwischenschritt, der auf
-einen weiteren, in derselben Operation folgenden Schritt angewiesen waere.
-Coordinator-Ergebnis: `Ready` (ein Lauf mit gueltigem, aber unentschiedenem
-Zustand existiert; `RecoveryEvaluation` traegt keine Aktorfreigabe).
-
-**Zwei gleichwertige, spaetere Aufloesungswege (beide ueber denselben
-Commit-Kern, 5.8):**
-
-1. **Automatisch, sobald UTC verfuegbar wird:** `RunRecoveryCoordinator::reevaluatePendingRecovery(RunCommandState&, const RunCheckpointTime&)`
-   (neu, nativ testbar; produktive Verdrahtung eines Aufrufers ist **nicht**
-   Teil von #18, siehe 5.16/Gate B). Wiederholt 5.3-5.5 gegen
-   `current.processState.state == RecoveryEvaluation` und `originalRestoredProcessState`
-   (muss dafuer weiterhin verfuegbar sein – wird deshalb Teil des
-   persistierten Recovery-Kontexts, 5.9).
-2. **Benutzerpfad:** `CommandKind::ResolveRecoveryUncertainty` (unveraendert
-   aus Revision 3 im Grundprinzip): typisierte Entscheidung
-   (`AssumeStillValid`/`AssumeThresholdCrossed`), laeuft ueber die
-   bestehende `persistCommand`-Infrastruktur (`expectedRunRevision`,
-   `persistedIds_`-Dedup, `StaleState`/`AlreadyProcessed`), darf das
-   berechnete Fenster nur innerhalb der ausgewiesenen Unsicherheit
-   auflegen (Ablehnung, wenn `bounds`-Verdikt bereits definitiv ist).
-   `AcknowledgeMessage` bleibt reine Quittierung.
-
-Beide Wege fuehren **denselben** Hop-2-Aufbau (5.5/5.6) aus und persistieren
-ueber denselben Commit-Kern (5.8) – keine zweite Entscheidungslogik.
-
-**Kein Dead-End (Korrektur gegenueber Revision 3):** Revision 3 liess
-`FallbackRecovered` bei `Uncertain` im Zustand
-`BlockedIndeterminate/FallbackRecovery`, aus dem weder der automatische
-noch der Benutzerpfad erreichbar waren, da beide einen bereits committeten
-`RecoveryEvaluation`-Zustand voraussetzen. Die Korrektur: **Hop 1 wird
-immer versucht**, unabhaengig davon, ob die Quelle `Current` oder
-`FallbackRecovered` war, und **immer** atomar committet, sobald er lokal
-erfolgreich aufgebaut werden konnte (5.8). Der Ursprung (`Current` vs.
-`FallbackRecovered`) hat danach keine Bedeutung mehr fuer den weiteren
-Ablauf – beide konvergieren auf denselben `Ready`+`RecoveryEvaluation`-
-Zustand, aufloesbar ueber dieselben zwei Wege oben. `BlockedIndeterminate`
-bleibt ausschliesslich reserviert fuer den Fall, dass **Hop 1 selbst** lokal
-nicht aufgebaut/angewendet werden kann (z. B. eine strukturell defekte
-Snapshot-Form) – das ist eine echte Datenintegritaetsfrage, keine
-Zeitunsicherheit, und rechtfertigt weiterhin Fail-Closed (5.10).
-
-### 5.8 Gemeinsamer Commit-Kern
-
-Ein privater Coordinator-Helfer `commitRecoveryOutcome(RunCommandState& current,
-const RunCommandState& candidateAfterHops, std::optional<std::size_t> targetSlotOverride,
-const RunCheckpointTime& time)` kapselt: Projektion via
-`makeRunPersistenceSnapshot`, Schreiben (siehe 5.10 fuer die
-Fehlerfallunterscheidung), Bestimmung von `state_` (`ReadyEmpty` wenn
-`variant == NoActiveRun`, sonst `Ready`), Uebernahme in `current` erst nach
-bestaetigtem Schreiben. Aufrufer: `activateLoadedRun` (Quelle: direkt
-geladen), `activateFallbackRecoveredRun` (Quelle: Fallback, mit
-`targetSlotOverride = currentHead_->current.slot` – die bestehende
-Standardableitung `target = 1 - currentHead_->current.slot`
-(`run_persistence_coordinator.cpp:307-308`) wuerde sonst den einzigen
-gueltigen Fallback-Datensatz ueberschreiben, bevor der neue Datensatz
-sicher committet ist; Test mit Store-Schnitt zwischen Slot- und
-Kopfschreiben, Erweiterung von
-`test_restart_after_prepared_or_slot_cut_is_interrupted`),
-`resolveRecoveryOutcome` (automatischer UTC-Pfad, nur Hop-2-Ergebnis, kein
-erneutes Hop 1) sowie der `ResolveRecoveryUncertainty`-Kommandozweig in
-`persistCommand`. `writeSnapshot`s bestehende `Ready`/`ReadyEmpty`-
-Vorbedingung bleibt fuer die Standard-Zielslot-Ableitung unveraendert; der
-Override betrifft ausschliesslich den Fallback-Fall.
-
-### 5.9 Persistierter Recovery-Kontext (fuer Hop-1-only-Faelle)
-
-Damit der automatische Wiederholungspfad (5.7, Weg 1) und der
-Benutzerpfad (5.7, Weg 2) nach einem Hop-1-only-Commit weiterhin Zugriff
-auf `originalRestoredProcessState` und den zugehoerigen
-`ProcessRunSnapshot` haben (auch nach einem zwischenzeitlichen Reboot,
-falls die Aufloesung erst nach einem weiteren Neustart erfolgt), bleibt der
-urspruengliche `ProcessRunSnapshot` unveraendert Teil von
-`RunPersistenceSnapshot.processRunSnapshot` (bereits bestehendes Feld,
-unveraendert). Zusaetzlich wird `originalRestoredProcessState` als
-kompakter, optionaler Teil des Schema-3-Vertrags gefuehrt
-(`pendingRecoveryOriginalState: std::optional<ProcessRuntimeState>`),
-gesetzt bei jedem Hop-1-only-Commit, geloescht (auf `nullopt`) sobald Hop 2
-erfolgreich committet. Kein Duplikat einer bereits vorhandenen kanonischen
-Quelle – dieser Wert existiert nirgends sonst, sobald `candidate.processState`
-bereits `RecoveryEvaluation` ist.
-
-### 5.10 `BlockedIndeterminate` und `PersistenceCommittedApplyFailed` – getrennt behandelt
-
-**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 3):** Der
-bestehende Coordinator unterscheidet bereits zwei verschiedene
-Sicherheitszustaende, die Revision 3 faelschlich zusammenlegte:
-
-- **Store-Schreibausgang unbestimmt** (`RunPersistenceStoreWriteResult::Indeterminate`
-  an beliebiger Phase des Prepared-/Slot-/Head-Schreibens,
-  `run_persistence_coordinator.cpp:427-431,452,466,477,486,500,518`):
-  `enterBlockedIndeterminate()` -> Coordinator-Zustand `BlockedIndeterminate`,
-  Ergebnis `RunPersistenceResultStatus::PersistenceIndeterminate` mit
-  `RunPersistenceTechnicalReason::StoreOutcomeUnknown`. Wir wissen nicht, ob
-  die Daten geschrieben wurden.
-- **Commit bestaetigt, RAM-Apply schlaegt danach fehl**
-  (`run_persistence_coordinator.cpp:617-625,676-685`): Coordinator-Zustand
-  `PersistenceCommittedApplyFailed`, gleichnamiger Ergebnisstatus. Die
-  durable Daten sind bekannt korrekt; nur die RAM-Projektion ist inkonsistent.
-
-Der in 5.8 beschriebene Commit-Kern (und die
-`ApplyRecoveryTimeCorrection`-Persistierung, 5.13) uebernehmen **beide**
-bestehenden Zustaende unveraendert und getrennt: ein unbestimmter
-Schreibausgang fuehrt zu `BlockedIndeterminate`/`StoreOutcomeUnknown`; ein
-bestaetigter Commit mit fehlgeschlagenem RAM-Apply fuehrt zu
-`PersistenceCommittedApplyFailed`. Beide Faelle werden in der Testmatrix
-(8.15) einzeln, nicht gemeinsam, abgedeckt.
-
-### 5.11 `RunProgressState`, Fortschrittsfortschreibung – realer Eigentuemer
-
-**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 3):**
-
-1. `decideRunAdjustment()` (`run_commands.cpp:947-1033`) setzt bei einer
-   Daueraenderung waehrend `Fermenting`
-   (`durationChanged && current.processState.state == Fermenting`,
-   Zeilen 1019-1023) `candidate.processState.stateEnteredAtMillis =
-   request.envelope.monotonicMillis` – **ohne** die bis dahin verstrichene
-   Zeit vorher in einen Fortschrittszaehler zu falten. Ohne Korrektur geht
-   diese Zeit fuer jede spaetere Ableitung verloren.
-2. `RunCommandState::runRevision` (`run_commands.hpp:331`) wird
-   ausschliesslich durch **fachliche Kommando-Entscheidungen** erhoeht
-   (`decideProgramStart`, `decideManualStart`, `decideStop`,
-   `decideCompletion`, `decideRunAdjustment` – verifiziert exakt an den
-   `++decision.after.runRevision`-Stellen `run_commands.cpp:673,744,841,927,1027`).
-   `writeSnapshot()` erhoeht ausschliesslich seine **technischen**
-   Kopf-/Checkpoint-Zaehler (`nextHeadRevision_`, `nextCheckpointRevision_`),
-   **nicht** `RunCommandState::runRevision`. Die Behauptung aus Revision 3,
-   jeder neue Boot erzeuge zwangslaeufig eine neue Recovery-Episode ueber
-   `runRevision`, war falsch – Hop 1/Hop 2 (Transitionsbasiert, nicht
-   kommandobasiert) beruehren `runRevision` gar nicht.
-
-**Vertrag – ein neues, explizites Episodenfeld statt einer falschen
-Annahme:**
-
-```cpp
-// run_commands.hpp (RunCommandState) und run_persistence_contract.hpp
-// (RunPersistenceSnapshot, Schema 3) – dieselbe Semantik in RAM und
-// persistiert, ueberlebt Restore.
-std::uint32_t recoveryEpisodeRevision{0U};
-```
-
-Erhoeht **ausschliesslich** durch Hop 1 (`candidate.recoveryEpisodeRevision =
-restoredState.recoveryEpisodeRevision + 1U`, als Teil des Hop-1-Kandidaten,
-5.2). Kein anderer Pfad (weder gewoehnliche Kommandos noch Hop 2, noch der
-Korrekturbefehl selbst) veraendert dieses Feld. Damit:
-
-- **Neuer Reboot -> neue Episode:** jede neue Ausfuehrung von Hop 1
-  erhoeht garantiert um genau 1, unabhaengig von `runRevision`.
-- **Stabil ueber Hop-1-only (`Uncertain`) und spaeteren Hop 2:** Hop 2
-  aendert `recoveryEpisodeRevision` nicht; die Episode bleibt bis zur
-  naechsten Hop-1-Ausfuehrung (also bis zum naechsten Reboot, der erneut
-  Recovery erfordert) identisch.
-- **Fortschrittskorrektur (5.13):** traegt sowohl das bestehende
-  `CommandEnvelope.expectedRunRevision` (schuetzt vor zwischenzeitlichen
-  fachlichen Mutationen seit Berechnung der Korrektur) **als auch** ein
-  neues `expectedRecoveryEpisodeRevision` (schuetzt vor einem
-  zwischenzeitlichen weiteren Reboot/neuer Recovery-Episode) – beide
-  Pruefungen zusammen, nicht nur eine.
-
-**Fortschrittsfortschreibung – reale Aufrufpunkte, keine neue Schleife:**
-Eine reine Funktion `deriveFermentingSecondsDelta(before: ProcessRuntimeState,
-atMillis: uint64) -> uint32` (`before.state == Fermenting ? (atMillis -
-before.stateEnteredAtMillis) / 1000 : 0`) wird an **drei** bestehenden
-Punkten angewandt, jeweils unmittelbar bevor `stateEnteredAtMillis`
-(fachlich) neu gesetzt wird:
-
-1. Live-Phasenwechsel **aus** `Fermenting` (`persistTransition`, jeder
-   Aufruf mit `decision.before.state == Fermenting`).
-2. `decideRunAdjustment()`, unmittelbar **vor** Zeile 1021
-   (`run_commands.cpp:1019-1023`): `if (durationChanged && current.processState.state
-   == Fermenting) { candidate.runProgress.observedRunSeconds +=
-   deriveFermentingSecondsDelta(current.processState, request.envelope.monotonicMillis);
-   candidate.processState.stateEnteredAtMillis = request.envelope.monotonicMillis; }`
-   – **vor** dem bestehenden Reset, damit keine Zeit verloren geht; keine
-   Doppelzaehlung, da `stateEnteredAtMillis` danach sofort neu gesetzt wird
-   und ein zweiter Aufruf desselben Deltas ab dem neuen Wert null ergaebe.
-   Overflow-Schutz: `observedRunSeconds` ist `uint32_t`
-   (`>136` Jahre Kapazitaet bei Sekundenaufloesung, praktisch nicht
-   erreichbar; sattigende Addition dennoch als Grenzfallschutz vorgesehen).
-3. Hop 1 (5.2), wenn `originalRestoredProcessState.state == Fermenting`:
-   `deriveFermentingSecondsDelta(originalRestoredProcessState,
-   restoredSnapshot.checkpointMonotonicMillis)` – ausschliesslich aus
-   bereits persistierten Checkpointdaten, keine unterbrochene Buchfuehrung.
-
-Keine separate RAM-only-Buchfuehrungsstruktur noetig: `stateEnteredAtMillis`
-innerhalb von `ProcessRuntimeState` ist bereits die einzige Quelle fuer "seit
-wann in dieser Phase", wird bereits an jedem Fold-Punkt korrekt neu gesetzt
-und ist bereits boot-lokal korrekt (uebliche `propose()`-Semantik bzw. das in
-5.2/5.5 definierte Rebasing). Der in Revision 3 geplante
-`RunProgressAccountingRuntime`-Typ hatte keinen fachlich benoetigten
-Aufrufpunkt und entfaellt ersatzlos.
-
-`RunProgressState` (persistiert, Schema 3) bleibt entsprechend einfach:
-
-```cpp
-struct RunProgressState {
-    std::uint32_t observedRunSeconds{0U};
-    WeightedProgressStatus weightedStatus{WeightedProgressStatus::NotCalibrated};  // 5.15
-};
-```
-
-Kein boot-lokales Feld ist je Teil dieser Struktur, weil kein
-boot-lokaler Begleitwert mehr existiert, der eine Trennung erforderte.
-
-### 5.12 Recovery-Sensorevidenz – expliziter Datenfluss, keine erfundene Quelle
-
-**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 3):** Die vier
-bestehenden Checkpoint-Schreibpfade (`persistCommand`, `persistTransition`,
-`persistSensorSelection`, `checkpointPeriodic`) erhalten aktuell **keine**
-Sensor-Snapshots als Parameter; die Behauptung, es fliesse "bereits" eine
-`SensorQualitySnapshot`-Instanz mit, war falsch (verifiziert: keiner der
-vier Funktionskoepfe nimmt einen entsprechenden Parameter oder liest ihn
-aus `RunCommandState`). Ausserdem existiert **kein** `SensorRole`-Typ im
-Repository (verifiziert: keine Fundstelle); das etablierte Muster ist
-`CrossRolePlausibilityContext { air, product, cooling: SensorQualitySnapshot }`
-(`sensor_selection.hpp:45-54`) – drei feste, benannte Felder statt eines
-Enum-/Array-Typs.
+**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 4):**
+`validStateFor()` (`run_persistence_contract.cpp:10-42`) erlaubt
+`RecoveryEvaluation` fuer `RunCheckpointVariant::ProgramRun`/`ManualRun`
+**nicht** (weder in der `ProgramRun`- noch der `ManualRun`-Fallliste).
+`makeRunPersistenceSnapshot()` wuerde einen Hop-1-only-Kandidaten (5.13)
+damit ablehnen – nicht speicherbar.
 
 **Vertrag:**
 
+1. `validStateFor()` wird um `RecoveryEvaluation` in beiden Fallisten
+   (`ProgramRun`, `ManualRun`) ergaenzt.
+2. **Zusaetzliche, engere Konsistenzpruefung** in
+   `validateRunPersistenceSnapshot()` (nicht in `validStateFor()` selbst,
+   um dessen einfache Struktur zu erhalten): ist
+   `snapshot.processState.state == RecoveryEvaluation` **und**
+   `snapshot.variant != NoActiveRun`, dann ist der Snapshot nur gueltig,
+   wenn zusaetzlich gilt:
+   - `snapshot.pendingRecoveryOriginalState.has_value()` (5.13, neues
+     Schema-3-Feld, in diesem Fall verpflichtend);
+   - `pendingRecoveryOriginalState->state != ProcessState::RecoveryEvaluation`
+     (die urspruengliche Phase ist eine echte Altphase, keine
+     Selbstreferenz);
+   - `stateMatchesRunSnapshot(pendingRecoveryOriginalState->state,
+     *snapshot.processRunSnapshot)` (die urspruengliche Phase passt zum
+     mitgelieferten Programm-/manuellen Schnappschuss).
+
+   Fehlt eine dieser Bedingungen, ist der Snapshot ungueltig – kein aktiver
+   Run darf ausserhalb dieses eng begrenzten Pending-Recovery-Falls in
+   `RecoveryEvaluation` stehen.
+3. **Keine stille Liberalisierung von Schema 1/2:** ein nach altem Schema
+   (vor #18) geschriebener Datensatz konnte `RecoveryEvaluation` fuer einen
+   aktiven Run strukturell nie enthalten (die alte `validStateFor()`-Liste
+   liess das nicht zu) – die Erweiterung macht eine vorher **immer**
+   ungueltige Kombination unter den engen, oben genannten zusaetzlichen
+   Bedingungen gueltig; bereits existierende Alt-Daten sind von dieser
+   Erweiterung nicht betroffen, da sie diese Kombination nie erzeugen
+   konnten. Kein expliziter Schema-Versionscheck an dieser Stelle noetig.
+
+Contract-/Codec-Tests: aktiver Schema-3-Snapshot mit `RecoveryEvaluation`
+und vollstaendigem, konsistentem Pending-Kontext -> gueltig; ohne
+Pending-Kontext -> ungueltig; mit inkonsistentem
+`pendingRecoveryOriginalState` (falsche Phase fuer den Snapshot) ->
+ungueltig; Schema-1/2-Decodierung kann diese Kombination gar nicht
+erzeugen (Regressionstest gegen bestehende Migrationsvektoren).
+
+### 5.11 Reboot waehrend bereits persistiertem `RecoveryEvaluation`
+
+**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 4):**
+`RecoveryReentryRequired`s Topologie erlaubt als Quelle ausschliesslich
+`stateUsesRunSnapshot(from)`-Phasen; `RecoveryEvaluation` selbst gehoert
+nicht dazu (`stateUsesRunSnapshot(RecoveryEvaluation) == false`). Ein
+zweiter Reboot waehrend einer noch offenen Hop-1-only-Recovery (5.13) laedt
+aber genau `processState.state == RecoveryEvaluation` – Hop 1 ist auf
+dieses geladene Ergebnis nicht anwendbar.
+
+**Vertrag – Ladeklassifikation um einen dritten Fall erweitert:**
+
+```text
+loadAndInitialize():
+  variant == NoActiveRun                                -> ReadyEmpty (unveraendert)
+  variant != NoActiveRun && state != RecoveryEvaluation  -> LoadedActiveRun (Hop-1-faehig, 5.7)
+  variant != NoActiveRun && state == RecoveryEvaluation  -> LoadedActiveRun
+      (bereits im Recoveryzustand befindlicher Run; kein Hop 1 noetig,
+       erkannt an processState.state selbst, keine neue
+       RunPersistenceCoordinatorState-Auspraegung)
+```
+
+Kein zweiter kuenstlicher `RecoveryReentryRequired`-Transition-Hack:
+`RunRecoveryCoordinator::activate()` prueft `current.processState.state`
+selbst und ueberspringt Hop 1 vollstaendig, wenn bereits
+`RecoveryEvaluation` vorliegt (Voraussetzung: `pendingRecoveryOriginalState`
+ist vorhanden, sonst `NotReconstructible` – ein aktiver Snapshot in
+`RecoveryEvaluation` ohne Pending-Kontext ist gemaess 5.10 strukturell
+ungueltig und waere schon beim Laden abgelehnt worden).
+
+**Episode-Refresh statt Transition:** Da kein Zustandsuebergang stattfindet,
+aber die Zeitbasis (UTC-jetzt, ggf. zwischenzeitlich neuere periodische
+Checkpoints, siehe unten) sich seit dem letzten Boot geaendert haben kann,
+fuehrt `activate()` in diesem Fall einen eigenen, einfacheren Commit aus:
+`candidate = current` (keine Transition), `candidate.recoveryEpisodeRevision
++= 1U` (5.16), `pendingRecoveryOriginalState` bleibt unveraendert (beschreibt
+weiterhin die **urspruengliche** Altphase vor dem allerersten Ausfall, nicht
+den Zwischenzustand). Geschrieben ueber denselben Commit-Kern (5.12).
+Dadurch: **jeder** Reboot, der eine Recovery-Bewertung neu beginnt – ob via
+echtem Hop 1 oder via Episode-Refresh –, erhoeht `recoveryEpisodeRevision`
+genau einmal; ein zwischen zwei Boots eingereichter, jetzt veralteter
+Korrektur-/Entscheidungsversuch wird ueber den bestehenden
+`expectedRecoveryEpisodeRevision`-Abgleich (5.17) als `StaleState` erkannt.
+
+`state_` bleibt `Ready` (kein Unterschied zur regulaeren Hop-1-only-Situation);
+`RecoveryEvaluation` traegt weiterhin keine Aktorfreigabe; die
+Aufloesungswege (automatisch/Benutzer, 5.13) bleiben unveraendert erreichbar,
+jetzt gegen die aufgefrischte Episode.
+
+Test: Reboot -> Hop-1-only -> erneuter Reboot -> `recoveryEpisodeRevision`
+erhoeht sich erneut, `pendingRecoveryOriginalState` bleibt identisch, beide
+Aufloesungswege bleiben funktionsfaehig.
+
+### 5.12 Gemeinsamer Commit-Kern – korrekter Transaktionsschnitt
+
+**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 4):**
+`writeSnapshot()` (`run_persistence_coordinator.cpp:287-...`) akzeptiert
+ausschliesslich `state_ == Ready || state_ == ReadyEmpty` (Zeilen 292-294).
+Revision 4 rief den gemeinsamen Recovery-Commit-Kern jedoch aus
+`LoadedActiveRun` und aus `BlockedIndeterminate/FallbackRecovery` auf und
+behauptete gleichzeitig, die bestehende Vorbedingung bleibe unveraendert –
+widersspruechlich und nicht ausfuehrbar.
+
+**Vertrag:** Der bestehende Koerper von `writeSnapshot()` wird in eine
+private, guard-lose Funktion extrahiert:
+
 ```cpp
-// run_persistence_contract.hpp, Schema 3 – KISS-gerecht, dem bestehenden
-// Muster folgend, kein neuer SensorRole-Typ.
+// privat, KEINE state_-Vorbedingung – Aufrufer traegt die Verantwortung
+RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
+    const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+    bool periodic, const RunCommandState& before,
+    RunPersistenceMutationKind mutationKind, std::optional<CommandId> commandId,
+    std::optional<std::size_t> targetSlotOverride);
+
+RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
+    const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+    bool periodic, const RunCommandState& before,
+    RunPersistenceMutationKind mutationKind, std::optional<CommandId> commandId) {
+    if (state_ != RunPersistenceCoordinatorState::Ready &&
+        state_ != RunPersistenceCoordinatorState::ReadyEmpty) {
+        return unavailableResult();
+    }
+    return writeSnapshotCore(snapshot, time, periodic, before, mutationKind,
+                             commandId, /*targetSlotOverride=*/std::nullopt);
+}
+```
+
+Alle vier bestehenden oeffentlichen Standardpfade (`persistCommand`,
+`persistTransition`, `persistSensorSelection`, `checkpointPeriodic`) rufen
+weiterhin ausschliesslich das unveraenderte `writeSnapshot()` mit seinem
+bestehenden Guard auf – **kein** Verhaltensunterschied fuer diese Pfade.
+
+Der Recovery-Commit-Kern `commitRecoveryOutcome(...)` (5.7-5.9, 5.13, 5.14)
+ruft **ausschliesslich** `writeSnapshotCore()` direkt auf, mit einer
+eigenen, engen Vorbedingung: `state_ == LoadedActiveRun ||
+(state_ == BlockedIndeterminate && blockedIndeterminateReason_ ==
+FallbackRecovery)`. Kein temporaeres Umsetzen von `state_` auf `Ready` vor
+dem Commit. Write-before-apply sowie alle bestehenden Prepared-/Slot-/
+Head-Fehlersemantiken (5.15) bleiben identisch, da `writeSnapshotCore` exakt
+derselbe Code ist wie zuvor `writeSnapshot`, nur ohne die eine Guard-Zeile.
+Der Fallback-Slot-Override (5.14) wird als Parameter durchgereicht.
+
+`resolveRecoveryOutcome`/`ResolveRecoveryUncertainty` (5.13, Hop-2-only,
+nur relevant wenn `current.processState.state == RecoveryEvaluation` und
+`state_` bereits `Ready` ist) verwenden weiterhin das **normale**,
+guard-behaftete `writeSnapshot()` – sie benoetigen den Bypass nicht, da
+`state_` zu diesem Zeitpunkt bereits `Ready` ist.
+
+### 5.13 Unsichere Recovery – Hop-1-only, zwei gleichwertige Aufloesungswege
+
+Bei `RecoveryTimeVerdict::Uncertain` (5.4, nur `WaitingForProduct`) oder
+fehlendem Gate-A-Ergebnis ohne sichere `RecoveryReject`-Anzeige wird nur
+Hop 1 committet (`commitRecoveryOutcome`, 5.12). `pendingRecoveryOriginalState
+= originalRestoredProcessState` wird dabei gesetzt (5.10). Coordinator-
+Ergebnis: `Ready`.
+
+**Zwei gleichwertige Aufloesungswege**, beide ueber denselben Commit-Kern:
+
+1. **Automatisch:** `RunRecoveryCoordinator::reevaluatePendingRecovery(RunCommandState&,
+   const RunCheckpointTime&)` (nativ testbar; produktive Verdrahtung eines
+   Aufrufers ist nicht Teil von #18, 5.21/Gate B). Wiederholt 5.2-5.8 gegen
+   `current.processState.state == RecoveryEvaluation` und
+   `pendingRecoveryOriginalState`.
+2. **Benutzerpfad:** `CommandKind::ResolveRecoveryUncertainty`
+   (`AssumeStillValid`/`AssumeThresholdCrossed`), ueber die bestehende
+   `persistCommand`-Infrastruktur (`expectedRunRevision`,
+   `expectedRecoveryEpisodeRevision`, 5.16; `persistedIds_`-Dedup,
+   `StaleState`/`AlreadyProcessed`). Nur zulaessig innerhalb der
+   ausgewiesenen Unsicherheit. `AcknowledgeMessage` bleibt reine
+   Quittierung, nicht zweckentfremdet.
+
+Bei erfolgreicher Aufloesung wird `pendingRecoveryOriginalState` auf
+`nullopt` gesetzt (Pending-Kontext beendet); Ergebnis-`state_` gemaess 5.9
+(`ReadyEmpty`) oder unveraendert `Ready` (Resume/Reject).
+
+### 5.14 `FallbackRecovered` – kein Dead-End
+
+Unveraendert aus Revision 4: Hop 1 wird **immer** versucht, unabhaengig
+davon, ob die Quelle `Current` oder `FallbackRecovered` war, und immer
+atomar committet (ueber `writeSnapshotCore` mit Slot-Override, 5.12), sobald
+er lokal erfolgreich aufgebaut werden konnte. Der Ursprung ist danach
+irrelevant – beide konvergieren auf `Ready`+`RecoveryEvaluation`, aufloesbar
+ueber 5.13. `BlockedIndeterminate` bleibt ausschliesslich reserviert fuer
+den Fall, dass Hop 1 selbst lokal nicht aufgebaut/angewendet werden kann.
+
+### 5.15 `BlockedIndeterminate` und `PersistenceCommittedApplyFailed` – getrennt
+
+Unveraendert aus Revision 4 (verifiziert weiterhin korrekt): Store-
+Schreibausgang unbestimmt (`RunPersistenceStoreWriteResult::Indeterminate`,
+`run_persistence_coordinator.cpp:427-431,452,466,477,486,500,518`) ->
+`BlockedIndeterminate`/`StoreOutcomeUnknown`; bestaetigter Commit mit
+fehlgeschlagenem RAM-Apply (`run_persistence_coordinator.cpp:617-625,676-685`)
+-> `PersistenceCommittedApplyFailed`. `writeSnapshotCore` (5.12) und die
+`ApplyRecoveryTimeCorrection`-Persistierung (5.17) uebernehmen beide
+Zustaende unveraendert und getrennt.
+
+### 5.16 Sensorevidenz – Vor-/Nach-Ausfall strukturell getrennt
+
+**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 4):** Ein
+einzelnes `RecoveryTemperatureEvidence{air,product,cooling}` kann nicht
+gleichzeitig die laufend fortgeschriebene "letzte gueltige"-Evidenz und die
+eingefrorene Vor-/Nach-Ausfall-Diagnose einer bestimmten Recoveryepisode
+tragen, ohne dass spaetere normale Checkpoints die Diagnosedaten
+ueberschreiben.
+
+```cpp
 struct RoleTemperatureEvidence {
-    std::optional<double> filteredCelsius;  // letzter fachlich gueltiger, gefilterter Wert
+    std::optional<double> filteredCelsius;
     device_platform::SensorQuality quality{device_platform::SensorQuality::Stale};
 };
-struct RecoveryTemperatureEvidence {
+struct CrossRoleEvidence {
     RoleTemperatureEvidence air;
     RoleTemperatureEvidence product;
     RoleTemperatureEvidence cooling;
 };
-```
 
-**Aktualisierungsregel (ein Owner, eine Funktion, keine zweite
-Sensorqualitaetslogik):**
-
-```cpp
-void updateRoleEvidence(RoleTemperatureEvidence& evidence,
-                        const device_platform::SensorQualitySnapshot& live) {
-    evidence.quality = live.quality;
-    if (live.quality == device_platform::SensorQuality::Valid &&
-        live.filteredCelsius.has_value()) {
-        evidence.filteredCelsius = live.filteredCelsius;
-    }
-    // Sonst: vorheriger filteredCelsius bleibt erhalten. Ein
-    // Stale/Failed-Sensor verliert seinen letzten gueltigen Wert nicht
-    // (RUN_PERSISTENCE.md: der letzte gueltige Wert wird fuer
-    // Recovery/Diagnose benoetigt).
-}
-```
-
-**Datenfluss:** Die vier bestehenden Checkpoint-Schreibpfade erhalten einen
-neuen, optionalen Parameter `const CrossRolePlausibilityContext*
-liveSensorEvidence` (nullptr zulaessig – bedeutet "keine frischere Evidenz
-in diesem Zyklus verfuegbar", vorheriger Stand bleibt erhalten, kein
-Zwang zu einer neuen Aufrufkette). Ist er gesetzt, wird
-`updateRoleEvidence` fuer `air`/`product`/`cooling` auf den Kandidaten vor
-dem Schreiben angewandt. Alle vier Pfade verwenden dieselbe Funktion – kein
-Parallelpfad. Aufrufer, die bereits ueber eine aktuelle
-`CrossRolePlausibilityContext` verfuegen (z. B. der Gate-A-Aufruf bei
-Restart-Sensorauswahl, 5.14), uebergeben sie explizit; alle bestehenden
-Testaufrufe der vier Funktionen werden auf die neue Signatur angepasst
-(Commit-Umfang, Abschnitt 7).
-
-`afterRestart`-Evidenz (Vor-/Nach-Vergleich fuer die Anzeige, 5.16) wird
-**einmalig** beim Hop-1/Hop-2-Aufbau aus der zu diesem Zeitpunkt ohnehin
-fuer Gate A benoetigten `CrossRolePlausibilityContext` uebernommen – kein
-zweiter Erhebungsweg.
-
-### 5.13 `ApplyRecoveryTimeCorrection` – episoden-/staleness-fest
-
-- **Episodenidentitaet:** `recoveryEpisodeRevision` (5.11), nicht
-  `runRevision`.
-- **Genau eine Korrektur pro Episode:** neues Kommando
-  `CommandKind::ApplyRecoveryTimeCorrection`; `RecoveryTimeCorrectionRecord
-  { std::uint32_t appliedAtEpisodeRevision; std::int32_t appliedSecondsDelta; }`
-  (Schema 3, optional). Zweiter Versuch mit identischem Inhalt fuer
-  dieselbe Episode -> `AlreadyProcessed` (bestehende Dedup ueber
-  `persistedIds_`); mit abweichendem Inhalt -> `NotAllowedInState`.
-- **Kein Einfluss auf einen fortgeschrittenen/beendeten Lauf:**
-  `CommandEnvelope.expectedRunRevision` **und** ein neues
-  `expectedRecoveryEpisodeRevision`-Feld muessen beide mit `current`
-  uebereinstimmen; sonst `StaleState`.
-- **Write-before-apply:** exakt das bestehende `persistCommand`-Muster.
-- **Fehlerfaelle:** getrennt nach 5.10 (`BlockedIndeterminate`/
-  `StoreOutcomeUnknown` bei unbestimmtem Schreibausgang,
-  `PersistenceCommittedApplyFailed` bei bestaetigtem Commit mit
-  fehlgeschlagenem RAM-Apply).
-- **Reboot-Idempotenz:** folgt aus Write-before-apply ohne Sonderfallcode.
-
-### 5.14 Restart-Sensorauswahl-Aktivierung (Gate A)
-
-Zwischen Hop 1 und Hop 2 (5.5) wird `SensorSelectionPhase::RestartRevalidationPending`
-real bewertet: `evaluatePhase` erhaelt einen echten Fall statt
-`reject(InvalidContext)`; `computeRestartSensorSelection`
-(`sensor_selection.cpp:890-907`, aktuell Stub) wertet den persistierten
-Sensorselektionszustand (`sensorSelection`, #21) gegen die aktuelle
-`CrossRolePlausibilityContext` aus. Ein negatives Ergebnis fuehrt zu
-`RecoveryReject` statt `RecoveryResume` (5.5) – bereits vor #18 als offener
-Uebergabepunkt in `docs/RUN_PERSISTENCE.md` dokumentiert; #18 schliesst ihn.
-
-### 5.15 `WeightedProgressStatus` – nur heute unterscheidbare Zustaende
-
-**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 3):** Ein
-zweiwertiges Enum (`NotCalibrated`/`Unavailable`), dessen Testmatrix
-zugleich verlangt, dass Release 1 durchgehend `NotCalibrated` bleibt, macht
-`Unavailable` zu einem unbenutzten Zukunftswert – die vermiedene
-vorsorgliche Modellierung in neuer Form. `docs/SENSOR_TUNING_COMMISSIONING.md`/
-Issue #34 (verifiziert per `gh issue view 34`) nennt heute **kein**
-Aktivitaetskennfeld als eigenes Akzeptanzkriterium; #34 liefert die
-**Messgrundlage** (Referenzmessungen, Offsets, thermische Reaktion), nicht
-bereits ein Gewichtungsmodell.
-
-**Vertrag:** Ein einwertiges Enum, das genau die heute tatsaechlich
-erreichbare Aussage traegt und explizit als Erweiterungspunkt fuer eine
-spaetere, dann eigenstaendig zu planende Modellierung dokumentiert ist:
-
-```cpp
-enum class WeightedProgressStatus : std::uint8_t {
-    NotCalibrated,  // einziger heute erreichbarer Wert: kein freigegebenes Modell
+// Schema 3, Teil von RunPersistenceSnapshot:
+struct RecoveryTemperatureEvidence {
+    CrossRoleEvidence lastKnown;  // laufend, von jedem normalen Checkpoint aktualisiert
+};
+struct RecoveryEpisodeEvidence {
+    CrossRoleEvidence beforeOutage;             // Kopie von lastKnown, eingefroren bei Hop 1/Episode-Refresh
+    std::optional<CrossRoleEvidence> afterRestart;  // genau einmal gesetzt, bei Hop 1/Episode-Refresh aus der fuer Gate A ohnehin benoetigten CrossRolePlausibilityContext
 };
 ```
 
-Ein spaeterer, tatsaechlich unterscheidbarer Wert (z. B. sobald ein
-konkretes Commissioning-Ergebnis eine reale Berechnung ermoeglicht) ist
-eine neue, eigenstaendig zu begruendende Erweiterung dieses Enums zu
-gegebener Zeit – kein heute vorab reservierter toter Wert. Die reale
-Aktivitaetsgewichtung bleibt #34 als Messgrundlagen-Voraussetzung
-zugeordnet, ohne #34 faelschlich als bereits definierten Modelleigentuemer
-darzustellen; das eigentliche Gewichtungsmodell (falls spaeter benoetigt)
-gehoert einem dann zu benennenden eigenen Vorhaben.
+`lastKnown` wird ausschliesslich von der bestehenden, in allen vier
+Checkpoint-Schreibpfaden neu hinzugefuegten
+`updateRoleEvidence(RoleTemperatureEvidence&, const
+device_platform::SensorQualitySnapshot&)` (unveraendert aus Revision 4:
+aktualisiert `filteredCelsius` nur bei `SensorQuality::Valid`, behaelt den
+letzten gueltigen Wert bei `Stale`/`Failed`) fortgeschrieben – ueber einen
+neuen, optionalen Parameter `const CrossRolePlausibilityContext*
+liveSensorEvidence` an allen vier Pfaden (unveraendert aus Revision 4,
+`nullptr` zulaessig).
 
-### 5.16 Komposition/DI – kein erfundener Aufrufer
+`lastRecoveryEpisodeEvidence: std::optional<RecoveryEpisodeEvidence>`
+(separates Schema-3-Feld) wird bei Hop 1/Episode-Refresh **einmalig**
+befuellt (`beforeOutage = candidate.recoveryTemperatureEvidence.lastKnown`
+zum Zeitpunkt des Commits) und danach von keinem spaeteren, regulaeren
+Checkpoint-Schreibvorgang mehr veraendert – nur eine erneute Hop-1-
+Ausfuehrung (naechste Recoveryepisode) ueberschreibt es wieder vollstaendig.
+Kein "before"/"after" geht verloren, keine Diagnosedaten werden
+versehentlich durch spaetere Live-Checkpoints ueberschrieben.
 
-**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 3):** Der
-aktuelle Produktionscode enthaelt keinen produktiven Aufrufer von
-`RunPersistenceCoordinator::loadAndInitialize()` und keine bestehende
-Verdrahtung eines UTC-Verfuegbarkeitssignals als Recovery-Trigger
-(verifiziert: kein Fund ausserhalb von Zeitquellen-Implementierungen/Tests).
-Revision 3s Behauptung eines "bestehenden Aufrufers" war falsch.
+### 5.17 `RunProgressState`, Fortschrittsfortschreibung, Schema-1/2-Migration
 
-**Vertrag:** `RunRecoveryCoordinator` (`run_recovery.hpp/.cpp`) liefert
-ausschliesslich eine nativ testbare API:
-`activate(RunCommandState&, const RunCheckpointTime&) -> RunPersistenceResult`
-(Hop 1 + bedingt Hop 2, initialer Aufruf nach `loadAndInitialize()`) und
-`reevaluatePendingRecovery(RunCommandState&, const RunCheckpointTime&) ->
-RunPersistenceResult` (spaetere Aufloesung bei zuvor `Uncertain`, 5.7 Weg 1).
-Beide sind ueber Unit-Tests direkt aufrufbar. Die produktive Verdrahtung
-(wann/durch wen `loadAndInitialize()` und `reevaluatePendingRecovery()`
-tatsaechlich im laufenden Betrieb aufgerufen werden) ist ausdruecklich
-**nicht** Teil von #18 und bleibt dem zustaendigen Composition-Issue
-vorbehalten (Gate B). Kein Verweis auf einen nicht existierenden
-bestehenden Caller.
+**Fortschreibungspunkte** (unveraendert aus Revision 4, weiterhin
+verifiziert korrekt): `deriveFermentingSecondsDelta(before, atMillis)`,
+angewandt (1) bei jedem Live-Phasenwechsel **aus** `Fermenting`, (2) in
+`decideRunAdjustment()` unmittelbar **vor** der bestehenden
+`stateEnteredAtMillis`-Neusetzung bei Daueraenderung
+(`run_commands.cpp:1019-1023`), (3) bei Hop 1, wenn
+`originalRestoredProcessState.state == Fermenting`, ausschliesslich aus
+`checkpointMonotonicMillis` (dem Alt-Boot-lokalen, sicher bekannten
+Anteil – **nicht** aus dem unsicheren Ausfallanteil, siehe naechster
+Absatz). Kein `RunProgressAccountingRuntime`-Typ; `stateEnteredAtMillis`
+selbst erfuellt bereits die Rolle der Buchfuehrungsreferenz.
 
-### 5.17 ROADMAP-Korrektur (PR #103 bereits gemergt)
+**Trennung von Fortschritts-Gutschrift und Grenzbewertung (Klarstellung
+gegenueber Revision 4):** Nur der sicher bekannte Alt-Boot-Anteil
+(`RecoveredPhaseElapsed.knownSecondsBeforeCheckpoint`) wird automatisch in
+`observedRunSeconds` gefaltet. Der unsichere Ausfallanteil
+(`RecoveryOutageBounds`) fliesst **nicht** automatisch in
+`observedRunSeconds` ein – er dient ausschliesslich der Grenzbewertung
+(5.4-5.5, ueber `priorElapsed`, konservativ mit der Untergrenze). Eine
+explizite Gutschrift des Ausfallanteils in `observedRunSeconds` erfolgt
+ausschliesslich ueber die kontrollierte, begrenzte Korrektur (5.17
+`ApplyRecoveryTimeCorrection`) – niemals automatisch ohne diese Kontrolle
+(Gate C).
 
-`docs/ROADMAP.md` fuehrte PR #103 nach dessen Merge weiterhin als aktive,
-zu mergende Arbeit ("Owner reviewt und mergt den separaten
-Markdown-only-PR"). Da PR #103 bereits gemergt ist, ist das falsch – die
-Roadmap ist die einzige aktuelle Statusuebersicht und darf keinen bereits
-abgeschlossenen PR als offen darstellen. Korrigiert (als Teil dieses
-Plan-Commits, siehe Abschnitt 12): Zeile 1 bleibt #18/PR #102 als aktuelle
-fachliche Arbeit; Zeile 2 stellt PR #103 als abgeschlossen dar und verweist
-auf das weiterhin reale, ueber #29/`OPEN_POINTS.md` sichtbare
-Ressourcen-Gate; #22 bleibt als naechste fachliche Arbeit nach #18 im
-Abschnitt "Naechste fachliche Arbeit" unveraendert benannt.
+**Schema-1/2-Migration (neu, Korrektur gegenueber Revision 4):**
+`RunProgressState` existierte vor Schema 3 nicht. `observedRunSeconds{0U}`
+als stiller Default wuerde "sicher null Sekunden" und "bei altem Schema
+unbekannt" nicht unterscheidbar machen.
 
-### 5.18 #24-Abgrenzung
+```cpp
+enum class RunProgressBasis : std::uint8_t {
+    Known,          // observedRunSeconds ist eine belastbare Zaehlung
+    LegacyUnknown,   // aus Schema 1/2 migriert, kein Vorwert bekannt
+};
+struct RunProgressState {
+    RunProgressBasis basis{RunProgressBasis::Known};
+    std::uint32_t observedRunSeconds{0U};  // nur bedeutsam, wenn basis == Known
+};
+```
 
-Fault-Klassen, SAFE_BOOT-Feinausbau und Fault-Reset-Ablauf bleiben #24
-zugeordnet. #18 nutzt den bestehenden `Fault`-Zustand ausschliesslich ueber
-die bereits implementierte `RecoveryReject`-Logik (5.5); es fuegt keine
-neue Fault-Unterklassifikation hinzu.
+Codec: Decodiert ein Schema-1- oder Schema-2-Datensatz (kein
+`RunProgressState`-Feld im Wireformat), wird `basis = LegacyUnknown`
+gesetzt, **nicht** `Known` mit `observedRunSeconds = 0`. Der erste
+Fold-Punkt (oben) **nach** einer solchen Migration schaltet
+`basis: LegacyUnknown -> Known` um und beginnt die Zaehlung ab genau diesem
+Delta (kein rueckwirkendes Erfinden von Sekunden vor der Migration). Anzeige/
+Export rendert `LegacyUnknown` explizit als "unbekannt", nicht als "0
+Sekunden". Migrationstests: Schema 1 -> 3 und Schema 2 -> 3 fuer einen
+aktiven Run (`basis == LegacyUnknown` nach Migration, `Known` nach dem
+ersten Fold); gemischte Current/Fallback-Matrix 3/2 und 3/1; korrupter
+Schema-3-Current mit gueltigem Schema-2/1-Fallback; Prepared-Head-
+Unterbrechung ueber den Versionswechsel hinweg (Erweiterung der
+bestehenden Migrationstestreihe).
+
+### 5.18 `ApplyRecoveryTimeCorrection` – fachliche Wirkung und harte Grenzen
+
+**Geltungsbereich:** ausschliesslich fuer `Fermenting` (die einzige Phase
+mit einer Geschaeftsprogress-Metrik, `observedRunSeconds`). Fuer
+`WaitingForProduct` ist `ResolveRecoveryUncertainty` (5.13) der zustaendige,
+semantisch andere Vertrag (Phasengrenzentscheidung: fortsetzen/beenden,
+keine Sekundenkorrektur) – beide Kommandos bleiben getrennt.
+
+**Wirkung:** mutiert ausschliesslich
+`RunCommandState.runProgress.observedRunSeconds` (und setzt `basis = Known`,
+falls zuvor `LegacyUnknown`).
+
+**Harte Grenzen, aus dem tatsaechlichen Ausfallintervall abgeleitet:**
+`appliedSecondsDelta: std::uint32_t` (keine negativen Korrekturen – der
+automatische Hop-1-Fold verwendet immer die Untergrenze, eine gueltige
+Korrektur bewegt sich daher ausschliesslich aufwaerts in Richtung der
+Obergrenze, nie darunter). Gueltiger Bereich:
+`[0, totalSecondsUpperBound - totalSecondsLowerBound]`
+(`RecoveredPhaseElapsed` fuer `Fermenting` zum Episodenzeitpunkt). Ist
+`totalSecondsUpperBound` nicht bekannt (keine UTC-Bruecke, 5.2), ist **kein**
+Korrekturwert gegen eine obere Grenze pruefbar -> jede Korrektur wird
+abgelehnt (`InvalidInput`), **kein** Saturieren auf einen Ersatzwert.
+Ein Wert ausserhalb `[0, maxDelta]` wird ebenso abgelehnt, nicht auf die
+Grenze gekappt. Additionsueberlauf von `observedRunSeconds` (uint32) wird
+vor dem Schreiben geprueft und fuehrt zu `InvalidInput` (praktisch nicht
+erreichbar, aber explizit abgesichert).
+
+**Automatischer Korrekturpfad:** sobald `reevaluatePendingRecovery`/eine
+verbesserte UTC-Lage eine praezisere Grenze liefert als die urspruenglich
+bei Hop 1 verwendete Untergrenze, wird **dieselbe** begrenzte Mutation
+(gleiche Ober-/Untergrenzen-Pruefung) automatisch mit der Differenz
+angewendet – bleibt damit ebenso konservativ und erfindet keine
+biologische Gutschrift ausserhalb des belegten Intervalls.
+
+**Episoden-/Staleness-Vertrag** (unveraendert aus Revision 4):
+`CommandKind::ApplyRecoveryTimeCorrection`; `RecoveryTimeCorrectionRecord
+{ appliedAtEpisodeRevision: uint32; appliedSecondsDelta: uint32; }`
+(Schema 3, optional); zweiter Versuch mit identischem Inhalt fuer dieselbe
+Episode -> `AlreadyProcessed`; mit abweichendem Inhalt -> `NotAllowedInState`;
+`CommandEnvelope.expectedRunRevision` **und** neues
+`expectedRecoveryEpisodeRevision` muessen beide mit `current` uebereinstimmen,
+sonst `StaleState`; Write-before-apply; Fehlerfaelle getrennt nach 5.15.
+
+### 5.19 `Completed` – expliziter, schmaler Sonderpfad
+
+**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 4):**
+`docs/RECOVERY_AND_INTERRUPTION.md:163-174` verlangt fuer `COMPLETED`: keine
+Temperaturregelung neu starten, Ergebniszustand wiederherstellen, erst
+Benutzerquittierung fuehrt nach `STANDBY`. `RecoveryReentryRequired` deckt
+`Completed` bewusst nicht ab (`stateUsesRunSnapshot(Completed) == false`).
+Ein pauschaler `RunRecoveryCoordinator::activate()`-Aufruf auf jeden
+geladenen Snapshot wuerde fuer `Completed` `InvalidDecision` liefern.
+
+**Vertrag:** `RunPersistenceCoordinator`/`RunRecoveryCoordinator` behandeln
+`processState.state == Completed` als eigenen, fruehen Sonderfall, **vor**
+jedem Hop-1-Versuch:
+
+- Keine `TransitionDecision`/`applyProcessTransition` noetig (keine
+  Entscheidung wird getroffen – die Phase aendert sich nicht, es gibt keine
+  Ambiguitaet, kein Sicherheitsgate).
+- Direkte Uebernahme: `current = restoredState`, mit **einer** expliziten
+  technischen Korrektur: `current.processState.stateEnteredAtMillis =
+  monotonicMillis` (aktueller Boot) – noetig, da `decideProcessTransition`
+  bei der spaeteren `CompletionAcknowledged`-Entscheidung sonst
+  `runtimeTimeIsValid` gegen einen Alt-Boot-Wert prueft und faelschlich
+  `TimeWentBackwards` liefern koennte. Keine sonstige Feldaenderung.
+- Keine Aktorfreigabe (unveraendert, `Completed` traegt ohnehin keine).
+- `state_ = Ready` direkt, kein `LoadedActiveRun`-Zwischenschritt fuer
+  diesen Fall (kein Hop 1 vorgesehen, keine Recovery-Bewertung noetig).
+- Bestehender `CompletedRunRestored`-Reason bleibt fuer den originalen,
+  echten Boot-Zeitpunkt (unveraendert, ausserhalb dieses Sonderpfads)
+  unangetastet.
+
+Test: persistierter `Completed`-Snapshot bleibt nach Reboot `Completed` bis
+zur Quittierung; `stateEnteredAtMillis` liegt im aktuellen Boot; kein
+`InvalidDecision`.
+
+### 5.20 `WeightedProgressStatus` – entfernt (KISS)
+
+**Ausgangsbefund (verifiziert, korrigiert gegenueber Revision 4):** Ein
+persistiertes Enum mit exakt einem heute erreichbaren Wert traegt keinen
+Zustand, der sich innerhalb von Release 1 aendern kann – ein konstantes
+Wire-Feld ohne fachliche Funktion.
+
+**Vertrag:** Kein `WeightedProgressStatus`-Feld im Schema-3-Persistenzvertrag.
+"Nicht kalibriert" ist eine statische, aus dem Firmware-/Commissioning-Stand
+ableitbare Anzeige-/Exportkonstante (nicht pro Lauf persistiert). Die reale
+Aktivitaetsgewichtung bleibt ohne validiertes Modell ausdruecklich
+unimplementiert; #34 liefert die Messgrundlage (verifiziert per `gh issue
+view 34`: Referenzmessungen, Offsets, thermische Reaktion – kein
+Aktivitaetskennfeld als eigenes Akzeptanzkriterium), ist aber nicht der
+stille Modelleigentuemer. Ein spaeteres, dann eigenstaendig zu planendes
+Vorhaben fuehrt bei Bedarf ein echtes, mehrwertiges Statusfeld ein.
+
+### 5.21 Restart-Sensorauswahl (Gate A)
+
+Unveraendert: `SensorSelectionPhase::RestartRevalidationPending` wird
+zwischen Hop 1 und Hop 2 real bewertet; `computeRestartSensorSelection`
+(`sensor_selection.cpp:890-907`, Stub) wertet den persistierten
+Sensorselektionszustand gegen die aktuelle `CrossRolePlausibilityContext`
+aus; negatives Ergebnis -> `RecoveryReject`.
+
+### 5.22 Komposition/DI – kein erfundener Aufrufer
+
+Unveraendert aus Revision 4: `RunRecoveryCoordinator::activate(...)` und
+`reevaluatePendingRecovery(...)` sind nativ testbare APIs; kein bestehender
+produktiver Aufrufer wird behauptet; produktive Verdrahtung bleibt dem
+zustaendigen Composition-Issue vorbehalten (Gate B).
+
+### 5.23 ROADMAP-Konsistenz
+
+**Ausgangsbefund (verifiziert):** `docs/ROADMAP.md:3` zeigt weiterhin
+`Stand: 2026-08-07` trotz Aktualisierung in dieser Session; Zeile 32
+("offene Ownerentscheidungen stehen im Plan unter `docs/tasks/`") liest
+sich so, als bestuenden aktuell offene Ownerentscheidungen, obwohl Abschnitt
+3 dieses Plans keine offenen Gates mehr ausweist.
+
+**Vertrag (in diesem Plan-Commit umgesetzt, Abschnitt 12):** Standdatum auf
+das tatsaechliche Aenderungsdatum aktualisiert; Zeile 32 praezisiert, dass
+Details und Abhaengigkeitsstand im Plan stehen, ohne offene
+Ownerentscheidungen zu behaupten, wo keine bestehen; #18/PR #102 bleibt
+aktuelle Arbeit; Ressourcen-Gate ueber #29/`OPEN_POINTS.md` weiterhin
+sichtbar; #22 bleibt naechste fachliche Arbeit nach #18.
+
+### 5.24 #24-Abgrenzung
+
+Unveraendert: Fault-Klassen, SAFE_BOOT-Feinausbau und Fault-Reset-Ablauf
+bleiben #24 zugeordnet. #18 nutzt `Fault` ausschliesslich ueber die
+bestehende `RecoveryReject`-Logik.
 
 ## 6. Modul- und Abhaengigkeitsgrenzen
 
-Alle neuen/aenderten Dateien liegen in `lib/fermentation_app/src/` und
+Alle neuen/geaenderten Dateien liegen in `lib/fermentation_app/src/` und
 haengen ausschliesslich von bestehenden `device_platform`-Ports und
 bestehenden `fermentation_app`-Modulen ab (ADR-013 unveraendert
-eingehalten). `device_platform::SensorQuality`/`SensorQualitySnapshot`
-werden wiederverwendet (bereits bestehende, portable Typen); kein neuer
-`SensorRole`-Typ.
+eingehalten). Kein neuer `SensorRole`-Typ (feste `air`/`product`/`cooling`-
+Felder, konsistent mit `CrossRolePlausibilityContext`).
 
 ## 7. Datei-/Commit-Aufschluesselung
 
 | # | Commit | Inhalt |
 |---|---|---|
-| 1 | `feat(process-state-machine): RecoveryReentryRequired- und RecoveryEndedByExpiredWait-Topologie` | 5.2, 5.6 |
-| 2 | `feat(persistence): Schema 3 – RunProgressState, RecoveryTemperatureEvidence, RecoveryTimeCorrectionRecord, recoveryEpisodeRevision, pendingRecoveryOriginalState` | 5.9, 5.11, 5.12, 5.13, 5.15; Migrationstests 1/2/3 |
-| 3 | `feat(recovery): computeRecoveryTimeBounds, evaluateRecoveryTimeVerdict` | `run_recovery_time.hpp/.cpp` (5.3, 5.4) |
-| 4 | `feat(sensor-selection): reale Restart-Reaktivierung` | Gate A / 5.14 |
-| 5 | `feat(persistence-coordinator): Signaturerweiterung der vier Checkpoint-Schreibpfade um liveSensorEvidence` | 5.12 (inkl. Anpassung aller bestehenden Testaufrufe) |
-| 6 | `feat(persistence-coordinator): commitRecoveryOutcome, activateLoadedRun (Hop 1 + bedingt Hop 2)` | 5.2, 5.5, 5.8, 5.10 |
-| 7 | `feat(persistence-coordinator): activateFallbackRecoveredRun, Slot-Override` | 5.7 (Dead-End-Fix), 5.8 |
-| 8 | `feat(persistence-coordinator): resolveRecoveryOutcome, ResolveRecoveryUncertainty` | 5.7 |
-| 9 | `feat(run-commands): ApplyRecoveryTimeCorrection, AdjustRun-Zeitfaltung` | 5.11, 5.13 |
-| 10 | `feat(recovery): RunRecoveryCoordinator (activate, reevaluatePendingRecovery)` | 5.16 |
-| 11 | `docs: Anzeigevertrag, Ressourcenbudget, ROADMAP-Korrektur` | 5.17, Abschnitt 10 |
-
-Jeder Commit ist einzeln kompilier- und testbar; vollstaendiger Lauf erst
-nach Owner-Freigabe gemaess `docs/AGENT_WORKFLOW.md`.
+| 1 | `feat(process-state-machine): RecoveryReentryRequired-/RecoveryEndedByExpiredWait-Topologie, PriorBootPhaseElapsed-Parameter, elapsedWithPrior` | 5.5-5.9 |
+| 2 | `feat(persistence): Schema 3 – RunProgressState (mit Legacy-Basis), RecoveryTemperatureEvidence/RecoveryEpisodeEvidence, RecoveryTimeCorrectionRecord, recoveryEpisodeRevision, pendingRecoveryOriginalState, validStateFor-Erweiterung` | 5.10, 5.16, 5.17, 5.18; Migrationstests 1/2/3 |
+| 3 | `feat(recovery): computeRecoveryOutageBounds, computeRecoveredPhaseElapsed, evaluateRecoveryTimeVerdict` | `run_recovery_time.hpp/.cpp` (5.2-5.4) |
+| 4 | `feat(sensor-selection): reale Restart-Reaktivierung` | Gate A / 5.21 |
+| 5 | `feat(persistence-coordinator): writeSnapshotCore-Extraktion, Signaturerweiterung der vier Checkpoint-Schreibpfade um liveSensorEvidence` | 5.12, 5.16 |
+| 6 | `feat(persistence-coordinator): commitRecoveryOutcome, activateLoadedRun (Hop 1 + bedingt Hop 2), Episode-Refresh-Pfad` | 5.7-5.9, 5.11-5.13 |
+| 7 | `feat(persistence-coordinator): activateFallbackRecoveredRun, Slot-Override` | 5.14 |
+| 8 | `feat(persistence-coordinator): resolveRecoveryOutcome, ResolveRecoveryUncertainty, Completed-Sonderpfad` | 5.13, 5.19 |
+| 9 | `feat(run-commands): ApplyRecoveryTimeCorrection, AdjustRun-Zeitfaltung` | 5.17, 5.18 |
+| 10 | `feat(recovery): RunRecoveryCoordinator (activate, reevaluatePendingRecovery)` | 5.22 |
+| 11 | `docs: Anzeigevertrag, Ressourcenbudget, ROADMAP-Korrektur` | 5.23, Abschnitt 10 |
 
 ## 8. Testmatrix
 
-1. Hop 1 mit echter geladener Altphase (`Fermenting` u. a.) ->
-   `applyProcessTransition` erfolgreich, `RecoveryEvaluation` erreicht.
-2. Negativtest: Hop 1 mit vorgetaeuschtem `Boot`-Quellzustand (statt der
-   echten Altphase) wird von der Topologiepruefung abgelehnt.
-3. `computeRecoveryTimeBounds`: exakte UTC-Bruecke, nur unterer Bound ohne
-   UTC, `Uncertain` bei grenzwertiger Lage.
-4. `evaluateRecoveryTimeVerdict`: beide Bounds auf derselben Seite ->
-   definitives Ergebnis auch ohne exakten UTC-Anker.
-5. `WaitingForProduct` `DefinitelyExpired` -> Tombstone -> `ReadyEmpty` ->
+1. Hop 1 mit echter geladener Altphase; Negativtest gegen vorgetaeuschten
+   `Boot`-Quellzustand.
+2. `computeRecoveryOutageBounds`: exakte UTC-Bruecke bleibt ein Intervall
+   (Ober-/Untergrenze via Kontrollpunktabstand), fehlender Anker -> `nullopt`.
+3. `computeRecoveredPhaseElapsed`: korrekte Komposition aus Alt-Boot-Anteil
+   und Ausfallintervall, getrennt testbar von `RecoveryOutageBounds`.
+4. Frischer Boot mit `now` deutlich kleiner als bereits bekannte
+   Phasenzeit: **kein** unsigned Rebasing-Unterlauf (`elapsedWithPrior`
+   statt Subtraktion von `now`).
+5. `WaitingForProduct`/`Fermenting`/`CoolHolding` mit Vor-Boot-Phasenanteil
+   ueber `priorElapsed` korrekt beruecksichtigt.
+6. Target-Reach-/Qualification-Timer aus altem Boot werden niemals roh
+   weiterverwendet (volle Tabelle 5.6, alle acht Phasen).
+7. `WaitingForProduct` `DefinitelyExpired` -> Tombstone -> `ReadyEmpty` ->
    Reboot `NoActiveRun`.
-6. `WaitingForProduct` `DefinitelyStillValid` -> Resume ueber
-   `decideRecoveryEvent`, Rebasing mit oberer Grenze.
-7. `WaitingForProduct` `Uncertain` -> Hop-1-only -> automatischer Pfad
-   **und** Benutzerpfad loesen unabhaengig auf; `StaleState` bei
-   zwischenzeitlichem `runRevision`- oder `recoveryEpisodeRevision`-Wechsel;
-   `AlreadyProcessed` bei Wiederholung.
-8. `Fermenting`/`CoolHolding` resumieren trotz `DefinitelyExpired`-Verdikt
-   (kein Blockieren); anschliessende automatische Bewertung schliesst sie
-   regulaer ab.
-9. Gueltiger `FallbackRecovered`-Snapshot mit `Uncertain`-Zeitverdikt
-   erreicht **keinen** Dead-End: Hop 1 committet, `Ready`+`RecoveryEvaluation`,
-   danach ueber beide Wege (automatisch/Benutzer) aufloesbar.
-10. Slot-Override: Store-Schnitt zwischen Slot- und Kopfschreiben im
-    Fallback-Fall – urspruenglicher Fallback-Datensatz bleibt bis Commit
-    erhalten.
-11. `AdjustRun` mit Daueraenderung waehrend `Fermenting` faltet die
-    Vor-Anpassungszeit exakt einmal in `observedRunSeconds`; kein
-    Datenverlust, keine Doppelzaehlung bei nachfolgendem Phasenwechsel/
-    Recovery.
-12. Recovery-Episode: Hop 1 -> `recoveryEpisodeRevision` erhoeht; ein
-    zwischenzeitlicher weiterer Reboot (neues Hop 1) erhoeht erneut; eine
-    Korrektur mit altem `expectedRecoveryEpisodeRevision` wird `StaleState`,
-    unabhaengig vom aktuellen `runRevision`.
-13. `StoreOutcomeUnknown` (`BlockedIndeterminate`) und bestaetigter Commit
-    mit RAM-Apply-Fehler (`PersistenceCommittedApplyFailed`) werden als
-    zwei getrennte, nicht austauschbare Faelle getestet.
-14. Sensorevidenz: `liveSensorEvidence == nullptr` laesst vorherigen Stand
-    unveraendert; ein `Stale`/`Failed`-Update ueberschreibt `filteredCelsius`
-    nicht; ein `Valid`-Update aktualisiert Wert und Qualitaet. Roundtrip
-    ueber Schema 3 und Recovery.
-15. `WeightedProgressStatus` bleibt in Release 1 durchgaengig
-    `NotCalibrated`, Codec-Roundtrip getestet.
-16. Schema-1/2/3-Current/Fallback-Matrix bleibt vollstaendig (Regression).
-17. Alle bestehenden #20/#21-Sensor-/Sicherheitsregressionen bleiben gruen.
-18. `docs/ROADMAP.md`/`git diff --check` nach Fertigstellung.
+8. Aktiver Schema-3-Snapshot mit `RecoveryEvaluation` nur mit gueltigem
+   Pending-Kontext gueltig; ohne/mit inkonsistentem Kontext ungueltig.
+9. Reboot waehrend bereits persistiertem `RecoveryEvaluation`:
+   Episode-Refresh statt Hop 1, `recoveryEpisodeRevision` erhoeht sich,
+   beide Aufloesungswege bleiben erreichbar.
+10. Recovery-Commit aus `LoadedActiveRun` und aus
+    `BlockedIndeterminate/FallbackRecovery` gelingt trotz unveraendertem
+    oeffentlichem `writeSnapshot`-Guard (ueber `writeSnapshotCore`).
+11. Fallback-Slot-Override: Store-Schnitt zwischen Slot- und Kopfschreiben.
+12. Getrennte Vor-/Nach-Ausfall-Sensorevidenz; ein spaeterer normaler
+    Checkpoint ueberschreibt `lastRecoveryEpisodeEvidence` **nicht**.
+13. Schema-1/2-Legacy-Progress: `basis == LegacyUnknown` nach Migration,
+    `Known` erst nach dem ersten Fold-Ereignis; Anzeige unterscheidet
+    "unbekannt" von "0 Sekunden".
+14. `ApplyRecoveryTimeCorrection` innerhalb der Grenzen erfolgreich; ausserhalb
+    -> Ablehnung ohne Saturierung; ohne bekannte Obergrenze -> Ablehnung;
+    Overflow-Schutz.
+15. `Completed`-Restore: bleibt `Completed` bis Quittierung, kein
+    `InvalidDecision`, `stateEnteredAtMillis` im aktuellen Boot.
+16. `StoreOutcomeUnknown` vs. bestaetigter Commit + RAM-Apply-Fehler
+    weiterhin getrennt.
+17. Schema-1/2/3-Current/Fallback-Matrix vollstaendig (Regression).
+18. Alle bestehenden #20/#21-Sensor-/Sicherheitsregressionen bleiben gruen.
+19. `git diff --check`.
 
 ## 9. Safety-/Security-/Recovery-/Hardwaregrenzen
 
-Keine Aktorfreigabe vor abgeschlossenem Hop 2 (`RecoveryEvaluation` traegt
-keine Aktorfreigabe, unveraendert). Kein Schreiben vor vollstaendigem
-lokalem Kandidatenaufbau. Kein Aktorpfad direkt aus `FallbackRecovered` vor
-Hop 1. Reale Hardware-/NVS-Anbindung bleibt #29/#90 vorbehalten.
+Keine Aktorfreigabe vor abgeschlossenem Hop 2 oder vor `Completed`-
+Quittierung. Kein Schreiben vor vollstaendigem lokalem Kandidatenaufbau.
+Kein Aktorpfad direkt aus `FallbackRecovered` vor Hop 1. Reale Hardware-/
+NVS-Anbindung bleibt #29/#90 vorbehalten.
 
 ## 10. Ressourcen-/Betriebsbudget
 
-Schema-3-Zuwachs: `RunProgressState` (5 Byte), `RecoveryTemperatureEvidence`
-(3 Rollen a ~10 Byte = ~30 Byte, optional), `RecoveryTimeCorrectionRecord`
+Schema-3-Zuwachs: `RunProgressState` (5 Byte inkl. Basis-Tag),
+`RecoveryTemperatureEvidence.lastKnown` (~30 Byte), `RecoveryEpisodeEvidence`
+(optional, ~60 Byte waehrend offener Episode), `RecoveryTimeCorrectionRecord`
 (8 Byte, optional), `recoveryEpisodeRevision` (4 Byte),
 `pendingRecoveryOriginalState` (Groesse von `ProcessRuntimeState`, optional,
-nur waehrend einer offenen `Uncertain`-Episode belegt). Gesamtzuwachs pro
-aktivem Lauf-Snapshot deutlich unter dem bestehenden
-`kMaximumCheckpointRecordBytes`-Budget, durch Migrationstest 8.16
-abgesichert. Keine unbeschraenkten Logs, kein Rohmesswertverlauf.
+nur waehrend offener Episode belegt). Deutlich unter dem bestehenden
+`kMaximumCheckpointRecordBytes`-Budget, durch Migrationstest 8.17 belegt.
 
 ## 11. SOLID/DRY/KISS
 
-Hop 2 nutzt die bestehende, bereits implementierte `decideRecoveryEvent`/
-`decideProcessTransition`-API vollstaendig wieder, statt sie zu duplizieren
-– die groesste DRY-Verbesserung gegenueber Revision 3. `evaluateRecoveryTimeVerdict`
-ist eine einzige, phasenunabhaengige Vergleichsfunktion, dreifach
-angewandt (WaitingForProduct/Fermenting/CoolHolding) statt dreier
-Spezialimplementierungen. `updateRoleEvidence` ist die einzige
-Sensorevidenz-Aktualisierungsfunktion, von allen vier Checkpoint-Pfaden
-gemeinsam genutzt. `RunProgressAccountingRuntime` (Revision 3) entfaellt
-ersatzlos, da `stateEnteredAtMillis` bereits dieselbe Rolle erfuellt – ein
-Typ weniger statt eines toten Typs mit nachtraeglich gesuchtem Eigentuemer.
+`RecoveryOutageBounds`/`RecoveredPhaseElapsed` sind zwei kleine, einzeln
+testbare, nicht ueberladene Typen statt eines vermischten Objekts.
+`elapsedWithPrior` ist eine einzige neue Vergleichsfunktion, an drei
+bestehenden Stellen sowie am eingebauten `WaitingForProduct`-Check
+wiederverwendet. `writeSnapshotCore` ist eine einzige Extraktion, von allen
+Schreibpfaden (Standard und Recovery) gemeinsam genutzt, mit exakt einer
+zusaetzlichen Guard-Variante fuer Recovery. `WeightedProgressStatus` entfaellt
+vollstaendig statt eines Ein-Wert-Enums.
 
 ## 12. Dokumentations-/Abschlussnachweis
 
-- `docs/ROADMAP.md`: in diesem Plan-Commit korrigiert (5.17).
+- `docs/ROADMAP.md`: in diesem Plan-Commit korrigiert (5.23).
 - `docs/RUN_PERSISTENCE.md`/`docs/RECOVERY_AND_INTERRUPTION.md`: werden im
-  Umsetzungscommit (Nr. 11) um die in 5.3-5.15 vertraglich fixierten Punkte
+  Umsetzungscommit (Nr. 11) um die in 5.2-5.19 vertraglich fixierten Punkte
   ergaenzt.
 - `git diff --check`: nach Commit dieser Datei auszufuehren.
-- **Remote-Verifikation (neu, Pflicht):** nach dem Push wird
+- **Remote-Verifikation (Pflicht):** nach dem Push wird
   `origin/plan/issue-18-restart-weighted-progress` per frischem `git fetch`
   gelesen und mit dem lokalen `HEAD` sowie mit `gh api
-  repos/ManuEngineer/ESP32-Fermentationsschrank/pulls/102` (`head.sha`)
-  abgeglichen, bevor PR-Beschreibung/SESSION HANDOVER als aktuell gemeldet
-  werden.
+  repos/ManuEngineer/ESP32-Fermentationsschrank/pulls/102` (`head.sha`) und
+  `gh pr view 102 --json headRefOid` abgeglichen, bevor PR-Beschreibung/
+  SESSION HANDOVER als aktuell gemeldet werden.
 
 ## 13. Pflichtaufgabenliste (fuer die Umsetzung, nicht Teil dieser Planungssession)
 
@@ -881,7 +850,7 @@ Typ weniger statt eines toten Typs mit nachtraeglich gesuchtem Eigentuemer.
 
 ## 14. Stop-Bedingung
 
-Diese Revision 4 ist ein vollstaendiger, eigenstaendiger Plan. Nach Commit
+Diese Revision 5 ist ein vollstaendiger, eigenstaendiger Plan. Nach Commit
 dieser Datei: **anhalten**, `git push`, Remote-SHA verifizieren
 (Abschnitt 12), PR-Beschreibung und SESSION HANDOVER aktualisieren. Keine
 Implementierung. Kein `Ready for review`. Keine Remote-CI. Kein Merge.
