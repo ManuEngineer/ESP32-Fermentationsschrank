@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-- Revision: **6** (ersetzt alle fruehe­ren Revisionen vollstaendig; kein
+- Revision: **6** (ersetzt alle frueheren Revisionen vollstaendig; kein
   Abschnitt dieser Datei verweist auf eine fruehere Revision als weiterhin
   gueltige Quelle).
 - Draft-PR: #102 (`plan/issue-18-restart-weighted-progress` -> `main`).
@@ -139,8 +139,8 @@ struct RecoveredPhaseElapsed {
     const RecoveredPhaseElapsedInput& input);
 ```
 
-**Kern der Korrektur gegenueber der vorherigen Fassung:** Die Funktion nimmt
-keine zwei Boot-Millis-Werte mehr entgegen, aus denen sie selbst eine
+**Verbindliche Eigenschaft:** Die Funktion nimmt
+keine zwei Boot-Millis-Werte entgegen, aus denen sie selbst eine
 Differenz bilden koennte. Damit ist es strukturell unmoeglich, dass diese
 Funktion Werte aus zwei verschiedenen Boots voneinander subtrahiert – das war
 der zentrale Fehlermodus, den ein Ausfallanker ueber mehrere Reboots hinweg
@@ -345,9 +345,9 @@ implementierte `RecoveryEvaluation -> Fault`-Logik).
 `from == RecoveryEvaluation && to == Standby`, direkt ueber `propose()`
 konstruiert (keine wiederverwendbare bestehende Funktion dafuer vorhanden),
 `clearActiveRunState(candidate)` vor der Persistierung (dieser Helfer setzt
-zusaetzlich `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis` und
-`priorBootPhaseElapsed` auf `nullopt`, 5.10/5.20), Coordinator erreicht
-`ReadyEmpty`.
+zusaetzlich `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
+`lastRecoveryEpisodeEvidence` (5.17) und `priorBootPhaseElapsed` (5.20) auf
+`nullopt`), Coordinator erreicht `ReadyEmpty`.
 
 ### 5.10 `PendingRecoveryAnchor` – unveraenderlicher Ursprungsanker ueber Hop-1-Commit und mehrere Reboots
 
@@ -355,7 +355,7 @@ zusaetzlich `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis` und
 restaurierte `ProcessRuntimeState`) reicht nach dem ersten Hop-1-Commit nicht
 mehr aus: der neue Current-Snapshot traegt `checkpointMonotonicMillis` des
 Recovery-Boots, waehrend die urspruengliche Vor-Ausfall-Phasenzeit aus dem
-ursprünglichen Boot stammt. Wuerde `computeRecoveredPhaseElapsed` beide
+urspruenglichen Boot stammt. Wuerde `computeRecoveredPhaseElapsed` beide
 Werte direkt gegeneinander verrechnen, entstuende eine Boot-uebergreifende
 Subtraktion. Ebenso darf die urspruengliche `utcAtLastCheckpoint` nicht still
 durch die UTC eines spaeteren Hop-1-/Episode-Refresh-Commits ersetzt werden,
@@ -488,8 +488,8 @@ Triggers – `run_persistence_coordinator.cpp:516`) mindestens
 SensorSelection-Checkpoint verschiebt den naechsten faelligen periodischen
 Checkpoint deshalb genauso wie ein periodischer selbst – das bestehende
 `RunCheckpointTrigger`-Feld hat damit auf die GROESSE der maximalen Luecke
-keinen Einfluss (bleibt reine Konfidenzanzeige, wie in Revision 4/5 bereits
-festgehalten); es liefert keinen zusaetzlichen, engeren Bound. Die einzige
+keinen Einfluss (bleibt reine Konfidenzanzeige); es liefert keinen
+zusaetzlichen, engeren Bound. Die einzige
 zusaetzliche, nicht von diesem Modul beweisbare Annahme ist, dass der
 periodische Aufrufer (ausserhalb dieses Moduls, bestehende Voraussetzung
 bereits vor #18) tatsaechlich mindestens einmal pro `intervalMinutes`
@@ -550,12 +550,21 @@ damit ablehnen – nicht speicherbar.
    Bedingungen gueltig; bereits existierende Alt-Daten sind von dieser
    Erweiterung nicht betroffen, da sie diese Kombination nie erzeugen
    konnten. Kein expliziter Schema-Versionscheck an dieser Stelle noetig.
+5. **`NoActiveRun` traegt keine Recovery-Diagnosedaten eines beendeten
+   Laufs:** ist `snapshot.variant == NoActiveRun`, muessen
+   `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
+   `lastRecoveryEpisodeEvidence` (5.17) und `priorBootPhaseElapsed` (5.20)
+   alle `nullopt` sein, sonst ist der Snapshot ungueltig – konsistent mit
+   `clearActiveRunState()` (5.9), das alle vier Felder im selben Commit
+   loescht.
 
 Contract-/Codec-Tests: aktiver Schema-3-Snapshot mit `RecoveryEvaluation`
 und vollstaendigem, konsistentem Pending-Kontext -> gueltig; ohne
 Pending-Kontext -> ungueltig; mit inkonsistentem `pendingRecoveryAnchor`
 (falsche Phase fuer den Snapshot) -> ungueltig; mit `priorBootPhaseElapsed`,
-dessen Tag nicht zur aktuellen Phase passt -> ungueltig; Schema-1/2-
+dessen Tag nicht zur aktuellen Phase passt -> ungueltig; `NoActiveRun` mit
+noch gesetztem `pendingRecoveryAnchor`/`lastRecoveryEpisodeEvidence` ->
+ungueltig; Schema-1/2-
 Decodierung kann diese Kombinationen gar nicht erzeugen (Regressionstest
 gegen bestehende Migrationsvektoren).
 
@@ -978,9 +987,14 @@ Korrektur):**
 
 **Latch-Regel, in derselben Reihenfolge wie der Reset ausgefuehrt:** direkt
 im Anschluss an einen Reset (Hop 1/Episode-Refresh) sowie bei jedem der vier
-bestehenden Checkpoint-Schreibpfade waehrend einer **offenen** Episode
-(`candidate.lastRecoveryEpisodeEvidence.has_value()`), sofern
-`liveSensorEvidence != nullptr`:
+bestehenden Checkpoint-Schreibpfade waehrend einer **offenen** Episode –
+definiert als `candidate.pendingRecoveryAnchor.has_value()` (5.10), **nicht**
+als `lastRecoveryEpisodeEvidence.has_value()`: Letzteres bleibt gemaess der
+Loeschregel unten laenger bestehen als der Anker und darf deshalb nicht als
+Latch-Bedingung dienen, sonst wuerde nach Aufloesung der Episode aus
+unzusammenhaengenden spaeteren Live-Sensorwerten weiterlatcht. Bedingung
+also `candidate.pendingRecoveryAnchor.has_value() && liveSensorEvidence !=
+nullptr`:
 
 ```cpp
 void latchFirstAfterRestart(RecoveryEpisodeEvidence& episode,
@@ -1005,12 +1019,17 @@ spaeteres Episode-Refresh), sobald `liveSensorEvidence` das erstmals meldet
 – unabhaengig davon, ob dieser Checkpoint durch ein Kommando, eine
 Transition, eine Sensorselektionsaenderung oder periodisch ausgeloest wurde.
 
-`lastRecoveryEpisodeEvidence: std::optional<RecoveryEpisodeEvidence>`
-selbst wird bei Hop 1 neu angelegt (nie zuvor `nullopt` -> jetzt belegt) und
-bleibt bis zur vollstaendigen Aufloesung der Episode (5.14) bestehen; danach
-gilt es weiterhin als reines Diagnosefeld der zuletzt abgeschlossenen
-Episode (kein automatisches Loeschen bei Resume/Tombstone vorgesehen, da es
-keine Aktorfreigabe und keine Fortschrittsbuchhaltung beeinflusst).
+`lastRecoveryEpisodeEvidence: std::optional<RecoveryEpisodeEvidence>` selbst
+wird bei Hop 1 neu angelegt (nie zuvor `nullopt` -> jetzt belegt). Nach
+**Resume/Reject** (Run bleibt aktiv, 5.14) bleibt es unveraendert als reines
+Diagnosefeld der zuletzt abgeschlossenen Episode bestehen – harmlos, weil
+die Latch-Regel oben ausschliesslich an `pendingRecoveryAnchor` haengt, nicht
+an dieses Feld. Nach **Tombstone** (5.9, `clearActiveRunState()`,
+`variant` wird `NoActiveRun`) wird es dagegen **im selben Commit auf
+`nullopt` gesetzt** wie `pendingRecoveryAnchor`,
+`recoveryBootAnchorMonotonicMillis` und `priorBootPhaseElapsed` (5.20) – ein
+`NoActiveRun`-Snapshot traegt keinerlei Recovery-Diagnosedaten eines
+beendeten Laufs mehr.
 
 **Tests:**
 - Air beim Hop 1 bereits gueltig, Product/Cooling erst bei einem spaeteren
@@ -1022,6 +1041,13 @@ keine Aktorfreigabe und keine Fortschrittsbuchhaltung beeinflusst).
   unabhaengig befuellt; `beforeOutage` bleibt unveraendert.
 - Ein spaeterer regulaerer Checkpoint ueberschreibt weder `beforeOutage`
   noch bereits gesetzte `firstAfterRestart`-Werte.
+- Nach Resume/Reject bleibt `lastRecoveryEpisodeEvidence` als Diagnosedaten
+  bestehen; ein danach eintreffender, mit dem Run inhaltlich nicht mehr
+  zusammenhaengender Live-Sensorwert latcht **nicht** nach (Regressionstest
+  gegen den in dieser Revision behobenen Fehler: Latch-Bedingung haengt an
+  `pendingRecoveryAnchor`, nicht an `lastRecoveryEpisodeEvidence`).
+- Nach Tombstone (5.9) ist `lastRecoveryEpisodeEvidence` im selben Commit
+  wie `pendingRecoveryAnchor` auf `nullopt` gesetzt.
 
 ### 5.18 `RunProgressState` – ehrliche Basis bleibt nach Migration und Folds bestehen
 
@@ -1336,18 +1362,17 @@ Felder (`PendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
 `RunProgressState`, `RecoveryEpisodeEvidence`, `RecoveryTimeCorrectionRecord`,
 `TaggedPriorBootPhaseElapsed`, `recoveryEpisodeRevision`) sind
 Schema-3-exklusiv; eine Schema-1/2-Decodierung liefert fuer jedes davon den
-jeweiligen Leerwert (`nullopt`/`0`/`KnownTotal`→`PartialUnknownHistory` nach
-5.18-Migrationsregel).
+jeweiligen Leerwert (`nullopt`/`0`, `basis` wird `PartialUnknownHistory`
+statt `KnownTotal`, nach 5.18-Migrationsregel).
 
 ### 5.26 ROADMAP-Konsistenz
 
-`docs/ROADMAP.md:3` zeigt bereits `Stand: 2026-08-08`; Zeile 32-33 ist
-bereits so formuliert, dass Details/Abhaengigkeitsstand im Plan stehen und
-aktuell **keine** offenen Ownerentscheidungen behauptet werden. Dieser
-Zustand wurde im Rahmen des Revision-5-Plan-Commits hergestellt und in
-dieser Session am aktuellen Dateiinhalt erneut verifiziert – **kein**
-weiterer ROADMAP-Änderungsbedarf durch diese Revision. #18/PR #102 bleibt
-aktuelle Arbeit; Ressourcen-Gate ueber #29/`OPEN_POINTS.md` weiterhin
+`docs/ROADMAP.md:3` zeigt `Stand: 2026-08-08`; Zeile 32-33 ist bereits so
+formuliert, dass Details/Abhaengigkeitsstand im Plan stehen und aktuell
+**keine** offenen Ownerentscheidungen behauptet werden. Dieser Zustand wurde
+in dieser Session direkt am aktuellen Dateiinhalt verifiziert – **kein**
+weiterer ROADMAP-Aenderungsbedarf durch diesen Plan-Commit. #18/PR #102
+bleibt aktuelle Arbeit; Ressourcen-Gate ueber #29/`OPEN_POINTS.md` weiterhin
 sichtbar; #22 bleibt naechste fachliche Arbeit nach #18.
 
 ### 5.27 #24-Abgrenzung
@@ -1372,14 +1397,13 @@ bestehenden `fermentation_app`-Modulen ab (ADR-013 eingehalten). Kein neuer
 | 2 | `feat(persistence): Schema 3 – PendingRecoveryAnchor, recoveryBootAnchorMonotonicMillis, RunProgressState (mit ehrlicher Basis), RecoveryTemperatureEvidence/RecoveryEpisodeEvidence (mit Rollen-Latches), RecoveryTimeCorrectionRecord, TaggedPriorBootPhaseElapsed, recoveryEpisodeRevision, validStateFor-Erweiterung, Schema-Bump auf 3` | 5.10, 5.11, 5.17, 5.18, 5.19, 5.20, 5.25; Migrationstests 1/2/3 |
 | 3 | `feat(recovery): computeRecoveryOutageBounds, computeRecoveredPhaseElapsed, evaluateRecoveryTimeVerdict, deriveUtcAtRecoveryBootAnchor` | `run_recovery_time.hpp/.cpp` (5.2-5.4, 5.10) |
 | 4 | `feat(sensor-selection): reale Restart-Reaktivierung` | Gate A / 5.23 |
-| 5 | `feat(persistence-coordinator): writeSnapshotCore mit explizitem Rollbackzustand, Fallback-Override-Parameter, FallbackRecoveryPending-Zustand, Signaturerweiterung der vier Checkpoint-Schreibpfade um liveSensorEvidence` | 5.13, 5.15, 5.16, 5.17 |
+| 5 | `feat(persistence-coordinator): writeSnapshotCore mit explizitem Rollbackzustand, Fallback-Override-Parameter, FallbackRecoveryPending-Zustand, Signaturerweiterung der vier Checkpoint-Schreibpfade um liveSensorEvidence; bestehenden FallbackRecovered-state()-Test (`test_run_persistence_coordinator.cpp:1454-1456`) auf `FallbackRecoveryPending` aktualisiert` | 5.13, 5.15, 5.16, 5.17 |
 | 6 | `feat(persistence-coordinator): commitRecoveryOutcome, activateLoadedRun (Hop 1 + bedingt Hop 2), Episode-Refresh-Pfad` | 5.7-5.9, 5.12-5.14 |
 | 7 | `feat(persistence-coordinator): activateFallbackRecoveredRun, Slot-/Fallback-Override, Slot-Distinctness-Guard` | 5.15 |
 | 8 | `feat(persistence-coordinator): resolveRecoveryOutcome, ResolveRecoveryUncertainty, Completed-Sonderpfad` | 5.14, 5.21 |
 | 9 | `feat(run-commands): ApplyRecoveryTimeCorrection (nominale Korrektur, getrennt von observedRunSeconds), AdjustRun-Zeitfaltung` | 5.19 |
 | 10 | `feat(recovery): RunRecoveryCoordinator (activate, reevaluatePendingRecovery – ausschliesslich Verdicts, keine Sekundenschreibung)` | 5.14, 5.19, 5.24 |
 | 11 | `docs: Anzeigevertrag (getrennte Ausweisung observedRunSeconds/appliedSecondsDelta, LegacyUnknown-Anzeige), Ressourcenbudget` | Abschnitt 10 |
-| 12 | `test: bestehenden FallbackRecovered-state()-Test auf FallbackRecoveryPending aktualisieren` | 5.15 |
 
 ## 8. Testmatrix
 
@@ -1444,7 +1468,11 @@ bestehenden `fermentation_app`-Modulen ab (ADR-013 eingehalten). Kein neuer
     spaet gueltig werdende Air/Product/Cooling-Sensoren, je einzeln
     gelatcht ueber alle fuenf Schreibpfade hinweg; Episode-Refresh setzt
     Latches zurueck, `beforeOutage` bleibt unveraendert; spaeterer normaler
-    Checkpoint ueberschreibt weder `beforeOutage` noch gesetzte Latches.
+    Checkpoint ueberschreibt weder `beforeOutage` noch gesetzte Latches;
+    Latch-Bedingung haengt an `pendingRecoveryAnchor`, nicht an
+    `lastRecoveryEpisodeEvidence` (kein Nachlatchen nach Resume/Reject);
+    Tombstone loescht `lastRecoveryEpisodeEvidence` im selben Commit wie
+    `pendingRecoveryAnchor`.
 17. **`PriorBootPhaseElapsed` (5.20):** Roundtrip je Phase; Phasenwechsel-
     Clear; neuer Run/`clearActiveRunState()`-Clear; Akkumulation ueber zwei
     Recovery-Episoden innerhalb derselben Phase (Unter- und Obergrenze);
@@ -1483,8 +1511,10 @@ Byte, nur waehrend offener Episode belegt), `RecoveryTimeCorrectionRecord`
 `TaggedPriorBootPhaseElapsed` (~10 Byte, optional, nur waehrend
 zeitbegrenzter Phase belegt). In Summe deutlich unter dem bestehenden
 `kMaximumCheckpointRecordBytes`-Budget (8240 Byte) bzw.
-`kMaximumRunPersistencePayloadBytes` (8192 Byte), durch Migrationstest 8.20
-belegt.
+`kMaximumRunPersistencePayloadBytes` (8192 Byte); im Rahmen der
+Schema-3-Schreibtests (Testmatrix 20) abgedeckt – ein tatsaechliches
+Ueberschreiten des Budgets wuerde dort als `CapacityExceeded` auffallen,
+ohne dass ein gesonderter Groessen-Assert noetig ist.
 
 ## 11. SOLID/DRY/KISS
 
@@ -1526,7 +1556,7 @@ Felder statt eines ueberladenen, mehrdeutigen Feldes.
 
 ## 13. Pflichtaufgabenliste (fuer die Umsetzung, nicht Teil dieser Planungssession)
 
-1. Commit 1-12 gemaess Abschnitt 7, je mit gezielten lokalen Tests.
+1. Commit 1-11 gemaess Abschnitt 7, je mit gezielten lokalen Tests.
 2. Testmatrix Abschnitt 8 vollstaendig.
 3. `docs/RUN_PERSISTENCE.md`/`docs/RECOVERY_AND_INTERRUPTION.md` nachfuehren.
 4. SESSION HANDOVER vor Sessionende bei offenem PR, inkl. verifiziertem
