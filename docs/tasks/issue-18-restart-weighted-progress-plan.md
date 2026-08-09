@@ -2,23 +2,29 @@
 
 ## 1. Status
 
-- Revision: **8** (ersetzt Revision 7 vollstaendig; kein Abschnitt dieser
+- Revision: **9** (ersetzt Revision 8 vollstaendig; kein Abschnitt dieser
   Datei verweist auf eine fruehere Revision als weiterhin gueltige Quelle).
 - Draft-PR: #102 (`plan/issue-18-restart-weighted-progress` -> `main`).
 - Live-Issue: #18.
 - Plan-Basis: `main` = `17ab3f5399a066465298ac6871b965d176a38d32`;
-  Revision-7-Commit = `b8fed7f31bece5b890de340b3c5a30734e841015` (Remote-HEAD
+  Revision-8-Commit = `a6eb06220d24c250356063c8dac1a30ebd943c26` (Remote-HEAD
   vor dieser Korrektur, laut Auftrag). Branch ist 0 Commits hinter `main`.
-- Anlass: Ownerreview von Revision 7 identifiziert vier Punkte – (1) eine zu
-  fruehe Loeschung des Recovery-Zeitankers direkt nach Aktor-Resume fuer
-  `Fermenting`/`CoolHolding`, die eine spaetere NTP-Nachbewertung strukturell
-  verhindert; (2) `WaitingForProduct + AssumeStillValid` ohne echten
-  fachlichen Effekt; (3) fehlende Bounds-Pruefung fuer eine qualitative
-  Abschlussbestaetigung bei unbekannter Obergrenze; (4) eine veraltete
-  `docs/ROADMAP.md`-Statuszeile. Diese Revision loest alle vier.
-- Nach Commit dieser Revision: `git diff --check` fuer **alle** geaenderten
-  Dateien (Plan **und** `docs/ROADMAP.md`) ausfuehren, `git push`, danach
-  frischer `git fetch` und Abgleich `git rev-parse
+- Anlass: Ownerreview von Revision 8 identifiziert drei Punkte – (1) ein
+  zweiter Ausfall waehrend noch offener Recovery-Zeitbewertung eines bereits
+  resumten Laufs ueberschreibt den Anker vollstaendig und macht die
+  Aufloesbarkeit der ersten Episode **dauerhaft** unmoeglich, obwohl der
+  vorige Auftrag ausdruecklich verlangte, dass genau dieser Fall den
+  Zeitkontext korrekt erhaelt; (2) mehrere Textstellen aus Revision 7
+  behaupten weiterhin unbedingt, der Anker sei nach einem Resume fuer
+  `Fermenting`/`CoolHolding` bereits geloescht bzw. `resolveRecoveryOutcome`
+  koenne davon ausgehen – ein Widerspruch zu Revision 8s eigenem,
+  bedingten Anker-Lebenszyklus; (3) die Testmatrix kodifiziert den
+  Informationsverlust aus (1) als Sollverhalten. Diese Revision loest alle
+  drei und synchronisiert `docs/ROADMAP.md` erneut minimal auf den neuen
+  Revisionsstand.
+- Nach Commit dieser Revision: `git diff --check` **ungescoped** (bare,
+  ohne Pfadangabe, s. Auftrag "fuer alle geaenderten Dateien") ausfuehren,
+  `git push`, danach frischer `git fetch` und Abgleich `git rev-parse
   origin/plan/issue-18-restart-weighted-progress` == lokaler `HEAD` sowie
   `gh api repos/ManuEngineer/ESP32-Fermentationsschrank/pulls/102`
   (`head.sha`) und `gh pr view 102 --json headRefOid`, bevor PR-Beschreibung/
@@ -29,13 +35,18 @@
 
 - `gh issue view 18`: weiterhin offen, Scope/Akzeptanzkriterien unveraendert.
 - `gh pr view 102`: Draft, Base `main`.
-- `docs/ROADMAP.md:13` wurde in dieser Session direkt gelesen und zeigt
-  tatsaechlich weiterhin `Revision 5 in Arbeit`, obwohl Revision 7 zum
-  Zeitpunkt dieser Pruefung bereits der aktuelle, freigabefertige Stand war
-  – die in Revision 7 (5.29 dort) behauptete Aktualitaet bezog sich
-  ausschliesslich auf Zeile 32-33 (Abhaengigkeits-/Ownerentscheidungstext),
-  nicht auf die Statuszeile 13. Diese Revision korrigiert Zeile 13 (siehe
-  Punkt 4 des Auftrags, 5.29 unten).
+- `docs/ROADMAP.md:13` wurde in dieser Session erneut direkt gelesen und
+  zeigt tatsaechlich weiterhin `Revision 8 in Arbeit` (aus der vorigen
+  Korrektur). Diese Revision aktualisiert Zeile 13 auf `Revision 9` sowie
+  Zeile 3 (`Stand:`) auf das Datum dieses Commits (5.29 unten).
+- `docs/tasks/issue-18-restart-weighted-progress-plan.md` (Revision 8,
+  Commit `a6eb062`) wurde vollstaendig gegen den Auftrag der Revision 9
+  geprueft: die drei benannten Fundstellen (5.12 "Reboot waehrend noch
+  offener Zeitbewertung", 5.17s Vorbedingungsbegruendung fuer
+  `Fermenting`/`CoolHolding`, 5.20s `recoveryEvidenceWindowOpen`-Kommentar)
+  wurden direkt im aktuellen Dateiinhalt lokalisiert (Zeilennummern vor
+  dieser Revision: 819-853, 1531-1533, 1918-1920) und bestaetigen den
+  Befund des Auftrags wortgetreu.
 - `lib/fermentation_app/src/run_persistence_contract.hpp:40-43`
   (`RunCheckpointTime{monotonicMillis; std::optional<std::int64_t>
   utcUnixSeconds}`) direkt erneut gelesen: die UTC ist bereits im
@@ -448,7 +459,13 @@ unveraendert gueltig.
   autoritativen internen Datensatz: `activateLoadedRun` aus
   `slots_[currentHead_->current.slot]`, `activateFallbackRecoveredRun` aus
   `slots_[currentHead_->fallback->slot]`. Kein zweiter Transportweg, keine
-  Kopie ueber die oeffentliche API.
+  Kopie ueber die oeffentliche API. **Beide** wenden dabei identisch die in
+  5.12 festgelegte Fallunterscheidung (frisch/Carry-Forward, Auftragspunkt
+  1) auf ihren jeweiligen Datensatz an – `activateFallbackRecoveredRun`
+  traegt dieselbe Carry-Forward-Pflicht wie `activateLoadedRun`, da auch
+  ein aus dem Fallback-Slot geladener Datensatz einen noch offenen
+  `pendingRecoveryAnchor` tragen kann (derselbe Schema-3-Snapshot, nur aus
+  dem anderen Slot gelesen).
 - Beide Methoden fuehren atomar Ankerkonstruktion, Gate-A-Auswertung (Punkt
   weiter unten), Hop-1-Aufbau und – falls erfolgreich – den Hop-2-Versuch
   sowie den Commit ueber `writeSnapshotCore` (5.16) in einem einzigen
@@ -514,9 +531,13 @@ Bei Fehlschlag: kein Schreiben, Coordinator bleibt im Ausgangszustand,
 
 **Zusaetzlich, vor dem Commit dieses Hop 1 (5.12):** aus dem intern
 autoritativen Vor-Ausfall-Datensatz (5.8) wird `PendingRecoveryAnchor`
-einmalig konstruiert und `candidate.pendingRecoveryAnchor` gesetzt;
-`candidate.recoveryBootAnchorMonotonicMillis = monotonicMillis` wird
-ebenfalls gesetzt (5.12). Die geordnete Reihenfolge fuer Sensorevidenz
+konstruiert und `candidate.pendingRecoveryAnchor` gesetzt – **frisch**
+(einmalig) oder **carry-forward** (fortgesetzt), je nachdem, ob der
+geladene Datensatz selbst bereits einen noch offenen
+`pendingRecoveryAnchor` traegt (5.12 legt die genaue Fallunterscheidung
+und Feldkonstruktion fest, Auftragspunkt 1 Revision 9);
+`candidate.recoveryBootAnchorMonotonicMillis = monotonicMillis` wird in
+beiden Faellen gesetzt (5.12). Die geordnete Reihenfolge fuer Sensorevidenz
 (`beforeOutage` einfrieren, `lastKnown` aktualisieren, `firstAfterRestart`
 latchen, erst danach ggf. den Anker loeschen) ist in 5.20 verbindlich
 festgelegt und gilt fuer Hop 1 unveraendert.
@@ -627,7 +648,8 @@ struct PendingRecoveryAnchor {
     std::optional<std::int64_t> originalCheckpointUtc;     // RunPersistenceRawRecord.utcUnixSeconds DES VOR-AUSFALL-DATENSATZES, eingefroren bei Hop 1
     RunCheckpointTrigger originalCheckpointTrigger;        // Trigger desselben Vor-Ausfall-Datensatzes (reine Anzeigeinformation)
     std::uint32_t originalCheckpointIntervalMinutes;       // intervalMinutes desselben Vor-Ausfall-Datensatzes – Soll-Cadence-Anzeige und Eingabe fuer eine kuenftige belastbare Gap-Herleitung (5.13); dient NICHT als harter maximaler Gap
-    PriorBootPhaseElapsed accumulatedBeforeEpisode{};   // 5.23s "alt"-Wert (Default {0U, nullopt}, identisch zu 5.23s eigener Konvention fuer eine fehlende/nicht passende Vor-Tag-Situation), EINMALIG bei Hop 1 aus dem zu diesem Zeitpunkt bereits geladenen candidate.priorBootPhaseElapsed (falls Tag passend vorhanden, sonst Default) uebernommen, BEVOR diese Episode gefaltet wird; danach nur noch gelesen. Neu in dieser Revision (Auftragspunkt 1) – ohne dieses Feld wuerde eine spaetere reevaluateRecoveryTime-Faltung (s. u.) den vor dieser Episode akkumulierten Stand nicht mehr kennen, da der unmittelbar bei Hop 1 gefaltete candidate.priorBootPhaseElapsed selbst bereits nullopt ist, sobald die Ausfallzeit dieser Episode zum Hop-1-Zeitpunkt unbekannt war.
+    PriorBootPhaseElapsed accumulatedBeforeEpisode{};   // 5.23s "alt"-Wert (Default {0U, nullopt}, identisch zu 5.23s eigener Konvention fuer eine fehlende/nicht passende Vor-Tag-Situation). Bedeutung ab dieser Revision praezisiert (Auftragspunkt 1, Korrektur gegenueber Revision 8): EINMALIG beim ERSTEN Hop 1 einer noch offenen Kette aus dem zu diesem Zeitpunkt bereits geladenen candidate.priorBootPhaseElapsed uebernommen (falls Tag passend vorhanden, sonst Default), BEVOR diese Kette ihre erste Episode faltet; bei jedem WEITEREN Carry-Forward-Hop-1 derselben, weiterhin offenen Kette (s. u., "Carry-Forward") byte-identisch unveraendert uebernommen, NICHT erneut aus candidate.priorBootPhaseElapsed neu erfasst (das wuerde bereits diese Kette selbst wieder einlesen und deren eigenen Beitrag doppelt zaehlen). Ohne dieses Feld wuerde eine spaetere reevaluateRecoveryTime-Faltung (s. u.) den vor dieser Kette akkumulierten Stand nicht mehr kennen, da der unmittelbar bei Hop 1 gefaltete candidate.priorBootPhaseElapsed selbst bereits nullopt ist, sobald die Ausfallzeit dieser Episode zum Hop-1-Zeitpunkt unbekannt war.
+    std::uint64_t knownSecondsSinceOriginalCheckpoint{0U};  // NEU in dieser Revision (Auftragspunkt 1): kumulierte, sicher bekannte eingeschaltete Sekunden zwischen originalCheckpointUtc und dem Beginn der aktuellen, noch offenen Episode. 0 beim ERSTEN Hop 1 einer Kette; bei jedem Carry-Forward-Hop-1 (s. u.) um den Alt-Boot-lokalen Beitrag der soeben beendeten, bereits resumten Episode erhoeht (dieselbe Formel wie knownPhaseSecondsAtOriginalCheckpoint, nur gegen den zuletzt geladenen Datensatz statt gegen den urspruenglichen). originalCheckpointUtc/originalCheckpointTrigger/originalCheckpointIntervalMinutes bleiben dabei bewusst unveraendert (sie beschreiben weiterhin wahrheitsgemaess DEN einen Checkpoint, den sie ausweisen); dieses Feld traegt stattdessen den seither vergangenen, bekannten Anteil separat.
 };
 ```
 
@@ -707,24 +729,81 @@ immer boot-lokal, niemals boot-uebergreifend. Das Ergebnis ersetzt in 5.2
 `RecoveryOutageBoundsInput.utcAtRestartBoundary`, niemals eine roh zum
 Abfragezeitpunkt gelesene `utcNow`.
 
-**Verbindlicher Vertrag:**
+**Verbindlicher Vertrag – Hop 1 konstruiert den Anker bedingt (frisch oder
+Carry-Forward, Korrektur gegenueber Revision 8, Auftragspunkt 1):**
 
-- Bei Hop 1 (5.9) wird `PendingRecoveryAnchor` **einmalig** aus dem intern
-  autoritativen Vor-Ausfall-Datensatz (5.8) konstruiert:
-  `knownPhaseSecondsAtOriginalCheckpoint = (loadedRecord.snapshot.checkpointMonotonicMillis
-  - originalRestoredProcessState.stateEnteredAtMillis) / 1000`,
-  `originalCheckpointUtc = loadedRecord.utcUnixSeconds`,
-  `originalCheckpointTrigger = loadedRecord.snapshot.trigger`,
-  `originalCheckpointIntervalMinutes = loadedRecord.snapshot.intervalMinutes`,
-  `accumulatedBeforeEpisode = (candidate.priorBootPhaseElapsed.has_value()
-  && candidate.priorBootPhaseElapsed->taggedState == Zielphase) ?
-  candidate.priorBootPhaseElapsed->elapsed : PriorBootPhaseElapsed{}`
-  (derselbe "alt"-Wert, den 5.23s Akkumulationsregel ohnehin fuer diese
-  Episode verwendet – hier zusaetzlich, unveraendert, in den Anker
-  kopiert, **bevor** diese Episode ihn faltet).
-  `recoveryBootAnchorMonotonicMillis = monotonicMillis` (der Hop-1-Zeitpunkt).
+Bei Hop 1 (5.9), sowohl in `activateLoadedRun` als auch identisch in
+`activateFallbackRecoveredRun` (5.8 – beide konstruieren den Anker aus dem
+fuer ihren jeweiligen Fall autoritativen internen Datensatz, dieselbe
+Fallunterscheidung gilt fuer beide unveraendert), wird zuerst geprueft, ob
+der geladene Datensatz selbst bereits einen `pendingRecoveryAnchor` traegt
+(`loadedRecord.snapshot.pendingRecoveryAnchor.has_value()`). Das ist
+strukturell nur moeglich, wenn `loadedRecord.snapshot.processState.state !=
+RecoveryEvaluation` (sonst waere dies gemaess 5.15 ein Episode-Refresh, kein
+Hop 1) **und** damit gemaess 5.14 Punkt 3 zwingend `state in
+{WaitingForProduct, Fermenting, CoolHolding}` mit weiterhin offener
+Zeitbewertung – ein frueherer Resume dieser Kette war also bereits
+erfolgreich, ihre Zeitfrage aber noch nicht abgeschlossen. Diese Praesenz
+allein ist damit hinreichend, um zwischen zwei Faellen zu unterscheiden,
+ohne zusaetzlich die Zielphase separat zu vergleichen:
+
+1. **Frischer Fall** (`loadedRecord.snapshot.pendingRecoveryAnchor ==
+   nullopt` – kein vorheriger, noch offener Zeitkontext fuer diese Phase):
+   `PendingRecoveryAnchor` wird **einmalig**, vollstaendig neu konstruiert:
+   `knownPhaseSecondsAtOriginalCheckpoint = thisHopAltBootLocalSeconds =
+   (loadedRecord.snapshot.checkpointMonotonicMillis
+   - originalRestoredProcessState.stateEnteredAtMillis) / 1000` (Definition
+   von `thisHopAltBootLocalSeconds` s. u. "Carry-Forward-Fall" – hier
+   identisch mit dem neu gesetzten Feld selbst),
+   `originalCheckpointUtc = loadedRecord.utcUnixSeconds`,
+   `originalCheckpointTrigger = loadedRecord.snapshot.trigger`,
+   `originalCheckpointIntervalMinutes = loadedRecord.snapshot.intervalMinutes`,
+   `accumulatedBeforeEpisode = (candidate.priorBootPhaseElapsed.has_value()
+   && candidate.priorBootPhaseElapsed->taggedState == Zielphase) ?
+   candidate.priorBootPhaseElapsed->elapsed : PriorBootPhaseElapsed{}`
+   (derselbe "alt"-Wert, den 5.23s Akkumulationsregel ohnehin fuer diese
+   Episode verwendet), `knownSecondsSinceOriginalCheckpoint = 0`.
+2. **Carry-Forward-Fall** (`loadedRecord.snapshot.pendingRecoveryAnchor.has_value()`
+   – die Zeitfrage einer frueheren Episode derselben Phase ist noch offen,
+   neuer Auftragspunkt 1): `originalProcessState`,
+   `originalCheckpointUtc`, `originalCheckpointTrigger`,
+   `originalCheckpointIntervalMinutes` und `accumulatedBeforeEpisode`
+   werden **byte-identisch** aus `loadedRecord.snapshot.pendingRecoveryAnchor`
+   uebernommen, **nicht** neu konstruiert; `knownPhaseSecondsAtOriginalCheckpoint`
+   ebenso byte-identisch uebernommen (bleibt der Alt-Boot-lokale Anteil
+   **vor** `originalCheckpointUtc`, s. o.). Einzige Aenderung:
+   `knownSecondsSinceOriginalCheckpoint = checked_add(loadedRecord.snapshot.pendingRecoveryAnchor->knownSecondsSinceOriginalCheckpoint,
+   thisHopAltBootLocalSeconds)`, wobei
+
+   ```text
+   thisHopAltBootLocalSeconds = (loadedRecord.snapshot.checkpointMonotonicMillis
+       - originalRestoredProcessState.stateEnteredAtMillis) / 1000
+   ```
+
+   **derselbe Alt-Boot-lokale Beitrag der soeben beendeten, bereits
+   resumten Episode, den der frische Fall als
+   `knownPhaseSecondsAtOriginalCheckpoint` speichern wuerde** (dieselbe
+   Formel, hier nur auf den bestehenden Carry-Forward-Zaehler addiert
+   statt den Ursprungscheckpoint zu ersetzen; `checked_add`, Ueberlauf
+   praktisch unerreichbar; im Theoriefall behandelt wie jeder andere
+   Rechenfehler dieses Plans, s. u. "Checked Arithmetic fuer den
+   Carry-Forward-Zaehler"). `thisHopAltBootLocalSeconds` ist damit **der
+   einzige neue, von diesem konkreten Hop 1 selbst beigetragene Anteil** –
+   im frischen Fall identisch mit dem neu gesetzten
+   `knownPhaseSecondsAtOriginalCheckpoint` selbst, im Carry-Forward-Fall
+   identisch mit dem Zuwachs von `knownSecondsSinceOriginalCheckpoint`.
+   Diese einheitliche Grosse wird von 5.22s `observedRunSeconds`-Fold
+   wiederverwendet (s. dort) – niemals die **gesamte**, bereits akkumulierte
+   `knownSecondsSinceOriginalCheckpoint`, die auch fruehere Episoden dieser
+   Kette enthaelt und sonst bei jedem weiteren Carry-Forward erneut
+   mitgezaehlt wuerde.
+
+In beiden Faellen: `recoveryBootAnchorMonotonicMillis = monotonicMillis`
+(der Hop-1-Zeitpunkt **dieses** Boots, wie bisher).
+
 - Episode-Refresh (5.15) uebernimmt `pendingRecoveryAnchor` **byte-identisch**
-  unveraendert, setzt aber `recoveryBootAnchorMonotonicMillis` **neu** auf den
+  unveraendert (inklusive `knownSecondsSinceOriginalCheckpoint`), setzt aber
+  `recoveryBootAnchorMonotonicMillis` **neu** auf den
   Episode-Refresh-Zeitpunkt **dieses** Boots.
 - Automatische Reevaluation (`reevaluateRecoveryTime`, s. u.) und der
   Benutzerpfad (`resolveRecoveryOutcome`, 5.17) lesen **ausschliesslich**
@@ -739,6 +818,90 @@ Abfragezeitpunkt gelesene `utcNow`.
   Snapshots unveraendert mitgefuehrt wird und `recoveryBootAnchorMonotonicMillis`
   bei jedem dieser Reboots ueber Episode-Refresh neu und korrekt (boot-lokal)
   gesetzt wird.
+
+**Wirksame Zeitbasis – ein einziger, an allen drei Auswertungsstellen
+wiederverwendeter Ableitungsschritt (DRY, neu in dieser Revision):** Hop 1s
+eigene Verdikt-/Bounds-Auswertung (5.4, fuer den automatischen
+Hop-1-only-Pfad von `WaitingForProduct`, 5.11), `reevaluateRecoveryTime`
+(s. u.) **und** `resolveRecoveryOutcome`s Verdikt-Neuberechnung fuer
+`WaitingForProduct` (5.17 – auf einer carry-forwarded Kette ueber
+`AssumeStillValid` + erneutem zweiten Ausfall genauso erreichbar wie die
+anderen beiden) verwenden **nicht** `anchor.originalCheckpointUtc` und
+`anchor.knownPhaseSecondsAtOriginalCheckpoint` direkt, sondern eine
+kleine, reine Ableitung:
+
+```cpp
+// run_recovery_time.hpp
+struct EffectiveAnchorTimeBasis {
+    std::optional<std::int64_t> effectiveCheckpointUtc;
+    std::uint64_t effectiveKnownSecondsBeforeCheckpoint;
+};
+
+[[nodiscard]] EffectiveAnchorTimeBasis deriveEffectiveAnchorTimeBasis(
+    const PendingRecoveryAnchor& anchor) {
+    return EffectiveAnchorTimeBasis{
+        .effectiveCheckpointUtc = anchor.originalCheckpointUtc.has_value()
+            ? checked_add_signed_unsigned(*anchor.originalCheckpointUtc,
+                                           anchor.knownSecondsSinceOriginalCheckpoint)
+            : std::nullopt,  // kein Ursprungsanker -> bleibt unbekannt, unabhaengig vom Carry-Forward-Zaehler
+        .effectiveKnownSecondsBeforeCheckpoint =
+            checked_add(anchor.knownPhaseSecondsAtOriginalCheckpoint,
+                        anchor.knownSecondsSinceOriginalCheckpoint),
+    };
+}
+```
+
+`effectiveCheckpointUtc` ersetzt `anchor.originalCheckpointUtc` als
+`RecoveryOutageBoundsInput.utcAtLastCheckpoint` (5.2);
+`effectiveKnownSecondsBeforeCheckpoint` ersetzt
+`anchor.knownPhaseSecondsAtOriginalCheckpoint` als
+`RecoveredPhaseElapsedInput.knownSecondsBeforeCheckpoint` (5.3) – **an
+jeder Stelle**, an der bislang die rohen Anker-Felder gelesen wurden. Fuer
+einen frischen Anker (`knownSecondsSinceOriginalCheckpoint == 0`) ist das
+Ergebnis identisch zu Revision 8 (`effectiveCheckpointUtc ==
+originalCheckpointUtc`, `effectiveKnownSecondsBeforeCheckpoint ==
+knownPhaseSecondsAtOriginalCheckpoint`) – keine Verhaltensaenderung fuer
+den Einzelausfall-Fall.
+
+**Checked Arithmetic fuer den Carry-Forward-Zaehler:** `checked_add`
+(`std::uint64_t`) folgt derselben Konvention wie 5.3
+(`computeRecoveredPhaseElapsed`); `checked_add_signed_unsigned`
+(`std::int64_t + std::uint64_t`) prueft vor der Addition, dass das Ergebnis
+als `std::int64_t` darstellbar bleibt (analog zu
+`deriveUtcAtRecoveryBootAnchor`s bereits bestehenden Grenzwertpruefungen,
+s. o.). Im praktisch unerreichbaren Ueberlauffall liefert
+`deriveEffectiveAnchorTimeBasis` `effectiveCheckpointUtc == nullopt`
+(degradiert fail-safe auf "Zeitfrage unbeweisbar", niemals ein
+Programmabbruch oder eine geratene Zahl) bzw. behandelt einen Ueberlauf von
+`effectiveKnownSecondsBeforeCheckpoint` wie jeden anderen technischen
+Additionsfehler dieses Plans (5.3: Funktionsebene `nullopt`, niemals ein
+fachliches `Uncertain`).
+
+**Zwei getrennte, aber zusammenwirkende Effekte des Carry-Forward, beide
+ausdruecklich benannt statt eines einzigen ueberzeichneten Vorteils:**
+
+1. **Erhalt der Aufloesbarkeit (der eigentliche Auftragspunkt):** ein
+   bereits bekanntes `originalCheckpointUtc` (`t0`, z. B. weil NTP vor dem
+   ersten Ausfall der Kette verfuegbar war) bleibt ueber beliebig viele
+   weitere Reboots erhalten, statt beim naechsten Ausfall verworfen zu
+   werden. Sobald spaeter (auf einem beliebigen Boot dieser Kette) NTP
+   verfuegbar wird, ist `computeRecoveryOutageBounds` fuer die **gesamte**
+   Kette auswertbar, nicht nur fuer deren letzte Episode.
+2. **Zusaetzliche Praezisierung der Untergrenze durch
+   `knownSecondsSinceOriginalCheckpoint` (Nebeneffekt, nicht der
+   Kernpunkt):** dieser Zaehler ist nur dann `> 0`, wenn zwischen dem
+   Resume der vorigen Episode und dem naechsten Ausfall tatsaechlich ein
+   weiterer Checkpoint geschrieben wurde (z. B. ein Benutzerkommando, eine
+   Sensorselektion oder eine erfolgreiche `reevaluateRecoveryTime`-Korrektur
+   – **nicht** durch periodisches Checkpointing, s. 5.13:
+   `checkpointPeriodic()` hat keinen produktiven Aufrufer). Im
+   Regelfall ohne zwischenzeitliche Aktivitaet ist
+   `loadedRecord.snapshot.checkpointMonotonicMillis ==
+   originalRestoredProcessState.stateEnteredAtMillis` (derselbe
+   Resume-Commit ist der zuletzt geschriebene Datensatz), also
+   `knownSecondsSinceOriginalCheckpoint`-Zuwachs `== 0` – Punkt 1 (Erhalt
+   der Aufloesbarkeit) bleibt davon vollstaendig unberuehrt und ist der
+   tatsaechlich verlangte, immer wirksame Teil dieser Korrektur.
 
 **Anker-Lebenszyklus bei Resume – bedingt, nicht unbedingt (Korrektur
 gegenueber Revision 7, Auftragspunkt 1):** Revision 7 loeschte
@@ -816,41 +979,119 @@ grenztragenden Phasen ab.
   Revision) und jeder zukuenftige gleichartige Pfad – eine einzige Regel
   statt eines an jeder Stelle erneut zu treffenden Sonderfalls (DRY).
 
-**Reboot waehrend noch offener Zeitbewertung eines bereits resumten Laufs
-(Auftragspunkt 1, expliziter Testfall):** laedt `loadAndInitialize()` einen
-Snapshot mit `processState.state in {Fermenting, CoolHolding,
-WaitingForProduct}` **und** weiterhin gesetztem `pendingRecoveryAnchor`
-(Zeitbewertung war beim vorigen Reboot noch offen), ist das gemaess 5.15
-strukturell ein regulaerer `LoadedActiveRun` (`state != RecoveryEvaluation`)
-– **kein** Episode-Refresh, sondern ein **frischer Hop 1**. Das ist
-zwingend, nicht optional: der Aktor war zwischen dem letzten Resume und
-diesem neuen Reboot tatsaechlich freigegeben und lief; ein erneuter
-physischer Ausfall verlangt dieselbe Aktor-Sicherheits-Neubewertung (Gate
-A, Sensor-Reselektion) wie jeder andere Hop 1 – eine "vereinfachte"
+**Reboot waehrend noch offener Zeitbewertung eines bereits resumten Laufs –
+Carry-Forward statt Verlust (Auftragspunkt 1, Korrektur gegenueber
+Revision 8):** laedt `loadAndInitialize()` einen Snapshot mit
+`processState.state in {Fermenting, CoolHolding, WaitingForProduct}`
+**und** weiterhin gesetztem `pendingRecoveryAnchor` (Zeitbewertung war beim
+vorigen Reboot noch offen), ist das gemaess 5.15 strukturell ein
+regulaerer `LoadedActiveRun` (`state != RecoveryEvaluation`) – **kein**
+Episode-Refresh, sondern ein **frischer Hop 1**. Das ist zwingend, nicht
+optional: der Aktor war zwischen dem letzten Resume und diesem neuen
+Reboot tatsaechlich freigegeben und lief; ein erneuter physischer Ausfall
+verlangt dieselbe Aktor-Sicherheits-Neubewertung (Gate A,
+Sensor-Reselektion) wie jeder andere Hop 1 – eine "vereinfachte"
 Wiederaufnahme ohne diese Neubewertung waere eine unzulaessig
-vorausgesetzte Aktorfreigabe ueber einen Reboot hinweg.
+vorausgesetzte Aktorfreigabe ueber einen Reboot hinweg. **Diese
+Aktor-Neubewertung ist von der Zeitfrage vollstaendig unabhaengig** (Punkt
+1, "Zwei getrennte Fragen") – der folgende Absatz betrifft ausschliesslich
+die zweite Frage.
 
-Dieser frische Hop 1 konstruiert **seinen eigenen, neuen**
-`PendingRecoveryAnchor` fuer die zweite Ausfallepisode und ueberschreibt
-damit den noch offenen, alten Anker der ersten Episode. Die
-Akkumulationsregel (5.23) liest dabei weiterhin `alt =
-candidate.priorBootPhaseElapsed` (den bereits akkumulierten Stand nach
-Episode 1, dessen `upperBoundSeconds` noch `nullopt` war) und addiert
-Episode 2 – gemaess der bestehenden Akkumulationsformel bleibt die
-**gesamte** akkumulierte Obergrenze `nullopt`, sobald **ein einziges**
-Teilintervall unbekannt ist/war (5.23). Episode 1s eigene, individuelle
-Aufloesbarkeit ist damit **endgueltig verloren**, sobald ihr Anker
-ueberschrieben wird, bevor sie aufgeloest wurde – das ist eine ehrliche,
-in Kauf genommene Konsequenz (kein stiller Versuch, verlorene Rohdaten
-nachtraeglich zu rekonstruieren oder zu erraten; Gate C), keine
-Fehlfunktion. Der **neue** Anker (Episode 2) durchlaeuft anschliessend
-denselben Hop-2-Resume und dieselbe bedingte Loeschregel wie oben; da die
-akkumulierte Obergrenze durch den Verlust von Episode 1 bereits
-strukturell auf `nullopt` festliegt, bleibt der neue Anker nach diesem
-Resume ebenfalls bestehen (die Bedingung `recoveryTimeResolvedAtResume`
-ist erst wieder erfuellbar, wenn ein Phasenwechsel die gesamte
-Buchfuehrung ohnehin beendet) – kein separater Code-Pfad noetig, dies
-folgt bereits aus der einheitlichen Regel oben.
+Dieser frische Hop 1 ist per Definition der oben beschriebene
+**Carry-Forward-Fall**: `loadedRecord.snapshot.pendingRecoveryAnchor` ist
+gesetzt, also werden `originalCheckpointUtc`,
+`knownPhaseSecondsAtOriginalCheckpoint`, `originalCheckpointTrigger`,
+`originalCheckpointIntervalMinutes` und `accumulatedBeforeEpisode`
+byte-identisch aus dem alten Anker uebernommen (Episode 1s Ursprungskontext
+bleibt erhalten, wird **nicht** ueberschrieben) und lediglich
+`knownSecondsSinceOriginalCheckpoint` um Episode 1s eigenen, seit dem
+Resume bekannt gewordenen Alt-Boot-lokalen Beitrag erhoeht. Damit bleibt
+ein **vor** Episode 1 bekanntes `originalCheckpointUtc` fuer die **gesamte**
+Kette (Episode 1 + Episode 2 + ggf. weitere) auswertbar, sobald irgendwann
+auf irgendeinem Boot dieser Kette NTP verfuegbar wird – nicht nur fuer die
+jeweils letzte Episode.
+
+Die 5.23-Akkumulationsregel selbst aendert sich dabei nicht in ihrer Form,
+nur in ihrer Eingabe: `alt` bleibt `pendingRecoveryAnchor->accumulatedBeforeEpisode`
+(der VOR der gesamten Kette eingefrorene Stand, **nicht**
+`candidate.priorBootPhaseElapsed` – dieses wuerde bereits Episode 1s
+eigenen, in der Kette selbst enthaltenen Beitrag zurueckspiegeln und ihn
+bei erneuter Addition doppelt zaehlen, s. u. "Kein doppeltes Zaehlen");
+`knownSecondsBeforeCheckpoint`/`utcAtLastCheckpoint` sind die ueber
+`deriveEffectiveAnchorTimeBasis` (s. o.) aus dem carry-forwarded Anker
+abgeleiteten wirksamen Werte, nicht die rohen Einzelfelder. Ist
+`originalCheckpointUtc` bereits vor Episode 1 unbekannt gewesen (kein NTP
+je vor Beginn dieser Kette verfuegbar), bleibt `effectiveCheckpointUtc`
+unabhaengig vom Carry-Forward `nullopt` – dieser Fall bleibt unveraendert
+unaufloesbar (keine erfundene Zeit, Gate C), aber das ist eine **andere**
+Ursache als das in Revision 8 ausdruecklich in Kauf genommene, hier
+korrigierte Ueberschreiben eines **bereits bekannten** Ursprungscheckpoints.
+
+**Kein doppeltes Zaehlen (verbindliche Invariante, Auftrag woertlich):**
+nach einer Kette aus **drei** Episoden (zwei Carry-Forwards) mit
+Alt-Boot-lokalen Beitraegen `N1` (Episode 1, vor `originalCheckpointUtc`),
+`N2` (Episode 2, carry-forward-akkumuliert) und `N3` (Episode 3,
+carry-forward-akkumuliert) gilt fuer die akkumulierte Untergrenze
+(sofern die vorherige `accumulatedBeforeEpisode` selbst `0` war):
+`neu.lowerBoundSeconds == accumulatedBeforeEpisode.lowerBoundSeconds + N1
++ N2 + N3` – jedes `N_k` erscheint in dieser Summe **genau einmal**, unabhaengig
+davon, ob es ueber `knownPhaseSecondsAtOriginalCheckpoint` (nur `N1`) oder
+ueber `knownSecondsSinceOriginalCheckpoint` (`N2+N3`, kumulativ) gefuehrt
+wird. Der Test in Abschnitt 8 prueft diese Summe explizit fuer eine
+Drei-Reboot-Kette.
+
+**Sicher bekannte eingeschaltete Zeit zwischen Ausfaellen zaehlt nicht als
+Ausfallzeit (Auftrag woertlich):** `knownSecondsSinceOriginalCheckpoint`
+wird ausschliesslich aus boot-lokalen, bereits checkpoint-belegten
+Zeitwerten gebildet (wie `knownPhaseSecondsAtOriginalCheckpoint` selbst,
+5.3) und fliesst ueber `effectiveKnownSecondsBeforeCheckpoint` in **beide**
+Grenzen von `RecoveredPhaseElapsed` symmetrisch und ungeschmaelert ein
+(anders als eine unbewiesene Ausfallzeit, die nach 5.13 nur die Obergrenze
+erreicht) – sie wird an keiner Stelle als potenzielle Ausfalldauer
+behandelt.
+
+**Untergrenzen-Vertrag fuer einen carry-forwarded Anker (Anpassung an
+5.13, verbindlich, sicherheitsrelevant):** 5.13s Kontrollpunktabstands-Luecke
+(`outageSecondsLowerBound = saturating_sub(upperBound, maxCheckpointGapSeconds, 0)`)
+kompensiert genau **eine** Checkpoint-zu-Ausfall-Verzoegerung. Eine
+carry-forwarded Kette durchlaeuft **mehrere** solcher Luecken (eine je
+Episode), sodass dieselbe Formel unveraendert auf die **kumulierte**
+Ausfallspanne angewandt bei einem kuenftig tatsaechlich bewiesenen
+`maxCheckpointGapSeconds` die Untergrenze um bis zu `(Episodenzahl-1) *
+maxCheckpointGapSeconds` **ueberhoehen** wuerde – eine faelschlich zu
+grosse Untergrenze ist unter 5.13 der sicherheitsrelevante Fehlerfall
+(falsches `DefinitelyExpired`, ungerechtfertigter Tombstone). Deshalb gilt
+zusaetzlich zu 5.2/5.13: **ist `anchor.knownSecondsSinceOriginalCheckpoint
+> 0`** (die Kette wurde mindestens einmal carry-forwarded), **bleibt
+`outageSecondsLowerBound` unbedingt `0`**, unabhaengig vom Wert eines
+kuenftig gesetzten `maxCheckpointGapSeconds` – die Luecken-Kompensation
+gilt ausschliesslich fuer einen Anker mit genau einer Episode. Heute
+(`maxCheckpointGapSeconds` immer `nullopt`, 5.13) ist dieser Zusatz
+beobachtungsgleich zum bestehenden Verhalten; er wird normativ, sobald
+5.13s offener Folgepunkt (ein bewiesener Gap) tatsaechlich umgesetzt wird.
+Eine kuenftige, engere Untergrenze fuer den Mehrfach-Episoden-Fall (z. B.
+ueber einen zusaetzlichen Episodenzaehler) ist ausdruecklich **nicht** Teil
+von #18 (mehr Feld, mehr Testflaeche, KISS).
+
+**Phasenwechsel/Abschluss vor Zeitaufloesung macht die offene Frage
+fachlich obsolet (Praezisierung, Auftragspunkt 1):** wechselt die Phase vor
+einer Zeitaufloesung real (z. B. `Fermenting -> Cooling` bei signalbasiertem
+Abschluss, oder ein Tombstone/`Completed`), wird der Anker gemaess der
+bestehenden `RecoveryReentryRequired`/`RecoveryResumed`-Ausnahme (5.23) und
+der Tombstone-/Abschluss-Loeschregel (5.11/5.17) geloescht, **ohne** dass
+die Zeitfrage jemals explizit aufgeloest wurde. Das ist kein Sonderfall:
+die akkumulierten Bounds haben ausschliesslich der Dauer-/Abschlussgrenze
+**dieser** Phase gedient (5.4/5.17/5.22); ein echter Phasenwechsel
+beendet genau diese Entscheidung selbst – der jetzt unbeantwortbare Teil
+der Zeitfrage ("wie lange dauerte Ausfall X genau") wird damit fachlich
+gegenstandslos, nicht heimlich als geloest behandelt. Der bereits
+carry-forward-erhaltene, sicher bekannte Anteil
+(`accumulatedBeforeEpisode`/`knownPhaseSecondsAtOriginalCheckpoint`/
+`knownSecondsSinceOriginalCheckpoint`) ist zu diesem Zeitpunkt ohnehin
+bereits vollstaendig in `priorBootPhaseElapsed`/`observedRunSeconds`
+eingeflossen (5.22/5.23) und geht durch die Anker-Loeschung nicht
+verloren – nur der ANKER (die noch offene ZeitFRAGE selbst) wird
+geloescht, nicht die bereits gesicherten Sekundenwerte.
 
 **Zwei getrennte Fragen, ausdruecklich entkoppelt (Kern von
 Auftragspunkt 1):**
@@ -892,7 +1133,10 @@ Lauf (`Fermenting`/`CoolHolding`/`WaitingForProduct` nach Resume) gehoert.
 
 Ablauf:
 
-1. Neuberechnung von 5.2-5.3 mit dem (weiterhin bestehenden) Anker und der
+1. Neuberechnung von 5.2-5.3 mit dem (weiterhin bestehenden) Anker – **ueber
+   `deriveEffectiveAnchorTimeBasis(pendingRecoveryAnchor)` (s. o.), nicht
+   ueber die rohen Anker-Felder direkt**, damit ein ggf. carry-forwarded
+   `knownSecondsSinceOriginalCheckpoint` korrekt einfliesst – und der
    frisch uebergebenen `time` (`deriveUtcAtRecoveryBootAnchor` mit
    `time.utcUnixSeconds`, s. o.).
 2. **Fall `current.processState.state == RecoveryEvaluation`
@@ -910,49 +1154,60 @@ Ablauf:
    regulaeren Hop-1-Anwendung an:
    - **Basis ist nicht** das bereits gefaltete (und deshalb bereits
      `nullopt`) `current.priorBootPhaseElapsed`, sondern
-     `pendingRecoveryAnchor->accumulatedBeforeEpisode` (der bei Hop 1
-     dieser Episode eingefrorene "alt"-Wert, s. o.) – nur so bleibt ein
-     vor dieser Episode bereits akkumulierter, bekannter Stand erreichbar.
-   - **Es wird keine neue Episode addiert**, sondern lediglich dieselbe
-     Episode mit dem jetzt bekannten `outage` statt des zum Hop-1-
-     Zeitpunkt unbekannten neu gefaltet.
+     `pendingRecoveryAnchor->accumulatedBeforeEpisode` (der VOR der
+     gesamten, ggf. bereits carry-forwarded Kette eingefrorene "alt"-Wert,
+     s. o.) – nur so bleibt ein vor dieser Kette bereits akkumulierter,
+     bekannter Stand erreichbar, ohne die Kette selbst doppelt zu zaehlen.
+   - **Es wird keine neue Episode addiert**, sondern die gesamte,
+     ggf. bereits carry-forwarded Kette mit dem jetzt bekannten `outage`
+     (aus Schritt 1, gegen die **wirksame** Zeitbasis berechnet) statt des
+     zum Hop-1-Zeitpunkt unbekannten neu gefaltet.
    - `neu.lowerBoundSeconds` wird ebenfalls nach 5.23s Formel neu gefaltet
      (`accumulatedBeforeEpisode.lowerBoundSeconds +
-     knownPhaseSecondsAtOriginalCheckpoint + outage.outageSecondsLowerBound`)
+     effectiveKnownSecondsBeforeCheckpoint + outage.outageSecondsLowerBound`)
      – nicht uebersprungen. Solange `maxCheckpointGapSeconds == nullopt`
      ist (heute der einzige implementierte Zustand, 5.13), liefert das
-     **exakt denselben** Wert, den Hop 1 bereits committet hat, da
-     `outageSecondsLowerBound` dann strukturell immer `0` ist; die
-     Neufaltung ist in diesem Fall ein beobachtbar wirkungsloser, aber
+     **exakt denselben** Wert, den der letzte Commit dieser Kette bereits
+     enthielt, da `outageSecondsLowerBound` dann strukturell immer `0` ist;
+     die Neufaltung ist in diesem Fall ein beobachtbar wirkungsloser, aber
      korrekt hergeleiteter Leerlauf. Wird `maxCheckpointGapSeconds`
      kuenftig als bewiesene Konstante gesetzt (5.13s ausdruecklich offener
      Folgepunkt), liefert dieselbe Faltung dann echte, groessere
-     `lowerBoundSeconds`-Werte – ohne dass dieser Schritt selbst geaendert
-     werden muesste. Eine **reine** `lowerBoundSeconds`-Verbesserung (ohne
-     begleitende `upperBoundSeconds`-Aenderung, also ein Wert-zu-Wert-
-     statt `nullopt`-zu-Wert-Uebergang) ist ebenfalls ein gueltiger
+     `lowerBoundSeconds`-Werte fuer eine Kette aus **genau einer** Episode
+     – fuer eine bereits carry-forwarded Kette (`knownSecondsSinceOriginalCheckpoint
+     > 0`) bleibt `outageSecondsLowerBound` gemaess dem oben festgelegten
+     Untergrenzen-Vertrag unbedingt `0`, unabhaengig von
+     `maxCheckpointGapSeconds` – dieser Schritt selbst muss dafuer nicht
+     geaendert werden, die Einschraenkung liegt bereits in der
+     Outage-Bounds-Berechnung selbst. Eine **reine**
+     `lowerBoundSeconds`-Verbesserung (ohne begleitende
+     `upperBoundSeconds`-Aenderung, also ein Wert-zu-Wert- statt
+     `nullopt`-zu-Wert-Uebergang) ist ebenfalls ein gueltiger
      Commit-Ausloeser fuer den fuenften `RunPersistenceMutationKind::Recovery`-
      Trigger (5.16, dort entsprechend ergaenzt) – heute unerreichbar, da
      `outageSecondsLowerBound` ohne gesetztes `maxCheckpointGapSeconds`
-     nie einen von Hop 1 abweichenden Wert liefert, aber ab produktivem
-     `maxCheckpointGapSeconds` faellig.
+     nie einen von Hop 1 abweichenden Wert liefert, aber ab produktivem,
+     auf eine Ein-Episoden-Kette beschraenktem `maxCheckpointGapSeconds`
+     faellig.
    - Nur `neu.upperBoundSeconds` kann sich durch diesen Aufruf ueberhaupt
      aendern (`outage` ist jetzt bekannt, `accumulatedBeforeEpisode` ist
-     unveraendert seit Hop 1). Nur wenn dieser **neu berechnete** Wert von
-     `nullopt` auf einen Wert wechselt, wird
+     unveraendert seit dem ersten Hop 1 dieser Kette). Nur wenn dieser
+     **neu berechnete** Wert von `nullopt` auf einen Wert wechselt, wird
      `candidate.priorBootPhaseElapsed->elapsed.upperBoundSeconds` auf ihn
      gesetzt und **committet** (`recoveryTimeResolvedAtResume(...)` ist
      danach zwangslaeufig wahr, da `priorBootPhaseElapsed` bereits
      vorhanden ist und die Obergrenze nun bekannt ist -> Anker im selben
      Commit geloescht). War `accumulatedBeforeEpisode.upperBoundSeconds`
-     bereits vor dieser Episode `nullopt` (eine fruehere Episode dieser
-     Phase wurde unaufgeloest ueberschrieben, 5.23), bleibt
-     `neu.upperBoundSeconds` **unabhaengig vom jetzt bekannten `outage`**
-     bei `nullopt` – dieser Fall committet **nichts**, exakt wie ein
-     Aufruf ohne jede Verbesserung. Diese Uebereinstimmung des
-     Schreibkriteriums (5.16: nur bei echter akkumulierter `nullopt`->
-     Wert-Aenderung) mit der tatsaechlichen Akkumulationsformel ist die
-     einzige Bedingung, unter der **ueberhaupt** committet wird – ein
+     bereits vor dieser Kette `nullopt` (kein UTC-Anker war jemals vor
+     Beginn dieser Kette fuer diese Phase bekannt, oder eine fruehere,
+     bereits **abgeschlossene** Kette derselben Phase wurde nie aufgeloest,
+     bevor die Phase real wechselte, 5.23), bleibt `neu.upperBoundSeconds`
+     **unabhaengig vom jetzt bekannten `outage`** bei `nullopt` – dieser
+     Fall committet **nichts**, exakt wie ein Aufruf ohne jede
+     Verbesserung. Diese Uebereinstimmung des Schreibkriteriums (5.16: nur
+     bei echter akkumulierter `nullopt`->Wert-Aenderung) mit der
+     tatsaechlichen Akkumulationsformel ist die einzige Bedingung, unter
+     der **ueberhaupt** committet wird – ein
      episode-lokal berechenbares `outage` allein reicht dafuer **nicht**,
      wenn die akkumulierte Basis bereits dauerhaft `nullopt` ist. In jedem
      Fall ohne Commit wird `unavailableResult()`/ein expliziter "keine
@@ -1008,17 +1263,74 @@ Ablauf:
 - `reevaluateRecoveryTime` ohne verbesserte Obergrenze (NTP weiterhin nicht
   verfuegbar): kein Commit, `priorBootPhaseElapsed`/`runRevision`
   unveraendert (Negativtest gegen unnoetigen NVS-Schreibverschleiss).
-- **Reboot zwischen Resume und spaeterer NTP-Reevaluation**
-  (Auftragspunkt 1, zweiter expliziter Testfall): `Fermenting` resumt ohne
-  NTP (Anker bleibt offen) -> weiterer Reboot **ohne** zwischenzeitliche
-  Aufloesung -> `loadAndInitialize()` klassifiziert dies gemaess 5.15 als
-  regulaeren `LoadedActiveRun` (nicht Episode-Refresh) -> frischer Hop 1
-  konstruiert einen neuen Anker fuer Episode 2, akkumuliert gegen den nach
-  Episode 1 weiterhin `nullopt`-Obergrenzen-Stand (5.23) -> akkumulierte
-  Obergrenze bleibt **dauerhaft** `nullopt` fuer diese Phase (Episode 1s
-  Aufloesbarkeit ist verloren, kein Absturz, keine falsche Praezision) ->
-  Hop 2 resumt erneut unbedingt -> der neue Anker (Episode 2) bleibt aus
-  demselben Grund ebenfalls bestehen, ohne separaten Code-Pfad.
+- **Reboot zwischen Resume und spaeterer NTP-Reevaluation – Carry-Forward
+  erhaelt die Aufloesbarkeit (Auftragspunkt 1, Revision-9-Korrektur, ersetzt
+  den Revision-8-Test fuer denselben Ablauf, der den hier behobenen
+  Informationsverlust noch als Sollverhalten festschrieb):** `Fermenting`
+  resumt ohne NTP (`originalCheckpointUtc` **bekannt**, Anker bleibt offen)
+  -> weiterer Reboot **ohne** zwischenzeitliche Aufloesung ->
+  `loadAndInitialize()` klassifiziert dies gemaess 5.15 als regulaeren
+  `LoadedActiveRun` (nicht Episode-Refresh) -> frischer Hop 1 erkennt
+  `loadedRecord.snapshot.pendingRecoveryAnchor.has_value()` und konstruiert
+  den Carry-Forward-Fall: `originalCheckpointUtc`/
+  `knownPhaseSecondsAtOriginalCheckpoint`/`accumulatedBeforeEpisode`
+  byte-identisch uebernommen, `knownSecondsSinceOriginalCheckpoint` um
+  Episode 1s Alt-Boot-lokalen Beitrag erhoeht -> Hop 2 resumt erneut
+  unbedingt -> der Anker bleibt aus demselben Grund wie zuvor bestehen ->
+  NTP wird **danach** (auf diesem oder einem weiteren Boot) verfuegbar ->
+  `reevaluateRecoveryTime` faltet ueber `deriveEffectiveAnchorTimeBasis`
+  eine endliche, **beide** Ausfaelle (Episode 1 + Episode 2) korrekt
+  umfassende Obergrenze und committet sie, loescht danach den Anker –
+  Episode 1s urspruengliches `originalCheckpointUtc` war zu keinem
+  Zeitpunkt verloren.
+- **Drei-Reboot-Kette (Auftragspunkt 3, KISS-Grenztest):** drei
+  aufeinanderfolgende Ausfaelle derselben Phase, alle vor jeder
+  NTP-Verfuegbarkeit, jeweils mit erfolgreichem Zwischen-Resume; NTP wird
+  erst nach dem dritten Reboot verfuegbar -> `reevaluateRecoveryTime`
+  loest die **gesamte** Kette auf einen Schlag auf (keine Ober-/Untergrenze
+  bleibt wegen einer der drei Episoden dauerhaft unbekannt); dasselbe fuer
+  zeitbegrenztes `CoolHolding`.
+- **Kein doppeltes Zaehlen ueber eine Drei-Reboot-Kette (expliziter
+  Assertion-Test):** bei bekannten Alt-Boot-lokalen Beitraegen `N1`
+  (Episode 1), `N2`, `N3` (jeweils carry-forward-akkumuliert) und
+  `accumulatedBeforeEpisode.lowerBoundSeconds == 0` gilt nach Aufloesung
+  `priorBootPhaseElapsed->elapsed.lowerBoundSeconds == N1 + N2 + N3` exakt
+  (nicht mehr, nicht weniger) – deckt sowohl `knownPhaseSecondsAtOriginalCheckpoint`
+  (nur `N1`) als auch die kumulative Rolle von
+  `knownSecondsSinceOriginalCheckpoint` (`N2+N3`) ab.
+- **Sicher bekannte eingeschaltete Zeit zwischen Ausfaellen zaehlt nicht
+  als Ausfallzeit:** ist zwischen Episode 1s Resume und Episode 2s Ausfall
+  ein weiterer Checkpoint geschrieben worden (`knownSecondsSinceOriginalCheckpoint`-Zuwachs
+  `> 0`, z. B. durch ein zwischenzeitliches Benutzerkommando), erscheint
+  dieser Anteil in der akkumulierten Untergrenze, **bevor** NTP jemals
+  verfuegbar wird (unabhaengig von `outage`); ohne einen solchen
+  zwischenzeitlichen Checkpoint ist der Zuwachs `0` (Regelfall, 5.13) und
+  die Aufloesbarkeit aus Punkt 1 bleibt trotzdem unveraendert erhalten.
+- **Carry-Forward-Untergrenzen-Vertrag:** mit gesetztem
+  `maxCheckpointGapSeconds` (5.13-Testaufbau) bleibt
+  `outageSecondsLowerBound` fuer eine carry-forwarded Kette
+  (`knownSecondsSinceOriginalCheckpoint > 0`) unbedingt `0`, obwohl
+  dieselbe Konstellation fuer eine Ein-Episoden-Kette (`== 0`) eine
+  `> 0`-Untergrenze liefern wuerde (Negativtest gegen eine Ueberhoehung
+  der Untergrenze durch mehrfach angewandte Kontrollpunktabstands-Kompensation).
+- **Phasenwechsel vor Zeitaufloesung macht die Zeitfrage obsolet, ohne
+  bereits gesicherte Sekunden zu verlieren:** ein echter Phasenwechsel
+  (z. B. signalbasierter `Fermenting -> Cooling`-Uebergang) waehrend noch
+  offener Zeitbewertung loescht `pendingRecoveryAnchor`/
+  `priorBootPhaseElapsed` atomar (5.23); `observedRunSeconds`/bereits
+  gefaltete `priorBootPhaseElapsed`-Werte **vor** diesem Wechsel bleiben in
+  der zu diesem Zeitpunkt bereits committeten Historie unveraendert
+  (Regressionstest: kein rueckwirkender Verlust bereits gesicherter
+  Sekunden durch die Anker-Loeschung selbst).
+- **Kein UTC-Anker jemals vor Beginn der Kette bekannt:** `originalCheckpointUtc
+  == nullopt` bereits beim ersten Hop 1 -> bleibt ueber beliebig viele
+  Carry-Forwards `nullopt` (`effectiveCheckpointUtc` bleibt `nullopt`
+  unabhaengig von `knownSecondsSinceOriginalCheckpoint`) – Abgrenzung
+  gegen den oben behobenen Fall (dort war `originalCheckpointUtc` bekannt
+  und wurde faelschlich verworfen).
+- `activateFallbackRecoveredRun` konstruiert den Carry-Forward-Fall
+  identisch zu `activateLoadedRun` (5.8) – derselbe Test einmal je
+  Aktivierungspfad.
 - `recoveryTimeResolvedAtResume`: `true` bei fehlendem `priorBootPhaseElapsed`
   insgesamt (Resume nach `Preheating`/`ReachingTarget`/`Cooling`/
   `ManualHolding` – keine Zeitfrage, sofortige Loeschung, Regressionstest
@@ -1246,8 +1558,9 @@ Episode-Refresh – werden die drei `firstAfterRestart`-Latches
 `nullopt` zurueckgesetzt, **bevor** derselbe Commit versucht, sie ueber
 `applyLiveRecoveryEvidence` (5.20) aus dem bei dieser Gelegenheit ohnehin
 verfuegbaren `CrossRolePlausibilityContext` (Gate A, 5.26) sofort neu zu
-befuellen. `beforeOutage` bleibt davon unberuehrt und wird ausschliesslich
-beim initialen Hop 1 einer Recoveryepisode-Kette eingefroren (5.20).
+befuellen. `beforeOutage` bleibt davon unberuehrt und wird bei jedem
+echten Hop 1 (frisch oder carry-forward, 5.12) neu eingefroren, nicht bei
+einem Episode-Refresh (5.20).
 
 Dadurch: **jeder** Reboot, der eine Recovery-Bewertung neu beginnt – ob via
 echtem Hop 1 oder via Episode-Refresh –, erhoeht `recoveryEpisodeRevision`
@@ -1401,9 +1714,14 @@ enum class RunPersistenceMutationKind : std::uint8_t {
   `reevaluateRecoveryTime`-Aufruf (5.12), der die akkumulierte
   `priorBootPhaseElapsed`-Obergrenze tatsaechlich von `nullopt` auf einen
   Wert aendert, **oder** – sobald `maxCheckpointGapSeconds` produktiv
-  gesetzt ist (5.13, heute nicht der Fall) – die akkumulierte
-  `lowerBoundSeconds` gegenueber dem zuletzt committeten Stand tatsaechlich
-  vergroessert (5. Ausloeser: Zeit-Nachtragskorrektur, s. 5.12 Schritt 3).
+  gesetzt ist (5.13, heute nicht der Fall) **und** die betroffene Kette aus
+  genau einer Episode besteht (`knownSecondsSinceOriginalCheckpoint == 0`,
+  5.12s Untergrenzen-Vertrag fuer carry-forwarded Anker – fuer eine bereits
+  carry-forwarded Kette bleibt `outageSecondsLowerBound` unbedingt `0` und
+  liefert daher nie eine Verbesserung ueber diesen Zweig) – die
+  akkumulierte `lowerBoundSeconds` gegenueber dem zuletzt committeten
+  Stand tatsaechlich vergroessert (5. Ausloeser: Zeit-Nachtragskorrektur,
+  s. 5.12 Schritt 3).
   Dieser fuenfte Ausloeser committet **ausschliesslich** bei einer dieser
   beiden echten Verbesserungen; ein Aufruf ohne jede Verbesserung (NTP
   weiterhin nicht verfuegbar, und ohne gesetztes `maxCheckpointGapSeconds`)
@@ -1528,9 +1846,16 @@ laengst freigegebener Prozess wird nur beendet, nicht neu aktiviert.
 `Fermenting`/`CoolHolding` bereits abgeschlossen ist, bevor dieser Pfad
 ueberhaupt aufgerufen werden kann (5.12):** Ein Resume fuer diese beiden
 Phasen ist bereits erfolgt, sobald ein aktiver Run ueberhaupt wieder in
-`Ready` beobachtbar ist – `pendingRecoveryAnchor` ist zu diesem Zeitpunkt
-schon auf `nullopt` gesetzt und `current.processState.state` ist bereits
-`Fermenting`/`CoolHolding`, nicht mehr `RecoveryEvaluation`. Die
+`Ready` beobachtbar ist – `current.processState.state` ist zu diesem
+Zeitpunkt bereits `Fermenting`/`CoolHolding`, nicht mehr
+`RecoveryEvaluation`. **Richtiggestellt gegenueber einer frueheren Fassung
+dieses Abschnitts (Auftragspunkt 2, Revision 9):** `pendingRecoveryAnchor`
+ist zu diesem Zeitpunkt **nicht** notwendigerweise bereits `nullopt` – er
+kann gemaess 5.12s bedingter Loeschregel weiterhin bestehen, solange die
+Recovery-Zeitbewertung noch offen ist ("Zeitbewertung noch offen", 5.12).
+Das ist fuer die Vorbedingung dieses Pfades unerheblich: sie liest
+`pendingRecoveryAnchor` an keiner Stelle (s. u.), sondern ausschliesslich
+`current.processState.state` und `current.priorBootPhaseElapsed`. Die
 Vorbedingung ist deshalb **phasenabhaengig**, nicht einheitlich:
 
 - **`WaitingForProduct`:** `state_ == Ready && current.processState.state
@@ -1555,7 +1880,11 @@ bleibt ueber Hop 2 hinweg gueltig, da er unabhaengig vom Anker gefuehrt
 wird (5.14). Dedup ueber `persistedIds_`/`request.commandId` (dieselbe
 Technik wie `persistCommand`, sonst `AlreadyPersisted`/
 `AlreadyProcessed`). Anschliessend Neuberechnung des Verdikts (5.4) – fuer
-`WaitingForProduct` aus 5.2-5.3 gegen `pendingRecoveryAnchor`, fuer
+`WaitingForProduct` aus 5.2-5.3 gegen `deriveEffectiveAnchorTimeBasis(pendingRecoveryAnchor)`
+(5.12 – **nicht** gegen die rohen Anker-Felder direkt, damit ein bereits
+carry-forwarded `knownSecondsSinceOriginalCheckpoint` korrekt einfliesst,
+z. B. wenn diese Phase nach einem frueheren `AssumeStillValid`-Resume
+einen zweiten Ausfall erlebt hat), fuer
 `Fermenting`/`CoolHolding` durch direktes Anwenden von
 `evaluateRecoveryTimeVerdict`s Vergleichslogik auf
 `current.priorBootPhaseElapsed->elapsed.lowerBoundSeconds`/
@@ -1892,7 +2221,7 @@ struct RecoveryTemperatureEvidence {
     CrossRoleEvidence lastKnown;  // laufend, von jedem normalen Checkpoint aktualisiert
 };
 struct RecoveryEpisodeEvidence {
-    CrossRoleEvidence beforeOutage;              // eingefroren, ausschliesslich beim initialen Hop 1 einer Recoveryepisode-Kette gesetzt
+    CrossRoleEvidence beforeOutage;              // eingefroren, bei jedem echten Hop 1 (frisch oder carry-forward, 5.12) neu gesetzt, nicht bei Episode-Refresh
     FirstAfterRestartEvidence firstAfterRestart; // gemischte Lebensdauer, siehe unten
 };
 ```
@@ -1915,12 +2244,14 @@ bool recoveryEvidenceWindowOpen(const RunCommandState& current) {
         current.processState.state == ProcessState::RecoveryEvaluation) {
         return true;  // Hop-1-only, Entscheidung noch offen (5.12)
     }
-    // Fermenting/CoolHolding: Anker bereits nach Resume geloescht (5.12),
-    // Fenster bleibt ueber die dauerhafte PriorBootPhaseElapsed-Tag-Bindung
-    // offen, bis die Phase real wechselt (5.23) – nicht ueber den Anker.
-    // Der zusaetzliche Zustandscheck oben schliesst das Fenster defensiv
-    // auch dann, wenn ein spaeterer Aufrufer den Anker in einem
-    // Fault-Pfad (Reject, #24) noch nicht geloescht haben sollte.
+    // Fermenting/CoolHolding nach Resume: der Anker mag bereits nullopt
+    // sein (Zeitfrage geloest) ODER weiterhin bestehen ("Zeitbewertung
+    // noch offen", 5.12) - in BEIDEN Faellen bleibt das Fenster ueber die
+    // dauerhafte PriorBootPhaseElapsed-Tag-Bindung offen, bis die Phase
+    // real wechselt (5.23) - nicht ueber den Anker-Zustand. Der
+    // zusaetzliche Zustandscheck oben schliesst das Fenster defensiv auch
+    // dann, wenn ein spaeterer Aufrufer den Anker in einem Fault-Pfad
+    // (Reject, #24) noch nicht geloescht haben sollte.
     return current.priorBootPhaseElapsed.has_value() &&
            current.priorBootPhaseElapsed->taggedState ==
                current.processState.state;
@@ -2006,9 +2337,14 @@ Neustart enthalten.
 `firstAfterRestart` (alle drei Rollenfelder) wird bei **jedem** Anstieg von
 `recoveryEpisodeRevision` – Hop 1 **und** jedes Episode-Refresh –
 vollstaendig auf `{nullopt, nullopt, nullopt}` zurueckgesetzt, unmittelbar
-vor Schritt 1-3 oben. `beforeOutage` wird dagegen ausschliesslich beim
-initialen Hop 1 einer Recoveryepisode-Kette neu gesetzt; ein Episode-Refresh
-laesst es unveraendert.
+vor Schritt 1-3 oben. `beforeOutage` wird dagegen bei **jedem echten Hop 1**
+neu gesetzt (frisch **und** carry-forward, 5.12 – jeder physische Ausfall
+hat seine eigenen, tatsaechlich vor **diesem** Ausfall gemessenen
+Sensorwerte, unabhaengig davon, ob 5.12s Zeitkontext fuer diesen Ausfall
+frisch beginnt oder eine fortgesetzte Kette carry-forwarded; "Kette" meint
+hier **nicht** 5.12s Zeitkontext-Kette, sondern schlicht "ein echter Hop 1
+fand statt"); ein Episode-Refresh (kein echter Hop 1, derselbe Ausfall wird
+nur erneut bewertet) laesst es unveraendert.
 
 `lastRecoveryEpisodeEvidence: std::optional<RecoveryEpisodeEvidence>` selbst
 wird bei Hop 1 neu angelegt. Nach **Resume** bleibt es als Diagnosefeld
@@ -2109,10 +2445,20 @@ struct RunProgressState {
 Live-Phasenwechsel **aus** `Fermenting`, (2) in `decideRunAdjustment()`
 unmittelbar **vor** der bestehenden `stateEnteredAtMillis`-Neusetzung bei
 Daueraenderung (`run_commands.cpp:1019-1023`), (3) bei Hop 1, wenn
-`pendingRecoveryAnchor.originalProcessState.state == Fermenting`,
-ausschliesslich aus `pendingRecoveryAnchor.knownPhaseSecondsAtOriginalCheckpoint`
-(dem Alt-Boot-lokalen, sicher bekannten Anteil – **niemals** aus dem
-unsicheren Ausfallanteil).
+`originalRestoredProcessState.state == Fermenting`, ausschliesslich aus
+`thisHopAltBootLocalSeconds` (5.12 – dem Alt-Boot-lokalen, sicher bekannten
+Beitrag, den **dieser konkrete** Hop 1 neu beisteuert; **niemals** aus dem
+unsicheren Ausfallanteil). **Korrektur gegenueber Revision 8, notwendig
+wegen Carry-Forward (Auftragspunkt 1, Revision 9):** vor dieser Revision
+war jeder Hop 1 zwangslaeufig frisch, sodass
+`pendingRecoveryAnchor.knownPhaseSecondsAtOriginalCheckpoint` selbst genau
+diesen Beitrag enthielt. Bei einem Carry-Forward-Hop-1 (5.12) ist dieses
+Feld dagegen byte-identisch aus der vorigen Episode uebernommen und wuerde,
+ungeaendert wiederverwendet, `N1` ein zweites Mal falten (statt des
+tatsaechlich neuen `N2`) – ein Verstoss gegen "streng beobachtete
+Laufzeit" (s. u.). `thisHopAltBootLocalSeconds` ist in beiden Faellen
+(frisch/Carry-Forward) exakt der neue, von diesem Hop 1 selbst
+beigetragene Anteil und schliesst diese Luecke strukturell.
 
 **Harte Trennung:** `observedRunSeconds` bedeutet ausschliesslich
 tatsaechlich beobachtete, eingeschaltete Fermentationszeit. Es wird **unter
@@ -2264,6 +2610,15 @@ einzelnes, ununterscheidbares Feld.
   -> `NotAllowedInState`.
 - `observedRunSeconds` bleibt bei jeder Ausfallkorrektur (automatisch und
   manuell) unveraendert.
+- **Carry-Forward-Kette, kein doppeltes/verlorenes Zaehlen bei
+  `observedRunSeconds` (Auftragspunkt 1, Revision-9-Korrektur):** eine
+  Drei-Reboot-Kette in `Fermenting` mit Alt-Boot-lokalen Beitraegen `N1`,
+  `N2`, `N3` (frischer Hop 1, dann zwei Carry-Forward-Hop-1s) faltet
+  `observedRunSeconds` um genau `N1 + N2 + N3` – `N1` erscheint dabei
+  **kein zweites Mal** (Regressionstest gegen ein Wiederaufgreifen von
+  `pendingRecoveryAnchor.knownPhaseSecondsAtOriginalCheckpoint` bei einem
+  Carry-Forward-Hop-1, das `N1` erneut statt des tatsaechlich neuen `N2`
+  falten wuerde).
 - Automatische UTC-Reevaluation erzeugt keine Aenderung an
   `NominalRecoveryAdjustmentState` oder `observedRunSeconds`.
 - Neuer Run/`clearActiveRunState()` setzt `nominalRecoveryAdjustment`
@@ -2328,19 +2683,34 @@ gesetzt wird (5.9). Die weiter oben (Abschnitt "Erhalt/Loeschen")
 beschriebene Ausnahme fuer `RecoveryReentryRequired`/`RecoveryResumed`
 von der Phasenwechsel-Loeschregel bleibt unabhaengig davon verbindlich –
 sie schuetzt gegen eine generische, `applyProcessTransition`-gekoppelte
-Loeschimplementierung, die unabhaengig vom Lesezeitpunkt greifen koennte:
+Loeschimplementierung, die unabhaengig vom Lesezeitpunkt greifen koennte.
+**`outage` und der Known-Seconds-Term werden hier – wie ueberall in diesem
+Plan (5.12) – aus `deriveEffectiveAnchorTimeBasis(pendingRecoveryAnchor)`
+gebildet, nicht aus den rohen Anker-Feldern direkt:**
 
 ```text
+basis = deriveEffectiveAnchorTimeBasis(pendingRecoveryAnchor)  // 5.12
+outage = computeRecoveryOutageBounds({utcAtLastCheckpoint: basis.effectiveCheckpointUtc, ...})  // 5.2
+
 neu.lowerBoundSeconds = alt.lowerBoundSeconds
-    + pendingRecoveryAnchor.knownPhaseSecondsAtOriginalCheckpoint
+    + basis.effectiveKnownSecondsBeforeCheckpoint
     + outage.outageSecondsLowerBound
 neu.upperBoundSeconds =
     (alt.upperBoundSeconds.has_value() && outage.outageSecondsUpperBound.has_value())
         ? alt.upperBoundSeconds.value()
-            + pendingRecoveryAnchor.knownPhaseSecondsAtOriginalCheckpoint
+            + basis.effectiveKnownSecondsBeforeCheckpoint
             + outage.outageSecondsUpperBound.value()
         : std::nullopt  // ein einziges unbekanntes Teilintervall macht die gesamte akkumulierte Obergrenze unbekannt
 ```
+
+Fuer einen frischen Anker (`knownSecondsSinceOriginalCheckpoint == 0`) ist
+`basis.effectiveKnownSecondsBeforeCheckpoint ==
+pendingRecoveryAnchor.knownPhaseSecondsAtOriginalCheckpoint` und
+`basis.effectiveCheckpointUtc == pendingRecoveryAnchor.originalCheckpointUtc`
+– byte-identisch zu Revision 8s Formel fuer den Einzelausfall-Fall. Fuer
+einen carry-forwarded Anker schliesst dieselbe Formel automatisch den
+gesamten, bereits mehrfach fortgesetzten Zeitkontext ein, ohne gesondert
+behandelt werden zu muessen.
 
 Diese akkumulierte Obergrenze ist dieselbe, die 5.22 fuer die
 Bounds-Invariante der nominalen Korrektur wiederverwendet – **eine**
@@ -2384,23 +2754,30 @@ wird, folgt der Phasenregel aus 5.10 (Untergrenze fuer alle Phasen ausser
   (`recoveryTimeResolvedAtResume`, Tombstone/Abschluss, oder ein echter,
   **anderer** Phasenwechsel).
 - **Zweiter Ausfall waehrend bereits resumtem Lauf, ggf. mit weiterhin
-  offenem Zeitkontext (5.12, dort im Detail):** ein erneuter Reboot
-  waehrend `Fermenting`/`CoolHolding`/`WaitingForProduct` (nach einem
-  frueheren erfolgreichen Resume) laedt `state != RecoveryEvaluation` als
+  offenem Zeitkontext (5.12, dort im Detail; Korrektur gegenueber
+  Revision 8, Auftragspunkt 1):** ein erneuter Reboot waehrend
+  `Fermenting`/`CoolHolding`/`WaitingForProduct` (nach einem frueheren
+  erfolgreichen Resume) laedt `state != RecoveryEvaluation` als
   regulaeren `LoadedActiveRun` (5.15) und loest einen **frischen** Hop 1
-  aus, unabhaengig davon, ob der vorige Zeitkontext bereits geloescht war
-  oder noch offen ist. Der dabei neu konstruierte `PendingRecoveryAnchor`
-  ersetzt den vorherigen (neuer Ausfall, neuer Ursprungskontext); die
-  Akkumulationsregel liest dabei den weiterhin unveraendert bestehenden
-  `alt`-Wert dieses `priorBootPhaseElapsed` (der den vorangegangenen
-  Ausfall bereits enthaelt, ggf. mit `upperBoundSeconds == nullopt`, falls
-  dessen eigene Zeitfrage noch offen war) und addiert den neuen Ausfall
-  hinzu – exakt derselbe Mechanismus wie bei zwei Episoden ohne
-  zwischenzeitlichen Resume, weil `taggedState` ueber den gesamten
-  Zyklus unveraendert bleibt. War die Obergrenze der vorherigen Episode
-  noch `nullopt`, bleibt die akkumulierte Obergrenze **dauerhaft**
-  `nullopt` (5.12: deren eigene Aufloesbarkeit ist mit dem Ueberschreiben
-  ihres Ankers endgueltig verloren).
+  aus. War der vorige Zeitkontext bereits geloescht (Zeitfrage der ersten
+  Episode war bereits aufgeloest), konstruiert dieser Hop 1 einen
+  vollstaendig neuen `PendingRecoveryAnchor` (5.12 "Frischer Fall"); die
+  Akkumulationsregel liest dabei den unveraendert bestehenden `alt`-Wert
+  dieses `priorBootPhaseElapsed` (der die vorangegangene, bereits
+  aufgeloeste Episode enthaelt) und addiert die neue Episode hinzu –
+  unveraendert zu Revision 8. War der vorige Zeitkontext dagegen noch
+  **offen** (Zeitfrage der ersten Episode war beim Ausfall noch nicht
+  geloest), ist dieser Hop 1 gemaess 5.12 der **Carry-Forward-Fall**: der
+  bestehende Anker (inklusive seines urspruenglichen
+  `originalCheckpointUtc`, sofern damals bekannt) wird **fortgesetzt**,
+  nicht ersetzt – die Aufloesbarkeit der ersten Episode geht **nicht**
+  mehr verloren, sobald spaeter (auf einem beliebigen Boot dieser Kette)
+  NTP verfuegbar wird (5.12 fuehrt den vollstaendigen Mechanismus und die
+  zugehoerigen Tests). Ein `upperBoundSeconds == nullopt` nach der ersten
+  Episode bleibt in diesem Fall **vorlaeufig** offen, nicht **dauerhaft**
+  unaufloesbar – "dauerhaft `nullopt`" bleibt ausschliesslich dem Fall
+  vorbehalten, dass niemals vor Beginn der gesamten Kette ein UTC-Anker
+  bekannt war (5.12).
 
 **Tests:**
 - Roundtrip fuer `WaitingForProduct`, `Fermenting`, `CoolHolding` je
@@ -2424,11 +2801,13 @@ wird, folgt der Phasenregel aus 5.10 (Untergrenze fuer alle Phasen ausser
   `priorBootPhaseElapsed` akkumuliert beide Ausfaelle korrekt, identisch
   zum Fall ohne zwischenzeitlichen Resume; ist die Obergrenze nach Episode 1
   bereits bekannt (Zeitfrage dort geloest), ist der Anker vor Episode 2s
-  Hop 1 bereits `nullopt` (Regressionstest gegen Revision 7); ist sie bei
-  Episode 1 noch `nullopt` (Zeitfrage dort offen), akkumuliert Episode 2
-  auf `nullopt` weiter und bleibt **dauerhaft** `nullopt` (5.12, neuer
-  Test fuer den in dieser Revision explizit in Kauf genommenen
-  Informationsverlust).
+  Hop 1 bereits `nullopt` (Regressionstest, unveraendert zu Revision 8);
+  ist sie bei Episode 1 noch `nullopt` (Zeitfrage dort offen), konstruiert
+  Episode 2s Hop 1 den Carry-Forward-Fall (5.12) und die Zeitfrage bleibt
+  **weiterhin aufloesbar**, sobald spaeter NTP verfuegbar wird – **nicht**
+  mehr **dauerhaft** `nullopt` (Regressionstest gegen Revision 8s hier
+  behobenen Informationsverlust, Details und die Drei-Reboot-Erweiterung
+  in 5.12).
 
 ### 5.24 `Completed` – expliziter, schmaler Sonderpfad
 
@@ -2510,19 +2889,16 @@ Schema 3 erzeugt.
 
 ### 5.29 ROADMAP-Konsistenz
 
-**Korrektur gegenueber Revision 7 (Auftragspunkt 4):** Revision 7 behauptete
-hier, `docs/ROADMAP.md` sei bereits vollstaendig aktuell und beduerfe
-keiner Aenderung. Das war unvollstaendig: Revision 7 pruefte nur Zeile
-32-33 (Abhaengigkeits-/Ownerentscheidungstext, dort tatsaechlich bereits
-korrekt formuliert), uebersah aber die Statuszeile `docs/ROADMAP.md:13`,
-die zu diesem Zeitpunkt weiterhin `Revision 5 in Arbeit` zeigte, obwohl
-Revision 7 selbst bereits der aktuelle Stand war – ein Planabschnitt darf
-nicht behaupten, eine Datei sei aktuell, wenn eine ihrer Statuszeilen eine
-veraltete Revisionsnummer nennt (Auftrag, woertlich).
+**Fortlaufende Korrektur (Auftragspunkt 4 aus Revision 8, Revision 9
+Punkt 4 des vorliegenden Auftrags):** Revision 8 korrigierte
+`docs/ROADMAP.md:13` bereits von `Revision 5` auf `Revision 8 in Arbeit,
+Freigabe steht aus` und `docs/ROADMAP.md:3` auf ihr eigenes Commit-Datum.
+Da diese Revision 9 den Revision-8-Plan-Commit ersetzt, ist Zeile 13
+erneut minimal zu aktualisieren.
 
 **Aenderung in diesem Commit (durchgefuehrt, nicht nur geplant):**
-`docs/ROADMAP.md:13` wird von `Revision 5 in Arbeit, Freigabe steht aus`
-auf `Revision 8 in Arbeit, Freigabe steht aus` korrigiert;
+`docs/ROADMAP.md:13` wird von `Revision 8 in Arbeit, Freigabe steht aus`
+auf `Revision 9 in Arbeit, Freigabe steht aus` korrigiert;
 `docs/ROADMAP.md:3` (`Stand:`) wird auf das Datum dieses Commits
 aktualisiert. Inhaltlich unveraendert bleiben: #18/PR #102 als aktuelle
 Arbeit (Prioritaet 1); das Ressourcen-Gate aus PR #103 ueber #29/
@@ -2551,15 +2927,15 @@ bestehenden `fermentation_app`-Modulen ab (ADR-013 eingehalten). Kein neuer
 | # | Commit | Inhalt |
 |---|---|---|
 | 1 | `feat(process-state-machine): RecoveryReentryRequired-/RecoveryEndedByExpiredWait-Topologie, PriorBootPhaseElapsed-Parameter, elapsedWithPrior, completeHoldDuration-Extraktion (von decideCoolHolding wiederverwendet)` | 5.6-5.11, 5.17 |
-| 2 | `feat(persistence): Schema 3 – PendingRecoveryAnchor, recoveryBootAnchorMonotonicMillis, RunProgressState, RecoveryEpisodeEvidence, NominalRecoveryAdjustmentState, TaggedPriorBootPhaseElapsed, recoveryEpisodeRevision, validStateFor-Erweiterung, Schema-Bump auf 3` | 5.12, 5.14, 5.20, 5.21, 5.22, 5.23, 5.28; Migrationstests |
-| 3 | `feat(recovery): computeRecoveryOutageBounds, computeRecoveredPhaseElapsed, evaluateRecoveryTimeVerdict, deriveUtcAtRecoveryBootAnchor, deriveRecoveryConfidence` | `run_recovery_time.hpp/.cpp` (5.2-5.5, 5.12, 5.13) |
+| 2 | `feat(persistence): Schema 3 – PendingRecoveryAnchor (inkl. knownSecondsSinceOriginalCheckpoint fuer Carry-Forward-Ketten), recoveryBootAnchorMonotonicMillis, RunProgressState, RecoveryEpisodeEvidence, NominalRecoveryAdjustmentState, TaggedPriorBootPhaseElapsed, recoveryEpisodeRevision, validStateFor-Erweiterung, Schema-Bump auf 3` | 5.12, 5.14, 5.20, 5.21, 5.22, 5.23, 5.28; Migrationstests |
+| 3 | `feat(recovery): computeRecoveryOutageBounds, computeRecoveredPhaseElapsed, evaluateRecoveryTimeVerdict, deriveUtcAtRecoveryBootAnchor, deriveRecoveryConfidence, deriveEffectiveAnchorTimeBasis` | `run_recovery_time.hpp/.cpp` (5.2-5.5, 5.12, 5.13) |
 | 4 | `feat(sensor-selection): reale Restart-Reaktivierung` | Gate A / 5.26 |
 | 5 | `feat(persistence-coordinator): writeSnapshotCore mit explizitem Rollbackzustand, Fallback-Override-Parameter, FallbackRecoveryPending-Zustand, RunPersistenceMutationKind::Recovery, Signaturerweiterung der vier Checkpoint-Schreibpfade um liveSensorEvidence; bestehenden FallbackRecovered-state()-Test (`test_run_persistence_coordinator.cpp:1454-1456`) und `readMutationKind`-Test auf den neuen Wert aktualisiert` | 5.16, 5.18, 5.19, 5.20 |
-| 6 | `feat(persistence-coordinator): activateLoadedRun (Hop 1 + bedingt Hop 2), applyLiveRecoveryEvidence, Episode-Refresh-Pfad, bedingte Anker-Loeschung ueber recoveryTimeResolvedAtResume` | 5.8-5.10, 5.12, 5.15, 5.20 |
-| 7 | `feat(persistence-coordinator): activateFallbackRecoveredRun, Slot-/Fallback-Override, Slot-Distinctness-Guard` | 5.18 |
+| 6 | `feat(persistence-coordinator): activateLoadedRun (Hop 1 + bedingt Hop 2, frisch/Carry-Forward-Ankerkonstruktion), applyLiveRecoveryEvidence, Episode-Refresh-Pfad, bedingte Anker-Loeschung ueber recoveryTimeResolvedAtResume` | 5.8-5.10, 5.12, 5.15, 5.20 |
+| 7 | `feat(persistence-coordinator): activateFallbackRecoveredRun (identische frisch/Carry-Forward-Fallunterscheidung wie activateLoadedRun), Slot-/Fallback-Override, Slot-Distinctness-Guard` | 5.8, 5.18 |
 | 8 | `feat(persistence-coordinator): resolveRecoveryOutcome (ResolveRecoveryUncertaintyRequest, phasenuebergreifend WaitingForProduct/Fermenting/CoolHolding, liveSensorEvidence-Parameter fuer Gate-A-Kopplung, echter Resume fuer WaitingForProduct+AssumeStillValid, Bounds-Gate fuer AssumeThresholdCrossed), Completed-Sonderpfad` | 5.17, 5.24 |
 | 9 | `feat(run-commands): ApplyRecoveryTimeCorrection (kumulativ, wirksam, gemeinsamer Bounds-Grundsatz mit resolveRecoveryOutcome), AdjustRun-Zeitfaltung` | 5.22 |
-| 10 | `feat(recovery): RunRecoveryCoordinator (activate, reevaluateRecoveryTime – Verdicts UND, neu, Zeit-Nachtragskorrektur fuer bereits resumte Laeufe via RunPersistenceMutationKind::Recovery)` | 5.12, 5.17, 5.22, 5.27 |
+| 10 | `feat(recovery): RunRecoveryCoordinator (activate, reevaluateRecoveryTime – Verdicts UND, neu ab Revision 8, Zeit-Nachtragskorrektur fuer bereits resumte Laeufe ueber deriveEffectiveAnchorTimeBasis via RunPersistenceMutationKind::Recovery)` | 5.12, 5.17, 5.22, 5.27 |
 | 11 | `docs: Anzeigevertrag (getrennte Ausweisung observedRunSeconds/kumulativer nominaler Korrektur, LegacyUnknown-Anzeige, RecoveryConfidence), Ressourcenbudget` | Abschnitt 10 |
 
 `docs/ROADMAP.md` (Statuszeile, Stand-Datum) wird **nicht** ueber diese
@@ -2606,7 +2982,13 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
    `accumulatedBeforeEpisode` (Codec-Roundtrip-Test: bei Hop 1 mit sowohl
    `alt.lowerBoundSeconds` als auch `alt.upperBoundSeconds` bekannt
    gesetzt, ueber Persistenz-Schreiben und -Lesen sowie einen zweiten
-   Reboot hinweg fuer **beide** Felder unveraendert nachweisen);
+   Reboot hinweg fuer **beide** Felder unveraendert nachweisen) **und**
+   `knownSecondsSinceOriginalCheckpoint` (Codec-Roundtrip-Test: nach
+   mindestens einem Carry-Forward auf einen von `0` verschiedenen Wert
+   gesetzt, ueber Persistenz-Schreiben und -Lesen sowie einen weiteren
+   Reboot hinweg unveraendert nachweisen – ein Test mit `0` koennte eine
+   fehlende Codierung dieses Feldes nicht von einem frischen Anker
+   unterscheiden);
    `utcNow == nullopt` und negative `*utcNow` sowie Integer-Grenzwerte fuer
    `deriveUtcAtRecoveryBootAnchor` (5.12); spaetere UTC-Reevaluation
    verwendet nicht den Hop-1-/Episode-Refresh-Commit als Ausfallanker.
@@ -2618,12 +3000,36 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
     Obergrenze nach, loescht danach den Anker, committet als fuenften
     `RunPersistenceMutationKind::Recovery`-Ausloeser; ein
     `reevaluateRecoveryTime`-Aufruf ohne Verbesserung committet nichts;
-    weiterer Reboot waehrend noch offener Zeitbewertung durchlaeuft einen
-    frischen Hop 1 (nicht Episode-Refresh), akkumulierte Obergrenze bleibt
-    dauerhaft `nullopt`, wenn die vorige Episode unaufgeloest ueberschrieben
-    wird; `decideFermenting`/`decideCoolHolding`/`decideWaitingForProduct`
+    `decideFermenting`/`decideCoolHolding`/`decideWaitingForProduct`
     liefern unabhaengig von `pendingRecoveryAnchor.has_value()` identische
-    Ergebnisse (kein erneutes Aktor-Blocking).
+    Ergebnisse (kein erneutes Aktor-Blocking). **Weiterer Reboot waehrend
+    noch offener Zeitbewertung – Carry-Forward statt Verlust (5.12,
+    Korrektur gegenueber Revision 8):** durchlaeuft einen frischen Hop 1
+    (nicht Episode-Refresh), der `loadedRecord.snapshot.pendingRecoveryAnchor.has_value()`
+    erkennt und den Anker fortsetzt statt ihn zu ersetzen
+    (`originalCheckpointUtc`/`knownPhaseSecondsAtOriginalCheckpoint`/
+    `accumulatedBeforeEpisode` byte-identisch, `knownSecondsSinceOriginalCheckpoint`
+    erhoeht); ein urspruenglich bekanntes `originalCheckpointUtc` bleibt
+    ueber diesen zweiten Ausfall hinweg aufloesbar, sobald NTP spaeter
+    verfuegbar wird; dasselbe fuer zeitbegrenztes `CoolHolding`; **drei
+    aufeinanderfolgende Ausfaelle** vor jeder NTP-Verfuegbarkeit verlieren
+    die Aufloesbarkeit ebenfalls nicht; explizite Summenpruefung gegen
+    doppeltes Zaehlen (`priorBootPhaseElapsed->elapsed.lowerBoundSeconds ==
+    accumulatedBeforeEpisode.lowerBoundSeconds + N1 + N2 + N3` fuer eine
+    Drei-Episoden-Kette mit Alt-Boot-lokalen Beitraegen `N1`/`N2`/`N3`);
+    ein zwischenzeitlich tatsaechlich geschriebener Checkpoint zwischen
+    zwei Ausfaellen erhoeht `knownSecondsSinceOriginalCheckpoint` und
+    zaehlt nicht als Ausfallzeit; bei gesetztem `maxCheckpointGapSeconds`
+    (5.13-Testaufbau) bleibt `outageSecondsLowerBound` fuer eine
+    carry-forwarded Kette unbedingt `0` (Negativtest gegen mehrfach
+    angewandte Kontrollpunktabstands-Kompensation); ein echter
+    Phasenwechsel vor Zeitaufloesung loescht Anker und
+    `priorBootPhaseElapsed` atomar, ohne bereits zuvor gesicherte
+    `observedRunSeconds`/`priorBootPhaseElapsed`-Werte rueckwirkend zu
+    veraendern; war `originalCheckpointUtc` bereits vor der gesamten Kette
+    unbekannt, bleibt die Kette unabhaengig von Carry-Forward-Reboots
+    unaufloesbar (Abgrenzung); `activateFallbackRecoveredRun` konstruiert
+    den Carry-Forward-Fall identisch zu `activateLoadedRun`.
 11. Reboot waehrend bereits persistiertem `RecoveryEvaluation`:
     Episode-Refresh statt Hop 1, `recoveryEpisodeRevision` erhoeht sich,
     `nominalRecoveryAdjustment` bleibt unveraendert, beide Aufloesungswege
@@ -2674,10 +3080,11 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
     ohne Resume dazwischen (Unter- und Obergrenze); Akkumulation ueber zwei
     Recovery-Episoden **mit** zwischenzeitlichem erfolgreichem Resume,
     sowohl mit bereits geloeschtem als auch mit noch offenem Anker der
-    ersten Episode; eine Episode ohne bekannte Obergrenze macht die
-    akkumulierte Obergrenze `nullopt` (dauerhaft, falls ihr Anker vor
-    Aufloesung ueberschrieben wird); Tag-Mismatch ist strukturell
-    ungueltig.
+    ersten Episode (letzterer Fall: Carry-Forward, 5.12); eine Episode
+    ohne bekannte Obergrenze macht die akkumulierte Obergrenze `nullopt`
+    (nur dauerhaft, wenn niemals vor Beginn der Kette ein UTC-Anker bekannt
+    war – ein carry-forwarded, urspruenglich bekannter Anker bleibt
+    aufloesbar, 5.12); Tag-Mismatch ist strukturell ungueltig.
 19. Benutzerpfad Fermenting/CoolHolding-Grenzueberschneidung (5.17):
     Hop 2/Resume erfolgt fuer beide Phasen unveraendert bei `Uncertain`
     (kein Hop-1-only); `resolveRecoveryOutcome`s Vorbedingung fuer diese
@@ -2725,8 +3132,8 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
 26. Schema-1/2/3-Current/Fallback-Matrix vollstaendig (Regression);
     `knownRunPersistenceSchema` akzeptiert `{1,2,3}`.
 27. Alle bestehenden #20/#21-Sensor-/Sicherheitsregressionen bleiben gruen.
-28. `git diff --check` fuer alle geaenderten Dateien (Plan **und**
-    `docs/ROADMAP.md`).
+28. `git diff --check` **ungescoped** (bare, ohne Pfadangabe) fuer alle
+    geaenderten Dateien (Plan **und** `docs/ROADMAP.md`).
 
 ## 9. Safety-/Security-/Recovery-/Hardwaregrenzen
 
@@ -2749,12 +3156,17 @@ jeder andere Resume.
 
 ## 10. Ressourcen-/Betriebsbudget
 
-Schema-3-Zuwachs gegenueber Schema 2: `PendingRecoveryAnchor` (~60-70 Byte,
-optional, waehrend offener Episode **oder** – neu in dieser Revision –
-waehrend einer noch offenen Recovery-Zeitbewertung eines bereits resumten
-Laufs belegt, s. 5.12; das neue Feld `accumulatedBeforeEpisode`
-(`PriorBootPhaseElapsed`, uint32 + optional uint32, ~9 Byte) vergroessert
-das Struct-Layout gegenueber Revision 7 um diesen Betrag),
+Schema-3-Zuwachs gegenueber Schema 2: `PendingRecoveryAnchor` (~68-78 Byte,
+optional, waehrend offener Episode **oder** – seit Revision 8 – waehrend
+einer noch offenen Recovery-Zeitbewertung eines bereits resumten Laufs
+belegt, s. 5.12; das Feld `accumulatedBeforeEpisode`
+(`PriorBootPhaseElapsed`, uint32 + optional uint32, ~9 Byte, seit
+Revision 8) sowie das **neue** Feld `knownSecondsSinceOriginalCheckpoint`
+(`std::uint64_t`, 8 Byte, neu in dieser Revision fuer Carry-Forward-Ketten,
+5.12) vergroessern das Struct-Layout gegenueber Revision 7 um diese
+Betraege; struct-intern kein zusaetzlicher Alignment-Zuschlag ueber die
+uebliche 8-Byte-Ausrichtung von `std::uint64_t`/`std::optional<std::int64_t>`
+hinaus),
 `recoveryBootAnchorMonotonicMillis`
 (9 Byte, optional), `RunProgressState` (5 Byte inkl. Basis-Tag),
 `RecoveryTemperatureEvidence.lastKnown` (~30 Byte), `RecoveryEpisodeEvidence`
@@ -2798,7 +3210,16 @@ unabhaengig davon aufrufbar – keine zweite Sensorpipeline.
 `recoveryTimeResolvedAtResume` (5.12) ist eine einzige, kleine
 Praedikatsfunktion, an jeder Resume-Stelle (Hop 2 automatisch,
 `resolveRecoveryOutcome` + `AssumeStillValid`) identisch verwendet, statt
-eines an jeder Stelle erneut zu treffenden Sonderfalls. Die
+eines an jeder Stelle erneut zu treffenden Sonderfalls.
+`deriveEffectiveAnchorTimeBasis` (5.12, neu in dieser Revision) ist eine
+einzige, reine Ableitung, sowohl von Hop 1s eigener Verdikt-/Bounds-Auswertung
+als auch von `reevaluateRecoveryTime` identisch verwendet – ohne sie
+muesste die Carry-Forward-Verschiebung (`originalCheckpointUtc`/
+`knownPhaseSecondsAtOriginalCheckpoint` gegen `knownSecondsSinceOriginalCheckpoint`)
+an beiden Stellen getrennt und potenziell abweichend implementiert werden.
+Die frisch/Carry-Forward-Fallunterscheidung selbst ist identisch fuer
+`activateLoadedRun` und `activateFallbackRecoveredRun` spezifiziert (5.8),
+keine zweite, abweichende Ankerkonstruktionsregel je Aktivierungspfad. Die
 Gate-A-Kopplung (5.10/5.26) wird fuer den neuen `AssumeStillValid`-Resume
 wiederverwendet, statt eine zweite Sensorpruefung zu erfinden. Der
 Bounds-Grundsatz fuer eine bewiesene, endliche Obergrenze (5.17/5.22) ist
@@ -2817,10 +3238,10 @@ gelesen statt zweimal getrennt implementiert.
   Punkte ergaenzt, insbesondere die getrennte, kumulative Ausweisung von
   `observedRunSeconds` und der nominalen Ausfallzeitkorrektur (5.22), die
   ehrliche Legacy-Historie (5.21) und den Konfidenzvertrag (5.5).
-- `git diff --check`: nach Commit **fuer alle geaenderten Dateien** (Plan
-  **und** `docs/ROADMAP.md`) ausgefuehrt und im SESSION-HANDOVER-Kommentar
-  mit dem tatsaechlichen Befehlsergebnis dokumentiert (nicht nur als
-  geplanter Schritt).
+- `git diff --check`: nach Commit **ungescoped (bare), fuer alle
+  geaenderten Dateien** (Plan **und** `docs/ROADMAP.md`) ausgefuehrt und im
+  SESSION-HANDOVER-Kommentar mit dem tatsaechlichen Befehlsergebnis
+  dokumentiert (nicht nur als geplanter Schritt).
 - **Remote-Verifikation (Pflicht):** nach dem Push wird
   `origin/plan/issue-18-restart-weighted-progress` per frischem `git fetch`
   gelesen und mit dem lokalen `HEAD` sowie mit `gh api
@@ -2838,9 +3259,9 @@ gelesen statt zweimal getrennt implementiert.
 
 ## 14. Stop-Bedingung
 
-Revision 8 ist ein vollstaendiger, eigenstaendiger Plan. Nach Commit dieser
-Datei **und** `docs/ROADMAP.md`: **anhalten**, `git diff --check` fuer
-beide geaenderten Dateien ausfuehren, `git push`, Remote-SHA verifizieren
-(Abschnitt 12), PR-Beschreibung und SESSION HANDOVER aktualisieren. Keine
-Implementierung. Kein `Ready for review`. Keine Remote-CI. Kein Merge.
-Keine Branchloeschung.
+Revision 9 ist ein vollstaendiger, eigenstaendiger Plan. Nach Commit dieser
+Datei **und** `docs/ROADMAP.md`: **anhalten**, `git diff --check`
+**ungescoped (bare)** fuer beide geaenderten Dateien ausfuehren, `git push`,
+Remote-SHA verifizieren (Abschnitt 12), PR-Beschreibung und SESSION
+HANDOVER aktualisieren. Keine Implementierung. Kein `Ready for review`.
+Keine Remote-CI. Kein Merge. Keine Branchloeschung.
