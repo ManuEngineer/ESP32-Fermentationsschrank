@@ -127,6 +127,8 @@ enum class TransitionReason : std::uint8_t {
     ServiceModeExited,
     RecoveryResumed,
     RecoveryRejected,
+    RecoveryReentryRequired,
+    RecoveryEndedByExpiredWait,
 };
 
 enum class ProcessMessage : std::uint8_t {
@@ -153,13 +155,50 @@ struct TransitionDecision {
     }
 };
 
+// Bereits bekannter Vor-Boot-Anteil einer Phase (Recovery), boot-unabhaengig
+// und additiv gefuehrt statt durch Zurueckrechnen des Boot-Zeitpunkts.
+struct PriorBootPhaseElapsed {
+    std::uint32_t lowerBoundSeconds{0U};
+    std::optional<std::uint32_t> upperBoundSeconds;
+};
+
+// now >= startedAt ist innerhalb desselben Boots durch propose()/
+// Hop-1-Konstruktion garantiert - keine Unterlaufgefahr, da hier
+// ausschliesslich addiert, nie von now subtrahiert wird.
+[[nodiscard]] inline bool elapsedWithPrior(std::uint64_t now,
+                                           std::uint64_t startedAt,
+                                           std::uint32_t durationMinutes,
+                                           std::uint32_t priorSeconds) {
+    return (now - startedAt) / 1000U + priorSeconds >=
+           static_cast<std::uint64_t>(durationMinutes) * 60U;
+}
+
 [[nodiscard]] TransitionDecision decideProcessTransition(
     const ProcessRuntimeState& current, const ProcessRunSnapshot* runSnapshot,
     const ProcessSignals& signals, const TransitionRequest& request,
-    std::uint64_t monotonicMillis);
+    std::uint64_t monotonicMillis,
+    const PriorBootPhaseElapsed& priorElapsed = {});
 
 [[nodiscard]] bool applyProcessTransition(
     ProcessRuntimeState& current, const TransitionDecision& decision,
     const ProcessRunSnapshot* runSnapshot);
+
+// Oeffentlich fuer Recovery-Orchestrierung ausserhalb dieser
+// Uebersetzungseinheit
+// (RunPersistenceCoordinator::activateLoadedRun/activateFallbackRecoveredRun,
+// RunPersistenceCoordinator::resolveRecoveryOutcome): konstruiert dieselbe
+// Transitionsform wie decideProcessTransition, ohne den vollen
+// Entscheidungspfad zu durchlaufen.
+[[nodiscard]] TransitionDecision propose(const ProcessRuntimeState& current,
+                                         ProcessState nextState,
+                                         TransitionReason reason,
+                                         std::uint64_t monotonicMillis);
+
+[[nodiscard]] TransitionDecision completeTimedRun(
+    const ProcessRuntimeState& current, const ProcessRunSnapshot& snapshot,
+    std::uint64_t monotonicMillis);
+
+[[nodiscard]] TransitionDecision completeHoldDuration(
+    const ProcessRuntimeState& current, std::uint64_t monotonicMillis);
 
 }  // namespace fermentation

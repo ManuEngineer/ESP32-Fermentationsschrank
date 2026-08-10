@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
 
 #include "process_state_machine.hpp"
 #include "standard_program_catalog.hpp"
@@ -14,6 +15,7 @@ using fermentation::ActiveRun;
 using fermentation::CompletionMode;
 using fermentation::DecisionStatus;
 using fermentation::FactoryProgramCatalog;
+using fermentation::PriorBootPhaseElapsed;
 using fermentation::ProcessEvent;
 using fermentation::ProcessKind;
 using fermentation::ProcessMessage;
@@ -759,6 +761,255 @@ void test_recovery_rejects_state_and_snapshot_mismatches() {
                           static_cast<int>(incompatibleCurrent.status));
 }
 
+void test_recovery_reentry_and_tombstone_topology_use_exported_propose() {
+    const auto snapshot = makeTimedSnapshot(false);
+    ProcessRuntimeState fermenting;
+    fermenting.state = ProcessState::Fermenting;
+    fermenting.stateEnteredAtMillis = 5000U;
+    fermenting.transitionSequence = 3U;
+
+    const auto hop1 =
+        fermentation::propose(fermenting, ProcessState::RecoveryEvaluation,
+                              TransitionReason::RecoveryReentryRequired, 5000U);
+    TEST_ASSERT_TRUE(hop1.proposed());
+    auto candidate = fermenting;
+    TEST_ASSERT_TRUE(
+        fermentation::applyProcessTransition(candidate, hop1, &snapshot));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::RecoveryEvaluation),
+                          static_cast<int>(candidate.state));
+
+    // Boot benutzt keinen Run-Snapshot: Hop-1-Reentry ist dort topologisch
+    // unzulaessig, auch wenn propose() selbst keine Topologie prueft.
+    ProcessRuntimeState boot;
+    boot.state = ProcessState::Boot;
+    const auto invalidHop1 =
+        fermentation::propose(boot, ProcessState::RecoveryEvaluation,
+                              TransitionReason::RecoveryReentryRequired, 0U);
+    auto bootCandidate = boot;
+    TEST_ASSERT_FALSE(fermentation::applyProcessTransition(
+        bootCandidate, invalidHop1, nullptr));
+
+    ProcessRuntimeState recoveryEval;
+    recoveryEval.state = ProcessState::RecoveryEvaluation;
+    recoveryEval.transitionSequence = 1U;
+    const auto tombstone = fermentation::propose(
+        recoveryEval, ProcessState::Standby,
+        TransitionReason::RecoveryEndedByExpiredWait, 9000U);
+    TEST_ASSERT_TRUE(tombstone.proposed());
+    auto tombstoneCandidate = recoveryEval;
+    TEST_ASSERT_TRUE(fermentation::applyProcessTransition(tombstoneCandidate,
+                                                          tombstone, nullptr));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                          static_cast<int>(tombstoneCandidate.state));
+
+    // Tombstone-Reason ausserhalb RecoveryEvaluation ist topologisch
+    // unzulaessig.
+    auto standby = standbyState();
+    const auto invalidTombstone =
+        fermentation::propose(standby, ProcessState::Standby,
+                              TransitionReason::RecoveryEndedByExpiredWait, 0U);
+    auto standbyCandidate = standby;
+    TEST_ASSERT_FALSE(fermentation::applyProcessTransition(
+        standbyCandidate, invalidTombstone, nullptr));
+}
+
+void test_prior_boot_phase_elapsed_completes_fermentation_without_rebasing_underflow() {
+    VirtualTimeSource time;
+    ProcessRuntimeState state;
+    state.state = ProcessState::Fermenting;
+    state.stateEnteredAtMillis = 0U;
+    const auto snapshot = makeTimedSnapshot(false);  // 2 Minuten (120s) Grenze
+
+    time.advanceMonotonicMillis(5000U);  // dieser Boot laeuft erst 5 Sekunden
+
+    // Ohne Vor-Boot-Anteil bleibt die Phase innerhalb der Grenze.
+    const auto withoutPrior = fermentation::decideProcessTransition(
+        state, &snapshot, {}, {}, time.monotonicMillis());
+    TEST_ASSERT_FALSE(withoutPrior.proposed());
+
+    // Ein bereits bekannter Vor-Boot-Anteil (200s), der allein schon ueber der
+    // Grenze liegt, wird additiv beruecksichtigt - ohne dass `now - startedAt`
+    // dafuer unterlaufen muesste (now ist hier deutlich kleiner als die
+    // bereits bekannte Phasenzeit).
+    PriorBootPhaseElapsed prior;
+    prior.lowerBoundSeconds = 200U;
+    const auto withPrior = fermentation::decideProcessTransition(
+        state, &snapshot, {}, {}, time.monotonicMillis(), prior);
+    TEST_ASSERT_TRUE(withPrior.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::FermentationCompleted),
+        static_cast<int>(withPrior.reason));
+}
+
+void test_recovery_resume_waiting_for_product_honors_prior_boot_phase_elapsed() {
+    ProcessRuntimeState recoveryEval;
+    recoveryEval.state = ProcessState::RecoveryEvaluation;
+
+    ProcessRuntimeState waiting;
+    waiting.state = ProcessState::WaitingForProduct;
+    waiting.stateEnteredAtMillis = 0U;
+    const auto preheat = makeTimedSnapshot(true);  // 3 Minuten (180s) Grenze
+
+    TransitionRequest request;
+    request.event = ProcessEvent::RecoveryResume;
+    request.recoveredState = waiting;
+
+    PriorBootPhaseElapsed exceeded;
+    exceeded.lowerBoundSeconds =
+        200U;  // > 180s, obwohl dieser Boot bei 0ms steht
+    const auto rejectedByPrior = fermentation::decideProcessTransition(
+        recoveryEval, &preheat, {}, request, 0U, exceeded);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(DecisionStatus::Rejected),
+                          static_cast<int>(rejectedByPrior.status));
+
+    PriorBootPhaseElapsed withinLimit;
+    withinLimit.lowerBoundSeconds = 100U;
+    const auto resumed = fermentation::decideProcessTransition(
+        recoveryEval, &preheat, {}, request, 0U, withinLimit);
+    TEST_ASSERT_TRUE(resumed.proposed());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::WaitingForProduct),
+                          static_cast<int>(resumed.after.state));
+}
+
+void test_complete_hold_duration_extraction_matches_automatic_cool_holding_completion() {
+    VirtualTimeSource time;
+    ProcessRuntimeState state;
+    state.state = ProcessState::CoolHolding;
+    state.stateEnteredAtMillis = 0U;
+    const auto snapshot =
+        makeTimedSnapshot(false, CompletionMode::CoolAndHoldForDuration);
+    time.advanceMonotonicMillis(2U * kMinuteMillis);
+
+    const auto automatic = fermentation::decideProcessTransition(
+        state, &snapshot, {}, {}, time.monotonicMillis());
+    const auto direct =
+        fermentation::completeHoldDuration(state, time.monotonicMillis());
+
+    TEST_ASSERT_TRUE(automatic.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::HoldDurationCompleted),
+        static_cast<int>(automatic.reason));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(direct.reason),
+                          static_cast<int>(automatic.reason));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(direct.after.state),
+                          static_cast<int>(automatic.after.state));
+    TEST_ASSERT_EQUAL_UINT32(direct.messageCount, automatic.messageCount);
+}
+
+void test_propose_rejects_transition_sequence_overflow() {
+    ProcessRuntimeState state;
+    state.state = ProcessState::Fermenting;
+    state.transitionSequence = std::numeric_limits<std::uint32_t>::max();
+
+    const auto decision =
+        fermentation::propose(state, ProcessState::Cooling,
+                              TransitionReason::FermentationCompleted, 1000U);
+    TEST_ASSERT_FALSE(decision.proposed());
+
+    // completeTimedRun()/completeHoldDuration() rufen propose() intern auf
+    // und erben denselben Schutz, ohne ihn erneut zu implementieren.
+    const auto snapshot = makeTimedSnapshot(false);
+    TEST_ASSERT_FALSE(
+        fermentation::completeTimedRun(state, snapshot, 1000U).proposed());
+    TEST_ASSERT_FALSE(
+        fermentation::completeHoldDuration(state, 1000U).proposed());
+}
+
+void test_apply_process_transition_rejects_manually_constructed_sequence_wrap() {
+    ProcessRuntimeState before;
+    before.state = ProcessState::RecoveryEvaluation;
+    before.transitionSequence = std::numeric_limits<std::uint32_t>::max();
+
+    // Ein manuell konstruierter Kandidat, dessen after.transitionSequence
+    // bereits auf 0 "gewrapped" ist - genau der Fall, in dem
+    // `after != before + 1U` denselben Ueberlauf durchlaeuft und den Wrap
+    // faelschlich als gueltigen Nachfolger akzeptieren wuerde, wenn
+    // applyProcessTransition() before.transitionSequence nicht zusaetzlich
+    // explizit gegen UINT32_MAX prueft.
+    TransitionDecision forgedWrap;
+    forgedWrap.status = DecisionStatus::Proposed;
+    forgedWrap.before = before;
+    forgedWrap.after = before;
+    forgedWrap.after.state = ProcessState::Standby;
+    forgedWrap.after.stateEnteredAtMillis = 1000U;
+    forgedWrap.after.transitionSequence = 0U;
+    forgedWrap.reason = TransitionReason::RecoveryEndedByExpiredWait;
+    forgedWrap.monotonicMillis = 1000U;
+
+    auto candidate = before;
+    TEST_ASSERT_FALSE(
+        fermentation::applyProcessTransition(candidate, forgedWrap, nullptr));
+    TEST_ASSERT_TRUE(fermentation::equalProcessRuntimeState(candidate, before));
+}
+
+void test_recovery_reentry_at_ordinary_sequence_is_unaffected_by_overflow_guard() {
+    const auto snapshot = makeTimedSnapshot(false);
+    ProcessRuntimeState fermenting;
+    fermenting.state = ProcessState::Fermenting;
+    fermenting.transitionSequence = 41U;
+
+    const auto hop1 =
+        fermentation::propose(fermenting, ProcessState::RecoveryEvaluation,
+                              TransitionReason::RecoveryReentryRequired, 1000U);
+    TEST_ASSERT_TRUE(hop1.proposed());
+    auto candidate = fermenting;
+    TEST_ASSERT_TRUE(
+        fermentation::applyProcessTransition(candidate, hop1, &snapshot));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::RecoveryEvaluation),
+                          static_cast<int>(candidate.state));
+    TEST_ASSERT_EQUAL_UINT32(42U, candidate.transitionSequence);
+}
+
+void test_prior_boot_phase_elapsed_waiting_for_product_boundary() {
+    ProcessRuntimeState state;
+    state.state = ProcessState::WaitingForProduct;
+    state.stateEnteredAtMillis = 0U;
+    const auto snapshot = makeTimedSnapshot(true);  // 3 Minuten (180s) Grenze
+
+    PriorBootPhaseElapsed justUnder;
+    justUnder.lowerBoundSeconds = 179U;
+    TEST_ASSERT_FALSE(fermentation::decideProcessTransition(
+                          state, &snapshot, {}, {}, 0U, justUnder)
+                          .proposed());
+
+    PriorBootPhaseElapsed atLimit;
+    atLimit.lowerBoundSeconds = 180U;
+    const auto atLimitDecision = fermentation::decideProcessTransition(
+        state, &snapshot, {}, {}, 0U, atLimit);
+    TEST_ASSERT_TRUE(atLimitDecision.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::ProductWaitExpired),
+        static_cast<int>(atLimitDecision.reason));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                          static_cast<int>(atLimitDecision.after.state));
+}
+
+void test_prior_boot_phase_elapsed_cool_holding_boundary() {
+    ProcessRuntimeState state;
+    state.state = ProcessState::CoolHolding;
+    state.stateEnteredAtMillis = 0U;
+    const auto snapshot =
+        makeTimedSnapshot(false, CompletionMode::CoolAndHoldForDuration);
+    // 2 Minuten (120s) Grenze.
+
+    PriorBootPhaseElapsed justUnder;
+    justUnder.lowerBoundSeconds = 119U;
+    TEST_ASSERT_FALSE(fermentation::decideProcessTransition(
+                          state, &snapshot, {}, {}, 0U, justUnder)
+                          .proposed());
+
+    PriorBootPhaseElapsed atLimit;
+    atLimit.lowerBoundSeconds = 120U;
+    const auto atLimitDecision = fermentation::decideProcessTransition(
+        state, &snapshot, {}, {}, 0U, atLimit);
+    TEST_ASSERT_TRUE(atLimitDecision.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::HoldDurationCompleted),
+        static_cast<int>(atLimitDecision.reason));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
+                          static_cast<int>(atLimitDecision.after.state));
+}
+
 void test_backward_time_and_invalid_events_do_not_change_state() {
     VirtualTimeSource time;
     auto state = standbyState();
@@ -806,6 +1057,20 @@ int main() {
     RUN_TEST(test_abort_is_explicit_for_every_active_state);
     RUN_TEST(test_boot_service_recovery_and_completion_topology_is_explicit);
     RUN_TEST(test_recovery_rejects_state_and_snapshot_mismatches);
+    RUN_TEST(test_recovery_reentry_and_tombstone_topology_use_exported_propose);
+    RUN_TEST(
+        test_prior_boot_phase_elapsed_completes_fermentation_without_rebasing_underflow);
+    RUN_TEST(
+        test_recovery_resume_waiting_for_product_honors_prior_boot_phase_elapsed);
+    RUN_TEST(
+        test_complete_hold_duration_extraction_matches_automatic_cool_holding_completion);
+    RUN_TEST(test_propose_rejects_transition_sequence_overflow);
+    RUN_TEST(
+        test_apply_process_transition_rejects_manually_constructed_sequence_wrap);
+    RUN_TEST(
+        test_recovery_reentry_at_ordinary_sequence_is_unaffected_by_overflow_guard);
+    RUN_TEST(test_prior_boot_phase_elapsed_waiting_for_product_boundary);
+    RUN_TEST(test_prior_boot_phase_elapsed_cool_holding_boundary);
     RUN_TEST(test_backward_time_and_invalid_events_do_not_change_state);
     return UNITY_END();
 }
