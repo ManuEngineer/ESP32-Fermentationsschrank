@@ -2,26 +2,28 @@
 
 ## 1. Status
 
-- Revision: **9** (ersetzt Revision 8 vollstaendig; kein Abschnitt dieser
-  Datei verweist auf eine fruehere Revision als weiterhin gueltige Quelle).
+- Revision: **10** (ersetzt Revision 9 vollstaendig; diese Datei ist die
+  einzige normative Planquelle fuer die Umsetzung und setzt keine fruehere
+  Planrevision voraus).
 - Draft-PR: #102 (`plan/issue-18-restart-weighted-progress` -> `main`).
 - Live-Issue: #18.
 - Plan-Basis: `main` = `17ab3f5399a066465298ac6871b965d176a38d32`;
-  Revision-8-Commit = `a6eb06220d24c250356063c8dac1a30ebd943c26` (Remote-HEAD
-  vor dieser Korrektur, laut Auftrag). Branch ist 0 Commits hinter `main`.
-- Anlass: Ownerreview von Revision 8 identifiziert drei Punkte – (1) ein
-  zweiter Ausfall waehrend noch offener Recovery-Zeitbewertung eines bereits
-  resumten Laufs ueberschreibt den Anker vollstaendig und macht die
-  Aufloesbarkeit der ersten Episode **dauerhaft** unmoeglich, obwohl der
-  vorige Auftrag ausdruecklich verlangte, dass genau dieser Fall den
-  Zeitkontext korrekt erhaelt; (2) mehrere Textstellen aus Revision 7
-  behaupten weiterhin unbedingt, der Anker sei nach einem Resume fuer
-  `Fermenting`/`CoolHolding` bereits geloescht bzw. `resolveRecoveryOutcome`
-  koenne davon ausgehen – ein Widerspruch zu Revision 8s eigenem,
-  bedingten Anker-Lebenszyklus; (3) die Testmatrix kodifiziert den
-  Informationsverlust aus (1) als Sollverhalten. Diese Revision loest alle
-  drei und synchronisiert `docs/ROADMAP.md` erneut minimal auf den neuen
-  Revisionsstand.
+  Remote-HEAD vor dieser Korrektur =
+  `0cad66e2cc7e59a0171487ef2ed55e6131e2f2a7`. Branch ist 0 Commits hinter
+  `main`.
+- Anlass: Der bestehende Vertrag fuer eine bestaetigte Restdaueranpassung
+  waehrend `Fermenting` setzt den Timer bereits auf den Kommandozeitpunkt,
+  faltet aber die sicher beobachtete Vor-Anpassungszeit noch nicht vollstaendig
+  und neutralisiert die alten Recovery-Zeitbeitraege fuer den neuen Timer
+  nicht. Revision 10 schliesst deshalb den gesamten Vertrag: die historische
+  `observedRunSeconds`-Zeit wird genau einmal vor der Neusetzung gefaltet;
+  `priorBootPhaseElapsed`, aktive nominale Recoverykorrektur und ein offener
+  Recovery-Anker werden fuer die neue Restdauer-Baseline superseded; reine
+  Zieltemperaturaenderungen behalten ihre ununterbrochene Zeitbasis; neue
+  Stromausfaelle nach der Baseline beginnen wieder mit deren aktuellem
+  `stateEnteredAtMillis`. Die Testmatrix und der atomare Persistenznachweis
+  werden entsprechend erweitert. `docs/ROADMAP.md` wird minimal auf Revision
+  10 synchronisiert.
 - Nach Commit dieser Revision: `git diff --check` **ungescoped** (bare,
   ohne Pfadangabe, s. Auftrag "fuer alle geaenderten Dateien") ausfuehren,
   `git push`, danach frischer `git fetch` und Abgleich `git rev-parse
@@ -33,20 +35,17 @@
 
 ## 2. Live-Status-Pruefung
 
-- `gh issue view 18`: weiterhin offen, Scope/Akzeptanzkriterien unveraendert.
+- Live-Issue #18: weiterhin offen mit Status `PLANNED_SPEC_PENDING`; Scope,
+  Akzeptanzkriterien und Quellen bleiben unveraendert.
 - `gh pr view 102`: Draft, Base `main`.
-- `docs/ROADMAP.md:13` wurde in dieser Session erneut direkt gelesen und
-  zeigt tatsaechlich weiterhin `Revision 8 in Arbeit` (aus der vorigen
-  Korrektur). Diese Revision aktualisiert Zeile 13 auf `Revision 9` sowie
-  Zeile 3 (`Stand:`) auf das Datum dieses Commits (5.29 unten).
-- `docs/tasks/issue-18-restart-weighted-progress-plan.md` (Revision 8,
-  Commit `a6eb062`) wurde vollstaendig gegen den Auftrag der Revision 9
-  geprueft: die drei benannten Fundstellen (5.12 "Reboot waehrend noch
-  offener Zeitbewertung", 5.17s Vorbedingungsbegruendung fuer
-  `Fermenting`/`CoolHolding`, 5.20s `recoveryEvidenceWindowOpen`-Kommentar)
-  wurden direkt im aktuellen Dateiinhalt lokalisiert (Zeilennummern vor
-  dieser Revision: 819-853, 1531-1533, 1918-1920) und bestaetigen den
-  Befund des Auftrags wortgetreu.
+- `docs/ROADMAP.md:13` wurde in dieser Session direkt gelesen und zeigt
+  weiterhin `Revision 9 in Arbeit`. Diese Revision aktualisiert Zeile 13 auf
+  `Revision 10` sowie Zeile 3 (`Stand:`) auf das Datum dieses Commits (5.29
+  unten).
+- Der aktuelle Planstand wurde vollstaendig gegen den neuen Ownerauftrag
+  geprueft. Die bestehende Recovery-/Carry-Forward-Semantik bleibt erhalten;
+  die neue Restdauer-Baseline wird in 5.22, 5.23, 5.12, 5.16, 5.17 und der
+  Testmatrix konsistent als ein atomarer `AdjustRun`-Pfad beschrieben.
 - `lib/fermentation_app/src/run_persistence_contract.hpp:40-43`
   (`RunCheckpointTime{monotonicMillis; std::optional<std::int64_t>
   utcUnixSeconds}`) direkt erneut gelesen: die UTC ist bereits im
@@ -85,7 +84,7 @@
 - **Gate B:** kein neuer allgemeiner Prozesszyklus; kein produktiver
   Aufrufer wird behauptet, der nicht existiert (5.27). Gilt explizit auch
   fuer `applyLiveRecoveryEvidence` (5.20) und `reevaluateRecoveryTime`
-  (5.17, umbenannt gegenueber Revision 7s `reevaluatePendingRecovery`, da
+  (5.17, als `reevaluateRecoveryTime` bewusst schmal benannt, da
   die Funktion ab dieser Revision auch bereits resumte
   `Fermenting`/`CoolHolding`/`WaitingForProduct`-Laeufe auswertet, also
   nicht mehr nur "pending" im Sinn von "noch in `RecoveryEvaluation`"
@@ -127,7 +126,7 @@ Live-Sensor-Update-Schleife (Gate B).
 | Persistenzvertrag: Schema 3 (`PendingRecoveryAnchor`, `RunProgressState`, `RecoveryEpisodeEvidence`, `TaggedPriorBootPhaseElapsed`, `NominalRecoveryAdjustmentState`) | `lib/fermentation_app/src/run_persistence_contract.hpp/.cpp` | erweitert |
 | Codec: Schema-3-Gate, Legacy-Migration, `RunPersistenceMutationKind::Recovery` | `lib/fermentation_app/src/run_persistence_codec.cpp` | erweitert |
 | Coordinator: Low-Level-Schreibkern mit Rollbackzustand, `FallbackRecoveryPending`, `activateLoadedRun`, `activateFallbackRecoveredRun`, `resolveRecoveryOutcome` (Gate-A-gekoppelter Resume fuer `AssumeStillValid`, Bounds-Gate fuer `AssumeThresholdCrossed`), Episode-Refresh | `lib/fermentation_app/src/run_persistence_coordinator.hpp/.cpp` | erweitert |
-| Kommandos: `ApplyRecoveryTimeCorrection` (echtes `persistCommand`, mutiert nur Daten); `completeTimedRun`-Wiederverwendung fuer `resolveRecoveryOutcome` | `lib/fermentation_app/src/run_commands.hpp/.cpp` | erweitert |
+| Kommandos: `ApplyRecoveryTimeCorrection` (echtes `persistCommand`, mutiert nur Daten); `AdjustRun`-Zeitfaltung und manuelle Restdauer-Baseline; `completeTimedRun`-Wiederverwendung fuer `resolveRecoveryOutcome` | `lib/fermentation_app/src/run_commands.hpp/.cpp` | erweitert |
 | Restart-Sensorauswahl (Gate A) | `lib/fermentation_app/src/sensor_selection.hpp/.cpp` | erweitert |
 | Tests | `test/test_run_recovery_time/`, `test/test_run_recovery/`, `test/test_process_state_machine/`, `test/test_run_persistence_coordinator/`, `test/test_run_commands/`, `test/test_sensor_selection/` | neu/erweitert |
 
@@ -411,6 +410,17 @@ um eine bestaetigte nominale Korrektur ergaenzt (5.22) – Herkunft und
 Kombination dort verbindlich festgelegt. Keine Boot-Epochen-Fiktion; keine
 Subtraktion von `now`.
 
+**Manuelle Restdauer-Baseline:** Bei einem bestaetigten `AdjustRun` mit
+tatsaechlich geaendertem `remainingDurationMinutes` waehrend `Fermenting` gilt
+der Kommandozeitpunkt als neuer Timer-Baselinepunkt. Der anschliessende normale
+`elapsedWithPrior`-Aufruf verwendet fuer diese neue Restdauer weder den alten
+`priorBootPhaseElapsed`-Beitrag noch eine alte nominale Korrektur; beide werden
+im selben Kandidaten auf den in 5.22/5.23 beschriebenen neuen Nullstand
+gebracht. `observedRunSeconds` ist eine historische Metrik und wird nicht als
+Timer-Vorlauf verwendet. Eine reine Zieltemperaturaenderung durchlaeuft diese
+Baseline-Regel nicht. Eine kombinierte Ziel- und Restdaueranpassung folgt fuer
+die Zeitbasis der Restdauerregel.
+
 ### 5.7 Vollstaendige phasenbezogene Timertabelle fuer Hop 2
 
 | Phase | `stateEnteredAtMillis` | `targetReachStartedAtMillis` | `targetReachWarningIssued` | `qualificationValidSinceMillis` | boot-unabhaengiger Anteil |
@@ -419,14 +429,16 @@ Subtraktion von `now`.
 | `WaitingForProduct` | `now` | `0` | `false` | n/a | `priorElapsed` (Ober- oder Untergrenze, siehe 5.10) |
 | `ReachingTarget` | `now` | `now` (Timer bewusst neu gestartet – konservativ, verzoegert hoechstens eine Warnung) | `false` | n/a | keiner |
 | `QualifyingTarget` | wird von `decideRecoveryEvent` selbst zu `ReachingTarget` umgeleitet, `stateEnteredAtMillis = now` (bestehende Logik, `process_state_machine.cpp:773-777`) | `now` | `false` | `nullopt` | keiner – beginnt vollstaendig neu |
-| `Fermenting` | `now` | `0` | `false` | n/a | `priorElapsed` (Untergrenze, ggf. + bestaetigte nominale Korrektur, 5.22) + separat `observedRunSeconds` (5.22, Geschaeftsmetrik, getrennt von der reinen Grenzbewertung) |
+| `Fermenting` | `now` | `0` | `false` | n/a | `priorElapsed` (Untergrenze, ggf. + bestaetigte nominale Korrektur, 5.22) + separat `observedRunSeconds` (5.22, Geschaeftsmetrik, getrennt von der reinen Grenzbewertung); nach manueller Restdauer-Baseline sind beide aktiven Vorlaufbeitraege fuer den neuen Timer `0` |
 | `Cooling` | `now` | `0` | `false` | n/a | keiner (kein Dauer-Timer, signalbasiert) |
 | `CoolHolding` | `now` | `0` | `false` | n/a | `priorElapsed` (Untergrenze) |
 | `ManualHolding` | `now` | `0` | `false` | n/a | keiner (kein automatisches Limit) |
 
 Kein Feld wird roh aus dem alten Boot uebernommen; jedes Feld ist entweder
 explizit auf `now`/`0`/`nullopt` gesetzt oder ueber `priorElapsed` separat
-gefuehrt.
+gefuehrt. Der `now`-Wert bei einer manuellen Restdauer-Baseline ist dabei der
+Kommandozeitpunkt, nicht ein Recovery-Bootzeitpunkt; die alte Recovery-Zeitbasis
+wird nicht zusaetzlich in die neue Dauerentscheidung eingerechnet.
 
 ### 5.8 Architekturgrenze: `RunPersistenceCoordinator` vs. `RunRecoveryCoordinator`
 
@@ -535,7 +547,7 @@ konstruiert und `candidate.pendingRecoveryAnchor` gesetzt – **frisch**
 (einmalig) oder **carry-forward** (fortgesetzt), je nachdem, ob der
 geladene Datensatz selbst bereits einen noch offenen
 `pendingRecoveryAnchor` traegt (5.12 legt die genaue Fallunterscheidung
-und Feldkonstruktion fest, Auftragspunkt 1 Revision 9);
+und Feldkonstruktion fest, Auftragspunkt 1);
 `candidate.recoveryBootAnchorMonotonicMillis = monotonicMillis` wird in
 beiden Faellen gesetzt (5.12). Die geordnete Reihenfolge fuer Sensorevidenz
 (`beforeOutage` einfrieren, `lastKnown` aktualisieren, `firstAfterRestart`
@@ -648,7 +660,7 @@ struct PendingRecoveryAnchor {
     std::optional<std::int64_t> originalCheckpointUtc;     // RunPersistenceRawRecord.utcUnixSeconds DES VOR-AUSFALL-DATENSATZES, eingefroren bei Hop 1
     RunCheckpointTrigger originalCheckpointTrigger;        // Trigger desselben Vor-Ausfall-Datensatzes (reine Anzeigeinformation)
     std::uint32_t originalCheckpointIntervalMinutes;       // intervalMinutes desselben Vor-Ausfall-Datensatzes – Soll-Cadence-Anzeige und Eingabe fuer eine kuenftige belastbare Gap-Herleitung (5.13); dient NICHT als harter maximaler Gap
-    PriorBootPhaseElapsed accumulatedBeforeEpisode{};   // 5.23s "alt"-Wert (Default {0U, nullopt}, identisch zu 5.23s eigener Konvention fuer eine fehlende/nicht passende Vor-Tag-Situation). Bedeutung ab dieser Revision praezisiert (Auftragspunkt 1, Korrektur gegenueber Revision 8): EINMALIG beim ERSTEN Hop 1 einer noch offenen Kette aus dem zu diesem Zeitpunkt bereits geladenen candidate.priorBootPhaseElapsed uebernommen (falls Tag passend vorhanden, sonst Default), BEVOR diese Kette ihre erste Episode faltet; bei jedem WEITEREN Carry-Forward-Hop-1 derselben, weiterhin offenen Kette (s. u., "Carry-Forward") byte-identisch unveraendert uebernommen, NICHT erneut aus candidate.priorBootPhaseElapsed neu erfasst (das wuerde bereits diese Kette selbst wieder einlesen und deren eigenen Beitrag doppelt zaehlen). Ohne dieses Feld wuerde eine spaetere reevaluateRecoveryTime-Faltung (s. u.) den vor dieser Kette akkumulierten Stand nicht mehr kennen, da der unmittelbar bei Hop 1 gefaltete candidate.priorBootPhaseElapsed selbst bereits nullopt ist, sobald die Ausfallzeit dieser Episode zum Hop-1-Zeitpunkt unbekannt war.
+    PriorBootPhaseElapsed accumulatedBeforeEpisode{};   // 5.23s "alt"-Wert (Default {0U, nullopt}, identisch zu 5.23s eigener Konvention fuer eine fehlende/nicht passende Vor-Tag-Situation). Bedeutung gemaess Auftragspunkt 1: EINMALIG beim ERSTEN Hop 1 einer noch offenen Kette aus dem zu diesem Zeitpunkt bereits geladenen candidate.priorBootPhaseElapsed uebernommen (falls Tag passend vorhanden, sonst Default), BEVOR diese Kette ihre erste Episode faltet; bei jedem WEITEREN Carry-Forward-Hop-1 derselben, weiterhin offenen Kette (s. u., "Carry-Forward") byte-identisch unveraendert uebernommen, NICHT erneut aus candidate.priorBootPhaseElapsed neu erfasst (das wuerde bereits diese Kette selbst wieder einlesen und deren eigenen Beitrag doppelt zaehlen). Ohne dieses Feld wuerde eine spaetere reevaluateRecoveryTime-Faltung (s. u.) den vor dieser Kette akkumulierten Stand nicht mehr kennen, da der unmittelbar bei Hop 1 gefaltete candidate.priorBootPhaseElapsed selbst bereits nullopt ist, sobald die Ausfallzeit dieser Episode zum Hop-1-Zeitpunkt unbekannt war.
     std::uint64_t knownSecondsSinceOriginalCheckpoint{0U};  // NEU in dieser Revision (Auftragspunkt 1): kumulierte, sicher bekannte eingeschaltete Sekunden zwischen originalCheckpointUtc und dem Beginn der aktuellen, noch offenen Episode. 0 beim ERSTEN Hop 1 einer Kette; bei jedem Carry-Forward-Hop-1 (s. u.) um den Alt-Boot-lokalen Beitrag der soeben beendeten, bereits resumten Episode erhoeht (dieselbe Formel wie knownPhaseSecondsAtOriginalCheckpoint, nur gegen den zuletzt geladenen Datensatz statt gegen den urspruenglichen). originalCheckpointUtc/originalCheckpointTrigger/originalCheckpointIntervalMinutes bleiben dabei bewusst unveraendert (sie beschreiben weiterhin wahrheitsgemaess DEN einen Checkpoint, den sie ausweisen); dieses Feld traegt stattdessen den seither vergangenen, bekannten Anteil separat.
 };
 ```
@@ -696,13 +708,13 @@ checked:**
 ```
 
 **Signatur bewusst auf `std::optional<std::int64_t> utcNow` umgestellt
-(gegenueber Revision 7s rohem `std::int64_t utcNow`):** der einzige
+(gegenueber dem frueheren rohen `std::int64_t utcNow`):** der einzige
 produktive Aufrufkontext, `RunCheckpointTime.utcUnixSeconds`
 (`run_persistence_contract.hpp:42`), ist bereits heute
 `std::optional<std::int64_t>` – "noch keine NTP-Synchronisation seit
 diesem Boot" ist im bestehenden Vertrag also strukturell `nullopt`, kein
 erfundener Sentinelwert (z. B. `-1`) und keine Sonderbehandlung an der
-Aufrufstelle. Revision 7s Signatur haette jeden Aufrufer gezwungen, dieses
+Aufrufstelle. Eine rohe Signatur haette jeden Aufrufer gezwungen, dieses
 "noch unbekannt" selbst irgendwie in einen rohen `int64_t` zu kodieren,
 bevor die Funktion ueberhaupt entscheiden koennte – das waere entweder ein
 zweiter, hier erfundener Sentinelwert oder eine stillschweigende Annahme
@@ -730,7 +742,7 @@ immer boot-lokal, niemals boot-uebergreifend. Das Ergebnis ersetzt in 5.2
 Abfragezeitpunkt gelesene `utcNow`.
 
 **Verbindlicher Vertrag – Hop 1 konstruiert den Anker bedingt (frisch oder
-Carry-Forward, Korrektur gegenueber Revision 8, Auftragspunkt 1):**
+Carry-Forward, Auftragspunkt 1):**
 
 Bei Hop 1 (5.9), sowohl in `activateLoadedRun` als auch identisch in
 `activateFallbackRecoveredRun` (5.8 – beide konstruieren den Anker aus dem
@@ -858,7 +870,7 @@ struct EffectiveAnchorTimeBasis {
 `RecoveredPhaseElapsedInput.knownSecondsBeforeCheckpoint` (5.3) – **an
 jeder Stelle**, an der bislang die rohen Anker-Felder gelesen wurden. Fuer
 einen frischen Anker (`knownSecondsSinceOriginalCheckpoint == 0`) ist das
-Ergebnis identisch zu Revision 8 (`effectiveCheckpointUtc ==
+Ergebnis identisch zum frischen Ankerfall (`effectiveCheckpointUtc ==
 originalCheckpointUtc`, `effectiveKnownSecondsBeforeCheckpoint ==
 knownPhaseSecondsAtOriginalCheckpoint`) – keine Verhaltensaenderung fuer
 den Einzelausfall-Fall.
@@ -903,10 +915,10 @@ ausdruecklich benannt statt eines einzigen ueberzeichneten Vorteils:**
    der Aufloesbarkeit) bleibt davon vollstaendig unberuehrt und ist der
    tatsaechlich verlangte, immer wirksame Teil dieser Korrektur.
 
-**Anker-Lebenszyklus bei Resume – bedingt, nicht unbedingt (Korrektur
-gegenueber Revision 7, Auftragspunkt 1):** Revision 7 loeschte
-`pendingRecoveryAnchor`/`recoveryBootAnchorMonotonicMillis` unbedingt bei
-jedem erfolgreichen Resume, mit der Begruendung, `priorBootPhaseElapsed`
+**Anker-Lebenszyklus bei Resume – bedingt, nicht unbedingt:** Ein
+unbedingtes Loeschen von `pendingRecoveryAnchor`/
+`recoveryBootAnchorMonotonicMillis` bei jedem erfolgreichen Resume, mit der
+Begruendung, `priorBootPhaseElapsed`
 (5.23) trage die Entscheidungsgrundlage bereits vollstaendig weiter. Das
 gilt nur, wenn die Ausfallzeit **bereits** UTC-seitig aufgeloest war – ist
 sie das nicht (keine NTP-Synchronisation zum Resume-Zeitpunkt, der
@@ -931,7 +943,7 @@ Fragen"):
         return true;  // Phase traegt keine Grenze/keinen Vor-Boot-Anteil (5.7:
                        // "keiner" fuer Preheating/ReachingTarget/Cooling/
                        // ManualHolding) – keine Zeitfrage, sofort loeschen,
-                       // genau wie Revision 7 fuer jeden Resume.
+                       // fuer jede Phase ohne eigene Zeitfrage.
     }
     return accumulated->elapsed.upperBoundSeconds.has_value();
 }
@@ -947,9 +959,8 @@ und haette den Anker damit auch nach einem Resume nach `Cooling`/
 `Preheating`/`ReachingTarget`/`ManualHolding` faelschlich bestehen lassen
 – ein gemaess 5.14 Punkt 3 (dort auf genau die drei grenztragenden Phasen
 beschraenkt) strukturell ungueltiger Snapshot. Die obige Fassung liefert
-fuer diese vier Phasen immer `true` (sofortige Loeschung, byte-identisch
-zu Revision 7) und weicht von Revision 7 ausschliesslich fuer die drei
-grenztragenden Phasen ab.
+fuer diese vier Phasen immer `true` (sofortige Loeschung); fuer die drei
+grenztragenden Phasen bleibt der Anker bei unbekannter Obergrenze erhalten.
 
 - Ist `recoveryTimeResolvedAtResume(candidate.priorBootPhaseElapsed)`
   **nach** der Akkumulation dieser Episode (5.23) `true` (die
@@ -958,7 +969,7 @@ grenztragenden Phasen ab.
   `pendingRecoveryAnchor`/`recoveryBootAnchorMonotonicMillis` im selben
   Commit auf `nullopt` gesetzt (**nach** der geordneten
   Sensorevidenz-Latch-Sequenz aus 5.20, niemals davor) – identisch zu
-  Revision 7s Verhalten fuer den Fall, dass die Zeit von Anfang an
+  Das bestehende Verhalten fuer den Fall, dass die Zeit von Anfang an
   aufgeloest war.
 - Ist sie `false` (Obergrenze weiterhin unbekannt), bleiben
   `pendingRecoveryAnchor`/`recoveryBootAnchorMonotonicMillis` **unveraendert
@@ -975,13 +986,85 @@ grenztragenden Phasen ab.
   ihn fachlich obsolet macht.
 - Diese Regel gilt **einheitlich** an jeder Stelle, die einen Resume
   durchfuehrt: Hop 2 (automatisch, 5.10), `resolveRecoveryOutcome` mit
-  `AssumeStillValid` fuer `WaitingForProduct` (5.17, neu in dieser
-  Revision) und jeder zukuenftige gleichartige Pfad – eine einzige Regel
-  statt eines an jeder Stelle erneut zu treffenden Sonderfalls (DRY).
+  `AssumeStillValid` fuer `WaitingForProduct` und jeder zukuenftige
+  gleichartige Pfad – eine einzige Regel statt eines an jeder Stelle erneut
+  zu treffenden Sonderfalls (DRY).
+
+**Manuelle Restdauer-Neubaseline – Recovery-Zeit der alten Baseline ist
+fachlich superseded:** Eine bestaetigte `AdjustRun`-Entscheidung mit
+`durationChanged == true` waehrend `Fermenting` beginnt eine neue
+Restdauerentscheidung ab `request.envelope.monotonicMillis`. Das gilt auch
+bei einer kombinierten Zieltemperatur- und Restdaueranpassung. Es gilt nicht
+bei `durationChanged == false`, insbesondere nicht bei einer reinen
+Zieltemperaturaenderung.
+
+Der bestehende `decideRunAdjustment()`-Pfad bleibt die einzige
+Laufanpassungsentscheidung. In seiner Kandidatenmutation ist die Reihenfolge
+verbindlich:
+
+1. Vor jeder Kandidatenmutation werden erwartete Lauf-/Kommando-Revision,
+   monotoner Zeitbezug und `observedRunSeconds`-Kapazitaet geprueft. Der
+   Kommandozeitpunkt darf nicht vor dem bisherigen
+   `processState.stateEnteredAtMillis` liegen. Der seit diesem alten
+   Timerstart sicher beobachtete Fermenting-Anteil wird checked als
+   `deriveFermentingSecondsDelta(before, command.monotonicMillis)` berechnet;
+   die Addition zu `runProgress.observedRunSeconds` muss ohne
+   `std::uint32_t`-Ueberlauf moeglich sein. Stale-, Zeit- oder
+   Kapazitaetsfehler verlassen den Pfad ohne irgendeine Feldmutation.
+2. Dieser Deltawert wird in der lokalen Kandidatenkopie genau einmal in
+   `runProgress.observedRunSeconds` gefaltet. Die historische Basis
+   (`KnownTotal` oder `PartialUnknownHistory`) bleibt unveraendert.
+3. Die bereits bestehende `ActiveRun`-Entscheidung wird auf dem Kandidaten
+   angewandt; `makeProcessRunSnapshot(ActiveRun)` projiziert weiterhin exakt
+   das neue `EffectiveRunValues::remainingDurationMinutes` auf
+   `ProcessRunSnapshot::fermentationDurationMinutes`.
+4. Der Kandidat setzt `processState.stateEnteredAtMillis` auf den
+   Kommandozeitpunkt und ersetzt die aktive Zeitbasis fuer die neue
+   Restdauer. `priorBootPhaseElapsed` wird dabei getaggt fuer `Fermenting`
+   auf `lowerBoundSeconds == 0` und `upperBoundSeconds == 0` gesetzt. Damit
+   ist kein alter priorer Zeitbeitrag mehr wirksam, waehrend der neue
+   Baselinepunkt ausdruecklich und nicht als unbekannter Zustand modelliert
+   ist.
+5. `nominalRecoveryAdjustment` wird auf `nullopt` gesetzt. Falls die
+   Implementierung das Feld im Kandidaten behaelt, bedeutet es ab diesem
+   Kommando ausschliesslich eine seit dieser manuellen Restdauer-Baseline
+   bestaetigte Korrektur; eine unbegrenzte Historie wird nicht eingefuehrt.
+6. `pendingRecoveryAnchor` und `recoveryBootAnchorMonotonicMillis` werden
+   atomar auf `nullopt` gesetzt. Damit ist die alte offene
+   Recovery-Zeitfrage geschlossen und ein spaeterer NTP-Abgleich kann diese
+   alte Baseline nicht mehr in die neue Restdauerentscheidung einbringen.
+   `lastRecoveryEpisodeEvidence` darf gemaess seinem bestehenden
+   Diagnoselebenszyklus im Kandidaten erhalten bleiben; es ist kein
+   Zeitgeber und wird von keiner Dauerentscheidung gelesen.
+7. Erst der vollstaendige Kandidat wird ueber die bestehende
+   Write-before-Apply-/`persistCommand`-Kette persistiert. Nach bestaetigtem
+   Commit werden neue Restdauer, Snapshot, Timer-Baseline und die
+   supersedeten Recovery-Felder gemeinsam im RAM angewandt. Der bestehende
+   `RunRevision`-Eintrag mit altem/neuem `remainingDurationMinutes`,
+   `remainingDurationChanged` und dem Kommandozeitbezug ist der kanonische
+   Nachweis der manuellen Neufestlegung; kein zweites Baseline- oder
+   Journalfeld wird eingefuehrt.
+
+Die Folge ist absichtlich schmal: `observedRunSeconds` behaelt die gesamte
+tatsaechlich beobachtete Historie, ist aber kein Restdauer-Timer. Der neue
+Timer misst nur ab dem neuen `stateEnteredAtMillis`; `priorBootPhaseElapsed`
+und `nominalRecoveryAdjustment` tragen keinen alten Kredit hinueber. Ein
+`remainingDurationMinutes == 0` bleibt deshalb unmittelbar zulaessig, sobald
+die bestehende Fermenting-Abschlusspruefung nach dem Commit laeuft. Ein
+spaeterer Stromausfall konstruiert seinen Hop-1-Kontext wieder aus diesem
+neuen Baselinepunkt; nur seit dieser Baseline tatsaechlich bekannte Zeit wird
+in den neuen Recovery-Kontext aufgenommen.
+
+**Reine Zieltemperaturaenderung:** Bei `durationChanged == false` bleiben
+`stateEnteredAtMillis`, `priorBootPhaseElapsed`,
+`nominalRecoveryAdjustment`, `pendingRecoveryAnchor` und
+`recoveryBootAnchorMonotonicMillis` unveraendert. Der bestehende Vertrag
+"verbleibende Dauer laeuft ohne Unterbrechung weiter" wird damit nicht
+versehentlich in eine Restdauer-Neubaseline umgedeutet.
 
 **Reboot waehrend noch offener Zeitbewertung eines bereits resumten Laufs –
-Carry-Forward statt Verlust (Auftragspunkt 1, Korrektur gegenueber
-Revision 8):** laedt `loadAndInitialize()` einen Snapshot mit
+Carry-Forward statt Verlust (Auftragspunkt 1):** laedt `loadAndInitialize()`
+einen Snapshot mit
 `processState.state in {Fermenting, CoolHolding, WaitingForProduct}`
 **und** weiterhin gesetztem `pendingRecoveryAnchor` (Zeitbewertung war beim
 vorigen Reboot noch offen), ist das gemaess 5.15 strukturell ein
@@ -1024,7 +1107,7 @@ abgeleiteten wirksamen Werte, nicht die rohen Einzelfelder. Ist
 je vor Beginn dieser Kette verfuegbar), bleibt `effectiveCheckpointUtc`
 unabhaengig vom Carry-Forward `nullopt` – dieser Fall bleibt unveraendert
 unaufloesbar (keine erfundene Zeit, Gate C), aber das ist eine **andere**
-Ursache als das in Revision 8 ausdruecklich in Kauf genommene, hier
+Ursache als den zuvor ausdruecklich ausgeschlossenen Informationsverlust, hier
 korrigierte Ueberschreiben eines **bereits bekannten** Ursprungscheckpoints.
 
 **Kein doppeltes Zaehlen (verbindliche Invariante, Auftrag woertlich):**
@@ -1114,7 +1197,7 @@ Auftragspunkt 1):**
    bleiben davon vollstaendig unberuehrt).
 
 **`reevaluateRecoveryTime` – gemeinsame Zeit-Reevaluations-API, erweitert
-auf bereits resumte Laeufe (umbenannt gegenueber Revision 7s
+auf bereits resumte Laeufe (bewusst als
 `reevaluatePendingRecovery`):**
 
 ```cpp
@@ -1125,8 +1208,7 @@ RunRecoveryCoordinator::reevaluateRecoveryTime(
 
 Vorbedingung: `current.pendingRecoveryAnchor.has_value()` –
 **unabhaengig** von `current.processState.state` (sonst
-`unavailableResult()`). Das ist die zentrale Erweiterung gegenueber
-Revision 7: die Funktion liest **denselben** Anker unabhaengig davon, ob
+`unavailableResult()`). Der Vertrag liest **denselben** Anker unabhaengig davon, ob
 er zu einer noch offenen `RecoveryEvaluation` (Hop-1-only,
 `WaitingForProduct`) oder zu einem bereits resumten, aktorfreigegebenen
 Lauf (`Fermenting`/`CoolHolding`/`WaitingForProduct` nach Resume) gehoert.
@@ -1140,7 +1222,7 @@ Ablauf:
    frisch uebergebenen `time` (`deriveUtcAtRecoveryBootAnchor` mit
    `time.utcUnixSeconds`, s. o.).
 2. **Fall `current.processState.state == RecoveryEvaluation`
-   (Hop-1-only):** identisch zu Revision 7 – nur `WaitingForProduct`
+   (Hop-1-only):** identisch zum bestehenden Vertrag – nur `WaitingForProduct`
    erreicht diesen Zustand; ergibt sich aus Unter- **und** Obergrenze
    bereits dieselbe fachliche Entscheidung (`DefinitelyExpired`/
    `DefinitelyStillValid`), wird automatisch Tombstone/Resume ausgeloest
@@ -1264,8 +1346,8 @@ Ablauf:
   verfuegbar): kein Commit, `priorBootPhaseElapsed`/`runRevision`
   unveraendert (Negativtest gegen unnoetigen NVS-Schreibverschleiss).
 - **Reboot zwischen Resume und spaeterer NTP-Reevaluation – Carry-Forward
-  erhaelt die Aufloesbarkeit (Auftragspunkt 1, Revision-9-Korrektur, ersetzt
-  den Revision-8-Test fuer denselben Ablauf, der den hier behobenen
+  erhaelt die Aufloesbarkeit (Auftragspunkt 1; der Test ersetzt den zuvor
+  widerspruechlichen Ablauf, der den hier behobenen
   Informationsverlust noch als Sollverhalten festschrieb):** `Fermenting`
   resumt ohne NTP (`originalCheckpointUtc` **bekannt**, Anker bleibt offen)
   -> weiterer Reboot **ohne** zwischenzeitliche Aufloesung ->
@@ -1440,7 +1522,7 @@ damit ablehnen – nicht speicherbar.
 3. **Konverser Fall, neu in dieser Revision (5.12, "Anker-Lebenszyklus bei
    Resume"):** `snapshot.pendingRecoveryAnchor.has_value()` **und**
    `snapshot.processState.state != RecoveryEvaluation` ist ab dieser
-   Revision **ebenfalls** ein gueltiger Fall (Revision 7 liess ihn
+   Revision **ebenfalls** ein gueltiger Fall (der fruehere Vertrag liess ihn
    strukturell nicht zu, da der Anker dort immer spaetestens beim Resume
    geloescht wurde) – die "Recovery-Zeitbewertung noch offen"-Situation
    eines bereits aktorfreigegebenen Laufs. Gueltig nur, wenn zusaetzlich
@@ -1681,6 +1763,26 @@ Alle vier bestehenden oeffentlichen Standardpfade (`persistCommand`,
 weiterhin ausschliesslich das unveraenderte `writeSnapshot()` mit seinem
 bestehenden Guard auf – **kein** Verhaltensunterschied fuer diese Pfade.
 
+**Atomarer `AdjustRun`-Pfad fuer die manuelle Restdauer-Baseline:** Eine
+Restdaueranpassung bleibt ein einzelnes `Command`-Commit. Die lokale
+Entscheidung darf zwar den vollstaendigen Kandidaten aus
+`observedRunSeconds`-Fold, neuer `ActiveRun`-/`ProcessRunSnapshot`-Projektion,
+neuem `stateEnteredAtMillis`, `priorBootPhaseElapsed == 0/0`, leerer
+`nominalRecoveryAdjustment` und geloeschtem altem Recovery-Anker aufbauen;
+`persistCommand` schreibt diesen Kandidaten aber als eine unteilbare
+Revision, bevor `current` angewandt wird. Der Kandidat wird nicht aus
+mehreren Schreibvorgaengen zusammengesetzt.
+
+Vor-Commit-Fehler (`Write`, `Capacity`, `Stale`, `Apply` vor bestaetigtem
+Commit) lassen den alten Restdauer-Timer, die alte `observedRunSeconds` und
+den alten Recovery-Kontext unveraendert. Ein `CommitOutcomeUnknown` bleibt
+ueber den bestehenden Indeterminate-/Fail-Closed-Vertrag behandelt; es gibt
+keine nachtraegliche Teilanwendung oder erneuten Foldversuch in derselben
+Entscheidung. Erst ein bestaetigter Commit erlaubt die einmalige RAM-
+Anwendung. Ein bestaetigter Commit mit anschliessendem Apply-Fehler bleibt
+`PersistenceCommittedApplyFailed` gemaess dem bestehenden Vertrag und wird
+nicht in einen behaupteten Rollback umgedeutet.
+
 **`RunPersistenceMutationKind::Recovery` – eigener Mutationstyp fuer
 Recovery-Commits:**
 
@@ -1705,7 +1807,7 @@ enum class RunPersistenceMutationKind : std::uint8_t {
   `(mutationKind == Command) != commandId.has_value()`) bleibt unveraendert
   korrekt, da `Recovery` – wie `Transition` und `SensorSelection` bereits
   heute – **keine** `CommandId` traegt.
-- **Fuenf** Ausloeser (erweitert gegenueber Revision 7s vier): die von
+- **Fuenf** Ausloeser: die von
   `activateLoadedRun`, `activateFallbackRecoveredRun`, dem
   Episode-Refresh-Pfad (5.15) und dem Tombstone-Pfad (5.11) ausgeloesten
   Commits rufen `writeSnapshotCore` mit `mutationKind =
@@ -1848,8 +1950,8 @@ ueberhaupt aufgerufen werden kann (5.12):** Ein Resume fuer diese beiden
 Phasen ist bereits erfolgt, sobald ein aktiver Run ueberhaupt wieder in
 `Ready` beobachtbar ist – `current.processState.state` ist zu diesem
 Zeitpunkt bereits `Fermenting`/`CoolHolding`, nicht mehr
-`RecoveryEvaluation`. **Richtiggestellt gegenueber einer frueheren Fassung
-dieses Abschnitts (Auftragspunkt 2, Revision 9):** `pendingRecoveryAnchor`
+`RecoveryEvaluation`. **Praezisierung fuer diesen Vertrag
+(Auftragspunkt 2):** `pendingRecoveryAnchor`
 ist zu diesem Zeitpunkt **nicht** notwendigerweise bereits `nullopt` – er
 kann gemaess 5.12s bedingter Loeschregel weiterhin bestehen, solange die
 Recovery-Zeitbewertung noch offen ist ("Zeitbewertung noch offen", 5.12).
@@ -1897,13 +1999,11 @@ geloeschten) Anker – nur bei `Uncertain` wird fortgefahren, sonst
 - **`WaitingForProduct` + `AssumeThresholdCrossed`:** identisch zu 5.11 –
   `propose(candidate.processState, Standby, RecoveryEndedByExpiredWait,
   monotonicMillis)`, `clearActiveRunState(candidate)`.
-- **`WaitingForProduct` + `AssumeStillValid` – echter Resume (Korrektur
-  gegenueber Revision 7, Auftragspunkt 2):** Revision 7 fuehrte hier keine
-  Transition aus (reiner `persistedIds_`/Episode-Buchhaltungs-Effekt ohne
-  fachliche Wirkung – kein wirksamer Benutzerentscheid). Diese Revision
-  fuehrt stattdessen denselben Resume aus, den der automatische Pfad bei
-  `DefinitelyStillValid` ausfuehren wuerde, jetzt durch die manuelle
-  Attestierung des Benutzers anstelle des dortigen UTC-Beweises getragen:
+- **`WaitingForProduct` + `AssumeStillValid` – echter Resume
+  (Auftragspunkt 2):** Diese Revision fuehrt hier denselben Resume aus,
+  den der automatische Pfad bei `DefinitelyStillValid` ausfuehren wuerde,
+  jetzt durch die manuelle Attestierung des Benutzers anstelle des dortigen
+  UTC-Beweises getragen:
   1. Gate A (5.26) wird gegen `liveSensorEvidence` ausgewertet; negatives
      Ergebnis -> `request.event = ProcessEvent::RecoveryReject`
      (identisch zu Hop 2s Gate-A-Kopplung, 5.10) statt eines Resume –
@@ -1923,7 +2023,7 @@ geloeschten) Anker – nur bei `Uncertain` wird fortgefahren, sonst
      nur zeitlich entkoppelt von Hop 1 ausgeloest).
   4. Anker-Loeschung/-Erhalt folgt der einheitlichen Regel aus 5.12
      (`recoveryTimeResolvedAtResume`) – **nicht** mehr "bleibt unveraendert
-     bestehen" wie in Revision 7, da nun tatsaechlich ein Resume
+     bestehen" wie im frueheren Pfad, da nun tatsaechlich ein Resume
      stattfindet, der dieselbe Bedingung wie jeder andere Resume
      durchlaeuft.
 - **`Fermenting` + `AssumeThresholdCrossed` – nur innerhalb belastbarer
@@ -1964,7 +2064,7 @@ geloeschten) Anker – nur bei `Uncertain` wird fortgefahren, sonst
   lingernder `pendingRecoveryAnchor` vorhanden (5.12,
   "Zeitbewertung noch offen"), wird er **hier** geloescht (Abschluss macht
   die Zeitfrage fachlich obsolet, s. 5.12 Punkt (c)) – anders als in
-  Revision 7, wo diese Felder an dieser Stelle bereits unbedingt `nullopt`
+  dem frueheren Pfad, wo diese Felder an dieser Stelle bereits unbedingt `nullopt`
   waren.
 - **`CoolHolding` + `AssumeThresholdCrossed`:** dasselbe Bounds-Gate wie
   fuer `Fermenting` (`priorBootPhaseElapsed->elapsed.upperBoundSeconds.has_value()`,
@@ -2001,8 +2101,8 @@ Commit ueber das normale, guard-behaftete `writeSnapshot()` (5.16,
 `mutationKind = Command`, echte `commandId` aus `request.commandId`) – der
 Bypass aus 5.16 wird nicht benoetigt, da `state_` bereits `Ready` ist.
 `pendingRecoveryAnchor`/`recoveryBootAnchorMonotonicMillis` werden **nicht
-mehr pauschal phasenabhaengig** behandelt (Korrektur gegenueber Revision
-7), sondern folgen einheitlich der Regel aus 5.12:
+pauschal phasenabhaengig** behandelt, sondern folgen einheitlich der Regel
+aus 5.12:
 
 - **`WaitingForProduct` + `AssumeThresholdCrossed`:** immer auf `nullopt`
   gesetzt (Tombstone macht die Zeitfrage obsolet, ueber
@@ -2040,13 +2140,13 @@ vollstaendige native Tests sind es.
 
 **Zwei gleichwertige Aufloesungswege bleiben bestehen, beide ueber
 denselben Commit-Kern – jetzt fuer alle drei Phasen erreichbar, nicht nur
-fuer `WaitingForProduct` (Erweiterung gegenueber Revision 7 durch 5.12s
+fuer `WaitingForProduct` (Erweiterung durch 5.12s
 `reevaluateRecoveryTime`):**
 
 1. **Automatisch:** `RunRecoveryCoordinator::reevaluateRecoveryTime(RunCommandState&,
    const RunCheckpointTime&)` (5.12, nativ testbar; produktive Verdrahtung
    eines Aufrufers ist nicht Teil von #18, Gate B). Fuer `WaitingForProduct`
-   im Hop-1-only-Zustand identisch zu Revision 7: ergibt sich aus Unter-
+   im Hop-1-only-Zustand identisch zum bestehenden Vertrag: ergibt sich aus Unter-
    **und** Obergrenze dieselbe fachliche Entscheidung
    (`DefinitelyExpired`/`DefinitelyStillValid`), wird automatisch
    Tombstone/Resume ausgeloest. Fuer alle drei Phasen **nach** bereits
@@ -2444,12 +2544,12 @@ struct RunProgressState {
 `deriveFermentingSecondsDelta(before, atMillis)`):** angewandt (1) bei jedem
 Live-Phasenwechsel **aus** `Fermenting`, (2) in `decideRunAdjustment()`
 unmittelbar **vor** der bestehenden `stateEnteredAtMillis`-Neusetzung bei
-Daueraenderung (`run_commands.cpp:1019-1023`), (3) bei Hop 1, wenn
+tatsaechlicher Daueraenderung (`run_commands.cpp:1019-1023`), (3) bei Hop 1, wenn
 `originalRestoredProcessState.state == Fermenting`, ausschliesslich aus
 `thisHopAltBootLocalSeconds` (5.12 – dem Alt-Boot-lokalen, sicher bekannten
 Beitrag, den **dieser konkrete** Hop 1 neu beisteuert; **niemals** aus dem
-unsicheren Ausfallanteil). **Korrektur gegenueber Revision 8, notwendig
-wegen Carry-Forward (Auftragspunkt 1, Revision 9):** vor dieser Revision
+unsicheren Ausfallanteil). **Carry-Forward-Vertrag gemaess Auftragspunkt 1:**
+vor diesem Vertrag
 war jeder Hop 1 zwangslaeufig frisch, sodass
 `pendingRecoveryAnchor.knownPhaseSecondsAtOriginalCheckpoint` selbst genau
 diesen Beitrag enthielt. Bei einem Carry-Forward-Hop-1 (5.12) ist dieses
@@ -2459,6 +2559,15 @@ tatsaechlich neuen `N2`) – ein Verstoss gegen "streng beobachtete
 Laufzeit" (s. u.). `thisHopAltBootLocalSeconds` ist in beiden Faellen
 (frisch/Carry-Forward) exakt der neue, von diesem Hop 1 selbst
 beigetragene Anteil und schliesst diese Luecke strukturell.
+
+Bei Punkt (2) ist die Faltung kein unabhaengiger Schreibvorgang, sondern Teil
+der einen `AdjustRun`-Kandidatenmutation: Der checked Delta-Wert wird vor der
+Timer-Neusetzung genau einmal addiert; danach werden neue
+`ProcessRunSnapshot`-Daten und die neue `stateEnteredAtMillis`-Baseline
+gebildet und die alten aktiven Recovery-Zeitbeitraege gemaess 5.12/5.23
+superseded. Bei `durationChanged == false` findet dieser Fold und diese
+Neubaseline nicht statt. Ein Commit darf daher nie nur die Restdauer, nur die
+historische Metrik oder nur die Recovery-Felder uebernehmen.
 
 **Harte Trennung:** `observedRunSeconds` bedeutet ausschliesslich
 tatsaechlich beobachtete, eingeschaltete Fermentationszeit. Es wird **unter
@@ -2518,6 +2627,15 @@ und kein Verstoss gegen Gate C: der automatische Pfad wird ausschliesslich
 durch bewiesene Alt-Boot-lokale Zeit **und** durch explizit vom Benutzer
 bestaetigte nominale Sekunden gespeist, niemals durch eine unbewiesene
 Ausfall-Untergrenze (die ist unter 5.13 ohnehin `0`).
+
+Diese Kombination gilt fuer den jeweils bestehenden Recovery-Kontext. Nach
+einer manuellen Restdauer-Neubaseline waehrend `Fermenting` ist der aktive
+`priorBootPhaseElapsed`-Wert auf `0/0` gesetzt und
+`nominalRecoveryAdjustment` auf `nullopt`; der neue
+`stateEnteredAtMillis`-Punkt ist die alleinige Zeitbasis fuer den neuen
+Restdauer-Timer. `observedRunSeconds` wird dabei nicht in diesen
+`priorSeconds`-Wert eingemischt und bleibt ausschliesslich historische,
+tatsaechlich beobachtete Laufzeit.
 
 Fuer eine **sofortige, qualitative** Abschlussentscheidung ohne exakte
 Sekundenangabe steht zusaetzlich `resolveRecoveryOutcome` mit
@@ -2583,14 +2701,17 @@ die obige Bounds-Invariante wird gegen das NEUE `d` geprueft; bei Erfolg
 Episode`, `lastAppliedEpisodeDelta = d`. Write-before-apply; Fehlerfaelle
 getrennt nach 5.19.
 
-**Reset:** `nominalRecoveryAdjustment` wird bei Start eines neuen Runs
-sowie in `clearActiveRunState()` (5.11) vollstaendig auf `nullopt`
+**Reset:** `nominalRecoveryAdjustment` wird bei Start eines neuen Runs, bei
+einer manuellen Restdauer-Neubaseline in `Fermenting` sowie in
+`clearActiveRunState()` (5.11) vollstaendig auf `nullopt`
 zurueckgesetzt – derselbe Helfer, der bereits `pendingRecoveryAnchor`/
 `recoveryBootAnchorMonotonicMillis`/`lastRecoveryEpisodeEvidence`/
 `priorBootPhaseElapsed` zuruecksetzt. Ausfuehrliche Journal-/Historienfuehrung
 ueber alle einzelnen Korrekturen hinweg bleibt #19 vorbehalten; dieser
 Vertrag haelt nur die aktuell wirksame kumulative Summe sowie die zuletzt
-angewandte Episode fuer Idempotenz.
+angewandte Episode fuer Idempotenz. Nach einer manuellen Restdauer-Neubaseline
+bedeutet ein erneut vorhandenes Feld ausschliesslich "seit der letzten
+manuellen Restdauer-Baseline"; ein alter Wert darf nicht weiterwirken.
 
 **Anzeige/Export:** `observedRunSeconds` und
 `nominalRecoveryAdjustment.cumulativeAppliedSeconds` werden **getrennt**
@@ -2610,8 +2731,24 @@ einzelnes, ununterscheidbares Feld.
   -> `NotAllowedInState`.
 - `observedRunSeconds` bleibt bei jeder Ausfallkorrektur (automatisch und
   manuell) unveraendert.
+- Restdaueranpassung waehrend `Fermenting`: der seit der alten
+  `stateEnteredAtMillis`-Baseline sicher beobachtete Anteil wird vor der
+  Timer-Neusetzung genau einmal gefaltet; neue Restdauer und neuer Timer
+  werden ab Kommandozeitpunkt angewandt; `priorBootPhaseElapsed` ist danach
+  `0/0`, `nominalRecoveryAdjustment` ist leer, und ein alter offener Anker ist
+  geschlossen.
+- Reine Zieltemperaturaenderung waehrend `Fermenting`: keine Faltung, kein
+  Reset von Prior-/Nominalzeit und kein Schliessen eines Recovery-Kontexts;
+  `stateEnteredAtMillis` bleibt unveraendert. Kombinierte Ziel- und
+  Restdaueranpassung folgt der Restdauerregel.
+- `remainingDurationMinutes == 0`: bestehende unmittelbare
+  Abschlusszulaessigkeit bleibt nach der neuen Baseline erhalten.
+- Restdaueranpassung mit stale Erwartungsrevision, monotone Zeit vor der
+  bisherigen Baseline, Additionsueberlauf oder Persistenzfehler: keine
+  teilweise neue Dauer, kein teilweise geloeschter Recovery-Kontext und kein
+  doppelter Fold.
 - **Carry-Forward-Kette, kein doppeltes/verlorenes Zaehlen bei
-  `observedRunSeconds` (Auftragspunkt 1, Revision-9-Korrektur):** eine
+  `observedRunSeconds` (Auftragspunkt 1):** eine
   Drei-Reboot-Kette in `Fermenting` mit Alt-Boot-lokalen Beitraegen `N1`,
   `N2`, `N3` (frischer Hop 1, dann zwei Carry-Forward-Hop-1s) faltet
   `observedRunSeconds` um genau `N1 + N2 + N3` – `N1` erscheint dabei
@@ -2662,10 +2799,15 @@ konstruiert wird), nicht gegen `current.processState.state` (das durch
 `applyProcessTransition(hop1)` bereits auf `RecoveryEvaluation` gesetzt
 sein kann).
 
-**Setzen:** ausschliesslich bei einer Recovery-Aktivierung (Hop 1 oder
-Hop 2 mit Resume, 5.9/5.10), wenn die resultierende Phase
-`WaitingForProduct`, `Fermenting` oder `CoolHolding` ist (5.7). Getaggt mit
-genau dieser resultierenden Phase.
+**Setzen:** bei einer Recovery-Aktivierung (Hop 1 oder Hop 2 mit Resume,
+5.9/5.10), wenn die resultierende Phase `WaitingForProduct`, `Fermenting`
+oder `CoolHolding` ist (5.7), getaggt mit genau dieser resultierenden Phase.
+Zusaetzlich setzt eine manuelle Restdauer-Neubaseline in `Fermenting` gemaess
+5.12/5.22 das Feld explizit auf
+`TaggedPriorBootPhaseElapsed{Fermenting, {0U, std::optional<uint32_t>{0U}}}`.
+Dieser Nullstand ist die neue aktive Baseline: die historische
+`observedRunSeconds`-Metrik bleibt davon unberuehrt, wird aber von keiner
+Fermenting-Dauerentscheidung als priorer Timeranteil gelesen.
 
 **Akkumulationsregel bei wiederholter Recovery innerhalb derselben, noch
 nicht gewechselten Phase (kein doppeltes Zaehlen, kein stilles
@@ -2707,7 +2849,7 @@ Fuer einen frischen Anker (`knownSecondsSinceOriginalCheckpoint == 0`) ist
 `basis.effectiveKnownSecondsBeforeCheckpoint ==
 pendingRecoveryAnchor.knownPhaseSecondsAtOriginalCheckpoint` und
 `basis.effectiveCheckpointUtc == pendingRecoveryAnchor.originalCheckpointUtc`
-– byte-identisch zu Revision 8s Formel fuer den Einzelausfall-Fall. Fuer
+– byte-identisch zur Formel fuer den frischen Einzelausfall-Fall. Fuer
 einen carry-forwarded Anker schliesst dieselbe Formel automatisch den
 gesamten, bereits mehrfach fortgesetzten Zeitkontext ein, ohne gesondert
 behandelt werden zu muessen.
@@ -2727,6 +2869,11 @@ wird, folgt der Phasenregel aus 5.10 (Untergrenze fuer alle Phasen ausser
 **Erhalt/Loeschen:**
 
 - Bleibt fuer die laufende, zeitbegrenzte Phase erhalten.
+- Wird bei einer bestaetigten Restdauer-Neubaseline waehrend `Fermenting`
+  auf den getaggten `0/0`-Nullstand zurueckgesetzt; der alte
+  `priorBootPhaseElapsed`-Beitrag wird nicht in die neue Restdauer
+  uebertragen. Das ist eine explizite Baseline-Mutation und kein echter
+  Phasenwechsel.
 - Wird bei **jedem** echten Phasenwechsel atomar im selben Commit geloescht
   (`nullopt`) – **mit Ausnahme** von Transitionen mit
   `TransitionReason::RecoveryReentryRequired` (Hop 1, in
@@ -2754,8 +2901,8 @@ wird, folgt der Phasenregel aus 5.10 (Untergrenze fuer alle Phasen ausser
   (`recoveryTimeResolvedAtResume`, Tombstone/Abschluss, oder ein echter,
   **anderer** Phasenwechsel).
 - **Zweiter Ausfall waehrend bereits resumtem Lauf, ggf. mit weiterhin
-  offenem Zeitkontext (5.12, dort im Detail; Korrektur gegenueber
-  Revision 8, Auftragspunkt 1):** ein erneuter Reboot waehrend
+  offenem Zeitkontext (5.12, dort im Detail; Praezisierung zu
+  Auftragspunkt 1):** ein erneuter Reboot waehrend
   `Fermenting`/`CoolHolding`/`WaitingForProduct` (nach einem frueheren
   erfolgreichen Resume) laedt `state != RecoveryEvaluation` als
   regulaeren `LoadedActiveRun` (5.15) und loest einen **frischen** Hop 1
@@ -2765,7 +2912,7 @@ wird, folgt der Phasenregel aus 5.10 (Untergrenze fuer alle Phasen ausser
   Akkumulationsregel liest dabei den unveraendert bestehenden `alt`-Wert
   dieses `priorBootPhaseElapsed` (der die vorangegangene, bereits
   aufgeloeste Episode enthaelt) und addiert die neue Episode hinzu –
-  unveraendert zu Revision 8. War der vorige Zeitkontext dagegen noch
+  unveraendert zum bestehenden Einzelausfallvertrag. War der vorige Zeitkontext dagegen noch
   **offen** (Zeitfrage der ersten Episode war beim Ausfall noch nicht
   geloest), ist dieser Hop 1 gemaess 5.12 der **Carry-Forward-Fall**: der
   bestehende Anker (inklusive seines urspruenglichen
@@ -2778,6 +2925,26 @@ wird, folgt der Phasenregel aus 5.10 (Untergrenze fuer alle Phasen ausser
   unaufloesbar – "dauerhaft `nullopt`" bleibt ausschliesslich dem Fall
   vorbehalten, dass niemals vor Beginn der gesamten Kette ein UTC-Anker
   bekannt war (5.12).
+
+**Neue Recovery-Kette nach manueller Restdauer-Baseline:** Ein spaeterer
+Stromausfall behandelt den Kommandozeitpunkt als neuen
+`stateEnteredAtMillis`-Ausgangspunkt. `knownPhaseSecondsAtOriginalCheckpoint`
+und – falls die Kette spaeter fortgesetzt wird –
+`knownSecondsSinceOriginalCheckpoint` enthalten dann nur seit diesem Punkt
+im jeweiligen Boot sicher bekannte Sekunden. `observedRunSeconds` darf die
+gesamte Vor-Anpassungs-Historie weiter ausweisen, wird aber weder als
+`priorBootPhaseElapsed` in den neuen Timer eingefaltet noch durch einen
+Carry-Forward erneut als Recoveryzeit gelesen. Fuer eine neue offene Kette
+werden `accumulatedBeforeEpisode` aus dem neuen `0/0`-Stand und die Nominal-
+Korrektur aus dem leeren Zustand aufgebaut. Der bestehende Carry-Forward-
+Vertrag fuer danach entstehende Reboots bleibt ansonsten unveraendert.
+
+**Reine Zieltemperaturaenderung:** Sie ist kein Setzen oder Loeschen einer
+Restdauer-Baseline. Solange `durationChanged == false`, bleiben
+`priorBootPhaseElapsed`, `nominalRecoveryAdjustment`,
+`pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis` und
+`stateEnteredAtMillis` byte- beziehungsweise wertgleich im Kandidaten; die
+neue Zieltemperatur wird nach dem bestehenden Vertrag angewandt.
 
 **Tests:**
 - Roundtrip fuer `WaitingForProduct`, `Fermenting`, `CoolHolding` je
@@ -2801,11 +2968,11 @@ wird, folgt der Phasenregel aus 5.10 (Untergrenze fuer alle Phasen ausser
   `priorBootPhaseElapsed` akkumuliert beide Ausfaelle korrekt, identisch
   zum Fall ohne zwischenzeitlichen Resume; ist die Obergrenze nach Episode 1
   bereits bekannt (Zeitfrage dort geloest), ist der Anker vor Episode 2s
-  Hop 1 bereits `nullopt` (Regressionstest, unveraendert zu Revision 8);
+  Hop 1 bereits `nullopt` (Regressionstest);
   ist sie bei Episode 1 noch `nullopt` (Zeitfrage dort offen), konstruiert
   Episode 2s Hop 1 den Carry-Forward-Fall (5.12) und die Zeitfrage bleibt
   **weiterhin aufloesbar**, sobald spaeter NTP verfuegbar wird – **nicht**
-  mehr **dauerhaft** `nullopt` (Regressionstest gegen Revision 8s hier
+  mehr **dauerhaft** `nullopt` (Regressionstest gegen den hier
   behobenen Informationsverlust, Details und die Drei-Reboot-Erweiterung
   in 5.12).
 
@@ -2889,24 +3056,13 @@ Schema 3 erzeugt.
 
 ### 5.29 ROADMAP-Konsistenz
 
-**Fortlaufende Korrektur (Auftragspunkt 4 aus Revision 8, Revision 9
-Punkt 4 des vorliegenden Auftrags):** Revision 8 korrigierte
-`docs/ROADMAP.md:13` bereits von `Revision 5` auf `Revision 8 in Arbeit,
-Freigabe steht aus` und `docs/ROADMAP.md:3` auf ihr eigenes Commit-Datum.
-Da diese Revision 9 den Revision-8-Plan-Commit ersetzt, ist Zeile 13
-erneut minimal zu aktualisieren.
-
-**Aenderung in diesem Commit (durchgefuehrt, nicht nur geplant):**
-`docs/ROADMAP.md:13` wird von `Revision 8 in Arbeit, Freigabe steht aus`
-auf `Revision 9 in Arbeit, Freigabe steht aus` korrigiert;
-`docs/ROADMAP.md:3` (`Stand:`) wird auf das Datum dieses Commits
-aktualisiert. Inhaltlich unveraendert bleiben: #18/PR #102 als aktuelle
-Arbeit (Prioritaet 1); das Ressourcen-Gate aus PR #103 ueber #29/
-`OPEN_POINTS.md` (Prioritaet 2); #22 als naechste fachliche Arbeit nach
-#18 (Abschnitt "Naechste fachliche Arbeit", dort bereits korrekt und nicht
-Gegenstand dieser Korrektur). Kein weiterer ROADMAP-Aenderungsbedarf ueber
-diese beiden Zeilen hinaus wurde in dieser Session direkt am aktuellen
-Dateiinhalt festgestellt.
+Revision 10 aktualisiert `docs/ROADMAP.md` minimal: `docs/ROADMAP.md:13`
+wechselt von `Revision 9 in Arbeit, Freigabe steht aus` auf `Revision 10 in
+Arbeit, Freigabe steht aus`; `docs/ROADMAP.md:3` (`Stand:`) wird auf das
+Datum des Plan-Commits gesetzt. Inhaltlich unveraendert bleiben #18/PR #102
+als aktuelle Arbeit (Prioritaet 1), das Ressourcen-Gate aus PR #103 ueber
+#29/`OPEN_POINTS.md` (Prioritaet 2) und die naechste fachliche Arbeit nach
+#18. Kein weiterer ROADMAP-Aenderungsbedarf ist vorgesehen.
 
 ### 5.30 #24-Abgrenzung
 
@@ -2934,8 +3090,8 @@ bestehenden `fermentation_app`-Modulen ab (ADR-013 eingehalten). Kein neuer
 | 6 | `feat(persistence-coordinator): activateLoadedRun (Hop 1 + bedingt Hop 2, frisch/Carry-Forward-Ankerkonstruktion), applyLiveRecoveryEvidence, Episode-Refresh-Pfad, bedingte Anker-Loeschung ueber recoveryTimeResolvedAtResume` | 5.8-5.10, 5.12, 5.15, 5.20 |
 | 7 | `feat(persistence-coordinator): activateFallbackRecoveredRun (identische frisch/Carry-Forward-Fallunterscheidung wie activateLoadedRun), Slot-/Fallback-Override, Slot-Distinctness-Guard` | 5.8, 5.18 |
 | 8 | `feat(persistence-coordinator): resolveRecoveryOutcome (ResolveRecoveryUncertaintyRequest, phasenuebergreifend WaitingForProduct/Fermenting/CoolHolding, liveSensorEvidence-Parameter fuer Gate-A-Kopplung, echter Resume fuer WaitingForProduct+AssumeStillValid, Bounds-Gate fuer AssumeThresholdCrossed), Completed-Sonderpfad` | 5.17, 5.24 |
-| 9 | `feat(run-commands): ApplyRecoveryTimeCorrection (kumulativ, wirksam, gemeinsamer Bounds-Grundsatz mit resolveRecoveryOutcome), AdjustRun-Zeitfaltung` | 5.22 |
-| 10 | `feat(recovery): RunRecoveryCoordinator (activate, reevaluateRecoveryTime – Verdicts UND, neu ab Revision 8, Zeit-Nachtragskorrektur fuer bereits resumte Laeufe ueber deriveEffectiveAnchorTimeBasis via RunPersistenceMutationKind::Recovery)` | 5.12, 5.17, 5.22, 5.27 |
+| 9 | `feat(run-commands): ApplyRecoveryTimeCorrection (kumulativ, wirksam, gemeinsamer Bounds-Grundsatz mit resolveRecoveryOutcome), AdjustRun-Zeitfaltung und manuelle Restdauer-Baseline` | 5.12, 5.22, 5.23 |
+| 10 | `feat(recovery): RunRecoveryCoordinator (activate, reevaluateRecoveryTime – Verdicts und Zeit-Nachtragskorrektur fuer bereits resumte Laeufe ueber deriveEffectiveAnchorTimeBasis via RunPersistenceMutationKind::Recovery)` | 5.12, 5.17, 5.22, 5.27 |
 | 11 | `docs: Anzeigevertrag (getrennte Ausweisung observedRunSeconds/kumulativer nominaler Korrektur, LegacyUnknown-Anzeige, RecoveryConfidence), Ressourcenbudget` | Abschnitt 10 |
 
 `docs/ROADMAP.md` (Statuszeile, Stand-Datum) wird **nicht** ueber diese
@@ -3004,7 +3160,7 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
     liefern unabhaengig von `pendingRecoveryAnchor.has_value()` identische
     Ergebnisse (kein erneutes Aktor-Blocking). **Weiterer Reboot waehrend
     noch offener Zeitbewertung – Carry-Forward statt Verlust (5.12,
-    Korrektur gegenueber Revision 8):** durchlaeuft einen frischen Hop 1
+    Carry-Forward-Fall):** durchlaeuft einen frischen Hop 1
     (nicht Episode-Refresh), der `loadedRecord.snapshot.pendingRecoveryAnchor.has_value()`
     erkennt und den Anker fortsetzt statt ihn zu ersetzen
     (`originalCheckpointUtc`/`knownPhaseSecondsAtOriginalCheckpoint`/
@@ -3102,7 +3258,7 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
 20. **`WaitingForProduct` + `AssumeStillValid` – echter Resume
     (Auftragspunkt 2, Detailtests unter 5.17):** fuehrt einen tatsaechlich
     fortsetzbaren Resume nach `WaitingForProduct` herbei (kein reiner
-    `CommandId`-Verbrauch wie in Revision 7); Gate-A-Kopplung ueber den
+    `CommandId`-Verbrauch wie im frueheren wirkungslosen Pfad); Gate-A-Kopplung ueber den
     neuen `liveSensorEvidence`-Parameter (positiv -> Resume, negativ ->
     `RecoveryRejected`/`Fault`); `priorElapsedForOldPhase ==
     RecoveredPhaseElapsed.totalSecondsLowerBound` (nicht `totalSecondsUpperBound`,
@@ -3134,6 +3290,47 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
 27. Alle bestehenden #20/#21-Sensor-/Sicherheitsregressionen bleiben gruen.
 28. `git diff --check` **ungescoped** (bare, ohne Pfadangabe) fuer alle
     geaenderten Dateien (Plan **und** `docs/ROADMAP.md`).
+29. Recovered `Fermenting` mit
+    `priorBootPhaseElapsed.lowerBoundSeconds == 3600`, danach bestaetigte
+    Restdauer `remainingDurationMinutes == 120`: `priorBootPhaseElapsed` und
+    `nominalRecoveryAdjustment` sind nach dem Commit auf dem neuen Nullstand;
+    nach 119 neuen Minuten erfolgt **kein** Abschluss, nach 120 neuen Minuten
+    der bestehende Abschluss.
+30. Derselbe Fall mit bereits gesetztem
+    `nominalRecoveryAdjustment.cumulativeAppliedSeconds`: die alte nominale
+    Korrektur verkuerzt die neu gesetzte Restdauer nicht; die neue
+    Entscheidung zaehlt ausschliesslich ab dem Kommando-Baselinepunkt.
+31. Restdaueranpassung waehrend noch offenem `pendingRecoveryAnchor` und
+    gesetztem `recoveryBootAnchorMonotonicMillis`: beide werden im selben
+    Commit geloescht; ein spaeterer `reevaluateRecoveryTime()`-Aufruf liefert
+    keinen dauerwirksamen Pfad und kann die neue Restdauer nicht verkuerzen.
+32. Reine Zieltemperaturaenderung waehrend `Fermenting`: keine Fold- oder
+    Baseline-Mutation; `stateEnteredAtMillis`, Prior-/Nominalzeit und offener
+    Recovery-Kontext bleiben vollstaendig erhalten, die Restdauer laeuft
+    ununterbrochen weiter.
+33. Kombinierte Zieltemperatur- und Restdaueranpassung waehrend `Fermenting`:
+    die neue Zieltemperatur und die neue Restdauer werden gemeinsam
+    angewandt, aber genau eine neue Restdauer-Baseline wird gesetzt; der
+    Temperaturteil loest keinen zweiten Reset aus.
+34. `remainingDurationMinutes == 0`: bestehende Semantik eines unmittelbar
+    zulaessigen Fermenting-Abschlusses bleibt trotz neuer Baseline erhalten.
+35. Neuer Stromausfall **nach** manueller Restdauer-Baseline: Hop 1 beginnt
+    mit dem neuen `stateEnteredAtMillis`; `knownPhaseSecondsAtOriginalCheckpoint`
+    enthaelt keine Vor-Baseline-Zeit; neue Carry-Forward-Ketten funktionieren
+    normal und Vor-Baseline-Zeit wird nicht erneut in `priorBootPhaseElapsed`
+    eingefaltet.
+36. `observedRunSeconds`: die vor der Anpassung sicher beobachtete Zeit wird
+    genau einmal gefaltet und ueber die Baseline hinweg historisch erhalten;
+    sie wird weder geloescht noch als neuer Restdauer-Vorlauf verwendet.
+37. Persistenz-Cutpoints der Restdaueranpassung: kein Commit -> weder neue
+    Restdauer noch neuer Snapshot, Timer-Baseline, Fold oder geloeschter
+    Recovery-Kontext ist teilweise sichtbar; `CommitOutcomeUnknown` bleibt
+    fail-closed; bestaetigter Commit plus Apply-Fehler bleibt der bestehende
+    `PersistenceCommittedApplyFailed`-Vertrag.
+38. Alle Tests 1-28 dieser Matrix, insbesondere die Carry-Forward-/Mehrfach-
+    Reboot-/Kein-doppeltes-Zaehlen-Tests, bleiben als Regression erhalten;
+    die neuen Baseline-Tests veraendern deren Semantik fuer neue
+    Recovery-Ketten nicht.
 
 ## 9. Safety-/Security-/Recovery-/Hardwaregrenzen
 
@@ -3152,18 +3349,24 @@ erneut (Aktor-/Zeitfrage strukturell entkoppelt); eine qualitative
 Abschlussbestaetigung fuer `Fermenting`/`CoolHolding` erfolgt niemals ohne
 eine bewiesene, endliche akkumulierte Obergrenze; ein Resume ueber
 `resolveRecoveryOutcome` durchlaeuft dieselbe Gate-A-Sensorpruefung wie
-jeder andere Resume.
+jeder andere Resume. **Fuer die manuelle Restdauer-Baseline gilt zusaetzlich:**
+der neue Timer darf nur nach einem bestaetigten atomaren `AdjustRun`-Commit
+wirksam werden; alte Recovery-Zeit darf weder ueber
+`priorBootPhaseElapsed`/`nominalRecoveryAdjustment` noch ueber einen spaeteren
+NTP-Reevaluationspfad erneut angerechnet werden. Die historische
+`observedRunSeconds`-Metrik bleibt erhalten und wird nie als unbewiesene
+biologische Zeitgutschrift behandelt.
 
 ## 10. Ressourcen-/Betriebsbudget
 
 Schema-3-Zuwachs gegenueber Schema 2: `PendingRecoveryAnchor` (~68-78 Byte,
-optional, waehrend offener Episode **oder** – seit Revision 8 – waehrend
+optional, waehrend offener Episode **oder** waehrend
 einer noch offenen Recovery-Zeitbewertung eines bereits resumten Laufs
 belegt, s. 5.12; das Feld `accumulatedBeforeEpisode`
-(`PriorBootPhaseElapsed`, uint32 + optional uint32, ~9 Byte, seit
-Revision 8) sowie das **neue** Feld `knownSecondsSinceOriginalCheckpoint`
+(`PriorBootPhaseElapsed`, uint32 + optional uint32, ~9 Byte) sowie das Feld
+`knownSecondsSinceOriginalCheckpoint`
 (`std::uint64_t`, 8 Byte, neu in dieser Revision fuer Carry-Forward-Ketten,
-5.12) vergroessern das Struct-Layout gegenueber Revision 7 um diese
+5.12) vergroessern das Struct-Layout um diese
 Betraege; struct-intern kein zusaetzlicher Alignment-Zuschlag ueber die
 uebliche 8-Byte-Ausrichtung von `std::uint64_t`/`std::optional<std::int64_t>`
 hinaus),
@@ -3180,6 +3383,12 @@ unter dem bestehenden `kMaximumCheckpointRecordBytes`-Budget (8240 Byte)
 bzw. `kMaximumRunPersistencePayloadBytes` (8192 Byte); im Rahmen der
 Schema-3-Schreibtests (Testmatrix 24) abgedeckt – ein tatsaechliches
 Ueberschreiten des Budgets wuerde dort als `CapacityExceeded` auffallen.
+Die manuelle Restdauer-Baseline fuehrt kein zusaetzliches persistentes
+Timerfeld und kein unbegrenztes Recoveryjournal ein: sie verwendet den
+bestehenden `stateEnteredAtMillis`-Punkt sowie die vorhandenen
+`priorBootPhaseElapsed`-/`nominalRecoveryAdjustment`-/Ankerfelder mit deren
+beschriebenem Null-/Leerstand. Detaillierte historische Korrekturen bleiben
+#19.
 
 ## 11. SOLID/DRY/KISS
 
@@ -3226,7 +3435,14 @@ Bounds-Grundsatz fuer eine bewiesene, endliche Obergrenze (5.17/5.22) ist
 eine einzige logische Bedingung
 (`priorBootPhaseElapsed->elapsed.upperBoundSeconds.has_value()`), von
 `resolveRecoveryOutcome` und `ApplyRecoveryTimeCorrection` identisch
-gelesen statt zweimal getrennt implementiert.
+gelesen statt zweimal getrennt implementiert. Die manuelle
+Restdauer-Neubaseline verwendet keine zweite Timerwahrheit: der bestehende
+`stateEnteredAtMillis`-Wert wird einmal auf den Kommandozeitpunkt gesetzt,
+der bestehende prior-/nominale Recoverystand auf `0/0` beziehungsweise leer
+gebracht, und `observedRunSeconds` bleibt als einzige historische
+Beobachtungsmetrik erhalten. `reevaluateRecoveryTime` kann nur einen noch
+vorhandenen Anker lesen und ist damit strukturell von der neuen Baseline
+entkoppelt.
 
 ## 12. Dokumentations-/Abschlussnachweis
 
@@ -3259,7 +3475,7 @@ gelesen statt zweimal getrennt implementiert.
 
 ## 14. Stop-Bedingung
 
-Revision 9 ist ein vollstaendiger, eigenstaendiger Plan. Nach Commit dieser
+Revision 10 ist ein vollstaendiger, eigenstaendiger Plan. Nach Commit dieser
 Datei **und** `docs/ROADMAP.md`: **anhalten**, `git diff --check`
 **ungescoped (bare)** fuer beide geaenderten Dateien ausfuehren, `git push`,
 Remote-SHA verifizieren (Abschnitt 12), PR-Beschreibung und SESSION
