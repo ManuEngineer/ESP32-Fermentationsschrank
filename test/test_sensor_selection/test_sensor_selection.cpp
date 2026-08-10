@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <cstdint>
+#include <utility>
 
 #include "sensor_selection.hpp"
 
@@ -72,6 +73,17 @@ SensorSelectionDecision makeDecision(
     decision.plausibility.evaluationMonotonicMillis = 1'000'000U;
     decision.userAction = userAction;
     return decision;
+}
+
+CrossRolePlausibilityContext restartPlausibility(
+    SensorQualitySnapshot air, SensorQualitySnapshot product,
+    SensorQualitySnapshot cooling, std::uint64_t evaluatedAt = 100U) {
+    CrossRolePlausibilityContext context;
+    context.air = std::move(air);
+    context.product = std::move(product);
+    context.cooling = std::move(cooling);
+    context.evaluationMonotonicMillis = evaluatedAt;
+    return context;
 }
 
 bool runtimeAndModeUnchanged(const SensorSelectionStateView& before,
@@ -1190,7 +1202,7 @@ void test_thermal_evidence_no_own_age_threshold_is_evaluated() {
 // computeRestartSensorSelection (6.12.3, reine Funktion)
 // ---------------------------------------------------------------------------
 
-void test_restart_recommendation_is_fail_closed_for_legacy_unknown() {
+void test_restart_recommendation_revalidates_legacy_unknown_with_live_evidence() {
     const PersistedSensorSelectionState persisted{
         SensorSelectionProvenance::LegacyUnknown,
         SensorSelectionDecisionCause::None, 0U};
@@ -1200,18 +1212,21 @@ void test_restart_recommendation_is_fail_closed_for_legacy_unknown() {
         ReturnStrategy::AutomaticValidatedReturnToProduct, 60U};
 
     const auto recommendation = computeRestartSensorSelection(
-        persisted, RunSensorMode::Product, program);
+        persisted, RunSensorMode::Product, program,
+        restartPlausibility(validSnapshot(), validSnapshot(), validSnapshot()));
 
     TEST_ASSERT_TRUE(recommendation.runtime.phase ==
-                     SensorSelectionPhase::RestartRevalidationPending);
+                     SensorSelectionPhase::NormalProduct);
     TEST_ASSERT_TRUE(recommendation.runtime.permission ==
-                     SensorPeltierPermission::Blocked);
+                     SensorPeltierPermission::Allowed);
     TEST_ASSERT_TRUE(recommendation.activeMode == RunSensorMode::Product);
+    TEST_ASSERT_EQUAL_UINT64(
+        100U, recommendation.runtime.lastAppliedMonotonicMillis.value());
     TEST_ASSERT_FALSE(recommendation.runtime.returnValidation
                           .enteredAtMonotonicMillis.has_value());
 }
 
-void test_restart_recommendation_is_fail_closed_for_fallback_active() {
+void test_restart_recommendation_revalidates_fallback_active_in_air() {
     const PersistedSensorSelectionState persisted{
         SensorSelectionProvenance::FallbackActive,
         SensorSelectionDecisionCause::FallbackToAir, 5U};
@@ -1220,17 +1235,19 @@ void test_restart_recommendation_is_fail_closed_for_fallback_active() {
         ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
         ReturnStrategy::AutomaticValidatedReturnToProduct, 60U};
 
-    const auto recommendation =
-        computeRestartSensorSelection(persisted, RunSensorMode::Air, program);
+    const auto recommendation = computeRestartSensorSelection(
+        persisted, RunSensorMode::Air, program,
+        restartPlausibility(validSnapshot(), failedSnapshot(),
+                            validSnapshot()));
 
     TEST_ASSERT_TRUE(recommendation.runtime.phase ==
-                     SensorSelectionPhase::RestartRevalidationPending);
+                     SensorSelectionPhase::AirFallbackActive);
     TEST_ASSERT_TRUE(recommendation.runtime.permission ==
-                     SensorPeltierPermission::Blocked);
+                     SensorPeltierPermission::Allowed);
     TEST_ASSERT_TRUE(recommendation.activeMode == RunSensorMode::Air);
 }
 
-void test_restart_recommendation_is_fail_closed_for_returned_to_product() {
+void test_restart_recommendation_revalidates_returned_to_product() {
     const PersistedSensorSelectionState persisted{
         SensorSelectionProvenance::ReturnedToProduct,
         SensorSelectionDecisionCause::AutomaticValidatedReturn, 9U};
@@ -1240,13 +1257,116 @@ void test_restart_recommendation_is_fail_closed_for_returned_to_product() {
         ReturnStrategy::AutomaticValidatedReturnToProduct, 60U};
 
     const auto recommendation = computeRestartSensorSelection(
-        persisted, RunSensorMode::Product, program);
+        persisted, RunSensorMode::Product, program,
+        restartPlausibility(validSnapshot(), validSnapshot(), validSnapshot()));
+
+    TEST_ASSERT_TRUE(recommendation.runtime.phase ==
+                     SensorSelectionPhase::NormalProduct);
+    TEST_ASSERT_TRUE(recommendation.runtime.permission ==
+                     SensorPeltierPermission::Allowed);
+    TEST_ASSERT_TRUE(recommendation.activeMode == RunSensorMode::Product);
+}
+
+void test_restart_recommendation_revalidates_air_without_product_sensor() {
+    const PersistedSensorSelectionState persisted{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::None, 2U};
+    const SensorSelectionProgramContext program{
+        SensorPreference::AirOnly,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::ManualReturnToProduct, 60U};
+
+    const auto recommendation = computeRestartSensorSelection(
+        persisted, RunSensorMode::Air, program,
+        restartPlausibility(validSnapshot(), failedSnapshot(), validSnapshot(),
+                            200U));
+
+    TEST_ASSERT_TRUE(recommendation.runtime.phase ==
+                     SensorSelectionPhase::NormalAir);
+    TEST_ASSERT_TRUE(recommendation.runtime.permission ==
+                     SensorPeltierPermission::Allowed);
+    TEST_ASSERT_TRUE(recommendation.activeMode == RunSensorMode::Air);
+    TEST_ASSERT_EQUAL_UINT64(
+        200U, recommendation.runtime.lastAppliedMonotonicMillis.value());
+}
+
+void test_restart_recommendation_rejects_missing_selected_sensor() {
+    const PersistedSensorSelectionState persisted{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::None, 2U};
+    const SensorSelectionProgramContext program{
+        SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::AutomaticValidatedReturnToProduct, 60U};
+
+    const auto recommendation = computeRestartSensorSelection(
+        persisted, RunSensorMode::Product, program,
+        restartPlausibility(validSnapshot(), failedSnapshot(),
+                            validSnapshot()));
 
     TEST_ASSERT_TRUE(recommendation.runtime.phase ==
                      SensorSelectionPhase::RestartRevalidationPending);
     TEST_ASSERT_TRUE(recommendation.runtime.permission ==
                      SensorPeltierPermission::Blocked);
-    TEST_ASSERT_TRUE(recommendation.activeMode == RunSensorMode::Product);
+    TEST_ASSERT_FALSE(
+        recommendation.runtime.lastAppliedMonotonicMillis.has_value());
+}
+
+void test_restart_recommendation_rejects_invalid_fixed_sensor() {
+    const PersistedSensorSelectionState persisted{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::None, 2U};
+    const SensorSelectionProgramContext program{
+        SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::AutomaticValidatedReturnToProduct, 60U};
+
+    const auto recommendation = computeRestartSensorSelection(
+        persisted, RunSensorMode::Product, program,
+        restartPlausibility(staleSnapshot(), validSnapshot(), validSnapshot()));
+
+    TEST_ASSERT_TRUE(recommendation.runtime.phase ==
+                     SensorSelectionPhase::RestartRevalidationPending);
+    TEST_ASSERT_TRUE(recommendation.runtime.permission ==
+                     SensorPeltierPermission::Blocked);
+}
+
+void test_restart_recommendation_rejects_provenance_mode_mismatch() {
+    const PersistedSensorSelectionState persisted{
+        SensorSelectionProvenance::FallbackActive,
+        SensorSelectionDecisionCause::FallbackToAir, 5U};
+    const SensorSelectionProgramContext program{
+        SensorPreference::ProductIfAvailableElseAir,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::AutomaticValidatedReturnToProduct, 60U};
+
+    const auto recommendation = computeRestartSensorSelection(
+        persisted, RunSensorMode::Product, program,
+        restartPlausibility(validSnapshot(), validSnapshot(), validSnapshot()));
+
+    TEST_ASSERT_TRUE(recommendation.runtime.phase ==
+                     SensorSelectionPhase::RestartRevalidationPending);
+    TEST_ASSERT_TRUE(recommendation.runtime.permission ==
+                     SensorPeltierPermission::Blocked);
+}
+
+void test_restart_recommendation_rejects_program_forbidden_mode() {
+    const PersistedSensorSelectionState persisted{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::None, 2U};
+    const SensorSelectionProgramContext program{
+        SensorPreference::ProductRequired,
+        ProductSensorFailurePolicy::FallbackToAirAfterTimeout,
+        ReturnStrategy::AutomaticValidatedReturnToProduct, 60U};
+
+    const auto recommendation = computeRestartSensorSelection(
+        persisted, RunSensorMode::Air, program,
+        restartPlausibility(validSnapshot(), validSnapshot(), validSnapshot()));
+
+    TEST_ASSERT_TRUE(recommendation.runtime.phase ==
+                     SensorSelectionPhase::RestartRevalidationPending);
+    TEST_ASSERT_TRUE(recommendation.runtime.permission ==
+                     SensorPeltierPermission::Blocked);
 }
 
 // ---------------------------------------------------------------------------
@@ -1525,10 +1645,16 @@ int main() {
     RUN_TEST(test_thermal_evidence_unavailable_never_grants_return);
     RUN_TEST(test_thermal_evidence_no_own_age_threshold_is_evaluated);
     RUN_TEST(test_normal_product_ignores_structurally_invalid_thermal_evidence);
-    RUN_TEST(test_restart_recommendation_is_fail_closed_for_legacy_unknown);
-    RUN_TEST(test_restart_recommendation_is_fail_closed_for_fallback_active);
     RUN_TEST(
-        test_restart_recommendation_is_fail_closed_for_returned_to_product);
+        test_restart_recommendation_revalidates_legacy_unknown_with_live_evidence);
+    RUN_TEST(test_restart_recommendation_revalidates_fallback_active_in_air);
+    RUN_TEST(test_restart_recommendation_revalidates_returned_to_product);
+    RUN_TEST(
+        test_restart_recommendation_revalidates_air_without_product_sensor);
+    RUN_TEST(test_restart_recommendation_rejects_missing_selected_sensor);
+    RUN_TEST(test_restart_recommendation_rejects_invalid_fixed_sensor);
+    RUN_TEST(test_restart_recommendation_rejects_provenance_mode_mismatch);
+    RUN_TEST(test_restart_recommendation_rejects_program_forbidden_mode);
     RUN_TEST(test_return_to_product_blocked_by_single_air_sensor_failure);
     RUN_TEST(test_return_to_product_blocked_by_single_cooling_sensor_failure);
     RUN_TEST(

@@ -89,11 +89,12 @@ struct SensorSelectionDecision {
     const SensorSelectionStateView& current,
     const SensorSelectionDecision& decision, std::uint64_t nowMonotonicMillis);
 
-// Reine, seiteneffektfreie Funktion fuer die spaetere #18-Restart-Aktivierung
-// (6.12.3). Berechnet aus dem persistierten Sensorselektionszustand und dem
-// konfigurierten Programmkontext eine Empfehlung, ohne selbst zu
-// persistieren oder einen Coordinator zu mutieren. #21 ruft sie nicht selbst
-// im Restart-Pfad auf; das bleibt #18 vorbehalten.
+// Reine, seiteneffektfreie Funktion fuer die #18-Restart-Aktivierung
+// (6.12.3). Bewertet den persistierten Sensorselektionszustand zusammen mit
+// Programmkontext und aktueller CrossRole-Evidenz. Sie persistiert nicht und
+// mutiert keinen Coordinator. Eine blockierte Empfehlung bleibt im
+// RestartRevalidationPending-Zustand; der Recovery-Aufrufer entscheidet daraus
+// ueber den RecoveryReject-Pfad.
 struct RestartSensorSelectionRecommendation {
     SensorSelectionRuntimeState runtime;
     RunSensorMode activeMode{RunSensorMode::Product};
@@ -102,6 +103,7 @@ struct RestartSensorSelectionRecommendation {
 [[nodiscard]] RestartSensorSelectionRecommendation
 computeRestartSensorSelection(const PersistedSensorSelectionState& persisted,
                               RunSensorMode lastActiveMode,
-                              const SensorSelectionProgramContext& program);
+                              const SensorSelectionProgramContext& program,
+                              const CrossRolePlausibilityContext& plausibility);
 
 }  // namespace fermentation
