@@ -2,28 +2,29 @@
 
 ## 1. Status
 
-- Revision: **10** (ersetzt Revision 9 vollstaendig; diese Datei ist die
+- Revision: **11** (ersetzt Revision 10 vollstaendig; diese Datei ist die
   einzige normative Planquelle fuer die Umsetzung und setzt keine fruehere
   Planrevision voraus).
 - Draft-PR: #102 (`plan/issue-18-restart-weighted-progress` -> `main`).
 - Live-Issue: #18.
 - Plan-Basis: `main` = `17ab3f5399a066465298ac6871b965d176a38d32`;
   Remote-HEAD vor dieser Korrektur =
-  `0cad66e2cc7e59a0171487ef2ed55e6131e2f2a7`. Branch ist 0 Commits hinter
+  `56a0200d6d0c492ec136705c52dd67e481117a9b`. Branch ist 0 Commits hinter
   `main`.
-- Anlass: Der bestehende Vertrag fuer eine bestaetigte Restdaueranpassung
-  waehrend `Fermenting` setzt den Timer bereits auf den Kommandozeitpunkt,
-  faltet aber die sicher beobachtete Vor-Anpassungszeit noch nicht vollstaendig
-  und neutralisiert die alten Recovery-Zeitbeitraege fuer den neuen Timer
-  nicht. Revision 10 schliesst deshalb den gesamten Vertrag: die historische
-  `observedRunSeconds`-Zeit wird genau einmal vor der Neusetzung gefaltet;
-  `priorBootPhaseElapsed`, aktive nominale Recoverykorrektur und ein offener
-  Recovery-Anker werden fuer die neue Restdauer-Baseline superseded; reine
-  Zieltemperaturaenderungen behalten ihre ununterbrochene Zeitbasis; neue
-  Stromausfaelle nach der Baseline beginnen wieder mit deren aktuellem
-  `stateEnteredAtMillis`. Die Testmatrix und der atomare Persistenznachweis
-  werden entsprechend erweitert. `docs/ROADMAP.md` wird minimal auf Revision
-  10 synchronisiert.
+- Anlass: Revision 10 schliesst die manuelle Restdauer-Neubaseline fachlich
+  ab, hat dabei aber den weiterhin live geforderten temperaturgewichteten
+  Fortschrittsvertrag aus #18 und `docs/RUN_PERSISTENCE.md` als Nicht-Ziel
+  behandelt. Revision 11 nimmt deshalb den **technischen** gewichteten
+  Kernvertrag wieder kanonisch in #18 auf: eine kleine, reine
+  `fermentation_app`-Modellgrenze, ehrliche `unavailable`-Semantik,
+  persistente kumulative Bounds, sichtbare Quelle/Konfidenz und einmalige
+  Beitragsbuchung. Gate C bleibt unveraendert: Ohne freigegebenes
+  Commissioning-Modell liefert der Produktionspfad `unavailable` und
+  schreibt keinen biologischen Fortschritt gut; #34 liefert nur
+  Messgrundlagen und wird nicht still zum Modelleigentuemer. Die Revision-10-
+  Recovery-, Restdauer-, Fallback-, Legacy-, Sensor- und Persistenzvertraege
+  bleiben unveraendert, insbesondere die neue Restdauer-Baseline ab
+  `stateEnteredAtMillis`.
 - Nach Commit dieser Revision: `git diff --check` **ungescoped** (bare,
   ohne Pfadangabe, s. Auftrag "fuer alle geaenderten Dateien") ausfuehren,
   `git push`, danach frischer `git fetch` und Abgleich `git rev-parse
@@ -39,13 +40,19 @@
   Akzeptanzkriterien und Quellen bleiben unveraendert.
 - `gh pr view 102`: Draft, Base `main`.
 - `docs/ROADMAP.md:13` wurde in dieser Session direkt gelesen und zeigt
-  weiterhin `Revision 9 in Arbeit`. Diese Revision aktualisiert Zeile 13 auf
-  `Revision 10` sowie Zeile 3 (`Stand:`) auf das Datum dieses Commits (5.29
+  weiterhin `Revision 10 in Arbeit`. Diese Revision aktualisiert Zeile 13 auf
+  `Revision 11` sowie Zeile 3 (`Stand:`) auf das Datum dieses Commits (5.29
   unten).
 - Der aktuelle Planstand wurde vollstaendig gegen den neuen Ownerauftrag
-  geprueft. Die bestehende Recovery-/Carry-Forward-Semantik bleibt erhalten;
-  die neue Restdauer-Baseline wird in 5.22, 5.23, 5.12, 5.16, 5.17 und der
-  Testmatrix konsistent als ein atomarer `AdjustRun`-Pfad beschrieben.
+  geprueft. Die bestehende Recovery-/Carry-Forward-Semantik und die
+  Revision-10-Restdauer-Baseline bleiben erhalten; der gewichtete Vertrag wird
+  als getrennte, nicht timerwirksame Progressmetrik in 5.20, 5.21, 5.22,
+  5.25, 5.28 und der Testmatrix ergaenzt.
+- Live-Issue #34 ist offen mit `TBD_COMMISSIONING` und umfasst
+  Sensorvergleich, Offsets und thermische Grundvermessung; #35 und #36 sind
+  ebenfalls offen mit `TBD_COMMISSIONING`. Keine dieser Issues wird in dieser
+  Revision still zum Eigentuemer eines biologischen Aktivitaetskennfelds
+  erweitert.
 - `lib/fermentation_app/src/run_persistence_contract.hpp:40-43`
   (`RunCheckpointTime{monotonicMillis; std::optional<std::int64_t>
   utcUnixSeconds}`) direkt erneut gelesen: die UTC ist bereits im
@@ -92,10 +99,14 @@
   Verdrahtung innerhalb von #18 – insbesondere wird kein produktiver
   NTP-Verfuegbarkeits-Aufrufer komponiert, der `reevaluateRecoveryTime`
   automatisch ausloest.
-- **Gate C:** keine unkalibrierte biologische Aktivitaetskurve; unsichere
-  Ausfallzeit wird ohne freigegebenes Modell nicht automatisch als
-  Fortschritt gutgeschrieben (5.22); nicht beobachtete Ausfallzeit wird
-  niemals als `observedRunSeconds` gebucht (5.22). Eine automatische
+- **Gate C:** keine unkalibrierte biologische Aktivitaetskurve; #18
+  implementiert die reine Modellgrenze, Persistenz und native Testbarkeit,
+  aber der Produktionsprovider bleibt ohne freigegebenes
+  Commissioning-Modell bei `unavailable`. Unsichere Ausfallzeit wird ohne
+  freigegebenes Modell nicht automatisch als gewichteter Fortschritt
+  gutgeschrieben (5.25); nicht beobachtete Ausfallzeit wird niemals als
+  `observedRunSeconds` gebucht (5.22) und `NominalRecoveryAdjustmentState`
+  bleibt eine nominale Benutzerkorrektur. Eine automatische
   Prozessentscheidung wird ausschliesslich aus bewiesenen Fakten (Alt-Boot-
   lokal bekannte Sekunden, bestaetigte Benutzerkorrektur) getroffen, niemals
   aus einer unbewiesenen Ausfall-Untergrenzen-Annahme (5.13).
@@ -104,15 +115,19 @@
 
 **Ziel:** Nach einem Neustart wird ein geladener aktiver Lauf sicher
 bewertet, korrekt fortgesetzt oder korrekt beendet, mit nachvollziehbarem,
-ehrlich gekennzeichnetem Fortschritt und ohne jede Aktorfreigabe vor
-abgeschlossener Bewertung.
+ehrlich gekennzeichnetem Zeit- und temperaturgewichteten Fortschritt sowie
+sichtbarer Quelle, Konfidenz und Korrektur – ohne jede Aktorfreigabe vor
+abgeschlossener Bewertung. Der gewichtete Fortschritt ist eine separate
+Progressmetrik und keine zweite Restdauer-Timerwahrheit.
 
 **Nicht-Ziele (Release 1):** reale Hardware-/NVS-Anbindung (#29/#90);
 Fault-Klassen/SAFE_BOOT-Feinausbau (#24); Web-/Anzeige-UI-Implementierung;
-kalibrierte biologische Temperatur-Aktivitaets-Gewichtung (Gate C); ein
-neuer periodischer Anwendungszyklus (Gate B); produktive Verdrahtung eines
-automatischen UTC-Reevaluationsaufrufers oder einer produktiven
-Live-Sensor-Update-Schleife (Gate B).
+ein reales kalibriertes Aktivitaetskennfeld und produktive
+Commissioning-Parameter (Gate C, `TBD_COMMISSIONING`); ein neuer periodischer
+Anwendungszyklus (Gate B); produktive Verdrahtung eines automatischen
+UTC-Reevaluationsaufrufers oder einer produktiven Live-Sensor-Update-Schleife
+(Gate B). Die reine gewichtete Modellgrenze, Persistenzsemantik,
+unavailable-Provider und native Fake-Modelltests sind dagegen #18-Ziel.
 
 ## 5. Bindende Fachvertraege
 
@@ -122,13 +137,14 @@ Live-Sensor-Update-Schleife (Gate B).
 |---|---|---|
 | Ausfallintervall, Boot-Anker-Ableitung, Konfidenz (rein) | `lib/fermentation_app/src/run_recovery_time.hpp/.cpp` | neu |
 | Recovery-Orchestrierung, `applyLiveRecoveryEvidence`, `RunRecoveryCoordinator::reevaluateRecoveryTime` (Verdicts, Zeit-Nachtragskorrektur fuer bereits resumte Laeufe) | `lib/fermentation_app/src/run_recovery.hpp/.cpp` | neu |
+| Temperaturgewichtete Fortschrittsgrenze: reine Modellinputs/-ergebnisse, `unavailable`-Provider, checked kumulative Bounds und Segment-Dedup | `lib/fermentation_app/src/run_progress_weighting.hpp/.cpp` | neu |
 | Zustandsautomat: neue Reasons, Topologie, `PriorBootPhaseElapsed`-Parameter | `lib/fermentation_app/src/process_state_machine.hpp/.cpp` | erweitert |
-| Persistenzvertrag: Schema 3 (`PendingRecoveryAnchor`, `RunProgressState`, `RecoveryEpisodeEvidence`, `TaggedPriorBootPhaseElapsed`, `NominalRecoveryAdjustmentState`) | `lib/fermentation_app/src/run_persistence_contract.hpp/.cpp` | erweitert |
+| Persistenzvertrag: Schema 3 (`PendingRecoveryAnchor`, `RunProgressState` inkl. optionalem `WeightedProgressState`, `RecoveryEpisodeEvidence` inkl. Segment-ID, `TaggedPriorBootPhaseElapsed`, `NominalRecoveryAdjustmentState`) | `lib/fermentation_app/src/run_persistence_contract.hpp/.cpp` | erweitert |
 | Codec: Schema-3-Gate, Legacy-Migration, `RunPersistenceMutationKind::Recovery` | `lib/fermentation_app/src/run_persistence_codec.cpp` | erweitert |
 | Coordinator: Low-Level-Schreibkern mit Rollbackzustand, `FallbackRecoveryPending`, `activateLoadedRun`, `activateFallbackRecoveredRun`, `resolveRecoveryOutcome` (Gate-A-gekoppelter Resume fuer `AssumeStillValid`, Bounds-Gate fuer `AssumeThresholdCrossed`), Episode-Refresh | `lib/fermentation_app/src/run_persistence_coordinator.hpp/.cpp` | erweitert |
 | Kommandos: `ApplyRecoveryTimeCorrection` (echtes `persistCommand`, mutiert nur Daten); `AdjustRun`-Zeitfaltung und manuelle Restdauer-Baseline; `completeTimedRun`-Wiederverwendung fuer `resolveRecoveryOutcome` | `lib/fermentation_app/src/run_commands.hpp/.cpp` | erweitert |
 | Restart-Sensorauswahl (Gate A) | `lib/fermentation_app/src/sensor_selection.hpp/.cpp` | erweitert |
-| Tests | `test/test_run_recovery_time/`, `test/test_run_recovery/`, `test/test_process_state_machine/`, `test/test_run_persistence_coordinator/`, `test/test_run_commands/`, `test/test_sensor_selection/` | neu/erweitert |
+| Tests | `test/test_run_recovery_time/`, `test/test_run_recovery/`, `test/test_run_progress_weighting/`, `test/test_process_state_machine/`, `test/test_run_persistence_coordinator/`, `test/test_run_commands/`, `test/test_sensor_selection/` | neu/erweitert |
 
 ### 5.2 `RecoveryOutageBounds` – kanonische Ausfalldauer (Vertrag A)
 
@@ -347,8 +363,9 @@ alle Aufrufer, kein zweiter, potenziell abweichender gespeicherter Wert.
 **Tests:** `Strong` ueber Alt-Boot-lokalen Beweis ohne UTC-Anker; `Strong`
 ueber UTC-Obergrenze; `Bounded` bei ueberschneidendem UTC-Intervall;
 `Unknown` ohne jeden UTC-Anker; alle drei Faelle nachweisbar erreichbar
-(kein toter Enumwert, Regressionstest gegen den in `WeightedProgressStatus`,
-5.25, bereits vermiedenen Fehler).
+(kein zusaetzlicher unreachable-only Enumwert; die optionale
+`weightedProgress`-Darstellung ist bei `unavailable` und nach einem
+validierten Fake-/Commissioning-Modell strukturell eindeutig).
 
 ### 5.6 Boot-unabhaengiger Phasenfortschritt – kein Rebasing-Unterlauf
 
@@ -1265,8 +1282,9 @@ Ablauf:
      `lowerBoundSeconds`-Verbesserung (ohne begleitende
      `upperBoundSeconds`-Aenderung, also ein Wert-zu-Wert- statt
      `nullopt`-zu-Wert-Uebergang) ist ebenfalls ein gueltiger
-     Commit-Ausloeser fuer den fuenften `RunPersistenceMutationKind::Recovery`-
-     Trigger (5.16, dort entsprechend ergaenzt) – heute unerreichbar, da
+     Commit-Ausloeser fuer den Zeit-Nachtrags-Trigger von
+     `RunPersistenceMutationKind::Recovery` (5.16, dort entsprechend
+     ergaenzt) – heute unerreichbar, da
      `outageSecondsLowerBound` ohne gesetztes `maxCheckpointGapSeconds`
      nie einen von Hop 1 abweichenden Wert liefert, aber ab produktivem,
      auf eine Ein-Episoden-Kette beschraenktem `maxCheckpointGapSeconds`
@@ -1296,7 +1314,7 @@ Ablauf:
      Verbesserung"-Status zurueckgegeben.
 4. Commit (nur im Erfolgsfall aus Punkt 3, oder bei automatischer
    Tombstone-/Resume-Aufloesung aus Punkt 2) ueber den gemeinsamen
-   Commit-Kern (5.16), `mutationKind = Recovery` (fuenfter Ausloeser,
+   Commit-Kern (5.16), `mutationKind = Recovery` (Zeit-Nachtragsausloeser,
    s. 5.16), `rollbackState` gemaess aktuellem `state_`.
 
 **Tests:**
@@ -1304,7 +1322,7 @@ Ablauf:
   Setter noetig), `outage` erst bei Reevaluation bekannt, akkumulierte
   `lowerBoundSeconds` waechst gegenueber dem zuletzt committeten Stand
   waehrend `upperBoundSeconds` weiterhin `nullopt` bleibt -> Commit ueber
-  den fuenften Ausloeser (5.16) feuert allein wegen der Untergrenze;
+  den Zeit-Nachtragsausloeser (5.16) feuert allein wegen der Untergrenze;
   identischer Aufbau ohne Wachstum -> kein Commit.
 - Hop1-only -> Commit -> UTC wird spaeter im selben Boot verfuegbar:
   `deriveUtcAtRecoveryBootAnchor` liefert die UTC am Hop-1-Zeitpunkt, nicht
@@ -1572,9 +1590,20 @@ damit ablehnen – nicht speicherbar.
    Laufs:** ist `snapshot.variant == NoActiveRun`, muessen
    `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
    `lastRecoveryEpisodeEvidence` (5.20), `priorBootPhaseElapsed` (5.23) und
-   `nominalRecoveryAdjustment` (5.22) alle `nullopt` sein, sonst ist der
+   `nominalRecoveryAdjustment` (5.22) sowie `runProgress.weightedProgress`
+   alle `nullopt` sein, sonst ist der
    Snapshot ungueltig – konsistent mit `clearActiveRunState()` (5.11), das
-   alle fuenf Felder im selben Commit loescht.
+   alle sechs aktiven Recovery-/Progressfelder im selben Commit loescht.
+
+7. **Gewichteter Zustand (5.21/5.25):** ist
+   `snapshot.runProgress.weightedProgress.has_value()`, muessen die
+   kumulierten Bounds geordnet sein, `lastSourceRole` ausschliesslich
+   `Product` oder `Air` tragen, die Konfidenz exakt zur Rolle passen und
+   `lastAppliedSegmentId != 0` gelten. Ein gesetztes
+   `lastRecoveryEpisodeEvidence->weightedProgressSegmentId` ist ebenfalls
+   ungleich null. `weightedProgress == nullopt` ist dagegen der gueltige
+   `unavailable/unknown`-Zustand und wird bei Schema-1/2-Migration nicht als
+   Fehler behandelt.
 
 Contract-/Codec-Tests: aktiver Schema-3-Snapshot mit `RecoveryEvaluation`
 und vollstaendigem, konsistentem Pending-Kontext -> gueltig; ohne
@@ -1582,7 +1611,7 @@ Pending-Kontext -> ungueltig; mit inkonsistentem `pendingRecoveryAnchor`
 (falsche Phase fuer den Snapshot) -> ungueltig; mit `priorBootPhaseElapsed`,
 dessen Tag nicht zur aktuellen Phase passt -> ungueltig; `NoActiveRun` mit
 noch gesetztem `pendingRecoveryAnchor`/`lastRecoveryEpisodeEvidence`/
-`nominalRecoveryAdjustment` -> ungueltig; Schema-1/2-Decodierung kann diese
+`nominalRecoveryAdjustment`/`weightedProgress` -> ungueltig; Schema-1/2-Decodierung kann diese
 Kombinationen gar nicht erzeugen (Regressionstest gegen bestehende
 Migrationsvektoren). Zusaetzlich (Punkt 3, neu): Snapshot mit
 `processState.state == Fermenting`, gesetztem `PendingRecoveryAnchor`,
@@ -1631,7 +1660,10 @@ monotonicMillis` (dieser Boot, 5.12), `candidate.nominalRecoveryAdjustment`
 bleibt unveraendert (5.22 – eine bereits bestaetigte nominale Korrektur wird
 durch einen Reboot nicht beeinflusst). Geschrieben ueber denselben
 Commit-Kern (5.16), mit `rollbackState == LoadedActiveRun` (5.16),
-`mutationKind == Recovery` (5.16).
+`mutationKind == Recovery` (5.16). Das
+`lastRecoveryEpisodeEvidence->weightedProgressSegmentId` bleibt bei diesem
+Episode-Refresh unveraendert; die neue `recoveryEpisodeRevision` ist bewusst
+nicht der gewichtete Idempotenzschluessel.
 
 **Latch-Reset pro Sensorrolle (5.20):** Bei jedem Anstieg von
 `recoveryEpisodeRevision` – ob durch den initialen Hop 1 oder durch ein
@@ -1798,7 +1830,7 @@ enum class RunPersistenceMutationKind : std::uint8_t {
     Command = 1U,
     Transition = 2U,
     SensorSelection = 3U,
-    Recovery = 4U,  // Hop 1, Hop 1+Hop 2, Episode-Refresh, Tombstone, Zeit-Nachtragskorrektur
+    Recovery = 4U,  // Hop 1, Hop 1+Hop 2, Episode-Refresh, Tombstone, Zeit-Nachtragskorrektur, gewichtete Modellbuchung
 };
 ```
 
@@ -1807,7 +1839,7 @@ enum class RunPersistenceMutationKind : std::uint8_t {
   `(mutationKind == Command) != commandId.has_value()`) bleibt unveraendert
   korrekt, da `Recovery` – wie `Transition` und `SensorSelection` bereits
   heute – **keine** `CommandId` traegt.
-- **Fuenf** Ausloeser: die von
+- **Sechs** Ausloeser: die von
   `activateLoadedRun`, `activateFallbackRecoveredRun`, dem
   Episode-Refresh-Pfad (5.15) und dem Tombstone-Pfad (5.11) ausgeloesten
   Commits rufen `writeSnapshotCore` mit `mutationKind =
@@ -1823,9 +1855,14 @@ enum class RunPersistenceMutationKind : std::uint8_t {
   liefert daher nie eine Verbesserung ueber diesen Zweig) – die
   akkumulierte `lowerBoundSeconds` gegenueber dem zuletzt committeten
   Stand tatsaechlich vergroessert (5. Ausloeser: Zeit-Nachtragskorrektur,
-  s. 5.12 Schritt 3).
-  Dieser fuenfte Ausloeser committet **ausschliesslich** bei einer dieser
-  beiden echten Verbesserungen; ein Aufruf ohne jede Verbesserung (NTP
+  s. 5.12 Schritt 3), **oder** ein erfolgreicher
+  `applyRecoveryProgressWeighting`-Aufruf mit einer verfuegbaren, checked
+  Modellentscheidung (6. Ausloeser: gewichtete Modellbuchung). Diese sechste
+  Mutation schreibt ausschliesslich den in 5.25 definierten
+  `weightedProgress`-Kandidaten und niemals Timer-, Prior-, Nominal- oder
+  Recovery-Ankerfelder. Der Zeit-Nachtragsausloeser committet
+  **ausschliesslich** bei einer der beiden echten Zeitverbesserungen; ein
+  Aufruf ohne jede Verbesserung (NTP
   weiterhin nicht verfuegbar, und ohne gesetztes `maxCheckpointGapSeconds`)
   schreibt **nichts** – ohne diese Einschraenkung koennte ein wiederholt
   erfolgloser Reevaluationsversuch unbegrenzt NVS-Schreibverschleiss
@@ -1865,9 +1902,10 @@ NotWritten-Fehler vor Commit stellen exakt `rollbackState` wieder her; ein
 `BlockedIndeterminate`; ein bestaetigt durabler Commit mit RAM-Apply-Fehler
 fuehrt zu `PersistenceCommittedApplyFailed`; Standardpfade zeigen exakt das
 heutige Verhalten (Regressionstest). Zusaetzlich: `RunPersistenceMutationKind::Recovery`
-Codec-Roundtrip; alle **fuenf** Recovery-Commit-Ausloeser (Hop 1, Hop
+Codec-Roundtrip; alle **sechs** Recovery-Commit-Ausloeser (Hop 1, Hop
 1+Hop 2, Episode-Refresh, Tombstone, erfolgreiche Zeit-Nachtragskorrektur
-via `reevaluateRecoveryTime`) erzeugen einen Prepared-Head mit
+via `reevaluateRecoveryTime`, erfolgreiche gewichtete Modellbuchung via
+`applyRecoveryProgressWeighting`) erzeugen einen Prepared-Head mit
 `mutationKind == Recovery` und `commandId == std::nullopt`; ein
 `reevaluateRecoveryTime`-Aufruf ohne Verbesserung erzeugt **keinen**
 Prepared-Head (Negativtest); ein Cut nach dem Prepared-Head-Schreiben
@@ -2323,8 +2361,19 @@ struct RecoveryTemperatureEvidence {
 struct RecoveryEpisodeEvidence {
     CrossRoleEvidence beforeOutage;              // eingefroren, bei jedem echten Hop 1 (frisch oder carry-forward, 5.12) neu gesetzt, nicht bei Episode-Refresh
     FirstAfterRestartEvidence firstAfterRestart; // gemischte Lebensdauer, siehe unten
+    std::optional<std::uint32_t> weightedProgressSegmentId; // genau ein fachlicher Recoveryabschnitt; bei echtem Hop 1 neu, bei Episode-Refresh unveraendert, bei manueller Restdauer-Baseline superseded
 };
 ```
+
+`weightedProgressSegmentId` ist **nur** ein begrenzter Idempotenzschluessel fuer
+die gewichtete Fortschrittsmetrik, keine Zeitbasis und kein Historienjournal.
+Bei jedem echten Hop 1 wird er aus dem ohnehin checked erhoehten
+`recoveryEpisodeRevision` gesetzt; bei einem Episode-Refresh bleibt er
+unveraendert, weil derselbe physische Ausfall nur neu bewertet wird. Ein
+Carry-Forward-Hop 1 ist dagegen ein neuer physischer Ausfall und erhaelt einen
+neuen Segment-Schluessel; die bereits bekannte Zeitkette wird dadurch nicht
+veraendert. Ein wiederholtes Modellanwenden innerhalb desselben Segments kann
+so strukturell nicht doppelt buchen.
 
 **Das Problem eines rein schreibpfad-gebundenen Latches:** wird `Product`
 z. B. um 12:00:05 erstmals gueltig, der naechste Checkpoint aber erst um
@@ -2462,6 +2511,16 @@ fuer `Fault`). Nach **Tombstone** (5.11, `clearActiveRunState()`) wird
 `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
 `priorBootPhaseElapsed` (5.23) und `nominalRecoveryAdjustment` (5.22).
 
+Eine manuelle Restdauer-Neubaseline aendert daran nur die gewichtete
+Segmentgueltigkeit: der Kandidat setzt
+`lastRecoveryEpisodeEvidence->weightedProgressSegmentId = nullopt`, falls das
+Diagnosefeld erhalten bleibt. `beforeOutage` und `firstAfterRestart` duerfen
+als Diagnoseinformation bestehen bleiben, aber der alte Abschnitt darf danach
+weder erstmals noch ein zweites Mal als gewichteter Fortschritt gebucht
+werden. Reine Zieltemperaturaenderungen lassen Feld und Segment-ID
+unveraendert; eine spaetere neue Recoveryepisode legt bei echtem Hop 1 wieder
+ein neues Segment an.
+
 **Tests:**
 - Echter First-valid-Latch: `applyLiveRecoveryEvidence` wird mit einer
   Zwischenevidenz aufgerufen, die zeitlich **zwischen** zwei simulierten
@@ -2504,11 +2563,43 @@ enum class RunProgressBasis : std::uint8_t {
     KnownTotal,             // die gesamte bisherige Laufzeit dieses Runs ist lueckenlos bekannt (Run vollstaendig unter Schema 3 gestartet)
     PartialUnknownHistory,  // ein permanent unbekannter Alt-Anteil (Schema-1/2-Migration) besteht fuer den Rest dieses Runs, unabhaengig von spaeter bekannten Deltas
 };
+
+enum class WeightedProgressConfidence : std::uint8_t {
+    ProductPreferred,
+    AirReduced,
+};
+
+struct WeightedProgressBounds {
+    std::uint64_t lowerBoundSeconds{0U};
+    std::uint64_t upperBoundSeconds{0U};
+};
+
+struct WeightedProgressState {
+    WeightedProgressBounds cumulative;
+    RunSensorMode lastSourceRole;
+    WeightedProgressConfidence confidence;
+    std::uint32_t modelRevision{0U};
+    std::uint32_t lastAppliedSegmentId{0U};
+};
+
 struct RunProgressState {
     RunProgressBasis basis{RunProgressBasis::KnownTotal};
     std::uint32_t observedRunSeconds{0U};  // ausschliesslich der BEKANNTE, tatsaechlich beobachtete Anteil, kumulativ
+    std::optional<WeightedProgressState> weightedProgress; // nullopt = unavailable/unknown, sonst belastbare kumulative Modell-Bounds
 };
 ```
+
+Die in diesem Schema-3-Feld verwendeten gewichteten Typen sind hier
+kanonisch persistenzseitig definiert; die reine Modellgrenze und ihre
+Beitragsberechnung stehen in 5.25.
+
+`validateRunPersistenceSnapshot()` validiert fuer einen gesetzten Zustand
+`lowerBoundSeconds <= upperBoundSeconds`, eine ausschliesslich biologische
+`lastSourceRole` (`Product` oder `Air`) sowie die konsistente
+Konfidenzableitung. `lastAppliedSegmentId != 0` ist der einzige gespeicherte
+Idempotenzbeleg fuer den zuletzt gebuchten Abschnitt; er ist kein Verlauf und
+keine zweite Zeitbasis. Die Typen werden genau einmal definiert; 5.25
+referenziert sie nur fuer Modellinputs und -beitrag.
 
 **Verbindlich, fuer die gesamte Lebensdauer eines Runs:**
 
@@ -2523,7 +2614,10 @@ struct RunProgressState {
   genau das dort tatsaechlich beobachtete Delta.
 - Anzeige/Export rendert bei `PartialUnknownHistory` explizit "mindestens
   `observedRunSeconds` Sekunden bekannt, aelterer Anteil unbekannt", bei
-  `KnownTotal` schlicht `observedRunSeconds`.
+  `KnownTotal` schlicht `observedRunSeconds`. Der optionale
+  `weightedProgress`-Zustand wird daneben als `unavailable/unknown` oder mit
+  seinen kumulierten Bounds und der getrennten Quelle/Konfidenz ausgewiesen;
+  er veraendert `basis` nicht.
 
 **Tests:**
 - Schema 1 -> 3 und Schema 2 -> 3 fuer einen aktiven Run: `basis ==
@@ -2574,6 +2668,16 @@ tatsaechlich beobachtete, eingeschaltete Fermentationszeit. Es wird **unter
 keinen Umstaenden** durch eine Stromausfallkorrektur veraendert – weder
 durch den automatischen Hop-1-Fold, noch durch `ApplyRecoveryTimeCorrection`,
 noch durch eine automatische UTC-Reevaluation.
+
+`weightedProgress` ist die dritte, davon getrennte Groesse: es wird nur durch
+die explizite, erfolgreiche Modellentscheidung aus 5.25 fortgeschrieben.
+Weder `observedRunSeconds` noch `NominalRecoveryAdjustmentState` werden in
+gewichtete Sekunden umetikettiert; automatische UTC-Reevaluation, reine
+Zieltemperaturaenderung und eine nicht verfuegbare Modellantwort veraendern
+`weightedProgress` nicht. Eine manuelle Restdauer-Neubaseline darf eine
+belastbare gewichtete Historie fuer Anzeige/Diagnose behalten, aber sie darf
+deren Bounds nicht in den neuen Restdauer-Timer oder in
+`priorBootPhaseElapsed` einfalten.
 
 Eine genauere UTC-Grenze beweist **Zeit**, aber nicht **biologische
 Aktivitaet** (Gate C). Der kanonische Recovery-Vertrag verlangt: fehlende
@@ -3002,20 +3106,195 @@ Test: persistierter `Completed`-Snapshot bleibt nach Reboot `Completed` bis
 zur Quittierung; `stateEnteredAtMillis` liegt im aktuellen Boot; kein
 `InvalidDecision`.
 
-### 5.25 `WeightedProgressStatus` – entfernt (KISS)
+### 5.25 Temperaturgewichteter Fortschritt – Modellgrenze, Persistenz und einmalige Buchung
 
-Ein persistiertes Enum mit exakt einem heute erreichbaren Wert traegt
-keinen Zustand, der sich innerhalb von Release 1 aendern kann.
+`docs/RUN_PERSISTENCE.md:96-108` verlangt den kumulierten
+temperaturgewichteten Fortschritt zusammen mit nomineller Dauer,
+Verlaengerungen/Korrekturen, monotoner Laufzeit, UTC-Anker und Sensor-/Zeit-
+qualitaet. `docs/RECOVERY_AND_INTERRUPTION.md:262-280` definiert dafuer
+konzeptionell:
 
-**Vertrag:** Kein `WeightedProgressStatus`-Feld im Schema-3-Persistenzvertrag.
-"Nicht kalibriert" ist eine statische, aus dem Firmware-/Commissioning-Stand
-ableitbare Anzeige-/Exportkonstante (nicht pro Lauf persistiert). Die reale
-Aktivitaetsgewichtung bleibt ohne validiertes Modell ausdruecklich
-unimplementiert; #34 liefert die Messgrundlage (verifiziert per `gh issue
-view 34`), ist aber nicht der stille Modelleigentuemer. Derselbe
-Erreichbarkeitsmassstab gilt fuer jeden neu eingefuehrten Enum in diesem
-Plan (`RecoveryConfidence`, 5.5): kein Wert wird eingefuehrt, der unter den
-hier festgelegten Vertraegen praktisch nie erreichbar waere.
+```text
+wirksamer Fortschritt = Summe aus Zeitabschnitten * Aktivitaetsfaktor(Temperatur)
+```
+
+Revision 11 implementiert diesen **technischen Kernvertrag** ohne ein
+unbelegtes biologisches Kennfeld vorzutaueschen. Die Modellgrenze ist klein,
+rein und hardwareunabhaengig:
+
+```cpp
+// run_progress_weighting.hpp/.cpp – fermentation_app, keine ESP-IDF-/NVS-/
+// Display-/Web-/Systemzeit-Abhaengigkeit
+struct RecoveryProgressWeightingInput {
+    ProcessState phase;                         // #18 wertet nur Fermenting als biologische Fortschrittsphase aus
+    RecoveryEpisodeEvidence episodeEvidence;    // beforeOutage + firstAfterRestart
+    std::optional<RecoveryOutageBounds> outage; // bereits kanonisch abgeleitet, keine UTC-Neuberechnung im Modell
+    std::optional<RunSensorMode> usableSensorRole; // nur Product oder Air, aus der bestehenden Sensorselektion
+};
+
+struct WeightedProgressContribution {
+    WeightedProgressBounds delta;          // Beitrag genau dieses Segments, nicht die kumulierte Historie
+    RunSensorMode sourceRole;              // ausschliesslich Product oder Air
+    WeightedProgressConfidence confidence; // aus der Rolle, keine zweite Sensorqualitaetslogik
+    std::uint32_t modelRevision{0U};       // Provenienz des freigegebenen Modells; TBD_COMMISSIONING bis dahin
+};
+
+class RecoveryProgressWeightingModel {
+  public:
+    virtual ~RecoveryProgressWeightingModel() = default;
+    [[nodiscard]] virtual std::optional<WeightedProgressContribution> evaluate(
+        const RecoveryProgressWeightingInput& input) const = 0;
+};
+```
+
+`std::nullopt` ist die kanonische Modellantwort **unavailable / nicht
+ausreichend belegt**. Sie ist kein Fehler und erzeugt keinen gewichteten
+Wert. Der Produktionsprovider `UnavailableRecoveryProgressWeightingModel`
+liefert in Release 1 solange immer `nullopt`, bis ein ausdruecklich
+freigegebener Commissioning-/Modellvertrag existiert. Das ist kein Verzicht
+auf die #18-Schnittstelle, sondern Gate C in einer ehrlichen
+Produktionskonfiguration. Ein deterministisches Fake-Modell lebt nur im
+nativen Testbereich und darf beliebige, explizit vorgegebene Bounds liefern;
+seine Ergebnisse sind kein biologischer Nachweis.
+
+**Eingabe- und Rollenvertrag:**
+
+- `phase` muss `Fermenting` sein; fuer `WaitingForProduct`, `CoolHolding` und
+  andere Phasen liefert der Modellpfad `nullopt`, ohne `RunProgressState` zu
+  mutieren.
+- `beforeOutage` und `firstAfterRestart` werden ausschliesslich aus dem
+  bestehenden `RecoveryEpisodeEvidence` (5.20) uebernommen. Das Modell
+  interpoliert keine Zwischenmessungen und erfindet keine Temperaturwerte.
+- Die Modellgrenze verwendet die bereits kanonische
+  `SensorQuality`-Bewertung: fuer die gewaehlte Rolle muessen die
+  erforderlichen Evidenzwerte `Valid` und mit `filteredCelsius` belegt sein;
+  `Stale`, `Failed` oder fehlende Werte ergeben `nullopt`. Es werden keine
+  eigenen Grenzwerte, Filter, Plausibilitaets- oder Rollenwechselregeln
+  eingefuehrt.
+- `usableSensorRole` wird von der bestehenden Sensorselektionslogik geliefert;
+  es gibt keinen zweiten Sensorqualitaets- oder Rollenentscheid. `Product`
+  ist die bevorzugte biologische Quelle. Bei explizitem, bereits validiertem
+  `Air`-Fallback wird `sourceRole == Air` und `confidence == AirReduced`
+  gespeichert. `Cooling` ist keine zulaessige Modellrolle und wird niemals
+  still als Produkttemperatur verwendet. Keine verwertbare Rolle ergibt
+  `nullopt`.
+- Ein verfuegbarer Modellbeitrag muss dieselbe `sourceRole` wie die
+  verwendbare Eingaberolle und die dazugehoerige Konfidenz tragen, eine
+  nicht-null `modelRevision` besitzen und `0 <= lower <= upper` erfuellen.
+  Seine obere Schranke darf die aus dem kanonischen Ausfallintervall
+  ableitbare physische Zeitobergrenze nicht ueberschreiten; inkonsistente
+  Fake-/Providerantworten werden wie `unavailable` ohne Kandidatenmutation
+  behandelt.
+- `outage` muss vorliegen und ist bereits mit `computeRecoveryOutageBounds`
+  (5.2) aus dem kanonischen UTC-Kontext abgeleitet. Automatische UTC-
+  Reevaluation allein ruft keine gewichtete Buchung aus und mutiert keinen
+  gewichteten Zustand; sie kann lediglich spaeter die Eingabe fuer eine
+  ausdrueckliche Modellentscheidung vervollstaendigen.
+
+**Persistierter Zustand in `RunProgressState`:** Die vollstaendige und
+einzige Definition steht in 5.21. Das optionale Feld `weightedProgress`
+erweitert dort die bestehende `KnownTotal`-/`PartialUnknownHistory`-Darstellung;
+dieser Abschnitt definiert nur Modellinput und Beitrag, keinen zweiten
+Persistenzvertrag.
+`weightedProgress == nullopt` bedeutet, dass fuer diesen Lauf noch kein
+belastbarer gewichteter Fortschritt vorliegt (`unavailable / unknown`). Ein
+gesetzter Wert bedeutet, dass seine kumulierten Bounds ausschliesslich aus
+validierten Modellentscheidungen stammen. Ein Bounds-Paar erzwingt keinen
+scheinexakten Einzelwert: `lowerBoundSeconds < upperBoundSeconds` bleibt eine
+ehrliche Modellspanne, Gleichheit ist nur bei einem vom Modell selbst
+gelieferten exakten Wert zulaessig. `lowerBoundSeconds <= upperBoundSeconds`
+und jeder Additionsschritt sind checked; jeder Ueberlauf verwirft die
+Kandidatenmutation.
+
+`confidence` wird monoton konservativ zusammengefuehrt: ein gebuchter
+`AirReduced`-Beitrag senkt die kumulative Konfidenz dauerhaft auf
+`AirReduced`; spaetere Produktbeitraege stufen bereits gespeicherte Historie
+nicht still hoch. `lastSourceRole` und `confidence` machen Quelle und
+Vertrauen sichtbar; die vollstaendige Quellenhistorie bleibt #19. Der
+gewichtete Zustand ist eine Progress-/Diagnosemetrik und **kein** Wert fuer
+`priorBootPhaseElapsed`, `elapsedWithPrior` oder den Restdauer-Timer.
+
+**Explizite Modellentscheidung und Persistenz:**
+
+`RunRecoveryCoordinator::applyRecoveryProgressWeighting(...)` nimmt den
+aktuellen `RunCommandState`, die erwartete `runRevision`, die erwartete
+`recoveryEpisodeRevision` und den aktuellen
+`weightedProgressSegmentId` sowie eine `RecoveryProgressWeightingModel` an.
+Beide erwarteten Revisionen muessen vor jeder Kandidatenmutation exakt
+stimmen; die Funktion:
+
+1. prueft Phase, erwartete Lauf-/Recovery-Revision, vorhandene Episode-ID,
+   vollstaendige Eingabe und dass kein `Cooling`-Sensor als Rolle verwendet
+   wird;
+2. laesst das reine Modell einmal auswerten; `nullopt` liefert
+   `unavailable` und beendet den Pfad ohne Feldmutation und ohne Commit;
+3. lehnt einen bereits in `weightedProgress.lastAppliedSegmentId`
+   gebuchten Segment-Schluessel als `AlreadyProcessed` ab; ein
+   `weightedProgressSegmentId` ist dabei die Identitaet des fachlichen
+   Recoveryabschnitts, nicht die bei Episode-Refresh veraenderte
+   `recoveryEpisodeRevision`;
+4. addiert `delta.lowerBoundSeconds` und `delta.upperBoundSeconds` per
+   checked arithmetic zur bestehenden kumulierten gewichteten Historie,
+   validiert die Bounds und bildet die konservativere Konfidenz;
+5. persistiert den vollstaendigen Kandidaten als bestehende
+   `RunPersistenceMutationKind::Recovery`-Mutation (ohne `CommandId`) und
+   wendet ihn erst nach bestaetigtem Commit einmal im RAM an.
+
+Vor-Commit-Fehler (Stale, fehlende/ungueltige Evidenz, Modell-`unavailable`,
+Bounds-/Ueberlauf-, Write- oder Capacity-Fehler) mutieren weder
+`weightedProgress` noch `observedRunSeconds`, `NominalRecoveryAdjustmentState`,
+`priorBootPhaseElapsed`, `pendingRecoveryAnchor` oder den Timer. Ein
+unbestimmter Store-Ausgang bleibt `BlockedIndeterminate`/fail-closed; ein
+bestaetigter Commit mit RAM-Apply-Fehler bleibt
+`PersistenceCommittedApplyFailed`. Kein zweiter Schreibvorgang und kein
+zweiter gewichteter Fold wird eingefuehrt.
+
+**Lebenszyklus und Revision-10-Baseline:**
+
+- Ein echter Hop 1 erzeugt genau ein neues `weightedProgressSegmentId`; ein
+  Episode-Refresh und eine spaetere UTC-Reevaluation desselben Abschnitts
+  verwenden dieselbe ID und koennen keinen zweiten Beitrag buchen.
+- Ein Carry-Forward-Hop 1 ist ein neuer physischer Abschnitt und erhaelt eine
+  neue ID; der bestehende Carry-Forward-Zeitkontext bleibt byte-identisch
+  nach 5.12. Die gewichtete Buchung fuer jeden neuen Abschnitt erfolgt
+  hoechstens einmal, auch ueber Hop 1, Hop 2, mehrere Reboots und spaetere
+  Reevaluation.
+- Eine manuelle Restdauer-Neubaseline behaelt einen zuvor belastbaren
+  `weightedProgress`-Zustand als historische Progress-/Diagnosemetrik, setzt
+  aber die Segment-ID der offenen alten Episode auf `nullopt`. Alte
+  gewichtete Bounds werden weder in `remainingDurationMinutes` eingefaltet
+  noch fuer `elapsedWithPrior`/`priorBootPhaseElapsed` verwendet und koennen
+  keinen zweiten Beitrag erzeugen. Ein neuer Stromausfall nach der Baseline
+  erzeugt wieder ein neues Segment.
+- Eine reine Zieltemperaturaenderung veraendert weder
+  `weightedProgress`, `weightedProgressSegmentId` noch die Revision-10-
+  Recovery-/Timerfelder. Eine kombinierte Ziel-/Restdaueranpassung folgt fuer
+  die Zeitbasis exakt 5.12/5.22; der gewichtete historische Zustand bleibt
+  getrennt erhalten, die alte offene Segment-ID wird aber superseded.
+- Neuer Lauf und `clearActiveRunState()` setzen `weightedProgress` zusammen
+  mit den bestehenden Laufhistorien zurueck. Schema-1/2-Migration setzt es
+  auf `nullopt`; kein gewichteter Altwert wird erfunden.
+
+**Sichtbare Schaetzung, Vertrauen und Korrektur:** Anzeige/Export weisen
+`weightedProgress` als `unavailable/unknown` oder mit Lower-/Upper-Bounds,
+`lastSourceRole`, `confidence`, `modelRevision` und der getrennten
+`NominalRecoveryAdjustmentState`-Korrektur aus. `observedRunSeconds`, nominale
+Benutzerkorrektur und temperaturgewichteter Fortschritt bleiben drei
+getrennte Groessen; keine davon wird in eine andere umetikettiert.
+
+**Issue-/Commissioning-Grenze:** Live-Issue #34 (`TBD_COMMISSIONING`,
+Sensorvergleich, Offsets, thermische Grundvermessung) ist eine moegliche
+Messgrundlage, aber nicht automatisch Eigentuemer eines Aktivitaetsmodells.
+Auch #35 und #36 werden nicht still umgedeutet. Ein reales Modell oder
+Parameter bleiben `TBD_COMMISSIONING`, bis ein ausdruecklich zugeordneter und
+freigegebener Commissioning-Vertrag existiert. Das blockiert nicht die reine
+Modellgrenze, die Persistenz, den unavailable-Provider und native
+Fake-Modelltests in #18.
+
+**Tests:** Die vollstaendige Matrix steht in Abschnitt 8, Punkte 39-46; sie
+weist insbesondere `unavailable`, Fake-Modell, Rollen-/Qualitaetsgrenzen,
+Carry-Forward-/Episode-Refresh-Dedup, Migration/Roundtrip, Restdauer-
+Neubaseline und die Trennung der drei Fortschrittsgroessen nach.
 
 ### 5.26 Restart-Sensorauswahl (Gate A)
 
@@ -3031,12 +3310,15 @@ liefert auch den Kontext fuer `applyLiveRecoveryEvidence` (5.20).
 ### 5.27 Komposition/DI – kein erfundener Aufrufer
 
 `RunRecoveryCoordinator::activate(...)`, `reevaluateRecoveryTime(...)`
-(5.12) und `applyLiveRecoveryEvidence(...)` (5.20) sind nativ testbare
-APIs; kein bestehender produktiver Aufrufer wird behauptet – insbesondere
+(5.12), `applyLiveRecoveryEvidence(...)` (5.20) und
+`applyRecoveryProgressWeighting(...)` (5.25) sind nativ testbare APIs; kein
+bestehender produktiver Aufrufer wird behauptet – insbesondere
 kein produktiver NTP-Verfuegbarkeits-Aufrufer, der `reevaluateRecoveryTime`
 automatisch nach erfolgreicher Zeitsynchronisation ausloest; produktive
-Verdrahtung bleibt dem zustaendigen Composition-Issue vorbehalten
-(Gate B).
+Verdrahtung eines echten Commissioning-Modells bleibt dem zustaendigen
+Composition-/Commissioning-Issue vorbehalten (Gate B/C). Der
+`UnavailableRecoveryProgressWeightingModel` ist der sichere Produktions-
+Fallback, sofern eine Composition ihn bereits bereitstellt.
 
 ### 5.28 Schema-Versionierung
 
@@ -3045,24 +3327,32 @@ Verdrahtung bleibt dem zustaendigen Composition-Issue vorbehalten
 `knownRunPersistenceSchema()` akzeptiert nach dieser Aenderung `{1U, 2U,
 3U}` (bisher `{1U, 2U}`). Alle in diesem Plan neu eingefuehrten Felder
 (`PendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
-`RunProgressState`, `RecoveryEpisodeEvidence`, `NominalRecoveryAdjustmentState`,
-`TaggedPriorBootPhaseElapsed`, `recoveryEpisodeRevision`) sind
+`RunProgressState` inkl. `WeightedProgressState`, `RecoveryEpisodeEvidence`
+inkl. `weightedProgressSegmentId`,
+`NominalRecoveryAdjustmentState`, `TaggedPriorBootPhaseElapsed`,
+`recoveryEpisodeRevision`) sind
 Schema-3-exklusiv; eine Schema-1/2-Decodierung liefert fuer jedes davon den
 jeweiligen Leerwert (`nullopt`/`0`, `basis` wird `PartialUnknownHistory`
 statt `KnownTotal`, nach 5.21-Migrationsregel). `RunPersistenceMutationKind::Recovery`
 (5.16, Wert `4U`) ist ein Codec-Wert innerhalb des Prepared-Head-
 Wireformats, kein Schema-3-Feld im engeren Sinn, aber ebenso erst ab
-Schema 3 erzeugt.
+Schema 3 erzeugt. Die optionale `WeightedProgressState`-Darstellung und
+der Segment-Idempotenzschluessel sind damit bereits Teil von Schema 3;
+spaetere Freigabe eines validierten Modells benoetigt fuer Bounds, Quelle,
+Konfidenz, Modellrevision und Exactly-once-Buchung keinen weiteren
+Schemaumbau.
 
 ### 5.29 ROADMAP-Konsistenz
 
-Revision 10 aktualisiert `docs/ROADMAP.md` minimal: `docs/ROADMAP.md:13`
-wechselt von `Revision 9 in Arbeit, Freigabe steht aus` auf `Revision 10 in
+Revision 11 aktualisiert `docs/ROADMAP.md` minimal: `docs/ROADMAP.md:13`
+wechselt von `Revision 10 in Arbeit, Freigabe steht aus` auf `Revision 11 in
 Arbeit, Freigabe steht aus`; `docs/ROADMAP.md:3` (`Stand:`) wird auf das
 Datum des Plan-Commits gesetzt. Inhaltlich unveraendert bleiben #18/PR #102
 als aktuelle Arbeit (Prioritaet 1), das Ressourcen-Gate aus PR #103 ueber
 #29/`OPEN_POINTS.md` (Prioritaet 2) und die naechste fachliche Arbeit nach
-#18. Kein weiterer ROADMAP-Aenderungsbedarf ist vorgesehen.
+#18. Die gewichtete Progressmetrik wird dort nicht fachlich kopiert; Details
+bleiben in diesem Plan und im Live-Issue. Kein weiterer ROADMAP-Aenderungsbedarf
+ist vorgesehen.
 
 ### 5.30 #24-Abgrenzung
 
@@ -3074,16 +3364,20 @@ zugeordnet. #18 nutzt `Fault` ausschliesslich ueber die bestehende
 
 Alle neuen/geaenderten Dateien liegen in `lib/fermentation_app/src/` und
 haengen ausschliesslich von bestehenden `device_platform`-Ports und
-bestehenden `fermentation_app`-Modulen ab (ADR-013 eingehalten). Kein neuer
+bestehenden `fermentation_app`-Modulen ab (ADR-013 eingehalten). Die neue
+`run_progress_weighting`-Grenze ist rein, side-effect-free und kennt weder
+ESP-IDF noch NVS, Display, Web oder reale Zeit. Kein neuer allgemeiner
 `SensorRole`-Typ (feste `air`/`product`/`cooling`-Felder, konsistent mit
-`CrossRolePlausibilityContext`).
+`CrossRolePlausibilityContext`); die Modellgrenze nimmt die bereits
+kanonisch gewaehlte verwendbare biologische Rolle als `RunSensorMode` an und
+interpretiert den Kuehlkoerpersensor niemals als Produktquelle.
 
 ## 7. Datei-/Commit-Aufschluesselung
 
 | # | Commit | Inhalt |
 |---|---|---|
 | 1 | `feat(process-state-machine): RecoveryReentryRequired-/RecoveryEndedByExpiredWait-Topologie, PriorBootPhaseElapsed-Parameter, elapsedWithPrior, completeHoldDuration-Extraktion (von decideCoolHolding wiederverwendet)` | 5.6-5.11, 5.17 |
-| 2 | `feat(persistence): Schema 3 – PendingRecoveryAnchor (inkl. knownSecondsSinceOriginalCheckpoint fuer Carry-Forward-Ketten), recoveryBootAnchorMonotonicMillis, RunProgressState, RecoveryEpisodeEvidence, NominalRecoveryAdjustmentState, TaggedPriorBootPhaseElapsed, recoveryEpisodeRevision, validStateFor-Erweiterung, Schema-Bump auf 3` | 5.12, 5.14, 5.20, 5.21, 5.22, 5.23, 5.28; Migrationstests |
+| 2 | `feat(persistence): Schema 3 – PendingRecoveryAnchor (inkl. knownSecondsSinceOriginalCheckpoint fuer Carry-Forward-Ketten), recoveryBootAnchorMonotonicMillis, RunProgressState inkl. WeightedProgressState, RecoveryEpisodeEvidence inkl. weightedProgressSegmentId, NominalRecoveryAdjustmentState, TaggedPriorBootPhaseElapsed, recoveryEpisodeRevision, validStateFor-Erweiterung, Schema-Bump auf 3` | 5.12, 5.14, 5.20, 5.21, 5.22, 5.23, 5.25, 5.28; Migrationstests |
 | 3 | `feat(recovery): computeRecoveryOutageBounds, computeRecoveredPhaseElapsed, evaluateRecoveryTimeVerdict, deriveUtcAtRecoveryBootAnchor, deriveRecoveryConfidence, deriveEffectiveAnchorTimeBasis` | `run_recovery_time.hpp/.cpp` (5.2-5.5, 5.12, 5.13) |
 | 4 | `feat(sensor-selection): reale Restart-Reaktivierung` | Gate A / 5.26 |
 | 5 | `feat(persistence-coordinator): writeSnapshotCore mit explizitem Rollbackzustand, Fallback-Override-Parameter, FallbackRecoveryPending-Zustand, RunPersistenceMutationKind::Recovery, Signaturerweiterung der vier Checkpoint-Schreibpfade um liveSensorEvidence; bestehenden FallbackRecovered-state()-Test (`test_run_persistence_coordinator.cpp:1454-1456`) und `readMutationKind`-Test auf den neuen Wert aktualisiert` | 5.16, 5.18, 5.19, 5.20 |
@@ -3092,7 +3386,8 @@ bestehenden `fermentation_app`-Modulen ab (ADR-013 eingehalten). Kein neuer
 | 8 | `feat(persistence-coordinator): resolveRecoveryOutcome (ResolveRecoveryUncertaintyRequest, phasenuebergreifend WaitingForProduct/Fermenting/CoolHolding, liveSensorEvidence-Parameter fuer Gate-A-Kopplung, echter Resume fuer WaitingForProduct+AssumeStillValid, Bounds-Gate fuer AssumeThresholdCrossed), Completed-Sonderpfad` | 5.17, 5.24 |
 | 9 | `feat(run-commands): ApplyRecoveryTimeCorrection (kumulativ, wirksam, gemeinsamer Bounds-Grundsatz mit resolveRecoveryOutcome), AdjustRun-Zeitfaltung und manuelle Restdauer-Baseline` | 5.12, 5.22, 5.23 |
 | 10 | `feat(recovery): RunRecoveryCoordinator (activate, reevaluateRecoveryTime – Verdicts und Zeit-Nachtragskorrektur fuer bereits resumte Laeufe ueber deriveEffectiveAnchorTimeBasis via RunPersistenceMutationKind::Recovery)` | 5.12, 5.17, 5.22, 5.27 |
-| 11 | `docs: Anzeigevertrag (getrennte Ausweisung observedRunSeconds/kumulativer nominaler Korrektur, LegacyUnknown-Anzeige, RecoveryConfidence), Ressourcenbudget` | Abschnitt 10 |
+| 11 | `feat(progress): reine RecoveryProgressWeightingModel-Grenze, unavailable-Provider, checked Bounds-Akkumulation, Segment-Dedup und atomare Recovery-Buchung` | 5.25; `run_progress_weighting.hpp/.cpp`, `run_recovery.hpp/.cpp`, `run_persistence_coordinator.hpp/.cpp`; native Fake-/Unavailable-Modelltests |
+| 12 | `docs: Anzeigevertrag (getrennte Ausweisung observedRunSeconds/gewichteter Bounds/kumulativer nominaler Korrektur, LegacyUnknown-Anzeige, RecoveryConfidence), Ressourcenbudget` | Abschnitt 10 |
 
 `docs/ROADMAP.md` (Statuszeile, Stand-Datum) wird **nicht** ueber diese
 Commit-Liste behandelt – die Korrektur ist bereits Teil **dieses**
@@ -3153,8 +3448,8 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
     `Fermenting`/`CoolHolding` resumen ohne NTP unbedingt, Anker bleibt
     bestehen (`recoveryTimeResolvedAtResume == false`); spaeterer
     `reevaluateRecoveryTime`-Aufruf mit jetzt verfuegbarer UTC faltet die
-    Obergrenze nach, loescht danach den Anker, committet als fuenften
-    `RunPersistenceMutationKind::Recovery`-Ausloeser; ein
+    Obergrenze nach, loescht danach den Anker, committet als Zeit-Nachtrags-
+    ausloeser von `RunPersistenceMutationKind::Recovery`; ein
     `reevaluateRecoveryTime`-Aufruf ohne Verbesserung committet nichts;
     `decideFermenting`/`decideCoolHolding`/`decideWaitingForProduct`
     liefern unabhaengig von `pendingRecoveryAnchor.has_value()` identische
@@ -3232,7 +3527,7 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
     `RecoveryReentryRequired`/`RecoveryResumed` loeschen weder
     `priorBootPhaseElapsed` noch `pendingRecoveryAnchor`/
     `recoveryBootAnchorMonotonicMillis`; neuer Run/`clearActiveRunState()`-
-    Clear (alle fuenf Felder); Akkumulation ueber zwei Recovery-Episoden
+    Clear (gewichteter Zustand und alle bisherigen Recoveryfelder); Akkumulation ueber zwei Recovery-Episoden
     ohne Resume dazwischen (Unter- und Obergrenze); Akkumulation ueber zwei
     Recovery-Episoden **mit** zwischenzeitlichem erfolgreichem Resume,
     sowohl mit bereits geloeschtem als auch mit noch offenem Anker der
@@ -3271,8 +3566,9 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
     ueberschneidendem UTC-Intervall; `Unknown` ohne jeden UTC-Anker; alle
     drei Werte nachweisbar erreichbar.
 22. `RunPersistenceMutationKind::Recovery` (5.16): Codec-Roundtrip; alle
-    **fuenf** Recovery-Commit-Ausloeser (Hop 1, Hop 1+Hop 2, Episode-Refresh,
-    Tombstone, erfolgreiche Zeit-Nachtragskorrektur) erzeugen
+    **sechs** Recovery-Commit-Ausloeser (Hop 1, Hop 1+Hop 2, Episode-Refresh,
+    Tombstone, erfolgreiche Zeit-Nachtragskorrektur, erfolgreiche gewichtete
+    Modellbuchung) erzeugen
     `mutationKind == Recovery`, `commandId == std::nullopt`; eine
     erfolglose Zeit-Nachtragskorrektur erzeugt **keinen** Commit; Cut nach
     Prepared-Head-Schreiben eines Recovery-Commits durchlaeuft den
@@ -3331,6 +3627,57 @@ Plan-Revision-Commits (5.29), nicht der spaeteren Umsetzung.
     Reboot-/Kein-doppeltes-Zaehlen-Tests, bleiben als Regression erhalten;
     die neuen Baseline-Tests veraendern deren Semantik fuer neue
     Recovery-Ketten nicht.
+39. **Kein validiertes Modell:** der
+    `UnavailableRecoveryProgressWeightingModel` liefert
+    `std::nullopt`; `runProgress.weightedProgress` bleibt
+    `unavailable/unknown`, es gibt keinen Recovery-Commit und keine
+    automatische biologische Gutschrift. `observedRunSeconds`,
+    `NominalRecoveryAdjustmentState` und die Revision-10-Restdauerlogik
+    funktionieren unveraendert.
+40. **Deterministisches Fake-/Testmodell:** ein nativer Fake mit vollstaendig
+    definierter Eingabe liefert definierte Delta-Lower-/Upper-Bounds,
+    `Product`/`Air`-Quelle, Konfidenz und `modelRevision`; der komplette
+    `applyRecoveryProgressWeighting`-Pfad committet genau einmal und der
+    Schema-3-Persistenzroundtrip liefert byte-/wertgleich denselben
+    kumulierten Zustand. Das Testmodell beweist keine reale Biologie.
+41. **Sensorrollen:** gueltiger Product-Wert wird als `ProductPreferred`
+    gebucht; Product nicht nutzbar plus explizit kanonischer Air-Fallback
+    wird als `AirReduced` gebucht; keine verwertbare Rolle liefert
+    `unavailable`; ein Cooling-Wert als vermeintliche Produktrolle wird
+    abgelehnt und nicht umgedeutet.
+42. **Recovery-Datenlage:** fehlendes `beforeOutage`, fehlendes
+    `firstAfterRestart`, fehlende Zeitobergrenze, `Stale`, `Failed`, fehlende
+    `filteredCelsius` und unvollstaendige Bounds fuehren jeweils zu
+    `unavailable` ohne Mutation; das Modell erzeugt keine interpolierten oder
+    scheinbar exakten Zwischenmesswerte.
+43. **Mehrfach-Reboot / Carry-Forward:** ein Modellbeitrag wird je
+    `weightedProgressSegmentId` genau einmal gebucht; Episode-Refresh,
+    wiederholte Aufrufe und spaetere UTC-Reevaluation desselben Segments
+    erzeugen `AlreadyProcessed`/keinen Commit. Ein echter neuer
+    Carry-Forward-Hop 1 erhaelt einen neuen Segment-Schluessel und kann bei
+    vollstaendig validierter neuer Evidenz genau einen neuen Beitrag
+    hinzufuegen; die Zeitkette und die bisherigen Recovery-/Priorwerte
+    bleiben dabei unveraendert.
+44. **Schema:** Schema 1/2 -> Schema 3 setzt `weightedProgress == nullopt`
+    und erfindet keinen gewichteten Altwert; ein Schema-3-Current/Fallback-
+    Roundtrip erhaelt `weightedProgress`, Bounds, Quelle, Konfidenz,
+    `modelRevision` und Segment-ID; korrupter Current mit gueltigem Fallback
+    bleibt unveraendert fail-safe; Prepared-Head-Cutpoints erhalten den
+    bestehenden `PreparedInterrupted`-Vertrag.
+45. **Restdauer-Neubaseline aus Revision 10:** eine belastbare alte
+    gewichtete Historie bleibt als Diagnose-/Progressmetrik erhalten, aber
+    verkuerzt die neu gesetzte `remainingDurationMinutes` nicht; ein offenes
+    altes Segment wird durch die Baseline superseded und erzeugt keinen
+    zweiten gewichteten Beitrag. Eine reine Zieltemperaturaenderung behaelt
+    weighted state, Segment-ID, Prior-/Nominalzeit, offenen Recovery-Kontext
+    und `stateEnteredAtMillis`; eine kombinierte Anpassung setzt genau eine
+    Restdauer-Baseline.
+46. **Drei-Groessen-Trennung:** Tests weisen getrennt nach, dass
+    `observedRunSeconds`, nominale Benutzer-Recoverykorrektur und
+    temperaturgewichteter Fortschritt weder beim Fold, bei Recovery,
+    Modell-`unavailable`, manueller Restdauer-Neubaseline noch bei Anzeige/
+    Export still ineinander umetikettiert oder gemeinsam als Timerkredit
+    verwendet werden.
 
 ## 9. Safety-/Security-/Recovery-/Hardwaregrenzen
 
@@ -3355,7 +3702,12 @@ wirksam werden; alte Recovery-Zeit darf weder ueber
 `priorBootPhaseElapsed`/`nominalRecoveryAdjustment` noch ueber einen spaeteren
 NTP-Reevaluationspfad erneut angerechnet werden. Die historische
 `observedRunSeconds`-Metrik bleibt erhalten und wird nie als unbewiesene
-biologische Zeitgutschrift behandelt.
+biologische Zeitgutschrift behandelt. Der gewichtete Fortschritt darf nur
+aus einer verfuegbaren, validierten Modellentscheidung gebucht werden;
+`unavailable`, fehlende/stale/failed Evidenz, unvollstaendige Bounds und
+Ueberlauf bleiben ohne Mutation. Eine gewichtete Buchung gibt niemals
+Aktorfreigabe und veraendert niemals Timer-, Recovery- oder nominale
+Benutzerkorrekturfelder.
 
 ## 10. Ressourcen-/Betriebsbudget
 
@@ -3371,11 +3723,12 @@ Betraege; struct-intern kein zusaetzlicher Alignment-Zuschlag ueber die
 uebliche 8-Byte-Ausrichtung von `std::uint64_t`/`std::optional<std::int64_t>`
 hinaus),
 `recoveryBootAnchorMonotonicMillis`
-(9 Byte, optional), `RunProgressState` (5 Byte inkl. Basis-Tag),
+(9 Byte, optional), `RunProgressState` (bestehende Basis plus optionaler
+`WeightedProgressState`, grob ~32-40 Byte bei gesetztem gewichteten Zustand),
 `RecoveryTemperatureEvidence.lastKnown` (~30 Byte), `RecoveryEpisodeEvidence`
 (optional, `beforeOutage` ~30 Byte + `firstAfterRestart` mit drei
-optionalen ~15-Byte-Feldern, zusammen ~75-90 Byte, nur waehrend offener
-Episode belegt), `NominalRecoveryAdjustmentState` (12 Byte, optional, groesser
+optionalen ~15-Byte-Feldern plus optionaler Segment-ID, zusammen ~80-100 Byte,
+nur waehrend offener Episode belegt), `NominalRecoveryAdjustmentState` (12 Byte, optional, groesser
 als der vorherige 8-Byte-Einzelrecord wegen der kumulativen Buchfuehrung),
 `recoveryEpisodeRevision` (4 Byte), `TaggedPriorBootPhaseElapsed` (~10 Byte,
 optional, nur waehrend zeitbegrenzter Phase belegt). In Summe deutlich
@@ -3388,7 +3741,9 @@ Timerfeld und kein unbegrenztes Recoveryjournal ein: sie verwendet den
 bestehenden `stateEnteredAtMillis`-Punkt sowie die vorhandenen
 `priorBootPhaseElapsed`-/`nominalRecoveryAdjustment`-/Ankerfelder mit deren
 beschriebenem Null-/Leerstand. Detaillierte historische Korrekturen bleiben
-#19.
+#19; die gewichtete Darstellung fuehrt nur Bounds, Provenienz und einen
+einzigen Segment-Idempotenzschluessel, kein unbegrenztes Progress- oder
+Temperaturjournal.
 
 ## 11. SOLID/DRY/KISS
 
@@ -3403,9 +3758,14 @@ ist eine einzige Extraktion, von allen Schreibpfaden gemeinsam genutzt, mit
 exakt einem zusaetzlichen Parameter (`rollbackState`) statt einer
 impliziten, neu-berechneten Vorbedingung. `FallbackRecoveryPending` ist ein
 eigenstaendiger, disjunkter Zustand statt eines versteckten Grundes.
-`WeightedProgressStatus` entfaellt vollstaendig statt eines
-Ein-Wert-Enums; `RecoveryConfidence` (5.5) wird an demselben Massstab
-(jeder Wert tatsaechlich erreichbar) geprueft. Der phasenuebergreifende
+Die optionale `weightedProgress`-Darstellung vermeidet sowohl ein Enum mit
+nur einem Produktionswert als auch eine zweite versteckte Historie;
+`nullopt` ist `unavailable`, ein gesetzter Zustand traegt Bounds und
+Provenienz. `RecoveryConfidence` (5.5) wird weiterhin an demselben Massstab
+(jeder Wert tatsaechlich erreichbar) geprueft. Die reine
+`RecoveryProgressWeightingModel`-Grenze ist eine kleine Abstraktion fuer
+Unavailable-Provider und native Fake-Modelle, ohne Hardware- oder
+Sensorpipeline zu duplizieren. Der phasenuebergreifende
 `resolveRecoveryOutcome`-Vertrag (5.17) ist eine einzige, an drei Phasen
 wiederverwendete Entscheidungs-/Stale-/Dedup-Infrastruktur statt dreier
 separater Mechanismen; `completeTimedRun`/`completeHoldDuration` werden
@@ -3439,10 +3799,11 @@ gelesen statt zweimal getrennt implementiert. Die manuelle
 Restdauer-Neubaseline verwendet keine zweite Timerwahrheit: der bestehende
 `stateEnteredAtMillis`-Wert wird einmal auf den Kommandozeitpunkt gesetzt,
 der bestehende prior-/nominale Recoverystand auf `0/0` beziehungsweise leer
-gebracht, und `observedRunSeconds` bleibt als einzige historische
-Beobachtungsmetrik erhalten. `reevaluateRecoveryTime` kann nur einen noch
-vorhandenen Anker lesen und ist damit strukturell von der neuen Baseline
-entkoppelt.
+gebracht, `observedRunSeconds` bleibt historisch erhalten und
+`weightedProgress` bleibt davon getrennt als belastbare oder unbekannte
+Progressmetrik erhalten. Beide werden nicht in den neuen Timer eingefaltet.
+`reevaluateRecoveryTime` kann nur einen noch vorhandenen Anker lesen und ist
+damit strukturell von der neuen Baseline entkoppelt.
 
 ## 12. Dokumentations-/Abschlussnachweis
 
@@ -3450,10 +3811,12 @@ entkoppelt.
   (Statuszeile) und Zeile 3 (`Stand:`), s. dort fuer den Befund; kein
   weiterer Aenderungsbedarf ueber diese beiden Zeilen hinaus.
 - `docs/RUN_PERSISTENCE.md`/`docs/RECOVERY_AND_INTERRUPTION.md`: werden im
-  Umsetzungscommit (Nr. 11) um die in 5.2-5.24 vertraglich fixierten
-  Punkte ergaenzt, insbesondere die getrennte, kumulative Ausweisung von
-  `observedRunSeconds` und der nominalen Ausfallzeitkorrektur (5.22), die
-  ehrliche Legacy-Historie (5.21) und den Konfidenzvertrag (5.5).
+  Umsetzungscommit (Nr. 12) um die in 5.2-5.25 vertraglich fixierten Punkte
+  ergaenzt, insbesondere die getrennte Ausweisung von `observedRunSeconds`,
+  kumulierten gewichteten Bounds, Quelle/Konfidenz und nominaler
+  Benutzerkorrektur, die ehrliche Legacy-Historie (5.21), den
+  unavailable-/Modellgrenzenvertrag (5.25) und den Recovery-Konfidenzvertrag
+  (5.5).
 - `git diff --check`: nach Commit **ungescoped (bare), fuer alle
   geaenderten Dateien** (Plan **und** `docs/ROADMAP.md`) ausgefuehrt und im
   SESSION-HANDOVER-Kommentar mit dem tatsaechlichen Befehlsergebnis
@@ -3467,7 +3830,7 @@ entkoppelt.
 
 ## 13. Pflichtaufgabenliste (fuer die Umsetzung, nicht Teil dieser Planungssession)
 
-1. Commit 1-11 gemaess Abschnitt 7, je mit gezielten lokalen Tests.
+1. Commit 1-12 gemaess Abschnitt 7, je mit gezielten lokalen Tests.
 2. Testmatrix Abschnitt 8 vollstaendig.
 3. `docs/RUN_PERSISTENCE.md`/`docs/RECOVERY_AND_INTERRUPTION.md` nachfuehren.
 4. SESSION HANDOVER vor Sessionende bei offenem PR, inkl. verifiziertem
@@ -3475,7 +3838,7 @@ entkoppelt.
 
 ## 14. Stop-Bedingung
 
-Revision 10 ist ein vollstaendiger, eigenstaendiger Plan. Nach Commit dieser
+Revision 11 ist ein vollstaendiger, eigenstaendiger Plan. Nach Commit dieser
 Datei **und** `docs/ROADMAP.md`: **anhalten**, `git diff --check`
 **ungescoped (bare)** fuer beide geaenderten Dateien ausfuehren, `git push`,
 Remote-SHA verifizieren (Abschnitt 12), PR-Beschreibung und SESSION
