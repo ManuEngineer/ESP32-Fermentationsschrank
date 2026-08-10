@@ -21,6 +21,8 @@ constexpr std::size_t kMaximumCheckpointPayloadBytes =
     kMaximumRunPersistencePayloadBytes;
 // #21, 6.12: the sensor-selection field only exists from schema 2 onward.
 constexpr std::uint32_t kSensorSelectionFieldIntroducedInSchema = 2U;
+// #18, 5.28: the recovery/progress block only exists from schema 3 onward.
+constexpr std::uint32_t kRecoveryFieldsIntroducedInSchema = 3U;
 constexpr device_platform::RecordTypeId kCheckpointRecordType{7U};
 constexpr device_platform::RecordTypeId kHeadRecordType{8U};
 constexpr std::size_t kMaximumCheckpointRecordBytes = 8240U;
@@ -96,6 +98,30 @@ bool writeOptionalUint64(ByteWriter& writer,
                          const std::optional<std::uint64_t>& value) {
     return be::writeOptionalTag(writer, value.has_value()) &&
            (!value.has_value() || be::writeUint64(writer, *value));
+}
+
+bool writeOptionalDouble(ByteWriter& writer,
+                         const std::optional<double>& value) {
+    return be::writeOptionalTag(writer, value.has_value()) &&
+           (!value.has_value() ||
+            device_platform::binary64::encode(*value, writer));
+}
+
+bool readOptionalDouble(ByteReader& reader, std::optional<double>& out) {
+    bool present = false;
+    double value = 0.0;
+    if (!be::readOptionalTag(reader, present)) {
+        return false;
+    }
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    if (!device_platform::binary64::decode(reader, value)) {
+        return false;
+    }
+    out = value;
+    return true;
 }
 
 bool readOptionalUint64(ByteReader& reader, std::optional<std::uint64_t>& out) {
@@ -290,6 +316,44 @@ bool writeEnum(ByteWriter& w, RunChangeReason v) {
         case RunChangeReason::UserAdjustment:
             return be::writeUint8(w, 1U);
         case RunChangeReason::RecoveryCorrection:
+            return be::writeUint8(w, 2U);
+    }
+    return false;
+}
+bool writeEnum(ByteWriter& w, device_platform::SensorQuality v) {
+    switch (v) {
+        case device_platform::SensorQuality::Valid:
+            return be::writeUint8(w, 1U);
+        case device_platform::SensorQuality::Stale:
+            return be::writeUint8(w, 2U);
+        case device_platform::SensorQuality::Failed:
+            return be::writeUint8(w, 3U);
+    }
+    return false;
+}
+bool writeEnum(ByteWriter& w, RunProgressBasis v) {
+    switch (v) {
+        case RunProgressBasis::KnownTotal:
+            return be::writeUint8(w, 1U);
+        case RunProgressBasis::PartialUnknownHistory:
+            return be::writeUint8(w, 2U);
+    }
+    return false;
+}
+bool writeEnum(ByteWriter& w, WeightedProgressConfidence v) {
+    switch (v) {
+        case WeightedProgressConfidence::ProductPreferred:
+            return be::writeUint8(w, 1U);
+        case WeightedProgressConfidence::AirReduced:
+            return be::writeUint8(w, 2U);
+    }
+    return false;
+}
+bool writeEnum(ByteWriter& w, WeightedProgressCoverage v) {
+    switch (v) {
+        case WeightedProgressCoverage::Complete:
+            return be::writeUint8(w, 1U);
+        case WeightedProgressCoverage::PartialUnknown:
             return be::writeUint8(w, 2U);
     }
     return false;
@@ -580,6 +644,67 @@ bool readChangeReason(ByteReader& reader, RunChangeReason& out) {
             return false;
     }
 }
+bool readQuality(ByteReader& reader, device_platform::SensorQuality& out) {
+    std::uint8_t value = 0U;
+    if (!be::readUint8(reader, value)) return false;
+    switch (value) {
+        case 1U:
+            out = device_platform::SensorQuality::Valid;
+            return true;
+        case 2U:
+            out = device_platform::SensorQuality::Stale;
+            return true;
+        case 3U:
+            out = device_platform::SensorQuality::Failed;
+            return true;
+        default:
+            return false;
+    }
+}
+bool readProgressBasis(ByteReader& reader, RunProgressBasis& out) {
+    std::uint8_t value = 0U;
+    if (!be::readUint8(reader, value)) return false;
+    switch (value) {
+        case 1U:
+            out = RunProgressBasis::KnownTotal;
+            return true;
+        case 2U:
+            out = RunProgressBasis::PartialUnknownHistory;
+            return true;
+        default:
+            return false;
+    }
+}
+bool readWeightedProgressConfidence(ByteReader& reader,
+                                    WeightedProgressConfidence& out) {
+    std::uint8_t value = 0U;
+    if (!be::readUint8(reader, value)) return false;
+    switch (value) {
+        case 1U:
+            out = WeightedProgressConfidence::ProductPreferred;
+            return true;
+        case 2U:
+            out = WeightedProgressConfidence::AirReduced;
+            return true;
+        default:
+            return false;
+    }
+}
+bool readWeightedProgressCoverage(ByteReader& reader,
+                                  WeightedProgressCoverage& out) {
+    std::uint8_t value = 0U;
+    if (!be::readUint8(reader, value)) return false;
+    switch (value) {
+        case 1U:
+            out = WeightedProgressCoverage::Complete;
+            return true;
+        case 2U:
+            out = WeightedProgressCoverage::PartialUnknown;
+            return true;
+        default:
+            return false;
+    }
+}
 
 bool writeValues(ByteWriter& writer, const EffectiveRunValues& values) {
     return device_platform::binary64::encode(values.targetTemperatureCelsius,
@@ -689,6 +814,266 @@ bool readManual(ByteReader& reader, const std::string& id, ManualRunPlan& p) {
            readProcessKind(reader, p.kind) && ((p.values.runId = id), true);
 }
 
+// Schema 3 (#18, 5.20/5.12/5.23/5.22/5.21): Recovery-/Progressfeldblock,
+// unbedingt geschrieben (encode() erzeugt ausschliesslich
+// kCurrentRunPersistenceSchema-Payloads) und schemabewacht gelesen (s.
+// decodeRunPersistenceSnapshot, kRecoveryFieldsIntroducedInSchema).
+bool writeRoleEvidence(ByteWriter& writer, const RoleTemperatureEvidence& v) {
+    return writeOptionalDouble(writer, v.filteredCelsius) &&
+           writeEnum(writer, v.quality);
+}
+bool readRoleEvidence(ByteReader& reader, RoleTemperatureEvidence& v) {
+    return readOptionalDouble(reader, v.filteredCelsius) &&
+           readQuality(reader, v.quality);
+}
+bool writeCrossRoleEvidence(ByteWriter& writer, const CrossRoleEvidence& v) {
+    return writeRoleEvidence(writer, v.air) &&
+           writeRoleEvidence(writer, v.product) &&
+           writeRoleEvidence(writer, v.cooling);
+}
+bool readCrossRoleEvidence(ByteReader& reader, CrossRoleEvidence& v) {
+    return readRoleEvidence(reader, v.air) &&
+           readRoleEvidence(reader, v.product) &&
+           readRoleEvidence(reader, v.cooling);
+}
+bool writeOptionalRoleEvidence(
+    ByteWriter& writer, const std::optional<RoleTemperatureEvidence>& v) {
+    return be::writeOptionalTag(writer, v.has_value()) &&
+           (!v.has_value() || writeRoleEvidence(writer, *v));
+}
+bool readOptionalRoleEvidence(ByteReader& reader,
+                              std::optional<RoleTemperatureEvidence>& out) {
+    bool present = false;
+    if (!be::readOptionalTag(reader, present)) return false;
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    RoleTemperatureEvidence value;
+    if (!readRoleEvidence(reader, value)) return false;
+    out = value;
+    return true;
+}
+bool writeFirstAfterRestartEvidence(ByteWriter& writer,
+                                    const FirstAfterRestartEvidence& v) {
+    return writeOptionalRoleEvidence(writer, v.air) &&
+           writeOptionalRoleEvidence(writer, v.product) &&
+           writeOptionalRoleEvidence(writer, v.cooling);
+}
+bool readFirstAfterRestartEvidence(ByteReader& reader,
+                                   FirstAfterRestartEvidence& v) {
+    return readOptionalRoleEvidence(reader, v.air) &&
+           readOptionalRoleEvidence(reader, v.product) &&
+           readOptionalRoleEvidence(reader, v.cooling);
+}
+bool writeRecoveryEpisodeEvidence(ByteWriter& writer,
+                                  const RecoveryEpisodeEvidence& v) {
+    return writeCrossRoleEvidence(writer, v.beforeOutage) &&
+           writeFirstAfterRestartEvidence(writer, v.firstAfterRestart) &&
+           writeOptionalUint32(writer, v.weightedProgressSegmentId);
+}
+bool readRecoveryEpisodeEvidence(ByteReader& reader,
+                                 RecoveryEpisodeEvidence& v) {
+    return readCrossRoleEvidence(reader, v.beforeOutage) &&
+           readFirstAfterRestartEvidence(reader, v.firstAfterRestart) &&
+           readOptionalUint32(reader, v.weightedProgressSegmentId);
+}
+bool writeOptionalRecoveryEpisodeEvidence(
+    ByteWriter& writer, const std::optional<RecoveryEpisodeEvidence>& v) {
+    return be::writeOptionalTag(writer, v.has_value()) &&
+           (!v.has_value() || writeRecoveryEpisodeEvidence(writer, *v));
+}
+bool readOptionalRecoveryEpisodeEvidence(
+    ByteReader& reader, std::optional<RecoveryEpisodeEvidence>& out) {
+    bool present = false;
+    if (!be::readOptionalTag(reader, present)) return false;
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    RecoveryEpisodeEvidence value;
+    if (!readRecoveryEpisodeEvidence(reader, value)) return false;
+    out = value;
+    return true;
+}
+bool writePendingRecoveryAnchor(ByteWriter& writer,
+                                const PendingRecoveryAnchor& v) {
+    return writeRuntime(writer, v.originalProcessState) &&
+           be::writeUint64(writer, v.knownPhaseSecondsAtOriginalCheckpoint) &&
+           writeOptionalInt64(writer, v.originalCheckpointUtc) &&
+           writeEnum(writer, v.originalCheckpointTrigger) &&
+           be::writeUint32(writer, v.originalCheckpointIntervalMinutes) &&
+           be::writeUint32(writer,
+                           v.accumulatedBeforeEpisode.lowerBoundSeconds) &&
+           writeOptionalUint32(writer,
+                               v.accumulatedBeforeEpisode.upperBoundSeconds) &&
+           be::writeUint64(writer, v.knownSecondsSinceOriginalCheckpoint);
+}
+bool readPendingRecoveryAnchor(ByteReader& reader, PendingRecoveryAnchor& v) {
+    return readRuntime(reader, v.originalProcessState) &&
+           be::readUint64(reader, v.knownPhaseSecondsAtOriginalCheckpoint) &&
+           readOptionalInt64(reader, v.originalCheckpointUtc) &&
+           readTrigger(reader, v.originalCheckpointTrigger) &&
+           be::readUint32(reader, v.originalCheckpointIntervalMinutes) &&
+           be::readUint32(reader,
+                          v.accumulatedBeforeEpisode.lowerBoundSeconds) &&
+           readOptionalUint32(reader,
+                              v.accumulatedBeforeEpisode.upperBoundSeconds) &&
+           be::readUint64(reader, v.knownSecondsSinceOriginalCheckpoint);
+}
+bool writeOptionalPendingRecoveryAnchor(
+    ByteWriter& writer, const std::optional<PendingRecoveryAnchor>& v) {
+    return be::writeOptionalTag(writer, v.has_value()) &&
+           (!v.has_value() || writePendingRecoveryAnchor(writer, *v));
+}
+bool readOptionalPendingRecoveryAnchor(
+    ByteReader& reader, std::optional<PendingRecoveryAnchor>& out) {
+    bool present = false;
+    if (!be::readOptionalTag(reader, present)) return false;
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    PendingRecoveryAnchor value;
+    if (!readPendingRecoveryAnchor(reader, value)) return false;
+    out = value;
+    return true;
+}
+bool writeTaggedPriorBootPhaseElapsed(ByteWriter& writer,
+                                      const TaggedPriorBootPhaseElapsed& v) {
+    return writeEnum(writer, v.taggedState) &&
+           be::writeUint32(writer, v.elapsed.lowerBoundSeconds) &&
+           writeOptionalUint32(writer, v.elapsed.upperBoundSeconds);
+}
+bool readTaggedPriorBootPhaseElapsed(ByteReader& reader,
+                                     TaggedPriorBootPhaseElapsed& v) {
+    return readProcessState(reader, v.taggedState) &&
+           be::readUint32(reader, v.elapsed.lowerBoundSeconds) &&
+           readOptionalUint32(reader, v.elapsed.upperBoundSeconds);
+}
+bool writeOptionalTaggedPriorBootPhaseElapsed(
+    ByteWriter& writer, const std::optional<TaggedPriorBootPhaseElapsed>& v) {
+    return be::writeOptionalTag(writer, v.has_value()) &&
+           (!v.has_value() || writeTaggedPriorBootPhaseElapsed(writer, *v));
+}
+bool readOptionalTaggedPriorBootPhaseElapsed(
+    ByteReader& reader, std::optional<TaggedPriorBootPhaseElapsed>& out) {
+    bool present = false;
+    if (!be::readOptionalTag(reader, present)) return false;
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    TaggedPriorBootPhaseElapsed value;
+    if (!readTaggedPriorBootPhaseElapsed(reader, value)) return false;
+    out = value;
+    return true;
+}
+bool writeNominalRecoveryAdjustmentState(
+    ByteWriter& writer, const NominalRecoveryAdjustmentState& v) {
+    return be::writeUint32(writer, v.cumulativeAppliedSeconds) &&
+           be::writeUint32(writer, v.lastAppliedEpisodeRevision) &&
+           be::writeUint32(writer, v.lastAppliedEpisodeDelta);
+}
+bool readNominalRecoveryAdjustmentState(ByteReader& reader,
+                                        NominalRecoveryAdjustmentState& v) {
+    return be::readUint32(reader, v.cumulativeAppliedSeconds) &&
+           be::readUint32(reader, v.lastAppliedEpisodeRevision) &&
+           be::readUint32(reader, v.lastAppliedEpisodeDelta);
+}
+bool writeOptionalNominalRecoveryAdjustmentState(
+    ByteWriter& writer,
+    const std::optional<NominalRecoveryAdjustmentState>& v) {
+    return be::writeOptionalTag(writer, v.has_value()) &&
+           (!v.has_value() || writeNominalRecoveryAdjustmentState(writer, *v));
+}
+bool readOptionalNominalRecoveryAdjustmentState(
+    ByteReader& reader, std::optional<NominalRecoveryAdjustmentState>& out) {
+    bool present = false;
+    if (!be::readOptionalTag(reader, present)) return false;
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    NominalRecoveryAdjustmentState value;
+    if (!readNominalRecoveryAdjustmentState(reader, value)) return false;
+    out = value;
+    return true;
+}
+bool writeWeightedProgressProvenance(ByteWriter& writer,
+                                     const WeightedProgressProvenance& v) {
+    return writeEnum(writer, v.lastSourceRole) &&
+           writeEnum(writer, v.confidence) &&
+           be::writeUint32(writer, v.modelRevision) &&
+           be::writeUint32(writer, v.lastAppliedSegmentId);
+}
+bool readWeightedProgressProvenance(ByteReader& reader,
+                                    WeightedProgressProvenance& v) {
+    return readSensor(reader, v.lastSourceRole) &&
+           readWeightedProgressConfidence(reader, v.confidence) &&
+           be::readUint32(reader, v.modelRevision) &&
+           be::readUint32(reader, v.lastAppliedSegmentId);
+}
+bool writeOptionalWeightedProgressProvenance(
+    ByteWriter& writer, const std::optional<WeightedProgressProvenance>& v) {
+    return be::writeOptionalTag(writer, v.has_value()) &&
+           (!v.has_value() || writeWeightedProgressProvenance(writer, *v));
+}
+bool readOptionalWeightedProgressProvenance(
+    ByteReader& reader, std::optional<WeightedProgressProvenance>& out) {
+    bool present = false;
+    if (!be::readOptionalTag(reader, present)) return false;
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    WeightedProgressProvenance value;
+    if (!readWeightedProgressProvenance(reader, value)) return false;
+    out = value;
+    return true;
+}
+bool writeWeightedProgressState(ByteWriter& writer,
+                                const WeightedProgressState& v) {
+    return be::writeUint64(writer, v.cumulative.lowerBoundSeconds) &&
+           writeOptionalUint64(writer, v.cumulative.upperBoundSeconds) &&
+           writeEnum(writer, v.coverage) &&
+           writeOptionalWeightedProgressProvenance(writer, v.lastApplied);
+}
+bool readWeightedProgressState(ByteReader& reader, WeightedProgressState& v) {
+    return be::readUint64(reader, v.cumulative.lowerBoundSeconds) &&
+           readOptionalUint64(reader, v.cumulative.upperBoundSeconds) &&
+           readWeightedProgressCoverage(reader, v.coverage) &&
+           readOptionalWeightedProgressProvenance(reader, v.lastApplied);
+}
+bool writeOptionalWeightedProgressState(
+    ByteWriter& writer, const std::optional<WeightedProgressState>& v) {
+    return be::writeOptionalTag(writer, v.has_value()) &&
+           (!v.has_value() || writeWeightedProgressState(writer, *v));
+}
+bool readOptionalWeightedProgressState(
+    ByteReader& reader, std::optional<WeightedProgressState>& out) {
+    bool present = false;
+    if (!be::readOptionalTag(reader, present)) return false;
+    if (!present) {
+        out.reset();
+        return true;
+    }
+    WeightedProgressState value;
+    if (!readWeightedProgressState(reader, value)) return false;
+    out = value;
+    return true;
+}
+bool writeRunProgressState(ByteWriter& writer, const RunProgressState& v) {
+    return writeEnum(writer, v.basis) &&
+           be::writeUint32(writer, v.observedRunSeconds) &&
+           writeOptionalWeightedProgressState(writer, v.weightedProgress);
+}
+bool readRunProgressState(ByteReader& reader, RunProgressState& v) {
+    return readProgressBasis(reader, v.basis) &&
+           be::readUint32(reader, v.observedRunSeconds) &&
+           readOptionalWeightedProgressState(reader, v.weightedProgress);
+}
+
 }  // namespace
 
 RunPersistenceCodecStatus encodeRunPersistenceSnapshot(
@@ -733,6 +1118,25 @@ RunPersistenceCodecStatus encodeRunPersistenceSnapshot(
                                     snapshot.persistedRunCommandCount));
     for (std::size_t i = 0U; ok && i < snapshot.persistedRunCommandCount; ++i)
         ok = be::writeUint64(writer, snapshot.persistedRunCommandIds[i]);
+    // Schema 3 (#18, 5.28): immer angehaengt, encode() erzeugt ausschliesslich
+    // kCurrentRunPersistenceSchema-Payloads. Am Ende des Payloads, damit der
+    // Schema-1/2-Lesepfad byte-identisch bleibt (s.
+    // decodeRunPersistenceSnapshot).
+    ok = ok &&
+         writeOptionalPendingRecoveryAnchor(writer,
+                                            snapshot.pendingRecoveryAnchor) &&
+         writeOptionalUint64(writer,
+                             snapshot.recoveryBootAnchorMonotonicMillis) &&
+         writeCrossRoleEvidence(
+             writer, snapshot.recoveryTemperatureEvidence.lastKnown) &&
+         writeOptionalRecoveryEpisodeEvidence(
+             writer, snapshot.lastRecoveryEpisodeEvidence) &&
+         writeOptionalTaggedPriorBootPhaseElapsed(
+             writer, snapshot.priorBootPhaseElapsed) &&
+         writeOptionalNominalRecoveryAdjustmentState(
+             writer, snapshot.nominalRecoveryAdjustment) &&
+         be::writeUint32(writer, snapshot.recoveryEpisodeRevision) &&
+         writeRunProgressState(writer, snapshot.runProgress);
     if (!ok) return RunPersistenceCodecStatus::CapacityExceeded;
     auto encoded = writer.takeBytes();
     out.swap(encoded);
@@ -822,6 +1226,34 @@ RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
     for (std::size_t i = 0U; i < count; ++i)
         if (!be::readUint64(reader, s.persistedRunCommandIds[i]))
             return {RunPersistenceCodecStatus::Truncated, std::nullopt};
+    if (schemaVersion >= kRecoveryFieldsIntroducedInSchema) {
+        if (!readOptionalPendingRecoveryAnchor(reader,
+                                               s.pendingRecoveryAnchor) ||
+            !readOptionalUint64(reader, s.recoveryBootAnchorMonotonicMillis) ||
+            !readCrossRoleEvidence(reader,
+                                   s.recoveryTemperatureEvidence.lastKnown) ||
+            !readOptionalRecoveryEpisodeEvidence(
+                reader, s.lastRecoveryEpisodeEvidence) ||
+            !readOptionalTaggedPriorBootPhaseElapsed(reader,
+                                                     s.priorBootPhaseElapsed) ||
+            !readOptionalNominalRecoveryAdjustmentState(
+                reader, s.nominalRecoveryAdjustment) ||
+            !be::readUint32(reader, s.recoveryEpisodeRevision) ||
+            !readRunProgressState(reader, s.runProgress)) {
+            return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
+        }
+    } else if (s.variant != RunCheckpointVariant::NoActiveRun) {
+        // 5.28: Schema-1/2-Migration eines aktiven Runs startet ehrlich mit
+        // PartialUnknownHistory statt eines erfundenen KnownTotal-Altbestands
+        // und einem gesetzten, aber unbelegten Weighting-Zustand (5.21/5.25) -
+        // kein gewichteter Altbeitrag wird erfunden. NoActiveRun bleibt beim
+        // Default (5.14 Punkt 6 verlangt dort ohnehin weightedProgress ==
+        // nullopt).
+        s.runProgress.basis = RunProgressBasis::PartialUnknownHistory;
+        s.runProgress.weightedProgress = WeightedProgressState{
+            WeightedProgressBounds{0U, std::nullopt},
+            WeightedProgressCoverage::PartialUnknown, std::nullopt};
+    }
     if (reader.remaining() != 0U)
         return {RunPersistenceCodecStatus::TrailingBytes, std::nullopt};
     if (!validateRunPersistenceSnapshot(s))

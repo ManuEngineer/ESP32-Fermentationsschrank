@@ -49,6 +49,22 @@ struct ProcessRunSnapshot {
 [[nodiscard]] std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
     const ActiveRun& run);
 
+// Oeffentlich fuer den Schema-3-Gueltigkeitsvertrag ausserhalb dieser
+// Uebersetzungseinheit (run_persistence_contract.cpp, 5.14): prueft, ob eine
+// Phase strukturell zu einem gegebenen Programm-/manuellen Schnappschuss
+// passt, unabhaengig von einer konkreten ProcessRuntimeState-Instanz.
+[[nodiscard]] bool stateMatchesRunSnapshot(ProcessState state,
+                                           const ProcessRunSnapshot& snapshot);
+
+// Oeffentlich fuer denselben Schema-3-Gueltigkeitsvertrag (5.14
+// Korrekturauftrag Befund 1): stateMatchesRunSnapshot() liefert fuer nicht
+// run-gebundene Zustaende (Boot/Standby/Completed/RecoveryEvaluation/Fault/
+// ServiceMode) absichtlich true und kann eine Recovery-Altphase deshalb
+// nicht allein pruefen - stateUsesRunSnapshot() grenzt zusaetzlich auf genau
+// die acht Phasen ein, die ueberhaupt eine laufende, snapshot-gebundene
+// Regelung darstellen.
+[[nodiscard]] bool stateUsesRunSnapshot(ProcessState state);
+
 struct ProcessRuntimeState {
     ProcessState state{ProcessState::Boot};
     std::uint64_t stateEnteredAtMillis{0U};

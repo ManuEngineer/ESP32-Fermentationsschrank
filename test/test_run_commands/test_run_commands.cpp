@@ -1796,6 +1796,55 @@ void test_apply_run_command_staleness_regression_for_sensor_selection_and_other_
 // #21, 6.14.6: die neuen Felder werden bei jedem terminalen Pfad
 // zurueckgesetzt; ein direkt anschliessender Start beginnt nicht mit einer
 // uebernommenen Sensorselektion des vorherigen Laufs.
+// Schema 3 (#18): populates the six clearActiveRunState()-managed
+// recovery-/progress fields on `state` with non-default values, so a
+// terminal-path regression test can prove they are actually reset instead of
+// merely happening to already be at their zero value.
+void populateRecoveryAndProgressFieldsForClearRegression(
+    RunCommandState& state) {
+    PendingRecoveryAnchor anchor;
+    anchor.originalProcessState.state = ProcessState::Fermenting;
+    anchor.knownPhaseSecondsAtOriginalCheckpoint = 5U;
+    state.pendingRecoveryAnchor = anchor;
+    state.recoveryBootAnchorMonotonicMillis = 10U;
+    RecoveryEpisodeEvidence episode;
+    episode.weightedProgressSegmentId = 3U;
+    state.lastRecoveryEpisodeEvidence = episode;
+    state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+        ProcessState::Fermenting, PriorBootPhaseElapsed{20U, std::nullopt}};
+    state.nominalRecoveryAdjustment =
+        NominalRecoveryAdjustmentState{7U, 1U, 7U};
+    state.runProgress.basis = RunProgressBasis::PartialUnknownHistory;
+    state.runProgress.observedRunSeconds = 42U;
+    state.runProgress.weightedProgress = WeightedProgressState{};
+    // Absichtlich NICHT von clearActiveRunState() zurueckgesetzt (5.20, 5.14):
+    // bleibt unveraendert, um das nachzuweisen.
+    state.recoveryTemperatureEvidence.lastKnown.product.filteredCelsius = 6.5;
+    state.recoveryEpisodeRevision = 9U;
+}
+
+void assertRecoveryAndProgressFieldsWereClearedButNotEvidenceOrRevision(
+    const RunCommandState& after) {
+    TEST_ASSERT_FALSE(after.pendingRecoveryAnchor.has_value());
+    TEST_ASSERT_FALSE(after.recoveryBootAnchorMonotonicMillis.has_value());
+    TEST_ASSERT_FALSE(after.lastRecoveryEpisodeEvidence.has_value());
+    TEST_ASSERT_FALSE(after.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_FALSE(after.nominalRecoveryAdjustment.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunProgressBasis::KnownTotal),
+                          static_cast<int>(after.runProgress.basis));
+    TEST_ASSERT_EQUAL_UINT32(0U, after.runProgress.observedRunSeconds);
+    TEST_ASSERT_FALSE(after.runProgress.weightedProgress.has_value());
+    // recoveryTemperatureEvidence (laufend fortgeschrieben, kein
+    // laufgebundenes Diagnosefeld) und recoveryEpisodeRevision (monotoner
+    // Zaehler wie runRevision) bleiben bewusst unberuehrt.
+    TEST_ASSERT_TRUE(after.recoveryTemperatureEvidence.lastKnown.product
+                         .filteredCelsius.has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(
+        6.5,
+        *after.recoveryTemperatureEvidence.lastKnown.product.filteredCelsius);
+    TEST_ASSERT_EQUAL_UINT32(9U, after.recoveryEpisodeRevision);
+}
+
 void test_clear_active_run_state_regressions_across_terminal_paths() {
     // AbortAndTurnOff.
     {
@@ -1804,6 +1853,7 @@ void test_clear_active_run_state_regressions_across_terminal_paths() {
                                      SensorSelectionPhase::AirFallbackActive,
                                      SensorPeltierPermission::Allowed,
                                      RunSensorMode::Air);
+        populateRecoveryAndProgressFieldsForClearRegression(state);
         StopRequest request{envelope(200U, state), StopOption::AbortAndTurnOff,
                             std::nullopt, false};
         const auto decision = decideStop(state, request);
@@ -1815,6 +1865,8 @@ void test_clear_active_run_state_regressions_across_terminal_paths() {
             static_cast<int>(SensorPeltierPermission::Blocked),
             static_cast<int>(decision.after.sensorSelectionRuntime.permission));
         TEST_ASSERT_FALSE(decision.after.sensorSelection.has_value());
+        assertRecoveryAndProgressFieldsWereClearedButNotEvidenceOrRevision(
+            decision.after);
 
         // Ein neuer Start unmittelbar danach beginnt mit einer vollstaendig
         // neuen Sensorselektion (#21, 6.14.6/9.4), nicht mit der
@@ -1845,6 +1897,7 @@ void test_clear_active_run_state_regressions_across_terminal_paths() {
         state.processState.state = ProcessState::Completed;
         state.processState.targetReachStartedAtMillis = 0U;
         state.processState.targetReachWarningIssued = false;
+        populateRecoveryAndProgressFieldsForClearRegression(state);
         CompletionRequest request{envelope(202U, state), false, std::nullopt,
                                   false};
         const auto decision = decideCompletion(state, request);
@@ -1853,6 +1906,8 @@ void test_clear_active_run_state_regressions_across_terminal_paths() {
             static_cast<int>(SensorSelectionPhase::NoActiveRun),
             static_cast<int>(decision.after.sensorSelectionRuntime.phase));
         TEST_ASSERT_FALSE(decision.after.sensorSelection.has_value());
+        assertRecoveryAndProgressFieldsWereClearedButNotEvidenceOrRevision(
+            decision.after);
     }
 }
 

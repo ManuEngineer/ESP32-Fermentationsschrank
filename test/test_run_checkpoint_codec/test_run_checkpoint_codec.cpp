@@ -69,17 +69,15 @@ void test_program_checkpoint_round_trip_restores_active_run() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(source, encoded)));
-    assertGolden(encoded,
-                 "01010000000000000064000500000001000e636865636b706f696e742d727"
-                 "56e01010102000000"
-                 "010000000101005d00000006000000000001ffff000b77617465722d6b656"
-                 "66972000b57617373"
-                 "65726b656669720000010101010101000201010000001e030101404300000"
-                 "00000000100000078"
-                 "013fe0000000000000010000000a01000000b400010000000100010000000"
-                 "a000000b400010000"
-                 "0078000600000000000000000000000000000000000000000000010000000"
-                 "000000063");
+    assertGolden(
+        encoded,
+        "01010000000000000064000500000001000e636865636b706f696e742d72756e0"
+        "1010102000000010000000101005d00000006000000000001ffff000b77617465"
+        "722d6b65666972000b5761737365726b656669720000010101010101000201010"
+        "000001e03010140430000000000000100000078013fe000000000000001000000"
+        "0a01000000b400010000000100010000000a000000b4000100000078000600000"
+        "00000000000000000000000000000000000000001000000000000006300000002"
+        "0002000200000000000000010000000000");
     const auto decoded =
         decodeRunPersistenceSnapshot(encoded, kCurrentRunPersistenceSchema);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
@@ -108,9 +106,10 @@ void test_tombstone_has_empty_run_id_and_rejects_active_data() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(*tombstone, encoded)));
-    assertGolden(encoded,
-                 "0302000000000000006400050000000000000300000000000000000000000"
-                 "00000000000000000000000");
+    assertGolden(
+        encoded,
+        "03020000000000000064000500000000000003000000000000000000000000000"
+        "0000000000000000000000000020002000200000000000000010000000000");
     auto invalid = *tombstone;
     invalid.activeRunId = "stale";
     TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(invalid));
@@ -172,14 +171,13 @@ void test_manual_completed_round_trip_is_a_valid_run_projection() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(*snapshot, bytes)));
-    assertGolden(bytes,
-                 "0202000000000000006400050000000100116d616e75616c2d636865636b7"
-                 "06f696e74020101"
-                 "020000000140280000000000000200003fe00000000000000000000a00000"
-                 "0b4010000000000"
-                 "00000a020200010000000a000000b40000000c00000000000000640000000"
-                 "000000000000000"
-                 "00000000");
+    assertGolden(
+        bytes,
+        "0202000000000000006400050000000100116d616e75616c2d636865636b706f6"
+        "96e74020101020000000140280000000000000200003fe0000000000000000000"
+        "0a000000b401000000000000000a020200010000000a000000b40000000c00000"
+        "00000000064000000000000000000000000000000000000020002000200000000"
+        "000000010000000000");
     const auto decoded =
         decodeRunPersistenceSnapshot(bytes, kCurrentRunPersistenceSchema);
     TEST_ASSERT_TRUE(decoded.snapshot.has_value());
@@ -279,6 +277,426 @@ void test_sensor_selection_cross_field_invariants_are_enforced() {
     TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(legacyUnknownAnyMode));
 }
 
+// 5.14 Punkt 2: RecoveryEvaluation eines aktiven Runs ist nur mit
+// vollstaendigem, konsistentem PendingRecoveryAnchor-Kontext gueltig. Alle
+// sechs neuen Schema-3-Felder werden hier bewusst auf tatsaechlich von Null
+// verschiedene Werte gesetzt (Testmatrix 9: ein Nullwert-Roundtrip koennte
+// eine fehlende Codierung nicht von einem frischen/leeren Zustand
+// unterscheiden).
+RunPersistenceSnapshot recoveryEvaluationPendingSnapshot() {
+    auto snapshot = programSnapshot();
+    snapshot.processState.state = ProcessState::RecoveryEvaluation;
+
+    PendingRecoveryAnchor anchor;
+    anchor.originalProcessState.state = ProcessState::Fermenting;
+    anchor.originalProcessState.stateEnteredAtMillis = 40U;
+    anchor.originalProcessState.transitionSequence = 6U;
+    anchor.knownPhaseSecondsAtOriginalCheckpoint = 123U;
+    anchor.originalCheckpointUtc = 1700000000;
+    anchor.originalCheckpointTrigger = RunCheckpointTrigger::Periodic;
+    anchor.originalCheckpointIntervalMinutes = 7U;
+    anchor.accumulatedBeforeEpisode = PriorBootPhaseElapsed{50U, 200U};
+    anchor.knownSecondsSinceOriginalCheckpoint = 30U;
+    snapshot.pendingRecoveryAnchor = anchor;
+    snapshot.recoveryBootAnchorMonotonicMillis = 555U;
+
+    const RoleTemperatureEvidence airEvidence{
+        4.5, device_platform::SensorQuality::Valid};
+    const RoleTemperatureEvidence productEvidence{
+        5.5, device_platform::SensorQuality::Valid};
+    const RoleTemperatureEvidence coolingEvidence{
+        -2.5, device_platform::SensorQuality::Stale};
+    snapshot.recoveryTemperatureEvidence.lastKnown =
+        CrossRoleEvidence{airEvidence, productEvidence, coolingEvidence};
+
+    RecoveryEpisodeEvidence episode;
+    episode.beforeOutage =
+        CrossRoleEvidence{airEvidence, productEvidence, coolingEvidence};
+    episode.firstAfterRestart.product = productEvidence;
+    episode.weightedProgressSegmentId = 7U;
+    snapshot.lastRecoveryEpisodeEvidence = episode;
+
+    TaggedPriorBootPhaseElapsed tagged;
+    tagged.taggedState = ProcessState::Fermenting;
+    tagged.elapsed = PriorBootPhaseElapsed{10U, std::nullopt};
+    snapshot.priorBootPhaseElapsed = tagged;
+
+    snapshot.nominalRecoveryAdjustment =
+        NominalRecoveryAdjustmentState{40U, 3U, 15U};
+    snapshot.recoveryEpisodeRevision = 12U;
+
+    WeightedProgressProvenance provenance;
+    provenance.lastSourceRole = RunSensorMode::Product;
+    provenance.confidence = WeightedProgressConfidence::ProductPreferred;
+    provenance.modelRevision = 5U;
+    provenance.lastAppliedSegmentId = 7U;
+    WeightedProgressState weighted;
+    weighted.cumulative = WeightedProgressBounds{100U, 300U};
+    weighted.coverage = WeightedProgressCoverage::Complete;
+    weighted.lastApplied = provenance;
+    snapshot.runProgress.basis = RunProgressBasis::KnownTotal;
+    snapshot.runProgress.observedRunSeconds = 999U;
+    snapshot.runProgress.weightedProgress = weighted;
+
+    return snapshot;
+}
+
+void test_recovery_evaluation_pending_context_round_trips_with_nonzero_values() {
+    const auto snapshot = recoveryEvaluationPendingSnapshot();
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(snapshot));
+
+    std::string bytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(snapshot, bytes)));
+    const auto decoded =
+        decodeRunPersistenceSnapshot(bytes, kCurrentRunPersistenceSchema);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(decoded.status));
+    TEST_ASSERT_TRUE(decoded.snapshot.has_value());
+    const auto& d = *decoded.snapshot;
+
+    TEST_ASSERT_TRUE(d.pendingRecoveryAnchor.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fermenting),
+        static_cast<int>(d.pendingRecoveryAnchor->originalProcessState.state));
+    TEST_ASSERT_EQUAL_UINT64(
+        123U, d.pendingRecoveryAnchor->knownPhaseSecondsAtOriginalCheckpoint);
+    TEST_ASSERT_TRUE(
+        d.pendingRecoveryAnchor->originalCheckpointUtc.has_value());
+    TEST_ASSERT_EQUAL_INT64(1700000000,
+                            *d.pendingRecoveryAnchor->originalCheckpointUtc);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunCheckpointTrigger::Periodic),
+        static_cast<int>(d.pendingRecoveryAnchor->originalCheckpointTrigger));
+    TEST_ASSERT_EQUAL_UINT32(
+        7U, d.pendingRecoveryAnchor->originalCheckpointIntervalMinutes);
+    TEST_ASSERT_EQUAL_UINT32(
+        50U,
+        d.pendingRecoveryAnchor->accumulatedBeforeEpisode.lowerBoundSeconds);
+    TEST_ASSERT_TRUE(d.pendingRecoveryAnchor->accumulatedBeforeEpisode
+                         .upperBoundSeconds.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        200U,
+        *d.pendingRecoveryAnchor->accumulatedBeforeEpisode.upperBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT64(
+        30U, d.pendingRecoveryAnchor->knownSecondsSinceOriginalCheckpoint);
+
+    TEST_ASSERT_TRUE(d.recoveryBootAnchorMonotonicMillis.has_value());
+    TEST_ASSERT_EQUAL_UINT64(555U, *d.recoveryBootAnchorMonotonicMillis);
+
+    TEST_ASSERT_TRUE(d.recoveryTemperatureEvidence.lastKnown.air.filteredCelsius
+                         .has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(
+        4.5, *d.recoveryTemperatureEvidence.lastKnown.air.filteredCelsius);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::SensorQuality::Stale),
+        static_cast<int>(
+            d.recoveryTemperatureEvidence.lastKnown.cooling.quality));
+
+    TEST_ASSERT_TRUE(d.lastRecoveryEpisodeEvidence.has_value());
+    TEST_ASSERT_TRUE(
+        d.lastRecoveryEpisodeEvidence->firstAfterRestart.product.has_value());
+    TEST_ASSERT_FALSE(
+        d.lastRecoveryEpisodeEvidence->firstAfterRestart.air.has_value());
+    TEST_ASSERT_TRUE(
+        d.lastRecoveryEpisodeEvidence->weightedProgressSegmentId.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        7U, *d.lastRecoveryEpisodeEvidence->weightedProgressSegmentId);
+
+    TEST_ASSERT_TRUE(d.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fermenting),
+        static_cast<int>(d.priorBootPhaseElapsed->taggedState));
+    TEST_ASSERT_EQUAL_UINT32(
+        10U, d.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+    TEST_ASSERT_FALSE(
+        d.priorBootPhaseElapsed->elapsed.upperBoundSeconds.has_value());
+
+    TEST_ASSERT_TRUE(d.nominalRecoveryAdjustment.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        40U, d.nominalRecoveryAdjustment->cumulativeAppliedSeconds);
+    TEST_ASSERT_EQUAL_UINT32(
+        3U, d.nominalRecoveryAdjustment->lastAppliedEpisodeRevision);
+    TEST_ASSERT_EQUAL_UINT32(
+        15U, d.nominalRecoveryAdjustment->lastAppliedEpisodeDelta);
+
+    TEST_ASSERT_EQUAL_UINT32(12U, d.recoveryEpisodeRevision);
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunProgressBasis::KnownTotal),
+                          static_cast<int>(d.runProgress.basis));
+    TEST_ASSERT_EQUAL_UINT32(999U, d.runProgress.observedRunSeconds);
+    TEST_ASSERT_TRUE(d.runProgress.weightedProgress.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        100U, d.runProgress.weightedProgress->cumulative.lowerBoundSeconds);
+    TEST_ASSERT_TRUE(d.runProgress.weightedProgress->cumulative
+                         .upperBoundSeconds.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        300U, *d.runProgress.weightedProgress->cumulative.upperBoundSeconds);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WeightedProgressCoverage::Complete),
+        static_cast<int>(d.runProgress.weightedProgress->coverage));
+    TEST_ASSERT_TRUE(d.runProgress.weightedProgress->lastApplied.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Product),
+        static_cast<int>(
+            d.runProgress.weightedProgress->lastApplied->lastSourceRole));
+    TEST_ASSERT_EQUAL_UINT32(
+        5U, d.runProgress.weightedProgress->lastApplied->modelRevision);
+    TEST_ASSERT_EQUAL_UINT32(
+        7U, d.runProgress.weightedProgress->lastApplied->lastAppliedSegmentId);
+
+    // Ueber mehrere Reboots byte-identisch (5.12, Testmatrix 9): ein erneuter
+    // Roundtrip auf dem bereits decodierten Snapshot darf keine Feldwerte
+    // veraendern.
+    std::string reencoded;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(d, reencoded)));
+    TEST_ASSERT_TRUE(bytes == reencoded);
+}
+
+void test_recovery_evaluation_without_pending_context_is_invalid() {
+    auto snapshot = programSnapshot();
+    snapshot.processState.state = ProcessState::RecoveryEvaluation;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(snapshot));
+}
+
+void test_pending_recovery_anchor_with_wrong_original_phase_is_invalid() {
+    auto snapshot = recoveryEvaluationPendingSnapshot();
+    // "Falsche Phase fuer den Snapshot" (5.14 Punkt 2): originalProcessState
+    // passt strukturell nicht mehr zum mitgelieferten Programm-Snapshot
+    // (kind == Timed, kein ManualHolding).
+    snapshot.pendingRecoveryAnchor->originalProcessState.state =
+        ProcessState::ManualHolding;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(snapshot));
+}
+
+void test_prior_boot_phase_elapsed_tag_mismatch_is_invalid() {
+    auto snapshot = recoveryEvaluationPendingSnapshot();
+    snapshot.priorBootPhaseElapsed->taggedState = ProcessState::CoolHolding;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(snapshot));
+}
+
+void test_no_active_run_rejects_lingering_recovery_and_progress_fields() {
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    std::array<CommandId, kMaximumPersistedRunCommandIds> ids{};
+    const auto tombstone = makeRunPersistenceSnapshot(
+        state, ids, 0U, RunCheckpointTrigger::Transition,
+        RunCheckpointTime{100U, std::nullopt}, 5U);
+    TEST_ASSERT_TRUE(tombstone.has_value());
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(*tombstone));
+
+    auto withAnchor = *tombstone;
+    withAnchor.pendingRecoveryAnchor = PendingRecoveryAnchor{};
+    withAnchor.recoveryBootAnchorMonotonicMillis = 1U;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(withAnchor));
+
+    auto withEpisodeEvidence = *tombstone;
+    withEpisodeEvidence.lastRecoveryEpisodeEvidence = RecoveryEpisodeEvidence{};
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(withEpisodeEvidence));
+
+    auto withPriorBootPhaseElapsed = *tombstone;
+    withPriorBootPhaseElapsed.priorBootPhaseElapsed =
+        TaggedPriorBootPhaseElapsed{};
+    TEST_ASSERT_FALSE(
+        validateRunPersistenceSnapshot(withPriorBootPhaseElapsed));
+
+    auto withNominalAdjustment = *tombstone;
+    withNominalAdjustment.nominalRecoveryAdjustment =
+        NominalRecoveryAdjustmentState{};
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(withNominalAdjustment));
+
+    auto withWeightedProgress = *tombstone;
+    withWeightedProgress.runProgress.weightedProgress = WeightedProgressState{};
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(withWeightedProgress));
+}
+
+void test_pending_recovery_anchor_survives_resume_while_time_question_stays_open() {
+    // 5.14 Punkt 3 (neu, "Zeitbewertung noch offen"): ein bereits resumter
+    // Lauf (Fermenting) darf einen weiterhin gesetzten PendingRecoveryAnchor
+    // tragen, solange priorBootPhaseElapsed regulaer getaggt ist und dessen
+    // akkumulierte Obergrenze unbekannt bleibt.
+    auto snapshot = programSnapshot();
+    snapshot.processState.state = ProcessState::Fermenting;
+
+    PendingRecoveryAnchor anchor;
+    anchor.originalProcessState.state = ProcessState::Fermenting;
+    anchor.knownPhaseSecondsAtOriginalCheckpoint = 90U;
+    anchor.originalCheckpointUtc = 1700000000;
+    snapshot.pendingRecoveryAnchor = anchor;
+    snapshot.recoveryBootAnchorMonotonicMillis = 200U;
+
+    TaggedPriorBootPhaseElapsed tagged;
+    tagged.taggedState = ProcessState::Fermenting;
+    tagged.elapsed = PriorBootPhaseElapsed{90U, std::nullopt};
+    snapshot.priorBootPhaseElapsed = tagged;
+
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(snapshot));
+
+    // Dieselbe Konstellation, aber mit bekannter akkumulierter Obergrenze:
+    // der Anker muesste dann laengst geloescht sein
+    // (recoveryTimeResolvedAtResume), ein weiterhin gesetzter Anker ist
+    // strukturell inkonsistent.
+    auto withKnownUpperBound = snapshot;
+    withKnownUpperBound.priorBootPhaseElapsed->elapsed.upperBoundSeconds = 300U;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(withKnownUpperBound));
+
+    // Keine der drei erlaubten Phasen (WaitingForProduct/Fermenting/
+    // CoolHolding): ReachingTarget statt Cooling, damit die Ablehnung
+    // nachweisbar aus der Anker-Phaseninvariante kommt, nicht aus einer
+    // unabhaengigen completionMode-/stateMatchesRunSnapshot-Inkompatibilitaet
+    // (water-kefir verwendet FinishWithoutCooling und waere fuer Cooling
+    // ohnehin strukturell inkompatibel).
+    auto reachingTargetWithAnchor = snapshot;
+    reachingTargetWithAnchor.processState.state = ProcessState::ReachingTarget;
+    reachingTargetWithAnchor.priorBootPhaseElapsed.reset();
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(reachingTargetWithAnchor));
+}
+
+// Korrekturauftrag Befund 1: stateMatchesRunSnapshot() liefert fuer nicht
+// run-gebundene Zustaende (Boot/Standby/Completed/RecoveryEvaluation/Fault/
+// ServiceMode) absichtlich true - eine echte Recovery-Altphase muss
+// zusaetzlich zu den acht tatsaechlich snapshot-gebundenen Phasen gehoeren
+// (stateUsesRunSnapshot()).
+void test_pending_recovery_anchor_valid_for_manual_run_manual_holding_origin() {
+    ManualRunPlan plan;
+    plan.values.runId = "manual-recovery";
+    plan.values.targetTemperatureCelsius = 12.0;
+    plan.values.sensorMode = RunSensorMode::Air;
+    plan.values.qualificationBandCelsius = 0.5;
+    plan.values.qualificationDurationMinutes = 10U;
+    plan.values.maximumTargetReachMinutes = 180U;
+    plan.createdAtMonotonicMillis = 10U;
+    RunCommandState state;
+    state.activeManualRun = plan;
+    state.activeRunId = plan.values.runId;
+    state.activeRunSensorMode = plan.values.sensorMode;
+    state.runRevision = 1U;
+    state.sensorSelection = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::StartSelection, 1U};
+    state.processRunSnapshot = makeProcessRunSnapshot(plan);
+    state.processState.state = ProcessState::ManualHolding;
+    state.processState.stateEnteredAtMillis = 100U;
+    std::array<CommandId, kMaximumPersistedRunCommandIds> ids{};
+    auto snapshot = makeRunPersistenceSnapshot(
+        state, ids, 0U, RunCheckpointTrigger::Transition,
+        RunCheckpointTime{100U, std::nullopt}, 5U);
+    TEST_ASSERT_TRUE(snapshot.has_value());
+
+    snapshot->processState.state = ProcessState::RecoveryEvaluation;
+    PendingRecoveryAnchor anchor;
+    anchor.originalProcessState.state = ProcessState::ManualHolding;
+    anchor.knownPhaseSecondsAtOriginalCheckpoint = 12U;
+    snapshot->pendingRecoveryAnchor = anchor;
+    snapshot->recoveryBootAnchorMonotonicMillis = 20U;
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(*snapshot));
+}
+
+void test_pending_recovery_anchor_with_non_recovery_original_phase_is_invalid() {
+    // Completed sowie vier weitere, strukturell nie snapshot-gebundene
+    // Zustaende: keiner davon kann eine echte Vor-Ausfall-Recoveryphase sein.
+    for (const auto originalState :
+         {ProcessState::Completed, ProcessState::Boot, ProcessState::Standby,
+          ProcessState::ServiceMode, ProcessState::Fault}) {
+        auto snapshot = recoveryEvaluationPendingSnapshot();
+        snapshot.pendingRecoveryAnchor->originalProcessState.state =
+            originalState;
+        TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(snapshot));
+    }
+}
+
+void test_prior_boot_phase_elapsed_bounds_are_validated() {
+    // Pending-Anker: geordnete Grenzen (Testmatrix "geordnet gueltig"/"lower
+    // == upper gueltig") bereits durch den Roundtrip-Test bewiesen
+    // (accumulatedBeforeEpisode = {50, 200}); hier die Grenzfaelle.
+    auto anchorEqual = recoveryEvaluationPendingSnapshot();
+    anchorEqual.pendingRecoveryAnchor->accumulatedBeforeEpisode =
+        PriorBootPhaseElapsed{100U, 100U};
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(anchorEqual));
+
+    auto anchorInverted = recoveryEvaluationPendingSnapshot();
+    anchorInverted.pendingRecoveryAnchor->accumulatedBeforeEpisode =
+        PriorBootPhaseElapsed{200U, 50U};
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(anchorInverted));
+
+    // Getaggtes Feld: dieselbe Invariante.
+    auto taggedEqual = recoveryEvaluationPendingSnapshot();
+    taggedEqual.priorBootPhaseElapsed->elapsed =
+        PriorBootPhaseElapsed{100U, 100U};
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(taggedEqual));
+
+    auto taggedInverted = recoveryEvaluationPendingSnapshot();
+    taggedInverted.priorBootPhaseElapsed->elapsed =
+        PriorBootPhaseElapsed{200U, 50U};
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(taggedInverted));
+}
+
+void test_weighted_progress_provenance_role_and_confidence_must_match() {
+    auto validProduct = recoveryEvaluationPendingSnapshot();
+    validProduct.runProgress.weightedProgress->lastApplied->lastSourceRole =
+        RunSensorMode::Product;
+    validProduct.runProgress.weightedProgress->lastApplied->confidence =
+        WeightedProgressConfidence::ProductPreferred;
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(validProduct));
+
+    auto validAir = recoveryEvaluationPendingSnapshot();
+    validAir.runProgress.weightedProgress->lastApplied->lastSourceRole =
+        RunSensorMode::Air;
+    validAir.runProgress.weightedProgress->lastApplied->confidence =
+        WeightedProgressConfidence::AirReduced;
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(validAir));
+
+    auto productWithAirReduced = recoveryEvaluationPendingSnapshot();
+    productWithAirReduced.runProgress.weightedProgress->lastApplied
+        ->lastSourceRole = RunSensorMode::Product;
+    productWithAirReduced.runProgress.weightedProgress->lastApplied
+        ->confidence = WeightedProgressConfidence::AirReduced;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(productWithAirReduced));
+
+    auto airWithProductPreferred = recoveryEvaluationPendingSnapshot();
+    airWithProductPreferred.runProgress.weightedProgress->lastApplied
+        ->lastSourceRole = RunSensorMode::Air;
+    airWithProductPreferred.runProgress.weightedProgress->lastApplied
+        ->confidence = WeightedProgressConfidence::ProductPreferred;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(airWithProductPreferred));
+}
+
+void test_first_after_restart_evidence_requires_canonical_latch_form() {
+    // Gesetzt + Valid + Wert: gueltig (Positivfall bereits durch den
+    // bestehenden Roundtrip-Test bewiesen, hier zusaetzlich direkt geprueft).
+    auto validWithValue = recoveryEvaluationPendingSnapshot();
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(validWithValue));
+
+    // Nicht gesetzt: weiterhin gueltig/latchbar.
+    auto notSet = recoveryEvaluationPendingSnapshot();
+    notSet.lastRecoveryEpisodeEvidence->firstAfterRestart.air.reset();
+    notSet.lastRecoveryEpisodeEvidence->firstAfterRestart.product.reset();
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(notSet));
+
+    // Gesetzt + Valid ohne Wert: strukturell unmoeglich (5.20-Latch verlangt
+    // beides gemeinsam) - ungueltig.
+    auto validWithoutValue = recoveryEvaluationPendingSnapshot();
+    validWithoutValue.lastRecoveryEpisodeEvidence->firstAfterRestart.air =
+        RoleTemperatureEvidence{std::nullopt,
+                                device_platform::SensorQuality::Valid};
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(validWithoutValue));
+
+    // Gesetzt + Stale/Failed: ebenso unmoeglich, der Latch traegt
+    // ausschliesslich Valid-Werte.
+    auto staleWithValue = recoveryEvaluationPendingSnapshot();
+    staleWithValue.lastRecoveryEpisodeEvidence->firstAfterRestart.air =
+        RoleTemperatureEvidence{3.0, device_platform::SensorQuality::Stale};
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(staleWithValue));
+
+    auto failedWithValue = recoveryEvaluationPendingSnapshot();
+    failedWithValue.lastRecoveryEpisodeEvidence->firstAfterRestart.air =
+        RoleTemperatureEvidence{3.0, device_platform::SensorQuality::Failed};
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(failedWithValue));
+}
+
 void test_prepared_head_binds_full_transaction_contract() {
     const RunCheckpointReference current{
         0U, 1U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
@@ -301,16 +719,13 @@ void test_prepared_head_binds_full_transaction_contract() {
     const auto encoded =
         encodeRunPersistenceHead(prepared, device_platform::StorageEpoch(9U));
     TEST_ASSERT_TRUE(encoded.has_value());
-    assertGolden(*encoded,
-                 "4450524600010008000000020000000000000009000000000000001400000"
-                 "077004b4c6c7c01"
-                 "0100000000010000000000000009000000000000000a0000000b0000000c0"
-                 "101010000000100"
-                 "0000000000000900000000000000090000000800000007030100000001000"
-                 "000000000000900"
-                 "0000000000000b0000000d0000000e0301010000000000000058000000040"
-                 "000000500000006"
-                 "00000007");
+    assertGolden(
+        *encoded,
+        "44505246000100080000000300000000000000090000000000000014000000770"
+        "0b42ede08010100000000010000000000000009000000000000000a0000000b00"
+        "00000c01010100000001000000000000000900000000000000090000000800000"
+        "0070301000000010000000000000009000000000000000b0000000d0000000e03"
+        "0101000000000000005800000004000000050000000600000007");
     const auto decoded =
         decodeRunPersistenceHead(*encoded, device_platform::StorageEpoch(9U));
     TEST_ASSERT_TRUE(decoded.has_value());
@@ -400,12 +815,12 @@ void test_head_reference_and_mutation_invariants_reject_invalid_contracts() {
     const auto committedGolden = encodeRunPersistenceHead(
         activeWithTombstoneFallback, device_platform::StorageEpoch(9U));
     TEST_ASSERT_TRUE(committedGolden.has_value());
-    assertGolden(*committedGolden,
-                 "4450524600010008000000020000000000000009000000000000001600000"
-                 "03e007a5213fe02"
-                 "00000000010000000000000009000000000000000a0000000b0000000c010"
-                 "101000000010000"
-                 "0000000000090000000000000009000000080000000703");
+    assertGolden(
+        *committedGolden,
+        "445052460001000800000003000000000000000900000000000000160000003e0"
+        "02051b3310200000000010000000000000009000000000000000a0000000b0000"
+        "000c0101010000000100000000000000090000000000000009000000080000000"
+        "703");
 
     committed.fallback = current;
     TEST_ASSERT_FALSE(
@@ -486,6 +901,39 @@ void test_schema_one_payload_decodes_without_sensor_selection_field() {
         static_cast<int>(decoded.snapshot->sensorSelection->lastDecisionCause));
     TEST_ASSERT_EQUAL_UINT32(
         0U, decoded.snapshot->sensorSelection->lastDecisionRunRevision);
+    // 5.28: eine Schema-1-Decodierung kann keine der neuen Schema-3-
+    // Pending-/Evidenz-/Korrekturkombinationen erzeugen (sie existierten
+    // damals nicht) - Regressionstest gegen bestehende Migrationsvektoren.
+    // basis startet ehrlich mit PartialUnknownHistory statt eines erfundenen
+    // KnownTotal-Altbestands; weightedProgress wird gesetzt, aber ohne
+    // erfundenen Beitrag (0/0, PartialUnknown, kein lastApplied).
+    TEST_ASSERT_FALSE(decoded.snapshot->pendingRecoveryAnchor.has_value());
+    TEST_ASSERT_FALSE(
+        decoded.snapshot->recoveryBootAnchorMonotonicMillis.has_value());
+    TEST_ASSERT_FALSE(
+        decoded.snapshot->lastRecoveryEpisodeEvidence.has_value());
+    TEST_ASSERT_FALSE(decoded.snapshot->priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_FALSE(decoded.snapshot->nominalRecoveryAdjustment.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, decoded.snapshot->recoveryEpisodeRevision);
+    TEST_ASSERT_FALSE(decoded.snapshot->recoveryTemperatureEvidence.lastKnown
+                          .air.filteredCelsius.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunProgressBasis::PartialUnknownHistory),
+        static_cast<int>(decoded.snapshot->runProgress.basis));
+    TEST_ASSERT_EQUAL_UINT32(0U,
+                             decoded.snapshot->runProgress.observedRunSeconds);
+    TEST_ASSERT_TRUE(
+        decoded.snapshot->runProgress.weightedProgress.has_value());
+    TEST_ASSERT_EQUAL_UINT64(0U, decoded.snapshot->runProgress.weightedProgress
+                                     ->cumulative.lowerBoundSeconds);
+    TEST_ASSERT_FALSE(decoded.snapshot->runProgress.weightedProgress->cumulative
+                          .upperBoundSeconds.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WeightedProgressCoverage::PartialUnknown),
+        static_cast<int>(
+            decoded.snapshot->runProgress.weightedProgress->coverage));
+    TEST_ASSERT_FALSE(decoded.snapshot->runProgress.weightedProgress
+                          ->lastApplied.has_value());
     // Decoding the identical bytes as schema 2 misreads the following field
     // boundary (there is no presence tag at this offset in a schema-1
     // payload) and must not silently succeed with the wrong shape.
@@ -495,6 +943,28 @@ void test_schema_one_payload_decodes_without_sensor_selection_field() {
                           static_cast<int>(misread.status));
 }
 
+void test_no_active_run_migration_from_schema_one_keeps_default_progress() {
+    // 5.28/5.14 Punkt 6: NoActiveRun-Migration erfindet keinen
+    // PartialUnknownHistory-Zustand fuer einen nicht existierenden Run - die
+    // Migrationsregel gilt ausdruecklich nur fuer variant != NoActiveRun. Ein
+    // genuiner Schema-1-Payload (identisch zur bisherigen NoActiveRun-
+    // Kodierung vor #18 - dieser Bereich schrieb nie ein schema-abhaengiges
+    // Feld) traegt keinen angehaengten Schema-3-Block.
+    const auto schemaOnePayload = bytesFromHex(
+        "03020000000000000064000500000000000003000000000000000000000000000"
+        "0000000000000000000");
+    const auto decoded = decodeRunPersistenceSnapshot(schemaOnePayload, 1U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(decoded.status));
+    TEST_ASSERT_TRUE(decoded.snapshot.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunProgressBasis::KnownTotal),
+        static_cast<int>(decoded.snapshot->runProgress.basis));
+    TEST_ASSERT_FALSE(
+        decoded.snapshot->runProgress.weightedProgress.has_value());
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(*decoded.snapshot));
+}
+
 // #21, 9.3: readReference/validReference accept exactly the known schema set
 // {1U, 2U} and reject anything else, exercised via the public head codec
 // (encodeRunPersistenceHead stamps kCurrentRunPersistenceSchema on the head
@@ -502,7 +972,7 @@ void test_schema_one_payload_decodes_without_sensor_selection_field() {
 // independently checked by readReference/validReference).
 void test_head_reference_accepts_known_schemas_and_rejects_unknown_ones() {
     const auto epoch = device_platform::StorageEpoch(9U);
-    for (const std::uint32_t schema : {1U, 2U}) {
+    for (const std::uint32_t schema : {1U, 2U, 3U}) {
         RunPersistenceHead committed;
         committed.state = RunPersistenceHeadState::Committed;
         committed.revision = 5U;
@@ -518,7 +988,7 @@ void test_head_reference_accepts_known_schemas_and_rejects_unknown_ones() {
     unknownSchema.state = RunPersistenceHeadState::Committed;
     unknownSchema.revision = 5U;
     unknownSchema.current = RunCheckpointReference{
-        0U, 3U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
+        0U, 4U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
     TEST_ASSERT_FALSE(
         encodeRunPersistenceHead(unknownSchema, epoch).has_value());
 }
@@ -563,7 +1033,24 @@ int main(int, char**) {
         test_head_reference_and_mutation_invariants_reject_invalid_contracts);
     RUN_TEST(test_manual_snapshot_and_runtime_shape_must_be_canonical);
     RUN_TEST(test_sensor_selection_cross_field_invariants_are_enforced);
+    RUN_TEST(
+        test_recovery_evaluation_pending_context_round_trips_with_nonzero_values);
+    RUN_TEST(test_recovery_evaluation_without_pending_context_is_invalid);
+    RUN_TEST(test_pending_recovery_anchor_with_wrong_original_phase_is_invalid);
+    RUN_TEST(test_prior_boot_phase_elapsed_tag_mismatch_is_invalid);
+    RUN_TEST(test_no_active_run_rejects_lingering_recovery_and_progress_fields);
+    RUN_TEST(
+        test_pending_recovery_anchor_survives_resume_while_time_question_stays_open);
+    RUN_TEST(
+        test_pending_recovery_anchor_valid_for_manual_run_manual_holding_origin);
+    RUN_TEST(
+        test_pending_recovery_anchor_with_non_recovery_original_phase_is_invalid);
+    RUN_TEST(test_prior_boot_phase_elapsed_bounds_are_validated);
+    RUN_TEST(test_weighted_progress_provenance_role_and_confidence_must_match);
+    RUN_TEST(test_first_after_restart_evidence_requires_canonical_latch_form);
     RUN_TEST(test_schema_one_payload_decodes_without_sensor_selection_field);
+    RUN_TEST(
+        test_no_active_run_migration_from_schema_one_keeps_default_progress);
     RUN_TEST(
         test_head_reference_accepts_known_schemas_and_rejects_unknown_ones);
     RUN_TEST(test_committed_head_accepts_mixed_current_and_fallback_schema);

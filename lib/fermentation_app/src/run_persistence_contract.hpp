@@ -6,6 +6,7 @@
 #include <string>
 
 #include "run_commands.hpp"
+#include "run_recovery_types.hpp"
 
 namespace fermentation {
 
@@ -21,20 +22,18 @@ inline constexpr std::uint16_t kMaximumRunCheckpointIntervalMinutes = 60U;
 // checkpoint payload) must accept every version knownRunPersistenceSchema
 // reports, not just the current one, so a not-yet-migrated schema-1 slot
 // written before this PR stays decodable across the upgrade boundary.
-inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 2U;
+// Schema 3 (#18): PendingRecoveryAnchor, recoveryBootAnchorMonotonicMillis,
+// RunProgressState, RecoveryEpisodeEvidence, RecoveryTemperatureEvidence,
+// TaggedPriorBootPhaseElapsed, NominalRecoveryAdjustmentState,
+// recoveryEpisodeRevision (5.28). RunCheckpointTrigger moved to
+// run_recovery_types.hpp, transitively still visible here.
+inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 3U;
 [[nodiscard]] bool knownRunPersistenceSchema(std::uint32_t schemaVersion);
 
 enum class RunCheckpointVariant : std::uint8_t {
     ProgramRun = 1U,
     ManualRun = 2U,
     NoActiveRun = 3U,
-};
-
-enum class RunCheckpointTrigger : std::uint8_t {
-    Command = 1U,
-    Transition = 2U,
-    Periodic = 3U,
-    SensorSelection = 4U,
 };
 
 struct RunCheckpointTime {
@@ -107,6 +106,22 @@ struct RunPersistenceSnapshot {
     std::array<CommandId, kMaximumPersistedRunCommandIds>
         persistedRunCommandIds{};
     std::size_t persistedRunCommandCount{0U};
+    // Schema 3 (#18). Nur gueltig gemaess validateRunPersistenceSnapshot()
+    // (5.14): pendingRecoveryAnchor/recoveryBootAnchorMonotonicMillis nur bei
+    // RecoveryEvaluation eines aktiven Runs (Punkt 2) oder bei einem bereits
+    // resumten Lauf mit noch offener Zeitbewertung (Punkt 3); alle sechs
+    // Recovery-/Progressfelder (inkl. runProgress.weightedProgress) sind bei
+    // NoActiveRun zwingend nullopt (Punkt 6). recoveryTemperatureEvidence ist
+    // davon bewusst ausgenommen (5.20: laufend fortgeschrieben, kein
+    // laufgebundenes Diagnosefeld).
+    std::optional<PendingRecoveryAnchor> pendingRecoveryAnchor;
+    std::optional<std::uint64_t> recoveryBootAnchorMonotonicMillis;
+    RecoveryTemperatureEvidence recoveryTemperatureEvidence;
+    std::optional<RecoveryEpisodeEvidence> lastRecoveryEpisodeEvidence;
+    std::optional<TaggedPriorBootPhaseElapsed> priorBootPhaseElapsed;
+    std::optional<NominalRecoveryAdjustmentState> nominalRecoveryAdjustment;
+    std::uint32_t recoveryEpisodeRevision{0U};
+    RunProgressState runProgress;
 };
 
 struct RunPersistenceRawRecord {

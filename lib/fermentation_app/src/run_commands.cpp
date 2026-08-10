@@ -499,6 +499,18 @@ void clearActiveRunState(RunCommandState& state) {
     state.activeRunSensorMode.reset();
     state.sensorSelection.reset();
     state.sensorSelectionRuntime = SensorSelectionRuntimeState{};
+    // Schema 3 (#18, 5.11/5.14 Punkt 6): dieselben sechs Recovery-/
+    // Progressfelder, die ein NoActiveRun-Snapshot zwingend nullopt traegt.
+    // recoveryTemperatureEvidence bleibt bewusst unberuehrt (5.20: laufend
+    // fortgeschrieben, kein laufgebundenes Diagnosefeld);
+    // recoveryEpisodeRevision bleibt aus demselben Grund wie runRevision
+    // unberuehrt (monotoner Zaehler ueber Laufgrenzen hinweg).
+    state.pendingRecoveryAnchor.reset();
+    state.recoveryBootAnchorMonotonicMillis.reset();
+    state.lastRecoveryEpisodeEvidence.reset();
+    state.priorBootPhaseElapsed.reset();
+    state.nominalRecoveryAdjustment.reset();
+    state.runProgress = RunProgressState{};
 }
 
 // Korrekturauftrag Befund 1: siehe Kommentar in run_commands.hpp. Beide

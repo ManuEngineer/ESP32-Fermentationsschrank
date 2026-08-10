@@ -65,29 +65,6 @@ bool elapsed(std::uint64_t now, std::uint64_t startedAt,
     return now - startedAt >= minutesToMillis(durationMinutes);
 }
 
-bool stateUsesRunSnapshot(ProcessState state) {
-    switch (state) {
-        case ProcessState::Preheating:
-        case ProcessState::WaitingForProduct:
-        case ProcessState::ReachingTarget:
-        case ProcessState::QualifyingTarget:
-        case ProcessState::Fermenting:
-        case ProcessState::Cooling:
-        case ProcessState::CoolHolding:
-        case ProcessState::ManualHolding:
-            return true;
-        case ProcessState::Boot:
-        case ProcessState::SafeBoot:
-        case ProcessState::Standby:
-        case ProcessState::Completed:
-        case ProcessState::RecoveryEvaluation:
-        case ProcessState::Fault:
-        case ProcessState::ServiceMode:
-            return false;
-    }
-    return false;
-}
-
 bool stateHasTargetReachTimer(ProcessState state) {
     return state == ProcessState::ReachingTarget ||
            state == ProcessState::QualifyingTarget;
@@ -139,44 +116,6 @@ bool validRecoveryTarget(ProcessState state) {
         case ProcessState::Fault:
         case ProcessState::ServiceMode:
             return false;
-    }
-    return false;
-}
-
-bool stateMatchesRunSnapshot(ProcessState state,
-                             const ProcessRunSnapshot& snapshot) {
-    switch (state) {
-        case ProcessState::Preheating:
-            return snapshot.preheatEnabled;
-        case ProcessState::WaitingForProduct:
-            return snapshot.preheatEnabled &&
-                   snapshot.maximumProductWaitMinutes.has_value();
-        case ProcessState::ReachingTarget:
-        case ProcessState::QualifyingTarget:
-            return true;
-        case ProcessState::Fermenting:
-            return snapshot.kind == ProcessKind::Timed &&
-                   snapshot.fermentationDurationMinutes.has_value();
-        case ProcessState::Cooling:
-            return snapshot.kind == ProcessKind::Timed &&
-                   snapshot.completionMode !=
-                       CompletionMode::FinishWithoutCooling;
-        case ProcessState::CoolHolding:
-            return snapshot.kind == ProcessKind::Timed &&
-                   (snapshot.completionMode ==
-                        CompletionMode::CoolAndHoldForDuration ||
-                    snapshot.completionMode ==
-                        CompletionMode::CoolAndHoldUntilManualStop);
-        case ProcessState::ManualHolding:
-            return snapshot.kind == ProcessKind::ManualHolding;
-        case ProcessState::Boot:
-        case ProcessState::SafeBoot:
-        case ProcessState::Standby:
-        case ProcessState::Completed:
-        case ProcessState::RecoveryEvaluation:
-        case ProcessState::Fault:
-        case ProcessState::ServiceMode:
-            return true;
     }
     return false;
 }
@@ -930,6 +869,67 @@ bool validateProcessRuntimeForCheckpoint(
                stateMatchesRunSnapshot(state.state, *runSnapshot);
     }
     return runSnapshot == nullptr || validateProcessRunSnapshot(*runSnapshot);
+}
+
+bool stateUsesRunSnapshot(ProcessState state) {
+    switch (state) {
+        case ProcessState::Preheating:
+        case ProcessState::WaitingForProduct:
+        case ProcessState::ReachingTarget:
+        case ProcessState::QualifyingTarget:
+        case ProcessState::Fermenting:
+        case ProcessState::Cooling:
+        case ProcessState::CoolHolding:
+        case ProcessState::ManualHolding:
+            return true;
+        case ProcessState::Boot:
+        case ProcessState::SafeBoot:
+        case ProcessState::Standby:
+        case ProcessState::Completed:
+        case ProcessState::RecoveryEvaluation:
+        case ProcessState::Fault:
+        case ProcessState::ServiceMode:
+            return false;
+    }
+    return false;
+}
+
+bool stateMatchesRunSnapshot(ProcessState state,
+                             const ProcessRunSnapshot& snapshot) {
+    switch (state) {
+        case ProcessState::Preheating:
+            return snapshot.preheatEnabled;
+        case ProcessState::WaitingForProduct:
+            return snapshot.preheatEnabled &&
+                   snapshot.maximumProductWaitMinutes.has_value();
+        case ProcessState::ReachingTarget:
+        case ProcessState::QualifyingTarget:
+            return true;
+        case ProcessState::Fermenting:
+            return snapshot.kind == ProcessKind::Timed &&
+                   snapshot.fermentationDurationMinutes.has_value();
+        case ProcessState::Cooling:
+            return snapshot.kind == ProcessKind::Timed &&
+                   snapshot.completionMode !=
+                       CompletionMode::FinishWithoutCooling;
+        case ProcessState::CoolHolding:
+            return snapshot.kind == ProcessKind::Timed &&
+                   (snapshot.completionMode ==
+                        CompletionMode::CoolAndHoldForDuration ||
+                    snapshot.completionMode ==
+                        CompletionMode::CoolAndHoldUntilManualStop);
+        case ProcessState::ManualHolding:
+            return snapshot.kind == ProcessKind::ManualHolding;
+        case ProcessState::Boot:
+        case ProcessState::SafeBoot:
+        case ProcessState::Standby:
+        case ProcessState::Completed:
+        case ProcessState::RecoveryEvaluation:
+        case ProcessState::Fault:
+        case ProcessState::ServiceMode:
+            return true;
+    }
+    return false;
 }
 
 TransitionDecision propose(const ProcessRuntimeState& current,

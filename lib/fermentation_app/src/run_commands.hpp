@@ -8,6 +8,7 @@
 
 #include "process_state_machine.hpp"
 #include "run_command_limits.hpp"
+#include "run_recovery_types.hpp"
 #include "run_snapshot.hpp"
 #include "sensor_selection_types.hpp"
 
@@ -348,6 +349,20 @@ struct RunCommandState {
     std::array<CommandId, run_command_limits::kMaximumProcessedCommandIds>
         processedCommandIds{};
     std::size_t processedCommandCount{0U};
+    // Schema 3 (#18), gespiegelt aus RunPersistenceSnapshot (siehe dortigen
+    // Kommentar): RAM-Zustand fuer die Recovery-Orchestrierung
+    // (RunPersistenceCoordinator/RunRecoveryCoordinator). clearActiveRunState()
+    // setzt alle bis auf recoveryTemperatureEvidence und
+    // recoveryEpisodeRevision zurueck (analog zu runRevision bleibt Letzteres
+    // ein monoton gefuehrter Zaehler ueber Laufgrenzen hinweg).
+    std::optional<PendingRecoveryAnchor> pendingRecoveryAnchor;
+    std::optional<std::uint64_t> recoveryBootAnchorMonotonicMillis;
+    RecoveryTemperatureEvidence recoveryTemperatureEvidence;
+    std::optional<RecoveryEpisodeEvidence> lastRecoveryEpisodeEvidence;
+    std::optional<TaggedPriorBootPhaseElapsed> priorBootPhaseElapsed;
+    std::optional<NominalRecoveryAdjustmentState> nominalRecoveryAdjustment;
+    std::uint32_t recoveryEpisodeRevision{0U};
+    RunProgressState runProgress;
 };
 
 struct CommandDecision {
