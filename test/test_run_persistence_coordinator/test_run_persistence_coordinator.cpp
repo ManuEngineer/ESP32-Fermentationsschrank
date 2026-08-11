@@ -2702,6 +2702,333 @@ CrossRolePlausibilityContext recoveryPlausibility(
     return plausibility;
 }
 
+RunCommandState persistedWaitingForProductRun(
+    RunPersistenceCoordinator& coordinator, CommandId startId) {
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(
+                    state,
+                    startDecision(state, startId, 100U, preheatProgram()),
+                    RunCheckpointTime{100U, std::nullopt})
+                .status));
+    ProcessSignals signals;
+    signals.qualificationConditionValid = true;
+    auto transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{200U, std::nullopt})
+                .status));
+    transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 600300U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{600300U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::WaitingForProduct),
+                          static_cast<int>(state.processState.state));
+    return state;
+}
+
+RunCommandState persistedCoolHoldingRun(RunPersistenceCoordinator& coordinator,
+                                        CommandId startId) {
+    auto program = runnableProgram();
+    program.program.completion.mode = CompletionMode::CoolAndHoldForDuration;
+    program.program.completion.coolingTargetCelsius = 20.0;
+    program.program.completion.holdDurationMinutes = 30U;
+    TEST_ASSERT_TRUE(validateProgram(program).valid());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state,
+                                startDecision(state, startId, 100U, program),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    ProcessSignals signals;
+    signals.qualificationConditionValid = true;
+    auto transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{200U, std::nullopt})
+                .status));
+    transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 600300U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{600300U, std::nullopt})
+                .status));
+    transition = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{}, 7800300U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{7800300U, std::nullopt})
+                .status));
+    transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 7800400U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::CoolHolding),
+                          static_cast<int>(transition.after.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{7800400U, std::nullopt})
+                .status));
+    return state;
+}
+
+void test_resolve_recovery_outcome_waiting_assume_still_valid_resumes() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(persistedWaitingForProductRun(seed, 1006U));
+
+    store.restart();
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto activated = coordinator.activateLoadedRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt},
+        recoveryPlausibility(700000U));
+    RunCommandState current = activated.resultingState;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::RecoveryEvaluation),
+                          static_cast<int>(current.processState.state));
+
+    const ResolveRecoveryUncertaintyRequest request{
+        1007U, current.runRevision, current.recoveryEpisodeRevision,
+        RecoveryUncertaintyDecision::AssumeStillValid};
+    const auto result = coordinator.resolveRecoveryOutcome(
+        current, request, RunCheckpointTime{700100U, std::nullopt},
+        recoveryPlausibility(700100U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::WaitingForProduct),
+                          static_cast<int>(current.processState.state));
+    TEST_ASSERT_TRUE(current.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::WaitingForProduct),
+        static_cast<int>(current.priorBootPhaseElapsed->taggedState));
+    TEST_ASSERT_TRUE(current.pendingRecoveryAnchor.has_value());
+}
+
+void test_resolve_recovery_outcome_waiting_threshold_crossed_tombstones() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(persistedWaitingForProductRun(seed, 1008U));
+    store.restart();
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto activated = coordinator.activateLoadedRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt},
+        recoveryPlausibility(700000U));
+    RunCommandState current = activated.resultingState;
+    const ResolveRecoveryUncertaintyRequest request{
+        1009U, current.runRevision, current.recoveryEpisodeRevision,
+        RecoveryUncertaintyDecision::AssumeThresholdCrossed};
+    const auto result = coordinator.resolveRecoveryOutcome(
+        current, request, RunCheckpointTime{700100U, std::nullopt},
+        recoveryPlausibility(700100U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                          static_cast<int>(current.processState.state));
+    TEST_ASSERT_FALSE(current.activeProgramRun.has_value());
+    TEST_ASSERT_FALSE(current.pendingRecoveryAnchor.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::ReadyEmpty),
+        static_cast<int>(coordinator.state()));
+}
+
+void test_resolve_recovery_outcome_fermenting_bounds_gate_and_completion() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(seed, 1010U);
+    ProcessSignals signals;
+    signals.qualificationConditionValid = true;
+    auto transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistTransition(state, transition,
+                                   RunCheckpointTime{200U, std::nullopt})
+                .status));
+    transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 600300U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistTransition(state, transition,
+                                   RunCheckpointTime{600300U, std::nullopt})
+                .status));
+
+    store.restart();
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto activated = coordinator.activateLoadedRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt},
+        recoveryPlausibility(700000U));
+    RunCommandState current = activated.resultingState;
+    const ResolveRecoveryUncertaintyRequest rejectedRequest{
+        1011U, current.runRevision, current.recoveryEpisodeRevision,
+        RecoveryUncertaintyDecision::AssumeThresholdCrossed};
+    const auto rejected = coordinator.resolveRecoveryOutcome(
+        current, rejectedRequest, RunCheckpointTime{700100U, std::nullopt},
+        recoveryPlausibility(700100U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotAllowedInState),
+        static_cast<int>(rejected.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
+                          static_cast<int>(current.processState.state));
+
+    current.priorBootPhaseElapsed->elapsed.upperBoundSeconds = 7201U;
+    const ResolveRecoveryUncertaintyRequest acceptedRequest{
+        1012U, current.runRevision, current.recoveryEpisodeRevision,
+        RecoveryUncertaintyDecision::AssumeThresholdCrossed};
+    const auto accepted = coordinator.resolveRecoveryOutcome(
+        current, acceptedRequest, RunCheckpointTime{700200U, std::nullopt},
+        recoveryPlausibility(700200U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(accepted.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
+                          static_cast<int>(current.processState.state));
+    TEST_ASSERT_FALSE(current.pendingRecoveryAnchor.has_value());
+    TEST_ASSERT_FALSE(current.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_EQUAL_UINT32(1U, accepted.messageCount);
+}
+
+void test_resolve_recovery_outcome_cool_holding_bounds_gate_completes_hold() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(persistedCoolHoldingRun(seed, 1014U));
+    store.restart();
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto activated = coordinator.activateLoadedRun(
+        *restored, RunCheckpointTime{8000000U, std::nullopt},
+        recoveryPlausibility(8000000U));
+    RunCommandState current = activated.resultingState;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::CoolHolding),
+                          static_cast<int>(current.processState.state));
+    TEST_ASSERT_TRUE(current.priorBootPhaseElapsed.has_value());
+    const ResolveRecoveryUncertaintyRequest request{
+        1015U, current.runRevision, current.recoveryEpisodeRevision,
+        RecoveryUncertaintyDecision::AssumeThresholdCrossed};
+    const auto rejected = coordinator.resolveRecoveryOutcome(
+        current, request, RunCheckpointTime{8000100U, std::nullopt},
+        recoveryPlausibility(8000100U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotAllowedInState),
+        static_cast<int>(rejected.status));
+
+    current.priorBootPhaseElapsed->elapsed.upperBoundSeconds = 1801U;
+    const auto accepted = coordinator.resolveRecoveryOutcome(
+        current, request, RunCheckpointTime{8000200U, std::nullopt},
+        recoveryPlausibility(8000200U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(accepted.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
+                          static_cast<int>(current.processState.state));
+    TEST_ASSERT_EQUAL_UINT32(1U, accepted.messageCount);
+}
+
+RunCommandState readyActiveManualRunWithSensorSelection(
+    RunPersistenceCoordinator& coordinator, CommandId startId);
+
+void test_activate_loaded_completed_run_refreshes_boot_time_without_transition() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveManualRunWithSensorSelection(coordinator, 1013U);
+    state.processState.state = ProcessState::ManualHolding;
+    state.processState.stateEnteredAtMillis = 100U;
+    state.processState.targetReachStartedAtMillis = 0U;
+    const auto transition = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{ProcessEvent::FinishHoldConfirmed, std::nullopt},
+        200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{200U, std::nullopt})
+                .status));
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = afterBoot.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto outcome = afterBoot.activateLoadedRun(
+        *restored, RunCheckpointTime{500U, std::nullopt},
+        recoveryPlausibility(500U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Completed),
+        static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_UINT64(
+        500U, outcome.resultingState.processState.stateEnteredAtMillis);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceDurability::Unchanged),
+        static_cast<int>(outcome.persistenceResult.durability));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(afterBoot.state()));
+}
+
 void test_apply_live_recovery_evidence_requires_a_value_to_latch() {
     RunCommandState state;
     state.processState.state = ProcessState::RecoveryEvaluation;
@@ -3839,6 +4166,15 @@ int main(int, char**) {
     RUN_TEST(test_activate_loaded_run_rejects_sensor_gate_without_writing);
     RUN_TEST(
         test_activate_fallback_recovered_run_replaces_damaged_current_slot);
+    RUN_TEST(test_resolve_recovery_outcome_waiting_assume_still_valid_resumes);
+    RUN_TEST(
+        test_resolve_recovery_outcome_waiting_threshold_crossed_tombstones);
+    RUN_TEST(
+        test_resolve_recovery_outcome_fermenting_bounds_gate_and_completion);
+    RUN_TEST(
+        test_activate_loaded_completed_run_refreshes_boot_time_without_transition);
+    RUN_TEST(
+        test_resolve_recovery_outcome_cool_holding_bounds_gate_completes_hold);
     RUN_TEST(
         test_persist_sensor_selection_from_loaded_active_run_stays_recovery_pending);
     RUN_TEST(test_persist_sensor_selection_rejects_manual_causes);

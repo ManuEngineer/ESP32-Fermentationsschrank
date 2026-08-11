@@ -35,6 +35,7 @@ enum class RunPersistenceResultStatus : std::uint8_t {
     AlreadyProcessed,
     AlreadyPersisted,
     NotEligible,
+    NotAllowedInState,
     NotInitialized,
     RecoveryPending,
     Busy,
@@ -129,6 +130,19 @@ struct RecoveryActivationOutcome {
     RunCommandState resultingState;
 };
 
+enum class RecoveryUncertaintyDecision : std::uint8_t {
+    AssumeStillValid,
+    AssumeThresholdCrossed,
+};
+
+struct ResolveRecoveryUncertaintyRequest {
+    CommandId commandId{0U};
+    std::uint32_t expectedRunRevision{0U};
+    std::uint32_t expectedRecoveryEpisodeRevision{0U};
+    RecoveryUncertaintyDecision decision{
+        RecoveryUncertaintyDecision::AssumeStillValid};
+};
+
 // Reine RAM-Mutation fuer die diagnostische First-after-restart-Evidenz. Die
 // Funktion ist unabhaengig davon aufrufbar, ob im selben Moment ein
 // Persistenz-Commit stattfindet.
@@ -181,6 +195,11 @@ class RunPersistenceCoordinator {
         const CrossRolePlausibilityContext& liveSensorEvidence);
     [[nodiscard]] RecoveryActivationOutcome activateFallbackRecoveredRun(
         const RunCommandState& current, const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext& liveSensorEvidence);
+    [[nodiscard]] RunPersistenceResult resolveRecoveryOutcome(
+        RunCommandState& current,
+        const ResolveRecoveryUncertaintyRequest& request,
+        const RunCheckpointTime& time,
         const CrossRolePlausibilityContext& liveSensorEvidence);
 
    private:

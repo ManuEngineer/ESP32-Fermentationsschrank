@@ -542,6 +542,21 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         return {unavailableResult(), current};
     }
 
+    // Completed is a restored result, not a run phase that may be re-entered.
+    // Refresh its boot-local timestamp in RAM so the later acknowledgement
+    // can pass the normal monotonic-time validation.
+    if (current.processState.state == ProcessState::Completed) {
+        auto candidate = current;
+        candidate.processState.stateEnteredAtMillis = time.monotonicMillis;
+        state_ = RunPersistenceCoordinatorState::Ready;
+        auto persisted = result(RunPersistenceResultStatus::Applied,
+                                RunPersistenceStep::RamApply,
+                                RunPersistenceTechnicalReason::None,
+                                RunPersistenceDurability::Unchanged);
+        persisted.coordinatorState = state_;
+        return {persisted, candidate};
+    }
+
     const auto& loadedRecord = *slots_[currentHead_->current.slot];
     if (!current.processRunSnapshot.has_value() ||
         !current.sensorSelection.has_value() ||
@@ -753,6 +768,17 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         !slots_[fallbackReference.slot].has_value()) {
         return invalid(current);
     }
+    if (current.processState.state == ProcessState::Completed) {
+        auto candidate = current;
+        candidate.processState.stateEnteredAtMillis = time.monotonicMillis;
+        state_ = RunPersistenceCoordinatorState::Ready;
+        auto persisted = result(RunPersistenceResultStatus::Applied,
+                                RunPersistenceStep::RamApply,
+                                RunPersistenceTechnicalReason::None,
+                                RunPersistenceDurability::Unchanged);
+        persisted.coordinatorState = state_;
+        return {persisted, candidate};
+    }
     const auto& loadedRecord = *slots_[fallbackReference.slot];
     if (!current.processRunSnapshot.has_value() ||
         !current.sensorSelection.has_value() ||
@@ -926,6 +952,215 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         candidate.recoveryBootAnchorMonotonicMillis.reset();
     }
     return commitCandidate(candidate);
+}
+
+RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
+    RunCommandState& current, const ResolveRecoveryUncertaintyRequest& request,
+    const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext& liveSensorEvidence) {
+    const auto notAllowed = [this]() {
+        return result(RunPersistenceResultStatus::NotAllowedInState,
+                      RunPersistenceStep::CandidateApply);
+    };
+    if (state_ != RunPersistenceCoordinatorState::Ready) {
+        return unavailableResult();
+    }
+    if (request.commandId == 0U) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    if (request.expectedRunRevision != current.runRevision ||
+        request.expectedRecoveryEpisodeRevision !=
+            current.recoveryEpisodeRevision) {
+        return result(RunPersistenceResultStatus::StaleDecision,
+                      RunPersistenceStep::CandidateApply);
+    }
+    for (std::size_t i = 0U; i < persistedIdCount_; ++i) {
+        if (persistedIds_[i] == request.commandId) {
+            return result(RunPersistenceResultStatus::AlreadyPersisted);
+        }
+    }
+    if (!current.processRunSnapshot.has_value()) return notAllowed();
+
+    ProcessState phase = ProcessState::RecoveryEvaluation;
+    std::optional<RecoveryTimeContext> timeContext;
+    if (current.processState.state == ProcessState::RecoveryEvaluation) {
+        if (!current.pendingRecoveryAnchor.has_value() ||
+            !current.recoveryBootAnchorMonotonicMillis.has_value() ||
+            current.pendingRecoveryAnchor->originalProcessState.state !=
+                ProcessState::WaitingForProduct ||
+            !current.processRunSnapshot->maximumProductWaitMinutes
+                 .has_value()) {
+            return notAllowed();
+        }
+        phase = ProcessState::WaitingForProduct;
+        timeContext = deriveRecoveryTimeContext(
+            *current.pendingRecoveryAnchor, time,
+            *current.recoveryBootAnchorMonotonicMillis);
+        if (!timeContext.has_value()) return notAllowed();
+    } else if (current.processState.state == ProcessState::Fermenting ||
+               current.processState.state == ProcessState::CoolHolding) {
+        phase = current.processState.state;
+        if (!current.priorBootPhaseElapsed.has_value() ||
+            current.priorBootPhaseElapsed->taggedState != phase) {
+            return notAllowed();
+        }
+        timeContext = RecoveryTimeContext{
+            EffectiveAnchorTimeBasis{}, std::nullopt,
+            RecoveredPhaseElapsed{
+                0U, current.priorBootPhaseElapsed->elapsed.lowerBoundSeconds,
+                current.priorBootPhaseElapsed->elapsed.upperBoundSeconds}};
+    } else {
+        return notAllowed();
+    }
+
+    std::uint32_t limitSeconds = 0U;
+    if (phase == ProcessState::WaitingForProduct) {
+        limitSeconds =
+            *current.processRunSnapshot->maximumProductWaitMinutes * 60U;
+    } else if (phase == ProcessState::Fermenting) {
+        if (!current.processRunSnapshot->fermentationDurationMinutes
+                 .has_value()) {
+            return notAllowed();
+        }
+        limitSeconds =
+            *current.processRunSnapshot->fermentationDurationMinutes * 60U;
+    } else {
+        if (!current.processRunSnapshot->holdDurationMinutes.has_value()) {
+            return notAllowed();
+        }
+        limitSeconds = *current.processRunSnapshot->holdDurationMinutes * 60U;
+    }
+    const auto verdict =
+        evaluateRecoveryTimeVerdict(timeContext->elapsed, limitSeconds);
+    if (verdict != RecoveryTimeVerdict::Uncertain) return notAllowed();
+
+    auto ids = persistedIds_;
+    auto count = persistedIdCount_;
+    if (count < ids.size()) {
+        ids[count++] = request.commandId;
+    } else {
+        for (std::size_t i = 1U; i < ids.size(); ++i) ids[i - 1U] = ids[i];
+        ids.back() = request.commandId;
+    }
+
+    auto candidate = current;
+    std::array<ProcessMessage, kMaximumTransitionMessages> messages{};
+    std::size_t messageCount = 0U;
+    if (phase == ProcessState::WaitingForProduct &&
+        request.decision == RecoveryUncertaintyDecision::AssumeStillValid) {
+        if (!candidate.sensorSelection.has_value() ||
+            !candidate.activeRunSensorMode.has_value()) {
+            return notAllowed();
+        }
+        updateLastKnownEvidence(candidate.recoveryTemperatureEvidence,
+                                liveSensorEvidence);
+        const auto recommendation = computeRestartSensorSelection(
+            *candidate.sensorSelection, *candidate.activeRunSensorMode,
+            recoverySensorSelectionProgramContext(candidate),
+            liveSensorEvidence);
+        candidate.sensorSelectionRuntime = recommendation.runtime;
+        candidate.activeRunSensorMode = recommendation.activeMode;
+        if (candidate.activeManualRun.has_value()) {
+            candidate.activeManualRun->values.sensorMode =
+                recommendation.activeMode;
+        }
+        if (recommendation.runtime.permission !=
+            SensorPeltierPermission::Allowed) {
+            return result(RunPersistenceResultStatus::InvalidDecision,
+                          RunPersistenceStep::CandidateApply,
+                          RunPersistenceTechnicalReason::InvalidProjection);
+        }
+        applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
+        const auto accumulated = accumulatedPriorForResume(
+            *candidate.pendingRecoveryAnchor, *timeContext);
+        if (!accumulated.has_value()) return notAllowed();
+        const auto recovered = rebasedRecoveredState(
+            candidate.pendingRecoveryAnchor->originalProcessState,
+            time.monotonicMillis);
+        const auto hop2 = decideProcessTransition(
+            candidate.processState, &*candidate.processRunSnapshot,
+            ProcessSignals{},
+            TransitionRequest{ProcessEvent::RecoveryResume, recovered},
+            time.monotonicMillis, *accumulated);
+        if (!hop2.proposed() ||
+            !applyProcessTransition(candidate.processState, hop2,
+                                    &*candidate.processRunSnapshot)) {
+            return notAllowed();
+        }
+        candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+            ProcessState::WaitingForProduct, *accumulated};
+        applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
+        if (recoveryTimeResolvedAtResume(candidate.priorBootPhaseElapsed)) {
+            candidate.pendingRecoveryAnchor.reset();
+            candidate.recoveryBootAnchorMonotonicMillis.reset();
+        }
+    } else if (phase == ProcessState::WaitingForProduct &&
+               request.decision ==
+                   RecoveryUncertaintyDecision::AssumeThresholdCrossed) {
+        const auto tombstone = propose(
+            candidate.processState, ProcessState::Standby,
+            TransitionReason::RecoveryEndedByExpiredWait, time.monotonicMillis);
+        if (!tombstone.proposed() ||
+            !applyProcessTransition(candidate.processState, tombstone,
+                                    &*candidate.processRunSnapshot)) {
+            return notAllowed();
+        }
+        clearActiveRunState(candidate);
+    } else if (request.decision ==
+                   RecoveryUncertaintyDecision::AssumeThresholdCrossed &&
+               (phase == ProcessState::Fermenting ||
+                phase == ProcessState::CoolHolding)) {
+        if (!current.priorBootPhaseElapsed->elapsed.upperBoundSeconds
+                 .has_value()) {
+            return notAllowed();
+        }
+        const auto completion =
+            phase == ProcessState::Fermenting
+                ? completeTimedRun(candidate.processState,
+                                   *candidate.processRunSnapshot,
+                                   time.monotonicMillis)
+                : completeHoldDuration(candidate.processState,
+                                       time.monotonicMillis);
+        if (!completion.proposed() ||
+            !applyProcessTransition(candidate.processState, completion,
+                                    &*candidate.processRunSnapshot)) {
+            return notAllowed();
+        }
+        messages = completion.messages;
+        messageCount = completion.messageCount;
+        candidate.pendingRecoveryAnchor.reset();
+        candidate.recoveryBootAnchorMonotonicMillis.reset();
+        candidate.priorBootPhaseElapsed.reset();
+    } else {
+        return notAllowed();
+    }
+
+    const auto snapshot = makeRunPersistenceSnapshot(
+        candidate, ids, count, RunCheckpointTrigger::Command, time,
+        schedule_.intervalMinutes());
+    if (!snapshot.has_value()) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    const auto persisted =
+        writeSnapshot(*snapshot, time, false, current,
+                      RunPersistenceMutationKind::Command, request.commandId);
+    if (persisted.status != RunPersistenceResultStatus::Applied) {
+        return persisted;
+    }
+    current = candidate;
+    persistedIds_ = ids;
+    persistedIdCount_ = count;
+    auto applied = persisted;
+    applied.step = RunPersistenceStep::RamApply;
+    applied.durability = RunPersistenceDurability::Changed;
+    applied.coordinatorState = state_;
+    applied.messages = messages;
+    applied.messageCount = messageCount;
+    return applied;
 }
 
 RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
