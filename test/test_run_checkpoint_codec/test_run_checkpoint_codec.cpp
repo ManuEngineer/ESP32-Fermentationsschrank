@@ -28,6 +28,34 @@ void assertGolden(const std::string& actual, const char* expectedHex) {
     TEST_ASSERT_EQUAL_MEMORY(expected.data(), actual.data(), expected.size());
 }
 
+// Genuine schema-1 active payload from before sensorSelection existed. The
+// runtime state byte is at offset 152; the following schema-2 helper inserts
+// only the field introduced by schema 2 and therefore keeps this legacy layout
+// otherwise byte-identical.
+constexpr std::size_t kSchemaOneRuntimeStateOffset = 152U;
+constexpr std::size_t kSchemaTwoRuntimeStateOffset = 159U;
+
+std::string schemaOneActivePayload() {
+    return bytesFromHex(
+        "01010000000000000064000500000000000e636865636b706f696e742d72756e010000"
+        "0001"
+        "01005d00000006000000000001ffff000b77617465722d6b65666972000b5761737365"
+        "726b"
+        "656669720000010101010101000201010000001e030101404300000000000001000000"
+        "7801"
+        "3fe0000000000000010000000a01000000b400010000000100010000000a000000b400"
+        "0100"
+        "0000780006000000000000000000000000000000000000000000000100000000000000"
+        "63");
+}
+
+std::string schemaTwoActivePayload() {
+    auto payload = schemaOneActivePayload();
+    // present=true, LegacyUnknown, None, lastDecisionRunRevision=0
+    payload.insert(33U, std::string("\x01\x04\x01\0\0\0\0", 7U));
+    return payload;
+}
+
 RunPersistenceSnapshot programSnapshot() {
     auto document = FactoryProgramCatalog::find("water-kefir");
     TEST_ASSERT_TRUE(document.has_value());
@@ -93,6 +121,36 @@ void test_program_checkpoint_round_trip_restores_active_run() {
 }
 
 void test_active_recovery_fault_requires_schema_three() {
+    const auto schemaOne = schemaOneActivePayload();
+    const auto schemaOneDecoded = decodeRunPersistenceSnapshot(schemaOne, 1U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(schemaOneDecoded.status));
+    TEST_ASSERT_TRUE(schemaOneDecoded.snapshot.has_value());
+    TEST_ASSERT_EQUAL_UINT8(
+        6U, static_cast<std::uint8_t>(schemaOne[kSchemaOneRuntimeStateOffset]));
+    auto schemaOneFault = schemaOne;
+    schemaOneFault[kSchemaOneRuntimeStateOffset] = static_cast<char>(14U);
+    TEST_ASSERT_EQUAL_UINT32(schemaOne.size(), schemaOneFault.size());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::InvalidWireValue),
+        static_cast<int>(
+            decodeRunPersistenceSnapshot(schemaOneFault, 1U).status));
+
+    const auto schemaTwo = schemaTwoActivePayload();
+    const auto schemaTwoDecoded = decodeRunPersistenceSnapshot(schemaTwo, 2U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(schemaTwoDecoded.status));
+    TEST_ASSERT_TRUE(schemaTwoDecoded.snapshot.has_value());
+    TEST_ASSERT_EQUAL_UINT8(
+        6U, static_cast<std::uint8_t>(schemaTwo[kSchemaTwoRuntimeStateOffset]));
+    auto schemaTwoFault = schemaTwo;
+    schemaTwoFault[kSchemaTwoRuntimeStateOffset] = static_cast<char>(14U);
+    TEST_ASSERT_EQUAL_UINT32(schemaTwo.size(), schemaTwoFault.size());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::InvalidWireValue),
+        static_cast<int>(
+            decodeRunPersistenceSnapshot(schemaTwoFault, 2U).status));
+
     auto fault = programSnapshot();
     fault.processState.state = ProcessState::Fault;
     TEST_ASSERT_FALSE(validateRunPersistenceSnapshotForSchema(fault, 1U));
@@ -105,6 +163,9 @@ void test_active_recovery_fault_requires_schema_three() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::Success),
         static_cast<int>(encodeRunPersistenceSnapshot(fault, encoded)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::InvalidWireValue),
+        static_cast<int>(decodeRunPersistenceSnapshot(encoded, 4U).status));
     for (const std::uint32_t legacySchema : {1U, 2U}) {
         TEST_ASSERT_NOT_EQUAL(
             static_cast<int>(RunPersistenceCodecStatus::Success),
@@ -1010,17 +1071,7 @@ void test_payload_bounds_and_truncation_are_strict() {
 // must still decode. Decoding it with schemaVersion 1 must never attempt to
 // read the field at all.
 void test_schema_one_payload_decodes_without_sensor_selection_field() {
-    const auto schemaOnePayload = bytesFromHex(
-        "01010000000000000064000500000000000e636865636b706f696e742d72756e010000"
-        "0001"
-        "01005d00000006000000000001ffff000b77617465722d6b65666972000b5761737365"
-        "726b"
-        "656669720000010101010101000201010000001e030101404300000000000001000000"
-        "7801"
-        "3fe0000000000000010000000a01000000b400010000000100010000000a000000b400"
-        "0100"
-        "0000780006000000000000000000000000000000000000000000000100000000000000"
-        "63");
+    const auto schemaOnePayload = schemaOneActivePayload();
     const auto decoded = decodeRunPersistenceSnapshot(schemaOnePayload, 1U);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
                           static_cast<int>(decoded.status));

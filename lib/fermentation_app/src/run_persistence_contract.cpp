@@ -7,6 +7,10 @@
 namespace fermentation {
 namespace {
 
+// Recovery Fault became a valid active-run wire state with schema 3. Keep
+// this feature boundary stable when a later schema extends the wire format.
+constexpr std::uint32_t kActiveFaultIntroducedInSchema = 3U;
+
 bool validStateFor(RunCheckpointVariant variant, ProcessState state) {
     switch (variant) {
         case RunCheckpointVariant::ProgramRun:
@@ -379,7 +383,7 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
 bool validateRunPersistenceSnapshotForSchema(
     const RunPersistenceSnapshot& snapshot, std::uint32_t schemaVersion) {
     if (!knownRunPersistenceSchema(schemaVersion)) return false;
-    if (schemaVersion < kCurrentRunPersistenceSchema &&
+    if (schemaVersion < kActiveFaultIntroducedInSchema &&
         snapshot.variant != RunCheckpointVariant::NoActiveRun &&
         snapshot.processState.state == ProcessState::Fault) {
         return false;

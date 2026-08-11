@@ -93,9 +93,9 @@ struct RunPersistenceSnapshot {
     std::string activeRunId;
     std::optional<RunSensorMode> activeRunSensorMode;
     // Persisted sensor-selection provenance (#21, 6.12). Present iff variant
-    // != NoActiveRun for a schema-2-written snapshot; a decoded schema-1
-    // active-run snapshot legitimately has no value here (field did not
-    // exist yet), see kSensorSelectionFieldIntroducedInSchema.
+    // != NoActiveRun. Schema-1 decode maps the absent wire field to the
+    // LegacyUnknown/None/0 sentinel so the common active-snapshot contract
+    // requires this field for legacy restores as well.
     std::optional<PersistedSensorSelectionState> sensorSelection;
     std::optional<RunProgramSnapshot> program;
     std::array<RunRevision, kMaximumRunRevisions> revisions{};
