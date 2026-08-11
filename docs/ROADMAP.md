@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #102 / Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt | Revision 13 liegt zur Ownerfreigabe vor; Implementierungsstand bis Commit 8 existiert; vor weiterer Implementierung sind die freigegebenen Korrekturschnitte 6-8 umzusetzen; Commit 9 bleibt bis zu den vorgesehenen Gates gesperrt | Ownerfreigabe der exakten korrigierten Revision-13-Plan-SHA |
+| 1 | Draft-PR #102 / Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt | Revision 13 ist freigegeben; die Korrekturschnitte 6-8A werden umgesetzt; Commit 9 bleibt bis zu den vorgesehenen Gates gesperrt | Owner-Pruefung der Korrekturschnitte 6-8A vor dem separaten Gate fuer Commit 9 |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -29,8 +29,9 @@ Grundlage aus #21 auf: der persistierte und laufzeitseitige
 Sensorselektionszustand sowie eine reine Empfehlungsfunktion sind vorhanden,
 die tatsaechliche Reaktivierung eines geladenen aktiven Laufs (inklusive
 Freigabe der Regelung) ist noch offen. Details und Abhaengigkeitsstand
-stehen im Plan unter `docs/tasks/`; offene Ownerentscheidungen bestehen
-aktuell nicht, der Plan wartet auf Freigabe des exakten Commits.
+stehen im Plan unter `docs/tasks/`; Revision 13 ist fuer die
+Korrekturschnitte 6-8A freigegeben. Nach deren Abschluss bleibt die Umsetzung
+vor Commit 9 bis zur erneuten Owner-Pruefung angehalten.
 
 ## Zulaessige Parallelitaet
 
