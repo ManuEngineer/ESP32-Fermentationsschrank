@@ -39,6 +39,7 @@ struct CommandEnvelope {
     std::optional<std::uint32_t> expectedMessageRevision;
     std::optional<std::uint32_t> expectedFaultRevision;
     bool confirmed{false};
+    std::optional<std::uint32_t> expectedRecoveryEpisodeRevision;
 };
 
 enum class CommandStatus : std::uint8_t {
@@ -68,6 +69,7 @@ enum class CommandKind : std::uint8_t {
     AcknowledgeCompletion,
     CoolAfterCompletion,
     AdjustRun,
+    ApplyRecoveryTimeCorrection,
     AcknowledgeMessage,
     MuteMessage,
     ResetFault,
@@ -187,6 +189,11 @@ struct RunAdjustmentCommandRequest {
     std::optional<double> targetTemperatureCelsius;
     std::optional<std::uint32_t> remainingDurationMinutes;
     bool safetyAllowsChange{false};
+};
+
+struct ApplyRecoveryTimeCorrectionRequest {
+    CommandEnvelope envelope;
+    std::uint32_t secondsDelta{0U};
 };
 
 struct RunAdjustmentPreview {
@@ -365,6 +372,14 @@ struct RunCommandState {
     RunProgressState runProgress;
 };
 
+// Liefert die fuer die Fermenting-Dauerentscheidung wirksame Vorzeitbasis.
+// Die bestaetigte nominale Korrektur bleibt dabei strukturell getrennt von
+// `priorBootPhaseElapsed` und wird nur fuer diese fachliche Auswertung
+// addiert. Ein inkonsistenter Kandidat wird fail-closed als `nullopt`
+// zurueckgegeben.
+[[nodiscard]] std::optional<PriorBootPhaseElapsed>
+effectivePriorElapsedForFermenting(const RunCommandState& current);
+
 struct CommandDecision {
     CommandStatus status{CommandStatus::InvalidInput};
     CommandKind kind{CommandKind::StartProgram};
@@ -402,6 +417,9 @@ struct CommandDecision {
     const RunCommandState& current, const CompletionRequest& request);
 [[nodiscard]] CommandDecision decideRunAdjustment(
     const RunCommandState& current, const RunAdjustmentCommandRequest& request);
+[[nodiscard]] CommandDecision decideApplyRecoveryTimeCorrection(
+    const RunCommandState& current,
+    const ApplyRecoveryTimeCorrectionRequest& request);
 [[nodiscard]] CommandDecision decideAcknowledgeMessage(
     const RunCommandState& current, const MessageCommandRequest& request);
 [[nodiscard]] CommandDecision decideMuteMessage(

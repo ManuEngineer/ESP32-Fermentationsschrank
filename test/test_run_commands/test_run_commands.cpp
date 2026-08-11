@@ -677,6 +677,18 @@ RunAdjustmentCommandRequest targetChange(const RunCommandState& state,
     return request;
 }
 
+ApplyRecoveryTimeCorrectionRequest recoveryCorrection(
+    const RunCommandState& state, CommandId id, std::uint32_t seconds,
+    std::uint64_t time) {
+    ApplyRecoveryTimeCorrectionRequest request;
+    request.envelope =
+        envelope(id, state, CommandSource::LocalDisplay, true, time);
+    request.envelope.expectedRecoveryEpisodeRevision =
+        state.recoveryEpisodeRevision;
+    request.secondsDelta = seconds;
+    return request;
+}
+
 void test_target_adjustments_requalify_before_fermentation_only() {
     const std::array<ProcessState, 3U> requalifying{{
         ProcessState::Preheating,
@@ -743,6 +755,158 @@ void test_duration_adjustment_restarts_remaining_timer_and_allows_zero() {
         decision.adjustmentPreview->targetRequalificationRequired);
     TEST_ASSERT_FALSE(
         decision.adjustmentPreview->timerContinuesWithoutBiologicalCorrection);
+}
+
+void test_duration_adjustment_folds_observed_time_and_resets_recovery_baseline() {
+    auto state = startedProgramState();
+    state.processState.state = ProcessState::Fermenting;
+    state.processState.stateEnteredAtMillis = 50U;
+    state.runProgress.observedRunSeconds = 10U;
+    state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+        ProcessState::Fermenting, PriorBootPhaseElapsed{80U, 120U}};
+    state.nominalRecoveryAdjustment =
+        NominalRecoveryAdjustmentState{20U, 3U, 20U};
+    PendingRecoveryAnchor anchor;
+    anchor.originalProcessState.state = ProcessState::Fermenting;
+    state.pendingRecoveryAnchor = anchor;
+    state.recoveryBootAnchorMonotonicMillis = 25U;
+
+    RunAdjustmentCommandRequest request;
+    request.envelope =
+        envelope(2U, state, CommandSource::LocalDisplay, true, 5'050U);
+    request.remainingDurationMinutes = 60U;
+    request.safetyAllowsChange = true;
+    const auto decision = decideRunAdjustment(state, request);
+
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_UINT32(15U,
+                             decision.after.runProgress.observedRunSeconds);
+    TEST_ASSERT_EQUAL_UINT64(5'050U,
+                             decision.after.processState.stateEnteredAtMillis);
+    TEST_ASSERT_TRUE(decision.after.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, decision.after.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, *decision.after.priorBootPhaseElapsed->elapsed.upperBoundSeconds);
+    TEST_ASSERT_FALSE(decision.after.nominalRecoveryAdjustment.has_value());
+    TEST_ASSERT_FALSE(decision.after.pendingRecoveryAnchor.has_value());
+    TEST_ASSERT_FALSE(
+        decision.after.recoveryBootAnchorMonotonicMillis.has_value());
+
+    auto applied = state;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::Applied),
+                          static_cast<int>(applyRunCommand(applied, decision)));
+    TEST_ASSERT_EQUAL_UINT32(15U, applied.runProgress.observedRunSeconds);
+}
+
+void test_target_only_adjustment_keeps_recovery_and_timer_baseline() {
+    auto state = startedProgramState();
+    state.processState.state = ProcessState::Fermenting;
+    state.processState.stateEnteredAtMillis = 50U;
+    state.runProgress.observedRunSeconds = 10U;
+    state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+        ProcessState::Fermenting, PriorBootPhaseElapsed{80U, 120U}};
+    state.nominalRecoveryAdjustment =
+        NominalRecoveryAdjustmentState{20U, 3U, 20U};
+    PendingRecoveryAnchor anchor;
+    anchor.originalProcessState.state = ProcessState::Fermenting;
+    state.pendingRecoveryAnchor = anchor;
+    state.recoveryBootAnchorMonotonicMillis = 25U;
+
+    const auto decision =
+        decideRunAdjustment(state, targetChange(state, 2U, 39.0, 5'050U));
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_UINT32(10U,
+                             decision.after.runProgress.observedRunSeconds);
+    TEST_ASSERT_EQUAL_UINT64(50U,
+                             decision.after.processState.stateEnteredAtMillis);
+    TEST_ASSERT_TRUE(decision.after.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        80U, decision.after.priorBootPhaseElapsed->elapsed.lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(
+        120U, *decision.after.priorBootPhaseElapsed->elapsed.upperBoundSeconds);
+    TEST_ASSERT_TRUE(decision.after.nominalRecoveryAdjustment.has_value());
+    TEST_ASSERT_TRUE(decision.after.pendingRecoveryAnchor.has_value());
+    TEST_ASSERT_EQUAL_UINT64(25U,
+                             *decision.after.recoveryBootAnchorMonotonicMillis);
+}
+
+void test_recovery_time_correction_is_cumulative_bounded_and_idempotent() {
+    auto state = startedProgramState();
+    state.processState.state = ProcessState::Fermenting;
+    state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+        ProcessState::Fermenting, PriorBootPhaseElapsed{100U, 300U}};
+    state.recoveryEpisodeRevision = 4U;
+
+    const auto first = recoveryCorrection(state, 10U, 50U, 100U);
+    const auto firstDecision = decideApplyRecoveryTimeCorrection(state, first);
+    TEST_ASSERT_TRUE(firstDecision.proposed());
+    TEST_ASSERT_EQUAL_UINT32(50U, firstDecision.after.nominalRecoveryAdjustment
+                                      ->cumulativeAppliedSeconds);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::Applied),
+        static_cast<int>(applyRunCommand(state, firstDecision)));
+
+    const auto duplicate = recoveryCorrection(state, 11U, 50U, 101U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::AlreadyProcessed),
+        static_cast<int>(
+            decideApplyRecoveryTimeCorrection(state, duplicate).status));
+    const auto conflicting = recoveryCorrection(state, 12U, 51U, 102U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::NotAllowedInState),
+        static_cast<int>(
+            decideApplyRecoveryTimeCorrection(state, conflicting).status));
+
+    state.recoveryEpisodeRevision = 5U;
+    const auto second = recoveryCorrection(state, 13U, 100U, 103U);
+    const auto secondDecision =
+        decideApplyRecoveryTimeCorrection(state, second);
+    TEST_ASSERT_TRUE(secondDecision.proposed());
+    TEST_ASSERT_EQUAL_UINT32(150U,
+                             secondDecision.after.nominalRecoveryAdjustment
+                                 ->cumulativeAppliedSeconds);
+
+    const auto outOfBounds = recoveryCorrection(state, 14U, 151U, 104U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::InvalidInput),
+        static_cast<int>(
+            decideApplyRecoveryTimeCorrection(state, outOfBounds).status));
+
+    auto unknown = state;
+    unknown.priorBootPhaseElapsed->elapsed.upperBoundSeconds.reset();
+    const auto unknownBounds = recoveryCorrection(unknown, 15U, 1U, 105U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(CommandStatus::NotAllowedInState),
+        static_cast<int>(
+            decideApplyRecoveryTimeCorrection(unknown, unknownBounds).status));
+}
+
+void test_recovery_correction_is_effective_for_fermenting_completion() {
+    auto state = startedProgramState();
+    state.processState.state = ProcessState::Fermenting;
+    state.processState.stateEnteredAtMillis = 1'000U;
+    state.processState.targetReachStartedAtMillis = 0U;
+    state.processState.targetReachWarningIssued = false;
+    state.processState.qualificationValidSinceMillis.reset();
+    state.processRunSnapshot->fermentationDurationMinutes = 1U;
+    state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+        ProcessState::Fermenting, PriorBootPhaseElapsed{30U, 60U}};
+    state.nominalRecoveryAdjustment =
+        NominalRecoveryAdjustmentState{30U, 4U, 30U};
+
+    const auto effective = effectivePriorElapsedForFermenting(state);
+    TEST_ASSERT_TRUE(effective.has_value());
+    TEST_ASSERT_EQUAL_UINT32(60U, effective->lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(60U, *effective->upperBoundSeconds);
+
+    const auto decision = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{}, 1'000U, *effective);
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::FermentationCompleted),
+        static_cast<int>(decision.reason));
 }
 
 void test_late_run_adjustment_rejections_discard_the_complete_candidate() {
@@ -2255,6 +2419,12 @@ int main() {
     RUN_TEST(test_completion_can_return_to_standby_or_start_manual_cooling);
     RUN_TEST(test_target_adjustments_requalify_before_fermentation_only);
     RUN_TEST(test_duration_adjustment_restarts_remaining_timer_and_allows_zero);
+    RUN_TEST(
+        test_duration_adjustment_folds_observed_time_and_resets_recovery_baseline);
+    RUN_TEST(test_target_only_adjustment_keeps_recovery_and_timer_baseline);
+    RUN_TEST(
+        test_recovery_time_correction_is_cumulative_bounded_and_idempotent);
+    RUN_TEST(test_recovery_correction_is_effective_for_fermenting_completion);
     RUN_TEST(
         test_late_run_adjustment_rejections_discard_the_complete_candidate);
     RUN_TEST(test_composed_cooling_rejections_discard_the_complete_candidate);

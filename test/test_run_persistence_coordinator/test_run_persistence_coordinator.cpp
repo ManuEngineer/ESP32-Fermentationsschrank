@@ -205,7 +205,8 @@ CommandDecision startDecision(
                         state.runRevision,
                         std::nullopt,
                         std::nullopt,
-                        true};
+                        true,
+                        std::nullopt};
     request.runId = "persisted-run";
     request.program = program.has_value() ? *program : runnableProgram();
     request.sourceKind = ProgramSourceKind::FactoryCatalog;
@@ -228,7 +229,8 @@ CommandDecision manualStartDecision(const RunCommandState& state,
                         state.runRevision,
                         std::nullopt,
                         std::nullopt,
-                        true};
+                        true,
+                        std::nullopt};
     request.plan.runId = "manual-persisted-run";
     request.plan.targetTemperatureCelsius = 12.0;
     request.plan.sensorMode = RunSensorMode::Air;
@@ -252,7 +254,8 @@ CommandDecision stopDecision(const RunCommandState& state, CommandId id,
                         state.runRevision,
                         std::nullopt,
                         std::nullopt,
-                        true};
+                        true,
+                        std::nullopt};
     request.option = StopOption::AbortAndTurnOff;
     return decideStop(state, request);
 }
@@ -285,7 +288,8 @@ void commitTombstone(
                      state.runRevision,
                      std::nullopt,
                      std::nullopt,
-                     true};
+                     true,
+                     std::nullopt};
     stop.option = StopOption::AbortAndTurnOff;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::Applied),
@@ -342,6 +346,65 @@ void test_load_empty_then_commit_and_restore_run_projection() {
                           .fallbackWaitStartedAtMonotonicMillis.has_value());
     TEST_ASSERT_FALSE(
         runtime->sensorSelectionRuntime.lastAppliedMonotonicMillis.has_value());
+}
+
+void test_apply_recovery_time_correction_uses_persist_command_atomically() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 43U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    state.processState.state = ProcessState::Fermenting;
+    state.processState.stateEnteredAtMillis = 100U;
+    state.processState.targetReachStartedAtMillis = 0U;
+    state.processState.targetReachWarningIssued = false;
+    state.processState.qualificationValidSinceMillis.reset();
+    state.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+        ProcessState::Fermenting, PriorBootPhaseElapsed{100U, 300U}};
+    state.recoveryEpisodeRevision = 2U;
+
+    ApplyRecoveryTimeCorrectionRequest request;
+    request.envelope.id = 44U;
+    request.envelope.source = CommandSource::LocalDisplay;
+    request.envelope.monotonicMillis = 200U;
+    request.envelope.expectedStateSequence =
+        state.processState.transitionSequence;
+    request.envelope.expectedRunRevision = state.runRevision;
+    request.envelope.expectedRecoveryEpisodeRevision =
+        state.recoveryEpisodeRevision;
+    request.envelope.confirmed = true;
+    request.secondsDelta = 50U;
+    const auto decision = decideApplyRecoveryTimeCorrection(state, request);
+    TEST_ASSERT_TRUE(decision.proposed());
+
+    const auto persisted = coordinator.persistCommand(
+        state, decision, RunCheckpointTime{200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(persisted.status));
+    TEST_ASSERT_TRUE(state.nominalRecoveryAdjustment.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        50U, state.nominalRecoveryAdjustment->cumulativeAppliedSeconds);
+
+    store.restart();
+    RunPersistenceCoordinator restored(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+    const auto loaded = restored.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(loaded.status));
+    TEST_ASSERT_TRUE(loaded.snapshot.has_value());
+    TEST_ASSERT_TRUE(loaded.snapshot->nominalRecoveryAdjustment.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        50U,
+        loaded.snapshot->nominalRecoveryAdjustment->cumulativeAppliedSeconds);
 }
 
 void test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe() {
@@ -522,7 +585,8 @@ void test_tombstone_boot_resets_schedule_to_the_new_boot_timebase() {
                      state.runRevision,
                      std::nullopt,
                      std::nullopt,
-                     true};
+                     true,
+                     std::nullopt};
     stop.option = StopOption::AbortAndTurnOff;
     const auto abort = decideStop(state, stop);
     TEST_ASSERT_TRUE(abort.proposed());
@@ -580,7 +644,8 @@ void test_already_persisted_command_id_is_rejected_after_restart_via_tombstone()
                      state.runRevision,
                      std::nullopt,
                      std::nullopt,
-                     true};
+                     true,
+                     std::nullopt};
     stop.option = StopOption::AbortAndTurnOff;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::Applied),
@@ -650,7 +715,8 @@ void test_orphan_checkpoint_revision_is_never_reused_after_restart() {
                      state.runRevision,
                      std::nullopt,
                      std::nullopt,
-                     true};
+                     true,
+                     std::nullopt};
     stop.option = StopOption::AbortAndTurnOff;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::Applied),
@@ -1634,7 +1700,8 @@ void test_tombstone_fallback_does_not_enter_recovery_pending() {
                      state.runRevision,
                      std::nullopt,
                      std::nullopt,
-                     true};
+                     true,
+                     std::nullopt};
     stop.option = StopOption::AbortAndTurnOff;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::Applied),
@@ -4377,7 +4444,8 @@ CommandDecision continueWithAirDecision(const RunCommandState& state,
                         state.runRevision,
                         std::nullopt,
                         std::nullopt,
-                        true};
+                        true,
+                        std::nullopt};
     request.action = SensorSelectionUserAction::ContinueWithAir;
     request.safetyAllowsChange = true;
     CrossRolePlausibilityContext plausibility;
@@ -4472,7 +4540,8 @@ void test_persist_command_manual_recheck_product_ram_only_is_ram_only_and_idempo
                         state.runRevision,
                         std::nullopt,
                         std::nullopt,
-                        true};
+                        true,
+                        std::nullopt};
     request.action = SensorSelectionUserAction::RecheckProduct;
     request.safetyAllowsChange = true;
     CrossRolePlausibilityContext plausibility;
@@ -4585,7 +4654,8 @@ void test_persist_command_manual_recheck_product_ram_only_rejects_stale_decision
                         state.runRevision,
                         std::nullopt,
                         std::nullopt,
-                        true};
+                        true,
+                        std::nullopt};
     request.action = SensorSelectionUserAction::RecheckProduct;
     request.safetyAllowsChange = true;
     CrossRolePlausibilityContext plausibility;
@@ -4637,7 +4707,8 @@ CommandDecision substitutedStartDecision(const RunCommandState& state,
                         state.runRevision,
                         std::nullopt,
                         std::nullopt,
-                        true};
+                        true,
+                        std::nullopt};
     request.runId = "persisted-run";
     request.program = program;
     request.sourceKind = ProgramSourceKind::FactoryCatalog;
@@ -4696,6 +4767,8 @@ void test_start_sensor_selection_notice_only_visible_after_successful_commit() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_load_empty_then_commit_and_restore_run_projection);
+    RUN_TEST(
+        test_apply_recovery_time_correction_uses_persist_command_atomically);
     RUN_TEST(
         test_unknown_outcome_is_resolved_by_exact_readback_and_duplicate_is_safe);
     RUN_TEST(test_mutation_before_initialization_writes_nothing);

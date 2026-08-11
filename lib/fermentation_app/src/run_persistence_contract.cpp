@@ -301,6 +301,7 @@ bool isPersistedRunCommand(CommandKind kind) {
         case CommandKind::AcknowledgeCompletion:
         case CommandKind::CoolAfterCompletion:
         case CommandKind::AdjustRun:
+        case CommandKind::ApplyRecoveryTimeCorrection:
         // #21, 6.14.1: analog zu allen anderen laufwirksamen Kommandos.
         case CommandKind::ApplySensorSelectionAction:
             return true;
