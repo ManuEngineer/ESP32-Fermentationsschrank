@@ -773,21 +773,7 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         !slots_[fallbackReference.slot].has_value()) {
         return invalid(current);
     }
-    if (current.processState.state == ProcessState::Completed) {
-        auto candidate = current;
-        candidate.processState.stateEnteredAtMillis = time.monotonicMillis;
-        state_ = RunPersistenceCoordinatorState::Ready;
-        auto persisted = result(RunPersistenceResultStatus::Applied,
-                                RunPersistenceStep::RamApply,
-                                RunPersistenceTechnicalReason::None,
-                                RunPersistenceDurability::Unchanged);
-        persisted.coordinatorState = state_;
-        return {persisted, candidate};
-    }
-    const auto& loadedRecord = *slots_[fallbackReference.slot];
-    if (!current.processRunSnapshot.has_value() ||
-        !current.sensorSelection.has_value() ||
-        !current.activeRunSensorMode.has_value()) {
+    if (!current.processRunSnapshot.has_value()) {
         return invalid(current);
     }
 
@@ -808,6 +794,14 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         }
         return {persisted, toCommit};
     };
+
+    if (current.processState.state == ProcessState::Completed) {
+        auto candidate = current;
+        candidate.processState.stateEnteredAtMillis = time.monotonicMillis;
+        return commitCandidate(candidate);
+    }
+
+    const auto& loadedRecord = *slots_[fallbackReference.slot];
 
     // A fallback snapshot can itself be a persisted Hop-1-only episode. It
     // receives the same refresh treatment as a loaded current snapshot, but
@@ -858,32 +852,6 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
     }
     applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
 
-    const auto recommendation = computeRestartSensorSelection(
-        *candidate.sensorSelection, *candidate.activeRunSensorMode,
-        recoverySensorSelectionProgramContext(candidate), liveSensorEvidence);
-    candidate.sensorSelectionRuntime = recommendation.runtime;
-    candidate.activeRunSensorMode = recommendation.activeMode;
-    if (candidate.activeManualRun.has_value()) {
-        candidate.activeManualRun->values.sensorMode =
-            recommendation.activeMode;
-    }
-    if (recommendation.runtime.permission != SensorPeltierPermission::Allowed) {
-        const auto rejected = decideProcessTransition(
-            candidate.processState, &*candidate.processRunSnapshot,
-            ProcessSignals{},
-            TransitionRequest{ProcessEvent::RecoveryReject, std::nullopt},
-            time.monotonicMillis);
-        if (rejected.proposed()) {
-            static_cast<void>(
-                applyProcessTransition(candidate.processState, rejected,
-                                       &*candidate.processRunSnapshot));
-        }
-        return {result(RunPersistenceResultStatus::InvalidDecision,
-                       RunPersistenceStep::CandidateApply,
-                       RunPersistenceTechnicalReason::InvalidProjection),
-                candidate};
-    }
-
     const auto timeContext =
         deriveRecoveryTimeContext(*candidate.pendingRecoveryAnchor, time,
                                   *candidate.recoveryBootAnchorMonotonicMillis);
@@ -910,6 +878,36 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         if (verdict == RecoveryTimeVerdict::Uncertain) {
             return commitCandidate(candidate);
         }
+    }
+
+    if (!candidate.sensorSelection.has_value() ||
+        !candidate.activeRunSensorMode.has_value()) {
+        return invalid(current);
+    }
+    const auto recommendation = computeRestartSensorSelection(
+        *candidate.sensorSelection, *candidate.activeRunSensorMode,
+        recoverySensorSelectionProgramContext(candidate), liveSensorEvidence);
+    candidate.sensorSelectionRuntime = recommendation.runtime;
+    candidate.activeRunSensorMode = recommendation.activeMode;
+    if (candidate.activeManualRun.has_value()) {
+        candidate.activeManualRun->values.sensorMode =
+            recommendation.activeMode;
+    }
+    if (recommendation.runtime.permission != SensorPeltierPermission::Allowed) {
+        const auto rejected = decideProcessTransition(
+            candidate.processState, &*candidate.processRunSnapshot,
+            ProcessSignals{},
+            TransitionRequest{ProcessEvent::RecoveryReject, std::nullopt},
+            time.monotonicMillis);
+        if (!rejected.proposed() ||
+            !applyProcessTransition(candidate.processState, rejected,
+                                    &*candidate.processRunSnapshot)) {
+            return invalid(current);
+        }
+        candidate.pendingRecoveryAnchor.reset();
+        candidate.recoveryBootAnchorMonotonicMillis.reset();
+        candidate.priorBootPhaseElapsed.reset();
+        return commitCandidate(candidate);
     }
 
     if (!candidate.pendingRecoveryAnchor.has_value()) return invalid(current);

@@ -3434,6 +3434,329 @@ void test_activate_fallback_recovered_run_replaces_damaged_current_slot() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(ProcessState::ReachingTarget),
         static_cast<int>(afterRecovery.snapshot->processState.state));
+
+    const auto recoveredCurrent =
+        RunPersistenceCoordinatorTestAccess::currentReference(afterBoot);
+    const auto recoveredFallback =
+        RunPersistenceCoordinatorTestAccess::fallbackReference(afterBoot);
+    TEST_ASSERT_NOT_EQUAL(recoveredCurrent.slot, recoveredFallback.slot);
+    const auto recoveredCurrentKey =
+        recoveredCurrent.slot == 0U ? slotKey("rc0") : slotKey("rc1");
+    store.backing().injectCorruption(recoveredCurrentKey,
+                                     "damaged-current-again");
+    store.restart();
+
+    RunPersistenceCoordinator repeated(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+    const auto repeatedLoaded = repeated.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
+        static_cast<int>(repeatedLoaded.status));
+    const auto repeatedRestored =
+        restoreRunPersistenceSnapshot(*repeatedLoaded.snapshot);
+    TEST_ASSERT_TRUE(repeatedRestored.has_value());
+    const auto repeatedOutcome = repeated.activateFallbackRecoveredRun(
+        *repeatedRestored, RunCheckpointTime{800000U, std::nullopt},
+        recoveryPlausibility(800000U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(repeatedOutcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(repeated.state()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(repeatedOutcome.resultingState.processState.state));
+
+    store.restart();
+    RunPersistenceCoordinator repeatedReboot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto repeatedCurrent = repeatedReboot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(repeatedCurrent.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(repeatedCurrent.snapshot->processState.state));
+    const auto finalFallback =
+        RunPersistenceCoordinatorTestAccess::fallbackReference(repeatedReboot);
+    TEST_ASSERT_EQUAL_UINT8(recoveredFallback.slot, finalFallback.slot);
+    TEST_ASSERT_EQUAL_UINT64(recoveredFallback.checkpointRevision,
+                             finalFallback.checkpointRevision);
+    TEST_ASSERT_EQUAL_UINT32(recoveredFallback.payloadCrc,
+                             finalFallback.payloadCrc);
+}
+
+void test_activate_fallback_run_persists_sensor_gate_rejection_as_fault() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistCommand(state, startDecision(state, 1016U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            seed.checkpointPeriodic(state,
+                                    RunCheckpointTime{300200U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            seed.checkpointPeriodic(state,
+                                    RunCheckpointTime{600200U, std::nullopt})
+                .status));
+
+    store.backing().injectCorruption(slotKey("rc0"), "damaged-current");
+    store.restart();
+    RunPersistenceCoordinator recovered(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = recovered.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
+        static_cast<int>(loaded.status));
+    const auto fallbackBefore =
+        RunPersistenceCoordinatorTestAccess::fallbackReference(recovered);
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto outcome = recovered.activateFallbackRecoveredRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt},
+        recoveryPlausibility(700000U, false));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fault),
+        static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(recovered.state()));
+
+    const auto fallbackAfter =
+        RunPersistenceCoordinatorTestAccess::fallbackReference(recovered);
+    TEST_ASSERT_EQUAL_UINT8(fallbackBefore.slot, fallbackAfter.slot);
+    TEST_ASSERT_EQUAL_UINT64(fallbackBefore.checkpointRevision,
+                             fallbackAfter.checkpointRevision);
+    TEST_ASSERT_EQUAL_UINT32(fallbackBefore.payloadCrc,
+                             fallbackAfter.payloadCrc);
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto rebooted = afterBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(rebooted.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fault),
+        static_cast<int>(rebooted.snapshot->processState.state));
+    const auto rebootedFallback =
+        RunPersistenceCoordinatorTestAccess::fallbackReference(afterBoot);
+    TEST_ASSERT_EQUAL_UINT8(fallbackBefore.slot, rebootedFallback.slot);
+    TEST_ASSERT_EQUAL_UINT64(fallbackBefore.checkpointRevision,
+                             rebootedFallback.checkpointRevision);
+    TEST_ASSERT_EQUAL_UINT32(fallbackBefore.payloadCrc,
+                             rebootedFallback.payloadCrc);
+}
+
+void test_fallback_completed_recovery_repairs_current_and_repeats() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    auto state = readyActiveManualRunWithSensorSelection(seed, 1017U);
+    state.processState.state = ProcessState::ManualHolding;
+    state.processState.stateEnteredAtMillis = 100U;
+    state.processState.targetReachStartedAtMillis = 0U;
+    const auto completed = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{ProcessEvent::FinishHoldConfirmed, std::nullopt},
+        200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistTransition(state, completed,
+                                   RunCheckpointTime{200U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
+                          static_cast<int>(state.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            seed.checkpointPeriodic(state,
+                                    RunCheckpointTime{300200U, std::nullopt})
+                .status));
+
+    store.backing().injectCorruption(slotKey("rc0"), "damaged-completed");
+    store.restart();
+    RunPersistenceCoordinator recovered(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = recovered.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
+        static_cast<int>(loaded.status));
+    const auto fallbackBefore =
+        RunPersistenceCoordinatorTestAccess::fallbackReference(recovered);
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto sequenceBefore = restored->processState.transitionSequence;
+    const auto outcome = recovered.activateFallbackRecoveredRun(
+        *restored, RunCheckpointTime{400U, std::nullopt},
+        recoveryPlausibility(400U, false));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Completed),
+        static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_UINT32(
+        sequenceBefore, outcome.resultingState.processState.transitionSequence);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(recovered.state()));
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto currentLoad = afterBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(currentLoad.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Completed),
+        static_cast<int>(currentLoad.snapshot->processState.state));
+    const auto currentReference =
+        RunPersistenceCoordinatorTestAccess::currentReference(afterBoot);
+    const auto currentKey =
+        currentReference.slot == 0U ? slotKey("rc0") : slotKey("rc1");
+    store.backing().injectCorruption(currentKey, "damaged-completed-again");
+    store.restart();
+
+    RunPersistenceCoordinator repeated(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+    const auto repeatedLoad = repeated.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
+        static_cast<int>(repeatedLoad.status));
+    const auto repeatedRestored =
+        restoreRunPersistenceSnapshot(*repeatedLoad.snapshot);
+    TEST_ASSERT_TRUE(repeatedRestored.has_value());
+    const auto repeatedOutcome = repeated.activateFallbackRecoveredRun(
+        *repeatedRestored, RunCheckpointTime{500U, std::nullopt},
+        recoveryPlausibility(500U, false));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(repeatedOutcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Completed),
+        static_cast<int>(repeatedOutcome.resultingState.processState.state));
+    const auto finalFallback =
+        RunPersistenceCoordinatorTestAccess::fallbackReference(repeated);
+    TEST_ASSERT_EQUAL_UINT8(fallbackBefore.slot, finalFallback.slot);
+    TEST_ASSERT_EQUAL_UINT64(fallbackBefore.checkpointRevision,
+                             finalFallback.checkpointRevision);
+    TEST_ASSERT_EQUAL_UINT32(fallbackBefore.payloadCrc,
+                             finalFallback.payloadCrc);
+}
+
+void seed_completed_fallback(SequencedWriteStore& store, CommandId startId) {
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    auto state = readyActiveManualRunWithSensorSelection(seed, startId);
+    state.processState.state = ProcessState::ManualHolding;
+    state.processState.stateEnteredAtMillis = 100U;
+    state.processState.targetReachStartedAtMillis = 0U;
+    const auto completed = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{ProcessEvent::FinishHoldConfirmed, std::nullopt},
+        200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistTransition(state, completed,
+                                   RunCheckpointTime{200U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            seed.checkpointPeriodic(state,
+                                    RunCheckpointTime{300200U, std::nullopt})
+                .status));
+    store.backing().injectCorruption(slotKey("rc0"), "damaged-completed");
+}
+
+void test_fallback_completed_storage_recovery_cutpoints_remain_fail_closed() {
+    using Fault = SequencedWriteStore::WriteFault;
+    for (const auto offset : {1U, 2U, 3U}) {
+        SequencedWriteStore store;
+        seed_completed_fallback(store, 1022U + offset);
+        store.restart();
+
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        const auto loaded = coordinator.loadAndInitialize();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
+            static_cast<int>(loaded.status));
+        const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+        TEST_ASSERT_TRUE(restored.has_value());
+        const auto writeNumber = store.writeCount() + offset;
+        store.faultAt(writeNumber, Fault::FailBeforeBegin);
+        const auto outcome = coordinator.activateFallbackRecoveredRun(
+            *restored, RunCheckpointTime{400U, std::nullopt},
+            recoveryPlausibility(400U, false));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+            static_cast<int>(outcome.persistenceResult.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                offset == 1U
+                    ? RunPersistenceCoordinatorState::FallbackRecoveryPending
+                    : RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(coordinator.state()));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(offset == 1U ? RunPersistenceDurability::Unchanged
+                                          : RunPersistenceDurability::Changed),
+            static_cast<int>(outcome.persistenceResult.durability));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(offset == 1U ? RunPersistenceStep::PreparedHead
+                             : offset == 2U
+                                 ? RunPersistenceStep::CheckpointSlot
+                                 : RunPersistenceStep::CommittedHead),
+            static_cast<int>(outcome.persistenceResult.step));
+    }
+
+    for (const auto offset : {1U, 2U, 3U}) {
+        SequencedWriteStore store;
+        seed_completed_fallback(store, 1030U + offset);
+        store.restart();
+
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        const auto loaded = coordinator.loadAndInitialize();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
+            static_cast<int>(loaded.status));
+        const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+        TEST_ASSERT_TRUE(restored.has_value());
+        const auto writeNumber = store.writeCount() + offset;
+        store.unknownWithoutCommitAt(writeNumber);
+        store.readFaultAt(writeNumber,
+                          SequencedWriteStore::ReadFault::ReadError);
+        const auto outcome = coordinator.activateFallbackRecoveredRun(
+            *restored, RunCheckpointTime{400U, std::nullopt},
+            recoveryPlausibility(400U, false));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceResultStatus::PersistenceIndeterminate),
+            static_cast<int>(outcome.persistenceResult.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(coordinator.state()));
+    }
 }
 
 RunCommandState readyActiveManualRunWithSensorSelection(
@@ -4242,6 +4565,11 @@ int main(int, char**) {
     RUN_TEST(test_loaded_gate_rejection_keeps_persistence_cutpoint_contract);
     RUN_TEST(
         test_activate_fallback_recovered_run_replaces_damaged_current_slot);
+    RUN_TEST(
+        test_activate_fallback_run_persists_sensor_gate_rejection_as_fault);
+    RUN_TEST(test_fallback_completed_recovery_repairs_current_and_repeats);
+    RUN_TEST(
+        test_fallback_completed_storage_recovery_cutpoints_remain_fail_closed);
     RUN_TEST(test_resolve_recovery_outcome_waiting_assume_still_valid_resumes);
     RUN_TEST(
         test_resolve_recovery_outcome_waiting_threshold_crossed_tombstones);
