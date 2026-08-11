@@ -598,7 +598,8 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         const auto persisted = writeSnapshotCore(
             *snapshot, time, false, current,
             RunPersistenceMutationKind::Recovery, std::nullopt, std::nullopt,
-            std::nullopt, RunPersistenceCoordinatorState::LoadedActiveRun);
+            RunPersistenceFallbackDirective{},
+            RunPersistenceCoordinatorState::LoadedActiveRun);
         if (persisted.status != RunPersistenceResultStatus::Applied) {
             return {persisted, current};
         }
@@ -637,7 +638,9 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
     applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
 
     const auto commitCandidate =
-        [&](const RunCommandState& toCommit) -> RecoveryActivationOutcome {
+        [&](const RunCommandState& toCommit,
+            RunPersistenceFallbackDirective fallbackDirective = {})
+        -> RecoveryActivationOutcome {
         const auto snapshot = makeRunPersistenceSnapshot(
             toCommit, persistedIds_, persistedIdCount_,
             RunCheckpointTrigger::Transition, time,
@@ -646,7 +649,7 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         const auto persisted = writeSnapshotCore(
             *snapshot, time, false, current,
             RunPersistenceMutationKind::Recovery, std::nullopt, std::nullopt,
-            std::nullopt, RunPersistenceCoordinatorState::LoadedActiveRun);
+            fallbackDirective, RunPersistenceCoordinatorState::LoadedActiveRun);
         if (persisted.status != RunPersistenceResultStatus::Applied) {
             return {persisted, current};
         }
@@ -711,7 +714,10 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         candidate.pendingRecoveryAnchor.reset();
         candidate.recoveryBootAnchorMonotonicMillis.reset();
         candidate.priorBootPhaseElapsed.reset();
-        return commitCandidate(candidate);
+        return commitCandidate(
+            candidate,
+            RunPersistenceFallbackDirective{
+                RunPersistenceFallbackMode::ClearFallback, std::nullopt});
     }
 
     if (!candidate.pendingRecoveryAnchor.has_value()) return invalid(current);
@@ -791,7 +797,9 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
     }
 
     const auto commitCandidate =
-        [&](const RunCommandState& toCommit) -> RecoveryActivationOutcome {
+        [&](const RunCommandState& toCommit,
+            const RunPersistenceFallbackDirective& fallbackDirective)
+        -> RecoveryActivationOutcome {
         const auto snapshot = makeRunPersistenceSnapshot(
             toCommit, persistedIds_, persistedIdCount_,
             RunCheckpointTrigger::Transition, time,
@@ -800,7 +808,7 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         const auto persisted = writeSnapshotCore(
             *snapshot, time, false, current,
             RunPersistenceMutationKind::Recovery, std::nullopt, targetSlot,
-            fallbackReference,
+            fallbackDirective,
             RunPersistenceCoordinatorState::FallbackRecoveryPending);
         if (persisted.status != RunPersistenceResultStatus::Applied) {
             return {persisted, current};
@@ -811,7 +819,10 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
     if (current.processState.state == ProcessState::Completed) {
         auto candidate = current;
         candidate.processState.stateEnteredAtMillis = time.monotonicMillis;
-        return commitCandidate(candidate);
+        return commitCandidate(
+            candidate, RunPersistenceFallbackDirective{
+                           RunPersistenceFallbackMode::SetExplicitReference,
+                           fallbackReference});
     }
 
     const auto& loadedRecord = *slots_[fallbackReference.slot];
@@ -832,7 +843,10 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         ++candidate.recoveryEpisodeRevision;
         candidate.recoveryBootAnchorMonotonicMillis = time.monotonicMillis;
         applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
-        return commitCandidate(candidate);
+        return commitCandidate(
+            candidate, RunPersistenceFallbackDirective{
+                           RunPersistenceFallbackMode::SetExplicitReference,
+                           fallbackReference});
     }
 
     const auto originalProcessState = current.processState;
@@ -886,10 +900,16 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
             }
             applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
             clearActiveRunState(candidate);
-            return commitCandidate(candidate);
+            return commitCandidate(
+                candidate,
+                RunPersistenceFallbackDirective{
+                    RunPersistenceFallbackMode::ClearFallback, std::nullopt});
         }
         if (verdict == RecoveryTimeVerdict::Uncertain) {
-            return commitCandidate(candidate);
+            return commitCandidate(
+                candidate, RunPersistenceFallbackDirective{
+                               RunPersistenceFallbackMode::SetExplicitReference,
+                               fallbackReference});
         }
     }
 
@@ -920,7 +940,10 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         candidate.pendingRecoveryAnchor.reset();
         candidate.recoveryBootAnchorMonotonicMillis.reset();
         candidate.priorBootPhaseElapsed.reset();
-        return commitCandidate(candidate);
+        return commitCandidate(
+            candidate,
+            RunPersistenceFallbackDirective{
+                RunPersistenceFallbackMode::ClearFallback, std::nullopt});
     }
 
     if (!candidate.pendingRecoveryAnchor.has_value()) return invalid(current);
@@ -950,7 +973,11 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         !applyProcessTransition(candidate.processState, hop2,
                                 &*candidate.processRunSnapshot)) {
         return originalProcessState.state == ProcessState::WaitingForProduct
-                   ? commitCandidate(candidate)
+                   ? commitCandidate(
+                         candidate,
+                         RunPersistenceFallbackDirective{
+                             RunPersistenceFallbackMode::SetExplicitReference,
+                             fallbackReference})
                    : invalid(current);
     }
 
@@ -967,7 +994,10 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         candidate.pendingRecoveryAnchor.reset();
         candidate.recoveryBootAnchorMonotonicMillis.reset();
     }
-    return commitCandidate(candidate);
+    return commitCandidate(candidate,
+                           RunPersistenceFallbackDirective{
+                               RunPersistenceFallbackMode::SetExplicitReference,
+                               fallbackReference});
 }
 
 RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
@@ -1064,6 +1094,7 @@ RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
     auto candidate = current;
     std::array<ProcessMessage, kMaximumTransitionMessages> messages{};
     std::size_t messageCount = 0U;
+    RunPersistenceFallbackDirective fallbackDirective{};
     if (phase == ProcessState::WaitingForProduct &&
         request.decision == RecoveryUncertaintyDecision::AssumeStillValid) {
         if (!candidate.sensorSelection.has_value() ||
@@ -1097,6 +1128,8 @@ RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
             candidate.pendingRecoveryAnchor.reset();
             candidate.recoveryBootAnchorMonotonicMillis.reset();
             candidate.priorBootPhaseElapsed.reset();
+            fallbackDirective = RunPersistenceFallbackDirective{
+                RunPersistenceFallbackMode::ClearFallback, std::nullopt};
             messages = rejected.messages;
             messageCount = rejected.messageCount;
         } else {
@@ -1175,8 +1208,15 @@ RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
                       RunPersistenceTechnicalReason::InvalidProjection);
     }
     const auto persisted =
-        writeSnapshot(*snapshot, time, false, current,
-                      RunPersistenceMutationKind::Command, request.commandId);
+        fallbackDirective.mode == RunPersistenceFallbackMode::ClearFallback
+            ? writeSnapshotCore(*snapshot, time, false, current,
+                                RunPersistenceMutationKind::Command,
+                                request.commandId, std::nullopt,
+                                fallbackDirective,
+                                RunPersistenceCoordinatorState::Ready)
+            : writeSnapshot(*snapshot, time, false, current,
+                            RunPersistenceMutationKind::Command,
+                            request.commandId);
     if (persisted.status != RunPersistenceResultStatus::Applied) {
         return persisted;
     }
@@ -1202,8 +1242,8 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
         return unavailableResult();
     const auto rollbackState = state_;
     return writeSnapshotCore(snapshot, time, periodic, before, mutationKind,
-                             commandId, std::nullopt, std::nullopt,
-                             rollbackState);
+                             commandId, std::nullopt,
+                             RunPersistenceFallbackDirective{}, rollbackState);
 }
 
 RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
@@ -1211,7 +1251,7 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
     bool periodic, const RunCommandState& before,
     RunPersistenceMutationKind mutationKind, std::optional<CommandId> commandId,
     std::optional<std::size_t> targetSlotOverride,
-    std::optional<RunCheckpointReference> fallbackOverride,
+    RunPersistenceFallbackDirective fallbackDirective,
     RunPersistenceCoordinatorState rollbackState) {
     if (nextCheckpointRevision_ == 0U || nextHeadRevision_ == 0U ||
         (!periodic &&
@@ -1231,27 +1271,44 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
             : (currentHead_.has_value() ? 1U - currentHead_->current.slot : 0U);
     const bool sameCurrentSlot =
         currentHead_.has_value() && target == currentHead_->current.slot;
+    const auto sameReference = [](const RunCheckpointReference& left,
+                                  const RunCheckpointReference& right) {
+        return left.slot == right.slot &&
+               left.schemaVersion == right.schemaVersion &&
+               left.storageEpoch == right.storageEpoch &&
+               left.checkpointRevision == right.checkpointRevision &&
+               left.payloadLength == right.payloadLength &&
+               left.payloadCrc == right.payloadCrc &&
+               left.variant == right.variant;
+    };
+    const bool clearFallbackAllowed =
+        snapshot.variant == RunCheckpointVariant::NoActiveRun ||
+        (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
+         snapshot.processState.state == ProcessState::Fault);
+    const bool explicitFallbackValid =
+        fallbackDirective.mode ==
+            RunPersistenceFallbackMode::SetExplicitReference &&
+        fallbackDirective.reference.has_value() && currentHead_.has_value() &&
+        currentHead_->fallback.has_value() &&
+        fallbackDirective.reference->slot != target &&
+        sameReference(*fallbackDirective.reference, *currentHead_->fallback);
+    const bool directiveValid =
+        (fallbackDirective.mode ==
+             RunPersistenceFallbackMode::UseStandardFallback &&
+         !fallbackDirective.reference.has_value()) ||
+        (fallbackDirective.mode == RunPersistenceFallbackMode::ClearFallback &&
+         !fallbackDirective.reference.has_value() && clearFallbackAllowed) ||
+        explicitFallbackValid;
     const bool validFallbackRecoverySameSlot =
         !periodic &&
         rollbackState ==
             RunPersistenceCoordinatorState::FallbackRecoveryPending &&
         mutationKind == RunPersistenceMutationKind::Recovery &&
         sameCurrentSlot && currentHead_->fallback.has_value() &&
-        fallbackOverride.has_value() && fallbackOverride->slot != target &&
-        fallbackOverride->slot == currentHead_->fallback->slot &&
-        fallbackOverride->schemaVersion ==
-            currentHead_->fallback->schemaVersion &&
-        fallbackOverride->storageEpoch ==
-            currentHead_->fallback->storageEpoch &&
-        fallbackOverride->checkpointRevision ==
-            currentHead_->fallback->checkpointRevision &&
-        fallbackOverride->payloadLength ==
-            currentHead_->fallback->payloadLength &&
-        fallbackOverride->payloadCrc == currentHead_->fallback->payloadCrc &&
-        fallbackOverride->variant == currentHead_->fallback->variant;
-    if (target > 1U ||
-        (fallbackOverride.has_value() &&
-         (fallbackOverride->slot > 1U || fallbackOverride->slot == target))) {
+        ((fallbackDirective.mode == RunPersistenceFallbackMode::ClearFallback &&
+          clearFallbackAllowed) ||
+         explicitFallbackValid);
+    if (target > 1U || !directiveValid) {
         state_ = rollbackState;
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply,
@@ -1296,9 +1353,13 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
         committed.current = ref;
         if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
             currentHead_.has_value()) {
-            committed.fallback = fallbackOverride.has_value()
-                                     ? fallbackOverride
-                                     : currentHead_->current;
+            if (fallbackDirective.mode ==
+                RunPersistenceFallbackMode::SetExplicitReference) {
+                committed.fallback = fallbackDirective.reference;
+            } else if (fallbackDirective.mode ==
+                       RunPersistenceFallbackMode::UseStandardFallback) {
+                committed.fallback = currentHead_->current;
+            }
         }
         committedBytes = encodeRunPersistenceHead(committed, epoch_);
         if (!committedBytes.has_value()) {
@@ -1328,9 +1389,13 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
         committed.current = ref;
         if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
             currentHead_.has_value()) {
-            committed.fallback = fallbackOverride.has_value()
-                                     ? fallbackOverride
-                                     : currentHead_->current;
+            if (fallbackDirective.mode ==
+                RunPersistenceFallbackMode::SetExplicitReference) {
+                committed.fallback = fallbackDirective.reference;
+            } else if (fallbackDirective.mode ==
+                       RunPersistenceFallbackMode::UseStandardFallback) {
+                committed.fallback = currentHead_->current;
+            }
         }
         preparedBytes = encodeRunPersistenceHead(prepared, epoch_);
         committedBytes = encodeRunPersistenceHead(committed, epoch_);

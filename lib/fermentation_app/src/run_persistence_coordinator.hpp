@@ -143,6 +143,18 @@ struct ResolveRecoveryUncertaintyRequest {
         RecoveryUncertaintyDecision::AssumeStillValid};
 };
 
+enum class RunPersistenceFallbackMode : std::uint8_t {
+    UseStandardFallback,
+    SetExplicitReference,
+    ClearFallback,
+};
+
+struct RunPersistenceFallbackDirective {
+    RunPersistenceFallbackMode mode{
+        RunPersistenceFallbackMode::UseStandardFallback};
+    std::optional<RunCheckpointReference> reference;
+};
+
 // Reine RAM-Mutation fuer die diagnostische First-after-restart-Evidenz. Die
 // Funktion ist unabhaengig davon aufrufbar, ob im selben Moment ein
 // Persistenz-Commit stattfindet.
@@ -221,7 +233,7 @@ class RunPersistenceCoordinator {
         RunPersistenceMutationKind mutationKind,
         std::optional<CommandId> commandId,
         std::optional<std::size_t> targetSlotOverride,
-        std::optional<RunCheckpointReference> fallbackOverride,
+        RunPersistenceFallbackDirective fallbackDirective,
         RunPersistenceCoordinatorState rollbackState);
     [[nodiscard]] RunPersistenceResult unavailableResult() const;
     [[nodiscard]] RunPersistenceResult result(

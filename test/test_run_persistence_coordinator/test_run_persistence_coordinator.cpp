@@ -29,11 +29,11 @@ class RunPersistenceCoordinatorTestAccess {
         RunPersistenceMutationKind mutationKind,
         std::optional<CommandId> commandId,
         std::optional<std::size_t> targetSlotOverride,
-        std::optional<RunCheckpointReference> fallbackOverride,
+        RunPersistenceFallbackDirective fallbackDirective,
         RunPersistenceCoordinatorState rollbackState) {
         return coordinator.writeSnapshotCore(
             snapshot, time, periodic, before, mutationKind, commandId,
-            targetSlotOverride, fallbackOverride, rollbackState);
+            targetSlotOverride, fallbackDirective, rollbackState);
     }
 
     static RunCheckpointReference currentReference(
@@ -44,6 +44,11 @@ class RunPersistenceCoordinatorTestAccess {
     static RunCheckpointReference fallbackReference(
         const RunPersistenceCoordinator& coordinator) {
         return *coordinator.currentHead_->fallback;
+    }
+
+    static std::optional<RunCheckpointReference> fallbackReferenceOptional(
+        const RunPersistenceCoordinator& coordinator) {
+        return coordinator.currentHead_->fallback;
     }
 
     static std::uint64_t nextCheckpointRevision(
@@ -1725,7 +1730,7 @@ void test_write_snapshot_core_rolls_back_loaded_active_run_before_commit() {
             RunPersistenceCoordinatorTestAccess::writeSnapshotCore(
                 coordinator, snapshot, RunCheckpointTime{200U, std::nullopt},
                 false, *before, RunPersistenceMutationKind::Recovery,
-                std::nullopt, std::nullopt, std::nullopt,
+                std::nullopt, std::nullopt, RunPersistenceFallbackDirective{},
                 RunPersistenceCoordinatorState::LoadedActiveRun);
         const auto expectedStatus =
             failure == CorePreCommitFailure::Codec
@@ -1804,7 +1809,9 @@ void test_write_snapshot_core_rolls_back_fallback_recovery_before_commit() {
             RunPersistenceCoordinatorTestAccess::writeSnapshotCore(
                 coordinator, snapshot, RunCheckpointTime{200U, std::nullopt},
                 false, *before, RunPersistenceMutationKind::Recovery,
-                std::nullopt, current.slot, fallback,
+                std::nullopt, current.slot,
+                RunPersistenceFallbackDirective{
+                    RunPersistenceFallbackMode::SetExplicitReference, fallback},
                 RunPersistenceCoordinatorState::FallbackRecoveryPending);
         const auto expectedStatus =
             failure == CorePreCommitFailure::Codec
@@ -1858,7 +1865,7 @@ void test_write_snapshot_core_indeterminate_always_blocks_loaded_and_fallback() 
                 coordinator, *loaded.snapshot,
                 RunCheckpointTime{200U, std::nullopt}, false, *before,
                 RunPersistenceMutationKind::Recovery, std::nullopt,
-                std::nullopt, std::nullopt,
+                std::nullopt, RunPersistenceFallbackDirective{},
                 RunPersistenceCoordinatorState::LoadedActiveRun);
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(
@@ -1908,7 +1915,9 @@ void test_write_snapshot_core_indeterminate_always_blocks_loaded_and_fallback() 
                 coordinator, *loaded.snapshot,
                 RunCheckpointTime{200U, std::nullopt}, false, *before,
                 RunPersistenceMutationKind::Recovery, std::nullopt,
-                current.slot, fallback,
+                current.slot,
+                RunPersistenceFallbackDirective{
+                    RunPersistenceFallbackMode::SetExplicitReference, fallback},
                 RunPersistenceCoordinatorState::FallbackRecoveryPending);
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(
@@ -1944,10 +1953,16 @@ void test_same_slot_overrides_fail_closed_before_any_write() {
     const auto reject = [&](bool periodic,
                             RunPersistenceMutationKind mutationKind,
                             std::optional<RunCheckpointReference> fallback) {
+        const auto fallbackDirective =
+            fallback.has_value()
+                ? RunPersistenceFallbackDirective{RunPersistenceFallbackMode::
+                                                      SetExplicitReference,
+                                                  fallback}
+                : RunPersistenceFallbackDirective{};
         return RunPersistenceCoordinatorTestAccess::writeSnapshotCore(
             coordinator, snapshot, RunCheckpointTime{200U, std::nullopt},
             periodic, before, mutationKind, std::nullopt, current.slot,
-            fallback, RunPersistenceCoordinatorState::Ready);
+            fallbackDirective, RunPersistenceCoordinatorState::Ready);
     };
 
     const auto recoveryWithoutFallback =
@@ -1973,6 +1988,55 @@ void test_same_slot_overrides_fail_closed_before_any_write() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
         static_cast<int>(nonRecoverySameSlot.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(coordinator.state()));
+}
+
+void test_fallback_directive_rejects_invalid_mode_reference_combinations() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 997U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+
+    const auto current =
+        RunPersistenceCoordinatorTestAccess::currentReference(coordinator);
+    const RunPersistenceSnapshot snapshot;
+    const auto writesBefore = store.writeCount();
+    const auto reject = [&](RunPersistenceFallbackDirective directive) {
+        return RunPersistenceCoordinatorTestAccess::writeSnapshotCore(
+            coordinator, snapshot, RunCheckpointTime{200U, std::nullopt}, false,
+            state, RunPersistenceMutationKind::Recovery, std::nullopt,
+            1U - current.slot, directive,
+            RunPersistenceCoordinatorState::Ready);
+    };
+
+    for (const auto directive :
+         {RunPersistenceFallbackDirective{
+              RunPersistenceFallbackMode::UseStandardFallback, current},
+          RunPersistenceFallbackDirective{
+              RunPersistenceFallbackMode::ClearFallback, current},
+          RunPersistenceFallbackDirective{
+              RunPersistenceFallbackMode::SetExplicitReference, std::nullopt},
+          RunPersistenceFallbackDirective{
+              RunPersistenceFallbackMode::SetExplicitReference, current},
+          RunPersistenceFallbackDirective{
+              static_cast<RunPersistenceFallbackMode>(99U), std::nullopt}}) {
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+            static_cast<int>(reject(directive).status));
+    }
     TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
                            static_cast<unsigned>(store.writeCount()));
     TEST_ASSERT_EQUAL_INT(
@@ -3653,8 +3717,6 @@ void test_activate_fallback_run_persists_sensor_gate_rejection_as_fault() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
         static_cast<int>(loaded.status));
-    const auto fallbackBefore =
-        RunPersistenceCoordinatorTestAccess::fallbackReference(recovered);
     const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
     TEST_ASSERT_TRUE(restored.has_value());
     const auto outcome = recovered.activateFallbackRecoveredRun(
@@ -3669,13 +3731,10 @@ void test_activate_fallback_run_persists_sensor_gate_rejection_as_fault() {
         static_cast<int>(RunPersistenceCoordinatorState::Ready),
         static_cast<int>(recovered.state()));
 
-    const auto fallbackAfter =
-        RunPersistenceCoordinatorTestAccess::fallbackReference(recovered);
-    TEST_ASSERT_EQUAL_UINT8(fallbackBefore.slot, fallbackAfter.slot);
-    TEST_ASSERT_EQUAL_UINT64(fallbackBefore.checkpointRevision,
-                             fallbackAfter.checkpointRevision);
-    TEST_ASSERT_EQUAL_UINT32(fallbackBefore.payloadCrc,
-                             fallbackAfter.payloadCrc);
+    TEST_ASSERT_FALSE(
+        RunPersistenceCoordinatorTestAccess::fallbackReferenceOptional(
+            recovered)
+            .has_value());
 
     store.restart();
     RunPersistenceCoordinator afterBoot(
@@ -3686,13 +3745,26 @@ void test_activate_fallback_run_persists_sensor_gate_rejection_as_fault() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(ProcessState::Fault),
         static_cast<int>(rebooted.snapshot->processState.state));
-    const auto rebootedFallback =
-        RunPersistenceCoordinatorTestAccess::fallbackReference(afterBoot);
-    TEST_ASSERT_EQUAL_UINT8(fallbackBefore.slot, rebootedFallback.slot);
-    TEST_ASSERT_EQUAL_UINT64(fallbackBefore.checkpointRevision,
-                             rebootedFallback.checkpointRevision);
-    TEST_ASSERT_EQUAL_UINT32(fallbackBefore.payloadCrc,
-                             rebootedFallback.payloadCrc);
+    TEST_ASSERT_FALSE(
+        RunPersistenceCoordinatorTestAccess::fallbackReferenceOptional(
+            afterBoot)
+            .has_value());
+
+    const auto faultCurrent =
+        RunPersistenceCoordinatorTestAccess::currentReference(afterBoot);
+    const auto faultCurrentKey =
+        faultCurrent.slot == 0U ? slotKey("rc0") : slotKey("rc1");
+    store.backing().injectCorruption(faultCurrentKey, "damaged-fault-current");
+    store.restart();
+    RunPersistenceCoordinator failClosed(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto failedLoad = failClosed.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NotReconstructible),
+        static_cast<int>(failedLoad.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(failClosed.state()));
 }
 
 void test_fallback_completed_recovery_repairs_current_and_repeats() {
@@ -4667,6 +4739,8 @@ int main(int, char**) {
     RUN_TEST(
         test_write_snapshot_core_indeterminate_always_blocks_loaded_and_fallback);
     RUN_TEST(test_same_slot_overrides_fail_closed_before_any_write);
+    RUN_TEST(
+        test_fallback_directive_rejects_invalid_mode_reference_combinations);
     RUN_TEST(
         test_load_rejects_a_structurally_valid_but_mismatched_current_reference);
     RUN_TEST(test_loaded_active_run_blocks_all_mutations_after_restart);
