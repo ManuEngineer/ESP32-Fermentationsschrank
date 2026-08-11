@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "run_persistence_codec.hpp"
+#include "run_progress_weighting.hpp"
 #include "run_recovery_time.hpp"
 #include "sensor_selection.hpp"
 #include "storage_envelope.hpp"
@@ -577,6 +578,11 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
     candidate.pendingRecoveryAnchor = *anchor;
     candidate.recoveryBootAnchorMonotonicMillis = time.monotonicMillis;
     ++candidate.recoveryEpisodeRevision;
+    if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
+        supersedeUnbookedWeightedSegment(
+            candidate.runProgress,
+            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId);
+    }
     candidate.lastRecoveryEpisodeEvidence = RecoveryEpisodeEvidence{
         current.recoveryTemperatureEvidence.lastKnown,
         FirstAfterRestartEvidence{}, candidate.recoveryEpisodeRevision};
@@ -667,6 +673,13 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
             }
         } else {
             return invalid(current);
+        }
+        if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
+            supersedeUnbookedWeightedSegment(
+                candidate.runProgress, candidate.lastRecoveryEpisodeEvidence
+                                           ->weightedProgressSegmentId);
+            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId
+                .reset();
         }
         candidate.pendingRecoveryAnchor.reset();
         candidate.recoveryBootAnchorMonotonicMillis.reset();
@@ -820,6 +833,11 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
     candidate.pendingRecoveryAnchor = *anchor;
     candidate.recoveryBootAnchorMonotonicMillis = time.monotonicMillis;
     ++candidate.recoveryEpisodeRevision;
+    if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
+        supersedeUnbookedWeightedSegment(
+            candidate.runProgress,
+            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId);
+    }
     candidate.lastRecoveryEpisodeEvidence = RecoveryEpisodeEvidence{
         current.recoveryTemperatureEvidence.lastKnown,
         FirstAfterRestartEvidence{}, candidate.recoveryEpisodeRevision};
@@ -893,6 +911,13 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
             !applyProcessTransition(candidate.processState, rejected,
                                     &*candidate.processRunSnapshot)) {
             return invalid(current);
+        }
+        if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
+            supersedeUnbookedWeightedSegment(
+                candidate.runProgress, candidate.lastRecoveryEpisodeEvidence
+                                           ->weightedProgressSegmentId);
+            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId
+                .reset();
         }
         candidate.pendingRecoveryAnchor.reset();
         candidate.recoveryBootAnchorMonotonicMillis.reset();
@@ -1149,6 +1174,13 @@ RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
         }
         messages = completion.messages;
         messageCount = completion.messageCount;
+        if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
+            supersedeUnbookedWeightedSegment(
+                candidate.runProgress, candidate.lastRecoveryEpisodeEvidence
+                                           ->weightedProgressSegmentId);
+            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId
+                .reset();
+        }
         candidate.pendingRecoveryAnchor.reset();
         candidate.recoveryBootAnchorMonotonicMillis.reset();
         candidate.priorBootPhaseElapsed.reset();
@@ -1677,6 +1709,14 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
                       RunPersistenceStep::CandidateApply);
     if (decision.reason == TransitionReason::ProductWaitExpired)
         clearActiveRunState(candidate);
+    if (candidate.lastRecoveryEpisodeEvidence.has_value() &&
+        candidate.processState.state != current.processState.state) {
+        supersedeUnbookedWeightedSegment(
+            candidate.runProgress,
+            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId);
+        candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId
+            .reset();
+    }
     if (liveSensorEvidence != nullptr)
         applyLiveRecoveryEvidence(candidate, *liveSensorEvidence);
     const auto snapshot = makeRunPersistenceSnapshot(

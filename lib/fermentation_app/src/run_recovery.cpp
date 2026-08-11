@@ -154,6 +154,108 @@ RunPersistenceResult reevaluateWith(
     return persistence.persistRecoveryCandidate(current, candidate, time);
 }
 
+RunPersistenceResult applyWeightingWith(
+    RunPersistenceCoordinator& persistence, RunCommandState& current,
+    std::uint32_t expectedRunRevision,
+    std::uint32_t expectedRecoveryEpisodeRevision,
+    std::uint32_t weightedProgressSegmentId, const RunCheckpointTime& time,
+    const RecoveryProgressWeightingInput& suppliedInput,
+    const RecoveryProgressWeightingModel& model) {
+    if (expectedRunRevision != current.runRevision ||
+        expectedRecoveryEpisodeRevision != current.recoveryEpisodeRevision) {
+        return coordinatorResult(RunPersistenceResultStatus::StaleDecision,
+                                 persistence.state());
+    }
+    if (weightedProgressSegmentId == 0U ||
+        !current.lastRecoveryEpisodeEvidence.has_value() ||
+        !current.lastRecoveryEpisodeEvidence->weightedProgressSegmentId
+             .has_value() ||
+        *current.lastRecoveryEpisodeEvidence->weightedProgressSegmentId !=
+            weightedProgressSegmentId) {
+        return coordinatorResult(RunPersistenceResultStatus::NotAllowedInState,
+                                 persistence.state());
+    }
+    if (!current.activeRunSensorMode.has_value() ||
+        !suppliedInput.usableSensorRole.has_value() ||
+        *suppliedInput.usableSensorRole != *current.activeRunSensorMode ||
+        current.sensorSelectionRuntime.permission !=
+            SensorPeltierPermission::Allowed) {
+        return coordinatorResult(RunPersistenceResultStatus::NotAllowedInState,
+                                 persistence.state());
+    }
+
+    auto input = suppliedInput;
+    input.phase = current.processState.state;
+    input.episodeEvidence = *current.lastRecoveryEpisodeEvidence;
+    const auto contribution = model.evaluate(input);
+    if (!contribution.has_value()) {
+        return coordinatorResult(RunPersistenceResultStatus::NotEligible,
+                                 persistence.state());
+    }
+    if (!isValidWeightedProgressContribution(input, *contribution)) {
+        return coordinatorResult(RunPersistenceResultStatus::NotEligible,
+                                 persistence.state());
+    }
+
+    if (current.runProgress.weightedProgress.has_value() &&
+        current.runProgress.weightedProgress->lastApplied.has_value()) {
+        const auto& last = *current.runProgress.weightedProgress->lastApplied;
+        if (last.lastAppliedSegmentId == weightedProgressSegmentId) {
+            return coordinatorResult(
+                RunPersistenceResultStatus::AlreadyProcessed,
+                persistence.state());
+        }
+        if (last.modelRevision != contribution->modelRevision) {
+            return coordinatorResult(
+                RunPersistenceResultStatus::NotAllowedInState,
+                persistence.state());
+        }
+    }
+
+    WeightedProgressState next;
+    if (current.runProgress.weightedProgress.has_value()) {
+        next = *current.runProgress.weightedProgress;
+        if (contribution->delta.lowerBoundSeconds >
+            std::numeric_limits<std::uint64_t>::max() -
+                next.cumulative.lowerBoundSeconds) {
+            return coordinatorResult(
+                RunPersistenceResultStatus::CounterOverflow,
+                persistence.state());
+        }
+        next.cumulative.lowerBoundSeconds +=
+            contribution->delta.lowerBoundSeconds;
+        if (next.coverage == WeightedProgressCoverage::PartialUnknown) {
+            next.cumulative.upperBoundSeconds.reset();
+        } else {
+            if (!next.cumulative.upperBoundSeconds.has_value() ||
+                *contribution->delta.upperBoundSeconds >
+                    std::numeric_limits<std::uint64_t>::max() -
+                        *next.cumulative.upperBoundSeconds) {
+                return coordinatorResult(
+                    RunPersistenceResultStatus::CounterOverflow,
+                    persistence.state());
+            }
+            *next.cumulative.upperBoundSeconds +=
+                *contribution->delta.upperBoundSeconds;
+        }
+    } else {
+        next.coverage = WeightedProgressCoverage::Complete;
+        next.cumulative = contribution->delta;
+    }
+    next.lastApplied = WeightedProgressProvenance{
+        contribution->sourceRole, contribution->confidence,
+        contribution->modelRevision, weightedProgressSegmentId};
+
+    if (current.runRevision == std::numeric_limits<std::uint32_t>::max()) {
+        return coordinatorResult(RunPersistenceResultStatus::CounterOverflow,
+                                 persistence.state());
+    }
+    auto candidateState = current;
+    candidateState.runProgress.weightedProgress = next;
+    ++candidateState.runRevision;
+    return persistence.persistRecoveryCandidate(current, candidateState, time);
+}
+
 }  // namespace
 
 RunPersistenceResult RunRecoveryCoordinator::activate(
@@ -206,6 +308,34 @@ RunPersistenceResult RunRecoveryCoordinator::reevaluateRecoveryTime(
                                  RunPersistenceCoordinatorState::Uninitialized);
     }
     return reevaluateWith(*persistence_, current, time, &liveSensorEvidence);
+}
+
+RunPersistenceResult RunRecoveryCoordinator::applyRecoveryProgressWeighting(
+    RunPersistenceCoordinator& persistence, RunCommandState& current,
+    std::uint32_t expectedRunRevision,
+    std::uint32_t expectedRecoveryEpisodeRevision,
+    std::uint32_t weightedProgressSegmentId, const RunCheckpointTime& time,
+    const RecoveryProgressWeightingInput& input,
+    const RecoveryProgressWeightingModel& model) {
+    persistence_ = &persistence;
+    return applyWeightingWith(persistence, current, expectedRunRevision,
+                              expectedRecoveryEpisodeRevision,
+                              weightedProgressSegmentId, time, input, model);
+}
+
+RunPersistenceResult RunRecoveryCoordinator::applyRecoveryProgressWeighting(
+    RunCommandState& current, std::uint32_t expectedRunRevision,
+    std::uint32_t expectedRecoveryEpisodeRevision,
+    std::uint32_t weightedProgressSegmentId, const RunCheckpointTime& time,
+    const RecoveryProgressWeightingInput& input,
+    const RecoveryProgressWeightingModel& model) {
+    if (persistence_ == nullptr) {
+        return coordinatorResult(RunPersistenceResultStatus::NotInitialized,
+                                 RunPersistenceCoordinatorState::Uninitialized);
+    }
+    return applyWeightingWith(*persistence_, current, expectedRunRevision,
+                              expectedRecoveryEpisodeRevision,
+                              weightedProgressSegmentId, time, input, model);
 }
 
 }  // namespace fermentation

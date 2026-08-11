@@ -21,6 +21,21 @@
 #include "storage_envelope.hpp"
 
 namespace fermentation {
+
+class FixedRecoveryProgressModel final : public RecoveryProgressWeightingModel {
+   public:
+    mutable std::uint32_t calls{0U};
+
+    [[nodiscard]] std::optional<WeightedProgressContribution> evaluate(
+        const RecoveryProgressWeightingInput& input) const override {
+        ++calls;
+        if (!hasUsableRecoveryProgressEvidence(input)) return std::nullopt;
+        return WeightedProgressContribution{
+            WeightedProgressBounds{10U, 20U}, RunSensorMode::Product,
+            WeightedProgressConfidence::ProductPreferred, 7U};
+    }
+};
+
 class RunPersistenceCoordinatorTestAccess {
    public:
     static RunPersistenceResult writeSnapshotCore(
@@ -3472,6 +3487,112 @@ void test_run_recovery_coordinator_reevaluates_resumed_time_without_biological_f
     TEST_ASSERT_FALSE(restoredLoad.snapshot->pendingRecoveryAnchor.has_value());
 }
 
+void test_run_recovery_coordinator_books_weighting_atomically_once() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(seed, 1022U);
+    ProcessSignals signals;
+    signals.qualificationConditionValid = true;
+    auto transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistTransition(state, transition,
+                                   RunCheckpointTime{200U, std::nullopt})
+                .status));
+    transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 600300U);
+    auto beforeEvidence = recoveryPlausibility(600300U);
+    state.recoveryTemperatureEvidence.lastKnown.air = {
+        beforeEvidence.air.filteredCelsius, beforeEvidence.air.quality};
+    state.recoveryTemperatureEvidence.lastKnown.product = {
+        beforeEvidence.product.filteredCelsius, beforeEvidence.product.quality};
+    state.recoveryTemperatureEvidence.lastKnown.cooling = {
+        beforeEvidence.cooling.filteredCelsius, beforeEvidence.cooling.quality};
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistTransition(state, transition,
+                                   RunCheckpointTime{600300U, std::nullopt},
+                                   &beforeEvidence)
+                .status));
+
+    store.restart();
+    RunPersistenceCoordinator persistence(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = persistence.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto activated = persistence.activateLoadedRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt},
+        recoveryPlausibility(700000U));
+    RunCommandState current = activated.resultingState;
+    TEST_ASSERT_TRUE(current.lastRecoveryEpisodeEvidence.has_value());
+    TEST_ASSERT_TRUE(current.lastRecoveryEpisodeEvidence
+                         ->weightedProgressSegmentId.has_value());
+    current.runProgress.observedRunSeconds = 12U;
+    current.nominalRecoveryAdjustment =
+        NominalRecoveryAdjustmentState{5U, 1U, 5U};
+    const auto observedBefore = current.runProgress.observedRunSeconds;
+    const auto nominalBefore = *current.nominalRecoveryAdjustment;
+    const auto segmentId =
+        *current.lastRecoveryEpisodeEvidence->weightedProgressSegmentId;
+
+    RecoveryProgressWeightingInput input;
+    input.phase = ProcessState::Fermenting;
+    input.outage = RecoveryOutageBounds{200U, 100U};
+    input.usableSensorRole = RunSensorMode::Product;
+    FixedRecoveryProgressModel model;
+    RunRecoveryCoordinator recovery(persistence);
+    const auto booked = recovery.applyRecoveryProgressWeighting(
+        current, current.runRevision, current.recoveryEpisodeRevision,
+        segmentId, RunCheckpointTime{700100U, std::nullopt}, input, model);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(booked.status));
+    TEST_ASSERT_EQUAL_UINT32(1U, model.calls);
+    TEST_ASSERT_EQUAL_UINT32(observedBefore,
+                             current.runProgress.observedRunSeconds);
+    TEST_ASSERT_TRUE(current.nominalRecoveryAdjustment.has_value());
+    TEST_ASSERT_EQUAL_UINT32(
+        nominalBefore.cumulativeAppliedSeconds,
+        current.nominalRecoveryAdjustment->cumulativeAppliedSeconds);
+    TEST_ASSERT_TRUE(current.runProgress.weightedProgress.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WeightedProgressCoverage::Complete),
+        static_cast<int>(current.runProgress.weightedProgress->coverage));
+    TEST_ASSERT_EQUAL_UINT64(
+        10U,
+        current.runProgress.weightedProgress->cumulative.lowerBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT64(
+        20U,
+        *current.runProgress.weightedProgress->cumulative.upperBoundSeconds);
+    TEST_ASSERT_EQUAL_UINT32(segmentId,
+                             current.runProgress.weightedProgress->lastApplied
+                                 ->lastAppliedSegmentId);
+
+    const auto duplicate = recovery.applyRecoveryProgressWeighting(
+        current, current.runRevision, current.recoveryEpisodeRevision,
+        segmentId, RunCheckpointTime{700200U, std::nullopt}, input, model);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::AlreadyProcessed),
+        static_cast<int>(duplicate.status));
+    TEST_ASSERT_EQUAL_UINT32(2U, model.calls);
+
+    const UnavailableRecoveryProgressWeightingModel unavailable;
+    const auto unavailableResult = recovery.applyRecoveryProgressWeighting(
+        current, current.runRevision, current.recoveryEpisodeRevision,
+        segmentId, RunCheckpointTime{700300U, std::nullopt}, input,
+        unavailable);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::NotEligible),
+        static_cast<int>(unavailableResult.status));
+}
+
 void test_activate_loaded_run_resolved_resume_clears_anchor() {
     device_platform_test_support::SimulatedPersistentStateStore store;
     RunPersistenceCoordinator coordinator(
@@ -4949,6 +5070,7 @@ int main(int, char**) {
     RUN_TEST(test_run_recovery_coordinator_delegates_loaded_activation);
     RUN_TEST(
         test_run_recovery_coordinator_reevaluates_resumed_time_without_biological_fold);
+    RUN_TEST(test_run_recovery_coordinator_books_weighting_atomically_once);
     RUN_TEST(test_activate_loaded_run_resolved_resume_clears_anchor);
     RUN_TEST(test_activate_loaded_run_episode_refreshes_hop_one_anchor);
     RUN_TEST(test_activate_loaded_run_persists_sensor_gate_rejection_as_fault);

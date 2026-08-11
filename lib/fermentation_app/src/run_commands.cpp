@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "program_limits.hpp"
+#include "run_progress_weighting.hpp"
 #include "run_limits.hpp"
 #include "sensor_selection.hpp"
 
@@ -1114,6 +1115,13 @@ CommandDecision decideRunAdjustment(
         candidate.nominalRecoveryAdjustment.reset();
         candidate.pendingRecoveryAnchor.reset();
         candidate.recoveryBootAnchorMonotonicMillis.reset();
+        if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
+            supersedeUnbookedWeightedSegment(
+                candidate.runProgress, candidate.lastRecoveryEpisodeEvidence
+                                           ->weightedProgressSegmentId);
+            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId
+                .reset();
+        }
     }
 
     decision.after = std::move(candidate);
