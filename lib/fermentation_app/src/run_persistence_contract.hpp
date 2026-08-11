@@ -135,6 +135,8 @@ struct RunPersistenceRawRecord {
 [[nodiscard]] bool isPersistedRunCommand(CommandKind kind);
 [[nodiscard]] bool validateRunPersistenceSnapshot(
     const RunPersistenceSnapshot& snapshot);
+[[nodiscard]] bool validateRunPersistenceSnapshotForSchema(
+    const RunPersistenceSnapshot& snapshot, std::uint32_t schemaVersion);
 
 // A projection is constructed only from the canonical candidate state. The
 // separate durable ID window is supplied by the coordinator and never copied

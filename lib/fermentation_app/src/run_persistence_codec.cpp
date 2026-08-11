@@ -1256,7 +1256,7 @@ RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
     }
     if (reader.remaining() != 0U)
         return {RunPersistenceCodecStatus::TrailingBytes, std::nullopt};
-    if (!validateRunPersistenceSnapshot(s))
+    if (!validateRunPersistenceSnapshotForSchema(s, schemaVersion))
         return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
     return {RunPersistenceCodecStatus::Success, std::move(s)};
 }

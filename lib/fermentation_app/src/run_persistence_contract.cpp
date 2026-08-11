@@ -376,6 +376,17 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
                snapshot.checkpointMonotonicMillis);
 }
 
+bool validateRunPersistenceSnapshotForSchema(
+    const RunPersistenceSnapshot& snapshot, std::uint32_t schemaVersion) {
+    if (!knownRunPersistenceSchema(schemaVersion)) return false;
+    if (schemaVersion < kCurrentRunPersistenceSchema &&
+        snapshot.variant != RunCheckpointVariant::NoActiveRun &&
+        snapshot.processState.state == ProcessState::Fault) {
+        return false;
+    }
+    return validateRunPersistenceSnapshot(snapshot);
+}
+
 std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
     const RunCommandState& state,
     const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,

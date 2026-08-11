@@ -92,6 +92,39 @@ void test_program_checkpoint_round_trip_restores_active_run() {
     TEST_ASSERT_TRUE(restored->activeProgramRun.has_value());
 }
 
+void test_active_recovery_fault_requires_schema_three() {
+    auto fault = programSnapshot();
+    fault.processState.state = ProcessState::Fault;
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshotForSchema(fault, 1U));
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshotForSchema(fault, 2U));
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshotForSchema(
+        fault, kCurrentRunPersistenceSchema));
+    TEST_ASSERT_FALSE(validateRunPersistenceSnapshotForSchema(fault, 4U));
+
+    std::string encoded;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(fault, encoded)));
+    for (const std::uint32_t legacySchema : {1U, 2U}) {
+        TEST_ASSERT_NOT_EQUAL(
+            static_cast<int>(RunPersistenceCodecStatus::Success),
+            static_cast<int>(
+                decodeRunPersistenceSnapshot(encoded, legacySchema).status));
+    }
+    const auto decoded =
+        decodeRunPersistenceSnapshot(encoded, kCurrentRunPersistenceSchema);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(decoded.status));
+    TEST_ASSERT_TRUE(decoded.snapshot.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fault),
+        static_cast<int>(decoded.snapshot->processState.state));
+    const auto restored = restoreRunPersistenceSnapshot(*decoded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
+                          static_cast<int>(restored->processState.state));
+}
+
 void test_tombstone_has_empty_run_id_and_rejects_active_data() {
     RunCommandState state;
     state.processState.state = ProcessState::Standby;
@@ -1129,6 +1162,7 @@ void test_committed_head_accepts_mixed_current_and_fallback_schema() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_program_checkpoint_round_trip_restores_active_run);
+    RUN_TEST(test_active_recovery_fault_requires_schema_three);
     RUN_TEST(test_tombstone_has_empty_run_id_and_rejects_active_data);
     RUN_TEST(
         test_projection_rejects_inconsistent_aggregate_instead_of_prioritizing);
