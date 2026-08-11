@@ -268,6 +268,17 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
         const auto fallbackRecord =
             loadReference(*currentHead_->fallback, fallbackStatus);
         if (fallbackRecord.has_value()) {
+            if (fallbackRecord->snapshot.variant ==
+                RunCheckpointVariant::NoActiveRun) {
+                // A tombstone is a valid fallback reference for an active
+                // current, but it cannot reconstruct that current after the
+                // active slot is damaged.  Keep this integrity failure
+                // fail-closed instead of exposing a non-resumable snapshot as
+                // FallbackRecoveryPending to the later recovery API.
+                enterBlockedIndeterminate();
+                return {RunPersistenceLoadStatus::NotReconstructible,
+                        std::nullopt};
+            }
             slots_[currentHead_->fallback->slot] = *fallbackRecord;
             const auto raiseCheckpointHighWatermark =
                 [this](std::uint64_t checkpointRevision) {

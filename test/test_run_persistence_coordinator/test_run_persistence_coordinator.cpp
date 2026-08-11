@@ -41,6 +41,11 @@ class RunPersistenceCoordinatorTestAccess {
         return coordinator.currentHead_->current;
     }
 
+    static RunCheckpointReference fallbackReference(
+        const RunPersistenceCoordinator& coordinator) {
+        return *coordinator.currentHead_->fallback;
+    }
+
     static std::uint64_t nextCheckpointRevision(
         const RunPersistenceCoordinator& coordinator) {
         return coordinator.nextCheckpointRevision_;
@@ -1600,6 +1605,322 @@ void test_load_fallback_orphan_and_schema_epoch_matrix() {
         static_cast<int>(unsupportedBoot.state()));
 }
 
+void test_tombstone_fallback_does_not_enter_recovery_pending() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 990U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+
+    StopRequest stop;
+    stop.envelope = {991U,
+                     CommandSource::LocalDisplay,
+                     200U,
+                     state.processState.transitionSequence,
+                     state.runRevision,
+                     std::nullopt,
+                     std::nullopt,
+                     true};
+    stop.option = StopOption::AbortAndTurnOff;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, decideStop(state, stop),
+                                RunCheckpointTime{200U, std::nullopt})
+                .status));
+
+    // Start another run so the valid active Current carries the valid
+    // NoActiveRun tombstone as its fallback.
+    RunCommandState nextRun;
+    nextRun.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(nextRun, startDecision(nextRun, 992U, 300U),
+                                RunCheckpointTime{300U, std::nullopt})
+                .status));
+    const auto current =
+        RunPersistenceCoordinatorTestAccess::currentReference(coordinator);
+    const auto fallback =
+        RunPersistenceCoordinatorTestAccess::fallbackReference(coordinator);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunCheckpointVariant::ProgramRun),
+                          static_cast<int>(current.variant));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunCheckpointVariant::NoActiveRun),
+                          static_cast<int>(fallback.variant));
+
+    store.backing().injectCorruption(
+        current.slot == 0U ? slotKey("rc0") : slotKey("rc1"),
+        "damaged-current");
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = afterBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NotReconstructible),
+        static_cast<int>(loaded.status));
+    TEST_ASSERT_FALSE(loaded.snapshot.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(afterBoot.state()));
+}
+
+enum class CorePreCommitFailure {
+    Codec,
+    Write,
+    Capacity,
+    NotWritten,
+};
+
+void test_write_snapshot_core_rolls_back_loaded_active_run_before_commit() {
+    using Fault = SequencedWriteStore::WriteFault;
+    for (const auto failure :
+         {CorePreCommitFailure::Codec, CorePreCommitFailure::Write,
+          CorePreCommitFailure::Capacity, CorePreCommitFailure::NotWritten}) {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+        static_cast<void>(seed.loadAndInitialize());
+        RunCommandState state;
+        state.processState.state = ProcessState::Standby;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(
+                seed.persistCommand(state, startDecision(state, 993U),
+                                    RunCheckpointTime{100U, std::nullopt})
+                    .status));
+
+        store.restart();
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        const auto loaded = coordinator.loadAndInitialize();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceLoadStatus::Current),
+            static_cast<int>(loaded.status));
+        TEST_ASSERT_TRUE(loaded.snapshot.has_value());
+        const auto before = restoreRunPersistenceSnapshot(*loaded.snapshot);
+        TEST_ASSERT_TRUE(before.has_value());
+        auto snapshot = *loaded.snapshot;
+        if (failure == CorePreCommitFailure::Codec) {
+            snapshot = RunPersistenceSnapshot{};
+        } else if (failure == CorePreCommitFailure::Write) {
+            store.faultAt(1U, Fault::FailBeforeBegin);
+        } else if (failure == CorePreCommitFailure::Capacity) {
+            store.faultAt(1U, Fault::CapacityExceeded);
+        } else {
+            store.unknownWithoutCommitAt(1U);
+        }
+
+        const auto result =
+            RunPersistenceCoordinatorTestAccess::writeSnapshotCore(
+                coordinator, snapshot, RunCheckpointTime{200U, std::nullopt},
+                false, *before, RunPersistenceMutationKind::Recovery,
+                std::nullopt, std::nullopt, std::nullopt,
+                RunPersistenceCoordinatorState::LoadedActiveRun);
+        const auto expectedStatus =
+            failure == CorePreCommitFailure::Codec
+                ? RunPersistenceResultStatus::InvalidDecision
+            : failure == CorePreCommitFailure::Capacity
+                ? RunPersistenceResultStatus::CapacityExceeded
+                : RunPersistenceResultStatus::WriteFailed;
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(expectedStatus),
+                              static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceCoordinatorState::LoadedActiveRun),
+            static_cast<int>(coordinator.state()));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceCoordinatorState::LoadedActiveRun),
+            static_cast<int>(result.coordinatorState));
+        TEST_ASSERT_EQUAL_UINT(failure == CorePreCommitFailure::Codec ? 0U : 1U,
+                               static_cast<unsigned>(store.writeCount()));
+    }
+}
+
+void test_write_snapshot_core_rolls_back_fallback_recovery_before_commit() {
+    using Fault = SequencedWriteStore::WriteFault;
+    for (const auto failure :
+         {CorePreCommitFailure::Codec, CorePreCommitFailure::Write,
+          CorePreCommitFailure::Capacity, CorePreCommitFailure::NotWritten}) {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+        static_cast<void>(seed.loadAndInitialize());
+        RunCommandState state;
+        state.processState.state = ProcessState::Standby;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(
+                seed.persistCommand(state, startDecision(state, 994U),
+                                    RunCheckpointTime{100U, std::nullopt})
+                    .status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+            static_cast<int>(
+                seed.checkpointPeriodic(
+                        state, RunCheckpointTime{300100U, std::nullopt})
+                    .status));
+
+        store.backing().injectCorruption(slotKey("rc1"), "damaged-current");
+        store.restart();
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        const auto loaded = coordinator.loadAndInitialize();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
+            static_cast<int>(loaded.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceCoordinatorState::FallbackRecoveryPending),
+            static_cast<int>(coordinator.state()));
+        TEST_ASSERT_TRUE(loaded.snapshot.has_value());
+        const auto before = restoreRunPersistenceSnapshot(*loaded.snapshot);
+        TEST_ASSERT_TRUE(before.has_value());
+        const auto current =
+            RunPersistenceCoordinatorTestAccess::currentReference(coordinator);
+        const auto fallback =
+            RunPersistenceCoordinatorTestAccess::fallbackReference(coordinator);
+        auto snapshot = *loaded.snapshot;
+        if (failure == CorePreCommitFailure::Codec) {
+            snapshot = RunPersistenceSnapshot{};
+        } else if (failure == CorePreCommitFailure::Write) {
+            store.faultAt(1U, Fault::FailBeforeBegin);
+        } else if (failure == CorePreCommitFailure::Capacity) {
+            store.faultAt(1U, Fault::CapacityExceeded);
+        } else {
+            store.unknownWithoutCommitAt(1U);
+        }
+
+        const auto result =
+            RunPersistenceCoordinatorTestAccess::writeSnapshotCore(
+                coordinator, snapshot, RunCheckpointTime{200U, std::nullopt},
+                false, *before, RunPersistenceMutationKind::Recovery,
+                std::nullopt, current.slot, fallback,
+                RunPersistenceCoordinatorState::FallbackRecoveryPending);
+        const auto expectedStatus =
+            failure == CorePreCommitFailure::Codec
+                ? RunPersistenceResultStatus::InvalidDecision
+            : failure == CorePreCommitFailure::Capacity
+                ? RunPersistenceResultStatus::CapacityExceeded
+                : RunPersistenceResultStatus::WriteFailed;
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(expectedStatus),
+                              static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceCoordinatorState::FallbackRecoveryPending),
+            static_cast<int>(coordinator.state()));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceCoordinatorState::FallbackRecoveryPending),
+            static_cast<int>(result.coordinatorState));
+        TEST_ASSERT_EQUAL_UINT(failure == CorePreCommitFailure::Codec ? 0U : 1U,
+                               static_cast<unsigned>(store.writeCount()));
+    }
+}
+
+void test_write_snapshot_core_indeterminate_always_blocks_loaded_and_fallback() {
+    using Fault = SequencedWriteStore::WriteFault;
+    using ReadFault = SequencedWriteStore::ReadFault;
+
+    {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+        static_cast<void>(seed.loadAndInitialize());
+        RunCommandState state;
+        state.processState.state = ProcessState::Standby;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(
+                seed.persistCommand(state, startDecision(state, 995U),
+                                    RunCheckpointTime{100U, std::nullopt})
+                    .status));
+        store.restart();
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        const auto loaded = coordinator.loadAndInitialize();
+        TEST_ASSERT_TRUE(loaded.snapshot.has_value());
+        const auto before = restoreRunPersistenceSnapshot(*loaded.snapshot);
+        TEST_ASSERT_TRUE(before.has_value());
+        store.faultAt(1U, Fault::PowerCutAfterCommitBeforeReturn);
+        store.readFaultAt(1U, ReadFault::ReadError);
+        const auto result =
+            RunPersistenceCoordinatorTestAccess::writeSnapshotCore(
+                coordinator, *loaded.snapshot,
+                RunCheckpointTime{200U, std::nullopt}, false, *before,
+                RunPersistenceMutationKind::Recovery, std::nullopt,
+                std::nullopt, std::nullopt,
+                RunPersistenceCoordinatorState::LoadedActiveRun);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceResultStatus::PersistenceIndeterminate),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(coordinator.state()));
+    }
+
+    {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+        static_cast<void>(seed.loadAndInitialize());
+        RunCommandState state;
+        state.processState.state = ProcessState::Standby;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::Applied),
+            static_cast<int>(
+                seed.persistCommand(state, startDecision(state, 996U),
+                                    RunCheckpointTime{100U, std::nullopt})
+                    .status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+            static_cast<int>(
+                seed.checkpointPeriodic(
+                        state, RunCheckpointTime{300100U, std::nullopt})
+                    .status));
+        store.backing().injectCorruption(slotKey("rc1"), "damaged-current");
+        store.restart();
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        const auto loaded = coordinator.loadAndInitialize();
+        TEST_ASSERT_TRUE(loaded.snapshot.has_value());
+        const auto before = restoreRunPersistenceSnapshot(*loaded.snapshot);
+        TEST_ASSERT_TRUE(before.has_value());
+        const auto current =
+            RunPersistenceCoordinatorTestAccess::currentReference(coordinator);
+        const auto fallback =
+            RunPersistenceCoordinatorTestAccess::fallbackReference(coordinator);
+        store.faultAt(1U, Fault::PowerCutAfterCommitBeforeReturn);
+        store.readFaultAt(1U, ReadFault::ReadError);
+        const auto result =
+            RunPersistenceCoordinatorTestAccess::writeSnapshotCore(
+                coordinator, *loaded.snapshot,
+                RunCheckpointTime{200U, std::nullopt}, false, *before,
+                RunPersistenceMutationKind::Recovery, std::nullopt,
+                current.slot, fallback,
+                RunPersistenceCoordinatorState::FallbackRecoveryPending);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceResultStatus::PersistenceIndeterminate),
+            static_cast<int>(result.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(coordinator.state()));
+    }
+}
+
 void test_same_slot_overrides_fail_closed_before_any_write() {
     SequencedWriteStore store;
     RunPersistenceCoordinator coordinator(
@@ -3125,6 +3446,13 @@ int main(int, char**) {
     RUN_TEST(test_periodic_committed_head_existing_not_found_is_indeterminate);
     RUN_TEST(test_periodic_target_slot_existing_not_found_is_indeterminate);
     RUN_TEST(test_load_fallback_orphan_and_schema_epoch_matrix);
+    RUN_TEST(test_tombstone_fallback_does_not_enter_recovery_pending);
+    RUN_TEST(
+        test_write_snapshot_core_rolls_back_loaded_active_run_before_commit);
+    RUN_TEST(
+        test_write_snapshot_core_rolls_back_fallback_recovery_before_commit);
+    RUN_TEST(
+        test_write_snapshot_core_indeterminate_always_blocks_loaded_and_fallback);
     RUN_TEST(test_same_slot_overrides_fail_closed_before_any_write);
     RUN_TEST(
         test_load_rejects_a_structurally_valid_but_mismatched_current_reference);

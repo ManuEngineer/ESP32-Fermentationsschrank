@@ -1344,7 +1344,8 @@ bool writeMutationKind(ByteWriter& writer, RunPersistenceMutationKind kind) {
     return false;
 }
 
-bool readMutationKind(ByteReader& reader, RunPersistenceMutationKind& kind) {
+bool readMutationKind(ByteReader& reader, std::uint32_t schemaVersion,
+                      RunPersistenceMutationKind& kind) {
     std::uint8_t value = 0U;
     if (!be::readUint8(reader, value)) return false;
     switch (value) {
@@ -1358,6 +1359,7 @@ bool readMutationKind(ByteReader& reader, RunPersistenceMutationKind& kind) {
             kind = RunPersistenceMutationKind::SensorSelection;
             return true;
         case 4U:
+            if (schemaVersion < 3U) return false;
             kind = RunPersistenceMutationKind::Recovery;
             return true;
         default:
@@ -1493,7 +1495,8 @@ std::optional<RunPersistenceHead> decodeRunPersistenceHead(
             head.preparedFallback = reference;
         }
         if (!readReference(reader, head.target) ||
-            !readMutationKind(reader, head.mutationKind) ||
+            !readMutationKind(reader, envelope.envelope->schemaVersion,
+                              head.mutationKind) ||
             !be::readOptionalTag(reader, present)) {
             return std::nullopt;
         }

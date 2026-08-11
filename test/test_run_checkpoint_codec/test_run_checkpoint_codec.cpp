@@ -2,6 +2,7 @@
 
 #include "run_persistence_codec.hpp"
 #include "standard_program_catalog.hpp"
+#include "storage_envelope.hpp"
 
 namespace {
 
@@ -764,6 +765,40 @@ void test_prepared_head_round_trips_recovery_mutation_kind() {
     TEST_ASSERT_FALSE(decoded->commandId.has_value());
 }
 
+void test_recovery_mutation_kind_requires_schema_three() {
+    const auto epoch = device_platform::StorageEpoch(9U);
+    const RunCheckpointReference current{
+        0U, 1U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
+    const RunCheckpointReference target{
+        1U, 1U, 9U, 11U, 13U, 14U, RunCheckpointVariant::ProgramRun};
+    RunPersistenceHead recovery;
+    recovery.state = RunPersistenceHeadState::Prepared;
+    recovery.revision = 20U;
+    recovery.preparedCurrent = current;
+    recovery.target = target;
+    recovery.mutationKind = RunPersistenceMutationKind::Recovery;
+    recovery.newRunRevision = 5U;
+    recovery.newTransitionSequence = 7U;
+
+    const auto encoded = encodeRunPersistenceHead(recovery, epoch);
+    TEST_ASSERT_TRUE(encoded.has_value());
+    for (const std::uint32_t schema : {1U, 2U}) {
+        const auto envelope = device_platform::decodeEnvelope(*encoded);
+        TEST_ASSERT_TRUE(envelope.envelope.has_value());
+        auto legacyEnvelope = *envelope.envelope;
+        legacyEnvelope.schemaVersion = schema;
+        std::string legacyBytes;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+            static_cast<int>(device_platform::encodeEnvelope(
+                legacyEnvelope, legacyBytes, 256U)));
+        TEST_ASSERT_FALSE(
+            decodeRunPersistenceHead(legacyBytes, epoch).has_value());
+    }
+
+    TEST_ASSERT_TRUE(decodeRunPersistenceHead(*encoded, epoch).has_value());
+}
+
 void test_same_slot_recovery_requires_a_separate_prepared_fallback() {
     const RunCheckpointReference current{
         0U, 1U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
@@ -1101,6 +1136,7 @@ int main(int, char**) {
     RUN_TEST(test_manual_completed_round_trip_is_a_valid_run_projection);
     RUN_TEST(test_prepared_head_binds_full_transaction_contract);
     RUN_TEST(test_prepared_head_round_trips_recovery_mutation_kind);
+    RUN_TEST(test_recovery_mutation_kind_requires_schema_three);
     RUN_TEST(test_same_slot_recovery_requires_a_separate_prepared_fallback);
     RUN_TEST(
         test_head_reference_and_mutation_invariants_reject_invalid_contracts);
