@@ -2843,6 +2843,114 @@ void test_resolve_recovery_outcome_waiting_assume_still_valid_resumes() {
     TEST_ASSERT_TRUE(current.pendingRecoveryAnchor.has_value());
 }
 
+void test_resolve_recovery_outcome_rejects_gate_and_deduplicates() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(persistedWaitingForProductRun(seed, 1018U));
+    store.restart();
+
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto activated = coordinator.activateLoadedRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt},
+        recoveryPlausibility(700000U));
+    RunCommandState current = activated.resultingState;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::RecoveryEvaluation),
+                          static_cast<int>(current.processState.state));
+
+    const auto writesBeforeStale = store.writeCount();
+    const ResolveRecoveryUncertaintyRequest staleRequest{
+        1019U, current.runRevision, current.recoveryEpisodeRevision - 1U,
+        RecoveryUncertaintyDecision::AssumeStillValid};
+    const auto stale = coordinator.resolveRecoveryOutcome(
+        current, staleRequest, RunCheckpointTime{700100U, std::nullopt},
+        recoveryPlausibility(700100U, false));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::StaleDecision),
+        static_cast<int>(stale.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBeforeStale),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::RecoveryEvaluation),
+                          static_cast<int>(current.processState.state));
+
+    const ResolveRecoveryUncertaintyRequest request{
+        1020U, current.runRevision, current.recoveryEpisodeRevision,
+        RecoveryUncertaintyDecision::AssumeStillValid};
+    const auto rejected = coordinator.resolveRecoveryOutcome(
+        current, request, RunCheckpointTime{700100U, std::nullopt},
+        recoveryPlausibility(700100U, false));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(rejected.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
+                          static_cast<int>(current.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(coordinator.state()));
+    TEST_ASSERT_FALSE(current.pendingRecoveryAnchor.has_value());
+
+    const auto duplicate = coordinator.resolveRecoveryOutcome(
+        current, request, RunCheckpointTime{700200U, std::nullopt},
+        recoveryPlausibility(700200U, false));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::AlreadyPersisted),
+        static_cast<int>(duplicate.status));
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto rebooted = afterBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(rebooted.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fault),
+        static_cast<int>(rebooted.snapshot->processState.state));
+}
+
+void test_waiting_definitely_expired_tombstones_before_sensor_gate() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    auto state = persistedWaitingForProductRun(seed, 1021U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            seed.checkpointPeriodic(state,
+                                    RunCheckpointTime{2400300U, std::nullopt})
+                .status));
+
+    store.restart();
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto outcome = coordinator.activateLoadedRun(
+        *restored, RunCheckpointTime{2500000U, std::nullopt},
+        recoveryPlausibility(2500000U, false));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Standby),
+        static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::ReadyEmpty),
+        static_cast<int>(coordinator.state()));
+    TEST_ASSERT_FALSE(outcome.resultingState.activeProgramRun.has_value());
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoActiveRun),
+        static_cast<int>(afterBoot.loadAndInitialize().status));
+}
+
 void test_resolve_recovery_outcome_waiting_threshold_crossed_tombstones() {
     device_platform_test_support::SimulatedPersistentStateStore store;
     RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
@@ -4571,6 +4679,8 @@ int main(int, char**) {
     RUN_TEST(
         test_fallback_completed_storage_recovery_cutpoints_remain_fail_closed);
     RUN_TEST(test_resolve_recovery_outcome_waiting_assume_still_valid_resumes);
+    RUN_TEST(test_resolve_recovery_outcome_rejects_gate_and_deduplicates);
+    RUN_TEST(test_waiting_definitely_expired_tombstones_before_sensor_gate);
     RUN_TEST(
         test_resolve_recovery_outcome_waiting_threshold_crossed_tombstones);
     RUN_TEST(

@@ -1071,33 +1071,46 @@ RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
         }
         if (recommendation.runtime.permission !=
             SensorPeltierPermission::Allowed) {
-            return result(RunPersistenceResultStatus::InvalidDecision,
-                          RunPersistenceStep::CandidateApply,
-                          RunPersistenceTechnicalReason::InvalidProjection);
-        }
-        applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
-        const auto accumulated = accumulatedPriorForResume(
-            *candidate.pendingRecoveryAnchor, *timeContext);
-        if (!accumulated.has_value()) return notAllowed();
-        const auto recovered = rebasedRecoveredState(
-            candidate.pendingRecoveryAnchor->originalProcessState,
-            time.monotonicMillis);
-        const auto hop2 = decideProcessTransition(
-            candidate.processState, &*candidate.processRunSnapshot,
-            ProcessSignals{},
-            TransitionRequest{ProcessEvent::RecoveryResume, recovered},
-            time.monotonicMillis, *accumulated);
-        if (!hop2.proposed() ||
-            !applyProcessTransition(candidate.processState, hop2,
-                                    &*candidate.processRunSnapshot)) {
-            return notAllowed();
-        }
-        candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
-            ProcessState::WaitingForProduct, *accumulated};
-        applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
-        if (recoveryTimeResolvedAtResume(candidate.priorBootPhaseElapsed)) {
+            const auto rejected = decideProcessTransition(
+                candidate.processState, &*candidate.processRunSnapshot,
+                ProcessSignals{},
+                TransitionRequest{ProcessEvent::RecoveryReject, std::nullopt},
+                time.monotonicMillis);
+            if (!rejected.proposed() ||
+                !applyProcessTransition(candidate.processState, rejected,
+                                        &*candidate.processRunSnapshot)) {
+                return notAllowed();
+            }
             candidate.pendingRecoveryAnchor.reset();
             candidate.recoveryBootAnchorMonotonicMillis.reset();
+            candidate.priorBootPhaseElapsed.reset();
+            messages = rejected.messages;
+            messageCount = rejected.messageCount;
+        } else {
+            applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
+            const auto accumulated = accumulatedPriorForResume(
+                *candidate.pendingRecoveryAnchor, *timeContext);
+            if (!accumulated.has_value()) return notAllowed();
+            const auto recovered = rebasedRecoveredState(
+                candidate.pendingRecoveryAnchor->originalProcessState,
+                time.monotonicMillis);
+            const auto hop2 = decideProcessTransition(
+                candidate.processState, &*candidate.processRunSnapshot,
+                ProcessSignals{},
+                TransitionRequest{ProcessEvent::RecoveryResume, recovered},
+                time.monotonicMillis, *accumulated);
+            if (!hop2.proposed() ||
+                !applyProcessTransition(candidate.processState, hop2,
+                                        &*candidate.processRunSnapshot)) {
+                return notAllowed();
+            }
+            candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+                ProcessState::WaitingForProduct, *accumulated};
+            applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
+            if (recoveryTimeResolvedAtResume(candidate.priorBootPhaseElapsed)) {
+                candidate.pendingRecoveryAnchor.reset();
+                candidate.recoveryBootAnchorMonotonicMillis.reset();
+            }
         }
     } else if (phase == ProcessState::WaitingForProduct &&
                request.decision ==
