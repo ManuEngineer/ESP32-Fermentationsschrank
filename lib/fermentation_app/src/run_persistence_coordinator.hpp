@@ -179,6 +179,9 @@ class RunPersistenceCoordinator {
     [[nodiscard]] RecoveryActivationOutcome activateLoadedRun(
         const RunCommandState& current, const RunCheckpointTime& time,
         const CrossRolePlausibilityContext& liveSensorEvidence);
+    [[nodiscard]] RecoveryActivationOutcome activateFallbackRecoveredRun(
+        const RunCommandState& current, const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext& liveSensorEvidence);
 
    private:
     friend class RunPersistenceCoordinatorTestAccess;

@@ -2973,6 +2973,67 @@ void test_activate_loaded_run_rejects_sensor_gate_without_writing() {
                            static_cast<unsigned>(store.writeCount()));
 }
 
+void test_activate_fallback_recovered_run_replaces_damaged_current_slot() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistCommand(state, startDecision(state, 1005U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            seed.checkpointPeriodic(state,
+                                    RunCheckpointTime{300100U, std::nullopt})
+                .status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            seed.checkpointPeriodic(state,
+                                    RunCheckpointTime{600200U, std::nullopt})
+                .status));
+
+    store.backing().injectCorruption(slotKey("rc0"), "damaged-current");
+    store.restart();
+    RunPersistenceCoordinator recovered(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = recovered.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
+        static_cast<int>(loaded.status));
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto outcome = recovered.activateFallbackRecoveredRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt},
+        recoveryPlausibility(700000U));
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(recovered.state()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_FALSE(outcome.resultingState.pendingRecoveryAnchor.has_value());
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto afterRecovery = afterBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(afterRecovery.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::ReachingTarget),
+        static_cast<int>(afterRecovery.snapshot->processState.state));
+}
+
 RunCommandState readyActiveManualRunWithSensorSelection(
     RunPersistenceCoordinator& coordinator, CommandId startId) {
     RunCommandState state;
@@ -3776,6 +3837,8 @@ int main(int, char**) {
     RUN_TEST(test_activate_loaded_run_resolved_resume_clears_anchor);
     RUN_TEST(test_activate_loaded_run_episode_refreshes_hop_one_anchor);
     RUN_TEST(test_activate_loaded_run_rejects_sensor_gate_without_writing);
+    RUN_TEST(
+        test_activate_fallback_recovered_run_replaces_damaged_current_slot);
     RUN_TEST(
         test_persist_sensor_selection_from_loaded_active_run_stays_recovery_pending);
     RUN_TEST(test_persist_sensor_selection_rejects_manual_causes);
