@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-08-10
+Stand: 2026-08-11
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #102 / Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt | Planung laeuft auf Basis von `main` (`17ab3f5`, inkl. PR #103); Revision 12 in Arbeit, Freigabe steht aus | Owner prueft und gibt exakten Plan-Commit frei |
+| 1 | Draft-PR #102 / Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt | Revision 13 liegt zur Ownerfreigabe vor; Implementierungsstand bis Commit 8 existiert; vor weiterer Implementierung sind die freigegebenen Korrekturschnitte 6-8 umzusetzen; Commit 9 bleibt bis zu den vorgesehenen Gates gesperrt | Ownerfreigabe der exakten korrigierten Revision-13-Plan-SHA |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit

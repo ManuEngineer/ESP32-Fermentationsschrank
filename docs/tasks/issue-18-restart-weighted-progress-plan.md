@@ -38,12 +38,14 @@
 - Live-Issue #18: weiterhin offen mit Status `PLANNED_SPEC_PENDING`; Scope,
   Akzeptanzkriterien und Quellen bleiben unveraendert.
 - `gh pr view 102`: Draft, Base `main`.
-- `docs/ROADMAP.md:13` wurde in dieser Session direkt gelesen und zeigt
-  `Revision 12 in Arbeit, Freigabe steht aus`; Live-Issue #18 zeigt weiterhin
-  `PLANNED_SPEC_PENDING`. Dieser bekannte Statuswiderspruch wird in dieser
-  Planrevision nicht stillschweigend aufgeloest: Die Repository-Regel verlangt
-  hier weder einen neuen PR-Status noch eine materielle Reihenfolgeaenderung,
-  daher bleibt `docs/ROADMAP.md` unveraendert.
+- `docs/ROADMAP.md:13` wird in diesem Plan-/Status-Folgecommit minimal auf
+  den tatsaechlichen Stand synchronisiert: Revision 13 liegt zur
+  Ownerfreigabe vor, der Implementierungsstand bis Commit 8 existiert, die
+  Korrekturschnitte 6-8 liegen vor weiterer Implementierung, und Commit 9
+  bleibt bis zu den vorgesehenen Gates gesperrt. Das naechste Gate ist die
+  Freigabe der exakten korrigierten Revision-13-Plan-SHA. Live-Issue #18 bleibt
+  unveraendert bei `PLANNED_SPEC_PENDING` und wird nicht eigenmaechtig
+  aktualisiert.
 - Der aktuelle Planstand wurde vollstaendig gegen den neuen Ownerauftrag
   geprueft. Die bestehende Recovery-/Carry-Forward-Semantik und die
   Revision-10-Restdauer-Baseline bleiben erhalten; die neuen Korrekturen sind
@@ -74,32 +76,39 @@
     `run_checkpoint_schedule.hpp/.cpp`, `sensor_selection.hpp`,
     `sensor_quality_snapshot.hpp` (`SensorQuality{Valid,Stale,Failed}`),
     `run_commands.cpp:995-1029`.
-  - `run_persistence_codec.cpp:901-929` (`writeMutationKind`/
-    `readMutationKind`, aktuell exakt drei Werte 1/2/3) und
-    `run_persistence_codec.cpp:958-973` (`validCommittedHead`, erzwingt dort
-    bereits strukturell `head.fallback->slot != head.current.slot`).
-  - `run_commands.hpp`/`run_persistence_coordinator.hpp`/
-    `process_state_machine.hpp/.cpp`: `ResolveRecoveryUncertainty`/
-    `ResolveRecoveryUncertaintyRequest`/`resolveRecoveryOutcome`/
-    `ApplyRecoveryTimeCorrection`/`AssumeStillValid`/`AssumeThresholdCrossed`/
-    `completeHoldDuration`/`reevaluateRecoveryTime` existieren dort nirgends
-    – reine Planungsbegriffe dieser Datei, keine bestehenden Bezeichner, die
-    kollidieren koennten.
+  - `run_persistence_codec.cpp:1333-1368` (`writeMutationKind`/
+    `readMutationKind`) sowie `run_persistence_contract.hpp:61-66`: Der
+    aktuelle HEAD kennt bereits `Command = 1U`, `Transition = 2U`,
+    `SensorSelection = 3U` und `Recovery = 4U`; `readMutationKind` akzeptiert
+    `Recovery` nur ab Schema 3. `validCommittedHead`
+    (`run_persistence_codec.cpp:1370ff`) erzwingt weiterhin strukturell
+    `head.fallback->slot != head.current.slot`.
+  - Die Commits 1-8 haben bereits die Recovery-Typen und APIs eingefuehrt:
+    `RecoveryUncertaintyDecision::{AssumeStillValid,AssumeThresholdCrossed}`,
+    `ResolveRecoveryUncertaintyRequest`,
+    `RunPersistenceCoordinator::resolveRecoveryOutcome`,
+    `completeTimedRun`, `completeHoldDuration` und
+    `applyLiveRecoveryEvidence`; sie sind Bestandteil des tatsaechlichen
+    aktuellen Implementierungs-HEAD und werden in dieser Revision nur
+    wiederverwendet bzw. in den Korrekturschnitten berichtigt.
+  - Noch nicht im aktuellen Implementierungs-HEAD und deshalb weiterhin
+    spaetere Plan-/Implementierungsschritte sind
+    `ApplyRecoveryTimeCorrection`, `RunRecoveryCoordinator` und
+    `reevaluateRecoveryTime` sowie die jeweils in Abschnitt 7 dafuer
+    vorgesehenen Folge-Slices. Diese noch geplanten Symbole werden nicht mit
+    den bereits vorhandenen APIs gleichgesetzt.
 
 ## 3. Owner-Entscheidungen (Gates)
 
 - **Gate A:** Restart-Sensorauswahl wird real angewandt (5.26).
 - **Gate B:** kein neuer allgemeiner Prozesszyklus; kein produktiver
-  Aufrufer wird behauptet, der nicht existiert (5.27). Gilt explizit auch
-  fuer `applyLiveRecoveryEvidence` (5.20) und `reevaluateRecoveryTime`
-  (5.17, als `reevaluateRecoveryTime` bewusst schmal benannt, da
-  die Funktion ab dieser Revision auch bereits resumte
-  `Fermenting`/`CoolHolding`/`WaitingForProduct`-Laeufe auswertet, also
-  nicht mehr nur "pending" im Sinn von "noch in `RecoveryEvaluation`"
-  ist): beide sind native, vollstaendig getestete APIs ohne produktive
-  Verdrahtung innerhalb von #18 – insbesondere wird kein produktiver
-  NTP-Verfuegbarkeits-Aufrufer komponiert, der `reevaluateRecoveryTime`
-  automatisch ausloest.
+  Aufrufer wird behauptet, der nicht existiert (5.27).
+  `applyLiveRecoveryEvidence` (5.20) ist bereits eine vorhandene native
+  RAM-Hilfsfunktion aus den Commits 6-8, wird aber innerhalb von #18 nicht
+  produktiv verdrahtet. `RunRecoveryCoordinator` und
+  `reevaluateRecoveryTime` sind dagegen noch spaetere
+  Plan-/Implementierungsschritte; fuer sie wird in dieser Revision weder
+  eine bestehende API noch ein produktiver NTP-Aufrufer behauptet.
 - **Gate C:** keine unkalibrierte biologische Aktivitaetskurve; #18
   implementiert die reine Modellgrenze, Persistenz und native Testbarkeit,
   aber der Produktionsprovider bleibt ohne freigegebenes
@@ -641,8 +650,8 @@ weitergereicht wird:
   es einen in Wirklichkeit bereits abgelaufenen Wartezustand automatisch
   als "noch gueltig" fortsetzen wuerde.
 - **`WaitingForProduct` mit `Uncertain` und bestaetigendem Benutzerentscheid
-  (`resolveRecoveryOutcome` + `AssumeStillValid`, 5.17, neu in dieser
-  Revision):** `totalSecondsLowerBound` – **bewusst die entgegengesetzte
+  (`resolveRecoveryOutcome` + `AssumeStillValid`, 5.17, bereits als
+  Commit-8-API vorhanden):** `totalSecondsLowerBound` – **bewusst die entgegengesetzte
   Richtung zum automatischen Pfad**, kein Widerspruch: die manuelle
   Attestierung des Benutzers ersetzt hier bereits den Sicherheitsnachweis
   ("selbst im schlechtesten Fall noch gueltig"), den der automatische Pfad
@@ -1879,14 +1888,20 @@ nicht in einen behaupteten Rollback umgedeutet.
 **`RunPersistenceMutationKind::Recovery` – eigener Mutationstyp fuer
 Recovery-Commits:**
 
-Der bestehende `RunPersistenceMutationKind` kennt heute `Command`,
-`Transition`, `SensorSelection` (`run_persistence_codec.cpp:901-929`, Werte
-1/2/3). Ein Episode-Refresh ist strukturell weder ein `Command` (keine
-`CommandId`, kein Benutzerkommando) noch eine gewoehnliche `Transition`
-(kein `TransitionDecision`, keine Zustandsaenderung) – dieselbe
-Unschaerfe gilt fuer Hop 1, Hop 1+Hop 2, den Tombstone-Pfad und die
-fachlich transitionsfreie `FallbackRecoveryPending + Completed`-
-Storage-Reparatur.
+Der aktuelle Implementierungs-HEAD kennt bereits `Command = 1U`,
+`Transition = 2U`, `SensorSelection = 3U` und
+`Recovery = 4U` (`run_persistence_contract.hpp:61-66`,
+`run_persistence_codec.cpp:1333-1368`). Commit 5 fuehrte den Typ ein;
+die Aktivierungspfade aus den Commits 6-7 verwenden ihn bereits fuer ihre
+Recovery-Commits. `resolveRecoveryOutcome` aus Commit 8 bleibt dagegen als
+Benutzerpfad `Command`-klassifiziert, wie unten verbindlich beschrieben.
+Diese Revision legt fuer die noch ausstehenden Folge-Slices verbindlich fest,
+diesen bestehenden Typ wiederzuverwenden. Ein Episode-Refresh ist
+strukturell weder ein `Command` (keine `CommandId`, kein Benutzerkommando)
+noch eine gewoehnliche `Transition` (kein `TransitionDecision`, keine
+Zustandsaenderung) – dieselbe Unschaerfe gilt fuer Hop 1, Hop 1+Hop 2, den
+Tombstone-Pfad und die fachlich transitionsfreie
+`FallbackRecoveryPending + Completed`-Storage-Reparatur.
 
 ```cpp
 enum class RunPersistenceMutationKind : std::uint8_t {
@@ -1897,11 +1912,13 @@ enum class RunPersistenceMutationKind : std::uint8_t {
 };
 ```
 
-- Codec: `writeMutationKind`/`readMutationKind` erhalten den vierten Wert
-  (`4U`); `validPreparedHead` (`run_persistence_codec.cpp:931-939`,
-  `(mutationKind == Command) != commandId.has_value()`) bleibt unveraendert
-  korrekt, da `Recovery` – wie `Transition` und `SensorSelection` bereits
-  heute – **keine** `CommandId` traegt.
+- Codec: `writeMutationKind`/`readMutationKind` schreiben und lesen den
+  bereits eingefuehrten vierten Wert (`4U`); `readMutationKind` weist ihn in
+  Schema 1/2 weiterhin ab. `validPreparedHead`
+  (`run_persistence_codec.cpp:1370ff`,
+  `(mutationKind == Command) != commandId.has_value()`) bleibt korrekt, da
+  `Recovery` – wie `Transition` und `SensorSelection` – **keine**
+  `CommandId` traegt.
 - **Sieben** Ausloeser: die von
   `activateLoadedRun`, `activateFallbackRecoveredRun`, dem
   Episode-Refresh-Pfad (5.15) und dem Tombstone-Pfad (5.11) ausgeloesten
@@ -2037,8 +2054,8 @@ struct ResolveRecoveryUncertaintyRequest {
     const CrossRolePlausibilityContext& liveSensorEvidence);
 ```
 
-**Neuer Parameter `liveSensorEvidence` (Gate-A-Kopplung, Auftragspunkt 2,
-"implied but not stated"):** ausschliesslich fuer den einen Zweig
+**Bereits eingefuehrter Parameter `liveSensorEvidence` (Commit-8-API,
+Gate-A-Kopplung, Auftragspunkt 2, "implied but not stated"):** ausschliesslich fuer den einen Zweig
 verwendet, der tatsaechlich einen Resume durchfuehrt
 (`WaitingForProduct` + `AssumeStillValid`, s. u.) – jeder Resume in eine
 snapshot-getragene, sensorabhaengige Phase durchlaeuft dieselbe
@@ -2327,8 +2344,8 @@ identisch zum bestehenden
 ### 5.18 `FallbackRecovered`/`FallbackRecoveryPending` – kein Dead-End, echter gueltiger Fallback nach Commit
 
 `loadAndInitialize()` setzt beim erfolgreichen Laden des Fallback-
-Datensatzes (`run_persistence_coordinator.cpp:264-274`, dort heute
-`enterBlockedIndeterminate()`) stattdessen den eigenstaendigen Zustand
+Datensatzes (`run_persistence_coordinator.cpp:476-515`) auf dem aktuellen
+Implementierungs-HEAD bereits den eigenstaendigen Zustand
 `RunPersistenceCoordinatorState::FallbackRecoveryPending`:
 
 ```cpp
@@ -2339,11 +2356,12 @@ enum class RunPersistenceCoordinatorState : std::uint8_t {
 };
 ```
 
-Das ist eine **beobachtbare Vertragsaenderung**: der bestehende Test
-`test_run_persistence_coordinator.cpp:1454-1456` erwartet nach einem
-`FallbackRecovered`-Load `state() == BlockedIndeterminate`; er wird auf
-`state() == FallbackRecoveryPending` aktualisiert. `RunPersistenceCoordinatorState`
-ist reine Laufzeit-/RAM-Kategorie ohne Wire-Format-Bezug.
+Das ist die bereits in Commit 5 eingefuehrte beobachtbare
+Vertragsaenderung; der bestehende Test
+`test_run_persistence_coordinator.cpp:1454-1456` erwartet auf dem aktuellen
+HEAD nach einem `FallbackRecovered`-Load bereits
+`state() == FallbackRecoveryPending`. `RunPersistenceCoordinatorState` ist
+reine Laufzeit-/RAM-Kategorie ohne Wire-Format-Bezug.
 
 `unavailableResult()` erhaelt einen Zweig fuer `FallbackRecoveryPending`,
 der wie `LoadedActiveRun` `RunPersistenceResultStatus::RecoveryPending`
@@ -2413,15 +2431,27 @@ aus 5.16:
   mit Write-before-Apply und den bestehenden Cutpoint-/Indeterminate-/Apply-
   Fehlerregeln.
 
-Erst nach bestaetigtem Commit wird `state_ = Ready` gesetzt und der
-Coordinator uebernimmt den RAM-Kandidaten. Der post-commit Zustand ist
-`Ready` mit `current.processState.state == Completed`, nicht weiter
-`FallbackRecoveryPending`. Ein Vor-Commit-Fehler laesst den bekannten
-defekten Current und den gueltigen Fallback in `FallbackRecoveryPending`;
-ein unbestimmter Ausgang bleibt `BlockedIndeterminate`; ein bestaetigter
-Commit mit anschliessendem RAM-Apply-Fehler bleibt
-`PersistenceCommittedApplyFailed`. Ein normaler Command-/Checkpoint-
-Schreibpfad darf aus `FallbackRecoveryPending` vor diesem Commit weder
+Nach erfolgreich abgeschlossenem Commit und erfolgreichem RAM-Apply wird
+`state_ = Ready` gesetzt und der Coordinator uebernimmt den RAM-Kandidaten;
+der post-commit Zustand ist dann `Ready` mit
+`current.processState.state == Completed`, nicht weiter
+`FallbackRecoveryPending`. Die Fehlersemantik folgt fuer diesen Pfad exakt
+`writeSnapshotCore` und fuehrt keine Sonderregel ein:
+
+- Ein Fehler/Cut **vor** erfolgreich geschriebenem Prepared-Head stellt den
+  expliziten `rollbackState` wieder her, hier
+  `FallbackRecoveryPending`; Current bleibt defekt und der Fallback gueltig.
+- Nach erfolgreich geschriebenem Prepared-Head sind Fehler beim
+  Slot-/Committed-Head-Pfad nicht mehr sicher auf
+  `FallbackRecoveryPending` rueckrollbar; der bestehende
+  `PreparedInterrupted`-/`BlockedIndeterminate`-Vertrag greift je nach
+  bestimmtem bzw. unbestimmtem Ausgang.
+- `Indeterminate` bleibt immer fail-closed als `BlockedIndeterminate`.
+- Ein bestaetigter Commit mit anschliessendem RAM-Apply-Fehler bleibt
+  `PersistenceCommittedApplyFailed`.
+
+Ein normaler Command-/Checkpoint-Schreibpfad darf aus
+`FallbackRecoveryPending` vor diesem Storage-Recovery-Commit weder
 ausgefuehrt noch als erfolgreich behauptet werden.
 
 Nach erfolgreicher Reparatur laedt ein Reboot `Completed` ueber den neuen
@@ -2437,8 +2467,10 @@ Committed-Head):**
   defekt, Fallback bleibt unveraendert gueltig und ladbar; ein erneuter
   Recovery- beziehungsweise Storage-Reparaturversuch bleibt moeglich.
 - Cut **nach** dem Prepared-Head-Schreiben, vor oder nach dem
-  Slot-Schreiben: bestehender generischer `PreparedInterrupted`-Mechanismus
-  greift unveraendert.
+  Slot-Schreiben: der Zustand ist nicht mehr sicher auf
+  `FallbackRecoveryPending` rueckrollbar; der bestehende generische
+  `PreparedInterrupted`-/`BlockedIndeterminate`-Mechanismus greift
+  unveraendert.
 - Cut **nach** vollstaendigem Committed-Head-Schreiben: Erfolg wie oben;
   ein anschliessend erneut beschaedigter neuer Current fuehrt beim
   naechsten Boot wieder zu `FallbackRecovered` -> `FallbackRecoveryPending`
@@ -3285,12 +3317,17 @@ benoetigt aber zwingend die in 5.18 definierte Storage-Reparatur:
   `currentHead_->fallback` und bleibt nach dem Commit referenziert;
 - die Mutation ist `RunPersistenceMutationKind::Recovery` und verwendet
   `writeSnapshotCore` mit Write-before-Apply;
-- vor bestaetigtem Commit bleibt der Coordinator in
-  `FallbackRecoveryPending`; erst danach wird er `Ready` mit
+- nach erfolgreich abgeschlossenem Commit und RAM-Apply wird er `Ready` mit
   `current.processState.state == Completed`;
-- die bestehenden Cutpoint-/Indeterminate-/
-  `PersistenceCommittedApplyFailed`-Regeln gelten unveraendert. Kein normaler
-  Schreibpfad darf diesen Zustand vor der Reparatur verlassen.
+- vor erfolgreich geschriebenem Prepared-Head stellt ein Fehler den
+  expliziten `rollbackState` `FallbackRecoveryPending` wieder her; nach
+  geschriebenem Prepared-Head greifen fuer Slot-/Committed-Head-Fehler die
+  bestehenden `PreparedInterrupted`-/`BlockedIndeterminate`-Regeln statt
+  eines behaupteten Rollbacks auf `FallbackRecoveryPending`;
+- `Indeterminate` bleibt fail-closed und ein bestaetigter Commit mit
+  anschliessendem RAM-Apply-Fehler bleibt
+  `PersistenceCommittedApplyFailed`. Kein normaler Schreibpfad darf den
+  Zustand vor der Storage-Reparatur verlassen.
 
 Damit sind `LoadedActiveRun + Completed` (RAM-only, kein Write) und
 `FallbackRecoveryPending + Completed` (Storage-Recovery-Commit, kein Hop)
@@ -3590,23 +3627,25 @@ liefert auch den Kontext fuer `applyLiveRecoveryEvidence` (5.20).
 
 ### 5.27 Komposition/DI – kein erfundener Aufrufer
 
-`RunRecoveryCoordinator::activate(...)`, `reevaluateRecoveryTime(...)`
-(5.12), `applyLiveRecoveryEvidence(...)` (5.20) und
-`applyRecoveryProgressWeighting(...)` (5.25) sind nativ testbare APIs; kein
-bestehender produktiver Aufrufer wird behauptet – insbesondere
-kein produktiver NTP-Verfuegbarkeits-Aufrufer, der `reevaluateRecoveryTime`
-automatisch nach erfolgreicher Zeitsynchronisation ausloest; produktive
-Verdrahtung eines echten Commissioning-Modells bleibt dem zustaendigen
-Composition-/Commissioning-Issue vorbehalten (Gate B/C). Der
+`applyLiveRecoveryEvidence(...)` (5.20) ist auf dem aktuellen HEAD eine
+nativ testbare, bereits vorhandene API. `RunRecoveryCoordinator::activate(...)`,
+`reevaluateRecoveryTime(...)` (5.12) und
+`applyRecoveryProgressWeighting(...)` (5.25) sind dagegen die fuer spaetere
+Slices vorgesehenen nativ testbaren APIs; kein bestehender produktiver
+Aufrufer wird fuer sie behauptet – insbesondere kein produktiver
+NTP-Verfuegbarkeits-Aufrufer, der `reevaluateRecoveryTime` automatisch nach
+erfolgreicher Zeitsynchronisation ausloest. Produktive Verdrahtung eines echten
+Commissioning-Modells bleibt dem zustaendigen Composition-/Commissioning-Issue
+vorbehalten (Gate B/C). Der
 `UnavailableRecoveryProgressWeightingModel` ist der sichere Produktions-
 Fallback, sofern eine Composition ihn bereits bereitstellt.
 
 ### 5.28 Schema-Versionierung
 
-`kCurrentRunPersistenceSchema` (aktuell `2U`,
-`run_persistence_contract.hpp:24`) wird auf `3U` angehoben.
-`knownRunPersistenceSchema()` akzeptiert nach dieser Aenderung `{1U, 2U,
-3U}` (bisher `{1U, 2U}`). Alle in diesem Plan neu eingefuehrten Felder
+`kCurrentRunPersistenceSchema` ist auf dem aktuellen HEAD bereits `3U`
+(`run_persistence_contract.hpp:30`), und
+`knownRunPersistenceSchema()` akzeptiert bereits `{1U, 2U, 3U}`. Die in
+Commit 2 eingefuehrten Felder
 (`PendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
 `RunProgressState` inkl. `WeightedProgressState`, `RecoveryEpisodeEvidence`
 inkl. `weightedProgressSegmentId`,
@@ -3629,16 +3668,14 @@ Modellrevision und Exactly-once-Buchung keinen weiteren Schemaumbau.
 
 ### 5.29 ROADMAP-Konsistenz
 
-`docs/ROADMAP.md` bleibt in dieser Revision unveraendert. Der aktuelle
-Roadmap-Eintrag nennt weiterhin `Revision 12 in Arbeit, Freigabe steht aus`,
-waehrend das Live-Issue #18 weiterhin `PLANNED_SPEC_PENDING` zeigt. Das ist
-der bekannte Statuswiderspruch zur freigegebenen Revision 12 und dem
-implementierten PR-Stand; er wird nicht neben dieser Vertragskorrektur
-aufgeloest. Die Repository-Regeln verlangen fuer diese Planrevision weder
-eine neue PR-Statuszeile noch eine materielle Reihenfolgeaenderung. Eine
-spaetere Statussynchronisierung bleibt ein eigener, minimaler
-Dokumentationsschritt. Fachliche Anforderungen werden weiterhin nicht in die
-Roadmap kopiert.
+`docs/ROADMAP.md` wird in diesem Plan-/Status-Folgecommit minimal
+synchronisiert. Der Eintrag zu PR #102 nennt Revision 13 zur Ownerfreigabe,
+den vorhandenen Implementierungsstand bis Commit 8, die Korrekturschnitte 6-8
+vor weiterer Implementierung und Commit 9 als bis zu den vorgesehenen Gates
+gesperrt; das naechste Gate ist die Freigabe der exakten korrigierten
+Revision-13-Plan-SHA. Live-Issue #18 bleibt weiterhin
+`PLANNED_SPEC_PENDING` und wird nicht eigenmaechtig geaendert. Fachliche
+Anforderungen werden weiterhin nicht in die Roadmap kopiert.
 
 ### 5.30 #24-Abgrenzung
 
@@ -3700,9 +3737,9 @@ Verdrahtung, keine temperaturgewichtete Fortschrittslogik und keinen
 Parallelvertrag ein. Nach den Korrekturschnitten wird erneut angehalten;
 Commit 9-12 bleiben bis zu einem separaten Owner-Gate unangetastet.
 
-`docs/ROADMAP.md` wird nicht ueber diese Commit-Liste behandelt und ist nicht
-Teil dieses Plan-Revision-Commits; 5.29 dokumentiert bewusst nur den offenen
-Statuswiderspruch.
+`docs/ROADMAP.md` ist nicht Teil der Implementierungs-Commit-Liste; die
+zwingende minimale Statussynchronisierung erfolgt jedoch in diesem
+Plan-/Status-Folgecommit und ist in 5.29/Abschnitt 12 dokumentiert.
 
 ## 8. Testmatrix
 
@@ -4074,11 +4111,15 @@ Statuswiderspruch.
     zurueckfallen.
 59. **Completed-Storage-Recovery-Cutpoints:** Fuer den Pfad aus Punkt 58
     werden Fehler vor Prepared, nach Prepared, beim Slot-Schreiben und beim
-    Committed-Head einzeln injiziert; `Indeterminate` bleibt fail-closed,
-    der bestaetigte Commit mit anschliessendem RAM-Apply-Fehler bleibt
-    `PersistenceCommittedApplyFailed`, und vor bestaetigtem Commit bleibt
-    `FallbackRecoveryPending`. Kein normaler Schreibpfad darf den Zustand
-    vorher verlassen.
+    Committed-Head einzeln injiziert. Vor erfolgreich geschriebenem
+    Prepared-Head wird der explizite `rollbackState`
+    `FallbackRecoveryPending` wiederhergestellt; danach ist kein sicherer
+    Rollback auf diesen Zustand zu behaupten und der bestehende
+    `PreparedInterrupted`-/`BlockedIndeterminate`-Vertrag greift.
+    `Indeterminate` bleibt fail-closed; der bestaetigte Commit mit
+    anschliessendem RAM-Apply-Fehler bleibt
+    `PersistenceCommittedApplyFailed`. Kein normaler Schreibpfad darf den
+    Zustand vor der Storage-Reparatur verlassen.
 
 ## 9. Safety-/Security-/Recovery-/Hardwaregrenzen
 
@@ -4229,9 +4270,13 @@ damit strukturell von der neuen Baseline entkoppelt.
 
 ## 12. Dokumentations-/Abschlussnachweis
 
-- `docs/ROADMAP.md`: in Revision 13 bewusst **nicht** geaendert; 5.29
-  dokumentiert den bekannten Widerspruch zu Live-Issue #18 und begruendet,
-  warum keine Statussynchronisierung in diesen Plan-Commit gehoert.
+- `docs/ROADMAP.md`: wird in diesem Plan-/Status-Folgecommit minimal
+  synchronisiert. Die Zeile zu PR #102 nennt Revision 13 zur
+  Ownerfreigabe, den vorhandenen Implementierungsstand bis Commit 8, die
+  Korrekturschnitte 6-8 vor weiterer Implementierung und Commit 9 als bis zu
+  den Gates gesperrt; das naechste Gate ist die Freigabe der exakten
+  korrigierten Revision-13-Plan-SHA. Live-Issue #18 bleibt unveraendert bei
+  `PLANNED_SPEC_PENDING`.
 - `docs/RUN_PERSISTENCE.md`/`docs/RECOVERY_AND_INTERRUPTION.md`: werden im
   Umsetzungscommit (Nr. 12) um die in 5.2-5.25 vertraglich fixierten Punkte
   ergaenzt, insbesondere die getrennte Ausweisung von `observedRunSeconds`,
@@ -4242,7 +4287,8 @@ damit strukturell von der neuen Baseline entkoppelt.
   First-after-Lebenszyklus (5.15/5.20) und den Recovery-Konfidenzvertrag
   (5.5).
 - `git diff --check`: nach Commit **ungescoped (bare), fuer alle
-  geaenderten Dateien** (in Revision 13 nur der Plan) ausgefuehrt und im
+  geaenderten Dateien** (in diesem Folgecommit Plan und minimale
+  Roadmap-Statuszeile) ausgefuehrt und im
   SESSION-HANDOVER-Kommentar mit dem tatsaechlichen Befehlsergebnis
   dokumentiert (nicht nur als geplanter Schritt).
 - **Remote-Verifikation (Pflicht):** nach dem Push wird
@@ -4269,13 +4315,14 @@ damit strukturell von der neuen Baseline entkoppelt.
 ## 14. Stop-Bedingung
 
 Revision 13 ist ein vollstaendiger, eigenstaendiger Plan und ersetzt Revision
-12 vollstaendig. Nach Commit **nur dieser Datei**: **anhalten**,
+12 vollstaendig. Nach Commit **dieser Datei und der zwingenden minimalen
+Roadmap-Statuszeile**: **anhalten**,
 `git diff --check` **ungescoped (bare)** fuer den Plan ausfuehren, `git push`,
 Remote-SHA verifizieren (Abschnitt 12), PR-Beschreibung und den genau einen
 aktuellen SESSION-HANDOVER aktualisieren. Keine Implementierung, keine
 Amendierung bestehender Implementierungscommits und kein Beginn von Commit 9.
-Keine Roadmap-Statusaenderung, kein `Ready for review`, keine Remote-CI, kein
-Merge, kein Auto-Merge und keine Branchloeschung. Umsetzung der in Abschnitt
+Keine weitere Roadmap- oder Issue-Aenderung, kein `Ready for review`, keine
+Remote-CI, kein Merge, kein Auto-Merge und keine Branchloeschung. Umsetzung der in Abschnitt
 7A definierten Korrekturschnitte ist erst nach ausdruecklicher Freigabe der
 exakten Revision-13-Plan-SHA zulaessig; Commit 9-12 bleiben bis zu einem
 separaten Owner-Gate unangetastet.
