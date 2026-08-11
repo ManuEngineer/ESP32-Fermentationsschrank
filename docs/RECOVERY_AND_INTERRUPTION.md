@@ -6,6 +6,9 @@ Dieses Dokument definiert die Release-1-Regeln fuer Stromunterbrechungen,
 Sensorersatz, phasenbezogenen Wiederanlauf und Zeitbewertung. Es ergaenzt
 [`STATE_MACHINE.md`](STATE_MACHINE.md) und
 [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md).
+Die persistierten Felder, die atomare Buchung und die Anzeigeprojektion sind
+hier und in [`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md) konsistent beschrieben;
+es gibt keine parallele Statusquelle.
 
 ## Grundsatz: autonom, aber nicht blind
 
@@ -280,6 +283,22 @@ Verbindliche Grenzen:
 - Ohne freigegebenes Modell wird das Zeitintervall konservativ behandelt und
   nicht durch eine scheinbar genaue Kurve ersetzt.
 
+Die Produktionsgrenze ist `RecoveryProgressWeightingModel`. Gate C liefert in
+Release 1 mit `UnavailableRecoveryProgressWeightingModel` stets `unavailable`,
+weil kein Commissioning-Modell freigegeben ist. Ein Provider darf nur aus
+`FERMENTING`, bekannten Ausfallgrenzen sowie gueltiger, gefilterter Vor-/
+Nach-Ausfall-Evidenz einen Beitrag liefern. Produkt ist
+`ProductPreferred`, Luft ist nur ausdruecklich und mit `AirReduced` zulaessig;
+eine ungueltige Kuehlkoerper- oder Stale-Evidenz wird nicht umgedeutet.
+
+Die Buchung bleibt separat von `observedRunSeconds` und nominaler Zeitkorrektur.
+Sie verlangt Lauf-/Episodenrevision, eine passende nicht-null Segmentkennung,
+aktuelle Sensorberechtigung, nicht fallende checked Bounds und eine positive
+Modellrevision. Ein Segment ist idempotent; die atomare Persistenz erfolgt vor
+der RAM-Anwendung. Ein abgeloestes, noch nicht gebuchtes Segment setzt
+`PartialUnknown` und entfernt die Gesamt-Obergrenze. Unsichere Ausfallzeit
+wird nicht automatisch als biologischer Fortschritt gutgeschrieben.
+
 ## Anzeige und Export
 
 Die Recoveryanzeige zeigt mindestens:
@@ -293,6 +312,14 @@ Die Recoveryanzeige zeigt mindestens:
 - automatisch gewaehlte sichere Wiederanlaufaktion
 - angewandte oder noch ausstehende Fortschrittskorrektur
 - Grund einer erforderlichen Benutzerentscheidung
+
+Fuer die implementierte Anzeige-/Exportprojektion bleiben ausserdem getrennt
+sichtbar: beobachtete Laufzeit, kumulative nominale Korrektur, gewichtete
+Coverage (`Complete` oder `PartialUnknown`), Bounds, letzte Sensorrolle,
+Vertrauensstufe, Modellrevision und zuletzt gebuchte Segmentkennung. Bei
+`unavailable`, `not eligible`, `Stale`, `AlreadyProcessed` oder
+`PartialUnknown` wird kein erfundener Einzelwert als exakter biologischer
+Fortschritt ausgegeben; die Rohgrenzen und der Status werden exportiert.
 
 ## Spaetere RTC-Option
 
@@ -313,6 +340,12 @@ ergaenzt werden. Sie ist keine Voraussetzung fuer Release 1.
       Ausfalldauer behandelt
 - [x] kein automatischer Phasenabschluss bei ueberlappendem Unsicherheitsintervall
 - [x] spaetere RTC bleibt moeglich
+- [x] Recovery-Zeitanker und nominale Korrektur bleiben von beobachteter Laufzeit
+      und gewichteter Fortschrittsbasis getrennt
+- [x] kein gewichteter Produktionsfortschritt ohne freigegebenes
+      Commissioning-Modell
+- [x] Recovery-/Progress-Buchungen sind revisioniert, bounds-geprueft,
+      idempotent und Write-before-Apply
 
 ## Noch durch Inbetriebnahme festzulegen
 
