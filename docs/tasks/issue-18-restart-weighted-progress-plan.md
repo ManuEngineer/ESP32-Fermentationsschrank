@@ -2,24 +2,29 @@
 
 ## 1. Status
 
-- Revision: **13** (ersetzt Revision 12 vollstaendig; diese Datei ist die
-  einzige normative Planquelle fuer die Umsetzung und setzt keine fruehere
-  Planrevision voraus).
+- Revision: **14** (ersetzt Revision 13 und damit Revision 12 vollstaendig;
+  diese Datei ist die einzige normative Planquelle fuer die Umsetzung und
+  setzt keine fruehere Planrevision voraus).
 - Draft-PR: #102 (`plan/issue-18-restart-weighted-progress` -> `main`).
 - Live-Issue: #18.
 - Plan-Basis: `main` = `17ab3f5399a066465298ac6871b965d176a38d32`;
+  freigegebener Planstand Revision 13 =
+  `941fccb5c2bbce9d8cc291d7866b83c7900c6c94`; aktueller
   Implementierungs-HEAD zum Reviewzeitpunkt und vor dieser Revision =
-  `46ace9cbe06c172ec78ca41a5904b386990e0c1a`. Der lokale und der remote
-  Branch zeigen auf diesen HEAD; der Branch ist 0 Commits hinter `main`.
-- Anlass: Revision 13 ersetzt Revision 12 vollstaendig und korrigiert
-  ausschliesslich drei im Review des Stands bis Commit 8 festgestellte
-  Vertragsluecken: ein negatives Gate A muss als persistierter
-  `RecoveryRejected`/`Fault` enden; `FallbackRecoveryPending + Completed`
-  braucht trotz fehlender fachlicher Recovery-Transition eine atomare
-  Storage-Reparatur; und die zugehoerigen Reboot-, Idempotenz-, Wiederholungs-
-  und Cutpoint-Tests sowie die Korrekturschnitte 6-8 muessen explizit sein.
-  Die fachliche Architektur und die bereits geltenden Weighting-, Carry-
-  Forward-, Legacy-, Sensor- und Persistenzvertraege bleiben unveraendert.
+  `977eceaa8d5c003033cfb71d60b21fa68f500f61`. Der lokale und der remote
+  Branch zeigen auf diesen HEAD; der Branch ist 30 Commits vor und 0 Commits
+  hinter `main`.
+- Anlass: Revision 13 ist freigegeben und die Korrekturschnitte 6-8A sind
+  umgesetzt. Im vollstaendigen Owner-Review wurden drei weitere, vor Commit 9
+  zu schliessende Vertragsluecken gefunden: ein persistierter
+  `RecoveryRejected`/`Fault` wird nach Reboot noch als
+  `LoadedActiveRun` behandelt; ein aelterer aktiver Fallback kann nach Verlust
+  des juengeren Fault-Current die terminale Entscheidung implizit
+  zuruecksetzen; und die aktive `Fault`-Kombination ist in der gemeinsamen
+  Snapshotvalidierung noch nicht an Schema 3 gebunden. Revision 14
+  konsolidiert diese Korrekturen vollstaendig, ohne die fachliche Architektur
+  oder die bereits geltenden Weighting-, Carry-Forward-, Legacy-, Sensor- und
+  Persistenzvertraege ausserhalb dieser Luecken zu veraendern.
   Gate C bleibt unveraendert: Ohne freigegebenes Commissioning-Modell liefert
   der Produktionspfad `unavailable` und schreibt keinen biologischen
   Fortschritt gut; #34 liefert nur Messgrundlagen und wird nicht still zum
@@ -31,26 +36,48 @@
   `gh api repos/ManuEngineer/ESP32-Fermentationsschrank/pulls/102`
   (`head.sha`) und `gh pr view 102 --json headRefOid`, bevor PR-Beschreibung/
   SESSION HANDOVER als aktuell gemeldet werden.
-- Dieser Plan implementiert noch nichts.
+- Dieser Plan implementiert noch nichts. Commit 9 und alle spaeteren Slices
+  bleiben bis zur ausdruecklichen Freigabe der exakten Revision-14-Plan-SHA
+  gesperrt.
+
+```text
+CONTEXT_BASELINE_BRANCH: plan/issue-18-restart-weighted-progress
+CONTEXT_BASELINE_SHA: 941fccb5c2bbce9d8cc291d7866b83c7900c6c94
+CONTEXT_HEAD_SHA: 977eceaa8d5c003033cfb71d60b21fa68f500f61
+CONTEXT_PLAN_SHA: 941fccb5c2bbce9d8cc291d7866b83c7900c6c94
+CONTEXT_REFRESH_MODE: FULL
+CONTEXT_DELTA: Revision-13-Korrekturcommits 6-8A; aktueller Diff seit freigegebenem Plan; Fault-Restore-, terminaler Fallback- und Schema-Decode-Befunde; ROADMAP-/PR-/Issue-Liveabgleich
+SOURCE_OF_TRUTH_CONFLICT: NONE
+```
 
 ## 2. Live-Status-Pruefung
 
 - Live-Issue #18: weiterhin offen mit Status `PLANNED_SPEC_PENDING`; Scope,
   Akzeptanzkriterien und Quellen bleiben unveraendert.
-- `gh pr view 102`: Draft, Base `main`.
-- `docs/ROADMAP.md:13` wird in diesem Plan-/Status-Folgecommit minimal auf
-  den tatsaechlichen Stand synchronisiert: Revision 13 liegt zur
-  Ownerfreigabe vor, der Implementierungsstand bis Commit 8 existiert, die
-  Korrekturschnitte 6-8 liegen vor weiterer Implementierung, und Commit 9
-  bleibt bis zu den vorgesehenen Gates gesperrt. Das naechste Gate ist die
-  Freigabe der exakten korrigierten Revision-13-Plan-SHA. Live-Issue #18 bleibt
-  unveraendert bei `PLANNED_SPEC_PENDING` und wird nicht eigenmaechtig
-  aktualisiert.
-- Der aktuelle Planstand wurde vollstaendig gegen den neuen Ownerauftrag
-  geprueft. Die bestehende Recovery-/Carry-Forward-Semantik und die
-  Revision-10-Restdauer-Baseline bleiben erhalten; die neuen Korrekturen sind
-  in 5.10, 5.17, 5.18, 5.24, 5.26, den Korrekturschnitten vor Commit 9 und der
-  Testmatrix konsolidiert.
+- PR #102: offen, Draft, Base `main`, Head-Branch
+  `plan/issue-18-restart-weighted-progress`, `head.sha` gleich dem lokalen
+  `977eceaa8d5c003033cfb71d60b21fa68f500f61`.
+- `docs/ROADMAP.md` ist vor dieser Revision veraltet: der Eintrag behauptet
+  noch, die Korrekturschnitte 6-8A wuerden umgesetzt. Der Plan-/Status-
+  Folgecommit synchronisiert ihn minimal auf: 6-8A umgesetzt, die neuen
+  Fault-Restore-/Fail-Closed-Fallback-Blocker aus dem Owner-Review sind offen,
+  Revision 14 liegt zur Ownerfreigabe vor, und Commit 9 bleibt gesperrt. Das
+  naechste Gate ist die Freigabe der exakten Revision-14-Plan-SHA. Live-Issue
+  #18 bleibt unveraendert bei `PLANNED_SPEC_PENDING`.
+- Die aktuelle Revision wurde vollstaendig gegen den Ownerauftrag, die
+  freigegebene Revision-13-SHA und den Implementierungs-HEAD geprueft. Die
+  bestehende Recovery-/Carry-Forward-Semantik und die Revision-10-
+  Restdauer-Baseline bleiben erhalten; die neuen Korrekturen sind in 5.8,
+  5.14, 5.16, 5.18, 5.24, 5.26, 5.28, dem zusaetzlichen
+  Revision-14-Korrekturblock vor Commit 9 und der Testmatrix konsolidiert.
+- Als normative Quellen wurden Issue #18, `docs/RECOVERY_AND_INTERRUPTION.md`,
+  `docs/RUN_PERSISTENCE.md`, `docs/STATE_MACHINE.md`,
+  `docs/SPECIFICATION_REVIEW.md`, `docs/DECISIONS.md`,
+  `docs/AGENT_WORKFLOW.md`, `docs/ENGINEERING_PRINCIPLES.md` sowie der
+  aktuelle Coordinator-/Contract-/Codec-Code und die bestehenden nativen
+  Tests herangezogen. Die Persistenz-, Zustandsautomaten-, Schema- und
+  Safety-Vertraege sind in dieser Revision aufeinander abgeglichen; ein
+  Source-of-Truth-Konflikt bleibt nicht offen.
 - Live-Issue #34 ist offen mit `TBD_COMMISSIONING` und umfasst
   Sensorvergleich, Offsets und thermische Grundvermessung; #35 und #36 sind
   ebenfalls offen mit `TBD_COMMISSIONING`. Keine dieser Issues wird in dieser
@@ -91,6 +118,13 @@
     `applyLiveRecoveryEvidence`; sie sind Bestandteil des tatsaechlichen
     aktuellen Implementierungs-HEAD und werden in dieser Revision nur
     wiederverwendet bzw. in den Korrekturschnitten berichtigt.
+  - `validStateFor()` erlaubt am aktuellen HEAD aktive `Fault`-Snapshots fuer
+    den Schema-3-Recovery-Fault, kennt aber selbst keine Schema-Version. Der
+    Decodepfad erhaelt die Envelope-Version separat; Revision 14 bindet die
+    aktive Fault-Kombination deshalb dort ueber die schema-aware
+    Snapshotvalidierung an Schema 3, ohne die schema-unabhaengige
+    In-Memory-Validierung oder die bestehende Schema-1/2-Migration
+    pauschal zu veraendern.
   - Noch nicht im aktuellen Implementierungs-HEAD und deshalb weiterhin
     spaetere Plan-/Implementierungsschritte sind
     `ApplyRecoveryTimeCorrection`, `RunRecoveryCoordinator` und
@@ -149,9 +183,9 @@ unavailable-Provider und native Fake-Modelltests sind dagegen #18-Ziel.
 | Recovery-Orchestrierung, `applyLiveRecoveryEvidence`, `RunRecoveryCoordinator::reevaluateRecoveryTime` (Verdicts, Zeit-Nachtragskorrektur fuer bereits resumte Laeufe) | `lib/fermentation_app/src/run_recovery.hpp/.cpp` | neu |
 | Temperaturgewichtete Fortschrittsgrenze: reine Modellinputs/-ergebnisse, `unavailable`-Provider, checked kumulative Bounds und Segment-Dedup | `lib/fermentation_app/src/run_progress_weighting.hpp/.cpp` | neu |
 | Zustandsautomat: neue Reasons, Topologie, `PriorBootPhaseElapsed`-Parameter | `lib/fermentation_app/src/process_state_machine.hpp/.cpp` | erweitert |
-| Persistenzvertrag: Schema 3 (`PendingRecoveryAnchor`, `RunProgressState` inkl. optionalem `WeightedProgressState`, `RecoveryEpisodeEvidence` inkl. Segment-ID, `TaggedPriorBootPhaseElapsed`, `NominalRecoveryAdjustmentState`) | `lib/fermentation_app/src/run_persistence_contract.hpp/.cpp` | erweitert |
-| Codec: Schema-3-Gate, Legacy-Migration, `RunPersistenceMutationKind::Recovery` | `lib/fermentation_app/src/run_persistence_codec.cpp` | erweitert |
-| Coordinator: Low-Level-Schreibkern mit Rollbackzustand, `FallbackRecoveryPending`, `activateLoadedRun`, `activateFallbackRecoveredRun`, `resolveRecoveryOutcome` (Gate-A-gekoppelter Resume fuer `AssumeStillValid`, Bounds-Gate fuer `AssumeThresholdCrossed`), Episode-Refresh | `lib/fermentation_app/src/run_persistence_coordinator.hpp/.cpp` | erweitert |
+| Persistenzvertrag: Schema 3 (`PendingRecoveryAnchor`, `RunProgressState` inkl. optionalem `WeightedProgressState`, `RecoveryEpisodeEvidence` inkl. Segment-ID, `TaggedPriorBootPhaseElapsed`, `NominalRecoveryAdjustmentState`), schema-aware Snapshotvalidierung fuer aktive `Fault`-Snapshots | `lib/fermentation_app/src/run_persistence_contract.hpp/.cpp` | erweitert |
+| Codec: Schema-3-Gate, Legacy-Migration, `RunPersistenceMutationKind::Recovery`, schema-versionierter Decode-Gate fuer aktive `Fault`-Snapshots | `lib/fermentation_app/src/run_persistence_codec.cpp` | erweitert |
+| Coordinator: Low-Level-Schreibkern mit Rollbackzustand und expliziter Fallback-Direktive, `FallbackRecoveryPending`, terminaler Fault-Sperrung, `activateLoadedRun`, `activateFallbackRecoveredRun`, `resolveRecoveryOutcome` (Gate-A-gekoppelter Resume fuer `AssumeStillValid`, Bounds-Gate fuer `AssumeThresholdCrossed`), Episode-Refresh | `lib/fermentation_app/src/run_persistence_coordinator.hpp/.cpp` | erweitert |
 | Kommandos: `ApplyRecoveryTimeCorrection` (echtes `persistCommand`, mutiert nur Daten); `AdjustRun`-Zeitfaltung und manuelle Restdauer-Baseline; `completeTimedRun`-Wiederverwendung fuer `resolveRecoveryOutcome` | `lib/fermentation_app/src/run_commands.hpp/.cpp` | erweitert |
 | Restart-Sensorauswahl (Gate A) | `lib/fermentation_app/src/sensor_selection.hpp/.cpp` | erweitert |
 | Tests | `test/test_run_recovery_time/`, `test/test_run_recovery/`, `test/test_run_progress_weighting/`, `test/test_process_state_machine/`, `test/test_run_persistence_coordinator/`, `test/test_run_commands/`, `test/test_sensor_selection/` | neu/erweitert |
@@ -505,10 +539,13 @@ unveraendert gueltig.
   ein aus dem Fallback-Slot geladener Datensatz einen noch offenen
   `pendingRecoveryAnchor` tragen kann (derselbe Schema-3-Snapshot, nur aus
   dem anderen Slot gelesen).
-- Beide Methoden fuehren atomar Ankerkonstruktion, Gate-A-Auswertung (Punkt
-  weiter unten), Hop-1-Aufbau und – falls erfolgreich – den Hop-2-Versuch
-  sowie den Commit ueber `writeSnapshotCore` (5.16) in einem einzigen
-  Methodenaufruf durch und liefern ein schmales Ergebnis:
+- Fuer wiederaufnehmbare aktive Phasen fuehren beide Methoden atomar
+  Ankerkonstruktion, Gate-A-Auswertung (Punkt weiter unten), Hop-1-Aufbau und
+  – falls erfolgreich – den Hop-2-Versuch sowie den Commit ueber
+  `writeSnapshotCore` (5.16) in einem einzigen Methodenaufruf durch und
+  liefern ein schmales Ergebnis. Die schmalen `Fault`- und `Completed`-
+  Restore-/Sonderpfade verlassen diese Sequenz frueh und sind in 5.24/5.31
+  normativ festgelegt:
 
   Fuer einen bereits erfolgreich aufgebauten Hop 1 ist ein negatives Gate A
   kein technischer `InvalidDecision`-Rueckgabefall. Die Methode baut dann die
@@ -543,14 +580,32 @@ unveraendert gueltig.
   CrossRolePlausibilityContext& liveSensorEvidence)` ist die duenne
   Orchestrierungsschicht: sie liest `persistence.state()` (oeffentlich,
   bestehend), waehlt anhand dessen zwischen `activateLoadedRun`,
-  `activateFallbackRecoveredRun`, dem Episode-Refresh-Pfad (5.15) und dem
-  `Completed`-Sonderpfad (5.24), ruft die gewaehlte Methode auf und
-  uebernimmt `resultingState` in `current`. Sie erhaelt zu keinem Zeitpunkt
-  Zugriff auf `slots_`, `currentHead_` oder einen `RunPersistenceRawRecord`.
+  `activateFallbackRecoveredRun`, dem Episode-Refresh-Pfad (5.15) und den
+  terminalen Restore-Sonderpfaden (Fault/Completed, 5.24/5.31), ruft die
+  gewaehlte Methode auf und uebernimmt `resultingState` in `current`. Sie
+  erhaelt zu keinem Zeitpunkt Zugriff auf `slots_`, `currentHead_` oder einen
+  `RunPersistenceRawRecord`. Ein persistierter `Fault` wird dabei innerhalb
+  von `activateLoadedRun` vor jedem Hop-1-Versuch schmal restauriert; es gibt
+  keine zweite Fault-Restorelogik im spaeteren `RunRecoveryCoordinator`.
   Bei `LoadedActiveRun + Completed` waehlt sie den RAM-only-Pfad; bei
   `FallbackRecoveryPending + Completed` den in 5.18/5.24 definierten
   Storage-Recovery-Commit in den bekannten defekten Current-Slot. Nur der
-  zweite Pfad schreibt; beide geben keine Aktoren frei.
+  zweite Completed-Pfad schreibt; Fault und beide Completed-Pfade geben keine
+  Aktoren frei.
+- **Persistierter `Fault` im Current (Restore-Sonderpfad, 5.31):**
+  `loadAndInitialize()` behaelt fuer einen aktiven Current die bestehende
+  Runtime-Kategorie `LoadedActiveRun`; es wird keine neue Wire- oder
+  Coordinator-State-Auspraegung erfunden. Die Unterscheidung erfolgt frueh in
+  `activateLoadedRun`, anhand von `current.processState.state == Fault`, vor
+  Ankerkonstruktion, Hop 1, Gate A und jedem Schreibversuch. Der Pfad
+  uebernimmt den geladenen Zustand unveraendert, laesst
+  `sensorSelectionRuntime` und alle Aktorfreigaben fail-closed, setzt den
+  Coordinator direkt auf `Ready` und liefert einen RAM-Restore-Erfolg. Er
+  aendert weder den persistierten Fault noch setzt er ihn zurueck, resumt ihn
+  automatisch oder erzeugt einen neuen Recovery-Commit. Ein spaeteres
+  `RunRecoveryCoordinator::activate` benutzt denselben bestehenden
+  `activateLoadedRun`-Pfad; es wird weder eine zweite Restorefunktion noch
+  eine neue Fault-/SAFE_BOOT-Fachdomaene eingefuehrt.
 - `reevaluateRecoveryTime` (5.12) benoetigt keinen RawRecord: sie liest
   ausschliesslich `current.pendingRecoveryAnchor` und
   `current.recoveryBootAnchorMonotonicMillis` (beide bereits im RAM-Zustand
@@ -681,7 +736,13 @@ Negatives Ergebnis -> `request.event = ProcessEvent::RecoveryReject` und
 `writeSnapshotCore`-Pfad (5.16), `mutationKind == Recovery` und
 Write-before-Apply persistent uebernommen. Ein bestaetigter Reject-Commit
 setzt den Coordinator auf `Ready` mit persistiertem `Fault`; er laesst ihn
-nicht in `LoadedActiveRun`/`FallbackRecoveryPending`. Technische
+nicht in `LoadedActiveRun`/`FallbackRecoveryPending`. Fuer jeden
+`RecoveryRejected -> Fault`-Commit wird die explizite
+`RunPersistenceFallbackDirective::ClearFallback` verwendet: der physisch
+unveraenderte aeltere Slot bleibt kein im Committed Head referenzierter,
+autonom nutzbarer Fallback. Das verhindert, dass eine spaetere Beschaedigung
+des neuen Fault-Current die terminale Entscheidung durch einen alten aktiven
+Snapshot ersetzt. Technische
 `hop2.status != Proposed`-Fehler ohne Gate-A-Befund behalten dagegen die
 bisherigen fail-closed Regeln und werden nicht als Gate-A-Reject umetikettiert.
 
@@ -1646,7 +1707,26 @@ damit ablehnen – nicht speicherbar.
    ungueltige Kombination unter den engen, oben genannten zusaetzlichen
    Bedingungen gueltig; bereits existierende Alt-Daten sind von dieser
    Erweiterung nicht betroffen, da sie diese Kombination nie erzeugen
-   konnten. Kein expliziter Schema-Versionscheck an dieser Stelle noetig.
+   konnten. Fuer **diese** RecoveryEvaluation-Erweiterung ist an dieser
+   Stelle kein expliziter Schema-Versionscheck noetig; der davon getrennte
+   aktive-Fault-Gate steht in Punkt 5a.
+5a. **Aktiver `Fault` ist Schema-3-Semantik:** `validStateFor()` bleibt als
+   schema-unabhaengige In-Memory-/Writevalidierung die einfache Strukturquelle
+   und darf `ProcessState::Fault` fuer aktive `ProgramRun`-/`ManualRun`-
+   Snapshots annehmen. Der Decodepfad kennt die Envelope-Schema-Version jedoch
+   und ruft zusaetzlich eine gemeinsame, schema-aware Vertragsfunktion auf,
+   beispielsweise
+   `validateRunPersistenceSnapshotForSchema(snapshot, schemaVersion)`.
+   Diese Funktion delegiert die bestehenden Snapshotinvarianten an
+   `validateRunPersistenceSnapshot()` und lehnt fuer `schemaVersion < 3` jede
+   aktive Kombination `variant != NoActiveRun && processState.state == Fault`
+   ab. Schema 1/2 bleiben ansonsten unveraendert migrierbar; insbesondere
+   werden ihre bisherigen Legacy-Sensor- und Weighting-Leerwerte nicht
+   veraendert. Ein Schema-3-Fault aus dem Recoveryvertrag ist dagegen ein
+   gueltiger aktiver Snapshot und muss den normalen Schema-3-Roundtrip
+   bestehen. Die Version wird nur dort ausgewertet, wo sie im Decodepfad
+   tatsaechlich vorliegt; es gibt weder eine zweite Validierungswahrheit noch
+   eine kuenstliche Schema-4-Erhoehung.
 6. **`NoActiveRun` traegt keine Recovery-Diagnosedaten eines beendeten
    Laufs:** ist `snapshot.variant == NoActiveRun`, muessen
    `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
@@ -1787,12 +1867,24 @@ erraten:
 ```cpp
 // privat – KEINE state_-Vorbedingung, der Aufrufer liefert stattdessen den
 // exakten Zustand, in den bei einem Vor-Commit-Fehler zurueckgekehrt wird.
+enum class RunPersistenceFallbackMode : std::uint8_t {
+    UseStandardFallback,
+    SetExplicitReference,
+    ClearFallback,
+};
+
+struct RunPersistenceFallbackDirective {
+    RunPersistenceFallbackMode mode{
+        RunPersistenceFallbackMode::UseStandardFallback};
+    std::optional<RunCheckpointReference> reference;
+};
+
 RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
     const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
     bool periodic, const RunCommandState& before,
     RunPersistenceMutationKind mutationKind, std::optional<CommandId> commandId,
     std::optional<std::size_t> targetSlotOverride,
-    std::optional<RunCheckpointReference> fallbackOverride,  // 5.18
+    RunPersistenceFallbackDirective fallbackDirective,  // 5.18/5.31
     RunPersistenceCoordinatorState rollbackState);
 
 RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
@@ -1806,8 +1898,31 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
     const auto rollbackState = state_;  // exakt Ready oder ReadyEmpty, nicht neu berechnet
     return writeSnapshotCore(snapshot, time, periodic, before, mutationKind,
                              commandId, /*targetSlotOverride=*/std::nullopt,
-                             /*fallbackOverride=*/std::nullopt, rollbackState);
+                             RunPersistenceFallbackDirective{}, rollbackState);
 }
+
+`fallbackDirective` ist eine explizite, typisierte Dreiweg-Semantik; ein
+`std::nullopt`-Wert wird nie mehr zugleich als "Standard-Fallback" und als
+"kein Fallback" interpretiert:
+
+- `UseStandardFallback` behaelt die bisherige Standardregel
+  `committed.fallback = currentHead_->current` fuer einen aktiven Snapshot;
+- `SetExplicitReference` verlangt eine vollstaendige, zu Head und Slot
+  passende `RunCheckpointReference` und wird ausschliesslich fuer die normale
+  Fallback-Recovery bzw. die Completed-Storage-Reparatur verwendet;
+- `ClearFallback` verlangt keine Referenz und erzeugt im Committed Head
+  explizit kein `fallback`-Feld. Physisch vorhandene alte Bytes bleiben dabei
+  unangetastet, werden aber nicht mehr als autonom nutzbare Recoveryquelle
+  behauptet.
+
+Die optionale Referenz innerhalb der Directive ist nur mit dem Modus
+`SetExplicitReference` belegt; bei den beiden anderen Modi ist sie leer. Fake-
+oder Sentinel-Referenzen sind unzulaessig. Fuer einen aktiven
+`RecoveryRejected -> Fault`-Kandidaten ist `ClearFallback` verbindlich – in
+beiden Quellen, `LoadedActiveRun` und `FallbackRecoveryPending`. Fuer einen
+nicht-terminalen positiven Fallback-Recovery- oder Completed-Reparaturpfad
+bleibt `SetExplicitReference` verbindlich. Ein `NoActiveRun`-Snapshot hat
+unabhaengig von der Directive keinen Fallback.
 ```
 
 `rollbackState` ist auf genau vier Werte beschraenkt (durch die beiden
@@ -1919,14 +2034,20 @@ enum class RunPersistenceMutationKind : std::uint8_t {
   `(mutationKind == Command) != commandId.has_value()`) bleibt korrekt, da
   `Recovery` – wie `Transition` und `SensorSelection` – **keine**
   `CommandId` traegt.
-- **Sieben** Ausloeser: die von
-  `activateLoadedRun`, `activateFallbackRecoveredRun`, dem
-  Episode-Refresh-Pfad (5.15) und dem Tombstone-Pfad (5.11) ausgeloesten
-  Commits rufen `writeSnapshotCore` mit `mutationKind =
-  RunPersistenceMutationKind::Recovery`, `commandId = std::nullopt` auf –
-  einschliesslich der Storage-Reparatur fuer
-  `FallbackRecoveryPending + Completed` (5.18), die keinen Hop erzeugt, aber
-  denselben Recovery-Mutationstyp verwendet. Zusaetzlich loest ein erfolgreicher
+- **Neun Recovery-ausgeloeste Ausloeser:** Hop 1-only, Hop 1+Hop 2,
+  Episode-Refresh, Tombstone, Fallback-`Completed`-Storage-Reparatur,
+  `activateLoadedRun`-Gate-A-Reject als Fault,
+  `activateFallbackRecoveredRun`-Gate-A-Reject als Fault, erfolgreiche
+  Zeit-Nachtragskorrektur und erfolgreiche gewichtete Modellbuchung rufen
+  `writeSnapshotCore` mit `mutationKind =
+  RunPersistenceMutationKind::Recovery`, `commandId = std::nullopt` auf.
+  Die beiden terminalen Fault-Rejects verwenden dabei
+  `ClearFallback`; die normale Fallback-/Completed-Recovery verwendet die
+  explizite Referenz. Der deferred Gate-A-Reject in
+  `resolveRecoveryOutcome` bleibt als Benutzerpfad mit echter `CommandId`
+  `Command`-klassifiziert, benutzt aber ebenfalls `writeSnapshotCore` und
+  `ClearFallback`, damit die Head-Semantik identisch terminal bleibt.
+  Zusaetzlich loest ein erfolgreicher
   `reevaluateRecoveryTime`-Aufruf (5.12), der die akkumulierte
   `priorBootPhaseElapsed`-Obergrenze tatsaechlich von `nullopt` auf einen
   Wert aendert, **oder** – sobald `maxCheckpointGapSeconds` produktiv
@@ -1939,7 +2060,7 @@ enum class RunPersistenceMutationKind : std::uint8_t {
   Stand tatsaechlich vergroessert (6. Ausloeser: Zeit-Nachtragskorrektur,
   s. 5.12 Schritt 3), **oder** ein erfolgreicher
   `applyRecoveryProgressWeighting`-Aufruf mit einer verfuegbaren, checked
-  Modellentscheidung (7. Ausloeser: gewichtete Modellbuchung). Diese siebte
+  Modellentscheidung (Recovery-Ausloeser: gewichtete Modellbuchung). Diese
   Mutation schreibt ausschliesslich den in 5.25 definierten
   `weightedProgress`-Kandidaten und niemals Timer-, Prior-, Nominal- oder
   Recovery-Ankerfelder. Ein `PartialUnknown`-Uebergang beim Supersede eines
@@ -1962,7 +2083,9 @@ enum class RunPersistenceMutationKind : std::uint8_t {
   (5.17, kann eine `TransitionDecision` erzeugen, was `persistCommand`
   nicht ausdruecken kann) ist eine eigene Coordinator-Methode mit
   denselben Envelope-/Stale-/Dedup-Halbfunktionen, committet aber ueber
-  das normale `writeSnapshot()` ebenfalls mit `mutationKind = Command`.
+  `writeSnapshotCore` mit `mutationKind = Command`, echter `CommandId` und
+  bei negativem Gate A der Directive `ClearFallback`; der Standardpfad von
+  `writeSnapshot()` wird fuer diesen terminalen Sonderfall nicht verwendet.
 - Normale Prozessuebergaenge (`persistTransition`) bleiben `Transition`.
 - Kompatibilitaet: ein vor #18 geschriebener Schema-1/2-Datensatz kann den
   Wert `4U` fuer `mutationKind` nie enthalten (das Feld existiert dort nur
@@ -2227,9 +2350,14 @@ geloeschten) Anker – nur bei `Uncertain` wird fortgefahren, sonst
   widerspricht, noch eine, fuer die keine belastbare Obergrenze
   nachgewiesen ist.
 
-Commit ueber das normale, guard-behaftete `writeSnapshot()` (5.16,
-`mutationKind = Command`, echte `commandId` aus `request.commandId`) – der
-Bypass aus 5.16 wird nicht benoetigt, da `state_` bereits `Ready` ist.
+Fuer alle nicht-terminalen Benutzerentscheidungen commit ueber das normale,
+guard-behaftete `writeSnapshot()` (5.16, `mutationKind = Command`, echte
+`commandId` aus `request.commandId`) – der Bypass aus 5.16 wird nicht benoetigt,
+da `state_` bereits `Ready` ist. Der Zweig
+`WaitingForProduct + AssumeStillValid` mit negativem Gate A ist die
+ausdrueckliche Ausnahme: Er verwendet trotz `Command`-Klassifikation den
+gemeinsamen `writeSnapshotCore` mit `RunPersistenceFallbackMode::ClearFallback`,
+damit der terminale Fault nicht den alten Head-Fallback weitervererbt.
 `pendingRecoveryAnchor`/`recoveryBootAnchorMonotonicMillis` werden **nicht
 pauschal phasenabhaengig** behandelt, sondern folgen einheitlich der Regel
 aus 5.12:
@@ -2341,7 +2469,7 @@ Hop-1-only fuer diese beiden Phasen); Stale-/Episode-/CommandId-Schutz
 identisch zum bestehenden
 `WaitingForProduct`-Pfad; Write-before-Apply.
 
-### 5.18 `FallbackRecovered`/`FallbackRecoveryPending` – kein Dead-End, echter gueltiger Fallback nach Commit
+### 5.18 `FallbackRecovered`/`FallbackRecoveryPending` – kein Dead-End fuer nicht-terminale Recovery
 
 `loadAndInitialize()` setzt beim erfolgreichen Laden des Fallback-
 Datensatzes (`run_persistence_coordinator.cpp:476-515`) auf dem aktuellen
@@ -2389,18 +2517,21 @@ wiederaufnehmbaren Phase (Ankerkonstruktion aus
 - **Zielslot:** `targetSlotOverride = currentHead_->current.slot` (der
   bekannt defekte Slot – der gueltige Fallback-Slot bleibt bis zum Commit
   physisch unangetastet).
-- **Fallback-Referenz nach Commit:** `fallbackOverride =
-  currentHead_->fallback` (die zum Ladezeitpunkt erfolgreich gelesene,
+- **Fallback-Referenz nach einem nicht-terminalen Commit:**
+  `RunPersistenceFallbackDirective::SetExplicitReference` mit
+  `currentHead_->fallback` (die zum Ladezeitpunkt erfolgreich gelesene,
   weiterhin gueltige Fallback-Referenz) wird an `writeSnapshotCore`
   durchgereicht und dort fuer `committed.fallback` verwendet **statt** der
   bestehenden Standardregel `committed.fallback = currentHead_->current`
-  (die im Fallback-Fall exakt die bekannt defekte Referenz waere).
+  (die im Fallback-Fall exakt die bekannt defekte Referenz waere). Das gilt
+  fuer eine positive Recovery und fuer die Completed-Storage-Reparatur, nicht
+  fuer den terminalen Gate-A-Reject.
   `currentHead_->fallback` ist zwischen Laden und diesem – dem einzigen aus
   `FallbackRecoveryPending` moeglichen – Commit unveraendert, da
   `FallbackRecoveryPending` ausser diesem einen Commit keinerlei
   Schreibzugriff zulaesst.
 - **Fail-closed-Guard:** vor dem Commit wird geprueft
-  `targetSlotOverride != fallbackOverride->slot`; sind beide Slots
+  `targetSlotOverride != explicitFallbackReference.slot`; sind beide Slots
   identisch (nur bei bereits inkonsistenten Head-Metadaten moeglich),
   wird der Commit abgelehnt (`InvalidDecision`, kein Schreibversuch). Der
   Codec selbst erzwingt dieselbe Trennung zusaetzlich strukturell fuer
@@ -2411,6 +2542,26 @@ wiederaufnehmbaren Phase (Ankerkonstruktion aus
 - **Ergebnis nach vollstaendigem Commit:** `committed.current` = neuer
   Recovery-Snapshot im ehemals defekten Slot; `committed.fallback` = die
   unveraendert gueltige alte Fallback-Referenz.
+
+**`FallbackRecoveryPending + RecoveryRejected -> Fault` – terminale
+Sperrung:** Ein negatives Gate A wird ebenfalls in den bekannten defekten
+Current-Slot geschrieben, verwendet aber zwingend
+`RunPersistenceFallbackDirective::ClearFallback`. Der resultierende
+Committed Head referenziert den neuen Fault-Current und **keinen** Fallback.
+Der alte aktive Fallback-Slot bleibt physisch unveraendert und darf fuer
+Diagnose bzw. spaetere nicht-autonome Wartung erhalten bleiben; er ist durch
+die fehlende Head-Referenz jedoch nicht mehr autonom recoverbar. Ein Reboot,
+bei dem der neue Fault-Current lesbar ist, laedt ihn als normalen Current und
+nutzt den Fault-Restore-Pfad aus 5.31. Wird genau dieser Fault-Current spaeter
+beschaedigt, versucht `loadAndInitialize()` keinen Fallback mehr: je nach
+konkretem Storefehler liefert es die bestehende
+`NotReconstructible`-/`ReadFailed`-/`ForeignEpoch`-Kategorie und setzt den
+Coordinator fail-closed auf `BlockedIndeterminate`. Es gibt keinen neuen
+Recoverycommit, keine Aktivierung des alten Fallbacks, keinen Hop 1/Hop 2 und
+keinen Resume. Diese Semantik gilt nur fuer die terminale
+`RecoveryRejected -> Fault`-Entscheidung; die normale nicht-terminale
+Fallback-Recovery und der Completed-Reparaturpfad behalten ihre explizite
+Fallback-Referenz.
 
 **`FallbackRecoveryPending + Completed` – Storage-Recovery-Commit ohne
 fachliche Recovery-Transition:** Der geladene Fallback bleibt fachlich
@@ -2425,8 +2576,9 @@ aus 5.16:
   einzige bootlokale fachliche/technische Korrektur;
 - `targetSlotOverride = currentHead_->current.slot` ist der bekannte defekte
   Current-Slot;
-- `fallbackOverride = currentHead_->fallback` bleibt die erfolgreich geladene
-  alte Fallback-Referenz und wird nicht ueberschrieben;
+- `RunPersistenceFallbackDirective::SetExplicitReference` mit
+  `currentHead_->fallback` bleibt die erfolgreich geladene alte
+  Fallback-Referenz und wird nicht ueberschrieben;
 - die Mutation wird als `RunPersistenceMutationKind::Recovery` klassifiziert,
   mit Write-before-Apply und den bestehenden Cutpoint-/Indeterminate-/Apply-
   Fehlerregeln.
@@ -2476,13 +2628,20 @@ Committed-Head):**
   naechsten Boot wieder zu `FallbackRecovered` -> `FallbackRecoveryPending`
   – derselbe Mechanismus greift beliebig oft.
 
-**Tests:** korrupter Current + gueltiger Fallback -> Recoverycommit -> neuer
-Current gueltig **und** alter gueltiger Fallback weiterhin ladbar;
+**Tests:** korrupter Current + gueltiger Fallback -> nicht-terminaler
+Recoverycommit -> neuer Current gueltig **und** alter gueltiger Fallback
+weiterhin ladbar;
 anschliessend neuen Current beschaedigen -> Fallback-Recovery funktioniert
-erneut; `targetSlotOverride == fallbackOverride->slot` -> Ablehnung ohne
+ erneut; `targetSlotOverride == explicitFallbackReference.slot` -> Ablehnung ohne
 Schreibversuch; Cut vor/nach Prepared-/Head-Commit mit erwartetem Zustand
 je Cutpoint; `state()` nach `FallbackRecovered`-Load ist
 `FallbackRecoveryPending` (aktualisierter bestehender Test). Fuer
+den terminalen Gate-A-Reject zusaetzlich: der neue Fault-Current ist
+rebootfest und hat im Committed Head keinen Fallback; der physisch
+unveraenderte alte aktive Slot wird nach Beschaedigung des Fault-Current nicht
+als `FallbackRecoveryPending` geladen, sondern fuehrt fail-closed zu
+`BlockedIndeterminate`/der passenden bestehenden Load-Kategorie; kein
+Recoverycommit und kein Resume. Fuer
 `FallbackRecoveryPending + Completed` zusaetzlich: kein Hop 1/Hop 2 und keine
 Aktorfreigabe; Storage-Recovery-Commit in den defekten Current-Slot; alter
 Fallback bleibt referenziert; Reboot laedt `Completed` ueber den neuen
@@ -3313,8 +3472,9 @@ benoetigt aber zwingend die in 5.18 definierte Storage-Reparatur:
   `stateEnteredAtMillis = monotonicMillis`;
 - `targetSlotOverride` ist der bekannte defekte
   `currentHead_->current.slot`;
-- `fallbackOverride` ist der erfolgreich geladene alte
-  `currentHead_->fallback` und bleibt nach dem Commit referenziert;
+- `RunPersistenceFallbackDirective::SetExplicitReference` mit dem
+  erfolgreich geladenen alten `currentHead_->fallback` laesst diesen nach dem
+  Commit referenziert;
 - die Mutation ist `RunPersistenceMutationKind::Recovery` und verwendet
   `writeSnapshotCore` mit Write-before-Apply;
 - nach erfolgreich abgeschlossenem Commit und RAM-Apply wird er `Ready` mit
@@ -3601,12 +3761,14 @@ Sensorselektionszustand gegen die aktuelle `CrossRolePlausibilityContext`
 aus. Die Bewertung erfolgt nur auf einem Pfad, der tatsaechlich einen Resume
 und damit eine Wiederfreigabe vorbereitet. Ein negatives Ergebnis ist der
 fachliche `RecoveryReject`-Fall, nicht `InvalidDecision`: Der bestehende
-`RecoveryEvaluation -> Fault`-Uebergang wird nach Write-before-Apply
-persistent committed. Bei `activateLoadedRun` bleibt der Current-Slot
-gueltig und der Coordinator wird nach bestaetigtem Commit `Ready` mit
-`Fault`; bei `activateFallbackRecoveredRun` wird gleichzeitig der defekte
-Current-Slot repariert, der alte gueltige Fallback als `fallbackOverride`
-beibehalten und danach ebenfalls `Ready` mit `Fault` erreicht. Bei
+  `RecoveryEvaluation -> Fault`-Uebergang wird nach Write-before-Apply
+  persistent committed. Bei `activateLoadedRun` bleibt der Current-Slot
+  gueltig und der Coordinator wird nach bestaetigtem Commit `Ready` mit
+  `Fault`; der Committed Head erhaelt dabei keinen autonom nutzbaren
+  Fallback. Bei `activateFallbackRecoveredRun` wird gleichzeitig der defekte
+  Current-Slot repariert, der physisch unveraenderte alte aktive Fallback aber
+  ueber `RunPersistenceFallbackDirective::ClearFallback` aus dem Committed
+  Head entfernt und danach ebenfalls `Ready` mit `Fault` erreicht. Bei
 `resolveRecoveryOutcome` fuer `WaitingForProduct + Uncertain +
 AssumeStillValid` gilt derselbe Reject-/Persistenzvertrag mit der echten
 `commandId`; Wiederholung derselben CommandId ist dedupliziert/idempotent.
@@ -3666,14 +3828,28 @@ damit bereits Teil von Schema 3; spaetere Freigabe eines validierten Modells
 benoetigt fuer Bounds, Coverage, Quelle, Konfidenz, einheitliche
 Modellrevision und Exactly-once-Buchung keinen weiteren Schemaumbau.
 
+**Aktive Fault-Kompatibilitaet:** Die Erweiterung von `validStateFor()` um
+`ProcessState::Fault` fuer aktive `ProgramRun`-/`ManualRun`-Snapshots ist keine
+Rueckwirkende Freigabe fuer Schema 1/2. Der Decodepfad uebergibt seine bereits
+vorhandene Envelope-Version an
+`validateRunPersistenceSnapshotForSchema(snapshot, schemaVersion)`. Fuer
+Schema 1/2 wird ein aktiver `Fault` vor der Rueckgabe des Decoders abgelehnt;
+fuer Schema 3 wird derselbe Snapshot nach den bestehenden Recovery-/Progress-
+Invarianten akzeptiert. Die normalen Schema-1/2-Migrationsvektoren fuer
+Nicht-Fault-Zustaende bleiben unveraendert. `kCurrentRunPersistenceSchema`
+bleibt `3U`; kein Schema-4-Schritt und keine neue Wire-Representation ist
+erforderlich. Der schema-aware Gate liegt im Decoder, wo die Version
+tatsaechlich verfuegbar ist, und erzeugt keine zweite fachliche
+Snapshotvalidierung.
+
 ### 5.29 ROADMAP-Konsistenz
 
 `docs/ROADMAP.md` wird in diesem Plan-/Status-Folgecommit minimal
-synchronisiert. Der Eintrag zu PR #102 nennt Revision 13 zur Ownerfreigabe,
-den vorhandenen Implementierungsstand bis Commit 8, die Korrekturschnitte 6-8
-vor weiterer Implementierung und Commit 9 als bis zu den vorgesehenen Gates
+synchronisiert. Der Eintrag zu PR #102 nennt die umgesetzten
+Korrekturschnitte 6-8A, die im Owner-Review gefundenen Fault-Restore-/Fail-
+Closed-Fallback-Blocker, Revision 14 zur Ownerfreigabe und Commit 9 als
 gesperrt; das naechste Gate ist die Freigabe der exakten korrigierten
-Revision-13-Plan-SHA. Live-Issue #18 bleibt weiterhin
+Revision-14-Plan-SHA. Live-Issue #18 bleibt weiterhin
 `PLANNED_SPEC_PENDING` und wird nicht eigenmaechtig geaendert. Fachliche
 Anforderungen werden weiterhin nicht in die Roadmap kopiert.
 
@@ -3682,6 +3858,109 @@ Anforderungen werden weiterhin nicht in die Roadmap kopiert.
 Fault-Klassen, SAFE_BOOT-Feinausbau und Fault-Reset-Ablauf bleiben #24
 zugeordnet. #18 nutzt `Fault` ausschliesslich ueber die bestehende
 `RecoveryReject`-Logik.
+
+### 5.31 Persistierter `Fault` – terminaler Restore und Fail-Closed-Fallback
+
+Ein bestaetigter `RecoveryRejected -> Fault`-Commit ist eine terminale,
+sperrende Recoveryentscheidung. Er ist kein neuer Hop-1-Ausgangspunkt und
+kein impliziter Fehlerreset. Dieser Abschnitt bindet den Restore an den
+bestehenden Zustandsautomaten und die Head-/Slot-Invarianten, ohne die
+Fault-Quittierung oder den SAFE_BOOT-Feinausbau aus #24 vorwegzunehmen.
+
+**Fault-Restore aus einem lesbaren Current:** `loadAndInitialize()` darf den
+aktiven Snapshot weiterhin als `LoadedActiveRun` klassifizieren. Die
+Klassifikation wird nicht um eine neue Wire- oder Coordinator-State-
+Auspraegung erweitert. `activateLoadedRun()` prueft jedoch unmittelbar nach
+der Vorbedingung und vor `Completed`-Sonderpfad, Ankerkonstruktion, Hop 1,
+Gate A oder einem Schreibversuch:
+
+```text
+current.processState.state == Fault
+    -> current unveraendert uebernehmen
+    -> keine Transition, kein Hop 1, kein Hop 2, keine Sensorwertung
+    -> kein Write und kein automatischer Resume/Fehlerreset
+    -> sensorSelectionRuntime bleibt Blocked/fail-closed
+    -> state_ = Ready, Ergebnis Applied/RAM-Restore
+```
+
+Der persistierte Fault, seine aktive Run-Projektion und seine
+`stateEnteredAtMillis`-Semantik bleiben fachlich unveraendert; nur der
+Coordinator verlaesst den technischen Ladezustand. `Ready` in diesem
+Zusammenhang ist kein Aktorfreigabesignal: die aus dem Snapshot restaurierte
+Runtime-Freigabe bleibt bis zu einem ausdruecklich zustaendigen, spaeteren
+Vertrag gesperrt. Ein nachfolgender Aufruf ueber den fuer Commit 10 geplanten
+`RunRecoveryCoordinator` delegiert denselben Sonderpfad und fuehrt keine
+zweite Restorelogik ein. Fault-Quittierung, bewusster Fehlerreset und
+SAFE_BOOT-Rueckkehr bleiben #24.
+
+**Fault-Commit ohne autonom nutzbaren Alt-Fallback:** Jeder Gate-A-Reject in
+`activateLoadedRun()`, `activateFallbackRecoveredRun()` und
+`resolveRecoveryOutcome()` erzeugt den vorhandenen
+`RecoveryEvaluation -> Fault`-Uebergang und verwendet beim gemeinsamen
+`writeSnapshotCore` die Directive
+`RunPersistenceFallbackMode::ClearFallback`. Der Commit darf die physisch
+unveraenderten Bytes des alten anderen Slots nicht loeschen oder ueberschreiben;
+der Committed Head referenziert sie aber nicht mehr. Insbesondere gilt fuer
+den Fallback-Recovery-Fall:
+
+1. Der defekte Current-Slot wird mit dem neuen Fault-Snapshot beschrieben.
+2. Der Committed Head referenziert diesen Fault als `current` und traegt kein
+   `fallback`.
+3. `activateFallbackRecoveredRun()` endet nach bestaetigtem Commit in `Ready`
+   mit `Fault`, nicht in `FallbackRecoveryPending`.
+4. Ein Reboot mit lesbarem Fault-Current laedt den Fault ueber den normalen
+   Current-Pfad und aktiviert nur den Fault-Restore aus diesem Abschnitt.
+5. Wird genau dieser Fault-Current spaeter unlesbar, findet der Loader im
+   Head keinen Fallback. Er liefert die bereits passende
+   `NotReconstructible`-/`ReadFailed`-/`ForeignEpoch`-Kategorie und setzt den
+   Coordinator auf `BlockedIndeterminate`; er darf den physisch erhaltenen
+   alten aktiven Slot nicht als `FallbackRecovered` exponieren.
+
+Damit wird eine spaetere Sicherheitsverriegelung nicht durch eine aeltere
+aktive Revision unterschlagen. Es gibt in diesem Fall keinen Recoverycommit,
+keinen Hop 1/Hop 2, keine Gate-A-Neubewertung und keinen Resume aus dem alten
+Stand. Die normale nicht-terminale Fallback-Recovery bleibt unveraendert:
+bei einem aktiven, nicht-terminalen Snapshot wird weiterhin die explizite
+geladene Fallback-Referenz gesetzt, der defekte Current-Slot repariert und
+der neue Current anschliessend wieder ueber denselben Fallback ladbar. Auch
+`FallbackRecoveryPending + Completed` verwendet weiterhin die explizite
+Fallback-Referenz, weil dieser Pfad keine spaetere Fault-Entscheidung
+zuruecksetzt und die wiederholbare Storage-Reparatur benoetigt.
+
+**Explizite Fallback-Direktive:** Die genaue Signatur und die Semantik von
+`RunPersistenceFallbackDirective` stehen in 5.16. `std::nullopt` ist dort
+nicht mehr die fachliche Wahl zwischen Standard und Loeschen: der Modus
+`UseStandardFallback`, `SetExplicitReference` oder `ClearFallback` ist
+entscheidend; eine Referenz ist nur im Set-Modus zulaessig. Die Directive
+fuehrt keine Fake-Referenz, keinen Sentinel-Slot und keinen neuen
+Persistenzroot ein. Der bestehende `validCommittedHead`-Vertrag bleibt
+unveraendert gueltig, weil ein Committed Head ohne Fallback bereits eine
+zulaessige Darstellung ist.
+
+**Schema-Grenze:** Aktive `Fault`-Snapshots aus diesem Recoveryvertrag sind
+Schema-3-Semantik. `validStateFor()` darf fuer die aktuelle
+Schema-3-Kandidatenkonstruktion weiterhin `Fault` annehmen, aber
+`decodeRunPersistenceSnapshot(payload, schemaVersion)` muss nach dem Decode
+die schema-aware gemeinsame Validierung aus 5.14 aufrufen. Schema 1 und 2
+mit `variant != NoActiveRun` und `processState.state == Fault` werden
+abgelehnt; die bisherigen Schema-1/2-Migrationsvektoren fuer alle anderen
+Zustaende bleiben unveraendert. Schema 3 mit aktivem Recovery-Fault besteht
+Encode/Decode/Restore als Roundtrip. Ein kuenftiges Schema-4-Format ist nicht
+Teil dieses Plans.
+
+**Fail-closed- und Apply-Regeln:** Alle Store-, Cutpoint-, Readback- und
+Apply-Fehler eines Fault-Commits verwenden unveraendert den bestehenden
+`writeSnapshotCore`-/`PreparedInterrupted`-/`BlockedIndeterminate`-Vertrag.
+Ein bestaetigter Commit mit nachfolgendem RAM-Apply-Fehler bleibt
+`PersistenceCommittedApplyFailed`; er wird weder als Rollback auf den alten
+aktiven Fallback noch als erfolgreicher Fault-Restore umetikettiert. Ein
+normaler Command-/Checkpoint-Schreibpfad wird aus
+`FallbackRecoveryPending` vor dem jeweiligen Recoverycommit nicht
+freigeschaltet.
+
+**Tests:** Die Testmatrix in Abschnitt 8 muss den normalen Current-Restore,
+den Fault-Current-Verlust, die nicht-terminale Fallback-Regression, die
+Directive-Invarianten sowie die Schema-1/2/3-Grenze vollstaendig abdecken.
 
 ## 6. Modul- und Abhaengigkeitsgrenzen
 
@@ -3703,7 +3982,7 @@ interpretiert den Kuehlkoerpersensor niemals als Produktquelle.
 | 2 | `feat(persistence): Schema 3 – PendingRecoveryAnchor (inkl. knownSecondsSinceOriginalCheckpoint fuer Carry-Forward-Ketten), recoveryBootAnchorMonotonicMillis, RunProgressState inkl. WeightedProgressState/Coverage/Provenienz, RecoveryEpisodeEvidence inkl. weightedProgressSegmentId, NominalRecoveryAdjustmentState, TaggedPriorBootPhaseElapsed, recoveryEpisodeRevision, validStateFor-Erweiterung, Schema-Bump auf 3` | 5.12, 5.14, 5.20, 5.21, 5.22, 5.23, 5.25, 5.28; Migrationstests |
 | 3 | `feat(recovery): computeRecoveryOutageBounds, computeRecoveredPhaseElapsed, evaluateRecoveryTimeVerdict, deriveUtcAtRecoveryBootAnchor, deriveRecoveryConfidence, deriveEffectiveAnchorTimeBasis` | `run_recovery_time.hpp/.cpp` (5.2-5.5, 5.12, 5.13) |
 | 4 | `feat(sensor-selection): reale Restart-Reaktivierung` | Gate A / 5.26 |
-| 5 | `feat(persistence-coordinator): writeSnapshotCore mit explizitem Rollbackzustand, Fallback-Override-Parameter, FallbackRecoveryPending-Zustand, RunPersistenceMutationKind::Recovery, Signaturerweiterung der vier Checkpoint-Schreibpfade um liveSensorEvidence; bestehenden FallbackRecovered-state()-Test (`test_run_persistence_coordinator.cpp:1454-1456`) und `readMutationKind`-Test auf den neuen Wert aktualisiert` | 5.16, 5.18, 5.19, 5.20 |
+| 5 | `feat(persistence-coordinator): writeSnapshotCore mit explizitem Rollbackzustand, initialem Fallback-Override-Parameter, FallbackRecoveryPending-Zustand, RunPersistenceMutationKind::Recovery, Signaturerweiterung der vier Checkpoint-Schreibpfade um liveSensorEvidence; bestehenden FallbackRecovered-state()-Test (`test_run_persistence_coordinator.cpp:1454-1456`) und `readMutationKind`-Test auf den neuen Wert aktualisiert` | 5.16, 5.18, 5.19, 5.20; die eindeutige Fallback-Direktive wird als Revision-14-Folgecommit 7C konsolidiert |
 | 6 | `feat(persistence-coordinator): activateLoadedRun (Hop 1 + bedingt Hop 2, frisch/Carry-Forward-Ankerkonstruktion), applyLiveRecoveryEvidence, Episode-Refresh-Pfad, bedingte Anker-Loeschung ueber recoveryTimeResolvedAtResume` | 5.8-5.10, 5.12, 5.15, 5.20 |
 | 7 | `feat(persistence-coordinator): activateFallbackRecoveredRun (identische frisch/Carry-Forward-Fallunterscheidung wie activateLoadedRun), Slot-/Fallback-Override, Slot-Distinctness-Guard` | 5.8, 5.18 |
 | 8 | `feat(persistence-coordinator): resolveRecoveryOutcome (ResolveRecoveryUncertaintyRequest, phasenuebergreifend WaitingForProduct/Fermenting/CoolHolding, liveSensorEvidence-Parameter fuer Gate-A-Kopplung, echter Resume fuer WaitingForProduct+AssumeStillValid, Bounds-Gate fuer AssumeThresholdCrossed), Completed-Sonderpfad` | 5.17, 5.24 |
@@ -3712,30 +3991,91 @@ interpretiert den Kuehlkoerpersensor niemals als Produktquelle.
 | 11 | `feat(progress): reine RecoveryProgressWeightingModel-Grenze, unavailable-Provider, checked Bounds-Akkumulation ohne Faktorgrenze, Coverage/Supersede-Semantik, einheitliche Modellrevision, Segment-Dedup und atomare Recovery-Buchung` | 5.25; `run_progress_weighting.hpp/.cpp`, `run_recovery.hpp/.cpp`, `run_persistence_coordinator.hpp/.cpp`; native Fake-/Unavailable-Modelltests |
 | 12 | `docs: Anzeigevertrag (getrennte Ausweisung observedRunSeconds/gewichteter Bounds/Coverage/fehlender Gesamt-Obergrenze/konsistenter Modellrevision/kumulativer nominaler Korrektur, LegacyUnknown-Anzeige, RecoveryConfidence), Ressourcenbudget` | Abschnitt 10 |
 
-### 7A. Revision-13-Korrekturschnitte vor Commit 9
+### 7A. Bereits umgesetzte Revision-13-Korrekturschnitte vor Commit 9
 
-Die Commits 6-8 sind am aktuellen HEAD bereits vorhanden. Nach Freigabe der
-exakten Revision-13-Plan-SHA werden ihre Reviewkorrekturen als drei klar
-abgegrenzte Folgecommits ausgefuehrt; sie werden nicht mit Commit 9
-vermischt. Ein Amend der bestehenden Commits ist nur eine moegliche
-historische Alternative, wenn der Owner dies ausdruecklich anordnet und die
-Repositoryregeln dafuer erneut bestaetigt werden. Der Standard dieses Plans
-ist wegen des geltenden Force-Push-Verbots die nicht-rewritende Folgecommit-
-Variante:
+Die Commits 6-8A sind am aktuellen HEAD
+`977eceaa8d5c003033cfb71d60b21fa68f500f61` bereits als drei klar
+abgegrenzte, nicht-rewritende Folgecommits umgesetzt. Sie bleiben Bestandteil
+der Baseline und werden durch Revision 14 weder wiederholt noch amendiert.
+Die folgenden drei Revision-13-Schnitte sind daher normative
+Regressionserwartungen fuer die Umsetzung des Gesamtplans, aber kein neuer
+Arbeitsauftrag dieser Planrevision:
 
 | Bezug | Korrekturcommit | Verbindlicher Umfang | Direkte Nachweise |
 |---|---|---|---|
 | Commit 6 | `fix(persistence-coordinator): persist loaded-run Gate-A rejection as Fault` | `activateLoadedRun`: negatives Gate A nach erfolgreich angewandtem Hop 1 baut `RecoveryReject -> Fault`, schreibt den Kandidaten mit `writeSnapshotCore` nach Write-before-Apply und endet nach Commit in `Ready`/`Fault`, nicht in `LoadedActiveRun`; technische Hop-1-Fehler bleiben unveraendert `InvalidDecision` ohne Write. | Gate-A-negativ, persistierter Fault, Reboot-Load des Fault, kein `LoadedActiveRun`, Cutpoint-/Indeterminate-/Apply-Fehler |
-| Commit 7 | `fix(persistence-coordinator): repair fallback current for Gate-A rejection and Completed` | `activateFallbackRecoveredRun`: negatives Gate A schreibt `Fault` in den bekannten defekten Current-Slot, erhaelt den gueltigen Fallback ueber `fallbackOverride` und endet nach Commit in `Ready`/`Fault`; `FallbackRecoveryPending + Completed` bekommt den separaten Storage-Recovery-Commit mit Bootzeitkorrektur in denselben defekten Current-Slot, ohne Hop 1/Hop 2/Aktoren. | Gate-A-negativ mit Slot-/Fallback-Invarianten, Reboot des neuen Current, wiederholte Fallback-Recovery nach erneuter Current-Beschaedigung, Completed-Reparatur und alle Cutpoints |
+| Commit 7 | `fix(persistence-coordinator): repair fallback current for Gate-A rejection and Completed` | `activateFallbackRecoveredRun`: negatives Gate A schreibt `Fault` in den bekannten defekten Current-Slot, erhaelt den alten Slot physisch, entfernt ihn aber aus dem Committed Head; `FallbackRecoveryPending + Completed` bekommt den separaten Storage-Recovery-Commit mit Bootzeitkorrektur in denselben defekten Current-Slot, ohne Hop 1/Hop 2/Aktoren. | Gate-A-negativ mit terminaler Fallback-Sperre, Reboot des neuen Current, wiederholte nicht-terminale Fallback-Recovery, Completed-Reparatur und alle Cutpoints |
 | Commit 8 | `fix(persistence-coordinator): persist deferred WaitingForProduct rejection and keep tombstone first` | `resolveRecoveryOutcome`: `WaitingForProduct + Uncertain + AssumeStillValid` wertet Gate A aus; negativ -> persistierter `RecoveryRejected/Fault` statt `InvalidDecision`, gleiche CommandId dedupliziert, Stale-Run/Episode vor Mutation abgelehnt. `DefinitelyExpired` beziehungsweise der Tombstonepfad wird vor Gate A ohne Sensorfreigabe committed. `LoadedActiveRun + Completed` bleibt RAM-only ohne Write und wird `Ready`. | Negative Gate-A-Recovery mit Reboot und Idempotenz, Stale-Schutz, DefinitelyExpired-Tombstone ohne Gate A, Loaded-Completed RAM-only |
 
-Diese drei Korrekturschnitte duerfen nur bestehende Persistenz-/Recovery-
-Helfer verwenden: `writeSnapshotCore`, `RecoveryReject`,
+Diese drei bereits umgesetzten Korrekturschnitte verwenden nur bestehende
+Persistenz-/Recovery-Helfer: `writeSnapshotCore`, `RecoveryReject`,
 `completeTimedRun`, `completeHoldDuration` und die vorhandenen Slot-/Fallback-
 Invarianten. Sie fuehren keine neue Prozessschleife, keine produktive
 Verdrahtung, keine temperaturgewichtete Fortschrittslogik und keinen
-Parallelvertrag ein. Nach den Korrekturschnitten wird erneut angehalten;
-Commit 9-12 bleiben bis zu einem separaten Owner-Gate unangetastet.
+Parallelvertrag ein. Die Revision-14-Korrekturen in 7B-7D folgen demselben
+Scope; Commit 9-12 bleiben bis zu einem separaten Owner-Gate unangetastet.
+
+### 7B. Revision-14-Korrekturcommit: persistierten Fault nach Reboot schmal restaurieren
+
+`fix(persistence-coordinator): restore persisted Fault without recovery reentry`
+
+Dieser nicht-rewritende Folgecommit korrigiert ausschliesslich den Restore-
+Vertrag aus 5.8 und 5.31. `loadAndInitialize()` bleibt bei
+`LoadedActiveRun`; `activateLoadedRun()` erkennt einen bereits persistierten
+`ProcessState::Fault` vor Hop 1 und uebernimmt ihn ohne Transition, Gate A,
+Write, Resume oder Aktorfreigabe in `Ready`. `Completed` bleibt der separate
+RAM-only-Sonderpfad. Die spaetere `RunRecoveryCoordinator`-Komposition
+delegiert an diese eine bestehende Methode.
+
+Direkte Nachweise: Gate-A-Reject, Reboot, `Current` mit `Fault`, vollstaendige
+Activation, kein Hop 1/Hop 2/Gate A/Write/Resume, Coordinator nicht mehr
+`LoadedActiveRun`, Fault unveraendert, Runtime-Freigabe `Blocked` und keine
+Aktorwirkung. Ein technischer Hop-1-Fehler sowie alle bisherigen Gate-A-,
+Completed-, Tombstone-, Stale-, Idempotenz- und Cutpoint-Regressionen bleiben
+getrennt erhalten.
+
+### 7C. Revision-14-Korrekturcommit: terminalen Fault-Commit gegen alten Fallback versiegeln
+
+`fix(persistence-coordinator): seal terminal recovery fault against fallback revival`
+
+Dieser nicht-rewritende Folgecommit fuehrt die explizite
+`RunPersistenceFallbackDirective` aus 5.16 ein beziehungsweise ersetzt die
+mehrdeutige `std::optional<RunCheckpointReference>`-Bedeutung nur im
+gemeinsamen Persistenzkern. `UseStandardFallback` behaelt alle normalen
+Schreibpfade byte-/wertgleich, `SetExplicitReference` behaelt die
+nicht-terminale Fallback-Recovery und die Completed-Reparatur, und
+`ClearFallback` wird nur fuer bestaetigte `RecoveryRejected -> Fault`-
+Commits verwendet. Der alte Slot wird physisch nicht geloescht, aber aus dem
+Committed Head entfernt. Der Loader darf nach Verlust des neuen Fault-Current
+nicht `FallbackRecoveryPending` liefern.
+
+Direkte Nachweise: Fallback-Current beschaedigen, Gate A negativ, Fault-
+Current im defekten Slot committen, Committed Head ohne Fallback bestaetigen,
+Reboot des lesbaren Faults, danach Fault-Current beschaedigen und den
+fail-closed Load als `NotReconstructible`/passende bestehende Kategorie mit
+`BlockedIndeterminate` nachweisen; kein neuer Recoverycommit und kein Resume.
+Die positive nicht-terminale Fallback-Recovery, ihre Wiederholung, die
+Completed-Storage-Reparatur und alle bestehenden Write-before-Apply-,
+Prepared-/Slot-/Committed-Head-/Indeterminate-/Apply-Fehler bleiben gruen.
+
+### 7D. Revision-14-Korrekturcommit: aktive Fault-Snapshots an Schema 3 binden
+
+`fix(persistence-codec): reject active legacy Fault snapshots`
+
+Dieser nicht-rewritende Folgecommit fuehrt die schema-aware gemeinsame
+Validierung aus 5.14/5.28 am Decodepfad ein. `validStateFor()` bleibt fuer
+aktuelle Schema-3-Kandidaten zustaendig; der Decoder reicht die tatsaechlich
+gelesene Envelope-Version an `validateRunPersistenceSnapshotForSchema()` und
+lehnt aktive `Fault`-Snapshots aus Schema 1/2 ab. Schema 3 bleibt unveraendert
+und bildet den Recovery-Fault vollstaendig ab; es gibt keine Schema-4-
+Erhoehung.
+
+Direkte Nachweise: Schema 1 + aktiver Fault -> Decodeablehnung, Schema 2 +
+aktiver Fault -> Decodeablehnung, Schema 3 + aktiver Recovery-Fault -> Encode/
+Decode-/Restore-Roundtrip, alle bisherigen Schema-1/2-Migrationsvektoren und
+`Recovery = 4U`-Headtests unveraendert gruen. Commit 9 und alle spaeteren
+Slices beginnen erst nach einem neuen Owner-Gate fuer die exakte
+Revision-14-Plan-SHA.
 
 `docs/ROADMAP.md` ist nicht Teil der Implementierungs-Commit-Liste; die
 zwingende minimale Statussynchronisierung erfolgt jedoch in diesem
@@ -3916,10 +4256,12 @@ Plan-/Status-Folgecommit und ist in 5.29/Abschnitt 12 dokumentiert.
     ueberschneidendem UTC-Intervall; `Unknown` ohne jeden UTC-Anker; alle
     drei Werte nachweisbar erreichbar.
 22. `RunPersistenceMutationKind::Recovery` (5.16): Codec-Roundtrip; alle
-    **sieben** Recovery-Commit-Ausloeser (Hop 1, Hop 1+Hop 2, Episode-Refresh,
-    Tombstone, Fallback-`Completed`-Storage-Reparatur, erfolgreiche
-    Zeit-Nachtragskorrektur, erfolgreiche gewichtete Modellbuchung) erzeugen
-    `mutationKind == Recovery`, `commandId == std::nullopt`; eine
+    **neun** Recovery-Commit-Ausloeser (inklusive der beiden terminalen
+    Loaded-/Fallback-Gate-A-Rejects) erzeugen `mutationKind == Recovery`,
+    `commandId == std::nullopt`; der deferred
+    `resolveRecoveryOutcome`-Reject bleibt als `Command` mit echter
+    `CommandId` klassifiziert, verwendet aber dieselbe terminale
+    `ClearFallback`-Headsemantik. Eine
     erfolglose Zeit-Nachtragskorrektur erzeugt **keinen** Commit; Cut nach
     Prepared-Head-Schreiben eines Recovery-Commits durchlaeuft den
     bestehenden generischen `PreparedInterrupted`-Mechanismus.
@@ -3935,8 +4277,8 @@ Plan-/Status-Folgecommit und ist in 5.29/Abschnitt 12 dokumentiert.
     `knownRunPersistenceSchema` akzeptiert `{1,2,3}`.
 27. Alle bestehenden #20/#21-Sensor-/Sicherheitsregressionen bleiben gruen.
 28. `git diff --check` **ungescoped** (bare, ohne Pfadangabe) fuer alle
-    geaenderten Dateien dieses Plans; `docs/ROADMAP.md` ist in Revision 13
-    bewusst nicht geaendert.
+    geaenderten Dateien dieses Plans; `docs/ROADMAP.md` wird in Revision 14
+    bewusst minimal synchronisiert.
 29. Recovered `Fermenting` mit
     `priorBootPhaseElapsed.lowerBoundSeconds == 3600`, danach bestaetigte
     Restdauer `remainingDurationMinutes == 120`: `priorBootPhaseElapsed` und
@@ -4075,11 +4417,11 @@ Plan-/Status-Folgecommit und ist in 5.29/Abschnitt 12 dokumentiert.
 53. **`activateFallbackRecoveredRun()` Gate A negativ:** Current ist
     beschaedigt, der Fallback gueltig; negatives Gate A erzeugt denselben
     persistierten `RecoveryRejected/Fault` im bekannten defekten Current-
-    Slot, erhaelt den alten gueltigen Fallback als Referenz, laedt nach Reboot
-    den neuen Fault-Current und endet nicht in
-    `FallbackRecoveryPending`. Cutpoints, `Indeterminate` und bestaetigter
-    Commit mit Apply-Fehler bleiben den bestehenden getrennten
-    Persistenzzustaenden zugeordnet.
+    Slot, laesst den alten gueltigen Fallback-Slot physisch unveraendert, aber
+    entfernt ihn aus dem Committed Head. Ein Reboot laedt den neuen
+    Fault-Current normal und endet nicht in `FallbackRecoveryPending`.
+    Cutpoints, `Indeterminate` und bestaetigter Commit mit Apply-Fehler bleiben
+    den bestehenden getrennten Persistenzzustaenden zugeordnet.
 54. **`resolveRecoveryOutcome()` Gate A negativ:** Bei
     `WaitingForProduct + Uncertain + AssumeStillValid` fuehrt negatives Gate A
     zu einem persistierten `RecoveryRejected/Fault`, nicht zu
@@ -4105,7 +4447,7 @@ Plan-/Status-Folgecommit und ist in 5.29/Abschnitt 12 dokumentiert.
 58. **`FallbackRecoveryPending + Completed`:** kein Hop 1/Hop 2 und keine
     Aktorfreigabe; Storage-Recovery-Commit in den beschaedigten
     `currentHead_->current.slot`, Bootzeitkorrektur im Kandidaten, alter
-    Fallback bleibt als `fallbackOverride` gueltig und referenziert. Ein
+    Fallback bleibt ueber `SetExplicitReference` gueltig und referenziert. Ein
     Reboot laedt `Completed` ueber den neuen Current; erneute Beschaedigung
     des neuen Current kann weiterhin auf denselben alten Fallback
     zurueckfallen.
@@ -4120,6 +4462,51 @@ Plan-/Status-Folgecommit und ist in 5.29/Abschnitt 12 dokumentiert.
     anschliessendem RAM-Apply-Fehler bleibt
     `PersistenceCommittedApplyFailed`. Kein normaler Schreibpfad darf den
     Zustand vor der Storage-Reparatur verlassen.
+60. **Persistierter Fault – vollstaendiger Restore:** Gate A negativ ->
+    `RecoveryRejected -> Fault` committen, Reboot, `Current` mit
+    `ProcessState::Fault` laden und den vollstaendigen Activation-Pfad
+    ausfuehren. Dieser fuehrt keinen Hop 1, keinen Hop 2, keine Gate-A-
+    Neubewertung, keinen Write und keinen Resume aus; der Coordinator wird
+    `Ready` und bleibt fachlich `Fault`, der Zustand wird nicht geloescht oder
+    zurueckgesetzt, und die restaurierte Runtime-Freigabe bleibt `Blocked`.
+    Der Test muss den Zustand vor und nach Activation vergleichen und den
+    technischen Restore-Erfolg von einer Aktorfreigabe unterscheiden.
+61. **Fault-Current spaeter beschaedigt:** aktiven Fallback herstellen,
+    Fallback-Recovery starten, Gate A negativ, Fault-Current im bekannten
+    Current-Slot committen und Head mit `fallback == nullopt` bestaetigen.
+    Den neuen Fault-Current normal rebooten und danach genau diesen Slot
+    beschaedigen. Der zweite Reboot darf den aelteren aktiven Slot trotz
+    physischer Erhaltung nicht als `FallbackRecoveryPending` laden; erwartet
+    sind die passende bestehende `NotReconstructible`-/Read-/Epoch-Kategorie
+    und Coordinator `BlockedIndeterminate`, ohne Recoverycommit, Hop 1/Hop 2
+    oder Resume.
+62. **Normale nicht-terminale Fallback-Recovery bleibt aktiv:** Current
+    beschaedigen, gueltigen aktiven Fallback laden, Recoverycommit ausfuehren,
+    neuen Current laden und die bestehende Wiederholungs-/Cutpoint-Semantik
+    fuer den weiterhin erlaubten nicht-terminalen Fall nachweisen. Der
+    Committed Head referenziert den geladenen Fallback dort weiterhin ueber
+    `SetExplicitReference`; diese Regression darf durch die terminale
+    Fault-Sperre nicht pauschal abgeschaltet werden.
+63. **Fallback-Direktive eindeutig:** `UseStandardFallback` behaelt die
+    Standardpfade, `SetExplicitReference` verlangt eine gueltige distinct
+    Referenz fuer normale Fallback-/Completed-Recovery, und `ClearFallback`
+    erzeugt einen Committed Head ohne Fallback. Ungueltige Modus-/Referenz-
+    Kombinationen werden vor dem Schreibversuch abgelehnt; es gibt keine
+    Sentinel- oder Fake-Referenz und keine mehrdeutige `std::nullopt`-
+    Auslegung.
+64. **Schema-Kompatibilitaet aktiver Faults:** Schema 1 + aktiver Fault ->
+    Decodeablehnung; Schema 2 + aktiver Fault -> Decodeablehnung; Schema 3 +
+    aktiver Recovery-Fault -> erfolgreicher Encode-/Decode-/Restore-
+    Roundtrip. Die bisherigen Schema-1/2-Migrationsvektoren fuer
+    Nicht-Fault-Zustaende, `knownRunPersistenceSchema() == {1,2,3}` und
+    `readMutationKind(Recovery)` bleiben unveraendert gruen. Es wird kein
+    Schema 4 eingefuehrt.
+65. **Bestehende Revision-13-Matrix bleibt Regression:** alle Tests 1-59,
+    insbesondere Gate-A-, Tombstone-, Completed-, Cutpoint-, Stale-,
+    Idempotenz-, Wiederholungs-, Carry-Forward-, Sensor- und Weighting-
+    Regressionen bleiben erhalten. Die einzige bewusst geaenderte Erwartung
+    ist Punkt 53: ein terminaler Fault-Commit erhaelt den alten Slot physisch,
+    aber nicht als autonom nutzbare Head-Fallback-Referenz.
 
 ## 9. Safety-/Security-/Recovery-/Hardwaregrenzen
 
@@ -4156,7 +4543,14 @@ keinen Commit. Der getrennte, atomare Supersede-Helfer darf beim ohnehin
 notwendigen Abschluss-/Phasen-/AdjustRun-Kandidaten lediglich die unbekannte
 Coverage markieren (5.25). Eine gewichtete Buchung gibt niemals
 Aktorfreigabe und veraendert niemals Timer-, Recovery- oder nominale
-Benutzerkorrekturfelder.
+Benutzerkorrekturfelder. Ein persistierter `RecoveryRejected -> Fault` wird
+nach Reboot schmal als Fault restauriert, niemals als neuer Hop 1 behandelt;
+sein physisch erhaltener alter Slot ist ohne Head-Referenz kein autonomer
+Fallback. Ein Verlust dieses Fault-Current fuehrt deshalb fail-closed in die
+bestehende Nichtrekonstruierbar-/Indeterminate-Kategorie und nicht in eine
+Wiederbelebung des alten aktiven Zustands. Die normale nicht-terminale
+Fallback-Recovery und die Completed-Storage-Reparatur behalten ihre
+explizite Fallback-Referenz.
 
 ## 10. Ressourcen-/Betriebsbudget
 
@@ -4266,26 +4660,34 @@ in den neuen Timer eingefaltet. Der Coverage-Helfer wird an den bestehenden
 Kandidatenpfaden wiederverwendet; kein Segmentjournal und kein zweiter
 Recovery- oder Sensorvertrag entsteht.
 `reevaluateRecoveryTime` kann nur einen noch vorhandenen Anker lesen und ist
-damit strukturell von der neuen Baseline entkoppelt.
+damit strukturell von der neuen Baseline entkoppelt. Die typisierte
+`RunPersistenceFallbackDirective` haelt Standard-, expliziten und geloeschten
+Fallback als eine gemeinsame Entscheidung zusammen; insbesondere entsteht
+keine zweite Fault-/Fallback-Logik und kein Sentinelvertrag. Der schmale
+Fault-Restore vor Hop 1 ist eine Fallunterscheidung derselben
+`activateLoadedRun`-Verantwortung, keine parallele Restorefunktion. Die
+schema-aware aktive-Fault-Pruefung bleibt am bestehenden Decode-/Contract-
+Besitzer und erfordert keine neue Schema- oder Modulgrenze.
 
 ## 12. Dokumentations-/Abschlussnachweis
 
 - `docs/ROADMAP.md`: wird in diesem Plan-/Status-Folgecommit minimal
-  synchronisiert. Die Zeile zu PR #102 nennt Revision 13 zur
-  Ownerfreigabe, den vorhandenen Implementierungsstand bis Commit 8, die
-  Korrekturschnitte 6-8 vor weiterer Implementierung und Commit 9 als bis zu
-  den Gates gesperrt; das naechste Gate ist die Freigabe der exakten
-  korrigierten Revision-13-Plan-SHA. Live-Issue #18 bleibt unveraendert bei
+  synchronisiert. Die Zeile zu PR #102 nennt die umgesetzten
+  Korrekturschnitte 6-8A, die Fault-Restore-/Fail-Closed-Fallback-Blocker aus
+  dem Owner-Review, Revision 14 zur Ownerfreigabe und Commit 9 als gesperrt;
+  das naechste Gate ist die Freigabe der exakten korrigierten
+  Revision-14-Plan-SHA. Live-Issue #18 bleibt unveraendert bei
   `PLANNED_SPEC_PENDING`.
 - `docs/RUN_PERSISTENCE.md`/`docs/RECOVERY_AND_INTERRUPTION.md`: werden im
-  Umsetzungscommit (Nr. 12) um die in 5.2-5.25 vertraglich fixierten Punkte
+  Umsetzungscommit (Nr. 12) um die in 5.2-5.31 vertraglich fixierten Punkte
   ergaenzt, insbesondere die getrennte Ausweisung von `observedRunSeconds`,
   kumulierten gewichteten Bounds, Coverage/fehlender Gesamt-Obergrenze,
   Quelle/Konfidenz/einheitlicher Modellrevision und nominaler
   Benutzerkorrektur, die ehrliche Legacy-Historie (5.21), den
   unavailable-/Modellgrenzenvertrag (5.25), den unveraenderten
-  First-after-Lebenszyklus (5.15/5.20) und den Recovery-Konfidenzvertrag
-  (5.5).
+  First-after-Lebenszyklus (5.15/5.20), den Recovery-Konfidenzvertrag (5.5),
+  den terminalen Fault-Restore/Fallback-Ausschluss (5.31) und die
+  schema-aware aktive-Fault-Kompatibilitaet (5.14/5.28).
 - `git diff --check`: nach Commit **ungescoped (bare), fuer alle
   geaenderten Dateien** (in diesem Folgecommit Plan und minimale
   Roadmap-Statuszeile) ausgefuehrt und im
@@ -4300,8 +4702,9 @@ damit strukturell von der neuen Baseline entkoppelt.
 
 ## 13. Pflichtaufgabenliste (fuer die Umsetzung, nicht Teil dieser Planungssession)
 
-1. Nach Freigabe der exakten Revision-13-SHA zuerst nur die drei
-   Korrekturschnitte 6-8A aus Abschnitt 7A mit den direkten Tests der
+1. Die bereits umgesetzten Revision-13-Korrekturschnitte 6-8A nicht
+   wiederholen. Nach Freigabe der exakten Revision-14-SHA ausschliesslich die
+   zusaetzlichen Korrekturcommits 7B-7D mit den direkten Tests der
    Testmatrix umsetzen; danach erneut vollstaendig pruefen und fuer das
    separate Owner-Gate anhalten.
 2. Erst nach diesem separaten Gate Commit 9-12 gemaess Abschnitt 7, je mit
@@ -4314,15 +4717,16 @@ damit strukturell von der neuen Baseline entkoppelt.
 
 ## 14. Stop-Bedingung
 
-Revision 13 ist ein vollstaendiger, eigenstaendiger Plan und ersetzt Revision
-12 vollstaendig. Nach Commit **dieser Datei und der zwingenden minimalen
+Revision 14 ist ein vollstaendiger, eigenstaendiger Plan und ersetzt Revision
+13 und damit Revision 12 vollstaendig. Nach Commit **dieser Datei und der
+zwingenden minimalen
 Roadmap-Statuszeile**: **anhalten**,
 `git diff --check` **ungescoped (bare)** fuer den Plan ausfuehren, `git push`,
 Remote-SHA verifizieren (Abschnitt 12), PR-Beschreibung und den genau einen
 aktuellen SESSION-HANDOVER aktualisieren. Keine Implementierung, keine
 Amendierung bestehender Implementierungscommits und kein Beginn von Commit 9.
 Keine weitere Roadmap- oder Issue-Aenderung, kein `Ready for review`, keine
-Remote-CI, kein Merge, kein Auto-Merge und keine Branchloeschung. Umsetzung der in Abschnitt
-7A definierten Korrekturschnitte ist erst nach ausdruecklicher Freigabe der
-exakten Revision-13-Plan-SHA zulaessig; Commit 9-12 bleiben bis zu einem
-separaten Owner-Gate unangetastet.
+Remote-CI, kein Merge, kein Auto-Merge und keine Branchloeschung. Umsetzung der
+in Abschnitt 7B-7D definierten Korrekturcommits ist erst nach ausdruecklicher
+Freigabe der exakten Revision-14-Plan-SHA zulaessig; Commit 9-12 bleiben bis
+zu einem separaten Owner-Gate unangetastet.
