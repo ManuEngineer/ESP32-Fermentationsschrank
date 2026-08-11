@@ -5,6 +5,8 @@
 #include <utility>
 
 #include "run_persistence_codec.hpp"
+#include "run_recovery_time.hpp"
+#include "sensor_selection.hpp"
 #include "storage_envelope.hpp"
 
 namespace fermentation {
@@ -14,6 +16,192 @@ constexpr device_platform::RecordTypeId kCheckpointRecordType{7U};
 constexpr device_platform::RecordTypeId kHeadRecordType{8U};
 constexpr std::size_t kMaximumCheckpointRecordBytes = 8240U;
 constexpr std::size_t kMaximumHeadRecordBytes = 256U;
+
+std::optional<std::uint64_t> checkedAdd(std::uint64_t left,
+                                        std::uint64_t right) {
+    if (right > std::numeric_limits<std::uint64_t>::max() - left) {
+        return std::nullopt;
+    }
+    return left + right;
+}
+
+std::optional<std::uint32_t> checkedToUint32(std::uint64_t value) {
+    if (value > std::numeric_limits<std::uint32_t>::max()) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(value);
+}
+
+RoleTemperatureEvidence toRoleTemperatureEvidence(
+    const device_platform::SensorQualitySnapshot& source) {
+    return {source.filteredCelsius, source.quality};
+}
+
+void updateLastKnownEvidence(
+    RecoveryTemperatureEvidence& target,
+    const CrossRolePlausibilityContext& liveSensorEvidence) {
+    target.lastKnown.air = toRoleTemperatureEvidence(liveSensorEvidence.air);
+    target.lastKnown.product =
+        toRoleTemperatureEvidence(liveSensorEvidence.product);
+    target.lastKnown.cooling =
+        toRoleTemperatureEvidence(liveSensorEvidence.cooling);
+}
+
+bool recoveryEvidenceWindowOpen(const RunCommandState& current) {
+    if (current.pendingRecoveryAnchor.has_value() &&
+        current.processState.state == ProcessState::RecoveryEvaluation) {
+        return true;
+    }
+    return current.priorBootPhaseElapsed.has_value() &&
+           current.priorBootPhaseElapsed->taggedState ==
+               current.processState.state;
+}
+
+SensorSelectionProgramContext recoverySensorSelectionProgramContext(
+    const RunCommandState& current) {
+    if (current.activeProgramRun.has_value()) {
+        const auto& program =
+            current.activeProgramRun->snapshot().sourceProgram.program;
+        SensorSelectionProgramContext context;
+        context.sensorPreference = program.sensorPreference;
+        context.policy = program.productSensorFailure.policy;
+        context.returnStrategy = program.productSensorFailure.returnStrategy;
+        context.fallbackDelaySeconds =
+            program.productSensorFailure.fallbackDelaySeconds;
+        return context;
+    }
+    SensorSelectionProgramContext context;
+    context.sensorPreference = SensorPreference::ProductIfAvailableElseAir;
+    context.policy = ProductSensorFailurePolicy::WaitForUser;
+    context.returnStrategy = ReturnStrategy::ManualReturnToProduct;
+    return context;
+}
+
+bool recoveryTimeResolvedAtResume(
+    const std::optional<TaggedPriorBootPhaseElapsed>& accumulated) {
+    return !accumulated.has_value() ||
+           accumulated->elapsed.upperBoundSeconds.has_value();
+}
+
+struct RecoveryTimeContext {
+    EffectiveAnchorTimeBasis basis;
+    std::optional<RecoveryOutageBounds> outage;
+    RecoveredPhaseElapsed elapsed;
+};
+
+std::optional<RecoveryTimeContext> deriveRecoveryTimeContext(
+    const PendingRecoveryAnchor& anchor, const RunCheckpointTime& time,
+    std::uint64_t recoveryBootAnchorMonotonicMillis) {
+    const auto basis = deriveEffectiveAnchorTimeBasis(anchor);
+    if (!basis.has_value()) return std::nullopt;
+
+    const auto utcAtRecoveryBoot =
+        deriveUtcAtRecoveryBootAnchor(time.utcUnixSeconds, time.monotonicMillis,
+                                      recoveryBootAnchorMonotonicMillis);
+    const auto outage = computeRecoveryOutageBounds(RecoveryOutageBoundsInput{
+        basis->effectiveCheckpointUtc, utcAtRecoveryBoot, std::nullopt,
+        anchor.originalCheckpointTrigger});
+    const auto lowerWithKnown =
+        checkedAdd(anchor.accumulatedBeforeEpisode.lowerBoundSeconds,
+                   basis->effectiveKnownSecondsBeforeCheckpoint);
+    if (!lowerWithKnown.has_value()) return std::nullopt;
+    const auto lower =
+        checkedAdd(*lowerWithKnown,
+                   outage.has_value() ? outage->outageSecondsLowerBound : 0U);
+    if (!lower.has_value()) return std::nullopt;
+
+    std::optional<std::uint64_t> upper;
+    if (anchor.accumulatedBeforeEpisode.upperBoundSeconds.has_value() &&
+        outage.has_value()) {
+        const auto upperWithKnown =
+            checkedAdd(*anchor.accumulatedBeforeEpisode.upperBoundSeconds,
+                       basis->effectiveKnownSecondsBeforeCheckpoint);
+        if (!upperWithKnown.has_value()) return std::nullopt;
+        upper = checkedAdd(*upperWithKnown, outage->outageSecondsUpperBound);
+        if (!upper.has_value()) return std::nullopt;
+    }
+    return RecoveryTimeContext{
+        *basis, outage,
+        RecoveredPhaseElapsed{basis->effectiveKnownSecondsBeforeCheckpoint,
+                              *lower, upper}};
+}
+
+std::optional<PendingRecoveryAnchor> makePendingRecoveryAnchor(
+    const RunCommandState& candidate,
+    const RunPersistenceRawRecord& loadedRecord,
+    const ProcessRuntimeState& originalProcessState) {
+    if (!candidate.processRunSnapshot.has_value() ||
+        !stateUsesRunSnapshot(originalProcessState.state) ||
+        !stateMatchesRunSnapshot(originalProcessState.state,
+                                 *candidate.processRunSnapshot) ||
+        loadedRecord.snapshot.checkpointMonotonicMillis <
+            originalProcessState.stateEnteredAtMillis) {
+        return std::nullopt;
+    }
+
+    const auto thisHopAltBootLocalSeconds =
+        (loadedRecord.snapshot.checkpointMonotonicMillis -
+         originalProcessState.stateEnteredAtMillis) /
+        1000U;
+    if (loadedRecord.snapshot.pendingRecoveryAnchor.has_value()) {
+        auto anchor = *loadedRecord.snapshot.pendingRecoveryAnchor;
+        const auto knownSince =
+            checkedAdd(anchor.knownSecondsSinceOriginalCheckpoint,
+                       thisHopAltBootLocalSeconds);
+        if (!knownSince.has_value()) return std::nullopt;
+        anchor.knownSecondsSinceOriginalCheckpoint = *knownSince;
+        return anchor;
+    }
+
+    PendingRecoveryAnchor anchor;
+    anchor.originalProcessState = originalProcessState;
+    anchor.knownPhaseSecondsAtOriginalCheckpoint = thisHopAltBootLocalSeconds;
+    anchor.originalCheckpointUtc = loadedRecord.utcUnixSeconds;
+    anchor.originalCheckpointTrigger = loadedRecord.snapshot.trigger;
+    anchor.originalCheckpointIntervalMinutes =
+        loadedRecord.snapshot.intervalMinutes;
+    // No prior elapsed field means that this is the first recovery episode
+    // for the phase, not an unknown amount of earlier phase time. Represent
+    // that empty prefix as the exact zero interval so known UTC outage
+    // evidence can produce an upper bound as well.
+    anchor.accumulatedBeforeEpisode = PriorBootPhaseElapsed{0U, 0U};
+    if (candidate.priorBootPhaseElapsed.has_value() &&
+        candidate.priorBootPhaseElapsed->taggedState ==
+            originalProcessState.state) {
+        anchor.accumulatedBeforeEpisode =
+            candidate.priorBootPhaseElapsed->elapsed;
+    }
+    return anchor;
+}
+
+std::optional<PriorBootPhaseElapsed> accumulatedPriorForResume(
+    const PendingRecoveryAnchor& anchor, const RecoveryTimeContext& context) {
+    static_cast<void>(anchor);
+    const auto lower32 =
+        checkedToUint32(context.elapsed.totalSecondsLowerBound);
+    if (!lower32.has_value()) return std::nullopt;
+
+    std::optional<std::uint32_t> upper32;
+    if (context.elapsed.totalSecondsUpperBound.has_value()) {
+        upper32 = checkedToUint32(*context.elapsed.totalSecondsUpperBound);
+        if (!upper32.has_value()) return std::nullopt;
+    }
+    return PriorBootPhaseElapsed{*lower32, upper32};
+}
+
+ProcessRuntimeState rebasedRecoveredState(const ProcessRuntimeState& original,
+                                          std::uint64_t monotonicMillis) {
+    auto recovered = original;
+    recovered.stateEnteredAtMillis = monotonicMillis;
+    recovered.qualificationValidSinceMillis.reset();
+    recovered.targetReachWarningIssued = false;
+    recovered.targetReachStartedAtMillis =
+        (original.state == ProcessState::ReachingTarget ||
+         original.state == ProcessState::QualifyingTarget)
+            ? monotonicMillis
+            : 0U;
+    return recovered;
+}
 
 bool eligibleTransition(TransitionReason reason) {
     switch (reason) {
@@ -40,6 +228,29 @@ RunPersistenceCoordinator::RunPersistenceCoordinator(
     device_platform::IStateStore& store, device_platform::StorageEpoch epoch,
     RunCheckpointSchedule schedule) noexcept
     : store_(store), epoch_(epoch), schedule_(std::move(schedule)) {}
+
+void applyLiveRecoveryEvidence(
+    RunCommandState& current,
+    const CrossRolePlausibilityContext& liveSensorEvidence) {
+    if (!recoveryEvidenceWindowOpen(current) ||
+        !current.lastRecoveryEpisodeEvidence.has_value()) {
+        return;
+    }
+
+    auto latch = [](std::optional<RoleTemperatureEvidence>& target,
+                    const device_platform::SensorQualitySnapshot& live) {
+        if (target.has_value() ||
+            live.quality != device_platform::SensorQuality::Valid ||
+            !live.filteredCelsius.has_value()) {
+            return;
+        }
+        target = toRoleTemperatureEvidence(live);
+    };
+    auto& firstAfter = current.lastRecoveryEpisodeEvidence->firstAfterRestart;
+    latch(firstAfter.air, liveSensorEvidence.air);
+    latch(firstAfter.product, liveSensorEvidence.product);
+    latch(firstAfter.cooling, liveSensorEvidence.cooling);
+}
 
 RunPersistenceResult RunPersistenceCoordinator::result(
     RunPersistenceResultStatus status, RunPersistenceStep step,
@@ -313,6 +524,210 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
     }
     enterBlockedIndeterminate();
     return {currentStatus, std::nullopt};
+}
+
+RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
+    const RunCommandState& current, const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext& liveSensorEvidence) {
+    const auto invalid = [this](const RunCommandState& state) {
+        return RecoveryActivationOutcome{
+            result(RunPersistenceResultStatus::InvalidDecision,
+                   RunPersistenceStep::CandidateApply,
+                   RunPersistenceTechnicalReason::InvalidProjection),
+            state};
+    };
+    if (state_ != RunPersistenceCoordinatorState::LoadedActiveRun ||
+        !currentHead_.has_value() ||
+        !slots_[currentHead_->current.slot].has_value()) {
+        return {unavailableResult(), current};
+    }
+
+    const auto& loadedRecord = *slots_[currentHead_->current.slot];
+    if (!current.processRunSnapshot.has_value() ||
+        !current.sensorSelection.has_value() ||
+        !current.activeRunSensorMode.has_value()) {
+        return invalid(current);
+    }
+
+    // A reboot while Hop-1-only RecoveryEvaluation is already persisted is an
+    // episode refresh, not a second RecoveryReentryRequired transition.
+    if (current.processState.state == ProcessState::RecoveryEvaluation) {
+        if (!current.pendingRecoveryAnchor.has_value() ||
+            !current.recoveryBootAnchorMonotonicMillis.has_value() ||
+            current.recoveryEpisodeRevision ==
+                std::numeric_limits<std::uint32_t>::max()) {
+            return invalid(current);
+        }
+        auto candidate = current;
+        updateLastKnownEvidence(candidate.recoveryTemperatureEvidence,
+                                liveSensorEvidence);
+        ++candidate.recoveryEpisodeRevision;
+        candidate.recoveryBootAnchorMonotonicMillis = time.monotonicMillis;
+        applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
+        const auto snapshot = makeRunPersistenceSnapshot(
+            candidate, persistedIds_, persistedIdCount_,
+            RunCheckpointTrigger::Transition, time,
+            schedule_.intervalMinutes());
+        if (!snapshot.has_value()) return invalid(current);
+        const auto persisted = writeSnapshotCore(
+            *snapshot, time, false, current,
+            RunPersistenceMutationKind::Recovery, std::nullopt, std::nullopt,
+            std::nullopt, RunPersistenceCoordinatorState::LoadedActiveRun);
+        if (persisted.status != RunPersistenceResultStatus::Applied) {
+            return {persisted, current};
+        }
+        return {persisted, candidate};
+    }
+
+    const auto originalProcessState = current.processState;
+    if (!stateUsesRunSnapshot(originalProcessState.state) ||
+        current.recoveryEpisodeRevision ==
+            std::numeric_limits<std::uint32_t>::max()) {
+        return invalid(current);
+    }
+
+    auto candidate = current;
+    const auto anchor = makePendingRecoveryAnchor(candidate, loadedRecord,
+                                                  originalProcessState);
+    if (!anchor.has_value()) return invalid(current);
+    candidate.pendingRecoveryAnchor = *anchor;
+    candidate.recoveryBootAnchorMonotonicMillis = time.monotonicMillis;
+    ++candidate.recoveryEpisodeRevision;
+    candidate.lastRecoveryEpisodeEvidence = RecoveryEpisodeEvidence{
+        current.recoveryTemperatureEvidence.lastKnown,
+        FirstAfterRestartEvidence{}, candidate.recoveryEpisodeRevision};
+    // The frozen beforeOutage copy must precede every post-restart update.
+    updateLastKnownEvidence(candidate.recoveryTemperatureEvidence,
+                            liveSensorEvidence);
+
+    const auto hop1 = propose(
+        originalProcessState, ProcessState::RecoveryEvaluation,
+        TransitionReason::RecoveryReentryRequired, time.monotonicMillis);
+    if (!hop1.proposed() ||
+        !applyProcessTransition(candidate.processState, hop1,
+                                &*candidate.processRunSnapshot)) {
+        return invalid(current);
+    }
+    applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
+
+    const auto recommendation = computeRestartSensorSelection(
+        *candidate.sensorSelection, *candidate.activeRunSensorMode,
+        recoverySensorSelectionProgramContext(candidate), liveSensorEvidence);
+    candidate.sensorSelectionRuntime = recommendation.runtime;
+    candidate.activeRunSensorMode = recommendation.activeMode;
+    if (candidate.activeManualRun.has_value()) {
+        candidate.activeManualRun->values.sensorMode =
+            recommendation.activeMode;
+    }
+    if (recommendation.runtime.permission != SensorPeltierPermission::Allowed) {
+        const auto rejected = decideProcessTransition(
+            candidate.processState, &*candidate.processRunSnapshot,
+            ProcessSignals{},
+            TransitionRequest{ProcessEvent::RecoveryReject, std::nullopt},
+            time.monotonicMillis);
+        if (rejected.proposed()) {
+            static_cast<void>(
+                applyProcessTransition(candidate.processState, rejected,
+                                       &*candidate.processRunSnapshot));
+        }
+        return {result(RunPersistenceResultStatus::InvalidDecision,
+                       RunPersistenceStep::CandidateApply,
+                       RunPersistenceTechnicalReason::InvalidProjection),
+                candidate};
+    }
+
+    const auto timeContext =
+        deriveRecoveryTimeContext(*candidate.pendingRecoveryAnchor, time,
+                                  *candidate.recoveryBootAnchorMonotonicMillis);
+    if (!timeContext.has_value()) return invalid(current);
+
+    const auto commitCandidate =
+        [&](const RunCommandState& toCommit) -> RecoveryActivationOutcome {
+        const auto snapshot = makeRunPersistenceSnapshot(
+            toCommit, persistedIds_, persistedIdCount_,
+            RunCheckpointTrigger::Transition, time,
+            schedule_.intervalMinutes());
+        if (!snapshot.has_value()) return invalid(current);
+        const auto persisted = writeSnapshotCore(
+            *snapshot, time, false, current,
+            RunPersistenceMutationKind::Recovery, std::nullopt, std::nullopt,
+            std::nullopt, RunPersistenceCoordinatorState::LoadedActiveRun);
+        if (persisted.status != RunPersistenceResultStatus::Applied) {
+            return {persisted, current};
+        }
+        return {persisted, toCommit};
+    };
+
+    if (originalProcessState.state == ProcessState::WaitingForProduct) {
+        const auto verdict = evaluateRecoveryTimeVerdict(
+            timeContext->elapsed,
+            *candidate.processRunSnapshot->maximumProductWaitMinutes * 60U);
+        if (verdict == RecoveryTimeVerdict::DefinitelyExpired) {
+            const auto tombstone =
+                propose(candidate.processState, ProcessState::Standby,
+                        TransitionReason::RecoveryEndedByExpiredWait,
+                        time.monotonicMillis);
+            if (!tombstone.proposed() ||
+                !applyProcessTransition(candidate.processState, tombstone,
+                                        &*candidate.processRunSnapshot)) {
+                return invalid(current);
+            }
+            applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
+            clearActiveRunState(candidate);
+            return commitCandidate(candidate);
+        }
+        if (verdict == RecoveryTimeVerdict::Uncertain) {
+            return commitCandidate(candidate);
+        }
+    }
+
+    if (!candidate.pendingRecoveryAnchor.has_value()) return invalid(current);
+    const auto accumulated = accumulatedPriorForResume(
+        *candidate.pendingRecoveryAnchor, *timeContext);
+    if (!accumulated.has_value()) return invalid(current);
+
+    PriorBootPhaseElapsed priorForDecision = *accumulated;
+    if (originalProcessState.state == ProcessState::WaitingForProduct) {
+        if (!timeContext->elapsed.totalSecondsUpperBound.has_value()) {
+            return invalid(current);
+        }
+        const auto upper =
+            checkedToUint32(*timeContext->elapsed.totalSecondsUpperBound);
+        if (!upper.has_value()) return invalid(current);
+        priorForDecision = PriorBootPhaseElapsed{*upper, *upper};
+    }
+
+    const auto recovered =
+        rebasedRecoveredState(originalProcessState, time.monotonicMillis);
+    const auto hop2 = decideProcessTransition(
+        candidate.processState, &*candidate.processRunSnapshot,
+        ProcessSignals{},
+        TransitionRequest{ProcessEvent::RecoveryResume, recovered},
+        time.monotonicMillis, priorForDecision);
+    if (!hop2.proposed() ||
+        !applyProcessTransition(candidate.processState, hop2,
+                                &*candidate.processRunSnapshot)) {
+        return originalProcessState.state == ProcessState::WaitingForProduct
+                   ? commitCandidate(candidate)
+                   : invalid(current);
+    }
+
+    if (candidate.processState.state == ProcessState::WaitingForProduct ||
+        candidate.processState.state == ProcessState::Fermenting ||
+        candidate.processState.state == ProcessState::CoolHolding) {
+        candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+            candidate.processState.state, *accumulated};
+    } else {
+        candidate.priorBootPhaseElapsed.reset();
+    }
+    // Latching must happen before this conditional deletion. A resolved
+    // resume closes the time question; an unresolved one retains both fields.
+    applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
+    if (recoveryTimeResolvedAtResume(candidate.priorBootPhaseElapsed)) {
+        candidate.pendingRecoveryAnchor.reset();
+        candidate.recoveryBootAnchorMonotonicMillis.reset();
+    }
+    return commitCandidate(candidate);
 }
 
 RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
@@ -603,7 +1018,7 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
 RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
     const RunCheckpointTime& time,
-    const CrossRolePlausibilityContext* /*liveSensorEvidence*/) {
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
     if (state_ != RunPersistenceCoordinatorState::Ready &&
         state_ != RunPersistenceCoordinatorState::ReadyEmpty)
         return unavailableResult();
@@ -651,6 +1066,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
                               ? RunPersistenceResultStatus::StaleDecision
                               : RunPersistenceResultStatus::InvalidDecision,
                           RunPersistenceStep::CandidateApply);
+        if (liveSensorEvidence != nullptr)
+            applyLiveRecoveryEvidence(current, *liveSensorEvidence);
         RunPersistenceResult ramResult{RunPersistenceResultStatus::Applied};
         ramResult.step = RunPersistenceStep::RamApply;
         ramResult.durability = RunPersistenceDurability::Unchanged;
@@ -666,6 +1083,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
                           ? RunPersistenceResultStatus::StaleDecision
                           : RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CandidateApply);
+    if (liveSensorEvidence != nullptr)
+        applyLiveRecoveryEvidence(candidate, *liveSensorEvidence);
     auto ids = persistedIds_;
     auto count = persistedIdCount_;
     if (count < ids.size())
@@ -697,6 +1116,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
             RunPersistenceTechnicalReason::InvalidProjection,
             RunPersistenceDurability::Changed);
     }
+    if (liveSensorEvidence != nullptr)
+        applyLiveRecoveryEvidence(current, *liveSensorEvidence);
     persistedIds_ = ids;
     persistedIdCount_ = count;
     RunPersistenceResult result{RunPersistenceResultStatus::Applied};
@@ -716,7 +1137,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
 RunPersistenceResult RunPersistenceCoordinator::persistTransition(
     RunCommandState& current, const TransitionDecision& decision,
     const RunCheckpointTime& time,
-    const CrossRolePlausibilityContext* /*liveSensorEvidence*/) {
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
     if (state_ != RunPersistenceCoordinatorState::Ready)
         return unavailableResult();
     if (!decision.proposed() || !eligibleTransition(decision.reason))
@@ -735,6 +1156,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
                       RunPersistenceStep::CandidateApply);
     if (decision.reason == TransitionReason::ProductWaitExpired)
         clearActiveRunState(candidate);
+    if (liveSensorEvidence != nullptr)
+        applyLiveRecoveryEvidence(candidate, *liveSensorEvidence);
     const auto snapshot = makeRunPersistenceSnapshot(
         candidate, persistedIds_, persistedIdCount_,
         RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes());
@@ -760,6 +1183,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
     }
     if (decision.reason == TransitionReason::ProductWaitExpired)
         clearActiveRunState(current);
+    if (liveSensorEvidence != nullptr)
+        applyLiveRecoveryEvidence(current, *liveSensorEvidence);
     RunPersistenceResult result{RunPersistenceResultStatus::Applied};
     result.step = RunPersistenceStep::RamApply;
     result.durability = RunPersistenceDurability::Changed;
@@ -771,7 +1196,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
 
 RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
     const RunCommandState& current, const RunCheckpointTime& time,
-    const CrossRolePlausibilityContext* /*liveSensorEvidence*/) {
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
     if (state_ == RunPersistenceCoordinatorState::ReadyEmpty) {
         return result(RunPersistenceResultStatus::NoActiveRun);
     }
@@ -808,8 +1233,11 @@ RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
         return result(RunPersistenceResultStatus::NotDue);
     if (due != RunCheckpointScheduleStatus::Success)
         return result(RunPersistenceResultStatus::TimeWentBackwards);
+    auto candidate = current;
+    if (liveSensorEvidence != nullptr)
+        applyLiveRecoveryEvidence(candidate, *liveSensorEvidence);
     const auto snapshot = makeRunPersistenceSnapshot(
-        current, persistedIds_, persistedIdCount_,
+        candidate, persistedIds_, persistedIdCount_,
         RunCheckpointTrigger::Periodic, time, schedule_.intervalMinutes());
     // mutationKind is inert here: a periodic write only ever produces a
     // Committed head, which carries no mutation-kind field
@@ -850,7 +1278,7 @@ bool automaticSensorSelectionCause(SensorSelectionDecisionCause cause) {
 RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     RunCommandState& current, const SensorSelectionStateMutation& mutation,
     const RunCheckpointTime& time,
-    const CrossRolePlausibilityContext* /*liveSensorEvidence*/) {
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
     if (state_ == RunPersistenceCoordinatorState::ReadyEmpty)
         return result(RunPersistenceResultStatus::NoActiveRun);
     if (state_ != RunPersistenceCoordinatorState::Ready)
@@ -900,6 +1328,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     // auf dem alten Wert stehen) und haelt den in ManualRunPlan::values
     // duplizierten Sensormodus konsistent.
     applySensorSelectionMutation(candidate, mutation);
+    if (liveSensorEvidence != nullptr)
+        applyLiveRecoveryEvidence(candidate, *liveSensorEvidence);
     const auto snapshot =
         makeRunPersistenceSnapshot(candidate, persistedIds_, persistedIdCount_,
                                    RunCheckpointTrigger::SensorSelection, time,
@@ -914,6 +1344,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     applySensorSelectionMutation(current, mutation);
+    if (liveSensorEvidence != nullptr)
+        applyLiveRecoveryEvidence(current, *liveSensorEvidence);
     RunPersistenceResult out{RunPersistenceResultStatus::Applied};
     out.step = RunPersistenceStep::RamApply;
     out.durability = RunPersistenceDurability::Changed;

@@ -124,6 +124,18 @@ struct RunPersistenceLoadResult {
     std::optional<RunPersistenceSnapshot> snapshot;
 };
 
+struct RecoveryActivationOutcome {
+    RunPersistenceResult persistenceResult;
+    RunCommandState resultingState;
+};
+
+// Reine RAM-Mutation fuer die diagnostische First-after-restart-Evidenz. Die
+// Funktion ist unabhaengig davon aufrufbar, ob im selben Moment ein
+// Persistenz-Commit stattfindet.
+void applyLiveRecoveryEvidence(
+    RunCommandState& current,
+    const CrossRolePlausibilityContext& liveSensorEvidence);
+
 class RunPersistenceCoordinator {
    public:
     // Private implementation data is declared here solely because the
@@ -164,6 +176,9 @@ class RunPersistenceCoordinator {
     [[nodiscard]] RunPersistenceCoordinatorState state() const {
         return state_;
     }
+    [[nodiscard]] RecoveryActivationOutcome activateLoadedRun(
+        const RunCommandState& current, const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext& liveSensorEvidence);
 
    private:
     friend class RunPersistenceCoordinatorTestAccess;

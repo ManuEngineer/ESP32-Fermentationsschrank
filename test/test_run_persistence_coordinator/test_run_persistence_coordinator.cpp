@@ -2679,6 +2679,300 @@ RunCommandState readyActiveRunWithSensorSelection(
     return state;
 }
 
+CrossRolePlausibilityContext recoveryPlausibility(
+    std::uint64_t evaluatedAtMonotonicMillis, bool productValid = true) {
+    CrossRolePlausibilityContext plausibility;
+    plausibility.phase = ProcessState::RecoveryEvaluation;
+    plausibility.evaluationMonotonicMillis = evaluatedAtMonotonicMillis;
+    const auto valid = [](double value) {
+        device_platform::SensorQualitySnapshot snapshot;
+        snapshot.quality = device_platform::SensorQuality::Valid;
+        snapshot.filteredCelsius = value;
+        return snapshot;
+    };
+    plausibility.air = valid(20.0);
+    plausibility.product = valid(21.0);
+    plausibility.cooling = valid(19.0);
+    if (!productValid) {
+        plausibility.product.quality = device_platform::SensorQuality::Failed;
+        plausibility.product.filteredCelsius.reset();
+        plausibility.product.lastFaultReason =
+            device_platform::SensorFaultReason::MissingSample;
+    }
+    return plausibility;
+}
+
+void test_apply_live_recovery_evidence_requires_a_value_to_latch() {
+    RunCommandState state;
+    state.processState.state = ProcessState::RecoveryEvaluation;
+    state.pendingRecoveryAnchor = PendingRecoveryAnchor{};
+    state.lastRecoveryEpisodeEvidence = RecoveryEpisodeEvidence{};
+
+    auto plausibility = recoveryPlausibility(100U);
+    plausibility.air.filteredCelsius.reset();
+    applyLiveRecoveryEvidence(state, plausibility);
+    TEST_ASSERT_FALSE(
+        state.lastRecoveryEpisodeEvidence->firstAfterRestart.air.has_value());
+    TEST_ASSERT_TRUE(state.lastRecoveryEpisodeEvidence->firstAfterRestart
+                         .product.has_value());
+
+    plausibility.air.filteredCelsius = 20.5;
+    applyLiveRecoveryEvidence(state, plausibility);
+    TEST_ASSERT_TRUE(
+        state.lastRecoveryEpisodeEvidence->firstAfterRestart.air.has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(
+        20.5, *state.lastRecoveryEpisodeEvidence->firstAfterRestart.air
+                   ->filteredCelsius);
+}
+
+void test_activate_loaded_run_resumes_and_retains_unresolved_anchor() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 1001U);
+
+    ProcessSignals signals;
+    signals.qualificationConditionValid = true;
+    auto transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::QualificationTrackingStarted),
+        static_cast<int>(transition.reason));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{200U, std::nullopt})
+                .status));
+
+    transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 600300U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::TargetQualified),
+                          static_cast<int>(transition.reason));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{600300U, std::nullopt})
+                .status));
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = afterBoot.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(loaded.status));
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+
+    const auto live = recoveryPlausibility(700000U);
+    const auto outcome = afterBoot.activateLoadedRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt}, live);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(afterBoot.state()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fermenting),
+        static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_TRUE(outcome.resultingState.pendingRecoveryAnchor.has_value());
+    TEST_ASSERT_TRUE(
+        outcome.resultingState.recoveryBootAnchorMonotonicMillis.has_value());
+    TEST_ASSERT_TRUE(outcome.resultingState.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_FALSE(outcome.resultingState.priorBootPhaseElapsed->elapsed
+                          .upperBoundSeconds.has_value());
+    TEST_ASSERT_TRUE(outcome.resultingState.lastRecoveryEpisodeEvidence
+                         ->firstAfterRestart.air.has_value());
+    TEST_ASSERT_TRUE(outcome.resultingState.lastRecoveryEpisodeEvidence
+                         ->firstAfterRestart.product.has_value());
+    TEST_ASSERT_TRUE(outcome.resultingState.lastRecoveryEpisodeEvidence
+                         ->firstAfterRestart.cooling.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::SensorQuality::Valid),
+        static_cast<int>(outcome.resultingState.recoveryTemperatureEvidence
+                             .lastKnown.product.quality));
+}
+
+void test_activate_loaded_run_resolved_resume_clears_anchor() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(coordinator, 1002U);
+
+    ProcessSignals signals;
+    signals.qualificationConditionValid = true;
+    auto transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{200U, 1700000200})
+                .status));
+    transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 600300U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{600300U, 1700000600})
+                .status));
+
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = afterBoot.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    const auto outcome = afterBoot.activateLoadedRun(
+        *restored, RunCheckpointTime{700000U, 1700000700},
+        recoveryPlausibility(700000U));
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_TRUE(outcome.resultingState.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_TRUE(outcome.resultingState.priorBootPhaseElapsed->elapsed
+                         .upperBoundSeconds.has_value());
+    TEST_ASSERT_FALSE(outcome.resultingState.pendingRecoveryAnchor.has_value());
+    TEST_ASSERT_FALSE(
+        outcome.resultingState.recoveryBootAnchorMonotonicMillis.has_value());
+}
+
+void test_activate_loaded_run_episode_refreshes_hop_one_anchor() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(
+                    state, startDecision(state, 1003U, 100U, preheatProgram()),
+                    RunCheckpointTime{100U, std::nullopt})
+                .status));
+
+    ProcessSignals signals;
+    signals.qualificationConditionValid = true;
+    auto transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::QualificationTrackingStarted),
+        static_cast<int>(transition.reason));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{200U, std::nullopt})
+                .status));
+    transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 600300U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::PreheatQualified),
+                          static_cast<int>(transition.reason));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, transition,
+                                   RunCheckpointTime{600300U, std::nullopt})
+                .status));
+
+    store.restart();
+    RunPersistenceCoordinator firstBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto firstLoaded = firstBoot.loadAndInitialize();
+    const auto firstRestored =
+        restoreRunPersistenceSnapshot(*firstLoaded.snapshot);
+    TEST_ASSERT_TRUE(firstRestored.has_value());
+    const auto live = recoveryPlausibility(700000U);
+    const auto first = firstBoot.activateLoadedRun(
+        *firstRestored, RunCheckpointTime{700000U, std::nullopt}, live);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(first.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::RecoveryEvaluation),
+        static_cast<int>(first.resultingState.processState.state));
+    TEST_ASSERT_TRUE(first.resultingState.pendingRecoveryAnchor.has_value());
+    const auto firstRevision = first.resultingState.recoveryEpisodeRevision;
+    const auto firstAnchor = *first.resultingState.pendingRecoveryAnchor;
+
+    store.restart();
+    RunPersistenceCoordinator secondBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto secondLoaded = secondBoot.loadAndInitialize();
+    const auto secondRestored =
+        restoreRunPersistenceSnapshot(*secondLoaded.snapshot);
+    TEST_ASSERT_TRUE(secondRestored.has_value());
+    const auto second = secondBoot.activateLoadedRun(
+        *secondRestored, RunCheckpointTime{800000U, std::nullopt},
+        recoveryPlausibility(800000U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(second.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::RecoveryEvaluation),
+        static_cast<int>(second.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_UINT32(firstRevision + 1U,
+                             second.resultingState.recoveryEpisodeRevision);
+    TEST_ASSERT_TRUE(
+        second.resultingState.recoveryBootAnchorMonotonicMillis.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        800000U, *second.resultingState.recoveryBootAnchorMonotonicMillis);
+    const auto& secondAnchor = *second.resultingState.pendingRecoveryAnchor;
+    TEST_ASSERT_TRUE(equalProcessRuntimeState(
+        firstAnchor.originalProcessState, secondAnchor.originalProcessState));
+    TEST_ASSERT_EQUAL_UINT64(
+        firstAnchor.knownPhaseSecondsAtOriginalCheckpoint,
+        secondAnchor.knownPhaseSecondsAtOriginalCheckpoint);
+    TEST_ASSERT_EQUAL_UINT64(firstAnchor.knownSecondsSinceOriginalCheckpoint,
+                             secondAnchor.knownSecondsSinceOriginalCheckpoint);
+}
+
+void test_activate_loaded_run_rejects_sensor_gate_without_writing() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    const auto state = readyActiveRunWithSensorSelection(coordinator, 1004U);
+    store.restart();
+    RunPersistenceCoordinator afterBoot(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = afterBoot.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    auto invalidEvidence = recoveryPlausibility(700000U, false);
+    const auto writesBefore = store.writeCount();
+
+    const auto outcome = afterBoot.activateLoadedRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt}, invalidEvidence);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fault),
+        static_cast<int>(outcome.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::LoadedActiveRun),
+        static_cast<int>(afterBoot.state()));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+}
+
 RunCommandState readyActiveManualRunWithSensorSelection(
     RunPersistenceCoordinator& coordinator, CommandId startId) {
     RunCommandState state;
@@ -3477,6 +3771,11 @@ int main(int, char**) {
         test_persist_sensor_selection_from_ready_empty_reports_no_active_run);
     RUN_TEST(test_persist_sensor_selection_same_mutation_is_not_replayed);
     RUN_TEST(test_persist_sensor_selection_requires_active_run_fields);
+    RUN_TEST(test_apply_live_recovery_evidence_requires_a_value_to_latch);
+    RUN_TEST(test_activate_loaded_run_resumes_and_retains_unresolved_anchor);
+    RUN_TEST(test_activate_loaded_run_resolved_resume_clears_anchor);
+    RUN_TEST(test_activate_loaded_run_episode_refreshes_hop_one_anchor);
+    RUN_TEST(test_activate_loaded_run_rejects_sensor_gate_without_writing);
     RUN_TEST(
         test_persist_sensor_selection_from_loaded_active_run_stays_recovery_pending);
     RUN_TEST(test_persist_sensor_selection_rejects_manual_causes);
