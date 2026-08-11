@@ -214,6 +214,15 @@ class RunPersistenceCoordinator {
         const RunCheckpointTime& time,
         const CrossRolePlausibilityContext& liveSensorEvidence);
 
+    // Gemeinsamer, write-before-apply Recovery-Schreibpfad fuer spaetere
+    // fachliche Recovery-Kandidaten (Zeit-Reevaluation und Gewichtung). Der
+    // Aufrufer liefert bereits den vollstaendigen, um genau eine
+    // RunRevision erhoehten Kandidaten; hier bleibt die Persistenzmutation
+    // auf `Recovery` festgelegt und es entsteht kein zweiter Schreibkern.
+    [[nodiscard]] RunPersistenceResult persistRecoveryCandidate(
+        RunCommandState& current, const RunCommandState& candidate,
+        const RunCheckpointTime& time);
+
    private:
     friend class RunPersistenceCoordinatorTestAccess;
 

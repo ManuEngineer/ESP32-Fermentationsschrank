@@ -72,4 +72,19 @@ struct EffectiveAnchorTimeBasis {
 [[nodiscard]] std::optional<EffectiveAnchorTimeBasis>
 deriveEffectiveAnchorTimeBasis(const PendingRecoveryAnchor& anchor);
 
+struct RecoveryTimeContext {
+    EffectiveAnchorTimeBasis basis;
+    std::optional<RecoveryOutageBounds> outage;
+    RecoveredPhaseElapsed elapsed;
+};
+
+// Gemeinsame, checked Ableitung fuer Hop-1-Verdicts, Benutzer-Reevaluation
+// und die spaetere Recovery-Zeitkorrektur. Der UTC-Wert wird am aktuellen
+// Boot-Anker abgeleitet; ein Carry-Forward-Anker erhaelt keine kuenstliche
+// Ausfall-Untergrenze.
+[[nodiscard]] std::optional<RecoveryTimeContext> deriveRecoveryTimeContext(
+    const PendingRecoveryAnchor& anchor, std::optional<std::int64_t> utcNow,
+    std::uint64_t nowMonotonicMillis,
+    std::uint64_t recoveryBootAnchorMonotonicMillis);
+
 }  // namespace fermentation

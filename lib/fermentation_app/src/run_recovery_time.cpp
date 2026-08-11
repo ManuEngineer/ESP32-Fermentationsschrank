@@ -172,4 +172,51 @@ std::optional<EffectiveAnchorTimeBasis> deriveEffectiveAnchorTimeBasis(
                                     *effectiveKnownSeconds};
 }
 
+std::optional<RecoveryTimeContext> deriveRecoveryTimeContext(
+    const PendingRecoveryAnchor& anchor, std::optional<std::int64_t> utcNow,
+    std::uint64_t nowMonotonicMillis,
+    std::uint64_t recoveryBootAnchorMonotonicMillis) {
+    const auto basis = deriveEffectiveAnchorTimeBasis(anchor);
+    if (!basis.has_value()) return std::nullopt;
+
+    const auto utcAtRecoveryBoot = deriveUtcAtRecoveryBootAnchor(
+        utcNow, nowMonotonicMillis, recoveryBootAnchorMonotonicMillis);
+    auto outage = computeRecoveryOutageBounds(RecoveryOutageBoundsInput{
+        basis->effectiveCheckpointUtc, utcAtRecoveryBoot, std::nullopt,
+        anchor.originalCheckpointTrigger});
+    if (outage.has_value() && anchor.knownSecondsSinceOriginalCheckpoint > 0U) {
+        outage->outageSecondsLowerBound = 0U;
+    }
+    const auto knownWithAccumulated =
+        checkedAddUint64(anchor.accumulatedBeforeEpisode.lowerBoundSeconds,
+                         basis->effectiveKnownSecondsBeforeCheckpoint);
+    if (!knownWithAccumulated.has_value()) return std::nullopt;
+    std::optional<RecoveryOutageBounds> boundedOutage = outage;
+    if (boundedOutage.has_value() &&
+        anchor.accumulatedBeforeEpisode.upperBoundSeconds.has_value()) {
+        const auto accumulatedUpper =
+            checkedAddUint64(*anchor.accumulatedBeforeEpisode.upperBoundSeconds,
+                             basis->effectiveKnownSecondsBeforeCheckpoint);
+        if (!accumulatedUpper.has_value()) return std::nullopt;
+        const auto upper = checkedAddUint64(
+            *accumulatedUpper, boundedOutage->outageSecondsUpperBound);
+        if (!upper.has_value()) return std::nullopt;
+        // `computeRecoveredPhaseElapsed` takes a single known base and adds
+        // the outage interval symmetrically. The lower side is handled below
+        // because an accumulated upper bound is required before an upper
+        // result can be exposed.
+        const auto lower = checkedAddUint64(
+            *knownWithAccumulated, boundedOutage->outageSecondsLowerBound);
+        if (!lower.has_value()) return std::nullopt;
+        return RecoveryTimeContext{
+            *basis, boundedOutage,
+            RecoveredPhaseElapsed{basis->effectiveKnownSecondsBeforeCheckpoint,
+                                  *lower, upper}};
+    }
+    const auto elapsed = computeRecoveredPhaseElapsed(
+        RecoveredPhaseElapsedInput{*knownWithAccumulated, outage});
+    if (!elapsed.has_value()) return std::nullopt;
+    return RecoveryTimeContext{*basis, outage, *elapsed};
+}
+
 }  // namespace fermentation

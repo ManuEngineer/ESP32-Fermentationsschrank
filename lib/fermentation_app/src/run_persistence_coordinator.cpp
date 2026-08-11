@@ -83,49 +83,6 @@ bool recoveryTimeResolvedAtResume(
            accumulated->elapsed.upperBoundSeconds.has_value();
 }
 
-struct RecoveryTimeContext {
-    EffectiveAnchorTimeBasis basis;
-    std::optional<RecoveryOutageBounds> outage;
-    RecoveredPhaseElapsed elapsed;
-};
-
-std::optional<RecoveryTimeContext> deriveRecoveryTimeContext(
-    const PendingRecoveryAnchor& anchor, const RunCheckpointTime& time,
-    std::uint64_t recoveryBootAnchorMonotonicMillis) {
-    const auto basis = deriveEffectiveAnchorTimeBasis(anchor);
-    if (!basis.has_value()) return std::nullopt;
-
-    const auto utcAtRecoveryBoot =
-        deriveUtcAtRecoveryBootAnchor(time.utcUnixSeconds, time.monotonicMillis,
-                                      recoveryBootAnchorMonotonicMillis);
-    const auto outage = computeRecoveryOutageBounds(RecoveryOutageBoundsInput{
-        basis->effectiveCheckpointUtc, utcAtRecoveryBoot, std::nullopt,
-        anchor.originalCheckpointTrigger});
-    const auto lowerWithKnown =
-        checkedAdd(anchor.accumulatedBeforeEpisode.lowerBoundSeconds,
-                   basis->effectiveKnownSecondsBeforeCheckpoint);
-    if (!lowerWithKnown.has_value()) return std::nullopt;
-    const auto lower =
-        checkedAdd(*lowerWithKnown,
-                   outage.has_value() ? outage->outageSecondsLowerBound : 0U);
-    if (!lower.has_value()) return std::nullopt;
-
-    std::optional<std::uint64_t> upper;
-    if (anchor.accumulatedBeforeEpisode.upperBoundSeconds.has_value() &&
-        outage.has_value()) {
-        const auto upperWithKnown =
-            checkedAdd(*anchor.accumulatedBeforeEpisode.upperBoundSeconds,
-                       basis->effectiveKnownSecondsBeforeCheckpoint);
-        if (!upperWithKnown.has_value()) return std::nullopt;
-        upper = checkedAdd(*upperWithKnown, outage->outageSecondsUpperBound);
-        if (!upper.has_value()) return std::nullopt;
-    }
-    return RecoveryTimeContext{
-        *basis, outage,
-        RecoveredPhaseElapsed{basis->effectiveKnownSecondsBeforeCheckpoint,
-                              *lower, upper}};
-}
-
 std::optional<PendingRecoveryAnchor> makePendingRecoveryAnchor(
     const RunCommandState& candidate,
     const RunPersistenceRawRecord& loadedRecord,
@@ -656,9 +613,9 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         return {persisted, toCommit};
     };
 
-    const auto timeContext =
-        deriveRecoveryTimeContext(*candidate.pendingRecoveryAnchor, time,
-                                  *candidate.recoveryBootAnchorMonotonicMillis);
+    const auto timeContext = deriveRecoveryTimeContext(
+        *candidate.pendingRecoveryAnchor, time.utcUnixSeconds,
+        time.monotonicMillis, *candidate.recoveryBootAnchorMonotonicMillis);
     if (!timeContext.has_value()) return invalid(current);
 
     if (originalProcessState.state == ProcessState::WaitingForProduct) {
@@ -879,9 +836,9 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
     }
     applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
 
-    const auto timeContext =
-        deriveRecoveryTimeContext(*candidate.pendingRecoveryAnchor, time,
-                                  *candidate.recoveryBootAnchorMonotonicMillis);
+    const auto timeContext = deriveRecoveryTimeContext(
+        *candidate.pendingRecoveryAnchor, time.utcUnixSeconds,
+        time.monotonicMillis, *candidate.recoveryBootAnchorMonotonicMillis);
     if (!timeContext.has_value()) return invalid(current);
 
     if (originalProcessState.state == ProcessState::WaitingForProduct) {
@@ -1042,8 +999,8 @@ RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
         }
         phase = ProcessState::WaitingForProduct;
         timeContext = deriveRecoveryTimeContext(
-            *current.pendingRecoveryAnchor, time,
-            *current.recoveryBootAnchorMonotonicMillis);
+            *current.pendingRecoveryAnchor, time.utcUnixSeconds,
+            time.monotonicMillis, *current.recoveryBootAnchorMonotonicMillis);
         if (!timeContext.has_value()) return notAllowed();
     } else if (current.processState.state == ProcessState::Fermenting ||
                current.processState.state == ProcessState::CoolHolding) {
@@ -1659,6 +1616,43 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     result.sensorSelectionNotice = decision.sensorSelectionNotice;
     result.startSensorSelectionNotice = decision.startSensorSelectionNotice;
     return result;
+}
+
+RunPersistenceResult RunPersistenceCoordinator::persistRecoveryCandidate(
+    RunCommandState& current, const RunCommandState& candidate,
+    const RunCheckpointTime& time) {
+    if (state_ != RunPersistenceCoordinatorState::Ready &&
+        state_ != RunPersistenceCoordinatorState::LoadedActiveRun) {
+        return unavailableResult();
+    }
+    if (current.runRevision == std::numeric_limits<std::uint32_t>::max() ||
+        candidate.runRevision != current.runRevision + 1U) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    const auto snapshot = makeRunPersistenceSnapshot(
+        candidate, persistedIds_, persistedIdCount_,
+        RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes());
+    if (!snapshot.has_value()) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    const auto rollbackState = state_;
+    const auto persisted = writeSnapshotCore(
+        *snapshot, time, false, current, RunPersistenceMutationKind::Recovery,
+        std::nullopt, std::nullopt, RunPersistenceFallbackDirective{},
+        rollbackState);
+    if (persisted.status != RunPersistenceResultStatus::Applied) {
+        return persisted;
+    }
+    current = candidate;
+    auto applied = persisted;
+    applied.step = RunPersistenceStep::RamApply;
+    applied.durability = RunPersistenceDurability::Changed;
+    applied.coordinatorState = state_;
+    return applied;
 }
 
 RunPersistenceResult RunPersistenceCoordinator::persistTransition(
