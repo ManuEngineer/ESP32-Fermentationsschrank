@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -19,6 +20,7 @@ enum class RunPersistenceCoordinatorState : std::uint8_t {
     Ready,
     Busy,
     BlockedIndeterminate,
+    FallbackRecoveryPending,
     PersistenceCommittedApplyFailed,
 };
 
@@ -140,10 +142,12 @@ class RunPersistenceCoordinator {
     [[nodiscard]] RunPersistenceLoadResult loadAndInitialize();
     [[nodiscard]] RunPersistenceResult persistCommand(
         RunCommandState& current, const CommandDecision& decision,
-        const RunCheckpointTime& time);
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
     [[nodiscard]] RunPersistenceResult persistTransition(
         RunCommandState& current, const TransitionDecision& decision,
-        const RunCheckpointTime& time);
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
     // #21, 6.14.3: transports exactly the six automatic
     // SensorSelectionDecisionCause values (never ManualUserFallback/
     // ManualUserReturn, which route through persistCommand once #21 Commit 4
@@ -152,14 +156,18 @@ class RunPersistenceCoordinator {
     // this function contains no second rule implementation.
     [[nodiscard]] RunPersistenceResult persistSensorSelection(
         RunCommandState& current, const SensorSelectionStateMutation& mutation,
-        const RunCheckpointTime& time);
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
     [[nodiscard]] RunPersistenceResult checkpointPeriodic(
-        const RunCommandState& current, const RunCheckpointTime& time);
+        const RunCommandState& current, const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
     [[nodiscard]] RunPersistenceCoordinatorState state() const {
         return state_;
     }
 
    private:
+    friend class RunPersistenceCoordinatorTestAccess;
+
     // `mutationKind` is explicit (6.14.2) rather than inferred from
     // commandId presence: persistTransition and persistSensorSelection both
     // omit commandId, but need distinct RunPersistenceHead::mutationKind
@@ -170,6 +178,14 @@ class RunPersistenceCoordinator {
         bool periodic, const RunCommandState& before,
         RunPersistenceMutationKind mutationKind,
         std::optional<CommandId> commandId = std::nullopt);
+    [[nodiscard]] RunPersistenceResult writeSnapshotCore(
+        const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+        bool periodic, const RunCommandState& before,
+        RunPersistenceMutationKind mutationKind,
+        std::optional<CommandId> commandId,
+        std::optional<std::size_t> targetSlotOverride,
+        std::optional<RunCheckpointReference> fallbackOverride,
+        RunPersistenceCoordinatorState rollbackState);
     [[nodiscard]] RunPersistenceResult unavailableResult() const;
     [[nodiscard]] RunPersistenceResult result(
         RunPersistenceResultStatus status,

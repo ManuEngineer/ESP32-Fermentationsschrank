@@ -67,7 +67,8 @@ RunPersistenceResult RunPersistenceCoordinator::unavailableResult() const {
         RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed)
         return result(
             RunPersistenceResultStatus::PersistenceCommittedApplyFailed);
-    if (state_ == RunPersistenceCoordinatorState::LoadedActiveRun)
+    if (state_ == RunPersistenceCoordinatorState::LoadedActiveRun ||
+        state_ == RunPersistenceCoordinatorState::FallbackRecoveryPending)
         return result(RunPersistenceResultStatus::RecoveryPending);
     return result(RunPersistenceResultStatus::Blocked);
 }
@@ -268,7 +269,26 @@ RunPersistenceLoadResult RunPersistenceCoordinator::loadAndInitialize() {
             loadReference(*currentHead_->fallback, fallbackStatus);
         if (fallbackRecord.has_value()) {
             slots_[currentHead_->fallback->slot] = *fallbackRecord;
-            enterBlockedIndeterminate();
+            const auto raiseCheckpointHighWatermark =
+                [this](std::uint64_t checkpointRevision) {
+                    if (nextCheckpointRevision_ == 0U ||
+                        checkpointRevision ==
+                            std::numeric_limits<std::uint64_t>::max()) {
+                        nextCheckpointRevision_ = 0U;
+                        return;
+                    }
+                    nextCheckpointRevision_ = std::max(nextCheckpointRevision_,
+                                                       checkpointRevision + 1U);
+                };
+            raiseCheckpointHighWatermark(fallbackRecord->checkpointRevision);
+            raiseCheckpointHighWatermark(
+                currentHead_->current.checkpointRevision);
+            raiseCheckpointHighWatermark(
+                currentHead_->fallback->checkpointRevision);
+            persistedIds_ = fallbackRecord->snapshot.persistedRunCommandIds;
+            persistedIdCount_ =
+                fallbackRecord->snapshot.persistedRunCommandCount;
+            state_ = RunPersistenceCoordinatorState::FallbackRecoveryPending;
             return {RunPersistenceLoadStatus::FallbackRecovered,
                     fallbackRecord->snapshot};
         }
@@ -292,6 +312,19 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
     if (state_ != RunPersistenceCoordinatorState::Ready &&
         state_ != RunPersistenceCoordinatorState::ReadyEmpty)
         return unavailableResult();
+    const auto rollbackState = state_;
+    return writeSnapshotCore(snapshot, time, periodic, before, mutationKind,
+                             commandId, std::nullopt, std::nullopt,
+                             rollbackState);
+}
+
+RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(
+    const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+    bool periodic, const RunCommandState& before,
+    RunPersistenceMutationKind mutationKind, std::optional<CommandId> commandId,
+    std::optional<std::size_t> targetSlotOverride,
+    std::optional<RunCheckpointReference> fallbackOverride,
+    RunPersistenceCoordinatorState rollbackState) {
     if (nextCheckpointRevision_ == 0U || nextHeadRevision_ == 0U ||
         (!periodic &&
          nextHeadRevision_ == std::numeric_limits<std::uint64_t>::max()))
@@ -305,13 +338,47 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
     }
     state_ = RunPersistenceCoordinatorState::Busy;
     const std::size_t target =
-        currentHead_.has_value() ? 1U - currentHead_->current.slot : 0U;
+        targetSlotOverride.has_value()
+            ? *targetSlotOverride
+            : (currentHead_.has_value() ? 1U - currentHead_->current.slot : 0U);
+    const bool sameCurrentSlot =
+        currentHead_.has_value() && target == currentHead_->current.slot;
+    const bool validFallbackRecoverySameSlot =
+        !periodic &&
+        rollbackState ==
+            RunPersistenceCoordinatorState::FallbackRecoveryPending &&
+        mutationKind == RunPersistenceMutationKind::Recovery &&
+        sameCurrentSlot && currentHead_->fallback.has_value() &&
+        fallbackOverride.has_value() && fallbackOverride->slot != target &&
+        fallbackOverride->slot == currentHead_->fallback->slot &&
+        fallbackOverride->schemaVersion ==
+            currentHead_->fallback->schemaVersion &&
+        fallbackOverride->storageEpoch ==
+            currentHead_->fallback->storageEpoch &&
+        fallbackOverride->checkpointRevision ==
+            currentHead_->fallback->checkpointRevision &&
+        fallbackOverride->payloadLength ==
+            currentHead_->fallback->payloadLength &&
+        fallbackOverride->payloadCrc == currentHead_->fallback->payloadCrc &&
+        fallbackOverride->variant == currentHead_->fallback->variant;
+    if (target > 1U ||
+        (fallbackOverride.has_value() &&
+         (fallbackOverride->slot > 1U || fallbackOverride->slot == target))) {
+        state_ = rollbackState;
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    if (sameCurrentSlot && !validFallbackRecoverySameSlot) {
+        state_ = rollbackState;
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
     std::string payload;
     if (encodeRunPersistenceSnapshot(snapshot, payload) !=
         RunPersistenceCodecStatus::Success) {
-        state_ = currentHead_.has_value()
-                     ? RunPersistenceCoordinatorState::Ready
-                     : RunPersistenceCoordinatorState::ReadyEmpty;
+        state_ = rollbackState;
         return result(RunPersistenceResultStatus::InvalidDecision,
                       RunPersistenceStep::CheckpointSlot,
                       RunPersistenceTechnicalReason::CodecError);
@@ -323,9 +390,7 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
     if (device_platform::encodeEnvelope(env, targetBytes,
                                         kMaximumCheckpointRecordBytes) !=
         device_platform::EnvelopeEncodeStatus::Success) {
-        state_ = currentHead_.has_value()
-                     ? RunPersistenceCoordinatorState::Ready
-                     : RunPersistenceCoordinatorState::ReadyEmpty;
+        state_ = rollbackState;
         return result(RunPersistenceResultStatus::CapacityExceeded,
                       RunPersistenceStep::CheckpointSlot,
                       RunPersistenceTechnicalReason::CodecError);
@@ -343,13 +408,13 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
         committed.current = ref;
         if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
             currentHead_.has_value()) {
-            committed.fallback = currentHead_->current;
+            committed.fallback = fallbackOverride.has_value()
+                                     ? fallbackOverride
+                                     : currentHead_->current;
         }
         committedBytes = encodeRunPersistenceHead(committed, epoch_);
         if (!committedBytes.has_value()) {
-            state_ = currentHead_.has_value()
-                         ? RunPersistenceCoordinatorState::Ready
-                         : RunPersistenceCoordinatorState::ReadyEmpty;
+            state_ = rollbackState;
             return result(RunPersistenceResultStatus::CapacityExceeded,
                           RunPersistenceStep::CommittedHead,
                           RunPersistenceTechnicalReason::CodecError,
@@ -375,14 +440,14 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
         committed.current = ref;
         if (snapshot.variant != RunCheckpointVariant::NoActiveRun &&
             currentHead_.has_value()) {
-            committed.fallback = currentHead_->current;
+            committed.fallback = fallbackOverride.has_value()
+                                     ? fallbackOverride
+                                     : currentHead_->current;
         }
         preparedBytes = encodeRunPersistenceHead(prepared, epoch_);
         committedBytes = encodeRunPersistenceHead(committed, epoch_);
         if (!preparedBytes.has_value() || !committedBytes.has_value()) {
-            state_ = currentHead_.has_value()
-                         ? RunPersistenceCoordinatorState::Ready
-                         : RunPersistenceCoordinatorState::ReadyEmpty;
+            state_ = rollbackState;
             return result(RunPersistenceResultStatus::CapacityExceeded,
                           !preparedBytes.has_value()
                               ? RunPersistenceStep::PreparedHead
@@ -416,11 +481,7 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
             RunPersistenceDurability::Unchanged);
     }
 
-    auto readyState = [this]() {
-        state_ = currentHead_.has_value()
-                     ? RunPersistenceCoordinatorState::Ready
-                     : RunPersistenceCoordinatorState::ReadyEmpty;
-    };
+    auto readyState = [this, rollbackState]() { state_ = rollbackState; };
     auto writeFailure = [this](RunPersistenceStoreWriteResult written,
                                RunPersistenceStep step,
                                RunPersistenceDurability durability) {
@@ -530,7 +591,8 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
 
 RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
-    const RunCheckpointTime& time) {
+    const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* /*liveSensorEvidence*/) {
     if (state_ != RunPersistenceCoordinatorState::Ready &&
         state_ != RunPersistenceCoordinatorState::ReadyEmpty)
         return unavailableResult();
@@ -642,7 +704,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
 
 RunPersistenceResult RunPersistenceCoordinator::persistTransition(
     RunCommandState& current, const TransitionDecision& decision,
-    const RunCheckpointTime& time) {
+    const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* /*liveSensorEvidence*/) {
     if (state_ != RunPersistenceCoordinatorState::Ready)
         return unavailableResult();
     if (!decision.proposed() || !eligibleTransition(decision.reason))
@@ -696,7 +759,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
 }
 
 RunPersistenceResult RunPersistenceCoordinator::checkpointPeriodic(
-    const RunCommandState& current, const RunCheckpointTime& time) {
+    const RunCommandState& current, const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* /*liveSensorEvidence*/) {
     if (state_ == RunPersistenceCoordinatorState::ReadyEmpty) {
         return result(RunPersistenceResultStatus::NoActiveRun);
     }
@@ -774,7 +838,8 @@ bool automaticSensorSelectionCause(SensorSelectionDecisionCause cause) {
 
 RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     RunCommandState& current, const SensorSelectionStateMutation& mutation,
-    const RunCheckpointTime& time) {
+    const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* /*liveSensorEvidence*/) {
     if (state_ == RunPersistenceCoordinatorState::ReadyEmpty)
         return result(RunPersistenceResultStatus::NoActiveRun);
     if (state_ != RunPersistenceCoordinatorState::Ready)

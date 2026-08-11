@@ -738,6 +738,77 @@ void test_prepared_head_binds_full_transaction_contract() {
     TEST_ASSERT_EQUAL_UINT64(9U, decoded->target.storageEpoch);
 }
 
+void test_prepared_head_round_trips_recovery_mutation_kind() {
+    const RunCheckpointReference current{
+        0U, 1U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
+    const RunCheckpointReference target{
+        1U, 1U, 9U, 11U, 13U, 14U, RunCheckpointVariant::ProgramRun};
+    RunPersistenceHead recovery;
+    recovery.state = RunPersistenceHeadState::Prepared;
+    recovery.revision = 20U;
+    recovery.preparedCurrent = current;
+    recovery.target = target;
+    recovery.mutationKind = RunPersistenceMutationKind::Recovery;
+    recovery.newRunRevision = 5U;
+    recovery.newTransitionSequence = 7U;
+
+    const auto encoded =
+        encodeRunPersistenceHead(recovery, device_platform::StorageEpoch(9U));
+    TEST_ASSERT_TRUE(encoded.has_value());
+    const auto decoded =
+        decodeRunPersistenceHead(*encoded, device_platform::StorageEpoch(9U));
+    TEST_ASSERT_TRUE(decoded.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceMutationKind::Recovery),
+        static_cast<int>(decoded->mutationKind));
+    TEST_ASSERT_FALSE(decoded->commandId.has_value());
+}
+
+void test_same_slot_recovery_requires_a_separate_prepared_fallback() {
+    const RunCheckpointReference current{
+        0U, 1U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
+    const RunCheckpointReference fallback{
+        1U, 1U, 9U, 9U, 8U, 7U, RunCheckpointVariant::ProgramRun};
+
+    RunPersistenceHead recovery;
+    recovery.state = RunPersistenceHeadState::Prepared;
+    recovery.revision = 20U;
+    recovery.preparedCurrent = current;
+    recovery.target = current;
+    recovery.mutationKind = RunPersistenceMutationKind::Recovery;
+    recovery.newRunRevision = 5U;
+    recovery.newTransitionSequence = 7U;
+
+    // Recovery alone does not authorize overwriting the only current slot.
+    TEST_ASSERT_FALSE(
+        encodeRunPersistenceHead(recovery, device_platform::StorageEpoch(9U))
+            .has_value());
+
+    // A fallback on the same slot is not a fallback at all.
+    auto sameSlotFallback = recovery;
+    sameSlotFallback.preparedFallback = current;
+    TEST_ASSERT_FALSE(encodeRunPersistenceHead(
+                          sameSlotFallback, device_platform::StorageEpoch(9U))
+                          .has_value());
+
+    // Non-Recovery mutations cannot use the same-slot exception.
+    auto nonRecovery = recovery;
+    nonRecovery.mutationKind = RunPersistenceMutationKind::Command;
+    nonRecovery.preparedFallback = fallback;
+    nonRecovery.commandId = 88U;
+    TEST_ASSERT_FALSE(
+        encodeRunPersistenceHead(nonRecovery, device_platform::StorageEpoch(9U))
+            .has_value());
+
+    // The sole allowed wire shape remains encodable: Recovery, same target
+    // slot, and a valid fallback on the other slot.
+    auto validRecovery = recovery;
+    validRecovery.preparedFallback = fallback;
+    TEST_ASSERT_TRUE(encodeRunPersistenceHead(validRecovery,
+                                              device_platform::StorageEpoch(9U))
+                         .has_value());
+}
+
 void test_head_reference_and_mutation_invariants_reject_invalid_contracts() {
     const RunCheckpointReference current{
         0U, 1U, 9U, 10U, 11U, 12U, RunCheckpointVariant::ProgramRun};
@@ -1029,6 +1100,8 @@ int main(int, char**) {
     RUN_TEST(test_payload_bounds_and_truncation_are_strict);
     RUN_TEST(test_manual_completed_round_trip_is_a_valid_run_projection);
     RUN_TEST(test_prepared_head_binds_full_transaction_contract);
+    RUN_TEST(test_prepared_head_round_trips_recovery_mutation_kind);
+    RUN_TEST(test_same_slot_recovery_requires_a_separate_prepared_fallback);
     RUN_TEST(
         test_head_reference_and_mutation_invariants_reject_invalid_contracts);
     RUN_TEST(test_manual_snapshot_and_runtime_shape_must_be_canonical);

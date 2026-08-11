@@ -1338,6 +1338,8 @@ bool writeMutationKind(ByteWriter& writer, RunPersistenceMutationKind kind) {
             return be::writeUint8(writer, 2U);
         case RunPersistenceMutationKind::SensorSelection:
             return be::writeUint8(writer, 3U);
+        case RunPersistenceMutationKind::Recovery:
+            return be::writeUint8(writer, 4U);
     }
     return false;
 }
@@ -1355,6 +1357,9 @@ bool readMutationKind(ByteReader& reader, RunPersistenceMutationKind& kind) {
         case 3U:
             kind = RunPersistenceMutationKind::SensorSelection;
             return true;
+        case 4U:
+            kind = RunPersistenceMutationKind::Recovery;
+            return true;
         default:
             return false;
     }
@@ -1371,9 +1376,15 @@ bool validPreparedHead(const RunPersistenceHead& head,
         return false;
     }
     if (head.commandId.has_value() && *head.commandId == 0U) return false;
+    const bool validSameSlotRecovery =
+        head.mutationKind == RunPersistenceMutationKind::Recovery &&
+        head.preparedFallback.has_value() &&
+        validReference(*head.preparedFallback, epoch) &&
+        head.preparedFallback->slot != head.target.slot;
     if (head.preparedCurrent.has_value() &&
         (!validReference(*head.preparedCurrent, epoch) ||
-         head.preparedCurrent->slot == head.target.slot ||
+         (head.preparedCurrent->slot == head.target.slot &&
+          !validSameSlotRecovery) ||
          (head.preparedCurrent->variant == RunCheckpointVariant::NoActiveRun &&
           head.preparedFallback.has_value()))) {
         return false;

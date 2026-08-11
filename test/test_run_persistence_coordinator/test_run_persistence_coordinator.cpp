@@ -19,6 +19,45 @@
 #include "standard_program_catalog.hpp"
 #include "storage_envelope.hpp"
 
+namespace fermentation {
+class RunPersistenceCoordinatorTestAccess {
+   public:
+    static RunPersistenceResult writeSnapshotCore(
+        RunPersistenceCoordinator& coordinator,
+        const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+        bool periodic, const RunCommandState& before,
+        RunPersistenceMutationKind mutationKind,
+        std::optional<CommandId> commandId,
+        std::optional<std::size_t> targetSlotOverride,
+        std::optional<RunCheckpointReference> fallbackOverride,
+        RunPersistenceCoordinatorState rollbackState) {
+        return coordinator.writeSnapshotCore(
+            snapshot, time, periodic, before, mutationKind, commandId,
+            targetSlotOverride, fallbackOverride, rollbackState);
+    }
+
+    static RunCheckpointReference currentReference(
+        const RunPersistenceCoordinator& coordinator) {
+        return coordinator.currentHead_->current;
+    }
+
+    static std::uint64_t nextCheckpointRevision(
+        const RunPersistenceCoordinator& coordinator) {
+        return coordinator.nextCheckpointRevision_;
+    }
+
+    static std::size_t persistedIdCount(
+        const RunPersistenceCoordinator& coordinator) {
+        return coordinator.persistedIdCount_;
+    }
+
+    static CommandId persistedId(const RunPersistenceCoordinator& coordinator,
+                                 std::size_t index) {
+        return coordinator.persistedIds_[index];
+    }
+};
+}  // namespace fermentation
+
 namespace {
 
 using namespace fermentation;
@@ -1444,7 +1483,17 @@ void test_load_fallback_orphan_and_schema_epoch_matrix() {
                 .checkpointPeriodic(active,
                                     RunCheckpointTime{300100U, std::nullopt})
                 .status));
-    fallback.backing().injectCorruption(slotKey("rc1"), "damaged-current");
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::CheckpointWritten),
+        static_cast<int>(
+            running
+                .checkpointPeriodic(active,
+                                    RunCheckpointTime{600200U, std::nullopt})
+                .status));
+    // The current reference is now rc0/revision 3; the fallback is
+    // rc1/revision 2, so the fallback-side reconstruction cannot accidentally
+    // keep its initial checkpoint revision of 1.
+    fallback.backing().injectCorruption(slotKey("rc0"), "damaged-current");
     fallback.restart();
     RunPersistenceCoordinator recovered(
         fallback, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
@@ -1452,10 +1501,38 @@ void test_load_fallback_orphan_and_schema_epoch_matrix() {
         static_cast<int>(RunPersistenceLoadStatus::FallbackRecovered),
         static_cast<int>(recovered.loadAndInitialize().status));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(
+            RunPersistenceCoordinatorState::FallbackRecoveryPending),
         static_cast<int>(recovered.state()));
+    TEST_ASSERT_EQUAL_UINT64(
+        4U,
+        RunPersistenceCoordinatorTestAccess::nextCheckpointRevision(recovered));
+    TEST_ASSERT_EQUAL_UINT(
+        1U,
+        static_cast<unsigned>(
+            RunPersistenceCoordinatorTestAccess::persistedIdCount(recovered)));
+    TEST_ASSERT_EQUAL_UINT64(
+        771U, RunPersistenceCoordinatorTestAccess::persistedId(recovered, 0U));
+    // The first externally writing FallbackRecoveryPending API is Commit 7;
+    // its end-to-end write must assert that this reconstructed high-watermark
+    // is used and that this persisted command ID is deduplicated.
+    RunCommandState blockedState;
+    blockedState.processState.state = ProcessState::Standby;
+    const auto writesBeforeRecovery = fallback.writeCount();
+    const auto blockedMutation = recovered.persistCommand(
+        blockedState, startDecision(blockedState, 773U),
+        RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::RecoveryPending),
+        static_cast<int>(blockedMutation.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(
+            RunPersistenceCoordinatorState::FallbackRecoveryPending),
+        static_cast<int>(blockedMutation.coordinatorState));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBeforeRecovery),
+                           static_cast<unsigned>(fallback.writeCount()));
 
-    fallback.backing().injectCorruption(slotKey("rc0"), "damaged-fallback");
+    fallback.backing().injectCorruption(slotKey("rc1"), "damaged-fallback");
     fallback.restart();
     RunPersistenceCoordinator unrecoverable(
         fallback, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
@@ -1521,6 +1598,65 @@ void test_load_fallback_orphan_and_schema_epoch_matrix() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
         static_cast<int>(unsupportedBoot.state()));
+}
+
+void test_same_slot_overrides_fail_closed_before_any_write() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state, startDecision(state, 980U),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+
+    const auto current =
+        RunPersistenceCoordinatorTestAccess::currentReference(coordinator);
+    const auto writesBefore = store.writeCount();
+    const RunPersistenceSnapshot snapshot;
+    const RunCommandState before;
+    const auto reject = [&](bool periodic,
+                            RunPersistenceMutationKind mutationKind,
+                            std::optional<RunCheckpointReference> fallback) {
+        return RunPersistenceCoordinatorTestAccess::writeSnapshotCore(
+            coordinator, snapshot, RunCheckpointTime{200U, std::nullopt},
+            periodic, before, mutationKind, std::nullopt, current.slot,
+            fallback, RunPersistenceCoordinatorState::Ready);
+    };
+
+    const auto recoveryWithoutFallback =
+        reject(false, RunPersistenceMutationKind::Recovery, std::nullopt);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(recoveryWithoutFallback.status));
+
+    const auto recoveryWithSameSlotFallback =
+        reject(false, RunPersistenceMutationKind::Recovery, current);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(recoveryWithSameSlotFallback.status));
+
+    const auto periodicSameSlot =
+        reject(true, RunPersistenceMutationKind::Recovery, std::nullopt);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(periodicSameSlot.status));
+
+    const auto nonRecoverySameSlot =
+        reject(false, RunPersistenceMutationKind::Command, std::nullopt);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
+        static_cast<int>(nonRecoverySameSlot.status));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(coordinator.state()));
 }
 
 // The head-vs-slot reference binding (slot, revision, length, CRC, variant)
@@ -2989,6 +3125,7 @@ int main(int, char**) {
     RUN_TEST(test_periodic_committed_head_existing_not_found_is_indeterminate);
     RUN_TEST(test_periodic_target_slot_existing_not_found_is_indeterminate);
     RUN_TEST(test_load_fallback_orphan_and_schema_epoch_matrix);
+    RUN_TEST(test_same_slot_overrides_fail_closed_before_any_write);
     RUN_TEST(
         test_load_rejects_a_structurally_valid_but_mismatched_current_reference);
     RUN_TEST(test_loaded_active_run_blocks_all_mutations_after_restart);

@@ -62,6 +62,7 @@ enum class RunPersistenceMutationKind : std::uint8_t {
     Command = 1U,
     Transition = 2U,
     SensorSelection = 3U,
+    Recovery = 4U,
 };
 
 struct RunPersistenceHead {
