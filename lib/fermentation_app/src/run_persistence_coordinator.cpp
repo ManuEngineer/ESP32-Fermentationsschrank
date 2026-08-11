@@ -558,9 +558,7 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
     }
 
     const auto& loadedRecord = *slots_[currentHead_->current.slot];
-    if (!current.processRunSnapshot.has_value() ||
-        !current.sensorSelection.has_value() ||
-        !current.activeRunSensorMode.has_value()) {
+    if (!current.processRunSnapshot.has_value()) {
         return invalid(current);
     }
 
@@ -625,37 +623,6 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
     }
     applyLiveRecoveryEvidence(candidate, liveSensorEvidence);
 
-    const auto recommendation = computeRestartSensorSelection(
-        *candidate.sensorSelection, *candidate.activeRunSensorMode,
-        recoverySensorSelectionProgramContext(candidate), liveSensorEvidence);
-    candidate.sensorSelectionRuntime = recommendation.runtime;
-    candidate.activeRunSensorMode = recommendation.activeMode;
-    if (candidate.activeManualRun.has_value()) {
-        candidate.activeManualRun->values.sensorMode =
-            recommendation.activeMode;
-    }
-    if (recommendation.runtime.permission != SensorPeltierPermission::Allowed) {
-        const auto rejected = decideProcessTransition(
-            candidate.processState, &*candidate.processRunSnapshot,
-            ProcessSignals{},
-            TransitionRequest{ProcessEvent::RecoveryReject, std::nullopt},
-            time.monotonicMillis);
-        if (rejected.proposed()) {
-            static_cast<void>(
-                applyProcessTransition(candidate.processState, rejected,
-                                       &*candidate.processRunSnapshot));
-        }
-        return {result(RunPersistenceResultStatus::InvalidDecision,
-                       RunPersistenceStep::CandidateApply,
-                       RunPersistenceTechnicalReason::InvalidProjection),
-                candidate};
-    }
-
-    const auto timeContext =
-        deriveRecoveryTimeContext(*candidate.pendingRecoveryAnchor, time,
-                                  *candidate.recoveryBootAnchorMonotonicMillis);
-    if (!timeContext.has_value()) return invalid(current);
-
     const auto commitCandidate =
         [&](const RunCommandState& toCommit) -> RecoveryActivationOutcome {
         const auto snapshot = makeRunPersistenceSnapshot(
@@ -672,6 +639,11 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         }
         return {persisted, toCommit};
     };
+
+    const auto timeContext =
+        deriveRecoveryTimeContext(*candidate.pendingRecoveryAnchor, time,
+                                  *candidate.recoveryBootAnchorMonotonicMillis);
+    if (!timeContext.has_value()) return invalid(current);
 
     if (originalProcessState.state == ProcessState::WaitingForProduct) {
         const auto verdict = evaluateRecoveryTimeVerdict(
@@ -694,6 +666,39 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         if (verdict == RecoveryTimeVerdict::Uncertain) {
             return commitCandidate(candidate);
         }
+    }
+
+    if (!candidate.sensorSelection.has_value() ||
+        !candidate.activeRunSensorMode.has_value()) {
+        return invalid(current);
+    }
+    const auto recommendation = computeRestartSensorSelection(
+        *candidate.sensorSelection, *candidate.activeRunSensorMode,
+        recoverySensorSelectionProgramContext(candidate), liveSensorEvidence);
+    candidate.sensorSelectionRuntime = recommendation.runtime;
+    candidate.activeRunSensorMode = recommendation.activeMode;
+    if (candidate.activeManualRun.has_value()) {
+        candidate.activeManualRun->values.sensorMode =
+            recommendation.activeMode;
+    }
+    if (recommendation.runtime.permission != SensorPeltierPermission::Allowed) {
+        const auto rejected = decideProcessTransition(
+            candidate.processState, &*candidate.processRunSnapshot,
+            ProcessSignals{},
+            TransitionRequest{ProcessEvent::RecoveryReject, std::nullopt},
+            time.monotonicMillis);
+        if (rejected.proposed()) {
+            if (!applyProcessTransition(candidate.processState, rejected,
+                                        &*candidate.processRunSnapshot)) {
+                return invalid(current);
+            }
+        } else {
+            return invalid(current);
+        }
+        candidate.pendingRecoveryAnchor.reset();
+        candidate.recoveryBootAnchorMonotonicMillis.reset();
+        candidate.priorBootPhaseElapsed.reset();
+        return commitCandidate(candidate);
     }
 
     if (!candidate.pendingRecoveryAnchor.has_value()) return invalid(current);

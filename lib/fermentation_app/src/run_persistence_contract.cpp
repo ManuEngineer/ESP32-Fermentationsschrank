@@ -19,6 +19,7 @@ bool validStateFor(RunCheckpointVariant variant, ProcessState state) {
                 case ProcessState::Cooling:
                 case ProcessState::CoolHolding:
                 case ProcessState::Completed:
+                case ProcessState::Fault:
                 // Schema 3 (#18, 5.14 Punkt 1): ein Hop-1-only-Kandidat (die
                 // Zeitfrage ist noch offen, kein Resume) ist ein gueltiger,
                 // speicherbarer aktiver Zustand. Die engere Konsistenzpruefung
@@ -37,6 +38,7 @@ bool validStateFor(RunCheckpointVariant variant, ProcessState state) {
                 case ProcessState::QualifyingTarget:
                 case ProcessState::ManualHolding:
                 case ProcessState::Completed:
+                case ProcessState::Fault:
                 case ProcessState::RecoveryEvaluation:
                     return true;
                 default:

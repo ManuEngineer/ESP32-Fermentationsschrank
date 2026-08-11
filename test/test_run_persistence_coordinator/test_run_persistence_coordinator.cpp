@@ -3270,7 +3270,7 @@ void test_activate_loaded_run_episode_refreshes_hop_one_anchor() {
                              secondAnchor.knownSecondsSinceOriginalCheckpoint);
 }
 
-void test_activate_loaded_run_rejects_sensor_gate_without_writing() {
+void test_activate_loaded_run_persists_sensor_gate_rejection_as_fault() {
     SequencedWriteStore store;
     RunPersistenceCoordinator coordinator(
         store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
@@ -3287,17 +3287,92 @@ void test_activate_loaded_run_rejects_sensor_gate_without_writing() {
 
     const auto outcome = afterBoot.activateLoadedRun(
         *restored, RunCheckpointTime{700000U, std::nullopt}, invalidEvidence);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceResultStatus::InvalidDecision),
-        static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(outcome.persistenceResult.status));
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(ProcessState::Fault),
         static_cast<int>(outcome.resultingState.processState.state));
     TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunPersistenceCoordinatorState::LoadedActiveRun),
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
         static_cast<int>(afterBoot.state()));
-    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBefore),
-                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_TRUE(store.writeCount() > writesBefore);
+
+    store.restart();
+    RunPersistenceCoordinator rebooted(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+    const auto rebootedLoad = rebooted.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(rebootedLoad.status));
+    const auto rebootedState =
+        restoreRunPersistenceSnapshot(*rebootedLoad.snapshot);
+    TEST_ASSERT_TRUE(rebootedState.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
+                          static_cast<int>(rebootedState->processState.state));
+}
+
+void test_loaded_gate_rejection_keeps_persistence_cutpoint_contract() {
+    using Fault = SequencedWriteStore::WriteFault;
+    for (const auto offset : {1U, 2U, 3U}) {
+        SequencedWriteStore store;
+        RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                       RunCheckpointSchedule{});
+        static_cast<void>(seed.loadAndInitialize());
+        static_cast<void>(
+            readyActiveRunWithSensorSelection(seed, 1023U + offset));
+        store.restart();
+
+        RunPersistenceCoordinator coordinator(
+            store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+        const auto loaded = coordinator.loadAndInitialize();
+        const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+        TEST_ASSERT_TRUE(restored.has_value());
+        store.faultAt(offset, Fault::FailBeforeBegin);
+        const auto outcome = coordinator.activateLoadedRun(
+            *restored, RunCheckpointTime{700000U, std::nullopt},
+            recoveryPlausibility(700000U, false));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+            static_cast<int>(outcome.persistenceResult.status));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                offset == 1U
+                    ? RunPersistenceCoordinatorState::LoadedActiveRun
+                    : RunPersistenceCoordinatorState::BlockedIndeterminate),
+            static_cast<int>(coordinator.state()));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(offset == 1U ? RunPersistenceDurability::Unchanged
+                                          : RunPersistenceDurability::Changed),
+            static_cast<int>(outcome.persistenceResult.durability));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(ProcessState::ReachingTarget),
+            static_cast<int>(outcome.resultingState.processState.state));
+    }
+
+    SequencedWriteStore indeterminateStore;
+    RunPersistenceCoordinator seed(indeterminateStore,
+                                   device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(readyActiveRunWithSensorSelection(seed, 1027U));
+    indeterminateStore.restart();
+    RunPersistenceCoordinator coordinator(indeterminateStore,
+                                          device_platform::StorageEpoch(1U),
+                                          RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    indeterminateStore.unknownWithoutCommitAt(1U);
+    indeterminateStore.readFaultAt(1U,
+                                   SequencedWriteStore::ReadFault::ReadError);
+    const auto outcome = coordinator.activateLoadedRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt},
+        recoveryPlausibility(700000U, false));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::PersistenceIndeterminate),
+        static_cast<int>(outcome.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(coordinator.state()));
 }
 
 void test_activate_fallback_recovered_run_replaces_damaged_current_slot() {
@@ -4163,7 +4238,8 @@ int main(int, char**) {
     RUN_TEST(test_activate_loaded_run_resumes_and_retains_unresolved_anchor);
     RUN_TEST(test_activate_loaded_run_resolved_resume_clears_anchor);
     RUN_TEST(test_activate_loaded_run_episode_refreshes_hop_one_anchor);
-    RUN_TEST(test_activate_loaded_run_rejects_sensor_gate_without_writing);
+    RUN_TEST(test_activate_loaded_run_persists_sensor_gate_rejection_as_fault);
+    RUN_TEST(test_loaded_gate_rejection_keeps_persistence_cutpoint_contract);
     RUN_TEST(
         test_activate_fallback_recovered_run_replaces_damaged_current_slot);
     RUN_TEST(test_resolve_recovery_outcome_waiting_assume_still_valid_resumes);
