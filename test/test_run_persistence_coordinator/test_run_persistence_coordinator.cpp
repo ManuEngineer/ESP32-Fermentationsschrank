@@ -3416,6 +3416,31 @@ void test_activate_loaded_run_persists_sensor_gate_rejection_as_fault() {
     TEST_ASSERT_TRUE(rebootedState.has_value());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
                           static_cast<int>(rebootedState->processState.state));
+
+    const auto writesBeforeRestore = store.writeCount();
+    const auto activation = rebooted.activateLoadedRun(
+        *rebootedState, RunCheckpointTime{700100U, std::nullopt},
+        recoveryPlausibility(700100U, true));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(activation.persistenceResult.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceStep::RamApply),
+                          static_cast<int>(activation.persistenceResult.step));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceDurability::Unchanged),
+        static_cast<int>(activation.persistenceResult.durability));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(ProcessState::Fault),
+        static_cast<int>(activation.resultingState.processState.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::Ready),
+        static_cast<int>(rebooted.state()));
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBeforeRestore),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(SensorPeltierPermission::Blocked),
+        static_cast<int>(
+            activation.resultingState.sensorSelectionRuntime.permission));
 }
 
 void test_loaded_gate_rejection_keeps_persistence_cutpoint_contract() {

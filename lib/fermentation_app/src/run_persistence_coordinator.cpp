@@ -542,6 +542,19 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         return {unavailableResult(), current};
     }
 
+    // A persisted RecoveryRejected -> Fault is terminal for this recovery
+    // episode. Restore it as-is and leave the recovery load state without
+    // re-entering the process state machine or touching persistence.
+    if (current.processState.state == ProcessState::Fault) {
+        state_ = RunPersistenceCoordinatorState::Ready;
+        auto restored = result(RunPersistenceResultStatus::Applied,
+                               RunPersistenceStep::RamApply,
+                               RunPersistenceTechnicalReason::None,
+                               RunPersistenceDurability::Unchanged);
+        restored.coordinatorState = state_;
+        return {restored, current};
+    }
+
     // Completed is a restored result, not a run phase that may be re-entered.
     // Refresh its boot-local timestamp in RAM so the later acknowledgement
     // can pass the normal monotonic-time validation.
