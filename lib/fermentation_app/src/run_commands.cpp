@@ -1120,6 +1120,10 @@ CommandDecision decideRunAdjustment(
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
+    if (targetChanged) {
+        decision.committedControlContextTransition =
+            CommittedControlContextTransition::TargetContextChange;
+    }
     if (durationChanged &&
         current.processState.state == ProcessState::Fermenting) {
         candidate.processState.stateEnteredAtMillis =
@@ -1381,6 +1385,8 @@ CommandDecision decideApplySensorSelectionAction(
             beginMutation(decision);
             if (mutation.event.has_value()) {
                 decision.sensorSelectionEvent = mutation.event;
+                decision.committedControlContextTransition =
+                    CommittedControlContextTransition::SensorRoleChange;
             } else if (mutation.notice.has_value()) {
                 decision.sensorSelectionNotice = mutation.notice;
             }

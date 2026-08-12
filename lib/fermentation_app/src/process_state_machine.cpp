@@ -735,6 +735,8 @@ TransitionDecision decideExplicitEvent(
                                     TransitionReason::TargetChangedReevaluation,
                                     monotonicMillis);
             decision.after.qualificationValidSinceMillis.reset();
+            decision.committedControlContextTransition =
+                CommittedControlContextTransition::TargetContextChange;
             return decision;
         }
         if (current.state == ProcessState::ReachingTarget ||
@@ -743,6 +745,8 @@ TransitionDecision decideExplicitEvent(
                                     TransitionReason::TargetChangedReevaluation,
                                     monotonicMillis);
             initializeTargetReach(decision, monotonicMillis);
+            decision.committedControlContextTransition =
+                CommittedControlContextTransition::TargetContextChange;
             return decision;
         }
         return rejected(current, monotonicMillis);
@@ -760,6 +764,8 @@ TransitionDecision decideExplicitEvent(
                     propose(current, ProcessState::ReachingTarget,
                             TransitionReason::ProductInserted, monotonicMillis);
                 initializeTargetReach(decision, monotonicMillis);
+                decision.committedControlContextTransition =
+                    CommittedControlContextTransition::ProductInserted;
                 return decision;
             }
             return rejected(current, monotonicMillis);

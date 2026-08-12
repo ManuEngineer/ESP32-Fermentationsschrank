@@ -77,6 +77,31 @@ void test_cooling_uses_dedicated_signal_not_qualification_progress() {
     TEST_ASSERT_TRUE(cooling.after.state == ProcessState::Completed);
 }
 
+void test_process_apply_decisions_expose_only_fluid_context_commit_notice() {
+    auto run = snapshot();
+    run.preheatEnabled = true;
+    run.maximumProductWaitMinutes = 10U;
+    ProcessRuntimeState waiting;
+    waiting.state = ProcessState::WaitingForProduct;
+    const auto inserted = decideProcessTransition(
+        waiting, &run, {}, {ProcessEvent::ProductInsertedConfirmed, std::nullopt},
+        100U);
+    TEST_ASSERT_TRUE(inserted.proposed());
+    TEST_ASSERT_TRUE(inserted.committedControlContextTransition.has_value());
+    TEST_ASSERT_TRUE(*inserted.committedControlContextTransition ==
+                     CommittedControlContextTransition::ProductInserted);
+
+    ProcessRuntimeState reaching;
+    reaching.state = ProcessState::ReachingTarget;
+    reaching.targetReachStartedAtMillis = 0U;
+    const auto changed = decideProcessTransition(
+        reaching, &run, {}, {ProcessEvent::TargetChanged, std::nullopt}, 100U);
+    TEST_ASSERT_TRUE(changed.proposed());
+    TEST_ASSERT_TRUE(changed.committedControlContextTransition.has_value());
+    TEST_ASSERT_TRUE(*changed.committedControlContextTransition ==
+                     CommittedControlContextTransition::TargetContextChange);
+}
+
 }  // namespace
 
 void setup() {}
@@ -90,5 +115,6 @@ int main(int argc, char** argv) {
     RUN_TEST(test_qualifying_in_band_does_not_bypass_complete_progress);
     RUN_TEST(test_qualifying_complete_enters_fermenting);
     RUN_TEST(test_cooling_uses_dedicated_signal_not_qualification_progress);
+    RUN_TEST(test_process_apply_decisions_expose_only_fluid_context_commit_notice);
     return UNITY_END();
 }

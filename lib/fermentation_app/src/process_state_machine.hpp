@@ -8,6 +8,7 @@
 #include "process_signal_types.hpp"
 #include "program_model.hpp"
 #include "run_snapshot.hpp"
+#include "temperature_control_types.hpp"
 
 namespace fermentation {
 
@@ -160,6 +161,11 @@ struct TransitionDecision {
     std::uint64_t monotonicMillis{0U};
     std::array<ProcessMessage, kMaximumTransitionMessages> messages{};
     std::size_t messageCount{0U};
+    // Fluessige Commit-Information fuer den #22-Integrator. Sie wird erst
+    // nach erfolgreichem applyProcessTransition wirksam und ist kein
+    // Prozess-/Wirefeld.
+    std::optional<CommittedControlContextTransition>
+        committedControlContextTransition;
 
     [[nodiscard]] bool proposed() const {
         return status == DecisionStatus::Proposed;

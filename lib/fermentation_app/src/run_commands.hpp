@@ -11,6 +11,7 @@
 #include "run_recovery_types.hpp"
 #include "run_snapshot.hpp"
 #include "sensor_selection_types.hpp"
+#include "temperature_control_types.hpp"
 
 namespace fermentation {
 
@@ -411,6 +412,11 @@ struct CommandDecision {
     // der Bestaetigungspruefung gefuellt (analog startSummary) - nur bei
     // tatsaechlichem requestedMode != effectiveMode (Startmatrix Zeile 2).
     std::optional<StartSensorSelectionNotice> startSensorSelectionNotice;
+    // Fluessige #22-Commit-Information. Sie wird nur nach erfolgreichem
+    // persistCommand/applyRunCommand an den PI-Kern weitergereicht und wird
+    // weder persistiert noch als zweiter Lauf-/Prozessstatus verwendet.
+    std::optional<CommittedControlContextTransition>
+        committedControlContextTransition;
 
     [[nodiscard]] bool proposed() const {
         return status == CommandStatus::Proposed;
