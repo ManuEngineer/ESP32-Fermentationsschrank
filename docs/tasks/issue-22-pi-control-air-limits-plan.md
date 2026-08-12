@@ -2,8 +2,8 @@
 
 ## 1. Status, Scope und Owner-Gate
 
-- Revision: **3**.
-- Live-Issue: #22, offen.
+- Revision: **4**.
+- Live-Issue: #22, offen, Status `PLANNED_SPEC_PENDING`.
 - Draft-PR: #104, Branch `agent/issue-22-pi-regelung-plan` -> `main`.
 - Planpfad: `docs/tasks/issue-22-pi-control-air-limits-plan.md`.
 - Diese Revision ist ein vollständiger, eigenständig gültiger Plan. Sie setzt
@@ -11,11 +11,11 @@
 - Planbasis: `main` @
   `10ff98eca4d6f64cc453571d66d4c3b18729b18e`.
 - Ausgangs-HEAD vor dieser Revision:
-  `2a46ee7a62700093e26274f48d488c380b937831`.
+  `7ac7fc6dfa099df370281757120d3636805de37a`.
 - Der exakte Commit dieser Revision wird nach dem Commit mit voller SHA in
-  der PR-Beschreibung und im aktuellen SESSION-HANDOVER ausgewiesen.
-- Umsetzung bleibt gesperrt, bis der Owner exakt diesen neuen Plan-Commit mit
-  `PLAN APPROVED` beziehungsweise `Approved plan commit: <SHA>` freigibt.
+  PR-Beschreibung und aktuellem SESSION-HANDOVER ausgewiesen.
+- Die Umsetzung bleibt gesperrt, bis der Owner exakt diesen neuen Plan-Commit
+  mit `PLAN APPROVED` beziehungsweise `Approved plan commit: <SHA>` freigibt.
 - Diese Revision ändert ausschließlich Plan-/Roadmap-Dokumentation und
   zugehörige PR-Metadaten. Sie implementiert keine Produktionslogik,
   produktiven Tests, Hardware-, GPIO-, Toolchain- oder CI-Änderung.
@@ -25,11 +25,12 @@
 ```text
 CONTEXT_BASELINE_BRANCH: agent/issue-22-pi-regelung-plan
 CONTEXT_BASELINE_SHA: 10ff98eca4d6f64cc453571d66d4c3b18729b18e
-CONTEXT_HEAD_BEFORE_REVISION: 2a46ee7a62700093e26274f48d488c380b937831
+CONTEXT_HEAD_BEFORE_REVISION: 7ac7fc6dfa099df370281757120d3636805de37a
 CONTEXT_PLAN_SHA: NONE (wird nach dem Commit dieser Revision eingetragen)
 CONTEXT_REFRESH_MODE: FULL
-SOURCE_OF_TRUTH_CONFLICT: NONE festgestellt; bandCelsius wird durch diese
-  Ownerfreigabe als einseitige Toleranz/Halbbreite festgelegt.
+SOURCE_OF_TRUTH_CONFLICT: NONE festgestellt; die R1-PI-Gleichung ist in den
+  kanonischen Quellen nicht festgelegt und wird hier als explizite
+  Ownerentscheidung formuliert. bandCelsius bleibt einseitige Toleranz.
 ```
 
 ## 2. Ziel, Reihenfolge und Nicht-Ziele
@@ -37,34 +38,37 @@ SOURCE_OF_TRUTH_CONFLICT: NONE festgestellt; bandCelsius wird durch diese
 Issue #22 liefert einen deterministischen, hardwarefreien und nativ testbaren
 Fachkern für Release 1:
 
-- zeitproportionale PI-Regelung mit Proportional- und Integralanteil;
+- zeitproportionale PI-Regelung mit exakt definierter Quote-Mathematik;
 - vier getrennte Maschinenparametersätze: Luft/Heizen, Luft/Kühlen,
   Produkt/Heizen und Produkt/Kühlen;
 - richtungsabhängige einseitige Neutralbandschwellen und begrenzte Zeitquote;
 - Produktregelung mit früher Luftbegrenzung;
 - Luftregelung als eigener normaler Modus;
-- vollständige Zielqualifikation für Vorheizen und Zielphase;
-- ein schmaler Anti-Windup- und Demand-Identitätsvertrag für die spätere
-  Integration.
+- vollständige Zielqualifikation für leeres Vorheizen und spätere Zielphase;
+- eine eindeutige, sequenzierte ControlRequest für HEAT, OFF und COOL;
+- ein schmaler, dispositionsbasierter Anti-Windup-Vertrag für die spätere
+  #23/#24-Integration.
 
 Nicht Bestandteil von #22 sind GPIOs, BTS7960-, Lüfter- oder sonstige
 Aktorsignale, Aktorfreigabe, Mindestzeiten, Totzeit, Richtungswechsel-
 Hysterese, Impulsakkumulator, Kühlkörpersensor-Auswertung, systemweite
-Safety-/Fehlerentscheidungen, Persistenz des PI- oder Evaluator-RAM-Zustands,
-aktive Kaskadenregelung, D-Anteil, Autotuning und eine externe Regelbibliothek.
+Safety-/Fehlerentscheidungen, aktive Kaskadenregelung, D-Anteil, Autotuning,
+eine externe Regelbibliothek oder Persistenz von PI-/Qualifier-RAM-Zustand,
+ControlRequest-Identitäten oder Feedbackfenstern.
 
 Die fachliche Reihenfolge bleibt:
 
 ```text
-#21 Sensorrollen/-freigabe -> #22 abstrakte Regelanforderung
-                                  -> #23 Aktorplanung
-                                  -> #24 Safety-/Fehlerkern
+#21 persistierter Laufmodus und Sensorselektion
+  -> #22 effektive Prozessrolle, PI und abstrakte ControlRequest
+  -> #23 Aktorplanung
+  -> #24 Safety-/Fehlerkern
 ```
 
-Vor der Umsetzung wird der vollständige aktuelle Diff gegen diesen Plan,
-Issue #22, die kanonischen Verträge und die direkten Konsumententests geprüft.
-Ein vollständiger Firmwarelauf bleibt bis zum Owner-Gate und der späteren
-Review-/CI-Anweisung ausgeschlossen.
+#22 erzeugt nur die abstrakte Anforderung `HEAT`, `OFF` oder `COOL` mit
+Zeitquote. #23 bleibt Aktorplaner; #24 bleibt Safety-/Fehlerkern. Die
+nachgelagerte Kette darf eine gültige Anforderung ablehnen, begrenzen oder
+aufschieben, ohne dass #22 daraus eine Safetyentscheidung macht.
 
 ## 3. Verbindliche Quellen und Wiederverwendung
 
@@ -77,11 +81,15 @@ aktuellen Stand zu prüfen:
 - `docs/AGENT_WORKFLOW.md` und `docs/ENGINEERING_PRINCIPLES.md`;
 - `docs/STATE_MACHINE.md` und der bestehende
   `process_state_machine.hpp/.cpp`-Vertrag;
+- `docs/TEMPERATURE_CONTROL.md` für Regelstrategie, Sensorrollen und
+  Vorheizvertrag;
 - `docs/PROGRAMS.md`, `run_commands.hpp/.cpp`, `ActiveRun::effectiveValues()`
   und `ManualRunPlan`;
-- `docs/ACTUATOR_TIMING.md` für PI-/Aktorgrenzen, Impulsakkumulator,
-  Richtungswechsel und Regelanforderungs-Identität;
-- `docs/SENSOR_TUNING_COMMISSIONING.md` für die Anti-Windup-Anforderung;
+- `docs/ACTUATOR_TIMING.md` für die Identität jeder gültigen
+  Regelanforderung, Impulsakkumulator, Mindestzeiten, Totzeit und
+  Integratorverhalten;
+- `docs/SENSOR_TUNING_COMMISSIONING.md` für Anti-Windup,
+  Sensorrollenwechsel und Commissioning-Eigentümerschaft;
 - die #20-Sensorqualitätsverträge und der #21-
   `SensorSelection`-/`CrossRolePlausibilityContext`-Vertrag;
 - `docs/RUN_PERSISTENCE.md`, `run_persistence_codec` und
@@ -92,51 +100,39 @@ aktuellen Stand zu prüfen:
 Der kanonische Komponentenregisterpfad ist exakt
 `docs/THIRD_PARTY_COMPONENTS.md`.
 
-Wiederzuverwenden sind insbesondere die #21-Sensorrollen und ihre
-Regelberechtigung, `AbstractControlDirection`,
+Wiederzuverwenden sind insbesondere `RunSensorMode`, seine #21-Semantik und
+die aktive Sensorrollen-/Regelberechtigung, `AbstractControlDirection`,
 `CrossRolePlausibilityContext`, `SensorQualitySnapshot`, die bestehende
 Prozesszustands-Topologie, `ProcessRuntimeState` einschließlich
-`qualificationValidSinceMillis`, die bestehenden Laufanpassungen sowie die
-abstrakten Plattformports. Kein paralleler Sensor-, Safety-, Prozess- oder
+`qualificationValidSinceMillis`, `ActiveRun`-Laufanpassungen,
+`ManualRunPlan`, die CompletionMode-Verträge und die abstrakten
+Plattformports. Kein paralleler Sensor-, Safety-, Prozess- oder
 Persistenzvertrag wird still erfunden.
 
-## 4. Architektur- und Verantwortungsgrenzen
+## 4. Zuständigkeiten und schmale Werttypen
 
-### 4.1 #22
+### 4.1 #22, #23 und #24
 
-#22 nimmt einen bereits ausgewählten Regelsensor, die aktuelle
-Luftbeobachtung, einen validierten PI-Parametersatz und den schmalen
-Vorzyklus-Feedbackvertrag entgegen. Der Kern erzeugt ausschließlich:
+#22 nimmt einen bereits aufgelösten Control-Kontext, qualitätsgeprüfte
+Sensorbeobachtungen, das effektive Regelziel, ein validiertes PI-Profil und
+den Vorzyklus-Feedbackvertrag entgegen. Der Kern kennt weder Prozessphase
+noch #21-Fallbacklogik und erzeugt keine Aktorfreigabe.
 
-```text
-HEAT + Zeitquote
-OFF
-COOL + Zeitquote
-```
+#23 entscheidet nach der abstrakten ControlRequest über Aktorplanung
+einschließlich Mindest-Auszeit, Mindest-Einschaltzeit, Polaritätstotzeit,
+Impulsakkumulator, Gegenrichtungsbestätigung, Richtungswechsel und
+Luft-/Kühlkörpersensor. #24 besitzt die systemweite Safety-/Fehlerentscheidung.
 
-Das ist eine abstrakte Soll-Anforderung, kein Aktorbefehl und keine
-Safetyfreigabe. #22 prüft weder Kühlkörpersensor noch Aktorfreigabe und führt
-keinen allgemeinen `ControlSafetyPermission`-Vertrag ein.
+Die #21-Sensorselektionsfreigabe darf als kanonische Regelberechtigung
+konsumiert werden. #22 implementiert keine neue Sensorwahl, keinen Fallback
+und kein allgemeines `ControlSafetyPermission`.
 
-Produkt-/Luft-Regelsensor und die frühe Luftbegrenzung bleiben in #22. Die
-kanonische #21-Sensorselektionsfreigabe darf als Sensorrollen- und
-Regelberechtigung konsumiert werden; #22 implementiert keine neue Auswahl,
-keinen Fallback und keine parallele Berechtigung.
+### 4.2 Gemeinsame und schmale Prozesswerttypen
 
-### 4.2 #23 und #24
-
-#23 entscheidet nach der abstrakten Anforderung über Aktorplanung einschließlich
-Mindestzeiten, Totzeit, Impulsakkumulator, Gegenrichtungsbestätigung,
-Richtungswechsel und Luft-/Kühlkörpersensor. #24 besitzt die systemweite
-Safety-/Fehlerentscheidung. Die Rückkopplung aus diesen Schichten bleibt in
-#22 ursachenunabhängig und darf deren Fachlogik nicht vorwegnehmen.
-
-## 5. Schmale Werttypen und Prozesssignale
-
-`AbstractControlDirection` wird, falls für die neue gemeinsame Verwendung
-erforderlich, aus `sensor_selection.hpp` in einen schmalen gemeinsamen
-Werttyp-Header verschoben. Es gibt danach genau eine Definition mit exakt
-gleicher #21-Semantik und gleichen Werten:
+`AbstractControlDirection` wird, falls für die gemeinsame ControlRequest-
+Verwendung erforderlich, aus `sensor_selection.hpp` in einen schmalen
+gemeinsamen Werttyp-Header verschoben. Es gibt genau eine Definition mit
+unverändert gleicher #21-Semantik:
 
 ```text
 AbstractControlDirection = Unknown | Heating | Cooling | Idle
@@ -144,24 +140,34 @@ AbstractControlDirection = Unknown | Heating | Cooling | Idle
 
 `CrossRolePlausibilityContext` und alle bestehenden #21-Felder bleiben
 wertgleich. `test_sensor_selection` ist in Commit 1 und im finalen gezielten
-Nachweis ausdrücklich enthalten.
+Nachweis Pflicht.
 
-`QualificationProgress` gehört nicht in den breiten
-Regler-/Diagnoseheader. Es wird genau einmal in einem schmalen
-`process_signal_types.hpp` oder dem gleichwertigen Prozesssignal-/State-
-Machine-Vertrag definiert:
+Der tatsächliche PI-Regelsensor ist ein eigener, schmaler Werttyp:
+
+```text
+ControlSensorRole = Air | Product
+```
+
+`RunSensorMode = Product | Air` bleibt der persistierte/kanonische #21-
+Laufmodus. `ControlSensorRole` ist dagegen die für den aktuellen
+Prozesszustand tatsächlich verwendete PI-Rolle. Die beiden Werte werden nicht
+umbenannt oder gleichgesetzt.
+
+`QualificationProgress` gehört nicht in den breiten Regler-/Diagnoseheader.
+Es wird genau einmal in einem schmalen `process_signal_types.hpp` oder dem
+gleichwertigen Prozesssignal-/State-Machine-Vertrag definiert:
 
 ```text
 QualificationProgress = Unavailable | Invalid | OutsideBand |
                         Grace | InBand | Complete
 ```
 
-Der `TargetQualificationEvaluator` produziert diesen schmalen
-Prozesssignaltyp; der Zustandsautomat konsumiert ihn. Eine zweite Enum-
-Definition und eine implizite Kopplung von Prozessstatus an
-`temperature_control_types.hpp` sind unzulässig.
+Der `TargetQualificationEvaluator` produziert diesen Prozesssignaltyp; der
+Zustandsautomat konsumiert ihn. Eine zweite Enumdefinition und eine implizite
+Kopplung von Prozessstatus an `temperature_control_types.hpp` sind
+unzulässig.
 
-Der neue Prozesssignalvertrag lautet mindestens:
+Der Prozesssignalvertrag lautet mindestens:
 
 ```text
 ProcessSignals
@@ -173,33 +179,120 @@ ProcessSignals
 `qualificationProgress` wird ausschließlich in `PREHEATING`,
 `REACHING_TARGET` und `QUALIFYING_TARGET` ausgewertet.
 `coolingTargetConditionValid` wird ausschließlich in `COOLING` ausgewertet.
-Die beiden Bedeutungen werden nicht über einen gemeinsamen Bool oder über
-Gnadenzeit/Qualifikationsdauer für COOLING zusammengelegt.
+Die beiden Bedeutungen werden nicht über einen gemeinsamen Bool, Gnadenzeit
+oder Qualifikationsdauer für COOLING zusammengelegt.
 
-## 6. PI-Datenmodell und Mathematik
+## 5. Effektiver Prozess-Control-Kontext
 
-### 6.1 Eingabe und Parametersätze
+Der Orchestrator löst vor jeder PI-Evaluation einen vollständigen, bereits
+validierten Kontext auf. Der PI-Kern erhält daraus nur `ControlSensorRole` und
+`targetCelsius`; er interpretiert weder Prozessphase noch `RunSensorMode`.
 
-Der reine PI-Kern liest keine Ports und keine globale Uhr:
+### 5.1 Effektive Regelsensorrolle
+
+Die Auflösung ist verbindlich:
+
+| Prozessphase | effektive PI-Regelsensorrolle |
+|---|---|
+| `PREHEATING` | immer `Air` |
+| `WAITING_FOR_PRODUCT` | immer `Air` |
+| `REACHING_TARGET` | der aktive #21-Laufmodus |
+| `QUALIFYING_TARGET` | der aktive #21-Laufmodus |
+| `FERMENTING` | der aktive #21-Laufmodus |
+| `COOLING` | der aktive #21-Laufmodus |
+| `COOL_HOLDING` | der aktive #21-Laufmodus |
+| `MANUAL_HOLDING` | der aktive #21-Laufmodus des wirksamen ManualRunPlan |
+
+Im Produktlauf bleibt `activeRunSensorMode == Product` unverändert, obwohl
+die effektive Rolle in `PREHEATING` und `WAITING_FOR_PRODUCT` `Air` ist. Diese
+Luftrolle ist ein expliziter leerer-Schrank-Prozessvertrag und kein stiller
+#21-Fallback. Im Luftlauf bleibt die Rolle in allen temperaturgeregelten
+Phasen `Air`.
+
+Bei `ProductInserted` kann ein Produktlauf erstmals von effektiver `Air`-
+Rolle auf `Product` wechseln. Dieser tatsächliche Rollenwechsel wird nach
+erfolgreichem Prozess-Commit an die Integrator-Transition-Grenze aus
+Abschnitt 10 übergeben. Ein Rollenwechsel wird nicht schon durch den
+persistierten Modus beim Laufstart vorweggenommen.
+
+Wenn #21 während eines laufenden Laufs seine aktive Regelrolle nach seinen
+eigenen Auswahl-/Fehlerregeln ändert, wird nur die wirksame Rollenänderung
+weitergereicht. #22 implementiert diese Auswahl nicht neu.
+
+### 5.2 Effektives Regelziel
+
+Der Resolver liefert einen kleinen Vertrag, beispielsweise:
+
+```text
+EffectiveControlTarget
+  targetCelsius: finite double
+  targetKind: FermentationRun | CoolingCompletion | ManualRun
+  sourceRevision: checked RAM/context identity
+  valid: bool
+```
+
+Die Quelle ist vollständig phasenbezogen:
+
+| Prozessphase | PI-Ziel |
+|---|---|
+| `PREHEATING` | aktuell effektives Fermentations-/Laufziel |
+| `WAITING_FOR_PRODUCT` | aktuell effektives Fermentations-/Laufziel |
+| `REACHING_TARGET` | aktuell effektives Fermentations-/Laufziel |
+| `QUALIFYING_TARGET` | aktuell effektives Fermentations-/Laufziel |
+| `FERMENTING` | aktuell effektives Fermentations-/Laufziel |
+| `COOLING` | bestehendes `completion.coolingTargetCelsius` |
+| `COOL_HOLDING` | dasselbe bestehende Kühlziel |
+| `MANUAL_HOLDING` | wirksames Ziel des `ManualRunPlan` |
+
+Für einen Programmlauf kommt das Fermentationsziel nach allen bestätigten
+`RunAdjustment`-Revisionen aus
+`ActiveRun::effectiveValues().targetTemperatureCelsius`. Der unveränderte
+Quell-Programmschnappschuss bleibt davon getrennt. Eine Zielanpassung des
+Fermentationsziels deutet den Kühlzielwert nicht um.
+
+Für einen manuellen Lauf kommt das Ziel aus dem wirksamen
+`ManualRunPlan`. Für `COOLING` und `COOL_HOLDING` ist ausschließlich das
+bestehende Completion-Objekt einschließlich `coolingTargetCelsius` maßgeblich;
+das Fermentationsziel darf dort nicht als Ersatz dienen.
+
+Wenn die Phase keinen temperaturgeregelten Laufvertrag besitzt – insbesondere
+`BOOT`, `SAFE_BOOT`, `STANDBY`, `COMPLETED`, `FAULT`, `SERVICE_MODE` und
+`RECOVERY_EVALUATION` – erzeugt #22 keine gültige ControlRequest. Ein fehlender
+oder strukturell unzulässiger Zielwert erzeugt ebenfalls keine gültige
+Anforderung.
+
+`FinishWithoutCooling` darf strukturell nicht in `COOLING` eintreten. Ein
+fehlender Kühlzielwert für einen kühlenden CompletionMode ist kein stiller
+Fallback auf das Fermentationsziel, sondern ein ungültiger Lauf-/Control-
+Kontext.
+
+## 6. PI-Datenmodell und exakte R1-Mathematik
+
+### 6.1 PI-Eingabe und Maschinenprofile
+
+Der reine PI-Kern liest keine Ports, keine globale Uhr und keine
+Prozessphase:
 
 ```text
 TemperatureControlInput
   sampleTimestampMonotonicMillis: uint64_t
   targetCelsius: finite double
-  sensorMode: Product | Air
+  controlSensorRole: ControlSensorRole
   air: SensorQualitySnapshot
   product: SensorQualitySnapshot
-  previousDemandFeedback: optional<PreviousDemandFeedback>
+  previousControlRequestFeedback: optional<PreviousControlRequestFeedback>
 ```
 
-`sensorMode` und die dazugehörige Regelberechtigung stammen aus #21. Es gibt
-kein Kühlkörpersensorfeld und kein allgemeines Safety-Permission-Feld im
-PI-Eingang.
+Der Snapshot der `controlSensorRole` ist der PI-Regelsensor. Die Luft bleibt
+zusätzlich im Produktmodus für die frühe #22-Luftbegrenzung erforderlich. Im
+Luftmodus ist Luft der Regelsensor; der Produktwert ist nicht notwendig.
+Ein fehlender, stale oder failed Regelsensor ist `Unavailable`, kein stiller
+Rollenwechsel.
 
 ```text
 PiDirectionParameters
-  proportionalGain: finite, >= 0
-  integralGainPerSecond: finite, >= 0
+  proportionalGainQuotePerCelsius: finite, > 0
+  integralGainQuotePerCelsiusSecond: finite, > 0
   neutralBandWidthCelsius: finite, > 0
   maximumQuote: finite, (0, 1]
   maximumIntegrationStepMillis: uint64_t, > 0
@@ -209,285 +302,430 @@ TemperatureControlParameters
   airCooling
   productHeating
   productCooling
-  lowerHard < lowerSoft < upperSoft < upperHard
+  airLimitLowerBlockCelsius
+  airLimitLowerReduceStartCelsius
+  airLimitUpperReduceStartCelsius
+  airLimitUpperBlockCelsius
 ```
 
-Die vier Parametersätze sind getrennt; Produktionszahlen bleiben
-`TBD_COMMISSIONING`. Ein fehlendes Profil ist
-`Unavailable / NoCommissioning`, ein vorhandenes strukturell ungültiges
-Profil `InvalidInput / InvalidConfiguration`. Es gibt keinen Produktions-
-default aus Null- oder geratenen Werten.
+Alle vier PI-Parametersätze sind getrennt. Für die Release-1-
+Produktionssemantik sind `Kp > 0` und `Ki > 0` verbindlich; ein gültiger
+Parametersatz darf nicht beide Anteile still auf null setzen. Reale Werte
+bleiben `TBD_COMMISSIONING`. Testprofile isolieren P- und I-Wirkung über
+Fehler, Zeitabstand und Zustand, nicht über einen ungültigen Null-
+Produktionsparametersatz.
+
+Der Integralzustand ist eine endliche, nichtnegative Quote mit der
+Richtungsobergrenze `maximumQuote`. Ein separater Integral-Limit-Parameter
+wird in R1 nicht eingeführt. Damit gilt für jede Richtung:
+
+```text
+0 <= integralContributionQuote <= maximumQuote <= 1
+```
 
 ### 6.2 Richtung und Neutralband
 
 ```text
-error = targetCelsius - measuredCelsius
+rawErrorCelsius = targetCelsius - measuredCelsius
 ```
 
-Die Schwelle für positiven Fehler ist ausschließlich
-`neutralBandWidthCelsius` des Heating-Parametersatzes derselben Sensorrolle.
-Die Schwelle für negativen Fehler ist ausschließlich die entsprechende
-Cooling-Breite. Der Wert ist eine **einseitige Fehlerschwelle**, nicht die
-gesamte Bandbreite:
+Die Richtung wird ausschließlich aus dem aktuellen Fehler und der
+richtungsabhängigen Schwelle derselben ControlSensorRole bestimmt:
 
 ```text
-error > +heatingNeutralBandWidth  -> Heating
-error < -coolingNeutralBandWidth  -> Cooling
--coolingNeutralBandWidth <= error
-  <= heatingNeutralBandWidth      -> Idle
+rawErrorCelsius > +heatingNeutralBandWidth -> Heating
+rawErrorCelsius < -coolingNeutralBandWidth -> Cooling
+sonst                                      -> Idle
 ```
 
-An beiden Grenzen gilt `Idle` und Quote `0`; die Grenzen sind inklusiv im
-Neutralband. Diese Entscheidung ersetzt nicht die in #23 separat
-festgelegte Gegenrichtungsbestätigung oder Richtungswechsel-Hysterese.
+Die positive und negative Schwelle sind jeweils einseitige
+`neutralBandWidthCelsius`-Fehlerschwellen des Heating-/Cooling-
+Parametersatzes; sie beschreiben nicht die gesamte Bandbreite. An beiden
+Grenzen gilt inklusiv `Idle` und Quote `0`.
 
-### 6.3 Quote, Luftbegrenzung und Integrator
-
-Für die gewählte Richtung wird zunächst die unbeschränkte PI-Quote berechnet,
-danach die Maschinenquote und im Produktmodus die frühe Luftbegrenzung:
+Für eine aktive Richtung gilt die Planentscheidung:
 
 ```text
-maximumLimitedQuote = min(unboundedQuote, maximumQuote)
-limitedQuote = maximumLimitedQuote * airLimitFactor
+directionalThreshold =
+  Heating: heatingNeutralBandWidthCelsius
+  Cooling: coolingNeutralBandWidthCelsius
+
+activeErrorCelsius = abs(rawErrorCelsius) - directionalThreshold
 ```
 
-Alle Berechnungen sind checked und endlich in `[0, 1]`.
+Eine aktive Richtung existiert nur bei `activeErrorCelsius > 0`. Das
+Neutralband ersetzt nicht die Gegenrichtungsbestätigung oder
+Richtungswechsel-Hysterese aus #23.
 
-Die Luftbegrenzung gilt ausschließlich im Produktmodus und mit einem gültigen,
-endlichen Luftsnapshot:
+### 6.3 PI-Gleichung und Einheiten
+
+Die R1-Gleichung ist in Quote-Einheiten vollständig festgelegt:
 
 ```text
-HEAT: air <= upperSoft                         factor 1, Unrestricted
-      upperSoft < air < upperHard              linear, Reduced
-      air >= upperHard                         factor 0, Blocked
+P = proportionalGainQuotePerCelsius * activeErrorCelsius
 
-COOL: air >= lowerSoft                         factor 1, Unrestricted
-      lowerHard < air < lowerSoft              linear, Reduced
-      air <= lowerHard                         factor 0, Blocked
+dtSeconds = checked(sampleTimestamp - lastSampleTimestamp) / 1000.0
+
+deltaI = integralGainQuotePerCelsiusSecond
+         * activeErrorCelsius
+         * dtSeconds
+
+unboundedQuote = P + integralContributionQuote
 ```
 
-An der weichen Grenze ist die Quote noch unbeschränkt, an der harten Grenze
-ist die betroffene Richtung blockiert. Im Luftmodus ist Luft der normale
-Regelsensor und die Produkt-Luftbegrenzung `NotApplied`; ein Produktwert ist
-dort nicht erforderlich.
+`proportionalGainQuotePerCelsius` hat die Einheit Quote/°C,
+`integralGainQuotePerCelsiusSecond` Quote/(°C·s), `P`, `I` und Quote sind
+dimensionslos in `[0, 1]`. Der Fehler wird nach Abzug der jeweiligen
+Neutralbandschwelle integriert; ein Fehler innerhalb des Neutralbands
+integriert nicht.
 
-Der PI-Integrator wird nicht persistiert. Die genaue
-Kontextwechsel-/Resetentscheidung steht in Abschnitt 9. Unabhängig davon
-gilt als sichere R1-Regel: bei eigener Begrenzung, fehlender/ungültiger
-Rückmeldung oder nachgelagerter Nicht-/Teilannahme keine weitere positive
-Aufladung in die bereits blockierte Richtung.
+Der Integral-Kandidat ist checked:
 
-### 6.4 Zeitvertrag des PI-Kerns
+```text
+candidateI = min(max(oldI + deltaI, 0), maximumQuote)
+```
 
-`sampleTimestampMonotonicMillis` ist `uint64_t`; `NaN` und Unendlich sind
-keine möglichen Timestampwerte. Struktur-, Reihenfolge- und Rechenfehler
-werden checked behandelt:
+`oldI + deltaI`, Multiplikationen und die Millisekunden-/Sekundenumrechnung
+müssen auf Endlichkeit und Überlauf geprüft werden. Bei einem Rechenfehler
+gibt es keine gültige ControlRequest und keinen unsicheren Integralwert.
 
-| Situation | Demand | Integralzustand | Timestampwirkung |
-|---|---|---|---|
-| erster Sample | aktueller P-/begrenzter Demand möglich | exakt 0/unverändert; keine Integration | als erster Anker speichern |
-| gleicher Timestamp | aktueller Demand möglich | unverändert; `dt = 0` | Anker bleibt gültig |
-| rückwärts | `InvalidInput / TimeInvalid`, `Idle`, `0` | auf 0 löschen | alter gültiger Anker bleibt |
-| vorwärts, Lücke innerhalb des checked Maximums | aktueller Demand möglich | mit `dt` fortschreiben, sofern Anti-Windup erlaubt | checked übernehmen |
-| vorwärts, zu große Lücke | `InvalidInput / TimeInvalid`, `Idle`, `0` | auf 0 löschen | aktueller Timestamp wird neuer Anker, ohne Zeitgutschrift |
-| checked Differenz-, Konversions- oder Float-Overflow | `InvalidInput / TimeInvalid`, `Idle`, `0` | auf 0 löschen | kein unsicherer Zeitwert wird übernommen |
+### 6.4 Verbindliche Auswertungsreihenfolge
 
-Eine rückwärts laufende Zeit ersetzt den letzten Anker nicht. Nach einer zu
-großen Lücke ist der neue Anker akzeptiert, aber erst spätere normale Samples
-dürfen wieder integrieren. Diese sechs Fälle erhalten je einen Test für
-Demand und Integralzustand.
+Jede Evaluation folgt exakt dieser Reihenfolge:
 
-## 7. Status-/Reason-Vertrag
+1. Struktur-, Rollen-, Ziel-, Profil-, Sensor-, Timestamp- und
+   Feedbackvalidierung;
+2. bereits erfolgreich commitierte Control-Context-Transition anwenden;
+3. effektive Rolle, Ziel und aktuelle Richtung bestimmen;
+4. `activeErrorCelsius`, P und den aktuellen Luftbegrenzungszustand
+   bestimmen;
+5. nur wenn kein nachgelagertes Feedback `DeferredOrLimited`/`Rejected` oder
+   fehlt und keine aktuelle #22-eigene Begrenzung/Sättigung dagegen spricht,
+   `deltaI` berechnen;
+6. Integral checked und auf `maximumQuote` begrenzt fortschreiben;
+7. `unboundedQuote = P + I` bilden;
+8. `maximumLimitedQuote = min(unboundedQuote, maximumQuote)` bilden;
+9. die frühe Luftbegrenzung anwenden;
+10. Status/Reason setzen und die gültige HEAT/OFF/COOL-ControlRequest mit
+    Sequenz und Erzeugungszeitpunkt bilden.
 
-Der Evaluationswert enthält genau einen Status und Reason sowie getrennte
-Diagnosewerte für unbeschränkte, maximal begrenzte und luftbegrenzte Quote:
+Im Neutralband wird eine gültige `OFF`-ControlRequest erzeugt, keine positive
+Integration durchgeführt und der Integralwert nur gemäß der bereits
+angewandten Context-/Richtungs-Transition kontrolliert gehalten. Er wird
+nicht still durch Zeit oder weitere Off-Samples aufgeladen.
+
+Die #22-eigene Sättigungsprüfung vor Schritt 5 ist ebenfalls eindeutig:
+Wenn `P + oldI >= maximumQuote`, wird keine positive `deltaI` berechnet. Ist
+`P + oldI < maximumQuote`, darf ein zulässiger Integrationsschritt den
+Kandidaten bis genau `maximumQuote` auffüllen; der nächste Sample integriert
+dort nicht weiter. Ein checked Kandidat, der durch Addition darüber liegen
+würde, wird auf `maximumQuote` begrenzt und löst keinen Overflow aus.
+
+Bei eigener Maximalsättigung, `AirLimitReduced` und `AirLimitBlocked` wird in
+der begrenzten Richtung keine weitere positive Integration zugelassen. Ein
+bereits zulässig begrenzter Integralwert wird nicht über die Richtungs-
+obergrenze hinaus vergrößert.
+
+### 6.5 Frühe Luftbegrenzung ohne Safety-Namen
+
+Die normale #22-Luftbegrenzung verwendet keine Begriffe `Hard` oder `Soft`,
+die mit Safety-/Notgrenzen verwechselt werden können:
+
+```text
+HEAT: air <= airLimitUpperReduceStartCelsius
+        factor = 1, Unrestricted
+      reduceStart < air < airLimitUpperBlockCelsius
+        factor = (upperBlock - air) / (upperBlock - reduceStart), Reduced
+      air >= airLimitUpperBlockCelsius
+        factor = 0, Blocked
+
+COOL: air >= airLimitLowerReduceStartCelsius
+        factor = 1, Unrestricted
+      lowerBlock < air < reduceStart
+        factor = (air - lowerBlock) / (reduceStart - lowerBlock), Reduced
+      air <= airLimitLowerBlockCelsius
+        factor = 0, Blocked
+```
+
+An der Reduktionsstartgrenze ist die Quote noch unbeschränkt; an der
+Blockgrenze ist die betroffene normale Richtung blockiert. Die Werte müssen
+checked validiert werden (`lowerBlock < lowerReduceStart` und
+`upperReduceStart < upperBlock`).
+
+Diese Grenzen reduzieren oder blockieren ausschließlich die normale abstrakte
+#22-Anforderung. Sie sind keine Safety-Hard-Limits und keine Notgrenzen.
+Safety-Eingriffs- und Notgrenzen bleiben #24/#35. Die Luftbegrenzung gilt nur
+im Produktregelbetrieb. Im Luftbetrieb ist die Luft der normale Regelsensor
+und `AirLimitState = NotApplied`.
+
+## 7. ControlRequest, Status und Invarianten
+
+### 7.1 Gültige ControlRequest
+
+Der Vertrag aus `ACTUATOR_TIMING.md` wird für alle drei gültigen normalen
+Anforderungen konkretisiert:
+
+```text
+ControlRequestIdentity
+  sequence: uint64_t
+  createdAtMonotonicMillis: uint64_t
+
+ControlRequest
+  identity: ControlRequestIdentity
+  direction: Heating | Cooling | Idle
+  timeQuote: [0, 1]
+```
+
+Die Zuordnung lautet:
+
+```text
+HEAT + Quote -> gültige ControlRequest, direction = Heating
+OFF          -> gültige ControlRequest, direction = Idle, quote = 0
+COOL + Quote -> gültige ControlRequest, direction = Cooling
+Unavailable  -> keine gültige ControlRequest
+InvalidInput -> keine gültige ControlRequest
+```
+
+Jede neu erzeugte gültige HEAT/OFF/COOL-ControlRequest erhält die nächste
+RAM-only `uint64_t`-Sequenz und den monotonen Erzeugungszeitpunkt des
+aktuellen Samples. Eine neue gültige OFF-Anforderung erhält daher ebenso eine
+Identität wie eine aktive Anforderung. Derselbe Timestamp ist zulässig, aber
+bei einer neuen gültigen ControlRequest kein Identitätsersatz; er erhält eine
+neue Sequenz.
+
+Beim Erreichen `UINT64_MAX` wird nicht gewrappt. Die nächste gültige
+Anforderung wird checked als `InvalidInput` ohne ControlRequest abgewiesen;
+es gibt keine stillschweigende Wiederverwendung einer alten Identität.
+Sequenz, Timestamp, letztes Feedbackfenster und PI-Zustand werden nicht
+persistiert und nach Neustart verworfen.
+
+### 7.2 Status-/Reason-Matrix
 
 ```text
 TemperatureControlStatus = Demand | Off | Unavailable | InvalidInput
 TemperatureControlReason = None | NeutralBand | Saturated |
                             AirLimitReduced | AirLimitBlocked |
                             NoCommissioning | SensorUnavailable |
-                            InvalidConfiguration | InvalidSample | TimeInvalid
+                            InvalidConfiguration | InvalidSample |
+                            TimeInvalid | RequestIdentityExhausted
 AirLimitState = NotApplied | Unrestricted | Reduced | Blocked | Unavailable
 ```
 
-| Status | zulässige Reason | Richtung | Quote |
-|---|---|---|---:|
-| `Demand` | `None`, `Saturated`, `AirLimitReduced` | `Heating` oder `Cooling` | `> 0` und `<= 1` |
-| `Off` | `NeutralBand`, `AirLimitBlocked` | zwingend `Idle` | `0` |
-| `Unavailable` | `NoCommissioning`, `SensorUnavailable` | zwingend `Idle` | `0` |
-| `InvalidInput` | `InvalidConfiguration`, `InvalidSample`, `TimeInvalid` | zwingend `Idle` | `0` |
+| Status | zulässige Reasons | ControlRequest | Richtung/Quote |
+|---|---|---|---|
+| `Demand` | `None`, `Saturated`, `AirLimitReduced` | zwingend vorhanden | `Heating`/`Cooling`, Quote `>0` und `<=1` |
+| `Off` | `NeutralBand`, `AirLimitBlocked` | zwingend vorhanden | `Idle`, Quote `0` |
+| `Unavailable` | `NoCommissioning`, `SensorUnavailable` | zwingend nicht vorhanden | `Idle`, Quote `0` nur als Diagnosewert |
+| `InvalidInput` | `InvalidConfiguration`, `InvalidSample`, `TimeInvalid`, `RequestIdentityExhausted` | zwingend nicht vorhanden | `Idle`, Quote `0` nur als Diagnosewert |
 
-`AirLimitReduced` ist nur mit `Demand`, `Reduced` und einer tatsächlich
-reduzierten Quote erlaubt. `AirLimitBlocked` ist nur mit `Off`, `Blocked` und
-Quote `0` erlaubt. `Saturated` ist nur eine `Demand`-Diagnose für die
-PI-/Maschinenquotenbegrenzung, sofern nicht die Luftreduktion die primäre
-Diagnose ist. Safety-, Aktor- und Kühlkörpersensorgründe werden nicht als
-#22-Reasons erfunden. Widersprüchliche Kombinationen sind Testfehler.
+`AirLimitReduced` tritt nur mit `Demand`, `Reduced` und einer tatsächlich
+reduzierten Quote auf. `AirLimitBlocked` tritt nur mit `Off`, `Blocked`,
+Quote `0` und einer gültigen OFF-ControlRequest auf. `Saturated` ist eine
+Demand-Diagnose für die PI-/Maschinenquotenbegrenzung, sofern nicht die
+Luftreduktion die primäre Diagnose ist.
 
-## 8. Anti-Windup-Feedback und Demand-Identität
+Kein `Demand` trägt `Idle`, kein `Unavailable`/`InvalidInput` trägt eine
+ControlRequest, und keine Sperrdiagnose trägt eine positive Quote. Safety-,
+Aktor- und Kühlkörpersensorgründe werden nicht als #22-Reasons erfunden.
 
-### 8.1 Schmaler ursachenunabhängiger Feedbackvertrag
+## 8. Anti-Windup-Feedback und Replay-Schutz
 
-Der #22-Vertrag behauptet keine physisch ausgeführte Quote pro PI-Zyklus.
-Der bereits akzeptierte #23-Impulsakkumulator kann aufgeschobene kleine
-Anforderungen später gemeinsam ausführen; eine spätere elektrische Leistung
-kann deshalb größer sein als die einzelne aktuelle Quote.
+### 8.1 Ursachenschmaler Feedbackvertrag
+
+Eine einzelne aktuelle PI-Quote ist keine physische Aktorleistung. Der #23-
+Impulsakkumulator kann kleine Anforderungen über mehrere Fenster sammeln und
+später gemeinsam ausführen. #22 behauptet deshalb keine `appliedQuote`.
 
 ```text
-PreviousDemandFeedback
-  demandSequence: uint64_t
-  disposition: FullyAccepted | DeferredOrLimited | Rejected
+PreviousControlRequestFeedback
+  controlRequestSequence: uint64_t
+  disposition: NoIntegratorConstraint |
+               DeferredOrLimited |
+               Rejected
 ```
 
-Bedeutung:
+`NoIntegratorConstraint` darf #23/#24 nur für genau diese
+ControlRequest melden, wenn für diese konkrete Anforderung kein
+nachgelagerter Aufschub und keine Begrenzung vorliegt, die eine positive
+Integratorfortschreibung unvertretbar machen würde. Insbesondere ist
+`DeferredOrLimited` zu melden bei:
 
-- `FullyAccepted` bedeutet nur, dass die nachgelagerte Kette die abstrakte
-  Anforderung für ihre weitere Planung angenommen hat. Es behauptet keine
-  physische Momentanleistung und keine sofortige Pulsabgabe.
-- `DeferredOrLimited` bedeutet, dass die nachgelagerte Kette die Anforderung
-  wegen einer beliebigen nachgelagerten Begrenzung nicht normal weiterführen
-  konnte, ohne die Ursache in #22 zu benennen.
-- `Rejected` bedeutet, dass sie die Anforderung nicht angenommen hat.
+- aktiver Mindest-Auszeit;
+- Polaritätstotzeit;
+- noch nicht ausführbarem Impulsakkumulator oder Mindestimpuls;
+- nachgelagerter Leistungsbegrenzung;
+- sonstigem temporärem Aufschub.
 
-#22 kennt keine Mindestzeit, Totzeit, Impulsakkumulation, Aktorfreigabe oder
-Safetyursache. In R1 ist die Wirkung konservativ und vollständig definiert:
-`DeferredOrLimited` und `Rejected` unterbinden mindestens jede weitere
-positive Integratoraufladung für die betroffene Richtung; es gibt kein
-Back-Calculation und keinen erfundenen Gain. Bei fehlender Rückmeldung wird
-ebenfalls nicht positiv integriert. Eine spätere #23-Planrevision darf die
-Disposition fachlich präzisieren, darf aber weder die Demand-Identität noch
-die Aussage ändern, dass #22 keine physische Quote behauptet.
+`Rejected` bedeutet vollständige Nichtannahme. Die Disposition enthält keinen
+Grund, keine Safetyklasse und keine elektrische Momentanquote. #22 kennt
+weiterhin keine #23-Zeit, keinen Akkumulator und keine #24-Ursache.
 
-Die Reihenfolge ist nicht zyklisch:
+Die R1-Wirkung ist vollständig und konservativ:
 
-1. Evaluation `n` erzeugt eine neue abstrakte Demand mit einer neuen
-   `demandSequence`.
-2. #23/#24 verarbeiten diese Demand außerhalb von #22.
-3. Vor der Integratorfortschreibung der nächsten Evaluation `n+1` wird das
-   Feedback für genau die Demand `n` geprüft.
-4. Erst danach erzeugt #22 gegebenenfalls Demand `n+1`; das Feedback wird
-   nicht in eine zweite Aktor- oder Safetyentscheidung umgedeutet.
+- `NoIntegratorConstraint`: normale Integration darf stattfinden, sofern die
+  übrigen #22-eigenen Prüfungen, Zeitregeln und Grenzen dies erlauben;
+- `DeferredOrLimited`: Integral einfrieren, keine positive Aufladung;
+- `Rejected`: Integral einfrieren, keine positive Aufladung;
+- fehlendes Feedback für eine vorherige aktive Heating-/Cooling-Anforderung:
+  ebenfalls Integral einfrieren, keine positive Aufladung;
+- kein Back-Calculation-Gain und kein kontrollierter Abbau aus einer
+  behaupteten Quotendifferenz.
 
-### 8.2 Checked Demand-Identität
+Die Auswertung ist nicht zyklisch:
 
-Die Demand-Identität ist RAM-only und nicht zeitbasiert:
+1. Evaluation `n` erzeugt eine gültige ControlRequest oder keinen Request.
+2. #23/#24 verarbeiten Request `n` außerhalb von #22.
+3. Vor der Integratorfortschreibung von Evaluation `n+1` wird ausschließlich
+   Feedback für den letzten aktiven Request `n` geprüft.
+4. Danach erzeugt #22 Request `n+1`; das Feedback wird nicht als zweite
+   Aktor-/Safetyentscheidung interpretiert.
 
-- jede tatsächlich neu erzeugte gültige Demand-Evaluation erhält genau die
-  nächste `uint64_t`-Sequenz, beginnend bei `1`;
-- auch eine gültige Neubewertung mit gleichem Timestamp erhält eine neue
-  Sequenz; `dt = 0` ist kein Identitätsersatz;
-- `lastDemandSequence` und der Status, ob das Feedbackfenster offen ist,
-  bleiben flüchtig;
-- Feedback ist nur gültig, wenn es die unmittelbar vorherige Demand-Sequence
-  referenziert und noch nicht konsumiert wurde;
+### 8.2 Feedbackfenster
+
+Nur eine unmittelbar vorherige aktive `Heating`-/`Cooling`-ControlRequest
+öffnet ein Feedbackfenster. Für sie gilt:
+
 - fehlendes Feedback im unmittelbaren Folgeaufruf wird als konservatives
-  `DeferredOrLimited` behandelt und das Fenster geschlossen; später
-  eintreffendes Feedback ist stale und wird nicht nachträglich angewandt;
-- unbekannte, alte, doppelt konsumierte oder nicht zur letzten Demand passende
-  Sequenzen werden verworfen und erzeugen `InvalidInput / InvalidSample`,
-  Richtung `Idle`, Quote `0` und keinen Integratorfortschritt;
-- beim Erreichen `UINT64_MAX` wird nicht gewrappt. Eine weitere neue Demand
-  wird checked als `InvalidInput` abgewiesen; es gibt keinen stillen
-  Identitätswechsel und kein Persistenzschema dafür.
+  Einfrieren behandelt und das Fenster geschlossen;
+- vorhandenes Feedback muss exakt die letzte Request-Sequence referenzieren
+  und darf nicht bereits konsumiert sein;
+- unbekannte, alte, doppelt konsumierte oder fremde Sequenzen erzeugen
+  `InvalidInput / InvalidSample`, keine neue ControlRequest und keinen
+  Integratorfortschritt;
+- Feedback für eine vorherige gültige OFF-ControlRequest ist unzulässig und
+  wird als fremdes/inkompatibles Feedback verworfen; OFF benötigt kein
+  Anti-Windup-Feedback;
+- ein neuer gültiger OFF-Request schließt das vorherige aktive Fenster;
+- ein Unavailable-/InvalidInput-Ergebnis erzeugt keinen neuen Request und
+  beendet den normalen Feedbackpfad fail-closed;
+- nach Neustart gibt es kein offenes Feedbackfenster.
 
-Eine nicht erzeugte `Off`-/`Unavailable`-/`InvalidInput`-Bewertung eröffnet
-keine neue Demand-Identität und invalidiert ein noch offenes Feedbackfenster.
-Ein Neustart verwirft das flüchtige Fenster. Tests decken gleiche Timestamps,
-fehlendes, altes, doppeltes, fremdes und überlaufendes Feedback ab.
+Der Zeitstempel ist kein Identitätsersatz. Gleiche Timestamps mit neuen
+gültigen HEAT/OFF/COOL-Anforderungen erhalten jeweils neue Sequences.
 
-## 9. PI-Integrator bei Kontextwechseln
+## 9. Integrator-Transition-Policy und Commit-Grenze
 
-`ACTUATOR_TIMING.md` bleibt maßgeblich: ein Richtungswechsel setzt den
-Integralanteil nicht automatisch und pauschal auf null. Sollwertsprung,
-Sensorrollenwechsel, Moduswechsel und relevante Phasenwechsel können eine
-kontrollierte Anpassung oder Teilrücksetzung verlangen; ihre endgültige
-Produktionswahl bleibt Commissioning.
+### 9.1 Kleiner nicht redundanter Policy-Vertrag
 
-Dafür erhält der PI-Kern einen kleinen, validierten und injizierten Vertrag,
-keinen Produktionsdefault und keine Strategiebibliothek:
+`ACTUATOR_TIMING.md` bleibt maßgeblich: Ein Richtungswechsel setzt den
+Integralanteil nicht automatisch pauschal auf null; konkrete Anpassung oder
+Teilrücksetzung ist Commissioning.
+
+Der R1-Vertrag verwendet nur zwei tatsächlich unterschiedliche Aktionen:
 
 ```text
-IntegratorTransitionAction = Reset | Freeze | BoundedCarry
+IntegratorTransitionAction = Reset | BoundedCarry
 
 IntegratorTransitionPolicy
-  directionChange
-  sensorRoleChange
-  targetChanged
-  relevantPhaseChange
-  maximumCarryQuote: finite, >= 0
+  directionChange: Reset | BoundedCarry
+  sensorRoleChange: Reset | BoundedCarry
+  targetContextChange: Reset | BoundedCarry
+  transitionMaximumCarryQuote: finite double in [0, 1]
 ```
 
-Der Vertrag ist vollständig zu validieren und muss vom Aufrufer explizit
-geliefert werden. `Reset` setzt den Integralanteil auf `0` und integriert im
-Übergangssample nicht. `Freeze` erhält höchstens den checked Wert
-`min(oldIntegral, maximumCarryQuote)` und integriert im Übergangssample nicht.
-`BoundedCarry` überträgt ebenfalls höchstens diesen checked Grenzwert und
-verhindert im Übergangssample jede positive Aufladung. Damit kann kein großer
-alter Integralimpuls unbegrenzt in einen anderen Sensor-, Richtungs- oder
-Sollwertkontext gelangen.
+`Reset` setzt `I = 0`. `BoundedCarry` setzt:
 
-Für neue Läufe, Neustart/Recovery und echte ungültige Zustände gilt unabhängig
-von der injizierten Policy immer `Reset`. Für bestätigte
-Richtungswechsel, Sensorrollenwechsel, Sollwertsprünge, Moduswechsel und
-relevante Phasenwechsel wird die jeweilige Policy-Aktion ausgewertet; #22
-entscheidet keinen Produktionswert. Testprofile dürfen `Reset` oder
-`BoundedCarry` mit konkreten Testgrenzen wählen. Die reale Auswahl bleibt
+```text
+I = min(oldI,
+        transitionMaximumCarryQuote,
+        newDirectionIntegralLimit)
+```
+
+`newDirectionIntegralLimit` ist in R1 `maximumQuote` des neuen
+Richtungs-/Rollenparametersatzes. Im Transition-Sample ist unabhängig von
+der Aktion keine positive Integration erlaubt. Die strengste neue Grenze
+gewinnt. Es gibt keinen zweiten Namen mit derselben Wirkung und keine
+Strategiebibliothek.
+
+Die Policy ist vollständig zu validieren und muss explizit injiziert werden;
+es gibt keinen Produktionsdefault. Testprofile dürfen konkrete Aktionen und
+eine konkrete Carry-Grenze verwenden. Die endgültige Produktionswahl bleibt
 `TBD_COMMISSIONING` / #35.
 
-Ein bestätigtes `TargetChanged` löst nach erfolgreicher Run-/Prozessänderung
-die Policy-Aktion `targetChanged` aus. Der alte Integrator wird nicht still
-weitergeführt; die gewählte Test-/Commissioning-Policy ist in der
-Evaluation nachvollziehbar. Die Entscheidung ist von der
-TargetQualification-Resetentscheidung getrennt, wird aber an derselben
-erfolgreichen Commit-/Apply-Grenze synchronisiert.
+### 9.2 Committe Aufrufgrenze
 
-## 10. Zieltemperatur, Zielband und Laufanpassungen
+Der PI-Kern übernimmt persistierbare Kontextänderungen nicht durch bloßen
+Vergleich vor ihrem Commit. Der schmale Aufruf lautet sinngemäß:
 
-### 10.1 Effektive Zielquelle
+```text
+applyCommittedControlContextTransition(
+    state,
+    committedTransition,
+    validatedIntegratorTransitionPolicy,
+    newDirectionIntegralLimit)
+```
 
-`targetCelsius` ist immer der **aktuell wirksame Zielwert des laufenden
-Prozesses**, nicht der unveränderte Zielwert des Quellprogramms:
+`committedTransition` benennt ausschließlich konkrete Änderungen:
 
-- Programmlauf: `ActiveRun::effectiveValues().targetTemperatureCelsius` nach
-  allen erfolgreich angewendeten `RunAdjustment`-Revisionen;
-- manueller Lauf: der wirksame Wert des `ManualRunPlan`;
-- Zielband und Qualifikationsdauer: der bestehende unveränderliche
-  Lauf-/Qualifikationsvertrag dieses Laufs. Eine Zielanpassung ersetzt nicht
-  stillschweigend Band oder Dauer.
+- angewendete Run-Target-Änderung oder Änderung des effektiven TargetKind;
+- angewendeter #21-Sensorrollenwechsel;
+- `ProductInserted` bei einem Produktlauf, wenn die effektive PI-Rolle von
+  Luft auf Produkt wechselt;
+- Eintritt in den Cooling-ControlTarget oder Rückkehr daraus, weil sich der
+  tatsächlich verwendete Regelzielkontext von Fermentation zu Completion-
+  Cooling bzw. zurück ändert.
 
-Die Evaluator-Eingabe wird pro Bewertung aus diesen effektiven Werten neu
-aufgebaut. Ein alter Quell-Programmsollwert darf nach einer bestätigten
-Laufanpassung keine Qualifikation mehr auslösen. `COOLING` verwendet weiterhin
-den bestehenden Kühlzielvertrag und niemals den
-`TargetQualificationEvaluator`.
+Ein generischer undefinierter `relevantPhaseChange`-Eintrag existiert nicht.
+Ein reiner Prozessphasenwechsel ohne neuen Ziel- oder Sensorrollen-Kontext
+ruft diese Policy nicht auf; neue Läufe, Neustart/Recovery und echtes
+Verlassen der Temperaturregelung setzen den PI-Zustand ohnehin sicher zurück.
 
-### 10.2 TargetChanged und manuelle Läufe
+Der Aufruf erfolgt erst nach dem bestehenden erfolgreichen Persistenz-/Apply-
+Pfad der jeweiligen Änderung:
 
-Eine Zieländerung wird zunächst als bestehende Lauf-/Prozesskandidaten-
-änderung berechnet. Erst nach erfolgreicher Persistenz und erfolgreichem
-`applyProcessTransition()` gilt sie als angewendet. Danach:
+- bei einem vor `FERMENTING` wirksamen `TargetChanged` nach erfolgreicher
+  Lauf-/Prozesspersistenz und `applyProcessTransition()`;
+- bei einem `TargetChanged` während `FERMENTING` nach erfolgreichem
+  `persistCommand`, auch wenn der Prozesszustand `FERMENTING` bleibt;
+- bei #21-Rollenwechsel nach erfolgreichem Sensor-/Prozess-Apply;
+- bei `ProductInserted` nach erfolgreichem Prozess-Apply.
 
-- wird der Evaluator für die neue effektive Zieltemperatur zurückgesetzt;
-- wird die PI-Integrator-Policy `targetChanged` angewandt;
-- verwendet die nächste Bewertung zwingend den neuen effektiven Zielwert;
-- beginnt die Qualifikation gemäß der bestehenden Prozess-Topologie neu.
+Eine kombinierte Ziel- und Rollenänderung wird als ein checked Contextwechsel
+übergeben. `Reset` hat Vorrang, sonst werden Carry-Grenzen aller betroffenen
+Kontextänderungen gemeinsam auf das Minimum begrenzt. Der Kandidat erhält ein
+`transitionSamplePending`-Merkmal; der nächste Evaluation-Sample integriert
+positiv erst nach der Übergangsbehandlung.
 
-Scheitert Persistenz oder Apply, bleiben alter effektiver Laufwert,
-Evaluatorzustand und Integratorkontext gemäß dem bestehenden fail-closed-
-Fehlerpfad wirksam; es wird kein halb angewendeter TargetChanged-Zustand
-veröffentlicht.
+### 9.3 Richtungswechsel innerhalb der PI-Evaluation
 
-Gezielte Tests decken Zieländerung in `PREHEATING`, `REACHING_TARGET` und
-`QUALIFYING_TARGET` sowie einen manuellen Lauf ab. Der manuelle Lauf testet
-die effektive `ManualRunPlan`-Quelle und beweist, dass kein Programmsnapshot
-als Ersatz gelesen wird.
+Die Richtung wird aus dem aktuellen Fehler bestimmt. Weicht sie von der
+letzten gültigen aktiven/neutralen Richtung ab, wird die validierte
+`directionChange`-Aktion in derselben Evaluation vor P und I angewandt. Das
+ist keine persistierbare Prozessentscheidung und benötigt keinen vorgelagerten
+Prozess-Commit. Der Transition-Sample erzeugt bei gültigem Ergebnis trotzdem
+eine normale ControlRequest, aber keine positive `deltaI`.
 
-## 11. TargetQualificationEvaluator
+Unavailable/Invalid, echte Fehler, neue Läufe, Neustart und Recovery löschen
+den Integrator und den Richtungsanker fail-closed. Ein alter großer
+Integralimpuls wird niemals ungebunden in einen neuen Rollen-, Ziel- oder
+Richtungskontext übertragen.
 
-### 11.1 Eingabe und Sensorrolle
+## 10. Zeitvertrag des PI-Kerns
 
-Der Evaluator erhält genau:
+`sampleTimestampMonotonicMillis` ist `uint64_t`; `NaN` und Unendlich sind
+keine möglichen Timestampwerte. Struktur-, Reihenfolge- und Rechenfehler
+werden checked behandelt:
+
+| Situation | ControlRequest | Integralzustand | Zeitwirkung |
+|---|---|---|---|
+| erster gültiger Sample | aktueller HEAT/OFF/COOL-Request möglich | exakt `0`; keine Integration | als erster Anker speichern |
+| gleicher Timestamp | neue gültige Request möglich, neue Sequence | `dt=0`, unverändert außer Policy-Transition | Timestamp bleibt Anker |
+| rückwärts laufender Timestamp | `InvalidInput / TimeInvalid`, kein Request | auf `0` löschen; Richtungsanker verwerfen | alter Timestamp wird nicht ersetzt |
+| vorwärts, `delta <= maximumIntegrationStepMillis` | aktueller Request möglich | `delta` nur gemäß Feedback-/Limitregeln integrieren | checked übernehmen |
+| vorwärts, zu große Lücke | `InvalidInput / TimeInvalid`, kein Request | auf `0` löschen | aktueller Timestamp wird neuer Nullanker, keine Gutschrift |
+| checked Differenz-, Konversions-, Float- oder PI-Overflow | `InvalidInput`, kein Request | auf `0` löschen | kein unsicherer Zeitwert wird übernommen |
+
+Bei einer zu großen Lücke wird der aktuelle Timestamp als checked
+Recoveryanker gespeichert, aber bis zu einem späteren normalen Sample keine
+Zeit gutgeschrieben. Bei Rückwärtszeit bleibt der alte Anker erhalten; kein
+späterer Sample darf die rückwärts liegende Lücke überbrücken.
+
+## 11. Zielqualifikation und effektive Eingabe
+
+### 11.1 Eigentum der Werte
+
+Der `TargetQualificationEvaluator` erhält eine reine, bereits aufgelöste
+Momentaufnahme:
 
 ```text
 TargetQualificationInput
@@ -498,13 +736,40 @@ TargetQualificationInput
   qualificationDurationMillis: uint64_t, > 0
   effectiveGraceMillis: optional<checked uint64_t>
   maximumAcceptedSampleGapMillis: optional<checked uint64_t>
-  selectedRunMode: Product | Air
+  controlSensorRole: ControlSensorRole
   air: SensorQualitySnapshot
   product: SensorQualitySnapshot
 ```
 
-`bandCelsius` ist die bestehende persistente Feldbezeichnung. Seine durch die
-Freigabe dieser Plan-SHA ausdrücklich zu treffende Ownerentscheidung lautet:
+`targetCelsius` kommt aus dem effektiven Regelzielvertrag in Abschnitt 5.
+Zielband und Qualifikationsdauer kommen aus dem bestehenden unveränderlichen
+Lauf-/Qualifikationsvertrag. Für `PREHEATING` ist die ControlSensorRole immer
+`Air`; `WAITING_FOR_PRODUCT` besitzt keinen aktiven Evaluator.
+
+`effectiveGraceMillis` ist ein vorgelagert effektiv aufgelöster und validierter
+Wert. Die kanonische Programmdokumentation lässt Programmwert oder validierten
+Standardwert offen. #22 entscheidet weder seine persistente
+Eigentümerschaft noch führt es dafür ein Programmschemafeld ein. Reale Werte
+und Commissioning liegen bei #35. Muss die persistente Eigentümerschaft vorher
+entschieden werden, ist das ein ausdrückliches Owner-Gate.
+
+`maximumAcceptedSampleGapMillis` ist ebenfalls eine effektiv validierte
+Eingabe aus dem Regel-/Sampling-/Commissioningvertrag, nicht aus einem neuen
+#22-Programmschemafeld. Produktionswert und Eigentümerschaft bleiben
+`TBD_COMMISSIONING` / #35 beziehungsweise der später validierte
+Samplingvertrag.
+
+- fehlender Grace-Wert oder fehlender Sample-Gap-Wert -> `Unavailable`;
+- ungültiger Grace-Wert, insbesondere checked nicht darstellbar, oder
+  ungültiger Sample-Gap-Wert, insbesondere `0`/Overflow -> `Invalid`;
+- ein Grace-Wert `0` ist als effektiv validierter Wert zulässig und lässt
+  keine fortsetzbare Grace-Episode entstehen.
+
+### 11.2 bandCelsius
+
+`bandCelsius` ist die bestehende persistente Feldbezeichnung und das externe
+Feld bleibt `target_qualification_band_c`. Die ausdrückliche R1-
+Ownerentscheidung lautet:
 
 ```text
 bandCelsius = einseitige Toleranz / Halbbreite
@@ -514,22 +779,30 @@ InBand genau dann, wenn abs(measuredCelsius - targetCelsius) <= bandCelsius
 Die Grenze ist inklusiv. Der bestehende Wertebereich wird nicht erweitert:
 `program_limits::kMinimumQualificationBandCelsius` bis
 `program_limits::kMaximumQualificationBandCelsius`; `0` ist kein gültiger
-effektiver Laufwert. Der persistente Feldname `bandCelsius` und das externe
-Feld `target_qualification_band_c` bleiben unverändert. Wäre bei einem
-erneuten Quellenabgleich eine andere kanonische Bedeutung belegt, würde die
-Umsetzung mit `SOURCE_OF_TRUTH_CONFLICT` angehalten und diese Entscheidung
-nicht überschrieben.
+effektiver Laufwert. Die Freigabe dieser Plan-SHA umfasst diese bisher offene
+Feldsemantik. Wäre bei einem erneuten Quellenabgleich eine andere kanonische
+Bedeutung belegt, würde die Umsetzung mit `SOURCE_OF_TRUTH_CONFLICT`
+angehalten und diese Entscheidung nicht überschrieben.
 
-In `PREHEATING` wird immer der Luftsnapshot verwendet, unabhängig vom
-späteren Produkt-/Luftmodus. In `REACHING_TARGET` und
-`QUALIFYING_TARGET` wird der von #21 ausgewählte Produkt- beziehungsweise
-Luftsnapshot verwendet. Ein ungültiger/fehlender Produktwert wird im
-Produktmodus nicht durch Luft ersetzt.
+### 11.3 Sensorrolle und Unavailable/Invalid
 
-### 11.2 Zustandsbehafteter, aber entscheidungsreiner Vertrag
+In `PREHEATING` wird ausschließlich der Luftsnapshot bewertet, unabhängig
+davon, ob `activeRunSensorMode` später `Product` oder `Air` ist. In
+`REACHING_TARGET` und `QUALIFYING_TARGET` wird ausschließlich die wirksame
+ControlSensorRole aus Abschnitt 5 bewertet. Ein fehlender/stale/failed
+Snapshot der zuständigen Rolle ist `Unavailable` und wird nicht durch die
+andere Rolle ersetzt.
 
-Der Evaluator besitzt flüchtigen Zustand, aber die Berechnung mutiert ihn
-nicht irreversibel:
+`Invalid` ist davon getrennt: nicht-finite Messung, strukturell ungültige
+Parameter, rückwärts laufender Evaluator-Timestamp, zu große Lücke,
+checked Overflow oder unzulässiger Band-/Dauerwert sind `Invalid`. Ein
+vorhandener, aber nicht verfügbarer #20-Sensorwert ist `Unavailable`.
+
+## 12. Qualifier-Decide-/Apply-Vertrag und Episoden
+
+### 12.1 Keine zweite Prozesszustandsmaschine
+
+Der Evaluator entscheidet ausschließlich Qualifikation:
 
 ```text
 evaluateQualification(currentEvaluatorState, input)
@@ -537,377 +810,493 @@ evaluateQualification(currentEvaluatorState, input)
        progress
        expectedEvaluatorState
        candidateEvaluatorState
-       expectedProcessState
-       processEffect
+       expectedQualificationContext
      }
 
 applyQualificationDecision(decision, commitContext)
 ```
 
-`expectedEvaluatorState` und die Ziel-/Rollen-/Phasenrevision verhindern, dass
-eine veraltete Entscheidung angewendet wird. `candidateEvaluatorState`
-enthält insbesondere `creditedInBandMillis`, letzten gültigen Sample-
-Timestamp, letzten Qualifikationszustand und `graceStartedAtMillis`.
+`expectedQualificationContext` bindet nur Phase, Ziel-/Rollen-/Laufrevision,
+Episodeart und die für Stale-Prüfung erforderlichen Context-Identitäten. Es
+entscheidet keinen Prozessübergang und enthält kein `processEffect`,
+`expectedProcessState` oder parallele Topologie.
 
-Die verbindliche Commit-/Apply-Reihenfolge lautet:
+Die verbindliche Reihenfolge ist:
 
-1. Aus dem aktuellen Live-Evaluatorzustand und der aktuellen Eingabe wird
-   eine Kandidatenentscheidung berechnet; Live-Zustand und
-   `ProcessRuntimeState` werden dabei nicht mutiert.
-2. Führt die Entscheidung zu einer persistierbaren Prozessänderung, werden
-   Prozesskandidat und Evaluatorkandidat gemeinsam vorbereitet.
-3. Der bestehende Write-before-Apply-Pfad persistiert den Prozesskandidaten.
-4. Nur nach erfolgreicher Persistenz und erfolgreichem
-   `applyProcessTransition()` wird der Evaluatorkandidat live übernommen.
-5. Schlägt Persistenz oder Apply fehl, bleibt der vorherige Evaluatorzustand
-   wirksam; der Kandidat wird verworfen und der bestehende fail-closed-
-   Persistenzfehlerpfad bleibt maßgeblich.
+1. Der Evaluator berechnet ohne Live-Mutation einen
+   `QualificationDecision`-Kandidaten.
+2. Der Orchestrator nimmt nur `decision.progress` und bildet daraus den
+   kanonischen `ProcessSignals`-Vertrag.
+3. `decideProcessTransition()` des bestehenden Zustandsautomaten ist alleinige
+   Quelle des Prozessübergangs und der `qualificationValidSinceMillis`-
+   Markeränderung.
+4. Bei einer persistierbaren Prozess- oder Markeränderung werden Prozess-
+   und Evaluatorkandidat gemeinsam vorbereitet, der bestehende
+   Write-before-Apply-Pfad schreibt zuerst, danach wird
+   `applyProcessTransition()` ausgeführt.
+5. Erst nach erfolgreicher Persistenz und erfolgreichem Process-Apply wird
+   der Evaluatorkandidat übernommen.
+6. Schlägt Persistenz oder Apply fehl, bleibt der vorherige Evaluatorzustand
+   wirksam, der Kandidat wird verworfen und der bestehende fail-closed-
+   Persistenzfehlerpfad blockiert die normale weitere Qualifikation.
 
-In einem Zyklus ohne persistierbare Prozessänderung darf der Kandidat nach
-der normalen erfolgreichen Evaluation als RAM-only-Zustand übernommen
-werden. Es wird keine Persistenz des Evaluatorzustands eingeführt.
+Bei einem Zyklus ohne persistierbare Prozess-/Markeränderung darf der
+Evaluator-Kandidat nach erfolgreicher Evaluation als RAM-only-Zustand
+übernommen werden. Es wird keine Evaluatorpersistenz eingeführt. Ein
+erfolgreicher Retry berechnet aus dem weiterhin gültigen Live-Zustand neu und
+schreibt keine Qualifikationszeit doppelt gut.
 
-TargetChanged, Rollenwechsel, Recovery und Phasenwechsel benutzen dieselbe
-Grenze. Ein erfolgreicher Retry berechnet aus dem alten Live-Zustand erneut
-und schreibt keine Zeit doppelt gut. Ein `Process-Apply`-Fehler nach
-erfolgreicher Persistenz übernimmt den Evaluator ebenfalls nicht; die
-bestehenden Recovery-/Fault-Regeln verhindern eine stille Fortsetzung.
+### 12.2 Exakte Episodenlebensdauer
 
-### 11.3 Zeit- und Resetsemantik
+Der Evaluatorzustand ist in zwei Episodearten getrennt:
 
-- Erster Sample: Zustand wird als neuer Zeitanker vorbereitet; es gibt keine
-  Zeitgutschrift.
-- Gleicher Timestamp: `dt = 0`; keine doppelte Gutschrift, die
-  Bandklassifikation darf sich dennoch ändern.
-- Rückwärts laufender Timestamp, zu große Lücke, checked Overflow oder
-  ungültige Konfiguration: `Invalid`, kein Kandidat mit gutgeschriebener
-  Zeit; der alte gültige Zustand bleibt bis zur expliziten Recovery-/Reset-
-  Grenze erhalten.
-- Neue Läufe und Recovery löschen Episode, Grace und Kredit.
-- `TargetChanged` löscht Episode, Grace und Kredit erst nach erfolgreichem
-  Lauf-/Prozess-Commit.
-- Ein bestätigter Sensorrollenwechsel löscht Episode, Grace und Kredit an
-  derselben Rollenwechsel-Commit-Grenze; es gibt keinen Rollenfallback.
-- Ein Wechsel aus `QUALIFYING_TARGET` zurück nach `REACHING_TARGET` löscht
-  die Qualifikation; die alte Episode wird nicht bei Rückkehr fortgesetzt.
+```text
+QualificationEpisode = None | Preheating | Target
+```
 
-### 11.4 Vollständige Bedeutung der Progress-Werte
+Verbindliche Matrix:
 
-- `Unavailable`: Es fehlt verwertbare Evidenz oder eine separat erforderliche
-  Voraussetzung ist noch nicht verfügbar, zum Beispiel kein erlaubter
-  Snapshot der zuständigen Rolle. Es liegt nicht zwingend ein fehlerhafter
-  Wert vor; der Kandidat schreibt keine Zeit gut.
-- `Invalid`: Ein vorhandener Sample, Timestamp oder Qualifikationsparameter
-  ist strukturell/semantisch ungültig, etwa nicht-finite Messung,
-  Rückwärtszeit, zu große Lücke, checked Overflow oder `bandCelsius == 0`.
-  Der Kandidat schreibt keine Zeit gut. `Invalid` ist nicht dasselbe wie
-  `Unavailable`.
-- `OutsideBand`: Verwertbarer Sample liegt außerhalb des inklusiven Bandes
-  und es gibt keine fortsetzbare aktive Grace-Episode. Kredit wird nicht
-  erhöht.
-- `Grace`: Verwertbarer Outside-Sample bei vorhandener Gutschrift und noch
-  nicht abgelaufener Gnadenzeit. Kredit bleibt unverändert; außerhalb wird
-  keine Zeit gutgeschrieben.
-- `InBand`: Verwertbarer Sample liegt im Band und die aktuelle Episode ist
-  noch nicht vollständig. Nur aufeinanderfolgende verwertbare InBand-Samples
-  mit checked Zeitabstand erhöhen den Kredit; ein Episode-Neustart liefert
-  zunächst `InBand` mit Kredit `0`.
-- `Complete`: Die checked gutgeschriebene InBand-Zeit erreicht die
-  Qualifikationsdauer. Der Wert ist eine positive Qualifikationsevidenz, aber
-  kein direkter Zustandsübergang aus `REACHING_TARGET`.
+| Ereignis/Phase | Evaluatorzustand nach erfolgreichem Commit/Apply |
+|---|---|
+| neuer Lauf | leer (`None`) |
+| `PREHEATING` beginnt | neue `Preheating`-Episode, Kredit `0` |
+| `PREHEATING + Complete -> WAITING_FOR_PRODUCT` | Preheating-Episode vollständig verwerfen |
+| `WAITING_FOR_PRODUCT` | kein aktiver QualificationEvaluator |
+| `ProductInserted -> REACHING_TARGET` | neue `Target`-Episode, Kredit `0` |
+| `REACHING_TARGET -> QUALIFYING_TARGET` | dieselbe Target-Episode fortführen |
+| `QUALIFYING_TARGET -> REACHING_TARGET` wegen Verlust | Target-Episode vollständig löschen |
+| bestätigtes `TargetChanged` | neue Target-Episode erst nach erfolgreichem Commit |
+| bestätigter Rollenwechsel | neue Target-Episode erst nach erfolgreichem Commit |
+| Recovery | neue Episode, kein alter Kredit |
+| Verlassen der Qualifikationsdomäne nach Abschluss | Evaluatorzustand löschen |
 
-### 11.5 Grace-Ablauf und direkte Rückkehr ins Band
+Ein vollständig gutgeschriebenes Preheating wird damit niemals auf die
+Qualifikationsdauer nach `ProductInserted` übertragen. Der Zustand
+`WAITING_FOR_PRODUCT` ist bewusst ohne aktiven Evaluator, obwohl PI und
+Innenlüfter dort weiterhin mit Luftrolle und effektivem Laufziel regeln.
 
-Vor jeder Rückkehr aus `Grace` wird bei verwertbarem aktuellem Timestamp die
-checked Zeit
-`outsideElapsed = currentTimestamp - graceStartedAtMillis` ausgewertet,
-unabhängig davon, ob der aktuelle Sample Outside oder InBand ist. Die
-Gleichheit `outsideElapsed == effectiveGraceMillis` gehört zur abgelaufenen
-Seite.
+### 12.3 Zeit, Progress und Unterbrechung
 
-- Bei `< effectiveGraceMillis` bleibt die alte Gutschrift erhalten. Ein
-  aktueller InBand-Sample kehrt mit `InBand` zurück, schreibt für die
-  Rückkehr selbst `0` neue Millisekunden gut und setzt die Folgeanker für
-  weitere InBand-Samples.
-- Bei `>= effectiveGraceMillis` wird die alte Gutschrift **zuerst vollständig
-  verworfen** und die Grace-Episode beendet. Ist der aktuelle Sample dann
-  InBand, startet er eine neue Episode und liefert `InBand` mit `0` Kredit;
-  ist er Outside, liefert er `OutsideBand` ohne alte Gutschrift.
-- Bei `effectiveGraceMillis == 0` wird keine fortsetzbare Grace-Episode
-  eröffnet; Outside verwirft eine vorhandene Episode sofort.
+- erster verwertbarer InBand-Sample: neuer Zeitanker, Kredit `0`;
+- gleicher Timestamp: `dt=0`, keine doppelte Gutschrift;
+- aufeinanderfolgende verwertbare InBand-Samples: checked `dt` erhöht den
+  Kredit bis zur checked Qualifikationsdauer;
+- bei erreichter Dauer: `Complete`;
+- jeder `Unavailable`-Sample unterbricht die laufende Episode und verwirft
+  Kredit, Grace-Anker und letzten verwertbaren Zeitanker;
+- jeder `Invalid`-Sample unterbricht die laufende Episode und verwirft Kredit,
+  Grace-Anker und letzten verwertbaren Zeitanker;
+- `OutsideBand` außerhalb einer aktiven, nicht abgelaufenen Grace-Episode
+  unterbricht die Episode und setzt Kredit auf `0`;
+- rückwärts laufender Timestamp und zu große Lücke erzeugen `Invalid` und
+  dürfen keinen alten Zeitanker für einen späteren Sample erhalten;
+- checked Zeitaddition, Differenz, Millisekundenumrechnung und Kreditgrenze
+  dürfen nicht wrapen.
 
-Tests decken direkte InBand-Rückkehr mit Grace-Zeit `<`, `==` und `>` sowie
-Outside-Samples am und nach dem Ablauf ab. Ein Sample genau am Grace-Ende ist
-kein weiterer Outside-Sample erforderlich, damit der alte Kredit verworfen
-wird.
+Ein später gültiger InBand-Sample startet nach jedem solchen Unterbruch eine
+neue Episode mit Kredit `0`. Er darf keine Zeit über `Unavailable`, `Invalid`,
+retrograde Zeit, zu große Lücke oder Outside-Unterbruch hinweg anrechnen.
 
-### 11.6 Prozessphase-Wirkung jedes Progress-Wertes
+### 12.4 Grace einschließlich direkter InBand-Rückkehr
+
+Vor jeder Rückkehr aus `Grace` wird bei verwertbarem Timestamp checked
+
+```text
+outsideElapsed = currentTimestamp - graceStartedAtMillis
+```
+
+ausgewertet, unabhängig davon, ob der aktuelle Sample Outside oder InBand ist.
+Die Gleichheit `outsideElapsed == effectiveGraceMillis` gehört zur
+abgelaufenen Seite.
+
+- bei `< effectiveGraceMillis` bleibt alte Gutschrift erhalten; ein aktueller
+  InBand-Sample liefert `InBand` und `0` neue Millisekunden für die Rückkehr;
+- bei `>= effectiveGraceMillis` wird alte Gutschrift zuerst vollständig
+  verworfen und die Grace-Episode beendet; aktueller InBand-Sample startet
+  eine neue Episode mit `InBand` und Kredit `0`, Outside liefert
+  `OutsideBand`;
+- bei `effectiveGraceMillis == 0` wird keine fortsetzbare Grace-Episode
+  eröffnet.
+
+Direkte InBand-Rückkehrtests decken Grace-Zeit `<`, `==` und `>` ab. Ein
+weiterer Outside-Sample am Grace-Ende ist nicht erforderlich, damit der alte
+Kredit verworfen wird.
+
+### 12.5 Vollständige Bedeutung aller Progress-Werte
+
+- `Unavailable`: erforderliche Evidenz oder effektiv validierte Eingabe fehlt
+  oder ist momentan nicht verfügbar; keine Zeitgutschrift, laufende Episode
+  wird unterbrochen.
+- `Invalid`: vorhandener Sample/Parameter/Zeit-/Kontextwert ist strukturell
+  oder semantisch ungültig; keine Zeitgutschrift, laufende Episode wird
+  unterbrochen.
+- `OutsideBand`: verwertbarer Sample liegt außerhalb des Bandes und eröffnet
+  keine fortsetzbare Grace; Kredit ist `0`.
+- `Grace`: verwertbarer Outside-Sample bei vorhandener Episode und noch nicht
+  abgelaufener Gnadenzeit; Kredit bleibt unverändert.
+- `InBand`: verwertbarer Sample im inklusiven Band, Episode nicht vollständig;
+  nur checked Folgezeit erhöht den Kredit.
+- `Complete`: checked Kredit erreicht Qualifikationsdauer; positive
+  Qualifikationsevidenz, aber kein direkter Prozessübergang aus
+  `REACHING_TARGET`.
+
+## 13. ProcessSignals und Zustandsautomat
+
+### 13.1 Phasenwirkung
+
+`criticalFault` wird vor jedem normalen Qualifikations- oder Cooling-
+Fortschritt ausgewertet und behält die bestehende Priorität.
 
 | Phase / Progress | `Unavailable` | `Invalid` | `OutsideBand` | `Grace` | `InBand` | `Complete` |
 |---|---|---|---|---|---|---|
-| `PREHEATING` | bleibt Preheating, keine Freigabe | bleibt Preheating, Fehlerdiagnose | bleibt Preheating, Episode ggf. löschen | bleibt Preheating, Kredit nicht erhöhen | bleibt Preheating, Episode führen | `WaitingForProduct`, `PreheatQualified` |
-| `REACHING_TARGET` | bleibt Reaching | bleibt Reaching | bleibt Reaching | **`QUALIFYING_TARGET`** | **`QUALIFYING_TARGET`** | **`QUALIFYING_TARGET`**, niemals direkt Fermenting/Manual |
-| `QUALIFYING_TARGET` | `ReachingTarget`, alte Qualifikation löschen | `ReachingTarget`, alte Qualifikation löschen | `ReachingTarget`, alte Qualifikation löschen | bleibt Qualifying | bleibt Qualifying | `FERMENTING` oder `MANUAL_HOLDING` |
-| `COOLING` | wird ignoriert | wird ignoriert | wird ignoriert | wird ignoriert | wird ignoriert | wird ignoriert |
+| `PREHEATING` | bleibt Preheating, Episode/Marker resetten | bleibt Preheating, Episode/Marker resetten | bleibt Preheating, Episode resetten | bleibt Preheating | bleibt Preheating | `WAITING_FOR_PRODUCT` |
+| `REACHING_TARGET` | bleibt Reaching, Episode leer | bleibt Reaching, Episode leer | bleibt Reaching, Episode leer | `QUALIFYING_TARGET` | `QUALIFYING_TARGET` | `QUALIFYING_TARGET` |
+| `QUALIFYING_TARGET` | `REACHING_TARGET` | `REACHING_TARGET` | `REACHING_TARGET` | bleibt Qualifying | bleibt Qualifying | `FERMENTING`/`MANUAL_HOLDING` |
+| `COOLING` | ignoriert | ignoriert | ignoriert | ignoriert | ignoriert | ignoriert |
 
-Bei `REACHING_TARGET + Complete` wird also zuerst die bestehende
-`REACHING_TARGET -> QUALIFYING_TARGET`-Topologie persistiert. Der nächste
-Zyklus darf mit derselben aktuellen Evidenz
-`QUALIFYING_TARGET + Complete` und damit den normalen zweiten Übergang
-vorlegen. Ein direkter Übergang von `REACHING_TARGET` nach
-`FERMENTING`/`MANUAL_HOLDING` ist unzulässig und erhält einen expliziten
-Negativtest.
+Aus `REACHING_TARGET` führt jeder positive Qualifikationswert, einschließlich
+`Complete`, zuerst nach `QUALIFYING_TARGET`. Nur
+`QUALIFYING_TARGET + Complete` führt nach `FERMENTING` oder
+`MANUAL_HOLDING`. Ein direkter `REACHING_TARGET -> FERMENTING`/
+`MANUAL_HOLDING`-Vorschlag ist unzulässig.
 
-## 12. ProcessSignals und bestehende Zustandsautomat-Topologie
+`targetReachStartedAtMillis` und `TargetReachTimeExceeded` funktionieren in
+`REACHING_TARGET` und `QUALIFYING_TARGET` weiterhin, auch während `Grace`.
+Eine Warnung ergänzt die bestehende Qualifikationsentscheidung und ersetzt
+keine Topologie.
 
-### 12.1 Priorität und Übergänge
+### 13.2 Cooling und CompletionMode
 
-`criticalFault` wird vor jedem normalen Qualifikations- oder Cooling-
-Fortschritt ausgewertet und behält seine bestehende Priorität. Die
-Qualifikationsauswertung benutzt nur `qualificationProgress`:
+`decideCooling()` liest ausschließlich `coolingTargetConditionValid`. Der
+Qualifikationsprogress, Grace und Qualifikationsdauer sind dort bedeutungslos.
+Alle kühlenden Completion-Modi bleiben explizit:
 
-- `PREHEATING`: nur `Complete` führt wie bisher zu `WAITING_FOR_PRODUCT`;
-  alle anderen Werte halten die Phase beziehungsweise aktualisieren nur
-  ihren Kandidatenmarker.
-- `REACHING_TARGET`: jeder positive Qualifikationswert, einschließlich
-  `Grace`, `InBand` und bereits berechnetem `Complete`, führt zunächst nach
-  `QUALIFYING_TARGET`.
-- `QUALIFYING_TARGET`: nur `Complete` führt nach `FERMENTING` oder
-  `MANUAL_HOLDING`; `Unavailable`, `Invalid` und `OutsideBand` führen wie
-  bisher zurück nach `REACHING_TARGET`, `Grace` und `InBand` halten die Phase.
-- `COOLING`: ausschließlich `coolingTargetConditionValid` darf den
-  bestehenden `CoolingTargetReached`-Übergang auslösen. Der Progresswert ist
-  dort vollständig bedeutungslos.
+```text
+CoolThenFinish
+  COOLING -> COMPLETED
 
-`targetReachStartedAtMillis` und `TargetReachTimeExceeded` bleiben in
-`REACHING_TARGET` und `QUALIFYING_TARGET` aktiv, auch während `Grace`. Ein
-Warnereignis darf die bestehende Qualifikations-/Phasenentscheidung nur
-ergänzen, nicht ihre Topologie ersetzen.
+CoolAndHoldForDuration
+  COOLING -> COOL_HOLDING
 
-### 12.2 Cooling ohne Qualifikationslogik
+CoolAndHoldUntilManualStop
+  COOLING -> COOL_HOLDING
+```
 
-`decideCooling()` liest ausschließlich `coolingTargetConditionValid`:
+`COOL_HOLDING` nutzt für PI weiter dasselbe bestehende Kühlziel. Nur
+`CoolAndHoldForDuration` darf danach automatisch nach Ablauf der Haltedauer
+abschließen; `CoolAndHoldUntilManualStop` bleibt bis zum bestehenden
+manuellen Abschlussereignis. `FinishWithoutCooling` darf strukturell nicht in
+`COOLING` eintreten und erhält einen expliziten Negativtest.
 
-- bei `CompletionMode::CoolThenFinish` führt `true` zu
-  `COMPLETED` mit `CoolingTargetReached` und der bestehenden
-  Completion-Nachricht;
-- bei `CompletionMode::CoolAndHoldForDuration` führt `true` zu
-  `COOL_HOLDING` mit `CoolingTargetReached`;
-- bei `false` bleibt `COOLING`;
-- `qualificationProgress::Complete`, Gnadenzeit und Qualifikationsdauer
-  dürfen diesen Pfad nicht beeinflussen.
+`CoolingTargetReached` bleibt für alle drei kühlenden Modi unverändert. Es
+gibt keine Gnaden- oder Qualifikationsdauer für COOLING.
 
-Gezielte Regressionstests beweisen `COOLING -> COMPLETED` und
-`COOLING -> COOL_HOLDING` sowie beide CompletionModes und die Unabhängigkeit
-vom Qualifikationsprogress.
+### 13.3 Bestehende Ereignisse
 
-### 12.3 Bestehende Ereignisse und Recovery
+Die bestehende `TargetChanged`-Topologie bleibt erhalten:
 
-Die vorhandene `TargetChanged`-Topologie bleibt erhalten; nur die effektive
-Zielquelle und die Commit-Grenze aus Abschnitt 10 werden ergänzt. Recovery
-aus einer alten `QUALIFYING_TARGET`-Phase beginnt weiterhin neu über
-`REACHING_TARGET`; der alte Evaluatorkredit und
-`qualificationValidSinceMillis` werden nicht als Qualifikation fortgesetzt.
+- in `PREHEATING` wird die Phase neu bewertet und die Preheating-Episode
+  zurückgesetzt;
+- in `REACHING_TARGET` oder `QUALIFYING_TARGET` führt TargetChanged nach
+  erfolgreichem Commit zurück nach `REACHING_TARGET`;
+- in `FERMENTING` bleibt der Zustand bei einer erlaubten Zielanpassung
+  `FERMENTING`; es gibt keine Requalifikation, aber die PI-
+  `targetContextChange`-Policy wird nach erfolgreichem Command-Commit
+  angewandt;
+- in nicht erlaubten Phasen entscheidet der bestehende Laufanpassungs-
+  vertrag fail-closed.
 
-`CoolingTargetReached` bleibt für alle CompletionModes unverändert. Es gibt
-kein neues Prozessereignis, kein neues Persistenzfeld und keinen Schema-Bump.
+`ProductInserted` führt aus `WAITING_FOR_PRODUCT` nach
+`REACHING_TARGET`, erzeugt eine neue Target-Episode und wendet bei einem
+Produktlauf die effektive Rollenänderung erst nach Process-Apply an.
 
-## 13. `qualificationValidSinceMillis` und Persistenz
+Recovery aus einer alten `QUALIFYING_TARGET`-Phase beginnt weiterhin neu über
+`REACHING_TARGET`; Marker und Evaluatorkredit werden nicht übernommen.
+
+## 14. `qualificationValidSinceMillis` und Persistenz
 
 `ProcessRuntimeState::qualificationValidSinceMillis` bleibt als bestehendes
-Wire-/Persistenzfeld strukturell erhalten. Es wird nicht in ein neues Feld
-umbenannt, nicht entfernt und nicht als neuer Wirevertrag erweitert.
+optionales uint64-Wire-/Persistenzfeld strukturell erhalten. Es wird weder
+umbenannt noch entfernt; es gibt keinen Schema-Bump und kein neues Wirefeld.
 
-Seine verbleibende Bedeutung ist ausschließlich ein persistierter
-Prozessmarker der aktuellen Qualifikationsphase/-episode für Diagnose,
-Recovery-Topologie und bestehende Vertragskompatibilität. Es ist **nicht** die
-Quelle für gutgeschriebene Qualifikationszeit. Der flüchtige Evaluator ist die
-alleinige Wahrheit für `creditedInBandMillis`.
+Das Feld ist ausschließlich Prozessphasen-/Diagnosemarker. Die alleinige
+Wahrheit für `creditedInBandMillis`, Grace und verwertbare Qualifikationszeit
+ist der flüchtige Evaluator. Der Marker ist nie Zeitquelle.
 
 Verbindliche Lebenszyklusregeln:
 
-- `nullopt` bei neuem Lauf, Reset, Recovery-Rebase und vor Beginn einer
-  akzeptierten Qualifikation;
-- beim erfolgreichen Eintritt in eine aktuelle Qualifikationsphase wird der
-  Marker mit dem dafür verwendeten Sample-Zeitpunkt gesetzt, auch wenn der
-  Kandidat bereits `Complete` meldet;
-- während die aktuelle Qualifying-Phase durch `Grace` oder `InBand` erhalten
-  bleibt, bleibt er als Phasenmarker erhalten; daraus wird keine Zeit
-  berechnet. `Unavailable` und `Invalid` führen gemäß Abschnitt 11.6 aus
-  `QUALIFYING_TARGET` heraus und löschen ihn mit diesem Kandidaten;
-- bei bestätigtem Qualifikationsverlust, Rückkehr nach `REACHING_TARGET`,
-  `TargetChanged`, Rollenwechsel, Recovery aus alter Qualifying-Phase,
-  Abschluss oder Cooling wird er gelöscht;
-- beim direkten Grace-Ablauf mit InBand wird er erst im neuen Kandidaten und
-  nur an der zugehörigen Commit-/Apply-Grenze auf den neuen Episodezeitpunkt
-  gesetzt;
-- ein alter persistierter Marker darf weder Kredit erzeugen noch einen
-  aktuellen Zielwert, Bandwert oder Zeitstempel ersetzen.
+- neuer Lauf, Recovery-Rebase, `WAITING_FOR_PRODUCT`, `ProductInserted`,
+  TargetChanged, Rollenwechsel, Qualifikationsverlust, Abschluss und Cooling
+  löschen den Marker im jeweiligen Kandidaten;
+- bei Beginn einer aktuellen Qualifikationsphase darf die alleinige
+  Zustandsmaschine den Marker mit dem aktuellen Sample-Zeitpunkt setzen;
+- während `QUALIFYING_TARGET` bleibt er als Marker erhalten, ohne Zeit zu
+  berechnen;
+- `Unavailable`/`Invalid`/Outside in `PREHEATING` bereiten eine
+  `QualificationReset`-Phasendatenänderung vor, wenn ein Marker/eine Episode
+  besteht;
+- der Marker wird erst nach erfolgreicher Persistenz und erfolgreichem Apply
+  des zugehörigen Prozesskandidaten live geändert;
+- ein alter Marker erzeugt keinen Kredit und ersetzt keinen aktuellen
+  Zielwert, Bandwert, Rollenwert oder Zeitanker.
 
-Persistenz- und Recovery-Code bleibt für das vorhandene optionale uint64-
-Feld wire-kompatibel. Es werden keine Evaluatorfelder, Demand-Sequenzen,
-Feedbackfenster, PI-Integrale oder alten Aktorzustände persistiert. Ein
-Schema-Bump und ein stiller Wireformat-Vertrag sind ausgeschlossen.
+Für `ControlRequestIdentity`, Feedbackfenster, PI-Integrator und
+Evaluatorzustand gibt es keine Persistenz. Nach Recovery beginnt der
+Evaluator leer; das bestehende Recovery-Verhalten aus alter
+`QUALIFYING_TARGET`-Phase bleibt `REACHING_TARGET`.
 
-## 14. Commit-/Apply-Cut-Points und Fehlerfälle
+## 15. TargetChanged- und Rollenwechsel-Commitgrenzen
+
+### 15.1 Zieländerung vor `FERMENTING`
+
+Eine zulässige RunAdjustment-Zieländerung wird als bestehender
+Lauf-/Prozesskandidat berechnet. Erst nach erfolgreicher Persistenz und
+erfolgreichem `applyProcessTransition()` gilt sie als angewendet. Erst dann
+werden:
+
+- der neue `ActiveRun::effectiveValues()`-Zielwert für den nächsten
+  Resolver verwendet;
+- die alte TargetQualification-Episode verworfen und die neue Target-Episode
+  vorbereitet;
+- `applyCommittedControlContextTransition()` mit
+  `targetContextChange` aufgerufen;
+- die nächste PI-Evaluation mit dem neuen Ziel berechnet.
+
+Scheitert Persistenz oder Apply, bleibt der alte effektive Zielwert,
+Evaluatorzustand und Integratorkontext wirksam; der bestehende fail-closed-
+Fehlerpfad verhindert eine normale Weiterqualifikation aus einem halb
+angewendeten Kandidaten.
+
+### 15.2 Zieländerung während `FERMENTING`
+
+Der bestehende Laufvertrag erlaubt eine wirksame Zieltemperaturänderung
+während `FERMENTING`, ohne den unveränderten Quell-Programmschnappschuss zu
+ändern. Nach erfolgreichem `persistCommand`:
+
+- bleibt `ProcessState::Fermenting` unverändert;
+- es gibt keine Target-Requalifikation und keine neue Qualifier-Episode;
+- der nächste PI-Resolver verwendet zwingend den neuen effektiven
+  `ActiveRun::effectiveValues()`-Zielwert;
+- `applyCommittedControlContextTransition()` wendet die
+  `targetContextChange`-Policy an.
+
+Der alte Zielwert darf danach keine PI-Ausgabe mehr auslösen. Ein fehlender,
+staler oder fehlgeschlagener Command-Commit darf den neuen Wert dagegen nicht
+sichtbar machen.
+
+### 15.3 Sensorrollenwechsel
+
+Ein #21-Rollenwechsel wird erst nach dem bestehenden erfolgreichen
+Sensor-/Prozess-Apply an #22 weitergereicht. Bei `ProductInserted` geschieht
+dies nach dem erfolgreichen Prozessübergang. Die neue ControlSensorRole,
+neue TargetQualification-Episode und Integrator-Policy werden nicht vor
+dieser Grenze live gesetzt. `activeRunSensorMode` bleibt das unveränderte
+kanonische #21-Feld.
+
+## 16. Commit-/Apply-Schnitte
 
 Die Umsetzung bleibt in kleinen, jeweils kompilierbaren Schnitten:
 
-### Commit 1 – schmale Wert- und Prozesssignalgrenzen
+### Commit 1 – Control-Werttypen und Context-Resolver
 
-- `AbstractControlDirection` wertgleich in den schmalen gemeinsamen
-  Werttyp verschieben;
-- genau ein `QualificationProgress` und den erweiterten `ProcessSignals`-
-  Vertrag einführen;
-- bestehende #21-Konsumenten aktualisieren;
-- keine PI- oder Prozesslogik vorziehen.
+- `AbstractControlDirection` wertgleich und genau einmal verschieben;
+- `ControlSensorRole`, `ControlRequestIdentity` und `ControlRequest`
+  definieren;
+- `RunSensorMode` nicht verändern;
+- effektive Rollen-/Zielmatrix für alle temperaturgeregelten Phasen
+  herstellen;
+- `ProcessSignals` mit getrenntem COOLING-Signal einführen;
+- keine PI-Mathematik und keine neue Sensor-/Safety-Auswahl vorziehen.
 
-Nachweis mindestens:
+Gezielter Nachweis:
 
 ```text
 pio test -e native --filter test_sensor_selection
 pio test -e native --filter test_process_state_machine
 ```
 
-### Commit 2 – reine PI-Auswertung
+Zusätzliche Orakel: Produkt- und Luftlauf in `PREHEATING` und
+`WAITING_FOR_PRODUCT`, Produktlauf erst nach `ProductInserted` mit
+ControlSensorRole `Product`, Air-Lauf durchgehend `Air`, ohne Änderung von
+`activeRunSensorMode`.
 
-- vier Parametersätze, Neutralband, Zeitvertrag, Luftbegrenzung und
-  Status-/Reason-Invarianten implementieren;
-- Demand-Sequenz und schmalen PreviousDemandFeedback-Vertrag einführen;
-- keine Aktor-/Safety- oder Hardwareabhängigkeit.
+### Commit 2 – PI-Gleichung, Request-Identität und Status
 
-Nachweis mindestens:
+- vier Parametersätze mit Einheiten und `Kp > 0`, `Ki > 0`;
+- Neutralband, `activeErrorCelsius`, P/I-Gleichung und Integralgrenze;
+- checked Zeitvertrag;
+- frühe Luftbegrenzung mit `airLimit...`-Namen;
+- Status-/Reason-Invarianten;
+- gültige OFF-ControlRequest mit Sequence/Timestamp.
+
+Gezielter Nachweis mindestens:
 
 ```text
 pio test -e native --filter test_temperature_control
 ```
 
-### Commit 3 – Qualifikation und Zustandsautomat
+Der neue Filter darf als produktiver Test-Schnitt erst nach Planfreigabe
+angelegt werden; in dieser Planrevision wird er nicht implementiert.
 
-- reine Decide-/Apply-Evaluatorgrenze implementieren;
-- vollständige Progress-, Sensorrollen-, Zeit-, Grace- und Resetsemantik;
-- ProcessSignals-Topologie einschließlich getrenntem Cooling-Signal;
-- effektive Zielquelle und TargetChanged-Kopplung.
+### Commit 3 – Feedback und Integrator-Transition
 
-Cut-Point-Tests sind verpflichtend:
+- `PreviousControlRequestFeedback` mit
+  `NoIntegratorConstraint`/`DeferredOrLimited`/`Rejected`;
+- Feedbackfenster nur für vorherige aktive Requests;
+- Replay-/Stale-/Duplicate-/Sequence-Wrap-Schutz;
+- `applyCommittedControlContextTransition()`;
+- `Reset`/`BoundedCarry`, checked Carry-Grenze und keine positive Integration
+  im Transition-Sample;
+- Zieländerung während `FERMENTING` ohne Requalifikation.
 
-- `REACHING_TARGET -> QUALIFYING_TARGET`, Persistenz vor Commit schlägt fehl;
-- Persistenz gelingt, `applyProcessTransition()` schlägt fehl;
-- erfolgreicher Retry ohne doppelte Zeitgutschrift;
-- `TargetChanged` mit fehlgeschlagenem Persistenz- und Apply-Pfad;
-- `REACHING_TARGET` schlägt nie direkt `FERMENTING`/`MANUAL_HOLDING` vor;
-- Grace-Rückkehr `<`, `==`, `>` mit direktem InBand-Sample;
-- Zieländerung in Preheating, Reaching, Qualifying und manuellem Lauf;
-- `COOLING -> COMPLETED` und `COOLING -> COOL_HOLDING`.
+Gezielte Orakel: Impulsakkumulator-Aufschub, Mindest-Auszeit, Totzeit,
+fehlendes Feedback, alle drei Dispositionen, OFF ohne Feedback,
+Rollenwechsel nach `ProductInserted`, Zieländerung vor und während
+`FERMENTING`, sowie kein unbounded Integraltransfer.
 
-Nachweis mindestens:
+### Commit 4 – Qualifier und Prozessintegration
+
+- vollständiger Decide-/Apply-Evaluator ohne `processEffect`;
+- Sensorrolle `Air` für Preheating und kein Evaluator in Waiting;
+- getrennte Preheating-/Target-Episoden;
+- vollständige Progress-, Unavailable-/Invalid-, Zeit- und Grace-Semantik;
+- Orchestrator bildet ProcessSignals und lässt allein
+  `decideProcessTransition()` die Topologie entscheiden.
+
+Cut-Point-Tests:
+
+- `REACHING_TARGET + Complete` schlägt nur `QUALIFYING_TARGET` vor;
+- `QUALIFYING_TARGET + Complete` führt erst nach erfolgreichem Apply zu
+  `FERMENTING`/`MANUAL_HOLDING`;
+- Persistenz vor Qualifier-Commit schlägt fehl;
+- Persistenz gelingt, Process-Apply schlägt fehl;
+- erfolgreicher Retry ohne Doppelgutschrift;
+- TargetChanged mit fehlgeschlagenem Persistenz-/Apply-Pfad;
+- InBand -> Unavailable -> InBand;
+- InBand -> Invalid -> InBand;
+- InBand -> retrograde Zeit -> InBand;
+- InBand -> zu große Lücke -> InBand;
+- Preheating Complete -> Waiting -> ProductInserted ohne Kreditübertragung;
+- Grace-Direktrückkehr `<`, `==`, `>`.
+
+### Commit 5 – Persistenz-/Recovery- und Zustandsregressionen
+
+- nur notwendige Anpassungen am bestehenden
+  `qualificationValidSinceMillis`-Markerpfad;
+- bestehender Write-before-Apply-Vertrag;
+- kein neues Wirefeld und kein Schema-Bump;
+- alle CompletionModes und Recoverypfade gezielt absichern.
+
+Gezielter Nachweis mindestens:
 
 ```text
+pio test -e native --filter test_sensor_selection
 pio test -e native --filter test_process_state_machine
-pio test -e native --filter test_temperature_control
-pio test -e native --filter test_run_commands
 pio test -e native --filter test_program_models
-```
-
-### Commit 4 – Persistenz-/Recovery- und direkte Konsumentenregressionen
-
-- ausschließlich notwendige Vertragsanpassungen an bestehendem
-  `qualificationValidSinceMillis`-Codec und Coordinator-
-  Write-before-Apply-Vertrag;
-- keine neuen Wirefelder und kein Schema-Bump;
-- #21-Regression, bestehende Zustandsautomatpfade und Laufanpassungen
-  abschließend gezielt testen.
-
-Nachweis mindestens:
-
-```text
-pio test -e native --filter test_sensor_selection
+pio test -e native --filter test_run_commands
 pio test -e native --filter test_run_checkpoint_codec
 pio test -e native --filter test_run_persistence_coordinator
-pio test -e native --filter test_process_state_machine
-pio test -e native --filter test_run_commands
 ```
 
-Die Filter werden nicht parallel gegen dasselbe native Buildverzeichnis
-gestartet. Ausgelassene Tests gelten nicht als bestanden.
+Filter werden nicht parallel gegen dasselbe native Buildverzeichnis
+gestartet. Ein vollständiger lokaler Lauf erfolgt erst nach Review ohne
+offene Befunde und ausdrücklicher Owner-Anweisung.
 
-## 15. Direkter Testkatalog
+## 17. Vollständiger direkter Testkatalog
 
-Zusätzlich zu den Commit-Gates muss der gezielte Nachweis folgende Orakel
-enthalten:
+Der gezielte Nachweis muss mindestens diese Orakel enthalten:
 
-- PI: erster, gleicher, rückwärts laufender, zu großer und overflow-
-  gefährdeter Timestamp mit exakt erwarteter Demand-/Integralwirkung;
-- Neutralband: unterschiedliche Heating-/Cooling-Schwellen, beide exakten
-  Grenzen und Nachweis, dass dies #23-Hysterese nicht ersetzt;
-- Luftmodus und Produktmodus einschließlich früher Luftreduktion und Block;
-- Status-/Reason-Invarianten und widersprüchliche Kombinationen;
-- Demand-Sequenzen bei gleichem Timestamp sowie fehlendes, altes, doppeltes,
-  fremdes und überlaufendes Feedback;
-- `FullyAccepted`, `DeferredOrLimited` und `Rejected` mit konservativem
-  Integrator-Freeze ohne physische `appliedQuote`;
-- alle sechs `QualificationProgress`-Werte und ihre Wirkungen in allen drei
-  Qualifikationsphasen;
-- `Unavailable` ohne verwertbare Evidenz versus `Invalid` bei fehlerhaftem
-  Sample/Vertrag;
-- Luftsensor in Preheating für Produkt- und Luftlauf; Produkt-/Luftrolle in
-  Reaching und Qualifying ohne stillen Fallback;
-- Zielband inklusive Grenze, Halbbreiten-Semantik, bestehende Min-/Max-
-  Limits und `0` als ungültiger Wert;
-- Qualifikationsdauer ohne Overflow, gleiche Zeit, Rückwärtszeit, große Lücke
-  und checked Addition;
-- Grace-Direktrückkehr und Gleichheit als Ablauf;
-- `qualificationValidSinceMillis` nur als Marker, kein zweiter Kreditpfad;
-- Decide ohne Mutation, Apply erst nach Persistenz und Process-Apply,
-  Verwerfen bei jedem Fehler und Retry ohne Doppelgutschrift;
-- TargetChanged-Commitgrenze und effektive Zielquelle für Programm und
-  manuelle Läufe;
-- neue Läufe, Neustart/Recovery, Rollenwechsel, Richtungswechsel,
-  Sollwertsprung und Phasenwechsel gemäß injiziertem Testprofil ohne
-  unbegrenzten Integraltransfer;
+- effektive PI-Regelsensorrolle je Phase, insbesondere Produktlauf in
+  `PREHEATING`/`WAITING_FOR_PRODUCT` und Rollenwechsel bei ProductInserted;
+- effektive PI-Zielquelle für Preheating/Waiting, Reaching/Qualifying/
+  Fermenting, Cooling, CoolHolding und ManualHolding;
+- Programmlauf mit `ActiveRun::effectiveValues()` nach TargetChanged;
+- manueller Lauf mit wirksamem `ManualRunPlan`;
+- Zieländerung in `PREHEATING`, `REACHING_TARGET` und
+  `QUALIFYING_TARGET` mit erfolgreichem beziehungsweise fehlgeschlagenem
+  Commit;
+- Fermenting-Zieländerung: Zustand bleibt Fermenting, neues Ziel wirkt,
+  keine Requalifikation, Policy erst nach Command-Commit;
+- alle drei kühlenden CompletionModes positiv;
+- `FinishWithoutCooling` als strukturell unzulässiger Cooling-Eintritt;
+- `COOLING -> COMPLETED`, `COOLING -> COOL_HOLDING` für Dauer und manuellen
+  Halt, sowie unveränderte `CoolingTargetReached`-Semantik;
+- PI-Gleichung mit Einheiten, P-only-/I-Wirkung über gültige Testprofile,
+  Richtungs-Schwellen und begrenztem Integral;
+- erster, gleicher, rückwärts laufender, zu großer und overflow-gefährdeter
+  Timestamp mit exakt erwarteter Request-/Integralwirkung;
+- gleiche Timestampwerte mit neuen Request-Sequenzen;
+- gültige OFF-ControlRequest mit Sequence und Timestamp;
+- Unavailable/Invalid ohne gültige ControlRequest;
+- fehlendes, altes, doppeltes, fremdes und überlaufendes Feedback;
+- `NoIntegratorConstraint`, `DeferredOrLimited`, `Rejected` einschließlich
+  Impulsakkumulator, Mindest-Auszeit und Totzeit;
+- keine positive Integration bei aktueller PI-Sättigung,
+  AirLimitReduced/AirLimitBlocked oder fehlendem Feedback;
+- `Reset`/`BoundedCarry` an Target-/Rollen-/Richtungswechsel und keine
+  positive Integration im Transition-Sample;
+- alle sechs `QualificationProgress`-Werte und ihre Wirkung in
+  Preheating/Reaching/Qualifying;
+- `Unavailable` und `Invalid` mit unterschiedlicher Ursache und Wirkung;
+- InBand-Unterbrechung durch Unavailable, Invalid, retrograde Zeit, große
+  Lücke und Outside ohne Zeitübertragung;
+- Grace-Direktrückkehr mit `<`, `==`, `>` und Gleichheit als Ablauf;
+- Preheating immer über Luft, Waiting ohne Evaluator, Target-Episode erst
+  nach ProductInserted;
+- vollständiger Preheating-Kredit wird nie Target-Qualifikationskredit;
+- Qualifier liefert keine Prozesswirkung außerhalb von Progress;
+- `qualificationValidSinceMillis` als Marker, nie zweite Zeitwahrheit;
 - `criticalFault` vor Qualifikations- und Cooling-Fortschritt;
 - `targetReachStartedAtMillis` und `TargetReachTimeExceeded` in Reaching und
   Qualifying, auch während Grace;
-- unveränderte `TargetChanged`-Topologie, `CoolingTargetReached` für alle
-  CompletionModes und Recovery aus alter Qualifying-Phase über Reaching;
-- kein neues Persistenz-/Wirefeld und kein Schema-Bump.
+- bestehende TargetChanged-Topologie, Recovery aus alter Qualifying-Phase
+  über Reaching und Write-before-Apply-Fehlerpfade;
+- keine neuen Wire-/Persistenzfelder und kein Schema-Bump;
+- `test_sensor_selection` mit wertgleichem `CrossRolePlausibilityContext`.
 
-## 16. Notwendige Dokumentations- und Implementierungsnachführung
+## 18. Notwendige Dokumentationsnachführung und offene Eigentümerschaft
 
 Während der späteren Umsetzung werden nur die fachlich notwendigen Stellen
-aktualisiert: Prozesssignal-/State-Machine-Vertrag, Temperaturregelungs-
-vertrag, `docs/ACTUATOR_TIMING.md`, `docs/SENSOR_TUNING_COMMISSIONING.md`,
-`docs/PROGRAMS.md`, relevante Lauf-/Persistenzverträge und die betroffenen
-Testdokumentationen. Der Komponentenregisterverweis bleibt
-`docs/THIRD_PARTY_COMPONENTS.md`.
+aktualisiert: Prozesssignal-/State-Machine-Vertrag,
+`docs/TEMPERATURE_CONTROL.md`, `docs/ACTUATOR_TIMING.md`,
+`docs/SENSOR_TUNING_COMMISSIONING.md`, `docs/PROGRAMS.md`, relevante
+Lauf-/RunCommand-/Persistenzverträge und direkte Testdokumentation. Der
+Komponentenregisterverweis bleibt `docs/THIRD_PARTY_COMPONENTS.md`.
 
-Es werden keine Produktionszahlen, GPIOs, Sensoranschlüsse, Aktormodelle,
-Safetygrenzen oder Hardwareergebnisse erfunden. Der effektive Grace-Wert und
-die Integrator-Transition-Policy bleiben bis zur Commissioningentscheidung
-validierte Eingaben ohne #22-Programmschema-Bump. Eine Änderung dieser
-offenen Eigentümerschaft oder der Produktionspolicy ist ein separates
-Owner-Gate.
+Keine Produktionszahlen, GPIOs, Sensoranschlüsse, Aktormodelle,
+Safetygrenzen, Sample-Gap-Werte, Grace-Werte, Integrator-Policywerte oder
+Hardwareergebnisse werden erfunden. Grace-Eigentümerschaft,
+Sample-Gap-Eigentümerschaft und Produktionswahl der Integrator-Transition-
+Policy bleiben ausdrücklich validierte Commissioning-/#35-Eingaben. #22
+führt dafür keinen Programmschema-Bump, keine Persistenzmigration und keine
+neue Komponentenentscheidung ein.
 
-## 17. Abnahmekriterien und Übergabe
+## 19. Abnahmekriterien und Übergabe
 
 Der Plan ist erst umsetzungsbereit, wenn der Owner den exakten neuen
 Plan-Commit freigibt. Die Freigabe muss insbesondere umfassen:
 
-- die getrennten `qualificationProgress`-/`coolingTargetConditionValid`-
-  Bedeutungen;
-- die erhaltene `REACHING_TARGET -> QUALIFYING_TARGET ->
-  FERMENTING/MANUAL_HOLDING`-Topologie;
-- die effektive Zieltemperaturquelle und TargetChanged-Grenze;
-- die Evaluator-Decide-/Apply-Semantik;
-- den dispositionsbasierten, sequenzidentifizierten Freeze-Feedback;
-- die offene, injizierte Integrator-Transition-Policy;
-- die vollständige Progress-/Grace-/Zeitmatrix;
-- die Entscheidung `bandCelsius = einseitige Toleranz/Halbbreite` bei
-  unverändertem persistentem Feld und Wertebereich;
-- `qualificationValidSinceMillis` als Marker ohne zweite Zeitwahrheit;
-- die expliziten COOLING-, #21-, Recovery-, Timer- und Persistenzregressionen.
+- Trennung von persistiertem `RunSensorMode` und effektiver
+  `ControlSensorRole`, einschließlich Luftrolle vor ProductInserted;
+- vollständige phase-by-phase `targetCelsius`-Quelle einschließlich
+  Completion-Kühlziel und ManualRunPlan;
+- alle drei kühlenden CompletionModes und Negativpfad für
+  `FinishWithoutCooling`;
+- gültige OFF-ControlRequest mit derselben checked Identitätssystematik;
+- wirkungssichere Anti-Windup-Disposition ohne physische `appliedQuote`;
+- exakte PI-Gleichung, Einheiten, Integralgrenze, Reihenfolge und
+  Kp/Ki-Validierung;
+- vereinfachte `Reset`/`BoundedCarry`-Policy und Commit-Grenze;
+- Unterbrechung von Qualifikationszeit bei Unavailable/Invalid und
+  vollständige Preheating-/Target-Episodentrennung;
+- Qualifier ohne zweite Prozesszustandsmaschine;
+- benannte normale Luftbegrenzung ohne Safety-Hard-Limit-Semantik;
+- offene Sample-Gap-, Grace- und Commissioning-Eigentümerschaft;
+- `bandCelsius` als inklusive einseitige Toleranz/Halbbreite bei unverändertem
+  Feld und Wertebereich;
+- Marker-/Recovery-/Timer-/#21-/Cooling-/Persistenzregressionen.
 
 Nach erfolgreicher Planfreigabe werden die beschriebenen Commit-Schnitte
-umgesetzt. Bis dahin bleibt der Draft unverändert in Plan-only-Zustand; kein
+umgesetzt. Bis dahin bleibt der Draft in Plan-only-Zustand; kein
 Firmwaretest, kein Produktionscode und keine PR-Statusänderung wird aus
 dieser Revision abgeleitet.

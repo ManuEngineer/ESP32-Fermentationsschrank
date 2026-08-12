@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #104 / Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung | Vollstaendige eigenstaendige Planrevision 3 unter `docs/tasks/issue-22-pi-control-air-limits-plan.md`; Branch `agent/issue-22-pi-regelung-plan` ist von `main` @ `10ff98e` abgeleitet; noch keine Implementierung | Ownerfreigabe des exakten neuen Plan-Commits |
+| 1 | Draft-PR #104 / Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung | Vollstaendige eigenstaendige Planrevision 4 unter `docs/tasks/issue-22-pi-control-air-limits-plan.md`; Branch `agent/issue-22-pi-regelung-plan` ist von `main` @ `10ff98e` abgeleitet; noch keine Implementierung | Ownerfreigabe des exakten neuen Plan-Commits |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -26,7 +26,7 @@ Issue #22 (zeitproportionale PI-Regelung und Luftbegrenzung), danach Issue #23
 (Aktorplaner), Issue #24 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue
 #19 (Journale, Aufbewahrung, Bereinigung, Backup und Import). Die jeweiligen
 Arbeiten beginnen erst nach ihrem eigenen Plan-/Owner-Gate; #22 ist jetzt die
-aktuelle Planungsarbeit. Die vollstaendige eigenstaendige Planrevision 3 liegt
+aktuelle Planungsarbeit. Die vollstaendige eigenstaendige Planrevision 4 liegt
 im Draft-PR #104 unter `docs/tasks/issue-22-pi-control-air-limits-plan.md` und
 wartet auf die Freigabe ihrer exakten neuen Plan-SHA.
 
