@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "process_signal_types.hpp"
 #include "program_model.hpp"
 #include "run_snapshot.hpp"
 
@@ -79,12 +80,6 @@ struct ProcessRuntimeState {
 [[nodiscard]] bool validateProcessRuntimeForCheckpoint(
     const ProcessRuntimeState& state, const ProcessRunSnapshot* runSnapshot,
     std::uint64_t checkpointMonotonicMillis);
-
-struct ProcessSignals {
-    // Bezieht sich immer auf Ziel und Zielband der aktuellen Prozessphase.
-    bool qualificationConditionValid{false};
-    bool criticalFault{false};
-};
 
 enum class ProcessEvent : std::uint8_t {
     None,

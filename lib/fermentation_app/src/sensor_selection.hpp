@@ -15,17 +15,6 @@
 // Abschnitt 6.4.11/7).
 namespace fermentation {
 
-// Abstrakte Regelrichtung (6.10). #21 definiert den Typvertrag vollstaendig;
-// erst #22/#23 befuellen ihn mit echten Werten. Bis dahin bleibt
-// `automatic_validated_return_to_product` mangels Evidenz praktisch inert
-// (P21-M4).
-enum class AbstractControlDirection : std::uint8_t {
-    Unknown,
-    Heating,
-    Cooling,
-    Idle,
-};
-
 enum class ThermalCompatibility : std::uint8_t {
     Unavailable,
     Compatible,
