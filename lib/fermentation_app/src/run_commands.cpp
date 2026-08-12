@@ -11,6 +11,31 @@
 
 namespace fermentation {
 
+bool foldObservedRunSeconds(RunCommandState& candidate,
+                            std::uint64_t deltaSeconds) {
+    if (deltaSeconds > std::numeric_limits<std::uint32_t>::max() -
+                           candidate.runProgress.observedRunSeconds) {
+        return false;
+    }
+    candidate.runProgress.observedRunSeconds +=
+        static_cast<std::uint32_t>(deltaSeconds);
+    return true;
+}
+
+std::optional<std::uint32_t> deriveFermentingSecondsDelta(
+    const RunCommandState& before, std::uint64_t atMillis) {
+    if (before.processState.state != ProcessState::Fermenting ||
+        atMillis < before.processState.stateEnteredAtMillis) {
+        return std::nullopt;
+    }
+    const auto seconds =
+        (atMillis - before.processState.stateEnteredAtMillis) / 1000U;
+    if (seconds > std::numeric_limits<std::uint32_t>::max()) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(seconds);
+}
+
 std::optional<PriorBootPhaseElapsed> effectivePriorElapsedForFermenting(
     const RunCommandState& current) {
     if (current.processState.state != ProcessState::Fermenting) {
@@ -226,20 +251,6 @@ bool requireRecoveryEpisodeRevision(CommandDecision& decision) {
         return false;
     }
     return true;
-}
-
-std::optional<std::uint32_t> deriveFermentingSecondsDelta(
-    const RunCommandState& current, std::uint64_t monotonicMillis) {
-    if (current.processState.state != ProcessState::Fermenting ||
-        monotonicMillis < current.processState.stateEnteredAtMillis) {
-        return std::nullopt;
-    }
-    const auto seconds =
-        (monotonicMillis - current.processState.stateEnteredAtMillis) / 1000U;
-    if (seconds > std::numeric_limits<std::uint32_t>::max()) {
-        return std::nullopt;
-    }
-    return static_cast<std::uint32_t>(seconds);
 }
 
 bool requireMessageRevision(CommandDecision& decision) {
@@ -1064,20 +1075,24 @@ CommandDecision decideRunAdjustment(
     const bool durationChanged = runDecision.revision.has_value() &&
                                  runDecision.revision->remainingDurationChanged;
     std::optional<std::uint32_t> observedDelta;
-    std::optional<std::uint32_t> observedAfter;
     if (durationChanged &&
         current.processState.state == ProcessState::Fermenting) {
         observedDelta = deriveFermentingSecondsDelta(
             current, request.envelope.monotonicMillis);
-        if (!observedDelta.has_value() ||
-            *observedDelta > std::numeric_limits<std::uint32_t>::max() -
-                                 current.runProgress.observedRunSeconds) {
+        if (!observedDelta.has_value()) {
             decision.status = CommandStatus::InvalidInput;
             return decision;
         }
-        observedAfter = current.runProgress.observedRunSeconds + *observedDelta;
     }
     auto candidate = decision.before;
+    if (durationChanged &&
+        current.processState.state == ProcessState::Fermenting) {
+        if (!observedDelta.has_value() ||
+            !foldObservedRunSeconds(candidate, *observedDelta)) {
+            decision.status = CommandStatus::InvalidInput;
+            return decision;
+        }
+    }
     if (!candidate.activeProgramRun.has_value()) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
@@ -1107,7 +1122,6 @@ CommandDecision decideRunAdjustment(
     }
     if (durationChanged &&
         current.processState.state == ProcessState::Fermenting) {
-        candidate.runProgress.observedRunSeconds = *observedAfter;
         candidate.processState.stateEnteredAtMillis =
             request.envelope.monotonicMillis;
         candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{

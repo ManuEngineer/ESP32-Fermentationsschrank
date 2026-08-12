@@ -380,6 +380,16 @@ struct RunCommandState {
 [[nodiscard]] std::optional<PriorBootPhaseElapsed>
 effectivePriorElapsedForFermenting(const RunCommandState& current);
 
+// Checked, gemeinsame Fortschreibung der ausschliesslich sicher beobachteten
+// Fermenting-Sekunden. Der Aufrufer berechnet den fachlichen Delta-Punkt
+// (Live-Transition, AdjustRun oder konkreter Hop 1); diese Funktion ist die
+// einzige uint32-Fold-Grenze und mutiert bei Overflow nicht.
+[[nodiscard]] bool foldObservedRunSeconds(RunCommandState& candidate,
+                                          std::uint64_t deltaSeconds);
+
+[[nodiscard]] std::optional<std::uint32_t> deriveFermentingSecondsDelta(
+    const RunCommandState& before, std::uint64_t atMillis);
+
 struct CommandDecision {
     CommandStatus status{CommandStatus::InvalidInput};
     CommandKind kind{CommandKind::StartProgram};

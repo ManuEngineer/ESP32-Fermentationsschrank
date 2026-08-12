@@ -84,7 +84,12 @@ bool recoveryTimeResolvedAtResume(
            accumulated->elapsed.upperBoundSeconds.has_value();
 }
 
-std::optional<PendingRecoveryAnchor> makePendingRecoveryAnchor(
+struct PendingRecoveryAnchorConstruction {
+    PendingRecoveryAnchor anchor;
+    std::uint32_t thisHopAltBootLocalSeconds{0U};
+};
+
+std::optional<PendingRecoveryAnchorConstruction> makePendingRecoveryAnchor(
     const RunCommandState& candidate,
     const RunPersistenceRawRecord& loadedRecord,
     const ProcessRuntimeState& originalProcessState) {
@@ -97,23 +102,27 @@ std::optional<PendingRecoveryAnchor> makePendingRecoveryAnchor(
         return std::nullopt;
     }
 
-    const auto thisHopAltBootLocalSeconds =
+    const auto thisHopAltBootLocalSeconds64 =
         (loadedRecord.snapshot.checkpointMonotonicMillis -
          originalProcessState.stateEnteredAtMillis) /
         1000U;
+    const auto thisHopAltBootLocalSeconds =
+        checkedToUint32(thisHopAltBootLocalSeconds64);
+    if (!thisHopAltBootLocalSeconds.has_value()) return std::nullopt;
     if (loadedRecord.snapshot.pendingRecoveryAnchor.has_value()) {
         auto anchor = *loadedRecord.snapshot.pendingRecoveryAnchor;
         const auto knownSince =
             checkedAdd(anchor.knownSecondsSinceOriginalCheckpoint,
-                       thisHopAltBootLocalSeconds);
+                       *thisHopAltBootLocalSeconds);
         if (!knownSince.has_value()) return std::nullopt;
         anchor.knownSecondsSinceOriginalCheckpoint = *knownSince;
-        return anchor;
+        return PendingRecoveryAnchorConstruction{anchor,
+                                                 *thisHopAltBootLocalSeconds};
     }
 
     PendingRecoveryAnchor anchor;
     anchor.originalProcessState = originalProcessState;
-    anchor.knownPhaseSecondsAtOriginalCheckpoint = thisHopAltBootLocalSeconds;
+    anchor.knownPhaseSecondsAtOriginalCheckpoint = *thisHopAltBootLocalSeconds;
     anchor.originalCheckpointUtc = loadedRecord.utcUnixSeconds;
     anchor.originalCheckpointTrigger = loadedRecord.snapshot.trigger;
     anchor.originalCheckpointIntervalMinutes =
@@ -129,7 +138,8 @@ std::optional<PendingRecoveryAnchor> makePendingRecoveryAnchor(
         anchor.accumulatedBeforeEpisode =
             candidate.priorBootPhaseElapsed->elapsed;
     }
-    return anchor;
+    return PendingRecoveryAnchorConstruction{anchor,
+                                             *thisHopAltBootLocalSeconds};
 }
 
 std::optional<PriorBootPhaseElapsed> accumulatedPriorForResume(
@@ -575,7 +585,12 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
     const auto anchor = makePendingRecoveryAnchor(candidate, loadedRecord,
                                                   originalProcessState);
     if (!anchor.has_value()) return invalid(current);
-    candidate.pendingRecoveryAnchor = *anchor;
+    candidate.pendingRecoveryAnchor = anchor->anchor;
+    if (originalProcessState.state == ProcessState::Fermenting &&
+        !foldObservedRunSeconds(candidate,
+                                anchor->thisHopAltBootLocalSeconds)) {
+        return invalid(current);
+    }
     candidate.recoveryBootAnchorMonotonicMillis = time.monotonicMillis;
     ++candidate.recoveryEpisodeRevision;
     if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
@@ -1702,6 +1717,22 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
     if (time.monotonicMillis != decision.monotonicMillis)
         return result(RunPersistenceResultStatus::TimeMismatch);
     auto candidate = current;
+    std::optional<std::uint32_t> observedFermentingDelta;
+    const bool foldsObservedFermentingTime =
+        current.processState.state == ProcessState::Fermenting &&
+        decision.after.state != ProcessState::Fermenting;
+    if (foldsObservedFermentingTime) {
+        observedFermentingDelta =
+            deriveFermentingSecondsDelta(current, decision.monotonicMillis);
+        if (!observedFermentingDelta.has_value()) {
+            return result(RunPersistenceResultStatus::InvalidDecision,
+                          RunPersistenceStep::CandidateApply);
+        }
+        if (!foldObservedRunSeconds(candidate, *observedFermentingDelta)) {
+            return result(RunPersistenceResultStatus::CounterOverflow,
+                          RunPersistenceStep::CandidateApply);
+        }
+    }
     if (!candidate.processRunSnapshot.has_value() ||
         !applyProcessTransition(candidate.processState, decision,
                                 &*candidate.processRunSnapshot))
@@ -1741,6 +1772,20 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
             RunPersistenceStep::RamApply,
             RunPersistenceTechnicalReason::InvalidProjection,
             RunPersistenceDurability::Changed);
+    }
+    if (foldsObservedFermentingTime) {
+        // `current` has already transitioned, so use the exact checked delta
+        // derived from the pre-transition state.
+        if (!observedFermentingDelta.has_value() ||
+            !foldObservedRunSeconds(current, *observedFermentingDelta)) {
+            state_ =
+                RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed;
+            return result(
+                RunPersistenceResultStatus::PersistenceCommittedApplyFailed,
+                RunPersistenceStep::RamApply,
+                RunPersistenceTechnicalReason::InvalidProjection,
+                RunPersistenceDurability::Changed);
+        }
     }
     if (decision.reason == TransitionReason::ProductWaitExpired)
         clearActiveRunState(current);
