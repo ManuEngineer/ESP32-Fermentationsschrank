@@ -2,17 +2,17 @@
 
 ## 1. Status, Scope und Owner-Gate
 
-- Revision: **5**.
+- Revision: **6**.
 - Live-Issue: #22, offen, Status `PLANNED_SPEC_PENDING`.
 - Draft-PR: #104, Branch `agent/issue-22-pi-regelung-plan` -> `main`.
 - Planpfad: `docs/tasks/issue-22-pi-control-air-limits-plan.md`.
-- Diese Revision 5 ersetzt Revision 4 vollständig und ist ein vollständiger,
+- Diese Revision 6 ersetzt Revision 5 vollständig und ist ein vollständiger,
   eigenständig gültiger Plan. Sie setzt keine frühere Planrevision als
   fachliche oder normative Quelle voraus.
 - Planbasis: `main` @
   `10ff98eca4d6f64cc453571d66d4c3b18729b18e`.
 - Ausgangs-HEAD vor dieser Revision:
-  `34417db16e77c3a147f06ce0ac9314b37b607feb`.
+  `750d83b51a4f58a8265921e538cc6ce6eca3bd76`.
 - Der exakte Commit dieser Revision wird nach dem Commit mit voller SHA in
   PR-Beschreibung und aktuellem SESSION-HANDOVER ausgewiesen.
 - Die Umsetzung bleibt gesperrt, bis der Owner exakt diesen neuen Plan-Commit
@@ -26,12 +26,12 @@
 ```text
 CONTEXT_BASELINE_BRANCH: agent/issue-22-pi-regelung-plan
 CONTEXT_BASELINE_SHA: 10ff98eca4d6f64cc453571d66d4c3b18729b18e
-CONTEXT_HEAD_BEFORE_REVISION: 34417db16e77c3a147f06ce0ac9314b37b607feb
+CONTEXT_HEAD_BEFORE_REVISION: 750d83b51a4f58a8265921e538cc6ce6eca3bd76
 CONTEXT_PLAN_SHA: NONE (wird nach dem Commit dieser Revision eingetragen)
 CONTEXT_REFRESH_MODE: FULL
-CONTEXT_DELTA: Revision-4-Restbefunde zu Request-Kontextbindung,
-  Integral-Headroom, gemeinsamer Gap-Grenze, lastActiveDirection und
-  commitierter pending Context-Transition geprüft und geschlossen.
+CONTEXT_DELTA: Revision-5-Konsistenzkorrekturen zu rohem P-Anteil und
+  fail-closed Luftbegrenzungs-Evidenz im Produktmodus geprüft und geschlossen;
+  alle fünf früheren Restbefunde bleiben erhalten.
 SOURCE_OF_TRUTH_CONFLICT: NONE; die R1-PI-Gleichung ist in den kanonischen
   Quellen nicht festgelegt und wird hier als explizite Ownerentscheidung
   formuliert. bandCelsius bleibt einseitige Toleranz.
@@ -291,7 +291,30 @@ Der Snapshot der `controlSensorRole` ist der PI-Regelsensor. Die Luft bleibt
 zusätzlich im Produktmodus für die frühe #22-Luftbegrenzung erforderlich. Im
 Luftmodus ist Luft der Regelsensor; der Produktwert ist nicht notwendig.
 Ein fehlender, stale oder failed Regelsensor ist `Unavailable`, kein stiller
-Rollenwechsel.
+Rollenwechsel. Im Produktmodus (`ControlSensorRole = Product`) müssen sowohl
+der verwendbare Produktsnapshot als Regelsensor als auch der verwendbare
+Luftsnapshot für die frühe Luftbegrenzung vorliegen. Fehlt der Luftsnapshot,
+ist er `STALE`/`FAILED` oder fachlich nicht verwendbar, wird nicht nur anhand
+des Produktsensors weitergeregelt und die Rolle wird nicht still auf Luft
+gewechselt. Der PI-Zustand wird dabei gemäß dem fail-closed-Vertrag für
+`Unavailable`/`Invalid` verworfen.
+
+Für den zusätzlich erforderlichen Luftsnapshot im Produktmodus gilt exakt:
+
+- fehlend, `STALE`, `FAILED` oder fachlich nicht verwendbar ->
+  `TemperatureControlStatus::Unavailable`,
+  `TemperatureControlReason::SensorUnavailable`,
+  `AirLimitState::Unavailable` und keine ControlRequest;
+- vorhanden, aber strukturell/arithmetisch ungültig oder nicht-finit ->
+  `TemperatureControlStatus::InvalidInput`,
+  `TemperatureControlReason::InvalidSample`,
+  `AirLimitState::Unavailable` und keine ControlRequest.
+
+Diese normale #22-Eingabefehlersemantik erfindet keine Safety-Ursache aus #24.
+Im `ControlSensorRole = Air`-Modus bleibt Luft der normale Regelsensor; die
+normale Regelsensor-`Unavailable`/`Invalid`-Semantik gilt und die
+Produkt-Luftbegrenzung ist `AirLimitState = NotApplied`. Ein Produktwert ist
+in diesem Modus nicht erforderlich.
 
 ```text
 PiDirectionParameters
@@ -370,7 +393,7 @@ Richtungswechsel-Hysterese aus #23.
 Die R1-Gleichung ist in Quote-Einheiten vollständig festgelegt:
 
 ```text
-P = proportionalGainQuotePerCelsius * activeErrorCelsius
+rawP = proportionalGainQuotePerCelsius * activeErrorCelsius
 
 dtSeconds = checked(sampleTimestamp - lastSampleTimestamp) / 1000.0
 
@@ -378,41 +401,53 @@ deltaI = integralGainQuotePerCelsiusSecond
          * activeErrorCelsius
          * dtSeconds
 
-integralHeadroom = max(0, maximumQuote - P)
+integralHeadroom = max(0, maximumQuote - rawP)
 
 allowedDeltaI = checked positive deltaI, oder 0 wenn die
                  Integrationsvoraussetzungen nicht erfüllt sind
 
 candidateI = min(max(oldI + allowedDeltaI, 0), integralHeadroom)
 
-unboundedQuote = P + candidateI
+unboundedQuote = rawP + candidateI
 ```
 
 `proportionalGainQuotePerCelsius` hat die Einheit Quote/°C,
-`integralGainQuotePerCelsiusSecond` Quote/(°C·s), `P`, `I` und Quote sind
-dimensionslos in `[0, 1]`. Der Fehler wird nach Abzug der jeweiligen
-Neutralbandschwelle integriert; ein Fehler innerhalb des Neutralbands
-integriert nicht.
+`integralGainQuotePerCelsiusSecond` Quote/(°C·s). `rawP` ist ein endlicher,
+nichtnegativer roher P-Anteil in Quote-Einheiten; er wird nicht künstlich auf
+`[0, 1]` oder `maximumQuote` gesättigt. Der gespeicherte Integralanteil und
+die ausgegebene Control-Quote bleiben dagegen in `[0, 1]`, da
+`candidateI <= integralHeadroom <= maximumQuote <= 1` gilt und die
+resultierende Quote erst danach auf `maximumQuote` begrenzt wird. Der Fehler
+wird nach Abzug der jeweiligen Neutralbandschwelle integriert; ein Fehler
+innerhalb des Neutralbands integriert nicht.
 
 Der Integral-Kandidat ist checked und an die verbleibende Ausgangsreserve
 gebunden. `allowedDeltaI` ist bei fehlender Rückmeldung, Aufschub,
 `Rejected`, Luftbegrenzung, eigener Sättigung oder einem Übergangssample exakt
 `0`. Die Begrenzung wirkt auch auf einen alten Integralwert, wenn ein
-gestiegener P-Anteil die neue Reserve verkleinert. Damit gilt nach der
+gestiegener `rawP`-Anteil die neue Reserve verkleinert. Damit gilt nach der
 internen Begrenzung stets:
 
 ```text
-0 <= candidateI <= maximumQuote
-P + candidateI <= maximumQuote
+0 <= candidateI <= integralHeadroom <= maximumQuote <= 1
+0 <= maximumLimitedQuote <= maximumQuote <= 1
 ```
 
-Ist `P >= maximumQuote`, ist `integralHeadroom = 0` und der Integralanteil
-wird auf `0` begrenzt; die anschließende Ausgangsquote bleibt separat auf
-`maximumQuote` begrenzt.
+Für `rawP < maximumQuote` gilt zusätzlich `rawP + candidateI <=
+maximumQuote`. Für `rawP >= maximumQuote` ist `candidateI = 0`; die rohe
+Summe darf dann über `maximumQuote` beziehungsweise `1` liegen und wird erst
+in `maximumLimitedQuote` begrenzt.
 
-`oldI + deltaI`, Multiplikationen und die Millisekunden-/Sekundenumrechnung
-müssen auf Endlichkeit und Überlauf geprüft werden. Bei einem Rechenfehler
-gibt es keine gültige ControlRequest und keinen unsicheren Integralwert.
+Ist `rawP >= maximumQuote`, ist `integralHeadroom = 0` und der Integralanteil
+wird auf `0` begrenzt. Die finite, aber möglicherweise über `1` liegende
+Summe `rawP + candidateI` wird erst in `maximumLimitedQuote` auf
+`maximumQuote` begrenzt. Das ist die einzige Ausgangsbegrenzung; eine
+zusätzliche rohe P-Sättigungsstufe wird nicht eingeführt.
+
+`rawP`, `oldI + deltaI`, `rawP + candidateI`, alle Multiplikationen und die
+Millisekunden-/Sekundenumrechnung müssen auf Endlichkeit und Überlauf geprüft
+werden. Bei einem Rechenfehler gibt es keine gültige ControlRequest und keinen
+unsicheren Integralwert.
 
 ### 6.4 Verbindliche Auswertungsreihenfolge
 
@@ -429,14 +464,14 @@ Jede Evaluation folgt exakt dieser Reihenfolge:
    zusammenführen; bei `Idle` bleibt die pending Transition bis zum ersten
    späteren gültigen aktiven Sample unaufgelöst, ohne eine Richtung zu
    erfinden.
-4. `activeErrorCelsius`, P und den aktuellen Luftbegrenzungszustand
+4. `activeErrorCelsius`, `rawP` und den aktuellen Luftbegrenzungszustand
    bestimmen.
 5. nur wenn kein nachgelagertes Feedback `DeferredOrLimited`/`Rejected` oder
    fehlt und keine aktuelle #22-eigene Begrenzung/Sättigung dagegen spricht,
    `allowedDeltaI` als checked positive `deltaI` setzen, sonst auf `0` lassen.
-6. `integralHeadroom = max(0, maximumQuote - P)` bilden und den Integral-
+6. `integralHeadroom = max(0, maximumQuote - rawP)` bilden und den Integral-
    kandidaten checked auf diese Restreserve begrenzen.
-7. `unboundedQuote = P + candidateI` bilden;
+7. `unboundedQuote = rawP + candidateI` bilden;
 8. `maximumLimitedQuote = min(unboundedQuote, maximumQuote)` bilden;
 9. die frühe Luftbegrenzung anwenden;
 10. Status/Reason setzen und die gültige HEAT/OFF/COOL-ControlRequest mit
@@ -451,12 +486,12 @@ pending; sie wird nicht durch ein erfundenes Heating-/Cooling-Profil
 angewandt. Der Integrator wird nicht still durch Zeit oder weitere
 Off-Samples aufgeladen.
 
-Die #22-eigene Sättigungsprüfung ist ebenfalls eindeutig: `P` bestimmt die
+Die #22-eigene Sättigungsprüfung ist ebenfalls eindeutig: `rawP` bestimmt die
 verbleibende `integralHeadroom` bereits vor der Integrationsentscheidung. Ein
 zulässiger Schritt darf den Kandidaten nur bis genau diese Restreserve
 auffüllen. Ist die Restreserve kleiner als der Schritt, wird exakt bis zur
 Reserve integriert; ist sie null, wird nicht positiv integriert. Ein durch
-gestiegenen P-Anteil zu großer alter Integralwert wird auch ohne positive
+gestiegenen `rawP`-Anteil zu großer alter Integralwert wird auch ohne positive
 Integration auf die neue Reserve zurückgeführt. Ein checked Kandidat, der
 durch Addition darüber liegen würde, wird an der Restreserve begrenzt und
 löst keinen Overflow aus.
@@ -588,8 +623,21 @@ AirLimitState = NotApplied | Unrestricted | Reduced | Blocked | Unavailable
 `AirLimitReduced` tritt nur mit `Demand`, `Reduced` und einer tatsächlich
 reduzierten Quote auf. `AirLimitBlocked` tritt nur mit `Off`, `Blocked`,
 Quote `0` und einer gültigen OFF-ControlRequest auf. `Saturated` ist eine
-Demand-Diagnose für die PI-/Maschinenquotenbegrenzung, sofern nicht die
-Luftreduktion die primäre Diagnose ist.
+Demand-Diagnose, wenn `rawP >= maximumQuote` oder die ausgegebene
+Control-Quote an `maximumQuote` begrenzt wird, sofern nicht die Luftreduktion
+die primäre Diagnose ist. Ein `rawP >= maximumQuote` ist damit ausdrücklich
+`Saturated`; es erzeugt keine zusätzliche P-Sättigungsstufe und keinen
+positiven Integralanteil.
+
+Für `ControlSensorRole = Product` gilt zusätzlich zur allgemeinen Matrix:
+Der Produktsnapshot und der Luftsnapshot müssen beide verwendbar sein. Ein
+fehlender, `STALE`- oder `FAILED`-Luftsnapshot liefert exakt
+`Unavailable / SensorUnavailable / AirLimitState::Unavailable`; ein
+vorhandener, aber nicht-finiter oder strukturell/arithmetisch ungültiger
+Luftwert liefert exakt `InvalidInput / InvalidSample /
+AirLimitState::Unavailable`. In beiden Fällen gibt es keine ControlRequest,
+keinen stillen Rollenwechsel und keinen Produkt-only-Weiterbetrieb. Der
+fail-closed PI-Zustand verwirft Integrator und `lastActiveDirection`.
 
 Kein `Demand` trägt `Idle`, kein `Unavailable`/`InvalidInput` trägt eine
 ControlRequest, und keine Sperrdiagnose trägt eine positive Quote. Safety-,
@@ -1243,11 +1291,13 @@ ControlSensorRole `Product`, Air-Lauf durchgehend `Air`, ohne Änderung von
 ### Commit 2 – PI-Gleichung, Request-Identität und Status
 
 - vier Parametersätze mit Einheiten und `Kp > 0`, `Ki > 0`;
-- Neutralband, `activeErrorCelsius`, P/I-Gleichung und Integralgrenze;
+- Neutralband, `activeErrorCelsius`, `rawP`-/I-Gleichung und Integralgrenze;
 - checked Zeitvertrag;
 - frühe Luftbegrenzung mit `airLimit...`-Namen;
 - Status-/Reason-Invarianten;
 - gültige OFF-ControlRequest mit Sequence/Timestamp.
+- Produktmodus mit verpflichtender, fail-closed validierter Luftbegrenzungs-
+  Evidenz; Luftmodus ohne Produktwert und mit `NotApplied`.
 
 Gezielter Nachweis mindestens:
 
@@ -1353,10 +1403,16 @@ Der gezielte Nachweis muss mindestens diese Orakel enthalten:
   Halt, sowie unveränderte `CoolingTargetReached`-Semantik;
 - PI-Gleichung mit Einheiten, P-only-/I-Wirkung über gültige Testprofile,
   Richtungs-Schwellen und begrenztem Integral;
-- Integral-Headroom: P allein unter `maximumQuote`, Integration exakt bis zur
-  Restreserve, Integrationsschritt größer als die Restreserve, P allein am
-  oder über Maximum, gestiegener P-Anteil mit verkleinerter Reserve und nie
-  ein gespeichertes `I` mit `P + I > maximumQuote`;
+- roher P-Anteil: `rawP < maximumQuote`, `rawP == maximumQuote`,
+  `rawP > maximumQuote` und `rawP > 1`; jeweils checked `rawP`, Headroom `0`
+  ab `maximumQuote`, eindeutiges `Saturated` und keine zusätzliche rohe
+  P-Sättigungsstufe;
+- Integral-Headroom: `rawP` allein unter `maximumQuote`, Integration exakt bis
+  zur Restreserve, Integrationsschritt größer als die Restreserve, `rawP`
+  allein am oder über Maximum, gestiegener `rawP`-Anteil mit verkleinerter
+  Reserve und nie ein gespeichertes `I` über `integralHeadroom`; für
+  `rawP < maximumQuote` gilt `rawP + I <= maximumQuote`, für größere `rawP`
+  bleibt nur die ausgegebene Quote begrenzt;
 - erster, gleicher, rückwärts laufender, zu großer und overflow-gefährdeter
   Timestamp mit exakt erwarteter Request-/Integralwirkung;
 - gemeinsamer `maximumIntegrationStepMillis` vor der Richtungswahl; keine
@@ -1364,6 +1420,12 @@ Der gezielte Nachweis muss mindestens diese Orakel enthalten:
 - gleiche Timestampwerte mit neuen Request-Sequenzen;
 - gültige OFF-ControlRequest mit Sequence und Timestamp;
 - Unavailable/Invalid ohne gültige ControlRequest;
+- Produktmodus mit gültigem Produkt und Luft `STALE`, Luft `FAILED` sowie
+  vorhandenem nicht-finitem/strukturell ungültigem Luftwert: jeweils
+  fail-closed ohne Request mit korrektem Status/Reason/AirLimitState;
+- nach Unavailable/Invalid wieder gültige Luft: sicherer PI-Neuanlauf ohne
+  alten Integralimpuls oder alten `lastActiveDirection`-Anker;
+- Luftmodus ohne Produktwert mit `AirLimitState = NotApplied`;
 - fehlendes, altes, doppeltes, fremdes und überlaufendes Feedback;
 - `NoIntegratorConstraint`, `DeferredOrLimited`, `Rejected` einschließlich
   Impulsakkumulator, Mindest-Auszeit und Totzeit;
@@ -1431,7 +1493,9 @@ Plan-Commit freigibt. Die Freigabe muss insbesondere umfassen:
 - kontextgebundene ControlRequest mit vorhandener Prozess-/Run-/Sensor-
   Identity und #23-eigener begrenzter Gültigkeitsprüfung;
 - gemeinsame `maximumIntegrationStepMillis`-Gap-Grenze vor der Richtungswahl;
-- Integral-Headroom mit `P + I <= maximumQuote`;
+- Integral-Headroom mit `I <= max(0, maximumQuote - rawP)` und begrenzter
+  `maximumLimitedQuote`; für `rawP < maximumQuote` zusätzlich
+  `rawP + I <= maximumQuote`;
 - `lastActiveDirection`, Idle-Semantik und genau einmalige Kombination von
   Context- und echtem aktiven Richtungswechsel;
 - pending committed `Reset`/`BoundedCarry`-Policy ohne
