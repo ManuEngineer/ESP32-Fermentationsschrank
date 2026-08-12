@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #104 / Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung | Planrevision 6 freigegeben; Restkorrekturen aus dem Owner-Rereview (Candidate-Lifecycle, Stale-Identity, Write-before-Apply-Orchestrierung, PI-/Diagnosegrenzen und direkte Orakel) sind auf `agent/issue-22-pi-regelung-plan` umgesetzt; gezielte native Nachweise und Quality-Gates werden auf dem Korrektur-HEAD erneut belegt; neuer vollstaendiger Owner-Rereview offen | Owner prueft den Korrektur-HEAD vollstaendig und entscheidet danach ueber `Ready for review` |
+| 1 | Draft-PR #104 / Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung | Planrevision 6 freigegeben; Restkorrekturen A1–A7 aus dem Owner-Rereview (Post-Commit-Handoff, Lifecycle-Grenzen, Qualifier-Identity/Fault-/Zeitbindung, PI-Headroom und direkte Orakel) sind auf `agent/issue-22-pi-regelung-plan` umgesetzt; 226/226 gezielte native Testfaelle sowie Format-, clang-tidy-, Architektur-, Secret-, Quality- und Artefaktabdeckungs-Gates PASS; erneuter vollstaendiger Owner-Rereview offen | Owner prueft den Korrektur-HEAD vollstaendig und entscheidet danach ueber `Ready for review` |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
