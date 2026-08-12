@@ -6,6 +6,7 @@
 #include <string>
 
 #include "run_commands.hpp"
+#include "run_recovery_types.hpp"
 
 namespace fermentation {
 
@@ -21,20 +22,18 @@ inline constexpr std::uint16_t kMaximumRunCheckpointIntervalMinutes = 60U;
 // checkpoint payload) must accept every version knownRunPersistenceSchema
 // reports, not just the current one, so a not-yet-migrated schema-1 slot
 // written before this PR stays decodable across the upgrade boundary.
-inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 2U;
+// Schema 3 (#18): PendingRecoveryAnchor, recoveryBootAnchorMonotonicMillis,
+// RunProgressState, RecoveryEpisodeEvidence, RecoveryTemperatureEvidence,
+// TaggedPriorBootPhaseElapsed, NominalRecoveryAdjustmentState,
+// recoveryEpisodeRevision (5.28). RunCheckpointTrigger moved to
+// run_recovery_types.hpp, transitively still visible here.
+inline constexpr std::uint32_t kCurrentRunPersistenceSchema = 3U;
 [[nodiscard]] bool knownRunPersistenceSchema(std::uint32_t schemaVersion);
 
 enum class RunCheckpointVariant : std::uint8_t {
     ProgramRun = 1U,
     ManualRun = 2U,
     NoActiveRun = 3U,
-};
-
-enum class RunCheckpointTrigger : std::uint8_t {
-    Command = 1U,
-    Transition = 2U,
-    Periodic = 3U,
-    SensorSelection = 4U,
 };
 
 struct RunCheckpointTime {
@@ -63,6 +62,7 @@ enum class RunPersistenceMutationKind : std::uint8_t {
     Command = 1U,
     Transition = 2U,
     SensorSelection = 3U,
+    Recovery = 4U,
 };
 
 struct RunPersistenceHead {
@@ -93,9 +93,9 @@ struct RunPersistenceSnapshot {
     std::string activeRunId;
     std::optional<RunSensorMode> activeRunSensorMode;
     // Persisted sensor-selection provenance (#21, 6.12). Present iff variant
-    // != NoActiveRun for a schema-2-written snapshot; a decoded schema-1
-    // active-run snapshot legitimately has no value here (field did not
-    // exist yet), see kSensorSelectionFieldIntroducedInSchema.
+    // != NoActiveRun. Schema-1 decode maps the absent wire field to the
+    // LegacyUnknown/None/0 sentinel so the common active-snapshot contract
+    // requires this field for legacy restores as well.
     std::optional<PersistedSensorSelectionState> sensorSelection;
     std::optional<RunProgramSnapshot> program;
     std::array<RunRevision, kMaximumRunRevisions> revisions{};
@@ -107,6 +107,22 @@ struct RunPersistenceSnapshot {
     std::array<CommandId, kMaximumPersistedRunCommandIds>
         persistedRunCommandIds{};
     std::size_t persistedRunCommandCount{0U};
+    // Schema 3 (#18). Nur gueltig gemaess validateRunPersistenceSnapshot()
+    // (5.14): pendingRecoveryAnchor/recoveryBootAnchorMonotonicMillis nur bei
+    // RecoveryEvaluation eines aktiven Runs (Punkt 2) oder bei einem bereits
+    // resumten Lauf mit noch offener Zeitbewertung (Punkt 3); alle sechs
+    // Recovery-/Progressfelder (inkl. runProgress.weightedProgress) sind bei
+    // NoActiveRun zwingend nullopt (Punkt 6). recoveryTemperatureEvidence ist
+    // davon bewusst ausgenommen (5.20: laufend fortgeschrieben, kein
+    // laufgebundenes Diagnosefeld).
+    std::optional<PendingRecoveryAnchor> pendingRecoveryAnchor;
+    std::optional<std::uint64_t> recoveryBootAnchorMonotonicMillis;
+    RecoveryTemperatureEvidence recoveryTemperatureEvidence;
+    std::optional<RecoveryEpisodeEvidence> lastRecoveryEpisodeEvidence;
+    std::optional<TaggedPriorBootPhaseElapsed> priorBootPhaseElapsed;
+    std::optional<NominalRecoveryAdjustmentState> nominalRecoveryAdjustment;
+    std::uint32_t recoveryEpisodeRevision{0U};
+    RunProgressState runProgress;
 };
 
 struct RunPersistenceRawRecord {
@@ -119,6 +135,8 @@ struct RunPersistenceRawRecord {
 [[nodiscard]] bool isPersistedRunCommand(CommandKind kind);
 [[nodiscard]] bool validateRunPersistenceSnapshot(
     const RunPersistenceSnapshot& snapshot);
+[[nodiscard]] bool validateRunPersistenceSnapshotForSchema(
+    const RunPersistenceSnapshot& snapshot, std::uint32_t schemaVersion);
 
 // A projection is constructed only from the canonical candidate state. The
 // separate durable ID window is supplied by the coordinator and never copied

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -19,6 +20,7 @@ enum class RunPersistenceCoordinatorState : std::uint8_t {
     Ready,
     Busy,
     BlockedIndeterminate,
+    FallbackRecoveryPending,
     PersistenceCommittedApplyFailed,
 };
 
@@ -33,6 +35,7 @@ enum class RunPersistenceResultStatus : std::uint8_t {
     AlreadyProcessed,
     AlreadyPersisted,
     NotEligible,
+    NotAllowedInState,
     NotInitialized,
     RecoveryPending,
     Busy,
@@ -122,6 +125,43 @@ struct RunPersistenceLoadResult {
     std::optional<RunPersistenceSnapshot> snapshot;
 };
 
+struct RecoveryActivationOutcome {
+    RunPersistenceResult persistenceResult;
+    RunCommandState resultingState;
+};
+
+enum class RecoveryUncertaintyDecision : std::uint8_t {
+    AssumeStillValid,
+    AssumeThresholdCrossed,
+};
+
+struct ResolveRecoveryUncertaintyRequest {
+    CommandId commandId{0U};
+    std::uint32_t expectedRunRevision{0U};
+    std::uint32_t expectedRecoveryEpisodeRevision{0U};
+    RecoveryUncertaintyDecision decision{
+        RecoveryUncertaintyDecision::AssumeStillValid};
+};
+
+enum class RunPersistenceFallbackMode : std::uint8_t {
+    UseStandardFallback,
+    SetExplicitReference,
+    ClearFallback,
+};
+
+struct RunPersistenceFallbackDirective {
+    RunPersistenceFallbackMode mode{
+        RunPersistenceFallbackMode::UseStandardFallback};
+    std::optional<RunCheckpointReference> reference;
+};
+
+// Reine RAM-Mutation fuer die diagnostische First-after-restart-Evidenz. Die
+// Funktion ist unabhaengig davon aufrufbar, ob im selben Moment ein
+// Persistenz-Commit stattfindet.
+void applyLiveRecoveryEvidence(
+    RunCommandState& current,
+    const CrossRolePlausibilityContext& liveSensorEvidence);
+
 class RunPersistenceCoordinator {
    public:
     // Private implementation data is declared here solely because the
@@ -140,10 +180,12 @@ class RunPersistenceCoordinator {
     [[nodiscard]] RunPersistenceLoadResult loadAndInitialize();
     [[nodiscard]] RunPersistenceResult persistCommand(
         RunCommandState& current, const CommandDecision& decision,
-        const RunCheckpointTime& time);
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
     [[nodiscard]] RunPersistenceResult persistTransition(
         RunCommandState& current, const TransitionDecision& decision,
-        const RunCheckpointTime& time);
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
     // #21, 6.14.3: transports exactly the six automatic
     // SensorSelectionDecisionCause values (never ManualUserFallback/
     // ManualUserReturn, which route through persistCommand once #21 Commit 4
@@ -152,14 +194,45 @@ class RunPersistenceCoordinator {
     // this function contains no second rule implementation.
     [[nodiscard]] RunPersistenceResult persistSensorSelection(
         RunCommandState& current, const SensorSelectionStateMutation& mutation,
-        const RunCheckpointTime& time);
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
     [[nodiscard]] RunPersistenceResult checkpointPeriodic(
-        const RunCommandState& current, const RunCheckpointTime& time);
+        const RunCommandState& current, const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
     [[nodiscard]] RunPersistenceCoordinatorState state() const {
         return state_;
     }
+    [[nodiscard]] RecoveryActivationOutcome activateLoadedRun(
+        const RunCommandState& current, const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext& liveSensorEvidence);
+    [[nodiscard]] RecoveryActivationOutcome activateFallbackRecoveredRun(
+        const RunCommandState& current, const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext& liveSensorEvidence);
+    [[nodiscard]] RunPersistenceResult resolveRecoveryOutcome(
+        RunCommandState& current,
+        const ResolveRecoveryUncertaintyRequest& request,
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext& liveSensorEvidence);
+    // Automatic UTC reevaluation of the persisted Hop-1-only
+    // WaitingForProduct case. Expiry is resolved without Gate A; a still
+    // valid result requires the optional fresh Gate-A context.
+    [[nodiscard]] RunPersistenceResult reevaluateRecoveryEvaluation(
+        RunCommandState& current, const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
+
+    // Gemeinsamer, write-before-apply Recovery-Schreibpfad fuer spaetere
+    // fachliche Recovery-Kandidaten (Zeit-Reevaluation und Gewichtung). Der
+    // Aufrufer liefert bereits den vollstaendigen, um genau eine
+    // RunRevision erhoehten Kandidaten; hier bleibt die Persistenzmutation
+    // auf `Recovery` festgelegt und es entsteht kein zweiter Schreibkern.
+    [[nodiscard]] RunPersistenceResult persistRecoveryCandidate(
+        RunCommandState& current, const RunCommandState& candidate,
+        const RunCheckpointTime& time,
+        RunPersistenceFallbackDirective fallbackDirective = {});
 
    private:
+    friend class RunPersistenceCoordinatorTestAccess;
+
     // `mutationKind` is explicit (6.14.2) rather than inferred from
     // commandId presence: persistTransition and persistSensorSelection both
     // omit commandId, but need distinct RunPersistenceHead::mutationKind
@@ -170,6 +243,14 @@ class RunPersistenceCoordinator {
         bool periodic, const RunCommandState& before,
         RunPersistenceMutationKind mutationKind,
         std::optional<CommandId> commandId = std::nullopt);
+    [[nodiscard]] RunPersistenceResult writeSnapshotCore(
+        const RunPersistenceSnapshot& snapshot, const RunCheckpointTime& time,
+        bool periodic, const RunCommandState& before,
+        RunPersistenceMutationKind mutationKind,
+        std::optional<CommandId> commandId,
+        std::optional<std::size_t> targetSlotOverride,
+        RunPersistenceFallbackDirective fallbackDirective,
+        RunPersistenceCoordinatorState rollbackState);
     [[nodiscard]] RunPersistenceResult unavailableResult() const;
     [[nodiscard]] RunPersistenceResult result(
         RunPersistenceResultStatus status,

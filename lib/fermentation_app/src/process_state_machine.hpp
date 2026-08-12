@@ -49,6 +49,22 @@ struct ProcessRunSnapshot {
 [[nodiscard]] std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
     const ActiveRun& run);
 
+// Oeffentlich fuer den Schema-3-Gueltigkeitsvertrag ausserhalb dieser
+// Uebersetzungseinheit (run_persistence_contract.cpp, 5.14): prueft, ob eine
+// Phase strukturell zu einem gegebenen Programm-/manuellen Schnappschuss
+// passt, unabhaengig von einer konkreten ProcessRuntimeState-Instanz.
+[[nodiscard]] bool stateMatchesRunSnapshot(ProcessState state,
+                                           const ProcessRunSnapshot& snapshot);
+
+// Oeffentlich fuer denselben Schema-3-Gueltigkeitsvertrag (5.14
+// Korrekturauftrag Befund 1): stateMatchesRunSnapshot() liefert fuer nicht
+// run-gebundene Zustaende (Boot/Standby/Completed/RecoveryEvaluation/Fault/
+// ServiceMode) absichtlich true und kann eine Recovery-Altphase deshalb
+// nicht allein pruefen - stateUsesRunSnapshot() grenzt zusaetzlich auf genau
+// die acht Phasen ein, die ueberhaupt eine laufende, snapshot-gebundene
+// Regelung darstellen.
+[[nodiscard]] bool stateUsesRunSnapshot(ProcessState state);
+
 struct ProcessRuntimeState {
     ProcessState state{ProcessState::Boot};
     std::uint64_t stateEnteredAtMillis{0U};
@@ -127,6 +143,8 @@ enum class TransitionReason : std::uint8_t {
     ServiceModeExited,
     RecoveryResumed,
     RecoveryRejected,
+    RecoveryReentryRequired,
+    RecoveryEndedByExpiredWait,
 };
 
 enum class ProcessMessage : std::uint8_t {
@@ -153,13 +171,50 @@ struct TransitionDecision {
     }
 };
 
+// Bereits bekannter Vor-Boot-Anteil einer Phase (Recovery), boot-unabhaengig
+// und additiv gefuehrt statt durch Zurueckrechnen des Boot-Zeitpunkts.
+struct PriorBootPhaseElapsed {
+    std::uint32_t lowerBoundSeconds{0U};
+    std::optional<std::uint32_t> upperBoundSeconds;
+};
+
+// now >= startedAt ist innerhalb desselben Boots durch propose()/
+// Hop-1-Konstruktion garantiert - keine Unterlaufgefahr, da hier
+// ausschliesslich addiert, nie von now subtrahiert wird.
+[[nodiscard]] inline bool elapsedWithPrior(std::uint64_t now,
+                                           std::uint64_t startedAt,
+                                           std::uint32_t durationMinutes,
+                                           std::uint32_t priorSeconds) {
+    return (now - startedAt) / 1000U + priorSeconds >=
+           static_cast<std::uint64_t>(durationMinutes) * 60U;
+}
+
 [[nodiscard]] TransitionDecision decideProcessTransition(
     const ProcessRuntimeState& current, const ProcessRunSnapshot* runSnapshot,
     const ProcessSignals& signals, const TransitionRequest& request,
-    std::uint64_t monotonicMillis);
+    std::uint64_t monotonicMillis,
+    const PriorBootPhaseElapsed& priorElapsed = {});
 
 [[nodiscard]] bool applyProcessTransition(
     ProcessRuntimeState& current, const TransitionDecision& decision,
     const ProcessRunSnapshot* runSnapshot);
+
+// Oeffentlich fuer Recovery-Orchestrierung ausserhalb dieser
+// Uebersetzungseinheit
+// (RunPersistenceCoordinator::activateLoadedRun/activateFallbackRecoveredRun,
+// RunPersistenceCoordinator::resolveRecoveryOutcome): konstruiert dieselbe
+// Transitionsform wie decideProcessTransition, ohne den vollen
+// Entscheidungspfad zu durchlaufen.
+[[nodiscard]] TransitionDecision propose(const ProcessRuntimeState& current,
+                                         ProcessState nextState,
+                                         TransitionReason reason,
+                                         std::uint64_t monotonicMillis);
+
+[[nodiscard]] TransitionDecision completeTimedRun(
+    const ProcessRuntimeState& current, const ProcessRunSnapshot& snapshot,
+    std::uint64_t monotonicMillis);
+
+[[nodiscard]] TransitionDecision completeHoldDuration(
+    const ProcessRuntimeState& current, std::uint64_t monotonicMillis);
 
 }  // namespace fermentation

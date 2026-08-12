@@ -32,11 +32,15 @@ Mindestens enthalten:
 - Regelmodus und primaerer Regelsensor
 - dokumentierte Sensorwechsel
 - nominelle Dauer
-- kumulierter temperaturgewichteter Fortschritt
+- ehrliche Fortschrittsbasis und, nur bei freigegebenem Modell, kumulierter
+  temperaturgewichteter Fortschritt
 - Verlaengerungen und Korrekturen
 - letzter monotoner Zeitstand
 - letzter verlaesslicher UTC-Anker, sofern vorhanden
 - Zeitqualitaetsstatus
+- Recovery-Episode mit Vor-/Nach-Ausfall-Evidenz und Segmentkennung
+- ausstehender Recovery-Zeitanker, Boot-Anker und getaggte Vor-Boot-Zeit
+- kumulative wirksame nominale Zeitkorrektur mit Episodenrevision
 - letzte gueltige Temperaturen und Qualitaetszustaende von:
   - Schrankluft
   - Produkt, sofern vorhanden
@@ -105,8 +109,61 @@ Kombiniert gespeichert werden:
 - letzter UTC-Anker
 - Sensor- und Zeitqualitaet
 
-Die biologische Wirkung wird nicht durch eine erfundene Kurve behauptet. Die
-Gewichtung wird bei der Inbetriebnahme kalibriert und bleibt konservativ.
+Die biologische Wirkung wird nicht durch eine erfundene Kurve behauptet. Ein
+Produktionsprovider fuer die Gewichtung bleibt ohne freigegebenes
+Commissioning-Modell `unavailable`; die Firmware schreibt dann keinen
+biologischen Beitrag gut. Die reine Modellgrenze akzeptiert nur eine
+Fermenting-Episode mit bekannten Ausfallgrenzen und gueltiger, gefilterter
+Vor-/Nach-Ausfall-Evidenz. Der Produktfuehler hat die Vertrauensstufe
+`ProductPreferred`, der ausdruecklich verwendete Luftfuehler `AirReduced`.
+
+### Recovery-/Fortschrittsvertrag (Schema 3)
+
+Der persistierte Vertrag besteht aus den getrennten Feldern
+`pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
+`lastRecoveryEpisodeEvidence`, `priorBootPhaseElapsed`,
+`nominalRecoveryAdjustment`, `recoveryEpisodeRevision` und
+`runProgress`. `observedRunSeconds` bleibt die monotone beobachtete Laufzeit;
+nominale Recovery-Korrekturen und gewichtete Beitraege werden nicht in diesen
+Wert hineingeschrieben. Der Wert faltet die sicher beobachtete Zeit bei jedem
+echten Live-Phasenwechsel aus `Fermenting`, bei einer echten
+`AdjustRun`-Restdauer-Neubaseline und bei jedem echten Hop 1 aus `Fermenting`
+genau einmal. Beim Hop 1 wird ausschliesslich
+`thisHopAltBootLocalSeconds` dieses konkreten Boots verwendet; ein
+Episode-Refresh erzeugt keinen Fold.
+
+`ApplyRecoveryTimeCorrection` ist kumulativ und nur fuer die passende
+Recovery-Episode zulaessig. Bounds, Episodenrevision, Idempotenz und
+Counter-Overflow werden vor dem Schreiben geprueft. Eine wirksame Aenderung
+faltet bei `AdjustRun` die seit dem Eintritt beobachtete Fermenting-Zeit genau
+einmal in die Zeitbasis und setzt die Recovery-Baseline neu. Persistenz ist
+Write-before-Apply; erst nach erfolgreichem atomarem Recovery-Schreiben wird
+der RAM-Zustand geaendert.
+
+`RunRecoveryCoordinator::activate` ist die schmale Orchestrierungsgrenze fuer
+geladenen aktiven Lauf und Fallback. Sie delegiert die bestehende
+Recovery-/Regelsensorauswahl und enthaelt keine eigene Prozessschleife.
+`reevaluateRecoveryTime` leitet eine spaetere Zeitverbesserung aus demselben
+Anker ab und persistiert sie als Recovery-Revision. Im Hop-1-only-Fall
+`RecoveryEvaluation` mit urspruenglichem `WaitingForProduct` wird
+`DefinitelyExpired` automatisch ohne Gate A als bestehender Tombstone-Pfad
+beendet. `DefinitelyStillValid` darf nur mit frischem Gate-A-Kontext nach
+`WaitingForProduct` resumieren; der No-context-Aufruf bleibt fail-closed.
+`Uncertain` schreibt und mutiert nichts. Ein produktiver Aufrufer oder eine
+allgemeine Prozessschleife ist in Release 1 nicht Bestandteil dieses Vertrags.
+
+Die gewichtete Buchung prueft erwartete Lauf- und Episodenrevision,
+Segmentkennung, Sensorberechtigung, Modellrevision und checked Bounds. Ein
+Segment wird hoechstens einmal gebucht. Ein nicht gebuchtes, abgeloestes
+Segment setzt die Coverage konservativ auf `PartialUnknown` und entfernt die
+Obergrenze; ein gebuchtes Segment bleibt unveraendert. Eine atomare Buchung
+aktualisiert nur den gewichteten Zustand und die Laufrevision. Ohne Modell,
+ohne Evidenz oder bei ungueltiger Evidenz bleibt der Provider unavailable-
+beziehungsweise not-eligible und erzeugt keinen Fortschritt.
+`lastSourceRole` bezeichnet dabei immer die Quelle des zuletzt gebuchten
+Beitrags. `confidence` bezeichnet die kumulative, konservative Vertrauensstufe:
+ein einziges `AirReduced` bleibt auch nach einem spaeteren
+`ProductPreferred`-Beitrag `AirReduced` und wird nie hochgestuft.
 
 ## Zeitanker und Ausfallintervall
 
@@ -134,6 +191,13 @@ Recovery berechnet:
 obere Grenze = aktuelle UTC - letzter verlaesslicher UTC-Kontrollpunkt
 untere Grenze = max(0, obere Grenze - maximal moeglicher Kontrollpunktabstand)
 ```
+
+Die Berechnung verwendet bei einer laufenden Recovery-Episode den
+unveraenderlichen Ursprungsanker und den aktuellen Recovery-Boot-Anker.
+Carry-forward-Zeit aus einem frueheren Boot wird in der bekannten Zeitbasis
+gefuehrt; sie erzeugt keine kuenstliche neue Ausfall-Untergrenze. Ein spaeterer
+UTC-Abgleich darf nur eine echte Verbesserung der bereits persistierten unteren
+Grenze oder die Aufloesung einer offenen Obergrenze nachtragen.
 
 Fuehren beide Grenzen nicht zur gleichen Fortschritts- oder Phasenentscheidung,
 wird kein automatischer Abschluss ausgeloest. Beide Grenzen und die Konfidenz
@@ -242,8 +306,9 @@ Boot
 -> COMPLETED direkt wiederherstellen, falls zutreffend
 -> aktiven Laufdatensatz auswaehlen
 -> Schrankluft-, Produkt- und Kuehlkoerpersensor bewerten
--> phasenbezogene Wiederanlaufaktion bestimmen
--> Entscheidung atomar speichern
+  -> RunRecoveryCoordinator::activate aufrufen
+  -> bestehende Phasen-/Regelsensorauswahl delegiert bewerten
+  -> Entscheidung atomar speichern
 -> Regelung kontrolliert freigeben, sofern erlaubt
 -> Netzwerk und NTP parallel wiederherstellen
 -> Ausfallintervall und Fortschritt spaeter korrigieren
@@ -254,14 +319,13 @@ Der Wiederanlauf blockiert nicht auf NTP. Ohne absolute Zeit wird kein exakter
 Unterbrechungsfortschritt erfunden und kein automatischer Phasenabschluss allein
 aus einer Schaetzung abgeleitet.
 
-## Uebergabe an ein spaeteres Vorhaben: Regelsensorauswahl bei Reaktivierung
+## Recovery-API und Regelsensorauswahl bei Reaktivierung
 
 Issue #21 (Regelsensorauswahl, Ersatzbetrieb, Rueckkehrlogik) liefert den
-persistierten und den laufzeitseitigen Auswahlzustand, aktiviert einen nach
-einem Neustart geladenen aktiven Lauf aber bewusst **nicht** selbst. Dieser
-Abschnitt haelt fest, was bereits vorhanden ist und was ein spaeteres
-Vorhaben fuer die tatsaechliche Reaktivierung noch leisten muss, damit dies
-nicht erneut recherchiert werden muss.
+persistierten und den laufzeitseitigen Auswahlzustand. Die
+`RunRecoveryCoordinator`-Grenze aktiviert einen geladenen aktiven Lauf oder
+Fallback, delegiert die bestehende Empfehlung und persistiert die resultierende
+Recovery-Entscheidung. Sie fuehrt keine zweite Auswahl- oder Prozesslogik ein.
 
 Bereits vorhanden:
 
@@ -280,12 +344,10 @@ Bereits vorhanden:
   den reaktivierten Zustand, ohne selbst etwas zu veraendern oder zu
   speichern.
 
-Fuer die tatsaechliche Reaktivierung (geladener aktiver Lauf -> betriebsbereit)
-noch zu leisten:
+Fuer die Reaktivierung (geladener aktiver Lauf -> betriebsbereit) gilt:
 
-- diese Empfehlung anwenden und dabei den laufzeitseitigen Auswahlzustand
-  endgueltig setzen, bevor die Regelung fuer diesen Lauf ueberhaupt bewertet
-  wird;
+- die Empfehlung wird angewendet und der laufzeitseitige Auswahlzustand
+  gesetzt, bevor die Regelung fuer diesen Lauf bewertet wird;
 - **Reihenfolge beachten:** ein aktiver Lauf verlangt beim Schreiben
   zwingend einen vorhandenen persistierten Auswahlzustand (`sensorSelection`)
   - dieser ist nach dem Laden bereits vorhanden und wird durch jede
@@ -299,17 +361,14 @@ noch zu leisten:
   laufen davon unberuehrt normal weiter;
 - die Peltier-Freigabe bleibt bis zum Abschluss dieser Neubewertung gesperrt;
   eine vorherige Freigabe aus dem Lauf vor dem Neustart wird nie blind
-  uebernommen.
+  uebernommen. Bei fehlender oder ungueltiger Live-Evidenz bleibt die
+  Entscheidung fail-closed.
 
-Test- und Zustaendigkeitsgrenze: Issue #21 prueft ausschliesslich, dass ein
-Schema-1- oder Schema-2-Bestand korrekt geladen wird, dass ein geladener
-aktiver Lauf jede weitere Zustandsaenderung blockiert, und dass der
-laufzeitseitige Zustand beim Laden fail-closed gesetzt wird - ausschliesslich
-ueber die bestehende oeffentliche Schnittstelle, ohne Zugriff auf interne
-Koordinatorzustaende. Die tatsaechliche Reaktivierungsaktion, der erste
-Kontrollpunkt danach und ein anschliessender erneuter Neustart mit dann
-gemischter aktueller/Rueckfallrevision sind in Issue #21 **nicht** geprueft
-und bleiben einem spaeteren Vorhaben vorbehalten.
+Test- und Zustaendigkeitsgrenze: Schema-1- und Schema-2-Bestaende bleiben
+kompatibel, ausserhalb des bewusst abgelehnten aktiven Fault-Falls. Die
+Reaktivierungs- und Fallback-Delegation prueft die bestehenden
+Recovery-/Sensorselektionsregeln; die Persistenzkoordination bleibt Eigentuemer
+von Gate A, Write-before-Apply und der atomaren Recovery-Revision.
 
 ## Flashstrategie
 
@@ -344,5 +403,11 @@ Verbindlich:
   - temporaere Exporte
 - Sicherheits- und Regelungslogik haben Vorrang
 
-Konkrete Groessen bleiben `TBD_IMPLEMENTATION_BUDGET` und werden durch die
-zustaendigen Issues gemessen.
+Der aktuelle Laufvertrag bleibt innerhalb fester Grenzen: maximal 8.192 Bytes
+Payload, 8.240 Bytes Checkpoint-Record und 256 Bytes Head-Record; jeweils
+maximal 32 Laufrevisionen und persistierte Command-IDs. Die neuen Recovery-
+und Progressfelder nutzen ausschliesslich den bestehenden Schema-3-Datensatz,
+keine unbounded Historie, keine neue Prozessschleife, keinen Netzwerk- oder
+Anzeige-Puffer und keine OTA-/PSRAM-Reserve. Ein zusaetzlicher
+Commissioning-Provider ist in Release 1 nicht eingebaut; ein
+`TBD_IMPLEMENTATION_BUDGET` bleibt daher kein Laufzeitwert.

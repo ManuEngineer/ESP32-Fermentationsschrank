@@ -65,37 +65,6 @@ bool elapsed(std::uint64_t now, std::uint64_t startedAt,
     return now - startedAt >= minutesToMillis(durationMinutes);
 }
 
-bool elapsedOptional(std::uint64_t now, std::uint64_t startedAt,
-                     const std::optional<std::uint32_t>& durationMinutes) {
-    if (!durationMinutes.has_value()) {
-        return false;
-    }
-    return elapsed(now, startedAt, durationMinutes.value());
-}
-
-bool stateUsesRunSnapshot(ProcessState state) {
-    switch (state) {
-        case ProcessState::Preheating:
-        case ProcessState::WaitingForProduct:
-        case ProcessState::ReachingTarget:
-        case ProcessState::QualifyingTarget:
-        case ProcessState::Fermenting:
-        case ProcessState::Cooling:
-        case ProcessState::CoolHolding:
-        case ProcessState::ManualHolding:
-            return true;
-        case ProcessState::Boot:
-        case ProcessState::SafeBoot:
-        case ProcessState::Standby:
-        case ProcessState::Completed:
-        case ProcessState::RecoveryEvaluation:
-        case ProcessState::Fault:
-        case ProcessState::ServiceMode:
-            return false;
-    }
-    return false;
-}
-
 bool stateHasTargetReachTimer(ProcessState state) {
     return state == ProcessState::ReachingTarget ||
            state == ProcessState::QualifyingTarget;
@@ -147,44 +116,6 @@ bool validRecoveryTarget(ProcessState state) {
         case ProcessState::Fault:
         case ProcessState::ServiceMode:
             return false;
-    }
-    return false;
-}
-
-bool stateMatchesRunSnapshot(ProcessState state,
-                             const ProcessRunSnapshot& snapshot) {
-    switch (state) {
-        case ProcessState::Preheating:
-            return snapshot.preheatEnabled;
-        case ProcessState::WaitingForProduct:
-            return snapshot.preheatEnabled &&
-                   snapshot.maximumProductWaitMinutes.has_value();
-        case ProcessState::ReachingTarget:
-        case ProcessState::QualifyingTarget:
-            return true;
-        case ProcessState::Fermenting:
-            return snapshot.kind == ProcessKind::Timed &&
-                   snapshot.fermentationDurationMinutes.has_value();
-        case ProcessState::Cooling:
-            return snapshot.kind == ProcessKind::Timed &&
-                   snapshot.completionMode !=
-                       CompletionMode::FinishWithoutCooling;
-        case ProcessState::CoolHolding:
-            return snapshot.kind == ProcessKind::Timed &&
-                   (snapshot.completionMode ==
-                        CompletionMode::CoolAndHoldForDuration ||
-                    snapshot.completionMode ==
-                        CompletionMode::CoolAndHoldUntilManualStop);
-        case ProcessState::ManualHolding:
-            return snapshot.kind == ProcessKind::ManualHolding;
-        case ProcessState::Boot:
-        case ProcessState::SafeBoot:
-        case ProcessState::Standby:
-        case ProcessState::Completed:
-        case ProcessState::RecoveryEvaluation:
-        case ProcessState::Fault:
-        case ProcessState::ServiceMode:
-            return true;
     }
     return false;
 }
@@ -331,6 +262,12 @@ bool validControlTopology(const TransitionDecision& decision) {
         case TransitionReason::RecoveryRejected:
             return from == ProcessState::RecoveryEvaluation &&
                    to == ProcessState::Fault;
+        case TransitionReason::RecoveryReentryRequired:
+            return stateUsesRunSnapshot(from) &&
+                   to == ProcessState::RecoveryEvaluation;
+        case TransitionReason::RecoveryEndedByExpiredWait:
+            return from == ProcessState::RecoveryEvaluation &&
+                   to == ProcessState::Standby;
         default:
             return false;
     }
@@ -418,22 +355,6 @@ bool addMessage(TransitionDecision& decision, ProcessMessage message) {
     return true;
 }
 
-TransitionDecision propose(const ProcessRuntimeState& current,
-                           ProcessState nextState, TransitionReason reason,
-                           std::uint64_t monotonicMillis) {
-    auto decision = result(DecisionStatus::Proposed, current, monotonicMillis);
-    decision.reason = reason;
-    decision.after.state = nextState;
-    decision.after.stateEnteredAtMillis = monotonicMillis;
-    decision.after.qualificationValidSinceMillis = std::nullopt;
-    if (!stateHasTargetReachTimer(nextState)) {
-        decision.after.targetReachStartedAtMillis = 0U;
-        decision.after.targetReachWarningIssued = false;
-    }
-    decision.after.transitionSequence = current.transitionSequence + 1U;
-    return decision;
-}
-
 TransitionDecision proposePhaseDataUpdate(const ProcessRuntimeState& current,
                                           TransitionReason reason,
                                           std::uint64_t monotonicMillis) {
@@ -464,20 +385,6 @@ void includeTargetReachWarning(TransitionDecision& decision) {
     }
     static_cast<void>(
         addMessage(decision, ProcessMessage::TargetReachTimeExceeded));
-}
-
-TransitionDecision completeTimedRun(const ProcessRuntimeState& current,
-                                    const ProcessRunSnapshot& snapshot,
-                                    std::uint64_t monotonicMillis) {
-    if (snapshot.completionMode == CompletionMode::FinishWithoutCooling) {
-        auto decision =
-            propose(current, ProcessState::Completed,
-                    TransitionReason::FermentationCompleted, monotonicMillis);
-        static_cast<void>(addMessage(decision, ProcessMessage::RunCompleted));
-        return decision;
-    }
-    return propose(current, ProcessState::Cooling,
-                   TransitionReason::FermentationCompleted, monotonicMillis);
 }
 
 TransitionDecision decideQualification(const ProcessRuntimeState& current,
@@ -534,11 +441,13 @@ TransitionDecision decideQualification(const ProcessRuntimeState& current,
                    monotonicMillis);
 }
 
-TransitionDecision decideWaitingForProduct(const ProcessRuntimeState& current,
-                                           const ProcessRunSnapshot& snapshot,
-                                           std::uint64_t monotonicMillis) {
-    if (!elapsedOptional(monotonicMillis, current.stateEnteredAtMillis,
-                         snapshot.maximumProductWaitMinutes)) {
+TransitionDecision decideWaitingForProduct(
+    const ProcessRuntimeState& current, const ProcessRunSnapshot& snapshot,
+    std::uint64_t monotonicMillis, PriorBootPhaseElapsed priorElapsed = {}) {
+    if (!snapshot.maximumProductWaitMinutes.has_value() ||
+        !elapsedWithPrior(monotonicMillis, current.stateEnteredAtMillis,
+                          *snapshot.maximumProductWaitMinutes,
+                          priorElapsed.lowerBoundSeconds)) {
         return result(DecisionStatus::NoTransition, current, monotonicMillis);
     }
     auto decision =
@@ -595,9 +504,12 @@ TransitionDecision decideQualifyingTarget(const ProcessRuntimeState& current,
 
 TransitionDecision decideFermenting(const ProcessRuntimeState& current,
                                     const ProcessRunSnapshot& snapshot,
-                                    std::uint64_t monotonicMillis) {
-    if (!elapsedOptional(monotonicMillis, current.stateEnteredAtMillis,
-                         snapshot.fermentationDurationMinutes)) {
+                                    std::uint64_t monotonicMillis,
+                                    PriorBootPhaseElapsed priorElapsed = {}) {
+    if (!snapshot.fermentationDurationMinutes.has_value() ||
+        !elapsedWithPrior(monotonicMillis, current.stateEnteredAtMillis,
+                          *snapshot.fermentationDurationMinutes,
+                          priorElapsed.lowerBoundSeconds)) {
         return result(DecisionStatus::NoTransition, current, monotonicMillis);
     }
     return completeTimedRun(current, snapshot, monotonicMillis);
@@ -623,23 +535,22 @@ TransitionDecision decideCooling(const ProcessRuntimeState& current,
 
 TransitionDecision decideCoolHolding(const ProcessRuntimeState& current,
                                      const ProcessRunSnapshot& snapshot,
-                                     std::uint64_t monotonicMillis) {
+                                     std::uint64_t monotonicMillis,
+                                     PriorBootPhaseElapsed priorElapsed = {}) {
     if (snapshot.completionMode != CompletionMode::CoolAndHoldForDuration ||
-        !elapsedOptional(monotonicMillis, current.stateEnteredAtMillis,
-                         snapshot.holdDurationMinutes)) {
+        !snapshot.holdDurationMinutes.has_value() ||
+        !elapsedWithPrior(monotonicMillis, current.stateEnteredAtMillis,
+                          *snapshot.holdDurationMinutes,
+                          priorElapsed.lowerBoundSeconds)) {
         return result(DecisionStatus::NoTransition, current, monotonicMillis);
     }
-    auto decision =
-        propose(current, ProcessState::Completed,
-                TransitionReason::HoldDurationCompleted, monotonicMillis);
-    static_cast<void>(addMessage(decision, ProcessMessage::RunCompleted));
-    return decision;
+    return completeHoldDuration(current, monotonicMillis);
 }
 
-TransitionDecision decideAutomatic(const ProcessRuntimeState& current,
-                                   const ProcessRunSnapshot* snapshot,
-                                   const ProcessSignals& signals,
-                                   std::uint64_t monotonicMillis) {
+TransitionDecision decideAutomatic(
+    const ProcessRuntimeState& current, const ProcessRunSnapshot* snapshot,
+    const ProcessSignals& signals, std::uint64_t monotonicMillis,
+    const PriorBootPhaseElapsed& priorElapsed = {}) {
     if (snapshot == nullptr && stateUsesRunSnapshot(current.state)) {
         return result(DecisionStatus::InvalidInput, current, monotonicMillis);
     }
@@ -649,7 +560,8 @@ TransitionDecision decideAutomatic(const ProcessRuntimeState& current,
             return decideQualification(current, *snapshot, signals,
                                        monotonicMillis, true);
         case ProcessState::WaitingForProduct:
-            return decideWaitingForProduct(current, *snapshot, monotonicMillis);
+            return decideWaitingForProduct(current, *snapshot, monotonicMillis,
+                                           priorElapsed);
         case ProcessState::ReachingTarget:
             return decideReachingTarget(current, *snapshot, signals,
                                         monotonicMillis);
@@ -657,11 +569,13 @@ TransitionDecision decideAutomatic(const ProcessRuntimeState& current,
             return decideQualifyingTarget(current, *snapshot, signals,
                                           monotonicMillis);
         case ProcessState::Fermenting:
-            return decideFermenting(current, *snapshot, monotonicMillis);
+            return decideFermenting(current, *snapshot, monotonicMillis,
+                                    priorElapsed);
         case ProcessState::Cooling:
             return decideCooling(current, *snapshot, signals, monotonicMillis);
         case ProcessState::CoolHolding:
-            return decideCoolHolding(current, *snapshot, monotonicMillis);
+            return decideCoolHolding(current, *snapshot, monotonicMillis,
+                                     priorElapsed);
         case ProcessState::Boot:
         case ProcessState::SafeBoot:
         case ProcessState::Standby:
@@ -738,10 +652,10 @@ TransitionDecision decideHoldEvent(const ProcessRuntimeState& current,
     return decision;
 }
 
-TransitionDecision decideRecoveryEvent(const ProcessRuntimeState& current,
-                                       const ProcessRunSnapshot* snapshot,
-                                       const TransitionRequest& request,
-                                       std::uint64_t monotonicMillis) {
+TransitionDecision decideRecoveryEvent(
+    const ProcessRuntimeState& current, const ProcessRunSnapshot* snapshot,
+    const TransitionRequest& request, std::uint64_t monotonicMillis,
+    const PriorBootPhaseElapsed& priorElapsed = {}) {
     if (request.event == ProcessEvent::RecoveryReject) {
         auto decision =
             propose(current, ProcessState::Fault,
@@ -760,8 +674,10 @@ TransitionDecision decideRecoveryEvent(const ProcessRuntimeState& current,
         !runtimeTimeIsValid(recovered, monotonicMillis) ||
         !stateMatchesRunSnapshot(recovered.state, *snapshot) ||
         (recovered.state == ProcessState::WaitingForProduct &&
-         elapsedOptional(monotonicMillis, recovered.stateEnteredAtMillis,
-                         snapshot->maximumProductWaitMinutes))) {
+         snapshot->maximumProductWaitMinutes.has_value() &&
+         elapsedWithPrior(monotonicMillis, recovered.stateEnteredAtMillis,
+                          *snapshot->maximumProductWaitMinutes,
+                          priorElapsed.lowerBoundSeconds))) {
         return rejected(current, monotonicMillis);
     }
 
@@ -779,10 +695,10 @@ TransitionDecision decideRecoveryEvent(const ProcessRuntimeState& current,
     return decision;
 }
 
-TransitionDecision decideExplicitEvent(const ProcessRuntimeState& current,
-                                       const ProcessRunSnapshot* snapshot,
-                                       const TransitionRequest& request,
-                                       std::uint64_t monotonicMillis) {
+TransitionDecision decideExplicitEvent(
+    const ProcessRuntimeState& current, const ProcessRunSnapshot* snapshot,
+    const TransitionRequest& request, std::uint64_t monotonicMillis,
+    const PriorBootPhaseElapsed& priorElapsed = {}) {
     if (request.event == ProcessEvent::Abort) {
         if (!stateCanAbort(current.state)) {
             return rejected(current, monotonicMillis);
@@ -839,7 +755,7 @@ TransitionDecision decideExplicitEvent(const ProcessRuntimeState& current,
             return rejected(current, monotonicMillis);
         case ProcessState::RecoveryEvaluation:
             return decideRecoveryEvent(current, snapshot, request,
-                                       monotonicMillis);
+                                       monotonicMillis, priorElapsed);
         case ProcessState::ServiceMode:
             if (request.event == ProcessEvent::ExitServiceMode) {
                 return propose(current, ProcessState::Standby,
@@ -955,10 +871,118 @@ bool validateProcessRuntimeForCheckpoint(
     return runSnapshot == nullptr || validateProcessRunSnapshot(*runSnapshot);
 }
 
+bool stateUsesRunSnapshot(ProcessState state) {
+    switch (state) {
+        case ProcessState::Preheating:
+        case ProcessState::WaitingForProduct:
+        case ProcessState::ReachingTarget:
+        case ProcessState::QualifyingTarget:
+        case ProcessState::Fermenting:
+        case ProcessState::Cooling:
+        case ProcessState::CoolHolding:
+        case ProcessState::ManualHolding:
+            return true;
+        case ProcessState::Boot:
+        case ProcessState::SafeBoot:
+        case ProcessState::Standby:
+        case ProcessState::Completed:
+        case ProcessState::RecoveryEvaluation:
+        case ProcessState::Fault:
+        case ProcessState::ServiceMode:
+            return false;
+    }
+    return false;
+}
+
+bool stateMatchesRunSnapshot(ProcessState state,
+                             const ProcessRunSnapshot& snapshot) {
+    switch (state) {
+        case ProcessState::Preheating:
+            return snapshot.preheatEnabled;
+        case ProcessState::WaitingForProduct:
+            return snapshot.preheatEnabled &&
+                   snapshot.maximumProductWaitMinutes.has_value();
+        case ProcessState::ReachingTarget:
+        case ProcessState::QualifyingTarget:
+            return true;
+        case ProcessState::Fermenting:
+            return snapshot.kind == ProcessKind::Timed &&
+                   snapshot.fermentationDurationMinutes.has_value();
+        case ProcessState::Cooling:
+            return snapshot.kind == ProcessKind::Timed &&
+                   snapshot.completionMode !=
+                       CompletionMode::FinishWithoutCooling;
+        case ProcessState::CoolHolding:
+            return snapshot.kind == ProcessKind::Timed &&
+                   (snapshot.completionMode ==
+                        CompletionMode::CoolAndHoldForDuration ||
+                    snapshot.completionMode ==
+                        CompletionMode::CoolAndHoldUntilManualStop);
+        case ProcessState::ManualHolding:
+            return snapshot.kind == ProcessKind::ManualHolding;
+        case ProcessState::Boot:
+        case ProcessState::SafeBoot:
+        case ProcessState::Standby:
+        case ProcessState::Completed:
+        case ProcessState::RecoveryEvaluation:
+        case ProcessState::Fault:
+        case ProcessState::ServiceMode:
+            return true;
+    }
+    return false;
+}
+
+TransitionDecision propose(const ProcessRuntimeState& current,
+                           ProcessState nextState, TransitionReason reason,
+                           std::uint64_t monotonicMillis) {
+    // Kein gueltiger Transitionspfad darf UINT32_MAX -> 0 ueberlaufen; dieser
+    // Schutz lag bisher nur in decideProcessTransition() und griff damit
+    // nicht fuer den seit Commit 1 direkten propose()-Aufrufpfad (Recovery-
+    // Orchestrierung ausserhalb dieser Uebersetzungseinheit, 5.9/5.11/5.17).
+    if (current.transitionSequence ==
+        std::numeric_limits<std::uint32_t>::max()) {
+        return result(DecisionStatus::InvalidInput, current, monotonicMillis);
+    }
+    auto decision = result(DecisionStatus::Proposed, current, monotonicMillis);
+    decision.reason = reason;
+    decision.after.state = nextState;
+    decision.after.stateEnteredAtMillis = monotonicMillis;
+    decision.after.qualificationValidSinceMillis = std::nullopt;
+    if (!stateHasTargetReachTimer(nextState)) {
+        decision.after.targetReachStartedAtMillis = 0U;
+        decision.after.targetReachWarningIssued = false;
+    }
+    decision.after.transitionSequence = current.transitionSequence + 1U;
+    return decision;
+}
+
+TransitionDecision completeTimedRun(const ProcessRuntimeState& current,
+                                    const ProcessRunSnapshot& snapshot,
+                                    std::uint64_t monotonicMillis) {
+    if (snapshot.completionMode == CompletionMode::FinishWithoutCooling) {
+        auto decision =
+            propose(current, ProcessState::Completed,
+                    TransitionReason::FermentationCompleted, monotonicMillis);
+        static_cast<void>(addMessage(decision, ProcessMessage::RunCompleted));
+        return decision;
+    }
+    return propose(current, ProcessState::Cooling,
+                   TransitionReason::FermentationCompleted, monotonicMillis);
+}
+
+TransitionDecision completeHoldDuration(const ProcessRuntimeState& current,
+                                        std::uint64_t monotonicMillis) {
+    auto decision =
+        propose(current, ProcessState::Completed,
+                TransitionReason::HoldDurationCompleted, monotonicMillis);
+    static_cast<void>(addMessage(decision, ProcessMessage::RunCompleted));
+    return decision;
+}
+
 TransitionDecision decideProcessTransition(
     const ProcessRuntimeState& current, const ProcessRunSnapshot* runSnapshot,
     const ProcessSignals& signals, const TransitionRequest& request,
-    std::uint64_t monotonicMillis) {
+    std::uint64_t monotonicMillis, const PriorBootPhaseElapsed& priorElapsed) {
     if (!runtimeShapeIsValid(current)) {
         return result(DecisionStatus::InvalidInput, current, monotonicMillis);
     }
@@ -991,16 +1015,20 @@ TransitionDecision decideProcessTransition(
     }
 
     if (current.state == ProcessState::WaitingForProduct &&
-        elapsedOptional(monotonicMillis, current.stateEnteredAtMillis,
-                        runSnapshot->maximumProductWaitMinutes)) {
-        return decideAutomatic(current, runSnapshot, signals, monotonicMillis);
+        runSnapshot->maximumProductWaitMinutes.has_value() &&
+        elapsedWithPrior(monotonicMillis, current.stateEnteredAtMillis,
+                         *runSnapshot->maximumProductWaitMinutes,
+                         priorElapsed.lowerBoundSeconds)) {
+        return decideAutomatic(current, runSnapshot, signals, monotonicMillis,
+                               priorElapsed);
     }
 
     if (request.event != ProcessEvent::None) {
         return decideExplicitEvent(current, runSnapshot, request,
-                                   monotonicMillis);
+                                   monotonicMillis, priorElapsed);
     }
-    return decideAutomatic(current, runSnapshot, signals, monotonicMillis);
+    return decideAutomatic(current, runSnapshot, signals, monotonicMillis,
+                           priorElapsed);
 }
 
 bool applyProcessTransition(ProcessRuntimeState& current,
@@ -1008,6 +1036,14 @@ bool applyProcessTransition(ProcessRuntimeState& current,
                             const ProcessRunSnapshot* runSnapshot) {
     if (!decision.proposed() ||
         !equalProcessRuntimeState(current, decision.before) ||
+        // Letzte Schutzschicht: bei before.transitionSequence == UINT32_MAX
+        // wraeppt sowohl ein manuell konstruiertes after.transitionSequence
+        // als auch der Vergleichsausdruck before+1U identisch auf 0, sodass
+        // der folgende Gleichheitscheck einen Wrap-Around faelschlich
+        // akzeptieren wuerde. Explizit vorab ausschliessen statt sich auf den
+        // (dadurch selbst ueberlaufenden) Vergleich zu verlassen.
+        decision.before.transitionSequence ==
+            std::numeric_limits<std::uint32_t>::max() ||
         decision.after.transitionSequence !=
             decision.before.transitionSequence + 1U ||
         !validProposedTopology(decision) ||

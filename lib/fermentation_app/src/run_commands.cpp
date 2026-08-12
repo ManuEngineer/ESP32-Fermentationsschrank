@@ -5,10 +5,67 @@
 #include <utility>
 
 #include "program_limits.hpp"
+#include "run_progress_weighting.hpp"
 #include "run_limits.hpp"
 #include "sensor_selection.hpp"
 
 namespace fermentation {
+
+bool foldObservedRunSeconds(RunCommandState& candidate,
+                            std::uint64_t deltaSeconds) {
+    if (deltaSeconds > std::numeric_limits<std::uint32_t>::max() -
+                           candidate.runProgress.observedRunSeconds) {
+        return false;
+    }
+    candidate.runProgress.observedRunSeconds +=
+        static_cast<std::uint32_t>(deltaSeconds);
+    return true;
+}
+
+std::optional<std::uint32_t> deriveFermentingSecondsDelta(
+    const RunCommandState& before, std::uint64_t atMillis) {
+    if (before.processState.state != ProcessState::Fermenting ||
+        atMillis < before.processState.stateEnteredAtMillis) {
+        return std::nullopt;
+    }
+    const auto seconds =
+        (atMillis - before.processState.stateEnteredAtMillis) / 1000U;
+    if (seconds > std::numeric_limits<std::uint32_t>::max()) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(seconds);
+}
+
+std::optional<PriorBootPhaseElapsed> effectivePriorElapsedForFermenting(
+    const RunCommandState& current) {
+    if (current.processState.state != ProcessState::Fermenting) {
+        return std::nullopt;
+    }
+
+    PriorBootPhaseElapsed effective;
+    if (current.priorBootPhaseElapsed.has_value()) {
+        if (current.priorBootPhaseElapsed->taggedState !=
+            ProcessState::Fermenting) {
+            return std::nullopt;
+        }
+        effective = current.priorBootPhaseElapsed->elapsed;
+    }
+
+    if (current.nominalRecoveryAdjustment.has_value()) {
+        const auto nominal =
+            current.nominalRecoveryAdjustment->cumulativeAppliedSeconds;
+        const auto lower =
+            static_cast<std::uint64_t>(effective.lowerBoundSeconds) + nominal;
+        if (lower > std::numeric_limits<std::uint32_t>::max() ||
+            (effective.upperBoundSeconds.has_value() &&
+             lower > *effective.upperBoundSeconds)) {
+            return std::nullopt;
+        }
+        effective.lowerBoundSeconds = static_cast<std::uint32_t>(lower);
+    }
+    return effective;
+}
+
 namespace {
 
 bool validCommandSource(CommandSource source) {
@@ -61,6 +118,7 @@ bool isRunComfortCommand(CommandKind kind) {
         case CommandKind::AcknowledgeCompletion:
         case CommandKind::CoolAfterCompletion:
         case CommandKind::AdjustRun:
+        case CommandKind::ApplyRecoveryTimeCorrection:
             return true;
         case CommandKind::AcknowledgeMessage:
         case CommandKind::MuteMessage:
@@ -173,6 +231,22 @@ bool requireRunRevision(CommandDecision& decision) {
         return false;
     }
     if (*decision.envelope.expectedRunRevision != decision.before.runRevision) {
+        decision.status = CommandStatus::StaleState;
+        return false;
+    }
+    return true;
+}
+
+bool requireRecoveryEpisodeRevision(CommandDecision& decision) {
+    if (!decision.proposed()) {
+        return false;
+    }
+    if (!decision.envelope.expectedRecoveryEpisodeRevision.has_value()) {
+        decision.status = CommandStatus::ContextMissing;
+        return false;
+    }
+    if (*decision.envelope.expectedRecoveryEpisodeRevision !=
+        decision.before.recoveryEpisodeRevision) {
         decision.status = CommandStatus::StaleState;
         return false;
     }
@@ -499,6 +573,18 @@ void clearActiveRunState(RunCommandState& state) {
     state.activeRunSensorMode.reset();
     state.sensorSelection.reset();
     state.sensorSelectionRuntime = SensorSelectionRuntimeState{};
+    // Schema 3 (#18, 5.11/5.14 Punkt 6): dieselben sechs Recovery-/
+    // Progressfelder, die ein NoActiveRun-Snapshot zwingend nullopt traegt.
+    // recoveryTemperatureEvidence bleibt bewusst unberuehrt (5.20: laufend
+    // fortgeschrieben, kein laufgebundenes Diagnosefeld);
+    // recoveryEpisodeRevision bleibt aus demselben Grund wie runRevision
+    // unberuehrt (monotoner Zaehler ueber Laufgrenzen hinweg).
+    state.pendingRecoveryAnchor.reset();
+    state.recoveryBootAnchorMonotonicMillis.reset();
+    state.lastRecoveryEpisodeEvidence.reset();
+    state.priorBootPhaseElapsed.reset();
+    state.nominalRecoveryAdjustment.reset();
+    state.runProgress = RunProgressState{};
 }
 
 // Korrekturauftrag Befund 1: siehe Kommentar in run_commands.hpp. Beide
@@ -986,7 +1072,27 @@ CommandDecision decideRunAdjustment(
     }
 
     const auto beforeValues = current.activeProgramRun->effectiveValues();
+    const bool durationChanged = runDecision.revision.has_value() &&
+                                 runDecision.revision->remainingDurationChanged;
+    std::optional<std::uint32_t> observedDelta;
+    if (durationChanged &&
+        current.processState.state == ProcessState::Fermenting) {
+        observedDelta = deriveFermentingSecondsDelta(
+            current, request.envelope.monotonicMillis);
+        if (!observedDelta.has_value()) {
+            decision.status = CommandStatus::InvalidInput;
+            return decision;
+        }
+    }
     auto candidate = decision.before;
+    if (durationChanged &&
+        current.processState.state == ProcessState::Fermenting) {
+        if (!observedDelta.has_value() ||
+            !foldObservedRunSeconds(candidate, *observedDelta)) {
+            decision.status = CommandStatus::InvalidInput;
+            return decision;
+        }
+    }
     if (!candidate.activeProgramRun.has_value()) {
         decision.status = CommandStatus::InvalidInput;
         return decision;
@@ -1000,8 +1106,6 @@ CommandDecision decideRunAdjustment(
     const auto afterValues = adjustedRun.effectiveValues();
     const bool targetChanged = beforeValues.targetTemperatureCelsius !=
                                afterValues.targetTemperatureCelsius;
-    const bool durationChanged = beforeValues.remainingDurationMinutes !=
-                                 afterValues.remainingDurationMinutes;
     candidate.processRunSnapshot = makeProcessRunSnapshot(adjustedRun);
     if (!candidate.processRunSnapshot.has_value()) {
         decision.status = CommandStatus::InvalidInput;
@@ -1020,6 +1124,18 @@ CommandDecision decideRunAdjustment(
         current.processState.state == ProcessState::Fermenting) {
         candidate.processState.stateEnteredAtMillis =
             request.envelope.monotonicMillis;
+        candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+            ProcessState::Fermenting, PriorBootPhaseElapsed{0U, 0U}};
+        candidate.nominalRecoveryAdjustment.reset();
+        candidate.pendingRecoveryAnchor.reset();
+        candidate.recoveryBootAnchorMonotonicMillis.reset();
+        if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
+            supersedeUnbookedWeightedSegment(
+                candidate.runProgress, candidate.lastRecoveryEpisodeEvidence
+                                           ->weightedProgressSegmentId);
+            candidate.lastRecoveryEpisodeEvidence->weightedProgressSegmentId
+                .reset();
+        }
     }
 
     decision.after = std::move(candidate);
@@ -1034,6 +1150,62 @@ CommandDecision decideRunAdjustment(
             RunAdjustmentEffect::ContinueFermentationWithoutRequalification,
     };
     static_cast<void>(addEffect(decision, CommandEffect::RunAdjusted));
+    return decision;
+}
+
+CommandDecision decideApplyRecoveryTimeCorrection(
+    const RunCommandState& current,
+    const ApplyRecoveryTimeCorrectionRequest& request) {
+    auto decision = beginDecision(current, request.envelope,
+                                  CommandKind::ApplyRecoveryTimeCorrection);
+    if (!requireRunRevision(decision) ||
+        !requireRecoveryEpisodeRevision(decision)) {
+        return decision;
+    }
+    if (!request.envelope.confirmed ||
+        current.processState.state != ProcessState::Fermenting ||
+        !current.priorBootPhaseElapsed.has_value() ||
+        current.priorBootPhaseElapsed->taggedState !=
+            ProcessState::Fermenting ||
+        !current.priorBootPhaseElapsed->elapsed.upperBoundSeconds.has_value()) {
+        decision.status = request.envelope.confirmed
+                              ? CommandStatus::NotAllowedInState
+                              : CommandStatus::NotConfirmed;
+        return decision;
+    }
+
+    const auto currentAdjustment = current.nominalRecoveryAdjustment.has_value()
+                                       ? *current.nominalRecoveryAdjustment
+                                       : NominalRecoveryAdjustmentState{};
+    if (current.nominalRecoveryAdjustment.has_value() &&
+        currentAdjustment.lastAppliedEpisodeRevision ==
+            current.recoveryEpisodeRevision) {
+        decision.status =
+            currentAdjustment.lastAppliedEpisodeDelta == request.secondsDelta
+                ? CommandStatus::AlreadyProcessed
+                : CommandStatus::NotAllowedInState;
+        return decision;
+    }
+
+    if (request.secondsDelta > std::numeric_limits<std::uint32_t>::max() -
+                                   currentAdjustment.cumulativeAppliedSeconds) {
+        decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
+    const auto newCumulative =
+        currentAdjustment.cumulativeAppliedSeconds + request.secondsDelta;
+    const auto lower =
+        static_cast<std::uint64_t>(
+            current.priorBootPhaseElapsed->elapsed.lowerBoundSeconds) +
+        newCumulative;
+    if (lower > *current.priorBootPhaseElapsed->elapsed.upperBoundSeconds) {
+        decision.status = CommandStatus::InvalidInput;
+        return decision;
+    }
+
+    beginMutation(decision);
+    decision.after.nominalRecoveryAdjustment = NominalRecoveryAdjustmentState{
+        newCumulative, current.recoveryEpisodeRevision, request.secondsDelta};
     return decision;
 }
 
@@ -1273,6 +1445,8 @@ CommandStatus applyRunCommand(RunCommandState& current,
         current.sensorSelectionRuntime !=
             decision.before.sensorSelectionRuntime ||
         current.sensorSelection != decision.before.sensorSelection ||
+        current.recoveryEpisodeRevision !=
+            decision.before.recoveryEpisodeRevision ||
         decision.after.commandSequence != current.commandSequence + 1U) {
         return CommandStatus::StaleState;
     }

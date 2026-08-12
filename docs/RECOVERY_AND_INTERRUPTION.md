@@ -6,6 +6,9 @@ Dieses Dokument definiert die Release-1-Regeln fuer Stromunterbrechungen,
 Sensorersatz, phasenbezogenen Wiederanlauf und Zeitbewertung. Es ergaenzt
 [`STATE_MACHINE.md`](STATE_MACHINE.md) und
 [`SYSTEM_SAFETY_AND_RECOVERY.md`](SYSTEM_SAFETY_AND_RECOVERY.md).
+Die persistierten Felder, die atomare Buchung und die Anzeigeprojektion sind
+hier und in [`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md) konsistent beschrieben;
+es gibt keine parallele Statusquelle.
 
 ## Grundsatz: autonom, aber nicht blind
 
@@ -82,10 +85,10 @@ Die Wartezeit bleibt `TBD_COMMISSIONING`.
 
 Die vollstaendige Auswahl-, Ersatzbetriebs- und Rueckkehrlogik (alle drei
 Strategien, gleichzeitiger Schrankluft-/Kuehlkoerperausfall, manuelle
-Aktionen) ist Issue #21. Was davon nach einem Neustart bereits vorliegt und
-was fuer die tatsaechliche Reaktivierung eines geladenen aktiven Laufs noch
-fehlt, steht in `docs/RUN_PERSISTENCE.md`, Abschnitt "Uebergabe an ein
-spaeteres Vorhaben: Regelsensorauswahl bei Reaktivierung".
+Aktionen) ist in Issue #21 und PR #99 umgesetzt. Die tatsaechliche
+Reaktivierung eines geladenen aktiven Laufs durch PR #102 ist in
+`docs/RUN_PERSISTENCE.md`, Abschnitt "Recovery-API und Regelsensorauswahl
+bei Reaktivierung", beschrieben.
 
 ## Maximale Wartezeit nach dem Vorheizen
 
@@ -280,6 +283,37 @@ Verbindliche Grenzen:
 - Ohne freigegebenes Modell wird das Zeitintervall konservativ behandelt und
   nicht durch eine scheinbar genaue Kurve ersetzt.
 
+Die Produktionsgrenze ist `RecoveryProgressWeightingModel`. Gate C liefert in
+Release 1 mit `UnavailableRecoveryProgressWeightingModel` stets `unavailable`,
+weil kein Commissioning-Modell freigegeben ist. Ein Provider darf nur aus
+`FERMENTING`, bekannten Ausfallgrenzen sowie gueltiger, gefilterter Vor-/
+Nach-Ausfall-Evidenz einen Beitrag liefern. Produkt ist
+`ProductPreferred`, Luft ist nur ausdruecklich und mit `AirReduced` zulaessig;
+eine ungueltige Kuehlkoerper- oder Stale-Evidenz wird nicht umgedeutet.
+
+Die Buchung bleibt separat von `observedRunSeconds` und nominaler Zeitkorrektur.
+Sie verlangt Lauf-/Episodenrevision, eine passende nicht-null Segmentkennung,
+aktuelle Sensorberechtigung, nicht fallende checked Bounds und eine positive
+Modellrevision. Ein Segment ist idempotent; die atomare Persistenz erfolgt vor
+der RAM-Anwendung. Ein abgeloestes, noch nicht gebuchtes Segment setzt
+`PartialUnknown` und entfernt die Gesamt-Obergrenze. Unsichere Ausfallzeit
+wird nicht automatisch als biologischer Fortschritt gutgeschrieben.
+`lastSourceRole` ist die Quelle des letzten gebuchten Beitrags; `confidence`
+ist die kumulative konservative Vertrauensstufe. Die Kombinationen werden
+monoton behandelt: Product+Product bleibt `ProductPreferred`, jede Folge mit
+einem `AirReduced`-Beitrag bleibt `AirReduced`, auch wenn danach wieder ein
+Produktbeitrag gebucht wird. Der persistierte Zustand
+`lastSourceRole == Product` und `confidence == AirReduced` ist daher gueltig;
+`lastSourceRole == Air` mit `ProductPreferred` bleibt ungueltig.
+
+Die getrennte historische Metrik `observedRunSeconds` wird nicht aus diesem
+Modell abgeleitet. Sie wird bei jedem echten Live-Phasenwechsel aus
+`Fermenting`, bei der echten `AdjustRun`-Restdauer-Neubaseline und bei echtem
+Hop 1 aus `Fermenting` aus dem jeweils sicher beobachteten Delta gefaltet.
+Der Hop-1-Fold verwendet nur `thisHopAltBootLocalSeconds` des konkreten Boots;
+ein Episode-Refresh, UTC-Reevaluation oder `ApplyRecoveryTimeCorrection`
+erzeugt keinen zusätzlichen beobachteten Laufzeitbeitrag.
+
 ## Anzeige und Export
 
 Die Recoveryanzeige zeigt mindestens:
@@ -293,6 +327,14 @@ Die Recoveryanzeige zeigt mindestens:
 - automatisch gewaehlte sichere Wiederanlaufaktion
 - angewandte oder noch ausstehende Fortschrittskorrektur
 - Grund einer erforderlichen Benutzerentscheidung
+
+Fuer die implementierte Anzeige-/Exportprojektion bleiben ausserdem getrennt
+sichtbar: beobachtete Laufzeit, kumulative nominale Korrektur, gewichtete
+Coverage (`Complete` oder `PartialUnknown`), Bounds, letzte Sensorrolle,
+Vertrauensstufe, Modellrevision und zuletzt gebuchte Segmentkennung. Bei
+`unavailable`, `not eligible`, `Stale`, `AlreadyProcessed` oder
+`PartialUnknown` wird kein erfundener Einzelwert als exakter biologischer
+Fortschritt ausgegeben; die Rohgrenzen und der Status werden exportiert.
 
 ## Spaetere RTC-Option
 
@@ -313,6 +355,12 @@ ergaenzt werden. Sie ist keine Voraussetzung fuer Release 1.
       Ausfalldauer behandelt
 - [x] kein automatischer Phasenabschluss bei ueberlappendem Unsicherheitsintervall
 - [x] spaetere RTC bleibt moeglich
+- [x] Recovery-Zeitanker und nominale Korrektur bleiben von beobachteter Laufzeit
+      und gewichteter Fortschrittsbasis getrennt
+- [x] kein gewichteter Produktionsfortschritt ohne freigegebenes
+      Commissioning-Modell
+- [x] Recovery-/Progress-Buchungen sind revisioniert, bounds-geprueft,
+      idempotent und Write-before-Apply
 
 ## Noch durch Inbetriebnahme festzulegen
 

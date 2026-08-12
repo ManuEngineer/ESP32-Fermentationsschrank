@@ -8,6 +8,7 @@
 
 #include "process_state_machine.hpp"
 #include "run_command_limits.hpp"
+#include "run_recovery_types.hpp"
 #include "run_snapshot.hpp"
 #include "sensor_selection_types.hpp"
 
@@ -38,6 +39,7 @@ struct CommandEnvelope {
     std::optional<std::uint32_t> expectedMessageRevision;
     std::optional<std::uint32_t> expectedFaultRevision;
     bool confirmed{false};
+    std::optional<std::uint32_t> expectedRecoveryEpisodeRevision;
 };
 
 enum class CommandStatus : std::uint8_t {
@@ -67,6 +69,7 @@ enum class CommandKind : std::uint8_t {
     AcknowledgeCompletion,
     CoolAfterCompletion,
     AdjustRun,
+    ApplyRecoveryTimeCorrection,
     AcknowledgeMessage,
     MuteMessage,
     ResetFault,
@@ -186,6 +189,11 @@ struct RunAdjustmentCommandRequest {
     std::optional<double> targetTemperatureCelsius;
     std::optional<std::uint32_t> remainingDurationMinutes;
     bool safetyAllowsChange{false};
+};
+
+struct ApplyRecoveryTimeCorrectionRequest {
+    CommandEnvelope envelope;
+    std::uint32_t secondsDelta{0U};
 };
 
 struct RunAdjustmentPreview {
@@ -348,7 +356,39 @@ struct RunCommandState {
     std::array<CommandId, run_command_limits::kMaximumProcessedCommandIds>
         processedCommandIds{};
     std::size_t processedCommandCount{0U};
+    // Schema 3 (#18), gespiegelt aus RunPersistenceSnapshot (siehe dortigen
+    // Kommentar): RAM-Zustand fuer die Recovery-Orchestrierung
+    // (RunPersistenceCoordinator/RunRecoveryCoordinator). clearActiveRunState()
+    // setzt alle bis auf recoveryTemperatureEvidence und
+    // recoveryEpisodeRevision zurueck (analog zu runRevision bleibt Letzteres
+    // ein monoton gefuehrter Zaehler ueber Laufgrenzen hinweg).
+    std::optional<PendingRecoveryAnchor> pendingRecoveryAnchor;
+    std::optional<std::uint64_t> recoveryBootAnchorMonotonicMillis;
+    RecoveryTemperatureEvidence recoveryTemperatureEvidence;
+    std::optional<RecoveryEpisodeEvidence> lastRecoveryEpisodeEvidence;
+    std::optional<TaggedPriorBootPhaseElapsed> priorBootPhaseElapsed;
+    std::optional<NominalRecoveryAdjustmentState> nominalRecoveryAdjustment;
+    std::uint32_t recoveryEpisodeRevision{0U};
+    RunProgressState runProgress;
 };
+
+// Liefert die fuer die Fermenting-Dauerentscheidung wirksame Vorzeitbasis.
+// Die bestaetigte nominale Korrektur bleibt dabei strukturell getrennt von
+// `priorBootPhaseElapsed` und wird nur fuer diese fachliche Auswertung
+// addiert. Ein inkonsistenter Kandidat wird fail-closed als `nullopt`
+// zurueckgegeben.
+[[nodiscard]] std::optional<PriorBootPhaseElapsed>
+effectivePriorElapsedForFermenting(const RunCommandState& current);
+
+// Checked, gemeinsame Fortschreibung der ausschliesslich sicher beobachteten
+// Fermenting-Sekunden. Der Aufrufer berechnet den fachlichen Delta-Punkt
+// (Live-Transition, AdjustRun oder konkreter Hop 1); diese Funktion ist die
+// einzige uint32-Fold-Grenze und mutiert bei Overflow nicht.
+[[nodiscard]] bool foldObservedRunSeconds(RunCommandState& candidate,
+                                          std::uint64_t deltaSeconds);
+
+[[nodiscard]] std::optional<std::uint32_t> deriveFermentingSecondsDelta(
+    const RunCommandState& before, std::uint64_t atMillis);
 
 struct CommandDecision {
     CommandStatus status{CommandStatus::InvalidInput};
@@ -387,6 +427,9 @@ struct CommandDecision {
     const RunCommandState& current, const CompletionRequest& request);
 [[nodiscard]] CommandDecision decideRunAdjustment(
     const RunCommandState& current, const RunAdjustmentCommandRequest& request);
+[[nodiscard]] CommandDecision decideApplyRecoveryTimeCorrection(
+    const RunCommandState& current,
+    const ApplyRecoveryTimeCorrectionRequest& request);
 [[nodiscard]] CommandDecision decideAcknowledgeMessage(
     const RunCommandState& current, const MessageCommandRequest& request);
 [[nodiscard]] CommandDecision decideMuteMessage(

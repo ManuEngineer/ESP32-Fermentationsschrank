@@ -889,20 +889,65 @@ SensorSelectionStateMutation applySensorSelectionDecision(
 
 RestartSensorSelectionRecommendation computeRestartSensorSelection(
     const PersistedSensorSelectionState& persisted,
-    RunSensorMode lastActiveMode,
-    const SensorSelectionProgramContext& program) {
-    // Reine Datenaufbereitung fuer #18: die tatsaechliche Reaktivierung
-    // (LoadedActiveRun -> Ready) bleibt vollstaendig #18 vorbehalten (6.12.3).
-    // Permission bleibt fail-closed Blocked, jede laufende Wartezeit-/
-    // Rueckkehrvalidierung beginnt nach einem Neustart zwingend bei Null
-    // (6.4.7), unabhaengig von provenance/Policy.
-    static_cast<void>(persisted);
-    static_cast<void>(program);
+    RunSensorMode lastActiveMode, const SensorSelectionProgramContext& program,
+    const CrossRolePlausibilityContext& plausibility) {
     RestartSensorSelectionRecommendation recommendation;
     recommendation.runtime.phase =
         SensorSelectionPhase::RestartRevalidationPending;
     recommendation.runtime.permission = SensorPeltierPermission::Blocked;
     recommendation.activeMode = lastActiveMode;
+
+    // Persistierte Provenienz darf den kanonischen aktiven Modus nicht
+    // widersprechen. LegacyUnknown bleibt fuer Schema-1-Bestaende zulaessig;
+    // die aktuelle Sensor-Evidenz muss den ebenfalls persistierten Modus aber
+    // trotzdem vollstaendig neu beweisen.
+    if ((persisted.provenance == SensorSelectionProvenance::FallbackActive &&
+         lastActiveMode != RunSensorMode::Air) ||
+        (persisted.provenance == SensorSelectionProvenance::ReturnedToProduct &&
+         lastActiveMode != RunSensorMode::Product)) {
+        return recommendation;
+    }
+
+    const bool airValid = usable(plausibility.air);
+    const bool productValid = usable(plausibility.product);
+    const bool coolingValid = usable(plausibility.cooling);
+
+    bool modeAllowedByProgram = false;
+    switch (program.sensorPreference) {
+        case SensorPreference::ProductIfAvailableElseAir:
+        case SensorPreference::AirProductOptional:
+            modeAllowedByProgram = true;
+            break;
+        case SensorPreference::ProductRequired:
+            modeAllowedByProgram = lastActiveMode == RunSensorMode::Product;
+            break;
+        case SensorPreference::AirOnly:
+            modeAllowedByProgram = lastActiveMode == RunSensorMode::Air;
+            break;
+    }
+    if (!modeAllowedByProgram) {
+        return recommendation;
+    }
+
+    const bool fixedSensorsValid = airValid && coolingValid;
+    const bool selectedSensorsValid =
+        fixedSensorsValid &&
+        (lastActiveMode == RunSensorMode::Air || productValid);
+    if (!selectedSensorsValid) {
+        return recommendation;
+    }
+
+    recommendation.runtime.permission = SensorPeltierPermission::Allowed;
+    recommendation.runtime.lastAppliedMonotonicMillis =
+        plausibility.evaluationMonotonicMillis;
+    if (lastActiveMode == RunSensorMode::Air) {
+        recommendation.runtime.phase =
+            persisted.provenance == SensorSelectionProvenance::FallbackActive
+                ? SensorSelectionPhase::AirFallbackActive
+                : SensorSelectionPhase::NormalAir;
+    } else {
+        recommendation.runtime.phase = SensorSelectionPhase::NormalProduct;
+    }
     return recommendation;
 }
 
