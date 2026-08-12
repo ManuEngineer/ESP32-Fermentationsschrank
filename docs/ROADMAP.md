@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #102 / Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt | Korrekturstand 7B-7D ist vom Owner freigegeben; die geplanten Commits 9-12 sind umgesetzt; der PR bleibt Draft bis zum vollstaendigen Owner-Abschlussreview | Vollstaendiges Owner-Abschlussreview des PR |
+| 1 | Draft-PR #102 / Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt | Korrekturstand 7B-7D ist vom Owner freigegeben; das Abschlussreview verlangte Korrekturen an C9/C10/C11, diese sind umgesetzt; erneutes vollstaendiges Owner-Abschlussreview ist offen | Erneutes vollstaendiges Owner-Abschlussreview des PR |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -31,8 +31,9 @@ die tatsaechliche Reaktivierung eines geladenen aktiven Laufs (inklusive
 Freigabe der Regelung) ist noch offen. Details und Abhaengigkeitsstand
 stehen im Plan unter `docs/tasks/`; die Korrekturschnitte 6-8A und der in
 Revision 14 definierte Fault-Restore-/Fail-Closed-Fallback-/Schema-
-Korrekturblock 7B-7D sind umgesetzt. Die geplanten Commits 9-12 sind umgesetzt;
-naechstes Gate ist das vollstaendige Owner-Abschlussreview des PR.
+Korrekturblock 7B-7D sind umgesetzt. Die geplanten Commits 9-12 sowie die vom
+Abschlussreview verlangten C9/C10/C11-Korrekturen sind umgesetzt; das naechste
+Gate ist das erneute vollstaendige Owner-Abschlussreview des PR.
 
 ## Zulaessige Parallelitaet
 

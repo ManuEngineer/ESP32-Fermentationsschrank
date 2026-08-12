@@ -69,6 +69,16 @@ bool isValidWeightedProgressContribution(
     return contribution.confidence == expectedConfidence;
 }
 
+WeightedProgressConfidence combineWeightedProgressConfidence(
+    WeightedProgressConfidence previous,
+    WeightedProgressConfidence contribution) {
+    if (previous == WeightedProgressConfidence::AirReduced ||
+        contribution == WeightedProgressConfidence::AirReduced) {
+        return WeightedProgressConfidence::AirReduced;
+    }
+    return WeightedProgressConfidence::ProductPreferred;
+}
+
 void supersedeUnbookedWeightedSegment(
     RunProgressState& progress, std::optional<std::uint32_t> oldSegmentId) {
     if (!oldSegmentId.has_value() || *oldSegmentId == 0U) return;

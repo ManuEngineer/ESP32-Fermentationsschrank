@@ -43,6 +43,13 @@ class UnavailableRecoveryProgressWeightingModel final
     const RecoveryProgressWeightingInput& input,
     const WeightedProgressContribution& contribution);
 
+// Combines the persisted cumulative confidence conservatively. A single
+// AirReduced contribution permanently prevents a later Product contribution
+// from being presented as ProductPreferred.
+[[nodiscard]] WeightedProgressConfidence combineWeightedProgressConfidence(
+    WeightedProgressConfidence previous,
+    WeightedProgressConfidence contribution);
+
 // Markiert ein offenes, noch nicht gebuchtes Segment als unbekannt. Ein
 // bereits gebuchtes Segment bleibt unveraendert; nur Coverage und die
 // Gesamt-Obergrenze werden konservativ angepasst.

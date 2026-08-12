@@ -125,7 +125,12 @@ Der persistierte Vertrag besteht aus den getrennten Feldern
 `nominalRecoveryAdjustment`, `recoveryEpisodeRevision` und
 `runProgress`. `observedRunSeconds` bleibt die monotone beobachtete Laufzeit;
 nominale Recovery-Korrekturen und gewichtete Beitraege werden nicht in diesen
-Wert hineingeschrieben.
+Wert hineingeschrieben. Der Wert faltet die sicher beobachtete Zeit bei jedem
+echten Live-Phasenwechsel aus `Fermenting`, bei einer echten
+`AdjustRun`-Restdauer-Neubaseline und bei jedem echten Hop 1 aus `Fermenting`
+genau einmal. Beim Hop 1 wird ausschliesslich
+`thisHopAltBootLocalSeconds` dieses konkreten Boots verwendet; ein
+Episode-Refresh erzeugt keinen Fold.
 
 `ApplyRecoveryTimeCorrection` ist kumulativ und nur fuer die passende
 Recovery-Episode zulaessig. Bounds, Episodenrevision, Idempotenz und
@@ -139,10 +144,13 @@ der RAM-Zustand geaendert.
 geladenen aktiven Lauf und Fallback. Sie delegiert die bestehende
 Recovery-/Regelsensorauswahl und enthaelt keine eigene Prozessschleife.
 `reevaluateRecoveryTime` leitet eine spaetere Zeitverbesserung aus demselben
-Anker ab und persistiert sie als Recovery-Revision. Ohne den fuer den
-Hop-1-Sonderfall erforderlichen frischen Sensor-/Gate-A-Kontext bleibt die
-Reevaluation fail-closed; ein produktiver Aufrufer oder eine allgemeine
-Prozessschleife ist in Release 1 nicht Bestandteil dieses Vertrags.
+Anker ab und persistiert sie als Recovery-Revision. Im Hop-1-only-Fall
+`RecoveryEvaluation` mit urspruenglichem `WaitingForProduct` wird
+`DefinitelyExpired` automatisch ohne Gate A als bestehender Tombstone-Pfad
+beendet. `DefinitelyStillValid` darf nur mit frischem Gate-A-Kontext nach
+`WaitingForProduct` resumieren; der No-context-Aufruf bleibt fail-closed.
+`Uncertain` schreibt und mutiert nichts. Ein produktiver Aufrufer oder eine
+allgemeine Prozessschleife ist in Release 1 nicht Bestandteil dieses Vertrags.
 
 Die gewichtete Buchung prueft erwartete Lauf- und Episodenrevision,
 Segmentkennung, Sensorberechtigung, Modellrevision und checked Bounds. Ein
@@ -152,6 +160,10 @@ Obergrenze; ein gebuchtes Segment bleibt unveraendert. Eine atomare Buchung
 aktualisiert nur den gewichteten Zustand und die Laufrevision. Ohne Modell,
 ohne Evidenz oder bei ungueltiger Evidenz bleibt der Provider unavailable-
 beziehungsweise not-eligible und erzeugt keinen Fortschritt.
+`lastSourceRole` bezeichnet dabei immer die Quelle des zuletzt gebuchten
+Beitrags. `confidence` bezeichnet die kumulative, konservative Vertrauensstufe:
+ein einziges `AirReduced` bleibt auch nach einem spaeteren
+`ProductPreferred`-Beitrag `AirReduced` und wird nie hochgestuft.
 
 ## Zeitanker und Ausfallintervall
 

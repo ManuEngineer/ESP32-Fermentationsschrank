@@ -298,6 +298,21 @@ Modellrevision. Ein Segment ist idempotent; die atomare Persistenz erfolgt vor
 der RAM-Anwendung. Ein abgeloestes, noch nicht gebuchtes Segment setzt
 `PartialUnknown` und entfernt die Gesamt-Obergrenze. Unsichere Ausfallzeit
 wird nicht automatisch als biologischer Fortschritt gutgeschrieben.
+`lastSourceRole` ist die Quelle des letzten gebuchten Beitrags; `confidence`
+ist die kumulative konservative Vertrauensstufe. Die Kombinationen werden
+monoton behandelt: Product+Product bleibt `ProductPreferred`, jede Folge mit
+einem `AirReduced`-Beitrag bleibt `AirReduced`, auch wenn danach wieder ein
+Produktbeitrag gebucht wird. Der persistierte Zustand
+`lastSourceRole == Product` und `confidence == AirReduced` ist daher gueltig;
+`lastSourceRole == Air` mit `ProductPreferred` bleibt ungueltig.
+
+Die getrennte historische Metrik `observedRunSeconds` wird nicht aus diesem
+Modell abgeleitet. Sie wird bei jedem echten Live-Phasenwechsel aus
+`Fermenting`, bei der echten `AdjustRun`-Restdauer-Neubaseline und bei echtem
+Hop 1 aus `Fermenting` aus dem jeweils sicher beobachteten Delta gefaltet.
+Der Hop-1-Fold verwendet nur `thisHopAltBootLocalSeconds` des konkreten Boots;
+ein Episode-Refresh, UTC-Reevaluation oder `ApplyRecoveryTimeCorrection`
+erzeugt keinen zusätzlichen beobachteten Laufzeitbeitrag.
 
 ## Anzeige und Export
 

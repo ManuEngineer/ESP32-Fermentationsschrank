@@ -749,7 +749,21 @@ void test_weighted_progress_provenance_role_and_confidence_must_match() {
         ->lastSourceRole = RunSensorMode::Product;
     productWithAirReduced.runProgress.weightedProgress->lastApplied
         ->confidence = WeightedProgressConfidence::AirReduced;
-    TEST_ASSERT_FALSE(validateRunPersistenceSnapshot(productWithAirReduced));
+    TEST_ASSERT_TRUE(validateRunPersistenceSnapshot(productWithAirReduced));
+    std::string productWithAirReducedBytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(
+            productWithAirReduced, productWithAirReducedBytes)));
+    const auto productWithAirReducedDecoded = decodeRunPersistenceSnapshot(
+        productWithAirReducedBytes, kCurrentRunPersistenceSchema);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(productWithAirReducedDecoded.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WeightedProgressConfidence::AirReduced),
+        static_cast<int>(productWithAirReducedDecoded.snapshot->runProgress
+                             .weightedProgress->lastApplied->confidence));
 
     auto airWithProductPreferred = recoveryEvaluationPendingSnapshot();
     airWithProductPreferred.runProgress.weightedProgress->lastApplied

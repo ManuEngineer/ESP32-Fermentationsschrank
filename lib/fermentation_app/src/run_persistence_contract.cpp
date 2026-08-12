@@ -217,7 +217,9 @@ bool validWeightedProgressRoleConfidence(
     switch (provenance.lastSourceRole) {
         case RunSensorMode::Product:
             return provenance.confidence ==
-                   WeightedProgressConfidence::ProductPreferred;
+                       WeightedProgressConfidence::ProductPreferred ||
+                   provenance.confidence ==
+                       WeightedProgressConfidence::AirReduced;
         case RunSensorMode::Air:
             return provenance.confidence ==
                    WeightedProgressConfidence::AirReduced;

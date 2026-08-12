@@ -25,14 +25,16 @@ namespace fermentation {
 class FixedRecoveryProgressModel final : public RecoveryProgressWeightingModel {
    public:
     mutable std::uint32_t calls{0U};
+    RunSensorMode sourceRole{RunSensorMode::Product};
+    WeightedProgressConfidence confidence{
+        WeightedProgressConfidence::ProductPreferred};
 
     [[nodiscard]] std::optional<WeightedProgressContribution> evaluate(
         const RecoveryProgressWeightingInput& input) const override {
         ++calls;
         if (!hasUsableRecoveryProgressEvidence(input)) return std::nullopt;
-        return WeightedProgressContribution{
-            WeightedProgressBounds{10U, 20U}, RunSensorMode::Product,
-            WeightedProgressConfidence::ProductPreferred, 7U};
+        return WeightedProgressContribution{WeightedProgressBounds{10U, 20U},
+                                            sourceRole, confidence, 7U};
     }
 };
 
@@ -4578,6 +4580,169 @@ SensorSelectionStateMutation modeChangeMutation(
     return mutation;
 }
 
+void test_weighted_progress_keeps_cumulative_confidence_conservative() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    auto state = readyActiveRunWithSensorSelection(seed, 1035U);
+    ProcessSignals signals;
+    signals.qualificationConditionValid = true;
+    auto transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistTransition(state, transition,
+                                   RunCheckpointTime{200U, 1700000200})
+                .status));
+    transition =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 600300U);
+    const auto evidence = recoveryPlausibility(600300U);
+    state.recoveryTemperatureEvidence.lastKnown = CrossRoleEvidence{
+        {evidence.air.filteredCelsius, evidence.air.quality},
+        {evidence.product.filteredCelsius, evidence.product.quality},
+        {evidence.cooling.filteredCelsius, evidence.cooling.quality}};
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            seed.persistTransition(state, transition,
+                                   RunCheckpointTime{600300U, std::nullopt},
+                                   &evidence)
+                .status));
+
+    store.restart();
+    RunPersistenceCoordinator persistence(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = persistence.loadAndInitialize();
+    const auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+    auto activation = persistence.activateLoadedRun(
+        *restored, RunCheckpointTime{700000U, std::nullopt},
+        recoveryPlausibility(700000U));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(activation.persistenceResult.status));
+    auto current = activation.resultingState;
+    TEST_ASSERT_TRUE(current.lastRecoveryEpisodeEvidence.has_value());
+    const auto initialSegment =
+        *current.lastRecoveryEpisodeEvidence->weightedProgressSegmentId;
+    RecoveryProgressWeightingInput input;
+    input.phase = ProcessState::Fermenting;
+    input.outage = RecoveryOutageBounds{200U, 100U};
+    input.usableSensorRole = RunSensorMode::Product;
+    FixedRecoveryProgressModel model;
+    RunRecoveryCoordinator recovery(persistence);
+
+    const auto productOne = recovery.applyRecoveryProgressWeighting(
+        current, current.runRevision, current.recoveryEpisodeRevision,
+        initialSegment, RunCheckpointTime{700100U, std::nullopt}, input, model);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(productOne.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WeightedProgressConfidence::ProductPreferred),
+        static_cast<int>(
+            current.runProgress.weightedProgress->lastApplied->confidence));
+
+    auto nextSegment = [&]() {
+        ++current.lastRecoveryEpisodeEvidence->weightedProgressSegmentId
+              .value();
+        return *current.lastRecoveryEpisodeEvidence->weightedProgressSegmentId;
+    };
+    const auto productTwo = recovery.applyRecoveryProgressWeighting(
+        current, current.runRevision, current.recoveryEpisodeRevision,
+        nextSegment(), RunCheckpointTime{700200U, std::nullopt}, input, model);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(productTwo.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WeightedProgressConfidence::ProductPreferred),
+        static_cast<int>(
+            current.runProgress.weightedProgress->lastApplied->confidence));
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            persistence
+                .persistSensorSelection(
+                    current,
+                    modeChangeMutation(
+                        current, RunSensorMode::Air,
+                        SensorSelectionDecisionCause::FallbackToAir, 700300U),
+                    RunCheckpointTime{700300U, std::nullopt})
+                .status));
+    model.sourceRole = RunSensorMode::Air;
+    model.confidence = WeightedProgressConfidence::AirReduced;
+    input.usableSensorRole = RunSensorMode::Air;
+    const auto airOne = recovery.applyRecoveryProgressWeighting(
+        current, current.runRevision, current.recoveryEpisodeRevision,
+        nextSegment(), RunCheckpointTime{700400U, std::nullopt}, input, model);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(airOne.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Air),
+        static_cast<int>(
+            current.runProgress.weightedProgress->lastApplied->lastSourceRole));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WeightedProgressConfidence::AirReduced),
+        static_cast<int>(
+            current.runProgress.weightedProgress->lastApplied->confidence));
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            persistence
+                .persistSensorSelection(
+                    current,
+                    modeChangeMutation(
+                        current, RunSensorMode::Product,
+                        SensorSelectionDecisionCause::AutomaticValidatedReturn,
+                        700500U),
+                    RunCheckpointTime{700500U, std::nullopt})
+                .status));
+    model.sourceRole = RunSensorMode::Product;
+    model.confidence = WeightedProgressConfidence::ProductPreferred;
+    input.usableSensorRole = RunSensorMode::Product;
+    const auto productAfterAir = recovery.applyRecoveryProgressWeighting(
+        current, current.runRevision, current.recoveryEpisodeRevision,
+        nextSegment(), RunCheckpointTime{700600U, std::nullopt}, input, model);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(productAfterAir.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunSensorMode::Product),
+        static_cast<int>(
+            current.runProgress.weightedProgress->lastApplied->lastSourceRole));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WeightedProgressConfidence::AirReduced),
+        static_cast<int>(
+            current.runProgress.weightedProgress->lastApplied->confidence));
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            persistence
+                .persistSensorSelection(
+                    current,
+                    modeChangeMutation(
+                        current, RunSensorMode::Air,
+                        SensorSelectionDecisionCause::FallbackToAir, 700700U),
+                    RunCheckpointTime{700700U, std::nullopt})
+                .status));
+    model.sourceRole = RunSensorMode::Air;
+    model.confidence = WeightedProgressConfidence::AirReduced;
+    input.usableSensorRole = RunSensorMode::Air;
+    const auto airAfterAir = recovery.applyRecoveryProgressWeighting(
+        current, current.runRevision, current.recoveryEpisodeRevision,
+        nextSegment(), RunCheckpointTime{700800U, std::nullopt}, input, model);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(airAfterAir.status));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(WeightedProgressConfidence::AirReduced),
+        static_cast<int>(
+            current.runProgress.weightedProgress->lastApplied->confidence));
+}
+
 SensorSelectionStateMutation recoveryRevalidationMutation(
     const RunCommandState& state, std::uint64_t nowMonotonicMillis) {
     SensorSelectionStateMutation mutation;
@@ -5350,8 +5515,11 @@ int main(int, char**) {
     RUN_TEST(
         test_three_real_fermenting_reboots_fold_exactly_n1_plus_n2_plus_n3);
     RUN_TEST(
+        test_hop_one_waiting_utc_reevaluation_has_single_gate_and_tombstone_rules);
+    RUN_TEST(
         test_run_recovery_coordinator_reevaluates_resumed_time_without_biological_fold);
     RUN_TEST(test_run_recovery_coordinator_books_weighting_atomically_once);
+    RUN_TEST(test_weighted_progress_keeps_cumulative_confidence_conservative);
     RUN_TEST(test_activate_loaded_run_resolved_resume_clears_anchor);
     RUN_TEST(test_activate_loaded_run_episode_refreshes_hop_one_anchor);
     RUN_TEST(test_activate_loaded_run_persists_sensor_gate_rejection_as_fault);
