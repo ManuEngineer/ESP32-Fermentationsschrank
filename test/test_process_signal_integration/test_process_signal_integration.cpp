@@ -77,7 +77,7 @@ void test_cooling_uses_dedicated_signal_not_qualification_progress() {
     TEST_ASSERT_TRUE(cooling.after.state == ProcessState::Completed);
 }
 
-void test_process_apply_decisions_expose_only_fluid_context_commit_notice() {
+void test_state_machine_does_not_infer_product_sensor_role() {
     auto run = snapshot();
     run.preheatEnabled = true;
     run.maximumProductWaitMinutes = 10U;
@@ -87,9 +87,7 @@ void test_process_apply_decisions_expose_only_fluid_context_commit_notice() {
         waiting, &run, {},
         {ProcessEvent::ProductInsertedConfirmed, std::nullopt}, 100U);
     TEST_ASSERT_TRUE(inserted.proposed());
-    TEST_ASSERT_TRUE(inserted.committedControlContextTransition.has_value());
-    TEST_ASSERT_TRUE(*inserted.committedControlContextTransition ==
-                     CommittedControlContextTransition::ProductInserted);
+    TEST_ASSERT_FALSE(inserted.committedControlContextTransition.has_value());
 
     ProcessRuntimeState reaching;
     reaching.state = ProcessState::ReachingTarget;
@@ -131,7 +129,6 @@ int main(int argc, char** argv) {
     RUN_TEST(test_qualifying_in_band_does_not_bypass_complete_progress);
     RUN_TEST(test_qualifying_complete_enters_fermenting);
     RUN_TEST(test_cooling_uses_dedicated_signal_not_qualification_progress);
-    RUN_TEST(
-        test_process_apply_decisions_expose_only_fluid_context_commit_notice);
+    RUN_TEST(test_state_machine_does_not_infer_product_sensor_role);
     return UNITY_END();
 }

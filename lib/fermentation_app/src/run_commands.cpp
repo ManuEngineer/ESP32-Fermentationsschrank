@@ -86,6 +86,14 @@ bool validSensorMode(RunSensorMode mode) {
     return false;
 }
 
+std::optional<CommittedControlContextTransition> targetContextTransition(
+    bool targetChanged) {
+    if (!targetChanged) {
+        return std::nullopt;
+    }
+    return CommittedControlContextTransition::TargetContextChange;
+}
+
 bool activeProcessState(ProcessState state) {
     switch (state) {
         case ProcessState::Preheating:
@@ -1120,10 +1128,8 @@ CommandDecision decideRunAdjustment(
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
-    if (targetChanged) {
-        decision.committedControlContextTransition =
-            CommittedControlContextTransition::TargetContextChange;
-    }
+    decision.committedControlContextTransition =
+        targetContextTransition(targetChanged);
     if (durationChanged &&
         current.processState.state == ProcessState::Fermenting) {
         candidate.processState.stateEnteredAtMillis =

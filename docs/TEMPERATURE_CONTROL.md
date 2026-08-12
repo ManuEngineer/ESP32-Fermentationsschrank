@@ -77,7 +77,9 @@ quote = min(rawP + I, maximumQuote)
 ```
 
 `rawP` wird nicht vorab auf `maximumQuote` begrenzt. Ein endlicher `rawP` ab
-`maximumQuote` ist `Saturated`; der Integralanteil bleibt dann null. Jede
+`maximumQuote` ist `Saturated`; bereits die positive Integrationsentscheidung
+ist dann `0`, der Integralanteil bleibt null. Die Integralreserve wird vor der
+`deltaI`-Berechnung aus `maximumQuote - rawP` bestimmt und begrenzt. Jede
 gueltige Anforderung, einschliesslich `OFF`, traegt eine fluechtige Sequenz
 und den monotonen Erzeugungszeitpunkt. Sequenz, Integral, Timestamp und
 Feedbackfenster werden nicht persistiert.

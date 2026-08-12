@@ -17,6 +17,8 @@ enum class QualificationPhase : std::uint8_t {
 struct TargetQualificationInput {
     QualificationPhase phase{QualificationPhase::Target};
     std::uint64_t sampleTimestampMonotonicMillis{0U};
+    std::uint32_t runRevision{0U};
+    std::uint32_t processTransitionSequence{0U};
     double targetCelsius{0.0};
     double bandCelsius{0.0};
     std::uint64_t qualificationDurationMillis{0U};
@@ -40,13 +42,45 @@ struct TargetQualificationContext {
            left.controlSensorRole == right.controlSensorRole;
 }
 
+[[nodiscard]] inline bool operator!=(const TargetQualificationContext& left,
+                                     const TargetQualificationContext& right) {
+    return !(left == right);
+}
+
+struct TargetQualificationCommitContext {
+    TargetQualificationContext qualification;
+    std::uint32_t runRevision{0U};
+    std::uint32_t processTransitionSequence{0U};
+};
+
+[[nodiscard]] inline bool operator==(
+    const TargetQualificationCommitContext& left,
+    const TargetQualificationCommitContext& right) {
+    return left.qualification == right.qualification &&
+           left.runRevision == right.runRevision &&
+           left.processTransitionSequence == right.processTransitionSequence;
+}
+
+[[nodiscard]] inline bool operator!=(
+    const TargetQualificationCommitContext& left,
+    const TargetQualificationCommitContext& right) {
+    return !(left == right);
+}
+
 struct TargetQualificationRuntimeState {
     QualificationPhase phase{QualificationPhase::Target};
     std::optional<TargetQualificationContext> context;
+    std::optional<TargetQualificationCommitContext> commitContext;
     bool episodeActive{false};
     std::uint64_t creditedInBandMillis{0U};
     std::optional<std::uint64_t> lastUsableTimestampMillis;
     std::optional<std::uint64_t> graceStartedAtMillis;
+};
+
+enum class TargetQualificationDecisionLifecycle : std::uint8_t {
+    Pending,
+    Applied,
+    Discarded,
 };
 
 struct TargetQualificationResult {
@@ -54,25 +88,31 @@ struct TargetQualificationResult {
     std::uint64_t creditedInBandMillis{0U};
     TargetQualificationRuntimeState expectedEvaluatorState;
     TargetQualificationRuntimeState candidateEvaluatorState;
+    TargetQualificationDecisionLifecycle lifecycle{
+        TargetQualificationDecisionLifecycle::Pending};
+    bool candidateApplicable{true};
 };
 
-enum class TargetQualificationApplyStatus : std::uint8_t {
-    AppliedRamOnly,
-    PersistedAndProcessApplied,
-    PersistenceFailed,
-    ProcessApplyFailed,
-    StaleDecision,
-};
+[[nodiscard]] inline bool validQualificationPhase(QualificationPhase phase) {
+    return phase == QualificationPhase::Preheating ||
+           phase == QualificationPhase::Target;
+}
 
 class TargetQualificationEvaluator {
    public:
     [[nodiscard]] TargetQualificationResult evaluate(
         const TargetQualificationInput& input);
 
-    // The caller supplies the outcome of the existing write-before-apply
-    // process path. The evaluator never persists its RAM-only state.
-    [[nodiscard]] bool apply(const TargetQualificationResult& decision,
-                             TargetQualificationApplyStatus status);
+    // A decision is single-use. Failed/stale candidates are explicitly
+    // discarded and cannot later be reinterpreted as successful applies.
+    [[nodiscard]] bool applyRamOnly(
+        TargetQualificationResult& decision,
+        const TargetQualificationCommitContext& currentContext);
+    [[nodiscard]] bool applyAfterPersistedProcessApply(
+        TargetQualificationResult& decision,
+        const TargetQualificationCommitContext& expectedBeforeContext,
+        const TargetQualificationCommitContext& committedContext);
+    void discard(TargetQualificationResult& decision);
 
     void reset();
 

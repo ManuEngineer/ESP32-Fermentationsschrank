@@ -7,6 +7,7 @@
 #include "run_persistence_codec.hpp"
 #include "run_progress_weighting.hpp"
 #include "run_recovery_time.hpp"
+#include "control_context.hpp"
 #include "sensor_selection.hpp"
 #include "storage_envelope.hpp"
 
@@ -1748,7 +1749,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
                           RunPersistenceStep::CandidateApply);
         if (liveSensorEvidence != nullptr)
             applyLiveRecoveryEvidence(current, *liveSensorEvidence);
-        RunPersistenceResult ramResult{RunPersistenceResultStatus::Applied};
+        RunPersistenceResult ramResult{};
+        ramResult.status = RunPersistenceResultStatus::Applied;
         ramResult.step = RunPersistenceStep::RamApply;
         ramResult.durability = RunPersistenceDurability::Unchanged;
         ramResult.coordinatorState = state_;
@@ -1800,7 +1802,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
         applyLiveRecoveryEvidence(current, *liveSensorEvidence);
     persistedIds_ = ids;
     persistedIdCount_ = count;
-    RunPersistenceResult result{RunPersistenceResultStatus::Applied};
+    RunPersistenceResult result{};
+    result.status = RunPersistenceResultStatus::Applied;
     result.step = RunPersistenceStep::RamApply;
     result.durability = RunPersistenceDurability::Changed;
     result.coordinatorState = state_;
@@ -1940,12 +1943,22 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
         clearActiveRunState(current);
     if (liveSensorEvidence != nullptr)
         applyLiveRecoveryEvidence(current, *liveSensorEvidence);
-    RunPersistenceResult result{RunPersistenceResultStatus::Applied};
+    RunPersistenceResult result{};
+    result.status = RunPersistenceResultStatus::Applied;
     result.step = RunPersistenceStep::RamApply;
     result.durability = RunPersistenceDurability::Changed;
     result.coordinatorState = state_;
     result.messages = decision.messages;
     result.messageCount = decision.messageCount;
+    if (decision.reason == TransitionReason::ProductInserted) {
+        const auto beforeRole = resolveEffectiveControlSensorRole(
+            decision.before.state, current.activeRunSensorMode);
+        const auto afterRole = resolveEffectiveControlSensorRole(
+            current.processState.state, current.activeRunSensorMode);
+        result.committedControlContextTransition =
+            resolveProductInsertedControlContextTransition(beforeRole,
+                                                           afterRole);
+    }
     return result;
 }
 
@@ -2101,7 +2114,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     applySensorSelectionMutation(current, mutation);
     if (liveSensorEvidence != nullptr)
         applyLiveRecoveryEvidence(current, *liveSensorEvidence);
-    RunPersistenceResult out{RunPersistenceResultStatus::Applied};
+    RunPersistenceResult out{};
+    out.status = RunPersistenceResultStatus::Applied;
     out.step = RunPersistenceStep::RamApply;
     out.durability = RunPersistenceDurability::Changed;
     out.coordinatorState = state_;

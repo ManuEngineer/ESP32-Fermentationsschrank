@@ -8,6 +8,7 @@
 #include "run_persistence_coordinator.hpp"
 #include "run_persistence_codec.hpp"
 #include "run_recovery.hpp"
+#include "qualification_orchestrator.hpp"
 // PR-#99-Abschlussreview-Korrektur: der manuelle Transportvertrag-
 // Integrationstest (persistCommand fuer ApplySensorSelectionAction) braucht
 // CrossRolePlausibilityContext/decideApplySensorSelectionAction - beides nur
@@ -148,6 +149,8 @@ class SequencedWriteStore final : public device_platform::IStateStore {
         faults_[writeNumber] = fault;
     }
 
+    void clearFaults() { faults_.clear(); }
+
     void unknownWithoutCommitAt(std::size_t writeNumber) {
         unknownWithoutCommit_.insert(writeNumber);
     }
@@ -214,7 +217,8 @@ ProgramDocument preheatProgram() {
 CommandDecision startDecision(
     const RunCommandState& state, CommandId id,
     std::uint64_t monotonicMillis = 100U,
-    std::optional<ProgramDocument> program = std::nullopt) {
+    std::optional<ProgramDocument> program = std::nullopt,
+    RunSensorMode sensorMode = RunSensorMode::Product) {
     ProgramStartRequest request;
     request.envelope = {id,
                         CommandSource::LocalDisplay,
@@ -229,7 +233,7 @@ CommandDecision startDecision(
     request.program = program.has_value() ? *program : runnableProgram();
     request.sourceKind = ProgramSourceKind::FactoryCatalog;
     request.sourceProgramRevision = 1U;
-    request.sensorMode = RunSensorMode::Product;
+    request.sensorMode = sensorMode;
     request.safetyAllowsStart = true;
     request.airSensorValid = true;
     request.coolingSensorValid = true;
@@ -2331,17 +2335,18 @@ void test_loaded_active_run_blocks_all_mutations_after_restart() {
 // calls this once; neither scenario resets the other's already-advanced RAM
 // state.
 RunCommandState reachDurablyWaitingForProduct(
-    RunPersistenceCoordinator& coordinator, CommandId startId) {
+    RunPersistenceCoordinator& coordinator, CommandId startId,
+    RunSensorMode sensorMode = RunSensorMode::Product) {
     RunCommandState state;
     state.processState.state = ProcessState::Standby;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::Applied),
         static_cast<int>(
             coordinator
-                .persistCommand(
-                    state,
-                    startDecision(state, startId, 100U, preheatProgram()),
-                    RunCheckpointTime{100U, std::nullopt})
+                .persistCommand(state,
+                                startDecision(state, startId, 100U,
+                                              preheatProgram(), sensorMode),
+                                RunCheckpointTime{100U, std::nullopt})
                 .status));
     const auto tracking = decideProcessTransition(
         state.processState, &*state.processRunSnapshot,
@@ -2375,6 +2380,114 @@ RunCommandState reachDurablyWaitingForProduct(
     return state;
 }
 
+TargetQualificationInput preheatQualificationInput(const RunCommandState& state,
+                                                   std::uint64_t timestamp) {
+    TargetQualificationInput input;
+    input.phase = QualificationPhase::Preheating;
+    input.sampleTimestampMonotonicMillis = timestamp;
+    input.runRevision = state.runRevision;
+    input.processTransitionSequence = state.processState.transitionSequence;
+    input.targetCelsius = 38.0;
+    input.bandCelsius = 0.5;
+    input.qualificationDurationMillis = 1'000U;
+    input.effectiveGraceMillis = 500U;
+    input.maximumAcceptedSampleGapMillis = 2'000U;
+    input.controlSensorRole = ControlSensorRole::Air;
+    input.air.quality = device_platform::SensorQuality::Valid;
+    input.air.rawCelsius = 38.0;
+    input.product = input.air;
+    return input;
+}
+
+void test_qualification_orchestrator_discards_failed_candidate_and_retries() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(
+                    state, startDecision(state, 1200U, 100U, preheatProgram()),
+                    RunCheckpointTime{100U, std::nullopt})
+                .status));
+    TargetQualificationEvaluator evaluator;
+
+    const auto tracking = evaluateAndApplyTargetQualification(
+        evaluator, state, coordinator, preheatQualificationInput(state, 100U),
+        RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_TRUE(tracking.status ==
+                     TargetQualificationOrchestrationStatus::AppliedPersisted);
+    TEST_ASSERT_TRUE(tracking.qualification.lifecycle ==
+                     TargetQualificationDecisionLifecycle::Applied);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
+                          static_cast<int>(state.processState.state));
+    const auto beforeFailure = evaluator.state();
+
+    store.faultAt(store.writeCount() + 1U,
+                  SequencedWriteStore::WriteFault::FailBeforeBegin);
+    const auto failed = evaluateAndApplyTargetQualification(
+        evaluator, state, coordinator, preheatQualificationInput(state, 1'100U),
+        RunCheckpointTime{1'100U, std::nullopt});
+    TEST_ASSERT_TRUE(failed.status ==
+                     TargetQualificationOrchestrationStatus::PersistenceFailed);
+    TEST_ASSERT_TRUE(failed.qualification.lifecycle ==
+                     TargetQualificationDecisionLifecycle::Discarded);
+    TEST_ASSERT_TRUE(evaluator.state().lastUsableTimestampMillis ==
+                     beforeFailure.lastUsableTimestampMillis);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
+                          static_cast<int>(state.processState.state));
+
+    store.clearFaults();
+    const auto retry = evaluateAndApplyTargetQualification(
+        evaluator, state, coordinator, preheatQualificationInput(state, 1'100U),
+        RunCheckpointTime{1'100U, std::nullopt});
+    TEST_ASSERT_TRUE(retry.status ==
+                     TargetQualificationOrchestrationStatus::AppliedPersisted);
+    TEST_ASSERT_TRUE(retry.qualification.progress ==
+                     QualificationProgress::Complete);
+    TEST_ASSERT_EQUAL_UINT64(0U, evaluator.state().creditedInBandMillis);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::WaitingForProduct),
+                          static_cast<int>(state.processState.state));
+
+    const auto inserted = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{ProcessEvent::ProductInsertedConfirmed, std::nullopt},
+        1'200U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistTransition(state, inserted,
+                                   RunCheckpointTime{1'200U, std::nullopt})
+                .status));
+    auto targetInput = preheatQualificationInput(state, 2'000U);
+    targetInput.phase = QualificationPhase::Target;
+    targetInput.controlSensorRole = ControlSensorRole::Product;
+    targetInput.product.rawCelsius = 38.0;
+    const auto targetTracking = evaluateAndApplyTargetQualification(
+        evaluator, state, coordinator, targetInput,
+        RunCheckpointTime{2'000U, std::nullopt});
+    TEST_ASSERT_TRUE(targetTracking.status ==
+                     TargetQualificationOrchestrationStatus::AppliedPersisted);
+    TEST_ASSERT_EQUAL_UINT64(0U, evaluator.state().creditedInBandMillis);
+
+    targetInput.processTransitionSequence =
+        state.processState.transitionSequence;
+    targetInput.sampleTimestampMonotonicMillis = 3'000U;
+    const auto targetComplete = evaluateAndApplyTargetQualification(
+        evaluator, state, coordinator, targetInput,
+        RunCheckpointTime{3'000U, std::nullopt});
+    TEST_ASSERT_TRUE(targetComplete.qualification.progress ==
+                     QualificationProgress::Complete);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
+                          static_cast<int>(state.processState.state));
+    TEST_ASSERT_EQUAL_UINT64(0U, evaluator.state().creditedInBandMillis);
+}
+
 void test_product_inserted_commits_before_advancing_and_restores() {
     SequencedWriteStore store;
     RunPersistenceCoordinator coordinator(
@@ -2405,6 +2518,9 @@ void test_product_inserted_commits_before_advancing_and_restores() {
                           static_cast<int>(committed.status));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(state.processState.state));
+    TEST_ASSERT_TRUE(committed.committedControlContextTransition.has_value());
+    TEST_ASSERT_TRUE(*committed.committedControlContextTransition ==
+                     CommittedControlContextTransition::ProductInserted);
 
     const auto insertedRecord = store.read(slotKey("rc1"), 8240U);
     TEST_ASSERT_EQUAL_INT(
@@ -2427,6 +2543,26 @@ void test_product_inserted_commits_before_advancing_and_restores() {
     TEST_ASSERT_TRUE(restored.has_value());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(restored->processState.state));
+}
+
+void test_air_run_product_inserted_is_air_to_air_without_pi_transition() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto state =
+        reachDurablyWaitingForProduct(coordinator, 792U, RunSensorMode::Air);
+    const auto inserted = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{ProcessEvent::ProductInsertedConfirmed, std::nullopt},
+        600200U);
+    const auto committed = coordinator.persistTransition(
+        state, inserted, RunCheckpointTime{600200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(committed.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
+                          static_cast<int>(state.processState.state));
+    TEST_ASSERT_FALSE(committed.committedControlContextTransition.has_value());
 }
 
 void test_product_wait_expired_tombstones_and_does_not_revive_after_restart() {
@@ -5495,7 +5631,10 @@ int main(int, char**) {
     RUN_TEST(
         test_load_rejects_a_structurally_valid_but_mismatched_current_reference);
     RUN_TEST(test_loaded_active_run_blocks_all_mutations_after_restart);
+    RUN_TEST(
+        test_qualification_orchestrator_discards_failed_candidate_and_retries);
     RUN_TEST(test_product_inserted_commits_before_advancing_and_restores);
+    RUN_TEST(test_air_run_product_inserted_is_air_to_air_without_pi_transition);
     RUN_TEST(
         test_product_wait_expired_tombstones_and_does_not_revive_after_restart);
     RUN_TEST(test_periodic_unknown_outcomes_at_slot_and_head_are_unresolvable);

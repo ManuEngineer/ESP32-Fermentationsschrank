@@ -103,6 +103,10 @@ struct RunPersistenceResult {
     // #21, 6.11: nur bei tatsaechlichem requestedMode != effectiveMode
     // (Startmatrix Zeile 2), erst nach erfolgreichem Commit sichtbar.
     std::optional<StartSensorSelectionNotice> startSensorSelectionNotice{};
+    // Set only after a persisted ProcessInserted transition has also been
+    // applied and the resolved effective role changed Air -> Product.
+    std::optional<CommittedControlContextTransition>
+        committedControlContextTransition;
 };
 
 enum class RunPersistenceLoadStatus : std::uint8_t {

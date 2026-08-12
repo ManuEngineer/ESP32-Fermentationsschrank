@@ -228,6 +228,13 @@ Die sichtbare und akustische Aufforderung beim Eintritt in
 `WAITING_FOR_PRODUCT` ist zugleich die Warnung vor Ablauf der Wartezeit. Release
 1 besitzt keine zweite, davon getrennte Warnschwelle.
 
+`ProductInserted` ist zunaechst ausschliesslich ein Prozessereignis. Die
+Zustandsmaschine waehlt daraus keine PI-Sensorrolle. Erst nach erfolgreicher
+Persistenz und Anwendung wird der bereits aufgeloeste effektive Kontext
+verglichen: Nur `Air -> Product` erzeugt die committed
+`ProductInserted`-Kontexttransition. Ein luftgefuehrter Lauf bleibt
+`Air -> Air` und erzeugt keinen kuenstlichen Rollenwechsel oder Carry/Reset.
+
 ### Uebergaenge
 
 ```text

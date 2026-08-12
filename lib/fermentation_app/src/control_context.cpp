@@ -37,9 +37,10 @@ bool validCoolingMode(CompletionMode mode) {
 }
 
 std::optional<ControlSensorRole> effectiveRole(
-    const EffectiveControlContextInput& input) {
-    if (input.activeRunSensorMode.has_value()) {
-        switch (*input.activeRunSensorMode) {
+    ProcessState phase,
+    const std::optional<RunSensorMode>& activeRunSensorMode) {
+    if (activeRunSensorMode.has_value()) {
+        switch (*activeRunSensorMode) {
             case RunSensorMode::Product:
                 break;
             case RunSensorMode::Air:
@@ -48,14 +49,14 @@ std::optional<ControlSensorRole> effectiveRole(
                 return std::nullopt;
         }
     }
-    if (input.phase == ProcessState::Preheating ||
-        input.phase == ProcessState::WaitingForProduct) {
+    if (phase == ProcessState::Preheating ||
+        phase == ProcessState::WaitingForProduct) {
         return ControlSensorRole::Air;
     }
-    if (!input.activeRunSensorMode.has_value()) {
+    if (!activeRunSensorMode.has_value()) {
         return std::nullopt;
     }
-    switch (*input.activeRunSensorMode) {
+    switch (*activeRunSensorMode) {
         case RunSensorMode::Product:
             return ControlSensorRole::Product;
         case RunSensorMode::Air:
@@ -65,6 +66,23 @@ std::optional<ControlSensorRole> effectiveRole(
 }
 
 }  // namespace
+
+std::optional<ControlSensorRole> resolveEffectiveControlSensorRole(
+    ProcessState phase,
+    const std::optional<RunSensorMode>& activeRunSensorMode) {
+    return effectiveRole(phase, activeRunSensorMode);
+}
+
+std::optional<CommittedControlContextTransition>
+resolveProductInsertedControlContextTransition(
+    const std::optional<ControlSensorRole>& before,
+    const std::optional<ControlSensorRole>& after) {
+    if (before == ControlSensorRole::Air &&
+        after == ControlSensorRole::Product) {
+        return CommittedControlContextTransition::ProductInserted;
+    }
+    return std::nullopt;
+}
 
 EffectiveControlContext resolveEffectiveControlContext(
     const EffectiveControlContextInput& input) {
@@ -78,7 +96,8 @@ EffectiveControlContext resolveEffectiveControlContext(
         return result;
     }
 
-    const auto role = effectiveRole(input);
+    const auto role = resolveEffectiveControlSensorRole(
+        input.phase, input.activeRunSensorMode);
     if (!role.has_value()) {
         return result;
     }

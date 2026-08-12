@@ -37,9 +37,13 @@ TargetQualificationInput input(QualificationPhase phase,
 TargetQualificationResult evaluateAndApply(
     TargetQualificationEvaluator& evaluator,
     const TargetQualificationInput& qualificationInput) {
-    const auto result = evaluator.evaluate(qualificationInput);
-    static_cast<void>(evaluator.apply(
-        result, TargetQualificationApplyStatus::AppliedRamOnly));
+    auto result = evaluator.evaluate(qualificationInput);
+    const TargetQualificationCommitContext context{
+        {qualificationInput.targetCelsius, qualificationInput.bandCelsius,
+         qualificationInput.controlSensorRole},
+        qualificationInput.runRevision,
+        qualificationInput.processTransitionSequence};
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(result, context));
     return result;
 }
 
@@ -89,6 +93,29 @@ void test_unavailable_and_invalid_interrupt_episode_differently() {
     TEST_ASSERT_TRUE(invalid.progress == QualificationProgress::Invalid);
 }
 
+void test_unavailable_and_invalid_return_start_new_credit() {
+    TargetQualificationEvaluator evaluator;
+    static_cast<void>(evaluateAndApply(
+        evaluator, input(QualificationPhase::Target, 100U, 20.0)));
+
+    auto unavailableInput = input(QualificationPhase::Target, 200U, 20.0);
+    unavailableInput.product.quality = SensorQuality::Stale;
+    static_cast<void>(evaluateAndApply(evaluator, unavailableInput));
+    const auto afterUnavailable = evaluateAndApply(
+        evaluator, input(QualificationPhase::Target, 300U, 20.0));
+    TEST_ASSERT_TRUE(afterUnavailable.progress ==
+                     QualificationProgress::InBand);
+    TEST_ASSERT_EQUAL_UINT64(0U, afterUnavailable.creditedInBandMillis);
+
+    auto invalidInput = input(QualificationPhase::Target, 400U, 20.0);
+    invalidInput.product.rawCelsius = std::numeric_limits<double>::quiet_NaN();
+    static_cast<void>(evaluateAndApply(evaluator, invalidInput));
+    const auto afterInvalid = evaluateAndApply(
+        evaluator, input(QualificationPhase::Target, 500U, 20.0));
+    TEST_ASSERT_TRUE(afterInvalid.progress == QualificationProgress::InBand);
+    TEST_ASSERT_EQUAL_UINT64(0U, afterInvalid.creditedInBandMillis);
+}
+
 void test_outside_starts_grace_and_direct_return_does_not_credit_time() {
     TargetQualificationEvaluator evaluator;
     static_cast<void>(evaluateAndApply(
@@ -123,11 +150,15 @@ void test_gap_and_retrograde_time_reset_as_invalid() {
         evaluator, input(QualificationPhase::Target, 99U, 20.0));
     TEST_ASSERT_TRUE(retrograde.progress == QualificationProgress::Invalid);
 
-    static_cast<void>(evaluateAndApply(
-        evaluator, input(QualificationPhase::Target, 200U, 20.0)));
+    const auto afterRetrograde = evaluateAndApply(
+        evaluator, input(QualificationPhase::Target, 200U, 20.0));
+    TEST_ASSERT_EQUAL_UINT64(0U, afterRetrograde.creditedInBandMillis);
     const auto gap = evaluateAndApply(
         evaluator, input(QualificationPhase::Target, 2'201U, 20.0));
     TEST_ASSERT_TRUE(gap.progress == QualificationProgress::Invalid);
+    const auto afterGap = evaluateAndApply(
+        evaluator, input(QualificationPhase::Target, 2'300U, 20.0));
+    TEST_ASSERT_EQUAL_UINT64(0U, afterGap.creditedInBandMillis);
 }
 
 void test_preheating_always_uses_air_and_phase_change_resets_credit() {
@@ -148,12 +179,12 @@ void test_missing_effective_grace_or_gap_is_unavailable() {
     TargetQualificationEvaluator evaluator;
     auto missingGrace = input(QualificationPhase::Target, 100U, 20.0);
     missingGrace.effectiveGraceMillis = std::nullopt;
-    TEST_ASSERT_TRUE(evaluateAndApply(evaluator, missingGrace).progress ==
+    TEST_ASSERT_TRUE(evaluator.evaluate(missingGrace).progress ==
                      QualificationProgress::Unavailable);
 
     auto missingGap = input(QualificationPhase::Target, 200U, 20.0);
     missingGap.maximumAcceptedSampleGapMillis = std::nullopt;
-    TEST_ASSERT_TRUE(evaluateAndApply(evaluator, missingGap).progress ==
+    TEST_ASSERT_TRUE(evaluator.evaluate(missingGap).progress ==
                      QualificationProgress::Unavailable);
 }
 
@@ -161,15 +192,21 @@ void test_candidate_failures_leave_live_state_and_retry_does_not_double_credit()
     TargetQualificationEvaluator evaluator;
     const auto first =
         evaluator.evaluate(input(QualificationPhase::Target, 100U, 20.0));
-    TEST_ASSERT_TRUE(
-        evaluator.apply(first, TargetQualificationApplyStatus::AppliedRamOnly));
+    auto firstDecision = first;
+    const auto firstInput = input(QualificationPhase::Target, 100U, 20.0);
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        firstDecision, {{firstInput.targetCelsius, firstInput.bandCelsius,
+                         firstInput.controlSensorRole},
+                        firstInput.runRevision,
+                        firstInput.processTransitionSequence}));
     const auto before = evaluator.state();
 
-    const auto candidate =
+    auto candidate =
         evaluator.evaluate(input(QualificationPhase::Target, 1'100U, 20.0));
     TEST_ASSERT_EQUAL_UINT64(1'000U, candidate.creditedInBandMillis);
-    TEST_ASSERT_FALSE(evaluator.apply(
-        candidate, TargetQualificationApplyStatus::PersistenceFailed));
+    evaluator.discard(candidate);
+    TEST_ASSERT_FALSE(evaluator.applyRamOnly(
+        candidate, {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
     TEST_ASSERT_TRUE(evaluator.state().creditedInBandMillis ==
                      before.creditedInBandMillis);
     TEST_ASSERT_TRUE(evaluator.state().lastUsableTimestampMillis ==
@@ -178,8 +215,9 @@ void test_candidate_failures_leave_live_state_and_retry_does_not_double_credit()
     const auto retry =
         evaluator.evaluate(input(QualificationPhase::Target, 1'100U, 20.0));
     TEST_ASSERT_EQUAL_UINT64(1'000U, retry.creditedInBandMillis);
-    TEST_ASSERT_TRUE(evaluator.apply(
-        retry, TargetQualificationApplyStatus::PersistedAndProcessApplied));
+    auto retryDecision = retry;
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        retryDecision, {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
     TEST_ASSERT_EQUAL_UINT64(1'000U, evaluator.state().creditedInBandMillis);
 }
 
@@ -187,36 +225,45 @@ void test_process_apply_failure_leaves_live_state_unchanged() {
     TargetQualificationEvaluator evaluator;
     const auto first =
         evaluator.evaluate(input(QualificationPhase::Target, 100U, 20.0));
-    TEST_ASSERT_TRUE(
-        evaluator.apply(first, TargetQualificationApplyStatus::AppliedRamOnly));
+    auto firstDecision = first;
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        firstDecision, {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
     const auto before = evaluator.state();
-    const auto candidate =
+    auto candidate =
         evaluator.evaluate(input(QualificationPhase::Target, 600U, 20.0));
-    TEST_ASSERT_FALSE(evaluator.apply(
-        candidate, TargetQualificationApplyStatus::ProcessApplyFailed));
-    TEST_ASSERT_TRUE(evaluator.state().creditedInBandMillis ==
+    auto committedElsewhere =
+        evaluator.evaluate(input(QualificationPhase::Target, 600U, 20.0));
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        committedElsewhere, {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
+    TEST_ASSERT_FALSE(evaluator.applyAfterPersistedProcessApply(
+        candidate, {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U},
+        {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
+    TEST_ASSERT_TRUE(evaluator.state().creditedInBandMillis >
                      before.creditedInBandMillis);
-    TEST_ASSERT_TRUE(evaluator.state().lastUsableTimestampMillis ==
-                     before.lastUsableTimestampMillis);
+    TEST_ASSERT_TRUE(evaluator.state().lastUsableTimestampMillis == 600U);
 }
 
 void test_target_change_is_candidate_only_until_commit() {
     TargetQualificationEvaluator evaluator;
     const auto first =
         evaluator.evaluate(input(QualificationPhase::Target, 100U, 20.0));
-    TEST_ASSERT_TRUE(
-        evaluator.apply(first, TargetQualificationApplyStatus::AppliedRamOnly));
+    auto firstDecision = first;
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        firstDecision, {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
 
     auto changed = input(QualificationPhase::Target, 200U, 21.0);
     changed.targetCelsius = 21.0;
-    const auto candidate = evaluator.evaluate(changed);
-    TEST_ASSERT_FALSE(evaluator.apply(
-        candidate, TargetQualificationApplyStatus::ProcessApplyFailed));
+    auto candidate = evaluator.evaluate(changed);
+    evaluator.discard(candidate);
+    TEST_ASSERT_FALSE(evaluator.applyRamOnly(
+        candidate, {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
     TEST_ASSERT_TRUE(evaluator.state().context.has_value());
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 20.0,
                               evaluator.state().context->targetCelsius);
-    TEST_ASSERT_TRUE(evaluator.apply(
-        candidate, TargetQualificationApplyStatus::AppliedRamOnly));
+    const auto retry = evaluator.evaluate(changed);
+    auto retryDecision = retry;
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        retryDecision, {{21.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 21.0,
                               evaluator.state().context->targetCelsius);
     TEST_ASSERT_EQUAL_UINT64(0U, evaluator.state().creditedInBandMillis);
@@ -225,22 +272,24 @@ void test_target_change_is_candidate_only_until_commit() {
 void test_grace_direct_return_preserves_credit_only_before_expiry() {
     for (const auto returnTimestamp : {799U, 800U, 801U}) {
         TargetQualificationEvaluator evaluator;
-        TEST_ASSERT_TRUE(evaluator.apply(
-            evaluator.evaluate(input(QualificationPhase::Target, 100U, 20.0)),
-            TargetQualificationApplyStatus::AppliedRamOnly));
-        TEST_ASSERT_TRUE(evaluator.apply(
-            evaluator.evaluate(input(QualificationPhase::Target, 200U, 20.0)),
-            TargetQualificationApplyStatus::AppliedRamOnly));
-        TEST_ASSERT_TRUE(evaluator.apply(
-            evaluator.evaluate(input(QualificationPhase::Target, 300U, 21.0)),
-            TargetQualificationApplyStatus::AppliedRamOnly));
-        const auto returned = evaluator.evaluate(
+        static_cast<void>(evaluateAndApply(
+            evaluator, input(QualificationPhase::Target, 100U, 20.0)));
+        static_cast<void>(evaluateAndApply(
+            evaluator, input(QualificationPhase::Target, 200U, 20.0)));
+        static_cast<void>(evaluateAndApply(
+            evaluator, input(QualificationPhase::Target, 300U, 21.0)));
+        auto returned = evaluator.evaluate(
             input(QualificationPhase::Target, returnTimestamp, 20.0));
         const auto expectedCredit = returnTimestamp < 800U ? 100U : 0U;
         TEST_ASSERT_EQUAL_UINT64(expectedCredit, returned.creditedInBandMillis);
         TEST_ASSERT_TRUE(returned.progress == QualificationProgress::InBand);
-        TEST_ASSERT_TRUE(evaluator.apply(
-            returned, TargetQualificationApplyStatus::AppliedRamOnly));
+        const auto returnedInput =
+            input(QualificationPhase::Target, returnTimestamp, 20.0);
+        TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+            returned, {{returnedInput.targetCelsius, returnedInput.bandCelsius,
+                        returnedInput.controlSensorRole},
+                       returnedInput.runRevision,
+                       returnedInput.processTransitionSequence}));
     }
 }
 
@@ -296,6 +345,83 @@ void test_invalid_and_unavailable_qualifier_parameters_are_distinct() {
                      QualificationProgress::Invalid);
 }
 
+void test_stale_run_context_rejects_old_candidate_without_resetting_episode() {
+    TargetQualificationEvaluator evaluator;
+    auto firstInput = input(QualificationPhase::Target, 100U, 20.0);
+    firstInput.runRevision = 4U;
+    firstInput.processTransitionSequence = 9U;
+    auto first = evaluator.evaluate(firstInput);
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        first, {{20.0, 0.5, ControlSensorRole::Product}, 4U, 9U}));
+
+    auto oldCandidateInput = firstInput;
+    oldCandidateInput.sampleTimestampMonotonicMillis = 200U;
+    auto oldCandidate = evaluator.evaluate(oldCandidateInput);
+
+    auto changedRunInput = firstInput;
+    changedRunInput.sampleTimestampMonotonicMillis = 200U;
+    changedRunInput.runRevision = 5U;
+    auto changedRun = evaluator.evaluate(changedRunInput);
+    TEST_ASSERT_TRUE(evaluator.applyAfterPersistedProcessApply(
+        changedRun, {{20.0, 0.5, ControlSensorRole::Product}, 4U, 9U},
+        {{20.0, 0.5, ControlSensorRole::Product}, 5U, 9U}));
+    TEST_ASSERT_EQUAL_UINT64(100U, evaluator.state().creditedInBandMillis);
+    TEST_ASSERT_FALSE(evaluator.applyRamOnly(
+        oldCandidate, {{20.0, 0.5, ControlSensorRole::Product}, 4U, 9U}));
+
+    auto newRunSample = changedRunInput;
+    newRunSample.sampleTimestampMonotonicMillis = 300U;
+    auto newRunCandidate = evaluator.evaluate(newRunSample);
+    TEST_ASSERT_EQUAL_UINT64(200U, newRunCandidate.creditedInBandMillis);
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        newRunCandidate, {{20.0, 0.5, ControlSensorRole::Product}, 5U, 9U}));
+    TEST_ASSERT_EQUAL_UINT64(200U, evaluator.state().creditedInBandMillis);
+}
+
+void test_stale_process_identity_rejects_same_valued_candidate() {
+    TargetQualificationEvaluator evaluator;
+    auto firstInput = input(QualificationPhase::Target, 100U, 20.0);
+    firstInput.runRevision = 2U;
+    firstInput.processTransitionSequence = 10U;
+    auto first = evaluator.evaluate(firstInput);
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        first, {{20.0, 0.5, ControlSensorRole::Product}, 2U, 10U}));
+
+    auto candidateInput = firstInput;
+    candidateInput.sampleTimestampMonotonicMillis = 200U;
+    auto candidate = evaluator.evaluate(candidateInput);
+    auto contextChanged = firstInput;
+    contextChanged.sampleTimestampMonotonicMillis = 200U;
+    contextChanged.processTransitionSequence = 11U;
+    auto changed = evaluator.evaluate(contextChanged);
+    TEST_ASSERT_TRUE(evaluator.applyAfterPersistedProcessApply(
+        changed, {{20.0, 0.5, ControlSensorRole::Product}, 2U, 10U},
+        {{20.0, 0.5, ControlSensorRole::Product}, 2U, 11U}));
+    TEST_ASSERT_FALSE(evaluator.applyRamOnly(
+        candidate, {{20.0, 0.5, ControlSensorRole::Product}, 2U, 10U}));
+    TEST_ASSERT_EQUAL_UINT64(100U, evaluator.state().creditedInBandMillis);
+}
+
+void test_invalid_qualification_phase_is_a_non_mutating_invalid_candidate() {
+    TargetQualificationEvaluator evaluator;
+    auto validInput = input(QualificationPhase::Target, 100U, 20.0);
+    auto validResult = evaluator.evaluate(validInput);
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        validResult, {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
+    const auto before = evaluator.state();
+
+    auto invalidInput = validInput;
+    invalidInput.phase = static_cast<QualificationPhase>(0xFFU);
+    auto invalid = evaluator.evaluate(invalidInput);
+    TEST_ASSERT_TRUE(invalid.progress == QualificationProgress::Invalid);
+    TEST_ASSERT_FALSE(evaluator.applyRamOnly(
+        invalid, {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
+    evaluator.discard(invalid);
+    TEST_ASSERT_TRUE(evaluator.state().creditedInBandMillis ==
+                     before.creditedInBandMillis);
+    TEST_ASSERT_TRUE(evaluator.state().phase == before.phase);
+}
+
 }  // namespace
 
 void setup() {}
@@ -309,6 +435,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_duration_completes_only_after_checked_following_time);
     RUN_TEST(test_band_boundary_is_inclusive);
     RUN_TEST(test_unavailable_and_invalid_interrupt_episode_differently);
+    RUN_TEST(test_unavailable_and_invalid_return_start_new_credit);
     RUN_TEST(test_outside_starts_grace_and_direct_return_does_not_credit_time);
     RUN_TEST(test_grace_equality_expires_old_episode_before_return);
     RUN_TEST(test_gap_and_retrograde_time_reset_as_invalid);
@@ -321,5 +448,10 @@ int main(int argc, char** argv) {
     RUN_TEST(test_grace_direct_return_preserves_credit_only_before_expiry);
     RUN_TEST(test_band_limits_are_inclusive_and_outside_is_invalid);
     RUN_TEST(test_invalid_and_unavailable_qualifier_parameters_are_distinct);
+    RUN_TEST(
+        test_stale_run_context_rejects_old_candidate_without_resetting_episode);
+    RUN_TEST(test_stale_process_identity_rejects_same_valued_candidate);
+    RUN_TEST(
+        test_invalid_qualification_phase_is_a_non_mutating_invalid_candidate);
     return UNITY_END();
 }

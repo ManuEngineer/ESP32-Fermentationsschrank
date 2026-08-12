@@ -74,7 +74,16 @@ Write-before-Apply und `applyProcessTransition()` uebernommen. Bei einem
 fehlgeschlagenen Schreiben oder Anwenden bleibt der alte Evaluatorzustand
 wirksam. Ohne persistierbare Aenderung darf der Kandidat RAM-only uebernommen
 werden. Ein Retry bewertet deshalb den unveraenderten Live-Zustand neu und
-schreibt keine Qualifikationszeit doppelt gut.
+schreibt keine Qualifikationszeit doppelt gut. Jede Decision ist dabei
+single-use: ein stale oder fehlgeschlagener Kandidat wird verworfen und kann
+nicht durch eine spaetere Statusumdeutung erneut angewendet werden. Der
+hardwarefreie Orchestrator bildet `decision.progress` in `ProcessSignals`,
+ruft ausschliesslich `decideProcessTransition()` auf und verwendet fuer den
+Commit den bestehenden `RunPersistenceCoordinator`; er fuehrt weder eine
+zweite Prozessmaschine noch einen zweiten Persistence-Coordinator ein.
+Der Stale-Kontext bindet die bestehende `runRevision` und
+`processTransitionSequence`, ohne dadurch allein die fachliche Episode zu
+resetten.
 
 ## Speicherereignisse
 

@@ -42,11 +42,47 @@ void test_product_waiting_uses_air_and_product_after_insertion() {
 }
 
 void test_air_run_stays_air_in_all_run_phases() {
-    auto input = baseInput(ProcessState::Fermenting);
-    input.activeRunSensorMode = RunSensorMode::Air;
-    const auto context = resolveEffectiveControlContext(input);
-    TEST_ASSERT_TRUE(context.valid);
-    TEST_ASSERT_TRUE(context.controlSensorRole == ControlSensorRole::Air);
+    for (const auto phase :
+         {ProcessState::Preheating, ProcessState::WaitingForProduct,
+          ProcessState::ReachingTarget, ProcessState::QualifyingTarget,
+          ProcessState::Fermenting, ProcessState::Cooling,
+          ProcessState::CoolHolding, ProcessState::ManualHolding}) {
+        auto input = baseInput(phase);
+        input.activeRunSensorMode = RunSensorMode::Air;
+        if (phase == ProcessState::ManualHolding) input.manualRun = true;
+        const auto context = resolveEffectiveControlContext(input);
+        TEST_ASSERT_TRUE(context.valid);
+        TEST_ASSERT_TRUE(context.controlSensorRole == ControlSensorRole::Air);
+    }
+}
+
+void test_product_run_switches_from_air_to_product_only_after_waiting() {
+    for (const auto phase :
+         {ProcessState::Preheating, ProcessState::WaitingForProduct}) {
+        const auto context = resolveEffectiveControlContext(baseInput(phase));
+        TEST_ASSERT_TRUE(context.valid);
+        TEST_ASSERT_TRUE(context.controlSensorRole == ControlSensorRole::Air);
+    }
+    for (const auto phase :
+         {ProcessState::ReachingTarget, ProcessState::QualifyingTarget,
+          ProcessState::Fermenting, ProcessState::Cooling,
+          ProcessState::CoolHolding, ProcessState::ManualHolding}) {
+        auto input = baseInput(phase);
+        if (phase == ProcessState::ManualHolding) input.manualRun = true;
+        const auto context = resolveEffectiveControlContext(input);
+        TEST_ASSERT_TRUE(context.valid);
+        TEST_ASSERT_TRUE(context.controlSensorRole ==
+                         ControlSensorRole::Product);
+    }
+}
+
+void test_product_inserted_transition_depends_on_resolved_roles() {
+    TEST_ASSERT_TRUE(resolveProductInsertedControlContextTransition(
+                         ControlSensorRole::Air, ControlSensorRole::Product)
+                         .has_value());
+    TEST_ASSERT_FALSE(resolveProductInsertedControlContextTransition(
+                          ControlSensorRole::Air, ControlSensorRole::Air)
+                          .has_value());
 }
 
 void test_cooling_uses_completion_target_only() {
@@ -95,6 +131,8 @@ int main(int argc, char** argv) {
     RUN_TEST(test_product_preheating_uses_air_without_changing_run_mode);
     RUN_TEST(test_product_waiting_uses_air_and_product_after_insertion);
     RUN_TEST(test_air_run_stays_air_in_all_run_phases);
+    RUN_TEST(test_product_run_switches_from_air_to_product_only_after_waiting);
+    RUN_TEST(test_product_inserted_transition_depends_on_resolved_roles);
     RUN_TEST(test_cooling_uses_completion_target_only);
     RUN_TEST(test_manual_holding_uses_manual_target);
     RUN_TEST(test_non_control_phase_has_no_context);

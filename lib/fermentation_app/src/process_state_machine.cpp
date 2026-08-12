@@ -748,8 +748,6 @@ TransitionDecision decideExplicitEvent(
                     propose(current, ProcessState::ReachingTarget,
                             TransitionReason::ProductInserted, monotonicMillis);
                 initializeTargetReach(decision, monotonicMillis);
-                decision.committedControlContextTransition =
-                    CommittedControlContextTransition::ProductInserted;
                 return decision;
             }
             return rejected(current, monotonicMillis);

@@ -34,4 +34,17 @@ struct EffectiveControlContext {
 [[nodiscard]] EffectiveControlContext resolveEffectiveControlContext(
     const EffectiveControlContextInput& input);
 
+// The process/persistence commit path consumes only this already-resolved
+// role identity. It does not select sensors or infer a role from
+// ProductInserted.
+[[nodiscard]] std::optional<ControlSensorRole>
+resolveEffectiveControlSensorRole(
+    ProcessState phase,
+    const std::optional<RunSensorMode>& activeRunSensorMode);
+
+[[nodiscard]] std::optional<CommittedControlContextTransition>
+resolveProductInsertedControlContextTransition(
+    const std::optional<ControlSensorRole>& before,
+    const std::optional<ControlSensorRole>& after);
+
 }  // namespace fermentation

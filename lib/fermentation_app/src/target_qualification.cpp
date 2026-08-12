@@ -61,6 +61,7 @@ bool validRole(ControlSensorRole role) {
 bool sameState(const TargetQualificationRuntimeState& left,
                const TargetQualificationRuntimeState& right) {
     return left.phase == right.phase && left.context == right.context &&
+           left.commitContext == right.commitContext &&
            left.episodeActive == right.episodeActive &&
            left.creditedInBandMillis == right.creditedInBandMillis &&
            left.lastUsableTimestampMillis == right.lastUsableTimestampMillis &&
@@ -70,8 +71,14 @@ bool sameState(const TargetQualificationRuntimeState& left,
 TargetQualificationResult result(
     QualificationProgress progress,
     const TargetQualificationRuntimeState& expected,
-    const TargetQualificationRuntimeState& candidate) {
-    return {progress, candidate.creditedInBandMillis, expected, candidate};
+    const TargetQualificationRuntimeState& candidate,
+    bool candidateApplicable = true) {
+    return {progress,
+            candidate.creditedInBandMillis,
+            expected,
+            candidate,
+            TargetQualificationDecisionLifecycle::Pending,
+            candidateApplicable};
 }
 
 bool checkedAdd(std::uint64_t left, std::uint64_t right, std::uint64_t& sum) {
@@ -90,24 +97,63 @@ void TargetQualificationEvaluator::reset() {
     state_.phase = phase;
 }
 
-bool TargetQualificationEvaluator::apply(
-    const TargetQualificationResult& decision,
-    TargetQualificationApplyStatus status) {
-    if (!sameState(state_, decision.expectedEvaluatorState)) {
+bool TargetQualificationEvaluator::applyRamOnly(
+    TargetQualificationResult& decision,
+    const TargetQualificationCommitContext& currentContext) {
+    if (decision.lifecycle != TargetQualificationDecisionLifecycle::Pending ||
+        !decision.candidateApplicable) {
         return false;
     }
-    if (status != TargetQualificationApplyStatus::AppliedRamOnly &&
-        status != TargetQualificationApplyStatus::PersistedAndProcessApplied) {
+    decision.lifecycle = TargetQualificationDecisionLifecycle::Discarded;
+    if (!sameState(state_, decision.expectedEvaluatorState) ||
+        !decision.candidateEvaluatorState.commitContext.has_value() ||
+        *decision.candidateEvaluatorState.commitContext != currentContext) {
         return false;
     }
     state_ = decision.candidateEvaluatorState;
+    decision.lifecycle = TargetQualificationDecisionLifecycle::Applied;
     return true;
+}
+
+bool TargetQualificationEvaluator::applyAfterPersistedProcessApply(
+    TargetQualificationResult& decision,
+    const TargetQualificationCommitContext& expectedBeforeContext,
+    const TargetQualificationCommitContext& committedContext) {
+    if (decision.lifecycle != TargetQualificationDecisionLifecycle::Pending ||
+        !decision.candidateApplicable) {
+        return false;
+    }
+    decision.lifecycle = TargetQualificationDecisionLifecycle::Discarded;
+    if (!sameState(state_, decision.expectedEvaluatorState) ||
+        !decision.candidateEvaluatorState.commitContext.has_value() ||
+        decision.candidateEvaluatorState.commitContext->qualification !=
+            expectedBeforeContext.qualification ||
+        committedContext.qualification != expectedBeforeContext.qualification) {
+        return false;
+    }
+    auto candidate = decision.candidateEvaluatorState;
+    candidate.commitContext = committedContext;
+    state_ = candidate;
+    decision.lifecycle = TargetQualificationDecisionLifecycle::Applied;
+    return true;
+}
+
+void TargetQualificationEvaluator::discard(
+    TargetQualificationResult& decision) {
+    if (decision.lifecycle == TargetQualificationDecisionLifecycle::Pending) {
+        decision.lifecycle = TargetQualificationDecisionLifecycle::Discarded;
+    }
 }
 
 TargetQualificationResult TargetQualificationEvaluator::evaluate(
     const TargetQualificationInput& input) {
     const auto expected = state_;
     auto candidate = state_;
+    if (!validQualificationPhase(input.phase)) {
+        clearEpisode(candidate);
+        return result(QualificationProgress::Invalid, expected, candidate,
+                      false);
+    }
     if (input.phase != candidate.phase) {
         clearEpisode(candidate);
         candidate.phase = input.phase;
@@ -137,6 +183,8 @@ TargetQualificationResult TargetQualificationEvaluator::evaluate(
         clearEpisode(candidate);
         candidate.context = context;
     }
+    candidate.commitContext = TargetQualificationCommitContext{
+        context, input.runRevision, input.processTransitionSequence};
 
     const auto& selectedSnapshot =
         input.phase == QualificationPhase::Preheating ||
