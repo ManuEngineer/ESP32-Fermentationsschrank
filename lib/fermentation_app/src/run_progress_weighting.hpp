@@ -23,6 +23,14 @@ struct WeightedProgressContribution {
 
 class RecoveryProgressWeightingModel {
    public:
+    RecoveryProgressWeightingModel() = default;
+    RecoveryProgressWeightingModel(const RecoveryProgressWeightingModel&) =
+        default;
+    RecoveryProgressWeightingModel& operator=(
+        const RecoveryProgressWeightingModel&) = default;
+    RecoveryProgressWeightingModel(RecoveryProgressWeightingModel&&) = default;
+    RecoveryProgressWeightingModel& operator=(
+        RecoveryProgressWeightingModel&&) = default;
     virtual ~RecoveryProgressWeightingModel() = default;
     [[nodiscard]] virtual std::optional<WeightedProgressContribution> evaluate(
         const RecoveryProgressWeightingInput& input) const = 0;
