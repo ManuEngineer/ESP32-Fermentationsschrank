@@ -481,16 +481,14 @@ void test_target_qualification_starts_fermentation_timer() {
     const auto snapshot = makeTimedSnapshot(false);
     enterQualifying(state, snapshot, time);
 
+    // Complete is the evaluator's checked-duration signal. The old process
+    // marker is not a second qualification clock.
     time.advanceMonotonicMillis(kMinuteMillis - 1U);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(DecisionStatus::NoTransition),
-        static_cast<int>(
-            decide(state, &snapshot, time, qualificationCompleteSignals())
-                .status));
-
-    time.advanceMonotonicMillis(1U);
-    apply(state, decide(state, &snapshot, time, qualificationCompleteSignals()),
-          &snapshot);
+    const auto qualified =
+        decide(state, &snapshot, time, qualificationCompleteSignals());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::TargetQualified),
+                          static_cast<int>(qualified.reason));
+    apply(state, qualified, &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
                           static_cast<int>(state.state));
     TEST_ASSERT_EQUAL_UINT64(time.monotonicMillis(),
@@ -504,6 +502,24 @@ void test_target_qualification_starts_fermentation_timer() {
     apply(state, decide(state, &snapshot, time), &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
                           static_cast<int>(state.state));
+}
+
+void test_in_band_signal_never_uses_old_marker_as_qualification_time() {
+    VirtualTimeSource time;
+    auto state = ProcessRuntimeState{};
+    state.state = ProcessState::QualifyingTarget;
+    state.stateEnteredAtMillis = 0U;
+    state.targetReachStartedAtMillis = 0U;
+    state.qualificationValidSinceMillis = 0U;
+    auto snapshot = makeTimedSnapshot(false);
+    snapshot.maximumTargetReachMinutes = 100U;
+    time.advanceMonotonicMillis(10U * kMinuteMillis);
+
+    const auto decision =
+        decide(state, &snapshot, time, qualificationInBandSignals());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(DecisionStatus::NoTransition),
+                          static_cast<int>(decision.status));
+    TEST_ASSERT_TRUE(state.qualificationValidSinceMillis.has_value());
 }
 
 void test_zero_remaining_duration_completes_immediately_after_qualification() {
@@ -1097,6 +1113,7 @@ int main() {
     RUN_TEST(test_product_confirmation_starts_target_reach);
     RUN_TEST(test_product_confirmation_cannot_bypass_expired_wait_limit);
     RUN_TEST(test_target_qualification_starts_fermentation_timer);
+    RUN_TEST(test_in_band_signal_never_uses_old_marker_as_qualification_time);
     RUN_TEST(
         test_zero_remaining_duration_completes_immediately_after_qualification);
     RUN_TEST(

@@ -423,6 +423,14 @@ TransitionDecision decideQualification(const ProcessRuntimeState& current,
         return decision;
     }
 
+    if (signals.qualificationProgress == QualificationProgress::Complete) {
+        const auto nextState = snapshot.kind == ProcessKind::ManualHolding
+                                   ? ProcessState::ManualHolding
+                                   : ProcessState::Fermenting;
+        return propose(current, nextState, TransitionReason::TargetQualified,
+                       monotonicMillis);
+    }
+
     if (!current.qualificationValidSinceMillis.has_value()) {
         auto decision = proposePhaseDataUpdate(
             current, TransitionReason::QualificationTrackingStarted,
@@ -430,33 +438,11 @@ TransitionDecision decideQualification(const ProcessRuntimeState& current,
         decision.after.qualificationValidSinceMillis = monotonicMillis;
         return decision;
     }
-    // Der neue Evaluator liefert Complete als einziges positives Abschluss-
-    // signal. Das alte boolesche Feld bleibt nur fuer bestehende Aufrufer
-    // kompatibel; bei einem expliziten Progresswert darf die
-    // Zustandsmaschine keine Dauer aus dem Marker allein gutschreiben.
-    if (signals.qualificationProgress != QualificationProgress::Unavailable &&
-        !qualificationIsComplete(signals)) {
-        return result(DecisionStatus::NoTransition, current, monotonicMillis);
-    }
-    if (!elapsed(monotonicMillis, *current.qualificationValidSinceMillis,
-                 snapshot.qualificationDurationMinutes)) {
+    if (!qualificationIsComplete(signals)) {
         return result(DecisionStatus::NoTransition, current, monotonicMillis);
     }
 
-    if (preheating && qualificationIsComplete(signals)) {
-        auto decision =
-            propose(current, ProcessState::WaitingForProduct,
-                    TransitionReason::PreheatQualified, monotonicMillis);
-        static_cast<void>(
-            addMessage(decision, ProcessMessage::ProductInsertionRequested));
-        return decision;
-    }
-
-    const auto nextState = snapshot.kind == ProcessKind::ManualHolding
-                               ? ProcessState::ManualHolding
-                               : ProcessState::Fermenting;
-    return propose(current, nextState, TransitionReason::TargetQualified,
-                   monotonicMillis);
+    return result(DecisionStatus::NoTransition, current, monotonicMillis);
 }
 
 TransitionDecision decideWaitingForProduct(

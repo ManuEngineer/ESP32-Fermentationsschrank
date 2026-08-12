@@ -181,8 +181,12 @@ zuruecksetzen. Dafuer werden spaeter eine kleine Ausreisser- oder Gnadenzeit
 und Plausibilitaetsregeln definiert. Laengere oder deutliche Abweichungen
 unterbrechen oder starten die Qualifikation neu.
 
-Die genaue Zielbandbreite, Qualifikationsdauer und Gnadenzeit werden pro
-Programm oder als validierte Standardwerte festgelegt.
+`bandCelsius` beschreibt dabei die einseitige Toleranz beziehungsweise
+Halbbreite um das Ziel: Das inklusive Zielband ist
+`targetCelsius - bandCelsius` bis `targetCelsius + bandCelsius`.
+Qualifikationsdauer und Gnadenzeit werden pro Programm oder als validierte
+Standardwerte festgelegt; die Bandgrenzen selbst stammen aus der zentralen
+Programmvalidierung und werden nicht parallel in diesem Vertrag definiert.
 
 Der fachliche Zustandsautomat wertet keine Rohsensoren aus. Er erhaelt bereits
 qualitaetsgepruefte Prozesssignale. Filterung, Ausreisser- und Gnadenzeit sowie

@@ -38,6 +38,16 @@ bool validCoolingMode(CompletionMode mode) {
 
 std::optional<ControlSensorRole> effectiveRole(
     const EffectiveControlContextInput& input) {
+    if (input.activeRunSensorMode.has_value()) {
+        switch (*input.activeRunSensorMode) {
+            case RunSensorMode::Product:
+                break;
+            case RunSensorMode::Air:
+                break;
+            default:
+                return std::nullopt;
+        }
+    }
     if (input.phase == ProcessState::Preheating ||
         input.phase == ProcessState::WaitingForProduct) {
         return ControlSensorRole::Air;
@@ -45,9 +55,13 @@ std::optional<ControlSensorRole> effectiveRole(
     if (!input.activeRunSensorMode.has_value()) {
         return std::nullopt;
     }
-    return *input.activeRunSensorMode == RunSensorMode::Product
-               ? ControlSensorRole::Product
-               : ControlSensorRole::Air;
+    switch (*input.activeRunSensorMode) {
+        case RunSensorMode::Product:
+            return ControlSensorRole::Product;
+        case RunSensorMode::Air:
+            return ControlSensorRole::Air;
+    }
+    return std::nullopt;
 }
 
 }  // namespace

@@ -67,6 +67,15 @@ Nach Recovery beginnt der #22-PI-/Qualifikatorzustand leer. Eine alte
 Prozess-/Diagnosemarker und erzeugt keinen Qualifikationskredit; die bestehende
 Recovery-Rebase aus `QUALIFYING_TARGET` nach `REACHING_TARGET` bleibt bestehen.
 
+Der Qualifikatorzustand bleibt fluechtig und wird nicht persistiert. Seine
+Evaluation erzeugt zunaechst einen Kandidaten; bei einer persistierbaren
+Prozess- oder Markeränderung wird dieser erst nach erfolgreichem
+Write-before-Apply und `applyProcessTransition()` uebernommen. Bei einem
+fehlgeschlagenen Schreiben oder Anwenden bleibt der alte Evaluatorzustand
+wirksam. Ohne persistierbare Aenderung darf der Kandidat RAM-only uebernommen
+werden. Ein Retry bewertet deshalb den unveraenderten Live-Zustand neu und
+schreibt keine Qualifikationszeit doppelt gut.
+
 ## Speicherereignisse
 
 Eine neue atomare Revision entsteht mindestens bei:

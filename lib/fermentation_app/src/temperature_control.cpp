@@ -43,6 +43,30 @@ bool hasConfiguredValues(const TemperatureControlParameters& parameters) {
            validAirLimits(parameters);
 }
 
+bool isDefaultParameters(const TemperatureControlParameters& parameters) {
+    return parameters.maximumIntegrationStepMillis == 0U &&
+           parameters.airHeating.proportionalGainQuotePerCelsius == 0.0 &&
+           parameters.airHeating.integralGainQuotePerCelsiusSecond == 0.0 &&
+           parameters.airHeating.neutralBandWidthCelsius == 0.0 &&
+           parameters.airHeating.maximumQuote == 0.0 &&
+           parameters.airCooling.proportionalGainQuotePerCelsius == 0.0 &&
+           parameters.airCooling.integralGainQuotePerCelsiusSecond == 0.0 &&
+           parameters.airCooling.neutralBandWidthCelsius == 0.0 &&
+           parameters.airCooling.maximumQuote == 0.0 &&
+           parameters.productHeating.proportionalGainQuotePerCelsius == 0.0 &&
+           parameters.productHeating.integralGainQuotePerCelsiusSecond == 0.0 &&
+           parameters.productHeating.neutralBandWidthCelsius == 0.0 &&
+           parameters.productHeating.maximumQuote == 0.0 &&
+           parameters.productCooling.proportionalGainQuotePerCelsius == 0.0 &&
+           parameters.productCooling.integralGainQuotePerCelsiusSecond == 0.0 &&
+           parameters.productCooling.neutralBandWidthCelsius == 0.0 &&
+           parameters.productCooling.maximumQuote == 0.0 &&
+           parameters.airLimitLowerBlockCelsius == 0.0 &&
+           parameters.airLimitLowerReduceStartCelsius == 0.0 &&
+           parameters.airLimitUpperReduceStartCelsius == 0.0 &&
+           parameters.airLimitUpperBlockCelsius == 0.0;
+}
+
 bool validAction(IntegratorTransitionAction action) {
     switch (action) {
         case IntegratorTransitionAction::Reset:
@@ -107,9 +131,20 @@ TemperatureControlResult invalidResult(
 
 }  // namespace
 
+TemperatureControlParametersValidation classifyTemperatureControlParameters(
+    const TemperatureControlParameters& parameters) {
+    if (isDefaultParameters(parameters)) {
+        return TemperatureControlParametersValidation::Unconfigured;
+    }
+    return hasConfiguredValues(parameters)
+               ? TemperatureControlParametersValidation::Valid
+               : TemperatureControlParametersValidation::Invalid;
+}
+
 bool validateTemperatureControlParameters(
     const TemperatureControlParameters& parameters) {
-    return hasConfiguredValues(parameters);
+    return classifyTemperatureControlParameters(parameters) ==
+           TemperatureControlParametersValidation::Valid;
 }
 
 bool validateIntegratorTransitionPolicy(
@@ -162,10 +197,19 @@ TemperatureControlResult TemperatureController::evaluate(
         state_.feedbackWindow = std::nullopt;
     };
 
-    if (!validateTemperatureControlParameters(parameters_)) {
+    const auto parameterValidation =
+        classifyTemperatureControlParameters(parameters_);
+    if (parameterValidation != TemperatureControlParametersValidation::Valid) {
         clearFailClosed();
-        return invalidResult(TemperatureControlStatus::Unavailable,
-                             TemperatureControlReason::NoCommissioning);
+        return invalidResult(
+            parameterValidation ==
+                    TemperatureControlParametersValidation::Unconfigured
+                ? TemperatureControlStatus::Unavailable
+                : TemperatureControlStatus::InvalidInput,
+            parameterValidation ==
+                    TemperatureControlParametersValidation::Unconfigured
+                ? TemperatureControlReason::NoCommissioning
+                : TemperatureControlReason::InvalidConfiguration);
     }
     if (!validateIntegratorTransitionPolicy(policy_) ||
         !validRole(input.controlSensorRole) || !finite(input.targetCelsius)) {
@@ -179,12 +223,18 @@ TemperatureControlResult TemperatureController::evaluate(
     if (airValidation == SampleValidation::Unavailable) {
         clearFailClosed();
         return invalidResult(TemperatureControlStatus::Unavailable,
-                             TemperatureControlReason::SensorUnavailable);
+                             TemperatureControlReason::SensorUnavailable,
+                             input.controlSensorRole == ControlSensorRole::Air
+                                 ? AirLimitState::NotApplied
+                                 : AirLimitState::Unavailable);
     }
     if (airValidation == SampleValidation::Invalid) {
         clearFailClosed();
         return invalidResult(TemperatureControlStatus::InvalidInput,
-                             TemperatureControlReason::InvalidSample);
+                             TemperatureControlReason::InvalidSample,
+                             input.controlSensorRole == ControlSensorRole::Air
+                                 ? AirLimitState::NotApplied
+                                 : AirLimitState::Unavailable);
     }
 
     double measuredCelsius = airCelsius;
@@ -335,6 +385,7 @@ TemperatureControlResult TemperatureController::evaluate(
         // Idle does not change the active-direction anchor and does not
         // consume a pending transition because no new profile is known.
         if (requestIdentityExhausted_) {
+            clearFailClosed();
             return invalidResult(
                 TemperatureControlStatus::InvalidInput,
                 TemperatureControlReason::RequestIdentityExhausted,

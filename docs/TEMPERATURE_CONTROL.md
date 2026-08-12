@@ -59,9 +59,12 @@ angesteuert wird.
 Der native Issue-22-Kern verwendet vier getrennte Parametersaetze fuer
 `Air/Heating`, `Air/Cooling`, `Product/Heating` und `Product/Cooling`. Jeder
 Satz validiert endliche, positive `Kp`-/`Ki`-Werte, eine positive einseitige
-Neutralbandschwelle und eine Quote in `(0, 1]`; die konkrete Auswahl bleibt
-`TBD_COMMISSIONING`. Die gemeinsame `maximumIntegrationStepMillis`-Grenze
-wird vor der Richtungs- und Profilwahl geprueft.
+Neutralbandschwelle und eine Quote in `(0, 1]`. Die Parameterpruefung
+unterscheidet ein unkonfiguriertes Defaultprofil
+(`Unavailable / NoCommissioning`) von einer vorhandenen, strukturell
+ungueltigen Konfiguration (`InvalidInput / InvalidConfiguration`). Die
+gemeinsame `maximumIntegrationStepMillis`-Grenze wird vor der Richtungs- und
+Profilwahl geprueft; die konkrete Kommissionierung bleibt `TBD_COMMISSIONING`.
 
 Die aktive Richtung und Quote werden checked berechnet:
 
@@ -83,10 +86,13 @@ Im Produktbetrieb muessen Produkt- und Luftsnapshot gleichzeitig verwendbar
 sein. Ein fehlender, `STALE`- oder `FAILED`-Luftsnapshot fuehrt fail-closed zu
 `Unavailable / SensorUnavailable`; ein vorhandener, aber nicht-finiter oder
 strukturell ungueltiger Wert zu `InvalidInput / InvalidSample`. Im Luftbetrieb
-ist ein Produktwert nicht erforderlich und `AirLimitState` ist `NotApplied`.
-Die normale Produkt-Luftbegrenzung ist `Unrestricted`, `Reduced` oder
-`Blocked`; sie ist keine Safety-Grenze und verwendet keine Safety-
-Fehlerursache. `#24` bleibt fuer Safety und Aktorfreigabe zustaendig.
+ist ein Produktwert nicht erforderlich; auch bei einem fehlenden, `STALE`-,
+`FAILED`- oder nicht-finiten Luftsnapshot bleibt `AirLimitState` dort
+`NotApplied`. Im Produktbetrieb bleibt fehlende oder ungueltige
+Luftbegrenzungs-Evidenz `Unavailable`. Die normale Produkt-Luftbegrenzung ist
+`Unrestricted`, `Reduced` oder `Blocked`; sie ist keine Safety-Grenze und
+verwendet keine Safety-Fehlerursache. `#24` bleibt fuer Safety und
+Aktorfreigabe zustaendig.
 
 Der Kern liefert `HEAT`, `OFF` oder `COOL` als `ControlRequest` mit
 `processTransitionSequence`, `runRevision` und `ControlSensorRole`. Ein
@@ -269,7 +275,8 @@ Verbindliche Regeln:
   Zielbands liegende Temperaturen qualifiziert werden.
 - `bandCelsius` ist eine einseitige Toleranz/Halbbreite; die Grenze ist
   inklusiv: `abs(measured - target) <= bandCelsius`. Der bestehende
-  Wertebereich bleibt unveraendert.
+  Wertebereich wird zentral durch `program_limits::kMinimumQualificationBandCelsius`
+  bis `program_limits::kMaximumQualificationBandCelsius` validiert.
 - Der Evaluator unterscheidet `Unavailable`, `Invalid`, `OutsideBand`,
   `Grace`, `InBand` und `Complete`. Unavailable, Invalid, rueckwaerts laufende
   Zeit, eine zu grosse Luecke und ein abgelaufenes Grace-Fenster unterbrechen
@@ -277,6 +284,14 @@ Verbindliche Regeln:
 - `Grace` mit `outsideElapsed == effectiveGraceMillis` ist bereits abgelaufen;
   eine direkte InBand-Rueckkehr vor dieser Grenze erhaelt den alten Kredit,
   schreibt aber keine Rueckkehrzeit gut.
+- `qualificationValidSinceMillis` ist ausschliesslich Prozess-/Diagnosemarker.
+  Der Evaluator liefert den einzigen Qualifikationsfortschritt und `Complete`;
+  der Marker wird nie als zweite Zeitquelle ausgewertet.
+- Die Qualifier-Evaluation erzeugt einen nicht mutierenden Kandidaten. Ein
+  Kandidat wird bei persistierbarer Prozess-/Markeränderung erst nach
+  erfolgreichem Write-before-Apply uebernommen; ohne solche Aenderung darf er
+  RAM-only angewendet werden. Bei Persistenz-, Apply- oder Stale-Fehlern bleibt
+  der vorherige Evaluatorzustand unveraendert.
 - Effektive Gnaden- und Sample-Gap-Werte sowie die konkreten
   Qualifikationswerte bleiben `TBD_COMMISSIONING` beziehungsweise Eigentum
   des freigegebenen Sampling-/Commissioning-Vertrags.

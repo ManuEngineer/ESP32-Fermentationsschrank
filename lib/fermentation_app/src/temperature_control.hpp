@@ -20,6 +20,15 @@ struct TemperatureControlInput {
     std::uint32_t runRevision{0U};
 };
 
+enum class TemperatureControlParametersValidation : std::uint8_t {
+    Unconfigured,
+    Valid,
+    Invalid,
+};
+
+[[nodiscard]] TemperatureControlParametersValidation
+classifyTemperatureControlParameters(
+    const TemperatureControlParameters& parameters);
 [[nodiscard]] bool validateTemperatureControlParameters(
     const TemperatureControlParameters& parameters);
 [[nodiscard]] bool validateIntegratorTransitionPolicy(

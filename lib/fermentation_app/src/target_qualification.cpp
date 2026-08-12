@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 
+#include "program_limits.hpp"
 #include "sensor_quality_snapshot.hpp"
 
 namespace fermentation {
@@ -57,12 +58,20 @@ bool validRole(ControlSensorRole role) {
     return role == ControlSensorRole::Air || role == ControlSensorRole::Product;
 }
 
-TargetQualificationResult result(QualificationProgress progress,
-                                 const TargetQualificationRuntimeState& state) {
-    return {progress, state.creditedInBandMillis,
-            state.episodeActive && state.lastUsableTimestampMillis.has_value()
-                ? state.lastUsableTimestampMillis
-                : std::nullopt};
+bool sameState(const TargetQualificationRuntimeState& left,
+               const TargetQualificationRuntimeState& right) {
+    return left.phase == right.phase && left.context == right.context &&
+           left.episodeActive == right.episodeActive &&
+           left.creditedInBandMillis == right.creditedInBandMillis &&
+           left.lastUsableTimestampMillis == right.lastUsableTimestampMillis &&
+           left.graceStartedAtMillis == right.graceStartedAtMillis;
+}
+
+TargetQualificationResult result(
+    QualificationProgress progress,
+    const TargetQualificationRuntimeState& expected,
+    const TargetQualificationRuntimeState& candidate) {
+    return {progress, candidate.creditedInBandMillis, expected, candidate};
 }
 
 bool checkedAdd(std::uint64_t left, std::uint64_t right, std::uint64_t& sum) {
@@ -75,26 +84,58 @@ bool checkedAdd(std::uint64_t left, std::uint64_t right, std::uint64_t& sum) {
 
 }  // namespace
 
-void TargetQualificationEvaluator::reset() { clearEpisode(state_); }
+void TargetQualificationEvaluator::reset() {
+    const auto phase = state_.phase;
+    state_ = {};
+    state_.phase = phase;
+}
+
+bool TargetQualificationEvaluator::apply(
+    const TargetQualificationResult& decision,
+    TargetQualificationApplyStatus status) {
+    if (!sameState(state_, decision.expectedEvaluatorState)) {
+        return false;
+    }
+    if (status != TargetQualificationApplyStatus::AppliedRamOnly &&
+        status != TargetQualificationApplyStatus::PersistedAndProcessApplied) {
+        return false;
+    }
+    state_ = decision.candidateEvaluatorState;
+    return true;
+}
 
 TargetQualificationResult TargetQualificationEvaluator::evaluate(
     const TargetQualificationInput& input) {
-    if (input.phase != state_.phase) {
-        clearEpisode(state_);
-        state_.phase = input.phase;
+    const auto expected = state_;
+    auto candidate = state_;
+    if (input.phase != candidate.phase) {
+        clearEpisode(candidate);
+        candidate.phase = input.phase;
     }
 
     if (!finite(input.targetCelsius) || !finite(input.bandCelsius) ||
-        input.bandCelsius <= 0.0 || input.qualificationDurationMillis == 0U ||
-        !validRole(input.controlSensorRole) ||
-        !input.effectiveGraceMillis.has_value() ||
+        input.bandCelsius < program_limits::kMinimumQualificationBandCelsius ||
+        input.bandCelsius > program_limits::kMaximumQualificationBandCelsius ||
+        input.qualificationDurationMillis == 0U ||
+        !validRole(input.controlSensorRole)) {
+        clearEpisode(candidate);
+        return result(QualificationProgress::Invalid, expected, candidate);
+    }
+    if (!input.effectiveGraceMillis.has_value() ||
         !input.maximumAcceptedSampleGapMillis.has_value()) {
-        clearEpisode(state_);
-        return result(QualificationProgress::Unavailable, state_);
+        clearEpisode(candidate);
+        return result(QualificationProgress::Unavailable, expected, candidate);
     }
     if (*input.maximumAcceptedSampleGapMillis == 0U) {
-        clearEpisode(state_);
-        return result(QualificationProgress::Invalid, state_);
+        clearEpisode(candidate);
+        return result(QualificationProgress::Invalid, expected, candidate);
+    }
+
+    const TargetQualificationContext context{
+        input.targetCelsius, input.bandCelsius, input.controlSensorRole};
+    if (!candidate.context.has_value() || !(*candidate.context == context)) {
+        clearEpisode(candidate);
+        candidate.context = context;
     }
 
     const auto& selectedSnapshot =
@@ -105,104 +146,94 @@ TargetQualificationResult TargetQualificationEvaluator::evaluate(
     double measuredCelsius = 0.0;
     const auto sampleStatus = readSnapshot(selectedSnapshot, measuredCelsius);
     if (sampleStatus == SampleStatus::Unavailable) {
-        clearEpisode(state_);
-        return result(QualificationProgress::Unavailable, state_);
+        clearEpisode(candidate);
+        return result(QualificationProgress::Unavailable, expected, candidate);
     }
     if (sampleStatus == SampleStatus::Invalid || !finite(measuredCelsius)) {
-        clearEpisode(state_);
-        return result(QualificationProgress::Invalid, state_);
+        clearEpisode(candidate);
+        return result(QualificationProgress::Invalid, expected, candidate);
     }
 
     const auto now = input.sampleTimestampMonotonicMillis;
-    if (state_.lastUsableTimestampMillis.has_value()) {
-        const auto previous = *state_.lastUsableTimestampMillis;
+    if (candidate.lastUsableTimestampMillis.has_value()) {
+        const auto previous = *candidate.lastUsableTimestampMillis;
         if (now < previous ||
             now - previous > *input.maximumAcceptedSampleGapMillis) {
-            clearEpisode(state_);
-            return result(QualificationProgress::Invalid, state_);
+            clearEpisode(candidate);
+            return result(QualificationProgress::Invalid, expected, candidate);
         }
     }
-    if (state_.graceStartedAtMillis.has_value()) {
-        if (now < *state_.graceStartedAtMillis) {
-            clearEpisode(state_);
-            return result(QualificationProgress::Invalid, state_);
+    if (candidate.graceStartedAtMillis.has_value()) {
+        if (now < *candidate.graceStartedAtMillis) {
+            clearEpisode(candidate);
+            return result(QualificationProgress::Invalid, expected, candidate);
         }
-        const auto outsideElapsed = now - *state_.graceStartedAtMillis;
+        const auto outsideElapsed = now - *candidate.graceStartedAtMillis;
         if (outsideElapsed >= *input.effectiveGraceMillis) {
-            clearEpisode(state_);
+            clearEpisode(candidate);
             const bool inBand =
                 std::fabs(measuredCelsius - input.targetCelsius) <=
                 input.bandCelsius;
             if (!inBand) {
-                return result(QualificationProgress::OutsideBand, state_);
+                return result(QualificationProgress::OutsideBand, expected,
+                              candidate);
             }
-            state_.episodeActive = true;
-            state_.lastUsableTimestampMillis = now;
-            return result(QualificationProgress::InBand, state_);
+            candidate.episodeActive = true;
+            candidate.lastUsableTimestampMillis = now;
+            return result(QualificationProgress::InBand, expected, candidate);
         }
 
         const bool inBand = std::fabs(measuredCelsius - input.targetCelsius) <=
                             input.bandCelsius;
         if (inBand) {
-            state_.graceStartedAtMillis = std::nullopt;
-            state_.lastUsableTimestampMillis = now;
-            return result(QualificationProgress::InBand, state_);
+            candidate.graceStartedAtMillis = std::nullopt;
+            candidate.lastUsableTimestampMillis = now;
+            return result(QualificationProgress::InBand, expected, candidate);
         }
-        state_.lastUsableTimestampMillis = now;
-        return result(QualificationProgress::Grace, state_);
-    }
-
-    if (state_.lastUsableTimestampMillis.has_value()) {
-        const auto previous = *state_.lastUsableTimestampMillis;
-        if (now < previous) {
-            clearEpisode(state_);
-            return result(QualificationProgress::Invalid, state_);
-        }
-        const auto gap = now - previous;
-        if (gap > *input.maximumAcceptedSampleGapMillis) {
-            clearEpisode(state_);
-            return result(QualificationProgress::Invalid, state_);
-        }
+        candidate.lastUsableTimestampMillis = now;
+        return result(QualificationProgress::Grace, expected, candidate);
     }
 
     const double deviation = std::fabs(measuredCelsius - input.targetCelsius);
     if (!finite(deviation)) {
-        clearEpisode(state_);
-        return result(QualificationProgress::Invalid, state_);
+        clearEpisode(candidate);
+        return result(QualificationProgress::Invalid, expected, candidate);
     }
     const bool inBand = deviation <= input.bandCelsius;
     if (!inBand) {
-        if (!state_.episodeActive || *input.effectiveGraceMillis == 0U) {
-            clearEpisode(state_);
-            return result(QualificationProgress::OutsideBand, state_);
+        if (!candidate.episodeActive || *input.effectiveGraceMillis == 0U) {
+            clearEpisode(candidate);
+            return result(QualificationProgress::OutsideBand, expected,
+                          candidate);
         }
-        state_.graceStartedAtMillis = now;
-        state_.lastUsableTimestampMillis = now;
-        return result(QualificationProgress::Grace, state_);
+        candidate.graceStartedAtMillis = now;
+        candidate.lastUsableTimestampMillis = now;
+        return result(QualificationProgress::Grace, expected, candidate);
     }
 
-    if (!state_.episodeActive) {
-        state_.episodeActive = true;
-        state_.creditedInBandMillis = 0U;
-        state_.lastUsableTimestampMillis = now;
-        return result(QualificationProgress::InBand, state_);
+    if (!candidate.episodeActive) {
+        candidate.episodeActive = true;
+        candidate.creditedInBandMillis = 0U;
+        candidate.lastUsableTimestampMillis = now;
+        return result(QualificationProgress::InBand, expected, candidate);
     }
 
-    const auto previous = state_.lastUsableTimestampMillis.value_or(now);
+    const auto previous = candidate.lastUsableTimestampMillis.value_or(now);
     const auto delta = now - previous;
     std::uint64_t credited = 0U;
-    if (!checkedAdd(state_.creditedInBandMillis, delta, credited)) {
-        clearEpisode(state_);
-        return result(QualificationProgress::Invalid, state_);
+    if (!checkedAdd(candidate.creditedInBandMillis, delta, credited)) {
+        clearEpisode(candidate);
+        return result(QualificationProgress::Invalid, expected, candidate);
     }
-    state_.creditedInBandMillis = credited >= input.qualificationDurationMillis
-                                      ? input.qualificationDurationMillis
-                                      : credited;
-    state_.lastUsableTimestampMillis = now;
-    if (state_.creditedInBandMillis >= input.qualificationDurationMillis) {
-        return result(QualificationProgress::Complete, state_);
+    candidate.creditedInBandMillis =
+        credited >= input.qualificationDurationMillis
+            ? input.qualificationDurationMillis
+            : credited;
+    candidate.lastUsableTimestampMillis = now;
+    if (candidate.creditedInBandMillis >= input.qualificationDurationMillis) {
+        return result(QualificationProgress::Complete, expected, candidate);
     }
-    return result(QualificationProgress::InBand, state_);
+    return result(QualificationProgress::InBand, expected, candidate);
 }
 
 }  // namespace fermentation

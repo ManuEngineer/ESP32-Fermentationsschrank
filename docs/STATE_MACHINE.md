@@ -294,8 +294,11 @@ Der Evaluator liefert dafuer ausschliesslich `ProcessSignals`; er entscheidet
 keinen Prozessuebergang selbst. `REACHING_TARGET` darf bei jedem positiven
 Qualifikationssignal, auch bei `Grace` oder `Complete`, nur nach
 `QUALIFYING_TARGET` wechseln. Erst `QUALIFYING_TARGET` mit `Complete` darf
-`FERMENTING` beziehungsweise `MANUAL_HOLDING` vorschlagen. `Unavailable`,
-`Invalid` und `OutsideBand` loeschen die aktuelle Qualifikation.
+`FERMENTING` beziehungsweise `MANUAL_HOLDING` vorschlagen. `Complete` ist
+hier das alleinige Abschluss-Signal und ist unabhaengig vom Alter des
+Prozessmarkers. `InBand` und `Grace` schliessen auch bei einem alten Marker
+nicht ab. `Unavailable`, `Invalid` und `OutsideBand` loeschen die aktuelle
+Qualifikation.
 
 Cooling verwendet getrennt davon `coolingTargetConditionValid`. Der
 Qualifikationsfortschritt, Grace und Qualifikationsdauer sind in `COOLING`

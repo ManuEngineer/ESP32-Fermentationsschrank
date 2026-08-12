@@ -76,6 +76,13 @@ void test_non_control_phase_has_no_context() {
     TEST_ASSERT_FALSE(resolveEffectiveControlContext(input).valid);
 }
 
+void test_invalid_run_sensor_mode_does_not_fallback_to_air() {
+    auto input = baseInput(ProcessState::Fermenting);
+    input.activeRunSensorMode = static_cast<RunSensorMode>(0xFFU);
+    const auto context = resolveEffectiveControlContext(input);
+    TEST_ASSERT_FALSE(context.valid);
+}
+
 }  // namespace
 
 void setup() {}
@@ -91,5 +98,6 @@ int main(int argc, char** argv) {
     RUN_TEST(test_cooling_uses_completion_target_only);
     RUN_TEST(test_manual_holding_uses_manual_target);
     RUN_TEST(test_non_control_phase_has_no_context);
+    RUN_TEST(test_invalid_run_sensor_mode_does_not_fallback_to_air);
     return UNITY_END();
 }

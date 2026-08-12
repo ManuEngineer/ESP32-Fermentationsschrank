@@ -70,6 +70,56 @@ void test_parameters_require_all_four_profiles() {
     TEST_ASSERT_FALSE(validateTemperatureControlParameters(configured));
 }
 
+void test_parameter_validation_distinguishes_unconfigured_from_invalid() {
+    TemperatureControlParameters unconfigured;
+    TEST_ASSERT_TRUE(classifyTemperatureControlParameters(unconfigured) ==
+                     TemperatureControlParametersValidation::Unconfigured);
+    TEST_ASSERT_TRUE(validateTemperatureControlParameters(parameters()));
+
+    auto nanKp = parameters();
+    nanKp.airHeating.proportionalGainQuotePerCelsius = NAN;
+    TEST_ASSERT_TRUE(classifyTemperatureControlParameters(nanKp) ==
+                     TemperatureControlParametersValidation::Invalid);
+    TEST_ASSERT_TRUE(TemperatureController(nanKp, policy())
+                         .evaluate(airInput(100U, 25.0, 20.0))
+                         .reason ==
+                     TemperatureControlReason::InvalidConfiguration);
+
+    auto negativeKi = parameters();
+    negativeKi.airCooling.integralGainQuotePerCelsiusSecond = -0.1;
+    TEST_ASSERT_TRUE(classifyTemperatureControlParameters(negativeKi) ==
+                     TemperatureControlParametersValidation::Invalid);
+
+    auto negativeKp = parameters();
+    negativeKp.airHeating.proportionalGainQuotePerCelsius = -0.1;
+    TEST_ASSERT_TRUE(classifyTemperatureControlParameters(negativeKp) ==
+                     TemperatureControlParametersValidation::Invalid);
+
+    auto invalidQuote = parameters();
+    invalidQuote.productHeating.maximumQuote = 1.1;
+    TEST_ASSERT_TRUE(classifyTemperatureControlParameters(invalidQuote) ==
+                     TemperatureControlParametersValidation::Invalid);
+
+    auto zeroStep = parameters();
+    zeroStep.maximumIntegrationStepMillis = 0U;
+    TEST_ASSERT_TRUE(classifyTemperatureControlParameters(zeroStep) ==
+                     TemperatureControlParametersValidation::Invalid);
+
+    auto wrongAirOrder = parameters();
+    wrongAirOrder.airLimitLowerBlockCelsius = 12.0;
+    wrongAirOrder.airLimitLowerReduceStartCelsius = 10.0;
+    TEST_ASSERT_TRUE(classifyTemperatureControlParameters(wrongAirOrder) ==
+                     TemperatureControlParametersValidation::Invalid);
+
+    const auto unconfiguredResult =
+        TemperatureController(unconfigured, policy())
+            .evaluate(airInput(100U, 25.0, 20.0));
+    TEST_ASSERT_TRUE(unconfiguredResult.status ==
+                     TemperatureControlStatus::Unavailable);
+    TEST_ASSERT_TRUE(unconfiguredResult.reason ==
+                     TemperatureControlReason::NoCommissioning);
+}
+
 void test_neutral_band_emits_identified_off_request() {
     TemperatureController controller(parameters(), policy());
     const auto result = controller.evaluate(airInput(100U, 20.0, 20.5));
@@ -140,6 +190,17 @@ void test_raw_p_above_maximum_is_checked_and_saturated_without_p_preclamp() {
     TEST_ASSERT_TRUE(result.reason == TemperatureControlReason::Saturated);
     TEST_ASSERT_TRUE(result.rawProportionalQuote > 1.0);
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.8, result.maximumLimitedQuote);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, result.integralContributionQuote);
+}
+
+void test_raw_p_equal_to_maximum_has_zero_headroom() {
+    auto configured = parameters();
+    configured.airHeating.proportionalGainQuotePerCelsius = 0.2;
+    TemperatureController controller(configured, policy());
+    const auto result = controller.evaluate(airInput(100U, 25.0, 20.0));
+    TEST_ASSERT_TRUE(result.status == TemperatureControlStatus::Demand);
+    TEST_ASSERT_TRUE(result.reason == TemperatureControlReason::Saturated);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.8, result.rawProportionalQuote);
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, result.integralContributionQuote);
 }
 
@@ -235,6 +296,68 @@ void test_air_mode_does_not_require_product() {
     TEST_ASSERT_TRUE(result.airLimitState == AirLimitState::NotApplied);
 }
 
+void test_air_mode_sensor_failures_are_not_applied_air_limits() {
+    for (const auto quality : {SensorQuality::Stale, SensorQuality::Failed}) {
+        TemperatureController controller(parameters(), policy());
+        auto input = airInput(100U, 25.0, 20.0);
+        input.air = unavailableSample(quality);
+        const auto result = controller.evaluate(input);
+        TEST_ASSERT_TRUE(result.status ==
+                         TemperatureControlStatus::Unavailable);
+        TEST_ASSERT_TRUE(result.reason ==
+                         TemperatureControlReason::SensorUnavailable);
+        TEST_ASSERT_TRUE(result.airLimitState == AirLimitState::NotApplied);
+        TEST_ASSERT_FALSE(result.controlRequest.has_value());
+    }
+
+    TemperatureController controller(parameters(), policy());
+    auto invalidInput = airInput(100U, 25.0, 20.0);
+    invalidInput.air.rawCelsius = NAN;
+    const auto invalid = controller.evaluate(invalidInput);
+    TEST_ASSERT_TRUE(invalid.status == TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_TRUE(invalid.reason == TemperatureControlReason::InvalidSample);
+    TEST_ASSERT_TRUE(invalid.airLimitState == AirLimitState::NotApplied);
+    TEST_ASSERT_FALSE(invalid.controlRequest.has_value());
+}
+
+void test_sensor_role_transition_resets_integral_on_first_product_sample() {
+    TemperatureController controller(parameters(), policy());
+    const auto first = controller.evaluate(airInput(100U, 25.0, 20.0));
+    auto secondInput = airInput(1100U, 25.0, 20.0);
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto second = controller.evaluate(secondInput);
+    TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
+    TEST_ASSERT_TRUE(controller.markCommittedControlContextTransitionPending(
+        CommittedControlContextTransition::SensorRoleChange));
+
+    const auto product =
+        controller.evaluate(productInput(1200U, 25.0, 20.0, 32.0));
+    TEST_ASSERT_TRUE(product.controlRequest.has_value());
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, product.integralContributionQuote);
+    TEST_ASSERT_FALSE(controller.state().pendingContextTransition.has_value());
+}
+
+void test_invalid_sensor_sample_clears_old_pi_state_before_recovery() {
+    TemperatureController controller(parameters(), policy());
+    const auto first = controller.evaluate(airInput(100U, 25.0, 20.0));
+    auto secondInput = airInput(1100U, 25.0, 20.0);
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto second = controller.evaluate(secondInput);
+    TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
+
+    auto invalidInput = airInput(1200U, 25.0, 20.0);
+    invalidInput.air.rawCelsius = NAN;
+    TEST_ASSERT_TRUE(controller.evaluate(invalidInput).status ==
+                     TemperatureControlStatus::InvalidInput);
+    const auto recovered = controller.evaluate(airInput(1300U, 25.0, 20.0));
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, recovered.integralContributionQuote);
+    TEST_ASSERT_TRUE(recovered.controlRequest.has_value());
+}
+
 void test_large_gap_resets_and_uses_current_timestamp_as_new_anchor() {
     TemperatureController controller(parameters(), policy());
     static_cast<void>(controller.evaluate(airInput(100U, 25.0, 20.0)));
@@ -258,6 +381,90 @@ void test_timestamp_can_repeat_but_request_identity_cannot() {
         100U, second.controlRequest->identity.createdAtMonotonicMillis);
     TEST_ASSERT_EQUAL_UINT64(first.controlRequest->identity.sequence + 1U,
                              second.controlRequest->identity.sequence);
+}
+
+void test_near_overflow_pi_timestamps_use_checked_delta() {
+    TemperatureController controller(parameters(), policy());
+    const auto first = controller.evaluate(
+        airInput(std::numeric_limits<std::uint64_t>::max() - 100U, 25.0, 20.0));
+    auto secondInput =
+        airInput(std::numeric_limits<std::uint64_t>::max(), 25.0, 20.0);
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto second = controller.evaluate(secondInput);
+    TEST_ASSERT_TRUE(second.status == TemperatureControlStatus::Demand);
+    TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
+}
+
+void test_feedback_replay_and_all_dispositions_fail_closed() {
+    for (const auto disposition :
+         {PreviousControlRequestFeedback::Disposition::DeferredOrLimited,
+          PreviousControlRequestFeedback::Disposition::Rejected}) {
+        TemperatureController controller(parameters(), policy());
+        const auto first = controller.evaluate(airInput(100U, 25.0, 20.0));
+        auto nextInput = airInput(1100U, 25.0, 20.0);
+        nextInput.previousControlRequestFeedback =
+            PreviousControlRequestFeedback{
+                first.controlRequest->identity.sequence, disposition};
+        const auto next = controller.evaluate(nextInput);
+        TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, next.integralContributionQuote);
+    }
+
+    TemperatureController oldController(parameters(), policy());
+    const auto oldFirst = oldController.evaluate(airInput(100U, 25.0, 20.0));
+    auto secondInput = airInput(200U, 25.0, 20.0);
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        oldFirst.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto second = oldController.evaluate(secondInput);
+    auto oldFeedbackInput = airInput(300U, 25.0, 20.0);
+    oldFeedbackInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        oldFirst.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    TEST_ASSERT_TRUE(oldController.evaluate(oldFeedbackInput).status ==
+                     TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_TRUE(second.controlRequest.has_value());
+
+    TemperatureController foreignController(parameters(), policy());
+    const auto foreignFirst =
+        foreignController.evaluate(airInput(100U, 25.0, 20.0));
+    auto foreignInput = airInput(200U, 25.0, 20.0);
+    foreignInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        foreignFirst.controlRequest->identity.sequence + 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    TEST_ASSERT_TRUE(foreignController.evaluate(foreignInput).status ==
+                     TemperatureControlStatus::InvalidInput);
+
+    TemperatureController duplicateController(parameters(), policy());
+    const auto duplicateFirst =
+        duplicateController.evaluate(airInput(100U, 25.0, 20.0));
+    auto duplicateInput = airInput(200U, 25.0, 20.0);
+    duplicateInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        duplicateFirst.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    static_cast<void>(duplicateController.evaluate(duplicateInput));
+    duplicateInput.sampleTimestampMonotonicMillis = 300U;
+    TEST_ASSERT_TRUE(duplicateController.evaluate(duplicateInput).status ==
+                     TemperatureControlStatus::InvalidInput);
+}
+
+void test_direction_sequences_cover_idle_and_opposite_demand() {
+    TemperatureController controller(parameters(), policy());
+    const auto heating = controller.evaluate(airInput(100U, 25.0, 20.0));
+    TEST_ASSERT_TRUE(heating.direction == AbstractControlDirection::Heating);
+    const auto idle = controller.evaluate(airInput(200U, 20.0, 20.0));
+    TEST_ASSERT_TRUE(idle.direction == AbstractControlDirection::Idle);
+    const auto cooling = controller.evaluate(airInput(300U, 20.0, 25.0));
+    TEST_ASSERT_TRUE(cooling.direction == AbstractControlDirection::Cooling);
+    const auto idleAgain = controller.evaluate(airInput(400U, 20.0, 20.0));
+    TEST_ASSERT_TRUE(idleAgain.direction == AbstractControlDirection::Idle);
+    const auto heatingAgain = controller.evaluate(airInput(500U, 25.0, 20.0));
+    TEST_ASSERT_TRUE(heatingAgain.direction ==
+                     AbstractControlDirection::Heating);
 }
 
 void test_invalid_parameters_are_unavailable_without_a_request() {
@@ -286,6 +493,40 @@ void test_request_identity_does_not_wrap_at_uint64_max() {
     TEST_ASSERT_FALSE(exhausted.controlRequest.has_value());
 }
 
+void test_request_identity_exhaustion_clears_nonempty_idle_state() {
+    TemperatureController controller(
+        parameters(), policy(), std::numeric_limits<std::uint64_t>::max() - 1U);
+    const auto first = controller.evaluate(airInput(100U, 25.0, 20.0));
+    auto secondInput = airInput(1100U, 25.0, 20.0);
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto second = controller.evaluate(secondInput);
+    TEST_ASSERT_TRUE(second.controlRequest.has_value());
+    TEST_ASSERT_TRUE(controller.state().integralContributionQuote > 0.0);
+
+    auto activeExhaustionInput = airInput(1200U, 25.0, 20.0);
+    activeExhaustionInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        second.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto activeExhausted = controller.evaluate(activeExhaustionInput);
+    TEST_ASSERT_TRUE(activeExhausted.reason ==
+                     TemperatureControlReason::RequestIdentityExhausted);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              controller.state().integralContributionQuote);
+    TEST_ASSERT_FALSE(controller.state().lastActiveDirection.has_value());
+    TEST_ASSERT_FALSE(controller.state().feedbackWindow.has_value());
+
+    const auto idleExhausted = controller.evaluate(airInput(1300U, 20.0, 20.0));
+    TEST_ASSERT_TRUE(idleExhausted.reason ==
+                     TemperatureControlReason::RequestIdentityExhausted);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              controller.state().integralContributionQuote);
+    TEST_ASSERT_FALSE(controller.state().lastActiveDirection.has_value());
+    TEST_ASSERT_FALSE(controller.state().feedbackWindow.has_value());
+}
+
 }  // namespace
 
 void setup() {}
@@ -296,6 +537,7 @@ int main(int argc, char** argv) {
     static_cast<void>(argv);
     UNITY_BEGIN();
     RUN_TEST(test_parameters_require_all_four_profiles);
+    RUN_TEST(test_parameter_validation_distinguishes_unconfigured_from_invalid);
     RUN_TEST(test_neutral_band_emits_identified_off_request);
     RUN_TEST(test_pi_uses_active_error_and_integrates_only_after_first_sample);
     RUN_TEST(
@@ -303,15 +545,24 @@ int main(int argc, char** argv) {
     RUN_TEST(test_feedback_for_off_or_wrong_request_is_invalid);
     RUN_TEST(
         test_raw_p_above_maximum_is_checked_and_saturated_without_p_preclamp);
+    RUN_TEST(test_raw_p_equal_to_maximum_has_zero_headroom);
     RUN_TEST(test_product_air_limit_reduces_and_blocks_normal_demand);
     RUN_TEST(test_air_limit_does_not_charge_integrator);
     RUN_TEST(
         test_committed_transition_applies_once_and_idle_does_not_consume_it);
     RUN_TEST(test_product_mode_requires_air_and_product_without_role_fallback);
     RUN_TEST(test_air_mode_does_not_require_product);
+    RUN_TEST(test_air_mode_sensor_failures_are_not_applied_air_limits);
+    RUN_TEST(
+        test_sensor_role_transition_resets_integral_on_first_product_sample);
+    RUN_TEST(test_invalid_sensor_sample_clears_old_pi_state_before_recovery);
     RUN_TEST(test_large_gap_resets_and_uses_current_timestamp_as_new_anchor);
     RUN_TEST(test_timestamp_can_repeat_but_request_identity_cannot);
+    RUN_TEST(test_near_overflow_pi_timestamps_use_checked_delta);
+    RUN_TEST(test_feedback_replay_and_all_dispositions_fail_closed);
+    RUN_TEST(test_direction_sequences_cover_idle_and_opposite_demand);
     RUN_TEST(test_invalid_parameters_are_unavailable_without_a_request);
     RUN_TEST(test_request_identity_does_not_wrap_at_uint64_max);
+    RUN_TEST(test_request_identity_exhaustion_clears_nonempty_idle_state);
     return UNITY_END();
 }
