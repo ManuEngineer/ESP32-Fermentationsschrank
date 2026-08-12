@@ -845,7 +845,12 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
     const auto anchor = makePendingRecoveryAnchor(candidate, loadedRecord,
                                                   originalProcessState);
     if (!anchor.has_value()) return invalid(current);
-    candidate.pendingRecoveryAnchor = *anchor;
+    candidate.pendingRecoveryAnchor = anchor->anchor;
+    if (originalProcessState.state == ProcessState::Fermenting &&
+        !foldObservedRunSeconds(candidate,
+                                anchor->thisHopAltBootLocalSeconds)) {
+        return invalid(current);
+    }
     candidate.recoveryBootAnchorMonotonicMillis = time.monotonicMillis;
     ++candidate.recoveryEpisodeRevision;
     if (candidate.lastRecoveryEpisodeEvidence.has_value()) {
