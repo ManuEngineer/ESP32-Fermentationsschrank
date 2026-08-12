@@ -20,8 +20,8 @@ EffectiveControlContextInput baseInput(ProcessState phase) {
 }
 
 void test_product_preheating_uses_air_without_changing_run_mode() {
-    const auto context = resolveEffectiveControlContext(
-        baseInput(ProcessState::Preheating));
+    const auto context =
+        resolveEffectiveControlContext(baseInput(ProcessState::Preheating));
     TEST_ASSERT_TRUE(context.valid);
     TEST_ASSERT_TRUE(context.controlSensorRole == ControlSensorRole::Air);
     TEST_ASSERT_TRUE(context.target.targetKind ==
@@ -35,8 +35,8 @@ void test_product_waiting_uses_air_and_product_after_insertion() {
     TEST_ASSERT_TRUE(waiting.valid);
     TEST_ASSERT_TRUE(waiting.controlSensorRole == ControlSensorRole::Air);
 
-    const auto reaching = resolveEffectiveControlContext(
-        baseInput(ProcessState::ReachingTarget));
+    const auto reaching =
+        resolveEffectiveControlContext(baseInput(ProcessState::ReachingTarget));
     TEST_ASSERT_TRUE(reaching.valid);
     TEST_ASSERT_TRUE(reaching.controlSensorRole == ControlSensorRole::Product);
 }

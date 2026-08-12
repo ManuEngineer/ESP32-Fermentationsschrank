@@ -434,8 +434,7 @@ TransitionDecision decideQualification(const ProcessRuntimeState& current,
     // signal. Das alte boolesche Feld bleibt nur fuer bestehende Aufrufer
     // kompatibel; bei einem expliziten Progresswert darf die
     // Zustandsmaschine keine Dauer aus dem Marker allein gutschreiben.
-    if (signals.qualificationProgress !=
-            QualificationProgress::Unavailable &&
+    if (signals.qualificationProgress != QualificationProgress::Unavailable &&
         !qualificationIsComplete(signals)) {
         return result(DecisionStatus::NoTransition, current, monotonicMillis);
     }
@@ -538,8 +537,7 @@ TransitionDecision decideCooling(const ProcessRuntimeState& current,
                                  const ProcessRunSnapshot& snapshot,
                                  const ProcessSignals& signals,
                                  std::uint64_t monotonicMillis) {
-    if (!signals.coolingTargetConditionValid &&
-        !signals.qualificationConditionValid) {
+    if (!signals.coolingTargetConditionValid) {
         return result(DecisionStatus::NoTransition, current, monotonicMillis);
     }
     if (snapshot.completionMode == CompletionMode::CoolThenFinish) {
@@ -992,8 +990,12 @@ TransitionDecision completeTimedRun(const ProcessRuntimeState& current,
         static_cast<void>(addMessage(decision, ProcessMessage::RunCompleted));
         return decision;
     }
-    return propose(current, ProcessState::Cooling,
-                   TransitionReason::FermentationCompleted, monotonicMillis);
+    auto decision =
+        propose(current, ProcessState::Cooling,
+                TransitionReason::FermentationCompleted, monotonicMillis);
+    decision.committedControlContextTransition =
+        CommittedControlContextTransition::CoolingTargetContextChange;
+    return decision;
 }
 
 TransitionDecision completeHoldDuration(const ProcessRuntimeState& current,

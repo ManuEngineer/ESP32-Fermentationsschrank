@@ -54,8 +54,7 @@ SampleStatus readSnapshot(const SensorQualitySnapshot& snapshot,
 }
 
 bool validRole(ControlSensorRole role) {
-    return role == ControlSensorRole::Air ||
-           role == ControlSensorRole::Product;
+    return role == ControlSensorRole::Air || role == ControlSensorRole::Product;
 }
 
 TargetQualificationResult result(QualificationProgress progress,
@@ -66,8 +65,7 @@ TargetQualificationResult result(QualificationProgress progress,
                 : std::nullopt};
 }
 
-bool checkedAdd(std::uint64_t left, std::uint64_t right,
-                std::uint64_t& sum) {
+bool checkedAdd(std::uint64_t left, std::uint64_t right, std::uint64_t& sum) {
     if (left > std::numeric_limits<std::uint64_t>::max() - right) {
         return false;
     }
@@ -143,9 +141,8 @@ TargetQualificationResult TargetQualificationEvaluator::evaluate(
             return result(QualificationProgress::InBand, state_);
         }
 
-        const bool inBand =
-            std::fabs(measuredCelsius - input.targetCelsius) <=
-            input.bandCelsius;
+        const bool inBand = std::fabs(measuredCelsius - input.targetCelsius) <=
+                            input.bandCelsius;
         if (inBand) {
             state_.graceStartedAtMillis = std::nullopt;
             state_.lastUsableTimestampMillis = now;
@@ -198,10 +195,9 @@ TargetQualificationResult TargetQualificationEvaluator::evaluate(
         clearEpisode(state_);
         return result(QualificationProgress::Invalid, state_);
     }
-    state_.creditedInBandMillis =
-        credited >= input.qualificationDurationMillis
-            ? input.qualificationDurationMillis
-            : credited;
+    state_.creditedInBandMillis = credited >= input.qualificationDurationMillis
+                                      ? input.qualificationDurationMillis
+                                      : credited;
     state_.lastUsableTimestampMillis = now;
     if (state_.creditedInBandMillis >= input.qualificationDurationMillis) {
         return result(QualificationProgress::Complete, state_);

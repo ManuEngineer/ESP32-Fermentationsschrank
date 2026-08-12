@@ -30,8 +30,7 @@ struct TemperatureControlRuntimeState {
     std::optional<std::uint64_t> lastSampleTimestampMonotonicMillis;
     bool suppressIntegrationAfterGap{false};
     std::optional<AbstractControlDirection> lastActiveDirection;
-    std::optional<CommittedControlContextTransition>
-        pendingContextTransition;
+    std::optional<CommittedControlContextTransition> pendingContextTransition;
     std::optional<IntegratorTransitionAction> pendingTransitionAction;
     std::optional<ControlRequest> feedbackWindow;
 };

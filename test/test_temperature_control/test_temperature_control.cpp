@@ -39,7 +39,8 @@ TemperatureControlParameters parameters() {
 }
 
 IntegratorTransitionPolicy policy() {
-    return {IntegratorTransitionAction::Reset, IntegratorTransitionAction::Reset,
+    return {IntegratorTransitionAction::Reset,
+            IntegratorTransitionAction::Reset,
             IntegratorTransitionAction::Reset, 0.2};
 }
 
@@ -78,8 +79,8 @@ void test_neutral_band_emits_identified_off_request() {
     TEST_ASSERT_TRUE(result.controlRequest->direction ==
                      AbstractControlDirection::Idle);
     TEST_ASSERT_EQUAL_UINT64(1U, result.controlRequest->identity.sequence);
-    TEST_ASSERT_EQUAL_UINT64(100U,
-                             result.controlRequest->identity.createdAtMonotonicMillis);
+    TEST_ASSERT_EQUAL_UINT64(
+        100U, result.controlRequest->identity.createdAtMonotonicMillis);
 }
 
 void test_pi_uses_active_error_and_integrates_only_after_first_sample() {
@@ -87,15 +88,12 @@ void test_pi_uses_active_error_and_integrates_only_after_first_sample() {
     const auto first = controller.evaluate(airInput(100U, 25.0, 20.0));
     TEST_ASSERT_TRUE(first.status == TemperatureControlStatus::Demand);
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.4, first.rawProportionalQuote);
-    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
-                              first.integralContributionQuote);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, first.integralContributionQuote);
 
     auto secondInput = airInput(1100U, 25.0, 20.0);
-    secondInput.previousControlRequestFeedback =
-        PreviousControlRequestFeedback{
-            first.controlRequest->identity.sequence,
-            PreviousControlRequestFeedback::Disposition::
-                NoIntegratorConstraint};
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
     const auto second = controller.evaluate(secondInput);
     TEST_ASSERT_TRUE(second.status == TemperatureControlStatus::Demand);
     TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
@@ -114,12 +112,10 @@ void test_feedback_disposition_freezes_integrator_and_missing_feedback_is_safe()
             first.controlRequest->identity.sequence,
             PreviousControlRequestFeedback::Disposition::DeferredOrLimited};
     const auto deferred = controller.evaluate(deferredInput);
-    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
-                              deferred.integralContributionQuote);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, deferred.integralContributionQuote);
 
     const auto missing = controller.evaluate(airInput(2100U, 25.0, 20.0));
-    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
-                              missing.integralContributionQuote);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, missing.integralContributionQuote);
 }
 
 void test_feedback_for_off_or_wrong_request_is_invalid() {
@@ -127,11 +123,9 @@ void test_feedback_for_off_or_wrong_request_is_invalid() {
     const auto off = controller.evaluate(airInput(100U, 20.0, 20.0));
     TEST_ASSERT_TRUE(off.controlRequest.has_value());
     auto next = airInput(200U, 25.0, 20.0);
-    next.previousControlRequestFeedback =
-        PreviousControlRequestFeedback{
-            off.controlRequest->identity.sequence,
-            PreviousControlRequestFeedback::Disposition::
-                NoIntegratorConstraint};
+    next.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        off.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
     const auto result = controller.evaluate(next);
     TEST_ASSERT_TRUE(result.status == TemperatureControlStatus::InvalidInput);
     TEST_ASSERT_FALSE(result.controlRequest.has_value());
@@ -146,8 +140,7 @@ void test_raw_p_above_maximum_is_checked_and_saturated_without_p_preclamp() {
     TEST_ASSERT_TRUE(result.reason == TemperatureControlReason::Saturated);
     TEST_ASSERT_TRUE(result.rawProportionalQuote > 1.0);
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.8, result.maximumLimitedQuote);
-    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
-                              result.integralContributionQuote);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, result.integralContributionQuote);
 }
 
 void test_product_air_limit_reduces_and_blocks_normal_demand() {
@@ -155,14 +148,16 @@ void test_product_air_limit_reduces_and_blocks_normal_demand() {
     const auto reduced =
         controller.evaluate(productInput(100U, 25.0, 20.0, 32.5));
     TEST_ASSERT_TRUE(reduced.status == TemperatureControlStatus::Demand);
-    TEST_ASSERT_TRUE(reduced.reason == TemperatureControlReason::AirLimitReduced);
+    TEST_ASSERT_TRUE(reduced.reason ==
+                     TemperatureControlReason::AirLimitReduced);
     TEST_ASSERT_TRUE(reduced.airLimitState == AirLimitState::Reduced);
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.4, reduced.timeQuote);
 
     const auto blocked =
         controller.evaluate(productInput(200U, 25.0, 20.0, 35.0));
     TEST_ASSERT_TRUE(blocked.status == TemperatureControlStatus::Off);
-    TEST_ASSERT_TRUE(blocked.reason == TemperatureControlReason::AirLimitBlocked);
+    TEST_ASSERT_TRUE(blocked.reason ==
+                     TemperatureControlReason::AirLimitBlocked);
     TEST_ASSERT_TRUE(blocked.airLimitState == AirLimitState::Blocked);
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, blocked.timeQuote);
 }
@@ -172,31 +167,25 @@ void test_air_limit_does_not_charge_integrator() {
     const auto first =
         controller.evaluate(productInput(100U, 25.0, 20.0, 32.0));
     auto next = productInput(1100U, 25.0, 20.0, 32.0);
-    next.previousControlRequestFeedback =
-        PreviousControlRequestFeedback{
-            first.controlRequest->identity.sequence,
-            PreviousControlRequestFeedback::Disposition::
-                NoIntegratorConstraint};
+    next.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
     const auto result = controller.evaluate(next);
     TEST_ASSERT_TRUE(result.airLimitState == AirLimitState::Reduced);
-    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
-                              result.integralContributionQuote);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, result.integralContributionQuote);
 }
 
 void test_committed_transition_applies_once_and_idle_does_not_consume_it() {
     auto configured = parameters();
     TemperatureController controller(
-        configured,
-        {IntegratorTransitionAction::BoundedCarry,
-         IntegratorTransitionAction::BoundedCarry,
-         IntegratorTransitionAction::BoundedCarry, 0.1});
+        configured, {IntegratorTransitionAction::BoundedCarry,
+                     IntegratorTransitionAction::BoundedCarry,
+                     IntegratorTransitionAction::BoundedCarry, 0.1});
     const auto first = controller.evaluate(airInput(100U, 25.0, 20.0));
     auto secondInput = airInput(1100U, 25.0, 20.0);
-    secondInput.previousControlRequestFeedback =
-        PreviousControlRequestFeedback{
-            first.controlRequest->identity.sequence,
-            PreviousControlRequestFeedback::Disposition::
-                NoIntegratorConstraint};
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
     const auto second = controller.evaluate(secondInput);
     TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
     TEST_ASSERT_TRUE(controller.markCommittedControlContextTransitionPending(
@@ -220,7 +209,8 @@ void test_product_mode_requires_air_and_product_without_role_fallback() {
     auto input = productInput(100U, 25.0, 20.0, 32.0);
     input.air = unavailableSample(SensorQuality::Stale);
     const auto unavailable = controller.evaluate(input);
-    TEST_ASSERT_TRUE(unavailable.status == TemperatureControlStatus::Unavailable);
+    TEST_ASSERT_TRUE(unavailable.status ==
+                     TemperatureControlStatus::Unavailable);
     TEST_ASSERT_TRUE(unavailable.reason ==
                      TemperatureControlReason::SensorUnavailable);
     TEST_ASSERT_TRUE(unavailable.airLimitState == AirLimitState::Unavailable);
@@ -257,15 +247,15 @@ void test_large_gap_resets_and_uses_current_timestamp_as_new_anchor() {
 
     const auto next = controller.evaluate(airInput(21'100U, 25.0, 20.0));
     TEST_ASSERT_TRUE(next.status == TemperatureControlStatus::Demand);
-    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
-                              next.integralContributionQuote);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, next.integralContributionQuote);
 }
 
 void test_timestamp_can_repeat_but_request_identity_cannot() {
     TemperatureController controller(parameters(), policy());
     const auto first = controller.evaluate(airInput(100U, 25.0, 20.0));
     const auto second = controller.evaluate(airInput(100U, 25.0, 20.0));
-    TEST_ASSERT_EQUAL_UINT64(100U, second.controlRequest->identity.createdAtMonotonicMillis);
+    TEST_ASSERT_EQUAL_UINT64(
+        100U, second.controlRequest->identity.createdAtMonotonicMillis);
     TEST_ASSERT_EQUAL_UINT64(first.controlRequest->identity.sequence + 1U,
                              second.controlRequest->identity.sequence);
 }
@@ -275,20 +265,22 @@ void test_invalid_parameters_are_unavailable_without_a_request() {
     TemperatureController controller(unconfigured, policy());
     const auto result = controller.evaluate(airInput(100U, 25.0, 20.0));
     TEST_ASSERT_TRUE(result.status == TemperatureControlStatus::Unavailable);
-    TEST_ASSERT_TRUE(result.reason == TemperatureControlReason::NoCommissioning);
+    TEST_ASSERT_TRUE(result.reason ==
+                     TemperatureControlReason::NoCommissioning);
     TEST_ASSERT_FALSE(result.controlRequest.has_value());
 }
 
 void test_request_identity_does_not_wrap_at_uint64_max() {
-    TemperatureController controller(
-        parameters(), policy(), std::numeric_limits<std::uint64_t>::max());
+    TemperatureController controller(parameters(), policy(),
+                                     std::numeric_limits<std::uint64_t>::max());
     const auto last = controller.evaluate(airInput(100U, 20.0, 20.0));
     TEST_ASSERT_TRUE(last.controlRequest.has_value());
     TEST_ASSERT_EQUAL_UINT64(std::numeric_limits<std::uint64_t>::max(),
                              last.controlRequest->identity.sequence);
 
     const auto exhausted = controller.evaluate(airInput(200U, 20.0, 20.0));
-    TEST_ASSERT_TRUE(exhausted.status == TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_TRUE(exhausted.status ==
+                     TemperatureControlStatus::InvalidInput);
     TEST_ASSERT_TRUE(exhausted.reason ==
                      TemperatureControlReason::RequestIdentityExhausted);
     TEST_ASSERT_FALSE(exhausted.controlRequest.has_value());
@@ -306,12 +298,15 @@ int main(int argc, char** argv) {
     RUN_TEST(test_parameters_require_all_four_profiles);
     RUN_TEST(test_neutral_band_emits_identified_off_request);
     RUN_TEST(test_pi_uses_active_error_and_integrates_only_after_first_sample);
-    RUN_TEST(test_feedback_disposition_freezes_integrator_and_missing_feedback_is_safe);
+    RUN_TEST(
+        test_feedback_disposition_freezes_integrator_and_missing_feedback_is_safe);
     RUN_TEST(test_feedback_for_off_or_wrong_request_is_invalid);
-    RUN_TEST(test_raw_p_above_maximum_is_checked_and_saturated_without_p_preclamp);
+    RUN_TEST(
+        test_raw_p_above_maximum_is_checked_and_saturated_without_p_preclamp);
     RUN_TEST(test_product_air_limit_reduces_and_blocks_normal_demand);
     RUN_TEST(test_air_limit_does_not_charge_integrator);
-    RUN_TEST(test_committed_transition_applies_once_and_idle_does_not_consume_it);
+    RUN_TEST(
+        test_committed_transition_applies_once_and_idle_does_not_consume_it);
     RUN_TEST(test_product_mode_requires_air_and_product_without_role_fallback);
     RUN_TEST(test_air_mode_does_not_require_product);
     RUN_TEST(test_large_gap_resets_and_uses_current_timestamp_as_new_anchor);

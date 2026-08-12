@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #104 / Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung | Vollstaendige eigenstaendige Planrevision 6 unter `docs/tasks/issue-22-pi-control-air-limits-plan.md`; Branch `agent/issue-22-pi-regelung-plan` ist von `main` @ `10ff98e` abgeleitet; noch keine Implementierung | Ownerfreigabe des exakten neuen Plan-Commits |
+| 1 | Draft-PR #104 / Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung | Planrevision 6 freigegeben; Implementierung der fuenf geplanten Schnitte laeuft auf `agent/issue-22-pi-regelung-plan`; PI-/Qualifikationskern und gezielte native Nachweise sind vorhanden, Persistenz-/Recovery-Regressionen und Gesamtreview offen | gezielte Resttests, vollstaendiges Diff-Review und Owner-Handover |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -26,13 +26,13 @@ Issue #22 (zeitproportionale PI-Regelung und Luftbegrenzung), danach Issue #23
 (Aktorplaner), Issue #24 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue
 #19 (Journale, Aufbewahrung, Bereinigung, Backup und Import). Die jeweiligen
 Arbeiten beginnen erst nach ihrem eigenen Plan-/Owner-Gate; #22 ist jetzt die
-aktuelle Planungsarbeit. Die vollstaendige eigenstaendige Planrevision 6 liegt
-im Draft-PR #104 unter `docs/tasks/issue-22-pi-control-air-limits-plan.md` und
-wartet auf die Freigabe ihrer exakten neuen Plan-SHA.
+aktuelle Umsetzungsarbeit. Die vollstaendige eigenstaendige Planrevision 6
+liegt im Draft-PR #104 unter `docs/tasks/issue-22-pi-control-air-limits-plan.md`
+und wurde mit `6b801d30bfb34e48350ea3c29caa22dfea5f7320` freigegeben.
 
 ## Zulaessige Parallelitaet
 
-- Der #22-Planungs-PR bleibt Draft, bis der Owner ihn selbst auf `Ready for review` setzt;
+- Der #22-PR bleibt Draft, bis der Owner ihn selbst auf `Ready for review` setzt;
   bis dahin startet keine erneute vollstaendige Remote-CI.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.

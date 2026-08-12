@@ -2159,7 +2159,8 @@ void test_load_rejects_a_structurally_valid_but_mismatched_current_reference() {
                     .status));
         const auto tracking = decideProcessTransition(
             state.processState, &*state.processRunSnapshot,
-            ProcessSignals{true, false}, TransitionRequest{}, 100U);
+            ProcessSignals{QualificationProgress::InBand, false, false},
+            TransitionRequest{}, 100U);
         TEST_ASSERT_TRUE(tracking.proposed());
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunPersistenceResultStatus::Applied),
@@ -2344,7 +2345,8 @@ RunCommandState reachDurablyWaitingForProduct(
                 .status));
     const auto tracking = decideProcessTransition(
         state.processState, &*state.processRunSnapshot,
-        ProcessSignals{true, false}, TransitionRequest{}, 100U);
+        ProcessSignals{QualificationProgress::InBand, false, false},
+        TransitionRequest{}, 100U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(TransitionReason::QualificationTrackingStarted),
         static_cast<int>(tracking.reason));
@@ -2357,7 +2359,8 @@ RunCommandState reachDurablyWaitingForProduct(
                 .status));
     const auto waiting = decideProcessTransition(
         state.processState, &*state.processRunSnapshot,
-        ProcessSignals{true, false}, TransitionRequest{}, 600100U);
+        ProcessSignals{QualificationProgress::Complete, false, false},
+        TransitionRequest{}, 600100U);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::PreheatQualified),
                           static_cast<int>(waiting.reason));
     TEST_ASSERT_EQUAL_INT(
@@ -2865,7 +2868,7 @@ RunCommandState persistedWaitingForProductRun(
                     RunCheckpointTime{100U, std::nullopt})
                 .status));
     ProcessSignals signals;
-    signals.qualificationConditionValid = true;
+    signals.qualificationProgress = QualificationProgress::InBand;
     auto transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 200U);
@@ -2876,6 +2879,7 @@ RunCommandState persistedWaitingForProductRun(
                 .persistTransition(state, transition,
                                    RunCheckpointTime{200U, std::nullopt})
                 .status));
+    signals.qualificationProgress = QualificationProgress::Complete;
     transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 600300U);
@@ -2907,7 +2911,7 @@ RunCommandState persistedFermentingRun(RunPersistenceCoordinator& coordinator,
                                        CommandId startId) {
     auto state = readyActiveRunWithSensorSelection(coordinator, startId);
     ProcessSignals signals;
-    signals.qualificationConditionValid = true;
+    signals.qualificationProgress = QualificationProgress::Complete;
     auto transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 200U);
@@ -2949,7 +2953,7 @@ RunCommandState persistedCoolHoldingRun(RunPersistenceCoordinator& coordinator,
                                 RunCheckpointTime{100U, std::nullopt})
                 .status));
     ProcessSignals signals;
-    signals.qualificationConditionValid = true;
+    signals.qualificationProgress = QualificationProgress::Complete;
     auto transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 200U);
@@ -2960,6 +2964,7 @@ RunCommandState persistedCoolHoldingRun(RunPersistenceCoordinator& coordinator,
                 .persistTransition(state, transition,
                                    RunCheckpointTime{200U, std::nullopt})
                 .status));
+    signals.qualificationProgress = QualificationProgress::Complete;
     transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 600300U);
@@ -2980,6 +2985,8 @@ RunCommandState persistedCoolHoldingRun(RunPersistenceCoordinator& coordinator,
                 .persistTransition(state, transition,
                                    RunCheckpointTime{7800300U, std::nullopt})
                 .status));
+    signals.qualificationProgress = QualificationProgress::Unavailable;
+    signals.coolingTargetConditionValid = true;
     transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 7800400U);
@@ -3180,7 +3187,7 @@ void test_resolve_recovery_outcome_fermenting_bounds_gate_and_completion() {
     static_cast<void>(seed.loadAndInitialize());
     auto state = readyActiveRunWithSensorSelection(seed, 1010U);
     ProcessSignals signals;
-    signals.qualificationConditionValid = true;
+    signals.qualificationProgress = QualificationProgress::Complete;
     auto transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 200U);
@@ -3357,7 +3364,7 @@ void test_activate_loaded_run_resumes_and_retains_unresolved_anchor() {
     auto state = readyActiveRunWithSensorSelection(coordinator, 1001U);
 
     ProcessSignals signals;
-    signals.qualificationConditionValid = true;
+    signals.qualificationProgress = QualificationProgress::Complete;
     auto transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 200U);
@@ -3695,7 +3702,7 @@ void test_run_recovery_coordinator_reevaluates_resumed_time_without_biological_f
     static_cast<void>(seed.loadAndInitialize());
     auto state = readyActiveRunWithSensorSelection(seed, 1021U);
     ProcessSignals signals;
-    signals.qualificationConditionValid = true;
+    signals.qualificationProgress = QualificationProgress::Complete;
     auto transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 200U);
@@ -3773,7 +3780,7 @@ void test_run_recovery_coordinator_books_weighting_atomically_once() {
     static_cast<void>(seed.loadAndInitialize());
     auto state = readyActiveRunWithSensorSelection(seed, 1022U);
     ProcessSignals signals;
-    signals.qualificationConditionValid = true;
+    signals.qualificationProgress = QualificationProgress::Complete;
     auto transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 200U);
@@ -3880,7 +3887,7 @@ void test_activate_loaded_run_resolved_resume_clears_anchor() {
     auto state = readyActiveRunWithSensorSelection(coordinator, 1002U);
 
     ProcessSignals signals;
-    signals.qualificationConditionValid = true;
+    signals.qualificationProgress = QualificationProgress::Complete;
     auto transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 200U);
@@ -3939,7 +3946,7 @@ void test_activate_loaded_run_episode_refreshes_hop_one_anchor() {
                 .status));
 
     ProcessSignals signals;
-    signals.qualificationConditionValid = true;
+    signals.qualificationProgress = QualificationProgress::InBand;
     auto transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 200U);
@@ -3953,6 +3960,7 @@ void test_activate_loaded_run_episode_refreshes_hop_one_anchor() {
                 .persistTransition(state, transition,
                                    RunCheckpointTime{200U, std::nullopt})
                 .status));
+    signals.qualificationProgress = QualificationProgress::Complete;
     transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 600300U);
@@ -4587,7 +4595,7 @@ void test_weighted_progress_keeps_cumulative_confidence_conservative() {
     static_cast<void>(seed.loadAndInitialize());
     auto state = readyActiveRunWithSensorSelection(seed, 1035U);
     ProcessSignals signals;
-    signals.qualificationConditionValid = true;
+    signals.qualificationProgress = QualificationProgress::Complete;
     auto transition =
         decideProcessTransition(state.processState, &*state.processRunSnapshot,
                                 signals, TransitionRequest{}, 200U);

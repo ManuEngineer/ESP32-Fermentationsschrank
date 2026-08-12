@@ -290,6 +290,18 @@ kritischer Fehler
 Nach einem Neustart beginnt eine zuvor nur teilweise absolvierte
 Zielqualifikation neu.
 
+Der Evaluator liefert dafuer ausschliesslich `ProcessSignals`; er entscheidet
+keinen Prozessuebergang selbst. `REACHING_TARGET` darf bei jedem positiven
+Qualifikationssignal, auch bei `Grace` oder `Complete`, nur nach
+`QUALIFYING_TARGET` wechseln. Erst `QUALIFYING_TARGET` mit `Complete` darf
+`FERMENTING` beziehungsweise `MANUAL_HOLDING` vorschlagen. `Unavailable`,
+`Invalid` und `OutsideBand` loeschen die aktuelle Qualifikation.
+
+Cooling verwendet getrennt davon `coolingTargetConditionValid`. Der
+Qualifikationsfortschritt, Grace und Qualifikationsdauer sind in `COOLING`
+wirkungslos. `CoolThenFinish` fuehrt nach gueltigem Kuehlziel nach
+`COMPLETED`; beide Cool-and-Hold-Modi fuehren nach `COOL_HOLDING`.
+
 ## FERMENTING
 
 ### Zweck

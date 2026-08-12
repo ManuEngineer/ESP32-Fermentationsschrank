@@ -19,8 +19,8 @@ bool validDirectionParameters(const PiDirectionParameters& parameters) {
            parameters.integralGainQuotePerCelsiusSecond > 0.0 &&
            finite(parameters.neutralBandWidthCelsius) &&
            parameters.neutralBandWidthCelsius > 0.0 &&
-           finite(parameters.maximumQuote) &&
-           parameters.maximumQuote > 0.0 && parameters.maximumQuote <= 1.0;
+           finite(parameters.maximumQuote) && parameters.maximumQuote > 0.0 &&
+           parameters.maximumQuote <= 1.0;
 }
 
 bool validAirLimits(const TemperatureControlParameters& parameters) {
@@ -94,10 +94,9 @@ SampleValidation validateSnapshot(const SensorQualitySnapshot& snapshot,
     return SampleValidation::Valid;
 }
 
-TemperatureControlResult invalidResult(TemperatureControlStatus status,
-                                       TemperatureControlReason reason,
-                                       AirLimitState airLimitState =
-                                           AirLimitState::Unavailable) {
+TemperatureControlResult invalidResult(
+    TemperatureControlStatus status, TemperatureControlReason reason,
+    AirLimitState airLimitState = AirLimitState::Unavailable) {
     TemperatureControlResult result;
     result.status = status;
     result.reason = reason;
@@ -211,11 +210,12 @@ TemperatureControlResult TemperatureController::evaluate(
 
     if (!finite(measuredCelsius)) {
         clearFailClosed();
-        return invalidResult(TemperatureControlStatus::InvalidInput,
-                             TemperatureControlReason::InvalidSample,
-                             input.controlSensorRole == ControlSensorRole::Product
-                                 ? AirLimitState::Unavailable
-                                 : AirLimitState::NotApplied);
+        return invalidResult(
+            TemperatureControlStatus::InvalidInput,
+            TemperatureControlReason::InvalidSample,
+            input.controlSensorRole == ControlSensorRole::Product
+                ? AirLimitState::Unavailable
+                : AirLimitState::NotApplied);
     }
 
     const bool hasPreviousTimestamp =
@@ -227,11 +227,12 @@ TemperatureControlResult TemperatureController::evaluate(
         const auto previous = *state_.lastSampleTimestampMonotonicMillis;
         if (input.sampleTimestampMonotonicMillis < previous) {
             clearFailClosed();
-            return invalidResult(TemperatureControlStatus::InvalidInput,
-                                 TemperatureControlReason::TimeInvalid,
-                                 input.controlSensorRole == ControlSensorRole::Product
-                                     ? AirLimitState::Unavailable
-                                     : AirLimitState::NotApplied);
+            return invalidResult(
+                TemperatureControlStatus::InvalidInput,
+                TemperatureControlReason::TimeInvalid,
+                input.controlSensorRole == ControlSensorRole::Product
+                    ? AirLimitState::Unavailable
+                    : AirLimitState::NotApplied);
         }
         deltaMillis = input.sampleTimestampMonotonicMillis - previous;
         if (deltaMillis > parameters_.maximumIntegrationStepMillis) {
@@ -239,11 +240,12 @@ TemperatureControlResult TemperatureController::evaluate(
                 input.sampleTimestampMonotonicMillis;
             state_.suppressIntegrationAfterGap = true;
             clearFailClosed();
-            return invalidResult(TemperatureControlStatus::InvalidInput,
-                                 TemperatureControlReason::TimeInvalid,
-                                 input.controlSensorRole == ControlSensorRole::Product
-                                     ? AirLimitState::Unavailable
-                                     : AirLimitState::NotApplied);
+            return invalidResult(
+                TemperatureControlStatus::InvalidInput,
+                TemperatureControlReason::TimeInvalid,
+                input.controlSensorRole == ControlSensorRole::Product
+                    ? AirLimitState::Unavailable
+                    : AirLimitState::NotApplied);
         }
     }
     state_.lastSampleTimestampMonotonicMillis =
@@ -269,10 +271,9 @@ TemperatureControlResult TemperatureController::evaluate(
                         ? AirLimitState::Unavailable
                         : AirLimitState::NotApplied);
             }
-            allowPositiveIntegration =
-                feedback.disposition ==
-                PreviousControlRequestFeedback::Disposition::
-                    NoIntegratorConstraint;
+            allowPositiveIntegration = feedback.disposition ==
+                                       PreviousControlRequestFeedback::
+                                           Disposition::NoIntegratorConstraint;
             state_.feedbackWindow = std::nullopt;
         }
     } else if (input.previousControlRequestFeedback.has_value()) {
@@ -290,11 +291,12 @@ TemperatureControlResult TemperatureController::evaluate(
     const double rawErrorCelsius = input.targetCelsius - measuredCelsius;
     if (!finite(rawErrorCelsius)) {
         clearFailClosed();
-        return invalidResult(TemperatureControlStatus::InvalidInput,
-                             TemperatureControlReason::InvalidSample,
-                             input.controlSensorRole == ControlSensorRole::Product
-                                 ? AirLimitState::Unavailable
-                                 : AirLimitState::NotApplied);
+        return invalidResult(
+            TemperatureControlStatus::InvalidInput,
+            TemperatureControlReason::InvalidSample,
+            input.controlSensorRole == ControlSensorRole::Product
+                ? AirLimitState::Unavailable
+                : AirLimitState::NotApplied);
     }
 
     const PiDirectionParameters* profile = nullptr;
@@ -333,9 +335,10 @@ TemperatureControlResult TemperatureController::evaluate(
         // Idle does not change the active-direction anchor and does not
         // consume a pending transition because no new profile is known.
         if (requestIdentityExhausted_) {
-            return invalidResult(TemperatureControlStatus::InvalidInput,
-                                 TemperatureControlReason::RequestIdentityExhausted,
-                                 result.airLimitState);
+            return invalidResult(
+                TemperatureControlStatus::InvalidInput,
+                TemperatureControlReason::RequestIdentityExhausted,
+                result.airLimitState);
         }
         ControlRequest request;
         request.identity = {nextRequestSequence_,
@@ -402,16 +405,15 @@ TemperatureControlResult TemperatureController::evaluate(
 
     bool directionChanged = false;
     if (state_.lastActiveDirection.has_value()) {
-        directionChanged =
-            *state_.lastActiveDirection != direction;
+        directionChanged = *state_.lastActiveDirection != direction;
     }
-    const bool hasPendingTransition = state_.pendingTransitionAction.has_value();
+    const bool hasPendingTransition =
+        state_.pendingTransitionAction.has_value();
     const bool transitionSample = directionChanged || hasPendingTransition ||
                                   firstSample || timestampRecoveryAnchor;
     if (hasPendingTransition || directionChanged) {
         IntegratorTransitionAction action =
-            state_.pendingTransitionAction.value_or(
-                policy_.directionChange);
+            state_.pendingTransitionAction.value_or(policy_.directionChange);
         if (hasPendingTransition && directionChanged &&
             policy_.directionChange == IntegratorTransitionAction::Reset) {
             action = IntegratorTransitionAction::Reset;
@@ -429,8 +431,7 @@ TemperatureControlResult TemperatureController::evaluate(
 
     double allowedDeltaI = 0.0;
     if (allowPositiveIntegration && !airLimitRestricts && !transitionSample &&
-        !firstSample &&
-        deltaMillis > 0U) {
+        !firstSample && deltaMillis > 0U) {
         const double dtSeconds = static_cast<double>(deltaMillis) / 1000.0;
         const double deltaI = profile->integralGainQuotePerCelsiusSecond *
                               activeErrorCelsius * dtSeconds;
@@ -443,8 +444,7 @@ TemperatureControlResult TemperatureController::evaluate(
         allowedDeltaI = deltaI;
     }
 
-    const double integralHeadroom =
-        std::max(0.0, profile->maximumQuote - rawP);
+    const double integralHeadroom = std::max(0.0, profile->maximumQuote - rawP);
     if (!finite(integralHeadroom)) {
         clearFailClosed();
         return invalidResult(TemperatureControlStatus::InvalidInput,
@@ -454,7 +454,8 @@ TemperatureControlResult TemperatureController::evaluate(
     if (rawP >= profile->maximumQuote) {
         state_.integralContributionQuote = 0.0;
     } else {
-        const double candidate = state_.integralContributionQuote + allowedDeltaI;
+        const double candidate =
+            state_.integralContributionQuote + allowedDeltaI;
         if (!finite(candidate)) {
             clearFailClosed();
             return invalidResult(TemperatureControlStatus::InvalidInput,
@@ -464,8 +465,7 @@ TemperatureControlResult TemperatureController::evaluate(
         state_.integralContributionQuote =
             std::min(std::max(candidate, 0.0), integralHeadroom);
     }
-    const double unboundedQuote =
-        rawP + state_.integralContributionQuote;
+    const double unboundedQuote = rawP + state_.integralContributionQuote;
     if (!finite(unboundedQuote)) {
         clearFailClosed();
         return invalidResult(TemperatureControlStatus::InvalidInput,

@@ -59,6 +59,13 @@ Nicht gespeichert werden:
 - letzte Heiz- oder Kuehlfreigabe als Bootbefehl
 - rohe GPIO-Zustaende
 - blinde Aktor-Wiederherstellungsbefehle
+- fluechtige `ControlRequest`-Sequenzen, PI-Integratorwerte,
+  Feedbackfenster, `lastActiveDirection` oder Qualifikator-Episoden
+
+Nach Recovery beginnt der #22-PI-/Qualifikatorzustand leer. Eine alte
+`qualificationValidSinceMillis`-Markierung bleibt ausschliesslich ein
+Prozess-/Diagnosemarker und erzeugt keinen Qualifikationskredit; die bestehende
+Recovery-Rebase aus `QUALIFYING_TARGET` nach `REACHING_TARGET` bleibt bestehen.
 
 ## Speicherereignisse
 

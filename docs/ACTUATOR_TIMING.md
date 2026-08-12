@@ -157,18 +157,28 @@ anwachsen.
 Verbindliches Verhalten:
 
 - Bei Mindest-Auszeit, Polaritaetswechsel-Totzeit, Luftbegrenzung oder sonstiger
-  temporaerer Aktorsperre wird der Integralanteil eingefroren oder durch
-  geeignetes Anti-Windup begrenzt.
-- Die Differenz zwischen Regleranforderung und tatsaechlich freigegebener
-  Aktorleistung wird fuer das Anti-Windup beruecksichtigt.
-- Ein Richtungswechsel setzt den Integralanteil nicht automatisch und pauschal
-  auf null; die genaue Rueckfuehrungs- oder Begrenzungsstrategie wird beim
-  Tuning festgelegt.
+  temporaerer Aktorsperre meldet die nachgelagerte Kette fuer die konkrete
+  Request `DeferredOrLimited`; bei vollstaendiger Nichtannahme `Rejected`.
+  Der #22-Kern friert den Integralanteil dann ein und behauptet keine
+  physische Aktorquote.
+- Nur `NoIntegratorConstraint` fuer exakt die unmittelbar vorherige aktive
+  Request erlaubt dem #22-Kern eine positive Integrationsfortschreibung.
+  Fehlendes, fremdes, altes oder doppelt konsumiertes Feedback friert ein oder
+  wird fail-closed verworfen.
+- Ein Richtungswechsel setzt den Integralanteil nicht automatisch pauschal auf
+  null. Die injizierte Policy kennt nur `Reset` oder `BoundedCarry`; konkrete
+  Produktionswahl und Carry-Grenze bleiben `TBD_COMMISSIONING`.
 - Bei Phasenwechsel, Sollwertsprung, Sensorwechsel oder manueller Laufanpassung
   kann eine kontrollierte Anpassung beziehungsweise Teilruecksetzung notwendig
   sein.
 - Nach einem Fehler wird kein alter aufgeladener Integralwert blind wieder
   freigegeben.
+
+Jede gueltige `HEAT`-, `OFF`- oder `COOL`-Anforderung besitzt im #22-Kern eine
+fluechtige `uint64_t`-Sequenz, einen monotonen Erzeugungszeitpunkt sowie die
+fluechtige Identitaet aus Prozessuebergang, Laufrevision und Regelsensorrolle.
+Der Aktorplaner verwirft Requests mit veraltetem Kontext oder abgelaufenem
+eigenem Watchdog; diese Pruefungen sind nicht Teil der PI-Mathematik.
 
 ## Aussenluefter
 

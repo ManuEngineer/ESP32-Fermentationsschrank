@@ -25,6 +25,7 @@ using fermentation::ProcessSignals;
 using fermentation::ProcessState;
 using fermentation::ProgramDocument;
 using fermentation::ProgramSourceKind;
+using fermentation::QualificationProgress;
 using fermentation::TransitionDecision;
 using fermentation::TransitionReason;
 using fermentation::TransitionRequest;
@@ -133,6 +134,26 @@ ProcessRuntimeState standbyState() {
     return state;
 }
 
+ProcessSignals qualificationInBandSignals() {
+    return {QualificationProgress::InBand, false, false};
+}
+
+ProcessSignals qualificationCompleteSignals() {
+    return {QualificationProgress::Complete, false, false};
+}
+
+ProcessSignals coolingReachedSignals() {
+    return {QualificationProgress::Unavailable, true, false};
+}
+
+ProcessSignals interruptedSignals() {
+    return {QualificationProgress::Unavailable, false, false};
+}
+
+ProcessSignals criticalFaultSignals() {
+    return {QualificationProgress::Unavailable, false, true};
+}
+
 void enterQualifying(ProcessRuntimeState& state,
                      const ProcessRunSnapshot& snapshot,
                      const VirtualTimeSource& time) {
@@ -140,7 +161,8 @@ void enterQualifying(ProcessRuntimeState& state,
           &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(state.state));
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationInBandSignals()),
+          &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::QualifyingTarget),
                           static_cast<int>(state.state));
 }
@@ -148,7 +170,8 @@ void enterQualifying(ProcessRuntimeState& state,
 void qualify(ProcessRuntimeState& state, const ProcessRunSnapshot& snapshot,
              VirtualTimeSource& time) {
     time.advanceMonotonicMillis(kMinuteMillis);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationCompleteSignals()),
+          &snapshot);
 }
 
 void test_all_factory_programs_produce_expected_process_snapshots() {
@@ -188,20 +211,27 @@ void test_all_factory_programs_complete_their_full_process_flow() {
         apply(state, decide(state, &snapshot, time, {}, ProcessEvent::StartRun),
               &snapshot);
         if (snapshot.preheatEnabled) {
-            apply(state, decide(state, &snapshot, time, {true, false}),
+            apply(state,
+                  decide(state, &snapshot, time, qualificationInBandSignals()),
                   &snapshot);
             time.advanceMonotonicMillis(kMinuteMillis);
-            apply(state, decide(state, &snapshot, time, {true, false}),
-                  &snapshot);
+            apply(
+                state,
+                decide(state, &snapshot, time, qualificationCompleteSignals()),
+                &snapshot);
             apply(state,
                   decide(state, &snapshot, time, {},
                          ProcessEvent::ProductInsertedConfirmed),
                   &snapshot);
         }
 
-        apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+        apply(state,
+              decide(state, &snapshot, time, qualificationInBandSignals()),
+              &snapshot);
         time.advanceMonotonicMillis(kMinuteMillis);
-        apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+        apply(state,
+              decide(state, &snapshot, time, qualificationCompleteSignals()),
+              &snapshot);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
                               static_cast<int>(state.state));
 
@@ -215,7 +245,8 @@ void test_all_factory_programs_complete_their_full_process_flow() {
 
         TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Cooling),
                               static_cast<int>(state.state));
-        apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+        apply(state, decide(state, &snapshot, time, coolingReachedSignals()),
+              &snapshot);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::CoolHolding),
                               static_cast<int>(state.state));
         apply(state,
@@ -337,8 +368,8 @@ void test_critical_fault_has_priority_over_user_event() {
     auto state = standbyState();
     const auto snapshot = makeTimedSnapshot(false);
 
-    const auto decision =
-        decide(state, &snapshot, time, {false, true}, ProcessEvent::StartRun);
+    const auto decision = decide(state, &snapshot, time, criticalFaultSignals(),
+                                 ProcessEvent::StartRun);
 
     TEST_ASSERT_TRUE(decision.proposed());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
@@ -350,7 +381,7 @@ void test_critical_fault_has_priority_over_user_event() {
     auto invalidSnapshot = snapshot;
     invalidSnapshot.qualificationDurationMinutes = 0U;
     const auto invalidSnapshotDecision =
-        decide(state, &invalidSnapshot, time, {false, true});
+        decide(state, &invalidSnapshot, time, criticalFaultSignals());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::CriticalFault),
                           static_cast<int>(invalidSnapshotDecision.reason));
     apply(state, invalidSnapshotDecision, &invalidSnapshot);
@@ -368,14 +399,18 @@ void test_preheat_qualification_resets_and_wait_timeout_aborts() {
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
                           static_cast<int>(state.state));
 
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationInBandSignals()),
+          &snapshot);
     time.advanceMonotonicMillis(30000U);
-    apply(state, decide(state, &snapshot, time, {false, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, interruptedSignals()),
+          &snapshot);
     TEST_ASSERT_FALSE(state.qualificationValidSinceMillis.has_value());
 
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationInBandSignals()),
+          &snapshot);
     time.advanceMonotonicMillis(kMinuteMillis);
-    const auto waiting = decide(state, &snapshot, time, {true, false});
+    const auto waiting =
+        decide(state, &snapshot, time, qualificationCompleteSignals());
     TEST_ASSERT_TRUE(
         containsMessage(waiting, ProcessMessage::ProductInsertionRequested));
     apply(state, waiting, &snapshot);
@@ -399,9 +434,11 @@ void test_product_confirmation_starts_target_reach() {
     const auto snapshot = makeTimedSnapshot(true);
     apply(state, decide(state, &snapshot, time, {}, ProcessEvent::StartRun),
           &snapshot);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationInBandSignals()),
+          &snapshot);
     time.advanceMonotonicMillis(kMinuteMillis);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationCompleteSignals()),
+          &snapshot);
 
     time.advanceMonotonicMillis(1000U);
     apply(state,
@@ -421,9 +458,11 @@ void test_product_confirmation_cannot_bypass_expired_wait_limit() {
     const auto snapshot = makeTimedSnapshot(true);
     apply(state, decide(state, &snapshot, time, {}, ProcessEvent::StartRun),
           &snapshot);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationInBandSignals()),
+          &snapshot);
     time.advanceMonotonicMillis(kMinuteMillis);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationCompleteSignals()),
+          &snapshot);
     time.advanceMonotonicMillis(3U * kMinuteMillis);
 
     const auto decision = decide(state, &snapshot, time, {},
@@ -445,10 +484,13 @@ void test_target_qualification_starts_fermentation_timer() {
     time.advanceMonotonicMillis(kMinuteMillis - 1U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(DecisionStatus::NoTransition),
-        static_cast<int>(decide(state, &snapshot, time, {true, false}).status));
+        static_cast<int>(
+            decide(state, &snapshot, time, qualificationCompleteSignals())
+                .status));
 
     time.advanceMonotonicMillis(1U);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationCompleteSignals()),
+          &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
                           static_cast<int>(state.state));
     TEST_ASSERT_EQUAL_UINT64(time.monotonicMillis(),
@@ -492,7 +534,8 @@ void test_target_reach_warning_survives_qualification_reset_and_occurs_once() {
     enterQualifying(state, snapshot, time);
 
     time.advanceMonotonicMillis(kMinuteMillis);
-    apply(state, decide(state, &snapshot, time, {false, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, interruptedSignals()),
+          &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(state.state));
     TEST_ASSERT_EQUAL_UINT64(0U, state.targetReachStartedAtMillis);
@@ -519,7 +562,8 @@ void test_completion_modes_reach_the_specified_states() {
     apply(state, decide(state, &snapshot, time), &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Cooling),
                           static_cast<int>(state.state));
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, coolingReachedSignals()),
+          &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
                           static_cast<int>(state.state));
 
@@ -535,7 +579,7 @@ void test_completion_modes_reach_the_specified_states() {
           &timedHoldSnapshot);
     apply(timedHoldState,
           decide(timedHoldState, &timedHoldSnapshot, timedHoldTime,
-                 {true, false}),
+                 coolingReachedSignals()),
           &timedHoldSnapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::CoolHolding),
                           static_cast<int>(timedHoldState.state));
@@ -556,7 +600,8 @@ void test_manual_cool_hold_finishes_normally() {
     qualify(state, snapshot, time);
     time.advanceMonotonicMillis(2U * kMinuteMillis);
     apply(state, decide(state, &snapshot, time), &snapshot);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, coolingReachedSignals()),
+          &snapshot);
 
     const auto finished =
         decide(state, &snapshot, time, {}, ProcessEvent::FinishHoldConfirmed);
@@ -577,18 +622,23 @@ void test_manual_holding_uses_qualified_route_with_and_without_preheat() {
               &snapshot);
 
         if (preheat) {
-            apply(state, decide(state, &snapshot, time, {true, false}),
+            apply(state,
+                  decide(state, &snapshot, time, qualificationInBandSignals()),
                   &snapshot);
             time.advanceMonotonicMillis(kMinuteMillis);
-            apply(state, decide(state, &snapshot, time, {true, false}),
-                  &snapshot);
+            apply(
+                state,
+                decide(state, &snapshot, time, qualificationCompleteSignals()),
+                &snapshot);
             apply(state,
                   decide(state, &snapshot, time, {},
                          ProcessEvent::ProductInsertedConfirmed),
                   &snapshot);
         }
 
-        apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+        apply(state,
+              decide(state, &snapshot, time, qualificationInBandSignals()),
+              &snapshot);
         qualify(state, snapshot, time);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ManualHolding),
                               static_cast<int>(state.state));
@@ -615,9 +665,11 @@ void test_product_and_air_guided_programs_use_same_abstract_signal_path() {
     productState.state = ProcessState::ReachingTarget;
     airState.state = ProcessState::ReachingTarget;
     apply(productState,
-          decide(productState, &productSnapshot, productTime, {true, false}),
+          decide(productState, &productSnapshot, productTime,
+                 qualificationInBandSignals()),
           &productSnapshot);
-    apply(airState, decide(airState, &airSnapshot, airTime, {true, false}),
+    apply(airState,
+          decide(airState, &airSnapshot, airTime, qualificationInBandSignals()),
           &airSnapshot);
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(productState.state),

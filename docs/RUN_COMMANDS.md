@@ -325,6 +325,12 @@ Die Vorschau weist ausdruecklich darauf hin, dass der biologische Prozess
 weiterlaeuft und Release 1 aus der Sollwertaenderung keine erfundene
 biologische Zeitkorrektur ableitet.
 
+Nach erfolgreichem Persistenz-/Apply-Pfad wird fuer den fluechtigen #22-Kern
+eine `TargetContextChange`-Commit-Information bereitgestellt. Bei einem
+fehlgeschlagenen Persistenz- oder Apply-Pfad entsteht keine solche Information;
+der alte Ziel- und Integratorkontext bleibt wirksam. Die Information ist kein
+neues Lauf- oder Wirefeld.
+
 Eine spaetere temperaturgewichtete Fortschrittskorrektur bleibt Issue #18 und
 der Inbetriebnahme vorbehalten.
 

@@ -17,15 +17,10 @@ enum class QualificationProgress : std::uint8_t {
 };
 
 struct ProcessSignals {
-    // Kompatibilitaetsfeld fuer bereits bestehende Aufrufer des
-    // Zustandsautomaten. Neue Orchestratoren verwenden qualificationProgress
-    // und coolingTargetConditionValid. Es wird intern nicht als Cooling-Signal
-    // wiederverwendet.
-    bool qualificationConditionValid{false};
-    bool criticalFault{false};
     QualificationProgress qualificationProgress{
         QualificationProgress::Unavailable};
     bool coolingTargetConditionValid{false};
+    bool criticalFault{false};
 };
 
 [[nodiscard]] inline bool qualificationHasPositiveEvidence(
@@ -38,17 +33,14 @@ struct ProcessSignals {
         case QualificationProgress::Unavailable:
         case QualificationProgress::Invalid:
         case QualificationProgress::OutsideBand:
-            return signals.qualificationConditionValid;
+            return false;
     }
     return false;
 }
 
 [[nodiscard]] inline bool qualificationIsComplete(
     const ProcessSignals& signals) {
-    return signals.qualificationProgress == QualificationProgress::Complete ||
-           (signals.qualificationProgress ==
-                QualificationProgress::Unavailable &&
-            signals.qualificationConditionValid);
+    return signals.qualificationProgress == QualificationProgress::Complete;
 }
 
 [[nodiscard]] inline bool qualificationIsInterrupted(
@@ -57,7 +49,7 @@ struct ProcessSignals {
         case QualificationProgress::Unavailable:
         case QualificationProgress::Invalid:
         case QualificationProgress::OutsideBand:
-            return !signals.qualificationConditionValid;
+            return true;
         case QualificationProgress::Grace:
         case QualificationProgress::InBand:
         case QualificationProgress::Complete:
