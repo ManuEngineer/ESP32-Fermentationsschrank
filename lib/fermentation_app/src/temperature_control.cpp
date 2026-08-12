@@ -124,8 +124,11 @@ bool validateIntegratorTransitionPolicy(
 }
 
 TemperatureController::TemperatureController(
-    TemperatureControlParameters parameters, IntegratorTransitionPolicy policy)
-    : parameters_(parameters), policy_(policy) {}
+    TemperatureControlParameters parameters, IntegratorTransitionPolicy policy,
+    std::uint64_t initialRequestSequence)
+    : parameters_(parameters),
+      policy_(policy),
+      nextRequestSequence_(initialRequestSequence) {}
 
 bool TemperatureController::markCommittedControlContextTransitionPending(
     CommittedControlContextTransition transition) {

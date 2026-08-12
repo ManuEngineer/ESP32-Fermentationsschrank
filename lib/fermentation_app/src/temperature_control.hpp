@@ -39,7 +39,8 @@ struct TemperatureControlRuntimeState {
 class TemperatureController {
    public:
     TemperatureController(TemperatureControlParameters parameters,
-                          IntegratorTransitionPolicy policy);
+                          IntegratorTransitionPolicy policy,
+                          std::uint64_t initialRequestSequence = 1U);
 
     [[nodiscard]] TemperatureControlResult evaluate(
         const TemperatureControlInput& input);

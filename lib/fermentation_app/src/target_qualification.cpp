@@ -116,6 +116,14 @@ TargetQualificationResult TargetQualificationEvaluator::evaluate(
     }
 
     const auto now = input.sampleTimestampMonotonicMillis;
+    if (state_.lastUsableTimestampMillis.has_value()) {
+        const auto previous = *state_.lastUsableTimestampMillis;
+        if (now < previous ||
+            now - previous > *input.maximumAcceptedSampleGapMillis) {
+            clearEpisode(state_);
+            return result(QualificationProgress::Invalid, state_);
+        }
+    }
     if (state_.graceStartedAtMillis.has_value()) {
         if (now < *state_.graceStartedAtMillis) {
             clearEpisode(state_);

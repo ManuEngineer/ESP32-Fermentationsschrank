@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <cmath>
+#include <limits>
 
 #include "temperature_control.hpp"
 
@@ -278,6 +279,21 @@ void test_invalid_parameters_are_unavailable_without_a_request() {
     TEST_ASSERT_FALSE(result.controlRequest.has_value());
 }
 
+void test_request_identity_does_not_wrap_at_uint64_max() {
+    TemperatureController controller(
+        parameters(), policy(), std::numeric_limits<std::uint64_t>::max());
+    const auto last = controller.evaluate(airInput(100U, 20.0, 20.0));
+    TEST_ASSERT_TRUE(last.controlRequest.has_value());
+    TEST_ASSERT_EQUAL_UINT64(std::numeric_limits<std::uint64_t>::max(),
+                             last.controlRequest->identity.sequence);
+
+    const auto exhausted = controller.evaluate(airInput(200U, 20.0, 20.0));
+    TEST_ASSERT_TRUE(exhausted.status == TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_TRUE(exhausted.reason ==
+                     TemperatureControlReason::RequestIdentityExhausted);
+    TEST_ASSERT_FALSE(exhausted.controlRequest.has_value());
+}
+
 }  // namespace
 
 void setup() {}
@@ -301,5 +317,6 @@ int main(int argc, char** argv) {
     RUN_TEST(test_large_gap_resets_and_uses_current_timestamp_as_new_anchor);
     RUN_TEST(test_timestamp_can_repeat_but_request_identity_cannot);
     RUN_TEST(test_invalid_parameters_are_unavailable_without_a_request);
+    RUN_TEST(test_request_identity_does_not_wrap_at_uint64_max);
     return UNITY_END();
 }
