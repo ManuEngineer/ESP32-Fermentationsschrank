@@ -213,6 +213,12 @@ class RunPersistenceCoordinator {
         const ResolveRecoveryUncertaintyRequest& request,
         const RunCheckpointTime& time,
         const CrossRolePlausibilityContext& liveSensorEvidence);
+    // Automatic UTC reevaluation of the persisted Hop-1-only
+    // WaitingForProduct case. Expiry is resolved without Gate A; a still
+    // valid result requires the optional fresh Gate-A context.
+    [[nodiscard]] RunPersistenceResult reevaluateRecoveryEvaluation(
+        RunCommandState& current, const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
 
     // Gemeinsamer, write-before-apply Recovery-Schreibpfad fuer spaetere
     // fachliche Recovery-Kandidaten (Zeit-Reevaluation und Gewichtung). Der
@@ -221,7 +227,8 @@ class RunPersistenceCoordinator {
     // auf `Recovery` festgelegt und es entsteht kein zweiter Schreibkern.
     [[nodiscard]] RunPersistenceResult persistRecoveryCandidate(
         RunCommandState& current, const RunCommandState& candidate,
-        const RunCheckpointTime& time);
+        const RunCheckpointTime& time,
+        RunPersistenceFallbackDirective fallbackDirective = {});
 
    private:
     friend class RunPersistenceCoordinatorTestAccess;

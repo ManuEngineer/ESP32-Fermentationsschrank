@@ -89,17 +89,13 @@ RunPersistenceResult reevaluateWith(
                                  persistence.state());
     }
 
-    // The Hop-1-only WaitingForProduct path needs a fresh Gate-A sensor
-    // context. Keep the no-context API fail-closed; the existing persistence
-    // coordinator remains the sole owner of the Gate-A/Resume rules.
+    // The persistence coordinator owns the canonical Hop-1-only verdict and
+    // write-before-apply resolution. Expiry needs no Gate A; a valid resume
+    // keeps the no-context overload fail-closed and delegates Gate A to the
+    // existing restart sensor-selection path.
     if (current.processState.state == ProcessState::RecoveryEvaluation) {
-        if (liveSensorEvidence == nullptr) {
-            return coordinatorResult(
-                RunPersistenceResultStatus::NotAllowedInState,
-                persistence.state());
-        }
-        return coordinatorResult(RunPersistenceResultStatus::NotAllowedInState,
-                                 persistence.state());
+        return persistence.reevaluateRecoveryEvaluation(current, time,
+                                                        liveSensorEvidence);
     }
 
     const auto phase = current.processState.state;
@@ -242,8 +238,15 @@ RunPersistenceResult applyWeightingWith(
         next.coverage = WeightedProgressCoverage::Complete;
         next.cumulative = contribution->delta;
     }
+    auto cumulativeConfidence = contribution->confidence;
+    if (current.runProgress.weightedProgress.has_value() &&
+        current.runProgress.weightedProgress->lastApplied.has_value()) {
+        cumulativeConfidence = combineWeightedProgressConfidence(
+            current.runProgress.weightedProgress->lastApplied->confidence,
+            contribution->confidence);
+    }
     next.lastApplied = WeightedProgressProvenance{
-        contribution->sourceRole, contribution->confidence,
+        contribution->sourceRole, cumulativeConfidence,
         contribution->modelRevision, weightedProgressSegmentId};
 
     if (current.runRevision == std::numeric_limits<std::uint32_t>::max()) {
