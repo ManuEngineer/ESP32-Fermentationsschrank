@@ -185,6 +185,7 @@ bool eligibleTransition(TransitionReason reason) {
         case TransitionReason::CoolingTargetReached:
         case TransitionReason::HoldDurationCompleted:
         case TransitionReason::HoldFinishedByUser:
+        case TransitionReason::CriticalFault:
             return true;
         default:
             return false;
@@ -1814,6 +1815,8 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
     result.sensorSelectionEvent = decision.sensorSelectionEvent;
     result.sensorSelectionNotice = decision.sensorSelectionNotice;
     result.startSensorSelectionNotice = decision.startSensorSelectionNotice;
+    result.committedControlContextTransition =
+        decision.committedControlContextTransition;
     return result;
 }
 
@@ -1958,6 +1961,9 @@ RunPersistenceResult RunPersistenceCoordinator::persistTransition(
         result.committedControlContextTransition =
             resolveProductInsertedControlContextTransition(beforeRole,
                                                            afterRole);
+    } else {
+        result.committedControlContextTransition =
+            decision.committedControlContextTransition;
     }
     return result;
 }
@@ -2088,6 +2094,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     // aus der Ursache - `beforePermission` wird deshalb festgehalten, bevor
     // der gemeinsame Mutationshelfer `current`/`candidate` veraendert.
     const auto beforePermission = current.sensorSelectionRuntime.permission;
+    const auto beforeMode = *current.activeRunSensorMode;
     auto candidate = current;
     // Korrekturauftrag Befund 1 (zweiter Punkt): gemeinsamer mechanischer
     // Mutationshelfer mit dem manuellen Pfad (run_commands.cpp::
@@ -2138,6 +2145,11 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
         auto event = *mutation.event;
         event.utcUnixSeconds = time.utcUnixSeconds;
         out.sensorSelectionEvent = event;
+        if (mutation.activeMode.has_value() &&
+            beforeMode != *mutation.activeMode) {
+            out.committedControlContextTransition =
+                CommittedControlContextTransition::SensorRoleChange;
+        }
     } else if (mutation.notice.has_value()) {
         out.sensorSelectionNotice = mutation.notice;
     }

@@ -3,7 +3,9 @@
 #include <cmath>
 #include <limits>
 
+#include "target_qualification.hpp"
 #include "temperature_control.hpp"
+#include "temperature_control_orchestrator.hpp"
 
 namespace {
 
@@ -59,6 +61,22 @@ TemperatureControlInput productInput(std::uint64_t timestamp, double target,
     auto input = airInput(timestamp, target, measured);
     input.controlSensorRole = ControlSensorRole::Product;
     input.air = validSample(air);
+    input.product = validSample(measured);
+    return input;
+}
+
+TargetQualificationInput qualificationInput(std::uint64_t timestamp,
+                                            double measured) {
+    TargetQualificationInput input;
+    input.phase = QualificationPhase::Target;
+    input.sampleTimestampMonotonicMillis = timestamp;
+    input.targetCelsius = 20.0;
+    input.bandCelsius = 0.5;
+    input.qualificationDurationMillis = 1'000U;
+    input.effectiveGraceMillis = 500U;
+    input.maximumAcceptedSampleGapMillis = 2'000U;
+    input.controlSensorRole = ControlSensorRole::Product;
+    input.air = validSample(measured);
     input.product = validSample(measured);
     return input;
 }
@@ -219,6 +237,103 @@ void test_second_raw_p_saturation_skips_overflowing_positive_delta_i() {
     TEST_ASSERT_TRUE(second.status == TemperatureControlStatus::Demand);
     TEST_ASSERT_TRUE(second.reason == TemperatureControlReason::Saturated);
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, second.integralContributionQuote);
+}
+
+void test_integral_headroom_caps_exact_and_oversized_steps_and_reduces_existing_i() {
+    auto exactParameters = parameters();
+    exactParameters.airHeating.proportionalGainQuotePerCelsius = 0.2;
+    exactParameters.airHeating.integralGainQuotePerCelsiusSecond = 0.05;
+    exactParameters.airHeating.neutralBandWidthCelsius = 0.8;
+    TemperatureController exact(exactParameters, policy());
+    const auto exactFirst = exact.evaluate(airInput(100U, 25.0, 21.0));
+    auto exactSecondInput = airInput(1'100U, 25.0, 21.0);
+    exactSecondInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        exactFirst.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto exactSecond = exact.evaluate(exactSecondInput);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.16,
+                              exactSecond.integralContributionQuote);
+    TEST_ASSERT_TRUE(exactSecond.integralContributionQuote <=
+                     exactParameters.airHeating.maximumQuote -
+                         exactSecond.rawProportionalQuote);
+
+    auto oversizedParameters = exactParameters;
+    oversizedParameters.airHeating.integralGainQuotePerCelsiusSecond = 0.2;
+    TemperatureController oversized(oversizedParameters, policy());
+    const auto oversizedFirst = oversized.evaluate(airInput(100U, 25.0, 21.0));
+    auto oversizedSecondInput = airInput(1'100U, 25.0, 21.0);
+    oversizedSecondInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        oversizedFirst.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto oversizedSecond = oversized.evaluate(oversizedSecondInput);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.16,
+                              oversizedSecond.integralContributionQuote);
+
+    auto reductionParameters = parameters();
+    reductionParameters.airHeating.integralGainQuotePerCelsiusSecond = 0.1;
+    reductionParameters.airHeating.neutralBandWidthCelsius = 0.8;
+    TemperatureController reduction(reductionParameters, policy());
+    const auto reductionFirst = reduction.evaluate(airInput(100U, 25.0, 20.0));
+    auto reductionSecondInput = airInput(1'100U, 25.0, 20.0);
+    reductionSecondInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        reductionFirst.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto reductionSecond = reduction.evaluate(reductionSecondInput);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.38,
+                              reductionSecond.integralContributionQuote);
+    auto reductionThirdInput = airInput(2'100U, 25.0, 19.0);
+    reductionThirdInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        reductionSecond.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto reductionThird = reduction.evaluate(reductionThirdInput);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.28,
+                              reductionThird.integralContributionQuote);
+    TEST_ASSERT_TRUE(reductionThird.integralContributionQuote <=
+                     reductionParameters.airHeating.maximumQuote -
+                         reductionThird.rawProportionalQuote);
+}
+
+void test_lifecycle_boundary_resets_pi_and_qualification_ram() {
+    TemperatureController controller(parameters(), policy());
+    const auto first = controller.evaluate(airInput(100U, 25.0, 20.0));
+    auto secondInput = airInput(1'100U, 25.0, 20.0);
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto second = controller.evaluate(secondInput);
+    TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
+
+    TargetQualificationEvaluator evaluator;
+    auto qualificationFirst =
+        evaluator.evaluate(qualificationInput(100U, 20.0));
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        qualificationFirst, {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
+    auto qualificationSecond =
+        evaluator.evaluate(qualificationInput(1'100U, 20.0));
+    TEST_ASSERT_TRUE(qualificationSecond.creditedInBandMillis > 0U);
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        qualificationSecond,
+        {{20.0, 0.5, ControlSensorRole::Product}, 0U, 0U}));
+
+    resetTemperatureControlAtBoundary(
+        controller, evaluator, TemperatureControlLifecycleBoundary::Recovery);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              controller.state().integralContributionQuote);
+    TEST_ASSERT_FALSE(controller.state().lastActiveDirection.has_value());
+    TEST_ASSERT_FALSE(controller.state().feedbackWindow.has_value());
+    TEST_ASSERT_EQUAL_UINT64(0U, evaluator.state().creditedInBandMillis);
+    TEST_ASSERT_FALSE(evaluator.state().episodeActive);
+
+    const auto firstAfterReset =
+        controller.evaluate(airInput(2'000U, 25.0, 20.0));
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              firstAfterReset.integralContributionQuote);
+    TEST_ASSERT_TRUE(firstAfterReset.controlRequest->identity.sequence >
+                     second.controlRequest->identity.sequence);
 }
 
 void test_product_air_limit_reduces_and_blocks_normal_demand() {
@@ -673,6 +788,9 @@ int main(int argc, char** argv) {
         test_raw_p_above_maximum_is_checked_and_saturated_without_p_preclamp);
     RUN_TEST(test_raw_p_equal_to_maximum_has_zero_headroom);
     RUN_TEST(test_second_raw_p_saturation_skips_overflowing_positive_delta_i);
+    RUN_TEST(
+        test_integral_headroom_caps_exact_and_oversized_steps_and_reduces_existing_i);
+    RUN_TEST(test_lifecycle_boundary_resets_pi_and_qualification_ram);
     RUN_TEST(test_product_air_limit_reduces_and_blocks_normal_demand);
     RUN_TEST(test_air_limit_does_not_charge_integrator);
     RUN_TEST(

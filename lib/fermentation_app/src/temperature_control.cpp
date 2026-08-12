@@ -192,6 +192,8 @@ bool TemperatureController::markCommittedControlContextTransitionPending(
     return true;
 }
 
+void TemperatureController::resetRuntime() { state_ = {}; }
+
 TemperatureControlResult TemperatureController::evaluate(
     const TemperatureControlInput& input) {
     const auto clearFailClosed = [this]() {

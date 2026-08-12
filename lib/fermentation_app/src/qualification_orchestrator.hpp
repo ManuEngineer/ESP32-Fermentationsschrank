@@ -5,6 +5,7 @@
 
 #include "run_persistence_coordinator.hpp"
 #include "target_qualification.hpp"
+#include "temperature_control.hpp"
 
 namespace fermentation {
 
@@ -33,6 +34,8 @@ evaluateAndApplyTargetQualification(
     TargetQualificationEvaluator& evaluator, RunCommandState& current,
     RunPersistenceCoordinator& persistence,
     const TargetQualificationInput& input, const RunCheckpointTime& time,
-    const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
+    const ProcessSignals& baselineSignals = {},
+    const CrossRolePlausibilityContext* liveSensorEvidence = nullptr,
+    TemperatureController* temperatureController = nullptr);
 
 }  // namespace fermentation

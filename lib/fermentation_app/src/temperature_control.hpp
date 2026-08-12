@@ -59,6 +59,11 @@ class TemperatureController {
     [[nodiscard]] bool markCommittedControlContextTransitionPending(
         CommittedControlContextTransition transition);
 
+    // Fail-closed RAM boundary for a new run, recovery, or leaving the
+    // temperature-control domain. Request-identity high-watermark state is
+    // deliberately retained so reset cannot enable sequence reuse.
+    void resetRuntime();
+
     [[nodiscard]] const TemperatureControlRuntimeState& state() const {
         return state_;
     }

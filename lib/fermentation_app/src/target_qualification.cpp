@@ -126,8 +126,8 @@ bool TargetQualificationEvaluator::applyAfterPersistedProcessApply(
     decision.lifecycle = TargetQualificationDecisionLifecycle::Discarded;
     if (!sameState(state_, decision.expectedEvaluatorState) ||
         !decision.candidateEvaluatorState.commitContext.has_value() ||
-        decision.candidateEvaluatorState.commitContext->qualification !=
-            expectedBeforeContext.qualification ||
+        *decision.candidateEvaluatorState.commitContext !=
+            expectedBeforeContext ||
         committedContext.qualification != expectedBeforeContext.qualification) {
         return false;
     }

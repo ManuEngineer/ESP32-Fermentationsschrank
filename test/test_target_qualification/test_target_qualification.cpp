@@ -360,21 +360,22 @@ void test_stale_run_context_rejects_old_candidate_without_resetting_episode() {
 
     auto changedRunInput = firstInput;
     changedRunInput.sampleTimestampMonotonicMillis = 200U;
-    changedRunInput.runRevision = 5U;
     auto changedRun = evaluator.evaluate(changedRunInput);
     TEST_ASSERT_TRUE(evaluator.applyAfterPersistedProcessApply(
         changedRun, {{20.0, 0.5, ControlSensorRole::Product}, 4U, 9U},
-        {{20.0, 0.5, ControlSensorRole::Product}, 5U, 9U}));
+        {{20.0, 0.5, ControlSensorRole::Product}, 5U, 10U}));
     TEST_ASSERT_EQUAL_UINT64(100U, evaluator.state().creditedInBandMillis);
     TEST_ASSERT_FALSE(evaluator.applyRamOnly(
         oldCandidate, {{20.0, 0.5, ControlSensorRole::Product}, 4U, 9U}));
 
     auto newRunSample = changedRunInput;
     newRunSample.sampleTimestampMonotonicMillis = 300U;
+    newRunSample.runRevision = 5U;
+    newRunSample.processTransitionSequence = 10U;
     auto newRunCandidate = evaluator.evaluate(newRunSample);
     TEST_ASSERT_EQUAL_UINT64(200U, newRunCandidate.creditedInBandMillis);
     TEST_ASSERT_TRUE(evaluator.applyRamOnly(
-        newRunCandidate, {{20.0, 0.5, ControlSensorRole::Product}, 5U, 9U}));
+        newRunCandidate, {{20.0, 0.5, ControlSensorRole::Product}, 5U, 10U}));
     TEST_ASSERT_EQUAL_UINT64(200U, evaluator.state().creditedInBandMillis);
 }
 
@@ -390,16 +391,33 @@ void test_stale_process_identity_rejects_same_valued_candidate() {
     auto candidateInput = firstInput;
     candidateInput.sampleTimestampMonotonicMillis = 200U;
     auto candidate = evaluator.evaluate(candidateInput);
-    auto contextChanged = firstInput;
-    contextChanged.sampleTimestampMonotonicMillis = 200U;
-    contextChanged.processTransitionSequence = 11U;
-    auto changed = evaluator.evaluate(contextChanged);
+    auto changed = evaluator.evaluate(candidateInput);
     TEST_ASSERT_TRUE(evaluator.applyAfterPersistedProcessApply(
         changed, {{20.0, 0.5, ControlSensorRole::Product}, 2U, 10U},
         {{20.0, 0.5, ControlSensorRole::Product}, 2U, 11U}));
     TEST_ASSERT_FALSE(evaluator.applyRamOnly(
         candidate, {{20.0, 0.5, ControlSensorRole::Product}, 2U, 10U}));
     TEST_ASSERT_EQUAL_UINT64(100U, evaluator.state().creditedInBandMillis);
+}
+
+void test_future_candidate_identity_is_stale_against_old_expected_context() {
+    TargetQualificationEvaluator evaluator;
+    auto beforeInput = input(QualificationPhase::Target, 100U, 20.0);
+    beforeInput.runRevision = 4U;
+    beforeInput.processTransitionSequence = 9U;
+    auto first = evaluator.evaluate(beforeInput);
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        first, {{20.0, 0.5, ControlSensorRole::Product}, 4U, 9U}));
+
+    auto futureInput = beforeInput;
+    futureInput.sampleTimestampMonotonicMillis = 200U;
+    futureInput.runRevision = 5U;
+    futureInput.processTransitionSequence = 10U;
+    auto futureCandidate = evaluator.evaluate(futureInput);
+    TEST_ASSERT_FALSE(evaluator.applyAfterPersistedProcessApply(
+        futureCandidate, {{20.0, 0.5, ControlSensorRole::Product}, 4U, 9U},
+        {{20.0, 0.5, ControlSensorRole::Product}, 5U, 10U}));
+    TEST_ASSERT_EQUAL_UINT64(0U, evaluator.state().creditedInBandMillis);
 }
 
 void test_invalid_qualification_phase_is_a_non_mutating_invalid_candidate() {
@@ -451,6 +469,8 @@ int main(int argc, char** argv) {
     RUN_TEST(
         test_stale_run_context_rejects_old_candidate_without_resetting_episode);
     RUN_TEST(test_stale_process_identity_rejects_same_valued_candidate);
+    RUN_TEST(
+        test_future_candidate_identity_is_stale_against_old_expected_context);
     RUN_TEST(
         test_invalid_qualification_phase_is_a_non_mutating_invalid_candidate);
     return UNITY_END();

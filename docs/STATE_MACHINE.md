@@ -305,7 +305,10 @@ Qualifikationssignal, auch bei `Grace` oder `Complete`, nur nach
 hier das alleinige Abschluss-Signal und ist unabhaengig vom Alter des
 Prozessmarkers. `InBand` und `Grace` schliessen auch bei einem alten Marker
 nicht ab. `Unavailable`, `Invalid` und `OutsideBand` loeschen die aktuelle
-Qualifikation.
+Qualifikation. Ein vorgelagertes `criticalFault`-Signal behält dabei die
+kanonische Prioritaet und fuehrt auch bei `Complete` nach `FAULT`; nach dem
+erfolgreichen Verlassen der Qualifikationsdomaene bleibt kein Qualifier-Kredit
+im RAM.
 
 Cooling verwendet getrennt davon `coolingTargetConditionValid`. Der
 Qualifikationsfortschritt, Grace und Qualifikationsdauer sind in `COOLING`

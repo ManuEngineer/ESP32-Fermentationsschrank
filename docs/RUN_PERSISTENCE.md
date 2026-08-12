@@ -83,7 +83,19 @@ Commit den bestehenden `RunPersistenceCoordinator`; er fuehrt weder eine
 zweite Prozessmaschine noch einen zweiten Persistence-Coordinator ein.
 Der Stale-Kontext bindet die bestehende `runRevision` und
 `processTransitionSequence`, ohne dadurch allein die fachliche Episode zu
-resetten.
+resetten. Die Sample-Zeit des Qualifikators muss dabei exakt der
+`RunCheckpointTime.monotonicMillis` entsprechen; Abweichungen werden stale
+verworfen und erzeugen keinen Write.
+
+Die erfolgreichen Write-before-Apply-Ergebnisse tragen ausserhalb des
+Persistenzschemas einen fluessigen Handoff-Hinweis: `persistCommand()` fuer
+Ziel-/Kontextaenderungen, `persistTransition()` fuer Ziel-/Coolingwechsel und
+`persistSensorSelection()` fuer einen tatsaechlichen
+`SensorSelectionEvent`/Moduswechsel. Notices, fehlgeschlagene Writes und
+fehlgeschlagene RAM-Applies tragen keinen solchen Hinweis. Ein schmaler
+Verbraucher uebergibt den Hinweis nach dem erfolgreichen Commit hoechstens
+einmal an den PI-Kern; daraus wird kein zweiter Prozesszustand und kein
+Persistenzfeld.
 
 ## Speicherereignisse
 

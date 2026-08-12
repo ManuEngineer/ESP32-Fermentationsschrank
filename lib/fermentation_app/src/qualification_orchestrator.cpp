@@ -1,5 +1,7 @@
 #include "qualification_orchestrator.hpp"
 
+#include "temperature_control_orchestrator.hpp"
+
 namespace fermentation {
 namespace {
 
@@ -36,7 +38,9 @@ TargetQualificationOrchestrationResult evaluateAndApplyTargetQualification(
     TargetQualificationEvaluator& evaluator, RunCommandState& current,
     RunPersistenceCoordinator& persistence,
     const TargetQualificationInput& input, const RunCheckpointTime& time,
-    const CrossRolePlausibilityContext* liveSensorEvidence) {
+    const ProcessSignals& baselineSignals,
+    const CrossRolePlausibilityContext* liveSensorEvidence,
+    TemperatureController* temperatureController) {
     auto qualification = evaluator.evaluate(input);
     const auto context = commitContext(input);
     if (!validQualificationPhase(input.phase) ||
@@ -44,6 +48,10 @@ TargetQualificationOrchestrationResult evaluateAndApplyTargetQualification(
         return discarded(
             evaluator, qualification,
             TargetQualificationOrchestrationStatus::InvalidDecision);
+    }
+    if (input.sampleTimestampMonotonicMillis != time.monotonicMillis) {
+        return discarded(evaluator, qualification,
+                         TargetQualificationOrchestrationStatus::StaleDecision);
     }
     if (input.runRevision != current.runRevision ||
         input.processTransitionSequence !=
@@ -54,6 +62,7 @@ TargetQualificationOrchestrationResult evaluateAndApplyTargetQualification(
 
     TargetQualificationOrchestrationResult result;
     result.qualification = qualification;
+    result.signals = baselineSignals;
     result.signals.qualificationProgress = qualification.progress;
     const auto processDecision = decideProcessTransition(
         current.processState,
@@ -78,8 +87,8 @@ TargetQualificationOrchestrationResult evaluateAndApplyTargetQualification(
         return result;
     }
 
-    const auto persisted = persistence.persistTransition(
-        current, processDecision, time, liveSensorEvidence);
+    auto persisted = persistence.persistTransition(current, processDecision,
+                                                   time, liveSensorEvidence);
     result.persistenceStatus = persisted.status;
     if (persisted.status != RunPersistenceResultStatus::Applied) {
         evaluator.discard(qualification);
@@ -88,18 +97,26 @@ TargetQualificationOrchestrationResult evaluateAndApplyTargetQualification(
             TargetQualificationOrchestrationStatus::PersistenceFailed;
         return result;
     }
+    if (temperatureController != nullptr)
+        static_cast<void>(consumeCommittedControlContextTransition(
+            persisted, *temperatureController));
 
     const auto committedContext = TargetQualificationCommitContext{
         context.qualification, current.runRevision,
         current.processState.transitionSequence};
-    if (!evaluator.applyAfterPersistedProcessApply(qualification, context,
-                                                   committedContext)) {
+    const bool applied = evaluator.applyAfterPersistedProcessApply(
+        qualification, context, committedContext);
+    const bool leavesQualificationDomain =
+        processDecision.reason == TransitionReason::PreheatQualified ||
+        processDecision.reason == TransitionReason::TargetQualified ||
+        processDecision.reason == TransitionReason::CriticalFault;
+    if (!applied) {
+        if (leavesQualificationDomain) evaluator.reset();
         result.qualification = qualification;
         result.status = TargetQualificationOrchestrationStatus::StaleDecision;
         return result;
     }
-    if (processDecision.reason == TransitionReason::PreheatQualified ||
-        processDecision.reason == TransitionReason::TargetQualified) {
+    if (leavesQualificationDomain) {
         // Leaving the qualification domain ends the current episode. This is
         // deliberately RAM-only; the process marker remains owned by the
         // state machine and no evaluator state is persisted.

@@ -293,7 +293,22 @@ Verbindliche Regeln:
   Kandidat wird bei persistierbarer Prozess-/Markeränderung erst nach
   erfolgreichem Write-before-Apply uebernommen; ohne solche Aenderung darf er
   RAM-only angewendet werden. Bei Persistenz-, Apply- oder Stale-Fehlern bleibt
-  der vorherige Evaluatorzustand unveraendert.
+  der vorherige Evaluatorzustand unveraendert; der fehlgeschlagene Kandidat ist
+  single-use verworfen und ein Retry bewertet den unveraenderten Live-Zustand
+  neu. Der Candidate-Kontext bindet neben Ziel, Band und Rolle auch
+  `runRevision` und `processTransitionSequence`, ohne jede Revisionsaenderung
+  automatisch als neue fachliche Episode zu behandeln.
+- Ein erfolgreicher Prozess-/Marker-Commit liefert einen fluessigen
+  Post-Commit-Hinweis fuer Target-, Cooling- oder Regelsensorwechsel. Nur der
+  bereits angewendete effektive Kontext wird danach einmalig an den PI-Kern als
+  `pendingContextTransition` uebergeben; eine Decision vor dem Commit ist nie
+  selbst eine PI-Freigabe. `ProductInserted` erzeugt diesen Hinweis nur bei
+  effektivem `Air -> Product`, nicht bei `Air -> Air`.
+- PI- und Qualifier-RAM werden an der kanonischen Grenze fuer neuen Lauf,
+  Recovery oder das Verlassen der Temperaturregelung fail-closed geleert.
+  Normale Phasenwechsel im selben Regelkontext uebertragen diesen Vollreset
+  nicht; Target-, Cooling- und Regelsensorwechsel verwenden ihre jeweilige
+  Commit-/Transition-Policy.
 - Effektive Gnaden- und Sample-Gap-Werte sowie die konkreten
   Qualifikationswerte bleiben `TBD_COMMISSIONING` beziehungsweise Eigentum
   des freigegebenen Sampling-/Commissioning-Vertrags.
