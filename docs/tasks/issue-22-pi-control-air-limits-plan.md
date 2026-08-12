@@ -2,16 +2,17 @@
 
 ## 1. Status, Scope und Owner-Gate
 
-- Revision: **4**.
+- Revision: **5**.
 - Live-Issue: #22, offen, Status `PLANNED_SPEC_PENDING`.
 - Draft-PR: #104, Branch `agent/issue-22-pi-regelung-plan` -> `main`.
 - Planpfad: `docs/tasks/issue-22-pi-control-air-limits-plan.md`.
-- Diese Revision ist ein vollständiger, eigenständig gültiger Plan. Sie setzt
-  keine frühere Planrevision als fachliche oder normative Quelle voraus.
+- Diese Revision 5 ersetzt Revision 4 vollständig und ist ein vollständiger,
+  eigenständig gültiger Plan. Sie setzt keine frühere Planrevision als
+  fachliche oder normative Quelle voraus.
 - Planbasis: `main` @
   `10ff98eca4d6f64cc453571d66d4c3b18729b18e`.
 - Ausgangs-HEAD vor dieser Revision:
-  `7ac7fc6dfa099df370281757120d3636805de37a`.
+  `34417db16e77c3a147f06ce0ac9314b37b607feb`.
 - Der exakte Commit dieser Revision wird nach dem Commit mit voller SHA in
   PR-Beschreibung und aktuellem SESSION-HANDOVER ausgewiesen.
 - Die Umsetzung bleibt gesperrt, bis der Owner exakt diesen neuen Plan-Commit
@@ -25,12 +26,15 @@
 ```text
 CONTEXT_BASELINE_BRANCH: agent/issue-22-pi-regelung-plan
 CONTEXT_BASELINE_SHA: 10ff98eca4d6f64cc453571d66d4c3b18729b18e
-CONTEXT_HEAD_BEFORE_REVISION: 7ac7fc6dfa099df370281757120d3636805de37a
+CONTEXT_HEAD_BEFORE_REVISION: 34417db16e77c3a147f06ce0ac9314b37b607feb
 CONTEXT_PLAN_SHA: NONE (wird nach dem Commit dieser Revision eingetragen)
 CONTEXT_REFRESH_MODE: FULL
-SOURCE_OF_TRUTH_CONFLICT: NONE festgestellt; die R1-PI-Gleichung ist in den
-  kanonischen Quellen nicht festgelegt und wird hier als explizite
-  Ownerentscheidung formuliert. bandCelsius bleibt einseitige Toleranz.
+CONTEXT_DELTA: Revision-4-Restbefunde zu Request-Kontextbindung,
+  Integral-Headroom, gemeinsamer Gap-Grenze, lastActiveDirection und
+  commitierter pending Context-Transition geprüft und geschlossen.
+SOURCE_OF_TRUTH_CONFLICT: NONE; die R1-PI-Gleichung ist in den kanonischen
+  Quellen nicht festgelegt und wird hier als explizite Ownerentscheidung
+  formuliert. bandCelsius bleibt einseitige Toleranz.
 ```
 
 ## 2. Ziel, Reihenfolge und Nicht-Ziele
@@ -295,13 +299,13 @@ PiDirectionParameters
   integralGainQuotePerCelsiusSecond: finite, > 0
   neutralBandWidthCelsius: finite, > 0
   maximumQuote: finite, (0, 1]
-  maximumIntegrationStepMillis: uint64_t, > 0
 
 TemperatureControlParameters
   airHeating
   airCooling
   productHeating
   productCooling
+  maximumIntegrationStepMillis: uint64_t, > 0
   airLimitLowerBlockCelsius
   airLimitLowerReduceStartCelsius
   airLimitUpperReduceStartCelsius
@@ -310,7 +314,11 @@ TemperatureControlParameters
 
 Alle vier PI-Parametersätze sind getrennt. Für die Release-1-
 Produktionssemantik sind `Kp > 0` und `Ki > 0` verbindlich; ein gültiger
-Parametersatz darf nicht beide Anteile still auf null setzen. Reale Werte
+Parametersatz darf nicht beide Anteile still auf null setzen. Der
+`maximumIntegrationStepMillis`-Wert ist dagegen genau ein gemeinsamer,
+validierter Temperaturregelungs-/Samplingwert. Er wird vor jeder
+richtungsabhängigen Profilwahl für die Timestamp-/Gap-Prüfung verwendet; es
+gibt keine vier Kopien und keine implizite Min-/Max-Auswahl. Reale Werte
 bleiben `TBD_COMMISSIONING`. Testprofile isolieren P- und I-Wirkung über
 Fehler, Zeitabstand und Zustand, nicht über einen ungültigen Null-
 Produktionsparametersatz.
@@ -370,7 +378,14 @@ deltaI = integralGainQuotePerCelsiusSecond
          * activeErrorCelsius
          * dtSeconds
 
-unboundedQuote = P + integralContributionQuote
+integralHeadroom = max(0, maximumQuote - P)
+
+allowedDeltaI = checked positive deltaI, oder 0 wenn die
+                 Integrationsvoraussetzungen nicht erfüllt sind
+
+candidateI = min(max(oldI + allowedDeltaI, 0), integralHeadroom)
+
+unboundedQuote = P + candidateI
 ```
 
 `proportionalGainQuotePerCelsius` hat die Einheit Quote/°C,
@@ -379,11 +394,21 @@ dimensionslos in `[0, 1]`. Der Fehler wird nach Abzug der jeweiligen
 Neutralbandschwelle integriert; ein Fehler innerhalb des Neutralbands
 integriert nicht.
 
-Der Integral-Kandidat ist checked:
+Der Integral-Kandidat ist checked und an die verbleibende Ausgangsreserve
+gebunden. `allowedDeltaI` ist bei fehlender Rückmeldung, Aufschub,
+`Rejected`, Luftbegrenzung, eigener Sättigung oder einem Übergangssample exakt
+`0`. Die Begrenzung wirkt auch auf einen alten Integralwert, wenn ein
+gestiegener P-Anteil die neue Reserve verkleinert. Damit gilt nach der
+internen Begrenzung stets:
 
 ```text
-candidateI = min(max(oldI + deltaI, 0), maximumQuote)
+0 <= candidateI <= maximumQuote
+P + candidateI <= maximumQuote
 ```
+
+Ist `P >= maximumQuote`, ist `integralHeadroom = 0` und der Integralanteil
+wird auf `0` begrenzt; die anschließende Ausgangsquote bleibt separat auf
+`maximumQuote` begrenzt.
 
 `oldI + deltaI`, Multiplikationen und die Millisekunden-/Sekundenumrechnung
 müssen auf Endlichkeit und Überlauf geprüft werden. Bei einem Rechenfehler
@@ -393,33 +418,48 @@ gibt es keine gültige ControlRequest und keinen unsicheren Integralwert.
 
 Jede Evaluation folgt exakt dieser Reihenfolge:
 
-1. Struktur-, Rollen-, Ziel-, Profil-, Sensor-, Timestamp- und
-   Feedbackvalidierung;
-2. bereits erfolgreich commitierte Control-Context-Transition anwenden;
-3. effektive Rolle, Ziel und aktuelle Richtung bestimmen;
+1. Struktur-, Rollen-, Ziel-, Profil-, Sensor- und Feedbackgrundlagen sowie
+   den Timestamp mit dem gemeinsamen `maximumIntegrationStepMillis`
+   validieren. Bei einer ungültigen oder zu großen Zeitlücke wird bereits hier
+   abgebrochen; eine Richtungs- oder Profilwahl findet dafür nicht statt.
+2. effektive Rolle und Ziel auflösen, danach das tatsächlich passende
+   Heating-/Cooling-Profil und die aktuelle Richtung bestimmen.
+3. eine commitierte pending Context-Transition mit einem gegebenenfalls
+   gleichzeitig erkannten echten Heating↔Cooling-Wechsel einmalig
+   zusammenführen; bei `Idle` bleibt die pending Transition bis zum ersten
+   späteren gültigen aktiven Sample unaufgelöst, ohne eine Richtung zu
+   erfinden.
 4. `activeErrorCelsius`, P und den aktuellen Luftbegrenzungszustand
-   bestimmen;
+   bestimmen.
 5. nur wenn kein nachgelagertes Feedback `DeferredOrLimited`/`Rejected` oder
    fehlt und keine aktuelle #22-eigene Begrenzung/Sättigung dagegen spricht,
-   `deltaI` berechnen;
-6. Integral checked und auf `maximumQuote` begrenzt fortschreiben;
-7. `unboundedQuote = P + I` bilden;
+   `allowedDeltaI` als checked positive `deltaI` setzen, sonst auf `0` lassen.
+6. `integralHeadroom = max(0, maximumQuote - P)` bilden und den Integral-
+   kandidaten checked auf diese Restreserve begrenzen.
+7. `unboundedQuote = P + candidateI` bilden;
 8. `maximumLimitedQuote = min(unboundedQuote, maximumQuote)` bilden;
 9. die frühe Luftbegrenzung anwenden;
 10. Status/Reason setzen und die gültige HEAT/OFF/COOL-ControlRequest mit
-    Sequenz und Erzeugungszeitpunkt bilden.
+    Sequenz, Erzeugungszeitpunkt und Context-Identity bilden.
 
-Im Neutralband wird eine gültige `OFF`-ControlRequest erzeugt, keine positive
-Integration durchgeführt und der Integralwert nur gemäß der bereits
-angewandten Context-/Richtungs-Transition kontrolliert gehalten. Er wird
-nicht still durch Zeit oder weitere Off-Samples aufgeladen.
+Im Neutralband und bei `Idle` wird eine gültige `OFF`-ControlRequest erzeugt,
+keine positive Integration durchgeführt und der Integralwert nur gemäß der
+bereits angewandten Context-Transition kontrolliert gehalten. Ein `Idle`-
+Sample verändert den `lastActiveDirection`-Anker nicht. Eine noch nicht mit
+einem aktiven Profil zusammengeführte pending Context-Transition bleibt dabei
+pending; sie wird nicht durch ein erfundenes Heating-/Cooling-Profil
+angewandt. Der Integrator wird nicht still durch Zeit oder weitere
+Off-Samples aufgeladen.
 
-Die #22-eigene Sättigungsprüfung vor Schritt 5 ist ebenfalls eindeutig:
-Wenn `P + oldI >= maximumQuote`, wird keine positive `deltaI` berechnet. Ist
-`P + oldI < maximumQuote`, darf ein zulässiger Integrationsschritt den
-Kandidaten bis genau `maximumQuote` auffüllen; der nächste Sample integriert
-dort nicht weiter. Ein checked Kandidat, der durch Addition darüber liegen
-würde, wird auf `maximumQuote` begrenzt und löst keinen Overflow aus.
+Die #22-eigene Sättigungsprüfung ist ebenfalls eindeutig: `P` bestimmt die
+verbleibende `integralHeadroom` bereits vor der Integrationsentscheidung. Ein
+zulässiger Schritt darf den Kandidaten nur bis genau diese Restreserve
+auffüllen. Ist die Restreserve kleiner als der Schritt, wird exakt bis zur
+Reserve integriert; ist sie null, wird nicht positiv integriert. Ein durch
+gestiegenen P-Anteil zu großer alter Integralwert wird auch ohne positive
+Integration auf die neue Reserve zurückgeführt. Ein checked Kandidat, der
+durch Addition darüber liegen würde, wird an der Restreserve begrenzt und
+löst keinen Overflow aus.
 
 Bei eigener Maximalsättigung, `AirLimitReduced` und `AirLimitBlocked` wird in
 der begrenzten Richtung keine weitere positive Integration zugelassen. Ein
@@ -470,11 +510,38 @@ ControlRequestIdentity
   sequence: uint64_t
   createdAtMonotonicMillis: uint64_t
 
+ControlRequestContext
+  processTransitionSequence: uint32_t
+  runRevision: uint32_t
+  controlSensorRole: ControlSensorRole
+
 ControlRequest
   identity: ControlRequestIdentity
+  context: ControlRequestContext
   direction: Heating | Cooling | Idle
   timeQuote: [0, 1]
 ```
+
+`ControlRequestContext` ist eine kleine Identity aus dem bereits vorhandenen
+kanonischen Lauf-/Prozess-/Regelkontext, kein zweiter Prozess- oder
+Sensorsnapshot: `processTransitionSequence` wird aus
+`ProcessRuntimeState::transitionSequence`, `runRevision` aus dem bestehenden
+Laufzustand und `controlSensorRole` aus der bereits aufgelösten #21-/Phasen-
+Rolle übernommen. Es wird weder ein vollständiger `RunCommandState` kopiert
+noch ein neues Wire- oder Persistenzfeld eingeführt. Der Kontext wird nur
+flüchtig in der Request mitgeführt.
+
+Der #23-Aktorplaner prüft für jede übernommene Request zusätzlich zur
+monotonen Sequenz die exakte aktuelle `ControlRequestContext`-Identity. Eine
+Request ist nur dann kontextfrisch, wenn `processTransitionSequence`,
+`runRevision` und `controlSensorRole` mit dem aktuellen kanonischen Kontext
+übereinstimmen. Ein Prozessübergang, `TargetChanged`, `ProductInserted`, ein
+normaler Laufübergang oder ein #21-Sensorrollenwechsel macht eine alte Request
+damit stale; sie darf keine HEAT-, OFF- oder COOL-Wirkung weiterführen. Der
+begrenzte Watchdog-/Gültigkeitszeitraum bleibt Eigentum von #23: #22 liefert
+nur `createdAtMonotonicMillis`, #23 prüft dessen Alter gegen seinen
+konfigurierten Watchdog-Zeitraum und erzeugt bei Kontext- oder Zeitablauf
+keine Aktorfreigabe.
 
 Die Zuordnung lautet:
 
@@ -487,11 +554,11 @@ InvalidInput -> keine gültige ControlRequest
 ```
 
 Jede neu erzeugte gültige HEAT/OFF/COOL-ControlRequest erhält die nächste
-RAM-only `uint64_t`-Sequenz und den monotonen Erzeugungszeitpunkt des
-aktuellen Samples. Eine neue gültige OFF-Anforderung erhält daher ebenso eine
-Identität wie eine aktive Anforderung. Derselbe Timestamp ist zulässig, aber
-bei einer neuen gültigen ControlRequest kein Identitätsersatz; er erhält eine
-neue Sequenz.
+RAM-only `uint64_t`-Sequenz, den monotonen Erzeugungszeitpunkt des aktuellen
+Samples und die zu diesem Zeitpunkt geprüfte `ControlRequestContext`-Identity.
+Eine neue gültige OFF-Anforderung erhält daher ebenso eine Identität wie eine
+aktive Anforderung. Derselbe Timestamp ist zulässig, aber bei einer neuen
+gültigen ControlRequest kein Identitätsersatz; sie erhält eine neue Sequenz.
 
 Beim Erreichen `UINT64_MAX` wird nicht gewrappt. Die nächste gültige
 Anforderung wird checked als `InvalidInput` ohne ControlRequest abgewiesen;
@@ -628,14 +695,30 @@ IntegratorTransitionPolicy
 ```text
 I = min(oldI,
         transitionMaximumCarryQuote,
-        newDirectionIntegralLimit)
+        maximumQuoteOfActuallySelectedNewDirection)
 ```
 
-`newDirectionIntegralLimit` ist in R1 `maximumQuote` des neuen
-Richtungs-/Rollenparametersatzes. Im Transition-Sample ist unabhängig von
-der Aktion keine positive Integration erlaubt. Die strengste neue Grenze
-gewinnt. Es gibt keinen zweiten Namen mit derselben Wirkung und keine
-Strategiebibliothek.
+Die dritte Grenze ist erst bekannt, nachdem das nächste gültige Sample die
+neue aktive Richtung und damit das tatsächlich gewählte neue
+Heating-/Cooling-Profil bestimmt hat. Es gibt kein
+`newDirectionIntegralLimit` als vorab zu übergebenden Commitparameter. Im
+Transition-Sample ist unabhängig von der Aktion keine positive Integration
+erlaubt. Die strengste bekannte Grenze gewinnt. Es gibt keinen zweiten Namen
+mit derselben Wirkung und keine Strategiebibliothek.
+
+Der PI-Zustand enthält zusätzlich genau einen flüchtigen aktiven
+Richtungsanker:
+
+```text
+lastActiveDirection: optional<Heating | Cooling>
+```
+
+`Idle` erzeugt OFF, integriert nicht positiv und verändert diesen Anker
+nicht. Die Rückkehr aus `Idle` in dieselbe aktive Richtung ist kein
+`directionChange`. Nur `Heating -> Cooling` oder `Cooling -> Heating`
+gegenüber dem letzten aktiven Anker löst `directionChange` aus. Ein neuer
+Lauf, Recovery, Unavailable/Invalid-Reset oder das Verlassen der
+Temperaturregelung löscht Anker und Integrator fail-closed.
 
 Die Policy ist vollständig zu validieren und muss explizit injiziert werden;
 es gibt keinen Produktionsdefault. Testprofile dürfen konkrete Aktionen und
@@ -648,11 +731,10 @@ Der PI-Kern übernimmt persistierbare Kontextänderungen nicht durch bloßen
 Vergleich vor ihrem Commit. Der schmale Aufruf lautet sinngemäß:
 
 ```text
-applyCommittedControlContextTransition(
+markCommittedControlContextTransitionPending(
     state,
     committedTransition,
-    validatedIntegratorTransitionPolicy,
-    newDirectionIntegralLimit)
+    validatedIntegratorTransitionPolicy)
 ```
 
 `committedTransition` benennt ausschließlich konkrete Änderungen:
@@ -680,20 +762,49 @@ Pfad der jeweiligen Änderung:
 - bei #21-Rollenwechsel nach erfolgreichem Sensor-/Prozess-Apply;
 - bei `ProductInserted` nach erfolgreichem Prozess-Apply.
 
-Eine kombinierte Ziel- und Rollenänderung wird als ein checked Contextwechsel
-übergeben. `Reset` hat Vorrang, sonst werden Carry-Grenzen aller betroffenen
-Kontextänderungen gemeinsam auf das Minimum begrenzt. Der Kandidat erhält ein
-`transitionSamplePending`-Merkmal; der nächste Evaluation-Sample integriert
-positiv erst nach der Übergangsbehandlung.
+Der erfolgreiche Commit markiert nur eine RAM-only `pendingContextTransition`
+mit den bereits freigegebenen `Reset`-/`BoundedCarry`-Aktionen. Er kennt noch
+keine neue Heating-/Cooling-Richtung und nimmt deshalb keine
+`maximumQuote`-Grenze eines unbekannten Profils vorweg. Bei fehlgeschlagener
+Persistenz oder fehlgeschlagenem Apply wird keine pending Transition gesetzt;
+alter Ziel-/Rollen-/PI-Kontext bleibt wirksam.
+
+Beim nächsten gültigen PI-Sample mit aktiver Richtung werden die neue
+Rolle/Zielquelle und die Richtung zuerst bestimmt. Eine pending Ziel-/Rollen-
+Transition und ein in demselben Sample festgestellter echter
+`Heating <-> Cooling`-Wechsel werden danach genau einmal zusammengeführt:
+
+- `Reset` gewinnt, sobald eine der relevanten Aktionen `Reset` ist;
+- sonst gilt `BoundedCarry` mit
+  `min(transitionMaximumCarryQuote, maximumQuote des tatsächlich gewählten
+  neuen Richtungsprofils)`;
+- der Übergangssample darf danach nicht positiv integrieren;
+- die pending Transition wird nach dieser einmaligen Anwendung gelöscht.
+
+Ist das nächste gültige Sample `Idle`, erzeugt es deterministisch OFF, ändert
+`lastActiveDirection` nicht, integriert nicht positiv und verbraucht die
+pending Transition noch nicht. Die Zusammenführung wartet bis zum ersten
+späteren gültigen aktiven Sample, weil erst dann ein konkretes
+Heating-/Cooling-Profil existiert; eine unbekannte Richtung wird nicht
+erfunden. So werden Target-/Role-Policy und `directionChange` auch bei
+gleichzeitigem Wechsel nie zweimal auf denselben Integrator angewandt.
 
 ### 9.3 Richtungswechsel innerhalb der PI-Evaluation
 
-Die Richtung wird aus dem aktuellen Fehler bestimmt. Weicht sie von der
-letzten gültigen aktiven/neutralen Richtung ab, wird die validierte
-`directionChange`-Aktion in derselben Evaluation vor P und I angewandt. Das
-ist keine persistierbare Prozessentscheidung und benötigt keinen vorgelagerten
-Prozess-Commit. Der Transition-Sample erzeugt bei gültigem Ergebnis trotzdem
-eine normale ControlRequest, aber keine positive `deltaI`.
+Die Richtung wird aus dem aktuellen Fehler und dem passend gewählten Profil
+bestimmt. Nur wenn die aktuelle aktive Richtung dem
+`lastActiveDirection`-Anker gegenüberliegt, wird die validierte
+`directionChange`-Aktion in derselben Evaluation vor P und I berücksichtigt.
+`Heating -> Idle`, `Idle -> Heating`, `Cooling -> Idle` und
+`Idle -> Cooling` sind kein Richtungswechsel. Das ist keine persistierbare
+Prozessentscheidung und benötigt keinen vorgelagerten Prozess-Commit. Der
+Transition-Sample erzeugt bei gültigem Ergebnis trotzdem eine normale
+ControlRequest, aber keine positive `allowedDeltaI`.
+
+Bei einem echten aktiven Richtungswechsel ohne pending Context-Transition
+wird nur die `directionChange`-Policy angewandt. Bei einer pending
+Context-Transition wird sie mit der Context-Policy nach 9.2 einmalig
+zusammengeführt.
 
 Unavailable/Invalid, echte Fehler, neue Läufe, Neustart und Recovery löschen
 den Integrator und den Richtungsanker fail-closed. Ein alter großer
@@ -705,6 +816,12 @@ Richtungskontext übertragen.
 `sampleTimestampMonotonicMillis` ist `uint64_t`; `NaN` und Unendlich sind
 keine möglichen Timestampwerte. Struktur-, Reihenfolge- und Rechenfehler
 werden checked behandelt:
+
+`maximumIntegrationStepMillis` stammt ausschließlich aus
+`TemperatureControlParameters`, wird als gemeinsamer Wert vor der
+Richtungs-/Profilwahl validiert und bleibt produktiv `TBD_COMMISSIONING`. Kein
+Heating-/Cooling-Profilwert und keine implizite Min-/Max-Regel darf die
+Timestampprüfung auswählen.
 
 | Situation | ControlRequest | Integralzustand | Zeitwirkung |
 |---|---|---|---|
@@ -1058,8 +1175,8 @@ werden:
   Resolver verwendet;
 - die alte TargetQualification-Episode verworfen und die neue Target-Episode
   vorbereitet;
-- `applyCommittedControlContextTransition()` mit
-  `targetContextChange` aufgerufen;
+- eine pending committed Context-Transition mit `targetContextChange`
+  markiert, ohne eine unbekannte neue Richtungsgrenze zu übergeben;
 - die nächste PI-Evaluation mit dem neuen Ziel berechnet.
 
 Scheitert Persistenz oder Apply, bleibt der alte effektive Zielwert,
@@ -1077,8 +1194,9 @@ während `FERMENTING`, ohne den unveränderten Quell-Programmschnappschuss zu
 - es gibt keine Target-Requalifikation und keine neue Qualifier-Episode;
 - der nächste PI-Resolver verwendet zwingend den neuen effektiven
   `ActiveRun::effectiveValues()`-Zielwert;
-- `applyCommittedControlContextTransition()` wendet die
-  `targetContextChange`-Policy an.
+- der erfolgreiche Commit markiert eine pending `targetContextChange`-
+  Transition; die Policy wirkt erst im nächsten gültigen aktiven PI-Sample
+  zusammen mit der dann bekannten Richtung.
 
 Der alte Zielwert darf danach keine PI-Ausgabe mehr auslösen. Ein fehlender,
 staler oder fehlgeschlagener Command-Commit darf den neuen Wert dagegen nicht
@@ -1088,10 +1206,12 @@ sichtbar machen.
 
 Ein #21-Rollenwechsel wird erst nach dem bestehenden erfolgreichen
 Sensor-/Prozess-Apply an #22 weitergereicht. Bei `ProductInserted` geschieht
-dies nach dem erfolgreichen Prozessübergang. Die neue ControlSensorRole,
-neue TargetQualification-Episode und Integrator-Policy werden nicht vor
-dieser Grenze live gesetzt. `activeRunSensorMode` bleibt das unveränderte
-kanonische #21-Feld.
+dies nach dem erfolgreichen Prozessübergang. Der erfolgreiche Apply markiert
+eine pending `sensorRoleChange`-Transition; neue ControlSensorRole, neue
+TargetQualification-Episode und Integrator-Policy werden nicht vor dieser
+Grenze live gesetzt. `activeRunSensorMode` bleibt das unveränderte
+kanonische #21-Feld. Ein fehlgeschlagener Commit erzeugt keine pending
+Transition.
 
 ## 16. Commit-/Apply-Schnitte
 
@@ -1144,15 +1264,21 @@ angelegt werden; in dieser Planrevision wird er nicht implementiert.
   `NoIntegratorConstraint`/`DeferredOrLimited`/`Rejected`;
 - Feedbackfenster nur für vorherige aktive Requests;
 - Replay-/Stale-/Duplicate-/Sequence-Wrap-Schutz;
-- `applyCommittedControlContextTransition()`;
-- `Reset`/`BoundedCarry`, checked Carry-Grenze und keine positive Integration
-  im Transition-Sample;
+- kontextgebundene ControlRequest mit Prozess-Transition, `runRevision` und
+  `ControlSensorRole` für den #23-Stale-/Watchdog-Check;
+- pending committed Context-Transition ohne vorgezogene Richtungsgrenze;
+- `Reset`/`BoundedCarry`, checked Carry-Grenze, echte
+  `lastActiveDirection`-Wechsel und keine positive Integration im
+  Transition-Sample;
 - Zieländerung während `FERMENTING` ohne Requalifikation.
 
 Gezielte Orakel: Impulsakkumulator-Aufschub, Mindest-Auszeit, Totzeit,
-fehlendes Feedback, alle drei Dispositionen, OFF ohne Feedback,
-Rollenwechsel nach `ProductInserted`, Zieländerung vor und während
-`FERMENTING`, sowie kein unbounded Integraltransfer.
+fehlendes Feedback, alle drei Dispositionen, OFF ohne Feedback, stale Request
+nach Prozessübergang, `runRevision`-/TargetChanged-Wechsel und
+Sensorrollenwechsel, Rollenwechsel nach `ProductInserted`, Zieländerung vor
+und während `FERMENTING`, pending Transition bei zunächst `Idle`,
+gleichgerichtete und gegenläufige aktive Richtung sowie kein unbounded
+Integraltransfer.
 
 ### Commit 4 – Qualifier und Prozessintegration
 
@@ -1212,6 +1338,10 @@ Der gezielte Nachweis muss mindestens diese Orakel enthalten:
   Fermenting, Cooling, CoolHolding und ManualHolding;
 - Programmlauf mit `ActiveRun::effectiveValues()` nach TargetChanged;
 - manueller Lauf mit wirksamem `ManualRunPlan`;
+- ControlRequest-Kontext: unveränderter Request nach Prozessübergang,
+  `runRevision`-/TargetChanged-Wechsel oder #21-Sensorrollenwechsel wird von
+  #23 als stale verworfen; aktueller Request erfüllt zusätzlich den
+  begrenzten #23-Watchdog über `createdAtMonotonicMillis`;
 - Zieländerung in `PREHEATING`, `REACHING_TARGET` und
   `QUALIFYING_TARGET` mit erfolgreichem beziehungsweise fehlgeschlagenem
   Commit;
@@ -1223,8 +1353,14 @@ Der gezielte Nachweis muss mindestens diese Orakel enthalten:
   Halt, sowie unveränderte `CoolingTargetReached`-Semantik;
 - PI-Gleichung mit Einheiten, P-only-/I-Wirkung über gültige Testprofile,
   Richtungs-Schwellen und begrenztem Integral;
+- Integral-Headroom: P allein unter `maximumQuote`, Integration exakt bis zur
+  Restreserve, Integrationsschritt größer als die Restreserve, P allein am
+  oder über Maximum, gestiegener P-Anteil mit verkleinerter Reserve und nie
+  ein gespeichertes `I` mit `P + I > maximumQuote`;
 - erster, gleicher, rückwärts laufender, zu großer und overflow-gefährdeter
   Timestamp mit exakt erwarteter Request-/Integralwirkung;
+- gemeinsamer `maximumIntegrationStepMillis` vor der Richtungswahl; keine
+  richtungsabhängige oder implizite Min-/Max-Gap-Grenze;
 - gleiche Timestampwerte mit neuen Request-Sequenzen;
 - gültige OFF-ControlRequest mit Sequence und Timestamp;
 - Unavailable/Invalid ohne gültige ControlRequest;
@@ -1233,8 +1369,14 @@ Der gezielte Nachweis muss mindestens diese Orakel enthalten:
   Impulsakkumulator, Mindest-Auszeit und Totzeit;
 - keine positive Integration bei aktueller PI-Sättigung,
   AirLimitReduced/AirLimitBlocked oder fehlendem Feedback;
-- `Reset`/`BoundedCarry` an Target-/Rollen-/Richtungswechsel und keine
-  positive Integration im Transition-Sample;
+- `Heating -> Idle`, `Idle -> Heating`, `Cooling -> Idle`,
+  `Idle -> Cooling` ohne `directionChange`; `Heating -> Idle -> Cooling` und
+  `Cooling -> Idle -> Heating` mit genau einem echten Wechsel;
+- `Reset`/`BoundedCarry` an Target-/Rollen-/Richtungswechsel, TargetChanged
+  bei gleicher und gegenüberliegender aktiver Richtung, ProductInserted
+  Air->Product, #21-Rollenwechsel, pending Context-Transition bei zunächst
+  `Idle`, fehlgeschlagener Commit ohne pending Transition und keine positive
+  Integration im Transition-Sample;
 - alle sechs `QualificationProgress`-Werte und ihre Wirkung in
   Preheating/Reaching/Qualifying;
 - `Unavailable` und `Invalid` mit unterschiedlicher Ursache und Wirkung;
@@ -1286,7 +1428,14 @@ Plan-Commit freigibt. Die Freigabe muss insbesondere umfassen:
 - wirkungssichere Anti-Windup-Disposition ohne physische `appliedQuote`;
 - exakte PI-Gleichung, Einheiten, Integralgrenze, Reihenfolge und
   Kp/Ki-Validierung;
-- vereinfachte `Reset`/`BoundedCarry`-Policy und Commit-Grenze;
+- kontextgebundene ControlRequest mit vorhandener Prozess-/Run-/Sensor-
+  Identity und #23-eigener begrenzter Gültigkeitsprüfung;
+- gemeinsame `maximumIntegrationStepMillis`-Gap-Grenze vor der Richtungswahl;
+- Integral-Headroom mit `P + I <= maximumQuote`;
+- `lastActiveDirection`, Idle-Semantik und genau einmalige Kombination von
+  Context- und echtem aktiven Richtungswechsel;
+- pending committed `Reset`/`BoundedCarry`-Policy ohne
+  `newDirectionIntegralLimit` vor der Richtungswahl;
 - Unterbrechung von Qualifikationszeit bei Unavailable/Invalid und
   vollständige Preheating-/Target-Episodentrennung;
 - Qualifier ohne zweite Prozesszustandsmaschine;
