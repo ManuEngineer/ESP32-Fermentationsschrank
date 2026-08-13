@@ -2,8 +2,8 @@
 
 ## 1. Status, Scope und Owner-Gate
 
-- Revision: **5**. Ersetzt Revision 4 (`bf5c0973a06b518bb2c2f5e2dee95e235f4a7b37`)
-  vollständig. Diese Revision ist ohne Rückgriff auf Revision 1, 2, 3 oder 4
+- Revision: **6**. Ersetzt Revision 5 (`aee2c32acfed21e72276f14e8900eb4221274f5a`)
+  vollständig. Diese Revision ist ohne Rückgriff auf Revision 1, 2, 3, 4 oder 5
   vollständig ausführbar und reviewbar.
 - Live-Issue: #23, offen, Status `PLANNED_SPEC_PENDING`.
 - Draft-PR: #105, Branch `agent/issue-23-aktorplaner-plan` -> `main`.
@@ -18,7 +18,7 @@
   bleibt Abhängigkeit dieses Plans für die produktive Verdrahtung (Abschnitt
   14).
 - Die Umsetzung bleibt gesperrt, bis der Owner exakt diesen neuen
-  Revision-5-Plan-Commit mit `PLAN APPROVED: <SHA>` freigibt.
+  Revision-6-Plan-Commit mit `PLAN APPROVED: <SHA>` freigibt.
 - Diese Revision committet ausschließlich Plandokumentation. Sie implementiert
   keine Produktionslogik, keine produktiven Tests, keine Hardware-, GPIO-,
   Toolchain- oder CI-Änderung.
@@ -28,15 +28,16 @@
 ```text
 CONTEXT_BASELINE_BRANCH: agent/issue-23-aktorplaner-plan
 CONTEXT_BASELINE_SHA: 2986dca5736a34171910c9245a3d5f43fa55da06
-CONTEXT_HEAD_BEFORE_REVISION: 88efb3e875718f92bcd6c9afc07389259e2f41b0 (Roadmap-Metadaten-Commit nach Revision 4)
+CONTEXT_HEAD_BEFORE_REVISION: b729d2a17e5262afda779bec007806e0cfd04972 (Roadmap-Metadaten-Commit nach Revision 5)
 CONTEXT_PLAN_SHA: NONE (wird nach dem Commit dieser Revision im PR/Handover
   ausgewiesen)
 CONTEXT_REFRESH_MODE: FULL
-CONTEXT_DELTA: Vollständiges Owner-Review von Revision 4 mit sechs neuen
-  BLOCKER-Befunden (R4.1-R4.6) sowie der letzten Präzisierung I106.R1 wurde
-  erhalten. Issue #106 wurde vor diesem Plan-Commit separat live aktualisiert
-  (siehe PR-Body/SESSION HANDOVER). Die Befunde sind in dieser vollständigen
-  Revision 5 konsistent gelöst:
+CONTEXT_DELTA: Vollständiges Owner-Review von Revision 5 mit den Befunden
+  R5.1-R5.8 wurde erhalten. Issue #106 wurde vor Revision 5 separat live um
+  I106.R1 präzisiert, ist seitdem unverändert offen und wird in dieser Revision
+  nicht geändert. Die bisherigen R4.1-R4.6- und I106.R1-Verträge bleiben
+  erhalten. Die neuen Befunde sind in dieser vollständigen Revision 6
+  konsistent gelöst:
   R4.1 -> `ActiveSwitchingWindow` bleibt ein reiner
     Planungssnapshot; der Runtime-State führt den tatsächlichen
     `lastAppliedDirection` sowie die letzte physische
@@ -75,6 +76,36 @@ CONTEXT_DELTA: Vollständiges Owner-Review von Revision 4 mit sechs neuen
   I106.R1 -> Issue #106 trennt strukturelle Producer-/Schema-/Snapshot-
     Vorbereitung ohne Produktionswerte von der produktiven Aktivierung und
     dem Gate-Abschluss, die zwingend auf #35-Werte/Grenzen warten.
+  R5.1 -> die zentrale H-Regel in Phase A aktualisiert das
+    `lastNewRequestAcceptedAtMonotonicMillis`-Lebenszeichen genau für jede
+    neue, strukturell gültige und nicht stale-on-arrival #22-Evaluation,
+    einschließlich `NoValidRequest`; nullopt, Replay, malformed und
+    stale-on-arrival verlängern die Frist nicht.
+  R5.2 -> ein normaler Puls startet nur, wenn die verbleibende natürliche
+    On-Zeit am ersten Aktivierungstick mindestens `minimumOnMillis` beträgt;
+    ein verspätetes Fenster wird vollständig verworfen, ohne Verlängerung oder
+    Nachholung.
+  R5.3 -> die Feedbackdisposition unterscheidet planmäßigen Window-Off als
+    vertragsgemäße Ausführung von downstream Begrenzungen; nur letztere sind
+    `DeferredOrLimited`.
+  R5.4 -> die Dispositionsschwere ist je Request-Sequence monoton
+    `NoIntegratorConstraint < DeferredOrLimited < Rejected`; ein regulärer
+    Window-Off-Anteil verschärft die Disposition nicht.
+  R5.5 -> eine exhaustive Trusted-Sequence-Regel vereinheitlicht
+    Prioritätstabelle, Feldlebenszeit, Phase A, Abschnitt 9 und `forceStop()`;
+    korrupte Safety-Evidence bleibt von einer validen Request-Identität
+    getrennt.
+  R5.6 -> der Orchestrator verwaltet ein `outstandingEvaluation` und verhindert
+    eine zweite #22-Evaluation, bevor die vorige genau einmal intern an den
+    Planner übergeben oder an einer terminalen Lifecycle-Grenze fail-closed
+    abgeschrieben wurde.
+  R5.7 -> die Entfernung von
+    `TemperatureControlEvaluationEvidence::previousControlRequestFeedback`
+    ist als öffentlicher #23-Integrationsschritt mit vollständiger
+    Repository-Callsite-Suche, Migration und Regressionstests im Scope.
+  R5.8 -> nach dem Plan-Commit wird die Roadmap in einem separaten
+    redaktionellen Metadaten-Commit auf die exakte Revision-6-SHA synchronisiert;
+    alle alten Revision-4/5-Statusstellen werden geprüft.
 SOURCE_OF_TRUTH_CONFLICT: NONE.
 ```
 
@@ -125,11 +156,17 @@ Die fachliche Reihenfolge bleibt:
   (`SAFETY_AND_FAULTS.md`). #23 erzeugt für #24 ausschließlich konsumierbare
   Evidenz (Abschnitt 8.6), keine Ursache, keine Wiederfreigabeentscheidung
   und keinen eigenen Fehlerreset.
-- Keine Änderung an der PI-/Luftbegrenzungslogik aus Issue #22
-  (`temperature_control.*`, `control_context.*`); `ControlRequest`,
+- Keine Änderung an der PI-/Luftbegrenzungsmathematik oder ihren #22-Orakeln
+  (`temperature_control.cpp`, `control_context.*`); `ControlRequest`,
   `ControlRequestContext`, `ControlSensorRole`, `AbstractControlDirection`,
   `TemperatureControlResult` und `PreviousControlRequestFeedback` werden
-  ausschließlich wiederverwendet.
+  ausschließlich wiederverwendet. Die öffentliche Application-Evidence-API
+  wird jedoch als notwendiger #23-Integrationsschritt geändert: Das Feld
+  `TemperatureControlEvaluationEvidence::previousControlRequestFeedback`
+  entfällt, und der Orchestrator injiziert das interne Handoff in das private
+  #22-Input. Alle direkt betroffenen Callsites und Regressionstests werden
+  migriert (Abschnitte 5, 6.1, 18 und 19); dies ist keine Änderung der
+  eigentlichen #22-PI-Mathematik.
 - Keine konkreten Sekundenwerte für Schaltfenster, Mindestzeiten, Totzeit,
   Umschaltschwelle, Akkumulatorgrenze oder Nachlaufzeiten; diese bleiben
   `TBD_COMMISSIONING` (Nachverfolgung #35 / `OPEN_POINTS.md`). Der Plan legt
@@ -208,7 +245,7 @@ Wiederzuverwenden sind insbesondere:
 | `isTemperatureControlledProcessState()` | `control_context.hpp` | Innenlüfter-Phasenklassifikation, keine Parallel-Klassifikation |
 | `TemperatureControlLifecycleBoundary` | `temperature_control_orchestrator.hpp` | wiederverwendete Lifecycle-Grenzen (kein zweiter Enum) |
 | `TemperatureControlApplicationOrchestrator` | `temperature_control_orchestrator.hpp/.cpp` | wird erweitert (nicht dupliziert), einzige Application-/Lifecycle-Grenze auch für #23 (Abschnitt 11) |
-| `TemperatureControlEvaluationEvidence` | `temperature_control_orchestrator.hpp` | bestehende öffentliche Evidence-Grenze für Zeit/Sensoren; Feedback wird ausschließlich intern durch den Orchestrator injiziert |
+| `TemperatureControlEvaluationEvidence` | `temperature_control_orchestrator.hpp` | öffentliche Evidence-Grenze für Zeit/Sensoren; `previousControlRequestFeedback` wird in diesem #23-Integrationsschritt entfernt, Feedback injiziert ausschließlich der Orchestrator |
 | `IBidirectionalActuatorSink` | `device_platform/bidirectional_actuator_sink.hpp` | bereits vorhandener, bisher unbenutzter Peltier-Port |
 | `IBinaryOutputSink` | `device_platform/binary_output_sink.hpp` | bereits vorhandener, bisher unbenutzter Lüfter-Port (zwei Instanzen: außen/innen) |
 | `ITimeSource`, `VirtualTimeSource` | `device_platform/time_source.hpp`, `virtual_time_source.hpp` | monotone Zeit im Aufrufer; native Tests |
@@ -217,6 +254,25 @@ Wiederzuverwenden sind insbesondere:
 Kein paralleler Sensor-, Prozess-, Persistenz- oder PI-Vertrag wird erfunden.
 Insbesondere wird `ControlRequestContext` nicht kopiert, sondern exakt wie in
 Issue #22 als flüchtige Identität mitgeführt und geprüft.
+
+Vor der ersten Implementierungsänderung ist die vollständige Repository-Suche
+für mindestens diese Symbole zu wiederholen und als Migrationsliste im
+Implementierungscommit festzuhalten:
+
+```text
+TemperatureControlEvaluationEvidence
+previousControlRequestFeedback
+evaluateTemperatureControl()
+```
+
+Der aktuell geprüfte Stand umfasst mindestens
+`temperature_control_orchestrator.hpp/.cpp`,
+`temperature_control.hpp/.cpp`,
+`test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp`
+und `test/test_temperature_control/test_temperature_control.cpp`. Jede
+weitere Fundstelle wird entweder auf die neue öffentliche Evidence-Semantik
+migriert oder begründet als internes #22-Feedback-Input ausgeschlossen. Kein
+Callsite bleibt mit einem caller-supplied Evidence-Feedbackfeld bestehen.
 
 ## 4. Zuständigkeiten und Architekturgrenzen
 
@@ -330,9 +386,12 @@ lib/fermentation_app/src/temperature_control_orchestrator.hpp / .cpp
       identisch zur bestehenden TemperatureController&-Injektion, siehe
       Abschnitt 14 – kein Rekonstruktions-/Rebinding-Mechanismus).
     - Neue Methode tickActuatorPlan(const RunCommandState&,
-      std::optional<TemperatureControlResult> newEvaluation,
       const ActuatorSafetyGateInput&, std::uint64_t nowMonotonicMillis)
-      -> ActuatorPlanTickResult. Leitet currentCanonicalContext und
+      -> ActuatorPlanTickResult. Sie nimmt keine caller-supplied
+      newEvaluation mehr entgegen: Die Application besitzt die intern
+      erzeugte `outstandingEvaluation` und übergibt sie genau einmal selbst
+      an `planner.tick()`; danach sind beliebig viele Ticks ohne neue
+      Evaluation möglich. Leitet currentCanonicalContext und
       temperatureControlledPhase intern über die bereits vorhandenen
       resolveEffectiveControlContext()/isTemperatureControlledProcessState()
       ab (keine Parallel-Ableitung). Interne Aufrufsequenz gemäß Abschnitt
@@ -340,11 +399,19 @@ lib/fermentation_app/src/temperature_control_orchestrator.hpp / .cpp
     - evaluateTemperatureControl() nimmt das interne, einmalige Handoff und
       injiziert es in den privaten TemperatureControlInput; die öffentliche
       TemperatureControlEvaluationEvidence enthält kein caller-supplied
-      previousControlRequestFeedback mehr.
+      previousControlRequestFeedback mehr. Jede erfolgreich erzeugte
+      #22-Evaluation wird in `outstandingEvaluation` registriert. Ein zweiter
+      #22-Aufruf vor dessen Planner-Beobachtung wird kanonisch verhindert und
+      fail-closed beantwortet; er ersetzt die offene Evaluation nicht.
     - complete()/needsRuntimeReset() ruft für dieselbe erfolgreiche
       Lifecycle-/Commit-Grenze zusätzlich den Aktorplaner-Stop-Pfad auf
-      (Abschnitt 11), der auch den internen Handoff-Slot leert; keine zweite
-      Caller-Pflicht.
+      (Abschnitt 11). Eine unverbrauchte Evaluation wird dabei terminal
+      fail-closed aus dem Application-Zustand entfernt; kein Ergebnis darf in
+      die nächste Lifecycle-Episode oder als zweite Evaluation gelangen.
+    - Alle bestehenden Produktions-/Test-Callsites der öffentlichen Evidence-
+      Struktur werden in demselben API-Migrationsschnitt angepasst; die
+      direkte #22-PI-Eingabe `TemperatureControlInput` bleibt intern erhalten
+      und wird nur noch aus dem Orchestrator-Handoff befüllt.
 ```
 
 Neue Testverzeichnisse:
@@ -366,6 +433,24 @@ test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp
       Aktorplaner-Integration (Abschnitt 19); keine bestehenden Fälle
       werden entfernt.
 ```
+
+Direkt betroffene #22-API-Konsumenten, die im selben passenden Commit-Schnitt
+mitgeführt werden:
+
+```text
+lib/fermentation_app/src/temperature_control_orchestrator.hpp / .cpp
+lib/fermentation_app/src/temperature_control.hpp / .cpp
+test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp
+test/test_temperature_control/test_temperature_control.cpp
+```
+
+Die Testdateien werden nicht pauschal neu geschrieben: Fixtures, die den
+privaten `TemperatureControlInput`-Vertrag des reinen #22-Kerns prüfen, behalten
+ihre direkte Feedback-Prüfung. Fixtures, die `TemperatureControlEvaluationEvidence`
+oder `evaluateTemperatureControl()` als Application-API prüfen, werden auf den
+Orchestrator-Handoff und die neue Evidence-Struktur umgestellt. Vor dem
+Commit wird die in Abschnitt 3 geforderte vollständige Symbolsuche erneut
+ausgeführt und mit dem tatsächlichen Diff abgeglichen.
 
 Betroffen, aber ohne Vertragsänderung durch diesen Plan:
 
@@ -409,6 +494,10 @@ struct ActiveSwitchingWindow {
     std::uint64_t startMonotonicMillis{0U};
     AbstractControlDirection direction{AbstractControlDirection::Idle};
     std::uint64_t scheduledOnMillis{0U};
+    // Exactly one first-start attempt is allowed for this natural window.
+    // A late tick that cannot guarantee minimumOnMillis sets this marker and
+    // discards the entire pulse without retry or carry into the next window.
+    bool pulseStartAttempted{false};
 };
 
 // Getrenntes Feedback-Handoff: Das Subjekt, fuer das
@@ -460,6 +549,10 @@ struct ActuatorPlannerRuntimeState {
     std::optional<std::uint64_t> lastNewRequestAcceptedAtMonotonicMillis;
     std::optional<ActuatorWatchdogFaultEvidence> latchedWatchdogFault;
 
+    // Last actually observed disposition for the currently tracked active
+    // sequence. A new active sequence starts with no disposition yet; Phase B
+    // records the first real outcome. Once recorded, severity only increases
+    // until a new sequence or an explicit OFF/no-request closes the window.
     std::optional<PendingControlRequestFeedback> pendingFeedback;
     bool pendingFeedbackUpdateAvailable{false};
 
@@ -523,17 +616,17 @@ durch stillschweigend inkonsistente Feld-Lebenszyklen entstand):
 
 | Feld | Gesetzt von | Gelöscht/verändert von | Überlebt `forceStop()`? |
 |---|---|---|---|
-| `acceptedCommand` | Phase A, jede erfolgreiche aktive Admission | jeder unmittelbare Fail-closed-Verwurf, tatsächlicher normaler Teardown und `forceStop()` | Nein |
-| `activeWindow` | Fensterstart bzw. bestätigte neue B-Planung (8.1/8.5) | unmittelbarer Fail-closed-Verwurf, tatsächlicher normaler Teardown, unbestätigte Gegenrichtung am alten Fensterende, `forceStop()` | Nein |
+| `acceptedCommand` | Phase B, sobald ein frisch validierter Heating/Cooling-Kandidat tatsächlich als aktuelle Planungsrequest übernommen wird | jeder unmittelbare Fail-closed-Verwurf, tatsächlicher normaler Teardown und `forceStop()` | Nein |
+| `activeWindow` | Fensterstart bzw. bestätigte neue B-Planung (8.1/8.5); `pulseStartAttempted` wird beim ersten Aktivierungsversuch des natürlichen Fensters gesetzt | unmittelbarer Fail-closed-Verwurf, tatsächlicher normaler Teardown, unbestätigte Gegenrichtung am alten Fensterende, `forceStop()` | Nein |
 | `accumulator` | Fensterstart-Ereignis (8.1) | unmittelbarer Fail-closed-Verwurf, tatsächlicher Teardown, `forceStop()`; keine Gutschrift für einen am Arming-Gate verpassten Puls | Nein |
 | `lastAppliedDirection` | jede physische Ausgangsentscheidung | nächste physische Ausgangsentscheidung | Ja als RAM-Zustand; bei `forceStop()` auf `Idle` gesetzt |
 | `currentOnPhaseStartedAtMonotonicMillis` | Tick, an dem `lastAppliedDirection` Idle->Heating/Cooling wechselt | Tick, an dem der physische Ausgang Idle wird | Nein |
 | `lastPhysicalDeactivationDirection` / `lastPhysicalDeactivationAtMonotonicMillis` | jeder tatsächliche Active -> Idle-Übergang, einschließlich normalem Window-Off, Fail-closed und `forceStop()` | nie gelöscht, nur beim nächsten tatsächlichen Übergang überschrieben | Ja |
 | `counterDirectionCandidate` / `...ObservedSinceMonotonicMillis` / `counterDirectionConfirmed` | 8.5 bei gültiger, aktueller Gegenrequest | Unterbrechung, erfolgreiche B-Übernahme, Fail-closed und `forceStop()` | Nein |
-| `lastAcceptedSequence` | Phase A, jede erfolgreiche Admission (6.2 Schritt 4 „sonst") | nie gelöscht (Hochwasserzeichen) | Ja |
-| `lastNewRequestAcceptedAtMonotonicMillis` | Phase A, jede erfolgreich verarbeitete Evaluation (6.2 Schritt 3/4) | nie gelöscht | Ja |
+| `lastAcceptedSequence` | Phase A, jede neue strukturell valide ControlRequest-Identität vor Stale-on-arrival-/Safety-/Parameterentscheidung | nie gelöscht (Hochwasserzeichen) | Ja |
+| `lastNewRequestAcceptedAtMonotonicMillis` | **Zentrale H-Regel:** Phase A setzt dieses Lebenszeichen genau bei `NoValidRequest` sowie bei jeder neuen, strukturell gültigen, tatsächlich angenommenen aktiven #22-Evaluation, sofern sie weder Replay/Duplicate noch eine malformed #22-Evaluation noch stale-on-arrival Watchdog/Context ist; Safety-/Parameter-/Allowed-Sperren verhindern dieses Lebenszeichen nicht | nie gelöscht | Ja |
 | `latchedWatchdogFault` | Watchdog-Trip (Klasse I-5) | ausschließlich `applyExternalWatchdogFaultReset()` | Ja |
-| `pendingFeedback` | ereignisgetrieben, siehe Abschnitt 9 | ereignisgetrieben (9), unbedingt bei `forceStop()`; die Application-Grenze besitzt zusätzlich das nicht erneut auslieferbare Handoff-Slot | Nein |
+| `pendingFeedback` | erste tatsächlich bestimmte Disposition der aktuellen aktiven Sequence sowie spätere Verschärfung gemäß Abschnitt 9; planmäßiger Window-Off setzt keine Verschärfung | neue aktive Sequence eröffnet einen frischen Dispositionszustand; OFF/NoValidRequest schließt ohne neues Fenster; `forceStop()`/I-Ereignis setzen bei vertrauenswürdiger Sequence `Rejected`, sonst `nullopt` | Nein |
 | `outerFanActive`/`...DeactivationRequestedAtMonotonicMillis` | Abschnitt 10 | Abschnitt 10 | Ja (Nachlauf läuft über `forceStop()` unverändert weiter, Abschnitt 11) |
 | `innerFanActive`/`...DeactivationRequestedAtMonotonicMillis` | Abschnitt 10 | Abschnitt 10 | Ja (analog) |
 
@@ -552,14 +645,21 @@ Er wird vom Aufrufer (`TemperatureControlApplicationOrchestrator::tickActuatorPl
 potenziell **häufiger** aufgerufen als #22 seine eigene, sensorgetaktete
 `evaluateTemperatureControl()`-Berechnung durchführt.
 
-`tickActuatorPlan()` folgt bei jedem Aufruf exakt dieser Reihenfolge:
+`tickActuatorPlan()` folgt bei jedem Aufruf exakt dieser Reihenfolge. Die
+öffentliche Methode besitzt **keinen** caller-supplied
+`std::optional<TemperatureControlResult>`-Parameter; dadurch kann ein Caller
+weder eine andere Evaluation unterschieben noch dieselbe Evaluation als
+Replay erneut einspeisen:
 
 ```text
 tickActuatorPlan(...)
   -> currentCanonicalContext/temperatureControlledPhase ableiten
      (bestehende resolveEffectiveControlContext()/
      isTemperatureControlledProcessState()-Kette, keine Parallel-Ableitung)
-  -> result = planner.tick(input)          [genau einmal]
+  -> evaluation = move(outstandingEvaluation) oder std::nullopt
+     [eine gespeicherte Evaluation genau einmal; Slot vor planner.tick()
+      leeren]
+  -> result = planner.tick(input{newEvaluation = evaluation}) [genau einmal]
   -> driver.apply(result)                  [genau einmal, sowohl im
                                              normalen als auch im
                                              fail-closed Fall]
@@ -579,26 +679,70 @@ Active) ersetzt dort den noch nicht konsumierten Wert. Ein Wechsel auf
 `nullopt` ist ebenfalls ein echtes Update und schließt das Handoff.
 
 Der Orchestrator besitzt in seiner kanonischen Application-Grenze genau einen
-internen Slot für dieses Handoff. `evaluateTemperatureControl()` nimmt den
-Slot vor dem Aufruf des #22-Kerns atomar aus dem Slot (bei leerem Slot
-`nullopt`), injiziert diesen lokalen Wert einmalig in den internen
-`TemperatureControlInput` und löscht den Slot bereits vor dem eigentlichen
-#22-Aufruf. Die öffentliche
+internen Slot für dieses Handoff. Vor jedem neuen #22-Aufruf prüft
+`evaluateTemperatureControl()` zuerst die `outstandingEvaluation`-Invariante.
+Nur wenn dieser Slot leer ist, nimmt die Methode den Feedback-Slot vor dem
+Aufruf des #22-Kerns atomar aus dem Slot (bei leerem Slot `nullopt`), injiziert
+diesen lokalen Wert einmalig in den internen `TemperatureControlInput` und
+löscht den Slot bereits vor dem eigentlichen #22-Aufruf. Die öffentliche
 `TemperatureControlEvaluationEvidence::previousControlRequestFeedback`-
 Callerpflicht entfällt; Sensor-/Zeit-Evidence bleibt caller-supplied. Mehrere
 Planner-Ticks zwischen zwei #22-Evaluationen sind damit zulässig und speichern
-nur den zuletzt fachlich gültigen Update-Stand. Ein zweiter
-`evaluateTemperatureControl()`-Aufruf ohne neues Handoff erhält
-`nullopt` und lässt #22 gemäß seinem bestehenden Vertrag konservativ
-einfrieren.
+nur den zuletzt fachlich gültigen Update-Stand. Die Application führt
+zusätzlich genau einen internen `outstandingEvaluation`-Slot:
 
-**Verbindlicher Orchestrator-Vertrag:** Eine neue #22-Evaluation wird genau
-einmal als `newEvaluation` an einen späteren `tickActuatorPlan()`-
-Aufruf übergeben. Der Orchestrator kopiert kein Feedback zwischen Callern;
-er besitzt, aktualisiert und konsumiert den Handoff selbst. Lifecycle-Reset
-und fehlgeschlagenes Persistence bleiben davon getrennt: ein fehlgeschlagener
-Commit konsumiert oder löscht kein Handoff, eine erfolgreiche kanonische
-Lifecycle-Grenze löscht es zusammen mit dem Planner-Stop.
+Die öffentliche Evidence-Struktur ist nach der Migration exakt auf Zeit- und
+Sensorsignale begrenzt:
+
+```cpp
+struct TemperatureControlEvaluationEvidence {
+    std::uint64_t sampleTimestampMonotonicMillis{0U};
+    device_platform::SensorQualitySnapshot air;
+    device_platform::SensorQualitySnapshot product;
+};
+```
+
+Der private Application-Zustand enthält mindestens:
+
+```cpp
+std::optional<TemperatureControlResult> outstandingEvaluation_;
+std::optional<PreviousControlRequestFeedback>
+    pendingControlRequestFeedback_;
+```
+
+Beide Slots gehören ausschließlich dem
+`TemperatureControlApplicationOrchestrator`; sie werden nicht in
+`TemperatureControlEvaluationEvidence`, `TemperatureControlResult` oder
+Persistenz kopiert.
+
+- Nach jedem tatsächlich ausgeführten #22-Aufruf wird dessen vollständiges
+  `TemperatureControlResult` genau einmal in diesen Slot gestellt. Das gilt
+  auch für `NoValidRequest`/`Unavailable`/`InvalidInput`, weil auch diese
+  Ergebnisse vom Planner beobachtet werden müssen.
+- Der nächste `tickActuatorPlan()` nimmt diesen Slot atomar und verwendet ihn
+  als `ActuatorPlanTickInput::newEvaluation`; danach ist der Slot leer. Weitere
+  Planner-Ticks liefern `std::nullopt`, bis eine neue #22-Evaluation entsteht.
+- Ruft ein Caller `evaluateTemperatureControl()` erneut auf, solange der Slot
+  noch belegt ist, führt die Application den #22-Kern nicht erneut aus. Sie
+  liefert ein deterministisches fail-closed
+  `InvalidInput/InvalidConfiguration`-Ergebnis mit `Idle` zurück, lässt den
+  bestehenden Slot unverändert und markiert dies nicht als neue Evaluation.
+  Damit ist `evaluate n -> Planner-Consume(n) -> evaluate n+1` eine intern
+  geschützte Invariante und keine ungesicherte Caller-Konvention.
+- Eine erfolgreiche Lifecycle-Grenze leert einen unverbrauchten
+  `outstandingEvaluation`-Slot terminal fail-closed zusammen mit dem Lauf-
+  Reset; er darf nicht in die nächste Lifecycle-Episode gelangen. Ein aus
+  `forceStop()` stammendes `Rejected`-Handoff wird nur für die noch passende
+  aktuelle #22-Feedback-Episode vorgehalten und beim Lifecycle-Abschluss
+  atomar ausgemustert, statt in eine neue Episode einzufließen. Ein
+  fehlgeschlagener Persistence-Commit konsumiert oder löscht weder Evaluation
+  noch Feedback-Handoff.
+
+Der Orchestrator kopiert kein Feedback zwischen Callern; er besitzt,
+aktualisiert und konsumiert Handoff und Evaluation selbst. Die neue
+#22-Evaluation wird intern genau einmal als `newEvaluation` an den Planner
+übergeben. Dieses interne Weiterreichen ist die geschützte Bedeutung der
+Reihenfolge `evaluate n -> tickActuatorPlan(newEvaluation=n)`.
 
 Intern läuft `tick()` in **zwei Phasen**, die absichtlich unabhängig
 voneinander sind:
@@ -606,88 +750,86 @@ voneinander sind:
 ### 6.2 Phase A – Annahme (Admission), immer zuerst, unabhängig von Parametern/Safety/Fault
 
 Diese Phase aktualisiert ausschließlich Buchführung (Replay-Schutz,
-Watchdog-Lebenszeichen, Feedback-Subjekt) und liefert `admissionOutcome`
-plus – bei Erfolg – einen „vorgemerkten Kandidaten" für Phase B. Sie läuft
-**immer**, auch wenn Parameter ungültig sind, Safety nicht `Allowed` ist oder
-ein Watchdog-Fault latched ist – denn ein strukturell gültiges neues
-#22-Ergebnis ist ein Lebenszeichen von #22, unabhängig davon, ob #23 es
-gerade physisch umsetzen darf.
+Watchdog-Lebenszeichen und die vertrauenswürdige Request-Identität) und
+liefert `admissionOutcome` plus – bei Erfolg – einen vorgemerkten Kandidaten
+für Phase B. Sie läuft **immer**, auch wenn Parameter ungültig sind, Safety
+nicht `Allowed` ist oder ein Watchdog-Fault latched ist. Ein gültiges neues
+#22-Ergebnis ist zunächst eine #22-Auswertung; ob es physisch ausgeführt wird,
+entscheidet erst Phase B.
+
+Die folgende H-Regel ist die einzige Stelle, an der das Watchdog-Lebenszeichen
+gesetzt werden darf:
+
+> **H:** `lastNewRequestAcceptedAtMonotonicMillis = now` genau bei
+> `NoValidRequest` sowie bei jeder neuen, strukturell gültigen und tatsächlich
+> angenommenen aktiven #22-Evaluation, sofern sie weder Replay/Duplicate noch
+> eine malformed #22-Evaluation noch stale-on-arrival Watchdog/Context ist.
+> Safety-, Parameter- und `Allowed`-Sperren verhindern H nicht. `std::nullopt`,
+> Replay/Duplicate, eine malformed #22-Evaluation und stale-on-arrival
+> Watchdog/Context setzen H nicht.
 
 1. `input.newEvaluation == std::nullopt` -> `admissionOutcome = NoCandidate`,
-   kein vorgemerkter Kandidat, keine `pendingFeedback`-Änderung. **Phase A
-   endet hier.**
-2. `newEvaluation` strukturell ungültig (unbekannter Enumwert bei Richtung
-   oder Status, `timeQuote` nicht-finit oder außerhalb `[0,1]` bei
-   vorhandener `ControlRequest`, Status/`ControlRequest`-Präsenz widerspricht
-   der #22-Matrix aus Abschnitt 7, `sequence == 0` bei vorhandener
-   `ControlRequest`, strukturell ungültiger `currentCanonicalContext`, oder
-   `input.safetyGate.status` ist keiner der drei bekannten
-   `ActuatorSafetyGateStatus`-Werte) -> `admissionOutcome =
-   MalformedCandidate`. **Phase A endet hier**, kein vorgemerkter Kandidat.
-   Weil die aktuelle Request-Identität bei einem malformed Ergebnis nicht
-   vertrauenswürdig ist, wird das Planner-Handoff fail-closed auf
-   `pendingFeedback = std::nullopt` gesetzt und als `changed`-Update
-   markiert. Es wird niemals eine unsichere Sequence für `Rejected`
-   verwendet (Abschnitt 9).
-3. `classifyActuatorDemand(newEvaluation.value())` (Abschnitt 7) ==
-   `NoValidRequest` (also `Unavailable`/`InvalidInput` von #22, keine
-   `ControlRequest` vorhanden): `admissionOutcome = Accepted`,
-   `state_.lastNewRequestAcceptedAtMonotonicMillis = input.nowMonotonicMillis`
-   (Lebenszeichen, unabhängig von einer Sequenz – es gibt hier keine).
-   `state_.pendingFeedback = std::nullopt` (kein Feedbackfenster, Abschnitt
-   9). Der vorgemerkte Kandidat trägt `demandClass = NoValidRequest` und
-   **kein** `AcceptedControlCommand` (keine Richtung, keine Sequenz).
-4. Andernfalls trägt `newEvaluation` eine `ControlRequest`
-   (`NeutralOff`/`AirLimitBlockedOff`/`AirLimitReducedDemand`/`NormalDemand`).
-   Geprüft wird der Reihe nach:
-   - `identity.sequence <= state().lastAcceptedSequence.value_or(0)` ->
-     `admissionOutcome = DuplicateOrOldSequence`. **Phase A endet hier**,
-     kein vorgemerkter Kandidat, keine Bookkeeping-Änderung, `pendingFeedback`
-     bleibt unverändert (ein Replay darf ein bereits korrektes
-     Feedbackfenster nicht zurückdrehen, Abschnitt 9).
-   - Andernfalls ist dies eine **neu beobachtete** aktive Request; ab hier
-     wird `state_.lastAcceptedSequence = identity.sequence` bereits gesetzt
-     (Hochwasserzeichen unabhängig vom weiteren Ausgang), und, falls
-     `demandClass` Heating/Cooling trägt (`NormalDemand`/
-     `AirLimitReducedDemand`), `state_.pendingFeedback = {identity.sequence,
-     Rejected}` als **vorläufiger** Wert gesetzt (Abschnitt 9). Danach:
-     - `deadlineReached(input.nowMonotonicMillis,
-       identity.createdAtMonotonicMillis, requestWatchdogMillis)` (Abschnitt
-       8.3) -> `admissionOutcome = StaleOnArrivalWatchdog`. **Phase A endet
-       hier**, kein vorgemerkter Kandidat; `pendingFeedback` bleibt bei
-       `{sequence, Rejected}`, `acceptedCommand` bleibt
-       unverändert.
-     - `context != input.currentCanonicalContext` ->
-       `admissionOutcome = StaleOnArrivalContext`. Identisch zum vorigen
-       Fall: `pendingFeedback = {sequence, Rejected}` bleibt bestehen,
-       `acceptedCommand` unverändert.
-     - trägt `demandClass` kein Heating/Cooling (`NeutralOff`/
-       `AirLimitBlockedOff`): `admissionOutcome = Accepted`,
-       `state_.pendingFeedback = std::nullopt` (OFF öffnet kein
-       Feedbackfenster, Abschnitt 9). Der vorgemerkte Kandidat trägt
-       `demandClass`, `direction = Idle`, `sequence` und
-       `context`.
-     - sonst (Heating/Cooling, alle Prüfungen bestanden):
-       `admissionOutcome = Accepted`. Der vorgemerkte Kandidat trägt
-       `demandClass`, `direction`, `timeQuote`, `sequence` und
-       `context`;
-       `pendingFeedback` bleibt vorläufig bei `{sequence, Rejected}`
-       und wird ab dem Moment, in dem Phase B diesen Kandidaten zu
-       `acceptedCommand` macht, jeden Tick live nachgeführt (Abschnitt 9).
+   kein vorgemerkter Kandidat, keine `pendingFeedback`-Änderung und kein H.
+   **Phase A endet hier.**
+2. Zuerst wird ausschließlich die #22-Evaluation und der aktuelle kanonische
+   Kontext strukturell geprüft: unbekannter Status-/Richtungswert,
+   nicht-finite oder außerhalb `[0,1]` liegende Quote, Status-/Request-
+   Widerspruch, `sequence == 0` bei vorhandener Request oder ein strukturell
+   ungültiger `currentCanonicalContext` -> `admissionOutcome =
+   MalformedCandidate`, kein H, kein vorgemerkter Kandidat und
+   `pendingFeedback = std::nullopt` als geändertes Update. Die Identität ist
+   nicht vertrauenswürdig; es wird kein Sequence-Feedback erfunden.
+3. Ein ungültiger externer `input.safetyGate.status` wird **separat** als
+   `MalformedSafetyGate` markiert. Ist die #22-Evaluation selbst strukturell
+   gültig, bleibt ihre Request-Identität vertrauenswürdig: H wird nach den
+   folgenden Regeln gesetzt, `lastAcceptedSequence` wird normal geführt und
+   Phase B verwirft den Tick als Klasse I-1. Safety-Enum-Korruption macht
+   daher eine valide ControlRequest-Sequence nicht automatisch unsicher.
+4. `classifyActuatorDemand(newEvaluation.value())` (Abschnitt 7) ==
+   `NoValidRequest` (`Unavailable`/`InvalidInput` ohne ControlRequest):
+   `admissionOutcome = Accepted` beziehungsweise `MalformedSafetyGate`, falls
+   nur das externe Gate malformed ist; H wird gesetzt. Der Kandidat trägt
+   `NoValidRequest` ohne Sequence. Falls bereits ein vertrauenswürdig aktives
+   `acceptedCommand` besteht, wird dessen Sequence vor dem I-6-Teardown als
+   `{sequence, Rejected}` gemerged; andernfalls bleibt
+   `pendingFeedback = std::nullopt`. Diese Evaluation zählt als lebende
+   #22-Auswertung, eröffnet aber selbst kein Feedbackfenster und schaltet in
+   Phase B physisch fail-closed ab.
+5. Andernfalls trägt die Evaluation eine ControlRequest. Falls
+   `identity.sequence <= lastAcceptedSequence` gilt, ist sie
+   `DuplicateOrOldSequence`: kein H, kein Kandidat, keine Bookkeeping- oder
+   Feedbackänderung. Ein Replay darf weder eine laufende Zeitbasis noch ein
+   bestehendes Handoff zurückdrehen.
+6. Für eine neue, strukturell valide Sequence wird zunächst
+   `lastAcceptedSequence = identity.sequence` gesetzt. Danach gilt:
+   - `deadlineReached(now, identity.createdAtMonotonicMillis,
+     requestWatchdogMillis)` -> `StaleOnArrivalWatchdog`, kein H, kein
+     Kandidat; die Sequence ist vertrauenswürdig bekannt und erhält
+     `pendingFeedback = {sequence, Rejected}`. `acceptedCommand` bleibt
+     unverändert.
+   - `context != currentCanonicalContext` -> `StaleOnArrivalContext`, kein H,
+     kein Kandidat und ebenfalls `{sequence, Rejected}`; `acceptedCommand`
+     bleibt unverändert.
+   - Gültiges `NeutralOff`/`AirLimitBlockedOff` -> H; `admissionOutcome`
+     `Accepted` beziehungsweise `MalformedSafetyGate`; kein
+     Feedbackfenster, Kandidat mit Richtung `Idle`.
+   - Gültiges Heating/Cooling (`NormalDemand` oder `AirLimitReducedDemand`)
+     -> H; `admissionOutcome` `Accepted` beziehungsweise
+     `MalformedSafetyGate`; Kandidat mit Richtung, Quote, Sequence und
+     Kontext. Es wird **kein vorläufiges `Rejected`** gesetzt: Phase B trägt
+     die erste tatsächliche Disposition ein, damit die Monotonie-Regel nicht
+     durch einen nicht beobachteten Platzhalter verletzt wird.
 
 Eine bei Admission abgelehnte neue Request (`DuplicateOrOldSequence`,
-`StaleOnArrivalWatchdog`, `StaleOnArrivalContext`, `MalformedCandidate`)
-berührt einen bereits gehaltenen `acceptedCommand` **nicht**, sofern es sich
-um Replay oder eine vertrauenswürdig identifizierte, bei Ankunft stale gewordene
-Request handelt: Phase B bewertet die bestehende Zeitbasis dann wie bei
-`newEvaluation == std::nullopt`. Das schließt aus, dass ein Replay oder eine
-verspätete Request einen laufenden Plan zerstört. Ein `MalformedCandidate`
-ist die notwendige Ausnahme: Seine Identität ist nicht vertrauenswürdig, deshalb
-schließt Phase A das Handoff und Phase B führt den unbedingten
-Malformed-Fail-closed-Verwurf aus. `StaleOnArrivalWatchdog` und
-`StaleOnArrivalContext` dürfen dagegen ein eigenständiges
-`{sequence, Rejected}` für ihre vertrauenswürdig bekannte Sequence führen
-(Abschnitt 9).
+`StaleOnArrivalWatchdog`, `StaleOnArrivalContext`, `MalformedCandidate` oder
+`MalformedSafetyGate`) berührt einen bereits gehaltenen `acceptedCommand`
+nicht, soweit Phase B nicht selbst die unmittelbare Fail-closed-Klasse
+ausführt. Replay und stale-on-arrival Requests lassen die bestehende
+Zeitbasis weiterlaufen; eine malformed Request-Identität schließt das
+Handoff und führt I-1 aus. Eine malformed Safety-Evidence führt ebenfalls I-1
+aus, darf aber bei valider Request-Identität das `{sequence, Rejected}`-Feedback
+verwenden. Die vollständige Trusted-Sequence-Regel steht in Abschnitt 9 und
+gilt identisch für I-Ereignisse und `forceStop()`.
 
 ### 6.3 Phase B – Physischer Ausgang (Prioritätsleiter, Abschnitt 8.2)
 
@@ -706,14 +848,22 @@ verarbeitet hat, prüft Phase B:
 deadlineReached(nowMonotonicMillis, lastNewRequestAcceptedAtMonotonicMillis, requestWatchdogMillis)
 ```
 
-Da `lastNewRequestAcceptedAtMonotonicMillis` in Phase A bereits durch **jede**
-erfolgreich angenommene neue Evaluation aktualisiert wird (auch durch eine
-`NoValidRequest`-Evaluation, siehe 6.2 Schritt 3), ist der Watchdog
-unabhängig von der #22-eigenen Kadenz und von der Planner-Tick-Kadenz: Läuft
-#22 seltener als der Planer tickt, bleibt der Watchdog bis zum konfigurierten
-Zeitraum ruhig; läuft #22 (theoretisch) so schnell, dass Sequenzen dupliziert
-ankommen, werden diese in Phase A abgelehnt, ohne den Watchdog oder die
-laufende Zeitbasis zu stören.
+Die H-Regel aus Phase A ist hier **wortgleich** maßgeblich:
+
+> `lastNewRequestAcceptedAtMonotonicMillis = now` genau bei
+> `NoValidRequest` sowie bei jeder neuen, strukturell gültigen und tatsächlich
+> angenommenen aktiven #22-Evaluation, sofern sie weder Replay/Duplicate noch
+> eine malformed #22-Evaluation noch stale-on-arrival Watchdog/Context ist.
+> Safety-, Parameter- und `Allowed`-Sperren verhindern H nicht. `std::nullopt`,
+> Replay/Duplicate, eine malformed #22-Evaluation und stale-on-arrival
+> Watchdog/Context setzen H nicht.
+
+Damit ist der Watchdog unabhängig von der #22-eigenen Kadenz und von der
+Planner-Tick-Kadenz: Neue HEAT-, COOL-, OFF- und `NoValidRequest`-Evaluationen
+halten ihn jeweils am Leben, sofern H gilt; Replay, malformed und
+stale-on-arrival verlängern die Frist nicht. Eine `NoValidRequest`-Evaluation
+zählt als lebende #22-Auswertung, schaltet aber in Phase B physisch sofort
+fail-closed ab.
 
 ### 6.5 Welche Quote ein Fenster bestimmt / neue Quote mitten im Fenster
 
@@ -872,18 +1022,34 @@ nichtnulliges `scheduledOnMillis` gilt:
    nachträglich verschoben noch als neues Akkumulatorguthaben blind in das
    nächste Fenster übertragen.
 3. Ist sie am Fensterstart zulässig, darf der erste Planner-Tick innerhalb des
-   natürlichen On-Intervalls den physischen Puls starten. Bleibt die
-   Aufruferkadenz hinter dem Intervall zurück, wird kein verspäteter Puls
-   außerhalb dieses Intervalls begonnen. Ein physischer Puls endet am
-   natürlichen Intervallende, sofern keine unmittelbare Fail-closed-Abschaltung
-   ihn früher beendet; ein normaler Teardown darf ihn nur bis zum Ende der
-   konkreten Mindest-Einschaltphase halten.
+   natürlichen On-Intervalls den physischen Puls nur starten, wenn vor der
+   Aktivierung gilt:
+
+   ```text
+   elapsedInWindow = now - window.startMonotonicMillis
+   remainingNaturalOnMillis =
+       window.scheduledOnMillis - elapsedInWindow
+   remainingNaturalOnMillis >= minimumOnMillis
+   ```
+
+   Die Subtraktion wird nur nach `elapsedInWindow < scheduledOnMillis`
+   ausgeführt. Der erste Aktivierungsversuch setzt
+   `activeWindow.pulseStartAttempted = true`. Ist
+   `remainingNaturalOnMillis < minimumOnMillis`, wird der gesamte
+   Fensterpuls als `DeferredOrLimited` verworfen; das Fenster erhält keinen
+   späteren Retry, keine Verlängerung über sein natürliches Ende und keine
+   Nachholung im Folgefenster. Ein verspäteter Tick darf daher niemals einen
+   realen normalen Puls unter `minimumOnMillis` starten. Ein zugelassener
+   physischer Puls endet am natürlichen Intervallende, sofern keine
+   unmittelbare Fail-closed-Abschaltung ihn früher beendet; ein normaler
+   Teardown darf ihn nur bis zum Ende der konkreten Mindest-Einschaltphase
+   halten.
 4. Ist das Arming-Gate exakt am Fensterstart erfüllt, ist der Puls zulässig
    (Gleichheitsgrenze); ist es erst danach erfüllt, bleibt dieses Fenster
    verworfen. Damit sind vor, auf und nach dem Minimum-Off-Ende sowie kurze und
    lange Off-Anteile ohne Nachholung unterscheidbar testbar.
 
-Diese feste Lage ist die gewählte Revision-5-Regel. Sie ist konservativer als
+Diese feste Lage ist die gewählte Revision-6-Regel. Sie ist konservativer als
 ein verschobener Puls, verhindert aber jede stille Energieerzeugung aus einer
 Sperrphase und ist O(1) sowie nativ deterministisch.
 
@@ -921,9 +1087,13 @@ desiredActive = activeWindow.has_value()
              && elapsedInWindow < activeWindow->scheduledOnMillis
 ```
 
-`desiredActive` ist kein physischer Freigabebefehl. Der zentrale
+`desiredActive` ist nur der natürliche Zeitwunsch. Der zentrale
 Übergangs-/Prioritätspfad aus Abschnitt 8.2 entscheidet zusätzlich über
 Mindest-On, physische Mindest-Off-/Totzeit, Fail-closed und den Außenlüfter.
+Ist der physische Ausgang in diesem Fenster noch `Idle` und
+`pulseStartAttempted == true`, gilt der natürliche Start als bereits
+verworfen und es gibt keinen zweiten Startversuch; ist der Ausgang bereits
+aktiv, darf der begonnene Puls bis zum natürlichen Ende weiterlaufen.
 ### 8.2 Prioritätsleiter (Phase B)
 
 ```cpp
@@ -964,20 +1134,46 @@ nicht-faultige Teardown- oder Freigabeentscheidung und darf nur dort
 `MinimumOnTimeHeld` liefern, wo der kanonische Vertrag das ausdrücklich
 zulässt.
 
+**Exhaustive Trusted-Sequence-Regel für jede vollständige Nichtannahme:**
+
+- Eine Sequence ist vertrauenswürdig bekannt, wenn sie aus einer strukturell
+  validierten aktuellen #22-ControlRequest stammt (auch wenn sie wegen
+  Stale-on-arrival oder eines korrupten externen Safety-Gates nicht
+  ausgeführt werden darf) oder wenn sie bereits als `acceptedCommand`
+  gehalten wird.
+- Führt ein unmittelbares I-Ereignis oder `forceStop()` zur vollständigen
+  Nichtannahme und ist genau eine solche aktive Sequence `S` bekannt, wird
+  ausschließlich `{S, Rejected}` als `pendingFeedback` gesetzt beziehungsweise
+  beibehalten und bis zum einmaligen #22-Konsum weitergereicht. Das gilt auch,
+  wenn `S` nur in der aktuellen Phase-A-Evaluation bekannt ist.
+- Ist die aktuelle Request-Identität nicht vertrauenswürdig, wird kein
+  Sequence-Feedback erfunden und der Handoff auf `std::nullopt` geschlossen.
+  Die Korruption des externen Safety-Gate-Werts ändert die Vertrauenswürdigkeit
+  einer ansonsten validen ControlRequest-Identität nicht.
+- `OFF`/`NoValidRequest` ohne vertrauenswürdig aktive ControlRequest eröffnen
+  kein Feedbackfenster. Wenn bei einer expliziten `NoValidRequest` noch eine
+  vertrauenswürdig aktive Sequence gehalten wird, wird sie als vollständige
+  Nichtannahme nach der ersten Regel mit `Rejected` geschlossen; danach gibt
+  es für die neue `NoValidRequest` kein eigenes Feedbackfenster.
+
+Diese vier Sätze sind die gemeinsame Bedeutung von Feldtabelle, Phase A,
+Prioritätsleiter, Abschnitt 9 und `forceStop()`; „vollständige Bereinigung"
+bedeutet daher nicht pauschal „Feedback löschen".
+
 **Klasse I – unmittelbare Fail-closed-Abschaltung:**
 
 | Klasse | Bedingung | Status | Reason | Physisch im selben Tick | Zustandswirkung |
 |---|---|---|---|---|---|
-| I-1 | Phase A liefert `MalformedCandidate` oder Safety-Enum, aktueller Kontext oder ein anderer struktureller Tickwert ist ungültig | `InvalidInput` | `MalformedInput` | `Idle`, sofort | Snapshot, Akkumulator, Gegenrichtung, Request und Handoff fail-closed schließen |
-| I-2a | `classifyActuatorPlannerParameters() == Unconfigured` | `Unconfigured` | `NoCommissioning` | `Idle`, sofort | dieselbe vollständige Bereinigung wie I-1 |
-| I-2b | `classifyActuatorPlannerParameters() == Invalid` | `InvalidInput` | `InvalidConfiguration` | `Idle`, sofort | dieselbe vollständige Bereinigung wie I-1 |
-| I-3a | `safetyGate.status == Unresolved` | `Idle` | `SafetyGateUnresolved` | `Idle`, sofort | vollständige Bereinigung; kein Minimum-On-Hold |
-| I-3b | `safetyGate.status == ImmediateStop` | `Idle` | `ExternalSafetyOverride` | `Idle`, sofort | vollständige Bereinigung; kein Minimum-On-Hold |
-| I-4 | `latchedWatchdogFault.has_value()` | `Idle` | `RequestWatchdogFaultLatched` | `Idle`, sofort | keine Wiederfreigabe; Latch bleibt bestehen |
-| I-5 | der laufende Watchdog trippt in diesem Tick | `Idle` | `StaleRequestWatchdog` | `Idle`, sofort | Fault-Evidenz latchen und alle Plan-/Peltierzustände verwerfen |
-| I-6 | eine **neue, explizite** Phase-A-Evaluation klassifiziert als `NoValidRequest` | `Idle` | `NoValidRequest` | `Idle`, sofort | aktuelle Request, Snapshot und Guthaben verwerfen; kein altes Feedbacksubjekt |
-| I-7 | der gehaltene Request-Kontext ist stale/inkompatibel zum aktuellen kanonischen Kontext | `Idle` | `StaleRequestContext` | `Idle`, sofort | aktuelle Request, Snapshot und Guthaben verwerfen |
-| I-8 | eine Referenzzeit ist retrograd oder anderweitig `TimeInvalid` | `InvalidInput` | `TimeInvalid` | `Idle`, sofort | vollständige Bereinigung; keine Frist wird als erfüllt angenommen |
+| I-1 | Phase A liefert `MalformedCandidate`/`MalformedSafetyGate`, aktueller Kontext oder ein anderer struktureller Tickwert ist ungültig | `InvalidInput` | `MalformedInput` | `Idle`, sofort | Snapshot, Akkumulator, Gegenrichtung und Request schließen; Feedback nach Trusted-Sequence-Regel |
+| I-2a | `classifyActuatorPlannerParameters() == Unconfigured` | `Unconfigured` | `NoCommissioning` | `Idle`, sofort | dieselbe vollständige Bereinigung wie I-1; Feedback nach Trusted-Sequence-Regel |
+| I-2b | `classifyActuatorPlannerParameters() == Invalid` | `InvalidInput` | `InvalidConfiguration` | `Idle`, sofort | dieselbe vollständige Bereinigung wie I-1; Feedback nach Trusted-Sequence-Regel |
+| I-3a | `safetyGate.status == Unresolved` | `Idle` | `SafetyGateUnresolved` | `Idle`, sofort | vollständige Bereinigung; kein Minimum-On-Hold; Feedback nach Trusted-Sequence-Regel |
+| I-3b | `safetyGate.status == ImmediateStop` | `Idle` | `ExternalSafetyOverride` | `Idle`, sofort | vollständige Bereinigung; kein Minimum-On-Hold; Feedback nach Trusted-Sequence-Regel |
+| I-4 | `latchedWatchdogFault.has_value()` | `Idle` | `RequestWatchdogFaultLatched` | `Idle`, sofort | keine Wiederfreigabe; Latch bleibt bestehen; Feedback nach Trusted-Sequence-Regel |
+| I-5 | der laufende Watchdog trippt in diesem Tick | `Idle` | `StaleRequestWatchdog` | `Idle`, sofort | Fault-Evidenz latchen und alle Plan-/Peltierzustände verwerfen; Feedback nach Trusted-Sequence-Regel |
+| I-6 | eine **neue, explizite** Phase-A-Evaluation klassifiziert als `NoValidRequest` | `Idle` | `NoValidRequest` | `Idle`, sofort | alte vertrauenswürdige Request ggf. als `Rejected` schließen; neue `NoValidRequest` eröffnet kein Feedbackfenster |
+| I-7 | der gehaltene Request-Kontext ist stale/inkompatibel zum aktuellen kanonischen Kontext | `Idle` | `StaleRequestContext` | `Idle`, sofort | aktuelle Request, Snapshot und Guthaben verwerfen; Feedback nach Trusted-Sequence-Regel |
+| I-8 | eine Referenzzeit ist retrograd oder anderweitig `TimeInvalid` | `InvalidInput` | `TimeInvalid` | `Idle`, sofort | vollständige Bereinigung; keine Frist wird als erfüllt angenommen; Feedback nach Trusted-Sequence-Regel |
 
 Für **jede einzelne** I-Zeile gilt: Wenn der physische Ausgang zuvor Active
 war, wird derselbe Tick als der reale Active -> Idle-Übergang behandelt und
@@ -995,7 +1191,8 @@ außerhalb dieser Tick-Eingabe erfolgt.
 | N-1 | gültiges `NeutralOff`, gültiges `AirLimitBlockedOff` oder bestätigter normaler Richtungswechsel fordert Teardown, physischer Puls ist noch in seiner Mindest-On-Phase | `Active / MinimumOnTimeHeld` | alte Richtung bleibt bis zum Ende dieser konkreten physischen Einschaltphase | Snapshot/Request bleiben nur so lange erhalten; kein neues Guthaben |
 | N-2 | derselbe normale Teardown nach erfüllter Mindest-On oder während physischem Idle | `Idle / NeutralIdle` beziehungsweise `AirLimitBlocked` | Active -> Idle, falls erforderlich | Snapshot, Request, Akkumulator und Gegenrichtung werden verworfen |
 | N-3 | ein gültiger Heating/Cooling-Puls soll aus Idle beginnen, aber der physische Deaktivierungsanker sperrt ihn | `Idle / MinimumOffTimeHeld` beziehungsweise `PolarityDeadTimeHeld` | Idle | der aktuelle Fensterpuls ist nach 8.1 verworfen; kein Nachholen |
-| N-4 | gültige normale Fensterauswertung ohne Teardown | `Active`/`Idle` mit `ScheduledWithinWindow`, `MinimumPulseTriggered` oder `AccumulatingBelowThreshold` | gemäß natürlichem Snapshot-Intervall | nur reguläre Fenster-/Akkumulatorfortschreibung |
+| N-4 | gültige normale Fensterauswertung ohne downstream Begrenzung | `Active`/`Idle` mit `ScheduledWithinWindow` oder `MinimumPulseTriggered`; der planmäßige Window-Off-Anteil gehört ausdrücklich hierher | gemäß natürlichem Snapshot-Intervall | reguläre Fensterfortschreibung; Feedback `NoIntegratorConstraint` unabhängig von Sample-Phase |
+| N-5 | gültige Request, aber Akkumulation unter Mindestimpuls, Mindest-Off/Totzeit, Counterdirection-Gate oder verspäteter erster Tick | `Idle / AccumulatingBelowThreshold`, `MinimumOffTimeHeld`, `PolarityDeadTimeHeld` oder `DeferredOrLimited` | Idle | aktuelle Quote/Pulsbegrenzung wird verworfen oder verzögert; Feedback mindestens `DeferredOrLimited` |
 
 N-1 ist die einzige normale Mindest-On-Halteentscheidung. Sie gilt nicht für
 I-1 bis I-8. Ein Window-Off-Anteil ist kein Teardown des Planungssnapshots:
@@ -1229,6 +1426,21 @@ tatsächlich neues Update. Er ersetzt damit keinen älteren Wert durch einen
 unveränderten Replay. Ein Update mit `std::nullopt` löscht den
 Application-Slot.
 
+Für eine einzelne aktive Request-Sequence gilt die feste Severity-Ordnung:
+
+```text
+NoIntegratorConstraint (0)
+    < DeferredOrLimited (1)
+        < Rejected (2)
+```
+
+`mergeDisposition(sequence, candidate)` darf nur für dieselbe Sequence
+aufgerufen werden und speichert den jeweils schwereren Wert. Eine neue aktive
+Sequence eröffnet einen neuen, zunächst noch nicht ausgegebenen
+Dispositionszustand; sie erbt weder `Rejected` noch `DeferredOrLimited` der
+alten Sequence. `OFF`/`NoValidRequest` schließen das alte Fenster nach der
+Trusted-Sequence-Regel und eröffnen kein neues.
+
 ### 9.2 Ereignisgetriebene Update-Regel
 
 Bei jeder Phase-A-Verarbeitung einer neu beobachteten Evaluation gilt:
@@ -1238,48 +1450,68 @@ Bei jeder Phase-A-Verarbeitung einer neu beobachteten Evaluation gilt:
 | `newEvaluation == std::nullopt` | unverändert | kein Update |
 | `DuplicateOrOldSequence` | unverändert | kein Update |
 | `MalformedCandidate` | `std::nullopt`, weil die Identität unsicher ist | geändert auf `nullopt` |
-| `NoValidRequest` | `std::nullopt` | geändert auf `nullopt` |
+| `MalformedSafetyGate` bei ansonsten valider Request-Identität | Klasse I-1; vertrauenswürdige Sequence erhält `{sequence, Rejected}` | geändert auf genau diese Sequence |
+| `NoValidRequest` ohne aktive vertrauenswürdige Sequence | `std::nullopt` | geändert auf `nullopt` |
+| `NoValidRequest` bei noch vertrauenswürdig aktiver alter Sequence | alte Sequence wird `{sequence, Rejected}`; die neue NoValidRequest eröffnet kein Fenster | geändert auf alte Sequence |
 | gültiges `NeutralOff` oder `AirLimitBlockedOff` | `std::nullopt` | geändert auf `nullopt` |
 | gültige aktive Request, aber `StaleOnArrivalWatchdog` oder `StaleOnArrivalContext` | `{sequence, Rejected}` | geändert auf genau diese vertrauenswürdige Sequence |
-| gültige aktive Request, Admission bestanden | zunächst `{sequence, Rejected}`, danach physisch live nachgeführt | geändert auf genau diese Sequence |
+| gültige aktive Request, Admission bestanden | erste tatsächliche Phase-B-Disposition; kein vorläufiges `Rejected` | geändert auf genau diese Sequence nach Beobachtung |
 
 Bei jeder Änderung der Disposition wird ein Update markiert, auch wenn die
 neue Disposition wieder `Rejected` lautet. Ein identischer Wert wird
 nicht erneut ausgeliefert.
 
 Wird ein vertrauenswürdig bekanntes `acceptedCommand` durch ein
-unbedingtes I-Ereignis oder den tatsächlichen Vollzug eines normalen Teardowns
-verworfen und verfolgt `pendingFeedback` genau dessen Sequence, wird die
-Disposition `Rejected` und als Update markiert. Das gilt nicht für
-eine neue OFF-/`NoValidRequest`-Evaluation, die das Feedbackfenster
-bereits auf `nullopt` schließt. Ein `MalformedCandidate` hat
-keine vertrauenswürdige Sequence und löscht deshalb das gesamte Handoff; ein
+unbedingtes I-Ereignis, `forceStop()` oder eine explizite vollständige
+Nichtannahme außerhalb des planmäßigen Window-Off verworfen und verfolgt
+`pendingFeedback` genau dessen Sequence, wird die Disposition mit `Rejected`
+gemerged und als Update markiert.
+Das gilt nicht für eine `OFF`-/`NoValidRequest`-Evaluation ohne aktive
+vertrauenswürdige Sequence. Ein `MalformedCandidate` hat keine
+vertrauenswürdige Sequence und löscht deshalb das gesamte Handoff; ein
 älteres Subjekt wird nie als vermeintliches Feedback für diese neue Evaluation
 weitergereicht. Ein Replay darf kein bestehendes Handoff zurückdrehen.
 
 ### 9.3 Live-Nachführung während laufender Governance
 
-Für ein Handoff, dessen Sequence noch dem gehaltenen aktiven Command
-entspricht, wird die Disposition pro relevantem Planner-Tick aus dem
-**physischen** Ausgang abgeleitet:
+Feedback wird nicht aus `physicalDirection() == requestedDirection` allein
+abgeleitet. Phase B führt intern je Fenster eine Ausführungsfeststellung:
 
 ```text
-pendingFeedback.sequence == acceptedCommand.sequence
-  && physicalDirection() == acceptedCommand.direction
-  && physical output is Active in that direction
-      -> NoIntegratorConstraint
-otherwise while acceptedCommand is an active Heating/Cooling request
-      -> DeferredOrLimited
+RequestFullyExecuted:
+  aktuelles Fenster gehört zur vertrauenswürdigen aktiven Sequence,
+  die natürliche Zeitquote wurde ohne #23-seitige Reduktion geplant,
+  der Puls durfte am Arming-Gate starten und wurde nicht wegen
+  Minimum-Off, Polaritätstotzeit, Gegenrichtungsbestätigung, Counterdirection,
+  verspätetem Start oder sonstigem #23-Gate verzögert/gekürzt;
+  sowohl der laufende Duty-Puls als auch der planmäßige Window-Off-Anteil
+  derselben korrekt ausgeführten Quote gehören hierher.
+
+DownstreamLimited:
+  mindestens eine #23-seitige Sperre, Verzögerung, Reduktion oder ein
+  verpasster/verworfener Fensterpuls wirkte, insbesondere Minimum-Off,
+  Polaritätstotzeit, unbestätigte Gegenrichtung, Akkumulation unter
+  minimumOnMillis, Counterdirection-Gate oder verspäteter erster Tick.
 ```
 
-Damit sind Mindest-On-Hold, Mindest-Off, Polaritätstotzeit,
-unbestätigte Gegenrichtungsbestätigung, Window-Off-Idle und ein verpasster
-Fensterpuls konservativ `DeferredOrLimited`. Nur der tatsächlich
-aktive
-physische Ausgang derselben Richtung erhält `NoIntegratorConstraint`.
-Eine bestätigte B-Request bleibt bis zur physischen Übernahme deferred, auch
-wenn der alte Snapshot bereits beendet und mehrere Fenstergrenzen vergangen
-sind.
+Für ein aktives Heating/Cooling-Handoff gilt danach:
+
+- `RequestFullyExecuted` -> Kandidat `NoIntegratorConstraint`. Das gilt
+  ausdrücklich unabhängig davon, ob der #22-Folgesample während des laufenden
+  Peltier-EIN oder während des normalen, planmäßigen AUS-Anteils derselben
+  Zeitquote eintrifft.
+- `DownstreamLimited` -> Kandidat `DeferredOrLimited`.
+- Vollständige Nichtannahme durch Klasse I oder `forceStop()` -> Kandidat
+  `Rejected` nach der Trusted-Sequence-Regel.
+
+Der Kandidat wird anschließend mit `mergeDisposition()` gegen die bisherige
+Disposition derselben Sequence gemerged. Ein einmaliges `DeferredOrLimited`
+bleibt daher auch nach späterer physischer Freigabe mindestens deferred; ein
+`Rejected` bleibt rejected. Der planmäßige Window-Off-Anteil ist keine
+Verschärfung und darf nicht allein wegen seines zufälligen Sample-Zeitpunkts
+`DeferredOrLimited` erzeugen. Eine bestätigte B-Request bleibt bis zur
+physischen Übernahme downstream-limitiert, auch wenn der alte Snapshot bereits
+beendet und mehrere Fenstergrenzen vergangen sind.
 
 ### 9.4 Single-use-Handoff und Lifecycle
 
@@ -1298,14 +1530,21 @@ einschleusen und muss kein Planner-Ergebnis kopieren.
 Mehrere Planner-Ticks zwischen zwei #22-Aufrufen sind erlaubt: ein neues
 fachlich gültiges Update ersetzt den noch nicht konsumierten Slot, ein
 unverändertes Update wird nicht erneut ausgeliefert. Ein zweiter
-`evaluateTemperatureControl()`-Aufruf ohne neues Update erhält
-`nullopt`; #22 friert gemäß seinem Vertrag ein. Die nachfolgende neue
-#22-Evaluation wird als Ergebnis an einen späteren Planner-Tick übergeben, ohne
-manuelle Feedbackkopie im Caller.
+`evaluateTemperatureControl()`-Aufruf vor dem internen
+`outstandingEvaluation`-Consume wird jedoch verhindert (Abschnitt 6.1), nicht
+als `nullopt` an #22 weitergereicht und nicht als neue Evaluation registriert.
+Nach dem Consume erzeugt der nächste #22-Aufruf eine neue Evaluation, die der
+Orchestrator selbst für den nächsten Planner-Tick bereithält; manuelle
+Feedback- oder Evaluationkopien im Caller gibt es nicht.
 
 An jeder erfolgreich committed Lifecycle-Grenze ruft der Orchestrator den
-gemeinsamen Planner-Stop auf und löscht den Application-Slot. Ein fehlgeschlagener
-Persistence-Commit verändert weder Planner noch Slot.
+gemeinsamen Planner-Stop auf. Ein vertrauenswürdig aktiver Sequence wird dabei
+nach der Trusted-Sequence-Regel als `Rejected` handoff-fähig gemacht; ein
+unverbrauchter `outstandingEvaluation` wird terminal verworfen, damit kein
+altes Ergebnis in die nächste Episode gelangt. Nur wenn kein vertrauenswürdiges
+aktives Subjekt vorhanden ist, wird der Application-Slot auf `nullopt`
+geschlossen. Ein fehlgeschlagener Persistence-Commit verändert weder Planner
+noch Slot.
 
 ### 9.5 `ActuatorAdmissionOutcome` als separater Diagnosevertrag
 
@@ -1314,6 +1553,7 @@ enum class ActuatorAdmissionOutcome : std::uint8_t {
     NoCandidate,
     Accepted,
     MalformedCandidate,
+    MalformedSafetyGate,
     DuplicateOrOldSequence,
     StaleOnArrivalWatchdog,
     StaleOnArrivalContext,
@@ -1330,8 +1570,9 @@ bereit?
 
 ```text
 #22 Evaluation n -> Heating Request A
-  -> Caller gibt nur das erzeugte Result an tickActuatorPlan(newEvaluation)
-  -> Planner erzeugt ein internes Update {A, Rejected}; Orchestrator speichert es
+  -> Orchestrator speichert A intern als outstandingEvaluation
+  -> nächster tickActuatorPlan() übergibt A genau einmal intern an planner.tick()
+  -> Planner erzeugt die erste reale Disposition für A; Orchestrator speichert sie
 
 Mehrere Planner-Ticks ohne neue Evaluation
   -> A bleibt unverändert, Disposition kann bei realer Governance einmalig
@@ -1343,7 +1584,8 @@ evaluateTemperatureControl() für Evaluation n+1
   -> #22 erhält genau A; kein Caller kopiert ein Planner-Feedbackfeld
 
 #22 Evaluation n+1 -> Cooling Request B
-  -> Ergebnis wird an einen späteren Planner-Tick gegeben
+  -> Orchestrator hält B als outstandingEvaluation zurück
+  -> erst der nächste tickActuatorPlan() beobachtet B genau einmal
   -> B wird als aktuelle Request angenommen, aber nicht sofort als physische
      Gegenrichtung ausgeführt
   -> während mindestens zwei alten Fenstergrenzen: altes A-Fenster darf nur
@@ -1356,6 +1598,10 @@ Malformed neue Evaluation
      unsichere B-Sequence zu behaupten
   -> der nächste #22-Aufruf erhält kein fremdes altes Feedback und friert
      gemäß seinem bestehenden Vertrag konservativ ein
+
+Ein direkter `evaluate n -> evaluate n+1`-Aufruf ohne zwischenliegenden
+Planner-Consume wird von der Application verhindert und fail-closed beantwortet;
+`n+1` ersetzt weder A noch wird es als beobachtete Planner-Evaluation gezählt.
 ```
 
 Spiegelbildlich gilt alles für Cooling -> Heating.
@@ -1417,7 +1663,8 @@ ActuatorPlanTickResult resetActuatorPlanAtBoundary(
     TemperatureControlLifecycleBoundary boundary,
     std::uint64_t nowMonotonicMillis,
     std::optional<PreviousControlRequestFeedback>&
-        applicationPendingFeedback);
+        applicationPendingFeedback,
+    std::optional<TemperatureControlResult>& outstandingEvaluation);
 ```
 
 Ablauf (identisch für alle sieben Grenzen; **keine** davon ruft
@@ -1425,10 +1672,12 @@ Ablauf (identisch für alle sieben Grenzen; **keine** davon ruft
 
 1. `ActuatorPlanTickResult result = planner.forceStop(nowMonotonicMillis);`
    – berechnet denselben Ergebnistyp wie `tick()`: physisch `Idle`;
-   Akkumulator/`activeWindow`/Gegenrichtungskandidat/`acceptedCommand`/
-   `pendingFeedback` werden verworfen. Wenn der Ausgang zuvor
-   physisch aktiv war, setzt `forceStop()` den realen
-   `lastPhysicalDeactivationDirection`- und Zeitanker; ein bereits
+   Akkumulator/`activeWindow`/Gegenrichtungskandidat/`acceptedCommand` werden
+   verworfen. Wenn ein vertrauenswürdiges aktives Sequence-Subjekt vorhanden
+   ist, erzeugt `forceStop()` vor dem Löschen des Planner-RAM-Zustands genau
+   ein Update `{sequence, Rejected}`; ohne ein solches Subjekt erzeugt es
+   `nullopt`. Wenn der Ausgang zuvor physisch aktiv war, setzt `forceStop()`
+   den realen `lastPhysicalDeactivationDirection`- und Zeitanker; ein bereits
    laufender Außenlüfter-Nachlauf wird nicht verkürzt oder abrupt beendet.
 2. `driver.apply(result);` – dieselbe Übersetzungsfunktion wie bei jedem
    gewöhnlichen Tick (Abschnitt 12); keine zweite Ausgabelogik.
@@ -1436,10 +1685,14 @@ Ablauf (identisch für alle sieben Grenzen; **keine** davon ruft
    `state().lastAppliedDirection == Idle`,
    `state().acceptedCommand == std::nullopt`,
    `state().activeWindow == std::nullopt` und
-   `state().pendingFeedback == std::nullopt`. Der interne
-   Application-Slot wird im selben Hilfsaufruf auf `std::nullopt`
-   gesetzt; `latchedWatchdogFault` bleibt unverändert bestehen,
-   falls zuvor gesetzt.
+   `state().pendingFeedback == std::nullopt`. Das einmalige Update wird vor
+   dem Planner-Cleanup in den Application-Slot übernommen und bleibt dort
+   nach der Trusted-Sequence-Regel bis zur einmaligen #22-Konsumierung; ein
+   erfolgreicher Lifecycle-Reset darf es nicht in eine neue
+   Feedback-Episode einspeisen, sondern muss einen nicht mehr passenden Slot
+   dort atomar terminal ausmustern. `outstandingEvaluation` wird in derselben
+   Grenze geleert. `latchedWatchdogFault` bleibt unverändert bestehen, falls
+   zuvor gesetzt.
 
 `ActuatorPlanner::forceStop()` ist die einzige RAM-Stop-Operation; es gibt
 keine separate `resetRuntime()`-Methode, die den physischen Deaktivierungs-
@@ -1795,14 +2048,16 @@ wird durch diesen Plan nicht geändert.
 4. **Lüfterlogik** – Außen-/Innenlüfter (10), eigener, von der
    Fenster-/Mindestzeitlogik klar getrennter Codeabschnitt.
 5. **Feedback-Dispositionsmatrix** – vollständige Umsetzung von Abschnitt 9
-   (`pendingFeedback`-Handoff, ereignisgetriebene Update-Regel, Live-
-   Nachführung) innerhalb von `tick()`/`forceStop()`.
+   (`pendingFeedback`-Handoff, Trusted-Sequence-Regel, Severity-Merge,
+   planmäßiger Window-Off als `NoIntegratorConstraint`, ereignisgetriebene
+   Update-Regel und Live-Nachführung) innerhalb von `tick()`/`forceStop()`.
 6. **Sink-Driver und Application-/Lifecycle-Integration** –
    `ActuatorPlanSinkDriver` (12), Erweiterung von
    `TemperatureControlApplicationOrchestrator` um `tickActuatorPlan()`
-   (mit der in Abschnitt 6.1 festgelegten Aufrufsequenz) und die
-   gemeinsame Lifecycle-Stop-Integration (11); keine
-   Composition-Root-Verdrahtung.
+   (mit der in Abschnitt 6.1 festgelegten Aufrufsequenz), geschützter
+   `outstandingEvaluation`-Invariante, vollständiger öffentlicher
+   `TemperatureControlEvaluationEvidence`-API-Migration und gemeinsamer
+   Lifecycle-Stop-Integration (11); keine Composition-Root-Verdrahtung.
 7. **Tests und Dokumentation** – vollständige native Testklassen gemäß
    Abschnitt 19; `docs/ACTUATOR_TIMING.md` „Akzeptierte Entscheidungen" um
    Strukturhinweise ergänzen, ohne `TBD_COMMISSIONING`-Werte zu erfinden.
@@ -1858,7 +2113,7 @@ während der gesamten Sperre `DeferredOrLimited`.
 Heating-/Cooling-Freigabe innerhalb ihrer Mindest-Einschaltzeit wird durch
 eine neue, strukturell gültige `Unavailable`/`InvalidInput`-Evaluation
 sofort beendet (Klasse I-6); ein `tick()`-Aufruf mit
-`newEvaluation = std::nullopt` tut dies ausdrücklich nicht und führt
+`outstandingEvaluation = std::nullopt` tut dies ausdrücklich nicht und führt
 die laufende Freigabe unverändert fort.
 **Feedback-Vertrag (R4.4/R4.5):** Das n/n+1/n+2-Orakel für Heating -> Cooling
 und Cooling -> Heating prüft den Orchestrator-internen Slot, nicht eine vom
@@ -1871,7 +2126,9 @@ Wert. Die Admission-Reject-Variante (höhere B als
 `{B, Rejected}`, nicht A. OFF schließt das Fenster auf
 `nullopt`. Eine malformed neue Evaluation bei pending A löscht dagegen
 das Handoff auf `nullopt` und erzeugt kein Sequence-Feedback.
-`forceStop()` löscht Planner-Handoff und Application-Slot;
+`forceStop()` löscht den Planner-RAM-Zustand, übergibt aber bei trusted
+aktiver Sequence genau einmal `{sequence, Rejected}` an den Application-
+Slot; ohne trusted Sequence bleibt der Slot `nullopt`.
 `admissionOutcome` ist für jeden Fall aus Abschnitt 9.5 geprüft.
 **AirLimit-Klassifikation:** `NeutralOff` vs. `AirLimitBlockedOff`:
 identische Mindestzeit-Behandlung, unterschiedliche Akkumulatorwirkung;
@@ -1921,6 +2178,16 @@ Fensterstart-Ereignis ohne Nachholen der übersprungenen Fenster;
 `switchingWindowMillis > 2^53` wird von `classifyActuatorPlannerParameters`
 als `Invalid` eingestuft (Abschnitt 13, Relation 12).
 
+**Verspäteter erster Puls (R5.2):** Für Heating und Cooling werden ein Tick
+exakt am Fensterstart, kurz danach, exakt bei
+`elapsedInWindow = scheduledOnMillis - minimumOnMillis`, 1 ms danach und
+nahe dem natürlichen Fensterende getrennt geprüft. Zusätzlich werden
+`scheduledOnMillis == minimumOnMillis` (nur exakter Fensterstart zulässig)
+und eine normale größere Quote geprüft. Jeder tatsächlich gestartete normale
+Puls ist mindestens `minimumOnMillis` aktiv; ein verspäteter Versuch wird
+einmalig als `DeferredOrLimited` verworfen und weder verlängert noch im
+Folgefenster nachgeholt.
+
 **Mindestzeiten/Totzeit und physische Deaktivierung (R4.1/R4.2):**
 Normaler `NeutralOff` und `AirLimitBlockedOff` dürfen die
 konkrete Mindest-On-Phase halten; jede I-Klasse schaltet im selben Tick aus.
@@ -1930,6 +2197,18 @@ wartet nur `minimumOffMillis`; ein tatsächlicher Richtungswechsel
 wartet Mindest-Off und Totzeit nach der Späteres-Ende-Regel. Beide Richtungen,
 exakter Gleichstand, voller und nahezu voller Puls sowie der Richtungswechsel
 aus bereits laufendem Window-Off werden getestet.
+
+**Feedback bei normalem Duty-Off (R5.3/R5.4):** Dieselbe 30-%-Request wird
+je Richtung zweimal geprüft: Der unmittelbar folgende #22-Sample trifft
+einmal während des planmäßigen Peltier-EIN und einmal während des
+planmäßigen Window-Off; beide liefern `NoIntegratorConstraint`, sofern kein
+anderes #23-Gate wirkte. Minimum-Off-AUS, Polaritätstotzeit,
+Gegenrichtungsbestätigung, Akkumulation unter Mindestimpuls und ein
+verspäteter/verworfener Fensterpuls liefern dagegen `DeferredOrLimited`.
+Eine Sequenz mit `DeferredOrLimited` wird nach späterer physischer
+Freigabe nicht auf `NoIntegratorConstraint` zurückgestuft; eine Sequenz mit
+`Rejected` bleibt `Rejected`. Eine neue Sequence beginnt unabhängig davon
+frisch.
 **Parameterklassifikation:** vollständige Tabelle aus Abschnitt 13 (alle
 Felder `0` -> `Unconfigured`; jede einzelne strukturell unmögliche Relation
 1-12 einzeln getestet -> `Invalid`, inklusive `outerFanPostRunMillis == 0`
@@ -1943,6 +2222,16 @@ davor/genau darauf/knapp danach für Mindest-Ein-/Auszeit, Totzeit,
 Bestätigungsdauer, Watchdog, Fan-Nachlauf; Retrograde-Zeit an jeder
 Referenzzeit (-> `TimeInvalid`); Werte nahe `UINT64_MAX`.
 
+**Watchdog-Lebenszeichen (R5.1):** Die H-Regel wird direkt als Zustandsorakel
+geprüft: fortlaufend neue Heating-, Cooling-, gültige OFF- und
+`NoValidRequest`-Evaluationen setzen jeweils `lastNewRequestAcceptedAt...`
+auf `now`; `NoValidRequest` schaltet Peltier im selben Tick aus, löst aber
+keinen zusätzlichen Request-Staleness-Trip aus. `std::nullopt`, Replay,
+malformed #22-Evaluation sowie stale-on-arrival Watchdog/Context verlängern
+die Frist nicht. Parameterfehler, Safety `Unresolved`/`ImmediateStop` und
+korruptes externes Safety-Gate werden getrennt geprüft: Sie fail-closen
+physisch, ohne eine ansonsten valide neue #22-Request-Identität zu verfälschen.
+
 **Priorität/Fail-closed:** malformed `ControlRequest` (Sequenz `0`,
 unbekannte Richtung, `timeQuote` `NaN`/`Infinity`/außerhalb `[0,1]`,
 Status/Request-Mismatch, ungültiger Kontext) -> `MalformedInput`,
@@ -1951,14 +2240,27 @@ ebenfalls `MalformedInput` (Klasse I-1); mehrere gleichzeitig
 zutreffende Bedingungen (z. B. Safety `ImmediateStop` **und** Kontext-Stale
 gleichzeitig) -> exakte Klassen-Reihenfolge aus 8.2.
 
+**Trusted-Sequence-Fail-closed (R5.5):** Safety, InvalidConfig, Watchdog,
+StaleContext und `forceStop()` erzeugen bei einer vertrauenswürdig bekannten
+aktiven Sequence genau deren `{sequence, Rejected}` bis zum Single-use-
+Konsum; eine malformed Request-Identität erzeugt dagegen kein erfundenes
+Sequence-Feedback. Ein korruptes externes Safety-Gate wird separat geprüft und
+führt bei ansonsten valider Request-Identität zu `Rejected` für diese
+Sequence. `OFF`/`NoValidRequest` ohne aktive Sequence eröffnen kein neues
+Feedbackfenster.
+
 **Lifecycle/Stop und Fan-Nachlauf:** Für jede der sieben
 `TemperatureControlLifecycleBoundary`-Werte ruft die Application-Grenze
 denselben Stop-Pfad auf. `forceStop()` verwirft Akkumulator,
-`activeWindow`, Gegenrichtung, `acceptedCommand` und Planner-Handoff,
-setzt bei physischem Active -> Idle den
+`activeWindow`, Gegenrichtung und `acceptedCommand` sowie den Planner-RAM-
+Zustand; bei einer vertrauenswürdig aktiven Sequence wird dabei genau einmal
+deren `{sequence, Rejected}`-Update in den Application-Slot übernommen. Ohne
+vertrauenswürdige Sequence bleibt dieser Slot `nullopt`. Der reale Active ->
+Idle-Übergang setzt den
 `lastPhysicalDeactivationDirection`/Zeitanker und lässt den
-Außenlüfter-Nachlauf weiterlaufen; der interne Application-Slot wird ebenfalls
-geleert, `latchedWatchdogFault` bleibt unverändert. Ein sofortiger
+Außenlüfter-Nachlauf weiterlaufen; `latchedWatchdogFault` bleibt unverändert.
+Der Lifecycle-Abschluss mustert ein nicht mehr passendes Rejected-Handoff
+terminal aus, bevor eine neue Episode beginnen kann. Ein sofortiger
 gleichgerichteter Restart respektiert weiterhin Minimum-Off. Stop und Fault
 werden zusammen mit kurzem Duty-Puls, kürzerem/längerem Off-Anteil und
 erneutem Puls im Nachlauf geprüft.
@@ -1971,7 +2273,7 @@ behaupten.
 **Architekturnachweis:** `ActuatorPlanner` kompiliert und wird getestet ohne
 jede Abhängigkeit auf `device_platform`-Sink-Header.
 
-### 19.2 Revision-5-Direktmatrix für physische Zeit- und Handoff-Grenzen
+### 19.2 Revision-6-Direktmatrix für physische Zeit- und Handoff-Grenzen
 
 Zusätzlich zu den allgemeinen Orakeln der vorherigen Absätze werden mindestens
 diese Fälle als getrennte native Tests umgesetzt:
@@ -2013,6 +2315,32 @@ diese Fälle als getrennte native Tests umgesetzt:
     normalen Window-Off erfordert zusätzlich die Totzeit und nutzt die
     Späteres-Ende-Regel; Heating -> Cooling und Cooling -> Heating sind
     symmetrisch.
+14. H setzt das Watchdog-Lebenszeichen für jede neue gültige HEAT-, COOL-,
+    OFF- und NoValidRequest-Evaluation; Replay, malformed #22-Evaluation und
+    stale-on-arrival Watchdog/Context setzen es nicht. NoValidRequest schaltet
+    Peltier aus, erzeugt aber keinen zusätzlichen Staleness-Trip.
+15. Für beide Richtungen werden verspätete erste Ticks exakt am Fensterstart,
+    kurz danach, bei scheduledOn-minus-minimumOn, 1 ms später, bei
+    scheduledOn == minimumOn und nahe dem Fensterende geprüft; kein realer
+    normaler Puls unterschreitet minimumOnMillis.
+16. Eine identische 30-%-Request liefert während des planmäßigen EIN und des
+    planmäßigen Window-Off jeweils NoIntegratorConstraint; Minimum-Off,
+    Deadtime, Counterdirection, Akkumulation und verspäteter Puls liefern
+    DeferredOrLimited.
+17. Die Severity je Sequence wird als
+    NoIntegratorConstraint -> DeferredOrLimited -> Rejected geprüft; keine
+    spätere Freigabe stuft zurück, ein planmäßiger Window-Off-Anteil
+    verschärft nicht.
+18. Safety/InvalidConfig/Watchdog/StaleContext und forceStop erzeugen bei
+    vertrauenswürdiger aktiver Sequence deren Rejected-Feedback; eine
+    malformed Request-Identität erzeugt kein erfundenes Sequence-Feedback;
+    korruptes Safety-Gate wird bei valider Request-Identität separat geprüft.
+19. evaluate n -> interner Planner-Consume n -> evaluate n+1 wird erzwungen;
+    evaluate n+1 ohne Consume wird fail-closed verhindert und erzeugt keinen
+    zweiten Planner-Kandidaten.
+20. Alle in Abschnitt 19.5 gefundenen Evidence-/evaluate-Callsites werden
+    kompiliert und gezielt regressionsgeprüft; kein öffentlicher
+    caller-supplied Evidence-Feedbackpfad bleibt bestehen.
 
 ### 19.3 `test/test_actuator_plan_sink_driver/test_actuator_plan_sink_driver.cpp`
 
@@ -2033,23 +2361,51 @@ jeweils richtige `IBinaryOutputSink`-Instanz.
 - `complete()`/`needsRuntimeReset()` ruft
   `resetActuatorPlanAtBoundary()` für dieselbe committed Lifecycle-Grenze
   auf wie `resetTemperatureControlAtBoundary()`; ein Fixture-Aufruf löst
-  nachweislich beide Resets aus und leert den internen Handoff-Slot.
-- **Interner Single-use-Handoff:** Das Test-Fixture ruft
-  `evaluateTemperatureControl()` ohne caller-supplied
-  `previousControlRequestFeedback` auf. Mehrere
-  `tickActuatorPlan()`-Aufrufe zwischen zwei Evaluationen speichern nur
-  den neuesten Planner-Update; genau der nächste #22-Aufruf erhält ihn genau
-  einmal. Ein weiterer Evaluation-Aufruf ohne neues Planner-Update erhält
-  `nullopt`. Die neue Evaluation wird danach als `newEvaluation`
-  an den nächsten Planner-Tick gegeben.
-- Eine malformed Evaluation B bei pending A leert den Orchestrator-Slot; der
-  nächste #22-Aufruf erhält weder A noch eine unsichere B-Sequence.
+  nachweislich beide Resets aus, leert `outstandingEvaluation` und behandelt
+  ein trusted aktives Stop-Subjekt nach der Trusted-Sequence-Regel.
+- **Geschützte Evaluation-Reihenfolge (R5.6):**
+  `evaluate n -> tickActuatorPlan()` übergibt n genau einmal intern als
+  `newEvaluation`; mehrere weitere Planner-Ticks erhalten `nullopt`. Ein
+  direkter `evaluate n+1`-Aufruf vor diesem Consume wird ohne zweiten
+  #22-Kernaufruf fail-closed verhindert; n bleibt unverändert ausstehend.
+  Nach dem Consume darf n+1 erzeugt und im nächsten Planner-Tick beobachtet
+  werden. Der Test deckt auch `NoValidRequest` als zu beobachtende Evaluation
+  ab.
+- **Internes Feedback-Handoff:** Mehrere Planner-Ticks speichern nur das
+  neueste geänderte Update; genau der nächste #22-Aufruf erhält es genau
+  einmal. Das öffentliche Evidence-Objekt enthält kein caller-supplied
+  `previousControlRequestFeedback` mehr. Ein malformed #22-Ergebnis bei
+  pending A löscht das Handoff auf `nullopt`, erzeugt kein Sequence-Feedback
+  und löst keinen Replay aus; eine malformed Safety-Evidence bei valider
+  Request-Identität erzeugt dagegen `{sequence, Rejected}`.
 - `ActuatorPlanner&`/`ActuatorPlanSinkDriver&` werden über die
   gesamte Lebenszeit des Test-Fixtures unverändert referenziert (Objektlebenszeit-
   Nachweis gemäß Abschnitt 14.1, kein Rebinding).
-Bei geänderten gemeinsamen Verträgen werden zusätzlich die direkt betroffenen
-#22-Konsumententests gezielt mitgeführt, sofern die Umsetzung dort
-tatsächlich etwas berührt – in diesem Plan ist das nicht vorgesehen.
+
+### 19.5 `test/test_temperature_control/test_temperature_control.cpp` und vollständige API-Callsite-Migration
+
+Vor Umsetzung wird die vollständige Repository-Suche aus Abschnitt 3 mit
+`rg` wiederholt. Alle direkten Konsumenten von
+`TemperatureControlEvaluationEvidence`,
+`previousControlRequestFeedback` und
+`evaluateTemperatureControl()` werden im API-Migrationsschnitt geprüft:
+
+- Application-Fixtures entfernen die öffentliche Feedback-Feldinitialisierung
+  und prüfen stattdessen, dass nur der Orchestrator-Slot in das private
+  `TemperatureControlInput` gelangt.
+- Direkte #22-Tests des reinen `TemperatureControlInput`-Vertrags behalten
+  ihre expliziten `previousControlRequestFeedback`-Orakel; sie sind keine
+  caller-supplied Evidence-API und werden gegen die unveränderte
+  PI-Mathematik regressionsgeprüft.
+- Alle `evaluateTemperatureControl()`-Callsites werden auf die geschützte
+  Application-Semantik migriert; kein Caller kopiert mehr ein Planner-
+  Feedbackfeld in Evidence.
+
+Mindestens ein Regressionstest bestätigt, dass `TemperatureControlResult`
+und `TemperatureControlEvaluationEvidence` nach der Migration dieselben
+#22-Status-/Reason-/AirLimit-/Request-Orakel liefern und dass die API-Änderung
+keine PI-Mathematik, keine Sequenzsemantik und keinen Feedbackfenstervertrag
+verändert.
 
 ## 20. Dokumentations- und Roadmapwirkung sowie Plan-SHA-Governance
 
@@ -2059,14 +2415,17 @@ tatsächlich etwas berührt – in diesem Plan ist das nicht vorgesehen.
 - Kein neues ADR erwartet: Modulzuordnung folgt unverändert ADR-013,
   Zustandsautomat-Trennung unverändert ADR-014.
 - `docs/THIRD_PARTY_COMPONENTS.md` bleibt unverändert.
-- **Governance:** Issue #106 wurde live aktualisiert, **bevor** dieser
-  Plan-Commit erstellt wurde (eigenständiger Governance-Schritt, siehe
-  PR-Body). Diese Revision-5-Planänderung wird als eigener, abgeschlossener
-  Plan-Commit committet. Erst danach ist die exakte Revision-5-Plan-SHA
-  bekannt und wird im Draft-PR #105 und im `SESSION HANDOVER` ausgewiesen.
-  Eine Nachführung von `docs/ROADMAP.md` auf die exakte Revision-5-SHA
-  erfolgt anschließend in einem separaten, rein redaktionellen
-  Metadaten-Commit; Plantext und Roadmap-Metadaten werden nicht vermischt.
+- **Governance:** Issue #106 wurde live bereits um I106.R1 präzisiert und ist
+  in dieser Revision unverändert offen; es gibt in diesem Auftrag keine
+  zusätzliche #106-Scope-Erweiterung. Diese Revision-6-Planänderung wird als
+  eigener, abgeschlossener Plan-Commit committet. Erst danach ist die exakte
+  Revision-6-Plan-SHA bekannt und wird im Draft-PR #105, im
+  `SESSION HANDOVER` und im PR-Body ausgewiesen.
+  Anschließend wird `docs/ROADMAP.md` in einem separaten, rein redaktionellen
+  Metadaten-Commit auf Revision 6 und diese exakte Plan-SHA synchronisiert.
+  Vor diesem Roadmap-Commit werden alle aktuellen Statusstellen, insbesondere
+  „Naechste fachliche Arbeit“, nach alten Revision-4/5-SHAs durchsucht;
+  Plantext und Roadmap-Metadaten werden nicht vermischt.
 
 ## 21. Offene Fragen und materielle Risiken
 
