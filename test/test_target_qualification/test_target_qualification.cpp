@@ -136,6 +136,59 @@ void test_outside_starts_grace_and_direct_return_does_not_credit_time() {
     TEST_ASSERT_EQUAL_UINT64(0U, returned.creditedInBandMillis);
 }
 
+void test_all_six_progress_values_have_direct_evaluator_oracles() {
+    TargetQualificationEvaluator unavailableEvaluator;
+    auto unavailableInput = input(QualificationPhase::Target, 100U, 20.0);
+    unavailableInput.product.quality = SensorQuality::Stale;
+    TEST_ASSERT_TRUE(unavailableEvaluator.evaluate(unavailableInput).progress ==
+                     QualificationProgress::Unavailable);
+
+    TargetQualificationEvaluator invalidEvaluator;
+    auto invalidInput = input(QualificationPhase::Target, 100U, 20.0);
+    invalidInput.product.filteredCelsius =
+        std::numeric_limits<double>::quiet_NaN();
+    TEST_ASSERT_TRUE(invalidEvaluator.evaluate(invalidInput).progress ==
+                     QualificationProgress::Invalid);
+
+    TargetQualificationEvaluator outsideEvaluator;
+    TEST_ASSERT_TRUE(
+        outsideEvaluator.evaluate(input(QualificationPhase::Target, 100U, 21.0))
+            .progress == QualificationProgress::OutsideBand);
+
+    TargetQualificationEvaluator graceEvaluator;
+    static_cast<void>(evaluateAndApply(
+        graceEvaluator, input(QualificationPhase::Target, 100U, 20.0)));
+    TEST_ASSERT_TRUE(
+        evaluateAndApply(graceEvaluator,
+                         input(QualificationPhase::Target, 200U, 21.0))
+            .progress == QualificationProgress::Grace);
+
+    TargetQualificationEvaluator inBandEvaluator;
+    TEST_ASSERT_TRUE(
+        inBandEvaluator.evaluate(input(QualificationPhase::Target, 100U, 20.0))
+            .progress == QualificationProgress::InBand);
+
+    TargetQualificationEvaluator completeEvaluator;
+    static_cast<void>(evaluateAndApply(
+        completeEvaluator, input(QualificationPhase::Target, 100U, 20.0)));
+    TEST_ASSERT_TRUE(
+        evaluateAndApply(completeEvaluator,
+                         input(QualificationPhase::Target, 1'100U, 20.0))
+            .progress == QualificationProgress::Complete);
+}
+
+void test_outside_band_resets_an_episode_when_grace_cannot_continue() {
+    TargetQualificationEvaluator evaluator;
+    static_cast<void>(evaluateAndApply(
+        evaluator, input(QualificationPhase::Target, 100U, 20.0)));
+    auto outsideInput = input(QualificationPhase::Target, 200U, 21.0);
+    outsideInput.effectiveGraceMillis = 0U;
+    const auto outside = evaluateAndApply(evaluator, outsideInput);
+    TEST_ASSERT_TRUE(outside.progress == QualificationProgress::OutsideBand);
+    TEST_ASSERT_EQUAL_UINT64(0U, outside.creditedInBandMillis);
+    TEST_ASSERT_FALSE(evaluator.state().episodeActive);
+}
+
 void test_grace_equality_expires_old_episode_before_return() {
     TargetQualificationEvaluator evaluator;
     static_cast<void>(evaluateAndApply(
@@ -511,6 +564,8 @@ int main(int argc, char** argv) {
     RUN_TEST(test_unavailable_and_invalid_interrupt_episode_differently);
     RUN_TEST(test_unavailable_and_invalid_return_start_new_credit);
     RUN_TEST(test_outside_starts_grace_and_direct_return_does_not_credit_time);
+    RUN_TEST(test_all_six_progress_values_have_direct_evaluator_oracles);
+    RUN_TEST(test_outside_band_resets_an_episode_when_grace_cannot_continue);
     RUN_TEST(test_grace_equality_expires_old_episode_before_return);
     RUN_TEST(test_gap_and_retrograde_time_reset_as_invalid);
     RUN_TEST(test_preheating_always_uses_air_and_phase_change_resets_credit);

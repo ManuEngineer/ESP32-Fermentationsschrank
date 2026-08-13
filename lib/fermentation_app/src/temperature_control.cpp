@@ -84,6 +84,17 @@ bool validRole(ControlSensorRole role) {
     return false;
 }
 
+bool validDisposition(PreviousControlRequestFeedback::Disposition disposition) {
+    switch (disposition) {
+        case PreviousControlRequestFeedback::Disposition::
+            NoIntegratorConstraint:
+        case PreviousControlRequestFeedback::Disposition::DeferredOrLimited:
+        case PreviousControlRequestFeedback::Disposition::Rejected:
+            return true;
+    }
+    return false;
+}
+
 AirLimitState diagnosticAirLimitState(ControlSensorRole role) {
     return role == ControlSensorRole::Air ? AirLimitState::NotApplied
                                           : AirLimitState::Unavailable;
@@ -281,6 +292,13 @@ TemperatureControlResult TemperatureController::evaluate(
             if (feedback.controlRequestSequence !=
                     state_.feedbackWindow->identity.sequence ||
                 feedback.controlRequestSequence == 0U) {
+                clearFailClosed();
+                return invalidResult(
+                    TemperatureControlStatus::InvalidInput,
+                    TemperatureControlReason::InvalidSample,
+                    diagnosticAirLimitState(input.controlSensorRole));
+            }
+            if (!validDisposition(feedback.disposition)) {
                 clearFailClosed();
                 return invalidResult(
                     TemperatureControlStatus::InvalidInput,
@@ -538,6 +556,7 @@ TemperatureControlResult TemperatureController::evaluate(
     if (result.airLimitState == AirLimitState::Blocked || limitedQuote == 0.0) {
         result.status = TemperatureControlStatus::Off;
         result.reason = TemperatureControlReason::AirLimitBlocked;
+        result.direction = AbstractControlDirection::Idle;
     } else {
         result.status = TemperatureControlStatus::Demand;
         if (result.airLimitState == AirLimitState::Reduced) {

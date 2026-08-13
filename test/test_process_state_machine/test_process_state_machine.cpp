@@ -174,6 +174,100 @@ void qualify(ProcessRuntimeState& state, const ProcessRunSnapshot& snapshot,
           &snapshot);
 }
 
+void test_all_qualification_progress_values_follow_phase_topology() {
+    struct ProgressCase {
+        QualificationProgress progress;
+        bool interrupted;
+        bool positive;
+        bool complete;
+    };
+    const std::array cases = {
+        ProgressCase{QualificationProgress::Unavailable, true, false, false},
+        ProgressCase{QualificationProgress::Invalid, true, false, false},
+        ProgressCase{QualificationProgress::OutsideBand, true, false, false},
+        ProgressCase{QualificationProgress::Grace, false, true, false},
+        ProgressCase{QualificationProgress::InBand, false, true, false},
+        ProgressCase{QualificationProgress::Complete, false, true, true},
+    };
+    const auto snapshot = makeTimedSnapshot(true);
+    VirtualTimeSource time;
+
+    for (const auto& testCase : cases) {
+        ProcessSignals signals;
+        signals.qualificationProgress = testCase.progress;
+
+        ProcessRuntimeState preheating;
+        preheating.state = ProcessState::Preheating;
+        if (testCase.interrupted) {
+            preheating.qualificationValidSinceMillis = 0U;
+        }
+        const auto preheatingDecision =
+            decide(preheating, &snapshot, time, signals);
+        if (testCase.interrupted) {
+            TEST_ASSERT_TRUE(preheatingDecision.proposed());
+            TEST_ASSERT_TRUE(preheatingDecision.reason ==
+                             TransitionReason::QualificationReset);
+            TEST_ASSERT_TRUE(preheatingDecision.after.state ==
+                             ProcessState::Preheating);
+            TEST_ASSERT_FALSE(preheatingDecision.after
+                                  .qualificationValidSinceMillis.has_value());
+        } else if (testCase.complete) {
+            TEST_ASSERT_TRUE(preheatingDecision.proposed());
+            TEST_ASSERT_TRUE(preheatingDecision.reason ==
+                             TransitionReason::PreheatQualified);
+            TEST_ASSERT_TRUE(preheatingDecision.after.state ==
+                             ProcessState::WaitingForProduct);
+        } else {
+            TEST_ASSERT_TRUE(preheatingDecision.proposed());
+            TEST_ASSERT_TRUE(preheatingDecision.reason ==
+                             TransitionReason::QualificationTrackingStarted);
+            TEST_ASSERT_TRUE(preheatingDecision.after.state ==
+                             ProcessState::Preheating);
+            TEST_ASSERT_TRUE(
+                preheatingDecision.after.qualificationValidSinceMillis == 0U);
+        }
+
+        ProcessRuntimeState reaching;
+        reaching.state = ProcessState::ReachingTarget;
+        const auto reachingDecision =
+            decide(reaching, &snapshot, time, signals);
+        if (testCase.positive) {
+            TEST_ASSERT_TRUE(reachingDecision.proposed());
+            TEST_ASSERT_TRUE(reachingDecision.reason ==
+                             TransitionReason::QualificationTrackingStarted);
+            TEST_ASSERT_TRUE(reachingDecision.after.state ==
+                             ProcessState::QualifyingTarget);
+        } else {
+            TEST_ASSERT_TRUE(reachingDecision.status ==
+                             DecisionStatus::NoTransition);
+        }
+
+        ProcessRuntimeState qualifying;
+        qualifying.state = ProcessState::QualifyingTarget;
+        qualifying.qualificationValidSinceMillis = 0U;
+        const auto qualifyingDecision =
+            decide(qualifying, &snapshot, time, signals);
+        if (testCase.interrupted) {
+            TEST_ASSERT_TRUE(qualifyingDecision.proposed());
+            TEST_ASSERT_TRUE(qualifyingDecision.reason ==
+                             TransitionReason::QualificationReset);
+            TEST_ASSERT_TRUE(qualifyingDecision.after.state ==
+                             ProcessState::ReachingTarget);
+            TEST_ASSERT_FALSE(qualifyingDecision.after
+                                  .qualificationValidSinceMillis.has_value());
+        } else if (testCase.complete) {
+            TEST_ASSERT_TRUE(qualifyingDecision.proposed());
+            TEST_ASSERT_TRUE(qualifyingDecision.reason ==
+                             TransitionReason::TargetQualified);
+            TEST_ASSERT_TRUE(qualifyingDecision.after.state ==
+                             ProcessState::Fermenting);
+        } else {
+            TEST_ASSERT_TRUE(qualifyingDecision.status ==
+                             DecisionStatus::NoTransition);
+        }
+    }
+}
+
 void test_all_factory_programs_produce_expected_process_snapshots() {
     const auto yogurtMild = makeFactorySnapshot("yogurt-mild");
     const auto yogurtFirm = makeFactorySnapshot("yogurt-firm");
@@ -1207,6 +1301,7 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_all_factory_programs_produce_expected_process_snapshots);
     RUN_TEST(test_all_factory_programs_complete_their_full_process_flow);
+    RUN_TEST(test_all_qualification_progress_values_follow_phase_topology);
     RUN_TEST(test_process_snapshot_validation_rejects_inconsistent_values);
     RUN_TEST(test_decision_does_not_mutate_until_applied_and_stale_is_rejected);
     RUN_TEST(test_apply_rejects_fabricated_forbidden_transition);

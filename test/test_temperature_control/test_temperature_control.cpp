@@ -1,5 +1,6 @@
 #include <unity.h>
 
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -420,6 +421,137 @@ void test_product_air_limit_reduces_and_blocks_normal_demand() {
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, blocked.timeQuote);
 }
 
+void test_product_air_limit_blocking_returns_idle_for_both_pi_directions() {
+    struct BlockingCase {
+        bool cooling;
+        double airCelsius;
+        AbstractControlDirection activeDirection;
+    };
+    const std::array cases = {
+        BlockingCase{false, 35.0, AbstractControlDirection::Heating},
+        BlockingCase{true, 5.0, AbstractControlDirection::Cooling},
+    };
+
+    for (const auto& testCase : cases) {
+        TemperatureController controller(parameters(), policy());
+        const auto blocked = testCase.cooling
+                                 ? controller.evaluate(productInput(
+                                       100U, 20.0, 25.0, testCase.airCelsius))
+                                 : controller.evaluate(productInput(
+                                       100U, 25.0, 20.0, testCase.airCelsius));
+        TEST_ASSERT_TRUE(blocked.status == TemperatureControlStatus::Off);
+        TEST_ASSERT_TRUE(blocked.reason ==
+                         TemperatureControlReason::AirLimitBlocked);
+        TEST_ASSERT_TRUE(blocked.airLimitState == AirLimitState::Blocked);
+        TEST_ASSERT_TRUE(blocked.direction == AbstractControlDirection::Idle);
+        TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, blocked.timeQuote);
+        TEST_ASSERT_TRUE(blocked.controlRequest.has_value());
+        TEST_ASSERT_TRUE(blocked.controlRequest->direction ==
+                         AbstractControlDirection::Idle);
+        TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                                  blocked.controlRequest->timeQuote);
+        TEST_ASSERT_EQUAL_UINT64(1U, blocked.controlRequest->identity.sequence);
+        TEST_ASSERT_EQUAL_UINT64(
+            100U, blocked.controlRequest->identity.createdAtMonotonicMillis);
+        TEST_ASSERT_TRUE(controller.state().lastActiveDirection.has_value());
+        TEST_ASSERT_TRUE(*controller.state().lastActiveDirection ==
+                         testCase.activeDirection);
+    }
+}
+
+void test_product_air_limit_boundaries_cover_both_directions() {
+    struct BoundaryCase {
+        bool cooling;
+        double airCelsius;
+        AirLimitState expectedAirLimitState;
+        TemperatureControlStatus expectedStatus;
+        TemperatureControlReason expectedReason;
+        AbstractControlDirection expectedDirection;
+        double expectedQuote;
+    };
+    const std::array cases = {
+        BoundaryCase{false, 30.0, AirLimitState::Unrestricted,
+                     TemperatureControlStatus::Demand,
+                     TemperatureControlReason::Saturated,
+                     AbstractControlDirection::Heating, 0.8},
+        BoundaryCase{false, 32.5, AirLimitState::Reduced,
+                     TemperatureControlStatus::Demand,
+                     TemperatureControlReason::AirLimitReduced,
+                     AbstractControlDirection::Heating, 0.4},
+        BoundaryCase{false, 35.0, AirLimitState::Blocked,
+                     TemperatureControlStatus::Off,
+                     TemperatureControlReason::AirLimitBlocked,
+                     AbstractControlDirection::Idle, 0.0},
+        BoundaryCase{true, 10.0, AirLimitState::Unrestricted,
+                     TemperatureControlStatus::Demand,
+                     TemperatureControlReason::Saturated,
+                     AbstractControlDirection::Cooling, 0.8},
+        BoundaryCase{true, 7.5, AirLimitState::Reduced,
+                     TemperatureControlStatus::Demand,
+                     TemperatureControlReason::AirLimitReduced,
+                     AbstractControlDirection::Cooling, 0.4},
+        BoundaryCase{true, 5.0, AirLimitState::Blocked,
+                     TemperatureControlStatus::Off,
+                     TemperatureControlReason::AirLimitBlocked,
+                     AbstractControlDirection::Idle, 0.0},
+    };
+
+    for (const auto& testCase : cases) {
+        TemperatureController controller(parameters(), policy());
+        const auto result = testCase.cooling
+                                ? controller.evaluate(productInput(
+                                      100U, 20.0, 25.0, testCase.airCelsius))
+                                : controller.evaluate(productInput(
+                                      100U, 25.0, 20.0, testCase.airCelsius));
+        TEST_ASSERT_TRUE(result.airLimitState ==
+                         testCase.expectedAirLimitState);
+        TEST_ASSERT_TRUE(result.status == testCase.expectedStatus);
+        TEST_ASSERT_TRUE(result.reason == testCase.expectedReason);
+        TEST_ASSERT_TRUE(result.direction == testCase.expectedDirection);
+        TEST_ASSERT_DOUBLE_WITHIN(0.0001, testCase.expectedQuote,
+                                  result.timeQuote);
+    }
+}
+
+void test_air_limit_reduced_and_blocked_never_charge_integrator() {
+    struct LimitCase {
+        bool cooling;
+        double airCelsius;
+        AirLimitState expectedAirLimitState;
+    };
+    const std::array cases = {
+        LimitCase{false, 32.0, AirLimitState::Reduced},
+        LimitCase{false, 35.0, AirLimitState::Blocked},
+        LimitCase{true, 8.0, AirLimitState::Reduced},
+        LimitCase{true, 5.0, AirLimitState::Blocked},
+    };
+
+    for (const auto& testCase : cases) {
+        TemperatureController controller(parameters(), policy());
+        const auto first = testCase.cooling
+                               ? controller.evaluate(productInput(
+                                     100U, 20.0, 25.0, testCase.airCelsius))
+                               : controller.evaluate(productInput(
+                                     100U, 25.0, 20.0, testCase.airCelsius));
+        auto nextInput =
+            testCase.cooling
+                ? productInput(1100U, 20.0, 25.0, testCase.airCelsius)
+                : productInput(1100U, 25.0, 20.0, testCase.airCelsius);
+        if (testCase.expectedAirLimitState == AirLimitState::Reduced) {
+            nextInput.previousControlRequestFeedback =
+                PreviousControlRequestFeedback{
+                    first.controlRequest->identity.sequence,
+                    PreviousControlRequestFeedback::Disposition::
+                        NoIntegratorConstraint};
+        }
+        const auto result = controller.evaluate(nextInput);
+        TEST_ASSERT_TRUE(result.airLimitState ==
+                         testCase.expectedAirLimitState);
+        TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                                  result.integralContributionQuote);
+    }
+}
+
 void test_air_limit_does_not_charge_integrator() {
     TemperatureController controller(parameters(), policy());
     const auto first =
@@ -690,6 +822,25 @@ void test_feedback_replay_and_all_dispositions_fail_closed() {
                      TemperatureControlStatus::InvalidInput);
 }
 
+void test_unknown_feedback_disposition_is_fail_closed() {
+    TemperatureController controller(parameters(), policy());
+    const auto first = controller.evaluate(airInput(100U, 25.0, 20.0));
+    auto invalidInput = airInput(1100U, 25.0, 20.0);
+    invalidInput.previousControlRequestFeedback =
+        PreviousControlRequestFeedback{
+            first.controlRequest->identity.sequence,
+            static_cast<PreviousControlRequestFeedback::Disposition>(0xFFU)};
+
+    const auto invalid = controller.evaluate(invalidInput);
+    TEST_ASSERT_TRUE(invalid.status == TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_TRUE(invalid.reason == TemperatureControlReason::InvalidSample);
+    TEST_ASSERT_FALSE(invalid.controlRequest.has_value());
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              controller.state().integralContributionQuote);
+    TEST_ASSERT_FALSE(controller.state().feedbackWindow.has_value());
+    TEST_ASSERT_FALSE(controller.state().lastActiveDirection.has_value());
+}
+
 void test_direction_sequences_cover_idle_and_opposite_demand() {
     TemperatureController controller(parameters(), policy());
     const auto heating = controller.evaluate(airInput(100U, 25.0, 20.0));
@@ -933,6 +1084,10 @@ int main(int argc, char** argv) {
         test_integral_headroom_caps_exact_and_oversized_steps_and_reduces_existing_i);
     RUN_TEST(test_lifecycle_boundary_resets_pi_and_qualification_ram);
     RUN_TEST(test_product_air_limit_reduces_and_blocks_normal_demand);
+    RUN_TEST(
+        test_product_air_limit_blocking_returns_idle_for_both_pi_directions);
+    RUN_TEST(test_product_air_limit_boundaries_cover_both_directions);
+    RUN_TEST(test_air_limit_reduced_and_blocked_never_charge_integrator);
     RUN_TEST(test_air_limit_does_not_charge_integrator);
     RUN_TEST(
         test_committed_transition_applies_once_and_idle_does_not_consume_it);
@@ -948,6 +1103,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_near_overflow_pi_timestamps_use_checked_delta);
     RUN_TEST(test_backward_pi_timestamp_is_invalid_and_clears_state);
     RUN_TEST(test_feedback_replay_and_all_dispositions_fail_closed);
+    RUN_TEST(test_unknown_feedback_disposition_is_fail_closed);
     RUN_TEST(test_direction_sequences_cover_idle_and_opposite_demand);
     RUN_TEST(test_direction_changes_reset_or_bound_carry_exactly_once);
     RUN_TEST(test_invalid_parameters_are_unavailable_without_a_request);
