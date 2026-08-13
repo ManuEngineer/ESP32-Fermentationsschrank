@@ -852,6 +852,20 @@ std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(const ActiveRun& run) {
                : std::nullopt;
 }
 
+bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
+                             const ProcessRunSnapshot& right) {
+    return left.kind == right.kind &&
+           left.preheatEnabled == right.preheatEnabled &&
+           left.completionMode == right.completionMode &&
+           left.qualificationDurationMinutes ==
+               right.qualificationDurationMinutes &&
+           left.maximumTargetReachMinutes == right.maximumTargetReachMinutes &&
+           left.maximumProductWaitMinutes == right.maximumProductWaitMinutes &&
+           left.fermentationDurationMinutes ==
+               right.fermentationDurationMinutes &&
+           left.holdDurationMinutes == right.holdDurationMinutes;
+}
+
 bool equalProcessRuntimeState(const ProcessRuntimeState& left,
                               const ProcessRuntimeState& right) {
     return left.state == right.state &&

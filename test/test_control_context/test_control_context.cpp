@@ -312,6 +312,34 @@ void test_qualification_context_binds_band_and_duration_to_active_run() {
     TEST_ASSERT_FALSE(resolveEffectiveQualificationContext(fermenting).valid);
 }
 
+void test_live_state_projection_rejects_stale_snapshot_and_manual_identity() {
+    auto program = projectedProgramState(ProcessState::Preheating);
+    TEST_ASSERT_TRUE(resolveEffectiveControlContext(program).valid);
+    TEST_ASSERT_TRUE(resolveEffectiveQualificationContext(program).valid);
+    program.processRunSnapshot->qualificationDurationMinutes = 5U;
+    TEST_ASSERT_FALSE(resolveEffectiveControlContext(program).valid);
+    TEST_ASSERT_FALSE(resolveEffectiveQualificationContext(program).valid);
+
+    auto manual = manualRunState(ProcessState::ReachingTarget, false);
+    TEST_ASSERT_TRUE(resolveEffectiveControlContext(manual).valid);
+    TEST_ASSERT_TRUE(resolveEffectiveQualificationContext(manual).valid);
+    manual.processRunSnapshot->qualificationDurationMinutes = 5U;
+    TEST_ASSERT_FALSE(resolveEffectiveControlContext(manual).valid);
+    TEST_ASSERT_FALSE(resolveEffectiveQualificationContext(manual).valid);
+
+    manual = manualRunState(ProcessState::ReachingTarget, false);
+    manual.activeRunSensorMode = RunSensorMode::Air;
+    TEST_ASSERT_FALSE(resolveEffectiveControlContext(manual).valid);
+
+    manual = manualRunState(ProcessState::ReachingTarget, false);
+    manual.activeRunId = "foreign-manual-run";
+    TEST_ASSERT_FALSE(resolveEffectiveControlContext(manual).valid);
+
+    const auto canonical = manualRunState(ProcessState::ReachingTarget, false);
+    TEST_ASSERT_TRUE(resolveEffectiveControlContext(canonical).valid);
+    TEST_ASSERT_TRUE(resolveEffectiveQualificationContext(canonical).valid);
+}
+
 }  // namespace
 
 void setup() {}
@@ -333,6 +361,8 @@ int main(int argc, char** argv) {
     RUN_TEST(test_manual_run_target_resolves_before_manual_holding);
     RUN_TEST(test_manual_run_in_fermenting_is_structurally_rejected);
     RUN_TEST(test_qualification_context_binds_band_and_duration_to_active_run);
+    RUN_TEST(
+        test_live_state_projection_rejects_stale_snapshot_and_manual_identity);
     RUN_TEST(
         test_live_state_projection_uses_effective_targets_and_completion_target);
     return UNITY_END();

@@ -212,6 +212,14 @@ std::optional<EffectiveControlContextInput> projectEffectiveControlContextInput(
                 current.activeManualRun.has_value()) {
                 return std::nullopt;
             }
+            {
+                const auto expected =
+                    makeProcessRunSnapshot(*current.activeProgramRun);
+                if (!expected.has_value() ||
+                    !equalProcessRunSnapshot(*expected, snapshot)) {
+                    return std::nullopt;
+                }
+            }
             input.effectiveFermentationTargetCelsius =
                 current.activeProgramRun->effectiveValues()
                     .targetTemperatureCelsius;
@@ -227,6 +235,19 @@ std::optional<EffectiveControlContextInput> projectEffectiveControlContextInput(
             if (!current.activeManualRun.has_value() ||
                 current.activeProgramRun.has_value()) {
                 return std::nullopt;
+            }
+            {
+                const auto expected =
+                    makeProcessRunSnapshot(*current.activeManualRun);
+                if (!expected.has_value() ||
+                    !equalProcessRunSnapshot(*expected, snapshot) ||
+                    current.activeManualRun->values.runId !=
+                        current.activeRunId ||
+                    !current.activeRunSensorMode.has_value() ||
+                    current.activeManualRun->values.sensorMode !=
+                        *current.activeRunSensorMode) {
+                    return std::nullopt;
+                }
             }
             input.manualRun = true;
             input.manualTargetCelsius =

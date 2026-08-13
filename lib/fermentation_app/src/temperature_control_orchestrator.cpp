@@ -144,10 +144,12 @@ TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
     const auto context = resolveEffectiveControlContext(current);
     if (!context.valid) {
         // Not temperature-controlled or structurally inconsistent (Run-/
-        // Snapshot-Widerspruch): fail-closed, no ControlRequest. The
-        // TemperatureController runtime itself was already reset at the
-        // lifecycle boundary that left temperature control, so it is left
-        // untouched here.
+        // Snapshot-Widerspruch): fail-closed, no ControlRequest. A
+        // structurally inconsistent state may still remain in a
+        // temperature-controlled phase, so clear all volatile PI state here
+        // as well. TemperatureController::resetRuntime() retains the request
+        // sequence high-watermark.
+        temperatureController_.resetRuntime();
         TemperatureControlResult result;
         result.status = TemperatureControlStatus::InvalidInput;
         result.reason = TemperatureControlReason::InvalidConfiguration;

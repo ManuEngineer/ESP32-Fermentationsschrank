@@ -50,6 +50,8 @@ struct ProcessRunSnapshot {
     const ProcessRunSnapshot& snapshot);
 [[nodiscard]] std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
     const ActiveRun& run);
+[[nodiscard]] bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
+                                           const ProcessRunSnapshot& right);
 
 // Oeffentlich fuer den Schema-3-Gueltigkeitsvertrag ausserhalb dieser
 // Uebersetzungseinheit (run_persistence_contract.cpp, 5.14): prueft, ob eine
