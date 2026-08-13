@@ -2,8 +2,8 @@
 
 ## 1. Status, Scope und Owner-Gate
 
-- Revision: **4**. Ersetzt Revision 3 (`c1ca0db178442db64332a7b5ef7c66341c6ea500`)
-  vollständig. Diese Revision ist ohne Rückgriff auf Revision 1, 2 oder 3
+- Revision: **5**. Ersetzt Revision 4 (`bf5c0973a06b518bb2c2f5e2dee95e235f4a7b37`)
+  vollständig. Diese Revision ist ohne Rückgriff auf Revision 1, 2, 3 oder 4
   vollständig ausführbar und reviewbar.
 - Live-Issue: #23, offen, Status `PLANNED_SPEC_PENDING`.
 - Draft-PR: #105, Branch `agent/issue-23-aktorplaner-plan` -> `main`.
@@ -11,11 +11,14 @@
 - Planbasis: `main` @ `2986dca5736a34171910c9245a3d5f43fa55da06`
   (Merge-Commit von PR #104 / Issue #22, unverändert seit Revision 1).
 - Issue **#106** „Aktorplaner Per-Run-Parameter-Snapshot und
-  Recovery-Bindung" wurde vor diesem Plan-Commit live präzisiert (siehe
-  gesonderter Governance-Nachweis in PR-Body/SESSION HANDOVER) und bleibt
-  Abhängigkeit dieses Plans für die produktive Verdrahtung (Abschnitt 14).
+  Recovery-Bindung" wurde vor diesem Plan-Commit nochmals um I106.R1
+  präzisiert: strukturelle Producer-/Schema-/Snapshot-Vorbereitung darf ohne
+  Produktionswerte vor #35 erfolgen; produktive Werte-/Grenzenaktivierung und
+  der Gate-Abschluss hängen zwingend von #35 ab. Issue #106 bleibt offen und
+  bleibt Abhängigkeit dieses Plans für die produktive Verdrahtung (Abschnitt
+  14).
 - Die Umsetzung bleibt gesperrt, bis der Owner exakt diesen neuen
-  Revision-4-Plan-Commit mit `PLAN APPROVED: <SHA>` freigibt.
+  Revision-5-Plan-Commit mit `PLAN APPROVED: <SHA>` freigibt.
 - Diese Revision committet ausschließlich Plandokumentation. Sie implementiert
   keine Produktionslogik, keine produktiven Tests, keine Hardware-, GPIO-,
   Toolchain- oder CI-Änderung.
@@ -25,75 +28,53 @@
 ```text
 CONTEXT_BASELINE_BRANCH: agent/issue-23-aktorplaner-plan
 CONTEXT_BASELINE_SHA: 2986dca5736a34171910c9245a3d5f43fa55da06
-CONTEXT_HEAD_BEFORE_REVISION: ab8ce9f (Roadmap-Metadaten-Commit nach Revision 3)
-CONTEXT_PLAN_SHA: NONE (wird nach dem Commit dieser Revision eingetragen)
+CONTEXT_HEAD_BEFORE_REVISION: 88efb3e875718f92bcd6c9afc07389259e2f41b0 (Roadmap-Metadaten-Commit nach Revision 4)
+CONTEXT_PLAN_SHA: NONE (wird nach dem Commit dieser Revision im PR/Handover
+  ausgewiesen)
 CONTEXT_REFRESH_MODE: FULL
-CONTEXT_DELTA: Vollständiges Owner-Planreview von Revision 3 mit neun
-  Befunden (R3.1-R3.9, davon acht BLOCKER und ein MAJOR) sowie fünf
-  Befunden zur Live-Beschreibung von Issue #106 (I106.1-I106.5) erhalten.
-  Issue #106 wurde vor diesem Plan-Commit separat live aktualisiert
-  (siehe PR-Body). Die neun Planbefunde sind in dieser Revision vollständig
-  gelöst:
-  R3.1 (Fensterzustand nicht vollständig im Runtime-State abgebildet) ->
-    neuer expliziter Wertetyp `ActiveSwitchingWindow` (Richtung und
-    `scheduledOnMillis` werden am Fensterstart genau einmal eingefroren,
-    Abschnitt 6.0, 8.1); `armedDirection` wird aus `activeWindow` abgeleitet,
-    nicht mehr als eigenes Feld gehalten (zusätzliche Vereinfachung, schließt
-    einen Redundanzfehler aus).
-  R3.2 (Lücke bei Gegenrichtungsbestätigung nach Ende der Mindest-Einzeit)
-    -> explizite Regel: das bereits eingefrorene alte Fenster läuft während
-    der gesamten Bestätigungs-/Sperrphase unbeeinflusst nach eigener
-    Fensterlogik weiter, die Gegenrichtung erhält weder Energie noch
-    physische Wirkung vor bestätigter, gegateter Freigabe (Abschnitt 8.5);
-    eine allgemeine, richtungsunabhängige Feedback-Dispositionsregel
-    (Abschnitt 9) macht den physischen Entscheid für jeden Tick eindeutig,
-    ohne einen zusätzlichen Status-Rang zu benötigen.
-  R3.3 (Fenster-Neustart nach normalem OFF widerspricht Mindest-Auszeit) ->
-    Planung (Fensterfortschritt) und physische Freigabefähigkeit (Arming)
-    werden strukturell getrennt; neue persistente Felder
-    `lastDeactivatedDirection`/`directionDeactivatedAtMonotonicMillis`
-    (nie durch `forceStop()` verworfen, sondern von `forceStop()` selbst
-    gesetzt) plus eine einheitliche Arming-Regel, die zwischen
-    gleichgerichtetem Neustart (nur Mindest-Auszeit) und Richtungswechsel
-    (Mindest-Auszeit UND Totzeit, Späteres-Ende-Regel) unterscheidet
-    (Abschnitt 8.1).
-  R3.4/R3.5/R3.6 (Feedback-Vertrag verletzt `ACTUATOR_TIMING.md`;
-    `acceptedCommand` ist nicht immer das Feedback-Subjekt;
-    `Rejected` darf zwischen Ticks nicht verloren gehen) -> vollständig
-    entkoppeltes `pendingFeedback`-Handoff (`PendingControlRequestFeedback`)
-    getrennt von `acceptedCommand`; ereignisgetriebene, exhaustive
-    Update-Tabelle inklusive explizitem `Rejected` bei vollständiger
-    Nichtannahme; Einzelverbrauch über einen expliziten
-    Orchestrator-Vertrag (Abschnitt 6.1, 9) statt eines impliziten
-    „nullopt reicht"-Arguments.
-  R3.7 (Pflicht-Nachlauf Außenlüfter darf nicht 0 sein) -> Relation
-    `outerFanPostRunMillis > 0` (verbindlich laut `ACTUATOR_TIMING.md`
-    Zeile 186/220, zwingender Nachlauf mit firmwarefesten Grenzen);
-    `innerFanPostRunMillis` bleibt ausdrücklich bei `>= 0` mit begründetem
-    Unterschied (`ACTUATOR_TIMING.md` Zeile 223-242, kein „zwingend" für den
-    Innenlüfter); zusätzliche strukturelle Relation gegen
-    Double-Praezisions-/Konvertierungsfehler bei `timeQuote *
-    switchingWindowMillis` (Abschnitt 13).
-  R3.8 (unbekannter Safety-Gate-Enumwert muss fail-closed sein) -> Rang 1
-    (`MalformedInput`, umbenannt von `MalformedEvaluation`) deckt jetzt
-    explizit auch einen strukturell ungültigen `ActuatorSafetyGateStatus`-
-    Wert sowie einen strukturell ungültigen `currentCanonicalContext` ab,
-    nicht nur `newEvaluation` (Abschnitt 8.2).
-  R3.9 (Sink-Driver-Aufruf bei normalen Ticks nicht explizit) -> explizite
-    Aufrufsequenz für `tickActuatorPlan()` (Abschnitt 6.1, 11).
-  Zusätzlich beim eigenen Review vor Fertigstellung entdeckt und behoben:
-  die ursprünglich für Rang 9 vorgesehene Zeitbasis
-  (`directionActivatedAtMonotonicMillis`, gemessen ab Erstarmierung) hätte
-  einen über mehrere Fenster akkumulierten Mindestimpuls vorzeitig
-  abschneiden können, wenn die Akkumulationsphase selbst physisch inaktiv
-  war; die Mindest-Einschaltzeit wird jetzt ab dem tatsächlichen Beginn der
-  aktuellen physischen Einschaltphase gemessen
-  (`currentOnPhaseStartedAtMonotonicMillis`, Abschnitt 8.1/8.2); ein
-  malformed Tick darf ein bereits gültig ermitteltes `Rejected` in
-  `pendingFeedback` nicht überschreiben, nur ein tatsächlicher Verwurf des
-  davon betroffenen `acceptedCommand` löst die Rejected-Überschreibung aus
-  (Abschnitt 9); `forceStop()` löscht `pendingFeedback` unbedingt, analog zu
-  #22s eigenem Reset an denselben Lifecycle-Grenzen.
+CONTEXT_DELTA: Vollständiges Owner-Review von Revision 4 mit sechs neuen
+  BLOCKER-Befunden (R4.1-R4.6) sowie der letzten Präzisierung I106.R1 wurde
+  erhalten. Issue #106 wurde vor diesem Plan-Commit separat live aktualisiert
+  (siehe PR-Body/SESSION HANDOVER). Die Befunde sind in dieser vollständigen
+  Revision 5 konsistent gelöst:
+  R4.1 -> `ActiveSwitchingWindow` bleibt ein reiner
+    Planungssnapshot; der Runtime-State führt den tatsächlichen
+    `lastAppliedDirection` sowie die letzte physische
+    Deaktivierungsrichtung und -zeit. Jeder reale Übergang Active -> Idle,
+    einschließlich des normalen Window-Off-Anteils, setzt diese Zeitbasis.
+    Die Arming-Regel verwendet nur diesen physischen Anker; ein an
+    Mindest-Auszeit gesperrter Fensterpuls wird deterministisch für dieses
+    Fenster verworfen und nicht nachgeholt (Abschnitte 6.0, 8.1).
+  R4.2 -> die Prioritätsleiter trennt vollständig unmittelbare
+    Fail-closed-Ereignisse von normalen, nicht-faultigen Teardown-Wünschen.
+    Malformed/ungültige Parameter, Safety-Unresolved/ImmediateStop,
+    Watchdog-Trip/Latch, explizites NoValidRequest, stale Kontext und
+    TimeInvalid schalten physisch im selben Tick aus und werden nie durch
+    Minimum-On gehalten. Nur gültiges NeutralOff, AirLimitBlockedOff und ein
+    bestätigter normaler Richtungswechsel dürfen dem explizit beschriebenen
+    Minimum-On-Vertrag folgen (Abschnitt 8.2, 17).
+  R4.3 -> eine unbestätigte Gegenrichtung darf das alte Fenster nur bis zu
+    dessen bereits eingefrorenem Ende ausführen. An Fenstergrenzen wird kein
+    neues altes Richtungsfenster aus der Gegenrequest erzeugt; B sammelt kein
+    Guthaben. Die Bestätigung kann ohne alte Energie über mehrere Grenzen
+    weiterlaufen und plant B danach aus der dann aktuellen Request neu
+    (Abschnitt 8.5).
+  R4.4 -> das Feedback-Handoff gehört der
+    `TemperatureControlApplicationOrchestrator`-Grenze. Ein internes,
+    revisionsbehaftetes Update wird dort gespeichert; `evaluate...()` nimmt
+    den zuletzt gültigen Wert genau einmal, löscht ihn vor dem #22-Aufruf und
+    injiziert kein caller-supplied Feedbackfeld mehr (Abschnitte 6.1, 9, 11).
+  R4.5 -> eine malformed Evaluation mit nicht vertrauenswürdiger Identität
+    löscht das Handoff fail-closed auf `nullopt`; sie erzeugt kein
+    Rejected mit unsicherer Sequenz und reicht kein älteres Subjekt weiter
+    (Abschnitt 6.2, 9).
+  R4.6 -> Außenlüfterzustand und Nachlauf hängen ausschließlich am physischen
+    Peltierausgang. Der Nachlauf startet bei jedem realen Active -> Idle, auch
+    beim normalen Window-Off; ein neuer Puls hebt ihn ohne Unterbrechung auf
+    (Abschnitt 10, 12).
+  I106.R1 -> Issue #106 trennt strukturelle Producer-/Schema-/Snapshot-
+    Vorbereitung ohne Produktionswerte von der produktiven Aktivierung und
+    dem Gate-Abschluss, die zwingend auf #35-Werte/Grenzen warten.
 SOURCE_OF_TRUTH_CONFLICT: NONE.
 ```
 
@@ -106,14 +87,16 @@ zeitlich korrekte, abstrakte Aktorbefehle für Peltier und Lüfter übersetzt:
 - gemeinsames zeitproportionales Schaltfenster für Heizen und Kühlen;
 - begrenzter, einzelner, richtungsgebundener Impulsakkumulator für
   Anforderungen unterhalb der Mindest-Einschaltzeit;
-- Mindest-Einschaltzeit mit Vorrang für Sicherheits-/Fehlerabschaltung;
-- Mindest-Auszeit vor erneuter Freigabe;
+- Mindest-Einschaltzeit mit Vorrang für unmittelbare Sicherheits-/Fehlerabschaltung;
+- Mindest-Auszeit nach **jedem** physischen Peltier-AUS vor erneuter Freigabe;
 - bestätigte Gegenrichtungsanforderung (Schwelle + Dauer + Plausibilität) vor
   Richtungswechsel;
 - sichere Polaritätstotzeit, kombiniert mit Mindest-Auszeit über
   Späteres-Ende-Regel (keine Addition), ausschließlich bei tatsächlichem
   Richtungswechsel (nicht bei gleichgerichtetem Neustart);
 - Außenlüfter ohne absichtlichen Vorlauf, mit zwingendem Nachlauf;
+- physisch gestarteter Außenlüfter-Nachlauf auch beim normalen Off-Anteil eines
+  Schaltfensters;
 - Innenlüfter während temperaturgeregelter Phasen und mit eigenem,
   konfigurierbarem (nicht zwingendem) Nachlauf;
 - Aktualisierungs-Watchdog für veraltete oder kontextfremde `ControlRequest`
@@ -225,7 +208,7 @@ Wiederzuverwenden sind insbesondere:
 | `isTemperatureControlledProcessState()` | `control_context.hpp` | Innenlüfter-Phasenklassifikation, keine Parallel-Klassifikation |
 | `TemperatureControlLifecycleBoundary` | `temperature_control_orchestrator.hpp` | wiederverwendete Lifecycle-Grenzen (kein zweiter Enum) |
 | `TemperatureControlApplicationOrchestrator` | `temperature_control_orchestrator.hpp/.cpp` | wird erweitert (nicht dupliziert), einzige Application-/Lifecycle-Grenze auch für #23 (Abschnitt 11) |
-| `TemperatureControlEvaluationEvidence::previousControlRequestFeedback` | `temperature_control_orchestrator.hpp` | bereits vorhandenes Eingabefeld für #22; wird von #23s Feedback exakt befüllt, kein neuer Mechanismus |
+| `TemperatureControlEvaluationEvidence` | `temperature_control_orchestrator.hpp` | bestehende öffentliche Evidence-Grenze für Zeit/Sensoren; Feedback wird ausschließlich intern durch den Orchestrator injiziert |
 | `IBidirectionalActuatorSink` | `device_platform/bidirectional_actuator_sink.hpp` | bereits vorhandener, bisher unbenutzter Peltier-Port |
 | `IBinaryOutputSink` | `device_platform/binary_output_sink.hpp` | bereits vorhandener, bisher unbenutzter Lüfter-Port (zwei Instanzen: außen/innen) |
 | `ITimeSource`, `VirtualTimeSource` | `device_platform/time_source.hpp`, `virtual_time_source.hpp` | monotone Zeit im Aufrufer; native Tests |
@@ -282,8 +265,7 @@ Plans.
 
 `status` trägt strukturell **nur** einen der drei oben genannten Enumwerte.
 Ein Wert außerhalb dieser Menge (z. B. durch fehlerhaftes Casting) ist
-strukturell ungültig und wird **niemals** wie `Allowed` behandelt – er wird
-in Abschnitt 8.2 Rang 1 (`MalformedInput`) fail-closed abgefangen, exakt wie
+in Abschnitt 8.2 Klasse I-1 (`MalformedInput`) fail-closed abgefangen, exakt wie
 ein strukturell ungültiges `newEvaluation` (siehe Abschnitt 8.2 und den dort
 geforderten Test mit `static_cast<ActuatorSafetyGateStatus>(0xFF)`).
 
@@ -355,9 +337,14 @@ lib/fermentation_app/src/temperature_control_orchestrator.hpp / .cpp
       resolveEffectiveControlContext()/isTemperatureControlledProcessState()
       ab (keine Parallel-Ableitung). Interne Aufrufsequenz gemäß Abschnitt
       6.1 (genau ein planner.tick(), genau ein driver.apply()).
+    - evaluateTemperatureControl() nimmt das interne, einmalige Handoff und
+      injiziert es in den privaten TemperatureControlInput; die öffentliche
+      TemperatureControlEvaluationEvidence enthält kein caller-supplied
+      previousControlRequestFeedback mehr.
     - complete()/needsRuntimeReset() ruft für dieselbe erfolgreiche
       Lifecycle-/Commit-Grenze zusätzlich den Aktorplaner-Stop-Pfad auf
-      (Abschnitt 11); keine zweite Caller-Pflicht.
+      (Abschnitt 11), der auch den internen Handoff-Slot leert; keine zweite
+      Caller-Pflicht.
 ```
 
 Neue Testverzeichnisse:
@@ -415,17 +402,16 @@ struct AcceptedControlCommand {
     ControlRequestContext contextAtAcceptance;
 };
 
-// Am Fensterstart genau einmal erzeugter, unveraenderlicher Snapshot
-// (loest R3.1): Richtung und geplante Einschaltdauer eines laufenden
-// Fensters aendern sich bis zum naechsten Fensterstart-Ereignis nicht,
-// auch wenn acceptedCommand sich mitten im Fenster aendert.
+// Am Fensterstart genau einmal erzeugter, unveraenderlicher Planungssnapshot.
+// Er beschreibt nur die natuerliche Pulsplatzierung dieses Fensters; er
+// behauptet weder eine physische Freigabe noch einen laufenden Nachlauf.
 struct ActiveSwitchingWindow {
     std::uint64_t startMonotonicMillis{0U};
     AbstractControlDirection direction{AbstractControlDirection::Idle};
     std::uint64_t scheduledOnMillis{0U};
 };
 
-// Getrenntes Feedback-Handoff (loest R3.4/R3.5/R3.6): das Subjekt, fuer das
+// Getrenntes Feedback-Handoff: Das Subjekt, fuer das
 // #23 als naechstes ein PreviousControlRequestFeedback an #22 liefert, ist
 // NICHT zwangslaeufig identisch mit dem aktuell physisch massgeblichen
 // acceptedCommand. Siehe Abschnitt 9 fuer die vollstaendige Update-Regel.
@@ -435,33 +421,47 @@ struct PendingControlRequestFeedback {
         PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
 };
 
+struct PendingControlRequestFeedbackUpdate {
+    bool changed{false};
+    std::optional<PreviousControlRequestFeedback> feedback;
+};
+
 struct ActuatorPlannerRuntimeState {
     std::optional<AcceptedControlCommand> acceptedCommand;
     std::optional<ActiveSwitchingWindow> activeWindow;
     PulseAccumulator accumulator;
 
+    // Tatsächlicher physischer Ausgang, getrennt vom Planungs-Snapshot.
+    // Ein Window-Off-Anteil setzt diesen Wert auf Idle, ohne
+    // activeWindow zwingend zu löschen.
+    AbstractControlDirection lastAppliedDirection{
+        AbstractControlDirection::Idle};
+
     // Beginn der aktuellen ununterbrochenen physischen Einschaltphase;
-    // nullopt, sobald appliedDirection diesen Tick Idle ist. Alleinige
-    // Zeitbasis fuer die Mindest-Einschaltzeit (Abschnitt 8.2 Rang 9,
-    // korrigiert gegenueber Revision 3 - siehe CONTEXT_DELTA).
+    // nullopt, sobald lastAppliedDirection Idle ist. Alleinige Zeitbasis
+    // fuer die normale Mindest-Einschaltzeit.
     std::optional<std::uint64_t> currentOnPhaseStartedAtMonotonicMillis;
 
-    // Letzte tatsaechlich deaktivierte Richtung und ihr Zeitpunkt; wird von
-    // JEDEM Teardown-Ereignis (inklusive forceStop()) gesetzt und NIE
-    // geloescht - dient als alleinige Grundlage der Arming-Regel
-    // (Abschnitt 8.1), die zwischen Erststart, gleichgerichtetem Neustart
-    // und Richtungswechsel unterscheidet (loest R3.3).
-    std::optional<AbstractControlDirection> lastDeactivatedDirection;
-    std::optional<std::uint64_t> directionDeactivatedAtMonotonicMillis;
+    // Letzte physisch deaktivierte Richtung und ihr Zeitpunkt. Diese Felder
+    // werden bei JEDEM tatsächlichen Active -> Idle gesetzt, auch beim
+    // normalen Window-Off-Anteil, bei forceStop() und bei Fail-closed.
+    // Sie werden nie gelöscht und sind die alleinige Mindest-Auszeit-/
+    // Totzeit-Zeitbasis.
+    std::optional<AbstractControlDirection>
+        lastPhysicalDeactivationDirection;
+    std::optional<std::uint64_t>
+        lastPhysicalDeactivationAtMonotonicMillis;
 
     std::optional<AbstractControlDirection> counterDirectionCandidate;
     std::uint64_t counterDirectionObservedSinceMonotonicMillis{0U};
+    bool counterDirectionConfirmed{false};
 
     std::optional<std::uint64_t> lastAcceptedSequence;
     std::optional<std::uint64_t> lastNewRequestAcceptedAtMonotonicMillis;
     std::optional<ActuatorWatchdogFaultEvidence> latchedWatchdogFault;
 
     std::optional<PendingControlRequestFeedback> pendingFeedback;
+    bool pendingFeedbackUpdateAvailable{false};
 
     bool outerFanActive{false};
     std::optional<std::uint64_t> outerFanDeactivationRequestedAtMonotonicMillis;
@@ -485,7 +485,6 @@ struct ActuatorPlanTickResult {
     bool innerFanEnabled{false};
     bool counterDirectionConfirming{false};
     ActuatorAdmissionOutcome admissionOutcome{ActuatorAdmissionOutcome::NoCandidate};
-    std::optional<PreviousControlRequestFeedback> feedbackForAcceptedRequest;
     std::optional<std::uint64_t> acceptedCommandSequence;
     bool watchdogFaultActive{false};
 };
@@ -496,13 +495,15 @@ class ActuatorPlanner {
 
     [[nodiscard]] ActuatorPlanTickResult tick(const ActuatorPlanTickInput& input);
     [[nodiscard]] ActuatorPlanTickResult forceStop(std::uint64_t nowMonotonicMillis);
+    [[nodiscard]] PendingControlRequestFeedbackUpdate takeFeedbackUpdate();
     void applyExternalWatchdogFaultReset(std::uint64_t nowMonotonicMillis);
 
     [[nodiscard]] const ActuatorPlannerRuntimeState& state() const;
     [[nodiscard]] const ActuatorPlannerParameters& parameters() const;
 
    private:
-    [[nodiscard]] AbstractControlDirection armedDirection() const;  // abgeleitet aus activeWindow, kein eigenes Feld
+    [[nodiscard]] AbstractControlDirection plannedDirection() const;
+    [[nodiscard]] AbstractControlDirection physicalDirection() const;
 
     ActuatorPlannerParameters parameters_;
     ActuatorPlannerRuntimeState state_;
@@ -522,24 +523,27 @@ durch stillschweigend inkonsistente Feld-Lebenszyklen entstand):
 
 | Feld | Gesetzt von | Gelöscht/verändert von | Überlebt `forceStop()`? |
 |---|---|---|---|
-| `acceptedCommand` | Phase A, jede erfolgreiche Admission (6.2 Schritt 3/4) | jeder Rang-1/2/3/5/7-Verwurf (8.2), Rang-9-Ende-Teardown (8.1), `forceStop()` | Nein |
-| `activeWindow` | Arming-Ereignis (8.1) | dieselben Trigger wie `acceptedCommand`-Verwurf, gegated durch Rang 9 (8.2) | Nein |
-| `accumulator` | Fensterstart-Ereignis (8.1) | identisch zu `activeWindow` (8.4) | Nein |
-| `currentOnPhaseStartedAtMonotonicMillis` | Tick, an dem `appliedDirection` Idle->Heating/Cooling wechselt | Tick, an dem `appliedDirection` diesen Tick Idle ist | Nein (wird bei `forceStop()` auf `nullopt`, da `appliedDirection` danach Idle ist) |
-| `lastDeactivatedDirection` / `directionDeactivatedAtMonotonicMillis` | jedes Teardown-Ereignis von `activeWindow`, inklusive `forceStop()` | nie gelöscht, nur überschrieben vom jeweils nächsten Teardown | Ja (wird von `forceStop()` selbst geschrieben, nicht gelöscht) |
-| `counterDirectionCandidate` / `...ObservedSinceMonotonicMillis` | 8.5 (neuer, plausibler Gegenrichtungskandidat) | Unterbrechung (8.5), `activeWindow`-Teardown, `forceStop()` | Nein |
+| `acceptedCommand` | Phase A, jede erfolgreiche aktive Admission | jeder unmittelbare Fail-closed-Verwurf, tatsächlicher normaler Teardown und `forceStop()` | Nein |
+| `activeWindow` | Fensterstart bzw. bestätigte neue B-Planung (8.1/8.5) | unmittelbarer Fail-closed-Verwurf, tatsächlicher normaler Teardown, unbestätigte Gegenrichtung am alten Fensterende, `forceStop()` | Nein |
+| `accumulator` | Fensterstart-Ereignis (8.1) | unmittelbarer Fail-closed-Verwurf, tatsächlicher Teardown, `forceStop()`; keine Gutschrift für einen am Arming-Gate verpassten Puls | Nein |
+| `lastAppliedDirection` | jede physische Ausgangsentscheidung | nächste physische Ausgangsentscheidung | Ja als RAM-Zustand; bei `forceStop()` auf `Idle` gesetzt |
+| `currentOnPhaseStartedAtMonotonicMillis` | Tick, an dem `lastAppliedDirection` Idle->Heating/Cooling wechselt | Tick, an dem der physische Ausgang Idle wird | Nein |
+| `lastPhysicalDeactivationDirection` / `lastPhysicalDeactivationAtMonotonicMillis` | jeder tatsächliche Active -> Idle-Übergang, einschließlich normalem Window-Off, Fail-closed und `forceStop()` | nie gelöscht, nur beim nächsten tatsächlichen Übergang überschrieben | Ja |
+| `counterDirectionCandidate` / `...ObservedSinceMonotonicMillis` / `counterDirectionConfirmed` | 8.5 bei gültiger, aktueller Gegenrequest | Unterbrechung, erfolgreiche B-Übernahme, Fail-closed und `forceStop()` | Nein |
 | `lastAcceptedSequence` | Phase A, jede erfolgreiche Admission (6.2 Schritt 4 „sonst") | nie gelöscht (Hochwasserzeichen) | Ja |
 | `lastNewRequestAcceptedAtMonotonicMillis` | Phase A, jede erfolgreich verarbeitete Evaluation (6.2 Schritt 3/4) | nie gelöscht | Ja |
-| `latchedWatchdogFault` | Watchdog-Trip (Rang 5) | ausschließlich `applyExternalWatchdogFaultReset()` | Ja |
-| `pendingFeedback` | ereignisgetrieben, siehe Abschnitt 9 | ereignisgetrieben (9), unbedingt bei `forceStop()` | Nein |
+| `latchedWatchdogFault` | Watchdog-Trip (Klasse I-5) | ausschließlich `applyExternalWatchdogFaultReset()` | Ja |
+| `pendingFeedback` | ereignisgetrieben, siehe Abschnitt 9 | ereignisgetrieben (9), unbedingt bei `forceStop()`; die Application-Grenze besitzt zusätzlich das nicht erneut auslieferbare Handoff-Slot | Nein |
 | `outerFanActive`/`...DeactivationRequestedAtMonotonicMillis` | Abschnitt 10 | Abschnitt 10 | Ja (Nachlauf läuft über `forceStop()` unverändert weiter, Abschnitt 11) |
 | `innerFanActive`/`...DeactivationRequestedAtMonotonicMillis` | Abschnitt 10 | Abschnitt 10 | Ja (analog) |
 
-`armedDirection()` ist keine gespeicherte Zustandsvariable, sondern eine
-reine Ableitung: `activeWindow.has_value() ? activeWindow->direction :
-AbstractControlDirection::Idle`. Ein separates `physicalDirection`-Feld
-(Revision 3) entfällt, um zwei strukturell redundante, potenziell
-divergierende Felder zu vermeiden.
+`plannedDirection()` ist die reine Ableitung
+`activeWindow.has_value() ? activeWindow->direction :
+AbstractControlDirection::Idle` und dient nur der Fenster-/Gegenrichtungs-
+planung. `physicalDirection()` liest ausschließlich
+`state_.lastAppliedDirection`. Diese beiden Felder sind bewusst nicht
+redundant: das eine ist ein Planungssnapshot, das andere der tatsächlich
+angewendete physische Ausgang.
 
 ### 6.1 Aufrufsemantik
 
@@ -548,8 +552,7 @@ Er wird vom Aufrufer (`TemperatureControlApplicationOrchestrator::tickActuatorPl
 potenziell **häufiger** aufgerufen als #22 seine eigene, sensorgetaktete
 `evaluateTemperatureControl()`-Berechnung durchführt.
 
-`tickActuatorPlan()` folgt bei jedem Aufruf exakt dieser Reihenfolge (löst
-R3.9):
+`tickActuatorPlan()` folgt bei jedem Aufruf exakt dieser Reihenfolge:
 
 ```text
 tickActuatorPlan(...)
@@ -560,24 +563,42 @@ tickActuatorPlan(...)
   -> driver.apply(result)                  [genau einmal, sowohl im
                                              normalen als auch im
                                              fail-closed Fall]
-  -> result.feedbackForAcceptedRequest wird dem naechsten
-     evaluateTemperatureControl()-Aufruf ueber
-     TemperatureControlEvaluationEvidence.previousControlRequestFeedback
-     zugefuehrt
-  -> result zurueckgeben
+  -> update = planner.takeFeedbackUpdate() [genau einmal]
+  -> falls update.changed: Orchestrator-internes
+     pendingControlRequestFeedback = update.feedback
+  -> result zurückgeben; kein Feedbackfeld muss vom Caller kopiert werden
 ```
 
-**Verbindlicher Orchestrator-Vertrag (löst R3.6):** Jedes Ergebnis eines
-`evaluateTemperatureControl()`-Aufrufs wird durch genau einen nachfolgenden
-`tickActuatorPlan()`-Aufruf beobachtet, bevor der nächste
-`evaluateTemperatureControl()`-Aufruf erfolgt. Dieser Vertrag stellt sicher,
-dass `pendingFeedback` (Abschnitt 9) nicht doppelt an #22 übergeben wird,
-selbst wenn `tickActuatorPlan()` selbst deutlich häufiger als
-`evaluateTemperatureControl()` aufgerufen wird (der Planer liefert bei
-wiederholten Ticks ohne neue Evaluation denselben, weiterhin gültigen
-`pendingFeedback`-Wert zurück; die Einmaligkeit der tatsächlichen #22-Weitergabe
-ist Aufgabe des Aufrufers, nicht eine Selbstlöschung im Planer). Ein direkter
-Test dieses Vertrags ist Teil von Abschnitt 19.3.
+Der Planer markiert eine Änderung seines `pendingFeedback` mit einer
+internen Update-Revision. `takeFeedbackUpdate()` liefert höchstens einmal
+pro Revision ein `PendingControlRequestFeedbackUpdate` und markiert diese
+Revision als ausgeliefert. Eine unveränderte Disposition wird bei weiteren
+Planner-Ticks nicht erneut in den Application-Slot kopiert; eine neue
+Disposition (beispielsweise durch den Übergang von Minimum-Off zu physisch
+Active) ersetzt dort den noch nicht konsumierten Wert. Ein Wechsel auf
+`nullopt` ist ebenfalls ein echtes Update und schließt das Handoff.
+
+Der Orchestrator besitzt in seiner kanonischen Application-Grenze genau einen
+internen Slot für dieses Handoff. `evaluateTemperatureControl()` nimmt den
+Slot vor dem Aufruf des #22-Kerns atomar aus dem Slot (bei leerem Slot
+`nullopt`), injiziert diesen lokalen Wert einmalig in den internen
+`TemperatureControlInput` und löscht den Slot bereits vor dem eigentlichen
+#22-Aufruf. Die öffentliche
+`TemperatureControlEvaluationEvidence::previousControlRequestFeedback`-
+Callerpflicht entfällt; Sensor-/Zeit-Evidence bleibt caller-supplied. Mehrere
+Planner-Ticks zwischen zwei #22-Evaluationen sind damit zulässig und speichern
+nur den zuletzt fachlich gültigen Update-Stand. Ein zweiter
+`evaluateTemperatureControl()`-Aufruf ohne neues Handoff erhält
+`nullopt` und lässt #22 gemäß seinem bestehenden Vertrag konservativ
+einfrieren.
+
+**Verbindlicher Orchestrator-Vertrag:** Eine neue #22-Evaluation wird genau
+einmal als `newEvaluation` an einen späteren `tickActuatorPlan()`-
+Aufruf übergeben. Der Orchestrator kopiert kein Feedback zwischen Callern;
+er besitzt, aktualisiert und konsumiert den Handoff selbst. Lifecycle-Reset
+und fehlgeschlagenes Persistence bleiben davon getrennt: ein fehlgeschlagener
+Commit konsumiert oder löscht kein Handoff, eine erfolgreiche kanonische
+Lifecycle-Grenze löscht es zusammen mit dem Planner-Stop.
 
 Intern läuft `tick()` in **zwei Phasen**, die absichtlich unabhängig
 voneinander sind:
@@ -602,10 +623,12 @@ gerade physisch umsetzen darf.
    `ControlRequest`, strukturell ungültiger `currentCanonicalContext`, oder
    `input.safetyGate.status` ist keiner der drei bekannten
    `ActuatorSafetyGateStatus`-Werte) -> `admissionOutcome =
-   MalformedCandidate`. **Phase A endet hier**, kein vorgemerkter Kandidat,
-   `pendingFeedback` bleibt unverändert (siehe Abschnitt 9 für die
-   Ausnahme, falls Phase B denselben Tick `acceptedCommand` deshalb
-   verwirft).
+   MalformedCandidate`. **Phase A endet hier**, kein vorgemerkter Kandidat.
+   Weil die aktuelle Request-Identität bei einem malformed Ergebnis nicht
+   vertrauenswürdig ist, wird das Planner-Handoff fail-closed auf
+   `pendingFeedback = std::nullopt` gesetzt und als `changed`-Update
+   markiert. Es wird niemals eine unsichere Sequence für `Rejected`
+   verwendet (Abschnitt 9).
 3. `classifyActuatorDemand(newEvaluation.value())` (Abschnitt 7) ==
    `NoValidRequest` (also `Unavailable`/`InvalidInput` von #22, keine
    `ControlRequest` vorhanden): `admissionOutcome = Accepted`,
@@ -632,7 +655,7 @@ gerade physisch umsetzen darf.
        identity.createdAtMonotonicMillis, requestWatchdogMillis)` (Abschnitt
        8.3) -> `admissionOutcome = StaleOnArrivalWatchdog`. **Phase A endet
        hier**, kein vorgemerkter Kandidat; `pendingFeedback` bleibt bei
-       `{sequence, Rejected}` (löst R3.5), `acceptedCommand` bleibt
+       `{sequence, Rejected}`, `acceptedCommand` bleibt
        unverändert.
      - `context != input.currentCanonicalContext` ->
        `admissionOutcome = StaleOnArrivalContext`. Identisch zum vorigen
@@ -642,34 +665,37 @@ gerade physisch umsetzen darf.
        `AirLimitBlockedOff`): `admissionOutcome = Accepted`,
        `state_.pendingFeedback = std::nullopt` (OFF öffnet kein
        Feedbackfenster, Abschnitt 9). Der vorgemerkte Kandidat trägt
-       `demandClass`, `direction = Idle`, `sequence` und `context`.
+       `demandClass`, `direction = Idle`, `sequence` und
+       `context`.
      - sonst (Heating/Cooling, alle Prüfungen bestanden):
        `admissionOutcome = Accepted`. Der vorgemerkte Kandidat trägt
-       `demandClass`, `direction`, `timeQuote`, `sequence` und `context`;
-       `pendingFeedback` bleibt vorläufig bei `{sequence, Rejected}` und
-       wird ab dem Moment, in dem Phase B diesen Kandidaten zu
+       `demandClass`, `direction`, `timeQuote`, `sequence` und
+       `context`;
+       `pendingFeedback` bleibt vorläufig bei `{sequence, Rejected}`
+       und wird ab dem Moment, in dem Phase B diesen Kandidaten zu
        `acceptedCommand` macht, jeden Tick live nachgeführt (Abschnitt 9).
 
 Eine bei Admission abgelehnte neue Request (`DuplicateOrOldSequence`,
 `StaleOnArrivalWatchdog`, `StaleOnArrivalContext`, `MalformedCandidate`)
-berührt einen bereits gehaltenen `acceptedCommand` **nicht**: Phase B
-bewertet in diesem Fall die bestehende Zeitbasis unverändert, so, als wäre
-`newEvaluation` `std::nullopt` gewesen. Das schließt aus, dass ein Replay
-oder ein verspätet eingetroffener Kandidat einen laufenden, weiterhin
-gültigen Zeitplan zerstört. Es gilt jedoch **nicht** mehr für `pendingFeedback`:
-`StaleOnArrivalWatchdog`/`StaleOnArrivalContext` erzeugen ein eigenständiges
-`Rejected`-Feedbackfenster für den abgelehnten Kandidaten, unabhängig vom
-Schicksal des physisch weiterhin maßgeblichen `acceptedCommand` (löst R3.5,
-siehe Beispiel in Abschnitt 9.4).
+berührt einen bereits gehaltenen `acceptedCommand` **nicht**, sofern es sich
+um Replay oder eine vertrauenswürdig identifizierte, bei Ankunft stale gewordene
+Request handelt: Phase B bewertet die bestehende Zeitbasis dann wie bei
+`newEvaluation == std::nullopt`. Das schließt aus, dass ein Replay oder eine
+verspätete Request einen laufenden Plan zerstört. Ein `MalformedCandidate`
+ist die notwendige Ausnahme: Seine Identität ist nicht vertrauenswürdig, deshalb
+schließt Phase A das Handoff und Phase B führt den unbedingten
+Malformed-Fail-closed-Verwurf aus. `StaleOnArrivalWatchdog` und
+`StaleOnArrivalContext` dürfen dagegen ein eigenständiges
+`{sequence, Rejected}` für ihre vertrauenswürdig bekannte Sequence führen
+(Abschnitt 9).
 
 ### 6.3 Phase B – Physischer Ausgang (Prioritätsleiter, Abschnitt 8.2)
 
 Phase B verwendet den in Phase A ermittelten vorgemerkten Kandidaten (falls
 vorhanden) zusammen mit dem laufenden `ActuatorPlannerRuntimeState`, um genau
 eine physische Ausgangsentscheidung für diesen Tick zu treffen. Sie ist in
-Abschnitt 8.2 vollständig als Prioritätsleiter definiert und aktualisiert am
-Ende jedes Ticks zusätzlich `pendingFeedback` gemäß der Live-Nachführungsregel
-in Abschnitt 9.
+Abschnitt 8.2 vollständig definiert und aktualisiert am Ende jedes Ticks
+`pendingFeedback` sowie dessen einmaliges Update-Signal gemäß Abschnitt 9.
 
 ### 6.4 Laufender Watchdog
 
@@ -692,13 +718,15 @@ laufende Zeitbasis zu stören.
 ### 6.5 Welche Quote ein Fenster bestimmt / neue Quote mitten im Fenster
 
 Siehe Abschnitt 8.1. Kurzfassung: `ActiveSwitchingWindow` wird bei jedem
-Fensterstart-Ereignis genau einmal aus dem zu diesem Zeitpunkt gehaltenen
-`acceptedCommand` erzeugt und ist für die Dauer des Fensters unveränderlich;
-eine während des Fensters neu angenommene Request mit unveränderter Richtung
-wirkt erst im nächsten Fenster, da sie zwar `acceptedCommand` sofort ersetzt,
-aber `activeWindow` erst am nächsten Fensterstart-Ereignis neu gelesen wird.
-Ereignisse der Prioritätsstufen 1–7 (Abschnitt 8.2) wirken dagegen sofort auf
-`activeWindow` (unbedingter Verwurf).
+zulässigen Fensterstart-Ereignis genau einmal aus der dann aktuellen Request
+erzeugt und ist für die Dauer dieses Fensters unveränderlich. Eine neue
+Request mit unveränderter Richtung wirkt erst im nächsten Fenster. Eine
+unbestätigte Gegenrichtung ist davon ausdrücklich ausgenommen: Das bereits
+laufende alte Fenster darf seinen eingefrorenen Puls beenden, aber an dessen
+Fensterende wird kein Folgefenster aus der Gegenrequest erzeugt. Danach bleibt
+der physische Ausgang Idle, bis die Gegenrequest bestätigt und neu geplant
+wurde. Unbedingte Fail-closed-Ereignisse wirken dagegen sofort auf
+`activeWindow` und den physischen Ausgang.
 
 ### 6.6 Beenden einer geplanten Peltierfreigabe
 
@@ -738,7 +766,7 @@ als strukturell ungültig eingestuft (`MalformedCandidate`, Abschnitt 6.2).
 
 | `ActuatorDemandClass` | Effekt auf Richtung | Effekt auf Akkumulator |
 |---|---|---|
-| `NoValidRequest` | kein `AcceptedControlCommand`; Abschnitt 8.2 Rang 6 | siehe Abschnitt 8.4 (Verwurf bei Übergang nach Idle) |
+| `NoValidRequest` | kein `AcceptedControlCommand`; Abschnitt 8.2 Klasse I-6 | siehe Abschnitt 8.4 (Verwurf bei Übergang nach Idle) |
 | `NeutralOff` | Richtung `Idle` | siehe Abschnitt 8.4 |
 | `AirLimitBlockedOff` | Richtung `Idle` | zusätzlich: sofortiger, unbedingter Verwurf bei **Übergang** in diese Klasse |
 | `AirLimitReducedDemand` | Richtung Heating/Cooling, Quote bereits von #22 reduziert | bei Übergang aus einer weniger restriktiven Klasse: Verwurf vor Gutschrift der aktuellen (reduzierten) Fensterquote; bei fortlaufendem Verbleib: normale Akkumulation aus der jeweils aktuellen, bereits reduzierten Quote |
@@ -750,157 +778,160 @@ höheres Guthaben zur Umgehung der aktuellen Reduktion nutzen, weil der
 Übergang selbst das alte Guthaben verwirft. `AirLimitBlockedOff` ist
 **keine** Safety-Sofortabschaltung – eine bereits aktive Richtung wird davon
 nicht anders behandelt als von `NeutralOff` (beide unterliegen der normalen
-Mindest-Einschaltzeit-Haltelogik, Abschnitt 8.2 Rang 9); der Unterschied
+Mindest-Einschaltzeit-Haltelogik, Abschnitt 8.2 Klasse N); der Unterschied
 wirkt ausschließlich auf den Akkumulator.
 
 ## 8. Verhalten im Detail: Fenster, Prioritätsleiter, Zeitarithmetik
 
 ### 8.1 Fenster- und Impulsplatzierung
 
-**Arming-Regel (physische Freigabefähigkeit einer Richtung, löst R3.3).**
-Eine Richtung `D` (`Heating`/`Cooling`) darf in dem Tick physisch neu
-armiert werden (`activeWindow` wird neu erzeugt), in dem `acceptedCommand.direction
-== D` gilt und `activeWindow` aktuell leer ist, sofern **eine** der folgenden
-Bedingungen zutrifft:
+**Zwei getrennte Wahrheiten.** `ActiveSwitchingWindow` ist ausschließlich
+ein unveränderlicher Planungssnapshot. `lastAppliedDirection` ist der
+physische Ausgang. Daher kann ein Window-Snapshot während seines Off-Anteils
+weiterbestehen, obwohl der physische Ausgang bereits Idle ist und die
+Mindest-Auszeit seit dem realen Abschalten läuft.
 
-- **(a) Erststart seit Konstruktion:** `state().directionDeactivatedAtMonotonicMillis
-  == std::nullopt` (der Planer hat seit seiner Konstruktion noch nie eine
-  Richtung deaktiviert). Keine Mindest-Auszeit, keine Totzeit – es gibt
-  keine vorherige Deaktivierung, gegen die eine Frist geprüft werden
-  müsste.
-- **(b) Gleichgerichteter Neustart:**
-  `state().lastDeactivatedDirection == D` **und**
-  `deadlineReached(now, directionDeactivatedAtMonotonicMillis,
-  minimumOffMillis)`. Keine Totzeit: Eine gleichgerichtete Wiederfreigabe
-  ist kein Polaritätswechsel und erfordert laut `ACTUATOR_TIMING.md`
-  ausschließlich die Mindest-Auszeit.
-- **(c) Richtungswechsel:**
-  `state().lastDeactivatedDirection != D` **und**
-  `deadlineReached(now, directionDeactivatedAtMonotonicMillis,
-  minimumOffMillis)` **und**
-  `deadlineReached(now, directionDeactivatedAtMonotonicMillis,
-  polarityDeadTimeMillis)` (Späteres-Ende-Regel: beide Fristen laufen
-  parallel ab demselben `directionDeactivatedAtMonotonicMillis`, keine
-  Addition; maßgeblich ist, dass **beide** erfüllt sind).
+**Physische Übergänge und Zeitbasis.** Jede Ausgabeentscheidung wird über eine
+zentrale Übergangsfunktion angewendet:
 
-Diese Regel unterscheidet die von R3.3 geforderten fünf Fälle
-widerspruchsfrei:
+- Active -> Idle setzt genau einmal
+  `lastPhysicalDeactivationDirection` und
+  `lastPhysicalDeactivationAtMonotonicMillis = now`. Das gilt für
+  einen normalen Window-Off-Anteil, einen normalen Stop, einen bestätigten
+  Richtungswechsel, `forceStop()` und jede unmittelbare Fail-closed-
+  Abschaltung.
+- Idle -> Heating/Cooling setzt
+  `currentOnPhaseStartedAtMonotonicMillis = now` und hebt einen
+  laufenden Außenlüfter-Nachlauf ohne Unterbrechung auf.
+- Active -> Gegenrichtung ist im Planner verboten; zwischen beiden Richtungen
+  liegt immer ein physischer Idle-Tick. Ein bereits physisch Idle gewordener
+  Window-Snapshot ist deshalb kein aktives Peltier.
+- Bleibt der physische Ausgang Idle, wird der Deaktivierungsanker nicht bei
+  jedem weiteren Idle-Tick neu datiert. Dadurch misst `minimumOffMillis`
+  die reale Auszeit und nicht die Dauer der anschließenden Sperrphase.
 
-1. *Erstmaliger Start:* Fall (a).
-2. *Normales Window-Off* (das aktuelle Fenster erreicht `elapsedInWindow >=
-   activeWindow.scheduledOnMillis`, `acceptedCommand.direction` bleibt
-   unverändert `D`): **kein** Teardown-Ereignis – `activeWindow` bleibt
-   bestehen (siehe „Fensterfortschritt" unten) und wird am nächsten
-   Fensterstart-Ereignis erneut aus dem dann aktuellen `acceptedCommand`
-   gelesen, ohne die Arming-Regel erneut zu durchlaufen.
-3. *Explizite OFF-Request* (`acceptedCommand.direction` wechselt nach
-   `Idle`) oder ein anderer Rang-1-bis-7-Verwurf: `activeWindow`-Teardown
-   (siehe Rang 9/10 unten), `lastDeactivatedDirection`/
-   `directionDeactivatedAtMonotonicMillis` werden gesetzt.
-4. *Gleichgerichteter Restart* nach (3): Fall (b) – nur Mindest-Auszeit.
-5. *Richtungswechsel* (bestätigte Gegenrichtung, Abschnitt 8.5): Nach dem
-   Teardown der alten Richtung (die dabei `lastDeactivatedDirection` setzt)
-   greift für die neue Richtung Fall (c) – Mindest-Auszeit **und** Totzeit.
+**Arming-Regel (physische Freigabefähigkeit einer Richtung).** Eine Richtung
+`D` darf nur dann physisch von Idle aus freigegeben werden, wenn alle
+unmittelbaren Fail-closed-Bedingungen aus Abschnitt 8.2 nicht zutreffen und
+eine der folgenden Bedingungen auf dem physischen Deaktivierungsanker erfüllt
+ist:
 
-**Teardown-Timing (Zusammenspiel mit Mindest-Einschaltzeit, Rang 9 in
-Abschnitt 8.2).** Ein Teardown-auslösendes Ereignis (Übergang von
-`acceptedCommand.direction` nach `Idle`, Rang-1-bis-7-Verwurf, oder
-bestätigter, gegateter Richtungswechsel) wird nicht zwingend im selben Tick
-physisch vollzogen: Solange diesen Tick `elapsedInWindow <
-activeWindow->scheduledOnMillis` (physisch noch im Einschaltanteil des
-Fensters) **und** die Mindest-Einschaltzeit noch nicht erfüllt ist (siehe
-Rang 9), bleibt `activeWindow` unverändert bestehen und der physische
-Ausgang bleibt ohnehin `Active` (identisch zu dem, was die reine
-Fensterarithmetik für diesen Tick ergäbe). Sobald entweder die
-Mindest-Einschaltzeit erfüllt ist oder der Einschaltanteil des Fensters
-ohnehin bereits vorbei ist, wird der Teardown ausgeführt.
+- **(a) Erststart seit Konstruktion:** `lastPhysicalDeactivationAtMonotonicMillis
+  == std::nullopt`. Es gab seit Konstruktion noch keinen Active -> Idle-
+  Übergang.
+- **(b) Gleichgerichteter Neustart:** `lastPhysicalDeactivationDirection
+  == D` und
+  `deadlineReached(at, lastPhysicalDeactivationAt, minimumOffMillis)`.
+  Eine Totzeit ist bei gleichgerichtetem Neustart nicht erforderlich.
+- **(c) Richtungswechsel:** `lastPhysicalDeactivationDirection != D` und
+  sowohl `deadlineReached(at, lastPhysicalDeactivationAt, minimumOffMillis)`
+  als auch `deadlineReached(at, lastPhysicalDeactivationAt,
+  polarityDeadTimeMillis)`. Die Fristen laufen parallel ab demselben
+  realen Abschaltzeitpunkt; es gilt das spätere Ende, nicht eine Addition.
 
-**Maßgebliche Quote pro Fenster.** Bei jedem Fensterstart-Ereignis
-(Erstarmierung, Richtungswechsel-Freigabe, oder regulärer Übergang in ein
-Folgefenster derselben Richtung) wird `requestedOnMillisExact` aus der Quote
-des zu diesem Zeitpunkt gehaltenen `acceptedCommand` berechnet:
+Die Regel unterscheidet damit Erststart, gleichgerichtete Wiederfreigabe und
+Richtungswechsel unabhängig davon, ob ein `activeWindow`-Snapshot noch
+existiert.
+
+**Fensterstart und Quote.** Ein Fensterstart-Ereignis ist der Erststart, der
+reguläre Beginn eines Folgefensters derselben weiterhin gültigen Richtung oder
+die bestätigte, gegatete Neuanlage eines B-Fensters. Die Quote wird nur an
+diesem Ereignis aus der dann aktuellen, fachlich gültigen
+`acceptedCommand` gelesen:
 
 ```text
-requestedOnMillisExact = clamp(timeQuote, 0.0, 1.0) * switchingWindowMillis   (double, ungerundet)
+requestedOnMillisExact = clamp(timeQuote, 0.0, 1.0) * switchingWindowMillis
 ```
 
-- `requestedOnMillisExact >= minimumOnMillis`: `scheduledOnMillis =
-  min(round_half_up(requestedOnMillisExact), switchingWindowMillis)`
-  (nächste ganze Millisekunde, `.5` aufgerundet, defensiv auf
-  `switchingWindowMillis` begrenzt – siehe Abschnitt 13 für den Beweis,
-  dass diese Grenze durch die Parametervalidierung strukturell nie greifen
-  muss, aber als zweite Verteidigungslinie gegen Rundungs-/
-  Konvertierungsfehler bestehen bleibt, löst R3.7), direkt geplant
-  (`ScheduledWithinWindow`); der Akkumulator wird bei diesem Fensterstart
-  nicht zusätzlich gefüttert.
+- `requestedOnMillisExact >= minimumOnMillis`:
+  `scheduledOnMillis = min(round_half_up(requestedOnMillisExact),
+  switchingWindowMillis)`, Reason `ScheduledWithinWindow`. Der
+  Akkumulator wird an diesem Fensterstart nicht zusätzlich gefüttert.
 - `0 < requestedOnMillisExact < minimumOnMillis`:
-  `accumulator.accumulatedMillis += requestedOnMillisExact` (double,
-  ungerundet; `accumulator.direction` wird dabei auf die aktuelle Richtung
-  gebunden), begrenzt auf `pulseAccumulatorCapMillis`. Erreicht
-  `accumulatedMillis >= minimumOnMillis`: `scheduledOnMillis =
-  minimumOnMillis` (exakt), `accumulatedMillis -= minimumOnMillis` (Rest
-  bleibt erhalten), Reason `MinimumPulseTriggered`. Sonst:
-  `scheduledOnMillis = 0`, Reason `AccumulatingBelowThreshold`.
-- `requestedOnMillisExact == 0`: `scheduledOnMillis = 0`, Reason
-  `NeutralIdle` beziehungsweise `AirLimitBlocked` (Heating/Cooling mit Quote
-  `0` tritt laut #22-Matrix nicht auf).
+  die ungerundete Quote wird an den einzigen richtungsgebundenen Akkumulator
+  gutgeschrieben, maximal bis `pulseAccumulatorCapMillis`. Erreicht
+  das Guthaben `minimumOnMillis`, wird ein vollständiger
+  `minimumOnMillis`-Puls geplant und der Rest abgezogen; andernfalls
+  bleibt `scheduledOnMillis = 0`.
+- `requestedOnMillisExact == 0`: kein Peltierpuls; der Reason ist
+  `NeutralIdle` beziehungsweise `AirLimitBlocked`.
 
-Die neue Quote wird **ausschließlich** bei einem Fensterstart-Ereignis
-gelesen – ein während eines laufenden Fensters neu angenommenes
-`acceptedCommand` mit unveränderter Richtung ändert `activeWindow` nicht
-rückwirkend (Fall 2 der Arming-Regel oben); seine Quote wirkt erst am
-nächsten Fensterstart-Ereignis.
+**Deterministische Impulsplatzierung bei Mindest-Auszeit/Totzeit.** Der
+geplante Puls hat seine natürliche, am Fensterstart eingefrorene Lage
+`[window.startMonotonicMillis,
+window.startMonotonicMillis + scheduledOnMillis)`. Er wird nicht hinter
+das Fensterende verschoben und nicht in ein Folgefenster nachgeholt. Für ein
+nichtnulliges `scheduledOnMillis` gilt:
 
-**Fensterfortschritt (overflow-sicher, O(1)).** Solange `activeWindow`
-besteht und seine Richtung unverändert bleibt (Fall 2 oben), verwendet kein
-Schritt dieser Berechnung eine ungeprüfte Deadline-Addition:
+1. Beim Fensterstart wird die Arming-Regel am exakten
+   `window.startMonotonicMillis` gegen den letzten physischen
+   Deaktivierungsanker geprüft.
+2. Ist die Richtung zu diesem Zeitpunkt wegen `minimumOffMillis` oder
+   `polarityDeadTimeMillis` gesperrt, wird der gesamte Puls dieses
+   Fensters als `DeferredOrLimited` verworfen; die Quote wird weder
+   nachträglich verschoben noch als neues Akkumulatorguthaben blind in das
+   nächste Fenster übertragen.
+3. Ist sie am Fensterstart zulässig, darf der erste Planner-Tick innerhalb des
+   natürlichen On-Intervalls den physischen Puls starten. Bleibt die
+   Aufruferkadenz hinter dem Intervall zurück, wird kein verspäteter Puls
+   außerhalb dieses Intervalls begonnen. Ein physischer Puls endet am
+   natürlichen Intervallende, sofern keine unmittelbare Fail-closed-Abschaltung
+   ihn früher beendet; ein normaler Teardown darf ihn nur bis zum Ende der
+   konkreten Mindest-Einschaltphase halten.
+4. Ist das Arming-Gate exakt am Fensterstart erfüllt, ist der Puls zulässig
+   (Gleichheitsgrenze); ist es erst danach erfüllt, bleibt dieses Fenster
+   verworfen. Damit sind vor, auf und nach dem Minimum-Off-Ende sowie kurze und
+   lange Off-Anteile ohne Nachholung unterscheidbar testbar.
+
+Diese feste Lage ist die gewählte Revision-5-Regel. Sie ist konservativer als
+ein verschobener Puls, verhindert aber jede stille Energieerzeugung aus einer
+Sperrphase und ist O(1) sowie nativ deterministisch.
+
+**Fensterfortschritt (overflow-sicher, O(1)).** Solange ein
+`activeWindow` besteht, verwendet kein Schritt eine ungeprüfte
+Deadline-Addition:
 
 ```cpp
 if (now < activeWindow->startMonotonicMillis) {
-    // Retrograde -> Rang „TimeInvalid" (Abschnitt 8.2 Rang 1-aequivalent)
+    // Retrograde -> TimeInvalid
 }
 elapsed = now - activeWindow->startMonotonicMillis;
 if (elapsed >= switchingWindowMillis) {
-    windowsElapsed = elapsed / switchingWindowMillis;              // ganzzahlig, >= 1
+    windowsElapsed = elapsed / switchingWindowMillis;
     activeWindow->startMonotonicMillis += windowsElapsed * switchingWindowMillis;
-    // Beweis: windowsElapsed * switchingWindowMillis <= elapsed <= now (da elapsed = now - startMonotonicMillis),
-    // also startMonotonicMillis(neu) <= startMonotonicMillis(alt) + elapsed = now.
-    // Die Summe kann folglich nicht ueber einen bereits gueltigen now-Wert hinaus ueberlaufen.
-    // -> genau EIN Fensterstart-Ereignis wird fuer den neuen startMonotonicMillis ausgewertet,
-    //    activeWindow->scheduledOnMillis wird dabei aus dem dann aktuellen acceptedCommand neu gelesen.
+    // windowsElapsed * switchingWindowMillis <= elapsed <= now:
+    // der neue Start bleibt innerhalb des gültigen Zeitraums.
 }
-elapsedInWindow = now - activeWindow->startMonotonicMillis;   // < switchingWindowMillis
+elapsedInWindow = now - activeWindow->startMonotonicMillis;
 ```
 
-Diese Berechnung ist **O(1)** unabhängig davon, wie lange die Pause zwischen
-zwei Ticks war; es gibt keine Iterationsschleife und keine künstliche
-Iterationsobergrenze. **Nicht-Nachhol-Semantik:** Ist `windowsElapsed > 1`
-(ungewöhnlich lange Pause), werden die dazwischenliegenden, nicht
-beobachteten Fenster **nicht** einzeln nachgeholt oder rückwirkend
-akkumuliert – es wird genau ein Fensterstart-Ereignis für das aktuell
-gültige, neu berechnete `startMonotonicMillis` mit der dann aktuellen Quote
-des `acceptedCommand` ausgewertet. Das ist bewusst konservativ: ein langer,
-unbeobachteter Zeitraum darf kein rückwirkend „nachgeholtes" Guthaben
-erzeugen (dieselbe Nicht-Umgehungslogik wie in Abschnitt 7).
+Die Berechnung bleibt O(1); übersprungene Fenster werden nicht einzeln
+nachgeholt. Bei einem normalen Folgefenster derselben Richtung wird genau ein
+neuer Snapshot aus der damals aktuellen Request erzeugt. Wenn jedoch eine
+Gegenrequest B noch unbestätigt ist, wird am Ende des alten Snapshots kein
+neues altes Richtungsfenster erzeugt: der alte Snapshot wird gelöscht, der
+physische Ausgang bleibt Idle, und B erhält in dieser Wartephase kein
+Akkumulatorguthaben. Die Bestätigungsbuchführung darf dabei weiterlaufen;
+Abschnitt 8.5 definiert die spätere B-Neuanlage.
 
-**Physischer Wunschzustand.** Für einen beliebigen Tick innerhalb eines
-Fensters:
+**Physischer Wunschzustand.** Für das natürliche Fensterintervall gilt:
 
 ```text
-desiredActive = activeWindow.has_value() && elapsedInWindow < activeWindow->scheduledOnMillis
+desiredActive = activeWindow.has_value()
+             && elapsedInWindow < activeWindow->scheduledOnMillis
 ```
 
-Dieser Wunschzustand wird durch die Mindestzeit-/Totzeit-/Safety-Schicht
-(Abschnitt 8.2) gefiltert.
-
+`desiredActive` ist kein physischer Freigabebefehl. Der zentrale
+Übergangs-/Prioritätspfad aus Abschnitt 8.2 entscheidet zusätzlich über
+Mindest-On, physische Mindest-Off-/Totzeit, Fail-closed und den Außenlüfter.
 ### 8.2 Prioritätsleiter (Phase B)
 
 ```cpp
 enum class ActuatorPlanStatus : std::uint8_t {
-    Active,        // Heating oder Cooling wird diesen Tick physisch angesteuert
-    Idle,          // Idle wird diesen Tick physisch angesteuert
-    Unconfigured,  // Parameter NoCommissioning
-    InvalidInput,  // strukturell ungueltige Parameter/Evaluation oder TimeInvalid
+    Active,
+    Idle,
+    Unconfigured,
+    InvalidInput,
 };
 
 enum class ActuatorPlanReason : std::uint8_t {
@@ -926,67 +957,61 @@ enum class ActuatorPlanReason : std::uint8_t {
 };
 ```
 
-Jeder Tick wird gegen genau eine dieser Stufen ausgewertet (höchste
-zutreffende Stufe gewinnt; alle Verwurfsangaben in Rang 1–7 sind
-**unbedingt** und **einheitlich**: Akkumulator, `activeWindow`,
-Gegenrichtungskandidat und `acceptedCommand` werden gemeinsam verworfen –
-es gibt **keine** dieser Stufen, die den Akkumulator „unverändert hält",
-während gleichzeitig `acceptedCommand` verworfen wird):
+Die folgende Tabelle ist bewusst in zwei Klassen getrennt. Die unmittelbare
+Fail-closed-Klasse ist nicht durch die normale Mindest-Einschaltzeit
+verzögerbar. Die normale Klasse betrifft ausschließlich eine gültige,
+nicht-faultige Teardown- oder Freigabeentscheidung und darf nur dort
+`MinimumOnTimeHeld` liefern, wo der kanonische Vertrag das ausdrücklich
+zulässt.
 
-| Rang | Bedingung | Status | Reason | Physisch | Verwurf |
-|---:|---|---|---|---|---|
-| 1 | Phase A liefert `admissionOutcome == MalformedCandidate` **oder** `input.safetyGate.status` ist strukturell ungültig **oder** `input.currentCanonicalContext` ist strukturell ungültig | `InvalidInput` | `MalformedInput` | `Idle` sofort | unbedingt: Akkumulator, `activeWindow`, Gegenrichtungskandidat, `acceptedCommand` |
-| 2 | `classifyActuatorPlannerParameters(parameters_) == Unconfigured` | `Unconfigured` | `NoCommissioning` | `Idle` | unbedingt (identisch zu Rang 1) |
-| 2 | `classifyActuatorPlannerParameters(parameters_) == Invalid` | `InvalidInput` | `InvalidConfiguration` | `Idle` | unbedingt (identisch zu Rang 1) |
-| 3 | `safetyGate.status == Unresolved` | `Idle` | `SafetyGateUnresolved` | `Idle` sofort, überstimmt Mindest-Einschaltzeit | unbedingt |
-| 3 | `safetyGate.status == ImmediateStop` | `Idle` | `ExternalSafetyOverride` | `Idle` sofort, überstimmt Mindest-Einschaltzeit | unbedingt |
-| 4 | `state().latchedWatchdogFault.has_value()` | `Idle` | `RequestWatchdogFaultLatched` | `Idle` | bereits leer (Verwurf erfolgte im Trip-Tick, Rang 5) |
-| 5 | laufender Watchdog löst diesen Tick aus (Abschnitt 6.4) | `Idle` | `StaleRequestWatchdog` | `Idle` sofort, überstimmt Mindest-Einschaltzeit | unbedingt; zusätzlich wird `latchedWatchdogFault` gesetzt |
-| 6 | Phase-A-Kandidat vorhanden mit `demandClass == NoValidRequest` (explizite neue `Unavailable`/`InvalidInput`-Evaluation) | `Idle` | `NoValidRequest` | `Idle` sofort, überstimmt Mindest-Einschaltzeit | unbedingt |
-| 7 | `acceptedCommand` vorhanden, aber `contextAtAcceptance != input.currentCanonicalContext` (bei jedem Tick geprüft, nicht nur bei Ankunft) | `Idle` | `StaleRequestContext` | `Idle` sofort | unbedingt |
-| 8 | kein `acceptedCommand` vorhanden (nach den obigen Prüfungen, oder von Anfang an) | `Idle` | `NoValidRequest` | `Idle` | leer (nichts zu verwerfen) |
-| 9 | `activeWindow` vorhanden **und** `elapsedInWindow < activeWindow->scheduledOnMillis` (physisch mid-on-phase) **und** ein Teardown-Ereignis liegt vor (`acceptedCommand.direction != activeWindow->direction`, z. B. weil `acceptedCommand` inzwischen `Idle` ist oder eine bestätigte Gegenrichtung zur Freigabe ansteht) **und** `NOT deadlineReached(now, currentOnPhaseStartedAtMonotonicMillis, minimumOnMillis)` | `Active` (alte Richtung bleibt) | `MinimumOnTimeHeld` | bisherige Richtung bleibt an (identisch zu reiner Fensterarithmetik) | keiner (`activeWindow` bleibt unverändert bestehen, Teardown wird verschoben) |
-| 10 | `activeWindow` leer oder physisch bereits im Aus-Anteil des Fensters, `acceptedCommand.direction` will Heating/Cooling starten, aber die Arming-Regel (8.1) ist noch nicht erfüllt (Mindest-Auszeit und/oder Totzeit noch aktiv, je nach Fall (b)/(c)) | `Idle` | `MinimumOffTimeHeld` bzw. `PolarityDeadTimeHeld` | `Idle` | Teardown des alten `activeWindow`, falls noch vorhanden und Rang 9 nicht mehr greift (8.1) |
-| 11 | Arming-Regel (8.1) für `acceptedCommand.direction` erfüllt **und** — bei einem Richtungswechsel — die Gegenrichtungsbestätigung ist abgeschlossen (8.5) | `Active` | `DirectionChangeApplied` | neue Richtung startet, neues Fenster (8.1) | altes Akkumulator-/Fenster-/Kandidatguthaben bereits verworfen (Teil des vorangegangenen Teardowns) |
-| 12 | `acceptedCommand.direction == Idle`, kein Mindest-Einschaltzeit-Halt aus Rang 9 | `Idle` | `NeutralIdle` bzw. `AirLimitBlocked` | `Idle` | gemäß Abschnitt 7/8.4 |
-| 13 | normale Fensterauswertung (8.1), Akkumulator unter Schwelle | `Idle` | `AccumulatingBelowThreshold` | `Idle` | keiner (Akkumulator wächst) |
-| 13 | normale Fensterauswertung, Mindestimpuls ausgelöst | `Active` | `MinimumPulseTriggered` | Richtung an für `minimumOnMillis` | keiner |
-| 13 | normale Fensterauswertung, direkte Planung | `Active`/`Idle` gemäß `desiredActive` | `ScheduledWithinWindow` | gemäß `desiredActive` | keiner |
+**Klasse I – unmittelbare Fail-closed-Abschaltung:**
 
-**Gegenrichtungsbestätigung während laufender Mindest-Einzeit oder danach
-(löst R3.2):** Solange eine Gegenrichtung noch unbestätigt ist (Abschnitt
-8.5), bleibt sie in Rang 9/10/11 vollständig unsichtbar – `acceptedCommand`
-zeigt zwar bereits die Gegenrichtung, aber Rang 9/10/11 werten weiterhin
-gegen `activeWindow->direction` (die **alte**, noch physisch laufende
-Richtung) aus. Das bereits eingefrorene alte Fenster läuft dabei nach
-seiner eigenen Fensterarithmetik unbeeinflusst weiter (inklusive eigener
-Fenstererneuerung an eigenen Fenstergrenzen), unabhängig davon, ob die
-Mindest-Einschaltzeit der alten Richtung bereits erfüllt ist oder nicht:
-Ein Teardown im Sinne von Rang 9/10 tritt für die alte Richtung **nicht**
-allein deshalb ein, weil eine unbestätigte Gegenrichtung vorliegt – nur ein
-tatsächlich **bestätigter** Richtungswechsel (Abschnitt 8.5) macht
-`acceptedCommand.direction != activeWindow->direction` zu einem
-Teardown-Ereignis im Sinne von Rang 9/10. Damit ist die von R3.2 benannte
-Lücke (Zustand nach Ende der Mindest-Einzeit, Bestätigung noch offen)
-eindeutig aufgelöst: Die alte Richtung läuft in diesem Fall exakt wie in
-Rang 13 beschrieben normal weiter, **nicht** wie in Rang 9 (das wäre nur
-bei tatsächlich anstehendem, aber noch durch Mindest-Einzeit blockiertem
-Teardown zutreffend). `counterDirectionConfirming = true` wird zusätzlich,
-unabhängig vom physisch bestimmenden Rang, als reine Zusatzauskunft im
-Ergebnis gesetzt (siehe unten) – sie ändert die Rang-Auswertung selbst
-nicht, weil die physische Entscheidung durch diese Regel bereits vollständig
-eindeutig ist.
+| Klasse | Bedingung | Status | Reason | Physisch im selben Tick | Zustandswirkung |
+|---|---|---|---|---|---|
+| I-1 | Phase A liefert `MalformedCandidate` oder Safety-Enum, aktueller Kontext oder ein anderer struktureller Tickwert ist ungültig | `InvalidInput` | `MalformedInput` | `Idle`, sofort | Snapshot, Akkumulator, Gegenrichtung, Request und Handoff fail-closed schließen |
+| I-2a | `classifyActuatorPlannerParameters() == Unconfigured` | `Unconfigured` | `NoCommissioning` | `Idle`, sofort | dieselbe vollständige Bereinigung wie I-1 |
+| I-2b | `classifyActuatorPlannerParameters() == Invalid` | `InvalidInput` | `InvalidConfiguration` | `Idle`, sofort | dieselbe vollständige Bereinigung wie I-1 |
+| I-3a | `safetyGate.status == Unresolved` | `Idle` | `SafetyGateUnresolved` | `Idle`, sofort | vollständige Bereinigung; kein Minimum-On-Hold |
+| I-3b | `safetyGate.status == ImmediateStop` | `Idle` | `ExternalSafetyOverride` | `Idle`, sofort | vollständige Bereinigung; kein Minimum-On-Hold |
+| I-4 | `latchedWatchdogFault.has_value()` | `Idle` | `RequestWatchdogFaultLatched` | `Idle`, sofort | keine Wiederfreigabe; Latch bleibt bestehen |
+| I-5 | der laufende Watchdog trippt in diesem Tick | `Idle` | `StaleRequestWatchdog` | `Idle`, sofort | Fault-Evidenz latchen und alle Plan-/Peltierzustände verwerfen |
+| I-6 | eine **neue, explizite** Phase-A-Evaluation klassifiziert als `NoValidRequest` | `Idle` | `NoValidRequest` | `Idle`, sofort | aktuelle Request, Snapshot und Guthaben verwerfen; kein altes Feedbacksubjekt |
+| I-7 | der gehaltene Request-Kontext ist stale/inkompatibel zum aktuellen kanonischen Kontext | `Idle` | `StaleRequestContext` | `Idle`, sofort | aktuelle Request, Snapshot und Guthaben verwerfen |
+| I-8 | eine Referenzzeit ist retrograd oder anderweitig `TimeInvalid` | `InvalidInput` | `TimeInvalid` | `Idle`, sofort | vollständige Bereinigung; keine Frist wird als erfüllt angenommen |
 
-Zusätzlich, unabhängig vom Rang: `counterDirectionConfirming` (Bool im
-Ergebnis) wird gesetzt, wenn ein Gegenrichtungskandidat aktuell beobachtet,
-aber noch nicht bestätigt ist (Abschnitt 8.5) – eine Zusatzauskunft, keine
-eigene Prioritätsstufe.
+Für **jede einzelne** I-Zeile gilt: Wenn der physische Ausgang zuvor Active
+war, wird derselbe Tick als der reale Active -> Idle-Übergang behandelt und
+setzt `lastPhysicalDeactivationAtMonotonicMillis`. Die Lüfterlogik aus
+Abschnitt 10 läuft danach weiter. Kein I-Ereignis wird durch
+`currentOnPhaseStartedAtMonotonicMillis` verzögert. Ein
+Lifecycle-Stop über `forceStop()` ist ebenfalls unmittelbares
+Fail-closed und nutzt denselben physischen Übergangspfad, auch wenn er
+außerhalb dieser Tick-Eingabe erfolgt.
 
-`RequiredSensorUnavailable` aus früheren Revisionen entfällt vollständig: Ein
-fehlender/ungültiger Pflichtsensor erscheint ausschließlich als
-`ActuatorDemandClass::NoValidRequest` und landet damit in Rang 6 (bei
-expliziter neuer Evaluation) oder Rang 8 (kein aktueller Bezug), ohne mit
-`InvalidConfiguration` oder `TimeInvalid` vermischt zu werden.
+**Klasse N – normale, nicht-faultige Teardown- und Freigabewünsche:**
+
+| Klasse | Bedingung | Status/Reason | Physisch | Zustandswirkung |
+|---|---|---|---|---|
+| N-1 | gültiges `NeutralOff`, gültiges `AirLimitBlockedOff` oder bestätigter normaler Richtungswechsel fordert Teardown, physischer Puls ist noch in seiner Mindest-On-Phase | `Active / MinimumOnTimeHeld` | alte Richtung bleibt bis zum Ende dieser konkreten physischen Einschaltphase | Snapshot/Request bleiben nur so lange erhalten; kein neues Guthaben |
+| N-2 | derselbe normale Teardown nach erfüllter Mindest-On oder während physischem Idle | `Idle / NeutralIdle` beziehungsweise `AirLimitBlocked` | Active -> Idle, falls erforderlich | Snapshot, Request, Akkumulator und Gegenrichtung werden verworfen |
+| N-3 | ein gültiger Heating/Cooling-Puls soll aus Idle beginnen, aber der physische Deaktivierungsanker sperrt ihn | `Idle / MinimumOffTimeHeld` beziehungsweise `PolarityDeadTimeHeld` | Idle | der aktuelle Fensterpuls ist nach 8.1 verworfen; kein Nachholen |
+| N-4 | gültige normale Fensterauswertung ohne Teardown | `Active`/`Idle` mit `ScheduledWithinWindow`, `MinimumPulseTriggered` oder `AccumulatingBelowThreshold` | gemäß natürlichem Snapshot-Intervall | nur reguläre Fenster-/Akkumulatorfortschreibung |
+
+N-1 ist die einzige normale Mindest-On-Halteentscheidung. Sie gilt nicht für
+I-1 bis I-8. Ein Window-Off-Anteil ist kein Teardown des Planungssnapshots:
+Er schaltet den physischen Ausgang regulär Idle und datiert den physischen
+Mindest-Off-Anker; der Snapshot darf für ein Folgefenster bestehen bleiben.
+Eine unbestätigte Gegenrichtung ist ebenfalls kein N-1-Teardown: Sie darf den
+aktuellen alten Snapshot beenden, erzeugt danach aber kein neues altes Fenster
+(siehe Abschnitt 8.5).
+
+`counterDirectionConfirming` bleibt eine Zusatzauskunft über einen
+laufenden, noch nicht bestätigten Kandidaten. Sie ist keine dritte
+Prioritätsklasse und darf keine physische Freigabe auslösen.
+
+`NoValidRequest` aus einem neuen #22-Ergebnis steht ausschließlich in
+I-6. Ein Tick ohne neue Evaluation ist kein neues Lebenszeichen und darf eine
+bestehende physische Freigabe nicht allein deshalb abschalten.
 
 ### 8.3 Overflow-sichere Zeitarithmetik
 
@@ -1006,12 +1031,12 @@ elapsed-time-Vergleiche:
 Ein `now < since`-Fall ist laut `ITimeSource`-Vertrag ausgeschlossen, wird
 aber defensiv abgefangen: Tritt er an einer der Referenzen
 (`currentOnPhaseStartedAtMonotonicMillis`,
-`directionDeactivatedAtMonotonicMillis`, `activeWindow->startMonotonicMillis`,
+`lastPhysicalDeactivationAtMonotonicMillis`, `activeWindow->startMonotonicMillis`,
 `counterDirectionObservedSinceMonotonicMillis`,
 `lastNewRequestAcceptedAtMonotonicMillis`,
 `outerFanDeactivationRequestedAtMonotonicMillis`/
 `innerFanDeactivationRequestedAtMonotonicMillis`) auf, wird dies als
-`TimeInvalid` (Rang-1-äquivalent, `InvalidInput`, unbedingter Verwurf)
+`TimeInvalid` (Klasse I-8, `InvalidInput`, unbedingter Verwurf)
 eingestuft. Es gibt keine Stelle im gesamten Vertrag, an der eine Deadline
 durch `start + dauer` berechnet und direkt mit `now` verglichen wird; der
 Lüfter-Nachlauf merkt sich `fanDeactivationRequestedAtMonotonicMillis` und
@@ -1035,31 +1060,22 @@ Gegenrichtungskandidat hat **keinen** eigenen Akkumulator und akkumuliert
 laut Abschnitt 8.2 (Gegenrichtungsbestätigung) zu keinem Zeitpunkt eigenes
 Guthaben, solange er nicht bestätigt ist.
 
-`accumulator` und `activeWindow` werden **gemeinsam** verworfen (identischer
-Trigger-Satz, keine getrennte Buchführung mehr nötig) bei:
+`accumulator` und `activeWindow` werden gemeinsam verworfen bei
+jedem einzelnen unmittelbaren Fail-closed-Ereignis I-1 bis I-8, beim
+tatsächlichen Vollzug eines normalen Teardowns N-2 und bei
+`forceStop()`. Der normale physische Window-Off-Anteil ist kein
+`activeWindow`-Teardown: Der Snapshot und sein Akkumulator bleiben
+für ein zulässiges Folgefenster erhalten, während die physische
+Deaktivierungszeitbasis neu gesetzt wird.
 
-- jedem Rang-1-bis-7-Ereignis (Abschnitt 8.2);
-- dem tatsächlichen Vollzug eines Teardowns gemäß Rang 9/10 (Abschnitt 8.1/8.2)
-  – also sobald ein anstehender Teardown nicht mehr durch die
-  Mindest-Einschaltzeit blockiert ist;
-- `forceStop()` (Abschnitt 11).
-
-`counterDirectionCandidate` wird **zusätzlich und eigenständig** verworfen
-bei jeder Unterbrechung der Bestätigung (Abschnitt 8.5) – unabhängig davon,
-ob `activeWindow` zum selben Zeitpunkt ebenfalls verworfen wird. Insbesondere
-gilt: **Der Teardown der alten Richtung bei einem bestätigten
-Richtungswechsel (Rang 9/10-Ende, Abschnitt 8.1 Fall (c)) verwirft
-`counterDirectionCandidate` als Teil desselben Übergangs.** Nach diesem
-Teardown ist die weitere Freigabe der neuen Richtung ausschließlich durch
-die allgemeine Arming-Regel (8.1) bestimmt – ein separat „gemerkter",
-bereits bestätigter `counterDirectionCandidate` wird **nicht** über den
-Teardown hinaus als Freigabegrundlage mitgeführt; fällt die
-Gegenanforderung während Bestätigung oder während der anschließenden
-Mindest-Auszeit/Totzeit weg (`acceptedCommand.direction` wechselt zurück
-oder wird `Idle`), findet keine Freigabe „aus alter Evidenz" statt, weil die
-Arming-Regel `acceptedCommand.direction == D` **live** zum Zeitpunkt der
-tatsächlichen Freigabe verlangt (löst den in R3.2 benannten
-Wegfall-Fall).
+Bei einer unbestätigten Gegenrequest am alten Fensterende werden Snapshot und
+altes Guthaben verworfen, aber der Gegenrichtungskandidat bleibt erhalten,
+solange B gültig und ununterbrochen aktuell ist. `counterDirectionCandidate`,
+`counterDirectionConfirmed` und der Beobachtungszeitpunkt werden
+zusätzlich bei jeder Unterbrechung der Bestätigung, bei I-1 bis I-8, bei
+erfolgreicher B-Übernahme und bei `forceStop()` verworfen. So kann die
+Bestätigung über mehrere alte Fenstergrenzen weiterlaufen, ohne alte Energie
+oder ein zweites Guthaben mitzunehmen.
 
 Diese gemeinsame Verwurfsregel schließt sowohl den in `ACTUATOR_TIMING.md`
 explizit genannten Fall („Verlassen der temperaturgeregelten Phase, Stop,
@@ -1080,36 +1096,66 @@ nicht.
 
 ### 8.5 Bestätigter Richtungswechsel
 
-Solange `activeWindow` besteht (`armedDirection() != Idle`) und
-`acceptedCommand.direction` die entgegengesetzte Richtung anzeigt, mit
-Klasse `NormalDemand` oder `AirLimitReducedDemand` und `timeQuote >=
-counterDirectionConfirmationQuoteThreshold`: Falls `counterDirectionCandidate`
-leer oder `!=` dieser Gegenrichtung ist, wird ein neuer Kandidat mit
-`counterDirectionObservedSinceMonotonicMillis = now` gestartet
-(`counterDirectionConfirming = true`). Jede Unterbrechung (Quote fällt unter
-die Schwelle, Richtung wechselt zurück, wird `NoValidRequest`/`NeutralOff`/
-`AirLimitBlockedOff`, oder eine der Rang-1-bis-7-Bedingungen tritt ein)
-setzt `counterDirectionCandidate` sofort zurück – die alte Richtung bleibt
-davon unberührt, sofern sie nicht selbst durch dasselbe Ereignis betroffen
-ist. Erst wenn `deadlineReached(now,
-counterDirectionObservedSinceMonotonicMillis,
-counterDirectionConfirmationDurationMillis)` **ununterbrochen** erreicht
-wird, gilt die Gegenrichtung als bestätigt: Ab diesem Tick zeigt Rang 9/10
-`acceptedCommand.direction != activeWindow->direction` als Teardown-Ereignis
-für die alte Richtung an (siehe Abschnitt 8.2); die alte Richtung wird –
-vorbehaltlich einer noch laufenden eigenen Mindest-Einschaltzeit (Rang 9) –
-`Idle`; danach greift Rang 10 (Mindest-Auszeit/Totzeit, Fall (c) der
-Arming-Regel), bevor Rang 11 die neue Richtung tatsächlich freigibt.
+Eine gültige Gegenrequest B wird als Gegenrichtungskandidat geführt, wenn sie
+eine andere Richtung als der aktuell geplante Snapshot oder die aktuell
+physisch gehaltene Richtung fordert, `NormalDemand` oder
+`AirLimitReducedDemand` ist und
+`timeQuote >= counterDirectionConfirmationQuoteThreshold` gilt. Falls
+`counterDirectionCandidate` leer oder eine andere Richtung ist, beginnt
+die ununterbrochene Beobachtung mit
+`counterDirectionObservedSinceMonotonicMillis = now`. Quote,
+Kontext, Safety und Request-Identität werden in jedem Tick erneut geprüft.
 
-Vor Ablauf der Mindest-Einschaltzeit der alten Richtung bleibt eine
-Gegenanforderung – bestätigt oder nicht – wirkungslos auf die physische
-Ausgabe (Rang 9 hat Vorrang vor Rang 10/11, Abschnitt 8.2); der
-Bestätigungstimer läuft davon unbeeinflusst weiter, solange die
-Gegenanforderung selbst ununterbrochen bestehen bleibt.
+Bis zur Bestätigung gilt:
+
+- Das bereits laufende alte `activeWindow` darf nur seinen am
+  Fensterstart eingefrorenen aktuellen Puls beenden. Eine am Fensterende
+  eintreffende oder bereits gehaltene B-Request erzeugt **kein** neues altes
+  Richtungsfenster; das alte Snapshot-/Akkumulatorguthaben wird verworfen und
+  der physische Ausgang bleibt Idle.
+- B sammelt in dieser Wartephase kein Akkumulatorguthaben und erhält keine
+  physische Wirkung. Auch über zwei oder mehr alte Fenstergrenzen wird keine
+  Quote von B als Heating-/Cooling-Energie der alten Richtung gelesen.
+- Sobald der alte Snapshot gelöscht ist, bleibt der Gegenrichtungskandidat
+  selbst die einzige fachliche Warteidentität: Bei den zwei möglichen
+  Peltier-Richtungen ist die alte Richtung eindeutig die Gegenrichtung zu B.
+  Es wird dafür weder ein zweiter alter Request-/Quote-Snapshot noch ein
+  zweiter Akkumulator gespeichert.
+- Die Bestätigungsbuchführung darf nach dem alten Fensterende weiterlaufen.
+  Fällt B unter die Schwelle, wechselt zurück, wird `NeutralOff`/
+  `AirLimitBlockedOff` oder trifft ein unmittelbares Fail-closed-
+  Ereignis ein, werden Kandidat und Bestätigungsstatus sofort verworfen.
+
+Erst wenn
+`deadlineReached(now, counterDirectionObservedSinceMonotonicMillis,
+counterDirectionConfirmationDurationMillis)` ununterbrochen erfüllt ist,
+wird `counterDirectionConfirmed = true`. Der alte Snapshot bleibt
+dabei bereits verworfen. Wenn B in diesem Moment noch die aktuelle,
+vertrauenswürdige Request ist, wird sie **neu** aus genau dieser aktuellen
+B-Quote geplant, sobald `minimumOffMillis` und – beim echten
+Richtungswechsel – `polarityDeadTimeMillis` ab dem realen alten
+Active -> Idle erfüllt sind. Ist eine dieser Fristen noch aktiv, bleibt der
+Ausgang Idle; die bestätigte B-Buchführung wird nicht als Energie oder
+Akkumulatorguthaben ausgeführt und wartet nur auf die nächste zulässige
+Neuanlage.
+
+Sobald B physisch übernommen und ein neues `activeWindow` erzeugt ist,
+werden `counterDirectionCandidate`, `counterDirectionConfirmed`
+und der Beobachtungszeitpunkt gelöscht. B wird dann als aktueller Request-
+Snapshot behandelt; eine spätere Quote-Änderung wirkt erst am nächsten
+Fensterstart. Eine neue, höhere B-Sequence ersetzt die fachlich aktuelle
+B-Request während der Bestätigung, erzeugt aber keine alte Energie. Spiegelbildlich
+gilt alles für Heating -> Cooling und Cooling -> Heating.
+
+Vor Ablauf der Mindest-Einschaltzeit der alten physischen Richtung bleibt eine
+Gegenanforderung – bestätigt oder nicht – wirkungslos auf die physische Ausgabe.
+Ein unmittelbares Fail-closed-Ereignis aus Klasse I beendet die alte Richtung
+  dagegen sofort; ein gültiger normaler Teardown darf sie nur nach dem
+  Mindest-On-Vertrag beenden.
 
 ### 8.6 Watchdog-Fault-Evidenz
 
-Löst der laufende Watchdog aus (Rang 5), wird
+Löst der laufende Watchdog aus (Klasse I-5), wird
 
 ```cpp
 state_.latchedWatchdogFault = ActuatorWatchdogFaultEvidence{
@@ -1118,7 +1164,7 @@ state_.latchedWatchdogFault = ActuatorWatchdogFaultEvidence{
 };
 ```
 
-gesetzt. Solange `latchedWatchdogFault.has_value()`, bleibt Rang 4 in jedem
+gesetzt. Solange `latchedWatchdogFault.has_value()`, bleibt Klasse I-4 in jedem
 weiteren Tick maßgeblich (`Idle`, `RequestWatchdogFaultLatched`) –
 **unabhängig davon**, was danach in Phase A geschieht: Eine strukturell
 einwandfreie, kontextfrische, an sich akzeptable neue `newEvaluation` wird
@@ -1126,9 +1172,8 @@ in Phase A weiterhin für Sequenz-/Watchdog-Bücher berücksichtigt
 (`admissionOutcome` kann `Accepted` sein, `lastAcceptedSequence`/
 `lastNewRequestAcceptedAtMonotonicMillis` werden aktualisiert, und –
 sofern Heating/Cooling – `pendingFeedback` wird gemäß Abschnitt 9 ebenfalls
-aktualisiert), öffnet aber **keine** neue physische Freigabe, solange Rang 4
-vor Rang 6/8/9 usw. ausgewertet wird.
-
+aktualisiert), öffnet aber **keine** neue physische Freigabe, solange Klasse I-4
+vor den weiteren Klassen ausgewertet wird.
 ```cpp
 void applyExternalWatchdogFaultReset(std::uint64_t nowMonotonicMillis);
 ```
@@ -1160,209 +1205,219 @@ die Aktorsperre). `#23` ruft diese Methode an **keiner** Stelle selbst auf:
 
 ## 9. Feedback-Dispositionsmatrix
 
-`ActuatorPlanTickResult::feedbackForAcceptedRequest` ist
-`std::optional<PreviousControlRequestFeedback>` und wird aus
-`state().pendingFeedback` abgeleitet. Grundlage ist wörtlich
+Die fachliche Grundlage ist wörtlich
 `docs/tasks/issue-22-pi-control-air-limits-plan.md` Abschnitt 8.2
-„Feedbackfenster": „Nur eine unmittelbar vorherige aktive
-`Heating`-/`Cooling`-ControlRequest öffnet ein Feedbackfenster", „vorhandenes
-Feedback muss exakt die letzte Request-Sequence referenzieren", „fehlendes
-Feedback ... wird als konservatives Einfrieren behandelt und das Fenster
-geschlossen", „Feedback für eine vorherige gültige OFF-ControlRequest ist
-unzulässig ... OFF benötigt kein Anti-Windup-Feedback".
+„Feedbackfenster": Nur eine unmittelbar vorherige aktive
+`Heating`-/`Cooling`-ControlRequest öffnet ein Feedbackfenster,
+vorhandenes Feedback muss exakt deren Sequence referenzieren, fehlendes oder
+fremdes Feedback friert #22 konservativ ein, und eine gültige OFF-Request
+benötigt kein Anti-Windup-Feedback.
 
-### 9.1 Entkopplung von Feedback-Subjekt und physischer Governance (löst R3.5)
+### 9.1 Entkopplung von Feedback-Subjekt und physischer Governance
 
-`pendingFeedback` (Abschnitt 6.0) ist ein von `acceptedCommand`
-**unabhängiges** Feld. `acceptedCommand` bestimmt ausschließlich, welche
-Richtung/Quote physisch geplant wird (Abschnitt 8). `pendingFeedback`
-bestimmt ausschließlich, welches `PreviousControlRequestFeedback` #22 im
-nächsten Aufruf erhält. Beide Felder werden in Phase A oft gemeinsam,
-aber nicht immer identisch aktualisiert: Eine neue, höhere aktive Request B,
-die bei Admission vollständig abgelehnt wird (`StaleOnArrivalWatchdog`/
-`StaleOnArrivalContext`), erzeugt ein `Rejected`-Feedbackfenster für B, ohne
-`acceptedCommand` zu berühren (Abschnitt 6.2 Schritt 4).
+`pendingFeedback` ist ein von `acceptedCommand` unabhängiges Planner-
+Feld. `acceptedCommand` bestimmt ausschließlich die fachliche
+Planungsrequest; `pendingFeedback` bestimmt ausschließlich das Feedback-
+Subjekt für #22. Das Planner-Feld ist keine Caller-API. Änderungen daran werden
+als `PendingControlRequestFeedbackUpdate` mit einer einmaligen internen
+Update-Revision an die Application-Grenze ausgeliefert.
 
-### 9.2 Ereignisgetriebene Update-Regel (löst R3.4, exhaustiv)
+Der Orchestrator besitzt dort
+`std::optional<PreviousControlRequestFeedback>
+pendingControlRequestFeedback_`. Nach jedem Planner-Tick übernimmt er nur ein
+tatsächlich neues Update. Er ersetzt damit keinen älteren Wert durch einen
+unveränderten Replay. Ein Update mit `std::nullopt` löscht den
+Application-Slot.
 
-Bei jeder Phase-A-Verarbeitung einer neu beobachteten (nicht-duplizierten)
-Evaluation:
+### 9.2 Ereignisgetriebene Update-Regel
 
-| Beobachtetes Ereignis | Wirkung auf `pendingFeedback` |
-|---|---|
-| `newEvaluation == std::nullopt` | unverändert |
-| `DuplicateOrOldSequence` (Replay) | unverändert – ein Replay darf ein bereits korrektes Fenster nicht zurückdrehen |
-| `MalformedCandidate` | unverändert (siehe unten für die einzige Ausnahme über den allgemeinen Verwurf-Trigger) |
-| `demandClass == NoValidRequest` | `= std::nullopt` (kein Feedbackfenster) |
-| `demandClass ∈ {NeutralOff, AirLimitBlockedOff}` (OFF-Richtung, Admission besteht) | `= std::nullopt` (OFF benötigt kein Anti-Windup-Feedback, schließt ein offenes Fenster) |
-| `demandClass ∈ {NormalDemand, AirLimitReducedDemand}`, aber `StaleOnArrivalWatchdog`/`StaleOnArrivalContext` | `= {sequence, Rejected}` – vollständige Nichtannahme, `acceptedCommand` bleibt unverändert |
-| `demandClass ∈ {NormalDemand, AirLimitReducedDemand}`, Admission vollständig bestanden | `= {sequence, Rejected}` als Startwert, danach jeden Tick live nachgeführt (siehe 9.3), solange dieser Kandidat weiterhin `acceptedCommand` ist |
+Bei jeder Phase-A-Verarbeitung einer neu beobachteten Evaluation gilt:
 
-Zusätzlich, **unabhängig von einer neuen Evaluation**, bei jedem Tick, in dem
-`acceptedCommand` durch einen unbedingten Verwurf (Rang 1/2/3/5/7,
-Abschnitt 8.2) oder durch den tatsächlichen Vollzug eines Teardowns (Rang
-9/10-Ende, Abschnitt 8.1) verworfen wird, **und** `pendingFeedback.has_value()
-&& pendingFeedback->sequence == acceptedCommand->sequence` (also
-`pendingFeedback` genau das gerade verworfene `acceptedCommand` verfolgt):
+| Beobachtetes Ereignis | Wirkung auf Planner-`pendingFeedback` | Handoff-Update |
+|---|---|---|
+| `newEvaluation == std::nullopt` | unverändert | kein Update |
+| `DuplicateOrOldSequence` | unverändert | kein Update |
+| `MalformedCandidate` | `std::nullopt`, weil die Identität unsicher ist | geändert auf `nullopt` |
+| `NoValidRequest` | `std::nullopt` | geändert auf `nullopt` |
+| gültiges `NeutralOff` oder `AirLimitBlockedOff` | `std::nullopt` | geändert auf `nullopt` |
+| gültige aktive Request, aber `StaleOnArrivalWatchdog` oder `StaleOnArrivalContext` | `{sequence, Rejected}` | geändert auf genau diese vertrauenswürdige Sequence |
+| gültige aktive Request, Admission bestanden | zunächst `{sequence, Rejected}`, danach physisch live nachgeführt | geändert auf genau diese Sequence |
 
-```text
-pendingFeedback->disposition = Rejected   (sequence bleibt erhalten)
-```
+Bei jeder Änderung der Disposition wird ein Update markiert, auch wenn die
+neue Disposition wieder `Rejected` lautet. Ein identischer Wert wird
+nicht erneut ausgeliefert.
 
-Diese Regel gilt **nicht** für den Übergang nach `Idle` durch eine neu
-angenommene OFF-/`NoValidRequest`-Request (dort greift bereits die
-`nullopt`-Zeile der obigen Tabelle) und **nicht** für `forceStop()` (siehe
-9.4). Sie stellt sicher, dass ein bereits als `Rejected` erkanntes Subjekt
-zwischen zwei `evaluateTemperatureControl()`-Aufrufen nicht durch einen
-späteren Tick verlorengeht, selbst wenn der Aktorplaner deutlich häufiger
-tickt als #22 evaluiert (löst R3.6).
-
-Ein `MalformedCandidate`-Tick löscht `pendingFeedback` **nicht** pauschal:
-Ein bereits gültig ermitteltes `Rejected` für ein anderes, älteres Subjekt
-bleibt bestehen, wenn Rang 1 dieses Ticks ein *anderes* `acceptedCommand`
-unbedingt verwirft. Nur falls `pendingFeedback` exakt dieses soeben
-verworfene `acceptedCommand` verfolgt, greift die obige „Rejected"-Regel
-auch hier.
+Wird ein vertrauenswürdig bekanntes `acceptedCommand` durch ein
+unbedingtes I-Ereignis oder den tatsächlichen Vollzug eines normalen Teardowns
+verworfen und verfolgt `pendingFeedback` genau dessen Sequence, wird die
+Disposition `Rejected` und als Update markiert. Das gilt nicht für
+eine neue OFF-/`NoValidRequest`-Evaluation, die das Feedbackfenster
+bereits auf `nullopt` schließt. Ein `MalformedCandidate` hat
+keine vertrauenswürdige Sequence und löscht deshalb das gesamte Handoff; ein
+älteres Subjekt wird nie als vermeintliches Feedback für diese neue Evaluation
+weitergereicht. Ein Replay darf kein bestehendes Handoff zurückdrehen.
 
 ### 9.3 Live-Nachführung während laufender Governance
 
-Für jeden Tick, in dem `pendingFeedback.has_value() &&
-acceptedCommand.has_value() && pendingFeedback->sequence ==
-acceptedCommand->sequence` (das Feedback-Subjekt ist die aktuell
-maßgebliche Request):
+Für ein Handoff, dessen Sequence noch dem gehaltenen aktiven Command
+entspricht, wird die Disposition pro relevantem Planner-Tick aus dem
+**physischen** Ausgang abgeleitet:
 
 ```text
-acceptedCommand->direction != armedDirection()
-    -> disposition = DeferredOrLimited
-       (deckt: Mindest-Einschaltzeit der alten Richtung noch aktiv (Rang 9),
-       Mindest-Auszeit/Totzeit (Rang 10), unbestaetigte oder noch nicht
-       freigegebene Gegenrichtungsbestaetigung (Abschnitt 8.5) – in all
-       diesen Faellen fuehrt eine ANDERE Richtung physisch aus als die,
-       die acceptedCommand fordert)
-
-acceptedCommand->direction == armedDirection()
-    -> physisch Active diesen Tick (ScheduledWithinWindow/
-       MinimumPulseTriggered/DirectionChangeApplied)
-           -> disposition = NoIntegratorConstraint
-       physisch Idle, AccumulatingBelowThreshold
-           -> disposition = DeferredOrLimited
+pendingFeedback.sequence == acceptedCommand.sequence
+  && physicalDirection() == acceptedCommand.direction
+  && physical output is Active in that direction
+      -> NoIntegratorConstraint
+otherwise while acceptedCommand is an active Heating/Cooling request
+      -> DeferredOrLimited
 ```
 
-Diese eine, richtungsunabhängige Regel ersetzt die ranggebundene Tabelle aus
-Revision 3 und macht die Disposition auch für den in R3.2 benannten
-Zwischenzustand (Gegenrichtung wartet auf Bestätigung, alte Richtung läuft
-nach eigener Fensterlogik weiter) eindeutig: `armedDirection()` bleibt in
-diesem Zustand die alte Richtung, `acceptedCommand->direction` bereits die
-neue – die Bedingung der ersten Zeile trifft zu, Disposition ist
-`DeferredOrLimited`, exakt wie von R3.2 gefordert.
+Damit sind Mindest-On-Hold, Mindest-Off, Polaritätstotzeit,
+unbestätigte Gegenrichtungsbestätigung, Window-Off-Idle und ein verpasster
+Fensterpuls konservativ `DeferredOrLimited`. Nur der tatsächlich
+aktive
+physische Ausgang derselben Richtung erhält `NoIntegratorConstraint`.
+Eine bestätigte B-Request bleibt bis zur physischen Übernahme deferred, auch
+wenn der alte Snapshot bereits beendet und mehrere Fenstergrenzen vergangen
+sind.
 
-### 9.4 `forceStop()` und Lifecycle-Grenzen
+### 9.4 Single-use-Handoff und Lifecycle
 
-`forceStop()` (Abschnitt 11) setzt `pendingFeedback = std::nullopt`
-unbedingt – unabhängig davon, welchen Wert es zuvor trug. Dies ist bewusst
-symmetrisch zu #22s eigenem Verhalten an denselben Lifecycle-Grenzen: Jede
-der sieben `TemperatureControlLifecycleBoundary`-Werte löst über
-`resetTemperatureControlAtBoundary()` bereits einen vollständigen Reset des
-#22-eigenen Integrator-/Anker-Zustands aus, sodass #22 nach einer solchen
-Grenze ohnehin kein Feedback zu einer Request aus der vorherigen
-Laufphase mehr erwartet.
+`tickActuatorPlan()` ruft Planner und Sink-Driver je einmal auf und nimmt
+danach genau einmal `takeFeedbackUpdate()`. Nur die kanonische
+Application-Grenze schreibt den Update-Wert in ihren internen Slot.
 
-### 9.5 `ActuatorAdmissionOutcome` als eigener, von `ActuatorPlanReason` getrennter Diagnosevertrag
+`evaluateTemperatureControl()` übernimmt den Slot in eine lokale
+`std::optional<PreviousControlRequestFeedback>` und löscht den
+internen Slot **vor** dem #22-Aufruf. Sie injiziert diese lokale Kopie genau
+einmal in `TemperatureControlInput`. Die öffentliche Struktur
+`TemperatureControlEvaluationEvidence` enthält danach nur Zeit- und
+Sensorsignale; ein Caller kann kein alternatives Feedbacksubjekt mehr
+einschleusen und muss kein Planner-Ergebnis kopieren.
+
+Mehrere Planner-Ticks zwischen zwei #22-Aufrufen sind erlaubt: ein neues
+fachlich gültiges Update ersetzt den noch nicht konsumierten Slot, ein
+unverändertes Update wird nicht erneut ausgeliefert. Ein zweiter
+`evaluateTemperatureControl()`-Aufruf ohne neues Update erhält
+`nullopt`; #22 friert gemäß seinem Vertrag ein. Die nachfolgende neue
+#22-Evaluation wird als Ergebnis an einen späteren Planner-Tick übergeben, ohne
+manuelle Feedbackkopie im Caller.
+
+An jeder erfolgreich committed Lifecycle-Grenze ruft der Orchestrator den
+gemeinsamen Planner-Stop auf und löscht den Application-Slot. Ein fehlgeschlagener
+Persistence-Commit verändert weder Planner noch Slot.
+
+### 9.5 `ActuatorAdmissionOutcome` als separater Diagnosevertrag
 
 ```cpp
 enum class ActuatorAdmissionOutcome : std::uint8_t {
-    NoCandidate,             // newEvaluation war std::nullopt
-    Accepted,                 // Kandidat hat alle Pruefungen bestanden
-    MalformedCandidate,       // strukturell ungueltig
-    DuplicateOrOldSequence,   // Sequenz <= Hochwasserzeichen
-    StaleOnArrivalWatchdog,   // createdAtMonotonicMillis bereits zu alt
-    StaleOnArrivalContext,    // Kontext bei Ankunft bereits fremd
+    NoCandidate,
+    Accepted,
+    MalformedCandidate,
+    DuplicateOrOldSequence,
+    StaleOnArrivalWatchdog,
+    StaleOnArrivalContext,
 };
 ```
 
-`ActuatorPlanTickResult::admissionOutcome` trägt dieses Ergebnis getrennt von
-`reason` (welches die physische Tick-Entscheidung beschreibt) und getrennt
-von `pendingFeedback`/`feedbackForAcceptedRequest` (welches das #22-Feedback
-beschreibt). Alle drei Felder beantworten unterschiedliche Fragen: „Was
-geschah mit dem gerade eingetroffenen Kandidaten?", „Warum ist der physische
-Ausgang dieses Ticks so, wie er ist?" und „Welches Feedback erhält #22 als
-nächstes?".
+`ActuatorPlanTickResult::admissionOutcome` bleibt von der physischen
+`reason`-Entscheidung und dem internen Feedback-Handoff getrennt.
+Die drei Antworten sind: Was geschah mit dem neuen Kandidaten? Warum ist der
+physische Ausgang so? Und welches Feedback liegt intern einmalig für #22
+bereit?
 
-### 9.6 n/n+1/n+2-Beispiel (Heating -> Cooling, inklusive Admission-Reject-Fall)
+### 9.6 n/n+1/n+2-Beispiel ohne Caller-Ritual
 
 ```text
-#22 Evaluation n   -> Heating Request A (sequence=A)
-   Phase A: neu, alle Pruefungen bestanden -> acceptedCommand = A,
-            pendingFeedback = {A, Rejected} (vorlaeufig)
-   Rang 11 (Fall a oder b): activeWindow armiert fuer Heating
-   pendingFeedback lebt fortan mit: acceptedCommand.direction(Heating) ==
-     armedDirection()(Heating) -> disposition folgt dem physischen Rang
-     (z. B. ScheduledWithinWindow -> NoIntegratorConstraint)
-   -> vor #22-Aufruf n+1 liegt pendingFeedback = {A, NoIntegratorConstraint}
-      (oder DeferredOrLimited, je nach Rang dieses Ticks)
+#22 Evaluation n -> Heating Request A
+  -> Caller gibt nur das erzeugte Result an tickActuatorPlan(newEvaluation)
+  -> Planner erzeugt ein internes Update {A, Rejected}; Orchestrator speichert es
 
-#22 Evaluation n+1 -> Cooling Request B (sequence=B > A)
-   Phase A: neu, alle Pruefungen bestanden -> acceptedCommand = B (sofort,
-            unabhaengig vom physischen Zustand), pendingFeedback = {B, Rejected}
-            (vorlaeufig, ersetzt den A-Eintrag)
-   armedDirection() bleibt Heating (activeWindow der alten Richtung laeuft
-     unveraendert weiter, Abschnitt 8.2 Gegenrichtungsbestaetigung)
-   acceptedCommand.direction(Cooling) != armedDirection()(Heating)
-     -> pendingFeedback.disposition = DeferredOrLimited, jeden Tick live
-        nachgefuehrt, bis B entweder physisch uebernimmt (armedDirection()
-        wird Cooling) oder durch eine neuere Request C ersetzt wird
-   -> vor #22-Aufruf n+2 erhaelt #22 das zuletzt berechnete Feedback fuer B
-      (DeferredOrLimited), nicht fuer A
+Mehrere Planner-Ticks ohne neue Evaluation
+  -> A bleibt unverändert, Disposition kann bei realer Governance einmalig
+     auf DeferredOrLimited oder NoIntegratorConstraint aktualisiert werden
+  -> nur der zuletzt gültige Update-Stand bleibt im Application-Slot
 
-Admission-Reject-Variante (loest R3.5 explizit):
-#22 Evaluation n+1 -> Cooling Request B, aber B ist StaleOnArrivalContext
-   Phase A: pendingFeedback = {B, Rejected}, acceptedCommand bleibt A
-   -> vor #22-Aufruf n+2 erhaelt #22 Rejected fuer B, NICHT fuer A - #22
-      erwartet exakt dieses Feedback fuer B (seine zuletzt erzeugte aktive
-      Request) und wuerde ein Feedback fuer A als fremd/alt einstufen
+evaluateTemperatureControl() für Evaluation n+1
+  -> Orchestrator nimmt {A, <letzte Disposition>} einmalig und löscht den Slot
+  -> #22 erhält genau A; kein Caller kopiert ein Planner-Feedbackfeld
+
+#22 Evaluation n+1 -> Cooling Request B
+  -> Ergebnis wird an einen späteren Planner-Tick gegeben
+  -> B wird als aktuelle Request angenommen, aber nicht sofort als physische
+     Gegenrichtung ausgeführt
+  -> während mindestens zwei alten Fenstergrenzen: altes A-Fenster darf nur
+     enden; kein neues A-Fenster aus B, kein B-Guthaben
+  -> nach bestätigter B-Anforderung und erfüllter Arming-Regel wird B aus
+     der dann aktuellen B-Quote neu geplant; bis dahin B-Feedback deferred
+
+Malformed neue Evaluation
+  -> Planner löscht das interne Handoff auf nullopt, ohne A oder eine
+     unsichere B-Sequence zu behaupten
+  -> der nächste #22-Aufruf erhält kein fremdes altes Feedback und friert
+     gemäß seinem bestehenden Vertrag konservativ ein
 ```
 
-Spiegelbildlich für Cooling -> Heating.
-
+Spiegelbildlich gilt alles für Cooling -> Heating.
 ## 10. Lüfterlogik
 
-- **Außenlüfter**: `outerFanEnabled = true`, sobald `armedDirection() !=
-  Idle`. Beim Übergang auf physisch `Idle` wird
-  `outerFanDeactivationRequestedAtMonotonicMillis = now` gesetzt;
-  `outerFanEnabled` bleibt `true`, bis `deadlineReached(now,
-  outerFanDeactivationRequestedAtMonotonicMillis, outerFanPostRunMillis)`.
-  Eine erneute Freigabe während des Nachlaufs setzt
-  `outerFanDeactivationRequestedAtMonotonicMillis` auf `std::nullopt`
-  zurück, ohne dass der Lüfter zwischenzeitlich `false` war. Kein Vorlauf:
-  `outerFanEnabled` wird im selben `tick()`-Aufruf gesetzt wie die
-  Peltierfreigabe. Der Nachlauf ist laut `ACTUATOR_TIMING.md` (Zeile 186,
-  220) **zwingend**: `outerFanPostRunMillis > 0` ist eine strukturelle
-  Parametervoraussetzung (Abschnitt 13).
-- **Innenlüfter**: `innerFanEnabled = true`, solange
-  `input.temperatureControlledPhase == true` – unabhängig vom aktuellen
-  Peltier-Fensterzustand. Beim Verlassen der temperaturgeregelten Phase
-  startet ein eigener, unabhängiger Nachlauf. Kurze Peltier-Auszeiten
-  *innerhalb* einer weiterhin temperaturgeregelten Phase lösen keinen
-  Innenlüfter-Nachlauf aus. Der Innenlüfter-Nachlauf ist laut
-  `ACTUATOR_TIMING.md` (Zeile 223-244) ausdrücklich **konfigurierbar**, aber
-  – anders als beim Außenlüfter – an keiner Stelle als „zwingend"
-  bezeichnet und besitzt dort auch keine explizit genannte firmwarefeste
-  Mindestgrenze; `innerFanPostRunMillis == 0` („kein Nachlauf") bleibt daher
-  strukturell zulässig (Abschnitt 13).
+**Außenlüfter und physischer Peltierausgang.** Der Außenlüfter wird nicht aus
+`activeWindow` oder `plannedDirection()` abgeleitet, sondern aus
+dem tatsächlichen Peltierzustand und dessen Nachlauf:
+
+- Beim physischen Übergang Idle -> Heating/Cooling wird
+  `outerFanEnabled = true` im selben Tick vor der H-Brückenfreigabe
+  ausgegeben. Es gibt keinen absichtlichen Vorlauf.
+- Bei **jedem** physischen Übergang Active -> Idle wird
+  `outerFanDeactivationRequestedAtMonotonicMillis = now` gesetzt.
+  Das umfasst den normalen Off-Anteil eines zeitproportionalen Fensters,
+  einen normalen Stop, einen bestätigten Richtungswechsel, Watchdog,
+  Safety-Fail-closed und `forceStop()`.
+- Während des Nachlaufs bleibt `outerFanEnabled` true, bis
+  `deadlineReached(now, outerFanDeactivationRequestedAtMonotonicMillis,
+  outerFanPostRunMillis)` erfüllt ist. Ein neuer physischer Puls während
+  dieser Zeit löscht die Deaktivierungsdeadline und lässt den Lüfter ohne
+  Unterbrechung an; der Timer wird nicht auf den späteren Window-Off-Snapshot
+  verschoben.
+- Ist der Nachlauf abgelaufen und der physische Peltierausgang weiterhin Idle,
+  wird der Außenlüfter aus geschaltet. Ein wiederholter Idle-Tick startet den
+  Nachlauf nicht neu, weil kein neuer physischer Active -> Idle-Übergang
+  stattgefunden hat.
+- `outerFanPostRunMillis > 0` bleibt eine strukturelle Voraussetzung
+  gemäß `ACTUATOR_TIMING.md` und Abschnitt 13.
+
+Damit laufen beispielsweise bei einem 3-s-Puls in einem 30-s-Fenster Peltier
+und Außenlüfter zunächst gemeinsam; beim realen Peltier-AUS nach 3 s beginnt
+der Nachlauf, obwohl `activeWindow` bis zur Fenstergrenze als
+Planungssnapshot bestehen kann. Ist der Off-Anteil länger als der Nachlauf,
+geht der Lüfter vor dem nächsten Puls aus; ist er kürzer, bleibt er an. Ein
+neuer Puls hebt den Nachlauf auf, ohne dass der Lüfter aus- und wieder
+eingeschaltet wird.
+
+**Innenlüfter.** `innerFanEnabled = true`, solange
+`input.temperatureControlledPhase == true` – unabhängig vom
+Peltier-Fenster. Beim Verlassen der temperaturgeregelten Phase startet ein
+eigener Nachlauf. Kurze Peltier-Off-Zeiten innerhalb derselben geregelten
+Phase lösen keinen Innenlüfter-Nachlauf aus. Der Innenlüfter-Nachlauf ist
+konfigurierbar, aber nicht als zwingend bezeichnet; `innerFanPostRunMillis
+== 0` bleibt gemäß Abschnitt 13 zulässig.
 
 ## 11. Lifecycle-Integration und Stop-Ablauf
 
-`resetActuatorPlanAtBoundary()` ist eine freie Funktion, die **ausschließlich**
-von `TemperatureControlApplicationOrchestrator::complete()` aufgerufen wird
-– an derselben committed Lifecycle-Grenze, mit demselben
-`TemperatureControlLifecycleBoundary`-Wert, im selben Funktionsaufruf, in dem
-bereits `resetTemperatureControlAtBoundary()` aufgerufen wird.
+`resetActuatorPlanAtBoundary()` ist eine interne Hilfsfunktion, die
+**ausschließlich** von
+`TemperatureControlApplicationOrchestrator::complete()` aufgerufen wird –
+an derselben committed Lifecycle-Grenze, mit demselben
+`TemperatureControlLifecycleBoundary`-Wert und im selben Funktionsaufruf,
+in dem bereits `resetTemperatureControlAtBoundary()` aufgerufen wird.
 
 ```cpp
 ActuatorPlanTickResult resetActuatorPlanAtBoundary(
     ActuatorPlanner& planner, ActuatorPlanSinkDriver& driver,
     TemperatureControlLifecycleBoundary boundary,
-    std::uint64_t nowMonotonicMillis);
+    std::uint64_t nowMonotonicMillis,
+    std::optional<PreviousControlRequestFeedback>&
+        applicationPendingFeedback);
 ```
 
 Ablauf (identisch für alle sieben Grenzen; **keine** davon ruft
@@ -1371,22 +1426,24 @@ Ablauf (identisch für alle sieben Grenzen; **keine** davon ruft
 1. `ActuatorPlanTickResult result = planner.forceStop(nowMonotonicMillis);`
    – berechnet denselben Ergebnistyp wie `tick()`: physisch `Idle`;
    Akkumulator/`activeWindow`/Gegenrichtungskandidat/`acceptedCommand`/
-   `pendingFeedback` werden verworfen (Abschnitt 8.4, 9.4);
-   `lastDeactivatedDirection`/`directionDeactivatedAtMonotonicMillis` werden
-   gesetzt, sofern zuvor eine Richtung armiert war (Abschnitt 8.1); ein
-   bereits laufender Außenlüfter-Nachlauf wird **nicht** verkürzt oder
-   abrupt beendet, sondern exakt wie bei einem gewöhnlichen Übergang auf
-   `Idle` fortgeschrieben (`outerFanDeactivationRequestedAtMonotonicMillis`
-   wird gesetzt, nicht der Lüfter direkt auf `false`).
+   `pendingFeedback` werden verworfen. Wenn der Ausgang zuvor
+   physisch aktiv war, setzt `forceStop()` den realen
+   `lastPhysicalDeactivationDirection`- und Zeitanker; ein bereits
+   laufender Außenlüfter-Nachlauf wird nicht verkürzt oder abrupt beendet.
 2. `driver.apply(result);` – dieselbe Übersetzungsfunktion wie bei jedem
    gewöhnlichen Tick (Abschnitt 12); keine zweite Ausgabelogik.
-3. Danach: `armedDirection() == Idle`, `state().acceptedCommand ==
-   std::nullopt`, `state().activeWindow == std::nullopt`,
-   `state().pendingFeedback == std::nullopt`; `latchedWatchdogFault` bleibt
-   unverändert bestehen, falls zuvor gesetzt.
+3. Danach: `plannedDirection() == Idle`,
+   `state().lastAppliedDirection == Idle`,
+   `state().acceptedCommand == std::nullopt`,
+   `state().activeWindow == std::nullopt` und
+   `state().pendingFeedback == std::nullopt`. Der interne
+   Application-Slot wird im selben Hilfsaufruf auf `std::nullopt`
+   gesetzt; `latchedWatchdogFault` bleibt unverändert bestehen,
+   falls zuvor gesetzt.
 
 `ActuatorPlanner::forceStop()` ist die einzige RAM-Stop-Operation; es gibt
-keine separate `resetRuntime()`-Methode, die den Nachlauf verlieren könnte.
+keine separate `resetRuntime()`-Methode, die den physischen Deaktivierungs-
+oder Lüfternachlauf verlieren könnte.
 
 ## 12. Sink-Ausgabereihenfolge und Cross-Sink-Testnachweis
 
@@ -1403,7 +1460,8 @@ Sinks in dieser Reihenfolge:
 2./3. Außen-/Innenlüfter gemäß jeweiligem Nachlauf.
 
 **Richtungswechsel:** Ein direkter Wechsel `Forward true -> Reverse true`
-(oder umgekehrt) ist durch Rang 9–11 bereits strukturell ausgeschlossen
+(oder umgekehrt) ist durch Klasse N und die physische Übergangsfunktion bereits
+strukturell ausgeschlossen
 (mindestens ein Tick mit `appliedDirection == Idle` dazwischen); der Driver
 setzt zusätzlich defensiv vor jedem `setForward(true)`/`setReverse(true)`
 immer zuerst die jeweils andere Richtung explizit `false`.
@@ -1521,7 +1579,7 @@ sonst prüfe ALLE folgenden Relationen; hält jede: Valid, sonst Invalid:
   (10) outerFanPostRunMillis > 0
        (strukturell zwingend laut ACTUATOR_TIMING.md Zeile 186/220 -
        "zwingender Nachlauf" mit firmwarefesten Mindest-/Maximalgrenzen;
-       die konkrete Grenze selbst bleibt TBD_COMMISSIONING/#35, loest R3.7)
+       die konkrete Grenze selbst bleibt TBD_COMMISSIONING/#35)
   (11) innerFanPostRunMillis: keine Relation noetig (0 = zulaessiger
        "kein Nachlauf"-Wert; ACTUATOR_TIMING.md Zeile 223-244 nennt den
        Innenluefter-Nachlauf ausdruecklich "konfigurierbar", nicht
@@ -1535,7 +1593,7 @@ sonst prüfe ALLE folgenden Relationen; hält jede: Valid, sonst Invalid:
        erzeugt, und schliesst zugleich einen Additionsueberlauf in der
        O(1)-Fensterarithmetik (Abschnitt 8.1) mit einem derart grossen
        switchingWindowMillis strukturell aus, bevor dieser Code ueberhaupt
-       erreicht wird (loest den Konvertierungs-/Ueberlaufteil von R3.7).
+       erreicht wird.
        Kein produktiver Wert in dieser Groessenordnung ist plausibel; die
        Relation ist ein struktureller Sicherheitsbeweis, keine erfundene
        Kommissionierungsgrenze.
@@ -1556,15 +1614,15 @@ eines bereits über `clamp(timeQuote, 0.0, 1.0)` begrenzten Wertebereichs.
 
 | `classifyActuatorPlannerParameters` | `ActuatorPlanStatus` | `ActuatorPlanReason` | physisch |
 |---|---|---|---|
-| `Unconfigured` | `Unconfigured` | `NoCommissioning` | `Idle`, unbedingter Verwurf (Rang 2) |
-| `Invalid` | `InvalidInput` | `InvalidConfiguration` | `Idle`, unbedingter Verwurf (Rang 2) |
-| `Valid` | abhängig vom weiteren Rang | abhängig vom weiteren Rang | abhängig vom weiteren Rang |
+| `Unconfigured` | `Unconfigured` | `NoCommissioning` | `Idle`, unmittelbarer Verwurf (I-2a) |
+| `Invalid` | `InvalidInput` | `InvalidConfiguration` | `Idle`, unmittelbarer Verwurf (I-2b) |
+| `Valid` | abhängig von der weiteren Klasse | abhängig von der weiteren Klasse | abhängig von der weiteren Klasse |
 
-Diese Tabelle beseitigt den in Revision 2 vorhandenen Widerspruch
-vollständig: Rang 2 verwirft in **jedem** Fall (`Unconfigured` wie
-`Invalid`) unbedingt, identisch zu allen anderen Rang-1-bis-7-Ereignissen
-(Abschnitt 8.4).
-
+Diese Tabelle hält die Konfigurationsklassifikation unabhängig von der
+weiteren Prioritätsentscheidung fest und beseitigt den früheren Widerspruch
+vollständig: I-2a und I-2b verwerfen in **jedem** Fall (`Unconfigured` wie
+`Invalid`) unbedingt und ohne Minimum-On-Hold; alle I-Klassen nutzen
+denselben physischen Active -> Idle-Pfad (Abschnitt 8.4).
 ## 14. Objektlebenszeit und Lauf-Snapshot-Bindung (Integrationsgate #106)
 
 ### 14.1 Boot-session-fixes Objektmodell (löst den Referenz-/Rebinding-Widerspruch)
@@ -1607,9 +1665,10 @@ behauptet.
 **Issue #106** „Aktorplaner Per-Run-Parameter-Snapshot und
 Recovery-Bindung" ist Abhängigkeit dieses Plans für jede produktive
 Verdrahtung. Die Live-Beschreibung von Issue #106 wurde vor diesem
-Plan-Commit präzisiert (Producer-Eigentümerschaft, Laufpersistenz-/
-Schema-Evolutionssemantik, Write-before-Apply-Reihenfolge, vollständige
-Abhängigkeiten/Quellen, erweiterte Akzeptanzkriterien) und definiert
+Plan-Commit um I106.R1 präzisiert: strukturelle Producer-/Schema-/Snapshot-
+Vorbereitung darf ohne Produktionswerte vor #35 erfolgen; produktive
+Werte-/Grenzenaktivierung und der Abschluss dieses Integrationsgates hängen
+zwingend von den durch #35 freigegebenen Werten/Grenzen ab. Sie definiert
 weiterhin:
 
 - einen unveränderlichen Pro-Lauf-Parametersnapshot, erzeugt genau einmal
@@ -1621,6 +1680,14 @@ weiterhin:
 - eine ausführbare Objekt-/Lebenszeit-Anbindung ohne dangling oder
   nicht-rebindbare Referenzsemantik (konkrete Wahl bleibt dem
   #106-eigenen Plan vorbehalten);
+- einen rein strukturellen, typisierten und additiv schema-versionierten
+  Producer-/Snapshot-Mechanismus, der vor #35 vorbereitet werden darf, aber
+  keine produktiven Werte, Grenzwerte oder Defaults erfindet oder aktiviert;
+  `ServiceConfiguration` Schema 1 bleibt dabei unverändert leer;
+- die produktive ServiceConfiguration-Aktivierung und den produktiven
+  Abschluss des #106-Gates erst, wenn #35 die erforderlichen Schaltfenster-,
+  Mindestzeit-, Totzeit-, Nachlauf- und Gegenrichtungswerte/-grenzen
+  freigegeben hat;
 - vollständige DoD und Akzeptanzkriterien (siehe Issue #106).
 
 **Blockierende Wirkung, verbindlich für diesen Plan:** Eine produktive
@@ -1661,15 +1728,14 @@ wird durch diesen Plan nicht geändert.
   Request-Identität/-Kontext, Lifecycle-Grenzen, Phasenklassifikation und
   Application-/Lifecycle-Autorität; ein einziger, bereits vorhandener
   Feedback-Übergabemechanismus; eine einzige Ausgabereihenfolge-
-  Implementierung für Tick- und Stop-Pfad; `armedDirection()` als reine
-  Ableitung aus `activeWindow` statt eines zweiten, redundanten
-  Richtungsfeldes; ein gemeinsamer Verwurf-Trigger-Satz für Akkumulator und
-  Fenster (Abschnitt 8.4) statt getrennter, potenziell divergierender
-  Regeln.
+  Implementierung für Tick- und Stop-Pfad; `plannedDirection()` nur für
+  Planung und `physicalDirection()` nur für den realen Ausgang; ein
+  gemeinsamer Verwurf-Trigger-Satz für Akkumulator und Fenster (Abschnitt 8.4)
+  statt getrennter, potenziell divergierender Regeln.
 - **KISS:** `ActuatorSafetyGateInput` bleibt ein einfacher Werttyp; kein
   zweiter Test-Recorder in Produktionscode (Decorator bleibt test-only);
   die Feedback-Dispositionsregel (Abschnitt 9.3) ist eine einzige,
-  richtungsunabhängige Regel statt einer ranggebundenen Tabelle mit vielen
+  richtungsunabhängige Regel statt einer mehrfach duplizierten Einzelfalltabelle mit vielen
   Einzelfällen; keine vorsorgliche Generalisierung ohne aktuellen Bedarf
   (z. B. kein zusätzlicher `ActuatorPlanReason`-Wert für die
   Gegenrichtungsbestätigung, da die physische Entscheidung bereits durch
@@ -1677,16 +1743,21 @@ wird durch diesen Plan nicht geändert.
 
 ## 17. Safety-, Security-, Recovery- und Hardwaregrenzen
 
-- Fail-closed bei jedem Rang 1–8 aus Abschnitt 8.2: `Idle`, kein Guthaben-
-  Nachholen.
+- Fail-closed bei jeder einzelnen Klasse I-1 bis I-8 aus Abschnitt 8.2:
+  `Idle` im selben Tick, kein Guthaben-Nachholen und keine Verzögerung
+  durch `minimumOnMillis`.
 - Keine Aktorfreigabe wird bei Boot, Reset, Fehler, unbekanntem Zustand oder
   unbestätigter Hardware vorausgesetzt; `ActuatorSafetyGateInput` startet mit
   `Unresolved` und erzwingt `Idle`. Ein strukturell ungültiger
-  `ActuatorSafetyGateStatus`-Wert (z. B. durch fehlerhaftes Casting) wird
-  niemals wie `Allowed` behandelt, sondern fail-closed über Rang 1
-  (`MalformedInput`) abgefangen (Abschnitt 4.2, 8.2).
-- `ImmediateStop` überstimmt die Mindest-Einschaltzeit ausschließlich in
-  Richtung „sicherer machen", niemals in Richtung „Freigabe erzwingen".
+  `ActuatorSafetyGateStatus`-Wert wird niemals wie `Allowed` behandelt,
+  sondern über Klasse I-1 fail-closed abgefangen.
+- `ImmediateStop`, Watchdog-Trip/Latch, explizites `NoValidRequest`,
+  stale Kontext, `TimeInvalid`, ungültige Parameter und malformed Input
+  überstimmen die Mindest-Einschaltzeit ausschließlich in Richtung „sicherer
+  machen", niemals in Richtung „Freigabe erzwingen“.
+- Ein gültiges `NeutralOff`, `AirLimitBlockedOff` oder ein bestätigter
+  normaler Richtungswechsel darf dagegen gemäß Klasse N-1 bis N-2 durch
+  `MinimumOnTimeHeld` gehalten werden.
 - Ein Watchdog-Fault bleibt latched, bis ausschließlich eine externe,
   #24-getriebene Logik `applyExternalWatchdogFaultReset()` aufruft; weder
   eine neue Request noch irgendeine Lifecycle-Grenze noch ein simulierter
@@ -1700,12 +1771,10 @@ wird durch diesen Plan nicht geändert.
   (Abschnitt 14), nicht stillschweigend als erfüllt behauptet.
 - Kein Türkontakt, keine Kühlkörper-Grenzwertlogik, keine absolute
   Temperatursicherheit – bleibt #24/`SAFETY_AND_FAULTS.md`.
-- Ein anstehender Teardown (OFF, Kontext-Verlust, bestätigter
-  Richtungswechsel) darf eine noch nicht erfüllte Mindest-Einschaltzeit
-  niemals verkürzen (Abschnitt 8.1/8.2 Rang 9, korrigierte Zeitbasis über
-  `currentOnPhaseStartedAtMonotonicMillis`); ausschließlich Safety-/
-  Fault-Ränge (1/2/3/5/6) dürfen die Mindest-Einschaltzeit überstimmen.
-- Keine Hardwarewerte werden in diesem Plan festgelegt; `OPEN_POINTS.md`
+- Ein normaler Teardown (OFF, bestätigter Richtungswechsel) darf die konkrete
+  Mindest-Einschaltphase nicht verkürzen; die unmittelbaren I-Klassen dürfen
+  sie dagegen nie verzögern. Jeder physische Active -> Idle setzt die
+  Mindest-Auszeitbasis und startet den Außenlüfter-Nachlauf.
   (#29, #32, #33, #35) bleibt unverändert sichtbar offen.
 
 ## 18. Umsetzungs- und Commit-Schnitte
@@ -1716,13 +1785,13 @@ wird durch diesen Plan nicht geändert.
    inklusive vollständiger struktureller Invarianten; keine
    Verhaltenslogik.
 2. **Phase A / Annahme** – `ActuatorPlanner::tick()` Grundgerüst: Admission
-   (Abschnitt 6.2), laufender Watchdog (6.4), Prioritätsleiter Rang 1–8
+   (Abschnitt 6.2), laufender Watchdog (6.4), Prioritätsleiter Klasse I/N
    (8.2), overflow-sichere Zeitarithmetik (8.3), `forceStop()`,
    `applyExternalWatchdogFaultReset()`.
 3. **Fenster, Akkumulator, Mindestzeiten, Totzeit, Richtungswechsel** –
    Fensterlogik inklusive Arming-Regel und O(1)-Fortschritt (8.1), einziger
    Akkumulator mit vollständigen Verwurfsregeln (8.4), bestätigter
-   Richtungswechsel (8.5), Prioritätsleiter Rang 9–13 vollständig.
+   Richtungswechsel (8.5), Klasse N der Prioritätsleiter vollständig.
 4. **Lüfterlogik** – Außen-/Innenlüfter (10), eigener, von der
    Fenster-/Mindestzeitlogik klar getrennter Codeabschnitt.
 5. **Feedback-Dispositionsmatrix** – vollständige Umsetzung von Abschnitt 9
@@ -1757,7 +1826,7 @@ erwarteten Fensteranzahl ausgelöst; spiegelbildlich Cooling; reine
 gleichgerichteter Neustart und Richtungswechsel (Abschnitt 8.1, alle drei
 Fälle der Arming-Regel) sind je durch eigene Tests abgedeckt.
 
-**Fensterzustand vollständig im Runtime-State (R3.1):** Heating-Fenster
+**Fensterzustand vollständig im Runtime-State:** Heating-Fenster
 armiert, Quote und Richtung bleiben über `activeWindow` bis zum nächsten
 Fensterstart-Ereignis unverändert, auch wenn `acceptedCommand` sich mitten
 im Fenster mit unveränderter Richtung ändert (wirkt erst nächstes Fenster)
@@ -1775,39 +1844,35 @@ Teardown, der erst NACH Ablauf der Mindest-Einschaltzeit dieser konkreten
 Einschaltphase eintrifft, wird sofort vollzogen, auch wenn das Fenster laut
 eigener Arithmetik noch länger eingeschaltet geblieben wäre.
 
-**Gegenrichtungsbestätigung nach Ende der Mindest-Einzeit (R3.2):** vor
-Minimum-On-Ende; exakt Minimum-On-Ende; danach, Bestätigung noch offen
-(altes Fenster läuft nach eigener Fensterlogik unverändert weiter,
-`counterDirectionConfirming == true`, physischer Ausgang folgt exakt der
-alten Richtung); exakt Bestätigungsdauer; Abbruch kurz davor (keine
-Freigabe aus alter Evidenz, auch nicht nach anschließender Mindest-Auszeit/
-Totzeit); bestätigte Gegenrichtung während Peltier bereits `Idle`; beide
-Richtungen symmetrisch; Feedback für die aktive Gegenrichtungsrequest ist
-während der gesamten Sperre `DeferredOrLimited` (Abschnitt 9.3).
-
-**Explizite `NoValidRequest`-Evaluation:** eine aktive
+**Gegenrichtungsbestätigung nach Ende der Mindest-Einzeit (R4.3):** vor
+Minimum-On-Ende; exakt Minimum-On-Ende; danach bleibt das alte Fenster nur bis
+zu seinem bereits eingefrorenen Ende maßgeblich. An der ersten und an jeder
+weiteren Fenstergrenze während unbestätigter B werden kein neues altes
+Heating-/Cooling-Fenster und kein altes Energie-Guthaben aus B erzeugt; der
+physische Ausgang bleibt danach Idle. Die Bestätigung läuft unabhängig davon
+weiter; exakt Bestätigungsdauer und erfüllte Arming-Fristen planen B aus der
+dann aktuellen Request neu. Abbruch kurz davor oder nach einer Grenze (keine
+Freigabe aus alter Evidenz), beide Richtungen symmetrisch; Feedback für B ist
+während der gesamten Sperre `DeferredOrLimited`.
+**Explizite `NoValidRequest`-Evaluation:** Eine aktive
 Heating-/Cooling-Freigabe innerhalb ihrer Mindest-Einschaltzeit wird durch
 eine neue, strukturell gültige `Unavailable`/`InvalidInput`-Evaluation
-sofort beendet (Rang 6); ein `tick()`-Aufruf mit `newEvaluation =
-std::nullopt` im selben Szenario tut dies ausdrücklich **nicht** und führt
+sofort beendet (Klasse I-6); ein `tick()`-Aufruf mit
+`newEvaluation = std::nullopt` tut dies ausdrücklich nicht und führt
 die laufende Freigabe unverändert fort.
-
-**Feedback-Vertrag (R3.4/R3.5/R3.6):** n/n+1/n+2-Orakel für Heating->Cooling
-und Cooling->Heating exakt gemäß Abschnitt 9.6, inklusive der
-Admission-Reject-Variante (neue, höhere Request B wird als
-`StaleOnArrivalWatchdog`/`StaleOnArrivalContext` abgelehnt: `pendingFeedback`
-zeigt `{B, Rejected}`, nicht A); OFF-Admission erzeugt kein nachträgliches
-Feedback für die zuvor aktive Request (`pendingFeedback = nullopt`); jede
-Zeile der Tabelle aus Abschnitt 9.2 einzeln; ein `Rejected`-Feedback
-überlebt mehrere `tick()`-Aufrufe ohne neue Evaluation unverändert (direkter
-Mehr-Tick-Test zwischen zwei `evaluate()`-Aufrufen, löst R3.6); ein
-`MalformedCandidate`-Tick überschreibt ein bereits gesetztes `Rejected`
-eines **anderen** Subjekts nicht, überschreibt es aber korrekt mit
-`Rejected`, falls Rang 1 desselben Ticks genau das von `pendingFeedback`
-verfolgte `acceptedCommand` verwirft; `forceStop()` setzt `pendingFeedback`
-unbedingt auf `nullopt`, unabhängig vom vorherigen Wert;
-`admissionOutcome` ist für jeden Fall aus Abschnitt 9.5 direkt geprüft.
-
+**Feedback-Vertrag (R4.4/R4.5):** Das n/n+1/n+2-Orakel für Heating -> Cooling
+und Cooling -> Heating prüft den Orchestrator-internen Slot, nicht eine vom
+Test-Caller kopierte Feedbackvariable. Mehrere `tickActuatorPlan()`-
+Aufrufe dürfen zwischen zwei `evaluateTemperatureControl()`-Aufrufen
+liegen; nur ein geändertes Update ersetzt den Slot, und genau ein
+`evaluateTemperatureControl()`-Aufruf konsumiert den zuletzt gültigen
+Wert. Die Admission-Reject-Variante (höhere B als
+`StaleOnArrivalWatchdog`/`StaleOnArrivalContext`) führt genau zu
+`{B, Rejected}`, nicht A. OFF schließt das Fenster auf
+`nullopt`. Eine malformed neue Evaluation bei pending A löscht dagegen
+das Handoff auf `nullopt` und erzeugt kein Sequence-Feedback.
+`forceStop()` löscht Planner-Handoff und Application-Slot;
+`admissionOutcome` ist für jeden Fall aus Abschnitt 9.5 geprüft.
 **AirLimit-Klassifikation:** `NeutralOff` vs. `AirLimitBlockedOff`:
 identische Mindestzeit-Behandlung, unterschiedliche Akkumulatorwirkung;
 aufgebautes Guthaben, danach `AirLimitBlockedOff`: Guthaben verworfen;
@@ -1821,12 +1886,13 @@ beim Übergang nach `Idle` vollständig verworfen, kein sofortiger
 Mindestimpuls aus altem Guthaben; Fensterstart beginnt strukturell frisch
 (Fall (a) oder (b) je nach seit der Deaktivierung verstrichener Zeit).
 
-**Safety-Gate:** `Unresolved`, `Allowed`, `ImmediateStop`; `ImmediateStop`
-überstimmt eine aktive Mindest-Einschaltzeit; `Unresolved` erzwingt `Idle`
-auch bei ansonsten vollständig gültiger Request; **unbekannter Enumwert**
-`static_cast<ActuatorSafetyGateStatus>(0xFF)` wird niemals wie `Allowed`
-behandelt, sondern erzeugt `InvalidInput`/`MalformedInput` mit sofortigem
-`Idle` und unbedingtem Verwurf (Rang 1, löst R3.8).
+**Safety-Gate und Fail-closed-Klassen:** `Unresolved`,
+`Allowed`, `ImmediateStop` und unbekannter Enumwert werden geprüft.
+`ImmediateStop` und `Unresolved` erzwingen auch innerhalb
+laufender Mindest-On-Zeit im selben Tick `Idle`; ein unbekannter Wert
+`static_cast<ActuatorSafetyGateStatus>(0xFF)` wird als I-1
+`InvalidInput/MalformedInput` behandelt. Zusätzlich werden I-2a/I-2b,
+I-4/I-5, I-6, I-7 und I-8 jeweils an einer aktiven Mindest-On-Phase geprüft.
 
 **Watchdog-Fault-Evidenz:** Watchdog-Trip erzeugt
 `ActuatorWatchdogFaultEvidence`; eine danach eintreffende, ansonsten gültige
@@ -1855,24 +1921,21 @@ Fensterstart-Ereignis ohne Nachholen der übersprungenen Fenster;
 `switchingWindowMillis > 2^53` wird von `classifyActuatorPlannerParameters`
 als `Invalid` eingestuft (Abschnitt 13, Relation 12).
 
-**Mindestzeiten/Totzeit (R3.3):** Mindest-Einschaltzeit hält aktive Richtung
-trotz neuer `Idle`-Anforderung (sofern nicht Rang 6 zutrifft); Mindest-
-Auszeit verhindert verfrühte erneute Freigabe bei gleichgerichtetem Neustart
-(nur Mindest-Auszeit, keine Totzeit erforderlich); Polaritätstotzeit
-zusätzlich zur Mindest-Auszeit ausschließlich bei tatsächlichem
-Richtungswechsel (Späteres-Ende-Regel, beide Richtungen sowie exakter
-Gleichstand-Grenzfall); Heizen -> Kühlen und Kühlen -> Heizen symmetrisch;
-niemals gleichzeitig `Forward` und `Reverse` über eine lange Sequenz; alle
-fünf in Abschnitt 8.1 benannten Fälle (Erststart, normales Window-Off,
-explizite OFF-Request, gleichgerichteter Restart, Richtungswechsel) einzeln
-und in Kombination getestet.
-
+**Mindestzeiten/Totzeit und physische Deaktivierung (R4.1/R4.2):**
+Normaler `NeutralOff` und `AirLimitBlockedOff` dürfen die
+konkrete Mindest-On-Phase halten; jede I-Klasse schaltet im selben Tick aus.
+Ein normaler Window-Off-Anteil in Heating und Cooling setzt bei jedem realen
+Active -> Idle den physischen Deaktivierungsanker. Gleichgerichteter Restart
+wartet nur `minimumOffMillis`; ein tatsächlicher Richtungswechsel
+wartet Mindest-Off und Totzeit nach der Späteres-Ende-Regel. Beide Richtungen,
+exakter Gleichstand, voller und nahezu voller Puls sowie der Richtungswechsel
+aus bereits laufendem Window-Off werden getestet.
 **Parameterklassifikation:** vollständige Tabelle aus Abschnitt 13 (alle
 Felder `0` -> `Unconfigured`; jede einzelne strukturell unmögliche Relation
 1-12 einzeln getestet -> `Invalid`, inklusive `outerFanPostRunMillis == 0`
-(jetzt `Invalid`, löst R3.7) und `innerFanPostRunMillis == 0` (weiterhin
+(jetzt `Invalid`) und `innerFanPostRunMillis == 0` (weiterhin
 `Valid`, sofern alle anderen Relationen erfüllt sind); vollständig
-konsistente Testwerte -> `Valid`); Rang-2-Verwurf ist für `Unconfigured` und
+konsistente Testwerte -> `Valid`); Klasse-I-2-Verwurf ist für `Unconfigured` und
 `Invalid` identisch unbedingt.
 
 **Zeit-/Overflow-Verträge:** Gleichheit an jeder Frist; knapp
@@ -1884,22 +1947,21 @@ Referenzzeit (-> `TimeInvalid`); Werte nahe `UINT64_MAX`.
 unbekannte Richtung, `timeQuote` `NaN`/`Infinity`/außerhalb `[0,1]`,
 Status/Request-Mismatch, ungültiger Kontext) -> `MalformedInput`,
 sofortiger Verwurf; strukturell ungültiger `currentCanonicalContext` ->
-ebenfalls `MalformedInput` (Rang 1, löst R3.8); mehrere gleichzeitig
+ebenfalls `MalformedInput` (Klasse I-1); mehrere gleichzeitig
 zutreffende Bedingungen (z. B. Safety `ImmediateStop` **und** Kontext-Stale
-gleichzeitig) -> exakte Rang-Reihenfolge aus 8.2.
+gleichzeitig) -> exakte Klassen-Reihenfolge aus 8.2.
 
-**Lifecycle/Stop:** für jede der sieben `TemperatureControlLifecycleBoundary`-
-Werte: `forceStop()` liefert korrekten Nachlauf, verwirft Akkumulator/
-`activeWindow`/Gegenrichtungskandidat/`acceptedCommand`/`pendingFeedback`,
-setzt `lastDeactivatedDirection`/`directionDeactivatedAtMonotonicMillis`
-(sofern zuvor armiert), lässt `latchedWatchdogFault` unverändert; „aktives
-Peltier -> `Fault`" und „aktives Peltier -> `Standby`" mit weiterlaufendem
-Außenlüfter-Nachlauf statt abruptem Fan-Stopp; ein `forceStop()` mit
-anschließend sofort wieder gleichgerichteter Anforderung respektiert
-weiterhin die Mindest-Auszeit (kein impliziter Fall-(a)-Erststart nach
-`forceStop()`, da `directionDeactivatedAtMonotonicMillis` dabei gesetzt
-wird).
-
+**Lifecycle/Stop und Fan-Nachlauf:** Für jede der sieben
+`TemperatureControlLifecycleBoundary`-Werte ruft die Application-Grenze
+denselben Stop-Pfad auf. `forceStop()` verwirft Akkumulator,
+`activeWindow`, Gegenrichtung, `acceptedCommand` und Planner-Handoff,
+setzt bei physischem Active -> Idle den
+`lastPhysicalDeactivationDirection`/Zeitanker und lässt den
+Außenlüfter-Nachlauf weiterlaufen; der interne Application-Slot wird ebenfalls
+geleert, `latchedWatchdogFault` bleibt unverändert. Ein sofortiger
+gleichgerichteter Restart respektiert weiterhin Minimum-Off. Stop und Fault
+werden zusammen mit kurzem Duty-Puls, kürzerem/längerem Off-Anteil und
+erneutem Puls im Nachlauf geprüft.
 **Sequenzhochwasserzeichen:** `lastAcceptedSequence` bleibt über
 `forceStop()` innerhalb derselben `ActuatorPlanner`-Instanz erhalten; eine
 neue Instanz (simulierter Neustart) beginnt regulär bei einer neuen,
@@ -1909,7 +1971,50 @@ behaupten.
 **Architekturnachweis:** `ActuatorPlanner` kompiliert und wird getestet ohne
 jede Abhängigkeit auf `device_platform`-Sink-Header.
 
-### 19.2 `test/test_actuator_plan_sink_driver/test_actuator_plan_sink_driver.cpp`
+### 19.2 Revision-5-Direktmatrix für physische Zeit- und Handoff-Grenzen
+
+Zusätzlich zu den allgemeinen Orakeln der vorherigen Absätze werden mindestens
+diese Fälle als getrennte native Tests umgesetzt:
+
+1. Normaler Window-Off-Anteil in Heating und Cooling setzt bei jedem
+   tatsächlichen Active -> Idle die physische Deaktivierungszeit; ein nächster
+   Puls vor dem Minimum-Off-Ende bleibt aus.
+2. Ein nächster Fensterpuls wird vor, exakt auf und nach dem
+   Minimum-Off-Ende geprüft: vor dem Ende bleibt er aus; exakt auf und danach
+   ist er zulässig, sofern sein natürliches Fensterintervall noch läuft.
+3. Kurzer und langer Off-Anteil, volle Quote und nahezu volle Quote werden
+   gegen den physischen Ausgang und den Außenlüfter getrennt geprüft.
+4. Ein akkumuliertes Mindestimpulsfenster, das am Arming-Gate gesperrt ist,
+   wird als DeferredOrLimited verworfen und nicht in das Folgefenster
+   nachgeholt; der Mindestimpulsfall wird für beide Richtungen geprüft.
+5. Fail-closed-Ränge I-1, I-2a/I-2b, I-3a/I-3b, I-4, I-5, I-6, I-7 und I-8
+   werden jeweils innerhalb einer laufenden Mindest-On-Zeit geprüft: in jedem
+   Fall ist das Peltier im selben Tick Idle und der physische
+   Deaktivierungsanker gesetzt.
+6. Gültiges NeutralOff und AirLimitBlockedOff werden separat geprüft und
+   folgen dagegen dem normalen Minimum-On-Hold-Vertrag.
+7. Eine unbestätigte Gegenrichtung über mindestens zwei alte Fenstergrenzen
+   erzeugt keine neue alte Energie, kein Gegenrichtungs-Guthaben und bleibt
+   physisch Idle; nach Bestätigung wird B aus der dann aktuellen B-Request
+   neu geplant.
+8. Das interne Single-use-Handoff wird ohne manuelle Feedbackkopie im Caller
+   geprüft: mehrere Planner-Ticks speichern den neuesten Stand, genau ein
+   #22-Aufruf konsumiert ihn, ein zweiter erhält nullopt.
+9. Eine malformed neue Evaluation bei pending A löscht das alte Handoff,
+   erzeugt kein Rejected mit fremder Sequence und löst keinen Replay aus.
+10. Der Außenlüfter-Nachlauf startet bei jedem physischen Peltier-AUS:
+    kurzer Duty-Puls, Off-Anteil kürzer als der Nachlauf, Off-Anteil länger als
+    der Nachlauf, normaler Stop und Fault werden getrennt geprüft.
+11. Ein erneuter Peltierpuls während des Außenlüfter-Nachlaufs hält den Lüfter
+    ohne Unterbrechung aktiv; der Nachlauf wird nicht doppelt gestartet.
+12. Physische Deaktivierung, Mindest-Off und Nachlauf nahe `UINT64_MAX`
+    verwenden ausschließlich elapsed-Vergleiche ohne Überlauf.
+13. Ein Richtungswechsel mit bereits laufender Mindest-Off-Zeit aus einem
+    normalen Window-Off erfordert zusätzlich die Totzeit und nutzt die
+    Späteres-Ende-Regel; Heating -> Cooling und Cooling -> Heating sind
+    symmetrisch.
+
+### 19.3 `test/test_actuator_plan_sink_driver/test_actuator_plan_sink_driver.cpp`
 
 Vollständige Cross-Sink-Reihenfolgeprüfung über `SharedActuatorCallTrace`
 gemäß Abschnitt 12.1: Freigabe Heating/Cooling, Abschalten, Richtungswechsel
@@ -1917,32 +2022,31 @@ mit garantiertem Off-Zwischenzustand; `simultaneousActivationObserved() ==
 false`; korrekte Weitergabe von `outerFanEnabled`/`innerFanEnabled` an die
 jeweils richtige `IBinaryOutputSink`-Instanz.
 
-### 19.3 `test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp` (gezielte Ergänzung)
+### 19.4 `test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp` (gezielte Ergänzung)
 
 - `tickActuatorPlan()` leitet `currentCanonicalContext`/
   `temperatureControlledPhase` korrekt aus der bestehenden
   `resolveEffectiveControlContext()`/`isTemperatureControlledProcessState()`-
-  Kette ab, und ruft `planner.tick()`/`driver.apply()` in der in Abschnitt
+  Kette ab und ruft `planner.tick()`/`driver.apply()` in der in Abschnitt
   6.1 festgelegten Reihenfolge genau je einmal auf – sowohl im normalen als
-  auch im fail-closed Fall (löst R3.9);
-- `complete()`/`needsRuntimeReset()` ruft `resetActuatorPlanAtBoundary()` für
-  dieselbe committed Lifecycle-Grenze auf wie
-  `resetTemperatureControlAtBoundary()` (ein einziger Test-Fixture-Aufruf
-  löst nachweislich beide Resets aus);
-- **Einzelverbrauch des Feedback-Handoffs (löst R3.6, direkter Test des
-  Orchestrator-Vertrags aus Abschnitt 6.1):** mehrere aufeinanderfolgende
-  `tickActuatorPlan()`-Aufrufe zwischen zwei
-  `evaluateTemperatureControl()`-Aufrufen liefern denselben, weiterhin
-  gültigen `feedbackForAcceptedRequest`-Wert zurück; das Test-Fixture ruft
-  `evaluateTemperatureControl()` exakt einmal pro tatsächlich neuer
-  #22-Evaluation auf und weist nach, dass genau der zuletzt von
-  `tickActuatorPlan()` gelieferte Wert (nicht ein älterer) in
-  `TemperatureControlEvaluationEvidence.previousControlRequestFeedback`
-  ankommt;
-- `ActuatorPlanner&`/`ActuatorPlanSinkDriver&` werden über die gesamte
-  Lebenszeit des Test-Fixtures unverändert referenziert (Objektlebenszeit-
+  auch im fail-closed Fall.
+- `complete()`/`needsRuntimeReset()` ruft
+  `resetActuatorPlanAtBoundary()` für dieselbe committed Lifecycle-Grenze
+  auf wie `resetTemperatureControlAtBoundary()`; ein Fixture-Aufruf löst
+  nachweislich beide Resets aus und leert den internen Handoff-Slot.
+- **Interner Single-use-Handoff:** Das Test-Fixture ruft
+  `evaluateTemperatureControl()` ohne caller-supplied
+  `previousControlRequestFeedback` auf. Mehrere
+  `tickActuatorPlan()`-Aufrufe zwischen zwei Evaluationen speichern nur
+  den neuesten Planner-Update; genau der nächste #22-Aufruf erhält ihn genau
+  einmal. Ein weiterer Evaluation-Aufruf ohne neues Planner-Update erhält
+  `nullopt`. Die neue Evaluation wird danach als `newEvaluation`
+  an den nächsten Planner-Tick gegeben.
+- Eine malformed Evaluation B bei pending A leert den Orchestrator-Slot; der
+  nächste #22-Aufruf erhält weder A noch eine unsichere B-Sequence.
+- `ActuatorPlanner&`/`ActuatorPlanSinkDriver&` werden über die
+  gesamte Lebenszeit des Test-Fixtures unverändert referenziert (Objektlebenszeit-
   Nachweis gemäß Abschnitt 14.1, kein Rebinding).
-
 Bei geänderten gemeinsamen Verträgen werden zusätzlich die direkt betroffenen
 #22-Konsumententests gezielt mitgeführt, sofern die Umsetzung dort
 tatsächlich etwas berührt – in diesem Plan ist das nicht vorgesehen.
@@ -1957,12 +2061,12 @@ tatsächlich etwas berührt – in diesem Plan ist das nicht vorgesehen.
 - `docs/THIRD_PARTY_COMPONENTS.md` bleibt unverändert.
 - **Governance:** Issue #106 wurde live aktualisiert, **bevor** dieser
   Plan-Commit erstellt wurde (eigenständiger Governance-Schritt, siehe
-  PR-Body). Diese Revision-4-Planänderung wird als eigener, abgeschlossener
-  Plan-Commit committet. Erst danach ist die exakte Revision-4-Plan-SHA
+  PR-Body). Diese Revision-5-Planänderung wird als eigener, abgeschlossener
+  Plan-Commit committet. Erst danach ist die exakte Revision-5-Plan-SHA
   bekannt und wird im Draft-PR #105 und im `SESSION HANDOVER` ausgewiesen.
-  Eine Nachführung von `docs/ROADMAP.md` auf die exakte Revision-4-SHA
-  erfolgt in einem separaten, rein redaktionellen Metadaten-Commit direkt
-  im Anschluss – nicht durch eine fünfte Planrevision.
+  Eine Nachführung von `docs/ROADMAP.md` auf die exakte Revision-5-SHA
+  erfolgt anschließend in einem separaten, rein redaktionellen
+  Metadaten-Commit; Plantext und Roadmap-Metadaten werden nicht vermischt.
 
 ## 21. Offene Fragen und materielle Risiken
 
@@ -1980,9 +2084,9 @@ tatsächlich etwas berührt – in diesem Plan ist das nicht vorgesehen.
   wollen, ist das eine materielle Abweichung und erfordert eine neue
   Planrevision.
 - **Einheitliche, ereignisgetriebene `pendingFeedback`-Regel** (Abschnitt 9):
-  Diese Revision ersetzt die ranggebundene Feedback-Tabelle aus Revision 3
-  durch eine einzige, richtungsunabhängige Live-Nachführungsregel
-  (Abschnitt 9.3). Sollte sich bei der Umsetzung zeigen, dass der
+  Diese Revision verwendet eine einzige, richtungsunabhängige
+  Live-Nachführungsregel mit internem Single-use-Handoff (Abschnitt 9.3/9.4).
+  Sollte sich bei der Umsetzung zeigen, dass der
   tatsächliche #22-Code (nicht nur der Plan) an einer Stelle eine andere
   Disposition erwartet als hier hergeleitet, ist das ein materieller Befund
   gegen den bestehenden #22-Code (nicht gegen diesen Plan) und wird als
@@ -1990,7 +2094,6 @@ tatsächlich etwas berührt – in diesem Plan ist das nicht vorgesehen.
 - **Asymmetrische Mindest-Auszeit-/Totzeit-Anwendung** (Abschnitt 8.1, Fall
   (b) vs. (c)): Diese Revision wendet die Polaritätstotzeit ausschließlich
   bei tatsächlichem Richtungswechsel an, nicht bei gleichgerichtetem
-  Neustart. Dies ist eine gegenüber Revision 3 präzisierte, durch die
-  physische Funktion der Totzeit (Polaritätsschutz) begründete
-  Verhaltensänderung; sie wird hier als Teil der Auflösung von R3.3
-  offengelegt, nicht als stille Vereinfachung behandelt.
+  Neustart. Die Unterscheidung folgt der physischen Funktion der Totzeit als
+  Polaritätsschutz und ist hier ausdrücklich festgelegt, nicht stillschweigend
+  aus einer Mindest-Auszeit abgeleitet.
