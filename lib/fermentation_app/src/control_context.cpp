@@ -105,6 +105,22 @@ resolveProductInsertedControlContextTransition(
     return std::nullopt;
 }
 
+std::optional<CommittedControlContextTransition>
+resolveControlSensorRoleTransition(
+    ProcessState beforePhase,
+    const std::optional<RunSensorMode>& beforeRunSensorMode,
+    ProcessState afterPhase,
+    const std::optional<RunSensorMode>& afterRunSensorMode) {
+    const auto before =
+        resolveEffectiveControlSensorRole(beforePhase, beforeRunSensorMode);
+    const auto after =
+        resolveEffectiveControlSensorRole(afterPhase, afterRunSensorMode);
+    if (before.has_value() && after.has_value() && before != after) {
+        return CommittedControlContextTransition::SensorRoleChange;
+    }
+    return std::nullopt;
+}
+
 EffectiveControlContext resolveEffectiveControlContext(
     const EffectiveControlContextInput& input) {
     EffectiveControlContext result;

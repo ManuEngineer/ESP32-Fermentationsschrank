@@ -2095,6 +2095,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     // der gemeinsame Mutationshelfer `current`/`candidate` veraendert.
     const auto beforePermission = current.sensorSelectionRuntime.permission;
     const auto beforeMode = *current.activeRunSensorMode;
+    const auto beforeProcessState = current.processState.state;
     auto candidate = current;
     // Korrekturauftrag Befund 1 (zweiter Punkt): gemeinsamer mechanischer
     // Mutationshelfer mit dem manuellen Pfad (run_commands.cpp::
@@ -2103,6 +2104,17 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     // auf dem alten Wert stehen) und haelt den in ManualRunPlan::values
     // duplizierten Sensormodus konsistent.
     applySensorSelectionMutation(candidate, mutation);
+    if (mutation.event.has_value() &&
+        resolveControlSensorRoleTransition(
+            beforeProcessState, current.activeRunSensorMode,
+            candidate.processState.state, candidate.activeRunSensorMode)
+            .has_value() &&
+        !applySensorRoleChangeQualificationReset(candidate,
+                                                 time.monotonicMillis)) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
     if (liveSensorEvidence != nullptr)
         applyLiveRecoveryEvidence(candidate, *liveSensorEvidence);
     const auto snapshot =
@@ -2119,6 +2131,7 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
     if (persisted.status != RunPersistenceResultStatus::Applied)
         return persisted;
     applySensorSelectionMutation(current, mutation);
+    current.processState = candidate.processState;
     if (liveSensorEvidence != nullptr)
         applyLiveRecoveryEvidence(current, *liveSensorEvidence);
     RunPersistenceResult out{};
@@ -2145,11 +2158,10 @@ RunPersistenceResult RunPersistenceCoordinator::persistSensorSelection(
         auto event = *mutation.event;
         event.utcUnixSeconds = time.utcUnixSeconds;
         out.sensorSelectionEvent = event;
-        if (mutation.activeMode.has_value() &&
-            beforeMode != *mutation.activeMode) {
-            out.committedControlContextTransition =
-                CommittedControlContextTransition::SensorRoleChange;
-        }
+        out.committedControlContextTransition =
+            resolveControlSensorRoleTransition(beforeProcessState, beforeMode,
+                                               current.processState.state,
+                                               mutation.activeMode);
     } else if (mutation.notice.has_value()) {
         out.sensorSelectionNotice = mutation.notice;
     }

@@ -477,4 +477,11 @@ void clearActiveRunState(RunCommandState& state);
 void applySensorSelectionMutation(RunCommandState& state,
                                   const SensorSelectionStateMutation& mutation);
 
+// Reuses the existing QualificationReset -> REACHING_TARGET topology for an
+// effective sensor-role change committed while target qualification is active.
+// Returns false without mutation when the current process context cannot
+// produce that validated state-machine transition.
+[[nodiscard]] bool applySensorRoleChangeQualificationReset(
+    RunCommandState& state, std::uint64_t monotonicMillis);
+
 }  // namespace fermentation

@@ -59,6 +59,16 @@ resolveProductInsertedControlContextTransition(
     const std::optional<ControlSensorRole>& before,
     const std::optional<ControlSensorRole>& after);
 
+// Resolves both sides through the canonical phase/mode matrix. A persisted
+// RunSensorMode change is not by itself a PI-role change (PREHEATING and
+// WAITING_FOR_PRODUCT are always Air).
+[[nodiscard]] std::optional<CommittedControlContextTransition>
+resolveControlSensorRoleTransition(
+    ProcessState beforePhase,
+    const std::optional<RunSensorMode>& beforeRunSensorMode,
+    ProcessState afterPhase,
+    const std::optional<RunSensorMode>& afterRunSensorMode);
+
 // The canonical qualification-context projection (FR4): target and role come
 // from resolveEffectiveControlContext(); band and duration are bound to the
 // same immutable run/qualification contract (program targetQualification or

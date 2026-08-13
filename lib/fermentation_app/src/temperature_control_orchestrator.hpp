@@ -106,7 +106,8 @@ class TemperatureControlApplicationOrchestrator {
                                                 bool recoveryBoundary = false);
     [[nodiscard]] bool needsRuntimeReset(const RunCommandState& before,
                                          const RunCommandState& after,
-                                         bool recoveryBoundary) const;
+                                         bool recoveryBoundary,
+                                         bool newActiveRun) const;
 
     RunPersistenceCoordinator& persistence_;
     TemperatureController& temperatureController_;

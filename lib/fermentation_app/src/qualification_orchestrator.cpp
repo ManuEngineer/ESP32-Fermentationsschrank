@@ -51,8 +51,44 @@ TargetQualificationOrchestrationResult evaluateAndApplyTargetQualification(
     const RunCheckpointTime& time, const ProcessSignals& baselineSignals,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
     auto& evaluator = application.qualificationEvaluator();
+
+    // Fault is an absolute process-priority signal. It must reach the
+    // existing state-machine fault branch before qualification evaluates or
+    // caller-supplied context is allowed to reject the cycle.
+    if (baselineSignals.criticalFault) {
+        TargetQualificationOrchestrationResult result;
+        result.signals = baselineSignals;
+        const auto processDecision = decideProcessTransition(
+            current.processState,
+            current.processRunSnapshot.has_value()
+                ? &*current.processRunSnapshot
+                : nullptr,
+            baselineSignals, TransitionRequest{}, time.monotonicMillis);
+        result.processDecision = processDecision;
+        if (!processDecision.proposed()) {
+            result.status =
+                TargetQualificationOrchestrationStatus::InvalidDecision;
+            return result;
+        }
+        auto persisted = application.persistTransition(
+            current, processDecision, time, liveSensorEvidence);
+        result.persistenceStatus = persisted.status;
+        if (persisted.status != RunPersistenceResultStatus::Applied) {
+            result.status =
+                TargetQualificationOrchestrationStatus::PersistenceFailed;
+            return result;
+        }
+        // The application boundary performs the fail-closed lifecycle reset;
+        // no qualification candidate is evaluated or applied after a fault
+        // commit.
+        result.status =
+            TargetQualificationOrchestrationStatus::AppliedPersisted;
+        return result;
+    }
+
     auto qualification = evaluator.evaluate(input);
     const auto context = commitContext(input);
+
     if (!validQualificationPhase(input.phase) ||
         !phaseMatchesProcessState(input.phase, current.processState.state) ||
         !matchesCanonicalControlContext(current, input)) {

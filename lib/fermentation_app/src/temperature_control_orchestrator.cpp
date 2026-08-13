@@ -5,6 +5,24 @@
 
 namespace fermentation {
 
+namespace {
+
+bool hasEffect(const RunPersistenceResult& result, CommandEffect effect) {
+    if (result.effectCount > result.effects.size()) return false;
+    for (std::size_t index = 0U; index < result.effectCount; ++index) {
+        if (result.effects[index] == effect) return true;
+    }
+    return false;
+}
+
+bool qualificationEpisodeDomain(ProcessState state) {
+    return state == ProcessState::Preheating ||
+           state == ProcessState::ReachingTarget ||
+           state == ProcessState::QualifyingTarget;
+}
+
+}  // namespace
+
 bool consumeCommittedControlContextTransition(
     RunPersistenceResult& persisted, TemperatureController& controller) {
     if (persisted.status != RunPersistenceResultStatus::Applied ||
@@ -113,17 +131,27 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
     RunCommandState& current, bool recoveryBoundary) {
     if (result.status != RunPersistenceResultStatus::Applied) return result;
 
+    const bool newActiveRun = hasEffect(result, CommandEffect::RunStarted);
+    std::optional<CommittedControlContextTransition> committedTransition;
+    if (result.committedControlContextTransition.has_value()) {
+        committedTransition = *result.committedControlContextTransition;
+    }
+
     // This is the sole production handoff boundary. The persistence
     // coordinator never owns PI state, and a failed result cannot reach it.
     static_cast<void>(consumeCommittedControlContextTransition(
         result, temperatureController_));
 
-    if (needsRuntimeReset(before, current, recoveryBoundary)) {
+    if (needsRuntimeReset(before, current, recoveryBoundary, newActiveRun)) {
         TemperatureControlLifecycleBoundary boundary =
             TemperatureControlLifecycleBoundary::LeaveTemperatureControl;
-        if (recoveryBoundary ||
-            before.processState.state == ProcessState::RecoveryEvaluation ||
-            current.processState.state == ProcessState::RecoveryEvaluation) {
+        if (newActiveRun) {
+            boundary = TemperatureControlLifecycleBoundary::NewActiveRun;
+        } else if (recoveryBoundary ||
+                   before.processState.state ==
+                       ProcessState::RecoveryEvaluation ||
+                   current.processState.state ==
+                       ProcessState::RecoveryEvaluation) {
             boundary = TemperatureControlLifecycleBoundary::Recovery;
         } else if (!isTemperatureControlledProcessState(
                        before.processState.state) &&
@@ -133,6 +161,21 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
         }
         resetTemperatureControlAtBoundary(temperatureController_, evaluator_,
                                           boundary);
+    }
+    if (committedTransition.has_value() && !newActiveRun &&
+        (committedTransition ==
+             CommittedControlContextTransition::TargetContextChange ||
+         committedTransition ==
+             CommittedControlContextTransition::SensorRoleChange ||
+         committedTransition ==
+             CommittedControlContextTransition::ProductInserted) &&
+        (qualificationEpisodeDomain(before.processState.state) ||
+         qualificationEpisodeDomain(current.processState.state))) {
+        // A successful target/role/product context commit ends the old
+        // target episode immediately. The process marker is owned by the
+        // state-machine transition; evaluator RAM is reset here at the same
+        // successful application boundary.
+        evaluator_.reset();
     }
     return result;
 }
@@ -175,7 +218,8 @@ TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
 
 bool TemperatureControlApplicationOrchestrator::needsRuntimeReset(
     const RunCommandState& before, const RunCommandState& after,
-    bool recoveryBoundary) const {
+    bool recoveryBoundary, bool newActiveRun) const {
+    if (newActiveRun) return true;
     if (recoveryBoundary) return true;
     if (before.processState.state == ProcessState::RecoveryEvaluation ||
         after.processState.state == ProcessState::RecoveryEvaluation) {
