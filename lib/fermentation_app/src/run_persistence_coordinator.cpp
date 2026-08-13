@@ -161,14 +161,14 @@ std::optional<PriorBootPhaseElapsed> accumulatedPriorForResume(
 ProcessRuntimeState rebasedRecoveredState(const ProcessRuntimeState& original,
                                           std::uint64_t monotonicMillis) {
     auto recovered = original;
+    if (original.state == ProcessState::QualifyingTarget) {
+        recovered.state = ProcessState::ReachingTarget;
+    }
     recovered.stateEnteredAtMillis = monotonicMillis;
     recovered.qualificationValidSinceMillis.reset();
     recovered.targetReachWarningIssued = false;
     recovered.targetReachStartedAtMillis =
-        (original.state == ProcessState::ReachingTarget ||
-         original.state == ProcessState::QualifyingTarget)
-            ? monotonicMillis
-            : 0U;
+        recovered.state == ProcessState::ReachingTarget ? monotonicMillis : 0U;
     return recovered;
 }
 

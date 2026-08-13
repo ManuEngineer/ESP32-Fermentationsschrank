@@ -824,6 +824,21 @@ void test_recovery_rejects_state_and_snapshot_mismatches() {
     TEST_ASSERT_FALSE(
         restartedPreheat.after.qualificationValidSinceMillis.has_value());
 
+    ProcessRuntimeState reaching;
+    reaching.state = ProcessState::ReachingTarget;
+    reaching.targetReachStartedAtMillis = 0U;
+    const auto restartedReaching =
+        decideRecovery(recovery, &noPreheat, time, reaching);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
+                          static_cast<int>(restartedReaching.after.state));
+
+    ProcessRuntimeState restartedFermentingState;
+    restartedFermentingState.state = ProcessState::Fermenting;
+    const auto restartedFermenting =
+        decideRecovery(recovery, &noPreheat, time, restartedFermentingState);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
+                          static_cast<int>(restartedFermenting.after.state));
+
     const auto incompatibleCurrent = decide(waiting, &noPreheat, time);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(DecisionStatus::InvalidInput),
                           static_cast<int>(incompatibleCurrent.status));
