@@ -54,6 +54,60 @@ Eine nachgelagerte Aktorlogik prueft Totzeiten, Mindestlaufzeiten,
 Richtungswechsel, Sensorstatus und Sicherheitsgrenzen, bevor die H-Bruecke
 angesteuert wird.
 
+### Implementierter Issue-22-Fachkern
+
+Der native Issue-22-Kern verwendet vier getrennte Parametersaetze fuer
+`Air/Heating`, `Air/Cooling`, `Product/Heating` und `Product/Cooling`. Jeder
+Satz validiert endliche, positive `Kp`-/`Ki`-Werte, eine positive einseitige
+Neutralbandschwelle und eine Quote in `(0, 1]`. Die Parameterpruefung
+unterscheidet ein unkonfiguriertes Defaultprofil
+(`Unavailable / NoCommissioning`) von einer vorhandenen, strukturell
+ungueltigen Konfiguration (`InvalidInput / InvalidConfiguration`). Die
+gemeinsame `maximumIntegrationStepMillis`-Grenze wird vor der Richtungs- und
+Profilwahl geprueft; die konkrete Kommissionierung bleibt `TBD_COMMISSIONING`.
+
+Die aktive Richtung und Quote werden checked berechnet:
+
+```text
+rawError = target - measured
+activeError = abs(rawError) - directionNeutralBand
+rawP = Kp * activeError
+I <= max(0, maximumQuote - rawP)
+quote = min(rawP + I, maximumQuote)
+```
+
+`rawP` wird nicht vorab auf `maximumQuote` begrenzt. Ein endlicher `rawP` ab
+`maximumQuote` ist `Saturated`; bereits die positive Integrationsentscheidung
+ist dann `0`, der Integralanteil bleibt null. Die Integralreserve wird vor der
+`deltaI`-Berechnung aus `maximumQuote - rawP` bestimmt und begrenzt. Jede
+gueltige Anforderung, einschliesslich `OFF`, traegt eine fluechtige Sequenz
+und den monotonen Erzeugungszeitpunkt. Sequenz, Integral, Timestamp und
+Feedbackfenster werden nicht persistiert.
+
+Ein normaler PI- oder Qualifierwert ist ausschliesslich ein Snapshot mit
+`SensorQuality::Valid` und vorhandenem, endlichem `filteredCelsius`.
+`rawCelsius` und `correctedCelsius` bleiben Diagnose-, Roh- beziehungsweise
+Safety-Evidenz und sind kein Fallback fuer den normalen Regelwert.
+
+Im Produktbetrieb muessen Produkt- und Luftsnapshot gleichzeitig verwendbar
+sein. Ein fehlender, `STALE`- oder `FAILED`-Luftsnapshot fuehrt fail-closed zu
+`Unavailable / SensorUnavailable`; ein vorhandener, aber nicht-finiter oder
+strukturell ungueltiger Wert zu `InvalidInput / InvalidSample`. Im Luftbetrieb
+ist ein Produktwert nicht erforderlich; auch bei einem fehlenden, `STALE`-,
+`FAILED`- oder nicht-finiten Luftsnapshot bleibt `AirLimitState` dort
+`NotApplied`. Im Produktbetrieb bleibt fehlende oder ungueltige
+Luftbegrenzungs-Evidenz `Unavailable`. Die normale Produkt-Luftbegrenzung ist
+`Unrestricted`, `Reduced` oder `Blocked`; sie ist keine Safety-Grenze und
+verwendet keine Safety-Fehlerursache. `#24` bleibt fuer Safety und
+Aktorfreigabe zustaendig.
+
+Der Kern liefert `HEAT`, `OFF` oder `COOL` als `ControlRequest` mit
+`processTransitionSequence`, `runRevision` und `ControlSensorRole`. Ein
+nachgelagerter Aktorplaner muss diese Identitaet und sein eigenes Watchdog-
+Zeitfenster pruefen. Das PI-Feedback nennt nur
+`NoIntegratorConstraint`, `DeferredOrLimited` oder `Rejected`; der Kern
+behauptet keine physische Aktorquote.
+
 ### Warum im ersten Release kein vollstaendiger PID mit Autotuning
 
 Ein vollstaendiger PID-Regler mit automatischer Einmessung bleibt technisch
@@ -226,8 +280,66 @@ Verbindliche Regeln:
   im Zielband.
 - Eine Gnadenzeit darf nicht dazu fuehren, dass ueberwiegend ausserhalb des
   Zielbands liegende Temperaturen qualifiziert werden.
-- Zielband, Qualifikationsdauer, Messfilter und Gnadenzeit bleiben
-  `TBD_COMMISSIONING`.
+- `bandCelsius` ist eine einseitige Toleranz/Halbbreite; die Grenze ist
+  inklusiv: `abs(measured - target) <= bandCelsius`. Der bestehende
+  Wertebereich wird zentral durch `program_limits::kMinimumQualificationBandCelsius`
+  bis `program_limits::kMaximumQualificationBandCelsius` validiert.
+- Der Evaluator unterscheidet `Unavailable`, `Invalid`, `OutsideBand`,
+  `Grace`, `InBand` und `Complete`. Unavailable, Invalid, rueckwaerts laufende
+  Zeit, eine zu grosse Luecke und ein abgelaufenes Grace-Fenster unterbrechen
+  die aktuelle Episode und uebertragen keine Zeit.
+- `Grace` mit `outsideElapsed == effectiveGraceMillis` ist bereits abgelaufen;
+  eine direkte InBand-Rueckkehr vor dieser Grenze erhaelt den alten Kredit,
+  schreibt aber keine Rueckkehrzeit gut.
+- `qualificationValidSinceMillis` ist ausschliesslich Prozess-/Diagnosemarker.
+  Der Evaluator liefert den einzigen Qualifikationsfortschritt und `Complete`;
+  der Marker wird nie als zweite Zeitquelle ausgewertet.
+- Die Qualifier-Evaluation erzeugt einen nicht mutierenden Kandidaten. Ein
+  Kandidat wird bei persistierbarer Prozess-/Markeränderung erst nach
+  erfolgreichem Write-before-Apply uebernommen; ohne solche Aenderung darf er
+  RAM-only angewendet werden. Bei Persistenz-, Apply- oder Stale-Fehlern bleibt
+  der vorherige Evaluatorzustand unveraendert; der fehlgeschlagene Kandidat ist
+  single-use verworfen und ein Retry bewertet den unveraenderten Live-Zustand
+  neu. `TargetQualificationContext` bindet Ziel, Band und Rolle. Der
+  `TargetQualificationCommitContext` erweitert diesen Kontext um
+  `runRevision` und `processTransitionSequence`. Qualifikationsdauer und
+  Sample-Zeit sind separat durch den Orchestrator gebunden: Die Dauer wird
+  gegen den kanonischen Live-Laufvertrag validiert, und
+  `sampleTimestampMonotonicMillis` muss exakt zu
+  `RunCheckpointTime.monotonicMillis` passen. Ohne identischen Lauf-,
+  Prozess- und Zeitkontext ist der Kandidat stale; keine Revisionsaenderung
+  wird dadurch allein automatisch als neue fachliche Episode behandelt.
+- Ein erfolgreicher Prozess-/Marker-Commit liefert einen fluessigen
+  Post-Commit-Hinweis fuer Target-, Cooling- oder Regelsensorwechsel. Nur der
+  bereits angewendete effektive Kontext wird danach einmalig an den PI-Kern als
+  `pendingContextTransition` uebergeben; eine Decision vor dem Commit ist nie
+  selbst eine PI-Freigabe. `ProductInserted` erzeugt diesen Hinweis nur bei
+  effektivem `Air -> Product`, nicht bei `Air -> Air`.
+  Nur ein echter effektiver Rollenwechsel zwischen `Air` und `Product` erzeugt
+  `SensorRoleChange`; der Moduswert allein erzeugt keinen solchen Hinweis.
+- Die hardwarefreie
+  `TemperatureControlApplicationOrchestrator`-Grenze kapselt den erfolgreichen
+  Persistence-/RAM-Apply-Handoff fuer Commands, Prozessuebergaenge,
+  Regelsensorauswahl und Recovery. Nur ein Ergebnis mit Status `Applied` darf
+  den Hinweis konsumieren; fehlgeschlagene Writes oder Applies erreichen den
+  PI-Kern nicht. Dieselbe Grenze leitet Vollresets aus dem kanonischen
+  Before-/After-Laufzustand ab und leert PI/Qualifier bei neuem Lauf,
+  Recovery/Rebase, Fault oder dem Verlassen der Temperaturregelung.
+  Fuer diese Lifecycle-Entscheidung verwendet sie ausschliesslich den
+  fluechtigen `TemperatureControlLifecycleSnapshot` mit `processState`; sie
+  kopiert keinen vollstaendigen `RunCommandState`.
+- PI- und Qualifier-RAM werden an der kanonischen Grenze fuer neuen Lauf,
+  Recovery oder das Verlassen der Temperaturregelung fail-closed geleert.
+  Normale Phasenwechsel im selben Regelkontext uebertragen diesen Vollreset
+  nicht; Target-, Cooling- und Regelsensorwechsel verwenden ihre jeweilige
+  Commit-/Transition-Policy.
+- `ControlSensorRole` und `CommittedControlContextTransition` sind als kleine,
+  dependency-arme gemeinsame Werttypen von den PI-Parametern und
+  `TemperatureControlResult` getrennt. Prozess-, Kommando-, Persistenz- und
+  Context-Schichten binden dadurch keinen breiten PI-Vertrag ein.
+- Effektive Gnaden- und Sample-Gap-Werte sowie die konkreten
+  Qualifikationswerte bleiben `TBD_COMMISSIONING` beziehungsweise Eigentum
+  des freigegebenen Sampling-/Commissioning-Vertrags.
 - Der Start der Fermentationszeit erfolgt erst nach vollstaendig erfolgreicher
   Zielqualifikation.
 
@@ -348,14 +460,15 @@ vermischen.
 - Mindest-Ein- und Mindest-Auszeit des Peltiers
 - konkrete Polaritaetswechsel-Totzeit und Umschalthysterese
 - Verhalten bei sehr kleinen Reglerausgaengen
-- Anti-Windup- und Integralruecksetzregeln je Phase
+- konkrete Produktionswahl der validierten Anti-Windup-/Integral-
+  Transition-Policy je Phase
 - PI-Parameter fuer Luft- und Produktbetrieb
 - fruehe obere und untere Luftbegrenzungen
 - absolute Temperatur-Sicherheitsgrenzen
 - Innen- und Aussenluefter-Nachlaufzeiten
 - Verhalten der Luefter bei Fehlern
 - Filterung, Abtastrate und Plausibilisierung der Sensorwerte
-- Zielband, Qualifikationsdauer und Gnadenzeit
+- konkrete Zielband-, Qualifikationsdauer- und Gnadenwerte
 - validierte Stabilitaetszeit fuer Sensor-Rueckwechsel
 - Inbetriebnahme-, Sprungantwort- und Tuningverfahren
 - Kriterien fuer eine spaetere Freigabe von `cascade_product_air`

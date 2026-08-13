@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 
+#include "control_context_types.hpp"
 #include "run_checkpoint_schedule.hpp"
 #include "run_persistence_contract.hpp"
 #include "run_persistence_store.hpp"
@@ -103,6 +104,11 @@ struct RunPersistenceResult {
     // #21, 6.11: nur bei tatsaechlichem requestedMode != effectiveMode
     // (Startmatrix Zeile 2), erst nach erfolgreichem Commit sichtbar.
     std::optional<StartSensorSelectionNotice> startSensorSelectionNotice{};
+    // Transient post-commit handoff only: set after successful persistence
+    // and RAM apply for a target, sensor-role, cooling-target, or effective
+    // ProductInserted Air -> Product context transition. Never persisted.
+    std::optional<CommittedControlContextTransition>
+        committedControlContextTransition;
 };
 
 enum class RunPersistenceLoadStatus : std::uint8_t {

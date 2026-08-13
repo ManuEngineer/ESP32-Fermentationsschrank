@@ -7,6 +7,7 @@
 #include "program_limits.hpp"
 #include "run_progress_weighting.hpp"
 #include "run_limits.hpp"
+#include "control_context.hpp"
 #include "sensor_selection.hpp"
 
 namespace fermentation {
@@ -84,6 +85,14 @@ bool validSensorMode(RunSensorMode mode) {
             return true;
     }
     return false;
+}
+
+std::optional<CommittedControlContextTransition> targetContextTransition(
+    bool targetChanged) {
+    if (!targetChanged) {
+        return std::nullopt;
+    }
+    return CommittedControlContextTransition::TargetContextChange;
 }
 
 bool activeProcessState(ProcessState state) {
@@ -603,6 +612,26 @@ void applySensorSelectionMutation(
     }
 }
 
+bool applySensorRoleChangeQualificationReset(RunCommandState& state,
+                                             std::uint64_t monotonicMillis) {
+    if (state.processState.state != ProcessState::QualifyingTarget) {
+        return true;
+    }
+    if (!state.processRunSnapshot.has_value()) {
+        return false;
+    }
+
+    const auto reset = decideProcessTransition(
+        state.processState, &*state.processRunSnapshot, ProcessSignals{},
+        TransitionRequest{}, monotonicMillis);
+    if (!reset.proposed() ||
+        reset.reason != TransitionReason::QualificationReset) {
+        return false;
+    }
+    return applyProcessTransition(state.processState, reset,
+                                  &*state.processRunSnapshot);
+}
+
 bool validateManualRunPlan(const ManualRunPlan& plan) {
     const auto& values = plan.values;
     const bool waitMatchesPreheat =
@@ -1120,6 +1149,8 @@ CommandDecision decideRunAdjustment(
         decision.status = CommandStatus::InvalidInput;
         return decision;
     }
+    decision.committedControlContextTransition =
+        targetContextTransition(targetChanged);
     if (durationChanged &&
         current.processState.state == ProcessState::Fermenting) {
         candidate.processState.stateEnteredAtMillis =
@@ -1377,10 +1408,27 @@ CommandDecision decideApplySensorSelectionAction(
             // Mutationshelfer mit dem automatischen Pfad (siehe
             // run_persistence_coordinator.cpp::persistSensorSelection).
             applySensorSelectionMutation(candidate, mutation);
+            if (mutation.event.has_value() &&
+                resolveControlSensorRoleTransition(
+                    decision.before.processState.state,
+                    decision.before.activeRunSensorMode,
+                    candidate.processState.state, candidate.activeRunSensorMode)
+                    .has_value() &&
+                !applySensorRoleChangeQualificationReset(
+                    candidate, request.envelope.monotonicMillis)) {
+                decision.status = CommandStatus::InvalidInput;
+                return decision;
+            }
             decision.after = std::move(candidate);
             beginMutation(decision);
             if (mutation.event.has_value()) {
                 decision.sensorSelectionEvent = mutation.event;
+                decision.committedControlContextTransition =
+                    resolveControlSensorRoleTransition(
+                        decision.before.processState.state,
+                        decision.before.activeRunSensorMode,
+                        decision.after.processState.state,
+                        decision.after.activeRunSensorMode);
             } else if (mutation.notice.has_value()) {
                 decision.sensorSelectionNotice = mutation.notice;
             }

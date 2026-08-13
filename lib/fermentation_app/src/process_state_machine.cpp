@@ -392,7 +392,7 @@ TransitionDecision decideQualification(const ProcessRuntimeState& current,
                                        const ProcessSignals& signals,
                                        std::uint64_t monotonicMillis,
                                        bool preheating) {
-    if (!signals.qualificationConditionValid) {
+    if (qualificationIsInterrupted(signals)) {
         if (!current.qualificationValidSinceMillis.has_value()) {
             return result(DecisionStatus::NoTransition, current,
                           monotonicMillis);
@@ -413,19 +413,8 @@ TransitionDecision decideQualification(const ProcessRuntimeState& current,
         return decision;
     }
 
-    if (!current.qualificationValidSinceMillis.has_value()) {
-        auto decision = proposePhaseDataUpdate(
-            current, TransitionReason::QualificationTrackingStarted,
-            monotonicMillis);
-        decision.after.qualificationValidSinceMillis = monotonicMillis;
-        return decision;
-    }
-    if (!elapsed(monotonicMillis, *current.qualificationValidSinceMillis,
-                 snapshot.qualificationDurationMinutes)) {
-        return result(DecisionStatus::NoTransition, current, monotonicMillis);
-    }
-
-    if (preheating) {
+    if (signals.qualificationProgress == QualificationProgress::Complete &&
+        preheating) {
         auto decision =
             propose(current, ProcessState::WaitingForProduct,
                     TransitionReason::PreheatQualified, monotonicMillis);
@@ -434,11 +423,26 @@ TransitionDecision decideQualification(const ProcessRuntimeState& current,
         return decision;
     }
 
-    const auto nextState = snapshot.kind == ProcessKind::ManualHolding
-                               ? ProcessState::ManualHolding
-                               : ProcessState::Fermenting;
-    return propose(current, nextState, TransitionReason::TargetQualified,
-                   monotonicMillis);
+    if (signals.qualificationProgress == QualificationProgress::Complete) {
+        const auto nextState = snapshot.kind == ProcessKind::ManualHolding
+                                   ? ProcessState::ManualHolding
+                                   : ProcessState::Fermenting;
+        return propose(current, nextState, TransitionReason::TargetQualified,
+                       monotonicMillis);
+    }
+
+    if (!current.qualificationValidSinceMillis.has_value()) {
+        auto decision = proposePhaseDataUpdate(
+            current, TransitionReason::QualificationTrackingStarted,
+            monotonicMillis);
+        decision.after.qualificationValidSinceMillis = monotonicMillis;
+        return decision;
+    }
+    if (!qualificationIsComplete(signals)) {
+        return result(DecisionStatus::NoTransition, current, monotonicMillis);
+    }
+
+    return result(DecisionStatus::NoTransition, current, monotonicMillis);
 }
 
 TransitionDecision decideWaitingForProduct(
@@ -461,7 +465,7 @@ TransitionDecision decideReachingTarget(const ProcessRuntimeState& current,
                                         const ProcessRunSnapshot& snapshot,
                                         const ProcessSignals& signals,
                                         std::uint64_t monotonicMillis) {
-    if (signals.qualificationConditionValid) {
+    if (qualificationHasPositiveEvidence(signals)) {
         auto decision = propose(current, ProcessState::QualifyingTarget,
                                 TransitionReason::QualificationTrackingStarted,
                                 monotonicMillis);
@@ -519,7 +523,7 @@ TransitionDecision decideCooling(const ProcessRuntimeState& current,
                                  const ProcessRunSnapshot& snapshot,
                                  const ProcessSignals& signals,
                                  std::uint64_t monotonicMillis) {
-    if (!signals.qualificationConditionValid) {
+    if (!signals.coolingTargetConditionValid) {
         return result(DecisionStatus::NoTransition, current, monotonicMillis);
     }
     if (snapshot.completionMode == CompletionMode::CoolThenFinish) {
@@ -715,6 +719,8 @@ TransitionDecision decideExplicitEvent(
                                     TransitionReason::TargetChangedReevaluation,
                                     monotonicMillis);
             decision.after.qualificationValidSinceMillis.reset();
+            decision.committedControlContextTransition =
+                CommittedControlContextTransition::TargetContextChange;
             return decision;
         }
         if (current.state == ProcessState::ReachingTarget ||
@@ -723,6 +729,8 @@ TransitionDecision decideExplicitEvent(
                                     TransitionReason::TargetChangedReevaluation,
                                     monotonicMillis);
             initializeTargetReach(decision, monotonicMillis);
+            decision.committedControlContextTransition =
+                CommittedControlContextTransition::TargetContextChange;
             return decision;
         }
         return rejected(current, monotonicMillis);
@@ -842,6 +850,20 @@ std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(const ActiveRun& run) {
     return validateProcessRunSnapshot(snapshot)
                ? std::optional<ProcessRunSnapshot>{snapshot}
                : std::nullopt;
+}
+
+bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
+                             const ProcessRunSnapshot& right) {
+    return left.kind == right.kind &&
+           left.preheatEnabled == right.preheatEnabled &&
+           left.completionMode == right.completionMode &&
+           left.qualificationDurationMinutes ==
+               right.qualificationDurationMinutes &&
+           left.maximumTargetReachMinutes == right.maximumTargetReachMinutes &&
+           left.maximumProductWaitMinutes == right.maximumProductWaitMinutes &&
+           left.fermentationDurationMinutes ==
+               right.fermentationDurationMinutes &&
+           left.holdDurationMinutes == right.holdDurationMinutes;
 }
 
 bool equalProcessRuntimeState(const ProcessRuntimeState& left,
@@ -966,8 +988,12 @@ TransitionDecision completeTimedRun(const ProcessRuntimeState& current,
         static_cast<void>(addMessage(decision, ProcessMessage::RunCompleted));
         return decision;
     }
-    return propose(current, ProcessState::Cooling,
-                   TransitionReason::FermentationCompleted, monotonicMillis);
+    auto decision =
+        propose(current, ProcessState::Cooling,
+                TransitionReason::FermentationCompleted, monotonicMillis);
+    decision.committedControlContextTransition =
+        CommittedControlContextTransition::CoolingTargetContextChange;
+    return decision;
 }
 
 TransitionDecision completeHoldDuration(const ProcessRuntimeState& current,

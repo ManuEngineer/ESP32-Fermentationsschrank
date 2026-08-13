@@ -99,20 +99,6 @@ bool validSensorSelectionCrossFields(
     return true;
 }
 
-bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
-                             const ProcessRunSnapshot& right) {
-    return left.kind == right.kind &&
-           left.preheatEnabled == right.preheatEnabled &&
-           left.completionMode == right.completionMode &&
-           left.qualificationDurationMinutes ==
-               right.qualificationDurationMinutes &&
-           left.maximumTargetReachMinutes == right.maximumTargetReachMinutes &&
-           left.maximumProductWaitMinutes == right.maximumProductWaitMinutes &&
-           left.fermentationDurationMinutes ==
-               right.fermentationDurationMinutes &&
-           left.holdDurationMinutes == right.holdDurationMinutes;
-}
-
 // Schema 3 (#18, 5.14 Punkt 6): NoActiveRun traegt keine Recovery-
 // Diagnosedaten eines beendeten Laufs - dieselben sechs Felder, die
 // clearActiveRunState() zuruecksetzt (run_commands.cpp).

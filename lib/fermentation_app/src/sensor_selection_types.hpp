@@ -18,6 +18,16 @@ enum class RunSensorMode : std::uint8_t {
     Air,
 };
 
+// Gemeinsamer, fachlich abstrakter Regelrichtungstyp. Er gehoert nicht zur
+// Sensorselektionsentscheidung, wird aber von #21-Evidenz und der
+// #22-ControlRequest gemeinsam verwendet.
+enum class AbstractControlDirection : std::uint8_t {
+    Unknown,
+    Heating,
+    Cooling,
+    Idle,
+};
+
 enum class SensorSelectionPhase : std::uint8_t {
     NoActiveRun,
     NormalProduct,

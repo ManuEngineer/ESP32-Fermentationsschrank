@@ -173,6 +173,13 @@ Die Parameter gehören zur Maschine, nicht zum einzelnen Rezept. Programme legen
 Solltemperatur und Prozessverhalten fest, aber keine beliebigen
 Reglerverstärkungen.
 
+Der implementierte #22-Kern waehlt den Parametersatz aus der bereits
+aufgeloesten `ControlSensorRole` (`Air` oder `Product`) und der Richtung. Im
+Produktmodus sind Luft- und Produktsnapshot beide Pflicht; ein Luftausfall
+bleibt `Unavailable`/`SensorUnavailable` und loest keinen Rollenfallback aus.
+Die konkrete Kommissionierung der vier Saetze und der gemeinsamen
+Sample-Gap-/Integrationsgrenze bleibt offen.
+
 ## Integratorregeln
 
 Der Integrator wird begrenzt oder eingefroren bei:
@@ -185,8 +192,16 @@ Der Integrator wird begrenzt oder eingefroren bei:
 - Wechsel des primären Regelsensors
 - Prozessphasen, in denen keine Temperaturregelung aktiv ist
 
-Ein Sensor- oder Richtungswechsel darf keinen gespeicherten grossen
-Integratorimpuls auf die neue Lage übertragen.
+Die nachgelagerte Aktorkette bestaetigt nur die Disposition der unmittelbar
+vorherigen aktiven Request: `NoIntegratorConstraint`, `DeferredOrLimited` oder
+`Rejected`. Der #22-Kern behauptet keine physische Quote. Ein fehlendes,
+fremdes, altes oder doppelt konsumiertes Feedback friert die positive
+Integration ein beziehungsweise wird fail-closed verworfen.
+
+Ein Sensor-, Ziel- oder Richtungswechsel verwendet die injizierte Policy
+`Reset` oder `BoundedCarry`; ein gespeicherter grosser Integratorimpuls darf
+nicht ungebunden in die neue Lage uebertragen werden. Die produktive Wahl und
+Carry-Grenze bleiben `TBD_COMMISSIONING`/#35.
 
 ## Strukturierte Inbetriebnahme
 

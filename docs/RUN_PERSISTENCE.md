@@ -59,6 +59,51 @@ Nicht gespeichert werden:
 - letzte Heiz- oder Kuehlfreigabe als Bootbefehl
 - rohe GPIO-Zustaende
 - blinde Aktor-Wiederherstellungsbefehle
+- fluechtige `ControlRequest`-Sequenzen, PI-Integratorwerte,
+  Feedbackfenster, `lastActiveDirection` oder Qualifikator-Episoden
+
+Nach Recovery beginnt der #22-PI-/Qualifikatorzustand leer. Eine alte
+`qualificationValidSinceMillis`-Markierung bleibt ausschliesslich ein
+Prozess-/Diagnosemarker und erzeugt keinen Qualifikationskredit; die bestehende
+Recovery-Rebase aus `QUALIFYING_TARGET` nach `REACHING_TARGET` bleibt bestehen.
+
+Der Qualifikatorzustand bleibt fluechtig und wird nicht persistiert. Seine
+Evaluation erzeugt zunaechst einen Kandidaten; bei einer persistierbaren
+Prozess- oder Markeränderung wird dieser erst nach erfolgreichem
+Write-before-Apply und `applyProcessTransition()` uebernommen. Bei einem
+fehlgeschlagenen Schreiben oder Anwenden bleibt der alte Evaluatorzustand
+wirksam. Ohne persistierbare Aenderung darf der Kandidat RAM-only uebernommen
+werden. Ein Retry bewertet deshalb den unveraenderten Live-Zustand neu und
+schreibt keine Qualifikationszeit doppelt gut. Jede Decision ist dabei
+single-use: ein stale oder fehlgeschlagener Kandidat wird verworfen und kann
+nicht durch eine spaetere Statusumdeutung erneut angewendet werden. Der
+hardwarefreie Orchestrator bildet `decision.progress` in `ProcessSignals`,
+ruft ausschliesslich `decideProcessTransition()` auf und verwendet fuer den
+Commit den bestehenden `RunPersistenceCoordinator`; er fuehrt weder eine
+zweite Prozessmaschine noch einen zweiten Persistence-Coordinator ein.
+Der Stale-Kontext bindet die bestehende `runRevision` und
+`processTransitionSequence`, ohne dadurch allein die fachliche Episode zu
+resetten. Die Sample-Zeit des Qualifikators muss dabei exakt der
+`RunCheckpointTime.monotonicMillis` entsprechen; Abweichungen werden stale
+verworfen und erzeugen keinen Write.
+
+Die erfolgreichen Write-before-Apply-Ergebnisse tragen ausserhalb des
+Persistenzschemas einen fluessigen Handoff-Hinweis: `persistCommand()` fuer
+Ziel-/Kontextaenderungen, `persistTransition()` fuer Ziel-/Coolingwechsel und
+`persistSensorSelection()` fuer einen persistierten `RunSensorMode`-
+Wechsel, der nach erfolgreichem Write-before-Apply einen
+`SensorSelectionEvent`/Moduswechsel tragen kann. Der #22-Handoff entsteht
+daraus nur bei einem echten effektiven `ControlSensorRole`-Wechsel
+`Air <-> Product`; ein effektiver `Air -> Air`-Pfad in
+`PREHEATING`/`WAITING_FOR_PRODUCT` erzeugt keinen `SensorRoleChange`.
+Notices, fehlgeschlagene Writes und fehlgeschlagene RAM-Applies tragen
+keinen solchen Hinweis. Die einzige
+Anwendungsgrenze dafuer ist
+`TemperatureControlApplicationOrchestrator`: Sie konsumiert Hinweise nur bei
+`RunPersistenceResultStatus::Applied`, hoechstens einmal, und uebergibt sie
+erst danach an den PI-Kern. Sie leitet ausserdem Vollresets aus dem kanonischen
+Before-/After-Laufzustand sowie der Recovery-Grenze ab. Daraus wird weder ein
+zweiter Prozesszustand noch ein Persistenzfeld.
 
 ## Speicherereignisse
 

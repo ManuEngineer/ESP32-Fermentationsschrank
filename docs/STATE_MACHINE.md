@@ -228,6 +228,22 @@ Die sichtbare und akustische Aufforderung beim Eintritt in
 `WAITING_FOR_PRODUCT` ist zugleich die Warnung vor Ablauf der Wartezeit. Release
 1 besitzt keine zweite, davon getrennte Warnschwelle.
 
+`ProductInserted` ist zunaechst ausschliesslich ein Prozessereignis. Die
+Zustandsmaschine waehlt daraus keine PI-Sensorrolle. Erst nach erfolgreicher
+Persistenz und Anwendung wird der bereits aufgeloeste effektive Kontext
+verglichen: Nur `Air -> Product` erzeugt die committed
+`ProductInserted`-Kontexttransition. Ein luftgefuehrter Lauf bleibt
+`Air -> Air` und erzeugt keinen kuenstlichen Rollenwechsel oder Carry/Reset.
+
+Der effektive Temperaturregelkontext wird vor der Aufloesung aus dem aktuellen
+`RunCommandState` projiziert. Dabei liefert `ActiveRun::effectiveValues()` das
+aktuelle Programmsoll, ein aktiver `ManualRunPlan` das manuelle Soll und
+`COOLING`/`COOL_HOLDING` ausschliesslich das Completion-Kuehlziel. Die Phasen-
+und Rollenmatrix wird danach zentral genau einmal aufgeloest; Qualifier-
+Eingaben werden gegen denselben Live-Kontext sowie `runRevision` und
+`processTransitionSequence` validiert. Source-Programmsoll, alte Rollenwerte
+oder ein allein passender Revisionswert sind keine zulaessigen Fallbacks.
+
 ### Uebergaenge
 
 ```text
@@ -289,6 +305,24 @@ kritischer Fehler
 
 Nach einem Neustart beginnt eine zuvor nur teilweise absolvierte
 Zielqualifikation neu.
+
+Der Evaluator liefert dafuer ausschliesslich `ProcessSignals`; er entscheidet
+keinen Prozessuebergang selbst. `REACHING_TARGET` darf bei jedem positiven
+Qualifikationssignal, auch bei `Grace` oder `Complete`, nur nach
+`QUALIFYING_TARGET` wechseln. Erst `QUALIFYING_TARGET` mit `Complete` darf
+`FERMENTING` beziehungsweise `MANUAL_HOLDING` vorschlagen. `Complete` ist
+hier das alleinige Abschluss-Signal und ist unabhaengig vom Alter des
+Prozessmarkers. `InBand` und `Grace` schliessen auch bei einem alten Marker
+nicht ab. `Unavailable`, `Invalid` und `OutsideBand` loeschen die aktuelle
+Qualifikation. Ein vorgelagertes `criticalFault`-Signal behält dabei die
+kanonische Prioritaet und fuehrt auch bei `Complete` nach `FAULT`; nach dem
+erfolgreichen Verlassen der Qualifikationsdomaene bleibt kein Qualifier-Kredit
+im RAM.
+
+Cooling verwendet getrennt davon `coolingTargetConditionValid`. Der
+Qualifikationsfortschritt, Grace und Qualifikationsdauer sind in `COOLING`
+wirkungslos. `CoolThenFinish` fuehrt nach gueltigem Kuehlziel nach
+`COMPLETED`; beide Cool-and-Hold-Modi fuehren nach `COOL_HOLDING`.
 
 ## FERMENTING
 
@@ -438,6 +472,8 @@ Es gibt keine Pause. Nach `STOP` zeigt die Bedienoberflaeche:
 - urspruenglichen Prozess als abgebrochen markieren
 - Benutzer bestaetigt Kuehlziel und Abschlussverhalten
 - neuen expliziten manuellen Kuehllauf mit eigenem Schnappschuss anlegen
+- diesen `AbortAndCool`-Neulauf als kanonische `NewActiveRun`-Grenze beginnen;
+  PI- und Qualifier-RAM des alten Laufes werden vollstaendig geleert
 - Uebergang in `REACHING_TARGET` beziehungsweise `COOLING`
 
 ## Warnungen und WARNING_REQUIRES_ACTION

@@ -11,6 +11,7 @@
 #include "run_recovery_types.hpp"
 #include "run_snapshot.hpp"
 #include "sensor_selection_types.hpp"
+#include "control_context_types.hpp"
 
 namespace fermentation {
 
@@ -411,6 +412,11 @@ struct CommandDecision {
     // der Bestaetigungspruefung gefuellt (analog startSummary) - nur bei
     // tatsaechlichem requestedMode != effectiveMode (Startmatrix Zeile 2).
     std::optional<StartSensorSelectionNotice> startSensorSelectionNotice;
+    // Fluessige #22-Commit-Information. Sie wird nur nach erfolgreichem
+    // persistCommand/applyRunCommand an den PI-Kern weitergereicht und wird
+    // weder persistiert noch als zweiter Lauf-/Prozessstatus verwendet.
+    std::optional<CommittedControlContextTransition>
+        committedControlContextTransition;
 
     [[nodiscard]] bool proposed() const {
         return status == CommandStatus::Proposed;
@@ -470,5 +476,12 @@ void clearActiveRunState(RunCommandState& state);
 // zusaetzlicher Include.
 void applySensorSelectionMutation(RunCommandState& state,
                                   const SensorSelectionStateMutation& mutation);
+
+// Reuses the existing QualificationReset -> REACHING_TARGET topology for an
+// effective sensor-role change committed while target qualification is active.
+// Returns false without mutation when the current process context cannot
+// produce that validated state-machine transition.
+[[nodiscard]] bool applySensorRoleChangeQualificationReset(
+    RunCommandState& state, std::uint64_t monotonicMillis);
 
 }  // namespace fermentation

@@ -5,8 +5,10 @@
 #include <cstdint>
 #include <optional>
 
+#include "process_signal_types.hpp"
 #include "program_model.hpp"
 #include "run_snapshot.hpp"
+#include "control_context_types.hpp"
 
 namespace fermentation {
 
@@ -48,6 +50,8 @@ struct ProcessRunSnapshot {
     const ProcessRunSnapshot& snapshot);
 [[nodiscard]] std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
     const ActiveRun& run);
+[[nodiscard]] bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
+                                           const ProcessRunSnapshot& right);
 
 // Oeffentlich fuer den Schema-3-Gueltigkeitsvertrag ausserhalb dieser
 // Uebersetzungseinheit (run_persistence_contract.cpp, 5.14): prueft, ob eine
@@ -79,12 +83,6 @@ struct ProcessRuntimeState {
 [[nodiscard]] bool validateProcessRuntimeForCheckpoint(
     const ProcessRuntimeState& state, const ProcessRunSnapshot* runSnapshot,
     std::uint64_t checkpointMonotonicMillis);
-
-struct ProcessSignals {
-    // Bezieht sich immer auf Ziel und Zielband der aktuellen Prozessphase.
-    bool qualificationConditionValid{false};
-    bool criticalFault{false};
-};
 
 enum class ProcessEvent : std::uint8_t {
     None,
@@ -165,6 +163,11 @@ struct TransitionDecision {
     std::uint64_t monotonicMillis{0U};
     std::array<ProcessMessage, kMaximumTransitionMessages> messages{};
     std::size_t messageCount{0U};
+    // Fluessige Commit-Information fuer den #22-Integrator. Sie wird erst
+    // nach erfolgreichem applyProcessTransition wirksam und ist kein
+    // Prozess-/Wirefeld.
+    std::optional<CommittedControlContextTransition>
+        committedControlContextTransition;
 
     [[nodiscard]] bool proposed() const {
         return status == DecisionStatus::Proposed;

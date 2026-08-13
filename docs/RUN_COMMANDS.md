@@ -248,7 +248,10 @@ Die CommandDecision bildet eine unteilbare fachliche Gesamtaktion:
 1. bisherigen Programmlauf als abgebrochen markieren
 2. Benutzerabbruch protokollierbar machen
 3. neuen validierten manuellen Laufplan mit eigenem Schnappschuss erzeugen
-4. den neuen Lauf ueber `REACHING_TARGET` beziehungsweise den kanonischen
+4. den neuen `AbortAndCool`-Lauf als kanonische `NewActiveRun`-Grenze beginnen;
+   PI- und Qualifier-RAM des alten Laufes werden nicht in den neuen Lauf
+   uebernommen
+5. den neuen Lauf ueber `REACHING_TARGET` beziehungsweise den kanonischen
    manuellen Zustandsweg starten
 
 Der alte Lauf darf nicht bereits beendet werden, wenn der neue manuelle Laufplan
@@ -324,6 +327,12 @@ Eine bestaetigte Zieltemperaturaenderung waehrend `FERMENTING`:
 Die Vorschau weist ausdruecklich darauf hin, dass der biologische Prozess
 weiterlaeuft und Release 1 aus der Sollwertaenderung keine erfundene
 biologische Zeitkorrektur ableitet.
+
+Nach erfolgreichem Persistenz-/Apply-Pfad wird fuer den fluechtigen #22-Kern
+eine `TargetContextChange`-Commit-Information bereitgestellt. Bei einem
+fehlgeschlagenen Persistenz- oder Apply-Pfad entsteht keine solche Information;
+der alte Ziel- und Integratorkontext bleibt wirksam. Die Information ist kein
+neues Lauf- oder Wirefeld.
 
 Eine spaetere temperaturgewichtete Fortschrittskorrektur bleibt Issue #18 und
 der Inbetriebnahme vorbehalten.

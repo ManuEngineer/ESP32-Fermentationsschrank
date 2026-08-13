@@ -25,6 +25,7 @@ using fermentation::ProcessSignals;
 using fermentation::ProcessState;
 using fermentation::ProgramDocument;
 using fermentation::ProgramSourceKind;
+using fermentation::QualificationProgress;
 using fermentation::TransitionDecision;
 using fermentation::TransitionReason;
 using fermentation::TransitionRequest;
@@ -133,6 +134,26 @@ ProcessRuntimeState standbyState() {
     return state;
 }
 
+ProcessSignals qualificationInBandSignals() {
+    return {QualificationProgress::InBand, false, false};
+}
+
+ProcessSignals qualificationCompleteSignals() {
+    return {QualificationProgress::Complete, false, false};
+}
+
+ProcessSignals coolingReachedSignals() {
+    return {QualificationProgress::Unavailable, true, false};
+}
+
+ProcessSignals interruptedSignals() {
+    return {QualificationProgress::Unavailable, false, false};
+}
+
+ProcessSignals criticalFaultSignals() {
+    return {QualificationProgress::Unavailable, false, true};
+}
+
 void enterQualifying(ProcessRuntimeState& state,
                      const ProcessRunSnapshot& snapshot,
                      const VirtualTimeSource& time) {
@@ -140,7 +161,8 @@ void enterQualifying(ProcessRuntimeState& state,
           &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(state.state));
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationInBandSignals()),
+          &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::QualifyingTarget),
                           static_cast<int>(state.state));
 }
@@ -148,7 +170,102 @@ void enterQualifying(ProcessRuntimeState& state,
 void qualify(ProcessRuntimeState& state, const ProcessRunSnapshot& snapshot,
              VirtualTimeSource& time) {
     time.advanceMonotonicMillis(kMinuteMillis);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationCompleteSignals()),
+          &snapshot);
+}
+
+void test_all_qualification_progress_values_follow_phase_topology() {
+    struct ProgressCase {
+        QualificationProgress progress;
+        bool interrupted;
+        bool positive;
+        bool complete;
+    };
+    const std::array cases = {
+        ProgressCase{QualificationProgress::Unavailable, true, false, false},
+        ProgressCase{QualificationProgress::Invalid, true, false, false},
+        ProgressCase{QualificationProgress::OutsideBand, true, false, false},
+        ProgressCase{QualificationProgress::Grace, false, true, false},
+        ProgressCase{QualificationProgress::InBand, false, true, false},
+        ProgressCase{QualificationProgress::Complete, false, true, true},
+    };
+    const auto snapshot = makeTimedSnapshot(true);
+    VirtualTimeSource time;
+
+    for (const auto& testCase : cases) {
+        ProcessSignals signals;
+        signals.qualificationProgress = testCase.progress;
+
+        ProcessRuntimeState preheating;
+        preheating.state = ProcessState::Preheating;
+        if (testCase.interrupted) {
+            preheating.qualificationValidSinceMillis = 0U;
+        }
+        const auto preheatingDecision =
+            decide(preheating, &snapshot, time, signals);
+        if (testCase.interrupted) {
+            TEST_ASSERT_TRUE(preheatingDecision.proposed());
+            TEST_ASSERT_TRUE(preheatingDecision.reason ==
+                             TransitionReason::QualificationReset);
+            TEST_ASSERT_TRUE(preheatingDecision.after.state ==
+                             ProcessState::Preheating);
+            TEST_ASSERT_FALSE(preheatingDecision.after
+                                  .qualificationValidSinceMillis.has_value());
+        } else if (testCase.complete) {
+            TEST_ASSERT_TRUE(preheatingDecision.proposed());
+            TEST_ASSERT_TRUE(preheatingDecision.reason ==
+                             TransitionReason::PreheatQualified);
+            TEST_ASSERT_TRUE(preheatingDecision.after.state ==
+                             ProcessState::WaitingForProduct);
+        } else {
+            TEST_ASSERT_TRUE(preheatingDecision.proposed());
+            TEST_ASSERT_TRUE(preheatingDecision.reason ==
+                             TransitionReason::QualificationTrackingStarted);
+            TEST_ASSERT_TRUE(preheatingDecision.after.state ==
+                             ProcessState::Preheating);
+            TEST_ASSERT_TRUE(
+                preheatingDecision.after.qualificationValidSinceMillis == 0U);
+        }
+
+        ProcessRuntimeState reaching;
+        reaching.state = ProcessState::ReachingTarget;
+        const auto reachingDecision =
+            decide(reaching, &snapshot, time, signals);
+        if (testCase.positive) {
+            TEST_ASSERT_TRUE(reachingDecision.proposed());
+            TEST_ASSERT_TRUE(reachingDecision.reason ==
+                             TransitionReason::QualificationTrackingStarted);
+            TEST_ASSERT_TRUE(reachingDecision.after.state ==
+                             ProcessState::QualifyingTarget);
+        } else {
+            TEST_ASSERT_TRUE(reachingDecision.status ==
+                             DecisionStatus::NoTransition);
+        }
+
+        ProcessRuntimeState qualifying;
+        qualifying.state = ProcessState::QualifyingTarget;
+        qualifying.qualificationValidSinceMillis = 0U;
+        const auto qualifyingDecision =
+            decide(qualifying, &snapshot, time, signals);
+        if (testCase.interrupted) {
+            TEST_ASSERT_TRUE(qualifyingDecision.proposed());
+            TEST_ASSERT_TRUE(qualifyingDecision.reason ==
+                             TransitionReason::QualificationReset);
+            TEST_ASSERT_TRUE(qualifyingDecision.after.state ==
+                             ProcessState::ReachingTarget);
+            TEST_ASSERT_FALSE(qualifyingDecision.after
+                                  .qualificationValidSinceMillis.has_value());
+        } else if (testCase.complete) {
+            TEST_ASSERT_TRUE(qualifyingDecision.proposed());
+            TEST_ASSERT_TRUE(qualifyingDecision.reason ==
+                             TransitionReason::TargetQualified);
+            TEST_ASSERT_TRUE(qualifyingDecision.after.state ==
+                             ProcessState::Fermenting);
+        } else {
+            TEST_ASSERT_TRUE(qualifyingDecision.status ==
+                             DecisionStatus::NoTransition);
+        }
+    }
 }
 
 void test_all_factory_programs_produce_expected_process_snapshots() {
@@ -188,20 +305,27 @@ void test_all_factory_programs_complete_their_full_process_flow() {
         apply(state, decide(state, &snapshot, time, {}, ProcessEvent::StartRun),
               &snapshot);
         if (snapshot.preheatEnabled) {
-            apply(state, decide(state, &snapshot, time, {true, false}),
+            apply(state,
+                  decide(state, &snapshot, time, qualificationInBandSignals()),
                   &snapshot);
             time.advanceMonotonicMillis(kMinuteMillis);
-            apply(state, decide(state, &snapshot, time, {true, false}),
-                  &snapshot);
+            apply(
+                state,
+                decide(state, &snapshot, time, qualificationCompleteSignals()),
+                &snapshot);
             apply(state,
                   decide(state, &snapshot, time, {},
                          ProcessEvent::ProductInsertedConfirmed),
                   &snapshot);
         }
 
-        apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+        apply(state,
+              decide(state, &snapshot, time, qualificationInBandSignals()),
+              &snapshot);
         time.advanceMonotonicMillis(kMinuteMillis);
-        apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+        apply(state,
+              decide(state, &snapshot, time, qualificationCompleteSignals()),
+              &snapshot);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
                               static_cast<int>(state.state));
 
@@ -215,7 +339,8 @@ void test_all_factory_programs_complete_their_full_process_flow() {
 
         TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Cooling),
                               static_cast<int>(state.state));
-        apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+        apply(state, decide(state, &snapshot, time, coolingReachedSignals()),
+              &snapshot);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::CoolHolding),
                               static_cast<int>(state.state));
         apply(state,
@@ -337,8 +462,8 @@ void test_critical_fault_has_priority_over_user_event() {
     auto state = standbyState();
     const auto snapshot = makeTimedSnapshot(false);
 
-    const auto decision =
-        decide(state, &snapshot, time, {false, true}, ProcessEvent::StartRun);
+    const auto decision = decide(state, &snapshot, time, criticalFaultSignals(),
+                                 ProcessEvent::StartRun);
 
     TEST_ASSERT_TRUE(decision.proposed());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
@@ -350,10 +475,35 @@ void test_critical_fault_has_priority_over_user_event() {
     auto invalidSnapshot = snapshot;
     invalidSnapshot.qualificationDurationMinutes = 0U;
     const auto invalidSnapshotDecision =
-        decide(state, &invalidSnapshot, time, {false, true});
+        decide(state, &invalidSnapshot, time, criticalFaultSignals());
     TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::CriticalFault),
                           static_cast<int>(invalidSnapshotDecision.reason));
     apply(state, invalidSnapshotDecision, &invalidSnapshot);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
+                          static_cast<int>(state.state));
+}
+
+void test_critical_fault_has_priority_over_cooling_progress() {
+    VirtualTimeSource time;
+    auto state = ProcessRuntimeState{};
+    state.state = ProcessState::Cooling;
+    const auto snapshot =
+        makeTimedSnapshot(false, CompletionMode::CoolThenFinish);
+    auto signals = coolingReachedSignals();
+    signals.criticalFault = true;
+
+    const auto decision = decide(state, &snapshot, time, signals);
+
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
+                          static_cast<int>(decision.after.state));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::CriticalFault),
+                          static_cast<int>(decision.reason));
+    TEST_ASSERT_TRUE(containsMessage(decision, ProcessMessage::FaultEntered));
+    TEST_ASSERT_FALSE(containsMessage(decision, ProcessMessage::RunCompleted));
+    TEST_ASSERT_FALSE(decision.after.state == ProcessState::CoolHolding);
+
+    apply(state, decision, &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
                           static_cast<int>(state.state));
 }
@@ -368,14 +518,18 @@ void test_preheat_qualification_resets_and_wait_timeout_aborts() {
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
                           static_cast<int>(state.state));
 
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationInBandSignals()),
+          &snapshot);
     time.advanceMonotonicMillis(30000U);
-    apply(state, decide(state, &snapshot, time, {false, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, interruptedSignals()),
+          &snapshot);
     TEST_ASSERT_FALSE(state.qualificationValidSinceMillis.has_value());
 
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationInBandSignals()),
+          &snapshot);
     time.advanceMonotonicMillis(kMinuteMillis);
-    const auto waiting = decide(state, &snapshot, time, {true, false});
+    const auto waiting =
+        decide(state, &snapshot, time, qualificationCompleteSignals());
     TEST_ASSERT_TRUE(
         containsMessage(waiting, ProcessMessage::ProductInsertionRequested));
     apply(state, waiting, &snapshot);
@@ -399,9 +553,11 @@ void test_product_confirmation_starts_target_reach() {
     const auto snapshot = makeTimedSnapshot(true);
     apply(state, decide(state, &snapshot, time, {}, ProcessEvent::StartRun),
           &snapshot);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationInBandSignals()),
+          &snapshot);
     time.advanceMonotonicMillis(kMinuteMillis);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationCompleteSignals()),
+          &snapshot);
 
     time.advanceMonotonicMillis(1000U);
     apply(state,
@@ -421,9 +577,11 @@ void test_product_confirmation_cannot_bypass_expired_wait_limit() {
     const auto snapshot = makeTimedSnapshot(true);
     apply(state, decide(state, &snapshot, time, {}, ProcessEvent::StartRun),
           &snapshot);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationInBandSignals()),
+          &snapshot);
     time.advanceMonotonicMillis(kMinuteMillis);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, qualificationCompleteSignals()),
+          &snapshot);
     time.advanceMonotonicMillis(3U * kMinuteMillis);
 
     const auto decision = decide(state, &snapshot, time, {},
@@ -442,13 +600,14 @@ void test_target_qualification_starts_fermentation_timer() {
     const auto snapshot = makeTimedSnapshot(false);
     enterQualifying(state, snapshot, time);
 
+    // Complete is the evaluator's checked-duration signal. The old process
+    // marker is not a second qualification clock.
     time.advanceMonotonicMillis(kMinuteMillis - 1U);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(DecisionStatus::NoTransition),
-        static_cast<int>(decide(state, &snapshot, time, {true, false}).status));
-
-    time.advanceMonotonicMillis(1U);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    const auto qualified =
+        decide(state, &snapshot, time, qualificationCompleteSignals());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::TargetQualified),
+                          static_cast<int>(qualified.reason));
+    apply(state, qualified, &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
                           static_cast<int>(state.state));
     TEST_ASSERT_EQUAL_UINT64(time.monotonicMillis(),
@@ -462,6 +621,24 @@ void test_target_qualification_starts_fermentation_timer() {
     apply(state, decide(state, &snapshot, time), &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
                           static_cast<int>(state.state));
+}
+
+void test_in_band_signal_never_uses_old_marker_as_qualification_time() {
+    VirtualTimeSource time;
+    auto state = ProcessRuntimeState{};
+    state.state = ProcessState::QualifyingTarget;
+    state.stateEnteredAtMillis = 0U;
+    state.targetReachStartedAtMillis = 0U;
+    state.qualificationValidSinceMillis = 0U;
+    auto snapshot = makeTimedSnapshot(false);
+    snapshot.maximumTargetReachMinutes = 100U;
+    time.advanceMonotonicMillis(10U * kMinuteMillis);
+
+    const auto decision =
+        decide(state, &snapshot, time, qualificationInBandSignals());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(DecisionStatus::NoTransition),
+                          static_cast<int>(decision.status));
+    TEST_ASSERT_TRUE(state.qualificationValidSinceMillis.has_value());
 }
 
 void test_zero_remaining_duration_completes_immediately_after_qualification() {
@@ -492,7 +669,8 @@ void test_target_reach_warning_survives_qualification_reset_and_occurs_once() {
     enterQualifying(state, snapshot, time);
 
     time.advanceMonotonicMillis(kMinuteMillis);
-    apply(state, decide(state, &snapshot, time, {false, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, interruptedSignals()),
+          &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(state.state));
     TEST_ASSERT_EQUAL_UINT64(0U, state.targetReachStartedAtMillis);
@@ -509,6 +687,69 @@ void test_target_reach_warning_survives_qualification_reset_and_occurs_once() {
                           static_cast<int>(noSecondWarning.status));
 }
 
+void test_target_reach_warning_is_emitted_when_grace_enters_qualification() {
+    VirtualTimeSource time;
+    auto state = ProcessRuntimeState{};
+    state.state = ProcessState::ReachingTarget;
+    state.targetReachStartedAtMillis = 10'000U;
+    const auto snapshot = makeTimedSnapshot(false);
+    time.advanceMonotonicMillis(130'000U);
+
+    const auto decision = decide(state, &snapshot, time,
+                                 {QualificationProgress::Grace, false, false});
+
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::QualifyingTarget),
+                          static_cast<int>(decision.after.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::QualificationTrackingStarted),
+        static_cast<int>(decision.reason));
+    TEST_ASSERT_EQUAL_UINT64(10'000U,
+                             decision.after.targetReachStartedAtMillis);
+    TEST_ASSERT_TRUE(decision.after.targetReachWarningIssued);
+    TEST_ASSERT_TRUE(
+        containsMessage(decision, ProcessMessage::TargetReachTimeExceeded));
+
+    apply(state, decision, &snapshot);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::QualifyingTarget),
+                          static_cast<int>(state.state));
+    TEST_ASSERT_EQUAL_UINT64(10'000U, state.targetReachStartedAtMillis);
+    TEST_ASSERT_TRUE(state.targetReachWarningIssued);
+}
+
+void test_target_reach_warning_is_emitted_once_during_qualifying_grace() {
+    VirtualTimeSource time;
+    auto state = ProcessRuntimeState{};
+    state.state = ProcessState::QualifyingTarget;
+    state.qualificationValidSinceMillis = 20'000U;
+    state.targetReachStartedAtMillis = 10'000U;
+    const auto snapshot = makeTimedSnapshot(false);
+    time.advanceMonotonicMillis(130'000U);
+
+    const auto warning = decide(state, &snapshot, time,
+                                {QualificationProgress::Grace, false, false});
+
+    TEST_ASSERT_TRUE(warning.proposed());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::QualifyingTarget),
+                          static_cast<int>(warning.after.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::TargetReachTimeExceeded),
+        static_cast<int>(warning.reason));
+    TEST_ASSERT_FALSE(warning.after.state == ProcessState::Fermenting);
+    TEST_ASSERT_EQUAL_UINT64(10'000U, warning.after.targetReachStartedAtMillis);
+    TEST_ASSERT_TRUE(warning.after.targetReachWarningIssued);
+    TEST_ASSERT_TRUE(
+        containsMessage(warning, ProcessMessage::TargetReachTimeExceeded));
+
+    apply(state, warning, &snapshot);
+    time.advanceMonotonicMillis(1U);
+    const auto noSecondWarning = decide(
+        state, &snapshot, time, {QualificationProgress::Grace, false, false});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(DecisionStatus::NoTransition),
+                          static_cast<int>(noSecondWarning.status));
+    TEST_ASSERT_EQUAL_UINT32(0U, noSecondWarning.messageCount);
+}
+
 void test_completion_modes_reach_the_specified_states() {
     VirtualTimeSource time;
     auto state = standbyState();
@@ -519,7 +760,8 @@ void test_completion_modes_reach_the_specified_states() {
     apply(state, decide(state, &snapshot, time), &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Cooling),
                           static_cast<int>(state.state));
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, coolingReachedSignals()),
+          &snapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Completed),
                           static_cast<int>(state.state));
 
@@ -535,7 +777,7 @@ void test_completion_modes_reach_the_specified_states() {
           &timedHoldSnapshot);
     apply(timedHoldState,
           decide(timedHoldState, &timedHoldSnapshot, timedHoldTime,
-                 {true, false}),
+                 coolingReachedSignals()),
           &timedHoldSnapshot);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::CoolHolding),
                           static_cast<int>(timedHoldState.state));
@@ -556,7 +798,8 @@ void test_manual_cool_hold_finishes_normally() {
     qualify(state, snapshot, time);
     time.advanceMonotonicMillis(2U * kMinuteMillis);
     apply(state, decide(state, &snapshot, time), &snapshot);
-    apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+    apply(state, decide(state, &snapshot, time, coolingReachedSignals()),
+          &snapshot);
 
     const auto finished =
         decide(state, &snapshot, time, {}, ProcessEvent::FinishHoldConfirmed);
@@ -577,18 +820,23 @@ void test_manual_holding_uses_qualified_route_with_and_without_preheat() {
               &snapshot);
 
         if (preheat) {
-            apply(state, decide(state, &snapshot, time, {true, false}),
+            apply(state,
+                  decide(state, &snapshot, time, qualificationInBandSignals()),
                   &snapshot);
             time.advanceMonotonicMillis(kMinuteMillis);
-            apply(state, decide(state, &snapshot, time, {true, false}),
-                  &snapshot);
+            apply(
+                state,
+                decide(state, &snapshot, time, qualificationCompleteSignals()),
+                &snapshot);
             apply(state,
                   decide(state, &snapshot, time, {},
                          ProcessEvent::ProductInsertedConfirmed),
                   &snapshot);
         }
 
-        apply(state, decide(state, &snapshot, time, {true, false}), &snapshot);
+        apply(state,
+              decide(state, &snapshot, time, qualificationInBandSignals()),
+              &snapshot);
         qualify(state, snapshot, time);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ManualHolding),
                               static_cast<int>(state.state));
@@ -615,9 +863,11 @@ void test_product_and_air_guided_programs_use_same_abstract_signal_path() {
     productState.state = ProcessState::ReachingTarget;
     airState.state = ProcessState::ReachingTarget;
     apply(productState,
-          decide(productState, &productSnapshot, productTime, {true, false}),
+          decide(productState, &productSnapshot, productTime,
+                 qualificationInBandSignals()),
           &productSnapshot);
-    apply(airState, decide(airState, &airSnapshot, airTime, {true, false}),
+    apply(airState,
+          decide(airState, &airSnapshot, airTime, qualificationInBandSignals()),
           &airSnapshot);
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(productState.state),
@@ -755,6 +1005,21 @@ void test_recovery_rejects_state_and_snapshot_mismatches() {
                           static_cast<int>(restartedPreheat.after.state));
     TEST_ASSERT_FALSE(
         restartedPreheat.after.qualificationValidSinceMillis.has_value());
+
+    ProcessRuntimeState reaching;
+    reaching.state = ProcessState::ReachingTarget;
+    reaching.targetReachStartedAtMillis = 0U;
+    const auto restartedReaching =
+        decideRecovery(recovery, &noPreheat, time, reaching);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
+                          static_cast<int>(restartedReaching.after.state));
+
+    ProcessRuntimeState restartedFermentingState;
+    restartedFermentingState.state = ProcessState::Fermenting;
+    const auto restartedFermenting =
+        decideRecovery(recovery, &noPreheat, time, restartedFermentingState);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
+                          static_cast<int>(restartedFermenting.after.state));
 
     const auto incompatibleCurrent = decide(waiting, &noPreheat, time);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(DecisionStatus::InvalidInput),
@@ -1036,19 +1301,25 @@ int main() {
     UNITY_BEGIN();
     RUN_TEST(test_all_factory_programs_produce_expected_process_snapshots);
     RUN_TEST(test_all_factory_programs_complete_their_full_process_flow);
+    RUN_TEST(test_all_qualification_progress_values_follow_phase_topology);
     RUN_TEST(test_process_snapshot_validation_rejects_inconsistent_values);
     RUN_TEST(test_decision_does_not_mutate_until_applied_and_stale_is_rejected);
     RUN_TEST(test_apply_rejects_fabricated_forbidden_transition);
     RUN_TEST(test_apply_rejects_snapshot_incompatible_fabricated_transitions);
     RUN_TEST(test_critical_fault_has_priority_over_user_event);
+    RUN_TEST(test_critical_fault_has_priority_over_cooling_progress);
     RUN_TEST(test_preheat_qualification_resets_and_wait_timeout_aborts);
     RUN_TEST(test_product_confirmation_starts_target_reach);
     RUN_TEST(test_product_confirmation_cannot_bypass_expired_wait_limit);
     RUN_TEST(test_target_qualification_starts_fermentation_timer);
+    RUN_TEST(test_in_band_signal_never_uses_old_marker_as_qualification_time);
     RUN_TEST(
         test_zero_remaining_duration_completes_immediately_after_qualification);
     RUN_TEST(
         test_target_reach_warning_survives_qualification_reset_and_occurs_once);
+    RUN_TEST(
+        test_target_reach_warning_is_emitted_when_grace_enters_qualification);
+    RUN_TEST(test_target_reach_warning_is_emitted_once_during_qualifying_grace);
     RUN_TEST(test_completion_modes_reach_the_specified_states);
     RUN_TEST(test_manual_cool_hold_finishes_normally);
     RUN_TEST(test_manual_holding_uses_qualified_route_with_and_without_preheat);
