@@ -472,6 +472,8 @@ Es gibt keine Pause. Nach `STOP` zeigt die Bedienoberflaeche:
 - urspruenglichen Prozess als abgebrochen markieren
 - Benutzer bestaetigt Kuehlziel und Abschlussverhalten
 - neuen expliziten manuellen Kuehllauf mit eigenem Schnappschuss anlegen
+- diesen `AbortAndCool`-Neulauf als kanonische `NewActiveRun`-Grenze beginnen;
+  PI- und Qualifier-RAM des alten Laufes werden vollstaendig geleert
 - Uebergang in `REACHING_TARGET` beziehungsweise `COOLING`
 
 ## Warnungen und WARNING_REQUIRES_ACTION

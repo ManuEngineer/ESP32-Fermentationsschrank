@@ -248,7 +248,10 @@ Die CommandDecision bildet eine unteilbare fachliche Gesamtaktion:
 1. bisherigen Programmlauf als abgebrochen markieren
 2. Benutzerabbruch protokollierbar machen
 3. neuen validierten manuellen Laufplan mit eigenem Schnappschuss erzeugen
-4. den neuen Lauf ueber `REACHING_TARGET` beziehungsweise den kanonischen
+4. den neuen `AbortAndCool`-Lauf als kanonische `NewActiveRun`-Grenze beginnen;
+   PI- und Qualifier-RAM des alten Laufes werden nicht in den neuen Lauf
+   uebernommen
+5. den neuen Lauf ueber `REACHING_TARGET` beziehungsweise den kanonischen
    manuellen Zustandsweg starten
 
 Der alte Lauf darf nicht bereits beendet werden, wenn der neue manuelle Laufplan

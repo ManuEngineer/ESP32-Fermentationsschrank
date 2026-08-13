@@ -84,6 +84,11 @@ gueltige Anforderung, einschliesslich `OFF`, traegt eine fluechtige Sequenz
 und den monotonen Erzeugungszeitpunkt. Sequenz, Integral, Timestamp und
 Feedbackfenster werden nicht persistiert.
 
+Ein normaler PI- oder Qualifierwert ist ausschliesslich ein Snapshot mit
+`SensorQuality::Valid` und vorhandenem, endlichem `filteredCelsius`.
+`rawCelsius` und `correctedCelsius` bleiben Diagnose-, Roh- beziehungsweise
+Safety-Evidenz und sind kein Fallback fuer den normalen Regelwert.
+
 Im Produktbetrieb muessen Produkt- und Luftsnapshot gleichzeitig verwendbar
 sein. Ein fehlender, `STALE`- oder `FAILED`-Luftsnapshot fuehrt fail-closed zu
 `Unavailable / SensorUnavailable`; ein vorhandener, aber nicht-finiter oder
@@ -296,14 +301,18 @@ Verbindliche Regeln:
   der vorherige Evaluatorzustand unveraendert; der fehlgeschlagene Kandidat ist
   single-use verworfen und ein Retry bewertet den unveraenderten Live-Zustand
   neu. Der Candidate-Kontext bindet neben Ziel, Band und Rolle auch
-  `runRevision` und `processTransitionSequence`, ohne jede Revisionsaenderung
-  automatisch als neue fachliche Episode zu behandeln.
+  Qualifikationsdauer, `runRevision`, `processTransitionSequence` und die
+  Sample-Zeit. Ohne identischen Lauf-, Prozess- und Zeitkontext ist der
+  Kandidat stale; keine Revisionsaenderung wird dadurch allein automatisch
+  als neue fachliche Episode behandelt.
 - Ein erfolgreicher Prozess-/Marker-Commit liefert einen fluessigen
   Post-Commit-Hinweis fuer Target-, Cooling- oder Regelsensorwechsel. Nur der
   bereits angewendete effektive Kontext wird danach einmalig an den PI-Kern als
   `pendingContextTransition` uebergeben; eine Decision vor dem Commit ist nie
   selbst eine PI-Freigabe. `ProductInserted` erzeugt diesen Hinweis nur bei
   effektivem `Air -> Product`, nicht bei `Air -> Air`.
+  Nur ein echter effektiver Rollenwechsel zwischen `Air` und `Product` erzeugt
+  `SensorRoleChange`; der Moduswert allein erzeugt keinen solchen Hinweis.
 - Die hardwarefreie
   `TemperatureControlApplicationOrchestrator`-Grenze kapselt den erfolgreichen
   Persistence-/RAM-Apply-Handoff fuer Commands, Prozessuebergaenge,
@@ -312,11 +321,18 @@ Verbindliche Regeln:
   PI-Kern nicht. Dieselbe Grenze leitet Vollresets aus dem kanonischen
   Before-/After-Laufzustand ab und leert PI/Qualifier bei neuem Lauf,
   Recovery/Rebase, Fault oder dem Verlassen der Temperaturregelung.
+  Fuer diese Lifecycle-Entscheidung verwendet sie ausschliesslich den
+  fluechtigen `TemperatureControlLifecycleSnapshot` mit `processState`; sie
+  kopiert keinen vollstaendigen `RunCommandState`.
 - PI- und Qualifier-RAM werden an der kanonischen Grenze fuer neuen Lauf,
   Recovery oder das Verlassen der Temperaturregelung fail-closed geleert.
   Normale Phasenwechsel im selben Regelkontext uebertragen diesen Vollreset
   nicht; Target-, Cooling- und Regelsensorwechsel verwenden ihre jeweilige
   Commit-/Transition-Policy.
+- `ControlSensorRole` und `CommittedControlContextTransition` sind als kleine,
+  dependency-arme gemeinsame Werttypen von den PI-Parametern und
+  `TemperatureControlResult` getrennt. Prozess-, Kommando-, Persistenz- und
+  Context-Schichten binden dadurch keinen breiten PI-Vertrag ein.
 - Effektive Gnaden- und Sample-Gap-Werte sowie die konkreten
   Qualifikationswerte bleiben `TBD_COMMISSIONING` beziehungsweise Eigentum
   des freigegebenen Sampling-/Commissioning-Vertrags.

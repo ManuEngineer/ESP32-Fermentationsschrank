@@ -617,14 +617,17 @@ bool applySensorRoleChangeQualificationReset(RunCommandState& state,
     if (state.processState.state != ProcessState::QualifyingTarget) {
         return true;
     }
-    if (!state.processRunSnapshot.has_value()) return false;
+    if (!state.processRunSnapshot.has_value()) {
+        return false;
+    }
 
     const auto reset = decideProcessTransition(
         state.processState, &*state.processRunSnapshot, ProcessSignals{},
         TransitionRequest{}, monotonicMillis);
     if (!reset.proposed() ||
-        reset.reason != TransitionReason::QualificationReset)
+        reset.reason != TransitionReason::QualificationReset) {
         return false;
+    }
     return applyProcessTransition(state.processState, reset,
                                   &*state.processRunSnapshot);
 }
