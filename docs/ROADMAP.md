@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-08-12
+Stand: 2026-08-13
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #104 / Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung | Planrevision 6 freigegeben; Restkorrekturen A1–A7 aus dem Owner-Rereview (Post-Commit-Handoff, Lifecycle-Grenzen, Qualifier-Identity/Fault-/Zeitbindung, PI-Headroom und direkte Orakel) sind auf `agent/issue-22-pi-regelung-plan` umgesetzt; 226/226 gezielte native Testfaelle sowie Format-, clang-tidy-, Architektur-, Secret-, Quality- und Artefaktabdeckungs-Gates PASS; erneuter vollstaendiger Owner-Rereview offen | Owner prueft den Korrektur-HEAD vollstaendig und entscheidet danach ueber `Ready for review` |
+| 1 | Draft-PR #104 / Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung | Planrevision 6 freigegeben; A1–A7 und B1–B4 aus dem vollstaendigen Rereview umgesetzt: eine kanonische Application-Bridge fuer Post-Commit-Handoff und Lifecycle-Reset, kanonische RunCommandState-Kontextprojektion sowie aktualisierte direkte Orakel; 287/287 gezielte native Testfaelle sowie Format-, clang-tidy-, Architektur-, Secret-, Quality- und Artefaktabdeckungs-Gates PASS | Owner prueft den Korrektur-HEAD vollstaendig und entscheidet danach ueber `Ready for review` |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit

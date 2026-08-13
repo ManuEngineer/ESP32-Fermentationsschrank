@@ -103,8 +103,9 @@ struct RunPersistenceResult {
     // #21, 6.11: nur bei tatsaechlichem requestedMode != effectiveMode
     // (Startmatrix Zeile 2), erst nach erfolgreichem Commit sichtbar.
     std::optional<StartSensorSelectionNotice> startSensorSelectionNotice{};
-    // Set only after a persisted ProcessInserted transition has also been
-    // applied and the resolved effective role changed Air -> Product.
+    // Transient post-commit handoff only: set after successful persistence
+    // and RAM apply for a target, sensor-role, cooling-target, or effective
+    // ProductInserted Air -> Product context transition. Never persisted.
     std::optional<CommittedControlContextTransition>
         committedControlContextTransition;
 };

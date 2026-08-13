@@ -92,10 +92,13 @@ Persistenzschemas einen fluessigen Handoff-Hinweis: `persistCommand()` fuer
 Ziel-/Kontextaenderungen, `persistTransition()` fuer Ziel-/Coolingwechsel und
 `persistSensorSelection()` fuer einen tatsaechlichen
 `SensorSelectionEvent`/Moduswechsel. Notices, fehlgeschlagene Writes und
-fehlgeschlagene RAM-Applies tragen keinen solchen Hinweis. Ein schmaler
-Verbraucher uebergibt den Hinweis nach dem erfolgreichen Commit hoechstens
-einmal an den PI-Kern; daraus wird kein zweiter Prozesszustand und kein
-Persistenzfeld.
+fehlgeschlagene RAM-Applies tragen keinen solchen Hinweis. Die einzige
+Anwendungsgrenze dafuer ist
+`TemperatureControlApplicationOrchestrator`: Sie konsumiert Hinweise nur bei
+`RunPersistenceResultStatus::Applied`, hoechstens einmal, und uebergibt sie
+erst danach an den PI-Kern. Sie leitet ausserdem Vollresets aus dem kanonischen
+Before-/After-Laufzustand sowie der Recovery-Grenze ab. Daraus wird weder ein
+zweiter Prozesszustand noch ein Persistenzfeld.
 
 ## Speicherereignisse
 

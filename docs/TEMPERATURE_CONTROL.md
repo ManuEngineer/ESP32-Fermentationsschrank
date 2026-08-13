@@ -304,6 +304,14 @@ Verbindliche Regeln:
   `pendingContextTransition` uebergeben; eine Decision vor dem Commit ist nie
   selbst eine PI-Freigabe. `ProductInserted` erzeugt diesen Hinweis nur bei
   effektivem `Air -> Product`, nicht bei `Air -> Air`.
+- Die hardwarefreie
+  `TemperatureControlApplicationOrchestrator`-Grenze kapselt den erfolgreichen
+  Persistence-/RAM-Apply-Handoff fuer Commands, Prozessuebergaenge,
+  Regelsensorauswahl und Recovery. Nur ein Ergebnis mit Status `Applied` darf
+  den Hinweis konsumieren; fehlgeschlagene Writes oder Applies erreichen den
+  PI-Kern nicht. Dieselbe Grenze leitet Vollresets aus dem kanonischen
+  Before-/After-Laufzustand ab und leert PI/Qualifier bei neuem Lauf,
+  Recovery/Rebase, Fault oder dem Verlassen der Temperaturregelung.
 - PI- und Qualifier-RAM werden an der kanonischen Grenze fuer neuen Lauf,
   Recovery oder das Verlassen der Temperaturregelung fail-closed geleert.
   Normale Phasenwechsel im selben Regelkontext uebertragen diesen Vollreset

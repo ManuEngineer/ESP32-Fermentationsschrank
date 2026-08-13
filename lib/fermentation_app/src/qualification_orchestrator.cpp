@@ -1,5 +1,6 @@
 #include "qualification_orchestrator.hpp"
 
+#include "control_context.hpp"
 #include "temperature_control_orchestrator.hpp"
 
 namespace fermentation {
@@ -21,6 +22,14 @@ bool phaseMatchesProcessState(QualificationPhase phase, ProcessState state) {
     return false;
 }
 
+bool matchesCanonicalControlContext(const RunCommandState& current,
+                                    const TargetQualificationInput& input) {
+    const auto context = resolveEffectiveControlContext(current);
+    return context.valid &&
+           context.target.targetCelsius == input.targetCelsius &&
+           context.controlSensorRole == input.controlSensorRole;
+}
+
 TargetQualificationOrchestrationResult discarded(
     TargetQualificationEvaluator& evaluator,
     TargetQualificationResult& qualification,
@@ -35,16 +44,16 @@ TargetQualificationOrchestrationResult discarded(
 }  // namespace
 
 TargetQualificationOrchestrationResult evaluateAndApplyTargetQualification(
-    TargetQualificationEvaluator& evaluator, RunCommandState& current,
-    RunPersistenceCoordinator& persistence,
-    const TargetQualificationInput& input, const RunCheckpointTime& time,
-    const ProcessSignals& baselineSignals,
-    const CrossRolePlausibilityContext* liveSensorEvidence,
-    TemperatureController* temperatureController) {
+    TemperatureControlApplicationOrchestrator& application,
+    RunCommandState& current, const TargetQualificationInput& input,
+    const RunCheckpointTime& time, const ProcessSignals& baselineSignals,
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
+    auto& evaluator = application.qualificationEvaluator();
     auto qualification = evaluator.evaluate(input);
     const auto context = commitContext(input);
     if (!validQualificationPhase(input.phase) ||
-        !phaseMatchesProcessState(input.phase, current.processState.state)) {
+        !phaseMatchesProcessState(input.phase, current.processState.state) ||
+        !matchesCanonicalControlContext(current, input)) {
         return discarded(
             evaluator, qualification,
             TargetQualificationOrchestrationStatus::InvalidDecision);
@@ -87,7 +96,7 @@ TargetQualificationOrchestrationResult evaluateAndApplyTargetQualification(
         return result;
     }
 
-    auto persisted = persistence.persistTransition(current, processDecision,
+    auto persisted = application.persistTransition(current, processDecision,
                                                    time, liveSensorEvidence);
     result.persistenceStatus = persisted.status;
     if (persisted.status != RunPersistenceResultStatus::Applied) {
@@ -97,10 +106,16 @@ TargetQualificationOrchestrationResult evaluateAndApplyTargetQualification(
             TargetQualificationOrchestrationStatus::PersistenceFailed;
         return result;
     }
-    if (temperatureController != nullptr)
-        static_cast<void>(consumeCommittedControlContextTransition(
-            persisted, *temperatureController));
-
+    if (processDecision.reason == TransitionReason::CriticalFault) {
+        // The application boundary has already fail-closed the evaluator at
+        // the committed fault boundary. The candidate must not be applied
+        // back into that freshly reset runtime.
+        evaluator.discard(qualification);
+        result.qualification = qualification;
+        result.status =
+            TargetQualificationOrchestrationStatus::AppliedPersisted;
+        return result;
+    }
     const auto committedContext = TargetQualificationCommitContext{
         context.qualification, current.runRevision,
         current.processState.transitionSequence};

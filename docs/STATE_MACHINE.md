@@ -235,6 +235,15 @@ verglichen: Nur `Air -> Product` erzeugt die committed
 `ProductInserted`-Kontexttransition. Ein luftgefuehrter Lauf bleibt
 `Air -> Air` und erzeugt keinen kuenstlichen Rollenwechsel oder Carry/Reset.
 
+Der effektive Temperaturregelkontext wird vor der Aufloesung aus dem aktuellen
+`RunCommandState` projiziert. Dabei liefert `ActiveRun::effectiveValues()` das
+aktuelle Programmsoll, ein aktiver `ManualRunPlan` das manuelle Soll und
+`COOLING`/`COOL_HOLDING` ausschliesslich das Completion-Kuehlziel. Die Phasen-
+und Rollenmatrix wird danach zentral genau einmal aufgeloest; Qualifier-
+Eingaben werden gegen denselben Live-Kontext sowie `runRevision` und
+`processTransitionSequence` validiert. Source-Programmsoll, alte Rollenwerte
+oder ein allein passender Revisionswert sind keine zulaessigen Fallbacks.
+
 ### Uebergaenge
 
 ```text

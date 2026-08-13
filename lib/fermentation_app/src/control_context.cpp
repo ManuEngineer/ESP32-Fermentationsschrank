@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "run_commands.hpp"
+
 namespace fermentation {
 namespace {
 
@@ -141,6 +143,60 @@ EffectiveControlContext resolveEffectiveControlContext(
     result.target = {*target, targetKind, input.runRevision, true};
     result.valid = true;
     return result;
+}
+
+bool isTemperatureControlledProcessState(ProcessState phase) {
+    return temperatureControlledPhase(phase);
+}
+
+std::optional<EffectiveControlContextInput> projectEffectiveControlContextInput(
+    const RunCommandState& current) {
+    EffectiveControlContextInput input;
+    input.phase = current.processState.state;
+    input.activeRunSensorMode = current.activeRunSensorMode;
+    input.processTransitionSequence = current.processState.transitionSequence;
+    input.runRevision = current.runRevision;
+
+    if (!isTemperatureControlledProcessState(input.phase)) return input;
+    if (!current.processRunSnapshot.has_value()) return std::nullopt;
+
+    const auto& snapshot = *current.processRunSnapshot;
+    switch (snapshot.kind) {
+        case ProcessKind::Timed:
+            if (!current.activeProgramRun.has_value() ||
+                current.activeManualRun.has_value()) {
+                return std::nullopt;
+            }
+            input.effectiveFermentationTargetCelsius =
+                current.activeProgramRun->effectiveValues()
+                    .targetTemperatureCelsius;
+            input.completionMode = snapshot.completionMode;
+            if (input.phase == ProcessState::Cooling ||
+                input.phase == ProcessState::CoolHolding) {
+                input.completionCoolingTargetCelsius =
+                    current.activeProgramRun->snapshot()
+                        .sourceProgram.program.completion.coolingTargetCelsius;
+            }
+            return input;
+        case ProcessKind::ManualHolding:
+            if (!current.activeManualRun.has_value() ||
+                current.activeProgramRun.has_value()) {
+                return std::nullopt;
+            }
+            input.manualRun = true;
+            input.manualTargetCelsius =
+                current.activeManualRun->values.targetTemperatureCelsius;
+            input.completionMode = snapshot.completionMode;
+            return input;
+    }
+    return std::nullopt;
+}
+
+EffectiveControlContext resolveEffectiveControlContext(
+    const RunCommandState& current) {
+    const auto projected = projectEffectiveControlContextInput(current);
+    if (!projected.has_value()) return {};
+    return resolveEffectiveControlContext(*projected);
 }
 
 }  // namespace fermentation

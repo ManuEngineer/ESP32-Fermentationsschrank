@@ -3,9 +3,8 @@
 #include <cstdint>
 #include <optional>
 
-#include "run_persistence_coordinator.hpp"
 #include "target_qualification.hpp"
-#include "temperature_control.hpp"
+#include "temperature_control_orchestrator.hpp"
 
 namespace fermentation {
 
@@ -31,11 +30,9 @@ struct TargetQualificationOrchestrationResult {
 // process/persistence path. It never persists evaluator RAM state itself.
 [[nodiscard]] TargetQualificationOrchestrationResult
 evaluateAndApplyTargetQualification(
-    TargetQualificationEvaluator& evaluator, RunCommandState& current,
-    RunPersistenceCoordinator& persistence,
-    const TargetQualificationInput& input, const RunCheckpointTime& time,
-    const ProcessSignals& baselineSignals = {},
-    const CrossRolePlausibilityContext* liveSensorEvidence = nullptr,
-    TemperatureController* temperatureController = nullptr);
+    TemperatureControlApplicationOrchestrator& application,
+    RunCommandState& current, const TargetQualificationInput& input,
+    const RunCheckpointTime& time, const ProcessSignals& baselineSignals = {},
+    const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
 
 }  // namespace fermentation

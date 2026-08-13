@@ -8,6 +8,8 @@
 
 namespace fermentation {
 
+struct RunCommandState;
+
 struct EffectiveControlContextInput {
     ProcessState phase{ProcessState::Boot};
     std::optional<RunSensorMode> activeRunSensorMode;
@@ -33,6 +35,16 @@ struct EffectiveControlContext {
 // Safety; diese Verantwortungen bleiben bei #21 beziehungsweise #24.
 [[nodiscard]] EffectiveControlContext resolveEffectiveControlContext(
     const EffectiveControlContextInput& input);
+
+// Canonical projection from the live command state. Callers must not rebuild
+// effective targets or roles from source-program values independently.
+[[nodiscard]] std::optional<EffectiveControlContextInput>
+projectEffectiveControlContextInput(const RunCommandState& current);
+
+[[nodiscard]] EffectiveControlContext resolveEffectiveControlContext(
+    const RunCommandState& current);
+
+[[nodiscard]] bool isTemperatureControlledProcessState(ProcessState phase);
 
 // The process/persistence commit path consumes only this already-resolved
 // role identity. It does not select sensors or infer a role from

@@ -215,6 +215,67 @@ ProgramDocument preheatProgram() {
     return document;
 }
 
+TemperatureControlParameters bridgeTemperatureParameters() {
+    TemperatureControlParameters result;
+    result.airHeating = {0.10, 0.01, 1.0, 0.8};
+    result.airCooling = {0.10, 0.01, 1.0, 0.8};
+    result.productHeating = {0.20, 0.02, 1.0, 0.8};
+    result.productCooling = {0.20, 0.02, 1.0, 0.8};
+    result.maximumIntegrationStepMillis = 10'000U;
+    result.airLimitLowerBlockCelsius = 5.0;
+    result.airLimitLowerReduceStartCelsius = 10.0;
+    result.airLimitUpperReduceStartCelsius = 30.0;
+    result.airLimitUpperBlockCelsius = 35.0;
+    return result;
+}
+
+IntegratorTransitionPolicy bridgeTemperaturePolicy() {
+    return {IntegratorTransitionAction::Reset,
+            IntegratorTransitionAction::Reset,
+            IntegratorTransitionAction::Reset, 0.2};
+}
+
+TemperatureControlInput bridgeAirInput(std::uint64_t timestamp, double target,
+                                       double measured) {
+    TemperatureControlInput input;
+    input.sampleTimestampMonotonicMillis = timestamp;
+    input.targetCelsius = target;
+    input.controlSensorRole = ControlSensorRole::Air;
+    input.air.quality = device_platform::SensorQuality::Valid;
+    input.air.rawCelsius = measured;
+    return input;
+}
+
+void buildQualifierCredit(TargetQualificationEvaluator& evaluator) {
+    TargetQualificationInput first;
+    first.phase = QualificationPhase::Preheating;
+    first.sampleTimestampMonotonicMillis = 100U;
+    first.targetCelsius = 20.0;
+    first.bandCelsius = 0.5;
+    first.qualificationDurationMillis = 1'000U;
+    first.effectiveGraceMillis = 500U;
+    first.maximumAcceptedSampleGapMillis = 2'000U;
+    first.controlSensorRole = ControlSensorRole::Air;
+    first.air.quality = device_platform::SensorQuality::Valid;
+    first.air.rawCelsius = 20.0;
+    auto firstDecision = evaluator.evaluate(first);
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        firstDecision, {{20.0, 0.5, ControlSensorRole::Air}, 0U, 0U}));
+
+    first.sampleTimestampMonotonicMillis = 1'100U;
+    auto credited = evaluator.evaluate(first);
+    TEST_ASSERT_TRUE(credited.creditedInBandMillis > 0U);
+    TEST_ASSERT_TRUE(evaluator.applyRamOnly(
+        credited, {{20.0, 0.5, ControlSensorRole::Air}, 0U, 0U}));
+}
+
+RunCommandState readyActiveRunWithSensorSelection(
+    RunPersistenceCoordinator& coordinator, CommandId startId);
+RunCommandState persistedFermentingRun(RunPersistenceCoordinator& coordinator,
+                                       CommandId startId);
+CrossRolePlausibilityContext recoveryPlausibility(
+    std::uint64_t evaluatedAtMonotonicMillis, bool productValid = true);
+
 CommandDecision startDecision(
     const RunCommandState& state, CommandId id,
     std::uint64_t monotonicMillis = 100U,
@@ -2425,12 +2486,19 @@ void test_persist_command_hands_off_target_context_only_after_apply() {
         RunPersistenceCoordinator coordinator(
             store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
         static_cast<void>(coordinator.loadAndInitialize());
+        TargetQualificationEvaluator evaluator;
+        TemperatureController controller(
+            {}, {IntegratorTransitionAction::Reset,
+                 IntegratorTransitionAction::Reset,
+                 IntegratorTransitionAction::Reset, 0.2});
+        TemperatureControlApplicationOrchestrator application(
+            coordinator, controller, evaluator);
         RunCommandState state;
         state.processState.state = ProcessState::Standby;
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunPersistenceResultStatus::Applied),
             static_cast<int>(
-                coordinator
+                application
                     .persistCommand(state, startDecision(state, 1210U),
                                     RunCheckpointTime{100U, std::nullopt})
                     .status));
@@ -2448,7 +2516,7 @@ void test_persist_command_hands_off_target_context_only_after_apply() {
             state.activeProgramRun->effectiveValues().targetTemperatureCelsius;
         store.faultAt(store.writeCount() + 1U,
                       SequencedWriteStore::WriteFault::FailBeforeBegin);
-        const auto failed = coordinator.persistCommand(
+        const auto failed = application.persistCommand(
             state, decision, RunCheckpointTime{200U, std::nullopt});
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunPersistenceResultStatus::WriteFailed),
@@ -2457,28 +2525,22 @@ void test_persist_command_hands_off_target_context_only_after_apply() {
         TEST_ASSERT_DOUBLE_WITHIN(
             0.0001, oldTarget,
             state.activeProgramRun->effectiveValues().targetTemperatureCelsius);
+        TEST_ASSERT_FALSE(
+            controller.state().pendingContextTransition.has_value());
 
         store.clearFaults();
-        auto committed = coordinator.persistCommand(
+        auto committed = application.persistCommand(
             state, decision, RunCheckpointTime{200U, std::nullopt});
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunPersistenceResultStatus::Applied),
             static_cast<int>(committed.status));
-        TEST_ASSERT_TRUE(
+        TEST_ASSERT_FALSE(
             committed.committedControlContextTransition.has_value());
         TEST_ASSERT_TRUE(
-            *committed.committedControlContextTransition ==
+            controller.state().pendingContextTransition.has_value());
+        TEST_ASSERT_TRUE(
+            *controller.state().pendingContextTransition ==
             CommittedControlContextTransition::TargetContextChange);
-        TemperatureController controller(
-            {}, {IntegratorTransitionAction::Reset,
-                 IntegratorTransitionAction::Reset,
-                 IntegratorTransitionAction::Reset, 0.2});
-        TEST_ASSERT_TRUE(
-            consumeCommittedControlContextTransition(committed, controller));
-        TEST_ASSERT_FALSE(
-            committed.committedControlContextTransition.has_value());
-        TEST_ASSERT_FALSE(
-            consumeCommittedControlContextTransition(committed, controller));
     }
 }
 
@@ -2498,9 +2560,37 @@ void test_qualification_orchestrator_discards_failed_candidate_and_retries() {
                     RunCheckpointTime{100U, std::nullopt})
                 .status));
     TargetQualificationEvaluator evaluator;
+    TemperatureController temperatureController({}, {});
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, temperatureController, evaluator);
+
+    const auto writesBeforeMismatchedInput = store.writeCount();
+    auto mismatchedInput = preheatQualificationInput(state, 100U);
+    mismatchedInput.targetCelsius = 37.0;
+    const auto mismatched = evaluateAndApplyTargetQualification(
+        application, state, mismatchedInput,
+        RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_TRUE(mismatched.status ==
+                     TargetQualificationOrchestrationStatus::InvalidDecision);
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBeforeMismatchedInput),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
+                          static_cast<int>(state.processState.state));
+
+    auto mismatchedRole = preheatQualificationInput(state, 100U);
+    mismatchedRole.controlSensorRole = ControlSensorRole::Product;
+    const auto roleMismatch = evaluateAndApplyTargetQualification(
+        application, state, mismatchedRole,
+        RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_TRUE(roleMismatch.status ==
+                     TargetQualificationOrchestrationStatus::InvalidDecision);
+    TEST_ASSERT_EQUAL_UINT(static_cast<unsigned>(writesBeforeMismatchedInput),
+                           static_cast<unsigned>(store.writeCount()));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Preheating),
+                          static_cast<int>(state.processState.state));
 
     const auto tracking = evaluateAndApplyTargetQualification(
-        evaluator, state, coordinator, preheatQualificationInput(state, 100U),
+        application, state, preheatQualificationInput(state, 100U),
         RunCheckpointTime{100U, std::nullopt});
     TEST_ASSERT_TRUE(tracking.status ==
                      TargetQualificationOrchestrationStatus::AppliedPersisted);
@@ -2513,7 +2603,7 @@ void test_qualification_orchestrator_discards_failed_candidate_and_retries() {
     store.faultAt(store.writeCount() + 1U,
                   SequencedWriteStore::WriteFault::FailBeforeBegin);
     const auto failed = evaluateAndApplyTargetQualification(
-        evaluator, state, coordinator, preheatQualificationInput(state, 1'100U),
+        application, state, preheatQualificationInput(state, 1'100U),
         RunCheckpointTime{1'100U, std::nullopt});
     TEST_ASSERT_TRUE(failed.status ==
                      TargetQualificationOrchestrationStatus::PersistenceFailed);
@@ -2526,7 +2616,7 @@ void test_qualification_orchestrator_discards_failed_candidate_and_retries() {
 
     store.clearFaults();
     const auto retry = evaluateAndApplyTargetQualification(
-        evaluator, state, coordinator, preheatQualificationInput(state, 1'100U),
+        application, state, preheatQualificationInput(state, 1'100U),
         RunCheckpointTime{1'100U, std::nullopt});
     TEST_ASSERT_TRUE(retry.status ==
                      TargetQualificationOrchestrationStatus::AppliedPersisted);
@@ -2552,7 +2642,7 @@ void test_qualification_orchestrator_discards_failed_candidate_and_retries() {
     targetInput.controlSensorRole = ControlSensorRole::Product;
     targetInput.product.rawCelsius = 38.0;
     const auto targetTracking = evaluateAndApplyTargetQualification(
-        evaluator, state, coordinator, targetInput,
+        application, state, targetInput,
         RunCheckpointTime{2'000U, std::nullopt});
     TEST_ASSERT_TRUE(targetTracking.status ==
                      TargetQualificationOrchestrationStatus::AppliedPersisted);
@@ -2562,7 +2652,7 @@ void test_qualification_orchestrator_discards_failed_candidate_and_retries() {
         state.processState.transitionSequence;
     targetInput.sampleTimestampMonotonicMillis = 3'000U;
     const auto targetComplete = evaluateAndApplyTargetQualification(
-        evaluator, state, coordinator, targetInput,
+        application, state, targetInput,
         RunCheckpointTime{3'000U, std::nullopt});
     TEST_ASSERT_TRUE(targetComplete.qualification.progress ==
                      QualificationProgress::Complete);
@@ -2584,9 +2674,16 @@ void test_product_inserted_commits_before_advancing_and_restores() {
         600200U);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::ProductInserted),
                           static_cast<int>(inserted.reason));
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(
+        {},
+        {IntegratorTransitionAction::Reset, IntegratorTransitionAction::Reset,
+         IntegratorTransitionAction::Reset, 0.2});
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
     store.faultAt(store.writeCount() + 1U,
                   SequencedWriteStore::WriteFault::FailBeforeBegin);
-    const auto failed = coordinator.persistTransition(
+    const auto failed = application.persistTransition(
         state, inserted, RunCheckpointTime{600200U, std::nullopt});
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::WriteFailed),
@@ -2594,28 +2691,18 @@ void test_product_inserted_commits_before_advancing_and_restores() {
     TEST_ASSERT_EQUAL_UINT32(0U, failed.messageCount);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::WaitingForProduct),
                           static_cast<int>(state.processState.state));
+    TEST_ASSERT_FALSE(controller.state().pendingContextTransition.has_value());
 
-    auto committed = coordinator.persistTransition(
+    auto committed = application.persistTransition(
         state, inserted, RunCheckpointTime{600200U, std::nullopt});
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
                           static_cast<int>(committed.status));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(state.processState.state));
-    TEST_ASSERT_TRUE(committed.committedControlContextTransition.has_value());
-    TEST_ASSERT_TRUE(*committed.committedControlContextTransition ==
-                     CommittedControlContextTransition::ProductInserted);
-    TemperatureController controller(
-        {},
-        {IntegratorTransitionAction::Reset, IntegratorTransitionAction::Reset,
-         IntegratorTransitionAction::Reset, 0.2});
-    TEST_ASSERT_TRUE(
-        consumeCommittedControlContextTransition(committed, controller));
     TEST_ASSERT_FALSE(committed.committedControlContextTransition.has_value());
     TEST_ASSERT_TRUE(controller.state().pendingContextTransition.has_value());
     TEST_ASSERT_TRUE(*controller.state().pendingContextTransition ==
                      CommittedControlContextTransition::ProductInserted);
-    TEST_ASSERT_FALSE(
-        consumeCommittedControlContextTransition(committed, controller));
 
     const auto insertedRecord = store.read(slotKey("rc1"), 8240U);
     TEST_ASSERT_EQUAL_INT(
@@ -2651,13 +2738,169 @@ void test_air_run_product_inserted_is_air_to_air_without_pi_transition() {
         state.processState, &*state.processRunSnapshot, ProcessSignals{},
         TransitionRequest{ProcessEvent::ProductInsertedConfirmed, std::nullopt},
         600200U);
-    const auto committed = coordinator.persistTransition(
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller({}, {});
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    const auto committed = application.persistTransition(
         state, inserted, RunCheckpointTime{600200U, std::nullopt});
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
                           static_cast<int>(committed.status));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(state.processState.state));
     TEST_ASSERT_FALSE(committed.committedControlContextTransition.has_value());
+    TEST_ASSERT_FALSE(controller.state().pendingContextTransition.has_value());
+}
+
+void test_application_bridge_hands_off_cooling_context_once() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    auto program = runnableProgram();
+    program.program.completion.mode = CompletionMode::CoolThenFinish;
+    program.program.completion.coolingTargetCelsius = 20.0;
+    TEST_ASSERT_TRUE(validateProgram(program).valid());
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            coordinator
+                .persistCommand(state,
+                                startDecision(state, 793U, 100U, program),
+                                RunCheckpointTime{100U, std::nullopt})
+                .status));
+    state.processState.state = ProcessState::Fermenting;
+    state.processState.stateEnteredAtMillis = 100U;
+
+    const auto transition = completeTimedRun(
+        state.processState, *state.processRunSnapshot, 600'000U);
+    TEST_ASSERT_TRUE(transition.proposed());
+    TEST_ASSERT_TRUE(transition.committedControlContextTransition.has_value());
+
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller({}, bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    store.faultAt(store.writeCount() + 1U,
+                  SequencedWriteStore::WriteFault::FailBeforeBegin);
+    const auto failed = application.persistTransition(
+        state, transition, RunCheckpointTime{600'000U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(failed.status));
+    TEST_ASSERT_FALSE(controller.state().pendingContextTransition.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
+                          static_cast<int>(state.processState.state));
+
+    store.clearFaults();
+    const auto committed = application.persistTransition(
+        state, transition, RunCheckpointTime{600'000U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(committed.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Cooling),
+                          static_cast<int>(state.processState.state));
+    TEST_ASSERT_FALSE(committed.committedControlContextTransition.has_value());
+    TEST_ASSERT_TRUE(controller.state().pendingContextTransition.has_value());
+    TEST_ASSERT_TRUE(
+        *controller.state().pendingContextTransition ==
+        CommittedControlContextTransition::CoolingTargetContextChange);
+}
+
+void test_application_bridge_resets_runtime_at_committed_lifecycle_boundaries() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+
+    const auto first = controller.evaluate(bridgeAirInput(100U, 25.0, 20.0));
+    auto secondInput = bridgeAirInput(1'100U, 25.0, 20.0);
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    TEST_ASSERT_TRUE(
+        controller.evaluate(secondInput).integralContributionQuote > 0.0);
+    buildQualifierCredit(evaluator);
+
+    RunCommandState state;
+    state.processState.state = ProcessState::Standby;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            application
+                .persistCommand(state, startDecision(state, 794U, 2'000U),
+                                RunCheckpointTime{2'000U, std::nullopt})
+                .status));
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              controller.state().integralContributionQuote);
+    TEST_ASSERT_FALSE(controller.state().lastActiveDirection.has_value());
+    TEST_ASSERT_EQUAL_UINT64(0U, evaluator.state().creditedInBandMillis);
+
+    const auto stop = stopDecision(state, 795U, 2'100U);
+    TEST_ASSERT_TRUE(stop.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            application
+                .persistCommand(state, stop,
+                                RunCheckpointTime{2'100U, std::nullopt})
+                .status));
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              controller.state().integralContributionQuote);
+    TEST_ASSERT_FALSE(controller.state().lastActiveDirection.has_value());
+
+    auto firstAfterAbort = bridgeAirInput(2'200U, 25.0, 20.0);
+    const auto firstAfter = controller.evaluate(firstAfterAbort);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              firstAfter.integralContributionQuote);
+}
+
+void test_application_bridge_resets_runtime_on_recovery_activation() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(persistedFermentingRun(seed, 796U));
+
+    store.restart();
+    RunPersistenceCoordinator persistence(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = persistence.loadAndInitialize();
+    TEST_ASSERT_TRUE(loaded.snapshot.has_value());
+    auto restored = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(restored.has_value());
+
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    const auto first = controller.evaluate(bridgeAirInput(100U, 25.0, 20.0));
+    auto secondInput = bridgeAirInput(1'100U, 25.0, 20.0);
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    TEST_ASSERT_TRUE(
+        controller.evaluate(secondInput).integralContributionQuote > 0.0);
+    buildQualifierCredit(evaluator);
+
+    TemperatureControlApplicationOrchestrator application(
+        persistence, controller, evaluator);
+    RunRecoveryCoordinator recovery;
+    RunCommandState current = *restored;
+    const auto result = application.activateRecovery(
+        recovery, current, RunCheckpointTime{700'000U, std::nullopt},
+        recoveryPlausibility(700'000U));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(result.status));
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              controller.state().integralContributionQuote);
+    TEST_ASSERT_FALSE(controller.state().lastActiveDirection.has_value());
+    TEST_ASSERT_EQUAL_UINT64(0U, evaluator.state().creditedInBandMillis);
 }
 
 void test_qualification_orchestrator_preserves_fault_signal_and_binds_sample_time() {
@@ -2677,11 +2920,25 @@ void test_qualification_orchestrator_preserves_fault_signal_and_binds_sample_tim
                 .status));
 
     TargetQualificationEvaluator faultEvaluator;
+    TemperatureController faultController(bridgeTemperatureParameters(),
+                                          bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator faultApplication(
+        coordinator, faultController, faultEvaluator);
+    const auto faultFirst =
+        faultController.evaluate(bridgeAirInput(100U, 25.0, 20.0));
+    auto faultSecondInput = bridgeAirInput(1'100U, 25.0, 20.0);
+    faultSecondInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        faultFirst.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    TEST_ASSERT_TRUE(
+        faultController.evaluate(faultSecondInput).integralContributionQuote >
+        0.0);
+    buildQualifierCredit(faultEvaluator);
     ProcessSignals baseline;
     baseline.criticalFault = true;
     const auto fault = evaluateAndApplyTargetQualification(
-        faultEvaluator, state, coordinator,
-        preheatQualificationInput(state, 200U),
+        faultApplication, state, preheatQualificationInput(state, 200U),
         RunCheckpointTime{200U, std::nullopt}, baseline);
     TEST_ASSERT_TRUE(fault.status ==
                      TargetQualificationOrchestrationStatus::AppliedPersisted);
@@ -2691,6 +2948,9 @@ void test_qualification_orchestrator_preserves_fault_signal_and_binds_sample_tim
                           static_cast<int>(fault.processDecision->reason));
     TEST_ASSERT_FALSE(faultEvaluator.state().episodeActive);
     TEST_ASSERT_EQUAL_UINT64(0U, faultEvaluator.state().creditedInBandMillis);
+    TEST_ASSERT_DOUBLE_WITHIN(
+        0.0001, 0.0, faultController.state().integralContributionQuote);
+    TEST_ASSERT_FALSE(faultController.state().lastActiveDirection.has_value());
 
     RunCommandState timeState;
     timeState.processState.state = ProcessState::Standby;
@@ -2708,10 +2968,12 @@ void test_qualification_orchestrator_preserves_fault_signal_and_binds_sample_tim
                     RunCheckpointTime{300U, std::nullopt})
                 .status));
     TargetQualificationEvaluator timeEvaluator;
+    TemperatureController timeController({}, {});
+    TemperatureControlApplicationOrchestrator timeApplication(
+        timeCoordinator, timeController, timeEvaluator);
     const auto beforeWrites = timeStore.writeCount();
     const auto mismatch = evaluateAndApplyTargetQualification(
-        timeEvaluator, timeState, timeCoordinator,
-        preheatQualificationInput(timeState, 400U),
+        timeApplication, timeState, preheatQualificationInput(timeState, 400U),
         RunCheckpointTime{401U, std::nullopt});
     TEST_ASSERT_TRUE(mismatch.status ==
                      TargetQualificationOrchestrationStatus::StaleDecision);
@@ -2720,8 +2982,7 @@ void test_qualification_orchestrator_preserves_fault_signal_and_binds_sample_tim
     TEST_ASSERT_FALSE(timeEvaluator.state().episodeActive);
 
     const auto futureSample = evaluateAndApplyTargetQualification(
-        timeEvaluator, timeState, timeCoordinator,
-        preheatQualificationInput(timeState, 500U),
+        timeApplication, timeState, preheatQualificationInput(timeState, 500U),
         RunCheckpointTime{499U, std::nullopt});
     TEST_ASSERT_TRUE(futureSample.status ==
                      TargetQualificationOrchestrationStatus::StaleDecision);
@@ -3132,7 +3393,7 @@ RunCommandState readyActiveRunWithSensorSelection(
 }
 
 CrossRolePlausibilityContext recoveryPlausibility(
-    std::uint64_t evaluatedAtMonotonicMillis, bool productValid = true) {
+    std::uint64_t evaluatedAtMonotonicMillis, bool productValid) {
     CrossRolePlausibilityContext plausibility;
     plausibility.phase = ProcessState::RecoveryEvaluation;
     plausibility.evaluationMonotonicMillis = evaluatedAtMonotonicMillis;
@@ -5164,15 +5425,29 @@ void test_persist_sensor_selection_mode_change_fills_event_and_updates_mode() {
         modeChangeMutation(state, RunSensorMode::Air,
                            SensorSelectionDecisionCause::FallbackToAir, 500U);
 
-    const auto result = coordinator.persistSensorSelection(
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller({}, {});
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    store.faultAt(store.writeCount() + 1U,
+                  SequencedWriteStore::WriteFault::FailBeforeBegin);
+    const auto failed = application.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, 1700000600});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(failed.status));
+    TEST_ASSERT_FALSE(controller.state().pendingContextTransition.has_value());
+    store.clearFaults();
+    const auto result = application.persistSensorSelection(
         state, mutation, RunCheckpointTime{500U, 1700000600});
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
                           static_cast<int>(result.status));
     TEST_ASSERT_TRUE(result.sensorSelectionEvent.has_value());
     TEST_ASSERT_FALSE(result.sensorSelectionNotice.has_value());
-    TEST_ASSERT_TRUE(result.committedControlContextTransition.has_value());
-    TEST_ASSERT_TRUE(*result.committedControlContextTransition ==
+    TEST_ASSERT_FALSE(result.committedControlContextTransition.has_value());
+    TEST_ASSERT_TRUE(controller.state().pendingContextTransition.has_value());
+    TEST_ASSERT_TRUE(*controller.state().pendingContextTransition ==
                      CommittedControlContextTransition::SensorRoleChange);
     TEST_ASSERT_TRUE(result.sensorSelectionEvent->utcUnixSeconds.has_value());
     TEST_ASSERT_EQUAL_INT64(1700000600,
@@ -5194,7 +5469,22 @@ void test_persist_sensor_selection_mode_change_on_manual_run() {
         state, RunSensorMode::Product,
         SensorSelectionDecisionCause::AutomaticValidatedReturn, 500U);
 
-    auto result = coordinator.persistSensorSelection(
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller({}, {});
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    store.faultAt(store.writeCount() + 1U,
+                  SequencedWriteStore::WriteFault::FailBeforeBegin);
+    const auto failed = application.persistSensorSelection(
+        state, mutation, RunCheckpointTime{500U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(failed.status));
+    TEST_ASSERT_FALSE(controller.state().pendingContextTransition.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Air),
+                          static_cast<int>(*state.activeRunSensorMode));
+    store.clearFaults();
+    auto result = application.persistSensorSelection(
         state, mutation, RunCheckpointTime{500U, std::nullopt});
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
@@ -5205,18 +5495,10 @@ void test_persist_sensor_selection_mode_change_on_manual_run() {
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunSensorMode::Product),
         static_cast<int>(state.activeManualRun->values.sensorMode));
-    TEST_ASSERT_TRUE(result.committedControlContextTransition.has_value());
-    TEST_ASSERT_TRUE(*result.committedControlContextTransition ==
-                     CommittedControlContextTransition::SensorRoleChange);
-    TemperatureController controller(
-        {},
-        {IntegratorTransitionAction::Reset, IntegratorTransitionAction::Reset,
-         IntegratorTransitionAction::Reset, 0.2});
-    TEST_ASSERT_TRUE(
-        consumeCommittedControlContextTransition(result, controller));
     TEST_ASSERT_FALSE(result.committedControlContextTransition.has_value());
-    TEST_ASSERT_FALSE(
-        consumeCommittedControlContextTransition(result, controller));
+    TEST_ASSERT_TRUE(controller.state().pendingContextTransition.has_value());
+    TEST_ASSERT_TRUE(*controller.state().pendingContextTransition ==
+                     CommittedControlContextTransition::SensorRoleChange);
 }
 
 void test_persist_sensor_selection_recovery_revalidation_restores_permission() {
@@ -5817,6 +6099,10 @@ int main(int, char**) {
         test_qualification_orchestrator_preserves_fault_signal_and_binds_sample_time);
     RUN_TEST(test_product_inserted_commits_before_advancing_and_restores);
     RUN_TEST(test_air_run_product_inserted_is_air_to_air_without_pi_transition);
+    RUN_TEST(test_application_bridge_hands_off_cooling_context_once);
+    RUN_TEST(
+        test_application_bridge_resets_runtime_at_committed_lifecycle_boundaries);
+    RUN_TEST(test_application_bridge_resets_runtime_on_recovery_activation);
     RUN_TEST(
         test_product_wait_expired_tombstones_and_does_not_revive_after_restart);
     RUN_TEST(test_periodic_unknown_outcomes_at_slot_and_head_are_unresolvable);
