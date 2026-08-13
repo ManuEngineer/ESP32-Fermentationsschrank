@@ -242,6 +242,8 @@ TemperatureControlInput bridgeAirInput(std::uint64_t timestamp, double target,
     input.targetCelsius = target;
     input.controlSensorRole = ControlSensorRole::Air;
     input.air.quality = device_platform::SensorQuality::Valid;
+    // Per #20/FR2, only filteredCelsius is a normal control value.
+    input.air.filteredCelsius = measured;
     input.air.rawCelsius = measured;
     return input;
 }
@@ -257,6 +259,8 @@ void buildQualifierCredit(TargetQualificationEvaluator& evaluator) {
     first.maximumAcceptedSampleGapMillis = 2'000U;
     first.controlSensorRole = ControlSensorRole::Air;
     first.air.quality = device_platform::SensorQuality::Valid;
+    // Per #20/FR2, only filteredCelsius is a normal control value.
+    first.air.filteredCelsius = 20.0;
     first.air.rawCelsius = 20.0;
     auto firstDecision = evaluator.evaluate(first);
     TEST_ASSERT_TRUE(evaluator.applyRamOnly(
@@ -273,6 +277,10 @@ RunCommandState readyActiveRunWithSensorSelection(
     RunPersistenceCoordinator& coordinator, CommandId startId);
 RunCommandState persistedFermentingRun(RunPersistenceCoordinator& coordinator,
                                        CommandId startId);
+RunCommandState persistedCoolHoldingRun(RunPersistenceCoordinator& coordinator,
+                                        CommandId startId);
+RunCommandState readyActiveManualRunWithSensorSelection(
+    RunPersistenceCoordinator& coordinator, CommandId startId);
 CrossRolePlausibilityContext recoveryPlausibility(
     std::uint64_t evaluatedAtMonotonicMillis, bool productValid = true);
 
@@ -2450,12 +2458,19 @@ TargetQualificationInput preheatQualificationInput(const RunCommandState& state,
     input.runRevision = state.runRevision;
     input.processTransitionSequence = state.processState.transitionSequence;
     input.targetCelsius = 38.0;
+    // Must match the canonical run contract (preheatProgram():
+    // targetQualification.bandCelsius/durationMinutes) so
+    // evaluateAndApplyTargetQualification()'s canonical-context check
+    // (FR4) accepts it; effectiveGraceMillis/maximumAcceptedSampleGapMillis
+    // stay free Commissioning-style test values (not canonically bound).
     input.bandCelsius = 0.5;
-    input.qualificationDurationMillis = 1'000U;
+    input.qualificationDurationMillis = 600'000U;
     input.effectiveGraceMillis = 500U;
-    input.maximumAcceptedSampleGapMillis = 2'000U;
+    input.maximumAcceptedSampleGapMillis = 700'000U;
     input.controlSensorRole = ControlSensorRole::Air;
     input.air.quality = device_platform::SensorQuality::Valid;
+    // Per #20/FR2, only filteredCelsius is a normal control value.
+    input.air.filteredCelsius = 38.0;
     input.air.rawCelsius = 38.0;
     input.product = input.air;
     return input;
@@ -2602,9 +2617,12 @@ void test_qualification_orchestrator_discards_failed_candidate_and_retries() {
 
     store.faultAt(store.writeCount() + 1U,
                   SequencedWriteStore::WriteFault::FailBeforeBegin);
+    // FR4: the canonical duration is the real 10-minute program contract
+    // (600'000ms), so completion needs a matching elapsed gap, not the
+    // previous arbitrary short one.
     const auto failed = evaluateAndApplyTargetQualification(
-        application, state, preheatQualificationInput(state, 1'100U),
-        RunCheckpointTime{1'100U, std::nullopt});
+        application, state, preheatQualificationInput(state, 600'100U),
+        RunCheckpointTime{600'100U, std::nullopt});
     TEST_ASSERT_TRUE(failed.status ==
                      TargetQualificationOrchestrationStatus::PersistenceFailed);
     TEST_ASSERT_TRUE(failed.qualification.lifecycle ==
@@ -2616,8 +2634,8 @@ void test_qualification_orchestrator_discards_failed_candidate_and_retries() {
 
     store.clearFaults();
     const auto retry = evaluateAndApplyTargetQualification(
-        application, state, preheatQualificationInput(state, 1'100U),
-        RunCheckpointTime{1'100U, std::nullopt});
+        application, state, preheatQualificationInput(state, 600'100U),
+        RunCheckpointTime{600'100U, std::nullopt});
     TEST_ASSERT_TRUE(retry.status ==
                      TargetQualificationOrchestrationStatus::AppliedPersisted);
     TEST_ASSERT_TRUE(retry.qualification.progress ==
@@ -2629,36 +2647,209 @@ void test_qualification_orchestrator_discards_failed_candidate_and_retries() {
     const auto inserted = decideProcessTransition(
         state.processState, &*state.processRunSnapshot, ProcessSignals{},
         TransitionRequest{ProcessEvent::ProductInsertedConfirmed, std::nullopt},
-        1'200U);
+        600'200U);
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceResultStatus::Applied),
         static_cast<int>(
             coordinator
                 .persistTransition(state, inserted,
-                                   RunCheckpointTime{1'200U, std::nullopt})
+                                   RunCheckpointTime{600'200U, std::nullopt})
                 .status));
-    auto targetInput = preheatQualificationInput(state, 2'000U);
+    auto targetInput = preheatQualificationInput(state, 600'300U);
     targetInput.phase = QualificationPhase::Target;
     targetInput.controlSensorRole = ControlSensorRole::Product;
+    targetInput.product.filteredCelsius = 38.0;
     targetInput.product.rawCelsius = 38.0;
     const auto targetTracking = evaluateAndApplyTargetQualification(
         application, state, targetInput,
-        RunCheckpointTime{2'000U, std::nullopt});
+        RunCheckpointTime{600'300U, std::nullopt});
     TEST_ASSERT_TRUE(targetTracking.status ==
                      TargetQualificationOrchestrationStatus::AppliedPersisted);
     TEST_ASSERT_EQUAL_UINT64(0U, evaluator.state().creditedInBandMillis);
 
     targetInput.processTransitionSequence =
         state.processState.transitionSequence;
-    targetInput.sampleTimestampMonotonicMillis = 3'000U;
+    targetInput.sampleTimestampMonotonicMillis = 1'200'300U;
     const auto targetComplete = evaluateAndApplyTargetQualification(
         application, state, targetInput,
-        RunCheckpointTime{3'000U, std::nullopt});
+        RunCheckpointTime{1'200'300U, std::nullopt});
     TEST_ASSERT_TRUE(targetComplete.qualification.progress ==
                      QualificationProgress::Complete);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fermenting),
                           static_cast<int>(state.processState.state));
     TEST_ASSERT_EQUAL_UINT64(0U, evaluator.state().creditedInBandMillis);
+}
+
+device_platform::SensorQualitySnapshot bridgeSensorSample(double celsius) {
+    device_platform::SensorQualitySnapshot snapshot;
+    snapshot.quality = device_platform::SensorQuality::Valid;
+    snapshot.filteredCelsius = celsius;
+    return snapshot;
+}
+
+// FR1: the only canonical PI-evaluation boundary. It resolves target/role
+// from the live RunCommandState via resolveEffectiveControlContext() - a
+// caller cannot supply a freely-chosen target/role/context, closing the gap
+// where TemperatureController::evaluate() alone could still be fed a stale
+// or fabricated source-program target.
+void test_evaluate_temperature_control_uses_canonical_context_per_phase() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+
+    // Programme run, ReachingTarget: canonical target 38.0, role Product.
+    auto state = readyActiveRunWithSensorSelection(coordinator, 900U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
+                          static_cast<int>(state.processState.state));
+    TemperatureControlEvaluationEvidence evidence;
+    evidence.sampleTimestampMonotonicMillis = 100U;
+    evidence.air = bridgeSensorSample(20.0);
+    evidence.product = bridgeSensorSample(20.0);
+    const auto reaching =
+        application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(reaching.status == TemperatureControlStatus::Demand);
+    TEST_ASSERT_TRUE(reaching.direction == AbstractControlDirection::Heating);
+    TEST_ASSERT_TRUE(reaching.controlRequest.has_value());
+    TEST_ASSERT_TRUE(reaching.controlRequest->context.controlSensorRole ==
+                     ControlSensorRole::Product);
+    TEST_ASSERT_EQUAL_UINT32(state.runRevision,
+                             reaching.controlRequest->context.runRevision);
+    TEST_ASSERT_EQUAL_UINT32(
+        state.processState.transitionSequence,
+        reaching.controlRequest->context.processTransitionSequence);
+}
+
+void test_evaluate_temperature_control_target_changed_uses_new_value_only() {
+    // FR1/#20-consistent: after a live TargetChanged commit, only the new
+    // effective target may drive the PI evaluation - no leftover old
+    // source-program target.
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    auto state = readyActiveRunWithSensorSelection(coordinator, 901U);
+
+    TemperatureControlEvaluationEvidence evidence;
+    evidence.sampleTimestampMonotonicMillis = 100U;
+    evidence.air = bridgeSensorSample(37.9);
+    evidence.product = bridgeSensorSample(37.9);
+    const auto beforeChange =
+        application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(beforeChange.status == TemperatureControlStatus::Off);
+
+    const auto decision = decideRunAdjustment(
+        state, targetAdjustmentRequest(state, 902U, 200U, 20.0));
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::Applied),
+        static_cast<int>(
+            application
+                .persistCommand(state, decision,
+                                RunCheckpointTime{200U, std::nullopt})
+                .status));
+
+    evidence.sampleTimestampMonotonicMillis = 300U;
+    const auto afterChange =
+        application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(afterChange.status == TemperatureControlStatus::Demand);
+    TEST_ASSERT_TRUE(afterChange.direction ==
+                     AbstractControlDirection::Cooling);
+}
+
+void test_evaluate_temperature_control_cooling_uses_completion_target_only() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    auto state = persistedCoolHoldingRun(coordinator, 903U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::CoolHolding),
+                          static_cast<int>(state.processState.state));
+
+    TemperatureControlEvaluationEvidence evidence;
+    evidence.sampleTimestampMonotonicMillis = 700'000U;
+    // Would be Heating against the 38.0 fermentation target, but Cooling
+    // must exclusively use the completion target (20.0) - Idle at 25.0.
+    evidence.air = bridgeSensorSample(25.0);
+    evidence.product = bridgeSensorSample(25.0);
+    const auto result = application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(result.direction == AbstractControlDirection::Cooling ||
+                     result.status == TemperatureControlStatus::Off);
+    TEST_ASSERT_TRUE(result.direction != AbstractControlDirection::Heating);
+}
+
+void test_evaluate_temperature_control_manual_run_uses_manual_target() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    auto state = readyActiveManualRunWithSensorSelection(coordinator, 904U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
+                          static_cast<int>(state.processState.state));
+
+    TemperatureControlEvaluationEvidence evidence;
+    evidence.sampleTimestampMonotonicMillis = 100U;
+    // ManualRun target is 12.0 (manualStartDecision()); 20.0 must read as
+    // Cooling against it, not as Heating against a nonexistent fermentation
+    // source.
+    evidence.air = bridgeSensorSample(20.0);
+    const auto result = application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(result.status == TemperatureControlStatus::Demand);
+    TEST_ASSERT_TRUE(result.direction == AbstractControlDirection::Cooling);
+}
+
+void test_evaluate_temperature_control_fails_closed_outside_temperature_control() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    RunCommandState standby;
+    standby.processState.state = ProcessState::Standby;
+
+    TemperatureControlEvaluationEvidence evidence;
+    evidence.sampleTimestampMonotonicMillis = 100U;
+    evidence.air = bridgeSensorSample(20.0);
+    const auto notControlled =
+        application.evaluateTemperatureControl(standby, evidence);
+    TEST_ASSERT_TRUE(notControlled.status ==
+                     TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_FALSE(notControlled.controlRequest.has_value());
+
+    // Run-/Snapshot-Widerspruch: a temperature-controlled phase without a
+    // matching run/snapshot is structurally inconsistent, not merely
+    // "not yet configured".
+    RunCommandState contradictory;
+    contradictory.processState.state = ProcessState::ReachingTarget;
+    const auto contradictoryResult =
+        application.evaluateTemperatureControl(contradictory, evidence);
+    TEST_ASSERT_TRUE(contradictoryResult.status ==
+                     TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_FALSE(contradictoryResult.controlRequest.has_value());
 }
 
 void test_product_inserted_commits_before_advancing_and_restores() {
@@ -6097,6 +6288,15 @@ int main(int, char**) {
         test_qualification_orchestrator_discards_failed_candidate_and_retries);
     RUN_TEST(
         test_qualification_orchestrator_preserves_fault_signal_and_binds_sample_time);
+    RUN_TEST(
+        test_evaluate_temperature_control_uses_canonical_context_per_phase);
+    RUN_TEST(
+        test_evaluate_temperature_control_target_changed_uses_new_value_only);
+    RUN_TEST(
+        test_evaluate_temperature_control_cooling_uses_completion_target_only);
+    RUN_TEST(test_evaluate_temperature_control_manual_run_uses_manual_target);
+    RUN_TEST(
+        test_evaluate_temperature_control_fails_closed_outside_temperature_control);
     RUN_TEST(test_product_inserted_commits_before_advancing_and_restores);
     RUN_TEST(test_air_run_product_inserted_is_air_to_air_without_pi_transition);
     RUN_TEST(test_application_bridge_hands_off_cooling_context_once);

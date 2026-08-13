@@ -1,14 +1,28 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "run_persistence_coordinator.hpp"
+#include "sensor_quality_snapshot.hpp"
 #include "target_qualification.hpp"
 #include "temperature_control.hpp"
 
 namespace fermentation {
 
 class RunRecoveryCoordinator;
+
+// The only dynamic PI evidence a caller may supply. Target, role, and
+// context identity are always derived internally from the live
+// RunCommandState via resolveEffectiveControlContext() - never taken from a
+// caller-suppliable field.
+struct TemperatureControlEvaluationEvidence {
+    std::uint64_t sampleTimestampMonotonicMillis{0U};
+    device_platform::SensorQualitySnapshot air;
+    device_platform::SensorQualitySnapshot product;
+    std::optional<PreviousControlRequestFeedback>
+        previousControlRequestFeedback;
+};
 
 // These are canonical lifecycle boundaries. Ordinary phase changes inside
 // the same run and control context are intentionally not represented here.
@@ -73,6 +87,17 @@ class TemperatureControlApplicationOrchestrator {
     qualificationEvaluator() noexcept {
         return evaluator_;
     }
+
+    // The single canonical PI-evaluation boundary (FR1): resolves the
+    // effective control context from the live RunCommandState and feeds it,
+    // together with the caller's sensor evidence, into the pure
+    // TemperatureController. A caller cannot supply its own target, role, or
+    // context identity. Fail-closed (no valid ControlRequest) when the
+    // current phase/run is not temperature-controlled or is structurally
+    // inconsistent.
+    [[nodiscard]] TemperatureControlResult evaluateTemperatureControl(
+        const RunCommandState& current,
+        const TemperatureControlEvaluationEvidence& evidence);
 
    private:
     [[nodiscard]] RunPersistenceResult complete(RunPersistenceResult result,

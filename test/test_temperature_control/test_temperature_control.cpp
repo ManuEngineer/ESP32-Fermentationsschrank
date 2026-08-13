@@ -16,6 +16,10 @@ using device_platform::SensorQualitySnapshot;
 SensorQualitySnapshot validSample(double celsius) {
     SensorQualitySnapshot snapshot;
     snapshot.quality = SensorQuality::Valid;
+    // Per #20, only filteredCelsius is a normal control value; rawCelsius is
+    // set alongside as harmless diagnostic evidence, never as the actual
+    // read value.
+    snapshot.filteredCelsius = celsius;
     snapshot.rawCelsius = celsius;
     return snapshot;
 }
@@ -411,7 +415,7 @@ void test_product_mode_requires_air_and_product_without_role_fallback() {
 
     input = productInput(200U, 25.0, 20.0, 32.0);
     input.air.quality = SensorQuality::Valid;
-    input.air.rawCelsius = NAN;
+    input.air.filteredCelsius = NAN;
     const auto invalid = controller.evaluate(input);
     TEST_ASSERT_TRUE(invalid.status == TemperatureControlStatus::InvalidInput);
     TEST_ASSERT_TRUE(invalid.reason == TemperatureControlReason::InvalidSample);
@@ -444,7 +448,7 @@ void test_air_mode_sensor_failures_are_not_applied_air_limits() {
 
     TemperatureController controller(parameters(), policy());
     auto invalidInput = airInput(100U, 25.0, 20.0);
-    invalidInput.air.rawCelsius = NAN;
+    invalidInput.air.filteredCelsius = NAN;
     const auto invalid = controller.evaluate(invalidInput);
     TEST_ASSERT_TRUE(invalid.status == TemperatureControlStatus::InvalidInput);
     TEST_ASSERT_TRUE(invalid.reason == TemperatureControlReason::InvalidSample);
@@ -509,7 +513,7 @@ void test_invalid_sensor_sample_clears_old_pi_state_before_recovery() {
     TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
 
     auto invalidInput = airInput(1200U, 25.0, 20.0);
-    invalidInput.air.rawCelsius = NAN;
+    invalidInput.air.filteredCelsius = NAN;
     TEST_ASSERT_TRUE(controller.evaluate(invalidInput).status ==
                      TemperatureControlStatus::InvalidInput);
     const auto recovered = controller.evaluate(airInput(1300U, 25.0, 20.0));
@@ -768,6 +772,80 @@ void test_request_identity_exhaustion_idle_path_clears_nonempty_pi_directly() {
     TEST_ASSERT_FALSE(controller.state().feedbackWindow.has_value());
 }
 
+void test_valid_quality_without_filtered_value_is_fail_closed_not_raw_fallback() {
+    // FR2: SensorQuality::Valid with a missing filteredCelsius is structurally
+    // inconsistent evidence, even if rawCelsius/correctedCelsius are present.
+    // It must never be used as a normal control value fallback.
+    TemperatureController rawOnly(parameters(), policy());
+    auto rawOnlyInput = airInput(100U, 25.0, 20.0);
+    rawOnlyInput.air.filteredCelsius = std::nullopt;
+    rawOnlyInput.air.rawCelsius = 20.0;
+    const auto rawResult = rawOnly.evaluate(rawOnlyInput);
+    TEST_ASSERT_TRUE(rawResult.status ==
+                     TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_FALSE(rawResult.controlRequest.has_value());
+
+    TemperatureController correctedOnly(parameters(), policy());
+    auto correctedOnlyInput = airInput(100U, 25.0, 20.0);
+    correctedOnlyInput.air.filteredCelsius = std::nullopt;
+    correctedOnlyInput.air.rawCelsius = std::nullopt;
+    correctedOnlyInput.air.correctedCelsius = 20.0;
+    const auto correctedResult = correctedOnly.evaluate(correctedOnlyInput);
+    TEST_ASSERT_TRUE(correctedResult.status ==
+                     TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_FALSE(correctedResult.controlRequest.has_value());
+}
+
+void test_stale_quality_with_old_filtered_value_is_unavailable() {
+    // FR2: quality != Valid is always Unavailable, even if a previously
+    // accepted filteredCelsius value is still carried on the snapshot.
+    TemperatureController controller(parameters(), policy());
+    auto input = airInput(100U, 25.0, 20.0);
+    input.air.quality = SensorQuality::Stale;
+    const auto result = controller.evaluate(input);
+    TEST_ASSERT_TRUE(result.status == TemperatureControlStatus::Unavailable);
+    TEST_ASSERT_TRUE(result.reason ==
+                     TemperatureControlReason::SensorUnavailable);
+    TEST_ASSERT_FALSE(result.controlRequest.has_value());
+}
+
+void test_recovery_after_invalid_evidence_starts_a_clean_pi_run() {
+    // FR2: after Unavailable/Invalid evidence, a later genuine
+    // Valid+filteredCelsius sample must not carry over an old PI impulse.
+    TemperatureController controller(parameters(), policy());
+    const auto first = controller.evaluate(airInput(100U, 25.0, 20.0));
+    auto secondInput = airInput(1100U, 25.0, 20.0);
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto second = controller.evaluate(secondInput);
+    TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
+
+    auto missingFiltered = airInput(1200U, 25.0, 20.0);
+    missingFiltered.air.filteredCelsius = std::nullopt;
+    missingFiltered.air.rawCelsius = 20.0;
+    TEST_ASSERT_TRUE(controller.evaluate(missingFiltered).status ==
+                     TemperatureControlStatus::InvalidInput);
+    const auto recovered = controller.evaluate(airInput(1300U, 25.0, 20.0));
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, recovered.integralContributionQuote);
+    TEST_ASSERT_TRUE(recovered.controlRequest.has_value());
+}
+
+void test_initial_request_sequence_zero_is_normalized_to_never_appear() {
+    // FR13: sequence 0 is reserved as "no request identity" by the feedback
+    // contract; constructing with initialRequestSequence == 0 must never
+    // produce a ControlRequest carrying sequence 0.
+    TemperatureController controller(parameters(), policy(), 0U);
+    const auto off = controller.evaluate(airInput(100U, 20.0, 20.0));
+    TEST_ASSERT_TRUE(off.controlRequest.has_value());
+    TEST_ASSERT_TRUE(off.controlRequest->identity.sequence != 0U);
+    TEST_ASSERT_EQUAL_UINT64(1U, off.controlRequest->identity.sequence);
+
+    const auto demand = controller.evaluate(airInput(1100U, 25.0, 20.0));
+    TEST_ASSERT_TRUE(demand.controlRequest.has_value());
+    TEST_ASSERT_TRUE(demand.controlRequest->identity.sequence != 0U);
+}
+
 }  // namespace
 
 void setup() {}
@@ -814,5 +892,10 @@ int main(int argc, char** argv) {
     RUN_TEST(test_request_identity_exhaustion_clears_nonempty_idle_state);
     RUN_TEST(
         test_request_identity_exhaustion_idle_path_clears_nonempty_pi_directly);
+    RUN_TEST(
+        test_valid_quality_without_filtered_value_is_fail_closed_not_raw_fallback);
+    RUN_TEST(test_stale_quality_with_old_filtered_value_is_unavailable);
+    RUN_TEST(test_recovery_after_invalid_evidence_starts_a_clean_pi_run);
+    RUN_TEST(test_initial_request_sequence_zero_is_normalized_to_never_appear);
     return UNITY_END();
 }

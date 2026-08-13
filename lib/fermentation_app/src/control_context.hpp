@@ -59,4 +59,22 @@ resolveProductInsertedControlContextTransition(
     const std::optional<ControlSensorRole>& before,
     const std::optional<ControlSensorRole>& after);
 
+// The canonical qualification-context projection (FR4): target and role come
+// from resolveEffectiveControlContext(); band and duration are bound to the
+// same immutable run/qualification contract (program targetQualification or
+// ManualRunPlan), never a caller-supplied value. Only valid for the phases
+// that own an active qualification episode (Preheating, ReachingTarget,
+// QualifyingTarget) - a target_qualification.hpp-independent header stays
+// intentionally forward-declared here to avoid widening this shared header.
+struct EffectiveQualificationContext {
+    ControlSensorRole controlSensorRole{ControlSensorRole::Air};
+    double targetCelsius{0.0};
+    double bandCelsius{0.0};
+    std::uint64_t qualificationDurationMillis{0U};
+    bool valid{false};
+};
+
+[[nodiscard]] EffectiveQualificationContext
+resolveEffectiveQualificationContext(const RunCommandState& current);
+
 }  // namespace fermentation

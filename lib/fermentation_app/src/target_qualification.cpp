@@ -3,14 +3,11 @@
 #include <cmath>
 #include <limits>
 
+#include "control_sensor_value.hpp"
 #include "program_limits.hpp"
-#include "sensor_quality_snapshot.hpp"
 
 namespace fermentation {
 namespace {
-
-using device_platform::SensorQuality;
-using device_platform::SensorQualitySnapshot;
 
 bool finite(double value) { return std::isfinite(value); }
 
@@ -19,39 +16,6 @@ void clearEpisode(TargetQualificationRuntimeState& state) {
     state.creditedInBandMillis = 0U;
     state.lastUsableTimestampMillis = std::nullopt;
     state.graceStartedAtMillis = std::nullopt;
-}
-
-std::optional<double> snapshotValue(const SensorQualitySnapshot& snapshot) {
-    const std::optional<double>* value = &snapshot.filteredCelsius;
-    if (!value->has_value()) {
-        value = &snapshot.correctedCelsius;
-    }
-    if (!value->has_value()) {
-        value = &snapshot.rawCelsius;
-    }
-    if (!value->has_value() || !finite(**value)) {
-        return std::nullopt;
-    }
-    return **value;
-}
-
-enum class SampleStatus : std::uint8_t {
-    Valid,
-    Unavailable,
-    Invalid,
-};
-
-SampleStatus readSnapshot(const SensorQualitySnapshot& snapshot,
-                          double& value) {
-    if (snapshot.quality != SensorQuality::Valid) {
-        return SampleStatus::Unavailable;
-    }
-    const auto candidate = snapshotValue(snapshot);
-    if (!candidate.has_value()) {
-        return SampleStatus::Invalid;
-    }
-    value = *candidate;
-    return SampleStatus::Valid;
 }
 
 bool validRole(ControlSensorRole role) {
@@ -192,12 +156,14 @@ TargetQualificationResult TargetQualificationEvaluator::evaluate(
             ? input.air
             : input.product;
     double measuredCelsius = 0.0;
-    const auto sampleStatus = readSnapshot(selectedSnapshot, measuredCelsius);
-    if (sampleStatus == SampleStatus::Unavailable) {
+    const auto sampleStatus =
+        readControlSensorValue(selectedSnapshot, measuredCelsius);
+    if (sampleStatus == ControlSensorValueStatus::Unavailable) {
         clearEpisode(candidate);
         return result(QualificationProgress::Unavailable, expected, candidate);
     }
-    if (sampleStatus == SampleStatus::Invalid || !finite(measuredCelsius)) {
+    if (sampleStatus == ControlSensorValueStatus::Invalid ||
+        !finite(measuredCelsius)) {
         clearEpisode(candidate);
         return result(QualificationProgress::Invalid, expected, candidate);
     }

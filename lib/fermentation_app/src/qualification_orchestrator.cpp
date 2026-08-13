@@ -24,10 +24,12 @@ bool phaseMatchesProcessState(QualificationPhase phase, ProcessState state) {
 
 bool matchesCanonicalControlContext(const RunCommandState& current,
                                     const TargetQualificationInput& input) {
-    const auto context = resolveEffectiveControlContext(current);
-    return context.valid &&
-           context.target.targetCelsius == input.targetCelsius &&
-           context.controlSensorRole == input.controlSensorRole;
+    const auto context = resolveEffectiveQualificationContext(current);
+    return context.valid && context.targetCelsius == input.targetCelsius &&
+           context.controlSensorRole == input.controlSensorRole &&
+           context.bandCelsius == input.bandCelsius &&
+           context.qualificationDurationMillis ==
+               input.qualificationDurationMillis;
 }
 
 TargetQualificationOrchestrationResult discarded(

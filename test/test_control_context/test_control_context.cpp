@@ -33,6 +33,13 @@ RunCommandState projectedProgramState(ProcessState phase) {
     document->program.maximumTargetReachMinutes = 180U;
     document->program.completion.mode = CompletionMode::CoolThenFinish;
     document->program.completion.coolingTargetCelsius = 9.0;
+    // Keep the snapshot structurally consistent with the requested phase
+    // (stateMatchesRunSnapshot()/validateProcessRunSnapshot()): Preheating
+    // requires preheatEnabled with a matching product-wait configuration.
+    document->program.preheat = phase == ProcessState::Preheating;
+    document->program.maximumProductWaitMinutes =
+        phase == ProcessState::Preheating ? std::optional<std::uint32_t>{30U}
+                                          : std::nullopt;
     TEST_ASSERT_TRUE(validateProgram(*document).valid());
     const auto run =
         ActiveRun::start(*document, ProgramSourceKind::FactoryCatalog, 1U);
@@ -211,6 +218,100 @@ void test_live_state_projection_uses_effective_targets_and_completion_target() {
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 12.0, context.target.targetCelsius);
 }
 
+RunCommandState manualRunState(ProcessState phase, bool preheatEnabled) {
+    RunCommandState state;
+    state.processState.state = phase;
+    state.activeRunId = "manual-run";
+    state.activeRunSensorMode = RunSensorMode::Product;
+    ManualRunPlan plan;
+    plan.values.runId = state.activeRunId;
+    plan.values.targetTemperatureCelsius = 18.0;
+    plan.values.sensorMode = RunSensorMode::Product;
+    plan.values.preheatEnabled = preheatEnabled;
+    plan.values.maximumProductWaitMinutes =
+        preheatEnabled ? std::optional<std::uint32_t>{30U} : std::nullopt;
+    plan.values.qualificationBandCelsius = 0.5;
+    plan.values.qualificationDurationMinutes = 10U;
+    plan.values.maximumTargetReachMinutes = 180U;
+    state.activeManualRun = plan;
+    state.processRunSnapshot = makeProcessRunSnapshot(plan);
+    state.runRevision = 2U;
+    state.processState.transitionSequence = 5U;
+    return state;
+}
+
+void test_manual_run_target_resolves_before_manual_holding() {
+    // FR5: PREHEATING/WAITING_FOR_PRODUCT/REACHING_TARGET/QUALIFYING_TARGET
+    // must resolve the ManualRunPlan target, not
+    // effectiveFermentationTargetCelsius (which a ManualRun never sets).
+    for (const auto phase :
+         {ProcessState::WaitingForProduct, ProcessState::ReachingTarget,
+          ProcessState::QualifyingTarget}) {
+        const auto state = manualRunState(phase, true);
+        const auto context = resolveEffectiveControlContext(state);
+        TEST_ASSERT_TRUE(context.valid);
+        TEST_ASSERT_TRUE(context.target.targetKind ==
+                         ControlTargetKind::ManualRun);
+        TEST_ASSERT_DOUBLE_WITHIN(0.0001, 18.0, context.target.targetCelsius);
+    }
+
+    const auto preheating = manualRunState(ProcessState::Preheating, true);
+    const auto preheatingContext = resolveEffectiveControlContext(preheating);
+    TEST_ASSERT_TRUE(preheatingContext.valid);
+    TEST_ASSERT_TRUE(preheatingContext.controlSensorRole ==
+                     ControlSensorRole::Air);
+    TEST_ASSERT_TRUE(preheatingContext.target.targetKind ==
+                     ControlTargetKind::ManualRun);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 18.0,
+                              preheatingContext.target.targetCelsius);
+
+    const auto waiting = manualRunState(ProcessState::WaitingForProduct, true);
+    const auto waitingContext = resolveEffectiveControlContext(waiting);
+    TEST_ASSERT_TRUE(waitingContext.valid);
+    TEST_ASSERT_TRUE(waitingContext.controlSensorRole ==
+                     ControlSensorRole::Air);
+
+    const auto reaching = manualRunState(ProcessState::ReachingTarget, false);
+    const auto reachingContext = resolveEffectiveControlContext(reaching);
+    TEST_ASSERT_TRUE(reachingContext.valid);
+    TEST_ASSERT_TRUE(reachingContext.controlSensorRole ==
+                     ControlSensorRole::Product);
+}
+
+void test_manual_run_in_fermenting_is_structurally_rejected() {
+    // FR5: a ManualRun snapshot can never legitimately reach FERMENTING; the
+    // corrected phase-based target resolution must not legitimize it.
+    auto input = baseInput(ProcessState::Fermenting);
+    input.manualRun = true;
+    TEST_ASSERT_FALSE(resolveEffectiveControlContext(input).valid);
+}
+
+void test_qualification_context_binds_band_and_duration_to_active_run() {
+    // FR4: band and duration come from the immutable run/qualification
+    // contract (program or ManualRunPlan), not a freely suppliable value.
+    auto programState = projectedProgramState(ProcessState::Preheating);
+    const auto programContext =
+        resolveEffectiveQualificationContext(programState);
+    TEST_ASSERT_TRUE(programContext.valid);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.5, programContext.bandCelsius);
+    TEST_ASSERT_EQUAL_UINT64(600'000U,
+                             programContext.qualificationDurationMillis);
+
+    const auto manualState =
+        manualRunState(ProcessState::ReachingTarget, false);
+    const auto manualContext =
+        resolveEffectiveQualificationContext(manualState);
+    TEST_ASSERT_TRUE(manualContext.valid);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.5, manualContext.bandCelsius);
+    TEST_ASSERT_EQUAL_UINT64(600'000U,
+                             manualContext.qualificationDurationMillis);
+
+    // FERMENTING/COOLING/etc. have no active qualification episode.
+    auto fermenting = programState;
+    fermenting.processState.state = ProcessState::Fermenting;
+    TEST_ASSERT_FALSE(resolveEffectiveQualificationContext(fermenting).valid);
+}
+
 }  // namespace
 
 void setup() {}
@@ -229,6 +330,9 @@ int main(int argc, char** argv) {
     RUN_TEST(test_manual_holding_uses_manual_target);
     RUN_TEST(test_non_control_phase_has_no_context);
     RUN_TEST(test_invalid_run_sensor_mode_does_not_fallback_to_air);
+    RUN_TEST(test_manual_run_target_resolves_before_manual_holding);
+    RUN_TEST(test_manual_run_in_fermenting_is_structurally_rejected);
+    RUN_TEST(test_qualification_context_binds_band_and_duration_to_active_run);
     RUN_TEST(
         test_live_state_projection_uses_effective_targets_and_completion_target);
     return UNITY_END();

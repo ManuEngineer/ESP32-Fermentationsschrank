@@ -4,11 +4,10 @@
 #include <cmath>
 #include <limits>
 
+#include "control_sensor_value.hpp"
+
 namespace fermentation {
 namespace {
-
-using device_platform::SensorQuality;
-using device_platform::SensorQualitySnapshot;
 
 bool finite(double value) { return std::isfinite(value); }
 
@@ -90,39 +89,6 @@ AirLimitState diagnosticAirLimitState(ControlSensorRole role) {
                                           : AirLimitState::Unavailable;
 }
 
-std::optional<double> sampleValue(const SensorQualitySnapshot& snapshot) {
-    const std::optional<double>* value = &snapshot.filteredCelsius;
-    if (!value->has_value()) {
-        value = &snapshot.correctedCelsius;
-    }
-    if (!value->has_value()) {
-        value = &snapshot.rawCelsius;
-    }
-    if (!value->has_value() || !finite(**value)) {
-        return std::nullopt;
-    }
-    return **value;
-}
-
-enum class SampleValidation : std::uint8_t {
-    Valid,
-    Unavailable,
-    Invalid,
-};
-
-SampleValidation validateSnapshot(const SensorQualitySnapshot& snapshot,
-                                  double& value) {
-    if (snapshot.quality != SensorQuality::Valid) {
-        return SampleValidation::Unavailable;
-    }
-    const auto sample = sampleValue(snapshot);
-    if (!sample.has_value()) {
-        return SampleValidation::Invalid;
-    }
-    value = *sample;
-    return SampleValidation::Valid;
-}
-
 TemperatureControlResult invalidResult(
     TemperatureControlStatus status, TemperatureControlReason reason,
     AirLimitState airLimitState = AirLimitState::Unavailable) {
@@ -167,7 +133,11 @@ TemperatureController::TemperatureController(
     std::uint64_t initialRequestSequence)
     : parameters_(parameters),
       policy_(policy),
-      nextRequestSequence_(initialRequestSequence) {}
+      // Sequence 0 is reserved as "no request identity" by the feedback
+      // contract (a feedback referencing sequence 0 is always rejected), so
+      // no valid ControlRequest may ever carry it.
+      nextRequestSequence_(
+          initialRequestSequence == 0U ? 1U : initialRequestSequence) {}
 
 bool TemperatureController::markCommittedControlContextTransitionPending(
     CommittedControlContextTransition transition) {
@@ -228,14 +198,14 @@ TemperatureControlResult TemperatureController::evaluate(
     }
 
     double airCelsius = 0.0;
-    const auto airValidation = validateSnapshot(input.air, airCelsius);
-    if (airValidation == SampleValidation::Unavailable) {
+    const auto airValidation = readControlSensorValue(input.air, airCelsius);
+    if (airValidation == ControlSensorValueStatus::Unavailable) {
         clearFailClosed();
         return invalidResult(TemperatureControlStatus::Unavailable,
                              TemperatureControlReason::SensorUnavailable,
                              diagnosticAirLimitState(input.controlSensorRole));
     }
-    if (airValidation == SampleValidation::Invalid) {
+    if (airValidation == ControlSensorValueStatus::Invalid) {
         clearFailClosed();
         return invalidResult(TemperatureControlStatus::InvalidInput,
                              TemperatureControlReason::InvalidSample,
@@ -246,15 +216,15 @@ TemperatureControlResult TemperatureController::evaluate(
     if (input.controlSensorRole == ControlSensorRole::Product) {
         double productCelsius = 0.0;
         const auto productValidation =
-            validateSnapshot(input.product, productCelsius);
-        if (productValidation == SampleValidation::Unavailable ||
-            airValidation == SampleValidation::Unavailable) {
+            readControlSensorValue(input.product, productCelsius);
+        if (productValidation == ControlSensorValueStatus::Unavailable ||
+            airValidation == ControlSensorValueStatus::Unavailable) {
             clearFailClosed();
             return invalidResult(TemperatureControlStatus::Unavailable,
                                  TemperatureControlReason::SensorUnavailable,
                                  AirLimitState::Unavailable);
         }
-        if (productValidation == SampleValidation::Invalid) {
+        if (productValidation == ControlSensorValueStatus::Invalid) {
             clearFailClosed();
             return invalidResult(TemperatureControlStatus::InvalidInput,
                                  TemperatureControlReason::InvalidSample,

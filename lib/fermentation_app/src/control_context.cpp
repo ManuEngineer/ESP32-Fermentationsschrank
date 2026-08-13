@@ -1,6 +1,7 @@
 #include "control_context.hpp"
 
 #include <cmath>
+#include <limits>
 
 #include "run_commands.hpp"
 
@@ -8,6 +9,24 @@ namespace fermentation {
 namespace {
 
 bool finite(double value) { return std::isfinite(value); }
+
+bool qualificationEpisodePhase(ProcessState phase) {
+    return phase == ProcessState::Preheating ||
+           phase == ProcessState::ReachingTarget ||
+           phase == ProcessState::QualifyingTarget;
+}
+
+std::optional<double> qualificationBandForActiveRun(
+    const RunCommandState& current) {
+    if (current.activeManualRun.has_value()) {
+        return current.activeManualRun->values.qualificationBandCelsius;
+    }
+    if (current.activeProgramRun.has_value()) {
+        return current.activeProgramRun->snapshot()
+            .sourceProgram.program.targetQualification.bandCelsius;
+    }
+    return std::nullopt;
+}
 
 bool temperatureControlledPhase(ProcessState phase) {
     switch (phase) {
@@ -125,13 +144,31 @@ EffectiveControlContext resolveEffectiveControlContext(
             target = input.manualTargetCelsius;
             targetKind = ControlTargetKind::ManualRun;
             break;
+        case ProcessState::Fermenting:
+            // A ManualRun snapshot is structurally never Timed and cannot
+            // legitimately reach Fermenting; do not resolve a target for
+            // that combination instead of silently reusing the fermentation
+            // source.
+            if (input.manualRun) {
+                return result;
+            }
+            target = input.effectiveFermentationTargetCelsius;
+            targetKind = ControlTargetKind::FermentationRun;
+            break;
         case ProcessState::Preheating:
         case ProcessState::WaitingForProduct:
         case ProcessState::ReachingTarget:
         case ProcessState::QualifyingTarget:
-        case ProcessState::Fermenting:
-            target = input.effectiveFermentationTargetCelsius;
-            targetKind = ControlTargetKind::FermentationRun;
+            if (input.manualRun) {
+                if (!input.manualTargetCelsius.has_value()) {
+                    return result;
+                }
+                target = input.manualTargetCelsius;
+                targetKind = ControlTargetKind::ManualRun;
+            } else {
+                target = input.effectiveFermentationTargetCelsius;
+                targetKind = ControlTargetKind::FermentationRun;
+            }
             break;
         default:
             return result;
@@ -161,6 +198,14 @@ std::optional<EffectiveControlContextInput> projectEffectiveControlContextInput(
     if (!current.processRunSnapshot.has_value()) return std::nullopt;
 
     const auto& snapshot = *current.processRunSnapshot;
+    // Reuse the existing run/snapshot consistency contract instead of
+    // trusting the phase in isolation: a stale or foreign snapshot (wrong
+    // kind for the current phase, or a structurally invalid snapshot) must
+    // not silently feed the PI/qualification boundary.
+    if (!validateProcessRunSnapshot(snapshot) ||
+        !stateMatchesRunSnapshot(input.phase, snapshot)) {
+        return std::nullopt;
+    }
     switch (snapshot.kind) {
         case ProcessKind::Timed:
             if (!current.activeProgramRun.has_value() ||
@@ -197,6 +242,40 @@ EffectiveControlContext resolveEffectiveControlContext(
     const auto projected = projectEffectiveControlContextInput(current);
     if (!projected.has_value()) return {};
     return resolveEffectiveControlContext(*projected);
+}
+
+EffectiveQualificationContext resolveEffectiveQualificationContext(
+    const RunCommandState& current) {
+    EffectiveQualificationContext result;
+    if (!qualificationEpisodePhase(current.processState.state)) {
+        return result;
+    }
+    const auto control = resolveEffectiveControlContext(current);
+    if (!control.valid || !current.processRunSnapshot.has_value()) {
+        return result;
+    }
+    const auto band = qualificationBandForActiveRun(current);
+    if (!band.has_value() || !finite(*band)) {
+        return result;
+    }
+    const auto minutes =
+        current.processRunSnapshot->qualificationDurationMinutes;
+    constexpr std::uint64_t kMillisecondsPerMinute = 60000ULL;
+    if (minutes >
+        std::numeric_limits<std::uint64_t>::max() / kMillisecondsPerMinute) {
+        return result;
+    }
+    const std::uint64_t durationMillis =
+        static_cast<std::uint64_t>(minutes) * kMillisecondsPerMinute;
+    if (durationMillis == 0U) {
+        return result;
+    }
+    result.controlSensorRole = control.controlSensorRole;
+    result.targetCelsius = control.target.targetCelsius;
+    result.bandCelsius = *band;
+    result.qualificationDurationMillis = durationMillis;
+    result.valid = true;
+    return result;
 }
 
 }  // namespace fermentation

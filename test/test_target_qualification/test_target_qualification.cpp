@@ -14,6 +14,10 @@ using device_platform::SensorQualitySnapshot;
 SensorQualitySnapshot valid(double celsius) {
     SensorQualitySnapshot snapshot;
     snapshot.quality = SensorQuality::Valid;
+    // Per #20, only filteredCelsius is a normal control value; rawCelsius is
+    // set alongside as harmless diagnostic evidence, never as the actual
+    // read value.
+    snapshot.filteredCelsius = celsius;
     snapshot.rawCelsius = celsius;
     return snapshot;
 }
@@ -88,7 +92,8 @@ void test_unavailable_and_invalid_interrupt_episode_differently() {
     TEST_ASSERT_EQUAL_UINT64(0U, unavailable.creditedInBandMillis);
 
     auto invalidInput = input(QualificationPhase::Target, 300U, 20.0);
-    invalidInput.product.rawCelsius = std::numeric_limits<double>::quiet_NaN();
+    invalidInput.product.filteredCelsius =
+        std::numeric_limits<double>::quiet_NaN();
     const auto invalid = evaluateAndApply(evaluator, invalidInput);
     TEST_ASSERT_TRUE(invalid.progress == QualificationProgress::Invalid);
 }
@@ -108,7 +113,8 @@ void test_unavailable_and_invalid_return_start_new_credit() {
     TEST_ASSERT_EQUAL_UINT64(0U, afterUnavailable.creditedInBandMillis);
 
     auto invalidInput = input(QualificationPhase::Target, 400U, 20.0);
-    invalidInput.product.rawCelsius = std::numeric_limits<double>::quiet_NaN();
+    invalidInput.product.filteredCelsius =
+        std::numeric_limits<double>::quiet_NaN();
     static_cast<void>(evaluateAndApply(evaluator, invalidInput));
     const auto afterInvalid = evaluateAndApply(
         evaluator, input(QualificationPhase::Target, 500U, 20.0));
@@ -440,6 +446,56 @@ void test_invalid_qualification_phase_is_a_non_mutating_invalid_candidate() {
     TEST_ASSERT_TRUE(evaluator.state().phase == before.phase);
 }
 
+void test_valid_quality_without_filtered_value_is_invalid_not_raw_fallback() {
+    // FR2: SensorQuality::Valid with a missing filteredCelsius is structurally
+    // inconsistent evidence, even if rawCelsius/correctedCelsius are present.
+    // It must never be used as a normal qualification-value fallback.
+    TargetQualificationEvaluator evaluator;
+    auto rawOnly = input(QualificationPhase::Target, 100U, 20.0);
+    rawOnly.product.filteredCelsius = std::nullopt;
+    rawOnly.product.rawCelsius = 20.0;
+    TEST_ASSERT_TRUE(evaluator.evaluate(rawOnly).progress ==
+                     QualificationProgress::Invalid);
+
+    auto correctedOnly = input(QualificationPhase::Target, 100U, 20.0);
+    correctedOnly.product.filteredCelsius = std::nullopt;
+    correctedOnly.product.rawCelsius = std::nullopt;
+    correctedOnly.product.correctedCelsius = 20.0;
+    TEST_ASSERT_TRUE(evaluator.evaluate(correctedOnly).progress ==
+                     QualificationProgress::Invalid);
+}
+
+void test_stale_quality_with_old_filtered_value_is_unavailable() {
+    // FR2: quality != Valid is always Unavailable, even if a previously
+    // accepted filteredCelsius value is still carried on the snapshot.
+    TargetQualificationEvaluator evaluator;
+    auto staleInput = input(QualificationPhase::Target, 100U, 20.0);
+    staleInput.product.quality = SensorQuality::Stale;
+    TEST_ASSERT_TRUE(evaluator.evaluate(staleInput).progress ==
+                     QualificationProgress::Unavailable);
+}
+
+void test_recovery_after_invalid_evidence_starts_a_clean_credit() {
+    // FR2: after Unavailable/Invalid evidence, a later genuine
+    // Valid+filteredCelsius sample must not carry over an old qualifier
+    // credit.
+    TargetQualificationEvaluator evaluator;
+    static_cast<void>(evaluateAndApply(
+        evaluator, input(QualificationPhase::Target, 100U, 20.0)));
+    static_cast<void>(evaluateAndApply(
+        evaluator, input(QualificationPhase::Target, 1'000U, 20.0)));
+
+    auto missingFiltered = input(QualificationPhase::Target, 2'000U, 20.0);
+    missingFiltered.product.filteredCelsius = std::nullopt;
+    missingFiltered.product.rawCelsius = 20.0;
+    static_cast<void>(evaluateAndApply(evaluator, missingFiltered));
+
+    const auto recovered = evaluateAndApply(
+        evaluator, input(QualificationPhase::Target, 2'100U, 20.0));
+    TEST_ASSERT_TRUE(recovered.progress == QualificationProgress::InBand);
+    TEST_ASSERT_EQUAL_UINT64(0U, recovered.creditedInBandMillis);
+}
+
 }  // namespace
 
 void setup() {}
@@ -473,5 +529,9 @@ int main(int argc, char** argv) {
         test_future_candidate_identity_is_stale_against_old_expected_context);
     RUN_TEST(
         test_invalid_qualification_phase_is_a_non_mutating_invalid_candidate);
+    RUN_TEST(
+        test_valid_quality_without_filtered_value_is_invalid_not_raw_fallback);
+    RUN_TEST(test_stale_quality_with_old_filtered_value_is_unavailable);
+    RUN_TEST(test_recovery_after_invalid_evidence_starts_a_clean_credit);
     return UNITY_END();
 }

@@ -137,6 +137,40 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
     return result;
 }
 
+TemperatureControlResult
+TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
+    const RunCommandState& current,
+    const TemperatureControlEvaluationEvidence& evidence) {
+    const auto context = resolveEffectiveControlContext(current);
+    if (!context.valid) {
+        // Not temperature-controlled or structurally inconsistent (Run-/
+        // Snapshot-Widerspruch): fail-closed, no ControlRequest. The
+        // TemperatureController runtime itself was already reset at the
+        // lifecycle boundary that left temperature control, so it is left
+        // untouched here.
+        TemperatureControlResult result;
+        result.status = TemperatureControlStatus::InvalidInput;
+        result.reason = TemperatureControlReason::InvalidConfiguration;
+        result.airLimitState = AirLimitState::Unavailable;
+        result.direction = AbstractControlDirection::Idle;
+        return result;
+    }
+
+    TemperatureControlInput input;
+    input.sampleTimestampMonotonicMillis =
+        evidence.sampleTimestampMonotonicMillis;
+    input.targetCelsius = context.target.targetCelsius;
+    input.controlSensorRole = context.controlSensorRole;
+    input.air = evidence.air;
+    input.product = evidence.product;
+    input.previousControlRequestFeedback =
+        evidence.previousControlRequestFeedback;
+    input.processTransitionSequence =
+        context.requestContext.processTransitionSequence;
+    input.runRevision = context.requestContext.runRevision;
+    return temperatureController_.evaluate(input);
+}
+
 bool TemperatureControlApplicationOrchestrator::needsRuntimeReset(
     const RunCommandState& before, const RunCommandState& after,
     bool recoveryBoundary) const {
