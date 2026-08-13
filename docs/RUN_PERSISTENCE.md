@@ -90,9 +90,14 @@ verworfen und erzeugen keinen Write.
 Die erfolgreichen Write-before-Apply-Ergebnisse tragen ausserhalb des
 Persistenzschemas einen fluessigen Handoff-Hinweis: `persistCommand()` fuer
 Ziel-/Kontextaenderungen, `persistTransition()` fuer Ziel-/Coolingwechsel und
-`persistSensorSelection()` fuer einen tatsaechlichen
-`SensorSelectionEvent`/Moduswechsel. Notices, fehlgeschlagene Writes und
-fehlgeschlagene RAM-Applies tragen keinen solchen Hinweis. Die einzige
+`persistSensorSelection()` fuer einen persistierten `RunSensorMode`-
+Wechsel, der nach erfolgreichem Write-before-Apply einen
+`SensorSelectionEvent`/Moduswechsel tragen kann. Der #22-Handoff entsteht
+daraus nur bei einem echten effektiven `ControlSensorRole`-Wechsel
+`Air <-> Product`; ein effektiver `Air -> Air`-Pfad in
+`PREHEATING`/`WAITING_FOR_PRODUCT` erzeugt keinen `SensorRoleChange`.
+Notices, fehlgeschlagene Writes und fehlgeschlagene RAM-Applies tragen
+keinen solchen Hinweis. Die einzige
 Anwendungsgrenze dafuer ist
 `TemperatureControlApplicationOrchestrator`: Sie konsumiert Hinweise nur bei
 `RunPersistenceResultStatus::Applied`, hoechstens einmal, und uebergibt sie

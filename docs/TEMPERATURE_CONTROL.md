@@ -300,11 +300,15 @@ Verbindliche Regeln:
   RAM-only angewendet werden. Bei Persistenz-, Apply- oder Stale-Fehlern bleibt
   der vorherige Evaluatorzustand unveraendert; der fehlgeschlagene Kandidat ist
   single-use verworfen und ein Retry bewertet den unveraenderten Live-Zustand
-  neu. Der Candidate-Kontext bindet neben Ziel, Band und Rolle auch
-  Qualifikationsdauer, `runRevision`, `processTransitionSequence` und die
-  Sample-Zeit. Ohne identischen Lauf-, Prozess- und Zeitkontext ist der
-  Kandidat stale; keine Revisionsaenderung wird dadurch allein automatisch
-  als neue fachliche Episode behandelt.
+  neu. `TargetQualificationContext` bindet Ziel, Band und Rolle. Der
+  `TargetQualificationCommitContext` erweitert diesen Kontext um
+  `runRevision` und `processTransitionSequence`. Qualifikationsdauer und
+  Sample-Zeit sind separat durch den Orchestrator gebunden: Die Dauer wird
+  gegen den kanonischen Live-Laufvertrag validiert, und
+  `sampleTimestampMonotonicMillis` muss exakt zu
+  `RunCheckpointTime.monotonicMillis` passen. Ohne identischen Lauf-,
+  Prozess- und Zeitkontext ist der Kandidat stale; keine Revisionsaenderung
+  wird dadurch allein automatisch als neue fachliche Episode behandelt.
 - Ein erfolgreicher Prozess-/Marker-Commit liefert einen fluessigen
   Post-Commit-Hinweis fuer Target-, Cooling- oder Regelsensorwechsel. Nur der
   bereits angewendete effektive Kontext wird danach einmalig an den PI-Kern als
