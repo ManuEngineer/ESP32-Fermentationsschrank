@@ -66,7 +66,8 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
-    const auto before = current;
+    const TemperatureControlLifecycleSnapshot before{
+        current.processState.state};
     return complete(persistence_.persistCommand(current, decision, time,
                                                 liveSensorEvidence),
                     before, current);
@@ -77,7 +78,8 @@ TemperatureControlApplicationOrchestrator::persistTransition(
     RunCommandState& current, const TransitionDecision& decision,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
-    const auto before = current;
+    const TemperatureControlLifecycleSnapshot before{
+        current.processState.state};
     return complete(persistence_.persistTransition(current, decision, time,
                                                    liveSensorEvidence),
                     before, current);
@@ -88,7 +90,8 @@ TemperatureControlApplicationOrchestrator::persistSensorSelection(
     RunCommandState& current, const SensorSelectionStateMutation& mutation,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
-    const auto before = current;
+    const TemperatureControlLifecycleSnapshot before{
+        current.processState.state};
     return complete(persistence_.persistSensorSelection(current, mutation, time,
                                                         liveSensorEvidence),
                     before, current);
@@ -99,7 +102,8 @@ TemperatureControlApplicationOrchestrator::activateRecovery(
     RunRecoveryCoordinator& recovery, RunCommandState& current,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext& liveSensorEvidence) {
-    const auto before = current;
+    const TemperatureControlLifecycleSnapshot before{
+        current.processState.state};
     return complete(
         recovery.activate(persistence_, current, time, liveSensorEvidence),
         before, current, true);
@@ -110,7 +114,8 @@ TemperatureControlApplicationOrchestrator::resolveRecoveryOutcome(
     RunCommandState& current, const ResolveRecoveryUncertaintyRequest& request,
     const RunCheckpointTime& time,
     const CrossRolePlausibilityContext& liveSensorEvidence) {
-    const auto before = current;
+    const TemperatureControlLifecycleSnapshot before{
+        current.processState.state};
     return complete(persistence_.resolveRecoveryOutcome(current, request, time,
                                                         liveSensorEvidence),
                     before, current);
@@ -120,15 +125,17 @@ RunPersistenceResult
 TemperatureControlApplicationOrchestrator::reevaluateRecoveryEvaluation(
     RunCommandState& current, const RunCheckpointTime& time,
     const CrossRolePlausibilityContext* liveSensorEvidence) {
-    const auto before = current;
+    const TemperatureControlLifecycleSnapshot before{
+        current.processState.state};
     return complete(persistence_.reevaluateRecoveryEvaluation(
                         current, time, liveSensorEvidence),
                     before, current);
 }
 
 RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
-    RunPersistenceResult result, const RunCommandState& before,
-    RunCommandState& current, bool recoveryBoundary) {
+    RunPersistenceResult result,
+    const TemperatureControlLifecycleSnapshot& before, RunCommandState& current,
+    bool recoveryBoundary) {
     if (result.status != RunPersistenceResultStatus::Applied) return result;
 
     const bool newActiveRun = hasEffect(result, CommandEffect::RunStarted);
@@ -142,19 +149,18 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
     static_cast<void>(consumeCommittedControlContextTransition(
         result, temperatureController_));
 
-    if (needsRuntimeReset(before, current, recoveryBoundary, newActiveRun)) {
+    if (needsRuntimeReset(before, current.processState.state, recoveryBoundary,
+                          newActiveRun)) {
         TemperatureControlLifecycleBoundary boundary =
             TemperatureControlLifecycleBoundary::LeaveTemperatureControl;
         if (newActiveRun) {
             boundary = TemperatureControlLifecycleBoundary::NewActiveRun;
         } else if (recoveryBoundary ||
-                   before.processState.state ==
-                       ProcessState::RecoveryEvaluation ||
+                   before.processState == ProcessState::RecoveryEvaluation ||
                    current.processState.state ==
                        ProcessState::RecoveryEvaluation) {
             boundary = TemperatureControlLifecycleBoundary::Recovery;
-        } else if (!isTemperatureControlledProcessState(
-                       before.processState.state) &&
+        } else if (!isTemperatureControlledProcessState(before.processState) &&
                    isTemperatureControlledProcessState(
                        current.processState.state)) {
             boundary = TemperatureControlLifecycleBoundary::NewActiveRun;
@@ -169,7 +175,7 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
              CommittedControlContextTransition::SensorRoleChange ||
          committedTransition ==
              CommittedControlContextTransition::ProductInserted) &&
-        (qualificationEpisodeDomain(before.processState.state) ||
+        (qualificationEpisodeDomain(before.processState) ||
          qualificationEpisodeDomain(current.processState.state))) {
         // A successful target/role/product context commit ends the old
         // target episode immediately. The process marker is owned by the
@@ -217,28 +223,27 @@ TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
 }
 
 bool TemperatureControlApplicationOrchestrator::needsRuntimeReset(
-    const RunCommandState& before, const RunCommandState& after,
+    const TemperatureControlLifecycleSnapshot& before, ProcessState after,
     bool recoveryBoundary, bool newActiveRun) const {
     if (newActiveRun) return true;
     if (recoveryBoundary) return true;
-    if (before.processState.state == ProcessState::RecoveryEvaluation ||
-        after.processState.state == ProcessState::RecoveryEvaluation) {
+    if (before.processState == ProcessState::RecoveryEvaluation ||
+        after == ProcessState::RecoveryEvaluation) {
         return true;
     }
 
     const bool beforeControlled =
-        isTemperatureControlledProcessState(before.processState.state);
-    const bool afterControlled =
-        isTemperatureControlledProcessState(after.processState.state);
+        isTemperatureControlledProcessState(before.processState);
+    const bool afterControlled = isTemperatureControlledProcessState(after);
     if (!beforeControlled && afterControlled) return true;
     if (beforeControlled && !afterControlled) return true;
 
-    switch (after.processState.state) {
+    switch (after) {
         case ProcessState::Fault:
         case ProcessState::SafeBoot:
         case ProcessState::ServiceMode:
         case ProcessState::Standby:
-            return before.processState.state != after.processState.state;
+            return before.processState != after;
         default:
             return false;
     }

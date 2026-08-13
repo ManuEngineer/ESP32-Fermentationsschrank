@@ -3,9 +3,9 @@
 #include <cstdint>
 #include <optional>
 
+#include "control_context_types.hpp"
 #include "process_signal_types.hpp"
 #include "sensor_quality_snapshot.hpp"
-#include "temperature_control_types.hpp"
 
 namespace fermentation {
 

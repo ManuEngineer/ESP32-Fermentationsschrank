@@ -8,7 +8,7 @@
 #include "process_signal_types.hpp"
 #include "program_model.hpp"
 #include "run_snapshot.hpp"
-#include "temperature_control_types.hpp"
+#include "control_context_types.hpp"
 
 namespace fermentation {
 

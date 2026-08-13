@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "process_state_machine.hpp"
 #include "run_persistence_coordinator.hpp"
 #include "sensor_quality_snapshot.hpp"
 #include "target_qualification.hpp"
@@ -34,6 +35,13 @@ enum class TemperatureControlLifecycleBoundary : std::uint8_t {
     SafeBoot,
     Service,
     Standby,
+};
+
+// Lifecycle-Entscheidungen benoetigen nur die Prozessphase. Der vollstaendige
+// RunCommandState bleibt an der Application-Grenze und wird nicht fuer diese
+// fluechtige Vorher-Nachher-Pruefung kopiert.
+struct TemperatureControlLifecycleSnapshot {
+    ProcessState processState{ProcessState::Boot};
 };
 
 // Consumes one successful persistence/apply handoff. Passing the result by
@@ -100,14 +108,13 @@ class TemperatureControlApplicationOrchestrator {
         const TemperatureControlEvaluationEvidence& evidence);
 
    private:
-    [[nodiscard]] RunPersistenceResult complete(RunPersistenceResult result,
-                                                const RunCommandState& before,
-                                                RunCommandState& current,
-                                                bool recoveryBoundary = false);
-    [[nodiscard]] bool needsRuntimeReset(const RunCommandState& before,
-                                         const RunCommandState& after,
-                                         bool recoveryBoundary,
-                                         bool newActiveRun) const;
+    [[nodiscard]] RunPersistenceResult complete(
+        RunPersistenceResult result,
+        const TemperatureControlLifecycleSnapshot& before,
+        RunCommandState& current, bool recoveryBoundary = false);
+    [[nodiscard]] bool needsRuntimeReset(
+        const TemperatureControlLifecycleSnapshot& before, ProcessState after,
+        bool recoveryBoundary, bool newActiveRun) const;
 
     RunPersistenceCoordinator& persistence_;
     TemperatureController& temperatureController_;

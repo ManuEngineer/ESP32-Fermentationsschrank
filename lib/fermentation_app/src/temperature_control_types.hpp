@@ -3,27 +3,10 @@
 #include <cstdint>
 #include <optional>
 
+#include "control_context_types.hpp"
 #include "sensor_selection_types.hpp"
 
 namespace fermentation {
-
-enum class ControlSensorRole : std::uint8_t {
-    Air,
-    Product,
-};
-
-enum class ControlTargetKind : std::uint8_t {
-    FermentationRun,
-    CoolingCompletion,
-    ManualRun,
-};
-
-struct EffectiveControlTarget {
-    double targetCelsius{0.0};
-    ControlTargetKind targetKind{ControlTargetKind::FermentationRun};
-    std::uint32_t sourceRevision{0U};
-    bool valid{false};
-};
 
 struct ControlRequestIdentity {
     std::uint64_t sequence{0U};
@@ -40,12 +23,6 @@ struct ControlRequestIdentity {
                                      const ControlRequestIdentity& right) {
     return !(left == right);
 }
-
-struct ControlRequestContext {
-    std::uint32_t processTransitionSequence{0U};
-    std::uint32_t runRevision{0U};
-    ControlSensorRole controlSensorRole{ControlSensorRole::Air};
-};
 
 struct ControlRequest {
     ControlRequestIdentity identity;
@@ -139,13 +116,6 @@ struct IntegratorTransitionPolicy {
     IntegratorTransitionAction targetContextChange{
         IntegratorTransitionAction::Reset};
     double transitionMaximumCarryQuote{0.0};
-};
-
-enum class CommittedControlContextTransition : std::uint8_t {
-    TargetContextChange,
-    SensorRoleChange,
-    ProductInserted,
-    CoolingTargetContextChange,
 };
 
 }  // namespace fermentation

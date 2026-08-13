@@ -11,7 +11,7 @@
 #include "run_recovery_types.hpp"
 #include "run_snapshot.hpp"
 #include "sensor_selection_types.hpp"
-#include "temperature_control_types.hpp"
+#include "control_context_types.hpp"
 
 namespace fermentation {
 

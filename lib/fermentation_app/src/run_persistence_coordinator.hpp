@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 
+#include "control_context_types.hpp"
 #include "run_checkpoint_schedule.hpp"
 #include "run_persistence_contract.hpp"
 #include "run_persistence_store.hpp"

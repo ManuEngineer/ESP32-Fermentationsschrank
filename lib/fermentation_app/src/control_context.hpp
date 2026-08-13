@@ -3,12 +3,26 @@
 #include <cstdint>
 #include <optional>
 
+#include "control_context_types.hpp"
 #include "process_state_machine.hpp"
-#include "temperature_control_types.hpp"
+#include "sensor_selection_types.hpp"
 
 namespace fermentation {
 
 struct RunCommandState;
+
+enum class ControlTargetKind : std::uint8_t {
+    FermentationRun,
+    CoolingCompletion,
+    ManualRun,
+};
+
+struct EffectiveControlTarget {
+    double targetCelsius{0.0};
+    ControlTargetKind targetKind{ControlTargetKind::FermentationRun};
+    std::uint32_t sourceRevision{0U};
+    bool valid{false};
+};
 
 struct EffectiveControlContextInput {
     ProcessState phase{ProcessState::Boot};
