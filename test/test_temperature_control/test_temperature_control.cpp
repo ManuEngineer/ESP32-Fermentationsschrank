@@ -243,6 +243,67 @@ void test_second_raw_p_saturation_skips_overflowing_positive_delta_i() {
     TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, second.integralContributionQuote);
 }
 
+void test_current_integral_headroom_saturation_skips_overflowing_positive_delta_i() {
+    auto configured = parameters();
+    configured.airHeating.proportionalGainQuotePerCelsius = 0.2;
+    configured.airHeating.integralGainQuotePerCelsiusSecond = 0.05;
+    configured.airHeating.neutralBandWidthCelsius = 0.8;
+    configured.airCooling.proportionalGainQuotePerCelsius = 0.2;
+    configured.airCooling.integralGainQuotePerCelsiusSecond =
+        std::numeric_limits<double>::max();
+    configured.airCooling.neutralBandWidthCelsius = 0.8;
+    const IntegratorTransitionPolicy boundedCarry{
+        IntegratorTransitionAction::BoundedCarry,
+        IntegratorTransitionAction::BoundedCarry,
+        IntegratorTransitionAction::BoundedCarry, 0.16};
+    TemperatureController controller(configured, boundedCarry);
+
+    const auto first = controller.evaluate(airInput(100U, 25.0, 21.0));
+    auto exactHeadroomInput = airInput(1'100U, 25.0, 21.0);
+    exactHeadroomInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        first.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto exactHeadroom = controller.evaluate(exactHeadroomInput);
+    TEST_ASSERT_TRUE(exactHeadroom.status == TemperatureControlStatus::Demand);
+    TEST_ASSERT_TRUE(exactHeadroom.reason ==
+                     TemperatureControlReason::Saturated);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.16,
+                              exactHeadroom.integralContributionQuote);
+    TEST_ASSERT_DOUBLE_WITHIN(
+        0.0001, 0.16,
+        exactHeadroom.maximumLimitedQuote - exactHeadroom.rawProportionalQuote);
+
+    // The bounded direction change carries I exactly to the cooling profile's
+    // headroom. The next valid feedback would overflow if deltaI were formed.
+    auto transitionInput = airInput(2'100U, 20.0, 24.0);
+    transitionInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        exactHeadroom.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto transition = controller.evaluate(transitionInput);
+    TEST_ASSERT_TRUE(transition.status == TemperatureControlStatus::Demand);
+    TEST_ASSERT_TRUE(transition.reason == TemperatureControlReason::Saturated);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.16,
+                              transition.integralContributionQuote);
+
+    auto saturatedInput = airInput(3'100U, 20.0, 24.0);
+    saturatedInput
+        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+        transition.controlRequest->identity.sequence,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+    const auto saturated = controller.evaluate(saturatedInput);
+    TEST_ASSERT_TRUE(saturated.status == TemperatureControlStatus::Demand);
+    TEST_ASSERT_TRUE(saturated.reason == TemperatureControlReason::Saturated);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.16,
+                              saturated.integralContributionQuote);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.8, saturated.unboundedQuote);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.8, saturated.maximumLimitedQuote);
+    TEST_ASSERT_TRUE(saturated.controlRequest.has_value());
+    TEST_ASSERT_EQUAL_UINT64(transition.controlRequest->identity.sequence + 1U,
+                             saturated.controlRequest->identity.sequence);
+}
+
 void test_integral_headroom_caps_exact_and_oversized_steps_and_reduces_existing_i() {
     auto exactParameters = parameters();
     exactParameters.airHeating.proportionalGainQuotePerCelsius = 0.2;
@@ -866,6 +927,8 @@ int main(int argc, char** argv) {
         test_raw_p_above_maximum_is_checked_and_saturated_without_p_preclamp);
     RUN_TEST(test_raw_p_equal_to_maximum_has_zero_headroom);
     RUN_TEST(test_second_raw_p_saturation_skips_overflowing_positive_delta_i);
+    RUN_TEST(
+        test_current_integral_headroom_saturation_skips_overflowing_positive_delta_i);
     RUN_TEST(
         test_integral_headroom_caps_exact_and_oversized_steps_and_reduces_existing_i);
     RUN_TEST(test_lifecycle_boundary_resets_pi_and_qualification_ram);

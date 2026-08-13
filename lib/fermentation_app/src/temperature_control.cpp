@@ -448,10 +448,14 @@ TemperatureControlResult TemperatureController::evaluate(
                              result.airLimitState);
     }
 
+    const bool ownPiSaturated =
+        rawP >= profile->maximumQuote ||
+        state_.integralContributionQuote >= integralHeadroom;
     double allowedDeltaI = 0.0;
-    if (rawP < profile->maximumQuote && integralHeadroom > 0.0 &&
-        allowPositiveIntegration && !airLimitRestricts && !transitionSample &&
-        !firstSample && deltaMillis > 0U) {
+    if (!ownPiSaturated && rawP < profile->maximumQuote &&
+        integralHeadroom > 0.0 && allowPositiveIntegration &&
+        !airLimitRestricts && !transitionSample && !firstSample &&
+        deltaMillis > 0U) {
         const double dtSeconds = static_cast<double>(deltaMillis) / 1000.0;
         const double deltaI = profile->integralGainQuotePerCelsiusSecond *
                               activeErrorCelsius * dtSeconds;

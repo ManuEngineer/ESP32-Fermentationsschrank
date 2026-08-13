@@ -389,6 +389,31 @@ void test_critical_fault_has_priority_over_user_event() {
                           static_cast<int>(state.state));
 }
 
+void test_critical_fault_has_priority_over_cooling_progress() {
+    VirtualTimeSource time;
+    auto state = ProcessRuntimeState{};
+    state.state = ProcessState::Cooling;
+    const auto snapshot =
+        makeTimedSnapshot(false, CompletionMode::CoolThenFinish);
+    auto signals = coolingReachedSignals();
+    signals.criticalFault = true;
+
+    const auto decision = decide(state, &snapshot, time, signals);
+
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
+                          static_cast<int>(decision.after.state));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(TransitionReason::CriticalFault),
+                          static_cast<int>(decision.reason));
+    TEST_ASSERT_TRUE(containsMessage(decision, ProcessMessage::FaultEntered));
+    TEST_ASSERT_FALSE(containsMessage(decision, ProcessMessage::RunCompleted));
+    TEST_ASSERT_FALSE(decision.after.state == ProcessState::CoolHolding);
+
+    apply(state, decision, &snapshot);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
+                          static_cast<int>(state.state));
+}
+
 void test_preheat_qualification_resets_and_wait_timeout_aborts() {
     VirtualTimeSource time;
     auto state = standbyState();
@@ -566,6 +591,69 @@ void test_target_reach_warning_survives_qualification_reset_and_occurs_once() {
     const auto noSecondWarning = decide(state, &snapshot, time);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(DecisionStatus::NoTransition),
                           static_cast<int>(noSecondWarning.status));
+}
+
+void test_target_reach_warning_is_emitted_when_grace_enters_qualification() {
+    VirtualTimeSource time;
+    auto state = ProcessRuntimeState{};
+    state.state = ProcessState::ReachingTarget;
+    state.targetReachStartedAtMillis = 10'000U;
+    const auto snapshot = makeTimedSnapshot(false);
+    time.advanceMonotonicMillis(130'000U);
+
+    const auto decision = decide(state, &snapshot, time,
+                                 {QualificationProgress::Grace, false, false});
+
+    TEST_ASSERT_TRUE(decision.proposed());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::QualifyingTarget),
+                          static_cast<int>(decision.after.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::QualificationTrackingStarted),
+        static_cast<int>(decision.reason));
+    TEST_ASSERT_EQUAL_UINT64(10'000U,
+                             decision.after.targetReachStartedAtMillis);
+    TEST_ASSERT_TRUE(decision.after.targetReachWarningIssued);
+    TEST_ASSERT_TRUE(
+        containsMessage(decision, ProcessMessage::TargetReachTimeExceeded));
+
+    apply(state, decision, &snapshot);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::QualifyingTarget),
+                          static_cast<int>(state.state));
+    TEST_ASSERT_EQUAL_UINT64(10'000U, state.targetReachStartedAtMillis);
+    TEST_ASSERT_TRUE(state.targetReachWarningIssued);
+}
+
+void test_target_reach_warning_is_emitted_once_during_qualifying_grace() {
+    VirtualTimeSource time;
+    auto state = ProcessRuntimeState{};
+    state.state = ProcessState::QualifyingTarget;
+    state.qualificationValidSinceMillis = 20'000U;
+    state.targetReachStartedAtMillis = 10'000U;
+    const auto snapshot = makeTimedSnapshot(false);
+    time.advanceMonotonicMillis(130'000U);
+
+    const auto warning = decide(state, &snapshot, time,
+                                {QualificationProgress::Grace, false, false});
+
+    TEST_ASSERT_TRUE(warning.proposed());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::QualifyingTarget),
+                          static_cast<int>(warning.after.state));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::TargetReachTimeExceeded),
+        static_cast<int>(warning.reason));
+    TEST_ASSERT_FALSE(warning.after.state == ProcessState::Fermenting);
+    TEST_ASSERT_EQUAL_UINT64(10'000U, warning.after.targetReachStartedAtMillis);
+    TEST_ASSERT_TRUE(warning.after.targetReachWarningIssued);
+    TEST_ASSERT_TRUE(
+        containsMessage(warning, ProcessMessage::TargetReachTimeExceeded));
+
+    apply(state, warning, &snapshot);
+    time.advanceMonotonicMillis(1U);
+    const auto noSecondWarning = decide(
+        state, &snapshot, time, {QualificationProgress::Grace, false, false});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(DecisionStatus::NoTransition),
+                          static_cast<int>(noSecondWarning.status));
+    TEST_ASSERT_EQUAL_UINT32(0U, noSecondWarning.messageCount);
 }
 
 void test_completion_modes_reach_the_specified_states() {
@@ -1124,6 +1212,7 @@ int main() {
     RUN_TEST(test_apply_rejects_fabricated_forbidden_transition);
     RUN_TEST(test_apply_rejects_snapshot_incompatible_fabricated_transitions);
     RUN_TEST(test_critical_fault_has_priority_over_user_event);
+    RUN_TEST(test_critical_fault_has_priority_over_cooling_progress);
     RUN_TEST(test_preheat_qualification_resets_and_wait_timeout_aborts);
     RUN_TEST(test_product_confirmation_starts_target_reach);
     RUN_TEST(test_product_confirmation_cannot_bypass_expired_wait_limit);
@@ -1133,6 +1222,9 @@ int main() {
         test_zero_remaining_duration_completes_immediately_after_qualification);
     RUN_TEST(
         test_target_reach_warning_survives_qualification_reset_and_occurs_once);
+    RUN_TEST(
+        test_target_reach_warning_is_emitted_when_grace_enters_qualification);
+    RUN_TEST(test_target_reach_warning_is_emitted_once_during_qualifying_grace);
     RUN_TEST(test_completion_modes_reach_the_specified_states);
     RUN_TEST(test_manual_cool_hold_finishes_normally);
     RUN_TEST(test_manual_holding_uses_qualified_route_with_and_without_preheat);
