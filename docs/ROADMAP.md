@@ -10,29 +10,29 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #104 / Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung | Planrevision 6 (`6b801d30bfb34e48350ea3c29caa22dfea5f7320`) freigegeben; FR1–FR14 in Slice 1–4 sowie die Owner-Finalreview-Restkorrekturen F1–F5 umgesetzt, einschliesslich eigener PI-Saettigungssperre vor `deltaI`, direkter Fault-/Cooling- und Grace-Warnorakel sowie synchronisierter Fachdokumentation; zehn gezielte Pflichtfilter mit 367/367 nativen Testfaellen PASS; clang-format, native Compile-Database, workflow-genauer clang-tidy, Architektur-, Secret-, Quality-, Artefaktabdeckungs-Gates und `git diff --check` PASS; Base `main @ 10ff98eca4d6f64cc453571d66d4c3b18729b18e` | Vollstaendiger Owner-Review des gesamten PR-Diffs von `main` bis zum finalen HEAD; PR bleibt Draft |
+| 1 | Draft-PR (Branch `agent/issue-23-aktorplaner-plan`) / Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | Planrevision 1 (`docs/tasks/issue-23-actuator-planner-plan.md`) committet; Owner-Freigabe der exakten Plan-SHA steht aus; noch keine Produktionslogik umgesetzt; Base `main @ 2986dca5736a34171910c9245a3d5f43fa55da06` (Merge von PR #104 / Issue #22) | Ownerfreigabe des exakten Plan-Commits |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
 
-Issue #18 – Wiederanlauf und temperaturgewichteter Fortschritt – ist mit PR
-#102 ueber Merge-Commit `10ff98e` nach `main` integriert und wurde am
-2026-08-12 als `completed` geschlossen. Die Reaktivierungs-, Persistenz-,
-Fail-Closed- und gewichteten Fortschrittsvertraege sowie die dokumentierten
-Nachweise stehen im gemergten Plan und den verlinkten Fachvertraegen.
+Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung – ist mit PR
+#104 ueber Merge-Commit `2986dca` nach `main` integriert und wurde als
+`completed` geschlossen. Der implementierte #22-Fachkern (`ControlRequest`,
+`ControlRequestContext`, `ControlSensorRole`, PI-/Luftbegrenzungslogik) ist
+kanonisch und wird von Issue #23 ausschliesslich wiederverwendet.
 
-Die vorgesehene fachliche Reihenfolge nach dem Abschluss von #18 ist:
-Issue #22 (zeitproportionale PI-Regelung und Luftbegrenzung), danach Issue #23
-(Aktorplaner), Issue #24 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue
-#19 (Journale, Aufbewahrung, Bereinigung, Backup und Import). Die jeweiligen
-Arbeiten beginnen erst nach ihrem eigenen Plan-/Owner-Gate; #22 ist jetzt die
-aktuelle Umsetzungsarbeit. Die vollstaendige eigenstaendige Planrevision 6
-liegt im Draft-PR #104 unter `docs/tasks/issue-22-pi-control-air-limits-plan.md`
-und wurde mit `6b801d30bfb34e48350ea3c29caa22dfea5f7320` freigegeben.
+Die vorgesehene fachliche Reihenfolge nach dem Abschluss von #22 ist:
+Issue #23 (Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik), danach
+Issue #24 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,
+Aufbewahrung, Bereinigung, Backup und Import). Die jeweiligen Arbeiten
+beginnen erst nach ihrem eigenen Plan-/Owner-Gate; #23 ist jetzt die aktuelle
+Planungsarbeit. Die vollstaendige eigenstaendige Planrevision 1 liegt im
+Draft-PR unter `docs/tasks/issue-23-actuator-planner-plan.md`; die exakte
+Freigabe-SHA wird nach Ownerfreigabe hier nachgetragen.
 
 ## Zulaessige Parallelitaet
 
-- Der #22-PR bleibt Draft, bis der Owner ihn selbst auf `Ready for review` setzt;
+- Der #23-PR bleibt Draft, bis der Owner ihn selbst auf `Ready for review` setzt;
   bis dahin startet keine erneute vollstaendige Remote-CI.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
@@ -61,6 +61,7 @@ und wurde mit `6b801d30bfb34e48350ea3c29caa22dfea5f7320` freigegeben.
 - PR #96: kompakter Session-Handover-Vertrag;
 - PR #99 / Issue #21: Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik.
 - PR #102 / Issue #18: Wiederanlauf und temperaturgewichteter Fortschritt;
+- PR #104 / Issue #22: Zeitproportionale PI-Regelung und Luftbegrenzung;
 
 ## Pflege
 
