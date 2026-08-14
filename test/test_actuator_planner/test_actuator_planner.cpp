@@ -1897,6 +1897,222 @@ void test_severity_disposition_matrix_for_thirty_percent_governance_reasons() {
     }
 }
 
+// Owner-Review R2 (Plan-19.2 #3): kurzer und langer Off-Anteil sowie volle
+// und nahezu volle Quote werden getrennt gegen den physischen Ausgang und den
+// Aussenluefter geprueft.
+void test_off_portion_matrix_against_physical_output_and_outer_fan() {
+    // Kurzer Off-Anteil (Quote 0.85: on=8500, off=1500 > outerFanPostRun=1000).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 0.85, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        auto result =
+            planner.tick(tickInput(8'500U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+        TEST_ASSERT_TRUE(result.outerFanEnabled);
+        result = planner.tick(tickInput(8'700U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.outerFanEnabled);
+        result = planner.tick(tickInput(9'600U, std::nullopt, airContext()));
+        TEST_ASSERT_FALSE(result.outerFanEnabled);
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+    }
+    // Langer Off-Anteil (Quote 0.25: on=2500, off=7500 > outerFanPostRun=1000).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Cooling, 0.25, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        auto result =
+            planner.tick(tickInput(2'500U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+        TEST_ASSERT_TRUE(result.outerFanEnabled);
+        result = planner.tick(tickInput(3'500U, std::nullopt, airContext()));
+        TEST_ASSERT_FALSE(result.outerFanEnabled);
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+    }
+    // Volle Quote (1.0): gar kein Off-Anteil innerhalb des Fensters.
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        const auto result =
+            planner.tick(tickInput(9'999U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Heating);
+        TEST_ASSERT_TRUE(result.outerFanEnabled);
+    }
+    // Nahezu volle Quote (0.95: on=9500, off=500 < outerFanPostRun=1000) - der
+    // Off-Anteil selbst ist kuerzer als der Nachlauf und endet erst mit dem
+    // Fensterende.
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Cooling, 0.95, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        auto result =
+            planner.tick(tickInput(9'500U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+        TEST_ASSERT_TRUE(result.outerFanEnabled);
+        result = planner.tick(tickInput(9'999U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.outerFanEnabled);
+    }
+}
+
+// Owner-Review R2 (Plan-19.2 #10): der Aussenluefter-Nachlauf startet bei
+// JEDEM physischen Peltier-AUS, unabhaengig vom Ausloeser - kurzer Duty-Puls,
+// Off-Anteil kuerzer als der Nachlauf, Off-Anteil laenger als der Nachlauf,
+// normaler Stop und Fault (forceStop) werden getrennt geprueft.
+void test_outer_fan_postrun_starts_for_every_physical_deactivation_trigger() {
+    // Kurzer Duty-Puls (Quote 0.2: on == minimumOnMillis == 2000,
+    // kleinstmoeglich direkt planbarer Puls).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 0.2, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        static_cast<void>(
+            planner.tick(tickInput(2'000U, std::nullopt, airContext())));
+        TEST_ASSERT_TRUE(
+            planner.state()
+                .outerFanDeactivationRequestedAtMonotonicMillis.has_value());
+        TEST_ASSERT_EQUAL_UINT64(
+            2'000U,
+            *planner.state().outerFanDeactivationRequestedAtMonotonicMillis);
+        const auto result =
+            planner.tick(tickInput(3'000U, std::nullopt, airContext()));
+        TEST_ASSERT_FALSE(result.outerFanEnabled);
+    }
+    // Off-Anteil kuerzer als der Nachlauf (Quote 0.95: off=500 < 1000).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 0.95, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        static_cast<void>(
+            planner.tick(tickInput(9'500U, std::nullopt, airContext())));
+        TEST_ASSERT_EQUAL_UINT64(
+            9'500U,
+            *planner.state().outerFanDeactivationRequestedAtMonotonicMillis);
+        const auto result =
+            planner.tick(tickInput(9'999U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.outerFanEnabled);
+    }
+    // Off-Anteil laenger als der Nachlauf (Quote 0.25: off=7500 > 1000).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 0.25, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        static_cast<void>(
+            planner.tick(tickInput(2'500U, std::nullopt, airContext())));
+        TEST_ASSERT_EQUAL_UINT64(
+            2'500U,
+            *planner.state().outerFanDeactivationRequestedAtMonotonicMillis);
+        const auto result =
+            planner.tick(tickInput(3'500U, std::nullopt, airContext()));
+        TEST_ASSERT_FALSE(result.outerFanEnabled);
+    }
+    // Normaler Stop (explizite OFF-Request nach erfuellter Mindest-On-Zeit).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        static_cast<void>(planner.tick(tickInput(
+            2'100U, offResult(2U, 2'100U, airContext()), airContext())));
+        TEST_ASSERT_EQUAL_UINT64(
+            2'100U,
+            *planner.state().outerFanDeactivationRequestedAtMonotonicMillis);
+        const auto result =
+            planner.tick(tickInput(3'100U, std::nullopt, airContext()));
+        TEST_ASSERT_FALSE(result.outerFanEnabled);
+    }
+    // Fault (forceStop).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        static_cast<void>(planner.forceStop(
+            500U, ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen));
+        TEST_ASSERT_EQUAL_UINT64(
+            500U,
+            *planner.state().outerFanDeactivationRequestedAtMonotonicMillis);
+        const auto result =
+            planner.tick(tickInput(1'500U, std::nullopt, airContext()));
+        TEST_ASSERT_FALSE(result.outerFanEnabled);
+    }
+}
+
+// Owner-Review R2 (Plan-19.2 #11): ein erneuter Peltierpuls waehrend des
+// Aussenluefter-Nachlaufs haelt den Luefter ohne Unterbrechung aktiv; der
+// Nachlauf wird nicht doppelt gestartet, sondern sauber zurueckgesetzt (nicht
+// nur ueberschrieben) fuer den naechsten echten Deaktivierungszeitpunkt.
+void test_repulse_during_outer_fan_postrun_holds_fan_without_restart() {
+    auto parameters = testParameters();
+    parameters.outerFanPostRunMillis = 2'000U;  // > minimumOffMillis (1000).
+    ActuatorPlanner planner{parameters};
+
+    static_cast<void>(
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext())));
+    // t=2100: normaler Stop nach erfuellter Mindest-On-Zeit - Nachlauf startet
+    // (Ende bei 2100+2000=4100).
+    static_cast<void>(planner.tick(
+        tickInput(2'100U, offResult(2U, 2'100U, airContext()), airContext())));
+    TEST_ASSERT_TRUE(
+        planner.state()
+            .outerFanDeactivationRequestedAtMonotonicMillis.has_value());
+
+    // t=3199/3200: unmittelbar vor und beim Neustart - Luefter bleibt
+    // ununterbrochen aktiv.
+    auto before = planner.tick(tickInput(3'199U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(before.outerFanEnabled);
+
+    // t=3200: Minimum-Off (2100+1000=3100) ist erfuellt - ein gleichgerichteter
+    // Neustart wird zugelassen, waehrend der Nachlauf (Ende 4100) noch laeuft.
+    const auto restart =
+        planner.tick(tickInput(3'200U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 3U, 3'200U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(restart.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    TEST_ASSERT_TRUE(restart.outerFanEnabled);
+    // Der Nachlauf wird nicht "doppelt gestartet", sondern sauber
+    // zurueckgesetzt: kein offener Nachlauf-Anker waehrend physisch aktiv.
+    TEST_ASSERT_FALSE(
+        planner.state()
+            .outerFanDeactivationRequestedAtMonotonicMillis.has_value());
+}
+
 void test_fan_deadlines_and_physical_edges_are_overflow_safe() {
     auto parameters = testParameters();
     parameters.switchingWindowMillis = 1'000U;
@@ -2095,6 +2311,10 @@ int main(int argc, char** argv) {
         test_next_pulse_blocked_before_and_allowed_at_and_after_minimum_off_end);
     RUN_TEST(
         test_severity_disposition_matrix_for_thirty_percent_governance_reasons);
+    RUN_TEST(test_off_portion_matrix_against_physical_output_and_outer_fan);
+    RUN_TEST(
+        test_outer_fan_postrun_starts_for_every_physical_deactivation_trigger);
+    RUN_TEST(test_repulse_during_outer_fan_postrun_holds_fan_without_restart);
     RUN_TEST(test_fan_deadlines_and_physical_edges_are_overflow_safe);
     RUN_TEST(test_fans_follow_physical_output_and_independent_inner_phase);
     RUN_TEST(test_feedback_handoff_is_single_use_and_severity_is_monotone);
