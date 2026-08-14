@@ -3375,6 +3375,82 @@ void test_application_actuator_handoff_and_lifecycle_boundary() {
     TEST_ASSERT_TRUE(innerFan.enabled());
 }
 
+// Owner-Review R1 test 6: a stale-on-arrival B closes A's episode and hands
+// {B, Rejected} to the Application. A further planner tick driven by an
+// unconditional fail-closed safety event, with no new #22 evaluation in
+// between, must not resurrect A's sequence into the Application's feedback
+// slot - #22 itself hard-fails with InvalidSample on any sequence mismatch
+// against its own last-emitted request (temperature_control.cpp), so a
+// corrupted slot would not merely be a wrong value but would break the next
+// #22 evaluation outright.
+//
+// Timing is deliberately chosen so B's own admission-staleness
+// (now - B.createdAt) and the running H-heartbeat staleness (now - H) are
+// two genuinely different gaps, not the same one observed twice: A and B
+// share the same #22 evidence timestamp (0; repeated timestamps are valid),
+// while A's planner tick - and thus H - lands close to the watchdog
+// boundary (999 of 1000ms). This is the only way to trip B's own
+// stale-on-arrival admission at t=1000 without the running watchdog (I-5)
+// also tripping in the very same tick, which would otherwise call
+// rejectToIdle() through its own correct freshTrustedActiveSequence path
+// and mask the acceptedCommand-fallback bug this test targets.
+void test_application_repeated_i_tick_after_stale_b_does_not_corrupt_next_evaluation() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    auto parameters = bridgeActuatorPlannerParameters();
+    parameters.requestWatchdogMillis = 1'000U;
+    ActuatorPlanner planner(parameters);
+    device_platform_test_support::MockBidirectionalActuatorSink peltier;
+    device_platform_test_support::MockBinaryOutputSink outerFan;
+    device_platform_test_support::MockBinaryOutputSink innerFan;
+    ActuatorPlanSinkDriver driver(peltier, outerFan, innerFan);
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator, planner, driver);
+    auto state = readyActiveRunWithSensorSelection(coordinator, 950U);
+
+    TemperatureControlEvaluationEvidence evidence;
+    evidence.sampleTimestampMonotonicMillis = 0U;
+    evidence.air = bridgeSensorSample(20.0);
+    evidence.product = bridgeSensorSample(36.0);
+    const auto a = application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(a.controlRequest.has_value());
+    const auto aPlan = application.tickActuatorPlan(
+        state, 999U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
+    TEST_ASSERT_TRUE(aPlan.appliedDirection ==
+                     AbstractControlDirection::Heating);
+
+    const auto b = application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(b.controlRequest.has_value());
+    TEST_ASSERT_EQUAL_UINT64(a.controlRequest->identity.sequence + 1U,
+                             b.controlRequest->identity.sequence);
+
+    // B is only observed by the planner exactly at its own watchdog boundary
+    // (createdAt 0, now 1000) - stale on arrival - while the running
+    // heartbeat (H = 999, from A's own admission tick) is not yet due.
+    const auto bPlan = application.tickActuatorPlan(
+        state, 1'000U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
+    TEST_ASSERT_TRUE(bPlan.admissionOutcome ==
+                     ActuatorAdmissionOutcome::StaleOnArrivalWatchdog);
+
+    // A second planner tick, still well before H's own boundary (999+1000 =
+    // 1999), with no new #22 evaluation in between.
+    static_cast<void>(application.tickActuatorPlan(
+        state, 1'500U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::ImmediateStop}));
+
+    evidence.sampleTimestampMonotonicMillis = 1'500U;
+    const auto next = application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_FALSE(next.status == TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_FALSE(next.reason == TemperatureControlReason::InvalidSample);
+}
+
 void test_application_multi_rate_windows_and_downstream_counter_probe() {
     SequencedWriteStore store;
     RunPersistenceCoordinator coordinator(
@@ -7514,6 +7590,8 @@ int main(int, char**) {
     RUN_TEST(test_air_run_product_inserted_is_air_to_air_without_pi_transition);
     RUN_TEST(test_application_bridge_hands_off_cooling_context_once);
     RUN_TEST(test_application_actuator_handoff_and_lifecycle_boundary);
+    RUN_TEST(
+        test_application_repeated_i_tick_after_stale_b_does_not_corrupt_next_evaluation);
     RUN_TEST(test_application_multi_rate_windows_and_downstream_counter_probe);
     RUN_TEST(
         test_application_bridge_resets_runtime_at_committed_lifecycle_boundaries);

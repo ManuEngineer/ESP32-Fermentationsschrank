@@ -45,22 +45,18 @@ class ActuatorPlanner {
 
    private:
     // Buendelt, was Phase A (Abschnitt 6.2) fuer Phase B (Abschnitt 8.2)
-    // vormerkt: das Ergebnis der Annahmeentscheidung, ein Kandidat fuer eine
-    // physische Neubewertung (nur bei Accepted/MalformedSafetyGate) sowie -
-    // ausschliesslich fuer eine aktive Heating/Cooling-ControlRequest
-    // (NormalDemand/AirLimitReducedDemand) - deren in diesem Tick frisch
-    // vertrauenswuerdig gewordene Sequence (Accepted, MalformedSafetyGate,
-    // StaleOnArrivalWatchdog, StaleOnArrivalContext - siehe Abschnitt 6.2
-    // Schritt 6 und die Trusted-Sequence-Regel in 8.2). Eine gueltige OFF-
-    // Request (NeutralOff/AirLimitBlockedOff) setzt dieses Feld NIE: #22
-    // oeffnet ein Feedbackfenster ausschliesslich fuer eine aktive
-    // Heating/Cooling-Request (Owner-Review ZR5/RZ6).
+    // vormerkt: das Ergebnis der Annahmeentscheidung sowie ein Kandidat fuer
+    // eine physische Neubewertung (nur bei Accepted/MalformedSafetyGate).
+    // Owner-Review R1: die frisch vertrauenswuerdig gewordene
+    // Feedback-Sequence wird NICHT mehr hier zwischengespeichert, sondern
+    // ausschliesslich in state_.feedbackEpisodeSubjectSequence gefuehrt -
+    // der alleinigen Autoritaet fuer das aktuell offene Feedbacksubjekt,
+    // gelesen von rejectToIdle()/forceStop() ueber beliebig viele Ticks
+    // hinweg, nicht nur innerhalb des Ticks, der sie eroeffnet hat.
     struct PhaseAOutcome {
         ActuatorAdmissionOutcome admissionOutcome{
             ActuatorAdmissionOutcome::NoCandidate};
         std::optional<AcceptedControlCommand> candidate;
-        std::optional<std::uint64_t> freshTrustedActiveSequence;
-        bool episodeClosedThisTick{false};
     };
 
     [[nodiscard]] PhaseAOutcome runPhaseA(const ActuatorPlanTickInput& input);
@@ -70,8 +66,6 @@ class ActuatorPlanner {
     [[nodiscard]] bool runningWatchdogTripped(
         const ActuatorPlanTickInput& input) const;
     [[nodiscard]] bool hasRetrogradeTimeReference(std::uint64_t now) const;
-    [[nodiscard]] std::optional<std::uint64_t>
-    resolveTrustedSequenceForRejection(const PhaseAOutcome& admission) const;
 
     // Zentrale physische Uebergangsfunktion (Abschnitt 8.1/8.2-Praeambel).
     // Nur von Idle aus in eine Richtung und umgekehrt; ein direkter

@@ -472,26 +472,24 @@ ActuatorPlanTickResult ActuatorPlanner::buildResult(
 ActuatorPlanTickResult ActuatorPlanner::rejectToIdle(
     const PhaseAOutcome& admission, std::uint64_t now,
     ActuatorPlanStatus status, ActuatorPlanReason reason) {
-    // Owner-Review ZR4: das Feedbacksubjekt muss VOR jeder Planungs-
-    // bereinigung aufgeloest werden, da resolveTrustedSequenceForRejection()
-    // ein noch gehaltenes acceptedCommand liest.
-    const std::optional<std::uint64_t> trustedSequence =
-        resolveTrustedSequenceForRejection(admission);
     if (physicalDirection() != AbstractControlDirection::Idle) {
         setPhysicalDirection(AbstractControlDirection::Idle, now);
     }
     clearPlanningState();
-    if (trustedSequence.has_value()) {
-        mergeFeedback(*trustedSequence,
+    // Owner-Review R1: an I-event without a new evaluation may only sharpen
+    // whichever sequence Phase A already left as the open feedback subject
+    // (feedbackEpisodeSubjectSequence is the sole authority - never
+    // acceptedCommand, which clearPlanningState() has just cleared and which
+    // could otherwise resurrect an old, already-superseded sequence). A
+    // repeated I-tick against an already-Rejected subject is a no-op via
+    // mergeFeedback()'s severity check - it must not erase a not-yet-
+    // consumed Rejected disposition to nullopt. Rule 5: the subject stays
+    // open here; only #22's consume, a new Phase-A episode, or a terminal
+    // lifecycle boundary (forceStop()) may close it.
+    if (state_.feedbackEpisodeSubjectSequence.has_value()) {
+        mergeFeedback(*state_.feedbackEpisodeSubjectSequence,
                       PreviousControlRequestFeedback::Disposition::Rejected);
-    } else {
-        state_.pendingFeedback.reset();
-        state_.pendingFeedbackUpdateAvailable = true;
     }
-    // Owner-Review F1: the immediate fail-closed teardown terminates the
-    // episode either way (Rejected or no subject); no later tick may still
-    // treat this sequence as an open feedback subject.
-    state_.feedbackEpisodeSubjectSequence.reset();
     return buildResult(status, reason, admission.admissionOutcome);
 }
 
@@ -870,25 +868,6 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
                        reason, admissionOutcome);
 }
 
-std::optional<std::uint64_t>
-ActuatorPlanner::resolveTrustedSequenceForRejection(
-    const PhaseAOutcome& admission) const {
-    if (admission.freshTrustedActiveSequence.has_value()) {
-        return admission.freshTrustedActiveSequence;
-    }
-    // Owner-Review ZR5 gilt hier identisch: ein gehaltenes OFF-acceptedCommand
-    // (NeutralOff/AirLimitBlockedOff) ist kein Feedbacksubjekt.
-    if (!admission.episodeClosedThisTick &&
-        state_.acceptedCommand.has_value() &&
-        (state_.acceptedCommand->demandClass ==
-             ActuatorDemandClass::NormalDemand ||
-         state_.acceptedCommand->demandClass ==
-             ActuatorDemandClass::AirLimitReducedDemand)) {
-        return state_.acceptedCommand->sequence;
-    }
-    return std::nullopt;
-}
-
 bool ActuatorPlanner::hasRetrogradeTimeReference(std::uint64_t now) const {
     const auto retro = [now](const std::optional<std::uint64_t>& reference) {
         return reference.has_value() && now < *reference;
@@ -953,7 +932,6 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
         // 6.2 Punkt 2: eine strukturell unsichere Identitaet schliesst das
         // Feedbackfenster fail-closed, ohne ein neues Subjekt zu eroeffnen.
         openFeedbackEpisode(std::nullopt);
-        outcome.episodeClosedThisTick = true;
         outcome.admissionOutcome = ActuatorAdmissionOutcome::MalformedCandidate;
         return outcome;  // kein H, kein Kandidat.
     }
@@ -966,7 +944,6 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
         // 6.2 Punkt 4: eine lebende, aber requestlose Auswertung schliesst
         // das alte Fenster ebenfalls, ohne selbst ein Subjekt zu eroeffnen.
         openFeedbackEpisode(std::nullopt);
-        outcome.episodeClosedThisTick = true;
         outcome.admissionOutcome =
             safetyGateMalformed ? ActuatorAdmissionOutcome::MalformedSafetyGate
                                 : ActuatorAdmissionOutcome::Accepted;
@@ -1007,7 +984,6 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
     // Feedbackfenster schliesst in jedem Fall (6.2 Praeambel), auch wenn
     // unten kein neues Subjekt eroeffnet wird.
     openFeedbackEpisode(std::nullopt);
-    outcome.episodeClosedThisTick = true;
     state_.lastObservedSequenceHighWatermark = sequence;
 
     if (deadlineReached(input.nowMonotonicMillis,
@@ -1021,7 +997,6 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
                 sequence,
                 PreviousControlRequestFeedback::Disposition::Rejected};
             state_.pendingFeedbackUpdateAvailable = true;
-            outcome.freshTrustedActiveSequence = sequence;
         }
         return outcome;
     }
@@ -1035,7 +1010,6 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
                 sequence,
                 PreviousControlRequestFeedback::Disposition::Rejected};
             state_.pendingFeedbackUpdateAvailable = true;
-            outcome.freshTrustedActiveSequence = sequence;
         }
         return outcome;
     }
@@ -1046,7 +1020,6 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
     state_.lastNewRequestAcceptedAtMonotonicMillis = input.nowMonotonicMillis;
     if (isActiveHeatingCoolingDemand) {
         state_.feedbackEpisodeSubjectSequence = sequence;
-        outcome.freshTrustedActiveSequence = sequence;
     }
 
     AcceptedControlCommand candidate;
@@ -1235,18 +1208,18 @@ ActuatorPlanTickResult ActuatorPlanner::tick(
 ActuatorPlanTickResult ActuatorPlanner::forceStop(
     std::uint64_t nowMonotonicMillis,
     ActuatorFeedbackEpisodeAtStop feedbackEpisodeAtStop) {
-    // Owner-Review ZR5 gilt auch hier: nur ein gehaltenes aktives
-    // Heating/Cooling-acceptedCommand ist ein Feedbacksubjekt.
-    std::optional<std::uint64_t> trustedSequence;
-    if (feedbackEpisodeAtStop ==
-            ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen &&
-        state_.acceptedCommand.has_value() &&
-        (state_.acceptedCommand->demandClass ==
-             ActuatorDemandClass::NormalDemand ||
-         state_.acceptedCommand->demandClass ==
-             ActuatorDemandClass::AirLimitReducedDemand)) {
-        trustedSequence = state_.acceptedCommand->sequence;
-    }
+    // Owner-Review R1: feedbackEpisodeSubjectSequence, not acceptedCommand,
+    // is the sole authority for the currently open feedback subject - it is
+    // only ever set for an active Heating/Cooling demand (Phase A), so no
+    // separate demandClass re-check is needed here. Read before
+    // clearPlanningState()/the terminal reset below, but the ordering no
+    // longer matters for correctness since clearPlanningState() does not
+    // touch this field.
+    const std::optional<std::uint64_t> trustedSequence =
+        feedbackEpisodeAtStop ==
+                ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen
+            ? state_.feedbackEpisodeSubjectSequence
+            : std::nullopt;
 
     if (physicalDirection() != AbstractControlDirection::Idle) {
         setPhysicalDirection(AbstractControlDirection::Idle,

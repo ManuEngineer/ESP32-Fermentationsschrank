@@ -1057,6 +1057,194 @@ void test_duplicate_evaluation_does_not_disturb_pending_feedback_or_resurrect_a(
                          PreviousControlRequestFeedback::Disposition::Rejected);
 }
 
+// --- Owner-Review R1: feedbackEpisodeSubjectSequence is the sole authority
+// for rejectToIdle()/forceStop() too, not just mergeFeedbackForDemand(). A
+// stale acceptedCommand must never resurface via these paths either,
+// including across a tick separate from the one that closed its episode. ---
+
+void test_i_event_after_stale_b_never_resurrects_a_immediate_stop() {
+    auto parameters = testParameters();
+    parameters.requestWatchdogMillis = 5'000U;
+    ActuatorPlanner planner{parameters};
+
+    auto result =
+        planner.tick(tickInput(1'000'000U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 1'000'000U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    assertFeedbackUpdate(
+        planner, 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    result =
+        planner.tick(tickInput(1'000'500U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 2U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.admissionOutcome ==
+                     ActuatorAdmissionOutcome::StaleOnArrivalWatchdog);
+    assertFeedbackUpdate(planner, 2U,
+                         PreviousControlRequestFeedback::Disposition::Rejected);
+
+    // An unconditional fail-closed safety event with no new evaluation, on a
+    // tick separate from B's own admission tick, must only ever sharpen B's
+    // still-open subject - never resurrect A via a stale
+    // acceptedCommand-based fallback.
+    const auto stopResult = planner.tick(ActuatorPlanTickInput{
+        1'001'000U, std::nullopt, airContext(), true,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::ImmediateStop}});
+    TEST_ASSERT_TRUE(stopResult.status == ActuatorPlanStatus::Idle);
+    TEST_ASSERT_TRUE(stopResult.appliedDirection ==
+                     AbstractControlDirection::Idle);
+    // B's {2, Rejected} was already consumed and is unchanged (same
+    // severity) - no new update, and certainly never {1, ...}.
+    TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
+    TEST_ASSERT_TRUE(
+        planner.state().feedbackEpisodeSubjectSequence.has_value());
+    TEST_ASSERT_EQUAL_UINT64(2U,
+                             *planner.state().feedbackEpisodeSubjectSequence);
+}
+
+void test_i_event_after_stale_b_never_resurrects_a_running_watchdog() {
+    auto parameters = testParameters();
+    parameters.requestWatchdogMillis = 1'000U;
+    ActuatorPlanner planner{parameters};
+
+    // A: admitted just inside its own watchdog boundary (999 < 1000), so H
+    // is set to 999 rather than to A's own createdAt (0). This is the only
+    // way to trip B's own admission-staleness boundary (below) without the
+    // running watchdog also tripping in the very same tick.
+    auto result =
+        planner.tick(tickInput(999U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    assertFeedbackUpdate(
+        planner, 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    // B: stale-on-arrival exactly at its own boundary (1000 - 0 = 1000),
+    // while H's own boundary (999 + 1000 = 1999) is not yet due.
+    result =
+        planner.tick(tickInput(1'000U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 2U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.admissionOutcome ==
+                     ActuatorAdmissionOutcome::StaleOnArrivalWatchdog);
+    assertFeedbackUpdate(planner, 2U,
+                         PreviousControlRequestFeedback::Disposition::Rejected);
+
+    // A separate later tick, still with no new evaluation, now trips the
+    // running watchdog (I-5) itself - a genuinely different I-event class
+    // than the previous test's external safety override.
+    const auto watchdogResult =
+        planner.tick(tickInput(2'000U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(watchdogResult.reason ==
+                     ActuatorPlanReason::StaleRequestWatchdog);
+    TEST_ASSERT_TRUE(watchdogResult.appliedDirection ==
+                     AbstractControlDirection::Idle);
+    TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
+    TEST_ASSERT_TRUE(
+        planner.state().feedbackEpisodeSubjectSequence.has_value());
+    TEST_ASSERT_EQUAL_UINT64(2U,
+                             *planner.state().feedbackEpisodeSubjectSequence);
+}
+
+void test_repeated_i4_tick_after_watchdog_trip_does_not_erase_pending_rejected() {
+    auto parameters = testParameters();
+    parameters.requestWatchdogMillis = 5'000U;
+    ActuatorPlanner planner{parameters};
+
+    auto result =
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext()));
+    assertFeedbackUpdate(
+        planner, 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    // No further evaluation; the running watchdog trips on H's own boundary.
+    result = planner.tick(tickInput(5'000U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(result.reason == ActuatorPlanReason::StaleRequestWatchdog);
+    TEST_ASSERT_TRUE(planner.state().latchedWatchdogFault.has_value());
+    TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, planner.state().pendingFeedback->sequence);
+    TEST_ASSERT_TRUE(planner.state().pendingFeedback->disposition ==
+                     PreviousControlRequestFeedback::Disposition::Rejected);
+
+    // Owner-Review R1b: a further tick before the next #22 evaluation hits
+    // the already-latched fault (I-4). It must not erase the still-
+    // unconsumed {1, Rejected} to nullopt, and must not downgrade it.
+    result = planner.tick(tickInput(5'500U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(result.reason ==
+                     ActuatorPlanReason::RequestWatchdogFaultLatched);
+    TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, planner.state().pendingFeedback->sequence);
+    TEST_ASSERT_TRUE(planner.state().pendingFeedback->disposition ==
+                     PreviousControlRequestFeedback::Disposition::Rejected);
+    assertFeedbackUpdate(planner, 1U,
+                         PreviousControlRequestFeedback::Disposition::Rejected);
+}
+
+void test_force_stop_existing_episode_open_uses_current_subject_not_stale_accepted_command() {
+    auto parameters = testParameters();
+    parameters.requestWatchdogMillis = 5'000U;
+    ActuatorPlanner planner{parameters};
+
+    auto result =
+        planner.tick(tickInput(1'000'000U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 1'000'000U, airContext()),
+                               airContext()));
+    assertFeedbackUpdate(
+        planner, 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    result =
+        planner.tick(tickInput(1'000'500U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 2U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.admissionOutcome ==
+                     ActuatorAdmissionOutcome::StaleOnArrivalWatchdog);
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    // {2, Rejected} deliberately left unconsumed here.
+
+    const auto stopResult = planner.forceStop(
+        1'001'000U, ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen);
+    TEST_ASSERT_TRUE(stopResult.appliedDirection ==
+                     AbstractControlDirection::Idle);
+    assertFeedbackUpdate(planner, 2U,
+                         PreviousControlRequestFeedback::Disposition::Rejected);
+}
+
+void test_force_stop_closed_by_outstanding_evaluation_never_emits_old_feedback() {
+    ActuatorPlanner planner{testParameters()};
+    static_cast<void>(
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext())));
+    assertFeedbackUpdate(
+        planner, 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    const auto stopResult = planner.forceStop(
+        1'000U, ActuatorFeedbackEpisodeAtStop::ClosedByOutstandingEvaluation);
+    TEST_ASSERT_TRUE(stopResult.appliedDirection ==
+                     AbstractControlDirection::Idle);
+    const auto update = planner.takeFeedbackUpdate();
+    TEST_ASSERT_TRUE(update.changed);
+    TEST_ASSERT_FALSE(update.feedback.has_value());
+}
+
 void test_fan_deadlines_and_physical_edges_are_overflow_safe() {
     auto parameters = testParameters();
     parameters.switchingWindowMillis = 1'000U;
@@ -1233,6 +1421,14 @@ int main(int argc, char** argv) {
     RUN_TEST(test_new_stale_off_request_closes_episode_without_any_a_feedback);
     RUN_TEST(
         test_duplicate_evaluation_does_not_disturb_pending_feedback_or_resurrect_a);
+    RUN_TEST(test_i_event_after_stale_b_never_resurrects_a_immediate_stop);
+    RUN_TEST(test_i_event_after_stale_b_never_resurrects_a_running_watchdog);
+    RUN_TEST(
+        test_repeated_i4_tick_after_watchdog_trip_does_not_erase_pending_rejected);
+    RUN_TEST(
+        test_force_stop_existing_episode_open_uses_current_subject_not_stale_accepted_command);
+    RUN_TEST(
+        test_force_stop_closed_by_outstanding_evaluation_never_emits_old_feedback);
     RUN_TEST(test_fan_deadlines_and_physical_edges_are_overflow_safe);
     RUN_TEST(test_fans_follow_physical_output_and_independent_inner_phase);
     RUN_TEST(test_feedback_handoff_is_single_use_and_severity_is_monotone);
