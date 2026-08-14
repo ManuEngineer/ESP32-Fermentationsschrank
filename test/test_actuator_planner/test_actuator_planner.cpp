@@ -2113,6 +2113,113 @@ void test_repulse_during_outer_fan_postrun_holds_fan_without_restart() {
             .outerFanDeactivationRequestedAtMonotonicMillis.has_value());
 }
 
+// Owner-Review R2 (Plan-19.2 #15): fuer beide Richtungen werden verspaetete
+// erste Ticks EINER FOLGEFENSTER-EVALUATION (rebasedStart, wie in
+// test_genuinely_late_first_tick_reports_window_pulse_missed) exakt am
+// Fensterstart, kurz danach, bei scheduledOn-minus-minimumOn, 1ms spaeter und
+// nahe dem Fensterende geprueft; kein real gestarteter Puls unterschreitet
+// minimumOnMillis - die Grenze bei remainingNaturalOnMillis == minimumOnMillis
+// ist inklusiv (case 3 startet noch, case 4 nicht mehr).
+void test_late_first_tick_matrix_never_undercuts_minimum_on() {
+    for (const auto direction : {AbstractControlDirection::Heating,
+                                 AbstractControlDirection::Cooling}) {
+        // Quote 0.5 -> Fenster2 (rebasedStart=10000): scheduledOnMillis=5000,
+        // minimumOnMillis=2000, scheduledOn-minimumOn=3000.
+
+        // Exakt am Fensterstart (offset 0): startet normal.
+        {
+            ActuatorPlanner p{testParameters()};
+            static_cast<void>(p.tick(tickInput(
+                0U, demandResult(direction, 0.5, 1U, 0U, airContext()),
+                airContext())));
+            const auto result =
+                p.tick(tickInput(10'000U, std::nullopt, airContext()));
+            TEST_ASSERT_TRUE(result.appliedDirection == direction);
+            TEST_ASSERT_TRUE(result.reason ==
+                             ActuatorPlanReason::ScheduledWithinWindow);
+        }
+        // Kurz danach (offset 100): startet noch normal.
+        {
+            ActuatorPlanner p{testParameters()};
+            static_cast<void>(p.tick(tickInput(
+                0U, demandResult(direction, 0.5, 1U, 0U, airContext()),
+                airContext())));
+            const auto result =
+                p.tick(tickInput(10'100U, std::nullopt, airContext()));
+            TEST_ASSERT_TRUE(result.appliedDirection == direction);
+            TEST_ASSERT_TRUE(result.reason ==
+                             ActuatorPlanReason::ScheduledWithinWindow);
+        }
+        // scheduledOn-minimumOn (offset 3000, remaining==minimumOnMillis):
+        // inklusive Grenze - startet noch.
+        {
+            ActuatorPlanner p{testParameters()};
+            static_cast<void>(p.tick(tickInput(
+                0U, demandResult(direction, 0.5, 1U, 0U, airContext()),
+                airContext())));
+            const auto result =
+                p.tick(tickInput(13'000U, std::nullopt, airContext()));
+            TEST_ASSERT_TRUE(result.appliedDirection == direction);
+            TEST_ASSERT_TRUE(result.reason ==
+                             ActuatorPlanReason::ScheduledWithinWindow);
+        }
+        // 1ms spaeter (offset 3001, remaining < minimumOnMillis): verworfen.
+        {
+            ActuatorPlanner p{testParameters()};
+            static_cast<void>(p.tick(tickInput(
+                0U, demandResult(direction, 0.5, 1U, 0U, airContext()),
+                airContext())));
+            const auto result =
+                p.tick(tickInput(13'001U, std::nullopt, airContext()));
+            TEST_ASSERT_TRUE(result.appliedDirection ==
+                             AbstractControlDirection::Idle);
+            TEST_ASSERT_TRUE(result.reason ==
+                             ActuatorPlanReason::WindowPulseMissed);
+        }
+        // Nahe dem Fensterende (offset 9999): Fenster bereits ueber seinen
+        // On-Anteil hinaus, bevor je ein Aktivierungsversuch stattfand.
+        {
+            ActuatorPlanner p{testParameters()};
+            static_cast<void>(p.tick(tickInput(
+                0U, demandResult(direction, 0.5, 1U, 0U, airContext()),
+                airContext())));
+            const auto result =
+                p.tick(tickInput(19'999U, std::nullopt, airContext()));
+            TEST_ASSERT_TRUE(result.appliedDirection ==
+                             AbstractControlDirection::Idle);
+            TEST_ASSERT_TRUE(result.reason ==
+                             ActuatorPlanReason::WindowPulseMissed);
+        }
+
+        // scheduledOn == minimumOn (Quote 0.2 -> scheduledOnMillis == 2000 ==
+        // minimumOnMillis): nur bei Beobachtung exakt am Fensterstart bleibt
+        // genug Restzeit; 1ms spaeter ist bereits zu spaet.
+        {
+            ActuatorPlanner p{testParameters()};
+            static_cast<void>(p.tick(tickInput(
+                0U, demandResult(direction, 0.2, 1U, 0U, airContext()),
+                airContext())));
+            const auto exact =
+                p.tick(tickInput(10'000U, std::nullopt, airContext()));
+            TEST_ASSERT_TRUE(exact.appliedDirection == direction);
+            TEST_ASSERT_TRUE(exact.reason ==
+                             ActuatorPlanReason::ScheduledWithinWindow);
+        }
+        {
+            ActuatorPlanner p{testParameters()};
+            static_cast<void>(p.tick(tickInput(
+                0U, demandResult(direction, 0.2, 1U, 0U, airContext()),
+                airContext())));
+            const auto oneMsLate =
+                p.tick(tickInput(10'001U, std::nullopt, airContext()));
+            TEST_ASSERT_TRUE(oneMsLate.appliedDirection ==
+                             AbstractControlDirection::Idle);
+            TEST_ASSERT_TRUE(oneMsLate.reason ==
+                             ActuatorPlanReason::WindowPulseMissed);
+        }
+    }
+}
+
 void test_fan_deadlines_and_physical_edges_are_overflow_safe() {
     auto parameters = testParameters();
     parameters.switchingWindowMillis = 1'000U;
@@ -2315,6 +2422,7 @@ int main(int argc, char** argv) {
     RUN_TEST(
         test_outer_fan_postrun_starts_for_every_physical_deactivation_trigger);
     RUN_TEST(test_repulse_during_outer_fan_postrun_holds_fan_without_restart);
+    RUN_TEST(test_late_first_tick_matrix_never_undercuts_minimum_on);
     RUN_TEST(test_fan_deadlines_and_physical_edges_are_overflow_safe);
     RUN_TEST(test_fans_follow_physical_output_and_independent_inner_phase);
     RUN_TEST(test_feedback_handoff_is_single_use_and_severity_is_monotone);
