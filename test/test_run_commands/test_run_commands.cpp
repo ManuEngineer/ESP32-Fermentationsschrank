@@ -1049,7 +1049,7 @@ void test_message_priority_acknowledgement_and_mute_are_independent() {
     TEST_ASSERT_TRUE(acknowledged.after.criticalSafetyEventPending);
 }
 
-void test_fault_reset_requires_current_qualified_evaluation() {
+void test_fault_reset_rejects_caller_supplied_positive_evaluation() {
     auto state = standbyState();
     state.processState.state = ProcessState::Fault;
     state.faultRevision = 4U;
@@ -1059,24 +1059,11 @@ void test_fault_reset_requires_current_qualified_evaluation() {
     request.evaluation = {
         true, false, true, true, false, 4U, FaultResetRejection::None};
 
-    const auto accepted = decideFaultReset(state, request);
-    TEST_ASSERT_TRUE(accepted.proposed());
-    TEST_ASSERT_FALSE(accepted.after.criticalSafetyEventPending);
-    TEST_ASSERT_EQUAL_UINT32(5U, accepted.after.faultRevision);
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Fault),
-                          static_cast<int>(accepted.after.processState.state));
-    TEST_ASSERT_TRUE(hasEffect(accepted, CommandEffect::FaultResetAuthorized));
-
-    request.evaluation.causeStillActive = true;
-    request.evaluation.allowed = false;
-    request.evaluation.rejection = FaultResetRejection::CauseStillActive;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(CommandStatus::SafetyRejected),
         static_cast<int>(decideFaultReset(state, request).status));
-    request.evaluation.faultRevision = 3U;
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(CommandStatus::StaleState),
-        static_cast<int>(decideFaultReset(state, request).status));
+    TEST_ASSERT_TRUE(state.criticalSafetyEventPending);
+    TEST_ASSERT_EQUAL_UINT32(4U, state.faultRevision);
 }
 
 void test_critical_safety_blocks_run_commands_but_not_message_commands() {
@@ -1490,7 +1477,7 @@ void test_message_and_fault_revision_overflow_is_rejected() {
         request.evaluation = {
             true, false, true, true, false, max, FaultResetRejection::None};
         const auto decision = decideFaultReset(state, request);
-        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::CapacityReached),
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
                               static_cast<int>(decision.status));
         TEST_ASSERT_TRUE(decision.after.criticalSafetyEventPending);
         TEST_ASSERT_EQUAL_UINT32(max, decision.after.faultRevision);
@@ -1507,8 +1494,8 @@ void test_message_and_fault_revision_overflow_is_rejected() {
                                 max - 1U,
                                 FaultResetRejection::None};
         const auto ok = decideFaultReset(state, okRequest);
-        TEST_ASSERT_TRUE(ok.proposed());
-        TEST_ASSERT_EQUAL_UINT32(max, ok.after.faultRevision);
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
+                              static_cast<int>(ok.status));
     }
 }
 
@@ -2430,7 +2417,7 @@ int main() {
     RUN_TEST(test_composed_cooling_rejections_discard_the_complete_candidate);
     RUN_TEST(test_adjustments_are_rejected_in_inappropriate_states);
     RUN_TEST(test_message_priority_acknowledgement_and_mute_are_independent);
-    RUN_TEST(test_fault_reset_requires_current_qualified_evaluation);
+    RUN_TEST(test_fault_reset_rejects_caller_supplied_positive_evaluation);
     RUN_TEST(test_critical_safety_blocks_run_commands_but_not_message_commands);
     RUN_TEST(test_critical_safety_event_invalidates_a_pending_comfort_decision);
     RUN_TEST(test_domain_revision_conflicts_are_rejected_without_mutation);
