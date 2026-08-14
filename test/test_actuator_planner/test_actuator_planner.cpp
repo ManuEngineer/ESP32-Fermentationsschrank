@@ -882,6 +882,181 @@ void test_feedback_episode_close_prevents_force_stop_resurrection() {
     TEST_ASSERT_FALSE(update.feedback.has_value());
 }
 
+// --- Owner-Review F1: feedback episode ownership vs. stale physical
+// governance. An old acceptedCommand may keep running physically
+// (minimum-on/window) after its own feedback episode already closed via a
+// newer evaluation; it must never be able to write into pendingFeedback
+// again, not even across a later tick with no new evaluation at all. ---
+
+void test_stale_on_arrival_watchdog_b_closes_episode_a_never_resurrects() {
+    auto parameters = testParameters();
+    parameters.requestWatchdogMillis = 5'000U;
+    ActuatorPlanner planner{parameters};
+
+    // A: valid active Heating admitted far from t=0 so B's own stale
+    // identity (createdAt=0) does not also trip the running H-watchdog.
+    auto result =
+        planner.tick(tickInput(1'000'000U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 1'000'000U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    assertFeedbackUpdate(
+        planner, 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    // B: structurally valid, active, but already older than
+    // requestWatchdogMillis when it arrives -> StaleOnArrivalWatchdog. A's
+    // own H (set at t=1'000'000) is far from expiring, so this must not
+    // also trip the running I-5 watchdog.
+    result =
+        planner.tick(tickInput(1'000'500U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 2U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.admissionOutcome ==
+                     ActuatorAdmissionOutcome::StaleOnArrivalWatchdog);
+    // A continues to run physically per ordinary window governance in the
+    // very same tick that closed and rejected B.
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    assertFeedbackUpdate(planner, 2U,
+                         PreviousControlRequestFeedback::Disposition::Rejected);
+
+    // A further tick with no new evaluation is the case a per-tick-only
+    // derivation would miss: A keeps governing physically, but must not be
+    // able to write feedback again.
+    result = planner.tick(tickInput(1'001'000U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
+}
+
+void test_stale_on_arrival_context_b_closes_episode_a_never_resurrects() {
+    ActuatorPlanner planner{testParameters()};
+
+    auto result =
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    assertFeedbackUpdate(
+        planner, 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    // B: structurally valid, active, fresh in time, but its own context does
+    // not match the current canonical context -> StaleOnArrivalContext. A's
+    // own accepted context (airContext()) still matches, so I-7 must not
+    // fire either.
+    result = planner.tick(
+        tickInput(500U,
+                  demandResult(AbstractControlDirection::Heating, 1.0, 2U, 500U,
+                               productContext(), TemperatureControlReason::None,
+                               AirLimitState::Unrestricted),
+                  airContext()));
+    TEST_ASSERT_TRUE(result.admissionOutcome ==
+                     ActuatorAdmissionOutcome::StaleOnArrivalContext);
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    assertFeedbackUpdate(planner, 2U,
+                         PreviousControlRequestFeedback::Disposition::Rejected);
+
+    result = planner.tick(tickInput(1'000U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
+}
+
+void test_new_stale_off_request_closes_episode_without_any_a_feedback() {
+    ActuatorPlanner planner{testParameters()};
+
+    auto result =
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    assertFeedbackUpdate(
+        planner, 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    // A structurally valid OFF-classified evaluation that is itself
+    // stale-on-arrival (context mismatch): it must close A's episode without
+    // ever opening a feedback window of its own, since #22 never opens a
+    // feedback window for OFF (Abschnitt 6.2 Schritt 6c / ZR5).
+    result =
+        planner.tick(tickInput(500U,
+                               offResult(2U, 500U, productContext(),
+                                         TemperatureControlReason::NeutralBand,
+                                         AirLimitState::Unrestricted),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.admissionOutcome ==
+                     ActuatorAdmissionOutcome::StaleOnArrivalContext);
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    const auto closingUpdate = planner.takeFeedbackUpdate();
+    TEST_ASSERT_TRUE(closingUpdate.changed);
+    TEST_ASSERT_FALSE(closingUpdate.feedback.has_value());
+
+    result = planner.tick(tickInput(1'000U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
+}
+
+void test_duplicate_evaluation_does_not_disturb_pending_feedback_or_resurrect_a() {
+    auto parameters = testParameters();
+    parameters.requestWatchdogMillis = 5'000U;
+    ActuatorPlanner planner{parameters};
+
+    auto result =
+        planner.tick(tickInput(1'000'000U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 1'000'000U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    assertFeedbackUpdate(
+        planner, 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    // B: stale-on-arrival, closes A's episode and opens {2, Rejected} - left
+    // deliberately unconsumed by this test.
+    result =
+        planner.tick(tickInput(1'000'500U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 2U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.admissionOutcome ==
+                     ActuatorAdmissionOutcome::StaleOnArrivalWatchdog);
+    TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+    TEST_ASSERT_EQUAL_UINT64(2U, planner.state().pendingFeedback->sequence);
+
+    // A byte-identical replay of A's own already-superseded sequence must
+    // leave the still-unconsumed {2, Rejected} completely untouched: it is
+    // neither reset to nullopt (6.2 Punkt 5 / 9.2) nor does A's continued
+    // physical governance get a chance to overwrite it (F1).
+    result =
+        planner.tick(tickInput(1'001'000U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.admissionOutcome ==
+                     ActuatorAdmissionOutcome::DuplicateOrOldSequence);
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+    TEST_ASSERT_EQUAL_UINT64(2U, planner.state().pendingFeedback->sequence);
+    TEST_ASSERT_TRUE(planner.state().pendingFeedback->disposition ==
+                     PreviousControlRequestFeedback::Disposition::Rejected);
+    assertFeedbackUpdate(planner, 2U,
+                         PreviousControlRequestFeedback::Disposition::Rejected);
+}
+
 void test_fan_deadlines_and_physical_edges_are_overflow_safe() {
     auto parameters = testParameters();
     parameters.switchingWindowMillis = 1'000U;
@@ -1052,6 +1227,12 @@ int main(int argc, char** argv) {
     RUN_TEST(test_feedback_disposition_maps_reasons_and_never_downgrades);
     RUN_TEST(test_malformed_evaluation_clears_pending_and_allows_next_sequence);
     RUN_TEST(test_feedback_episode_close_prevents_force_stop_resurrection);
+    RUN_TEST(
+        test_stale_on_arrival_watchdog_b_closes_episode_a_never_resurrects);
+    RUN_TEST(test_stale_on_arrival_context_b_closes_episode_a_never_resurrects);
+    RUN_TEST(test_new_stale_off_request_closes_episode_without_any_a_feedback);
+    RUN_TEST(
+        test_duplicate_evaluation_does_not_disturb_pending_feedback_or_resurrect_a);
     RUN_TEST(test_fan_deadlines_and_physical_edges_are_overflow_safe);
     RUN_TEST(test_fans_follow_physical_output_and_independent_inner_phase);
     RUN_TEST(test_feedback_handoff_is_single_use_and_severity_is_monotone);
