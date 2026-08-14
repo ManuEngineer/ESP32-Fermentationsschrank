@@ -2,13 +2,15 @@
 
 ## Status
 
-Dieses Dokument beschreibt die in Phase 8A akzeptierten Grundregeln fuer
-Fehlerklassen, unmittelbare Reaktionen, Quittierung, Fehlerreset,
-automatische Wiederfreigabe, Zeitfortschritt, Persistenz und gleichzeitige
-Fehlerursachen.
+Dieses Dokument beschreibt die in Phase 8A und der finalen R3-Synchronisierung
+akzeptierten Grundregeln fuer Fehlerklassen, stabile Fehlercodes, unmittelbare
+Reaktionen, Quittierung, Fehlerreset, automatische Wiederfreigabe,
+Zeitfortschritt, Persistenz und gleichzeitige Fehlerursachen.
 
 Konkrete Temperatur-, Sensor-, Luefter-, Aktor-, Versorgungs- und
-Softwarefehler werden in Phase 8B und 8C ergaenzt.
+Softwareparameter sowie die reale Hardwareverifikation bleiben in Phase 8B,
+8C und der Inbetriebnahme zu belegen; die #24-Code-/Resetpolicy ist unten
+vollstaendig festgelegt.
 
 ## Grundsaetze
 
@@ -145,6 +147,46 @@ Uebersetzte Texte werden aus dem stabilen Fehlercode und strukturierten
 Zusatzdaten erzeugt. Der Fehlercode darf nicht vom angezeigten deutschen,
 spanischen oder englischen Text abhaengen.
 
+### Finale Release-1-Code- und Resetmatrix fuer Issue #24
+
+Die folgenden Codes sind der verbindliche sprachunabhaengige R3-Namensraum.
+Cleared-Historie ist keine aktive Latchkapazitaet. `SAFE_BOOT-Exit` ist nie
+durch einen normalen Neustart moeglich. `Primaer/Folge` beschreibt nur die
+diagnostische Beziehung; die unmittelbare Reaktion jedes Codes bleibt aktiv.
+
+| Code / Producer und Ursache | Sofortreaktion | Latch / Auto-Rearm | Reset / Berechtigung | Reboot / SAFE_BOOT-Exit | Primaer/Folge |
+|---|---|---|---|---|---|
+| `P1-001` / #20/#22 langsame oder verfehlte Prozesszielerreichung | Warnung, nur bei Safetyfreigabe fortsetzen | nein / neue Prozessbewertung | kein Faultreset, nur Quittierung | kein Reboot / kein Exit | primaer; Folgebezug erlaubt |
+| `P1-002` / #20 degradierte, noch sichere Messqualitaet | Warnung und reduzierte Konfidenz | nein / nur #20-validierte Rueckkehr | kein Faultreset | kein Reboot / kein Exit | primaer; S3/O2 bleibt sichtbar |
+| `P1-003` / nichtkritische Historien-/Journalpflege | Warnung, kritische Persistenz priorisieren | nein, solange kritisch intakt / nach Speicherstatus | kein Faultreset | kein Reboot / kein Exit | primaer oder Folge vor Y4-Eskalation |
+| `O2-001` / #20/#21 Produktfuehler, Luftfallback erlaubt | Peltier AUS, nur validierter #21-Fallback | nein / ausschliesslich #21-Policy | Bediener oder #21-Policy nach Checks | kein Reboot / kein Exit | primaer; Eskalation separat |
+| `O2-002` / kurzzeitig stale bei Sicherheits-Sensorrolle | Peltier AUS, Nachlauf, Wiedererkennung | nein / vor `FAILED` nach stabilen Messungen | kein manueller Reset in Wiedererkennung | kein Reboot / kein Exit | primaer; S3-Eskalation bleibt |
+| `O2-003` / ungeklaerte Sensorrollen-/Plausibilitaetsabweichung | Peltier AUS, keine Ersatzfreigabe | nein / nur neue eindeutige Evidenz | Bediener nach neuer Safetypruefung | kein Reboot / kein Exit | primaer; S3-003 kann folgen |
+| `O2-004` / #23 fehlende thermische/Aktorreaktion, erster Nachweis | Peltier AUS, begrenzte #23-Diagnose | nein / kein pauschales Auto-Rearm | Bediener nach Sensor-/Aktorchecks | kein Reboot / kein Exit | primaer; S3-008/009 bleibt separat |
+| `S3-001` / #20 Schrankluftfuehler `FAILED` | Peltier/H-Bruecken AUS, Luefternachlauf | ja / nein | Service-PIN nach Sensor- und Safetychecks | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `S3-002` / #20 Aussenwaermetauscherfuehler `FAILED` | Peltier/Richtungen AUS, sichere Waermeabfuhr | ja / nein | Service-PIN nach Sensor-/Aktorchecks | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `S3-003` / persistenter sicherheitsrelevanter Sensorwiderspruch | Peltier AUS, kein Fallback | ja / nein | Service-PIN nach Rollen-/Plausibilitaetsnachweis | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer; O2-003 bleibt Folge |
+| `S3-004` / #20/#22 Sicherheits-Eingriffsgrenze | Leistung AUS, Richtung sperren, Impuls/Integrator verwerfen | ja / keine produktive Auto-Recovery | Service-PIN; Reset erzeugt keine Recovery | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer; Recovery folgt ohne Latchloesung |
+| `S3-005` / #20/#22 harte thermische Notgrenze | AUS, keine Gegenrichtung, sichere Luefterreaktion | ja / nein | technische Serviceberechtigung nach Grenz-/Hardwarecheck | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `S3-006` / #20/#23 externer Luefterausfall | Peltier AUS, Restwaerme fail-closed behandeln | ja / nein | Service-PIN nach Fan-/Ausgangspruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `S3-007` / #20/#23 interner Luefterausfall | Peltier AUS oder richtungsbezogen sperren | ja / nein | Service-PIN nach Fan-/Ausgangspruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `S3-008` / #23 `ActuatorWatchdogFaultEvidence` | Peltier AUS, Safety-Gate Stop, 64-bit-Evidenz sichern | ja / nein | technische Berechtigung nach #23-/Aktorchecks | standardmaessig kein Reboot / kein Exit durch Reset | primaer |
+| `S3-009` / #23 H-Bruecken-, Strom-, Ausgangs- oder Richtungsfehler | beide Richtungen AUS, Plan verwerfen | ja / nein | technische Serviceberechtigung nach Ausgangscheck | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer; O2-004 kann Folge sein |
+| `Y4-001` / #56 `ConfigurationRuntimeFailure` | keine neue Konfiguration, Aktoren sicher stoppen | ja / nein | Service/technisch nach Konfigurations- und Integritaetscheck | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `Y4-002` / #56/#57 Commitstatus unklar | unklare Revision sperren, Aktoren AUS | ja / nein | Service/technisch nach eindeutigem Commitstatus | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `Y4-003` / #57 `ConfigurationUnavailable` | keine Teilkonfiguration verwenden, Aktoren AUS | ja / nein | Service/technisch nach gueltiger Revision | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `Y4-004` / #57 `ConfigurationIntegrityFailure` | Integritaetsfehler fail-closed, Aktoren AUS | ja / nein | Service/technisch nach Integritaetscheck | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `Y4-005` / #17/#18 Laufcheckpoint nicht rekonstruierbar | Peltier/H-Bruecken AUS, Lauf sicher beenden | ja / nein | Service/technisch nach neuer Laufrevision | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `Y4-006` / #24 Safety-State-Read/Write/Capacity/Integrity unklar | RAM-Latch, Aktoren AUS, minimalen Latch versuchen, ggf. `SAFE_BOOT` | ja / nein, keine Eviction | Service/technisch nach Lesen-Schreiben-/Capacitycheck | kein zusaetzlicher Reboot / Exit nur separate Bootpolicy | primaer |
+| `Y4-007` / #24 interner Safety-Watchdog oder Recoveryfehler | Aktoren AUS, Persistenzversuch, technischen Restart vorbereiten | ja / nein | technische Berechtigung nach Integritaetscheck | kontrollierter Restart erforderlich / Exit nur autorisierter technischer Boot | primaer |
+| `Y4-008` / unbekannter Resetgrund, Evidenzmismatch oder Safetyinput | `Allowed` verbieten, Aktoren AUS, Diagnose fail-closed | ja / nein | bis Ursachen- und Evidenzklaerung verboten | kein Reboot als Loesung / kein Exit ungeklart | immer primaer; Folgen bleiben |
+| `Y4-009` / dritter abnormaler Restart, `SAFE_BOOT` | vor Aktor-/Lauffreigabe `SAFE_BOOT` | ja / kein Auto-Rearm durch Reboot | technische Berechtigung nach allen Checks | kontrollierter Restart fuer autorisierten Exit / normaler Reboot wirkungslos | primaer; ausloesende Fehler bleiben |
+
+Die Tabelle ist die vollstaendige R3-Policy: vier Klassen, keine reservierten
+historischen Luecken und kein alter `Y4-011`-Fallback. Jede nicht eindeutig
+aufloesbare Ursache wird als `Y4-008` beziehungsweise als fail-closed
+Capacity-/Persistenzfall behandelt.
+
 ## Unmittelbare Reaktion bei einem sicherheitsrelevanten Fehler
 
 Bei einem verriegelten Sicherheitsfehler oder schweren Systemfehler gilt logisch
@@ -175,7 +217,7 @@ Verbindliche Regeln:
 - Der Aussenluefter wird nicht pauschal zusammen mit dem Peltier abgeschaltet,
   solange Restwaerme abgefuehrt werden muss.
 - Der Innenluefter kann je nach Ursache weiterlaufen, nachlaufen oder abgeschaltet
-  werden. Die Fehlercode-Matrix folgt in Phase 8B und 8C.
+  werden. Die Entscheidung steht in der finalen Code-/Producer-Matrix oben.
 - Ist persistentes Speichern selbst Teil des Fehlers, hat der sichere
   Ausgangszustand Vorrang vor einem weiteren Schreibversuch.
 
@@ -428,7 +470,6 @@ verwechselt werden.
 
 ## Noch offen fuer Phase 8B und 8C
 
-- konkrete Fehlercodes und Klassen fuer Schrankluft- und Produktfuehler
 - Warn-, Begrenzungs- und absolute Temperaturgrenzen
 - Verhalten bei Ueber- und Untertemperatur je Heiz-/Kuehlrichtung
 - Erkennung und Reaktion bei Innen- oder Aussenluefterfehler
@@ -438,7 +479,6 @@ verwechselt werden.
 - Software-Watchdogs und Task-Ueberwachung
 - Speicher-, Konfigurations- und Integritaetsfehler
 - Fehler bei Display, Touch, WLAN und Weboberflaeche
-- konkrete Resetberechtigung je Fehlercode
 - konkrete automatische Fehlerfreiheitszeiten
 - Fehlerzaehler, Wiederholungsgrenzen und Eskalationsregeln
 - Fehlerprotokollformat und Aufbewahrung

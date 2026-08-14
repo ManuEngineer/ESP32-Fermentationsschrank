@@ -416,13 +416,27 @@ aktive Meldungen.
 
 ## Fehler zuruecksetzen
 
-Issue #15 definiert das fachliche Kommando `Fehler zuruecksetzen` und dessen
-Ergebnisstruktur, aber keine konkrete Fehlercode-, Sensor-, Hardware- oder
-Berechtigungspolitik.
+Issue #15 stellt weiterhin den fachlichen Commandpfad fuer `Fehler
+zuruecksetzen` bereit. Die konkrete Fehlercode-, Sensor-, Hardware- und
+Berechtigungspolitik liegt in der zentralen #24-Safetyinstanz.
 
-Das Kommando verwendet eine aktuelle, bereits qualifizierte
-Resetfreigabebewertung der spaeteren Sicherheitslogik. Diese Bewertung drueckt
-mindestens aus:
+Der externe `FaultResetRequest` enthaelt nur neutrale Befehlsdaten:
+
+- `CommandEnvelope`, einschliesslich der erwarteten Fehlerrevision, soweit sie
+  dort nicht bereits eindeutig enthalten ist;
+- das exakte Faultziel.
+
+Eine positive Evaluation oder ein positives Berechtigungsbool ist kein Teil
+der externen Safetyautoritaet. #24 berechnet die aktuelle
+`FaultResetEvaluation` zentral aus:
+
+- aktuellem Fault-/Latchzustand und Ursachenfreiheit,
+- erforderlichen Sensor-, Aktor-, Persistenz- und Integritaetspruefungen,
+- anderen blockierenden Faults,
+- der codebezogenen Reset-, Reboot- und SAFE_BOOT-Policy sowie
+- typisierter vorhandener Autorisierungsevidenz.
+
+Die Bewertung drueckt mindestens aus:
 
 - ob der Reset erlaubt ist
 - ob die Ursache weiterhin aktiv ist
@@ -437,12 +451,16 @@ Issue #15:
 
 - liest keine realen Sensoren oder GPIOs
 - kennt keine konkrete Service-PIN
-- erfindet keine Fehlercode-Matrix
+- erfindet keine Fehlercode-Matrix und liefert keine Safetyentscheidung als
+  Callerfeld
 - loest niemals durch `Quittieren` eine Verriegelung
 
-Die Erzeugung der Resetfreigabebewertung und die vollstaendige Resetpolitik
-bleiben Issue #24. Die atomare Speicherung einer erfolgreichen Resetentscheidung
-bleibt Issue #17.
+Die echte Service-PIN-Verifikation wird in #24 nicht neu implementiert. Der
+spaetere Serviceproducer liefert nur eine schmale typisierte Evidenz ueber den
+bestehenden Anwendungspfad; fehlende Evidenz wird fail-closed abgelehnt. Es
+gibt keinen booleschen Bypass und keine Pointer-/Token-Capabilityarchitektur.
+Die atomare Speicherung einer erfolgreichen Resetentscheidung bleibt Issue
+#17.
 
 ## Tests fuer Issue #15
 

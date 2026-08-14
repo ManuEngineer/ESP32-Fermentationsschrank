@@ -144,6 +144,53 @@ beweisen sie keine Freigabe der damals getesteten R2-Semantik.
 | Architektur, Secret, Format und Whitespace | damals ausgefuehrt | `NOT_ACCEPTED_PENDING_R3` | Architekturguard, Secret-Scan, clang-format dry-run, `git diff --check` |
 | vollstaendiger nativer Lauf, ESP-IDF, CI, Hardware | nicht ausgefuehrt | `NOT_RUN` | Draft-/Owner-Gates |
 
+### R3-Zielorakel fuer Issue #24 (aktuelle Ausfuehrung: NOT_RUN)
+
+Diese Orakel gelten erst nach Freigabe und Implementierung der vollstaendigen
+R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
+
+- Die finale `P1-*`-, `O2-*`-, `S3-*`- und `Y4-*`-Matrix in
+  `SAFETY_AND_FAULTS.md` wird vollstaendig gegen Producer, Sofortreaktion,
+  Latch, Auto-Rearm, Berechtigung, Reboot-/SAFE_BOOT-Policy und
+  Primaer-/Folgebezug geprueft. Unknown/Unresolved bleibt `Y4-008` und
+  fail-closed.
+- Acht unabhaengige S3- und neun Y4-Instanzen koexistieren. Cleared-Historie
+  zaehlt nicht als aktive Latchkapazitaet. Die aktive Bound `17`, Payload
+  `896 Byte`, Record `933 Byte` und Grenze `2048 Byte` werden statisch und
+  dynamisch geprueft; Overflow verdraengt keinen aktiven Latch.
+- Drei abnormale Neustarts innerhalb der offenen Episode erzwingen vor
+  Aktorfreigabe `SAFE_BOOT`. Erst 30 Minuten durchgehend stabile,
+  abnormal-restartfreie monotone Laufzeit schliessen die Episode. Power-off
+  schliesst sie nicht, ein normaler Neustart vor Abschluss ebenfalls nicht,
+  und ein abnormaler Neustart waehrend der Phase startet die Stabilitaets-
+  bewertung neu.
+- Ein unbekannter Resetgrund wird nicht als normal behandelt. Ein autorisierter
+  normaler Service-/Recovery-Neustart wird nur dann abnormal gezaehlt, wenn die
+  codebezogene Policy ihn als Safety-/Software-Recovery klassifiziert.
+- Ein normaler Reboot verlaesst `SAFE_BOOT` nicht. Nur die in der Code-Matrix
+  genannten technischen, autorisierten Reboots duerfen fuer `Y4-007` oder
+  `Y4-009` Teil eines SAFE_BOOT-Exits sein.
+- Der externe Faultreset enthaelt nur neutralen `CommandEnvelope`- und
+  Zielkontext. Eine positive Caller-Evaluation, ein boolescher
+  Autorisierungswert oder ein Pointer-/Token-Ersatz kann die zentrale
+  `FaultResetEvaluation` nicht umgehen. Fehlende Evidenz wird abgelehnt.
+- S3-004 bleibt ohne #35-Qualifikation `ImmediateStop`: keine aktive
+  `SAFETY_RECOVERY`, kein normales `Allowed` als Bypass und kein automatisches
+  Latchloeschen.
+- Der echte `FermentationApplication`-Pfad konsumiert die oeffentlichen
+  #56/#57-Resultate ueber genau eine
+  `ConfigurationSafetyIntegrationGate`-/`SafetyFaultService`-Instanz und
+  projiziert auf den bestehenden #23-Planner-/Sinkpfad. Eine Testfixture mit
+  Ersatzmapper gilt nicht als bestanden.
+- Fuer jeden S3/Y4-Code werden Ursachenfreiheit, Sensor-/Aktor-, Persistenz-,
+  Integritaets-, Berechtigungs- und Blockerchecks erneut geprueft; Quittierung
+  und Reset bleiben getrennt.
+
+Der historische R2-Abschnitt oberhalb bleibt unveraendert als
+`NOT_ACCEPTED_PENDING_R3`. Alle R3-Orakel in diesem Planungsauftrag sind
+`NOT_RUN`; Native-Suite, ESP-IDF-Build, Remote-CI und Hardwaretest werden hier
+nicht ausgefuehrt.
+
 ### Ebene 3: Build- und statische Integrationstests
 
 Mindestens:

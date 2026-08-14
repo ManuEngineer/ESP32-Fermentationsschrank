@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Plan-/Spezifikationskorrektur: R2 ist als Implementierungsgrundlage suspendiert; eigenstaendige R3-Reconciliation mit offenen Ownerentscheidungen, PR #107 bleibt Draft und Implementierung eingefroren | Ownerentscheidungen und anschliessende Freigabe der exakten, kanonisch synchronisierten R3-SHA |
+| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Vollstaendige R3-Plan-/Spezifikationssynchronisierung mit konsolidierten OD-24-01..10; R2 bleibt als Implementierungsgrundlage suspendiert, PR #107 bleibt Draft und Implementierung eingefroren | Ownerfreigabe der exakten R3-Plan-SHA `PLAN_R3_PENDING_OWNER_APPROVAL` |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -28,23 +28,30 @@ geschlossen. Die bestehenden #22/#23-Vertraege sind kanonisch und werden von
 Der aktuelle Branch enthaelt einen eingefrorenen R2-Implementierungs- und
 Dokumentationsstand. Die tatsaechlich ausgefuehrten frueheren Tests bleiben
 historische technische Nachweise, sind gegen die neue Spezifikationspruefung
-aber `NOT_ACCEPTED_PENDING_R3`. In dieser Plan-/Gate-Runde wurden keine
-Firmwaretests, Builds oder Produktionsaenderungen ausgefuehrt.
+aber `NOT_ACCEPTED_PENDING_R3`. Die vollstaendige R3 schliesst die bisherigen
+OD-24-01..10-Fragen ohne neue Product-Owner-Zahl oder erfundene
+Commissioningwerte. In dieser Plan-/Gate-Runde wurden keine Firmwaretests,
+Builds oder Produktionsaenderungen ausgefuehrt.
 
-Die native #56/#57-Bridge ist kein produktiver Application-/Composition-
-Root-Nachweis. Der aktuelle Root ist nur ein Skeleton; die genaue
-Abnahmeregel fuer die reale Producerintegration ist eine Ownerentscheidung in
-Planrevision 3. #29/#32/#33, #35, #106 und #19 werden nicht vorgezogen.
+Die native #56/#57-Bridge ist in R3 als realer
+`FermentationApplication`-Application-/Orchestrierungspfad mit einer zentralen
+Safetyinstanz und dem bestehenden #23-Planner-/Sinkgate festgelegt. Der
+aktuelle Root bleibt ein Skeleton; noch nicht vorhandene ESP-IDF-/NVS-/Hardware-
+Adapter werden nicht vorgezogen. #29/#32/#33, #35, #106 und #19 werden nicht
+vorgezogen. #35 bleibt das spaetere Gate fuer aktive thermische S3-004-
+Recovery.
 
 Die kanonische fachliche Reihenfolge bleibt: Issue #23, danach Issue #24
 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,
-Aufbewahrung, Bereinigung, Backup und Import). Issue #24 beginnt jetzt mit
-seinem eigenen Plan-/Owner-Gate mit offenen Spezifikationsfragen. Issue #106
+Aufbewahrung, Bereinigung, Backup und Import). Issue #24 befindet sich jetzt
+mit seiner konsolidierten R3 im eigenen Plan-/Owner-Gate. Issue #106
 (Aktorplaner Per-Run-
 Parameter-Snapshot und Recovery-Bindung) bleibt als separates spaeteres
 Integrationsgate offen und ist nicht die naechste Arbeit; seine vollstaendige
 Abnahme bleibt unter anderem von #35 abhaengig. Issue #35 bleibt
-`TBD_COMMISSIONING` und Eigentum der produktiven Werte und Grenzen.
+`TBD_COMMISSIONING` und Eigentum der produktiven Werte und Grenzen. Fuer #24
+ist nach dieser R3-Synchronisierung nur noch die Ownerfreigabe der exakten
+Plan-SHA offen; die Implementation bleibt bis dahin eingefroren.
 
 ## Zulaessige Parallelitaet
 

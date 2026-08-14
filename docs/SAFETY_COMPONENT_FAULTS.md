@@ -234,7 +234,29 @@ aktuelle Peltierleistung sofort AUS
 
 Das Ereignis wird als Sicherheitsfehler verriegelt. Eine begrenzte Gegenrichtung
 ist eine kontrollierte Sicherheitsrueckfuehrung und keine normale automatische
-Wiederfreigabe des Fermentationsprozesses.
+Wiederfreigabe des Fermentationsprozesses. Im #24-Release-1-Vertrag ist diese
+Rueckfuehrung jedoch zunaechst nur ein Gate-/Vertragspfad.
+
+#### S3-004: #24 contract-only bis #35
+
+S3-004 wird sofort als verriegelter Sicherheitsfehler klassifiziert und setzt
+`ImmediateStop`. Ohne eine spaeter vollstaendig qualifizierte #35-
+Commissioningrevision bleibt `SAFETY_RECOVERY` `Unresolved` und damit
+fail-closed deaktiviert. Das bedeutet:
+
+- Es werden in #24 keine Leistungs-, Puls-, Trend-, Temperatur-,
+  Versuchszahl- oder Revisionswerte erfunden oder produktiv aktiviert.
+- Der bestehende #23-`ActuatorSafetyGateInput`-/Planner-/Sinkpfad bleibt die
+  einzige Aktorgrenze. Ein normales `Allowed` kann S3-004 nicht umgehen.
+- Ein spaeter qualifizierter Recoveryproducer muss durch diesen Gatepfad laufen
+  und darf keine normale PI-Freigabe direkt setzen.
+- Eine Recovery loescht den S3-004-Latch nie automatisch. Auch eine
+  erfolgreiche spaetere Rueckfuehrung verlangt Ursachenpruefung und bewussten
+  Faultreset gemaess `SAFETY_AND_FAULTS.md`.
+- Native #24-Tests beweisen fehlende #35-Qualifikation => keine aktive
+  Recovery, normales `Allowed` => kein Bypass und Recovery => Latch bleibt
+  gesetzt. Die thermische Abnahme echter Recovery gehoert in den abhaengigen
+  #35-Commissioning-/Integrationspfad.
 
 ### Harte Notgrenze
 
@@ -267,18 +289,10 @@ alle folgenden Bedingungen erfuellt sind:
 - Die Gegenrichtung ist physikalisch geeignet, die Temperatur zurueck in den
   sicheren Bereich zu fuehren.
 
-Die Rueckfuehrung verwendet:
-
-- begrenzte Leistung,
-- begrenzte Pulsdauer,
-- staendige Sensor- und Aktorueberwachung,
-- eine erwartete Temperaturtrend-Pruefung nach jedem Versuch,
-- firmwarefest maximal **zwei** Versuche,
-- Werkseinstellung zunaechst **ein** Versuch, bis die Inbetriebnahme einen zweiten
-  Versuch sicher rechtfertigt.
-
-Die zulaessige Versuchszahl darf als PIN-geschuetzter Maschinenparameter nur im
-Bereich `0..2` liegen.
+Die konkrete Rueckfuehrung darf erst nach #35-Qualifikation festgelegt werden.
+Leistung, Pulsdauer, Trend-/Temperaturpruefung, Versuchszahl und Revision sind
+bis dahin `TBD_COMMISSIONING` und werden in #24 nicht als Laufzeitwerte
+verwendet.
 
 Abbruch und vollstaendige Verriegelung erfolgen sofort, wenn:
 
@@ -478,8 +492,8 @@ hinreichender Peltierfehlernachweis.
 - [x] Sensorwidersprueche werden rollen-, phasen- und zeitbezogen bewertet
 - [x] fruehe Regelbegrenzung, Prozesswarnung und Sicherheitsbereich getrennt
 - [x] Sicherheitsbereich besitzt Eingriffsgrenze und harte Notgrenze
-- [x] an der Eingriffsgrenze maximal zwei begrenzte Gegenrichtungsversuche,
-      Werkseinstellung zunaechst ein Versuch
+- [x] S3-004 bleibt in #24 contract-only und fail-closed bis zur #35-
+      Commissioningqualifikation
 - [x] nach erfolgreicher Sicherheitsrueckfuehrung bleibt der Fehler verriegelt
 - [x] an der harten Notgrenze keine automatische Gegenrichtung
 - [x] dritter fest eingebauter DS18B20 am Aussenwaermetauscher/Kuehlkoerper
@@ -500,8 +514,8 @@ hinreichender Peltierfehlernachweis.
 - Zeitraum, in dem eine Fehlerwiederholung eskaliert
 - konkrete obere und untere Regelbegrenzungen
 - konkrete Sicherheits-Eingriffs- und harte Notgrenzen
-- Leistungs-, Zeit- und Trendgrenzen fuer `SAFETY_RECOVERY`
-- Werkseinstellung ein oder nach Nachweis zwei Rueckfuehrungsversuche
+- Leistungs-, Zeit-, Trend-, Temperatur-, Versuchszahl- und Revisionsgrenzen
+  fuer eine spaetere `SAFETY_RECOVERY` bleiben #35-Commissioning
 - konkrete Montageposition des Kuehlkoerpersensors
 - finaler 1-Wire-Pinplan
 - thermische Erkennungsschwellen fuer Aussen- und Innenluefterfehler

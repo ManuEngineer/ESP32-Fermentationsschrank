@@ -204,26 +204,36 @@ Peltier sofort AUS
   -> beide Richtungen deaktivieren
   -> sichere Luefterreaktion ausfuehren
   -> Fehlerzustand sichern, soweit moeglich
-  -> einmaligen kontrollierten Neustart vorbereiten
+  -> nur bei codebezogener Policy einen kontrollierten Neustart vorbereiten
 ```
 
 ### Neustartbegrenzung und SAFE_BOOT
 
 Ein automatischer Neustart ist nur begrenzt zulaessig. Wiederholte abnormale
-Neustarts duerfen keine Endlosschleife erzeugen.
+Neustarts duerfen keine Endlosschleife erzeugen. Fuer Release 1 gilt daher die
+folgende firmwarefeste Episode-Policy:
 
-Nach einer firmwarefest beziehungsweise eng begrenzt definierten Anzahl
-abnormaler Neustarts innerhalb eines Zeitfensters wechselt das Geraet in
-`SAFE_BOOT`.
-
-Ausgangspunkt fuer die spaetere technische Festlegung:
-
-```text
-3 abnormale Neustarts innerhalb eines definierten Zeitfensters
-```
-
-Der exakte Wert und das Zeitfenster werden vor Implementierung als firmwarefeste
-oder nur eng servicekonfigurierbare Grenze festgelegt.
+- Nach drei abnormalen Neustarts innerhalb einer noch offenen Restart-
+  Streak/Episode wird vor normaler Aktor- oder Lauffreigabe `SAFE_BOOT`
+  erzwungen.
+- Die Episode wird erst nach 30 Minuten durchgehend stabilem,
+  abnormal-restartfreiem Betrieb geschlossen.
+- Die 30 Minuten werden ausschliesslich mit einer monotonen Laufzeitquelle im
+  laufenden Boot gemessen. NTP, Netzwerkzeit, RTC und Wall-Clock-Zeit sind
+  keine Voraussetzung und kein Ersatz.
+- Die 30 Minuten sind firmwarefest und nicht servicekonfigurierbar.
+- Ein normaler Neustart vor Abschluss der Stabilitaetsphase schliesst die
+  Episode nicht. Ein abnormaler Neustart waehrend der Stabilitaetsphase setzt
+  die stabile Laufzeitbewertung fuer den naechsten erfolgreichen Boot neu an.
+- Stromlosigkeit loescht die offene Episode nicht. Ohne stromausfallsichere
+  Zeitbasis ist die Dauer des Power-off unbekannt und kann keine Entwarnung
+  beweisen.
+- Ein kontrollierter Neustart zaehlt nur dann als abnormal, wenn ihn die
+  codebezogene Safety-/Software-Recovery-Policy als abnormal klassifiziert.
+  Ein autorisierter normaler Service-/Recovery-Neustart zaehlt nicht
+  automatisch abnormal.
+- Ein unbekannter Resetgrund wird nicht als normal geraten, sondern
+  fail-closed als ungeklaerte Systemursache behandelt.
 
 In `SAFE_BOOT` gilt:
 
@@ -233,9 +243,10 @@ In `SAFE_BOOT` gilt:
 - Diagnose, Fehlerexport, Firmwareupdate und geschuetzte Servicefunktionen bleiben
   verfuegbar, soweit das System stabil genug ist,
 - der Grund fuer `SAFE_BOOT` wird lokal sichtbar angezeigt,
-- ein normaler Neustart allein verlaesst `SAFE_BOOT` nicht automatisch,
-- Freigabe verlangt bestandene Integritaetspruefungen und je nach Ursache die
-  Service-PIN.
+- ein normaler Neustart allein verlaesst `SAFE_BOOT` niemals,
+- ein Exit ist nur ueber die explizite, codebezogene und autorisierte
+  SAFE_BOOT-Policy nach erneuten Persistenz-, Integritaets-, Sensor- und
+  Aktorpruefungen zulaessig.
 
 ## Beschaedigte Konfiguration oder Laufdaten
 
@@ -403,7 +414,10 @@ Verbindliche Regeln:
 
 - Alte GPIO-Zustaende werden nie wiederhergestellt.
 - Ein Brownout oder Watchdog zaehlt als relevante Unterbrechung.
-- Wiederholte Brownouts, Watchdogs oder Bootfehler fuehren zu `SAFE_BOOT`.
+- Drei als abnormal klassifizierte Neustarts innerhalb der offenen Episode
+  fuehren vor Aktorfreigabe zu `SAFE_BOOT`; Brownout, Watchdog und
+  kontrollierter Software-Recovery werden dafuer gemaess ihrer Resetpolicy
+  klassifiziert.
 - Ein verriegelter Fehler bleibt ueber den Neustart erhalten.
 - Eine unterbrochene Zielqualifikation beginnt erneut.
 - Fermentationsfortschritt wird nur gemaess der temperatur- und
@@ -424,8 +438,13 @@ Verbindliche Regeln:
       sichere Beschaltung inaktiv halten
 - [x] Boot-, Reset- und Bootloaderpegel aller verwendeten Ausgaenge praktisch
       messen
-- [x] einmaliger kontrollierter Neustart bei begruendetem Softwarefehler
-- [x] wiederholte abnormale Neustarts fuehren zu `SAFE_BOOT`
+- [x] kontrollierter Neustart nur gemaess einer begruendeten, codebezogenen
+      Safety-/Software-Recovery-Policy
+- [x] drei abnormale Neustarts innerhalb einer offenen Episode fuehren zu
+      `SAFE_BOOT`
+- [x] 30 Minuten stabile monotone Laufzeit schliessen die Episode
+- [x] Stromlosigkeit loescht die offene Episode nicht
+- [x] normaler Reboot ist kein `SAFE_BOOT`-Exit
 - [x] letzte gueltige Konfigurationsrevision als Rueckfall verwenden
 - [x] niemals automatischen Werksreset wegen Datenfehler ausloesen
 - [x] nicht rekonstruierbaren aktiven Lauf sicher stoppen, ohne Benutzerprogramme
@@ -448,8 +467,9 @@ Verbindliche Regeln:
 - Nachweis der sicheren Unterbrechung des Peltierpfades
 - BTS7960-Pulldowns beziehungsweise externe Freigabestufe auslegen
 - Boot-/Resetpegel aller Ausgaenge messen
-- konkrete Watchdog-Zeiten und Neustartzaehlergrenzen
-- Definition und Freigabeablauf von `SAFE_BOOT`
+- konkrete Watchdog- und Hardwareursachen auf dem Zielsystem
+- technische Service- und Exitnachweise fuer die codebezogene `SAFE_BOOT`-
+  Freigabe
 - Speicherbudget und konkrete Journalgroesse
 - genaue Fehleraufbewahrungs- und Verdichtungsregeln
 - Tests fuer Brownout waehrend Flash-Schreibvorgang und Aktorumschaltung
