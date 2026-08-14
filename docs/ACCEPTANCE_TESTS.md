@@ -130,10 +130,13 @@ Aktorbefehle. Eine verbotene Aktorfreigabe laesst den Test fehlschlagen.
 
 | Bereich | Status | Nachweis |
 |---|---|---|
-| bounded Faultkern, Klassen, Dominanz, Latchpersistenz, Restart-Episode und Reset-Boot | PASS | `pio test -e native --filter test_issue24_safety` (10/10) |
+| bounded Faultkern, Klassen, Dominanz, Latchpersistenz, Restart-Episode, Reset-Boot, Trust-Boundaries, exactly-once und reale Konfigurations-Gate-Projektion | PASS | `pio test -e native --filter test_issue24_safety` (20/20) |
 | bestehendes #23-Safety-Gate und `SAFETY_RECOVERY`-Pfad | PASS | `pio test -e native --filter test_actuator_planner` (44/44) plus Issue-24-Integrationstest |
 | bestehender #15-Command-/Faultprojektion | PASS | `pio test -e native --filter test_run_commands` (43/43) |
 | bestehender Prozessautomat und SAFE_BOOT-Topologie | PASS | `pio test -e native --filter test_process_state_machine` (35/35) |
+| bestehender #23-Persistenz-/Application-Pfad | PASS | `pio test -e native --filter test_run_persistence_coordinator` (112/112) |
+| reale #56/#57-Producer-Vertraege | PASS | `pio test -e native --filter test_configuration_recovery_service` (37/37) und `pio test -e native --filter test_configuration_service` (40/40); Issue-24-Bridge-Gate im 20/20-Suite |
+| Architekturgrenzen, Secret-Scan und Format-/Whitespace-Gate | PASS | `python3 scripts/check_architecture_boundaries.py`; `python3 scripts/check_secrets.py`; `clang-format --dry-run --Werror`; `git diff --check` |
 | vollstaendiger nativer Lauf, ESP-IDF-Profile, GitHub-CI, Hardware/Bring-up | NOT_RUN | Draft-Gate; Owner-Review und Ready-for-review stehen aus |
 
 ### Ebene 3: Build- und statische Integrationstests

@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Implementation nach Freigabe des exakten Plan-Commits `3b2befaf7595066cb8fcc0521b32e93212360ba5` in Arbeit; PR #107 bleibt Draft | Vollstaendiger Diff-Review gegen Plan und Ownerentscheidung; danach entscheidet der Owner ueber `Ready for review` |
+| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Owner-Review-Korrekturen gegen den unveraenderten freigegebenen Plan-Commit `3b2befaf7595066cb8fcc0521b32e93212360ba5` umgesetzt; PR #107 bleibt Draft | Vollstaendiger Diff-Review gegen Plan und Ownerentscheidung; danach entscheidet der Owner ueber `Ready for review` |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -26,18 +26,24 @@ geschlossen. Die bestehenden #22/#23-Vertraege sind kanonisch und werden von
 ## Issue #24 Implementierungsstatus
 
 Der aktuelle Code-Schnitt enthaelt den zentralen bounded Faultkern, den
-persistenten `SafetyStateRecord`, Reset-/Restart-Port und die SAFE_BOOT-
-beziehungsweise Recovery-Orchestrierung. Die Projektion in den bestehenden
-#15-Commandzustand und das #23-Aktor-Gate bleibt fail-closed; ein normaler
-`Allowed`-Pfad kann keinen Safety-Latch ueberschreiben.
+persistenten `SafetyStateRecord`, intern ausgestellte Reset-/Recovery-
+Autoritaeten, exactly-once Restart-Beobachtung, monotone FaultInstance-
+Sequenzen und die SAFE_BOOT-/Recovery-Orchestrierung. Die Projektion in den
+bestehenden #15-Commandzustand und das #23-Aktor-Gate bleibt fail-closed; ein
+normaler `Allowed`-Pfad kann keinen Safety-Latch ueberschreiben. Ein realer
+Bridge-Gate-Test fuehrt die vorhandenen #56/#57-
+`ConfigurationRecoveryService`-Ergebnisse in den zentralen #24-Safety-Service.
 
-Gezielte native Nachweise: `test_issue24_safety` PASS (10/10),
-`test_actuator_planner` PASS (44/44), `test_run_commands` PASS (43/43) und
-`test_process_state_machine` PASS (35/35). Der vollstaendige native Lauf,
+Gezielte native Nachweise auf dem Korrektur-HEAD: `test_issue24_safety` PASS
+(20/20), `test_actuator_planner` PASS (44/44), `test_run_commands` PASS
+(43/43), `test_process_state_machine` PASS (35/35),
+`test_run_persistence_coordinator` PASS (112/112),
+`test_configuration_recovery_service` PASS (37/37) und
+`test_configuration_service` PASS (40/40). Der vollstaendige native Lauf,
 ESP-IDF-Builds, GitHub-CI und Hardware-/Bring-up-Nachweise sind in diesem
-Draft NOT_RUN. Die reale Application-Komposition der #56/#57-Producer sowie
-der ESP-IDF-Resetadapter bleiben Integrations-/Bring-up-Gates und sind nicht
-als abgeschlossen bewiesen.
+Draft NOT_RUN. Die produktive ESP-IDF-Composition und Resetadapter sowie
+Hardwareeigenschaften bleiben Integrations-/Bring-up-Gates und sind nicht als
+abgeschlossen bewiesen.
 
 Die kanonische fachliche Reihenfolge bleibt: Issue #23, danach Issue #24
 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,

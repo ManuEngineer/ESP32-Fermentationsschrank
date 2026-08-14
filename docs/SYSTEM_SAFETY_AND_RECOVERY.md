@@ -248,6 +248,13 @@ markiert. Ein autorisierter Faultreset verwendet stattdessen einen einmaligen
 `FaultResetBootIntent`, zaehlt nicht als abnormal und schliesst keine offene
 Episode.
 
+Eine bereits verarbeitete `ResetCauseSnapshot::observationId` wird im selben
+Boot nicht erneut als Episode, Evidence oder Resetversuch konsumiert. Der
+`FaultResetBootIntent` wird vor dem Anwenden des Faultzustands persistiert und
+erst nach einem Folgeboot mit vollstaendiger Safety-, Konfigurations-,
+Recovery- und Latch-Qualifikation einmalig verbraucht. Ein normaler Neustart,
+ein stale Intent oder ein Persistenzfehler hebt `SAFE_BOOT` nicht auf.
+
 Die Episode wird erst nach 30 Minuten stabiler, monotone Zeit im laufenden
 Boot geschlossen. Zeitablauf, NTP, Stromlosigkeit oder ein normaler Neustart
 loeschen weder Episode noch Safety-Latch. Fehlende, widerspruechliche oder

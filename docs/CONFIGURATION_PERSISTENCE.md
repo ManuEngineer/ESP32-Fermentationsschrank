@@ -1035,10 +1035,11 @@ Manifest-, Root- und Bootstrapbedeutung, Graphvalidierung, ProgramCatalog,
 fluechtige Vorschau, Migration, Boot/Recovery,
 `RuntimeConfigurationSnapshot` und den typisierten
 `ConfigurationRuntimeFailure`. PR #107 konsumiert diese vorhandenen #56/#57-
-Statusvertraege am Safety-Service; die vollstaendige Composition-Root-
-Verdrahtung und die reproduzierbare Producer-Gate-Abnahme bleiben bis zur
-fertigen #24-Integration offen. #56 und #57 fuehren keinen Port zu #17 und
-keine vorbereitete Secret-Domaene ein.
+Statusvertraege ueber den `ConfigurationSafetyIntegrationGate` am zentralen
+Safety-Service; die native Producer-Gate-Abnahme ist belegt. Die produktive
+ESP-IDF-Composition, Resetadapter und Hardwareabnahme bleiben separate
+offene Gates. #56 und #57 fuehren keinen Port zu #17 und keine vorbereitete
+Secret-Domaene ein.
 
 `device_platform_test_support` enthaelt nur anwendungsneutrale Testadapter wie
 `SimulatedPersistentStateStore`, kontrollierbare Zufallsquelle, Cut-Point- und

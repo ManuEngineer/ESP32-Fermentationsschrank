@@ -33,6 +33,15 @@ loescht den Latch nicht. `S3-008` bindet die vorhandene
 `ActuatorWatchdogFaultEvidence`; der externe Planner-Reset ist erst nach
 erfolgreichem #24-Resetcommit zulaessig.
 
+Die `SAFETY_RECOVERY`-Capability und die
+`FaultResetAuthorization` werden ausschliesslich vom zentralen
+`SafetyFaultService` aus aktueller, intern verifizierter Evidenz ausgestellt.
+Strukturell passende externe Objekte, positive Legacy-Evaluationsdaten und
+Caller-Flags sind keine Safety-Autoritaet. Ein Reset bleibt auf genau ein
+Faultziel und dessen Revision begrenzt; Klasse-1-/Klasse-2-Fehler werden nicht
+als persistente Klasse-3-/Klasse-4-Latches kodiert. Watchdog-Diagnoseevidenz
+bleibt vollstaendig 64-bit erhalten.
+
 ## Grundsaetze
 
 - Ein Fehler darf niemals durch Komfortfunktionen, Mindestlaufzeiten oder einen

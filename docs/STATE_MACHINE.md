@@ -171,6 +171,9 @@ Restart-Evidence, Konfigurations-Gate und verbleibende Latches werden zuerst
 validiert. Ein normaler Neustart erzeugt keinen direkten
 `SAFE_BOOT -> STANDBY`-Uebergang; nur ein verifizierter `FaultResetBootIntent`
 geht anschliessend durch die bestehende Boot-/Recovery-/Standby-Kette.
+Eine Resetursache mit bereits verarbeiteter `observationId` wird dabei nicht
+erneut gezaehlt oder konsumiert. Der autorisierte Intent wird genau einmal
+verbraucht; bei fehlender Vollqualifikation bleibt der Zustand fail-closed.
 
 ## STANDBY
 

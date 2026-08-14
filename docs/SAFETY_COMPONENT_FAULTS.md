@@ -32,6 +32,14 @@ Aktor-Evidenz und erreicht den Sink nur ueber den bestehenden Planner. Die
 Leistungs- und Temperaturgrenzen bleiben `TBD_COMMISSIONING` und werden in
 diesem Issue nicht erfunden.
 
+Der Application-Bridge `ConfigurationSafetyIntegrationGate` leitet die
+Ergebnisse des bestehenden `ConfigurationRecoveryService` an den zentralen
+Safety-Service weiter. `ConfigurationRuntimeFailure`,
+`ConfigurationCommitIndeterminate`, `ConfigurationUnavailable` und
+`ConfigurationIntegrityFailure` werden dadurch als persistente Y4-Latches mit
+SAFE_BOOT-Prioritaet behandelt; der Bridge ersetzt weder #56/#57 noch baut er
+eine zweite Fault-Domaene auf.
+
 ## Sicherheitsrelevante Temperatursensoren
 
 Das erste Release verwendet drei Temperaturrollen:
