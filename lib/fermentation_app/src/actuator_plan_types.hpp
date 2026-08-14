@@ -11,6 +11,9 @@
 
 namespace fermentation {
 
+class ActuatorPlanner;
+class SafetyFaultService;
+
 // #24 (oder Interims-Composition-Root) liefert dieses Urteil pro Tick. Bis
 // #24 real verdrahtet ist, bleibt der Composition-Root-Default Unresolved;
 // dies fuehrt strukturell zu Idle und ist kein implizites "Safety=erlaubt".
@@ -22,15 +25,21 @@ enum class ActuatorSafetyGateStatus : std::uint8_t {
     SAFETY_RECOVERY = SafetyRecovery,
 };
 
-// Begrenzter Sonderpfad fuer S3-004. Die Felder sind ein vollstaendiger
-// Nachweis-Snapshot; fehlende Evidenz ist false und bleibt damit
-// fail-closed. Normale ControlRequests und caller-supplied Allowed koennen
-// diesen Datensatz nicht ersetzen.
-struct SafetyRecoveryRequest {
+// Qualification is an observation, not a safety authority.  It contains
+// typed producer results; the #24 core derives the positive capability from
+// it after checking the current FaultCore and SafetyStateRecord.
+enum class SafetyRecoveryCheck : std::uint8_t {
+    Unknown,
+    Passed,
+    Failed,
+};
+
+struct SafetyRecoveryQualification {
     FaultInstanceId targetFault;
     AbstractControlDirection triggeringDirection{
         AbstractControlDirection::Unknown};
-    AbstractControlDirection recoveryDirection{AbstractControlDirection::Unknown};
+    AbstractControlDirection recoveryDirection{
+        AbstractControlDirection::Unknown};
     std::uint32_t faultRevision{0U};
     std::uint32_t safetyEvidenceRevision{0U};
     std::uint8_t attemptIndex{0U};
@@ -42,30 +51,152 @@ struct SafetyRecoveryRequest {
     std::uint32_t qualifiedSensorEvidence{0U};
     std::uint32_t qualifiedFanEvidence{0U};
     std::uint32_t qualifiedActuatorEvidence{0U};
-    bool hardLimitNotReached{false};
-    bool noSensorConflict{false};
-    bool triggeringDirectionOff{false};
-    bool safeCurrentWhenAvailable{false};
-    bool minimumOffTimeElapsed{false};
-    bool polarityDeadTimeElapsed{false};
+    SafetyRecoveryCheck hardLimit{SafetyRecoveryCheck::Unknown};
+    SafetyRecoveryCheck sensorConflict{SafetyRecoveryCheck::Unknown};
+    SafetyRecoveryCheck triggeringDirectionOff{SafetyRecoveryCheck::Unknown};
+    SafetyRecoveryCheck safeCurrentWhenAvailable{SafetyRecoveryCheck::Unknown};
+    SafetyRecoveryCheck minimumOffTimeElapsed{SafetyRecoveryCheck::Unknown};
+    SafetyRecoveryCheck polarityDeadTimeElapsed{SafetyRecoveryCheck::Unknown};
     std::uint32_t safetyRecoveryParametersRevision{0U};
-
-    [[nodiscard]] bool structurallyValid() const {
-        return targetFault.valid() &&
-               triggeringDirection != AbstractControlDirection::Unknown &&
-               recoveryDirection != AbstractControlDirection::Unknown &&
-               triggeringDirection != recoveryDirection && faultRevision != 0U &&
-               safetyEvidenceRevision != 0U && attemptIndex >= 1U &&
-               maxAttempts >= attemptIndex && maxAttempts <= 2U && sequence != 0U &&
-               std::isfinite(timeQuote) &&
-               timeQuote > 0.0 && timeQuote <= 1.0 &&
-               qualifiedSensorEvidence != 0U && qualifiedFanEvidence != 0U &&
-               qualifiedActuatorEvidence != 0U && hardLimitNotReached &&
-               noSensorConflict && triggeringDirectionOff &&
-               safeCurrentWhenAvailable && minimumOffTimeElapsed &&
-               polarityDeadTimeElapsed && safetyRecoveryParametersRevision != 0U;
-    }
 };
+
+// Bounded S3-004 capability.  There is deliberately no public constructor or
+// public mutable field.  Only SafetyFaultService can issue one; the planner
+// may inspect one but cannot mint a replacement.  A copied capability remains
+// stale-checkable through the issuer marker and all current revisions.
+class SafetyRecoveryRequest final {
+   public:
+    [[nodiscard]] FaultInstanceId targetFault() const { return targetFault_; }
+    [[nodiscard]] AbstractControlDirection triggeringDirection() const {
+        return triggeringDirection_;
+    }
+    [[nodiscard]] AbstractControlDirection recoveryDirection() const {
+        return recoveryDirection_;
+    }
+    [[nodiscard]] std::uint32_t faultRevision() const { return faultRevision_; }
+    [[nodiscard]] std::uint32_t safetyEvidenceRevision() const {
+        return safetyEvidenceRevision_;
+    }
+    [[nodiscard]] std::uint8_t attemptIndex() const { return attemptIndex_; }
+    [[nodiscard]] std::uint8_t maxAttempts() const { return maxAttempts_; }
+    [[nodiscard]] std::uint64_t sequence() const { return sequence_; }
+    [[nodiscard]] std::uint64_t createdAtMonotonicMillis() const {
+        return createdAtMonotonicMillis_;
+    }
+    [[nodiscard]] double timeQuote() const { return timeQuote_; }
+    [[nodiscard]] const ControlRequestContext& contextAtQualification() const {
+        return contextAtQualification_;
+    }
+    [[nodiscard]] std::uint32_t qualifiedSensorEvidence() const {
+        return qualifiedSensorEvidence_;
+    }
+    [[nodiscard]] std::uint32_t qualifiedFanEvidence() const {
+        return qualifiedFanEvidence_;
+    }
+    [[nodiscard]] std::uint32_t qualifiedActuatorEvidence() const {
+        return qualifiedActuatorEvidence_;
+    }
+    [[nodiscard]] bool hardLimitNotReached() const {
+        return hardLimitNotReached_;
+    }
+    [[nodiscard]] bool noSensorConflict() const { return noSensorConflict_; }
+    [[nodiscard]] bool triggeringDirectionOff() const {
+        return triggeringDirectionOff_;
+    }
+    [[nodiscard]] bool safeCurrentWhenAvailable() const {
+        return safeCurrentWhenAvailable_;
+    }
+    [[nodiscard]] bool minimumOffTimeElapsed() const {
+        return minimumOffTimeElapsed_;
+    }
+    [[nodiscard]] bool polarityDeadTimeElapsed() const {
+        return polarityDeadTimeElapsed_;
+    }
+    [[nodiscard]] std::uint32_t safetyRecoveryParametersRevision() const {
+        return safetyRecoveryParametersRevision_;
+    }
+    [[nodiscard]] bool structurallyValid() const;
+    [[nodiscard]] bool issuedBy(const SafetyFaultService* issuer) const {
+        return issuer != nullptr && issuer_ == issuer;
+    }
+
+   private:
+    friend class SafetyFaultService;
+    friend class ActuatorPlanner;
+
+    SafetyRecoveryRequest(const SafetyRecoveryQualification& qualification,
+                          const SafetyFaultService* issuer)
+        : targetFault_(qualification.targetFault),
+          triggeringDirection_(qualification.triggeringDirection),
+          recoveryDirection_(qualification.recoveryDirection),
+          faultRevision_(qualification.faultRevision),
+          safetyEvidenceRevision_(qualification.safetyEvidenceRevision),
+          attemptIndex_(qualification.attemptIndex),
+          maxAttempts_(qualification.maxAttempts),
+          sequence_(qualification.sequence),
+          createdAtMonotonicMillis_(qualification.createdAtMonotonicMillis),
+          timeQuote_(qualification.timeQuote),
+          contextAtQualification_(qualification.contextAtQualification),
+          qualifiedSensorEvidence_(qualification.qualifiedSensorEvidence),
+          qualifiedFanEvidence_(qualification.qualifiedFanEvidence),
+          qualifiedActuatorEvidence_(qualification.qualifiedActuatorEvidence),
+          hardLimitNotReached_(qualification.hardLimit ==
+                               SafetyRecoveryCheck::Passed),
+          noSensorConflict_(qualification.sensorConflict ==
+                            SafetyRecoveryCheck::Passed),
+          triggeringDirectionOff_(qualification.triggeringDirectionOff ==
+                                  SafetyRecoveryCheck::Passed),
+          safeCurrentWhenAvailable_(qualification.safeCurrentWhenAvailable ==
+                                    SafetyRecoveryCheck::Passed),
+          minimumOffTimeElapsed_(qualification.minimumOffTimeElapsed ==
+                                 SafetyRecoveryCheck::Passed),
+          polarityDeadTimeElapsed_(qualification.polarityDeadTimeElapsed ==
+                                   SafetyRecoveryCheck::Passed),
+          safetyRecoveryParametersRevision_(
+              qualification.safetyRecoveryParametersRevision),
+          issuer_(issuer) {}
+
+    FaultInstanceId targetFault_;
+    AbstractControlDirection triggeringDirection_{
+        AbstractControlDirection::Unknown};
+    AbstractControlDirection recoveryDirection_{
+        AbstractControlDirection::Unknown};
+    std::uint32_t faultRevision_{0U};
+    std::uint32_t safetyEvidenceRevision_{0U};
+    std::uint8_t attemptIndex_{0U};
+    std::uint8_t maxAttempts_{0U};
+    std::uint64_t sequence_{0U};
+    std::uint64_t createdAtMonotonicMillis_{0U};
+    double timeQuote_{0.0};
+    ControlRequestContext contextAtQualification_;
+    std::uint32_t qualifiedSensorEvidence_{0U};
+    std::uint32_t qualifiedFanEvidence_{0U};
+    std::uint32_t qualifiedActuatorEvidence_{0U};
+    bool hardLimitNotReached_{false};
+    bool noSensorConflict_{false};
+    bool triggeringDirectionOff_{false};
+    bool safeCurrentWhenAvailable_{false};
+    bool minimumOffTimeElapsed_{false};
+    bool polarityDeadTimeElapsed_{false};
+    std::uint32_t safetyRecoveryParametersRevision_{0U};
+    const SafetyFaultService* issuer_{nullptr};
+};
+
+inline bool SafetyRecoveryRequest::structurallyValid() const {
+    return issuer_ != nullptr && targetFault_.valid() &&
+           triggeringDirection_ != AbstractControlDirection::Unknown &&
+           recoveryDirection_ != AbstractControlDirection::Unknown &&
+           triggeringDirection_ != recoveryDirection_ && faultRevision_ != 0U &&
+           safetyEvidenceRevision_ != 0U && attemptIndex_ >= 1U &&
+           maxAttempts_ >= attemptIndex_ && maxAttempts_ <= 2U &&
+           sequence_ != 0U && std::isfinite(timeQuote_) && timeQuote_ > 0.0 &&
+           timeQuote_ <= 1.0 && qualifiedSensorEvidence_ != 0U &&
+           qualifiedFanEvidence_ != 0U && qualifiedActuatorEvidence_ != 0U &&
+           hardLimitNotReached_ && noSensorConflict_ &&
+           triggeringDirectionOff_ && safeCurrentWhenAvailable_ &&
+           minimumOffTimeElapsed_ && polarityDeadTimeElapsed_ &&
+           safetyRecoveryParametersRevision_ != 0U;
+}
 
 struct ActuatorSafetyGateInput {
     ActuatorSafetyGateStatus status{ActuatorSafetyGateStatus::Unresolved};
@@ -74,6 +205,16 @@ struct ActuatorSafetyGateInput {
     ActuatorSafetyGateInput() = default;
     explicit ActuatorSafetyGateInput(ActuatorSafetyGateStatus value)
         : status(value) {}
+
+    [[nodiscard]] bool hasRecoveryAuthority() const {
+        return status == ActuatorSafetyGateStatus::SafetyRecovery &&
+               safetyRecovery.has_value() &&
+               safetyRecovery->issuedBy(authority_);
+    }
+
+   private:
+    friend class SafetyFaultService;
+    const SafetyFaultService* authority_{nullptr};
 };
 
 // Reine, fuer #24 konsumierbare Evidenz. Freigabe ausschliesslich ueber

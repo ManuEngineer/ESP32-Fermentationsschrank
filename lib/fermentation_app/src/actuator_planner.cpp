@@ -1079,23 +1079,25 @@ ActuatorPlanTickResult ActuatorPlanner::runPhaseB(
 
     if (input.safetyGate.status == ActuatorSafetyGateStatus::SafetyRecovery) {
         if (!input.safetyGate.safetyRecovery.has_value() ||
+            !input.safetyGate.hasRecoveryAuthority() ||
             !input.safetyGate.safetyRecovery->structurallyValid() ||
             input.newEvaluation.has_value() ||
             !input.temperatureControlledPhase ||
             state_.latchedWatchdogFault.has_value() ||
             !isStructurallyValidContext(
-                input.safetyGate.safetyRecovery->contextAtQualification) ||
-            input.safetyGate.safetyRecovery->createdAtMonotonicMillis > now) {
-            return rejectToIdle(admission, now, ActuatorPlanStatus::InvalidInput,
+                input.safetyGate.safetyRecovery->contextAtQualification()) ||
+            input.safetyGate.safetyRecovery->createdAtMonotonicMillis() > now) {
+            return rejectToIdle(admission, now,
+                                ActuatorPlanStatus::InvalidInput,
                                 ActuatorPlanReason::MalformedInput);
         }
         const auto& recovery = *input.safetyGate.safetyRecovery;
         AcceptedControlCommand candidate;
-        candidate.sequence = recovery.sequence;
-        candidate.direction = recovery.recoveryDirection;
-        candidate.timeQuote = recovery.timeQuote;
+        candidate.sequence = recovery.sequence();
+        candidate.direction = recovery.recoveryDirection();
+        candidate.timeQuote = recovery.timeQuote();
         candidate.demandClass = ActuatorDemandClass::NormalDemand;
-        candidate.contextAtAcceptance = recovery.contextAtQualification;
+        candidate.contextAtAcceptance = recovery.contextAtQualification();
         const auto result = evaluateHeatingCoolingDemand(
             candidate, ActuatorAdmissionOutcome::Accepted, now);
         auto qualifiedResult = result;

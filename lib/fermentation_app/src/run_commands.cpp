@@ -1296,8 +1296,11 @@ CommandDecision decideMuteMessage(const RunCommandState& current,
     return decision;
 }
 
-CommandDecision decideFaultReset(const RunCommandState& current,
-                                 const FaultResetRequest& request) {
+namespace {
+
+CommandDecision decideFaultResetInternal(
+    const RunCommandState& current, const FaultResetRequest& request,
+    const FaultResetAuthorization* authorization) {
     auto decision =
         beginDecision(current, request.envelope, CommandKind::ResetFault);
     if (!requireFaultRevision(decision)) {
@@ -1307,51 +1310,45 @@ CommandDecision decideFaultReset(const RunCommandState& current,
         decision.status = CommandStatus::NotConfirmed;
         return decision;
     }
-    if (request.targetFault.has_value()) {
-        const auto& target = *request.targetFault;
-        const FaultRecord* targetRecord = nullptr;
-        for (std::size_t index = 0U; index < current.faultSnapshot.count;
-             ++index) {
-            if (current.faultSnapshot.records[index].instanceId == target) {
-                targetRecord = &current.faultSnapshot.records[index];
-                break;
-            }
+    if (!request.targetFault.valid() || authorization == nullptr ||
+        !authorization->valid() ||
+        authorization->targetFault() != request.targetFault ||
+        !request.envelope.expectedFaultRevision.has_value() ||
+        authorization->expectedFaultRevision() !=
+            *request.envelope.expectedFaultRevision ||
+        authorization->safetyRevision() != current.faultRevision ||
+        !authorization->causeFree() || !authorization->safetyChecksPassed() ||
+        !authorization->authorizationSatisfied() ||
+        !authorization->noOtherBlockingFault()) {
+        decision.status = CommandStatus::SafetyRejected;
+        return decision;
+    }
+
+    const auto& target = request.targetFault;
+    const FaultRecord* targetRecord = nullptr;
+    for (std::size_t index = 0U; index < current.faultSnapshot.count; ++index) {
+        if (current.faultSnapshot.records[index].instanceId == target) {
+            targetRecord = &current.faultSnapshot.records[index];
+            break;
         }
-        if (targetRecord == nullptr || targetRecord->status == FaultStatus::Cleared) {
-            decision.status = CommandStatus::ContextMissing;
-            return decision;
-        }
-        if (targetRecord->faultRevision != current.faultRevision) {
-            decision.status = CommandStatus::StaleState;
-            return decision;
-        }
-        if (targetRecord->causeActive || !targetRecord->latched ||
-            targetRecord->status != FaultStatus::CauseClearedLocked) {
-            decision.status = CommandStatus::SafetyRejected;
-            return decision;
-        }
-        for (std::size_t index = 0U; index < current.faultSnapshot.count;
-             ++index) {
-            const auto& other = current.faultSnapshot.records[index];
-            if (other.instanceId != target && isBlockingFault(other)) {
-                decision.status = CommandStatus::SafetyRejected;
-                return decision;
-            }
-        }
-    } else {
-        // Legacy projection path, kept only so existing #15 consumers can
-        // migrate atomically. The new targetFault path above never trusts
-        // caller-supplied positive evaluation flags.
-        const auto& evaluation = request.evaluation;
-        if (evaluation.faultRevision != current.faultRevision) {
-            decision.status = CommandStatus::StaleState;
-            return decision;
-        }
-        if (!evaluation.allowed || evaluation.causeStillActive ||
-            !evaluation.safetyChecksPassed ||
-            !evaluation.authorizationSatisfied ||
-            evaluation.otherBlockingFaultActive ||
-            evaluation.rejection != FaultResetRejection::None) {
+    }
+    if (targetRecord == nullptr ||
+        targetRecord->status == FaultStatus::Cleared) {
+        decision.status = CommandStatus::ContextMissing;
+        return decision;
+    }
+    if (targetRecord->faultRevision != current.faultRevision) {
+        decision.status = CommandStatus::StaleState;
+        return decision;
+    }
+    if (targetRecord->causeActive || !targetRecord->latched ||
+        targetRecord->status != FaultStatus::CauseClearedLocked) {
+        decision.status = CommandStatus::SafetyRejected;
+        return decision;
+    }
+    for (std::size_t index = 0U; index < current.faultSnapshot.count; ++index) {
+        const auto& other = current.faultSnapshot.records[index];
+        if (other.instanceId != target && isBlockingFault(other)) {
             decision.status = CommandStatus::SafetyRejected;
             return decision;
         }
@@ -1361,32 +1358,45 @@ CommandDecision decideFaultReset(const RunCommandState& current,
     }
     beginMutation(decision);
     ++decision.after.faultRevision;
-    if (request.targetFault.has_value()) {
-        for (std::size_t index = 0U; index < decision.after.faultSnapshot.count;
-             ++index) {
-            auto& record = decision.after.faultSnapshot.records[index];
-            if (record.instanceId == *request.targetFault) {
-                record.status = FaultStatus::Cleared;
-                record.faultRevision = decision.after.faultRevision;
-                break;
-            }
+    for (std::size_t index = 0U; index < decision.after.faultSnapshot.count;
+         ++index) {
+        auto& record = decision.after.faultSnapshot.records[index];
+        if (record.instanceId == request.targetFault) {
+            record.status = FaultStatus::Cleared;
+            record.causeActive = false;
+            record.faultRevision = decision.after.faultRevision;
+            break;
         }
-        decision.after.faultSnapshot.revision = decision.after.faultRevision;
-        decision.after.criticalSafetyEventPending = false;
-        for (std::size_t index = 0U;
-             index < decision.after.faultSnapshot.count; ++index) {
-            if (isBlockingFault(decision.after.faultSnapshot.records[index])) {
-                decision.after.criticalSafetyEventPending = true;
-                break;
-            }
-        }
-        decision.after.faultSnapshot.criticalSafetyEventPending =
-            decision.after.criticalSafetyEventPending;
-    } else {
-        decision.after.criticalSafetyEventPending = false;
     }
+    decision.after.faultSnapshot.revision = decision.after.faultRevision;
+    decision.after.criticalSafetyEventPending = false;
+    for (std::size_t index = 0U; index < decision.after.faultSnapshot.count;
+         ++index) {
+        if (isBlockingFault(decision.after.faultSnapshot.records[index])) {
+            decision.after.criticalSafetyEventPending = true;
+            break;
+        }
+    }
+    decision.after.faultSnapshot.criticalSafetyEventPending =
+        decision.after.criticalSafetyEventPending;
     static_cast<void>(addEffect(decision, CommandEffect::FaultResetAuthorized));
     return decision;
+}
+
+}  // namespace
+
+CommandDecision decideFaultReset(const RunCommandState& current,
+                                 const FaultResetRequest& request) {
+    // There is intentionally no compatibility path that consumes positive
+    // caller evaluation.  Only the overload carrying the private capability
+    // can propose a reset.
+    return decideFaultResetInternal(current, request, nullptr);
+}
+
+CommandDecision decideFaultReset(const RunCommandState& current,
+                                 const FaultResetRequest& request,
+                                 const FaultResetAuthorization& authorization) {
+    return decideFaultResetInternal(current, request, &authorization);
 }
 
 void applyFaultCoreProjection(RunCommandState& state,

@@ -16,6 +16,8 @@
 
 namespace fermentation {
 
+class SafetyFaultService;
+
 // Vorwaertsdeklaration statt Include: `run_commands.hpp <->
 // sensor_selection.hpp` ist per Plan Abschnitt 7 NICHT zulaessig.
 // `decideApplySensorSelectionAction` braucht die externe Sensorevidenz dennoch
@@ -294,14 +296,66 @@ struct FaultResetEvaluation {
     FaultResetRejection rejection{FaultResetRejection::CauseStillActive};
 };
 
+// Internal reset capability.  A command may name a target and revision, but
+// it cannot construct the positive authorization that permits mutation.
+class FaultResetAuthorization final {
+   public:
+    [[nodiscard]] FaultInstanceId targetFault() const { return targetFault_; }
+    [[nodiscard]] std::uint32_t expectedFaultRevision() const {
+        return expectedFaultRevision_;
+    }
+    [[nodiscard]] std::uint32_t safetyRevision() const {
+        return safetyRevision_;
+    }
+    [[nodiscard]] bool causeFree() const { return causeFree_; }
+    [[nodiscard]] bool safetyChecksPassed() const {
+        return safetyChecksPassed_;
+    }
+    [[nodiscard]] bool authorizationSatisfied() const {
+        return authorizationSatisfied_;
+    }
+    [[nodiscard]] bool noOtherBlockingFault() const {
+        return noOtherBlockingFault_;
+    }
+    [[nodiscard]] bool valid() const { return authorityToken_ != 0U; }
+
+   private:
+    friend class SafetyFaultService;
+    FaultResetAuthorization(FaultInstanceId targetFault,
+                            std::uint32_t expectedFaultRevision,
+                            std::uint32_t safetyRevision, bool causeFree,
+                            bool safetyChecksPassed,
+                            bool authorizationSatisfied,
+                            bool noOtherBlockingFault,
+                            std::uint64_t authorityToken)
+        : targetFault_(targetFault),
+          expectedFaultRevision_(expectedFaultRevision),
+          safetyRevision_(safetyRevision),
+          causeFree_(causeFree),
+          safetyChecksPassed_(safetyChecksPassed),
+          authorizationSatisfied_(authorizationSatisfied),
+          noOtherBlockingFault_(noOtherBlockingFault),
+          authorityToken_(authorityToken) {}
+
+    FaultInstanceId targetFault_;
+    std::uint32_t expectedFaultRevision_{0U};
+    std::uint32_t safetyRevision_{0U};
+    bool causeFree_{false};
+    bool safetyChecksPassed_{false};
+    bool authorizationSatisfied_{false};
+    bool noOtherBlockingFault_{false};
+    std::uint64_t authorityToken_{0U};
+};
+
 struct FaultResetRequest {
     CommandEnvelope envelope;
-    // R2: einziges fachliches Reset-Ziel. Das alte evaluation-Feld bleibt
-    // temporaer als ABI-/Testkompatibilitaetsprojektion erhalten; neue
-    // Aufrufer setzen es nicht und positive Flags werden nicht als
-    // Safety-Autoritaet konsumiert.
+    // R2: exactly one target. The expected revision is carried by the
+    // envelope's expectedFaultRevision field; no positive evaluation is an
+    // input to this command.
+    FaultInstanceId targetFault;
+    // Legacy diagnostic payload only. decideFaultReset deliberately ignores
+    // every field here; it is not a reset authority.
     FaultResetEvaluation evaluation;
-    std::optional<FaultInstanceId> targetFault;
 };
 
 enum class CommandEffect : std::uint8_t {
@@ -449,6 +503,9 @@ struct CommandDecision {
     const RunCommandState& current, const MessageCommandRequest& request);
 [[nodiscard]] CommandDecision decideFaultReset(
     const RunCommandState& current, const FaultResetRequest& request);
+[[nodiscard]] CommandDecision decideFaultReset(
+    const RunCommandState& current, const FaultResetRequest& request,
+    const FaultResetAuthorization& authorization);
 // #21, 6.14.3: ruft applySensorSelectionDecision (sensor_selection.hpp) auf
 // derselben Kandidatenkopie wie der automatische Coordinator-Pfad auf - keine
 // zweite Regelimplementierung. `plausibility` ist ein eigener Parameter statt
