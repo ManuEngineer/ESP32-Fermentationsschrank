@@ -179,6 +179,17 @@ In `SAFE_BOOT` gesperrt:
 Nach Beseitigung der Ursache muss das Geraet erst bewusst und validiert nach
 `STANDBY` zurueckkehren. Erst dort kann der Servicebereich geoeffnet werden.
 
+## Issue #24 R2 – strukturierter Safety-Nachweis
+
+Lokale Diagnose projiziert den stabilen Faultcode, die `FaultInstanceId`,
+Fault-/Recordrevision, Dominanz, Restart-Episode, `RestartEvidenceId`,
+Resetgrund und die Resetentscheidung. Die Ereignisse werden ueber das
+bestehende `IEventJournal` geschrieben; es gibt kein paralleles Safetyjournal.
+Ein `FaultResetCommitted`-Ereignis beweist nur den verifizierten Commit und
+den anschliessenden autorisierten Resetpfad, nicht eine automatische
+Freigabe in derselben Operation. Hardwaretests und ESP-IDF-Resetursachen
+bleiben separate, noch nicht ausgefuehrte Nachweise.
+
 ## Gefuehrter Service-Hardwaretest
 
 ### Voraussetzungen

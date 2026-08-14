@@ -16,6 +16,22 @@ Plausibilitaetsgrenzen bleiben bis zu den Versuchen am realen Aufbau
 `TBD_COMMISSIONING`, soweit dieses Dokument keine firmwarefeste Obergrenze
 festlegt.
 
+## Issue #24 R2 – zentrale Codeprojektion
+
+Die fachlichen Producer liefern ihre bestehende Evidenz an den zentralen
+Safety-Service. Die dortige Projektion ist: Sensor-/Sicherheitsfreigabe und
+qualifizierte Eingriffsgrenze `S3-001` bis `S3-004`, fehlende sichere
+Reaktion `S3-009`, Aktor-/Luefter-/H-Brueckenfehler `S3-006`/`S3-007`,
+#23-Request-Watchdog `S3-008`; Konfigurationsruntime,
+Commit-Unbestimmtheit, Verfuegbarkeit und Integritaet `Y4-001` bis `Y4-004`.
+Unbekannte Producerwerte werden nicht in einen harmlosen Zustand umgedeutet.
+
+Die konkrete `SAFETY_RECOVERY`-Anforderung bleibt auf hoechstens zwei
+qualifizierte Versuche begrenzt, benoetigt aktuelle Sensor-, Luefter- und
+Aktor-Evidenz und erreicht den Sink nur ueber den bestehenden Planner. Die
+Leistungs- und Temperaturgrenzen bleiben `TBD_COMMISSIONING` und werden in
+diesem Issue nicht erfunden.
+
 ## Sicherheitsrelevante Temperatursensoren
 
 Das erste Release verwendet drei Temperaturrollen:

@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "control_context_types.hpp"
+#include "fault_types.hpp"
 #include "sensor_selection_types.hpp"
 #include "temperature_control_types.hpp"
 
@@ -17,10 +18,62 @@ enum class ActuatorSafetyGateStatus : std::uint8_t {
     Unresolved,
     Allowed,
     ImmediateStop,
+    SafetyRecovery,
+    SAFETY_RECOVERY = SafetyRecovery,
+};
+
+// Begrenzter Sonderpfad fuer S3-004. Die Felder sind ein vollstaendiger
+// Nachweis-Snapshot; fehlende Evidenz ist false und bleibt damit
+// fail-closed. Normale ControlRequests und caller-supplied Allowed koennen
+// diesen Datensatz nicht ersetzen.
+struct SafetyRecoveryRequest {
+    FaultInstanceId targetFault;
+    AbstractControlDirection triggeringDirection{
+        AbstractControlDirection::Unknown};
+    AbstractControlDirection recoveryDirection{AbstractControlDirection::Unknown};
+    std::uint32_t faultRevision{0U};
+    std::uint32_t safetyEvidenceRevision{0U};
+    std::uint8_t attemptIndex{0U};
+    std::uint8_t maxAttempts{0U};
+    std::uint64_t sequence{0U};
+    std::uint64_t createdAtMonotonicMillis{0U};
+    double timeQuote{0.0};
+    ControlRequestContext contextAtQualification;
+    std::uint32_t qualifiedSensorEvidence{0U};
+    std::uint32_t qualifiedFanEvidence{0U};
+    std::uint32_t qualifiedActuatorEvidence{0U};
+    bool hardLimitNotReached{false};
+    bool noSensorConflict{false};
+    bool triggeringDirectionOff{false};
+    bool safeCurrentWhenAvailable{false};
+    bool minimumOffTimeElapsed{false};
+    bool polarityDeadTimeElapsed{false};
+    std::uint32_t safetyRecoveryParametersRevision{0U};
+
+    [[nodiscard]] bool structurallyValid() const {
+        return targetFault.valid() &&
+               triggeringDirection != AbstractControlDirection::Unknown &&
+               recoveryDirection != AbstractControlDirection::Unknown &&
+               triggeringDirection != recoveryDirection && faultRevision != 0U &&
+               safetyEvidenceRevision != 0U && attemptIndex >= 1U &&
+               maxAttempts >= attemptIndex && maxAttempts <= 2U && sequence != 0U &&
+               std::isfinite(timeQuote) &&
+               timeQuote > 0.0 && timeQuote <= 1.0 &&
+               qualifiedSensorEvidence != 0U && qualifiedFanEvidence != 0U &&
+               qualifiedActuatorEvidence != 0U && hardLimitNotReached &&
+               noSensorConflict && triggeringDirectionOff &&
+               safeCurrentWhenAvailable && minimumOffTimeElapsed &&
+               polarityDeadTimeElapsed && safetyRecoveryParametersRevision != 0U;
+    }
 };
 
 struct ActuatorSafetyGateInput {
     ActuatorSafetyGateStatus status{ActuatorSafetyGateStatus::Unresolved};
+    std::optional<SafetyRecoveryRequest> safetyRecovery;
+
+    ActuatorSafetyGateInput() = default;
+    explicit ActuatorSafetyGateInput(ActuatorSafetyGateStatus value)
+        : status(value) {}
 };
 
 // Reine, fuer #24 konsumierbare Evidenz. Freigabe ausschliesslich ueber
@@ -90,6 +143,7 @@ enum class ActuatorPlanReason : std::uint8_t {
     CounterDirectionConfirming,
     WindowPulseMissed,
     ScheduledWithinWindow,
+    SafetyRecovery,
 };
 
 // Es existiert zu jedem Zeitpunkt genau EIN PulseAccumulator. direction ==

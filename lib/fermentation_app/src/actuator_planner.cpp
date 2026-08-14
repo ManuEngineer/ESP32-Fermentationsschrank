@@ -51,6 +51,7 @@ namespace {
         case ActuatorSafetyGateStatus::Unresolved:
         case ActuatorSafetyGateStatus::Allowed:
         case ActuatorSafetyGateStatus::ImmediateStop:
+        case ActuatorSafetyGateStatus::SafetyRecovery:
             return true;
     }
     return false;
@@ -141,6 +142,7 @@ namespace {
         case ActuatorPlanReason::TimeInvalid:
         case ActuatorPlanReason::SafetyGateUnresolved:
         case ActuatorPlanReason::ExternalSafetyOverride:
+        case ActuatorPlanReason::SafetyRecovery:
         case ActuatorPlanReason::RequestWatchdogFaultLatched:
         case ActuatorPlanReason::StaleRequestWatchdog:
         case ActuatorPlanReason::NoValidRequest:
@@ -1073,6 +1075,32 @@ ActuatorPlanTickResult ActuatorPlanner::runPhaseB(
     if (input.safetyGate.status == ActuatorSafetyGateStatus::ImmediateStop) {
         return rejectToIdle(admission, now, ActuatorPlanStatus::Idle,
                             ActuatorPlanReason::ExternalSafetyOverride);
+    }
+
+    if (input.safetyGate.status == ActuatorSafetyGateStatus::SafetyRecovery) {
+        if (!input.safetyGate.safetyRecovery.has_value() ||
+            !input.safetyGate.safetyRecovery->structurallyValid() ||
+            input.newEvaluation.has_value() ||
+            !input.temperatureControlledPhase ||
+            state_.latchedWatchdogFault.has_value() ||
+            !isStructurallyValidContext(
+                input.safetyGate.safetyRecovery->contextAtQualification) ||
+            input.safetyGate.safetyRecovery->createdAtMonotonicMillis > now) {
+            return rejectToIdle(admission, now, ActuatorPlanStatus::InvalidInput,
+                                ActuatorPlanReason::MalformedInput);
+        }
+        const auto& recovery = *input.safetyGate.safetyRecovery;
+        AcceptedControlCommand candidate;
+        candidate.sequence = recovery.sequence;
+        candidate.direction = recovery.recoveryDirection;
+        candidate.timeQuote = recovery.timeQuote;
+        candidate.demandClass = ActuatorDemandClass::NormalDemand;
+        candidate.contextAtAcceptance = recovery.contextAtQualification;
+        const auto result = evaluateHeatingCoolingDemand(
+            candidate, ActuatorAdmissionOutcome::Accepted, now);
+        auto qualifiedResult = result;
+        qualifiedResult.reason = ActuatorPlanReason::SafetyRecovery;
+        return qualifiedResult;
     }
 
     // I-4: bereits gelatchter Watchdog-Fehler.

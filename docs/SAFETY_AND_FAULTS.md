@@ -10,6 +10,29 @@ Fehlerursachen.
 Konkrete Temperatur-, Sensor-, Luefter-, Aktor-, Versorgungs- und
 Softwarefehler werden in Phase 8B und 8C ergaenzt.
 
+## Issue #24 R2 – kanonischer Implementierungsvertrag
+
+Der produktive Faultkern fuehrt genau vier stabile Klassen: `PROCESS_WARNING`,
+`OPERATING_FAULT`, `LATCHED_SAFETY_FAULT` und `LATCHED_SYSTEM_FAULT`. Codes,
+Dominanz, `FaultInstanceId`, Revisionen sowie Primary-/Follow-up-Beziehungen
+werden zentral und bounded gefuehrt; unbekannte Codes oder semantisch nicht
+validierbare Datensaetze werden als `Y4-011` behandelt und bleiben
+fail-closed. Der persistente Safety-State darf hoechstens acht Latches
+enthalten und ist kein zweites Run-Journal.
+
+`ACKNOWLEDGED`, `CAUSE_CLEARED_LOCKED` und `CLEARED` bleiben getrennt. Ein
+`ResetFault` zielt auf genau eine `FaultInstanceId` und eine erwartete
+Revision. Erst die interne Safety-Pruefung, der verifizierte Write-before-
+Apply-Commit und der autorisierte Reset-Bootpfad duerfen den Latch als
+`CLEARED` projizieren; Quittierung, normaler Neustart und eine positive
+Caller-Evaluation reichen nicht aus.
+
+`S3-004` kann nach vollstaendiger, bounded Evidenz als typisiertes
+`SAFETY_RECOVERY` an den bestehenden #23-Planner projiziert werden. Das
+loescht den Latch nicht. `S3-008` bindet die vorhandene
+`ActuatorWatchdogFaultEvidence`; der externe Planner-Reset ist erst nach
+erfolgreichem #24-Resetcommit zulaessig.
+
 ## Grundsaetze
 
 - Ein Fehler darf niemals durch Komfortfunktionen, Mindestlaufzeiten oder einen

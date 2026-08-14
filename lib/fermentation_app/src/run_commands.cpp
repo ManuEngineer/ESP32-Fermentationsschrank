@@ -1307,26 +1307,94 @@ CommandDecision decideFaultReset(const RunCommandState& current,
         decision.status = CommandStatus::NotConfirmed;
         return decision;
     }
-    const auto& evaluation = request.evaluation;
-    if (evaluation.faultRevision != current.faultRevision) {
-        decision.status = CommandStatus::StaleState;
-        return decision;
-    }
-    if (!evaluation.allowed || evaluation.causeStillActive ||
-        !evaluation.safetyChecksPassed || !evaluation.authorizationSatisfied ||
-        evaluation.otherBlockingFaultActive ||
-        evaluation.rejection != FaultResetRejection::None) {
-        decision.status = CommandStatus::SafetyRejected;
-        return decision;
+    if (request.targetFault.has_value()) {
+        const auto& target = *request.targetFault;
+        const FaultRecord* targetRecord = nullptr;
+        for (std::size_t index = 0U; index < current.faultSnapshot.count;
+             ++index) {
+            if (current.faultSnapshot.records[index].instanceId == target) {
+                targetRecord = &current.faultSnapshot.records[index];
+                break;
+            }
+        }
+        if (targetRecord == nullptr || targetRecord->status == FaultStatus::Cleared) {
+            decision.status = CommandStatus::ContextMissing;
+            return decision;
+        }
+        if (targetRecord->faultRevision != current.faultRevision) {
+            decision.status = CommandStatus::StaleState;
+            return decision;
+        }
+        if (targetRecord->causeActive || !targetRecord->latched ||
+            targetRecord->status != FaultStatus::CauseClearedLocked) {
+            decision.status = CommandStatus::SafetyRejected;
+            return decision;
+        }
+        for (std::size_t index = 0U; index < current.faultSnapshot.count;
+             ++index) {
+            const auto& other = current.faultSnapshot.records[index];
+            if (other.instanceId != target && isBlockingFault(other)) {
+                decision.status = CommandStatus::SafetyRejected;
+                return decision;
+            }
+        }
+    } else {
+        // Legacy projection path, kept only so existing #15 consumers can
+        // migrate atomically. The new targetFault path above never trusts
+        // caller-supplied positive evaluation flags.
+        const auto& evaluation = request.evaluation;
+        if (evaluation.faultRevision != current.faultRevision) {
+            decision.status = CommandStatus::StaleState;
+            return decision;
+        }
+        if (!evaluation.allowed || evaluation.causeStillActive ||
+            !evaluation.safetyChecksPassed ||
+            !evaluation.authorizationSatisfied ||
+            evaluation.otherBlockingFaultActive ||
+            evaluation.rejection != FaultResetRejection::None) {
+            decision.status = CommandStatus::SafetyRejected;
+            return decision;
+        }
     }
     if (!requireRevisionCapacity(decision, decision.before.faultRevision)) {
         return decision;
     }
     beginMutation(decision);
     ++decision.after.faultRevision;
-    decision.after.criticalSafetyEventPending = false;
+    if (request.targetFault.has_value()) {
+        for (std::size_t index = 0U; index < decision.after.faultSnapshot.count;
+             ++index) {
+            auto& record = decision.after.faultSnapshot.records[index];
+            if (record.instanceId == *request.targetFault) {
+                record.status = FaultStatus::Cleared;
+                record.faultRevision = decision.after.faultRevision;
+                break;
+            }
+        }
+        decision.after.faultSnapshot.revision = decision.after.faultRevision;
+        decision.after.criticalSafetyEventPending = false;
+        for (std::size_t index = 0U;
+             index < decision.after.faultSnapshot.count; ++index) {
+            if (isBlockingFault(decision.after.faultSnapshot.records[index])) {
+                decision.after.criticalSafetyEventPending = true;
+                break;
+            }
+        }
+        decision.after.faultSnapshot.criticalSafetyEventPending =
+            decision.after.criticalSafetyEventPending;
+    } else {
+        decision.after.criticalSafetyEventPending = false;
+    }
     static_cast<void>(addEffect(decision, CommandEffect::FaultResetAuthorized));
     return decision;
+}
+
+void applyFaultCoreProjection(RunCommandState& state,
+                              const FaultCore& faultCore) {
+    state.faultSnapshot = faultCore.snapshot();
+    state.faultRevision = state.faultSnapshot.revision;
+    state.criticalSafetyEventPending =
+        state.faultSnapshot.criticalSafetyEventPending;
 }
 
 CommandDecision decideApplySensorSelectionAction(
@@ -1479,6 +1547,8 @@ CommandStatus applyRunCommand(RunCommandState& current,
         current.runRevision != decision.before.runRevision ||
         current.messageRevision != decision.before.messageRevision ||
         current.faultRevision != decision.before.faultRevision ||
+        !equalFaultCoreSnapshot(current.faultSnapshot,
+                                decision.before.faultSnapshot) ||
         current.criticalSafetyEventPending !=
             decision.before.criticalSafetyEventPending ||
         current.activeRunId != decision.before.activeRunId ||

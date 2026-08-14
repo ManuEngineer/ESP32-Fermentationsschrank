@@ -12,6 +12,7 @@
 #include "run_snapshot.hpp"
 #include "sensor_selection_types.hpp"
 #include "control_context_types.hpp"
+#include "fault_types.hpp"
 
 namespace fermentation {
 
@@ -295,7 +296,12 @@ struct FaultResetEvaluation {
 
 struct FaultResetRequest {
     CommandEnvelope envelope;
+    // R2: einziges fachliches Reset-Ziel. Das alte evaluation-Feld bleibt
+    // temporaer als ABI-/Testkompatibilitaetsprojektion erhalten; neue
+    // Aufrufer setzen es nicht und positive Flags werden nicht als
+    // Safety-Autoritaet konsumiert.
     FaultResetEvaluation evaluation;
+    std::optional<FaultInstanceId> targetFault;
 };
 
 enum class CommandEffect : std::uint8_t {
@@ -343,6 +349,7 @@ struct RunCommandState {
     std::size_t messageCount{0U};
     std::uint32_t messageRevision{0U};
     std::uint32_t faultRevision{0U};
+    FaultCoreSnapshot faultSnapshot;
     bool criticalSafetyEventPending{false};
     std::uint32_t commandSequence{0U};
     std::uint64_t lastCommandMonotonicMillis{0U};
@@ -476,6 +483,11 @@ void clearActiveRunState(RunCommandState& state);
 // zusaetzlicher Include.
 void applySensorSelectionMutation(RunCommandState& state,
                                   const SensorSelectionStateMutation& mutation);
+
+// Einziger Projektionseinstieg aus dem kanonischen #24-Faultkern in den
+// bestehenden Command-/Messagekonsumenten.
+void applyFaultCoreProjection(RunCommandState& state,
+                              const FaultCore& faultCore);
 
 // Reuses the existing QualificationReset -> REACHING_TARGET topology for an
 // effective sensor-role change committed while target qualification is active.

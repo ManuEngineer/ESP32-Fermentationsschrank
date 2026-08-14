@@ -126,6 +126,16 @@ Mindestens:
 Die Simulation prueft erwartete Zustaende, Meldungen, Revisionen und abstrakte
 Aktorbefehle. Eine verbotene Aktorfreigabe laesst den Test fehlschlagen.
 
+### Aktueller Draft-Nachweis fuer Issue #24
+
+| Bereich | Status | Nachweis |
+|---|---|---|
+| bounded Faultkern, Klassen, Dominanz, Latchpersistenz, Restart-Episode und Reset-Boot | PASS | `pio test -e native --filter test_issue24_safety` (10/10) |
+| bestehendes #23-Safety-Gate und `SAFETY_RECOVERY`-Pfad | PASS | `pio test -e native --filter test_actuator_planner` (44/44) plus Issue-24-Integrationstest |
+| bestehender #15-Command-/Faultprojektion | PASS | `pio test -e native --filter test_run_commands` (43/43) |
+| bestehender Prozessautomat und SAFE_BOOT-Topologie | PASS | `pio test -e native --filter test_process_state_machine` (35/35) |
+| vollstaendiger nativer Lauf, ESP-IDF-Profile, GitHub-CI, Hardware/Bring-up | NOT_RUN | Draft-Gate; Owner-Review und Ready-for-review stehen aus |
+
 ### Ebene 3: Build- und statische Integrationstests
 
 Mindestens:

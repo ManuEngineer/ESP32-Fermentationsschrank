@@ -166,6 +166,12 @@ Sperre oder nicht ausreichend nachweisbarer Systemintegritaet.
 Eine Rueckkehr zu `STANDBY` erfordert beseitigte Ursache, bestandene
 Integritaetspruefung und den fuer die Fehlerklasse vorgesehenen bewussten Reset.
 
+Der #24-Bootentscheid kommt vor dieser Projektion: Safety-State, Resetursache,
+Restart-Evidence, Konfigurations-Gate und verbleibende Latches werden zuerst
+validiert. Ein normaler Neustart erzeugt keinen direkten
+`SAFE_BOOT -> STANDBY`-Uebergang; nur ein verifizierter `FaultResetBootIntent`
+geht anschliessend durch die bestehende Boot-/Recovery-/Standby-Kette.
+
 ## STANDBY
 
 ### Zweck
