@@ -74,7 +74,39 @@ ActuatorPlanTickResult result(AbstractControlDirection direction, bool outer,
     return value;
 }
 
-void test_driver_orders_heating_enable_before_hbridge_direction() {
+void assertTraceEntry(const SharedActuatorCallTrace::Entry& entry,
+                      SharedActuatorCallTrace::Sink sink, std::uint8_t call,
+                      bool value) {
+    TEST_ASSERT_TRUE(entry.sink == sink);
+    TEST_ASSERT_EQUAL_UINT8(call, entry.call);
+    TEST_ASSERT_TRUE(entry.value == value);
+}
+
+// Replay only the Peltier entries and prove that the shared trace contains a
+// real all-off state between active directions. The underlying mock remains
+// the source of truth for the no-simultaneous-activation assertion.
+bool traceContainsPeltierOffBetweenActiveDirections(
+    const SharedActuatorCallTrace& trace) {
+    bool forward = false;
+    bool reverse = false;
+    bool hadHeating = false;
+    bool hadCooling = false;
+    bool offBetween = false;
+    for (const auto& entry : trace.entries) {
+        if (entry.sink != SharedActuatorCallTrace::Sink::Peltier) continue;
+        if (entry.call == 0U) {
+            forward = entry.value;
+        } else {
+            reverse = entry.value;
+        }
+        if (hadHeating && !forward && !reverse) offBetween = true;
+        if (forward) hadHeating = true;
+        if (reverse) hadCooling = true;
+    }
+    return hadHeating && hadCooling && offBetween;
+}
+
+void test_driver_cross_sink_trace_proves_global_safety_order() {
     MockBidirectionalActuatorSink peltier;
     MockBinaryOutputSink outer;
     MockBinaryOutputSink inner;
@@ -89,49 +121,43 @@ void test_driver_orders_heating_enable_before_hbridge_direction() {
     driver.apply(result(AbstractControlDirection::Heating, true, true));
 
     TEST_ASSERT_EQUAL_UINT(4U, trace.entries.size());
-    TEST_ASSERT_TRUE(trace.entries[0].sink ==
-                     SharedActuatorCallTrace::Sink::Peltier);
-    TEST_ASSERT_EQUAL_UINT8(1U, trace.entries[0].call);
-    TEST_ASSERT_FALSE(trace.entries[0].value);
-    TEST_ASSERT_TRUE(trace.entries[1].sink ==
-                     SharedActuatorCallTrace::Sink::OuterFan);
-    TEST_ASSERT_TRUE(trace.entries[1].value);
-    TEST_ASSERT_TRUE(trace.entries[2].sink ==
-                     SharedActuatorCallTrace::Sink::Peltier);
-    TEST_ASSERT_EQUAL_UINT8(0U, trace.entries[2].call);
-    TEST_ASSERT_TRUE(trace.entries[2].value);
-    TEST_ASSERT_TRUE(inner.enabled());
-    TEST_ASSERT_FALSE(peltier.simultaneousActivationObserved());
-}
+    assertTraceEntry(trace.entries[0], SharedActuatorCallTrace::Sink::Peltier,
+                     1U, false);
+    assertTraceEntry(trace.entries[1], SharedActuatorCallTrace::Sink::OuterFan,
+                     0U, true);
+    assertTraceEntry(trace.entries[2], SharedActuatorCallTrace::Sink::Peltier,
+                     0U, true);
+    assertTraceEntry(trace.entries[3], SharedActuatorCallTrace::Sink::InnerFan,
+                     0U, true);
 
-void test_driver_orders_cooling_and_forces_off_between_directions() {
-    MockBidirectionalActuatorSink peltier;
-    MockBinaryOutputSink outer;
-    MockBinaryOutputSink inner;
-    SharedActuatorCallTrace trace;
-    TracingBidirectionalSink tracedPeltier(peltier, trace);
-    TracingBinarySink tracedOuter(
-        outer, SharedActuatorCallTrace::Sink::OuterFan, trace);
-    TracingBinarySink tracedInner(
-        inner, SharedActuatorCallTrace::Sink::InnerFan, trace);
-    ActuatorPlanSinkDriver driver(tracedPeltier, tracedOuter, tracedInner);
-
+    const auto coolingStart = trace.entries.size();
     driver.apply(result(AbstractControlDirection::Cooling, true, true));
-    TEST_ASSERT_EQUAL_UINT8(0U, trace.entries[0].call);
-    TEST_ASSERT_FALSE(trace.entries[0].value);
-    TEST_ASSERT_TRUE(trace.entries[1].sink ==
-                     SharedActuatorCallTrace::Sink::OuterFan);
-    TEST_ASSERT_TRUE(trace.entries[2].sink ==
-                     SharedActuatorCallTrace::Sink::Peltier);
-    TEST_ASSERT_EQUAL_UINT8(1U, trace.entries[2].call);
-    TEST_ASSERT_TRUE(trace.entries[2].value);
-
+    TEST_ASSERT_EQUAL_UINT(8U, trace.entries.size());
+    assertTraceEntry(trace.entries[coolingStart + 0U],
+                     SharedActuatorCallTrace::Sink::Peltier, 0U, false);
+    assertTraceEntry(trace.entries[coolingStart + 1U],
+                     SharedActuatorCallTrace::Sink::OuterFan, 0U, true);
+    assertTraceEntry(trace.entries[coolingStart + 2U],
+                     SharedActuatorCallTrace::Sink::Peltier, 1U, true);
+    assertTraceEntry(trace.entries[coolingStart + 3U],
+                     SharedActuatorCallTrace::Sink::InnerFan, 0U, true);
+    TEST_ASSERT_TRUE(traceContainsPeltierOffBetweenActiveDirections(trace));
     driver.apply(result(AbstractControlDirection::Idle, false, false));
-    driver.apply(result(AbstractControlDirection::Heating, true, true));
+    TEST_ASSERT_EQUAL_UINT(12U, trace.entries.size());
+    assertTraceEntry(trace.entries[8], SharedActuatorCallTrace::Sink::Peltier,
+                     0U, false);
+    assertTraceEntry(trace.entries[9], SharedActuatorCallTrace::Sink::Peltier,
+                     1U, false);
+    assertTraceEntry(trace.entries[10], SharedActuatorCallTrace::Sink::OuterFan,
+                     0U, false);
+    assertTraceEntry(trace.entries[11], SharedActuatorCallTrace::Sink::InnerFan,
+                     0U, false);
+
     TEST_ASSERT_FALSE(peltier.simultaneousActivationObserved());
-    TEST_ASSERT_TRUE(peltier.forward());
+    TEST_ASSERT_FALSE(peltier.forward());
     TEST_ASSERT_FALSE(peltier.reverse());
-    TEST_ASSERT_TRUE(outer.enabled());
+    TEST_ASSERT_FALSE(outer.enabled());
+    TEST_ASSERT_FALSE(inner.enabled());
 }
 
 void test_driver_fails_closed_for_unknown_direction() {
@@ -223,8 +249,7 @@ int main(int argc, char** argv) {
     static_cast<void>(argc);
     static_cast<void>(argv);
     UNITY_BEGIN();
-    RUN_TEST(test_driver_orders_heating_enable_before_hbridge_direction);
-    RUN_TEST(test_driver_orders_cooling_and_forces_off_between_directions);
+    RUN_TEST(test_driver_cross_sink_trace_proves_global_safety_order);
     RUN_TEST(test_driver_fails_closed_for_unknown_direction);
     RUN_TEST(test_driver_fails_closed_for_corrupted_direction_after_heating);
     RUN_TEST(test_driver_fails_closed_for_corrupted_direction_after_cooling);
