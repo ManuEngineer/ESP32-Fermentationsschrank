@@ -118,6 +118,17 @@ class TemperatureControlApplicationOrchestrator {
     // context identity. Fail-closed (no valid ControlRequest) when the
     // current phase/run is not temperature-controlled or is structurally
     // inconsistent.
+    //
+    // Owner-Review F4: an active PI evaluation (one that could produce a
+    // Heating/Cooling ControlRequest) requires the planner-/driver-bound
+    // 5-argument constructor, because #23's feedback handoff is the only
+    // source of anti-windup feedback for #22. Without it, this method
+    // unconditionally returns Unavailable/NoCommissioning instead of ever
+    // running the PI core - not just on the first call, but on every call -
+    // so a caller can never observe a silent "PI running without feedback"
+    // mode. The 3-argument constructor remains valid for fixtures that
+    // exercise only the persistence/lifecycle boundary and never call this
+    // method for an active result.
     [[nodiscard]] TemperatureControlResult evaluateTemperatureControl(
         const RunCommandState& current,
         const TemperatureControlEvaluationEvidence& evidence);

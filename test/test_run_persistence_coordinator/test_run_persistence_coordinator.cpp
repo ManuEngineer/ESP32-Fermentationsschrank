@@ -3016,6 +3016,55 @@ void test_evaluate_temperature_control_invalid_context_resets_runtime() {
                              restored.controlRequest->identity.sequence);
 }
 
+// Owner-Review R6: a direct, dedicated proof that the 3-argument
+// (plannerless) orchestrator never runs #22's PI core for an active
+// evaluation - not just on the first call, but repeatedly, so a caller can
+// never observe a silent "PI running without feedback" mode.
+void test_evaluate_temperature_control_without_planner_fails_closed_unconditionally() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    auto state = readyActiveRunWithSensorSelection(coordinator, 951U);
+
+    TemperatureControlEvaluationEvidence evidence;
+    evidence.sampleTimestampMonotonicMillis = 100U;
+    evidence.air = bridgeSensorSample(20.0);
+    evidence.product = bridgeSensorSample(20.0);
+    const auto first = application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(first.status == TemperatureControlStatus::Unavailable);
+    TEST_ASSERT_TRUE(first.reason == TemperatureControlReason::NoCommissioning);
+    TEST_ASSERT_FALSE(first.controlRequest.has_value());
+    TEST_ASSERT_TRUE(first.direction == AbstractControlDirection::Idle);
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0, first.integralContributionQuote);
+    // The #22 core itself must never have been invoked: its own runtime
+    // state stays completely untouched.
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              controller.state().integralContributionQuote);
+    TEST_ASSERT_FALSE(controller.state().lastActiveDirection.has_value());
+    TEST_ASSERT_FALSE(controller.state().feedbackWindow.has_value());
+    TEST_ASSERT_FALSE(
+        controller.state().lastSampleTimestampMonotonicMillis.has_value());
+
+    // A second call repeats the exact scenario that would otherwise freeze
+    // #22's integrator silently after only the first call; it must fail
+    // closed identically, not run the PI core "just this once more".
+    evidence.sampleTimestampMonotonicMillis = 2'100U;
+    const auto second = application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(second.status == TemperatureControlStatus::Unavailable);
+    TEST_ASSERT_TRUE(second.reason ==
+                     TemperatureControlReason::NoCommissioning);
+    TEST_ASSERT_FALSE(second.controlRequest.has_value());
+    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.0,
+                              controller.state().integralContributionQuote);
+    TEST_ASSERT_FALSE(controller.state().lastActiveDirection.has_value());
+}
+
 void test_qualification_orchestrator_rejects_band_and_duration_mismatch() {
     SequencedWriteStore programStore;
     RunPersistenceCoordinator programCoordinator(
@@ -7582,6 +7631,8 @@ int main(int, char**) {
     RUN_TEST(
         test_evaluate_temperature_control_fails_closed_outside_temperature_control);
     RUN_TEST(test_evaluate_temperature_control_invalid_context_resets_runtime);
+    RUN_TEST(
+        test_evaluate_temperature_control_without_planner_fails_closed_unconditionally);
     RUN_TEST(
         test_qualification_orchestrator_rejects_band_and_duration_mismatch);
     RUN_TEST(
