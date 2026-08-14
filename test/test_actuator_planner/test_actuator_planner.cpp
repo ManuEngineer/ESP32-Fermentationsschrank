@@ -349,11 +349,17 @@ void test_normal_off_portion_of_a_started_pulse_stays_scheduled_never_missed() {
     TEST_ASSERT_TRUE(result.reason ==
                      ActuatorPlanReason::ScheduledWithinWindow);
 
-    // t=5000: erster Tick im planmaessigen Off-Anteil.
+    // t=5000: erster Tick im planmaessigen Off-Anteil. Owner-Review R2
+    // (Plan-19.2 #1): dieser tatsaechliche Active -> Idle-Uebergang setzt die
+    // physische Deaktivierungszeit.
     result = planner.tick(tickInput(5'000U, std::nullopt, airContext()));
     TEST_ASSERT_TRUE(result.status == ActuatorPlanStatus::Idle);
     TEST_ASSERT_TRUE(result.reason ==
                      ActuatorPlanReason::ScheduledWithinWindow);
+    TEST_ASSERT_TRUE(
+        planner.state().lastPhysicalDeactivationAtMonotonicMillis.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        5'000U, *planner.state().lastPhysicalDeactivationAtMonotonicMillis);
 
     // t=7000 und t=9999: weitere Ticks im selben Off-Anteil - Owner-Review
     // RZ4 verlangt hier weiterhin ScheduledWithinWindow, niemals
@@ -1683,6 +1689,54 @@ void test_accumulated_minimum_pulse_blocked_at_arming_gate_is_deferred_not_repla
     }
 }
 
+// Owner-Review R2 (Plan-19.2 #1/#2): ein naechster Fensterpuls wird vor,
+// exakt auf und nach dem Minimum-Off-Ende geprueft - vor dem Ende bleibt er
+// aus, exakt auf und danach ist er zulaessig, solange sein natuerliches
+// Fensterintervall noch laeuft. Fuer beide Richtungen geprueft.
+void test_next_pulse_blocked_before_and_allowed_at_and_after_minimum_off_end() {
+    auto parameters = testParameters();
+    parameters.switchingWindowMillis = 1'000U;
+    parameters.minimumOnMillis = 200U;
+    parameters.minimumOffMillis = 500U;
+    parameters.polarityDeadTimeMillis = 500U;
+
+    for (const auto direction : {AbstractControlDirection::Heating,
+                                 AbstractControlDirection::Cooling}) {
+        for (const std::uint64_t restartAt : {749U, 750U, 751U}) {
+            ActuatorPlanner planner{parameters};
+            static_cast<void>(planner.tick(tickInput(
+                0U, demandResult(direction, 1.0, 1U, 0U, airContext()),
+                airContext())));
+            // t=250: Teardown nach erfuellter Mindest-On-Zeit - der
+            // tatsaechliche Active -> Idle-Uebergang setzt die physische
+            // Deaktivierungszeit (#1); Minimum-Off-Ende liegt bei 250+500=750.
+            static_cast<void>(planner.tick(tickInput(
+                250U, offResult(2U, 250U, airContext()), airContext())));
+            TEST_ASSERT_TRUE(
+                planner.state()
+                    .lastPhysicalDeactivationAtMonotonicMillis.has_value());
+            TEST_ASSERT_EQUAL_UINT64(
+                250U,
+                *planner.state().lastPhysicalDeactivationAtMonotonicMillis);
+
+            const auto result = planner.tick(tickInput(
+                restartAt,
+                demandResult(direction, 1.0, 3U, restartAt, airContext()),
+                airContext()));
+            if (restartAt < 750U) {
+                TEST_ASSERT_TRUE(result.reason ==
+                                 ActuatorPlanReason::MinimumOffTimeHeld);
+                TEST_ASSERT_TRUE(result.appliedDirection ==
+                                 AbstractControlDirection::Idle);
+            } else {
+                TEST_ASSERT_TRUE(result.reason ==
+                                 ActuatorPlanReason::ScheduledWithinWindow);
+                TEST_ASSERT_TRUE(result.appliedDirection == direction);
+            }
+        }
+    }
+}
+
 void test_fan_deadlines_and_physical_edges_are_overflow_safe() {
     auto parameters = testParameters();
     parameters.switchingWindowMillis = 1'000U;
@@ -1877,6 +1931,8 @@ int main(int argc, char** argv) {
         test_watchdog_fault_evidence_reports_high_watermark_not_last_accepted);
     RUN_TEST(
         test_accumulated_minimum_pulse_blocked_at_arming_gate_is_deferred_not_replayed);
+    RUN_TEST(
+        test_next_pulse_blocked_before_and_allowed_at_and_after_minimum_off_end);
     RUN_TEST(test_fan_deadlines_and_physical_edges_are_overflow_safe);
     RUN_TEST(test_fans_follow_physical_output_and_independent_inner_phase);
     RUN_TEST(test_feedback_handoff_is_single_use_and_severity_is_monotone);
