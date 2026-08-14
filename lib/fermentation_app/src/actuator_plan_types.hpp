@@ -34,11 +34,11 @@ struct ActuatorWatchdogFaultEvidence {
 // Reason-/AirLimitState-Matrix (issue-22-pi-control-air-limits-plan.md,
 // Abschnitt 7.2). Kein neuer Schwellenwert, keine Neuberechnung.
 enum class ActuatorDemandClass : std::uint8_t {
-    NoValidRequest,         // Unavailable oder InvalidInput - keine ControlRequest
-    NeutralOff,              // Off / NeutralBand
-    AirLimitBlockedOff,      // Off / AirLimitBlocked
-    AirLimitReducedDemand,   // Demand / AirLimitReduced
-    NormalDemand,            // Demand / None oder Saturated
+    NoValidRequest,      // Unavailable oder InvalidInput - keine ControlRequest
+    NeutralOff,          // Off / NeutralBand
+    AirLimitBlockedOff,  // Off / AirLimitBlocked
+    AirLimitReducedDemand,  // Demand / AirLimitReduced
+    NormalDemand,           // Demand / None oder Saturated
 };
 
 [[nodiscard]] inline ActuatorDemandClass classifyActuatorDemand(
@@ -215,6 +215,11 @@ struct PendingControlRequestFeedback {
     std::uint64_t sequence{0U};
     PreviousControlRequestFeedback::Disposition disposition{
         PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
+};
+
+struct PendingControlRequestFeedbackUpdate {
+    bool changed{false};
+    std::optional<PreviousControlRequestFeedback> feedback;
 };
 
 struct ActuatorPlannerRuntimeState {

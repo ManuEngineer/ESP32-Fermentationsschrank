@@ -111,6 +111,49 @@ namespace {
            left.controlSensorRole == right.controlSensorRole;
 }
 
+[[nodiscard]] int feedbackSeverity(
+    PreviousControlRequestFeedback::Disposition disposition) {
+    switch (disposition) {
+        case PreviousControlRequestFeedback::Disposition::
+            NoIntegratorConstraint:
+            return 0;
+        case PreviousControlRequestFeedback::Disposition::DeferredOrLimited:
+            return 1;
+        case PreviousControlRequestFeedback::Disposition::Rejected:
+            return 2;
+    }
+    return 2;
+}
+
+[[nodiscard]] bool isDownstreamLimitedReason(ActuatorPlanReason reason) {
+    switch (reason) {
+        case ActuatorPlanReason::MinimumOnTimeHeld:
+        case ActuatorPlanReason::MinimumOffTimeHeld:
+        case ActuatorPlanReason::PolarityDeadTimeHeld:
+        case ActuatorPlanReason::AccumulatingBelowThreshold:
+        case ActuatorPlanReason::CounterDirectionConfirming:
+        case ActuatorPlanReason::DirectionChangeApplied:
+        case ActuatorPlanReason::WindowPulseMissed:
+            return true;
+        case ActuatorPlanReason::MalformedInput:
+        case ActuatorPlanReason::NoCommissioning:
+        case ActuatorPlanReason::InvalidConfiguration:
+        case ActuatorPlanReason::TimeInvalid:
+        case ActuatorPlanReason::SafetyGateUnresolved:
+        case ActuatorPlanReason::ExternalSafetyOverride:
+        case ActuatorPlanReason::RequestWatchdogFaultLatched:
+        case ActuatorPlanReason::StaleRequestWatchdog:
+        case ActuatorPlanReason::NoValidRequest:
+        case ActuatorPlanReason::StaleRequestContext:
+        case ActuatorPlanReason::NeutralIdle:
+        case ActuatorPlanReason::AirLimitBlocked:
+        case ActuatorPlanReason::MinimumPulseTriggered:
+        case ActuatorPlanReason::ScheduledWithinWindow:
+            return false;
+    }
+    return true;
+}
+
 // Abschnitt 6.2 Schritt 2 / Abschnitt 7: vollstaendige strukturelle Pruefung
 // der neuen #22-Evaluation gegen die bereits abschliessende #22-Matrix
 // (issue-22-Plan Abschnitt 7.2): Status/Reason/AirLimitState-Legalitaet,
@@ -302,9 +345,16 @@ void ActuatorPlanner::setPhysicalDirection(AbstractControlDirection next,
         state_.lastPhysicalDeactivationDirection = state_.lastAppliedDirection;
         state_.lastPhysicalDeactivationAtMonotonicMillis = now;
         state_.currentOnPhaseStartedAtMonotonicMillis.reset();
+        // The outer fan follows the physical Peltier transition, not the
+        // still-live planning window. Every real deactivation starts or
+        // refreshes the mandatory post-run anchor.
+        state_.outerFanActive = true;
+        state_.outerFanDeactivationRequestedAtMonotonicMillis = now;
     }
     if (next != AbstractControlDirection::Idle) {
         state_.currentOnPhaseStartedAtMonotonicMillis = now;
+        state_.outerFanActive = true;
+        state_.outerFanDeactivationRequestedAtMonotonicMillis.reset();
     }
     state_.lastAppliedDirection = next;
 }
@@ -318,6 +368,75 @@ void ActuatorPlanner::clearPlanningState() {
     state_.counterDirectionConfirmed = false;
 }
 
+void ActuatorPlanner::mergeFeedback(
+    std::uint64_t sequence,
+    PreviousControlRequestFeedback::Disposition disposition) {
+    if (sequence == 0U) return;
+
+    if (!state_.pendingFeedback.has_value() ||
+        state_.pendingFeedback->sequence != sequence) {
+        state_.pendingFeedback =
+            PendingControlRequestFeedback{sequence, disposition};
+        state_.pendingFeedbackUpdateAvailable = true;
+        return;
+    }
+
+    if (feedbackSeverity(disposition) >
+        feedbackSeverity(state_.pendingFeedback->disposition)) {
+        state_.pendingFeedback->disposition = disposition;
+        state_.pendingFeedbackUpdateAvailable = true;
+    }
+}
+
+void ActuatorPlanner::mergeFeedbackForDemand(
+    const AcceptedControlCommand& command, ActuatorPlanReason reason) {
+    mergeFeedback(
+        command.sequence,
+        isDownstreamLimitedReason(reason)
+            ? PreviousControlRequestFeedback::Disposition::DeferredOrLimited
+            : PreviousControlRequestFeedback::Disposition::
+                  NoIntegratorConstraint);
+}
+
+void ActuatorPlanner::updateFanState(std::uint64_t now,
+                                     bool temperatureControlledPhase) {
+    if (state_.lastAppliedDirection != AbstractControlDirection::Idle) {
+        state_.outerFanActive = true;
+        state_.outerFanDeactivationRequestedAtMonotonicMillis.reset();
+    } else if (state_.outerFanActive &&
+               state_.outerFanDeactivationRequestedAtMonotonicMillis
+                   .has_value() &&
+               deadlineReached(
+                   now, *state_.outerFanDeactivationRequestedAtMonotonicMillis,
+                   parameters_.outerFanPostRunMillis)) {
+        state_.outerFanActive = false;
+    }
+
+    if (temperatureControlledPhase) {
+        state_.innerFanActive = true;
+        state_.innerFanDeactivationRequestedAtMonotonicMillis.reset();
+    } else {
+        if (state_.innerFanActive &&
+            !state_.innerFanDeactivationRequestedAtMonotonicMillis
+                 .has_value()) {
+            state_.innerFanDeactivationRequestedAtMonotonicMillis = now;
+        }
+        if (state_.innerFanActive &&
+            state_.innerFanDeactivationRequestedAtMonotonicMillis.has_value() &&
+            deadlineReached(
+                now, *state_.innerFanDeactivationRequestedAtMonotonicMillis,
+                parameters_.innerFanPostRunMillis)) {
+            state_.innerFanActive = false;
+        }
+    }
+}
+
+void ActuatorPlanner::copyFanStateToResult(
+    ActuatorPlanTickResult& result) const {
+    result.outerFanEnabled = state_.outerFanActive;
+    result.innerFanEnabled = state_.innerFanActive;
+}
+
 ActuatorPlanTickResult ActuatorPlanner::buildResult(
     ActuatorPlanStatus status, ActuatorPlanReason reason,
     ActuatorAdmissionOutcome admissionOutcome) const {
@@ -325,8 +444,7 @@ ActuatorPlanTickResult ActuatorPlanner::buildResult(
     result.status = status;
     result.reason = reason;
     result.appliedDirection = state_.lastAppliedDirection;
-    result.outerFanEnabled = false;  // Abschnitt 10, Commit 4.
-    result.innerFanEnabled = false;  // Abschnitt 10, Commit 4.
+    copyFanStateToResult(result);
     result.counterDirectionConfirming =
         state_.counterDirectionCandidate.has_value() &&
         !state_.counterDirectionConfirmed;
@@ -353,14 +471,13 @@ ActuatorPlanTickResult ActuatorPlanner::rejectToIdle(
         setPhysicalDirection(AbstractControlDirection::Idle, now);
     }
     clearPlanningState();
-    state_.pendingFeedback =
-        trustedSequence.has_value()
-            ? std::optional<PendingControlRequestFeedback>(
-                  PendingControlRequestFeedback{
-                      *trustedSequence,
-                      PreviousControlRequestFeedback::Disposition::Rejected})
-            : std::nullopt;
-    state_.pendingFeedbackUpdateAvailable = true;
+    if (trustedSequence.has_value()) {
+        mergeFeedback(*trustedSequence,
+                      PreviousControlRequestFeedback::Disposition::Rejected);
+    } else {
+        state_.pendingFeedback.reset();
+        state_.pendingFeedbackUpdateAvailable = true;
+    }
     return buildResult(status, reason, admission.admissionOutcome);
 }
 
@@ -594,6 +711,8 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
                     if (physical.active) {
                         setPhysicalDirection(oldDirection, now);
                     }
+                    mergeFeedbackForDemand(
+                        command, ActuatorPlanReason::MinimumOnTimeHeld);
                     return buildResult(ActuatorPlanStatus::Active,
                                        ActuatorPlanReason::MinimumOnTimeHeld,
                                        admissionOutcome);
@@ -601,6 +720,8 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
                 setPhysicalDirection(AbstractControlDirection::Idle, now);
                 state_.activeWindow.reset();
                 state_.accumulator = PulseAccumulator{};
+                mergeFeedbackForDemand(
+                    command, ActuatorPlanReason::DirectionChangeApplied);
                 return buildResult(ActuatorPlanStatus::Idle,
                                    ActuatorPlanReason::DirectionChangeApplied,
                                    admissionOutcome);
@@ -627,6 +748,10 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
                 !deadlineReached(now,
                                  *state_.currentOnPhaseStartedAtMonotonicMillis,
                                  parameters_.minimumOnMillis);
+            mergeFeedbackForDemand(
+                command, withinMinimumOn
+                             ? ActuatorPlanReason::MinimumOnTimeHeld
+                             : ActuatorPlanReason::CounterDirectionConfirming);
             return buildResult(
                 physicallyActiveAfter ? ActuatorPlanStatus::Active
                                       : ActuatorPlanStatus::Idle,
@@ -644,6 +769,8 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
                 // Unbestaetigte Gegenrichtung, altes Fenster/alte Physik
                 // bereits beendet (N-5d-b): physischer Ausgang bleibt Idle,
                 // keine Neuanlage; die Buchfuehrung bleibt oben erhalten.
+                mergeFeedbackForDemand(
+                    command, ActuatorPlanReason::CounterDirectionConfirming);
                 return buildResult(
                     ActuatorPlanStatus::Idle,
                     ActuatorPlanReason::CounterDirectionConfirming,
@@ -662,6 +789,10 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
                     deadlineReached(
                         now, *state_.lastPhysicalDeactivationAtMonotonicMillis,
                         parameters_.minimumOffMillis);
+                mergeFeedbackForDemand(
+                    command, minimumOffOk
+                                 ? ActuatorPlanReason::PolarityDeadTimeHeld
+                                 : ActuatorPlanReason::MinimumOffTimeHeld);
                 return buildResult(
                     ActuatorPlanStatus::Idle,
                     minimumOffOk ? ActuatorPlanReason::PolarityDeadTimeHeld
@@ -681,6 +812,8 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
             // Richtung ab, hat aber (noch) nicht die Bestaetigungsschwelle
             // erreicht - sonst waere sie oben bereits als Kandidat getrackt.
             // Kein automatischer Erststart, keine Energie.
+            mergeFeedbackForDemand(
+                command, ActuatorPlanReason::CounterDirectionConfirming);
             return buildResult(ActuatorPlanStatus::Idle,
                                ActuatorPlanReason::CounterDirectionConfirming,
                                admissionOutcome);
@@ -716,6 +849,7 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
         (sameDirectionMidWindowMismatch && ownQuoteBelowMinimum)
             ? ActuatorPlanReason::AccumulatingBelowThreshold
             : physical.reason;
+    mergeFeedbackForDemand(command, reason);
     return buildResult(physicalDirection() == AbstractControlDirection::Idle
                            ? ActuatorPlanStatus::Idle
                            : ActuatorPlanStatus::Active,
@@ -1056,7 +1190,10 @@ ActuatorPlanTickResult ActuatorPlanner::tick(
     }
 
     const PhaseAOutcome admission = runPhaseA(input);
-    return runPhaseB(input, admission);
+    ActuatorPlanTickResult result = runPhaseB(input, admission);
+    updateFanState(input.nowMonotonicMillis, input.temperatureControlledPhase);
+    copyFanStateToResult(result);
+    return result;
 }
 
 ActuatorPlanTickResult ActuatorPlanner::forceStop(
@@ -1083,18 +1220,48 @@ ActuatorPlanTickResult ActuatorPlanner::forceStop(
     state_.watchdogEpisodeStartedAtMonotonicMillis.reset();
     state_.lastNewRequestAcceptedAtMonotonicMillis.reset();
 
-    state_.pendingFeedback =
-        trustedSequence.has_value()
-            ? std::optional<PendingControlRequestFeedback>(
-                  PendingControlRequestFeedback{
-                      *trustedSequence,
-                      PreviousControlRequestFeedback::Disposition::Rejected})
-            : std::nullopt;
-    state_.pendingFeedbackUpdateAvailable = true;
+    if (trustedSequence.has_value()) {
+        mergeFeedback(*trustedSequence,
+                      PreviousControlRequestFeedback::Disposition::Rejected);
+    } else {
+        state_.pendingFeedback.reset();
+        state_.pendingFeedbackUpdateAvailable = true;
+    }
+
+    // A lifecycle boundary ends the controlled phase. Preserve an already
+    // running inner-fan post-run, while allowing a new controlled episode to
+    // re-enable it on its first planner tick.
+    if (state_.innerFanActive &&
+        !state_.innerFanDeactivationRequestedAtMonotonicMillis.has_value()) {
+        state_.innerFanDeactivationRequestedAtMonotonicMillis =
+            nowMonotonicMillis;
+    }
+    updateFanState(nowMonotonicMillis, false);
 
     return buildResult(ActuatorPlanStatus::Idle,
                        ActuatorPlanReason::NeutralIdle,
                        ActuatorAdmissionOutcome::NoCandidate);
+}
+
+void ActuatorPlanner::closeFeedbackEpisodeForOutstandingEvaluation() {
+    if (state_.pendingFeedback.has_value()) {
+        state_.pendingFeedback.reset();
+        state_.pendingFeedbackUpdateAvailable = true;
+    }
+}
+
+PendingControlRequestFeedbackUpdate ActuatorPlanner::takeFeedbackUpdate() {
+    if (!state_.pendingFeedbackUpdateAvailable) return {};
+
+    PendingControlRequestFeedbackUpdate update;
+    update.changed = true;
+    if (state_.pendingFeedback.has_value()) {
+        update.feedback =
+            PreviousControlRequestFeedback{state_.pendingFeedback->sequence,
+                                           state_.pendingFeedback->disposition};
+    }
+    state_.pendingFeedbackUpdateAvailable = false;
+    return update;
 }
 
 void ActuatorPlanner::applyExternalWatchdogFaultReset(

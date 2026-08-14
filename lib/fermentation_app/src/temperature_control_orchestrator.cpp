@@ -1,5 +1,7 @@
 #include "temperature_control_orchestrator.hpp"
 
+#include <utility>
+
 #include "control_context.hpp"
 #include "run_recovery.hpp"
 
@@ -53,6 +55,24 @@ void resetTemperatureControlAtBoundary(
     }
 }
 
+void resetActuatorPlanAtBoundary(
+    ActuatorPlanner& planner, ActuatorPlanSinkDriver& driver,
+    TemperatureControlLifecycleBoundary /*boundary*/,
+    std::uint64_t nowMonotonicMillis,
+    std::optional<PreviousControlRequestFeedback>& applicationPendingFeedback,
+    std::optional<TemperatureControlResult>& outstandingEvaluation) {
+    const auto episodeAtStop =
+        outstandingEvaluation.has_value()
+            ? ActuatorFeedbackEpisodeAtStop::ClosedByOutstandingEvaluation
+            : ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen;
+    const ActuatorPlanTickResult result =
+        planner.forceStop(nowMonotonicMillis, episodeAtStop);
+    driver.apply(result);
+    static_cast<void>(planner.takeFeedbackUpdate());
+    applicationPendingFeedback.reset();
+    outstandingEvaluation.reset();
+}
+
 TemperatureControlApplicationOrchestrator::
     TemperatureControlApplicationOrchestrator(
         RunPersistenceCoordinator& persistence,
@@ -62,6 +82,18 @@ TemperatureControlApplicationOrchestrator::
       temperatureController_(temperatureController),
       evaluator_(evaluator) {}
 
+TemperatureControlApplicationOrchestrator::
+    TemperatureControlApplicationOrchestrator(
+        RunPersistenceCoordinator& persistence,
+        TemperatureController& temperatureController,
+        TargetQualificationEvaluator& evaluator, ActuatorPlanner& planner,
+        ActuatorPlanSinkDriver& driver) noexcept
+    : persistence_(persistence),
+      temperatureController_(temperatureController),
+      evaluator_(evaluator),
+      planner_(&planner),
+      actuatorDriver_(&driver) {}
+
 RunPersistenceResult TemperatureControlApplicationOrchestrator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
     const RunCheckpointTime& time,
@@ -70,7 +102,7 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::persistCommand(
         current.processState.state};
     return complete(persistence_.persistCommand(current, decision, time,
                                                 liveSensorEvidence),
-                    before, current);
+                    before, current, time.monotonicMillis);
 }
 
 RunPersistenceResult
@@ -82,7 +114,7 @@ TemperatureControlApplicationOrchestrator::persistTransition(
         current.processState.state};
     return complete(persistence_.persistTransition(current, decision, time,
                                                    liveSensorEvidence),
-                    before, current);
+                    before, current, time.monotonicMillis);
 }
 
 RunPersistenceResult
@@ -94,7 +126,7 @@ TemperatureControlApplicationOrchestrator::persistSensorSelection(
         current.processState.state};
     return complete(persistence_.persistSensorSelection(current, mutation, time,
                                                         liveSensorEvidence),
-                    before, current);
+                    before, current, time.monotonicMillis);
 }
 
 RunPersistenceResult
@@ -106,7 +138,7 @@ TemperatureControlApplicationOrchestrator::activateRecovery(
         current.processState.state};
     return complete(
         recovery.activate(persistence_, current, time, liveSensorEvidence),
-        before, current, true);
+        before, current, time.monotonicMillis, true);
 }
 
 RunPersistenceResult
@@ -118,7 +150,7 @@ TemperatureControlApplicationOrchestrator::resolveRecoveryOutcome(
         current.processState.state};
     return complete(persistence_.resolveRecoveryOutcome(current, request, time,
                                                         liveSensorEvidence),
-                    before, current);
+                    before, current, time.monotonicMillis);
 }
 
 RunPersistenceResult
@@ -129,13 +161,13 @@ TemperatureControlApplicationOrchestrator::reevaluateRecoveryEvaluation(
         current.processState.state};
     return complete(persistence_.reevaluateRecoveryEvaluation(
                         current, time, liveSensorEvidence),
-                    before, current);
+                    before, current, time.monotonicMillis);
 }
 
 RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
     RunPersistenceResult result,
     const TemperatureControlLifecycleSnapshot& before, RunCommandState& current,
-    bool recoveryBoundary) {
+    std::uint64_t nowMonotonicMillis, bool recoveryBoundary) {
     if (result.status != RunPersistenceResultStatus::Applied) return result;
 
     const bool newActiveRun = hasEffect(result, CommandEffect::RunStarted);
@@ -167,6 +199,11 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
         }
         resetTemperatureControlAtBoundary(temperatureController_, evaluator_,
                                           boundary);
+        if (planner_ != nullptr && actuatorDriver_ != nullptr) {
+            resetActuatorPlanAtBoundary(
+                *planner_, *actuatorDriver_, boundary, nowMonotonicMillis,
+                pendingControlRequestFeedback_, outstandingEvaluation_);
+        }
     }
     if (committedTransition.has_value() && !newActiveRun &&
         (committedTransition ==
@@ -190,15 +227,9 @@ TemperatureControlResult
 TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
     const RunCommandState& current,
     const TemperatureControlEvaluationEvidence& evidence) {
-    const auto context = resolveEffectiveControlContext(current);
-    if (!context.valid) {
-        // Not temperature-controlled or structurally inconsistent (Run-/
-        // Snapshot-Widerspruch): fail-closed, no ControlRequest. A
-        // structurally inconsistent state may still remain in a
-        // temperature-controlled phase, so clear all volatile PI state here
-        // as well. TemperatureController::resetRuntime() retains the request
-        // sequence high-watermark.
-        temperatureController_.resetRuntime();
+    if (planner_ != nullptr && outstandingEvaluation_.has_value()) {
+        // A second evaluation before planner consumption is not a new input;
+        // fail closed without disturbing the pending result or feedback slot.
         TemperatureControlResult result;
         result.status = TemperatureControlStatus::InvalidInput;
         result.reason = TemperatureControlReason::InvalidConfiguration;
@@ -207,19 +238,83 @@ TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
         return result;
     }
 
-    TemperatureControlInput input;
-    input.sampleTimestampMonotonicMillis =
-        evidence.sampleTimestampMonotonicMillis;
-    input.targetCelsius = context.target.targetCelsius;
-    input.controlSensorRole = context.controlSensorRole;
-    input.air = evidence.air;
-    input.product = evidence.product;
-    input.previousControlRequestFeedback =
-        evidence.previousControlRequestFeedback;
-    input.processTransitionSequence =
-        context.requestContext.processTransitionSequence;
-    input.runRevision = context.requestContext.runRevision;
-    return temperatureController_.evaluate(input);
+    const auto context = resolveEffectiveControlContext(current);
+    TemperatureControlResult result;
+    if (!context.valid) {
+        // Not temperature-controlled or structurally inconsistent (Run-/
+        // Snapshot-Widerspruch): fail-closed, no ControlRequest. A
+        // structurally inconsistent state may still remain in a
+        // temperature-controlled phase, so clear all volatile PI state here
+        // as well. TemperatureController::resetRuntime() retains the request
+        // sequence high-watermark.
+        temperatureController_.resetRuntime();
+        result.status = TemperatureControlStatus::InvalidInput;
+        result.reason = TemperatureControlReason::InvalidConfiguration;
+        result.airLimitState = AirLimitState::Unavailable;
+        result.direction = AbstractControlDirection::Idle;
+    } else {
+        TemperatureControlInput input;
+        input.sampleTimestampMonotonicMillis =
+            evidence.sampleTimestampMonotonicMillis;
+        input.targetCelsius = context.target.targetCelsius;
+        input.controlSensorRole = context.controlSensorRole;
+        input.air = evidence.air;
+        input.product = evidence.product;
+        input.previousControlRequestFeedback =
+            planner_ == nullptr
+                ? std::nullopt
+                : std::exchange(pendingControlRequestFeedback_, std::nullopt);
+        input.processTransitionSequence =
+            context.requestContext.processTransitionSequence;
+        input.runRevision = context.requestContext.runRevision;
+        result = temperatureController_.evaluate(input);
+    }
+
+    if (planner_ != nullptr) {
+        outstandingEvaluation_ = result;
+        // Closing the prior feedback episode happens when the result becomes
+        // outstanding, before a lifecycle stop can inspect acceptedCommand.
+        planner_->closeFeedbackEpisodeForOutstandingEvaluation();
+    }
+    return result;
+}
+
+ActuatorPlanTickResult
+TemperatureControlApplicationOrchestrator::tickActuatorPlan(
+    const RunCommandState& current, std::uint64_t nowMonotonicMillis,
+    ActuatorSafetyGateInput safetyGate) {
+    if (planner_ == nullptr || actuatorDriver_ == nullptr) {
+        ActuatorPlanTickResult result;
+        result.status = ActuatorPlanStatus::Unconfigured;
+        result.reason = ActuatorPlanReason::NoCommissioning;
+        result.appliedDirection = AbstractControlDirection::Idle;
+        return result;
+    }
+
+    const EffectiveControlContext context =
+        resolveEffectiveControlContext(current);
+    ActuatorPlanTickInput input;
+    input.nowMonotonicMillis = nowMonotonicMillis;
+    input.currentCanonicalContext = context.requestContext;
+    input.temperatureControlledPhase =
+        isTemperatureControlledProcessState(current.processState.state);
+    input.safetyGate = safetyGate;
+    if (!context.valid) {
+        // No valid effective context may accidentally keep the physical gate
+        // open when a caller omitted a fresh #22 evaluation.
+        input.safetyGate.status = ActuatorSafetyGateStatus::Unresolved;
+    }
+    if (outstandingEvaluation_.has_value()) {
+        input.newEvaluation = std::move(outstandingEvaluation_);
+        outstandingEvaluation_.reset();
+    }
+
+    ActuatorPlanTickResult result = planner_->tick(input);
+    actuatorDriver_->apply(result);
+    const PendingControlRequestFeedbackUpdate update =
+        planner_->takeFeedbackUpdate();
+    if (update.changed) pendingControlRequestFeedback_ = update.feedback;
+    return result;
 }
 
 bool TemperatureControlApplicationOrchestrator::needsRuntimeReset(

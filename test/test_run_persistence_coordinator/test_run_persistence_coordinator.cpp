@@ -10,6 +10,8 @@
 #include "run_recovery.hpp"
 #include "qualification_orchestrator.hpp"
 #include "control_context.hpp"
+#include "mock_bidirectional_actuator_sink.hpp"
+#include "mock_binary_output_sink.hpp"
 // PR-#99-Abschlussreview-Korrektur: der manuelle Transportvertrag-
 // Integrationstest (persistCommand fuer ApplySensorSelectionAction) braucht
 // CrossRolePlausibilityContext/decideApplySensorSelectionAction - beides nur
@@ -234,6 +236,23 @@ IntegratorTransitionPolicy bridgeTemperaturePolicy() {
     return {IntegratorTransitionAction::Reset,
             IntegratorTransitionAction::Reset,
             IntegratorTransitionAction::Reset, 0.2};
+}
+
+ActuatorPlannerParameters bridgeActuatorPlannerParameters() {
+    // Test-only timing values; no hardware or production commissioning value
+    // is inferred from this integration fixture.
+    ActuatorPlannerParameters result;
+    result.switchingWindowMillis = 10'000U;
+    result.minimumOnMillis = 2'000U;
+    result.minimumOffMillis = 1'000U;
+    result.polarityDeadTimeMillis = 3'000U;
+    result.pulseAccumulatorCapMillis = 10'000U;
+    result.counterDirectionConfirmationQuoteThreshold = 0.5;
+    result.counterDirectionConfirmationDurationMillis = 2'000U;
+    result.requestWatchdogMillis = 60'000U;
+    result.outerFanPostRunMillis = 1'000U;
+    result.innerFanPostRunMillis = 500U;
+    return result;
 }
 
 TemperatureControlInput bridgeAirInput(std::uint64_t timestamp, double target,
@@ -2940,12 +2959,21 @@ void test_evaluate_temperature_control_invalid_context_resets_runtime() {
 
     TemperatureControlEvaluationEvidence secondEvidence = firstEvidence;
     secondEvidence.sampleTimestampMonotonicMillis = 1'100U;
-    secondEvidence
-        .previousControlRequestFeedback = PreviousControlRequestFeedback{
+    const auto context = resolveEffectiveControlContext(state);
+    TemperatureControlInput secondInput;
+    secondInput.sampleTimestampMonotonicMillis =
+        secondEvidence.sampleTimestampMonotonicMillis;
+    secondInput.targetCelsius = context.target.targetCelsius;
+    secondInput.controlSensorRole = context.controlSensorRole;
+    secondInput.air = secondEvidence.air;
+    secondInput.product = secondEvidence.product;
+    secondInput.previousControlRequestFeedback = PreviousControlRequestFeedback{
         first.controlRequest->identity.sequence,
         PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint};
-    const auto second =
-        application.evaluateTemperatureControl(state, secondEvidence);
+    secondInput.processTransitionSequence =
+        context.requestContext.processTransitionSequence;
+    secondInput.runRevision = context.requestContext.runRevision;
+    const auto second = controller.evaluate(secondInput);
     TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
     TEST_ASSERT_TRUE(controller.state().lastActiveDirection.has_value());
     TEST_ASSERT_TRUE(controller.state().feedbackWindow.has_value());
@@ -3268,6 +3296,214 @@ void test_application_bridge_hands_off_cooling_context_once() {
     TEST_ASSERT_TRUE(
         *controller.state().pendingContextTransition ==
         CommittedControlContextTransition::CoolingTargetContextChange);
+}
+
+void test_application_actuator_handoff_and_lifecycle_boundary() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    ActuatorPlanner planner(bridgeActuatorPlannerParameters());
+    device_platform_test_support::MockBidirectionalActuatorSink peltier;
+    device_platform_test_support::MockBinaryOutputSink outerFan;
+    device_platform_test_support::MockBinaryOutputSink innerFan;
+    ActuatorPlanSinkDriver driver(peltier, outerFan, innerFan);
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator, planner, driver);
+
+    auto state = readyActiveRunWithSensorSelection(coordinator, 797U);
+    TemperatureControlEvaluationEvidence evidence;
+    evidence.sampleTimestampMonotonicMillis = 100U;
+    evidence.air = bridgeSensorSample(20.0);
+    evidence.product = bridgeSensorSample(36.0);
+
+    const auto first = application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(first.controlRequest.has_value());
+    const auto repeatedBeforeTick =
+        application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(repeatedBeforeTick.status ==
+                     TemperatureControlStatus::InvalidInput);
+    TEST_ASSERT_FALSE(repeatedBeforeTick.controlRequest.has_value());
+
+    const auto firstPlan = application.tickActuatorPlan(
+        state, 100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
+    TEST_ASSERT_TRUE(firstPlan.acceptedCommandSequence.has_value());
+    TEST_ASSERT_EQUAL_UINT64(first.controlRequest->identity.sequence,
+                             *firstPlan.acceptedCommandSequence);
+    TEST_ASSERT_TRUE(firstPlan.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    TEST_ASSERT_TRUE(peltier.forward());
+    TEST_ASSERT_FALSE(peltier.reverse());
+    TEST_ASSERT_TRUE(outerFan.enabled());
+    TEST_ASSERT_TRUE(innerFan.enabled());
+
+    evidence.sampleTimestampMonotonicMillis = 2'100U;
+    const auto second = application.evaluateTemperatureControl(state, evidence);
+    TEST_ASSERT_TRUE(second.controlRequest.has_value());
+    TEST_ASSERT_EQUAL_UINT64(first.controlRequest->identity.sequence + 1U,
+                             second.controlRequest->identity.sequence);
+    TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
+    const auto secondPlan = application.tickActuatorPlan(
+        state, 2'100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
+    TEST_ASSERT_EQUAL_UINT64(second.controlRequest->identity.sequence,
+                             *secondPlan.acceptedCommandSequence);
+
+    const auto stop = stopDecision(state, 798U, 2'200U);
+    TEST_ASSERT_TRUE(stop.proposed());
+    const auto stopped = application.persistCommand(
+        state, stop, RunCheckpointTime{2'200U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(stopped.status));
+    TEST_ASSERT_FALSE(planner.state().acceptedCommand.has_value());
+    TEST_ASSERT_FALSE(peltier.forward());
+    TEST_ASSERT_FALSE(peltier.reverse());
+    // The lifecycle boundary applies the fail-closed Peltier stop immediately;
+    // both fan outputs may remain in their configured post-run windows.
+    TEST_ASSERT_TRUE(outerFan.enabled());
+    TEST_ASSERT_TRUE(innerFan.enabled());
+}
+
+void test_application_multi_rate_windows_and_downstream_counter_probe() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    auto parameters = bridgeActuatorPlannerParameters();
+    parameters.switchingWindowMillis = 30'000U;
+    parameters.minimumOnMillis = 2'000U;
+    parameters.minimumOffMillis = 1'000U;
+    parameters.polarityDeadTimeMillis = 3'000U;
+    parameters.pulseAccumulatorCapMillis = 30'000U;
+    ActuatorPlanner planner(parameters);
+    device_platform_test_support::MockBidirectionalActuatorSink peltier;
+    device_platform_test_support::MockBinaryOutputSink outerFan;
+    device_platform_test_support::MockBinaryOutputSink innerFan;
+    ActuatorPlanSinkDriver driver(peltier, outerFan, innerFan);
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator, planner, driver);
+    auto state = readyActiveRunWithSensorSelection(coordinator, 799U);
+
+    std::uint64_t windowSourceSequence = 0U;
+    double previousIntegral = 0.0;
+    for (std::uint32_t sample = 0U; sample <= 45U; ++sample) {
+        const std::uint64_t timestamp =
+            100U + static_cast<std::uint64_t>(sample) * 2'000U;
+        TemperatureControlEvaluationEvidence evidence;
+        evidence.sampleTimestampMonotonicMillis = timestamp;
+        evidence.air = bridgeSensorSample(20.0);
+        evidence.product = bridgeSensorSample(36.0);
+        const auto evaluation =
+            application.evaluateTemperatureControl(state, evidence);
+        TEST_ASSERT_TRUE(evaluation.controlRequest.has_value());
+        if (sample > 0U) {
+            TEST_ASSERT_TRUE(evaluation.integralContributionQuote >=
+                             previousIntegral);
+            TEST_ASSERT_TRUE(evaluation.integralContributionQuote > 0.0);
+        }
+        previousIntegral = evaluation.integralContributionQuote;
+
+        const auto plan = application.tickActuatorPlan(
+            state, timestamp,
+            ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
+        TEST_ASSERT_TRUE(plan.acceptedCommandSequence.has_value());
+        TEST_ASSERT_EQUAL_UINT64(evaluation.controlRequest->identity.sequence,
+                                 *plan.acceptedCommandSequence);
+        TEST_ASSERT_TRUE(planner.state().activeWindow.has_value());
+        if (sample == 0U || sample % 15U == 0U) {
+            windowSourceSequence = evaluation.controlRequest->identity.sequence;
+        }
+        TEST_ASSERT_EQUAL_UINT64(
+            windowSourceSequence,
+            planner.state().activeWindow->sourceRequestSequence);
+        TEST_ASSERT_TRUE(plan.reason !=
+                         ActuatorPlanReason::CounterDirectionConfirming);
+        TEST_ASSERT_TRUE(plan.reason != ActuatorPlanReason::MinimumOffTimeHeld);
+        TEST_ASSERT_TRUE(plan.reason !=
+                         ActuatorPlanReason::PolarityDeadTimeHeld);
+        TEST_ASSERT_FALSE(peltier.simultaneousActivationObserved());
+    }
+
+    // A separate run makes the real counter-direction and dead-time gates
+    // visible through the same Application -> Planner -> Sink path.
+    SequencedWriteStore counterStore;
+    RunPersistenceCoordinator counterCoordinator(
+        counterStore, device_platform::StorageEpoch(2U),
+        RunCheckpointSchedule{});
+    static_cast<void>(counterCoordinator.loadAndInitialize());
+    TargetQualificationEvaluator counterEvaluator;
+    TemperatureController counterController(bridgeTemperatureParameters(),
+                                            bridgeTemperaturePolicy());
+    auto counterParameters = bridgeActuatorPlannerParameters();
+    counterParameters.minimumOffMillis = 2'000U;
+    counterParameters.polarityDeadTimeMillis = 3'000U;
+    ActuatorPlanner counterPlanner(counterParameters);
+    device_platform_test_support::MockBidirectionalActuatorSink counterPeltier;
+    device_platform_test_support::MockBinaryOutputSink counterOuterFan;
+    device_platform_test_support::MockBinaryOutputSink counterInnerFan;
+    ActuatorPlanSinkDriver counterDriver(counterPeltier, counterOuterFan,
+                                         counterInnerFan);
+    TemperatureControlApplicationOrchestrator counterApplication(
+        counterCoordinator, counterController, counterEvaluator, counterPlanner,
+        counterDriver);
+    auto counterState =
+        readyActiveRunWithSensorSelection(counterCoordinator, 800U);
+    TemperatureControlEvaluationEvidence counterEvidence;
+    counterEvidence.air = bridgeSensorSample(20.0);
+    counterEvidence.product = bridgeSensorSample(20.0);
+    counterEvidence.sampleTimestampMonotonicMillis = 100U;
+    const auto heating = counterApplication.evaluateTemperatureControl(
+        counterState, counterEvidence);
+    TEST_ASSERT_TRUE(heating.controlRequest.has_value());
+    const auto initialCounterPlan = counterApplication.tickActuatorPlan(
+        counterState, 100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
+    TEST_ASSERT_TRUE(initialCounterPlan.appliedDirection ==
+                     AbstractControlDirection::Heating);
+
+    counterEvidence.product = bridgeSensorSample(45.0);
+    counterEvidence.sampleTimestampMonotonicMillis = 2'100U;
+    const auto cooling = counterApplication.evaluateTemperatureControl(
+        counterState, counterEvidence);
+    TEST_ASSERT_TRUE(cooling.direction == AbstractControlDirection::Cooling);
+    auto counterPlan = counterApplication.tickActuatorPlan(
+        counterState, 2'100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
+    TEST_ASSERT_TRUE(counterPlan.reason ==
+                     ActuatorPlanReason::CounterDirectionConfirming);
+    TEST_ASSERT_TRUE(counterPlan.appliedDirection ==
+                     AbstractControlDirection::Heating);
+
+    counterEvidence.sampleTimestampMonotonicMillis = 4'100U;
+    const auto coolingContinuation =
+        counterApplication.evaluateTemperatureControl(counterState,
+                                                      counterEvidence);
+    counterPlan = counterApplication.tickActuatorPlan(
+        counterState, 4'100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
+    TEST_ASSERT_TRUE(coolingContinuation.controlRequest.has_value());
+    TEST_ASSERT_TRUE(counterPlan.reason ==
+                     ActuatorPlanReason::DirectionChangeApplied);
+    TEST_ASSERT_TRUE(counterPlan.appliedDirection ==
+                     AbstractControlDirection::Idle);
+
+    counterEvidence.sampleTimestampMonotonicMillis = 6'100U;
+    static_cast<void>(counterApplication.evaluateTemperatureControl(
+        counterState, counterEvidence));
+    counterPlan = counterApplication.tickActuatorPlan(
+        counterState, 6'100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
+    TEST_ASSERT_TRUE(counterPlan.reason ==
+                     ActuatorPlanReason::PolarityDeadTimeHeld);
+    TEST_ASSERT_TRUE(counterPlan.appliedDirection ==
+                     AbstractControlDirection::Idle);
 }
 
 void test_application_bridge_resets_runtime_at_committed_lifecycle_boundaries() {
@@ -7238,6 +7474,8 @@ int main(int, char**) {
     RUN_TEST(test_product_inserted_commits_before_advancing_and_restores);
     RUN_TEST(test_air_run_product_inserted_is_air_to_air_without_pi_transition);
     RUN_TEST(test_application_bridge_hands_off_cooling_context_once);
+    RUN_TEST(test_application_actuator_handoff_and_lifecycle_boundary);
+    RUN_TEST(test_application_multi_rate_windows_and_downstream_counter_probe);
     RUN_TEST(
         test_application_bridge_resets_runtime_at_committed_lifecycle_boundaries);
     RUN_TEST(test_abort_and_cool_is_a_new_active_run_boundary);

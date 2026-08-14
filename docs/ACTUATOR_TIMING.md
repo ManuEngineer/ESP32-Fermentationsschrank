@@ -321,6 +321,21 @@ Leistungsfreigabe gesetzt.
       einen Fehler
 - [x] notwendiger Luefternachlauf wird auch bei veralteter Anforderung
       durchgefuehrt
+- [x] der Aussenluefter folgt dem tatsaechlichen Peltierzustand; jeder reale
+      Active-zu-Idle-Uebergang startet den Nachlauf, auch beim normalen
+      Window-Off-Anteil, und ein neuer Puls setzt ihn ohne Unterbrechung fort
+- [x] der Innenluefter folgt unabhaengig davon der kanonischen
+      temperaturgeregelten Prozessphase und besitzt einen eigenen,
+      konfigurierbaren Nachlauf
+- [x] das Feedback-Handoff zwischen Aktorplaner und PI-Kern ist intern,
+      sequenzgebunden, monoton verschaerfbar und genau einmal konsumierbar;
+      caller-supplied Feedback ist kein Evidence-Vertrag
+- [x] der Application-Orchestrator uebergibt eine Evaluation genau einmal an
+      Planner und Sink und setzt beide bei derselben committed Lifecycle-Grenze
+      fail-closed zurueck
+- [x] der Sink-Driver schaltet die Gegenrichtung zuerst aus, setzt den
+      Aussenluefter vor der Leistungsfreigabe und schaltet im Idle beide
+      H-Brueckenrichtungen vor den Lueftern aus
 
 ## Noch offen fuer Phase 7C und Phase 8
 

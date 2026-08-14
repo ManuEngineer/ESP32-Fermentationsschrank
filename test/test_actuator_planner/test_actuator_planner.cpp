@@ -1,3 +1,5 @@
+#include <limits>
+
 #include <unity.h>
 
 #include "actuator_planner.hpp"
@@ -86,6 +88,33 @@ ActuatorPlanTickInput tickInput(
     input.temperatureControlledPhase = true;
     input.safetyGate.status = ActuatorSafetyGateStatus::Allowed;
     return input;
+}
+
+TemperatureControlResult unavailableResult() {
+    TemperatureControlResult result;
+    result.status = TemperatureControlStatus::Unavailable;
+    result.reason = TemperatureControlReason::SensorUnavailable;
+    result.airLimitState = AirLimitState::Unavailable;
+    result.direction = AbstractControlDirection::Idle;
+    result.timeQuote = 0.0;
+    return result;
+}
+
+TemperatureControlResult malformedResult() {
+    auto result = demandResult(AbstractControlDirection::Heating, 0.5, 0U, 0U,
+                               airContext());
+    return result;
+}
+
+void assertFeedbackUpdate(
+    ActuatorPlanner& planner, std::uint64_t sequence,
+    PreviousControlRequestFeedback::Disposition disposition) {
+    const auto update = planner.takeFeedbackUpdate();
+    TEST_ASSERT_TRUE(update.changed);
+    TEST_ASSERT_TRUE(update.feedback.has_value());
+    TEST_ASSERT_EQUAL_UINT64(sequence, update.feedback->controlRequestSequence);
+    TEST_ASSERT_TRUE(update.feedback->disposition == disposition);
+    TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
 }
 
 // --- RZ1: rollenabhaengige AirLimitState-Matrix -----------------------------
@@ -534,6 +563,353 @@ void test_neutral_off_interrupts_counter_confirmation_during_minimum_on() {
                      ActuatorPlanReason::DirectionChangeApplied);
 }
 
+void test_parameter_classification_covers_all_structural_relations() {
+    const auto valid = testParameters();
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(valid) ==
+                     ActuatorPlannerParametersValidation::Valid);
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters({}) ==
+                     ActuatorPlannerParametersValidation::Unconfigured);
+
+    auto invalid = valid;
+    invalid.switchingWindowMillis = 0U;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.minimumOnMillis = 0U;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.minimumOnMillis = invalid.switchingWindowMillis + 1U;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.minimumOffMillis = 0U;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.polarityDeadTimeMillis = 0U;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.pulseAccumulatorCapMillis = invalid.minimumOnMillis - 1U;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.counterDirectionConfirmationQuoteThreshold = 0.0;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.counterDirectionConfirmationQuoteThreshold = 1.1;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.counterDirectionConfirmationDurationMillis = 0U;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.requestWatchdogMillis = 0U;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.outerFanPostRunMillis = 0U;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+    invalid = valid;
+    invalid.switchingWindowMillis = 9'007'199'254'740'993ULL;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(invalid) ==
+                     ActuatorPlannerParametersValidation::Invalid);
+
+    auto noInnerPostRun = valid;
+    noInnerPostRun.innerFanPostRunMillis = 0U;
+    TEST_ASSERT_TRUE(classifyActuatorPlannerParameters(noInnerPostRun) ==
+                     ActuatorPlannerParametersValidation::Valid);
+}
+
+void test_window_ownership_and_variant_b_feedback_are_separate() {
+    ActuatorPlanner planner{testParameters()};
+    auto result =
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            0.8, 10U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    TEST_ASSERT_TRUE(planner.state().activeWindow.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        10U, planner.state().activeWindow->sourceRequestSequence);
+    static_cast<void>(planner.takeFeedbackUpdate());
+
+    // B is a same-direction synchronization request. It must not rewrite the
+    // physical ownership snapshot of A, and it is not itself downstream
+    // limited merely because A's window is still running.
+    result =
+        planner.tick(tickInput(100U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            0.3, 11U, 100U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.reason ==
+                     ActuatorPlanReason::ScheduledWithinWindow);
+    TEST_ASSERT_EQUAL_UINT64(
+        10U, planner.state().activeWindow->sourceRequestSequence);
+    assertFeedbackUpdate(
+        planner, 11U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    result = planner.tick(tickInput(10'000U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(planner.state().activeWindow.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        11U, planner.state().activeWindow->sourceRequestSequence);
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+}
+
+void test_fail_closed_matrix_stops_physical_output_and_trusts_only_sequences() {
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        const auto result = planner.tick(ActuatorPlanTickInput{
+            500U, std::nullopt, airContext(), true,
+            ActuatorSafetyGateInput{ActuatorSafetyGateStatus::ImmediateStop}});
+        TEST_ASSERT_TRUE(result.status == ActuatorPlanStatus::Idle);
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+        assertFeedbackUpdate(
+            planner, 1U, PreviousControlRequestFeedback::Disposition::Rejected);
+    }
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        auto malformedGate = ActuatorSafetyGateInput{
+            static_cast<ActuatorSafetyGateStatus>(0xFF)};
+        const auto result = planner.tick(ActuatorPlanTickInput{
+            500U, std::nullopt, airContext(), true, malformedGate});
+        TEST_ASSERT_TRUE(result.status == ActuatorPlanStatus::InvalidInput);
+        TEST_ASSERT_TRUE(result.reason == ActuatorPlanReason::MalformedInput);
+        assertFeedbackUpdate(
+            planner, 1U, PreviousControlRequestFeedback::Disposition::Rejected);
+    }
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        const auto result = planner.tick(ActuatorPlanTickInput{
+            500U, unavailableResult(), airContext(), true,
+            ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
+        TEST_ASSERT_TRUE(result.reason == ActuatorPlanReason::NoValidRequest);
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+        const auto update = planner.takeFeedbackUpdate();
+        TEST_ASSERT_TRUE(update.changed);
+        TEST_ASSERT_FALSE(update.feedback.has_value());
+    }
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(100U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   100U, airContext()),
+                      airContext())));
+        const auto result = planner.tick(ActuatorPlanTickInput{
+            50U, std::nullopt, airContext(), true,
+            ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
+        TEST_ASSERT_TRUE(result.reason == ActuatorPlanReason::TimeInvalid);
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+        assertFeedbackUpdate(
+            planner, 1U, PreviousControlRequestFeedback::Disposition::Rejected);
+    }
+    {
+        ActuatorPlannerParameters parameters = testParameters();
+        parameters.requestWatchdogMillis = 500U;
+        ActuatorPlanner planner{parameters};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        const auto result =
+            planner.tick(tickInput(500U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::StaleRequestWatchdog);
+        TEST_ASSERT_TRUE(planner.state().latchedWatchdogFault.has_value());
+        assertFeedbackUpdate(
+            planner, 1U, PreviousControlRequestFeedback::Disposition::Rejected);
+    }
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        const auto result = planner.tick(ActuatorPlanTickInput{
+            500U, std::nullopt, productContext(), true,
+            ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::StaleRequestContext);
+        assertFeedbackUpdate(
+            planner, 1U, PreviousControlRequestFeedback::Disposition::Rejected);
+    }
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        const auto result =
+            planner.tick(tickInput(500U, malformedResult(), airContext()));
+        TEST_ASSERT_TRUE(result.status == ActuatorPlanStatus::InvalidInput);
+        TEST_ASSERT_TRUE(result.reason == ActuatorPlanReason::MalformedInput);
+        const auto update = planner.takeFeedbackUpdate();
+        TEST_ASSERT_TRUE(update.changed);
+        TEST_ASSERT_FALSE(update.feedback.has_value());
+    }
+}
+
+void test_no_valid_request_and_off_close_planner_without_old_feedback() {
+    for (const auto& result :
+         {unavailableResult(),
+          offResult(2U, 500U, airContext(),
+                    TemperatureControlReason::NeutralBand,
+                    AirLimitState::NotApplied),
+          offResult(2U, 500U, productContext(),
+                    TemperatureControlReason::AirLimitBlocked,
+                    AirLimitState::Blocked)}) {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 0.5, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        static_cast<void>(planner.takeFeedbackUpdate());
+        const auto stopped = planner.tick(tickInput(
+            500U, result,
+            result.controlRequest.has_value() ? result.controlRequest->context
+                                              : airContext()));
+        if (result.status == TemperatureControlStatus::Unavailable) {
+            TEST_ASSERT_TRUE(stopped.appliedDirection ==
+                             AbstractControlDirection::Idle);
+        } else {
+            TEST_ASSERT_TRUE(stopped.status == ActuatorPlanStatus::Active);
+            TEST_ASSERT_TRUE(stopped.reason ==
+                             ActuatorPlanReason::MinimumOnTimeHeld);
+        }
+        const auto update = planner.takeFeedbackUpdate();
+        TEST_ASSERT_TRUE(update.changed);
+        TEST_ASSERT_FALSE(update.feedback.has_value());
+    }
+}
+
+void test_feedback_disposition_maps_reasons_and_never_downgrades() {
+    ActuatorPlanner planner{testParameters()};
+    static_cast<void>(
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            0.3, 1U, 0U, airContext()),
+                               airContext())));
+    assertFeedbackUpdate(
+        planner, 1U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    // A real counter-direction gate is deferred, while the previous
+    // sequence's no-constraint observation is never replayed or downgraded.
+    const auto result =
+        planner.tick(tickInput(500U,
+                               demandResult(AbstractControlDirection::Cooling,
+                                            0.8, 2U, 500U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.reason ==
+                     ActuatorPlanReason::CounterDirectionConfirming);
+    assertFeedbackUpdate(
+        planner, 2U,
+        PreviousControlRequestFeedback::Disposition::DeferredOrLimited);
+
+    static_cast<void>(
+        planner.tick(tickInput(2'500U, std::nullopt, airContext())));
+    const auto update = planner.takeFeedbackUpdate();
+    TEST_ASSERT_FALSE(update.changed);
+}
+
+void test_malformed_evaluation_clears_pending_and_allows_next_sequence() {
+    ActuatorPlanner planner{testParameters()};
+    static_cast<void>(
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 10U, 0U, airContext()),
+                               airContext())));
+    static_cast<void>(planner.takeFeedbackUpdate());
+    auto result =
+        planner.tick(tickInput(100U, malformedResult(), airContext()));
+    TEST_ASSERT_TRUE(result.reason == ActuatorPlanReason::MalformedInput);
+    const auto malformedUpdate = planner.takeFeedbackUpdate();
+    TEST_ASSERT_TRUE(malformedUpdate.changed);
+    TEST_ASSERT_FALSE(malformedUpdate.feedback.has_value());
+
+    result =
+        planner.tick(tickInput(200U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 11U, 200U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.admissionOutcome ==
+                     ActuatorAdmissionOutcome::Accepted);
+    TEST_ASSERT_TRUE(result.acceptedCommandSequence.has_value());
+    TEST_ASSERT_EQUAL_UINT64(11U, *result.acceptedCommandSequence);
+}
+
+void test_feedback_episode_close_prevents_force_stop_resurrection() {
+    ActuatorPlanner planner{testParameters()};
+    static_cast<void>(
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 10U, 0U, airContext()),
+                               airContext())));
+    static_cast<void>(planner.takeFeedbackUpdate());
+    planner.closeFeedbackEpisodeForOutstandingEvaluation();
+    const auto update = planner.takeFeedbackUpdate();
+    TEST_ASSERT_TRUE(update.changed);
+    TEST_ASSERT_FALSE(update.feedback.has_value());
+}
+
+void test_fan_deadlines_and_physical_edges_are_overflow_safe() {
+    auto parameters = testParameters();
+    parameters.switchingWindowMillis = 1'000U;
+    parameters.minimumOnMillis = 100U;
+    parameters.minimumOffMillis = 100U;
+    parameters.polarityDeadTimeMillis = 100U;
+    parameters.pulseAccumulatorCapMillis = 1'000U;
+    parameters.outerFanPostRunMillis = 500U;
+    const std::uint64_t base =
+        std::numeric_limits<std::uint64_t>::max() - 2'000U;
+    ActuatorPlanner planner{parameters};
+    auto result =
+        planner.tick(tickInput(base,
+                               demandResult(AbstractControlDirection::Heating,
+                                            0.1, 1U, base, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    result = planner.tick(tickInput(base + 100U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection == AbstractControlDirection::Idle);
+    TEST_ASSERT_TRUE(result.outerFanEnabled);
+    TEST_ASSERT_TRUE(
+        planner.state().lastPhysicalDeactivationAtMonotonicMillis.has_value());
+    result = planner.tick(tickInput(base + 600U, std::nullopt, airContext()));
+    TEST_ASSERT_FALSE(result.outerFanEnabled);
+    TEST_ASSERT_TRUE(result.appliedDirection == AbstractControlDirection::Idle);
+}
+
 void test_air_limit_blocked_off_interrupts_counter_confirmation_during_minimum_on() {
     ActuatorPlanner planner{testParameters()};
 
@@ -567,6 +943,81 @@ void test_air_limit_blocked_off_interrupts_counter_confirmation_during_minimum_o
     TEST_ASSERT_TRUE(planner.state().activeWindow.has_value());
 }
 
+void test_fans_follow_physical_output_and_independent_inner_phase() {
+    auto parameters = testParameters();
+    parameters.innerFanPostRunMillis = 500U;
+    ActuatorPlanner planner{parameters};
+
+    auto result =
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            0.3, 1U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection ==
+                     AbstractControlDirection::Heating);
+    TEST_ASSERT_TRUE(result.outerFanEnabled);
+    TEST_ASSERT_TRUE(result.innerFanEnabled);
+
+    // The physical pulse ends at 3000 ms, while the planning window remains
+    // alive. The mandatory outer post-run is anchored at that real edge.
+    result = planner.tick(tickInput(3'000U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(result.appliedDirection == AbstractControlDirection::Idle);
+    TEST_ASSERT_TRUE(result.outerFanEnabled);
+    TEST_ASSERT_TRUE(result.innerFanEnabled);
+    result = planner.tick(tickInput(4'000U, std::nullopt, airContext()));
+    TEST_ASSERT_FALSE(result.outerFanEnabled);
+    TEST_ASSERT_TRUE(result.innerFanEnabled);
+
+    // Leaving the temperature-controlled phase starts only the inner-fan
+    // post-run; it is independent of the Peltier window.
+    result = planner.tick(ActuatorPlanTickInput{
+        4'100U, std::nullopt, airContext(), false,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
+    TEST_ASSERT_TRUE(result.innerFanEnabled);
+    result = planner.tick(ActuatorPlanTickInput{
+        4'600U, std::nullopt, airContext(), false,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}});
+    TEST_ASSERT_FALSE(result.innerFanEnabled);
+}
+
+void test_feedback_handoff_is_single_use_and_severity_is_monotone() {
+    ActuatorPlanner planner{testParameters()};
+
+    auto result =
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            0.1, 1U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.reason ==
+                     ActuatorPlanReason::AccumulatingBelowThreshold);
+    auto update = planner.takeFeedbackUpdate();
+    TEST_ASSERT_TRUE(update.changed);
+    TEST_ASSERT_TRUE(update.feedback.has_value());
+    TEST_ASSERT_EQUAL_UINT64(1U, update.feedback->controlRequestSequence);
+    TEST_ASSERT_TRUE(
+        update.feedback->disposition ==
+        PreviousControlRequestFeedback::Disposition::DeferredOrLimited);
+    TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
+
+    // The next window reaches the minimum pulse, but the already observed
+    // deferred disposition must not be downgraded to NoIntegratorConstraint.
+    result = planner.tick(tickInput(10'000U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(result.reason ==
+                     ActuatorPlanReason::MinimumPulseTriggered);
+    TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
+
+    // A terminal stop still raises the same sequence to Rejected exactly once.
+    result = planner.forceStop(
+        11'000U, ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen);
+    TEST_ASSERT_TRUE(result.appliedDirection == AbstractControlDirection::Idle);
+    update = planner.takeFeedbackUpdate();
+    TEST_ASSERT_TRUE(update.changed);
+    TEST_ASSERT_TRUE(update.feedback.has_value());
+    TEST_ASSERT_TRUE(update.feedback->disposition ==
+                     PreviousControlRequestFeedback::Disposition::Rejected);
+    TEST_ASSERT_FALSE(planner.takeFeedbackUpdate().changed);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -593,5 +1044,16 @@ int main(int argc, char** argv) {
         test_neutral_off_interrupts_counter_confirmation_during_minimum_on);
     RUN_TEST(
         test_air_limit_blocked_off_interrupts_counter_confirmation_during_minimum_on);
+    RUN_TEST(test_parameter_classification_covers_all_structural_relations);
+    RUN_TEST(test_window_ownership_and_variant_b_feedback_are_separate);
+    RUN_TEST(
+        test_fail_closed_matrix_stops_physical_output_and_trusts_only_sequences);
+    RUN_TEST(test_no_valid_request_and_off_close_planner_without_old_feedback);
+    RUN_TEST(test_feedback_disposition_maps_reasons_and_never_downgrades);
+    RUN_TEST(test_malformed_evaluation_clears_pending_and_allows_next_sequence);
+    RUN_TEST(test_feedback_episode_close_prevents_force_stop_resurrection);
+    RUN_TEST(test_fan_deadlines_and_physical_edges_are_overflow_safe);
+    RUN_TEST(test_fans_follow_physical_output_and_independent_inner_phase);
+    RUN_TEST(test_feedback_handoff_is_single_use_and_severity_is_monotone);
     return UNITY_END();
 }
