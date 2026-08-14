@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Kategorie-C-Gate in Finding 8 festgestellt; eigenstaendige Planrevision 3 ist zur Ownerfreigabe vorzulegen; PR #107 bleibt Draft und Produktionskorrekturen sind bis dahin gesperrt | Ownerfreigabe des exakten Planrevision-3-Commits; danach Umsetzung nur im freigegebenen Scope, produktiver Composition-Nachweis bleibt bis #29/#90 BLOCKED |
+| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Plan-/Spezifikationskorrektur: R2 ist als Implementierungsgrundlage suspendiert; eigenstaendige R3-Reconciliation mit offenen Ownerentscheidungen, PR #107 bleibt Draft und Implementierung eingefroren | Ownerentscheidungen und anschliessende Freigabe der exakten, kanonisch synchronisierten R3-SHA |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -25,24 +25,21 @@ geschlossen. Die bestehenden #22/#23-Vertraege sind kanonisch und werden von
 
 ## Issue #24 Implementierungsstatus
 
-Der vorherige Korrekturstand enthaelt bereits einen bounded Faultkern,
-`SafetyStateRecord`, Reset-/Recovery-Typen, Restart- und Producer-Bridge-
-Bausteine. Diese Bausteine sind wegen des Owner-Review-Gates nicht als
-abgeschlossene Umsetzung bestaetigt. Die native Bridge gegen
-`ConfigurationRecoveryService` ist kein produktiver Application-/Composition-
-Root-Nachweis: #29 (Resetadapter) und #90 (ESP-IDF-NVS-Adapter) sind live offen.
+Der aktuelle Branch enthaelt einen eingefrorenen R2-Implementierungs- und
+Dokumentationsstand. Die tatsaechlich ausgefuehrten frueheren Tests bleiben
+historische technische Nachweise, sind gegen die neue Spezifikationspruefung
+aber `NOT_ACCEPTED_PENDING_R3`. In dieser Plan-/Gate-Runde wurden keine
+Firmwaretests, Builds oder Produktionsaenderungen ausgefuehrt.
 
-Die frueher im PR dokumentierten gezielten nativen Ergebnisse bleiben als
-historische Evidenz referenziert, sind aber nach der Kategorie-C-Feststellung
-kein Abschlussnachweis fuer Issue #24. In dieser Plan-/Gate-Runde wurden keine
-Firmwaretests, Builds oder Produktionsaenderungen ausgefuehrt. Vollstaendiger
-native Lauf, ESP-IDF-Builds, Remote-CI und Hardware-/Bring-up-Nachweise bleiben
-NOT_RUN beziehungsweise fuer den produktiven Composition-Gate-Slice BLOCKED.
+Die native #56/#57-Bridge ist kein produktiver Application-/Composition-
+Root-Nachweis. Der aktuelle Root ist nur ein Skeleton; die genaue
+Abnahmeregel fuer die reale Producerintegration ist eine Ownerentscheidung in
+Planrevision 3. #29/#32/#33, #35, #106 und #19 werden nicht vorgezogen.
 
 Die kanonische fachliche Reihenfolge bleibt: Issue #23, danach Issue #24
 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,
 Aufbewahrung, Bereinigung, Backup und Import). Issue #24 beginnt jetzt mit
-seinem eigenen Plan-/Owner-Gate mit einer Kategorie-C-Planfrage. Issue #106
+seinem eigenen Plan-/Owner-Gate mit offenen Spezifikationsfragen. Issue #106
 (Aktorplaner Per-Run-
 Parameter-Snapshot und Recovery-Bindung) bleibt als separates spaeteres
 Integrationsgate offen und ist nicht die naechste Arbeit; seine vollstaendige
@@ -55,9 +52,9 @@ Abnahme bleibt unter anderem von #35 abhaengig. Issue #35 bleibt
   setzt; bis dahin startet keine Firmware-CI.
 - Issue #106 wird in diesem PR weder bearbeitet noch geschlossen und definiert
   keine neue Safety-/Fehlerklassifikation.
-- Issue #29 und #90 werden in diesem PR weder implementiert noch vorweggenommen;
-  sie sind fuer den produktiven Composition-/Adapter-Nachweis benoetigte offene
-  Eingangsgates.
+- Issue #29 und #90 werden in diesem PR weder implementiert noch als pauschale
+  Abhaengigkeit vorweggenommen; konkrete ESP-IDF-/Hardwareadapter bleiben ihre
+  jeweiligen Gates.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder

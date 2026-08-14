@@ -179,27 +179,6 @@ In `SAFE_BOOT` gesperrt:
 Nach Beseitigung der Ursache muss das Geraet erst bewusst und validiert nach
 `STANDBY` zurueckkehren. Erst dort kann der Servicebereich geoeffnet werden.
 
-## Issue #24 R2 – strukturierter Safety-Nachweis
-
-Lokale Diagnose projiziert den stabilen Faultcode, die `FaultInstanceId`,
-Fault-/Recordrevision, Dominanz, Restart-Episode, `RestartEvidenceId`,
-Resetgrund und die Resetentscheidung. Die Ereignisse werden ueber das
-bestehende `IEventJournal` geschrieben; es gibt kein paralleles Safetyjournal.
-Ein `FaultResetCommitted`-Ereignis beweist nur den verifizierten Commit und
-den anschliessenden autorisierten Resetpfad, nicht eine automatische
-Freigabe in derselben Operation. Hardwaretests und ESP-IDF-Resetursachen
-bleiben separate, noch nicht ausgefuehrte Nachweise.
-
-Die deterministische Projektion umfasst die in R2 vorgesehenen Fault-,
-Restart-, SAFE_BOOT- und Recovery-Entscheidungsereignisse, einschliesslich
-`FaultCreated`, `FaultEscalated`, `FaultCauseCleared`, `FaultAcknowledged`,
-`FaultResetCommitted`, `FaultResetRejected`, `RestartEpisodeAdvanced`,
-`RestartEpisodeClosed`, `SafeBootEntered`, `SafeBootExitDecided`,
-`SafeBootExitRejected`, `SafetyRecoveryAttempted`,
-`SafetyRecoveryAborted` und `SafetyRecoverySucceeded`. Journalfehler
-verhindern weder Safety-State-Commit noch sichere Reaktion; Restart-/Fault-
-und Watchdog-Diagnoseevidenz wird nicht auf 32-bit gekuerzt.
-
 ## Gefuehrter Service-Hardwaretest
 
 ### Voraussetzungen
