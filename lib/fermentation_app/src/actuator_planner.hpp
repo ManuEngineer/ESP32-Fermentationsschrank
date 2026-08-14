@@ -83,8 +83,15 @@ class ActuatorPlanner {
     void clearPlanningState();
     void mergeFeedback(std::uint64_t sequence,
                        PreviousControlRequestFeedback::Disposition disposition);
+    // Owner-Review F1: only mutates pendingFeedback when command.sequence is
+    // the currently open feedback episode's subject; a stale acceptedCommand
+    // still governed physically (minimum-on, teardown) after its own
+    // episode closed is silently skipped.
     void mergeFeedbackForDemand(const AcceptedControlCommand& command,
                                 ActuatorPlanReason reason);
+    // Atomically closes the previous feedback episode's subject and opens
+    // the given one (or none), resetting pendingFeedback (Abschnitt 6.2).
+    void openFeedbackEpisode(std::optional<std::uint64_t> subjectSequence);
     void updateFanState(std::uint64_t now, bool temperatureControlledPhase);
     void copyFanStateToResult(ActuatorPlanTickResult& result) const;
     [[nodiscard]] ActuatorPlanTickResult buildResult(

@@ -255,6 +255,35 @@ ActuatorPlannerParameters bridgeActuatorPlannerParameters() {
     return result;
 }
 
+// Owner-Review F4: evaluateTemperatureControl() fails closed without a
+// planner (Abschnitt 6.1/9.4); any fixture exercising it as the public
+// Application API therefore needs the full planner-/driver-bound
+// construction, not just the persistence-only 3-argument orchestrator.
+// Bundles one instance of every collaborator so evaluateTemperatureControl()
+// call sites do not need to hand-repeat this wiring.
+struct ActuatorHandoffFixture {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator;
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller;
+    ActuatorPlanner planner;
+    device_platform_test_support::MockBidirectionalActuatorSink peltier;
+    device_platform_test_support::MockBinaryOutputSink outerFan;
+    device_platform_test_support::MockBinaryOutputSink innerFan;
+    ActuatorPlanSinkDriver driver;
+    TemperatureControlApplicationOrchestrator application;
+
+    ActuatorHandoffFixture()
+        : coordinator(store, device_platform::StorageEpoch(1U),
+                      RunCheckpointSchedule{}),
+          controller(bridgeTemperatureParameters(), bridgeTemperaturePolicy()),
+          planner(bridgeActuatorPlannerParameters()),
+          driver(peltier, outerFan, innerFan),
+          application(coordinator, controller, evaluator, planner, driver) {
+        static_cast<void>(coordinator.loadAndInitialize());
+    }
+};
+
 TemperatureControlInput bridgeAirInput(std::uint64_t timestamp, double target,
                                        double measured) {
     TemperatureControlInput input;
@@ -2766,18 +2795,11 @@ TargetQualificationInput programTargetQualificationInput(
 // where TemperatureController::evaluate() alone could still be fed a stale
 // or fabricated source-program target.
 void test_evaluate_temperature_control_uses_canonical_context_per_phase() {
-    SequencedWriteStore store;
-    RunPersistenceCoordinator coordinator(
-        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
-    static_cast<void>(coordinator.loadAndInitialize());
-    TargetQualificationEvaluator evaluator;
-    TemperatureController controller(bridgeTemperatureParameters(),
-                                     bridgeTemperaturePolicy());
-    TemperatureControlApplicationOrchestrator application(
-        coordinator, controller, evaluator);
+    ActuatorHandoffFixture fixture;
+    auto& application = fixture.application;
 
     // Programme run, ReachingTarget: canonical target 38.0, role Product.
-    auto state = readyActiveRunWithSensorSelection(coordinator, 900U);
+    auto state = readyActiveRunWithSensorSelection(fixture.coordinator, 900U);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(state.processState.state));
     TemperatureControlEvaluationEvidence evidence;
@@ -2802,16 +2824,9 @@ void test_evaluate_temperature_control_target_changed_uses_new_value_only() {
     // FR1/#20-consistent: after a live TargetChanged commit, only the new
     // effective target may drive the PI evaluation - no leftover old
     // source-program target.
-    SequencedWriteStore store;
-    RunPersistenceCoordinator coordinator(
-        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
-    static_cast<void>(coordinator.loadAndInitialize());
-    TargetQualificationEvaluator evaluator;
-    TemperatureController controller(bridgeTemperatureParameters(),
-                                     bridgeTemperaturePolicy());
-    TemperatureControlApplicationOrchestrator application(
-        coordinator, controller, evaluator);
-    auto state = readyActiveRunWithSensorSelection(coordinator, 901U);
+    ActuatorHandoffFixture fixture;
+    auto& application = fixture.application;
+    auto state = readyActiveRunWithSensorSelection(fixture.coordinator, 901U);
 
     TemperatureControlEvaluationEvidence evidence;
     evidence.sampleTimestampMonotonicMillis = 100U;
@@ -2820,6 +2835,12 @@ void test_evaluate_temperature_control_target_changed_uses_new_value_only() {
     const auto beforeChange =
         application.evaluateTemperatureControl(state, evidence);
     TEST_ASSERT_TRUE(beforeChange.status == TemperatureControlStatus::Off);
+    // Consume the outstanding evaluation so the second public
+    // evaluateTemperatureControl() call below is not fail-closed by the
+    // single-outstanding-evaluation guard (Abschnitt 6.1).
+    static_cast<void>(application.tickActuatorPlan(
+        state, 100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}));
 
     const auto decision = decideRunAdjustment(
         state, targetAdjustmentRequest(state, 902U, 200U, 20.0));
@@ -2841,16 +2862,9 @@ void test_evaluate_temperature_control_target_changed_uses_new_value_only() {
 }
 
 void test_evaluate_temperature_control_cooling_uses_completion_target_only() {
-    SequencedWriteStore store;
-    RunPersistenceCoordinator coordinator(
-        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
-    static_cast<void>(coordinator.loadAndInitialize());
-    TargetQualificationEvaluator evaluator;
-    TemperatureController controller(bridgeTemperatureParameters(),
-                                     bridgeTemperaturePolicy());
-    TemperatureControlApplicationOrchestrator application(
-        coordinator, controller, evaluator);
-    auto state = persistedCoolHoldingRun(coordinator, 903U);
+    ActuatorHandoffFixture fixture;
+    auto& application = fixture.application;
+    auto state = persistedCoolHoldingRun(fixture.coordinator, 903U);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::CoolHolding),
                           static_cast<int>(state.processState.state));
 
@@ -2867,16 +2881,10 @@ void test_evaluate_temperature_control_cooling_uses_completion_target_only() {
 }
 
 void test_evaluate_temperature_control_manual_run_uses_manual_target() {
-    SequencedWriteStore store;
-    RunPersistenceCoordinator coordinator(
-        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
-    static_cast<void>(coordinator.loadAndInitialize());
-    TargetQualificationEvaluator evaluator;
-    TemperatureController controller(bridgeTemperatureParameters(),
-                                     bridgeTemperaturePolicy());
-    TemperatureControlApplicationOrchestrator application(
-        coordinator, controller, evaluator);
-    auto state = readyActiveManualRunWithSensorSelection(coordinator, 904U);
+    ActuatorHandoffFixture fixture;
+    auto& application = fixture.application;
+    auto state =
+        readyActiveManualRunWithSensorSelection(fixture.coordinator, 904U);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::ReachingTarget),
                           static_cast<int>(state.processState.state));
 
@@ -2892,15 +2900,8 @@ void test_evaluate_temperature_control_manual_run_uses_manual_target() {
 }
 
 void test_evaluate_temperature_control_fails_closed_outside_temperature_control() {
-    SequencedWriteStore store;
-    RunPersistenceCoordinator coordinator(
-        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
-    static_cast<void>(coordinator.loadAndInitialize());
-    TargetQualificationEvaluator evaluator;
-    TemperatureController controller(bridgeTemperatureParameters(),
-                                     bridgeTemperaturePolicy());
-    TemperatureControlApplicationOrchestrator application(
-        coordinator, controller, evaluator);
+    ActuatorHandoffFixture fixture;
+    auto& application = fixture.application;
     RunCommandState standby;
     standby.processState.state = ProcessState::Standby;
 
@@ -2926,15 +2927,9 @@ void test_evaluate_temperature_control_fails_closed_outside_temperature_control(
 }
 
 void test_evaluate_temperature_control_invalid_context_resets_runtime() {
-    SequencedWriteStore store;
-    RunPersistenceCoordinator coordinator(
-        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
-    static_cast<void>(coordinator.loadAndInitialize());
-    TargetQualificationEvaluator evaluator;
-    TemperatureController controller(bridgeTemperatureParameters(),
-                                     bridgeTemperaturePolicy());
-    TemperatureControlApplicationOrchestrator application(
-        coordinator, controller, evaluator);
+    ActuatorHandoffFixture fixture;
+    auto& application = fixture.application;
+    auto& controller = fixture.controller;
     RunCommandState state;
     state.processState.state = ProcessState::Standby;
     TEST_ASSERT_EQUAL_INT(
@@ -2956,6 +2951,13 @@ void test_evaluate_temperature_control_invalid_context_resets_runtime() {
     const auto first =
         application.evaluateTemperatureControl(state, firstEvidence);
     TEST_ASSERT_TRUE(first.controlRequest.has_value());
+    // Consume the outstanding evaluation so the next public
+    // evaluateTemperatureControl() call below is not fail-closed by the
+    // single-outstanding-evaluation guard (Abschnitt 6.1); this test targets
+    // context-validity resets, not the planner's own physical output.
+    static_cast<void>(application.tickActuatorPlan(
+        state, 100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}));
 
     TemperatureControlEvaluationEvidence secondEvidence = firstEvidence;
     secondEvidence.sampleTimestampMonotonicMillis = 1'100U;
@@ -2996,6 +2998,11 @@ void test_evaluate_temperature_control_invalid_context_resets_runtime() {
     TEST_ASSERT_FALSE(controller.state().pendingContextTransition.has_value());
     TEST_ASSERT_FALSE(
         controller.state().lastSampleTimestampMonotonicMillis.has_value());
+    // Consume this outstanding (fail-closed) evaluation too, for the same
+    // reason as above.
+    static_cast<void>(application.tickActuatorPlan(
+        state, 2'100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}));
 
     state.processRunSnapshot = makeProcessRunSnapshot(*state.activeProgramRun);
     TEST_ASSERT_TRUE(state.processRunSnapshot.has_value());

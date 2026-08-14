@@ -238,6 +238,23 @@ TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
         return result;
     }
 
+    if (planner_ == nullptr) {
+        // Owner-Review F4: without a planner there is no #23 feedback
+        // handoff, ever - not just on the first call. Running #22's PI
+        // core here would silently freeze its integrator on every active
+        // evaluation after the first, indistinguishable from a real
+        // downstream limitation. Mirrors tickActuatorPlan()'s plannerless
+        // Unconfigured/NoCommissioning response; no active ControlRequest is
+        // produced. The 3-argument constructor remains valid for fixtures
+        // that never call this method.
+        TemperatureControlResult result;
+        result.status = TemperatureControlStatus::Unavailable;
+        result.reason = TemperatureControlReason::NoCommissioning;
+        result.airLimitState = AirLimitState::Unavailable;
+        result.direction = AbstractControlDirection::Idle;
+        return result;
+    }
+
     const auto context = resolveEffectiveControlContext(current);
     TemperatureControlResult result;
     if (!context.valid) {
@@ -261,21 +278,17 @@ TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
         input.air = evidence.air;
         input.product = evidence.product;
         input.previousControlRequestFeedback =
-            planner_ == nullptr
-                ? std::nullopt
-                : std::exchange(pendingControlRequestFeedback_, std::nullopt);
+            std::exchange(pendingControlRequestFeedback_, std::nullopt);
         input.processTransitionSequence =
             context.requestContext.processTransitionSequence;
         input.runRevision = context.requestContext.runRevision;
         result = temperatureController_.evaluate(input);
     }
 
-    if (planner_ != nullptr) {
-        outstandingEvaluation_ = result;
-        // Closing the prior feedback episode happens when the result becomes
-        // outstanding, before a lifecycle stop can inspect acceptedCommand.
-        planner_->closeFeedbackEpisodeForOutstandingEvaluation();
-    }
+    outstandingEvaluation_ = result;
+    // Closing the prior feedback episode happens when the result becomes
+    // outstanding, before a lifecycle stop can inspect acceptedCommand.
+    planner_->closeFeedbackEpisodeForOutstandingEvaluation();
     return result;
 }
 

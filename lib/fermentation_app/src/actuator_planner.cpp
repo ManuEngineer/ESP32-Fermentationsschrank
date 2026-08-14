@@ -390,6 +390,16 @@ void ActuatorPlanner::mergeFeedback(
 
 void ActuatorPlanner::mergeFeedbackForDemand(
     const AcceptedControlCommand& command, ActuatorPlanReason reason) {
+    // Owner-Review F1: command may be an old acceptedCommand still governed
+    // physically (minimum-on, teardown) after its own feedback episode
+    // already closed via a newer evaluation. Only the sequence currently
+    // owning the open episode may still mutate pendingFeedback; a foreign or
+    // already-closed subject is silently skipped so it cannot resurrect a
+    // stale disposition over the current episode's subject.
+    if (!state_.feedbackEpisodeSubjectSequence.has_value() ||
+        *state_.feedbackEpisodeSubjectSequence != command.sequence) {
+        return;
+    }
     mergeFeedback(
         command.sequence,
         isDownstreamLimitedReason(reason)
@@ -478,6 +488,10 @@ ActuatorPlanTickResult ActuatorPlanner::rejectToIdle(
         state_.pendingFeedback.reset();
         state_.pendingFeedbackUpdateAvailable = true;
     }
+    // Owner-Review F1: the immediate fail-closed teardown terminates the
+    // episode either way (Rejected or no subject); no later tick may still
+    // treat this sequence as an open feedback subject.
+    state_.feedbackEpisodeSubjectSequence.reset();
     return buildResult(status, reason, admission.admissionOutcome);
 }
 
@@ -913,6 +927,17 @@ bool ActuatorPlanner::runningWatchdogTripped(
                            parameters_.requestWatchdogMillis);
 }
 
+void ActuatorPlanner::openFeedbackEpisode(
+    std::optional<std::uint64_t> subjectSequence) {
+    // Owner-Review F1: closes whatever the previous episode's subject was
+    // and opens the new one (or none) atomically, so a stale
+    // acceptedCommand from the old subject can never be mistaken for the
+    // new one on a subsequent tick.
+    state_.feedbackEpisodeSubjectSequence = subjectSequence;
+    state_.pendingFeedback.reset();
+    state_.pendingFeedbackUpdateAvailable = true;
+}
+
 ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
     const ActuatorPlanTickInput& input) {
     PhaseAOutcome outcome;
@@ -921,20 +946,16 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
         return outcome;  // 6.2 Punkt 1: NoCandidate, Phase A endet hier.
     }
 
-    // Neue-Evaluation-Episodengrenze (6.2 Praeambel): das bisherige
-    // Feedbackfenster wird immer zuerst geschlossen, unabhaengig davon, was
-    // die neue Evaluation ist.
-    state_.pendingFeedback.reset();
-    state_.pendingFeedbackUpdateAvailable = true;
-    outcome.episodeClosedThisTick = true;
-
     const TemperatureControlResult& evaluation = *input.newEvaluation;
 
     if (!isStructurallyValidEvaluation(evaluation) ||
         !isStructurallyValidContext(input.currentCanonicalContext)) {
+        // 6.2 Punkt 2: eine strukturell unsichere Identitaet schliesst das
+        // Feedbackfenster fail-closed, ohne ein neues Subjekt zu eroeffnen.
+        openFeedbackEpisode(std::nullopt);
+        outcome.episodeClosedThisTick = true;
         outcome.admissionOutcome = ActuatorAdmissionOutcome::MalformedCandidate;
-        return outcome;  // kein H, kein Kandidat, pendingFeedback bleibt
-                         // nullopt.
+        return outcome;  // kein H, kein Kandidat.
     }
 
     const bool safetyGateMalformed =
@@ -942,6 +963,10 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
     const ActuatorDemandClass demandClass = classifyActuatorDemand(evaluation);
 
     if (demandClass == ActuatorDemandClass::NoValidRequest) {
+        // 6.2 Punkt 4: eine lebende, aber requestlose Auswertung schliesst
+        // das alte Fenster ebenfalls, ohne selbst ein Subjekt zu eroeffnen.
+        openFeedbackEpisode(std::nullopt);
+        outcome.episodeClosedThisTick = true;
         outcome.admissionOutcome =
             safetyGateMalformed ? ActuatorAdmissionOutcome::MalformedSafetyGate
                                 : ActuatorAdmissionOutcome::Accepted;
@@ -970,11 +995,19 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
 
     if (state_.lastObservedSequenceHighWatermark.has_value() &&
         sequence <= *state_.lastObservedSequenceHighWatermark) {
+        // 6.2 Punkt 5 / 9.2: ein Replay beruehrt weder Zeitbasis noch ein
+        // bestehendes Feedbackfenster; das Subjekt bleibt exakt so, wie es
+        // vor diesem Tick war (Owner-Review F1).
         outcome.admissionOutcome =
             ActuatorAdmissionOutcome::DuplicateOrOldSequence;
         return outcome;
     }
 
+    // Ab hier ist die Sequence strukturell neu und vertrauenswuerdig: das
+    // Feedbackfenster schliesst in jedem Fall (6.2 Praeambel), auch wenn
+    // unten kein neues Subjekt eroeffnet wird.
+    openFeedbackEpisode(std::nullopt);
+    outcome.episodeClosedThisTick = true;
     state_.lastObservedSequenceHighWatermark = sequence;
 
     if (deadlineReached(input.nowMonotonicMillis,
@@ -983,6 +1016,7 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
         outcome.admissionOutcome =
             ActuatorAdmissionOutcome::StaleOnArrivalWatchdog;
         if (isActiveHeatingCoolingDemand) {
+            state_.feedbackEpisodeSubjectSequence = sequence;
             state_.pendingFeedback = PendingControlRequestFeedback{
                 sequence,
                 PreviousControlRequestFeedback::Disposition::Rejected};
@@ -996,6 +1030,7 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
         outcome.admissionOutcome =
             ActuatorAdmissionOutcome::StaleOnArrivalContext;
         if (isActiveHeatingCoolingDemand) {
+            state_.feedbackEpisodeSubjectSequence = sequence;
             state_.pendingFeedback = PendingControlRequestFeedback{
                 sequence,
                 PreviousControlRequestFeedback::Disposition::Rejected};
@@ -1010,6 +1045,7 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
                             : ActuatorAdmissionOutcome::Accepted;
     state_.lastNewRequestAcceptedAtMonotonicMillis = input.nowMonotonicMillis;
     if (isActiveHeatingCoolingDemand) {
+        state_.feedbackEpisodeSubjectSequence = sequence;
         outcome.freshTrustedActiveSequence = sequence;
     }
 
@@ -1227,6 +1263,9 @@ ActuatorPlanTickResult ActuatorPlanner::forceStop(
         state_.pendingFeedback.reset();
         state_.pendingFeedbackUpdateAvailable = true;
     }
+    // Owner-Review F1: a lifecycle stop terminates whatever episode was
+    // still open; no subsequent tick may resurrect it.
+    state_.feedbackEpisodeSubjectSequence.reset();
 
     // A lifecycle boundary ends the controlled phase. Preserve an already
     // running inner-fan post-run, while allowing a new controlled episode to
@@ -1244,6 +1283,11 @@ ActuatorPlanTickResult ActuatorPlanner::forceStop(
 }
 
 void ActuatorPlanner::closeFeedbackEpisodeForOutstandingEvaluation() {
+    // Owner-Review F1: a newly registered outstandingEvaluation always closes
+    // the previous subject, even if no disposition had been recorded for it
+    // yet (e.g. an accepted active candidate observed on an otherwise
+    // rejected tick).
+    state_.feedbackEpisodeSubjectSequence.reset();
     if (state_.pendingFeedback.has_value()) {
         state_.pendingFeedback.reset();
         state_.pendingFeedbackUpdateAvailable = true;

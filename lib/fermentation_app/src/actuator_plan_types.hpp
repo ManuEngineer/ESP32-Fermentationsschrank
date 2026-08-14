@@ -259,6 +259,17 @@ struct ActuatorPlannerRuntimeState {
     std::optional<std::uint64_t> watchdogEpisodeStartedAtMonotonicMillis;
     std::optional<ActuatorWatchdogFaultEvidence> latchedWatchdogFault;
 
+    // Owner-Review F1: the sequence, if any, that currently owns the open
+    // feedback episode (Abschnitt 9.1). Distinct from acceptedCommand, which
+    // may keep governing an old physical direction (minimum-on, teardown)
+    // after its episode already closed. Only a mergeFeedbackForDemand() call
+    // whose command matches this sequence may still mutate pendingFeedback;
+    // a stale acceptedCommand's continued physical governance must not
+    // resurrect an already-closed or foreign subject. Set exactly where
+    // Phase A opens/closes a feedback window (Abschnitt 6.2); left
+    // unchanged for a nullopt tick or a DuplicateOrOldSequence outcome.
+    std::optional<std::uint64_t> feedbackEpisodeSubjectSequence;
+
     // Last actually observed disposition for the currently tracked feedback
     // episode. A new active sequence starts with no disposition yet; Phase B
     // records the first real outcome. Once recorded, severity only increases
