@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Aktuelle fachliche Arbeit nach dem Merge von PR #105 / Issue #23; Planrevision 1 ist nach der Ownerentscheidung zur firmwarefesten Restart-Episode vorbereitet, Implementation `NOT_STARTED` | Ownerfreigabe des exakten Plan-Commits; danach Umsetzung ausschliesslich gemaess freigegebenem Plan |
+| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Aktuelle fachliche Arbeit nach dem Merge von PR #105 / Issue #23; Planrevision 2 korrigiert die Owner-Review-Befunde, Implementation `NOT_STARTED` | Ownerfreigabe des exakten Plan-Commits; danach Umsetzung ausschliesslich gemaess freigegebenem Plan |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
