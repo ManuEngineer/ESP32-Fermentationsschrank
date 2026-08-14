@@ -12,6 +12,7 @@
 namespace fermentation {
 
 class ActuatorPlanner;
+struct ConfigurationRecoveryResult;
 enum class ConfigurationServiceMode : std::uint8_t;
 enum class ConfigurationCommitStatus : std::uint8_t;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
@@ -65,7 +66,8 @@ class SafetyFaultService final {
         const FactoryNewSafetyProof& factoryProof = {});
     [[nodiscard]] SafetyBootResult evaluateBoot();
 
-    [[nodiscard]] SafetyServiceStatus raiseFault(const FaultRaiseRequest& request);
+    [[nodiscard]] SafetyServiceStatus raiseFault(
+        const FaultRaiseRequest& request);
     [[nodiscard]] SafetyServiceStatus consumeConfigurationStatus(
         ConfigurationSafetyStatus status, std::uint32_t sourceKey,
         std::uint32_t correlationKey);
@@ -78,15 +80,30 @@ class SafetyFaultService final {
     [[nodiscard]] SafetyServiceStatus consumeConfigurationStatus(
         ConfigurationRecoveryStatus status, std::uint32_t sourceKey,
         std::uint32_t correlationKey);
+    [[nodiscard]] SafetyServiceStatus consumeConfigurationRecoveryResult(
+        const ConfigurationRecoveryResult& result, std::uint32_t sourceKey,
+        std::uint32_t correlationKey);
     [[nodiscard]] SafetyServiceStatus consumeWatchdogEvidence(
         const ActuatorWatchdogFaultEvidence& evidence);
     [[nodiscard]] SafetyServiceStatus acknowledgeFault(
         FaultInstanceId id, std::uint32_t expectedRevision);
     [[nodiscard]] SafetyServiceStatus clearFaultCause(
         FaultInstanceId id, std::uint32_t expectedRevision);
+    [[nodiscard]] std::optional<FaultResetAuthorization>
+    prepareFaultResetAuthorization(FaultInstanceId id,
+                                   std::uint32_t expectedRevision);
+    [[nodiscard]] SafetyResetResult resetFault(
+        FaultInstanceId id, std::uint32_t expectedRevision,
+        ActuatorPlanner* planner = nullptr);
+    // Source-compatibility shield only. The bool is deliberately ignored and
+    // can never authorize a reset.
     [[nodiscard]] SafetyResetResult resetFault(
         FaultInstanceId id, std::uint32_t expectedRevision,
         bool authorizationSatisfied, ActuatorPlanner* planner = nullptr);
+    [[nodiscard]] std::optional<SafetyRecoveryRequest> issueSafetyRecovery(
+        const SafetyRecoveryQualification& qualification);
+    [[nodiscard]] SafetyServiceStatus completeSafetyRecovery(
+        const SafetyRecoveryRequest& request, bool succeeded);
     [[nodiscard]] SafetyServiceStatus requestControlledSafetyRestart(
         FaultInstanceId id, std::uint32_t expectedRevision);
     [[nodiscard]] SafetyServiceStatus advanceStableWindow(bool stable);
@@ -99,16 +116,21 @@ class SafetyFaultService final {
     // Projektion fuer vorhandene #15/#23-Konsumenten; die Projektion ist
     // niemals die Autoritaet.
     void projectTo(RunCommandState& state) const;
+    [[nodiscard]] ActuatorSafetyGateInput actuatorGateInput() const;
+    // Caller-supplied copies are never treated as an authority.
     [[nodiscard]] ActuatorSafetyGateInput actuatorGateInput(
-        const std::optional<SafetyRecoveryRequest>& recovery = std::nullopt)
-        const;
+        const std::optional<SafetyRecoveryRequest>&) const;
 
    private:
-    [[nodiscard]] SafetyServiceStatus persistCoreMutation();
+    [[nodiscard]] SafetyServiceStatus persistCoreMutation(
+        const FaultCoreSnapshot& before);
     [[nodiscard]] SafetyServiceStatus persistSafeBootLock();
     [[nodiscard]] bool copyCoreToRecord(SafetyStateRecord& candidate) const;
+    [[nodiscard]] bool copyCoreToRecord(SafetyStateRecord& candidate,
+                                        const FaultCore& core) const;
     void recordEvent(FaultEventType type, const FaultRecord* fault,
-                     bool accepted) const;
+                     bool accepted, std::uint32_t episodeId = 0U,
+                     std::uint32_t restartEvidenceId = 0U) const;
 
     SafetyStateStore stateStore_;
     device_platform::IResetController& resetController_;
@@ -118,6 +140,9 @@ class SafetyFaultService final {
     RestartEpisodeCoordinator restartEpisode_;
     SafetyStateRecord record_;
     bool started_{false};
+    bool configurationGateQualified_{false};
+    std::optional<SafetyRecoveryRequest> safetyRecoveryCapability_;
+    std::uint64_t nextAuthorityToken_{1U};
 };
 
 }  // namespace fermentation

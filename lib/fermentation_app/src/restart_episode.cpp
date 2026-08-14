@@ -13,14 +13,13 @@ bool isAbnormal(RestartCauseEvent cause) {
 
 bool sameControlledEvidence(const SafetyStateRecord& record) {
     return record.restartEvidence.state == RestartEvidenceState::Committed &&
-           record.restartEvidence.cause == RestartCauseEvent::ControlledSafety &&
+           record.restartEvidence.cause ==
+               RestartCauseEvent::ControlledSafety &&
            record.restartEvidence.evidenceId != 0U &&
            record.restartEvidence.faultInstanceId.valid();
 }
 
-void setSafeBoot(SafetyStateRecord& record) {
-    record.safeBootRequired = true;
-}
+void setSafeBoot(SafetyStateRecord& record) { record.safeBootRequired = true; }
 
 }  // namespace
 
@@ -34,15 +33,57 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
         result.safeBootRequired = true;
         return result;
     }
+    // The reset port exposes one boot-local stable observation. Re-evaluating
+    // it must never create another episode/evidence record or consume another
+    // intent. A changed cause under the same observation id is itself unsafe.
+    if (record.lastResetObservationId == snapshot.observationId) {
+        result.cause = classifyRestartCause(snapshot.cause);
+        if (snapshot.cause != record.lastResetCause) {
+            setSafeBoot(record);
+            result.status = RestartBootStatus::EvidenceMismatch;
+            result.safeBootRequired = true;
+            result.recordNeedsCommit = false;
+            return result;
+        }
+        result.evidenceId = record.restartEvidence.evidenceId;
+        switch (result.cause) {
+            case RestartCauseEvent::Authorized:
+                result.status = record.faultResetBootIntent.pending
+                                    ? RestartBootStatus::EvidenceMismatch
+                                    : RestartBootStatus::AuthorizedReset;
+                break;
+            case RestartCauseEvent::ControlledSafety:
+                result.status =
+                    record.restartEvidence.state ==
+                            RestartEvidenceState::Consumed
+                        ? RestartBootStatus::ControlledEvidenceConsumed
+                        : RestartBootStatus::EvidenceMismatch;
+                break;
+            case RestartCauseEvent::WatchdogOrPanic:
+            case RestartCauseEvent::Brownout:
+                result.status = record.restartEpisode.abnormalRestartCount >= 3U
+                                    ? RestartBootStatus::SafeBootRequired
+                                    : RestartBootStatus::AbnormalRecorded;
+                break;
+            case RestartCauseEvent::PowerOn:
+                result.status = RestartBootStatus::Normal;
+                break;
+            case RestartCauseEvent::Unknown:
+                result.status = RestartBootStatus::UnknownFailClosed;
+                break;
+        }
+        result.safeBootRequired = record.safeBootRequired;
+        return result;
+    }
     record.lastResetCause = snapshot.cause;
     record.lastResetObservationId = snapshot.observationId;
     result.cause = classifyRestartCause(snapshot.cause);
+    result.recordNeedsCommit = true;
 
     if (result.cause == RestartCauseEvent::Unknown) {
         setSafeBoot(record);
         result.status = RestartBootStatus::UnknownFailClosed;
         result.safeBootRequired = true;
-        result.recordNeedsCommit = true;
         return result;
     }
 
@@ -51,7 +92,6 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
         setSafeBoot(record);
         result.status = RestartBootStatus::EvidenceMismatch;
         result.safeBootRequired = true;
-        result.recordNeedsCommit = true;
         return result;
     }
     if (record.restartEvidence.state == RestartEvidenceState::Pending ||
@@ -68,7 +108,6 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
         if (record.faultResetBootIntent.pending) {
             record.faultResetBootIntent.pending = false;
             result.status = RestartBootStatus::AuthorizedReset;
-            result.recordNeedsCommit = true;
         } else {
             result.status = RestartBootStatus::Normal;
         }
@@ -87,7 +126,6 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
         record.restartEvidence.state = RestartEvidenceState::Consumed;
         result.status = RestartBootStatus::ControlledEvidenceConsumed;
         result.evidenceId = record.restartEvidence.evidenceId;
-        result.recordNeedsCommit = true;
         result.safeBootRequired = record.safeBootRequired;
         return result;
     }
@@ -112,7 +150,6 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
         setSafeBoot(record);
         result.status = RestartBootStatus::Overflow;
         result.safeBootRequired = true;
-        result.recordNeedsCommit = true;
         return result;
     }
     if (newEpisode) ++record.restartEpisode.episodeId;
