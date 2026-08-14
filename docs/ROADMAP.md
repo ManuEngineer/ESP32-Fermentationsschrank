@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #105 (Branch `agent/issue-23-aktorplaner-plan`) / Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | Planrevision 7 (`docs/tasks/issue-23-actuator-planner-plan.md`, Commit `c1398b3c1543750277a77ce15822895418e3494f`) committet; die vollständigen Owner-Review-Befunde R6.1-R6.5 sowie R4/R5 und I106.R1 sind im Planstand dokumentiert; Issue #106 bleibt unverändert offen und als separates produktives Integrationsgate bestehen; Owner-Freigabe dieser exakten Plan-SHA steht aus; noch keine Produktionslogik umgesetzt; Base `main @ 2986dca5736a34171910c9245a3d5f43fa55da06` (Merge von PR #104 / Issue #22) | Ownerfreigabe des exakten Revision-7-Plan-Commits |
+| 1 | Draft-PR #105 (Branch `agent/issue-23-aktorplaner-plan`) / Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | Planrevision 8 (`docs/tasks/issue-23-actuator-planner-plan.md`, Commit `3fa28d32ce9a0782edb984f27006467eb8d5f532`) committet; die vollständigen Owner-Review-Befunde R6.1-R6.5, R7.1-R7.3 sowie R4/R5 und I106.R1 sind im Planstand dokumentiert; Issue #106 bleibt unverändert offen und als separates produktives Integrationsgate bestehen; Owner-Freigabe dieser exakten Plan-SHA steht aus; noch keine Produktionslogik umgesetzt; Base `main @ 2986dca5736a34171910c9245a3d5f43fa55da06` (Merge von PR #104 / Issue #22) | Ownerfreigabe des exakten Revision-8-Plan-Commits |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -26,9 +26,9 @@ Issue #23 (Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik), danach
 Issue #24 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,
 Aufbewahrung, Bereinigung, Backup und Import). Die jeweiligen Arbeiten
 beginnen erst nach ihrem eigenen Plan-/Owner-Gate; #23 ist jetzt die aktuelle
-Planungsarbeit. Die vollstaendige eigenstaendige Planrevision 7 liegt im
+Planungsarbeit. Die vollstaendige eigenstaendige Planrevision 8 liegt im
 Draft-PR #105 unter `docs/tasks/issue-23-actuator-planner-plan.md`
-(Planrevision 7, Plan-Commit `c1398b3c1543750277a77ce15822895418e3494f`); die
+(Planrevision 8, Plan-Commit `3fa28d32ce9a0782edb984f27006467eb8d5f532`); die
 Freigabe selbst steht noch aus und wird nach Ownerfreigabe hier
 nachgetragen. Issue #106 (Aktorplaner Per-Run-Parameter-Snapshot und
 Recovery-Bindung) bleibt offen, wurde live praezisiert und ist als
