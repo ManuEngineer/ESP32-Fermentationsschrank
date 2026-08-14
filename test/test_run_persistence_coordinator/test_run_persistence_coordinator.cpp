@@ -3381,7 +3381,21 @@ void test_application_multi_rate_windows_and_downstream_counter_probe() {
         store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
     static_cast<void>(coordinator.loadAndInitialize());
     TargetQualificationEvaluator evaluator;
-    TemperatureController controller(bridgeTemperatureParameters(),
+    // Owner-Review F6: this fixture keeps a constant, unmoving sensor error
+    // for 45 cycles (the test evidence never simulates the temperature
+    // actually approaching target); with the shared
+    // bridgeTemperatureParameters() gain, that sustained error would clamp
+    // the integrator to its headroom within a handful of cycles, well
+    // before the required three switching windows have elapsed. Only this
+    // fixture's own copy gets a much smaller integral gain so genuine
+    // multi-window progression can be observed without a future parameter
+    // drift silently making the strict progression assertion vacuous
+    // through early saturation; bridgeTemperatureParameters() itself stays
+    // untouched for every other fixture.
+    auto temperatureParameters = bridgeTemperatureParameters();
+    temperatureParameters.productHeating.integralGainQuotePerCelsiusSecond =
+        0.001;
+    TemperatureController controller(temperatureParameters,
                                      bridgeTemperaturePolicy());
     auto parameters = bridgeActuatorPlannerParameters();
     parameters.switchingWindowMillis = 30'000U;
@@ -3411,9 +3425,18 @@ void test_application_multi_rate_windows_and_downstream_counter_probe() {
             application.evaluateTemperatureControl(state, evidence);
         TEST_ASSERT_TRUE(evaluation.controlRequest.has_value());
         if (sample > 0U) {
-            TEST_ASSERT_TRUE(evaluation.integralContributionQuote >=
+            // Owner-Review F6: strict positive progression at every one of
+            // these 45 non-saturated cycles (spanning three 30s switching
+            // windows and two window boundaries at sample 15/30) - a stalled
+            // sequence like 0.01, 0.01, ... would pass a ">=" check but is
+            // exactly the integrator-freezing class Revision 8 exists to
+            // rule out. Non-saturation is asserted explicitly so the
+            // parameters cannot silently drift into a state where clamping,
+            // not real progression, makes this pass.
+            TEST_ASSERT_TRUE(evaluation.integralContributionQuote >
                              previousIntegral);
-            TEST_ASSERT_TRUE(evaluation.integralContributionQuote > 0.0);
+            TEST_ASSERT_TRUE(evaluation.reason !=
+                             TemperatureControlReason::Saturated);
         }
         previousIntegral = evaluation.integralContributionQuote;
 
@@ -3480,6 +3503,9 @@ void test_application_multi_rate_windows_and_downstream_counter_probe() {
     const auto cooling = counterApplication.evaluateTemperatureControl(
         counterState, counterEvidence);
     TEST_ASSERT_TRUE(cooling.direction == AbstractControlDirection::Cooling);
+    // Owner-Review F7: capture the integral before the real downstream gate
+    // takes effect.
+    const double coolingIntegralBeforeGate = cooling.integralContributionQuote;
     auto counterPlan = counterApplication.tickActuatorPlan(
         counterState, 2'100U,
         ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
@@ -3492,6 +3518,12 @@ void test_application_multi_rate_windows_and_downstream_counter_probe() {
     const auto coolingContinuation =
         counterApplication.evaluateTemperatureControl(counterState,
                                                       counterEvidence);
+    // Owner-Review F7: the DeferredOrLimited disposition produced above by
+    // the real CounterDirectionConfirming gate must be consumed by exactly
+    // this next #22 evaluation and must hold the PI integrator - not merely
+    // be a planner Reason label with no effect on #22's own state.
+    TEST_ASSERT_TRUE(coolingContinuation.integralContributionQuote <=
+                     coolingIntegralBeforeGate);
     counterPlan = counterApplication.tickActuatorPlan(
         counterState, 4'100U,
         ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
