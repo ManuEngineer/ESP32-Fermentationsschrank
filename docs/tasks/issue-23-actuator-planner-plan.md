@@ -2,9 +2,9 @@
 
 ## 1. Status, Scope und Owner-Gate
 
-- Revision: **7**. Ersetzt Revision 6
-  (`62cd53c9f727e00e24c1ed6f99e400af059f1b24`) vollständig. Diese Revision ist
-  ohne Rückgriff auf Revision 1, 2, 3, 4, 5 oder 6
+- Revision: **8**. Ersetzt Revision 7
+  (`c1398b3c1543750277a77ce15822895418e3494f`) vollständig. Diese Revision ist
+  ohne Rückgriff auf Revision 1, 2, 3, 4, 5, 6 oder 7
   vollständig ausführbar und reviewbar.
 - Live-Issue: #23, offen, Status `PLANNED_SPEC_PENDING`.
 - Draft-PR: #105, Branch `agent/issue-23-aktorplaner-plan` -> `main`.
@@ -19,7 +19,7 @@
   bleibt Abhängigkeit dieses Plans für die produktive Verdrahtung (Abschnitt
   14).
 - Die Umsetzung bleibt gesperrt, bis der Owner exakt den nach diesem Commit
-  bekannten Revision-7-Plan-Commit mit `PLAN APPROVED: <SHA>` freigibt.
+  bekannten Revision-8-Plan-Commit mit `PLAN APPROVED: <SHA>` freigibt.
 - Diese Revision committet ausschließlich Plandokumentation. Sie implementiert
   keine Produktionslogik, keine produktiven Tests, keine Hardware-, GPIO-,
   Toolchain- oder CI-Änderung.
@@ -29,15 +29,16 @@
 ```text
 CONTEXT_BASELINE_BRANCH: agent/issue-23-aktorplaner-plan
 CONTEXT_BASELINE_SHA: 2986dca5736a34171910c9245a3d5f43fa55da06
-CONTEXT_HEAD_BEFORE_REVISION: cd49a6131b4e98bcaae28a52a067fbde96e45c50 (Roadmap-Metadaten-Commit nach Revision 6)
-CONTEXT_PLAN_SHA: 62cd53c9f727e00e24c1ed6f99e400af059f1b24 (vollstaendig zu ersetzender Revision-6-Plan)
+CONTEXT_HEAD_BEFORE_REVISION: 7a14df76eb745c061f835be42a9addb6ed515c42 (Roadmap-Metadaten-Commit nach Revision 7)
+CONTEXT_PLAN_SHA: c1398b3c1543750277a77ce15822895418e3494f (vollstaendig zu ersetzender Revision-7-Plan)
 CONTEXT_REFRESH_MODE: FULL
 CONTEXT_DELTA: Vollständiges Owner-Review von Revision 5 mit den Befunden
   R5.1-R5.8 wurde erhalten. Issue #106 wurde vor Revision 5 separat live um
   I106.R1 präzisiert, ist seitdem unverändert offen und wird in dieser Revision
   nicht geändert. Die bisherigen R4.1-R4.6- und I106.R1-Verträge bleiben
-  erhalten. Die neuen Befunde aus Revision 6 sind in dieser vollständigen
-  Revision 7 konsistent erhalten und erweitert. Revision 7 ergänzt zusätzlich:
+  erhalten. Die neuen Befunde aus Revision 6 und dem Cross-Review von
+  Revision 7 sind in dieser vollständigen Revision 8 konsistent erhalten und
+  erweitert. Revision 8 ergänzt zusätzlich:
   R4.1 -> `ActiveSwitchingWindow` bleibt ein reiner
     Planungssnapshot; der Runtime-State führt den tatsächlichen
     `lastAppliedDirection` sowie die letzte physische
@@ -104,7 +105,7 @@ CONTEXT_DELTA: Vollständiges Owner-Review von Revision 5 mit den Befunden
     ist als öffentlicher #23-Integrationsschritt mit vollständiger
     Repository-Callsite-Suche, Migration und Regressionstests im Scope.
   R5.8 -> nach dem Plan-Commit wird die Roadmap in einem separaten
-    redaktionellen Metadaten-Commit auf die exakte Revision-7-SHA synchronisiert;
+    redaktionellen Metadaten-Commit auf die exakte Revision-8-SHA synchronisiert;
     alle alten Revision-4/5-Statusstellen werden geprüft.
   R6.1 -> eine neue `outstandingEvaluation`-Episode schließt das vorige
     #22-Feedbackfenster bereits vor dem Planner-Tick; nur die neue
@@ -114,26 +115,43 @@ CONTEXT_DELTA: Vollständiges Owner-Review von Revision 5 mit den Befunden
     Sequence-Feedback. `forceStop()` darf nur ein noch offenes
     Feedbacksubjekt verschärfen; ein vorhandenes `outstandingEvaluation`
     sperrt die Resurrektion des alten `acceptedCommand`.
-  R6.2 -> Variante A: `ActiveSwitchingWindow::sourceRequestSequence` beweist
-    die Window-Ownership. Ein A-Fenster bleibt A, eine gleichgerichtete
-    Mid-window-B-Request wird nicht als ausgeführt behauptet, und ein
-    Folgefenster aus B trägt B als Quelle. Das Ownership-Gate ist in der
-    Feedbackmatrix und den Tests ausdrücklich nachgewiesen.
+  R6.2 -> `ActiveSwitchingWindow::sourceRequestSequence` bleibt der
+    unveränderliche physische Window-Ownership-Snapshot. Die normale
+    gleichgerichtete Mid-window-Synchronisierung ist jedoch kein downstream
+    Integrator-Constraint; die Feedbacksemantik verwendet dafür
+    `NoDownstreamIntegratorConstraint`, das auf
+    `NoIntegratorConstraint` abgebildet wird. Ein A-Fenster bleibt A, ein
+    Folgefenster aus B trägt B als Quelle, ohne dass B für das alte Fenster
+    als physisch ausgeführt behauptet wird.
   R6.3 -> `watchdogEpisodeStartedAtMonotonicMillis` definiert den frischen
     Startanker pro überwachte Temperaturregel-Episode. Vor dem ersten H gilt
     der Episodenanker, danach das letzte H; beim Verlassen wird der
     Heartbeat-/Episodenanker gelöscht, beim Wiedereintritt neu gesetzt.
     `latchedWatchdogFault` bleibt über alle Rebasings erhalten.
-  R6.4 -> `CounterDirectionConfirming`, `WindowPulseDeferred` und
-    `WindowPulseMissed` sind echte
+  R6.4 -> `CounterDirectionConfirming` und `WindowPulseMissed` sind echte
     `ActuatorPlanReason`-Werte. `DeferredOrLimited` bleibt ausschließlich
     Feedback-Disposition; die N-5-Tabelle ist typgetrennt und exhaustiv.
   R6.5 -> das Replay-Hochwasserzeichen heißt
     `lastObservedSequenceHighWatermark`; die Watchdog-Evidenz bezeichnet ihr
     Feld ebenfalls ehrlich als Hochwasserzeichen und behauptet keine
     erfolgreiche H-Akzeptanz für stale-on-arrival Sequences.
-  Governance -> Revision 7 wird als eigener Plancommit erstellt, der PR-Body
-    danach auf die exakte Revision-7-SHA gesetzt, die Roadmap anschließend in
+  R7.1 -> die normale gleichgerichtete Mid-window-Synchronisierung folgt
+    vollständig Variante B. Sie erzeugt allein kein
+    `DeferredOrLimited`; echte Mindestpuls-, Minimum-Off-, Totzeit-,
+    Gegenrichtungs- und verpasste-Puls-Begrenzungen bleiben deferred. Die
+    anti-windup-Bedeutung heißt `NoDownstreamIntegratorConstraint` und ist
+    nicht an die Window-Ownership-Sequence gebunden.
+  R7.2 -> `ActuatorPlanStatus` ist exakt mit `appliedDirection` gekoppelt:
+    Active nur bei Heating/Cooling, Idle nur bei Idle, Unconfigured und
+    InvalidInput immer mit Idle. `ActuatorPlanReason` nennt den dominanten
+    Governancegrund, ohne den realen Ausgang zu verleugnen; der tote
+    `WindowPulseDeferred`-Reason entfällt.
+  R7.3 -> ein mehrfenstriger 2-s/30-s-Multi-Rate-Orakeltest prüft den vollständigen
+    #22/#23-Orchestratorpfad über mindestens drei Fenster einschließlich
+    `NoDownstreamIntegratorConstraint`, positiver PI-Integration und einer
+    Gegenprobe mit echter downstream Begrenzung.
+  Governance -> Revision 8 wird als eigener Plancommit erstellt, der PR-Body
+    danach auf die exakte Revision-8-SHA gesetzt, die Roadmap anschließend in
     einem separaten rein redaktionellen Metadatencommit synchronisiert und ein
     neuer Handover veröffentlicht.
 SOURCE_OF_TRUTH_CONFLICT: NONE.
@@ -531,8 +549,9 @@ struct AcceptedControlCommand {
 struct ActiveSwitchingWindow {
     std::uint64_t startMonotonicMillis{0U};
     AbstractControlDirection direction{AbstractControlDirection::Idle};
-    // Immutable ownership of this natural window. It is the only sequence
-    // that may receive RequestFullyExecuted for this window.
+    // Immutable physical ownership of this natural window. This snapshot is
+    // diagnostic/physical evidence only; it is not the prerequisite for the
+    // anti-windup disposition of a later same-direction request.
     std::uint64_t sourceRequestSequence{0U};
     std::uint64_t scheduledOnMillis{0U};
     // Exactly one first-start attempt is allowed for this natural window.
@@ -906,9 +925,16 @@ gesetzt werden darf:
 Bei jedem `newEvaluation` bleibt ein altes `acceptedCommand` ausschließlich
 für die physische Mindest-On-/Stop-Logik relevant. Es darf weder eine alte
 Sequence als `pendingFeedback` wieder einsetzen noch die neue Sequence als
-bereits ausgeführt markieren. Eine neue aktive Sequence erhält ihre erste
-Disposition nur aus ihrem eigenen Candidate-/Window-Pfad; bei einer noch
-nicht möglichen B-Fensteranlage ist das `DeferredOrLimited` mit einem echten
+bereits physisch ausgeführt markieren. Eine neue aktive Sequence erhält ihre
+erste Disposition aus ihrem eigenen Candidate-/Window-Pfad: Bei einer
+gleichgerichteten normalen Mid-window-Aktualisierung ist das bloße Warten auf
+den nächsten Fensterstart kein #23-Constraint. Sie darf deshalb die interne
+Semantik `NoDownstreamIntegratorConstraint` und damit die Feedback-
+Disposition `NoIntegratorConstraint` erhalten, obwohl
+`activeWindow.sourceRequestSequence` noch die ältere physische Fensterquelle
+trägt. Nur ein tatsächlich eingetretenes Gate wie Mindestpulsakkumulation,
+Minimum-Off, Polaritätstotzeit, Gegenrichtungsbestätigung oder ein verpasster
+Puls führt zu `DeferredOrLimited` mit dem passenden
 `ActuatorPlanReason` nach Abschnitt 8.2. Eine neue `OFF`- oder
 `NoValidRequest`-Evaluation beendet dagegen ohne Feedbacksubjekt.
 
@@ -995,7 +1021,8 @@ zulässigen Fensterstart-Ereignis genau einmal aus der dann aktuellen Request
 erzeugt, übernimmt deren Sequence als unveränderliche
 `sourceRequestSequence` und bleibt für die Dauer dieses Fensters
 unveränderlich. Eine neue Request mit unveränderter Richtung wirkt erst im
-nächsten Fenster. Eine
+nächsten Fenster; dieses normale Warten ist allein aber kein
+`DeferredOrLimited`-Constraint. Eine
 unbestätigte Gegenrichtung ist davon ausdrücklich ausgenommen: Das bereits
 laufende alte Fenster darf seinen eingefrorenen Puls beenden, aber an dessen
 Fensterende wird kein Folgefenster aus der Gegenrequest erzeugt. Danach bleibt
@@ -1178,26 +1205,38 @@ nichtnulliges `scheduledOnMillis` gilt:
    verworfen. Damit sind vor, auf und nach dem Minimum-Off-Ende sowie kurze und
    lange Off-Anteile ohne Nachholung unterscheidbar testbar.
 
-Diese feste Lage ist die gewählte Revision-7-Regel. Sie ist konservativer als
+Diese feste Lage ist die gewählte Revision-8-Regel. Sie ist konservativer als
 ein verschobener Puls, verhindert aber jede stille Energieerzeugung aus einer
 Sperrphase und ist O(1) sowie nativ deterministisch.
 
-**Variante A – Window-Ownership ist feedbackrelevant.** Diese Revision
-entscheidet ausdrücklich gegen die alternative Variante B. Die natürliche
-Window-Synchronisierung ist für eine neue Sequence dann eine downstream
-Begrenzung, wenn deren eigenes Fenster noch nicht begonnen hat. Ein laufendes
-Fenster A darf niemals als Ausführung von B bewertet werden, auch wenn
-`acceptedCommand` zwischenzeitlich auf eine gleichgerichtete B-Request zeigt.
-Am nächsten zulässigen Fensterstart wird aus B ein neues Snapshot erzeugt und
-dieses trägt `sourceRequestSequence == B.sequence`. Wird ein A-Fenster
-verworfen, gelöscht oder durch OFF/Fail-closed beendet, wird seine Ownership
-ebenfalls gelöscht. Die Entscheidung `RequestFullyExecuted` ist damit aus dem
-Runtime-Datenmodell beweisbar und nicht aus physischer Richtung allein
-hergeleitet. Die Wahl folgt `ACTUATOR_TIMING.md`: Das gemeinsame
-zeitproportionale Fenster friert die Quote je Fenster ein; eine neue Quote
-wirkt erst am Folgefenster. Die nicht ausgeführte B-Quote ist daher bis zu
-ihrem eigenen Fenster tatsächlich begrenzt und darf #22 nicht als
-ungehindert ausgeführt gemeldet werden.
+**Variante B – normale gleichgerichtete Window-Synchronisierung ist kein
+Constraint.** Diese Revision entscheidet ausdrücklich für Variante B. Ein
+laufendes Fenster A bleibt bis zu seinem natürlichen Ende unverändert und
+trägt weiterhin `sourceRequestSequence == A.sequence`. Eine neue
+gleichgerichtete Request B wird als aktuellste Planungsrequest für das nächste
+Fenster übernommen, verändert aber das laufende A-Fenster nicht. Das bloße
+Warten auf diesen nächsten Fensterstart ist keine zusätzliche #23-seitige
+Sperre, Reduktion oder Zurückweisung; B darf deshalb
+`NoDownstreamIntegratorConstraint` und damit
+`NoIntegratorConstraint` erhalten. Diese Rückmeldung behauptet nicht, dass
+die komplette physische Energie von B bereits ausgeführt wurde.
+
+Die physische Ownership bleibt trotzdem beweisbar: B wird niemals als Quelle
+des alten A-Fensters dargestellt. Beim B-eigenen Folgefenster wird ein neuer
+Snapshot mit `sourceRequestSequence == B.sequence` erzeugt. Wird ein Fenster
+durch OFF, Fail-closed oder den unbestätigten Gegenrichtungsfall verworfen,
+wird seine Ownership gelöscht. Nur tatsächliche downstream Begrenzungen –
+etwa Akkumulation unter `minimumOnMillis`, Minimum-Off, Polaritätstotzeit,
+Gegenrichtungsbestätigung oder ein verspäteter/verpasster Puls – erzeugen
+`DeferredOrLimited`. Die Wahl folgt `ACTUATOR_TIMING.md`: Das gemeinsame
+zeitproportionale Fenster friert die Quote je Fenster ein, aber diese normale
+Sample-and-hold-Semantik ist keine permanente Aktorsperre für den #22-
+Integrator. Das ist gegen den kanonischen Messzyklus aus
+`SENSOR_TUNING_COMMISSIONING.md` begründet: Bei nominal ungefähr 2 s pro
+Regelwert und einem deutlich langsameren, beispielsweise 30 s langen
+Aktorfenster entstehen zwangsläufig viele gleichgerichtete Requests innerhalb
+eines Fensters. Würde allein dieses Warten `DeferredOrLimited` erzeugen,
+würde der #22-Integrator im Normalbetrieb dauerhaft einfrieren.
 
 **Fensterfortschritt (overflow-sicher, O(1)).** Solange ein
 `activeWindow` besteht, verwendet kein Schritt eine ungeprüfte
@@ -1270,11 +1309,35 @@ enum class ActuatorPlanReason : std::uint8_t {
     AccumulatingBelowThreshold,
     MinimumPulseTriggered,
     CounterDirectionConfirming,
-    WindowPulseDeferred,
     WindowPulseMissed,
     ScheduledWithinWindow,
 };
 ```
+
+**Status-/Ausgangsinvariante:** Für konfigurierte, strukturell gültige
+Normalticks beschreibt `ActuatorPlanStatus` den realen Ausgang dieses Ticks
+und nicht bloß den Governancegrund. Es gilt zwingend:
+
+```text
+status == Active  <=> appliedDirection == Heating oder Cooling
+status == Idle    <=> appliedDirection == Idle
+status == Unconfigured oder InvalidInput => appliedDirection == Idle
+```
+
+Die dritte Zeile ist die fail-closed-Ausnahme zu den beiden regulären
+Äquivalenzen: Ein unkonfigurierter oder ungültiger Tick hat einen eigenen
+Status, aber niemals einen aktiven physischen Ausgang.
+
+`ActuatorPlanReason` beschreibt zusätzlich den dominanten Governancegrund des
+aktuellen Ticks. Er darf den realen Ausgang nicht verleugnen. Läuft daher das
+alte Heating-Fenster noch, während eine neue Cooling-Request auf ihre
+Gegenrichtungsbestätigung wartet, lautet das Ergebnis `Active` mit
+`appliedDirection == Heating` und `reason == CounterDirectionConfirming`.
+Nach dem natürlichen Ende des alten Fensters lautet es `Idle` mit
+`appliedDirection == Idle` und demselben Reason, solange Cooling noch nicht
+freigegeben ist. In beiden Fällen erhält Cooling
+`DeferredOrLimited`. Ein unkonfigurierter oder ungültiger Tick bleibt immer
+`Idle`/`Idle`.
 
 Die folgende Tabelle ist bewusst in zwei Klassen getrennt. Die unmittelbare
 Fail-closed-Klasse ist nicht durch die normale Mindest-Einschaltzeit
@@ -1344,12 +1407,12 @@ außerhalb dieser Tick-Eingabe erfolgt.
 | N-2 | derselbe normale Teardown nach erfüllter Mindest-On oder während physischem Idle | `Idle / NeutralIdle` beziehungsweise `AirLimitBlocked` | Active -> Idle, falls erforderlich | Snapshot, Request, Akkumulator und Gegenrichtung werden verworfen |
 | N-3 | ein gültiger Heating/Cooling-Puls soll aus Idle beginnen, aber der physische Deaktivierungsanker sperrt ihn | `Idle / MinimumOffTimeHeld` beziehungsweise `PolarityDeadTimeHeld` | Idle | der aktuelle Fensterpuls ist nach 8.1 verworfen; kein Nachholen |
 | N-4 | gültige normale Fensterauswertung ohne downstream Begrenzung | `Active`/`Idle` mit `ScheduledWithinWindow` oder `MinimumPulseTriggered`; der planmäßige Window-Off-Anteil gehört ausdrücklich hierher | gemäß natürlichem Snapshot-Intervall | reguläre Fensterfortschreibung; Feedback `NoIntegratorConstraint` unabhängig von Sample-Phase |
-| N-5a | gültige Request, Akkumulation bleibt unter `minimumOnMillis` | `Idle` / `AccumulatingBelowThreshold` | Idle | Guthaben bleibt innerhalb des Caps; Feedback `DeferredOrLimited` |
+| N-5a | gültige Request, Akkumulation bleibt unter `minimumOnMillis` | gemäß `appliedDirection` / `AccumulatingBelowThreshold` | bestehender alter Ausgang oder Idle | Guthaben bleibt innerhalb des Caps; Feedback `DeferredOrLimited` |
 | N-5b | gültige Request, Fensterpuls am Minimum-Off-Gate gesperrt | `Idle` / `MinimumOffTimeHeld` | Idle | aktueller Puls wird verworfen, nicht verschoben; Feedback `DeferredOrLimited` |
 | N-5c | gültige Request, Fensterpuls am Polaritäts-Totzeit-Gate gesperrt | `Idle` / `PolarityDeadTimeHeld` | Idle | aktueller Puls wird verworfen, nicht verschoben; Feedback `DeferredOrLimited` |
-| N-5d | gültige Gegenrequest, Bestätigungsdauer noch nicht erfüllt | `Idle` / `CounterDirectionConfirming` | Idle | alte Energie endet höchstens am eingefrorenen Fensterende; Feedback `DeferredOrLimited` |
+| N-5d-a | gültige Gegenrequest, Bestätigungsdauer noch nicht erfüllt, alte Richtung physisch noch aktiv | `Active` / `CounterDirectionConfirming` | alte Heating-/Cooling-Richtung | alte Energie endet höchstens am eingefrorenen Fensterende; Feedback der Gegenrequest `DeferredOrLimited` |
+| N-5d-b | gültige Gegenrequest, Bestätigungsdauer noch nicht erfüllt, altes Fenster physisch beendet | `Idle` / `CounterDirectionConfirming` | Idle | keine alte Energie und kein B-Guthaben; Feedback der Gegenrequest `DeferredOrLimited` |
 | N-5e | gültige Request, erster Tick verpasst den natürlichen Mindestpuls | `Idle` / `WindowPulseMissed` | Idle | Puls wird einmalig verworfen, nicht verlängert oder nachgeholt; Feedback `DeferredOrLimited` |
-| N-5f | neue gleichgerichtete Request trifft während eines fremden laufenden Fensters ein | `Idle` / `WindowPulseDeferred` | Idle beziehungsweise alter Window-Verlauf ohne B-Ausführung | B erhält bis zum eigenen Folgefenster `DeferredOrLimited`; A wird nicht für B behauptet |
 
 N-1 ist die einzige normale Mindest-On-Halteentscheidung. Sie gilt nicht für
 I-1 bis I-8. Ein Window-Off-Anteil ist kein Teardown des Planungssnapshots:
@@ -1366,19 +1429,21 @@ Prioritätsklasse und darf keine physische Freigabe auslösen.
 `DeferredOrLimited` ist ausschließlich eine
 `PreviousControlRequestFeedback::Disposition`. Es ist niemals ein
 `ActuatorPlanReason`; jede N-5-Ursache verwendet genau einen der echten
-Reason-Werte N-5a bis N-5f.
+Reason-Werte N-5a bis N-5e. Die normale gleichgerichtete
+Window-Synchronisierung ist keine N-5-Ursache.
 
 **Exhaustive Ursache-/Typ-/Ausgangstabelle für die normale Planung:**
 
 | Ursache | `ActuatorPlanStatus` | `ActuatorPlanReason` | Feedback-Disposition | physischer Ausgang |
 |---|---|---|---|---|
 | planmäßige Quote innerhalb des zulässigen Fensters | `Active` oder `Idle` | `ScheduledWithinWindow` / `MinimumPulseTriggered` | `NoIntegratorConstraint` | natürliche Quote oder planmäßiges Window-Off |
-| Quote unter Mindestimpuls, Guthaben noch zu klein | `Idle` | `AccumulatingBelowThreshold` | `DeferredOrLimited` | `Idle` |
+| Quote unter Mindestimpuls, Guthaben noch zu klein | gemäß `appliedDirection` | `AccumulatingBelowThreshold` | `DeferredOrLimited` | bestehender alter Heating-/Cooling-Ausgang oder `Idle` |
 | Mindest-Auszeit sperrt den natürlichen Fensterpuls | `Idle` | `MinimumOffTimeHeld` | `DeferredOrLimited` | `Idle` |
 | Polaritäts-Totzeit sperrt den natürlichen Fensterpuls | `Idle` | `PolarityDeadTimeHeld` | `DeferredOrLimited` | `Idle` |
-| Gegenrichtungsbestätigung läuft noch | `Idle` | `CounterDirectionConfirming` | `DeferredOrLimited` | `Idle` |
+| Gegenrichtungsbestätigung läuft noch, alte Richtung läuft physisch | `Active` | `CounterDirectionConfirming` | `DeferredOrLimited` | alte Heating-/Cooling-Richtung |
+| Gegenrichtungsbestätigung läuft noch, alte Richtung ist beendet | `Idle` | `CounterDirectionConfirming` | `DeferredOrLimited` | `Idle` |
 | erster Tick verpasst den verbleibenden Mindestpuls | `Idle` | `WindowPulseMissed` | `DeferredOrLimited` | `Idle` |
-| neue gleichgerichtete Request wartet auf ihr eigenes Folgefenster | `Idle` | `WindowPulseDeferred` | `DeferredOrLimited` | `Idle` beziehungsweise altes A-Fenster ohne B-Ausführung |
+| neue gleichgerichtete Request wartet auf ihr eigenes Folgefenster, ohne weitere Begrenzung | gemäß `appliedDirection` | `ScheduledWithinWindow` oder `MinimumPulseTriggered` | `NoIntegratorConstraint` | laufender A-Ausgang oder planmäßiges Idle; A bleibt physisch A |
 | normaler OFF-/AirLimit-Teardown nach erfüllter Mindest-On-Zeit | `Idle` | `NeutralIdle` / `AirLimitBlocked` | kein neues Feedbackfenster | `Idle` |
 | normaler OFF-/AirLimit-Teardown während Mindest-On-Zeit | `Active` | `MinimumOnTimeHeld` | kein neues Feedbackfenster; alte Episode wird nur nach ihrer Regel weitergeführt | alte Richtung bleibt bis Mindest-On-Ende aktiv |
 
@@ -1621,6 +1686,14 @@ NoIntegratorConstraint (0)
         < Rejected (2)
 ```
 
+`NoDownstreamIntegratorConstraint` ist dabei eine interne, semantische
+Planungsfeststellung und kein zusätzliches #22-Enum: Sie bedeutet, dass #23
+die aktuelle Request nicht durch eine reale Aktorgrenze reduziert, blockiert,
+verzögert oder verworfen hat. Sie wird im Handoff ausschließlich als
+`PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint`
+ausgegeben. Insbesondere verlangt sie keine Gleichheit zwischen
+`activeWindow.sourceRequestSequence` und der Feedback-Sequence.
+
 `mergeDisposition(sequence, candidate)` darf nur für dieselbe Sequence
 aufgerufen werden und speichert den jeweils schwereren Wert. Eine neue aktive
 Sequence eröffnet einen neuen, zunächst noch nicht ausgegebenen
@@ -1663,38 +1736,39 @@ weitergereicht. Ein Replay darf kein bestehendes Handoff zurückdrehen.
 ### 9.3 Live-Nachführung während laufender Governance
 
 Feedback wird nicht aus `physicalDirection() == requestedDirection` allein
-abgeleitet. Phase B führt intern je Fenster eine Ausführungsfeststellung:
+abgeleitet. Phase B führt intern je aktueller Request eine
+Downstream-Governance-Feststellung:
 
 ```text
-RequestFullyExecuted:
-  aktuelles Fenster trägt sourceRequestSequence == der vertrauenswürdigen
-  aktiven Feedback-Sequence,
-  die natürliche Zeitquote wurde ohne #23-seitige Reduktion geplant,
-  der Puls durfte am Arming-Gate starten und wurde nicht wegen
-  Minimum-Off, Polaritätstotzeit, Gegenrichtungsbestätigung, Counterdirection,
-  verspätetem Start oder sonstigem #23-Gate verzögert/gekürzt;
-  sowohl der laufende Duty-Puls als auch der planmäßige Window-Off-Anteil
-  derselben korrekt ausgeführten Quote gehören hierher.
+NoDownstreamIntegratorConstraint:
+  die aktuelle vertrauenswürdige aktive Request wurde von #23 nicht zusätzlich
+  durch eine Aktorgrenze reduziert, blockiert, verzögert oder verworfen.
+  Normale Sample-and-hold-/Window-Synchronisierung ist ausdrücklich kein
+  Constraint. Deshalb muss
+  activeWindow.sourceRequestSequence NICHT der Sequence dieser Request
+  entsprechen; ein gleichgerichtetes B im laufenden A-Fenster kann hierunter
+  fallen. Diese Feststellung behauptet nicht, dass B physisch vollständig
+  ausgeführt wurde.
 
 DownstreamLimited:
   mindestens eine #23-seitige Sperre, Verzögerung, Reduktion oder ein
   verpasster/verworfener Fensterpuls wirkte, insbesondere Minimum-Off,
   Polaritätstotzeit, unbestätigte Gegenrichtung, Akkumulation unter
-  minimumOnMillis, Counterdirection-Gate, fehlende Window-Ownership oder
-  verspäteter erster Tick.
+  minimumOnMillis, Counterdirection-Gate oder verspäteter erster Tick.
 ```
 
-Die Window-Ownership-Prüfung ist ein echter Datenvergleich:
-`activeWindow.sourceRequestSequence` muss exakt dem Feedbacksubjekt
-entsprechen. Ein gleichgerichtetes B mitten in einem noch laufenden A-Fenster
-erhält deshalb niemals `RequestFullyExecuted`; bis zum eigenen B-Folgefenster
-ist es `DownstreamLimited` mit `WindowPulseDeferred` beziehungsweise dem
-jeweils tatsächlich eingetretenen Gate. Ein A-Fenster darf nach Schließung der
-A-Episode physisch noch auslaufen, erzeugt aber kein A-Feedback mehr.
+`activeWindow.sourceRequestSequence` bleibt ein echter Datenvergleich für die
+physische Snapshot-Ownership: A wird nie als B und B nie als Quelle des alten
+A-Fensters dargestellt. Diese Ownership-Prüfung ist aber kein
+Anti-Windup-Gate. Ein gleichgerichtetes B mitten im noch laufenden A-Fenster
+ist ohne weitere #23-Begrenzung `NoDownstreamIntegratorConstraint`, obwohl
+sein eigenes Fenster erst später beginnt. Ein A-Fenster darf nach Schließung
+der A-Episode physisch noch auslaufen, erzeugt aber kein A-Feedback mehr.
 
 Für ein aktives Heating/Cooling-Handoff gilt danach:
 
-- `RequestFullyExecuted` -> Kandidat `NoIntegratorConstraint`. Das gilt
+- `NoDownstreamIntegratorConstraint` -> Kandidat
+  `NoIntegratorConstraint`. Das gilt
   ausdrücklich unabhängig davon, ob der #22-Folgesample während des laufenden
   Peltier-EIN oder während des normalen, planmäßigen AUS-Anteils derselben
   Zeitquote eintrifft.
@@ -1707,11 +1781,13 @@ Disposition derselben Sequence gemerged. Ein einmaliges `DeferredOrLimited`
 bleibt daher auch nach späterer physischer Freigabe mindestens deferred; ein
 `Rejected` bleibt rejected. Der planmäßige Window-Off-Anteil ist keine
 Verschärfung und darf nicht allein wegen seines zufälligen Sample-Zeitpunkts
-`DeferredOrLimited` erzeugen. Eine bestätigte B-Request bleibt bis zur
-physischen Übernahme downstream-limitiert, auch wenn der alte Snapshot bereits
-beendet und mehrere Fenstergrenzen vergangen sind. Erst ein B-eigenes Fenster
-mit `sourceRequestSequence == B` kann für B `RequestFullyExecuted` liefern;
-die Severity bleibt danach gemäß der monotonen Regel bestehen.
+`DeferredOrLimited` erzeugen. Eine gleichgerichtete B-Request bleibt dagegen
+ohne tatsächliches Gate bei `NoIntegratorConstraint`, auch wenn der alte
+Snapshot noch läuft. Sobald B ein eigenes Folgefenster erhält, trägt dieses
+`sourceRequestSequence == B`; die physische Ownership wird damit für die
+Diagnose ebenfalls eindeutig. Eine echte Begrenzung bleibt gemäß der
+monotonen Regel bestehen und darf nicht auf `NoIntegratorConstraint`
+zurückgestuft werden.
 
 ### 9.4 Single-use-Handoff und Lifecycle
 
@@ -2213,9 +2289,8 @@ wird durch diesen Plan nicht geändert.
   die Feedback-Dispositionsregel (Abschnitt 9.3) ist eine einzige,
   richtungsunabhängige Regel statt einer mehrfach duplizierten Einzelfalltabelle mit vielen
   Einzelfällen; keine vorsorgliche Generalisierung ohne aktuellen Bedarf.
-  Die drei kleinen zusätzlichen Reasons `CounterDirectionConfirming`,
-  `WindowPulseDeferred` und `WindowPulseMissed` sind keine Enum-Explosion,
-  sondern die minimalen
+  Die zwei kleinen zusätzlichen Reasons `CounterDirectionConfirming` und
+  `WindowPulseMissed` sind keine Enum-Explosion, sondern die minimalen
   Diagnosewerte, die die exhaustive N-5-Tabelle und den Issue-#23-Vertrag
   tatsächlich verlangt (Abschnitt 8.2).
 
@@ -2321,14 +2396,16 @@ im Fenster mit unveränderter Richtung ändert (wirkt erst nächstes Fenster)
 oder mit einer Gegenrichtung ändert (armiertes Fenster bleibt unverändert
 Heating, bis eine bestätigte Freigabe stattfindet); spiegelbildlich Cooling.
 
-**Window-Ownership (R6.2, Variante A):** Zwei gleichgerichtete Requests A/B
+**Window-Ownership und Variant B (R7.1):** Zwei gleichgerichtete Requests A/B
 mit deutlich unterschiedlichen Quotes werden im selben natürlichen Fenster
 eingespeist. Das laufende Fenster behält `sourceRequestSequence == A`; ein
-Feedbacksample vor und nach der Fenstergrenze darf B nicht als durch A
-ausgeführt markieren. Erst das B-eigene Folgefenster trägt
-`sourceRequestSequence == B`. Die Disposition ist bis dahin
-`DeferredOrLimited` mit dem tatsächlich eingetretenen Reason und kann danach
-höchstens monoton verschärft werden.
+Feedbacksample vor und nach der Fenstergrenze darf B nicht als physische
+Quelle des A-Fensters darstellen. Die normale Synchronisierung erzeugt für B
+jedoch nicht allein `DeferredOrLimited`: Ohne weiteres Gate erhält B
+`NoDownstreamIntegratorConstraint`/`NoIntegratorConstraint`. Erst das B-eigene
+Folgefenster trägt `sourceRequestSequence == B`. Ein tatsächliches
+Minimum-Off-, Totzeit-, Akkumulator-, Gegenrichtungs- oder verpasstes-Puls-
+Gate bleibt dagegen `DeferredOrLimited`.
 
 **Mindest-Einschaltzeit schützt akkumulierten Mindestimpuls (eigener Fund,
 siehe CONTEXT_DELTA):** Guthaben akkumuliert über mehrere Fenster ohne
@@ -2380,7 +2457,7 @@ geprüft; eine Sequence erhält kein doppeltes Feedback.
 **Plan-Reason-Typtrennung (R6.4):** Jede N-5-Ursache wird einzeln geprüft:
 `AccumulatingBelowThreshold`, `MinimumOffTimeHeld`,
 `PolarityDeadTimeHeld`, `CounterDirectionConfirming`,
-`WindowPulseDeferred` und `WindowPulseMissed`. Kein Test akzeptiert
+`WindowPulseMissed`. Kein Test akzeptiert
 `DeferredOrLimited` als
 `ActuatorPlanReason`; die Feedback-Disposition wird separat geprüft.
 **AirLimit-Klassifikation:** `NeutralOff` vs. `AirLimitBlockedOff`:
@@ -2541,7 +2618,7 @@ behaupten.
 **Architekturnachweis:** `ActuatorPlanner` kompiliert und wird getestet ohne
 jede Abhängigkeit auf `device_platform`-Sink-Header.
 
-### 19.2 Revision-7-Direktmatrix für Episoden-, Zeit- und Handoff-Grenzen
+### 19.2 Revision-8-Direktmatrix für Episoden-, Zeit- und Handoff-Grenzen
 
 Zusätzlich zu den allgemeinen Orakeln der vorherigen Absätze werden mindestens
 diese Fälle als getrennte native Tests umgesetzt:
@@ -2620,9 +2697,11 @@ diese Fälle als getrennte native Tests umgesetzt:
     offene Subjekt A korrekt auf `{A, Rejected}`; derselbe Stop nach
     Entstehung von `outstandingEvaluation` erzeugt kein altes A-Feedback.
 24. Zwei gleichgerichtete Quotes A/B mit deutlich unterschiedlichen Werten
-    prüfen `sourceRequestSequence`: laufendes Fenster A bleibt A, B ist vor
-    seinem Folgefenster nicht `RequestFullyExecuted`, und das Folgefenster
-    trägt B. Die Orakel liegen vor und nach der Fenstergrenze.
+    prüfen `sourceRequestSequence`: laufendes Fenster A bleibt A, B wird nicht
+    als physische Quelle des A-Fensters dargestellt, erhält aber ohne weitere
+    Begrenzung `NoDownstreamIntegratorConstraint`/`NoIntegratorConstraint`.
+    Das Folgefenster trägt B. Die Orakel liegen vor und nach der
+    Fenstergrenze.
 25. Der erste Planner-Tick einer neuen überwachten Episode ohne Evaluation
     setzt den Episodenanker; knapp vor, exakt auf und nach der Watchdogfrist
     wird der Trip deterministisch geprüft. Ein erstes H rebased die Frist.
@@ -2630,8 +2709,8 @@ diese Fälle als getrennte native Tests umgesetzt:
     Recovery erzeugen keinen Soforttrip aus einem alten H-/Episodenanker;
     `latchedWatchdogFault` bleibt durch jedes Rebase erhalten.
 27. Jede N-5-Zeile wird auf ihren echten `ActuatorPlanReason` geprüft;
-    insbesondere erscheinen `CounterDirectionConfirming`,
-    `WindowPulseDeferred` und `WindowPulseMissed`, während
+    insbesondere erscheinen `CounterDirectionConfirming` und
+    `WindowPulseMissed`, während
     `DeferredOrLimited` ausschließlich in der Feedback-Disposition vorkommt.
 28. A=10 wird gültig angenommen, B=11 stale-on-arrival verworfen, danach
     trippt der Watchdog. Das Evidence-Orakel prüft das ehrlich benannte
@@ -2677,6 +2756,28 @@ jeweils richtige `IBinaryOutputSink`-Instanz.
 - `ActuatorPlanner&`/`ActuatorPlanSinkDriver&` werden über die
   gesamte Lebenszeit des Test-Fixtures unverändert referenziert (Objektlebenszeit-
   Nachweis gemäß Abschnitt 14.1, kein Rebinding).
+- **Multi-Rate-Integrator-Orakel (R7.3, vollständiger Orchestratorpfad):** Ein
+  Integrationstest führt den bestehenden #22-Regelkern und
+  `TemperatureControlApplicationOrchestrator` mit einer nominalen
+  Regel-/Request-Kadenz von 2 s und einem Test-
+  `switchingWindowMillis` von 30 s über mindestens drei vollständige Fenster.
+  Die stabile Heating-Anforderung hat eine Quote oberhalb
+  `minimumOnMillis`; Safety, Minimum-Off, Polaritätstotzeit,
+  Gegenrichtungsbestätigung, AirLimit und Akkumulatorbegrenzung sind in der
+  Hauptspur nicht aktiv. Jede #22-Evaluation erhält eine neue Sequence. Das
+  Orakel prüft pro Fenster, dass `activeWindow` bis zur Grenze unverändert
+  bleibt, die jeweils neueste gleichgerichtete Request im Folgefenster
+  verwendet wird, `sourceRequestSequence` A/B korrekt bleibt und die normale
+  Synchronisierung allein nie `DeferredOrLimited` erzeugt. Es muss wiederholt
+  `NoDownstreamIntegratorConstraint`/`NoIntegratorConstraint` beobachtet
+  werden, der PI-Integrator über mehrere Sensorzyklen positiv fortschreiten
+  können, und es dürfen weder Sequence-/Feedback-Mismatch noch doppeltes
+  Feedback auftreten.
+- **Multi-Rate-Gegenprobe:** Derselbe Orchestratorlauf wird mit einer echten
+  Mindest-Off-/Totzeit- oder Akkumulatorbegrenzung wiederholt. Nur diese reale
+  downstream Begrenzung erzeugt `DeferredOrLimited` mit dem passenden
+  `ActuatorPlanReason`; der PI-Integrator bleibt daraufhin gemäß dem #22-
+  Anti-Windup-Vertrag begrenzt/angehalten.
 
 ### 19.5 `test/test_temperature_control/test_temperature_control.cpp` und vollständige API-Callsite-Migration
 
@@ -2713,12 +2814,12 @@ verändert.
 - `docs/THIRD_PARTY_COMPONENTS.md` bleibt unverändert.
 - **Governance:** Issue #106 wurde live bereits um I106.R1 präzisiert und ist
   in dieser Revision unverändert offen; es gibt in diesem Auftrag keine
-  zusätzliche #106-Scope-Erweiterung. Diese Revision-7-Planänderung wird als
+  zusätzliche #106-Scope-Erweiterung. Diese Revision-8-Planänderung wird als
   eigener, abgeschlossener Plan-Commit committet. Erst danach ist die exakte
-  Revision-7-Plan-SHA bekannt und wird im Draft-PR #105, im
+  Revision-8-Plan-SHA bekannt und wird im Draft-PR #105, im
   `SESSION HANDOVER` und im PR-Body ausgewiesen.
   Anschließend wird `docs/ROADMAP.md` in einem separaten, rein redaktionellen
-  Metadaten-Commit auf Revision 7 und diese exakte Plan-SHA synchronisiert.
+  Metadaten-Commit auf Revision 8 und diese exakte Plan-SHA synchronisiert.
   Vor diesem Roadmap-Commit werden alle aktuellen Statusstellen, insbesondere
   „Naechste fachliche Arbeit“, nach alten Revision-4/5-SHAs durchsucht;
   Plantext und Roadmap-Metadaten werden nicht vermischt.
