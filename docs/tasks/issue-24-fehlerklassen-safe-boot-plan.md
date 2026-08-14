@@ -1,25 +1,28 @@
 # Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion
 
-## Planrevision 2
+## Planrevision 3
 
 | Feld | Verbindlicher Stand |
 |---|---|
 | Issue | #24, [E3.5] Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion |
-| Planrevision | 2 |
-| Planstatus | Zur Ownerfreigabe des exakten Plan-Commits; Revision 1 ist nicht freigegeben |
+| Planrevision | 3 |
+| Planstatus | Eigenstaendige Revision zur Ownerfreigabe des exakten Plan-Commits |
 | Branch | agent/issue-24-fehlerklassen-safe-boot-plan |
 | Draft-PR | #107 |
-| Ausgangs-HEAD vor dieser Planrevision | 08d19eee307219669533cf245fa2e640252de4da |
+| Ausgangs-HEAD vor dieser Planrevision | 95960b645f04b2c1fb42b21aa910385919e6b1af |
 | aktueller main-Basisstand | b8eae5f4da5f2666b5a9bda333d115254c4db5b2 |
 | freigegebener Plan-Commit | nach Commit einzutragen; bis dahin NONE |
 | Implementation | NOT_STARTED |
 | Tests und Builds dieser Planungsphase | NOT_RUN |
 
-Revision 1 war nicht ownerfreigegeben. Diese Revision 2 ersetzt sie
-vollstaendig und ist eigenstaendig. Sie beschreibt den vollstaendigen #24-Scope,
-die Wiederverwendung bestehender Vertraege, die Integrationsgrenzen und die
-spaeteren Umsetzungsschnitte. Sie implementiert keine Produktionslogik,
-keine Firmwaretests, keine Hardwareintegration und keine Testinjektion.
+Diese Revision ist vollstaendig und eigenstaendig. Sie beschreibt den
+vollstaendigen #24-Scope, die Wiederverwendung bestehender Vertraege, die
+Integrationsgrenzen, die verbindliche A/B/C-Klassifikation der zehn
+Owner-Review-Findings und die spaeteren Umsetzungsschnitte. Wegen des
+Kategorie-C-Befunds in Abschnitt 1.1 implementiert dieser Commit keine
+Produktionslogik, keine Firmwaretests, keine Hardwareintegration und keine
+Testinjektion. Nach Ownerfreigabe dieses exakten Plan-Commits wird nur der
+freigegebene Umsetzungsscope bearbeitet.
 
 ## 1. Ownerentscheidung und Scope-Gate
 
@@ -65,6 +68,42 @@ die realen Producer aus #56/#57 ergibt keinen fachlichen Widerspruch:
 - Die vier Fehlerklassen, persistente Verriegelung, Bootprioritaet,
   SAFE_BOOT, Fehlerreset und Fehlerinjektion bleiben Eigentum von #24.
 
+### 1.1 Verbindliches A/B/C-Gate der zehn Owner-Review-Findings
+
+Die Findings werden gegen diesen vollstaendigen Plan und den live geprueften
+Repository-/PR-Stand eingeordnet. Die Klassifikation ist verbindlich:
+
+| Finding | Kategorie | Feststellung im Gate |
+|---:|:---:|---|
+| 1 | A | Die verlangte interne SAFETY_RECOVERY-Capability-Grenze ist im bisherigen Korrekturstand noch nicht als vollstaendige Trust-Boundary bewiesen; insbesondere darf keine externe positive Qualifikations-/Bool-Eingabe die Capability eroeffnen. |
+| 2 | A | Die verlangte geschlossene Reset-Trust-Boundary ist noch nicht vollstaendig umgesetzt; ein oeffentliches Legacy-Evaluationsfeld darf nicht als Teil des Resetvertrags bestehen bleiben. |
+| 3 | A | Der Lebenszyklusvertrag ist eindeutig; korrelierte Reaktivierung, Revision, Dominanz und Stale-Reset muessen im Safety-Core vollstaendig nachgewiesen werden. |
+| 4 | A | Der autorisierte FaultResetBootIntent-/SAFE_BOOT-Exit ist eindeutig geplant; ein dauerhaftes OR-Latch oder ein direkter Reset-Exit verletzt den Vertrag. |
+| 5 | A/B | Exactly-once ist eindeutig geplant; dieselbe Observation darf weder Evidence-/Zaehler-Mutationen noch wiederholte kuenstliche Mismatch-Ereignisse erzeugen. |
+| 6 | A/B | Die persistente Recordsemantik ist eindeutig; P1/O2 duerfen nicht als persistente Latches kodiert werden und benoetigen getrennte Gate-/Rearm-Orakel. |
+| 7 | A | Die persistente FaultInstanceSequence ist eindeutig als High-Watermark vorgegeben; aktive Latches duerfen keine ID-Quelle nach Reboot sein. |
+| 8 | C | Der geforderte reale Application-/Composition-Root-Nachweis ist mit dem aktuellen Vertragsstand objektiv nicht produktiv herstellbar: #56/#57 liefern Anwendungsdienste auf abstrakten Ports, waehrend #29 den Resetadapter und #90 den produktiven ESP-IDF-NVS-Adapter als offene Folgegates fuehren. Die bisherige native Bridge ist deshalb kein vollstaendiges Gate. |
+| 9 | B | Die Eventprojektion ist eindeutig spezifiziert, aber die vollstaendige deterministische Matrix und der Journalfehlernachweis sind noch nicht lueckenlos erbracht. |
+| 10 | A | Die unverkuerzte 64-bit-Watchdogevidenz und die davon getrennte bounded Correlation benoetigen die vollstaendige Semantik ohne stille Trunkierung oder Kollision. |
+
+Finding 8 ist eine notwendige neue Architektur-/Scopeentscheidung und damit
+Kategorie C. Die Evidenz dafuer ist kanonisch: #56 und #57 verdrahten weder
+`src/main.cpp` noch einen produktiven Storeadapter; #29 ist offen und traegt
+Resetursachen sowie den kontrollierten ESP-IDF-Neustart; #90 ist offen und
+traegt den produktiven ESP-IDF-NVS-Adapter. `FermentationApplication` und die
+beiden Composition Roots binden diese Dienste im aktuellen Stand nicht. Ein
+Test mit `SimulatedPersistentStateStore` und
+`SimulatedResetController` beweist nur die native Kern-/Producer-Bridge, nicht
+das geforderte produktive Application-Gate.
+
+Daraus folgt die Stopregel: Vor einer Ownerfreigabe dieses Plan-Commits wird
+kein Produktionscode, kein produktiver Test, kein Adapter und kein
+Composition-Root-Patch begonnen. Die Umsetzung wird nach Freigabe in einen
+abstrakten #24-Kernpfad und einen separat gesperrten produktiven
+Composition-Gate-Pfad getrennt. #29, #90, Hardware und ESP-IDF bleiben ausserhalb
+dieses PRs; ihre Ergebnisse werden als verbindliche Eingangsgates konsumiert,
+nicht vorweggenommen.
+
 ## 2. Ziel und Ergebnis
 
 Issue #24 liefert einen einzigen anwendungsweiten Fehler- und
@@ -82,14 +121,18 @@ Safety-Kern, der:
    bestehende Prozesszustandsmaschine integriert;
 6. #23-Watchdog-Evidence und das
    CONFIGURATION_SAFETY_INTEGRATION_GATE ueber die realen Vertraege
-   verarbeitet;
+   verarbeitet und den produktiven Composition-Root-Nachweis nur nach den
+   expliziten #29/#90-Eingangsgates abnimmt;
 7. bei unbekannter oder unaufgeloester Information fail-closed bleibt;
 8. die geforderten Softwarefehler reproduzierbar und automatisiert pruefbar
    macht.
 
 Der Kern endet weiterhin an abstrakten Ports. Kein Teil dieses Plans
 entscheidet GPIOs, Pegel, H-Brueckenverdrahtung, reale Luefterrueckmeldung,
-Temperaturgrenzen, Commissioningwerte oder konkrete Hardwaretests.
+Temperaturgrenzen, Commissioningwerte oder konkrete Hardwaretests. Die
+produktive Application-/Composition-Root-Abnahme ist ein separates, im
+aktuellen PR blockiertes Eingangsgate und wird nicht durch native Fakes oder
+eine reine Mapper-Bridge behauptet.
 
 ## 3. Verbindliche Quellen und Vertragsrouting
 
@@ -120,6 +163,9 @@ Roadmap.
 | docs/tasks/issue-23-actuator-planner-plan.md | Watchdog-Evidence und Aktor-Safety-Gate |
 | docs/tasks/issue-56-implementation-plan.md | ConfigurationRuntimeFailure und Commit-Unbestimmtheit |
 | docs/tasks/issue-57-implementation-plan.md | ConfigurationUnavailable und ConfigurationIntegrityFailure |
+| docs/ARCHITECTURE.md | Composition-Root-Rollen und Produktions-/Native-Grenze |
+| Live-Issue #29 | Resetursachen, kontrollierter ESP-IDF-Neustart und aktorfreie Bring-up-Grenze |
+| Live-Issue #90 | produktiver ESP-IDF-NVS-Adapter fuer den bestehenden IStateStore |
 
 ## 4. Repository-first-Bestand und Wiederverwendung
 
@@ -130,7 +176,7 @@ oder konsumiert, nicht parallel nachgebaut:
 |---|---|
 | MessageClass, MessageCode, RuntimeMessage, faultRevision und RunCommandState | stabile Meldungsprojektion und Versionskonflikte; keine zweite Bediennachrichtenhierarchie |
 | AcknowledgeMessage, MuteMessage, ResetFault | bestehende Command-Semantik; #24 liefert die fachliche Reset-Evaluation |
-| FaultResetEvaluation und criticalSafetyEventPending | zentrale Reset- und Sperrprojektion; das Bool wird nicht zu einem zweiten Latch ausgebaut |
+| FaultResetEvaluation und criticalSafetyEventPending | read-only beziehungsweise abgeleitete Projektionen; keine positive Caller-Evaluation und kein zweites Latch |
 | highestPriorityActiveMessage und vorhandene Revisionspruefungen | zentrale Dominanz-/Stale-Pruefung, erweitert um den kanonischen Faultkern |
 | ProcessState::Boot, SafeBoot, Fault, RecoveryEvaluation, ServiceMode und bestehende ProcessEvent | eine bestehende Zustandsmaschine; keine zweite Boot- oder Recovery-State-Machine |
 | ActuatorSafetyGateInput und ActuatorSafetyGateStatus aus #23 | einziger vorhandener Aktor-Gate-Eingang; Unresolved bleibt nicht freigabefaehig |
@@ -170,7 +216,7 @@ verbindlicher Vertrag lautet:
   ist `Unknown` und fail-closed.
 
 Der konkrete ESP-IDF-Adapter, die Abbildung realer ESP-IDF-Resetursachen und
-der echte `esp_restart()`-Pfad gehoeren zum E5-Bring-up-Gate #29. R2
+der echte `esp_restart()`-Pfad gehoeren zum E5-Bring-up-Gate #29. Dieser Plan
 implementiert dort nichts und markiert keine Hardwareeigenschaft als
 bewiesen. Testseitig gehoert die kontrollierbare Quelle in
 device_platform_test_support. Falls bei der Umsetzung ein inzwischen
@@ -199,7 +245,7 @@ zurueckfallen.
 
 ### 5.2 Stabile Fehlercodes
 
-Die folgenden Codes sind Teil von Planrevision 2. Ihre IDs werden vor der
+Die folgenden Codes sind Teil dieses Plans. Ihre IDs werden vor der
 Implementierung eingefroren. Zusaetzliche Detaildaten werden strukturiert
 transportiert; ein sichtbarer Text darf den Code nicht ersetzen.
 
@@ -239,7 +285,7 @@ Alle weiteren aktiven Fehler bleiben erhalten.
 Die Codes bilden keine Temperatur-, GPIO-, Zeit- oder
 Commissioninggrenzwerte ab. Qualifizierte Sensor-, Limit- und
 Aktorentscheidungen kommen aus den bestehenden Fachvertraegen. Y4-010 ist
-kein R2-Faultcode: ein bekannter Brownout ist Restart-Evidenz und wird als
+kein separater Faultcode: ein bekannter Brownout ist Restart-Evidenz und wird als
 RestartCauseEvent protokolliert, aber nicht allein als persistenter Klasse-4-
 Latch behandelt. Ein unbekannter oder nicht sicher validierter Quellstatus
 wird stattdessen zu Y4-006, Y4-008 oder Y4-011 nach der jeweils bekannten
@@ -301,7 +347,7 @@ Instanz wird nach CLEARED nicht still wiederverwendet.
 Die fachliche Einordnung aus docs/SAFETY_COMPONENT_FAULTS.md wird ohne
 Parallelklassifikation abgebildet:
 
-| kanonische Ursache | R2-Abbildung | Grenze |
+| kanonische Ursache | #24-Abbildung | Grenze |
 |---|---|---|
 | Luftfuehler FAILED | S3-001 | Klasse-3-Latch, kein Luft- oder Produktfuehlerersatz |
 | Kuehlkoerper-/Peltier-Schutzfuehler FAILED | S3-002 | Klasse-3-Latch, keine normale Aktorfreigabe |
@@ -489,7 +535,7 @@ MuteMessage aendert ausschliesslich die akustische Ausgabe. Es:
 ### 8.3 Fehlerreset
 
 ResetFault bleibt der einzige bestehende Command, aber der #15-Vertrag wird
-strukturell geschlossen. Der externe FaultResetRequest enthaelt ab R2 nur:
+strukturell geschlossen. Der externe FaultResetRequest enthaelt nur:
 
 - CommandEnvelope;
 - genau eine targetFault FaultInstanceId;
@@ -497,7 +543,7 @@ strukturell geschlossen. Der externe FaultResetRequest enthaelt ab R2 nur:
 
 Er enthaelt keine caller-supplied FaultResetEvaluation und keine positiven
 allowed-, Safetycheck- oder Autorisierungsflags. Eine Reset-All-Semantik
-existiert in R2 nicht; mehrere Faults werden einzeln mit eigener
+Eine Reset-All-Semantik existiert nicht; mehrere Faults werden einzeln mit eigener
 FaultInstanceId bewertet.
 
 #24 berechnet intern aus kanonischem SafetyStateRecord, aktuellem Faultkern,
@@ -895,8 +941,13 @@ Der #24-Kern konsumiert die reale ActuatorWatchdogFaultEvidence:
 
 ### 11.2 CONFIGURATION_SAFETY_INTEGRATION_GATE
 
-Das Gate wird ueber die echten Producer und nicht ueber simulierte Ersatztypen
-abgenommen:
+Das Gate hat zwei getrennte Nachweise. Der native Kernnachweis konsumiert die
+echten #56/#57-Ergebnistypen. Der produktive Application-/Composition-Root-
+Nachweis ist ein zusaetzliches, bis zu den kanonischen #29/#90-Eingangsgates
+gesperrtes Abnahmegate. Eine native Fixture oder ein typisierter Mapper allein
+schliesst dieses Gate nicht.
+
+Die fachliche Producerabbildung bleibt:
 
 | realer Producer | #24-Code | Wirkung |
 |---|---|---|
@@ -911,7 +962,33 @@ ConfigurationCommitIndeterminateCause, bleiben Detailmetadaten und werden
 nicht in eine zweite Konfigurationsfehlerhierarchie umbenannt.
 ResetEligibleNoRuntime loescht keinen #24-Latch.
 
-Das Gate ist erst bestanden, wenn fuer jeden Producer nachgewiesen ist:
+#### Native Kernnachweis
+
+Fuer jeden Producer muss der echte Rueckgabetyp aus #56/#57 die zentrale
+`SafetyFaultService`-Authority erreichen. Dabei sind Y4-Code, persistenter
+System-Latch, `safeBootRequired`, `ImmediateStop`, Neustarterhalt,
+Resetbindung und reproduzierbare Fehlerinjektion nachzuweisen. Die Tests
+verwenden keine zweite Konfigurationsfehlerhierarchie und keinen zweiten
+Safety- oder Persistenzspeicher.
+
+#### Produktiver Application-/Composition-Root-Nachweis
+
+Dieser Nachweis darf erst begonnen werden, wenn die Eingangsgates verfuegbar
+und ownerfreigegeben sind:
+
+- #29 liefert den verifizierten `IResetController`-Adapter, die reale
+  Resetursachenabbildung und den kontrollierten Neustartpfad;
+- #90 liefert den verifizierten produktiven `IStateStore`-Adapter fuer den
+  bestehenden generischen Storevertrag;
+- die Composition Roots `src/main.cpp` und `main/app_main.cpp` binden genau
+  einen Safety-Core, genau einen Konfigurations-Recoverydienst, genau ein
+  `ConfigurationSafetyIntegrationGate`, genau einen bestehenden #23-
+  Planner-/Sinkpfad und die bestehenden abstrakten Ports;
+- kein Root erzeugt eine Test-Support-Abhaengigkeit und kein Producer-
+  Ergebnis wird am Safety-Core vorbei direkt an Runtime oder Aktorplanung
+  weitergereicht.
+
+Fuer jeden Producer ist dann im realen Applicationpfad nachzuweisen:
 
 - reale Eingabe kommt am #24-Kern an;
 - sofortige Aktorsperre und sichere Bootprioritaet folgen;
@@ -920,6 +997,11 @@ Das Gate ist erst bestanden, wenn fuer jeden Producer nachgewiesen ist:
 - Recovery erfolgt nur ueber die #24-Reset-Evaluation;
 - reale Aktoradapter koennen das Gate nicht umgehen;
 - die zugehoerige Fehlerinjektion ist reproduzierbar automatisiert.
+
+Bis #29 und #90 diese Voraussetzungen liefern, ist der produktive Nachweis
+`BLOCKED`, nicht `PASS` und nicht `NOT_RUN`. Issue #24 bleibt bis zur
+vollstaendigen Abnahme offen. Dieser PR implementiert weder #29 noch #90 und
+behauptet keine produktive ESP-IDF- oder Hardwareeigenschaft.
 
 ### 11.3 Typisierte #24-Ereignisprojektion auf IEventJournal
 
@@ -959,8 +1041,8 @@ Weiterlauf bei Journalfehlern, ohne eine neue Journalplattform zu bauen.
 
 ### 11.4 Zyklusfreie Gateabschluss-Semantik
 
-Der #24-Nachweis gegen Aktor-Bypass endet bewusst an der bereits vorhandenen
-Application-Grenze:
+Der Safety-Core-Nachweis gegen Aktor-Bypass endet fachlich an der
+Application-/Planner-/Sink-Grenze:
 
 `#24 Safety-Core -> ActuatorSafetyGateInput ->
 temperature_control_orchestrator -> ActuatorPlanner ->
@@ -977,7 +1059,7 @@ entsteht und vom Sink auf `Allowed`, `ImmediateStop` oder
 `SAFETY_RECOVERY` geprueft wird. Das ist keine zweite Gate-Abstraktion und
 keine parallel laufende Aktor-State-Machine.
 
-Native Architektur-, Compile- und Integrationstests sichern an dieser
+Native Architektur-, Compile- und Integrationstests sichern die abstrakte
 Grenze:
 
 - Unresolved, ImmediateStop und unbekannte Dispositionen erzeugen keinen
@@ -988,12 +1070,12 @@ Grenze:
 - ein direkter Test-/Adapteraufruf ohne Planner-Qualifikation ist
   strukturell abgewiesen oder nicht Teil der Produktionskomposition.
 
-Damit wird in #24 die reale Application-/Planner-/Sink-Grenze geprueft,
-ohne einen noch nicht vorhandenen Hardwareadapter zu behaupten. #106 bleibt
-das spaetere Gate fuer produktive Plannerparameter und Per-Run-Bindung.
+Damit ist die abstrakte Planner-/Sink-Semantik vollstaendig definiert, aber
+noch kein produktiver Composition-Root-Nachweis behauptet. Die produktive
+Verdrahtung wird erst nach #29/#90 gemaess Abschnitt 11.2 abgenommen. #106
+bleibt das spaetere Gate fuer produktive Plannerparameter und Per-Run-Bindung;
 #32/#33 muessen denselben Nichtumgehungsvertrag bei ihren spaeteren
-ESP-IDF-/Hardwareadaptern erneut nachweisen; dieser Nachweis ist kein
-Zyklus und kein Bestandteil der R2-Implementierung.
+ESP-IDF-/Hardwareadaptern erneut nachweisen.
 
 ## 12. Fail-closed-Regeln fuer unbekannte Zustaende
 
@@ -1046,63 +1128,92 @@ identischer Einzeltests:
 ### Matrix A – reiner Faultkern
 
 - alle stabilen Codes und Klassen;
-- Gleichzeitigkeit und Dominanz;
-- Primaer/Folge;
+- Gleichzeitigkeit und Dominanz Klasse 4 > 3 > 2 > 1;
+- Prioritaet innerhalb gleicher Klasse und fruehere Entstehungssequenz bei
+  gleicher Codeprioritaet;
+- Primaer-/Folgefehler sowie unabhaengige gleichcodige Ursachen;
 - Statusfolge aktiv, quittiert, Ursache beseitigt, resetberechtigt,
   geloescht;
-- unbekannter Code und ungueltige Klasse.
+- Active -> CauseClearedLocked -> dieselbe korrelierte Ursache erneut ->
+  Active mit gleicher FaultInstanceId, neuer Revision und stale altem Reset;
+- unbekannter Code/Klassenwert -> Unknown-Fallback;
+- bounded Capacity, Revision-Overflow und FaultInstanceId-Overflow.
 
 ### Matrix B – Commands und Safety-Ausgang
 
 - Acknowledge ohne Reset;
 - Mute ohne Status- oder Gateaenderung;
 - abgelehnter und gueltiger ResetFault;
+- targetFault, falsche/stale Faultrevision, aktive Ursache, fehlende
+  Berechtigung und weiterer blockierender Fault;
+- caller-supplied positive FaultResetEvaluation/Flags koennen keinen Reset
+  autorisieren;
 - Klasse-1-, Klasse-2-, Klasse-3-, Klasse-4-Ausgang;
 - Allowed, ImmediateStop und Unresolved am bestehenden #23-Gate;
+- gefaelschte SAFETY_RECOVERY-Capability wird abgelehnt, gueltige intern
+  ausgestellte Capability wird akzeptiert;
+- S3-005, unaufgeloeste Sensor-/Luefter-/Aktorchecks und andere blockierende
+  Faults verhindern Recovery;
 - keine Aktorfreigabe aus SAFE_BOOT.
 
 ### Matrix C – Persistenz und Recovery
 
 - erfolgreicher Latchwrite und Boot mit Latch;
 - WriteError, CapacityError, ReadError, Korruption;
-- CommitOutcomeUnknown vor und nach Readback;
+- CommitOutcomeUnknown vor und nach Readback, ReadbackMismatch und Cut vor
+  beziehungsweise nach Commit;
+- NotFound nur mit vollstaendigem Factory-New-Proof, sonst fail-closed;
 - Latch bleibt nach Ack, Mute, Resetversuch und Neustart;
 - Resetfreigabe erst nach verifizierter neuer Revision;
 - Episodezaehler und kontrollierter Restart Write-before-Restart;
-- fehlender Vorab-Write bei Brownout/Watchdog und Boot-Nachtrag.
+- fehlender Vorab-Write bei Brownout/Watchdog und Boot-Nachtrag;
+- persistente monotone FaultInstanceSequence nach Reset, Entfernung und
+  Reboot; Maxwert vor Mutation abgelehnt.
 
 ### Matrix D – Restart-Episode
 
 - Power-on ohne Evidenz;
 - abnormaler Restart 1 und 2;
 - dritter abnormaler Restart -> SAFE_BOOT;
+- exakt dieselbe Watchdog-, Brownout- und ControlledSafety-Observation
+  zweimal -> genau eine Evidence-/Zaehler-/Konsumaktion;
+- neue ObservationId wird normal bewertet;
 - normaler Neustart vor Ablauf von 30 Minuten;
-- stabile 30 Minuten und persistierte Episodenschliessung;
+- 29:59, 30:00 und 30:01 mit persistierter Episodenschliessung;
 - Schreibfehler beim Episodenschluss;
 - alte offene Episode nach langer Stromlosigkeit;
-- normaler Neustart in SAFE_BOOT.
+- normaler Neustart in SAFE_BOOT;
+- autorisierter FaultResetBootIntent-Exit genau einmal, falscher/staler oder
+  verbrauchter Intent fail-closed.
 
 ### Matrix E – reale Integrations- und Quellenmatrix
 
 - alle Pflichtsensor- und Aktorinjektionen;
 - #23-Watchdog-Evidence und externer Reset;
-- ConfigurationRuntimeFailure;
-- ConfigurationUnavailable;
-- ConfigurationIntegrityFailure;
-- ConfigurationCommitIndeterminate;
-- reale Gatewirkung gegen den Aktorplaner;
+- reale `ConfigurationRuntimeFailure`-Producerausgabe;
+- reale `ConfigurationCommitIndeterminate`-/`CommitOutcomeUnknown`-
+  Producerausgabe;
+- reale `ConfigurationUnavailable`- und `ConfigurationIntegrityFailure`-
+  Producerausgabe;
+- reale Gatewirkung gegen den Aktorplaner, bestehende Application-/Sink-
+  Grenze und keinen Allowed-Bypass;
 - Unknown-/Unresolved-Eingaben.
+
+Der native Teil von Matrix E ist gegen die bestehenden #56/#57-Anwendungstypen
+auszufuehren. Der produktive Application-/Composition-Root-Teil bleibt bis
+zum erfolgreichen #29/#90-Eingangsgate `BLOCKED`; er darf nicht als native
+PASS-Aussage oder Hardwarebeweis dokumentiert werden.
 
 Die fuenf Matrizen erhalten dabei diese schaerfenden Orakel, ohne neue
 Testframeworks oder parallele Faultmodelle einzufuehren:
 
 | Matrix | zusaetzliche verbindliche Orakel |
 |---|---|
-| B – Commands und Safety-Ausgang | S3-004 beginnt mit ImmediateStop; nur vollstaendig qualifizierte, typisierte SAFETY_RECOVERY darf den bestehenden Planner erreichen; S3-005, unsichere Pflichtsensoren sowie Luefter-/Aktorfehler verhindern Recovery; Latch und normale Allowed-Freigabe bleiben getrennt |
+| B – Commands und Safety-Ausgang | S3-004 beginnt mit ImmediateStop; nur vollstaendig intern ausgestellte, aktuelle SAFETY_RECOVERY darf den bestehenden Planner erreichen; S3-005, unsichere Pflichtsensoren sowie Luefter-/Aktorfehler verhindern Recovery; Latch und normale Allowed-Freigabe bleiben getrennt |
 | C – Persistenz und Recovery | erster fabrikneuer Initialrecord; NotFound ausserhalb des nachgewiesenen #57-Bootstrapfalls fail-closed; bounded Capacity/Overflow; WriteError, ReadError, Korruption und CommitOutcomeUnknown; Safetyprojektionen werden aus der persistenten Autoritaet rekonstruiert |
-| C/D – Restart-Episode | Brownout/Watchdog 1, 2 und 3; bei 3 SAFE_BOOT; Pre-Write plus passender Boot zaehlt genau einmal; Hardwarereset ohne Pre-Write zaehlt einmal nach; Mismatch bleibt fail-closed; dieselbe interne Ursache erzeugt keinen automatischen Restartloop |
-| B/C – Reset-Trust-Boundary | caller-supplied positive FaultResetEvaluation wird ignoriert beziehungsweise ist nicht mehr eingabefaehig; stale/falsches Faultziel wird abgelehnt; ein Reset loescht keinen anderen Latch; #23-Watchdogreset erfolgt erst nach dem bestaetigten #24-Commit |
-| D/E – ProcessState und SAFE_BOOT | der einzige Exit ist FaultResetBootIntent -> zentraler autorisierter Neustart -> Bootqualifikation -> bestehender Standby-/Recoverypfad; normaler Reboot hebt keinen Latch; SAFE_BOOT erlaubt weder SERVICE_MODE noch Aktortest |
+| C/D – Restart-Episode | Brownout/Watchdog 1, 2 und 3; bei 3 SAFE_BOOT; Pre-Write plus passender Boot zaehlt genau einmal; Hardwarereset ohne Pre-Write zaehlt einmal nach; Mismatch bleibt fail-closed und wiederholt sich nicht kuenstlich; dieselbe interne Ursache erzeugt keinen automatischen Restartloop |
+| B/C – Reset-Trust-Boundary | caller-supplied positive FaultResetEvaluation ist nicht eingabefaehig und kann nicht autorisieren; stale/falsches Faultziel wird abgelehnt; ein Reset loescht keinen anderen Latch; #23-Watchdogreset erfolgt erst nach dem bestaetigten #24-Commit |
+| D/E – ProcessState und SAFE_BOOT | der einzige Exit ist FaultResetBootIntent -> zentraler autorisierter Neustart -> Bootqualifikation -> bestehender Standby-/Recoverypfad; normaler Reboot hebt keinen Latch; SAFE_BOOT erlaubt weder SERVICE_MODE noch Aktortest; produktiver Rootnachweis bleibt bis #29/#90 BLOCKED |
 
 Die Journalpruefung in Matrix E umfasst die typisierten #24-Ereignisse und
 einen fehlerhaften IEventJournal-Port. Ein Journalfehler darf den sicheren
@@ -1124,8 +1235,9 @@ Module und gezielten Konsumententests begrenzt:
    Dominanz, Unknown-Fallback und reine native Orakel.
 2. **Command-/Messageintegration:** bestehende Messages, Revisionen,
    Acknowledge, Mute, der auf FaultInstanceId und erwartete Revision
-   reduzierte ResetFault sowie FaultResetEvaluation und
-   criticalSafetyEventPending nur als Projektionen.
+   reduzierte ResetFault. FaultResetEvaluation und
+   criticalSafetyEventPending bleiben ausschliesslich read-only beziehungsweise
+   abgeleitete Projektionen; kein positives Caller-Feld wird konsumiert.
 3. **Persistenter SafetyStateRecord:** bounded Recordcodec mit stabilen
    FaultInstanceIds, Primary-/Follow-up-Referenzen, Overflowschutz,
    IStateStore, Latchsetzen, Readback, Write-before-Apply,
@@ -1142,19 +1254,28 @@ Module und gezielten Konsumententests begrenzt:
 6. **#23-Safety-Gate:** ActuatorWatchdogFaultEvidence, vorhandener
    Watchdog-Latchreset, zentrale Safety-Disposition, typisierte
    SAFETY_RECOVERY und Nachweis gegen Allowed/Unresolved.
-7. **#56/#57-Gate:** reale Producerstatus, Ursachenmetadaten,
-   ConfigurationCommitIndeterminate und End-to-End-Recovery.
-8. **Injektions- und Akzeptanzmatrix:** deterministische Fixtures,
+7. **#56/#57-Native-Bridge:** reale Producerstatus, Ursachenmetadaten,
+   ConfigurationCommitIndeterminate und die vollstaendige native
+   End-to-End-Safetywirkung ohne Parallel-Fault-Domaene.
+8. **Produktiver Composition-Gate-Entscheid:** nach Ownerfreigabe der
+   Eingangsgates #29/#90 genau eine Application-/Composition-Root-Verdrahtung
+   gegen die bestehenden abstrakten Ports abnehmen. In diesem PR weder #29
+   noch #90 implementieren oder Hardware-/ESP-IDF-Eigenschaften vorwegnehmen;
+   bis dahin bleibt dieser Slice BLOCKED und Issue #24 offen.
+9. **Injektions- und Akzeptanzmatrix:** deterministische Fixtures,
    Restart-/Persistenz-Cut-Points, Reset-Trust-Boundary, Safety-Recovery-,
    Journal-, Konsumenten- und Integrationsorakel an den fuenf Matrizen.
-9. **Dokumentationsabschluss:** Safety-, Recovery-, Diagnose-,
+10. **Dokumentationsabschluss:** Safety-, Recovery-, Diagnose-,
    Akzeptanz- und Roadmapstatus auf den finalen Implementierungsstand
    synchronisieren.
 
 Jeder Commit muss seinen Scope, gezielte Tests und den Status offen ausweisen.
 Ein Fehler in einem frueheren Slice wird nicht durch spaetere Tests
-ueberschrieben. Ein vollstaendiger lokaler Lauf bleibt bis zum separaten
-Ownerauftrag nach Review ausgeschlossen.
+ueberschrieben. Der produktive Composition-Gate-Slice darf erst nach
+nachweislich verfuegbaren #29/#90-Adaptern beginnen; ein Fehlen dieser
+Voraussetzungen wird als BLOCKED dokumentiert, nicht als PASS ersetzt. Ein
+vollstaendiger lokaler Lauf bleibt bis zum separaten Ownerauftrag nach Review
+ausgeschlossen.
 
 ## 16. Modul- und Architekturgrenzen
 
@@ -1168,10 +1289,11 @@ Ownerauftrag nach Review ausgeschlossen.
 
 ### device_platform_esp_idf
 
-- in R2 keine Aenderung. Die sichere Auswertung real verfuegbarer
-  ESP-IDF-Resetursachen, die Abbildung auf den abstrakten Snapshot und der
-  kontrollierte `esp_restart()`-Adapter werden im E5-Bring-up-Gate #29
-  verankert;
+- keine Aenderung am ESP-IDF-Adapter in diesem PR. Die sichere Auswertung real
+  verfuegbarer ESP-IDF-Resetursachen, die Abbildung auf den abstrakten
+  Snapshot und der kontrollierte `esp_restart()`-Adapter werden im E5-
+  Bring-up-Gate #29 verankert. Der produktive `IStateStore`-Adapter bleibt
+  #90;
 - keine fachliche Klassifikation, Latch- oder Bootentscheidung;
 - keine GPIO-/Aktorfreigabe aus #24.
 
@@ -1181,6 +1303,9 @@ Ownerauftrag nach Review ausgeschlossen.
   Restart-Episode, Boot-/Recoveryentscheidung und Safety-Disposition;
 - konsumiert Sensor-, Konfigurations-, Run- und #23-Vertraege;
 - projiziert auf vorhandene Commands, Prozesszustand und #23-Gate;
+- besitzt die zyklusfreie #56/#57-Bridge und den abstrakten
+  Application-Gate-Vertrag; eine produktive Rootinstanz darf erst nach
+  verfuegbaren #29/#90-Ports abgenommen werden;
 - keine direkten ESP-IDF- oder GPIO-Abhaengigkeiten.
 
 ### device_platform_test_support
@@ -1220,6 +1345,20 @@ Ein erfolgreicher nativer Test ersetzt keinen Hardware-Nachweis.
 Event-/Journalvertrag, implementiert aber nicht die vollstaendige
 Journalaufbewahrung, Bereinigung, Backup- oder Importlogik aus #19.
 
+### #29 und #90 – produktive Eingangsgates
+
+#29 und #90 werden in diesem PR weder implementiert noch simuliert. Sie sind
+fuer den produktiven Composition-Root-Nachweis jedoch verbindlich:
+
+- #29 muss den abstrakten `IResetController` gegen reale Resetursachen und
+  den kontrollierten Neustart abnehmen;
+- #90 muss den bestehenden `IStateStore` produktiv auf ESP-IDF-NVS abbilden
+  und CommitOutcomeUnknown, Readback, Kapazitaet und reale Hardware nachweisen;
+- bis beide Nachweise vorliegen, bleibt die produktive #56/#57-zu-#24-
+  Verdrahtung `BLOCKED`;
+- dieser Blocker wird nicht durch Hardware-/ESP-IDF-Code in #24, erfundene
+  Adapter oder Test-Support in Produktionsmodulen umgangen.
+
 ## 18. Dokumentations- und Roadmapwirkung
 
 In dieser Planrevision werden keine normativen Fachquellen umgeschrieben.
@@ -1227,10 +1366,12 @@ Der bereits erfolgte Roadmap-Stand wird in dem Plan-Commit auf den nun
 realen Zustand synchronisiert:
 
 - PR #105 und Issue #23 bleiben als abgeschlossen sichtbar;
-- #24 ist aktuelle fachliche Arbeit mit Planrevision 2 und
-  IMPLEMENTATION: NOT_STARTED;
+- #24 ist aktuelle fachliche Arbeit mit Planrevision 3,
+  `IMPLEMENTATION: BLOCKED_PENDING_PLAN_APPROVAL` und einem expliziten
+  #29/#90-Composition-Gate;
 - die Reihenfolge #23 -> #24 -> #19 bleibt unveraendert;
 - #106 bleibt als separates spaeteres Integrationsgate sichtbar;
+- #29 und #90 bleiben als offene produktive Eingangsgates sichtbar;
 - #35 bleibt als TBD_COMMISSIONING offen;
 - Draft-PR #107 bleibt Draft und erzeugt keine Firmware-CI.
 
@@ -1250,8 +1391,10 @@ belegte Ergebnisse, Codes, Nachweise und Status aktualisiert:
 ## 19. Offene Punkte und Freigabegates
 
 Die materielle Ownerentscheidung zur Restart-Episode ist mit Abschnitt 1
-geschlossen. Vor der Implementierung bleiben keine weiteren fachlichen
-Ownerentscheidungen in diesem Plan verborgen.
+geschlossen. Das Kategorie-C-Gate aus Abschnitt 1.1 bleibt offen und wird
+nicht still durch eine native Test-Bridge ersetzt. Vor jeder Umsetzung muss
+der Owner deshalb den exakten Plan-Commit dieser Revision freigeben; die
+produktive Composition-Abnahme bleibt danach bis zu #29/#90 `BLOCKED`.
 
 Folgende Punkte sind technische Nachweise beziehungsweise harte
 Implementierungsgates, keine frei zu erfindenden Werte:
@@ -1263,6 +1406,10 @@ Implementierungsgates, keine frei zu erfindenden Werte:
 - der SafetyStateRecord muss in das bestehende Store-/Envelope- und
   Ressourcenbudget passen; bei unzureichendem Budget bleibt die Freigabe
   gesperrt;
+- #29 muss den Resetadapter-/Resetursachennachweis liefern;
+- #90 muss den produktiven IStateStore-/NVS-/Readbacknachweis liefern;
+- der reale Application-/Composition-Root-Gate-Nachweis darf erst nach
+  diesen beiden Eingangsgates als PASS dokumentiert werden;
 - Sensor-, Temperatur-, Aktor- und Serviceparameter bleiben in ihren
   jeweiligen Owner-/Commissioning-Gates;
 - ein unerwarteter Vertragswiderspruch waehrend der Umsetzung stoppt den
@@ -1273,7 +1420,7 @@ Implementierungsgates, keine frei zu erfindenden Werte:
 
 Dieser Auftrag endet nach:
 
-1. Commit der eigenstaendigen Planrevision 2 und der notwendigen
+1. Commit der eigenstaendigen Planrevision 3 und der notwendigen
    Roadmap-Synchronisierung;
 2. git diff --check ohne Befund;
 3. Push des Dokumentationscommits auf den bestehenden Branch;
@@ -1285,5 +1432,7 @@ Dieser Auftrag endet nach:
 
 Danach bleibt PR #107 Draft. Der Agent setzt ihn nicht auf Ready for review,
 merged nicht, aktiviert kein Auto-Merge, schliesst Issue #24 nicht, bearbeitet
-#106 nicht und loescht den Branch nicht. Die naechste Aktion ist ausschliesslich
-die Ownerfreigabe des exakten Plan-Commits.
+#106, #29 oder #90 nicht und loescht den Branch nicht. Die naechste Aktion ist
+ausschliesslich die Ownerfreigabe des exakten Plan-Commits. Ohne diese Freigabe
+beginnt keine Produktionscodekorrektur; nach Freigabe bleibt der
+Composition-Gate-Slice bis zu den #29/#90-Nachweisen gesperrt.
