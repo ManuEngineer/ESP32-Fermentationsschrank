@@ -193,6 +193,12 @@ struct ActiveSwitchingWindow {
     // A late tick that cannot guarantee minimumOnMillis sets this marker and
     // discards the entire pulse without retry or carry into the next window.
     bool pulseStartAttempted{false};
+    // Diagnostic-only: true iff scheduledOnMillis was produced by the pulse
+    // accumulator crossing minimumOnMillis (Abschnitt 8.1), false when it
+    // came directly from a quote already >= minimumOnMillis. Not part of
+    // the physical contract; distinguishes ActuatorPlanReason::
+    // MinimumPulseTriggered from ScheduledWithinWindow (Owner-Review ZR6).
+    bool minimumPulseFromAccumulator{false};
 };
 
 // Getrenntes Feedback-Handoff: Das Subjekt, fuer das #23 als naechstes ein

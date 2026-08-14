@@ -63,6 +63,36 @@ namespace {
     return false;
 }
 
+[[nodiscard]] bool isKnownReason(TemperatureControlReason reason) {
+    switch (reason) {
+        case TemperatureControlReason::None:
+        case TemperatureControlReason::NeutralBand:
+        case TemperatureControlReason::Saturated:
+        case TemperatureControlReason::AirLimitReduced:
+        case TemperatureControlReason::AirLimitBlocked:
+        case TemperatureControlReason::NoCommissioning:
+        case TemperatureControlReason::SensorUnavailable:
+        case TemperatureControlReason::InvalidConfiguration:
+        case TemperatureControlReason::InvalidSample:
+        case TemperatureControlReason::TimeInvalid:
+        case TemperatureControlReason::RequestIdentityExhausted:
+            return true;
+    }
+    return false;
+}
+
+[[nodiscard]] bool isKnownAirLimitState(AirLimitState state) {
+    switch (state) {
+        case AirLimitState::NotApplied:
+        case AirLimitState::Unrestricted:
+        case AirLimitState::Reduced:
+        case AirLimitState::Blocked:
+        case AirLimitState::Unavailable:
+            return true;
+    }
+    return false;
+}
+
 [[nodiscard]] bool isStructurallyValidContext(const ControlRequestContext& context) {
     return isKnownSensorRole(context.controlSensorRole);
 }
@@ -78,39 +108,99 @@ namespace {
            left.controlSensorRole == right.controlSensorRole;
 }
 
-// Abschnitt 6.2 Schritt 2: rein strukturelle Pruefung der neuen #22-
-// Evaluation gegen die bereits abschliessende #22-Matrix (Status-/Request-
-// Praesenz, Richtung/Quote je Status). Reason-Legalitaet je Status bleibt
-// bewusst #22s eigene Verantwortung (siehe issue-22-Plan Abschnitt 7.2);
-// classifyActuatorDemand() kann ein "malformed"-Ergebnis strukturell nicht
-// zurueckgeben und ist daher kein Ersatz fuer diese Pruefung.
+// Abschnitt 6.2 Schritt 2 / Abschnitt 7: vollstaendige strukturelle Pruefung
+// der neuen #22-Evaluation gegen die bereits abschliessende #22-Matrix
+// (issue-22-Plan Abschnitt 7.2): Status/Reason/AirLimitState-Legalitaet,
+// Request-Praesenz, Uebereinstimmung von Request- und Ergebnisfeldern sowie
+// Request-Kontext-Struktur. classifyActuatorDemand() kann ein "malformed"-
+// Ergebnis strukturell nicht zurueckgeben und ist deshalb kein Ersatz fuer
+// diese Pruefung; sie muss ihr vorausgehen (Owner-Review ZR1).
 [[nodiscard]] bool isStructurallyValidEvaluation(
     const TemperatureControlResult& evaluation) {
     if (!isKnownStatus(evaluation.status) || !isKnownDirection(evaluation.direction) ||
+        !isKnownReason(evaluation.reason) || !isKnownAirLimitState(evaluation.airLimitState) ||
         !isFiniteUnitQuote(evaluation.timeQuote)) {
         return false;
     }
 
     const bool requestPresent = evaluation.controlRequest.has_value();
-    const bool requiresRequest = evaluation.status == TemperatureControlStatus::Demand ||
-                                  evaluation.status == TemperatureControlStatus::Off;
-    if (requiresRequest != requestPresent) {
-        return false;
+
+    switch (evaluation.status) {
+        case TemperatureControlStatus::Demand:
+            if (!requestPresent) {
+                return false;
+            }
+            if (evaluation.reason != TemperatureControlReason::None &&
+                evaluation.reason != TemperatureControlReason::Saturated &&
+                evaluation.reason != TemperatureControlReason::AirLimitReduced) {
+                return false;
+            }
+            if (evaluation.direction != AbstractControlDirection::Heating &&
+                evaluation.direction != AbstractControlDirection::Cooling) {
+                return false;
+            }
+            if (!(evaluation.timeQuote > 0.0)) {
+                return false;
+            }
+            break;
+        case TemperatureControlStatus::Off:
+            if (!requestPresent) {
+                return false;
+            }
+            if (evaluation.reason != TemperatureControlReason::NeutralBand &&
+                evaluation.reason != TemperatureControlReason::AirLimitBlocked) {
+                return false;
+            }
+            if (evaluation.direction != AbstractControlDirection::Idle ||
+                evaluation.timeQuote != 0.0) {
+                return false;
+            }
+            break;
+        case TemperatureControlStatus::Unavailable:
+            if (requestPresent) {
+                return false;
+            }
+            if (evaluation.reason != TemperatureControlReason::NoCommissioning &&
+                evaluation.reason != TemperatureControlReason::SensorUnavailable) {
+                return false;
+            }
+            if (evaluation.direction != AbstractControlDirection::Idle ||
+                evaluation.timeQuote != 0.0) {
+                return false;
+            }
+            break;
+        case TemperatureControlStatus::InvalidInput:
+            if (requestPresent) {
+                return false;
+            }
+            if (evaluation.reason != TemperatureControlReason::InvalidConfiguration &&
+                evaluation.reason != TemperatureControlReason::InvalidSample &&
+                evaluation.reason != TemperatureControlReason::TimeInvalid &&
+                evaluation.reason != TemperatureControlReason::RequestIdentityExhausted) {
+                return false;
+            }
+            if (evaluation.direction != AbstractControlDirection::Idle ||
+                evaluation.timeQuote != 0.0) {
+                return false;
+            }
+            break;
     }
 
-    if (evaluation.status == TemperatureControlStatus::Demand) {
-        if (evaluation.direction != AbstractControlDirection::Heating &&
-            evaluation.direction != AbstractControlDirection::Cooling) {
+    // AirLimitReduced/AirLimitBlocked sind exakt an Demand/Reduced
+    // beziehungsweise Off/Blocked gebunden (issue-22-Plan 7.2); jede andere
+    // Kombination, einschliesslich Reduced/Blocked bei einem anderen Reason,
+    // ist unzulaessig.
+    if (evaluation.reason == TemperatureControlReason::AirLimitReduced) {
+        if (evaluation.airLimitState != AirLimitState::Reduced) {
             return false;
         }
-        if (!(evaluation.timeQuote > 0.0)) {
+    } else if (evaluation.reason == TemperatureControlReason::AirLimitBlocked) {
+        if (evaluation.airLimitState != AirLimitState::Blocked) {
             return false;
         }
-    } else {
-        if (evaluation.direction != AbstractControlDirection::Idle ||
-            evaluation.timeQuote != 0.0) {
-            return false;
-        }
+    } else if (evaluation.airLimitState == AirLimitState::Reduced ||
+               evaluation.airLimitState == AirLimitState::Blocked) {
+        return false;
     }
 
     if (requestPresent) {
@@ -118,7 +208,14 @@ namespace {
         if (!isKnownDirection(request.direction) || !isFiniteUnitQuote(request.timeQuote)) {
             return false;
         }
+        if (request.direction != evaluation.direction ||
+            request.timeQuote != evaluation.timeQuote) {
+            return false;
+        }
         if (request.identity.sequence == 0U) {
+            return false;
+        }
+        if (!isStructurallyValidContext(request.context)) {
             return false;
         }
     }
@@ -196,12 +293,15 @@ ActuatorPlanTickResult ActuatorPlanner::rejectToIdle(const PhaseAOutcome& admiss
                                                       std::uint64_t now,
                                                       ActuatorPlanStatus status,
                                                       ActuatorPlanReason reason) {
+    // Owner-Review ZR4: das Feedbacksubjekt muss VOR jeder Planungs-
+    // bereinigung aufgeloest werden, da resolveTrustedSequenceForRejection()
+    // ein noch gehaltenes acceptedCommand liest.
+    const std::optional<std::uint64_t> trustedSequence =
+        resolveTrustedSequenceForRejection(admission);
     if (physicalDirection() != AbstractControlDirection::Idle) {
         setPhysicalDirection(AbstractControlDirection::Idle, now);
     }
     clearPlanningState();
-    const std::optional<std::uint64_t> trustedSequence =
-        resolveTrustedSequenceForRejection(admission);
     state_.pendingFeedback =
         trustedSequence.has_value()
             ? std::optional<PendingControlRequestFeedback>(PendingControlRequestFeedback{
@@ -253,6 +353,7 @@ void ActuatorPlanner::startFreshWindow(const AcceptedControlCommand& source,
         window.scheduledOnMillis =
             std::min(static_cast<std::uint64_t>(roundHalfUp(requestedOnMillisExact)),
                      parameters_.switchingWindowMillis);
+        window.minimumPulseFromAccumulator = false;
     } else if (requestedOnMillisExact > 0.0) {
         creditAccumulator(source.direction, requestedOnMillisExact);
         if (state_.accumulator.accumulatedMillis >=
@@ -260,6 +361,7 @@ void ActuatorPlanner::startFreshWindow(const AcceptedControlCommand& source,
             window.scheduledOnMillis = parameters_.minimumOnMillis;
             state_.accumulator.accumulatedMillis -=
                 static_cast<double>(parameters_.minimumOnMillis);
+            window.minimumPulseFromAccumulator = true;
         } else {
             window.scheduledOnMillis = 0U;
         }
@@ -302,10 +404,9 @@ ActuatorPlanner::WindowPhysicalTick ActuatorPlanner::applyWindowPhysicalTick(
         if (remainingNaturalOnMillis < parameters_.minimumOnMillis) {
             return {false, ActuatorPlanReason::WindowPulseMissed};
         }
-        const ActuatorPlanReason triggerReason =
-            window.scheduledOnMillis == parameters_.minimumOnMillis
-                ? ActuatorPlanReason::MinimumPulseTriggered
-                : ActuatorPlanReason::ScheduledWithinWindow;
+        const ActuatorPlanReason triggerReason = window.minimumPulseFromAccumulator
+                                                      ? ActuatorPlanReason::MinimumPulseTriggered
+                                                      : ActuatorPlanReason::ScheduledWithinWindow;
         return {true, triggerReason};
     }
 
@@ -323,6 +424,14 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
     const AcceptedControlCommand& command, ActuatorAdmissionOutcome admissionOutcome,
     std::uint64_t now) {
     const AbstractControlDirection desired = command.direction;
+
+    // Referenzrichtung VOR jeder Fenstermutation dieses Ticks (Owner-Review
+    // ZR3): entscheidet, ob `desired` in DIESEM Tick erstmals als
+    // abweichende Gegenrichtung gilt. Darf nicht durch die nachfolgende
+    // Fensterfortschreibung (die das alte Fenster in DIESEM Tick loeschen
+    // kann) verfaelscht werden.
+    const AbstractControlDirection referenceDirectionAtTickStart =
+        state_.activeWindow.has_value() ? plannedDirection() : physicalDirection();
 
     // 8.1 Fensterfortschritt (O(1)): ein bestehendes Fenster wird zuerst
     // fortgeschrieben. Ueberschreitet es dabei seine natuerliche Grenze, ist
@@ -349,15 +458,22 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
         }
     }
 
-    // Gegenrichtungsbestaetigung (8.5): gefuehrt, solange `desired` von der
-    // planungs- oder physisch massgeblichen Richtung abweicht.
-    const AbstractControlDirection referenceDirection =
-        state_.activeWindow.has_value() ? plannedDirection() : physicalDirection();
-    const bool isCounterDirectionCandidate =
-        referenceDirection != AbstractControlDirection::Idle && referenceDirection != desired &&
+    // Gegenrichtungsbestaetigung (8.5, Owner-Review ZR3): ein bereits
+    // verfolgter Kandidat bleibt bestehen, solange `desired` weiterhin auf
+    // ihn zeigt und die Eignungskriterien erfuellt sind - unabhaengig davon,
+    // ob das alte Fenster/die alte Physik in DIESEM Tick bereits
+    // verschwunden ist. Die Bestaetigung laeuft so ueber beliebig viele
+    // Ticks/Fenstergrenzen weiter.
+    const bool eligibleForCounterDirection =
         (command.demandClass == ActuatorDemandClass::NormalDemand ||
          command.demandClass == ActuatorDemandClass::AirLimitReducedDemand) &&
         command.timeQuote >= parameters_.counterDirectionConfirmationQuoteThreshold;
+    const bool isCounterDirectionCandidate =
+        eligibleForCounterDirection &&
+        ((referenceDirectionAtTickStart != AbstractControlDirection::Idle &&
+          referenceDirectionAtTickStart != desired) ||
+         (state_.counterDirectionCandidate.has_value() &&
+          *state_.counterDirectionCandidate == desired));
 
     if (isCounterDirectionCandidate) {
         if (!state_.counterDirectionCandidate.has_value() ||
@@ -418,17 +534,42 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
     }
 
     if (!state_.activeWindow.has_value()) {
-        if (referenceDirection != AbstractControlDirection::Idle &&
-            referenceDirection != desired && !state_.counterDirectionConfirmed) {
-            // Unbestaetigte Gegenrichtung, altes Fenster bereits beendet
-            // (N-5d-b): physischer Ausgang bleibt Idle, keine Neuanlage.
+        if (state_.counterDirectionCandidate.has_value() &&
+            *state_.counterDirectionCandidate == desired && !state_.counterDirectionConfirmed) {
+            // Unbestaetigte Gegenrichtung, altes Fenster/alte Physik bereits
+            // beendet (N-5d-b): physischer Ausgang bleibt Idle, keine
+            // Neuanlage; die Buchfuehrung selbst bleibt oben erhalten.
             return buildResult(ActuatorPlanStatus::Idle,
                                 ActuatorPlanReason::CounterDirectionConfirming, admissionOutcome);
         }
         // Erststart, gleichgerichteter Neustart oder bestaetigte
         // B-Neuanlage.
         startFreshWindow(command, now);
+        if (state_.counterDirectionCandidate.has_value() &&
+            *state_.counterDirectionCandidate == desired) {
+            // Owner-Review ZR3: die Gegenrichtungsbuchfuehrung wird exakt
+            // bei dieser (versuchten) Neuanlage geloescht, nicht schon beim
+            // Ende des alten Fensters.
+            state_.counterDirectionCandidate.reset();
+            state_.counterDirectionObservedSinceMonotonicMillis = 0U;
+            state_.counterDirectionConfirmed = false;
+        }
     }
+
+    // Owner-Review ZR7: eine neue gleichgerichtete Request, deren eigene
+    // Quote unter minimumOnMillis liegt, traegt ihre eigene Governance, auch
+    // wenn sie physisch weiterhin unter dem (fremden, aelteren) laufenden
+    // Fenster mitlaeuft (Variante B). Nur relevant, wenn das aktive Fenster
+    // NICHT aus `command` selbst stammt; ein soeben erzeugtes/rebasiertes
+    // Fenster traegt bereits `command.sequence` und ist davon nicht
+    // betroffen.
+    const bool sameDirectionMidWindowMismatch =
+        state_.activeWindow->sourceRequestSequence != command.sequence;
+    const double ownRequestedOnMillisExact =
+        std::clamp(command.timeQuote, 0.0, 1.0) *
+        static_cast<double>(parameters_.switchingWindowMillis);
+    const bool ownQuoteBelowMinimum =
+        ownRequestedOnMillisExact < static_cast<double>(parameters_.minimumOnMillis);
 
     const WindowPhysicalTick physical = applyWindowPhysicalTick(now);
     if (physical.active) {
@@ -436,10 +577,13 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
     } else if (physicalDirection() == state_.activeWindow->direction) {
         setPhysicalDirection(AbstractControlDirection::Idle, now);
     }
+    const ActuatorPlanReason reason = (sameDirectionMidWindowMismatch && ownQuoteBelowMinimum)
+                                           ? ActuatorPlanReason::AccumulatingBelowThreshold
+                                           : physical.reason;
     return buildResult(physicalDirection() == AbstractControlDirection::Idle
                             ? ActuatorPlanStatus::Idle
                             : ActuatorPlanStatus::Active,
-                        physical.reason, admissionOutcome);
+                        reason, admissionOutcome);
 }
 
 std::optional<std::uint64_t> ActuatorPlanner::resolveTrustedSequenceForRejection(
@@ -447,8 +591,11 @@ std::optional<std::uint64_t> ActuatorPlanner::resolveTrustedSequenceForRejection
     if (admission.freshTrustedSequence.has_value()) {
         return admission.freshTrustedSequence;
     }
+    // Owner-Review ZR5 gilt hier identisch: ein gehaltenes OFF-acceptedCommand
+    // (NeutralOff/AirLimitBlockedOff) ist kein Feedbacksubjekt.
     if (!admission.episodeClosedThisTick && state_.acceptedCommand.has_value() &&
-        state_.acceptedCommand->demandClass != ActuatorDemandClass::NoValidRequest) {
+        (state_.acceptedCommand->demandClass == ActuatorDemandClass::NormalDemand ||
+         state_.acceptedCommand->demandClass == ActuatorDemandClass::AirLimitReducedDemand)) {
         return state_.acceptedCommand->sequence;
     }
     return std::nullopt;
@@ -528,6 +675,14 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(const ActuatorPlanTick
 
     const ControlRequest& request = *evaluation.controlRequest;
     const std::uint64_t sequence = request.identity.sequence;
+    // Owner-Review ZR5: #22 oeffnet ein Feedbackfenster ausschliesslich fuer
+    // eine aktive Heating/Cooling-Request (issue-22-Plan 8.1/8.2); eine
+    // gueltige OFF-Request erhaelt niemals ein Sequence-Feedback, auch nicht
+    // bei Stale-on-arrival oder korruptem externem Safety-Gate. Die Replay-/
+    // High-Watermark-Buchfuehrung bleibt fuer OFF unveraendert.
+    const bool isActiveHeatingCoolingDemand =
+        demandClass == ActuatorDemandClass::NormalDemand ||
+        demandClass == ActuatorDemandClass::AirLimitReducedDemand;
 
     if (state_.lastObservedSequenceHighWatermark.has_value() &&
         sequence <= *state_.lastObservedSequenceHighWatermark) {
@@ -540,26 +695,32 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(const ActuatorPlanTick
     if (deadlineReached(input.nowMonotonicMillis, request.identity.createdAtMonotonicMillis,
                          parameters_.requestWatchdogMillis)) {
         outcome.admissionOutcome = ActuatorAdmissionOutcome::StaleOnArrivalWatchdog;
-        state_.pendingFeedback = PendingControlRequestFeedback{
-            sequence, PreviousControlRequestFeedback::Disposition::Rejected};
-        state_.pendingFeedbackUpdateAvailable = true;
-        outcome.freshTrustedSequence = sequence;
+        if (isActiveHeatingCoolingDemand) {
+            state_.pendingFeedback = PendingControlRequestFeedback{
+                sequence, PreviousControlRequestFeedback::Disposition::Rejected};
+            state_.pendingFeedbackUpdateAvailable = true;
+            outcome.freshTrustedSequence = sequence;
+        }
         return outcome;
     }
 
     if (!contextsMatch(request.context, input.currentCanonicalContext)) {
         outcome.admissionOutcome = ActuatorAdmissionOutcome::StaleOnArrivalContext;
-        state_.pendingFeedback = PendingControlRequestFeedback{
-            sequence, PreviousControlRequestFeedback::Disposition::Rejected};
-        state_.pendingFeedbackUpdateAvailable = true;
-        outcome.freshTrustedSequence = sequence;
+        if (isActiveHeatingCoolingDemand) {
+            state_.pendingFeedback = PendingControlRequestFeedback{
+                sequence, PreviousControlRequestFeedback::Disposition::Rejected};
+            state_.pendingFeedbackUpdateAvailable = true;
+            outcome.freshTrustedSequence = sequence;
+        }
         return outcome;
     }
 
     outcome.admissionOutcome = safetyGateMalformed ? ActuatorAdmissionOutcome::MalformedSafetyGate
                                                     : ActuatorAdmissionOutcome::Accepted;
     state_.lastNewRequestAcceptedAtMonotonicMillis = input.nowMonotonicMillis;
-    outcome.freshTrustedSequence = sequence;
+    if (isActiveHeatingCoolingDemand) {
+        outcome.freshTrustedSequence = sequence;
+    }
 
     AcceptedControlCommand candidate;
     candidate.sequence = sequence;
@@ -652,7 +813,26 @@ ActuatorPlanTickResult ActuatorPlanner::runPhaseB(const ActuatorPlanTickInput& i
     // Klasse N ab hier: der frisch validierte Kandidat (falls vorhanden)
     // wird tatsaechlich als aktuelle Planungsrequest uebernommen.
     if (admission.candidate.has_value()) {
+        // Owner-Review ZR2 (Abschnitt 7): der Uebergang der demandClass
+        // entscheidet ueber den Akkumulator, unabhaengig davon, ob die alte
+        // physische Richtung wegen Minimum-On noch weiterlaeuft. Muss vor
+        // dem Ueberschreiben von acceptedCommand ausgewertet werden.
+        const ActuatorDemandClass previousDemandClass =
+            state_.acceptedCommand.has_value() ? state_.acceptedCommand->demandClass
+                                                : ActuatorDemandClass::NoValidRequest;
+        const ActuatorDemandClass newDemandClass = admission.candidate->demandClass;
         state_.acceptedCommand = admission.candidate;
+        if (newDemandClass == ActuatorDemandClass::AirLimitBlockedOff) {
+            // Uebergang zu AirLimitBlockedOff verwirft betroffenes Guthaben
+            // sofort, unbedingt.
+            state_.accumulator = PulseAccumulator{};
+        } else if (newDemandClass == ActuatorDemandClass::AirLimitReducedDemand &&
+                   previousDemandClass == ActuatorDemandClass::NormalDemand) {
+            // Uebergang aus einer weniger restriktiven aktiven Klasse in
+            // AirLimitReducedDemand verwirft altes Guthaben vor der naechsten
+            // (bereits reduzierten) Gutschrift.
+            state_.accumulator = PulseAccumulator{};
+        }
     }
 
     const bool isTeardownRequest = !state_.acceptedCommand.has_value() ||
@@ -700,10 +880,13 @@ ActuatorPlanTickResult ActuatorPlanner::tick(const ActuatorPlanTickInput& input)
 
 ActuatorPlanTickResult ActuatorPlanner::forceStop(
     std::uint64_t nowMonotonicMillis, ActuatorFeedbackEpisodeAtStop feedbackEpisodeAtStop) {
+    // Owner-Review ZR5 gilt auch hier: nur ein gehaltenes aktives
+    // Heating/Cooling-acceptedCommand ist ein Feedbacksubjekt.
     std::optional<std::uint64_t> trustedSequence;
     if (feedbackEpisodeAtStop == ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen &&
         state_.acceptedCommand.has_value() &&
-        state_.acceptedCommand->demandClass != ActuatorDemandClass::NoValidRequest) {
+        (state_.acceptedCommand->demandClass == ActuatorDemandClass::NormalDemand ||
+         state_.acceptedCommand->demandClass == ActuatorDemandClass::AirLimitReducedDemand)) {
         trustedSequence = state_.acceptedCommand->sequence;
     }
 
