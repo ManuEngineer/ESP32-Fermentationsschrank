@@ -186,38 +186,68 @@ namespace {
             break;
     }
 
-    // AirLimitReduced/AirLimitBlocked sind exakt an Demand/Reduced
-    // beziehungsweise Off/Blocked gebunden (issue-22-Plan 7.2); jede andere
-    // Kombination, einschliesslich Reduced/Blocked bei einem anderen Reason,
-    // ist unzulaessig.
-    if (evaluation.reason == TemperatureControlReason::AirLimitReduced) {
-        if (evaluation.airLimitState != AirLimitState::Reduced) {
-            return false;
-        }
-    } else if (evaluation.reason == TemperatureControlReason::AirLimitBlocked) {
-        if (evaluation.airLimitState != AirLimitState::Blocked) {
-            return false;
-        }
-    } else if (evaluation.airLimitState == AirLimitState::Reduced ||
-               evaluation.airLimitState == AirLimitState::Blocked) {
+    if (!requestPresent) {
+        // Owner-Review RZ1: Unavailable/InvalidInput tragen keine Request und
+        // damit keine sichtbare ControlSensorRole; ohne sie laesst sich die
+        // rollenabhaengige AirLimitState-Kopplung nicht pruefen. Es wird hier
+        // bewusst keine neue Fachsemantik erfunden - nur die strukturell
+        // unmoegliche Kopplung an Reduced/Blocked bleibt ausgeschlossen, da
+        // diese beiden Werte laut #22-Matrix ausschliesslich mit einer
+        // vorhandenen Request auftreten.
+        return evaluation.airLimitState != AirLimitState::Reduced &&
+               evaluation.airLimitState != AirLimitState::Blocked;
+    }
+
+    const ControlRequest& request = *evaluation.controlRequest;
+    if (!isKnownDirection(request.direction) || !isFiniteUnitQuote(request.timeQuote)) {
+        return false;
+    }
+    if (request.direction != evaluation.direction ||
+        request.timeQuote != evaluation.timeQuote) {
+        return false;
+    }
+    if (request.identity.sequence == 0U) {
+        return false;
+    }
+    if (!isStructurallyValidContext(request.context)) {
         return false;
     }
 
-    if (requestPresent) {
-        const ControlRequest& request = *evaluation.controlRequest;
-        if (!isKnownDirection(request.direction) || !isFiniteUnitQuote(request.timeQuote)) {
-            return false;
-        }
-        if (request.direction != evaluation.direction ||
-            request.timeQuote != evaluation.timeQuote) {
-            return false;
-        }
-        if (request.identity.sequence == 0U) {
-            return false;
-        }
-        if (!isStructurallyValidContext(request.context)) {
-            return false;
-        }
+    // Owner-Review RZ1: die AirLimitState-Kopplung ist rollenabhaengig
+    // (temperature_control.cpp, issue-22-Plan 7.2). ControlSensorRole::Air
+    // steuert die Luft direkt; Luftbegrenzung ist dort strukturell nicht
+    // anwendbar und traegt immer NotApplied. ControlSensorRole::Product
+    // unterliegt der eigentlichen Luftbegrenzung.
+    switch (request.context.controlSensorRole) {
+        case ControlSensorRole::Air:
+            if (evaluation.reason == TemperatureControlReason::AirLimitReduced ||
+                evaluation.reason == TemperatureControlReason::AirLimitBlocked) {
+                return false;
+            }
+            if (evaluation.airLimitState != AirLimitState::NotApplied) {
+                return false;
+            }
+            break;
+        case ControlSensorRole::Product:
+            if (evaluation.status == TemperatureControlStatus::Demand) {
+                if (evaluation.reason == TemperatureControlReason::AirLimitReduced) {
+                    if (evaluation.airLimitState != AirLimitState::Reduced) {
+                        return false;
+                    }
+                } else if (evaluation.airLimitState != AirLimitState::Unrestricted) {
+                    return false;
+                }
+            } else {
+                // Off (die einzige verbleibende requestPresent-Moeglichkeit).
+                if (evaluation.reason == TemperatureControlReason::AirLimitBlocked) {
+                    if (evaluation.airLimitState != AirLimitState::Blocked) {
+                        return false;
+                    }
+                } else if (evaluation.airLimitState != AirLimitState::Unrestricted) {
+                    return false;
+                }
+            }
+            break;
     }
 
     return true;
@@ -407,15 +437,18 @@ ActuatorPlanner::WindowPhysicalTick ActuatorPlanner::applyWindowPhysicalTick(
         const ActuatorPlanReason triggerReason = window.minimumPulseFromAccumulator
                                                       ? ActuatorPlanReason::MinimumPulseTriggered
                                                       : ActuatorPlanReason::ScheduledWithinWindow;
+        window.pulseStartedSuccessfully = true;
         return {true, triggerReason};
     }
 
-    if (physicalDirection() == window.direction && naturallyActive) {
-        return {true, ActuatorPlanReason::ScheduledWithinWindow};
-    }
-    if (physicalDirection() == window.direction) {
-        // Planmaessiges Fensterende dieses bereits gestarteten Pulses.
-        return {false, ActuatorPlanReason::ScheduledWithinWindow};
+    // Owner-Review RZ4: der einzige Aktivierungsversuch ist bereits erfolgt.
+    // pulseStartedSuccessfully unterscheidet eindeutig den planmaessigen
+    // Off-Anteil eines tatsaechlich gestarteten Pulses (weiterhin
+    // ScheduledWithinWindow, physisch Idle) von einem Puls, der nie
+    // erfolgreich gestartet wurde (WindowPulseMissed) - unabhaengig davon,
+    // wie viele weitere Ticks seither vergangen sind.
+    if (window.pulseStartedSuccessfully) {
+        return {naturallyActive, ActuatorPlanReason::ScheduledWithinWindow};
     }
     return {false, ActuatorPlanReason::WindowPulseMissed};
 }
@@ -426,12 +459,22 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
     const AbstractControlDirection desired = command.direction;
 
     // Referenzrichtung VOR jeder Fenstermutation dieses Ticks (Owner-Review
-    // ZR3): entscheidet, ob `desired` in DIESEM Tick erstmals als
-    // abweichende Gegenrichtung gilt. Darf nicht durch die nachfolgende
-    // Fensterfortschreibung (die das alte Fenster in DIESEM Tick loeschen
-    // kann) verfaelscht werden.
+    // ZR3, verschaerft durch RZ3): entscheidet, ob `desired` in DIESEM Tick
+    // erstmals als abweichende Gegenrichtung gilt. Darf nicht durch die
+    // nachfolgende Fensterfortschreibung (die das alte Fenster in DIESEM
+    // Tick loeschen kann) verfaelscht werden. Existiert weder Fenster noch
+    // aktive Physik, bleibt lastPhysicalDeactivationDirection die Referenz:
+    // eine Rueckkehr zu ihr ist ein gleichgerichteter Neustart, jede andere
+    // Richtung bleibt eine Gegenrichtung - auch nachdem der physische
+    // Ausgang laengst Idle geworden ist. Nur bei nullopt (Erststart seit
+    // Konstruktion) gibt es keine Referenz.
     const AbstractControlDirection referenceDirectionAtTickStart =
-        state_.activeWindow.has_value() ? plannedDirection() : physicalDirection();
+        state_.activeWindow.has_value()
+            ? plannedDirection()
+            : (physicalDirection() != AbstractControlDirection::Idle
+                   ? physicalDirection()
+                   : state_.lastPhysicalDeactivationDirection.value_or(
+                         AbstractControlDirection::Idle));
 
     // 8.1 Fensterfortschritt (O(1)): ein bestehendes Fenster wird zuerst
     // fortgeschrieben. Ueberschreitet es dabei seine natuerliche Grenze, ist
@@ -535,24 +578,48 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
 
     if (!state_.activeWindow.has_value()) {
         if (state_.counterDirectionCandidate.has_value() &&
-            *state_.counterDirectionCandidate == desired && !state_.counterDirectionConfirmed) {
-            // Unbestaetigte Gegenrichtung, altes Fenster/alte Physik bereits
-            // beendet (N-5d-b): physischer Ausgang bleibt Idle, keine
-            // Neuanlage; die Buchfuehrung selbst bleibt oben erhalten.
-            return buildResult(ActuatorPlanStatus::Idle,
-                                ActuatorPlanReason::CounterDirectionConfirming, admissionOutcome);
-        }
-        // Erststart, gleichgerichteter Neustart oder bestaetigte
-        // B-Neuanlage.
-        startFreshWindow(command, now);
-        if (state_.counterDirectionCandidate.has_value() &&
             *state_.counterDirectionCandidate == desired) {
-            // Owner-Review ZR3: die Gegenrichtungsbuchfuehrung wird exakt
-            // bei dieser (versuchten) Neuanlage geloescht, nicht schon beim
-            // Ende des alten Fensters.
+            if (!state_.counterDirectionConfirmed) {
+                // Unbestaetigte Gegenrichtung, altes Fenster/alte Physik
+                // bereits beendet (N-5d-b): physischer Ausgang bleibt Idle,
+                // keine Neuanlage; die Buchfuehrung bleibt oben erhalten.
+                return buildResult(ActuatorPlanStatus::Idle,
+                                    ActuatorPlanReason::CounterDirectionConfirming,
+                                    admissionOutcome);
+            }
+            // Owner-Review RZ2: eine bestaetigte Gegenrichtung wird erst neu
+            // geplant, sobald Minimum-Off und - bei echtem Richtungswechsel -
+            // Polaritaetstotzeit ab dem realen alten Active -> Idle erfuellt
+            // sind. Solange eine Frist offen ist, bleibt der Ausgang Idle und
+            // die Bestaetigung bleibt erhalten (kein "versuchter" Fensterbau
+            // als Ersatz fuer eine echte Neuanlage).
+            if (!armingAllowed(desired, now)) {
+                const bool minimumOffOk =
+                    !state_.lastPhysicalDeactivationAtMonotonicMillis.has_value() ||
+                    deadlineReached(now, *state_.lastPhysicalDeactivationAtMonotonicMillis,
+                                     parameters_.minimumOffMillis);
+                return buildResult(ActuatorPlanStatus::Idle,
+                                    minimumOffOk ? ActuatorPlanReason::PolarityDeadTimeHeld
+                                                 : ActuatorPlanReason::MinimumOffTimeHeld,
+                                    admissionOutcome);
+            }
+            startFreshWindow(command, now);
+            // Erfolgreiche B-Neuanlage: Buchfuehrung wird erst jetzt
+            // geloescht.
             state_.counterDirectionCandidate.reset();
             state_.counterDirectionObservedSinceMonotonicMillis = 0U;
             state_.counterDirectionConfirmed = false;
+        } else if (referenceDirectionAtTickStart != AbstractControlDirection::Idle &&
+                   referenceDirectionAtTickStart != desired) {
+            // Owner-Review RZ3: `desired` weicht von der zuletzt realen
+            // Richtung ab, hat aber (noch) nicht die Bestaetigungsschwelle
+            // erreicht - sonst waere sie oben bereits als Kandidat getrackt.
+            // Kein automatischer Erststart, keine Energie.
+            return buildResult(ActuatorPlanStatus::Idle,
+                                ActuatorPlanReason::CounterDirectionConfirming, admissionOutcome);
+        } else {
+            // Erststart seit Konstruktion oder gleichgerichteter Neustart.
+            startFreshWindow(command, now);
         }
     }
 
@@ -588,8 +655,8 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
 
 std::optional<std::uint64_t> ActuatorPlanner::resolveTrustedSequenceForRejection(
     const PhaseAOutcome& admission) const {
-    if (admission.freshTrustedSequence.has_value()) {
-        return admission.freshTrustedSequence;
+    if (admission.freshTrustedActiveSequence.has_value()) {
+        return admission.freshTrustedActiveSequence;
     }
     // Owner-Review ZR5 gilt hier identisch: ein gehaltenes OFF-acceptedCommand
     // (NeutralOff/AirLimitBlockedOff) ist kein Feedbacksubjekt.
@@ -699,7 +766,7 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(const ActuatorPlanTick
             state_.pendingFeedback = PendingControlRequestFeedback{
                 sequence, PreviousControlRequestFeedback::Disposition::Rejected};
             state_.pendingFeedbackUpdateAvailable = true;
-            outcome.freshTrustedSequence = sequence;
+            outcome.freshTrustedActiveSequence = sequence;
         }
         return outcome;
     }
@@ -710,7 +777,7 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(const ActuatorPlanTick
             state_.pendingFeedback = PendingControlRequestFeedback{
                 sequence, PreviousControlRequestFeedback::Disposition::Rejected};
             state_.pendingFeedbackUpdateAvailable = true;
-            outcome.freshTrustedSequence = sequence;
+            outcome.freshTrustedActiveSequence = sequence;
         }
         return outcome;
     }
@@ -719,7 +786,7 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(const ActuatorPlanTick
                                                     : ActuatorAdmissionOutcome::Accepted;
     state_.lastNewRequestAcceptedAtMonotonicMillis = input.nowMonotonicMillis;
     if (isActiveHeatingCoolingDemand) {
-        outcome.freshTrustedSequence = sequence;
+        outcome.freshTrustedActiveSequence = sequence;
     }
 
     AcceptedControlCommand candidate;

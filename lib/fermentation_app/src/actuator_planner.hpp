@@ -39,16 +39,20 @@ class ActuatorPlanner {
    private:
     // Buendelt, was Phase A (Abschnitt 6.2) fuer Phase B (Abschnitt 8.2)
     // vormerkt: das Ergebnis der Annahmeentscheidung, ein Kandidat fuer eine
-    // physische Neubewertung (nur bei Accepted/MalformedSafetyGate) sowie die
-    // in diesem Tick durch eine strukturell valide neue Evaluation frisch
+    // physische Neubewertung (nur bei Accepted/MalformedSafetyGate) sowie -
+    // ausschliesslich fuer eine aktive Heating/Cooling-ControlRequest
+    // (NormalDemand/AirLimitReducedDemand) - deren in diesem Tick frisch
     // vertrauenswuerdig gewordene Sequence (Accepted, MalformedSafetyGate,
     // StaleOnArrivalWatchdog, StaleOnArrivalContext - siehe Abschnitt 6.2
-    // Schritt 6 und die Trusted-Sequence-Regel in 8.2).
+    // Schritt 6 und die Trusted-Sequence-Regel in 8.2). Eine gueltige OFF-
+    // Request (NeutralOff/AirLimitBlockedOff) setzt dieses Feld NIE: #22
+    // oeffnet ein Feedbackfenster ausschliesslich fuer eine aktive
+    // Heating/Cooling-Request (Owner-Review ZR5/RZ6).
     struct PhaseAOutcome {
         ActuatorAdmissionOutcome admissionOutcome{
             ActuatorAdmissionOutcome::NoCandidate};
         std::optional<AcceptedControlCommand> candidate;
-        std::optional<std::uint64_t> freshTrustedSequence;
+        std::optional<std::uint64_t> freshTrustedActiveSequence;
         bool episodeClosedThisTick{false};
     };
 

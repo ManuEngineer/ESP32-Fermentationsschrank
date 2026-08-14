@@ -199,6 +199,13 @@ struct ActiveSwitchingWindow {
     // the physical contract; distinguishes ActuatorPlanReason::
     // MinimumPulseTriggered from ScheduledWithinWindow (Owner-Review ZR6).
     bool minimumPulseFromAccumulator{false};
+    // Diagnostic-only: true once this window's single first-activation
+    // attempt actually turned the physical output on. Distinguishes a
+    // pulse's own normal, scheduled off-portion (ScheduledWithinWindow)
+    // from a pulse that never successfully started at all
+    // (WindowPulseMissed / the applicable arming-gate reason). Not part of
+    // the physical contract (Owner-Review RZ4).
+    bool pulseStartedSuccessfully{false};
 };
 
 // Getrenntes Feedback-Handoff: Das Subjekt, fuer das #23 als naechstes ein
