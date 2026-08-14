@@ -96,11 +96,15 @@ struct FaultRecord {
     bool controlledRestartUsed{false};
     std::uint32_t faultRevision{0U};
     std::optional<FaultInstanceId> primaryFaultId;
+    // #23 diagnostic evidence is deliberately separate from the bounded
+    // correlation key and is never truncated.
+    std::uint64_t diagnosticSequenceHighWatermark{0U};
 };
 
 enum class FaultRaiseStatus : std::uint8_t {
     Created,
     Existing,
+    Reactivated,
     InvalidInput,
     CapacityReached,
     RevisionOverflow,
@@ -112,6 +116,7 @@ struct FaultRaiseRequest {
     std::uint32_t correlationKey{0U};
     std::uint64_t monotonicMillis{0U};
     std::optional<FaultInstanceId> primaryFaultId;
+    std::uint64_t diagnosticSequenceHighWatermark{0U};
 };
 
 struct FaultRaiseResult {
@@ -123,6 +128,7 @@ struct FaultCoreSnapshot {
     std::array<FaultRecord, kMaximumActiveFaults> records{};
     std::size_t count{0U};
     std::uint32_t revision{0U};
+    std::uint32_t instanceSequenceHighWatermark{0U};
     bool criticalSafetyEventPending{false};
 };
 
@@ -143,17 +149,17 @@ class FaultCore final {
 
     [[nodiscard]] FaultRaiseResult raise(const FaultRaiseRequest& request);
     [[nodiscard]] bool acknowledge(FaultInstanceId id,
-                                    std::uint32_t expectedRevision);
+                                   std::uint32_t expectedRevision);
     [[nodiscard]] bool markCauseCleared(FaultInstanceId id,
                                         std::uint32_t expectedRevision);
-    [[nodiscard]] bool markControlledRestartUsed(FaultInstanceId id,
-                                                 std::uint32_t expectedRevision);
+    [[nodiscard]] bool markControlledRestartUsed(
+        FaultInstanceId id, std::uint32_t expectedRevision);
 
     // Nur ein bereits als Ursache beseitigter, nicht mehr blockierender Fault
     // darf so als CLEARED markiert werden. Persistenter Reset und Boot-Intent
     // liegen darueber in safety_state_store.hpp.
-    [[nodiscard]] bool clearAfterVerifiedReset(
-        FaultInstanceId id, std::uint32_t expectedRevision);
+    [[nodiscard]] bool clearAfterVerifiedReset(FaultInstanceId id,
+                                               std::uint32_t expectedRevision);
     [[nodiscard]] bool restoreSnapshot(const FaultCoreSnapshot& snapshot);
 
     [[nodiscard]] const FaultRecord* find(FaultInstanceId id) const;
@@ -165,7 +171,8 @@ class FaultCore final {
    private:
     [[nodiscard]] bool incrementRevision();
     [[nodiscard]] FaultRecord* findMutable(FaultInstanceId id);
-    [[nodiscard]] FaultRecord* findCorrelation(const FaultRaiseRequest& request);
+    [[nodiscard]] FaultRecord* findCorrelation(
+        const FaultRaiseRequest& request);
     void recomputeProjection();
     void installUnknownPersistenceFault();
 
@@ -198,6 +205,7 @@ struct FaultEventProjection {
     std::uint32_t faultRevision{0U};
     std::uint32_t episodeId{0U};
     std::uint32_t restartEvidenceId{0U};
+    std::uint64_t diagnosticSequenceHighWatermark{0U};
     bool accepted{false};
 };
 

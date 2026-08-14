@@ -75,7 +75,8 @@ FaultCode normalizeFaultCode(FaultCode value) {
 
 FaultClass faultClassForCode(FaultCode value) {
     const auto* entry = info(normalizeFaultCode(value));
-    return entry == nullptr ? FaultClass::LatchedSystemFault : entry->faultClass;
+    return entry == nullptr ? FaultClass::LatchedSystemFault
+                            : entry->faultClass;
 }
 
 std::uint8_t faultCodePriority(FaultCode value) {
@@ -96,12 +97,15 @@ bool isLatchedFaultClass(FaultClass value) {
 bool isBlockingFault(const FaultRecord& record) {
     return statusActive(record) &&
            (isLatchedFaultClass(record.faultClass) ||
-            record.faultClass == FaultClass::OperatingFault);
+            (record.faultClass == FaultClass::OperatingFault &&
+             record.causeActive));
 }
 
 bool equalFaultCoreSnapshot(const FaultCoreSnapshot& left,
                             const FaultCoreSnapshot& right) {
     if (left.count != right.count || left.revision != right.revision ||
+        left.instanceSequenceHighWatermark !=
+            right.instanceSequenceHighWatermark ||
         left.criticalSafetyEventPending != right.criticalSafetyEventPending) {
         return false;
     }
@@ -117,7 +121,9 @@ bool equalFaultCoreSnapshot(const FaultCoreSnapshot& left,
             a.causeActive != b.causeActive || a.latched != b.latched ||
             a.controlledRestartUsed != b.controlledRestartUsed ||
             a.faultRevision != b.faultRevision ||
-            a.primaryFaultId != b.primaryFaultId) {
+            a.primaryFaultId != b.primaryFaultId ||
+            a.diagnosticSequenceHighWatermark !=
+                b.diagnosticSequenceHighWatermark) {
             return false;
         }
     }
@@ -158,7 +164,9 @@ FaultRecord* FaultCore::findCorrelation(const FaultRaiseRequest& request) {
         auto& record = state_.records[index];
         if (statusActive(record) && record.code == code &&
             record.sourceKey == request.sourceKey &&
-            record.correlationKey == request.correlationKey) {
+            record.correlationKey == request.correlationKey &&
+            record.diagnosticSequenceHighWatermark ==
+                request.diagnosticSequenceHighWatermark) {
             return &record;
         }
     }
@@ -171,6 +179,17 @@ FaultRaiseResult FaultCore::raise(const FaultRaiseRequest& request) {
         return {FaultRaiseStatus::InvalidInput, {}};
     }
     if (auto* existing = findCorrelation(request); existing != nullptr) {
+        if (!existing->causeActive ||
+            existing->status == FaultStatus::CauseClearedLocked) {
+            if (!incrementRevision()) {
+                return {FaultRaiseStatus::RevisionOverflow, {}};
+            }
+            existing->causeActive = true;
+            existing->status = FaultStatus::ActiveUnacknowledged;
+            existing->faultRevision = state_.revision;
+            recomputeProjection();
+            return {FaultRaiseStatus::Reactivated, existing->instanceId};
+        }
         return {FaultRaiseStatus::Existing, existing->instanceId};
     }
     if (state_.count >= state_.records.size() || nextInstanceId_ == 0U) {
@@ -201,20 +220,26 @@ FaultRaiseResult FaultCore::raise(const FaultRaiseRequest& request) {
     record.latched = isLatchedFaultClass(record.faultClass);
     record.faultRevision = state_.revision + 1U;
     record.primaryFaultId = request.primaryFaultId;
+    record.diagnosticSequenceHighWatermark =
+        request.diagnosticSequenceHighWatermark;
     state_.records[state_.count++] = record;
+    state_.instanceSequenceHighWatermark = id.value;
     ++state_.revision;
     recomputeProjection();
     return {FaultRaiseStatus::Created, id};
 }
 
-bool FaultCore::acknowledge(FaultInstanceId id, std::uint32_t expectedRevision) {
+bool FaultCore::acknowledge(FaultInstanceId id,
+                            std::uint32_t expectedRevision) {
     auto* record = findMutable(id);
     if (record == nullptr || record->status == FaultStatus::Cleared ||
         record->faultRevision != expectedRevision || !incrementRevision()) {
         return false;
     }
-    record->status = record->causeActive ? FaultStatus::ActiveAcknowledged
-                                         : FaultStatus::CauseClearedLocked;
+    record->status = record->causeActive
+                         ? FaultStatus::ActiveAcknowledged
+                         : (record->latched ? FaultStatus::CauseClearedLocked
+                                            : FaultStatus::Cleared);
     record->faultRevision = state_.revision;
     recomputeProjection();
     return true;
@@ -228,14 +253,18 @@ bool FaultCore::markCauseCleared(FaultInstanceId id,
         return false;
     }
     record->causeActive = false;
-    record->status = FaultStatus::CauseClearedLocked;
+    // P1/O2 are explicitly non-latched in the R2 code policy.  Once their
+    // cause is gone they are cleared immediately; leaving them in
+    // CauseClearedLocked would create an unresolvable nonpersistent latch.
+    record->status = record->latched ? FaultStatus::CauseClearedLocked
+                                     : FaultStatus::Cleared;
     record->faultRevision = state_.revision;
     recomputeProjection();
     return true;
 }
 
 bool FaultCore::markControlledRestartUsed(FaultInstanceId id,
-                                           std::uint32_t expectedRevision) {
+                                          std::uint32_t expectedRevision) {
     auto* record = findMutable(id);
     if (record == nullptr || record->status == FaultStatus::Cleared ||
         record->faultRevision != expectedRevision ||
@@ -249,7 +278,7 @@ bool FaultCore::markControlledRestartUsed(FaultInstanceId id,
 }
 
 bool FaultCore::clearAfterVerifiedReset(FaultInstanceId id,
-                                         std::uint32_t expectedRevision) {
+                                        std::uint32_t expectedRevision) {
     auto* record = findMutable(id);
     if (record == nullptr || record->status == FaultStatus::Cleared ||
         record->causeActive || !record->latched ||
@@ -264,6 +293,10 @@ bool FaultCore::clearAfterVerifiedReset(FaultInstanceId id,
 
 bool FaultCore::restoreSnapshot(const FaultCoreSnapshot& snapshot) {
     if (snapshot.count > snapshot.records.size()) return false;
+    if (snapshot.instanceSequenceHighWatermark ==
+        std::numeric_limits<std::uint32_t>::max()) {
+        return false;
+    }
     std::uint32_t maximumId = 0U;
     for (std::size_t index = 0U; index < snapshot.count; ++index) {
         const auto& record = snapshot.records[index];
@@ -296,13 +329,18 @@ bool FaultCore::restoreSnapshot(const FaultCoreSnapshot& snapshot) {
             }
             if (!primaryFound) return false;
         }
+        if (record.instanceId.value > snapshot.instanceSequenceHighWatermark) {
+            return false;
+        }
         if (record.instanceId.value > maximumId) {
             maximumId = record.instanceId.value;
         }
     }
-    if (maximumId == std::numeric_limits<std::uint32_t>::max()) return false;
+    if (maximumId > snapshot.instanceSequenceHighWatermark) return false;
     state_ = snapshot;
-    nextInstanceId_ = maximumId + 1U;
+    state_.instanceSequenceHighWatermark =
+        snapshot.instanceSequenceHighWatermark;
+    nextInstanceId_ = snapshot.instanceSequenceHighWatermark + 1U;
     recomputeProjection();
     return true;
 }
@@ -340,9 +378,7 @@ bool FaultCore::hasBlockingFault() const {
     return false;
 }
 
-FaultCoreSnapshot FaultCore::snapshot() const {
-    return state_;
-}
+FaultCoreSnapshot FaultCore::snapshot() const { return state_; }
 
 void FaultCore::recomputeProjection() {
     state_.criticalSafetyEventPending = hasBlockingFault();
@@ -350,7 +386,9 @@ void FaultCore::recomputeProjection() {
 
 void FaultCore::installUnknownPersistenceFault() {
     if (state_.count >= state_.records.size() ||
-        state_.revision == std::numeric_limits<std::uint32_t>::max()) {
+        state_.revision == std::numeric_limits<std::uint32_t>::max() ||
+        nextInstanceId_ == 0U ||
+        nextInstanceId_ == std::numeric_limits<std::uint32_t>::max()) {
         state_.criticalSafetyEventPending = true;
         return;
     }
@@ -362,21 +400,30 @@ void FaultCore::installUnknownPersistenceFault() {
     record.latched = true;
     record.faultRevision = ++state_.revision;
     state_.records[state_.count++] = record;
+    state_.instanceSequenceHighWatermark = record.instanceId.value;
     state_.criticalSafetyEventPending = true;
 }
 
 const char* faultEventTypeText(FaultEventType type) {
     switch (type) {
-        case FaultEventType::FaultCreated: return "FaultCreated";
-        case FaultEventType::FaultEscalated: return "FaultEscalated";
-        case FaultEventType::FaultCauseCleared: return "FaultCauseCleared";
-        case FaultEventType::FaultAcknowledged: return "FaultAcknowledged";
-        case FaultEventType::FaultResetCommitted: return "FaultResetCommitted";
-        case FaultEventType::FaultResetRejected: return "FaultResetRejected";
+        case FaultEventType::FaultCreated:
+            return "FaultCreated";
+        case FaultEventType::FaultEscalated:
+            return "FaultEscalated";
+        case FaultEventType::FaultCauseCleared:
+            return "FaultCauseCleared";
+        case FaultEventType::FaultAcknowledged:
+            return "FaultAcknowledged";
+        case FaultEventType::FaultResetCommitted:
+            return "FaultResetCommitted";
+        case FaultEventType::FaultResetRejected:
+            return "FaultResetRejected";
         case FaultEventType::RestartEpisodeAdvanced:
             return "RestartEpisodeAdvanced";
-        case FaultEventType::RestartEpisodeClosed: return "RestartEpisodeClosed";
-        case FaultEventType::SafeBootEntered: return "SafeBootEntered";
+        case FaultEventType::RestartEpisodeClosed:
+            return "RestartEpisodeClosed";
+        case FaultEventType::SafeBootEntered:
+            return "SafeBootEntered";
         case FaultEventType::SafeBootExitDecided:
             return "SafeBootExitDecided";
         case FaultEventType::SafeBootExitRejected:
@@ -404,6 +451,8 @@ std::string serializeFaultEvent(const FaultEventProjection& projection) {
     result += ";faultRevision=" + std::to_string(projection.faultRevision);
     result += ";episode=" + std::to_string(projection.episodeId);
     result += ";evidence=" + std::to_string(projection.restartEvidenceId);
+    result += ";diagnosticSequence=" +
+              std::to_string(projection.diagnosticSequenceHighWatermark);
     result += ";accepted=" + std::to_string(projection.accepted ? 1 : 0);
     return result;
 }

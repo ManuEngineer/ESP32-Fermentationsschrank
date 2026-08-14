@@ -43,28 +43,31 @@ bool readU16(const std::string& bytes, std::size_t& offset,
     if (bytes.size() - offset < 2U) return false;
     out = (static_cast<std::uint16_t>(static_cast<std::uint8_t>(bytes[offset]))
            << 8U) |
-          static_cast<std::uint16_t>(static_cast<std::uint8_t>(bytes[offset + 1U]));
+          static_cast<std::uint16_t>(
+              static_cast<std::uint8_t>(bytes[offset + 1U]));
     offset += 2U;
     return true;
 }
 
-bool readU32(const std::string& bytes, std::size_t& offset, std::uint32_t& out) {
+bool readU32(const std::string& bytes, std::size_t& offset,
+             std::uint32_t& out) {
     if (bytes.size() - offset < 4U) return false;
     out = 0U;
     for (std::size_t i = 0U; i < 4U; ++i) {
-        out = (out << 8U) |
-              static_cast<std::uint32_t>(static_cast<std::uint8_t>(bytes[offset + i]));
+        out = (out << 8U) | static_cast<std::uint32_t>(
+                                static_cast<std::uint8_t>(bytes[offset + i]));
     }
     offset += 4U;
     return true;
 }
 
-bool readU64(const std::string& bytes, std::size_t& offset, std::uint64_t& out) {
+bool readU64(const std::string& bytes, std::size_t& offset,
+             std::uint64_t& out) {
     if (bytes.size() - offset < 8U) return false;
     out = 0U;
     for (std::size_t i = 0U; i < 8U; ++i) {
-        out = (out << 8U) |
-              static_cast<std::uint64_t>(static_cast<std::uint8_t>(bytes[offset + i]));
+        out = (out << 8U) | static_cast<std::uint64_t>(
+                                static_cast<std::uint8_t>(bytes[offset + i]));
     }
     offset += 8U;
     return true;
@@ -77,17 +80,19 @@ void encodeFault(std::string& bytes, const FaultRecord& fault) {
     appendU8(bytes, static_cast<std::uint8_t>(fault.faultClass));
     appendU8(bytes, static_cast<std::uint8_t>(fault.status));
     appendU8(bytes, static_cast<std::uint8_t>(fault.disposition));
-    appendU8(bytes, static_cast<std::uint8_t>((fault.causeActive ? 1U : 0U) |
-                                              (fault.latched ? 2U : 0U) |
-                                              (fault.controlledRestartUsed ? 4U : 0U)));
+    appendU8(bytes,
+             static_cast<std::uint8_t>(
+                 (fault.causeActive ? 1U : 0U) | (fault.latched ? 2U : 0U) |
+                 (fault.controlledRestartUsed ? 4U : 0U)));
     appendU32(bytes, fault.sourceKey);
     appendU32(bytes, fault.correlationKey);
     appendU32(bytes, fault.creationSequence);
     appendU64(bytes, fault.createdAtMonotonicMillis);
     appendU32(bytes, fault.faultRevision);
     appendU32(bytes, fault.primaryFaultId.has_value()
-                       ? fault.primaryFaultId->value
-                       : 0U);
+                         ? fault.primaryFaultId->value
+                         : 0U);
+    appendU64(bytes, fault.diagnosticSequenceHighWatermark);
     // Fixed-size record: retain room for future bounded metadata without
     // introducing strings or vectors into the persistent authority.
     while (bytes.size() - start < 48U) appendU8(bytes, 0U);
@@ -110,11 +115,12 @@ bool decodeFault(const std::string& bytes, std::size_t& offset,
         !readU32(bytes, offset, fault.creationSequence) ||
         !readU64(bytes, offset, fault.createdAtMonotonicMillis) ||
         !readU32(bytes, offset, fault.faultRevision) ||
-        !readU32(bytes, offset, primary)) {
+        !readU32(bytes, offset, primary) ||
+        !readU64(bytes, offset, fault.diagnosticSequenceHighWatermark)) {
         return false;
     }
-    if (bytes.size() - offset < 10U) return false;
-    offset += 10U;
+    if (bytes.size() - offset < 2U) return false;
+    offset += 2U;
     fault.instanceId = {instance};
     fault.code = static_cast<FaultCode>(code);
     fault.faultClass = static_cast<FaultClass>(faultClass);
@@ -158,7 +164,7 @@ std::string encodePayload(const SafetyStateRecord& record) {
     while (bytes.size() < 80U) appendU8(bytes, 0U);
     for (std::size_t index = 0U; index < kMaximumPersistedLatches; ++index) {
         encodeFault(bytes, index < record.latchCount ? record.latches[index]
-                                                      : FaultRecord{});
+                                                     : FaultRecord{});
     }
     return bytes;
 }
@@ -212,12 +218,15 @@ bool decodePayload(const std::string& bytes, SafetyStateRecord& record) {
     record.latchCount = latchCount;
     record.restartEpisode.open = open != 0U;
     record.restartEpisode.stableWindowRunning = stable != 0U;
-    record.restartEvidence.cause = static_cast<RestartCauseEvent>(evidenceCause);
-    record.restartEvidence.state = static_cast<RestartEvidenceState>(evidenceState);
+    record.restartEvidence.cause =
+        static_cast<RestartCauseEvent>(evidenceCause);
+    record.restartEvidence.state =
+        static_cast<RestartEvidenceState>(evidenceState);
     record.restartEvidence.faultInstanceId = {evidenceFault};
     record.faultResetBootIntent.targetFault = {intentFault};
     record.faultResetBootIntent.pending = intentPending != 0U;
-    record.lastResetCause = static_cast<device_platform::ResetCause>(resetCause);
+    record.lastResetCause =
+        static_cast<device_platform::ResetCause>(resetCause);
     for (std::size_t index = 0U; index < kMaximumPersistedLatches; ++index) {
         if (!decodeFault(bytes, offset, record.latches[index])) return false;
     }
@@ -284,7 +293,8 @@ bool knownResetCause(device_platform::ResetCause cause) {
     return false;
 }
 
-SafetyRecordValidation validateSafetyStateRecord(const SafetyStateRecord& record) {
+SafetyRecordValidation validateSafetyStateRecord(
+    const SafetyStateRecord& record) {
     if (record.schemaVersion != kSafetyStateRecordSchema ||
         record.recordRevision == 0U || record.storageEpoch.value() == 0U ||
         record.latchCount > kMaximumPersistedLatches ||
@@ -316,15 +326,11 @@ SafetyRecordValidation validateSafetyStateRecord(const SafetyStateRecord& record
         const auto& fault = record.latches[index];
         if (!fault.instanceId.valid() || !isKnownFaultCode(fault.code) ||
             !isKnownFaultClass(fault.faultClass) ||
+            !isLatchedFaultClass(fault.faultClass) ||
             fault.faultClass != faultClassForCode(fault.code) ||
             !knownFaultStatus(fault.status) ||
             !knownDisposition(fault.disposition) || fault.faultRevision == 0U ||
-            fault.disposition !=
-                (fault.faultClass == FaultClass::ProcessWarning
-                     ? SafetyDisposition::Allowed
-                     : SafetyDisposition::ImmediateStop) ||
-            (fault.disposition == SafetyDisposition::Allowed &&
-             fault.faultClass != FaultClass::ProcessWarning) ||
+            fault.disposition != SafetyDisposition::ImmediateStop ||
             (fault.primaryFaultId.has_value() &&
              fault.primaryFaultId->value == fault.instanceId.value)) {
             return SafetyRecordValidation::InvalidRelationship;
@@ -336,15 +342,16 @@ SafetyRecordValidation validateSafetyStateRecord(const SafetyStateRecord& record
         }
         if (fault.primaryFaultId.has_value()) {
             bool primaryFound = false;
-            for (std::size_t primaryIndex = 0U; primaryIndex < record.latchCount;
-                 ++primaryIndex) {
+            for (std::size_t primaryIndex = 0U;
+                 primaryIndex < record.latchCount; ++primaryIndex) {
                 if (record.latches[primaryIndex].instanceId ==
                     *fault.primaryFaultId) {
                     primaryFound = true;
                     break;
                 }
             }
-            if (!primaryFound) return SafetyRecordValidation::InvalidRelationship;
+            if (!primaryFound)
+                return SafetyRecordValidation::InvalidRelationship;
         }
         if (fault.instanceId.value > record.faultInstanceSequence) {
             return SafetyRecordValidation::InvalidRelationship;
@@ -362,7 +369,8 @@ SafetyRecordValidation validateSafetyStateRecord(const SafetyStateRecord& record
         if (!dominantFound) return SafetyRecordValidation::InvalidRelationship;
     }
     if (record.restartEvidence.state != RestartEvidenceState::None) {
-        if (record.restartEvidence.cause == RestartCauseEvent::ControlledSafety &&
+        if (record.restartEvidence.cause ==
+                RestartCauseEvent::ControlledSafety &&
             !record.restartEvidence.faultInstanceId.valid()) {
             return SafetyRecordValidation::InvalidRelationship;
         }
@@ -404,9 +412,9 @@ SafetyRecordValidation validateSafetyStateRecord(const SafetyStateRecord& record
     return SafetyRecordValidation::Valid;
 }
 
-SafetyRecordEncodeStatus encodeSafetyStateRecord(const SafetyStateRecord& record,
-                                                std::string& outBytes,
-                                                std::size_t maxBytes) {
+SafetyRecordEncodeStatus encodeSafetyStateRecord(
+    const SafetyStateRecord& record, std::string& outBytes,
+    std::size_t maxBytes) {
     if (validateSafetyStateRecord(record) != SafetyRecordValidation::Valid) {
         return SafetyRecordEncodeStatus::InvalidRecord;
     }
@@ -418,8 +426,8 @@ SafetyRecordEncodeStatus encodeSafetyStateRecord(const SafetyStateRecord& record
         record.recordRevision,
         std::nullopt,
         payload};
-    const auto status = device_platform::encodeEnvelope(envelope, outBytes,
-                                                        maxBytes);
+    const auto status =
+        device_platform::encodeEnvelope(envelope, outBytes, maxBytes);
     if (status == device_platform::EnvelopeEncodeStatus::CapacityExceeded) {
         return SafetyRecordEncodeStatus::CapacityExceeded;
     }
@@ -429,7 +437,7 @@ SafetyRecordEncodeStatus encodeSafetyStateRecord(const SafetyStateRecord& record
 }
 
 SafetyRecordDecodeStatus decodeSafetyStateRecord(const std::string& bytes,
-                                                SafetyStateRecord& outRecord) {
+                                                 SafetyStateRecord& outRecord) {
     const auto decoded = device_platform::decodeEnvelope(bytes);
     if (decoded.status != device_platform::EnvelopeDecodeStatus::Success ||
         !decoded.envelope.has_value() ||
@@ -444,7 +452,7 @@ SafetyRecordDecodeStatus decodeSafetyStateRecord(const std::string& bytes,
         static_cast<std::uint32_t>(decoded.envelope->versionValue);
     outRecord.storageEpoch = decoded.envelope->storageEpoch;
     if (decoded.envelope->versionValue >
-        std::numeric_limits<std::uint32_t>::max() ||
+            std::numeric_limits<std::uint32_t>::max() ||
         !decodePayload(decoded.envelope->payload, outRecord)) {
         return SafetyRecordDecodeStatus::InvalidRecord;
     }
@@ -452,14 +460,16 @@ SafetyRecordDecodeStatus decodeSafetyStateRecord(const std::string& bytes,
 }
 
 SafetyStateStore::SafetyStateStore(device_platform::IStateStore& store)
-    : store_(store), key_(*device_platform::StateStoreKey::create("safety24").key) {}
+    : store_(store),
+      key_(*device_platform::StateStoreKey::create("safety24").key) {}
 
 SafetyRecordLoadResult SafetyStateStore::load(
     const FactoryNewSafetyProof& factoryProof) {
     const auto read = store_.read(key_, kMaximumSafetyRecordBytes);
     if (read.status == device_platform::StateStoreReadStatus::NotFound) {
         if (!factoryProof.valid()) {
-            return {SafetyRecordLoadStatus::NotFoundOutsideFactoryBootstrap, {}};
+            return {SafetyRecordLoadStatus::NotFoundOutsideFactoryBootstrap,
+                    {}};
         }
         SafetyStateRecord initial;
         const auto commitResult = commit(initial);
@@ -485,8 +495,8 @@ SafetyRecordLoadResult SafetyStateStore::load(
 SafetyRecordCommitResult SafetyStateStore::commit(
     const SafetyStateRecord& record) {
     std::string encoded;
-    const auto encodeStatus = encodeSafetyStateRecord(
-        record, encoded, kMaximumSafetyRecordBytes);
+    const auto encodeStatus =
+        encodeSafetyStateRecord(record, encoded, kMaximumSafetyRecordBytes);
     if (encodeStatus == SafetyRecordEncodeStatus::InvalidRecord) {
         return {SafetyRecordCommitStatus::InvalidRecord};
     }
@@ -502,14 +512,18 @@ SafetyRecordCommitResult SafetyStateStore::commit(
     }
     const auto readback = store_.read(key_, kMaximumSafetyRecordBytes);
     if (readback.status != device_platform::StateStoreReadStatus::Success) {
-        return {writeStatus == device_platform::StateStoreWriteStatus::CommitOutcomeUnknown
-                    ? SafetyRecordCommitStatus::CommitOutcomeUnknown
-                    : SafetyRecordCommitStatus::ReadbackError};
+        return {
+            writeStatus ==
+                    device_platform::StateStoreWriteStatus::CommitOutcomeUnknown
+                ? SafetyRecordCommitStatus::CommitOutcomeUnknown
+                : SafetyRecordCommitStatus::ReadbackError};
     }
     if (readback.value != encoded) {
-        return {writeStatus == device_platform::StateStoreWriteStatus::CommitOutcomeUnknown
-                    ? SafetyRecordCommitStatus::CommitOutcomeUnknown
-                    : SafetyRecordCommitStatus::ReadbackMismatch};
+        return {
+            writeStatus ==
+                    device_platform::StateStoreWriteStatus::CommitOutcomeUnknown
+                ? SafetyRecordCommitStatus::CommitOutcomeUnknown
+                : SafetyRecordCommitStatus::ReadbackMismatch};
     }
     return {SafetyRecordCommitStatus::Committed};
 }
