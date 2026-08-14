@@ -12,14 +12,16 @@ namespace {
 // gilt defensiv als nicht erfuellt; die dedizierten Zustandsreferenzen
 // werden zusaetzlich unabhaengig davon auf Retrogradheit geprueft (I-8).
 [[nodiscard]] bool deadlineReached(std::uint64_t now, std::uint64_t since,
-                                    std::uint64_t durationMillis) {
+                                   std::uint64_t durationMillis) {
     if (now < since) {
         return false;
     }
     return (now - since) >= durationMillis;
 }
 
-[[nodiscard]] double roundHalfUp(double value) { return std::floor(value + 0.5); }
+[[nodiscard]] double roundHalfUp(double value) {
+    return std::floor(value + 0.5);
+}
 
 [[nodiscard]] bool isKnownDirection(AbstractControlDirection direction) {
     switch (direction) {
@@ -93,7 +95,8 @@ namespace {
     return false;
 }
 
-[[nodiscard]] bool isStructurallyValidContext(const ControlRequestContext& context) {
+[[nodiscard]] bool isStructurallyValidContext(
+    const ControlRequestContext& context) {
     return isKnownSensorRole(context.controlSensorRole);
 }
 
@@ -102,7 +105,7 @@ namespace {
 }
 
 [[nodiscard]] bool contextsMatch(const ControlRequestContext& left,
-                                  const ControlRequestContext& right) {
+                                 const ControlRequestContext& right) {
     return left.processTransitionSequence == right.processTransitionSequence &&
            left.runRevision == right.runRevision &&
            left.controlSensorRole == right.controlSensorRole;
@@ -117,8 +120,10 @@ namespace {
 // diese Pruefung; sie muss ihr vorausgehen (Owner-Review ZR1).
 [[nodiscard]] bool isStructurallyValidEvaluation(
     const TemperatureControlResult& evaluation) {
-    if (!isKnownStatus(evaluation.status) || !isKnownDirection(evaluation.direction) ||
-        !isKnownReason(evaluation.reason) || !isKnownAirLimitState(evaluation.airLimitState) ||
+    if (!isKnownStatus(evaluation.status) ||
+        !isKnownDirection(evaluation.direction) ||
+        !isKnownReason(evaluation.reason) ||
+        !isKnownAirLimitState(evaluation.airLimitState) ||
         !isFiniteUnitQuote(evaluation.timeQuote)) {
         return false;
     }
@@ -132,7 +137,8 @@ namespace {
             }
             if (evaluation.reason != TemperatureControlReason::None &&
                 evaluation.reason != TemperatureControlReason::Saturated &&
-                evaluation.reason != TemperatureControlReason::AirLimitReduced) {
+                evaluation.reason !=
+                    TemperatureControlReason::AirLimitReduced) {
                 return false;
             }
             if (evaluation.direction != AbstractControlDirection::Heating &&
@@ -148,7 +154,8 @@ namespace {
                 return false;
             }
             if (evaluation.reason != TemperatureControlReason::NeutralBand &&
-                evaluation.reason != TemperatureControlReason::AirLimitBlocked) {
+                evaluation.reason !=
+                    TemperatureControlReason::AirLimitBlocked) {
                 return false;
             }
             if (evaluation.direction != AbstractControlDirection::Idle ||
@@ -160,8 +167,10 @@ namespace {
             if (requestPresent) {
                 return false;
             }
-            if (evaluation.reason != TemperatureControlReason::NoCommissioning &&
-                evaluation.reason != TemperatureControlReason::SensorUnavailable) {
+            if (evaluation.reason !=
+                    TemperatureControlReason::NoCommissioning &&
+                evaluation.reason !=
+                    TemperatureControlReason::SensorUnavailable) {
                 return false;
             }
             if (evaluation.direction != AbstractControlDirection::Idle ||
@@ -173,10 +182,12 @@ namespace {
             if (requestPresent) {
                 return false;
             }
-            if (evaluation.reason != TemperatureControlReason::InvalidConfiguration &&
+            if (evaluation.reason !=
+                    TemperatureControlReason::InvalidConfiguration &&
                 evaluation.reason != TemperatureControlReason::InvalidSample &&
                 evaluation.reason != TemperatureControlReason::TimeInvalid &&
-                evaluation.reason != TemperatureControlReason::RequestIdentityExhausted) {
+                evaluation.reason !=
+                    TemperatureControlReason::RequestIdentityExhausted) {
                 return false;
             }
             if (evaluation.direction != AbstractControlDirection::Idle ||
@@ -199,7 +210,8 @@ namespace {
     }
 
     const ControlRequest& request = *evaluation.controlRequest;
-    if (!isKnownDirection(request.direction) || !isFiniteUnitQuote(request.timeQuote)) {
+    if (!isKnownDirection(request.direction) ||
+        !isFiniteUnitQuote(request.timeQuote)) {
         return false;
     }
     if (request.direction != evaluation.direction ||
@@ -220,8 +232,10 @@ namespace {
     // unterliegt der eigentlichen Luftbegrenzung.
     switch (request.context.controlSensorRole) {
         case ControlSensorRole::Air:
-            if (evaluation.reason == TemperatureControlReason::AirLimitReduced ||
-                evaluation.reason == TemperatureControlReason::AirLimitBlocked) {
+            if (evaluation.reason ==
+                    TemperatureControlReason::AirLimitReduced ||
+                evaluation.reason ==
+                    TemperatureControlReason::AirLimitBlocked) {
                 return false;
             }
             if (evaluation.airLimitState != AirLimitState::NotApplied) {
@@ -230,20 +244,24 @@ namespace {
             break;
         case ControlSensorRole::Product:
             if (evaluation.status == TemperatureControlStatus::Demand) {
-                if (evaluation.reason == TemperatureControlReason::AirLimitReduced) {
+                if (evaluation.reason ==
+                    TemperatureControlReason::AirLimitReduced) {
                     if (evaluation.airLimitState != AirLimitState::Reduced) {
                         return false;
                     }
-                } else if (evaluation.airLimitState != AirLimitState::Unrestricted) {
+                } else if (evaluation.airLimitState !=
+                           AirLimitState::Unrestricted) {
                     return false;
                 }
             } else {
                 // Off (die einzige verbleibende requestPresent-Moeglichkeit).
-                if (evaluation.reason == TemperatureControlReason::AirLimitBlocked) {
+                if (evaluation.reason ==
+                    TemperatureControlReason::AirLimitBlocked) {
                     if (evaluation.airLimitState != AirLimitState::Blocked) {
                         return false;
                     }
-                } else if (evaluation.airLimitState != AirLimitState::Unrestricted) {
+                } else if (evaluation.airLimitState !=
+                           AirLimitState::Unrestricted) {
                     return false;
                 }
             }
@@ -258,7 +276,9 @@ namespace {
 ActuatorPlanner::ActuatorPlanner(ActuatorPlannerParameters parameters)
     : parameters_(std::move(parameters)) {}
 
-const ActuatorPlannerRuntimeState& ActuatorPlanner::state() const { return state_; }
+const ActuatorPlannerRuntimeState& ActuatorPlanner::state() const {
+    return state_;
+}
 
 const ActuatorPlannerParameters& ActuatorPlanner::parameters() const {
     return parameters_;
@@ -266,7 +286,7 @@ const ActuatorPlannerParameters& ActuatorPlanner::parameters() const {
 
 AbstractControlDirection ActuatorPlanner::plannedDirection() const {
     return state_.activeWindow.has_value() ? state_.activeWindow->direction
-                                            : AbstractControlDirection::Idle;
+                                           : AbstractControlDirection::Idle;
 }
 
 AbstractControlDirection ActuatorPlanner::physicalDirection() const {
@@ -274,7 +294,7 @@ AbstractControlDirection ActuatorPlanner::physicalDirection() const {
 }
 
 void ActuatorPlanner::setPhysicalDirection(AbstractControlDirection next,
-                                            std::uint64_t now) {
+                                           std::uint64_t now) {
     if (state_.lastAppliedDirection == next) {
         return;
     }
@@ -305,24 +325,25 @@ ActuatorPlanTickResult ActuatorPlanner::buildResult(
     result.status = status;
     result.reason = reason;
     result.appliedDirection = state_.lastAppliedDirection;
-    result.outerFanEnabled = false;   // Abschnitt 10, Commit 4.
-    result.innerFanEnabled = false;   // Abschnitt 10, Commit 4.
+    result.outerFanEnabled = false;  // Abschnitt 10, Commit 4.
+    result.innerFanEnabled = false;  // Abschnitt 10, Commit 4.
     result.counterDirectionConfirming =
-        state_.counterDirectionCandidate.has_value() && !state_.counterDirectionConfirmed;
+        state_.counterDirectionCandidate.has_value() &&
+        !state_.counterDirectionConfirmed;
     result.admissionOutcome = admissionOutcome;
     result.acceptedCommandSequence =
         (state_.acceptedCommand.has_value() &&
-         state_.acceptedCommand->demandClass != ActuatorDemandClass::NoValidRequest)
+         state_.acceptedCommand->demandClass !=
+             ActuatorDemandClass::NoValidRequest)
             ? std::optional<std::uint64_t>(state_.acceptedCommand->sequence)
             : std::nullopt;
     result.watchdogFaultActive = state_.latchedWatchdogFault.has_value();
     return result;
 }
 
-ActuatorPlanTickResult ActuatorPlanner::rejectToIdle(const PhaseAOutcome& admission,
-                                                      std::uint64_t now,
-                                                      ActuatorPlanStatus status,
-                                                      ActuatorPlanReason reason) {
+ActuatorPlanTickResult ActuatorPlanner::rejectToIdle(
+    const PhaseAOutcome& admission, std::uint64_t now,
+    ActuatorPlanStatus status, ActuatorPlanReason reason) {
     // Owner-Review ZR4: das Feedbacksubjekt muss VOR jeder Planungs-
     // bereinigung aufgeloest werden, da resolveTrustedSequenceForRejection()
     // ein noch gehaltenes acceptedCommand liest.
@@ -334,30 +355,37 @@ ActuatorPlanTickResult ActuatorPlanner::rejectToIdle(const PhaseAOutcome& admiss
     clearPlanningState();
     state_.pendingFeedback =
         trustedSequence.has_value()
-            ? std::optional<PendingControlRequestFeedback>(PendingControlRequestFeedback{
-                  *trustedSequence, PreviousControlRequestFeedback::Disposition::Rejected})
+            ? std::optional<PendingControlRequestFeedback>(
+                  PendingControlRequestFeedback{
+                      *trustedSequence,
+                      PreviousControlRequestFeedback::Disposition::Rejected})
             : std::nullopt;
     state_.pendingFeedbackUpdateAvailable = true;
     return buildResult(status, reason, admission.admissionOutcome);
 }
 
 bool ActuatorPlanner::armingAllowed(AbstractControlDirection direction,
-                                     std::uint64_t atMillis) const {
+                                    std::uint64_t atMillis) const {
     if (!state_.lastPhysicalDeactivationAtMonotonicMillis.has_value()) {
         return true;  // (a) Erststart seit Konstruktion.
     }
-    const std::uint64_t deactivatedAt = *state_.lastPhysicalDeactivationAtMonotonicMillis;
-    const bool sameDirection = state_.lastPhysicalDeactivationDirection.has_value() &&
-                                *state_.lastPhysicalDeactivationDirection == direction;
+    const std::uint64_t deactivatedAt =
+        *state_.lastPhysicalDeactivationAtMonotonicMillis;
+    const bool sameDirection =
+        state_.lastPhysicalDeactivationDirection.has_value() &&
+        *state_.lastPhysicalDeactivationDirection == direction;
     if (sameDirection) {
-        return deadlineReached(atMillis, deactivatedAt, parameters_.minimumOffMillis);
+        return deadlineReached(atMillis, deactivatedAt,
+                               parameters_.minimumOffMillis);
     }
-    return deadlineReached(atMillis, deactivatedAt, parameters_.minimumOffMillis) &&
-           deadlineReached(atMillis, deactivatedAt, parameters_.polarityDeadTimeMillis);
+    return deadlineReached(atMillis, deactivatedAt,
+                           parameters_.minimumOffMillis) &&
+           deadlineReached(atMillis, deactivatedAt,
+                           parameters_.polarityDeadTimeMillis);
 }
 
 void ActuatorPlanner::creditAccumulator(AbstractControlDirection direction,
-                                         double quoteMillis) {
+                                        double quoteMillis) {
     if (state_.accumulator.direction != direction) {
         state_.accumulator.direction = direction;
         state_.accumulator.accumulatedMillis = 0.0;
@@ -368,7 +396,7 @@ void ActuatorPlanner::creditAccumulator(AbstractControlDirection direction,
 }
 
 void ActuatorPlanner::startFreshWindow(const AcceptedControlCommand& source,
-                                        std::uint64_t startMonotonicMillis) {
+                                       std::uint64_t startMonotonicMillis) {
     ActiveSwitchingWindow window;
     window.startMonotonicMillis = startMonotonicMillis;
     window.direction = source.direction;
@@ -379,10 +407,11 @@ void ActuatorPlanner::startFreshWindow(const AcceptedControlCommand& source,
         std::clamp(source.timeQuote, 0.0, 1.0) *
         static_cast<double>(parameters_.switchingWindowMillis);
 
-    if (requestedOnMillisExact >= static_cast<double>(parameters_.minimumOnMillis)) {
-        window.scheduledOnMillis =
-            std::min(static_cast<std::uint64_t>(roundHalfUp(requestedOnMillisExact)),
-                     parameters_.switchingWindowMillis);
+    if (requestedOnMillisExact >=
+        static_cast<double>(parameters_.minimumOnMillis)) {
+        window.scheduledOnMillis = std::min(
+            static_cast<std::uint64_t>(roundHalfUp(requestedOnMillisExact)),
+            parameters_.switchingWindowMillis);
         window.minimumPulseFromAccumulator = false;
     } else if (requestedOnMillisExact > 0.0) {
         creditAccumulator(source.direction, requestedOnMillisExact);
@@ -423,20 +452,23 @@ ActuatorPlanner::WindowPhysicalTick ActuatorPlanner::applyWindowPhysicalTick(
         if (!armingAllowed(window.direction, window.startMonotonicMillis)) {
             const bool minimumOffOk =
                 !state_.lastPhysicalDeactivationAtMonotonicMillis.has_value() ||
-                deadlineReached(window.startMonotonicMillis,
-                                 *state_.lastPhysicalDeactivationAtMonotonicMillis,
-                                 parameters_.minimumOffMillis);
-            return {false, minimumOffOk ? ActuatorPlanReason::PolarityDeadTimeHeld
-                                         : ActuatorPlanReason::MinimumOffTimeHeld};
+                deadlineReached(
+                    window.startMonotonicMillis,
+                    *state_.lastPhysicalDeactivationAtMonotonicMillis,
+                    parameters_.minimumOffMillis);
+            return {false, minimumOffOk
+                               ? ActuatorPlanReason::PolarityDeadTimeHeld
+                               : ActuatorPlanReason::MinimumOffTimeHeld};
         }
         const std::uint64_t remainingNaturalOnMillis =
             window.scheduledOnMillis - elapsedInWindow;
         if (remainingNaturalOnMillis < parameters_.minimumOnMillis) {
             return {false, ActuatorPlanReason::WindowPulseMissed};
         }
-        const ActuatorPlanReason triggerReason = window.minimumPulseFromAccumulator
-                                                      ? ActuatorPlanReason::MinimumPulseTriggered
-                                                      : ActuatorPlanReason::ScheduledWithinWindow;
+        const ActuatorPlanReason triggerReason =
+            window.minimumPulseFromAccumulator
+                ? ActuatorPlanReason::MinimumPulseTriggered
+                : ActuatorPlanReason::ScheduledWithinWindow;
         window.pulseStartedSuccessfully = true;
         return {true, triggerReason};
     }
@@ -454,8 +486,8 @@ ActuatorPlanner::WindowPhysicalTick ActuatorPlanner::applyWindowPhysicalTick(
 }
 
 ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
-    const AcceptedControlCommand& command, ActuatorAdmissionOutcome admissionOutcome,
-    std::uint64_t now) {
+    const AcceptedControlCommand& command,
+    ActuatorAdmissionOutcome admissionOutcome, std::uint64_t now) {
     const AbstractControlDirection desired = command.direction;
 
     // Referenzrichtung VOR jeder Fenstermutation dieses Ticks (Owner-Review
@@ -485,9 +517,11 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
         const ActiveSwitchingWindow& window = *state_.activeWindow;
         const std::uint64_t elapsed = now - window.startMonotonicMillis;
         if (elapsed >= parameters_.switchingWindowMillis) {
-            const std::uint64_t windowsElapsed = elapsed / parameters_.switchingWindowMillis;
+            const std::uint64_t windowsElapsed =
+                elapsed / parameters_.switchingWindowMillis;
             const std::uint64_t rebasedStart =
-                window.startMonotonicMillis + windowsElapsed * parameters_.switchingWindowMillis;
+                window.startMonotonicMillis +
+                windowsElapsed * parameters_.switchingWindowMillis;
             const AbstractControlDirection oldDirection = window.direction;
             if (oldDirection == desired) {
                 startFreshWindow(command, rebasedStart);
@@ -510,7 +544,8 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
     const bool eligibleForCounterDirection =
         (command.demandClass == ActuatorDemandClass::NormalDemand ||
          command.demandClass == ActuatorDemandClass::AirLimitReducedDemand) &&
-        command.timeQuote >= parameters_.counterDirectionConfirmationQuoteThreshold;
+        command.timeQuote >=
+            parameters_.counterDirectionConfirmationQuoteThreshold;
     const bool isCounterDirectionCandidate =
         eligibleForCounterDirection &&
         ((referenceDirectionAtTickStart != AbstractControlDirection::Idle &&
@@ -525,55 +560,81 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
             state_.counterDirectionObservedSinceMonotonicMillis = now;
             state_.counterDirectionConfirmed = false;
         }
-        state_.counterDirectionConfirmed =
-            deadlineReached(now, state_.counterDirectionObservedSinceMonotonicMillis,
-                             parameters_.counterDirectionConfirmationDurationMillis);
+        state_.counterDirectionConfirmed = deadlineReached(
+            now, state_.counterDirectionObservedSinceMonotonicMillis,
+            parameters_.counterDirectionConfirmationDurationMillis);
     } else {
         state_.counterDirectionCandidate.reset();
         state_.counterDirectionObservedSinceMonotonicMillis = 0U;
         state_.counterDirectionConfirmed = false;
     }
 
-    if (state_.activeWindow.has_value() && state_.activeWindow->direction != desired) {
+    if (state_.activeWindow.has_value() &&
+        state_.activeWindow->direction != desired) {
         // Altes Fenster laeuft unter seiner eigenen Quelle grundsaetzlich
         // unveraendert weiter (8.1); ein BESTAETIGTER Richtungswechsel darf
         // es jedoch, wie ein normaler Teardown (N-1/8.5), sofort nach Ende
         // der Mindest-Einschaltzeit beenden, statt auf das natuerliche
         // Fensterende zu warten. Vor Ablauf der Mindest-Einschaltzeit bleibt
         // jede Gegenanforderung - bestaetigt oder nicht - wirkungslos.
-        const AbstractControlDirection oldDirection = state_.activeWindow->direction;
+        const AbstractControlDirection oldDirection =
+            state_.activeWindow->direction;
         const bool physicallyActiveBefore = physicalDirection() == oldDirection;
         const bool minimumOnSatisfied =
             !physicallyActiveBefore ||
             !state_.currentOnPhaseStartedAtMonotonicMillis.has_value() ||
             deadlineReached(now, *state_.currentOnPhaseStartedAtMonotonicMillis,
-                             parameters_.minimumOnMillis);
+                            parameters_.minimumOnMillis);
 
-        if (state_.counterDirectionConfirmed && physicallyActiveBefore && minimumOnSatisfied) {
-            setPhysicalDirection(AbstractControlDirection::Idle, now);
+        if (state_.counterDirectionConfirmed) {
+            if (physicallyActiveBefore) {
+                if (!minimumOnSatisfied) {
+                    const WindowPhysicalTick physical =
+                        applyWindowPhysicalTick(now);
+                    if (physical.active) {
+                        setPhysicalDirection(oldDirection, now);
+                    }
+                    return buildResult(ActuatorPlanStatus::Active,
+                                       ActuatorPlanReason::MinimumOnTimeHeld,
+                                       admissionOutcome);
+                }
+                setPhysicalDirection(AbstractControlDirection::Idle, now);
+                state_.activeWindow.reset();
+                state_.accumulator = PulseAccumulator{};
+                return buildResult(ActuatorPlanStatus::Idle,
+                                   ActuatorPlanReason::DirectionChangeApplied,
+                                   admissionOutcome);
+            }
+
+            // Die alte physische Richtung ist bereits im Window-Off-Anteil
+            // beendet. Nach der Bestaetigung wird ihr Snapshot sofort
+            // verworfen; die nachfolgende Wartephase prueft nur noch die
+            // reale Minimum-Off-/Totzeit ab dem letzten Active -> Idle.
             state_.activeWindow.reset();
             state_.accumulator = PulseAccumulator{};
-            return buildResult(ActuatorPlanStatus::Idle, ActuatorPlanReason::DirectionChangeApplied,
-                                admissionOutcome);
+        } else {
+            const WindowPhysicalTick physical = applyWindowPhysicalTick(now);
+            if (physical.active) {
+                setPhysicalDirection(oldDirection, now);
+            } else if (physicalDirection() == oldDirection) {
+                setPhysicalDirection(AbstractControlDirection::Idle, now);
+            }
+            const bool physicallyActiveAfter =
+                physicalDirection() == oldDirection;
+            const bool withinMinimumOn =
+                physicallyActiveAfter && state_.counterDirectionConfirmed &&
+                state_.currentOnPhaseStartedAtMonotonicMillis.has_value() &&
+                !deadlineReached(now,
+                                 *state_.currentOnPhaseStartedAtMonotonicMillis,
+                                 parameters_.minimumOnMillis);
+            return buildResult(
+                physicallyActiveAfter ? ActuatorPlanStatus::Active
+                                      : ActuatorPlanStatus::Idle,
+                withinMinimumOn
+                    ? ActuatorPlanReason::MinimumOnTimeHeld
+                    : ActuatorPlanReason::CounterDirectionConfirming,
+                admissionOutcome);
         }
-
-        const WindowPhysicalTick physical = applyWindowPhysicalTick(now);
-        if (physical.active) {
-            setPhysicalDirection(oldDirection, now);
-        } else if (physicalDirection() == oldDirection) {
-            setPhysicalDirection(AbstractControlDirection::Idle, now);
-        }
-        const bool physicallyActiveAfter = physicalDirection() == oldDirection;
-        const bool withinMinimumOn =
-            physicallyActiveAfter && state_.counterDirectionConfirmed &&
-            state_.currentOnPhaseStartedAtMonotonicMillis.has_value() &&
-            !deadlineReached(now, *state_.currentOnPhaseStartedAtMonotonicMillis,
-                              parameters_.minimumOnMillis);
-        return buildResult(
-            physicallyActiveAfter ? ActuatorPlanStatus::Active : ActuatorPlanStatus::Idle,
-            withinMinimumOn ? ActuatorPlanReason::MinimumOnTimeHeld
-                             : ActuatorPlanReason::CounterDirectionConfirming,
-            admissionOutcome);
     }
 
     if (!state_.activeWindow.has_value()) {
@@ -583,9 +644,10 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
                 // Unbestaetigte Gegenrichtung, altes Fenster/alte Physik
                 // bereits beendet (N-5d-b): physischer Ausgang bleibt Idle,
                 // keine Neuanlage; die Buchfuehrung bleibt oben erhalten.
-                return buildResult(ActuatorPlanStatus::Idle,
-                                    ActuatorPlanReason::CounterDirectionConfirming,
-                                    admissionOutcome);
+                return buildResult(
+                    ActuatorPlanStatus::Idle,
+                    ActuatorPlanReason::CounterDirectionConfirming,
+                    admissionOutcome);
             }
             // Owner-Review RZ2: eine bestaetigte Gegenrichtung wird erst neu
             // geplant, sobald Minimum-Off und - bei echtem Richtungswechsel -
@@ -595,13 +657,16 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
             // als Ersatz fuer eine echte Neuanlage).
             if (!armingAllowed(desired, now)) {
                 const bool minimumOffOk =
-                    !state_.lastPhysicalDeactivationAtMonotonicMillis.has_value() ||
-                    deadlineReached(now, *state_.lastPhysicalDeactivationAtMonotonicMillis,
-                                     parameters_.minimumOffMillis);
-                return buildResult(ActuatorPlanStatus::Idle,
-                                    minimumOffOk ? ActuatorPlanReason::PolarityDeadTimeHeld
-                                                 : ActuatorPlanReason::MinimumOffTimeHeld,
-                                    admissionOutcome);
+                    !state_.lastPhysicalDeactivationAtMonotonicMillis
+                         .has_value() ||
+                    deadlineReached(
+                        now, *state_.lastPhysicalDeactivationAtMonotonicMillis,
+                        parameters_.minimumOffMillis);
+                return buildResult(
+                    ActuatorPlanStatus::Idle,
+                    minimumOffOk ? ActuatorPlanReason::PolarityDeadTimeHeld
+                                 : ActuatorPlanReason::MinimumOffTimeHeld,
+                    admissionOutcome);
             }
             startFreshWindow(command, now);
             // Erfolgreiche B-Neuanlage: Buchfuehrung wird erst jetzt
@@ -609,14 +674,16 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
             state_.counterDirectionCandidate.reset();
             state_.counterDirectionObservedSinceMonotonicMillis = 0U;
             state_.counterDirectionConfirmed = false;
-        } else if (referenceDirectionAtTickStart != AbstractControlDirection::Idle &&
+        } else if (referenceDirectionAtTickStart !=
+                       AbstractControlDirection::Idle &&
                    referenceDirectionAtTickStart != desired) {
             // Owner-Review RZ3: `desired` weicht von der zuletzt realen
             // Richtung ab, hat aber (noch) nicht die Bestaetigungsschwelle
             // erreicht - sonst waere sie oben bereits als Kandidat getrackt.
             // Kein automatischer Erststart, keine Energie.
             return buildResult(ActuatorPlanStatus::Idle,
-                                ActuatorPlanReason::CounterDirectionConfirming, admissionOutcome);
+                               ActuatorPlanReason::CounterDirectionConfirming,
+                               admissionOutcome);
         } else {
             // Erststart seit Konstruktion oder gleichgerichteter Neustart.
             startFreshWindow(command, now);
@@ -636,7 +703,8 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
         std::clamp(command.timeQuote, 0.0, 1.0) *
         static_cast<double>(parameters_.switchingWindowMillis);
     const bool ownQuoteBelowMinimum =
-        ownRequestedOnMillisExact < static_cast<double>(parameters_.minimumOnMillis);
+        ownRequestedOnMillisExact <
+        static_cast<double>(parameters_.minimumOnMillis);
 
     const WindowPhysicalTick physical = applyWindowPhysicalTick(now);
     if (physical.active) {
@@ -644,25 +712,30 @@ ActuatorPlanTickResult ActuatorPlanner::evaluateHeatingCoolingDemand(
     } else if (physicalDirection() == state_.activeWindow->direction) {
         setPhysicalDirection(AbstractControlDirection::Idle, now);
     }
-    const ActuatorPlanReason reason = (sameDirectionMidWindowMismatch && ownQuoteBelowMinimum)
-                                           ? ActuatorPlanReason::AccumulatingBelowThreshold
-                                           : physical.reason;
+    const ActuatorPlanReason reason =
+        (sameDirectionMidWindowMismatch && ownQuoteBelowMinimum)
+            ? ActuatorPlanReason::AccumulatingBelowThreshold
+            : physical.reason;
     return buildResult(physicalDirection() == AbstractControlDirection::Idle
-                            ? ActuatorPlanStatus::Idle
-                            : ActuatorPlanStatus::Active,
-                        reason, admissionOutcome);
+                           ? ActuatorPlanStatus::Idle
+                           : ActuatorPlanStatus::Active,
+                       reason, admissionOutcome);
 }
 
-std::optional<std::uint64_t> ActuatorPlanner::resolveTrustedSequenceForRejection(
+std::optional<std::uint64_t>
+ActuatorPlanner::resolveTrustedSequenceForRejection(
     const PhaseAOutcome& admission) const {
     if (admission.freshTrustedActiveSequence.has_value()) {
         return admission.freshTrustedActiveSequence;
     }
     // Owner-Review ZR5 gilt hier identisch: ein gehaltenes OFF-acceptedCommand
     // (NeutralOff/AirLimitBlockedOff) ist kein Feedbacksubjekt.
-    if (!admission.episodeClosedThisTick && state_.acceptedCommand.has_value() &&
-        (state_.acceptedCommand->demandClass == ActuatorDemandClass::NormalDemand ||
-         state_.acceptedCommand->demandClass == ActuatorDemandClass::AirLimitReducedDemand)) {
+    if (!admission.episodeClosedThisTick &&
+        state_.acceptedCommand.has_value() &&
+        (state_.acceptedCommand->demandClass ==
+             ActuatorDemandClass::NormalDemand ||
+         state_.acceptedCommand->demandClass ==
+             ActuatorDemandClass::AirLimitReducedDemand)) {
         return state_.acceptedCommand->sequence;
     }
     return std::nullopt;
@@ -674,7 +747,8 @@ bool ActuatorPlanner::hasRetrogradeTimeReference(std::uint64_t now) const {
     };
     if (retro(state_.currentOnPhaseStartedAtMonotonicMillis)) return true;
     if (retro(state_.lastPhysicalDeactivationAtMonotonicMillis)) return true;
-    if (state_.activeWindow.has_value() && now < state_.activeWindow->startMonotonicMillis) {
+    if (state_.activeWindow.has_value() &&
+        now < state_.activeWindow->startMonotonicMillis) {
         return true;
     }
     if (state_.counterDirectionCandidate.has_value() &&
@@ -683,24 +757,30 @@ bool ActuatorPlanner::hasRetrogradeTimeReference(std::uint64_t now) const {
     }
     if (retro(state_.lastNewRequestAcceptedAtMonotonicMillis)) return true;
     if (retro(state_.watchdogEpisodeStartedAtMonotonicMillis)) return true;
-    if (retro(state_.outerFanDeactivationRequestedAtMonotonicMillis)) return true;
-    if (retro(state_.innerFanDeactivationRequestedAtMonotonicMillis)) return true;
+    if (retro(state_.outerFanDeactivationRequestedAtMonotonicMillis))
+        return true;
+    if (retro(state_.innerFanDeactivationRequestedAtMonotonicMillis))
+        return true;
     return false;
 }
 
-bool ActuatorPlanner::runningWatchdogTripped(const ActuatorPlanTickInput& input) const {
+bool ActuatorPlanner::runningWatchdogTripped(
+    const ActuatorPlanTickInput& input) const {
     if (!input.temperatureControlledPhase) {
         return false;
     }
     if (!state_.watchdogEpisodeStartedAtMonotonicMillis.has_value()) {
         return false;
     }
-    const std::uint64_t reference = state_.lastNewRequestAcceptedAtMonotonicMillis.value_or(
-        *state_.watchdogEpisodeStartedAtMonotonicMillis);
-    return deadlineReached(input.nowMonotonicMillis, reference, parameters_.requestWatchdogMillis);
+    const std::uint64_t reference =
+        state_.lastNewRequestAcceptedAtMonotonicMillis.value_or(
+            *state_.watchdogEpisodeStartedAtMonotonicMillis);
+    return deadlineReached(input.nowMonotonicMillis, reference,
+                           parameters_.requestWatchdogMillis);
 }
 
-ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(const ActuatorPlanTickInput& input) {
+ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(
+    const ActuatorPlanTickInput& input) {
     PhaseAOutcome outcome;
 
     if (!input.newEvaluation.has_value()) {
@@ -719,17 +799,20 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(const ActuatorPlanTick
     if (!isStructurallyValidEvaluation(evaluation) ||
         !isStructurallyValidContext(input.currentCanonicalContext)) {
         outcome.admissionOutcome = ActuatorAdmissionOutcome::MalformedCandidate;
-        return outcome;  // kein H, kein Kandidat, pendingFeedback bleibt nullopt.
+        return outcome;  // kein H, kein Kandidat, pendingFeedback bleibt
+                         // nullopt.
     }
 
-    const bool safetyGateMalformed = !isKnownSafetyGateStatus(input.safetyGate.status);
+    const bool safetyGateMalformed =
+        !isKnownSafetyGateStatus(input.safetyGate.status);
     const ActuatorDemandClass demandClass = classifyActuatorDemand(evaluation);
 
     if (demandClass == ActuatorDemandClass::NoValidRequest) {
-        outcome.admissionOutcome = safetyGateMalformed
-                                        ? ActuatorAdmissionOutcome::MalformedSafetyGate
-                                        : ActuatorAdmissionOutcome::Accepted;
-        state_.lastNewRequestAcceptedAtMonotonicMillis = input.nowMonotonicMillis;
+        outcome.admissionOutcome =
+            safetyGateMalformed ? ActuatorAdmissionOutcome::MalformedSafetyGate
+                                : ActuatorAdmissionOutcome::Accepted;
+        state_.lastNewRequestAcceptedAtMonotonicMillis =
+            input.nowMonotonicMillis;
         AcceptedControlCommand candidate;
         candidate.sequence = 0U;
         candidate.direction = AbstractControlDirection::Idle;
@@ -753,18 +836,22 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(const ActuatorPlanTick
 
     if (state_.lastObservedSequenceHighWatermark.has_value() &&
         sequence <= *state_.lastObservedSequenceHighWatermark) {
-        outcome.admissionOutcome = ActuatorAdmissionOutcome::DuplicateOrOldSequence;
+        outcome.admissionOutcome =
+            ActuatorAdmissionOutcome::DuplicateOrOldSequence;
         return outcome;
     }
 
     state_.lastObservedSequenceHighWatermark = sequence;
 
-    if (deadlineReached(input.nowMonotonicMillis, request.identity.createdAtMonotonicMillis,
-                         parameters_.requestWatchdogMillis)) {
-        outcome.admissionOutcome = ActuatorAdmissionOutcome::StaleOnArrivalWatchdog;
+    if (deadlineReached(input.nowMonotonicMillis,
+                        request.identity.createdAtMonotonicMillis,
+                        parameters_.requestWatchdogMillis)) {
+        outcome.admissionOutcome =
+            ActuatorAdmissionOutcome::StaleOnArrivalWatchdog;
         if (isActiveHeatingCoolingDemand) {
             state_.pendingFeedback = PendingControlRequestFeedback{
-                sequence, PreviousControlRequestFeedback::Disposition::Rejected};
+                sequence,
+                PreviousControlRequestFeedback::Disposition::Rejected};
             state_.pendingFeedbackUpdateAvailable = true;
             outcome.freshTrustedActiveSequence = sequence;
         }
@@ -772,18 +859,21 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(const ActuatorPlanTick
     }
 
     if (!contextsMatch(request.context, input.currentCanonicalContext)) {
-        outcome.admissionOutcome = ActuatorAdmissionOutcome::StaleOnArrivalContext;
+        outcome.admissionOutcome =
+            ActuatorAdmissionOutcome::StaleOnArrivalContext;
         if (isActiveHeatingCoolingDemand) {
             state_.pendingFeedback = PendingControlRequestFeedback{
-                sequence, PreviousControlRequestFeedback::Disposition::Rejected};
+                sequence,
+                PreviousControlRequestFeedback::Disposition::Rejected};
             state_.pendingFeedbackUpdateAvailable = true;
             outcome.freshTrustedActiveSequence = sequence;
         }
         return outcome;
     }
 
-    outcome.admissionOutcome = safetyGateMalformed ? ActuatorAdmissionOutcome::MalformedSafetyGate
-                                                    : ActuatorAdmissionOutcome::Accepted;
+    outcome.admissionOutcome =
+        safetyGateMalformed ? ActuatorAdmissionOutcome::MalformedSafetyGate
+                            : ActuatorAdmissionOutcome::Accepted;
     state_.lastNewRequestAcceptedAtMonotonicMillis = input.nowMonotonicMillis;
     if (isActiveHeatingCoolingDemand) {
         outcome.freshTrustedActiveSequence = sequence;
@@ -805,45 +895,47 @@ ActuatorPlanner::PhaseAOutcome ActuatorPlanner::runPhaseA(const ActuatorPlanTick
     return outcome;
 }
 
-ActuatorPlanTickResult ActuatorPlanner::runPhaseB(const ActuatorPlanTickInput& input,
-                                                   const PhaseAOutcome& admission) {
+ActuatorPlanTickResult ActuatorPlanner::runPhaseB(
+    const ActuatorPlanTickInput& input, const PhaseAOutcome& admission) {
     const std::uint64_t now = input.nowMonotonicMillis;
 
     // I-1: MalformedCandidate/MalformedSafetyGate oder ein struktureller
     // Tickwert (Safety-Gate-Enum, aktueller Kontext) ist ungueltig.
-    if (admission.admissionOutcome == ActuatorAdmissionOutcome::MalformedCandidate ||
+    if (admission.admissionOutcome ==
+            ActuatorAdmissionOutcome::MalformedCandidate ||
         !isKnownSafetyGateStatus(input.safetyGate.status) ||
         !isStructurallyValidContext(input.currentCanonicalContext)) {
         return rejectToIdle(admission, now, ActuatorPlanStatus::InvalidInput,
-                             ActuatorPlanReason::MalformedInput);
+                            ActuatorPlanReason::MalformedInput);
     }
 
     // I-2a/I-2b: Parameterklassifikation.
     const ActuatorPlannerParametersValidation parameterValidation =
         classifyActuatorPlannerParameters(parameters_);
-    if (parameterValidation == ActuatorPlannerParametersValidation::Unconfigured) {
+    if (parameterValidation ==
+        ActuatorPlannerParametersValidation::Unconfigured) {
         return rejectToIdle(admission, now, ActuatorPlanStatus::Unconfigured,
-                             ActuatorPlanReason::NoCommissioning);
+                            ActuatorPlanReason::NoCommissioning);
     }
     if (parameterValidation == ActuatorPlannerParametersValidation::Invalid) {
         return rejectToIdle(admission, now, ActuatorPlanStatus::InvalidInput,
-                             ActuatorPlanReason::InvalidConfiguration);
+                            ActuatorPlanReason::InvalidConfiguration);
     }
 
     // I-3a/I-3b: externes Safety-Gate.
     if (input.safetyGate.status == ActuatorSafetyGateStatus::Unresolved) {
         return rejectToIdle(admission, now, ActuatorPlanStatus::Idle,
-                             ActuatorPlanReason::SafetyGateUnresolved);
+                            ActuatorPlanReason::SafetyGateUnresolved);
     }
     if (input.safetyGate.status == ActuatorSafetyGateStatus::ImmediateStop) {
         return rejectToIdle(admission, now, ActuatorPlanStatus::Idle,
-                             ActuatorPlanReason::ExternalSafetyOverride);
+                            ActuatorPlanReason::ExternalSafetyOverride);
     }
 
     // I-4: bereits gelatchter Watchdog-Fehler.
     if (state_.latchedWatchdogFault.has_value()) {
         return rejectToIdle(admission, now, ActuatorPlanStatus::Idle,
-                             ActuatorPlanReason::RequestWatchdogFaultLatched);
+                            ActuatorPlanReason::RequestWatchdogFaultLatched);
     }
 
     // I-5: laufender Watchdog trippt in diesem Tick (8.6).
@@ -851,30 +943,32 @@ ActuatorPlanTickResult ActuatorPlanner::runPhaseB(const ActuatorPlanTickInput& i
         state_.latchedWatchdogFault = ActuatorWatchdogFaultEvidence{
             now, state_.lastObservedSequenceHighWatermark.value_or(0U)};
         return rejectToIdle(admission, now, ActuatorPlanStatus::Idle,
-                             ActuatorPlanReason::StaleRequestWatchdog);
+                            ActuatorPlanReason::StaleRequestWatchdog);
     }
 
     // I-6: neue, explizite NoValidRequest-Evaluation.
     if (admission.candidate.has_value() &&
-        admission.candidate->demandClass == ActuatorDemandClass::NoValidRequest) {
+        admission.candidate->demandClass ==
+            ActuatorDemandClass::NoValidRequest) {
         return rejectToIdle(admission, now, ActuatorPlanStatus::Idle,
-                             ActuatorPlanReason::NoValidRequest);
+                            ActuatorPlanReason::NoValidRequest);
     }
 
     // I-7: gehaltener Request-Kontext ist stale zum aktuellen kanonischen
     // Kontext (nur relevant, wenn dieser Tick keinen frischen Kandidaten
     // liefert, der ihn ohnehin ersetzt).
-    if (!admission.candidate.has_value() && state_.acceptedCommand.has_value() &&
+    if (!admission.candidate.has_value() &&
+        state_.acceptedCommand.has_value() &&
         !contextsMatch(state_.acceptedCommand->contextAtAcceptance,
-                        input.currentCanonicalContext)) {
+                       input.currentCanonicalContext)) {
         return rejectToIdle(admission, now, ActuatorPlanStatus::Idle,
-                             ActuatorPlanReason::StaleRequestContext);
+                            ActuatorPlanReason::StaleRequestContext);
     }
 
     // I-8: Referenzzeit ist retrograd (8.3).
     if (hasRetrogradeTimeReference(now)) {
         return rejectToIdle(admission, now, ActuatorPlanStatus::InvalidInput,
-                             ActuatorPlanReason::TimeInvalid);
+                            ActuatorPlanReason::TimeInvalid);
     }
 
     // Klasse N ab hier: der frisch validierte Kandidat (falls vorhanden)
@@ -885,15 +979,27 @@ ActuatorPlanTickResult ActuatorPlanner::runPhaseB(const ActuatorPlanTickInput& i
         // physische Richtung wegen Minimum-On noch weiterlaeuft. Muss vor
         // dem Ueberschreiben von acceptedCommand ausgewertet werden.
         const ActuatorDemandClass previousDemandClass =
-            state_.acceptedCommand.has_value() ? state_.acceptedCommand->demandClass
-                                                : ActuatorDemandClass::NoValidRequest;
-        const ActuatorDemandClass newDemandClass = admission.candidate->demandClass;
+            state_.acceptedCommand.has_value()
+                ? state_.acceptedCommand->demandClass
+                : ActuatorDemandClass::NoValidRequest;
+        const ActuatorDemandClass newDemandClass =
+            admission.candidate->demandClass;
         state_.acceptedCommand = admission.candidate;
+        if (newDemandClass == ActuatorDemandClass::NeutralOff ||
+            newDemandClass == ActuatorDemandClass::AirLimitBlockedOff) {
+            // Eine frisch angenommene OFF-Request unterbricht eine laufende
+            // Gegenrichtungsbestaetigung auch dann sofort, wenn die alte
+            // physische Richtung wegen Minimum-On noch gehalten werden muss.
+            state_.counterDirectionCandidate.reset();
+            state_.counterDirectionObservedSinceMonotonicMillis = 0U;
+            state_.counterDirectionConfirmed = false;
+        }
         if (newDemandClass == ActuatorDemandClass::AirLimitBlockedOff) {
             // Uebergang zu AirLimitBlockedOff verwirft betroffenes Guthaben
             // sofort, unbedingt.
             state_.accumulator = PulseAccumulator{};
-        } else if (newDemandClass == ActuatorDemandClass::AirLimitReducedDemand &&
+        } else if (newDemandClass ==
+                       ActuatorDemandClass::AirLimitReducedDemand &&
                    previousDemandClass == ActuatorDemandClass::NormalDemand) {
             // Uebergang aus einer weniger restriktiven aktiven Klasse in
             // AirLimitReducedDemand verwirft altes Guthaben vor der naechsten
@@ -902,22 +1008,27 @@ ActuatorPlanTickResult ActuatorPlanner::runPhaseB(const ActuatorPlanTickInput& i
         }
     }
 
-    const bool isTeardownRequest = !state_.acceptedCommand.has_value() ||
-                                    state_.acceptedCommand->direction ==
-                                        AbstractControlDirection::Idle;
+    const bool isTeardownRequest =
+        !state_.acceptedCommand.has_value() ||
+        state_.acceptedCommand->direction == AbstractControlDirection::Idle;
     if (isTeardownRequest) {
         const bool airLimitBlocked =
             state_.acceptedCommand.has_value() &&
-            state_.acceptedCommand->demandClass == ActuatorDemandClass::AirLimitBlockedOff;
-        const bool physicallyActive = physicalDirection() != AbstractControlDirection::Idle;
+            state_.acceptedCommand->demandClass ==
+                ActuatorDemandClass::AirLimitBlockedOff;
+        const bool physicallyActive =
+            physicalDirection() != AbstractControlDirection::Idle;
         const bool withinMinimumOn =
-            physicallyActive && state_.currentOnPhaseStartedAtMonotonicMillis.has_value() &&
-            !deadlineReached(now, *state_.currentOnPhaseStartedAtMonotonicMillis,
-                              parameters_.minimumOnMillis);
+            physicallyActive &&
+            state_.currentOnPhaseStartedAtMonotonicMillis.has_value() &&
+            !deadlineReached(now,
+                             *state_.currentOnPhaseStartedAtMonotonicMillis,
+                             parameters_.minimumOnMillis);
         if (withinMinimumOn) {
             // N-1: einzige normale Mindest-On-Halteentscheidung.
-            return buildResult(ActuatorPlanStatus::Active, ActuatorPlanReason::MinimumOnTimeHeld,
-                                admission.admissionOutcome);
+            return buildResult(ActuatorPlanStatus::Active,
+                               ActuatorPlanReason::MinimumOnTimeHeld,
+                               admission.admissionOutcome);
         }
         // N-2: tatsaechlicher normaler Teardown.
         if (physicallyActive) {
@@ -925,20 +1036,23 @@ ActuatorPlanTickResult ActuatorPlanner::runPhaseB(const ActuatorPlanTickInput& i
         }
         clearPlanningState();
         return buildResult(ActuatorPlanStatus::Idle,
-                            airLimitBlocked ? ActuatorPlanReason::AirLimitBlocked
-                                            : ActuatorPlanReason::NeutralIdle,
-                            admission.admissionOutcome);
+                           airLimitBlocked ? ActuatorPlanReason::AirLimitBlocked
+                                           : ActuatorPlanReason::NeutralIdle,
+                           admission.admissionOutcome);
     }
 
-    return evaluateHeatingCoolingDemand(*state_.acceptedCommand, admission.admissionOutcome, now);
+    return evaluateHeatingCoolingDemand(*state_.acceptedCommand,
+                                        admission.admissionOutcome, now);
 }
 
-ActuatorPlanTickResult ActuatorPlanner::tick(const ActuatorPlanTickInput& input) {
+ActuatorPlanTickResult ActuatorPlanner::tick(
+    const ActuatorPlanTickInput& input) {
     // Abschnitt 6.4: Episodeneintritt wird ausschliesslich ueber diesen Tick
     // erkannt; das Verlassen erfolgt ausschliesslich ueber forceStop().
     if (input.temperatureControlledPhase &&
         !state_.watchdogEpisodeStartedAtMonotonicMillis.has_value()) {
-        state_.watchdogEpisodeStartedAtMonotonicMillis = input.nowMonotonicMillis;
+        state_.watchdogEpisodeStartedAtMonotonicMillis =
+            input.nowMonotonicMillis;
     }
 
     const PhaseAOutcome admission = runPhaseA(input);
@@ -946,19 +1060,24 @@ ActuatorPlanTickResult ActuatorPlanner::tick(const ActuatorPlanTickInput& input)
 }
 
 ActuatorPlanTickResult ActuatorPlanner::forceStop(
-    std::uint64_t nowMonotonicMillis, ActuatorFeedbackEpisodeAtStop feedbackEpisodeAtStop) {
+    std::uint64_t nowMonotonicMillis,
+    ActuatorFeedbackEpisodeAtStop feedbackEpisodeAtStop) {
     // Owner-Review ZR5 gilt auch hier: nur ein gehaltenes aktives
     // Heating/Cooling-acceptedCommand ist ein Feedbacksubjekt.
     std::optional<std::uint64_t> trustedSequence;
-    if (feedbackEpisodeAtStop == ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen &&
+    if (feedbackEpisodeAtStop ==
+            ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen &&
         state_.acceptedCommand.has_value() &&
-        (state_.acceptedCommand->demandClass == ActuatorDemandClass::NormalDemand ||
-         state_.acceptedCommand->demandClass == ActuatorDemandClass::AirLimitReducedDemand)) {
+        (state_.acceptedCommand->demandClass ==
+             ActuatorDemandClass::NormalDemand ||
+         state_.acceptedCommand->demandClass ==
+             ActuatorDemandClass::AirLimitReducedDemand)) {
         trustedSequence = state_.acceptedCommand->sequence;
     }
 
     if (physicalDirection() != AbstractControlDirection::Idle) {
-        setPhysicalDirection(AbstractControlDirection::Idle, nowMonotonicMillis);
+        setPhysicalDirection(AbstractControlDirection::Idle,
+                             nowMonotonicMillis);
     }
     clearPlanningState();
     state_.watchdogEpisodeStartedAtMonotonicMillis.reset();
@@ -966,16 +1085,20 @@ ActuatorPlanTickResult ActuatorPlanner::forceStop(
 
     state_.pendingFeedback =
         trustedSequence.has_value()
-            ? std::optional<PendingControlRequestFeedback>(PendingControlRequestFeedback{
-                  *trustedSequence, PreviousControlRequestFeedback::Disposition::Rejected})
+            ? std::optional<PendingControlRequestFeedback>(
+                  PendingControlRequestFeedback{
+                      *trustedSequence,
+                      PreviousControlRequestFeedback::Disposition::Rejected})
             : std::nullopt;
     state_.pendingFeedbackUpdateAvailable = true;
 
-    return buildResult(ActuatorPlanStatus::Idle, ActuatorPlanReason::NeutralIdle,
-                        ActuatorAdmissionOutcome::NoCandidate);
+    return buildResult(ActuatorPlanStatus::Idle,
+                       ActuatorPlanReason::NeutralIdle,
+                       ActuatorAdmissionOutcome::NoCandidate);
 }
 
-void ActuatorPlanner::applyExternalWatchdogFaultReset(std::uint64_t /*nowMonotonicMillis*/) {
+void ActuatorPlanner::applyExternalWatchdogFaultReset(
+    std::uint64_t /*nowMonotonicMillis*/) {
     state_.latchedWatchdogFault.reset();
 }
 
