@@ -1737,6 +1737,166 @@ void test_next_pulse_blocked_before_and_allowed_at_and_after_minimum_off_end() {
     }
 }
 
+// Owner-Review R2 (Plan-19.2 #16): eine identische 30-%-Request liefert
+// waehrend des planmaessigen EIN und des planmaessigen Window-Off jeweils
+// NoIntegratorConstraint; Minimum-Off, Counterdirection, Akkumulation und
+// verspaeteter Puls liefern DeferredOrLimited - jeweils mit demselben 30-%-
+// Quote und testParameters() (bzw. eigens fuer den Akkumulationsfall
+// gewaehlten kleinen Fensterparametern, da 30% mit testParameters() direkt
+// planbar ist und den Akkumulator-Pfad gar nicht betreten kann).
+//
+// Strukturelle Ausnahme (analog zu I-2a/I-2b/I-4, Plan-19.2 #5): Deadtime
+// (PolarityDeadTimeHeld) ist ausschliesslich ueber den BESTAETIGTEN
+// Gegenrichtungspfad erreichbar (Abschnitt 8.5), der zwingend
+// counterDirectionConfirmationQuoteThreshold (hier 0.5) voraussetzt - ein
+// 30-%-Quote kann dort strukturell nie Kandidat werden und wird deshalb mit
+// dem kleinstmoeglich qualifizierenden Quote (0.8, wie in
+// test_confirmed_counter_direction_waits_for_arming_before_new_window)
+// separat bewiesen, nicht mit 30%.
+void test_severity_disposition_matrix_for_thirty_percent_governance_reasons() {
+    // Scheduled ON.
+    {
+        ActuatorPlanner planner{testParameters()};
+        const auto result = planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 0.3, 1U,
+                                   0U, airContext()),
+                      airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::ScheduledWithinWindow);
+        TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+        TEST_ASSERT_TRUE(planner.state().pendingFeedback->disposition ==
+                         PreviousControlRequestFeedback::Disposition::
+                             NoIntegratorConstraint);
+    }
+    // Scheduled Window-Off (derselbe Puls, planmaessiger Off-Anteil).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 0.3, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        const auto result =
+            planner.tick(tickInput(3'000U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::ScheduledWithinWindow);
+        TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+        TEST_ASSERT_TRUE(planner.state().pendingFeedback->disposition ==
+                         PreviousControlRequestFeedback::Disposition::
+                             NoIntegratorConstraint);
+    }
+    // Minimum-Off (gleichgerichteter Neustart innerhalb der Sperrzeit).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        static_cast<void>(planner.tick(tickInput(
+            2'100U, offResult(2U, 2'100U, airContext()), airContext())));
+        const auto result = planner.tick(
+            tickInput(2'200U,
+                      demandResult(AbstractControlDirection::Heating, 0.3, 3U,
+                                   2'200U, airContext()),
+                      airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::MinimumOffTimeHeld);
+        TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+        TEST_ASSERT_EQUAL_UINT64(3U, planner.state().pendingFeedback->sequence);
+        TEST_ASSERT_TRUE(
+            planner.state().pendingFeedback->disposition ==
+            PreviousControlRequestFeedback::Disposition::DeferredOrLimited);
+    }
+    // Counterdirection (unbestaetigt, unter Schwelle, alte Richtung bereits
+    // beendet).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        static_cast<void>(planner.tick(tickInput(
+            2'100U, offResult(2U, 2'100U, airContext()), airContext())));
+        const auto result = planner.tick(
+            tickInput(2'200U,
+                      demandResult(AbstractControlDirection::Cooling, 0.3, 3U,
+                                   2'200U, airContext()),
+                      airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::CounterDirectionConfirming);
+        TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+        TEST_ASSERT_EQUAL_UINT64(3U, planner.state().pendingFeedback->sequence);
+        TEST_ASSERT_TRUE(
+            planner.state().pendingFeedback->disposition ==
+            PreviousControlRequestFeedback::Disposition::DeferredOrLimited);
+    }
+    // Akkumulation (eigene kleine Fensterparameter, damit 30% strukturell
+    // unter minimumOnMillis liegt und den Akkumulator-Pfad betritt).
+    {
+        auto parameters = testParameters();
+        parameters.switchingWindowMillis = 1'000U;
+        parameters.minimumOnMillis = 400U;
+        ActuatorPlanner planner{parameters};
+        const auto result = planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 0.3, 1U,
+                                   0U, airContext()),
+                      airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::AccumulatingBelowThreshold);
+        TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+        TEST_ASSERT_TRUE(
+            planner.state().pendingFeedback->disposition ==
+            PreviousControlRequestFeedback::Disposition::DeferredOrLimited);
+    }
+    // Verspaeteter Puls (WindowPulseMissed).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 0.3, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        const auto result =
+            planner.tick(tickInput(13'001U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::WindowPulseMissed);
+        TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+        TEST_ASSERT_TRUE(
+            planner.state().pendingFeedback->disposition ==
+            PreviousControlRequestFeedback::Disposition::DeferredOrLimited);
+    }
+    // Deadtime (strukturelle Ausnahme: 0.8 statt 30%, siehe
+    // Funktionskommentar).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        static_cast<void>(planner.tick(
+            tickInput(500U,
+                      demandResult(AbstractControlDirection::Cooling, 0.8, 2U,
+                                   500U, airContext()),
+                      airContext())));
+        static_cast<void>(
+            planner.tick(tickInput(2'500U, std::nullopt, airContext())));
+        const auto result =
+            planner.tick(tickInput(3'600U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::PolarityDeadTimeHeld);
+        TEST_ASSERT_TRUE(planner.state().pendingFeedback.has_value());
+        TEST_ASSERT_EQUAL_UINT64(2U, planner.state().pendingFeedback->sequence);
+        TEST_ASSERT_TRUE(
+            planner.state().pendingFeedback->disposition ==
+            PreviousControlRequestFeedback::Disposition::DeferredOrLimited);
+    }
+}
+
 void test_fan_deadlines_and_physical_edges_are_overflow_safe() {
     auto parameters = testParameters();
     parameters.switchingWindowMillis = 1'000U;
@@ -1933,6 +2093,8 @@ int main(int argc, char** argv) {
         test_accumulated_minimum_pulse_blocked_at_arming_gate_is_deferred_not_replayed);
     RUN_TEST(
         test_next_pulse_blocked_before_and_allowed_at_and_after_minimum_off_end);
+    RUN_TEST(
+        test_severity_disposition_matrix_for_thirty_percent_governance_reasons);
     RUN_TEST(test_fan_deadlines_and_physical_edges_are_overflow_safe);
     RUN_TEST(test_fans_follow_physical_output_and_independent_inner_phase);
     RUN_TEST(test_feedback_handoff_is_single_use_and_severity_is_monotone);
