@@ -776,6 +776,106 @@ void test_fail_closed_matrix_stops_physical_output_and_trusts_only_sequences() {
         TEST_ASSERT_TRUE(update.changed);
         TEST_ASSERT_FALSE(update.feedback.has_value());
     }
+    // Owner-Review R2 (Plan-19.2 #5): I-3a (SafetyGateUnresolved) und I-4
+    // (RequestWatchdogFaultLatched) ergaenzen die Matrix, jeweils innerhalb
+    // einer laufenden Mindest-On-Zeit, mit explizitem Nachweis des
+    // physischen Deaktivierungsankers.
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        const auto result = planner.tick(ActuatorPlanTickInput{
+            500U, std::nullopt, airContext(), true,
+            ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Unresolved}});
+        TEST_ASSERT_TRUE(result.status == ActuatorPlanStatus::Idle);
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::SafetyGateUnresolved);
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+        TEST_ASSERT_TRUE(
+            planner.state()
+                .lastPhysicalDeactivationAtMonotonicMillis.has_value());
+        TEST_ASSERT_EQUAL_UINT64(
+            500U, *planner.state().lastPhysicalDeactivationAtMonotonicMillis);
+        assertFeedbackUpdate(
+            planner, 1U, PreviousControlRequestFeedback::Disposition::Rejected);
+    }
+    {
+        ActuatorPlannerParameters parameters = testParameters();
+        parameters.requestWatchdogMillis = 500U;
+        ActuatorPlanner planner{parameters};
+        static_cast<void>(planner.tick(
+            tickInput(0U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        // t=500: laufender Watchdog trippt (I-5) und latcht den Fehler.
+        static_cast<void>(
+            planner.tick(tickInput(500U, std::nullopt, airContext())));
+        static_cast<void>(planner.takeFeedbackUpdate());
+        TEST_ASSERT_TRUE(planner.state().latchedWatchdogFault.has_value());
+        // t=600: ein weiterer Tick ohne neue Evaluation faellt jetzt auf I-4
+        // (bereits gelatchter Fehler), nicht mehr auf I-5. Owner-Review R2:
+        // anders als I-1/I-3a/I-3b/I-5/I-6/I-7/I-8 kann I-4 den physischen
+        // Ausgang strukturell NIE selbst von aktiv auf Idle schalten - der
+        // Fehler wurde bereits im selben oder einem frueheren Tick durch I-5
+        // gelatcht, welches den Ausgang schon abgeschaltet hat, und Klasse
+        // I-4 verhindert in der Prioritaetsleiter jede spaetere
+        // Kandidatenuebernahme, die ihn erneut aktiv machen koennte. Der
+        // Deaktivierungsanker ist deshalb hier bereits vom I-5-Tick gesetzt,
+        // nicht neu von diesem I-4-Tick.
+        const auto result =
+            planner.tick(tickInput(600U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.status == ActuatorPlanStatus::Idle);
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::RequestWatchdogFaultLatched);
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+        TEST_ASSERT_TRUE(
+            planner.state()
+                .lastPhysicalDeactivationAtMonotonicMillis.has_value());
+    }
+}
+
+// Owner-Review R2 (Plan-19.2 #5): I-2a (Unconfigured) und I-2b (Invalid)
+// koennen strukturell NICHT "innerhalb einer laufenden Mindest-On-Zeit"
+// geprueft werden - parameters_ ist pro Planner-Instanz unveraenderlich und
+// wird bei JEDEM Tick klassifiziert (Klasse I-2a/I-2b liegt in der
+// Prioritaetsleiter vor jeder Fensteruebernahme), sodass ein Fenster unter
+// Unconfigured/Invalid-Parametern niemals entstehen kann. Der einzig
+// moegliche, ehrliche Nachweis ist der sofortige Fail-closed-Verwurf bereits
+// im ersten Tick.
+void test_i2a_unconfigured_parameters_reject_immediately() {
+    ActuatorPlanner planner{ActuatorPlannerParameters{}};
+    const auto result =
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.status == ActuatorPlanStatus::Unconfigured);
+    TEST_ASSERT_TRUE(result.reason == ActuatorPlanReason::NoCommissioning);
+    TEST_ASSERT_TRUE(result.appliedDirection == AbstractControlDirection::Idle);
+    assertFeedbackUpdate(planner, 1U,
+                         PreviousControlRequestFeedback::Disposition::Rejected);
+}
+
+void test_i2b_invalid_parameters_reject_immediately() {
+    auto parameters = testParameters();
+    parameters.minimumOnMillis = parameters.switchingWindowMillis + 1U;
+    ActuatorPlanner planner{parameters};
+    const auto result =
+        planner.tick(tickInput(0U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 1U, 0U, airContext()),
+                               airContext()));
+    TEST_ASSERT_TRUE(result.status == ActuatorPlanStatus::InvalidInput);
+    TEST_ASSERT_TRUE(result.reason == ActuatorPlanReason::InvalidConfiguration);
+    TEST_ASSERT_TRUE(result.appliedDirection == AbstractControlDirection::Idle);
+    assertFeedbackUpdate(planner, 1U,
+                         PreviousControlRequestFeedback::Disposition::Rejected);
 }
 
 void test_no_valid_request_and_off_close_planner_without_old_feedback() {
@@ -1245,6 +1345,344 @@ void test_force_stop_closed_by_outstanding_evaluation_never_emits_old_feedback()
     TEST_ASSERT_FALSE(update.feedback.has_value());
 }
 
+// Owner-Review R2 (Plan-19.2 #14): H (lastNewRequestAcceptedAtMonotonicMillis)
+// wird ausschliesslich fuer jede neue, vertrauenswuerdige HEAT-/COOL-/OFF-/
+// NoValidRequest-Evaluation aktualisiert; Replay, strukturell malformed
+// Evaluation und stale-on-arrival Watchdog/Context ruehren es nicht an.
+void test_watchdog_heartbeat_updates_only_for_new_valid_evaluations() {
+    // Positiv: HEAT.
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(100U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   100U, airContext()),
+                      airContext())));
+        TEST_ASSERT_TRUE(
+            planner.state()
+                .lastNewRequestAcceptedAtMonotonicMillis.has_value());
+        TEST_ASSERT_EQUAL_UINT64(
+            100U, *planner.state().lastNewRequestAcceptedAtMonotonicMillis);
+    }
+    // Positiv: COOL.
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(100U,
+                      demandResult(AbstractControlDirection::Cooling, 1.0, 1U,
+                                   100U, airContext()),
+                      airContext())));
+        TEST_ASSERT_TRUE(
+            planner.state()
+                .lastNewRequestAcceptedAtMonotonicMillis.has_value());
+        TEST_ASSERT_EQUAL_UINT64(
+            100U, *planner.state().lastNewRequestAcceptedAtMonotonicMillis);
+    }
+    // Positiv: OFF (NeutralOff).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(100U, offResult(1U, 100U, airContext()), airContext())));
+        TEST_ASSERT_TRUE(
+            planner.state()
+                .lastNewRequestAcceptedAtMonotonicMillis.has_value());
+        TEST_ASSERT_EQUAL_UINT64(
+            100U, *planner.state().lastNewRequestAcceptedAtMonotonicMillis);
+    }
+    // Positiv: NoValidRequest (schaltet Peltier aus, setzt H, kein
+    // zusaetzlicher Staleness-Trip).
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(
+            planner.tick(tickInput(100U, unavailableResult(), airContext())));
+        TEST_ASSERT_TRUE(
+            planner.state()
+                .lastNewRequestAcceptedAtMonotonicMillis.has_value());
+        TEST_ASSERT_EQUAL_UINT64(
+            100U, *planner.state().lastNewRequestAcceptedAtMonotonicMillis);
+        const auto follow =
+            planner.tick(tickInput(200U, std::nullopt, airContext()));
+        TEST_ASSERT_FALSE(planner.state().latchedWatchdogFault.has_value());
+        TEST_ASSERT_FALSE(follow.reason ==
+                          ActuatorPlanReason::StaleRequestWatchdog);
+    }
+    // Negativ: Replay ruehrt H nicht an.
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(100U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 5U,
+                                   100U, airContext()),
+                      airContext())));
+        static_cast<void>(planner.tick(
+            tickInput(300U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 5U,
+                                   100U, airContext()),
+                      airContext())));
+        TEST_ASSERT_EQUAL_UINT64(
+            100U, *planner.state().lastNewRequestAcceptedAtMonotonicMillis);
+    }
+    // Negativ: strukturell malformed Evaluation ruehrt H nicht an.
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(100U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   100U, airContext()),
+                      airContext())));
+        static_cast<void>(
+            planner.tick(tickInput(300U, malformedResult(), airContext())));
+        TEST_ASSERT_EQUAL_UINT64(
+            100U, *planner.state().lastNewRequestAcceptedAtMonotonicMillis);
+    }
+    // Negativ: stale-on-arrival Watchdog ruehrt H nicht an. Timing isoliert
+    // von H's eigener laufender Frist (H=999, B's eigene Staleness trippt
+    // exakt bei 1000, waehrend H's Grenze 1999 noch nicht faellig ist).
+    {
+        auto parameters = testParameters();
+        parameters.requestWatchdogMillis = 1'000U;
+        ActuatorPlanner planner{parameters};
+        static_cast<void>(planner.tick(
+            tickInput(999U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   0U, airContext()),
+                      airContext())));
+        static_cast<void>(planner.tick(
+            tickInput(1'000U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 2U,
+                                   0U, airContext()),
+                      airContext())));
+        TEST_ASSERT_EQUAL_UINT64(
+            999U, *planner.state().lastNewRequestAcceptedAtMonotonicMillis);
+    }
+    // Negativ: stale-on-arrival Context ruehrt H nicht an.
+    {
+        ActuatorPlanner planner{testParameters()};
+        static_cast<void>(planner.tick(
+            tickInput(100U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   100U, airContext()),
+                      airContext())));
+        static_cast<void>(planner.tick(
+            tickInput(300U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 2U,
+                                   300U, productContext()),
+                      airContext())));
+        TEST_ASSERT_EQUAL_UINT64(
+            100U, *planner.state().lastNewRequestAcceptedAtMonotonicMillis);
+    }
+}
+
+// Owner-Review R2 (Plan-19.2 #25): der allererste Planner-Tick einer neuen
+// ueberwachten Episode setzt den Episodenanker allein durch
+// temperatureControlledPhase, ohne jede Evaluation; knapp vor/exakt auf/nach
+// der Watchdogfrist wird der Trip deterministisch geprueft. Ein erstes H
+// rebased die Frist auf sich selbst statt auf den Episodenanker.
+void test_watchdog_episode_anchor_bootstraps_and_h_rebases_deadline() {
+    auto parameters = testParameters();
+    parameters.requestWatchdogMillis = 1'000U;
+
+    {
+        ActuatorPlanner planner{parameters};
+        static_cast<void>(
+            planner.tick(tickInput(0U, std::nullopt, airContext())));
+        TEST_ASSERT_TRUE(
+            planner.state()
+                .watchdogEpisodeStartedAtMonotonicMillis.has_value());
+        TEST_ASSERT_EQUAL_UINT64(
+            0U, *planner.state().watchdogEpisodeStartedAtMonotonicMillis);
+        TEST_ASSERT_FALSE(planner.state().latchedWatchdogFault.has_value());
+    }
+    {
+        ActuatorPlanner planner{parameters};
+        static_cast<void>(
+            planner.tick(tickInput(0U, std::nullopt, airContext())));
+        const auto result =
+            planner.tick(tickInput(999U, std::nullopt, airContext()));
+        TEST_ASSERT_FALSE(result.reason ==
+                          ActuatorPlanReason::StaleRequestWatchdog);
+        TEST_ASSERT_FALSE(planner.state().latchedWatchdogFault.has_value());
+    }
+    {
+        ActuatorPlanner planner{parameters};
+        static_cast<void>(
+            planner.tick(tickInput(0U, std::nullopt, airContext())));
+        const auto result =
+            planner.tick(tickInput(1'000U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::StaleRequestWatchdog);
+        TEST_ASSERT_TRUE(planner.state().latchedWatchdogFault.has_value());
+    }
+    {
+        ActuatorPlanner planner{parameters};
+        static_cast<void>(
+            planner.tick(tickInput(0U, std::nullopt, airContext())));
+        const auto result =
+            planner.tick(tickInput(1'001U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::StaleRequestWatchdog);
+    }
+    {
+        ActuatorPlanner planner{parameters};
+        static_cast<void>(
+            planner.tick(tickInput(0U, std::nullopt, airContext())));
+        static_cast<void>(planner.tick(
+            tickInput(500U,
+                      demandResult(AbstractControlDirection::Heating, 1.0, 1U,
+                                   500U, airContext()),
+                      airContext())));
+        // Alte Anker-Deadline (0+1000=1000) waere hier bereits ueberschritten;
+        // die durch H rebased Deadline (500+1000=1500) ist es nicht.
+        const auto result =
+            planner.tick(tickInput(1'000U, std::nullopt, airContext()));
+        TEST_ASSERT_FALSE(result.reason ==
+                          ActuatorPlanReason::StaleRequestWatchdog);
+        TEST_ASSERT_FALSE(planner.state().latchedWatchdogFault.has_value());
+    }
+}
+
+// Owner-Review R2 (Plan-19.2 #26): eine lange Standby-/Service-Zeit und
+// danach ein neuer Episodeneintritt (NewActiveRun/Recovery) darf keinen
+// Soforttrip aus einem alten H-/Episodenanker erzeugen - forceStop() rebased
+// beide auf den naechsten Episodenanker; latchedWatchdogFault bleibt ueber
+// den Boundary hinweg erhalten, weil ausschliesslich #24 ueber
+// applyExternalWatchdogFaultReset() es loeschen darf.
+void test_forcestop_rebase_after_long_standby_does_not_trip_and_preserves_latch() {
+    auto parameters = testParameters();
+    parameters.requestWatchdogMillis = 1'000U;
+    ActuatorPlanner planner{parameters};
+
+    static_cast<void>(planner.tick(tickInput(0U, std::nullopt, airContext())));
+    const auto tripResult =
+        planner.tick(tickInput(1'000U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(tripResult.reason ==
+                     ActuatorPlanReason::StaleRequestWatchdog);
+    TEST_ASSERT_TRUE(planner.state().latchedWatchdogFault.has_value());
+    static_cast<void>(planner.takeFeedbackUpdate());
+
+    static_cast<void>(planner.forceStop(
+        1'000U, ActuatorFeedbackEpisodeAtStop::ExistingEpisodeOpen));
+    static_cast<void>(planner.takeFeedbackUpdate());
+    TEST_ASSERT_FALSE(
+        planner.state().watchdogEpisodeStartedAtMonotonicMillis.has_value());
+    TEST_ASSERT_TRUE(planner.state().latchedWatchdogFault.has_value());
+
+    const auto reentry =
+        planner.tick(tickInput(1'000'000U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(
+        planner.state().watchdogEpisodeStartedAtMonotonicMillis.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        1'000'000U, *planner.state().watchdogEpisodeStartedAtMonotonicMillis);
+    TEST_ASSERT_TRUE(reentry.reason ==
+                     ActuatorPlanReason::RequestWatchdogFaultLatched);
+    TEST_ASSERT_TRUE(planner.state().latchedWatchdogFault.has_value());
+}
+
+// Owner-Review R2 (Plan-19.2 #28): A=10 wird gueltig angenommen, B=11
+// stale-on-arrival verworfen, danach trippt der laufende Watchdog separat.
+// Das Evidence-Orakel prueft das ehrlich benannte
+// lastObservedSequenceHighWatermarkBeforeFault == 11 (B wurde beobachtet,
+// nicht angenommen) statt einer falschen lastAccepted-Semantik.
+void test_watchdog_fault_evidence_reports_high_watermark_not_last_accepted() {
+    auto parameters = testParameters();
+    parameters.requestWatchdogMillis = 1'000U;
+    ActuatorPlanner planner{parameters};
+
+    static_cast<void>(
+        planner.tick(tickInput(999U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 10U, 0U, airContext()),
+                               airContext())));
+    assertFeedbackUpdate(
+        planner, 10U,
+        PreviousControlRequestFeedback::Disposition::NoIntegratorConstraint);
+
+    static_cast<void>(
+        planner.tick(tickInput(1'000U,
+                               demandResult(AbstractControlDirection::Heating,
+                                            1.0, 11U, 0U, airContext()),
+                               airContext())));
+    assertFeedbackUpdate(planner, 11U,
+                         PreviousControlRequestFeedback::Disposition::Rejected);
+
+    const auto tripResult =
+        planner.tick(tickInput(1'999U, std::nullopt, airContext()));
+    TEST_ASSERT_TRUE(tripResult.reason ==
+                     ActuatorPlanReason::StaleRequestWatchdog);
+    TEST_ASSERT_TRUE(planner.state().latchedWatchdogFault.has_value());
+    TEST_ASSERT_EQUAL_UINT64(
+        11U, planner.state()
+                 .latchedWatchdogFault
+                 ->lastObservedSequenceHighWatermarkBeforeFault);
+}
+
+// Owner-Review R2 (Plan-19.2 #4): ein akkumuliertes Mindestimpulsfenster, das
+// die Schwelle erreicht (minimumPulseFromAccumulator), aber am Arming-Gate
+// (Minimum-Off) gesperrt ist, wird als DeferredOrLimited verworfen; der
+// bereits ins Fenster gebuchte Anteil wird nicht ins Folgefenster
+// zurueckgegeben (kein Refund bei Sperre). Fuer beide Richtungen geprueft.
+void test_accumulated_minimum_pulse_blocked_at_arming_gate_is_deferred_not_replayed() {
+    auto parameters = testParameters();
+    parameters.switchingWindowMillis = 1'000U;
+    parameters.minimumOnMillis = 100U;
+    parameters.minimumOffMillis = 2'000U;
+    parameters.polarityDeadTimeMillis = 2'000U;
+    parameters.pulseAccumulatorCapMillis = 1'000U;
+
+    for (const auto direction : {AbstractControlDirection::Heating,
+                                 AbstractControlDirection::Cooling}) {
+        ActuatorPlanner planner{parameters};
+
+        // Voller Puls, physisch aktiv seit t=0.
+        static_cast<void>(planner.tick(
+            tickInput(0U, demandResult(direction, 1.0, 1U, 0U, airContext()),
+                      airContext())));
+        // t=150: Teardown nach erfuellter Mindest-On-Zeit -> physischer
+        // Deaktivierungsanker bei 150.
+        static_cast<void>(planner.tick(
+            tickInput(150U, offResult(2U, 150U, airContext()), airContext())));
+        TEST_ASSERT_TRUE(
+            planner.state()
+                .lastPhysicalDeactivationAtMonotonicMillis.has_value());
+        TEST_ASSERT_EQUAL_UINT64(
+            150U, *planner.state().lastPhysicalDeactivationAtMonotonicMillis);
+
+        // t=200: neue, gleichgerichtete Kleinstquote (50ms je Fenster, unter
+        // minimumOnMillis) - erstes Fenster nur Teilgutschrift, noch keine
+        // Schwelle.
+        auto result = planner.tick(tickInput(
+            200U, demandResult(direction, 0.05, 3U, 200U, airContext()),
+            airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::AccumulatingBelowThreshold);
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+
+        // t=1200: Fensterrollover derselben Request - die zweite Gutschrift
+        // erreicht exakt minimumOnMillis (50+50=100), aber Minimum-Off ab
+        // t=150 ist bei t=1200 (1050ms) noch nicht erfuellt (2000ms noetig)
+        // -> DeferredOrLimited statt physischer Aktivierung.
+        result = planner.tick(tickInput(1'200U, std::nullopt, airContext()));
+        TEST_ASSERT_TRUE(result.reason ==
+                         ActuatorPlanReason::MinimumOffTimeHeld);
+        TEST_ASSERT_TRUE(result.appliedDirection ==
+                         AbstractControlDirection::Idle);
+        TEST_ASSERT_TRUE(planner.state().activeWindow.has_value());
+        TEST_ASSERT_TRUE(
+            planner.state().activeWindow->minimumPulseFromAccumulator);
+        TEST_ASSERT_EQUAL_UINT64(
+            100U, planner.state().activeWindow->scheduledOnMillis);
+        assertFeedbackUpdate(
+            planner, 3U,
+            PreviousControlRequestFeedback::Disposition::DeferredOrLimited);
+        // Die verbrauchte Mindestimpuls-Gutschrift wird nicht zurueckgebucht;
+        // ein blockiertes Fenster erhaelt keinen erneuten Versuch derselben
+        // Gutschrift.
+        TEST_ASSERT_EQUAL_DOUBLE(0.0,
+                                 planner.state().accumulator.accumulatedMillis);
+    }
+}
+
 void test_fan_deadlines_and_physical_edges_are_overflow_safe() {
     auto parameters = testParameters();
     parameters.switchingWindowMillis = 1'000U;
@@ -1411,6 +1849,8 @@ int main(int argc, char** argv) {
     RUN_TEST(test_window_ownership_and_variant_b_feedback_are_separate);
     RUN_TEST(
         test_fail_closed_matrix_stops_physical_output_and_trusts_only_sequences);
+    RUN_TEST(test_i2a_unconfigured_parameters_reject_immediately);
+    RUN_TEST(test_i2b_invalid_parameters_reject_immediately);
     RUN_TEST(test_no_valid_request_and_off_close_planner_without_old_feedback);
     RUN_TEST(test_feedback_disposition_maps_reasons_and_never_downgrades);
     RUN_TEST(test_malformed_evaluation_clears_pending_and_allows_next_sequence);
@@ -1429,6 +1869,14 @@ int main(int argc, char** argv) {
         test_force_stop_existing_episode_open_uses_current_subject_not_stale_accepted_command);
     RUN_TEST(
         test_force_stop_closed_by_outstanding_evaluation_never_emits_old_feedback);
+    RUN_TEST(test_watchdog_heartbeat_updates_only_for_new_valid_evaluations);
+    RUN_TEST(test_watchdog_episode_anchor_bootstraps_and_h_rebases_deadline);
+    RUN_TEST(
+        test_forcestop_rebase_after_long_standby_does_not_trip_and_preserves_latch);
+    RUN_TEST(
+        test_watchdog_fault_evidence_reports_high_watermark_not_last_accepted);
+    RUN_TEST(
+        test_accumulated_minimum_pulse_blocked_at_arming_gate_is_deferred_not_replayed);
     RUN_TEST(test_fan_deadlines_and_physical_edges_are_overflow_safe);
     RUN_TEST(test_fans_follow_physical_output_and_independent_inner_phase);
     RUN_TEST(test_feedback_handoff_is_single_use_and_severity_is_monotone);
