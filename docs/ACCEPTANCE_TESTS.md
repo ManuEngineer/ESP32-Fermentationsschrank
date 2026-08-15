@@ -144,24 +144,29 @@ beweisen sie keine Freigabe der damals getesteten R2-Semantik.
 | Architektur, Secret, Format und Whitespace | damals ausgefuehrt | `NOT_ACCEPTED_PENDING_R3` | Architekturguard, Secret-Scan, clang-format dry-run, `git diff --check` |
 | vollstaendiger nativer Lauf, ESP-IDF, CI, Hardware | nicht ausgefuehrt | `NOT_RUN` | Draft-/Owner-Gates |
 
-### Aktueller R3-Implementierungsnachweis
+### Aktueller R3-Korrektur- und Implementierungsnachweis
 
-Die folgenden gezielten Draft-Laeufe pruefen den aktuellen R3-Stand und
-ersetzen nicht die historischen R2-Nachweise:
+Die folgenden gezielten Draft-Laeufe pruefen den Korrekturstand gegen den
+freigegebenen Plan `48f343ceb49d5a80239702241ae1fbf7d4ebfcd2`. Die direkten
+nativen Host-Laeufe wurden als Unity-Link ohne PlatformIO ausgefuehrt, weil
+PlatformIO im Draft-Umfeld bei `Platform Manager: Installing native` blockiert.
+Der PlatformIO-Lauf ist deshalb kein PASS-Nachweis:
 
 | Bereich | Ausfuehrung | Status | Nachweis |
 |---|---|---|---|
-| Issue-24-Safetykern, Record, Restart, Injection und Application-Grenze | 10/10 | `PASS` | `pio test -e native --filter test_issue24_safety` |
-| #15-Command-/Faultprojektion | 43/43 | `PASS` | `pio test -e native --filter test_run_commands` |
-| #23-Safety-Gate und Planner | 44/44 | `PASS` | `pio test -e native --filter test_actuator_planner` |
-| reale #56/#57-Recovery-/Service-Konsumenten | 37/37 bzw. 40/40 | `PASS` | `pio test -e native --filter test_configuration_recovery_service`; `pio test -e native --filter test_configuration_service` |
-| Smoke-/Application-Skeleton | 9/9 | `PASS` | `pio test -e native --filter test_smoke` |
-| vollstaendiger nativer Lauf, ESP-IDF, CI, Hardware | nicht ausgefuehrt | `NOT_RUN` | Draft-/Owner-Gates |
+| Issue-24-Safetykern, Record, Restart, Injection und Application-Grenze | 22/22 | `PASS` | direkter nativer Unity-Host-Link; PlatformIO gezielt `BLOCKED` bei `Platform Manager: Installing native` |
+| #15-Command-/Faultprojektion | 43/43 | `PASS` | direkter nativer Unity-Host-Link |
+| #23-Safety-Gate und Planner | 44/44 | `PASS` | direkter nativer Unity-Host-Link |
+| #23-Persistenz-/Application-Pfad | 112/112 | `PASS` | direkter nativer Unity-Host-Link |
+| reale #56/#57-Recovery-/Service-Konsumenten | 37/37 bzw. 40/40 | `PASS` | direkter nativer Unity-Host-Link |
+| Architektur, Secret, Format, Whitespace und Gate-Selbsttest | ausgefuehrt | `PASS` | Architekturguard, Secret-Scan, clang-format dry-run, `git diff --check`, `selftest_quality_gates.py` |
+| vollstaendiger nativer Lauf, ESP-IDF, Remote-CI, Hardware | nicht ausgefuehrt | `NOT_RUN` | Draft-/Owner-Gates; Remote-CI im Draft `SKIPPED` |
 
-### R3-Zielorakel fuer Issue #24 (verbleibende Ausfuehrung: gezielt PASS; Gesamtgate NOT_RUN)
+### R3-Zielorakel fuer Issue #24 (gezielt PASS; Gesamtgate NOT_RUN)
 
-Diese Orakel gelten erst nach Freigabe und Implementierung der vollstaendigen
-R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
+Die gezielten Orakel der Korrekturrunde sind auf dem aktuellen Arbeitsstand
+ausgefuehrt. Das ersetzt weder das Ownerreview noch den vollstaendigen
+nativen/ESP-IDF-/Hardware-Gesamtlauf.
 
 - Die finale `P1-*`-, `O2-*`-, `S3-*`- und `Y4-*`-Matrix in
   `SAFETY_AND_FAULTS.md` wird vollstaendig gegen Producer, Sofortreaktion,
@@ -267,8 +272,8 @@ R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
 
 Der historische R2-Abschnitt oberhalb bleibt unveraendert als
 `NOT_ACCEPTED_PENDING_R3`. Die gezielt ausgefuehrten R3-Orakel sind oben
-ausgewiesen; nicht abgedeckte Gesamt-, Firmware-, Remote-CI- und Hardwaregates
-bleiben `NOT_RUN`.
+ausgewiesen; Gesamt-, Firmware- und Hardwaregates bleiben `NOT_RUN`, der
+Draft-CI-Eintrag bleibt `SKIPPED`.
 
 ### Ebene 3: Build- und statische Integrationstests
 

@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Freigegebene R3 implementiert; R2 gegen die R3-Verträge reconciliert, PR #107 bleibt Draft | Ownerreview und Freigabe der exakten vollständigen R3-SHA |
+| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | R3-Implementierung und Ownerreview-Findings A–I korrigiert; PR #107 bleibt Draft | Ownerreview der neuen SHA gegen Plan `48f343c` |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -29,9 +29,12 @@ Der Branch enthaelt die gegen die freigegebene R3 reconcilierten
 Safety-/Recovery-Vertraege. Der eingefrorene R2-Stand war keine normative
 Quelle; insbesondere wurden der fachliche Resetport, die R2-Capability und
 der alte Safetyrecord entfernt beziehungsweise auf den R3-Vertrag migriert.
-Die gezielten nativen Konsumententests sind fuer den aktuellen
-Implementierungsstand PASS. Vollstaendiger nativer Lauf, Firmwarebuilds,
-Remote-CI und Hardware bleiben Draft-/Owner-Gates.
+Die gezielten nativen Konsumententests sind fuer den korrigierten
+Implementierungsstand PASS: Issue #24 22/22, #15 43/43, #23 44/44,
+Application/Persistenz 112/112 sowie #56/#57 37/37 und 40/40. Der PlatformIO-
+Treiber blieb wegen `Platform Manager: Installing native` BLOCKED; der
+vollstaendige native Lauf, Firmwarebuilds, Remote-CI und Hardware bleiben
+Draft-/Owner-Gates.
 
 Die native #56/#57-Bridge ist in der korrigierten R3 als realer
 `FermentationApplication`-Application-/Orchestrierungspfad mit einer zentralen
@@ -50,7 +53,8 @@ Parameter-Snapshot und Recovery-Bindung) bleibt als separates spaeteres
 Integrationsgate offen und ist nicht die naechste Arbeit; seine vollstaendige
 Abnahme bleibt unter anderem von #35 abhaengig. Issue #35 bleibt
 `TBD_COMMISSIONING` und Eigentum der produktiven Werte und Grenzen. Fuer #24
-ist nur noch die Ownerreview der exakten vollstaendigen R3-SHA offen.
+ist nur noch die Ownerreview der exakten neuen R3-SHA offen; der freigegebene
+Plan bleibt `48f343ceb49d5a80239702241ae1fbf7d4ebfcd2`.
 
 ## Zulaessige Parallelitaet
 

@@ -268,6 +268,29 @@ Berechtigungen:
 Ein Resetversuch wird abgelehnt und begruendet, wenn die Ursache weiterhin
 besteht oder die erneute Pruefung fehlschlaegt.
 
+Die zentrale `SafetyFaultService` erzeugt dafuer eine
+`FaultResetEvaluation` aus dem neutralen `FaultResetRequest`, der
+codebezogenen Resetpolicy, typisierter Autorisierungsevidenz und den
+separaten Sensor-, Aktor-, Persistenz- und Integritaetschecks. Fehlende,
+abgelaufene oder zu niedrige Evidenz bleibt fail-closed; ein positiver
+Caller-Bool ist keine Autorisierung. Der bestehende #15-Commandpfad wird fuer
+die fachliche Resetentscheidung wiederverwendet. Quittierung und Reset sind
+getrennte Vorgaenge.
+
+Die Safetyprojektion fuer den Aktorpfad stammt ausschliesslich aus dieser
+zentralen Safetyautoritaet. Der Application-to-Planner-Vertrag akzeptiert
+keine vom Produktionscaller gelieferte `Allowed`-Projektion. `O2-001` wird
+nur durch tatsaechlich qualifizierte #21-Sensorselektions-/Luftersatz-Evidenz
+aufgeloest, `O2-002` durch die vom #20-Producer qualifizierte Rueckkehr zu
+`Valid`, und `P1-001` durch eine neue gueltige Prozessbewertung.
+
+Ein autorisierter `SAFE_BOOT`-Exit wird erst nach erfolgreicher #56/#57-
+Konfigurations- und Integritaetsqualifikation finalisiert. Eine normale
+Restart-Evidenz verlaesst `SAFE_BOOT` nicht; die Restartbeobachtung wird
+weiterhin genau einmal konsumiert. Der `Y4-009`-Tracking-Latch wird bei einem
+autorisierten Exit nur im Rahmen dieser zentralen Bootpolicy aufgeloest;
+andere aktive blockierende Latches bleiben wirksam.
+
 ## Automatische Wiederfreigabe
 
 Automatische Wiederfreigabe ist standardmaessig verboten und wird nur pro
