@@ -13,17 +13,30 @@
 
 namespace fermentation {
 
-inline constexpr std::uint32_t kSafetyStateRecordSchema = 1U;
-inline constexpr std::size_t kMaximumPersistedLatches = 8U;
+inline constexpr std::uint32_t kSafetyStateRecordSchema = 3U;
+inline constexpr std::size_t kMaximumPersistedLatches = 17U;
 inline constexpr std::size_t kMaximumSafetyRecordBytes = 2048U;
 inline constexpr std::uint64_t kStableRestartWindowMillis = 30U * 60U * 1000U;
+inline constexpr std::size_t kSafetyRecordBasePayloadBytes = 128U;
+inline constexpr std::size_t kSafetyRecordSlotPayloadBytes = 64U;
+inline constexpr std::size_t kSafetyRecordPayloadBytes =
+    kSafetyRecordBasePayloadBytes +
+    kMaximumPersistedLatches * kSafetyRecordSlotPayloadBytes;
 
 enum class RestartCauseEvent : std::uint8_t {
-    ControlledSafety,
+    SoftwareRestart,
     WatchdogOrPanic,
     Brownout,
     PowerOn,
-    Authorized,
+    ExternalOrOther,
+    Unknown,
+};
+
+enum class RestartIntentType : std::uint8_t {
+    None,
+    AutomaticSafetyRecovery,
+    AuthorizedTechnicalRestart,
+    AuthorizedSafeBootExit,
     Unknown,
 };
 
@@ -48,14 +61,11 @@ struct PersistedRestartEvidence {
     std::uint32_t evidenceId{0U};
     RestartCauseEvent cause{RestartCauseEvent::Unknown};
     RestartEvidenceState state{RestartEvidenceState::None};
-    FaultInstanceId faultInstanceId;
-};
-
-struct FaultResetBootIntent {
+    RestartIntentType intent{RestartIntentType::None};
     FaultInstanceId targetFault;
-    std::uint32_t expectedFaultRevision{0U};
-    std::uint32_t intentRevision{0U};
-    bool pending{false};
+    std::uint32_t targetFaultRevision{0U};
+    std::uint32_t episodeId{0U};
+    std::uint32_t evidenceRevision{0U};
 };
 
 struct SafetyStateRecord {
@@ -68,9 +78,12 @@ struct SafetyStateRecord {
     device_platform::StorageEpoch storageEpoch{1U};
     std::array<FaultRecord, kMaximumPersistedLatches> latches{};
     std::size_t latchCount{0U};
+    bool capacityFailureLatched{false};
+    std::uint32_t capacityFailureRevision{0U};
+    std::uint32_t capacityFailureSourceKey{0U};
+    std::uint32_t capacityFailureCorrelationKey{0U};
     RestartEpisodeEvidence restartEpisode;
     PersistedRestartEvidence restartEvidence;
-    FaultResetBootIntent faultResetBootIntent;
     device_platform::ResetCause lastResetCause{
         device_platform::ResetCause::Unknown};
     std::uint64_t lastResetObservationId{0U};

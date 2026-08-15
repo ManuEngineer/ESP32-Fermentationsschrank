@@ -1298,9 +1298,8 @@ CommandDecision decideMuteMessage(const RunCommandState& current,
 
 namespace {
 
-CommandDecision decideFaultResetInternal(
-    const RunCommandState& current, const FaultResetRequest& request,
-    const FaultResetAuthorization* authorization) {
+CommandDecision decideFaultResetInternal(const RunCommandState& current,
+                                         const FaultResetRequest& request) {
     auto decision =
         beginDecision(current, request.envelope, CommandKind::ResetFault);
     if (!requireFaultRevision(decision)) {
@@ -1310,16 +1309,8 @@ CommandDecision decideFaultResetInternal(
         decision.status = CommandStatus::NotConfirmed;
         return decision;
     }
-    if (!request.targetFault.valid() || authorization == nullptr ||
-        !authorization->valid() ||
-        authorization->targetFault() != request.targetFault ||
-        !request.envelope.expectedFaultRevision.has_value() ||
-        authorization->expectedFaultRevision() !=
-            *request.envelope.expectedFaultRevision ||
-        authorization->safetyRevision() != current.faultRevision ||
-        !authorization->causeFree() || !authorization->safetyChecksPassed() ||
-        !authorization->authorizationSatisfied() ||
-        !authorization->noOtherBlockingFault()) {
+    if (!request.targetFault.valid() ||
+        !request.envelope.expectedFaultRevision.has_value()) {
         decision.status = CommandStatus::SafetyRejected;
         return decision;
     }
@@ -1387,16 +1378,7 @@ CommandDecision decideFaultResetInternal(
 
 CommandDecision decideFaultReset(const RunCommandState& current,
                                  const FaultResetRequest& request) {
-    // There is intentionally no compatibility path that consumes positive
-    // caller evaluation.  Only the overload carrying the private capability
-    // can propose a reset.
-    return decideFaultResetInternal(current, request, nullptr);
-}
-
-CommandDecision decideFaultReset(const RunCommandState& current,
-                                 const FaultResetRequest& request,
-                                 const FaultResetAuthorization& authorization) {
-    return decideFaultResetInternal(current, request, &authorization);
+    return decideFaultResetInternal(current, request);
 }
 
 void applyFaultCoreProjection(RunCommandState& state,

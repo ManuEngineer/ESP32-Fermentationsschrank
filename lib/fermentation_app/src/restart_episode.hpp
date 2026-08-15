@@ -36,13 +36,14 @@ class RestartEpisodeCoordinator final {
         SafetyStateRecord& record,
         const device_platform::ResetCauseSnapshot& snapshot);
 
-    [[nodiscard]] bool prepareControlledRestart(
-        SafetyStateRecord& record, FaultInstanceId faultId,
-        std::uint32_t faultRevision);
+    [[nodiscard]] bool prepareControlledRestart(SafetyStateRecord& record,
+                                                FaultInstanceId faultId,
+                                                std::uint32_t faultRevision);
 
-    [[nodiscard]] bool prepareFaultResetBootIntent(
-        SafetyStateRecord& record, FaultInstanceId faultId,
-        std::uint32_t faultRevision);
+    [[nodiscard]] bool prepareRestartIntent(SafetyStateRecord& record,
+                                            RestartIntentType intent,
+                                            FaultInstanceId faultId,
+                                            std::uint32_t faultRevision);
 
     [[nodiscard]] bool advanceStableWindow(SafetyStateRecord& record,
                                            std::uint64_t monotonicMillis,

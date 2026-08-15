@@ -10,7 +10,10 @@
 
 namespace fermentation {
 
-inline constexpr std::size_t kMaximumActiveFaults = 8U;
+// The in-memory core retains the 17 persistent safety/system slots plus the
+// three non-latched P1/O2 observations. Y4-006 is a record marker and never
+// consumes one of the persistent slots.
+inline constexpr std::size_t kMaximumActiveFaults = 20U;
 
 enum class FaultClass : std::uint8_t {
     ProcessWarning = 1U,
@@ -28,12 +31,8 @@ enum class FaultClass : std::uint8_t {
 // werden niemals in einen harmlosen Code umgedeutet.
 enum class FaultCode : std::uint16_t {
     P1_001 = 0x1001U,
-    P1_002 = 0x1002U,
-    P1_003 = 0x1003U,
     O2_001 = 0x2001U,
     O2_002 = 0x2002U,
-    O2_003 = 0x2003U,
-    O2_004 = 0x2004U,
     S3_001 = 0x3001U,
     S3_002 = 0x3002U,
     S3_003 = 0x3003U,
@@ -52,7 +51,6 @@ enum class FaultCode : std::uint16_t {
     Y4_007 = 0x4007U,
     Y4_008 = 0x4008U,
     Y4_009 = 0x4009U,
-    Y4_011 = 0x400BU,
     Unknown = 0xFFFFU,
 };
 
@@ -93,7 +91,7 @@ struct FaultRecord {
     SafetyDisposition disposition{SafetyDisposition::ImmediateStop};
     bool causeActive{true};
     bool latched{true};
-    bool controlledRestartUsed{false};
+    bool automaticRecoveryRestartUsed{false};
     std::uint32_t faultRevision{0U};
     std::optional<FaultInstanceId> primaryFaultId;
     // #23 diagnostic evidence is deliberately separate from the bounded

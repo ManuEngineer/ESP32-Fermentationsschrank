@@ -6,20 +6,40 @@ namespace fermentation {
 namespace {
 
 bool isAbnormal(RestartCauseEvent cause) {
-    return cause == RestartCauseEvent::ControlledSafety ||
-           cause == RestartCauseEvent::WatchdogOrPanic ||
-           cause == RestartCauseEvent::Brownout;
+    return cause == RestartCauseEvent::WatchdogOrPanic ||
+           cause == RestartCauseEvent::Brownout ||
+           cause == RestartCauseEvent::ExternalOrOther;
 }
 
-bool sameControlledEvidence(const SafetyStateRecord& record) {
-    return record.restartEvidence.state == RestartEvidenceState::Committed &&
-           record.restartEvidence.cause ==
-               RestartCauseEvent::ControlledSafety &&
-           record.restartEvidence.evidenceId != 0U &&
-           record.restartEvidence.faultInstanceId.valid();
+bool isValidIntent(RestartIntentType intent) {
+    return intent == RestartIntentType::AutomaticSafetyRecovery ||
+           intent == RestartIntentType::AuthorizedTechnicalRestart ||
+           intent == RestartIntentType::AuthorizedSafeBootExit;
 }
 
 void setSafeBoot(SafetyStateRecord& record) { record.safeBootRequired = true; }
+
+bool incrementEpisode(SafetyStateRecord& record) {
+    const bool newEpisode = !record.restartEpisode.open;
+    if (record.restartEpisode.nextRestartEvidenceId == 0U ||
+        record.restartEpisode.nextRestartEvidenceId ==
+            std::numeric_limits<std::uint32_t>::max() ||
+        record.restartEpisode.abnormalRestartCount ==
+            std::numeric_limits<std::uint32_t>::max() ||
+        (newEpisode && record.restartEpisode.episodeId ==
+                           std::numeric_limits<std::uint32_t>::max())) {
+        return false;
+    }
+    if (newEpisode) ++record.restartEpisode.episodeId;
+    ++record.restartEpisode.nextRestartEvidenceId;
+    ++record.restartEpisode.abnormalRestartCount;
+    record.restartEpisode.lastRestartEvidenceId =
+        record.restartEpisode.nextRestartEvidenceId - 1U;
+    record.restartEpisode.open = true;
+    record.restartEpisode.stableWindowRunning = false;
+    record.restartEpisode.stableWindowStartedAtMillis = 0U;
+    return true;
+}
 
 }  // namespace
 
@@ -33,51 +53,40 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
         result.safeBootRequired = true;
         return result;
     }
-    // The reset port exposes one boot-local stable observation. Re-evaluating
-    // it must never create another episode/evidence record or consume another
-    // intent. A changed cause under the same observation id is itself unsafe.
+
+    result.cause = classifyRestartCause(snapshot.cause);
     if (record.lastResetObservationId == snapshot.observationId) {
-        result.cause = classifyRestartCause(snapshot.cause);
-        if (snapshot.cause != record.lastResetCause) {
+        if (record.lastResetCause != snapshot.cause) {
             setSafeBoot(record);
             result.status = RestartBootStatus::EvidenceMismatch;
             result.safeBootRequired = true;
-            result.recordNeedsCommit = false;
             return result;
         }
         result.evidenceId = record.restartEvidence.evidenceId;
-        switch (result.cause) {
-            case RestartCauseEvent::Authorized:
-                result.status = record.faultResetBootIntent.pending
-                                    ? RestartBootStatus::EvidenceMismatch
-                                    : RestartBootStatus::AuthorizedReset;
-                break;
-            case RestartCauseEvent::ControlledSafety:
-                result.status =
-                    record.restartEvidence.state ==
-                            RestartEvidenceState::Consumed
-                        ? RestartBootStatus::ControlledEvidenceConsumed
-                        : RestartBootStatus::EvidenceMismatch;
-                break;
-            case RestartCauseEvent::WatchdogOrPanic:
-            case RestartCauseEvent::Brownout:
-                result.status = record.restartEpisode.abnormalRestartCount >= 3U
-                                    ? RestartBootStatus::SafeBootRequired
-                                    : RestartBootStatus::AbnormalRecorded;
-                break;
-            case RestartCauseEvent::PowerOn:
-                result.status = RestartBootStatus::Normal;
-                break;
-            case RestartCauseEvent::Unknown:
-                result.status = RestartBootStatus::UnknownFailClosed;
-                break;
+        if (result.cause == RestartCauseEvent::Unknown) {
+            result.status = RestartBootStatus::UnknownFailClosed;
+            setSafeBoot(record);
+        } else if (result.cause == RestartCauseEvent::SoftwareRestart) {
+            result.status =
+                record.restartEvidence.state == RestartEvidenceState::Consumed
+                    ? RestartBootStatus::ControlledEvidenceConsumed
+                    : RestartBootStatus::EvidenceMismatch;
+            if (result.status == RestartBootStatus::EvidenceMismatch) {
+                setSafeBoot(record);
+            }
+        } else if (isAbnormal(result.cause) &&
+                   record.restartEpisode.abnormalRestartCount >= 3U) {
+            result.status = RestartBootStatus::SafeBootRequired;
+            setSafeBoot(record);
+        } else {
+            result.status = RestartBootStatus::Normal;
         }
         result.safeBootRequired = record.safeBootRequired;
         return result;
     }
+
     record.lastResetCause = snapshot.cause;
     record.lastResetObservationId = snapshot.observationId;
-    result.cause = classifyRestartCause(snapshot.cause);
     result.recordNeedsCommit = true;
 
     if (result.cause == RestartCauseEvent::Unknown) {
@@ -87,138 +96,105 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
         return result;
     }
 
-    if (record.faultResetBootIntent.pending &&
-        result.cause != RestartCauseEvent::Authorized) {
-        setSafeBoot(record);
-        result.status = RestartBootStatus::EvidenceMismatch;
-        result.safeBootRequired = true;
-        return result;
-    }
-    if (record.restartEvidence.state == RestartEvidenceState::Pending ||
-        (record.restartEvidence.state == RestartEvidenceState::Committed &&
-         result.cause != RestartCauseEvent::ControlledSafety)) {
-        setSafeBoot(record);
-        result.status = RestartBootStatus::EvidenceMismatch;
-        result.safeBootRequired = true;
-        result.recordNeedsCommit = true;
-        return result;
-    }
-
-    if (result.cause == RestartCauseEvent::Authorized) {
-        if (record.faultResetBootIntent.pending) {
-            record.faultResetBootIntent.pending = false;
-            result.status = RestartBootStatus::AuthorizedReset;
-        } else {
-            result.status = RestartBootStatus::Normal;
-        }
-        result.safeBootRequired = record.safeBootRequired;
-        return result;
-    }
-
-    if (result.cause == RestartCauseEvent::ControlledSafety) {
-        if (!sameControlledEvidence(record)) {
+    if (result.cause == RestartCauseEvent::SoftwareRestart) {
+        const bool matchingEvidence =
+            record.restartEvidence.state == RestartEvidenceState::Committed &&
+            record.restartEvidence.cause ==
+                RestartCauseEvent::SoftwareRestart &&
+            record.restartEvidence.evidenceId != 0U &&
+            isValidIntent(record.restartEvidence.intent) &&
+            record.restartEvidence.episodeId == record.restartEpisode.episodeId;
+        if (!matchingEvidence) {
             setSafeBoot(record);
             result.status = RestartBootStatus::EvidenceMismatch;
             result.safeBootRequired = true;
-            result.recordNeedsCommit = true;
             return result;
         }
+        const auto intent = record.restartEvidence.intent;
         record.restartEvidence.state = RestartEvidenceState::Consumed;
-        result.status = RestartBootStatus::ControlledEvidenceConsumed;
         result.evidenceId = record.restartEvidence.evidenceId;
+        result.status = intent == RestartIntentType::AutomaticSafetyRecovery
+                            ? RestartBootStatus::ControlledEvidenceConsumed
+                            : RestartBootStatus::AuthorizedReset;
         result.safeBootRequired = record.safeBootRequired;
         return result;
     }
 
-    if (!isAbnormal(result.cause)) {
-        result.status = RestartBootStatus::Normal;
+    // A previous consumed application evidence is no longer eligible for a
+    // later boot. Keeping the episode itself is intentional.
+    if (record.restartEvidence.state == RestartEvidenceState::Consumed) {
+        record.restartEvidence = PersistedRestartEvidence{};
+    }
+
+    if (isAbnormal(result.cause)) {
+        if (!incrementEpisode(record)) {
+            setSafeBoot(record);
+            result.status = RestartBootStatus::Overflow;
+            result.safeBootRequired = true;
+            return result;
+        }
+        result.evidenceId = record.restartEpisode.lastRestartEvidenceId;
+        result.status = record.restartEpisode.abnormalRestartCount >= 3U
+                            ? RestartBootStatus::SafeBootRequired
+                            : RestartBootStatus::AbnormalRecorded;
+        if (result.status == RestartBootStatus::SafeBootRequired) {
+            setSafeBoot(record);
+        }
         result.safeBootRequired = record.safeBootRequired;
         return result;
     }
 
-    // A watchdog/Brownout has no pre-write evidence. It is recorded exactly
-    // once by this boot observation. A committed controlled evidence was
-    // handled above and therefore cannot be incremented again.
-    const bool newEpisode = !record.restartEpisode.open;
-    if (record.restartEpisode.nextRestartEvidenceId == 0U ||
-        (newEpisode && record.restartEpisode.episodeId ==
-                           std::numeric_limits<std::uint32_t>::max()) ||
-        record.restartEpisode.nextRestartEvidenceId ==
-            std::numeric_limits<std::uint32_t>::max() ||
-        record.restartEpisode.abnormalRestartCount ==
-            std::numeric_limits<std::uint32_t>::max()) {
-        setSafeBoot(record);
-        result.status = RestartBootStatus::Overflow;
-        result.safeBootRequired = true;
-        return result;
-    }
-    if (newEpisode) ++record.restartEpisode.episodeId;
-    ++record.restartEpisode.nextRestartEvidenceId;
-    ++record.restartEpisode.abnormalRestartCount;
-    record.restartEpisode.lastRestartEvidenceId =
-        record.restartEpisode.nextRestartEvidenceId - 1U;
-    record.restartEpisode.open = true;
-    record.restartEvidence.evidenceId =
-        record.restartEpisode.lastRestartEvidenceId;
-    record.restartEvidence.cause = result.cause;
-    record.restartEvidence.state = RestartEvidenceState::Consumed;
-    result.evidenceId = record.restartEvidence.evidenceId;
-    result.status = RestartBootStatus::AbnormalRecorded;
-    result.recordNeedsCommit = true;
-    if (record.restartEpisode.abnormalRestartCount >= 3U) {
-        setSafeBoot(record);
-        result.status = RestartBootStatus::SafeBootRequired;
-        result.safeBootRequired = true;
-    }
+    result.status = RestartBootStatus::Normal;
+    result.safeBootRequired = record.safeBootRequired;
     return result;
 }
 
 bool RestartEpisodeCoordinator::prepareControlledRestart(
     SafetyStateRecord& record, FaultInstanceId faultId,
     std::uint32_t faultRevision) {
-    const bool newEpisode = !record.restartEpisode.open;
-    if (!faultId.valid() || faultRevision == 0U ||
-        record.restartEvidence.state == RestartEvidenceState::Pending ||
-        record.restartEvidence.state == RestartEvidenceState::Committed ||
-        record.restartEpisode.nextRestartEvidenceId == 0U ||
-        (newEpisode && record.restartEpisode.episodeId ==
-                           std::numeric_limits<std::uint32_t>::max()) ||
-        record.restartEpisode.nextRestartEvidenceId ==
-            std::numeric_limits<std::uint32_t>::max() ||
-        record.restartEpisode.abnormalRestartCount ==
-            std::numeric_limits<std::uint32_t>::max()) {
-        return false;
-    }
-    if (newEpisode) ++record.restartEpisode.episodeId;
-    ++record.restartEpisode.nextRestartEvidenceId;
-    ++record.restartEpisode.abnormalRestartCount;
-    record.restartEpisode.open = true;
-    record.restartEpisode.lastRestartEvidenceId =
-        record.restartEpisode.nextRestartEvidenceId - 1U;
-    record.restartEvidence.evidenceId =
-        record.restartEpisode.lastRestartEvidenceId;
-    record.restartEvidence.cause = RestartCauseEvent::ControlledSafety;
-    record.restartEvidence.state = RestartEvidenceState::Committed;
-    record.restartEvidence.faultInstanceId = faultId;
-    record.faultRevision = faultRevision;
-    if (record.restartEpisode.abnormalRestartCount >= 3U) {
-        record.safeBootRequired = true;
-    }
-    return true;
+    return prepareRestartIntent(record,
+                                RestartIntentType::AutomaticSafetyRecovery,
+                                faultId, faultRevision);
 }
 
-bool RestartEpisodeCoordinator::prepareFaultResetBootIntent(
-    SafetyStateRecord& record, FaultInstanceId faultId,
-    std::uint32_t faultRevision) {
-    if (!faultId.valid() || faultRevision == 0U ||
-        record.faultResetBootIntent.pending ||
+bool RestartEpisodeCoordinator::prepareRestartIntent(
+    SafetyStateRecord& record, RestartIntentType intent,
+    FaultInstanceId faultId, std::uint32_t faultRevision) {
+    if (!isValidIntent(intent) || faultRevision == 0U ||
+        (intent == RestartIntentType::AutomaticSafetyRecovery &&
+         !faultId.valid()) ||
+        record.restartEvidence.state == RestartEvidenceState::Pending ||
+        record.restartEvidence.state == RestartEvidenceState::Committed ||
+        !incrementEpisode(record)) {
+        return false;
+    }
+    if (record.restartEpisode.abnormalRestartCount >= 3U &&
+        intent != RestartIntentType::AutomaticSafetyRecovery) {
+        return false;
+    }
+    if (record.restartEpisode.lastRestartEvidenceId == 0U ||
+        record.restartEpisode.episodeId == 0U ||
         record.recordRevision == std::numeric_limits<std::uint32_t>::max()) {
         return false;
     }
-    record.faultResetBootIntent.targetFault = faultId;
-    record.faultResetBootIntent.expectedFaultRevision = faultRevision;
-    record.faultResetBootIntent.intentRevision = record.recordRevision + 1U;
-    record.faultResetBootIntent.pending = true;
+    record.restartEvidence.evidenceId =
+        record.restartEpisode.lastRestartEvidenceId;
+    record.restartEvidence.cause = RestartCauseEvent::SoftwareRestart;
+    record.restartEvidence.state = RestartEvidenceState::Committed;
+    record.restartEvidence.intent = intent;
+    record.restartEvidence.targetFault = faultId;
+    record.restartEvidence.targetFaultRevision = faultRevision;
+    record.restartEvidence.episodeId = record.restartEpisode.episodeId;
+    record.restartEvidence.evidenceRevision = record.recordRevision + 1U;
+    if (intent != RestartIntentType::AutomaticSafetyRecovery) {
+        // Technical/service restarts are not abnormal episode entries.
+        if (record.restartEpisode.abnormalRestartCount > 0U) {
+            --record.restartEpisode.abnormalRestartCount;
+        }
+    }
+    if (record.restartEpisode.abnormalRestartCount >= 3U) {
+        setSafeBoot(record);
+    }
     return true;
 }
 
@@ -227,6 +203,7 @@ bool RestartEpisodeCoordinator::advanceStableWindow(SafetyStateRecord& record,
                                                     bool stable) {
     if (!record.restartEpisode.open || record.safeBootRequired || !stable) {
         record.restartEpisode.stableWindowRunning = false;
+        record.restartEpisode.stableWindowStartedAtMillis = 0U;
         return false;
     }
     if (!record.restartEpisode.stableWindowRunning) {
@@ -239,9 +216,8 @@ bool RestartEpisodeCoordinator::advanceStableWindow(SafetyStateRecord& record,
             kStableRestartWindowMillis) {
         return false;
     }
-    const std::uint32_t episodeId = record.restartEpisode.episodeId;
-    const std::uint32_t nextEvidenceId =
-        record.restartEpisode.nextRestartEvidenceId;
+    const auto episodeId = record.restartEpisode.episodeId;
+    const auto nextEvidenceId = record.restartEpisode.nextRestartEvidenceId;
     record.restartEpisode = RestartEpisodeEvidence{};
     record.restartEpisode.episodeId = episodeId;
     record.restartEpisode.nextRestartEvidenceId = nextEvidenceId;

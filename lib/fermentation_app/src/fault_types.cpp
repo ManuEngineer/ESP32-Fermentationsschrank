@@ -14,12 +14,8 @@ struct FaultCodeInfo {
 
 constexpr FaultCodeInfo kCodeInfo[] = {
     {FaultCode::P1_001, FaultClass::ProcessWarning, 1U, "P1-001"},
-    {FaultCode::P1_002, FaultClass::ProcessWarning, 2U, "P1-002"},
-    {FaultCode::P1_003, FaultClass::ProcessWarning, 3U, "P1-003"},
     {FaultCode::O2_001, FaultClass::OperatingFault, 1U, "O2-001"},
     {FaultCode::O2_002, FaultClass::OperatingFault, 2U, "O2-002"},
-    {FaultCode::O2_003, FaultClass::OperatingFault, 3U, "O2-003"},
-    {FaultCode::O2_004, FaultClass::OperatingFault, 4U, "O2-004"},
     {FaultCode::S3_001, FaultClass::LatchedSafetyFault, 1U, "S3-001"},
     {FaultCode::S3_002, FaultClass::LatchedSafetyFault, 2U, "S3-002"},
     {FaultCode::S3_003, FaultClass::LatchedSafetyFault, 3U, "S3-003"},
@@ -38,7 +34,6 @@ constexpr FaultCodeInfo kCodeInfo[] = {
     {FaultCode::Y4_007, FaultClass::LatchedSystemFault, 7U, "Y4-007"},
     {FaultCode::Y4_008, FaultClass::LatchedSystemFault, 8U, "Y4-008"},
     {FaultCode::Y4_009, FaultClass::LatchedSystemFault, 9U, "Y4-009"},
-    {FaultCode::Y4_011, FaultClass::LatchedSystemFault, 10U, "Y4-011"},
 };
 
 const FaultCodeInfo* info(FaultCode code) {
@@ -70,7 +65,7 @@ bool isKnownFaultClass(FaultClass value) {
 bool isKnownFaultCode(FaultCode value) { return info(value) != nullptr; }
 
 FaultCode normalizeFaultCode(FaultCode value) {
-    return isKnownFaultCode(value) ? value : FaultCode::Y4_011;
+    return isKnownFaultCode(value) ? value : FaultCode::Y4_008;
 }
 
 FaultClass faultClassForCode(FaultCode value) {
@@ -86,7 +81,7 @@ std::uint8_t faultCodePriority(FaultCode value) {
 
 const char* faultCodeText(FaultCode value) {
     const auto* entry = info(normalizeFaultCode(value));
-    return entry == nullptr ? "Y4-011" : entry->text;
+    return entry == nullptr ? "Y4-008" : entry->text;
 }
 
 bool isLatchedFaultClass(FaultClass value) {
@@ -119,7 +114,7 @@ bool equalFaultCoreSnapshot(const FaultCoreSnapshot& left,
             a.createdAtMonotonicMillis != b.createdAtMonotonicMillis ||
             a.status != b.status || a.disposition != b.disposition ||
             a.causeActive != b.causeActive || a.latched != b.latched ||
-            a.controlledRestartUsed != b.controlledRestartUsed ||
+            a.automaticRecoveryRestartUsed != b.automaticRecoveryRestartUsed ||
             a.faultRevision != b.faultRevision ||
             a.primaryFaultId != b.primaryFaultId ||
             a.diagnosticSequenceHighWatermark !=
@@ -268,10 +263,10 @@ bool FaultCore::markControlledRestartUsed(FaultInstanceId id,
     auto* record = findMutable(id);
     if (record == nullptr || record->status == FaultStatus::Cleared ||
         record->faultRevision != expectedRevision ||
-        record->controlledRestartUsed || !incrementRevision()) {
+        record->automaticRecoveryRestartUsed || !incrementRevision()) {
         return false;
     }
-    record->controlledRestartUsed = true;
+    record->automaticRecoveryRestartUsed = true;
     record->faultRevision = state_.revision;
     recomputeProjection();
     return true;

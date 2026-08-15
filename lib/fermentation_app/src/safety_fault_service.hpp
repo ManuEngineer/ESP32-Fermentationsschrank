@@ -89,21 +89,9 @@ class SafetyFaultService final {
         FaultInstanceId id, std::uint32_t expectedRevision);
     [[nodiscard]] SafetyServiceStatus clearFaultCause(
         FaultInstanceId id, std::uint32_t expectedRevision);
-    [[nodiscard]] std::optional<FaultResetAuthorization>
-    prepareFaultResetAuthorization(FaultInstanceId id,
-                                   std::uint32_t expectedRevision);
     [[nodiscard]] SafetyResetResult resetFault(
         FaultInstanceId id, std::uint32_t expectedRevision,
         ActuatorPlanner* planner = nullptr);
-    // Source-compatibility shield only. The bool is deliberately ignored and
-    // can never authorize a reset.
-    [[nodiscard]] SafetyResetResult resetFault(
-        FaultInstanceId id, std::uint32_t expectedRevision,
-        bool authorizationSatisfied, ActuatorPlanner* planner = nullptr);
-    [[nodiscard]] std::optional<SafetyRecoveryRequest> issueSafetyRecovery(
-        const SafetyRecoveryQualification& qualification);
-    [[nodiscard]] SafetyServiceStatus completeSafetyRecovery(
-        const SafetyRecoveryRequest& request, bool succeeded);
     [[nodiscard]] SafetyServiceStatus requestControlledSafetyRestart(
         FaultInstanceId id, std::uint32_t expectedRevision);
     [[nodiscard]] SafetyServiceStatus advanceStableWindow(bool stable);
@@ -117,9 +105,6 @@ class SafetyFaultService final {
     // niemals die Autoritaet.
     void projectTo(RunCommandState& state) const;
     [[nodiscard]] ActuatorSafetyGateInput actuatorGateInput() const;
-    // Caller-supplied copies are never treated as an authority.
-    [[nodiscard]] ActuatorSafetyGateInput actuatorGateInput(
-        const std::optional<SafetyRecoveryRequest>&) const;
 
    private:
     [[nodiscard]] SafetyServiceStatus persistCoreMutation(
@@ -141,8 +126,6 @@ class SafetyFaultService final {
     SafetyStateRecord record_;
     bool started_{false};
     bool configurationGateQualified_{false};
-    std::optional<SafetyRecoveryRequest> safetyRecoveryCapability_;
-    std::uint64_t nextAuthorityToken_{1U};
 };
 
 }  // namespace fermentation

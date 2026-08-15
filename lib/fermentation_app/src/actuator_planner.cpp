@@ -1078,31 +1078,11 @@ ActuatorPlanTickResult ActuatorPlanner::runPhaseB(
     }
 
     if (input.safetyGate.status == ActuatorSafetyGateStatus::SafetyRecovery) {
-        if (!input.safetyGate.safetyRecovery.has_value() ||
-            !input.safetyGate.hasRecoveryAuthority() ||
-            !input.safetyGate.safetyRecovery->structurallyValid() ||
-            input.newEvaluation.has_value() ||
-            !input.temperatureControlledPhase ||
-            state_.latchedWatchdogFault.has_value() ||
-            !isStructurallyValidContext(
-                input.safetyGate.safetyRecovery->contextAtQualification()) ||
-            input.safetyGate.safetyRecovery->createdAtMonotonicMillis() > now) {
-            return rejectToIdle(admission, now,
-                                ActuatorPlanStatus::InvalidInput,
-                                ActuatorPlanReason::MalformedInput);
-        }
-        const auto& recovery = *input.safetyGate.safetyRecovery;
-        AcceptedControlCommand candidate;
-        candidate.sequence = recovery.sequence();
-        candidate.direction = recovery.recoveryDirection();
-        candidate.timeQuote = recovery.timeQuote();
-        candidate.demandClass = ActuatorDemandClass::NormalDemand;
-        candidate.contextAtAcceptance = recovery.contextAtQualification();
-        const auto result = evaluateHeatingCoolingDemand(
-            candidate, ActuatorAdmissionOutcome::Accepted, now);
-        auto qualifiedResult = result;
-        qualifiedResult.reason = ActuatorPlanReason::SafetyRecovery;
-        return qualifiedResult;
+        // R3 keeps S3-004 contract-only until #35 supplies a qualified
+        // recovery producer. A bare recovery enum is never an actor
+        // authority and therefore fails closed at the existing #23 gate.
+        return rejectToIdle(admission, now, ActuatorPlanStatus::InvalidInput,
+                            ActuatorPlanReason::MalformedInput);
     }
 
     // I-4: bereits gelatchter Watchdog-Fehler.

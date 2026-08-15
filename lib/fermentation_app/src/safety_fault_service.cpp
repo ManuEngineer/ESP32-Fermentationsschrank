@@ -14,6 +14,28 @@ bool increment(std::uint32_t& value) {
     return true;
 }
 
+std::size_t persistentLatchCount(const FaultCore& core) {
+    const auto snapshot = core.snapshot();
+    std::size_t count = 0U;
+    for (std::size_t index = 0U; index < snapshot.count; ++index) {
+        const auto& fault = snapshot.records[index];
+        if (isLatchedFaultClass(fault.faultClass) &&
+            fault.status != FaultStatus::Cleared) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool hasOtherBlockingFault(const FaultCore& core, FaultInstanceId target) {
+    const auto snapshot = core.snapshot();
+    for (std::size_t index = 0U; index < snapshot.count; ++index) {
+        const auto& fault = snapshot.records[index];
+        if (fault.instanceId != target && isBlockingFault(fault)) return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 SafetyFaultService::SafetyFaultService(
@@ -51,40 +73,33 @@ SafetyServiceStatus SafetyFaultService::begin(
     }
     record_ = loaded.record;
     configurationGateQualified_ = false;
-    safetyRecoveryCapability_.reset();
     started_ = true;
     return SafetyServiceStatus::Ready;
 }
 
 SafetyBootResult SafetyFaultService::evaluateBoot() {
     SafetyBootResult result;
-    if (!started_) {
-        result.status = SafetyServiceStatus::NotStarted;
-        return result;
-    }
+    if (!started_) return result;
+
     const auto resetSnapshot = resetController_.observeBootReset();
     const bool sameObservation =
         resetSnapshot.valid && resetSnapshot.observationId != 0U &&
         resetSnapshot.observationId == record_.lastResetObservationId;
     SafetyStateRecord candidate = record_;
     FaultCore stagedCore = faultCore_;
-    const bool safeBootBefore = record_.safeBootRequired;
+    const bool safeBootBefore = candidate.safeBootRequired;
     result.restart = restartEpisode_.evaluateBoot(candidate, resetSnapshot);
-    bool recordNeedsCommit = result.restart.recordNeedsCommit;
-    if (!resetSnapshot.valid || resetSnapshot.observationId == 0U) {
-        candidate.safeBootRequired = true;
-        recordNeedsCommit = true;
-    }
+    bool needsCommit = result.restart.recordNeedsCommit;
 
     FaultCode bootFault = FaultCode::Unknown;
-    if (result.restart.status == RestartBootStatus::UnknownFailClosed) {
-        bootFault = FaultCode::Y4_006;
-    } else if (result.restart.status == RestartBootStatus::EvidenceMismatch ||
-               result.restart.status == RestartBootStatus::Overflow) {
-        bootFault = FaultCode::Y4_011;
+    if (result.restart.status == RestartBootStatus::UnknownFailClosed ||
+        result.restart.status == RestartBootStatus::EvidenceMismatch ||
+        result.restart.status == RestartBootStatus::Overflow) {
+        bootFault = FaultCode::Y4_008;
     } else if (result.restart.status == RestartBootStatus::SafeBootRequired) {
-        bootFault = FaultCode::Y4_007;
+        bootFault = FaultCode::Y4_009;
     }
+
     FaultInstanceId bootFaultId;
     if (bootFault != FaultCode::Unknown &&
         (!sameObservation ||
@@ -92,48 +107,42 @@ SafetyBootResult SafetyFaultService::evaluateBoot() {
         const auto raised = stagedCore.raise(
             {bootFault, 24U, candidate.restartEpisode.episodeId,
              timeSource_.monotonicMillis(), std::nullopt});
-        bootFaultId = raised.instanceId;
-        candidate.safeBootRequired = true;
-        recordNeedsCommit = true;
+        if (raised.status != FaultRaiseStatus::InvalidInput) {
+            bootFaultId = raised.instanceId;
+            candidate.safeBootRequired = true;
+            needsCommit = true;
+        }
     }
+
+    const bool authorizedExit =
+        !sameObservation &&
+        result.restart.status == RestartBootStatus::AuthorizedReset;
+    if (authorizedExit) {
+        const bool checksPass = !stagedCore.hasBlockingFault() &&
+                                configurationGateQualified_ &&
+                                !candidate.capacityFailureLatched;
+        if (!checksPass)
+            candidate.safeBootRequired = true;
+        else
+            candidate.safeBootRequired = false;
+        needsCommit =
+            needsCommit || candidate.safeBootRequired != safeBootBefore;
+        result.restart.safeBootRequired = candidate.safeBootRequired;
+    }
+
     if (!copyCoreToRecord(candidate, stagedCore)) {
         record_.safeBootRequired = true;
         result.status = SafetyServiceStatus::PersistentWriteFailed;
         result.safeBootRequired = true;
         return result;
     }
-    recordNeedsCommit =
-        recordNeedsCommit || candidate.safeBootRequired != safeBootBefore;
-
-    bool safeBootExitRejected = false;
-    const bool authorizedReset =
-        !sameObservation &&
-        result.restart.status == RestartBootStatus::AuthorizedReset;
-    if (authorizedReset) {
-        const bool fullyQualified =
-            !stagedCore.hasBlockingFault() && configurationGateQualified_ &&
-            candidate.restartEvidence.state != RestartEvidenceState::Pending &&
-            !candidate.faultResetBootIntent.pending;
-        if (fullyQualified) {
-            candidate.safeBootRequired = false;
-        } else {
-            candidate.safeBootRequired = true;
-            safeBootExitRejected = true;
-        }
-        result.restart.safeBootRequired = candidate.safeBootRequired;
-        recordNeedsCommit =
-            recordNeedsCommit || candidate.safeBootRequired != safeBootBefore;
-    }
-
-    if (recordNeedsCommit) {
-        if (!increment(candidate.recordRevision)) {
-            record_.safeBootRequired = true;
-            result.status = SafetyServiceStatus::PersistentWriteFailed;
-            result.safeBootRequired = true;
-            return result;
-        }
-        if (stateStore_.commit(candidate).status !=
-            SafetyRecordCommitStatus::Committed) {
+    needsCommit = needsCommit || candidate.safeBootRequired != safeBootBefore;
+    if (needsCommit) {
+        if (!increment(candidate.recordRevision) ||
+            stateStore_.commit(candidate).status !=
+                SafetyRecordCommitStatus::Committed) {
+            // A failed safety commit never grants an Allowed projection. The
+            // RAM lock is deliberately retained even when persistence failed.
             record_.safeBootRequired = true;
             result.status = SafetyServiceStatus::PersistentWriteFailed;
             result.safeBootRequired = true;
@@ -143,8 +152,7 @@ SafetyBootResult SafetyFaultService::evaluateBoot() {
         record_ = candidate;
     }
 
-    result.safeBootRequired =
-        record_.safeBootRequired || result.restart.safeBootRequired;
+    result.safeBootRequired = record_.safeBootRequired;
     result.status = result.safeBootRequired
                         ? SafetyServiceStatus::SafetyRejected
                         : SafetyServiceStatus::Ready;
@@ -165,10 +173,11 @@ SafetyBootResult SafetyFaultService::evaluateBoot() {
         recordEvent(FaultEventType::SafeBootEntered, faultCore_.dominant(),
                     true);
     }
-    if (authorizedReset) {
-        recordEvent(safeBootExitRejected ? FaultEventType::SafeBootExitRejected
-                                         : FaultEventType::SafeBootExitDecided,
-                    faultCore_.dominant(), !safeBootExitRejected);
+    if (authorizedExit) {
+        recordEvent(record_.safeBootRequired
+                        ? FaultEventType::SafeBootExitRejected
+                        : FaultEventType::SafeBootExitDecided,
+                    faultCore_.dominant(), !record_.safeBootRequired);
     }
     return result;
 }
@@ -180,35 +189,26 @@ bool SafetyFaultService::copyCoreToRecord(SafetyStateRecord& candidate) const {
 bool SafetyFaultService::copyCoreToRecord(SafetyStateRecord& candidate,
                                           const FaultCore& core) const {
     const auto snapshot = core.snapshot();
-    if (snapshot.count > candidate.latches.size()) return false;
+    if (persistentLatchCount(core) > candidate.latches.size()) return false;
     candidate.faultRevision = snapshot.revision;
     candidate.latchCount = 0U;
     candidate.dominantCode = FaultCode::Unknown;
     for (std::size_t index = 0U; index < snapshot.count; ++index) {
         const auto& fault = snapshot.records[index];
-        const bool isResetIntentTarget =
-            candidate.faultResetBootIntent.pending &&
-            candidate.faultResetBootIntent.targetFault == fault.instanceId;
         if (!isLatchedFaultClass(fault.faultClass) ||
-            (fault.status == FaultStatus::Cleared && !isResetIntentTarget)) {
+            fault.status == FaultStatus::Cleared) {
             continue;
         }
         if (candidate.latchCount >= candidate.latches.size()) return false;
         candidate.latches[candidate.latchCount++] = fault;
     }
-    // The sequence is a persistent high-watermark. It must not be rebuilt from
-    // the currently retained latch set because cleared faults are intentionally
-    // absent from that set.
     candidate.faultInstanceSequence = snapshot.instanceSequenceHighWatermark;
     if (const auto* dominant = core.dominant();
         dominant != nullptr && isLatchedFaultClass(dominant->faultClass) &&
         dominant->status != FaultStatus::Cleared) {
         candidate.dominantCode = dominant->code;
     }
-    candidate.safeBootRequired =
-        candidate.safeBootRequired ||
-        (core.dominant() != nullptr &&
-         core.dominant()->faultClass == FaultClass::LatchedSystemFault);
+    if (core.hasBlockingFault()) candidate.safeBootRequired = true;
     return true;
 }
 
@@ -233,11 +233,9 @@ SafetyServiceStatus SafetyFaultService::persistCoreMutation(
 SafetyServiceStatus SafetyFaultService::persistSafeBootLock() {
     SafetyStateRecord candidate = record_;
     candidate.safeBootRequired = true;
-    if (!increment(candidate.recordRevision)) {
-        return SafetyServiceStatus::PersistentWriteFailed;
-    }
-    const auto result = stateStore_.commit(candidate);
-    if (result.status != SafetyRecordCommitStatus::Committed) {
+    if (!increment(candidate.recordRevision) ||
+        stateStore_.commit(candidate).status !=
+            SafetyRecordCommitStatus::Committed) {
         record_.safeBootRequired = true;
         return SafetyServiceStatus::PersistentWriteFailed;
     }
@@ -248,24 +246,41 @@ SafetyServiceStatus SafetyFaultService::persistSafeBootLock() {
 SafetyServiceStatus SafetyFaultService::raiseFault(
     const FaultRaiseRequest& request) {
     if (!started_) return SafetyServiceStatus::NotStarted;
+    const auto normalized = normalizeFaultCode(request.code);
+    const bool latch = isLatchedFaultClass(faultClassForCode(normalized));
+    if (latch && persistentLatchCount(faultCore_) >= kMaximumPersistedLatches) {
+        SafetyStateRecord candidate = record_;
+        candidate.safeBootRequired = true;
+        candidate.capacityFailureLatched = true;
+        if (!increment(candidate.capacityFailureRevision)) {
+            candidate.capacityFailureRevision = 1U;
+        }
+        candidate.capacityFailureSourceKey = request.sourceKey;
+        candidate.capacityFailureCorrelationKey = request.correlationKey;
+        if (!increment(candidate.recordRevision) ||
+            stateStore_.commit(candidate).status !=
+                SafetyRecordCommitStatus::Committed) {
+            record_.safeBootRequired = true;
+            return SafetyServiceStatus::PersistentWriteFailed;
+        }
+        record_ = candidate;
+        return SafetyServiceStatus::FaultCapacityReached;
+    }
     const FaultCoreSnapshot before = faultCore_.snapshot();
     const auto raised = faultCore_.raise(request);
-    if (raised.status == FaultRaiseStatus::CapacityReached) {
+    if (raised.status == FaultRaiseStatus::CapacityReached ||
+        raised.status == FaultRaiseStatus::RevisionOverflow) {
         record_.safeBootRequired = true;
-        const auto persistStatus = persistCoreMutation(before);
-        return persistStatus == SafetyServiceStatus::Ready
+        record_.capacityFailureLatched = true;
+        record_.capacityFailureSourceKey = request.sourceKey;
+        record_.capacityFailureCorrelationKey = request.correlationKey;
+        const auto status = persistCoreMutation(before);
+        return status == SafetyServiceStatus::Ready
                    ? SafetyServiceStatus::FaultCapacityReached
-                   : persistStatus;
+                   : status;
     }
     if (raised.status == FaultRaiseStatus::InvalidInput) {
         return SafetyServiceStatus::InvalidFault;
-    }
-    if (raised.status == FaultRaiseStatus::RevisionOverflow) {
-        record_.safeBootRequired = true;
-        const auto persistStatus = persistCoreMutation(before);
-        return persistStatus == SafetyServiceStatus::Ready
-                   ? SafetyServiceStatus::PersistentWriteFailed
-                   : persistStatus;
     }
     const auto* fault = faultCore_.find(raised.instanceId);
     const auto status = persistCoreMutation(before);
@@ -278,7 +293,6 @@ SafetyServiceStatus SafetyFaultService::raiseFault(
 
 SafetyServiceStatus SafetyFaultService::consumeWatchdogEvidence(
     const ActuatorWatchdogFaultEvidence& evidence) {
-    if (!started_) return SafetyServiceStatus::NotStarted;
     return raiseFault(
         {FaultCode::S3_008, 23U,
          static_cast<std::uint32_t>(
@@ -290,12 +304,32 @@ SafetyServiceStatus SafetyFaultService::consumeWatchdogEvidence(
 SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
     ConfigurationSafetyStatus status, std::uint32_t sourceKey,
     std::uint32_t correlationKey) {
-    FaultCode code = FaultCode::Unknown;
     switch (status) {
         case ConfigurationSafetyStatus::Operational:
             configurationGateQualified_ = true;
             return started_ ? SafetyServiceStatus::Ready
                             : SafetyServiceStatus::NotStarted;
+        case ConfigurationSafetyStatus::ConfigurationRuntimeFailure:
+            status = ConfigurationSafetyStatus::ConfigurationRuntimeFailure;
+            break;
+        case ConfigurationSafetyStatus::ConfigurationCommitIndeterminate:
+            status =
+                ConfigurationSafetyStatus::ConfigurationCommitIndeterminate;
+            break;
+        case ConfigurationSafetyStatus::ConfigurationUnavailable:
+            status = ConfigurationSafetyStatus::ConfigurationUnavailable;
+            break;
+        case ConfigurationSafetyStatus::ConfigurationIntegrityFailure:
+            status = ConfigurationSafetyStatus::ConfigurationIntegrityFailure;
+            break;
+        case ConfigurationSafetyStatus::Unknown:
+            configurationGateQualified_ = false;
+            return raiseFault({FaultCode::Y4_008, sourceKey, correlationKey,
+                               timeSource_.monotonicMillis(), std::nullopt});
+    }
+    configurationGateQualified_ = false;
+    FaultCode code = FaultCode::Y4_003;
+    switch (status) {
         case ConfigurationSafetyStatus::ConfigurationRuntimeFailure:
             code = FaultCode::Y4_001;
             break;
@@ -308,11 +342,10 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
         case ConfigurationSafetyStatus::ConfigurationIntegrityFailure:
             code = FaultCode::Y4_004;
             break;
+        case ConfigurationSafetyStatus::Operational:
         case ConfigurationSafetyStatus::Unknown:
-            code = FaultCode::Y4_011;
             break;
     }
-    configurationGateQualified_ = false;
     return raiseFault({code, sourceKey, correlationKey,
                        timeSource_.monotonicMillis(), std::nullopt});
 }
@@ -322,9 +355,9 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
     std::uint32_t correlationKey) {
     switch (status) {
         case ConfigurationServiceMode::Operational:
-            configurationGateQualified_ = true;
-            return started_ ? SafetyServiceStatus::Ready
-                            : SafetyServiceStatus::NotStarted;
+            return consumeConfigurationStatus(
+                ConfigurationSafetyStatus::Operational, sourceKey,
+                correlationKey);
         case ConfigurationServiceMode::CommitIndeterminate:
             return consumeConfigurationStatus(
                 ConfigurationSafetyStatus::ConfigurationCommitIndeterminate,
@@ -341,8 +374,7 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
         case ConfigurationServiceMode::BootstrapFinalizationPending:
         case ConfigurationServiceMode::CommitInProgress:
             return consumeConfigurationStatus(
-                ConfigurationSafetyStatus::ConfigurationUnavailable, sourceKey,
-                correlationKey);
+                ConfigurationSafetyStatus::Unknown, sourceKey, correlationKey);
     }
     return consumeConfigurationStatus(ConfigurationSafetyStatus::Unknown,
                                       sourceKey, correlationKey);
@@ -352,6 +384,11 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
     ConfigurationCommitStatus status, std::uint32_t sourceKey,
     std::uint32_t correlationKey) {
     switch (status) {
+        case ConfigurationCommitStatus::Activated:
+        case ConfigurationCommitStatus::NoChange:
+            return consumeConfigurationStatus(
+                ConfigurationSafetyStatus::Operational, sourceKey,
+                correlationKey);
         case ConfigurationCommitStatus::ConfigurationCommitIndeterminate:
             return consumeConfigurationStatus(
                 ConfigurationSafetyStatus::ConfigurationCommitIndeterminate,
@@ -360,24 +397,15 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
             return consumeConfigurationStatus(
                 ConfigurationSafetyStatus::ConfigurationRuntimeFailure,
                 sourceKey, correlationKey);
-        case ConfigurationCommitStatus::Activated:
-        case ConfigurationCommitStatus::NoChange:
-            configurationGateQualified_ = true;
-            return started_ ? SafetyServiceStatus::Ready
-                            : SafetyServiceStatus::NotStarted;
-        case ConfigurationCommitStatus::PreviewNotFound:
-        case ConfigurationCommitStatus::PreviewSuperseded:
-        case ConfigurationCommitStatus::ConfigurationMutationBusy:
-        case ConfigurationCommitStatus::ConfigurationConflictFailure:
-        case ConfigurationCommitStatus::ConfigurationValidationFailure:
         case ConfigurationCommitStatus::PersistenceFailure:
         case ConfigurationCommitStatus::CapacityFailure:
             return consumeConfigurationStatus(
                 ConfigurationSafetyStatus::ConfigurationUnavailable, sourceKey,
                 correlationKey);
+        default:
+            return consumeConfigurationStatus(
+                ConfigurationSafetyStatus::Unknown, sourceKey, correlationKey);
     }
-    return consumeConfigurationStatus(ConfigurationSafetyStatus::Unknown,
-                                      sourceKey, correlationKey);
 }
 
 SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
@@ -387,9 +415,9 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
         case ConfigurationRecoveryStatus::RuntimeReady:
         case ConfigurationRecoveryStatus::FactoryInitializationCompleted:
         case ConfigurationRecoveryStatus::FactoryResetCompleted:
-            configurationGateQualified_ = true;
-            return started_ ? SafetyServiceStatus::Ready
-                            : SafetyServiceStatus::NotStarted;
+            return consumeConfigurationStatus(
+                ConfigurationSafetyStatus::Operational, sourceKey,
+                correlationKey);
         case ConfigurationRecoveryStatus::ConfigurationIntegrityFailure:
         case ConfigurationRecoveryStatus::UnsupportedNewerConfigurationSchema:
             return consumeConfigurationStatus(
@@ -410,31 +438,22 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
             return consumeConfigurationStatus(
                 ConfigurationSafetyStatus::ConfigurationUnavailable, sourceKey,
                 correlationKey);
-        case ConfigurationRecoveryStatus::ConfigurationMutationBusy:
-        case ConfigurationRecoveryStatus::ConfigurationModelBudgetBusy:
-        case ConfigurationRecoveryStatus::StateTransitionRejected:
-        case ConfigurationRecoveryStatus::CounterOverflow:
-            configurationGateQualified_ = false;
+        default:
             return consumeConfigurationStatus(
                 ConfigurationSafetyStatus::Unknown, sourceKey, correlationKey);
     }
-    return consumeConfigurationStatus(ConfigurationSafetyStatus::Unknown,
-                                      sourceKey, correlationKey);
 }
 
 SafetyServiceStatus SafetyFaultService::consumeConfigurationRecoveryResult(
     const ConfigurationRecoveryResult& result, std::uint32_t sourceKey,
     std::uint32_t correlationKey) {
-    // This is the producer-facing bridge: the real recovery result, including
-    // its safety-producer classification, is mapped once into the canonical
-    // #24 fault core. No parallel configuration fault domain is introduced.
     return consumeConfigurationStatus(result.status, sourceKey, correlationKey);
 }
 
 SafetyServiceStatus SafetyFaultService::acknowledgeFault(
     FaultInstanceId id, std::uint32_t expectedRevision) {
     if (!started_) return SafetyServiceStatus::NotStarted;
-    const FaultCoreSnapshot before = faultCore_.snapshot();
+    const auto before = faultCore_.snapshot();
     if (!faultCore_.acknowledge(id, expectedRevision)) {
         return SafetyServiceStatus::StaleFault;
     }
@@ -447,7 +466,7 @@ SafetyServiceStatus SafetyFaultService::acknowledgeFault(
 SafetyServiceStatus SafetyFaultService::clearFaultCause(
     FaultInstanceId id, std::uint32_t expectedRevision) {
     if (!started_) return SafetyServiceStatus::NotStarted;
-    const FaultCoreSnapshot before = faultCore_.snapshot();
+    const auto before = faultCore_.snapshot();
     if (!faultCore_.markCauseCleared(id, expectedRevision)) {
         return SafetyServiceStatus::StaleFault;
     }
@@ -455,88 +474,6 @@ SafetyServiceStatus SafetyFaultService::clearFaultCause(
     recordEvent(FaultEventType::FaultCauseCleared, faultCore_.find(id),
                 status == SafetyServiceStatus::Ready);
     return status;
-}
-
-std::optional<SafetyRecoveryRequest> SafetyFaultService::issueSafetyRecovery(
-    const SafetyRecoveryQualification& qualification) {
-    if (!started_) return std::nullopt;
-    SafetyRecoveryRequest candidate(qualification, this);
-    const auto* target = faultCore_.find(qualification.targetFault);
-    bool otherBlockingFault = false;
-    const auto snapshot = faultCore_.snapshot();
-    for (std::size_t index = 0U; index < snapshot.count; ++index) {
-        if (snapshot.records[index].instanceId != qualification.targetFault &&
-            isBlockingFault(snapshot.records[index])) {
-            otherBlockingFault = true;
-            break;
-        }
-    }
-    const bool targetEligible =
-        target != nullptr && target->code == FaultCode::S3_004 &&
-        target->latched && target->causeActive &&
-        target->faultRevision == qualification.faultRevision;
-    const bool accepted = candidate.structurallyValid() && targetEligible &&
-                          !otherBlockingFault && !record_.safeBootRequired;
-    recordEvent(FaultEventType::SafetyRecoveryAttempted, target, accepted);
-    if (!accepted) {
-        recordEvent(FaultEventType::SafetyRecoveryAborted, target, false);
-        return std::nullopt;
-    }
-    safetyRecoveryCapability_ = candidate;
-    return safetyRecoveryCapability_;
-}
-
-SafetyServiceStatus SafetyFaultService::completeSafetyRecovery(
-    const SafetyRecoveryRequest& request, bool succeeded) {
-    const auto* target =
-        started_ ? faultCore_.find(request.targetFault()) : nullptr;
-    const bool sameCapability =
-        safetyRecoveryCapability_.has_value() && request.structurallyValid() &&
-        request.targetFault() == safetyRecoveryCapability_->targetFault() &&
-        request.faultRevision() == safetyRecoveryCapability_->faultRevision() &&
-        request.sequence() == safetyRecoveryCapability_->sequence() &&
-        request.issuer_ == this;
-    if (!started_ || !sameCapability || target == nullptr ||
-        target->code != FaultCode::S3_004 || !target->causeActive ||
-        target->faultRevision != request.faultRevision()) {
-        recordEvent(FaultEventType::SafetyRecoveryAborted, target, false);
-        return started_ ? SafetyServiceStatus::SafetyRejected
-                        : SafetyServiceStatus::NotStarted;
-    }
-    if (!succeeded) {
-        safetyRecoveryCapability_.reset();
-        recordEvent(FaultEventType::SafetyRecoveryAborted, target, false);
-        return SafetyServiceStatus::SafetyRejected;
-    }
-    safetyRecoveryCapability_.reset();
-    recordEvent(FaultEventType::SafetyRecoverySucceeded, target, true);
-    return SafetyServiceStatus::Ready;
-}
-
-std::optional<FaultResetAuthorization>
-SafetyFaultService::prepareFaultResetAuthorization(
-    FaultInstanceId id, std::uint32_t expectedRevision) {
-    if (!started_ || !id.valid() || expectedRevision == 0U) {
-        return std::nullopt;
-    }
-    const auto* target = faultCore_.find(id);
-    if (target == nullptr ||
-        target->status != FaultStatus::CauseClearedLocked ||
-        target->causeActive || !target->latched ||
-        target->faultRevision != expectedRevision) {
-        return std::nullopt;
-    }
-    const auto snapshot = faultCore_.snapshot();
-    for (std::size_t index = 0U; index < snapshot.count; ++index) {
-        const auto& other = snapshot.records[index];
-        if (other.instanceId != id && isBlockingFault(other)) {
-            return std::nullopt;
-        }
-    }
-    if (nextAuthorityToken_ == 0U) return std::nullopt;
-    const auto token = nextAuthorityToken_++;
-    return FaultResetAuthorization{
-        id, expectedRevision, snapshot.revision, true, true, true, true, token};
 }
 
 SafetyResetResult SafetyFaultService::resetFault(FaultInstanceId id,
@@ -554,95 +491,36 @@ SafetyResetResult SafetyFaultService::resetFault(FaultInstanceId id,
         recordEvent(FaultEventType::FaultResetRejected, target, false);
         return result;
     }
-    const auto authorization =
-        prepareFaultResetAuthorization(id, expectedRevision);
-    if (!authorization.has_value()) {
+    if (target->status != FaultStatus::CauseClearedLocked ||
+        target->causeActive || hasOtherBlockingFault(faultCore_, id) ||
+        (record_.capacityFailureLatched && target->code != FaultCode::Y4_006)) {
         result.status = SafetyServiceStatus::SafetyRejected;
         recordEvent(FaultEventType::FaultResetRejected, target, false);
         return result;
     }
-    const FaultCode targetCode = target->code;
-    if (targetCode == FaultCode::S3_008 && planner == nullptr) {
+    const auto targetCode = target->code;
+    FaultCore staged = faultCore_;
+    if (!staged.clearAfterVerifiedReset(id, expectedRevision)) {
         result.status = SafetyServiceStatus::SafetyRejected;
-        recordEvent(FaultEventType::FaultResetRejected, target, false);
-        return result;
-    }
-
-    RunCommandState commandState;
-    projectTo(commandState);
-    FaultResetRequest request;
-    request.envelope.id =
-        nextAuthorityToken_ == 0U ? 1U : nextAuthorityToken_++;
-    request.envelope.monotonicMillis = timeSource_.monotonicMillis();
-    request.envelope.expectedStateSequence =
-        commandState.processState.transitionSequence;
-    request.envelope.expectedFaultRevision = expectedRevision;
-    request.envelope.confirmed = true;
-    request.targetFault = id;
-    const auto decision =
-        decideFaultReset(commandState, request, *authorization);
-    if (!decision.proposed()) {
-        result.status = SafetyServiceStatus::SafetyRejected;
-        recordEvent(FaultEventType::FaultResetRejected, target, false);
-        return result;
-    }
-
-    FaultCore stagedCore = faultCore_;
-    if (!stagedCore.clearAfterVerifiedReset(id, expectedRevision)) {
-        result.status = SafetyServiceStatus::SafetyRejected;
-        recordEvent(FaultEventType::FaultResetRejected, target, false);
         return result;
     }
     SafetyStateRecord candidate = record_;
-    if (!restartEpisode_.prepareFaultResetBootIntent(candidate, id,
-                                                     expectedRevision) ||
-        !copyCoreToRecord(candidate, stagedCore) ||
-        !increment(candidate.recordRevision)) {
+    if (!copyCoreToRecord(candidate, staged) ||
+        !increment(candidate.recordRevision) ||
+        stateStore_.commit(candidate).status !=
+            SafetyRecordCommitStatus::Committed) {
+        record_.safeBootRequired = true;
         result.status = SafetyServiceStatus::PersistentWriteFailed;
+        recordEvent(FaultEventType::FaultResetRejected, target, false);
         return result;
     }
-    const auto commit = stateStore_.commit(candidate);
-    if (commit.status != SafetyRecordCommitStatus::Committed) {
-        result.status = SafetyServiceStatus::PersistentWriteFailed;
-        return result;
-    }
-    // Write-before-apply: neither FaultCore nor the live record changes before
-    // the complete reset intent and cleared target are committed.
-    faultCore_ = stagedCore;
+    faultCore_ = staged;
     record_ = candidate;
-    recordEvent(FaultEventType::FaultResetCommitted, faultCore_.find(id), true);
     if (planner != nullptr && targetCode == FaultCode::S3_008) {
         planner->applyExternalWatchdogFaultReset(timeSource_.monotonicMillis());
     }
-    const auto resetResult = resetController_.requestRestart(
-        {device_platform::ControlledRestartPurpose::AuthorizedFaultReset});
-    if (resetResult == device_platform::ControlledRestartResult::Rejected) {
-        static_cast<void>(persistSafeBootLock());
-        result.status = SafetyServiceStatus::ResetBootRejected;
-        return result;
-    }
-    if (resetResult ==
-        device_platform::ControlledRestartResult::OutcomeUnknown) {
-        static_cast<void>(persistSafeBootLock());
-        result.status = SafetyServiceStatus::ResetBootOutcomeUnknown;
-        return result;
-    }
     result.status = SafetyServiceStatus::ResetCommitted;
-    return result;
-}
-
-SafetyResetResult SafetyFaultService::resetFault(
-    FaultInstanceId id, std::uint32_t expectedRevision,
-    bool /*authorizationSatisfied*/, ActuatorPlanner* planner) {
-    // Legacy callers cannot turn a positive boolean into a reset authority.
-    SafetyResetResult result;
-    result.targetFault = id;
-    result.status = started_ ? SafetyServiceStatus::SafetyRejected
-                             : SafetyServiceStatus::NotStarted;
-    recordEvent(FaultEventType::FaultResetRejected,
-                started_ ? faultCore_.find(id) : nullptr, false);
-    static_cast<void>(expectedRevision);
-    static_cast<void>(planner);
+    recordEvent(FaultEventType::FaultResetCommitted, faultCore_.find(id), true);
     return result;
 }
 
@@ -650,36 +528,31 @@ SafetyServiceStatus SafetyFaultService::requestControlledSafetyRestart(
     FaultInstanceId id, std::uint32_t expectedRevision) {
     if (!started_) return SafetyServiceStatus::NotStarted;
     const auto* target = faultCore_.find(id);
-    if (target == nullptr || target->status == FaultStatus::Cleared ||
-        !target->latched || target->faultRevision != expectedRevision ||
-        target->controlledRestartUsed || record_.safeBootRequired) {
+    if (target == nullptr || !target->latched || !target->causeActive ||
+        target->faultRevision != expectedRevision ||
+        target->automaticRecoveryRestartUsed || record_.safeBootRequired) {
         return SafetyServiceStatus::SafetyRejected;
     }
-    FaultCore stagedCore = faultCore_;
-    if (!stagedCore.markControlledRestartUsed(id, expectedRevision)) {
-        return SafetyServiceStatus::PersistentWriteFailed;
+    FaultCore staged = faultCore_;
+    if (!staged.markControlledRestartUsed(id, expectedRevision)) {
+        return SafetyServiceStatus::SafetyRejected;
     }
-    const auto stagedRevision = stagedCore.snapshot().revision;
     SafetyStateRecord candidate = record_;
-    if (!copyCoreToRecord(candidate, stagedCore) ||
-        !restartEpisode_.prepareControlledRestart(candidate, id,
-                                                  stagedRevision) ||
-        !increment(candidate.recordRevision)) {
+    if (!restartEpisode_.prepareControlledRestart(candidate, id,
+                                                  staged.snapshot().revision) ||
+        !copyCoreToRecord(candidate, staged) ||
+        !increment(candidate.recordRevision) ||
+        stateStore_.commit(candidate).status !=
+            SafetyRecordCommitStatus::Committed) {
+        record_.safeBootRequired = true;
         return SafetyServiceStatus::PersistentWriteFailed;
     }
-    candidate.faultRevision = stagedRevision;
-    const auto commit = stateStore_.commit(candidate);
-    if (commit.status != SafetyRecordCommitStatus::Committed) {
-        static_cast<void>(persistSafeBootLock());
-        return SafetyServiceStatus::PersistentWriteFailed;
-    }
-    faultCore_ = stagedCore;
+    faultCore_ = staged;
     record_ = candidate;
-    const auto resetResult = resetController_.requestRestart(
-        {device_platform::ControlledRestartPurpose::ControlledSafetyRestart});
-    if (resetResult != device_platform::ControlledRestartResult::Accepted) {
+    const auto restartResult = resetController_.requestRestart();
+    if (restartResult != device_platform::RestartRequestResult::Accepted) {
         static_cast<void>(persistSafeBootLock());
-        return resetResult == device_platform::ControlledRestartResult::Rejected
+        return restartResult == device_platform::RestartRequestResult::Rejected
                    ? SafetyServiceStatus::ResetBootRejected
                    : SafetyServiceStatus::ResetBootOutcomeUnknown;
     }
@@ -689,22 +562,20 @@ SafetyServiceStatus SafetyFaultService::requestControlledSafetyRestart(
 SafetyServiceStatus SafetyFaultService::advanceStableWindow(bool stable) {
     if (!started_) return SafetyServiceStatus::NotStarted;
     SafetyStateRecord candidate = record_;
-    const bool wasRunning = candidate.restartEpisode.stableWindowRunning;
-    const auto wasStarted =
+    const auto beforeRunning = candidate.restartEpisode.stableWindowRunning;
+    const auto beforeStart =
         candidate.restartEpisode.stableWindowStartedAtMillis;
     const bool closed = restartEpisode_.advanceStableWindow(
         candidate, timeSource_.monotonicMillis(), stable);
-    const bool changed =
-        closed || wasRunning != candidate.restartEpisode.stableWindowRunning ||
-        wasStarted != candidate.restartEpisode.stableWindowStartedAtMillis;
-    if (!changed) return SafetyServiceStatus::Ready;
-    if (!increment(candidate.recordRevision)) {
-        static_cast<void>(persistSafeBootLock());
-        return SafetyServiceStatus::PersistentWriteFailed;
+    if (!closed &&
+        beforeRunning == candidate.restartEpisode.stableWindowRunning &&
+        beforeStart == candidate.restartEpisode.stableWindowStartedAtMillis) {
+        return SafetyServiceStatus::Ready;
     }
-    const auto commit = stateStore_.commit(candidate);
-    if (commit.status != SafetyRecordCommitStatus::Committed) {
-        static_cast<void>(persistSafeBootLock());
+    if (!increment(candidate.recordRevision) ||
+        stateStore_.commit(candidate).status !=
+            SafetyRecordCommitStatus::Committed) {
+        record_.safeBootRequired = true;
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     record_ = candidate;
@@ -717,9 +588,8 @@ SafetyServiceStatus SafetyFaultService::advanceStableWindow(bool stable) {
 }
 
 SafetyDisposition SafetyFaultService::disposition() const {
-    if (!started_ || record_.safeBootRequired) {
+    if (!started_ || record_.safeBootRequired)
         return SafetyDisposition::ImmediateStop;
-    }
     return faultCore_.disposition();
 }
 
@@ -737,46 +607,11 @@ void SafetyFaultService::projectTo(RunCommandState& state) const {
 }
 
 ActuatorSafetyGateInput SafetyFaultService::actuatorGateInput() const {
-    ActuatorSafetyGateInput result;
-    if (!started_) {
-        result.status = ActuatorSafetyGateStatus::ImmediateStop;
-        return result;
+    if (!started_ || record_.safeBootRequired ||
+        faultCore_.hasBlockingFault()) {
+        return ActuatorSafetyGateInput{ActuatorSafetyGateStatus::ImmediateStop};
     }
-    if (safetyRecoveryCapability_.has_value() &&
-        safetyRecoveryCapability_->structurallyValid()) {
-        const auto& recovery = *safetyRecoveryCapability_;
-        const auto* target = faultCore_.find(recovery.targetFault());
-        bool onlyRecoverableBlockingFault =
-            !record_.safeBootRequired && target != nullptr &&
-            target->code == FaultCode::S3_004 && target->latched &&
-            target->causeActive &&
-            target->faultRevision == recovery.faultRevision();
-        const auto snapshot = faultCore_.snapshot();
-        for (std::size_t index = 0U; index < snapshot.count; ++index) {
-            if (snapshot.records[index].instanceId != recovery.targetFault() &&
-                isBlockingFault(snapshot.records[index])) {
-                onlyRecoverableBlockingFault = false;
-            }
-        }
-        if (onlyRecoverableBlockingFault) {
-            result.status = ActuatorSafetyGateStatus::SafetyRecovery;
-            result.safetyRecovery = recovery;
-            result.authority_ = this;
-            return result;
-        }
-    }
-    result.status = record_.safeBootRequired || faultCore_.hasBlockingFault()
-                        ? ActuatorSafetyGateStatus::ImmediateStop
-                        : ActuatorSafetyGateStatus::Allowed;
-    return result;
-}
-
-ActuatorSafetyGateInput SafetyFaultService::actuatorGateInput(
-    const std::optional<SafetyRecoveryRequest>&) const {
-    // The argument is intentionally ignored. A caller may pass a copied or
-    // lookalike value, but only the service-owned capability can open this
-    // narrow gate.
-    return actuatorGateInput();
+    return ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed};
 }
 
 void SafetyFaultService::recordEvent(FaultEventType type,
