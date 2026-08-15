@@ -1,41 +1,48 @@
 # Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion
 
-## Planrevision 3 – PLAN_R3_PENDING_OWNER_APPROVAL
+## Planrevision 4 – PLAN_R4_PENDING_OWNER_APPROVAL
 
 | Feld | Verbindlicher Stand |
 |---|---|
 | Issue | #24 – `[E3.5] Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion` |
 | Draft-PR | #107 |
 | Branch | `agent/issue-24-fehlerklassen-safe-boot-plan` |
-| Owner-reviewter Ausgangsstand | `d46170245f70411ecf594f41335cf85f2de647d5` |
+| Owner-reviewter Ausgangsstand | `dc9e7772893d9c7d929085c4ba0a38f72bb5164a` |
 | Base/main | `b8eae5f4da5f2666b5a9bda333d115254c4db5b2` |
-| R2 | suspendiert; weder normative R3-Quelle noch umzuschreibender Code |
-| Status | `PLAN_R3_PENDING_OWNER_APPROVAL` |
+| Vorheriger freigegebener Plan | `48f343ceb49d5a80239702241ae1fbf7d4ebfcd2` |
+| R2/R3 | suspendiert beziehungsweise durch diese vollständige R4 ersetzt; kein historischer Plan ist implizite Quelle |
+| Status | `PLAN_R4_PENDING_OWNER_APPROVAL` |
 | Exakte Freigabe-SHA | SHA des vollständigen Dokumentationscommits dieser Revision |
 | Produktionscode, Tests, Adapter, Build/Toolchain, Hardware | in dieser Planungsrunde unverändert |
 
 Diese Datei ist die vollständige und eigenständige Implementierungsgrundlage
-für R3. Alte R2-/R3-Texte sind nicht implizit Bestandteil dieser Fassung. Die
-Ownerentscheidungen OD-24-01 bis OD-24-10 sind technisch konsolidiert; es
-bleibt kein Owner-Gate zum Erfinden von Codes, einer Kapazitätszahl oder einer
-Resetarchitektur. Der nächste Schritt nach diesem Commit ist ausschließlich
-Ownerreview und Freigabe der exakten SHA.
+für R4. Alte R2-/R3-Texte sind nicht implizit Bestandteil dieser Fassung. Die
+Ownerentscheidungen OD-24-01 bis OD-24-10 sowie die verbindlichen
+Ownerentscheidungen C2-Rest, C3, C6 und C7 aus dem aktuellen Auftrag sind
+vollständig eingearbeitet. R4 entscheidet weder eine physische
+Aktor-Rückmeldung noch einen realen Y4-007-Produktions-Trigger. Der nächste
+Schritt nach diesem Commit ist ausschließlich Ownerreview und Freigabe der
+exakten SHA.
 
 ## 1. Live-Baseline und Planungs-Gate
 
-Vor dieser Korrektur wurden Repository, Branch, Arbeitsbaum, `origin/main`,
-Live-Issue #24, Draft-PR #107, der aktuelle R3-Plan, der neueste SESSION
+Vor dieser Revision wurden Repository, Branch, Arbeitsbaum, `origin/main`,
+Live-Issue #24, Draft-PR #107, der aktuelle freigegebene Plan, der neueste SESSION
 HANDOVER, Root- und lokale `AGENTS.md`, `docs/AGENT_WORKFLOW.md`,
 `docs/ENGINEERING_PRINCIPLES.md`, `docs/SPECIFICATION_REVIEW.md`,
 `docs/DECISIONS.md`, ADR-013/014/018 sowie die betroffenen Safety-, Recovery-,
 Persistenz-, Command- und Acceptance-Quellen geprüft.
 
-Der Branch und PR-HEAD standen auf `d46170245f70411ecf594f41335cf85f2de647d5`; der Arbeitsbaum war sauber,
-`origin/main` stand auf `b8eae5f4…`, Issue #24 war offen und PR #107 war offen
-und Draft. Der neueste Handover bestätigte `PLAN_R3_PENDING_OWNER_APPROVAL`.
-Es wurde keine materielle Live-Abweichung gefunden, die eine der bestätigten
-Ownerentscheidungen neu öffnen würde. Der eingefrorene R2-Produktionsstand wird
-nicht zurückgebaut oder korrigiert.
+Der Branch und PR-HEAD standen auf `dc9e7772893d9c7d929085c4ba0a38f72bb5164a`; der Arbeitsbaum war sauber,
+`origin/main` stand auf `b8eae5f4da5f2666b5a9bda333d115254c4db5b2`, Issue #24 war offen und PR #107 war offen
+und Draft. Der letzte Handover bestätigte die vier offenen Owner-Gates.
+Der aktuelle Auftrag schließt diese Gates fachlich, ändert aber den
+freigegebenen R3-Plan materiell: C2 ergänzt einen typisierten Software-
+Readiness-Nachweis, C3 bindet den realen #17/#18-Ladepfad, C6 bindet die
+reason-by-reason-Projektion des realen #22-Ergebnisses und C7 bestätigt
+Contract-/Injection-only ohne Produktions-Trigger. Deshalb ist R4 eine
+vollständige neue Planrevision; der eingefrorene R2-Produktionsstand wird nicht
+zurückgebaut oder korrigiert.
 
 Die maßgeblichen Fachquellen bleiben:
 
@@ -45,7 +52,8 @@ Die maßgeblichen Fachquellen bleiben:
 - `docs/RUN_COMMANDS.md` für den bestehenden #15-Commandpfad;
 - `docs/CONFIGURATION_PERSISTENCE.md` und die öffentlichen #56/#57-Typen für
   Persistenz- und Konfigurationsresultate;
-- `docs/ACCEPTANCE_TESTS.md` für historische R2-Nachweise und R3-Zielorakel;
+- `docs/ACCEPTANCE_TESTS.md` für historische R2-Nachweise und die bisherigen
+  Zielorakel;
 - `docs/ROADMAP.md` ausschließlich für Status und Gate.
 
 ## 2. Ziel, Architektur und Abgrenzung
@@ -68,17 +76,22 @@ Der einzige Aktorpfad ist:
 ```
 
 `Unknown`, `Unresolved`, fehlende Revision, unklare Persistenz und fehlende
-Autorisierung sind niemals `Allowed`.
+Autorisierung sind niemals `Allowed`. Der reale Run-Ladepfad und das reale
+#22-Ergebnis werden an genau dieser Application-Grenze einmalig in den
+zentralen Safetypfad projiziert; weder #24 noch die Tests bilden #17/#18- oder
+#22-Fachlogik ein zweites Mal nach.
 
 Nicht Teil dieses Plans sind ESP-IDF-Resetmapping und `esp_restart()` (#29/E5),
 reale NVS-/Flashadapter, Hardware-/GPIO-/Grenzwertfestlegung, #35-Commissioning,
 die erneute Service-PIN-Verifikation, E4, #29/#90-Adapter, OTA oder eine
-Capability-/Token-/Pointerarchitektur. Die Root-Skeletons
-`src/main.cpp` und `main/app_main.cpp` werden nicht künstlich erweitert. ADR-013
-trägt die Modulgrenzen; ADR-014 und ADR-018 tragen die vorhandenen
-Determinismus- und #56/#57-Verträge. Ein neuer ADR ist nicht erforderlich.
+Capability-/Token-/Pointerarchitektur. Die notwendige native
+`FermentationApplication`-/Boot-/Recovery-Komposition wird erweitert; daraus
+folgt keine ESP-IDF-Reset- oder Hardwareadapterarbeit in `src/main.cpp` oder
+`main/app_main.cpp`. ADR-013 trägt die Modulgrenzen; ADR-014 und ADR-018 tragen
+die vorhandenen Determinismus- und #56/#57-Verträge. Ein neuer ADR ist nicht
+erforderlich.
 
-## 3. Verbindliche R3-Semantik
+## 3. Verbindliche R4-Semantik
 
 ### 3.1 Restart-Episode (OD-24-01/02)
 
@@ -137,15 +150,15 @@ bei keinem Code ein Faultreset.
 | `S3-005` – stabiler #24-Release-1-Contract-/Injection-Code für harte thermische Notgrenze; späterer qualifizierter #35-/Hardware-Producer; eine obere/untere Grenzkorrelation | sofort aus, keine Gegenrichtung, sichere Lüfterstrategie | persistenter Latch; kein Auto-Rearm | technische Serviceautorisierung nach Grenz-/Hardwareprüfung | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
 | `S3-006` – stabiler #24-Release-1-Contract-/Injection-Code für Außenlüfterfehler; reale Fan-Diagnose folgt dem zuständigen späteren Hardware-/Commissioning-Gate; Außenlüfterrolle | Peltier aus, Restwärme fail-closed behandeln | persistenter Latch; kein Auto-Rearm | Serviceautorisierung nach Fan-/Ausgangsprüfung | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
 | `S3-007` – stabiler #24-Release-1-Contract-/Injection-Code für Innenlüfterfehler; reale Fan-Diagnose folgt dem zuständigen späteren Hardware-/Commissioning-Gate; Innenlüfterrolle | Peltier aus oder richtungsbezogen sperren | persistenter Latch; kein Auto-Rearm | Serviceautorisierung nach Fan-/Ausgangsprüfung | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
-| `S3-008` – #23 `ActuatorWatchdogFaultEvidence`; Planner-/Diagnose-Evidenz | Peltier aus, Safety-Gate stop, vollständige 64-bit-Evidenz sichern | persistenter Latch; kein Auto-Rearm | technische Autorisierung nach #23-, Sensor- und Aktorchecks | standardmäßig kein Reboot / kein Exit durch Reset | primary; Folgefehler bleiben |
+| `S3-008` – #23 `ActuatorWatchdogFaultEvidence`; Planner-/Diagnose-Evidenz | Peltier aus, Safety-Gate stop, vollständige 64-bit-Evidenz sichern | persistenter Latch; kein Auto-Rearm | technische Autorisierung nach Ursachefreiheit, Sensorcheck, typisiertem #23-Software-Aktorcheck und Integritätsprüfung | standardmäßig kein Reboot / kein Exit durch Reset | primary; Folgefehler bleiben |
 | `S3-009` – stabiler #24-Release-1-Contract-/Injection-Code für H-Brücke/Strom/Ausgang/Richtung; reale Diagnose folgt dem zuständigen späteren Hardware-/Commissioning-Gate; ein Output-Domain-Schlüssel | beide Richtungen aus, Plan verwerfen | persistenter Latch; kein Auto-Rearm | technische Serviceautorisierung nach Ausgangsprüfung | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
 | `Y4-001` – #56 `ConfigurationRuntimeFailure`; eine aktive Konfigurationsrevision | keine neue Konfiguration, Aktoren sicher stoppen | persistenter System-Latch; kein Auto-Rearm | Service/technisch nach Konfigurations-, Persistenz- und Integritätschecks | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
 | `Y4-002` – #56/#57 `ConfigurationCommitIndeterminate`/`CommitOutcomeUnknown`; eine aktive Commit-Korrelation | unklare Revision sperren, Aktoren aus | persistenter System-Latch; kein Auto-Rearm | Service/technisch erst nach eindeutigem Status und neuer Revision | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
 | `Y4-003` – #57 `ConfigurationUnavailable`; eine Recovery-/Graph-Quelle | keine Teilkonfiguration verwenden, Aktoren aus | persistenter System-Latch; kein Auto-Rearm | Service/technisch nach gültiger Revision | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
 | `Y4-004` – #57 `ConfigurationIntegrityFailure`; eine Graph-/Konfigurationsdomäne | Integritätsfehler fail-closed, Aktoren aus | persistenter System-Latch; kein Auto-Rearm | Service/technisch nach Integritätsprüfung | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
-| `Y4-005` – #17/#18 kritischer Laufcheckpoint nicht rekonstruierbar; ein aktiver Lauf | Peltier/H-Brücke aus, Lauf sicher beenden | persistenter System-Latch; kein Auto-Rearm | Service/technisch nach neuer gültiger Laufrevision | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
+| `Y4-005` – realer einmaliger #17/#18-`loadAndInitialize()`-Pfad erkennt einen kritischen aktiven Lauf als nicht rekonstruierbar | Peltier/H-Brücke aus, Lauf sicher beenden | persistenter System-Latch; kein Auto-Rearm | Service/technisch nach neuer gültiger Laufrevision | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
 | `Y4-006` – #24 Safety-State-Read/Write/Capacity/Integrity; ein globaler Basisrecord-Marker | RAM-Latch und Aktorsperre sofort, Marker im selben Record versuchen | persistenter System-Latch/Overflowmarker; kein Auto-Rearm, keine Eviction | Service/technisch nach Read-/Write-/Capacity-/Integritätsprüfung | kein zusätzlicher Reboot; Exit nur separate Bootpolicy | primary; aktive Slotliste wird nicht verfälscht |
-| `Y4-007` – #24 interner Safety-/Recoveryfehler; eine SafetyService-Evidenz | Aktoren aus, Recoveryevidenz sichern, höchstens den einen zulässigen kontrollierten Restart vorbereiten | persistenter System-Latch; kein Auto-Rearm | technische Autorisierung nach Ursachefreiheit und Integritätsprüfung | genau ein automatischer kontrollierter Restart pro aktiver Recoveryursache/-episode; danach kein zweiter automatischer Restart | primary; S3-008 bleibt separat |
+| `Y4-007` – stabiler #24-Contract-/Injection-Code für einen internen Safety-/Recoveryfehler; eine SafetyService-Evidenz | Aktoren aus, Recoveryevidenz sichern, höchstens den einen zulässigen kontrollierten Restart vorbereiten | persistenter System-Latch; kein Auto-Rearm | technische Autorisierung nach Ursachefreiheit und Integritätsprüfung | genau ein automatischer kontrollierter Restart pro aktiver Recoveryursache/-episode; danach kein zweiter automatischer Restart | primary; S3-008 bleibt separat |
 | `Y4-008` – unbekannter Resetgrund, fehlende/doppelte/mismatched App-Evidenz oder unbekannter Safetyinput; eine Bootbeobachtung | `Allowed` verbieten, Aktoren aus, fail-closed persistieren | persistenter System-Latch; kein Auto-Rearm | bis geklärter Ursache/Evidenz verboten | kein Reboot als Lösung / kein Exit ungeklärt | immer primary |
 | `Y4-009` – dritter abnormaler Restart / offene SAFE_BOOT-Episode; eine Episode | vor Aktor-/Lauffreigabe `SAFE_BOOT` | persistente Episode-/Systemverriegelung; kein Auto-Rearm durch Reboot | bewusster autorisierter codebezogener Exit nach allen Checks | kein automatischer zusätzlicher Reboot; ein technischer Restart ist nur Policy des zugrunde liegenden Codes | primary; auslösende Latches bleiben |
 
@@ -159,7 +172,8 @@ des Prozessautomaten projiziert; #24 berechnet weder eine eigene
 normale #22-Regelzustände und allein weder P1 noch O2; ein separater Fault
 entsteht nur aus einer eigenen realen Fehlerursache. Bei O2 wird immer der
 ursprüngliche #22-Reason beziehungsweise der vorhandene #20/#21-Sensorbefund
-verwendet; #23 `NoValidRequest` ist kein zusätzlicher Faultproducer.
+verwendet; #23 `NoValidRequest` ist kein zusätzlicher Faultproducer und darf
+auch in der #22-Projektion keine zusätzliche Fehlerursache werden.
 
 `ThermalCompatibility::Incompatible` aus einem strukturell gültigen #21-
 `CrossRolePlausibilityContext` ist kein direkter `S3-003`-Producer. Der
@@ -250,6 +264,90 @@ zugrunde liegender Fehler darf einen eigenen technischen Neustart als seine
 einmalige Policy verlangen; ein globaler `FaultResetBootIntent` wird nicht
 eingeführt.
 
+### 3.7 Verbindliche Ownerentscheidungen C2-Rest, C3, C6 und C7
+
+Diese vier Entscheidungen sind Bestandteil dieses vollständigen R4-Vertrags:
+
+**C2 – S3-008 Software-Aktorbereitschaft.** Der S3-008-Faultreset wird nur
+über den bestehenden #23-`ActuatorPlanner` und den bestehenden
+`ActuatorPlanSinkDriver` vorbereitet. Der Resetpfad erzeugt über die vorhandene
+Planner-Stopoperation einen typisierten sicheren AUS-Plan und reicht ihn über
+den Sink weiter. Der Nachweis ist ausschließlich Software-Readiness und
+enthält keine Strom-, H-Brücken-, Lüfter- oder sonstige physische
+Rückmeldung. Er ist nur vollständig, wenn alle folgenden typisierten
+Ergebnisse gleichzeitig vorliegen:
+
+1. die aktuelle #23-Watchdog-Episode ist beendet und es wurde im Readiness-
+   Schritt keine neue Watchdogursache beobachtet; die persistierte
+   `ActuatorWatchdogFaultEvidence` bleibt als historische Fault-Evidenz
+   unverändert erhalten;
+2. der Planner-Zustand ist nach seiner bestehenden Zustandsrepräsentation
+   konsistent: kein aktiver Plan, keine aktive physische Peltier-Richtung,
+   kein gebundener Akkumulator-/Gegenrichtungszustand und kein offener
+   Watchdog-Heartbeat; unbekannte oder widersprüchliche Felder sind nicht
+   bereit;
+3. der bestehende Planner erzeugt einen sicheren AUS-Plan mit bekannter
+   `Idle`-Richtung und zulässiger Stop-/Nachlaufsemantik;
+4. der bestehende Sinkpfad akzeptiert genau diesen sicheren Plan. Eine
+   erfolgreiche Ausführung der vorhandenen Sinkoperationen wird als
+   typisierte Software-Annahme des Sinkpfads protokolliert, niemals als
+   Hardware-Rückmeldung.
+
+Fehlt Planner, Sink, Readinessstatus, Konsistenz, Ursachenfreiheit oder
+Übereinstimmung zwischen Plan und Sinkannahme, bleibt der Reset fail-closed.
+Die SafetyFaultService bleibt die einzige Resetautorität; es gibt keine zweite
+Aktor-Safetylogik und keinen direkten Sink- oder Planner-Bypass. Die
+write-before-apply-Reihenfolge bleibt erhalten: erst Safetyrecord-Commit, dann
+das Aufheben des #23-Watchdog-Latches.
+
+**C3 – realer #17/#18-Producer.** `FermentationApplication` erhält in seiner
+bestehenden Boot-/Recovery-Komposition eine typisierte Referenz auf den
+vorhandenen `RunPersistenceCoordinator`. `loadAndInitialize()` wird in diesem
+Boot genau einmal aufgerufen. `NoPersistedRun` und `NoActiveRun` bleiben gültige
+leere Zustände. `Current` und `FallbackRecovered` werden ausschließlich über
+`restoreRunPersistenceSnapshot()` in den vorhandenen Laufzustand übernommen;
+eine fehlende oder inkonsistente Wiederherstellung ist nicht rekonstruierbar.
+`PreparedInterrupted`, `NotReconstructible`,
+`NotReconstructibleOrphanedState`, `ReadFailed`, `CapacityExceeded`,
+`UnsupportedSchema` und `ForeignEpoch` werden im kritischen aktiven
+Wiederanlaufpfad fail-closed als `Y4-005` an dieselbe zentrale
+`SafetyFaultService` projiziert. Ein erfolgreich rekonstruierter aktiver Lauf
+erzeugt kein `Y4-005`. Die Application exponiert nur den typisierten
+Lade-/Wiederherstellungszustand; sie dupliziert weder #17/#18-Codec,
+Recoveryentscheidung noch Faultlogik. Bei `Y4-005` bleiben die Aktoren über
+den bestehenden #23-Gatepfad gesperrt.
+
+**C6 – reale #22-Reason-Projektion.** Der echte
+`TemperatureControlResult` wird am vorhandenen
+`TemperatureControlApplicationOrchestrator`-Handoff genau einmal an die
+zentrale `SafetyFaultService` übergeben. Die Projektion verarbeitet die
+kanonischen Reasons einzeln und verwendet nur vorhandene typisierte
+Begleitevidenz:
+
+| #22-Reason | #24-Projektion |
+|---|---|
+| `None`, `NeutralBand`, `Saturated` | normaler #22-Regelzustand; kein Fault |
+| `AirLimitReduced`, `AirLimitBlocked` | normaler #22-Luftbegrenzungszustand; allein kein Fault und kein P1/O2-Fault |
+| `SensorUnavailable`, `InvalidSample` | nur mit der gleichzeitig vorliegenden #20-`SensorQualitySnapshot` und der #21-Regelsensorrolle auf O2/S3; fehlende oder widersprüchliche Sensorbegleitevidenz -> Y4-008 |
+| `NoCommissioning`, `InvalidConfiguration` | keine neue #24-Konfigurationslogik; die vorhandene typisierte #56/#57-/Y4-Grenze wird verwendet, und ohne passende Producer-Evidenz bleibt die Projektion fail-closed |
+| `TimeInvalid`, `RequestIdentityExhausted` | keine erfundene Sensor- oder Aktorursache; sicherheitsrelevante Unklarheit -> bestehender Y4-008-Unknown-Pfad |
+
+`#23 NoValidRequest` wird ausschließlich als Planner-/Annahmezustand
+behandelt und niemals als zusätzliche oder alternative Fehlerursache in diese
+Matrix aufgenommen. `AirLimitReduced` und `AirLimitBlocked` erzeugen allein
+keinen Fault. Eine zweite Reason-Matrix außerhalb dieser zentralen Projektion
+ist unzulässig.
+
+**C7 – Y4-007 Contract-only.** R4 führt keinen künstlichen Produktions-Trigger
+für `Y4-007` ein. Der Code bleibt der stabile Contract-/Injection-Code für
+einen internen Safety-/Recoveryfehler. Persistenter Latch, fail-closed-
+Wirkung, technische Autorisierung nach Ursachefreiheit und Integrität, genau
+ein automatischer kontrollierter Restart pro aktiver Ursache/Episode und
+deterministische Restart-Evidenz werden unverändert erhalten und gezielt
+regressionsgetestet. Ein späterer realer Producer darf erst eingeführt werden,
+wenn eine konkrete typisierte interne Recoveryfehler-Ursache existiert; das
+erfordert eine eigene fachliche Prüfung und eine neue Plan-/Ownerfreigabe.
+
 ## 4. Aktive Producer-Worst-Case-Analyse und Capacity
 
 ### 4.1 Aktive Instanzen
@@ -272,9 +370,9 @@ gleichzeitig aktiven unabhängigen Instanzen abgeleitet:
 | `Y4-002` | 1 | #56/#57 Commit-Korrelation | Mutation Coordinator liefert keine parallelen aktiven Commitvorgänge |
 | `Y4-003` | 1 | #57 `ConfigurationUnavailable` | eine Recovery-/Graph-Quelle |
 | `Y4-004` | 1 | #57 `ConfigurationIntegrityFailure` | eine Graph-/Konfigurationsdomäne |
-| `Y4-005` | 1 | #17/#18 aktiver Laufcheckpoint | ein aktiver Lauf |
+| `Y4-005` | 1 | realer einmaliger #17/#18-`loadAndInitialize()`-Producer für einen nicht rekonstruierbaren kritischen aktiven Lauf | ein aktiver Lauf |
 | `Y4-006` | 1 | globaler #24-Basisrecord-/Overflowmarker | kein variabler Slot; ein Marker aggregiert den globalen Capacity-/Persistenzzustand |
-| `Y4-007` | 1 | eine zentrale `SafetyFaultService`-Recoveryevidenz | genau eine zentrale Safetyinstanz |
+| `Y4-007` | 1 | stabile zentrale `SafetyFaultService`-Contract-/Injection-Evidenz; kein Produktions-Producer in R4 | genau eine zentrale Safetyinstanz |
 | `Y4-008` | 1 | eine bootlokale Reset-/Evidenzbeobachtung | Dubletten werden nicht neu gezählt |
 | `Y4-009` | 1 | eine offene Restart-Episode | globaler Episodenzustand |
 
@@ -292,20 +390,20 @@ darstellbare Bedingungen:  18 einschließlich Y4-006-Marker
 Cleared-Historie:           nicht enthalten
 ```
 
-Die Slotzahl `17` ist aus der finalen R3-Code-/Injection-Matrix und den heute
+Die Slotzahl `17` ist aus der vollständigen R4-Code-/Injection-Matrix und den heute
 belegten Rollen abgeleitet und nicht aus R2 übernommen: neun S3-Latches plus
 acht nicht-markerartige Y4-Latches. Die Contract-only-S3-Codes werden für den
 konservativen Injektions-Worst-Case jeweils mit einer unabhängigen Instanz
 gezählt. Ein späterer realer Producer übernimmt exakt denselben Code und die
 zugehörige Rollen-/Korrelationsidentität; er fügt keinen zusätzlichen Slot
 hinzu. Eine später nachgewiesene Mehrfachinstanz derselben Rolle wäre vor
-Implementierung eine materielle R3-Abweichung und dürfte nicht still in diese
+Implementierung eine materielle R4-Abweichung und dürfte nicht still in diese
 Bound gedrückt werden.
 
-### 4.2 Neuer R3-Record und Byte-Nachweis
+### 4.2 Neuer R4-Record und Byte-Nachweis
 
-Die 80-Byte-/48-Byte-Werte aus R2 sind kein R3-Vertrag und werden nicht zur
-Begründung verwendet. R3 definiert stattdessen einen neuen festen,
+Die 80-Byte-/48-Byte-Werte aus R2 sind kein R4-Vertrag und werden nicht zur
+Begründung verwendet. R4 definiert stattdessen einen neuen festen,
 sprachunabhängigen Safetyrecord:
 
 - Basisrecord: 128 Byte, einschließlich Schema-/Record-/Faultrevision,
@@ -324,7 +422,7 @@ sprachunabhängigen Safetyrecord:
   37 Byte. Diese generische Envelopegröße ist unabhängig vom suspendierten
   R2-Anwendungsrecord.
 
-Damit ergibt sich bewusst für R3:
+Damit ergibt sich bewusst für R4:
 
 ```text
 Payload = 128 + 17 * 64 = 1.216 Byte
@@ -333,7 +431,7 @@ Application-Limit       = 2.048 Byte
 Reserve                 =   795 Byte
 ```
 
-`2.048` ist kein globales `IStateStore`-Limit. R3 wählt es als
+`2.048` ist kein globales `IStateStore`-Limit. R4 wählt es als
 application-spezifisches `maxBytes` für genau diesen Safetyrecord: Es hält die
 Kodierung fest und bounded, vermeidet dynamische/unbounded Latchdaten, lässt
 795 Byte Prüf- und Evolutionsreserve und bleibt im 4-MB-/No-PSRAM-Ziel. Das ist
@@ -410,35 +508,97 @@ Der minimale konkrete Integrationspunkt liegt in
 5. Native End-to-End-Tests instanziieren diesen echten Applicationpfad mit den
    öffentlichen #56/#57-Typen; ein test-only Ersatzmapper gilt nicht.
 
-Die Root-Skeletons bleiben unverändert. #24 erzeugt keine pauschale #29/#90-
-Abhängigkeit. E5 wiederholt denselben Nichtumgehungsvertrag mit realen
-Adaptern.
+Die ESP-IDF-/Hardware-Root-Skeletons bleiben ohne neue Adapter unverändert; die
+native `FermentationApplication`-Komposition wird nur um die drei vorhandenen
+fachlichen Übergaben für #17/#18, #22 und den bestehenden #23-Planner-/Sinkpfad
+ergänzt. #24 erzeugt keine pauschale #29/#90-Abhängigkeit. E5 wiederholt
+denselben Nichtumgehungsvertrag mit realen Adaptern.
+
+### 5.3 Einmaliger #17/#18-Wiederanlauf (C3)
+
+`FermentationApplication::begin(..., SafetyDependencies, ...)` bindet den
+vorhandenen `RunPersistenceCoordinator` als erforderliche Bootabhängigkeit für
+den produktiven Recoverypfad. Vor einer normalen Application-Bereitschaft wird
+exakt einmal `loadAndInitialize()` aufgerufen. Der Status wird unverändert
+typisiert weitergegeben. Nur `Current`/`FallbackRecovered` mit erfolgreicher
+`restoreRunPersistenceSnapshot()`-Projektion dürfen einen aktiven Lauf in der
+Application repräsentieren. Alle kritischen, nicht rekonstruierbaren
+Loadstatus werden über eine einzige neue, schmale
+`SafetyFaultService`-Producerfunktion als `Y4-005` projiziert; der Coordinator
+bleibt Eigentümer seiner gesamten Persistenz- und Recoverylogik. Ein leeres
+oder erfolgreich als `NoActiveRun` geladenes System erzeugt keinen Y4-005.
+
+Der Fehlerfall setzt keine neue Lauf- oder Persistenzlogik in #24 ein. Die
+Application bleibt für Safetyzwecke gesperrt, und der vorhandene
+`ActuatorSafetyGateInput` erreicht den Planner weiterhin nur fail-closed.
+
+### 5.4 Reale #22-Projektion (C6)
+
+`TemperatureControlApplicationOrchestrator::evaluateTemperatureControl()`
+bleibt die einzige Application-Grenze für das echte #22-Ergebnis. Nach der
+Berechnung und vor der späteren Plannerübergabe reicht derselbe
+`TemperatureControlResult` gemeinsam mit den bereits verwendeten
+#20-Snapshots und der aufgelösten #21-Regelsensorrolle an
+`SafetyFaultService::consumeTemperatureControlResult()` weiter. Die Methode
+projiziert keine Quote, keine Air-Limit-Grenze und keinen Plannerzustand; sie
+ordnet nur die bereits erzeugte typisierte Reason nach der C6-Matrix zu. Ein
+fehlender oder widersprüchlicher Begleitzustand führt nicht zu einem
+Normalpfad.
+
+### 5.5 C2-Resetübergabe über #23
+
+Für einen S3-008-Reset bindet der bestehende Resetaufruf zusätzlich den
+`ActuatorPlanSinkDriver`. `SafetyFaultService::resetFault()` erzeugt dort über
+`ActuatorPlanner::forceStop()` den sicheren AUS-Plan, übergibt ihn genau einmal
+an den Sink und prüft den typisierten Software-Annahme-/Konsistenznachweis,
+bevor der persistierte Faultcore geändert wird. Nur nach erfolgreichem
+Safetyrecord-Commit wird `applyExternalWatchdogFaultReset()` aufgerufen. Alle
+anderen Faultcodes behalten ihren bisherigen Resetvertrag; fehlende
+Planner-/Sinkbindung bei S3-008 ist eine Ablehnung.
 
 ## 6. Konkreter Implementierungsschnitt nach Ownerfreigabe
 
 Erst nach Freigabe genau dieser Plan-SHA und erneuter Liveprüfung von
 lokalem/remote/PR-HEAD wird umgesetzt:
 
-1. R3-Code-/Policy-/Faultrecord-Verträge, `17`-Slot-Bound, Basis-Overflowmarker und
-   neuer fester Record-Codec;
-2. minimale #15-Migration in
-   `lib/fermentation_app/src/run_commands.hpp/.cpp` und Konsumenten in
-   `safety_fault_service.hpp/.cpp`, ohne positive Caller-Safetyfelder;
-3. zentrale Ursachen-, Latch-, Reset-, Restart- und SAFE_BOOT-Evaluation;
-4. Application-Grenze in `fermentation_application.*` und reale #56/#57-
-   Gateprojektion auf #23;
-5. Korrektur von `lib/device_platform/src/reset_port.hpp` und nativer
-   Testhilfe auf neutralen Plattformvertrag; kein ESP-IDF-Mapping;
-6. S3-004 contract-only, einmalige Recovery-Restart-Evidenz und
-   fail-closed Capacity-/Readbackpfad;
-7. gezielte native Tests und reale Application-End-to-End-/Negativtests.
+1. den bestehenden #23-Planner-/Sinkpfad um den typisierten
+   Software-Readiness-/Sinkannahmenachweis ergänzen und den S3-008-Reset in
+   `safety_fault_service.*` write-before-apply daran binden;
+2. `FermentationApplication::SafetyDependencies` um den vorhandenen
+   `RunPersistenceCoordinator` ergänzen, `loadAndInitialize()` genau einmal
+   ausführen, die bestehende Snapshot-Restaurierung verwenden und
+   nicht rekonstruierbare kritische Loadstatus einmalig als Y4-005 an die
+   zentrale SafetyFaultService projizieren;
+3. `TemperatureControlApplicationOrchestrator` an den vorhandenen echten
+   `TemperatureControlResult`-Handoff anbinden und in
+   `SafetyFaultService` die vollständige C6-Reason-Matrix mit den vorhandenen
+   #20/#21- und #56/#57-Typen implementieren; Air-Limit-Zustände bleiben
+   faultfrei, `NoValidRequest` bleibt außerhalb der Matrix;
+4. den bestehenden Y4-007-Injection-/Restartvertrag unverändert lassen und
+   nur die vollständigen positiven und negativen Contract-Orakel ergänzen;
+5. nur die tatsächlich betroffenen kanonischen Dokumentationen und
+   `docs/ROADMAP.md` auf R4, C2/C3/C6/C7 und den Ownergate aktualisieren;
+6. keine ESP-IDF-/NVS-/Hardwareadapter, keine neuen Grenzwerte, keine
+   physische Aktordiagnose, keinen Produktions-Trigger für Y4-007 und keine
+   zweite Fault-, Recovery-, Persistenz- oder Aktor-Safetylogik einführen.
+
+Voraussichtlich betroffene Dateien sind ausschließlich die vorhandenen
+Grenzen und ihre direkten Orakel: `actuator_plan_types.hpp`,
+`actuator_plan_sink_driver.hpp/.cpp`, `safety_fault_service.hpp/.cpp`,
+`fermentation_application.hpp/.cpp`,
+`temperature_control_orchestrator.hpp/.cpp` sowie
+`test/test_issue24_safety/test_issue24_safety.cpp`,
+`test/test_actuator_planner/test_actuator_planner.cpp`,
+`test/test_run_persistence_coordinator/test_run_persistence_coordinator.cpp`
+und der direkt betroffene #22-Testfilter. Neue Module, Ports oder Adapter sind
+nicht geplant.
 
 Die konkrete PIN-Verifikation, Hardwarediagnose, ESP-IDF-Resetursache und
 `esp_restart()` bleiben außerhalb dieses Schnittrahmens. Bei einer materiellen
-Abweichung wird die Implementierung gestoppt, diese R3 aktualisiert und erneut
+Abweichung wird die Implementierung gestoppt, diese R4 aktualisiert und erneut
 zur Ownerfreigabe vorgelegt.
 
-## 7. Vollständige R3-Zieltestmatrix (nach Freigabe; aktuell NOT_RUN)
+## 7. Vollständige R4-Zieltestmatrix (nach Freigabe; aktuell NOT_RUN)
 
 Die folgenden Tests sind Zielorakel, keine in dieser Planungsrunde ausgeführten
 Ergebnisse. Draft führt später nur gezielte native Tests des geänderten Bereichs
@@ -476,8 +636,61 @@ aus; Full-Suite bleibt Owner-Gate.
 - S3-006/S3-007 und S3-009 als reproduzierbare Contract-/Injection-Cases;
   kein Test behauptet eine heute vorhandene reale Fan- oder
   H-Brücken-/Stromdiagnose;
+- vollständige C2-Software-Readiness: auslösende Watchdog-Episode nicht mehr
+  aktiv, konsistenter Planner, erzeugter sicherer AUS-Plan und akzeptierter
+  bestehender Sinkpfad -> Reset zulässig;
+- fehlender Planner, fehlender Sink, unbekannter oder widersprüchlicher
+  Readinessstatus, ungültige Plannerparameter sowie nicht passender
+  AUS-Plan/Sinkannahme -> Reset fail-closed;
 - Planner-/Sink-Bypassversuch -> keine Freigabe, auch nicht aus normalem
   `Allowed` oder direkter Sinkanfrage.
+
+### C3 – realer #17/#18-Wiederanlauf
+
+- `FermentationApplication` ruft `loadAndInitialize()` einmalig auf;
+- gültiger aktiver `Current`-Load mit vorhandener
+  `restoreRunPersistenceSnapshot()`-Projektion -> aktiver Lauf, kein Y4-005;
+- gültiger `FallbackRecovered`-Load mit derselben bestehenden
+  Restaurierung -> kein Y4-005;
+- nicht rekonstruierbarer aktiver Current-/Fallback-Zustand,
+  `PreparedInterrupted` und kritische bestehende Loadfehler -> Y4-005,
+  persistenter Latch und `ActuatorSafetyGateInput != Allowed`;
+- `NoPersistedRun`/`NoActiveRun` -> kein Y4-005;
+- erneuter Boot-/Begin-Aufruf oder fehlender typisierter Producer darf keine
+  zweite Persistenz-/Faultentscheidung erzeugen.
+
+### C6 – vollständige #22-Reason-Projektion
+
+- `None`, `NeutralBand`, `Saturated`, `AirLimitReduced` und
+  `AirLimitBlocked` erzeugen allein keinen Fault;
+- `AirLimitReduced` und `AirLimitBlocked` bleiben auch bei wiederholter
+  Projektion faultfrei und werden nicht als `P1-001`, O2 oder S3 umgedeutet;
+- `SensorUnavailable` und `InvalidSample` mit gültiger #20/#21-
+  Rollen-/Snapshot-Evidenz -> der bestehende O2/S3-Producerpfad;
+- fehlende, unbekannte oder widersprüchliche Sensorbegleitevidenz -> Y4-008
+  fail-closed;
+- `NoCommissioning`/`InvalidConfiguration` werden nur über die vorhandene
+  #56/#57-/Y4-Grenze bewertet; ohne passende typisierte Producerantwort kein
+  `Allowed`;
+- `TimeInvalid` und `RequestIdentityExhausted` werden nicht als Sensor- oder
+  `NoValidRequest`-Fault erfunden, sondern bei sicherheitsrelevanter
+  Unklarheit fail-closed behandelt;
+- kein Orakel ruft die #23-`NoValidRequest`-Klassifikation als alternative
+  Faultursache auf.
+
+### C7 – Y4-007 Contract-/Injection-Nachweis
+
+- bestehende Y4-007-Injection erzeugt den persistenten System-Latch;
+- fehlende Ursachefreiheit, Integritätsfehler oder fehlende technische
+  Autorisierung bleiben fail-closed;
+- der erste automatische kontrollierte Restart derselben aktiven
+  Ursache/Episode wird write-before-apply vorbereitet und akzeptiert;
+- ein zweiter automatischer Restart derselben Ursache/Episode wird ohne
+  neuen Trigger verhindert;
+- Restart-Evidenz bleibt nach Bootabgleich exakt einmal, nachvollziehbar und
+  deterministisch;
+- es existiert weiterhin kein produktiver Y4-007-Trigger; ein Test darf keinen
+  hypothetischen internen Producer einschleusen.
 
 ### Persistenz und Capacity
 
@@ -538,7 +751,7 @@ Quellen:
   firmwarefeste Obergrenze `<=2`;
 - `docs/SYSTEM_SAFETY_AND_RECOVERY.md`: Episode, monotone Stabilität,
   Power-off und einmaliger kontrollierter Restart;
-- `docs/ACCEPTANCE_TESTS.md`: vollständige R3-Zielorakel, historische R2-
+- `docs/ACCEPTANCE_TESTS.md`: vollständige R4-Zielorakel, historische R2-
   Läufe unverändert `NOT_ACCEPTED_PENDING_R3`;
 - `docs/RUN_COMMANDS.md`: neutrale Resetdaten und zentrale Evaluation;
 - `docs/ROADMAP.md`: nur Status/Gate.
@@ -547,7 +760,19 @@ Es wird kein ADR als `accepted` ergänzt. Ein ADR-Entwurf wäre nur bei einer
 später tatsächlich nachgewiesenen neuen langfristigen Architekturentscheidung
 außerhalb ADR-013/014/018 zulässig.
 
-Ausgeführt werden ausschließlich:
+Nach Ownerfreigabe werden ausschließlich die gezielten nativen Filter der
+geänderten Bereiche und ihre direkten Konsumenten ausgeführt:
+
+- `test_issue24_safety` für C2, C3, C6 und C7;
+- `test_actuator_planner` für die #23-Readiness-/Stop-/Sinkgrenze;
+- `test_run_persistence_coordinator` für die unveränderte #17/#18-
+  Load-/Restore-Regression;
+- der bestehende #22-Temperaturkontrollfilter für die vollständige
+  Status-/Reason-Matrix.
+
+Zusätzlich gelten die Repository-Gates `clang-format --dry-run --Werror`,
+`git diff --check`, Architektur-/Dependency-Gate und Secret-Scan. Ausgeführt
+werden in dieser Planungsrunde ausschließlich:
 
 - `git diff --check`;
 - Markdown-/Architektur-Konsistenzprüfung;
@@ -566,5 +791,5 @@ Force-Push. Nach Commit, normalem Push, PR-Body-/Statusaktualisierung und genau
 einem neuen aktuellen SESSION HANDOVER ist der nächste und einzige Schritt:
 
 ```text
-Ownerreview und Freigabe der exakten vollständigen R3-SHA
+Ownerreview und Freigabe der exakten vollständigen R4-SHA
 ```
