@@ -178,8 +178,8 @@ durch einen normalen Neustart moeglich.
 | `Y4-009` / dritter abnormaler Restart, offene SAFE_BOOT-Episode | vor Aktor-/Lauffreigabe `SAFE_BOOT` | ja / kein Auto-Rearm durch Reboot | bewusster autorisierter Exit nach allen Checks | kein automatischer zusaetzlicher Reboot; nur zugrunde liegende Codepolicy darf technischen Restart verlangen | primaer; ausloesende Latches bleiben |
 
 Die Tabelle ist die vollstaendige R3-Policy: 21 stabile Codes (1 P1-, 2 O2-,
-9 S3- und 9 Y4-Codes), vier Klassen, keine reservierten historischen Luecken
-und kein alter `Y4-011`-Fallback. `AirLimitReduced` und `AirLimitBlocked` sind
+9 S3- und 9 Y4-Codes), vier Klassen und keine zusaetzlichen stabilen Codes
+ausserhalb der Matrix. `AirLimitReduced` und `AirLimitBlocked` sind
 normale #22-Regelzustaende und allein weder P1 noch O2; ein separater Fault
 entsteht nur aus einer eigenen realen Fehlerursache. Die urspruengliche
 #22-`TemperatureControlReason` bestimmt die Projektion; #23 `NoValidRequest`

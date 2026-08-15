@@ -144,7 +144,21 @@ beweisen sie keine Freigabe der damals getesteten R2-Semantik.
 | Architektur, Secret, Format und Whitespace | damals ausgefuehrt | `NOT_ACCEPTED_PENDING_R3` | Architekturguard, Secret-Scan, clang-format dry-run, `git diff --check` |
 | vollstaendiger nativer Lauf, ESP-IDF, CI, Hardware | nicht ausgefuehrt | `NOT_RUN` | Draft-/Owner-Gates |
 
-### R3-Zielorakel fuer Issue #24 (aktuelle Ausfuehrung: NOT_RUN)
+### Aktueller R3-Implementierungsnachweis
+
+Die folgenden gezielten Draft-Laeufe pruefen den aktuellen R3-Stand und
+ersetzen nicht die historischen R2-Nachweise:
+
+| Bereich | Ausfuehrung | Status | Nachweis |
+|---|---|---|---|
+| Issue-24-Safetykern, Record, Restart, Injection und Application-Grenze | 10/10 | `PASS` | `pio test -e native --filter test_issue24_safety` |
+| #15-Command-/Faultprojektion | 43/43 | `PASS` | `pio test -e native --filter test_run_commands` |
+| #23-Safety-Gate und Planner | 44/44 | `PASS` | `pio test -e native --filter test_actuator_planner` |
+| reale #56/#57-Recovery-/Service-Konsumenten | 37/37 bzw. 40/40 | `PASS` | `pio test -e native --filter test_configuration_recovery_service`; `pio test -e native --filter test_configuration_service` |
+| Smoke-/Application-Skeleton | 9/9 | `PASS` | `pio test -e native --filter test_smoke` |
+| vollstaendiger nativer Lauf, ESP-IDF, CI, Hardware | nicht ausgefuehrt | `NOT_RUN` | Draft-/Owner-Gates |
+
+### R3-Zielorakel fuer Issue #24 (verbleibende Ausfuehrung: gezielt PASS; Gesamtgate NOT_RUN)
 
 Diese Orakel gelten erst nach Freigabe und Implementierung der vollstaendigen
 R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
@@ -252,9 +266,9 @@ R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
 - S3-004 ohne #35: keine Recovery, kein PI-/Planner-Bypass, Latch bleibt.
 
 Der historische R2-Abschnitt oberhalb bleibt unveraendert als
-`NOT_ACCEPTED_PENDING_R3`. Alle R3-Orakel in diesem Planungsauftrag sind
-`NOT_RUN`; Native-Suite, ESP-IDF-Build, Remote-CI und Hardwaretest werden hier
-nicht ausgefuehrt.
+`NOT_ACCEPTED_PENDING_R3`. Die gezielt ausgefuehrten R3-Orakel sind oben
+ausgewiesen; nicht abgedeckte Gesamt-, Firmware-, Remote-CI- und Hardwaregates
+bleiben `NOT_RUN`.
 
 ### Ebene 3: Build- und statische Integrationstests
 

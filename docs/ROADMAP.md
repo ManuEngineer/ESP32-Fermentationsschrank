@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Korrigierte vollstaendige R3-Plan-/Spezifikationssynchronisierung nach Owner-Request-Changes auf `264cb586…`; R2 bleibt suspendiert, PR #107 Draft und Implementierung eingefroren | Ownerfreigabe der neuen exakten R3-Plan-SHA `PLAN_R3_PENDING_OWNER_APPROVAL` |
+| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Freigegebene R3 implementiert; R2 gegen die R3-Verträge reconciliert, PR #107 bleibt Draft | Ownerreview und Freigabe der exakten vollständigen R3-SHA |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -25,14 +25,13 @@ geschlossen. Die bestehenden #22/#23-Vertraege sind kanonisch und werden von
 
 ## Issue #24 Implementierungsstatus
 
-Der aktuelle Branch enthaelt einen eingefrorenen R2-Implementierungs- und
-Dokumentationsstand sowie die korrigierte, noch nicht freigegebene R3. Die
-tatsaechlich ausgefuehrten frueheren Tests bleiben
-historische technische Nachweise, sind gegen die neue Spezifikationspruefung
-aber `NOT_ACCEPTED_PENDING_R3`. Die vollstaendige R3 schliesst die bisherigen
-OD-24-01..10-Fragen ohne neue Product-Owner-Zahl oder erfundene
-Commissioningwerte. In dieser Plan-/Gate-Runde wurden keine Firmwaretests,
-Builds oder Produktionsaenderungen ausgefuehrt.
+Der Branch enthaelt die gegen die freigegebene R3 reconcilierten
+Safety-/Recovery-Vertraege. Der eingefrorene R2-Stand war keine normative
+Quelle; insbesondere wurden der fachliche Resetport, die R2-Capability und
+der alte Safetyrecord entfernt beziehungsweise auf den R3-Vertrag migriert.
+Die gezielten nativen Konsumententests sind fuer den aktuellen
+Implementierungsstand PASS. Vollstaendiger nativer Lauf, Firmwarebuilds,
+Remote-CI und Hardware bleiben Draft-/Owner-Gates.
 
 Die native #56/#57-Bridge ist in der korrigierten R3 als realer
 `FermentationApplication`-Application-/Orchestrierungspfad mit einer zentralen
@@ -45,14 +44,13 @@ Recovery.
 Die kanonische fachliche Reihenfolge bleibt: Issue #23, danach Issue #24
 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,
 Aufbewahrung, Bereinigung, Backup und Import). Issue #24 befindet sich jetzt
-mit der korrigierten R3 im eigenen Plan-/Owner-Gate. Issue #106
+mit der implementierten R3 im eigenen Owner-Gate. Issue #106
 (Aktorplaner Per-Run-
 Parameter-Snapshot und Recovery-Bindung) bleibt als separates spaeteres
 Integrationsgate offen und ist nicht die naechste Arbeit; seine vollstaendige
 Abnahme bleibt unter anderem von #35 abhaengig. Issue #35 bleibt
 `TBD_COMMISSIONING` und Eigentum der produktiven Werte und Grenzen. Fuer #24
-ist nach dieser Korrektur nur noch die Ownerfreigabe der neuen exakten
-Plan-SHA offen; die Implementation bleibt bis dahin eingefroren.
+ist nur noch die Ownerreview der exakten vollstaendigen R3-SHA offen.
 
 ## Zulaessige Parallelitaet
 
