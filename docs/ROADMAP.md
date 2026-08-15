@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Ownerreview-Korrekturrunde 5 umgesetzt: realer #23-Watchdog- und Prozessautomat-/#21-Producerpfad, Primary-/Follow-up-Vertrag; drei Befunde (Y4-005-, #22-Reason-Matrix- und Y4-007-Producerpfad) sowie eine S3-008-Reset-Teilfrage bleiben offene Owner-Gates ohne konkrete Planvorgabe; PR #107 bleibt Draft | Ownerreview der neuen SHA gegen Plan `48f343c`, insbesondere die vier offenen Gates aus dem SESSION HANDOVER |
+| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Vollständige Planrevision 4 für C2-Rest, C3, C6 und C7 erstellt; Produktionsstand bleibt unverändert, PR #107 bleibt Draft und offen | Ownerreview und Freigabe der exakten Plan-SHA `c1a185a120bf773dfffe7ed1b5a57faf0f2b0e44`, danach erneute Liveprüfung vor Implementierung |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -57,14 +57,14 @@ Recovery.
 Die kanonische fachliche Reihenfolge bleibt: Issue #23, danach Issue #24
 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,
 Aufbewahrung, Bereinigung, Backup und Import). Issue #24 befindet sich jetzt
-mit der implementierten R3 im eigenen Owner-Gate. Issue #106
+mit dem unveränderten R3-Produktionsstand und der vollständigen R4-Planrevision im eigenen Owner-Gate. Issue #106
 (Aktorplaner Per-Run-
 Parameter-Snapshot und Recovery-Bindung) bleibt als separates spaeteres
 Integrationsgate offen und ist nicht die naechste Arbeit; seine vollstaendige
 Abnahme bleibt unter anderem von #35 abhaengig. Issue #35 bleibt
-`TBD_COMMISSIONING` und Eigentum der produktiven Werte und Grenzen. Fuer #24
-ist nur noch die Ownerreview der exakten neuen R3-SHA offen; der freigegebene
-Plan bleibt `48f343ceb49d5a80239702241ae1fbf7d4ebfcd2`.
+`TBD_COMMISSIONING` und Eigentum der produktiven Werte und Grenzen. Für #24
+ist vor jeder Implementierung ausschließlich die Ownerfreigabe der
+vollständigen R4-SHA `c1a185a120bf773dfffe7ed1b5a57faf0f2b0e44` maßgeblich.
 
 ## Zulaessige Parallelitaet
 
