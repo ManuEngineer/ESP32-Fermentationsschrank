@@ -207,6 +207,17 @@ Peltier sofort AUS
   -> nur bei codebezogener Policy einen kontrollierten Neustart vorbereiten
 ```
 
+Ein automatischer kontrollierter Neustart ist fuer dieselbe aktive
+Safety-/Software-Recoveryursache innerhalb derselben Restart-Episode hoechstens
+einmal zulaessig. Die #24-Safetyinstanz persistiert vor dem Aufruf die
+zugehoerige `RestartIntentEvidence` mit Fault-/Episodenrevision und konsumiert
+sie nach einer passenden neutralen Plattformbeobachtung genau einmal. Ein
+unklares Ergebnis, fehlende Readback-Bestaetigung, eine fehlende oder doppelte
+Evidenz sowie ein zweiter automatischer Versuch bleiben fail-closed und werden
+nicht durch einen erneuten Reboot geloest. Ein autorisierter technischer
+Service-Neustart ist eine getrennte Application-Evidenz und zaehlt nicht
+automatisch als abnormal. Der Neustart selbst ist kein Fehlerreset.
+
 ### Neustartbegrenzung und SAFE_BOOT
 
 Ein automatischer Neustart ist nur begrenzt zulaessig. Wiederholte abnormale
@@ -232,7 +243,7 @@ folgende firmwarefeste Episode-Policy:
   codebezogene Safety-/Software-Recovery-Policy als abnormal klassifiziert.
   Ein autorisierter normaler Service-/Recovery-Neustart zaehlt nicht
   automatisch abnormal.
-- Ein unbekannter Resetgrund wird nicht als normal geraten, sondern
+- Ein unbekannter Plattform-Resetgrund wird nicht als normal geraten, sondern
   fail-closed als ungeklaerte Systemursache behandelt.
 
 In `SAFE_BOOT` gilt:
@@ -247,6 +258,9 @@ In `SAFE_BOOT` gilt:
 - ein Exit ist nur ueber die explizite, codebezogene und autorisierte
   SAFE_BOOT-Policy nach erneuten Persistenz-, Integritaets-, Sensor- und
   Aktorpruefungen zulaessig.
+- `SAFE_BOOT` selbst verlangt keinen generischen zusaetzlichen Reboot. Nur die
+  codebezogene Policy einer konkreten zugrunde liegenden Ursache darf einen
+  technischen Neustart verlangen; ein normaler Reboot ist kein Exit.
 
 ## Beschaedigte Konfiguration oder Laufdaten
 
@@ -440,6 +454,9 @@ Verbindliche Regeln:
       messen
 - [x] kontrollierter Neustart nur gemaess einer begruendeten, codebezogenen
       Safety-/Software-Recovery-Policy
+- [x] hoechstens ein automatischer kontrollierter Neustart je aktiver
+      Recoveryursache und Restart-Episode; Application-Evidenz wird exactly once
+      konsumiert
 - [x] drei abnormale Neustarts innerhalb einer offenen Episode fuehren zu
       `SAFE_BOOT`
 - [x] 30 Minuten stabile monotone Laufzeit schliessen die Episode

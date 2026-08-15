@@ -242,10 +242,15 @@ Rueckfuehrung jedoch zunaechst nur ein Gate-/Vertragspfad.
 S3-004 wird sofort als verriegelter Sicherheitsfehler klassifiziert und setzt
 `ImmediateStop`. Ohne eine spaeter vollstaendig qualifizierte #35-
 Commissioningrevision bleibt `SAFETY_RECOVERY` `Unresolved` und damit
-fail-closed deaktiviert. Das bedeutet:
+fail-closed deaktiviert. Die firmwarefeste Obergrenze bleibt davon unberuehrt:
+maximal zwei Versuche, Werkseinstellung zunaechst ein Versuch und ein
+zulaessiger Maschinenparameter im Bereich `0..2`. #35 darf spaeter nur einen
+Wert innerhalb dieser Grenze validieren. #24 verwendet keinen erfundenen
+Runtimewert. Das bedeutet:
 
-- Es werden in #24 keine Leistungs-, Puls-, Trend-, Temperatur-,
-  Versuchszahl- oder Revisionswerte erfunden oder produktiv aktiviert.
+- Es werden in #24 keine Leistungs-, Puls-, Trend-, Temperatur- oder
+  Revisionswerte erfunden oder produktiv aktiviert. Die Versuchszahl darf die
+  firmwarefeste Grenze `<= 2` nie ueberschreiten.
 - Der bestehende #23-`ActuatorSafetyGateInput`-/Planner-/Sinkpfad bleibt die
   einzige Aktorgrenze. Ein normales `Allowed` kann S3-004 nicht umgehen.
 - Ein spaeter qualifizierter Recoveryproducer muss durch diesen Gatepfad laufen
@@ -494,6 +499,9 @@ hinreichender Peltierfehlernachweis.
 - [x] Sicherheitsbereich besitzt Eingriffsgrenze und harte Notgrenze
 - [x] S3-004 bleibt in #24 contract-only und fail-closed bis zur #35-
       Commissioningqualifikation
+- [x] firmwarefeste Obergrenze fuer S3-004-Safety-Recovery bleibt bei maximal
+      zwei Versuchen; der zulaessige Maschinenparameterbereich ist `0..2`,
+      Werkseinstellung zunaechst ein Versuch
 - [x] nach erfolgreicher Sicherheitsrueckfuehrung bleibt der Fehler verriegelt
 - [x] an der harten Notgrenze keine automatische Gegenrichtung
 - [x] dritter fest eingebauter DS18B20 am Aussenwaermetauscher/Kuehlkoerper
@@ -510,15 +518,16 @@ hinreichender Peltierfehlernachweis.
 ## Noch offen fuer Phase 8C und Inbetriebnahme
 
 - konkrete Dauer und Fehleranzahl fuer `STALE -> FAILED`
-- Kriterien fuer einen einmaligen kontrollierten Software-Neustart
-- Zeitraum, in dem eine Fehlerwiederholung eskaliert
 - konkrete obere und untere Regelbegrenzungen
 - konkrete Sicherheits-Eingriffs- und harte Notgrenzen
 - Leistungs-, Zeit-, Trend-, Temperatur-, Versuchszahl- und Revisionsgrenzen
-  fuer eine spaetere `SAFETY_RECOVERY` bleiben #35-Commissioning
+  fuer eine spaetere `SAFETY_RECOVERY` bleiben #35-Commissioning; die
+  firmwarefeste Versuchszahl bleibt dennoch auf `0..2` begrenzt
 - konkrete Montageposition des Kuehlkoerpersensors
 - finaler 1-Wire-Pinplan
 - thermische Erkennungsschwellen fuer Aussen- und Innenluefterfehler
 - Nutzbarkeit, Skalierung und sichere Pegelanpassung von R_IS/L_IS
 - Fehlerreaktion bei unzuverlaessiger 12-V- oder 5-V-Versorgung
-- Verhalten bei Softwaretask-, Watchdog-, Speicher- und Bootfehlern
+- konkrete Hardwareursachen und reale Verifikation von Softwaretask-,
+  Watchdog-, Speicher- und Bootfehlern; die R3-Code-/Resetpolicy dafuer ist
+  bereits in `SAFETY_AND_FAULTS.md` geschlossen

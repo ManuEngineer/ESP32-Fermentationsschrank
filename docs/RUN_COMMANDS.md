@@ -462,6 +462,17 @@ gibt keinen booleschen Bypass und keine Pointer-/Token-Capabilityarchitektur.
 Die atomare Speicherung einer erfolgreichen Resetentscheidung bleibt Issue
 #17.
 
+Ein Faultreset erzeugt keinen generischen Reboot. Die fachliche Bedeutung eines
+Software-Neustarts wird nicht aus dem Plattform-Resetgrund geraten, sondern aus
+der neutralen bootlokalen Beobachtung, der vorab persistierten #24-
+`RestartIntentEvidence` und der passenden Fault-/Episode-Revision bestimmt.
+`AutomaticSafetyRecovery`, `AuthorizedTechnicalRestart` und
+`AuthorizedSafeBootExit` sind getrennte Application-Evidenzen; jede wird genau
+einmal konsumiert. Fehlende, widerspruechliche oder doppelte Evidenz ist
+fail-closed. Fuer dieselbe automatische Recoveryursache in derselben Episode
+ist hoechstens ein kontrollierter Neustart zulaessig. `SAFE_BOOT` wird durch
+einen normalen Reboot nicht verlassen.
+
 ## Tests fuer Issue #15
 
 Native Tests decken mindestens ab:

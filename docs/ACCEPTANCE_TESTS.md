@@ -153,38 +153,83 @@ R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
   `SAFETY_AND_FAULTS.md` wird vollstaendig gegen Producer, Sofortreaktion,
   Latch, Auto-Rearm, Berechtigung, Reboot-/SAFE_BOOT-Policy und
   Primaer-/Folgebezug geprueft. Unknown/Unresolved bleibt `Y4-008` und
-  fail-closed.
-- Acht unabhaengige S3- und neun Y4-Instanzen koexistieren. Cleared-Historie
-  zaehlt nicht als aktive Latchkapazitaet. Die aktive Bound `17`, Payload
-  `896 Byte`, Record `933 Byte` und Grenze `2048 Byte` werden statisch und
-  dynamisch geprueft; Overflow verdraengt keinen aktiven Latch.
-- Drei abnormale Neustarts innerhalb der offenen Episode erzwingen vor
-  Aktorfreigabe `SAFE_BOOT`. Erst 30 Minuten durchgehend stabile,
-  abnormal-restartfreie monotone Laufzeit schliessen die Episode. Power-off
-  schliesst sie nicht, ein normaler Neustart vor Abschluss ebenfalls nicht,
-  und ein abnormaler Neustart waehrend der Phase startet die Stabilitaets-
-  bewertung neu.
-- Ein unbekannter Resetgrund wird nicht als normal behandelt. Ein autorisierter
-  normaler Service-/Recovery-Neustart wird nur dann abnormal gezaehlt, wenn die
-  codebezogene Policy ihn als Safety-/Software-Recovery klassifiziert.
-- Ein normaler Reboot verlaesst `SAFE_BOOT` nicht. Nur die in der Code-Matrix
-  genannten technischen, autorisierten Reboots duerfen fuer `Y4-007` oder
-  `Y4-009` Teil eines SAFE_BOOT-Exits sein.
-- Der externe Faultreset enthaelt nur neutralen `CommandEnvelope`- und
-  Zielkontext. Eine positive Caller-Evaluation, ein boolescher
-  Autorisierungswert oder ein Pointer-/Token-Ersatz kann die zentrale
-  `FaultResetEvaluation` nicht umgehen. Fehlende Evidenz wird abgelehnt.
-- S3-004 bleibt ohne #35-Qualifikation `ImmediateStop`: keine aktive
-  `SAFETY_RECOVERY`, kein normales `Allowed` als Bypass und kein automatisches
-  Latchloeschen.
-- Der echte `FermentationApplication`-Pfad konsumiert die oeffentlichen
-  #56/#57-Resultate ueber genau eine
-  `ConfigurationSafetyIntegrationGate`-/`SafetyFaultService`-Instanz und
-  projiziert auf den bestehenden #23-Planner-/Sinkpfad. Eine Testfixture mit
-  Ersatzmapper gilt nicht als bestanden.
-- Fuer jeden S3/Y4-Code werden Ursachenfreiheit, Sensor-/Aktor-, Persistenz-,
-  Integritaets-, Berechtigungs- und Blockerchecks erneut geprueft; Quittierung
-  und Reset bleiben getrennt.
+  fail-closed. Zukunftscodes ohne heutigen Producer sind nicht enthalten.
+- Neun unabhaengige S3- und acht variable Y4-Latches koexistieren; der neunte
+  Y4-Zustand `Y4-006` ist ein Basisrecord-Marker ohne Slot. Cleared-Historie
+  zaehlt nicht als aktive Latchkapazitaet. Die Slot-Bound `17`, die neue
+  Payload `1.216 Byte`, der neue Envelope-Record `1.253 Byte` und das bewusst
+  gewaehlte application-spezifische Limit `2.048 Byte` werden statisch und
+  dynamisch geprueft.
+- Bei voll belegten aktiven Slots wird kein Latch evicted. Eine weitere
+  unabhaengige Safetyursache setzt den Basisrecord-Overflowmarker ausserhalb
+  der Slotliste, bleibt im RAM sofort fail-closed und fuehrt bei erfolgreichem
+  Marker-Commit deterministisch zu `SAFE_BOOT`; ein Marker-Schreib- oder
+  Readbackfehler bleibt ebenfalls fail-closed.
+- S3-004 und danach S3-005 bleiben gleichzeitig aktiv nachvollziehbar; eine
+  Recovery loescht S3-004 nicht. Die firmwarefeste Recoveryobergrenze `<=2`
+  und der zulaessige Bereich `0..2` werden erhalten.
+
+### Fault/Sensor-Injektionen
+
+- Produktfuehler O2/Fallback gemaess #21;
+- Schrankluft `FAILED` -> `S3-001`;
+- Kuehlkoerpersensor `FAILED` -> `S3-002`;
+- persistenter Sensorwiderspruch -> `S3-003`;
+- thermische Eingriffsgrenze -> `S3-004` und ohne #35 keine aktive Recovery;
+- harte Notgrenze nach bestehendem S3-004-Latch -> beide Latches bleiben aktiv.
+
+### Aktor-Injektionen
+
+- #23 `ActuatorWatchdogFaultEvidence` -> `S3-008`;
+- Aussen-/Innenluefterfehler -> `S3-006`/`S3-007`;
+- H-Bruecke, Strom, Richtung oder Ausgang -> `S3-009`;
+- Planner-/Sink-Bypassversuch -> keine Aktorfreigabe.
+
+### Persistenz-Injektionen
+
+- `WriteError`, `CapacityError`, `ReadError` und Korruption;
+- `CommitOutcomeUnknown` mit Readback des neuen Stands, altem Stand,
+  Readbackfehler und Mismatch;
+- alle 17 aktiven Slots plus neue unabhaengige Safetyursache: kein Evict,
+  persistenter Basis-Overflowmarker ausserhalb der Slots und `SAFE_BOOT`;
+- RAM-Latch bleibt bei fehlgeschlagenem Safetywrite;
+- ein spaeter isolierter erfolgreicher Write ist keine Entwarnung.
+
+### Restart-/Brownout-Injektionen
+
+- `PowerOn`, passender `SoftwareRestart` mit Application-Evidence,
+  `WatchdogOrPanic`, `Brownout`, `ExternalOrOther` und `Unknown`;
+- dieselbe bootlokale Observation wird nicht mehrfach als neuer Restart gezaehlt;
+- dieselbe automatische Recoveryursache darf hoechstens einen kontrollierten
+  Restart ausloesen; ein zweiter Versuch bleibt aus;
+- dritter abnormaler Restart -> `SAFE_BOOT`;
+- 29:59, 30:00 und >30:00 stabile monotone Laufzeit;
+- normaler Reboot und Power-off schliessen die Episode nicht;
+- abnormaler Restart waehrend der Stabilitaetsphase startet die Bewertung neu;
+- normaler Reboot verlaesst `SAFE_BOOT` nicht; `Y4-009` erzeugt keinen
+  generischen zweiten Reboot.
+
+### Reale #56/#57-Application-Grenze
+
+- `ConfigurationRuntimeFailure`;
+- nicht aufloesbarer `CommitOutcomeUnknown` beziehungsweise realer
+  Commitindeterminate-Status;
+- `ConfigurationUnavailable`;
+- `ConfigurationIntegrityFailure`;
+- echter `FermentationApplication`-Pfad, genau eine zentrale Safetyinstanz,
+  echte oeffentliche #56/#57-Resultate und bestehender #23-Planner-/Sinkpfad;
+- `Unknown`/`Unresolved` -> niemals `Allowed`.
+
+### Reset-, Journal- und Gate-Injektionen
+
+- neutraler #15-`FaultResetRequest` ohne positive Caller-Safetyentscheidung;
+- fehlende oder nicht passende typisierte Autorisierung -> fail-closed;
+- codebezogene Reset-/Reboot-/SAFE_BOOT-Entscheidung fuer jeden S3/Y4-Code;
+- Fault-, Restart-, Reset- und SAFE_BOOT-Ereignisse ueber das bestehende
+  `IEventJournal`;
+- Journalfehler darf Safetycommit oder sichere Reaktion nie in `Allowed`
+  umdeuten;
+- S3-004 ohne #35: keine Recovery, kein PI-/Planner-Bypass, Latch bleibt.
 
 Der historische R2-Abschnitt oberhalb bleibt unveraendert als
 `NOT_ACCEPTED_PENDING_R3`. Alle R3-Orakel in diesem Planungsauftrag sind
