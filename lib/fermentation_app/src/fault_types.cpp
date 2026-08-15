@@ -374,6 +374,9 @@ bool FaultCore::restoreSnapshot(const FaultCoreSnapshot& snapshot) {
             record.faultClass != faultClassForCode(record.code) ||
             record.status == FaultStatus::Cleared ||
             record.faultRevision == 0U ||
+            // D3: a record's own revision can never be newer than the
+            // global FaultCore revision it was last mutated under.
+            record.faultRevision > snapshot.revision ||
             record.disposition !=
                 (record.faultClass == FaultClass::ProcessWarning
                      ? SafetyDisposition::Allowed
@@ -384,6 +387,18 @@ bool FaultCore::restoreSnapshot(const FaultCoreSnapshot& snapshot) {
         }
         for (std::size_t otherIndex = 0U; otherIndex < index; ++otherIndex) {
             if (snapshot.records[otherIndex].instanceId == record.instanceId) {
+                return false;
+            }
+            // D3: S3-008 and Y4-008 mechanically normalize to one fixed
+            // bounded identity, so two active records can never legitimately
+            // share either code. Every other code's "at most one active
+            // instance" bound is a producer-discipline assumption, not a
+            // FaultCore-level identity constraint (e.g. O2-002 is bounded
+            // per independent safety sensor role instead, up to two
+            // simultaneous instances).
+            if ((record.code == FaultCode::S3_008 ||
+                 record.code == FaultCode::Y4_008) &&
+                snapshot.records[otherIndex].code == record.code) {
                 return false;
             }
         }

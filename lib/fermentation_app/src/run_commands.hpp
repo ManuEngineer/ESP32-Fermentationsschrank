@@ -313,35 +313,6 @@ enum class FaultResetCheckDomain : std::uint8_t {
     Integrity = 1U << 3U,
 };
 
-enum class FaultResetCheckStatus : std::uint8_t {
-    Unknown,
-    Passed,
-    Failed,
-};
-
-// Y4-006 is a basis-record marker, not a FaultCore slot. Its recovery has a
-// separate typed contract so a normal fault reset cannot accidentally clear
-// the global persistence/capacity lock.
-struct SafetyMarkerRecoveryEvidence {
-    std::uint32_t markerRevision{0U};
-    std::uint32_t evidenceRevision{0U};
-    FaultResetCheckStatus read{FaultResetCheckStatus::Unknown};
-    FaultResetCheckStatus write{FaultResetCheckStatus::Unknown};
-    FaultResetCheckStatus capacity{FaultResetCheckStatus::Unknown};
-    FaultResetCheckStatus integrity{FaultResetCheckStatus::Unknown};
-    std::uint32_t readEvidenceRevision{0U};
-    std::uint32_t writeEvidenceRevision{0U};
-    std::uint32_t capacityEvidenceRevision{0U};
-    std::uint32_t integrityEvidenceRevision{0U};
-
-    [[nodiscard]] bool allPassed() const {
-        return read == FaultResetCheckStatus::Passed &&
-               write == FaultResetCheckStatus::Passed &&
-               capacity == FaultResetCheckStatus::Passed &&
-               integrity == FaultResetCheckStatus::Passed;
-    }
-};
-
 struct FaultResetEvaluation {
     bool allowed{false};
     bool causeStillActive{true};

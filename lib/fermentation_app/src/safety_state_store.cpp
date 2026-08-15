@@ -384,6 +384,9 @@ SafetyRecordValidation validateSafetyStateRecord(
             !knownDisposition(fault.disposition) ||
             fault.disposition != SafetyDisposition::ImmediateStop ||
             fault.status == FaultStatus::Cleared || fault.faultRevision == 0U ||
+            // D3: a latch's own revision can never be newer than the
+            // global FaultCore revision it was last mutated under.
+            fault.faultRevision > record.faultRevision ||
             (fault.primaryFaultId.has_value() &&
              fault.primaryFaultId->value == fault.instanceId.value) ||
             fault.instanceId.value > record.faultInstanceSequence) {
@@ -391,6 +394,19 @@ SafetyRecordValidation validateSafetyStateRecord(
         }
         for (std::size_t other = 0U; other < index; ++other) {
             if (record.latches[other].instanceId == fault.instanceId) {
+                return SafetyRecordValidation::InvalidRelationship;
+            }
+            // D3: S3-008 and Y4-008 mechanically normalize to one fixed
+            // bounded identity (normalizeBoundedFaultIdentity()), so two
+            // persisted latches can never legitimately share either code.
+            // Every other code's "at most one active instance" bound is a
+            // producer-discipline assumption feeding the worst-case
+            // capacity analysis, not a FaultCore-level identity constraint;
+            // enforcing it here would reject legitimate independent
+            // instances (e.g. distinct sensor roles/correlations).
+            if ((fault.code == FaultCode::S3_008 ||
+                 fault.code == FaultCode::Y4_008) &&
+                record.latches[other].code == fault.code) {
                 return SafetyRecordValidation::InvalidRelationship;
             }
         }
@@ -407,15 +423,36 @@ SafetyRecordValidation validateSafetyStateRecord(
             if (!found) return SafetyRecordValidation::InvalidRelationship;
         }
     }
-    if (record.dominantCode != FaultCode::Unknown) {
-        bool found = false;
+    // D3: dominantCode must equal the actually reconstructed dominant among
+    // the persisted latches (highest class, then lowest code priority, then
+    // earliest creation), not merely occur somewhere in the record. Every
+    // persisted latch is already a latched class by the per-fault check
+    // above, so a persisted latched fault always outranks the non-persisted
+    // P1/O2 domain.
+    {
+        const FaultRecord* reconstructedDominant = nullptr;
         for (std::size_t index = 0U; index < record.latchCount; ++index) {
-            if (record.latches[index].code == record.dominantCode) {
-                found = true;
-                break;
+            const auto& candidate = record.latches[index];
+            if (reconstructedDominant == nullptr ||
+                static_cast<std::uint8_t>(candidate.faultClass) >
+                    static_cast<std::uint8_t>(
+                        reconstructedDominant->faultClass) ||
+                (candidate.faultClass == reconstructedDominant->faultClass &&
+                 (faultCodePriority(candidate.code) <
+                      faultCodePriority(reconstructedDominant->code) ||
+                  (faultCodePriority(candidate.code) ==
+                       faultCodePriority(reconstructedDominant->code) &&
+                   candidate.creationSequence <
+                       reconstructedDominant->creationSequence)))) {
+                reconstructedDominant = &candidate;
             }
         }
-        if (!found) return SafetyRecordValidation::InvalidRelationship;
+        const auto expectedDominantCode = reconstructedDominant == nullptr
+                                              ? FaultCode::Unknown
+                                              : reconstructedDominant->code;
+        if (record.dominantCode != expectedDominantCode) {
+            return SafetyRecordValidation::InvalidRelationship;
+        }
     }
     if (record.restartEvidence.state == RestartEvidenceState::None) {
         if (record.restartEvidence.evidenceId != 0U ||
@@ -498,12 +535,23 @@ SafetyRecordDecodeStatus decodeSafetyStateRecord(const std::string& bytes,
         std::numeric_limits<std::uint32_t>::max()) {
         return SafetyRecordDecodeStatus::InvalidRecord;
     }
-    outRecord.recordRevision =
+    if (!decodePayload(decoded.envelope->payload, outRecord)) {
+        return SafetyRecordDecodeStatus::InvalidRecord;
+    }
+    // D3: the envelope carries the authoritative schema/version/epoch; the
+    // payload carries its own redundant copy. decodePayload() sets these
+    // fields from the payload bytes alone, so a splice or partial
+    // corruption that changes one without the other must be caught here
+    // instead of letting whichever value decoded last silently win.
+    const auto expectedRevision =
         static_cast<std::uint32_t>(decoded.envelope->versionValue);
-    outRecord.storageEpoch = decoded.envelope->storageEpoch;
-    return decodePayload(decoded.envelope->payload, outRecord)
-               ? SafetyRecordDecodeStatus::Success
-               : SafetyRecordDecodeStatus::InvalidRecord;
+    if (outRecord.recordRevision != expectedRevision ||
+        outRecord.storageEpoch.value() !=
+            decoded.envelope->storageEpoch.value() ||
+        outRecord.schemaVersion != decoded.envelope->schemaVersion) {
+        return SafetyRecordDecodeStatus::InvalidRecord;
+    }
+    return SafetyRecordDecodeStatus::Success;
 }
 
 SafetyStateStore::SafetyStateStore(device_platform::IStateStore& store)

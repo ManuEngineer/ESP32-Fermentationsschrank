@@ -88,22 +88,6 @@ FaultResetRequest resetRequestFor(FaultInstanceId id, std::uint32_t revision) {
     return request;
 }
 
-SafetyMarkerRecoveryEvidence passedMarkerRecoveryEvidence(
-    const SafetyFaultService& service) {
-    SafetyMarkerRecoveryEvidence evidence;
-    evidence.markerRevision = service.record().capacityFailureRevision;
-    evidence.evidenceRevision = service.record().recordRevision;
-    evidence.read = FaultResetCheckStatus::Passed;
-    evidence.write = FaultResetCheckStatus::Passed;
-    evidence.capacity = FaultResetCheckStatus::Passed;
-    evidence.integrity = FaultResetCheckStatus::Passed;
-    evidence.readEvidenceRevision = service.record().recordRevision;
-    evidence.writeEvidenceRevision = service.record().recordRevision;
-    evidence.capacityEvidenceRevision = service.record().recordRevision;
-    evidence.integrityEvidenceRevision = service.record().recordRevision;
-    return evidence;
-}
-
 FaultResetAuthorizationEvidence authorizationFor(
     FaultInstanceId id, std::uint32_t revision,
     FaultResetAuthorizationLevel level =
@@ -225,6 +209,8 @@ void test_r3_record_is_fixed_1253_bytes_and_has_17_slots() {
     record.latches[0].faultRevision = 1U;
     record.latches[0].causeActive = true;
     record.latches[0].latched = true;
+    // D3: dominantCode must equal the actually reconstructed dominant.
+    record.dominantCode = FaultCode::S3_003;
     TEST_ASSERT_TRUE(encodeSafetyStateRecord(record, encoded) ==
                      SafetyRecordEncodeStatus::Success);
     SafetyStateRecord decoded;
@@ -627,13 +613,14 @@ void test_y4_006_requires_controlled_marker_recovery() {
     markerAuthorization.evidenceId = 800U;
     markerAuthorization.level = FaultResetAuthorizationLevel::Technical;
     markerAuthorization.expiresAtMonotonicMillis = 100U;
-    auto markerEvidence = passedMarkerRecoveryEvidence(service);
-    TEST_ASSERT_TRUE(service.recoverSafetyStateMarker({}, markerEvidence) ==
+    // D2: an empty/invalid authorization is rejected outright; a valid
+    // technical authorization is still rejected while the real cause
+    // (the still-active S3-003) has not been cleared through its own real
+    // path.
+    TEST_ASSERT_TRUE(service.recoverSafetyStateMarker({}) ==
                      SafetyServiceStatus::SafetyRejected);
-    markerEvidence.read = FaultResetCheckStatus::Unknown;
-    TEST_ASSERT_TRUE(
-        service.recoverSafetyStateMarker(markerAuthorization, markerEvidence) ==
-        SafetyServiceStatus::SafetyRejected);
+    TEST_ASSERT_TRUE(service.recoverSafetyStateMarker(markerAuthorization) ==
+                     SafetyServiceStatus::SafetyRejected);
     bool recoveryRejectedJournaled = false;
     for (const auto& entry : journal.entries()) {
         recoveryRejectedJournaled =
@@ -668,10 +655,8 @@ void test_y4_006_requires_controlled_marker_recovery() {
     TEST_ASSERT_TRUE(service.injectFaultForTesting(
                          {FaultCode::S3_004, 24U, 2U, 2U, std::nullopt}) ==
                      SafetyServiceStatus::Ready);
-    markerEvidence = passedMarkerRecoveryEvidence(service);
-    TEST_ASSERT_TRUE(
-        service.recoverSafetyStateMarker(markerAuthorization, markerEvidence) ==
-        SafetyServiceStatus::SafetyRejected);
+    TEST_ASSERT_TRUE(service.recoverSafetyStateMarker(markerAuthorization) ==
+                     SafetyServiceStatus::SafetyRejected);
     const auto* other = service.faultCore().dominant();
     TEST_ASSERT_NOT_NULL(other);
     const auto otherId = other->instanceId;
@@ -687,10 +672,8 @@ void test_y4_006_requires_controlled_marker_recovery() {
                         authorizationFor(otherId, other->faultRevision))
             .status == SafetyServiceStatus::ResetCommitted);
 
-    markerEvidence = passedMarkerRecoveryEvidence(service);
-    TEST_ASSERT_TRUE(
-        service.recoverSafetyStateMarker(markerAuthorization, markerEvidence) ==
-        SafetyServiceStatus::SafetyMarkerRecoveryCommitted);
+    TEST_ASSERT_TRUE(service.recoverSafetyStateMarker(markerAuthorization) ==
+                     SafetyServiceStatus::SafetyMarkerRecoveryCommitted);
     TEST_ASSERT_FALSE(service.record().capacityFailureLatched);
     TEST_ASSERT_FALSE(service.safeBootRequired());
     TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
@@ -726,14 +709,64 @@ void test_y4_006_requires_controlled_marker_recovery() {
             .status == SafetyServiceStatus::ResetCommitted);
     const auto journalEntriesBeforeFailure = journal.entries().size();
     journal.injectWriteFailure(true);
-    markerEvidence = passedMarkerRecoveryEvidence(service);
-    TEST_ASSERT_TRUE(
-        service.recoverSafetyStateMarker(markerAuthorization, markerEvidence) ==
-        SafetyServiceStatus::SafetyMarkerRecoveryCommitted);
+    TEST_ASSERT_TRUE(service.recoverSafetyStateMarker(markerAuthorization) ==
+                     SafetyServiceStatus::SafetyMarkerRecoveryCommitted);
     TEST_ASSERT_FALSE(service.record().capacityFailureLatched);
     TEST_ASSERT_EQUAL_UINT32(journalEntriesBeforeFailure,
                              journal.entries().size());
     TEST_ASSERT_EQUAL_UINT32(0U, reset.restartRequestCount());
+}
+
+void test_y4_006_recovery_rejects_diverged_store_record() {
+    // D2: recoverSafetyStateMarker() must compare the freshly loaded store
+    // record against the expected RAM identity, not just check its load
+    // status. A real external divergence (a different committed revision)
+    // stays fail-closed instead of being blindly overwritten from RAM.
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    qualifyConfiguration(service);
+
+    store.setNextWriteFault(
+        SimulatedPersistentStateStore::WriteFault::FailBeforeBegin);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::PersistentWriteFailed);
+    const auto* fault = service.faultCore().dominant();
+    TEST_ASSERT_NOT_NULL(fault);
+    const auto faultId = fault->instanceId;
+    TEST_ASSERT_TRUE(service.clearFaultCause(faultId, fault->faultRevision) ==
+                     SafetyServiceStatus::Ready);
+    fault = service.faultCore().find(faultId);
+    TEST_ASSERT_NOT_NULL(fault);
+    passedResetChecks(service, faultId, fault->faultRevision);
+    TEST_ASSERT_TRUE(
+        service
+            .resetFault(resetRequestFor(faultId, fault->faultRevision),
+                        authorizationFor(faultId, fault->faultRevision))
+            .status == SafetyServiceStatus::ResetCommitted);
+    TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
+
+    // An independent write to the same underlying store now diverges from
+    // the SafetyFaultService's own RAM/expected identity.
+    SafetyStateStore divergentStore(store);
+    SafetyStateRecord divergent = service.record();
+    divergent.recordRevision += 5U;
+    TEST_ASSERT_TRUE(divergentStore.commit(divergent).status ==
+                     SafetyRecordCommitStatus::Committed);
+
+    FaultResetAuthorizationEvidence markerAuthorization;
+    markerAuthorization.evidenceId = 900U;
+    markerAuthorization.level = FaultResetAuthorizationLevel::Technical;
+    markerAuthorization.expiresAtMonotonicMillis = 100U;
+    TEST_ASSERT_TRUE(service.recoverSafetyStateMarker(markerAuthorization) ==
+                     SafetyServiceStatus::SafetyRejected);
+    TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
+    TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
+                     ActuatorSafetyGateStatus::ImmediateStop);
 }
 
 void test_contract_injection_codes_and_journal_failure_remain_distinct() {
@@ -1949,6 +1982,7 @@ int main() {
         test_s3_004_is_contract_only_and_capacity_uses_marker_without_evict);
     RUN_TEST(test_safety_write_failure_keeps_ram_locked);
     RUN_TEST(test_y4_006_requires_controlled_marker_recovery);
+    RUN_TEST(test_y4_006_recovery_rejects_diverged_store_record);
     RUN_TEST(
         test_safety_commit_outcomes_are_fail_closed_and_exact_unknown_is_confirmed);
     RUN_TEST(test_contract_injection_codes_and_journal_failure_remain_distinct);

@@ -127,9 +127,12 @@ class SafetyFaultService final {
         const FaultResetRequest& request,
         const FaultResetAuthorizationEvidence& authorization,
         ActuatorPlanner* planner = nullptr);
+    // D2: only typed technical authorization crosses the boundary. Every
+    // read/write/capacity/integrity check is derived internally from a real
+    // store readback and a real store commit; no caller can fabricate a
+    // passing evidence object.
     [[nodiscard]] SafetyServiceStatus recoverSafetyStateMarker(
-        const FaultResetAuthorizationEvidence& authorization,
-        const SafetyMarkerRecoveryEvidence& evidence);
+        const FaultResetAuthorizationEvidence& authorization);
     [[nodiscard]] SafetyServiceStatus requestControlledSafetyRestart(
         FaultInstanceId id, std::uint32_t expectedRevision);
     [[nodiscard]] SafetyServiceStatus advanceStableWindow();

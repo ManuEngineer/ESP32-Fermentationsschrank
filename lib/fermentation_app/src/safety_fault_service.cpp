@@ -1374,8 +1374,7 @@ SafetyResetResult SafetyFaultService::resetFault(
 }
 
 SafetyServiceStatus SafetyFaultService::recoverSafetyStateMarker(
-    const FaultResetAuthorizationEvidence& authorization,
-    const SafetyMarkerRecoveryEvidence& evidence) {
+    const FaultResetAuthorizationEvidence& authorization) {
     if (!started_) return SafetyServiceStatus::NotStarted;
     recordEvent(FaultEventType::SafetyRecoveryAttempted, nullptr, true);
     const auto reject = [this](SafetyServiceStatus status) {
@@ -1391,23 +1390,15 @@ SafetyServiceStatus SafetyFaultService::recoverSafetyStateMarker(
                 FaultResetAuthorizationLevel::Technical) &&
         authorization.issuedAtMonotonicMillis <= now &&
         now <= authorization.expiresAtMonotonicMillis;
-    const bool evidenceCurrent =
-        evidence.markerRevision == record_.capacityFailureRevision &&
-        evidence.evidenceRevision == record_.recordRevision &&
-        evidence.allPassed() &&
-        evidence.readEvidenceRevision == record_.recordRevision &&
-        evidence.writeEvidenceRevision == record_.recordRevision &&
-        evidence.capacityEvidenceRevision == record_.recordRevision &&
-        evidence.integrityEvidenceRevision == record_.recordRevision;
     if (!record_.capacityFailureLatched || !authorizationValid ||
-        !evidenceCurrent || !configurationGateQualified_ ||
-        faultCore_.hasBlockingFault()) {
+        !configurationGateQualified_ || faultCore_.hasBlockingFault()) {
         return reject(SafetyServiceStatus::SafetyRejected);
     }
 
-    // Read and validate the currently committed record before preparing the
-    // recovery candidate. The candidate is not applied in RAM until the
-    // single normal SafetyStateStore write and its readback are confirmed.
+    // D2: Read - load and validate the currently committed record before
+    // trusting it as the recovery baseline. The candidate is not applied in
+    // RAM until this readback, the identity comparison below, and the
+    // single normal SafetyStateStore write/readback are all confirmed.
     const auto current = stateStore_.load();
     if (current.status != SafetyRecordLoadStatus::Loaded &&
         current.status != SafetyRecordLoadStatus::FactoryInitialized) {
@@ -1415,7 +1406,27 @@ SafetyServiceStatus SafetyFaultService::recoverSafetyStateMarker(
                             markerKindForLoad(current.status));
         return reject(SafetyServiceStatus::PersistentReadFailed);
     }
+    // D2: Integrity - the loaded record must itself validate and its
+    // identity must match the RAM state that caused the capacity latch. A
+    // caller cannot fabricate this; only a real matching store readback can
+    // satisfy it. A silent divergence (external tamper, partial write,
+    // corrupted-but-parseable record) stays fail-closed instead of being
+    // blindly overwritten from RAM.
+    if (validateSafetyStateRecord(current.record) !=
+            SafetyRecordValidation::Valid ||
+        current.record.recordRevision != record_.recordRevision ||
+        current.record.faultRevision != record_.faultRevision ||
+        current.record.latchCount != record_.latchCount ||
+        current.record.capacityFailureRevision !=
+            record_.capacityFailureRevision) {
+        retainRamFailClosed(0U, authorization.evidenceId,
+                            SafetyMarkerErrorKind::Integrity);
+        return reject(SafetyServiceStatus::SafetyRejected);
+    }
 
+    // D2: Write/Capacity - the store's own commit below (write + exact
+    // readback) is the sole proof; no caller-supplied PASS can substitute
+    // for it.
     SafetyStateRecord candidate = record_;
     candidate.capacityFailureLatched = false;
     candidate.capacityFailureRevision = 0U;

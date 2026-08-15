@@ -1128,14 +1128,53 @@ void test_domain_revision_conflicts_are_rejected_without_mutation() {
 
     auto faultState = standbyState();
     faultState.processState.state = ProcessState::Fault;
+    FaultRecord targetRecord;
+    targetRecord.instanceId = FaultInstanceId{1U};
+    targetRecord.code = FaultCode::S3_001;
+    targetRecord.faultClass = FaultClass::LatchedSafetyFault;
+    targetRecord.status = FaultStatus::CauseClearedLocked;
+    targetRecord.causeActive = false;
+    targetRecord.latched = true;
+    targetRecord.faultRevision = 2U;
+    faultState.faultSnapshot.records[0] = targetRecord;
+    faultState.faultSnapshot.count = 1U;
+    // D1: an unrelated fault later advances the shared FaultCore revision
+    // counter without ever touching this target's own revision (2).
     faultState.faultRevision = 4U;
     FaultResetRequest reset;
     reset.envelope = envelope(4U, faultState);
+    reset.targetFault = targetRecord.instanceId;
     reset.envelope.expectedFaultRevision = 3U;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(CommandStatus::StaleState),
         static_cast<int>(decideFaultReset(faultState, reset).status));
     TEST_ASSERT_EQUAL_UINT32(4U, faultState.faultRevision);
+}
+
+void test_fault_reset_target_revision_survives_unrelated_global_revision_advance() {
+    // D1: the target's own revision remains the correct staleness basis even
+    // after another fault has advanced the shared FaultCore revision
+    // counter past it.
+    auto faultState = standbyState();
+    faultState.processState.state = ProcessState::Fault;
+    FaultRecord targetRecord;
+    targetRecord.instanceId = FaultInstanceId{1U};
+    targetRecord.code = FaultCode::S3_001;
+    targetRecord.faultClass = FaultClass::LatchedSafetyFault;
+    targetRecord.status = FaultStatus::CauseClearedLocked;
+    targetRecord.causeActive = false;
+    targetRecord.latched = true;
+    targetRecord.faultRevision = 2U;
+    faultState.faultSnapshot.records[0] = targetRecord;
+    faultState.faultSnapshot.count = 1U;
+    faultState.faultRevision = 4U;
+    FaultResetRequest reset;
+    reset.envelope = envelope(5U, faultState);
+    reset.targetFault = targetRecord.instanceId;
+    reset.envelope.expectedFaultRevision = targetRecord.faultRevision;
+    const auto decision = decideFaultReset(faultState, reset);
+    TEST_ASSERT_TRUE(decision.status != CommandStatus::StaleState);
+    TEST_ASSERT_TRUE(decision.proposed());
 }
 
 void test_processed_command_ids_form_a_bounded_rolling_window() {
@@ -2411,6 +2450,8 @@ int main() {
     RUN_TEST(test_critical_safety_blocks_run_commands_but_not_message_commands);
     RUN_TEST(test_critical_safety_event_invalidates_a_pending_comfort_decision);
     RUN_TEST(test_domain_revision_conflicts_are_rejected_without_mutation);
+    RUN_TEST(
+        test_fault_reset_target_revision_survives_unrelated_global_revision_advance);
     RUN_TEST(test_processed_command_ids_form_a_bounded_rolling_window);
     RUN_TEST(
         test_run_revision_overflow_is_rejected_for_every_run_mutating_command);

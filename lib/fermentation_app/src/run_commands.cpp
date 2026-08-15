@@ -286,11 +286,10 @@ bool requireFaultRevision(CommandDecision& decision) {
         decision.status = CommandStatus::ContextMissing;
         return false;
     }
-    if (*decision.envelope.expectedFaultRevision !=
-        decision.before.faultRevision) {
-        decision.status = CommandStatus::StaleState;
-        return false;
-    }
+    // D1: the expected revision names the target fault's own revision, not
+    // the shared FaultCore revision counter, which another fault may
+    // advance independently of this target. The target-specific staleness
+    // check happens once the target record is resolved, below.
     return true;
 }
 
@@ -1328,7 +1327,12 @@ CommandDecision decideFaultResetInternal(const RunCommandState& current,
         decision.status = CommandStatus::ContextMissing;
         return decision;
     }
-    if (targetRecord->faultRevision != current.faultRevision) {
+    // D1: compare against the target fault's own expected revision, not the
+    // shared FaultCore revision counter. Another fault advancing the global
+    // counter without touching this target must not make a valid reset of
+    // this target look stale.
+    if (targetRecord->faultRevision !=
+        *request.envelope.expectedFaultRevision) {
         decision.status = CommandStatus::StaleState;
         return decision;
     }
