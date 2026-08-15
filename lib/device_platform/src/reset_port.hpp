@@ -9,10 +9,10 @@ namespace device_platform {
 // immer Unknown.
 enum class ResetCause : std::uint8_t {
     PowerOn,
-    AuthorizedRestart,
-    ControlledSafetyRestart,
+    SoftwareRestart,
     WatchdogOrPanic,
     Brownout,
+    ExternalOrOther,
     Unknown,
 };
 
@@ -24,17 +24,7 @@ struct ResetCauseSnapshot {
     std::uint64_t observationId{0U};
 };
 
-enum class ControlledRestartPurpose : std::uint8_t {
-    ControlledSafetyRestart,
-    AuthorizedFaultReset,
-};
-
-struct ControlledRestartRequest {
-    ControlledRestartPurpose purpose{
-        ControlledRestartPurpose::ControlledSafetyRestart};
-};
-
-enum class ControlledRestartResult : std::uint8_t {
+enum class RestartRequestResult : std::uint8_t {
     Accepted,
     Rejected,
     OutcomeUnknown,
@@ -54,8 +44,7 @@ class IResetController {
     IResetController& operator=(IResetController&&) = delete;
 
     [[nodiscard]] virtual ResetCauseSnapshot observeBootReset() const = 0;
-    [[nodiscard]] virtual ControlledRestartResult requestRestart(
-        const ControlledRestartRequest& request) = 0;
+    [[nodiscard]] virtual RestartRequestResult requestRestart() = 0;
 };
 
 }  // namespace device_platform
