@@ -168,6 +168,7 @@ std::string encodePayload(const SafetyStateRecord& record) {
     appendU8(bytes, record.restartEpisode.stableWindowRunning ? 1U : 0U);
     appendU64(bytes, record.restartEpisode.stableWindowStartedAtMillis);
     appendU32(bytes, record.restartEvidence.evidenceId);
+    appendU64(bytes, record.restartEvidence.authorizationEvidenceId);
     appendU8(bytes, static_cast<std::uint8_t>(record.restartEvidence.cause));
     appendU8(bytes, static_cast<std::uint8_t>(record.restartEvidence.state));
     appendU8(bytes, static_cast<std::uint8_t>(record.restartEvidence.intent));
@@ -219,6 +220,8 @@ bool decodePayload(const std::string& bytes, SafetyStateRecord& record) {
         !readU64(bytes, offset,
                  record.restartEpisode.stableWindowStartedAtMillis) ||
         !readU32(bytes, offset, record.restartEvidence.evidenceId) ||
+        !readU64(bytes, offset,
+                 record.restartEvidence.authorizationEvidenceId) ||
         !readU8(bytes, offset, evidenceCause) ||
         !readU8(bytes, offset, evidenceState) ||
         !readU8(bytes, offset, evidenceIntent) ||
@@ -393,6 +396,7 @@ SafetyRecordValidation validateSafetyStateRecord(
     }
     if (record.restartEvidence.state == RestartEvidenceState::None) {
         if (record.restartEvidence.evidenceId != 0U ||
+            record.restartEvidence.authorizationEvidenceId != 0U ||
             record.restartEvidence.intent != RestartIntentType::None ||
             record.restartEvidence.targetFault.valid() ||
             record.restartEvidence.targetFaultRevision != 0U ||
@@ -405,6 +409,18 @@ SafetyRecordValidation validateSafetyStateRecord(
                record.restartEvidence.intent == RestartIntentType::Unknown ||
                record.restartEvidence.evidenceRevision == 0U ||
                record.restartEvidence.episodeId == 0U) {
+        return SafetyRecordValidation::InvalidRelationship;
+    }
+    if ((record.restartEvidence.intent ==
+             RestartIntentType::AuthorizedTechnicalRestart ||
+         record.restartEvidence.intent ==
+             RestartIntentType::AuthorizedSafeBootExit) !=
+        (record.restartEvidence.authorizationEvidenceId != 0U)) {
+        return SafetyRecordValidation::InvalidRelationship;
+    }
+    if (record.restartEvidence.intent ==
+            RestartIntentType::AutomaticSafetyRecovery &&
+        record.restartEvidence.authorizationEvidenceId != 0U) {
         return SafetyRecordValidation::InvalidRelationship;
     }
     if (record.restartEvidence.intent ==

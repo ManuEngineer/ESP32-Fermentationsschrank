@@ -69,9 +69,22 @@ struct ConfigurationSafetyFixture {
                                              configuration, coordinator);
 };
 
-FaultResetSafetyEvidence passedResetChecks() {
-    return {FaultResetCheckStatus::Passed, FaultResetCheckStatus::Passed,
-            FaultResetCheckStatus::Passed, FaultResetCheckStatus::Passed};
+FaultResetSafetyEvidence passedResetChecks(const SafetyFaultService& service,
+                                           FaultInstanceId id,
+                                           std::uint32_t revision) {
+    FaultResetSafetyEvidence evidence;
+    evidence.sensor = FaultResetCheckStatus::Passed;
+    evidence.actuator = FaultResetCheckStatus::Passed;
+    evidence.persistence = FaultResetCheckStatus::Passed;
+    evidence.integrity = FaultResetCheckStatus::Passed;
+    evidence.targetFault = id;
+    evidence.targetFaultRevision = revision;
+    evidence.evidenceRevision = service.record().recordRevision;
+    evidence.sensorEvidenceRevision = service.record().recordRevision;
+    evidence.actuatorEvidenceRevision = service.record().recordRevision;
+    evidence.persistenceEvidenceRevision = service.record().recordRevision;
+    evidence.integrityEvidenceRevision = service.record().recordRevision;
+    return evidence;
 }
 
 FaultResetRequest resetRequestFor(FaultInstanceId id, std::uint32_t revision) {
@@ -83,6 +96,22 @@ FaultResetRequest resetRequestFor(FaultInstanceId id, std::uint32_t revision) {
     request.envelope.confirmed = true;
     request.targetFault = id;
     return request;
+}
+
+SafetyMarkerRecoveryEvidence passedMarkerRecoveryEvidence(
+    const SafetyFaultService& service) {
+    SafetyMarkerRecoveryEvidence evidence;
+    evidence.markerRevision = service.record().capacityFailureRevision;
+    evidence.evidenceRevision = service.record().recordRevision;
+    evidence.read = FaultResetCheckStatus::Passed;
+    evidence.write = FaultResetCheckStatus::Passed;
+    evidence.capacity = FaultResetCheckStatus::Passed;
+    evidence.integrity = FaultResetCheckStatus::Passed;
+    evidence.readEvidenceRevision = service.record().recordRevision;
+    evidence.writeEvidenceRevision = service.record().recordRevision;
+    evidence.capacityEvidenceRevision = service.record().recordRevision;
+    evidence.integrityEvidenceRevision = service.record().recordRevision;
+    return evidence;
 }
 
 FaultResetAuthorizationEvidence authorizationFor(
@@ -327,9 +356,8 @@ void test_s3_003_is_explicit_injection_not_thermal_enum() {
     authorization.expiresAtMonotonicMillis = 1U;
     authorization.targetFault = faultId;
     authorization.targetFaultRevision = cleared->faultRevision;
-    FaultResetSafetyEvidence safetyEvidence{
-        FaultResetCheckStatus::Passed, FaultResetCheckStatus::Passed,
-        FaultResetCheckStatus::Passed, FaultResetCheckStatus::Passed};
+    auto safetyEvidence =
+        passedResetChecks(service, faultId, cleared->faultRevision);
     TEST_ASSERT_TRUE(service.consumeConfigurationStatus(
                          ConfigurationSafetyStatus::Operational, 56U, 1U) ==
                      SafetyServiceStatus::Ready);
@@ -556,6 +584,93 @@ void test_safety_commit_outcomes_are_fail_closed_and_exact_unknown_is_confirmed(
     }
 }
 
+void test_y4_006_requires_controlled_marker_recovery() {
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    qualifyConfiguration(service);
+
+    store.setNextWriteFault(
+        SimulatedPersistentStateStore::WriteFault::FailBeforeBegin);
+    TEST_ASSERT_TRUE(
+        service.raiseFault({FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
+        SafetyServiceStatus::PersistentWriteFailed);
+    TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
+    TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
+                     ActuatorSafetyGateStatus::ImmediateStop);
+
+    FaultResetAuthorizationEvidence markerAuthorization;
+    markerAuthorization.evidenceId = 800U;
+    markerAuthorization.level = FaultResetAuthorizationLevel::Technical;
+    markerAuthorization.expiresAtMonotonicMillis = 100U;
+    auto markerEvidence = passedMarkerRecoveryEvidence(service);
+    TEST_ASSERT_TRUE(service.recoverSafetyStateMarker({}, markerEvidence) ==
+                     SafetyServiceStatus::SafetyRejected);
+    markerEvidence.read = FaultResetCheckStatus::Unknown;
+    TEST_ASSERT_TRUE(
+        service.recoverSafetyStateMarker(markerAuthorization, markerEvidence) ==
+        SafetyServiceStatus::SafetyRejected);
+
+    const auto* fault = service.faultCore().dominant();
+    TEST_ASSERT_NOT_NULL(fault);
+    const auto faultId = fault->instanceId;
+    const auto faultRevision = fault->faultRevision;
+    TEST_ASSERT_TRUE(service.clearFaultCause(faultId, faultRevision) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
+    TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
+                     ActuatorSafetyGateStatus::ImmediateStop);
+    fault = service.faultCore().find(faultId);
+    TEST_ASSERT_NOT_NULL(fault);
+    const auto clearedRevision = fault->faultRevision;
+    TEST_ASSERT_TRUE(
+        service
+            .resetFault(resetRequestFor(faultId, clearedRevision),
+                        authorizationFor(faultId, clearedRevision),
+                        passedResetChecks(service, faultId, clearedRevision))
+            .status == SafetyServiceStatus::ResetCommitted);
+    // The successful fault reset is not a Y4-006 recovery operation.
+    TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
+    TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
+                     ActuatorSafetyGateStatus::ImmediateStop);
+
+    TEST_ASSERT_TRUE(
+        service.raiseFault({FaultCode::S3_004, 24U, 2U, 2U, std::nullopt}) ==
+        SafetyServiceStatus::Ready);
+    markerEvidence = passedMarkerRecoveryEvidence(service);
+    TEST_ASSERT_TRUE(
+        service.recoverSafetyStateMarker(markerAuthorization, markerEvidence) ==
+        SafetyServiceStatus::SafetyRejected);
+    const auto* other = service.faultCore().dominant();
+    TEST_ASSERT_NOT_NULL(other);
+    const auto otherId = other->instanceId;
+    const auto otherRevision = other->faultRevision;
+    TEST_ASSERT_TRUE(service.clearFaultCause(otherId, otherRevision) ==
+                     SafetyServiceStatus::Ready);
+    other = service.faultCore().find(otherId);
+    TEST_ASSERT_NOT_NULL(other);
+    TEST_ASSERT_TRUE(
+        service
+            .resetFault(
+                resetRequestFor(otherId, other->faultRevision),
+                authorizationFor(otherId, other->faultRevision),
+                passedResetChecks(service, otherId, other->faultRevision))
+            .status == SafetyServiceStatus::ResetCommitted);
+
+    markerEvidence = passedMarkerRecoveryEvidence(service);
+    TEST_ASSERT_TRUE(
+        service.recoverSafetyStateMarker(markerAuthorization, markerEvidence) ==
+        SafetyServiceStatus::SafetyMarkerRecoveryCommitted);
+    TEST_ASSERT_FALSE(service.record().capacityFailureLatched);
+    TEST_ASSERT_FALSE(service.safeBootRequired());
+    TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
+                     ActuatorSafetyGateStatus::Allowed);
+    TEST_ASSERT_EQUAL_UINT32(0U, reset.restartRequestCount());
+}
+
 void test_contract_injection_codes_and_journal_failure_remain_distinct() {
     SimulatedPersistentStateStore store;
     device_platform_test_support::SimulatedResetController reset;
@@ -606,46 +721,62 @@ void test_fault_reset_evaluation_requires_auth_and_all_safety_checks() {
     const auto revision = active->faultRevision;
     const auto request = resetRequestFor(id, revision);
 
-    auto missing = service.evaluateFaultReset(request, {}, passedResetChecks());
+    auto missing = service.evaluateFaultReset(
+        request, {}, passedResetChecks(service, id, revision));
     TEST_ASSERT_FALSE(missing.allowed);
     TEST_ASSERT_TRUE(missing.rejection ==
                      FaultResetRejection::AuthorizationMissing);
 
     const auto lowAuthorization =
         authorizationFor(id, revision, FaultResetAuthorizationLevel::Operator);
-    auto low = service.evaluateFaultReset(request, lowAuthorization,
-                                          passedResetChecks());
+    auto low = service.evaluateFaultReset(
+        request, lowAuthorization, passedResetChecks(service, id, revision));
     TEST_ASSERT_FALSE(low.allowed);
     TEST_ASSERT_TRUE(low.rejection ==
                      FaultResetRejection::AuthorizationMissing);
 
-    auto failedSensor = passedResetChecks();
+    auto failedSensor = passedResetChecks(service, id, revision);
     failedSensor.sensor = FaultResetCheckStatus::Failed;
     auto sensor = service.evaluateFaultReset(
         request, authorizationFor(id, revision), failedSensor);
     TEST_ASSERT_FALSE(sensor.allowed);
     TEST_ASSERT_FALSE(sensor.safetyChecksPassed);
 
-    auto failedActuator = passedResetChecks();
+    auto failedActuator = passedResetChecks(service, id, revision);
     failedActuator.actuator = FaultResetCheckStatus::Failed;
     TEST_ASSERT_FALSE(service
                           .evaluateFaultReset(request,
                                               authorizationFor(id, revision),
                                               failedActuator)
                           .allowed);
-    auto failedPersistence = passedResetChecks();
+    auto failedPersistence = passedResetChecks(service, id, revision);
     failedPersistence.persistence = FaultResetCheckStatus::Failed;
     TEST_ASSERT_FALSE(service
                           .evaluateFaultReset(request,
                                               authorizationFor(id, revision),
                                               failedPersistence)
                           .allowed);
-    auto failedIntegrity = passedResetChecks();
+    auto failedIntegrity = passedResetChecks(service, id, revision);
     failedIntegrity.integrity = FaultResetCheckStatus::Failed;
     TEST_ASSERT_FALSE(service
                           .evaluateFaultReset(request,
                                               authorizationFor(id, revision),
                                               failedIntegrity)
+                          .allowed);
+    auto wrongTargetEvidence = passedResetChecks(service, id, revision);
+    wrongTargetEvidence.targetFault = FaultInstanceId{999U};
+    TEST_ASSERT_FALSE(service
+                          .evaluateFaultReset(request,
+                                              authorizationFor(id, revision),
+                                              wrongTargetEvidence)
+                          .allowed);
+    auto staleSensorEvidence = passedResetChecks(service, id, revision);
+    staleSensorEvidence.sensorEvidenceRevision =
+        service.record().recordRevision - 1U;
+    TEST_ASSERT_FALSE(service
+                          .evaluateFaultReset(request,
+                                              authorizationFor(id, revision),
+                                              staleSensorEvidence)
                           .allowed);
 
     // Acknowledgement is a separate command state; it does not reset the
@@ -659,7 +790,8 @@ void test_fault_reset_evaluation_requires_auth_and_all_safety_checks() {
     const auto acknowledgedAuthorization =
         authorizationFor(id, acknowledgedRevision);
     const auto committed = service.resetFault(
-        acknowledgedRequest, acknowledgedAuthorization, passedResetChecks());
+        acknowledgedRequest, acknowledgedAuthorization,
+        passedResetChecks(service, id, acknowledgedRevision));
     TEST_ASSERT_TRUE(committed.status == SafetyServiceStatus::ResetCommitted);
     TEST_ASSERT_NULL(service.faultCore().find(id));
     TEST_ASSERT_EQUAL_UINT32(0U, reset.restartRequestCount());
@@ -687,7 +819,8 @@ void test_fault_reset_rejects_stale_revision_and_other_blocking_fault() {
     auto staleRequest = resetRequestFor(targetId, revision - 1U);
     auto staleAuthorization = authorizationFor(targetId, revision);
     const auto stale = service.evaluateFaultReset(
-        staleRequest, staleAuthorization, passedResetChecks());
+        staleRequest, staleAuthorization,
+        passedResetChecks(service, targetId, revision));
     TEST_ASSERT_TRUE(stale.rejection == FaultResetRejection::StaleEvaluation);
 
     TEST_ASSERT_TRUE(
@@ -695,7 +828,8 @@ void test_fault_reset_rejects_stale_revision_and_other_blocking_fault() {
         SafetyServiceStatus::Ready);
     const auto blocked = service.evaluateFaultReset(
         resetRequestFor(targetId, revision),
-        authorizationFor(targetId, revision), passedResetChecks());
+        authorizationFor(targetId, revision),
+        passedResetChecks(service, targetId, revision));
     TEST_ASSERT_FALSE(blocked.allowed);
     TEST_ASSERT_TRUE(blocked.rejection ==
                      FaultResetRejection::OtherActiveFault);
@@ -733,13 +867,26 @@ void test_o2_and_p1_lifecycle_uses_producer_specific_resolution() {
 
     device_platform::SensorQualitySnapshot staleSafety;
     staleSafety.quality = device_platform::SensorQuality::Stale;
+    TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::CabinetAir,
+                                                  staleSafety, 22U, 10U) ==
+                     SafetyServiceStatus::Ready);
     TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::Cooling,
-                                                  staleSafety, 22U, 2U) ==
+                                                  staleSafety, 22U, 20U) ==
                      SafetyServiceStatus::Ready);
     device_platform::SensorQualitySnapshot validSafety;
     validSafety.quality = device_platform::SensorQuality::Valid;
+    TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::CabinetAir,
+                                                  validSafety, 22U, 10U) ==
+                     SafetyServiceStatus::Ready);
+    auto afterCabinetRecovery = service.faultCore().snapshot();
+    TEST_ASSERT_EQUAL_UINT32(1U, afterCabinetRecovery.count);
+    TEST_ASSERT_TRUE(afterCabinetRecovery.records[0].code == FaultCode::O2_002);
+    TEST_ASSERT_EQUAL_UINT32(20U,
+                             afterCabinetRecovery.records[0].correlationKey);
+    TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
+                     ActuatorSafetyGateStatus::ImmediateStop);
     TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::Cooling,
-                                                  validSafety, 22U, 3U) ==
+                                                  validSafety, 22U, 20U) ==
                      SafetyServiceStatus::Ready);
     for (std::size_t index = 0U; index < service.faultCore().snapshot().count;
          ++index) {
@@ -817,6 +964,143 @@ void test_automatic_restart_is_code_policy_bounded_and_once_per_episode() {
                      SafetyServiceStatus::SafetyRejected);
 }
 
+void test_restart_evidence_requires_current_fault_revision_and_episode_record() {
+    {
+        SimulatedPersistentStateStore store;
+        device_platform_test_support::SimulatedResetController reset;
+        device_platform::VirtualTimeSource time;
+        SafetyFaultService service(store, reset, time);
+        TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                         SafetyServiceStatus::Ready);
+        TEST_ASSERT_TRUE(service.raiseFault(
+                             {FaultCode::Y4_007, 24U, 1U, 1U, std::nullopt}) ==
+                         SafetyServiceStatus::Ready);
+        const auto* target = service.faultCore().dominant();
+        TEST_ASSERT_NOT_NULL(target);
+        TEST_ASSERT_TRUE(service.requestControlledSafetyRestart(
+                             target->instanceId, target->faultRevision) ==
+                         SafetyServiceStatus::Ready);
+
+        reset.setBootReset(ResetCause::SoftwareRestart, true, 1U);
+        SafetyFaultService restarted(store, reset, time);
+        TEST_ASSERT_TRUE(restarted.begin() == SafetyServiceStatus::Ready);
+        TEST_ASSERT_TRUE(restarted.evaluateBoot().restart.status ==
+                         RestartBootStatus::ControlledEvidenceConsumed);
+        TEST_ASSERT_FALSE(restarted.safeBootRequired());
+    }
+
+    const auto verifyEvidenceMismatch = [](bool removeTarget,
+                                           bool staleEvidenceRevision) {
+        SimulatedPersistentStateStore store;
+        device_platform_test_support::SimulatedResetController reset;
+        device_platform::VirtualTimeSource time;
+        {
+            SafetyFaultService service(store, reset, time);
+            TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                             SafetyServiceStatus::Ready);
+            TEST_ASSERT_TRUE(service.raiseFault({FaultCode::Y4_007, 24U, 1U, 1U,
+                                                 std::nullopt}) ==
+                             SafetyServiceStatus::Ready);
+            const auto* target = service.faultCore().dominant();
+            TEST_ASSERT_NOT_NULL(target);
+            TEST_ASSERT_TRUE(service.requestControlledSafetyRestart(
+                                 target->instanceId, target->faultRevision) ==
+                             SafetyServiceStatus::Ready);
+        }
+        SafetyStateStore persisted(store);
+        const auto loaded = persisted.load();
+        TEST_ASSERT_TRUE(loaded.status == SafetyRecordLoadStatus::Loaded);
+        auto tampered = loaded.record;
+        const auto originalEvidenceRevision =
+            tampered.restartEvidence.evidenceRevision;
+        ++tampered.recordRevision;
+        if (removeTarget) {
+            // A nonzero but absent instance is wire-valid and represents a
+            // target that no longer exists in the current FaultCore.
+            tampered.restartEvidence.targetFault = {999U};
+        } else {
+            ++tampered.restartEvidence.targetFaultRevision;
+        }
+        if (!staleEvidenceRevision) {
+            tampered.restartEvidence.evidenceRevision = tampered.recordRevision;
+        } else {
+            tampered.restartEvidence.evidenceRevision =
+                originalEvidenceRevision;
+        }
+        TEST_ASSERT_TRUE(persisted.commit(tampered).status ==
+                         SafetyRecordCommitStatus::Committed);
+
+        reset.setBootReset(ResetCause::SoftwareRestart, true, 2U);
+        SafetyFaultService restarted(store, reset, time);
+        TEST_ASSERT_TRUE(restarted.begin() == SafetyServiceStatus::Ready);
+        const auto boot = restarted.evaluateBoot();
+        TEST_ASSERT_TRUE(boot.restart.status ==
+                         RestartBootStatus::EvidenceMismatch);
+        TEST_ASSERT_TRUE(restarted.safeBootRequired());
+        bool evidenceFaultFound = false;
+        const auto faults = restarted.faultCore().snapshot();
+        for (std::size_t index = 0U; index < faults.count; ++index) {
+            evidenceFaultFound =
+                evidenceFaultFound ||
+                faults.records[index].code == FaultCode::Y4_008;
+        }
+        TEST_ASSERT_TRUE(evidenceFaultFound);
+    };
+    verifyEvidenceMismatch(false, false);
+    verifyEvidenceMismatch(true, false);
+    verifyEvidenceMismatch(false, true);
+}
+
+void test_rejected_or_unknown_restart_evidence_cannot_authorize_later_boot() {
+    {
+        SimulatedPersistentStateStore store;
+        device_platform_test_support::SimulatedResetController reset;
+        device_platform::VirtualTimeSource time;
+        SafetyFaultService service(store, reset, time);
+        TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                         SafetyServiceStatus::Ready);
+        TEST_ASSERT_TRUE(service.raiseFault(
+                             {FaultCode::Y4_007, 24U, 1U, 1U, std::nullopt}) ==
+                         SafetyServiceStatus::Ready);
+        const auto* target = service.faultCore().dominant();
+        TEST_ASSERT_NOT_NULL(target);
+        reset.setNextRestartResult(RestartRequestResult::Rejected);
+        TEST_ASSERT_TRUE(service.requestControlledSafetyRestart(
+                             target->instanceId, target->faultRevision) ==
+                         SafetyServiceStatus::ResetBootRejected);
+        reset.setBootReset(ResetCause::SoftwareRestart, true, 1U);
+        const auto boot = service.evaluateBoot();
+        TEST_ASSERT_TRUE(boot.restart.status ==
+                         RestartBootStatus::EvidenceMismatch);
+        TEST_ASSERT_TRUE(service.safeBootRequired());
+        TEST_ASSERT_EQUAL_UINT32(1U, reset.restartRequestCount());
+    }
+    {
+        SimulatedPersistentStateStore store;
+        device_platform_test_support::SimulatedResetController reset;
+        device_platform::VirtualTimeSource time;
+        SafetyFaultService service(store, reset, time);
+        TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                         SafetyServiceStatus::Ready);
+        TEST_ASSERT_TRUE(service.raiseFault(
+                             {FaultCode::Y4_007, 24U, 1U, 1U, std::nullopt}) ==
+                         SafetyServiceStatus::Ready);
+        const auto* target = service.faultCore().dominant();
+        TEST_ASSERT_NOT_NULL(target);
+        reset.setNextRestartResult(RestartRequestResult::OutcomeUnknown);
+        TEST_ASSERT_TRUE(service.requestControlledSafetyRestart(
+                             target->instanceId, target->faultRevision) ==
+                         SafetyServiceStatus::ResetBootOutcomeUnknown);
+        TEST_ASSERT_TRUE(service.safeBootRequired());
+        reset.setBootReset(ResetCause::SoftwareRestart, true, 1U);
+        const auto boot = service.evaluateBoot();
+        TEST_ASSERT_TRUE(boot.restart.status ==
+                         RestartBootStatus::EvidenceMismatch);
+        TEST_ASSERT_TRUE(service.safeBootRequired());
+        TEST_ASSERT_EQUAL_UINT32(1U, reset.restartRequestCount());
+    }
+}
+
 void test_stability_window_is_derived_from_central_safety_state() {
     SimulatedPersistentStateStore store;
     device_platform_test_support::SimulatedResetController reset;
@@ -874,14 +1158,50 @@ void test_cleared_history_reuses_active_capacity_but_not_instance_ids() {
         const auto request = resetRequestFor(last, fault->faultRevision);
         TEST_ASSERT_TRUE(
             service
-                .resetFault(request,
-                            authorizationFor(last, fault->faultRevision),
-                            passedResetChecks())
+                .resetFault(
+                    request, authorizationFor(last, fault->faultRevision),
+                    passedResetChecks(service, last, fault->faultRevision))
                 .status == SafetyServiceStatus::ResetCommitted);
         TEST_ASSERT_EQUAL_UINT32(0U, service.faultCore().snapshot().count);
     }
     TEST_ASSERT_TRUE(last.value > 20U);
     TEST_ASSERT_FALSE(service.record().capacityFailureLatched);
+}
+
+void test_active_capacity_includes_two_o2_safety_roles() {
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+
+    for (std::uint32_t index = 0U; index < kMaximumPersistedLatches; ++index) {
+        TEST_ASSERT_TRUE(
+            service.raiseFault({FaultCode::S3_003, 100U + index, index + 1U,
+                                index + 1U, std::nullopt}) ==
+            SafetyServiceStatus::Ready);
+    }
+    TEST_ASSERT_TRUE(service.consumeProcessMessage(
+                         ProcessMessage::TargetReachTimeExceeded, 200U, 1U) ==
+                     SafetyServiceStatus::Ready);
+
+    device_platform::SensorQualitySnapshot stale;
+    stale.quality = device_platform::SensorQuality::Stale;
+    TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::Product,
+                                                  stale, 201U, 1U) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::CabinetAir,
+                                                  stale, 202U, 2U) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::Cooling,
+                                                  stale, 202U, 3U) ==
+                     SafetyServiceStatus::Ready);
+
+    TEST_ASSERT_EQUAL_UINT32(21U, service.faultCore().snapshot().count);
+    TEST_ASSERT_FALSE(service.record().capacityFailureLatched);
+    TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
+                     ActuatorSafetyGateStatus::ImmediateStop);
 }
 
 void test_configuration_forwarding_reuses_producer_correlation() {
@@ -896,6 +1216,14 @@ void test_configuration_forwarding_reuses_producer_correlation() {
         static_cast<void>(gate.forward(ConfigurationRecoveryResult{
             ConfigurationRecoveryStatus::ConfigurationUnavailable, {}}));
     }
+    for (const auto status :
+         {ConfigurationRecoveryStatus::PersistenceReadFailure,
+          ConfigurationRecoveryStatus::PersistenceCapacityFailure,
+          ConfigurationRecoveryStatus::PersistenceWriteFailure,
+          ConfigurationRecoveryStatus::RuntimePreparationFailure}) {
+        static_cast<void>(
+            gate.forward(ConfigurationRecoveryResult{status, {}}));
+    }
     TEST_ASSERT_EQUAL_UINT32(1U, service.faultCore().snapshot().count);
     TEST_ASSERT_TRUE(service.faultCore().dominant()->code == FaultCode::Y4_003);
     TEST_ASSERT_TRUE(
@@ -906,8 +1234,21 @@ void test_configuration_forwarding_reuses_producer_correlation() {
         gate.forward(ConfigurationCommitResult{
             ConfigurationCommitStatus::ConfigurationCommitIndeterminate}) ==
         SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(
+        gate
+            .forward(ConfigurationRecoveryResult{
+                ConfigurationRecoveryStatus::BootstrapCommitIndeterminate, {}})
+            .safetyStatus == SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(
+        gate.forward(ConfigurationRecoveryResult{
+                         ConfigurationRecoveryStatus::
+                             ConfigurationRecordOutcomeIndeterminate,
+                         {}})
+            .safetyStatus == SafetyServiceStatus::Ready);
     static_cast<void>(gate.forward(ConfigurationRecoveryResult{
         ConfigurationRecoveryStatus::ConfigurationIntegrityFailure, {}}));
+    static_cast<void>(gate.forward(ConfigurationRecoveryResult{
+        ConfigurationRecoveryStatus::UnsupportedNewerConfigurationSchema, {}}));
     TEST_ASSERT_EQUAL_UINT32(4U, service.faultCore().snapshot().count);
 }
 
@@ -1061,6 +1402,7 @@ int main() {
     RUN_TEST(
         test_s3_004_is_contract_only_and_capacity_uses_marker_without_evict);
     RUN_TEST(test_safety_write_failure_keeps_ram_locked);
+    RUN_TEST(test_y4_006_requires_controlled_marker_recovery);
     RUN_TEST(
         test_safety_commit_outcomes_are_fail_closed_and_exact_unknown_is_confirmed);
     RUN_TEST(test_contract_injection_codes_and_journal_failure_remain_distinct);
@@ -1069,8 +1411,13 @@ int main() {
     RUN_TEST(test_o2_and_p1_lifecycle_uses_producer_specific_resolution);
     RUN_TEST(
         test_automatic_restart_is_code_policy_bounded_and_once_per_episode);
+    RUN_TEST(
+        test_restart_evidence_requires_current_fault_revision_and_episode_record);
+    RUN_TEST(
+        test_rejected_or_unknown_restart_evidence_cannot_authorize_later_boot);
     RUN_TEST(test_stability_window_is_derived_from_central_safety_state);
     RUN_TEST(test_cleared_history_reuses_active_capacity_but_not_instance_ids);
+    RUN_TEST(test_active_capacity_includes_two_o2_safety_roles);
     RUN_TEST(test_configuration_forwarding_reuses_producer_correlation);
     RUN_TEST(
         test_safe_boot_exit_is_authorized_after_configuration_qualification);

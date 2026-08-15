@@ -12,10 +12,11 @@ namespace fermentation {
 
 class SafetyFaultService;
 
-// The in-memory core retains the 17 persistent safety/system slots plus the
-// three non-latched P1/O2 observations. Y4-006 is a record marker and never
-// consumes one of the persistent slots.
-inline constexpr std::size_t kMaximumActiveFaults = 20U;
+// The in-memory core retains 17 persistent safety/system slots plus four
+// simultaneously possible non-latched observations: P1-001, one product
+// O2-001, and one O2-002 per independent safety sensor role (cabinet air and
+// cooling). Y4-006 is a record marker and never consumes a persistent slot.
+inline constexpr std::size_t kMaximumActiveFaults = 21U;
 
 enum class FaultClass : std::uint8_t {
     ProcessWarning = 1U,

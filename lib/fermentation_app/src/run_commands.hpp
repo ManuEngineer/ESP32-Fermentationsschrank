@@ -305,6 +305,14 @@ struct FaultResetAuthorizationEvidence {
     std::uint32_t targetFaultRevision{0U};
 };
 
+enum class FaultResetCheckDomain : std::uint8_t {
+    None = 0U,
+    Sensor = 1U << 0U,
+    Actuator = 1U << 1U,
+    Persistence = 1U << 2U,
+    Integrity = 1U << 3U,
+};
+
 enum class FaultResetCheckStatus : std::uint8_t {
     Unknown,
     Passed,
@@ -316,11 +324,41 @@ struct FaultResetSafetyEvidence {
     FaultResetCheckStatus actuator{FaultResetCheckStatus::Unknown};
     FaultResetCheckStatus persistence{FaultResetCheckStatus::Unknown};
     FaultResetCheckStatus integrity{FaultResetCheckStatus::Unknown};
+    FaultInstanceId targetFault;
+    std::uint32_t targetFaultRevision{0U};
+    std::uint32_t evidenceRevision{0U};
+    std::uint32_t sensorEvidenceRevision{0U};
+    std::uint32_t actuatorEvidenceRevision{0U};
+    std::uint32_t persistenceEvidenceRevision{0U};
+    std::uint32_t integrityEvidenceRevision{0U};
 
     [[nodiscard]] bool allPassed() const {
         return sensor == FaultResetCheckStatus::Passed &&
                actuator == FaultResetCheckStatus::Passed &&
                persistence == FaultResetCheckStatus::Passed &&
+               integrity == FaultResetCheckStatus::Passed;
+    }
+};
+
+// Y4-006 is a basis-record marker, not a FaultCore slot. Its recovery has a
+// separate typed contract so a normal fault reset cannot accidentally clear
+// the global persistence/capacity lock.
+struct SafetyMarkerRecoveryEvidence {
+    std::uint32_t markerRevision{0U};
+    std::uint32_t evidenceRevision{0U};
+    FaultResetCheckStatus read{FaultResetCheckStatus::Unknown};
+    FaultResetCheckStatus write{FaultResetCheckStatus::Unknown};
+    FaultResetCheckStatus capacity{FaultResetCheckStatus::Unknown};
+    FaultResetCheckStatus integrity{FaultResetCheckStatus::Unknown};
+    std::uint32_t readEvidenceRevision{0U};
+    std::uint32_t writeEvidenceRevision{0U};
+    std::uint32_t capacityEvidenceRevision{0U};
+    std::uint32_t integrityEvidenceRevision{0U};
+
+    [[nodiscard]] bool allPassed() const {
+        return read == FaultResetCheckStatus::Passed &&
+               write == FaultResetCheckStatus::Passed &&
+               capacity == FaultResetCheckStatus::Passed &&
                integrity == FaultResetCheckStatus::Passed;
     }
 };
@@ -331,9 +369,13 @@ struct FaultResetEvaluation {
     bool safetyChecksPassed{false};
     bool authorizationSatisfied{false};
     bool safetyEvidenceComplete{false};
+    bool safetyEvidenceTargetMatches{false};
+    bool safetyEvidenceCurrent{false};
     bool codePolicyAllowsReset{false};
     bool otherBlockingFaultActive{false};
     std::uint32_t faultRevision{0U};
+    std::uint8_t requiredCheckDomains{
+        static_cast<std::uint8_t>(FaultResetCheckDomain::None)};
     FaultResetAuthorizationLevel requiredAuthorization{
         FaultResetAuthorizationLevel::None};
     FaultResetAuthorizationLevel presentedAuthorization{

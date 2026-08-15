@@ -217,7 +217,9 @@ bool RestartEpisodeCoordinator::prepareRestartIntent(
     record.restartEvidence.state = RestartEvidenceState::Committed;
     record.restartEvidence.intent = intent;
     record.restartEvidence.targetFault = faultId;
-    record.restartEvidence.targetFaultRevision = faultRevision;
+    record.restartEvidence.targetFaultRevision =
+        intent == RestartIntentType::AuthorizedSafeBootExit ? 0U
+                                                            : faultRevision;
     record.restartEvidence.episodeId = record.restartEpisode.episodeId;
     record.restartEvidence.evidenceRevision = record.recordRevision + 1U;
     if (record.restartEpisode.abnormalRestartCount >= 3U) {

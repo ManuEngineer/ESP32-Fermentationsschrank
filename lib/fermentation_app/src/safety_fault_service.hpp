@@ -34,6 +34,7 @@ enum class SafetyServiceStatus : std::uint8_t {
     ResetCommitted,
     ResetBootRejected,
     ResetBootOutcomeUnknown,
+    SafetyMarkerRecoveryCommitted,
 };
 
 enum class ConfigurationSafetyStatus : std::uint8_t {
@@ -127,6 +128,9 @@ class SafetyFaultService final {
         const FaultResetAuthorizationEvidence& authorization,
         const FaultResetSafetyEvidence& safetyEvidence,
         ActuatorPlanner* planner = nullptr);
+    [[nodiscard]] SafetyServiceStatus recoverSafetyStateMarker(
+        const FaultResetAuthorizationEvidence& authorization,
+        const SafetyMarkerRecoveryEvidence& evidence);
     [[nodiscard]] SafetyServiceStatus requestControlledSafetyRestart(
         FaultInstanceId id, std::uint32_t expectedRevision);
     [[nodiscard]] SafetyServiceStatus advanceStableWindow();
@@ -155,17 +159,27 @@ class SafetyFaultService final {
     [[nodiscard]] bool copyCoreToRecord(SafetyStateRecord& candidate,
                                         const FaultCore& core) const;
     [[nodiscard]] SafetyServiceStatus resolveFaultCause(
-        FaultCode code, std::uint32_t sourceKey);
+        FaultCode code, std::uint32_t sourceKey,
+        std::optional<std::uint32_t> correlationKey = std::nullopt);
     [[nodiscard]] SafetyServiceStatus finalizePendingSafeBootExit();
     [[nodiscard]] bool clearSafeBootTrackingFault(FaultCore& core) const;
     void retainRamFailClosed(std::uint32_t sourceKey,
                              std::uint32_t correlationKey);
     [[nodiscard]] static FaultResetAuthorizationLevel requiredAuthorizationFor(
         FaultCode code);
+    [[nodiscard]] static std::uint8_t requiredResetCheckDomains(FaultCode code);
+    [[nodiscard]] bool resetSafetyEvidenceMatches(
+        const FaultResetSafetyEvidence& evidence,
+        const FaultResetRequest& request, std::uint32_t targetRevision,
+        std::uint8_t requiredDomains) const;
     [[nodiscard]] bool authorizationIsCurrent(
         const FaultResetAuthorizationEvidence& authorization,
         FaultInstanceId targetFault, std::uint32_t targetRevision,
         FaultResetAuthorizationLevel required) const;
+    [[nodiscard]] bool restartEvidenceMatchesCurrentFault(
+        const PersistedRestartEvidence& evidence) const;
+    [[nodiscard]] SafetyServiceStatus finalizeRestartRequestResult(
+        device_platform::RestartRequestResult result);
     void recordEvent(FaultEventType type, const FaultRecord* fault,
                      bool accepted, std::uint32_t episodeId = 0U,
                      std::uint32_t restartEvidenceId = 0U) const;

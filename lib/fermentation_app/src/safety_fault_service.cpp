@@ -101,7 +101,22 @@ SafetyBootResult SafetyFaultService::evaluateBoot() {
     SafetyStateRecord candidate = record_;
     FaultCore stagedCore = faultCore_;
     const bool safeBootBefore = candidate.safeBootRequired;
+    const bool committedSoftwareEvidence =
+        record_.restartEvidence.state == RestartEvidenceState::Committed &&
+        record_.restartEvidence.cause == RestartCauseEvent::SoftwareRestart;
     result.restart = restartEpisode_.evaluateBoot(candidate, resetSnapshot);
+    // RestartEpisodeCoordinator owns the neutral episode mechanics. The
+    // application service owns the semantic binding to the current FaultCore
+    // and record revision; a matching episode alone is not sufficient.
+    if (committedSoftwareEvidence &&
+        (result.restart.status == RestartBootStatus::AuthorizedReset ||
+         result.restart.status ==
+             RestartBootStatus::ControlledEvidenceConsumed) &&
+        !restartEvidenceMatchesCurrentFault(record_.restartEvidence)) {
+        candidate.safeBootRequired = true;
+        result.restart.status = RestartBootStatus::EvidenceMismatch;
+        result.restart.safeBootRequired = true;
+    }
     bool needsCommit = result.restart.recordNeedsCommit;
 
     FaultCode bootFault = FaultCode::Unknown;
@@ -405,7 +420,8 @@ SafetyServiceStatus SafetyFaultService::consumeSensorQuality(
             // O2-001 is resolved only by consumeSensorSelectionEvidence().
             return role == SafetySensorRole::Product
                        ? SafetyServiceStatus::Ready
-                       : resolveFaultCause(FaultCode::O2_002, sourceKey);
+                       : resolveFaultCause(FaultCode::O2_002, sourceKey,
+                                           correlationKey);
         case device_platform::SensorQuality::Stale: {
             const auto code = role == SafetySensorRole::Product
                                   ? FaultCode::O2_001
@@ -452,11 +468,12 @@ SafetyServiceStatus SafetyFaultService::consumeSensorSelectionEvidence(
     if (!airFallback && !returnedToProduct) {
         return SafetyServiceStatus::SafetyRejected;
     }
-    return resolveFaultCause(FaultCode::O2_001, sourceKey);
+    return resolveFaultCause(FaultCode::O2_001, sourceKey, correlationKey);
 }
 
 SafetyServiceStatus SafetyFaultService::resolveFaultCause(
-    FaultCode code, std::uint32_t sourceKey) {
+    FaultCode code, std::uint32_t sourceKey,
+    std::optional<std::uint32_t> correlationKey) {
     if (!started_) return SafetyServiceStatus::NotStarted;
     const auto before = faultCore_.snapshot();
     FaultCore staged = faultCore_;
@@ -464,6 +481,8 @@ SafetyServiceStatus SafetyFaultService::resolveFaultCause(
     for (std::size_t index = 0U; index < before.count; ++index) {
         const auto& fault = before.records[index];
         if (fault.code != code || fault.sourceKey != sourceKey ||
+            (correlationKey.has_value() &&
+             fault.correlationKey != *correlationKey) ||
             fault.status == FaultStatus::Cleared || !fault.causeActive) {
             continue;
         }
@@ -700,6 +719,79 @@ FaultResetAuthorizationLevel SafetyFaultService::requiredAuthorizationFor(
     return FaultResetAuthorizationLevel::None;
 }
 
+std::uint8_t SafetyFaultService::requiredResetCheckDomains(FaultCode code) {
+    constexpr auto sensor =
+        static_cast<std::uint8_t>(FaultResetCheckDomain::Sensor);
+    constexpr auto actuator =
+        static_cast<std::uint8_t>(FaultResetCheckDomain::Actuator);
+    constexpr auto persistence =
+        static_cast<std::uint8_t>(FaultResetCheckDomain::Persistence);
+    constexpr auto integrity =
+        static_cast<std::uint8_t>(FaultResetCheckDomain::Integrity);
+    switch (code) {
+        case FaultCode::S3_001:
+            return sensor | integrity;
+        case FaultCode::S3_002:
+            return sensor | actuator | persistence | integrity;
+        case FaultCode::S3_003:
+        case FaultCode::S3_004:
+        case FaultCode::S3_005:
+        case FaultCode::S3_006:
+        case FaultCode::S3_007:
+            return sensor | actuator | persistence | integrity;
+        case FaultCode::S3_008:
+            return sensor | actuator | integrity;
+        case FaultCode::S3_009:
+            return actuator | integrity;
+        case FaultCode::Y4_001:
+        case FaultCode::Y4_002:
+        case FaultCode::Y4_003:
+        case FaultCode::Y4_004:
+        case FaultCode::Y4_005:
+        case FaultCode::Y4_007:
+        case FaultCode::Y4_008:
+        case FaultCode::Y4_009:
+            return persistence | integrity;
+        case FaultCode::P1_001:
+        case FaultCode::O2_001:
+        case FaultCode::O2_002:
+        case FaultCode::Y4_006:
+        case FaultCode::Unknown:
+            return static_cast<std::uint8_t>(FaultResetCheckDomain::None);
+    }
+    return static_cast<std::uint8_t>(FaultResetCheckDomain::None);
+}
+
+bool SafetyFaultService::resetSafetyEvidenceMatches(
+    const FaultResetSafetyEvidence& evidence, const FaultResetRequest& request,
+    std::uint32_t targetRevision, std::uint8_t requiredDomains) const {
+    if (evidence.targetFault != request.targetFault ||
+        evidence.targetFaultRevision != targetRevision ||
+        evidence.evidenceRevision != record_.recordRevision) {
+        return false;
+    }
+    const auto passedAtCurrentRevision = [this](FaultResetCheckStatus status,
+                                                std::uint32_t revision) {
+        return status == FaultResetCheckStatus::Passed && revision != 0U &&
+               revision == record_.recordRevision;
+    };
+    const auto hasDomain = [requiredDomains](FaultResetCheckDomain domain) {
+        return (requiredDomains & static_cast<std::uint8_t>(domain)) != 0U;
+    };
+    return (!hasDomain(FaultResetCheckDomain::Sensor) ||
+            passedAtCurrentRevision(evidence.sensor,
+                                    evidence.sensorEvidenceRevision)) &&
+           (!hasDomain(FaultResetCheckDomain::Actuator) ||
+            passedAtCurrentRevision(evidence.actuator,
+                                    evidence.actuatorEvidenceRevision)) &&
+           (!hasDomain(FaultResetCheckDomain::Persistence) ||
+            passedAtCurrentRevision(evidence.persistence,
+                                    evidence.persistenceEvidenceRevision)) &&
+           (!hasDomain(FaultResetCheckDomain::Integrity) ||
+            passedAtCurrentRevision(evidence.integrity,
+                                    evidence.integrityEvidenceRevision));
+}
+
 bool SafetyFaultService::authorizationIsCurrent(
     const FaultResetAuthorizationEvidence& authorization,
     FaultInstanceId targetFault, std::uint32_t targetRevision,
@@ -712,6 +804,46 @@ bool SafetyFaultService::authorizationIsCurrent(
                static_cast<std::uint8_t>(required) &&
            authorization.issuedAtMonotonicMillis <= now &&
            now <= authorization.expiresAtMonotonicMillis;
+}
+
+bool SafetyFaultService::restartEvidenceMatchesCurrentFault(
+    const PersistedRestartEvidence& evidence) const {
+    if (evidence.state != RestartEvidenceState::Committed ||
+        evidence.cause != RestartCauseEvent::SoftwareRestart ||
+        evidence.evidenceId == 0U ||
+        evidence.evidenceId != record_.restartEpisode.lastRestartEvidenceId ||
+        evidence.episodeId == 0U ||
+        evidence.episodeId != record_.restartEpisode.episodeId ||
+        evidence.evidenceRevision == 0U ||
+        evidence.evidenceRevision != record_.recordRevision) {
+        return false;
+    }
+    switch (evidence.intent) {
+        case RestartIntentType::AutomaticSafetyRecovery: {
+            const auto* target = faultCore_.find(evidence.targetFault);
+            return evidence.authorizationEvidenceId == 0U &&
+                   target != nullptr && target->latched &&
+                   target->causeActive &&
+                   target->automaticRecoveryRestartUsed &&
+                   allowsAutomaticRecoveryRestart(target->code) &&
+                   target->faultRevision == evidence.targetFaultRevision;
+        }
+        case RestartIntentType::AuthorizedTechnicalRestart: {
+            const auto* target = faultCore_.find(evidence.targetFault);
+            return evidence.authorizationEvidenceId != 0U &&
+                   target != nullptr && target->latched &&
+                   target->causeActive &&
+                   target->faultRevision == evidence.targetFaultRevision;
+        }
+        case RestartIntentType::AuthorizedSafeBootExit:
+            return evidence.authorizationEvidenceId != 0U &&
+                   !evidence.targetFault.valid() &&
+                   evidence.targetFaultRevision == 0U;
+        case RestartIntentType::None:
+        case RestartIntentType::Unknown:
+            return false;
+    }
+    return false;
 }
 
 FaultResetEvaluation SafetyFaultService::evaluateFaultReset(
@@ -732,13 +864,20 @@ FaultResetEvaluation SafetyFaultService::evaluateFaultReset(
         hasOtherBlockingFault(faultCore_, request.targetFault);
     evaluation.requiredAuthorization = requiredAuthorizationFor(target->code);
     evaluation.presentedAuthorization = authorization.level;
+    evaluation.requiredCheckDomains = requiredResetCheckDomains(target->code);
     evaluation.codePolicyAllowsReset =
         target->latched && target->status == FaultStatus::CauseClearedLocked &&
         target->code != FaultCode::P1_001 && target->code != FaultCode::Y4_006;
-    evaluation.safetyEvidenceComplete = safetyEvidence.allPassed();
-    evaluation.safetyChecksPassed = evaluation.safetyEvidenceComplete &&
-                                    configurationGateQualified_ &&
-                                    !record_.capacityFailureLatched;
+    evaluation.safetyEvidenceTargetMatches =
+        safetyEvidence.targetFault == request.targetFault &&
+        safetyEvidence.targetFaultRevision == target->faultRevision;
+    evaluation.safetyEvidenceCurrent =
+        safetyEvidence.evidenceRevision == record_.recordRevision;
+    evaluation.safetyEvidenceComplete = resetSafetyEvidenceMatches(
+        safetyEvidence, request, target->faultRevision,
+        evaluation.requiredCheckDomains);
+    evaluation.safetyChecksPassed =
+        evaluation.safetyEvidenceComplete && configurationGateQualified_;
     evaluation.authorizationSatisfied = authorizationIsCurrent(
         authorization, request.targetFault, target->faultRevision,
         evaluation.requiredAuthorization);
@@ -814,6 +953,93 @@ SafetyResetResult SafetyFaultService::resetFault(
     return result;
 }
 
+SafetyServiceStatus SafetyFaultService::recoverSafetyStateMarker(
+    const FaultResetAuthorizationEvidence& authorization,
+    const SafetyMarkerRecoveryEvidence& evidence) {
+    if (!started_) return SafetyServiceStatus::NotStarted;
+    const auto now = timeSource_.monotonicMillis();
+    const bool authorizationValid =
+        authorization.evidenceId != 0U && !authorization.targetFault.valid() &&
+        authorization.targetFaultRevision == 0U &&
+        static_cast<std::uint8_t>(authorization.level) >=
+            static_cast<std::uint8_t>(
+                FaultResetAuthorizationLevel::Technical) &&
+        authorization.issuedAtMonotonicMillis <= now &&
+        now <= authorization.expiresAtMonotonicMillis;
+    const bool evidenceCurrent =
+        evidence.markerRevision == record_.capacityFailureRevision &&
+        evidence.evidenceRevision == record_.recordRevision &&
+        evidence.allPassed() &&
+        evidence.readEvidenceRevision == record_.recordRevision &&
+        evidence.writeEvidenceRevision == record_.recordRevision &&
+        evidence.capacityEvidenceRevision == record_.recordRevision &&
+        evidence.integrityEvidenceRevision == record_.recordRevision;
+    if (!record_.capacityFailureLatched || !authorizationValid ||
+        !evidenceCurrent || !configurationGateQualified_ ||
+        faultCore_.hasBlockingFault()) {
+        return SafetyServiceStatus::SafetyRejected;
+    }
+
+    // Read and validate the currently committed record before preparing the
+    // recovery candidate. The candidate is not applied in RAM until the
+    // single normal SafetyStateStore write and its readback are confirmed.
+    const auto current = stateStore_.load();
+    if (current.status != SafetyRecordLoadStatus::Loaded &&
+        current.status != SafetyRecordLoadStatus::FactoryInitialized) {
+        retainRamFailClosed(0U, authorization.evidenceId);
+        return SafetyServiceStatus::PersistentReadFailed;
+    }
+
+    SafetyStateRecord candidate = record_;
+    candidate.capacityFailureLatched = false;
+    candidate.capacityFailureRevision = 0U;
+    candidate.capacityFailureSourceKey = 0U;
+    candidate.capacityFailureCorrelationKey = 0U;
+    candidate.safeBootRequired = false;
+    if (!copyCoreToRecord(candidate) || !increment(candidate.recordRevision) ||
+        stateStore_.commit(candidate).status !=
+            SafetyRecordCommitStatus::Committed) {
+        retainRamFailClosed(0U, authorization.evidenceId);
+        return SafetyServiceStatus::PersistentWriteFailed;
+    }
+
+    // SafetyStateStore::commit performs the single write and exact readback
+    // comparison, including CommitOutcomeUnknown cut-points. Applying the
+    // candidate only after Committed avoids a second persistence path.
+    record_ = candidate;
+    return SafetyServiceStatus::SafetyMarkerRecoveryCommitted;
+}
+
+SafetyServiceStatus SafetyFaultService::finalizeRestartRequestResult(
+    device_platform::RestartRequestResult result) {
+    if (result == device_platform::RestartRequestResult::Accepted) {
+        return SafetyServiceStatus::Ready;
+    }
+
+    SafetyStateRecord terminal = record_;
+    if (result == device_platform::RestartRequestResult::OutcomeUnknown) {
+        // The request outcome is no longer retryable. Retaining the evidence
+        // as terminally consumed prevents a later unrelated SoftwareRestart
+        // from inheriting the old intent; SAFE_BOOT remains fail-closed.
+        terminal.restartEvidence.state = RestartEvidenceState::Consumed;
+        terminal.safeBootRequired = true;
+    } else {
+        // A definite rejection must not leave a committed intent that could
+        // authorize a later independent SoftwareRestart.
+        terminal.restartEvidence = PersistedRestartEvidence{};
+    }
+    if (!increment(terminal.recordRevision) ||
+        stateStore_.commit(terminal).status !=
+            SafetyRecordCommitStatus::Committed) {
+        retainRamFailClosed(0U, terminal.restartEvidence.evidenceId);
+        return SafetyServiceStatus::PersistentWriteFailed;
+    }
+    record_ = terminal;
+    return result == device_platform::RestartRequestResult::Rejected
+               ? SafetyServiceStatus::ResetBootRejected
+               : SafetyServiceStatus::ResetBootOutcomeUnknown;
+}
+
 SafetyServiceStatus SafetyFaultService::requestControlledSafetyRestart(
     FaultInstanceId id, std::uint32_t expectedRevision) {
     if (!started_) return SafetyServiceStatus::NotStarted;
@@ -828,9 +1054,11 @@ SafetyServiceStatus SafetyFaultService::requestControlledSafetyRestart(
     if (!staged.markControlledRestartUsed(id, expectedRevision)) {
         return SafetyServiceStatus::SafetyRejected;
     }
+    const auto* stagedTarget = staged.find(id);
+    if (stagedTarget == nullptr) return SafetyServiceStatus::SafetyRejected;
     SafetyStateRecord candidate = record_;
-    if (!restartEpisode_.prepareControlledRestart(candidate, id,
-                                                  staged.snapshot().revision) ||
+    if (!restartEpisode_.prepareControlledRestart(
+            candidate, id, stagedTarget->faultRevision) ||
         !copyCoreToRecord(candidate, staged) ||
         !increment(candidate.recordRevision) ||
         stateStore_.commit(candidate).status !=
@@ -840,14 +1068,7 @@ SafetyServiceStatus SafetyFaultService::requestControlledSafetyRestart(
     }
     faultCore_ = staged;
     record_ = candidate;
-    const auto restartResult = resetController_.requestRestart();
-    if (restartResult != device_platform::RestartRequestResult::Accepted) {
-        static_cast<void>(persistSafeBootLock());
-        return restartResult == device_platform::RestartRequestResult::Rejected
-                   ? SafetyServiceStatus::ResetBootRejected
-                   : SafetyServiceStatus::ResetBootOutcomeUnknown;
-    }
-    return SafetyServiceStatus::Ready;
+    return finalizeRestartRequestResult(resetController_.requestRestart());
 }
 
 SafetyServiceStatus SafetyFaultService::finalizePendingSafeBootExit() {
@@ -898,21 +1119,19 @@ SafetyServiceStatus SafetyFaultService::requestAuthorizedSafeBootExit(
     SafetyStateRecord candidate = record_;
     if (!restartEpisode_.prepareRestartIntent(
             candidate, RestartIntentType::AuthorizedSafeBootExit, {},
-            candidate.faultRevision) ||
-        !increment(candidate.recordRevision) ||
+            candidate.faultRevision)) {
+        return SafetyServiceStatus::SafetyRejected;
+    }
+    candidate.restartEvidence.authorizationEvidenceId =
+        authorization.evidenceId;
+    if (!increment(candidate.recordRevision) ||
         stateStore_.commit(candidate).status !=
             SafetyRecordCommitStatus::Committed) {
         retainRamFailClosed(0U, authorization.evidenceId);
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     record_ = candidate;
-    const auto restartResult = resetController_.requestRestart();
-    if (restartResult == device_platform::RestartRequestResult::Accepted) {
-        return SafetyServiceStatus::Ready;
-    }
-    return restartResult == device_platform::RestartRequestResult::Rejected
-               ? SafetyServiceStatus::ResetBootRejected
-               : SafetyServiceStatus::ResetBootOutcomeUnknown;
+    return finalizeRestartRequestResult(resetController_.requestRestart());
 }
 
 SafetyServiceStatus SafetyFaultService::requestAuthorizedTechnicalRestart(
@@ -926,24 +1145,27 @@ SafetyServiceStatus SafetyFaultService::requestAuthorizedTechnicalRestart(
                                 FaultResetAuthorizationLevel::Technical)) {
         return SafetyServiceStatus::SafetyRejected;
     }
+    const auto* target = faultCore_.find(targetFault);
+    if (target == nullptr || !target->latched || !target->causeActive ||
+        target->faultRevision != targetFaultRevision) {
+        return SafetyServiceStatus::SafetyRejected;
+    }
     SafetyStateRecord candidate = record_;
     if (!restartEpisode_.prepareRestartIntent(
             candidate, RestartIntentType::AuthorizedTechnicalRestart,
-            targetFault, targetFaultRevision) ||
-        !increment(candidate.recordRevision) ||
+            targetFault, targetFaultRevision)) {
+        return SafetyServiceStatus::SafetyRejected;
+    }
+    candidate.restartEvidence.authorizationEvidenceId =
+        authorization.evidenceId;
+    if (!increment(candidate.recordRevision) ||
         stateStore_.commit(candidate).status !=
             SafetyRecordCommitStatus::Committed) {
         retainRamFailClosed(0U, authorization.evidenceId);
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     record_ = candidate;
-    const auto restartResult = resetController_.requestRestart();
-    if (restartResult == device_platform::RestartRequestResult::Accepted) {
-        return SafetyServiceStatus::Ready;
-    }
-    return restartResult == device_platform::RestartRequestResult::Rejected
-               ? SafetyServiceStatus::ResetBootRejected
-               : SafetyServiceStatus::ResetBootOutcomeUnknown;
+    return finalizeRestartRequestResult(resetController_.requestRestart());
 }
 
 SafetyServiceStatus SafetyFaultService::advanceStableWindow() {

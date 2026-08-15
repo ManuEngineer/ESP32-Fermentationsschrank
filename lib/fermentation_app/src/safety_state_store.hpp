@@ -61,6 +61,7 @@ struct RestartEpisodeEvidence {
 
 struct PersistedRestartEvidence {
     std::uint32_t evidenceId{0U};
+    std::uint64_t authorizationEvidenceId{0U};
     RestartCauseEvent cause{RestartCauseEvent::Unknown};
     RestartEvidenceState state{RestartEvidenceState::None};
     RestartIntentType intent{RestartIntentType::None};
