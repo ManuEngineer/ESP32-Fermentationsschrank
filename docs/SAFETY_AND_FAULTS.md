@@ -10,7 +10,9 @@ Zeitfortschritt, Persistenz und gleichzeitige Fehlerursachen.
 Konkrete Temperatur-, Sensor-, Luefter-, Aktor-, Versorgungs- und
 Softwareparameter sowie die reale Hardwareverifikation bleiben in Phase 8B,
 8C und der Inbetriebnahme zu belegen; die #24-Code-/Resetpolicy ist unten
-vollstaendig festgelegt.
+vollstaendig festgelegt. Die Matrix unterscheidet reale heutige Producer,
+deterministische #24-interne Ursachen und stabile Release-1-Code-/Injection-
+Contracts fuer spaetere qualifizierte Producer.
 
 ## Grundsaetze
 
@@ -154,21 +156,19 @@ durch einen normalen Neustart moeglich.
 
 | Code / Producer und Ursache | Sofortreaktion | Latch / Auto-Rearm | Reset / Berechtigung | Reboot / SAFE_BOOT-Exit | Primaer/Folge |
 |---|---|---|---|---|---|
-| `P1-001` / #20/#22 `TemperatureControlResult`, Control-Request-Identitaet, langsame Zielerreichung | Warnung, nur bei Safetyfreigabe fortsetzen | nein / neue gueltige Prozessbewertung | kein Faultreset, nur Quittierung | kein Reboot / kein Exit | primaer; Folgebezug erlaubt |
-| `P1-002` / #22 `TemperatureControlReason::AirLimitReduced`, Request-Identitaet | Warnung und reduzierte Prozessanforderung gemaess #22 | nein / neue #22-Bewertung | kein Faultreset | kein Reboot / kein Exit | primaer; Safetyfehler bleiben separat |
+| `P1-001` / bestehender Prozessautomat mit `ProcessRuntimeState::targetReachWarningIssued`, `TransitionReason::TargetReachTimeExceeded`, `ProcessMessage::TargetReachTimeExceeded` und `ProcessRunSnapshot::maximumTargetReachMinutes`, Run-Snapshot-/Prozesslauf-Identitaet | Warnung, nur bei Safetyfreigabe fortsetzen | nein / neue gueltige Prozessbewertung | kein Faultreset, nur Quittierung | kein Reboot / kein Exit | primaer; Folgebezug erlaubt |
 | `O2-001` / #20/#21 Produktfuehler `STALE`/`FAILED`, Produkt-Sensorrolle, Luftfallback | Peltier AUS, nur validierte #21-Ersatzstrategie | nein / nur #21-Policy | Bediener-/#21-Reset nach Ursachefreiheit und Checks | kein Reboot / kein Exit | primaer; Eskalation separat |
 | `O2-002` / #20/#21 `STALE` in Sicherheitsrolle, Sensorrolle | Peltier AUS, Nachlauf, Wiedererkennung | nein / stabile Messungen vor `FAILED` | waehrend Wiedererkennung kein Reset | kein Reboot / kein Exit | primaer; S3-Eskalation bleibt |
 | `O2-003` / #20 unklare Sensorrollen-/Plausibilitaetskorrelation | Peltier AUS, keine Ersatzfreigabe | nein / nur eindeutige Evidenz | Bedienerreset nach Rollen-/Safetypruefung | kein Reboot / kein Exit | primaer; S3-003 kann folgen |
-| `O2-004` / #22 `Unavailable`/`InvalidInput`, #23 `NoValidRequest`, Request-Identitaet | Peltier AUS, begrenzte #23-Diagnose | nein / kein pauschales Auto-Rearm | Bedienerreset nach Sensor-/Aktorchecks | kein Reboot / kein Exit | primaer; S3-008/009 bleibt |
 | `S3-001` / #20 Schrankluftsensor `FAILED`, Sensorrolle | Peltier/H-Bruecke AUS, Nachlauf | ja / nein | Service nach stabiler Sensor-/Safetypruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
 | `S3-002` / #20 Aussenwaermetauscher-/Kuehlkoerpersensor `FAILED`, Sensorrolle | Peltier/Richtungen AUS, sichere Waermeabfuhr | ja / nein | Service nach Sensor-/Aktorpruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
-| `S3-003` / #20 persistenter Sensorwiderspruch, Rollen-/Plausibilitaetskorrelation | Peltier AUS, kein Fallback | ja / nein | Service nach Ursachefreiheit und Nachweis | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer; O2-003 bleibt |
-| `S3-004` / #20/#22 Sicherheits-Eingriffsgrenze, obere/untere Grenzkorrelation | Leistung AUS, Richtung sperren, Impuls/Integrator verwerfen | ja / keine produktive Auto-Recovery | Service nach Checks; Reset erzeugt keine Recovery und loescht nicht automatisch | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer; Recovery folgt |
-| `S3-005` / #20/#22 harte thermische Notgrenze, obere/untere Grenzkorrelation | AUS, keine Gegenrichtung, sichere Luefterstrategie | ja / nein | technische Servicepruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
-| `S3-006` / #24-Projektion aus #23-Aktorpfad, Aussenluefterrolle | Peltier AUS, Restwaerme fail-closed | ja / nein | Service nach Fan-/Ausgangspruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
-| `S3-007` / #24-Projektion aus #23-Aktorpfad, Innenluefterrolle | Peltier AUS oder richtungsbezogen sperren | ja / nein | Service nach Fan-/Ausgangspruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `S3-003` / #24-interne Latchprojektion eines vorhandenen #21-`CrossRolePlausibilityContext`-/`ThermalCompatibility::Incompatible`-Befunds, Rollen-/Plausibilitaetskorrelation | Peltier AUS, kein Fallback | ja / nein | Service nach Ursachefreiheit und Nachweis | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer; O2-003 bleibt |
+| `S3-004` / stabiler #24-Release-1-Contract-/Injection-Code fuer Sicherheits-Eingriffsgrenze; spaeterer qualifizierter #35-Grenzproducer, obere/untere Grenzkorrelation | Leistung AUS, Richtung sperren, Impuls/Integrator verwerfen | ja / keine produktive Auto-Recovery | Service nach Checks; Reset erzeugt keine Recovery und loescht nicht automatisch | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer; Recovery folgt |
+| `S3-005` / stabiler #24-Release-1-Contract-/Injection-Code fuer harte thermische Notgrenze; spaeterer qualifizierter #35-/Hardware-Grenzproducer, obere/untere Grenzkorrelation | AUS, keine Gegenrichtung, sichere Luefterstrategie | ja / nein | technische Servicepruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `S3-006` / stabiler #24-Release-1-Contract-/Injection-Code fuer Aussenluefterfehler; reale Fan-Diagnose folgt dem zustaendigen spaeteren Hardware-/Commissioning-Gate, Aussenluefterrolle | Peltier AUS, Restwaerme fail-closed | ja / nein | Service nach Fan-/Ausgangspruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
+| `S3-007` / stabiler #24-Release-1-Contract-/Injection-Code fuer Innenluefterfehler; reale Fan-Diagnose folgt dem zustaendigen spaeteren Hardware-/Commissioning-Gate, Innenluefterrolle | Peltier AUS oder richtungsbezogen sperren | ja / nein | Service nach Fan-/Ausgangspruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
 | `S3-008` / #23 `ActuatorWatchdogFaultEvidence`, Planner-/Diagnoseevidenz | Peltier AUS, Safety-Gate Stop, 64-bit-Evidenz sichern | ja / nein | technische Berechtigung nach #23-/Aktorchecks | standardmaessig kein Reboot / kein Exit durch Reset | primaer |
-| `S3-009` / #24-Projektion aus #23-Aktorpfad, H-Bruecke/Strom/Ausgang/Richtung, Output-Domain | beide Richtungen AUS, Plan verwerfen | ja / nein | technische Servicepruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer; O2-004 kann folgen |
+| `S3-009` / stabiler #24-Release-1-Contract-/Injection-Code fuer H-Bruecke/Strom/Ausgang/Richtung; reale Diagnose folgt dem zustaendigen spaeteren Hardware-/Commissioning-Gate, Output-Domain | beide Richtungen AUS, Plan verwerfen | ja / nein | technische Servicepruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
 | `Y4-001` / #56 `ConfigurationRuntimeFailure`, Konfigurationsrevision | keine neue Konfiguration, Aktoren stoppen | ja / nein | Service/technisch nach Konfigurations-/Integritaetschecks | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
 | `Y4-002` / #56/#57 `ConfigurationCommitIndeterminate`/`CommitOutcomeUnknown`, Commit-Korrelation | unklare Revision sperren, Aktoren AUS | ja / nein | Service/technisch nach eindeutigem Status | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
 | `Y4-003` / #57 `ConfigurationUnavailable`, Recovery-/Graph-Quelle | keine Teilkonfiguration, Aktoren AUS | ja / nein | Service/technisch nach gueltiger Revision | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
@@ -180,9 +180,12 @@ durch einen normalen Neustart moeglich.
 | `Y4-009` / dritter abnormaler Restart, offene SAFE_BOOT-Episode | vor Aktor-/Lauffreigabe `SAFE_BOOT` | ja / kein Auto-Rearm durch Reboot | bewusster autorisierter Exit nach allen Checks | kein automatischer zusaetzlicher Reboot; nur zugrunde liegende Codepolicy darf technischen Restart verlangen | primaer; ausloesende Latches bleiben |
 
 Die Tabelle ist die vollstaendige R3-Policy: vier Klassen, keine reservierten
-historischen Luecken und kein alter `Y4-011`-Fallback. Jede nicht eindeutig
-aufloesbare Ursache wird als `Y4-008` beziehungsweise als fail-closed
-Capacity-/Persistenzfall behandelt.
+historischen Luecken und kein alter `Y4-011`-Fallback. `AirLimitReduced` bleibt
+eine normale #22-Regelbegrenzung und erzeugt keinen P1-Fault. Die urspruengliche
+#22-`TemperatureControlReason` bestimmt die Projektion; #23 `NoValidRequest`
+ist nur die sichere Plannerklassifikation und kein eigener O2-Producer. Jede
+nicht eindeutig aufloesbare Ursache wird als `Y4-008` beziehungsweise als
+fail-closed Capacity-/Persistenzfall behandelt.
 
 ## Unmittelbare Reaktion bei einem sicherheitsrelevanten Fehler
 
@@ -467,7 +470,8 @@ verwechselt werden.
 
 ## Durch R3 fachlich geschlossen
 
-- Fehlerklasse, stabile Code-ID und Producer-/Ursachenzuordnung der Matrix
+- Fehlerklasse, stabile Code-ID und die gekennzeichnete Zuordnung zu realem
+  Producer, #24-interner Ursache oder stabilem Contract-/Injection-Producer
 - unmittelbare sichere Reaktion, Latch, Auto-Rearm und Resetberechtigung je Code
 - codebezogene Reboot- und SAFE_BOOT-Policy einschließlich einmaligem
   automatischem Recovery-Restart

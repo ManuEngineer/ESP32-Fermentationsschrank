@@ -153,7 +153,10 @@ R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
   `SAFETY_AND_FAULTS.md` wird vollstaendig gegen Producer, Sofortreaktion,
   Latch, Auto-Rearm, Berechtigung, Reboot-/SAFE_BOOT-Policy und
   Primaer-/Folgebezug geprueft. Unknown/Unresolved bleibt `Y4-008` und
-  fail-closed. Zukunftscodes ohne heutigen Producer sind nicht enthalten.
+  fail-closed. Jede Zeile ist entweder an einen heute oeffentlichen Producer,
+  eine deterministische #24-interne Ursache oder einen stabilen
+  Release-1-Contract-/Injection-Code gebunden; nicht vereinbarte
+  Zukunftsfunktionen sind nicht enthalten.
 - Neun unabhaengige S3- und acht variable Y4-Latches koexistieren; der neunte
   Y4-Zustand `Y4-006` ist ein Basisrecord-Marker ohne Slot. Cleared-Historie
   zaehlt nicht als aktive Latchkapazitaet. Die Slot-Bound `17`, die neue
@@ -171,7 +174,14 @@ R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
 
 ### Fault/Sensor-Injektionen
 
+- `ProcessMessage::TargetReachTimeExceeded` aus dem bestehenden Prozessautomaten
+  mit `ProcessRunSnapshot::maximumTargetReachMinutes`; keine neue #24-Zeitlogik;
+- `AirLimitReduced` als normale Regelbegrenzung erzeugt keinen P1-Fault;
 - Produktfuehler O2/Fallback gemaess #21;
+- #22 `NoCommissioning`, `SensorUnavailable`, `InvalidConfiguration`,
+  `InvalidSample`, `TimeInvalid` und `RequestIdentityExhausted` werden
+  reason-spezifisch projiziert; #23 `NoValidRequest` allein erzeugt keinen
+  O2-Fault, sondern bleibt die sichere Plannerklassifikation;
 - Schrankluft `FAILED` -> `S3-001`;
 - Kuehlkoerpersensor `FAILED` -> `S3-002`;
 - persistenter Sensorwiderspruch -> `S3-003`;
@@ -181,8 +191,10 @@ R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
 ### Aktor-Injektionen
 
 - #23 `ActuatorWatchdogFaultEvidence` -> `S3-008`;
-- Aussen-/Innenluefterfehler -> `S3-006`/`S3-007`;
-- H-Bruecke, Strom, Richtung oder Ausgang -> `S3-009`;
+- reproduzierbare Contract-/Injection-Cases fuer `S3-006`/`S3-007` und
+  `S3-009`; diese Tests simulieren die spaeteren Producer und behaupten keine
+  bereits implementierte reale Fan-, H-Bruecken-, Strom- oder
+  Ausgangsdiagnose;
 - Planner-/Sink-Bypassversuch -> keine Aktorfreigabe.
 
 ### Persistenz-Injektionen

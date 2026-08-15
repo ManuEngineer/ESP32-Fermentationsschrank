@@ -263,6 +263,20 @@ Runtimewert. Das bedeutet:
   gesetzt. Die thermische Abnahme echter Recovery gehoert in den abhaengigen
   #35-Commissioning-/Integrationspfad.
 
+### Release-1-Code-/Injection-Grenze fuer spaetere Producer
+
+`S3-004` und `S3-005` bleiben in #24 stabile Code-/Safetyvertraege fuer
+simulierte Fehlerinjektionen; produktive thermische Grenzproducer und
+Commissioningwerte kommen erst aus dem qualifizierten #35-Pfad. `S3-006` und
+`S3-007` sind stabile Vertraege fuer simulierte Aussen-/Innenluefterfehler;
+eine reale Fan-Erkennung ist in #24 nicht vorhanden. `S3-009` ist der stabile
+Vertrag fuer eine simulierte H-Bruecken-, Strom-, Ausgangs- oder
+Richtungsdiagnose; die reale Diagnose folgt dem zustaendigen spaeteren
+Hardware-/Commissioning-Gate. #24 prueft fuer diese Codes Fault-Core,
+Dominanz, Latch, Resetpolicy und sichere Aktorprojektion, behauptet aber keine
+heutige Hardwareerkennung. Ein spaeterer qualifizierter Producer uebernimmt
+exakt denselben Code und keine zusaetzliche Latchinstanz.
+
 ### Harte Notgrenze
 
 Wird die weiter entfernte harte obere oder untere Notgrenze erreicht oder
@@ -295,9 +309,13 @@ alle folgenden Bedingungen erfuellt sind:
   sicheren Bereich zu fuehren.
 
 Die konkrete Rueckfuehrung darf erst nach #35-Qualifikation festgelegt werden.
-Leistung, Pulsdauer, Trend-/Temperaturpruefung, Versuchszahl und Revision sind
-bis dahin `TBD_COMMISSIONING` und werden in #24 nicht als Laufzeitwerte
-verwendet.
+Leistung, Pulsdauer, Trend-/Temperaturpruefung und Revision sind bis dahin
+`TBD_COMMISSIONING` und werden in #24 nicht als Laufzeitwerte verwendet. Die
+Versuchsgrenze ist davon getrennt bereits firmwarefest: maximal zwei Versuche,
+Werkseinstellung zunächst ein Versuch, zulässiger Maschinenparameter `0..2`.
+`#35` qualifiziert später nur den tatsächlich produktiv verwendeten Wert
+innerhalb `0..2`; ohne diese Qualifikation aktiviert #24 keinen Runtimewert und
+bleibt die Recovery fail-closed.
 
 Abbruch und vollstaendige Verriegelung erfolgen sofort, wenn:
 
@@ -520,9 +538,10 @@ hinreichender Peltierfehlernachweis.
 - konkrete Dauer und Fehleranzahl fuer `STALE -> FAILED`
 - konkrete obere und untere Regelbegrenzungen
 - konkrete Sicherheits-Eingriffs- und harte Notgrenzen
-- Leistungs-, Zeit-, Trend-, Temperatur-, Versuchszahl- und Revisionsgrenzen
-  fuer eine spaetere `SAFETY_RECOVERY` bleiben #35-Commissioning; die
-  firmwarefeste Versuchszahl bleibt dennoch auf `0..2` begrenzt
+- Leistungs-, Zeit-, Trend-, Temperatur- und Revisionsgrenzen fuer eine
+  spaetere `SAFETY_RECOVERY` bleiben #35-Commissioning; #35 waehlt den
+  tatsaechlich verwendeten Versuchswert innerhalb des bereits firmwarefesten
+  Bereichs `0..2`
 - konkrete Montageposition des Kuehlkoerpersensors
 - finaler 1-Wire-Pinplan
 - thermische Erkennungsschwellen fuer Aussen- und Innenluefterfehler
