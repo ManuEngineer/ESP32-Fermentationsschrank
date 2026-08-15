@@ -351,9 +351,9 @@ void test_s3_003_is_explicit_injection_not_thermal_enum() {
     TEST_ASSERT_TRUE(service.faultCore().snapshot().count == 0U);
 
     // The stronger #24 cause has a separate reproducer and stable code.
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
                      ActuatorSafetyGateStatus::ImmediateStop);
     const auto* fault = service.faultCore().dominant();
@@ -435,9 +435,9 @@ void test_s3_004_is_contract_only_and_capacity_uses_marker_without_evict() {
     SafetyFaultService service(store, reset, time);
     TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                      SafetyServiceStatus::Ready);
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_004, 24U, 1U, 1U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_004, 24U, 1U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
                      ActuatorSafetyGateStatus::ImmediateStop);
 
@@ -448,12 +448,12 @@ void test_s3_004_is_contract_only_and_capacity_uses_marker_without_evict() {
     TEST_ASSERT_TRUE(capacity.begin({true, true, true}) ==
                      SafetyServiceStatus::Ready);
     for (std::uint32_t index = 0U; index < 17U; ++index) {
-        TEST_ASSERT_TRUE(
-            capacity.raiseFault({FaultCode::S3_001, 100U + index, index + 1U,
-                                 index + 1U, std::nullopt}) ==
-            SafetyServiceStatus::Ready);
+        TEST_ASSERT_TRUE(capacity.injectFaultForTesting(
+                             {FaultCode::S3_001, 100U + index, index + 1U,
+                              index + 1U, std::nullopt}) ==
+                         SafetyServiceStatus::Ready);
     }
-    TEST_ASSERT_TRUE(capacity.raiseFault(
+    TEST_ASSERT_TRUE(capacity.injectFaultForTesting(
                          {FaultCode::S3_002, 999U, 999U, 999U, std::nullopt}) ==
                      SafetyServiceStatus::FaultCapacityReached);
     TEST_ASSERT_EQUAL_UINT32(17U, capacity.record().latchCount);
@@ -470,9 +470,9 @@ void test_safety_write_failure_keeps_ram_locked() {
                      SafetyServiceStatus::Ready);
     store.setNextWriteFault(
         SimulatedPersistentStateStore::WriteFault::FailBeforeBegin);
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_003, 24U, 2U, 1U, std::nullopt}) ==
-        SafetyServiceStatus::PersistentWriteFailed);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_003, 24U, 2U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::PersistentWriteFailed);
     TEST_ASSERT_TRUE(service.safeBootRequired());
     TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
     TEST_ASSERT_EQUAL_UINT32(1U, service.record().latchCount);
@@ -480,9 +480,9 @@ void test_safety_write_failure_keeps_ram_locked() {
     TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
                      ActuatorSafetyGateStatus::ImmediateStop);
 
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_005, 24U, 3U, 2U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_005, 24U, 3U, 2U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
     TEST_ASSERT_TRUE(service.safeBootRequired());
 }
@@ -496,7 +496,7 @@ void test_safety_commit_outcomes_are_fail_closed_and_exact_unknown_is_confirmed(
         TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                          SafetyServiceStatus::Ready);
         store.setNextFault(SafetyOutcomeStore::Fault::CommitUnknownNew);
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
                          SafetyServiceStatus::Ready);
         TEST_ASSERT_FALSE(service.record().capacityFailureLatched);
@@ -509,7 +509,7 @@ void test_safety_commit_outcomes_are_fail_closed_and_exact_unknown_is_confirmed(
         TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                          SafetyServiceStatus::Ready);
         store.setNextFault(SafetyOutcomeStore::Fault::CommitUnknownOld);
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
                          SafetyServiceStatus::PersistentWriteFailed);
         TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
@@ -522,7 +522,7 @@ void test_safety_commit_outcomes_are_fail_closed_and_exact_unknown_is_confirmed(
         TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                          SafetyServiceStatus::Ready);
         store.setNextFault(SafetyOutcomeStore::Fault::CommitUnknownReadError);
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
                          SafetyServiceStatus::PersistentWriteFailed);
         TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
@@ -535,7 +535,7 @@ void test_safety_commit_outcomes_are_fail_closed_and_exact_unknown_is_confirmed(
         TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                          SafetyServiceStatus::Ready);
         store.setNextFault(SafetyOutcomeStore::Fault::CommitUnknownMismatch);
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
                          SafetyServiceStatus::PersistentWriteFailed);
         TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
@@ -549,7 +549,7 @@ void test_safety_commit_outcomes_are_fail_closed_and_exact_unknown_is_confirmed(
                          SafetyServiceStatus::Ready);
         store.setNextWriteFault(SimulatedPersistentStateStore::WriteFault::
                                     PowerCutAfterCommitBeforeReturn);
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
                          SafetyServiceStatus::Ready);
         TEST_ASSERT_FALSE(service.record().capacityFailureLatched);
@@ -564,7 +564,7 @@ void test_safety_commit_outcomes_are_fail_closed_and_exact_unknown_is_confirmed(
                          SafetyServiceStatus::Ready);
         store.setNextWriteFault(
             SimulatedPersistentStateStore::WriteFault::PowerCutBeforeCommit);
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
                          SafetyServiceStatus::PersistentWriteFailed);
         TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
@@ -582,7 +582,7 @@ void test_safety_commit_outcomes_are_fail_closed_and_exact_unknown_is_confirmed(
         store.injectReadFailure(*key.key, true);
         store.setNextWriteFault(SimulatedPersistentStateStore::WriteFault::
                                     PowerCutAfterCommitBeforeReturn);
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
                          SafetyServiceStatus::PersistentWriteFailed);
         TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
@@ -616,9 +616,9 @@ void test_y4_006_requires_controlled_marker_recovery() {
 
     store.setNextWriteFault(
         SimulatedPersistentStateStore::WriteFault::FailBeforeBegin);
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
-        SafetyServiceStatus::PersistentWriteFailed);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::PersistentWriteFailed);
     TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
     TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
                      ActuatorSafetyGateStatus::ImmediateStop);
@@ -665,9 +665,9 @@ void test_y4_006_requires_controlled_marker_recovery() {
     TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
                      ActuatorSafetyGateStatus::ImmediateStop);
 
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_004, 24U, 2U, 2U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_004, 24U, 2U, 2U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     markerEvidence = passedMarkerRecoveryEvidence(service);
     TEST_ASSERT_TRUE(
         service.recoverSafetyStateMarker(markerAuthorization, markerEvidence) ==
@@ -706,9 +706,9 @@ void test_y4_006_requires_controlled_marker_recovery() {
 
     store.setNextWriteFault(
         SimulatedPersistentStateStore::WriteFault::FailBeforeBegin);
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_003, 24U, 3U, 3U, std::nullopt}) ==
-        SafetyServiceStatus::PersistentWriteFailed);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_003, 24U, 3U, 3U, std::nullopt}) ==
+                     SafetyServiceStatus::PersistentWriteFailed);
     const auto* repeatedFault = service.faultCore().dominant();
     TEST_ASSERT_NOT_NULL(repeatedFault);
     const auto repeatedId = repeatedFault->instanceId;
@@ -749,9 +749,9 @@ void test_contract_injection_codes_and_journal_failure_remain_distinct() {
         FaultCode::S3_004, FaultCode::S3_005, FaultCode::S3_006,
         FaultCode::S3_007, FaultCode::S3_009};
     for (std::uint32_t index = 0U; index < codes.size(); ++index) {
-        TEST_ASSERT_TRUE(service.raiseFault({codes[index], 24U, index + 1U,
-                                             index + 1U, std::nullopt}) ==
-                         SafetyServiceStatus::Ready);
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                             {codes[index], 24U, index + 1U, index + 1U,
+                              std::nullopt}) == SafetyServiceStatus::Ready);
     }
     const auto snapshot = service.faultCore().snapshot();
     TEST_ASSERT_EQUAL_UINT32(codes.size(), snapshot.count);
@@ -773,9 +773,9 @@ void test_fault_reset_evaluation_requires_auth_and_all_safety_checks() {
     TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                      SafetyServiceStatus::Ready);
     qualifyConfiguration(service);
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     const auto* active = service.faultCore().dominant();
     TEST_ASSERT_NOT_NULL(active);
     const auto id = active->instanceId;
@@ -855,9 +855,9 @@ void test_fault_reset_rejects_stale_revision_and_other_blocking_fault() {
     TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                      SafetyServiceStatus::Ready);
     qualifyConfiguration(service);
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     const auto* target = service.faultCore().dominant();
     TEST_ASSERT_NOT_NULL(target);
     const auto targetId = target->instanceId;
@@ -873,9 +873,9 @@ void test_fault_reset_rejects_stale_revision_and_other_blocking_fault() {
         service.evaluateFaultReset(staleRequest, staleAuthorization);
     TEST_ASSERT_TRUE(stale.rejection == FaultResetRejection::StaleEvaluation);
 
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_004, 24U, 2U, 2U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_004, 24U, 2U, 2U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     passedResetChecks(service, targetId, revision);
     const auto blocked =
         service.evaluateFaultReset(resetRequestFor(targetId, revision),
@@ -1050,7 +1050,7 @@ void test_automatic_restart_is_code_policy_bounded_and_once_per_episode() {
     const std::array<FaultCode, 3U> physicalCodes = {
         FaultCode::S3_001, FaultCode::S3_002, FaultCode::S3_004};
     for (std::uint32_t index = 0U; index < physicalCodes.size(); ++index) {
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {physicalCodes[index], 24U, index + 1U, index + 1U,
                               std::nullopt}) == SafetyServiceStatus::Ready);
         const auto snapshot = service.faultCore().snapshot();
@@ -1068,9 +1068,9 @@ void test_automatic_restart_is_code_policy_bounded_and_once_per_episode() {
                          SafetyServiceStatus::SafetyRejected);
     }
 
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::Y4_007, 24U, 2U, 2U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::Y4_007, 24U, 2U, 2U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     const auto snapshot = service.faultCore().snapshot();
     const FaultRecord* recovery = nullptr;
     for (std::size_t index = 0U; index < snapshot.count; ++index) {
@@ -1103,7 +1103,7 @@ void test_restart_evidence_requires_current_fault_revision_and_episode_record() 
         SafetyFaultService service(store, reset, time);
         TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                          SafetyServiceStatus::Ready);
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {FaultCode::Y4_007, 24U, 1U, 1U, std::nullopt}) ==
                          SafetyServiceStatus::Ready);
         const auto* target = service.faultCore().dominant();
@@ -1129,9 +1129,9 @@ void test_restart_evidence_requires_current_fault_revision_and_episode_record() 
             SafetyFaultService service(store, reset, time);
             TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                              SafetyServiceStatus::Ready);
-            TEST_ASSERT_TRUE(service.raiseFault({FaultCode::Y4_007, 24U, 1U, 1U,
-                                                 std::nullopt}) ==
-                             SafetyServiceStatus::Ready);
+            TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                                 {FaultCode::Y4_007, 24U, 1U, 1U,
+                                  std::nullopt}) == SafetyServiceStatus::Ready);
             const auto* target = service.faultCore().dominant();
             TEST_ASSERT_NOT_NULL(target);
             TEST_ASSERT_TRUE(service.requestControlledSafetyRestart(
@@ -1190,7 +1190,7 @@ void test_rejected_or_unknown_restart_evidence_cannot_authorize_later_boot() {
         SafetyFaultService service(store, reset, time);
         TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                          SafetyServiceStatus::Ready);
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {FaultCode::Y4_007, 24U, 1U, 1U, std::nullopt}) ==
                          SafetyServiceStatus::Ready);
         const auto* target = service.faultCore().dominant();
@@ -1213,7 +1213,7 @@ void test_rejected_or_unknown_restart_evidence_cannot_authorize_later_boot() {
         SafetyFaultService service(store, reset, time);
         TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
                          SafetyServiceStatus::Ready);
-        TEST_ASSERT_TRUE(service.raiseFault(
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
                              {FaultCode::Y4_007, 24U, 1U, 1U, std::nullopt}) ==
                          SafetyServiceStatus::Ready);
         const auto* target = service.faultCore().dominant();
@@ -1258,9 +1258,9 @@ void test_stability_window_is_derived_from_central_safety_state() {
                      SafetyServiceStatus::Ready);
     TEST_ASSERT_FALSE(service.record().restartEpisode.stableWindowRunning);
 
-    TEST_ASSERT_TRUE(
-        service.raiseFault({FaultCode::S3_004, 24U, 1U, 1U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_004, 24U, 1U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     TEST_ASSERT_TRUE(service.advanceStableWindow() ==
                      SafetyServiceStatus::Ready);
     TEST_ASSERT_FALSE(service.record().restartEpisode.stableWindowRunning);
@@ -1276,9 +1276,9 @@ void test_cleared_history_reuses_active_capacity_but_not_instance_ids() {
     qualifyConfiguration(service);
     FaultInstanceId last;
     for (std::uint32_t index = 0U; index < 25U; ++index) {
-        TEST_ASSERT_TRUE(service.raiseFault({FaultCode::S3_003, 24U, index + 1U,
-                                             index + 1U, std::nullopt}) ==
-                         SafetyServiceStatus::Ready);
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                             {FaultCode::S3_003, 24U, index + 1U, index + 1U,
+                              std::nullopt}) == SafetyServiceStatus::Ready);
         const auto* fault = service.faultCore().dominant();
         TEST_ASSERT_NOT_NULL(fault);
         last = fault->instanceId;
@@ -1307,10 +1307,10 @@ void test_active_capacity_includes_two_o2_safety_roles() {
                      SafetyServiceStatus::Ready);
 
     for (std::uint32_t index = 0U; index < kMaximumPersistedLatches; ++index) {
-        TEST_ASSERT_TRUE(
-            service.raiseFault({FaultCode::S3_003, 100U + index, index + 1U,
-                                index + 1U, std::nullopt}) ==
-            SafetyServiceStatus::Ready);
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                             {FaultCode::S3_003, 100U + index, index + 1U,
+                              index + 1U, std::nullopt}) ==
+                         SafetyServiceStatus::Ready);
     }
     TEST_ASSERT_TRUE(service.consumeProcessMessage(
                          ProcessMessage::TargetReachTimeExceeded, 200U, 1U) ==
@@ -1425,9 +1425,17 @@ void test_bounded_watchdog_and_unknown_domains_reuse_identity() {
     TEST_ASSERT_TRUE(escalationJournaled);
 
     const auto unknownId = unknownFaults.records[0].instanceId;
-    const auto unknownRevision = unknownFaults.records[0].faultRevision;
-    TEST_ASSERT_TRUE(unknown.clearFaultCause(unknownId, unknownRevision) ==
-                     SafetyServiceStatus::Ready);
+    // B4: a bare id+revision clear is rejected for Y4-008; only the matching
+    // real clearance path (here: the sensor domain that most recently
+    // reported the unknown quality) may resolve the cause.
+    TEST_ASSERT_TRUE(unknown.clearFaultCause(
+                         unknownId, unknownFaults.records[0].faultRevision) ==
+                     SafetyServiceStatus::SafetyRejected);
+    device_platform::SensorQualitySnapshot validProductQuality;
+    validProductQuality.quality = device_platform::SensorQuality::Valid;
+    TEST_ASSERT_TRUE(unknown.consumeSensorQuality(
+                         SafetySensorRole::Product, validProductQuality, 20U,
+                         902U) == SafetyServiceStatus::Ready);
     TEST_ASSERT_TRUE(unknown.consumeConfigurationStatus(
                          ConfigurationSafetyStatus::Operational, 56U, 903U) ==
                      SafetyServiceStatus::Ready);
@@ -1442,9 +1450,9 @@ void test_bounded_watchdog_and_unknown_domains_reuse_identity() {
                                  FaultResetAuthorizationLevel::Technical))
             .status == SafetyServiceStatus::ResetCommitted);
     TEST_ASSERT_EQUAL_UINT32(0U, unknown.faultCore().snapshot().count);
-    TEST_ASSERT_TRUE(
-        unknown.raiseFault({FaultCode::Y4_008, 99U, 100U, 2U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(unknown.injectFaultForTesting(
+                         {FaultCode::Y4_008, 99U, 100U, 2U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     TEST_ASSERT_TRUE(unknown.faultCore().dominant()->instanceId != unknownId);
 }
 

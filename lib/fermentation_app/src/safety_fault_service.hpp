@@ -88,8 +88,6 @@ class SafetyFaultService final {
         const FactoryNewSafetyProof& factoryProof = {});
     [[nodiscard]] SafetyBootResult evaluateBoot();
 
-    [[nodiscard]] SafetyServiceStatus raiseFault(
-        const FaultRaiseRequest& request);
     [[nodiscard]] SafetyServiceStatus consumeProcessMessage(
         ProcessMessage message, std::uint32_t sourceKey,
         std::uint32_t correlationKey);
@@ -159,10 +157,20 @@ class SafetyFaultService final {
                                              std::uint8_t passedDomains);
     void injectSafeBootSafetyEvidenceForTesting(std::uint8_t passedDomains);
     void invalidateSafetyEvidenceForTesting(FaultResetCheckDomain domain);
+    // Native-only seam for the stable Release-1 contract-/injection-only
+    // codes (S3-003/004/005/006/007/009, Y4-007) whose real qualified
+    // producer does not exist yet. Production code has no raw-raise entry
+    // point; every real producer path uses a typed consume*() method that
+    // owns its own bounded identity.
+    [[nodiscard]] SafetyServiceStatus injectFaultForTesting(
+        const FaultRaiseRequest& request);
 #endif
 
    private:
     friend class TemperatureControlApplicationOrchestrator;
+
+    [[nodiscard]] SafetyServiceStatus raiseFault(
+        const FaultRaiseRequest& request);
 
     static constexpr std::size_t kSafetyCheckDomainCount = 4U;
 
@@ -187,7 +195,8 @@ class SafetyFaultService final {
                                         const FaultCore& core) const;
     [[nodiscard]] SafetyServiceStatus resolveFaultCause(
         FaultCode code, std::uint32_t sourceKey,
-        std::optional<std::uint32_t> correlationKey = std::nullopt);
+        std::optional<std::uint32_t> correlationKey = std::nullopt,
+        std::optional<FaultDiagnosticOrigin> requiredOrigin = std::nullopt);
     [[nodiscard]] SafetyServiceStatus finalizePendingSafeBootExit();
     [[nodiscard]] bool clearSafeBootTrackingFault(FaultCore& core) const;
     void retainRamFailClosed(

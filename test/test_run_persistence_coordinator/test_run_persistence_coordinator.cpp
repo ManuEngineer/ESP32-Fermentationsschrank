@@ -3446,9 +3446,9 @@ void test_application_actuator_handoff_and_lifecycle_boundary() {
     // Application -> Planner -> Sink boundary after the central SafetyFault-
     // Service enters a blocking state. There is no caller-supplied Allowed
     // argument at this boundary; the physical Peltier output must stop.
-    TEST_ASSERT_TRUE(
-        safety.raiseFault({FaultCode::S3_004, 24U, 900U, 100U, std::nullopt}) ==
-        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(safety.injectFaultForTesting(
+                         {FaultCode::S3_004, 24U, 900U, 100U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
     const auto secondPlan = application.tickActuatorPlan(state, 2'100U);
     TEST_ASSERT_TRUE(secondPlan.appliedDirection ==
                      AbstractControlDirection::Idle);

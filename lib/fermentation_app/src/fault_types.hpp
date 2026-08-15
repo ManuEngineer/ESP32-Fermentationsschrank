@@ -76,6 +76,19 @@ enum class FaultStatus : std::uint8_t {
     Cleared,
 };
 
+// Bounded diagnostic origin for the single active Y4-008 instance. It never
+// participates in the bounded correlation identity (Y4-008 always dedupes to
+// one system-wide instance); it only records which real domain most recently
+// reported the unknown/mismatched evidence, so only that domain's matching
+// real clearance path may resolve the cause.
+enum class FaultDiagnosticOrigin : std::uint8_t {
+    Unknown = 0U,
+    Boot = 1U,
+    Configuration = 2U,
+    Sensor = 3U,
+    Process = 4U,
+};
+
 enum class SafetyDisposition : std::uint8_t {
     Allowed,
     ImmediateStop,
@@ -100,6 +113,8 @@ struct FaultRecord {
     // #23 diagnostic evidence is deliberately separate from the bounded
     // correlation key and is never truncated.
     std::uint64_t diagnosticSequenceHighWatermark{0U};
+    // Only meaningful for Y4-008; ignored for every other code.
+    FaultDiagnosticOrigin diagnosticOrigin{FaultDiagnosticOrigin::Unknown};
 };
 
 enum class FaultRaiseStatus : std::uint8_t {
@@ -118,6 +133,7 @@ struct FaultRaiseRequest {
     std::uint64_t monotonicMillis{0U};
     std::optional<FaultInstanceId> primaryFaultId;
     std::uint64_t diagnosticSequenceHighWatermark{0U};
+    FaultDiagnosticOrigin diagnosticOrigin{FaultDiagnosticOrigin::Unknown};
 };
 
 struct FaultRaiseResult {
@@ -150,6 +166,13 @@ class FaultCore final {
     FaultCore() = default;
 
     [[nodiscard]] FaultRaiseResult raise(const FaultRaiseRequest& request);
+    // True when `request` would update an already-active instance (Existing,
+    // Reactivated, or a bounded-domain diagnostic update) rather than
+    // requiring a new persistent slot. The 17-slot bound must only ever be
+    // enforced when this is false, so a capacity gate never misfires against
+    // a mere repeat or reactivation of an already-counted cause.
+    [[nodiscard]] bool correlatesToExistingInstance(
+        const FaultRaiseRequest& request) const;
     [[nodiscard]] bool acknowledge(FaultInstanceId id,
                                    std::uint32_t expectedRevision);
     [[nodiscard]] bool markCauseCleared(FaultInstanceId id,
@@ -180,6 +203,8 @@ class FaultCore final {
         FaultInstanceId id, std::uint32_t expectedRevision);
     [[nodiscard]] bool incrementRevision();
     [[nodiscard]] FaultRecord* findMutable(FaultInstanceId id);
+    [[nodiscard]] const FaultRecord* findCorrelationConst(
+        const FaultRaiseRequest& request) const;
     [[nodiscard]] FaultRecord* findCorrelation(
         const FaultRaiseRequest& request);
     void recomputeProjection();

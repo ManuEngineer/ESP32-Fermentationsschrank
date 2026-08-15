@@ -124,7 +124,8 @@ bool equalFaultCoreSnapshot(const FaultCoreSnapshot& left,
             a.faultRevision != b.faultRevision ||
             a.primaryFaultId != b.primaryFaultId ||
             a.diagnosticSequenceHighWatermark !=
-                b.diagnosticSequenceHighWatermark) {
+                b.diagnosticSequenceHighWatermark ||
+            a.diagnosticOrigin != b.diagnosticOrigin) {
             return false;
         }
     }
@@ -159,12 +160,13 @@ const FaultRecord* FaultCore::find(FaultInstanceId id) const {
     return nullptr;
 }
 
-FaultRecord* FaultCore::findCorrelation(const FaultRaiseRequest& request) {
+const FaultRecord* FaultCore::findCorrelationConst(
+    const FaultRaiseRequest& request) const {
     const auto code = normalizeFaultCode(request.code);
     const bool boundedDiagnosticDomain =
         code == FaultCode::S3_008 || code == FaultCode::Y4_008;
     for (std::size_t index = 0U; index < state_.count; ++index) {
-        auto& record = state_.records[index];
+        const auto& record = state_.records[index];
         if (statusActive(record) && record.code == code &&
             record.sourceKey == request.sourceKey &&
             record.correlationKey == request.correlationKey &&
@@ -177,37 +179,59 @@ FaultRecord* FaultCore::findCorrelation(const FaultRaiseRequest& request) {
     return nullptr;
 }
 
+FaultRecord* FaultCore::findCorrelation(const FaultRaiseRequest& request) {
+    return const_cast<FaultRecord*>(findCorrelationConst(request));
+}
+
+bool FaultCore::correlatesToExistingInstance(
+    const FaultRaiseRequest& request) const {
+    return findCorrelationConst(request) != nullptr;
+}
+
 FaultRaiseResult FaultCore::raise(const FaultRaiseRequest& request) {
     if (request.primaryFaultId.has_value() &&
         find(*request.primaryFaultId) == nullptr) {
         return {FaultRaiseStatus::InvalidInput, {}};
     }
+    const auto code = normalizeFaultCode(request.code);
     if (auto* existing = findCorrelation(request); existing != nullptr) {
-        if ((normalizeFaultCode(request.code) == FaultCode::S3_008 ||
-             normalizeFaultCode(request.code) == FaultCode::Y4_008) &&
+        const bool boundedDiagnosticDomain =
+            code == FaultCode::S3_008 || code == FaultCode::Y4_008;
+        const bool higherWatermark =
+            boundedDiagnosticDomain &&
             request.diagnosticSequenceHighWatermark >
-                existing->diagnosticSequenceHighWatermark) {
-            if (!incrementRevision()) {
-                return {FaultRaiseStatus::RevisionOverflow, {}};
-            }
-            existing->diagnosticSequenceHighWatermark =
-                request.diagnosticSequenceHighWatermark;
-            existing->faultRevision = state_.revision;
-            recomputeProjection();
+                existing->diagnosticSequenceHighWatermark;
+        const bool needsReactivation =
+            !existing->causeActive ||
+            existing->status == FaultStatus::CauseClearedLocked;
+        const bool originChanged =
+            code == FaultCode::Y4_008 &&
+            existing->diagnosticOrigin != request.diagnosticOrigin;
+        if (!higherWatermark && !needsReactivation && !originChanged) {
             return {FaultRaiseStatus::Existing, existing->instanceId};
         }
-        if (!existing->causeActive ||
-            existing->status == FaultStatus::CauseClearedLocked) {
-            if (!incrementRevision()) {
-                return {FaultRaiseStatus::RevisionOverflow, {}};
-            }
+        if (!incrementRevision()) {
+            return {FaultRaiseStatus::RevisionOverflow, {}};
+        }
+        if (higherWatermark) {
+            existing->diagnosticSequenceHighWatermark =
+                request.diagnosticSequenceHighWatermark;
+        }
+        if (code == FaultCode::Y4_008) {
+            // The bounded Y4-008 identity is fixed regardless of the real
+            // origin; the diagnostic origin is kept current so only the
+            // matching real clearance path may later resolve the cause.
+            existing->diagnosticOrigin = request.diagnosticOrigin;
+        }
+        if (needsReactivation) {
             existing->causeActive = true;
             existing->status = FaultStatus::ActiveUnacknowledged;
-            existing->faultRevision = state_.revision;
-            recomputeProjection();
-            return {FaultRaiseStatus::Reactivated, existing->instanceId};
         }
-        return {FaultRaiseStatus::Existing, existing->instanceId};
+        existing->faultRevision = state_.revision;
+        recomputeProjection();
+        return {needsReactivation ? FaultRaiseStatus::Reactivated
+                                  : FaultRaiseStatus::Existing,
+                existing->instanceId};
     }
     if (state_.count >= state_.records.size() || nextInstanceId_ == 0U) {
         installUnknownPersistenceFault();
@@ -219,7 +243,6 @@ FaultRaiseResult FaultCore::raise(const FaultRaiseRequest& request) {
         return {FaultRaiseStatus::RevisionOverflow, {}};
     }
 
-    const auto code = normalizeFaultCode(request.code);
     const FaultInstanceId id{nextInstanceId_++};
     FaultRecord record;
     record.instanceId = id;
@@ -239,6 +262,9 @@ FaultRaiseResult FaultCore::raise(const FaultRaiseRequest& request) {
     record.primaryFaultId = request.primaryFaultId;
     record.diagnosticSequenceHighWatermark =
         request.diagnosticSequenceHighWatermark;
+    record.diagnosticOrigin = code == FaultCode::Y4_008
+                                  ? request.diagnosticOrigin
+                                  : FaultDiagnosticOrigin::Unknown;
     state_.records[state_.count++] = record;
     state_.instanceSequenceHighWatermark = id.value;
     ++state_.revision;
@@ -436,22 +462,12 @@ void FaultCore::compactClearedRecords() {
 }
 
 void FaultCore::installUnknownPersistenceFault() {
-    if (state_.count >= state_.records.size() ||
-        state_.revision == std::numeric_limits<std::uint32_t>::max() ||
-        nextInstanceId_ == 0U ||
-        nextInstanceId_ == std::numeric_limits<std::uint32_t>::max()) {
-        state_.criticalSafetyEventPending = true;
-        return;
-    }
-    FaultRecord record;
-    record.instanceId = {nextInstanceId_ == 0U ? 1U : nextInstanceId_++};
-    record.code = FaultCode::Y4_005;
-    record.faultClass = FaultClass::LatchedSystemFault;
-    record.creationSequence = record.instanceId.value;
-    record.latched = true;
-    record.faultRevision = ++state_.revision;
-    state_.records[state_.count++] = record;
-    state_.instanceSequenceHighWatermark = record.instanceId.value;
+    // A FaultCore-internal slot/revision overflow is a Y4-006 basis-record
+    // capacity concern owned by SafetyFaultService's own marker path, not a
+    // fabricated Y4-005 critical run-checkpoint fault. This keeps the
+    // in-core snapshot fail-closed without inventing a slot or a code whose
+    // real producer condition (an unreconstructible run checkpoint) does not
+    // apply here.
     state_.criticalSafetyEventPending = true;
 }
 

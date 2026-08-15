@@ -224,7 +224,8 @@ SafetyBootResult SafetyFaultService::evaluateBoot() {
          result.restart.status == RestartBootStatus::EvidenceMismatch)) {
         const auto raised = stagedCore.raise(normalizeBoundedFaultIdentity(
             {bootFault, 24U, candidate.restartEpisode.episodeId,
-             timeSource_.monotonicMillis(), std::nullopt}));
+             timeSource_.monotonicMillis(), std::nullopt, 0U,
+             FaultDiagnosticOrigin::Boot}));
         if (raised.status != FaultRaiseStatus::InvalidInput) {
             bootFaultId = raised.instanceId;
             candidate.safeBootRequired = true;
@@ -438,8 +439,14 @@ SafetyServiceStatus SafetyFaultService::raiseFault(
     const auto boundedRequest = normalizeBoundedFaultIdentity(request);
     const auto normalized = normalizeFaultCode(boundedRequest.code);
     const bool latch = isLatchedFaultClass(faultClassForCode(normalized));
+    // The 17-slot bound may only fire when this raise would actually need a
+    // new persistent slot. A repeat, a reactivation, or a bounded-domain
+    // diagnostic update (S3-008/Y4-008) of an already-counted instance must
+    // never be misread as a capacity overflow at 17/17.
+    const bool wouldNeedNewInstance =
+        latch && !faultCore_.correlatesToExistingInstance(boundedRequest);
     if (normalized == FaultCode::Y4_006 ||
-        (latch &&
+        (wouldNeedNewInstance &&
          persistentLatchCount(faultCore_) >= kMaximumPersistedLatches)) {
         SafetyStateRecord candidate = record_;
         candidate.safeBootRequired = true;
@@ -497,22 +504,36 @@ SafetyServiceStatus SafetyFaultService::consumeProcessMessage(
     ProcessMessage message, std::uint32_t sourceKey,
     std::uint32_t correlationKey) {
     if (!started_) return SafetyServiceStatus::NotStarted;
+    SafetyServiceStatus status = SafetyServiceStatus::Ready;
     switch (message) {
         case ProcessMessage::TargetReachTimeExceeded:
-            return raiseFault({FaultCode::P1_001, sourceKey, correlationKey,
-                               timeSource_.monotonicMillis(), std::nullopt});
+            status = raiseFault({FaultCode::P1_001, sourceKey, correlationKey,
+                                 timeSource_.monotonicMillis(), std::nullopt});
+            break;
         case ProcessMessage::ProductInsertionRequested:
         case ProcessMessage::FaultEntered:
-            return SafetyServiceStatus::Ready;
+            status = SafetyServiceStatus::Ready;
+            break;
         case ProcessMessage::RunCompleted:
         case ProcessMessage::RunAborted:
             // A later valid terminal process evaluation ends P1-001. The
             // process producer owns the signal; #24 owns only the
             // code-specific lifecycle projection.
-            return resolveFaultCause(FaultCode::P1_001, sourceKey);
+            status = resolveFaultCause(FaultCode::P1_001, sourceKey);
+            break;
+        default:
+            return raiseFault({FaultCode::Y4_008, sourceKey, correlationKey,
+                               timeSource_.monotonicMillis(), std::nullopt, 0U,
+                               FaultDiagnosticOrigin::Process});
     }
-    return raiseFault({FaultCode::Y4_008, sourceKey, correlationKey,
-                       timeSource_.monotonicMillis(), std::nullopt});
+    // Any recognized process message is also the matching clearance signal
+    // for a Process-origin Y4-008, never for a Boot-, Configuration-, or
+    // Sensor-origin one.
+    const auto resolvedUnknown = resolveFaultCause(
+        FaultCode::Y4_008, kUnknownSystemSource, kUnknownSystemCorrelation,
+        FaultDiagnosticOrigin::Process);
+    return resolvedUnknown == SafetyServiceStatus::Ready ? status
+                                                         : resolvedUnknown;
 }
 
 SafetyServiceStatus SafetyFaultService::consumeSensorQuality(
@@ -546,14 +567,26 @@ SafetyServiceStatus SafetyFaultService::consumeSensorQuality(
             if (role == SafetySensorRole::Cooling) code = FaultCode::S3_002;
             if (role == SafetySensorRole::Product) code = FaultCode::O2_001;
             status = raiseFault({code, sourceKey, internalCorrelation,
-                                 timeSource_.monotonicMillis(), std::nullopt});
+                                 timeSource_.monotonicMillis(), std::nullopt,
+                                 0U, FaultDiagnosticOrigin::Sensor});
             break;
         }
         default:
             status =
                 raiseFault({FaultCode::Y4_008, sourceKey, internalCorrelation,
-                            timeSource_.monotonicMillis(), std::nullopt});
+                            timeSource_.monotonicMillis(), std::nullopt, 0U,
+                            FaultDiagnosticOrigin::Sensor});
             break;
+    }
+    if (snapshot.quality == device_platform::SensorQuality::Valid) {
+        // A real sensor producer reporting Valid is also the matching
+        // clearance signal for a Sensor-origin Y4-008, never for a Boot-,
+        // Configuration-, or Process-origin one. Y4-008 always normalizes to
+        // the single bounded system identity, so resolution must target that
+        // fixed identity, not the sensor's own source/correlation.
+        static_cast<void>(resolveFaultCause(
+            FaultCode::Y4_008, kUnknownSystemSource, kUnknownSystemCorrelation,
+            FaultDiagnosticOrigin::Sensor));
     }
     updateSensorSafetyEvidence(
         role, sourceKey,
@@ -598,7 +631,8 @@ SafetyServiceStatus SafetyFaultService::consumeSensorSelectionEvidence(
 
 SafetyServiceStatus SafetyFaultService::resolveFaultCause(
     FaultCode code, std::uint32_t sourceKey,
-    std::optional<std::uint32_t> correlationKey) {
+    std::optional<std::uint32_t> correlationKey,
+    std::optional<FaultDiagnosticOrigin> requiredOrigin) {
     if (!started_) return SafetyServiceStatus::NotStarted;
     const auto before = faultCore_.snapshot();
     FaultCore staged = faultCore_;
@@ -608,6 +642,8 @@ SafetyServiceStatus SafetyFaultService::resolveFaultCause(
         if (fault.code != code || fault.sourceKey != sourceKey ||
             (correlationKey.has_value() &&
              fault.correlationKey != *correlationKey) ||
+            (requiredOrigin.has_value() &&
+             fault.diagnosticOrigin != *requiredOrigin) ||
             fault.status == FaultStatus::Cleared || !fault.causeActive) {
             continue;
         }
@@ -647,6 +683,19 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
                     return resolved;
                 }
             }
+            // A real Operational result is also the matching clearance
+            // signal for a Configuration-origin Y4-008, never for a Boot-,
+            // Sensor-, or Process-origin one.
+            {
+                const auto resolvedUnknown =
+                    resolveFaultCause(FaultCode::Y4_008, kUnknownSystemSource,
+                                      kUnknownSystemCorrelation,
+                                      FaultDiagnosticOrigin::Configuration);
+                if (resolvedUnknown != SafetyServiceStatus::Ready) {
+                    configurationGateQualified_ = false;
+                    return resolvedUnknown;
+                }
+            }
             configurationGateQualified_ = true;
             bindPersistenceAndIntegrityToCurrentFaults();
             return started_ ? finalizePendingSafeBootExit()
@@ -662,7 +711,8 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
         case ConfigurationSafetyStatus::Unknown:
             configurationGateQualified_ = false;
             return raiseFault({FaultCode::Y4_008, sourceKey, correlationKey,
-                               timeSource_.monotonicMillis(), std::nullopt});
+                               timeSource_.monotonicMillis(), std::nullopt, 0U,
+                               FaultDiagnosticOrigin::Configuration});
     }
     configurationGateQualified_ = false;
     updateSafetyDomainEvidence(FaultResetCheckDomain::Persistence, false);
@@ -818,6 +868,14 @@ SafetyServiceStatus SafetyFaultService::acknowledgeFault(
 SafetyServiceStatus SafetyFaultService::clearFaultCause(
     FaultInstanceId id, std::uint32_t expectedRevision) {
     if (!started_) return SafetyServiceStatus::NotStarted;
+    // Y4-008's cause may only be cleared by the matching real producer
+    // signal via resolveFaultCause(), never by a bare caller-supplied
+    // id+revision. A caller cannot prove which real domain's evidence
+    // resolved the unknown/mismatched condition.
+    if (const auto* target = faultCore_.find(id);
+        target != nullptr && target->code == FaultCode::Y4_008) {
+        return SafetyServiceStatus::SafetyRejected;
+    }
     const auto before = faultCore_.snapshot();
     if (!faultCore_.markCauseCleared(id, expectedRevision)) {
         return SafetyServiceStatus::StaleFault;
@@ -1626,6 +1684,11 @@ void SafetyFaultService::injectSafeBootSafetyEvidenceForTesting(
 void SafetyFaultService::invalidateSafetyEvidenceForTesting(
     FaultResetCheckDomain domain) {
     updateSafetyDomainEvidence(domain, false);
+}
+
+SafetyServiceStatus SafetyFaultService::injectFaultForTesting(
+    const FaultRaiseRequest& request) {
+    return raiseFault(request);
 }
 #endif
 
