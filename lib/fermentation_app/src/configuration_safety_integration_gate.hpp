@@ -32,7 +32,6 @@ class ConfigurationSafetyIntegrationGate final {
     ConfigurationRecoveryService& recovery_;
     SafetyFaultService& safety_;
     std::uint32_t sourceKey_{56U};
-    std::uint32_t nextCorrelationKey_{1U};
 };
 
 }  // namespace fermentation

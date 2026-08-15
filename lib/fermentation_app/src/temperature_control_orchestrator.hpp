@@ -14,6 +14,7 @@
 namespace fermentation {
 
 class RunRecoveryCoordinator;
+class SafetyFaultService;
 
 // The only dynamic PI evidence a caller may supply. Target, role, and
 // context identity are always derived internally from the live
@@ -78,7 +79,7 @@ class TemperatureControlApplicationOrchestrator {
         RunPersistenceCoordinator& persistence,
         TemperatureController& temperatureController,
         TargetQualificationEvaluator& evaluator, ActuatorPlanner& planner,
-        ActuatorPlanSinkDriver& driver) noexcept;
+        ActuatorPlanSinkDriver& driver, SafetyFaultService& safety) noexcept;
 
     [[nodiscard]] RunPersistenceResult persistCommand(
         RunCommandState& current, const CommandDecision& decision,
@@ -137,8 +138,7 @@ class TemperatureControlApplicationOrchestrator {
     // is consumed exactly once; the caller cannot inject an alternative
     // evaluation or feedback value.
     [[nodiscard]] ActuatorPlanTickResult tickActuatorPlan(
-        const RunCommandState& current, std::uint64_t nowMonotonicMillis,
-        ActuatorSafetyGateInput safetyGate = {});
+        const RunCommandState& current, std::uint64_t nowMonotonicMillis);
 
    private:
     [[nodiscard]] RunPersistenceResult complete(
@@ -155,6 +155,7 @@ class TemperatureControlApplicationOrchestrator {
     TargetQualificationEvaluator& evaluator_;
     ActuatorPlanner* planner_{nullptr};
     ActuatorPlanSinkDriver* actuatorDriver_{nullptr};
+    SafetyFaultService* safety_{nullptr};
     std::optional<TemperatureControlResult> outstandingEvaluation_;
     std::optional<PreviousControlRequestFeedback>
         pendingControlRequestFeedback_;

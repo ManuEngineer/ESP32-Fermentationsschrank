@@ -286,12 +286,58 @@ enum class FaultResetRejection : std::uint8_t {
     StaleEvaluation,
 };
 
+// Typed evidence from the future local authorization producer. The PIN
+// verification itself is outside Issue #24; a missing, expired, or
+// insufficient value is never interpreted as authorization.
+enum class FaultResetAuthorizationLevel : std::uint8_t {
+    None,
+    Operator,
+    Service,
+    Technical,
+};
+
+struct FaultResetAuthorizationEvidence {
+    CommandId evidenceId{0U};
+    FaultResetAuthorizationLevel level{FaultResetAuthorizationLevel::None};
+    std::uint64_t issuedAtMonotonicMillis{0U};
+    std::uint64_t expiresAtMonotonicMillis{0U};
+    FaultInstanceId targetFault;
+    std::uint32_t targetFaultRevision{0U};
+};
+
+enum class FaultResetCheckStatus : std::uint8_t {
+    Unknown,
+    Passed,
+    Failed,
+};
+
+struct FaultResetSafetyEvidence {
+    FaultResetCheckStatus sensor{FaultResetCheckStatus::Unknown};
+    FaultResetCheckStatus actuator{FaultResetCheckStatus::Unknown};
+    FaultResetCheckStatus persistence{FaultResetCheckStatus::Unknown};
+    FaultResetCheckStatus integrity{FaultResetCheckStatus::Unknown};
+
+    [[nodiscard]] bool allPassed() const {
+        return sensor == FaultResetCheckStatus::Passed &&
+               actuator == FaultResetCheckStatus::Passed &&
+               persistence == FaultResetCheckStatus::Passed &&
+               integrity == FaultResetCheckStatus::Passed;
+    }
+};
+
 struct FaultResetEvaluation {
     bool allowed{false};
     bool causeStillActive{true};
     bool safetyChecksPassed{false};
+    bool authorizationSatisfied{false};
+    bool safetyEvidenceComplete{false};
+    bool codePolicyAllowsReset{false};
     bool otherBlockingFaultActive{false};
     std::uint32_t faultRevision{0U};
+    FaultResetAuthorizationLevel requiredAuthorization{
+        FaultResetAuthorizationLevel::None};
+    FaultResetAuthorizationLevel presentedAuthorization{
+        FaultResetAuthorizationLevel::None};
     FaultResetRejection rejection{FaultResetRejection::CauseStillActive};
 };
 

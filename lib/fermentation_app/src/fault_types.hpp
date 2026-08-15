@@ -10,6 +10,8 @@
 
 namespace fermentation {
 
+class SafetyFaultService;
+
 // The in-memory core retains the 17 persistent safety/system slots plus the
 // three non-latched P1/O2 observations. Y4-006 is a record marker and never
 // consumes one of the persistent slots.
@@ -137,6 +139,7 @@ struct FaultCoreSnapshot {
 [[nodiscard]] std::uint8_t faultCodePriority(FaultCode value);
 [[nodiscard]] const char* faultCodeText(FaultCode value);
 [[nodiscard]] bool isLatchedFaultClass(FaultClass value);
+[[nodiscard]] bool allowsAutomaticRecoveryRestart(FaultCode value);
 [[nodiscard]] bool isBlockingFault(const FaultRecord& record);
 [[nodiscard]] bool equalFaultCoreSnapshot(const FaultCoreSnapshot& left,
                                           const FaultCoreSnapshot& right);
@@ -167,11 +170,19 @@ class FaultCore final {
     [[nodiscard]] FaultCoreSnapshot snapshot() const;
 
    private:
+    friend class SafetyFaultService;
+
+    // Y4-009 is the restart-tracking latch itself. It is cleared only by the
+    // explicit, technically authorized SAFE_BOOT-exit path; ordinary reboot,
+    // cause clearing, and generic re-arm paths cannot call this operation.
+    [[nodiscard]] bool clearAfterAuthorizedSafeBootExit(
+        FaultInstanceId id, std::uint32_t expectedRevision);
     [[nodiscard]] bool incrementRevision();
     [[nodiscard]] FaultRecord* findMutable(FaultInstanceId id);
     [[nodiscard]] FaultRecord* findCorrelation(
         const FaultRaiseRequest& request);
     void recomputeProjection();
+    void compactClearedRecords();
     void installUnknownPersistenceFault();
 
     FaultCoreSnapshot state_;

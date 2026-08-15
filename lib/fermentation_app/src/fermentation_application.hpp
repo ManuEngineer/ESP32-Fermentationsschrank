@@ -30,6 +30,7 @@ class FermentationApplication {
     void update();
 
     [[nodiscard]] bool ready() const;
+    [[nodiscard]] SafetyFaultService* safetyFaultService() const;
     [[nodiscard]] ActuatorSafetyGateInput actuatorSafetyGateInput() const;
     [[nodiscard]] SafetyServiceStatus forward(
         ConfigurationRecoveryResult result);

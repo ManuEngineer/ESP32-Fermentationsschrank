@@ -89,6 +89,12 @@ bool isLatchedFaultClass(FaultClass value) {
            value == FaultClass::LatchedSystemFault;
 }
 
+bool allowsAutomaticRecoveryRestart(FaultCode value) {
+    // R3 is default-deny. Only the explicitly documented internal recovery
+    // fault may prepare one controlled restart for its active episode.
+    return value == FaultCode::Y4_007;
+}
+
 bool isBlockingFault(const FaultRecord& record) {
     return statusActive(record) &&
            (isLatchedFaultClass(record.faultClass) ||
@@ -254,6 +260,7 @@ bool FaultCore::markCauseCleared(FaultInstanceId id,
     record->status = record->latched ? FaultStatus::CauseClearedLocked
                                      : FaultStatus::Cleared;
     record->faultRevision = state_.revision;
+    if (!record->latched) compactClearedRecords();
     recomputeProjection();
     return true;
 }
@@ -282,6 +289,23 @@ bool FaultCore::clearAfterVerifiedReset(FaultInstanceId id,
     }
     record->status = FaultStatus::Cleared;
     record->faultRevision = state_.revision;
+    compactClearedRecords();
+    recomputeProjection();
+    return true;
+}
+
+bool FaultCore::clearAfterAuthorizedSafeBootExit(
+    FaultInstanceId id, std::uint32_t expectedRevision) {
+    auto* record = findMutable(id);
+    if (record == nullptr || record->code != FaultCode::Y4_009 ||
+        record->status == FaultStatus::Cleared ||
+        record->faultRevision != expectedRevision || !incrementRevision()) {
+        return false;
+    }
+    record->causeActive = false;
+    record->status = FaultStatus::Cleared;
+    record->faultRevision = state_.revision;
+    compactClearedRecords();
     recomputeProjection();
     return true;
 }
@@ -298,6 +322,7 @@ bool FaultCore::restoreSnapshot(const FaultCoreSnapshot& snapshot) {
         if (!record.instanceId.valid() || !isKnownFaultCode(record.code) ||
             !isKnownFaultClass(record.faultClass) ||
             record.faultClass != faultClassForCode(record.code) ||
+            record.status == FaultStatus::Cleared ||
             record.faultRevision == 0U ||
             record.disposition !=
                 (record.faultClass == FaultClass::ProcessWarning
@@ -377,6 +402,21 @@ FaultCoreSnapshot FaultCore::snapshot() const { return state_; }
 
 void FaultCore::recomputeProjection() {
     state_.criticalSafetyEventPending = hasBlockingFault();
+}
+
+void FaultCore::compactClearedRecords() {
+    std::size_t writeIndex = 0U;
+    for (std::size_t readIndex = 0U; readIndex < state_.count; ++readIndex) {
+        if (state_.records[readIndex].status == FaultStatus::Cleared) continue;
+        if (writeIndex != readIndex) {
+            state_.records[writeIndex] = state_.records[readIndex];
+        }
+        ++writeIndex;
+    }
+    for (std::size_t index = writeIndex; index < state_.count; ++index) {
+        state_.records[index] = FaultRecord{};
+    }
+    state_.count = writeIndex;
 }
 
 void FaultCore::installUnknownPersistenceFault() {

@@ -173,13 +173,15 @@ bool RestartEpisodeCoordinator::prepareControlledRestart(
 bool RestartEpisodeCoordinator::prepareRestartIntent(
     SafetyStateRecord& record, RestartIntentType intent,
     FaultInstanceId faultId, std::uint32_t faultRevision) {
-    if (!isValidIntent(intent) || faultRevision == 0U ||
+    if (!isValidIntent(intent) ||
+        (intent != RestartIntentType::AuthorizedSafeBootExit &&
+         faultRevision == 0U) ||
         (intent == RestartIntentType::AutomaticSafetyRecovery &&
          !faultId.valid()) ||
         record.restartEvidence.state == RestartEvidenceState::Pending ||
         record.restartEvidence.state == RestartEvidenceState::Committed ||
         record.recordRevision == std::numeric_limits<std::uint32_t>::max() ||
-        (intent != RestartIntentType::AutomaticSafetyRecovery &&
+        (intent == RestartIntentType::AuthorizedTechnicalRestart &&
          record.restartEpisode.abnormalRestartCount >= 3U)) {
         return false;
     }
@@ -225,9 +227,8 @@ bool RestartEpisodeCoordinator::prepareRestartIntent(
 }
 
 bool RestartEpisodeCoordinator::advanceStableWindow(SafetyStateRecord& record,
-                                                    std::uint64_t now,
-                                                    bool stable) {
-    if (!record.restartEpisode.open || record.safeBootRequired || !stable) {
+                                                    std::uint64_t now) {
+    if (!record.restartEpisode.open || record.safeBootRequired) {
         record.restartEpisode.stableWindowRunning = false;
         record.restartEpisode.stableWindowStartedAtMillis = 0U;
         return false;

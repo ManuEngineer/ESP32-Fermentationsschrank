@@ -4,6 +4,7 @@
 
 #include "control_context.hpp"
 #include "run_recovery.hpp"
+#include "safety_fault_service.hpp"
 
 namespace fermentation {
 
@@ -87,12 +88,13 @@ TemperatureControlApplicationOrchestrator::
         RunPersistenceCoordinator& persistence,
         TemperatureController& temperatureController,
         TargetQualificationEvaluator& evaluator, ActuatorPlanner& planner,
-        ActuatorPlanSinkDriver& driver) noexcept
+        ActuatorPlanSinkDriver& driver, SafetyFaultService& safety) noexcept
     : persistence_(persistence),
       temperatureController_(temperatureController),
       evaluator_(evaluator),
       planner_(&planner),
-      actuatorDriver_(&driver) {}
+      actuatorDriver_(&driver),
+      safety_(&safety) {}
 
 RunPersistenceResult TemperatureControlApplicationOrchestrator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
@@ -294,8 +296,7 @@ TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
 
 ActuatorPlanTickResult
 TemperatureControlApplicationOrchestrator::tickActuatorPlan(
-    const RunCommandState& current, std::uint64_t nowMonotonicMillis,
-    ActuatorSafetyGateInput safetyGate) {
+    const RunCommandState& current, std::uint64_t nowMonotonicMillis) {
     if (planner_ == nullptr || actuatorDriver_ == nullptr) {
         ActuatorPlanTickResult result;
         result.status = ActuatorPlanStatus::Unconfigured;
@@ -311,7 +312,8 @@ TemperatureControlApplicationOrchestrator::tickActuatorPlan(
     input.currentCanonicalContext = context.requestContext;
     input.temperatureControlledPhase =
         isTemperatureControlledProcessState(current.processState.state);
-    input.safetyGate = safetyGate;
+    input.safetyGate = safety_ == nullptr ? ActuatorSafetyGateInput{}
+                                          : safety_->actuatorGateInput();
     if (!context.valid) {
         // No valid effective context may accidentally keep the physical gate
         // open when a caller omitted a fresh #22 evaluation.

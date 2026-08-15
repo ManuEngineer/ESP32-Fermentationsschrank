@@ -15,6 +15,8 @@ namespace fermentation {
 
 class ActuatorPlanner;
 struct ConfigurationRecoveryResult;
+struct CrossRolePlausibilityContext;
+struct SensorSelectionStateView;
 enum class ConfigurationServiceMode : std::uint8_t;
 enum class ConfigurationCommitStatus : std::uint8_t;
 enum class ConfigurationRecoveryStatus : std::uint8_t;
@@ -65,6 +67,7 @@ struct SafetyBootResult {
 struct SafetyResetResult {
     SafetyServiceStatus status{SafetyServiceStatus::SafetyRejected};
     FaultInstanceId targetFault;
+    FaultResetEvaluation evaluation;
 };
 
 // Anwendungsseitige #24-Orchestrierungsgrenze. Sie besitzt den Faultkern und
@@ -90,6 +93,10 @@ class SafetyFaultService final {
         SafetySensorRole role,
         const device_platform::SensorQualitySnapshot& snapshot,
         std::uint32_t sourceKey, std::uint32_t correlationKey);
+    [[nodiscard]] SafetyServiceStatus consumeSensorSelectionEvidence(
+        const SensorSelectionStateView& selection,
+        const CrossRolePlausibilityContext& plausibility,
+        std::uint32_t sourceKey, std::uint32_t correlationKey);
     [[nodiscard]] SafetyServiceStatus consumeConfigurationStatus(
         ConfigurationSafetyStatus status, std::uint32_t sourceKey,
         std::uint32_t correlationKey);
@@ -111,12 +118,23 @@ class SafetyFaultService final {
         FaultInstanceId id, std::uint32_t expectedRevision);
     [[nodiscard]] SafetyServiceStatus clearFaultCause(
         FaultInstanceId id, std::uint32_t expectedRevision);
+    [[nodiscard]] FaultResetEvaluation evaluateFaultReset(
+        const FaultResetRequest& request,
+        const FaultResetAuthorizationEvidence& authorization,
+        const FaultResetSafetyEvidence& safetyEvidence) const;
     [[nodiscard]] SafetyResetResult resetFault(
-        FaultInstanceId id, std::uint32_t expectedRevision,
+        const FaultResetRequest& request,
+        const FaultResetAuthorizationEvidence& authorization,
+        const FaultResetSafetyEvidence& safetyEvidence,
         ActuatorPlanner* planner = nullptr);
     [[nodiscard]] SafetyServiceStatus requestControlledSafetyRestart(
         FaultInstanceId id, std::uint32_t expectedRevision);
-    [[nodiscard]] SafetyServiceStatus advanceStableWindow(bool stable);
+    [[nodiscard]] SafetyServiceStatus advanceStableWindow();
+    [[nodiscard]] SafetyServiceStatus requestAuthorizedSafeBootExit(
+        const FaultResetAuthorizationEvidence& authorization);
+    [[nodiscard]] SafetyServiceStatus requestAuthorizedTechnicalRestart(
+        const FaultResetAuthorizationEvidence& authorization,
+        FaultInstanceId targetFault, std::uint32_t targetFaultRevision);
 
     [[nodiscard]] SafetyDisposition disposition() const;
     [[nodiscard]] bool safeBootRequired() const;
@@ -130,11 +148,24 @@ class SafetyFaultService final {
 
    private:
     [[nodiscard]] SafetyServiceStatus persistCoreMutation(
-        const FaultCoreSnapshot& before);
+        const FaultCoreSnapshot& before, std::uint32_t sourceKey = 0U,
+        std::uint32_t correlationKey = 0U);
     [[nodiscard]] SafetyServiceStatus persistSafeBootLock();
     [[nodiscard]] bool copyCoreToRecord(SafetyStateRecord& candidate) const;
     [[nodiscard]] bool copyCoreToRecord(SafetyStateRecord& candidate,
                                         const FaultCore& core) const;
+    [[nodiscard]] SafetyServiceStatus resolveFaultCause(
+        FaultCode code, std::uint32_t sourceKey);
+    [[nodiscard]] SafetyServiceStatus finalizePendingSafeBootExit();
+    [[nodiscard]] bool clearSafeBootTrackingFault(FaultCore& core) const;
+    void retainRamFailClosed(std::uint32_t sourceKey,
+                             std::uint32_t correlationKey);
+    [[nodiscard]] static FaultResetAuthorizationLevel requiredAuthorizationFor(
+        FaultCode code);
+    [[nodiscard]] bool authorizationIsCurrent(
+        const FaultResetAuthorizationEvidence& authorization,
+        FaultInstanceId targetFault, std::uint32_t targetRevision,
+        FaultResetAuthorizationLevel required) const;
     void recordEvent(FaultEventType type, const FaultRecord* fault,
                      bool accepted, std::uint32_t episodeId = 0U,
                      std::uint32_t restartEvidenceId = 0U) const;
@@ -148,6 +179,7 @@ class SafetyFaultService final {
     SafetyStateRecord record_;
     bool started_{false};
     bool configurationGateQualified_{false};
+    std::optional<std::uint32_t> pendingAuthorizedSafeBootExitEvidenceId_;
 };
 
 }  // namespace fermentation

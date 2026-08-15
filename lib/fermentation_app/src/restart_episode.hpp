@@ -46,8 +46,7 @@ class RestartEpisodeCoordinator final {
                                             std::uint32_t faultRevision);
 
     [[nodiscard]] bool advanceStableWindow(SafetyStateRecord& record,
-                                           std::uint64_t monotonicMillis,
-                                           bool stable);
+                                           std::uint64_t monotonicMillis);
 };
 
 }  // namespace fermentation

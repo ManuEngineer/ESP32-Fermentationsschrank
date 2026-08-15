@@ -1,6 +1,5 @@
 #include "configuration_safety_integration_gate.hpp"
 
-#include <limits>
 #include <utility>
 
 namespace fermentation {
@@ -13,10 +12,9 @@ ConfigurationSafetyIntegrationGate::boot() {
 ConfigurationSafetyIntegrationResult
 ConfigurationSafetyIntegrationGate::forward(
     ConfigurationRecoveryResult result) {
-    const auto correlationKey = nextCorrelationKey_;
-    if (nextCorrelationKey_ != std::numeric_limits<std::uint32_t>::max()) {
-        ++nextCorrelationKey_;
-    }
+    // A producer status is a stable cause identity. Polling the same result
+    // must not manufacture a new Y4 latch on every forward() call.
+    const auto correlationKey = static_cast<std::uint32_t>(result.status) + 1U;
     const auto safetyStatus = safety_.consumeConfigurationRecoveryResult(
         result, sourceKey_, correlationKey);
     return {std::move(result), safetyStatus};
@@ -24,20 +22,15 @@ ConfigurationSafetyIntegrationGate::forward(
 
 SafetyServiceStatus ConfigurationSafetyIntegrationGate::forward(
     ConfigurationCommitResult result) {
-    const auto correlationKey = nextCorrelationKey_;
-    if (nextCorrelationKey_ != std::numeric_limits<std::uint32_t>::max()) {
-        ++nextCorrelationKey_;
-    }
+    const auto correlationKey =
+        static_cast<std::uint32_t>(result.status) + 0x100U;
     return safety_.consumeConfigurationStatus(result.status, sourceKey_,
                                               correlationKey);
 }
 
 SafetyServiceStatus ConfigurationSafetyIntegrationGate::forward(
     ConfigurationServiceMode mode) {
-    const auto correlationKey = nextCorrelationKey_;
-    if (nextCorrelationKey_ != std::numeric_limits<std::uint32_t>::max()) {
-        ++nextCorrelationKey_;
-    }
+    const auto correlationKey = static_cast<std::uint32_t>(mode) + 0x200U;
     return safety_.consumeConfigurationStatus(mode, sourceKey_, correlationKey);
 }
 
