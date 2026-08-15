@@ -1990,6 +1990,169 @@ void test_real_application_boundary_consumes_public_configuration_result() {
         SafetyServiceStatus::Ready);
 }
 
+// E1: valid follow-up link, persist/reload survival, and journal projection.
+void test_primary_follow_up_link_is_valid_persists_and_is_journaled() {
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    device_platform_test_support::MockEventJournal journal;
+    SafetyFaultService service(store, reset, time, &journal);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    qualifyConfiguration(service);
+
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
+    const auto* primary = service.faultCore().dominant();
+    TEST_ASSERT_NOT_NULL(primary);
+    TEST_ASSERT_TRUE(primary->code == FaultCode::S3_003);
+    const auto primaryId = primary->instanceId;
+
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_001, 20U, 1U, 2U, primaryId}) ==
+                     SafetyServiceStatus::Ready);
+    const auto* followUp = service.faultCore().find(
+        service.faultCore().snapshot().records[1].instanceId);
+    TEST_ASSERT_NOT_NULL(followUp);
+    TEST_ASSERT_TRUE(followUp->code == FaultCode::S3_001);
+    TEST_ASSERT_TRUE(followUp->primaryFaultId.has_value());
+    TEST_ASSERT_TRUE(*followUp->primaryFaultId == primaryId);
+    const auto followUpId = followUp->instanceId;
+
+    bool journaledWithPrimary = false;
+    const std::string expectedPrimaryText =
+        ";primary=" + std::to_string(primaryId.value);
+    for (const auto& entry : journal.entries()) {
+        if (entry.message.find("type=FaultCreated;code=S3-001") !=
+                std::string::npos &&
+            entry.message.find(expectedPrimaryText) != std::string::npos) {
+            journaledWithPrimary = true;
+        }
+    }
+    TEST_ASSERT_TRUE(journaledWithPrimary);
+
+    // Persist/reload: a fresh service sharing the same store must load the
+    // same follow-up-to-primary link, not just the bare fault codes.
+    SafetyFaultService reloaded(store, reset, time);
+    TEST_ASSERT_TRUE(reloaded.begin() == SafetyServiceStatus::Ready);
+    const auto* reloadedFollowUp = reloaded.faultCore().find(followUpId);
+    TEST_ASSERT_NOT_NULL(reloadedFollowUp);
+    TEST_ASSERT_TRUE(reloadedFollowUp->primaryFaultId.has_value());
+    TEST_ASSERT_TRUE(*reloadedFollowUp->primaryFaultId == primaryId);
+}
+
+// E1: a follow-up naming a nonexistent primary is rejected; a persisted
+// record whose latch names itself as primary is rejected too.
+void test_primary_follow_up_rejects_missing_and_self_reference() {
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    qualifyConfiguration(service);
+
+    TEST_ASSERT_TRUE(
+        service.injectFaultForTesting(
+            {FaultCode::S3_001, 20U, 1U, 1U, FaultInstanceId{999U}}) ==
+        SafetyServiceStatus::InvalidFault);
+    TEST_ASSERT_EQUAL_UINT32(0U, service.faultCore().snapshot().count);
+
+    SafetyStateRecord record;
+    record.recordRevision = 2U;
+    record.faultRevision = 1U;
+    record.faultInstanceSequence = 1U;
+    record.latchCount = 1U;
+    record.latches[0].instanceId = {1U};
+    record.latches[0].code = FaultCode::S3_003;
+    record.latches[0].faultClass = FaultClass::LatchedSafetyFault;
+    record.latches[0].faultRevision = 1U;
+    record.dominantCode = FaultCode::S3_003;
+    TEST_ASSERT_TRUE(validateSafetyStateRecord(record) ==
+                     SafetyRecordValidation::Valid);
+
+    record.latches[0].primaryFaultId = FaultInstanceId{1U};
+    TEST_ASSERT_TRUE(validateSafetyStateRecord(record) ==
+                     SafetyRecordValidation::InvalidRelationship);
+
+    record.latches[0].primaryFaultId = FaultInstanceId{99U};
+    TEST_ASSERT_TRUE(validateSafetyStateRecord(record) ==
+                     SafetyRecordValidation::InvalidRelationship);
+}
+
+// E1: clear/reset/compaction must never leave a follow-up's primaryFaultId
+// dangling. The follow-up here is P1-001 ("darf Folge einer Stoerung sein",
+// R3 code matrix): P1-001 is never itself a blocking fault
+// (isBlockingFault() excludes FaultClass::ProcessWarning unconditionally),
+// so the existing otherBlockingFaultActive reset gate does not already cover
+// this case - the dangling-reference guard added for E1 is what must catch
+// it.
+void test_primary_cannot_be_reset_while_follow_up_still_active() {
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    qualifyConfiguration(service);
+
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::S3_003, 24U, 1U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
+    const auto* primary = service.faultCore().dominant();
+    TEST_ASSERT_NOT_NULL(primary);
+    const auto primaryId = primary->instanceId;
+    const auto primaryRevision = primary->faultRevision;
+
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::P1_001, 22U, 1U, 2U, primaryId}) ==
+                     SafetyServiceStatus::Ready);
+    const auto snapshotWithFollowUp = service.faultCore().snapshot();
+    TEST_ASSERT_EQUAL_UINT32(2U, snapshotWithFollowUp.count);
+    const auto followUpId = snapshotWithFollowUp.records[1].instanceId;
+    const auto* followUp = service.faultCore().find(followUpId);
+    TEST_ASSERT_NOT_NULL(followUp);
+    TEST_ASSERT_TRUE(followUp->code == FaultCode::P1_001);
+    const auto followUpRevision = followUp->faultRevision;
+
+    // The primary's own cause is clear, and its reset checks pass, but it
+    // is still referenced by the still-active P1-001 follow-up.
+    TEST_ASSERT_TRUE(service.clearFaultCause(primaryId, primaryRevision) ==
+                     SafetyServiceStatus::Ready);
+    const auto* clearedPrimary = service.faultCore().find(primaryId);
+    TEST_ASSERT_NOT_NULL(clearedPrimary);
+    passedResetChecks(service, primaryId, clearedPrimary->faultRevision);
+    TEST_ASSERT_TRUE(
+        service
+            .resetFault(
+                resetRequestFor(primaryId, clearedPrimary->faultRevision),
+                authorizationFor(primaryId, clearedPrimary->faultRevision),
+                nullptr)
+            .status == SafetyServiceStatus::SafetyRejected);
+    TEST_ASSERT_NOT_NULL(service.faultCore().find(primaryId));
+
+    // P1-001 has no faultreset of its own (R3 code matrix); a later valid
+    // process evaluation ends it via clearFaultCause() alone, which removes
+    // it immediately (non-latched).
+    TEST_ASSERT_TRUE(service.clearFaultCause(followUpId, followUpRevision) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_NULL(service.faultCore().find(followUpId));
+
+    // With the follow-up gone, the primary's reset now succeeds cleanly.
+    const auto* stillPrimary = service.faultCore().find(primaryId);
+    TEST_ASSERT_NOT_NULL(stillPrimary);
+    passedResetChecks(service, primaryId, stillPrimary->faultRevision);
+    TEST_ASSERT_TRUE(
+        service
+            .resetFault(
+                resetRequestFor(primaryId, stillPrimary->faultRevision),
+                authorizationFor(primaryId, stillPrimary->faultRevision),
+                nullptr)
+            .status == SafetyServiceStatus::ResetCommitted);
+    TEST_ASSERT_NULL(service.faultCore().find(primaryId));
+}
+
 }  // namespace
 
 int main() {
@@ -2039,5 +2202,8 @@ int main() {
     RUN_TEST(test_safe_boot_exit_requires_both_required_sensor_roles);
     RUN_TEST(
         test_real_application_boundary_consumes_public_configuration_result);
+    RUN_TEST(test_primary_follow_up_link_is_valid_persists_and_is_journaled);
+    RUN_TEST(test_primary_follow_up_rejects_missing_and_self_reference);
+    RUN_TEST(test_primary_cannot_be_reset_while_follow_up_still_active);
     return UNITY_END();
 }

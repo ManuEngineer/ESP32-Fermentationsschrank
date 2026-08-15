@@ -213,6 +213,10 @@ class FaultCore final {
         const FaultRaiseRequest& request) const;
     [[nodiscard]] FaultRecord* findCorrelation(
         const FaultRaiseRequest& request);
+    // E1: a primary must not be cleared while an active follow-up still
+    // references it - clearing it first would leave that follow-up's
+    // primaryFaultId dangling.
+    [[nodiscard]] bool isReferencedAsActivePrimary(FaultInstanceId id) const;
     void recomputeProjection();
     void compactClearedRecords();
     void installUnknownPersistenceFault();

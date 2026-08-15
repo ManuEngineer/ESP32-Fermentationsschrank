@@ -191,6 +191,17 @@ FaultRecord* FaultCore::findCorrelation(const FaultRaiseRequest& request) {
     return const_cast<FaultRecord*>(findCorrelationConst(request));
 }
 
+bool FaultCore::isReferencedAsActivePrimary(FaultInstanceId id) const {
+    for (std::size_t index = 0U; index < state_.count; ++index) {
+        const auto& record = state_.records[index];
+        if (record.status != FaultStatus::Cleared &&
+            record.primaryFaultId.has_value() && *record.primaryFaultId == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool FaultCore::correlatesToExistingInstance(
     const FaultRaiseRequest& request) const {
     return findCorrelationConst(request) != nullptr;
@@ -300,7 +311,12 @@ bool FaultCore::markCauseCleared(FaultInstanceId id,
                                  std::uint32_t expectedRevision) {
     auto* record = findMutable(id);
     if (record == nullptr || record->status == FaultStatus::Cleared ||
-        record->faultRevision != expectedRevision || !incrementRevision()) {
+        record->faultRevision != expectedRevision ||
+        // E1: only the immediate-clear (non-latched) branch below actually
+        // removes this instance; the latched branch only marks the cause
+        // resolved and keeps the record present for clearAfterVerifiedReset.
+        (!record->latched && isReferencedAsActivePrimary(id)) ||
+        !incrementRevision()) {
         return false;
     }
     record->causeActive = false;
@@ -334,7 +350,10 @@ bool FaultCore::clearAfterVerifiedReset(FaultInstanceId id,
     auto* record = findMutable(id);
     if (record == nullptr || record->status == FaultStatus::Cleared ||
         record->causeActive || !record->latched ||
-        record->faultRevision != expectedRevision || !incrementRevision()) {
+        record->faultRevision != expectedRevision ||
+        // E1: clearing a primary while an active follow-up still references
+        // it would leave that follow-up's primaryFaultId dangling.
+        isReferencedAsActivePrimary(id) || !incrementRevision()) {
         return false;
     }
     record->status = FaultStatus::Cleared;
@@ -349,7 +368,8 @@ bool FaultCore::clearAfterAuthorizedSafeBootExit(
     auto* record = findMutable(id);
     if (record == nullptr || record->code != FaultCode::Y4_009 ||
         record->status == FaultStatus::Cleared ||
-        record->faultRevision != expectedRevision || !incrementRevision()) {
+        record->faultRevision != expectedRevision ||
+        isReferencedAsActivePrimary(id) || !incrementRevision()) {
         return false;
     }
     record->causeActive = false;
