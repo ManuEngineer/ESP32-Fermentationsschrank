@@ -54,7 +54,6 @@ Standardreaktion:
 Durch R3 fachlich geschlossene Beispiele:
 
 - Zieltemperatur wird langsamer als erwartet erreicht
-- #22 reduziert eine ansonsten gueltige Anforderung wegen `AirLimit`
 
 ### Klasse 2: Behebbarer Betriebsfehler
 
@@ -159,10 +158,9 @@ durch einen normalen Neustart moeglich.
 | `P1-001` / bestehender Prozessautomat mit `ProcessRuntimeState::targetReachWarningIssued`, `TransitionReason::TargetReachTimeExceeded`, `ProcessMessage::TargetReachTimeExceeded` und `ProcessRunSnapshot::maximumTargetReachMinutes`, Run-Snapshot-/Prozesslauf-Identitaet | Warnung, nur bei Safetyfreigabe fortsetzen | nein / neue gueltige Prozessbewertung | kein Faultreset, nur Quittierung | kein Reboot / kein Exit | primaer; Folgebezug erlaubt |
 | `O2-001` / #20/#21 Produktfuehler `STALE`/`FAILED`, Produkt-Sensorrolle, Luftfallback | Peltier AUS, nur validierte #21-Ersatzstrategie | nein / nur #21-Policy | Bediener-/#21-Reset nach Ursachefreiheit und Checks | kein Reboot / kein Exit | primaer; Eskalation separat |
 | `O2-002` / #20/#21 `STALE` in Sicherheitsrolle, Sensorrolle | Peltier AUS, Nachlauf, Wiedererkennung | nein / stabile Messungen vor `FAILED` | waehrend Wiedererkennung kein Reset | kein Reboot / kein Exit | primaer; S3-Eskalation bleibt |
-| `O2-003` / #20 unklare Sensorrollen-/Plausibilitaetskorrelation | Peltier AUS, keine Ersatzfreigabe | nein / nur eindeutige Evidenz | Bedienerreset nach Rollen-/Safetypruefung | kein Reboot / kein Exit | primaer; S3-003 kann folgen |
 | `S3-001` / #20 Schrankluftsensor `FAILED`, Sensorrolle | Peltier/H-Bruecke AUS, Nachlauf | ja / nein | Service nach stabiler Sensor-/Safetypruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
 | `S3-002` / #20 Aussenwaermetauscher-/Kuehlkoerpersensor `FAILED`, Sensorrolle | Peltier/Richtungen AUS, sichere Waermeabfuhr | ja / nein | Service nach Sensor-/Aktorpruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
-| `S3-003` / #24-interne Latchprojektion eines vorhandenen #21-`CrossRolePlausibilityContext`-/`ThermalCompatibility::Incompatible`-Befunds, Rollen-/Plausibilitaetskorrelation | Peltier AUS, kein Fallback | ja / nein | Service nach Ursachefreiheit und Nachweis | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer; O2-003 bleibt |
+| `S3-003` / stabiler #24-Release-1-Contract-/Injection-Code fuer einen anhaltenden oder sicherheitsrelevanten Sensorwiderspruch; spaeterer qualifizierter Plausibilitaets-/Commissioning-Producer uebernimmt denselben Code, Rollen-/Plausibilitaetskorrelation | Peltier AUS, kein Fallback | ja / nein | Service nach Ursachefreiheit und Nachweis | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
 | `S3-004` / stabiler #24-Release-1-Contract-/Injection-Code fuer Sicherheits-Eingriffsgrenze; spaeterer qualifizierter #35-Grenzproducer, obere/untere Grenzkorrelation | Leistung AUS, Richtung sperren, Impuls/Integrator verwerfen | ja / keine produktive Auto-Recovery | Service nach Checks; Reset erzeugt keine Recovery und loescht nicht automatisch | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer; Recovery folgt |
 | `S3-005` / stabiler #24-Release-1-Contract-/Injection-Code fuer harte thermische Notgrenze; spaeterer qualifizierter #35-/Hardware-Grenzproducer, obere/untere Grenzkorrelation | AUS, keine Gegenrichtung, sichere Luefterstrategie | ja / nein | technische Servicepruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
 | `S3-006` / stabiler #24-Release-1-Contract-/Injection-Code fuer Aussenluefterfehler; reale Fan-Diagnose folgt dem zustaendigen spaeteren Hardware-/Commissioning-Gate, Aussenluefterrolle | Peltier AUS, Restwaerme fail-closed | ja / nein | Service nach Fan-/Ausgangspruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
@@ -179,13 +177,24 @@ durch einen normalen Neustart moeglich.
 | `Y4-008` / unbekannter Resetgrund, fehlende/doppelte/mismatched App-Evidenz oder Safetyinput, Bootbeobachtung | `Allowed` verbieten, Aktoren AUS, fail-closed | ja / nein | bis Klaerung verboten | kein Reboot als Loesung / kein Exit ungeklart | immer primaer |
 | `Y4-009` / dritter abnormaler Restart, offene SAFE_BOOT-Episode | vor Aktor-/Lauffreigabe `SAFE_BOOT` | ja / kein Auto-Rearm durch Reboot | bewusster autorisierter Exit nach allen Checks | kein automatischer zusaetzlicher Reboot; nur zugrunde liegende Codepolicy darf technischen Restart verlangen | primaer; ausloesende Latches bleiben |
 
-Die Tabelle ist die vollstaendige R3-Policy: vier Klassen, keine reservierten
-historischen Luecken und kein alter `Y4-011`-Fallback. `AirLimitReduced` bleibt
-eine normale #22-Regelbegrenzung und erzeugt keinen P1-Fault. Die urspruengliche
+Die Tabelle ist die vollstaendige R3-Policy: 21 stabile Codes (1 P1-, 2 O2-,
+9 S3- und 9 Y4-Codes), vier Klassen, keine reservierten historischen Luecken
+und kein alter `Y4-011`-Fallback. `AirLimitReduced` und `AirLimitBlocked` sind
+normale #22-Regelzustaende und allein weder P1 noch O2; ein separater Fault
+entsteht nur aus einer eigenen realen Fehlerursache. Die urspruengliche
 #22-`TemperatureControlReason` bestimmt die Projektion; #23 `NoValidRequest`
 ist nur die sichere Plannerklassifikation und kein eigener O2-Producer. Jede
 nicht eindeutig aufloesbare Ursache wird als `Y4-008` beziehungsweise als
 fail-closed Capacity-/Persistenzfall behandelt.
+
+`ThermalCompatibility::Incompatible` aus einem strukturell gueltigen #21-
+`CrossRolePlausibilityContext` ist kein direkter `S3-003`-Producer. Der
+bestehende #21-Pfad darf damit bei ansonsten gueltiger Evidenz die
+`ReturnValidationPending`-Rueckkehr abbrechen und `AirFallbackActive`
+beibehalten; allein daraus entsteht kein S3-Latch. `S3-003` bleibt der stabile
+#24-Contract-/Injection-Code fuer einen anhaltenden oder sicherheitsrelevanten
+Sensorwiderspruch, bis ein spaeterer qualifizierter Producer diese staerkere
+Semantik typisiert liefert.
 
 ## Unmittelbare Reaktion bei einem sicherheitsrelevanten Fehler
 

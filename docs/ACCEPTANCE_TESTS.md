@@ -156,7 +156,8 @@ R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
   fail-closed. Jede Zeile ist entweder an einen heute oeffentlichen Producer,
   eine deterministische #24-interne Ursache oder einen stabilen
   Release-1-Contract-/Injection-Code gebunden; nicht vereinbarte
-  Zukunftsfunktionen sind nicht enthalten.
+  Zukunftsfunktionen sind nicht enthalten. Die Matrix enthaelt 21 stabile
+  Codes: 1 P1-, 2 O2-, 9 S3- und 9 Y4-Codes.
 - Neun unabhaengige S3- und acht variable Y4-Latches koexistieren; der neunte
   Y4-Zustand `Y4-006` ist ein Basisrecord-Marker ohne Slot. Cleared-Historie
   zaehlt nicht als aktive Latchkapazitaet. Die Slot-Bound `17`, die neue
@@ -176,7 +177,8 @@ R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
 
 - `ProcessMessage::TargetReachTimeExceeded` aus dem bestehenden Prozessautomaten
   mit `ProcessRunSnapshot::maximumTargetReachMinutes`; keine neue #24-Zeitlogik;
-- `AirLimitReduced` als normale Regelbegrenzung erzeugt keinen P1-Fault;
+- `AirLimitReduced` und `AirLimitBlocked` als normale #22-Regelbegrenzungen
+  erzeugen allein weder einen P1- noch einen O2-Fault;
 - Produktfuehler O2/Fallback gemaess #21;
 - #22 `NoCommissioning`, `SensorUnavailable`, `InvalidConfiguration`,
   `InvalidSample`, `TimeInvalid` und `RequestIdentityExhausted` werden
@@ -184,7 +186,13 @@ R3-SHA. Sie sind keine nachtraeglich als bestanden behaupteten Ergebnisse.
   O2-Fault, sondern bleibt die sichere Plannerklassifikation;
 - Schrankluft `FAILED` -> `S3-001`;
 - Kuehlkoerpersensor `FAILED` -> `S3-002`;
-- persistenter Sensorwiderspruch -> `S3-003`;
+- `ThermalCompatibility::Incompatible` bei ansonsten gueltiger #21-Evidenz
+  mit gueltiger Revision -> bestehende `ReturnValidationAborted`-/
+  `AirFallbackActive`-Rueckkehrlogik; kein `S3-003`-Latch allein aus diesem
+  Enum;
+- explizite simulierte Ursache `persistent/safety-relevant sensor
+  contradiction` -> `S3-003`, persistenter Latch, `ImmediateStop`, kein
+  Auto-Rearm und Reset erst nach Ursachefreiheit und den vorgesehenen Checks;
 - thermische Eingriffsgrenze -> `S3-004` und ohne #35 keine aktive Recovery;
 - harte Notgrenze nach bestehendem S3-004-Latch -> beide Latches bleiben aktiv.
 

@@ -7,7 +7,7 @@
 | Issue | #24 – `[E3.5] Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion` |
 | Draft-PR | #107 |
 | Branch | `agent/issue-24-fehlerklassen-safe-boot-plan` |
-| Owner-reviewter Ausgangsstand | `6108ec649fb6d969b013e4eecf3ed25889127ee0` |
+| Owner-reviewter Ausgangsstand | `d46170245f70411ecf594f41335cf85f2de647d5` |
 | Base/main | `b8eae5f4da5f2666b5a9bda333d115254c4db5b2` |
 | R2 | suspendiert; weder normative R3-Quelle noch umzuschreibender Code |
 | Status | `PLAN_R3_PENDING_OWNER_APPROVAL` |
@@ -30,7 +30,7 @@ HANDOVER, Root- und lokale `AGENTS.md`, `docs/AGENT_WORKFLOW.md`,
 `docs/DECISIONS.md`, ADR-013/014/018 sowie die betroffenen Safety-, Recovery-,
 Persistenz-, Command- und Acceptance-Quellen geprüft.
 
-Der Branch und PR-HEAD standen auf `6108ec649fb6d969b013e4eecf3ed25889127ee0`; der Arbeitsbaum war sauber,
+Der Branch und PR-HEAD standen auf `d46170245f70411ecf594f41335cf85f2de647d5`; der Arbeitsbaum war sauber,
 `origin/main` stand auf `b8eae5f4…`, Issue #24 war offen und PR #107 war offen
 und Draft. Der neueste Handover bestätigte `PLAN_R3_PENDING_OWNER_APPROVAL`.
 Es wurde keine materielle Live-Abweichung gefunden, die eine der bestätigten
@@ -130,10 +130,9 @@ bei keinem Code ein Faultreset.
 | `P1-001` – bestehender Prozessautomat mit `ProcessRuntimeState::targetReachWarningIssued`, `TransitionReason::TargetReachTimeExceeded`, `ProcessMessage::TargetReachTimeExceeded` und `ProcessRunSnapshot::maximumTargetReachMinutes`; Run-Snapshot-/Prozesslauf-Identität | Warnung; nur bei vollständiger Safetyfreigabe fortsetzen | nein; neue gültige Prozessbewertung beendet die Meldung | kein Faultreset; Quittierung ohne Freigabeänderung | kein Reboot / kein Exit | primary; darf Folge einer Störung sein |
 | `O2-001` – #20/#21 Produktfühler `STALE`/`FAILED`, gültiger Luftfallback; Produkt-Sensorrolle | Peltier aus; nur validierte #21-Ersatzstrategie | kein persistenter Latch; nur #21-Policy darf rearmen | Bediener-/#21-Reset nach Ursachefreiheit und Checks | kein Reboot / kein Exit | primary; Eskalation bleibt separat |
 | `O2-002` – #20/#21 kurzzeitig `STALE` in einer Sicherheitsrolle; Sensorrolle | Peltier aus, Nachlauf, begrenztes Wiedererkennungsfenster | kein Latch; Rückkehr nur nach stabilen Messungen vor `FAILED` | während Wiedererkennung kein Reset | kein Reboot / kein Exit | primary; S3-Eskalation bleibt |
-| `O2-003` – #20 unklare Rollen-/Plausibilitätsabweichung; Sensorrollen-/Messkorrelation | Peltier aus, keine Ersatzfreigabe | kein Auto-Rearm; nur eindeutige neue Evidenz | Bedienerreset nach Rollen-, Plausibilitäts- und Safetychecks | kein Reboot / kein Exit | primary; S3-003 kann folgen |
 | `S3-001` – #20 Schrankluftsensor `FAILED`; Sensorrolle | Peltier/H-Brücke aus, sicherer Nachlauf | persistenter Latch; kein Auto-Rearm | Serviceautorisierung nach stabiler Sensor- und Safetyprüfung | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
 | `S3-002` – #20 Außenwärmetauscher-/Kühlkörpersensor `FAILED`; Sensorrolle | Peltier/Richtungen aus, sichere Wärmeabfuhr | persistenter Latch; kein Auto-Rearm | Serviceautorisierung nach Sensor-/Aktorprüfung | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
-| `S3-003` – #24-interne Persistenz eines vorhandenen #21-`CrossRolePlausibilityContext`-/`ThermalCompatibility::Incompatible`-Befunds; Rollen-/Plausibilitätskorrelation | Peltier aus, kein Fallback | persistenter Latch; kein Auto-Rearm | Serviceautorisierung nach Ursachefreiheit und Plausibilitätsnachweis | kein zusätzlicher Reboot / kein Exit durch Reset | primary; O2-003 bleibt nachvollziehbar |
+| `S3-003` – stabiler #24-Release-1-Contract-/Injection-Code für einen anhaltenden oder sicherheitsrelevanten Sensorwiderspruch; späterer qualifizierter Plausibilitäts-/Commissioning-Producer übernimmt denselben Code; Rollen-/Plausibilitätskorrelation | Peltier aus, kein Fallback | persistenter Latch; kein Auto-Rearm | Serviceautorisierung nach Ursachefreiheit und Plausibilitätsnachweis | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
 | `S3-004` – stabiler #24-Release-1-Contract-/Injection-Code für Sicherheits-Eingriffsgrenze; späterer qualifizierter #35-Producer; eine obere/untere Grenzkorrelation | Leistung aus, Richtung sperren, Impuls/Integrator verwerfen | persistenter Latch; keine produktive Auto-Recovery; #35 fehlt => `Unresolved` | Serviceautorisierung nach Checks; Reset löscht nicht automatisch und erzeugt keine Recovery | kein zusätzlicher Reboot / kein Exit durch Reset | primary; Recovery bleibt Folge |
 | `S3-005` – stabiler #24-Release-1-Contract-/Injection-Code für harte thermische Notgrenze; späterer qualifizierter #35-/Hardware-Producer; eine obere/untere Grenzkorrelation | sofort aus, keine Gegenrichtung, sichere Lüfterstrategie | persistenter Latch; kein Auto-Rearm | technische Serviceautorisierung nach Grenz-/Hardwareprüfung | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
 | `S3-006` – stabiler #24-Release-1-Contract-/Injection-Code für Außenlüfterfehler; reale Fan-Diagnose folgt dem zuständigen späteren Hardware-/Commissioning-Gate; Außenlüfterrolle | Peltier aus, Restwärme fail-closed behandeln | persistenter Latch; kein Auto-Rearm | Serviceautorisierung nach Fan-/Ausgangsprüfung | kein zusätzlicher Reboot / kein Exit durch Reset | primary |
@@ -150,14 +149,26 @@ bei keinem Code ein Faultreset.
 | `Y4-008` – unbekannter Resetgrund, fehlende/doppelte/mismatched App-Evidenz oder unbekannter Safetyinput; eine Bootbeobachtung | `Allowed` verbieten, Aktoren aus, fail-closed persistieren | persistenter System-Latch; kein Auto-Rearm | bis geklärter Ursache/Evidenz verboten | kein Reboot als Lösung / kein Exit ungeklärt | immer primary |
 | `Y4-009` – dritter abnormaler Restart / offene SAFE_BOOT-Episode; eine Episode | vor Aktor-/Lauffreigabe `SAFE_BOOT` | persistente Episode-/Systemverriegelung; kein Auto-Rearm durch Reboot | bewusster autorisierter codebezogener Exit nach allen Checks | kein automatischer zusätzlicher Reboot; ein technischer Restart ist nur Policy des zugrunde liegenden Codes | primary; auslösende Latches bleiben |
 
-Die Matrix führt keine historische Lücke und keine Zukunftsfunktion für #19
-ein. `Unknown`/`Unresolved` wird nicht in eine harmlose Klasse normalisiert.
+Die Matrix enthält 21 stabile Codes: 1 P1-, 2 O2-, 9 S3- und 9 Y4-Codes. Sie
+führt keine historische Lücke und keine Zukunftsfunktion für #19 ein.
+`Unknown`/`Unresolved` wird nicht in eine harmlose Klasse normalisiert.
 `P1-001` wird ausschließlich aus der bestehenden `ProcessMessage`-Erzeugung
 des Prozessautomaten projiziert; #24 berechnet weder eine eigene
 `maximumTargetReachMinutes`-Zeitlogik noch einen Fault aus dem normalen
-`TemperatureControlReason::AirLimitReduced`. Bei O2 wird immer der
+`TemperatureControlReason::AirLimitReduced` oder `AirLimitBlocked`. Beide sind
+normale #22-Regelzustände und allein weder P1 noch O2; ein separater Fault
+entsteht nur aus einer eigenen realen Fehlerursache. Bei O2 wird immer der
 ursprüngliche #22-Reason beziehungsweise der vorhandene #20/#21-Sensorbefund
 verwendet; #23 `NoValidRequest` ist kein zusätzlicher Faultproducer.
+
+`ThermalCompatibility::Incompatible` aus einem strukturell gültigen #21-
+`CrossRolePlausibilityContext` ist kein direkter `S3-003`-Producer. Der
+bestehende #21-Pfad darf damit bei ansonsten gültiger Evidenz die
+`ReturnValidationPending`-Rückkehr abbrechen und `AirFallbackActive` beibehalten;
+allein daraus entsteht kein S3-Latch. `S3-003` bleibt für die explizite
+reproduzierbare Injection eines anhaltenden oder sicherheitsrelevanten
+Sensorwiderspruchs reserviert, bis ein späterer qualifizierter Producer diese
+stärkere Semantik typisiert liefert.
 
 ### 3.3 S3-004 contract-only und firmwarefeste Obergrenze (OD-24-05)
 
@@ -250,7 +261,7 @@ gleichzeitig aktiven unabhängigen Instanzen abgeleitet:
 |---|---:|---|---|
 | `S3-001` | 1 | realer #20-`SensorQualitySnapshot`, Schrankluft-Sensorrolle | eine Rolle, ein SourceKey |
 | `S3-002` | 1 | realer #20-`SensorQualitySnapshot`, Außenwärmetauscher-/Kühlkörper-Sensorrolle | eine Rolle, ein SourceKey |
-| `S3-003` | 1 | #24-interne Latchprojektion aus vorhandenem #21-`CrossRolePlausibilityContext`-/`ThermalCompatibility::Incompatible`-Befund | ein aktueller Korrelationsfall; keine parallelen Konfliktinstanzen im Producer |
+| `S3-003` | 1 | stabiler #24-Contract-/Injection-Code für einen anhaltenden oder sicherheitsrelevanten Sensorwiderspruch; späterer qualifizierter Plausibilitäts-/Commissioning-Producer | ein aktueller Korrelationsfall; keine parallelen Konfliktinstanzen im Producer |
 | `S3-004` | 1 | stabiler #24-Contract-/Injection-Code; späterer qualifizierter #35-Grenzproducer | obere und untere Grenze sind bei einer einzelnen Prozessgröße gegenseitig exklusiv; der Latch bleibt aber beim späteren S3-005 bestehen |
 | `S3-005` | 1 | stabiler #24-Contract-/Injection-Code; späterer qualifizierter #35-/Hardware-Grenzproducer | gleiche physikalische Grenze; kann zusätzlich zum bestehenden S3-004 aktiv werden |
 | `S3-006` | 1 | stabiler #24-Contract-/Injection-Code; spätere Fan-Diagnose-/Commissioning-Evidenz | eine Außenlüfterrolle; kein zweiter Fan-Producer |
@@ -437,7 +448,12 @@ aus; Full-Suite bleibt Owner-Gate.
 
 - `ProcessMessage::TargetReachTimeExceeded` aus dem bestehenden Prozessautomaten
   mit `ProcessRunSnapshot::maximumTargetReachMinutes`; #24 dupliziert keine
-  Zeitlogik und erzeugt keinen P1-Fault aus normalem `AirLimitReduced`;
+  Zeitlogik und erzeugt keinen P1-Fault aus normalem `AirLimitReduced` oder
+  `AirLimitBlocked`;
+- #21-Evidenz mit gültigen Air-, Product- und Cooling-Snapshots sowie gültiger
+  Revision und `ThermalCompatibility::Incompatible` -> bestehende
+  `ReturnValidationAborted`-/`AirFallbackActive`-Rückkehrlogik; kein S3-003-
+  Latch allein aus diesem Enum;
 - Produktfühler O2/Fallback gemäß #21; die ursprüngliche #20/#22-Reason bestimmt
   die Projektion, nicht #23 `NoValidRequest`;
 - #22 `NoCommissioning`, `SensorUnavailable`, `InvalidConfiguration`,
@@ -447,7 +463,9 @@ aus; Full-Suite bleibt Owner-Gate.
   zuordenbare Ursachen in den fail-closed Unknown-Pfad;
 - Schrankluft `FAILED` -> `S3-001`;
 - Kühlkörper-/Außenwärmetauscher `FAILED` -> `S3-002`;
-- persistenter Sensorwiderspruch -> `S3-003`;
+- explizite simulierte Ursache `persistent/safety-relevant sensor
+  contradiction` -> `S3-003`, persistenter Latch, `ImmediateStop`, kein
+  Auto-Rearm und Reset erst nach Ursachefreiheit und den vorgesehenen Checks;
 - thermische Eingriffsgrenze -> `S3-004` und bis #35 keine aktive Recovery;
 - harte Notgrenze nach bestehendem S3-004-Latch -> S3-004 und S3-005 bleiben
   beide nachvollziehbar und aktiv.
