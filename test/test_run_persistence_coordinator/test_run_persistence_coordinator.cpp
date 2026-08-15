@@ -3524,6 +3524,9 @@ void test_application_safe_boot_exit_consumes_real_planner_evidence() {
     TEST_ASSERT_TRUE(safety.consumeSensorQuality(SafetySensorRole::CabinetAir,
                                                  valid, 20U, 999U) ==
                      SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(safety.consumeSensorQuality(SafetySensorRole::Cooling,
+                                                 valid, 20U, 1000U) ==
+                     SafetyServiceStatus::Ready);
     TEST_ASSERT_TRUE(safety.safeBootRequired());
 
     TemperatureControlApplicationOrchestrator application(

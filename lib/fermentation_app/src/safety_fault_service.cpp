@@ -15,6 +15,51 @@ bool increment(std::uint32_t& value) {
     return true;
 }
 
+constexpr std::uint32_t kActuatorWatchdogCorrelation = 0x53415708U;
+constexpr std::uint32_t kUnknownSystemSource = 24U;
+constexpr std::uint32_t kUnknownSystemCorrelation = 0x59440008U;
+
+FaultRaiseRequest normalizeBoundedFaultIdentity(FaultRaiseRequest request) {
+    switch (normalizeFaultCode(request.code)) {
+        case FaultCode::S3_008:
+            // The planner has one active watchdog domain. Keep the complete
+            // 64-bit sequence as diagnostic evidence, but never use it as the
+            // active instance identity.
+            request.sourceKey = 23U;
+            request.correlationKey = kActuatorWatchdogCorrelation;
+            break;
+        case FaultCode::Y4_008:
+            // Unknown system evidence is one boot/system-local bounded domain;
+            // the producer's source and correlation remain diagnostic input,
+            // not a second persistent latch identity.
+            request.sourceKey = kUnknownSystemSource;
+            request.correlationKey = kUnknownSystemCorrelation;
+            break;
+        case FaultCode::P1_001:
+        case FaultCode::O2_001:
+        case FaultCode::O2_002:
+        case FaultCode::S3_001:
+        case FaultCode::S3_002:
+        case FaultCode::S3_003:
+        case FaultCode::S3_004:
+        case FaultCode::S3_005:
+        case FaultCode::S3_006:
+        case FaultCode::S3_007:
+        case FaultCode::S3_009:
+        case FaultCode::Y4_001:
+        case FaultCode::Y4_002:
+        case FaultCode::Y4_003:
+        case FaultCode::Y4_004:
+        case FaultCode::Y4_005:
+        case FaultCode::Y4_006:
+        case FaultCode::Y4_007:
+        case FaultCode::Y4_009:
+        case FaultCode::Unknown:
+            break;
+    }
+    return request;
+}
+
 std::size_t persistentLatchCount(const FaultCore& core) {
     const auto snapshot = core.snapshot();
     std::size_t count = 0U;
@@ -123,6 +168,8 @@ SafetyServiceStatus SafetyFaultService::begin(
     configurationGateQualified_ = false;
     pendingAuthorizedSafeBootExitEvidenceId_.reset();
     currentSafetyEvidence_ = {};
+    cabinetAirSafetyEvidence_ = {};
+    coolingSafetyEvidence_ = {};
     faultSafetyEvidence_ = {};
     nextSafetyEvidenceRevision_ = 1U;
     started_ = true;
@@ -175,9 +222,9 @@ SafetyBootResult SafetyFaultService::evaluateBoot() {
     if (bootFault != FaultCode::Unknown &&
         (!sameObservation ||
          result.restart.status == RestartBootStatus::EvidenceMismatch)) {
-        const auto raised = stagedCore.raise(
+        const auto raised = stagedCore.raise(normalizeBoundedFaultIdentity(
             {bootFault, 24U, candidate.restartEpisode.episodeId,
-             timeSource_.monotonicMillis(), std::nullopt});
+             timeSource_.monotonicMillis(), std::nullopt}));
         if (raised.status != FaultRaiseStatus::InvalidInput) {
             bootFaultId = raised.instanceId;
             candidate.safeBootRequired = true;
@@ -388,7 +435,8 @@ SafetyServiceStatus SafetyFaultService::persistSafeBootLock() {
 SafetyServiceStatus SafetyFaultService::raiseFault(
     const FaultRaiseRequest& request) {
     if (!started_) return SafetyServiceStatus::NotStarted;
-    const auto normalized = normalizeFaultCode(request.code);
+    const auto boundedRequest = normalizeBoundedFaultIdentity(request);
+    const auto normalized = normalizeFaultCode(boundedRequest.code);
     const bool latch = isLatchedFaultClass(faultClassForCode(normalized));
     if (normalized == FaultCode::Y4_006 ||
         (latch &&
@@ -397,18 +445,20 @@ SafetyServiceStatus SafetyFaultService::raiseFault(
         candidate.safeBootRequired = true;
         candidate.capacityFailureLatched = true;
         if (!increment(candidate.capacityFailureRevision)) {
-            retainRamFailClosed(request.sourceKey, request.correlationKey,
+            retainRamFailClosed(boundedRequest.sourceKey,
+                                boundedRequest.correlationKey,
                                 SafetyMarkerErrorKind::Capacity);
             return SafetyServiceStatus::PersistentWriteFailed;
         }
-        candidate.capacityFailureSourceKey = request.sourceKey;
-        candidate.capacityFailureCorrelationKey = request.correlationKey;
+        candidate.capacityFailureSourceKey = boundedRequest.sourceKey;
+        candidate.capacityFailureCorrelationKey = boundedRequest.correlationKey;
         candidate.capacityFailureKind = SafetyMarkerErrorKind::Capacity;
         const auto commit = increment(candidate.recordRevision)
                                 ? stateStore_.commit(candidate)
                                 : SafetyRecordCommitResult{};
         if (commit.status != SafetyRecordCommitStatus::Committed) {
-            retainRamFailClosed(request.sourceKey, request.correlationKey,
+            retainRamFailClosed(boundedRequest.sourceKey,
+                                boundedRequest.correlationKey,
                                 markerKindForCommit(commit.status));
             return SafetyServiceStatus::PersistentWriteFailed;
         }
@@ -416,16 +466,16 @@ SafetyServiceStatus SafetyFaultService::raiseFault(
         return SafetyServiceStatus::FaultCapacityReached;
     }
     const FaultCoreSnapshot before = faultCore_.snapshot();
-    const auto raised = faultCore_.raise(request);
+    const auto raised = faultCore_.raise(boundedRequest);
     if (raised.status == FaultRaiseStatus::CapacityReached ||
         raised.status == FaultRaiseStatus::RevisionOverflow) {
         record_.safeBootRequired = true;
         record_.capacityFailureLatched = true;
-        record_.capacityFailureSourceKey = request.sourceKey;
-        record_.capacityFailureCorrelationKey = request.correlationKey;
+        record_.capacityFailureSourceKey = boundedRequest.sourceKey;
+        record_.capacityFailureCorrelationKey = boundedRequest.correlationKey;
         record_.capacityFailureKind = SafetyMarkerErrorKind::Capacity;
-        const auto status = persistCoreMutation(before, request.sourceKey,
-                                                request.correlationKey);
+        const auto status = persistCoreMutation(
+            before, boundedRequest.sourceKey, boundedRequest.correlationKey);
         return status == SafetyServiceStatus::Ready
                    ? SafetyServiceStatus::FaultCapacityReached
                    : status;
@@ -434,8 +484,8 @@ SafetyServiceStatus SafetyFaultService::raiseFault(
         return SafetyServiceStatus::InvalidFault;
     }
     const auto* fault = faultCore_.find(raised.instanceId);
-    const auto status =
-        persistCoreMutation(before, request.sourceKey, request.correlationKey);
+    const auto status = persistCoreMutation(before, boundedRequest.sourceKey,
+                                            boundedRequest.correlationKey);
     recordEvent(raised.status == FaultRaiseStatus::Created
                     ? FaultEventType::FaultCreated
                     : FaultEventType::FaultEscalated,
@@ -976,6 +1026,7 @@ void SafetyFaultService::updateSensorSafetyEvidence(SafetySensorRole role,
                                                     std::uint32_t sourceKey,
                                                     bool passed) {
     updateSafetyDomainEvidence(FaultResetCheckDomain::Sensor, passed);
+    updateRequiredSensorRoleEvidence(role, passed);
     const auto correlation = sensorRoleCorrelation(role);
     const auto snapshot = faultCore_.snapshot();
     for (std::size_t index = 0U; index < snapshot.count; ++index) {
@@ -995,6 +1046,28 @@ void SafetyFaultService::updateSensorSafetyEvidence(SafetySensorRole role,
                                     FaultResetCheckDomain::Sensor);
         }
     }
+}
+
+void SafetyFaultService::updateRequiredSensorRoleEvidence(SafetySensorRole role,
+                                                          bool passed) {
+    SafetyDomainEvidence* evidence = nullptr;
+    switch (role) {
+        case SafetySensorRole::CabinetAir:
+            evidence = &cabinetAirSafetyEvidence_;
+            break;
+        case SafetySensorRole::Cooling:
+            evidence = &coolingSafetyEvidence_;
+            break;
+        case SafetySensorRole::Product:
+            return;
+    }
+    if (nextSafetyEvidenceRevision_ ==
+        std::numeric_limits<std::uint32_t>::max()) {
+        *evidence = {};
+        return;
+    }
+    *evidence = SafetyDomainEvidence{nextSafetyEvidenceRevision_++,
+                                     record_.recordRevision, passed};
 }
 
 void SafetyFaultService::consumeActuatorPlanEvidence(
@@ -1044,13 +1117,23 @@ void SafetyFaultService::consumeActuatorPlanEvidence(
 }
 
 bool SafetyFaultService::safeBootSafetyEvidenceCurrent() const {
-    for (const auto& evidence : currentSafetyEvidence_) {
+    for (const auto index :
+         {safetyDomainIndex(FaultResetCheckDomain::Actuator),
+          safetyDomainIndex(FaultResetCheckDomain::Persistence),
+          safetyDomainIndex(FaultResetCheckDomain::Integrity)}) {
+        const auto& evidence = currentSafetyEvidence_[index];
         if (!evidence.passed || evidence.revision == 0U ||
             evidence.recordRevision != record_.recordRevision) {
             return false;
         }
     }
-    return true;
+    const auto requiredRoleIsCurrent =
+        [this](const SafetyDomainEvidence& evidence) {
+            return evidence.passed && evidence.revision != 0U &&
+                   evidence.recordRevision == record_.recordRevision;
+        };
+    return requiredRoleIsCurrent(cabinetAirSafetyEvidence_) &&
+           requiredRoleIsCurrent(coolingSafetyEvidence_);
 }
 
 bool SafetyFaultService::authorizationIsCurrent(
@@ -1521,6 +1604,9 @@ void SafetyFaultService::injectResetSafetyEvidenceForTesting(
 
 void SafetyFaultService::injectSafeBootSafetyEvidenceForTesting(
     std::uint8_t passedDomains) {
+    const bool sensorPassed =
+        (passedDomains &
+         static_cast<std::uint8_t>(FaultResetCheckDomain::Sensor)) != 0U;
     for (const auto domain :
          {FaultResetCheckDomain::Sensor, FaultResetCheckDomain::Actuator,
           FaultResetCheckDomain::Persistence,
@@ -1528,6 +1614,12 @@ void SafetyFaultService::injectSafeBootSafetyEvidenceForTesting(
         updateSafetyDomainEvidence(
             domain, (passedDomains & static_cast<std::uint8_t>(domain)) != 0U);
     }
+    // The native seam represents a complete synthetic sensor-domain result.
+    // Role-specific production evidence is still required by the real path;
+    // tests for missing roles use consumeSensorQuality() instead.
+    updateRequiredSensorRoleEvidence(SafetySensorRole::CabinetAir,
+                                     sensorPassed);
+    updateRequiredSensorRoleEvidence(SafetySensorRole::Cooling, sensorPassed);
     static_cast<void>(finalizePendingSafeBootExit());
 }
 

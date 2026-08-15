@@ -161,13 +161,16 @@ const FaultRecord* FaultCore::find(FaultInstanceId id) const {
 
 FaultRecord* FaultCore::findCorrelation(const FaultRaiseRequest& request) {
     const auto code = normalizeFaultCode(request.code);
+    const bool boundedDiagnosticDomain =
+        code == FaultCode::S3_008 || code == FaultCode::Y4_008;
     for (std::size_t index = 0U; index < state_.count; ++index) {
         auto& record = state_.records[index];
         if (statusActive(record) && record.code == code &&
             record.sourceKey == request.sourceKey &&
             record.correlationKey == request.correlationKey &&
-            record.diagnosticSequenceHighWatermark ==
-                request.diagnosticSequenceHighWatermark) {
+            (boundedDiagnosticDomain ||
+             record.diagnosticSequenceHighWatermark ==
+                 request.diagnosticSequenceHighWatermark)) {
             return &record;
         }
     }
@@ -180,6 +183,19 @@ FaultRaiseResult FaultCore::raise(const FaultRaiseRequest& request) {
         return {FaultRaiseStatus::InvalidInput, {}};
     }
     if (auto* existing = findCorrelation(request); existing != nullptr) {
+        if ((normalizeFaultCode(request.code) == FaultCode::S3_008 ||
+             normalizeFaultCode(request.code) == FaultCode::Y4_008) &&
+            request.diagnosticSequenceHighWatermark >
+                existing->diagnosticSequenceHighWatermark) {
+            if (!incrementRevision()) {
+                return {FaultRaiseStatus::RevisionOverflow, {}};
+            }
+            existing->diagnosticSequenceHighWatermark =
+                request.diagnosticSequenceHighWatermark;
+            existing->faultRevision = state_.revision;
+            recomputeProjection();
+            return {FaultRaiseStatus::Existing, existing->instanceId};
+        }
         if (!existing->causeActive ||
             existing->status == FaultStatus::CauseClearedLocked) {
             if (!incrementRevision()) {

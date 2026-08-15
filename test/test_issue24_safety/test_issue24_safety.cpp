@@ -1334,6 +1334,120 @@ void test_active_capacity_includes_two_o2_safety_roles() {
                      ActuatorSafetyGateStatus::ImmediateStop);
 }
 
+void test_bounded_watchdog_and_unknown_domains_reuse_identity() {
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    qualifyConfiguration(service);
+
+    const ActuatorWatchdogFaultEvidence firstWatchdog{10U,
+                                                      0x0000000100000001ULL};
+    TEST_ASSERT_TRUE(service.consumeWatchdogEvidence(firstWatchdog) ==
+                     SafetyServiceStatus::Ready);
+    const auto* first = service.faultCore().dominant();
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_TRUE(first->code == FaultCode::S3_008);
+    const auto firstId = first->instanceId;
+    const auto firstRevision = first->faultRevision;
+    TEST_ASSERT_EQUAL_UINT64(
+        firstWatchdog.lastObservedSequenceHighWatermarkBeforeFault,
+        first->diagnosticSequenceHighWatermark);
+
+    const ActuatorWatchdogFaultEvidence repeatedWatchdog{20U,
+                                                         0xFEDCBA9876543210ULL};
+    TEST_ASSERT_TRUE(service.consumeWatchdogEvidence(repeatedWatchdog) ==
+                     SafetyServiceStatus::Ready);
+    const auto watchdogs = service.faultCore().snapshot();
+    TEST_ASSERT_EQUAL_UINT32(1U, watchdogs.count);
+    TEST_ASSERT_TRUE(watchdogs.records[0].instanceId == firstId);
+    TEST_ASSERT_TRUE(watchdogs.records[0].faultRevision > firstRevision);
+    TEST_ASSERT_EQUAL_UINT64(
+        repeatedWatchdog.lastObservedSequenceHighWatermarkBeforeFault,
+        watchdogs.records[0].diagnosticSequenceHighWatermark);
+
+    TEST_ASSERT_TRUE(
+        service.clearFaultCause(firstId, watchdogs.records[0].faultRevision) ==
+        SafetyServiceStatus::Ready);
+    const auto* cleared = service.faultCore().find(firstId);
+    TEST_ASSERT_NOT_NULL(cleared);
+    passedResetChecks(service, firstId, cleared->faultRevision);
+    TEST_ASSERT_TRUE(
+        service
+            .resetFault(
+                resetRequestFor(firstId, cleared->faultRevision),
+                authorizationFor(firstId, cleared->faultRevision,
+                                 FaultResetAuthorizationLevel::Technical))
+            .status == SafetyServiceStatus::ResetCommitted);
+    TEST_ASSERT_EQUAL_UINT32(0U, service.faultCore().snapshot().count);
+
+    const ActuatorWatchdogFaultEvidence afterClear{30U, 0xFFFFFFFF00000001ULL};
+    TEST_ASSERT_TRUE(service.consumeWatchdogEvidence(afterClear) ==
+                     SafetyServiceStatus::Ready);
+    const auto* newWatchdog = service.faultCore().dominant();
+    TEST_ASSERT_NOT_NULL(newWatchdog);
+    TEST_ASSERT_TRUE(newWatchdog->instanceId != firstId);
+
+    device_platform_test_support::MockEventJournal journal;
+    SimulatedPersistentStateStore unknownStore;
+    device_platform_test_support::SimulatedResetController unknownReset;
+    device_platform::VirtualTimeSource unknownTime;
+    SafetyFaultService unknown(unknownStore, unknownReset, unknownTime,
+                               &journal);
+    TEST_ASSERT_TRUE(unknown.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    unknownReset.setBootReset(ResetCause::SoftwareRestart, true, 1U);
+    TEST_ASSERT_TRUE(unknown.evaluateBoot().restart.status ==
+                     RestartBootStatus::EvidenceMismatch);
+    TEST_ASSERT_TRUE(unknown.consumeConfigurationStatus(
+                         ConfigurationSafetyStatus::Unknown, 56U, 900U) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(unknown.consumeProcessMessage(
+                         static_cast<ProcessMessage>(0xFFU), 22U, 901U) ==
+                     SafetyServiceStatus::Ready);
+    device_platform::SensorQualitySnapshot unknownQuality;
+    unknownQuality.quality = static_cast<device_platform::SensorQuality>(0xFFU);
+    TEST_ASSERT_TRUE(unknown.consumeSensorQuality(SafetySensorRole::Product,
+                                                  unknownQuality, 20U, 902U) ==
+                     SafetyServiceStatus::Ready);
+    const auto unknownFaults = unknown.faultCore().snapshot();
+    TEST_ASSERT_EQUAL_UINT32(1U, unknownFaults.count);
+    TEST_ASSERT_TRUE(unknownFaults.records[0].code == FaultCode::Y4_008);
+    bool escalationJournaled = false;
+    for (const auto& entry : journal.entries()) {
+        escalationJournaled =
+            escalationJournaled ||
+            entry.message.find("type=FaultEscalated;code=Y4-008") !=
+                std::string::npos;
+    }
+    TEST_ASSERT_TRUE(escalationJournaled);
+
+    const auto unknownId = unknownFaults.records[0].instanceId;
+    const auto unknownRevision = unknownFaults.records[0].faultRevision;
+    TEST_ASSERT_TRUE(unknown.clearFaultCause(unknownId, unknownRevision) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(unknown.consumeConfigurationStatus(
+                         ConfigurationSafetyStatus::Operational, 56U, 903U) ==
+                     SafetyServiceStatus::Ready);
+    const auto* unknownCleared = unknown.faultCore().find(unknownId);
+    TEST_ASSERT_NOT_NULL(unknownCleared);
+    passedResetChecks(unknown, unknownId, unknownCleared->faultRevision);
+    TEST_ASSERT_TRUE(
+        unknown
+            .resetFault(
+                resetRequestFor(unknownId, unknownCleared->faultRevision),
+                authorizationFor(unknownId, unknownCleared->faultRevision,
+                                 FaultResetAuthorizationLevel::Technical))
+            .status == SafetyServiceStatus::ResetCommitted);
+    TEST_ASSERT_EQUAL_UINT32(0U, unknown.faultCore().snapshot().count);
+    TEST_ASSERT_TRUE(
+        unknown.raiseFault({FaultCode::Y4_008, 99U, 100U, 2U, std::nullopt}) ==
+        SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(unknown.faultCore().dominant()->instanceId != unknownId);
+}
+
 void test_configuration_forwarding_reuses_producer_correlation() {
     ConfigurationSafetyFixture fixture;
     device_platform_test_support::SimulatedResetController reset;
@@ -1517,6 +1631,59 @@ void test_safe_boot_exit_requires_current_four_domain_evidence() {
     TEST_ASSERT_FALSE(service.safeBootRequired());
 }
 
+void test_safe_boot_exit_requires_both_required_sensor_roles() {
+    SimulatedPersistentStateStore store;
+    SafetyStateStore seedStore(store);
+    SafetyStateRecord seed;
+    seed.safeBootRequired = true;
+    TEST_ASSERT_TRUE(seedStore.commit(seed).status ==
+                     SafetyRecordCommitStatus::Committed);
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin() == SafetyServiceStatus::Ready);
+
+    FaultResetAuthorizationEvidence authorization;
+    authorization.evidenceId = 703U;
+    authorization.level = FaultResetAuthorizationLevel::Technical;
+    authorization.expiresAtMonotonicMillis = 100U;
+    TEST_ASSERT_TRUE(service.requestAuthorizedSafeBootExit(authorization) ==
+                     SafetyServiceStatus::Ready);
+    reset.setBootReset(device_platform::ResetCause::SoftwareRestart, true, 2U);
+    TEST_ASSERT_TRUE(service.evaluateBoot().restart.status ==
+                     RestartBootStatus::AuthorizedReset);
+    TEST_ASSERT_TRUE(service.consumeConfigurationStatus(
+                         ConfigurationSafetyStatus::Operational, 56U, 1U) ==
+                     SafetyServiceStatus::SafetyRejected);
+
+    // Actuator, persistence and integrity are passed synthetically; the real
+    // sensor-role producers below must still qualify both mandatory roles.
+    service.injectSafeBootSafetyEvidenceForTesting(0x0EU);
+    device_platform::SensorQualitySnapshot valid;
+    valid.quality = device_platform::SensorQuality::Valid;
+    TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::Cooling,
+                                                  valid, 20U, 1U) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.safeBootRequired());
+    TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::CabinetAir,
+                                                  valid, 20U, 2U) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.safeBootRequired());
+
+    device_platform::SensorQualitySnapshot stale;
+    stale.quality = device_platform::SensorQuality::Stale;
+    TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::Cooling,
+                                                  stale, 20U, 3U) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::CabinetAir,
+                                                  valid, 20U, 4U) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.consumeSensorQuality(SafetySensorRole::Product,
+                                                  valid, 20U, 5U) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.safeBootRequired());
+}
+
 void test_real_application_boundary_consumes_public_configuration_result() {
     ConfigurationSafetyFixture fixture;
     device_platform_test_support::SimulatedResetController reset;
@@ -1587,12 +1754,14 @@ int main() {
     RUN_TEST(test_stability_window_is_derived_from_central_safety_state);
     RUN_TEST(test_cleared_history_reuses_active_capacity_but_not_instance_ids);
     RUN_TEST(test_active_capacity_includes_two_o2_safety_roles);
+    RUN_TEST(test_bounded_watchdog_and_unknown_domains_reuse_identity);
     RUN_TEST(test_configuration_forwarding_reuses_producer_correlation);
     RUN_TEST(
         test_safe_boot_exit_is_authorized_after_configuration_qualification);
     RUN_TEST(test_third_abnormal_restart_reaches_authorized_safe_boot_exit);
     RUN_TEST(test_normal_restart_and_missing_config_do_not_exit_safe_boot);
     RUN_TEST(test_safe_boot_exit_requires_current_four_domain_evidence);
+    RUN_TEST(test_safe_boot_exit_requires_both_required_sensor_roles);
     RUN_TEST(
         test_real_application_boundary_consumes_public_configuration_result);
     return UNITY_END();

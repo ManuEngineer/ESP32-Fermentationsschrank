@@ -208,6 +208,7 @@ class SafetyFaultService final {
     void bindPersistenceAndIntegrityToCurrentFaults();
     void updateSensorSafetyEvidence(SafetySensorRole role,
                                     std::uint32_t sourceKey, bool passed);
+    void updateRequiredSensorRoleEvidence(SafetySensorRole role, bool passed);
     void consumeActuatorPlanEvidence(const ActuatorPlanTickResult& result);
     [[nodiscard]] bool safeBootSafetyEvidenceCurrent() const;
     [[nodiscard]] static std::uint32_t sensorRoleCorrelation(
@@ -236,6 +237,8 @@ class SafetyFaultService final {
     std::optional<std::uint32_t> pendingAuthorizedSafeBootExitEvidenceId_;
     std::array<SafetyDomainEvidence, kSafetyCheckDomainCount>
         currentSafetyEvidence_{};
+    SafetyDomainEvidence cabinetAirSafetyEvidence_{};
+    SafetyDomainEvidence coolingSafetyEvidence_{};
     std::array<FaultSafetyEvidenceProjection, kMaximumActiveFaults>
         faultSafetyEvidence_{};
     std::uint32_t nextSafetyEvidenceRevision_{1U};

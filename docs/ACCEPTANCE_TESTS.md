@@ -154,7 +154,7 @@ Der PlatformIO-Lauf ist deshalb kein PASS-Nachweis:
 
 | Bereich | Ausfuehrung | Status | Nachweis |
 |---|---|---|---|
-| Issue-24-Safetykern, Record, Restart, Injection und Application-Grenze | 29/29 | `PASS` | direkter nativer Unity-Host-Link; PlatformIO gezielt `BLOCKED` bei `Platform Manager: Installing native` |
+| Issue-24-Safetykern, Record, Restart, Injection und Application-Grenze | 31/31 | `PASS` | direkter nativer Unity-Host-Link; PlatformIO gezielt `BLOCKED` bei `Platform Manager: Installing native` |
 | #15-Command-/Faultprojektion | 43/43 | `PASS` | direkter nativer Unity-Host-Link |
 | #23-Safety-Gate und Planner | 44/44 | `PASS` | direkter nativer Unity-Host-Link |
 | #23-Persistenz-/Application-Pfad | 113/113 | `PASS` | direkter nativer Unity-Host-Link; SAFE_BOOT-Aktor-Evidenz ueber den realen Planner-/Sink-Orchestrator |
@@ -206,6 +206,14 @@ nativen/ESP-IDF-/Hardware-Gesamtlauf.
   nicht. Der positive Aktornachweis kommt im Produktionspfad ausschliesslich
   aus dem privaten Planner-/Sink-Handoff; unkonfigurierter, invalider oder
   watchdog-belasteter Output bleibt fail-closed.
+- Die SAFE_BOOT-Sensordomaene verlangt getrennte aktuelle `CabinetAir`- und
+  `Cooling`-Evidenz; `Product`, eine einzelne Rolle, stale oder fehlende
+  Rollenevidenz kann die Freigabe nicht ersetzen.
+- S3-008 bleibt bei wechselnder 64-bit-Watchdog-Evidenz eine aktive
+  Planner-/Watchdog-Instanz; der vollstaendige High-Watermark wird aktualisiert
+  und journalisiert. Unterschiedliche unbekannte Boot-, Prozess-, Sensor- und
+  Konfigurationsquellen bleiben als `Y4-008` fail-closed, eskalieren im Journal
+  und verbrauchen keinen zweiten aktiven Slot.
 - O2-002 wird pro Sicherheits-Sensorrolle korreliert aufgeloest; eine gueltige
   Rueckkehr von Schrankluft beendet nicht den weiterhin aktiven Kuehlkoerper-
   Fault. Die In-Memory-Bound umfasst deshalb 17 persistente Faults plus P1-001,
