@@ -319,27 +319,6 @@ enum class FaultResetCheckStatus : std::uint8_t {
     Failed,
 };
 
-struct FaultResetSafetyEvidence {
-    FaultResetCheckStatus sensor{FaultResetCheckStatus::Unknown};
-    FaultResetCheckStatus actuator{FaultResetCheckStatus::Unknown};
-    FaultResetCheckStatus persistence{FaultResetCheckStatus::Unknown};
-    FaultResetCheckStatus integrity{FaultResetCheckStatus::Unknown};
-    FaultInstanceId targetFault;
-    std::uint32_t targetFaultRevision{0U};
-    std::uint32_t evidenceRevision{0U};
-    std::uint32_t sensorEvidenceRevision{0U};
-    std::uint32_t actuatorEvidenceRevision{0U};
-    std::uint32_t persistenceEvidenceRevision{0U};
-    std::uint32_t integrityEvidenceRevision{0U};
-
-    [[nodiscard]] bool allPassed() const {
-        return sensor == FaultResetCheckStatus::Passed &&
-               actuator == FaultResetCheckStatus::Passed &&
-               persistence == FaultResetCheckStatus::Passed &&
-               integrity == FaultResetCheckStatus::Passed;
-    }
-};
-
 // Y4-006 is a basis-record marker, not a FaultCore slot. Its recovery has a
 // separate typed contract so a normal fault reset cannot accidentally clear
 // the global persistence/capacity lock.

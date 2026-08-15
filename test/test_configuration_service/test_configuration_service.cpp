@@ -26,6 +26,9 @@
 #include "state_store_key.hpp"
 #include "storage_envelope.hpp"
 
+extern "C" void setUp(void) {}
+extern "C" void tearDown(void) {}
+
 namespace {
 
 std::atomic<std::size_t> gLiveAllocBytes{0U};

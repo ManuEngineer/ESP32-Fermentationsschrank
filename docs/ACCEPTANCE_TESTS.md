@@ -154,10 +154,10 @@ Der PlatformIO-Lauf ist deshalb kein PASS-Nachweis:
 
 | Bereich | Ausfuehrung | Status | Nachweis |
 |---|---|---|---|
-| Issue-24-Safetykern, Record, Restart, Injection und Application-Grenze | 26/26 | `PASS` | direkter nativer Unity-Host-Link; PlatformIO gezielt `BLOCKED` bei `Platform Manager: Installing native` |
+| Issue-24-Safetykern, Record, Restart, Injection und Application-Grenze | 29/29 | `PASS` | direkter nativer Unity-Host-Link; PlatformIO gezielt `BLOCKED` bei `Platform Manager: Installing native` |
 | #15-Command-/Faultprojektion | 43/43 | `PASS` | direkter nativer Unity-Host-Link |
 | #23-Safety-Gate und Planner | 44/44 | `PASS` | direkter nativer Unity-Host-Link |
-| #23-Persistenz-/Application-Pfad | 112/112 | `PASS` | direkter nativer Unity-Host-Link |
+| #23-Persistenz-/Application-Pfad | 113/113 | `PASS` | direkter nativer Unity-Host-Link; SAFE_BOOT-Aktor-Evidenz ueber den realen Planner-/Sink-Orchestrator |
 | reale #56/#57-Recovery-/Service-Konsumenten | 37/37 bzw. 40/40 | `PASS` | direkter nativer Unity-Host-Link |
 | Architektur, Secret, Format, Whitespace und Gate-Selbsttest | ausgefuehrt | `PASS` | Architekturguard, Secret-Scan, clang-format dry-run, `git diff --check`, `selftest_quality_gates.py` |
 | vollstaendiger nativer Lauf, ESP-IDF, Remote-CI, Hardware | nicht ausgefuehrt | `NOT_RUN` | Draft-/Owner-Gates; Remote-CI im Draft `SKIPPED` |
@@ -199,10 +199,26 @@ nativen/ESP-IDF-/Hardware-Gesamtlauf.
   Episode und Recordrevision gebunden. Stale-, fehlende, abgelehnte oder
   `OutcomeUnknown`-Evidence autorisiert keinen spaeteren unabhaengigen
   SoftwareRestart und bleibt fail-closed.
+- SAFE_BOOT-Exit verlangt nach der einmaligen Restartbeobachtung neben
+  technischer Autorisierung und qualifiziertem Configuration Gate aktuelle,
+  stale-sichere Sensor-, Aktor-, Persistenz- und Integritaetsevidenz. Ein
+  normaler Reboot, fehlende Evidence oder ein Y4-006-Marker beendet SAFE_BOOT
+  nicht. Der positive Aktornachweis kommt im Produktionspfad ausschliesslich
+  aus dem privaten Planner-/Sink-Handoff; unkonfigurierter, invalider oder
+  watchdog-belasteter Output bleibt fail-closed.
 - O2-002 wird pro Sicherheits-Sensorrolle korreliert aufgeloest; eine gueltige
   Rueckkehr von Schrankluft beendet nicht den weiterhin aktiven Kuehlkoerper-
   Fault. Die In-Memory-Bound umfasst deshalb 17 persistente Faults plus P1-001,
   O2-001 und zwei gleichzeitige O2-002-Rollen.
+- Positive Fault-Reset-Safetyfelder sind kein Produktionsparameter mehr. Die
+  SafetyFaultService bindet nur intern verwaltete, producerbezogene
+  Evidenceprojektionen an Faultinstanz und Revision; der native Test nutzt dafuer
+  einen explizit markierten Injection-Seam.
+- Der Y4-006-Basisrecord persistiert eine bounded Fehlerart ohne Aenderung der
+  128-Byte-Basis, des 1.216-Byte-Payloads oder des 1.253-Byte-Envelopes.
+  Akzeptierte und abgelehnte Marker-Recoveryentscheidungen werden ueber den
+  bestehenden `IEventJournal` projiziert; ein Journalfehler veraendert den
+  Safetycommit nicht.
 
 ### Fault/Sensor-Injektionen
 

@@ -176,6 +176,7 @@ std::string encodePayload(const SafetyStateRecord& record) {
     appendU32(bytes, record.restartEvidence.targetFaultRevision);
     appendU32(bytes, record.restartEvidence.episodeId);
     appendU32(bytes, record.restartEvidence.evidenceRevision);
+    appendU8(bytes, static_cast<std::uint8_t>(record.capacityFailureKind));
     padTo(bytes, kSafetyRecordBasePayloadBytes);
     for (std::size_t index = 0U; index < kMaximumPersistedLatches; ++index) {
         encodeFault(bytes, index < record.latchCount ? record.latches[index]
@@ -191,6 +192,7 @@ bool decodePayload(const std::string& bytes, SafetyStateRecord& record) {
     std::uint32_t latchCount = 0U;
     std::uint8_t safeBoot = 0U;
     std::uint8_t capacityFailure = 0U;
+    std::uint8_t capacityFailureKind = 0U;
     std::uint16_t dominant = 0U;
     std::uint8_t resetCause = 0U;
     std::uint8_t open = 0U;
@@ -228,7 +230,8 @@ bool decodePayload(const std::string& bytes, SafetyStateRecord& record) {
         !readU32(bytes, offset, targetFault) ||
         !readU32(bytes, offset, record.restartEvidence.targetFaultRevision) ||
         !readU32(bytes, offset, record.restartEvidence.episodeId) ||
-        !readU32(bytes, offset, record.restartEvidence.evidenceRevision)) {
+        !readU32(bytes, offset, record.restartEvidence.evidenceRevision) ||
+        !readU8(bytes, offset, capacityFailureKind)) {
         return false;
     }
     offset = kSafetyRecordBasePayloadBytes;
@@ -236,6 +239,8 @@ bool decodePayload(const std::string& bytes, SafetyStateRecord& record) {
     record.latchCount = latchCount;
     record.safeBootRequired = safeBoot != 0U;
     record.capacityFailureLatched = capacityFailure != 0U;
+    record.capacityFailureKind =
+        static_cast<SafetyMarkerErrorKind>(capacityFailureKind);
     record.dominantCode = static_cast<FaultCode>(dominant);
     record.lastResetCause =
         static_cast<device_platform::ResetCause>(resetCause);
@@ -318,6 +323,21 @@ bool knownResetCause(device_platform::ResetCause cause) {
     return false;
 }
 
+bool knownSafetyMarkerErrorKind(SafetyMarkerErrorKind kind) {
+    switch (kind) {
+        case SafetyMarkerErrorKind::None:
+        case SafetyMarkerErrorKind::Read:
+        case SafetyMarkerErrorKind::Write:
+        case SafetyMarkerErrorKind::Capacity:
+        case SafetyMarkerErrorKind::Integrity:
+        case SafetyMarkerErrorKind::ReadbackMismatch:
+        case SafetyMarkerErrorKind::CommitOutcomeUnknown:
+        case SafetyMarkerErrorKind::Unknown:
+            return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 SafetyRecordValidation validateSafetyStateRecord(
@@ -332,19 +352,22 @@ SafetyRecordValidation validateSafetyStateRecord(
         !knownRestartEvidenceState(record.restartEvidence.state) ||
         !knownRestartIntent(record.restartEvidence.intent) ||
         !knownResetCause(record.lastResetCause) ||
+        !knownSafetyMarkerErrorKind(record.capacityFailureKind) ||
         (record.restartEpisode.open && record.restartEpisode.episodeId == 0U) ||
         (record.restartEpisode.stableWindowRunning &&
          !record.restartEpisode.open)) {
         return SafetyRecordValidation::InvalidField;
     }
     if (record.capacityFailureLatched &&
-        (record.capacityFailureRevision == 0U || !record.safeBootRequired)) {
+        (record.capacityFailureRevision == 0U || !record.safeBootRequired ||
+         record.capacityFailureKind == SafetyMarkerErrorKind::None)) {
         return SafetyRecordValidation::InvalidRelationship;
     }
     if (!record.capacityFailureLatched &&
         (record.capacityFailureRevision != 0U ||
          record.capacityFailureSourceKey != 0U ||
-         record.capacityFailureCorrelationKey != 0U)) {
+         record.capacityFailureCorrelationKey != 0U ||
+         record.capacityFailureKind != SafetyMarkerErrorKind::None)) {
         return SafetyRecordValidation::InvalidRelationship;
     }
     if (!isKnownFaultCode(record.dominantCode) &&

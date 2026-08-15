@@ -4,6 +4,9 @@
 
 #include "actuator_planner.hpp"
 
+extern "C" void setUp(void) {}
+extern "C" void tearDown(void) {}
+
 namespace {
 
 using namespace fermentation;

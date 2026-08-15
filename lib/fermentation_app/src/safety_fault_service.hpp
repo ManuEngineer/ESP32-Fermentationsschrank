@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -14,6 +16,7 @@
 namespace fermentation {
 
 class ActuatorPlanner;
+class TemperatureControlApplicationOrchestrator;
 struct ConfigurationRecoveryResult;
 struct CrossRolePlausibilityContext;
 struct SensorSelectionStateView;
@@ -121,12 +124,10 @@ class SafetyFaultService final {
         FaultInstanceId id, std::uint32_t expectedRevision);
     [[nodiscard]] FaultResetEvaluation evaluateFaultReset(
         const FaultResetRequest& request,
-        const FaultResetAuthorizationEvidence& authorization,
-        const FaultResetSafetyEvidence& safetyEvidence) const;
+        const FaultResetAuthorizationEvidence& authorization) const;
     [[nodiscard]] SafetyResetResult resetFault(
         const FaultResetRequest& request,
         const FaultResetAuthorizationEvidence& authorization,
-        const FaultResetSafetyEvidence& safetyEvidence,
         ActuatorPlanner* planner = nullptr);
     [[nodiscard]] SafetyServiceStatus recoverSafetyStateMarker(
         const FaultResetAuthorizationEvidence& authorization,
@@ -150,7 +151,33 @@ class SafetyFaultService final {
     void projectTo(RunCommandState& state) const;
     [[nodiscard]] ActuatorSafetyGateInput actuatorGateInput() const;
 
+#if defined(APP_PROFILE_NATIVE)
+    // Native-only seam for contract tests. Production code cannot construct or
+    // pass positive reset-safety fields; the service remains the authority.
+    void injectResetSafetyEvidenceForTesting(FaultInstanceId targetFault,
+                                             std::uint32_t targetRevision,
+                                             std::uint8_t passedDomains);
+    void injectSafeBootSafetyEvidenceForTesting(std::uint8_t passedDomains);
+    void invalidateSafetyEvidenceForTesting(FaultResetCheckDomain domain);
+#endif
+
    private:
+    friend class TemperatureControlApplicationOrchestrator;
+
+    static constexpr std::size_t kSafetyCheckDomainCount = 4U;
+
+    struct SafetyDomainEvidence {
+        std::uint32_t revision{0U};
+        std::uint32_t recordRevision{0U};
+        bool passed{false};
+    };
+
+    struct FaultSafetyEvidenceProjection {
+        FaultInstanceId targetFault;
+        std::uint32_t targetRevision{0U};
+        std::array<SafetyDomainEvidence, kSafetyCheckDomainCount> domains{};
+    };
+
     [[nodiscard]] SafetyServiceStatus persistCoreMutation(
         const FaultCoreSnapshot& before, std::uint32_t sourceKey = 0U,
         std::uint32_t correlationKey = 0U);
@@ -163,15 +190,28 @@ class SafetyFaultService final {
         std::optional<std::uint32_t> correlationKey = std::nullopt);
     [[nodiscard]] SafetyServiceStatus finalizePendingSafeBootExit();
     [[nodiscard]] bool clearSafeBootTrackingFault(FaultCore& core) const;
-    void retainRamFailClosed(std::uint32_t sourceKey,
-                             std::uint32_t correlationKey);
+    void retainRamFailClosed(
+        std::uint32_t sourceKey, std::uint32_t correlationKey,
+        SafetyMarkerErrorKind kind = SafetyMarkerErrorKind::Unknown);
     [[nodiscard]] static FaultResetAuthorizationLevel requiredAuthorizationFor(
         FaultCode code);
     [[nodiscard]] static std::uint8_t requiredResetCheckDomains(FaultCode code);
     [[nodiscard]] bool resetSafetyEvidenceMatches(
-        const FaultResetSafetyEvidence& evidence,
         const FaultResetRequest& request, std::uint32_t targetRevision,
         std::uint8_t requiredDomains) const;
+    [[nodiscard]] static std::size_t safetyDomainIndex(
+        FaultResetCheckDomain domain);
+    void updateSafetyDomainEvidence(FaultResetCheckDomain domain, bool passed);
+    void bindFaultSafetyEvidence(FaultInstanceId targetFault,
+                                 std::uint32_t targetRevision,
+                                 FaultResetCheckDomain domain);
+    void bindPersistenceAndIntegrityToCurrentFaults();
+    void updateSensorSafetyEvidence(SafetySensorRole role,
+                                    std::uint32_t sourceKey, bool passed);
+    void consumeActuatorPlanEvidence(const ActuatorPlanTickResult& result);
+    [[nodiscard]] bool safeBootSafetyEvidenceCurrent() const;
+    [[nodiscard]] static std::uint32_t sensorRoleCorrelation(
+        SafetySensorRole role);
     [[nodiscard]] bool authorizationIsCurrent(
         const FaultResetAuthorizationEvidence& authorization,
         FaultInstanceId targetFault, std::uint32_t targetRevision,
@@ -194,6 +234,11 @@ class SafetyFaultService final {
     bool started_{false};
     bool configurationGateQualified_{false};
     std::optional<std::uint32_t> pendingAuthorizedSafeBootExitEvidenceId_;
+    std::array<SafetyDomainEvidence, kSafetyCheckDomainCount>
+        currentSafetyEvidence_{};
+    std::array<FaultSafetyEvidenceProjection, kMaximumActiveFaults>
+        faultSafetyEvidence_{};
+    std::uint32_t nextSafetyEvidenceRevision_{1U};
 };
 
 }  // namespace fermentation

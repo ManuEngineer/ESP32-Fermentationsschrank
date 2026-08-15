@@ -8,6 +8,9 @@
 #include "sensor_selection.hpp"
 #include "standard_program_catalog.hpp"
 
+extern "C" void setUp(void) {}
+extern "C" void tearDown(void) {}
+
 namespace {
 
 using namespace fermentation;

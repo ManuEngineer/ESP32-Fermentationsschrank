@@ -49,6 +49,19 @@ enum class RestartEvidenceState : std::uint8_t {
     Consumed,
 };
 
+// Bounded, language-neutral reason for the Y4-006 basis-record marker. The
+// marker remains outside the variable latch slots.
+enum class SafetyMarkerErrorKind : std::uint8_t {
+    None = 0U,
+    Read = 1U,
+    Write = 2U,
+    Capacity = 3U,
+    Integrity = 4U,
+    ReadbackMismatch = 5U,
+    CommitOutcomeUnknown = 6U,
+    Unknown = 0xFFU,
+};
+
 struct RestartEpisodeEvidence {
     std::uint32_t episodeId{0U};
     std::uint32_t abnormalRestartCount{0U};
@@ -85,6 +98,7 @@ struct SafetyStateRecord {
     std::uint32_t capacityFailureRevision{0U};
     std::uint32_t capacityFailureSourceKey{0U};
     std::uint32_t capacityFailureCorrelationKey{0U};
+    SafetyMarkerErrorKind capacityFailureKind{SafetyMarkerErrorKind::None};
     RestartEpisodeEvidence restartEpisode;
     PersistedRestartEvidence restartEvidence;
     device_platform::ResetCause lastResetCause{

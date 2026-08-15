@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | R3-Implementierung und Ownerreview-Korrekturrunde 2 (Findings 1–5 plus Capacity-Nachweis) umgesetzt; PR #107 bleibt Draft | Ownerreview der neuen SHA gegen Plan `48f343c` |
+| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | R3-Implementierung und Ownerreview-Korrekturrunde 3 (SAFE_BOOT-Domaenen, interne Reset-Evidence, Sensorrollen, Y4-006-Fehlerart und Journalnachweis) umgesetzt; PR #107 bleibt Draft | Ownerreview der neuen SHA gegen Plan `48f343c` |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -30,13 +30,17 @@ Safety-/Recovery-Vertraege. Der eingefrorene R2-Stand war keine normative
 Quelle; insbesondere wurden der fachliche Resetport, die R2-Capability und
 der alte Safetyrecord entfernt beziehungsweise auf den R3-Vertrag migriert.
 Die gezielten nativen Konsumententests sind fuer den korrigierten
-Implementierungsstand PASS: Issue #24 26/26, #15 43/43, #23 44/44,
-Application/Persistenz 112/112 sowie #56/#57 37/37 und 40/40. Der PlatformIO-
+Implementierungsstand PASS: Issue #24 29/29, #15 43/43, #23 44/44,
+Application/Persistenz 113/113 sowie #56/#57 37/37 und 40/40. Der PlatformIO-
 Treiber blieb wegen `Platform Manager: Installing native` BLOCKED; der
 vollstaendige native Lauf, Firmwarebuilds, Remote-CI und Hardware bleiben
 Draft-/Owner-Gates. Die neue R3-Korrekturrunde bindet Y4-006-Recovery,
 Restart-Evidence, O2-002-Rollen, #56/#57-R3-Domains und typed Resetchecks
-gegen aktuelle Fault-/Recordrevisionen.
+gegen aktuelle Fault-/Recordrevisionen. Die positive Reset-Safetyentscheidung
+wird nicht mehr als frei konstruierbares Produktionsobjekt uebergeben; der
+positive SAFE_BOOT-Aktornachweis kommt ueber den privaten Planner-/Sink-Handoff.
+Y4-006 persistiert seine bounded Fehlerart und journalisiert
+Marker-Recoveryentscheidungen.
 
 Die native #56/#57-Bridge ist in der korrigierten R3 als realer
 `FermentationApplication`-Application-/Orchestrierungspfad mit einer zentralen

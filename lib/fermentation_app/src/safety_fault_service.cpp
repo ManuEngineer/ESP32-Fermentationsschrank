@@ -48,6 +48,42 @@ bool hasBlockingFaultExceptSafeBootTracking(const FaultCore& core) {
     return false;
 }
 
+SafetyMarkerErrorKind markerKindForCommit(SafetyRecordCommitStatus status) {
+    switch (status) {
+        case SafetyRecordCommitStatus::CapacityError:
+            return SafetyMarkerErrorKind::Capacity;
+        case SafetyRecordCommitStatus::WriteError:
+            return SafetyMarkerErrorKind::Write;
+        case SafetyRecordCommitStatus::CommitOutcomeUnknown:
+            return SafetyMarkerErrorKind::CommitOutcomeUnknown;
+        case SafetyRecordCommitStatus::ReadbackError:
+            return SafetyMarkerErrorKind::Integrity;
+        case SafetyRecordCommitStatus::ReadbackMismatch:
+            return SafetyMarkerErrorKind::ReadbackMismatch;
+        case SafetyRecordCommitStatus::InvalidRecord:
+            return SafetyMarkerErrorKind::Integrity;
+        case SafetyRecordCommitStatus::Committed:
+            return SafetyMarkerErrorKind::Unknown;
+    }
+    return SafetyMarkerErrorKind::Unknown;
+}
+
+SafetyMarkerErrorKind markerKindForLoad(SafetyRecordLoadStatus status) {
+    switch (status) {
+        case SafetyRecordLoadStatus::ReadError:
+            return SafetyMarkerErrorKind::Read;
+        case SafetyRecordLoadStatus::CapacityError:
+            return SafetyMarkerErrorKind::Capacity;
+        case SafetyRecordLoadStatus::Corrupt:
+            return SafetyMarkerErrorKind::Integrity;
+        case SafetyRecordLoadStatus::Loaded:
+        case SafetyRecordLoadStatus::FactoryInitialized:
+        case SafetyRecordLoadStatus::NotFoundOutsideFactoryBootstrap:
+            return SafetyMarkerErrorKind::Unknown;
+    }
+    return SafetyMarkerErrorKind::Unknown;
+}
+
 }  // namespace
 
 SafetyFaultService::SafetyFaultService(
@@ -86,7 +122,14 @@ SafetyServiceStatus SafetyFaultService::begin(
     record_ = loaded.record;
     configurationGateQualified_ = false;
     pendingAuthorizedSafeBootExitEvidenceId_.reset();
+    currentSafetyEvidence_ = {};
+    faultSafetyEvidence_ = {};
+    nextSafetyEvidenceRevision_ = 1U;
     started_ = true;
+    // A successful load is the real persistence/integrity producer result for
+    // this boot. Sensor and actuator evidence deliberately remain unknown
+    // until their typed producers report a current result.
+    bindPersistenceAndIntegrityToCurrentFaults();
     return SafetyServiceStatus::Ready;
 }
 
@@ -151,7 +194,8 @@ SafetyBootResult SafetyFaultService::evaluateBoot() {
     if (authorizedExit) {
         const bool checksPass =
             !hasBlockingFaultExceptSafeBootTracking(stagedCore) &&
-            configurationGateQualified_ && !candidate.capacityFailureLatched;
+            configurationGateQualified_ && !candidate.capacityFailureLatched &&
+            safeBootSafetyEvidenceCurrent();
         if (!checksPass) {
             candidate.safeBootRequired = true;
             pendingAuthorizedSafeBootExitEvidenceId_ =
@@ -171,20 +215,21 @@ SafetyBootResult SafetyFaultService::evaluateBoot() {
 
     if (!copyCoreToRecord(candidate, stagedCore)) {
         faultCore_ = stagedCore;
-        retainRamFailClosed(0U, 0U);
+        retainRamFailClosed(0U, 0U, SafetyMarkerErrorKind::Capacity);
         result.status = SafetyServiceStatus::PersistentWriteFailed;
         result.safeBootRequired = true;
         return result;
     }
     needsCommit = needsCommit || candidate.safeBootRequired != safeBootBefore;
     if (needsCommit) {
-        if (!increment(candidate.recordRevision) ||
-            stateStore_.commit(candidate).status !=
-                SafetyRecordCommitStatus::Committed) {
+        const auto commit = increment(candidate.recordRevision)
+                                ? stateStore_.commit(candidate)
+                                : SafetyRecordCommitResult{};
+        if (commit.status != SafetyRecordCommitStatus::Committed) {
             // A failed safety commit never grants an Allowed projection. The
             // RAM lock is deliberately retained even when persistence failed.
             faultCore_ = stagedCore;
-            retainRamFailClosed(0U, 0U);
+            retainRamFailClosed(0U, 0U, markerKindForCommit(commit.status));
             result.status = SafetyServiceStatus::PersistentWriteFailed;
             result.safeBootRequired = true;
             return result;
@@ -261,20 +306,24 @@ SafetyServiceStatus SafetyFaultService::persistCoreMutation(
         // The in-memory mutation is the diagnostic truth even when the write
         // failed. Retaining it together with the Y4-006 marker prevents a
         // later isolated write from looking like an automatic all-clear.
-        retainRamFailClosed(sourceKey, correlationKey);
+        retainRamFailClosed(sourceKey, correlationKey,
+                            SafetyMarkerErrorKind::Capacity);
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     const auto result = stateStore_.commit(candidate);
     if (result.status != SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(sourceKey, correlationKey);
+        retainRamFailClosed(sourceKey, correlationKey,
+                            markerKindForCommit(result.status));
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     record_ = candidate;
+    bindPersistenceAndIntegrityToCurrentFaults();
     return SafetyServiceStatus::Ready;
 }
 
 void SafetyFaultService::retainRamFailClosed(std::uint32_t sourceKey,
-                                             std::uint32_t correlationKey) {
+                                             std::uint32_t correlationKey,
+                                             SafetyMarkerErrorKind kind) {
     record_.safeBootRequired = true;
     record_.capacityFailureLatched = true;
     if (record_.capacityFailureRevision !=
@@ -283,6 +332,7 @@ void SafetyFaultService::retainRamFailClosed(std::uint32_t sourceKey,
     }
     record_.capacityFailureSourceKey = sourceKey;
     record_.capacityFailureCorrelationKey = correlationKey;
+    record_.capacityFailureKind = kind;
     const auto snapshot = faultCore_.snapshot();
     record_.faultRevision = snapshot.revision;
     record_.faultInstanceSequence = snapshot.instanceSequenceHighWatermark;
@@ -324,10 +374,11 @@ bool SafetyFaultService::clearSafeBootTrackingFault(FaultCore& core) const {
 SafetyServiceStatus SafetyFaultService::persistSafeBootLock() {
     SafetyStateRecord candidate = record_;
     candidate.safeBootRequired = true;
-    if (!increment(candidate.recordRevision) ||
-        stateStore_.commit(candidate).status !=
-            SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(0U, 0U);
+    const auto commit = increment(candidate.recordRevision)
+                            ? stateStore_.commit(candidate)
+                            : SafetyRecordCommitResult{};
+    if (commit.status != SafetyRecordCommitStatus::Committed) {
+        retainRamFailClosed(0U, 0U, markerKindForCommit(commit.status));
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     record_ = candidate;
@@ -346,15 +397,19 @@ SafetyServiceStatus SafetyFaultService::raiseFault(
         candidate.safeBootRequired = true;
         candidate.capacityFailureLatched = true;
         if (!increment(candidate.capacityFailureRevision)) {
-            retainRamFailClosed(request.sourceKey, request.correlationKey);
+            retainRamFailClosed(request.sourceKey, request.correlationKey,
+                                SafetyMarkerErrorKind::Capacity);
             return SafetyServiceStatus::PersistentWriteFailed;
         }
         candidate.capacityFailureSourceKey = request.sourceKey;
         candidate.capacityFailureCorrelationKey = request.correlationKey;
-        if (!increment(candidate.recordRevision) ||
-            stateStore_.commit(candidate).status !=
-                SafetyRecordCommitStatus::Committed) {
-            retainRamFailClosed(request.sourceKey, request.correlationKey);
+        candidate.capacityFailureKind = SafetyMarkerErrorKind::Capacity;
+        const auto commit = increment(candidate.recordRevision)
+                                ? stateStore_.commit(candidate)
+                                : SafetyRecordCommitResult{};
+        if (commit.status != SafetyRecordCommitStatus::Committed) {
+            retainRamFailClosed(request.sourceKey, request.correlationKey,
+                                markerKindForCommit(commit.status));
             return SafetyServiceStatus::PersistentWriteFailed;
         }
         record_ = candidate;
@@ -368,6 +423,7 @@ SafetyServiceStatus SafetyFaultService::raiseFault(
         record_.capacityFailureLatched = true;
         record_.capacityFailureSourceKey = request.sourceKey;
         record_.capacityFailureCorrelationKey = request.correlationKey;
+        record_.capacityFailureKind = SafetyMarkerErrorKind::Capacity;
         const auto status = persistCoreMutation(before, request.sourceKey,
                                                 request.correlationKey);
         return status == SafetyServiceStatus::Ready
@@ -414,32 +470,45 @@ SafetyServiceStatus SafetyFaultService::consumeSensorQuality(
     const device_platform::SensorQualitySnapshot& snapshot,
     std::uint32_t sourceKey, std::uint32_t correlationKey) {
     if (!started_) return SafetyServiceStatus::NotStarted;
+    static_cast<void>(correlationKey);
+    const auto internalCorrelation = sensorRoleCorrelation(role);
+    SafetyServiceStatus status = SafetyServiceStatus::Ready;
     switch (snapshot.quality) {
         case device_platform::SensorQuality::Valid:
             // Product validity alone is not a #21 re-arm decision. Product
             // O2-001 is resolved only by consumeSensorSelectionEvidence().
-            return role == SafetySensorRole::Product
-                       ? SafetyServiceStatus::Ready
-                       : resolveFaultCause(FaultCode::O2_002, sourceKey,
-                                           correlationKey);
+            status = role == SafetySensorRole::Product
+                         ? SafetyServiceStatus::Ready
+                         : resolveFaultCause(FaultCode::O2_002, sourceKey,
+                                             internalCorrelation);
+            break;
         case device_platform::SensorQuality::Stale: {
             const auto code = role == SafetySensorRole::Product
                                   ? FaultCode::O2_001
                                   : FaultCode::O2_002;
-            return raiseFault({code, sourceKey, correlationKey,
-                               timeSource_.monotonicMillis(), std::nullopt});
+            status = raiseFault({code, sourceKey, internalCorrelation,
+                                 timeSource_.monotonicMillis(), std::nullopt});
+            break;
         }
         case device_platform::SensorQuality::Failed: {
             FaultCode code = FaultCode::Y4_008;
             if (role == SafetySensorRole::CabinetAir) code = FaultCode::S3_001;
             if (role == SafetySensorRole::Cooling) code = FaultCode::S3_002;
             if (role == SafetySensorRole::Product) code = FaultCode::O2_001;
-            return raiseFault({code, sourceKey, correlationKey,
-                               timeSource_.monotonicMillis(), std::nullopt});
+            status = raiseFault({code, sourceKey, internalCorrelation,
+                                 timeSource_.monotonicMillis(), std::nullopt});
+            break;
         }
+        default:
+            status =
+                raiseFault({FaultCode::Y4_008, sourceKey, internalCorrelation,
+                            timeSource_.monotonicMillis(), std::nullopt});
+            break;
     }
-    return raiseFault({FaultCode::Y4_008, sourceKey, correlationKey,
-                       timeSource_.monotonicMillis(), std::nullopt});
+    updateSensorSafetyEvidence(
+        role, sourceKey,
+        snapshot.quality == device_platform::SensorQuality::Valid);
+    return status;
 }
 
 SafetyServiceStatus SafetyFaultService::consumeSensorSelectionEvidence(
@@ -466,9 +535,15 @@ SafetyServiceStatus SafetyFaultService::consumeSensorSelectionEvidence(
         plausibility.product.quality == device_platform::SensorQuality::Valid &&
         plausibility.cooling.quality == device_platform::SensorQuality::Valid;
     if (!airFallback && !returnedToProduct) {
+        updateSensorSafetyEvidence(SafetySensorRole::Product, sourceKey, false);
         return SafetyServiceStatus::SafetyRejected;
     }
-    return resolveFaultCause(FaultCode::O2_001, sourceKey, correlationKey);
+    static_cast<void>(correlationKey);
+    const auto status =
+        resolveFaultCause(FaultCode::O2_001, sourceKey,
+                          sensorRoleCorrelation(SafetySensorRole::Product));
+    updateSensorSafetyEvidence(SafetySensorRole::Product, sourceKey, true);
+    return status;
 }
 
 SafetyServiceStatus SafetyFaultService::resolveFaultCause(
@@ -500,6 +575,7 @@ SafetyServiceStatus SafetyFaultService::resolveFaultCause(
 
 SafetyServiceStatus SafetyFaultService::consumeWatchdogEvidence(
     const ActuatorWatchdogFaultEvidence& evidence) {
+    updateSafetyDomainEvidence(FaultResetCheckDomain::Actuator, false);
     return raiseFault(
         {FaultCode::S3_008, 23U,
          static_cast<std::uint32_t>(
@@ -522,6 +598,7 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
                 }
             }
             configurationGateQualified_ = true;
+            bindPersistenceAndIntegrityToCurrentFaults();
             return started_ ? finalizePendingSafeBootExit()
                             : SafetyServiceStatus::NotStarted;
         case ConfigurationSafetyStatus::ConfigurationRuntimeFailure:
@@ -538,6 +615,8 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
                                timeSource_.monotonicMillis(), std::nullopt});
     }
     configurationGateQualified_ = false;
+    updateSafetyDomainEvidence(FaultResetCheckDomain::Persistence, false);
+    updateSafetyDomainEvidence(FaultResetCheckDomain::Integrity, false);
     FaultCode code = FaultCode::Y4_003;
     switch (status) {
         case ConfigurationSafetyStatus::ConfigurationRuntimeFailure:
@@ -556,8 +635,21 @@ SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
         case ConfigurationSafetyStatus::Unknown:
             break;
     }
-    return raiseFault({code, sourceKey, correlationKey,
-                       timeSource_.monotonicMillis(), std::nullopt});
+    const auto result =
+        raiseFault({code, sourceKey, correlationKey,
+                    timeSource_.monotonicMillis(), std::nullopt});
+    const auto snapshot = faultCore_.snapshot();
+    for (std::size_t index = 0U; index < snapshot.count; ++index) {
+        const auto& fault = snapshot.records[index];
+        if (fault.code == code && fault.sourceKey == sourceKey &&
+            fault.status != FaultStatus::Cleared) {
+            bindFaultSafetyEvidence(fault.instanceId, fault.faultRevision,
+                                    FaultResetCheckDomain::Persistence);
+            bindFaultSafetyEvidence(fault.instanceId, fault.faultRevision,
+                                    FaultResetCheckDomain::Integrity);
+        }
+    }
+    return result;
 }
 
 SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
@@ -763,33 +855,202 @@ std::uint8_t SafetyFaultService::requiredResetCheckDomains(FaultCode code) {
 }
 
 bool SafetyFaultService::resetSafetyEvidenceMatches(
-    const FaultResetSafetyEvidence& evidence, const FaultResetRequest& request,
-    std::uint32_t targetRevision, std::uint8_t requiredDomains) const {
-    if (evidence.targetFault != request.targetFault ||
-        evidence.targetFaultRevision != targetRevision ||
-        evidence.evidenceRevision != record_.recordRevision) {
+    const FaultResetRequest& request, std::uint32_t targetRevision,
+    std::uint8_t requiredDomains) const {
+    const FaultSafetyEvidenceProjection* evidence = nullptr;
+    for (const auto& candidate : faultSafetyEvidence_) {
+        if (candidate.targetFault == request.targetFault) {
+            evidence = &candidate;
+            break;
+        }
+    }
+    if (evidence == nullptr || evidence->targetRevision != targetRevision) {
         return false;
     }
-    const auto passedAtCurrentRevision = [this](FaultResetCheckStatus status,
-                                                std::uint32_t revision) {
-        return status == FaultResetCheckStatus::Passed && revision != 0U &&
-               revision == record_.recordRevision;
-    };
     const auto hasDomain = [requiredDomains](FaultResetCheckDomain domain) {
         return (requiredDomains & static_cast<std::uint8_t>(domain)) != 0U;
     };
-    return (!hasDomain(FaultResetCheckDomain::Sensor) ||
-            passedAtCurrentRevision(evidence.sensor,
-                                    evidence.sensorEvidenceRevision)) &&
-           (!hasDomain(FaultResetCheckDomain::Actuator) ||
-            passedAtCurrentRevision(evidence.actuator,
-                                    evidence.actuatorEvidenceRevision)) &&
-           (!hasDomain(FaultResetCheckDomain::Persistence) ||
-            passedAtCurrentRevision(evidence.persistence,
-                                    evidence.persistenceEvidenceRevision)) &&
-           (!hasDomain(FaultResetCheckDomain::Integrity) ||
-            passedAtCurrentRevision(evidence.integrity,
-                                    evidence.integrityEvidenceRevision));
+    for (const auto domain :
+         {FaultResetCheckDomain::Sensor, FaultResetCheckDomain::Actuator,
+          FaultResetCheckDomain::Persistence,
+          FaultResetCheckDomain::Integrity}) {
+        if (!hasDomain(domain)) continue;
+        const auto index = safetyDomainIndex(domain);
+        const auto& current = currentSafetyEvidence_[index];
+        const auto& captured = evidence->domains[index];
+        if (!captured.passed || captured.revision == 0U ||
+            captured.revision != current.revision || !current.passed ||
+            current.recordRevision != record_.recordRevision) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::size_t SafetyFaultService::safetyDomainIndex(
+    FaultResetCheckDomain domain) {
+    switch (domain) {
+        case FaultResetCheckDomain::Sensor:
+            return 0U;
+        case FaultResetCheckDomain::Actuator:
+            return 1U;
+        case FaultResetCheckDomain::Persistence:
+            return 2U;
+        case FaultResetCheckDomain::Integrity:
+            return 3U;
+        case FaultResetCheckDomain::None:
+            break;
+    }
+    return kSafetyCheckDomainCount;
+}
+
+void SafetyFaultService::updateSafetyDomainEvidence(
+    FaultResetCheckDomain domain, bool passed) {
+    const auto index = safetyDomainIndex(domain);
+    if (index >= kSafetyCheckDomainCount ||
+        nextSafetyEvidenceRevision_ ==
+            std::numeric_limits<std::uint32_t>::max()) {
+        currentSafetyEvidence_[index < kSafetyCheckDomainCount ? index : 0U] =
+            {};
+        return;
+    }
+    currentSafetyEvidence_[index] = SafetyDomainEvidence{
+        nextSafetyEvidenceRevision_++, record_.recordRevision, passed};
+}
+
+void SafetyFaultService::bindFaultSafetyEvidence(FaultInstanceId targetFault,
+                                                 std::uint32_t targetRevision,
+                                                 FaultResetCheckDomain domain) {
+    if (!targetFault.valid() || targetRevision == 0U) return;
+    auto* projection = static_cast<FaultSafetyEvidenceProjection*>(nullptr);
+    for (auto& candidate : faultSafetyEvidence_) {
+        if (candidate.targetFault == targetFault) {
+            projection = &candidate;
+            break;
+        }
+        if (projection == nullptr && !candidate.targetFault.valid()) {
+            projection = &candidate;
+        }
+    }
+    if (projection == nullptr) return;
+    if (projection->targetFault != targetFault ||
+        projection->targetRevision != targetRevision) {
+        *projection = {};
+        projection->targetFault = targetFault;
+        projection->targetRevision = targetRevision;
+    }
+    const auto index = safetyDomainIndex(domain);
+    if (index < kSafetyCheckDomainCount) {
+        projection->domains[index] = currentSafetyEvidence_[index];
+    }
+}
+
+void SafetyFaultService::bindPersistenceAndIntegrityToCurrentFaults() {
+    const bool passed = !record_.capacityFailureLatched;
+    updateSafetyDomainEvidence(FaultResetCheckDomain::Persistence, passed);
+    updateSafetyDomainEvidence(FaultResetCheckDomain::Integrity, passed);
+    const auto snapshot = faultCore_.snapshot();
+    for (std::size_t index = 0U; index < snapshot.count; ++index) {
+        const auto& fault = snapshot.records[index];
+        if (fault.status == FaultStatus::Cleared) continue;
+        bindFaultSafetyEvidence(fault.instanceId, fault.faultRevision,
+                                FaultResetCheckDomain::Persistence);
+        bindFaultSafetyEvidence(fault.instanceId, fault.faultRevision,
+                                FaultResetCheckDomain::Integrity);
+    }
+}
+
+std::uint32_t SafetyFaultService::sensorRoleCorrelation(SafetySensorRole role) {
+    switch (role) {
+        case SafetySensorRole::CabinetAir:
+            return 0x53434101U;
+        case SafetySensorRole::Product:
+            return 0x53435002U;
+        case SafetySensorRole::Cooling:
+            return 0x53434303U;
+    }
+    return 0U;
+}
+
+void SafetyFaultService::updateSensorSafetyEvidence(SafetySensorRole role,
+                                                    std::uint32_t sourceKey,
+                                                    bool passed) {
+    updateSafetyDomainEvidence(FaultResetCheckDomain::Sensor, passed);
+    const auto correlation = sensorRoleCorrelation(role);
+    const auto snapshot = faultCore_.snapshot();
+    for (std::size_t index = 0U; index < snapshot.count; ++index) {
+        const auto& fault = snapshot.records[index];
+        const bool roleCode = (role == SafetySensorRole::CabinetAir &&
+                               (fault.code == FaultCode::S3_001 ||
+                                fault.code == FaultCode::O2_002)) ||
+                              (role == SafetySensorRole::Product &&
+                               fault.code == FaultCode::O2_001) ||
+                              (role == SafetySensorRole::Cooling &&
+                               (fault.code == FaultCode::S3_002 ||
+                                fault.code == FaultCode::O2_002));
+        if (roleCode && fault.sourceKey == sourceKey &&
+            fault.correlationKey == correlation &&
+            fault.status != FaultStatus::Cleared) {
+            bindFaultSafetyEvidence(fault.instanceId, fault.faultRevision,
+                                    FaultResetCheckDomain::Sensor);
+        }
+    }
+}
+
+void SafetyFaultService::consumeActuatorPlanEvidence(
+    const ActuatorPlanTickResult& result) {
+    if (!started_) return;
+
+    // This is deliberately private and is called only by the real
+    // TemperatureControlApplicationOrchestrator after the planner result has
+    // crossed the sink. A caller cannot construct a positive reset field or
+    // invoke this producer projection through the public SafetyFaultService
+    // contract.
+    bool passed = !result.watchdogFaultActive;
+    switch (result.status) {
+        case ActuatorPlanStatus::Active:
+        case ActuatorPlanStatus::Idle:
+            break;
+        case ActuatorPlanStatus::Unconfigured:
+        case ActuatorPlanStatus::InvalidInput:
+            passed = false;
+            break;
+    }
+    switch (result.reason) {
+        case ActuatorPlanReason::MalformedInput:
+        case ActuatorPlanReason::InvalidConfiguration:
+        case ActuatorPlanReason::TimeInvalid:
+        case ActuatorPlanReason::SafetyGateUnresolved:
+        case ActuatorPlanReason::StaleRequestWatchdog:
+        case ActuatorPlanReason::RequestWatchdogFaultLatched:
+            passed = false;
+            break;
+        default:
+            break;
+    }
+    updateSafetyDomainEvidence(FaultResetCheckDomain::Actuator, passed);
+    const auto snapshot = faultCore_.snapshot();
+    for (std::size_t index = 0U; index < snapshot.count; ++index) {
+        const auto& fault = snapshot.records[index];
+        const auto required = requiredResetCheckDomains(fault.code);
+        if (fault.status != FaultStatus::Cleared &&
+            (required & static_cast<std::uint8_t>(
+                            FaultResetCheckDomain::Actuator)) != 0U) {
+            bindFaultSafetyEvidence(fault.instanceId, fault.faultRevision,
+                                    FaultResetCheckDomain::Actuator);
+        }
+    }
+    if (passed) static_cast<void>(finalizePendingSafeBootExit());
+}
+
+bool SafetyFaultService::safeBootSafetyEvidenceCurrent() const {
+    for (const auto& evidence : currentSafetyEvidence_) {
+        if (!evidence.passed || evidence.revision == 0U ||
+            evidence.recordRevision != record_.recordRevision) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool SafetyFaultService::authorizationIsCurrent(
@@ -848,8 +1109,7 @@ bool SafetyFaultService::restartEvidenceMatchesCurrentFault(
 
 FaultResetEvaluation SafetyFaultService::evaluateFaultReset(
     const FaultResetRequest& request,
-    const FaultResetAuthorizationEvidence& authorization,
-    const FaultResetSafetyEvidence& safetyEvidence) const {
+    const FaultResetAuthorizationEvidence& authorization) const {
     FaultResetEvaluation evaluation;
     const auto* target = faultCore_.find(request.targetFault);
     if (target == nullptr ||
@@ -868,14 +1128,20 @@ FaultResetEvaluation SafetyFaultService::evaluateFaultReset(
     evaluation.codePolicyAllowsReset =
         target->latched && target->status == FaultStatus::CauseClearedLocked &&
         target->code != FaultCode::P1_001 && target->code != FaultCode::Y4_006;
+    const auto* projection =
+        static_cast<const FaultSafetyEvidenceProjection*>(nullptr);
+    for (const auto& candidate : faultSafetyEvidence_) {
+        if (candidate.targetFault == request.targetFault) {
+            projection = &candidate;
+            break;
+        }
+    }
     evaluation.safetyEvidenceTargetMatches =
-        safetyEvidence.targetFault == request.targetFault &&
-        safetyEvidence.targetFaultRevision == target->faultRevision;
-    evaluation.safetyEvidenceCurrent =
-        safetyEvidence.evidenceRevision == record_.recordRevision;
-    evaluation.safetyEvidenceComplete = resetSafetyEvidenceMatches(
-        safetyEvidence, request, target->faultRevision,
-        evaluation.requiredCheckDomains);
+        projection != nullptr &&
+        projection->targetRevision == target->faultRevision;
+    evaluation.safetyEvidenceCurrent = resetSafetyEvidenceMatches(
+        request, target->faultRevision, evaluation.requiredCheckDomains);
+    evaluation.safetyEvidenceComplete = evaluation.safetyEvidenceCurrent;
     evaluation.safetyChecksPassed =
         evaluation.safetyEvidenceComplete && configurationGateQualified_;
     evaluation.authorizationSatisfied = authorizationIsCurrent(
@@ -906,7 +1172,7 @@ FaultResetEvaluation SafetyFaultService::evaluateFaultReset(
 SafetyResetResult SafetyFaultService::resetFault(
     const FaultResetRequest& request,
     const FaultResetAuthorizationEvidence& authorization,
-    const FaultResetSafetyEvidence& safetyEvidence, ActuatorPlanner* planner) {
+    ActuatorPlanner* planner) {
     SafetyResetResult result;
     result.targetFault = request.targetFault;
     if (!started_) {
@@ -914,8 +1180,7 @@ SafetyResetResult SafetyFaultService::resetFault(
         return result;
     }
     const auto* target = faultCore_.find(request.targetFault);
-    result.evaluation =
-        evaluateFaultReset(request, authorization, safetyEvidence);
+    result.evaluation = evaluateFaultReset(request, authorization);
     if (!result.evaluation.allowed) {
         result.status =
             result.evaluation.rejection == FaultResetRejection::StaleEvaluation
@@ -933,18 +1198,26 @@ SafetyResetResult SafetyFaultService::resetFault(
         return result;
     }
     SafetyStateRecord candidate = record_;
-    if (!copyCoreToRecord(candidate, staged) ||
-        !increment(candidate.recordRevision) ||
-        stateStore_.commit(candidate).status !=
-            SafetyRecordCommitStatus::Committed) {
+    const auto commit = copyCoreToRecord(candidate, staged) &&
+                                increment(candidate.recordRevision)
+                            ? stateStore_.commit(candidate)
+                            : SafetyRecordCommitResult{};
+    if (commit.status != SafetyRecordCommitStatus::Committed) {
         retainRamFailClosed(request.envelope.id,
-                            request.envelope.expectedStateSequence);
+                            request.envelope.expectedStateSequence,
+                            markerKindForCommit(commit.status));
         result.status = SafetyServiceStatus::PersistentWriteFailed;
         recordEvent(FaultEventType::FaultResetRejected, target, false);
         return result;
     }
     faultCore_ = staged;
     record_ = candidate;
+    for (auto& projection : faultSafetyEvidence_) {
+        if (projection.targetFault == request.targetFault) {
+            projection = {};
+            break;
+        }
+    }
     if (planner != nullptr && targetCode == FaultCode::S3_008) {
         planner->applyExternalWatchdogFaultReset(timeSource_.monotonicMillis());
     }
@@ -957,6 +1230,11 @@ SafetyServiceStatus SafetyFaultService::recoverSafetyStateMarker(
     const FaultResetAuthorizationEvidence& authorization,
     const SafetyMarkerRecoveryEvidence& evidence) {
     if (!started_) return SafetyServiceStatus::NotStarted;
+    recordEvent(FaultEventType::SafetyRecoveryAttempted, nullptr, true);
+    const auto reject = [this](SafetyServiceStatus status) {
+        recordEvent(FaultEventType::SafetyRecoveryAborted, nullptr, false);
+        return status;
+    };
     const auto now = timeSource_.monotonicMillis();
     const bool authorizationValid =
         authorization.evidenceId != 0U && !authorization.targetFault.valid() &&
@@ -977,7 +1255,7 @@ SafetyServiceStatus SafetyFaultService::recoverSafetyStateMarker(
     if (!record_.capacityFailureLatched || !authorizationValid ||
         !evidenceCurrent || !configurationGateQualified_ ||
         faultCore_.hasBlockingFault()) {
-        return SafetyServiceStatus::SafetyRejected;
+        return reject(SafetyServiceStatus::SafetyRejected);
     }
 
     // Read and validate the currently committed record before preparing the
@@ -986,8 +1264,9 @@ SafetyServiceStatus SafetyFaultService::recoverSafetyStateMarker(
     const auto current = stateStore_.load();
     if (current.status != SafetyRecordLoadStatus::Loaded &&
         current.status != SafetyRecordLoadStatus::FactoryInitialized) {
-        retainRamFailClosed(0U, authorization.evidenceId);
-        return SafetyServiceStatus::PersistentReadFailed;
+        retainRamFailClosed(0U, authorization.evidenceId,
+                            markerKindForLoad(current.status));
+        return reject(SafetyServiceStatus::PersistentReadFailed);
     }
 
     SafetyStateRecord candidate = record_;
@@ -995,18 +1274,23 @@ SafetyServiceStatus SafetyFaultService::recoverSafetyStateMarker(
     candidate.capacityFailureRevision = 0U;
     candidate.capacityFailureSourceKey = 0U;
     candidate.capacityFailureCorrelationKey = 0U;
+    candidate.capacityFailureKind = SafetyMarkerErrorKind::None;
     candidate.safeBootRequired = false;
-    if (!copyCoreToRecord(candidate) || !increment(candidate.recordRevision) ||
-        stateStore_.commit(candidate).status !=
-            SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(0U, authorization.evidenceId);
-        return SafetyServiceStatus::PersistentWriteFailed;
+    const auto commit =
+        copyCoreToRecord(candidate) && increment(candidate.recordRevision)
+            ? stateStore_.commit(candidate)
+            : SafetyRecordCommitResult{};
+    if (commit.status != SafetyRecordCommitStatus::Committed) {
+        retainRamFailClosed(0U, authorization.evidenceId,
+                            markerKindForCommit(commit.status));
+        return reject(SafetyServiceStatus::PersistentWriteFailed);
     }
 
     // SafetyStateStore::commit performs the single write and exact readback
     // comparison, including CommitOutcomeUnknown cut-points. Applying the
     // candidate only after Committed avoids a second persistence path.
     record_ = candidate;
+    recordEvent(FaultEventType::SafetyRecoverySucceeded, nullptr, true);
     return SafetyServiceStatus::SafetyMarkerRecoveryCommitted;
 }
 
@@ -1028,10 +1312,12 @@ SafetyServiceStatus SafetyFaultService::finalizeRestartRequestResult(
         // authorize a later independent SoftwareRestart.
         terminal.restartEvidence = PersistedRestartEvidence{};
     }
-    if (!increment(terminal.recordRevision) ||
-        stateStore_.commit(terminal).status !=
-            SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(0U, terminal.restartEvidence.evidenceId);
+    const auto terminalCommit = increment(terminal.recordRevision)
+                                    ? stateStore_.commit(terminal)
+                                    : SafetyRecordCommitResult{};
+    if (terminalCommit.status != SafetyRecordCommitStatus::Committed) {
+        retainRamFailClosed(0U, terminal.restartEvidence.evidenceId,
+                            markerKindForCommit(terminalCommit.status));
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     record_ = terminal;
@@ -1057,13 +1343,14 @@ SafetyServiceStatus SafetyFaultService::requestControlledSafetyRestart(
     const auto* stagedTarget = staged.find(id);
     if (stagedTarget == nullptr) return SafetyServiceStatus::SafetyRejected;
     SafetyStateRecord candidate = record_;
-    if (!restartEpisode_.prepareControlledRestart(
-            candidate, id, stagedTarget->faultRevision) ||
-        !copyCoreToRecord(candidate, staged) ||
-        !increment(candidate.recordRevision) ||
-        stateStore_.commit(candidate).status !=
-            SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(23U, id.value);
+    const auto commit = restartEpisode_.prepareControlledRestart(
+                            candidate, id, stagedTarget->faultRevision) &&
+                                copyCoreToRecord(candidate, staged) &&
+                                increment(candidate.recordRevision)
+                            ? stateStore_.commit(candidate)
+                            : SafetyRecordCommitResult{};
+    if (commit.status != SafetyRecordCommitStatus::Committed) {
+        retainRamFailClosed(23U, id.value, markerKindForCommit(commit.status));
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     faultCore_ = staged;
@@ -1077,7 +1364,7 @@ SafetyServiceStatus SafetyFaultService::finalizePendingSafeBootExit() {
     }
     if (!configurationGateQualified_ ||
         hasBlockingFaultExceptSafeBootTracking(faultCore_) ||
-        record_.capacityFailureLatched) {
+        record_.capacityFailureLatched || !safeBootSafetyEvidenceCurrent()) {
         return SafetyServiceStatus::SafetyRejected;
     }
     SafetyStateRecord candidate = record_;
@@ -1086,11 +1373,13 @@ SafetyServiceStatus SafetyFaultService::finalizePendingSafeBootExit() {
         return SafetyServiceStatus::SafetyRejected;
     }
     candidate.safeBootRequired = false;
-    if (!copyCoreToRecord(candidate, staged) ||
-        !increment(candidate.recordRevision) ||
-        stateStore_.commit(candidate).status !=
-            SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(0U, *pendingAuthorizedSafeBootExitEvidenceId_);
+    const auto commit = copyCoreToRecord(candidate, staged) &&
+                                increment(candidate.recordRevision)
+                            ? stateStore_.commit(candidate)
+                            : SafetyRecordCommitResult{};
+    if (commit.status != SafetyRecordCommitStatus::Committed) {
+        retainRamFailClosed(0U, *pendingAuthorizedSafeBootExitEvidenceId_,
+                            markerKindForCommit(commit.status));
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     faultCore_ = staged;
@@ -1124,10 +1413,12 @@ SafetyServiceStatus SafetyFaultService::requestAuthorizedSafeBootExit(
     }
     candidate.restartEvidence.authorizationEvidenceId =
         authorization.evidenceId;
-    if (!increment(candidate.recordRevision) ||
-        stateStore_.commit(candidate).status !=
-            SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(0U, authorization.evidenceId);
+    const auto commit = increment(candidate.recordRevision)
+                            ? stateStore_.commit(candidate)
+                            : SafetyRecordCommitResult{};
+    if (commit.status != SafetyRecordCommitStatus::Committed) {
+        retainRamFailClosed(0U, authorization.evidenceId,
+                            markerKindForCommit(commit.status));
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     record_ = candidate;
@@ -1158,10 +1449,12 @@ SafetyServiceStatus SafetyFaultService::requestAuthorizedTechnicalRestart(
     }
     candidate.restartEvidence.authorizationEvidenceId =
         authorization.evidenceId;
-    if (!increment(candidate.recordRevision) ||
-        stateStore_.commit(candidate).status !=
-            SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(0U, authorization.evidenceId);
+    const auto commit = increment(candidate.recordRevision)
+                            ? stateStore_.commit(candidate)
+                            : SafetyRecordCommitResult{};
+    if (commit.status != SafetyRecordCommitStatus::Committed) {
+        retainRamFailClosed(0U, authorization.evidenceId,
+                            markerKindForCommit(commit.status));
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     record_ = candidate;
@@ -1190,10 +1483,11 @@ SafetyServiceStatus SafetyFaultService::advanceStableWindow() {
         beforeStart == candidate.restartEpisode.stableWindowStartedAtMillis) {
         return SafetyServiceStatus::Ready;
     }
-    if (!increment(candidate.recordRevision) ||
-        stateStore_.commit(candidate).status !=
-            SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(0U, 0U);
+    const auto commit = increment(candidate.recordRevision)
+                            ? stateStore_.commit(candidate)
+                            : SafetyRecordCommitResult{};
+    if (commit.status != SafetyRecordCommitStatus::Committed) {
+        retainRamFailClosed(0U, 0U, markerKindForCommit(commit.status));
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     record_ = candidate;
@@ -1204,6 +1498,44 @@ SafetyServiceStatus SafetyFaultService::advanceStableWindow() {
     }
     return SafetyServiceStatus::Ready;
 }
+
+#if defined(APP_PROFILE_NATIVE)
+void SafetyFaultService::injectResetSafetyEvidenceForTesting(
+    FaultInstanceId targetFault, std::uint32_t targetRevision,
+    std::uint8_t passedDomains) {
+    if (!targetFault.valid() || targetRevision == 0U) return;
+    for (const auto domain :
+         {FaultResetCheckDomain::Sensor, FaultResetCheckDomain::Actuator,
+          FaultResetCheckDomain::Persistence,
+          FaultResetCheckDomain::Integrity}) {
+        const auto bit = static_cast<std::uint8_t>(domain);
+        updateSafetyDomainEvidence(domain, (passedDomains & bit) != 0U);
+    }
+    for (const auto domain :
+         {FaultResetCheckDomain::Sensor, FaultResetCheckDomain::Actuator,
+          FaultResetCheckDomain::Persistence,
+          FaultResetCheckDomain::Integrity}) {
+        bindFaultSafetyEvidence(targetFault, targetRevision, domain);
+    }
+}
+
+void SafetyFaultService::injectSafeBootSafetyEvidenceForTesting(
+    std::uint8_t passedDomains) {
+    for (const auto domain :
+         {FaultResetCheckDomain::Sensor, FaultResetCheckDomain::Actuator,
+          FaultResetCheckDomain::Persistence,
+          FaultResetCheckDomain::Integrity}) {
+        updateSafetyDomainEvidence(
+            domain, (passedDomains & static_cast<std::uint8_t>(domain)) != 0U);
+    }
+    static_cast<void>(finalizePendingSafeBootExit());
+}
+
+void SafetyFaultService::invalidateSafetyEvidenceForTesting(
+    FaultResetCheckDomain domain) {
+    updateSafetyDomainEvidence(domain, false);
+}
+#endif
 
 SafetyDisposition SafetyFaultService::disposition() const {
     if (!started_ || record_.safeBootRequired || !configurationGateQualified_ ||

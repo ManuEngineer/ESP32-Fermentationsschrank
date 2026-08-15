@@ -326,6 +326,7 @@ TemperatureControlApplicationOrchestrator::tickActuatorPlan(
 
     ActuatorPlanTickResult result = planner_->tick(input);
     actuatorDriver_->apply(result);
+    if (safety_ != nullptr) safety_->consumeActuatorPlanEvidence(result);
     const PendingControlRequestFeedbackUpdate update =
         planner_->takeFeedbackUpdate();
     if (update.changed) pendingControlRequestFeedback_ = update.feedback;

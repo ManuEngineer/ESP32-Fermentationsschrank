@@ -23,6 +23,9 @@
 #include "storage_envelope.hpp"
 #include "time_zone_resolver.hpp"
 
+extern "C" void setUp(void) {}
+extern "C" void tearDown(void) {}
+
 namespace fermentation {
 class ConfigurationServiceTestAccess {
    public:

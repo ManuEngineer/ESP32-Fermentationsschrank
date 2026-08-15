@@ -28,6 +28,9 @@
 #include "temperature_control_orchestrator.hpp"
 #include "virtual_time_source.hpp"
 
+extern "C" void setUp(void) {}
+extern "C" void tearDown(void) {}
+
 namespace fermentation {
 
 class FixedRecoveryProgressModel final : public RecoveryProgressWeightingModel {
@@ -3466,6 +3469,74 @@ void test_application_actuator_handoff_and_lifecycle_boundary() {
     // both fan outputs may remain in their configured post-run windows.
     TEST_ASSERT_TRUE(outerFan.enabled());
     TEST_ASSERT_TRUE(innerFan.enabled());
+}
+
+void test_application_safe_boot_exit_consumes_real_planner_evidence() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    static_cast<void>(coordinator.loadAndInitialize());
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    ActuatorPlanner planner(bridgeActuatorPlannerParameters());
+    device_platform_test_support::MockBidirectionalActuatorSink peltier;
+    device_platform_test_support::MockBinaryOutputSink outerFan;
+    device_platform_test_support::MockBinaryOutputSink innerFan;
+    ActuatorPlanSinkDriver driver(peltier, outerFan, innerFan);
+    device_platform_test_support::SimulatedResetController safetyReset;
+    device_platform::VirtualTimeSource safetyTime;
+    SafetyFaultService safety(store, safetyReset, safetyTime);
+    TEST_ASSERT_TRUE(safety.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(safety.consumeConfigurationStatus(
+                         ConfigurationSafetyStatus::Operational, 56U, 1U) ==
+                     SafetyServiceStatus::Ready);
+
+    safetyReset.setBootReset(device_platform::ResetCause::Brownout, true, 1U);
+    TEST_ASSERT_TRUE(safety.evaluateBoot().restart.status ==
+                     RestartBootStatus::AbnormalRecorded);
+    safetyReset.setBootReset(device_platform::ResetCause::ExternalOrOther, true,
+                             2U);
+    TEST_ASSERT_TRUE(safety.evaluateBoot().restart.status ==
+                     RestartBootStatus::AbnormalRecorded);
+    safetyReset.setBootReset(device_platform::ResetCause::WatchdogOrPanic, true,
+                             3U);
+    TEST_ASSERT_TRUE(safety.evaluateBoot().restart.status ==
+                     RestartBootStatus::SafeBootRequired);
+
+    FaultResetAuthorizationEvidence authorization;
+    authorization.evidenceId = 710U;
+    authorization.level = FaultResetAuthorizationLevel::Technical;
+    authorization.expiresAtMonotonicMillis = 100U;
+    TEST_ASSERT_TRUE(safety.requestAuthorizedSafeBootExit(authorization) ==
+                     SafetyServiceStatus::Ready);
+    safetyReset.setBootReset(device_platform::ResetCause::SoftwareRestart, true,
+                             4U);
+    TEST_ASSERT_TRUE(safety.evaluateBoot().restart.status ==
+                     RestartBootStatus::AuthorizedReset);
+    TEST_ASSERT_TRUE(safety.consumeConfigurationStatus(
+                         ConfigurationSafetyStatus::Operational, 56U, 1U) ==
+                     SafetyServiceStatus::SafetyRejected);
+
+    device_platform::SensorQualitySnapshot valid;
+    valid.quality = device_platform::SensorQuality::Valid;
+    TEST_ASSERT_TRUE(safety.consumeSensorQuality(SafetySensorRole::CabinetAir,
+                                                 valid, 20U, 999U) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(safety.safeBootRequired());
+
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator, planner, driver, safety);
+    auto state = readyActiveRunWithSensorSelection(coordinator, 799U);
+    const auto safeOutput = application.tickActuatorPlan(state, 100U);
+    TEST_ASSERT_TRUE(safeOutput.appliedDirection ==
+                     AbstractControlDirection::Idle);
+    TEST_ASSERT_FALSE(peltier.forward());
+    TEST_ASSERT_FALSE(peltier.reverse());
+    TEST_ASSERT_FALSE(safety.safeBootRequired());
+    TEST_ASSERT_TRUE(safety.actuatorGateInput().status ==
+                     ActuatorSafetyGateStatus::Allowed);
 }
 
 // Owner-Review R1 test 6: a stale-on-arrival B closes A's episode and hands
@@ -7793,6 +7864,7 @@ int main(int, char**) {
     RUN_TEST(test_air_run_product_inserted_is_air_to_air_without_pi_transition);
     RUN_TEST(test_application_bridge_hands_off_cooling_context_once);
     RUN_TEST(test_application_actuator_handoff_and_lifecycle_boundary);
+    RUN_TEST(test_application_safe_boot_exit_consumes_real_planner_evidence);
     RUN_TEST(
         test_application_repeated_i_tick_after_stale_b_does_not_corrupt_next_evaluation);
     RUN_TEST(
