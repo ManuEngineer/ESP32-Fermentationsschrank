@@ -530,4 +530,9 @@ void applyFaultCoreProjection(RunCommandState& state,
 [[nodiscard]] bool applySensorRoleChangeQualificationReset(
     RunCommandState& state, std::uint64_t monotonicMillis);
 
+// #21, 6.14.3: schmale Projektion auf SensorSelectionStateView - kein
+// vollstaendiger RunCommandState wird an sensor_selection.hpp weitergereicht.
+[[nodiscard]] SensorSelectionStateView sensorSelectionViewFrom(
+    const RunCommandState& state);
+
 }  // namespace fermentation

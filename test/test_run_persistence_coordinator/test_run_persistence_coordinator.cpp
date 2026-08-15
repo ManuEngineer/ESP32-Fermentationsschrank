@@ -3988,6 +3988,44 @@ void test_application_bridge_resets_runtime_at_committed_lifecycle_boundaries() 
     TEST_ASSERT_TRUE(fixture.planner.state().latchedWatchdogFault.has_value());
 }
 
+// C4: P1-001 must come from the real process automaton's own
+// ProcessMessage::TargetReachTimeExceeded emission
+// (process_state_machine.cpp's decideReachingTarget()/decideQualifyingTarget()
+// -> addMessage()), reaching SafetyFaultService only through the real
+// Orchestrator::persistTransition() -> complete() handoff, not a direct
+// consumeProcessMessage() test call.
+void test_application_real_process_automaton_projects_p1_001() {
+    ActuatorHandoffFixture fixture;
+    auto state = readyActiveRunWithSensorSelection(fixture.coordinator, 850U);
+    const auto tracking = evaluateAndApplyTargetQualification(
+        fixture.application, state,
+        programTargetQualificationInput(state, 100U),
+        RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_TRUE(tracking.status ==
+                     TargetQualificationOrchestrationStatus::AppliedPersisted);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::QualifyingTarget),
+                          static_cast<int>(state.processState.state));
+
+    ProcessSignals signals;
+    signals.qualificationProgress = QualificationProgress::InBand;
+    const auto warning =
+        decideProcessTransition(state.processState, &*state.processRunSnapshot,
+                                signals, TransitionRequest{}, 10'800'100U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(TransitionReason::TargetReachTimeExceeded),
+        static_cast<int>(warning.reason));
+    const auto applied = fixture.application.persistTransition(
+        state, warning, RunCheckpointTime{10'800'100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(applied.status));
+    TEST_ASSERT_TRUE(state.processState.targetReachWarningIssued);
+
+    const auto* p1 = fixture.safety.faultCore().dominant();
+    TEST_ASSERT_NOT_NULL(p1);
+    TEST_ASSERT_TRUE(p1->code == FaultCode::P1_001);
+    TEST_ASSERT_EQUAL_UINT32(1U, fixture.safety.faultCore().snapshot().count);
+}
+
 void test_abort_and_cool_is_a_new_active_run_boundary() {
     SequencedWriteStore store;
     RunPersistenceCoordinator coordinator(
@@ -7566,6 +7604,63 @@ void test_persist_command_applies_and_writes_manual_continue_with_air() {
             afterBoot.snapshot->sensorSelection->lastDecisionCause));
 }
 
+// C5: the successfully applied #21 selection state must reach
+// SafetyFaultService through the real
+// Orchestrator::persistSensorSelection() -> complete() handoff, not a
+// direct consumeSensorSelectionEvidence() test call.
+void test_application_real_sensor_selection_resolves_o2_001() {
+    ActuatorHandoffFixture fixture;
+    auto state = readyActiveRunWithSensorSelection(fixture.coordinator, 920U);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunSensorMode::Product),
+                          static_cast<int>(*state.activeRunSensorMode));
+
+    // A real #20 product-sensor failure raises O2-001 first, using the same
+    // fixed #21 source key the C5 resolve below must match.
+    device_platform::SensorQualitySnapshot staleProduct;
+    staleProduct.quality = device_platform::SensorQuality::Stale;
+    TEST_ASSERT_TRUE(fixture.safety.consumeSensorQuality(
+                         SafetySensorRole::Product, staleProduct, 21U, 1U) ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(fixture.safety.actuatorGateInput().status ==
+                     ActuatorSafetyGateStatus::ImmediateStop);
+
+    // Shape mirrors the real AirFallbackActive result already proven in
+    // test_persist_command_applies_and_writes_manual_continue_with_air().
+    SensorSelectionStateMutation mutation;
+    mutation.status = SensorSelectionApplyStatus::AppliedPersistentCandidate;
+    mutation.runtime.phase = SensorSelectionPhase::AirFallbackActive;
+    mutation.runtime.permission = SensorPeltierPermission::Allowed;
+    mutation.runtime.lastAppliedMonotonicMillis = 600U;
+    mutation.activeMode = RunSensorMode::Air;
+    mutation.resultingRunRevision = state.runRevision + 1U;
+    mutation.persisted = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::FallbackToAir,
+        mutation.resultingRunRevision};
+    mutation.event =
+        SensorSelectionEvent{*state.activeRunSensorMode,
+                             RunSensorMode::Air,
+                             SensorSelectionDecisionCause::FallbackToAir,
+                             mutation.resultingRunRevision,
+                             600U,
+                             std::nullopt};
+
+    CrossRolePlausibilityContext plausibility;
+    plausibility.air = coordinatorValidSensorSnapshot();
+    plausibility.cooling = coordinatorValidSensorSnapshot();
+    plausibility.evaluationMonotonicMillis = 600U;
+
+    const auto applied = fixture.application.persistSensorSelection(
+        state, mutation, RunCheckpointTime{600U, std::nullopt}, &plausibility);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(applied.status));
+
+    // The real handoff resolved O2-001 with real plausibility evidence -
+    // the actuator gate reopens without any direct #24 test call.
+    TEST_ASSERT_TRUE(fixture.safety.actuatorGateInput().status ==
+                     ActuatorSafetyGateStatus::Allowed);
+}
+
 // PR-#99-letzter-Abschlussblocker: RecheckProduct in AirFallbackActive mit
 // unvollstaendiger/veralteter thermischer Evidenz ist der einzige manuelle
 // Pfad, der AppliedRamOnly erreicht (test_recheck_product_from_air_fallback_
@@ -7913,6 +8008,7 @@ int main(int, char**) {
         test_application_multi_rate_windows_and_downstream_minimum_off_probe);
     RUN_TEST(
         test_application_bridge_resets_runtime_at_committed_lifecycle_boundaries);
+    RUN_TEST(test_application_real_process_automaton_projects_p1_001);
     RUN_TEST(test_abort_and_cool_is_a_new_active_run_boundary);
     RUN_TEST(test_application_bridge_resets_runtime_on_recovery_activation);
     RUN_TEST(
@@ -7982,6 +8078,7 @@ int main(int, char**) {
     RUN_TEST(
         test_qualifying_sensor_role_change_resets_state_marker_and_qualifier_atomically);
     RUN_TEST(test_persist_command_applies_and_writes_manual_continue_with_air);
+    RUN_TEST(test_application_real_sensor_selection_resolves_o2_001);
     RUN_TEST(
         test_persist_command_manual_recheck_product_ram_only_is_ram_only_and_idempotent);
     RUN_TEST(

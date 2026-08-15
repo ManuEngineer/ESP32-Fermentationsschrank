@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "control_context.hpp"
+#include "run_commands.hpp"
 #include "run_recovery.hpp"
 #include "safety_fault_service.hpp"
 
@@ -126,9 +127,27 @@ TemperatureControlApplicationOrchestrator::persistSensorSelection(
     const CrossRolePlausibilityContext* liveSensorEvidence) {
     const TemperatureControlLifecycleSnapshot before{
         current.processState.state};
-    return complete(persistence_.persistSensorSelection(current, mutation, time,
-                                                        liveSensorEvidence),
-                    before, current, time.monotonicMillis);
+    auto result = complete(persistence_.persistSensorSelection(
+                               current, mutation, time, liveSensorEvidence),
+                           before, current, time.monotonicMillis);
+    // C5: the successfully applied #21 selection state, projected the same
+    // way sensor_selection.hpp itself is fed, is the sole production
+    // handoff to SafetyFaultService - not a test-only manual call. Only
+    // fires with real live evidence in hand; a caller-omitted evidence
+    // pointer must not fabricate a plausibility result. sourceKey is the
+    // fixed #21 producer key (matches the existing consumeSensorQuality()
+    // /consumeSensorSelectionEvidence() test convention): O2-001's resolve
+    // must use the same key its own raise used, and runRevision changes on
+    // every persisted mutation including this one.
+    if (safety_ != nullptr &&
+        result.status == RunPersistenceResultStatus::Applied &&
+        liveSensorEvidence != nullptr) {
+        constexpr std::uint32_t kSensorSelectionSourceKey = 21U;
+        static_cast<void>(safety_->consumeSensorSelectionEvidence(
+            sensorSelectionViewFrom(current), *liveSensorEvidence,
+            kSensorSelectionSourceKey, current.runRevision));
+    }
+    return result;
 }
 
 RunPersistenceResult
@@ -171,6 +190,25 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::complete(
     const TemperatureControlLifecycleSnapshot& before, RunCommandState& current,
     std::uint64_t nowMonotonicMillis, bool recoveryBoundary) {
     if (result.status != RunPersistenceResultStatus::Applied) return result;
+
+    // C4: the real process automaton is the sole producer of ProcessMessage
+    // (process_state_machine.cpp); this is its one production handoff to
+    // #24, mirroring tickActuatorPlan()'s consumeActuatorPlanEvidence()
+    // handoff for #23. No #24-internal message synthesis or timing logic is
+    // introduced here. sourceKey is the fixed #22-adjacent producer key
+    // (matches consumeProcessMessage()'s existing test convention) rather
+    // than the per-mutation runRevision: RunCompleted/RunAborted resolve
+    // P1-001 by sourceKey alone (no correlationKey), so the key used at
+    // raise time must still match after later mutations have advanced
+    // runRevision.
+    if (safety_ != nullptr) {
+        constexpr std::uint32_t kProcessAutomatonSourceKey = 22U;
+        for (std::size_t index = 0U; index < result.messageCount; ++index) {
+            static_cast<void>(safety_->consumeProcessMessage(
+                result.messages[index], kProcessAutomatonSourceKey,
+                current.runRevision));
+        }
+    }
 
     const bool newActiveRun = hasEffect(result, CommandEffect::RunStarted);
     std::optional<CommittedControlContextTransition> committedTransition;

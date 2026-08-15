@@ -397,18 +397,6 @@ CommandStatus mapAdjustmentStatus(RunAdjustmentStatus status) {
     return CommandStatus::InvalidInput;
 }
 
-// #21, 6.14.3: schmale Projektion auf SensorSelectionStateView - kein
-// vollstaendiger RunCommandState wird an sensor_selection.hpp weitergereicht.
-SensorSelectionStateView sensorSelectionViewFrom(const RunCommandState& state) {
-    SensorSelectionStateView view;
-    view.activeRunId = state.activeRunId;
-    view.runtime = state.sensorSelectionRuntime;
-    view.activeMode = state.activeRunSensorMode;
-    view.persisted = state.sensorSelection;
-    view.runRevision = state.runRevision;
-    return view;
-}
-
 // #21, 6.8: fuer einen Programmlauf direkt aus dem vertrauenswuerdigen
 // Startvertrag (ProgramDocument) abgeleitet. Ein produktgefuehrter manueller
 // Lauf hat keine eigene Policy-/Ruecklaufkonfiguration und folgt deshalb
@@ -566,6 +554,20 @@ StartSensorSelectionOutcome startSensorSelectionOutcome(
 }
 
 }  // namespace
+
+// #21, 6.14.3: schmale Projektion auf SensorSelectionStateView - kein
+// vollstaendiger RunCommandState wird an sensor_selection.hpp weitergereicht.
+// External linkage: this is also the sole real projection C5 uses to hand
+// the applied #21 selection state to SafetyFaultService.
+SensorSelectionStateView sensorSelectionViewFrom(const RunCommandState& state) {
+    SensorSelectionStateView view;
+    view.activeRunId = state.activeRunId;
+    view.runtime = state.sensorSelectionRuntime;
+    view.activeMode = state.activeRunSensorMode;
+    view.persisted = state.sensorSelection;
+    view.runRevision = state.runRevision;
+    return view;
+}
 
 // #21, 6.14.6: einzige Implementierung; ersetzt das vormalige
 // run_commands.cpp::clearActiveRun (nur intern sichtbar) und
