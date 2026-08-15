@@ -157,6 +157,12 @@ struct FaultCoreSnapshot {
 [[nodiscard]] const char* faultCodeText(FaultCode value);
 [[nodiscard]] bool isLatchedFaultClass(FaultClass value);
 [[nodiscard]] bool allowsAutomaticRecoveryRestart(FaultCode value);
+// A2: central, default-deny allowlist for AuthorizedTechnicalRestart. R3's
+// code/reset-policy matrix documents "kein zusaetzlicher Reboot" for every
+// current code; no code currently defines an explicit technical-restart
+// policy, so this intentionally always returns false until a concrete
+// code's approved policy states otherwise.
+[[nodiscard]] bool allowsAuthorizedTechnicalRestart(FaultCode value);
 [[nodiscard]] bool isBlockingFault(const FaultRecord& record);
 [[nodiscard]] bool equalFaultCoreSnapshot(const FaultCoreSnapshot& left,
                                           const FaultCoreSnapshot& right);

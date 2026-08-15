@@ -3509,12 +3509,12 @@ void test_application_safe_boot_exit_consumes_real_planner_evidence() {
     authorization.evidenceId = 710U;
     authorization.level = FaultResetAuthorizationLevel::Technical;
     authorization.expiresAtMonotonicMillis = 100U;
+    // A1: SAFE_BOOT exit never itself reboots. Actuator/sensor evidence is
+    // not current yet, so the request is deferred (SafetyRejected) and
+    // completes later, once the real planner tick below supplies actuator
+    // evidence - exactly the boundary this test targets.
     TEST_ASSERT_TRUE(safety.requestAuthorizedSafeBootExit(authorization) ==
-                     SafetyServiceStatus::Ready);
-    safetyReset.setBootReset(device_platform::ResetCause::SoftwareRestart, true,
-                             4U);
-    TEST_ASSERT_TRUE(safety.evaluateBoot().restart.status ==
-                     RestartBootStatus::AuthorizedReset);
+                     SafetyServiceStatus::SafetyRejected);
     TEST_ASSERT_TRUE(safety.consumeConfigurationStatus(
                          ConfigurationSafetyStatus::Operational, 56U, 1U) ==
                      SafetyServiceStatus::SafetyRejected);
@@ -3540,6 +3540,7 @@ void test_application_safe_boot_exit_consumes_real_planner_evidence() {
     TEST_ASSERT_FALSE(safety.safeBootRequired());
     TEST_ASSERT_TRUE(safety.actuatorGateInput().status ==
                      ActuatorSafetyGateStatus::Allowed);
+    TEST_ASSERT_EQUAL_UINT32(0U, safetyReset.restartRequestCount());
 }
 
 // Owner-Review R1 test 6: a stale-on-arrival B closes A's episode and hands

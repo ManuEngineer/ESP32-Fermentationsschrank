@@ -94,6 +94,12 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
     record.lastResetCause = snapshot.cause;
     record.lastResetObservationId = snapshot.observationId;
     result.recordNeedsCommit = true;
+    // A4: every new boot observation must re-prove the 30-minute stability
+    // window from zero in the current boot, regardless of cause. The
+    // episode itself and abnormalRestartCount are deliberately untouched
+    // here.
+    record.restartEpisode.stableWindowRunning = false;
+    record.restartEpisode.stableWindowStartedAtMillis = 0U;
 
     if (result.cause == RestartCauseEvent::Unknown) {
         setSafeBoot(record);
@@ -119,9 +125,30 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
         const auto intent = record.restartEvidence.intent;
         record.restartEvidence.state = RestartEvidenceState::Consumed;
         result.evidenceId = record.restartEvidence.evidenceId;
-        result.status = intent == RestartIntentType::AutomaticSafetyRecovery
-                            ? RestartBootStatus::ControlledEvidenceConsumed
-                            : RestartBootStatus::AuthorizedReset;
+        if (intent == RestartIntentType::AutomaticSafetyRecovery) {
+            // A3: the abnormal-restart counter changes only here, on the
+            // real new boot observation that actually followed the prepared
+            // automatic safety-recovery restart - never when the intent was
+            // merely prepared, rejected, or left OutcomeUnknown.
+            if (record.restartEpisode.abnormalRestartCount ==
+                std::numeric_limits<std::uint32_t>::max()) {
+                setSafeBoot(record);
+                result.status = RestartBootStatus::Overflow;
+                result.safeBootRequired = true;
+                return result;
+            }
+            ++record.restartEpisode.abnormalRestartCount;
+            result.status = record.restartEpisode.abnormalRestartCount >= 3U
+                                ? RestartBootStatus::SafeBootRequired
+                                : RestartBootStatus::ControlledEvidenceConsumed;
+            if (result.status == RestartBootStatus::SafeBootRequired) {
+                setSafeBoot(record);
+            }
+        } else {
+            // An authorized technical restart is a deliberate service action
+            // and never counts as abnormal on its own.
+            result.status = RestartBootStatus::AuthorizedReset;
+        }
         result.safeBootRequired = record.safeBootRequired;
         return result;
     }
@@ -186,9 +213,12 @@ bool RestartEpisodeCoordinator::prepareRestartIntent(
         return false;
     }
 
-    if (intent == RestartIntentType::AutomaticSafetyRecovery) {
-        if (!incrementEpisode(record)) return false;
-    } else {
+    // A3: preparing any restart intent - including AutomaticSafetyRecovery -
+    // opens/advances the episode's evidence bookkeeping only. The
+    // abnormal-restart counter changes only in evaluateBoot() once a real
+    // new boot observation actually confirms the restart happened; a
+    // prepared, rejected, or OutcomeUnknown request must not count.
+    {
         const bool newEpisode = !record.restartEpisode.open;
         if (record.restartEpisode.nextRestartEvidenceId == 0U ||
             record.restartEpisode.nextRestartEvidenceId ==

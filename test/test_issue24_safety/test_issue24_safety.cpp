@@ -1086,6 +1086,11 @@ void test_automatic_restart_is_code_policy_bounded_and_once_per_episode() {
         service.requestControlledSafetyRestart(recoveryId, recoveryRevision) ==
         SafetyServiceStatus::Ready);
     TEST_ASSERT_EQUAL_UINT32(1U, reset.restartRequestCount());
+    // A3: preparing and accepting the restart request is not itself a new
+    // boot observation. The abnormal-restart counter must stay untouched
+    // until evaluateBoot() actually observes the resulting SoftwareRestart.
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, service.record().restartEpisode.abnormalRestartCount);
     const auto* retained = service.faultCore().find(recoveryId);
     TEST_ASSERT_NOT_NULL(retained);
     TEST_ASSERT_TRUE(retained->causeActive);
@@ -1093,6 +1098,112 @@ void test_automatic_restart_is_code_policy_bounded_and_once_per_episode() {
     TEST_ASSERT_TRUE(service.requestControlledSafetyRestart(
                          recoveryId, retained->faultRevision) ==
                      SafetyServiceStatus::SafetyRejected);
+}
+
+void test_technical_restart_is_default_deny_for_every_current_code() {
+    // A2: no code's approved R3 reset policy currently authorizes an
+    // additional technical restart; the allowlist must stay empty.
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    qualifyConfiguration(service);
+
+    const std::array<FaultCode, 19U> allCodesExceptY4009 = {
+        FaultCode::P1_001, FaultCode::O2_001, FaultCode::O2_002,
+        FaultCode::S3_001, FaultCode::S3_002, FaultCode::S3_003,
+        FaultCode::S3_004, FaultCode::S3_005, FaultCode::S3_006,
+        FaultCode::S3_007, FaultCode::S3_008, FaultCode::S3_009,
+        FaultCode::Y4_001, FaultCode::Y4_002, FaultCode::Y4_003,
+        FaultCode::Y4_004, FaultCode::Y4_005, FaultCode::Y4_006,
+        FaultCode::Y4_007};
+    std::uint32_t correlation = 1U;
+    for (const auto code : allCodesExceptY4009) {
+        if (code == FaultCode::Y4_006) continue;
+        TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                             {code, 24U, correlation, correlation,
+                              std::nullopt}) == SafetyServiceStatus::Ready);
+        // S3-008/Y4-008 normalize to a fixed bounded source/correlation
+        // regardless of the request, so the record is looked up by code
+        // alone; every code in this loop is otherwise distinct.
+        const auto snapshot = service.faultCore().snapshot();
+        const FaultRecord* fault = nullptr;
+        for (std::size_t index = 0U; index < snapshot.count; ++index) {
+            if (snapshot.records[index].code == code) {
+                fault = &snapshot.records[index];
+                break;
+            }
+        }
+        TEST_ASSERT_NOT_NULL(fault);
+        FaultResetAuthorizationEvidence authorization;
+        authorization.evidenceId = 800U + correlation;
+        authorization.level = FaultResetAuthorizationLevel::Technical;
+        authorization.expiresAtMonotonicMillis = 100U;
+        authorization.targetFault = fault->instanceId;
+        authorization.targetFaultRevision = fault->faultRevision;
+        TEST_ASSERT_TRUE(
+            service.requestAuthorizedTechnicalRestart(
+                authorization, fault->instanceId, fault->faultRevision) ==
+            SafetyServiceStatus::SafetyRejected);
+        ++correlation;
+    }
+    TEST_ASSERT_EQUAL_UINT32(0U, reset.restartRequestCount());
+}
+
+void test_abnormal_restart_count_changes_only_on_real_new_boot_observation() {
+    // A3: Rejected, OutcomeUnknown, and an Accepted request without a
+    // matching later boot observation must never change the counter.
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    qualifyConfiguration(service);
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::Y4_007, 24U, 1U, 1U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
+    const auto* recovery = service.faultCore().dominant();
+    TEST_ASSERT_NOT_NULL(recovery);
+    const auto recoveryId = recovery->instanceId;
+    const auto recoveryRevision = recovery->faultRevision;
+
+    reset.setNextRestartResult(device_platform::RestartRequestResult::Rejected);
+    TEST_ASSERT_TRUE(
+        service.requestControlledSafetyRestart(recoveryId, recoveryRevision) ==
+        SafetyServiceStatus::ResetBootRejected);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, service.record().restartEpisode.abnormalRestartCount);
+
+    TEST_ASSERT_TRUE(service.injectFaultForTesting(
+                         {FaultCode::Y4_007, 24U, 2U, 2U, std::nullopt}) ==
+                     SafetyServiceStatus::Ready);
+    // The first Y4-007 instance already has automaticRecoveryRestartUsed
+    // set from the rejected attempt above; the second, independently
+    // correlated instance must be located explicitly rather than via
+    // dominant(), which ties on creation order.
+    const auto snapshot2 = service.faultCore().snapshot();
+    const FaultRecord* recovery2 = nullptr;
+    for (std::size_t index = 0U; index < snapshot2.count; ++index) {
+        if (snapshot2.records[index].code == FaultCode::Y4_007 &&
+            snapshot2.records[index].correlationKey == 2U) {
+            recovery2 = &snapshot2.records[index];
+            break;
+        }
+    }
+    TEST_ASSERT_NOT_NULL(recovery2);
+    reset.setNextRestartResult(
+        device_platform::RestartRequestResult::OutcomeUnknown);
+    TEST_ASSERT_TRUE(service.requestControlledSafetyRestart(
+                         recovery2->instanceId, recovery2->faultRevision) ==
+                     SafetyServiceStatus::ResetBootOutcomeUnknown);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, service.record().restartEpisode.abnormalRestartCount);
+    // OutcomeUnknown is terminal and fail-closed; a repeated request does
+    // not silently retry.
+    TEST_ASSERT_TRUE(service.safeBootRequired());
 }
 
 void test_restart_evidence_requires_current_fault_revision_and_episode_record() {
@@ -1261,6 +1372,60 @@ void test_stability_window_is_derived_from_central_safety_state() {
     TEST_ASSERT_TRUE(service.injectFaultForTesting(
                          {FaultCode::S3_004, 24U, 1U, 1U, std::nullopt}) ==
                      SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.advanceStableWindow() ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_FALSE(service.record().restartEpisode.stableWindowRunning);
+}
+
+void test_stable_window_restarts_from_zero_after_a_new_boot_observation() {
+    // A4: 29:59 of stability, then a normal (non-abnormal, non-episode-
+    // closing) reboot observation, must require a fresh full 30:00 - the
+    // episode and abnormalRestartCount are preserved across it.
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+    reset.setBootReset(device_platform::ResetCause::Brownout, true, 1U);
+    TEST_ASSERT_TRUE(service.evaluateBoot().restart.status ==
+                     RestartBootStatus::AbnormalRecorded);
+    qualifyConfiguration(service);
+    TEST_ASSERT_TRUE(service.advanceStableWindow() ==
+                     SafetyServiceStatus::Ready);
+    time.advanceMonotonicMillis(kStableRestartWindowMillis - 1U);
+    TEST_ASSERT_TRUE(service.advanceStableWindow() ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.record().restartEpisode.stableWindowRunning);
+    const auto episodeIdBeforeReboot =
+        service.record().restartEpisode.episodeId;
+    const auto abnormalCountBeforeReboot =
+        service.record().restartEpisode.abnormalRestartCount;
+
+    // A normal PowerOn boot observation neither closes the episode nor
+    // counts as abnormal, but it must still discard the in-progress
+    // stability proof.
+    reset.setBootReset(device_platform::ResetCause::PowerOn, true, 2U);
+    TEST_ASSERT_TRUE(service.evaluateBoot().restart.status ==
+                     RestartBootStatus::Normal);
+    TEST_ASSERT_FALSE(service.record().restartEpisode.stableWindowRunning);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, service.record().restartEpisode.stableWindowStartedAtMillis);
+    TEST_ASSERT_EQUAL_UINT32(episodeIdBeforeReboot,
+                             service.record().restartEpisode.episodeId);
+    TEST_ASSERT_EQUAL_UINT32(
+        abnormalCountBeforeReboot,
+        service.record().restartEpisode.abnormalRestartCount);
+
+    // The previous near-complete proof does not carry over: a fresh full
+    // window is required again.
+    TEST_ASSERT_TRUE(service.advanceStableWindow() ==
+                     SafetyServiceStatus::Ready);
+    time.advanceMonotonicMillis(kStableRestartWindowMillis - 1U);
+    TEST_ASSERT_TRUE(service.advanceStableWindow() ==
+                     SafetyServiceStatus::Ready);
+    TEST_ASSERT_TRUE(service.record().restartEpisode.stableWindowRunning);
+    time.advanceMonotonicMillis(1U);
     TEST_ASSERT_TRUE(service.advanceStableWindow() ==
                      SafetyServiceStatus::Ready);
     TEST_ASSERT_FALSE(service.record().restartEpisode.stableWindowRunning);
@@ -1505,6 +1670,9 @@ void test_configuration_forwarding_reuses_producer_correlation() {
 }
 
 void test_safe_boot_exit_is_authorized_after_configuration_qualification() {
+    // A1: SAFE_BOOT exit is a write-before-apply decision within the current
+    // running boot. It never itself requests a reboot, so no evaluateBoot()
+    // roundtrip and no SoftwareRestart observation are involved here.
     SimulatedPersistentStateStore store;
     SafetyStateStore seedStore(store);
     SafetyStateRecord seed;
@@ -1520,11 +1688,10 @@ void test_safe_boot_exit_is_authorized_after_configuration_qualification() {
     authorization.evidenceId = 700U;
     authorization.level = FaultResetAuthorizationLevel::Technical;
     authorization.expiresAtMonotonicMillis = 10U;
+    // Evidence is not current yet (no configuration gate, no sensor/actuator
+    // domains), so the exit request is deferred, not rejected outright.
     TEST_ASSERT_TRUE(service.requestAuthorizedSafeBootExit(authorization) ==
-                     SafetyServiceStatus::Ready);
-    reset.setBootReset(device_platform::ResetCause::SoftwareRestart, true, 2U);
-    const auto boot = service.evaluateBoot();
-    TEST_ASSERT_TRUE(boot.restart.status == RestartBootStatus::AuthorizedReset);
+                     SafetyServiceStatus::SafetyRejected);
     TEST_ASSERT_TRUE(service.safeBootRequired());
     TEST_ASSERT_TRUE(service.consumeConfigurationStatus(
                          ConfigurationSafetyStatus::Operational, 56U, 1U) ==
@@ -1533,12 +1700,52 @@ void test_safe_boot_exit_is_authorized_after_configuration_qualification() {
     TEST_ASSERT_FALSE(service.safeBootRequired());
     TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
                      ActuatorSafetyGateStatus::Allowed);
+    TEST_ASSERT_EQUAL_UINT32(0U, reset.restartRequestCount());
+}
 
-    const auto repeated = service.evaluateBoot();
-    TEST_ASSERT_TRUE(repeated.restart.status ==
-                     RestartBootStatus::ControlledEvidenceConsumed);
-    TEST_ASSERT_FALSE(service.safeBootRequired());
-    TEST_ASSERT_EQUAL_UINT32(1U, reset.restartRequestCount());
+void test_y4_009_cannot_be_cleared_by_generic_cause_clear_or_reset() {
+    // A5: only the explicit SAFE_BOOT-exit path may ever resolve Y4-009.
+    SimulatedPersistentStateStore store;
+    device_platform_test_support::SimulatedResetController reset;
+    device_platform::VirtualTimeSource time;
+    SafetyFaultService service(store, reset, time);
+    TEST_ASSERT_TRUE(service.begin({true, true, true}) ==
+                     SafetyServiceStatus::Ready);
+
+    reset.setBootReset(device_platform::ResetCause::Brownout, true, 1U);
+    TEST_ASSERT_TRUE(service.evaluateBoot().restart.status ==
+                     RestartBootStatus::AbnormalRecorded);
+    reset.setBootReset(device_platform::ResetCause::ExternalOrOther, true, 2U);
+    TEST_ASSERT_TRUE(service.evaluateBoot().restart.status ==
+                     RestartBootStatus::AbnormalRecorded);
+    reset.setBootReset(device_platform::ResetCause::WatchdogOrPanic, true, 3U);
+    TEST_ASSERT_TRUE(service.evaluateBoot().restart.status ==
+                     RestartBootStatus::SafeBootRequired);
+    const auto* y4009 = service.faultCore().dominant();
+    TEST_ASSERT_NOT_NULL(y4009);
+    TEST_ASSERT_TRUE(y4009->code == FaultCode::Y4_009);
+    const auto y4009Id = y4009->instanceId;
+    const auto y4009Revision = y4009->faultRevision;
+
+    TEST_ASSERT_TRUE(service.clearFaultCause(y4009Id, y4009Revision) ==
+                     SafetyServiceStatus::SafetyRejected);
+    TEST_ASSERT_TRUE(service.safeBootRequired());
+    const auto* stillActive = service.faultCore().find(y4009Id);
+    TEST_ASSERT_NOT_NULL(stillActive);
+    TEST_ASSERT_TRUE(stillActive->causeActive);
+
+    passedResetChecks(service, y4009Id, y4009Revision);
+    TEST_ASSERT_TRUE(
+        service
+            .resetFault(
+                resetRequestFor(y4009Id, y4009Revision),
+                authorizationFor(y4009Id, y4009Revision,
+                                 FaultResetAuthorizationLevel::Technical))
+            .status == SafetyServiceStatus::SafetyRejected);
+    TEST_ASSERT_TRUE(service.safeBootRequired());
+    const auto* stillLatched = service.faultCore().find(y4009Id);
+    TEST_ASSERT_NOT_NULL(stillLatched);
+    TEST_ASSERT_TRUE(stillLatched->status != FaultStatus::Cleared);
 }
 
 void test_third_abnormal_restart_reaches_authorized_safe_boot_exit() {
@@ -1565,11 +1772,10 @@ void test_third_abnormal_restart_reaches_authorized_safe_boot_exit() {
     authorization.evidenceId = 701U;
     authorization.level = FaultResetAuthorizationLevel::Technical;
     authorization.expiresAtMonotonicMillis = 10U;
+    // A1: the exit itself never reboots; evidence is not current yet, so the
+    // request is deferred (SafetyRejected) rather than triggering a restart.
     TEST_ASSERT_TRUE(service.requestAuthorizedSafeBootExit(authorization) ==
-                     SafetyServiceStatus::Ready);
-    reset.setBootReset(device_platform::ResetCause::SoftwareRestart, true, 4U);
-    TEST_ASSERT_TRUE(service.evaluateBoot().restart.status ==
-                     RestartBootStatus::AuthorizedReset);
+                     SafetyServiceStatus::SafetyRejected);
     TEST_ASSERT_TRUE(service.safeBootRequired());
     TEST_ASSERT_TRUE(service.consumeConfigurationStatus(
                          ConfigurationSafetyStatus::Operational, 56U, 1U) ==
@@ -1579,7 +1785,7 @@ void test_third_abnormal_restart_reaches_authorized_safe_boot_exit() {
     TEST_ASSERT_EQUAL_UINT32(0U, service.faultCore().snapshot().count);
     TEST_ASSERT_TRUE(service.actuatorGateInput().status ==
                      ActuatorSafetyGateStatus::Allowed);
-    TEST_ASSERT_EQUAL_UINT32(1U, reset.restartRequestCount());
+    TEST_ASSERT_EQUAL_UINT32(0U, reset.restartRequestCount());
 }
 
 void test_normal_restart_and_missing_config_do_not_exit_safe_boot() {
@@ -1620,11 +1826,10 @@ void test_safe_boot_exit_requires_current_four_domain_evidence() {
     authorization.evidenceId = 702U;
     authorization.level = FaultResetAuthorizationLevel::Technical;
     authorization.expiresAtMonotonicMillis = 100U;
+    // A1: no reboot is involved; evidence is not current yet so the exit
+    // request is deferred (SafetyRejected).
     TEST_ASSERT_TRUE(service.requestAuthorizedSafeBootExit(authorization) ==
-                     SafetyServiceStatus::Ready);
-    reset.setBootReset(device_platform::ResetCause::SoftwareRestart, true, 2U);
-    TEST_ASSERT_TRUE(service.evaluateBoot().restart.status ==
-                     RestartBootStatus::AuthorizedReset);
+                     SafetyServiceStatus::SafetyRejected);
     TEST_ASSERT_TRUE(service.consumeConfigurationStatus(
                          ConfigurationSafetyStatus::Operational, 56U, 1U) ==
                      SafetyServiceStatus::SafetyRejected);
@@ -1655,11 +1860,10 @@ void test_safe_boot_exit_requires_both_required_sensor_roles() {
     authorization.evidenceId = 703U;
     authorization.level = FaultResetAuthorizationLevel::Technical;
     authorization.expiresAtMonotonicMillis = 100U;
+    // A1: no reboot is involved; evidence is not current yet so the exit
+    // request is deferred (SafetyRejected).
     TEST_ASSERT_TRUE(service.requestAuthorizedSafeBootExit(authorization) ==
-                     SafetyServiceStatus::Ready);
-    reset.setBootReset(device_platform::ResetCause::SoftwareRestart, true, 2U);
-    TEST_ASSERT_TRUE(service.evaluateBoot().restart.status ==
-                     RestartBootStatus::AuthorizedReset);
+                     SafetyServiceStatus::SafetyRejected);
     TEST_ASSERT_TRUE(service.consumeConfigurationStatus(
                          ConfigurationSafetyStatus::Operational, 56U, 1U) ==
                      SafetyServiceStatus::SafetyRejected);
@@ -1755,17 +1959,23 @@ int main() {
     RUN_TEST(test_sensor_role_identity_ignores_external_correlation_keys);
     RUN_TEST(
         test_automatic_restart_is_code_policy_bounded_and_once_per_episode);
+    RUN_TEST(test_technical_restart_is_default_deny_for_every_current_code);
+    RUN_TEST(
+        test_abnormal_restart_count_changes_only_on_real_new_boot_observation);
     RUN_TEST(
         test_restart_evidence_requires_current_fault_revision_and_episode_record);
     RUN_TEST(
         test_rejected_or_unknown_restart_evidence_cannot_authorize_later_boot);
     RUN_TEST(test_stability_window_is_derived_from_central_safety_state);
+    RUN_TEST(
+        test_stable_window_restarts_from_zero_after_a_new_boot_observation);
     RUN_TEST(test_cleared_history_reuses_active_capacity_but_not_instance_ids);
     RUN_TEST(test_active_capacity_includes_two_o2_safety_roles);
     RUN_TEST(test_bounded_watchdog_and_unknown_domains_reuse_identity);
     RUN_TEST(test_configuration_forwarding_reuses_producer_correlation);
     RUN_TEST(
         test_safe_boot_exit_is_authorized_after_configuration_qualification);
+    RUN_TEST(test_y4_009_cannot_be_cleared_by_generic_cause_clear_or_reset);
     RUN_TEST(test_third_abnormal_restart_reaches_authorized_safe_boot_exit);
     RUN_TEST(test_normal_restart_and_missing_config_do_not_exit_safe_boot);
     RUN_TEST(test_safe_boot_exit_requires_current_four_domain_evidence);

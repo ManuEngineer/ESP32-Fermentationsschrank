@@ -198,6 +198,8 @@ class SafetyFaultService final {
         std::optional<std::uint32_t> correlationKey = std::nullopt,
         std::optional<FaultDiagnosticOrigin> requiredOrigin = std::nullopt);
     [[nodiscard]] SafetyServiceStatus finalizePendingSafeBootExit();
+    [[nodiscard]] SafetyServiceStatus attemptSafeBootExit(
+        std::uint32_t evidenceIdForFailureTracking);
     [[nodiscard]] bool clearSafeBootTrackingFault(FaultCore& core) const;
     void retainRamFailClosed(
         std::uint32_t sourceKey, std::uint32_t correlationKey,

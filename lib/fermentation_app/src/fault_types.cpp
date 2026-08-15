@@ -95,6 +95,14 @@ bool allowsAutomaticRecoveryRestart(FaultCode value) {
     return value == FaultCode::Y4_007;
 }
 
+bool allowsAuthorizedTechnicalRestart(FaultCode /*value*/) {
+    // R3 is default-deny for every currently defined code; see the header
+    // comment. Kept as a function (not a literal false at the call site) so
+    // a later approved plan revision has a single place to name an explicit
+    // exception without re-deriving the policy at each call site.
+    return false;
+}
+
 bool isBlockingFault(const FaultRecord& record) {
     return statusActive(record) &&
            (isLatchedFaultClass(record.faultClass) ||

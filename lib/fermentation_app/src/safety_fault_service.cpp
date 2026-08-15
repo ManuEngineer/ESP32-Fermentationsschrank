@@ -872,8 +872,13 @@ SafetyServiceStatus SafetyFaultService::clearFaultCause(
     // signal via resolveFaultCause(), never by a bare caller-supplied
     // id+revision. A caller cannot prove which real domain's evidence
     // resolved the unknown/mismatched condition.
+    // A5: Y4-009 is the restart-tracking latch for the open SAFE_BOOT
+    // episode. Only the explicit, technically authorized SAFE_BOOT-exit
+    // path (attemptSafeBootExit()/clearAfterAuthorizedSafeBootExit()) may
+    // ever clear it; a generic cause-clear must never touch it.
     if (const auto* target = faultCore_.find(id);
-        target != nullptr && target->code == FaultCode::Y4_008) {
+        target != nullptr && (target->code == FaultCode::Y4_008 ||
+                              target->code == FaultCode::Y4_009)) {
         return SafetyServiceStatus::SafetyRejected;
     }
     const auto before = faultCore_.snapshot();
@@ -1268,7 +1273,8 @@ FaultResetEvaluation SafetyFaultService::evaluateFaultReset(
     evaluation.requiredCheckDomains = requiredResetCheckDomains(target->code);
     evaluation.codePolicyAllowsReset =
         target->latched && target->status == FaultStatus::CauseClearedLocked &&
-        target->code != FaultCode::P1_001 && target->code != FaultCode::Y4_006;
+        target->code != FaultCode::P1_001 &&
+        target->code != FaultCode::Y4_006 && target->code != FaultCode::Y4_009;
     const auto* projection =
         static_cast<const FaultSafetyEvidenceProjection*>(nullptr);
     for (const auto& candidate : faultSafetyEvidence_) {
@@ -1499,18 +1505,23 @@ SafetyServiceStatus SafetyFaultService::requestControlledSafetyRestart(
     return finalizeRestartRequestResult(resetController_.requestRestart());
 }
 
-SafetyServiceStatus SafetyFaultService::finalizePendingSafeBootExit() {
-    if (!pendingAuthorizedSafeBootExitEvidenceId_.has_value()) {
-        return SafetyServiceStatus::Ready;
-    }
+SafetyServiceStatus SafetyFaultService::attemptSafeBootExit(
+    std::uint32_t evidenceIdForFailureTracking) {
+    // A1: Y4-009/SAFE_BOOT exit is a write-before-apply service decision
+    // evaluated within the current running boot. It never itself requires or
+    // triggers a reboot; requestRestart() is never called from this path.
+    // Only a concrete underlying code's own reset policy may ever prepare
+    // its own separate technical restart.
     if (!configurationGateQualified_ ||
         hasBlockingFaultExceptSafeBootTracking(faultCore_) ||
         record_.capacityFailureLatched || !safeBootSafetyEvidenceCurrent()) {
+        pendingAuthorizedSafeBootExitEvidenceId_ = evidenceIdForFailureTracking;
         return SafetyServiceStatus::SafetyRejected;
     }
     SafetyStateRecord candidate = record_;
     FaultCore staged = faultCore_;
     if (!clearSafeBootTrackingFault(staged)) {
+        pendingAuthorizedSafeBootExitEvidenceId_ = evidenceIdForFailureTracking;
         return SafetyServiceStatus::SafetyRejected;
     }
     candidate.safeBootRequired = false;
@@ -1519,17 +1530,24 @@ SafetyServiceStatus SafetyFaultService::finalizePendingSafeBootExit() {
                             ? stateStore_.commit(candidate)
                             : SafetyRecordCommitResult{};
     if (commit.status != SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(0U, *pendingAuthorizedSafeBootExitEvidenceId_,
+        retainRamFailClosed(0U, evidenceIdForFailureTracking,
                             markerKindForCommit(commit.status));
         return SafetyServiceStatus::PersistentWriteFailed;
     }
     faultCore_ = staged;
     record_ = candidate;
-    const auto evidenceId = *pendingAuthorizedSafeBootExitEvidenceId_;
     pendingAuthorizedSafeBootExitEvidenceId_.reset();
     recordEvent(FaultEventType::SafeBootExitDecided, faultCore_.dominant(),
-                true, record_.restartEpisode.episodeId, evidenceId);
+                true, record_.restartEpisode.episodeId,
+                evidenceIdForFailureTracking);
     return SafetyServiceStatus::Ready;
+}
+
+SafetyServiceStatus SafetyFaultService::finalizePendingSafeBootExit() {
+    if (!pendingAuthorizedSafeBootExitEvidenceId_.has_value()) {
+        return SafetyServiceStatus::Ready;
+    }
+    return attemptSafeBootExit(*pendingAuthorizedSafeBootExitEvidenceId_);
 }
 
 SafetyServiceStatus SafetyFaultService::requestAuthorizedSafeBootExit(
@@ -1546,24 +1564,7 @@ SafetyServiceStatus SafetyFaultService::requestAuthorizedSafeBootExit(
         now > authorization.expiresAtMonotonicMillis) {
         return SafetyServiceStatus::SafetyRejected;
     }
-    SafetyStateRecord candidate = record_;
-    if (!restartEpisode_.prepareRestartIntent(
-            candidate, RestartIntentType::AuthorizedSafeBootExit, {},
-            candidate.faultRevision)) {
-        return SafetyServiceStatus::SafetyRejected;
-    }
-    candidate.restartEvidence.authorizationEvidenceId =
-        authorization.evidenceId;
-    const auto commit = increment(candidate.recordRevision)
-                            ? stateStore_.commit(candidate)
-                            : SafetyRecordCommitResult{};
-    if (commit.status != SafetyRecordCommitStatus::Committed) {
-        retainRamFailClosed(0U, authorization.evidenceId,
-                            markerKindForCommit(commit.status));
-        return SafetyServiceStatus::PersistentWriteFailed;
-    }
-    record_ = candidate;
-    return finalizeRestartRequestResult(resetController_.requestRestart());
+    return attemptSafeBootExit(authorization.evidenceId);
 }
 
 SafetyServiceStatus SafetyFaultService::requestAuthorizedTechnicalRestart(
@@ -1579,7 +1580,8 @@ SafetyServiceStatus SafetyFaultService::requestAuthorizedTechnicalRestart(
     }
     const auto* target = faultCore_.find(targetFault);
     if (target == nullptr || !target->latched || !target->causeActive ||
-        target->faultRevision != targetFaultRevision) {
+        target->faultRevision != targetFaultRevision ||
+        !allowsAuthorizedTechnicalRestart(target->code)) {
         return SafetyServiceStatus::SafetyRejected;
     }
     SafetyStateRecord candidate = record_;
