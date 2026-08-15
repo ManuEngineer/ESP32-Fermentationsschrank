@@ -1056,8 +1056,6 @@ void test_fault_reset_rejects_caller_supplied_positive_evaluation() {
     state.criticalSafetyEventPending = true;
     FaultResetRequest request;
     request.envelope = envelope(1U, state);
-    request.evaluation = {
-        true, false, true, true, false, 4U, FaultResetRejection::None};
 
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(CommandStatus::SafetyRejected),
@@ -1131,8 +1129,6 @@ void test_domain_revision_conflicts_are_rejected_without_mutation() {
     FaultResetRequest reset;
     reset.envelope = envelope(4U, faultState);
     reset.envelope.expectedFaultRevision = 3U;
-    reset.evaluation = {
-        true, false, true, true, false, 4U, FaultResetRejection::None};
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(CommandStatus::StaleState),
         static_cast<int>(decideFaultReset(faultState, reset).status));
@@ -1474,8 +1470,6 @@ void test_message_and_fault_revision_overflow_is_rejected() {
         state.criticalSafetyEventPending = true;
         FaultResetRequest request;
         request.envelope = envelope(1U, state);
-        request.evaluation = {
-            true, false, true, true, false, max, FaultResetRejection::None};
         const auto decision = decideFaultReset(state, request);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
                               static_cast<int>(decision.status));
@@ -1486,13 +1480,6 @@ void test_message_and_fault_revision_overflow_is_rejected() {
         state.faultRevision = max - 1U;
         FaultResetRequest okRequest;
         okRequest.envelope = envelope(2U, state);
-        okRequest.evaluation = {true,
-                                false,
-                                true,
-                                true,
-                                false,
-                                max - 1U,
-                                FaultResetRejection::None};
         const auto ok = decideFaultReset(state, okRequest);
         TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
                               static_cast<int>(ok.status));

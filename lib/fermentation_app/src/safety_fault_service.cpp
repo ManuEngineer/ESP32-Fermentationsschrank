@@ -208,7 +208,6 @@ bool SafetyFaultService::copyCoreToRecord(SafetyStateRecord& candidate,
         dominant->status != FaultStatus::Cleared) {
         candidate.dominantCode = dominant->code;
     }
-    if (core.hasBlockingFault()) candidate.safeBootRequired = true;
     return true;
 }
 
@@ -248,12 +247,15 @@ SafetyServiceStatus SafetyFaultService::raiseFault(
     if (!started_) return SafetyServiceStatus::NotStarted;
     const auto normalized = normalizeFaultCode(request.code);
     const bool latch = isLatchedFaultClass(faultClassForCode(normalized));
-    if (latch && persistentLatchCount(faultCore_) >= kMaximumPersistedLatches) {
+    if (normalized == FaultCode::Y4_006 ||
+        (latch &&
+         persistentLatchCount(faultCore_) >= kMaximumPersistedLatches)) {
         SafetyStateRecord candidate = record_;
         candidate.safeBootRequired = true;
         candidate.capacityFailureLatched = true;
         if (!increment(candidate.capacityFailureRevision)) {
-            candidate.capacityFailureRevision = 1U;
+            record_.safeBootRequired = true;
+            return SafetyServiceStatus::PersistentWriteFailed;
         }
         candidate.capacityFailureSourceKey = request.sourceKey;
         candidate.capacityFailureCorrelationKey = request.correlationKey;
@@ -289,6 +291,52 @@ SafetyServiceStatus SafetyFaultService::raiseFault(
                     : FaultEventType::FaultEscalated,
                 fault, status == SafetyServiceStatus::Ready);
     return status;
+}
+
+SafetyServiceStatus SafetyFaultService::consumeProcessMessage(
+    ProcessMessage message, std::uint32_t sourceKey,
+    std::uint32_t correlationKey) {
+    if (!started_) return SafetyServiceStatus::NotStarted;
+    switch (message) {
+        case ProcessMessage::TargetReachTimeExceeded:
+            return raiseFault({FaultCode::P1_001, sourceKey, correlationKey,
+                               timeSource_.monotonicMillis(), std::nullopt});
+        case ProcessMessage::ProductInsertionRequested:
+        case ProcessMessage::RunCompleted:
+        case ProcessMessage::RunAborted:
+        case ProcessMessage::FaultEntered:
+            return SafetyServiceStatus::Ready;
+    }
+    return raiseFault({FaultCode::Y4_008, sourceKey, correlationKey,
+                       timeSource_.monotonicMillis(), std::nullopt});
+}
+
+SafetyServiceStatus SafetyFaultService::consumeSensorQuality(
+    SafetySensorRole role,
+    const device_platform::SensorQualitySnapshot& snapshot,
+    std::uint32_t sourceKey, std::uint32_t correlationKey) {
+    if (!started_) return SafetyServiceStatus::NotStarted;
+    switch (snapshot.quality) {
+        case device_platform::SensorQuality::Valid:
+            return SafetyServiceStatus::Ready;
+        case device_platform::SensorQuality::Stale: {
+            const auto code = role == SafetySensorRole::Product
+                                  ? FaultCode::O2_001
+                                  : FaultCode::O2_002;
+            return raiseFault({code, sourceKey, correlationKey,
+                               timeSource_.monotonicMillis(), std::nullopt});
+        }
+        case device_platform::SensorQuality::Failed: {
+            FaultCode code = FaultCode::Y4_008;
+            if (role == SafetySensorRole::CabinetAir) code = FaultCode::S3_001;
+            if (role == SafetySensorRole::Cooling) code = FaultCode::S3_002;
+            if (role == SafetySensorRole::Product) code = FaultCode::O2_001;
+            return raiseFault({code, sourceKey, correlationKey,
+                               timeSource_.monotonicMillis(), std::nullopt});
+        }
+    }
+    return raiseFault({FaultCode::Y4_008, sourceKey, correlationKey,
+                       timeSource_.monotonicMillis(), std::nullopt});
 }
 
 SafetyServiceStatus SafetyFaultService::consumeWatchdogEvidence(
@@ -494,6 +542,21 @@ SafetyResetResult SafetyFaultService::resetFault(FaultInstanceId id,
     if (target->status != FaultStatus::CauseClearedLocked ||
         target->causeActive || hasOtherBlockingFault(faultCore_, id) ||
         (record_.capacityFailureLatched && target->code != FaultCode::Y4_006)) {
+        result.status = SafetyServiceStatus::SafetyRejected;
+        recordEvent(FaultEventType::FaultResetRejected, target, false);
+        return result;
+    }
+    RunCommandState commandState;
+    projectTo(commandState);
+    FaultResetRequest request;
+    request.envelope.id = 1U;
+    request.envelope.monotonicMillis = timeSource_.monotonicMillis();
+    request.envelope.expectedStateSequence =
+        commandState.processState.transitionSequence;
+    request.envelope.expectedFaultRevision = expectedRevision;
+    request.envelope.confirmed = true;
+    request.targetFault = id;
+    if (!decideFaultReset(commandState, request).proposed()) {
         result.status = SafetyServiceStatus::SafetyRejected;
         recordEvent(FaultEventType::FaultResetRejected, target, false);
         return result;

@@ -5,9 +5,11 @@
 
 #include "actuator_plan_types.hpp"
 #include "fault_types.hpp"
+#include "process_state_machine.hpp"
 #include "restart_episode.hpp"
 #include "run_commands.hpp"
 #include "safety_state_store.hpp"
+#include "sensor_quality_snapshot.hpp"
 
 namespace fermentation {
 
@@ -41,6 +43,19 @@ enum class ConfigurationSafetyStatus : std::uint8_t {
     Unknown,
 };
 
+enum class SafetySensorRole : std::uint8_t {
+    CabinetAir,
+    Product,
+    Cooling,
+};
+
+inline constexpr std::uint8_t kMinimumSafetyRecoveryAttempts = 0U;
+inline constexpr std::uint8_t kDefaultSafetyRecoveryAttempts = 1U;
+inline constexpr std::uint8_t kMaximumSafetyRecoveryAttempts = 2U;
+static_assert(kDefaultSafetyRecoveryAttempts >=
+                  kMinimumSafetyRecoveryAttempts &&
+              kDefaultSafetyRecoveryAttempts <= kMaximumSafetyRecoveryAttempts);
+
 struct SafetyBootResult {
     SafetyServiceStatus status{SafetyServiceStatus::NotStarted};
     RestartBootEvaluation restart;
@@ -68,6 +83,13 @@ class SafetyFaultService final {
 
     [[nodiscard]] SafetyServiceStatus raiseFault(
         const FaultRaiseRequest& request);
+    [[nodiscard]] SafetyServiceStatus consumeProcessMessage(
+        ProcessMessage message, std::uint32_t sourceKey,
+        std::uint32_t correlationKey);
+    [[nodiscard]] SafetyServiceStatus consumeSensorQuality(
+        SafetySensorRole role,
+        const device_platform::SensorQualitySnapshot& snapshot,
+        std::uint32_t sourceKey, std::uint32_t correlationKey);
     [[nodiscard]] SafetyServiceStatus consumeConfigurationStatus(
         ConfigurationSafetyStatus status, std::uint32_t sourceKey,
         std::uint32_t correlationKey);

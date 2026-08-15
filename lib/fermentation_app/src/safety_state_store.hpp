@@ -22,6 +22,8 @@ inline constexpr std::size_t kSafetyRecordSlotPayloadBytes = 64U;
 inline constexpr std::size_t kSafetyRecordPayloadBytes =
     kSafetyRecordBasePayloadBytes +
     kMaximumPersistedLatches * kSafetyRecordSlotPayloadBytes;
+static_assert(kSafetyRecordPayloadBytes == 1216U);
+static_assert(37U + kSafetyRecordPayloadBytes <= kMaximumSafetyRecordBytes);
 
 enum class RestartCauseEvent : std::uint8_t {
     SoftwareRestart,

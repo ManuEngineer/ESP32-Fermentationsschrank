@@ -74,6 +74,12 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
             if (result.status == RestartBootStatus::EvidenceMismatch) {
                 setSafeBoot(record);
             }
+        } else if (record.restartEvidence.state ==
+                       RestartEvidenceState::Pending ||
+                   record.restartEvidence.state ==
+                       RestartEvidenceState::Committed) {
+            setSafeBoot(record);
+            result.status = RestartBootStatus::EvidenceMismatch;
         } else if (isAbnormal(result.cause) &&
                    record.restartEpisode.abnormalRestartCount >= 3U) {
             result.status = RestartBootStatus::SafeBootRequired;
@@ -125,6 +131,13 @@ RestartBootEvaluation RestartEpisodeCoordinator::evaluateBoot(
     if (record.restartEvidence.state == RestartEvidenceState::Consumed) {
         record.restartEvidence = PersistedRestartEvidence{};
     }
+    if (record.restartEvidence.state == RestartEvidenceState::Pending ||
+        record.restartEvidence.state == RestartEvidenceState::Committed) {
+        setSafeBoot(record);
+        result.status = RestartBootStatus::EvidenceMismatch;
+        result.safeBootRequired = true;
+        return result;
+    }
 
     if (isAbnormal(result.cause)) {
         if (!incrementEpisode(record)) {
@@ -165,16 +178,35 @@ bool RestartEpisodeCoordinator::prepareRestartIntent(
          !faultId.valid()) ||
         record.restartEvidence.state == RestartEvidenceState::Pending ||
         record.restartEvidence.state == RestartEvidenceState::Committed ||
-        !incrementEpisode(record)) {
+        record.recordRevision == std::numeric_limits<std::uint32_t>::max() ||
+        (intent != RestartIntentType::AutomaticSafetyRecovery &&
+         record.restartEpisode.abnormalRestartCount >= 3U)) {
         return false;
     }
-    if (record.restartEpisode.abnormalRestartCount >= 3U &&
-        intent != RestartIntentType::AutomaticSafetyRecovery) {
-        return false;
+
+    if (intent == RestartIntentType::AutomaticSafetyRecovery) {
+        if (!incrementEpisode(record)) return false;
+    } else {
+        const bool newEpisode = !record.restartEpisode.open;
+        if (record.restartEpisode.nextRestartEvidenceId == 0U ||
+            record.restartEpisode.nextRestartEvidenceId ==
+                std::numeric_limits<std::uint32_t>::max() ||
+            (newEpisode && record.restartEpisode.episodeId ==
+                               std::numeric_limits<std::uint32_t>::max())) {
+            return false;
+        }
+        if (newEpisode) {
+            ++record.restartEpisode.episodeId;
+            record.restartEpisode.open = true;
+        }
+        record.restartEpisode.lastRestartEvidenceId =
+            record.restartEpisode.nextRestartEvidenceId;
+        ++record.restartEpisode.nextRestartEvidenceId;
+        record.restartEpisode.stableWindowRunning = false;
+        record.restartEpisode.stableWindowStartedAtMillis = 0U;
     }
     if (record.restartEpisode.lastRestartEvidenceId == 0U ||
-        record.restartEpisode.episodeId == 0U ||
-        record.recordRevision == std::numeric_limits<std::uint32_t>::max()) {
+        record.restartEpisode.episodeId == 0U) {
         return false;
     }
     record.restartEvidence.evidenceId =
@@ -186,12 +218,6 @@ bool RestartEpisodeCoordinator::prepareRestartIntent(
     record.restartEvidence.targetFaultRevision = faultRevision;
     record.restartEvidence.episodeId = record.restartEpisode.episodeId;
     record.restartEvidence.evidenceRevision = record.recordRevision + 1U;
-    if (intent != RestartIntentType::AutomaticSafetyRecovery) {
-        // Technical/service restarts are not abnormal episode entries.
-        if (record.restartEpisode.abnormalRestartCount > 0U) {
-            --record.restartEpisode.abnormalRestartCount;
-        }
-    }
     if (record.restartEpisode.abnormalRestartCount >= 3U) {
         setSafeBoot(record);
     }
