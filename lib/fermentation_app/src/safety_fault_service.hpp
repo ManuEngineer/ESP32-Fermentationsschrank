@@ -123,10 +123,16 @@ class SafetyFaultService final {
     [[nodiscard]] FaultResetEvaluation evaluateFaultReset(
         const FaultResetRequest& request,
         const FaultResetAuthorizationEvidence& authorization) const;
+    // C2: `planner` has no default. S3-008 is the only code whose cause
+    // lives outside FaultCore (the planner's own watchdog latch); a null
+    // planner for that target is rejected fail-closed rather than silently
+    // committing a FaultCore-only reset that leaves the planner permanently
+    // latched. Every other target ignores `planner`; callers pass nullptr
+    // explicitly to make that a deliberate choice, not an implicit default.
     [[nodiscard]] SafetyResetResult resetFault(
         const FaultResetRequest& request,
         const FaultResetAuthorizationEvidence& authorization,
-        ActuatorPlanner* planner = nullptr);
+        ActuatorPlanner* planner);
     // D2: only typed technical authorization crosses the boundary. Every
     // read/write/capacity/integrity check is derived internally from a real
     // store readback and a real store commit; no caller can fabricate a
@@ -224,6 +230,8 @@ class SafetyFaultService final {
                                     std::uint32_t sourceKey, bool passed);
     void updateRequiredSensorRoleEvidence(SafetySensorRole role, bool passed);
     void consumeActuatorPlanEvidence(const ActuatorPlanTickResult& result);
+    [[nodiscard]] SafetyServiceStatus raiseWatchdogFault(
+        const ActuatorWatchdogFaultEvidence& evidence);
     [[nodiscard]] bool safeBootSafetyEvidenceCurrent() const;
     [[nodiscard]] static std::uint32_t sensorRoleCorrelation(
         SafetySensorRole role);

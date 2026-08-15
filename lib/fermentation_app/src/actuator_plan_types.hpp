@@ -311,6 +311,11 @@ struct ActuatorPlanTickResult {
         ActuatorAdmissionOutcome::NoCandidate};
     std::optional<std::uint64_t> acceptedCommandSequence;
     bool watchdogFaultActive{false};
+    // C1: the real #23 evidence behind watchdogFaultActive, so #24 can raise
+    // S3-008 from the actual planner-observed trip instead of a test-only
+    // mapper. Set together with watchdogFaultActive whenever a watchdog
+    // fault is latched.
+    std::optional<ActuatorWatchdogFaultEvidence> watchdogFault;
 };
 
 }  // namespace fermentation

@@ -368,8 +368,9 @@ void test_s3_003_is_explicit_injection_not_thermal_enum() {
                          ConfigurationSafetyStatus::Operational, 56U, 1U) ==
                      SafetyServiceStatus::Ready);
     passedResetChecks(service, faultId, cleared->faultRevision);
-    TEST_ASSERT_TRUE(service.resetFault(resetRequest, authorization).status ==
-                     SafetyServiceStatus::ResetCommitted);
+    TEST_ASSERT_TRUE(
+        service.resetFault(resetRequest, authorization, nullptr).status ==
+        SafetyServiceStatus::ResetCommitted);
     TEST_ASSERT_NULL(service.faultCore().find(faultId));
     TEST_ASSERT_EQUAL_UINT32(0U, reset.restartRequestCount());
 }
@@ -645,7 +646,8 @@ void test_y4_006_requires_controlled_marker_recovery() {
     passedResetChecks(service, faultId, clearedRevision);
     TEST_ASSERT_TRUE(service
                          .resetFault(resetRequestFor(faultId, clearedRevision),
-                                     authorizationFor(faultId, clearedRevision))
+                                     authorizationFor(faultId, clearedRevision),
+                                     nullptr)
                          .status == SafetyServiceStatus::ResetCommitted);
     // The successful fault reset is not a Y4-006 recovery operation.
     TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
@@ -669,7 +671,8 @@ void test_y4_006_requires_controlled_marker_recovery() {
     TEST_ASSERT_TRUE(
         service
             .resetFault(resetRequestFor(otherId, other->faultRevision),
-                        authorizationFor(otherId, other->faultRevision))
+                        authorizationFor(otherId, other->faultRevision),
+                        nullptr)
             .status == SafetyServiceStatus::ResetCommitted);
 
     TEST_ASSERT_TRUE(service.recoverSafetyStateMarker(markerAuthorization) ==
@@ -705,7 +708,8 @@ void test_y4_006_requires_controlled_marker_recovery() {
         service
             .resetFault(
                 resetRequestFor(repeatedId, repeatedFault->faultRevision),
-                authorizationFor(repeatedId, repeatedFault->faultRevision))
+                authorizationFor(repeatedId, repeatedFault->faultRevision),
+                nullptr)
             .status == SafetyServiceStatus::ResetCommitted);
     const auto journalEntriesBeforeFailure = journal.entries().size();
     journal.injectWriteFailure(true);
@@ -746,7 +750,8 @@ void test_y4_006_recovery_rejects_diverged_store_record() {
     TEST_ASSERT_TRUE(
         service
             .resetFault(resetRequestFor(faultId, fault->faultRevision),
-                        authorizationFor(faultId, fault->faultRevision))
+                        authorizationFor(faultId, fault->faultRevision),
+                        nullptr)
             .status == SafetyServiceStatus::ResetCommitted);
     TEST_ASSERT_TRUE(service.record().capacityFailureLatched);
 
@@ -873,8 +878,8 @@ void test_fault_reset_evaluation_requires_auth_and_all_safety_checks() {
     const auto acknowledgedAuthorization =
         authorizationFor(id, acknowledgedRevision);
     passedResetChecks(service, id, acknowledgedRevision);
-    const auto committed =
-        service.resetFault(acknowledgedRequest, acknowledgedAuthorization);
+    const auto committed = service.resetFault(
+        acknowledgedRequest, acknowledgedAuthorization, nullptr);
     TEST_ASSERT_TRUE(committed.status == SafetyServiceStatus::ResetCommitted);
     TEST_ASSERT_NULL(service.faultCore().find(id));
     TEST_ASSERT_EQUAL_UINT32(0U, reset.restartRequestCount());
@@ -953,7 +958,8 @@ void test_real_sensor_producer_evidence_can_reset_matching_fault() {
     TEST_ASSERT_TRUE(
         service
             .resetFault(request,
-                        authorizationFor(targetId, target->faultRevision))
+                        authorizationFor(targetId, target->faultRevision),
+                        nullptr)
             .status == SafetyServiceStatus::ResetCommitted);
 }
 
@@ -1488,7 +1494,8 @@ void test_cleared_history_reuses_active_capacity_but_not_instance_ids() {
         TEST_ASSERT_TRUE(
             (passedResetChecks(service, last, fault->faultRevision),
              service.resetFault(request,
-                                authorizationFor(last, fault->faultRevision))
+                                authorizationFor(last, fault->faultRevision),
+                                nullptr)
                      .status == SafetyServiceStatus::ResetCommitted));
         TEST_ASSERT_EQUAL_UINT32(0U, service.faultCore().snapshot().count);
     }
@@ -1572,12 +1579,26 @@ void test_bounded_watchdog_and_unknown_domains_reuse_identity() {
     const auto* cleared = service.faultCore().find(firstId);
     TEST_ASSERT_NOT_NULL(cleared);
     passedResetChecks(service, firstId, cleared->faultRevision);
+    // C2: S3-008's cause lives in the planner's watchdog latch, not in
+    // FaultCore alone, so a reset for this code fails closed without a
+    // planner binding.
     TEST_ASSERT_TRUE(
         service
             .resetFault(
                 resetRequestFor(firstId, cleared->faultRevision),
                 authorizationFor(firstId, cleared->faultRevision,
-                                 FaultResetAuthorizationLevel::Technical))
+                                 FaultResetAuthorizationLevel::Technical),
+                nullptr)
+            .status == SafetyServiceStatus::SafetyRejected);
+    TEST_ASSERT_NOT_NULL(service.faultCore().find(firstId));
+    ActuatorPlanner planner{ActuatorPlannerParameters{}};
+    TEST_ASSERT_TRUE(
+        service
+            .resetFault(
+                resetRequestFor(firstId, cleared->faultRevision),
+                authorizationFor(firstId, cleared->faultRevision,
+                                 FaultResetAuthorizationLevel::Technical),
+                &planner)
             .status == SafetyServiceStatus::ResetCommitted);
     TEST_ASSERT_EQUAL_UINT32(0U, service.faultCore().snapshot().count);
 
@@ -1645,7 +1666,8 @@ void test_bounded_watchdog_and_unknown_domains_reuse_identity() {
             .resetFault(
                 resetRequestFor(unknownId, unknownCleared->faultRevision),
                 authorizationFor(unknownId, unknownCleared->faultRevision,
-                                 FaultResetAuthorizationLevel::Technical))
+                                 FaultResetAuthorizationLevel::Technical),
+                nullptr)
             .status == SafetyServiceStatus::ResetCommitted);
     TEST_ASSERT_EQUAL_UINT32(0U, unknown.faultCore().snapshot().count);
     TEST_ASSERT_TRUE(unknown.injectFaultForTesting(
@@ -1773,7 +1795,8 @@ void test_y4_009_cannot_be_cleared_by_generic_cause_clear_or_reset() {
             .resetFault(
                 resetRequestFor(y4009Id, y4009Revision),
                 authorizationFor(y4009Id, y4009Revision,
-                                 FaultResetAuthorizationLevel::Technical))
+                                 FaultResetAuthorizationLevel::Technical),
+                nullptr)
             .status == SafetyServiceStatus::SafetyRejected);
     TEST_ASSERT_TRUE(service.safeBootRequired());
     const auto* stillLatched = service.faultCore().find(y4009Id);

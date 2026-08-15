@@ -468,6 +468,7 @@ ActuatorPlanTickResult ActuatorPlanner::buildResult(
             ? std::optional<std::uint64_t>(state_.acceptedCommand->sequence)
             : std::nullopt;
     result.watchdogFaultActive = state_.latchedWatchdogFault.has_value();
+    result.watchdogFault = state_.latchedWatchdogFault;
     return result;
 }
 

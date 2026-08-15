@@ -348,7 +348,16 @@ bool SafetyFaultService::copyCoreToRecord(SafetyStateRecord& candidate,
 SafetyServiceStatus SafetyFaultService::persistCoreMutation(
     const FaultCoreSnapshot& before, std::uint32_t sourceKey,
     std::uint32_t correlationKey) {
-    static_cast<void>(before);
+    if (equalFaultCoreSnapshot(before, faultCore_.snapshot())) {
+        // No FaultCore state actually changed (e.g. a repeated producer
+        // signal that only re-confirms an already-active cause). Skipping
+        // the write here is what makes it safe to call this on every tick:
+        // without it, a persistently latched fault would advance
+        // recordRevision and hit flash storage on every single tick,
+        // silently invalidating every recordRevision-stamped domain
+        // evidence via resetSafetyEvidenceMatches.
+        return SafetyServiceStatus::Ready;
+    }
     SafetyStateRecord candidate = record_;
     if (!copyCoreToRecord(candidate) || !increment(candidate.recordRevision)) {
         // The in-memory mutation is the diagnostic truth even when the write
@@ -491,12 +500,20 @@ SafetyServiceStatus SafetyFaultService::raiseFault(
         return SafetyServiceStatus::InvalidFault;
     }
     const auto* fault = faultCore_.find(raised.instanceId);
+    // A repeated producer signal that only re-confirms an already-active
+    // cause (e.g. a watchdog fault re-raised on every tick while latched)
+    // must not append a fresh journal entry per tick; persistCoreMutation
+    // applies the same equality check to skip the flash write itself.
+    const bool unchanged =
+        equalFaultCoreSnapshot(before, faultCore_.snapshot());
     const auto status = persistCoreMutation(before, boundedRequest.sourceKey,
                                             boundedRequest.correlationKey);
-    recordEvent(raised.status == FaultRaiseStatus::Created
-                    ? FaultEventType::FaultCreated
-                    : FaultEventType::FaultEscalated,
-                fault, status == SafetyServiceStatus::Ready);
+    if (!unchanged) {
+        recordEvent(raised.status == FaultRaiseStatus::Created
+                        ? FaultEventType::FaultCreated
+                        : FaultEventType::FaultEscalated,
+                    fault, status == SafetyServiceStatus::Ready);
+    }
     return status;
 }
 
@@ -659,15 +676,20 @@ SafetyServiceStatus SafetyFaultService::resolveFaultCause(
     return status;
 }
 
-SafetyServiceStatus SafetyFaultService::consumeWatchdogEvidence(
+SafetyServiceStatus SafetyFaultService::raiseWatchdogFault(
     const ActuatorWatchdogFaultEvidence& evidence) {
-    updateSafetyDomainEvidence(FaultResetCheckDomain::Actuator, false);
     return raiseFault(
         {FaultCode::S3_008, 23U,
          static_cast<std::uint32_t>(
              evidence.lastObservedSequenceHighWatermarkBeforeFault),
          evidence.detectedAtMonotonicMillis, std::nullopt,
          evidence.lastObservedSequenceHighWatermarkBeforeFault});
+}
+
+SafetyServiceStatus SafetyFaultService::consumeWatchdogEvidence(
+    const ActuatorWatchdogFaultEvidence& evidence) {
+    updateSafetyDomainEvidence(FaultResetCheckDomain::Actuator, false);
+    return raiseWatchdogFault(evidence);
 }
 
 SafetyServiceStatus SafetyFaultService::consumeConfigurationStatus(
@@ -1165,6 +1187,12 @@ void SafetyFaultService::consumeActuatorPlanEvidence(
             break;
     }
     updateSafetyDomainEvidence(FaultResetCheckDomain::Actuator, passed);
+    // C1: raise S3-008 from the real planner-observed watchdog trip. This is
+    // the sole production path; a caller cannot reach this producer
+    // projection except by crossing the real Planner -> Sink boundary.
+    if (result.watchdogFault.has_value()) {
+        static_cast<void>(raiseWatchdogFault(*result.watchdogFault));
+    }
     const auto snapshot = faultCore_.snapshot();
     for (std::size_t index = 0U; index < snapshot.count; ++index) {
         const auto& fault = snapshot.records[index];
@@ -1339,6 +1367,15 @@ SafetyResetResult SafetyFaultService::resetFault(
 
     const auto targetCode = target->code;
     const auto targetRevision = target->faultRevision;
+    if (targetCode == FaultCode::S3_008 && planner == nullptr) {
+        // The S3-008 cause lives in the planner's own watchdog latch, not in
+        // FaultCore. Committing a FaultCore-only clear here would report the
+        // fault resolved while the planner keeps rejecting every future tick
+        // with RequestWatchdogFaultLatched forever. Fail closed instead.
+        result.status = SafetyServiceStatus::SafetyRejected;
+        recordEvent(FaultEventType::FaultResetRejected, target, false);
+        return result;
+    }
     FaultCore staged = faultCore_;
     if (!staged.clearAfterVerifiedReset(request.targetFault, targetRevision)) {
         result.status = SafetyServiceStatus::SafetyRejected;

@@ -3942,6 +3942,44 @@ void test_application_bridge_resets_runtime_at_committed_lifecycle_boundaries() 
                      ActuatorPlanReason::StaleRequestWatchdog);
     TEST_ASSERT_TRUE(fixture.planner.state().latchedWatchdogFault.has_value());
 
+    // C1: the real Planner -> Orchestrator -> SafetyFaultService path
+    // (tickActuatorPlan()'s own consumeActuatorPlanEvidence() call above) is
+    // the sole production route to a persistent S3-008; no test-only
+    // injection is involved in this assertion.
+    const auto snapshotAfterTrip = fixture.safety.faultCore().snapshot();
+    const FaultRecord* watchdogFault = nullptr;
+    for (std::size_t index = 0U; index < snapshotAfterTrip.count; ++index) {
+        if (snapshotAfterTrip.records[index].code == FaultCode::S3_008) {
+            watchdogFault = &snapshotAfterTrip.records[index];
+            break;
+        }
+    }
+    TEST_ASSERT_NOT_NULL(watchdogFault);
+    const auto watchdogRevision = watchdogFault->faultRevision;
+    const auto watchdogId = watchdogFault->instanceId;
+    const auto recordRevisionAfterFirstTrip =
+        fixture.safety.record().recordRevision;
+
+    // A repeated producer signal on the next tick, still latched, must not
+    // advance faultRevision or recordRevision again: the persisted write is
+    // only for an actual state change, not for every tick the watchdog stays
+    // tripped. By now the now-persistent S3-008 also closes the external
+    // safety gate itself (I-3b fires before the planner's own I-4 latch
+    // check), so the tick's reason is ExternalSafetyOverride, not
+    // RequestWatchdogFaultLatched - buildResult() still carries the
+    // planner's own latched watchdog evidence on this path regardless.
+    const auto secondWatchdogTick =
+        fixture.application.tickActuatorPlan(state, 90'002U);
+    TEST_ASSERT_TRUE(secondWatchdogTick.reason ==
+                     ActuatorPlanReason::ExternalSafetyOverride);
+    const auto* stillWatchdogFault =
+        fixture.safety.faultCore().find(watchdogId);
+    TEST_ASSERT_NOT_NULL(stillWatchdogFault);
+    TEST_ASSERT_EQUAL_UINT32(watchdogRevision,
+                             stillWatchdogFault->faultRevision);
+    TEST_ASSERT_EQUAL_UINT32(recordRevisionAfterFirstTrip,
+                             fixture.safety.record().recordRevision);
+
     const auto faultStop = stopDecision(state, 797U, 90'100U);
     const auto stoppedAfterFault = fixture.application.persistCommand(
         state, faultStop, RunCheckpointTime{90'100U, std::nullopt});
