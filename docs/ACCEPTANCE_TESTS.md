@@ -154,7 +154,7 @@ Der PlatformIO-Lauf ist deshalb kein PASS-Nachweis:
 
 | Bereich | Ausfuehrung | Status | Nachweis |
 |---|---|---|---|
-| Issue-24-Safetykern, Record, Restart, Injection und Application-Grenze | 22/22 | `PASS` | direkter nativer Unity-Host-Link; PlatformIO gezielt `BLOCKED` bei `Platform Manager: Installing native` |
+| Issue-24-Safetykern, Record, Restart, Injection und Application-Grenze | 26/26 | `PASS` | direkter nativer Unity-Host-Link; PlatformIO gezielt `BLOCKED` bei `Platform Manager: Installing native` |
 | #15-Command-/Faultprojektion | 43/43 | `PASS` | direkter nativer Unity-Host-Link |
 | #23-Safety-Gate und Planner | 44/44 | `PASS` | direkter nativer Unity-Host-Link |
 | #23-Persistenz-/Application-Pfad | 112/112 | `PASS` | direkter nativer Unity-Host-Link |
@@ -191,6 +191,18 @@ nativen/ESP-IDF-/Hardware-Gesamtlauf.
 - S3-004 und danach S3-005 bleiben gleichzeitig aktiv nachvollziehbar; eine
   Recovery loescht S3-004 nicht. Die firmwarefeste Recoveryobergrenze `<=2`
   und der zulaessige Bereich `0..2` werden erhalten.
+- `Y4-006` wird nicht durch Quittierung, Reboot oder einen isolierten
+  erfolgreichen Write geloescht. Ein separater technisch autorisierter
+  Marker-Recoverypfad verlangt aktuelle Read-, Write-/Readback-, Capacity- und
+  Integritaetsevidenz und loescht den Marker erst nach bestaetigtem Commit.
+- Restart-Evidence wird beim Boot gegen Intent, Faultinstanz, Faultrevision,
+  Episode und Recordrevision gebunden. Stale-, fehlende, abgelehnte oder
+  `OutcomeUnknown`-Evidence autorisiert keinen spaeteren unabhaengigen
+  SoftwareRestart und bleibt fail-closed.
+- O2-002 wird pro Sicherheits-Sensorrolle korreliert aufgeloest; eine gueltige
+  Rueckkehr von Schrankluft beendet nicht den weiterhin aktiven Kuehlkoerper-
+  Fault. Die In-Memory-Bound umfasst deshalb 17 persistente Faults plus P1-001,
+  O2-001 und zwei gleichzeitige O2-002-Rollen.
 
 ### Fault/Sensor-Injektionen
 

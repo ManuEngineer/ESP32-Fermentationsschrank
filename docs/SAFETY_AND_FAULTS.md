@@ -172,7 +172,7 @@ durch einen normalen Neustart moeglich.
 | `Y4-003` / #57 `ConfigurationUnavailable`, Recovery-/Graph-Quelle | keine Teilkonfiguration, Aktoren AUS | ja / nein | Service/technisch nach gueltiger Revision | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
 | `Y4-004` / #57 `ConfigurationIntegrityFailure`, Graph-/Konfigurationsdomaene | Integritaetsfehler fail-closed, Aktoren AUS | ja / nein | Service/technisch nach Integritaetspruefung | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
 | `Y4-005` / #17/#18 kritischer Laufcheckpoint, aktiver Lauf | Peltier/H-Bruecke AUS, Lauf sicher beenden | ja / nein | Service/technisch nach neuer Laufrevision | kein zusaetzlicher Reboot / kein Exit durch Reset | primaer |
-| `Y4-006` / #24 Safety-State Read/Write/Capacity/Integrity, globaler Basisrecord-Marker | RAM-Latch, Aktoren AUS, Marker im selben Record versuchen | ja / nein, keine Eviction; Marker ist kein Slot | Service/technisch nach Read-/Write-/Capacitypruefung | kein zusaetzlicher Reboot; Exit nur separate Bootpolicy | primaer |
+| `Y4-006` / #24 Safety-State Read/Write/Capacity/Integrity, globaler Basisrecord-Marker | RAM-Latch, Aktoren AUS, Marker im selben Record versuchen | ja / nein, keine Eviction; Marker ist kein Slot | separater technisch autorisierter Marker-Recoverypfad nach aktuellem Read-, Write-/Readback-, Capacity- und Integritaetsnachweis | kein zusaetzlicher Reboot; Exit nur separate Bootpolicy | primaer |
 | `Y4-007` / #24 zentrale Safety-/Recoveryevidenz, ein interner Recoveryfehler | Aktoren AUS, Evidenz sichern, hoechstens einen Recovery-Restart vorbereiten | ja / nein | technische Berechtigung nach Checks | genau ein automatischer Restart je aktiver Recoveryursache/-episode; kein zweiter | primaer; S3-008 bleibt |
 | `Y4-008` / unbekannter Resetgrund, fehlende/doppelte/mismatched App-Evidenz oder Safetyinput, Bootbeobachtung | `Allowed` verbieten, Aktoren AUS, fail-closed | ja / nein | bis Klaerung verboten | kein Reboot als Loesung / kein Exit ungeklart | immer primaer |
 | `Y4-009` / dritter abnormaler Restart, offene SAFE_BOOT-Episode | vor Aktor-/Lauffreigabe `SAFE_BOOT` | ja / kein Auto-Rearm durch Reboot | bewusster autorisierter Exit nach allen Checks | kein automatischer zusaetzlicher Reboot; nur zugrunde liegende Codepolicy darf technischen Restart verlangen | primaer; ausloesende Latches bleiben |
@@ -270,26 +270,40 @@ besteht oder die erneute Pruefung fehlschlaegt.
 
 Die zentrale `SafetyFaultService` erzeugt dafuer eine
 `FaultResetEvaluation` aus dem neutralen `FaultResetRequest`, der
-codebezogenen Resetpolicy, typisierter Autorisierungsevidenz und den
-separaten Sensor-, Aktor-, Persistenz- und Integritaetschecks. Fehlende,
-abgelaufene oder zu niedrige Evidenz bleibt fail-closed; ein positiver
-Caller-Bool ist keine Autorisierung. Der bestehende #15-Commandpfad wird fuer
-die fachliche Resetentscheidung wiederverwendet. Quittierung und Reset sind
-getrennte Vorgaenge.
+codebezogenen Resetpolicy, typisierter und an Fault/Faultrevision gebundener
+Autorisierungsevidenz sowie den jeweils erforderlichen Sensor-, Aktor-,
+Persistenz- und Integritaetschecks. Die Checkevidenz traegt dieselbe
+Fault-/Recordrevision und die aktuelle Revision ihrer Domaene. Fehlende,
+abgelaufene, unvollstaendige oder stale Evidenz bleibt fail-closed; ein
+positiver Caller-Bool ist keine Autorisierung. Der bestehende #15-Commandpfad
+wird fuer die fachliche Resetentscheidung wiederverwendet. Quittierung und
+Reset sind getrennte Vorgaenge.
 
 Die Safetyprojektion fuer den Aktorpfad stammt ausschliesslich aus dieser
 zentralen Safetyautoritaet. Der Application-to-Planner-Vertrag akzeptiert
 keine vom Produktionscaller gelieferte `Allowed`-Projektion. `O2-001` wird
 nur durch tatsaechlich qualifizierte #21-Sensorselektions-/Luftersatz-Evidenz
 aufgeloest, `O2-002` durch die vom #20-Producer qualifizierte Rueckkehr zu
-`Valid`, und `P1-001` durch eine neue gueltige Prozessbewertung.
+`Valid` derselben Sensorrolle, und `P1-001` durch eine neue gueltige
+Prozessbewertung. Die aktive In-Memory-Bound umfasst neben den 17 persistenten
+Slots P1-001, O2-001 und je eine O2-002-Instanz fuer Schrankluft und Kuehlung.
 
 Ein autorisierter `SAFE_BOOT`-Exit wird erst nach erfolgreicher #56/#57-
 Konfigurations- und Integritaetsqualifikation finalisiert. Eine normale
 Restart-Evidenz verlaesst `SAFE_BOOT` nicht; die Restartbeobachtung wird
 weiterhin genau einmal konsumiert. Der `Y4-009`-Tracking-Latch wird bei einem
 autorisierten Exit nur im Rahmen dieser zentralen Bootpolicy aufgeloest;
-andere aktive blockierende Latches bleiben wirksam.
+andere aktive blockierende Latches bleiben wirksam. Abgelehnte oder ungeklaerte
+Restartanforderungen hinterlassen keine wiederverwendbare Autorisierung fuer
+einen spaeteren unabhaengigen SoftwareRestart.
+
+`Y4-006` ist ein Basisrecord-Marker ausserhalb der 17 variablen Latchslots.
+Quittierung, Reboot und ein isoliert erfolgreicher Write loeschen ihn nicht.
+Sein eigener technisch autorisierter Recoverypfad prueft den aktuellen Record
+und fuehrt Read-, Write-/Readback-, Capacity- und Integritaetsnachweise
+write-before-apply aus. Erst ein exakt bestaetigter Commit darf den Marker und
+die daraus folgende SAFE_BOOT-Sperre loeschen; aktive blockierende Faults
+verhindern die Recovery.
 
 ## Automatische Wiederfreigabe
 
