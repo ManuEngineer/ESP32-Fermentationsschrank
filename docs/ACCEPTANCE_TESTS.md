@@ -146,20 +146,20 @@ beweisen sie keine Freigabe der damals getesteten R2-Semantik.
 
 ### Aktueller R3-Korrektur- und Implementierungsnachweis
 
-Die folgenden gezielten Draft-Laeufe pruefen den Korrekturstand gegen den
-freigegebenen Plan `48f343ceb49d5a80239702241ae1fbf7d4ebfcd2`. Die direkten
-nativen Host-Laeufe wurden als Unity-Link ohne PlatformIO ausgefuehrt, weil
-PlatformIO im Draft-Umfeld bei `Platform Manager: Installing native` blockiert.
-Der PlatformIO-Lauf ist deshalb kein PASS-Nachweis:
+Die folgenden gezielten Draft-Laeufe pruefen den Korrekturstand der
+Ownerreview-Runde 5 gegen den freigegebenen Plan
+`48f343ceb49d5a80239702241ae1fbf7d4ebfcd2` (geprueftes HEAD vor der Runde:
+`444553d8e34c6d583330723278b2ad88d741fc6b`). `pio test -e native` lief in
+dieser Runde direkt und unblockiert durch:
 
 | Bereich | Ausfuehrung | Status | Nachweis |
 |---|---|---|---|
-| Issue-24-Safetykern, Record, Restart, Injection und Application-Grenze | 31/31 | `PASS` | direkter nativer Unity-Host-Link; PlatformIO gezielt `BLOCKED` bei `Platform Manager: Installing native` |
-| #15-Command-/Faultprojektion | 43/43 | `PASS` | direkter nativer Unity-Host-Link |
-| #23-Safety-Gate und Planner | 44/44 | `PASS` | direkter nativer Unity-Host-Link |
-| #23-Persistenz-/Application-Pfad | 113/113 | `PASS` | direkter nativer Unity-Host-Link; SAFE_BOOT-Aktor-Evidenz ueber den realen Planner-/Sink-Orchestrator |
-| reale #56/#57-Recovery-/Service-Konsumenten | 37/37 bzw. 40/40 | `PASS` | direkter nativer Unity-Host-Link |
-| Architektur, Secret, Format, Whitespace und Gate-Selbsttest | ausgefuehrt | `PASS` | Architekturguard, Secret-Scan, clang-format dry-run, `git diff --check`, `selftest_quality_gates.py` |
+| Issue-24-Safetykern, Record, Restart, Injection, Primary-/Follow-up und Application-Grenze | 39/39 | `PASS` | `pio test -e native --filter test_issue24_safety` |
+| #15-Command-/Faultprojektion | 44/44 | `PASS` | `pio test -e native --filter test_run_commands` |
+| #23-Safety-Gate und Planner | 44/44 | `PASS` | `pio test -e native --filter test_actuator_planner` |
+| #23-Persistenz-/Application-Pfad | 115/115 | `PASS` | `pio test -e native --filter test_run_persistence_coordinator`; realer Planner-Watchdog- und Prozessautomat-/#21-Producerpfad ueber den echten Orchestrator |
+| reale #56/#57-Recovery-/Service-Konsumenten | nicht in dieser Runde erneut ausgefuehrt | unveraendert `PASS` aus vorheriger Runde | von dieser Korrekturrunde nicht beruehrt; siehe vorherige Nachweiszeile |
+| Architektur, Secret, Format, Whitespace | ausgefuehrt nach jedem Commit dieser Runde | `PASS` | `check_architecture_boundaries.py`, `check_secrets.py`, `clang-format --dry-run --Werror`, `git diff --check` |
 | vollstaendiger nativer Lauf, ESP-IDF, Remote-CI, Hardware | nicht ausgefuehrt | `NOT_RUN` | Draft-/Owner-Gates; Remote-CI im Draft `SKIPPED` |
 
 ### R3-Zielorakel fuer Issue #24 (gezielt PASS; Gesamtgate NOT_RUN)
@@ -169,14 +169,19 @@ ausgefuehrt. Das ersetzt weder das Ownerreview noch den vollstaendigen
 nativen/ESP-IDF-/Hardware-Gesamtlauf.
 
 - Die finale `P1-*`-, `O2-*`-, `S3-*`- und `Y4-*`-Matrix in
-  `SAFETY_AND_FAULTS.md` wird vollstaendig gegen Producer, Sofortreaktion,
-  Latch, Auto-Rearm, Berechtigung, Reboot-/SAFE_BOOT-Policy und
-  Primaer-/Folgebezug geprueft. Unknown/Unresolved bleibt `Y4-008` und
-  fail-closed. Jede Zeile ist entweder an einen heute oeffentlichen Producer,
-  eine deterministische #24-interne Ursache oder einen stabilen
-  Release-1-Contract-/Injection-Code gebunden; nicht vereinbarte
-  Zukunftsfunktionen sind nicht enthalten. Die Matrix enthaelt 21 stabile
-  Codes: 1 P1-, 2 O2-, 9 S3- und 9 Y4-Codes.
+  `SAFETY_AND_FAULTS.md` wird gegen Sofortreaktion, Latch, Auto-Rearm,
+  Berechtigung, Reboot-/SAFE_BOOT-Policy und Primaer-/Folgebezug geprueft.
+  Unknown/Unresolved bleibt `Y4-008` und fail-closed. Die Matrix enthaelt 21
+  stabile Codes: 1 P1-, 2 O2-, 9 S3- und 9 Y4-Codes; nicht vereinbarte
+  Zukunftsfunktionen sind nicht enthalten. **Nicht vollstaendig geprueft ist
+  der reale Producerpfad fuer zwei Codes**: `Y4-005` (#17/#18 kritischer
+  Laufcheckpoint) hat keinen verdrahteten Produktionsaufrufer von
+  `RunPersistenceCoordinator::loadAndInitialize()` in die Applicationgrenze;
+  `Y4-007` (#24-interner Safety-/Recoveryfehler) hat im freigegebenen Plan
+  keine konkret benannte reale Triggerbedingung, nur eine Policy. Beide
+  bleiben offene Owner-Gates aus der Ownerreview-Runde 5 (siehe SESSION
+  HANDOVER); nur Contract-/Injection-Verhalten ist fuer sie bewiesen, kein
+  realer Producer.
 - Neun unabhaengige S3- und acht variable Y4-Latches koexistieren; der neunte
   Y4-Zustand `Y4-006` ist ein Basisrecord-Marker ohne Slot. Cleared-Historie
   zaehlt nicht als aktive Latchkapazitaet. Die Slot-Bound `17`, die neue
@@ -231,14 +236,24 @@ nativen/ESP-IDF-/Hardware-Gesamtlauf.
 ### Fault/Sensor-Injektionen
 
 - `ProcessMessage::TargetReachTimeExceeded` aus dem bestehenden Prozessautomaten
-  mit `ProcessRunSnapshot::maximumTargetReachMinutes`; keine neue #24-Zeitlogik;
+  mit `ProcessRunSnapshot::maximumTargetReachMinutes`, projiziert ueber den
+  realen `TemperatureControlApplicationOrchestrator::persistTransition()` ->
+  `complete()`-Handoff, nicht ueber einen direkten Testaufruf; keine neue
+  #24-Zeitlogik;
 - `AirLimitReduced` und `AirLimitBlocked` als normale #22-Regelbegrenzungen
   erzeugen allein weder einen P1- noch einen O2-Fault;
 - Produktfuehler O2/Fallback gemaess #21;
-- #22 `NoCommissioning`, `SensorUnavailable`, `InvalidConfiguration`,
-  `InvalidSample`, `TimeInvalid` und `RequestIdentityExhausted` werden
-  reason-spezifisch projiziert; #23 `NoValidRequest` allein erzeugt keinen
-  O2-Fault, sondern bleibt die sichere Plannerklassifikation;
+- **offener Owner-Gate (nicht implementiert)**: #22 `NoCommissioning`,
+  `SensorUnavailable`, `InvalidConfiguration`, `InvalidSample`, `TimeInvalid`
+  und `RequestIdentityExhausted` werden aktuell **nicht** reason-spezifisch
+  projiziert; `SafetyFaultService` konsumiert derzeit keinen
+  `TemperatureControlResult`. Die Ownerreview-Runde 5 hat diesen Punkt als
+  Befund C6 identifiziert; das im freigegebenen Plan geforderte
+  Routing (Sensorursachen ueber reale #20/#21-Sensorproducer, Konfigurations-
+  ursachen ueber #56/#57/Y4, unklare Faelle -> `Y4-008`) ist eine materielle
+  Safety-Entscheidung, die dem Owner vorgelegt werden muss, nicht still
+  entschieden wird. #23 `NoValidRequest` allein erzeugt keinen O2-Fault,
+  sondern bleibt die sichere Plannerklassifikation;
 - Schrankluft `FAILED` -> `S3-001`;
 - Kuehlkoerpersensor `FAILED` -> `S3-002`;
 - `ThermalCompatibility::Incompatible` bei ansonsten gueltiger #21-Evidenz
@@ -253,7 +268,13 @@ nativen/ESP-IDF-/Hardware-Gesamtlauf.
 
 ### Aktor-Injektionen
 
-- #23 `ActuatorWatchdogFaultEvidence` -> `S3-008`;
+- realer #23 `ActuatorWatchdogFaultEvidence` -> `S3-008` ueber den echten
+  Planner-Watchdog-Trip, projiziert durch
+  `TemperatureControlApplicationOrchestrator::tickActuatorPlan()` ->
+  `consumeActuatorPlanEvidence()`, nicht ueber Testinjektion; ein
+  wiederholtes Producersignal auf jedem folgenden Tick loest keinen
+  zusaetzlichen Flash-Write und keine weitere Journal-/Revisionsaenderung
+  aus;
 - reproduzierbare Contract-/Injection-Cases fuer `S3-006`/`S3-007` und
   `S3-009`; diese Tests simulieren die spaeteren Producer und behaupten keine
   bereits implementierte reale Fan-, H-Bruecken-, Strom- oder
@@ -305,6 +326,22 @@ nativen/ESP-IDF-/Hardware-Gesamtlauf.
 - Journalfehler darf Safetycommit oder sichere Reaktion nie in `Allowed`
   umdeuten;
 - S3-004 ohne #35: keine Recovery, kein PI-/Planner-Bypass, Latch bleibt.
+- S3-008-Reset ohne gebundenen Planner ist fail-closed abgelehnt (kein
+  optionaler Pointer als Produktionsbypass); ein erfolgreicher Reset loescht
+  den Planner-Watchdog-Latch erst nach bestaetigtem Safetycommit.
+  **Teilweise offener Owner-Gate (Befund C2)**: der freigegebene Plan
+  verlangt fuer S3-008 explizit drei getrennte Pruefungen ("technische
+  Autorisierung nach #23-, Sensor- und Aktorchecks"); ein echtes
+  Aktor-Bereitschaftssignal, das beweist, dass der Aktorpfad nach dem
+  Watchdog-Trip real wieder gesund ist (nicht nur "aktuell nicht
+  `RequestWatchdogFaultLatched`"), ist nicht implementiert. Der Planner
+  verwirft die Sequenzverfolgung beim fruehen Ausstieg im gelatchten Zustand
+  (`actuator_planner.cpp`, I-4-Zweig), sodass keine bestehende
+  Planner-Diagnose diese Frage heute beantworten kann.
+- Primary-/Follow-up-Vertrag (`FaultRecord::primaryFaultId`): gueltiger Link,
+  Persistenz-/Reload-Ueberleben, Journalprojektion mit Primary-Bezug,
+  Ablehnung eines fehlenden oder selbstreferenzierenden Primary sowie
+  Clear-/Reset-/Compaction-Schutz vor haengenden Referenzen sind bewiesen.
 
 Der historische R2-Abschnitt oberhalb bleibt unveraendert als
 `NOT_ACCEPTED_PENDING_R3`. Die gezielt ausgefuehrten R3-Orakel sind oben

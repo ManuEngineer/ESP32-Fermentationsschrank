@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | R3-Implementierung und Ownerreview-Korrekturrunde 4 (getrennte SAFE_BOOT-Pflichtrollen sowie bounded S3-008-/Y4-008-Identitaeten) umgesetzt; PR #107 bleibt Draft | Ownerreview der neuen SHA gegen Plan `48f343c` |
+| 1 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion (Branch `agent/issue-24-fehlerklassen-safe-boot-plan`) | Ownerreview-Korrekturrunde 5 umgesetzt: realer #23-Watchdog- und Prozessautomat-/#21-Producerpfad, Primary-/Follow-up-Vertrag; drei Befunde (Y4-005-, #22-Reason-Matrix- und Y4-007-Producerpfad) sowie eine S3-008-Reset-Teilfrage bleiben offene Owner-Gates ohne konkrete Planvorgabe; PR #107 bleibt Draft | Ownerreview der neuen SHA gegen Plan `48f343c`, insbesondere die vier offenen Gates aus dem SESSION HANDOVER |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -29,20 +29,22 @@ Der Branch enthaelt die gegen die freigegebene R3 reconcilierten
 Safety-/Recovery-Vertraege. Der eingefrorene R2-Stand war keine normative
 Quelle; insbesondere wurden der fachliche Resetport, die R2-Capability und
 der alte Safetyrecord entfernt beziehungsweise auf den R3-Vertrag migriert.
-Die gezielten nativen Konsumententests sind fuer den korrigierten
-Implementierungsstand PASS: Issue #24 31/31, #15 43/43, #23 44/44,
-Application/Persistenz 113/113 sowie #56/#57 37/37 und 40/40. Der PlatformIO-
-Treiber blieb wegen `Platform Manager: Installing native` BLOCKED; der
-vollstaendige native Lauf, Firmwarebuilds, Remote-CI und Hardware bleiben
-Draft-/Owner-Gates. Die neue R4-Korrekturrunde bindet Y4-006-Recovery,
-Restart-Evidence, O2-002-Rollen, #56/#57-R3-Domains und typed Resetchecks
-gegen aktuelle Fault-/Recordrevisionen. Die positive Reset-Safetyentscheidung
-wird nicht mehr als frei konstruierbares Produktionsobjekt uebergeben; der
-positive SAFE_BOOT-Aktornachweis kommt ueber den privaten Planner-/Sink-Handoff.
-Y4-006 persistiert seine bounded Fehlerart und journalisiert
-Marker-Recoveryentscheidungen. SAFE_BOOT aggregiert die getrennten Pflichtrollen
-CabinetAir und Cooling; S3-008 und Y4-008 verwenden ihre stabilen bounded
-Producerdomänen trotz wechselnder Diagnosebeobachtungen.
+Die gezielten nativen Konsumententests sind fuer den Korrekturrunde-5-Stand
+PASS: Issue #24 39/39, #15 44/44, #23 44/44, Application/Persistenz 115/115
+(je `pio test -e native --filter ...`, direkt und unblockiert ausgefuehrt);
+der vollstaendige native Lauf, Firmwarebuilds, Remote-CI und Hardware bleiben
+Draft-/Owner-Gates. Die neue Korrekturrunde 5 verdrahtet den realen #23-
+Watchdog-Trip (Planner -> Orchestrator -> SafetyFaultService, ohne
+Testinjektion, inklusive Schutz vor Flash-Writes pro Tick bei anhaltendem
+Latch), den realen Prozessautomat-Handoff fuer P1-001 sowie den realen
+#21-Sensorauswahl-Handoff fuer O2-001, dazu einen Schutz gegen haengende
+Primary-/Follow-up-Referenzen beim Fault-Clear/-Reset. Vier Befunde bleiben
+offene, dem Owner vorzulegende Gates statt still entschiedener Ergaenzungen:
+kein realer Y4-005-Producerpfad (#17/#18), keine reason-spezifische #22-
+Projektion, keine konkrete Y4-007-Triggerbedingung im freigegebenen Plan,
+und ein fehlendes echtes Aktor-Bereitschaftssignal fuer den S3-008-Reset
+(nur Planner-Bindung und Post-Commit-Latch-Clear sind umgesetzt). Details
+stehen im SESSION HANDOVER auf PR #107.
 
 Die native #56/#57-Bridge ist in der korrigierten R3 als realer
 `FermentationApplication`-Application-/Orchestrierungspfad mit einer zentralen
