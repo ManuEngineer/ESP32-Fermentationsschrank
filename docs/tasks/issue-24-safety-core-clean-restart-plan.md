@@ -1,6 +1,6 @@
-# Issue #24 – verbindlicher Ersatzplan: Safety-Core, Verriegelung, Restart und SAFE_BOOT
+# Issue #24 – Safety-Core, Verriegelung, Restart und SAFE_BOOT
 
-Status: **PLAN – noch nicht zur Umsetzung freigegeben**
+Status: **PLANREVISION – NOCH NICHT ZUR UMSETZUNG FREIGEGEBEN**
 
 Issue: #24 – `[E3.5] Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion`
 
@@ -8,241 +8,356 @@ Branch: `agent/issue-24-safety-core-clean-restart`
 
 Draft-PR: #108
 
-Basis bei Erstellung dieses Plans:
+Live-Basis bei Erstellung dieser vollstaendigen Planfassung:
 
 ```text
 main @ b8eae5f4da5f2666b5a9bda333d115254c4db5b2
+zu ersetzende Plan-SHA:
+f3b034bf7d2a28abf5609b41eff749994eb7696e
 ```
 
-Diese Datei ist eine **vollstaendige eigenstaendige Planfassung**. Sie setzt weder PR #107 noch die vorherige Planfassung in PR #108 als Vertragsquelle voraus.
+Diese Datei ersetzt **alle frueheren Issue-#24-Planfassungen vollstaendig**.
+PR #107 und fruehere Plan-SHAs sind nur historische Lernreferenzen und keine
+normative Implementierungsquelle.
 
 ---
 
 # 1. Ziel
 
-Issue #24 implementiert den Release-1-Safety-Core als **eine einzige zentrale Fault-, Latch-, Reset-, Restart- und SAFE_BOOT-Autoritaet** innerhalb von `fermentation_app`.
+Issue #24 implementiert den Release-1-Safety-Core als zentrale Autoritaet fuer:
 
-Der Core:
+- vier Fehlerklassen P1/O2/S3/Y4;
+- stabile maschinenlesbare FaultCodes;
+- voneinander unabhaengige gleichzeitig aktive Ursachen;
+- unmittelbare sichere Aktorreaktionen;
+- automatische Wiederfreigabe nur fuer explizit erlaubte P1/O2-Faelle;
+- persistente S3/Y4-Verriegelungen;
+- Trennung von Quittierung, Cause-Clear und Reset;
+- Primaer-/Follow-up-Beziehungen;
+- einmaligen kontrollierten Restart fuer explizit restartfaehige Faults;
+- Restart-Episode und `SAFE_BOOT`;
+- redundante Safety-Persistenz;
+- getrennten minimalen EmergencyMarker;
+- reale Integration der vorhandenen #20/#21/#22/#23/#56/#57-Producer;
+- Run-Persistenz-/Recovery-Integration gegen #17/#18;
+- deterministische Fault-Injektion;
+- typisierte SafetyEvents als spaeteren Input fuer #19;
+- ein zentrales Aktor-Safety-Gate ohne caller-supplied Freigabe.
 
-- klassifiziert Fehler in P1/O2/S3/Y4;
-- fuehrt stabile maschinenlesbare Fehlercodes;
-- haelt gleichzeitig aktive unabhaengige Ursachen getrennt;
-- sperrt Aktoren fail-closed;
-- verriegelt S3/Y4 persistent;
-- trennt Quittierung, Cause-Clear und Reset;
-- konsumiert reale Producer aus den bereits gemergten Issues;
-- verwaltet genau einen kontrollierten Restartversuch pro dafuer vorgesehenem Faultvorgang;
-- eskaliert wiederholte abnormale Restarts nach `SAFE_BOOT`;
-- speichert kritische Safetydaten redundant und atomar;
-- besitzt einen getrennten minimalen Emergency-Marker fuer Safety-Persistenzfehler;
-- liefert reproduzierbare native Fehlerinjektionen;
-- erzeugt typisierte Fault-/Reset-/SAFE_BOOT-Ereignisse fuer das spaetere Journal aus #19;
-- laesst keinen produktiven Planner-/Sinkpfad an der zentralen Safetybewertung vorbei.
-
-Der Plan ist absichtlich fuer ESP32-WROOM-32E mit 4 MB Flash und ohne PSRAM begrenzt.
+Fail-closed ist die Grundregel.
 
 ---
 
-# 2. Verbindliche Quellen und Wiederverwendung
+# 2. Verbindliche Quellen und vorhandene Vertraege
 
-Vor jedem Umsetzungsschnitt werden mindestens die folgenden bereits gemergten Vertraege wiederverwendet und nicht nachgebaut:
+Vor Umsetzung und Review sind mindestens zu verwenden:
 
 | Bereich | bestehende Quelle |
 |---|---|
-| Prozesszustand | #14 / `process_state_machine.*` |
-| Commands / Staleness / Bestaetigung | #15 / `run_commands.*`, `RUN_COMMANDS.md` |
-| Run-Persistenz | #17 / `RunPersistenceCoordinator` |
-| Recovery | #18 |
+| Prozesszustand | #14 / `process_state_machine.*`, `STATE_MACHINE.md` |
+| Commands | #15 / `run_commands.*`, `RUN_COMMANDS.md` |
+| Run-Persistenz | #17 / `RunPersistenceCoordinator`, `RUN_PERSISTENCE.md` |
+| Recovery | #18 / `RunRecoveryCoordinator`, `RECOVERY_AND_INTERRUPTION.md` |
 | Sensorqualitaet | #20 / `SensorQualitySnapshot` |
-| Sensorselektion | #21 / `SensorSelectionRuntimeState`, BlockReason |
-| PI / ControlResult | #22 / `TemperatureControlResult` |
-| Planner / Watchdog / Sink | #23 / `ActuatorPlanner`, `ActuatorWatchdogFaultEvidence`, `ActuatorPlanSinkDriver` |
-| Configuration Runtime | #56 / `ConfigurationServiceMode`, RuntimeFailure, CommitIndeterminate |
-| Configuration Recovery | #57 / `ConfigurationRecoveryResult`, `ConfigurationSafetyProducer` |
+| Sensorselektion | #21 / `SensorSelectionRuntimeState` |
+| PI / Control | #22 / `TemperatureControlResult` |
+| Planner / Watchdog / Fanlogik | #23 / `ActuatorPlanner` |
+| Configuration Runtime | #56 / `ConfigurationService` |
+| Configuration Boot/Recovery | #57 / `ConfigurationRecoveryService` |
 | Persistenzport | `device_platform::IStateStore` |
-| Wire-Envelopes | `StorageEnvelope`, Big-Endian-Codec, CRC |
-| technischer Slot-Scan | `scanTechnicalSlotCandidates()` / `loadSlotPayload()` |
-| Zeit | `ITimeSource` |
-| spaeteres Journal | #19 – **nicht** in #24 implementieren |
+| Wireformat | `StorageEnvelope`, Big-Endian-Codecs, CRC |
+| Slotpruefung | `scanTechnicalSlotCandidates()`, `loadSlotPayload()` |
+| Zeit | `device_platform::ITimeSource` |
+| spaeteres Journal | #19 |
 
-Repositoryregeln aus `AGENTS.md`, den lokalen `AGENTS.md`, `AGENT_WORKFLOW.md`, `ENGINEERING_PRINCIPLES.md` und ADR-013 bleiben verbindlich.
-
-## 2.1 Adopt-or-build / Bibliotheken
-
-Vor der Umsetzung ist kein neuer Drittanbieter-Fault-Framework-Baustein vorgesehen.
-
-Begruendung:
-
-- die fachliche Fault-/Reset-/SAFE_BOOT-Semantik ist projektspezifisch;
-- die benoetigten technischen Primitive existieren bereits im Repository:
-  `IStateStore`, `StorageEnvelope`, Slot-Scan, Big-Endian-Codec, CRC,
-  `ITimeSource`, Run-Persistenz, Sensor-/Control-/Planner-Vertraege;
-- eine zusaetzliche allgemeine Fault-FSM- oder Persistence-Bibliothek wuerde
-  dieselben Domaenenregeln nur hinter einer weiteren Abstraktionsschicht
-  verstecken.
-
-Damit wird das Rad bei den technischen Primitive **nicht** neu erfunden, waehrend
-die projektspezifische Safety-Policy bewusst im eigenen Fachkern bleibt.
-
-Fuer einen spaeteren ESP-IDF-Resetadapter ist die native ESP-IDF-Resetursachen-
-und Restart-API zu verwenden. Issue #24 implementiert diesen Adapter nicht.
-Es entsteht in diesem Plan keine neue Drittanbieter-Lizenzabhaengigkeit.
+Repositoryregeln aus `AGENTS.md`, den lokalen `AGENTS.md`,
+`AGENT_WORKFLOW.md`, `ENGINEERING_PRINCIPLES.md`, `SPECIFICATION_REVIEW.md`
+und ADR-013 bleiben bindend.
 
 ---
 
-# 3. Nicht-Scope
+# 3. Adopt-or-build / Bibliotheken
 
-Issue #24 implementiert **nicht**:
+Es wird **kein neues Fault-, FSM-, Event-Bus- oder Persistence-Framework**
+eingefuehrt.
+
+Vorhandene technische Primitive werden wiederverwendet:
+
+- `IStateStore`;
+- `StateStoreKey`;
+- `StorageEnvelope`;
+- Slot-Scan und Payload-Load;
+- Big-Endian-Codecs;
+- CRC;
+- `ITimeSource`;
+- bestehende Run-/Config-/Sensor-/Control-/Planner-Vertraege.
+
+Die projektspezifische Fault-/Reset-/SAFE_BOOT-Policy bleibt im
+`fermentation_app`-Fachkern.
+
+Fuer einen spaeteren realen ESP-IDF-Resetadapter wird die native ESP-IDF-API
+verwendet. Dieser Adapter ist **nicht** Scope von Issue #24.
+
+Neue Drittanbieter-Lizenzabhaengigkeiten entstehen nicht.
+
+---
+
+# 4. Nicht-Scope
+
+Issue #24 implementiert nicht:
 
 - ESP-IDF-Resetadapter;
 - `esp_restart()`-Adapter;
-- NVS-Adapter oder Issue #90;
-- GPIO-, BTS7960-, Fan- oder Sensor-Hardwareadapter;
+- NVS-Adapter (#90);
+- reale GPIO-/BTS7960-/Fan-/Sensoradapter;
 - Fan-Tachometer;
-- neue Strommessung;
-- reale thermische Commissioning-Grenzwerte;
-- neue PIN-/Login-/Sessionlogik;
+- Strommessung;
+- thermische Commissioningwerte aus #35;
+- produktive Service-PIN-/Loginlogik;
+- Webtransport;
 - OTA;
-- Journalpersistenz, Retention, Export oder Import aus #19;
-- physische Flashredundanz ausserhalb des vorhandenen Flash;
-- kuenftige Hardwarediagnose als angeblich realen Producer;
-- ein allgemeines Event-Bus-, Plugin-, Provider- oder Safety-Framework.
+- Journalpersistenz/Retention/Export/Import aus #19;
+- allgemeine Event-Busse;
+- eine neue allgemeine Recovery-State-Machine;
+- ein Schema-4-Fault-Recoverymodell.
 
-Der aktuelle ESP-IDF-Root bleibt ein actorfreier Bring-up-/Skeletonpfad, solange er laut aktuellem Vertrag `real actuators: disabled` ist. Issue #24 baut dort keine kuenstlichen Hardware-/NVS-Abhaengigkeiten vor.
+Physische Fan-/Aktorfehler ohne realen Producer bleiben ehrlich
+**injection-only**.
 
 ---
 
-# 4. Festgelegte Release-1-Entscheidungen
+# 5. Release-1-Entscheidungen
 
-Die folgenden technischen Entscheidungen sind Bestandteil dieses Plans. Mit der Freigabe der exakten Plan-SHA sind sie fuer Issue #24 freigegeben.
-
-## 4.1 Restartgrenze
+## 5.1 Restart-Episode
 
 ```text
-3 abnormale Restart-Boots innerhalb derselben Restart-Episode
-=> SAFE_BOOT
+3 abnormale Boots innerhalb derselben Restart-Episode
+=> Y4-005 + SAFE_BOOT
 ```
 
-Eine Restart-Episode endet erst nach:
+Vor Erreichen von 3 endet eine Restart-Episode nach:
 
 ```text
-30 Minuten ununterbrochener stabiler Laufzeit
+30 Minuten ununterbrochener stabiler Uptime
 ```
 
-ohne:
+mit:
 
-- neuen abnormalen Reset;
-- aktiven S3/Y4-Fault;
-- offenen RestartIntent;
-- SAFE_BOOT.
+- keinem neuen abnormalen Reset;
+- keinem aktiven S3/Y4;
+- keinem offenen RestartIntent;
+- gesunder Safety-Persistenz.
 
-Die 30 Minuten werden ausschliesslich mit der aktuellen bootlokalen monotonen Zeit gemessen. Es wird **keine Zeit ueber Reboots hinweg subtrahiert oder geraten**.
+Die Zeit wird nur innerhalb des aktuellen Boots mit `monotonicMillis()`
+gemessen.
 
-PowerOn/External-Reset ohne offenen RestartIntent erhoeht den abnormalen Zaehler nicht, loescht ihn aber auch nicht automatisch. Brownout, Watchdog/Panic, unbekannte Resetursache und unerwarteter Software-Reset sind abnormal.
+Keine monotone Zeit wird ueber Reboots hinweg subtrahiert.
 
-Ein von #24 vorbereiteter kontrollierter Software-Restart zaehlt als Teil der abnormalen Restart-Episode. Er darf pro ausloesender Faultinstanz genau einmal automatisch angefordert werden.
+## 5.2 Y4-005-Requalifikation
 
-## 4.2 Safety-Storage-Epoch
+Bei `abnormalRestartCount == 3` bleibt Y4-005 gelatcht.
 
-Safetyrecords verwenden in Schema 1 eine eigene, vom Configuration-Werksreset unabhaengige:
+Nach 30 Minuten stabiler Uptime **auch innerhalb SAFE_BOOT** darf ausschliesslich
+dessen Ursache:
+
+```text
+causeCleared = true
+```
+
+werden.
+
+Der Counter bleibt 3 und der Latch bleibt aktiv.
+
+Erst ein erfolgreicher geschuetzter Reset von Y4-005:
+
+```text
+abnormalRestartCount = 0
+Fault entfernen
+```
+
+Danach bleibt `SAFE_BOOT` bestehen, bis der separate SAFE_BOOT-Exit erfolgreich
+ist.
+
+## 5.3 FAULT ist fuer S3/Y4 terminal fuer den Release-1-Lauf
+
+P1/O2 duerfen nur gemaess ihrem Katalogeintrag automatisch rearmen.
+
+Ein S3/Y4-Fault fuehrt den Prozess in `FAULT`.
+
+Nach dem letzten erfolgreichen Faultreset:
+
+```text
+FAULT -> STANDBY
+```
+
+Der aktive Lauf wird terminal ueber den bestehenden
+`clearActiveRunState()`-Vertrag entfernt.
+
+Es gibt **kein**:
+
+```text
+FAULT -> RECOVERY_EVALUATION
+```
+
+in Issue #24.
+
+Damit wird kein zweiter #18-Recoveryvertrag aufgebaut.
+
+## 5.4 SAFE_BOOT beendet einen noch nicht reaktivierten Lauf
+
+Wenn beim Boot `SAFE_BOOT` erforderlich ist:
+
+- ein geladener aktiver Run wird nicht ueber #18 reaktiviert;
+- sobald der Run-Store eindeutig les-/schreibbar ist, wird er ueber einen
+  kleinen terminalen #17-Pfad als `NoActiveRun/STANDBY` persistiert;
+- ist der Run-Store indeterminiert, bleibt das Geraet in SAFE_BOOT und der
+  Exit bleibt gesperrt.
+
+Damit ist `SAFE_BOOT -> STANDBY` eindeutig und kann keinen alten Run
+automatisch wieder aufnehmen.
+
+## 5.5 SafetyStorageEpoch
+
+Schema 1 verwendet:
 
 ```text
 SafetyStorageEpoch = 1
 ```
 
-Sie wird **nicht** mit der Configuration-`StorageEpoch` fortgeschrieben.
+unabhaengig von der Configuration-`StorageEpoch`.
 
-Begruendung:
+Ein Configuration-Werksreset darf Safety-Latches nicht implizit unlesbar
+machen oder loeschen.
 
-- #57 macht alte Configuration-Epochen bei Werksreset absichtlich unerreichbar;
-- #57 delegiert Safety-Latches und Safetyfreigabe ausdruecklich an #24;
-- ein Configuration-Werksreset darf keinen Safety-Latch nebenbei loeschen.
-
-Eine spaetere explizite Safety-Reset-/Migrationsepoch benoetigt einen eigenen freigegebenen Vertrag.
-
-## 4.3 Safety-Recordtypen und Keys
-
-Nach den bereits belegten RecordTypeIds 1..8 werden fuer #24 fest reserviert:
-
-```text
-RecordTypeId 9  = SafetyStateRecord
-RecordTypeId 10 = SafetyEmergencyMarker
-```
-
-Keys:
-
-```text
-sf0
-sf1
-sem0
-sem1
-```
-
-Alle Keys liegen innerhalb des bestehenden 15-Zeichen-Vertrags.
-
-## 4.4 Safety-Recordlimits
-
-```text
-SafetyStateRecord max envelope bytes: 1024
-SafetyEmergencyMarker max envelope bytes: 64
-```
-
-Das sind harte Softwarelimits fuer diesen Vertrag, keine Behauptung ueber reale NVS-/Flashlebensdauer.
+Eine spaetere explizite Safety-Epoch-Aenderung benoetigt eigenen Scope.
 
 ---
 
-# 5. Eine einzige Safety-Autoritaet
+# 6. Architektur und Verantwortungen
 
-## 5.1 Eigentuemerschaft
+## 6.1 FaultCore – reine Policy
 
-`SafetyFaultService` besitzt als einzige mutable Autoritaet:
+`FaultCore` ist:
 
-- aktive Faultinstanzen;
+- hardwarefrei;
+- persistenzfrei;
+- deterministisch;
+- nativ testbar;
+- ohne dynamische Allokation.
+
+Er besitzt:
+
+- aktiven Faultzustand;
+- FaultIdentity;
+- InstanceIds;
 - `faultRevision`;
-- Faultinstanz-IDs;
 - Cause-Clear;
-- Acknowledgementstatus;
 - Primary-/Follow-up-Bezug;
-- persistente S3-/Y4-Latches;
-- RestartIntent;
+- restartAttempted;
+- Hauptfaultauswahl;
+- Policyaggregation.
+
+Er schreibt keinen Store und ruft keine Hardware.
+
+## 6.2 SafetyStateStore – nur persistenter Safetyrecord
+
+Verantwortung:
+
+- Keys;
+- Envelope;
+- Codec;
+- Slot-Scan;
+- Readback;
+- CommitOutcomeUnknown;
+- Redundanzpruefung;
+- geschuetzte Reparatur.
+
+Keine Faultklassifikation.
+
+## 6.3 SafetyEmergencyMarkerStore
+
+Getrennter kleiner Storepfad fuer:
+
+- normalen SafetyState-Commitfehler;
+- unbestimmten Safety-State;
+- Counter-/Sequence-Exhaustion.
+
+Keine normale Faultliste.
+
+## 6.4 SafetyFaultService – eine mutable Safety-Autoritaet
+
+`SafetyFaultService` besitzt:
+
+- `FaultCore`;
+- geladenen/persistierten SafetyState;
 - RestartEpisode;
+- RestartIntent;
 - `safeBootRequired`;
-- Safety-Persistenzqualifikation;
-- Resetentscheidung;
-- SAFE_BOOT-Exit.
+- Storagequalification;
+- Resetbewertung;
+- Resetcommit;
+- SafetyMutationResults.
 
-Andere Komponenten duerfen Safety nur:
+Es ist die **einzige** mutable Fault-/Latch-/Reset-Autoritaet.
 
-- beobachten;
-- typisierte Producerdaten melden;
-- immutable Snapshots/Entscheidungen konsumieren.
+## 6.5 SafetyProcessCoordinator – nur Cross-Domain-Sequenzierung
 
-Keine andere Komponente fuehrt einen zweiten FaultCore.
+Ein kleiner `SafetyProcessCoordinator` koordiniert:
 
-## 5.2 Nicht autoritative Projektion in `RunCommandState`
+- Bootreihenfolge;
+- Run-Persistenzstatus;
+- Runtime-`FAULT`-Eintritt;
+- terminalen `FAULT -> STANDBY`-Pfad;
+- SAFE_BOOT-Eintritt;
+- terminales Run-Verwerfen bei SAFE_BOOT;
+- SAFE_BOOT-Exit;
+- #15-FaultReset-Handoff.
 
-Die bereits vorhandenen Felder:
+Er besitzt **keinen zweiten Faultzustand**.
 
-```cpp
-std::uint32_t faultRevision;
-bool criticalSafetyEventPending;
+Er ruft vorhandene #17-/#18-/StateMachine-Vertraege auf.
+
+## 6.6 Aktorpfad
+
+Der produktive abstrakte Pfad lautet:
+
+```text
+bestehende Producer
+  -> SafetyFaultService
+  -> ActuatorSafetyDirective
+  -> TemperatureControlApplicationOrchestrator
+  -> ActuatorPlanner
+  -> ActuatorPlanSinkDriver
 ```
 
-bleiben erhalten, sind aber nur eine **RAM-Projektion** des `SafetyFaultService`.
-
-Sie sind nicht Quelle der Wahrheit.
-
-Nach Boot und nach jeder Safety-Mutation werden sie aus dem zentralen Service synchronisiert.
-
-Sie gehoeren weiterhin nicht in den #17-Run-Snapshot.
+Der Caller kann kein `Allowed` injizieren.
 
 ---
 
-# 6. Stabiler Fault-Katalog
+# 7. Faultklassen
 
-## 6.1 Grundregel fuer Identitaet
+```text
+P1 = Hinweis / Warnung
+O2 = behebbarer Betriebsfehler
+S3 = verriegelter Sicherheitsfehler
+Y4 = schwerer Systemfehler
+```
 
-Eine Faultidentitaet ist exakt:
+Dominanz:
+
+```text
+Y4 > S3 > O2 > P1
+```
+
+Die hoechste aktive Klasse bestimmt die Safetywirkung.
+
+Alle aktiven Ursachen bleiben erhalten.
+
+---
+
+# 8. FaultIdentity
+
+Exakt:
 
 ```cpp
 struct FaultIdentity {
@@ -251,39 +366,25 @@ struct FaultIdentity {
 };
 ```
 
-**Nicht Teil der Identitaet** sind:
+Nicht Bestandteil:
 
-- Zeit;
-- ControlRequestSequence;
 - RunRevision;
 - FaultRevision;
-- Sensor-Messfolge;
-- Plannerrevision;
+- ControlRequestSequence;
+- Sensorsequence;
+- Plannersequence;
+- Bootzeit;
+- Config-StateRevision;
 - Persistenzrevision;
-- Bootrevision;
-- Restart-Evidence-ID;
-- Config-StateRevision.
+- Zeitstempel.
 
-Solche Werte sind nur Evidenz oder Diagnosemetadaten.
+Ein neues Messergebnis derselben Ursache erzeugt **keine** neue Instanz.
 
-Ein erneutes Beobachten derselben `(code, source)`-Ursache aktualisiert dieselbe aktive Instanz. Es erzeugt keinen neuen Slot.
+---
 
-## 6.2 Fehlerklassen
+# 9. FaultSource
 
-```text
-P1 = Hinweis / Prozesswarnung
-O2 = behebbarer Betriebsfehler
-S3 = verriegelter Sicherheitsfehler
-Y4 = schwerer Systemfehler
-```
-
-Klasse, Persistenz, Latchpolicy, Gatewirkung und Auto-Rearm werden zentral aus `FaultCode` und `FaultSource` abgeleitet.
-
-Diese Policy wird **nicht redundant im Wireformat gespeichert**.
-
-## 6.3 FaultSource
-
-Release 1 verwendet einen festen kleinen Source-Typ:
+Release 1:
 
 ```text
 Process
@@ -305,21 +406,25 @@ RestartSupervisor
 SafetyCore
 ```
 
-Unbekannte Enumwerte werden nicht auf einen Default gemappt.
+Unbekannte Werte werden abgelehnt.
 
-## 6.4 Stabile Codes
+---
 
-Numerische C++-Werte:
+# 10. Stabile FaultCodes
 
 ```text
 P1-001 = 0x1001
+
 O2-001 = 0x2001
 O2-002 = 0x2002
+
 S3-001 = 0x3001
 S3-002 = 0x3002
 S3-003 = 0x3003
 S3-004 = 0x3004
 S3-005 = 0x3005
+S3-006 = 0x3006
+
 Y4-001 = 0x4001
 Y4-002 = 0x4002
 Y4-003 = 0x4003
@@ -329,145 +434,285 @@ Y4-006 = 0x4006
 Y4-007 = 0x4007
 ```
 
-Sichtbarer technischer Code ist entsprechend `P1-001` usw.; Texte werden spaeter ueber den Code lokalisiert.
+Bedeutung:
 
-## 6.5 Katalog und reale Producer
-
-| Code | Bedeutung | zulaessige Source(s) | aktuell realer Producer | persistent | Gate |
-|---|---|---|---|---|---|
-| P1-001 | Prozesswarnung | Process | vorhandene typisierte Prozesswarnung, soweit #24 sie konsumiert | nein | keine direkte Aktorsperre |
-| O2-001 | Produktfuehler degradiert / Ersatzbetrieb | ProductSensor | #20/#21 | nein | durch #21-Permission bestimmt |
-| O2-002 | erforderlicher fixer Sensor voruebergehend STALE | AirSensor, CoolingSensor | #20 | nein | ImmediateStop bis wieder VALID |
-| S3-001 | erforderlicher fixer Sensor FAILED | AirSensor, CoolingSensor | #20 | ja | ImmediateStop |
-| S3-002 | Sensor-/Rollenplausibilitaet sicherheitsrelevant unaufgeloest | SensorSet | #21 CrossRole/SafeLocked | ja | ImmediateStop |
-| S3-003 | Safety-Temperaturgrenze | TemperatureSafety | **injection-only bis Commissioning-Producer real ist** | ja | ImmediateStop |
-| S3-004 | Aktoranforderungs-Watchdog | ActuatorPlanner | #23 `latchedWatchdogFault` | ja | ImmediateStop, einmaliger kontrollierter Restart erlaubt |
-| S3-005 | physische Aktordiagnose | Peltier, OuterFan, InnerFan | **injection-only; kein Tachometer/Stromsignal behaupten** | ja | ImmediateStop |
-| Y4-001 | aktiver Lauf nicht sicher rekonstruierbar | RunPersistence | #17/#18 Load/Recovery | ja | ImmediateStop |
-| Y4-002 | Configuration unavailable/integrity failure | ConfigurationRecovery | #57 | ja | ImmediateStop / SAFE_BOOT bei Boot |
-| Y4-003 | Configuration runtime/commit indeterminate | ConfigurationRuntime | #56 | ja | ImmediateStop |
-| Y4-004 | kritischer Persistenzfehler | RunPersistence, SafetyPersistence | #17 und #24-Store | ja | ImmediateStop |
-| Y4-005 | Restartloop / Restart-Episode eskaliert | RestartSupervisor | #24 + ResetCause | ja | SAFE_BOOT |
-| Y4-006 | sicherheitsrelevante Evidenz unbekannt/unaufgeloest | Process, SensorSet, Control, ActuatorPlanner, RunPersistence, ConfigurationRuntime, ConfigurationRecovery, SafetyPersistence, RestartSupervisor | reale Mappings bei unbekanntem/inkonsistentem Zustand | ja | ImmediateStop |
-| Y4-007 | interne Safety-Invariante nicht beweisbar | SafetyCore | #24 selbst | ja | ImmediateStop / SAFE_BOOT |
-
-## 6.6 Compile-time Capacity
-
-Zulaessige `(FaultCode, FaultSource)`-Paare stehen in einem einzigen `constexpr`-Katalog.
-
-Daraus werden compile-time abgeleitet:
-
-```text
-4 transiente P1/O2-Identitaeten
-24 persistente S3/Y4-Identitaeten
-28 Identitaeten insgesamt
-```
-
-Es gibt **keine dynamische freie Fault-Capacity**, die durch neue Correlations gefuellt werden kann.
-
-Invarianten:
-
-- jede aktive Identitaet existiert hoechstens einmal;
-- ein nicht im Katalog vorhandenes Paar ist ein interner Vertragsfehler;
-- keine Eviction aktiver Faults;
-- kein Ringpuffer fuer aktive Faults;
-- keine unbounded Liste.
+| Code | Bedeutung |
+|---|---|
+| P1-001 | Prozesswarnung |
+| O2-001 | Produktfuehler degradiert / validierter Ersatzbetrieb |
+| O2-002 | erforderlicher fixer Sensor voruebergehend STALE |
+| S3-001 | erforderlicher fixer Sensor FAILED |
+| S3-002 | Sensor-/Rollenplausibilitaet sicherheitsrelevant unaufgeloest |
+| S3-003 | thermische Safetygrenze |
+| S3-004 | Aktoranforderungs-Watchdog |
+| S3-005 | elektrischer/Ausgangsfehler eines Aktors |
+| S3-006 | funktionaler Fanfehler |
+| Y4-001 | Run nicht sicher rekonstruierbar |
+| Y4-002 | Configuration Recovery unavailable/integrity failure |
+| Y4-003 | Configuration RuntimeFailure / CommitIndeterminate |
+| Y4-004 | kritischer Persistenzfehler |
+| Y4-005 | Restartloop eskaliert |
+| Y4-006 | sicherheitsrelevante Evidenz unbekannt/unaufgeloest |
+| Y4-007 | interne Safety-Invariante nicht beweisbar |
 
 ---
 
-# 7. Fault-Lifecycle
+# 11. Katalog – erlaubte Identitaeten und Policy
 
-## 7.1 RAM-Zustand einer Faultinstanz
+## 11.1 Transient
 
-Mindestens:
+```text
+P1-001 / Process
+
+O2-001 / ProductSensor
+
+O2-002 / AirSensor
+O2-002 / CoolingSensor
+```
+
+4 Identitaeten.
+
+## 11.2 Persistent
+
+```text
+S3-001 / AirSensor
+S3-001 / CoolingSensor
+S3-002 / SensorSet
+S3-003 / TemperatureSafety
+S3-004 / ActuatorPlanner
+
+S3-005 / Peltier
+S3-005 / OuterFan
+S3-005 / InnerFan
+
+S3-006 / OuterFan
+S3-006 / InnerFan
+
+Y4-001 / RunPersistence
+Y4-002 / ConfigurationRecovery
+Y4-003 / ConfigurationRuntime
+
+Y4-004 / RunPersistence
+Y4-004 / SafetyPersistence
+
+Y4-005 / RestartSupervisor
+
+Y4-006 / Process
+Y4-006 / SensorSet
+Y4-006 / Control
+Y4-006 / ActuatorPlanner
+Y4-006 / RunPersistence
+Y4-006 / ConfigurationRuntime
+Y4-006 / ConfigurationRecovery
+Y4-006 / SafetyPersistence
+Y4-006 / RestartSupervisor
+
+Y4-007 / SafetyCore
+```
+
+26 persistente Identitaeten.
+
+Gesamt:
+
+```text
+30
+```
+
+Compile-time-fester Katalog.
+
+Keine Eviction.
+Keine Laufzeit-Erweiterung.
+Keine Correlation-Slots.
+
+---
+
+# 12. Displayprioritaet innerhalb einer Klasse
+
+Jeder `FaultCatalogEntry` besitzt:
+
+```text
+displayPriority
+```
+
+kleiner = prominenter.
+
+## Y4
+
+```text
+Y4-007  10
+Y4-004  20
+Y4-005  30
+Y4-003  40
+Y4-002  50
+Y4-001  60
+Y4-006  70
+```
+
+## S3
+
+```text
+S3-005  10
+S3-003  20
+S3-001  30
+S3-002  40
+S3-004  50
+S3-006  60
+```
+
+## O2
+
+```text
+O2-002 10
+O2-001 20
+```
+
+P1 besitzt nur P1-001.
+
+Tiebreak bei gleichem Code:
+
+```text
+numerischer FaultSource-Wert
+```
+
+Diese Reihenfolge beeinflusst nur Hauptmeldung/Anzeige, nie Safe-State oder
+Reset.
+
+---
+
+# 13. Fault-Lifecycle
+
+## 13.1 Runtime FaultRecord
 
 ```text
 identity
 instanceId
-active
-acknowledged
 causeCleared
 firstSeenBootSequence
 firstSeenMonotonicMillis
-detail
 optional primary reference
 restartAttempted
 ```
 
-## 7.2 Raise
+Kein generisches persistentes `detail`.
 
-`raise`:
+Acknowledgement ist nicht Teil des persistenten Safetyrecords.
 
-1. validiert `(code, source)` gegen den Katalog;
-2. findet eine bereits aktive identische Ursache;
-3. bei bestehender Ursache:
-   - keine neue Instanz;
-   - Diagnose-Detail darf aktualisiert werden;
-   - kein redundanter Persistenzwrite, wenn sich kein persistenter Zustand aendert;
-4. bei neuer Ursache:
-   - neue `instanceId`;
-   - `faultRevision` + 1 checked;
-   - ImmediateStop im RAM sofort wirksam;
-   - bei S3/Y4 persistieren;
-   - erst nach bestaetigtem Persistenzcommit gilt der neue persistente Record als dauerhaft.
+## 13.2 Neue Ursache
 
-Kann eine neue persistente Ursache nicht gespeichert werden, wird **nicht** zur alten Freigabe zurueckgekehrt: RAM bleibt gesperrt und der Emergency-Marker-Pfad startet.
+1. Katalog pruefen.
+2. Keine aktive identische Instanz vorhanden.
+3. `nextInstanceId` checked.
+4. `faultRevision` checked.
+5. neue Instanz.
+6. RAM-Gate sofort sicher.
+7. S3/Y4 SafetyState persistieren.
+8. bei Commitfehler EmergencyMarker.
 
-## 7.3 Acknowledge
+## 13.3 Gleiche Ursache erneut aktiv
 
-Acknowledgement:
-
-- aendert niemals `causeCleared`;
-- aendert niemals Gatewirkung;
-- aendert niemals Latch;
-- bei S3/Y4 darf der Ack-Zustand persistent mitgefuehrt werden;
-- erzeugt ein typisiertes `FaultAcknowledged`-Ereignis.
-
-Nach Boot darf ein nicht sicher rekonstruierbarer Ack-Zustand konservativ als nicht quittiert gelten; Safetyveraenderung entsteht dadurch nicht.
-
-## 7.4 Cause-Clear
-
-Cause-Clear bedeutet nur:
+Wenn bereits:
 
 ```text
-die konkrete Ursache wurde durch ihren realen Producer neu qualifiziert
+causeCleared == false
 ```
 
-Bei S3/Y4:
+bleiben:
+
+- instanceId;
+- faultRevision;
+- persistierter Record
+
+unveraendert.
+
+Kein Write pro Tick.
+
+## 13.4 Relapse
+
+Wenn dieselbe aktive S3/Y4-Instanz bereits:
 
 ```text
-active latch + causeCleared = true
+causeCleared == true
 ```
 
-Der Latch bleibt aktiv und das Gate bleibt gesperrt.
+hat und der Producer wieder Active meldet:
 
-Bei explizit auto-rearm-faehigen P1/O2 darf die Instanz nach ihrer codebezogenen Requalifikation automatisch verschwinden.
+```text
+causeCleared = false
+faultRevision++
+persistieren/readback
+```
 
-## 7.5 Reset
+Eine alte ResetEvaluation ist dadurch stale.
 
-Ein S3/Y4-Faultreset darf nur erfolgreich sein, wenn:
+## 13.5 Cause-Clear
 
-- Zielinstanz existiert und ist aktuell;
+Nur wenn der **gesamte kanonische Producerzustand dieser FaultIdentity**
+eindeutig wieder qualifiziert ist.
+
+Dann:
+
+```text
+causeCleared = true
+faultRevision++
+```
+
+S3/Y4 persistieren.
+
+Ein einzelner behobener Untergrund darf eine noch aktive zweite Unterursache
+derselben Identity nicht clearen.
+
+## 13.6 P1/O2 Auto-Rearm
+
+Nur Katalogeintraege mit `autoRearm=true`.
+
+Beim qualifizierten Clear:
+
+- Instanz entfernen;
+- `faultRevision++`;
+- keine SafetyState-Persistenz, weil P1/O2 nicht rebootgelatcht sind.
+
+## 13.7 Reset
+
+Reset entfernt genau eine S3/Y4-Instanz.
+
+Vor Commit erneut pruefen:
+
+- target instance existiert;
+- target gehoert zur erwarteten FaultIdentity;
+- erwartete `faultRevision` stimmt;
 - `causeCleared == true`;
-- aktuelle codebezogene Safetychecks bestanden sind;
-- notwendige Autorisierung ist bestaetigt;
-- keine andere gleich-/hoeherklassige **noch ungeklärte aktive Ursache** die Bewertung verhindert;
-- Runzustand ist fuer den naechsten sicheren Schritt rekonstruierbar;
-- Safety-Persistenz ist aktuell qualifiziert.
+- codebezogene Safetychecks positiv;
+- Authorization positiv;
+- keine andere **uncleared** gleich-/hoeherklassige Ursache blockiert;
+- SafetyStorage healthy.
 
-Wichtig gegen Reset-Deadlock:
+Andere bereits `causeCleared` Latches duerfen nacheinander resettiert werden.
 
-Eine andere Instanz, deren Ursache bereits `causeCleared == true` ist, verhindert den Reset der Zielinstanz **nicht**. Sie bleibt aber selbst gelatcht und haelt das Aktorgate weiterhin geschlossen.
+Reset:
 
-So koennen mehrere beseitigte Latches nacheinander sauber zurueckgesetzt werden, ohne dass der erste Reset bereits Aktoren freigibt.
+```text
+faultRevision++
+target entfernen
+```
+
+persistieren/readback.
+
+## 13.8 Acknowledgement
+
+Quittierung:
+
+- ist Message-/UI-Zustand;
+- aendert kein CauseClear;
+- aendert keinen Latch;
+- aendert `faultRevision` nicht;
+- ist nicht rebootkritisch;
+- darf nach Reboot wieder als nicht quittiert erscheinen.
 
 ---
 
-# 8. Primary-/Follow-up-Vertrag
+# 14. Primary-/Follow-up
 
-Eine neue Faultinstanz darf optional auf eine Primaerinstanz verweisen.
-
-Persistiert werden:
+Persistiert:
 
 ```text
 primaryInstanceId
@@ -475,229 +720,320 @@ primaryCode
 primarySource
 ```
 
+`0` bedeutet kein Primary.
+
 Regeln:
 
 - keine Selbstreferenz;
-- Primary-Code/Source muss einem bekannten Katalogeintrag entsprechen;
-- die Primaerinstanz muss beim Erzeugen der Beziehung existiert haben;
-- die Primaerinstanz darf spaeter bereits resettiert sein, ohne dass die Follow-up-Referenz ungueltig wird;
-- Reset/Clear des Primary loescht den Follow-up niemals automatisch;
-- Follow-up wird nur nach eigener Ursache-Clear-/Resetlogik geloescht.
+- Primary muss beim Erzeugen existieren;
+- Code/Source muessen Katalogwert sein;
+- spaeterer Primaryreset loescht Follow-up nicht;
+- Follow-up benoetigt eigenes Clear/Reset;
+- Decoder darf eine historische PrimaryInstanceId akzeptieren, deren aktive
+  Instanz inzwischen nicht mehr im Record liegt, sofern Code/Source gueltig
+  und nicht Selbstreferenz sind.
 
-Damit gibt es keine dangling aktive Pointerbeziehung und trotzdem bleibt die Ursache nachvollziehbar.
-
-Historische Langzeitaufbewahrung der Beziehung gehoert spaeter in #19.
+#19 uebernimmt spaeter die Langzeithistorie.
 
 ---
 
-# 9. Persistenzarchitektur
+# 15. FaultRevision und Counter
 
-## 9.1 Normaler SafetyStateRecord
-
-Zwei Slots:
+## 15.1 Initialwert
 
 ```text
+faultRevision = 1
+nextInstanceId = 1
+bootSequence = 1
+```
+
+0 ist ungueltig/reserviert.
+
+## 15.2 FaultRevision-Ueberlauf
+
+Kann die naechste resetrelevante Revision nicht gebildet werden:
+
+- RAM `SafetyCoreExhausted`;
+- Gate ImmediateStop;
+- EmergencyMarker `SafetyCounterExhausted`;
+- kein weiterer normaler Safetycommit.
+
+## 15.3 InstanceId-Allokation und Ueberlauf
+
+`nextInstanceId` bedeutet immer **naechste noch nicht verwendete ID**.
+
+Bei neuer Instanz:
+
+1. `nextInstanceId` muss nonzero und kleiner als `UINT32_MAX` sein;
+2. dieser Wert wird als `instanceId` verwendet;
+3. der persistierte Kandidat setzt `nextInstanceId = alt + 1`.
+
+`UINT32_MAX` wird bewusst nicht mehr als neue ID ausgegeben, weil danach kein
+eindeutiger naechster Wert mehr persistierbar waere.
+
+Fehlt Headroom:
+
+- keine neue Instanz;
+- RAM fail-closed;
+- EmergencyMarker `SafetyCounterExhausted`.
+
+Keine Wiederverwendung alter IDs.
+
+---
+
+# 16. SafetyState-Persistenz
+
+## 16.1 Record
+
+```text
+RecordTypeId = 9
+Schema = 1
+SafetyStorageEpoch = 1
+
+Keys:
 sf0
 sf1
 ```
 
-RecordType:
+Max Envelope:
 
 ```text
-9
+1024 Byte
 ```
 
-Schema:
-
-```text
-1
-```
-
-SafetyStorageEpoch:
-
-```text
-1
-```
-
-Envelope-`versionValue` ist die `SafetyStateRecordRevision`.
-
-### Bootscan
-
-`scanTechnicalSlotCandidates()` wird wiederverwendet.
-
-Regeln:
-
-- beide `NotFound` und kein Emergency Marker:
-  - Safety-Namespace ist noch nicht initialisiert;
-  - blanker Safetyrecord Revision 1 darf erzeugt werden;
-- `ReadError`, `CapacityError`, CRC-, Envelope-, Schema- oder Identitaetsfehler:
-  - **nicht** als `NotFound` behandeln;
-  - SAFE_BOOT;
-- technisch gueltige Kandidaten:
-  - absteigend nach `versionValue`;
-  - gewaehlten Payload erneut ueber `loadSlotPayload()` laden;
-  - vollstaendig semantisch validieren;
-- zwei technisch gueltige Kandidaten mit gleicher Revision aber unterschiedlichem Payload:
-  - widerspruechlich;
-  - SAFE_BOOT.
-
-Ein korruptes zweites Safety-Slot wird nicht still ignoriert, weil es einen unbekannten neueren Latch enthalten koennte.
-
-## 9.2 SafetyState-Payload
-
-Big-Endian, expliziter Codec, kein `memcpy` eines C++-Structs.
-
-Basisfelder:
+## 16.2 Basis-Payload
 
 | Feld | Wire |
 |---|---:|
-| `nextInstanceId` | u32 |
-| `faultRevision` | u32 |
-| `bootSequence` | u32 |
-| `safeBootRequired` | u8 bool |
-| `safeBootReason` | u8 enum |
-| `abnormalRestartCount` | u8 |
-| `restartIntentState` | u8 enum |
-| `restartIntentFaultInstanceId` | u32 |
-| `persistentFaultCount` | u8 |
+| nextInstanceId | u32 |
+| faultRevision | u32 |
+| bootSequence | u32 |
+| safeBootRequired | u8 bool |
+| abnormalRestartCount | u8 |
+| restartIntentState | u8 |
+| restartIntentFaultInstanceId | u32 |
+| persistentFaultCount | u8 |
 
-Basisgroesse: **21 Byte**.
+Basis:
 
-Pro persistentem aktiven Faultrecord:
+```text
+20 Byte
+```
+
+## 16.3 Persistenter Faultrecord
 
 | Feld | Wire |
 |---|---:|
-| `instanceId` | u32 |
-| `code` | u16 |
-| `source` | u8 |
-| `flags` (`acknowledged`, `causeCleared`, `restartAttempted`) | u8 |
-| `firstSeenBootSequence` | u32 |
-| `firstSeenMonotonicMillis` | u64 |
-| `primaryInstanceId` (`0` = keiner) | u32 |
-| `primaryCode` (`0` ohne Primary) | u16 |
-| `primarySource` (`0` ohne Primary) | u8 |
-| `detail` | u16 |
+| instanceId | u32 |
+| code | u16 |
+| source | u8 |
+| flags (`causeCleared`, `restartAttempted`) | u8 |
+| firstSeenBootSequence | u32 |
+| firstSeenMonotonicMillis | u64 |
+| primaryInstanceId | u32 |
+| primaryCode | u16 |
+| primarySource | u8 |
 
-Faultrecordgroesse: **29 Byte**.
-
-Maximal 24 persistente Identitaeten:
+Pro Fault:
 
 ```text
-payload_max = 21 + 24 * 29
-            = 717 Byte
-
-envelope_no_utc = 37 Byte
-
-record_max = 754 Byte
+27 Byte
 ```
 
-Das harte 1024-Byte-Limit besitzt damit Reserve fuer den Envelopevertrag, ohne eine zweite Payloadkopie oder 2-KiB-Safetystruktur zu verlangen.
+Maximal 26 persistente Faults:
 
-Die Policy-Felder:
+```text
+payload_max = 20 + 26 * 27
+            = 722 Byte
 
-- Fehlerklasse;
-- persistent ja/nein;
-- Latch ja/nein;
-- Auto-Rearm;
-- Gatewirkung;
-- erforderliche Resetstufe;
+Envelope ohne UTC = 37 Byte
 
-werden **nicht** gespeichert, weil sie deterministisch aus dem stabilen Katalog folgen.
+record_max = 759 Byte
+```
 
-## 9.3 Semantische Decode-Validierung
+Unter dem 1024-Byte-Limit.
 
-Der Decoder akzeptiert nur:
+## 16.4 Kein redundantes Policy-Wireformat
 
-- `persistentFaultCount <= 24`;
-- bekannte Code-/Source-Kombination;
-- nur S3/Y4 in diesem Record;
-- eindeutige `instanceId != 0`;
-- keine doppelte FaultIdentity;
-- nur bekannte Flags;
-- gueltige Primary-Metadaten;
-- keine Selbstreferenz;
-- `faultRevision != 0`;
-- `nextInstanceId != 0`;
-- `bootSequence != 0`;
-- bekannte SAFE_BOOT-/Restart-Enums;
-- `abnormalRestartCount <= 3`.
+Nicht gespeichert werden:
 
-Unbekannte Enumwerte, falsche Laenge, Restbytes oder semantischer Widerspruch sind kein Fallback auf Defaults.
+- FaultClass;
+- displayPriority;
+- persistence policy;
+- autoRearm;
+- reset auth policy;
+- Fanpolicy;
+- Gatewirkung.
 
-## 9.4 Commit des normalen Safetyrecords
-
-Mutation:
-
-1. vollstaendigen Kandidaten in RAM bauen;
-2. alle Invarianten pruefen;
-3. neue `SafetyStateRecordRevision` checked bestimmen;
-4. anderen/geeigneten Slot waehlen;
-5. Envelope kodieren;
-6. schreiben;
-7. **immer** zuruecklesen;
-8. Envelope + Payload + exakte Kandidatensemantik verifizieren;
-9. erst danach neuen Safetyzustand als persistent bestaetigt uebernehmen.
-
-`CommitOutcomeUnknown`:
-
-- exakter readback des neuen Kandidaten -> Commit bestaetigt;
-- alter/anderer eindeutiger Wert -> Mutation nicht bestaetigt;
-- Readfehler/uneindeutiger Zustand -> kritisch indeterminiert.
-
-Jeder fehlgeschlagene Safety-State-Commit fuehrt fail-closed in den Emergency-Marker-Pfad.
+Diese Felder folgen ausschliesslich aus dem compile-time Katalog.
 
 ---
 
-# 10. Separater SafetyEmergencyMarker
+# 17. SafetyState Initialisierung und Scan
 
-## 10.1 Zweck
+## 17.1 Fabrikneuer Safety-Namespace
 
-Der Marker ist ausschliesslich der minimale Fallback, wenn der normale Safetyrecord nicht mehr verlaesslich fortgeschrieben werden kann.
-
-Slots:
+Nur wenn:
 
 ```text
+sf0 == NotFound
+sf1 == NotFound
+sem0 == NotFound
+sem1 == NotFound
+```
+
+und alle Reads technisch erfolgreich waren.
+
+Dann SafetyState-Payload:
+
+```text
+nextInstanceId=1
+faultRevision=1
+bootSequence=1
+safeBootRequired=false
+abnormalRestartCount=0
+restartIntentState=None
+restartIntentFaultInstanceId=0
+persistentFaultCount=0
+```
+
+Initialisierung:
+
+1. sf0 Envelope Revision 1 schreiben/readback;
+2. sf1 semantisch gleicher Payload, Envelope Revision 2 schreiben/readback;
+3. erst danach `storageIntegrityQualified=true`.
+
+Powerloss zwischen 1 und 2 fuehrt beim naechsten Boot in den geschuetzten
+Storage-Recoverypfad, nicht zu normalem Allowed.
+
+## 17.2 Normaler Scan
+
+Beide Slots werden technisch geprueft.
+
+### Gesund
+
+- zwei gueltige Records;
+- hoechste `versionValue` ist kanonisch;
+- gleiche Revision nur erlaubt, wenn Payload bytegleich ist.
+
+### Unsicher
+
+- ReadError;
+- CapacityError;
+- CRC/Envelopefehler;
+- unbekanntes Schema/Epoch;
+- eine gueltige und eine fehlende/defekte Seite;
+- gleiche Revision mit anderem Payload;
+- semantisch ungueltiger Payload.
+
+Unsicher => keine normale Freigabe.
+
+---
+
+# 18. Semantische SafetyState-Validierung
+
+Mindestens:
+
+- `nextInstanceId != 0`;
+- `faultRevision != 0`;
+- `bootSequence != 0`;
+- `abnormalRestartCount <= 3`;
+- RestartIntent bekannt;
+- `restartIntentState==None` genau mit `restartIntentFaultInstanceId==0`;
+- `Prepared` verlangt bekannte persistente target instance;
+- `persistentFaultCount <= 26`;
+- jeder Record ist S3/Y4;
+- bekannte Code-/Source-Kombination;
+- eindeutige FaultIdentity;
+- eindeutige nonzero instanceId;
+- bekannte Flags;
+- gueltige Primarymetadaten;
+- keine Selbstreferenz;
+- keine Restbytes;
+- keine unbekannten Enums.
+
+---
+
+# 19. SafetyState Commit
+
+`StorageEnvelope::versionValue` ist die `SafetyStateRecordRevision`.
+
+Verbindlich:
+
+- nach der dualen Initialisierung ist die hoechste Revision 2;
+- jede spaetere Mutation verwendet checked `max(validRevision)+1`;
+- der Slot mit der aktuell niedrigeren/alten Revision ist das naechste
+  Schreibziel;
+- `UINT64_MAX` wird nie umgebrochen; Revisionsexhaustion fuehrt in den
+  EmergencyMarker-/fail-closed-Pfad.
+
+Normale Mutation:
+
+1. RAM-Kandidat bauen;
+2. alle Invarianten;
+3. Envelope Revision checked;
+4. alternierenden Slot waehlen;
+5. kodieren;
+6. write;
+7. readback;
+8. Envelope + Payload exakt verifizieren;
+9. erst dann persistent bestaetigt.
+
+`CommitOutcomeUnknown`:
+
+```text
+readback exakt neuer Candidate -> committed
+readback eindeutig alter Candidate -> nicht committed
+sonst -> indeterminate
+```
+
+Kein Raten.
+
+---
+
+# 20. EmergencyMarker
+
+## 20.1 Record
+
+```text
+RecordTypeId = 10
+Schema = 1
+SafetyStorageEpoch = 1
+
+Keys:
 sem0
 sem1
 ```
 
-RecordType:
+Max Envelope:
 
 ```text
-10
+64 Byte
 ```
 
-Schema / SafetyStorageEpoch:
-
-```text
-1 / 1
-```
-
-Envelope-`versionValue` ist die MarkerSequence.
-
-## 10.2 Payload
+## 20.2 Payload
 
 | Feld | Wire |
 |---|---:|
-| MarkerState (`Active`/`Cleared`) | u8 |
-| MarkerReason | u8 |
+| markerState | u8 |
+| markerReason | u8 |
 | bootSequence | u32 |
 | monotonicMillis | u64 |
 | attemptedSafetyRecordRevision | u64 |
 
-Payload: **22 Byte**.
-
-Envelope ohne UTC:
-
 ```text
-22 + 37 = 59 Byte
+22 Byte Payload
+59 Byte Envelope
 ```
 
-Damit passt der gesamte Marker in das 64-Byte-Limit.
+## 20.3 State
 
-## 10.3 MarkerReason
+```text
+Active
+Cleared
+```
 
-Mindestens:
+## 20.4 Reason
 
 ```text
 SafetyStateWriteFailed
@@ -708,61 +1044,116 @@ SafetyStateCorruptOrUnreadable
 SafetyCounterExhausted
 ```
 
-## 10.4 Verhalten
+## 20.5 MarkerSequence und Slotrotation
 
-Wenn ein kritischer Safety-State-Commit scheitert:
+`StorageEnvelope::versionValue` ist die `MarkerSequence`.
 
-1. RAM-seitiger `SafetyPersistenceUncertain`-Latch sofort setzen;
-2. Aktorgate `ImmediateStop`;
-3. genau einen Marker-Commitversuch ueber den redundanten Markerpfad durchfuehren;
-4. Marker readback-verifizieren;
-5. scheitert auch dies:
-   - keine weiteren Schreibloops;
-   - RAM-Latch bleibt bis Reset;
-   - kein normaler Betrieb.
+Verbindlich:
 
-## 10.5 Bootprioritaet
+- sind beide Marker-Slots `NotFound`, beginnt der erste `Active`-Marker mit
+  Sequence 1 auf `sem0`;
+- jeder spaetere Markerzustand verwendet checked `max(validSequence)+1`;
+- geschrieben wird bevorzugt der andere Slot als der aktuell hoechste
+  gueltige Marker;
+- jeder Write wird readback-verifiziert;
+- `UINT64_MAX` wird nie auf 0 umgebrochen; bei erschoepfter MarkerSequence ist
+  der Marker-Store dauerhaft unqualifiziert und der Boot bleibt fail-closed;
+- eine `Cleared`-Sequence darf nur einen aelteren `Active`-Marker ueberstimmen,
+  wenn beide Markerrecords technisch/semantisch gueltig sind.
 
-Emergency-Marker werden **vor** normaler Aktorfreigabe ausgewertet.
+## 20.6 Fehlerpfad
 
-- aktiver gueltiger Marker -> SAFE_BOOT;
-- Marker-Slot ReadError/Capacity/Corruption -> SAFE_BOOT;
-- beide Marker `NotFound` -> kein Marker;
-- hoechste gueltige MarkerSequence `Cleared` und keine Marker-Slot-Probleme -> Marker ist geloest.
+Normaler SafetyState-Commitfehler:
 
-Ein `Cleared`-Marker ist ein persistierter Zustand, kein Delete.
+1. RAM SafetyPersistenceUncertain;
+2. Gate ImmediateStop;
+3. Marker Active auf bevorzugten Slot schreiben/readback;
+4. falls nicht bestaetigt: genau ein zweiter Versuch auf dem anderen Slot;
+5. danach kein Write-Loop.
 
----
+Scheitern beide:
 
-# 11. Marker-Recovery ist nicht SAFE_BOOT-Exit
-
-Geschuetzte Marker-Recovery:
-
-1. Safety-State-Slots technisch lesen;
-2. semantisch gueltigen Safetyzustand herstellen;
-3. Write/Readback-Integritaet erfolgreich pruefen;
-4. neuen kohärenten SafetyStateRecord persistieren;
-5. Emergency Marker als `Cleared` persistieren und readbacken;
-6. `storageIntegrityQualified = true` in der aktuellen RAM-Sitzung setzen.
-
-Sie darf **nicht**:
-
-- `safeBootRequired` loeschen;
-- S3/Y4-Faults resetten;
-- RestartEpisode loeschen;
-- Aktorgate auf `Allowed` setzen.
-
-SAFE_BOOT bleibt bestehen, bis der separate Exitvertrag erfuellt ist.
+- aktueller Boot bleibt fail-closed;
+- kein automatischer Restart;
+- beim naechsten Boot sind vor jeder Freigabe vollstaendige Producer-
+  Requalifikation und erfolgreicher SafetyStorage-Write/Readback Pflicht.
 
 ---
 
-# 12. Reset-/Restart-Port
+# 21. Redundanz-Recovery
 
-## 12.1 Neuer neutraler device_platform-Port
+Der Recoverypfad darf unbekannte Safetyhistorie nie still als "leer" behandeln.
 
-Nur weil auf `main` kein entsprechender Port existiert, wird ein kleiner anwendungsneutraler Port eingefuehrt.
+## 21.1 Mindestens ein semantisch gueltiger SafetyState vorhanden
 
-Beispielvertrag:
+Wenn genau ein SafetyState-Kandidat vollstaendig gueltig ist und die andere
+Seite fehlt/defekt/unlesbar ist:
+
+1. Gate bleibt ImmediateStop;
+2. gueltigen Kandidaten als konservative bekannte Basis laden;
+3. `safeBootRequired=true` setzen;
+4. falls noch nicht aktiv, `Y4-004 / SafetyPersistence` als eigenen
+   persistenten Latch anlegen;
+5. Fault-/Instance-Counter checked fortschreiben;
+6. defekten/fehlenden SafetyState-Slot mit dieser konservativen Basis
+   ueberschreiben/readback;
+7. zweiten SafetyState-Slot mit naechster Revision auf denselben semantischen
+   Zustand bringen/readback;
+8. erst jetzt SafetyState-Redundanz als healthy markieren;
+9. vorhandene Markerhistorie analog auf zwei technisch gueltige Slots
+   reparieren;
+10. erst danach einen neuen `Cleared`-Marker schreiben/readback.
+
+Wichtig:
+
+- der neue Y4-004-Latch bleibt **nach** erfolgreicher Redundanzreparatur aktiv;
+- Storage-Recovery setzt nur dessen `causeCleared=true`, wenn alle Read/Write-
+  und Readbackpruefungen bestanden sind;
+- erst ein separater geschuetzter Faultreset darf Y4-004 entfernen;
+- SAFE_BOOT bleibt danach zusaetzlich bis zum separaten Exit bestehen.
+
+Damit wird ein moeglicherweise verlorener neuerer Fault nicht still vergessen:
+die unbekannte Persistenzhistorie wird durch einen hoeherklassigen
+SafetyPersistence-Latch vertreten.
+
+## 21.2 Kein semantisch gueltiger SafetyState vorhanden
+
+Wenn SafetyState-Slots existieren/Fehler melden, aber **kein einziger**
+semantisch gueltiger SafetyState rekonstruierbar ist:
+
+- keine neue leere Safetyhistorie erfinden;
+- keine InstanceIds/FaultRevisionen auf 1 zuruecksetzen;
+- Marker nicht `Cleared` setzen;
+- `storageIntegrityQualified=false`;
+- SAFE_BOOT bleibt dauerhaft aktiv.
+
+Dieser Zustand benoetigt den bereits vorgesehenen expliziten lokalen
+Vollreset-/UART-Recoveryweg; Issue #24 implementiert keinen stillen
+Safety-History-Reset.
+
+Nur der in Abschnitt 17.1 bewiesene **vollstaendig fabrikneue Namespace**
+(die vier Slots eindeutig `NotFound`, alle Reads erfolgreich) darf neu
+initialisiert werden.
+
+## 21.3 Marker-only Unsicherheit
+
+Ist der normale SafetyState vollstaendig gesund, aber der Markerpfad aktiv oder
+degradiert:
+
+- normaler SafetyState bleibt Basis;
+- Y4-004 / SafetyPersistence wird darin aktiviert, falls noch nicht vorhanden;
+- Markerredundanz wird repariert;
+- Marker wird `Cleared`;
+- Y4-004 bleibt bis CauseClear + geschuetztem Reset;
+- SAFE_BOOT bleibt bis separatem Exit.
+
+Marker-Recovery ist niemals Faultreset oder SAFE_BOOT-Exit.
+
+---
+
+# 22. Reset-Port
+
+Verbindlicher neutraler Port in `device_platform`:
 
 ```cpp
 enum class ResetCause : std::uint8_t {
@@ -781,260 +1172,537 @@ enum class RestartRequestStatus : std::uint8_t {
 
 class IResetController {
 public:
+    IResetController() = default;
     virtual ~IResetController() = default;
+
+    IResetController(const IResetController&) = delete;
+    IResetController& operator=(const IResetController&) = delete;
+    IResetController(IResetController&&) = delete;
+    IResetController& operator=(IResetController&&) = delete;
+
     [[nodiscard]] virtual ResetCause resetCause() const = 0;
     [[nodiscard]] virtual RestartRequestStatus requestSoftwareRestart() = 0;
 };
 ```
 
-Keine Faultcodes, SAFE_BOOT-Begriffe oder Fermentationsbegriffe in `device_platform`.
+Keine Fermentationsbegriffe im Port.
 
-`device_platform_test_support` erhaelt einen deterministischen Simulator.
-
-Kein ESP-IDF-Adapter in Issue #24.
-
-## 12.2 Write-before-apply
-
-Ein kontrollierter Restart darf nur angefordert werden, wenn vorher im normalen Safetyrecord atomar persistiert und readbackbestaetigt wurden:
-
-- `restartAttempted=true` an der ausloesenden Faultinstanz;
-- `restartIntentState=Prepared`;
-- `restartIntentFaultInstanceId`.
-
-Erst danach:
+Testsupport:
 
 ```text
-requestSoftwareRestart()
+SimulatedResetController
 ```
 
-Rueckkehr von `Requested` bedeutet nur „Anforderung akzeptiert“, nicht „Reboot bewiesen“.
-
-Der naechste Boot und dessen `ResetCause` sind der einzige Nachweis fuer die tatsaechliche Restartfolge.
-
-## 12.3 Keine Restartschleife
-
-Dasselbe `instanceId` darf nie einen zweiten automatischen Restart ausloesen.
-
-Ein abgelehnter oder nicht erfolgter Restart fuehrt nicht zu wiederholten Tick-basierten Restartversuchen.
+Kein ESP-IDF-Adapter in #24.
 
 ---
 
-# 13. RestartEpisode und SAFE_BOOT
+# 23. RestartIntent
 
-## 13.1 Abnormale Ursachen
+```text
+RestartIntentState::None
+RestartIntentState::Prepared
+```
 
-Abnormal zaehlen:
+## 23.1 Prepare
 
-- `Brownout`;
-- `WatchdogOrPanic`;
-- `Unknown`;
-- unerwarteter `SoftwareRestart`;
-- erwarteter kontrollierter Software-Restart nach SafetyFault.
+Nur fuer Katalogeintraege `restartEligible=true`.
 
-Nicht abnormal:
+Release 1:
 
-- `PowerOn` ohne offenen RestartIntent;
-- `External` ohne offenen RestartIntent.
+```text
+S3-004 / ActuatorPlanner
+```
 
-Ein normaler PowerCycle setzt einen vorhandenen Episodezaehler nicht zurueck.
+Einmal pro `instanceId`.
 
-## 13.2 Bootauswertung
+Vor `requestSoftwareRestart()` persistieren/readback:
+
+```text
+fault.restartAttempted=true
+restartIntentState=Prepared
+restartIntentFaultInstanceId=<instance>
+```
+
+## 23.2 Request Rejected
+
+Wenn:
+
+```text
+requestSoftwareRestart() == Rejected
+```
+
+dann genau ein Commit:
+
+```text
+restartIntentState=None
+restartIntentFaultInstanceId=0
+```
+
+Kein zweiter Restartversuch derselben Instanz.
+
+Commitfehler => EmergencyMarker/fail-closed.
+
+## 23.3 Request Requested
+
+Prepared bleibt bis zum naechsten Boot bestehen.
+
+Es wird kein Reboot behauptet, bevor der naechste Boot tatsaechlich beobachtet
+wurde.
+
+---
+
+# 24. BootSequence und RestartEpisode
+
+## 24.1 BootSequence
+
+Nach erfolgreichem SafetyState-Load:
+
+- erster initialisierter Boot: 1;
+- jeder weitere Boot checked +1;
+- genau einmal pro Boot;
+- vor Erzeugung neuer bootlokaler Faulttimestamps.
+
+Overflow => EmergencyMarker/fail-closed.
+
+## 24.2 Resetursache
+
+Abnormal:
+
+```text
+Brownout
+WatchdogOrPanic
+Unknown
+SoftwareRestart ohne Prepared
+SoftwareRestart mit Prepared
+Prepared + unerwartet anderer Resetgrund
+```
+
+Nicht abnormal ohne Prepared:
+
+```text
+PowerOn
+External
+```
+
+## 24.3 Prepared konsumieren
+
+Beim Boot:
+
+1. ResetCause lesen;
+2. Prepared genau einmal auswerten;
+3. abnormalen Counter saturierend aktualisieren;
+4. Prepared im selben Safety-Kandidaten auf None setzen;
+5. commit/readback.
+
+Kein Boot darf denselben Prepared-Intent zweimal zaehlen.
+
+## 24.4 Counter
+
+```text
+0,1,2,3
+```
+
+saturierend.
+
+Nie 4.
+
+Bei Uebergang auf 3:
+
+- Y4-005 anlegen oder bestehende Instanz aktiv halten;
+- `safeBootRequired=true`;
+- ein atomarer SafetyState-Kandidat.
+
+---
+
+# 25. SAFE_BOOT Eintritt
 
 Bootreihenfolge:
 
 ```text
-physische/simulierte Outputs bleiben AUS
--> Emergency Marker laden
--> SafetyStateRecord laden und validieren
--> ResetCause erfassen
--> offenen RestartIntent genau einmal auswerten
--> abnormalRestartCount aktualisieren
--> persistierte S3/Y4-Faults pruefen
--> Configuration #57/#56 qualifizieren
--> Run #17/#18 qualifizieren
--> Sensoren #20/#21 qualifizieren
+alle Outputs physisch/abstrakt AUS
+-> EmergencyMarker scan
+-> SafetyState scan/init
+-> bootSequence / ResetCause / RestartIntent
+-> Configuration #57
+-> Configuration #56
+-> RunPersistence #17/#18 load (noch keine aktive Recovery)
+-> aktuelle Sensorgrundqualifikation
+-> Safety-Fault-Mappings
 -> SAFE_BOOT-Entscheidung
--> Boottransition der bestehenden ProcessStateMachine
 ```
 
-SAFE_BOOT wird verlangt, wenn mindestens:
+SAFE_BOOT mindestens bei:
 
-- Emergency Marker aktiv/unklar;
-- SafetyStateRecord korrupt/unlesbar/semantisch ungueltig;
-- persistierter S3/Y4-Latch beim Boot vorhanden;
-- `abnormalRestartCount >= 3`;
+- aktiver/unklarer EmergencyMarker;
+- unqualifiziertem SafetyStorage;
+- bestehendem persistentem S3/Y4 beim Boot;
+- abnormalRestartCount == 3;
 - Y4-Configurationzustand;
-- aktiver Lauf nicht sicher rekonstruierbar;
-- sicherheitsrelevante Bootevidenz unaufgeloest.
+- RunPersistence indeterminiert/nicht rekonstruierbar;
+- sicherheitsrelevanter unbekannter Bootevidenz.
 
-## 13.3 Stable-Window-Clear
-
-Nur in normalem, nicht SAFE_BOOT Betrieb:
+Wenn SafetyState technisch schreibbar:
 
 ```text
-30 min aktuelle monotone stabile Laufzeit
-+ kein aktiver S3/Y4
-+ kein RestartIntent
-+ Safety-Persistenz healthy
-=> abnormalRestartCount auf 0 persistieren
+safeBootRequired=true
 ```
 
-Das geschieht genau einmal beim Erreichen der Grenze, nicht pro Tick.
+vor `BOOT -> SAFE_BOOT` persistieren/readback.
+
+Wenn SafetyState gerade die Ursache des Problems ist:
+
+- Marker/Corruption selbst haelt SAFE_BOOT persistent/fail-closed;
+- Recovery rekonstruiert spaeter zuerst einen State mit
+  `safeBootRequired=true`.
 
 ---
 
-# 14. SAFE_BOOT-Exit
+# 26. Run-Verhalten bei SAFE_BOOT
 
-SAFE_BOOT verlaesst sich niemals durch:
+## 26.1 Kein normaler Recovery-Start
 
-- Reboot;
-- Marker-Recovery allein;
-- Quittierung;
-- einen einzelnen erfolgreichen Write;
-- blosses Verschwinden einer Messwertwarnung.
+Wenn SAFE_BOOT bereits feststeht:
 
-## 14.1 Voraussetzungen
+- `activateLoadedRun()` wird fuer einen normalen aktiven Run **nicht**
+  aufgerufen;
+- kein PI-/Planner-Resume;
+- kein Run wird automatisch weitergefuehrt.
 
-`requestSafeBootExit()` darf nur positiv bewertet werden, wenn:
+## 26.2 Neuer schmaler #17-Terminalisierungspfad
 
-1. `safeBootRequired == true`;
-2. Emergency Marker eindeutig `Cleared`;
-3. Safety-State Write/Readback in diesem Boot qualifiziert;
-4. kein persistenter S3/Y4-Latch mehr aktiv;
-5. Configuration #56/#57 aktuell operational/qualified;
-6. Run-Persistenz nicht indeterminiert;
-7. AirSensor aktuell `VALID`;
-8. CoolingSensor aktuell `VALID`;
-9. Sensor-/CrossRole-Evidenz nicht unresolved;
-10. ActuatorPlanner besitzt keinen aktiven Watchdog-Latch;
-11. kein aktueller Y4-Unknown-Zustand;
-12. notwendige Serviceautorisierung wurde von der aufrufenden Schicht bestaetigt.
+`RunPersistenceCoordinator` erhaelt genau eine neue Safety-Integration:
 
-ProductSensor ist fuer den Exit nach `Standby` nicht generell Pflicht.
+```text
+terminateLoadedRunForSafeBoot(...)
+```
 
-## 14.2 Commitreihenfolge
+Diese API ist **kein zweiter Persistenzkern**. Sie muss intern den bereits
+vorhandenen `writeSnapshotCore()`-/Slot-/Fallback-Vertrag wiederverwenden.
 
-1. Exitbedingungen rein pruefen;
-2. SafetyState-Kandidat mit `safeBootRequired=false` persistieren/readbacken;
-3. erst nach bestaetigtem Commit:
-   - `ProcessEvent::SafeBootExitCompleted` anwenden;
-4. ProcessState muss `SafeBoot -> Standby` werden;
-5. neue Aktorfreigabe entsteht erst aus der naechsten normalen zentralen Gateauswertung.
+Zulaessige Coordinator-Ausgangszustaende:
 
-Wenn Prozesspersistenz/Transition fehlschlaegt, bleibt das System fail-closed; es entsteht kein aktiver Lauf.
+```text
+LoadedActiveRun
+FallbackRecoveryPending
+Ready mit bereits restauriertem aktivem Fault-Snapshot
+```
+
+Zweck:
+
+- geladenen `LoadedActiveRun` oder `FallbackRecoveryPending` nicht aktivieren;
+- daraus einen `NoActiveRun/STANDBY`-Kandidaten bilden;
+- vorhandenen `clearActiveRunState()`-Vertrag wiederverwenden;
+- `RunPersistenceMutationKind::Recovery` verwenden;
+- Fallbackreferenz terminal entfernen;
+- den geladenen Snapshot nur soweit in einen lokalen Kandidaten projizieren,
+  wie der bestehende Run-Persistence-Vertrag dies bereits tut;
+- `clearActiveRunState(candidate)` als einzige terminale Bereinigung;
+- Kandidat muss vor Write als gueltiger `NoActiveRun/STANDBY`-Snapshot
+  validieren;
+- write-before-apply;
+- nach Erfolg Coordinator `Ready`.
+
+Wenn der Store nicht eindeutig ist:
+
+- keine Terminalisierung raten;
+- SAFE_BOOT bleibt;
+- Exit gesperrt.
+
+Ein geladener `ProcessState::Fault` ohne passenden aktiven #24-Latch wird vor
+der Terminalisierung als `Y4-001 / RunPersistence` klassifiziert. Damit kann
+ein historischer #18-`RecoveryRejected -> Fault` oder ein Crash zwischen
+Safetyreset und Run-Terminalisierung nie als bereits bewusst resettiert gelten.
+
+Kein neues Wire-Schema.
 
 ---
 
-# 15. Erweiterung der bestehenden ProcessStateMachine
+# 27. Runtime S3/Y4 -> FAULT
 
-Issue #24 fuegt nur die zwei fehlenden Safety-Rueckwege hinzu:
+Bei neuem blockierendem S3/Y4:
 
-```text
-ProcessEvent::FaultResetCompleted
-ProcessEvent::SafeBootExitCompleted
-```
+1. FaultCore RAM sofort aktiv;
+2. Gate ImmediateStop;
+3. SafetyState commit/readback;
+4. wenn ProcessState bereits Fault/SafeBoot: kein zweiter Prozesswechsel;
+5. sonst `CriticalFault` gegen bestehende StateMachine;
+6. bei aktivem Run:
+   - vorhandenen #17 `persistTransition()` write-before-apply nutzen;
+   - aktiven Run als `Fault` erhalten;
+7. ohne aktiven Run:
+   - ProcessState RAM auf `Fault`;
+   - SafetyState ist die rebootpersistente Wahrheit;
+8. #17-Fehler beim Fault-Commit:
+   - auf Y4-004/Y4-001 mappen;
+   - Gate bleibt ohnehin ImmediateStop.
 
-sowie passende `TransitionReason`s.
+Safety-Abschaltung wartet nie auf Persistenz.
 
-## 15.1 FaultResetCompleted
+---
 
-Aus:
+# 28. FaultReset / #15
 
-```text
-Fault
-```
+## 28.1 Bestehenden Vertrag beibehalten
 
-nach:
+`FaultResetEvaluation` bleibt der von #24 qualifizierte #15-Vertrag.
 
-```text
-RecoveryEvaluation
-```
-
-wenn ein aktiver Laufkontext vorhanden und rekonstruierbar ist.
-
-Sonst nach:
-
-```text
-Standby
-```
-
-Nie direkt:
+Verbindliche Erweiterung:
 
 ```text
-Fault -> Heating/Cooling/Fermenting/...
+targetFaultInstanceId
 ```
 
-Die Wiederaufnahme eines Laufes bleibt ausschliesslich der vorhandene #18-Recoverypfad.
+liegt **in `FaultResetEvaluation`**.
 
-## 15.2 SafeBootExitCompleted
+Kein alternatives Feld „oder in Decision“.
+
+## 28.2 #15-Verantwortung
+
+`decideFaultReset()` prueft:
+
+- Envelope;
+- CommandId;
+- expectedStateSequence;
+- expectedFaultRevision;
+- Bestaetigung;
+- `FaultResetEvaluation`;
+- targetFaultInstanceId nonzero;
+- Evaluation faultRevision == RunCommandState-Projektion.
+
+#15 darf **nicht**:
+
+- FaultCore mutieren;
+- faultRevision selbst erhoehen;
+- `criticalSafetyEventPending=false` setzen.
+
+Die Decision darf nur RAM-Commandbookkeeping vorbereiten und traegt:
+
+```text
+authorizedFaultResetInstanceId
+```
+
+als eindeutigen Handoff.
+
+`ResetFault` bleibt gemaess bestehendem #17-Vertrag **nicht** in
+`isPersistedRunCommand()`.
+
+---
+
+# 29. FaultReset Commitreihenfolge
+
+```text
+SafetyFaultService.evaluateReset(target)
+-> #15 decideFaultReset(...)
+-> SafetyFaultService.commitReset(
+       target,
+       expectedFaultRevision)
+-> SafetyState persist/readback
+-> #15 Commandbookkeeping in RAM anwenden
+-> RunCommandState Safetyprojektion synchronisieren
+```
+
+Wenn weiterhin blockierende Faults aktiv sind:
+
+```text
+ProcessState unveraendert
+Gate bleibt sicher
+```
+
+Wenn letzter blockierender Fault entfernt wurde:
+
+### Aktueller ProcessState == Fault
+
+- terminalen `FaultResetCompleted`-Uebergang `FAULT -> STANDBY` erzeugen;
+- wenn aktiver Run vorhanden:
+  - #17 `persistTransition()` erweitern;
+  - `clearActiveRunState(candidate)` vor Snapshotbildung;
+  - `NoActiveRun/STANDBY` persistieren;
+  - erst nach Commit anwenden;
+- ohne aktiven Run: RAM-Transition anwenden.
+
+### Aktueller ProcessState == SafeBoot
+
+- **kein Prozessuebergang**;
+- SAFE_BOOT bleibt;
+- separater Exit erforderlich.
+
+### anderer Zustand
+
+- kein versteckter Prozesswechsel;
+- unmoegliche Kombination -> Y4-007 bzw. fail-closed.
+
+---
+
+# 30. FaultReset Crash-/Fehlermatrix
+
+## Vor SafetyState-Commit
+
+Kein Reset wirksam.
+
+## SafetyState-Commit erfolgreich, Crash vor Command-RAM-Bookkeeping
+
+Reboot laedt den dauerhaft resettierten Faultzustand.
+Command-ID ist bewusst nicht rebootpersistent.
+Kein Sicherheitsproblem.
+
+## SafetyState-Commit erfolgreich, Crash vor FAULT-Terminalisierung
+
+Persistierter Run bleibt `Fault`.
+
+Beim naechsten Boot:
+
+- `Fault` wird nicht automatisch resumt;
+- wenn SafetyBoot nicht bereits aus anderem Grund gilt, der persistierte
+  Fault-Run ist eine Safety-Reconciliation-Situation;
+- der Bootpfad terminalisiert ihn nach `NoActiveRun/STANDBY` oder bleibt
+  fail-closed, wenn Persistenz dies nicht erlaubt.
+
+## #17-Terminalisierung schlaegt fehl
+
+- ProcessState bleibt Fault;
+- kein Aktor;
+- technischer Fehler wird exakt auf Y4-004/Y4-001 gemappt;
+- bei SafetyState-Persistenzfehler EmergencyMarker.
+
+---
+
+# 31. Neue ProcessEvents
 
 Nur:
+
+```text
+FaultResetCompleted
+SafeBootExitCompleted
+```
+
+## FaultResetCompleted
+
+```text
+Fault -> Standby
+```
+
+terminal.
+
+Kein RecoveryEvaluation.
+
+## SafeBootExitCompleted
 
 ```text
 SafeBoot -> Standby
 ```
 
-Kein direkter Restore eines alten aktiven Laufes aus SAFE_BOOT.
+nur nach erfolgreichem SAFE_BOOT-Exit.
+
+`STATE_MACHINE.md` wird entsprechend aktualisiert.
 
 ---
 
-# 16. Reale Producer-Mappings
+# 32. SAFE_BOOT Exit
 
-Mappings bleiben klein, one-way und verwenden vorhandene Typen.
+## 32.1 Voraussetzungen
 
-## 16.1 SensorQuality #20
+- aktueller ProcessState `SafeBoot`;
+- `safeBootRequired == true`;
+- EmergencyMarker eindeutig Cleared/none und Marker-Redundanz healthy;
+- SafetyState-Redundanz healthy;
+- kein aktiver S3/Y4;
+- ConfigurationService `Operational`;
+- ConfigurationRecovery aktuell qualifiziert;
+- RunPersistence eindeutig und **NoActiveRun**;
+- kein RunPersistence-Indeterminate;
+- AirSensor VALID;
+- CoolingSensor VALID;
+- SensorSet nicht unresolved;
+- PlannerWatchdog nicht gelatcht;
+- kein Y4-Unknown;
+- trusted Serviceauthorization true.
 
-### Air/Cooling STALE
+ProductSensor ist fuer den Rueckweg nach Standby nicht generell Pflicht.
+
+## 32.2 Reihenfolge
+
+Da der Run bereits beim SAFE_BOOT-Eintritt terminalisiert wurde:
+
+1. alle Exitbedingungen neu pruefen;
+2. `safeBootRequired=false` im SafetyState persistieren/readback;
+3. erst danach `SafeBootExitCompleted` RAM-Transition;
+4. `STANDBY`;
+5. Gate kann erst in einem **neuen** normalen Safety-Evaluationsschritt
+   `Allowed` werden.
+
+Crash nach SafetyState-Commit vor RAM-Transition:
+
+- Run ist NoActiveRun;
+- Reboot sieht `safeBootRequired=false`;
+- normale Bootqualifikation fuehrt nach Standby, sofern weiterhin alle Gates
+  positiv sind.
+
+---
+
+# 33. SensorQuality #20
+
+## O2-002 STALE
+
+Air/Cooling STALE:
 
 ```text
-SensorQuality::Stale
-=> O2-002 fuer die konkrete Source
-=> ImmediateStop
+O2-002 / konkrete Source
 ```
 
-Bei stabiler Rueckkehr zu `VALID`:
+- Gate ImmediateStop fuer Peltier;
+- kein ProcessState Fault;
+- bestehende #23 Fan-Nachlaufsemantik bleibt aktiv;
+- autoRearm erst nach #20-qualifiziertem VALID.
 
-```text
-O2-002 auto clear
-```
+## S3-001 FAILED
 
-### Air/Cooling FAILED
+Air/Cooling FAILED:
 
-```text
-SensorQuality::Failed
-=> O2-002 beenden
-=> S3-001 raisen
-```
+- O2-002 derselben Source entfernen;
+- S3-001 raisen;
+- Runtime -> Fault;
+- nach stabil VALID: `causeCleared=true`;
+- Latch bis Reset.
 
-Nach durch #20 bereits validierter stabiler Rueckkehr zu `VALID`:
+#24 dupliziert keine Filter-/CRC-/Recoverycounter.
 
-```text
-S3-001 causeCleared=true
-```
+---
 
-Latch bleibt bis Reset.
+# 34. SensorSelection #21
 
-#24 implementiert keine zweite CRC-, Filter-, Alter- oder Recoveryzaehlung.
+## O2-001
 
-## 16.2 ProductSensor / #21
+ProductSensor degradiert / validierter AirFallback.
 
-`O2-001` bildet den produktfuehlerbezogenen Ersatzbetriebsfall ab.
+`AirFallbackActive + permission Allowed`:
 
-Reale Inputs sind die bestehenden #21-Phasen und Permission.
+- O2-001 darf sichtbar bleiben;
+- Gate darf ansonsten Allowed werden;
+- luftgefuehrte Regelung laeuft weiter.
 
-Wichtig:
+## S3-002
 
-- `AirFallbackActive + permission Allowed` darf trotz aktivem O2-001 normal luftgefuehrt regeln, sofern Air/Cooling und alle anderen Gates gueltig sind;
-- O2-001 selbst ist deshalb kein pauschaler ImmediateStop;
-- `ProductFailureDetected`, `UserDecisionRequired`, `ReturnValidationPending` mit Blocked-Permission verhindern Freigabe ueber die bestehende #21-Permission;
-- `CrossRoleEvidenceIndeterminate` bzw. sicherheitsrelevantes `SafeLocked` wird S3-002;
-- `InvalidContext`/unbekannte sicherheitsrelevante Evidenz wird Y4-006/SensorSet.
+Bei sicherheitsrelevantem:
 
-Kein zweiter Sensorselektionsautomat.
+- `SafeLocked`;
+- `CrossRoleEvidenceIndeterminate`;
 
-## 16.3 TemperatureControl #22
+S3-002 / SensorSet.
 
-Normale Zustaende:
+## Y4-006 / SensorSet
+
+Nur fuer strukturell ungueltige/unbekannte Safety-Evidenz, nicht fuer normale
+PolicyWait/UserAction.
+
+CauseClear erst, wenn der **gesamte aktuelle #21-Safetykontext** wieder
+eindeutig qualifiziert ist.
+
+---
+
+# 35. TemperatureControl #22
+
+Keine Faults aus normalen:
 
 ```text
 NeutralBand
@@ -1043,49 +1711,64 @@ AirLimitReduced
 AirLimitBlocked
 ```
 
-erzeugen fuer sich keinen SafetyFault.
-
-Fail-closed Mappings:
-
-- `InvalidConfiguration` -> Y4-006 / Control;
-- `TimeInvalid` -> Y4-006 / Control;
-- `RequestIdentityExhausted` -> Y4-006 / Control;
-- `SensorUnavailable` / `InvalidSample` -> Aktorfreigabe unresolved; eigentliche Sensorursache kommt aus #20/#21;
-- `NoCommissioning` -> unresolved, aber kein erfundener Fault.
-
-## 16.4 ActuatorPlanner #23
-
-`ActuatorPlanner::state().latchedWatchdogFault` bzw. reales Watchdog-Ergebnis:
+Mappings:
 
 ```text
-=> S3-004 / ActuatorPlanner
+InvalidConfiguration      -> Y4-006 / Control
+TimeInvalid               -> Y4-006 / Control
+RequestIdentityExhausted  -> Y4-006 / Control
 ```
 
-Der Planner hat die konkrete Tick-Reaktion bereits fail-closed ausgefuehrt.
+`SensorUnavailable` / `InvalidSample`:
 
-#24 persistiert den systemweiten Latch.
+- Gate unresolved/blocked;
+- konkrete Ursache soll aus #20/#21 kommen;
+- kein duplizierter Sensorfault.
 
-### Cause-Clear fuer S3-004
+`NoCommissioning`:
 
-Cause-Clear wird erst akzeptiert, wenn nach dem Watchdogereignis neue, aktuelle Anwendungsevidenz vorliegt:
+- `Unresolved`;
+- kein erfundener Fault;
+- keine Aktorfreigabe.
 
-- entweder die aktuelle Phase benoetigt keine Temperaturregelung mehr;
-- oder eine neue strukturell gueltige #22-Auswertung fuer den aktuellen ControlContext wurde erzeugt;
-- Planneroutput ist physisch abstrakt `Idle`/sicher gestoppt.
+---
 
-Es wird **kein** physisches Sink-Acknowledgement behauptet.
+# 36. ActuatorPlanner #23
 
-Nach erfolgreichem systemweiten Faultreset ruft die Application einmal:
+## S3-004 Watchdog
+
+Realer Producer:
+
+```text
+ActuatorPlanner::state().latchedWatchdogFault
+```
+
+=> S3-004 / ActuatorPlanner.
+
+Einmaliger kontrollierter Restart erlaubt.
+
+CauseClear erst nach neuer aktueller vertrauenswuerdiger Applicationevidenz:
+
+- temperaturgeregelte Phase verlassen;
+  oder
+- neue strukturell gueltige #22-Evaluation im aktuellen ControlContext;
+- Planner/Peltier abstrakt sicher Idle.
+
+Nach erfolgreichem S3-004 Reset:
 
 ```text
 ActuatorPlanner::applyExternalWatchdogFaultReset(now)
 ```
 
-auf.
+genau einmal.
 
-## 16.5 Physische Aktordiagnose
+---
 
-S3-005 besitzt einen kleinen typisierten Vertrag fuer:
+# 37. Injection-only Aktordiagnose
+
+## S3-005 – elektrischer/Ausgangsfehler
+
+Zulaessig:
 
 ```text
 Peltier
@@ -1093,66 +1776,123 @@ OuterFan
 InnerFan
 ```
 
-Zustaende mindestens:
+Noch kein realer Hardwareproducer.
+
+## S3-006 – funktionaler Fanfehler
+
+Zulaessig:
 
 ```text
-Healthy
-Fault
-Unknown
+OuterFan
+InnerFan
 ```
 
-In Issue #24 gibt es dafuer nur deterministische Injection-/Contracttests.
+Noch kein realer Tachometer-/Stromproducer.
 
-Kein Produktionscode behauptet, dass das aktuelle Board diese Information bereits messen kann.
+Keine Hardwarefaehigkeit wird behauptet.
 
-## 16.6 RunPersistence #17/#18
+---
 
-Bootmapping von `RunPersistenceLoadStatus`:
+# 38. Fan-Safety-Directive
 
-Normal/kein Y4:
+```cpp
+enum class FanSafetyAction : std::uint8_t {
+    PlannerManaged,
+    ForceOn,
+    ForceOff,
+};
+
+struct ActuatorSafetyDirective {
+    ActuatorSafetyGateStatus gate;
+    FanSafetyAction outerFanAction;
+    FanSafetyAction innerFanAction;
+};
+```
+
+Aggregation:
 
 ```text
-NoPersistedRun
-Current
-NoActiveRun
-FallbackRecovered
-PreparedInterrupted
+ForceOff > ForceOn > PlannerManaged
 ```
 
-soweit der bestehende #17/#18-Vertrag daraus einen sicheren Recoverypfad bereitstellt.
+Policy:
 
-Y4-001:
+- allgemeine Sensor-/Control-/Persistenzfaults:
+  - Fan `PlannerManaged`;
+  - #23 verwaltet bestehenden Nachlauf;
+- S3-005 / OuterFan:
+  - outer `ForceOff`;
+- S3-005 / InnerFan:
+  - inner `ForceOff`;
+- S3-006 / OuterFan:
+  - outer `ForceOn`;
+- S3-006 / InnerFan:
+  - inner `ForceOff`;
+- Peltierfehler:
+  - Peltier Gate ImmediateStop;
+  - outer fan `PlannerManaged`.
 
-```text
-NotReconstructible
-NotReconstructibleOrphanedState
-```
+Diese Aktionen sind **Sollbefehle**, kein physisches Feedback.
 
-Y4-004 oder Y4-006 je technischer Ursache:
+---
 
-```text
-ReadFailed
-CapacityExceeded
-UnsupportedSchema
-ForeignEpoch
-```
+# 39. RunPersistence #17/#18 – exakte Mappingmatrix
 
-Die genaue Zuordnung folgt der bereits vorhandenen typisierten Bedeutung; #24 baut keine zweite Run-Recoverylogik.
+## Boot / Load
 
-Laufzeit-`RunPersistenceResult`:
+| Status | #24 |
+|---|---|
+| NoPersistedRun | kein Fault |
+| Current, normale aktive/Completed-Topologie | kein Fault; normale #18-Bewertung nur wenn kein SAFE_BOOT |
+| Current mit `ProcessState::Fault` und bereits passendem aktivem #24-S3/Y4-Latch | kein zusaetzlicher Fault; der Run-Fault ist erwartete Folge |
+| Current mit `ProcessState::Fault` ohne passenden #24-Latch | Y4-001 / RunPersistence; niemals normal resumieren |
+| NoActiveRun | kein Fault |
+| FallbackRecovered | kein Y4; Diagnoseevent |
+| PreparedInterrupted | Y4-004 / RunPersistence |
+| NotReconstructible | Y4-001 / RunPersistence |
+| NotReconstructibleOrphanedState | Y4-001 / RunPersistence |
+| ReadFailed | Y4-004 / RunPersistence |
+| CapacityExceeded | Y4-004 / RunPersistence |
+| UnsupportedSchema | Y4-001 / RunPersistence |
+| ForeignEpoch | Y4-001 / RunPersistence |
+| AlreadyInitialized an unmoeglicher Bootstelle | Y4-007 / SafetyCore |
+
+## Runtime
 
 ```text
 WriteFailed
 CapacityExceeded
 PersistenceIndeterminate
+CounterOverflow
+    -> Y4-004 / RunPersistence
+
 PersistenceCommittedApplyFailed
+    -> Y4-001 / RunPersistence
 ```
 
-wird als kritische systemweite Persistenz-/Rekonstruktionsgefahr auf den zentralen Safety-Core abgebildet.
+Normale erwartbare:
 
-## 16.7 ConfigurationRecovery #57
+```text
+AlreadyProcessed
+AlreadyPersisted
+NotEligible
+NotAllowedInState
+StaleDecision
+Busy
+NotDue
+NoActiveRun
+```
 
-Direkt konsumieren:
+sind nicht automatisch persistente SafetyFaults.
+
+Ein `BlockedIndeterminate`-Coordinatorstate ohne bereits gemappte Ursache
+liefert Y4-006 / RunPersistence.
+
+---
+
+# 40. Configuration #57
+
+Direkt:
 
 ```text
 ConfigurationSafetyProducer::ConfigurationUnavailable
@@ -1161,30 +1901,74 @@ ConfigurationSafetyProducer::ConfigurationIntegrityFailure
 
 => Y4-002 / ConfigurationRecovery.
 
-`RuntimeReady`, `FactoryInitializationCompleted`, `FactoryResetCompleted` qualifizieren die Recovery-Seite neu, loeschen einen bestehenden Y4-Latch aber nicht automatisch. Sie setzen nur dessen Ursache `causeCleared`, sofern der aktuelle Graph wieder eindeutig gueltig ist.
+Clear erst wenn aktuelle #57-Recovery eindeutig wieder RuntimeReady bzw.
+erfolgreich abgeschlossen ist.
 
-## 16.8 ConfigurationService #56
-
-Mindestens:
-
-```text
-RuntimeFailure
-CommitIndeterminate
-```
-
-=> Y4-003 / ConfigurationRuntime.
-
-`Operational` ist positive aktuelle Qualifikation.
-
-Zwischenzustaende wie `CommitInProgress`, Reset/Recovery-Aufbau oder `NoRuntime` liefern keine normale Aktorfreigabe. Sie muessen nicht fuer jeden kurzen Zustand einen neuen persistenten Y4-Fault erzeugen; das Gate bleibt `Unresolved`, bis ein eindeutiger Endzustand vorliegt.
+Kein Auto-Reset des Latches.
 
 ---
 
-# 17. Unresolved-Semantik Y4-006
+# 41. Configuration #56
 
-Y4-006 ist **nicht eine globale Instanz**.
+`ConfigurationServiceMode`:
 
-Zulaessige feste Sources:
+```text
+RuntimeFailure       -> Y4-003 / ConfigurationRuntime
+CommitIndeterminate  -> Y4-003 / ConfigurationRuntime
+Operational          -> positive Clear-Qualifikation
+```
+
+Zwischenzustaende:
+
+```text
+NoRuntime
+RecoveryPreparing
+CommitInProgress
+ResetPreparing
+ResetEligibleNoRuntime
+EpochResetting
+BootstrapFinalizationPending
+```
+
+=> Gate `Unresolved`, solange sie fachlich erwartbar sind.
+
+Sie erzeugen nicht pro Tick neue Y4-Faults.
+
+Ein unbekannter/unmoeglicher Modewert:
+
+```text
+Y4-006 / ConfigurationRuntime
+```
+
+---
+
+# 42. CONFIGURATION_SAFETY_INTEGRATION_GATE
+
+Pflichttests gegen reale Producer:
+
+```text
+ConfigurationRuntimeFailure
+ConfigurationUnavailable
+ConfigurationIntegrityFailure
+nicht aufloesbarer CommitOutcomeUnknown / CommitIndeterminate
+```
+
+Jeder Fall beweist:
+
+- persistenter Y4-Latch;
+- unmittelbare Aktorsperre;
+- Reboot loescht Latch nicht;
+- Boot -> SAFE_BOOT;
+- Ursache-Recovery alleine loescht Latch nicht;
+- geschuetzter Faultreset erforderlich;
+- SAFE_BOOT bleibt danach bis separatem Exit;
+- aktiver Plannerpfad kann Gate nicht umgehen.
+
+---
+
+# 43. Y4-006 – unabhaengige Unknown-Ursachen
+
+Feste Sources:
 
 ```text
 Process
@@ -1198,346 +1982,240 @@ SafetyPersistence
 RestartSupervisor
 ```
 
-Damit koennen bis zu neun unabhaengige unresolved Ursachen gleichzeitig aktiv sein.
+Jede Source ist eigene FaultIdentity.
 
 Beispiel:
 
 ```text
 Y4-006 / ConfigurationRuntime
-Y4-006 / SensorSet
 Y4-006 / Process
+Y4-006 / SensorSet
 ```
 
-sind drei getrennte Faultinstanzen.
+sind drei Instanzen.
 
-Wenn spaeter die Sensorursache aufgeloest wird:
+Clear von SensorSet beruehrt die beiden anderen nicht.
 
-```text
-nur Y4-006 / SensorSet -> causeCleared
-```
-
-ConfigurationRuntime und Process bleiben unangetastet.
-
-Keine `last-origin-wins`-Semantik.
+Innerhalb einer Source wird erst gecleart, wenn **alle** Bedingungen dieser
+kanonischen Domain wieder eindeutig sind.
 
 ---
 
-# 18. Aktor-Safety-Gate
+# 44. SafetyGate / SafetyDirective
 
-## 18.1 Keine persistierte Freigabe
-
-`Allowed` wird niemals persistiert.
-
-Nach jedem Boot beginnt die aktuelle Releasequalifikation als unbekannt.
-
-## 18.2 Ergebnis
-
-`SafetyFaultService` erzeugt ausschliesslich:
-
-```text
-ActuatorSafetyGateStatus::ImmediateStop
-ActuatorSafetyGateStatus::Unresolved
-ActuatorSafetyGateStatus::Allowed
-```
-
-### ImmediateStop
-
-Mindestens bei:
-
-- aktivem/gelatchtem blockierenden S3/Y4;
-- aktivem Emergency Marker;
-- SAFE_BOOT;
-- kritischem Safety-Persistenz-RAM-Latch;
-- O2-002 Air/Cooling STALE;
-- einer aktuell sicherheitsrelevant blockierenden #21-Permission.
-
-### Unresolved
-
-Mindestens wenn eine fuer den aktuellen Kontext erforderliche Evidenz fehlt oder unbekannt ist, aber noch kein stabil klassifizierter Fault gesetzt wurde.
-
-### Allowed
-
-Nur wenn alle fuer den aktuellen Kontext erforderlichen aktuellen Nachweise positiv sind.
+## ImmediateStop
 
 Mindestens:
 
-- Safetyrecord geladen und healthy;
-- kein Emergency Marker;
-- kein SAFE_BOOT;
+- ProcessState Fault;
+- ProcessState SafeBoot;
+- aktiver blockierender S3/Y4;
+- EmergencyMarker active/unknown;
+- SafetyStorage unqualified;
+- SafetyPersistence RAM latch;
+- O2-002 Air/Cooling STALE;
+- #21 Permission Blocked;
+- terminaler Safety-Prozesscommit in Bearbeitung.
+
+## Unresolved
+
+Wenn notwendige aktuelle Evidenz fehlt, aber noch keine stabile FaultIdentity
+klassifiziert ist.
+
+## Allowed
+
+Nur bei:
+
+- SafetyStorage healthy;
+- Marker resolved/none;
+- kein Fault/SafeBoot;
 - kein blockierender Fault;
-- Configuration operational;
-- Runzustand nicht indeterminiert;
-- AirSensor VALID;
-- CoolingSensor VALID;
-- #21-Permission fuer den aktuellen Lauf erlaubt;
-- bei Product-Mode die von #21 verlangte ProductSensor-Evidenz;
-- ControlContext strukturell gueltig;
-- Planner-Watchdog nicht gelatcht.
+- Configuration Operational;
+- Runzustand eindeutig;
+- Air VALID;
+- Cooling VALID;
+- #21 Permission passend;
+- ProductEvidence falls aktueller ProductMode sie verlangt;
+- ControlContext gueltig;
+- PlannerWatchdog nicht gelatcht.
+
+`Allowed` wird nie persistiert.
 
 ---
 
-# 19. Kein Planner-/Sink-Bypass
+# 45. Kein Caller-supplied Allowed
 
-Der aktuelle aktive Aktorpfad ist:
+Der planner-/driver-gebundene
+`TemperatureControlApplicationOrchestrator` muss den zentralen
+`SafetyFaultService` bzw. einen daraus nicht faelschbaren internen
+SafetyDirective-Provider besitzen.
 
-```text
-TemperatureControlApplicationOrchestrator
-  -> ActuatorPlanner
-  -> ActuatorPlanSinkDriver
-```
+`tickActuatorPlan()` akzeptiert im produktiven gebundenen Pfad **keinen**
+freien `ActuatorSafetyGateInput`.
 
-Der heute vorhandene Aufruf:
+Ablauf:
 
-```cpp
-tickActuatorPlan(..., ActuatorSafetyGateInput safetyGate)
-```
+1. SafetyDirective zentral ableiten;
+2. internen Plannerinput bauen;
+3. Planner tick;
+4. FanDirective auf Plannerresultat anwenden;
+5. SinkDriver;
+6. PlannerWatchdog-Evidenz an Safety zurueckmelden.
 
-wird fuer den planner-/driver-gebundenen Produktionspfad geaendert.
-
-## 19.1 Verbindliche Form
-
-Der Konstruktor, der `ActuatorPlanner` und `ActuatorPlanSinkDriver` bindet, muss zusaetzlich den zentralen `SafetyFaultService` binden.
-
-`tickActuatorPlan()` nimmt **keinen frei vom Caller gesetzten SafetyGate-Wert** mehr entgegen.
-
-Der Orchestrator:
-
-1. fragt den zentralen Safety-Service;
-2. baut daraus intern `ActuatorSafetyGateInput`;
-3. ruft den Planner;
-4. wendet den Planneroutput am bestehenden SinkDriver an;
-5. meldet Planner-Watchdogereignisse wieder an den Safety-Service.
-
-Damit kann ein produktiver Caller nicht `Allowed` erfinden.
-
-## 19.2 Bestehender actorfreier Root
-
-`main/app_main.cpp` und `src/main.cpp` treiben auf aktuellem `main` keinen realen ActuatorPlanner/Sink und der ESP-IDF-Root deklariert reale Aktoren als disabled.
-
-Issue #24 baut dort deshalb **keinen Fake-StateStore oder Fake-Hardwareadapter** ein.
-
-Ein statischer/Integrationstest muss aber beweisen:
-
-> Sobald der aktive planner-/driver-gebundene Orchestrator verwendet wird, ist `SafetyFaultService` zwingende Konstruktorabhaengigkeit.
+Der actorfreie aktuelle ESP-IDF-Skeletonroot bleibt actorfrei.
+#24 baut keine Fake-Hardware auf.
 
 ---
 
-# 20. FaultReset und #15/#17 ohne zweite Safety-Autoritaet
+# 46. Trust Boundary fuer Authorization
 
-## 20.1 Bestehenden Vertrag wiederverwenden
+#24 implementiert keine PIN-Pruefung.
 
-`FaultResetEvaluation` bleibt der #15-Vertrag.
-
-Minimal notwendige Erweiterung:
+Reset-/SAFE_BOOT-Evaluation erhaelt:
 
 ```text
-targetFaultInstanceId
+authorizationSatisfied
 ```
 
-in:
+nur aus einer vertrauenswuerdigen Application/Auth-Grenze.
 
-- `FaultResetRequest`;
-- `FaultResetEvaluation` oder der zugehoerigen Decisionprojektion.
+UI/Web/Transport duerfen dieses Feld niemals als frei deserialisierbaren
+Benutzerwert direkt setzen.
 
-`CommandEnvelope.expectedFaultRevision` bleibt der globale Stalenessanker.
-
-## 20.2 Aenderung in `decideFaultReset()`
-
-#15 darf nach positiver Evaluation **nicht mehr**:
+Bis ein produktiver Auth-Producer existiert:
 
 ```text
-faultRevision selbst erhoehen
-criticalSafetyEventPending selbst loeschen
+Serviceauthorization im Produktpfad = false
 ```
 
-Stattdessen:
+Tests duerfen true/false deterministisch injizieren.
 
-- Envelope/Staleness/Bestaetigung pruefen;
-- #24-Evaluation pruefen;
-- normalen CommandDecision-Kandidaten erzeugen;
-- `FaultResetAuthorized` + Zielinstance transportieren;
-- keine Safety-Mutation ausfuehren.
-
-## 20.3 Commitreihenfolge
-
-```text
-SafetyFaultService.evaluateReset(target)
--> #15 decideFaultReset(...)
--> #17 persistCommand(...)
--> nur bei bestaetigtem #17-Erfolg:
-     SafetyFaultService.resetFault(target)
--> SafetyStateRecord persist/readback
--> RunCommandState Safetyprojektion synchronisieren
--> falls S3-004:
-     planner.applyExternalWatchdogFaultReset()
--> wenn keine blockierenden Latches mehr:
-     FaultResetCompleted-ProcessTransition anfordern
-```
-
-## 20.4 Crashmatrix
-
-### Crash vor #17-Commit
-
-Kein Safetyreset. Latch bleibt.
-
-### Crash nach #17-Commit, vor SafetyState-Commit
-
-Latch bleibt persistent. Reboot bleibt safe. Neue Command-ID kann spaeter erneut versuchen.
-
-### SafetyState-Commit schlaegt fehl
-
-Emergency Marker / ImmediateStop. Latch wird nicht als erfolgreich resettiert behauptet.
-
-### Crash nach SafetyState-Commit, vor ProcessTransition
-
-Safetyfault ist resettiert, aber ProcessState bleibt `Fault`. Dadurch keine Aktorfreigabe. Nach Recovery kann die Transition erneut ausgefuehrt werden.
-
-Diese Reihenfolge benoetigt keine verteilte Zwei-Phasen-Transaktion ueber Run- und Safetyrecord.
+Kein Capability-/Token-Framework.
 
 ---
 
-# 21. Fault-Acknowledgement
+# 47. SafetyEvents fuer #19
 
-Quittierung bleibt getrennt vom Reset.
-
-Bestehende #15-Meldungsquittierung bleibt der Benutzercommand.
-
-Die Safetyintegration darf nach erfolgreicher Quittierung einer faultgebundenen RuntimeMessage den betreffenden Fault `acknowledged=true` setzen.
-
-Dafuer wird die Meldungsprojektion bei Bedarf minimal um die konkrete `faultInstanceId` ergaenzt; `faultRevision` allein reicht bei mehreren gleichzeitigen Faults nicht.
-
-Regeln:
-
-- Ack kann keine Ursache clearen;
-- Ack kann keinen Latch resetten;
-- Ack kann `Allowed` nicht herstellen;
-- Ack-Ereignis wird fuer #19 als typisiertes Event ausgegeben.
-
----
-
-# 22. Authorization-Grenze
-
-Issue #24 implementiert keine PIN-Pruefung.
-
-Der Safety-Core definiert pro Code nur die benoetigte Stufe, z. B.:
-
-```text
-Operator
-Service
-```
-
-Die aufrufende Schicht liefert fuer eine konkrete Reset-/SAFE_BOOT-Anfrage nur das Ergebnis der spaeteren vertrauenswuerdigen Authentisierung:
-
-```text
-authorizationSatisfied = true/false
-```
-
-Bis ein produktiver Service-PIN-/Auth-Producer existiert, darf der reale Produktpfad keine Servicefreigabe herstellen.
-
-Tests duerfen beide Zustaende deterministisch injizieren.
-
-Es werden keine langlebigen Capability-Tokens, Pointer-Tokens oder versteckten Authframeworks gebaut.
-
----
-
-# 23. Fault-/Safety-Ereignisse und Grenze zu Issue #19
-
-Issue #24 erzeugt kleine typisierte Ereignisse, z. B.:
+Typ:
 
 ```text
 FaultRaised
-FaultAcknowledged
 FaultCauseCleared
+FaultRelapsed
 FaultReset
 SafeBootEntered
 SafeBootExited
 RestartPrepared
 RestartObserved
+RestartRejected
 SafetyPersistenceFailed
 EmergencyMarkerSet
 EmergencyMarkerCleared
+RunTerminatedByFaultReset
+RunTerminatedBySafeBoot
 ```
 
-Mindestens enthalten:
+`SafetyEvent` enthaelt mindestens:
 
-- EventKind;
-- FaultCode/Source falls zutreffend;
-- instanceId;
-- optional Primary;
-- aktuelle bootlokale monotone Zeit;
+- kind;
+- optional code/source/instanceId;
+- optional primary;
+- bootSequence;
+- monotonicMillis;
 - faultRevision.
 
-Issue #24 speichert daraus **kein Langzeitjournal**.
+Jede einzelne Mutation liefert:
 
-Die konkrete append-only-/Ringpufferpersistenz, Retention, Export und Bereinigung bleibt #19.
+```text
+SafetyMutationResult
+```
 
-Tests pruefen, dass die richtigen Ereignisse entstehen und keine Safetyentscheidung von einem funktionierenden Journal abhaengt.
+mit:
+
+```text
+std::array<SafetyEvent, 4>
+eventCount <= 4
+```
+
+Keine Queue im FaultCore.
+Keine Journalpersistenz in #24.
+Journalausfall kann Safety nicht blockieren oder freigeben.
 
 ---
 
-# 24. Fehlerinjektion
+# 48. Fehlerinjektion
 
-Keine zweite Test-only-Safetylogik.
+## Sensor
 
-## 24.1 Sensor
-
-Ueber reale #20/#21-Typen:
+Reale #20/#21-Typen:
 
 - VALID;
 - STALE;
 - FAILED;
+- SafeLocked;
 - CrossRole indeterminate;
 - Recovery.
 
-## 24.2 Aktor
+## Planner
 
-- realer #23-Watchdog wird durch fehlende/stale Requestfolge ausgeloest;
-- S3-005 wird ueber den kleinen typisierten ActuatorDiagnostic-Vertrag mit Peltier/OuterFan/InnerFan injiziert;
-- keine physische Rueckmeldung wird behauptet.
+Realer #23-Watchdog durch echte stale/fehlende Requestfolge.
 
-## 24.3 Persistenz
+## Aktor
 
-`SimulatedPersistentStateStore` injiziert:
+S3-005/S3-006 ueber typisierte injection-only Evidenz.
+
+## Persistenz
+
+`SimulatedPersistentStateStore`:
 
 - WriteError;
 - CapacityError;
-- CommitOutcomeUnknown -> neuer Record;
-- CommitOutcomeUnknown -> alter Record;
-- ReadError beim Readback;
-- CRC-korrupte Bytes;
-- semantisch ungueltigen, CRC-korrekten Payload;
-- Fehler auch im Emergency-Marker-Pfad.
+- CommitOutcomeUnknown -> neuer Wert;
+- CommitOutcomeUnknown -> alter Wert;
+- ReadError;
+- CRC corruption;
+- semantisch ungueltig bei korrektem CRC;
+- SafetyState-Slotfehler;
+- Marker-Slotfehler;
+- Redundanzreparatur.
 
-## 24.4 Brownout / Restart
+## Restart
 
-`SimulatedResetController` liefert:
+`SimulatedResetController`:
 
 - PowerOn;
 - SoftwareRestart;
 - WatchdogOrPanic;
 - Brownout;
 - External;
-- Unknown.
-
-Tests pruefen RestartEpisode und SAFE_BOOT deterministisch.
+- Unknown;
+- Restart Requested/Rejected.
 
 ---
 
-# 25. Testorakel
+# 49. Testmatrix – FaultCore
 
-## 25.1 FaultCore
+- alle 30 erlaubten Identities exakt einmal im Katalog;
+- keine ungueltige Code-/Source-Kombination;
+- keine Eviction;
+- gleiche Identity + 100 wechselnde Mess-/Run-/Plannerrevisionen:
+  gleiche instanceId;
+- unabhaengige Multi-Faults;
+- Klassenprioritaet;
+- Intra-Class displayPriority;
+- CauseClear;
+- Relapse setzt false + neue faultRevision;
+- alte ResetEvaluation nach Relapse stale;
+- P1/O2 autoRearm nur wenn erlaubt;
+- S3/Y4 nie auto reset;
+- Primary/Follower;
+- Primaryreset loescht Follower nicht;
+- faultRevision overflow;
+- instanceId overflow.
 
-- jede Katalogidentitaet ist eindeutig;
-- unbekannte Code-/Source-Kombination wird nie still akzeptiert;
-- wiederholte Evidenz derselben Identitaet erzeugt keine neue Instanz;
-- mehrere unterschiedliche Faults koexistieren;
-- P1/O2/S3/Y4-Dominanz;
-- Quittierung != Cause-Clear != Reset;
-- Primary/Follow-up bleibt nachvollziehbar;
-- Primaryreset loescht Follow-up nicht;
-- Instance-/FaultRevision-Overflow fail-closed.
+---
 
-## 25.2 Spezieller Regressionstest gegen PR #107/#108
+# 50. Testmatrix – Y4-006 Regression
 
 Gleichzeitig:
 
@@ -1547,569 +2225,566 @@ Y4-006 / Process
 Y4-006 / SensorSet
 ```
 
-Dann Sensorursache aufloesen.
+SensorSet qualifizieren.
 
 Erwartung:
 
 ```text
 nur SensorSet causeCleared
-ConfigurationRuntime aktiv
-Process aktiv
-Gate weiterhin ImmediateStop
+andere bleiben aktiv
+Gate bleibt ImmediateStop
 ```
 
-Anschliessend jede Ursache separat.
+Danach jede Domain einzeln.
 
-## 25.3 Volatile Evidenz darf keine neue Faultinstanz erzeugen
+Innerhalb ConfigurationRuntime:
 
-Dieselbe aktive Ursache wird mit:
+- zwei unresolved Unterbedingungen simulieren;
+- nur eine beheben;
+- Identity darf noch nicht causeCleared werden.
 
-- 100 verschiedenen Sensorzeitpunkten;
-- 100 ControlRequestSequences;
-- 100 Planner-/RunRevisionen
+---
 
-erneut beobachtet.
+# 51. Testmatrix – Wireformat
 
-Erwartung:
-
-```text
-immer dieselbe instanceId
-aktive Anzahl unveraendert
-```
-
-## 25.4 Persistenzcodec
-
-Golden-/Roundtriptests:
-
-- leere SafetyState;
-- alle 24 persistenten Katalogidentitaeten;
-- Ack/CauseClear/RestartAttempted Flags;
-- Primarymetadaten;
-- safeBoot;
+- initialer Payload;
+- 26 persistente Faults;
+- flags;
+- Primary;
+- safeBootRequired;
 - RestartIntent;
-- abnormalRestartCount;
-- maximale Payload;
-- unknown enum;
-- unknown code/source;
-- duplicate identity;
+- RestartCounter 0..3;
+- Golden Bytes;
+- Roundtrip;
+- max 759 Byte;
+- unknown Code;
+- unknown Source;
+- duplicate Identity;
 - duplicate instanceId;
 - invalid Primary;
-- falsche Anzahl;
-- Restbytes;
-- truncated;
-- Envelope-CRC;
-- falscher RecordType;
+- invalid Count;
+- rest bytes;
+- truncate;
+- falsche Epoch;
 - falsches Schema;
-- falsche SafetyEpoch.
-
-Wiregroessen werden aus den Codecfunktionen getestet und nicht nur aus Kommentaren behauptet.
-
-## 25.5 SafetyStateStore
-
-- beide Slots NotFound -> initialer Blankrecord;
-- ein gueltiger Slot;
-- zwei gueltige Revisionen -> hoechste;
-- gleiche Revision / anderer Payload -> SAFE_BOOT;
-- ReadError nie NotFound;
-- CRC-Fehler nie ignoriert;
-- Success + exakter Readback;
-- CommitOutcomeUnknown -> exakt neu;
-- CommitOutcomeUnknown -> alt;
-- ReadbackFailure;
-- SafetyState-Fehler -> EmergencyMarker;
-- EmergencyMarker-Fehler -> RAM-only Lock.
-
-## 25.6 Emergency Marker
-
-- Active ueberlebt Reboot;
-- Cleared erst nach erfolgreicher Marker-Recovery;
-- Marker-Recovery loescht SAFE_BOOT nicht;
-- korruptes Marker-Slot -> SAFE_BOOT;
-- ein einzelner erfolgreicher normaler Write loescht Marker nicht.
-
-## 25.7 Restart
-
-- PowerOn ohne Episode;
-- einzelner Brownout;
-- Watchdog;
-- unerwarteter SoftwareRestart;
-- kontrollierter Restart write-before-apply;
-- derselbe Fault bekommt keinen zweiten Restart;
-- 3 abnormale Boots -> SAFE_BOOT;
-- 29:59 stabil -> Counter bleibt;
-- 30:00 stabil -> Counter wird einmal persistiert auf 0;
-- Reboot vor 30 Minuten -> Counter bleibt;
-- persistierter S3/Y4 beim Boot -> SAFE_BOOT unabhaengig vom Counter.
-
-## 25.8 SAFE_BOOT
-
-- normaler Reboot verlaesst SAFE_BOOT nicht;
-- Marker-Recovery allein verlaesst SAFE_BOOT nicht;
-- fehlende Configqualifikation -> Exit abgelehnt;
-- Air STALE/FAILED -> Exit abgelehnt;
-- Cooling STALE/FAILED -> Exit abgelehnt;
-- Watchdog-Latch -> Exit abgelehnt;
-- Serviceautorisierung fehlt -> Exit abgelehnt;
-- alle Bedingungen positiv -> SafetyState persistiert, danach `SafeBoot -> Standby`;
-- kein direkter Aktortest aus SAFE_BOOT.
-
-## 25.9 Reset / #15 / #17
-
-- stale faultRevision;
-- falsche targetInstance;
-- cause active;
-- Safetycheck fehlt;
-- Authorization fehlt;
-- anderer uncleared gleich-/hoeherer Fault;
-- anderer cause-cleared Latch verhindert Zielreset nicht, aber Gate bleibt blockiert;
-- #15 mutiert FaultCore nicht;
-- #17 Commitfehler -> Safetyreset nicht ausgefuehrt;
-- Crash nach #17 vor SafetyState -> Latch bleibt;
-- SafetyState-Commitfehler -> EmergencyMarker;
-- letzter Fault reset -> erst dann Process-Fault-Exit;
-- aktiver Lauf -> `Fault -> RecoveryEvaluation`;
-- kein aktiver Lauf -> `Fault -> Standby`.
-
-## 25.10 Reale Integrationspfade
-
-- #20 Air/Cooling STALE/FAILED/Recovery;
-- #21 ProductFallback und SafeLocked;
-- #22 InvalidConfiguration/TimeInvalid sowie normale AirLimitReduced/Blocked ohne falschen Fault;
-- #23 realer Watchdog;
-- #17/#18 NotReconstructible;
-- #56 RuntimeFailure/CommitIndeterminate;
-- #57 ConfigurationUnavailable/IntegrityFailure;
-- alle Configuration-Gate-Faelle blockieren normale Aktorfreigabe.
-
-## 25.11 Bypass
-
-- planner-/driver-gebundener Orchestrator laesst sich nicht ohne SafetyFaultService konstruieren;
-- `tickActuatorPlan()` akzeptiert keinen caller-supplied `Allowed`;
-- Unresolved -> Planner Idle;
-- ImmediateStop -> Planner stoppt sofort trotz Mindestzeiten;
-- Sink kann keine Freigabe erzeugen;
-- kein Testhelper ist Produktionsabhaengigkeit.
+- falscher RecordType;
+- CRC.
 
 ---
 
-# 26. Dokumentationsaenderungen
+# 52. Testmatrix – SafetyState Store
 
-Nur dauerhafte Verträge aktualisieren:
+- beide NotFound -> duale Initialisierung;
+- Powerloss nach sf0 vor sf1 -> kein normaler Allowed;
+- zwei valide -> hoechste Revision;
+- gleiche Revision/gleicher Payload;
+- gleiche Revision/anderer Payload -> fail closed;
+- eine Seite NotFound -> Recovery erforderlich;
+- eine Seite CRC-defekt -> Recovery erforderlich;
+- eine Seite ReadError -> Recovery erforderlich;
+- Commit Success + readback;
+- CommitOutcomeUnknown -> neu;
+- CommitOutcomeUnknown -> alt;
+- Readback mismatch;
+- RecordRevision overflow.
+
+---
+
+# 53. Testmatrix – EmergencyMarker/Recovery
+
+- beide NotFound -> kein Marker;
+- Active + NotFound -> SAFE_BOOT;
+- Active + alter Cleared -> Active gewinnt nach Sequence;
+- neuer Cleared + alter Active -> Cleared nur bei healthy Markerhistorie;
+- corrupt slot -> SAFE_BOOT;
+- Markerwrite erster Slot fail -> zweiter Versuch;
+- beide fail -> RAM fail-closed;
+- MarkerRecovery repariert SafetyState-Redundanz;
+- MarkerRecovery repariert Marker-Redundanz;
+- MarkerRecovery schreibt safeBootRequired true;
+- MarkerRecovery verlaesst SAFE_BOOT nicht;
+- MarkerSequence overflow.
+
+---
+
+# 54. Testmatrix – Restart
+
+- erster Boot;
+- bootSequence increment einmal;
+- bootSequence overflow;
+- PowerOn ohne Intent;
+- External ohne Intent;
+- Brownout;
+- Watchdog/Panic;
+- Unknown;
+- SoftwareRestart ohne Intent;
+- Prepared + SoftwareRestart;
+- Prepared + PowerOn/External;
+- Prepared wird genau einmal konsumiert;
+- Request Rejected -> Intent clear, kein Retry;
+- Request Requested -> Intent bleibt bis Boot;
+- gleicher Fault nie zweiter Restart;
+- Count 1;
+- Count 2;
+- Count 3 -> Y4-005 + safeBootRequired;
+- Count saturiert 3;
+- 29:59 normal stabil -> nicht clear;
+- 30:00 normal stabil -> Count 0;
+- Y4-005 in SAFE_BOOT: 30:00 -> nur causeCleared;
+- Y4-005 Reset -> Count 0, SafeBoot bleibt.
+
+---
+
+# 55. Testmatrix – FAULT
+
+- S3/Y4 in aktiver Phase -> immediate Peltier stop;
+- SafetyState committed;
+- `CriticalFault` persisted;
+- aktiver Run bleibt waehrend Fault als Fault-Snapshot;
+- zweiter Fault erzeugt keinen zweiten ProcessTransition;
+- Reset eines von mehreren Faults -> Fault bleibt;
+- letzter Faultreset -> FaultResetCompleted;
+- aktiver Run -> terminal `NoActiveRun/STANDBY`;
+- `clearActiveRunState()` einzige terminale Runbereinigung;
+- kein `RecoveryEvaluation`;
+- #17-Commitfehler -> Fault bleibt + Y4 mapping;
+- Reboot vor Terminalisierung -> kein automatischer Resume.
+
+---
+
+# 56. Testmatrix – SAFE_BOOT
+
+- persistenter S3/Y4 beim Boot -> safeBootRequired true;
+- RestartCount 3 -> safeBootRequired true;
+- config Y4 -> safeBootRequired true;
+- run Y4 -> safeBootRequired true;
+- Markerproblem -> SAFE_BOOT;
+- aktiver geladenener Run wird nicht aktiviert;
+- terminale Runbereinigung fuer SAFE_BOOT;
+- RunStore indeterminate -> kein Exit;
+- Reboot verlaesst SafeBoot nicht;
+- Faultreset in SafeBoot verlaesst SafeBoot nicht;
+- MarkerRecovery verlaesst SafeBoot nicht;
+- Exit ohne Auth -> reject;
+- Exit mit Air STALE -> reject;
+- Exit mit Cooling STALE -> reject;
+- Exit mit Config nicht Operational -> reject;
+- Exit mit Run nicht NoActiveRun -> reject;
+- alle Bedingungen -> safety flag clear -> SafeBootExitCompleted -> Standby;
+- kein direkter Aktortest aus SafeBoot.
+
+---
+
+# 57. Testmatrix – #15 FaultReset
+
+- targetFaultInstanceId 0;
+- stale faultRevision;
+- cause active;
+- auth false;
+- safetychecks false;
+- andere uncleared gleich-/hoeherklassige Ursache;
+- andere cause-cleared Latches duerfen Zielreset nicht blockieren;
+- #15 mutiert FaultCore nicht;
+- #15 setzt criticalSafetyEventPending nicht selbst false;
+- ResetFault bleibt non-persisted RunCommand;
+- SafetyState ist Reset-Linearisierung;
+- Command-RAM-Bookkeeping erst nach Safetycommit;
+- Projektion danach synchronisiert.
+
+---
+
+# 58. Testmatrix – Fanpolicy
+
+- Sensorfault waehrend aktivem Peltier -> Peltier sofort Idle, #23 RunOn;
+- S3-005 OuterFan -> ForceOff dominiert;
+- S3-006 OuterFan -> ForceOn;
+- S3-006 InnerFan -> Inner ForceOff;
+- gleichzeitig OuterFan ForceOn + elektrischem OuterFan Fault ->
+  ForceOff gewinnt;
+- kein Fault kann Peltier trotz ImmediateStop aktivieren;
+- keine Fanpolicy behauptet Feedback.
+
+---
+
+# 59. Testmatrix – Configuration Gate
+
+Reale Producer:
+
+- ConfigurationRuntimeFailure;
+- ConfigurationUnavailable;
+- ConfigurationIntegrityFailure;
+- CommitIndeterminate.
+
+Jeweils:
+
+- Y4 Identity;
+- persistiert;
+- gate ImmediateStop;
+- reboot retain;
+- SAFE_BOOT;
+- Recovery -> nur causeClear;
+- Reset notwendig;
+- SafeBootExit separat;
+- Plannerpfad kein Bypass.
+
+---
+
+# 60. Dokumentation
+
+Dauerhaft aktualisieren:
 
 - `docs/SAFETY_AND_FAULTS.md`
-  - finaler 15-Code-Katalog;
-  - stabile Source-/Identity-Regel;
-  - Resetfolge;
-- `docs/SYSTEM_SAFETY_AND_RECOVERY.md`
-  - 3 Restarts / 30 Minuten;
-  - separater Emergency Marker;
-  - Marker-Recovery != SAFE_BOOT-Exit;
 - `docs/SAFETY_COMPONENT_FAULTS.md`
-  - reale vs injection-only Actuatordiagnose klar kennzeichnen;
+- `docs/SYSTEM_SAFETY_AND_RECOVERY.md`
 - `docs/ACCEPTANCE_TESTS.md`
-  - dauerhafte Orakel aus diesem Plan, **keine PR-Historie**;
 - `docs/RUN_COMMANDS.md`
-  - targetFaultInstanceId und #15/#24-Autoritaetsgrenze;
+- `docs/STATE_MACHINE.md`
+- `docs/RUN_PERSISTENCE.md`
+- `docs/RECOVERY_AND_INTERRUPTION.md`
+- `docs/ARCHITECTURE.md`
 - `docs/ROADMAP.md`
-  - #23 als abgeschlossen;
-  - #24 / PR #108 als aktuelle fachliche Arbeit;
-  - #19 danach als naechste fachliche Arbeit.
 
-PR-Runden, alte Heads und Testlaufhistorie bleiben im PR/Handover.
+Wesentliche neue dauerhafte Aussagen:
+
+- finaler Faultcodekatalog;
+- terminale R1-S3/Y4-Faultpolicy;
+- `FAULT -> STANDBY`;
+- SAFE_BOOT terminiert geladenen Run statt ihn zu reaktivieren;
+- Restart 3 / 30min;
+- SafetyState/EmergencyMarker;
+- MarkerRecovery != SafeBootExit;
+- #15/#24/#17-Autoritaetsgrenze;
+- Fan-Safety-Directive.
+
+Keine PR-Reviewhistorie in kanonischen Fachdocs.
 
 ---
 
-# 27. Voraussichtlich betroffene Produktionsdateien
+# 61. Voraussichtliche Dateien
 
-Die genaue Dateiliste wird pro Slice gegen Live-HEAD geprueft. Erwartet:
-
-## `lib/fermentation_app/src/`
-
-Neu bzw. zentral:
+## Neu `fermentation_app`
 
 ```text
 fault_types.hpp
 fault_catalog.hpp/.cpp
-safety_fault_service.hpp/.cpp
+fault_core.hpp/.cpp
+safety_events.hpp
 safety_state_codec.hpp/.cpp
 safety_state_store.hpp/.cpp
+safety_emergency_marker_store.hpp/.cpp
 safety_storage_contract.hpp
-safety_events.hpp
 restart_supervisor.hpp/.cpp
+safety_fault_service.hpp/.cpp
+safety_process_coordinator.hpp/.cpp
 actuator_diagnostic_types.hpp
 ```
 
-Gezielt angepasst:
+Kleine Klassen/Module nach Verantwortung; kein einzelnes 1800-Zeilen-Servicefile.
+
+## Geaendert
 
 ```text
 run_commands.hpp/.cpp
 process_state_machine.hpp/.cpp
+run_persistence_coordinator.hpp/.cpp
 temperature_control_orchestrator.hpp/.cpp
+actuator_plan_types.hpp
 ```
 
-## `lib/device_platform/src/`
+Nur tatsaechlich notwendige Aenderungen.
 
-Nur:
+## device_platform
 
 ```text
 reset_controller.hpp
 ```
 
-falls kein gleichwertiger Port am jeweiligen Live-HEAD vorhanden ist.
-
-## `lib/device_platform_test_support/src/`
-
-Nur deterministische Simulatoren, insbesondere:
+## test support
 
 ```text
 simulated_reset_controller.hpp/.cpp
 ```
 
-Bestehenden `SimulatedPersistentStateStore` erweitern statt zweiten Store bauen, falls seine vorhandenen Cut-Points ausreichen.
-
-## Tests
-
-Neue kleine Testbereiche entlang der Module, statt eines einzigen riesigen Issue-24-Testfiles.
+Bestehenden PersistentStateStore-Simulator erweitern statt zweitem Store.
 
 ---
 
-# 28. Umsetzungsschnitte
+# 62. Ressourcenregeln
 
-Jeder Slice endet mit:
+- FaultCore: feste `std::array`, keine unbounded Container;
+- maximal 30 Runtime-Identitaeten;
+- maximal 26 persistente Faultrecords;
+- SafetyState Envelope <= 1024 Byte;
+- Marker Envelope <= 64 Byte;
+- keine Writes pro Control-Tick;
+- gleiche aktive FaultIdentity ohne Zustandsaenderung erzeugt keinen Write;
+- Restart stable clear maximal ein Write beim Grenzerreichen;
+- SafetyEvents fixed array;
+- keine PSRAM-Annahme;
+- finaler Base-/Head-Ressourcenvergleich gemaess Quality-Gates.
 
-- gezielten Tests;
+Keine exakte C++-Struct-RAMgroesse wird vor Compiler-/Buildmessung behauptet.
+
+---
+
+# 63. Umsetzungsschnitte
+
+Jeder Slice:
+
+- gezielte Tests;
+- direkt betroffene Konsumententests;
 - `git diff --check`;
 - Architekturgrenzen;
-- Secretscan;
-- kurzem Handover;
-- Ownerreview.
+- Secretcheck;
+- Ownerreview;
+- kein Full-Suite-Zwang waehrend Draft.
 
-Keine Full Native Suite in jedem Draft-Slice.
+## Slice 1 – FaultCore + Katalog
 
-## Slice 1 – Faultmodell und pure Policy
-
-Umfang:
-
-- `FaultCode`, `FaultSource`, `FaultDetail`;
-- compile-time Katalog;
-- FaultIdentity;
-- reine FaultCore-Lifecyclelogik;
+- Typen;
+- 16 Codes;
+- 30 erlaubte Identities;
+- Policy;
+- DisplayPriority;
+- CauseClear/Relapse;
 - Primary/Follow-up;
-- P1/O2/S3/Y4 Policy;
-- keine Persistenz;
-- keine Producerintegration.
+- Fanpolicy rein;
+- Events rein.
 
-Tests:
+## Slice 2 – SafetyState Codec/Store
 
-- Katalog;
-- Identitaet;
-- Dominanz;
-- Multi-Fault;
-- same identity / wechselnde Evidenz;
-- Reset-/Ack-/CauseClear-Pure-Policy;
-- Overflow.
-
-**Stop zum Ownerreview.**
-
-## Slice 2 – Codec + normaler SafetyStateStore
-
-Umfang:
-
-- Safety Storage Contract;
 - RecordType 9;
 - sf0/sf1;
-- exaktes Wireformat;
-- Slotscan;
+- duale Init;
+- 759-Byte-Max;
 - semantic decode;
-- write/readback/CommitOutcomeUnknown.
+- CommitOutcomeUnknown;
+- Redundanz.
 
-Noch kein Emergency Marker.
-
-Tests:
-
-- Golden Bytes;
-- Roundtrip;
-- Corruption;
-- Slotselection;
-- Commitmatrix.
-
-**Stop zum Ownerreview.**
-
-## Slice 3 – Emergency Marker
-
-Umfang:
+## Slice 3 – EmergencyMarker + Repair
 
 - RecordType 10;
 - sem0/sem1;
-- 22-Byte-Payload;
-- RAM fallback;
-- Marker-Recovery;
-- Marker darf SAFE_BOOT nicht clearen.
+- bounded two-slot fallback;
+- Redundanzrecovery;
+- MarkerRecovery;
+- kein SafeBootExit.
 
-Tests komplette Cut-Point-Matrix.
+## Slice 4 – RestartSupervisor
 
-**Stop zum Ownerreview.**
-
-## Slice 4 – ResetSupervisor / SAFE_BOOT
-
-Umfang:
-
-- neutraler `IResetController`;
+- ResetPort;
 - Simulator;
+- bootSequence;
 - RestartIntent;
-- 3-Restart-/30-Minuten-Episode;
-- Bootauswertung;
-- ProcessStateMachine:
-  - `SafeBootExitCompleted`;
-  - `FaultResetCompleted`;
-- SAFE_BOOT-Exitcontract.
+- 3 / 30min;
+- Y4-005.
 
-Kein ESP-IDF-Adapter.
+## Slice 5 – Process/Run Safety
 
-**Stop zum Ownerreview.**
+- Runtime S3/Y4 -> Fault;
+- FaultResetCompleted -> Standby;
+- clearActiveRunState;
+- #17 terminal persistTransition;
+- terminateLoadedRunForSafeBoot;
+- SafeBootExitCompleted;
+- kein Fault->RecoveryEvaluation.
 
-## Slice 5 – reale Producer #20/#21/#22/#23
+## Slice 6 – Producer #20/#21/#22/#23
 
-Umfang:
+- Sensor;
+- Selection;
+- Control;
+- Watchdog;
+- injection-only actuator;
+- FanDirective.
 
-- SensorQuality-Mapping;
-- SensorSelection-Mapping;
-- TemperatureControl-Mapping;
-- Planner-Watchdog-Mapping;
-- injection-only ActuatorDiagnostic;
-- keine duplizierte Fachlogik.
+## Slice 7 – Producer #17/#18/#56/#57 + Boot
 
-Tests gegen echte existierende Typen.
+- exakte Runmappingmatrix;
+- Config Gate;
+- Bootreihenfolge;
+- safeBootRequired true;
+- geladenen Run nicht reaktivieren.
 
-**Stop zum Ownerreview.**
-
-## Slice 6 – reale Producer #17/#18/#56/#57
-
-Umfang:
-
-- RunPersistence Load/Runtime;
-- ConfigurationRuntime;
-- ConfigurationRecovery;
-- Configuration-Safety-Integration-Gate vollstaendig;
-- keine zweite Persistenz-/Recoverymaschine.
-
-Tests:
-
-- alle Issue-#24-Configuration-Akzeptanzfaelle;
-- Run not reconstructible;
-- indeterminate writes.
-
-**Stop zum Ownerreview.**
-
-## Slice 7 – Command-/Resetintegration
-
-Umfang:
+## Slice 8 – #15 FaultReset + Actuator Bypass
 
 - targetFaultInstanceId;
-- bestehende FaultResetEvaluation wiederverwenden;
-- #15 nicht mehr Safety mutieren lassen;
-- #17-persist-before-Safety-reset;
-- Ack-Verknuepfung;
-- Fault -> RecoveryEvaluation/Standby.
+- #15 keine SafetyMutation;
+- ResetFault non-persisted bestaetigen;
+- SafetyState reset linearisieren;
+- Orchestrator SafetyDirective zwingend;
+- kein caller Allowed.
 
-Tests inklusive Crashmatrix.
+## Slice 9 – Dokumentation und Abschluss
 
-**Stop zum Ownerreview.**
+- alle kanonischen Quellen;
+- Roadmap;
+- vollstaendiges Ownerreview.
 
-## Slice 8 – Aktorpfad / Bypass-Haertung
+Erst bei 0 Findings und Owner-Anweisung:
 
-Umfang:
-
-- aktiver Orchestrator bindet SafetyFaultService zwingend;
-- caller kann kein `Allowed` mehr liefern;
-- Planner/Sink-Handoff;
-- S3-004 Reset-Handoff.
-
-Tests:
-
-- Unresolved;
-- ImmediateStop;
-- watchdog;
-- Bypass;
-- Timingregeln duerfen SafetyStop nicht verhindern.
-
-**Stop zum Ownerreview.**
-
-## Slice 9 – kanonische Dokumentation und Issue-DoD
-
-Umfang:
-
-- dauerhafte Safetydocs;
-- ACCEPTANCE_TESTS;
-- RUN_COMMANDS;
-- ROADMAP;
-- keine PR-Historie.
-
-Danach vollstaendiges Ownerreview des gesamten PR-Diffs.
-
-Erst wenn 0 offene Findings:
-
-- Owner fordert den vollstaendigen Test-/Build-Gesamtlauf an;
-- Native Full Suite;
-- relevante Buildprofile;
+- Full Native;
+- Builds;
 - Ressourcenvergleich;
-- Remote CI gemaess Repositoryregeln.
+- CI.
 
-Hardwaretests bleiben `NOT_RUN`, sofern nicht separat freigegeben und verkabelt.
+Hardware bleibt `NOT_RUN`, solange nicht separat freigegeben/verkabelt.
 
 ---
 
-# 29. Aufgabenliste
+# 64. Aufgabenliste
 
-Die Liste ist Navigationshilfe, keine starre Mikro-Commit-Vorschrift.
+## Plan-Gate
 
-## Planung / Freigabe
-
-- [x] Ersatzplan als vollstaendige neue Planfassung in PR #108 uebernommen
-- [x] alte Plan-SHA nicht mehr als freigegeben bezeichnet
-- [x] Roadmap auf realen #23/#24-Stand korrigiert
-- [ ] exakte neue Plan-SHA in PR-Body und SESSION HANDOVER eingetragen
-- [x] Implementation weiterhin `NOT_STARTED`
-- [ ] Ownerfreigabe exakt dieser neuen Plan-SHA
+- [x] aktuelle Planfassung vollstaendig ersetzen
+- [x] Roadmap gegen Live-Stand pruefen
+- [ ] PR-Body neue exakte Plan-SHA
+- [x] Implementation NOT_STARTED
+- [ ] Plan-/Diff-/Architektur-/Secret-Gates
+- [x] Tests/Builds NOT_RUN
+- [ ] Handover
+- [ ] Ownerfreigabe der exakten neuen Plan-SHA
 
 ## Slice 1
-
-- [ ] stabiler FaultCode-/Source-Katalog
-- [ ] pure FaultCore-Policy
-- [ ] Multi-Ursachen-Semantik
-- [ ] Primary/Follow-up
-- [ ] Lifecycle-/Overflowtests
+- [ ] FaultCore
+- [ ] Katalog
+- [ ] Prioritaet
+- [ ] Relapse
+- [ ] Events
 - [ ] Ownerreview
 
 ## Slice 2
-
-- [ ] SafetyState Wireformat
-- [ ] RecordType 9 / sf0/sf1
-- [ ] semantic Decoder
-- [ ] readback / CommitOutcomeUnknown
-- [ ] Golden-/Corruptiontests
+- [ ] SafetyState wire
+- [ ] duale Init
+- [ ] Store
+- [ ] Readback
+- [ ] Redundanztests
 - [ ] Ownerreview
 
 ## Slice 3
-
-- [ ] RecordType 10 / sem0/sem1
-- [ ] Emergency Marker
-- [ ] RAM-fail-closed
-- [ ] Marker-Recovery != SAFE_BOOT-Exit
-- [ ] Cut-Point-Tests
+- [ ] Marker
+- [ ] two-slot fallback
+- [ ] Reparatur
+- [ ] MarkerRecovery != Exit
 - [ ] Ownerreview
 
 ## Slice 4
-
-- [ ] neutraler Reset-Port
-- [ ] SimulatedResetController
-- [ ] RestartIntent write-before-apply
-- [ ] 3-Restart-/30-Minuten-Episode
-- [ ] SAFE_BOOT Boot-/Exitlogik
-- [ ] fehlende ProcessTransitions
+- [ ] ResetPort
+- [ ] RestartIntent
+- [ ] bootSequence
+- [ ] 3 / 30min
 - [ ] Ownerreview
 
 ## Slice 5
-
-- [ ] #20 SensorQuality
-- [ ] #21 SensorSelection
-- [ ] #22 ControlResult
-- [ ] #23 Watchdog
-- [ ] ActuatorDiagnostic injection-only
+- [ ] Runtime Fault
+- [ ] Fault -> Standby
+- [ ] terminal Run clear
+- [ ] SafeBoot Run termination
+- [ ] ProcessEvents
 - [ ] Ownerreview
 
 ## Slice 6
-
-- [ ] #17/#18 RunPersistence/Recovery
-- [ ] #56 ConfigurationRuntime
-- [ ] #57 ConfigurationRecovery
-- [ ] reales CONFIGURATION_SAFETY_INTEGRATION_GATE
+- [ ] #20
+- [ ] #21
+- [ ] #22
+- [ ] #23
+- [ ] FanDirective
 - [ ] Ownerreview
 
 ## Slice 7
-
-- [ ] FaultReset target instance
-- [ ] #15 nur Commandautoritaet
-- [ ] #17 persist-before-reset
-- [ ] Crashmatrix
-- [ ] Fault-Exit in RecoveryEvaluation/Standby
+- [ ] #17/#18 mapping
+- [ ] #56/#57
+- [ ] Config gate
+- [ ] Boot
 - [ ] Ownerreview
 
 ## Slice 8
-
-- [ ] SafetyService zwingend im aktiven Orchestrator
-- [ ] kein caller-supplied Allowed
-- [ ] Planner-/Sink-Bypass negativ getestet
-- [ ] Watchdog-Reset-Handoff
+- [ ] #15 Reset
+- [ ] non-persisted ResetFault
+- [ ] no Safety duplicate
+- [ ] no caller Allowed
+- [ ] Planner/Sink integration
 - [ ] Ownerreview
 
-## Slice 9 / Abschluss
-
-- [ ] kanonische Dokumentation
+## Slice 9
+- [ ] kanonische Doku
 - [ ] Roadmap
-- [ ] keine PR-Historie in Fachdocs
-- [ ] vollstaendiges PR-Review
-- [ ] 0 offene Findings
-- [ ] Owner fordert Gesamtlauf an
-- [ ] Gesamtlauf/Builds/CI dokumentiert
-- [ ] Owner entscheidet Ready/Merge
+- [ ] komplettes PR-Review
+- [ ] 0 Findings
+- [ ] Owner-Gesamtlauf
 
 ---
 
-# 30. Stop-Regeln waehrend der Umsetzung
+# 65. Stop-/Replan-Grenzen
 
-Neue vollstaendige Planrevision und neue Owner-SHA-Freigabe ist erforderlich, wenn waehrend der Umsetzung eine materielle Aenderung notwendig wird an:
+Neue vollstaendige Planrevision und neue Owner-SHA erforderlich bei Aenderung an:
 
 - FaultCode-/Source-Katalog;
-- Persistenzschema;
-- RecordType/Keys;
-- Restartgrenze 3 / Stable Window 30 min;
-- Reset-/SAFE_BOOT-Transitions;
-- #15/#17 Commitreihenfolge;
+- FaultIdentity;
+- Fault terminal vs Recovery;
+- Safety Wireformat;
+- RecordType/Keys/Epoch;
+- Restart 3 / 30min;
+- EmergencyMarker-Semantik;
+- #15/#17/Safety Commitreihenfolge;
+- SAFE_BOOT Run-Termination;
+- Fan-Safety-Directive;
 - Aktor-Gate-Autoritaet;
-- neuen Hardware-/ESP-IDF-Abhaengigkeiten;
-- neuen realen Producerbehauptungen.
+- neuer Hardware-/ESP-IDF-Abhaengigkeit;
+- neu behauptetem realen Producer.
 
-Keine neue Planrevision ist fuer rein lokale Implementierungsdetails notwendig, wenn sie den freigegebenen Vertrag nicht veraendern.
-
----
-
-# 31. Definition of Done fuer Issue #24
-
-Issue #24 ist erst abgeschlossen, wenn:
-
-- vier Klassen und stabile Codes implementiert sind;
-- gleichzeitig aktive unabhaengige Ursachen korrekt koexistieren;
-- kein `last-origin-wins`;
-- S3/Y4 rebootfest verriegelt sind;
-- Quittierung, Cause-Clear und Reset getrennt sind;
-- Reset zentral und fail-closed ist;
-- Restart write-before-apply und einmal pro Faultinstanz arbeitet;
-- 3 abnormale Restart-Boots vor 30 Minuten stabiler Laufzeit SAFE_BOOT ausloesen;
-- SAFE_BOOT rebootfest und actorfrei ist;
-- Emergency Marker getrennt und getestet ist;
-- Marker-Recovery SAFE_BOOT nicht umgeht;
-- #17/#18/#20/#21/#22/#23/#56/#57 real konsumiert werden;
-- alle vier Configuration-Safety-Gate-Faelle aus Issue #24 getestet sind;
-- Planner-/Sinkpfad keinen caller-supplied Safety-Bypass besitzt;
-- Sensor-, Aktor-, Persistenz- und Brownout/Restart-Injektion reproduzierbar ist;
-- Fault-/Reset-/SAFE_BOOT-Events fuer #19 typisiert bereitstehen;
-- kanonische Dokumentation konsistent ist;
-- alle gezielten und final geforderten Tests/Gates bestanden sind;
-- offene Hardware-/Commissioningtests ehrlich `NOT_RUN/BLOCKED` bleiben;
-- kein ESP-IDF-/Hardwarewert erfunden wurde.
+Lokale mechanische Implementierungsdetails innerhalb dieser Vertraege
+benoetigen keine Planrevision.
 
 ---
 
-# 32. Plan-Gate
+# 66. Definition of Done
 
-Nach Uebernahme dieser vollstaendigen Planfassung in PR #108:
+Issue #24 ist abgeschlossen, wenn:
 
-1. nur Plan/Roadmap/PR-Body/Handover committen;
-2. keine Produktions- oder Testimplementation im selben Commit;
-3. exakte neue Plan-SHA veroeffentlichen;
-4. `git diff --check`, Architekturgrenzen und Secretscan ausfuehren;
-5. Tests/Builds fuer die reine Planrunde als `NOT_RUN` dokumentieren;
-6. anhalten.
+- vier Klassen implementiert;
+- stabile Codes implementiert;
+- alle erlaubten Identities compile-time begrenzt;
+- unabhaengige Ursachen koexistieren;
+- kein last-origin-wins;
+- Relapse stale-t alte Resetbewertungen;
+- S3/Y4 persistent;
+- Quittierung/Clear/Reset getrennt;
+- Restart einmal pro Fault;
+- 3 abnormale Boots -> SAFE_BOOT;
+- 30min-Vertrag getestet;
+- SAFE_BOOT rebootfest;
+- aktiver Run in SAFE_BOOT nicht reaktiviert;
+- S3/Y4 Fault terminal nach Standby;
+- EmergencyMarker getrennt;
+- Redundanzrepair getestet;
+- MarkerRecovery != Exit;
+- #17/#18/#20/#21/#22/#23/#56/#57 real konsumiert;
+- Configuration-Safety-Gate vollstaendig;
+- Fan-Safetyreaktionen modelliert;
+- kein caller-supplied Allowed;
+- Fehlerinjektionen reproduzierbar;
+- SafetyEvents bounded bereitgestellt;
+- kanonische Doku konsistent;
+- gezielte und final geforderte Tests bestanden;
+- nicht ausgefuehrte Hardwaretests ehrlich NOT_RUN/BLOCKED;
+- keine Hardwarewerte erfunden.
 
-**Keine Implementierung, bis der Owner exakt die neue Plan-Commit-SHA freigegeben hat.**
+---
+
+# 67. Plan-Gate
+
+Nach Uebernahme dieser vollstaendigen Fassung in PR #108:
+
+1. nur Plan/Roadmap/PR-Body/Handover aendern;
+2. keine Produktions- oder Testimplementation;
+3. neue exakte Plan-SHA committen/pushen;
+4. `git diff --check`;
+5. Architekturgrenzen;
+6. Secretscan;
+7. Tests/Builds `NOT_RUN`;
+8. Handover;
+9. anhalten.
+
+**Keine Implementierung vor ausdruecklicher Ownerfreigabe exakt dieser neuen
+Plan-Commit-SHA.**
