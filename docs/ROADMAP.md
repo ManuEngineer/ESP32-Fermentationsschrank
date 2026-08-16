@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-08-14
+Stand: 2026-08-16
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -10,7 +10,8 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #105 (Branch `agent/issue-23-aktorplaner-plan`) / Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | Planrevision 8 (`docs/tasks/issue-23-actuator-planner-plan.md`, Commit `3fa28d32ce9a0782edb984f27006467eb8d5f532`) ist ownerfreigegeben; der zweite Owner-Review-Zyklus ist auf Implementation-/Test-HEAD `0a3497b` abgeschlossen, Plan-Item 7 ist erledigt, Plan-Item 8 bleibt gesperrt, keine Planrevision 9. R1/R2/R3/R4/R5/R6 sind mit den gezielten Nachweisen geschlossen; die bestehende §19.2-Matrix wurde nicht erweitert. `test_actuator_planner` 44/44, Sink-Driver 5/5, Application-/Persistenzpfad 112/112 und `test_temperature_control` 40/40 PASS; Architektur-/Secret-Gates PASS; vollstaendiger Native-Lauf, ESP-IDF, Build-/Hardware-/CI- und Owner-Gesamtlauf NOT_RUN; Issue #106 bleibt unveraendert offen und separates produktives Integrationsgate; Base `main @ 2986dca5736a34171910c9245a3d5f43fa55da06` (Merge von PR #104 / Issue #22) | Ein vollstaendiger Owner-Review des aktuellen PR-Diffs; bei 0 offenen Findings Freigabe fuer Plan-Item 8 / den vollstaendigen Owner-Gesamtlauf |
+| 1 | Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | PR #105 ist nach `main` gemergt; #23 ist auf dem aktuellen Base abgeschlossen. Das separate produktive Integrationsgate #106 bleibt als eigener Live-Status unveraendert sichtbar. | Issue #24 erhält einen eigenen Plan-/Owner-Gate-PR |
+| 2 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion | neuer Draft-PR aus aktuellem `origin/main`, Plan `docs/tasks/issue-24-safety-core-replan.md`, Implementation NOT_STARTED | Owner-Review der exakten Plan-SHA |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -24,15 +25,10 @@ kanonisch und wird von Issue #23 ausschliesslich wiederverwendet.
 Die vorgesehene fachliche Reihenfolge nach dem Abschluss von #22 ist:
 Issue #23 (Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik), danach
 Issue #24 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,
-Aufbewahrung, Bereinigung, Backup und Import). Die jeweiligen Arbeiten
-beginnen erst nach ihrem eigenen Plan-/Owner-Gate; #23 befindet sich jetzt in
-Umsetzung. Die vollstaendige eigenstaendige Planrevision 8 liegt im
-Draft-PR #105 unter `docs/tasks/issue-23-actuator-planner-plan.md`
-(Planrevision 8, Plan-Commit `3fa28d32ce9a0782edb984f27006467eb8d5f532`,
-freigegeben). Issue #106 (Aktorplaner Per-Run-Parameter-Snapshot und
-Recovery-Bindung) bleibt offen, wurde live praezisiert und ist als
-benanntes, blockierendes Integrationsgate vor jeder produktiven
-#23-Aktorverdrahtung angelegt.
+Aufbewahrung, Bereinigung, Backup und Import). #23 ist mit PR #105 auf dem
+aktuellen `main` abgeschlossen; die neue #24-Arbeit beginnt ausschließlich
+nach ihrem eigenen Plan-/Owner-Gate. Issue #106 bleibt als separates
+produktives Integrationsgate unverändert offen.
 
 ## Zulaessige Parallelitaet
 
