@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-08-14
+Stand: 2026-08-16
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -12,6 +12,7 @@ nicht kopiert, sondern verlinkt.
 |---:|---|---|---|
 | 1 | Draft-PR #105 (Branch `agent/issue-23-aktorplaner-plan`) / Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | Planrevision 8 (`docs/tasks/issue-23-actuator-planner-plan.md`, Commit `3fa28d32ce9a0782edb984f27006467eb8d5f532`) ist ownerfreigegeben; der zweite Owner-Review-Zyklus ist auf Implementation-/Test-HEAD `0a3497b` abgeschlossen, Plan-Item 7 ist erledigt, Plan-Item 8 bleibt gesperrt, keine Planrevision 9. R1/R2/R3/R4/R5/R6 sind mit den gezielten Nachweisen geschlossen; die bestehende §19.2-Matrix wurde nicht erweitert. `test_actuator_planner` 44/44, Sink-Driver 5/5, Application-/Persistenzpfad 112/112 und `test_temperature_control` 40/40 PASS; Architektur-/Secret-Gates PASS; vollstaendiger Native-Lauf, ESP-IDF, Build-/Hardware-/CI- und Owner-Gesamtlauf NOT_RUN; Issue #106 bleibt unveraendert offen und separates produktives Integrationsgate; Base `main @ 2986dca5736a34171910c9245a3d5f43fa55da06` (Merge von PR #104 / Issue #22) | Ein vollstaendiger Owner-Review des aktuellen PR-Diffs; bei 0 offenen Findings Freigabe fuer Plan-Item 8 / den vollstaendigen Owner-Gesamtlauf |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
+| 3 | Issue #24 – Safety-Core-Neuplanung von aktuellem `origin/main` (Branch `agent/issue-24-safety-core-replan`) | neuer Draft-PR, ausschließlich Plan-/Roadmap-/Metadatenarbeit, Implementation `NOT_STARTED`; Basis `main @ b8eae5f4da5f2666b5a9bda333d115254c4db5b2` | Owner-Review und Freigabe des exakten Plan-SHA |
 
 ## Naechste fachliche Arbeit
 
