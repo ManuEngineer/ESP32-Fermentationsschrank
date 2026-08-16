@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-08-15
+Stand: 2026-08-16
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -10,36 +10,31 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #105 (Branch `agent/issue-23-aktorplaner-plan`) / Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | Planrevision 8 (`docs/tasks/issue-23-actuator-planner-plan.md`, Commit `3fa28d32ce9a0782edb984f27006467eb8d5f532`) ist ownerfreigegeben; der zweite Owner-Review-Zyklus ist auf Implementation-/Test-HEAD `0a3497b` abgeschlossen, Plan-Item 7 ist erledigt, Plan-Item 8 bleibt gesperrt, keine Planrevision 9. R1/R2/R3/R4/R5/R6 sind mit den gezielten Nachweisen geschlossen; die bestehende §19.2-Matrix wurde nicht erweitert. `test_actuator_planner` 44/44, Sink-Driver 5/5, Application-/Persistenzpfad 112/112 und `test_temperature_control` 40/40 PASS; Architektur-/Secret-Gates PASS; vollstaendiger Native-Lauf, ESP-IDF, Build-/Hardware-/CI- und Owner-Gesamtlauf NOT_RUN; Issue #106 bleibt unveraendert offen und separates produktives Integrationsgate; Base `main @ 2986dca5736a34171910c9245a3d5f43fa55da06` (Merge von PR #104 / Issue #22) | Ein vollstaendiger Owner-Review des aktuellen PR-Diffs; bei 0 offenen Findings Freigabe fuer Plan-Item 8 / den vollstaendigen Owner-Gesamtlauf |
+| 1 | Draft-PR #108 (Branch `agent/issue-24-safety-core-clean-restart`) / Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion | Vollstaendiger eigenstaendiger Ersatzplan (`docs/tasks/issue-24-safety-core-clean-restart-plan.md`) uebernommen, gegen den Live-Stand auf `main @ b8eae5f4da5f2666b5a9bda333d115254c4db5b2` verifiziert und committet; die vorherige Planfassung dieses PR ist nicht mehr freigegeben; PR #107 bleibt unangetastete, nicht normative Fehler- und Lernreferenz; Implementation `NOT_STARTED` | Ownerfreigabe der exakten neuen Plan-Commit-SHA (siehe PR-Body/SESSION HANDOVER), danach erneute Liveprüfung vor Umsetzungsbeginn |
 | 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
-| 3 | Neue Planrunde Issue #24 – Branch `agent/issue-24-safety-core-clean-restart` | eigenstaendig von `main @ b8eae5f4da5f2666b5a9bda333d115254c4db5b2` neu gestartet; vollständiger Plan unter `docs/tasks/issue-24-safety-core-clean-restart-plan.md`; PR #107 bleibt unangetastete, nicht normative Fehlerreferenz | Draft-PR und exakte Plan-Commit-SHA prüfen; danach Owner-Freigabe genau dieser Plan-SHA |
 
 ## Naechste fachliche Arbeit
 
-Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung – ist mit PR
-#104 ueber Merge-Commit `2986dca` nach `main` integriert und wurde als
-`completed` geschlossen. Der implementierte #22-Fachkern (`ControlRequest`,
-`ControlRequestContext`, `ControlSensorRole`, PI-/Luftbegrenzungslogik) ist
-kanonisch und wird von Issue #23 ausschliesslich wiederverwendet.
-
-Die vorgesehene fachliche Reihenfolge nach dem Abschluss von #22 ist:
-Issue #23 (Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik), danach
-Issue #24 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,
-Aufbewahrung, Bereinigung, Backup und Import). Die jeweiligen Arbeiten beginnen
-erst nach ihrem eigenen Plan-/Owner-Gate; #23 befindet sich in Umsetzung und
-Issue #24 ist jetzt in einer eigenständigen Planrunde direkt von `main`.
-Die vollstaendige eigenstaendige Planrevision 8 liegt im
-Draft-PR #105 unter `docs/tasks/issue-23-actuator-planner-plan.md`
-(Planrevision 8, Plan-Commit `3fa28d32ce9a0782edb984f27006467eb8d5f532`,
-freigegeben). Issue #106 (Aktorplaner Per-Run-Parameter-Snapshot und
-Recovery-Bindung) bleibt offen, wurde live praezisiert und ist als
-benanntes, blockierendes Integrationsgate vor jeder produktiven
-#23-Aktorverdrahtung angelegt.
+Issue #22 (Zeitproportionale PI-Regelung) und Issue #23 (Aktorplaner,
+Mindestzeiten, Totzeit und Luefterlogik) sind abgeschlossen und ueber PR #104
+bzw. PR #105 nach `main` gemergt. Die vorgesehene fachliche Reihenfolge ist
+jetzt: Issue #24 (Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion)
+als aktuelle fachliche Arbeit in Draft-PR #108, danach Issue #19 (Journale,
+Aufbewahrung, Bereinigung, Backup und Import) als naechste fachliche Arbeit.
+Issue #24 verwendet einen vollstaendigen eigenstaendigen Ersatzplan unter
+`docs/tasks/issue-24-safety-core-clean-restart-plan.md`; die Umsetzung
+beginnt erst nach Ownerfreigabe der exakten Plan-Commit-SHA. Issue #106
+(Aktorplaner Per-Run-Parameter-Snapshot und Recovery-Bindung) bleibt offen
+und ist als benanntes, blockierendes Integrationsgate vor jeder produktiven
+#23-Aktorverdrahtung angelegt; seine vollstaendige Abnahme bleibt unter
+anderem von #35 abhaengig, das `TBD_COMMISSIONING` und Eigentum der
+produktiven Werte und Grenzen bleibt.
 
 ## Zulaessige Parallelitaet
 
-- Der #23-PR bleibt Draft, bis der Owner ihn selbst auf `Ready for review` setzt;
-  bis dahin startet keine erneute vollstaendige Remote-CI.
+- Der #24-PR (#108) bleibt Draft, bis der Owner ihn selbst auf
+  `Ready for review` setzt; bis dahin startet keine erneute vollstaendige
+  Remote-CI.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder
@@ -68,6 +63,7 @@ benanntes, blockierendes Integrationsgate vor jeder produktiven
 - PR #99 / Issue #21: Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik.
 - PR #102 / Issue #18: Wiederanlauf und temperaturgewichteter Fortschritt;
 - PR #104 / Issue #22: Zeitproportionale PI-Regelung und Luftbegrenzung;
+- PR #105 / Issue #23: Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik;
 
 ## Pflege
 
