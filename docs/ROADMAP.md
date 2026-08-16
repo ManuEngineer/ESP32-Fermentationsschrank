@@ -10,9 +10,9 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Draft-PR #105 (Branch `agent/issue-23-aktorplaner-plan`) / Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | Planrevision 8 (`docs/tasks/issue-23-actuator-planner-plan.md`, Commit `3fa28d32ce9a0782edb984f27006467eb8d5f532`) ist ownerfreigegeben; der zweite Owner-Review-Zyklus ist auf Implementation-/Test-HEAD `0a3497b` abgeschlossen, Plan-Item 7 ist erledigt, Plan-Item 8 bleibt gesperrt, keine Planrevision 9. R1/R2/R3/R4/R5/R6 sind mit den gezielten Nachweisen geschlossen; die bestehende §19.2-Matrix wurde nicht erweitert. `test_actuator_planner` 44/44, Sink-Driver 5/5, Application-/Persistenzpfad 112/112 und `test_temperature_control` 40/40 PASS; Architektur-/Secret-Gates PASS; vollstaendiger Native-Lauf, ESP-IDF, Build-/Hardware-/CI- und Owner-Gesamtlauf NOT_RUN; Issue #106 bleibt unveraendert offen und separates produktives Integrationsgate; Base `main @ 2986dca5736a34171910c9245a3d5f43fa55da06` (Merge von PR #104 / Issue #22) | Ein vollstaendiger Owner-Review des aktuellen PR-Diffs; bei 0 offenen Findings Freigabe fuer Plan-Item 8 / den vollstaendigen Owner-Gesamtlauf |
-| 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
-| 3 | Draft-PR #109 (Branch `agent/issue-24-safety-core-replan`) / Issue #24 – Safety-Core-Neuplanung von aktuellem `origin/main` | ausschließlich Plan-/Roadmap-/Metadatenarbeit, Implementation `NOT_STARTED`; Basis `main @ b8eae5f4da5f2666b5a9bda333d115254c4db5b2` | Owner-Review und Freigabe des exakten Plan-SHA |
+| 1 | Draft-PR #109 (Branch `agent/issue-24-safety-core-replan`) / Issue #24 – Safety-Core-Planrevision von aktuellem `origin/main` | vollständige End-to-End-Planrevision, ausschließlich Plan-/Roadmap-/Metadatenarbeit, Implementation `NOT_STARTED`; Basis `main @ b8eae5f4da5f2666b5a9bda333d115254c4db5b2` | Owner-Review und Freigabe des exakten neuen Plan-SHA |
+| 2 | Issue #19 – Journale, Aufbewahrung, Bereinigung, Backup und Import | folgt nach der bestehenden kanonischen Reihenfolge auf Issue #24; nicht Bestandteil von PR #109 | eigener Live-Abgleich, Plan und Owner-Gate |
+| 3 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt; das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
 
@@ -25,20 +25,17 @@ kanonisch und wird von Issue #23 ausschliesslich wiederverwendet.
 Die vorgesehene fachliche Reihenfolge nach dem Abschluss von #22 ist:
 Issue #23 (Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik), danach
 Issue #24 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,
-Aufbewahrung, Bereinigung, Backup und Import). Die jeweiligen Arbeiten
-beginnen erst nach ihrem eigenen Plan-/Owner-Gate; #23 befindet sich jetzt in
-Umsetzung. Die vollstaendige eigenstaendige Planrevision 8 liegt im
-Draft-PR #105 unter `docs/tasks/issue-23-actuator-planner-plan.md`
-(Planrevision 8, Plan-Commit `3fa28d32ce9a0782edb984f27006467eb8d5f532`,
-freigegeben). Issue #106 (Aktorplaner Per-Run-Parameter-Snapshot und
-Recovery-Bindung) bleibt offen, wurde live praezisiert und ist als
-benanntes, blockierendes Integrationsgate vor jeder produktiven
-#23-Aktorverdrahtung angelegt.
+Aufbewahrung, Bereinigung, Backup und Import). #23 ist mit PR #105 über
+Merge-Commit `b8eae5f4da5f2666b5a9bda333d115254c4db5b2` in `main` integriert und
+damit fachlich abgeschlossen; Issue #106 bleibt als separates produktives
+Integrationsgate sichtbar. Issue #24 / Draft-PR #109 ist jetzt die aktuelle
+plan-only Owner-Arbeit. Die Arbeiten beginnen jeweils erst nach ihrem eigenen
+Plan-/Owner-Gate.
 
 ## Zulaessige Parallelitaet
 
-- Der #23-PR bleibt Draft, bis der Owner ihn selbst auf `Ready for review` setzt;
-  bis dahin startet keine erneute vollstaendige Remote-CI.
+- PR #109 bleibt Draft, bis der Owner ihn selbst auf `Ready for review` setzt;
+  bis dahin startet keine Firmware-CI und keine Implementation.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder
@@ -67,6 +64,8 @@ benanntes, blockierendes Integrationsgate vor jeder produktiven
 - PR #99 / Issue #21: Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik.
 - PR #102 / Issue #18: Wiederanlauf und temperaturgewichteter Fortschritt;
 - PR #104 / Issue #22: Zeitproportionale PI-Regelung und Luftbegrenzung;
+- PR #105 / Issue #23: Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik;
+  in `main` integriert; Issue #106 bleibt als separates Integrationsgate.
 
 ## Pflege
 
