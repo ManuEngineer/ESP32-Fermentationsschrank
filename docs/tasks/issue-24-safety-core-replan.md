@@ -1,13 +1,18 @@
 # [E3.5] Issue #24 – Safety Core nach dem Owner Scope Reset
 
+## Planrevision – Owner-Review-Korrektur F1–F4
+
+Diese Revision ist der vollständige, eigenständig ausführbare Plan für PR #110.
+Sie schließt die vier materiellen Owner-Befunde F1–F4. Alle fachlichen
+Anforderungen, Verträge, Ablaufregeln, Tests und Gates stehen in diesem
+Dokument; keine frühere Planrevision ist für eine Umsetzung erforderlich.
+
 ## 1. Planstatus und verifizierte Ausgangslage
 
-Dieser Plan ersetzt den bisherigen Plan in PR #110 vollständig. Er ist eine
-eigenständige, umsetzbare Planrevision und keine Ergänzung einer historischen
-Revision. Der bisherige Plan und sein Commit
-`58d9accb44da528701bdf78e4cc6382f38b6173a` sind
-`SUPERSEDED / NOT APPROVED`. Vor einer Umsetzung ist die exakte neue
-Plan-Commit-SHA ausdrücklich durch den Owner freizugeben.
+Der vorherige PR-Stand `8351b93d8d4bf394debb50d5c6b471fcddf76228` ist
+`SUPERSEDED / NOT APPROVED` und wird nur als Provenienz dieses
+Korrekturauftrags genannt. Vor einer Umsetzung ist die exakte Commit-SHA
+dieser Revision ausdrücklich durch den Owner freizugeben.
 
 ```text
 Repository: ManuEngineer/ESP32-Fermentationsschrank
@@ -16,7 +21,7 @@ PR: #110 – [E3.5] Issue #24 safety core replan from main
 PR-Branch: agent/issue-24-safety-core-replan-v2
 Base: main
 Verifizierte origin/main-SHA: b8eae5f4da5f2666b5a9bda333d115254c4db5b2
-PR-HEAD vor dieser Planrevision: 58d9accb44da528701bdf78e4cc6382f38b6173a
+PR-HEAD vor dieser Planrevision: 8351b93d8d4bf394debb50d5c6b471fcddf76228
 Issue-/PR-Stand verifiziert: 2026-08-17
 Planpfad: docs/tasks/issue-24-safety-core-replan.md
 Implementation: NOT_STARTED
@@ -26,9 +31,8 @@ Live verifiziert wurden Repository, Branch, `origin/main`, PR #110 und Issue
 #24. PR #110 ist offen und Draft. Issue #24 ist offen und enthält den
 Owner-Status `REPLAN_REQUIRED_OWNER_SCOPE_RESET`. PR #107, #108 und #109
 sind historische, superseded Referenzen und werden nicht geändert oder als
-normative Quelle verwendet. `origin/main` ist gegenüber der bisherigen
-PR-Basis der verbindliche Prüfstand; ein weiterer Main-Lauf wurde für diese
-Revision nicht angenommen.
+normative Quelle verwendet. `origin/main` am verifizierten Base-SHA ist der
+verbindliche Prüfstand für diese Revision.
 
 Der Branch enthält vor dieser Revision nur die historische Plan-/Roadmap-
 Dokumentation. Der Vergleich gegen `origin/main` zeigt keine Änderung an
@@ -82,6 +86,41 @@ Die Live-Ownerentscheidung vom 2026-08-17 ist vollständig bindend:
 Die Policy bedeutet ausdrücklich: Release 1 optimiert die sichere
 Entscheidung, nicht die automatische Rettung einer unterbrochenen Charge.
 
+### 2.1 Resetcause- und Persistenzentscheidung für R1 (F1)
+
+Die Notwendigkeitsprüfung für jede neue persistente Safety-Information ergibt
+keinen zusätzlichen R1-Safety-Record:
+
+| gewünschte Information | unsichere Freigabe ohne sie | bereits ausreichender Schutz | R1-Entscheidung |
+|---|---|---|---|
+| „Nach Neustart war eine Safety-Sperre aktiv“ | Ein Boot könnte einen alten Lauf oder einen alten Gate-Zustand als `Allowed` behandeln. | Boot all-off, `Unresolved` bis zur vollständigen Live-Prüfung, keine automatische Resume-Freigabe und der bestehende Store-/Config-Vertrag für unbestimmte Zustände. | Kein neuer allgemeiner Safety-Latch-Record. Bestehende kanonische Sperr-/Commitzustände bleiben unverändert. |
+| „Der alte Lauf wurde beim Neustart eindeutig beendet“ | RAM könnte ohne bestätigten Store-Commit `Standby` als dauerhafte Wahrheit behaupten. | Der bestehende Run-Persistence-Write-before-Apply-Vertrag schreibt `NoActiveRun` und bestätigt den Readback, bevor RAM/FSM Standby behauptet. | Kein neuer Safety-Record; `NoActiveRun` bleibt der vorhandene Run-Lebenszykluszustand. |
+| „N abnormale Neustarts in T“ | Ohne Zähler würde eine wiederholte Störung eventuell nicht erkannt. | Jeder Boot bleibt all-off; Resume ist nie automatisch; unbekannte oder nicht vertrauenswürdige System-/Config-/Persistence-Evidenz bleibt `SAFE_BOOT`/gesperrt. Ein konkreter zusätzlicher Hazard wurde im Bestandsaudit nicht nachgewiesen. | Keine generische Restart-Zählung, kein Zeitfenster, kein Restart-Latch in R1. |
+
+Damit wird kein neuer persistenter Safety-Zustand, kein neuer Key und kein neues
+Run-Schema geplant. Ein Resetgrund darf als flüchtige Diagnose- und Boot-Evidenz
+aus dem bestehenden beziehungsweise einem kleinen app-neutralen Plattformport
+verwendet werden; er erzwingt weder einen Write noch eine automatische Sperre.
+Der Port liefert nur eine endliche Ursache oder `Unknown`, niemals eine
+fachliche Entscheidung.
+
+Die Bootklassifikation ist verbindlich und hat keine versteckte Zähl- oder
+Zeitfenstersemantik:
+
+| Reset-/Bootursache | R1-Bootverhalten | persistenter Nebeneffekt |
+|---|---|---|
+| Power-on, externer Reset, Brownout | Aktoren AUS, vollständige normale Config-/Persistence-/Sensor-/Safety-Revalidierung, kein automatischer Resume. | Kein Safety-Write und keine Sperre allein aus der Ursache. |
+| Watchdog oder Panic | Aktoren AUS, keine automatische Wiederaufnahme; nur nach vertrauenswürdiger vollständiger Neubewertung ist ein nicht freigebendes Resume-Angebot zulässig. | Kein Zähler und kein Zeitfenster. Bei untrusted System-/Config-/Persistence-Zustand `SAFE_BOOT`/unknown-safe. |
+| unbekannte, nicht lesbare oder widersprüchliche Ursache | Aktoren AUS, `Unresolved`; keine automatische Wiederaufnahme. | Keine Ableitung eines neuen Latches; bleibt die Gesamtbewertung untrusted, `SAFE_BOOT`/unknown-safe. |
+
+Die Ursache wird nicht als „normal“, „abnormal“ oder „unknown“ in einen neuen
+persistenten Vertrag übersetzt. Diese Begriffe sind nur die obige flüchtige
+Bootdiagnose. Ein späterer Implementationsbefund, der einen konkreten Hazard
+mit einem persistenten Latch nachweist, beendet die Umsetzung an dieser Stelle
+und benötigt eine neue Owner-Planfreigabe mit exakt einem begründeten Record,
+Feldsatz, Read-/Write-/Readback- und Clear-Vertrag; er wird nicht still in die
+Implementierung verschoben.
+
 ## 3. Vollständiger Bestandsaudit gegen `origin/main`
 
 ### 3.1 Fach- und Codebestand
@@ -94,8 +133,8 @@ Entscheidung, nicht die automatische Rettung einer unterbrochenen Charge.
 | Issue #21 / Sensorwahl | Produkt-, Luft- und Kühlrollen, konfigurierte Fallbacks, `AirFallbackActive` und fail-closed Produkt-/Sicherheits-Sensorregeln sind vorhanden. | #24 dupliziert keine Sensor-FSM. Das Safety-Gate konsumiert die kanonische Auswahl-/Qualitätsprojektion und sperrt bei unbekanntem oder unzulässigem Ergebnis. |
 | Issue #22 / Temperaturregelung | `ControlRequest`, PI-/Luftbegrenzungslogik und Sensorrollen sind auf `main` integriert. | #24 bewertet die Regelanforderung nur über die Safety-Grenze. #24 ändert keine PI-Regelung und keine Grenzwerte. |
 | Issue #23 / Aktorplaner | `ActuatorSafetyGateStatus` startet mit `Unresolved`; `ActuatorPlanner` verwirft unbekannte, unverlässliche oder sofort stoppende Gates, hat Request-Watchdog-Logik und erzeugt Idle-/Stop-Pläne. `ActuatorPlanSinkDriver` schaltet die H-Brücke fail-closed und deaktiviert die Gegenrichtung. | Dieser zentrale Planer-/Sink-Pfad ist die bestehende Aktorgrenze. #24 liefert die einzige kanonische Safety-Direktive; kein Caller darf `Allowed` als Vertrauensbeweis einschleusen. |
-| Safety/Fault | Es gibt noch keinen zentralen Issue-24-Fault-/Safety-Service. FSM, Planner und Dokumente enthalten jedoch SafeBoot-, Fault-, Watchdog- und Gate-Projektionen. | Es wird genau eine kleine mutable Safety-Autorität in `fermentation_app` benötigt. Sie aggregiert Ursachen und erzeugt die bestehende `ActuatorSafetyGateInput`-Projektion. |
-| SAFE_BOOT / Resetcause / Watchdog | `ProcessState::SafeBoot` und der Aktor-Request-Watchdog existieren. Ein kanonischer Resetcause-Port und eine ESP-IDF-Adaptergrenze für wiederholte abnormale Neustarts existieren noch nicht. | Ein app-neutraler Resetcause-/Abnormal-Restart-Port wird gemäß ADR-013 ergänzt. ESP-IDF bleibt ausschließlich Adapter; konkrete Pins, Pegel und Hardwareverhalten werden nicht geraten. |
+| Safety/Fault | Es gibt noch keinen zentralen Issue-24-Fault-/Safety-Service. FSM, Planner und Dokumente enthalten jedoch SafeBoot-, Fault-, Watchdog- und Gate-Projektionen. | Es wird genau eine kleine mutable Safety-Autorität in `fermentation_app` benötigt. Sie aggregiert Ursachen und erzeugt die bestehende `ActuatorSafetyGateInput`-Projektion. Ein neuer persistenter Safety-Record ist nach der F1-Notwendigkeitsprüfung nicht erforderlich. |
+| SAFE_BOOT / Resetcause / Watchdog | `ProcessState::SafeBoot` und der Aktor-Request-Watchdog existieren. Ein kanonischer Resetcause-Port und eine ESP-IDF-Adaptergrenze für Diagnose-/Boot-Evidenz existieren noch nicht. | Ein app-neutraler Resetcause-Port wird gemäß ADR-013 nur für flüchtige Diagnose und die oben definierte Bootklassifikation ergänzt. Kein Restart-Zähler, Zeitfenster, automatischer Latch oder Hardwareparameter. |
 | Konfiguration #56/#57 | `ConfigurationService`, `ConfigurationRecoveryService` und die Producer-Verträge unterscheiden `ConfigurationRuntimeFailure`, `ConfigurationUnavailable`, `ConfigurationIntegrityFailure` und `ConfigurationCommitIndeterminate` bzw. den zugrunde liegenden unbestimmten Commit. | Das bestehende `CONFIGURATION_SAFETY_INTEGRATION_GATE` bleibt unverändert verbindlich. Jede dieser Ursachen sperrt normale Aktorfreigabe und kann `SAFE_BOOT` erfordern. |
 | Composition Root | `src/main.cpp` und `main/app_main.cpp` bauen Platform/Application; die App hängt gegen abstrakte Plattformdienste. Fachliche Safety-Entscheidungen liegen noch nicht in einem zentralen Root. | Safety bleibt Fachlogik in `fermentation_app`. Composition Roots verdrahten nur Ports und stellen den sicheren Startzustand her. |
 | Native Test Support | `SimulatedPersistentStateStore` injiziert Read-/Write-/Corruption-/Power-Cut-/`CommitOutcomeUnknown`-Fälle. Zeit-, Sensor-, Aktor- und Notification-Mocks sind vorhanden. | Die vorhandenen Testhilfen werden wiederverwendet. Kein Produktionsmodul hängt von `device_platform_test_support` ab. |
@@ -143,7 +182,8 @@ Fachvertrag. Diese Autorität ist verantwortlich für:
 
 - stabile Fault-Codes und die Zuordnung zur kanonischen Quelle;
 - den aktiven Safety-Zustand und die sichere Reaktion;
-- `SAFE_BOOT`, persistente Sperren und Reset-/Watchdog-Bewertung;
+- `SAFE_BOOT`, die Interpretation bestehender kanonischer Sperr-/Commitzustände
+  und Reset-/Watchdog-Bewertung; kein neuer persistenter Safety-Zustand;
 - die Trennung von Quittierung/Anzeige und fachlicher Wiederfreigabe;
 - die aus allen Eingaben aggregierte `ActuatorSafetyGateInput`-Projektion.
 
@@ -179,7 +219,7 @@ Dispositionen erforderlich:
 |---|---|---|
 | `Informational` | Journal/Anzeige, keine Änderung am Gate | bereits erlaubter Betrieb bleibt nur nach normalem Live-Gate erlaubt |
 | `OperationalBlocked` | betroffene Aktoren sofort AUS, Zustand wird neu bewertet | automatisch nur bei ausdrücklich dafür freigegebenem Code und nach nachweislich gültiger Live-Evidenz; niemals durch Quittierung oder Boot |
-| `LatchedOrSafeBoot` | Aktoren AUS, persistente Sperre oder `SAFE_BOOT`, je nach Ursache | nur über die für den Code definierte, fachlich zulässige Behebung und vollständige Neubewertung; unbekannt bleibt gesperrt |
+| `LatchedOrSafeBoot` | Aktoren AUS, eine bereits kanonisch vorgesehene persistente Sperre oder `SAFE_BOOT`, je nach Ursache | nur über die für den Code definierte, fachlich zulässige Behebung und vollständige Neubewertung; unbekannt bleibt gesperrt; #24 erfindet keinen neuen Latch |
 
 Die Dispositionen sind keine neue historische Fault-Lineage. Jede Fault-Quelle
 hat einen stabilen Code, eine Quelle, `active/cleared/acknowledged`-Projektion
@@ -194,49 +234,57 @@ reaktivierte Sensorqualität nach #20/#21. Kritische, unbekannte, Integritäts-,
 unbestimmte Commit- und nicht verifizierbare Persistenzzustände bleiben
 gesperrt.
 
-### 4.3 Minimal notwendige Safety-Persistenz
+### 4.3 Notwendigkeitsprüfung statt neuer Safety-Persistenz (F1)
 
-Eine kleine Safety-Persistenz ist nur für zwei konkrete Anforderungen nötig:
+Die Prüfung aus Abschnitt 2.1 ist ein verbindlicher Planbestandteil und kein
+späteres Design-Detail. Für R1 wird **kein** allgemeiner Safety-Record mit
+Restartzähler, Resetfenster, Latch-Flag, Resetzeitquelle oder eigener
+Clear-Regel eingeführt. Es gibt daher auch keinen neuen Safety-Key, kein
+zusätzliches Persistenzschema und keinen zweiten Safety-Store.
 
-1. Eine nach Neustart weiter geltende kritische Sperre darf nicht durch einen
-   Neustart verschwinden und dadurch Aktoren freigeben.
-2. Wiederholte abnormale Neustarts müssen begrenzt und bei Überschreitung
-   fail-closed nach `SAFE_BOOT` geführt werden können.
+Der unsichere Zustand nach jedem Neustart wird bereits durch die Kombination
+aus Boot-all-off, `ActuatorSafetyGateStatus::Unresolved`, vollständiger
+Config-/Persistence-/Sensor-/Planner-Prüfung, explizitem Start/Resume und dem
+bestehenden `CommitOutcomeUnknown`-Vertrag verhindert. Ein persistierter alter
+Run ist damit keine Freigabeinformation. Ein sicherer Abbruch schreibt den
+bestehenden kanonischen `RunCheckpointVariant::NoActiveRun` und darf erst nach
+bestätigtem Readback in RAM/FSM als Standby erscheinen.
 
-Dafür wird ein einzelner, begrenzter Safety-Zustand über die bestehende
-   generische `IStateStore`-/Envelope-/Readback-Grundlage geplant. Er enthält
-   nur versionierte, CRC-/Integritätsgeprüfte Safety-Sperr-/Resetdaten und
-   keinen Run-Snapshot, keine Recovery-Lineage, keine Aktorhistorie und keine
-   neue Run-Persistenzschema-Version. Die konkrete Feldbreite und die
-   Resetfenster-Grenzen werden aus den vorhandenen Plattform-/Safety-Verträgen
-   abgeleitet und nicht aus Hardwareannahmen geraten.
+Ein bestehender Config-/Store-Zustand, der bereits selbst `SAFE_BOOT`,
+Unverfügbarkeit oder unbestimmtes Commit bedeutet, bleibt unverändert
+maßgeblich. #24 interpretiert ihn fail-closed, kopiert ihn aber nicht in einen
+neuen Safety-Record. Ein Resetjournal beziehungsweise eine vorhandene
+Diagnoseprojektion darf die Ursache anzeigen; das ist keine dauerhafte
+Safety-Wahrheit und erzwingt keinen Write.
 
-Ein Read-, Integritäts- oder Readback-Fehler dieses Safety-Zustands ist selbst
-`unknown` und führt zu `SAFE_BOOT` bzw. `ImmediateStop`. Ein unbestimmter
-Safety-Write wird nicht durch den alten Wert, einen neuen Wert oder eine
-volatile Freigabe ersetzt. Safety-Persistenz ist damit eine kleine
-Fail-Closed-Sperre, nicht ein zweiter Recovery-Store.
+### 4.4 Resetcause und Watchdog ohne Restart-Latch
 
-### 4.4 Resetcause und Watchdog
+`fermentation_app` erhält, falls der Audit des aktuellen Composition Roots dies
+für die vorhandene Diagnose benötigt, nur einen schmalen app-neutralen
+Resetcause-Port. Der Port liefert eine endliche bekannte Ursache oder
+`Unknown`, kennt weder ESP-IDF-Typen noch GPIOs und trifft keine
+Safety-Entscheidung. Der ESP-IDF-Adapter mappt ausschließlich den öffentlichen
+ESP-IDF-Reset-/Watchdog-Vertrag; native Tests injizieren jede Ursache einzeln.
 
-`fermentation_app` erhält nur einen app-neutralen Resetcause-/Abnormal-
-Restart-Port. Der Port liefert eine endliche, bekannte Ursache oder
-`Unknown`; er kennt weder ESP-IDF-Typen noch GPIOs. Der ESP-IDF-Adapter mappt
-die öffentlichen ESP-IDF-Reset- und Watchdog-Verträge. Native Tests injizieren
-bekannte, unbekannte und wiederholte Ursachen.
+Die Bootreihenfolge ist immer:
 
-Bei jedem Boot gilt:
+1. Aktoren hart auf den sicheren Aus-Zustand bringen, bevor Validierung oder
+   Restore beginnt.
+2. Ursache flüchtig als Diagnose-/Boot-Evidenz lesen; es gibt keine
+   Neustartzählung und kein Zeitfenster.
+3. Konfiguration und die realen #56/#57-Producer-Gates prüfen.
+4. Run-Persistenz read-only laden und mit dem exakten Prädikat aus Abschnitt
+   5.2 klassifizieren.
+5. Erst nach vollständiger Validierung `Standby`, ein nicht freigebendes
+   `RecoveryEvaluation`-Angebot oder `SAFE_BOOT` darstellen. Kein Boot- oder
+   Restore-Schritt erzeugt `Allowed` oder ein Aktorcommand.
 
-1. Aktoren hart auf den sicheren Aus-Zustand bringen, bevor fachliche
-   Validierung und Restore beginnen.
-2. Resetcause und Safety-Zustand lesen. Unbekannte Ursache, abnormale
-   Neustartfolge außerhalb des zulässigen Fensters oder unklare Persistenz
-   führen zu `SAFE_BOOT`/`Unresolved`.
-3. Konfiguration und ihre Producer-Gates prüfen.
-4. Run-Persistenz nur lesen und klassifizieren.
-5. Erst nach vollständiger Validierung einen expliziten Standby-,
-   Resume-Angebots- oder SafeBoot-Zustand darstellen. Kein Boot-Schritt
-   erzeugt allein `Allowed`.
+Bei `PowerOn`, externem Reset und Brownout ist das eine normale vollständige
+Revalidierung ohne automatischen Resume. Bei Watchdog, Panic und unbekannter
+Ursache bleibt die Wiederaufnahme ebenfalls nicht automatisch; ein
+untrusted System-/Config-/Persistence-Zustand führt zu `SAFE_BOOT`/unknown-
+safe. Ein vertrauenswürdiges, vollständig qualifiziertes Resume-Angebot bleibt
+nicht freigebend und benötigt weiterhin die explizite Nutzerentscheidung.
 
 Der bereits vorhandene Aktor-Request-Watchdog und seine latched Stop-Reaktion
 bleiben Bestandteil des Planner-Vertrags. #24 ergänzt Resetcause-/Boot-
@@ -245,68 +293,156 @@ Hardware-Watchdogparameter.
 
 ## 5. Boot-, Restore- und Run-Vertrag
 
-### 5.1 Zustandsablauf
+### 5.1 Zustandsablauf und nicht freigebendes Resume-Angebot
 
 | Eingang | Klassifikation | Persistenz-/FSM-Ausgang | Aktor-Gate |
 |---|---|---|---|
-| gültige Konfiguration, kein aktiver Lauf | sicherer leerer Start | `Boot -> Standby`, kanonisch kein aktiver Lauf | `Unresolved` während Boot, danach weiterhin `ImmediateStop`/`Allowed` nur bei explizitem neuen Start und gültigem Live-Gate |
-| gültige Konfiguration, aktiver Lauf vollständig und eindeutig | Resume-Angebot | `Boot -> RecoveryEvaluation` oder äquivalente explizite Angebotsprojektion; keine automatische Weiterführung | AUS; `Allowed` erst nach expliziter Resume-Entscheidung, aktueller Safety-/Sensorprüfung und normalem Planner-Gate |
-| aktiver Lauf unvollständig, widersprüchlich, beschädigt, mehrdeutig oder nicht beweisbar | sicherer Abbruch | alter Lauf sicher beenden/verwerfen und kanonisches `NoActiveRun` schreiben; danach `Standby`, wenn dieser Commit eindeutig erfolgreich ist | AUS; kein Fault-Resume |
-| NoActiveRun-Abschluss nicht sicher schreibbar oder Ergebnis unbestimmt | unbekannter kritischer Persistenzzustand | Safety-Latch/`SAFE_BOOT`; kein normaler Standby als Ausweichbehauptung | `ImmediateStop` |
-| Konfiguration/Safety unbekannt oder ungültig | kritischer/unknown Zustand | `SAFE_BOOT` oder latched Safety-Zustand; aktiver Lauf wird nicht gerettet | `ImmediateStop` |
-| explizit bestätigter Resume oder neuer Lauf | neuer Fachbefehl | persistierte Fachentscheidung und regulärer Live-Startpfad | erst nach Sensor-, Konfigurations-, Planner- und Safety-Gate `Allowed` |
+| gültige Konfiguration, kein aktiver Lauf | sicherer leerer Start | bestehender Boot-Ready-Pfad, danach `Standby` mit `NoActiveRun` | `Unresolved` bis zum Ende der Bootprüfung; kein Aktorcommand |
+| aktiver Lauf erfüllt das Prädikat aus 5.2 | Resume-Angebot | `BootRecoverRun`/`RecoveryEvaluation` als nicht freigebende Projektion; kein automatischer Resume | AUS; kein `Allowed`, kein Planner-Command |
+| aktiver Lauf ist unvollständig, widersprüchlich, beschädigt, hat offene Recovery-Evidenz oder ist nicht beweisbar | sicherer Abbruch | zuerst kanonisches `NoActiveRun`; erst nach bestätigtem Commit `Standby` | AUS; kein Fault-Resume und keine Fallback-Promotion |
+| Nutzer lehnt Resume ab oder Angebot läuft ab | sicherer Abbruch desselben alten Runs | `RecoveryReject`/`RecoveryRejected` über den unten definierten Write-before-Apply-Pfad zu `NoActiveRun`, danach `Standby` | AUS bis zur bestätigten Persistenz, danach Standby ohne Aktorfreigabe |
+| `NoActiveRun`-Write, Readback oder Commitstatus nicht eindeutig | unbekannter kritischer Persistenzzustand | kein normaler Standby; bestehender Store-/Bootvertrag bleibt gesperrt, erforderlichenfalls `SAFE_BOOT` | `ImmediateStop`/`Unresolved` |
+| Konfiguration oder Safety unbekannt/ungültig | kritischer/unknown Zustand | `SAFE_BOOT` oder bestehender latched Zustand; kein alter Run wird gerettet | `ImmediateStop` |
+| Nutzer bestätigt Resume | expliziter Fachbefehl | aktuelle Sensor-/Config-/Safety-Prüfung, dann persistente Resume-Entscheidung; erst bei bestätigtem Commit FSM-Aktivierung | bis dahin `Unresolved`/AUS; danach erst normales Planner-Gate |
 
-`RecoveryEvaluation` bedeutet nur „vollständige Eindeutigkeit wurde
-festgestellt, eine explizite fachliche Entscheidung steht aus“. Es bedeutet
-nicht „Aktorfreigabe vorbereiten“. Ein Ablehnen, Ablauf oder Nichtbestätigen
-des Angebots beendet den alten Lauf sicher in `NoActiveRun`, sofern der
-kanonische Write eindeutig gelingt; es erzeugt nicht automatisch einen
-latched Safety-Fault.
+`RecoveryEvaluation` bedeutet ausschließlich: Der alte Zustand darf als
+nicht freigebendes Angebot angezeigt beziehungsweise fachlich bewertet werden.
+Es bedeutet weder `Allowed` noch „Aktorfreigabe vorbereiten“. Ein Resume-
+Angebot darf auch nach Boot, Brownout, Watchdog oder Panic niemals automatisch
+in einen aktiven Plannerpfad übergehen.
 
-### 5.2 Kriterium „vollständig und eindeutig rekonstruierbar“
+### 5.2 Exaktes Rekonstruktionsprädikat für Schema 1/2/3 (F3)
 
-Die spätere Implementierung verwendet ausschließlich bereits kanonische Daten
-aus dem vorhandenen #17-/Prozess-/Sensor-/Konfigurationsvertrag. Alle
-folgenden Punkte müssen gleichzeitig erfüllt sein:
+Die R1-Entscheidung wird als ein kanonisches Prädikat geplant:
 
-- Head, Slot, Recordtyp, CRC, Schema und Revision sind gültig und eindeutig
-  zueinander referenziert;
-- die Snapshot-Variante ist ein aktiver, nicht terminaler Run und enthält die
-  für den aktuellen Prozesszustand erforderlichen Felder;
-- Programm-/Run-Kontext, Prozesszustand, Revision, Sensorrollen und die
-  erforderlichen #20/#21-Auswahl-/Qualitätsdaten sind vorhanden und
-  widerspruchsfrei;
-- keine erforderliche Information ist nur aus einer unbestimmten
-  Ausfallzeit, einem gewichteten Fortschrittswert, einem beschädigten
-  Fallback oder einer nicht verifizierten Annahme ableitbar;
-- der Datensatz ist mit dem aktuellen, gültigen Konfigurationsgraphen und den
-  zulässigen Release-1-Verträgen vereinbar;
-- jeder für die explizite Resume-Entscheidung erforderliche Readback ist
-  erfolgreich und eindeutig.
+```text
+r1SimpleResumeEligible(snapshot, selectedRecord) =
+    knownSchema(selectedRecord.schemaVersion)
+ && selectedRecord.schemaVersion != 0
+ && validHeadSlotRecordCrcAndRevision(selectedRecord)
+ && selectedRecord is the unique current record
+ && activeVariant(snapshot)
+ && validRequiredRunAndProcessFields(snapshot)
+ && validCurrentSensorSelection(snapshot)
+ && configAndProducerGateCanBeRevalidated(snapshot)
+ && noSemanticOpenRecoveryEvidence(snapshot)
+ && noUnresolvedOrOrphanedStoreState(selectedRecord)
+```
 
-Fehlt ein Punkt oder liefern Current und Fallback mehrere nicht eindeutig
-auflösbare Möglichkeiten, ist das Ergebnis „nicht rekonstruierbar“. Es wird
-nicht durch Wahrscheinlichkeiten, Zeitgewichtung, historische Lineage oder
-eine neue Evidence-Struktur ergänzt.
+`schemaVersion == 3` ist ausdrücklich zulässig. Die reguläre Existenz der
+Schema-3-Felder ist ebenfalls ausdrücklich zulässig. Ein Fallback wird nur zur
+Integritätsprüfung gelesen; er wird nicht automatisch promoted, gerollbackt
+oder als zweiter Resume-Kandidat gewählt. Sind Current und Fallback nicht
+eindeutig auf denselben kanonischen Zustand reduzierbar, ist das Prädikat
+false.
 
-### 5.3 Persistenzfehler und `CommitOutcomeUnknown`
+Die Feldsemantik ist verbindlich:
 
-Die vorhandenen `IStateStore`- und `RunPersistenceStore`-Semantiken bleiben
-maßgeblich:
+| Feld/Gruppe im aktuellen `RunPersistenceSnapshot` | R1-Klassifikation | Verwendung im Prädikat/Resume |
+|---|---|---|
+| `schemaVersion == 1`, `2` oder `3`, Recordtyp, Slot, CRC, Storage-Epoch, Head-/Checkpoint-Revision | erforderlich | Muss gültig, bekannt und eindeutig sein. `3` ist kein Ablehnungsgrund. |
+| `variant`, `activeRunId`, Programm-/Manual-Snapshot, `processState`, `processRunSnapshot`, `runRevision`, Revisionen und persistierte Command-IDs | für eindeutige Rekonstruktion erforderlich | Müssen strukturell gültig, widerspruchsfrei und dem aktiven Run zugeordnet sein. |
+| `activeRunSensorMode`, `sensorSelection` und die #20/#21-Projektion | für die aktuelle Live-Prüfung erforderlich | Kein Resume ohne aktuelle Neubewertung; #24 erfindet keine Sensorqualität oder Sensorwahl. |
+| `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis` | offene/alte Recovery-Evidenz | Wenn eines vorhanden ist, blockiert es den einfachen R1-Resume. Es wird nicht als Zeitanker verwendet; der alte Run geht in den `NoActiveRun`-Abbruch. |
+| `lastRecoveryEpisodeEvidence`, `priorBootPhaseElapsed`, `nominalRecoveryAdjustment` | offene/alte Recovery-/Carry-Forward-Evidenz | Wenn eines vorhanden ist, blockiert es den einfachen R1-Resume. Keine Zeit-, Temperatur- oder Korrekturgutschrift. |
+| `runProgress.weightedProgress` oder `runProgress.basis == PartialUnknownHistory` | aktive komplexe Progress-/Legacy-Evidenz | Blockiert den einfachen R1-Resume; kein gewichteter Fortschritt, keine Promotion und kein Rollback. |
+| `runProgress.basis == KnownTotal`, `weightedProgress == null`, `observedRunSeconds` beliebig | neutraler/normaler R1-Bestand | Die Felder dürfen vorhanden sein. `observedRunSeconds` wird nur auf Struktur/Overflow geprüft und niemals als automatische R1-Gutschrift oder Aktorfreigabe verwendet. |
+| `recoveryTemperatureEvidence` mit allen Rollen `quality == Stale` und ohne `filteredCelsius` | neutraler Schema-3-Default | Für Resume ignorierbar; kein Ausschluss wegen seiner nicht-optionalen Existenz. |
+| `recoveryTemperatureEvidence` mit nichtneutralem Last-known-Wert | reine Legacy-/Diagnoseinformation | Darf gelesen/angezeigt werden, blockiert allein nicht; es ersetzt keine frische #20/#21-Evidenz und wird nie als Resume- oder Zeitbeweis verwendet. |
+| `recoveryEpisodeRevision == 0` oder ein nicht mit offenen Markern gekoppelter Wert > 0 | reine Legacy-/Diagnoseinformation | Allein kein Ablehnungsgrund und keine Restartzählung. Bei gekoppelter offener Recovery gilt die Zeile der offenen Marker. |
+| vorbereiteter Head, beschädigter Current-Record, widersprüchlicher Fallback, `CommitOutcomeUnknown` oder nicht bestätigter Readback | nicht rekonstruierbarer Storezustand | Prädikat false; keine automatische Reparatur oder Promotion, sondern `NoActiveRun` beziehungsweise unknown-safe. |
 
-- `WriteError` und `CapacityError`: keine neue fachliche Wahrheit behaupten;
-  Safety bleibt AUS/gesperrt.
-- `CommitOutcomeUnknown`: kein „alt“ und kein „neu“ behaupten, keinen Slot
-  wiederverwenden und keine Aktorfreigabe geben; Safety-Latch/`SAFE_BOOT` bis
-  zu einem zulässigen, explizit nachgewiesenen Zustand.
-- erfolgreicher Write ohne erforderlichen Readback: nicht als erfolgreich
-  behandeln.
-- erfolgreicher `NoActiveRun`-Write mit eindeutigem Readback: alter Run ist
-  beendet; ein neuer Run darf nach normaler Konfigurations-/Safety-Prüfung
-  angeboten werden.
+`validRequiredRunAndProcessFields` verlangt zusätzlich, dass der gespeicherte
+Prozesszustand seine aktuelle Run-Projektion trägt und ein neuer Boot keine
+abgelaufene Phase aus einer alten monotone Zeit, UTC-Differenz,
+`PriorBootPhaseElapsed`, `observedRunSeconds` oder gewichteten Coverage
+ableiten müsste. Wenn eine Phase ohne so eine alte Zeit-/Progressgutschrift nicht
+eindeutig weitergeführt werden kann, ist das Ergebnis `not reconstructable`.
+Die einfache R1-Rekonstruktion verwendet nur den kanonisch gespeicherten
+Prozess-/Programmkern und frische Live-Prüfungen; alte Recoverywerte werden
+weder angewendet noch zu Aktorfreigaben umgerechnet.
 
-Die Entscheidung bleibt fail-closed, ohne einen zusätzlichen Run-
-Recovery-Evidence- oder Capability-Vertrag.
+Damit gilt insbesondere: Ein ansonsten vollständiger und eindeutiger aktiver
+Run mit Schema 3, neutralen Defaultfeldern, `recoveryTemperatureEvidence`-
+Default und normalem `RunProgressState` wird nicht allein wegen dieser Felder
+verworfen. Nur die oben ausdrücklich benannte semantisch aktive offene
+Recovery-/Unknown-Evidenz blockiert den einfachen Resume.
+
+### 5.3 Exakte Write-before-Apply-Semantik für Resume und Abbruch (F4)
+
+Die vorhandenen `RecoveryEvaluation`, `RecoveryResume`, `RecoveryReject`,
+`RecoveryResumed` und `RecoveryRejected` werden wiederverwendet. Es entsteht
+keine zweite FSM und kein neuer Event/Reason. Die Topologie wird verbindlich
+angepasst:
+
+```text
+RecoveryEvaluation --RecoveryResume/RecoveryResumed--> valid active phase
+RecoveryEvaluation --RecoveryReject/RecoveryRejected--> Standby
+```
+
+`RecoveryRejected` gilt ausschließlich für ein fachlich entschiedenes
+Angebot, einen Ablauf oder eine unklare Rekonstruktion nach dem kanonischen
+`NoActiveRun`-Commit. Es führt nicht mehr von `RecoveryEvaluation` nach
+`Fault`; `Fault` bleibt für echte Safety-/Fachfehler. Der Reason darf erst als
+autoritativer FSM-Übergang sichtbar werden, wenn die Persistenzreihenfolge
+erfolgreich abgeschlossen ist.
+
+#### Resume-Angebot und bestätigter Resume
+
+1. Der read-only Audit erfüllt 5.2 vollständig. `RecoveryEvaluation` bleibt
+   nicht freigebend; es gibt kein `Allowed` und kein Aktorcommand.
+2. Der Nutzer sendet einen expliziten Resume-Befehl. Der Aufrufer prüft die
+   aktuelle Konfiguration einschließlich #56/#57, frische #20/#21-Sensorbasis,
+   SafetyCore und die Prozess-/Planner-Voraussetzungen. Der Planner bleibt
+   `Unresolved`/AUS.
+3. Aus `RecoveryResume` wird ein vollständiger detached Kandidat für die
+   gültige aktive Zielphase gebildet. Die bestehende
+   `RunPersistenceCoordinator`-Write-before-Apply-Grenze
+   (`persistRecoveryCandidate` oder der gleichwertige bestehende
+   `persistTransition`-Pfad) schreibt Prepared-Head, Zielsnapshot und
+   Committed-Head und bestätigt jeden erforderlichen Readback exakt.
+4. Nur das Ergebnis `Applied` mit eindeutig bestätigtem Commit darf den
+   autoritativen RAM-Zustand durch die bestehende FSM-Anwendung auf den
+   `RecoveryResumed`-Zielzustand aktualisieren. Erst danach wird ein normaler
+   Live-Planner-Tick mit allen Gates erlaubt; der Persistenzcommit selbst ist
+   kein `Allowed`.
+5. Bei Write-, Capacity-, Codec-, Readback- oder
+   `CommitOutcomeUnknown`-Ergebnis bleibt der bisherige RAM-/FSM-Zustand
+   `RecoveryEvaluation` beziehungsweise unknown-safe; es gibt keinen aktiven
+   Plannerpfad. Ein indeterminater Storezustand führt nach dem bestehenden
+   Vertrag zu `SAFE_BOOT`/gesperrt.
+
+#### Ablehnung, Ablauf oder nicht rekonstruierbarer Run
+
+1. Aktoren bleiben `AUS`; SafetyCore liefert `Unresolved`/`ImmediateStop`.
+2. Ein detached Kandidat wird mit der bestehenden
+   `RecoveryReject`-Entscheidung nach `Standby` und mit
+   `clearActiveRunState` als kanonischer `RunCheckpointVariant::NoActiveRun`
+   Projektion gebildet. Die autoritative `current`-FSM und der laufende
+   Snapshot bleiben bis zum Commit unverändert.
+3. Zuerst wird genau dieser `NoActiveRun`-Kandidat über den bestehenden
+   atomaren Run-Persistence-Vertrag geschrieben. `Applied` bedeutet erst:
+   Prepared-Head, Payload, Committed-Head und der erforderliche exakte
+   Readback sind bestätigt. Kein „Write erfolgreich“ ohne Readback genügt.
+4. Erst nach diesem bestätigten Ergebnis wird der detached Kandidat
+   autoritativ angewendet: `RecoveryRejected` führt `RecoveryEvaluation` nach
+   `Standby`, die aktiven Run-Felder werden gelöscht und der kanonische
+   `NoActiveRun`-Zustand ist die neue RAM-/Persistenzwahrheit.
+5. Bei `WriteError`, `CapacityError`, Readbackfehler oder
+   `CommitOutcomeUnknown` wird kein normales `Standby` behauptet. Die
+   Aktoren bleiben gesperrt; bei unbestimmtem Ergebnis bleibt der Boot- und
+   Safetyzustand nach dem bestehenden Storevertrag `SAFE_BOOT`/unknown-safe.
+   Ein späterer Boot entscheidet ausschließlich aus neu gelesenem,
+   eindeutigem Storezustand.
+
+Der initiale Bootfall „nicht rekonstruierbar“, in dem noch kein
+`RecoveryEvaluation`-Angebot autoritativ aktiv ist, verwendet denselben
+detached `NoActiveRun`-Write-before-Apply-Pfad und wendet danach den bereits
+vorhandenen `BootReady`-/`Standby`-Übergang an. Nutzerablehnung, Timeout und
+ein nachträglich unklar gewordener Resume verwenden ausdrücklich
+`RecoveryReject`/`RecoveryRejected`. In keiner Variante wird zuerst RAM-
+Standby behauptet und anschließend versucht, den alten aktiven Snapshot zu
+löschen.
 
 ## 6. Bestandsmatrix A/B/C und konkrete Entscheidungen
 
@@ -324,7 +460,7 @@ Recovery-Evidence- oder Capability-Vertrag.
 | #22 `ControlRequest` und #23 Planner-Verträge | SafetyCore muss die reale fachliche Anforderung sperren, nicht eine zweite Regelung erfinden. | Behalten; keine Grenzwert- oder PI-Änderung. |
 | #56/#57 Configuration-Safety-Producer | Konfigurationsintegrität ist unabhängig vom vereinfachten Run-Recovery und muss fail-closed bleiben. | Vollständig integrieren; alle vier benannten Producer-Zustände sperren normale Aktoren. |
 | SafeBoot-/Fault-Projektion und stabile Fehlercodes | Unknown/critical darf nie normal freigeben; Diagnose muss nachvollziehbar bleiben. | Als kleine Safety-Autorität ergänzen, ohne historische Lineage. |
-| Resetcause-/Abnormal-Restart-Evidenz und persistente Safety-Sperre | Wiederholte abnormale Neustarts und kritische Sperren müssen Neustarts überstehen. | Einen kleinen app-neutralen Port plus eine begrenzte Safety-Record-Nutzung planen; keine Run-Schema-Erweiterung. |
+| Resetcause-/Boot-Evidenz | Bootdiagnose und reproduzierbare Resetcause-Fehlerinjektion sind für die sichere Erstbewertung relevant. | Einen kleinen app-neutralen Port nur für flüchtige Ursache/Diagnose planen; keine Restart-Zählung, kein Zeitfenster und kein neuer persistenter Safety-Record. |
 
 ### B – allgemein sinnvoll und zu behalten
 
@@ -340,28 +476,42 @@ Recovery-Evidence- oder Capability-Vertrag.
 | ESP-IDF-/native Composition-Root-Trennung | Plattformwechsel und Testbarkeit ohne Safety-Abhängigkeit von Netzwerk/Web. | Behalten gemäß ADR-013; spätere Adapter liefern nur Ports. |
 | Bestehender Planner-Request-Watchdog | Schutz gegen stale/missing live control requests. | Behalten; von Resetcause-Bewertung getrennt testen. |
 
-### C – nur für die alte komplexe automatische Laufrettung
+### C – historische Recovery-Bestandteile mit C1/C2-Trennung (F2)
 
-| Mechanismus | Befund | Release-1-Entscheidung |
+Kategorie C wird nicht als pauschaler Cleanup-Auftrag behandelt. Entscheidend
+ist zuerst, ob ein Baustein noch einen aktiven Produktpfad beeinflusst.
+
+#### C1 – zwingend aus dem aktiven #24-Produktpfad entfernen/deaktivieren
+
+| Aktiver Pfad/Baustein | Hazard | R1-Entscheidung |
 |---|---|---|
-| `S3RunRecovery`, `S3RecoveryExclusiveMode`, `RecoveryWriteCapability` | Nur historische Konstrukte des alten PR-#110-Plans; nicht auf `origin/main` implementiert. | Nicht implementieren. Keine historische Capability-, Handoff- oder Lineage-Semantik übernehmen. |
-| Zusätzliche `RunPersistenceRecoveryEvidence`, historische Recovery-Lineage und spezielle Recovery-Schreibrechte | Nur zur Begründung/Absicherung einer weitergehenden alten Charge-Rettung; im aktuellen Main nicht als #24-Vertrag vorhanden. | Nicht implementieren. Bestehende normale Readback-/Revision-Verträge genügen für „eindeutig“ versus „nicht rekonstruierbar“. |
-| Fallback-Promotion, Rollback und `FallbackRecoveryPending` als automatische Rettung eines alten aktiven Runs | Der generische Fallback-Scan bleibt nützlich, die automatische Promotion/der Rückrollpfad würde aber gerade eine alte unterbrochene Charge retten. | Keine automatische Promotion/Rollback für aktives Run-Recovery. Ein unabhängig vollständiger Fallback darf höchstens read-only qualifiziert werden; bei erforderlicher Reparatur oder Mehrdeutigkeit sicher `NoActiveRun`/`SAFE_BOOT`. |
-| `PendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`, `RecoveryTemperatureEvidence`, `lastRecoveryEpisodeEvidence`, `priorBootPhaseElapsed`, `nominalRecoveryAdjustment`, `recoveryEpisodeRevision` | Bereits auf `main`, aber ihre Semantik dient der Zeit-/Episode-/Carry-Forward-Rettung über Neustarts. | Keine neuen Writes oder aktiven R1-Entscheidungen daraus. Alte Schema-3-Daten werden, falls erforderlich, decoderseitig erkannt und als nicht eindeutig klassifiziert; keine Zeit-/Progress-Gutschrift. |
-| `run_recovery_time.*`, `RunRecoveryCoordinator::reevaluateRecoveryTime` und zugehörige Verdict-/Ausfallintervallmodelle | Berechnen gerade die nicht mehr geschuldete transparente Unterbrechungszeit. | Aktive Pfade und APIs gezielt entfernen oder auf reine Ungültigkeitsklassifikation reduzieren; keine neue Ersatzzeitrechnung. |
-| `run_progress_weighting.*`, `RecoveryProgressWeightingModel`, gewichtete Coverage/Provenienz und `applyRecoveryProgressWeighting` | Dient der automatischen Fortschrittsrettung und ist für R1 nicht erforderlich. | Aktive Produzenten, Mutatoren und Recovery-Orakel entfernen. Ein alter optionaler Wert bleibt nur als „nicht für Resume verwendbar“ lesbar, falls Decoderkompatibilität nötig ist. |
-| `RunPersistenceCoordinator::activateFallbackRecoveredRun`, `resolveRecoveryOutcome` und ähnliche Recovery-Write-APIs | Erlauben Fallback-/Resume-/Episode-Schreibentscheidungen für den alten Lauf. | Für R1 auf explizite Qualifikation, explizite Resume-Entscheidung und sicheren `NoActiveRun`-Abschluss reduzieren; automatische Aktivierung, Promotion und Rollback entfallen. |
-| Zeitintervall-, NTP-/UTC-Abwesenheits-, gewichtete-Fortschritts- und transparente-Reboot-Orakel aus #18 | Testen Komfort-/Rettungsverhalten statt Safety-Anforderung. | Gezielte Tests entfernen oder in negative „keine automatische Rettung“-/Legacy-Klassifikationstests umwandeln. |
+| automatische Recovery-Aktivierung aus Boot, Restore oder Fallback, einschließlich `activateLoadedRun`/`activateFallbackRecoveredRun` soweit sie ohne explizite Nutzerentscheidung weiterführen | Alter Run kann trotz Reset/unklarer Zeit wieder aktiv werden. | Auf read-only Qualifikation und explizites Resume-Angebot begrenzen; kein aktives Recovery aus Boot/Restore. |
+| `run_recovery_time.*`, `reevaluateRecoveryTime` und Zeit-/UTC-Ausfallintervallpfade, soweit sie im Produktpfad eine Phase, Zeit oder Abschlussentscheidung automatisch weiterführen | Alte Unterbrechungszeit kann als fachlicher Fortschritt oder als automatische Freigabe wirken. | Auf die in 5.2 benötigte Klassifikation reduzieren oder Aufrufe entfernen; keine Ersatzzeitrechnung. |
+| `run_progress_weighting.*`, `RecoveryProgressWeightingModel` und `applyRecoveryProgressWeighting`, soweit sie Snapshot-/RAM-Werte mutieren oder gutschreiben | Alter gewichteter Wert kann einen Lauf oder Aktorpfad fördern. | Aktive Produzenten/Mutatoren aus dem R1-Produktpfad entfernen; Felder höchstens decoderseitig erkennen. |
+| Fallback-Promotion, Rollback, `FallbackRecoveryPending`-Auflösung und `resolveRecoveryOutcome`-Varianten mit automatischer Entscheidung | Fallback kann einen alten oder widersprüchlichen Run aktivieren. | Fallback nur read-only zur Eindeutigkeitsprüfung; keine Promotion, kein Rollback-Resume, bei Unklarheit `NoActiveRun`/unknown-safe. |
+| jede Recovery-Write-API, die ohne explizite Bestätigung `RecoveryResume`, Zeitgutschrift, Fortschritt, Fallback oder Aktorfreigabe persistiert | Persistenz könnte eine Recoveryentscheidung vor der Nutzer-/Live-Prüfung festschreiben. | Nur der explizite Resume- und der `NoActiveRun`-Write-before-Apply-Pfad aus 5.3 bleiben aktiv. |
 
-Die C-Entscheidung ist eine gezielte Vereinfachung, keine pauschale Löschung:
-Der vorhandene Schema-3-Decoder darf Legacy-Daten erkennen, damit ein alter
-Datensatz nicht versehentlich als gültiger Resume behandelt wird. Er darf
-diese Daten aber nicht mehr zur normalen Aktorfreigabe, Zeitgutschrift,
-Fallback-Promotion oder automatischen Recovery verwenden. Nach der
-Abhängigkeitsprüfung werden nicht mehr benötigte aktive C-Dateien und Tests in
-einem eigenen Umsetzungsschnitt entfernt; der sichere Legacy-Decode bleibt
-nur so lange bestehen, wie er für einen eindeutigen fail-closed Übergang zu
-`NoActiveRun` erforderlich ist.
+C1 umfasst nur die Aufrufstellen, Mutatoren und Orakel, die tatsächlich einen
+der genannten Produktwirkungen erzeugen. Die Umsetzung muss für jeden
+Call-Site nachweisen, dass Boot, Restore, Start, Sensorwahl, Planner und Sink
+keinen C1-Pfad mehr zur automatischen Run-/Aktoraktivierung erreichen.
+
+#### C2 – nach C1 ungenutzter Legacy-/Deprecated-Bestand
+
+| Bestand | Einstufung nach C1 | R1-Entscheidung |
+|---|---|---|
+| `PendingRecoveryAnchor`, `RecoveryTemperatureEvidence`, `lastRecoveryEpisodeEvidence`, `priorBootPhaseElapsed`, `nominalRecoveryAdjustment`, `recoveryEpisodeRevision` und ihre Schema-3-Codec-Felder | Teilweise reguläre Schema-3-Wirefelder; aktive Marker und neutrale Defaults sind gemäß 5.2 verschieden zu behandeln. | Decoder-/Wire-Kompatibilität und sichere Klassifikation nur soweit nötig behalten; keine pauschale Löschung und keine aktive R1-Gutschrift. |
+| `run_recovery_time.*`, `run_progress_weighting.*`, historische Hilfsmodelle und zugehörige Tests, nachdem alle C1-Aufrufe entfernt sind | Toter oder ungenutzter Legacy-Code ohne aktiven Produktpfad. | Als `Legacy/Deprecated` dokumentieren und in #24 nicht pauschal löschen. Ein kleiner separater Follow-up-Cleanup wird nach stabiler #24-Integration empfohlen. |
+| alte Zeitintervall-, gewichtete-Progress-, Fallback- und transparente-Reboot-Orakel ohne produktive Aufrufstelle | Nicht mehr normative Tests; keine R1-Sicherheitsbeweise. | Nicht als PASS verwenden. In #24 nur dort korrigieren/entfernen, wo sie den aktiven Testvertrag oder Architekturguard verfälschen; übrige Bereinigung als Follow-up. |
+
+Für C2 sind ein statischer/Architektur-Negativnachweis der erlaubten
+Produktionsaufrufe und mindestens ein Anwendungstest vorzusehen, der bei
+Schema-3-Legacy-/Open-Recoverydaten ausschließlich `NoActiveRun`/unknown-safe
+und keinen C2-Mutator/Plannerpfad erreicht. Nur wenn ein konkreter C2-Baustein
+technisch nicht sicher abtrennbar ist oder einen Parallelvertrag erzeugt, darf
+seine Entfernung in #24 verbleiben; der Plan muss dann Baustein, Call-Site,
+Abtrennungsversuch und den konkreten Safetygrund nennen. Diese Ausnahme ist
+nicht pauschal für ganze Dateien oder Testverzeichnisse erteilt.
 
 ## 7. Konfigurations- und Producer-Gate #56/#57
 
@@ -389,11 +539,12 @@ Die spätere Änderung hält ADR-013 und alle lokalen `AGENTS.md` ein:
 
 - `lib/device_platform`: nur app-neutrale Ports/Dienste. Falls der Audit die
   fehlende Resetcause-Fähigkeit bestätigt, kommt hier ein kleiner abstrakter
-  Resetcause-/Restart-Evidence-Port hinzu. Keine Fault-Codes, Run-Modelle,
-  GPIOs, ESP-IDF-Enums oder Safety-Entscheidungen.
+  Resetcause-/Boot-Evidence-Port für flüchtige Diagnose hinzu. Keine
+  Restart-Zählung, Safety-Persistenz, Fault-Codes, Run-Modelle, GPIOs,
+  ESP-IDF-Enums oder Safety-Entscheidungen.
 - `lib/device_platform_esp_idf`: ausschließlich Mapping der öffentlichen
   ESP-IDF-Reset-/Watchdog-Verträge auf den abstrakten Port und die sichere
-  Initialausgabe. Keine Fachlogik und kein Run-Recovery.
+  Initialausgabe. Keine Fachlogik, keine Restartzählung und kein Run-Recovery.
 - `lib/device_platform_test_support`: deterministische Resetcause-,
   Persistence-, Sensor- und Aktorsimulation. Keine Produktionsreferenz und
   keine Safety-Fachtypen als Plattformvertrag.
@@ -407,7 +558,7 @@ Die spätere Änderung hält ADR-013 und alle lokalen `AGENTS.md` ein:
 Geplante betroffene Bestandsdateien und neue Zielbereiche sind mindestens:
 
 ```text
-lib/device_platform/src/              Resetcause-/Restart-Port, falls Audit bestätigt
+lib/device_platform/src/              Resetcause-/Boot-Evidence-Port, falls Audit bestätigt
 lib/device_platform_esp_idf/src/      öffentlicher ESP-IDF-Adapter
 lib/device_platform_test_support/src/ deterministische Reset-/Store-Injektion
 lib/fermentation_app/src/             SafetyCore, Boot-/Run-/Config-Verknüpfung
@@ -415,7 +566,7 @@ lib/fermentation_app/src/             SafetyCore, Boot-/Run-/Config-Verknüpfung
   run_persistence_contract.*            nur notwendige Legacy-/R1-Klassifikation
   run_persistence_codec.*               kein neues Schema, sichere Altdecodierung
   run_persistence_coordinator.*         explicit resume / NoActiveRun / indeterminate
-  run_recovery*.*/run_progress_*.       C-Abbau bzw. Legacy-Decode-Abgrenzung
+  run_recovery*.*/run_progress_*.       C1-Abschaltung; C2 bleibt Legacy/Deprecated
   run_commands.*                        keine caller-supplied Safetyfreigabe
   actuator_plan_types.*                 SafetyView/Gate nur falls bestehender Typ es erfordert
   actuator_planner.* / sink driver       zentrale Endgrenze und Stop-Orakel
@@ -428,7 +579,8 @@ docs/...                                 in Abschnitt 10 definierte Vertragskorr
 Die genaue Dateiliste des Umsetzungsschnitts wird vor jedem Codecommit gegen
 den dann aktuellen Branch geprüft. Neue Dateien sind nur zulässig, wenn der
 konkrete Vertrag in diesem Plan nicht sauber durch einen vorhandenen
-kanonischen Typ getragen werden kann.
+kanonischen Typ getragen werden kann. Die Existenz eines C2-Legacy-Bausteins
+ist allein kein Löschmandat für #24.
 
 ## 9. Explizite Nicht-Ziele
 
@@ -440,6 +592,8 @@ Release 1 dieses Plans enthält nicht:
   Carry-Forward oder Recovery-Lineage zur Rettung eines alten Runs;
 - neue Run-Persistenzschema-Version, neue Run-Keys, Fallback-Promotion,
   Rollback oder besondere Recovery-Schreibberechtigungen;
+- ein zusätzlicher allgemeiner Safety-Record, Restart-Zähler, Resetzeitfenster
+  oder automatischer Restart-Latch;
 - OTA, Firmwaredownload, Netzwerk-, Web-, Anzeige- oder Remote-Safetylogik;
 - neue Hardware-, GPIO-, Pegel-, Sensor-, Grenzwert- oder
   Inbetriebnahmeentscheidungen;
@@ -469,18 +623,18 @@ für die kanonischen Dokumente.
 |---|---|---|
 | `docs/SAFETY_AND_FAULTS.md` | Vier Klassen und historische Latch-/Recovery-Verallgemeinerung | Drei minimale Reaktionsdispositionen, stabile Codes, unmittelbares AUS, Ack getrennt von Freigabe, automatische Wiederfreigabe nur pro Code; unknown/critical bleibt gesperrt. |
 | `docs/SAFETY_COMPONENT_FAULTS.md` | Teilweise Klassen-3/2-Orakel und automatische Reaktion ohne klare Boot-/Restore-Grenze | Sensor-/Aktorreaktionen gegen #20/#21/#23 beibehalten, aber Gate-/Recheck-Voraussetzungen und die R1-Ausnahme „kein Auto-Release durch Boot/Restore“ explizit machen. |
-| `docs/SYSTEM_SAFETY_AND_RECOVERY.md` | Automatische Wiederaufnahme, wiederholte Recovery und Charge-Erhalt als Leitbild | Boot all-off, Resetcause/SAFE_BOOT, explizites Resume-Angebot, sichere `NoActiveRun`-Beendigung und kein transparenter Brownout-/Crash-Erhalt. |
-| `docs/STATE_MACHINE.md` | `RecoveryEvaluation`/`RecoveryReject` begünstigen Recovery-Fortsetzung bzw. Fault statt sicherem Abbruch | `RecoveryEvaluation` als nicht freigebendes Angebot; Reject/Timeout/unklare Rekonstruktion führt bei erfolgreichem Abschluss zu `NoActiveRun`/Standby, Persistenzunknown zu SafeBoot. |
-| `docs/RUN_PERSISTENCE.md` | Schema-3-Recoveryfelder, automatisch aktivierende Reihenfolge und Fallback-Rettung | #17-Kern und Schema-3-Legacy-Decode klar von R1-Resume trennen; C-Felder nicht schreiben/interpretieren, unklare Snapshots sicher beenden, kein Boot-Release. |
-| `docs/RECOVERY_AND_INTERRUPTION.md` | Ausfallintervall, NTP-/Zeitbewertung und gewichteter Fortschritt als R1-Orakel | Alte Rettungsorakel entfernen oder als nicht normative historische Kompatibilität kennzeichnen; nur vollständige/eindeutige Qualifikation und explizite Entscheidung behalten. |
+| `docs/SYSTEM_SAFETY_AND_RECOVERY.md` | Automatische Wiederaufnahme, wiederholte Recovery und Charge-Erhalt als Leitbild | Boot all-off, Resetcause/SAFE_BOOT ohne Restart-Latch, explizites Resume-Angebot, sichere `NoActiveRun`-Beendigung und kein transparenter Brownout-/Crash-Erhalt. |
+| `docs/STATE_MACHINE.md` | `RecoveryEvaluation`/`RecoveryReject` begünstigen Recovery-Fortsetzung bzw. Fault statt sicherem Abbruch | `RecoveryEvaluation` als nicht freigebendes Angebot; `RecoveryReject`/`RecoveryRejected` führt nach bestätigtem `NoActiveRun`-Write zu `Standby`, Persistenzunknown nicht zu normalem Standby. |
+| `docs/RUN_PERSISTENCE.md` | Schema-3-Recoveryfelder, automatisch aktivierende Reihenfolge und Fallback-Rettung | Exaktes 5.2-Prädikat dokumentieren: Schema 3 und neutrale Felder sind zulässig; nur offene Recovery-Evidenz blockiert einfachen R1-Resume. `NoActiveRun`-Write-before-Apply und C1/C2-Grenze festhalten. |
+| `docs/RECOVERY_AND_INTERRUPTION.md` | Ausfallintervall, NTP-/Zeitbewertung und gewichteter Fortschritt als R1-Orakel | C1-Aufrufe und automatische Gutschriften aus dem aktiven Produktpfad entfernen; verbleibende C2-Kompatibilität als Legacy/Deprecated kennzeichnen; nur vollständige/eindeutige Qualifikation und explizite Entscheidung behalten. |
 | `docs/ACCEPTANCE_TESTS.md` | Automatische Recovery-, Zeit- und gewichtete-Progress-Orakel | Veraltete Orakel gezielt korrigieren; die vollständige Pflichtmatrix aus Abschnitt 11 dieses Plans ergänzen. |
 | `docs/SPECIFICATION_REVIEW.md` | „phasenbezogener sicherer Wiederanlauf“ kann automatische Aktorfreigabe nahelegen | Release-1-Scope auf allgemeine Persistenz plus explizites, nicht automatisch freigebendes Resume-Angebot präzisieren. |
 | `docs/REQUIREMENTS.md` | Vier Klassen und automatische Recovery ohne Owner-Gate | Minimalreaktionen, SafeBoot, NoActiveRun-Abbruch und klare Gate-Reihenfolge normieren. |
-| `docs/ARCHITECTURE.md` | Safety-Core-Beschreibung enthält historische vier Klassen und Recovery-Komplexität | Eine Safety-Autorität, zentrale Planner-Grenze, Platform-Trennung und kleine Safety-Persistenz dokumentieren. |
+| `docs/ARCHITECTURE.md` | Safety-Core-Beschreibung enthält historische vier Klassen und Recovery-Komplexität | Eine Safety-Autorität, zentrale Planner-Grenze, Platform-Trennung und die F1-Entscheidung „kein neuer allgemeiner Safety-Record“ dokumentieren. |
 | `docs/CONFIGURATION_PERSISTENCE.md` | Der #24-Anschluss ist korrekt, aber die neue Run-Abgrenzung fehlt | `CONFIGURATION_SAFETY_INTEGRATION_GATE` unverändert erhalten und explizit auf Boot/Restore/no-normal-release beziehen. |
 | `docs/IMPLEMENTATION_ISSUES.md` | #24-Abschlussbeschreibung kann alte Recoveryannahmen enthalten | Abhängigkeit #56/#57 -> #24 und #20 -> #21 -> #22 -> #23 -> #24 mit Scope-Reset aktualisieren; keine neue Zyklusabhängigkeit. |
 | `docs/ROADMAP.md` | Status nennt PR #110, aber den neuen Owner Scope Reset noch nicht | Draft-/NOT_STARTED-Status, superseded alte Planrevision und Owner-Gate für die neue exakte Plan-SHA sichtbar halten. |
-| `docs/DECISIONS.md` / ADR-018 | Muss gegen Config- und Persistenzänderung geprüft werden | Keine inhaltliche Abschwächung; nur falls die Umsetzung eine echte ADR-Abweichung findet, Ownerentscheidung vor Code. |
+| `docs/DECISIONS.md` / ADR-018 | Muss gegen Config- und Persistenzänderung geprüft werden | Keine inhaltliche Abschwächung; insbesondere keine neue Restart-/Safety-Persistenz aus #24. Nur falls die Umsetzung eine echte ADR-Abweichung findet, Ownerentscheidung vor Code. |
 | `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` | Darf durch Reset-/Safety-Port nicht abgeschwächt werden | Unverändert verbindlich halten; neuen Port nur app-neutral und native-testbar ergänzen. |
 
 Doppelte Verträge werden vermieden: Fehlercodes und Safety-Disposition gehören
@@ -500,14 +654,14 @@ interner Flag allein ist kein PASS.
 |---:|---|---|
 | 1. gültige Konfiguration, kein aktiver Lauf | Boot endet in sicherem Standby; kein Actor-Command vor explizitem Start | Boot/Application + Run-Persistence + Sink |
 | 2. vollständig/eindeutig rekonstruierbarer aktiver Lauf | Resume-Angebot vorhanden; Restore allein erzeugt kein `Allowed` und keinen Aktor-Command | Boot/Run-Persistence + Process FSM + Sink |
-| 3. unvollständiger, widersprüchlicher oder nicht eindeutiger Lauf | Aktoren AUS; alter Lauf wird sicher zu `NoActiveRun` beendet; bei eindeutigem Write ist neue Charge möglich; bei unklarem Write SafeBoot | Persistence + FSM + Store fault injection |
-| 4. kritischer/unknown Safetyzustand | `ImmediateStop`/SafeBoot, keine normale Freigabe, persistente Sperre falls erforderlich | SafetyCore + Planner + Restart |
+| 3. unvollständiger, widersprüchlicher oder nicht eindeutiger Lauf | Aktoren AUS; zuerst `NoActiveRun` mit bestätigtem Readback; erst danach `RecoveryRejected`/`Standby`; bei unklarem Write kein normaler Standby und unknown-safe | Persistence + FSM + Store fault injection |
+| 4. kritischer/unknown Safetyzustand | `ImmediateStop`/`SAFE_BOOT`, keine normale Freigabe; kein neuer Safety-Record wird vorausgesetzt | SafetyCore + Planner + Boot |
 | 5. Sensorfehler | sensorrollenspezifisch AUS/failover gemäß #20/#21; keine Freigabe aus stale/failed Daten | Sensor Quality/Selection + Planner |
 | 6. Aktor-/Plannerfehler | unmittelbares AUS, latched Verhalten gemäß Code, kein zweiter Bypass-Pfad | Planner + sink + SafetyCore |
 | 7. Persistenz-/Readbackfehler | kein neuer Zustand behauptet; AUS; safe abort oder SafeBoot je nach betroffener Persistenz | Store/codec/coordinator |
 | 8. unbestimmter Commitzustand | `CommitOutcomeUnknown` bleibt unbekannt; keine Slot-Wiederverwendung, kein Run-/Config-Release | Simulated Store + Run/Config service |
 | 9. Brownout | Resetcause erkannt/unknown-safe; Boot all-off; kein transparenter aktiver Resume | Reset mock + application + sink |
-| 10. Watchdog/Resetcause und wiederholte abnormale Neustarts | einzelner Restart bleibt AUS; Wiederholung erreicht definierte SafeBoot-Sperre; keine Charge-Rettung | Reset port + safety persistence + ESP-IDF adapter contract |
+| 10. Power-on/externer Reset/Brownout sowie Watchdog/Panic/unknown | jede Ursache startet all-off; vollständige Revalidierung; kein automatischer Resume; untrusted System-/Config-/Persistence-Zustand `SAFE_BOOT`; kein Zähler und kein Zeitfenster | Resetcause-Port + Application + ESP-IDF adapter contract |
 | 11. `ConfigurationRuntimeFailure` | Config-Gate blockiert normale Aktoren und erzeugt passende SafeBoot/latched Reaktion | Config recovery + SafetyCore + sink |
 | 12. `ConfigurationUnavailable` | SafeBoot/ImmediateStop, keine Factory-/Defaultfreigabe als Laufstart | Config recovery + boot |
 | 13. `ConfigurationIntegrityFailure` | SafeBoot/ImmediateStop, keine Quittierungsfreigabe | Config recovery + boot |
@@ -516,10 +670,25 @@ interner Flag allein ist kein PASS.
 
 Zusätzliche gezielte Negativnachweise:
 
-- Boot mit gültigem Run, aber altem Schema-3-Recoveryfeld: kein Zeit- oder
-  Progresskredit und kein automatischer Aktorstart;
+- Boot mit gültigem Schema-3-Run, dessen `recoveryTemperatureEvidence` und
+  `RunProgressState` nur neutrale Defaults/normalen `KnownTotal`-Bestand
+  enthalten: der Run wird nicht allein wegen Feldexistenz verworfen;
+- Boot mit gültigem Run und nichtneutralem Last-known-
+  `recoveryTemperatureEvidence` allein: Diagnose bleibt möglich, aber es gibt
+  keinen Resume-/Zeitbeweis und keinen automatischen Aktorstart;
+- Boot mit jedem offenen Marker aus 5.2 (`pendingRecoveryAnchor`,
+  `recoveryBootAnchorMonotonicMillis`, Episode-/Prior-/Adjustment-Evidenz oder
+  gewichteter/partiell unbekannter Progress): kein einfacher Resume, keine
+  Zeit-/Progressgutschrift, sicherer `NoActiveRun`-Pfad;
+- `schemaVersion == 3` mit vollständig eindeutiger aktueller Run-Struktur:
+  Schema 3 selbst führt nicht zu `not reconstructable`;
 - beschädigter Current-Record mit mehrdeutigem Fallback: keine Promotion,
   kein Rollback-Resume, sicherer Abschluss oder SafeBoot;
+- Resume-Bestätigung: aktueller Sensor-/Config-/Safety-Check, persistenter
+  Commit mit exactem Readback, erst danach `RecoveryResumed`/FSM-Aktivierung;
+- Reject/Timeout/unklare Rekonstruktion: zuerst `NoActiveRun`-Commit und
+  Readback, erst danach `RecoveryRejected` nach `Standby`; jeder Write-/Readback-
+  Fehler lässt RAM in Recovery/unknown-safe und nicht in normalem Standby;
 - Quittierung vor und nach jedem kritischen Fault ändert nicht das Gate;
 - ein erlaubter Sensor-Recheck kann nur mit frischer kanonischer Evidenz und
   ohne aktiven Latch wieder freigeben;
@@ -531,26 +700,29 @@ Zusätzliche gezielte Negativnachweise:
 Die vorhandenen Tests für #17, #20, #21, #22, #23, Config-Recovery,
 ActuatorPlanner, Sink und Simulated Store bleiben die Regressionbasis. Tests
 für automatische Recoveryzeit, gewichteten Fortschritt und alte
-Fallback-Rettung werden gezielt entfernt oder als negative R1-Orakel
-umgeschrieben. Hardware-Brownout, echter Watchdog, reale Resetcause und
-physische Aktorabschaltung sind keine nativen PASS-Nachweise.
+Fallback-Rettung werden nur für C1 aus dem aktiven Testvertrag entfernt oder
+als negative R1-Orakel umgeschrieben; verbleibende C2-Tests werden als
+Legacy/Deprecated gekennzeichnet und nicht pauschal im selben PR gelöscht.
+Hardware-Brownout, echter Watchdog, reale Resetcause und physische
+Aktorabschaltung sind keine nativen PASS-Nachweise.
 
 ## 12. Umsetzungs- und Commitstruktur nach Ownerfreigabe
 
 Keiner dieser Umsetzungsschnitte darf vor Freigabe der exakten neuen
 Plan-SHA begonnen werden.
 
-1. **Safety-Verträge und minimale Persistenz**
+1. **Safety-Verträge und flüchtige Boot-Evidenz**
    - stabile Fault-Codes/Dispositionen, SafetyView und einzige SafetyCore-
      Autorität;
-   - app-neutraler Resetcause-Port und kleiner Safety-Sperr-/Restart-Record
-     über vorhandene Store-/Envelope-/Readback-Verträge;
+   - app-neutraler Resetcause-Port nur für Ursache/Diagnose, ohne
+     Restart-Zähler oder Safety-Persistenz;
    - `Unresolved` als Boot-Default und fail-closed Write-/Readback-Semantik.
 
 2. **Boot-/Config-/Reset-Integration**
    - sichere Initialausgabe vor Validierung;
    - reale #56/#57-Producer-Gates und Config-Indeterminate-Abbruch;
-   - Resetcause-/Watchdog-Auswertung, wiederholte Neustarts und SafeBoot;
+   - Resetcause-/Watchdog-Auswertung und SafeBoot ohne Restartfenster-/Latch-
+     Vertrag;
    - ESP-IDF-Adapter sowie native Test-Injektion gemäß ADR-013.
 
 3. **Vereinfachung der Run-Persistenz-/FSM-Nutzung**
@@ -558,14 +730,16 @@ Plan-SHA begonnen werden.
    - explizites Resume-Angebot ohne Boot-Release;
    - sichere `NoActiveRun`-Beendigung nicht rekonstruierbarer Runs;
    - `CommitOutcomeUnknown` und Readbackfehler als unknown-safe;
-   - Entfernung der aktiven C-Write-/Zeit-/Progress-/Promotionpfade bei
-     Erhalt nur notwendiger Legacy-Decode-Kompatibilität.
+   - C1-Abschaltung aller aktiven Write-/Zeit-/Progress-/Promotionpfade;
+   - C2 als Legacy/Deprecated abgrenzen, nicht pauschal löschen, und
+     separaten Follow-up-Cleanup empfehlen.
 
 4. **Aktorpfade und Fehlerreaktionen**
    - SafetyCore als einzige Quelle für die bestehende Planner-Gate-Eingabe;
    - route-spezifische Allow-/Deny-Integration für Start, Resume, Sensor-,
      Planner- und reale Sinkpfade;
-   - Quittierung, Recheck und persistente Sperre sauber trennen.
+   - Quittierung, Recheck und vorhandene Store-/Config-Sperrsemantik sauber
+     trennen; keinen neuen Safety-Record einführen.
 
 5. **Gezielte Regression und Dokumentkonsistenz**
    - die Matrix aus Abschnitt 11 gegen Anwendung, Persistenz und Sink;
@@ -586,11 +760,12 @@ Der Plan entscheidet keine Hardwaredetails. Offen bleiben insbesondere:
 - reale GPIO-/Pegel-/Treiber-/Verdrahtungsbestätigung für alle Aktoren;
 - Nachweis der sicheren physischen Ausgabestellung bei Power-On, Reset,
   Brownout und ESP-IDF-Adapterstart;
-- echte Watchdog-/Resetcause-/Wiederholungsnachweise auf Zielhardware;
+- echte Watchdog-/Resetcause-Nachweise auf Zielhardware; native Einzelursachen-
+  Injektion ersetzt keinen Hardwarebeweis und begründet keine Zählung;
 - Sensor-/Aktor-Inbetriebnahme, thermische Parameter und Belastungsgrenzen;
 - #56/#57- und das separate produktive #106-Integrationsgate;
-- Speicher-/Zeitbudgets für die minimale Safety-Persistenz und den
-  SafetyCore;
+- Speicher-/Zeitbudgets für den SafetyCore und den bestehenden Store-/Readback-
+  Pfad;
 - reale Verifikation, dass kein Adapterpfad das Planner-Gate umgehen kann.
 
 Diese Nachweise sind nach dem Code-Review gesonderte Owner-/Hardware-Gates.
