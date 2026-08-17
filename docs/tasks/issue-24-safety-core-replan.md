@@ -16,12 +16,12 @@ Planpfad: docs/tasks/issue-24-safety-core-replan.md
 Implementation: NOT_STARTED
 ```
 
-Live-Revalidierung vor dieser abschließenden Planrevision am 2026-08-17:
+Live-Revalidierung vor dieser neuen Planrevision am 2026-08-17:
 
 ```text
 PR #110: OPEN / Draft
 PR-Branch: agent/issue-24-safety-core-replan-v2
-PR-HEAD vor dieser Revision: e3a7586032542d9c3e89a3c89f68f7d0f36efa2e
+PR-HEAD vor dieser Revision / direkter Parent: 4e47f17aa31d1f16b90cf6ae12eebad732354825
 PR-Base: main @ b8eae5f4da5f2666b5a9bda333d115254c4db5b2
 Issue #24: OPEN
 origin/main: b8eae5f4da5f2666b5a9bda333d115254c4db5b2
@@ -62,10 +62,11 @@ für die Umsetzung zu verwenden:
 | #17 Wire | `run_persistence_contract.hpp:19-145`, Schema 3; `run_persistence_codec.cpp:26-29`, Recordtypen 7/8, Checkpoint max. 8240, Head max. 256 | kein Schema 4 und kein Safety-Fallback-Wirefeld |
 | #17 Store | `run_persistence_store.cpp:8-17`, `rh0`, `rc0`, `rc1` | S3 benutzt keine neuen #17-Keys; Safety hat eigene Records |
 | #17 Load | `run_persistence_coordinator.cpp:257-497` | bestehendes `FallbackRecovered` bleibt ein eigenständiger #18-Pfad; `Current` mit Fault plus S3-Intent erhält nur einen zusätzlichen read-only Handoff |
+| #17 RecoveryEvidence | `run_persistence_contract.hpp`, `run_persistence_codec.cpp`, `run_persistence_coordinator.cpp` | #17 besitzt festen Evidence-Typ, gemeinsame Referenz-/Formathelfer, Capture, Klassifikation und read-only Fallback-Handoff; keine Safety-/Intent-Semantik und kein Schema 4 |
 | #17 Activation | `run_persistence_coordinator.hpp:214-218`, `run_persistence_coordinator.cpp:760-925` | neuer Safety-Handoff darf nur vor der bestehenden forward-only Recoveryaktivierung RAM-seitig auswählen |
 | #17 Write | `run_persistence_coordinator.cpp:1404-1685` | Prepared -> Slot -> Committed bleibt vorwärts und crash-sicher |
 | #18 Recovery | `docs/RUN_PERSISTENCE.md`, `docs/RECOVERY_AND_INTERRUPTION.md`, `RunRecoveryCoordinator` | Zeit, Phase, Sensorwahl, Progress und Terminalentscheidung bleiben #18 |
-| Prozess | `process_state_machine.hpp:15-150`, `process_state_machine.cpp:230-285` | Fault -> Standby erhält einen eigenen terminalen Owner-/Recoverygrund; kein `NoActiveRun + Fault` |
+| Prozess | `process_state_machine.hpp:15-150`, `process_state_machine.cpp:230-285` | echter FSM-Vertrag wird um `FaultResetCompleted`, `SafeBootExitCompleted` und nicht freigebendes `RunAbandonCompleted` ergänzt; kein `NoActiveRun + Fault` |
 | #21 Sensorwahl | `sensor_selection_types.hpp`, `sensor_selection.cpp:537-759` | `AirFallbackActive` ist ein vorhandener Runtimezustand; #24 dupliziert keine #21-FSM |
 | #22/#23 Aktor | `actuator_plan_types.hpp:12-35,286-307`, `temperature_control_orchestrator.hpp`, `actuator_planner.cpp:1040-1080` | zentrale SafetyDirective, kein frei gelieferter `Allowed`-Wert, #23 Timing bleibt Eigentümer |
 | Reset/Watchdog-Plattform | ESP-IDF 6.0.2 öffentliche `esp_system.h`-/`esp_task_wdt.h`-Verträge und `CONFIG_ESP_INT_WDT`, `CONFIG_ESP_INT_WDT_TIMEOUT_MS`, `CONFIG_ESP_TASK_WDT_*`, `CONFIG_ESP_SYSTEM_PANIC` | `device_platform` liefert `IResetCauseProvider`/`IResetController`; ESP-IDF mappt native Ursachen und nutzt TWDT/IWDT, `fermentation_app` bleibt ESP-IDF-frei; kein `esp_private/esp_int_wdt.h` |
@@ -131,29 +132,53 @@ Projektion für bestehende #15-Verträge und darf keine zweite Safetyautorität
 werden. UI, Web und Transport können mit `true` weder Start, Stop, Completion,
 Adjust, SensorSelection noch Aktortest freigeben.
 
-`FaultResetEvaluation` bleibt unverändert die reine, fachliche #15-Auswertung
-von Target, CauseClear, Safetybedingungen und Blockern. Insbesondere ist ein
-frei geliefertes `authorizationSatisfied` weder Teil dieser Evaluation noch
-eine Vertrauensquelle. Erst `SafetyFaultService` beziehungsweise der interne
-CommandCoordinator bildet aus der aktuellen `FaultResetEvaluation`, einem
-nicht öffentlich konstruierbaren `fermentation_app::ServiceResetProof` und der
-aktuellen `SafetyState`-Revision/-Lineage die endgültige TargetReset-Entscheidung.
-Der Proof bindet Auth-Session/Generation, Target-Instance, aktuelle Lineage und
-erwartete `persistentFaultRevision`; UI, Web und Transport können weder
-Evaluation noch Proof als Freigabe fabrizieren. Typ und Minting gehören
+Der direkte Main-Abgleich zeigt den noch caller-supplied #15-Vertrag:
+`FaultResetRequest` enthält derzeit `CommandEnvelope` und eine vollständige
+`FaultResetEvaluation`; diese Form ist für #24 nicht ausreichend. Die
+Planrevision korrigiert den Vertrag gegen den echten Code und trennt öffentliche
+Anforderung, interne Auswertung und endgültige Safety-Mutation:
+
+```text
+öffentlicher FaultResetRequest:
+  CommandEnvelope envelope
+  uint32_t targetInstanceId
+
+interne TargetResetEvaluation in #24:
+  targetIdentity = FaultCode + FaultSource
+  targetResetAllowed
+  causeCleared
+  safetyChecksPassed
+  otherBlockingFaultActive
+  releaseAllowed
+  expectedPersistentFaultRevision
+  current safetyHistoryLineage
+  rejection
+
+interner, nicht fälschbarer ServiceResetProof:
+  Auth-Session/Generation, Target-Instance, aktuelle Lineage,
+  erwartete persistentFaultRevision und serviceseitig qualifizierte Evidenz
+```
+
+`authorizationSatisfied` bleibt kein caller-supplied Freigabefeld. Die
+öffentliche Bewertung wird entfernt; der CommandCoordinator beziehungsweise
+`SafetyFaultService` bildet die interne `TargetResetEvaluation` aus der
+kanonischen SafetyState-/Producer-Evidenz und akzeptiert den Proof nur für
+exakt dasselbe Target. Typ und Minting von `ServiceResetProof` gehören
 ausschließlich `fermentation_app`; `device_platform_test_support` kennt weder
 den Typ noch Fault-/Lineagefelder. Bis ein echter Service-PIN/Auth-Producer
 existiert, erzeugt der Produktpfad keinen S3-/Y4-Resetproof. App-Tests erzeugen
 ihn nur über einen app-internen Testhelper aus generischer Test-Auth-/
 Sessionevidenz.
 
-Der direkte Main-Abgleich zeigt noch das öffentliche
-`FaultResetEvaluation::authorizationSatisfied`-Feld. Die #24-Integration
-behält die #15-Target-/Safetysemantik, akzeptiert dieses Feld aber weder aus
-`FaultResetRequest` noch aus einem Transportobjekt als Freigabe. Sie bildet die
-Evaluation intern aus kanonischer Evidenz und ergänzt sie erst dort mit dem
-unforgeable Proof; ein äußerer Kompatibilitätsrest darf nur Diagnose sein und
-nie die finale TargetReset-Entscheidung beeinflussen.
+Andere aktive Faults machen `otherBlockingFaultActive=true` und
+`releaseAllowed=false`, dürfen aber einen aktuell bewiesenen Target-Reset
+nicht verhindern. Erst wenn der letzte Blocker entfernt ist, darf Release,
+Standby oder SAFE_BOOT-Exit freigegeben werden. Die einzige Safetyrevision ist
+`SafetyState.persistentFaultRevision`. `RunCommandState::faultRevision` wird
+aus der Safety-Autorität entfernt; falls ein kurzlebiger #15-Kompatibilitäts-
+oder Nachrichtenwert nötig bleibt, ist er eine ausschließlich abgeleitete
+Projektion und darf weder unabhängig erhöht, persistiert noch als Safetywahrheit
+geprüft werden.
 
 ## 3. FaultCatalog und Identität
 
@@ -413,13 +438,13 @@ Envelope VersionValue = recordRevision (uint64, ab 1)
 Die Keys sind statisch und werden ausschließlich als `StateStoreKey` erzeugt.
 Es gibt keine dynamischen Safety-Keys. Ein technischer Envelope hat den
 bestehenden Envelope v1 von `storage_envelope.*`; seine maximal geplante Größe
-ist `33 Byte Header + 824 Byte Payload + 4 Byte CRC = 861 Byte`, also deutlich
-unter dem 1024-Byte-Limit.
+ist `33 Byte Header + 892 Byte Payload + 4 Byte CRC = 929 Byte`, also unter
+dem 1024-Byte-Limit.
 
 ### 4.2 Payload-Feldreihenfolge
 
 Alle Felder sind Big-Endian ohne C++-Padding. Der Payload ist immer exakt
-`kSafetyStatePayloadBytes = 824` Byte:
+`kSafetyStatePayloadBytes = 892` Byte:
 
 | Offset | Wirefeld | Typ / Wert |
 |---:|---|---|
@@ -438,12 +463,22 @@ Alle Felder sind Big-Endian ohne C++-Padding. Der Payload ist immer exakt
 | 28 | `runRecoveryForbidden` | `uint8`, 0/1 |
 | 29 | `historyLineageState` | `uint8`, `0=Continuous`, `1=PartialSuccessor`, `2=TotalDiscontinuity` |
 | 30 | `persistentFaultCount` | `uint8`, 0..33 |
-| 31 | `reserved0` | `uint8 = 0` |
-  | 32 | `FaultRecord[0..32]` | exakt 33 Records à 24 Byte |
+| 31 | `historyPreviousLineageKnown` | `uint8 = 0/1`, rebootstabiler Nachweis `oldLineageKnown` |
+| 32 | `FaultRecord[0..32]` | exakt 33 Records à 24 Byte |
+| 824 | `RunPersistenceRecoveryEvidence` | feste #17-Projektion, 68 Wirebytes; bei `None`/`SafetyTaskRecovery` vollständig zero |
+
+`historyPreviousLineageKnown` ersetzt das bisherige `reserved0` und ist der
+rebootstabile SafetyState-Anker für `oldLineageKnown`: `Continuous=0`,
+`PartialSuccessor=1`, `TotalDiscontinuity=0 oder 1`. Der Decoder lehnt jede
+andere Kombination ab; der Wert wird bei jedem History-/Lineage-Ereignis in
+den typisierten #19-Handoff projiziert.
 
 `recordRevision` ist ausschließlich Envelope `VersionValue`; er wird nicht
 doppelt im Payload gespeichert. Der Payload ist deshalb exakt
-`32 + (33 * 24) = 824 Byte`. Leere FaultRecord-Slots sind vollständig null.
+`32 + (33 * 24) + 68 = 892 Byte`. Leere FaultRecord-Slots sind vollständig
+null. Die Evidence-Projektion ist kein zweiter Safetyvertrag: ihre 68 Bytes
+werden ausschließlich über den von #17 bereitgestellten typisierten Codec-
+Helper geschrieben/gelesen.
 Die FaultRecords müssen aufsteigend nach `instanceId` folgen; die Zahl der
 nichtleeren Records muss exakt `persistentFaultCount` sein.
 
@@ -484,11 +519,18 @@ alle folgenden Regeln gelten:
 - `nextPersistentInstanceId` ist nie 0, außer der Record ist ein ausdrücklich
   erkanntes fabrikneues Rohformat vor Erstinitialisierung;
 - `restartIntentState=None` erzwingt `kind=None`, `source=0`,
-  `restartAttempted=0`, `outcome=None`;
+  `restartAttempted=0`, `outcome=None` und eine vollständig zero gesetzte
+  RecoveryEvidence-Projektion;
 - `restartIntentState=Prepared` erzwingt `kind=SafetyTaskRecovery` oder
   `kind=S3RunRecovery`,
   `0 < source < nextPersistentInstanceId`, `restartAttempted` 0/1 und
   `outcome` None oder Rejected;
+- bei `kind=SafetyTaskRecovery` ist die RecoveryEvidence-Projektion
+  vollständig zero;
+- bei `kind=S3RunRecovery` ist die Evidence-Projektion vollständig vorhanden
+  und wird über den gemeinsamen #17-Typ-/Codec-Helper validiert; der reine
+  SafetyState-Decoder prüft nur Wire, Format, Referenzform und Lineagefelder,
+  nicht den aktuell geladenen #17-Head oder dessen Fault-Zustand;
 - `restartOutcome=Rejected` erzwingt immer `restartAttempted=1`; ein abgelehnter
   Port darf keinen unverbrauchten Restartintent hinterlassen;
 - bei `kind=SafetyTaskRecovery` muss `source` exakt auf den aktuell aktiven,
@@ -499,16 +541,6 @@ alle folgenden Regeln gelten:
   aktiver Record vorhanden sein, es dürfen keine aktiven S3-/Y4-Records und
   kein `runRecoveryForbidden` bestehen, und Attempted/Outcome müssen gemäß
   dem RestartIntent-Vertrag gültig sein;
-- der Boot-Decoder darf keine nicht mehr persistierte Preimage-Historie
-  behaupten: Die zusätzliche Decode-/Handoff-Qualifikation verlangt
-  `#17 Current/Fault`, einen physisch verifizierten passenden Fallback und
-  eine passende Boot-/ResetCause-Qualifikation. Die Provenienz selbst wird
-  ausschließlich zum Candidate-Zeitpunkt gebildet: Das geladene Preimage muss
-  die Source-Instance aktiv enthalten, CauseClear und der exakte
-  `ServiceResetProof` müssen für genau diese Instance gelten, genau diese
-  Instance wird entfernt, und derselbe Kandidat setzt
-  `Prepared(kind=S3RunRecovery, sourceInstanceId=source)`. Erst dessen
-  bestätigter Commit ist die Provenienz-Evidenz;
 - `runRecoveryForbidden=true` zusammen mit Prepared `S3RunRecovery` ist
   ungültig; `SafetyTaskRecovery` darf dadurch niemals einen Recovery-Handoff
   erhalten;
@@ -521,15 +553,103 @@ Jede Verletzung ist Decode-Failure und führt zu `Y4_UNKNOWN_SAFETY_STATE`,
 `ImmediateStop` und `SAFE_BOOT`; sie wird nicht durch eine beliebige
 Interpretation repariert.
 
-Die `S3RunRecovery`-Candidate-Erzeugung beweist diese Herkunft mechanisch: Der
-Service-Target-Reset nimmt die aktuelle SafetyState-Revision als Preimage,
-prüft darin genau die aktive Source-Instance, CauseClear und den exakten
-ServiceResetProof, entfernt genau diese Instance und setzt im selben
-Kandidaten `Prepared(kind=S3RunRecovery, sourceInstanceId=source)`. Kein
-Caller und kein Decoder darf einen historischen Source nachträglich
-einsetzen. Der atomare Commit dieses Kandidaten ist die persistente Evidenz der
-gemeinsamen Entfernung und Intent-Erzeugung; der spätere Boot-Decoder prüft nur
-die verbleibenden Payload- und Handoff-Bedingungen.
+Die `S3RunRecovery`-Candidate-Erzeugung beweist die Safety-seitige
+Korrelation weiterhin mechanisch: Der Service-Target-Reset nimmt die aktuelle
+SafetyState-Revision als Preimage, prüft aktive Source-Instance, CauseClear und
+den exakten `ServiceResetProof`, entfernt genau diese Instance und setzt im
+selben Kandidaten `Prepared(kind=S3RunRecovery, sourceInstanceId=source)`.
+Dabei wird die von #17 unter derselben Orchestrierungs-/Mutationssperre
+erfasste `RunPersistenceRecoveryEvidence` eingebettet. Kein Caller und kein
+Decoder darf eine historische Source oder rohe #17-Wirebytes nachträglich
+einsetzen. Der atomare SafetyState-Commit ist die gemeinsame persistente
+Entscheidung; die mechanische Bedeutung der Evidence bleibt #17.
+
+### 4.4a Typisierter #17-Recovery-Evidence-Vertrag
+
+Der Typ gehört zur #17-RunPersistence-Domain in `fermentation_app` und bleibt
+fixed-size, stringfrei und Safety-/Auth-/Intent-neutral:
+
+```cpp
+struct RunPersistenceRecoveryEvidence {
+    std::uint64_t headRevision;
+    RunCheckpointReference current;
+    RunCheckpointReference fallback;
+};
+```
+
+#17 persistiert dabei keine Safety-Episode, keinen Fault, keine S3-Instance und
+keinen `S3RunRecovery`-Intent. Die Evidence beschreibt ausschließlich den
+mechanisch bewiesenen RunPersistence-Anker, der von #24 in seiner eigenen
+SafetyState-Instanz korreliert wird.
+
+Die feste Projektion ist:
+
+```text
+headRevision                 uint64       8 Byte
+current RunCheckpointReference            30 Byte
+fallback RunCheckpointReference           30 Byte
+Wire gesamt                               68 Byte
+```
+
+Die native Form ist nicht packed und erhält `static_assert(sizeof(...) ==
+88)` sowie `static_assert(alignof(...) == alignof(std::uint64_t))`. Die
+Referenz- und Evidence-Encoder/-Decoder/-Validatoren sind genau einmal in der
+#17-RunPersistence-Schicht definiert und werden vom SafetyState-Codec nur als
+gemeinsamer Helper aufgerufen. #24 kopiert weder
+`runCheckpointReferenceMatches()` noch Envelope-/CRC-/Schema-/Epochregeln.
+Der Helper unterscheidet ausschließlich die technisch erlaubte Projektion
+`zero` (alle 68 Bytes null) von einer vollständig gültigen Evidence-Instanz;
+`zero` ist nur bei Intent `None` oder `SafetyTaskRecovery` zulässig.
+
+`captureSafetyRecoveryEvidence(...)` liefert nur dann einen Wert, wenn #17
+unter der aktuellen Mutationssperre mechanisch nachweist:
+
+- Committed Head, gültige `current`-Referenz mit aktivem `Fault`-Snapshot und
+  gültige ältere `fallback`-Referenz;
+- beide Referenzen physisch lesbar, Envelope/CRC/Schema/Epoch gültig und
+  jeweils durch `runCheckpointReferenceMatches()` bestätigt;
+- gleicher Run-/Program-/Manual-Kontext, gleicher aktiver Run, gültige
+  `ProcessState::Fault`-Form und `fallback != current`;
+- ältere Checkpoint-/Runrevision des Fallbacks, zwei unterschiedliche Slots,
+  keine `NoActiveRun`-Variante und keine widersprüchlichen High-Watermarks;
+- `headRevision`, Referenzen, Variant und alle Crossfields des Typs gültig.
+
+Die API entscheidet weder S3, Auth, CauseClear noch Recovery. Sie darf nur
+technische RunPersistence-Wahrheit beschreiben. `mutationKind` ist dafür kein
+Beweis: Es steht ausschließlich im Prepared-Head und ist nach einem
+Committed-Readback nicht persistiert.
+
+`classifyRecoveryEvidence(expected)` bleibt ebenfalls #17. Nach
+`loadAndInitialize()` validiert sie eigene physische Records und liefert exakt:
+
+```text
+PendingHandoff
+RecoveryForwardAlreadyCommitted
+RecoveryRejectedAlreadyCommitted
+TerminalAlreadyCommitted
+InvalidOrOrphaned
+```
+
+`PendingHandoff` verlangt exakte Übereinstimmung von committed Headrevision,
+Current-/Fallback-Referenz und physisch validiertem aktivem Fault-current mit
+`expected`. Die vier übrigen Klassen verlangen eine strikt vorwärts liegende,
+physisch gültige Schema-3-Wahrheit nach `expected.headRevision` und die jeweils
+kanonische #18-Snapshotform: gültige RecoveryEvaluation/Recovery-Snapshotform,
+gültige Fault-/RecoveryRejected-Form ohne offenen Recoveryanker, oder exakt
+`NoActiveRun`/`Standby`. Run-ID, Programmsnapshot, Manual-Kontext, Snapshot-
+Crossfields, Fallbackkette und technische Referenz-/CRC-/Epochregeln werden
+innerhalb #17 geprüft. Eine dritte, unvollständige oder nicht mehr an die
+Evidence bindbare Wahrheit ist `InvalidOrOrphaned`. Kein Status wird aus
+`ProcessState` allein geraten; der Committed-Head enthält keine
+`mutationKind`-Provenienz.
+
+`prepareSafetyFallbackRecovery(expected)` konsumiert die von #17 selbst
+validierte Evidence, prüft Current/Fallback erneut, lädt den Fallback read-only
+und setzt `FallbackRecoveryPending`. Es schreibt keinen Head, keinen Slot und
+keine Fallbackpromotion. Normale #17-Mutationen bleiben ab bestätigtem
+Prepared-Intent gesperrt; ausschließlich diese Klassifikation, der read-only
+Handoff, explizite #18-Recoverymutationen und der definierte terminale Abandon
+sind zulässig.
 
 ### 4.5 Zwei-Slot-Commit
 
@@ -822,21 +942,34 @@ Ack-Writes. Nach Reboot darf die Meldung wieder unquittiert erscheinen.
 
 ### 6.2 Multi-Fault-Reset
 
-`FaultResetEvaluation` aus #15 bleibt die reine Auswertung mit
-Target-Identität, `targetResetAllowed`, `otherBlockingFaultActive` und
-`releaseAllowed`. Ein Target darf intern erst entfernt werden, wenn diese
-Evaluation aktuell ist, CauseClear und die Target-Safetychecks vorliegen und
-der CommandCoordinator zusätzlich einen unforgeable `ServiceResetProof` für
-dieselbe Target-Instance, Lineage und `persistentFaultRevision` prüft. Andere
-Blocker verhindern Release, Recovery und Standby, aber nicht den so
-qualifizierten Target-Reset. Erst nach dem letzten Blocker und erfüllter
-Y4-Terminalregel kann ein Gate auf `Allowed` oder ein SAFE_BOOT-Exit entstehen.
+Der tatsächliche #15-Vertrag wird für die #24-Integration explizit korrigiert:
+
+```text
+FaultResetRequest = CommandEnvelope + targetInstanceId
+
+interne TargetResetEvaluation =
+  targetIdentity, targetResetAllowed, causeCleared,
+  safetyChecksPassed, otherBlockingFaultActive, releaseAllowed,
+  expectedPersistentFaultRevision, safetyHistoryLineage, rejection
+```
+
+Ein Target darf intern erst entfernt werden, wenn diese Evaluation aktuell ist,
+CauseClear und die Target-Safetychecks vorliegen und der CommandCoordinator
+zusätzlich einen unforgeable `ServiceResetProof` für dieselbe Target-Instance,
+Lineage und `persistentFaultRevision` prüft. Andere Blocker verhindern Release,
+Recovery und Standby, aber nicht den so qualifizierten Target-Reset. Erst nach
+dem letzten Blocker und erfüllter Y4-Terminalregel kann ein Gate auf `Allowed`
+oder ein SAFE_BOOT-Exit entstehen. Das vorhandene öffentliche
+`FaultResetEvaluation::authorizationSatisfied` wird entfernt; eine
+Kompatibilitätsprojektion darf nie die Entscheidung beeinflussen.
 
 Der Produktpfad akzeptiert kein öffentlich konstruierbares
 `authorizationSatisfied=true`, keine vom Transport gelieferte Evaluation und
-keinen fremd erzeugten Proof. Bis ein produktiver Service-PIN/Auth-Producer
-existiert, sind S3/Y4-Resets produktiv fail-closed; Tests erhalten ausschließlich
-einen app-internen Testhelper, nicht `device_platform_test_support`.
+keinen fremd erzeugten Proof. `persistentFaultRevision` ist die einzige
+Safetyrevision; `RunCommandState::faultRevision` wird nicht als zweite
+Autorität fortgeführt. Bis ein produktiver Service-PIN/Auth-Producer existiert,
+sind S3/Y4-Resets produktiv fail-closed; Tests erhalten ausschließlich einen
+app-internen Testhelper, nicht `device_platform_test_support`.
 
 ## 7. ImmediateStop, Aktor-Gate und Fan-/Thermikvertrag
 
@@ -1249,96 +1382,93 @@ Ein S3 kann vor seinem Service-Reset rebooten. Dann sind S3-Latch,
 Fallback gemeinsam persistiert. Dieser Zustand darf nicht durch den normalen
 SAFE_BOOT-Exit in `NoActiveRun` terminalisiert werden.
 
-Ein eigener, fail-closed `S3RecoveryDeparture` ist nur zulässig, wenn ein
-autorisierter Service-Target-Reset gleichzeitig in **einem** SafetyState-
-Kandidaten ausführt:
+Die exakte `S3RecoveryDeparture`-Reihenfolge ist:
 
 ```text
-geladenes SafetyState-Preimage enthält die aktive sourceInstance
-CauseClear + exakter ServiceResetProof für genau diese sourceInstance
-genau diese S3-Instance aus dem Kandidaten entfernen
-im selben Kandidaten Prepared(kind=S3RunRecovery, sourceInstanceId, Attempted=0)
-setzen
+S3 aktiv
+ -> CauseClear
+ -> ServiceResetProof und Target-Identity prüfen
+ -> aktive Run-Domain vorhanden
+ -> #17 captureSafetyRecoveryEvidence() unter derselben
+    Orchestrierungs-/Mutationssperre
+ -> #24 prüft kein Y4, runRecoveryForbidden=false, aktuelle
+    Lineage/Target/Revision/Auth sowie Config-/Sensor-/Watchdog-Gates
+ -> ein SafetyState-Kandidat:
+    S3-Target entfernen, S3RunRecovery vorbereiten,
+    sourceInstanceId setzen, Attempted=0 und Evidence einbetten
+ -> SafetyState-Commit und Exact-Readback
+ -> Attempted=1 in einem zweiten SafetyState-Kandidaten committen/readbacken
+ -> genau ein kontrollierter Restart
 ```
 
-Das ist die Candidate-time-Provenienzbildung. Nach dem Commit ist die entfernte
-Source nicht mehr persistiert; der spätere Boot-Decoder darf deshalb nur noch
-`sourceInstanceId != 0 && sourceInstanceId < nextPersistentInstanceId`,
-kein aktives S3/Y4, `runRecoveryForbidden=false`, gültige Attempted-/Outcome-
-Crossfields sowie #17 `Current/Fault`, den physisch passenden Fallback und die
-ResetCause-Qualifikation prüfen.
+Vor dem ersten SafetyState-Commit muss #17 die Evidence nochmals aus seinem
+eigenen Committed-Head/Current/Fallback bestätigen. Die konkrete persistierte
+Evidence-Instanz gehört zu #24 `SafetyState`; #17 besitzt Typ, Regeln und
+mechanische Erzeugung. RAM bleibt bis zum Ende `SafeBoot/ImmediateStop`; kein
+Planner- oder Sink-Tick wird freigegeben. Nach bestätigtem Prepared-Intent
+sind normale #17-Mutationen gesperrt.
 
-Zusätzlich müssen vor dem Commit gelten: keine weiteren S3/Y4, kein
-`runRecoveryForbidden`, redundanter SafetyState und Marker healthy,
-#56/#57 qualifiziert, #17 `Current=Fault` plus vollständig passender
-Pre-Fault-Fallback, aktuelle Air/Cooling-/Sensor-Evidenz, Planner-/Watchdog-
-Evidenz healthy und kein Counter-Exhaustion. RAM bleibt bis zum Ende
-`SafeBoot/ImmediateStop`; kein Planner- oder Sink-Tick wird freigegeben.
+Ist die #17-Evidence oder ein Safety-/Config-/Reset-Gate vor dem Target-Reset
+nicht beweisbar, wird kein Intent gebildet und kein Target entfernt. Der alte
+Run wird unter aktivem S3-Latch über den technischen #17-Abandon zu
+`NoActiveRun/STANDBY` forward-only terminalisiert und exact-readback-bestätigt;
+RAM bleibt Fault/SafeBoot. Erst danach sind CauseClear und TargetReset ohne
+RecoveryIntent zulässig. Es entsteht keine zusätzliche Y4-Identity nur für
+diesen Terminalpfad.
 
-Ist diese Recoverability-Prüfung **vor** dem Target-Reset nicht beweisbar,
-bleibt der S3-Latch aktiv: ImmediateStop, Service-TargetReset-Anforderung und
-RecoverabilityGate werden zwar ausgeführt, aber es wird kein
-`S3RunRecovery`-Intent gebildet und kein Target entfernt. Der alte Run wird
-bei weiter aktivem S3-Latch über den bestehenden sicheren #17-Run-Abandon-
-Vertrag zu `NoActiveRun/STANDBY` terminalisiert und exact-readback-bestätigt.
-Erst danach ist ein S3-Target-Reset ohne RecoveryIntent zulässig;
-`safeBootRequired` bleibt bis zum separaten SAFE_BOOT-Exit gesetzt. Es entsteht
-keine zusätzliche Y4-Identity nur für diesen Terminalpfad.
+Nach bestätigtem Candidate-Commit wird `restartAttempted=true` in einem zweiten
+SafetyState-Kandidaten geschrieben. Erst danach darf der `IResetController`
+einmal aufgerufen werden. Bei ausdrücklicher Port-Ablehnung wird `Rejected`
+geschrieben, ohne Retry; eine unerwartete Rückkehr nach `Requested` ist kein
+Rejected. Beim nächsten Boot ist nur `S3RunRecovery + Attempted=1` gemäß
+ResetCause-Matrix handoffberechtigt. Attempted=0, jeder neue S3/Y4,
+Marker-/Safety-Indeterminate, Configuration-/Run-Fehler oder Counterstatus
+führt zu SAFE_BOOT ohne Handoff.
 
-Nach bestätigtem Kandidatencommit wird `restartAttempted=true` in einem zweiten
-SafetyState-Kandidaten geschrieben. Erst danach darf der
-`IResetController` einmal aufgerufen werden. Bei Port-Ablehnung/Return wird
-`Rejected` geschrieben, ohne Retry. Beim nächsten Boot ist nur
-`S3RunRecovery + Attempted=1` gemäß ResetCause-Matrix handoffberechtigt.
-`Attempted=0`, jeder neue S3/Y4, Marker-/Safety-Indeterminate,
-Configuration-/Run-Fehler oder Counterstatus führt zu SAFE_BOOT ohne Handoff.
-
-Jeder `S3RunRecovery`-Intent, der gemäß ResetCause-Matrix oder aktueller
-#17-/Fallback-/Config-Evidenz nicht mehr handoffberechtigt ist, wird niemals
-erneut gestartet. Stattdessen folgt zwingend: ImmediateStop/SAFE_BOOT,
-`safeBootRequired=true` durable sofern der SafetyState schreibbar, kein
-Restart-Retry und kein Resume; dann wird der alte Run über #17 forward-only zu
-`NoActiveRun/STANDBY` terminalisiert und exact-readback-bestätigt. Erst danach
-wird `restartIntent=None` durable committed; `safeBootRequired` bleibt true
-bis zum separaten Exit. Das umfasst Crash nach Prepared vor Attempted,
-`Attempted=0` mit jedem Reboot, explizites `RestartRejected`, Attempted=1 mit
-Brownout/Watchdog/Panic/Unknown, fehlende spätere Fallback-Qualifikation und
-jeden dauerhaft unzulässigen Handoffgrund. Bei `Prepared S3RunRecovery` plus
-bereits exakt durablem `NoActiveRun/STANDBY` erkennt der Boot nach Readback den
-Terminalpunkt und löscht den Intent deterministisch reparativ; kein Resume und
-kein Restart. Die Crashmatrix prüft Crash vor Tombstone, indeterminate
-Tombstone, Tombstone vor Intent-Clear und Intent-Clear vor SAFE_BOOT-Exit.
-Ein Crash vor dem Departure-Commit lässt den S3-Latch und
-`safeBootRequired=true` bestehen. Ein neuer Safetyfault während Departure
-bricht den Handoff ab, setzt ImmediateStop und lässt die neue persistente
-Wahrheit dominieren.
+Jeder `S3RunRecovery`-Intent, der gemäß ResetCause-Matrix oder der von #17
+gelieferten Evidence-Klassifikation nicht mehr handoffberechtigt ist, wird
+niemals erneut gestartet. Stattdessen folgt zwingend:
+ImmediateStop/SAFE_BOOT, `safeBootRequired=true` durable sofern schreibbar,
+kein Restart-Retry und kein Resume; danach technischer #17-Tombstone zu
+`NoActiveRun/STANDBY`, Intent/Evidence-Clear erst nach Exact-Readback, RAM
+weiter Fault/SafeBoot und ausschließlich am Ende ein normaler
+`SafeBootExitCompleted`-Pfad. Das umfasst Crash nach Prepared vor Attempted,
+`Attempted=0` mit jedem Reboot, explizites RestartRejected, Attempted=1 mit
+Brownout/Watchdog/Panic/Unknown, fehlende Fallback-Qualifikation und jede
+andere unzulässige Evidence-Klasse. Bei bereits durablem
+`NoActiveRun/STANDBY` erkennt der Boot nach Readback den Terminalpunkt und
+löscht Intent/Evidence reparativ; kein Resume und kein Restart. Ein Crash vor
+dem Departure-Commit lässt S3-Latch und `safeBootRequired=true` bestehen. Ein
+neuer Safetyfault während Departure bricht den Handoff ab und lässt die neue
+persistente Wahrheit dominieren.
 
 ### 8.8 S3RunRecovery: Schema-3-Klassifikation und Safety-Finalisierung
 
 Ein Prepared `S3RunRecovery` mit `restartAttempted=1` sperrt alle normalen
 RunPersistence-Mutationen. Zulässig sind bis zur Finalisierung ausschließlich
 der explizite #17-interne read-only Handoff und die bestehenden #18-
-Recoverymutationen. Damit wird Schema 3 ohne neues Feld mechanisch
-klassifizierbar: Head `state`/`mutationKind`, Current-/Fallback-Referenzen,
-Run-/Program-/Manual-Identität, Head-/Checkpointrevisionen,
-`RecoveryEpisode`-/PendingRecovery-Evidenz und `ProcessState` werden gemeinsam
-geprüft; kein einzelnes ProcessState-Feld ist ein Orakel.
+Recoverymutationen. Die Klassifikation wird vollständig an
+`classifyRecoveryEvidence(expected)` in #17 delegiert. Schema 3 bleibt ohne
+neues Feld; `mutationKind` wird ausdrücklich nicht als committed Provenienz
+verwendet, weil es im Prepared-Head verschwindet.
 
 | Klasse | mechanischer Schema-3-Nachweis | Wirkung |
 |---|---|---|
-| `PendingHandoff` | Committed Head mit `mutationKind=Transition`, ursprünglichem `CriticalFault`/Fault-current, passendem referenzierten Fallback, keiner Recovery-Mutation dieser Episode und vollständiger Intent-/Runbindung | genau einmal `prepareSafetyFallbackRecovery()` -> `FallbackRecoveryPending` -> #18 |
-| `RecoveryForwardAlreadyCommitted` | Committed `mutationKind=Recovery`, Current ist `RecoveryEvaluation` oder ein aktiver recovery-provenierter Snapshot mit konsistenter Episode/Referenzen | kein Fallback-Replay, kein Restart, kein Terminalisieren; #18 führt den bestehenden Zustand weiter, danach Finalisierung |
-| `RecoveryRejectedAlreadyCommitted` | Committed `mutationKind=Recovery`, Current ist Fault und erfüllt die bestehende `RecoveryRejected`-Form einschließlich Recovery-Evidenz/Referenzen | kein Fallback-Replay/Restart; forward-only Tombstone, dann Intent-Clear und normaler SAFE_BOOT-Exit |
-| `TerminalAlreadyCommitted` | Current ist exakt `NoActiveRun/STANDBY`, Head/Referenzen validiert | kein Resume/Restart; Intent nach Readback löschen, `safeBootRequired` bis normalem Exit gesetzt lassen |
-| `InvalidOrOrphaned` | jede andere, unvollständige oder widersprüchliche Kombination | kein Resume/Retry; forward-only terminalisieren, Intent erst nach Tombstone löschen, SAFE_BOOT |
+| `PendingHandoff` | Committed Headrevision, Current- und Fallback-Referenz entsprechen exakt der Evidence; Current ist physisch ein gültiger aktiver `Fault` desselben Run-/Program-/Manual-Kontexts | genau einmal `prepareSafetyFallbackRecovery(expected)` -> `FallbackRecoveryPending` -> #18 |
+| `RecoveryForwardAlreadyCommitted` | Headrevision liegt strikt vorwärts; #17 beweist eine gültige RecoveryEvaluation-/Recovery-Snapshotform derselben geladenen Evidence, inklusive Run-/Program-/Manual-Bindung und gültiger Recoveryfelder | kein Fallback-Replay, kein Restart, kein Terminalisieren; #18 führt den bestehenden Zustand weiter, danach Safety-Finalisierung |
+| `RecoveryRejectedAlreadyCommitted` | Headrevision liegt strikt vorwärts; #17 beweist die kanonische `Fault`-/RecoveryRejected-Form ohne offenen Recoveryanker, mit derselben Run-/Program-/Manual-Bindung | kein Fallback-Replay/Restart; forward-only Tombstone, dann Intent/Evidence-Clear und normaler SAFE_BOOT-Exit |
+| `TerminalAlreadyCommitted` | Headrevision liegt strikt vorwärts; Current ist exakt gültiges `NoActiveRun`/`Standby` ohne Fallback | kein Resume/Restart; Intent/Evidence nach Readback löschen, `safeBootRequired` bis normalem Exit gesetzt lassen |
+| `InvalidOrOrphaned` | jede andere, unvollständige, widersprüchliche oder nicht mehr an die Evidence bindbare Kombination | kein Resume/Retry; forward-only terminalisieren, Intent/Evidence erst nach Tombstone löschen, SAFE_BOOT |
 
 Der Nachweis ist tragfähig, weil `activateFallbackRecoveredRun()` alle
 Recoverywrites mit `RunPersistenceMutationKind::Recovery` schreibt und normale
-Writes während Prepared blockiert sind. Ein #18-`RecoveryRejected` ist deshalb
-nicht der ursprüngliche CriticalFault; seine Recovery-Mutation bleibt im Head
-sichtbar. Kann eine künftige Implementierung eine dieser Bedingungen nicht aus
-den genannten Schema-3-Feldern belegen, ist STOP/Owner-Entscheid zwingend; es
-gibt keinen Schemawechsel und kein Raten.
+Writes während Prepared blockiert sind. Diese Lock-/Forward-Invariante erlaubt
+#17 die mechanische Episode-Klassifikation, ohne eine persistente
+`mutationKind`-Behauptung zu erfinden. Der tatsächliche Committed-Head wird
+immer über Current/Fallback und physische Records geprüft. Kann eine künftige
+Implementierung eine der fünf Klassen nicht eindeutig aus Schema-3-Daten,
+Evidence und der Forward-only-Lockgrenze belegen, ist STOP/Owner-Entscheid
+zwingend; es gibt keinen Schemawechsel und kein Raten.
 
 Nach einem eindeutig bestätigten #17/#18-Commit gilt:
 
@@ -1346,16 +1476,16 @@ Nach einem eindeutig bestätigten #17/#18-Commit gilt:
 Fall A RecoveryForwardAlreadyCommitted:
   keine neue Safetyursache, kein S3/Y4, runRecoveryForbidden=false,
   Marker/SafetyState healthy und Config qualified
-  -> ein SafetyState-Commit/readback: Intent=None, source=0,
+  -> ein SafetyState-Commit/readback: Intent=None, source=0, Evidence=zero,
      attempted=0, outcome=None, safeBootRequired=false
   -> erst nach diesem Readback darf der #18-/Orchestratorpfad weiterarbeiten.
 
 Fall B RecoveryRejectedAlreadyCommitted oder TerminalAlreadyCommitted:
-  Tombstone exact readback -> Intent=None durable -> safeBootRequired bleibt true
+  Tombstone exact readback -> Intent/Evidence=None durable -> safeBootRequired bleibt true
   -> ausschließlich normaler SafeBootExitCompleted-Pfad.
 
 Fall C #17/#18-Write nicht eindeutig bestätigt oder neuer S3/Y4 vor Finalisierung:
-  keine Finalisierung, kein Intent-/safeBoot-Clear, ImmediateStop/SAFE_BOOT.
+  keine Finalisierung, kein Intent-/Evidence-/safeBoot-Clear, ImmediateStop/SAFE_BOOT.
 ```
 
 Das Clear von `safeBootRequired` in Fall A ist keine Runfreigabe und ersetzt
@@ -1392,13 +1522,13 @@ S3 qualifiziert
 Nach CauseClear und Service-Target-Reset ist der S3-Latch entfernt, der
 ProcessState bleibt RAM-seitig `Fault`, der alte Run wird im selben Boot nicht
 als aktiv zurückgeschrieben und es gibt kein Head-Rollback. Wenn danach kein
-aktiver Run und kein Y4/safeBoot-Blocker besteht, wird ohne Intent über den
-terminalen `FaultResetCompleted`-Pfad nach `Standby` gegangen. Existiert ein
-aktiver Run und `runRecoveryForbidden=false`, werden `Prepared` und dann
-`Attempted` wie in Abschnitt 8 committed und genau ein Restartversuch
-ausgeführt. Bei einer SafetyTaskRecovery-Episode geschieht diese
-S3RunRecovery erst nach erfolgreicher Task-/Treiber-Requalifikation und dem
-Service-Target-Reset als der ausdrücklich zweite, getrennte Restartversuch;
+aktiver Run und kein Y4/safeBoot-Blocker besteht, wird ohne Intent erst nach
+dem exakten `FaultResetCompleted`-FSM-Ereignis nach `Standby` gegangen.
+Existiert ein aktiver Run und `runRecoveryForbidden=false`, werden #17-
+Evidence, Prepared und dann Attempted wie in Abschnitt 8 committed und genau
+ein Restartversuch ausgeführt. Bei einer SafetyTaskRecovery-Episode geschieht
+diese S3RunRecovery erst nach erfolgreicher Task-/Treiber-Requalifikation und
+dem Service-Target-Reset als der ausdrücklich zweite, getrennte Restartversuch;
 der erste TaskRecovery-Boot darf diesen Pfad nicht vorwegnehmen.
 
 ### 9.2 RAM-only Fallback-Handoff
@@ -1413,33 +1543,40 @@ A) loadAndInitialize() == FallbackRecovered
    -> kein S3Intent erforderlich
 
 B) loadAndInitialize() == Current mit ProcessState::Fault
-   + gültiger S3RunRecovery-Intent + keine aktiven S3/Y4
-   -> prepareSafetyFallbackRecovery() liest/verifiziert den bestehenden Fallback
+   + SafetyState S3RunRecovery mit vollständiger Evidence
+   + #17 classifyRecoveryEvidence(expected) == PendingHandoff
+   + keine aktiven S3/Y4
+   -> prepareSafetyFallbackRecovery(expected) liest/verifiziert den bestehenden
+      Fallback
    -> FallbackRecoveryPending -> bestehendes #18
 ```
 
 Fall A bleibt unverändert der normale #17/#18-Recoverypfad. Fall B ist die
-neue, explizit durch S3-Reset und Intent autorisierte Auswahl. Ein aktiver
-persistent gespeicherter S3/Y4-Latch blockiert beide Fälle bis zum jeweiligen
-Reset-/Terminalvertrag.
+neue, explizit durch S3-Reset, SafetyState-Intent und typisierte #17-Evidence
+autorisierte Auswahl. Ein aktiver persistent gespeicherter S3/Y4-Latch
+blockiert beide Fälle bis zum jeweiligen Reset-/Terminalvertrag. `#24` liest
+oder dekodiert keine #17-Wirebytes und entscheidet keine der fünf #17-Klassen
+selbst.
 
-Für den Recovery-Boot wird eine schmale API mit dem Zweck
-`prepareSafetyFallbackRecovery(...)` geplant. Sie ist erforderlich, weil der
+Für den Recovery-Boot werden die schmalen #17-APIs
+`captureSafetyRecoveryEvidence(...)`, `classifyRecoveryEvidence(expected)` und
+`prepareSafetyFallbackRecovery(expected)` geplant. Sie sind erforderlich, weil der
 direkte #17-Code bei gültigem Current in `loadAndInitialize()` den Current lädt,
 `LoadedActiveRun` setzt und zurückkehrt; ein gültiger Fault-current lädt seinen
 Fallback **nicht** automatisch. Die API ist ein #17-interner, read-only
 RAM-Handoff und darf nur:
 
 - `currentHead_`, den bereits geladenen gültigen Fault-current und seine
-  Fallback-Referenz erneut prüfen;
+  Fallback-Referenz erneut prüfen und die erwartete typisierte Evidence exakt
+  binden;
 - die lokale technische `loadReference(...)`-Logik aus
   `loadAndInitialize()` als private Helperfunktion wiederverwenden (nicht
   kopieren): Slotread, Envelope, Epoch, Schema, CRC/Codec und
   `runCheckpointReferenceMatches()`;
 - den Fallback explizit in `slots_[fallback.slot]` laden und Current/Fallback
   an `runId`/Programmsnapshot/Manual-Runidentität binden;
-- `runRecoveryForbidden=false`, gültigen S3Intent, keine S3/Y4-Records,
-  qualifizierte Config und gültige Sensorgrundlage prüfen;
+- die technische Evidence prüfen; `runRecoveryForbidden`, S3-Intent, Config,
+  Sensor- und Auth-Gates bleiben #24-Safetyentscheidungen;
 - `persistedIds_` und `persistedIdCount_` aus dem Fallback herstellen,
   die bestehenden Head-/Checkpoint-High-Watermarks und Caches aber niemals
   zurücksetzen;
@@ -1456,8 +1593,9 @@ in `run_persistence_coordinator.cpp:331-369` beweist die
 Referenzvalidierung; sein Fallbackpfad `446-485` beweist RAM-Laden und
 `FallbackRecoveryPending` nur dann, wenn der Current nicht rekonstruiert werden
 kann. Er beweist ausdrücklich nicht das automatische Fallbackladen bei
-gültigem Fault-current. Der neue Helper nutzt diese vorhandenen Bausteine
-DRY für den zusätzlichen, eng begrenzten Safety-Handoff. Der bestehende
+gültigem Fault-current. Die drei neuen APIs extrahieren diese vorhandenen
+Bausteine DRY für Capture, Klassifikation und den zusätzlichen, eng begrenzten
+Safety-Handoff. Der bestehende
 `activateFallbackRecoveredRun()`-Pfad darf anschließend seine notwendige
 forward-only Recoveryrevision schreiben; das ist nicht die Auswahlmutation.
 
@@ -1531,10 +1669,16 @@ kein NoActiveRun + Fault
 ```
 
 Der Prozessvertrag erhält die expliziten Events
-`ProcessEvent::FaultResetCompleted` und `ProcessEvent::RunAbandonCompleted`
-sowie die gleichnamigen `TransitionReason`-Werte. Beide werden vor Anwendung
-als Kandidat validiert und durch #17 Write-before-Apply geschützt; keiner darf
-`NoActiveRun + Fault` oder `NoActiveRun + SafeBoot` erzeugen.
+`ProcessEvent::FaultResetCompleted`, `ProcessEvent::SafeBootExitCompleted`
+und `ProcessEvent::RunAbandonCompleted` sowie die gleichnamigen
+`TransitionReason`-Werte. `FaultResetCompleted` erlaubt erst nach dem letzten
+Blocker `Fault -> Standby`; `SafeBootExitCompleted` erlaubt erst nach dem
+normalen SAFE_BOOT-Gate `SafeBoot -> Standby`. `RunAbandonCompleted` ist ein
+technischer, nicht freigebender Lifecycle-Schritt und darf `Fault -> Fault`
+oder `SafeBoot -> SafeBoot` markieren, aber niemals RAM-seitig Standby
+freigeben. Alle drei werden als Kandidat validiert und durch #17
+Write-before-Apply geschützt; keiner darf `NoActiveRun + Fault` oder
+`NoActiveRun + SafeBoot` persistieren.
 
 ### 10.2 Terminalpunkt
 
@@ -1547,8 +1691,8 @@ Die kanonische Topologie ist ausschließlich:
 | recoverbarer S3-Run | kein Fault->Standby | kein terminaler Event | erst S3Intent, RAM-Fallback, #18; kein Tombstone vor #18 |
 | orphaned/non-handoffable S3RunRecovery | `SafeBootExitCompleted` erst am Schluss | `SafeBootExitCompleted` | NoActiveRun/STANDBY durable -> Intent-Clear -> RAM bleibt SafeBoot -> normaler Exit |
 | #18 `RecoveryRejected` | `SafeBootExitCompleted` erst am Schluss | `SafeBootExitCompleted` | RecoveryRejected/Fault forward-only -> Tombstone -> Intent-Clear -> RAM bleibt SafeBoot -> normaler Exit |
-| Y4 mit aktivem Run | `RunAbandonCompleted` nach durablem Tombstone | `RunAbandonCompleted` | autorisierter Abandon, Tombstone, dann Standby |
-| SAFE_BOOT-Abandon | `RunAbandonCompleted` nur als persistenter Kandidat | `RunAbandonCompleted` | Tombstone durable; RAM bleibt SafeBoot bis separatem Exit |
+| Y4 mit aktivem Run | `RunAbandonCompleted` nach durablem Tombstone, gleicher RAM-Fault/SafeBoot-Zustand | `RunAbandonCompleted` | autorisierter Abandon, Tombstone, RAM bleibt Fault/SafeBoot; erst CauseClear + TargetReset + letzter Blocker und danach `FaultResetCompleted`/`SafeBootExitCompleted` -> Standby |
+| SAFE_BOOT-Abandon | `RunAbandonCompleted` ohne Freigabe | `RunAbandonCompleted` | Tombstone durable; RAM bleibt SafeBoot bis separatem Exit |
 
 Für Y4-Abandon gilt die Reihenfolge:
 
@@ -1558,10 +1702,11 @@ Für Y4-Abandon gilt die Reihenfolge:
 3 aktiven Run vollständig löschen und kanonischen NoActiveRun/STANDBY-
   Kandidaten bilden
 4 #17 Prepared -> Slot -> Committed, exact CAS/readback
-5 erst nach bestätigtem Tombstone `RunAbandonCompleted` anwenden
-6 erst nach bestätigtem Tombstone `runRecoveryForbidden=false` schreiben,
-  falls kein weiterer Blocker besteht
-7 danach separater SAFE_BOOT-Exit, falls kein anderer Blocker besteht
+5 erst nach bestätigtem Tombstone `RunAbandonCompleted` ohne Zustandsfreigabe
+   anwenden; RAM bleibt Fault/SafeBoot
+6 CauseClear + Service-Target-Reset nach dem Tombstone ausführen
+7 erst nach dem letzten Blocker `runRecoveryForbidden=false` und
+  `FaultResetCompleted` oder `SafeBootExitCompleted` ausführen
 ```
 
 Für S3 vor TargetReset nicht beweisbar bleibt der S3-Latch bis zum
@@ -1571,7 +1716,7 @@ S3RunRecovery und #18-Reject existiert dagegen kein Source-Latch mehr: erst
 der Tombstone, dann Intent-Clear, RAM weiter SafeBoot und ausschließlich am
 Ende `SafeBootExitCompleted`.
 
-Ein Crash vor Schritt 6 lässt `runRecoveryForbidden=true`; ein Crash zwischen
+Ein Crash vor Schritt 7 lässt `runRecoveryForbidden=true`; ein Crash zwischen
 4 und 6 lässt den alten Run und die Terminalpflicht bestehen. Ein Crash nach
 dem Tombstone vor dem Flag-Clear darf nur nach erneut bestätigtem
 `NoActiveRun/STANDBY` reparieren. `NoActiveRun` wird nie mit Fault oder SafeBoot
@@ -1817,8 +1962,9 @@ static_assert(sizeof(NativeSafetyEventBatch) == 592);
 ```
 
 Die Wireform wird mit einem festen Bytewriter unabhängig von ABI-Padding
-serialisiert. Die feste Menge ist `kMaxSafetyEventsPerMutation = 36` und ergibt
-`13 + 36*12 = 445 Byte` pro Wire-Batch. Die Herleitung ist der echte Worst Case
+serialisiert. Ein Event ist exakt `kSafetyEventWireBytes = 12` Byte. Die feste
+Menge ist `kMaxSafetyEventsPerMutation = 36` und ergibt
+`kSafetyEventBatchWireBytes = 13 + 36*12 = 445 Byte` pro Wire-Batch. Die Herleitung ist der echte Worst Case
 einer atomaren Multi-Fault-Raise-Mutation: `33 * FaultRaised + GateChanged +
 TerminalRequiredSet + TerminalRequiredChanged = 36`. Nicht persistente P1-/O2-Ereignisse,
 `BootClassified`, `SafeBootEntered`, `RedundancyRepair`, `HistoryLossDetected`,
@@ -1877,8 +2023,10 @@ Ein Crash nach Prepared vor Attempted und ein Crash nach Attempted vor dem
 Reset-Port dürfen daher keine gemeinsame Eventpublikation erzeugen. Die feste
 Obergrenze ist `kMaxSafetyEventsPerMutation = 36`; die compile-time-Tabelle
 prüft den hergeleiteten Worst Case, nicht eine künstlich kleingerechnete
-Einzelmutation. `static_assert` prüft `maxEvents <= 36`,
-`sizeof(NativeSafetyEvent)==16` und
+Einzelmutation. `static_assert` prüft `kSafetyEventKindCount == 18`,
+`kMaxSafetyEventsPerMutation == 36`, `kSafetyEventWireBytes == 12`,
+`kSafetyEventBatchWireBytes == 445`, `maxEvents <= 36`,
+`sizeof(NativeSafetyEvent)==16`, `alignof(NativeSafetyEvent)==4` und
 `sizeof(NativeSafetyEventBatch)==592` auf Native und ESP-IDF. Ein Überschreiten
 ist `Y4_INTERNAL_SAFETY`; es werden keine Events still abgeschnitten.
 
@@ -1898,8 +2046,10 @@ bleiben strikt commitabhängig.
 ### 14.1 Statische Größen
 
 ```text
-SafetyState payload: 32 + (33 * 24) = 824 Byte
-SafetyState max Envelope: 33 + 824 + 4 = 861 Byte <= 1024
+SafetyState payload: 32 + (33 * 24) + 68 Evidence = 892 Byte
+SafetyState max Envelope: 33 + 892 + 4 = 929 Byte <= 1024
+RunPersistenceRecoveryEvidence wire: 8 + 30 + 30 = 68 Byte
+RunPersistenceRecoveryEvidence native: sizeof=88 Byte, alignof=8 Byte
 FaultCatalog: 41 Identities; persistente Records: 33 (19 S3 + 14 Y4)
 EmergencyMarker payload: 26 Byte
 EmergencyMarker max Envelope: 33 + 26 + 4 = 63 Byte <= 64
@@ -1921,19 +2071,19 @@ Peak gemessen werden. Der verbindliche Peak-Budgetvertrag lautet:
 |---|---:|---:|
 | zwei Safety-Encode-/Readback-Puffer | `2 * 1024` | 2048 B |
 | zwei Marker-Puffer | `2 * 64` | 128 B |
-| persistente native Records | `33 * 32` | 1056 B |
+| persistente native Records + Evidence | `33 * 32 + 88` | 1144 B |
 | transiente native Records, alle 8 Identities | `8 * 24` | 192 B |
 | native EventBatch | `592` | 592 B |
 | Codec-/Validator-Scratch einschließlich Event-Wirebuffer | fest | 512 B |
 | FaultCatalog[41] plus SafetyFaultService | `41 * 32 + 256` | 1568 B |
-| **SafetyCore fixed** | Summe | **6096 B** |
+| **SafetyCore fixed** | Summe | **6184 B** |
 | bestehender IStateStore-Heap | `3*1024 + 3*64 + 512` Allocatorreserve | **3776 B** |
 | Safety-Call-Stack | gemessene feste Obergrenze | 2048 B |
-| **SafetyCore Peak-Budget** | `6096 + 3776 + 2048` | **11920 B** |
+| **SafetyCore Peak-Budget** | `6184 + 3776 + 2048` | **12008 B** |
 
 `sizeof`-/`alignof`-Assertions gelten für Native und ESP-IDF; der
 Ressourcenbericht muss den tatsächlichen `std::string`-/Allocator- und
-Stack-Peak gegen 11920 Byte ausweisen. Wird der Budgetwert überschritten, ist
+Stack-Peak gegen 12008 Byte ausweisen. Wird der Budgetwert überschritten, ist
 der Plan-Gate fehlgeschlagen. Keine dynamische Allokation ist im
 ImmediateStop-Hotpath zulässig; Read-/Allocationfehler des bestehenden
 IStateStore führen fail-closed.
@@ -2086,10 +2236,14 @@ daher keinen vorpersistierten `SafetyTaskRecovery`-Intent.
 
 ```text
 fermentation_app:
+  #17 RunPersistenceRecoveryEvidence, dessen Codec-/Referenz-/Validator-
+  helper, Capture/Klassifikation/Fallback-Handoff; #24
   SafetyFaultService, FaultCatalog, SafetyState codec/store wrapper,
   EmergencyMarker, RestartSupervisor, ResetCause-Policy, ServiceResetProof,
   Boot-/Process-/Recovery-Orchestration, SafetyEventBatch und #24 Producer-
-  Mapping; app-interner Testhelper für ServiceResetProof
+  Mapping; app-interner Testhelper für ServiceResetProof. #24 serialisiert
+  die Evidence nur über den gemeinsamen #17-Helper und besitzt keine eigene
+  RunCheckpointReference-/CRC-/Schema-/Epochsemantik.
 
 device_platform:
   IStateStore, StorageEnvelope, SlotScanner, Time-Port,
@@ -2118,16 +2272,19 @@ oder Run-Typen. `src/main.cpp` bleibt Composition Root.
    `run_persistence_coordinator.cpp:371-444` den Current, setzt
    `LoadedActiveRun` und kehrt zurück. Der bestehende Fallbackpfad
    `446-485` ist deshalb nur der Beweis für den beschädigten-Current-Fall.
-   `prepareSafetyFallbackRecovery()` ist der neue schmale #17-interne
-   read-only Handoff für `LoadedActiveRun + Current/Fault`: Er verwendet den
-   extrahierten privaten `loadReference`-Helper, lädt den referenzierten
-   Fallback in RAM, stellt ID-Fenster und Caches korrekt her und setzt erst
-   dann `FallbackRecoveryPending`. Weder dieser Handoff noch der Helper
-   schreibt Head, Slot oder Fallbackreferenz.
-3. **Kein neues Wirefeld/Schemachange:** #17 bleibt
+   `captureSafetyRecoveryEvidence()` und `classifyRecoveryEvidence(expected)`
+   verwenden denselben extrahierten privaten `loadReference`-Helper und
+   beweisen Referenzen, CRC/Schema/Epoch, Run-/Program-/Manual-Kontext sowie
+   Pending/Forward/Rejected/Terminal/Orphan mechanisch in #17.
+   `prepareSafetyFallbackRecovery(expected)` lädt den referenzierten Fallback
+   in RAM, stellt ID-Fenster und Caches korrekt her und setzt erst dann
+   `FallbackRecoveryPending`. Weder Capture, Klassifikation noch Handoff
+   schreiben Head, Slot oder Fallbackreferenz.
+3. **Kein neues Wirefeld/Schemachange in #17:** #17 bleibt
    `kCurrentRunPersistenceSchema=3` (`run_persistence_contract.hpp:19-31`);
-   Intent, Latch und Terminalpflicht leben im RecordType 9/10, nicht in
-   Head/Checkpoint.
+   der typisierte Evidence-Vertrag ist ein #17-Domain-Helper und kein neues
+   Head-/Checkpoint-Wirefeld. Intent, Latch und Terminalpflicht leben im
+   SafetyState RecordType 9/10, nicht in Head/Checkpoint.
 4. **Fallback physisch unverändert:** `loadReference()` prüft Slotread,
    Envelope, Epoch, Schema, Codec und `runCheckpointReferenceMatches()` in
    `run_persistence_coordinator.cpp:331-369`; ein Fallback muss exakt zum
@@ -2146,9 +2303,12 @@ oder Run-Typen. `src/main.cpp` bleibt Composition Root.
    `runRecoveryForbidden` und SAFE_BOOT einen alten Run blockieren, ohne dessen
    Payload als neue gültige Run-Wahrheit zu kopieren oder zu reaktivieren.
 
-Damit sind die sechs Kern-Gates PASS: verwendbarer Pre-Fault-Fallback,
-explizite RAM-only Auswahl bei gültigem Fault-current, #18-Autorität, kein
-#17-Schemawechsel, forward-only Persistenz und persistente Y4-Terminalität.
+Damit sind die Architektur-Kern-Gates PASS: #17 besitzt typisierte
+RecoveryEvidence einschließlich mechanischer Validierung/Klassifikation und
+Fallback-Handoff; #24 persistiert nur die Evidence-Instanz mit
+S3RunRecovery; #18 bleibt alleinige fachliche Recoveryautorität; kein
+#17-Schemawechsel, kein committed-`mutationKind`-Claim, forward-only
+Persistenz, keine doppelte #17-Validierung und persistente Y4-Terminalität.
 
 ## 17. Architekturdiagramm Y4
 
@@ -2257,7 +2417,10 @@ nur in der Erwartungsspalte.
 | PreparedInterrupted | bestehenden Vertrag wiederverwenden | #17: Y4 RunPrepared, Abandon |
 | corrupt current + valid fallback | #24 implementiert | #17 liefert Evidenz; RAM-only FallbackRecoveryPending, #18 entscheidet |
 | `FallbackRecovered` ohne S3Intent | bestehenden Vertrag wiederverwenden | bestehender #18-Pfad bleibt aktiv |
-| `Current/Fault` plus gültiger S3RunRecovery-Intent | #24 implementiert | read-only Handoff -> FallbackRecoveryPending, danach #18 |
+| `Current/Fault` plus gültiger S3RunRecovery-Intent und vollständiger #17-Evidence | #24 implementiert | #17 klassifiziert Pending/Forward/Rejected/Terminal/Orphan; nur Pending read-only Handoff -> FallbackRecoveryPending, danach #18 |
+| S3RunRecovery-Evidence mit Intent None/SafetyTaskRecovery | #24 implementiert | SafetyState-Crossfield-Decode fail-closed; Evidence zero oder nicht zulässig |
+| committed `mutationKind` als Provenienz | #24 implementiert | kein Claim; Committed-Head enthält nur Current/optional Fallback |
+| Forward/Rejected/Terminal/Orphan nach Reboot | bestehenden Vertrag erweitern | #17 mechanische Klassifikation, kein Fallback-Replay, kein Raten |
 | corrupt fallback | bestehenden Vertrag wiederverwenden | #17-Evidenz: kein Resume, Y4 RunStore/terminal |
 | one-slot SafetyState corruption | #24 implementiert | Winner konservativ laden, Repair/Y4 bleibt |
 | total SafetyState loss | #24 implementiert | SAFE_BOOT, Service-Reinit mit historyLoss |
@@ -2336,10 +2499,11 @@ Für `Preheating`, `WaitingForProduct`, `ReachingTarget`, `QualifyingTarget`,
 - kein Planner-/Sink-Tick vor #18, #18 Resume oder Terminalentscheidung;
 - `t0..t1` und `t1..t2` als Unsicherheit/Unterbrechung;
 - fehlender, korrupt/falscher Fallback -> kein Resume, Tombstone;
-- gültiger Current/Fault plus gültiger Fallback: `loadAndInitialize()==Current`
-  und `LoadedActiveRun`; erst `prepareSafetyFallbackRecovery()` lädt den
-  Fallback read-only, setzt `FallbackRecoveryPending` und erlaubt danach die
-  bestehende `activateFallbackRecoveredRun()`-Grenze;
+- gültiger Current/Fault plus capturebare Evidence: `loadAndInitialize()==Current`
+  und `LoadedActiveRun`; erst `classifyRecoveryEvidence()==PendingHandoff`
+  erlaubt `prepareSafetyFallbackRecovery(expected)`, lädt den Fallback
+  read-only, setzt `FallbackRecoveryPending` und erlaubt danach die bestehende
+  `activateFallbackRecoveredRun()`-Grenze;
 - S3-Latch noch aktiv und Recovery nicht beweisbar: kein Intent, alter Run
   zunächst über den bestehenden #17-Abandon zu NoActiveRun/STANDBY mit exact
   readback, dann erst TargetReset ohne Intent und separater SAFE_BOOT-Exit;
@@ -2348,7 +2512,7 @@ Für `Preheating`, `WaitingForProduct`, `ReachingTarget`, `QualifyingTarget`,
   Prepared plus bereits durablem NoActiveRun/STANDBY sowie Intent-Clear vor
   SAFE_BOOT-Exit terminalisieren ohne Resume, Restart-Retry oder neue Y4;
 - `Prepared(S3RunRecovery, Attempted=1)` wird nach `loadAndInitialize()`
-  vollständig als PendingHandoff, RecoveryForwardAlreadyCommitted,
+  vollständig durch #17 als PendingHandoff, RecoveryForwardAlreadyCommitted,
   RecoveryRejectedAlreadyCommitted, TerminalAlreadyCommitted oder
   InvalidOrOrphaned klassifiziert: nur der originale Fault-current mit
   passendem Fallback darf einmal handoffen; Recovery-Fortschritt wird
@@ -2440,11 +2604,12 @@ abgeleitete eigene Exhaustion, externe Domain-Counter und Goldenbytes an
 `UINT32_MAX`/`UINT64_MAX`.
 
 Der #17-Test trennt `FallbackRecovered` ohne S3Intent vom
-`Current/Fault + S3RunRecovery`-Handoff und prüft Required-Status inklusive
-`AlreadyPersisted`-Readback. S3RunRecovery-Tests trennen Candidate-time-
-Provenienz (aktives Preimage, CauseClear, exakter ServiceResetProof, atomare
-Entfernung plus Intent) von Decode-time (Source nicht aktiv, gültige Lineage-
-und Crossfields, #17 Current/Fault, physisch verifizierter Fallback und
+`Current/Fault + S3RunRecovery`-Handoff und prüft Capture-, Codec-,
+Klassifikations- und Required-Status inklusive `AlreadyPersisted`-Readback.
+S3RunRecovery-Tests trennen Candidate-time-Provenienz (aktives Preimage,
+CauseClear, exakter ServiceResetProof, atomare Entfernung plus
+Intent/Evidence) von Decode-time (Source nicht aktiv, gültige Lineage- und
+Crossfields, #17 Current/Fault, physisch verifizierter Fallback und
 ResetCause). Ressourcen-/Eventtests prüfen native und ESP-IDF-`sizeof`/`alignof`,
 alle acht transienten Identities, tatsächlichen RAM-/Heap-Peak und
 Marker-Exhaustion bei `UINT32_MAX` sowie uint64-Grenzen von
@@ -2541,13 +2706,19 @@ Keine Safetyentscheidung wird in die Implementierung verschoben.
 2. SafetyState-Wire/Codec/Store, Crossfield-Validator, EmergencyMarker und
    Redundanz-/History-Loss-Recovery.
 3. RestartSupervisor, ResetCause, Counter und SAFE_BOOT.
-4. Run-/Process-Integration: S3-RAM-Handoff, Y4-Terminalflag,
-   Run-Abandon und Fault->Standby/Tombstone; kein Head-Rollback.
-5. #20/#21/#22/#23 Producer-Mapping, STALE/FAILED und Fan-/Thermik-Directive.
-6. #15 Target-FaultReset, Multi-Fault, Auth-Proof und SafetyRevision.
-7. #56/#57 Gate und kanonische Boot-Komposition.
-8. No-bypass Command-, Orchestrator-, Planner- und Sink-Pfad.
-9. Kanonische Dokumente, vollständige Injection-/Crashmatrix, Resource-/Wear-
+4. #17-RecoveryEvidence: Typ, gemeinsame 68-Byte-Projektion, Capture,
+   Pending/Forward/Rejected/Terminal/Orphan-Klassifikation und expliziter
+   read-only Fallback-Handoff; Schema 3 bleibt unverändert.
+5. Run-/Process-Integration: S3-RAM-Handoff, Y4-Terminalflag,
+   Run-Abandon und FaultReset-/SafeBootExit-/nicht freigebendes
+   RunAbandon-FSM; kein Head-Rollback.
+6. #20/#21/#22/#23 Producer-Mapping, STALE/FAILED und Fan-/Thermik-Directive.
+7. #15 Target-FaultReset gegen den echten Vertrag: öffentlicher
+   `targetInstanceId`, interne TargetResetEvaluation, ServiceResetProof und
+   einzige `persistentFaultRevision`.
+8. #56/#57 Gate und kanonische Boot-Komposition.
+9. No-bypass Command-, Orchestrator-, Planner- und Sink-Pfad.
+10. Kanonische Dokumente, vollständige Injection-/Crashmatrix, Resource-/Wear-
    Bericht und unabhängiger Owner-Review.
 
 ## 21. Betroffene kanonische Dokumente nach Implementierung
@@ -2607,21 +2778,26 @@ Die abschließende Plan-Konsistenzliste ist verbindlich:
 - S3 not provable terminalisiert zuerst unter aktivem Latch; jeder nicht mehr
   handoffberechtigte S3RunRecovery-Intent endet über Tombstone, Intent-Clear
   und separaten SAFE_BOOT-Exit statt Retry oder neuer Y4-Identity;
-- gültiger Fault-current lädt den Fallback nicht automatisch: der neue
-  #17-interne read-only Helper verwendet `loadReference`, stellt RAM/IDs/
-  High-Watermarks korrekt her und ruft danach nur die bestehende #18-Grenze;
+- gültiger Fault-current lädt den Fallback nicht automatisch: #17 Capture,
+  Klassifikation und der neue read-only Handoff verwenden gemeinsam
+  `loadReference`, stellen RAM/IDs/High-Watermarks korrekt her und rufen danach
+  nur die bestehende #18-Grenze;
 - EmergencyMarker prüft sem0-Tie, Envelope/Payload-Revision, vollständige
   State-/Reason-Crossfields und erreicht Cleared/healthy erst nach beiden
   qualifizierten Slots;
 - HistoryLoss hat getrennte bestätigte Event-Lifecycle-Schritte; P1/O2
   publizieren nur nach atomarer RAM-FaultCore-Mutation;
-- FaultResetEvaluation bleibt #15-Auswertung und wird ausschließlich zusammen
-  mit unforgeable ServiceResetProof und aktueller Lineage/Revision entschieden;
+- der öffentliche #15-FaultReset trägt nur `CommandEnvelope` plus
+  `targetInstanceId`; die interne TargetResetEvaluation wird ausschließlich
+  zusammen mit unforgeable ServiceResetProof und aktueller
+  `persistentFaultRevision`/Lineage entschieden; andere Blocker blockieren
+  Release, nicht den qualifizierten Target-Reset;
 - `safetyHistoryEpoch==UINT32_MAX` kann keinen PartialSuccessor wrappen;
   ausschließlich der servicegeschützte TotalDiscontinuity-Pfad bleibt;
-- RestartIntent-Crossfields prüfen Rejected/Attempted und aktive
-  SafetyTaskRecovery-Source; S3RunRecovery-Source-Provenienz wird ausschließlich
-  beim Candidate-Commit bewiesen, nicht beim späteren Decoder;
+- RestartIntent-Crossfields prüfen Rejected/Attempted, zero/full Evidence und
+  aktive SafetyTaskRecovery-Source; S3RunRecovery wird candidate-time mit
+  Evidence erzeugt und boot-time ausschließlich durch #17 als Pending,
+  Forward, Rejected, Terminal oder Orphan klassifiziert;
 - SafetyEventBatch ist exakt an einen bestätigten atomaren FaultCore-RAM-,
   SafetyState-Commit-, Boot- oder Repair-Lifecycle-Schritt gebunden; Prepared,
   Attempted, Side-Effect und explizites Rejected werden getrennt publiziert,
@@ -2643,8 +2819,10 @@ Die abschließende Plan-Konsistenzliste ist verbindlich:
 - `TotalDiscontinuity` beschreibt keine globale Fortsetzungsordnung und darf
   deshalb unabhängig vom faktischen `oldLineageKnown` auftreten;
 - Catalog 41, gültige FaultSources 28 plus Reserved, persistente Records 33,
-  Payload 824 Byte, EventKind 18, Event-Wire 445 Byte, Native-Batch 592 Byte
-  und Factory-Bootstrap 4 Writes sowie SafetyCore-Peak 11920 Byte sind neu
+  SafetyState Payload 892 Byte, SafetyState Envelope 929 Byte, Evidence Wire
+  68 Byte/native 88 Byte, EventKind 18, Event-Wire 12 Byte, Event-Batch-Wire
+  445 Byte, Native-Event 16 Byte, Native-Batch 592 Byte und
+  Factory-Bootstrap 4 Writes sowie SafetyCore-Peak 12008 Byte sind neu
   gerechnet und per Assertions zu prüfen; es besteht keine PSRAM-Abhängigkeit;
 - S3/Y4, Multi-Fault, Factory/HistoryLoss, SafetyState/Marker, Exhaustion,
   AirFallbackActive, Thermal 0..2, Fanpolicy, SafetyTaskRecovery,
@@ -2655,6 +2833,61 @@ Die abschließende Plan-Konsistenzliste ist verbindlich:
   `S3_PERSISTENCE_PATH_STALL`/`PersistencePath` einheitlich;
 - `displayPriority`-Richtung und `IResetController`-Returnsemantik sind
   explizit und fail-closed.
+
+### 22.1 Vollständiger End-to-End-Owner-Gate-Rückcheck
+
+Der Rückcheck wurde nach der Evidence-Korrektur nicht beim ersten Befund
+beendet. Die folgende Matrix ist der Plan-/Architekturstatus; sie ist kein
+Implementierungs- oder Testnachweis. Für jede Zeile gilt `PASS` als
+Planvertrag, die tatsächliche Testausführung bleibt plan-only `NOT_RUN`:
+
+| Gate | Status | Planbeweis |
+|---|---|---|
+| S3 `RecoverIfProvable` / nicht beweisbar `Terminal` | PASS | 8.7, 8.8, 9, 10 |
+| Y4 `Terminal` | PASS | 3.3, 10 |
+| P1/O2 transient | PASS | 3.1, 6.1, 13, 19 |
+| simultane persistente Ursachen atomar | PASS | 6.1, 13, 19 |
+| Multi-Fault TargetReset | PASS | 2.3, 6.2 |
+| Primary/Follow-up | PASS | 3.3, 3.4, 6.1 |
+| ImmediateStop | PASS | 7.1, 8.5 |
+| SafetyState / EmergencyMarker | PASS | 4, 5 |
+| Factory-new | PASS | 5.3, 19.5 |
+| HistoryLoss / TotalDiscontinuity | PASS | 5.3, 13, 19.4a |
+| Counter exhaustion | PASS | 5.2, 14, 19.5 |
+| AirFallbackActive | PASS | 7.3, 18, 19 |
+| STALE / FAILED | PASS | 7.3, 18 |
+| Thermal 0..2 / Hard Emergency | PASS | 7.4, 19.6 |
+| Fanpolicies | PASS | 3.2, 3.3, 7.2, 18 |
+| Trust boundary | PASS | 2.3, 6.2, 18 |
+| TargetReset / single FaultRevision | PASS | 2.3, 6.2, 22.1 |
+| ServiceResetProof | PASS | 2.3, 6.2, 8.7 |
+| FaultAcknowledged | PASS | 6.1, 13, 19.6 |
+| SafetyTaskRecovery one-shot | PASS | 8.1, 8.2, 19.6 |
+| TWDT / IWDT | PASS | 8.1, 15, 19.6 |
+| ResetCause / RestartLoop | PASS | 8.1-8.3, 15, 19.5-19.6 |
+| SAFE_BOOT | PASS | 8.4-8.6, 10, 19.5 |
+| S3RecoveryDeparture | PASS | 8.7, 9.1 |
+| typisierte #17 RecoveryEvidence | PASS | 4.4a, 8.7-9.2, 16 |
+| S3RunRecovery crash-idempotence | PASS | 8.7-8.8, 19.2, 19.6 |
+| Pending / Forward / Rejected / Terminal / Orphan | PASS | 4.4a, 8.8, 19.2 |
+| #17 expliziter read-only Fallback-Load | PASS | 4.4a, 9.2, 16 |
+| #18 sole recovery authority | PASS | 1, 9.3-9.4, 16 |
+| kein committed `mutationKind`-Claim | PASS | 4.4a, 8.8, 16 |
+| Y4 technical abandon ohne frühes Standby | PASS | 10.1-10.3 |
+| `NoActiveRun` / `STANDBY` | PASS | 10, 16, 19.3-19.4 |
+| `FaultResetCompleted` / `SafeBootExitCompleted` | PASS | 8.6, 10.1-10.2 |
+| #56 / #57 Gate | PASS | 1, 5.3, 8.4-8.7, 12 |
+| SafetyEvents / mixed snapshots | PASS | 13, 19.4a, 19.6 |
+| Journal handoff an #19 | PASS | 13, 15, 19.6 |
+| Resource / wear | PASS | 14, 19.4a, 19.5 |
+| `ACCEPTANCE_TESTS.md` vollständig | PASS | 18, 19, 19.6 |
+| ADR-013 | PASS | 1, 15, 16 |
+
+Ein weiterer Widerspruch zwischen diesem Vertrag, dem echten #15-/#17-Code,
+der FSM, den Safety-/Recovery-/Diagnostics-/#19-Quellen oder
+`ACCEPTANCE_TESTS.md` ist vor Implementierung als Owner-Befund zu stoppen; es
+wird kein stiller Parallelvertrag und kein automatischer Schema-4-Ausweg
+eingeführt.
 
 Für diese Planrevision gelten:
 
