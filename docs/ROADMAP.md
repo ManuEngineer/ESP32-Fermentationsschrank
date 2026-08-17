@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-08-16
+Stand: 2026-08-17
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -11,8 +11,8 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 1 | Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | PR #105 ist nach `main` gemergt; #23 ist auf dem aktuellen Base abgeschlossen. Das separate produktive Integrationsgate #106 bleibt als eigener Live-Status unveraendert sichtbar. | Issue #24 erhält einen eigenen Plan-/Owner-Gate-PR |
-| 2 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion | neuer Draft-PR aus aktuellem `origin/main`, Plan `docs/tasks/issue-24-safety-core-replan.md`, Implementation NOT_STARTED | Owner-Review der exakten Plan-SHA |
-| 2 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
+| 2 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion | PR #110 ist Draft; PR #109 ist superseded und nicht-normativ; Plan `docs/tasks/issue-24-safety-core-replan.md`, Implementation NOT_STARTED | Owner-Review der exakten neuen Plan-SHA |
+| 3 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
 
@@ -32,8 +32,8 @@ produktives Integrationsgate unverändert offen.
 
 ## Zulaessige Parallelitaet
 
-- Der #23-PR bleibt Draft, bis der Owner ihn selbst auf `Ready for review` setzt;
-  bis dahin startet keine erneute vollstaendige Remote-CI.
+- PR #110 bleibt Draft, bis der Owner die exakte Plan-SHA freigibt; bis dahin
+  beginnt keine Implementation und keine vollständige Remote-CI.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder
