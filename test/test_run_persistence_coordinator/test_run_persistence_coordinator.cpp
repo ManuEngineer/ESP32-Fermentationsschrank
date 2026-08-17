@@ -7974,6 +7974,220 @@ void test_orchestrator_fresh_start_uses_existing_command_commit_boundary() {
                           static_cast<int>(current.processState.state));
 }
 
+SafetyCoreInput freshStartSafetyInput(
+    RunPersistenceLoadStatus loadStatus,
+    const RunPersistenceResult& persistenceResult, bool processApplied,
+    device_platform::SensorQualitySnapshot& sensor,
+    SensorSelectionRuntimeState& selection, ActuatorPlanner& planner) {
+    SafetyCoreInput input;
+    input.bootValidationComplete = true;
+    input.configurationValidated = true;
+    input.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::RuntimeReady;
+    input.configurationServiceMode = ConfigurationServiceMode::Operational;
+    input.persistenceValidated = true;
+    input.persistenceLoadStatus = loadStatus;
+    input.persistenceCoordinatorState = persistenceResult.coordinatorState;
+    input.explicitActivationRequested = true;
+    input.activationKind = SafetyActivationKind::FreshStart;
+    input.activationPersistenceResult = persistenceResult.status;
+    input.processActivationApplied = processApplied;
+    input.sensorEvidenceValidated = true;
+    input.plannerEvidenceValidated = true;
+    sensor.quality = device_platform::SensorQuality::Valid;
+    selection.permission = SensorPeltierPermission::Allowed;
+    input.peltierSensor = &sensor;
+    input.sensorSelectionRuntime = &selection;
+    input.actuatorPlanner = &planner;
+    return input;
+}
+
+void test_fresh_start_bridge_reaches_safety_only_after_real_apply() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(loaded.status));
+
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    ActuatorPlanner planner(bridgeActuatorPlannerParameters());
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+
+    RunCommandState current;
+    current.processState.state = ProcessState::Standby;
+    const auto decision = startDecision(current, 1232U);
+    TEST_ASSERT_TRUE(decision.proposed());
+
+    RunPersistenceResult notApplied;
+    notApplied.status = RunPersistenceResultStatus::WriteFailed;
+    notApplied.coordinatorState = RunPersistenceCoordinatorState::ReadyEmpty;
+    auto beforeApply = freshStartSafetyInput(loaded.status, notApplied, false,
+                                             sensor, selection, planner);
+    const auto beforeCommit = safety.evaluate(beforeApply);
+    TEST_ASSERT_TRUE(beforeCommit.bootDisposition ==
+                     SafetyBootDisposition::Standby);
+    TEST_ASSERT_TRUE(beforeCommit.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_TRUE(beforeCommit.bootDisposition !=
+                     SafetyBootDisposition::ResumeOffer);
+
+    const auto applied = application.persistFreshStartCommand(
+        current, decision, RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(applied.status));
+    TEST_ASSERT_TRUE(current.activeProgramRun.has_value());
+    TEST_ASSERT_TRUE(current.processState.state != ProcessState::Standby);
+
+    auto afterApply = freshStartSafetyInput(loaded.status, applied, true,
+                                            sensor, selection, planner);
+    const auto allowed = safety.evaluate(afterApply);
+    TEST_ASSERT_TRUE(allowed.bootDisposition == SafetyBootDisposition::Standby);
+    TEST_ASSERT_TRUE(allowed.gate.status == ActuatorSafetyGateStatus::Allowed);
+    TEST_ASSERT_TRUE(afterApply.activationKind ==
+                     SafetyActivationKind::FreshStart);
+}
+
+void test_fresh_start_bridge_write_error_and_unresolved_unknown_never_allow() {
+    using Fault = SequencedWriteStore::WriteFault;
+
+    SequencedWriteStore writeErrorStore;
+    RunPersistenceCoordinator writeErrorCoordinator(
+        writeErrorStore, device_platform::StorageEpoch(1U),
+        RunCheckpointSchedule{});
+    const auto writeErrorLoad = writeErrorCoordinator.loadAndInitialize();
+    TargetQualificationEvaluator writeErrorEvaluator;
+    TemperatureController writeErrorController(bridgeTemperatureParameters(),
+                                               bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator writeErrorApplication(
+        writeErrorCoordinator, writeErrorController, writeErrorEvaluator);
+    RunCommandState writeErrorState;
+    writeErrorState.processState.state = ProcessState::Standby;
+    writeErrorStore.faultAt(writeErrorStore.writeCount() + 1U,
+                            Fault::FailBeforeBegin);
+    const auto writeError = writeErrorApplication.persistFreshStartCommand(
+        writeErrorState, startDecision(writeErrorState, 1233U),
+        RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::WriteFailed),
+        static_cast<int>(writeError.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                          static_cast<int>(writeErrorState.processState.state));
+
+    ActuatorPlanner writeErrorPlanner(bridgeActuatorPlannerParameters());
+    device_platform::SensorQualitySnapshot writeErrorSensor;
+    SensorSelectionRuntimeState writeErrorSelection;
+    SafetyCore writeErrorSafety;
+    writeErrorSafety.beginBoot(device_platform::ResetCause::PowerOn);
+    auto writeErrorInput = freshStartSafetyInput(
+        writeErrorLoad.status, writeError, false, writeErrorSensor,
+        writeErrorSelection, writeErrorPlanner);
+    const auto writeErrorEvaluation =
+        writeErrorSafety.evaluate(writeErrorInput);
+    TEST_ASSERT_TRUE(writeErrorEvaluation.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_TRUE(writeErrorEvaluation.bootDisposition !=
+                     SafetyBootDisposition::ResumeOffer);
+
+    SequencedWriteStore unknownStore;
+    RunPersistenceCoordinator unknownCoordinator(
+        unknownStore, device_platform::StorageEpoch(2U),
+        RunCheckpointSchedule{});
+    const auto unknownLoad = unknownCoordinator.loadAndInitialize();
+    TargetQualificationEvaluator unknownEvaluator;
+    TemperatureController unknownController(bridgeTemperatureParameters(),
+                                            bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator unknownApplication(
+        unknownCoordinator, unknownController, unknownEvaluator);
+    RunCommandState unknownState;
+    unknownState.processState.state = ProcessState::Standby;
+    const auto unknownWrite = unknownStore.writeCount() + 1U;
+    unknownStore.unknownWithoutCommitAt(unknownWrite);
+    unknownStore.readFaultAt(unknownWrite,
+                             SequencedWriteStore::ReadFault::ReadError);
+    const auto unknown = unknownApplication.persistFreshStartCommand(
+        unknownState, startDecision(unknownState, 1234U),
+        RunCheckpointTime{100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceResultStatus::PersistenceIndeterminate),
+        static_cast<int>(unknown.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                          static_cast<int>(unknownState.processState.state));
+
+    ActuatorPlanner unknownPlanner(bridgeActuatorPlannerParameters());
+    device_platform::SensorQualitySnapshot unknownSensor;
+    SensorSelectionRuntimeState unknownSelection;
+    SafetyCore unknownSafety;
+    unknownSafety.beginBoot(device_platform::ResetCause::PowerOn);
+    auto unknownInput =
+        freshStartSafetyInput(unknownLoad.status, unknown, false, unknownSensor,
+                              unknownSelection, unknownPlanner);
+    const auto unknownEvaluation = unknownSafety.evaluate(unknownInput);
+    TEST_ASSERT_TRUE(unknownEvaluation.faultCode ==
+                     FaultCode::RunPersistenceUntrusted);
+    TEST_ASSERT_TRUE(unknownEvaluation.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+}
+
+void test_discarded_no_active_run_can_use_real_fresh_start_bridge() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    static_cast<void>(persistedFermentingRun(seed, 1235U));
+    store.restart();
+
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto loaded = coordinator.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(loaded.status));
+    TEST_ASSERT_TRUE(loaded.snapshot.has_value());
+    auto current = restoreRunPersistenceSnapshot(*loaded.snapshot);
+    TEST_ASSERT_TRUE(current.has_value());
+
+    TargetQualificationEvaluator evaluator;
+    TemperatureController controller(bridgeTemperatureParameters(),
+                                     bridgeTemperaturePolicy());
+    TemperatureControlApplicationOrchestrator application(
+        coordinator, controller, evaluator);
+    const auto discarded = application.reconcileR1LoadedRun(
+        loaded, *current, RunCheckpointTime{700000U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(discarded.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(ProcessState::Standby),
+                          static_cast<int>(current->processState.state));
+
+    const auto decision = startDecision(*current, 1236U, 700100U);
+    const auto started = application.persistFreshStartCommand(
+        *current, decision, RunCheckpointTime{700100U, std::nullopt});
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceResultStatus::Applied),
+                          static_cast<int>(started.status));
+    TEST_ASSERT_TRUE(current->activeProgramRun.has_value());
+
+    ActuatorPlanner planner(bridgeActuatorPlannerParameters());
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+    auto input =
+        freshStartSafetyInput(RunPersistenceLoadStatus::NoActiveRun, started,
+                              true, sensor, selection, planner);
+    const auto evaluation = safety.evaluate(input);
+    TEST_ASSERT_TRUE(evaluation.bootDisposition ==
+                     SafetyBootDisposition::Standby);
+    TEST_ASSERT_TRUE(evaluation.gate.status ==
+                     ActuatorSafetyGateStatus::Allowed);
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -8080,6 +8294,10 @@ int main(int, char**) {
     RUN_TEST(test_orchestrator_reconciles_non_resumable_current_before_standby);
     RUN_TEST(
         test_orchestrator_fresh_start_uses_existing_command_commit_boundary);
+    RUN_TEST(test_fresh_start_bridge_reaches_safety_only_after_real_apply);
+    RUN_TEST(
+        test_fresh_start_bridge_write_error_and_unresolved_unknown_never_allow);
+    RUN_TEST(test_discarded_no_active_run_can_use_real_fresh_start_bridge);
     RUN_TEST(test_invalid_effect_and_message_counts_are_rejected_before_writes);
     RUN_TEST(
         test_persist_sensor_selection_writes_schema_two_and_reports_permission_blocked);

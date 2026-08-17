@@ -134,8 +134,11 @@ BOOT
 
 ```text
 aktuell untrusted System-/Config-/Persistenzzustand, unvollstaendige
-Transaktion oder kritischer Initialisierungsfehler
-  -> SAFE_BOOT oder FAULT gemaess Fehlerklasse
+Transaktion oder unbekannter Producer
+  -> SAFE_BOOT
+
+historischer `Current` im terminalen `Fault`
+  -> `FAULT`/TerminalFault ohne Aktivierung
 
 gueltiger persistierter Zustand COMPLETED
   -> COMPLETED
@@ -148,15 +151,17 @@ kein aktiver oder abgeschlossener Lauf und alle Bootpruefungen bestanden
 ```
 
 `STANDBY`, `COMPLETED` und `RECOVERY_EVALUATION` sind vor Abschluss der
-Bootpruefungen nicht erreichbar. Ein Neustart loescht keine Verriegelung und ist
-kein Fehlerreset.
+Bootpruefungen nicht erreichbar. Ein Neustart ist kein Fehlerreset; R1 fuehrt
+keine allgemeine persistente Verriegelung und keine Restart-Akkumulation ein.
 
 ## SAFE_BOOT
 
 ### Zweck
 
-Sicherer Wartungszustand nach wiederholtem abnormalem Neustart, persistierter
-Sperre oder nicht ausreichend nachweisbarer Systemintegritaet.
+Sicherer Zustand bei aktuell nicht vertrauenswuerdigem System-, Config- oder
+Persistenzzustand, unvollstaendiger Transaktion oder unbekanntem Producer.
+Wiederholte Neustarts und persistierte allgemeine Sperren sind keine R1-
+Safety-Wahrheit.
 
 ### Aktoren
 
@@ -172,11 +177,14 @@ Sperre oder nicht ausreichend nachweisbarer Systemintegritaet.
 - Fehler- und Resetjournal lesen
 - Berichte exportieren
 - Netzwerkwiederherstellung ohne Aktorwirkung
-- PIN-unabhaengigen lokalen Vollreset ausloesen
-- UART-Recovery beziehungsweise erneutes Flashen
+- passive Diagnose und Export ohne Aktorwirkung
+- physischer Vollreset, UART-Recovery und erneutes Flashen bleiben spaetere
+  E5-/Service-/Hardware-Gates und sind kein #24-R1-Resetvertrag
 
-Eine Rueckkehr zu `STANDBY` erfordert beseitigte Ursache, bestandene
-Integritaetspruefung und den fuer die Fehlerklasse vorgesehenen bewussten Reset.
+Eine Rueckkehr zu `STANDBY` erfordert beseitigte aktuelle Ursache, bestandene
+Config-/Persistenz-/Safety-Validierung und den fuer den konkreten FaultCode
+vorgesehenen positiven Clear-Pfad. Einen allgemeinen Service-/Fehlerklassen-
+Resetvertrag gibt es in R1 nicht.
 
 ## STANDBY
 
@@ -522,8 +530,9 @@ Beispiele:
 
 ### Zweck
 
-Nach `BOOT` unverzueglich bestimmen, wie ein unterbrochener Lauf sicher und
-fachlich sinnvoll fortgesetzt wird.
+Nach `BOOT` unverzueglich bestimmen, ob ein unterbrochener Lauf lediglich als
+Resume-Angebot angezeigt, als `NoActiveRun` verworfen oder wegen untrusted
+Evidenz in `SAFE_BOOT` gehalten wird. Keine automatische Fortsetzung.
 
 Vor Eintritt wurden aktueller Config-/Persistenzstatus, Transaktionsintegritaet
 und grundlegende Sensor-/Planner-Evidenz geprueft; es gibt keinen allgemeinen
@@ -625,7 +634,9 @@ Tuerinformation als vorhandene Sicherheits- oder Prozessbedingung voraussetzen.
 - [x] keine allgemeine Pausenfunktion
 - [x] Stop bietet Ausschalten oder einen neuen manuellen Kuehllauf
 - [x] Warnungen und Fehler sind getrennt
-- [x] `SERVICE_MODE` nur aus validiertem `STANDBY`
+- [x] `SERVICE_MODE` nur aus validiertem `STANDBY`; physische Service-/Reset-
+      Geraete bleiben E5/Future
 - [x] Produktfuehlerausfall fuehrt nicht zu stillem Sensorwechsel
-- [x] R1 verwendet keine automatische NTP-/Progress-Recovery
+- [x] R1 verwendet keine automatische NTP-/Progress-Recovery und keine
+      universelle Fehlerklassen-FSM
 - [x] kein Tuerkontakt in Release 1

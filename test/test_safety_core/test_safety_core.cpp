@@ -63,6 +63,18 @@ void validBootEvidence(SafetyCoreInput& input,
     input.sensorSelectionRuntime = &selection;
 }
 
+void validOperationalStandbyEvidence(SafetyCoreInput& input) {
+    input.bootValidationComplete = true;
+    input.configurationValidated = true;
+    input.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::RuntimeReady;
+    input.configurationServiceMode = ConfigurationServiceMode::Operational;
+    input.persistenceValidated = true;
+    input.persistenceLoadStatus = RunPersistenceLoadStatus::NoPersistedRun;
+    input.persistenceCoordinatorState =
+        RunPersistenceCoordinatorState::ReadyEmpty;
+}
+
 void test_missing_boot_evidence_is_safe_boot() {
     SafetyCore safety;
     safety.beginBoot(device_platform::ResetCause::PowerOn);
@@ -385,6 +397,8 @@ void test_safe_boot_fault_is_not_cleared_by_missing_producer() {
     input.configurationValidated = true;
     input.configurationRecoveryStatus =
         ConfigurationRecoveryStatus::ConfigurationUnavailable;
+    input.configurationProducer =
+        ConfigurationSafetyProducer::ConfigurationUnavailable;
     input.persistenceValidated = true;
     input.persistenceLoadStatus = RunPersistenceLoadStatus::NoPersistedRun;
     input.persistenceCoordinatorState =
@@ -399,6 +413,7 @@ void test_safe_boot_fault_is_not_cleared_by_missing_producer() {
 
     input.configurationRecoveryStatus =
         ConfigurationRecoveryStatus::RuntimeReady;
+    input.configurationProducer.reset();
     const auto revalidated = safety.evaluate(input);
     TEST_ASSERT_TRUE(revalidated.faultCode == FaultCode::None);
     TEST_ASSERT_TRUE(revalidated.bootDisposition ==
@@ -497,10 +512,13 @@ void test_integrity_and_commit_faults_require_matching_resolution() {
                       integritySnapshot);
     integrityInput.configurationRecoveryStatus =
         ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
+    integrityInput.configurationProducer =
+        ConfigurationSafetyProducer::ConfigurationIntegrityFailure;
     TEST_ASSERT_TRUE(integrity.evaluate(integrityInput).faultCode ==
                      FaultCode::ConfigurationIntegrityFailure);
     integrityInput.configurationRecoveryStatus =
         ConfigurationRecoveryStatus::RuntimeReady;
+    integrityInput.configurationProducer.reset();
     TEST_ASSERT_TRUE(integrity.evaluate(integrityInput).faultCode ==
                      FaultCode::None);
 
@@ -557,37 +575,200 @@ void test_load_matrix_rejects_fallback_and_untrusted_states() {
 void test_unknown_producer_is_fail_closed() {
     SafetyCore safety;
     SafetyCoreInput input;
+    input.bootValidationComplete = true;
     input.configurationValidated = true;
     input.persistenceValidated = true;
-    input.persistenceLoadStatus = RunPersistenceLoadStatus::Current;
-    input.persistenceCoordinatorState = RunPersistenceCoordinatorState::Ready;
+    input.persistenceLoadStatus = RunPersistenceLoadStatus::NoPersistedRun;
+    input.persistenceCoordinatorState =
+        RunPersistenceCoordinatorState::ReadyEmpty;
     input.configurationServiceMode =
         static_cast<ConfigurationServiceMode>(0xFFU);
 
     const auto result = safety.evaluate(input);
     TEST_ASSERT_TRUE(result.faultCode == FaultCode::SystemProducerUnknown);
     TEST_ASSERT_TRUE(result.disposition == SafetyDisposition::SafeBoot);
+
+    // Omitting the producer is not positive resolution.
+    input.configurationServiceMode.reset();
+    const auto missingProducer = safety.evaluate(input);
+    TEST_ASSERT_TRUE(missingProducer.faultCode ==
+                     FaultCode::SystemProducerUnknown);
+    safety.acknowledge(FaultCode::SystemProducerUnknown);
+    TEST_ASSERT_TRUE(safety.isAcknowledged(FaultCode::SystemProducerUnknown));
+
+    // The same source must later provide a known value.  The clear cycle is
+    // still fail-closed and cannot become an Allowed gate.
+    input.configurationServiceMode = ConfigurationServiceMode::Operational;
+    const auto resolved = safety.evaluate(input);
+    TEST_ASSERT_TRUE(resolved.faultCode == FaultCode::None);
+    TEST_ASSERT_TRUE(resolved.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+}
+
+void test_unknown_producer_sources_resolve_independently() {
+    SafetyCore safety;
+    SafetyCoreInput input;
+    input.bootValidationComplete = true;
+    input.configurationValidated = true;
+    input.configurationServiceMode =
+        static_cast<ConfigurationServiceMode>(0xFFU);
+    input.persistenceLoadStatus = static_cast<RunPersistenceLoadStatus>(0xFFU);
+    input.persistenceValidated = true;
+    input.persistenceCoordinatorState =
+        RunPersistenceCoordinatorState::ReadyEmpty;
+
+    TEST_ASSERT_TRUE(safety.evaluate(input).faultCode ==
+                     FaultCode::SystemProducerUnknown);
+
+    // Resolve only the configuration source; the omitted persistence source
+    // remains unresolved and keeps the bounded SystemProducerUnknown fault.
+    input.configurationServiceMode = ConfigurationServiceMode::Operational;
+    input.persistenceLoadStatus.reset();
+    const auto oneSourceRemaining = safety.evaluate(input);
+    TEST_ASSERT_TRUE(oneSourceRemaining.faultCode ==
+                     FaultCode::SystemProducerUnknown);
+
+    input.persistenceLoadStatus = RunPersistenceLoadStatus::NoPersistedRun;
+    const auto bothResolved = safety.evaluate(input);
+    TEST_ASSERT_TRUE(bothResolved.faultCode == FaultCode::None);
+    TEST_ASSERT_TRUE(bothResolved.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+}
+
+void test_configuration_recovery_status_requires_canonical_producer() {
+    constexpr ConfigurationRecoveryStatus rejectedStatuses[] = {
+        ConfigurationRecoveryStatus::ConfigurationMutationBusy,
+        ConfigurationRecoveryStatus::ConfigurationModelBudgetBusy,
+        ConfigurationRecoveryStatus::StateTransitionRejected,
+        ConfigurationRecoveryStatus::CounterOverflow,
+        ConfigurationRecoveryStatus::PersistenceWriteFailure,
+        ConfigurationRecoveryStatus::RuntimePreparationFailure,
+    };
+    for (const auto status : rejectedStatuses) {
+        SafetyCore safety;
+        SafetyCoreInput input;
+        validOperationalStandbyEvidence(input);
+        input.configurationRecoveryStatus = status;
+        const auto result = safety.evaluate(input);
+        TEST_ASSERT_TRUE(result.faultCode == FaultCode::None);
+        TEST_ASSERT_TRUE(result.bootDisposition ==
+                         SafetyBootDisposition::Standby);
+        TEST_ASSERT_TRUE(result.gate.status ==
+                         ActuatorSafetyGateStatus::Unresolved);
+    }
+
+    SafetyCore unavailable;
+    SafetyCoreInput unavailableInput;
+    validOperationalStandbyEvidence(unavailableInput);
+    unavailableInput.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::CounterOverflow;
+    unavailableInput.configurationProducer =
+        ConfigurationSafetyProducer::ConfigurationUnavailable;
+    const auto unavailableResult = unavailable.evaluate(unavailableInput);
+    TEST_ASSERT_TRUE(unavailableResult.faultCode ==
+                     FaultCode::ConfigurationUnavailable);
+    TEST_ASSERT_TRUE(unavailableResult.bootDisposition ==
+                     SafetyBootDisposition::SafeBoot);
+
+    SafetyCore integrity;
+    SafetyCoreInput integrityInput;
+    validOperationalStandbyEvidence(integrityInput);
+    integrityInput.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
+    integrityInput.configurationProducer =
+        ConfigurationSafetyProducer::ConfigurationIntegrityFailure;
+    const auto integrityResult = integrity.evaluate(integrityInput);
+    TEST_ASSERT_TRUE(integrityResult.faultCode ==
+                     FaultCode::ConfigurationIntegrityFailure);
+    TEST_ASSERT_TRUE(integrityResult.bootDisposition ==
+                     SafetyBootDisposition::SafeBoot);
+
+    SafetyCore contradictory;
+    SafetyCoreInput contradictoryInput;
+    validOperationalStandbyEvidence(contradictoryInput);
+    contradictoryInput.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
+    const auto contradictoryResult = contradictory.evaluate(contradictoryInput);
+    TEST_ASSERT_TRUE(contradictoryResult.faultCode ==
+                     FaultCode::SystemProducerUnknown);
+    TEST_ASSERT_TRUE(contradictoryResult.bootDisposition ==
+                     SafetyBootDisposition::SafeBoot);
+}
+
+void test_normal_configuration_commit_rejections_keep_operational_runtime() {
+    constexpr ConfigurationCommitStatus rejectedStatuses[] = {
+        ConfigurationCommitStatus::PreviewNotFound,
+        ConfigurationCommitStatus::PreviewSuperseded,
+        ConfigurationCommitStatus::ConfigurationMutationBusy,
+        ConfigurationCommitStatus::ConfigurationConflictFailure,
+        ConfigurationCommitStatus::ConfigurationValidationFailure,
+        ConfigurationCommitStatus::PersistenceFailure,
+        ConfigurationCommitStatus::CapacityFailure,
+    };
+    for (const auto status : rejectedStatuses) {
+        SafetyCore safety;
+        SafetyCoreInput input;
+        validOperationalStandbyEvidence(input);
+        input.configurationCommitStatus = status;
+        const auto result = safety.evaluate(input);
+        TEST_ASSERT_TRUE(result.faultCode == FaultCode::None);
+        TEST_ASSERT_TRUE(result.bootDisposition ==
+                         SafetyBootDisposition::Standby);
+        TEST_ASSERT_TRUE(result.gate.status ==
+                         ActuatorSafetyGateStatus::Unresolved);
+    }
+
+    SafetyCore commit;
+    SafetyCoreInput commitInput;
+    validOperationalStandbyEvidence(commitInput);
+    commitInput.configurationCommitStatus =
+        ConfigurationCommitStatus::ConfigurationCommitIndeterminate;
+    const auto commitResult = commit.evaluate(commitInput);
+    TEST_ASSERT_TRUE(commitResult.faultCode ==
+                     FaultCode::ConfigurationCommitIndeterminate);
+    TEST_ASSERT_TRUE(commitResult.bootDisposition ==
+                     SafetyBootDisposition::SafeBoot);
+
+    SafetyCore runtime;
+    SafetyCoreInput runtimeInput;
+    validOperationalStandbyEvidence(runtimeInput);
+    runtimeInput.configurationServiceMode =
+        ConfigurationServiceMode::RuntimeFailure;
+    const auto runtimeResult = runtime.evaluate(runtimeInput);
+    TEST_ASSERT_TRUE(runtimeResult.faultCode ==
+                     FaultCode::ConfigurationRuntimeFailure);
+    TEST_ASSERT_TRUE(runtimeResult.disposition ==
+                     SafetyDisposition::BlockedImmediateStop);
+    TEST_ASSERT_TRUE(runtimeResult.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
 }
 
 void test_configuration_fault_projection_uses_stable_r1_codes() {
-    const auto evaluate =
-        [](std::optional<ConfigurationRecoveryStatus> recovery,
-           std::optional<ConfigurationServiceMode> mode,
-           std::optional<ConfigurationCommitStatus> commit) {
-            SafetyCore safety;
-            safety.beginBoot(device_platform::ResetCause::PowerOn);
-            SafetyCoreInput input;
-            input.configurationValidated = true;
-            input.persistenceValidated = true;
-            input.persistenceLoadStatus =
-                RunPersistenceLoadStatus::NoPersistedRun;
-            input.persistenceCoordinatorState =
-                RunPersistenceCoordinatorState::ReadyEmpty;
-            input.configurationRecoveryStatus = recovery;
-            input.configurationServiceMode = mode;
-            input.configurationCommitStatus = commit;
-            return safety.evaluate(input);
-        };
+    const auto evaluate = [](std::optional<ConfigurationRecoveryStatus>
+                                 recovery,
+                             std::optional<ConfigurationServiceMode> mode,
+                             std::optional<ConfigurationCommitStatus> commit) {
+        SafetyCore safety;
+        safety.beginBoot(device_platform::ResetCause::PowerOn);
+        SafetyCoreInput input;
+        input.configurationValidated = true;
+        input.persistenceValidated = true;
+        input.persistenceLoadStatus = RunPersistenceLoadStatus::NoPersistedRun;
+        input.persistenceCoordinatorState =
+            RunPersistenceCoordinatorState::ReadyEmpty;
+        input.configurationRecoveryStatus = recovery;
+        if (recovery == ConfigurationRecoveryStatus::ConfigurationUnavailable) {
+            input.configurationProducer =
+                ConfigurationSafetyProducer::ConfigurationUnavailable;
+        } else if (recovery ==
+                   ConfigurationRecoveryStatus::ConfigurationIntegrityFailure) {
+            input.configurationProducer =
+                ConfigurationSafetyProducer::ConfigurationIntegrityFailure;
+        }
+        input.configurationServiceMode = mode;
+        input.configurationCommitStatus = commit;
+        return safety.evaluate(input);
+    };
 
     const auto unavailable =
         evaluate(ConfigurationRecoveryStatus::ConfigurationUnavailable,
@@ -734,6 +915,10 @@ void setup_suite() {
     RUN_TEST(test_schema_three_neutral_fields_do_not_block_simple_resume);
     RUN_TEST(test_load_matrix_rejects_fallback_and_untrusted_states);
     RUN_TEST(test_unknown_producer_is_fail_closed);
+    RUN_TEST(test_unknown_producer_sources_resolve_independently);
+    RUN_TEST(test_configuration_recovery_status_requires_canonical_producer);
+    RUN_TEST(
+        test_normal_configuration_commit_rejections_keep_operational_runtime);
     RUN_TEST(test_configuration_fault_projection_uses_stable_r1_codes);
     RUN_TEST(test_all_technical_load_statuses_are_safe_boot);
     RUN_TEST(test_resume_phase_matrix_is_explicit);

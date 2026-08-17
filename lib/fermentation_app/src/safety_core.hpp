@@ -160,7 +160,19 @@ class SafetyCore final {
     [[nodiscard]] static SafetyDisposition dispositionForFault(
         FaultCode code) noexcept;
     using FaultMask = std::uint16_t;
+    enum class UnknownProducerSource : std::uint8_t {
+        ConfigurationServiceMode,
+        ConfigurationCommitStatus,
+        ConfigurationRecoveryStatus,
+        ConfigurationSafetyProducer,
+        PersistenceLoadStatus,
+        PersistenceCoordinatorState,
+    };
+    using UnknownProducerSourceMask = std::uint8_t;
+
     [[nodiscard]] static FaultMask faultBit(FaultCode code) noexcept;
+    [[nodiscard]] static UnknownProducerSourceMask unknownProducerSourceBit(
+        UnknownProducerSource source) noexcept;
     [[nodiscard]] static bool hasFault(FaultMask mask, FaultCode code) noexcept;
     [[nodiscard]] static FaultCode primaryFault(FaultMask mask) noexcept;
     [[nodiscard]] static bool activationEvidenceComplete(
@@ -177,6 +189,7 @@ class SafetyCore final {
         device_platform::ResetCause::Unknown};
     FaultMask activeFaultMask_{0U};
     FaultMask acknowledgedFaultMask_{0U};
+    UnknownProducerSourceMask unknownProducerSources_{0U};
     SafetyEvaluation lastEvaluation_{};
 };
 

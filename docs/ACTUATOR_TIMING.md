@@ -285,8 +285,9 @@ Verbindliche Regeln:
 
 - Die letzte Anforderung wird nicht als dauerhafte Ersatzanforderung verwendet.
 - Ein automatischer Neustart ist nicht die erste Reaktion.
-- Eine neue Regelanforderung allein darf den Fehler nicht still loeschen; die
-  Fehlerklasse bestimmt Wiederfreigabe und Quittierung.
+- Eine neue Regelanforderung allein darf den Fehler nicht still loeschen; der
+  bestehende #23-Watchdog-Reset verlangt frische Evidenz und seinen expliziten
+  Pfad. Eine universelle Fehlerklassen-FSM wird in #24 nicht eingefuehrt.
 - Der Watchdog wird in einer von der eigentlichen PI-Berechnung getrennten
   Aktorlogik ausgewertet.
 - Ein blockierter Webserver oder fehlendes WLAN darf den Watchdog nicht
@@ -361,7 +362,7 @@ Leistungsfreigabe gesetzt.
 - Sensor- und Reglerzyklus
 - Aktualisierungs-Watchdog-Zeitraum
 - Aussen- und Innenluefter-Nachlaufzeiten
-- Luefterverhalten je Fehlerklasse
+- Luefterverhalten je FaultCode/Disposition
 - Erkennung eines ausgefallenen oder blockierten Luefters
 - sichere H-Bruecken-Sequenz fuer die bestaetigte Hardware
 - Verhalten bei Versorgungseinbruch waehrend einer Schaltsequenz

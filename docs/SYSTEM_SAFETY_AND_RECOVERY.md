@@ -89,7 +89,11 @@ Peltier-Gegenrichtung zu starten.
 Nach Rueckkehr der Versorgung erfolgt keine Wiederherstellung alter GPIO-Zustaende.
 Der validierte Wiederanlauf aus diesem Dokument ist erforderlich.
 
-## Unabhaengige thermische Notabschaltung
+## E5/#35/Future: unabhaengige thermische Notabschaltung
+
+Dieser Abschnitt beschreibt eine spaetere physische Schutzschicht. Die
+Temperatursicherung, thermisch verriegelte Fehler und Serviceanforderungen sind
+kein implementierter #24-R1-Producer und erzeugen in R1 keine neuen FaultCodes.
 
 ### Entscheidung fuer eine einmalige Temperatursicherung
 
@@ -236,13 +240,14 @@ In `SAFE_BOOT` gilt:
 - Peltier und H-Bruecke bleiben AUS,
 - kein Fermentationslauf wird automatisch fortgesetzt,
 - direkte Aktortests sind standardmaessig gesperrt,
-- Diagnose, Fehlerexport, Firmwareupdate und geschuetzte Servicefunktionen bleiben
-  verfuegbar, soweit das System stabil genug ist,
+- passive Diagnose und Fehlerexport bleiben verfuegbar, soweit das System stabil
+  genug ist; Firmwareupdate und geschuetzte Servicefunktionen sind spaetere
+  E5-/Future-Gates ohne #24-R1-Safety-Clear,
 - der Grund fuer `SAFE_BOOT` wird lokal sichtbar angezeigt,
 - ein normaler Neustart allein verlaesst `SAFE_BOOT` nicht automatisch,
-  - Freigabe verlangt bestandene aktuelle Integritaets-/Config-/Persistenz-
-    pruefungen und eine explizite Bedienentscheidung; ein Service-PIN ist
-    kein #24-R1-Vertrag.
+- Freigabe verlangt bestandene aktuelle Integritaets-/Config-/Persistenz-
+  pruefungen und den bestehenden positiven Producer-/FaultCode-Pfad; ein
+  Service-PIN ist kein #24-R1-Vertrag.
 
 ## Beschaedigte Konfiguration oder Laufdaten
 
@@ -350,7 +355,7 @@ Ringpufferprinzip. Es darf den 4-MB-Flash nicht unbegrenzt fuellen.
 Jeder relevante Eintrag enthaelt mindestens:
 
 - stabilen Fehler- oder Ereigniscode
-- Fehlerklasse und Prioritaet
+- FaultCode-/Disposition-Prioritaet
 - monotone Zeitbasis
 - UTC-Zeit und Zeitzoneninformation, sofern verlaesslich
 - Prozessphase und Laufrevision
@@ -411,7 +416,8 @@ Verbindliche Regeln:
 - [x] separate 12-V-ADC-Ueberwachung nur architektonisch und im Pinbudget
       vorbereiten, nicht als Pflicht-Hardware
 - [x] ohne eingebauten Spannungsteiler keine 12-V-Messwerte behaupten
-- [x] einmalige Temperatursicherung als unabhaengige thermische Notabschaltung
+- E5/#35/Future: einmalige Temperatursicherung als spaetere unabhaengige
+      thermische Notabschaltung
 - [x] vorhandener zusaetzlicher DS18B20 ersetzt keine unabhaengige Abschaltung
 - [x] BTS7960-Eingaenge durch Hardware-Pulldowns beziehungsweise nachgewiesen
       sichere Beschaltung inaktiv halten
@@ -441,8 +447,11 @@ Verbindliche Regeln:
 - Nachweis der sicheren Unterbrechung des Peltierpfades
 - BTS7960-Pulldowns beziehungsweise externe Freigabestufe auslegen
 - Boot-/Resetpegel aller Ausgaenge messen
-- konkrete Watchdog-Zeiten und Neustartzaehlergrenzen
-- Definition und Freigabeablauf von `SAFE_BOOT`
+- E5/Future: konkrete Watchdog-Zeiten und Neustartzaehlergrenzen fuer spaetere
+  Hardware-/Betriebsvertraege; nicht #24-R1
+- spaetere Hardware-/Service-Definition des `SAFE_BOOT`-Zugangs; der #24-R1-
+  SAFE_BOOT-Ausgang bleibt durch aktuelle System-/Config-/Persistenzevidenz
+  bestimmt
 - Speicherbudget und konkrete Journalgroesse
 - genaue Fehleraufbewahrungs- und Verdichtungsregeln
 - Tests fuer Brownout waehrend Flash-Schreibvorgang und Aktorumschaltung

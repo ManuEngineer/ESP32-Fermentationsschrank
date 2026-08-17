@@ -100,8 +100,8 @@ Anforderungen:
   Persistenzzustand; jede Resetcause startet all-off und revalidiert frisch.
 - Eine automatische thermische `SAFETY_RECOVERY`-Gegenrichtung und neue
   Thermal-/Hardwarefaults bleiben bis #35/E5 deferiert.
-- Der Peltierpfad besitzt eine 7,5-A-Ueberstromsicherung und eine einmalige
-  Temperatursicherung als unabhaengige thermische Abschaltung.
+- Der Peltierpfad besitzt eine 7,5-A-Ueberstromsicherung; eine unabhaengige
+  Temperatursicherung bleibt E5/#35/Future und ist kein #24-R1-Producer.
 - R_IS/L_IS werden nur verwendet, wenn das gelieferte BTS7960-Modul praktisch
   brauchbare und sicher angepasste Signale liefert.
 

@@ -2,10 +2,9 @@
 
 ## Status
 
-Dieses Dokument beschreibt die in Phase 8A akzeptierten Grundregeln fuer
-Fehlerklassen, unmittelbare Reaktionen, Quittierung, Fehlerreset,
-automatische Wiederfreigabe, Zeitfortschritt, Persistenz und gleichzeitige
-Fehlerursachen.
+Dieses Dokument enthaelt historische Phase-8A-Regeln und den vorrangigen
+Release-1-FaultCode-Vertrag fuer unmittelbare Reaktionen, Quittierung,
+Persistenz und gleichzeitige Fehlerursachen.
 
 Konkrete Temperatur-, Sensor-, Luefter-, Aktor-, Versorgungs- und
 Softwarefehler werden in Phase 8B und 8C ergaenzt.
@@ -20,8 +19,8 @@ historischen allgemeinen Fehlerklassen- und Recoverynotizen dieses Dokuments:
 - R1 verwendet nur `Information`, `Blocked/ImmediateStop` und `SAFE_BOOT`.
   Die historische Vierklassenbeschreibung ist fuer #24 keine neue API und
   keine zusätzliche Safety-Wahrheit.
-- SafetyCore verwendet die endliche FaultCode-Matrix aus der Umsetzung. Ack
-  ist nur Anzeige/Journaling und loescht weder Ursache noch Gate.
+- SafetyCore verwendet die endliche FaultCode-/Disposition-Matrix aus der
+  Umsetzung. Ack ist nur Anzeige/Journaling und loescht weder Ursache noch Gate.
 - Es gibt in #24 keinen generischen persistenten Safety-Latch, keinen
   Restart-Zaehler, kein Resetzeitfenster, keine Service-PIN-Pflicht und keine
   automatische `SAFETY_RECOVERY`-Gegenrichtung.
@@ -38,11 +37,13 @@ nicht als Release-1-#24-Laufzeitvertrag umgesetzt.
   alten Aktorbefehl ueberstimmt werden.
 - `Quittieren` und `Fehler zuruecksetzen` sind fachlich getrennte Aktionen.
 - Ein Neustart ist kein Fehlerreset.
-- Automatische Wiederfreigabe ist nur fuer ausdruecklich dafuer freigegebene
-  Fehlerklassen und Fehlercodes erlaubt.
+- Automatische Wiederfreigabe ist kein allgemeiner Fehlerklassenvertrag; ein
+  Clear ist nur ueber den positiven Pfad des konkreten FaultCodes erlaubt.
 - Bei unsicherem Zustand wird nicht geraten.
-- Die hoechste aktive Fehlerklasse bestimmt den sicheren Ausgangszustand.
-- Aktive Ursachen bleiben in einer endlichen, festen FaultCode-Menge
+- Die hoechste aktive FaultCode-Prioritaet bestimmt die Disposition. R1
+  verwendet keine universelle Fehlerklassenhierarchie und keine zweite
+  Fehlerzustandsmaschine.
+- Aktive Ursachen bleiben in einer endlichen, festen FaultCode-Maske
   nachvollziehbar; Historie und Journaling bleiben beim bestehenden
   `IEventJournal`, nicht im SafetyCore.
 - Sicherheitsreaktionen funktionieren ohne WLAN, Weboberflaeche, Netzwerkzeit
@@ -82,6 +83,12 @@ Commissioning referenzierbar, sind aber kein #24-R1-Vertrag. Insbesondere
 gelten dort genannte persistente Latches, Service-PIN-Resets, automatische
 `SAFETY_RECOVERY`, thermische Codes, gewichteter Fortschritt und automatische
 Wiederfreigaben nicht fuer Release 1.
+
+## C2-Legacy: historische Fehlerklassen- und Recoveryregeln
+
+Die folgenden Phase-8A-Abschnitte sind fuer spaetere/Legacy-Kontexte erhalten.
+Sie sind kein aktiver #24-R1-Vertrag; im R1-Safety-Core gelten ausschliesslich
+FaultCode, Disposition, bounded Multi-Fault und die kanonischen Producerpfade.
 
 ## Fehlerklassen
 

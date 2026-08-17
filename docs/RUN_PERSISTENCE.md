@@ -19,7 +19,8 @@ MOSFET- oder H-Bruecken-Zustaende werden nie wiederhergestellt.
 - Kritische Laufdaten und Sicherheitsjournale haben Vorrang vor Historien.
 - Release 1 funktioniert mit 4 MB Flash ohne PSRAM.
 - Release 1 reserviert keine dualen OTA-Slots.
-- Ein Neustart ist kein Fehlerreset und loescht keine Persistenzsperre.
+- Ein Neustart ist kein Fehlerreset; #24 fuehrt keine allgemeine persistente
+  Persistenz- oder Safety-Sperre ein.
 
 ## Issue #24 Release-1-Persistenzgrenze
 
@@ -42,6 +43,10 @@ R1 kein Fallback-Resume, keine Promotion und keine Charge-Rettungsrechnung.
 
 ## Persistierter Laufzustand
 
+Der aktive R1-Vertrag verwendet die kanonischen Run-/Transaktionsfelder. Die
+nachfolgend mit Recovery-/Progressbezug genannten Schema-3-Felder bleiben als
+C2-Legacy lesbar, sind aber kein R1-Resume- oder Charge-Recovery-Vertrag.
+
 Mindestens enthalten:
 
 - eindeutige Lauf-ID
@@ -51,15 +56,11 @@ Mindestens enthalten:
 - Regelmodus und primaerer Regelsensor
 - dokumentierte Sensorwechsel
 - nominelle Dauer
-- ehrliche Fortschrittsbasis und, nur bei freigegebenem Modell, kumulierter
-  temperaturgewichteter Fortschritt
-- Verlaengerungen und Korrekturen
+- ehrliche beobachtete Fortschrittsbasis; gewichtete Beitraege bleiben C2-
+  Legacy und werden im R1-Pfad nicht gutgeschrieben
+- Verlaengerungen und Korrekturen nur ueber bestehende kanonische Commands
 - letzter monotoner Zeitstand
-- letzter verlaesslicher UTC-Anker, sofern vorhanden
-- Zeitqualitaetsstatus
-- Recovery-Episode mit Vor-/Nach-Ausfall-Evidenz und Segmentkennung
-- ausstehender Recovery-Zeitanker, Boot-Anker und getaggte Vor-Boot-Zeit
-- kumulative wirksame nominale Zeitkorrektur mit Episodenrevision
+- Zeitqualitaetsstatus als Diagnose
 - letzte gueltige Temperaturen und Qualitaetszustaende von:
   - Schrankluft
   - Produkt, sofern vorhanden
@@ -71,6 +72,11 @@ Mindestens enthalten:
 - letzte Zustandsaenderung
 - Revisionsnummer, Schema und Integritaetsinformation
 - Transaktionsstatus fuer sicherheits- und aktorwirksame Zustandsaenderungen
+
+Schema-3-Felder wie UTC-Anker, Recovery-Episode, Boot-Anker, nominale
+Zeitkorrektur und gewichtete Progressbasis bleiben darunter als C2-Legacy
+kompatibel lesbar. Sie erzeugen in R1 weder Resume-Gutschrift noch
+Charge-Recovery.
 
 Nicht gespeichert werden:
 
@@ -235,7 +241,7 @@ Beitrags. `confidence` bezeichnet die kumulative, konservative Vertrauensstufe:
 ein einziges `AirReduced` bleibt auch nach einem spaeteren
 `ProductPreferred`-Beitrag `AirReduced` und wird nie hochgestuft.
 
-## Zeitanker und Ausfallintervall
+## C2-Legacy: Zeitanker und Ausfallintervall, nicht #24-R1
 
 Nach dem NTP-Abgleich ist
 
@@ -318,17 +324,11 @@ Bereinigung erfolgt proaktiv vor einer Ressourcenwarnung.
 
 ## Rueckfall bei beschaedigten Daten
 
-Ist die neueste Revision ungueltig:
-
-1. juengste aeltere vollstaendig gueltige Revision waehlen
-2. unsicheren Zeitraum als Intervall bestimmen
-3. Rueckfall sichtbar melden und protokollieren
-4. Phase, Sperren und Speicherintegritaet erneut bewerten
-5. nur bei eindeutig sicherer Recoveryentscheidung autonom fortsetzen
-
-Ist kein vollstaendiger Programmschnappschuss rekonstruierbar oder koennte eine
-spaetere Sicherheitsverriegelung fehlen, wird nicht geraten. Das Geraet wechselt
-in einen sicheren verriegelten Datenfehlerzustand.
+Ist die aktuelle Revision technisch untrusted, wird sie nicht durch eine
+Fallback-Promotion oder eine geschaetzte Zeit-/Progressrechnung ersetzt: Das
+Geraet bleibt in `SAFE_BOOT`. Ein trusted, semantisch nicht resumefaehiger
+Current wird dagegen ueber den bestehenden #17-Pfad als `NoActiveRun`
+abgeschlossen.
 
 ## Kritischer Persistenzfehler
 
@@ -336,27 +336,21 @@ Schlaegt ein kritischer Schreibvorgang fehl:
 
 1. neue Aktoranforderungen sperren
 2. Peltier AUS und erforderlichen Luefternachlauf ausfuehren
-3. RAM-seitige Verriegelung setzen
-4. minimalen Persistenzfehler-Latch in einem reservierten redundanten Bereich
-   schreiben
-5. Fehlerzustand anzeigen und protokollieren
-
-Der reservierte Latch ist logisch vom normalen Laufjournal getrennt. Er liegt in
-Release 1 jedoch im selben physischen ESP32-Flash und darf deshalb nicht als
-unabhaengige Hardware-Redundanz bezeichnet werden.
+3. den bestehenden #17-Coordinator unknown-safe/blockiert halten
+4. Fehlerzustand anzeigen und protokollieren; keine neue persistente Safety-
+   oder Persistenz-Latch-Wahrheit schreiben
 
 Beim Boot gilt:
 
-- gesetzter Latch -> `SAFE_BOOT`
 - unvollstaendige Transaktionsabsicht -> `SAFE_BOOT`
 - nicht les- oder schreibbarer kritischer Speicher -> `SAFE_BOOT`
-- Recovery erst nach erfolgreicher Lesen-Schreiben-Integritaetspruefung
-- Latch-Reset nur im Serviceablauf nach nachgewiesener Speichergesundheit
+- Recovery-/Fresh-Start-Freigabe erst nach aktuellem kanonischem Producerpfad,
+  `Applied`, FSM-Anwendung und frischer Evidenz
 
 ## Meldungen nach Neustart
 
 1. Meldungshistorie laden
-2. Sensoren, Zeit, Sperren und System neu pruefen
+2. Sensoren, Producer-/Persistenzstatus und System neu pruefen
 3. fruehere aktive Meldungen gegen aktuelle Ursachen bewerten
 4. weiterhin aktive Meldungen wieder anzeigen
 5. beseitigte Ursachen als erledigt kennzeichnen

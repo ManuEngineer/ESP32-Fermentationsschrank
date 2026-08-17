@@ -900,8 +900,9 @@ erzeugt und nichts still geloescht.
 
 Issue #16 liefert in diesem Fall einen typisierten
 `ConfigurationUnavailable`- beziehungsweise `ConfigurationIntegrityFailure`-
-Zustand und gibt keine RuntimeConfiguration frei. Die Einordnung in die
-systemweite Fehlerklasse und `SAFE_BOOT` erfolgt spaeter durch Issue #24.
+Zustand und gibt keine RuntimeConfiguration frei. Die Einordnung in den
+kanonischen FaultCode-/Disposition-Pfad und `SAFE_BOOT` erfolgt durch den
+bestehenden Issue-#24-Producerpfad.
 
 Firmwareupdates ueberschreiben keine Dokumente oder Standard-Arbeitskopien.
 Unbekannte oder nicht migrierbare Schemas loesen keine Factory-Neuanlage aus.

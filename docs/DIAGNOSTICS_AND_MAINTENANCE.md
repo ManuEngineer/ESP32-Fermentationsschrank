@@ -28,8 +28,9 @@ Servicegrenzen anzeigen, macht sie aber nicht zur Safety-Wahrheit.
 
 - Diagnose darf Regelung, Sicherheitsaufgaben und Aktor-Watchdogs nicht blockieren.
 - Lesende Diagnose bleibt waehrend eines Laufes verfuegbar.
-- Aktor- und Hardwaretests sind nur aus validiertem `STANDBY` im
-  PIN-geschuetzten `SERVICE_MODE` erlaubt.
+- Aktor- und Hardwaretests sind spaetere E5-/Service-Gates: nur aus validiertem
+  `STANDBY` im bestaetigten PIN-geschuetzten `SERVICE_MODE` erlaubt; sie sind
+  kein #24-R1-Safety-Clear.
 - `SAFE_BOOT` erlaubt keine leistungsbezogenen Aktortests.
 - Ein normaler Boot fuehrt keine automatische Peltier-, Luefter- oder
   Summeraktivierung aus.
@@ -70,7 +71,8 @@ Zusaetzlich mindestens:
 - Fehler-, Persistenz-, Reset-, Brownout- und Watchdogjournal
 - Netzwerk-, NTP-, Flash-, Heap- und Ressourcenwerte
 - erlaubte Exporte
-- Servicepruefungen nur nach Service-PIN und gueltigem Zustand
+- Servicepruefungen nur nach Service-PIN und gueltigem Zustand; E5/Future,
+  nicht #24-R1-Safety-Core
 
 ## Diagnose waehrend eines Laufes
 
@@ -292,8 +294,9 @@ Service-PIN- oder Vollresetlogik ein.
 - Sensorstatus und Sensorwechsel
 - Regler- und Aktorereignisse
 - Warnungen, Fehler, Quittierungen und Resets
-- Unterbrechungsintervall und Recoveryentscheidung
-- Fortschrittskorrekturen und Laufanpassungen
+- #24-R1: Loadstatus, `NoActiveRun`-/Resume-Angebot und kanonische
+  Transaktionsergebnisse; historische Unterbrechungs- und
+  Fortschrittskorrekturen bleiben C2-Legacy
 - Abschluss- oder Abbruchgrund
 
 Formate: JSON und geeignete CSV-Tabellen.
@@ -301,7 +304,8 @@ Formate: JSON und geeignete CSV-Tabellen.
 ### Diagnoseexport
 
 - Firmware-, Hardware-, Schema- und Konfigurationsrevision
-- Resetursache, Neustartzaehler und `SAFE_BOOT`
+- Resetursache, `SAFE_BOOT` und der ausdrueckliche Hinweis, dass #24 keinen
+  Neustartzaehler fuehrt
 - Prozess-, Fehler- und Persistenzzustand
 - Sensor-, Regel-, Aktor- und Luefterdaten
 - Speicher- und Ressourceninformationen

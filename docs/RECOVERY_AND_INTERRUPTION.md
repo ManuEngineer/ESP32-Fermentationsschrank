@@ -23,26 +23,26 @@ Promotion, keine gewichtete Progress-/UTC-Ausfallrechnung und keine neue
 persistente Safety-Sperre. Die bestehenden #18-Recoveryregeln bleiben als
 C2-Legacy dokumentiert, werden aber nicht vom aktiven #24-R1-Pfad aufgerufen.
 
-## Grundsatz: autonom, aber nicht blind
+## Grundsatz: fail-closed, aber nicht automatisch
 
-Ein unterbrochener Lauf soll nicht unnoetig auf Benutzer oder Netzwerk warten.
-Automatischer Wiederanlauf bedeutet jedoch nicht, unbekannte Ausfallzeit,
-Temperaturverlauf oder biologischen Fortschritt zu erfinden.
+R1 wartet fuer die Sicherheitsentscheidung weder auf Netzwerk noch auf NTP,
+behauptet aber auch keinen automatischen Wiederanlauf. Die Anwendung bewertet
+den aktuellen #17-Load, Config-/Sensor-/Planner-Evidenz und den bestehenden
+FaultCode-Pfad lokal und fail-closed.
 
 Deshalb gilt:
 
 - Jeder Wiederanlauf beginnt mit ausgeschalteten Aktoren.
-- Bootschleifen, persistierte Verriegelungen, Speicherintegritaet und Sensoren
-  werden vor jeder Aktorfreigabe geprueft.
+- Speicherintegritaet, aktueller Producerstatus und Sensoren werden vor jeder
+  Aktorfreigabe geprueft; Bootschleifen und persistierte allgemeine
+  Verriegelungen sind keine #24-R1-Zustaende.
 - Der letzte elektrische Aktorzustand wird nie wiederhergestellt.
-- Eine neue phasenbezogene Aktion wird aus validierten fachlichen Daten abgeleitet.
-- Sichere aktuelle Temperaturregelung darf vor verfuegbarer NTP-Zeit wieder
-  beginnen, sofern Phase und Freigaben eindeutig sind.
-- Unbekannter Unterbrechung wird kein frei geschaetzter exakter Fortschritt
-  gutgeschrieben.
-- Ein Sicherheitsfehler oder eine nicht rekonstruierbare Phase stoppt die
-  automatische Fortsetzung.
-- Die Recoveryentscheidung wird persistiert, bevor Aktoren freigegeben werden.
+- Ein eindeutig resumefaehiger Current wird nur als nicht freigebendes Angebot
+  projiziert; eine nicht einfache Phase wird als `NoActiveRun` ueber #17
+  beendet, ein untrusted Load bleibt `SAFE_BOOT`.
+- Keine Aktorfreigabe erfolgt vor explizitem Resume/Fresh Start, bestehendem
+  #17-Gesamtstatus `Applied`, FSM-Anwendung und frischer Safety-Evidenz.
+- Vorhandene NTP-/Zeit-/Progressdaten erzeugen keine R1-Gutschrift.
 
 ## Kein Tuerkontakt in Release 1
 
@@ -119,9 +119,11 @@ bei Reaktivierung", beschrieben.
 
 ## Fehlerquittierung und Fortsetzung
 
-Quittierung bedeutet nur Kenntnisnahme. Eine Fortsetzung richtet sich nach
-Fehlerklasse, beseitigter Ursache, erneuter Validierung und gegebenenfalls
-bewusstem Fehlerreset.
+Quittierung bedeutet nur Kenntnisnahme und aendert weder FaultCode noch Gate.
+Eine Fortsetzung richtet sich nach dem konkreten `FaultCode`/der Disposition,
+positiver Producer-Evidenz, erneuter Validierung und dem bestehenden expliziten
+Pfad. Eine universelle Fehlerklassen- oder Service-Resetlogik gibt es in R1
+nicht.
 
 Laufbeendende Beispiele:
 
@@ -131,7 +133,8 @@ Laufbeendende Beispiele:
 - unbrauchbare Persistenz oder unvollstaendige Transaktion
 - kritischer interner Softwarefehler
 
-Ein Neustart setzt solche Fehler nicht zurueck.
+Ein Neustart setzt solche Fehler nicht zurueck und loescht keine aktuelle
+unknown-safe Persistenz-/Producerlage.
 
 ## Exakte R1-Resume-Phasenmatrix
 
@@ -335,7 +338,10 @@ Fortschritt ausgegeben; die Rohgrenzen und der Status werden exportiert.
 Eine batteriegepufferte RTC kann spaeter hinter derselben Zeitquellenschnittstelle
 ergaenzt werden. Sie ist keine Voraussetzung fuer Release 1.
 
-## Akzeptierte Entscheidungen
+## C2-Legacy: historische akzeptierte Entscheidungen
+
+Die folgenden Entscheidungen gehoeren zum historischen #18-/C2-Modell. Sie
+sind fuer #24-R1 nicht normativ; dort gilt die oben stehende exakte R1-Matrix.
 
 - [x] kein Tuerkontakt in Release 1
 - [x] kein stiller Wechsel vom Produkt- zum Luftfuehler

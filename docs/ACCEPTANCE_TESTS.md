@@ -52,8 +52,8 @@ Mindestens:
   fail-closed `SAFE_BOOT`
 - Wiederherstellung eines persistierten `COMPLETED`
 - virtuelle monotone und absolute Zeit
-- Ausfallzeit als Unter-/Obergrenze
-- kein automatischer Phasenabschluss bei ueberlappendem Unsicherheitsintervall
+- `C2-Legacy/#18`: Ausfallzeit als Unter-/Obergrenze und kein automatischer
+  Phasenabschluss bei ueberlappendem Unsicherheitsintervall; kein #24-R1-Gate
 - Zielqualifikation und Gnadenzeit
 - PI-Reglerkern und Luftbegrenzung
 - Impulsakkumulator
@@ -65,22 +65,33 @@ Mindestens:
   laufzeitseitiger Auswahlzustand ausserhalb des Wireformats, fail-closed
   nach Restore; strukturell ungueltige externe Kompatibilitaetsevidenz
   blockiert nur die Rueckkehr, nicht unabhaengige Sicherheitsreaktionen
-- Fehlerklassifikation, Quittierung und Fehlerreset
+- begrenzte FaultCode-/Disposition-Projektion, Mehrfachfehler, Quittierung ohne
+  Safetywirkung und code-spezifische positive Clear-Pfade
 - Persistenzschema, atomare Revisionen und Rueckfall
 - Transaktionsabsicht vor aktorwirksamer Zustandsaenderung
 - #17-Transaktionsstatus und Bootauswertung ohne neue Safety-Persistenz
+- reale Config-Producerprojektion ohne zweite Configuration-FSM; normale
+  abgelehnte Mutationen bei gueltigem Operational-Runtime bleiben ohne
+  `SAFE_BOOT`
+- Unknown-Producer-Bits bleiben bei fehlender Quelle aktiv und loeschen sich nur
+  durch einen spaeteren bekannten Wert derselben Quelle
 - kritischer Schreibfehler sperrt neue Aktoranforderungen vor weiteren
-  Persistenzversuchen und setzt den RAM-seitigen Latch
+  Persistenzversuchen; #17-Status und RAM/FSM bleiben ohne neuen persistenten
+  Safety-Latch unknown-safe
 - ein Fehler vor dem ersten dauerhaften #17-Write bleibt `Unchanged`; ein
   Fehler nach `PreparedHead` bleibt `BlockedIndeterminate`/`Changed`
 - unvollstaendiger Transaktionsmarker fuehrt beim Boot zu `SAFE_BOOT`
 - Resume-Angebot bleibt `Unresolved`; Resume und Fresh Start werden erst nach
   dem bestehenden Gesamtstatus `Applied`, FSM-Anwendung und frischer Evidenz
   freigeschaltet
+- echter Fresh-Start-Bridge vom Start-Command ueber den #17-Gesamtstatus bis
+  SafetyCore `Allowed`; Fehler vor `PreparedHead` und unaufgeloestes
+  `CommitOutcomeUnknown` bleiben `Unresolved`
 - normaler `Success` benoetigt keinen zweiten Readback; Readback erfolgt nur
   zur Aufloesung von `CommitOutcomeUnknown` durch `writeExact()`
 - Aufbewahrung und Bereinigung
-- PIN-unabhaengiger Vollreset-Ablauf als Zustands- und Berechtigungslogik
+- physische Vollreset-/Service-PIN-Tests gehoeren zu spaeteren E4/E5-/Service-
+  Gates und sind kein #24-R1-Safety-Core-Gate
 - Device-Shell mit Header, exakt vier festen Slots, Home-/Zurueck-Hierarchie
   und sichtbaren leeren Slots
 - gemeinsame rendererunabhaengige View-Modelle, Commands, strukturierte
@@ -244,11 +255,18 @@ Vor realem Aktorbetrieb:
 - Aktorfreigabelogik getestet
 - Mindestzeiten, Totzeit und Watchdog getestet
 - Persistenz, Transaktionsmarker und Rueckfall getestet
-- kritischer Schreibfehler sperrt Aktoren und setzt den RAM-Latch
-- minimaler persistenter Latch und dessen Fehlerpfad getestet
-- Latch-Reset-Gate nach Speicherpruefung getestet
-- Recoveryfreigabe verlangt verifizierte neue Revision
-- Ausfallintervall und Zeitunsicherheit getestet
+- kritischer Schreibfehler sperrt Aktoren; #17-Status und RAM/FSM bleiben bis
+  `Applied` unknown-safe, ohne neuen persistenten Safety-Latch
+- der bestehende #23-Current-Boot-Watchdog-Latch wird nur ueber den
+  vorhandenen expliziten Resetpfad mit frischer Evidenz geloescht
+- Recoveryangebot, Resume und Fresh Start bleiben vor `Applied`/FSM/frischer
+  Evidenz `Unresolved`; ein Fresh Start wird ueber den echten Application-Bridge
+  bis SafetyCore nachgewiesen
+- normale Config-Ablehnungen mit gueltigem Operational-Runtime erzeugen keinen
+  Safety-Fault; echte Producer-/Integrity-/Indeterminate-Signale bleiben
+  fail-closed
+- `C2-Legacy/#18`: Ausfallintervall, alte Zeitunsicherheit und gewichtete
+  Charge-Recovery sind kein #24-R1-Gate
 - kein Aktortest aus `SAFE_BOOT` erreichbar
 - alle sicherheitsrelevanten automatischen Tests bestanden
 
@@ -343,7 +361,8 @@ Vor Release 1:
 - fehlende thermische Peltierreaktion
 - Sicherheits-Eingriffsgrenze und harte Notgrenze
 - Abbruch eines Servicepulses
-- Peltier-Test ohne Temperatursicherung muss blockiert werden
+- E5/#35/Future: Peltier-Test ohne bestaetigte Temperatursicherung muss
+  blockiert werden
 - Aktortest aus `SAFE_BOOT` muss blockiert werden
 
 ### Versorgung, Zeit und Boot

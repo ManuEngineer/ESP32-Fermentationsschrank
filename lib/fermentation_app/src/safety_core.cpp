@@ -5,38 +5,6 @@
 namespace fermentation {
 namespace {
 
-bool isConfigurationUnavailable(ConfigurationRecoveryStatus status) {
-    switch (status) {
-        case ConfigurationRecoveryStatus::ConfigurationUnavailable:
-        case ConfigurationRecoveryStatus::PersistenceReadFailure:
-        case ConfigurationRecoveryStatus::PersistenceCapacityFailure:
-        case ConfigurationRecoveryStatus::PersistenceWriteFailure:
-        case ConfigurationRecoveryStatus::RuntimePreparationFailure:
-        case ConfigurationRecoveryStatus::ConfigurationModelBudgetBusy:
-        case ConfigurationRecoveryStatus::StateTransitionRejected:
-        case ConfigurationRecoveryStatus::CounterOverflow:
-            return true;
-        default:
-            return false;
-    }
-}
-
-bool isConfigurationIntegrityFailure(ConfigurationRecoveryStatus status) {
-    return status ==
-               ConfigurationRecoveryStatus::ConfigurationIntegrityFailure ||
-           status ==
-               ConfigurationRecoveryStatus::UnsupportedNewerConfigurationSchema;
-}
-
-bool isConfigurationCommitIndeterminate(ConfigurationRecoveryStatus status) {
-    return status ==
-               ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate ||
-           status ==
-               ConfigurationRecoveryStatus::BootstrapCommitIndeterminate ||
-           status == ConfigurationRecoveryStatus::
-                         ConfigurationRecordOutcomeIndeterminate;
-}
-
 bool isPersistenceSafeBoot(RunPersistenceLoadStatus status) {
     switch (status) {
         case RunPersistenceLoadStatus::NoPersistedRun:
@@ -55,6 +23,21 @@ bool isPersistenceSafeBoot(RunPersistenceLoadStatus status) {
             return true;
     }
     return true;
+}
+
+bool recoveryStatusRequiresSafetyProducer(ConfigurationRecoveryStatus status) {
+    switch (status) {
+        case ConfigurationRecoveryStatus::ConfigurationUnavailable:
+        case ConfigurationRecoveryStatus::ConfigurationIntegrityFailure:
+        case ConfigurationRecoveryStatus::UnsupportedNewerConfigurationSchema:
+        case ConfigurationRecoveryStatus::BootstrapCommitIndeterminate:
+        case ConfigurationRecoveryStatus::
+            ConfigurationRecordOutcomeIndeterminate:
+        case ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate:
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool isTrustedCoordinatorState(RunPersistenceCoordinatorState state) {
@@ -142,6 +125,7 @@ void SafetyCore::beginBoot(device_platform::ResetCause resetCause) noexcept {
     resetCause_ = resetCause;
     activeFaultMask_ = 0U;
     acknowledgedFaultMask_ = 0U;
+    unknownProducerSources_ = 0U;
     lastEvaluation_ = SafetyEvaluation{};
     lastEvaluation_.resetCause = resetCause;
 }
@@ -162,21 +146,53 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
             static_cast<FaultMask>(observedFaults | SafetyCore::faultBit(code));
     };
 
-    const bool unknownConfigurationProducer =
-        (input.configurationServiceMode.has_value() &&
-         !isKnown(*input.configurationServiceMode)) ||
-        (input.configurationCommitStatus.has_value() &&
-         !isKnown(*input.configurationCommitStatus)) ||
-        (input.configurationRecoveryStatus.has_value() &&
-         !isKnown(*input.configurationRecoveryStatus)) ||
-        (input.configurationProducer.has_value() &&
-         !isKnown(*input.configurationProducer));
-    const bool unknownPersistenceProducer =
-        (input.persistenceLoadStatus.has_value() &&
-         !isKnown(*input.persistenceLoadStatus)) ||
-        !isKnown(input.persistenceCoordinatorState);
-    if (unknownConfigurationProducer || unknownPersistenceProducer)
+    const auto observeProducerKnownness = [this, &observe](
+                                              UnknownProducerSource source,
+                                              bool provided, bool known) {
+        if (!provided) return;
+        const auto bit = unknownProducerSourceBit(source);
+        if (known) {
+            unknownProducerSources_ = static_cast<UnknownProducerSourceMask>(
+                unknownProducerSources_ & ~bit);
+            return;
+        }
+        unknownProducerSources_ = static_cast<UnknownProducerSourceMask>(
+            unknownProducerSources_ | bit);
         observe(FaultCode::SystemProducerUnknown);
+    };
+
+    observeProducerKnownness(UnknownProducerSource::ConfigurationServiceMode,
+                             input.configurationServiceMode.has_value(),
+                             input.configurationServiceMode.has_value() &&
+                                 isKnown(*input.configurationServiceMode));
+    observeProducerKnownness(UnknownProducerSource::ConfigurationCommitStatus,
+                             input.configurationCommitStatus.has_value(),
+                             input.configurationCommitStatus.has_value() &&
+                                 isKnown(*input.configurationCommitStatus));
+    observeProducerKnownness(UnknownProducerSource::ConfigurationRecoveryStatus,
+                             input.configurationRecoveryStatus.has_value(),
+                             input.configurationRecoveryStatus.has_value() &&
+                                 isKnown(*input.configurationRecoveryStatus));
+    observeProducerKnownness(UnknownProducerSource::ConfigurationSafetyProducer,
+                             input.configurationProducer.has_value(),
+                             input.configurationProducer.has_value() &&
+                                 isKnown(*input.configurationProducer));
+    observeProducerKnownness(UnknownProducerSource::PersistenceLoadStatus,
+                             input.persistenceLoadStatus.has_value(),
+                             input.persistenceLoadStatus.has_value() &&
+                                 isKnown(*input.persistenceLoadStatus));
+    observeProducerKnownness(UnknownProducerSource::PersistenceCoordinatorState,
+                             true, isKnown(input.persistenceCoordinatorState));
+
+    // A producer-backed failure status without its canonical producer is a
+    // contradictory input.  It is not reclassified here; it stays fail-closed
+    // as an unresolved producer contract.
+    if (input.configurationRecoveryStatus.has_value() &&
+        recoveryStatusRequiresSafetyProducer(
+            *input.configurationRecoveryStatus) &&
+        !input.configurationProducer.has_value()) {
+        observe(FaultCode::SystemProducerUnknown);
+    }
 
     if (input.configurationProducer.has_value()) {
         switch (*input.configurationProducer) {
@@ -188,15 +204,11 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
                 break;
         }
     }
-    if (input.configurationRecoveryStatus.has_value()) {
-        const auto status = *input.configurationRecoveryStatus;
-        if (isConfigurationCommitIndeterminate(status))
-            observe(FaultCode::ConfigurationCommitIndeterminate);
-        if (isConfigurationIntegrityFailure(status))
-            observe(FaultCode::ConfigurationIntegrityFailure);
-        if (isConfigurationUnavailable(status))
-            observe(FaultCode::ConfigurationUnavailable);
-    }
+    // ConfigurationRecoveryStatus is diagnostic detail.  The recovery service's
+    // safetyProducer is the only authority for whether a failed attempt
+    // invalidated the old runtime.  In particular, a rejected reset/recovery
+    // may retain a valid Operational runtime and deliberately clear that
+    // producer; the same status value must not create a second Safety FSM here.
     if (input.configurationServiceMode.has_value()) {
         switch (*input.configurationServiceMode) {
             case ConfigurationServiceMode::CommitIndeterminate:
@@ -228,7 +240,6 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
             case ConfigurationCommitStatus::ConfigurationValidationFailure:
             case ConfigurationCommitStatus::PersistenceFailure:
             case ConfigurationCommitStatus::CapacityFailure:
-                observe(FaultCode::ConfigurationUnavailable);
                 break;
         }
     }
@@ -582,6 +593,13 @@ SafetyCore::FaultMask SafetyCore::faultBit(FaultCode code) noexcept {
     return 0U;
 }
 
+SafetyCore::UnknownProducerSourceMask SafetyCore::unknownProducerSourceBit(
+    UnknownProducerSource source) noexcept {
+    const auto index = static_cast<std::uint8_t>(source);
+    if (index >= 8U) return 0U;
+    return static_cast<UnknownProducerSourceMask>(1U << index);
+}
+
 bool SafetyCore::hasFault(FaultMask mask, FaultCode code) noexcept {
     const auto bit = faultBit(code);
     return bit != 0U && (mask & bit) != 0U;
@@ -661,7 +679,8 @@ bool SafetyCore::canClearFault(
         case FaultCode::ActuatorRequestWatchdog:
             return false;
         case FaultCode::SystemProducerUnknown:
-            return input.bootValidationComplete &&
+            return unknownProducerSources_ == 0U &&
+                   input.bootValidationComplete &&
                    hasFreshConfigurationEvidence(input) &&
                    input.persistenceValidated &&
                    input.persistenceLoadStatus.has_value() &&

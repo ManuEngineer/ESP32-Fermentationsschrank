@@ -76,7 +76,7 @@ Konfigurationsgraphs.
 - #21 – Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik
 - #22 – zeitproportionale PI-Regelung und Luftbegrenzung
 - #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik
-- #24 – Fehlerklassen, Verriegelung, `SAFE_BOOT` und Fehlerinjektion
+- #24 – FaultCodes, Disposition, `SAFE_BOOT` und Fehlerinjektion
 
 ```text
 #10/#11 -> #20 -> #21 -> #22 -> #23
@@ -85,7 +85,7 @@ Konfigurationsgraphs.
 ```
 
 #56 und #57 produzieren typisierte Konfigurations-, Integritaets- und
-unbestimmte Commitzustaende. #24 bildet diese auf systemweite Verriegelung,
+unbestimmte Commitzustaende. #24 bildet diese auf FaultCodes, Disposition,
 sichere Bootprioritaet, `SAFE_BOOT`, keine normale Aktorfreigabe und
 reproduzierbare Fehlerinjektion ab. Das Gate ist ein Abschlusskriterium, keine
 zyklische Implementierungsabhaengigkeit.
