@@ -25,21 +25,6 @@ bool isPersistenceSafeBoot(RunPersistenceLoadStatus status) {
     return true;
 }
 
-bool recoveryStatusRequiresSafetyProducer(ConfigurationRecoveryStatus status) {
-    switch (status) {
-        case ConfigurationRecoveryStatus::ConfigurationUnavailable:
-        case ConfigurationRecoveryStatus::ConfigurationIntegrityFailure:
-        case ConfigurationRecoveryStatus::UnsupportedNewerConfigurationSchema:
-        case ConfigurationRecoveryStatus::BootstrapCommitIndeterminate:
-        case ConfigurationRecoveryStatus::
-            ConfigurationRecordOutcomeIndeterminate:
-        case ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate:
-            return true;
-        default:
-            return false;
-    }
-}
-
 bool isTrustedCoordinatorState(RunPersistenceCoordinatorState state) {
     return state == RunPersistenceCoordinatorState::ReadyEmpty ||
            state == RunPersistenceCoordinatorState::LoadedActiveRun ||
@@ -183,16 +168,6 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
                                  isKnown(*input.persistenceLoadStatus));
     observeProducerKnownness(UnknownProducerSource::PersistenceCoordinatorState,
                              true, isKnown(input.persistenceCoordinatorState));
-
-    // A producer-backed failure status without its canonical producer is a
-    // contradictory input.  It is not reclassified here; it stays fail-closed
-    // as an unresolved producer contract.
-    if (input.configurationRecoveryStatus.has_value() &&
-        recoveryStatusRequiresSafetyProducer(
-            *input.configurationRecoveryStatus) &&
-        !input.configurationProducer.has_value()) {
-        observe(FaultCode::SystemProducerUnknown);
-    }
 
     if (input.configurationProducer.has_value()) {
         switch (*input.configurationProducer) {

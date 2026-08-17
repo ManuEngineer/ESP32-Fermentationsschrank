@@ -99,9 +99,10 @@ Die Wartezeit bleibt `TBD_COMMISSIONING`.
 Die vollstaendige Auswahl-, Ersatzbetriebs- und Rueckkehrlogik (alle drei
 Strategien, gleichzeitiger Schrankluft-/Kuehlkoerperausfall, manuelle
 Aktionen) ist in Issue #21 und PR #99 umgesetzt. Die tatsaechliche
-Reaktivierung eines geladenen aktiven Laufs durch PR #102 ist in
-`docs/RUN_PERSISTENCE.md`, Abschnitt "Recovery-API und Regelsensorauswahl
-bei Reaktivierung", beschrieben.
+Reaktivierung eines geladenen aktiven Laufs durch PR #102 gehoert zum
+`#18/C2-Legacy`-Vertrag; sie ist kein normaler #24-R1-Pfad. Die historische
+Beschreibung steht in `docs/RUN_PERSISTENCE.md` unter dem entsprechend
+markierten C2-Abschnitt.
 
 ## Maximale Wartezeit nach dem Vorheizen
 
@@ -114,8 +115,9 @@ bei Reaktivierung", beschrieben.
 - Ist die Maximalzeit belastbar abgelaufen, endet das Vorheizen sicher und der
   Lauf wird als nicht gestartet beziehungsweise abgebrochen protokolliert.
 - Ist nach einem Neustart unklar, ob die Maximalzeit abgelaufen ist, darf keine
-  Fermentation automatisch starten. Die Regelung bleibt nur in einer eindeutig
-  sicheren Warteaktion oder wird beendet.
+  Fermentation oder Warteaktion automatisch fortgesetzt werden.
+  `WAITING_FOR_PRODUCT` benoetigt die alte Wartezeit und wird als `NoActiveRun`
+  ueber den bestehenden #17-Pfad beendet.
 
 ## Fehlerquittierung und Fortsetzung
 

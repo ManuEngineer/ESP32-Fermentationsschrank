@@ -130,12 +130,14 @@ Mindestens:
   zeit-/progressabhaengigen R1-Faelle als `NoActiveRun`
 - unvollstaendige Persistenztransaktion -> `SAFE_BOOT`
 - kritischer Persistenzschreibfehler -> sofortige Aktorsperre, sichere
-  Abschaltung und Current-Boot-RAM-Latch
+  Abschaltung und bestehender #17-Coordinator-/unknown-safe-Zustand; kein
+  neuer allgemeiner Current-Boot-RAM-Latch
 - Watchdog: neue Request und Ack loeschen nicht; expliziter Reset nur ueber
   den bestehenden #23-Pfad mit aktueller Evidenz
 - `NoActiveRun`-Abschluss: `PreparedHead -> CheckpointSlot -> CommittedHead`
   und erst nach `Applied` Standby anwenden
-- korrupter Kontrollpunkt mit sicherem Rueckfall
+- korrupter Kontrollpunkt -> bestehender technischer #17-Speichervertrag und
+  `FallbackRecovered -> SAFE_BOOT`; kein Fallback-Resume und keine Promotion
 - `COMPLETED` bleibt nach Neustart `COMPLETED`
 - kein Service- oder Aktortest aus `SAFE_BOOT`
 - Quittierung ohne Fehlerreset
@@ -512,12 +514,16 @@ formellen Gate aber kein `PASS`, wenn die Warnung eine Gate-Anforderung betrifft
 - [x] dokumentierte Abnahme jedes relevanten Hardwarestands
 - [x] Temperatursicherung vor dem ersten realen Peltier-Puls
 - [x] `SAFE_BOOT` bleibt aktorfrei
-- [x] Boot bewertet Verriegelungen und Persistenz vor Recovery
-- [x] Ausfallzeit wird als Intervall getestet
+- [x] Boot bewertet aktuelle Producer-/Persistenzintegritaet vor dem
+      Resume-Angebot; es gibt keine allgemeine persistente Verriegelung
+- [x] `C2-Legacy/#18`: Ausfallzeit wird als Intervall dokumentiert, ist aber
+      kein #24-R1-Safety-Gate
 - [x] `COMPLETED` wird nach Neustart wiederhergestellt
-- [x] kritischer Persistenzfehler sperrt Aktoren und setzt RAM-/Persistenz-Latch
-- [x] fehlgeschlagener minimaler Latch-Schreibversuch bleibt fail-closed
-- [x] Latch-Reset nur nach bestandenem Service- und Speicher-Gate
-- [x] PIN-unabhaengiger lokaler Vollreset wird getestet
+- [x] kritischer Persistenzfehler sperrt Aktoren und haelt den bestehenden
+      #17-Coordinator unknown-safe; kein neuer RAM-/Persistenz-Latch
+- [x] der #23-Current-Boot-Watchdog-Latch bleibt bis zum bestehenden
+      expliziten Resetpfad aktiv und wird mit frischer Evidenz geloescht
+- [x] `E4/E5/Future`: physischer Vollreset, Service-Gate und PIN-Regeln sind
+      kein #24-R1-Safety-Clear
 - [x] mindestens siebentaegiger Dauer- und Belastungstest
 - [x] formeller versionierter Testnachweis

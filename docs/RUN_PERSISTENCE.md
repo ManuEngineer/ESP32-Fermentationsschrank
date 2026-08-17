@@ -89,8 +89,9 @@ Nicht gespeichert werden:
 
 Nach Recovery beginnt der #22-PI-/Qualifikatorzustand leer. Eine alte
 `qualificationValidSinceMillis`-Markierung bleibt ausschliesslich ein
-Prozess-/Diagnosemarker und erzeugt keinen Qualifikationskredit; die bestehende
-Recovery-Rebase aus `QUALIFYING_TARGET` nach `REACHING_TARGET` bleibt bestehen.
+Prozess-/Diagnosemarker und erzeugt keinen Qualifikationskredit. In R1 gibt es
+keine Recovery-Rebase von `QUALIFYING_TARGET` nach `REACHING_TARGET`; ein
+solcher historischer #18-Pfad ist ausschliesslich C2-Legacy.
 
 Der Qualifikatorzustand bleibt fluechtig und wird nicht persistiert. Seine
 Evaluation erzeugt zunaechst einen Kandidaten; bei einer persistierbaren
@@ -140,13 +141,17 @@ Eine neue atomare Revision entsteht mindestens bei:
 - Aenderung des primaeren Regelsensors
 - laufrelevantem Sensorausfall oder validierter Rueckkehr
 - manueller Laufanpassung
-- automatischer Fortschrittskorrektur
+- laufrelevanter, explizit persistierter Fortschrittsanpassung ueber einen
+  bestehenden kanonischen Command
 - neuer Warnung oder neuem Fehler mit Laufwirkung
-- Quittierung oder Reset mit Zustandswirkung
+- Quittierung oder einem expliziten Start-/Resume-Entscheid mit
+  Zustandswirkung
 - Start oder Ende von Kuehlen und Halten
 - Abbruch
 - Abschluss
-- Wiederanlaufentscheidung
+- einer expliziten, ueber den bestehenden #17-Pfad persistierten
+  Start-/Resume-Entscheidung; automatische Recoveryentscheidungen gehoeren
+  zum C2-Legacy
 
 Zusammengehoerige Aenderungen duerfen in einer atomaren Revision gebuendelt
 werden. Ein Schritt, der spaeter Aktoren freigeben kann, wird erst angewendet,

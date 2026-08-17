@@ -403,6 +403,82 @@ void test_factory_reset_advances_epoch_and_preserves_touch_key() {
                              fixture.store.value("touch-calibration")->c_str());
 }
 
+// The reset preparation status is diagnostic detail.  The real recovery
+// service deliberately removes its default status-derived producer when the
+// old Operational runtime remains valid, including for statuses that would
+// otherwise look fail-closed in isolation.
+void test_reset_prepare_failure_keeps_operational_runtime_without_producer() {
+    struct Case {
+        const char* key;
+        device_platform::RecordTypeId recordType;
+        std::uint32_t schemaVersion;
+        fermentation::ConfigurationRecoveryStatus expectedStatus;
+    };
+    const Case cases[]{
+        {"uc0",
+         fermentation::configuration_storage_contract::
+             kUserConfigurationRecordType,
+         1U,
+         fermentation::ConfigurationRecoveryStatus::
+             ConfigurationIntegrityFailure},
+        {"uc0",
+         fermentation::configuration_storage_contract::
+             kUserConfigurationRecordType,
+         2U,
+         fermentation::ConfigurationRecoveryStatus::
+             UnsupportedNewerConfigurationSchema},
+    };
+
+    for (const auto& item : cases) {
+        Fixture fixture;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                                 FactoryInitializationCompleted),
+            static_cast<int>(fixture.recovery->boot().status));
+
+        std::string bytes;
+        TEST_ASSERT_TRUE(
+            device_platform::encodeEnvelope(
+                {item.recordType, item.schemaVersion,
+                 device_platform::StorageEpoch{2U}, 1U, std::nullopt, "x"},
+                bytes, 128U) == device_platform::EnvelopeEncodeStatus::Success);
+        fixture.store.put(item.key, bytes);
+
+        const auto result = fixture.recovery->beginAuthorizedFactoryReset();
+        TEST_ASSERT_EQUAL_INT(static_cast<int>(item.expectedStatus),
+                              static_cast<int>(result.status));
+        TEST_ASSERT_FALSE(result.safetyProducer.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(
+                fermentation::ConfigurationServiceMode::Operational),
+            static_cast<int>(fixture.service.mode()));
+        const auto runtime = fixture.service.acquireRuntime();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(fermentation::RuntimeConfigurationReadStatus::
+                                 RuntimeLeaseGranted),
+            static_cast<int>(runtime.status));
+        TEST_ASSERT_EQUAL_UINT64(1U,
+                                 runtime.lease.get().storageEpoch().value());
+    }
+
+    Fixture busyFixture;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(busyFixture.recovery->boot().status));
+    const auto held = busyFixture.coordinator.tryAcquire();
+    TEST_ASSERT_TRUE(held.lease.valid());
+    const auto busy = busyFixture.recovery->beginAuthorizedFactoryReset();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             ConfigurationMutationBusy),
+        static_cast<int>(busy.status));
+    TEST_ASSERT_FALSE(busy.safetyProducer.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationServiceMode::Operational),
+        static_cast<int>(busyFixture.service.mode()));
+}
+
 void test_root_unknown_new_is_resolved_without_publishing_early() {
     Fixture fixture;
     fixture.store.faultWrite(
@@ -1007,6 +1083,12 @@ void test_each_reset_phase_resumes_after_definite_or_old_outcome() {
 
 void test_schema1_epoch_overflow_blocks_before_graph_or_factory_model() {
     Fixture fixture;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationRecoveryStatus::
+                             FactoryInitializationCompleted),
+        static_cast<int>(fixture.recovery->boot().status));
+    const auto writesBefore = fixture.store.writeCount();
+    const auto modelsBefore = fixture.service.fullModelGenerationCount();
     const auto epoch = std::numeric_limits<std::uint64_t>::max() / 2U;
     fermentation::ConfigurationBootstrapRecord record{
         fermentation::ConfigurationBootstrapSequence{epoch * 2U},
@@ -1019,6 +1101,7 @@ void test_schema1_epoch_overflow_blocks_before_graph_or_factory_model() {
             fermentation::ConfigurationBootstrapCodecStatus::Success),
         static_cast<int>(
             fermentation::encodeConfigurationBootstrapRecord(record, bytes)));
+    fixture.store.erase("cb1");
     fixture.store.put("cb0", bytes);
     const auto reads = fixture.store.readCount();
     const auto result = fixture.recovery->beginAuthorizedFactoryReset();
@@ -1026,9 +1109,14 @@ void test_schema1_epoch_overflow_blocks_before_graph_or_factory_model() {
         static_cast<int>(
             fermentation::ConfigurationRecoveryStatus::CounterOverflow),
         static_cast<int>(result.status));
+    TEST_ASSERT_FALSE(result.safetyProducer.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ConfigurationServiceMode::Operational),
+        static_cast<int>(fixture.service.mode()));
     TEST_ASSERT_EQUAL_UINT32(reads + 2U, fixture.store.readCount());
-    TEST_ASSERT_EQUAL_UINT32(0U, fixture.store.writeCount());
-    TEST_ASSERT_EQUAL_UINT32(0U, fixture.service.fullModelGenerationCount());
+    TEST_ASSERT_EQUAL_UINT32(writesBefore, fixture.store.writeCount());
+    TEST_ASSERT_EQUAL_UINT32(modelsBefore,
+                             fixture.service.fullModelGenerationCount());
 }
 
 void test_additive_unknown_records_and_envelope_versions_have_no_partial_effect() {
@@ -1064,6 +1152,16 @@ void test_additive_unknown_records_and_envelope_versions_have_no_partial_effect(
                                  UnsupportedNewerConfigurationSchema ||
             result.status == fermentation::ConfigurationRecoveryStatus::
                                  ConfigurationUnavailable);
+        if (result.status == fermentation::ConfigurationRecoveryStatus::
+                                 UnsupportedNewerConfigurationSchema ||
+            result.status == fermentation::ConfigurationRecoveryStatus::
+                                 ConfigurationIntegrityFailure) {
+            TEST_ASSERT_TRUE(result.safetyProducer.has_value());
+            TEST_ASSERT_EQUAL_INT(
+                static_cast<int>(fermentation::ConfigurationSafetyProducer::
+                                     ConfigurationIntegrityFailure),
+                static_cast<int>(*result.safetyProducer));
+        }
         TEST_ASSERT_EQUAL_UINT32(0U, fixture.store.writeCount());
         TEST_ASSERT_EQUAL_UINT32(0U,
                                  fixture.service.fullModelGenerationCount());
@@ -1746,6 +1844,8 @@ int main() {
     RUN_TEST(test_existing_bytes_without_bootstrap_are_not_factory_initialized);
     RUN_TEST(test_reboot_loads_initialized_graph);
     RUN_TEST(test_factory_reset_advances_epoch_and_preserves_touch_key);
+    RUN_TEST(
+        test_reset_prepare_failure_keeps_operational_runtime_without_producer);
     RUN_TEST(test_root_unknown_new_is_resolved_without_publishing_early);
     RUN_TEST(test_factory_boot_read_error_is_fail_closed);
     RUN_TEST(test_initialization_resumes_after_each_definite_write_cut);

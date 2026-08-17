@@ -225,9 +225,10 @@ Ziel des leeren Schrankes erfolgreich qualifiziert
   -> WAITING_FOR_PRODUCT
 ```
 
-Nach einer Unterbrechung wird die Vorheizphase nur wieder aufgenommen, wenn der
-gespeicherte Lauf gueltig ist, keine Sperre aktiv ist und die maximale Wartezeit
-noch nicht sicher abgelaufen ist.
+Nach einem Neustart wird ein technisch vertrauenswuerdiger `PREHEATING`-Lauf
+als Resume-Angebot dargestellt. Die Aktorfreigabe bleibt bis zur bewussten
+Bestaetigung und der vollstaendigen frischen Evidenz gesperrt; ein
+automatischer Resume ist in R1 ausgeschlossen.
 
 ## WAITING_FOR_PRODUCT
 
@@ -277,7 +278,9 @@ maximale Wartezeit sicher abgelaufen
 ```
 
 Auch nach einem Neustart darf nicht angenommen werden, dass das Produkt bereits
-eingesetzt wurde.
+eingesetzt wurde. Ein vertrauenswuerdiger `WAITING_FOR_PRODUCT`-Checkpoint
+wird deshalb in R1 als `NoActiveRun` ueber den bestehenden #17-Pfad beendet;
+die historische Wartezeit wird nicht fortgesetzt.
 
 ## REACHING_TARGET
 
@@ -304,6 +307,10 @@ kritischer Sensor- oder Sicherheitsfehler
   -> FAULT
 ```
 
+Nach einem Neustart wird `REACHING_TARGET` in R1 nicht fortgesetzt und nicht
+neu gestartet. Ein technisch vertrauenswuerdiger `Current` wird als
+`NoActiveRun` beendet; die alte Reach-Zeit wird nicht rekonstruiert.
+
 ## QUALIFYING_TARGET
 
 ### Zweck
@@ -323,8 +330,9 @@ kritischer Fehler
   -> FAULT
 ```
 
-Nach einem Neustart beginnt eine zuvor nur teilweise absolvierte
-Zielqualifikation neu.
+Nach einem Neustart wird eine zuvor nur teilweise absolvierte
+`QUALIFYING_TARGET`-Phase in R1 nicht reaktiviert und nicht neu gestartet. Ein
+technisch vertrauenswuerdiger `Current` wird als `NoActiveRun` beendet.
 
 Der Evaluator liefert dafuer ausschliesslich `ProcessSignals`; er entscheidet
 keinen Prozessuebergang selbst. `REACHING_TARGET` darf bei jedem positiven
@@ -368,13 +376,12 @@ Fermentationsziel erreicht, aktives Kuehlen vorgesehen
   -> COOLING
 ```
 
-### Wiederanlauf
+### Neustartverhalten in R1
 
-Nach validierter Recovery darf die Temperaturregelung automatisch neu abgeleitet
-werden. Fehlt eine verlaessliche absolute Zeit, bleibt
-`RECOVERY_TIME_PENDING` aktiv. Der unbekannten Unterbrechung wird kein erfundener
-exakter Fortschritt gutgeschrieben und der Lauf wird nicht allein aufgrund einer
-Schaetzung automatisch abgeschlossen.
+`FERMENTING` ist in R1 nicht resumefaehig. Ein technisch vertrauenswuerdiger
+`Current` wird nach dem Neustart als `NoActiveRun` beendet; Fermentations-
+fortschritt und Restdauer werden nicht fortgesetzt oder neu abgeleitet.
+`RECOVERY_TIME_PENDING` ist dafuer kein Freigabe- oder Fortsetzungspfad.
 
 ## COOLING
 
@@ -394,8 +401,10 @@ kritischer Fehler
   -> FAULT
 ```
 
-Nach einer Unterbrechung wird eine gueltige Kuehlphase nur nach vollstaendiger
-Recoverypruefung automatisch wieder aufgenommen.
+Nach einem Neustart wird ein technisch vertrauenswuerdiger `COOLING`-Lauf als
+Resume-Angebot dargestellt. Die Kuehlung wird nicht automatisch fortgesetzt;
+erst bewusste Bestaetigung, der bestehende Write-before-Apply-Pfad und frische
+Evidenz koennen eine Aktorfreigabe ergeben.
 
 ## COOL_HOLDING
 
@@ -416,8 +425,9 @@ kritischer Fehler
 ```
 
 Bei unsicherer Ausfallzeit wird kein automatisches Ende aus einem einzelnen
-Schaetzwert abgeleitet. Die Regelung darf sicher weiterlaufen, waehrend
-`RECOVERY_TIME_PENDING` beziehungsweise `WARNING_REQUIRES_ACTION` sichtbar ist.
+Schaetzwert abgeleitet. Ein technisch vertrauenswuerdiger `COOL_HOLDING`-
+Checkpoint wird in R1 als `NoActiveRun` beendet; weder Haltezeit noch
+`RECOVERY_TIME_PENDING` setzen die Regelung fort.
 
 ## MANUAL_HOLDING
 
@@ -426,8 +436,10 @@ Schaetzwert abgeleitet. Die Regelung darf sicher weiterlaufen, waehrend
 Eine manuell gewaehlte Zieltemperatur ohne Timer halten.
 
 Der Zustand nutzt dieselbe Regel- und Sicherheitslogik wie ein Programmlauf und
-endet durch bewusste Benutzeraktion oder Fehler. Nach einer Unterbrechung wird er
-nur nach erfolgreicher Recoverypruefung automatisch fortgesetzt.
+endet durch bewusste Benutzeraktion oder Fehler. Nach einem Neustart ist ein
+Resume-Angebot nur zulaessig, wenn keine alte Dauer benoetigt wird. Auch dann
+erfolgt keine automatische Fortsetzung: Bewusste Bestaetigung,
+Write-before-Apply und frische Evidenz bleiben erforderlich.
 
 Ein manueller Haltebetrieb wechselt nie direkt von `STANDBY` nach
 `MANUAL_HOLDING`. Sein validierter, unveraenderlicher manueller Laufplan

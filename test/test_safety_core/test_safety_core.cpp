@@ -635,8 +635,10 @@ void test_unknown_producer_sources_resolve_independently() {
                      ActuatorSafetyGateStatus::Unresolved);
 }
 
-void test_configuration_recovery_status_requires_canonical_producer() {
-    constexpr ConfigurationRecoveryStatus rejectedStatuses[] = {
+void test_configuration_recovery_status_uses_producer_context() {
+    constexpr ConfigurationRecoveryStatus producerlessRejectedStatuses[] = {
+        ConfigurationRecoveryStatus::ConfigurationIntegrityFailure,
+        ConfigurationRecoveryStatus::UnsupportedNewerConfigurationSchema,
         ConfigurationRecoveryStatus::ConfigurationMutationBusy,
         ConfigurationRecoveryStatus::ConfigurationModelBudgetBusy,
         ConfigurationRecoveryStatus::StateTransitionRejected,
@@ -644,7 +646,7 @@ void test_configuration_recovery_status_requires_canonical_producer() {
         ConfigurationRecoveryStatus::PersistenceWriteFailure,
         ConfigurationRecoveryStatus::RuntimePreparationFailure,
     };
-    for (const auto status : rejectedStatuses) {
+    for (const auto status : producerlessRejectedStatuses) {
         SafetyCore safety;
         SafetyCoreInput input;
         validOperationalStandbyEvidence(input);
@@ -681,17 +683,6 @@ void test_configuration_recovery_status_requires_canonical_producer() {
     TEST_ASSERT_TRUE(integrityResult.faultCode ==
                      FaultCode::ConfigurationIntegrityFailure);
     TEST_ASSERT_TRUE(integrityResult.bootDisposition ==
-                     SafetyBootDisposition::SafeBoot);
-
-    SafetyCore contradictory;
-    SafetyCoreInput contradictoryInput;
-    validOperationalStandbyEvidence(contradictoryInput);
-    contradictoryInput.configurationRecoveryStatus =
-        ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
-    const auto contradictoryResult = contradictory.evaluate(contradictoryInput);
-    TEST_ASSERT_TRUE(contradictoryResult.faultCode ==
-                     FaultCode::SystemProducerUnknown);
-    TEST_ASSERT_TRUE(contradictoryResult.bootDisposition ==
                      SafetyBootDisposition::SafeBoot);
 }
 
@@ -916,7 +907,7 @@ void setup_suite() {
     RUN_TEST(test_load_matrix_rejects_fallback_and_untrusted_states);
     RUN_TEST(test_unknown_producer_is_fail_closed);
     RUN_TEST(test_unknown_producer_sources_resolve_independently);
-    RUN_TEST(test_configuration_recovery_status_requires_canonical_producer);
+    RUN_TEST(test_configuration_recovery_status_uses_producer_context);
     RUN_TEST(
         test_normal_configuration_commit_rejections_keep_operational_runtime);
     RUN_TEST(test_configuration_fault_projection_uses_stable_r1_codes);
