@@ -34,6 +34,9 @@ produktives Integrationsgate unverändert offen.
 
 - PR #110 bleibt Draft, bis der Owner die exakte Plan-SHA freigibt; bis dahin
   beginnt keine Implementation und keine vollständige Remote-CI.
+- PR #113 / Issue #111 ist ein Markdown-only Governance-PR, bewusst auf dem
+  Branch von PR #110 gestapelt. Er wird nicht in #110 hineingemergt; nach dem
+  Merge von #110 wird #113 auf `main` umgestellt und separat ownerreviewt.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder
