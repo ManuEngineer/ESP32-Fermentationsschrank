@@ -11,7 +11,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 1 | Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | PR #105 ist nach `main` gemergt; #23 ist auf dem aktuellen Base abgeschlossen. Das separate produktive Integrationsgate #106 bleibt als eigener Live-Status unveraendert sichtbar. | Issue #24 erhält einen eigenen Plan-/Owner-Gate-PR |
-| 2 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion | PR #110 ist Draft; PR #109 ist superseded und nicht-normativ; Plan `docs/tasks/issue-24-safety-core-replan.md`, Implementation NOT_STARTED | Owner-Review der exakten neuen Plan-SHA |
+| 2 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion | PR #110 ist Draft; der Owner Scope Reset vom 2026-08-17 hat den bisherigen Plan (SHA `58d9accb44da528701bdf78e4cc6382f38b6173a`) als superseded/not approved abgelöst; neue vollständige Planrevision `docs/tasks/issue-24-safety-core-replan.md`, Implementation NOT_STARTED | Owner-Review der exakten neuen Plan-SHA |
 | 3 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
