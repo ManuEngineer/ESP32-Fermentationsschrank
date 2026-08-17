@@ -21,7 +21,7 @@ Live-Revalidierung am 2026-08-17:
 ```text
 PR #110: OPEN / Draft
 PR-Branch: agent/issue-24-safety-core-replan-v2
-PR-HEAD vor dieser Revision: 426d02f95f78e92a5caa9d4abb35d505937402c6
+PR-HEAD vor dieser Revision: 2d7b2ff3ec060dd8c6a35a05fd065d02a17aba90
 PR-Base: main @ b8eae5f4da5f2666b5a9bda333d115254c4db5b2
 Issue #24: OPEN
 origin/main: b8eae5f4da5f2666b5a9bda333d115254c4db5b2
@@ -68,7 +68,7 @@ für die Umsetzung zu verwenden:
 | Prozess | `process_state_machine.hpp:15-150`, `process_state_machine.cpp:230-285` | Fault -> Standby erhält einen eigenen terminalen Owner-/Recoverygrund; kein `NoActiveRun + Fault` |
 | #21 Sensorwahl | `sensor_selection_types.hpp`, `sensor_selection.cpp:537-759` | `AirFallbackActive` ist ein vorhandener Runtimezustand; #24 dupliziert keine #21-FSM |
 | #22/#23 Aktor | `actuator_plan_types.hpp:12-35,286-307`, `temperature_control_orchestrator.hpp`, `actuator_planner.cpp:1040-1080` | zentrale SafetyDirective, kein frei gelieferter `Allowed`-Wert, #23 Timing bleibt Eigentümer |
-| Reset/Watchdog-Plattform | ESP-IDF 6.0.2 `esp_system.h`, `esp_task_wdt.h`, `esp_private/esp_int_wdt.h` | `device_platform` liefert `IResetCauseProvider`/`IResetController`; ESP-IDF mappt native Ursachen und nutzt TWDT/IWDT, `fermentation_app` bleibt ESP-IDF-frei |
+| Reset/Watchdog-Plattform | ESP-IDF 6.0.2 öffentliche `esp_system.h`-/`esp_task_wdt.h`-Verträge und `CONFIG_ESP_INT_WDT`, `CONFIG_ESP_INT_WDT_TIMEOUT_MS`, `CONFIG_ESP_TASK_WDT_*`, `CONFIG_ESP_SYSTEM_PANIC` | `device_platform` liefert `IResetCauseProvider`/`IResetController`; ESP-IDF mappt native Ursachen und nutzt TWDT/IWDT, `fermentation_app` bleibt ESP-IDF-frei; kein `esp_private/esp_int_wdt.h` |
 | #56/#57 Config | `configuration_recovery_service.hpp:17-71`, `configuration_recovery_service.cpp:535-729`, `docs/CONFIGURATION_PERSISTENCE.md:773-808` | #24 konsumiert `ConfigurationRecoveryStatus`/`safetyProducer`; privater `FactoryNoveltyProof` bleibt #57-intern |
 | Akzeptanz | `docs/ACCEPTANCE_TESTS.md` | alle Pflichtinjektionen werden in der Matrix in Abschnitt 18 klassifiziert |
 
@@ -301,12 +301,12 @@ CauseClear, Runwirkung und Producerstatus sind damit vollständig bestimmt.
 | `0x030B` | `ActuatorOutput` | S3 / persistent | nein | `IS; FI; PM; AUS` | nein | SVC / QF: Ausgangszustand erklärt | `RESET_THEN_RECOVER` | injection-only ohne Hardwareproducer |
 | `0x030C` | `ActuatorOutput` | S3 / persistent | nein | `IS; FI; PM; AUS` | nein | SVC / QF: Strom-/Ausgangsevidenz, falls vorhanden | `RESET_THEN_RECOVER` | injection-only/Commissioning |
 | `0x030D` | `ActuatorPlanner` | S3 / persistent | nein | `IS; FI; PM; AUS` | nein | SVC / Q23: Watchdogepisode beendet, Ausgang geprüft | `RESET_THEN_RECOVER` | #23 request-watchdog real; kein Task-Restart |
-| `0x030E` | `SensorTask` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / QE: Task/Driver requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer + injection |
-| `0x030F` | `SafetyTask` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / QS: Safety-/Fehleraufgabe requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer + injection |
-| `0x0310` | `ActuatorTask` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / Q23: Aktoraufgabe requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer + injection |
-| `0x0311` | `MainTask` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / QS: Main-/Task-Zustand requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer + injection |
-| `0x0312` | `ControlTask` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / QS: Regelaufgabe requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer + injection |
-| `0x0313` | `PersistencePath` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / QS: kritischer Persistenzpfad requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer + injection |
+| `0x030E` | `SensorTask` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / QE: Task/Driver requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer, supervised only + injection |
+| `0x030F` | `SafetyTask` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / QS: Safety-/Fehleraufgabe requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer, supervised only + injection |
+| `0x0310` | `ActuatorTask` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / Q23: Aktoraufgabe requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer, supervised only + injection |
+| `0x0311` | `MainTask` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / QS: Main-/Task-Zustand requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer, supervised only + injection |
+| `0x0312` | `ControlTask` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / QS: Regelaufgabe requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer, supervised only + injection |
+| `0x0313` | `PersistencePath` | S3 / persistent | nein | `IS; FI; PM; AUS` | `SafetyTaskRecovery` | SVC / QS: kritischer Persistenzpfad requalifiziert | `RESET_THEN_RECOVER` | #24 SafetyWatchdogProducer, supervised only + injection |
 | `0x0401` | `RunPersistence` | Y4 / persistent | nein | `IS; FI; PM; AUS` | nein | SVC / QR: Tombstone durable | `TERM(active); NONE(no active)` | #17 real, injection |
 | `0x0402` | `RunPersistence` | Y4 / persistent | nein | `IS; FI; PM; AUS` | nein | SVC / QR: Tombstone durable | `TERM(active); NONE(no active)` | #17 real, injection |
 | `0x0403` | `RunPersistence` | Y4 / persistent | nein | `IS; FI; PM; AUS` | nein | SVC / QR: Tombstone durable | `TERM(active); NONE(no active)` | #17 real, injection |
@@ -471,11 +471,21 @@ alle folgenden Regeln gelten:
 - bei `kind=SafetyTaskRecovery` muss `source` exakt auf den aktuell aktiven,
   restartfähigen Task-/Liveness-S3-Record derselben `safetyHistoryEpoch`
   zeigen; eine physische Sensor-/Fan-/Aktorursache ist dafür unzulässig;
-- bei `kind=S3RunRecovery` darf `source` historisch sein, muss aber in der
-  aktuellen Lineage auf die unmittelbar zuvor aktive S3-Instance zeigen, die
-  im selben atomaren Service-Target-Reset/Prepared-Kandidaten entfernt wurde;
-  ein noch aktiver Source-Record, eine fremde Lineage oder eine nicht aus dem
-  geladenen Preimage stammende Source ist Decode-/Candidate-ungültig;
+- bei `kind=S3RunRecovery` muss `source` ungleich 0 und kleiner als
+  `nextPersistentInstanceId` sein; der Source-Record darf nicht mehr als
+  aktiver Record vorhanden sein, es dürfen keine aktiven S3-/Y4-Records und
+  kein `runRecoveryForbidden` bestehen, und Attempted/Outcome müssen gemäß
+  dem RestartIntent-Vertrag gültig sein;
+- der Boot-Decoder darf keine nicht mehr persistierte Preimage-Historie
+  behaupten: Die zusätzliche Decode-/Handoff-Qualifikation verlangt
+  `#17 Current/Fault`, einen physisch verifizierten passenden Fallback und
+  eine passende Boot-/ResetCause-Qualifikation. Die Provenienz selbst wird
+  ausschließlich zum Candidate-Zeitpunkt gebildet: Das geladene Preimage muss
+  die Source-Instance aktiv enthalten, CauseClear und der exakte
+  `ServiceResetProof` müssen für genau diese Instance gelten, genau diese
+  Instance wird entfernt, und derselbe Kandidat setzt
+  `Prepared(kind=S3RunRecovery, sourceInstanceId=source)`. Erst dessen
+  bestätigter Commit ist die Provenienz-Evidenz;
 - `runRecoveryForbidden=true` zusammen mit Prepared `S3RunRecovery` ist
   ungültig; `SafetyTaskRecovery` darf dadurch niemals einen Recovery-Handoff
   erhalten;
@@ -490,11 +500,13 @@ Interpretation repariert.
 
 Die `S3RunRecovery`-Candidate-Erzeugung beweist diese Herkunft mechanisch: Der
 Service-Target-Reset nimmt die aktuelle SafetyState-Revision als Preimage,
-prüft darin genau die Source-Instance, entfernt genau diesen Record und setzt
-im selben Kandidaten `Prepared(kind=S3RunRecovery, sourceInstanceId=source)`.
-Kein Caller und kein Decoder darf einen historischen Source nachträglich
+prüft darin genau die aktive Source-Instance, CauseClear und den exakten
+ServiceResetProof, entfernt genau diese Instance und setzt im selben
+Kandidaten `Prepared(kind=S3RunRecovery, sourceInstanceId=source)`. Kein
+Caller und kein Decoder darf einen historischen Source nachträglich
 einsetzen. Der atomare Commit dieses Kandidaten ist die persistente Evidenz der
-gemeinsamen Entfernung und Intent-Erzeugung.
+gemeinsamen Entfernung und Intent-Erzeugung; der spätere Boot-Decoder prüft nur
+die verbleibenden Payload- und Handoff-Bedingungen.
 
 ### 4.5 Zwei-Slot-Commit
 
@@ -611,26 +623,44 @@ nicht. #24 liest vor jeder Freigabe selbst `sf0`, `sf1`, `sem0`, `sem1` und die
 #17-RunPersistence-Evidenz. #57 wird über das öffentliche
 `ConfigurationRecoveryStatus`-Ergebnis konsumiert.
 
-Eine leere Safety-Erstinitialisierung ist ausschließlich gültig, wenn:
+Eine leere Safety-Erstinitialisierung ist ausschließlich gültig, wenn alle
+folgenden Preconditions gleichzeitig bestätigt sind:
 
-1. alle vier Safety-/Marker-Keys vorher `NotFound` waren;
-2. #17 keine RunPersistence-Historie besitzt (`NoPersistedRun`/keine Slots);
-3. derselbe Boot `FactoryInitializationCompleted` von #57 bestätigt;
-4. keine widersprüchliche Store-Evidenz vorliegt.
+```text
+sf0 = NotFound
+sf1 = NotFound
+sem0 = NotFound
+sem1 = NotFound
+#17 = keine RunPersistence-Historie
+#57 = FactoryInitializationCompleted im selben Boot
+keine widersprüchliche Store-Evidenz
+```
 
-Dann wird ein konservativer SafetyState mit `safetyHistoryEpoch=1`,
-`nextPersistentInstanceId=1`, `persistentFaultRevision=0`,
-`bootSequence=1`, `recordRevision=1`, keinem Fault, keinem Intent und
-`safeBootRequired=false` gebildet. Zusätzlich werden zwei semantisch
-identische `Cleared`-Marker mit `markerRevision=1` und
-`reason=FactoryInitialization` (eigener stabiler Wirewert) auf `sem0` und
-`sem1` geschrieben und jeweils exakt readback-verifiziert. Erst wenn
-SafetyState **und beide Marker** bestätigt sind, gilt die Erstinitialisierung
-als redundant gesund. Ein Crash nach jedem einzelnen Write führt konservativ
-zu SAFE_BOOT oder zur geschützten Reinitialisierung; ein einzelner Marker wird
-niemals still als vollständige Markerhistorie interpretiert. `bootSequence=1`
-wird bei dieser Erstinitialisierung gesetzt und in demselben Boot nicht nochmals
-auf 2 erhöht.
+Der Bootstrap-Vertrag ist danach exakt und redundant:
+
+```text
+1. SafetyState revision 1 bilden:
+   safetyHistoryEpoch=1, nextPersistentInstanceId=1,
+   persistentFaultRevision=0, bootSequence=1, kein Fault, kein Intent,
+   safeBootRequired=false.
+2. sf0 mit diesem SafetyState schreiben und exact readback-verifizieren.
+3. sf1 mit semantisch und byteidentischem SafetyState revision 1 schreiben
+   und exact readback-verifizieren.
+4. sem0 als Cleared revision 1 mit reason=FactoryInitialization schreiben
+   und exact readback-verifizieren.
+5. sem1 als byteidentischen Cleared revision 1 schreiben und exact
+   readback-verifizieren.
+6. Erst jetzt gilt Factory-Safety-Bootstrap = redundantly healthy.
+```
+
+Bei zwei identischen gültigen SafetyState-Revisionen gilt weiterhin die
+deterministische Tie-Regel: `sf0` ist der Winner. Ein Crash oder eine andere
+Unterbrechung nach 0, 1, 2, 3 oder 4 bestätigten Bootstrap-Writes wird jeweils
+als eigener Cut-Point getestet. Jeder Zustand mit weniger als allen vier
+bestätigten Writes bleibt fail-closed in `SAFE_BOOT` oder im geschützten
+Reinitialisierungspfad; ein partieller Bootstrap darf niemals als gesundes
+Leersystem gelten. `bootSequence=1` wird bei dieser Erstinitialisierung gesetzt
+und in demselben Boot nicht nochmals auf 2 erhöht.
 
 Sind Safety-/Marker-Keys verloren, aber nicht nachweislich fabrikneu, bleibt
 das Gerät in `SAFE_BOOT`. Ein geschützter, nicht automatischer Recoverypfad ist
@@ -890,13 +920,40 @@ Task-/Treiberüberwachung einen aktuellen Heartbeat und eine begründete Stall-
 Evidenz liefern; die sechs Überwachungsbereiche sind Sensor, Regelung,
 Safety/Fehler, Aktor, kritische Persistenz und Main/Task.
 
+Der bestehende ESP-IDF-Produktpfad besitzt eine zentrale `app_main`-/Supervisor-
+Schleife und bewusst keine sechs künstlichen FreeRTOS-Tasks. Deshalb sind zwei
+Stallfälle strikt getrennt:
+
+```text
+A) Supervisor läuft noch:
+   ein logischer Subpfad-/Heartbeat ist stale
+   -> passende S3_<DOMAIN>_STALL-Identity
+   -> ImmediateStop
+   -> durable SafetyTaskRecovery (Prepared/Attempted)
+   -> genau ein kontrollierter Restart
+
+B) Supervisor/app_main selbst ist vollständig blockiert:
+   kein eigener S3-/Intent-Write ist mehr möglich
+   -> ESP-IDF TWDT-/IWDT-Backstop
+   -> ungeplanter Watchdog-/Panic-Reset
+   -> nächster Boot: WatchdogOrPanic, abnormalRestartCount++
+   -> keine erfundene vorherige SafetyTaskRecovery-Persistenz
+```
+
+`S3_SAFETY_TASK_STALL` und die übrigen logischen Task-Domain-Identities sind
+nur im Fall A vorpersistierbare `SafetyTaskRecovery`-Fälle, wenn ein noch
+lauffähiger unabhängiger Supervisor die Evidenz erzeugt. Fall B darf nicht
+nachträglich als `S3_SAFETY_TASK_STALL` oder als vorbereiteter
+`SafetyTaskRecovery`-Intent rekonstruiert werden. Dafür wird keine neue
+Watchdog-Task eingeführt.
+
 `SafetyTaskRecovery` beantwortet ausschließlich, ob die intern blockierte
 Software-/Taskfunktion technisch durch genau einen Neustart requalifiziert
 werden kann. Es beantwortet nicht, ob der alte Fermentationslauf fortgesetzt
 werden darf. Die verbindliche Sequenz für einen Task-/Treiberstall lautet:
 
 ```text
-Task-Stall-S3 während aktivem Run
+überwachter Task-/Subpfad-Stall-S3 während aktivem Run (Fall A)
  -> ImmediateStop
  -> S3-Latch
  -> #17 CriticalFault/Fault-current + vorhandener Pre-Fault-Fallback
@@ -908,8 +965,14 @@ Task-Stall-S3 während aktivem Run
  -> bei aktivem Run: atomar S3RecoveryDeparture/S3RunRecovery vorbereiten
  -> Attempted=1 durable -> genau ein zweiter kontrollierter Restart
  -> Bootqualifikation, RAM-only FallbackRecoveryPending -> #18
- -> #18 provable: Resume; sonst kanonischer NoActiveRun/STANDBY-Tombstone
+  -> #18 provable: Resume; sonst kanonischer NoActiveRun/STANDBY-Tombstone
 ```
+
+Ein vollständiger Supervisor-/`app_main`-Stall (Fall B) nimmt diese Sequenz
+nicht. Es gibt keinen vorherigen SafetyState-/Intent-Write, keinen
+`SafetyTaskRecovery`-Handoff und keinen erfundenen FaultRecord; der nächste
+Boot behandelt ausschließlich `WatchdogOrPanic` als abnormal und bleibt bis
+zur normalen Boot-/SAFE_BOOT-Qualifikation fail-closed.
 
 Der erste Neustart darf niemals einen #18-Handoff auslösen. Der
 `SafetyTaskRecovery`-Intent und `restartAttempted=true` bleiben persistent,
@@ -1094,11 +1157,20 @@ autorisierter Service-Target-Reset gleichzeitig in **einem** SafetyState-
 Kandidaten ausführt:
 
 ```text
-CauseClear + ServiceResetProof
-S3-Target-Latch entfernen
-Prepared(kind=S3RunRecovery, sourceInstanceId, Attempted=0) setzen
+geladenes SafetyState-Preimage enthält die aktive sourceInstance
+CauseClear + exakter ServiceResetProof für genau diese sourceInstance
+genau diese S3-Instance aus dem Kandidaten entfernen
+im selben Kandidaten Prepared(kind=S3RunRecovery, sourceInstanceId, Attempted=0)
+setzen
 safeBootRequired=false setzen
 ```
+
+Das ist die Candidate-time-Provenienzbildung. Nach dem Commit ist die entfernte
+Source nicht mehr persistiert; der spätere Boot-Decoder darf deshalb nur noch
+`sourceInstanceId != 0 && sourceInstanceId < nextPersistentInstanceId`,
+kein aktives S3/Y4, `runRecoveryForbidden=false`, gültige Attempted-/Outcome-
+Crossfields sowie #17 `Current/Fault`, den physisch passenden Fallback und die
+ResetCause-Qualifikation prüfen.
 
 Zusätzlich müssen vor dem Commit gelten: keine weiteren S3/Y4, kein
 `runRecoveryForbidden`, redundanter SafetyState und Marker healthy,
@@ -1431,9 +1503,12 @@ Eigentümer der Langzeithistorie und der Journalpersistenz. Es gibt keine
 unbounded Queue und keine stille Trunkierung.
 
 Variante B spart Wire-RAM: ein Batch trägt einmal
-`bootSequence:uint32` und `occurredAtMonotonicMillis:uint64`; alle Events einer
-atomaren Mutation teilen diesen Zeitanker. Die **serialisierte** Eventform ist
-manuell Big-Endian und exakt 10 Byte:
+`bootSequence:uint32` und `occurredAtMonotonicMillis:uint64`. Ein
+`SafetyEventBatch` beschreibt exakt **einen** bestätigten atomaren
+SafetyState-, Boot- oder Repair-Lifecycle-Schritt. Alle Events dieses einen
+Schritts teilen den Zeitanker; Events aus späteren Commits, Side-Effects oder
+späteren Bootschritten werden in einem neuen Batch publiziert. Die
+**serialisierte** Eventform ist manuell Big-Endian und exakt 10 Byte:
 
 ```text
 eventKind:uint8, faultCode:uint16, faultSource:uint8, instanceId:uint32,
@@ -1469,6 +1544,23 @@ Handoff und keine Queue. Für diese EventKind ist `lineageState` exakt
 explizite Boolnachweis. #19 bleibt alleiniger Persistenzbesitzer und darf IDs
 vor und nach einer TotalDiscontinuity nicht korrelieren.
 
+Die Crossfields sind für jede Eventfamilie vollständig festgelegt:
+
+| Eventfamilie | `instanceId` | `faultCode` / `faultSource` | `lineageState` | `oldLineageKnown` |
+|---|---|---|---|---|
+| `FaultRaised`, `FaultCleared`, `FaultRelapsed`, `FaultReset` | bei P1/O2 `0`, bei S3/Y4 die konkrete Fault-Instance | für P1/O2/S3/Y4 exakt die Catalog-Identity des Ereignisses; niemals neutral | aktueller persistierter Lineagezustand | `1`, außer während einer `TotalDiscontinuity`-Lineage `0` |
+| `GateChanged`, `TerminalRequiredSet`, `TerminalRequiredChanged` | immer `0` | beide `0` als event-kind-spezifischer Neutralwert | aktueller persistierter Lineagezustand | `1`, außer während einer `TotalDiscontinuity`-Lineage `0` |
+| `IntentPrepared`, `RestartAttempted`, `RestartRejected` | immer `0`; die Intent-Source bleibt im SafetyState, nicht im Event-`instanceId` | beide `0` als event-kind-spezifischer Neutralwert | aktueller persistierter Lineagezustand | `1`, außer während einer `TotalDiscontinuity`-Lineage `0` |
+| `BootClassified`, `SafeBootEntered`, `RedundancyRepair` | immer `0` | beide `0` als event-kind-spezifischer Neutralwert | aktueller persistierter Lineagezustand | `1`, außer während einer `TotalDiscontinuity`-Lineage `0` |
+| `HistoryLossDetected`, `HistoryDiscontinuity`, `SafetyReinitialized` | immer `0` | beide `0` als event-kind-spezifischer Neutralwert | exakt `PartialSuccessor` bei bekannter alter Lineage, sonst `TotalDiscontinuity` | exakt `1` bei `PartialSuccessor`, sonst `0` |
+
+`faultCode=0` und `faultSource=0` sind damit ausschließlich reservierte,
+event-kind-spezifische Neutralwerte für Nicht-Fault-Events; sie bedeuten dort
+nicht `UnknownFaultIdentity` und dürfen nicht als FaultCatalog-Eintrag
+decodiert werden. Goldenbyte- und Decode-Tests decken jede der fünf Familien,
+beide Lineagezustände, `oldLineageKnown=0/1`, P1/O2 mit `instanceId=0`,
+persistente Fault-Identities und die Neutralwerte ab.
+
 Der native C++-Datentyp ist davon getrennt und darf nicht `packed` werden:
 
 ```cpp
@@ -1499,35 +1591,60 @@ serialisiert. Die feste Menge ist `kMaxSafetyEventsPerMutation = 6` und ergibt
 `HistoryDiscontinuity` und `SafetyReinitialized` tragen `instanceId=0`;
 S3-/Y4-Faultereignisse tragen die zugehörige persistente InstanceId.
 
-Die maximale Mutation wird vollständig enumeriert:
+Die Einzelmutationen werden vollständig und ohne Crashgrenzen-Übergreifen
+enumeriert:
 
 ```text
 Raise: FaultRaised, GateChanged, TerminalRequiredSet,
        TerminalRequiredChanged = 4
 CauseClear: FaultCleared, GateChanged = 2
 Relapse: FaultRelapsed, GateChanged = 2
-TargetReset: FaultReset, GateChanged, TerminalRequiredChanged,
+TargetReset ohne Intent: FaultReset, GateChanged,
+                          TerminalRequiredChanged = 3
+TargetReset + S3RunRecovery Prepared in demselben Kandidaten:
+             FaultReset, GateChanged, TerminalRequiredChanged,
              IntentPrepared = 4
-Restart: IntentPrepared, RestartAttempted, RestartRejected, GateChanged = 4
-Boot: BootClassified, SafeBootEntered, RedundancyRepair, FaultRaised = 4
+Restart Prepared: IntentPrepared = 1
+Restart Attempted: RestartAttempted = 1
+Restart Rejected nach expliziter Port-Ablehnung: RestartRejected = 1
+Boot-Klassifikation: BootClassified, SafeBootEntered = 2
+RedundancyRepair: RedundancyRepair = 1
 HistoryLoss: HistoryLossDetected, HistoryDiscontinuity, SafetyReinitialized,
              SafeBootEntered, FaultRaised = 5
-RecoveryDepartureRejected: FaultReset, GateChanged, TerminalRequiredChanged,
-             IntentPrepared, RestartAttempted, RestartRejected = 6
 ```
 
-Die vollständige Enumeration enthält damit den worst-case
-`RecoveryDepartureRejected` mit exakt sechs Events; die compile-time
-Event-Bound-Tabelle prüft `max == kMaxSafetyEventsPerMutation == 6`. Kein Batch
-darf diese Grenze überschreiten. Gleichzeitige neue FaultIdentities werden **nicht** in
-einer Multi-Identity-Atommutation zusammengelegt: Alle Ursachen werden zuerst
-RAM-seitig aggregiert, `ImmediateStop` wirkt aus der Gesamtmenge sofort, danach
-werden neue persistente Identities in stabiler Catalog-/Priority-Reihenfolge
-jeweils als eigene SafetyState-Lifecycle-Mutation committed. Jede Einzelmutation
-hat höchstens den bewiesenen Eventcount 6. Ein Crash zwischen zwei Commits
-bleibt fail-closed; beim nächsten Boot werden noch bestehende Producerursachen
-erneut erhoben und bestätigte Ursachen nicht still ersetzt. `static_assert`
-prüft `maxEvents == 6`, `sizeof(NativeSafetyEvent)==16` und
+Die bisherige `RecoveryDepartureRejected`-Zeile war unzulässig, weil sie
+`Commit A: TargetReset + Prepared`, `Commit B: Attempted=1`, den
+Restart-Side-Effect und `Commit C: Rejected` als eine Mutation zusammenzog.
+Verbindlich gilt stattdessen:
+
+```text
+Commit A: TargetReset + Prepared -> eigener Batch nach bestätigtem Commit
+Commit B: Attempted=1 -> eigener Batch nach bestätigtem Commit
+Side Effect: Restart request -> kein rückwirkend zusammengezogener Batch
+Commit C: Rejected nur bei expliziter Port-Ablehnung -> eigener Batch
+```
+
+Nach jedem bestätigten Commit werden die zugehörigen Events unmittelbar als
+eigener Batch publiziert. Ein späterer Commit darf keinen früheren Batch
+nachträglich ergänzen; ein Crash zwischen den Schritten beendet den früheren
+Batch an seiner bestätigten Commit-Grenze.
+
+Ein Crash nach Prepared vor Attempted und ein Crash nach Attempted vor dem
+Reset-Port dürfen daher keine gemeinsame Eventpublikation erzeugen. Die
+konservative feste Obergrenze bleibt `kMaxSafetyEventsPerMutation = 6`; die
+compile-time-Tabelle prüft `maxEvents <= 6`, nicht eine künstlich behauptete
+Sechs-Event-Mutation. Kein Batch darf die Grenze überschreiten.
+
+Gleichzeitige neue FaultIdentities werden **nicht** in einer Multi-Identity-
+Atommutation zusammengelegt: Alle Ursachen werden zuerst RAM-seitig
+aggregiert, `ImmediateStop` wirkt aus der Gesamtmenge sofort, danach werden
+neue persistente Identities in stabiler Catalog-/Priority-Reihenfolge jeweils
+als eigene SafetyState-Lifecycle-Mutation committed und publiziert. Ein Crash
+zwischen zwei Commits bleibt fail-closed; beim nächsten Boot werden noch
+bestehende Producerursachen erneut erhoben und bestätigte Ursachen nicht still
+ersetzt. `static_assert` prüft `maxEvents <= 6`,
+`sizeof(NativeSafetyEvent)==16` und
 `sizeof(NativeSafetyEventBatch)==112` auf Native und ESP-IDF. Ein Überschreiten
 ist `Y4_INTERNAL_SAFETY`; es werden keine Events still abgeschnitten.
 
@@ -1538,17 +1655,22 @@ ist `Y4_INTERNAL_SAFETY`; es werden keine Events still abgeschnitten.
 ```text
 SafetyState payload: 32 + (33 * 24) = 824 Byte
 SafetyState max Envelope: 33 + 824 + 4 = 861 Byte <= 1024
+FaultCatalog: 41 Identities; persistente Records: 33 (19 S3 + 14 Y4)
 EmergencyMarker payload: 26 Byte
 EmergencyMarker max Envelope: 33 + 26 + 4 = 63 Byte <= 64
 SafetyEventBatch Wire: 13 + (6 * 10) = 73 Byte
 SafetyEventBatch native: 112 Byte
+Factory-new Bootstrap: 4 bestätigte Writes (sf0, sf1, sem0, sem1),
+  jeder Write mit exact readback; Cut-Points 0..4
 ```
 
 Die ImmediateStop-/Gate-/FaultCore-/Directive-Hotpaths sind feste Arrays und
 heapfrei. Der bestehende `IStateStore` ist dagegen ein `std::string`-Port; für
 Safety-Persistenz wird deshalb ausdrücklich **keine** Heapfreiheit behauptet.
-Der Port bleibt unverändert und erhält nur feste `maxBytes`-Grenzen. Der
-verbindliche Peak-Budgetvertrag lautet:
+Der Port bleibt unverändert und erhält nur feste `maxBytes`-Grenzen. SafetyCore
+hat keine PSRAM-Abhängigkeit; die Budgets gelten für den bestehenden bounded
+String-Port und müssen in Native und ESP-IDF gegen den realen Allocator-/Stack-
+Peak gemessen werden. Der verbindliche Peak-Budgetvertrag lautet:
 
 | Anteil | Rechnung | Budget |
 |---|---:|---:|
@@ -1584,6 +1706,7 @@ IStateStore führen fail-closed.
 | Count-3 RestartLoop CauseClear | 1 SafetyState | exakt bestätigt; Record bleibt bis zum Target-Reset |
 | Count-3 Service-Target-Reset | 1 SafetyState | exakt bestätigt; Record entfernt, Count 0, `safeBootRequired` bleibt |
 | Bootsequence/Countermutation | 1 SafetyState | exakt bestätigt; bei Exhaustion kein Writeclaim |
+| Factory-new Bootstrap | exakt 4: `sf0`, `sf1`, `sem0`, `sem1` | jeder Write exact readback; kein gesundes Leersystem an Cut-Point 0/1/2/3 |
 | gleichzeitige neue FaultIdentities | höchstens 33 einzelne SafetyState-Mutationen | stabile Catalog-/Priority-Reihenfolge; Crash zwischen Mutationen bleibt fail-closed |
 | normale Redundanzreparatur | höchstens 1 Write pro defektem Peer | exakt bestätigt, kein Loop |
 | Marker Active/Cleared | 1 bevorzugter Slot, bei Nichtbestätigung höchstens 1 anderer Slot | exakt bestätigt |
@@ -1595,6 +1718,9 @@ Damit wird weder ein unendlicher Flash-Write-Loop noch ein persistenter Ack-
 Wearpfad eingeführt. Jede SafetyState-Mutation erhöht genau eine
 `recordRevision`; Fault-Lifecycle-Mutationen erhöhen zusätzlich genau eine
 `persistentFaultRevision`, sofern nicht Exhaustion vorliegt.
+Der Factory-new-Bootstrap ist ein einmaliger Vier-Write-Pfad; ein Crash nach
+jedem Cut-Point wird nicht durch blindes Wiederholen geheilt, sondern bleibt
+SAFE_BOOT beziehungsweise folgt dem geschützten Reinitialisierungsvertrag.
 
 Die 33er-Obergrenze ist ein Ressourcen-/Wear-Upper-Bound, kein normaler
 Einzelfall: Eine Beobachtung darf jede neue Identity höchstens einmal je
@@ -1666,26 +1792,46 @@ S3-Handoff freigeben. Der native Mock liefert nur einen deterministischen
 ESP-IDF-first für Watchdog:
 
 ```text
-Anwendung:
-  ein realer #24 SafetyWatchdogProducer im bestehenden periodischen
-  Safety-/Application-Pfad erkennt Heartbeat-/Liveness-Ausfälle
+Anwendung / Fall A:
+  der reale #24 SafetyWatchdogProducer im bestehenden periodischen
+  Safety-/Application-Pfad erkennt einen logischen Heartbeat-/Liveness-Stall,
+  solange der Supervisor noch läuft
   -> ImmediateStop -> durable Fault + Attempted -> kontrollierter Restart
+
 ESP-IDF TWDT:
-  vorhandener Task-Watchdog; genau der reale bestehende Task oder ein
-  TWDT-User für den periodischen Pfad, keine sechs künstlichen FreeRTOS-Tasks
+  Produktionspfad = echter Reset-Backstop, nicht nur Logging.
+  CONFIG_ESP_TASK_WDT_EN=y
+  CONFIG_ESP_TASK_WDT_PANIC=y
+  CONFIG_ESP_SYSTEM_PANIC wählt CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT
+  -> TWDT-Timeout -> Panic-Handler -> automatischer Systemreset.
+  Alternativ ist nur eine explizit getestete
+  esp_task_wdt_config_t.trigger_panic=true-Konfiguration zulässig, wenn sie
+  dieselbe Wirkung mit derselben expliziten Panic-Reboot-Policy herstellt.
+
 ESP-IDF IWDT:
-  vorhandener Interrupt-Watchdog als letzter Backstop
-  -> ungeplanter Reset/Panic -> nächster Boot klassifiziert abnormal
+  CONFIG_ESP_INT_WDT=y und explizites CONFIG_ESP_INT_WDT_TIMEOUT_MS;
+  eigener Interrupt-/CPU-Backstop, nicht der SafetyTaskRecovery-Producer.
+  -> Panic oder zweiter Hardware-Watchdog-Reset
+  -> nächster Boot klassifiziert WatchdogOrPanic.
 ```
 
-Der Plan führt keine eigene parallele Timer-, Hardware-Watchdog- oder
-FreeRTOS-Task-Infrastruktur ein. `esp_task_wdt_init`,
+Die TWDT-Panic- und automatische Reboot-Policy ist produktiv verbindlich; es
+gibt keine Abhängigkeit von Kconfig-Defaults. Ein ESP-IDF-Test muss einen
+echten TWDT-Timeout auslösen und nach dem Neustart nachweisen, dass nicht nur
+eine Warnung geloggt wurde, sondern `WatchdogOrPanic` erkannt,
+`abnormalRestartCount` erhöht und keine vorherige `SafetyTaskRecovery`-
+Persistenz erfunden wurde. `esp_task_wdt_init`,
 `esp_task_wdt_add`/`esp_task_wdt_add_user`, `esp_task_wdt_reset`/
 `esp_task_wdt_reset_user` und `esp_task_wdt_reconfigure` werden nur im
-ESP-IDF-Adapter gemäß `CONFIG_ESP_TASK_WDT_*` verwendet; die vorhandene IWDT-
-Konfiguration bleibt Backstop. Die sechs Catalog-Domains sind logische
+ESP-IDF-Adapter über den öffentlichen `esp_task_wdt.h`-Vertrag verwendet.
+IWDT läuft über `CONFIG_ESP_INT_WDT` und `CONFIG_ESP_INT_WDT_TIMEOUT_MS`; eine
+private Espressif-API oder `esp_private/esp_int_wdt.h` ist unzulässig.
+
+Der Plan führt keine eigene parallele Timer-, Hardware-Watchdog- oder
+FreeRTOS-Task-Infrastruktur ein. Die sechs Catalog-Domains sind logische
 Liveness-Checkpoints des einen Producers, keine behaupteten eigenen Tasks.
-Ein physischer Sensorfehler erzeugt daher nie `SafetyTaskRecovery`.
+Ein physischer Sensorfehler und ein vollständiger Supervisor-Stall erzeugen
+daher keinen vorpersistierten `SafetyTaskRecovery`-Intent.
 
 ```text
 fermentation_app:
@@ -1822,8 +1968,8 @@ nur in der Erwartungsspalte.
 | simultaneous H-bridge directions | bestehenden Vertrag wiederverwenden | #23-Injection: S3_HBRIDGE_CONFLICT |
 | invalid/unknown ActuatorPlan | injection-only | #23-Grenze: ImmediateStop, keine physische Behauptung |
 | planner watchdog | bestehenden Vertrag wiederverwenden | #23 real, #24 Mapping: S3/Y4 gemäß Catalog, `forceStop()` |
-| SafetyTaskRecovery bei internem Sensor-/Treiberstall | #24 implementiert | realer #24 SafetyWatchdogProducer plus deterministische Injection, genau ein Restartversuch, Latch bleibt, kein #18-Handoff im ersten Boot |
-| SafetyTaskRecovery bei Safety-/Aktor-/Main-Taskstall | #24 implementiert | realer zentraler Producer mit logischem Checkpoint plus Injection, genau ein Versuch, kein künstlicher FreeRTOS-Task und kein Auto-Loop |
+| SafetyTaskRecovery bei internem Sensor-/Treiberstall | #24 implementiert | realer #24 SafetyWatchdogProducer, supervised-only plus deterministische Injection, genau ein Restartversuch, Latch bleibt, kein #18-Handoff im ersten Boot |
+| SafetyTaskRecovery bei Safety-/Aktor-/Main-Taskstall | #24 implementiert | realer zentraler Producer mit logischem Checkpoint, supervised-only plus Injection, genau ein Versuch, kein künstlicher FreeRTOS-Task und kein Auto-Loop |
 | plausibler physischer Sensorfehler | bestehenden Vertrag wiederverwenden | kein SafetyTaskRecovery-Restart |
 | implausible actuator feedback | injection-only | S3_PELTIER_UNSAFE_OUTPUT, keine erfundene Hardware |
 | fan failure/off during Peltier | injection-only | Functional/Electrical Fan-Identity exakt trennen; kein Tacho behaupten |
@@ -1966,9 +2112,10 @@ Task-Recovery; S3RunRecovery separat; `Attempted=0 + SoftwareRestart` ohne
 Handoff; Brownout/Watchdog/Unknown; Count 3 -> Y4/SAFE_BOOT.
 
 Factory-/Marker-Cutpoints decken die vier `NotFound`-Keys,
-`FactoryInitializationCompleted`, beide Cleared-Marker und den nächsten
-gesunden Boot ab; ein Crash nach jedem einzelnen Initialwrite bleibt
-fail-closed. History-Loss deckt partielle bekannte Lineage, totalen Loss ohne
+`FactoryInitializationCompleted`, beide SafetyState-Slots und beide
+Cleared-Marker ab. Es werden exakt die Cut-Points nach 0, 1, 2, 3 und 4
+bestätigten Bootstrap-Writes getestet; nur Cut-Point 4 ist redundant healthy,
+alle früheren bleiben fail-closed. History-Loss deckt partielle bekannte Lineage, totalen Loss ohne
 bekannte Lineage, zweiten Totalverlust und ungültige alte
 ResetEvaluation/ServiceProof/RestartIntent ab. Safety-Countertests trennen
 abgeleitete eigene Exhaustion, externe Domain-Counter und Goldenbytes an
@@ -1976,9 +2123,13 @@ abgeleitete eigene Exhaustion, externe Domain-Counter und Goldenbytes an
 
 Der #17-Test trennt `FallbackRecovered` ohne S3Intent vom
 `Current/Fault + S3RunRecovery`-Handoff und prüft Required-Status inklusive
-`AlreadyPersisted`-Readback. Ressourcen-/Eventtests prüfen native und
-ESP-IDF-`sizeof`/`alignof`, alle acht transienten Identities, tatsächlichen
-RAM-/Heap-Peak und Markerrevision oberhalb `UINT32_MAX`.
+`AlreadyPersisted`-Readback. S3RunRecovery-Tests trennen Candidate-time-
+Provenienz (aktives Preimage, CauseClear, exakter ServiceResetProof, atomare
+Entfernung plus Intent) von Decode-time (Source nicht aktiv, gültige Lineage-
+und Crossfields, #17 Current/Fault, physisch verifizierter Fallback und
+ResetCause). Ressourcen-/Eventtests prüfen native und ESP-IDF-`sizeof`/`alignof`,
+alle acht transienten Identities, tatsächlichen RAM-/Heap-Peak und
+Markerrevision oberhalb `UINT32_MAX`.
 
 ### 19.6 Verbindliche Cross-Contract-Zusatzmatrix dieser Revision
 
@@ -1999,6 +2150,12 @@ SafetyTaskRecovery:
 
 - jede der sechs logischen Watchdog-Domains verwendet den einen realen
   `SafetyWatchdogProducer` und eine deterministische Injection;
+- Fall A: ein noch laufender Supervisor erkennt einen stale Subpfad und
+  persistiert `S3_<DOMAIN>_STALL` plus `SafetyTaskRecovery` vor dem kontrollierten
+  Restart;
+- Fall B: vollständiger Supervisor-/`app_main`-Stall lässt keinen eigenen Write
+  zu und führt ausschließlich über TWDT/IWDT zu `WatchdogOrPanic`,
+  `abnormalRestartCount++` und ohne erfundene SafetyTaskRecovery-Persistenz;
 - Crash vor Prepared, zwischen Prepared und Attempted, nach Attempted vor dem
   Reset, erfolgreicher SoftwareRestart und zweiter Boot ohne ServiceReset;
 - derselbe Stall bleibt aktiv: kein zweiter automatischer Side Effect;
@@ -2015,7 +2172,11 @@ ESP-IDF-Adapter:
 
 - vollständige `esp_reset_reason()`-Mappingtabelle einschließlich
   SoftwareRestart, Brownout, Panic, TWDT und IWDT;
-- TWDT-User/realer Pfad statt künstlicher Tasks und IWDT als Backstop;
+- TWDT-Timeout beweist echten Panic-/Systemreset statt bloßem Log,
+  `CONFIG_ESP_TASK_WDT_PANIC=y` plus automatische
+  `CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT`-Policy (oder explizit äquivalentes
+  `trigger_panic=true`), echter TWDT-User/realer Pfad statt künstlicher Tasks
+  und IWDT als eigener Backstop;
 - `esp_restart()` als non-returning Grenze; Mock-`Requested` beendet den
   normalen Pfad, unerwartete Rückkehr ist nicht `Rejected`.
 
@@ -2033,10 +2194,14 @@ Events und Identitäten:
 
 - zwei und maximal viele gleichzeitig erkannte Ursachen werden zuerst
   aggregiert, danach einzeln in Catalog-/Priority-Reihenfolge committed;
-- Crash zwischen zwei Einzelcommits, keine stille Trunkierung und erneute
-  Producererhebung beim nächsten Boot;
+- Crash zwischen zwei Einzelcommits, Crash nach Prepared vor Attempted,
+  Crash nach Attempted vor dem Port und explizites Rejected haben jeweils
+  getrennte, konsistente Eventpublikationen; keine stille Trunkierung und
+  erneute Producererhebung beim nächsten Boot;
 - `HistoryDiscontinuity` im fixed-size Batch einschließlich
   `lineageState`/`oldLineageKnown`, P1/O2 mit `instanceId=0`;
+- alle Nicht-Fault-Crossfields mit event-kind-spezifischen Neutralwerten und
+  Goldenbyte-/Decode-Abdeckung je Eventfamilie;
 - 33 persistente Slots, neue `0x040E`-/`0x040F`-Domaincounter und
   `Y4_INTERNAL_SAFETY` als Aggregate-Invariante; kein last-origin-wins.
 
@@ -2084,6 +2249,19 @@ Die abschließende Plan-Konsistenzliste ist verbindlich:
 - SafetyTaskRecovery ist über Reboot at-most-once und technisch von
   S3RunRecovery/#18 getrennt; aktiver Run folgt der vollständigen zweistufigen
   Sequenz;
+- Factory-new ist erst nach den vier bestätigten Bootstrap-Writes
+  `sf0`, `sf1`, `sem0`, `sem1` redundant healthy; Cut-Points 0/1/2/3 bleiben
+  fail-closed und die Tie-Regel lautet `sf0`;
+- S3RunRecovery-Provenienz wird beim Candidate-Time-Commit aus dem aktiven
+  Preimage, CauseClear, exaktem ServiceResetProof und atomarer Source-Entfernung
+  gebildet; Decode-Time behauptet keine verlorene Preimage-Historie und prüft
+  nur Payload-, #17-, Fallback- und ResetCause-Qualifikation;
+- SafetyWatchdogProducer trennt supervised subpath stall mit durablem
+  SafetyTaskRecovery von vollständigem Supervisor-/`app_main`-Stall mit echtem
+  TWDT/IWDT-Reset und ohne erfundene Vorpersistenz;
+- TWDT ist mit expliziter Panic-/automatischer Reboot-Policy ein echter
+  Produktions-Reset-Backstop; IWDT bleibt ein eigener Backstop und kein
+  `esp_private`-Header wird verwendet;
 - ThermalRecovery hat maximal zwei Versuche innerhalb eines Boots und verliert
   die Fähigkeit bei Reset/Crash/Indeterminate;
 - `Y4_INTERNAL_SAFETY` ist eine einzige bewiesene Aggregate-Invariante,
@@ -2097,11 +2275,22 @@ Die abschließende Plan-Konsistenzliste ist verbindlich:
 - HistoryDiscontinuity ist Bestandteil des bounded SafetyEventBatch;
 - simultane Ursachen werden aggregiert und als begrenzte Einzelmutationen in
   stabiler Reihenfolge committed, ohne Trunkierung oder last-origin-wins;
-- RestartIntent-Crossfields prüfen Rejected/Attempted, aktive Task-Source und
-  atomar entfernte historische S3RunRecovery-Source;
+- RestartIntent-Crossfields prüfen Rejected/Attempted und aktive
+  SafetyTaskRecovery-Source; S3RunRecovery-Source-Provenienz wird ausschließlich
+  beim Candidate-Commit bewiesen, nicht beim späteren Decoder;
+- SafetyEventBatch ist exakt an einen bestätigten atomaren Commit-/Boot-/Repair-
+  Schritt gebunden; Prepared, Attempted, Side-Effect und explizites Rejected
+  werden getrennt publiziert, und Nicht-Fault-Crossfields sind je Eventfamilie
+  goldenbyte-/decode-definiert;
 - Catalog 41, gültige FaultSources 28 plus Reserved, persistente Records 33,
   Payload 824 Byte, Event-Wire 73 Byte, Native-Batch 112 Byte und
-  SafetyCore-Peak 11184 Byte sind neu gerechnet und per Assertions zu prüfen;
+  Factory-Bootstrap 4 Writes sowie SafetyCore-Peak 11184 Byte sind neu
+  gerechnet und per Assertions zu prüfen; es besteht keine PSRAM-Abhängigkeit;
+- S3/Y4, Multi-Fault, Factory/HistoryLoss, SafetyState/Marker, Exhaustion,
+  AirFallbackActive, Thermal 0..2, Fanpolicy, SafetyTaskRecovery,
+  S3RunRecovery/#18, RestartLoop, ResetCause, #17-Mapping, Run-Abandon,
+  Auth/Trust, HistoryDiscontinuity, simultane Ursachen, Ressourcen/Wear,
+  ACCEPTANCE_TESTS und ADR-013 sind im vollständigen Rückcheck enthalten;
 - Code, Source, Restartwhitelist, Oracle und Tests verwenden
   `S3_PERSISTENCE_PATH_STALL`/`PersistencePath` einheitlich;
 - `displayPriority`-Richtung und `IResetController`-Returnsemantik sind
@@ -2116,6 +2305,6 @@ python3 scripts/check_secrets.py        REQUIRED
 Tests/Builds/Hardware                   NOT_RUN (Plan-only)
 ```
 
-Nach Commit, Push, Draft-PR, synchronisiertem PR-Body und aktuellem SESSION
+Nach Commit, Push, synchronisiertem Draft-PR-Body und aktuellem SESSION
 HANDOVER ist STOP. Keine Implementierung, kein Ready, kein Merge, kein
-Issue-Schluss und keine Änderung an PR #107/#108.
+Issue-Schluss und keine Änderung an PR #107/#108/#109.
