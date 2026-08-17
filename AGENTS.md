@@ -61,9 +61,17 @@ zusammenhaengender Scope und ein Issue pro Branch und Pull Request.
 Nicht triviale Arbeit folgt `docs/AGENT_WORKFLOW.md`:
 
 1. Branch und Draft-PR erstellen.
-2. Versionierten Plan unter `docs/tasks/` committen und anhalten.
-3. Erst nach Freigabe des exakten Plan-Commits umsetzen.
-4. Bei materieller Abweichung Plan aktualisieren und erneut freigeben lassen.
+2. Die Planung bevorzugt im nativen Planungsmodus des verwendeten Agenten
+   durchfuehren; bei Codex ist Plan Mode der bevorzugte Planungsmodus.
+3. Das Ergebnis als vollstaendigen versionierten Markdown-Plan unter
+   `docs/tasks/` committen und anhalten.
+4. Erst nach Freigabe des exakten Plan-Commits umsetzen.
+5. Bei materieller Abweichung Plan aktualisieren und erneut freigeben lassen.
+
+Ein nativer Planungsmodus ist nur das Arbeitsmittel zur Planerstellung. Er
+ersetzt weder den versionierten Markdown-Plan noch die Ownerfreigabe der exakten
+Plan-SHA. Ist kein nativer Planungsmodus verfuegbar, gilt derselbe Planvertrag
+ohne tool-spezifischen Ersatzprozess.
 
 Der Agent setzt keinen PR selbst auf `Ready for review` oder Draft, mergt nicht,
 aktiviert kein Auto-Merge, verwendet keinen Force-Push, loescht keinen Branch,
