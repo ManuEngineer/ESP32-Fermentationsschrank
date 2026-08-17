@@ -11,6 +11,19 @@ UART dient in Release 1 nur dem Flashen, der technischen Entwicklung und der
 physischen Recovery. Ein benutzeraktivierbarer UART-Diagnosemodus ist
 `FUTURE_RELEASE`.
 
+## Issue #24 Release-1-Diagnosegrenze
+
+Der passive Boot-Selbsttest liest die Resetcause nur als Diagnoseevidenz.
+Release 1 fuehrt in #24 keinen generischen Neustartzaehler, kein
+Resetzeitfenster und keinen neuen persistenten Safety-Latch ein. `SAFE_BOOT`
+kommt aus einem aktuell nicht vertrauenswuerdigen System-, Config- oder
+Persistenzzustand; jeder Boot bleibt bis zur vollstaendigen Revalidierung
+all-off/`Unresolved`.
+
+Service-PIN, persistente Watchdog-/Sensorverriegelung und Charge-Recovery sind
+keine #24-R1-Voraussetzung. Die vorhandene Diagnose darf technische
+Servicegrenzen anzeigen, macht sie aber nicht zur Safety-Wahrheit.
+
 ## Grundsaetze
 
 - Diagnose darf Regelung, Sicherheitsaufgaben und Aktor-Watchdogs nicht blockieren.
@@ -136,8 +149,8 @@ Mindestens sichtbar:
 
 Der Boot-Selbsttest prueft ohne Aktoraktivierung:
 
-1. Resetursache und abnormalen Neustartzaehler
-2. persistierte Verriegelungen und `SAFE_BOOT`
+1. Resetcause als Diagnose und `SAFE_BOOT`
+2. aktuell gelesenen System-/Config-/Persistenzzustand
 3. Firmware-, Schema- und Partitionsdaten
 4. Konfigurationsintegritaet und Rueckfallrevision
 5. Laufkontrollpunkt, Transaktionsmarker und Persistenzgesundheit

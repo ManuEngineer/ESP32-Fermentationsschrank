@@ -10,6 +10,19 @@ Die persistierten Felder, die atomare Buchung und die Anzeigeprojektion sind
 hier und in [`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md) konsistent beschrieben;
 es gibt keine parallele Statusquelle.
 
+## Issue #24 Release-1-Abbruch statt Charge-Recovery
+
+R1 beginnt jeden Neustart mit all-off/`Unresolved` und vollstaendiger frischer
+Validierung. Ein technisch integerer, aber nicht einfach resumefaehiger Run
+wird als `NoActiveRun` ueber den bestehenden #17-Write-before-Apply-Pfad
+beendet. Technisch untrusted Load bleibt `SAFE_BOOT`; kein Tombstone verbirgt
+einen unbestimmten Zustand.
+
+Es gibt in #24 keinen automatischen Resume, kein Fallback-Resume, keine
+Promotion, keine gewichtete Progress-/UTC-Ausfallrechnung und keine neue
+persistente Safety-Sperre. Die bestehenden #18-Recoveryregeln bleiben als
+C2-Legacy dokumentiert, werden aber nicht vom aktiven #24-R1-Pfad aufgerufen.
+
 ## Grundsatz: autonom, aber nicht blind
 
 Ein unterbrochener Lauf soll nicht unnoetig auf Benutzer oder Netzwerk warten.

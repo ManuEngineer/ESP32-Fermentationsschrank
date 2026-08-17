@@ -14,6 +14,19 @@ Konkrete Sekundenwerte bleiben bis zur Inbetriebnahme `TBD_COMMISSIONING`,
 sofern sie nicht als firmwarefeste Mindestgrenze aus Sicherheitsgruenden bereits
 vorher definiert werden muessen.
 
+## Issue #24 Release-1-Grenze
+
+Der bestehende #23-Request-Watchdog ist ein RAM-Latch fuer den aktuellen Boot:
+Trip fuehrt zu `ImmediateStop`; eine neue Request oder Ack loescht ihn nicht.
+Nur `applyExternalWatchdogFaultReset()` mit frischer Safety-/Planner-Evidenz
+darf ihn im selben Boot zuruecksetzen. Ein Reboot benoetigt keinen neuen
+persistenten Watchdog-Key, startet aber erneut all-off/`Unresolved` und ohne
+automatischen Resume.
+
+SafetyCore entscheidet vor Planner und Sink. Zeit-/Deadtime-/Fanregeln dieses
+Dokuments bleiben #23-Verantwortung; #24 fuehrt keine thermischen oder
+Hardwarefaults, Grenzwerte oder `SAFETY_RECOVERY`-Gegenrichtung ein.
+
 ## Gemeinsames zeitproportionales Schaltfenster
 
 Heizen und Kuehlen verwenden im ersten Release ein gemeinsames

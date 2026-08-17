@@ -24,6 +24,20 @@ esp32_release
 Das Umschalten des Buildprofils darf unbestaetigte Hardware nicht automatisch
 freigeben.
 
+## Issue #24 Release-1-Safetygrenze
+
+Der produktive abstrakte Pfad ist `SafetyCore -> ActuatorPlanner -> Sink`.
+`ActuatorSafetyGateStatus::Unresolved` ist der Boot-/Fehler-Default; ein
+Aufrufer darf `Allowed` nicht als eigene Safety-Wahrheit einschleusen. Der
+gebundene SafetyCore ueberschreibt deshalb am Orchestrator die
+caller-supplied Gate-Eingabe.
+
+Issue #24 enthaelt keine GPIO-, BTS7960-, MOSFET-, Luefter- oder
+Thermal-Hardwareimplementierung und umgeht nicht #106. ResetCause wird ueber
+den anwendungsneutralen Device-Platform-Port gelesen; der Adapter ist kein
+Aktoradapter. SafetyCore besitzt keine allgemeine persistente Fehlerhistorie,
+keinen Restartakkumulator und keine Charge-Recovery-Plattform.
+
 ### Umgesetzte Projektgrundlage
 
 `platformio.ini` definiert ausschliesslich `native` fuer den

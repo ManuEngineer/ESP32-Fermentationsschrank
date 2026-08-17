@@ -10,6 +10,28 @@ Fehlerursachen.
 Konkrete Temperatur-, Sensor-, Luefter-, Aktor-, Versorgungs- und
 Softwarefehler werden in Phase 8B und 8C ergaenzt.
 
+## Issue #24: verbindlicher Release-1-KISS-Vertrag
+
+Fuer den Release-1-Safety-Core gilt dieser Abschnitt vorrangig vor den
+historischen allgemeinen Fehlerklassen- und Recoverynotizen dieses Dokuments:
+
+- Der Gate-Default ist `Unresolved`; Boot, Reset und Restore halten den
+  abstrakten Aktorpfad bei Idle/Stop.
+- R1 verwendet nur `Information`, `Blocked/ImmediateStop` und `SAFE_BOOT`.
+  Die historische Vierklassenbeschreibung ist fuer #24 keine neue API und
+  keine zusätzliche Safety-Wahrheit.
+- SafetyCore verwendet die endliche FaultCode-Matrix aus der Umsetzung. Ack
+  ist nur Anzeige/Journaling und loescht weder Ursache noch Gate.
+- Es gibt in #24 keinen generischen persistenten Safety-Latch, keinen
+  Restart-Zaehler, kein Resetzeitfenster, keine Service-PIN-Pflicht und keine
+  automatische `SAFETY_RECOVERY`-Gegenrichtung.
+- Resetcause ist Diagnose. Jeder Boot validiert Configuration, Persistenz und
+  aktuelle Evidenz neu; ein Neustart erzeugt weder Resume noch `Allowed`.
+
+Historische Detailabschnitte zu spaeteren Produzenten, thermischen Grenzen und
+Serviceablaeufen bleiben als Zukunfts-/Nachfolgekontext erhalten, werden aber
+nicht als Release-1-#24-Laufzeitvertrag umgesetzt.
+
 ## Grundsaetze
 
 - Ein Fehler darf niemals durch Komfortfunktionen, Mindestlaufzeiten oder einen

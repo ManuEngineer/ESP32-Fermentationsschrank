@@ -4,6 +4,7 @@
 
 #include "control_context.hpp"
 #include "run_recovery.hpp"
+#include "safety_core.hpp"
 
 namespace fermentation {
 
@@ -302,6 +303,10 @@ TemperatureControlApplicationOrchestrator::tickActuatorPlan(
         result.reason = ActuatorPlanReason::NoCommissioning;
         result.appliedDirection = AbstractControlDirection::Idle;
         return result;
+    }
+
+    if (safetyCore_ != nullptr) {
+        safetyGate = safetyCore_->lastEvaluation().gate;
     }
 
     const EffectiveControlContext context =

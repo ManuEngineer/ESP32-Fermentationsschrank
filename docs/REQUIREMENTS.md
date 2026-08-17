@@ -90,21 +90,26 @@ Anforderungen:
 - BTS7960-Eingaenge benoetigen Hardware-Pulldowns oder eine nachgewiesen sichere
   externe Freigabestufe.
 - Sicherheitsabschaltungen ueberstimmen Mindest-Einschaltzeiten.
-- Die Fehlerklassen sind Warnung, behebbarer Betriebsfehler, verriegelter
-  Sicherheitsfehler und schwerer Systemfehler.
+- #24 verwendet die minimalen Reaktionen `Information`,
+  `Blocked/ImmediateStop` und `SAFE_BOOT` mit stabiler FaultCode-Matrix.
 - `Quittieren` entfernt keine Ursache und keine Aktorsperre.
 - Ein Neustart ist kein Fehlerreset.
-- Sicherheits- und Systemfehler bleiben persistent verriegelt.
-- Wiederholte abnormale Neustarts fuehren zu `SAFE_BOOT`.
-- Eine Sicherheits-Eingriffsgrenze darf bei eindeutig sicherer Lage eine
-  begrenzte Gegenrichtung versuchen; eine harte Notgrenze sperrt beide
-  Richtungen.
+- R1 fuehrt keinen allgemeinen persistenten Safety-Latch, Restart-Zaehler,
+  Resetzeitfenster oder Service-PIN-Vertrag in #24 ein.
+- `SAFE_BOOT` entsteht aus aktuell untrusted System-, Config- oder
+  Persistenzzustand; jede Resetcause startet all-off und revalidiert frisch.
+- Eine automatische thermische `SAFETY_RECOVERY`-Gegenrichtung und neue
+  Thermal-/Hardwarefaults bleiben bis #35/E5 deferiert.
 - Der Peltierpfad besitzt eine 7,5-A-Ueberstromsicherung und eine einmalige
   Temperatursicherung als unabhaengige thermische Abschaltung.
 - R_IS/L_IS werden nur verwendet, wenn das gelieferte BTS7960-Modul praktisch
   brauchbare und sicher angepasste Signale liefert.
 
 ## Persistenz und Wiederanlauf
+
+Fuer #24 wird ein technisch integerer, aber nicht einfach resumefaehiger Run
+als `NoActiveRun` beendet. Technisch untrusted Persistenz bleibt `SAFE_BOOT`;
+es gibt keinen Fallback-Resume, keine Promotion und keine Charge-Rettung.
 
 - Konfigurationen und aktive Laufkontrollpunkte sind atomar und versioniert.
 - Die letzte gueltige Revision bleibt als Rueckfall erhalten.

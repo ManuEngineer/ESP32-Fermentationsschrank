@@ -23,6 +23,12 @@ muss deshalb keine OTA-Slots reservieren.
 - Ein vorhandener Zahlenwert darf nicht mit einer behaupteten Bauteillebensdauer
   verwechselt werden.
 
+Der Release-1-SafetyCore hat eine endliche Compile-Time-FaultCode-Menge und
+feste bzw. enum-indexierte aktive/acknowledged Faultdaten. Er besitzt keine
+unbegrenzt wachsende Fault-Historie und keine dynamischen Faulttexte als
+Safety-Wahrheit; Journaling bleibt beim vorhandenen Event-Journal. Kein Fault-
+Ereignis darf im Safetykern Heapwachstum pro Ereignis verursachen.
+
 ## Ueberwachte Ressourcen
 
 Das erste Release ueberwacht mindestens:

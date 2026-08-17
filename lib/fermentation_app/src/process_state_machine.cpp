@@ -260,8 +260,9 @@ bool validControlTopology(const TransitionDecision& decision) {
             return from == ProcessState::RecoveryEvaluation &&
                    validRecoveryTarget(to);
         case TransitionReason::RecoveryRejected:
-            return from == ProcessState::RecoveryEvaluation &&
-                   to == ProcessState::Fault;
+            return to == ProcessState::Standby &&
+                   (from == ProcessState::RecoveryEvaluation ||
+                    stateUsesRunSnapshot(from));
         case TransitionReason::RecoveryReentryRequired:
             return stateUsesRunSnapshot(from) &&
                    to == ProcessState::RecoveryEvaluation;
@@ -662,9 +663,8 @@ TransitionDecision decideRecoveryEvent(
     const PriorBootPhaseElapsed& priorElapsed = {}) {
     if (request.event == ProcessEvent::RecoveryReject) {
         auto decision =
-            propose(current, ProcessState::Fault,
+            propose(current, ProcessState::Standby,
                     TransitionReason::RecoveryRejected, monotonicMillis);
-        static_cast<void>(addMessage(decision, ProcessMessage::FaultEntered));
         return decision;
     }
     if (request.event != ProcessEvent::RecoveryResume ||

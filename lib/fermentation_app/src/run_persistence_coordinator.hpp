@@ -219,6 +219,12 @@ class RunPersistenceCoordinator {
         const ResolveRecoveryUncertaintyRequest& request,
         const RunCheckpointTime& time,
         const CrossRolePlausibilityContext& liveSensorEvidence);
+    // R1 discard path for a technically trusted but semantically non-resumable
+    // run. The detached NoActiveRun candidate is durably committed first;
+    // current RAM is changed only after the complete coordinator transaction
+    // returns Applied. This does not repair an untrusted store state.
+    [[nodiscard]] RunPersistenceResult discardAsNoActiveRun(
+        RunCommandState& current, const RunCheckpointTime& time);
     // Automatic UTC reevaluation of the persisted Hop-1-only
     // WaitingForProduct case. Expiry is resolved without Gate A; a still
     // valid result requires the optional fresh Gate-A context.

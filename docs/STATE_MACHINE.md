@@ -66,6 +66,18 @@ Kritische Fehler werden vor Bedienereignissen und normalen Phasenfortschritten
 ausgewertet. In `WAITING_FOR_PRODUCT` hat der belastbar erreichte Zeitablauf
 Vorrang vor einer gleichzeitig eintreffenden Produktbestaetigung.
 
+## Issue #24 Release-1-Resume-Grenze
+
+`RECOVERY_EVALUATION` ist in R1 ausschliesslich ein nicht freigebendes
+Resume-Angebot: kein `Allowed`, kein Aktorcommand und kein automatischer
+Resume. Ein Ablehnen, Timeout oder technisch integerer, semantisch nicht
+resumefaehiger Lauf wird ueber den bestehenden Write-before-Apply-Pfad als
+`NoActiveRun`/`STANDBY` beendet. Technisch untrusted Persistenz bleibt
+`SAFE_BOOT` und wird nicht durch eine neue Tombstone-Mutation verdeckt.
+
+Historische komplexe Recoverykontexte bleiben als #17/#18-Legacy dokumentiert,
+sind aber kein aktiver #24-R1-Produktpfad.
+
 ## Kanonische Zustandsnamen
 
 ```text

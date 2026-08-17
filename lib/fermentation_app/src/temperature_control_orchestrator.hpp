@@ -14,6 +14,7 @@
 namespace fermentation {
 
 class RunRecoveryCoordinator;
+class SafetyCore;
 
 // The only dynamic PI evidence a caller may supply. Target, role, and
 // context identity are always derived internally from the live
@@ -140,6 +141,13 @@ class TemperatureControlApplicationOrchestrator {
         const RunCommandState& current, std::uint64_t nowMonotonicMillis,
         ActuatorSafetyGateInput safetyGate = {});
 
+    // Once bound, the planner consumes the latest SafetyCore decision and
+    // ignores caller-supplied gate status. This keeps an Allowed value from
+    // becoming a second safety authority at the application boundary.
+    void bindSafetyCore(SafetyCore& safetyCore) noexcept {
+        safetyCore_ = &safetyCore;
+    }
+
    private:
     [[nodiscard]] RunPersistenceResult complete(
         RunPersistenceResult result,
@@ -155,6 +163,7 @@ class TemperatureControlApplicationOrchestrator {
     TargetQualificationEvaluator& evaluator_;
     ActuatorPlanner* planner_{nullptr};
     ActuatorPlanSinkDriver* actuatorDriver_{nullptr};
+    SafetyCore* safetyCore_{nullptr};
     std::optional<TemperatureControlResult> outstandingEvaluation_;
     std::optional<PreviousControlRequestFeedback>
         pendingControlRequestFeedback_;

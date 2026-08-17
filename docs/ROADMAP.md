@@ -11,7 +11,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 1 | Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | PR #105 ist nach `main` gemergt; #23 ist auf dem aktuellen Base abgeschlossen. Das separate produktive Integrationsgate #106 bleibt als eigener Live-Status unveraendert sichtbar. | Issue #24 erhält einen eigenen Plan-/Owner-Gate-PR |
-| 2 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion | PR #110 ist Draft; die eigenständige Release-1-KISS-Planrevision `docs/tasks/issue-24-safety-core-replan.md` ist mit `97be3ddf53297768a277a76c02aa0251b7cd9943` committed und definiert fail-closed Boot/Load/Resume, die bestehende #17-Gesamttransaktion, die minimale Fault-Matrix, den diagnostischen Resetcause-Port sowie die E3/E5/#106-Grenzen; Implementation NOT_STARTED | Owner-Review der exakten Plan-SHA `97be3ddf53297768a277a76c02aa0251b7cd9943` |
+| 2 | Issue #24 – Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion | PR #110 ist Draft; die Owner-freigegebene Release-1-KISS-Planrevision `docs/tasks/issue-24-safety-core-replan.md` ist `97be3ddf53297768a277a76c02aa0251b7cd9943`; die Implementierung des fail-closed SafetyCore-, ResetCause-, `NoActiveRun`- und zentralen Planner-Gate-Pfads laeuft mit gezielten Native-Gates | Vollstaendiges Owner-Review des Implementierungs-HEADs; danach entscheidet der Owner ueber `Ready for review` |
 | 3 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
 
 ## Naechste fachliche Arbeit
@@ -32,8 +32,9 @@ produktives Integrationsgate unverändert offen.
 
 ## Zulaessige Parallelitaet
 
-- PR #110 bleibt Draft, bis der Owner die exakte Plan-SHA freigibt; bis dahin
-  beginnt keine Implementation und keine vollständige Remote-CI.
+- PR #110 bleibt Draft auch nach der Planfreigabe; der Implementierungs-HEAD
+  benoetigt ein vollstaendiges Owner-Review, bevor der Owner ueber `Ready for
+  review` und Remote-CI entscheidet.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder

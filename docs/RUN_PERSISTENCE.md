@@ -9,8 +9,8 @@ MOSFET- oder H-Bruecken-Zustaende werden nie wiederhergestellt.
 ## Grundsaetze
 
 - Nach jedem Boot bleiben Peltier und Aktoren zunaechst AUS.
-- Resetursache, Bootschleifen, persistierte Sperren und kritische
-  Speicherintegritaet werden vor `STANDBY` oder Recovery bewertet.
+- Resetursache, aktueller Loadstatus und kritische Speicherintegritaet werden
+  vor `STANDBY` oder einem Resume-Angebot bewertet; #24 zaehlt keine Bootschleifen.
 - Laufdaten, Sensoren, Sicherheitszustand und Wiederanlaufaktion werden vor jeder
   Freigabe validiert.
 - Wichtige Ereignisse werden sofort gespeichert.
@@ -20,6 +20,25 @@ MOSFET- oder H-Bruecken-Zustaende werden nie wiederhergestellt.
 - Release 1 funktioniert mit 4 MB Flash ohne PSRAM.
 - Release 1 reserviert keine dualen OTA-Slots.
 - Ein Neustart ist kein Fehlerreset und loescht keine Persistenzsperre.
+
+## Issue #24 Release-1-Persistenzgrenze
+
+Issue #24 fuehrt keine allgemeine Safety-Persistenz, keinen Restart-Zaehler,
+kein Resetzeitfenster und keinen persistenten Watchdog-/Sensor-Latch ein. Der
+kanonische #17-Loadstatus unterscheidet vertrauenswuerdige `Current`-/Tombstone-
+Zustaende von technisch untrusted Persistenz. Ein vertrauenswuerdiger, aber
+nicht einfach resumefaehiger Current wird write-before-apply als `NoActiveRun`
+beendet; technisch untrusted bleibt `SAFE_BOOT` und wird nicht blind
+ueberschrieben.
+
+`PreparedHead -> CheckpointSlot -> CommittedHead` bleibt eine einzige
+Gesamttransaktion. Einzel-Key-`Success` ist definitiv und benoetigt keinen
+zweiten Readback; nur `CommitOutcomeUnknown` wird durch `writeExact()`
+aufgeloest. RAM/FSM wird erst nach dem Gesamtstatus `Applied` geaendert.
+
+Die historischen #18-Recovery-/Progressabschnitte dieses Dokuments sind C2-
+Legacy. Sie werden von #24 nicht als aktiver Produktpfad aufgerufen; es gibt in
+R1 kein Fallback-Resume, keine Promotion und keine Charge-Rettungsrechnung.
 
 ## Persistierter Laufzustand
 
@@ -162,7 +181,7 @@ Fermenting-Episode mit bekannten Ausfallgrenzen und gueltiger, gefilterter
 Vor-/Nach-Ausfall-Evidenz. Der Produktfuehler hat die Vertrauensstufe
 `ProductPreferred`, der ausdruecklich verwendete Luftfuehler `AirReduced`.
 
-### Recovery-/Fortschrittsvertrag (Schema 3)
+### Historischer Recovery-/Fortschrittsvertrag (Schema 3, C2-Legacy)
 
 Der persistierte Vertrag besteht aus den getrennten Feldern
 `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
@@ -340,37 +359,32 @@ Beim Boot gilt:
 Ein Neustart laedt keine nicht mehr bestehende Warnung blind als aktiv, entfernt
 aber auch keine persistierte Sicherheitsverriegelung.
 
-## Wiederanlaufreihenfolge
+## Wiederanlaufreihenfolge im #24-R1-Pfad
 
 ```text
 Boot
 -> alle Ausgaenge AUS
--> Resetursache, Bootschleife und Verriegelungen pruefen
--> kritischen Speicher und Transaktionsmarker pruefen
--> aktuelle und Rueckfallrevision validieren
--> COMPLETED direkt wiederherstellen, falls zutreffend
--> aktiven Laufdatensatz auswaehlen
--> Schrankluft-, Produkt- und Kuehlkoerpersensor bewerten
-  -> RunRecoveryCoordinator::activate aufrufen
-  -> bestehende Phasen-/Regelsensorauswahl delegiert bewerten
-  -> Entscheidung atomar speichern
--> Regelung kontrolliert freigeben, sofern erlaubt
--> Netzwerk und NTP parallel wiederherstellen
--> Ausfallintervall und Fortschritt spaeter korrigieren
--> korrigierten Zustand atomar speichern
+-> Resetcause diagnostisch erfassen
+-> Config und Load-/Coordinatorstatus frisch validieren
+-> Completed erhalten, NoPersistedRun/NoActiveRun als Standby projizieren
+-> Current gegen das enge R1-Resume-Praedikat pruefen
+-> nicht resumefaehigen vertrauenswuerdigen Current als NoActiveRun schreiben
+-> untrusted Load als SAFE_BOOT sperren
+-> nur nach explizitem Start/Resume und aktueller Evidenz den Gatepfad pruefen
 ```
 
 Der Wiederanlauf blockiert nicht auf NTP. Ohne absolute Zeit wird kein exakter
 Unterbrechungsfortschritt erfunden und kein automatischer Phasenabschluss allein
 aus einer Schaetzung abgeleitet.
 
-## Recovery-API und Regelsensorauswahl bei Reaktivierung
+## Historische Recovery-API und Regelsensorauswahl bei Reaktivierung (C2)
 
 Issue #21 (Regelsensorauswahl, Ersatzbetrieb, Rueckkehrlogik) liefert den
 persistierten und den laufzeitseitigen Auswahlzustand. Die
-`RunRecoveryCoordinator`-Grenze aktiviert einen geladenen aktiven Lauf oder
-Fallback, delegiert die bestehende Empfehlung und persistiert die resultierende
-Recovery-Entscheidung. Sie fuehrt keine zweite Auswahl- oder Prozesslogik ein.
+Die `RunRecoveryCoordinator`-Grenze bleibt als bestehender #18/C2-Code
+erhalten, wird aber vom aktiven #24-R1-Produktpfad nicht aufgerufen. #24
+verwendet stattdessen die aktuelle #20/#21-Projektion, das enge
+Resume-Angebot und den kanonischen `NoActiveRun`-Abbruch.
 
 Bereits vorhanden:
 

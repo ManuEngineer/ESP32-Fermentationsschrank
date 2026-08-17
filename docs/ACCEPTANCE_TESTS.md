@@ -24,6 +24,22 @@ Regelparameter und Ressourcenschwellen bleiben bis zu den jeweiligen Messungen
 - Ein Neustart gilt nie als Fehlerreset.
 - `SAFE_BOOT` bleibt in allen Tests aktorfrei.
 
+## Issue #24 Release-1-Testgrenze
+
+Der #24-Schnitt testet nur reale R1-Pfade: ResetCause-Diagnose mit
+all-off/`Unresolved`, frische Config-/Persistenz-/Sensorvalidierung,
+`NoActiveRun` fuer integer nicht resumefaehige Laeufe, technisch untrusted
+Load als `SAFE_BOOT`, die #17-Gesamttransaktion, die reale #20/#21-
+Sensorprojektion, den #23-Current-Boot-Watchdog-Latch, Ack ohne Freigabe und
+die E3/E5/#106-Negativgrenzen.
+
+Ein Restart-Zaehler, Resetzeitfenster, persistenter allgemeiner Safety- oder
+Watchdog-Latch, Service-PIN, automatische `SAFETY_RECOVERY`, Fallback-
+Promotion, gewichteter Recoveryfortschritt sowie neue Thermal-/Hardwarefaults
+sind keine #24-R1-Testfaelle. Historische Testpunkte dazu bleiben fuer ihre
+spaeteren Issues/Hardware-Gates gekennzeichnet und gelten nicht als #24-
+Abnahmekriterium.
+
 ## Testebenen
 
 ### Ebene 1: Native Unit-Tests
@@ -32,7 +48,8 @@ Mindestens:
 
 - Programm- und Konfigurationsvalidierung
 - kanonische Zustandsuebergaenge
-- Bootprioritaet fuer Bootschleifen, persistierte Sperren und Speicherfehler
+- Bootprioritaet fuer jede Resetcause, aktuelle Persistenzintegritaet und
+  fail-closed `SAFE_BOOT`
 - Wiederherstellung eines persistierten `COMPLETED`
 - virtuelle monotone und absolute Zeit
 - Ausfallzeit als Unter-/Obergrenze
@@ -51,7 +68,7 @@ Mindestens:
 - Fehlerklassifikation, Quittierung und Fehlerreset
 - Persistenzschema, atomare Revisionen und Rueckfall
 - Transaktionsabsicht vor aktorwirksamer Zustandsaenderung
-- Persistenzfehler-Latch und Bootauswertung
+- #17-Transaktionsstatus und Bootauswertung ohne neue Safety-Persistenz
 - kritischer Schreibfehler sperrt neue Aktoranforderungen vor weiteren
   Persistenzversuchen und setzt den RAM-seitigen Latch
 - minimaler persistenter Latch wird ausserhalb des normalen Laufjournals versucht;
