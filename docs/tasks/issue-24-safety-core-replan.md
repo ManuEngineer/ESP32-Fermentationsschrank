@@ -571,8 +571,9 @@ Eine leere Safety-Erstinitialisierung ist ausschließlich gültig, wenn:
 
 Dann wird ein konservativer SafetyState mit `safetyHistoryEpoch=1`,
 `nextPersistentInstanceId=1`, `persistentFaultRevision=0`,
-`bootSequence=1`, keinem Fault, keinem Intent und `safeBootRequired=false`
-gebildet. Zusätzlich werden zwei semantisch identische `Cleared`-Marker mit
+`bootSequence=1`, `recordRevision=1`, keinem Fault, keinem Intent und
+`safeBootRequired=false` gebildet. Zusätzlich werden zwei semantisch
+identische `Cleared`-Marker mit `markerRevision=1` und
 `reason=FactoryInitialization` (eigener stabiler Wirewert) auf `sem0` und
 `sem1` geschrieben und jeweils exakt readback-verifiziert. Erst wenn
 SafetyState **und beide Marker** bestätigt sind, gilt die Erstinitialisierung
@@ -597,7 +598,8 @@ fehlender/unklarer SafetyState
  -> explizite SafetyState-Reinitialisierung
  -> neue SafetyHistoryLineage mit `historyLineageState=TotalDiscontinuity`
     eröffnen; kein numerisch größerer alter Epochwert wird behauptet
- -> konservativer SafetyState mit Y4_UNKNOWN_SAFETY_STATE
+ -> konservativer SafetyState mit `recordRevision=1`,
+    Y4_UNKNOWN_SAFETY_STATE und `markerRevision=1`
  -> beide Safety-Slots und beide `Cleared`-Marker mit
     `reason=HistoryLossReinitialization` redundant schreiben/readbacken
  -> History-Loss/Y4 bleibt bis CauseClear + Service-Target-Reset
@@ -1292,6 +1294,29 @@ manuell Big-Endian und exakt 8 Byte:
 ```text
 eventKind:uint8, faultCode:uint16, faultSource:uint8, instanceId:uint32
 ```
+
+Die Event-Wirewerte sind geschlossen und stabil:
+
+| Wirewert | EventKind |
+|---:|---|
+| `0x01` | `FaultRaised` |
+| `0x02` | `FaultCleared` |
+| `0x03` | `FaultRelapsed` |
+| `0x04` | `FaultReset` |
+| `0x05` | `GateChanged` |
+| `0x06` | `TerminalRequiredSet` |
+| `0x07` | `TerminalRequiredChanged` |
+| `0x08` | `IntentPrepared` |
+| `0x09` | `RestartAttempted` |
+| `0x0A` | `RestartRejected` |
+| `0x0B` | `BootClassified` |
+| `0x0C` | `SafeBootEntered` |
+| `0x0D` | `RedundancyRepair` |
+| `0x0E` | `HistoryLossDetected` |
+| `0x0F` | `SafetyReinitialized` |
+
+Unbekannte Eventwerte werden von #19 beim Handoff abgelehnt; die
+`static_assert`-Tabelle prüft `kSafetyEventKindCount=15`.
 
 Der native C++-Datentyp ist davon getrennt und darf nicht `packed` werden:
 
