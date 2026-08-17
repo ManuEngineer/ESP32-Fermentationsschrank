@@ -1,1023 +1,475 @@
-# [E3.5] Issue #24 – Safety Core nach dem Owner Scope Reset
+# Issue #24 – Release-1 Safety Core Plan
 
-## Planrevision – Owner-Review-Korrektur F1–F8
+## 1. Status, Scope und Owner-Gate
 
-Diese Revision ist der vollständige, eigenständig ausführbare Plan für PR #110.
-Sie schließt die acht materiellen Owner-Befunde F1–F8. Alle fachlichen
-Anforderungen, Verträge, Ablaufregeln, Tests und Gates stehen in diesem
-Dokument; keine frühere Planrevision ist für eine Umsetzung erforderlich.
-
-## 1. Planstatus und verifizierte Ausgangslage
-
-Der vorherige, F1–F6 korrigierte PR-Stand `1dc68b69469df16a2ecdea65e7375b4d7c2bea29` ist
-`SUPERSEDED / NOT APPROVED` und wird nur als Provenienz dieses
-Korrekturauftrags genannt. Vor einer Umsetzung ist die exakte Commit-SHA
-dieser Revision ausdrücklich durch den Owner freizugeben.
+Dieses Dokument ist die alleinige normative Planfassung für PR #110. Es ist
+vollständig und eigenständig ausführbar; keine externe Planchronik ist für die
+Umsetzung erforderlich.
 
 ```text
 Repository: ManuEngineer/ESP32-Fermentationsschrank
 Issue: #24 – [E3.5] Fehlerklassen, Verriegelung, SAFE_BOOT und Fehlerinjektion
 PR: #110 – [E3.5] Issue #24 safety core replan from main
-PR-Branch: agent/issue-24-safety-core-replan-v2
+Branch: agent/issue-24-safety-core-replan-v2
 Base: main
 Verifizierte origin/main-SHA: b8eae5f4da5f2666b5a9bda333d115254c4db5b2
-PR-HEAD vor dieser Planrevision: 1dc68b69469df16a2ecdea65e7375b4d7c2bea29
-Issue-/PR-Stand verifiziert: 2026-08-17
+HEAD vor dieser Planfassung: f686e3e371336041dba883013b3878a20eba5493
 Planpfad: docs/tasks/issue-24-safety-core-replan.md
+PR-Status: OPEN / DRAFT
 Implementation: NOT_STARTED
+Planfreigabe: ausstehend für den exakten Commit dieser Datei
 ```
 
-Live verifiziert wurden Repository, Branch, `origin/main`, PR #110 und Issue
-#24. PR #110 ist offen und Draft. Issue #24 ist offen und enthält den
-Owner-Status `REPLAN_REQUIRED_OWNER_SCOPE_RESET`; die F1–F6-Synchronisierung
-ist abgeschlossen und diese Revision ergänzt die Befunde F7/F8.
-PR #107, #108 und #109
-sind historische, superseded Referenzen und werden nicht geändert oder als
-normative Quelle verwendet. `origin/main` am verifizierten Base-SHA ist der
-verbindliche Prüfstand für diese Revision.
+Issue #24 bleibt offen. PR #110 bleibt Draft. Es gibt in diesem Auftrag keine
+Produktions-, Test-, Adapter- oder Persistenzimplementation, keinen neuen
+Branch oder PR, kein Ready-for-review, keinen Merge und keine Issue-Schließung.
 
-Der Branch enthält vor dieser Revision nur die historische Plan-/Roadmap-
-Dokumentation. Der Vergleich gegen `origin/main` zeigt keine Änderung an
-Produktionscode, Testcode, Adaptern, Persistenzschemas, Builddateien oder
-Hardwarekonfiguration. Es gibt auf dem Zielbranch somit keine Issue-24-
-Implementation, die versehentlich weitergeführt werden könnte.
+### Release-1-Ziel
 
-### 1.1 Verbindliche Quellenreihenfolge
+Der Safety Core macht Boot, Laufklassifikation, Safety-Gate und Fehlerreaktion
+fail-closed und reproduzierbar. Ein alter Lauf wird nur nach einer einfachen,
+frischen und eindeutigen R1-Prüfung als Resume-Angebot angezeigt. Boot oder
+Restore geben niemals selbst Aktoren frei.
 
-Für die spätere Umsetzung gelten in dieser Reihenfolge:
+Nicht Teil von R1 sind automatische oder verlustfreie Charge-Recovery,
+Restart-Akkumulatoren, Resetzeitfenster, ein neuer allgemeiner Safety-Record,
+Recovery-Evidence/Lineage/Capability, Fallback-Promotion, Rollback-Resume und
+eine neue Persistenz- oder Recovery-Engine. Schema 3 bleibt lesbar; neutrale
+Schema-3-Felder sind kein pauschaler Ablehnungsgrund.
 
-1. der Live-Text und die aktuelle Ownerentscheidung in Issue #24;
-2. `origin/main` am oben genannten Base-SHA;
-3. die akzeptierten ADRs und die in Abschnitt 4 genannten kanonischen
-   Fachverträge;
-4. dieser Plan nach Freigabe der exakten Plan-SHA;
-5. erst danach konkrete Implementierungsdetails.
+## 2. Verbindliche Grenzen und Verantwortlichkeiten
 
-Der alte PR-#110-Plan liefert höchstens historische Lernhinweise. Er liefert
-keine Anforderungen, keine Freigaben, keine Codes, keine Lineage und keine
-Capability-Verträge für diesen Plan.
+Die Umsetzung verwendet die vorhandenen Verträge von `origin/main` und die
+kanonischen Quellen aus Abschnitt 10.
 
-## 2. Owner Scope Reset – normative Release-1-Policy
+| Bereich | Besitzer und R1-Grenze |
+|---|---|
+| Konfiguration | #56/#57 und ihre vorhandenen Producer bleiben die einzige Konfigurationswahrheit. Unavailable, IntegrityFailure, RuntimeFailure und CommitIndeterminate bleiben fail-closed. |
+| Sensorqualität/-auswahl | #20/#21 liefern Qualität, Auswahl und Fallbackprojektion. #24 kopiert weder Sensor-FSM noch Sensorzustand. |
+| Regelung | #22 bleibt Besitzer von PI- und Control-Logik. #24 bewertet nur die Safety-Grenze der Anfrage. |
+| Aktorplanung | #23 bleibt Besitzer von Timing, Totzeit, Sink und Request-Watchdog. #24 liefert die einzige fachliche Safety-Direktive; ein caller-supplied `Allowed` ist nie Safety-Wahrheit. |
+| Plattform | `device_platform` enthält nur portable Ports/Dienste, `device_platform_esp_idf` nur ESP-IDF-Adapter, `fermentation_app` die Fachentscheidung und `device_platform_test_support` nur Testhilfen. ADR-013 bleibt vollständig gültig. |
+| Aktorausgänge | Der Gate-Default ist `ActuatorSafetyGateStatus::Unresolved`; vor vollständiger Validierung entsteht nur abstrakter Idle/Stop. Physische GPIO-, Pegel-, BTS7960-, MOSFET- und Lüfterbeweise bleiben E5/#29/#32/#33. |
+| #106 | #24 darf native Allow-/Deny- und abstrakte Planner-/Sink-Tests liefern, aber keine produktive reale `Allowed`-Verdrahtung am Pro-Lauf-Parameter-Gate vorbei herstellen. |
+| Quittierung | Ack, Anzeige und Journal sind Seiteneffekte. Ack ändert weder Fault-Clear noch Gate und ist niemals Wiederfreigabe. |
 
-Die Live-Ownerentscheidung vom 2026-08-17 ist vollständig bindend:
+SafetyCore ist die einzige mutable Safety-Autorität. Process-FSM,
+RunPersistenceCoordinator, ConfigurationService, Sensorquellen, Planner und
+Sink behalten ihre fachlichen Zustände. Es entsteht keine zweite Sensor-,
+Konfigurations-, Persistenz-, Recovery- oder Safety-Wahrheit.
 
-- Beim Boot sind alle Aktoren AUS und bleiben während der gesamten
-  Bootvalidierung AUS.
-- Ungültige, mehrdeutige oder nicht vertrauenswürdige Konfiguration bzw.
-  Safety-Evidenz bleibt fail-closed und führt erforderlichenfalls nach
+## 3. SafetyCore und minimaler R1-Fault-Code-Vertrag
+
+SafetyCore aggregiert kanonische Producer-Evidenz, führt den begrenzten aktiven
+Safetyzustand und erzeugt die bestehende Gate-Projektion:
+
+```text
+Producer-Evidenz
+  -> SafetyCore / FaultCode-Lifecycle
+  -> ActuatorSafetyGateInput (Default Unresolved)
+  -> ActuatorPlanner
+  -> ActuatorPlanSinkDriver
+  -> abstrakte Aktorports
+```
+
+Die drei R1-Dispositionen sind `Informational`, `OperationalBlocked` und
+`LatchedOrSafeBoot`. `LatchedOrSafeBoot` ist nur ein Gruppierungsname; die
+folgende Matrix legt für jeden Code die tatsächliche Gate-Reaktion eindeutig
+fest. Es gibt keine vierstufige Fehlerklassenhierarchie.
+
+Die FaultCode-Menge ist ein endlicher, compile-time bekannter, typisierter
+`uint16_t`-Code. Die Werte sind stabil für Journal-/Diagnose-/Schnittstellen-
+transport; sie führen keinen neuen persistenten Safety-Key ein. Technische
+Detailursachen bleiben beim Producer und werden nur referenziert.
+
+| Stabiler R1-Code / Wirewert | Kanonischer Producer und Detail | Disposition / Gate-Reaktion | Auto-Clear und Bedingung | Ack / manueller Reset / Neustart |
+|---|---|---|---|---|
+| `ConfigurationRuntimeFailure` / `0x0101` | `ConfigurationService` – vorhandener RuntimeFailure-Cause | `OperationalBlocked` / `ImmediateStop` | Ja, nur bei frischer gültiger Runtime-Projektion desselben Producers | Ack nur Anzeige; kein manueller Reset; Neustart gibt nicht frei |
+| `ConfigurationUnavailable` / `0x0102` | `ConfigurationRecoveryService::ConfigurationSafetyProducer` | `LatchedOrSafeBoot` / `SAFE_BOOT` | Nein; erst frische verfügbare und integritätsgeprüfte Konfiguration | Ack nur Anzeige; kein unabhängiges Clear; Neustart gibt nicht frei |
+| `ConfigurationIntegrityFailure` / `0x0103` | `ConfigurationRecoveryService::ConfigurationSafetyProducer` | `LatchedOrSafeBoot` / `SAFE_BOOT` | Nein; erst bestehender Producervertrag mit frischer Integritätsevidenz | Ack nur Anzeige; kein unabhängiges Clear; Neustart gibt nicht frei |
+| `ConfigurationCommitIndeterminate` / `0x0104` | `ConfigurationService` – `CommitIndeterminate` bzw. vorhandener Commit-Status/Cause | `LatchedOrSafeBoot` / `SAFE_BOOT` | Nein; bestehende Commit-Auflösung muss eindeutig gültig sein | Ack nur Anzeige; kein neuer Reset-/Persistenzpfad; Neustart gibt nicht frei |
+| `RunNotReconstructible` / `0x0201` | `RunPersistenceCoordinator` bei technisch vertrauenswürdigem, aber R1-semantisch nicht resumefähigem Current | `OperationalBlocked` / `ImmediateStop` für einen aktiven Alt-Lauf, danach `NoActiveRun` | Nein; nach erfolgreichem kanonischem Abschluss ist ein neuer Lauf möglich | Ack nur Anzeige; kein manueller Safety-Reset; Neustart gibt nicht frei |
+| `RunPersistenceIndeterminate` / `0x0202` | Coordinator bei unbestimmter Gesamttransaktion oder nicht vertrauenswürdigem Load | `LatchedOrSafeBoot` / `SAFE_BOOT` | Nein; nur bestehende Store-/Coordinator-Neubewertung mit vertrauenswürdigem Ergebnis | Ack nur Anzeige; kein neuer Record; Neustart gibt nicht frei |
+| `SafetySensorUnavailable` / `0x0301` | Projektion der vorhandenen #20/#21-Qualitäts-/Auswahlzustände | `OperationalBlocked` / `ImmediateStop` | Ja, nur frische gültige Sicherheitsrollen- und Auswahlprojektion | Ack nur Anzeige; kein manueller Reset; Neustart gibt nicht frei |
+| `ActuatorRequestWatchdog` / `0x0401` | #23 vorhandene Request-Watchdog-Evidenz und bestehender Latched-Zustand | `LatchedOrSafeBoot` / `ImmediateStop` | Nein; nur bestehender #23-Clear mit frischer Safety-/Sink-Evidenz | Ack nur Anzeige; fachlicher Reset nur über bestehenden #23-Vertrag; Neustart gibt nicht frei |
+| `ThermalSafetyIntervention` / `0x0501` | Bereits definierter R1-Temperatur-/Safety-Producer; keine neuen #35-Grenzwerte | `OperationalBlocked` / `ImmediateStop` | Ja, nur frische kanonische sichere Evidenz des Producers | Ack nur Anzeige; kein manueller Safety-Reset; Neustart gibt nicht frei |
+| `ThermalHardLimit` / `0x0502` | Bereits definierter R1-Hard-Limit-Producer; Grenzwerte bleiben #35/E5 | `LatchedOrSafeBoot` / `SAFE_BOOT` | Nein; bestehende Ursachen-, Hardware- und Integritätsprüfung erforderlich | Ack nur Anzeige; manueller Reset nur falls der bestehende Producer ihn vorsieht; Neustart gibt nicht frei |
+| `SystemSafetyUnknown` / `0x0601` | SafetyCore für unknown/unmapped Producer-, Boot-, System- oder Integritätszustand | `LatchedOrSafeBoot` / `SAFE_BOOT` | Nein; nur vollständige frische Vertrauensevidenz, keine Ack-Abkürzung | Ack nur Anzeige; kein unabhängiges Clear; Neustart gibt nicht frei |
+
+`ThermalSafetyIntervention` und `ThermalHardLimit` werden nur emittiert, wenn
+ein bestehender R1-Producer dafür eine fachlich definierte Eingabe besitzt.
+`TBD_HARDWARE`, `TBD_COMMISSIONING` und #35-Grenzwerte werden in #24 nicht
+erfunden. Ein unbekannter oder nicht gemappter Producerzustand wird immer zu
+`SystemSafetyUnknown` und niemals zu `Allowed`.
+
+Reine Information ohne Safetywirkung bleibt Journal-/Notification-Ereignis
+und wird nicht künstlich zum FaultCode. SafetyCore besitzt keine Historie und
+keine dynamischen Faulttexte: aktive und acknowledged Zustände sind fest bzw.
+enum-indexiert begrenzt, `IEventJournal` besitzt die Historie, Formatierung und
+Notification liegen außerhalb des zeitkritischen Safety-Entscheidungskerns.
+Es gibt kein Heap-Wachstum pro Fault-Ereignis und keine PSRAM-Annahme.
+
+### Producer-Projektion
+
+- Konfiguration konsumiert direkt `ConfigurationSafetyProducer` sowie die
+  vorhandenen `ConfigurationServiceMode`-/`ConfigurationCommitStatus`-Werte
+  inklusive typisierter Causes über genau eine schmale Safety-Eingangsprojektion.
+  Es entstehen keine parallelen Safety-Enums für dieselben Zustände.
+- Sensorik konsumiert #20 `SensorQuality` und #21 Auswahl-/Fallbackresultate.
+- Planner/Sink konsumiert die vorhandene #23 Watchdog-/Gate-Evidenz. Ein
+  technischer Zustand ohne kanonischen Mappingeintrag bleibt unbekannt-safe.
+- Run-Persistenz konsumiert Load-/Coordinator-Status, Transaktionsschritt,
+  technische Ursache und Durability. Ein semantisch nicht resumefähiger,
+  technisch integer geladener Run ist kein technischer Systemfault.
+
+Die Reihenfolge ist zwingend:
+
+```text
+Producer-Evidenz -> Safetyzustand/Gate bestimmen -> Stop/Unresolved wirksam
+                 -> danach Journal/Notification
+```
+
+`IEventJournal::record(...) == false` und ein Fehler von
+`IUserNotificationSink::notify(...)` dürfen Stop, Unresolved, SAFE_BOOT oder
+eine vorhandene Sperre nicht verhindern, zurückrollen oder eine zweite
+Safetyreaktion erzeugen. Ack hängt nicht von einem Journalerfolg ab, sofern ein
+bereits bestehender Fachvertrag nicht ausdrücklich etwas anderes verlangt.
+
+## 4. Run-Persistenz: Einzel-Write und Gesamttransaktion
+
+### 4.1 Einzelner Key-Write
+
+Der vorhandene `IStateStore`-/`RunPersistenceStore::writeExact()`-Vertrag wird
+unverändert verwendet:
+
+| `IStateStore::write()` | `writeExact()` | Readback |
+|---|---|---|
+| `Success` | `Written` | keiner; der neue Wert ist vollständig und dauerhaft gespeichert |
+| `WriteError` | `WriteError` / `NotWritten` | keiner; dieser Key-Write ist sicher nicht wirksam |
+| `CapacityError` | `CapacityError` | keiner; dieser Key-Write ist sicher nicht wirksam |
+| `CommitOutcomeUnknown` | `Written`, `NotWritten` oder `Indeterminate` | genau ein vorhandener `writeExact()`-Readback: neuer Wert, alter Wert oder fremd/Fehler |
+
+Ein zweiter Readback nach normalem `Success` ist verboten. Die Aussage über
+`WriteError`, `CapacityError` und `NotWritten` betrifft nur diesen einzelnen
+Key-Write und nicht automatisch eine bereits mehrstufig veränderte
+Gesamttransaktion.
+
+### 4.2 Nichtperiodischer Coordinator-Pfad
+
+Für Resume-Entscheidung und `NoActiveRun` wird ausschließlich der bestehende
+`RunPersistenceCoordinator::writeSnapshotCore()`-Pfad verwendet:
+
+```text
+PreparedHead -> CheckpointSlot -> CommittedHead
+```
+
+| Transaktionspunkt | Bestehender Gesamtzustand | R1-Folge |
+|---|---|---|
+| Fehler vor bzw. beim `PreparedHead`, sicher nicht geschrieben | keine dauerhafte Mutation; rollbackfähiger Coordinator-State | kein RAM/FSM-Apply; bestehender Unchanged-/Rollback-Vertrag bleibt gültig |
+| `PreparedHead` indeterminate | Gesamtzustand unbestimmt | bestehender `BlockedIndeterminate`-/`PersistenceIndeterminate`-/`MayHaveChanged`-Vertrag; kein Apply |
+| `PreparedHead` definitiv geschrieben, danach Slot-Fehler | PreparedHead dauerhaft vorhanden; Teiltransaktion geändert | `BlockedIndeterminate`, Durability `Changed` bzw. bestehender Coordinatorstatus; kein Apply; alten Gesamtzustand nicht als sicher autoritativ behaupten |
+| `PreparedHead` und Slot geschrieben, danach `CommittedHead`-Fehler | Teiltransaktion dauerhaft vorhanden | `BlockedIndeterminate`/`PersistenceIndeterminate` gemäß Coordinator; kein Apply; kein Rückschluss auf unveränderten Altzustand |
+| kompletter nichtperiodischer Coordinator-Pfad `Applied` | Zielzustand vollständig committed | erst jetzt detached Kandidat in RAM/FSM anwenden |
+
+`WriteError`, `CapacityError` oder `NotWritten` eines Slot- oder CommittedHead-
+Writes ändern nach einem definitiv geschriebenen PreparedHead nicht die
+Gesamtfolge zurück auf „old authoritative“. Die exakten Status-, Step- und
+Durability-Werte werden aus dem bestehenden Coordinatorvertrag wiederverwendet;
+#24 baut keine Transaktionsengine.
+
+Die Apply-Invariante lautet:
+
+```text
+detached Kandidat
+  -> bestehender Coordinator-Write-before-Apply-Pfad
+  -> Gesamtstatus Applied?
+       ja  -> RAM/FSM anwenden
+       nein -> kein normales Standby/Allowed; Coordinator-/Safety-Status erhalten
+```
+
+Bei `RecoveryEvaluation` bleibt `RecoveryResume` ein expliziter Befehl ohne
+`Allowed` und ohne Aktorcommand. Nach aktueller Config-/Sensor-/Safety-Prüfung
+wird die Entscheidung über den bestehenden Persistenzpfad committed; erst
+`Applied` aktiviert die FSM.
+
+`RecoveryReject` bei Ablehnung, Timeout oder nicht resumefähigem Current wird
+wiederverwendet, aber topologisch neu festgelegt: Aktoren bleiben AUS, zuerst
+wird der kanonische `NoActiveRun`-Snapshot über denselben Gesamtpfad geschrieben,
+und erst ein Gesamtstatus `Applied` führt `RecoveryEvaluation` mit
+`TransitionReason::RecoveryRejected` nach `Standby`. Bei Writefehler,
+`PersistenceIndeterminate`, `BlockedIndeterminate` oder unbekannter Durability
+behauptet RAM nicht normales Standby; der bestehende unknown-safe-/
+`SAFE_BOOT`-Vertrag bleibt aktiv. Eine neue FSM, ein neuer Event oder ein neuer
+Persistenzschlüssel ist dafür nicht vorgesehen.
+
+## 5. Schema-3-Rekonstruktion, Boot-/Load-Matrix und Fallback
+
+### 5.1 Exaktes R1-Prädikat
+
+`schemaVersion == 3` und die bloße Existenz regulärer Schema-3-Felder lehnen
+einen Resume nicht ab. Ein Current ist R1-eindeutig nur, wenn Head, referenzierter
+Slot, Codec-/Cross-Field-Validierung, Run-/Process-Projektion,
+Konfigurationssnapshot, Sensorselection und Runrevision gültig sind, der
+Prozesszustand der Phasenmatrix entspricht und keine offene Zeit-/Recovery-
+Entscheidung benötigt.
+
+| Schema-3-Feld | Neutral und ignorierbar | Für einfache Rekonstruktion | Blockiert R1-Resume bei aktiver Semantik | Legacy-/Diagnoseinformation |
+|---|---|---|---|---|
+| `RecoveryTemperatureEvidence` | Default ohne gültige gefilterte Rollewerte | nicht erforderlich | nie allein; keine Zeitgutschrift | vorhandene Last-known-Werte nur diagnostisch |
+| `RunProgressState` | `KnownTotal`, kein `weightedProgress`; `observedRunSeconds` wird nicht gutgeschrieben | kein Zeitbeweis | `PartialUnknownHistory` oder gesetztes `weightedProgress` | beobachtete Werte ohne Freigabewirkung |
+| `PendingRecoveryAnchor` | nicht vorhanden | nicht erforderlich | vorhanden | Ankerdaten werden nicht neu interpretiert |
+| `recoveryBootAnchorMonotonicMillis` | nicht vorhanden | nicht erforderlich | vorhanden zusammen mit offener Recovery | technische Diagnose |
+| `TaggedPriorBootPhaseElapsed` | nicht vorhanden | nicht erforderlich | vorhanden | niemals als R1-Restzeit verwenden |
+| `NominalRecoveryAdjustmentState` | nicht vorhanden | nicht erforderlich | vorhanden | keine gewichtete Gutschrift |
+| `lastRecoveryEpisodeEvidence` | nicht vorhanden | nicht erforderlich | nur wenn mit offener Recovery-/Progressentscheidung verknüpft | abgeschlossene Vor-/Nach-Ausfall-Diagnose ignorierbar |
+| `recoveryEpisodeRevision` | `0` oder vorhandene Revision ohne offene Evidenz | nicht erforderlich | nur zusammen mit ungültiger/offener Recoverysemantik | reine technische Diagnose |
+
+Ungültige Kombinationen, unbekannte Enumwerte, beschädigte Bytes oder fehlende
+für den Snapshot erforderliche Kernfelder sind kein semantischer Abbruch,
+sondern ein technisch nicht vertrauenswürdiger Load und führen zu `SAFE_BOOT`.
+Ein alter Zeit-, UTC-, `PriorBootPhaseElapsed`-, weighted-Progress- oder
+Nominalwert wird niemals als automatische R1-Gutschrift verwendet.
+
+### 5.2 Vollständige Load-/Boot-Disposition
+
+Die Implementierung verwendet die vorhandenen
+`RunPersistenceLoadStatus`- und Coordinator-Zustände; es entsteht keine zweite
+Load-FSM.
+
+| Realer Load-/Coordinator-Fall | R1-Ausgang |
+|---|---|
+| `NoPersistedRun` | sicherer `Standby`, Gate bleibt zunächst `Unresolved` |
+| `NoActiveRun` | sicherer `Standby`, keine Aktorfreigabe |
+| gültiger `Current` mit `Completed` | vorhandene `Completed`-Projektion beibehalten; kein Resume, keine Aktoren |
+| gültiger `Current` mit aktivem Run und vollständig erfülltem R1-Prädikat | nicht freigebendes `RecoveryEvaluation`-Resume-Angebot; kein `Allowed` |
+| gültiger, technisch integerer Current, aber R1-semantisch nicht resumefähig | `RunNotReconstructible`; kanonischen `NoActiveRun`-Abschluss wie Abschnitt 4, nur nach `Applied` `Standby` |
+| gültiger Current mit alter/offener komplexer Recovery-Evidenz | kein komplexer Resume; sofern der Store eindeutig vertrauenswürdig ist, derselbe sichere `NoActiveRun`-Abbruch |
+| gültiger historischer `Current` in `Fault` | terminale `Fault`-Projektion und Diagnose erhalten; keine RecoveryEvaluation, kein Allowed, kein automatisches Überschreiben; ein späterer expliziter Clear folgt dem bestehenden Producer-/Write-before-Apply-Vertrag |
+| `FallbackRecovered` | technische Degradation/Integritätsfall; kein Fallback-Resume, keine Promotion und kein Tombstone zum Verbergen des unklaren Current; `SAFE_BOOT`/unknown-safe |
+| `FallbackRecoveryPending` | bestehender Coordinator-Block; `SAFE_BOOT`/unknown-safe, keine Mutation zum Verbergen |
+| `PreparedInterrupted` | `SAFE_BOOT`/unknown-safe; keine automatische Mutation |
+| `NotReconstructible` | `SAFE_BOOT`/unknown-safe; kein blindes `NoActiveRun` |
+| `NotReconstructibleOrphanedState` | `SAFE_BOOT`/unknown-safe; kein blindes `NoActiveRun` |
+| `ReadFailed` | `SAFE_BOOT`/unknown-safe |
+| `CapacityExceeded` beim Load | `SAFE_BOOT`/unknown-safe |
+| `UnsupportedSchema` | `SAFE_BOOT`/unknown-safe |
+| `ForeignEpoch` | `SAFE_BOOT`/unknown-safe |
+| `AlreadyInitialized` bei erneutem Load | vorhandenen Coordinator-State nicht überschreiben; kein Resume/Allowed; bei nicht sicher feststellbarem State `SAFE_BOOT` |
+| `BlockedIndeterminate` oder `PersistenceCommittedApplyFailed` | `SAFE_BOOT`/unknown-safe, kein RAM/FSM-Apply |
+
+`NoActiveRun` ist damit ausschließlich der sichere Abbruch für einen
+vertrauenswürdig geladenen, fachlich nicht mehr einfachen R1-Resume-Kandidaten.
+Ein technisch nicht vertrauenswürdiger Persistenzzustand wird nicht durch einen
+neuen Tombstone „repariert“.
+
+### 5.3 Fallback-Regel
+
+Der vom Committed Head referenzierte gültige Current ist der einzige
+R1-Kandidat. Der normale Commit setzt den Fallback bewusst auf den vorherigen
+Current-Checkpoint; eine ältere Runrevision, TransitionSequence oder
+Prozessprojektion ist daher legitim und kein Gleichheitsfehler.
+
+- Gültiger Current plus älterer legitimer Fallback: Current wird unabhängig
+  vom Fallback nach dem R1-Prädikat bewertet.
+- Defekter Current plus lesbarer Fallback: `FallbackRecovered`, kein Resume,
+  keine Promotion, kein Rollback-Resume.
+- Widersprüchlicher oder technisch unklarer Head-/Slotzustand: unknown-safe/
   `SAFE_BOOT`.
-- Ohne gespeicherten aktiven Lauf wird der sichere Standby-Zustand erreicht.
-- Ein gespeicherter aktiver Lauf darf nur dann als wiederaufnehmbar gelten,
-  wenn er aus den bereits vorhandenen kanonischen Daten vollständig und
-  eindeutig rekonstruiert werden kann.
-- Auch bei einer eindeutigen Rekonstruktion gibt es keine automatische
-  Aktorfreigabe allein durch Boot oder Restore. Es gibt höchstens einen
-  expliziten Resume-Pfad.
-- Ist der alte Lauf nicht vollständig und eindeutig rekonstruierbar, bleiben
-  die Aktoren AUS und der Lauf wird sicher beendet/verworfen oder in den
-  kanonischen `NoActiveRun`-Zustand überführt. Danach darf eine neue Charge
-  möglich sein, wenn Konfiguration und Safety wieder gültig sind.
-- Stromausfall, Brownout, Watchdog-Reset und Crash müssen eine Charge nicht
-  transparent oder verlustfrei überleben.
-- Safety hat Vorrang vor dem Erhalt einer Charge. Kritische, unbekannte oder
-  nicht eindeutig bewertbare Zustände führen niemals zu normaler
-  Aktorfreigabe.
-- Device Platform, ESP-IDF-Trennung, native Testbarkeit und allgemein
-  sinnvolle bestehende Persistenz werden nicht pauschal zurückgebaut.
-
-Die Policy bedeutet ausdrücklich: Release 1 optimiert die sichere
-Entscheidung, nicht die automatische Rettung einer unterbrochenen Charge.
-
-### 2.1 Resetcause- und Persistenzentscheidung für R1 (F1)
-
-Die Notwendigkeitsprüfung für jede neue persistente Safety-Information ergibt
-keinen zusätzlichen R1-Safety-Record:
-
-| gewünschte Information | unsichere Freigabe ohne sie | bereits ausreichender Schutz | R1-Entscheidung |
-|---|---|---|---|
-| „Nach Neustart war eine Safety-Sperre aktiv“ | Ein Boot könnte einen alten Lauf oder einen alten Gate-Zustand als `Allowed` behandeln. | Boot all-off, `Unresolved` bis zur vollständigen Live-Prüfung, keine automatische Resume-Freigabe und der bestehende Store-/Config-Vertrag für unbestimmte Zustände. | Kein neuer allgemeiner Safety-Latch-Record. Bestehende kanonische Sperr-/Commitzustände bleiben unverändert. |
-| „Der alte Lauf wurde beim Neustart eindeutig beendet“ | RAM könnte ohne definitives Persistenzergebnis `Standby` als dauerhafte Wahrheit behaupten. | Der bestehende Run-Persistence-Write-before-Apply-Vertrag schreibt `NoActiveRun`; `Success` ist bereits definitiv, und nur `CommitOutcomeUnknown` wird über den vorhandenen `writeExact()`-Readback aufgelöst. | Kein neuer Safety-Record; `NoActiveRun` bleibt der vorhandene Run-Lebenszykluszustand. |
-| „N abnormale Neustarts in T“ | Ohne Zähler würde eine wiederholte Störung eventuell nicht erkannt. | Jeder Boot bleibt all-off; Resume ist nie automatisch; unbekannte oder nicht vertrauenswürdige System-/Config-/Persistence-Evidenz bleibt `SAFE_BOOT`/gesperrt. Ein konkreter zusätzlicher Hazard wurde im Bestandsaudit nicht nachgewiesen. | Keine generische Restart-Zählung, kein Zeitfenster, kein Restart-Latch in R1. |
-
-Damit wird kein neuer persistenter Safety-Zustand, kein neuer Key und kein neues
-Run-Schema geplant. Ein Resetgrund darf als flüchtige Diagnose- und Boot-Evidenz
-aus dem bestehenden beziehungsweise einem kleinen app-neutralen Plattformport
-verwendet werden; er erzwingt weder einen Write noch eine automatische Sperre.
-Der Port liefert nur eine endliche Ursache oder `Unknown`, niemals eine
-fachliche Entscheidung.
-
-Die Bootklassifikation ist verbindlich und hat keine versteckte Zähl- oder
-Zeitfenstersemantik:
-
-| Reset-/Bootursache | R1-Bootverhalten | persistenter Nebeneffekt |
-|---|---|---|
-| Power-on, externer Reset, Brownout | Aktoren AUS, vollständige normale Config-/Persistence-/Sensor-/Safety-Revalidierung, kein automatischer Resume. | Kein Safety-Write und keine Sperre allein aus der Ursache. |
-| Watchdog oder Panic | Aktoren AUS, keine automatische Wiederaufnahme; nur nach vertrauenswürdiger vollständiger Neubewertung ist ein nicht freigebendes Resume-Angebot zulässig. | Kein Zähler und kein Zeitfenster. Bei untrusted System-/Config-/Persistence-Zustand `SAFE_BOOT`/unknown-safe. |
-| unbekannte, nicht lesbare oder widersprüchliche Ursache | Aktoren AUS, `Unresolved`; keine automatische Wiederaufnahme. | Keine Ableitung eines neuen Latches; bleibt die Gesamtbewertung untrusted, `SAFE_BOOT`/unknown-safe. |
-
-Die Ursache wird nicht als „normal“, „abnormal“ oder „unknown“ in einen neuen
-persistenten Vertrag übersetzt. Diese Begriffe sind nur die obige flüchtige
-Bootdiagnose. Ein späterer Implementationsbefund, der einen konkreten Hazard
-mit einem persistenten Latch nachweist, beendet die Umsetzung an dieser Stelle
-und benötigt eine neue Owner-Planfreigabe mit exakt einem begründeten Record,
-Feldsatz, Read-/Write-/Readback- und Clear-Vertrag; er wird nicht still in die
-Implementierung verschoben.
-
-### 2.2 Kanonische Synchronisierung des Live-Issues #24 (F6)
-
-Die alte Formulierung zu wiederholten abnormalen Neustarts ist kein
-zusätzlicher R1-Vertrag. Im selben Planungsvorgang wird der Live-Text von Issue
-#24 daher kanonisch ersetzt. Das Akzeptanzkriterium lautet danach:
-
-> Jede Boot-/Resetursache startet fail-closed mit Aktoren AUS und vollständiger
-> Revalidierung. Release 1 führt keinen Restart-Zähler und kein Resetzeitfenster.
-> `SAFE_BOOT` wird verwendet, wenn der aktuell gelesene System-, Konfigurations-
-> oder Persistenzzustand nicht vertrauenswürdig ist.
-
-Der bisherige Testpunkt wird danach ersetzt durch:
-
-> Power-on, externer Reset, Brownout, Watchdog, Panic und unbekannte
-> Resetcause: Boot all-off, vollständige Revalidierung, kein automatischer
-> Resume und keine implizite Restart-Akkumulation.
-
-Falls derselbe Resetgrund wiederholt injiziert wird, ist das Orakel ausdrücklich
-negativ: keine versteckte Zählung, kein Zeitfenster, keine neue Persistenz und
-keine Eskalation aus der Wiederholung. Jeder Boot folgt demselben
-fail-closed-Revalidierungsvertrag. Diese Issue-Änderung synchronisiert nur die
-bereits beschlossene F1-Ownerentscheidung; sie führt keine neue Funktion ein.
-
-## 3. Vollständiger Bestandsaudit gegen `origin/main`
-
-### 3.1 Fach- und Codebestand
-
-| Bereich | Tatsächlicher Bestand auf `origin/main` | Konsequenz für #24 |
-|---|---|---|
-| Issue #17 / Run-Persistenz | `run_persistence_contract.*`, `run_persistence_codec.*`, `run_persistence_store.*` und `run_persistence_coordinator.*` bilden Head-/Slot-/Readback-Verträge, aktive Snapshots, Revisionen, `Completed` und `NoActiveRun`. `IStateStore` unterscheidet `WriteError`, `CapacityError` und `CommitOutcomeUnknown`. | Diese allgemeine, atomare und native-testbare Grundlage bleibt. #24 nutzt sie für sichere Klassifikation und den kanonischen `NoActiveRun`-Abschluss. |
-| Issue #18 / Recovery | `run_recovery.*`, `run_recovery_time.*`, `run_progress_weighting.*`, `FallbackRecoveryPending`, `PendingRecoveryAnchor`, `RecoveryTemperatureEvidence`, `PriorBootPhaseElapsed`, `NominalRecoveryAdjustment`, `RecoveryEpisodeEvidence` und `recoveryEpisodeRevision` sind bereits auf `main`. Der aktuelle Pfad berechnet Wiederanlaufzeit, gewichteten Fortschritt und kann einen Lauf weiterführen. | Die technische Decoder-/Kompatibilitätsprüfung bleibt, soweit sie alte Daten sicher erkennen muss. Aktive automatische Zeit-, Gewichts-, Episode-, Fallback-Promotion- und Rettungslogik wird für R1 nicht fortgeführt. |
-| Issue #20 / Sensorqualität | `VALID`, `STALE`, `FAILED`, CRC-/Bus-/Bereichs-/Ratenprüfung, Filterung und Re-Identifikation sind kanonische Sensorverträge. | Sensorqualität bleibt eine Safety-Eingabe. Eine klar erlaubte, nachweislich behobene Betriebsstörung darf nach Live-Neubewertung automatisch wieder freigeben; Boot/Restore selbst darf das nicht. |
-| Issue #21 / Sensorwahl | Produkt-, Luft- und Kühlrollen, konfigurierte Fallbacks, `AirFallbackActive` und fail-closed Produkt-/Sicherheits-Sensorregeln sind vorhanden. | #24 dupliziert keine Sensor-FSM. Das Safety-Gate konsumiert die kanonische Auswahl-/Qualitätsprojektion und sperrt bei unbekanntem oder unzulässigem Ergebnis. |
-| Issue #22 / Temperaturregelung | `ControlRequest`, PI-/Luftbegrenzungslogik und Sensorrollen sind auf `main` integriert. | #24 bewertet die Regelanforderung nur über die Safety-Grenze. #24 ändert keine PI-Regelung und keine Grenzwerte. |
-| Issue #23 / Aktorplaner | `ActuatorSafetyGateStatus` startet mit `Unresolved`; `ActuatorPlanner` verwirft unbekannte, unverlässliche oder sofort stoppende Gates, hat Request-Watchdog-Logik und erzeugt Idle-/Stop-Pläne. `ActuatorPlanSinkDriver` schaltet die H-Brücke fail-closed und deaktiviert die Gegenrichtung. | Dieser zentrale Planer-/Sink-Pfad ist die bestehende Aktorgrenze. #24 liefert die einzige kanonische Safety-Direktive; kein Caller darf `Allowed` als Vertrauensbeweis einschleusen. |
-| Safety/Fault | Es gibt noch keinen zentralen Issue-24-Fault-/Safety-Service. FSM, Planner und Dokumente enthalten jedoch SafeBoot-, Fault-, Watchdog- und Gate-Projektionen. | Es wird genau eine kleine mutable Safety-Autorität in `fermentation_app` benötigt. Sie aggregiert Ursachen und erzeugt die bestehende `ActuatorSafetyGateInput`-Projektion. Ein neuer persistenter Safety-Record ist nach der F1-Notwendigkeitsprüfung nicht erforderlich. |
-| SAFE_BOOT / Resetcause / Watchdog | `ProcessState::SafeBoot` und der Aktor-Request-Watchdog existieren. Ein kanonischer Resetcause-Port und eine ESP-IDF-Adaptergrenze für Diagnose-/Boot-Evidenz existieren noch nicht. | Ein app-neutraler Resetcause-Port wird gemäß ADR-013 nur für flüchtige Diagnose und die oben definierte Bootklassifikation ergänzt. Kein Restart-Zähler, Zeitfenster, automatischer Latch oder Hardwareparameter. |
-| Konfiguration #56/#57 | `ConfigurationService`, `ConfigurationRecoveryService` und die Producer-Verträge unterscheiden `ConfigurationRuntimeFailure`, `ConfigurationUnavailable`, `ConfigurationIntegrityFailure` und `ConfigurationCommitIndeterminate` bzw. den zugrunde liegenden unbestimmten Commit. | Das bestehende `CONFIGURATION_SAFETY_INTEGRATION_GATE` bleibt unverändert verbindlich. Jede dieser Ursachen sperrt normale Aktorfreigabe und kann `SAFE_BOOT` erfordern. |
-| Composition Root | `src/main.cpp` und `main/app_main.cpp` bauen Platform/Application; die App hängt gegen abstrakte Plattformdienste. Fachliche Safety-Entscheidungen liegen noch nicht in einem zentralen Root. | Safety bleibt Fachlogik in `fermentation_app`. Composition Roots verdrahten nur Ports und stellen den sicheren Startzustand her. |
-| Native Test Support | `SimulatedPersistentStateStore` injiziert Read-/Write-/Corruption-/Power-Cut-/`CommitOutcomeUnknown`-Fälle. Zeit-, Sensor-, Aktor- und Notification-Mocks sind vorhanden. | Die vorhandenen Testhilfen werden wiederverwendet. Kein Produktionsmodul hängt von `device_platform_test_support` ab. |
-
-### 3.2 Dokument- und ADR-Bestand
-
-- `docs/SAFETY_AND_FAULTS.md` und `docs/ARCHITECTURE.md` schreiben derzeit
-  vier Fehlerklassen, Latches und automatische Reaktionsdetails teilweise als
-  allgemeine Architektur fest. Das ist mit der Owner-Policy nur insoweit
-  vereinbar, wie unterschiedliche Reaktionen tatsächlich benötigt werden.
-- `docs/SYSTEM_SAFETY_AND_RECOVERY.md`, `docs/STATE_MACHINE.md`,
-  `docs/RUN_PERSISTENCE.md` und `docs/RECOVERY_AND_INTERRUPTION.md` tragen
-  die #18-Semantik eines automatischen bzw. zeitlich gewichteten
-  Wiederanlaufs weiter. Insbesondere `RecoveryReject -> Fault` darf nicht
-  der generelle R1-Ausgang für einen nicht zu rettenden alten Lauf sein.
-- `docs/ACCEPTANCE_TESTS.md` enthält Orakel für automatische Recovery,
-  Ausfallintervalle und gewichteten Fortschritt. Diese Orakel sind gegen die
-  neue Ownerentscheidung zu bereinigen; Sensor-, Planner-, Persistenz- und
-  Konfigurationsorakel bleiben fachlich relevant.
-- `docs/SPECIFICATION_REVIEW.md` und `docs/REQUIREMENTS.md` müssen den
-  Unterschied zwischen allgemeiner Run-Persistenz und nicht geschuldeter
-  transparenter Charge-Recovery ausdrücklich machen.
-- `docs/CONFIGURATION_PERSISTENCE.md` dokumentiert das reale #56/#57-Gate
-  bereits detailliert. Es bleibt fachlich bindend und erhält nur die
-  R1-Folgerung „keine normale Aktorfreigabe“ als Anschlussvertrag.
-- `docs/IMPLEMENTATION_ISSUES.md` bleibt die Abhängigkeitsübersicht:
-  #20 -> #21 -> #22 -> #23 -> #24 sowie #56/#57 ->
-  `CONFIGURATION_SAFETY_INTEGRATION_GATE`. Sie darf keine zweite
-  Konfigurations- oder Safety-Wahrheit erzeugen.
-- ADR-018 ist mit dem Scope Reset vereinbar: ein kanonischer aktiver
-  Konfigurationsgraph, ein nutzbarer Fallback, vorbereitete Ressourcen und
-  unresolved Commit fail-closed. ADR-018 wird nicht abgeschwächt und erhält
-  keinen Run-Recovery-Sonderweg.
-- ADR-013 bleibt vollständig verbindlich. Die Platform liefert nur portable
-  Ports/Dienste, ESP-IDF liefert Adapter, `fermentation_app` enthält die
-  Fachentscheidung und Test Support bleibt Produktionsfremd.
-
-## 4. Zielvertrag für Release 1
-
-### 4.1 Ein zentraler Safety-Entscheider und ein zentrales Gate
-
-Die spätere Umsetzung erhält genau eine mutable Safety-Autorität in
-`fermentation_app` (Arbeitsname `SafetyCore`). Der Name ist kein zusätzlicher
-Fachvertrag. Diese Autorität ist verantwortlich für:
-
-- stabile Fault-Codes und die Zuordnung zur kanonischen Quelle;
-- den aktiven Safety-Zustand und die sichere Reaktion;
-- `SAFE_BOOT`, die Interpretation bestehender kanonischer Sperr-/Commitzustände
-  und Reset-/Watchdog-Bewertung; kein neuer persistenter Safety-Zustand;
-- die Trennung von Quittierung/Anzeige und fachlicher Wiederfreigabe;
-- die aus allen Eingaben aggregierte `ActuatorSafetyGateInput`-Projektion.
-
-`RunPersistenceCoordinator`, `ConfigurationService`, `SensorQuality`,
-`SensorSelection`, `ProcessStateMachine` und `ActuatorPlanner` bleiben Besitzer
-ihrer Fachzustände. Sie liefern Evidenz oder erhalten eine typisierte
-Entscheidung; keiner von ihnen erzeugt eine zweite Safety-Wahrheit.
-
-Die bestehende Planner-Reihenfolge bleibt die letzte anwendungsseitige
-Sperre:
-
-```text
-kanonische Producer-Evidenz
-        -> SafetyCore (einzige Safety-Entscheidung)
-        -> ActuatorSafetyGateInput
-        -> ActuatorPlanner / ActuatorPlanSinkDriver
-        -> abstrakte Aktor-Ports
-```
-
-Der Default vor abgeschlossener Validierung ist `Unresolved`. Nur der
-SafetyCore darf aus einem intern erzeugten, vollständigen Live-Kontext
-`Allowed` ableiten. Ein Request-, UI-, Test- oder Transportfeld
-`allowed=true` ist keine Evidenz. Die reale Sink-Grenze bleibt zusätzlich
-fail-closed; `device_platform` erhält keine Fachlogik.
-
-### 4.2 Minimale Reaktionsdisposition statt historischer Vierklassenpflicht
-
-Die Fehlerregistrierung erhält stabile, menschenlesbare Codes und eine
-maschinenlesbare Reaktionsdisposition. Für R1 sind nur diese drei
-Dispositionen erforderlich:
-
-| Disposition | Sichere Reaktion | Wiederfreigabe |
-|---|---|---|
-| `Informational` | Journal/Anzeige, keine Änderung am Gate | bereits erlaubter Betrieb bleibt nur nach normalem Live-Gate erlaubt |
-| `OperationalBlocked` | betroffene Aktoren sofort AUS, Zustand wird neu bewertet | automatisch nur bei ausdrücklich dafür freigegebenem Code und nach nachweislich gültiger Live-Evidenz; niemals durch Quittierung oder Boot |
-| `LatchedOrSafeBoot` | Aktoren AUS, eine bereits kanonisch vorgesehene persistente Sperre oder `SAFE_BOOT`, je nach Ursache | nur über die für den Code definierte, fachlich zulässige Behebung und vollständige Neubewertung; unbekannt bleibt gesperrt; #24 erfindet keinen neuen Latch |
-
-Die Dispositionen sind keine neue historische Fault-Lineage. Jede Fault-Quelle
-hat einen stabilen Code, eine Quelle, `active/cleared/acknowledged`-Projektion
-und eine feste Dispositionsregel. Die Implementierung führt nicht automatisch
-vier Klassen, Primary-/Follow-up-Lineage oder eine unbeschränkte Fault-Historie
-ein.
-
-Quittierung ändert nur Anzeige/Journaling. Sie löscht weder eine fachliche
-Sperre noch erzeugt sie `Allowed`. Automatische Wiederfreigabe ist auf klar
-erlaubte, nachweislich behobene Betriebsfehler begrenzt, etwa eine gültig
-reaktivierte Sensorqualität nach #20/#21. Kritische, unbekannte, Integritäts-,
-unbestimmte Commit- und nicht verifizierbare Persistenzzustände bleiben
-gesperrt.
-
-### 4.2.1 Minimaler R1-Fault-Code- und Lifecycle-Vertrag (F8)
-
-Auf `main` existiert kein kanonischer `FaultCode`-Vertrag. Deshalb wird dieser
-minimale Vertrag vor der Implementation festgelegt. Die symbolischen Werte
-bilden einen typisierten `SafetyFaultCode : uint16_t`; die hexadezimalen Werte
-sind stabile Wire-/Journal-Werte und werden nie für einen anderen Code
-wiederverwendet. Sie sind keine UI-Texte und keine neuen Safety-Persistenzkeys.
-Wenn ein bestehender Journal-/Notification-Port einen Code transportiert,
-verwendet er genau diesen Wert und strukturierte Detaildaten.
-
-| stabiler Code / Wert | kanonischer Producer | Disposition | Aktor- und Bootwirkung | Auto-Clear | Clear-Bedingung | Ack / manueller Reset | Neustartwirkung |
-|---|---|---|---|---|---|---|---|
-| `ConfigurationRuntimeFailure` / `0x0101` | #56 `ConfigurationService` mit `ConfigurationRuntimeFailure` | `LatchedOrSafeBoot` | `ImmediateStop`; `SAFE_BOOT`, wenn der Servicezustand nicht vertrauenswürdig ist | nein | bestehender #56-Producer-Recoveryvertrag, danach vollständige Config-/Safety-Neubewertung | Ack nur Anzeige; kein generischer Reset erforderlich | all-off; keine Freigabe aus altem Code oder neuem #24-Record |
-| `ConfigurationUnavailable` / `0x0102` | #57 `ConfigurationRecoveryService`/Configuration-Gate | `LatchedOrSafeBoot` | `ImmediateStop` und `SAFE_BOOT`; keine Default-/Factoryfreigabe | nein | gültige kanonische Konfiguration ist wieder geladen und #56/#57-Gate besteht | Ack nur Anzeige; kein separater #24-Reset | all-off; nur frische Gate-Prüfung |
-| `ConfigurationIntegrityFailure` / `0x0103` | #57 Integritäts-/Schema-/Signaturprüfung | `LatchedOrSafeBoot` | `ImmediateStop` und `SAFE_BOOT` | nein | vollständige gültige Konfigurationsrevision und bestehender autorisierter Recovery-/Commitpfad | Ack nur Anzeige; expliziter fachlicher/servicegebundener Reset ja | all-off; keine implizite Freigabe |
-| `ConfigurationCommitIndeterminate` / `0x0104` | #56/#57 unaufgelöster `CommitOutcomeUnknown` | `LatchedOrSafeBoot` | `ImmediateStop` und `SAFE_BOOT`; weder alte noch neue Config behaupten | nein | bestehender Config-Store löst den Commit eindeutig auf und die vollständige Neubewertung besteht | Ack nur Anzeige; kein Reset durch Ack oder Reboot | all-off; kein neuer Persistenzmechanismus |
-| `RunNotReconstructible` / `0x0201` | `RunPersistenceCoordinator` bei eindeutig klassifiziertem nicht rekonstruierbarem altem Run | `OperationalBlocked` | Aktoren AUS; kanonischer `NoActiveRun`-Abbruch, kein `SAFE_BOOT` allein wegen Chargeverlust | nein | bestehender `NoActiveRun`-Write-before-Apply-Pfad liefert `Applied`; danach neuer Live-Start möglich | Ack nur Anzeige; kein manueller Fault-Reset | Boot all-off; kein automatischer Resume und keine alte Zeit-/Progressgutschrift |
-| `RunPersistenceIndeterminate` / `0x0202` | `RunPersistenceCoordinator` bei `BlockedIndeterminate`, `PersistenceIndeterminate` oder teilweiser Gesamttransaktion | `LatchedOrSafeBoot` | `ImmediateStop`; `SAFE_BOOT`/unknown-safe nach bestehendem Coordinator-Vertrag | nein | neuer Boot liest einen eindeutig vertrauenswürdigen Storezustand oder der bestehende Store-/Servicevertrag behebt ihn; kein #24-Latch | Ack nur Anzeige; kein generischer Reset durch Reboot | all-off; keine automatische Wiederaufnahme |
-| `SafetySensorUnavailable` / `0x0301` | einzige SafetyCore-Projektion der kanonischen #20-Qualität und #21-Auswahl für eine sicherheitsrelevante Rolle | `OperationalBlocked` | Peltier `ImmediateStop`; Luefterreaktion gemäß bestehendem #20/#21/#23-Vertrag; kein `SAFE_BOOT` allein aus einem behobenen Betriebsfehler | ja, ausdrücklich erlaubt | frische, stabile und rollenbezogen gültige #20/#21-Evidenz; keine aktive höhere Sperre | Ack nur Anzeige; kein manueller Reset erforderlich | all-off und vollständige Neubewertung; kein Auto-Resume |
-| `ActuatorRequestWatchdog` / `0x0401` | #23 `ActuatorPlanner`-Evidence `StaleRequestWatchdog`/gelatchter Watchdog | `LatchedOrSafeBoot` | `ImmediateStop`; `SAFE_BOOT` nur bei zusätzlicher untrusted System-/Persistenzlage | nein | explizite #24-Lifecycle-Aktion über `applyExternalWatchdogFaultReset()` nach frischer Planner-/Gate-/Request-Prüfung | Ack nur Anzeige; expliziter Reset ja, Reboot allein nein | all-off; RAM-Latch wird nicht als neue persistente Safety-Wahrheit fortgeschrieben |
-| `ThermalSafetyIntervention` / `0x0501` | einzige `SafetyCore::TemperatureSafetyProjection` aus kanonischer #20/#22/#23-Evidenz für begrenzte Sicherheitsrückführung | `OperationalBlocked` | Peltier AUS, Richtung/Integral gemäß bestehendem Temperatur-/Plannervertrag gesperrt; keine normale Freigabe während der Rückführung | ja, nur nach explizit erlaubter `SAFETY_RECOVERY`-Evidenz | aktuelle Sensor-, Grenz-, Lüfter- und Aktorprüfung bestätigt sichere Rückkehr innerhalb der harten Grenzen | Ack nur Anzeige; kein manueller Reset erforderlich | all-off; Boot erzeugt keine Rückführung oder Freigabe |
-| `ThermalHardLimit` / `0x0502` | einzige `SafetyCore::TemperatureSafetyProjection` aus kanonischer Temperatur-/Hardwareevidenz bei harter Notgrenze | `LatchedOrSafeBoot` | beide Peltier-Richtungen sofort AUS; sichere Luefterreaktion; kein Gegenrichtungsversuch; `SAFE_BOOT` bei untrusted Systemlage | nein | Ursache behoben, reale Grenz-/Sensor-/Aktorprüfung und bewusster Service-Reset | Ack nur Anzeige; expliziter Reset ja | all-off; keine automatische Wiederfreigabe |
-| `SystemSafetyUnknown` / `0x0601` | SafetyCore für unbekannte/unmapped Boot-, Reset-, System- oder Integritätsevidenz | `LatchedOrSafeBoot` | `ImmediateStop` und `SAFE_BOOT`; unknown bleibt gesperrt | nein | vollständige aktuelle System-/Config-/Persistence-/Safety-Neubewertung plus ausdrücklich zulässiger Reset | Ack nur Anzeige; expliziter Reset ja, Reboot allein nein | all-off; kein neuer Restart-Zähler, kein Zeitfenster, kein Safety-Record |
-
-Die Detailursache (Rolle, #20/#21-Grund, #23-Reason, Coordinator-Step und
-technischer Store-Status) bleibt strukturiert beim Producer beziehungsweise im
-Journal; sie erzeugt nicht automatisch einen weiteren Fault-Code. Ein
-unbekannter Producerwert, eine nicht abbildbare Disposition oder ein fehlender
-kritischer Producer wird niemals still verworfen, sondern mindestens als
-`SystemSafetyUnknown` fail-closed behandelt. Ein `ActuatorSafetyGateStatus::Unresolved`
-ist zunächst die Gate-Projektion und kein zweiter Fault; wenn seine Ursache
-diagnostisch und stabil aus einem echten Producer stammt, gilt der zugehörige
-Code der Matrix. Für einen reinen Gate-/Sink-Zustand ohne bereits vorhandenen
-stabilen Diagnoseproducer wird kein vorsorglicher `ActuatorPathFailure`-Code
-eingeführt.
-
-`LatchedOrSafeBoot` bleibt als eine der drei minimalen Dispositionen bestehen.
-Der Name ist kein versteckter Parallelvertrag: Die Matrix legt für jeden Code
-zusätzlich fest, ob die konkrete Reaktion ein RAM-/fachlicher Latch,
-`SAFE_BOOT` oder beides ist. Es wird keine historische vierstufige
-Fehlerklassenhierarchie eingeführt. Kein Code darf wegen Ack, Neustart oder
-einem nicht vorhandenen allgemeinen Safety-Record `Allowed` erzeugen.
-
-### 4.3 Notwendigkeitsprüfung statt neuer Safety-Persistenz (F1)
-
-Die Prüfung aus Abschnitt 2.1 ist ein verbindlicher Planbestandteil und kein
-späteres Design-Detail. Für R1 wird **kein** allgemeiner Safety-Record mit
-Restartzähler, Resetfenster, Latch-Flag, Resetzeitquelle oder eigener
-Clear-Regel eingeführt. Es gibt daher auch keinen neuen Safety-Key, kein
-zusätzliches Persistenzschema und keinen zweiten Safety-Store.
-
-Der unsichere Zustand nach jedem Neustart wird bereits durch die Kombination
-aus Boot-all-off, `ActuatorSafetyGateStatus::Unresolved`, vollständiger
-Config-/Persistence-/Sensor-/Planner-Prüfung, explizitem Start/Resume und dem
-bestehenden `CommitOutcomeUnknown`-Vertrag verhindert. Ein persistierter alter
-Run ist damit keine Freigabeinformation. Ein sicherer Abbruch schreibt den
-bestehenden kanonischen `RunCheckpointVariant::NoActiveRun` und darf erst nach
-einem definitiven Persistenzergebnis in RAM/FSM als Standby erscheinen. Ein
-zusätzlicher Readback nach `StateStoreWriteStatus::Success` ist weder nötig
-noch zulässig; Readback gehört ausschließlich zur vorhandenen Auflösung eines
-`CommitOutcomeUnknown`.
-
-Ein bestehender Config-/Store-Zustand, der bereits selbst `SAFE_BOOT`,
-Unverfügbarkeit oder unbestimmtes Commit bedeutet, bleibt unverändert
-maßgeblich. #24 interpretiert ihn fail-closed, kopiert ihn aber nicht in einen
-neuen Safety-Record. Ein Resetjournal beziehungsweise eine vorhandene
-Diagnoseprojektion darf die Ursache anzeigen; das ist keine dauerhafte
-Safety-Wahrheit und erzwingt keinen Write.
-
-### 4.4 Resetcause und Watchdog ohne Restart-Latch
-
-`fermentation_app` erhält, falls der Audit des aktuellen Composition Roots dies
-für die vorhandene Diagnose benötigt, nur einen schmalen app-neutralen
-Resetcause-Port. Der Port liefert eine endliche bekannte Ursache oder
-`Unknown`, kennt weder ESP-IDF-Typen noch GPIOs und trifft keine
-Safety-Entscheidung. Der ESP-IDF-Adapter mappt ausschließlich den öffentlichen
-ESP-IDF-Reset-/Watchdog-Vertrag; native Tests injizieren jede Ursache einzeln.
-
-Die Bootreihenfolge ist immer:
-
-1. Aktoren hart auf den sicheren Aus-Zustand bringen, bevor Validierung oder
-   Restore beginnt.
-2. Ursache flüchtig als Diagnose-/Boot-Evidenz lesen; es gibt keine
-   Neustartzählung und kein Zeitfenster.
-3. Konfiguration und die realen #56/#57-Producer-Gates prüfen.
-4. Run-Persistenz read-only laden und mit dem exakten Prädikat aus Abschnitt
-   5.2 klassifizieren.
-5. Erst nach vollständiger Validierung `Standby`, ein nicht freigebendes
-   `RecoveryEvaluation`-Angebot oder `SAFE_BOOT` darstellen. Kein Boot- oder
-   Restore-Schritt erzeugt `Allowed` oder ein Aktorcommand.
-
-Bei `PowerOn`, externem Reset und Brownout ist das eine normale vollständige
-Revalidierung ohne automatischen Resume. Bei Watchdog, Panic und unbekannter
-Ursache bleibt die Wiederaufnahme ebenfalls nicht automatisch; ein
-untrusted System-/Config-/Persistence-Zustand führt zu `SAFE_BOOT`/unknown-
-safe. Ein vertrauenswürdiges, vollständig qualifiziertes Resume-Angebot bleibt
-nicht freigebend und benötigt weiterhin die explizite Nutzerentscheidung.
-
-Der bereits vorhandene Aktor-Request-Watchdog und seine latched Stop-Reaktion
-bleiben Bestandteil des Planner-Vertrags. #24 ergänzt Resetcause-/Boot-
-Bewertung, ersetzt aber nicht den #23-Watchdog und erfindet keine
-Hardware-Watchdogparameter.
-
-## 5. Boot-, Restore- und Run-Vertrag
-
-### 5.1 Zustandsablauf und nicht freigebendes Resume-Angebot
-
-| Eingang | Klassifikation | Persistenz-/FSM-Ausgang | Aktor-Gate |
-|---|---|---|---|
-| gültige Konfiguration, kein aktiver Lauf | sicherer leerer Start | bestehender Boot-Ready-Pfad, danach `Standby` mit `NoActiveRun` | `Unresolved` bis zum Ende der Bootprüfung; kein Aktorcommand |
-| aktiver Lauf erfüllt das Prädikat aus 5.2 | Resume-Angebot | `BootRecoverRun`/`RecoveryEvaluation` als nicht freigebende Projektion; kein automatischer Resume | AUS; kein `Allowed`, kein Planner-Command |
-| aktiver Lauf ist unvollständig, widersprüchlich, beschädigt, hat offene Recovery-Evidenz oder ist nicht beweisbar | sicherer Abbruch | zuerst kanonisches `NoActiveRun`; erst nach definitivem Persistenzergebnis `Standby` | AUS; kein Fault-Resume und keine Fallback-Promotion |
-| Nutzer lehnt Resume ab oder Angebot läuft ab | sicherer Abbruch desselben alten Runs | `RecoveryReject`/`RecoveryRejected` über den unten definierten Write-before-Apply-Pfad zu `NoActiveRun`, danach `Standby` | AUS bis zum definitiven Persistenzergebnis, danach Standby ohne Aktorfreigabe |
-| `NoActiveRun`-Write nicht definitiv abgeschlossen | unbekannter kritischer Persistenzzustand | kein normaler Standby; bestehender Store-/Bootvertrag bleibt gesperrt, erforderlichenfalls `SAFE_BOOT` | `ImmediateStop`/`Unresolved` |
-| Konfiguration oder Safety unbekannt/ungültig | kritischer/unknown Zustand | `SAFE_BOOT` oder bestehender latched Zustand; kein alter Run wird gerettet | `ImmediateStop` |
-| Nutzer bestätigt Resume | expliziter Fachbefehl | aktuelle Sensor-/Config-/Safety-Prüfung, dann persistente Resume-Entscheidung; erst bei definitivem Persistenzergebnis FSM-Aktivierung | bis dahin `Unresolved`/AUS; danach erst normales Planner-Gate |
-
-`RecoveryEvaluation` bedeutet ausschließlich: Der alte Zustand darf als
-nicht freigebendes Angebot angezeigt beziehungsweise fachlich bewertet werden.
-Es bedeutet weder `Allowed` noch „Aktorfreigabe vorbereiten“. Ein Resume-
-Angebot darf auch nach Boot, Brownout, Watchdog oder Panic niemals automatisch
-in einen aktiven Plannerpfad übergehen.
-
-### 5.2 Exaktes Rekonstruktionsprädikat für Schema 1/2/3 (F3)
-
-Die R1-Entscheidung wird als ein kanonisches Prädikat geplant:
-
-```text
-r1SimpleResumeEligible(snapshot, selectedRecord) =
-    knownSchema(selectedRecord.schemaVersion)
- && selectedRecord.schemaVersion != 0
- && validHeadSlotRecordCrcAndRevision(selectedRecord)
- && selectedRecord is the unique current record
- && activeVariant(snapshot)
- && validRequiredRunAndProcessFields(snapshot)
- && validCurrentSensorSelection(snapshot)
- && configAndProducerGateCanBeRevalidated(snapshot)
- && noSemanticOpenRecoveryEvidence(snapshot)
- && noUnresolvedOrOrphanedStoreState(selectedRecord)
-```
-
-`schemaVersion == 3` ist ausdrücklich zulässig. Die reguläre Existenz der
-Schema-3-Felder ist ebenfalls ausdrücklich zulässig. Ein Fallback wird nur zur
-Integritätsprüfung gelesen; er wird nicht automatisch promoted, gerollbackt
-oder als zweiter Resume-Kandidat gewählt. Sind Current und Fallback nicht
-eindeutig auf denselben kanonischen Zustand reduzierbar, ist das Prädikat
-false.
-
-Die Feldsemantik ist verbindlich:
-
-| Feld/Gruppe im aktuellen `RunPersistenceSnapshot` | R1-Klassifikation | Verwendung im Prädikat/Resume |
-|---|---|---|
-| `schemaVersion == 1`, `2` oder `3`, Recordtyp, Slot, CRC, Storage-Epoch, Head-/Checkpoint-Revision | erforderlich | Muss gültig, bekannt und eindeutig sein. `3` ist kein Ablehnungsgrund. |
-| `variant`, `activeRunId`, Programm-/Manual-Snapshot, `processState`, `processRunSnapshot`, `runRevision`, Revisionen und persistierte Command-IDs | für eindeutige Rekonstruktion erforderlich | Müssen strukturell gültig, widerspruchsfrei und dem aktiven Run zugeordnet sein. |
-| `activeRunSensorMode`, `sensorSelection` und die #20/#21-Projektion | für die aktuelle Live-Prüfung erforderlich | Kein Resume ohne aktuelle Neubewertung; #24 erfindet keine Sensorqualität oder Sensorwahl. |
-| `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis` | offene/alte Recovery-Evidenz | Wenn eines vorhanden ist, blockiert es den einfachen R1-Resume. Es wird nicht als Zeitanker verwendet; der alte Run geht in den `NoActiveRun`-Abbruch. |
-| `lastRecoveryEpisodeEvidence`, `priorBootPhaseElapsed`, `nominalRecoveryAdjustment` | offene/alte Recovery-/Carry-Forward-Evidenz | Wenn eines vorhanden ist, blockiert es den einfachen R1-Resume. Keine Zeit-, Temperatur- oder Korrekturgutschrift. |
-| `runProgress.weightedProgress` oder `runProgress.basis == PartialUnknownHistory` | aktive komplexe Progress-/Legacy-Evidenz | Blockiert den einfachen R1-Resume; kein gewichteter Fortschritt, keine Promotion und kein Rollback. |
-| `runProgress.basis == KnownTotal`, `weightedProgress == null`, `observedRunSeconds` beliebig | neutraler/normaler R1-Bestand | Die Felder dürfen vorhanden sein. `observedRunSeconds` wird nur auf Struktur/Overflow geprüft und niemals als automatische R1-Gutschrift oder Aktorfreigabe verwendet. |
-| `recoveryTemperatureEvidence` mit allen Rollen `quality == Stale` und ohne `filteredCelsius` | neutraler Schema-3-Default | Für Resume ignorierbar; kein Ausschluss wegen seiner nicht-optionalen Existenz. |
-| `recoveryTemperatureEvidence` mit nichtneutralem Last-known-Wert | reine Legacy-/Diagnoseinformation | Darf gelesen/angezeigt werden, blockiert allein nicht; es ersetzt keine frische #20/#21-Evidenz und wird nie als Resume- oder Zeitbeweis verwendet. |
-| `recoveryEpisodeRevision == 0` oder ein nicht mit offenen Markern gekoppelter Wert > 0 | reine Legacy-/Diagnoseinformation | Allein kein Ablehnungsgrund und keine Restartzählung. Bei gekoppelter offener Recovery gilt die Zeile der offenen Marker. |
-| vorbereiteter Head, beschädigter Current-Record, widersprüchlicher Fallback oder nicht aufgelöster `CommitOutcomeUnknown`-/Storezustand | nicht rekonstruierbarer Storezustand | Prädikat false; keine automatische Reparatur oder Promotion, sondern `NoActiveRun` beziehungsweise unknown-safe. Ein erfolgreicher Snapshot-Read ist dabei kein nachgelagerter Write-Readback-Vertrag. |
-
-`validRequiredRunAndProcessFields` verlangt zusätzlich, dass der gespeicherte
-Prozesszustand seine aktuelle Run-Projektion trägt und ein neuer Boot keine
-abgelaufene Phase aus einer alten monotone Zeit, UTC-Differenz,
-`PriorBootPhaseElapsed`, `observedRunSeconds` oder gewichteten Coverage
-ableiten müsste. Wenn eine Phase ohne so eine alte Zeit-/Progressgutschrift nicht
-eindeutig weitergeführt werden kann, ist das Ergebnis `not reconstructable`.
-Die einfache R1-Rekonstruktion verwendet nur den kanonisch gespeicherten
-Prozess-/Programmkern und frische Live-Prüfungen; alte Recoverywerte werden
-weder angewendet noch zu Aktorfreigaben umgerechnet.
-
-Damit gilt insbesondere: Ein ansonsten vollständiger und eindeutiger aktiver
-Run mit Schema 3, neutralen Defaultfeldern, `recoveryTemperatureEvidence`-
-Default und normalem `RunProgressState` wird nicht allein wegen dieser Felder
-verworfen. Nur die oben ausdrücklich benannte semantisch aktive offene
-Recovery-/Unknown-Evidenz blockiert den einfachen Resume.
-
-### 5.3 Exakte Write-before-Apply-Semantik für Resume und Abbruch (F4)
-
-Die vorhandenen `RecoveryEvaluation`, `RecoveryResume`, `RecoveryReject`,
-`RecoveryResumed` und `RecoveryRejected` werden wiederverwendet. Es entsteht
-keine zweite FSM und kein neuer Event/Reason. Die Topologie wird verbindlich
-angepasst:
-
-```text
-RecoveryEvaluation --RecoveryResume/RecoveryResumed--> valid active phase
-RecoveryEvaluation --RecoveryReject/RecoveryRejected--> Standby
-```
-
-`RecoveryRejected` gilt ausschließlich für ein fachlich entschiedenes
-Angebot, einen Ablauf oder eine unklare Rekonstruktion nach dem kanonischen
-`NoActiveRun`-Commit. Es führt nicht mehr von `RecoveryEvaluation` nach
-`Fault`; `Fault` bleibt für echte Safety-/Fachfehler. Der Reason darf erst als
-autoritativer FSM-Übergang sichtbar werden, wenn die Persistenzreihenfolge
-erfolgreich abgeschlossen ist.
-
-#### Kanonischer Storevertrag und definitives Persistenzergebnis (F5)
-
-Der bestehende `IStateStore`- und `RunPersistenceStore::writeExact()`-Vertrag
-ist die einzige Write-before-Apply-Wahrheit. Für jeden vom bestehenden
-Run-Persistence-Transaktionspfad ausgeführten exakten Write gilt:
-
-| bestehendes Ergebnis | `writeExact()`-Ergebnis | Apply-Folge |
-|---|---|---|
-| `StateStoreWriteStatus::Success` | `Written` ohne Readback | Der Write ist definitiv dauerhaft; nach erfolgreichem Gesamtpfad darf der detached Kandidat angewendet werden. Ein zweiter Readback ist nicht erforderlich und darf keinen künstlichen Fehlerpfad erzeugen. |
-| `StateStoreWriteStatus::WriteError` | `WriteError` | dieser Key ist sicher nicht geschrieben; kein Apply aus diesem Einzelresultat. Ob der alte Gesamtzustand autoritativ bleibt, entscheidet bei einer Mehrschritttransaktion ausschließlich Abschnitt 5.4. |
-| `StateStoreWriteStatus::CapacityError` | `CapacityError` | dieser Key ist sicher nicht geschrieben; kein Apply aus diesem Einzelresultat. Ob der alte Gesamtzustand autoritativ bleibt, entscheidet bei einer Mehrschritttransaktion ausschließlich Abschnitt 5.4. |
-| `StateStoreWriteStatus::CommitOutcomeUnknown` + Readback des neuen Werts | `Written` | Der vorhandene `writeExact()`-Readback löst den Commit eindeutig auf; nach erfolgreichem Gesamtpfad darf der detached Kandidat angewendet werden. |
-| `StateStoreWriteStatus::CommitOutcomeUnknown` + Readback des alten Werts | `NotWritten` | dieser Key ist sicher nicht geschrieben; kein Apply aus diesem Einzelresultat. Die Gesamttransaktion wird gemäß Abschnitt 5.4 bewertet. |
-| `CommitOutcomeUnknown` + fremder/unklarer Wert oder Readbackfehler | `Indeterminate` | Commit bleibt unbekannt; kein RAM-/FSM-Apply; Aktoren gesperrt und Boot-/Safetyzustand `unknown-safe`/`SAFE_BOOT` gemäß bestehendem Storevertrag. |
-
-„Definitiv geschrieben“ bedeutet für den gesamten bestehenden
-Run-Persistence-Pfad: jeder für den atomaren Übergang erforderliche Write ist
-`Written`, wobei `Written` entweder aus einem direkten `Success` oder aus der
-gezielten `CommitOutcomeUnknown`-Auflösung durch `writeExact()` stammt. Ein
-normaler `Success` benötigt keinen nachgelagerten Readback. Es wird keine zweite
-Persistenz- oder Readback-Engine für #24 eingeführt. Ein einzelner definitiver
-Fehler entscheidet nur über den betroffenen Key-Write; die Gesamtwirkung einer
-mehrstufigen Transaktion kommt ausschließlich aus dem kanonischen
-`RunPersistenceCoordinator`-Ergebnis und seiner `durability`-/`step`-Semantik.
-`Indeterminate` darf keinen normalen Standby und keine aktive Resume-Projektion
-behaupten.
-
-#### Resume-Angebot und bestätigter Resume
-
-1. Der read-only Audit erfüllt 5.2 vollständig. `RecoveryEvaluation` bleibt
-   nicht freigebend; es gibt kein `Allowed` und kein Aktorcommand.
-2. Der Nutzer sendet einen expliziten Resume-Befehl. Der Aufrufer prüft die
-   aktuelle Konfiguration einschließlich #56/#57, frische #20/#21-Sensorbasis,
-   SafetyCore und die Prozess-/Planner-Voraussetzungen. Der Planner bleibt
-   `Unresolved`/AUS.
-3. Aus `RecoveryResume` wird ein vollständiger detached Kandidat für die
-   gültige aktive Zielphase gebildet. Die bestehende
-   `RunPersistenceCoordinator`-Write-before-Apply-Grenze
-   (`persistRecoveryCandidate` oder der gleichwertige bestehende
-   `persistTransition`-Pfad) schreibt Prepared-Head, Zielsnapshot und
-   Committed-Head. Jeder Einzelwrite wird ausschließlich über den bestehenden
-   Store-/`writeExact()`-Vertrag bewertet; zusätzliche Readbacks nach einem
-   definitiven `Success` sind ausgeschlossen.
-4. Nur das Gesamtergebnis `Applied`, bei dem alle erforderlichen Writes
-   `Written` sind (direktes `Success` oder eindeutige
-   `CommitOutcomeUnknown`-Auflösung auf den neuen Wert), darf den
-   autoritativen RAM-Zustand durch die bestehende FSM-Anwendung auf den
-   `RecoveryResumed`-Zielzustand aktualisieren. Erst danach wird ein normaler
-   Live-Planner-Tick mit allen Gates erlaubt; der Persistenzcommit selbst ist
-   kein `Allowed`.
-5. Bei `WriteError`, `CapacityError`, `NotWritten`, Codecfehler oder
-   `Indeterminate` bleibt der bisherige RAM-/FSM-Zustand unverändert und es
-   gibt keinen aktiven Plannerpfad. Vor einem geschriebenen Prepared Head darf
-   der Coordinator in den bestehenden rollbackfähigen Zustand zurückkehren;
-   danach bleibt er gemäß 5.4 `BlockedIndeterminate`, auch wenn der spätere
-   Einzelwrite sicher nicht geschrieben wurde. `Indeterminate` führt nach dem
-   bestehenden Vertrag zu `SAFE_BOOT`/gesperrt; ein `Success` wird nicht
-   nachträglich durch einen unnötigen Lesefehler wieder zu unknown gemacht.
-
-#### Ablehnung, Ablauf oder nicht rekonstruierbarer Run
-
-1. Aktoren bleiben `AUS`; SafetyCore liefert `Unresolved`/`ImmediateStop`.
-2. Ein detached Kandidat wird mit der bestehenden
-   `RecoveryReject`-Entscheidung nach `Standby` und mit
-   `clearActiveRunState` als kanonischer `RunCheckpointVariant::NoActiveRun`
-   Projektion gebildet. Die autoritative `current`-FSM und der laufende
-   Snapshot bleiben bis zum Commit unverändert.
-3. Zuerst wird genau dieser `NoActiveRun`-Kandidat über den bestehenden
-   atomaren Run-Persistence-Vertrag geschrieben. `Applied` bedeutet: Prepared-
-   Head, Payload und Committed-Head sind über den bestehenden Pfad definitiv
-   `Written`; ein direkter `Success` genügt dafür ohne zusätzlichen Readback,
-   nur `CommitOutcomeUnknown` löst den bereits vorhandenen `writeExact()`-
-   Readback aus.
-4. Erst nach diesem definitiven Ergebnis wird der detached Kandidat
-   autoritativ angewendet: `RecoveryRejected` führt `RecoveryEvaluation` nach
-   `Standby`, die aktiven Run-Felder werden gelöscht und der kanonische
-   `NoActiveRun`-Zustand ist die neue RAM-/Persistenzwahrheit.
-5. Bei `WriteError`, `CapacityError` oder `NotWritten` wird kein normales
-   `Standby` behauptet. Ob der alte Gesamtzustand noch autoritativ gelten darf,
-   entscheidet die Transaktionsposition gemäß 5.4; nach bereits geschriebenem
-   Prepared Head bleibt der Coordinator ausdrücklich blocked/indeterminate.
-   Bei `Indeterminate` oder einem Readbackfehler wird ebenfalls kein normales
-   `Standby` behauptet: Die Aktoren bleiben gesperrt und Boot-/Safetyzustand
-   bleibt nach dem bestehenden Storevertrag `SAFE_BOOT`/unknown-safe. Ein
-   späterer Boot entscheidet ausschließlich aus neu gelesenem, eindeutigem
-   Storezustand.
-
-Der initiale Bootfall „nicht rekonstruierbar“, in dem noch kein
-`RecoveryEvaluation`-Angebot autoritativ aktiv ist, verwendet denselben
-detached `NoActiveRun`-Write-before-Apply-Pfad und wendet danach den bereits
-vorhandenen `BootReady`-/`Standby`-Übergang an. Nutzerablehnung, Timeout und
-ein nachträglich unklar gewordener Resume verwenden ausdrücklich
-`RecoveryReject`/`RecoveryRejected`. In keiner Variante wird zuerst RAM-
-Standby behauptet und anschließend versucht, den alten aktiven Snapshot zu
-löschen.
-
-### 5.4 Zweiebenen-Semantik der nichtperiodischen Gesamttransaktion (F7)
-
-Die F5-Einzel-Write-Wahrheit und die F7-Gesamttransaktion werden nicht
-zusammengezogen. Für Resume, `NoActiveRun` und jede andere nichtperiodische
-Anwendung gilt der vorhandene `RunPersistenceCoordinator::writeSnapshotCore()`-
-Vertrag in exakt dieser Reihenfolge:
-
-```text
-Prepared Head
-    ↓
-Checkpoint Slot
-    ↓
-Committed Head
-    ↓
-Gesamtergebnis Applied
-```
-
-`writeExact()` entscheidet weiterhin nur über den jeweiligen Key-Write. Der
-Coordinator entscheidet zusätzlich aus `RunPersistenceStep`,
-`RunPersistenceDurability`, `RunPersistenceResultStatus` und seinem Zustand,
-ob die Gesamttransaktion rollbackfähig, dauerhaft verändert oder unbestimmt
-ist. #24 erfindet keine Transaktionsengine und interpretiert keinen
-Einzelstatus außerhalb dieses Vertrags neu.
-
-| Fehlerstelle | Einzel-/Gesamtstatus | Bereits dauerhaft verändert? | Verbindliche Gesamtfolge |
-|---|---|---:|---|
-| vor bzw. beim `PreparedHead`, `Success` nicht erreicht und sicher nicht geschrieben (`WriteError`, `CapacityError`, `NotWritten`) | `WriteFailed`/`CapacityExceeded`, `step=PreparedHead`, `durability=Unchanged` | nein | kein RAM-/FSM-Apply; der bestehende rollbackfähige Coordinator-State darf gemäß dem vorhandenen `rollbackState` wieder gelten. Der alte Zustand wird nur in diesem Vorbereitungsfall als unverändert behandelt. |
-| `PreparedHead` mit nicht auflösbarem `CommitOutcomeUnknown` | `PersistenceIndeterminate`, `step=PreparedHead`, `durability=MayHaveChanged`, Coordinator `BlockedIndeterminate` | unbekannt | kein RAM-/FSM-Apply; blocked/unknown-safe; kein pauschales „old authoritative“. |
-| Slot-Fehler nach definitiv geschriebenem `PreparedHead`, unabhängig davon ob `WriteError`, `CapacityError`, `NotWritten` oder `Indeterminate` | `WriteFailed`/`CapacityExceeded` oder `PersistenceIndeterminate`, `step=CheckpointSlot`, `durability=Changed` bzw. `MayHaveChanged`, Coordinator `BlockedIndeterminate` | ja | kein RAM-/FSM-Apply; bestehender blocked/indeterminate-Vertrag bleibt erhalten. Der Fehler des Slot-Keys darf die dauerhafte Prepared-Head-Mutation nicht zurückdefinieren. |
-| `CommittedHead`-Fehler nach Prepared Head und Slot, unabhängig vom Einzelstatus | `WriteFailed`/`CapacityExceeded` oder `PersistenceIndeterminate`, `step=CommittedHead`, `durability=Changed` bzw. `MayHaveChanged`, Coordinator `BlockedIndeterminate` | ja | kein RAM-/FSM-Apply; bestehender blocked/indeterminate-Vertrag bleibt erhalten; der alte Gesamtzustand wird nicht als sicher unverändert behauptet. |
-| Prepared Head, Slot und Committed Head jeweils `Written` sowie anschließende Konsistenzbestätigung | `Applied`, `step=CommittedHead`, `durability=Changed`, Coordinator `Ready`/`ReadyEmpty` | ja, vollständig | erst jetzt detached Resume-/`NoActiveRun`-Kandidat in RAM/FSM anwenden. Erst danach darf die normale Planner-Grenze weiterlaufen. |
-
-Die vier späteren Fehlerfälle umfassen ausdrücklich auch `CapacityError` und
-`NotWritten`: Ein Einzelwrite kann sicher nicht erfolgt sein, während die
-Gesamttransaktion wegen des vorherigen Prepared Head bereits dauerhaft verändert
-ist. Nur das vollständige Coordinator-Ergebnis `Applied` ist ein
-Gesamt-Apply-Ergebnis. Periodische Checkpoints behalten ihre eigene vorhandene
-Slot-zu-Head-Semantik; sie werden nicht als neue Resume-Transaktion modelliert.
-
-## 6. Bestandsmatrix A/B/C und konkrete Entscheidungen
-
-### A – für die vereinfachte Release-1-Policy benötigt
-
-| Mechanismus | Warum benötigt | Entscheidung |
-|---|---|---|
-| `ProcessState` mit `Boot`, `SafeBoot`, `Standby`, `RecoveryEvaluation`, aktiven Phasen und terminalen Zuständen | Sichere Boot-/Standby-/Angebots-/Fault-Projektion ist bereits der kanonische Prozessvertrag. | Behalten; `RecoveryEvaluation` wird explizites Angebot, nicht automatische Freigabe. |
-| `ActuatorSafetyGateStatus::Unresolved/Allowed/ImmediateStop` und Planner-Auswertung | Zentrale, nicht umgehbare Anwendungsgrenze gegen normale Aktorfreigabe. | Behalten und an SafetyCore binden; kein caller-supplied `Allowed`. |
-| `ActuatorPlanner`-Stop-/Watchdog- und `ActuatorPlanSinkDriver`-Idle-/Gegenrichtungslogik | Sofortige sichere Reaktion und letzte Sink-Grenze. | Behalten; route-spezifische Allow-/Deny-Tests ergänzen. |
-| #17 Head-/Slot-/CRC-/Schema-/Revision-/Readback-Validierung | Vollständige und eindeutige Rekonstruktionsprüfung sowie sicherer `NoActiveRun`-Abschluss. | Behalten; keine automatische Rettung aus unklaren Daten. |
-| `RunCheckpointVariant::NoActiveRun`, aktiver Snapshot und terminale Run-Zustände | Kanonischer leerer Zustand, sichere Beendigung und allgemeine Persistenz. | Behalten; `NoActiveRun` ist der R1-Abbruchausgang. |
-| `RunPersistenceCoordinator`-Load-/Write-Ergebnisse einschließlich Read-/Write-/Indeterminate-Fällen | Erkennen, ob ein alter Lauf eindeutig ist und ob sein sicherer Abschluss commitbar ist; F7 trennt Einzelwrite von Gesamttransaktion. | Behalten; `RunPersistenceStep`-/`durability`-/Coordinator-State unverändert als Gesamtvertrag wiederverwenden. |
-| #20 `SensorQuality` und #21 Sensorwahl/Fallback | Aktorfreigabe darf nur mit gültiger, aktueller und eindeutig ausgewählter Sensorbasis erfolgen. | Behalten; keine parallele #24-Sensor-FSM. |
-| #22 `ControlRequest` und #23 Planner-Verträge | SafetyCore muss die reale fachliche Anforderung sperren, nicht eine zweite Regelung erfinden. | Behalten; keine Grenzwert- oder PI-Änderung. |
-| #56/#57 Configuration-Safety-Producer | Konfigurationsintegrität ist unabhängig vom vereinfachten Run-Recovery und muss fail-closed bleiben. | Vollständig integrieren; alle vier benannten Producer-Zustände sperren normale Aktoren. |
-| SafeBoot-/Fault-Projektion und stabile Fehlercodes | Unknown/critical darf nie normal freigeben; Diagnose muss nachvollziehbar bleiben. | Als kleine Safety-Autorität mit der vollständigen minimalen F8-Matrix ergänzen, ohne historische Lineage oder Fault-Historie. |
-| Resetcause-/Boot-Evidenz | Bootdiagnose und reproduzierbare Resetcause-Fehlerinjektion sind für die sichere Erstbewertung relevant. | Einen kleinen app-neutralen Port nur für flüchtige Ursache/Diagnose planen; keine Restart-Zählung, kein Zeitfenster und kein neuer persistenter Safety-Record. |
-
-### B – allgemein sinnvoll und zu behalten
-
-| Mechanismus | Nutzen außerhalb komplexer Recovery | Entscheidung |
-|---|---|---|
-| `device_platform`-Ports, `IPlatformServices`, `IStateStore`, `StorageEnvelope`, Slot-Kandidaten und CRC | Portable, anwendungsneutrale Persistenz- und Plattformbasis. | Behalten; keine Safety-Fachlogik in `device_platform`. |
-| `device_platform_test_support` mit deterministischen Zeit-, Sensor-, Aktor- und Store-Injektionen | Native, reproduzierbare Nachweise für Fail-Closed-Verhalten. | Behalten; keine Produktionsabhängigkeit. |
-| Atomarer Active-/Fallback-Store sowie eindeutige Head-/Slot-Prüfung | Allgemeine Schutzfunktion gegen Teilwrites und Readbackfehler, auch ohne Charge-Recovery. | Behalten; Fallback bleibt Integritätswerkzeug, nicht automatische Rettungsfreigabe. |
-| Normale Run-Revisionen, Checkpoints, Programm-Snapshot und `observedRunSeconds`, soweit für einen laufenden Run benötigt | #17-Run-Persistenz und Diagnose bleiben sinnvoll, auch wenn Neustart nicht verlustfrei sein muss. | Behalten, aber keine unbewiesene alte Zeit als R1-Fortschritt gutschreiben. |
-| Terminale `Completed`-/`NoActiveRun`-Records und sichere neue-Run-Initialisierung | Allgemeine Lebenszyklus- und Bedienlogik. | Behalten und für den sicheren Abbruch verwenden. |
-| #20 Re-Identifikation und #21 erlaubter Fallback | Nachweislich behobene Betriebsfehler können ohne Neustart wieder bewertet werden. | Behalten; automatische Wiederfreigabe nur gemäß expliziter Code-Policy und Live-Gate. |
-| Event-Journal und User-Notification-Port | Diagnose und Quittierung bleiben von fachlicher Freigabe getrennt. | Behalten; kein zweiter Eventbus und keine Anzeige als Safety-Quelle. |
-| ESP-IDF-/native Composition-Root-Trennung | Plattformwechsel und Testbarkeit ohne Safety-Abhängigkeit von Netzwerk/Web. | Behalten gemäß ADR-013; spätere Adapter liefern nur Ports. |
-| Bestehender Planner-Request-Watchdog | Schutz gegen stale/missing live control requests. | Behalten; von Resetcause-Bewertung getrennt testen. |
-
-### C – historische Recovery-Bestandteile mit C1/C2-Trennung (F2)
-
-Kategorie C wird nicht als pauschaler Cleanup-Auftrag behandelt. Entscheidend
-ist zuerst, ob ein Baustein noch einen aktiven Produktpfad beeinflusst.
-
-#### C1 – zwingend aus dem aktiven #24-Produktpfad entfernen/deaktivieren
-
-| Aktiver Pfad/Baustein | Hazard | R1-Entscheidung |
-|---|---|---|
-| automatische Recovery-Aktivierung aus Boot, Restore oder Fallback, einschließlich `activateLoadedRun`/`activateFallbackRecoveredRun` soweit sie ohne explizite Nutzerentscheidung weiterführen | Alter Run kann trotz Reset/unklarer Zeit wieder aktiv werden. | Auf read-only Qualifikation und explizites Resume-Angebot begrenzen; kein aktives Recovery aus Boot/Restore. |
-| `run_recovery_time.*`, `reevaluateRecoveryTime` und Zeit-/UTC-Ausfallintervallpfade, soweit sie im Produktpfad eine Phase, Zeit oder Abschlussentscheidung automatisch weiterführen | Alte Unterbrechungszeit kann als fachlicher Fortschritt oder als automatische Freigabe wirken. | Auf die in 5.2 benötigte Klassifikation reduzieren oder Aufrufe entfernen; keine Ersatzzeitrechnung. |
-| `run_progress_weighting.*`, `RecoveryProgressWeightingModel` und `applyRecoveryProgressWeighting`, soweit sie Snapshot-/RAM-Werte mutieren oder gutschreiben | Alter gewichteter Wert kann einen Lauf oder Aktorpfad fördern. | Aktive Produzenten/Mutatoren aus dem R1-Produktpfad entfernen; Felder höchstens decoderseitig erkennen. |
-| Fallback-Promotion, Rollback, `FallbackRecoveryPending`-Auflösung und `resolveRecoveryOutcome`-Varianten mit automatischer Entscheidung | Fallback kann einen alten oder widersprüchlichen Run aktivieren. | Fallback nur read-only zur Eindeutigkeitsprüfung; keine Promotion, kein Rollback-Resume, bei Unklarheit `NoActiveRun`/unknown-safe. |
-| jede Recovery-Write-API, die ohne explizite Bestätigung `RecoveryResume`, Zeitgutschrift, Fortschritt, Fallback oder Aktorfreigabe persistiert | Persistenz könnte eine Recoveryentscheidung vor der Nutzer-/Live-Prüfung festschreiben. | Nur der explizite Resume- und der `NoActiveRun`-Write-before-Apply-Pfad aus 5.3 bleiben aktiv. |
-
-C1 umfasst nur die Aufrufstellen, Mutatoren und Orakel, die tatsächlich einen
-der genannten Produktwirkungen erzeugen. Die Umsetzung muss für jeden
-Call-Site nachweisen, dass Boot, Restore, Start, Sensorwahl, Planner und Sink
-keinen C1-Pfad mehr zur automatischen Run-/Aktoraktivierung erreichen.
-
-#### C2 – nach C1 ungenutzter Legacy-/Deprecated-Bestand
-
-| Bestand | Einstufung nach C1 | R1-Entscheidung |
-|---|---|---|
-| `PendingRecoveryAnchor`, `RecoveryTemperatureEvidence`, `lastRecoveryEpisodeEvidence`, `priorBootPhaseElapsed`, `nominalRecoveryAdjustment`, `recoveryEpisodeRevision` und ihre Schema-3-Codec-Felder | Teilweise reguläre Schema-3-Wirefelder; aktive Marker und neutrale Defaults sind gemäß 5.2 verschieden zu behandeln. | Decoder-/Wire-Kompatibilität und sichere Klassifikation nur soweit nötig behalten; keine pauschale Löschung und keine aktive R1-Gutschrift. |
-| `run_recovery_time.*`, `run_progress_weighting.*`, historische Hilfsmodelle und zugehörige Tests, nachdem alle C1-Aufrufe entfernt sind | Toter oder ungenutzter Legacy-Code ohne aktiven Produktpfad. | Als `Legacy/Deprecated` dokumentieren und in #24 nicht pauschal löschen. Ein kleiner separater Follow-up-Cleanup wird nach stabiler #24-Integration empfohlen. |
-| alte Zeitintervall-, gewichtete-Progress-, Fallback- und transparente-Reboot-Orakel ohne produktive Aufrufstelle | Nicht mehr normative Tests; keine R1-Sicherheitsbeweise. | Nicht als PASS verwenden. In #24 nur dort korrigieren/entfernen, wo sie den aktiven Testvertrag oder Architekturguard verfälschen; übrige Bereinigung als Follow-up. |
-
-Für C2 sind ein statischer/Architektur-Negativnachweis der erlaubten
-Produktionsaufrufe und mindestens ein Anwendungstest vorzusehen, der bei
-Schema-3-Legacy-/Open-Recoverydaten ausschließlich `NoActiveRun`/unknown-safe
-und keinen C2-Mutator/Plannerpfad erreicht. Nur wenn ein konkreter C2-Baustein
-technisch nicht sicher abtrennbar ist oder einen Parallelvertrag erzeugt, darf
-seine Entfernung in #24 verbleiben; der Plan muss dann Baustein, Call-Site,
-Abtrennungsversuch und den konkreten Safetygrund nennen. Diese Ausnahme ist
-nicht pauschal für ganze Dateien oder Testverzeichnisse erteilt.
-
-## 7. Konfigurations- und Producer-Gate #56/#57
-
-Das `CONFIGURATION_SAFETY_INTEGRATION_GATE` bleibt ein unveränderter
-Querschnittsvertrag. Der SafetyCore übernimmt die realen Producer-Ausgänge,
-ohne neue parallele Fehlernamen oder eine zweite Config-Integritätslogik zu
-schaffen:
-
-| Producer-Zustand | R1-Safetyreaktion |
-|---|---|
-| `ConfigurationRuntimeFailure` | `LatchedOrSafeBoot`/`ImmediateStop`; keine normale Aktorfreigabe. Erst nach dem bestehenden fachlichen Recovery-/Readback-Vertrag und vollständiger Neubewertung weiter. |
-| `ConfigurationUnavailable` | `SAFE_BOOT` oder latched Sperre; keine Annahme von Default-/Factorywerten als produktive Freigabe. |
-| `ConfigurationIntegrityFailure` | `SAFE_BOOT`/`ImmediateStop`; Integritätsfehler wird nicht quittierungs- oder UI-seitig freigegeben. |
-| nicht auflösbarer `CommitOutcomeUnknown` bzw. `ConfigurationCommitIndeterminate` | Zustand bleibt unbestimmt; weder alte noch neue Konfiguration behaupten, keine Publish-/Aktorfreigabe, keine Slot-Wiederverwendung. |
-
-Diese Zustände beeinflussen die Run-Policy unabhängig davon, ob ein aktiver
-Run rekonstruierbar wäre. Ein eindeutig gespeicherter Run darf bei
-ungültiger/unbekannter Konfiguration nicht normal freigegeben werden. Der
-Scope Reset vereinfacht nur die Laufrettung, nicht die Konfigurations-
-integrität.
-
-## 8. Modul- und Adapterarchitektur
-
-Die spätere Änderung hält ADR-013 und alle lokalen `AGENTS.md` ein:
-
-- `lib/device_platform`: nur app-neutrale Ports/Dienste. Falls der Audit die
-  fehlende Resetcause-Fähigkeit bestätigt, kommt hier ein kleiner abstrakter
-  Resetcause-/Boot-Evidence-Port für flüchtige Diagnose hinzu. Keine
-  Restart-Zählung, Safety-Persistenz, Fault-Codes, Run-Modelle, GPIOs,
-  ESP-IDF-Enums oder Safety-Entscheidungen.
-- `lib/device_platform_esp_idf`: ausschließlich Mapping der öffentlichen
-  ESP-IDF-Reset-/Watchdog-Verträge auf den abstrakten Port und die sichere
-  Initialausgabe. Keine Fachlogik, keine Restartzählung und kein Run-Recovery.
-- `lib/device_platform_test_support`: deterministische Resetcause-,
-  Persistence-, Sensor- und Aktorsimulation. Keine Produktionsreferenz und
-  keine Safety-Fachtypen als Plattformvertrag.
-- `lib/fermentation_app`: SafetyCore, stabile Fault-/Reaktionsverträge,
-  Boot-/Restore-Entscheidung, #56/#57-Gate und die Verbindung zur vorhandenen
-  Planner-Safety-Grenze. Die App kennt weder ESP-IDF noch konkrete GPIOs.
-- `src/main.cpp` und `main/app_main.cpp`: nur Composition Root. Sie erzeugen
-  Ports, übergeben die Safety-/Persistence-Abhängigkeiten und starten mit
-  sicheren Ausgaben; sie treffen keine eigenen Prozess- oder Faultentscheidungen.
-
-Geplante betroffene Bestandsdateien und neue Zielbereiche sind mindestens:
-
-```text
-lib/device_platform/src/              Resetcause-/Boot-Evidence-Port, falls Audit bestätigt
-lib/device_platform_esp_idf/src/      öffentlicher ESP-IDF-Adapter
-lib/device_platform_test_support/src/ deterministische Reset-/Store-Injektion
-lib/fermentation_app/src/             SafetyCore, Boot-/Run-/Config-Verknüpfung
-  process_state_machine.*              RecoveryReject/Standby-Semantik
-  run_persistence_contract.*            nur notwendige Legacy-/R1-Klassifikation
-  run_persistence_codec.*               kein neues Schema, sichere Altdecodierung
-  run_persistence_coordinator.*         explicit resume / NoActiveRun / indeterminate
-  run_recovery*.*/run_progress_*.       C1-Abschaltung; C2 bleibt Legacy/Deprecated
-  run_commands.*                        keine caller-supplied Safetyfreigabe
-  actuator_plan_types.*                 SafetyView/Gate nur falls bestehender Typ es erfordert
-  actuator_planner.* / sink driver       zentrale Endgrenze und Stop-Orakel
-  fermentation_application.*            Boot-Reihenfolge und Composition-Verbindung
-src/main.cpp, main/app_main.cpp         nur Verdrahtung und sichere Startausgabe
-test/...                                 gezielte native Vertrags-/Integrationsnachweise
-docs/...                                 in Abschnitt 10 definierte Vertragskorrekturen
-```
-
-Die genaue Dateiliste des Umsetzungsschnitts wird vor jedem Codecommit gegen
-den dann aktuellen Branch geprüft. Neue Dateien sind nur zulässig, wenn der
-konkrete Vertrag in diesem Plan nicht sauber durch einen vorhandenen
-kanonischen Typ getragen werden kann. Die Existenz eines C2-Legacy-Bausteins
-ist allein kein Löschmandat für #24.
-
-## 9. Explizite Nicht-Ziele
-
-Release 1 dieses Plans enthält nicht:
-
-- automatische transparente oder verlustfreie Charge-Recovery nach Brownout,
-  Watchdog, Crash oder Stromausfall;
-- Zeitintervallberechnung, gewichteten Fortschritt, Temperatur-Evidenz-
-  Carry-Forward oder Recovery-Lineage zur Rettung eines alten Runs;
-- neue Run-Persistenzschema-Version, neue Run-Keys, Fallback-Promotion,
-  Rollback oder besondere Recovery-Schreibberechtigungen;
-- ein zusätzlicher allgemeiner Safety-Record, Restart-Zähler, Resetzeitfenster
-  oder automatischer Restart-Latch;
-- OTA, Firmwaredownload, Netzwerk-, Web-, Anzeige- oder Remote-Safetylogik;
-- neue Hardware-, GPIO-, Pegel-, Sensor-, Grenzwert- oder
-  Inbetriebnahmeentscheidungen;
-- Änderung der #20-Sensorqualität, #21-Sensorwahl, #22-PI-Regelung oder
-  #23-Mindestzeiten/Totzeit als fachliche Nebenbaustelle;
-- direkte Aktor-/H-Brücken-/GPIO-Zugriffe aus `fermentation_app`;
-- Quittierung, UI-Autorisierung oder ein `allowed`-Requestfeld als
-  Freigabequelle;
-- eine allgemeine Fault-Historie, automatische Fault-Lineage, ein zweiter
-  Eventbus oder eine zweite Safety-/Persistenzautorität;
-- vollständige Hardwareverifikation im nativen Plan-PR. Reale
-  Aktor-/Reset-/Brownout-/Watchdog-Nachweise bleiben Integrationsgates.
-
-Spätere Komfortfunktionen dürfen einen ausdrücklich beweisbaren Resume-Flow
-mit mehr Nutzerinformation ergänzen, aber nicht die R1-Invarianten aufweichen.
-Zeitgewichtete Recovery, automatische Charge-Rettung oder verbesserte
-Historienführung benötigen ein eigenes Owner-Issue und einen eigenen Plan.
-
-## 10. Kanonische Dokumentkorrekturen
-
-Die Umsetzung muss die folgenden Dokumente im selben fachlichen Änderungs-
-umfang konsistent machen. Die Korrekturen werden erst nach Ownerfreigabe des
-Plans implementiert; dieser Plan ist die Arbeitsliste, kein stiller Ersatz
-für die kanonischen Dokumente.
-
-| Dokument | Widerspruch/Alt-Orakel | Geplante Korrektur |
-|---|---|---|
-| `docs/SAFETY_AND_FAULTS.md` | Vier Klassen und historische Latch-/Recovery-Verallgemeinerung | Drei minimale Reaktionsdispositionen, die stabile F8-Codes mit Wire-Werten und vollständigem Lifecycle, unmittelbares AUS, Ack getrennt von Freigabe und keine neue Safety-Persistenz festlegen; unknown/critical bleibt gesperrt. |
-| `docs/SAFETY_COMPONENT_FAULTS.md` | Teilweise Klassen-3/2-Orakel und automatische Reaktion ohne klare Boot-/Restore-Grenze | Sensor-/Aktor-/Temperaturreaktionen gegen #20/#21/#23 beibehalten, F8-Codes nur als SafetyCore-Projektion ergänzen und Gate-/Recheck-Voraussetzungen sowie „kein Auto-Release durch Boot/Restore“ explizit machen. |
-| `docs/SYSTEM_SAFETY_AND_RECOVERY.md` | Automatische Wiederaufnahme, wiederholte Recovery und Charge-Erhalt als Leitbild | Boot all-off, Resetcause/SAFE_BOOT ohne Restart-Latch, explizites Resume-Angebot, sichere `NoActiveRun`-Beendigung und kein transparenter Brownout-/Crash-Erhalt. |
-| `docs/STATE_MACHINE.md` | `RecoveryEvaluation`/`RecoveryReject` begünstigen Recovery-Fortsetzung bzw. Fault statt sicherem Abbruch | `RecoveryEvaluation` als nicht freigebendes Angebot; `RecoveryReject`/`RecoveryRejected` führt nach definitivem `NoActiveRun`-Write zu `Standby`, wobei `Success` ohne zweiten Readback genügt und nur `CommitOutcomeUnknown` über `writeExact()` gelesen wird; Persistenzunknown und F7-`BlockedIndeterminate` nicht zu normalem Standby; F8-Codewirkung nur über SafetyCore. |
-| `docs/RUN_PERSISTENCE.md` | Schema-3-Recoveryfelder, automatisch aktivierende Reihenfolge und Fallback-Rettung | Exaktes 5.2-Prädikat und 5.4-Transaktionsmatrix dokumentieren: Schema 3/neutrale Felder zulässig; `PreparedHead -> Slot -> CommittedHead` mit `durability`-/`step`-Semantik; `Success` ohne zweiten Readback, Readback nur für `CommitOutcomeUnknown`; `Applied` allein erlaubt Apply; C1/C2-Grenze festhalten. |
-| `docs/RECOVERY_AND_INTERRUPTION.md` | Ausfallintervall, NTP-/Zeitbewertung und gewichteter Fortschritt als R1-Orakel | C1-Aufrufe und automatische Gutschriften aus dem aktiven Produktpfad entfernen; verbleibende C2-Kompatibilität als Legacy/Deprecated kennzeichnen; nur vollständige/eindeutige Qualifikation und explizite Entscheidung behalten. |
-| `docs/ACCEPTANCE_TESTS.md` | Automatische Recovery-, Zeit- und gewichtete-Progress-Orakel | Veraltete Orakel gezielt korrigieren; F5-Einzel-Write-, F7-Gesamttransaktions- und F8-Fault-Lifecycle-Matrix aus Abschnitt 11 ergänzen. |
-| `docs/SPECIFICATION_REVIEW.md` | „phasenbezogener sicherer Wiederanlauf“ kann automatische Aktorfreigabe nahelegen | Release-1-Scope auf allgemeine Persistenz plus explizites, nicht automatisch freigebendes Resume-Angebot präzisieren. |
-| `docs/REQUIREMENTS.md` | Vier Klassen und automatische Recovery ohne Owner-Gate | Minimalreaktionen, SafeBoot, NoActiveRun-Abbruch und klare Gate-Reihenfolge normieren. |
-| `docs/ARCHITECTURE.md` | Safety-Core-Beschreibung enthält historische vier Klassen und Recovery-Komplexität | Eine Safety-Autorität, zentrale Planner-Grenze, Platform-Trennung, F8-Code-/Lifecycle-Matrix, F7-Weitergabe des Coordinator-Gesamtergebnisses und die F1-Entscheidung „kein neuer allgemeiner Safety-Record“ dokumentieren. |
-| `docs/CONFIGURATION_PERSISTENCE.md` | Der #24-Anschluss ist korrekt, aber die neue Run-Abgrenzung fehlt | `CONFIGURATION_SAFETY_INTEGRATION_GATE` unverändert erhalten und explizit auf Boot/Restore/no-normal-release beziehen. |
-| `docs/IMPLEMENTATION_ISSUES.md` | #24-Abschlussbeschreibung kann alte Recoveryannahmen enthalten | Abhängigkeit #56/#57 -> #24 und #20 -> #21 -> #22 -> #23 -> #24 mit Scope-Reset aktualisieren; keine neue Zyklusabhängigkeit. |
-| `docs/ROADMAP.md` | Status nennt PR #110, aber den neuen Owner Scope Reset noch nicht | Draft-/NOT_STARTED-Status, superseded alte Planrevision und Owner-Gate für die neue exakte Plan-SHA sichtbar halten. |
-| `docs/DECISIONS.md` / ADR-018 | Muss gegen Config- und Persistenzänderung geprüft werden | Keine inhaltliche Abschwächung; insbesondere keine neue Restart-/Safety-Persistenz aus #24. Nur falls die Umsetzung eine echte ADR-Abweichung findet, Ownerentscheidung vor Code. |
-| `docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md` | Darf durch Reset-/Safety-Port nicht abgeschwächt werden | Unverändert verbindlich halten; neuen Port nur app-neutral und native-testbar ergänzen. |
-
-Doppelte Verträge werden vermieden: Fehlercodes und Safety-Disposition gehören
-zum SafetyCore, Sensorqualität bleibt #20/#21, Config-Produzenten bleiben #56/
-#57, Aktorfreigabe bleibt der vorhandene Planner-/Sink-Pfad und Persistenz-
-Integrität bleibt bei den bestehenden Store-/Codec-Verträgen.
-
-## 11. Gezielte Teststrategie nach Ownerfreigabe
-
-Es werden keine Testfälle als Implementationsersatz vorweggenommen. Nach
-Freigabe müssen die bestehenden gezielten Suites erweitert und, wo
-fachlich veraltet, korrigiert werden. Der Nachweis muss Anwendungsergebnis,
-Persistenzresultat und Aktorsink-Verhalten zusammen betrachten; ein
-interner Flag allein ist kein PASS.
-
-| Pflichtfall | Erwartetes Orakel | Primäre Testfläche |
-|---:|---|---|
-| 1. gültige Konfiguration, kein aktiver Lauf | Boot endet in sicherem Standby; kein Actor-Command vor explizitem Start | Boot/Application + Run-Persistence + Sink |
-| 2. vollständig/eindeutig rekonstruierbarer aktiver Lauf | Resume-Angebot vorhanden; Restore allein erzeugt kein `Allowed` und keinen Aktor-Command | Boot/Run-Persistence + Process FSM + Sink |
-| 3. unvollständiger, widersprüchlicher oder nicht eindeutiger Lauf | Aktoren AUS; zuerst `NoActiveRun` über den bestehenden Write-before-Apply-Pfad mit definitivem Ergebnis; erst danach `RecoveryRejected`/`Standby`; bei `Indeterminate` kein normaler Standby und unknown-safe | Persistence + FSM + Store fault injection |
-| 4. kritischer/unknown Safetyzustand | `ImmediateStop`/`SAFE_BOOT`, keine normale Freigabe; kein neuer Safety-Record wird vorausgesetzt | SafetyCore + Planner + Boot |
-| 5. Sensorfehler | sensorrollenspezifisch AUS/failover gemäß #20/#21; keine Freigabe aus stale/failed Daten | Sensor Quality/Selection + Planner |
-| 6. Aktor-/Plannerfehler | unmittelbares AUS, latched Verhalten gemäß Code, kein zweiter Bypass-Pfad | Planner + sink + SafetyCore |
-| 7. Persistenz-/Readbackfehler | kein neuer Zustand behauptet; AUS; safe abort oder SafeBoot je nach betroffener Persistenz | Store/codec/coordinator |
-| 8. unbestimmter Commitzustand | `CommitOutcomeUnknown` wird nur über den bestehenden `writeExact()`-Readback aufgelöst; bleibt das Ergebnis `Indeterminate`, keine Slot-Wiederverwendung, kein Run-/Config-Release | Simulated Store + Run/Config service |
-| 9. Brownout | Resetcause erkannt/unknown-safe; Boot all-off; kein transparenter aktiver Resume | Reset mock + application + sink |
-| 10. Power-on/externer Reset/Brownout sowie Watchdog/Panic/unknown | jede Ursache startet all-off; vollständige Revalidierung; kein automatischer Resume; untrusted System-/Config-/Persistence-Zustand `SAFE_BOOT`; kein Zähler und kein Zeitfenster | Resetcause-Port + Application + ESP-IDF adapter contract |
-| 11. `ConfigurationRuntimeFailure` | Config-Gate blockiert normale Aktoren und erzeugt passende SafeBoot/latched Reaktion | Config recovery + SafetyCore + sink |
-| 12. `ConfigurationUnavailable` | SafeBoot/ImmediateStop, keine Factory-/Defaultfreigabe als Laufstart | Config recovery + boot |
-| 13. `ConfigurationIntegrityFailure` | SafeBoot/ImmediateStop, keine Quittierungsfreigabe | Config recovery + boot |
-| 14. nicht auflösbarer `CommitOutcomeUnknown` | weder alte noch neue Config behaupten, keine Publish-/Aktorfreigabe | Config service + simulated store |
-| 15. reale Aktoradapter | Safety-Gate kann den finalen Idle-/Stop-Pfad nicht umgehen; unbekannte/malformed Gatewerte bleiben AUS | Sink driver, ESP-IDF adapter integration gate |
-
-### 11.1 Verbindliche Write-before-Apply-Storematrix (F5)
-
-Die folgenden sechs Fälle sind getrennte Orakel und dürfen nicht zu einem
-pauschalen „Write plus Readback“-Orakel zusammengezogen werden:
-
-| Fall | Erwartetes Persistenzresultat | Apply-Orakel |
-|---|---|---|
-| `StateStoreWriteStatus::Success` | bestehender `writeExact()`-Pfad liefert `Written` ohne zusätzlichen Readback | Persistenz gilt definitiv; detached Resume-/`NoActiveRun`-Kandidat darf danach RAM/FSM anwenden. |
-| `WriteError` | `WriteError`; dieser Key sicher unverändert | kein Apply aus diesem Einzelwrite; die Gesamttransaktion wird nach 5.4 bewertet. |
-| `CapacityError` | `CapacityError`; dieser Key sicher unverändert | kein Apply aus diesem Einzelwrite; die Gesamttransaktion wird nach 5.4 bewertet. |
-| `CommitOutcomeUnknown` + Readback neuer Wert | `Written` durch den vorhandenen `writeExact()`-Readback | Apply danach zulässig, sofern der gesamte atomare Pfad `Applied` ergibt. |
-| `CommitOutcomeUnknown` + Readback alter Wert | `NotWritten` | kein Apply aus diesem Einzelwrite; nach bereits geschriebenem Prepared Head bleibt die Gesamttransaktion trotzdem blocked/indeterminate. |
-| `CommitOutcomeUnknown` + fremder/unklarer Wert oder Readbackfehler | `Indeterminate` | kein Apply; Aktoren AUS; unknown-safe/`SAFE_BOOT` gemäß Storevertrag. |
-
-Zu jedem Fall wird die Reihenfolge beobachtbar geprüft: detached Kandidat,
-bestehender Write-before-Apply-Pfad, Ergebnisbewertung, erst danach eventuelle
-FSM-/RAM-Anwendung. Der `Success`-Fall muss ausdrücklich zeigen, dass kein
-zweiter Readback erwartet oder ausgeführt wird. Es gibt keine zweite
-Persistenz- oder Readbackengine.
-
-### 11.2 Verbindliche Gesamttransaktions-Orakel (F7)
-
-Zusätzlich zur Einzel-Write-Matrix aus 11.1 werden mindestens diese
-nichtperiodischen `PreparedHead -> CheckpointSlot -> CommittedHead`-Szenarien
-gegen den bestehenden `RunPersistenceCoordinator` geprüft:
-
-| Fall | Erwartetes Orakel |
-|---|---|
-| PreparedHead `WriteError` | keine vorherige dauerhafte Mutation; `WriteFailed`, `PreparedHead`, `Unchanged`; kein Apply; rollbackfähiger Coordinator-State bleibt bestehen. |
-| PreparedHead `CommitOutcomeUnknown` nicht auflösbar | `PersistenceIndeterminate`, `PreparedHead`, `MayHaveChanged`, `BlockedIndeterminate`; kein Apply; unknown-safe. |
-| PreparedHead `Success`, danach Slot `WriteError` | Prepared Head ist dauerhaft; `WriteFailed`, `CheckpointSlot`, `Changed`, `BlockedIndeterminate`; kein Apply und keinesfalls „alter Gesamtzustand sicher unverändert“. |
-| PreparedHead `Success`, Slot `Success`, danach CommittedHead `WriteError` | Teiltransaktion ist dauerhaft; `WriteFailed`, `CommittedHead`, `Changed`, `BlockedIndeterminate`; kein Apply. |
-| PreparedHead `Success`, danach Slot oder CommittedHead `CapacityError`/`NotWritten` | gleiche F7-Gesamtfolge wie beim jeweiligen Fehlerpunkt: nach Prepared Head blocked/indeterminate, kein Apply; Einzel-„nicht geschrieben“ überschreibt nicht die bereits dauerhafte Mutation. |
-| PreparedHead, Slot und CommittedHead `Written` | Gesamtstatus `Applied`, `Changed`, Coordinator `Ready`/`ReadyEmpty`; erst danach RAM/FSM-Apply. |
-
-Die Orakel prüfen zusätzlich `RunPersistenceStep`,
-`RunPersistenceDurability`, `RunPersistenceCoordinatorState`, fehlende
-Command-/Process-Anwendung und die tatsächliche Store-Reihenfolge. Ein
-zusätzlicher Readback nach einem normalen Einzel-`Success` wird nicht erwartet.
-
-### 11.3 Verbindliche Fault-Code- und Lifecycle-Orakel (F8)
-
-- Jeder in 4.2.1 genannte #56/#57-, Coordinator-, #20/#21-, #23- und
-  Temperatur-/System-Producer mappt deterministisch genau auf den festgelegten
-  Code und den festgelegten Wire-Wert; Detailursache und Producer-Step bleiben
-  strukturiert getrennt.
-- Ein unbekannter, ungemappter oder widersprüchlicher Producerzustand erzeugt
-  mindestens `SystemSafetyUnknown`, `ImmediateStop`/`SAFE_BOOT` und niemals
-  `Allowed`; ein fehlender optionaler Hardwarediagnoseproducer erzeugt keinen
-  erfundenen `ActuatorPathFailure`.
-- Für jeden Code wird die Matrix aus Quelle, Disposition, Aktorwirkung,
-  Auto-Clear, Clear-Bedingung, Ack und Reset einmal positiv und einmal mit
-  ungültiger Evidenz geprüft. Ack verändert nie Gate, Clear-State oder
-  Aktorplan.
-- `SafetySensorUnavailable` darf nur mit frischer kanonischer #20/#21-Evidenz
-  automatisch verschwinden. `ThermalSafetyIntervention` darf nur die
-  ausdrücklich begrenzte `SAFETY_RECOVERY`-Rückführung nutzen. Alle kritischen,
-  indeterminierten, harten oder unbekannten Codes bleiben gesperrt.
-- `ConfigurationCommitIndeterminate` und `RunPersistenceIndeterminate` dürfen
-  weder alte noch neue Persistenz als sicher behaupten; die F7-Durability und
-  der bestehende Store-/Coordinator-Vertrag bleiben maßgeblich.
-- Kein Code benötigt den in F1 verworfenen allgemeinen Safety-Record,
-  Restartzähler oder Resetzeitraum. Es entsteht keine Fault-Historie, keine
-  Fault-Lineage und keine zweite Sensor-, Config- oder Planner-FSM im SafetyCore.
-
-Zusätzliche gezielte Negativnachweise:
-
-- Boot mit gültigem Schema-3-Run, dessen `recoveryTemperatureEvidence` und
-  `RunProgressState` nur neutrale Defaults/normalen `KnownTotal`-Bestand
-  enthalten: der Run wird nicht allein wegen Feldexistenz verworfen;
-- Boot mit gültigem Run und nichtneutralem Last-known-
-  `recoveryTemperatureEvidence` allein: Diagnose bleibt möglich, aber es gibt
-  keinen Resume-/Zeitbeweis und keinen automatischen Aktorstart;
-- Boot mit jedem offenen Marker aus 5.2 (`pendingRecoveryAnchor`,
-  `recoveryBootAnchorMonotonicMillis`, Episode-/Prior-/Adjustment-Evidenz oder
-  gewichteter/partiell unbekannter Progress): kein einfacher Resume, keine
-  Zeit-/Progressgutschrift, sicherer `NoActiveRun`-Pfad;
-- `schemaVersion == 3` mit vollständig eindeutiger aktueller Run-Struktur:
-  Schema 3 selbst führt nicht zu `not reconstructable`;
-- beschädigter Current-Record mit mehrdeutigem Fallback: keine Promotion,
-  kein Rollback-Resume, sicherer Abschluss oder SafeBoot;
-- Resume-Bestätigung: aktueller Sensor-/Config-/Safety-Check, bestehender
-  Write-before-Apply-Commit mit der Storematrix aus 11.1, erst danach
-  `RecoveryResumed`/FSM-Aktivierung; `Success` wird ohne zweiten Readback
-  angewendet;
-- Reject/Timeout/unklare Rekonstruktion: zuerst `NoActiveRun`-Commit über den
-  bestehenden Pfad, erst nach definitivem Ergebnis `RecoveryRejected` nach
-  `Standby`; `WriteError`, `CapacityError`, `NotWritten` und `Indeterminate`
-  lassen RAM in Recovery/unknown-safe und nicht in normalem Standby;
-- Quittierung vor und nach jedem kritischen Fault ändert nicht das Gate;
-- ein erlaubter Sensor-Recheck kann nur mit frischer kanonischer Evidenz und
-  ohne aktiven Latch wieder freigeben;
-- öffentliche Start-/Stop-/Completion-/Adjust-/Sensor-Requests können keine
-  Safety-Boolean-Felder als Freigabe einschleusen;
-- Application-/Persistence-Tests prüfen die realen Sink-Kommandos, nicht nur
-  SafetyCore-RAM-Zustände.
-
-Die vorhandenen Tests für #17, #20, #21, #22, #23, Config-Recovery,
-ActuatorPlanner, Sink und Simulated Store bleiben die Regressionbasis. Tests
-für automatische Recoveryzeit, gewichteten Fortschritt und alte
-Fallback-Rettung werden nur für C1 aus dem aktiven Testvertrag entfernt oder
-als negative R1-Orakel umgeschrieben; verbleibende C2-Tests werden als
-Legacy/Deprecated gekennzeichnet und nicht pauschal im selben PR gelöscht.
-Hardware-Brownout, echter Watchdog, reale Resetcause und physische
-Aktorabschaltung sind keine nativen PASS-Nachweise.
-
-## 12. Umsetzungs- und Commitstruktur nach Ownerfreigabe
-
-Keiner dieser Umsetzungsschnitte darf vor Freigabe der exakten neuen
-Plan-SHA begonnen werden.
-
-1. **Safety-Verträge und flüchtige Boot-Evidenz**
-   - stabile Fault-Codes/Dispositionen, SafetyView und einzige SafetyCore-
-     Autorität;
-   - die vollständige F8-Matrix mit stabilen Symbol-/Wire-Werten, Producer,
-     Disposition, Aktorwirkung, Auto-Clear, Ack, Reset und Neustartwirkung;
-   - app-neutraler Resetcause-Port nur für Ursache/Diagnose, ohne
-     Restart-Zähler oder Safety-Persistenz;
-   - `Unresolved` als Boot-Default und fail-closed Write-/Readback-Semantik.
-
-2. **Boot-/Config-/Reset-Integration**
-   - sichere Initialausgabe vor Validierung;
-   - reale #56/#57-Producer-Gates und Config-Indeterminate-Abbruch;
-   - Resetcause-/Watchdog-Auswertung und SafeBoot ohne Restartfenster-/Latch-
-     Vertrag;
-   - ESP-IDF-Adapter sowie native Test-Injektion gemäß ADR-013.
-
-3. **Vereinfachung der Run-Persistenz-/FSM-Nutzung**
-   - vollständige/eindeutige Read-only-Qualifikation;
-   - explizites Resume-Angebot ohne Boot-Release;
-   - sichere `NoActiveRun`-Beendigung nicht rekonstruierbarer Runs;
-   - F5-Einzel-Write-Semantik und F7-Weitergabe von
-     `RunPersistenceStep`/`RunPersistenceDurability`/Coordinator-State;
-   - `CommitOutcomeUnknown` und F7-Teiltransaktionen als unknown-safe bzw.
-     rollbackfähig ausschließlich nach dem bestehenden Coordinator-Vertrag;
-   - C1-Abschaltung aller aktiven Write-/Zeit-/Progress-/Promotionpfade;
-   - C2 als Legacy/Deprecated abgrenzen, nicht pauschal löschen, und
-     separaten Follow-up-Cleanup empfehlen.
-
-4. **Aktorpfade und Fehlerreaktionen**
-   - SafetyCore als einzige Quelle für die bestehende Planner-Gate-Eingabe;
-   - route-spezifische Allow-/Deny-Integration für Start, Resume, Sensor-,
-     Planner- und reale Sinkpfade;
-   - Quittierung, Recheck und vorhandene Store-/Config-Sperrsemantik sauber
-     trennen; keinen neuen Safety-Record einführen.
-
-5. **Gezielte Regression und Dokumentkonsistenz**
-   - die Matrix aus Abschnitt 11 gegen Anwendung, Persistenz und Sink;
-   - obsolete Recovery-Orakel entfernen/korrigieren;
-   - Dokumente aus Abschnitt 10 synchronisieren;
-   - vollständiger aktueller Diff gegen diesen freigegebenen Plan vor dem
-     späteren Review.
-
-Jeder Schnitt erhält einen eigenen fachlich begrenzten Commit. Bei einer
-materiellen Abweichung wird zuerst dieser Plan aktualisiert, neu committed und
-erneut vom Owner freigegeben. Kein Umsetzungsschnitt wird in den Plan-Commit
-gemischt.
-
-## 13. Hardware-, Integrations- und spätere Gates
-
-Der Plan entscheidet keine Hardwaredetails. Offen bleiben insbesondere:
-
-- reale GPIO-/Pegel-/Treiber-/Verdrahtungsbestätigung für alle Aktoren;
-- Nachweis der sicheren physischen Ausgabestellung bei Power-On, Reset,
-  Brownout und ESP-IDF-Adapterstart;
-- echte Watchdog-/Resetcause-Nachweise auf Zielhardware; native Einzelursachen-
-  Injektion ersetzt keinen Hardwarebeweis und begründet keine Zählung;
-- Sensor-/Aktor-Inbetriebnahme, thermische Parameter und Belastungsgrenzen;
-- #56/#57- und das separate produktive #106-Integrationsgate;
-- Speicher-/Zeitbudgets für den SafetyCore und den bestehenden Store-/Readback-
-  Pfad;
-- reale Verifikation, dass kein Adapterpfad das Planner-Gate umgehen kann.
-
-Diese Nachweise sind nach dem Code-Review gesonderte Owner-/Hardware-Gates.
-Native Builds und Tests beweisen weder die reale Aktorabschaltung noch
-Brownout-/Watchdog-Hardwareverhalten.
-
-## 14. Abschlussgates für diese Planrevision
-
-Für diesen Auftrag gelten ausschließlich leichte Plan-/Markdown-Gates:
-
-- Plan vollständig eigenständig, ohne normative Rückverweisung auf alte
-  Revisionen;
-- F7 trennt Einzel-Key-Write und mehrstufige Coordinator-Gesamttransaktion
-  verbindlich, einschließlich Prepared-/Slot-/Committed-Head-Positionen;
-- F8 legt jeden minimalen R1-Fault-Code mit stabilem Symbol-/Wire-Wert und
-  vollständigem Lifecycle vor Implementation fest;
-- Base, PR-Status, Branch, Issue und fehlende Implementation live verifiziert;
-- nur Plan und notwendige Roadmap-/Planstatus-Dokumentation geändert;
-- `git diff --check` ohne Befund;
-- Markdown-/Link-/Strukturprüfung der geänderten Dokumente;
-- bestehender PR #110 bleibt Draft;
-- PR-Body wird nach dem Plancommit auf den neuen Status, Planpfad und die
-  exakte Plan-SHA synchronisiert;
-- genau ein aktueller `SESSION HANDOVER`-Kommentar wird nach der
-  Synchronisierung veröffentlicht.
-
-Nicht Teil dieses Auftrags und daher nicht als PASS auszugeben sind Firmware-
-Builds, native Firmwaretests, clang-tidy, Hardwaretests, echte
-ESP-IDF-Reset-/Brownout-/Watchdogtests, `Ready for review`, Merge oder
-Issue-Schließung. `Implementation: NOT_STARTED` bleibt bestehen.
-
-Der neue Plan wartet nach seinem Commit auf die ausdrückliche Ownerfreigabe
-genau dieser vollständigen Plan-SHA.
+- Es gibt keinen Vergleich `Current == Fallback` als Resume-Voraussetzung und
+  keine zweite Fallback-Auswahlentscheidung.
+
+## 6. R1-Resume-Phasenmatrix
+
+Die folgende Matrix ist vor Implementation verbindlich. Sie ersetzt einen
+offenen generischen Prädikatsplatzhalter.
+
+| Aktiver `ProcessState` | R1-Resume | Ziel nach bestätigtem Resume | Bootlokale Timer / verworfene Werte | Begründung |
+|---|---|---|---|---|
+| `Preheating` | Ja | `Preheating` | Ziel-/Sensorbewertung und eventuelle Qualifikation ab Boot neu starten; alte Timer-/Qualifikationswerte verwerfen | ziel- und sensorbasierte Fortsetzung mit frischer Evidenz |
+| `WaitingForProduct` | Nein | kein Resume; `NoActiveRun` | maximale Wartezeit und alte Dauer nicht fortführen | alte Wartezeit könnte die Frist bereits überschritten haben |
+| `ReachingTarget` | Nein | kein Resume; `NoActiveRun` | Target-Reach-Timer und Warnstatus verwerfen | bootlokale Erreichungsdauer ist nicht beweisbar |
+| `QualifyingTarget` | Nein | kein Resume; `NoActiveRun` | Qualifikationszeit und monotonic Basis verwerfen | Zielqualifikation startet nicht mit alter Zeitgutschrift |
+| `Fermenting` | Nein | kein Resume; `NoActiveRun` | Dauer, `PriorBootPhaseElapsed`, UTC-/Progressrechnung verwerfen | Restzeit ist ohne freigegebenen Zeitbeweis unbekannt |
+| `Cooling` | Ja | `Cooling` | aktuelle Ziel-/Sensorbewertung frisch starten; keine alte Dauer gutschreiben | primär sensor-/zielbasiert, keine alte Restzeit erforderlich |
+| `CoolHolding` | Nein | kein Resume; `NoActiveRun` | Dauer und `PriorBootPhaseElapsed` verwerfen | dauerbasierte Haltephase ohne sicheren Zeitbeweis |
+| `ManualHolding` | Ja, nur als ausdrücklich indefinite manuelle Haltephase | `ManualHolding` | keine alte Dauer; bei einem gespeicherten endlichen Hold-Parameter ist das Prädikat falsch und es gilt `NoActiveRun` | manuell, nicht automatisch dauerbasiert; endliche Variante darf nicht geschätzt werden |
+
+Für alle positiven Zeilen gelten zusätzlich: vollständige frische Config-,
+Sensor-, Selection-, Planner- und Safety-Prüfung, kein offener Recovery-/Progress-
+Entscheidungszustand, Planner bis zur Benutzerbestätigung `Unresolved`/AUS und
+kein Aktorcommand aus Restore. Jede negative Zeile bildet den detached
+`NoActiveRun`-Kandidaten; der Apply erfolgt nur über `Applied`.
+
+## 7. Boot, Resetcause und E3/E5
+
+Ein kleiner app-neutraler Read-only-Port in `device_platform` liefert eine
+portable Resetcause. Der deterministische Testadapter liegt in
+`device_platform_test_support`; ein ESP-IDF-Adapter darf innerhalb des
+Umsetzungsschnitts in `device_platform_esp_idf` ergänzt werden. Der Port trifft
+keine Safetyentscheidung, zählt nichts, persistiert nichts und konfiguriert
+keinen Watchdog.
+
+Der ESP-IDF-Adapter mappt die vollständige Ziel-API von `esp_reset_reason()`
+exhaustiv: `UNKNOWN`, `POWERON`, `EXT`, `SW`, `PANIC`, `INT_WDT`, `TASK_WDT`,
+`WDT`, `DEEPSLEEP`, `BROWNOUT`, `SDIO`, `USB`, `JTAG`, `EFUSE`, `PWR_GLITCH`
+und `CPU_LOCKUP` erhalten portable Diagnosewerte; ein unbekannter künftiger
+Wert fällt auf `Unknown/Other` und bleibt fail-safe. Nicht jede Ursache erhält
+eine eigene Safetyreaktion. Für alle Ursachen gilt zuerst all-off,
+vollständige Revalidierung und kein automatischer Resume. Die Wiederholung
+derselben Ursache verändert nichts: kein Zähler, kein Zeitfenster, keine neue
+Persistenz.
+
+Insbesondere ändert #24 weder TWDT-Zeitwerte noch
+`CONFIG_ESP_TASK_WDT_PANIC` und behauptet nicht, dass ein Task-Watchdog immer
+einen Hardware-Reset auslöst. Der Port diagnostiziert nur den tatsächlich
+gelieferten Grund.
+
+Die Softwaregrenze vor E5 lautet: Gate `Unresolved`, abstrakter Planner-/Sink-
+Idle/Stop, kein normales `Allowed` vor vollständiger Bootvalidierung. Der
+Resetcause-Adapter initialisiert keine GPIOs und ist kein Aktoradapter. Die
+physische Ausgangsbeweiskette bleibt E5 und umgeht #106 nicht.
+
+## 8. Aktiver Produktpfad und Legacy-Abgrenzung
+
+Für #24 wird nur der aktive Produktpfad vereinfacht:
+
+**C1 – zwingend in #24:** automatische Recovery auslösen, alten Run ohne
+explizite Entscheidung aktivieren, alte Zeit/Fortschritt automatisch gutschreiben,
+Fallback promoten/rollbacken oder auf Grundlage alter Recoverylogik Aktoren
+freigeben. Diese Aufrufe werden deaktiviert/entfernt; negative Architekturtests
+belegen, dass sie keinen produktiven Pfad mehr erreichen.
+
+**C2 – zunächst nicht löschen:** bereits gemergte, nach C1 unaufgerufene
+`run_recovery_time`, `run_progress_weighting`, Recovery-Modelle, Helfer und
+zugehörige historische Tests bleiben als Legacy/Deprecated bestehen. Ihre
+Existenz erzeugt keinen aktiven Vertrag, weil keine produktive Aufrufkante
+mehr besteht. Ein kleiner separater Follow-up-Cleanup wird nach stabiler
+Integration von #24 empfohlen. #24 löscht C2 nur, wenn ein konkreter Baustein
+nachweislich nicht abtrennbar ist oder einen Parallelvertrag erzwingt; dann
+muss genau dieser Baustein samt Begründung vor Umsetzung im Plan aktualisiert
+und erneut freigegeben werden.
+
+## 9. Kanonische Dokumente und Umsetzungsschnitte
+
+Nach Ownerfreigabe werden die betroffenen Dokumente in einem eigenen
+Dokumentationsschnitt synchronisiert; diese Planrevision ändert sie noch nicht.
+
+1. `docs/DIAGNOSTICS_AND_MAINTENANCE.md`: passiver Boottest und Diagnoseexport
+   nennen Resetcause als Diagnose, keinen generischen Restart-Zähler und keinen
+   neuen allgemeinen Safety-Latch; die bisherige generelle Annahme eines
+   persistierten Restartzählers bzw. einer persistierten Verriegelung wird
+   entfernt; `SAFE_BOOT` folgt aktuellem untrusted System-/Config-/Persistenzzustand.
+2. `docs/RUNTIME_BEHAVIOR.md`: Meldungen referenzieren die stabile R1-
+   FaultCode-/Disposition-Matrix; es bleibt keine zweite offene Fehlerklassen-
+   oder Codeklassifikation.
+3. `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md`: als bindende SafetyCore-Quelle
+   bestätigen: feste/begrenzte Fehlerzustände, keine Historie im Core, keine
+   unkontrollierten dynamischen Faultstrings, 4 MB Flash, keine PSRAM-Annahme.
+4. `SAFETY_AND_FAULTS.md`, `SAFETY_COMPONENT_FAULTS.md`,
+   `SYSTEM_SAFETY_AND_RECOVERY.md`, `STATE_MACHINE.md`, `RUN_PERSISTENCE.md`,
+   `RECOVERY_AND_INTERRUPTION.md` und `ACCEPTANCE_TESTS.md`: neue Load-,
+   Resume-, Reject-, Fault- und Journalreihenfolge ohne automatische
+   Charge-Recovery.
+5. `SPECIFICATION_REVIEW.md`, `REQUIREMENTS.md`, `ARCHITECTURE.md`,
+   `CONFIGURATION_PERSISTENCE.md` und `IMPLEMENTATION_ISSUES.md`: R1-Scope,
+   #56/#57-Gate, ADR-013 sowie E3/E5/#106-Grenzen synchronisieren und alte
+   Restart-Eskalations- bzw. generische Persistenz-Latch-Annahmen entfernen.
+6. `DECISIONS.md`/ADR-018 und ADR-013 bleiben vollständig erhalten; nur echte
+   Widersprüche werden dokumentarisch bereinigt. Keine Auth-/PIN- oder
+   Hardware-Implementierung wird in #24 erfunden.
+
+Vorgesehene Umsetzungsschnitte nach Freigabe:
+
+1. portable Resetcause-Ports, Testadapter und sichere Composition-Root-
+   Verdrahtung ohne Aktorhardware;
+2. SafetyCore, FaultCode-Matrix, feste Zustandsrepräsentation und Producer-
+   Projektion;
+3. Load-/Fallback-/Schema-3-Prädikat, Write-before-Apply und vorhandene FSM-
+   Eventtopologie;
+4. C1-Abtrennung, Planner-/Sink-Gate und #106/E3/E5-Negativgrenzen;
+5. kanonische Dokumente und gezielte Test-/Nachweisschnitte.
+
+Jeder Schnitt stoppt bei einer materiellen Abweichung und verlangt eine neue
+Planfreigabe. Es werden keine neuen Persistenzschemas, Keys, Recovery-Capabilities
+oder Parallel-Engines eingeführt.
+
+## 10. Test- und Nachweisvertrag
+
+Die Tests werden erst nach Ownerfreigabe geplant umgesetzt; in dieser
+Planphase gibt es keinen Testcode. Die Orakel sind:
+
+### Persistenz und Apply
+
+- einzelner `Success` ohne zusätzlichen Readback erlaubt Apply;
+- `WriteError` und `CapacityError` auf einem Einzelkey ohne Apply;
+- `CommitOutcomeUnknown` mit Readback neuer Wert -> `Written`/weiter;
+- Readback alter Wert -> `NotWritten`/kein Apply;
+- fremder Wert oder Readbackfehler -> `Indeterminate`/kein Apply/
+  unknown-safe;
+- PreparedHead sicher nicht geschrieben -> rollbackfähiger alter Coordinator-
+  State, kein Apply;
+- PreparedHead indeterminate -> blocked/indeterminate, kein Apply;
+- PreparedHead `Success`, Slot `WriteError`/`CapacityError`/`NotWritten` ->
+  PreparedHead dauerhaft, Coordinator blocked/changed, kein „old authoritative“;
+- PreparedHead `Success`, Slot `Success`, danach CommittedHead `WriteError`
+  (sowie CapacityError/NotWritten) -> Teiltransaktion dauerhaft,
+  blocked/indeterminate, kein Apply;
+- vollständiger nichtperiodischer Pfad `Applied` -> erst dann RAM/FSM-Apply.
+
+### Boot, Load, Fallback und Resume
+
+- jeder Load-/Coordinator-Fall aus Abschnitt 5 erhält exakt sein Orakel;
+- `Completed` bleibt abgeschlossen und gibt nichts frei;
+- historischer `Fault` bleibt diagnostisch terminal und aktiviert keine Recovery;
+- gültiger Current plus älterer legitimer Fallback erlaubt Current-Prüfung;
+- defekter Current plus gültiger Fallback erzeugt kein Fallback-Resume;
+- unklarer Head-/Slotzustand bleibt unknown-safe;
+- jeder der acht aktiven Prozesszustände erhält den positiven/negativen Nachweis
+  aus Abschnitt 6;
+- RecoveryEvaluation bleibt nicht freigebend; Resume ist explizit;
+- Reject/Timeout/nicht resumefähiger Run schreibt zuerst `NoActiveRun`, und
+  nur `Applied` darf nach `Standby` führen.
+
+### Fault-, Ressourcen- und Seiteneffektverhalten
+
+- jeder reale Producerzustand mappt deterministisch genau auf den Matrixcode;
+- unknown/unmapped bleibt `SystemSafetyUnknown`/fail-closed;
+- Ack verändert weder Code-Lifecycle noch Gate;
+- Auto-Clear passiert nur für ausdrücklich markierte Codes mit frischer
+  kanonischer Evidenz;
+- kritische, unknown- und indeterminate-Codes erzeugen nie `Allowed`;
+- Journal- oder Notificationfehler beeinflussen Stop/Unresolved nicht;
+- keine neue Safety-Persistenz, kein Fault-History-Container, keine dynamischen
+  Faulttexte und kein Heap-Wachstum pro Ereignis;
+- #20/#21, Config, Planner und FSM werden nicht im SafetyCore dupliziert.
+
+### Resetcause, E3/E5 und reale Gates
+
+- jeder bekannte ESP-IDF-Resetwert und `Unknown/Other` wird deterministisch
+  getestet;
+- keine Ursache zählt sich auf, erzeugt ein Zeitfenster oder persistiert eine
+  Sperre;
+- kein Test behauptet einen zwingenden TWDT-Hardware-Reset;
+- abstrakter Sink bleibt bis Bootvalidierung Idle/Stop;
+- kein produktiver Hardware-`Allowed`-Bypass und keine #106-Umgehung;
+- GPIO-, Brownout-, Watchdog- und reale Aktornachweise bleiben ausdrückliche
+  Integrationsgates und werden nicht durch Native-Tests als bestanden behauptet.
+
+Die Befehle und Profile für spätere gezielte Tests stehen ausschließlich in
+`docs/CI_AND_QUALITY_GATES.md`. In diesem Draft-Auftrag werden nur leichte
+Plan-/Markdown-Gates ausgeführt; Firmware-Builds, vollständige Testläufe,
+Hardwaretests und CI bleiben `NOT_RUN`.
+
+## 11. Abschluss-Gate
+
+Nach der Planänderung werden ausschließlich:
+
+1. Markdown-/Planstruktur- und Diff-Gates,
+2. `docs/ROADMAP.md`-Synchronisierung,
+3. PR-Body-Synchronisierung,
+4. genau ein aktueller `SESSION HANDOVER`-Kommentar
+
+ausgeführt. Danach werden Branch, Base, PR-HEAD, Draftstatus, Issue-Status,
+Planpfad und exakte Plan-SHA erneut gelesen. Die exakte neue Plan-SHA wartet
+auf ausdrückliche Ownerfreigabe. Bis dahin bleibt
+`Implementation: NOT_STARTED` und PR #110 Draft.
