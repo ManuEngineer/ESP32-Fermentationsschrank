@@ -57,6 +57,46 @@ bool isPersistenceSafeBoot(RunPersistenceLoadStatus status) {
     return true;
 }
 
+bool isTrustedCoordinatorState(RunPersistenceCoordinatorState state) {
+    return state == RunPersistenceCoordinatorState::ReadyEmpty ||
+           state == RunPersistenceCoordinatorState::LoadedActiveRun ||
+           state == RunPersistenceCoordinatorState::Ready;
+}
+
+bool hasFreshConfigurationEvidence(const SafetyCoreInput& input) {
+    if (!input.configurationValidated) return false;
+    if (input.configurationRecoveryStatus.has_value()) {
+        switch (*input.configurationRecoveryStatus) {
+            case ConfigurationRecoveryStatus::RuntimeReady:
+            case ConfigurationRecoveryStatus::FactoryInitializationCompleted:
+            case ConfigurationRecoveryStatus::FactoryResetCompleted:
+                return true;
+            default:
+                break;
+        }
+    }
+    if (input.configurationServiceMode.has_value() &&
+        *input.configurationServiceMode ==
+            ConfigurationServiceMode::Operational)
+        return true;
+    if (input.configurationCommitStatus.has_value() &&
+        (*input.configurationCommitStatus ==
+             ConfigurationCommitStatus::Activated ||
+         *input.configurationCommitStatus ==
+             ConfigurationCommitStatus::NoChange))
+        return true;
+    return false;
+}
+
+bool hasFreshSensorEvidence(const SafetyCoreInput& input) {
+    return input.sensorEvidenceValidated && input.peltierSensor != nullptr &&
+           input.peltierSensor->quality ==
+               device_platform::SensorQuality::Valid &&
+           input.sensorSelectionRuntime != nullptr &&
+           input.sensorSelectionRuntime->permission ==
+               SensorPeltierPermission::Allowed;
+}
+
 }  // namespace
 
 void SafetyCore::beginBoot(device_platform::ResetCause resetCause) noexcept {
@@ -175,6 +215,11 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
         return finalize(result);
     }
 
+    if (!input.persistenceLoadStatus.has_value()) {
+        setResultFault(FaultCode::RunPersistenceUntrusted,
+                       SafetyDisposition::SafeBoot);
+        return finalize(result);
+    }
     if (input.persistenceLoadStatus.has_value() &&
         isPersistenceSafeBoot(*input.persistenceLoadStatus)) {
         setResultFault(FaultCode::RunPersistenceUntrusted,
@@ -199,13 +244,22 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
         return finalize(result);
     }
 
-    if (input.explicitActivationRequested &&
-        (!input.sensorEvidenceValidated || input.peltierSensor == nullptr ||
-         input.peltierSensor->quality !=
-             device_platform::SensorQuality::Valid ||
-         input.sensorSelectionRuntime == nullptr ||
-         input.sensorSelectionRuntime->permission !=
-             SensorPeltierPermission::Allowed)) {
+    const RunLoadDisposition loadDisposition = classifyRunLoad(
+        *input.persistenceLoadStatus, input.persistenceSnapshot);
+    if (loadDisposition == RunLoadDisposition::SafeBoot) {
+        setResultFault(FaultCode::RunPersistenceUntrusted,
+                       SafetyDisposition::SafeBoot);
+        return finalize(result);
+    }
+
+    const bool gateNeedsSensorEvidence =
+        input.explicitActivationRequested ||
+        loadDisposition == RunLoadDisposition::ResumeOffer;
+    const bool sensorPointerIsInvalid =
+        input.peltierSensor != nullptr &&
+        input.peltierSensor->quality != device_platform::SensorQuality::Valid;
+    if (sensorPointerIsInvalid ||
+        (gateNeedsSensorEvidence && !hasFreshSensorEvidence(input))) {
         setResultFault(FaultCode::SafetySensorUnavailable,
                        SafetyDisposition::BlockedImmediateStop);
         return finalize(result);
@@ -217,21 +271,52 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
         return finalize(result);
     }
 
+    if (activeFault_ != FaultCode::None &&
+        !canClearFault(input, loadDisposition)) {
+        result.faultCode = activeFault_;
+        result.acknowledged = acknowledged_;
+        result.disposition = dispositionForFault(activeFault_);
+        result.bootDisposition =
+            result.disposition == SafetyDisposition::SafeBoot
+                ? SafetyBootDisposition::SafeBoot
+                : SafetyBootDisposition::Unresolved;
+        return finalize(result);
+    }
+
     clearFault();
     result.faultCode = FaultCode::None;
     result.acknowledged = false;
     result.disposition = SafetyDisposition::Information;
-    if (!input.bootValidationComplete || !input.explicitActivationRequested ||
-        !input.plannerEvidenceValidated) {
-        result.bootDisposition =
-            input.persistenceLoadStatus.has_value() &&
-                    (*input.persistenceLoadStatus ==
-                         RunPersistenceLoadStatus::NoPersistedRun ||
-                     *input.persistenceLoadStatus ==
-                         RunPersistenceLoadStatus::NoActiveRun)
-                ? SafetyBootDisposition::Standby
-                : SafetyBootDisposition::Unresolved;
-        return finalize(result);
+
+    switch (loadDisposition) {
+        case RunLoadDisposition::Standby:
+            result.bootDisposition = SafetyBootDisposition::Standby;
+            return finalize(result);
+        case RunLoadDisposition::NoActiveRun:
+            result.bootDisposition = SafetyBootDisposition::NoActiveRun;
+            return finalize(result);
+        case RunLoadDisposition::Completed:
+            result.bootDisposition = SafetyBootDisposition::Completed;
+            return finalize(result);
+        case RunLoadDisposition::TerminalFault:
+            result.bootDisposition = SafetyBootDisposition::TerminalFault;
+            return finalize(result);
+        case RunLoadDisposition::ResumeOffer:
+            result.bootDisposition = SafetyBootDisposition::ResumeOffer;
+            if (!input.bootValidationComplete ||
+                !input.explicitActivationRequested ||
+                !input.plannerEvidenceValidated ||
+                !input.resumePersistenceResult.has_value() ||
+                *input.resumePersistenceResult !=
+                    RunPersistenceResultStatus::Applied ||
+                !input.processActivationApplied) {
+                return finalize(result);
+            }
+            break;
+        case RunLoadDisposition::SafeBoot:
+            setResultFault(FaultCode::RunPersistenceUntrusted,
+                           SafetyDisposition::SafeBoot);
+            return finalize(result);
     }
 
     result.gate.status = ActuatorSafetyGateStatus::Allowed;
@@ -240,7 +325,10 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
 }
 
 void SafetyCore::acknowledge(FaultCode code) noexcept {
-    if (code != FaultCode::None && code == activeFault_) acknowledged_ = true;
+    if (code != FaultCode::None && code == activeFault_) {
+        acknowledged_ = true;
+        lastEvaluation_.acknowledged = true;
+    }
 }
 
 bool SafetyCore::resetRequestWatchdog(ActuatorPlanner& planner,
@@ -251,7 +339,8 @@ bool SafetyCore::resetRequestWatchdog(ActuatorPlanner& planner,
         return false;
     planner.applyExternalWatchdogFaultReset(nowMonotonicMillis);
     clearFault();
-    acknowledged_ = false;
+    lastEvaluation_ = SafetyEvaluation{};
+    lastEvaluation_.resetCause = resetCause_;
     return true;
 }
 
@@ -425,12 +514,70 @@ bool SafetyCore::isKnown(RunPersistenceCoordinatorState state) noexcept {
     return false;
 }
 
+SafetyDisposition SafetyCore::dispositionForFault(FaultCode code) noexcept {
+    switch (code) {
+        case FaultCode::ConfigurationRuntimeFailure:
+        case FaultCode::SafetySensorUnavailable:
+        case FaultCode::ActuatorRequestWatchdog:
+            return SafetyDisposition::BlockedImmediateStop;
+        case FaultCode::ConfigurationUnavailable:
+        case FaultCode::ConfigurationIntegrityFailure:
+        case FaultCode::ConfigurationCommitIndeterminate:
+        case FaultCode::RunPersistenceUntrusted:
+        case FaultCode::SystemProducerUnknown:
+            return SafetyDisposition::SafeBoot;
+        case FaultCode::None:
+            return SafetyDisposition::Information;
+    }
+    return SafetyDisposition::SafeBoot;
+}
+
+bool SafetyCore::canClearFault(
+    const SafetyCoreInput& input,
+    RunLoadDisposition loadDisposition) const noexcept {
+    switch (activeFault_) {
+        case FaultCode::ConfigurationRuntimeFailure:
+            return input.explicitActivationRequested &&
+                   hasFreshConfigurationEvidence(input);
+        case FaultCode::ConfigurationUnavailable:
+        case FaultCode::ConfigurationIntegrityFailure:
+        case FaultCode::ConfigurationCommitIndeterminate:
+            return hasFreshConfigurationEvidence(input);
+        case FaultCode::RunPersistenceUntrusted:
+            return input.persistenceValidated &&
+                   input.persistenceLoadStatus.has_value() &&
+                   !isPersistenceSafeBoot(*input.persistenceLoadStatus) &&
+                   isTrustedCoordinatorState(
+                       input.persistenceCoordinatorState) &&
+                   loadDisposition != RunLoadDisposition::SafeBoot &&
+                   (loadDisposition != RunLoadDisposition::ResumeOffer ||
+                    input.persistenceSnapshot != nullptr);
+        case FaultCode::SafetySensorUnavailable:
+            return hasFreshSensorEvidence(input);
+        case FaultCode::ActuatorRequestWatchdog:
+            return false;
+        case FaultCode::SystemProducerUnknown:
+            return input.bootValidationComplete &&
+                   hasFreshConfigurationEvidence(input) &&
+                   input.persistenceValidated &&
+                   input.persistenceLoadStatus.has_value() &&
+                   !isPersistenceSafeBoot(*input.persistenceLoadStatus) &&
+                   isTrustedCoordinatorState(input.persistenceCoordinatorState);
+        case FaultCode::None:
+            return true;
+    }
+    return false;
+}
+
 void SafetyCore::setFault(FaultCode code) noexcept {
     if (activeFault_ == code) return;
     activeFault_ = code;
     acknowledged_ = false;
 }
 
-void SafetyCore::clearFault() noexcept { activeFault_ = FaultCode::None; }
+void SafetyCore::clearFault() noexcept {
+    activeFault_ = FaultCode::None;
+    acknowledged_ = false;
+}
 
 }  // namespace fermentation

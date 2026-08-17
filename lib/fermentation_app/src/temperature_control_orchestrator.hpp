@@ -79,7 +79,7 @@ class TemperatureControlApplicationOrchestrator {
         RunPersistenceCoordinator& persistence,
         TemperatureController& temperatureController,
         TargetQualificationEvaluator& evaluator, ActuatorPlanner& planner,
-        ActuatorPlanSinkDriver& driver) noexcept;
+        ActuatorPlanSinkDriver& driver, SafetyCore& safetyCore) noexcept;
 
     [[nodiscard]] RunPersistenceResult persistCommand(
         RunCommandState& current, const CommandDecision& decision,
@@ -121,8 +121,8 @@ class TemperatureControlApplicationOrchestrator {
     // inconsistent.
     //
     // Owner-Review F4: an active PI evaluation (one that could produce a
-    // Heating/Cooling ControlRequest) requires the planner-/driver-bound
-    // 5-argument constructor, because #23's feedback handoff is the only
+    // Heating/Cooling ControlRequest) requires the planner-/driver-/SafetyCore-
+    // bound 6-argument constructor, because #23's feedback handoff is the only
     // source of anti-windup feedback for #22. Without it, this method
     // unconditionally returns Unavailable/NoCommissioning instead of ever
     // running the PI core - not just on the first call, but on every call -
@@ -138,15 +138,7 @@ class TemperatureControlApplicationOrchestrator {
     // is consumed exactly once; the caller cannot inject an alternative
     // evaluation or feedback value.
     [[nodiscard]] ActuatorPlanTickResult tickActuatorPlan(
-        const RunCommandState& current, std::uint64_t nowMonotonicMillis,
-        ActuatorSafetyGateInput safetyGate = {});
-
-    // Once bound, the planner consumes the latest SafetyCore decision and
-    // ignores caller-supplied gate status. This keeps an Allowed value from
-    // becoming a second safety authority at the application boundary.
-    void bindSafetyCore(SafetyCore& safetyCore) noexcept {
-        safetyCore_ = &safetyCore;
-    }
+        const RunCommandState& current, std::uint64_t nowMonotonicMillis);
 
    private:
     [[nodiscard]] RunPersistenceResult complete(

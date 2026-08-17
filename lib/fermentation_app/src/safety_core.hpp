@@ -67,8 +67,13 @@ struct SafetyCoreInput {
     std::optional<ConfigurationCommitStatus> configurationCommitStatus;
 
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus;
+    const RunPersistenceSnapshot* persistenceSnapshot{nullptr};
     RunPersistenceCoordinatorState persistenceCoordinatorState{
         RunPersistenceCoordinatorState::Uninitialized};
+    // Post-commit/post-FSM evidence from the existing application path. These
+    // are required before a resume offer can become an Allowed gate.
+    std::optional<RunPersistenceResultStatus> resumePersistenceResult;
+    bool processActivationApplied{false};
 
     const device_platform::SensorQualitySnapshot* peltierSensor{nullptr};
     const SensorSelectionRuntimeState* sensorSelectionRuntime{nullptr};
@@ -139,6 +144,11 @@ class SafetyCore final {
     [[nodiscard]] static bool isKnown(RunPersistenceLoadStatus status) noexcept;
     [[nodiscard]] static bool isKnown(
         RunPersistenceCoordinatorState state) noexcept;
+    [[nodiscard]] static SafetyDisposition dispositionForFault(
+        FaultCode code) noexcept;
+    [[nodiscard]] bool canClearFault(
+        const SafetyCoreInput& input,
+        RunLoadDisposition loadDisposition) const noexcept;
 
     void setFault(FaultCode code) noexcept;
     void clearFault() noexcept;

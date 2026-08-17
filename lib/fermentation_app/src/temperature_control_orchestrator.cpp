@@ -88,12 +88,13 @@ TemperatureControlApplicationOrchestrator::
         RunPersistenceCoordinator& persistence,
         TemperatureController& temperatureController,
         TargetQualificationEvaluator& evaluator, ActuatorPlanner& planner,
-        ActuatorPlanSinkDriver& driver) noexcept
+        ActuatorPlanSinkDriver& driver, SafetyCore& safetyCore) noexcept
     : persistence_(persistence),
       temperatureController_(temperatureController),
       evaluator_(evaluator),
       planner_(&planner),
-      actuatorDriver_(&driver) {}
+      actuatorDriver_(&driver),
+      safetyCore_(&safetyCore) {}
 
 RunPersistenceResult TemperatureControlApplicationOrchestrator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
@@ -295,9 +296,9 @@ TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
 
 ActuatorPlanTickResult
 TemperatureControlApplicationOrchestrator::tickActuatorPlan(
-    const RunCommandState& current, std::uint64_t nowMonotonicMillis,
-    ActuatorSafetyGateInput safetyGate) {
-    if (planner_ == nullptr || actuatorDriver_ == nullptr) {
+    const RunCommandState& current, std::uint64_t nowMonotonicMillis) {
+    if (planner_ == nullptr || actuatorDriver_ == nullptr ||
+        safetyCore_ == nullptr) {
         ActuatorPlanTickResult result;
         result.status = ActuatorPlanStatus::Unconfigured;
         result.reason = ActuatorPlanReason::NoCommissioning;
@@ -305,9 +306,8 @@ TemperatureControlApplicationOrchestrator::tickActuatorPlan(
         return result;
     }
 
-    if (safetyCore_ != nullptr) {
-        safetyGate = safetyCore_->lastEvaluation().gate;
-    }
+    const ActuatorSafetyGateInput safetyGate =
+        safetyCore_->lastEvaluation().gate;
 
     const EffectiveControlContext context =
         resolveEffectiveControlContext(current);
