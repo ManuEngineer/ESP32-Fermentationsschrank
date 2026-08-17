@@ -108,6 +108,43 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::persistCommand(
 }
 
 RunPersistenceResult
+TemperatureControlApplicationOrchestrator::persistFreshStartCommand(
+    RunCommandState& current, const CommandDecision& decision,
+    const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
+    const bool isFreshStartKind =
+        decision.kind == CommandKind::StartProgram ||
+        decision.kind == CommandKind::StartManualHolding;
+    if (!isFreshStartKind) {
+        RunPersistenceResult rejected;
+        rejected.status = RunPersistenceResultStatus::NotEligible;
+        rejected.coordinatorState = persistence_.state();
+        return rejected;
+    }
+    return persistCommand(current, decision, time, liveSensorEvidence);
+}
+
+RunPersistenceResult
+TemperatureControlApplicationOrchestrator::reconcileR1LoadedRun(
+    const RunPersistenceLoadResult& loaded, RunCommandState& current,
+    const RunCheckpointTime& time) {
+    const RunPersistenceSnapshot* snapshot =
+        loaded.snapshot.has_value() ? &*loaded.snapshot : nullptr;
+    if (SafetyCore::classifyRunLoad(loaded.status, snapshot) !=
+        RunLoadDisposition::NoActiveRun) {
+        RunPersistenceResult notEligible;
+        notEligible.status = RunPersistenceResultStatus::NotEligible;
+        notEligible.coordinatorState = persistence_.state();
+        return notEligible;
+    }
+
+    const TemperatureControlLifecycleSnapshot before{
+        current.processState.state};
+    return complete(persistence_.discardAsNoActiveRun(current, time), before,
+                    current, time.monotonicMillis);
+}
+
+RunPersistenceResult
 TemperatureControlApplicationOrchestrator::persistTransition(
     RunCommandState& current, const TransitionDecision& decision,
     const RunCheckpointTime& time,

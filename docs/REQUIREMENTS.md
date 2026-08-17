@@ -116,14 +116,15 @@ es gibt keinen Fallback-Resume, keine Promotion und keine Charge-Rettung.
 - Wichtige Laufereignisse werden sofort gespeichert; periodische Kontrollpunkte
   standardmaessig alle 5 Minuten, einstellbar zwischen 1 und 60 Minuten.
 - Direkte GPIO- oder Aktorzustaende werden nie als Wiederanlaufzustand gespeichert.
-- Nach einer Unterbrechung wird eine sichere phasenbezogene Aktion neu berechnet.
-- Der Wiederanlauf wartet nicht blockierend auf NTP oder eine Benutzeraktion.
-- Fehlende Zeit fuehrt zu einer konservativen, gekennzeichneten Bewertung mit
-  niedriger Vertrauensstufe.
-- Nach spaeterer Netzwerkzeit werden Unterbrechungsdauer und Fortschritt
-  nachtraeglich korrigiert.
+- Nach einer Unterbrechung wird nur eine explizit R1-zulaessige Phase als
+  Resume-Angebot projiziert; sonst wird der integer geladene Lauf ueber #17 als
+  `NoActiveRun` beendet.
+- `RECOVERY_EVALUATION` bleibt ohne Aktorfreigabe. Explizites Resume und Fresh
+  Start verwenden den bestehenden Write-before-Apply-Pfad.
+- Alte UTC-/NTP-/gewichtete Fortschrittskorrektur und Charge-Rettung sind
+  #18/C2-Legacy, keine #24-R1-Anforderung.
 - Nichtkritische Historienfehler duerfen den Prozess mit Warnung weiterlaufen
-  lassen; kritische Persistenzfehler stoppen und verriegeln.
+  lassen; untrusted kritische Run-Persistenz fuehrt fail-closed zu `SAFE_BOOT`.
 
 ## Bedienung und Netzwerk
 
@@ -132,10 +133,9 @@ es gibt keinen Fallback-Resume, keine Promotion und keine Charge-Rettung.
 - Die Weboberflaeche ist responsiv und auf Handy, Tablet und Computer fachlich
   gleichwertig.
 - Display und Web verarbeiten Aenderungen atomar und mit Revisionsschutz.
-- Der normale Webzugang kann mit einem Webpasswort geschuetzt werden; die
-  Service-PIN bleibt getrennt.
-- Servicefunktionen sind PIN-geschuetzt und waehrend eines aktiven Laufes
-  weitgehend gesperrt.
+- Der normale Webzugang kann mit einem Webpasswort geschuetzt werden.
+- Service-PIN- und Hardware-Servicefunktionen sind spaetere Service-Gates und
+  nicht Teil des #24-R1-Safety-Resetvertrags.
 - WLAN-Ersteinrichtung erfolgt bevorzugt ueber ein geschuetztes Einrichtungs-WLAN
   mit QR-Code und Captive Portal; lokale Eingabe bleibt moeglich.
 - Bei laenger fehlendem Heim-WLAN kann ein geschuetztes Ersatz-WLAN starten.

@@ -85,6 +85,19 @@ class TemperatureControlApplicationOrchestrator {
         RunCommandState& current, const CommandDecision& decision,
         const RunCheckpointTime& time,
         const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
+    // Explicit R1 fresh-start boundary. The existing command decision and
+    // #17 write-before-apply path remain the only mutation path; a non-start
+    // decision is rejected without touching persistence.
+    [[nodiscard]] RunPersistenceResult persistFreshStartCommand(
+        RunCommandState& current, const CommandDecision& decision,
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
+    // R1 boot reconciliation for a trusted Current that the SafetyCore
+    // classifies as semantically non-resumable. Untrusted load statuses never
+    // enter this method's discard path.
+    [[nodiscard]] RunPersistenceResult reconcileR1LoadedRun(
+        const RunPersistenceLoadResult& loaded, RunCommandState& current,
+        const RunCheckpointTime& time);
     [[nodiscard]] RunPersistenceResult persistTransition(
         RunCommandState& current, const TransitionDecision& decision,
         const RunCheckpointTime& time,

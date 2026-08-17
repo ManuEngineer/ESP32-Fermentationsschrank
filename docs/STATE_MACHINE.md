@@ -122,9 +122,9 @@ Sicherheits- und Laufhistorie und waehlt erst danach den naechsten Zustand.
 BOOT
   -> Peltier und beide BTS7960-Richtungen AUS
   -> alle schaltbaren Ausgaenge zunaechst AUS
-  -> Resetursache und abnormalen Neustartzaehler auswerten
+  -> Resetcause nur diagnostisch erfassen; keine Restart-Akkumulation
   -> Konfiguration und kritischen Speicher validieren
-  -> persistierte Verriegelungen und unvollstaendige Transaktionen auswerten
+  -> aktuellen Config-/Persistenzzustand und Transaktionsstatus auswerten
   -> Sensoren und Hardwarefreigaben grundlegend pruefen
   -> gespeicherten Laufzustand klassifizieren
   -> Netzwerk und Zeitabgleich parallel vorbereiten
@@ -133,15 +133,15 @@ BOOT
 ### Uebergaenge
 
 ```text
-Bootschleife, persistierte Sperre, unvollstaendige Transaktion,
-kritischer Speicher- oder Initialisierungsfehler
+aktuell untrusted System-/Config-/Persistenzzustand, unvollstaendige
+Transaktion oder kritischer Initialisierungsfehler
   -> SAFE_BOOT oder FAULT gemaess Fehlerklasse
 
 gueltiger persistierter Zustand COMPLETED
   -> COMPLETED
 
-gueltiger unterbrochener aktiver Lauf
-  -> RECOVERY_EVALUATION
+gueltiger Current mit R1-qualifizierbarer Phase
+  -> RECOVERY_EVALUATION ohne Freigabe
 
 kein aktiver oder abgeschlossener Lauf und alle Bootpruefungen bestanden
   -> STANDBY
@@ -525,58 +525,59 @@ Beispiele:
 Nach `BOOT` unverzueglich bestimmen, wie ein unterbrochener Lauf sicher und
 fachlich sinnvoll fortgesetzt wird.
 
-Vor Eintritt wurden bereits Bootschleifen, persistierte Verriegelungen,
-unvollstaendige Transaktionen und grundlegende Speicherintegritaet geprueft.
+Vor Eintritt wurden aktueller Config-/Persistenzstatus, Transaktionsintegritaet
+und grundlegende Sensor-/Planner-Evidenz geprueft; es gibt keinen allgemeinen
+persistierten Safety-Latch.
 Zusaetzlich werden mindestens bewertet:
 
 - Programmschnappschuss und Laufrevisionen
 - Phase des unterbrochenen Laufes
 - aktueller und letzter gueltiger Sensorstatus
 - aktuelle und letzte bekannte Temperaturen
-- Zeitqualitaet und moegliches Ausfallintervall
+- nur die explizite R1-Phasenmatrix; keine alte Zeit-/Progressgutschrift
 - aktive Warnungen und Fehler
 - sichere phasenbezogene Aktoraktion
 
 ### Uebergaenge
 
 ```text
-Fortsetzung technisch und sicher zulaessig
-  -> geeigneten normalen Prozesszustand wieder aufnehmen
+NoPersistedRun / NoActiveRun
+  -> STANDBY, Gate Unresolved
 
-Zeit noch nicht belastbar
-  -> geeigneten sicheren Prozesszustand wieder aufnehmen
-  -> Kontext RECOVERY_TIME_PENDING setzen
+technisch integerer Current mit eindeutiger R1-Qualifikation
+  -> RECOVERY_EVALUATION, Gate Unresolved, Resume-Angebot
 
-Fortsetzung nicht sicher
-  -> FAULT
+technisch integerer Current ohne einfache R1-Qualifikation
+  -> kanonischer NoActiveRun-Abschluss ueber #17, danach STANDBY
 
-Lauf nicht fachlich rekonstruierbar
-  -> verriegelter Fehlerzustand; keine Aktorfreigabe
+technisch untrusted Load
+  -> SAFE_BOOT, keine Tombstone-Mutation und kein Resume
+
+expliziter Fresh Start oder bestaetigtes Resume
+  -> bestehender Write-before-Apply-Pfad
+  -> nach Gesamtstatus Applied, FSM-Anwendung und frischer Evidenz ggf. Allowed
 ```
 
-Die Recoveryentscheidung wird als neue Revision gespeichert, bevor Aktoren
-freigegeben werden.
+Die Entscheidung wird detached vorbereitet. Bei #17 gilt der Gesamtstatus der
+mehrstufigen Transaktion `PreparedHead -> CheckpointSlot -> CommittedHead` als
+Wahrheit: erst `Applied` erlaubt die RAM-/FSM-Anwendung; ein Einzel-Write-
+`Success` ist kein separater Gesamtstatus und benoetigt keinen zweiten
+Readback.
 
 ## RECOVERY_TIME_PENDING
 
 ### Zweck
 
-Kennzeichnen, dass die sichere aktuelle Prozessaktion bestimmt ist, die
-Unterbrechungsdauer und Fortschrittskorrektur aber noch nicht belastbar sind.
+`RECOVERY_TIME_PENDING` ist im #24-R1-Pfad kein Freigabekontext. Historische
+NTP-/Ausfallintervall- und Progressrechnung bleibt #18/C2-Legacy und darf
+keinen Resume- oder Aktorentscheid erzeugen.
 
 ### Verhalten
 
-- NTP-Zeitabgleich laeuft im Hintergrund
-- UI zeigt die ausstehende Zeitbewertung
-- keine scheinbar exakte Restzeit behaupten
-- keinen frei geschaetzten Unterbrechungsfortschritt anrechnen
-- keinen automatischen Phasenabschluss allein aus unbekannter Zeit ableiten
-- sichere phasenbezogene Regelung fortsetzen, soweit eindeutig zulaessig
-
-Nach verfuegbarer vertrauenswuerdiger UTC-Zeit wird die Ausfalldauer als
-Unter-/Obergrenze aus Kontrollpunktzeit und maximalem Kontrollpunktabstand
-berechnet. Ueberschneidet das Intervall eine Phasengrenze, bleibt eine sichtbare
-Benutzerentscheidung erforderlich.
+- Aktoren bleiben `Idle/Stop` und das Gate `Unresolved`.
+- Kein altes Zeit-, UTC- oder gewichtetes Progressfeld wird gutgeschrieben.
+- Ein Zustand ohne einfache frische Fortsetzung wird als `NoActiveRun`
+  beendet; technische Persistenzunsicherheit fuehrt zu `SAFE_BOOT`.
 
 ## SERVICE_MODE
 
@@ -587,7 +588,8 @@ Prozess.
 
 ### Regeln
 
-- Service-PIN erforderlich
+- Service-PIN, falls fuer spaetere Service-/Hardware-Gates benoetigt, ist
+  nicht Teil des #24-R1-Safety-Cores
 - deutlicher Warnhinweis vor Aktortests
 - Peltier- und Lueftertests zeitlich und leistungsmassig begrenzen
 - Richtungswechsel, Mindest-Ausschaltzeit und Totzeit bleiben erzwungen
@@ -616,7 +618,8 @@ Tuerinformation als vorhandene Sicherheits- oder Prozessbedingung voraussetzen.
 
 ## Akzeptierte Entscheidungen
 
-- [x] Bootpruefungen und persistierte Sperren haben Vorrang vor `STANDBY` und Recovery
+- [x] Bootpruefungen und aktuell untrusted System-/Config-/Persistenzzustaende
+  haben Vorrang vor `STANDBY` und Recovery
 - [x] `SAFE_BOOT` bleibt aktorfrei
 - [x] `COMPLETED` wird nach Neustart explizit wiederhergestellt
 - [x] keine allgemeine Pausenfunktion
@@ -624,7 +627,5 @@ Tuerinformation als vorhandene Sicherheits- oder Prozessbedingung voraussetzen.
 - [x] Warnungen und Fehler sind getrennt
 - [x] `SERVICE_MODE` nur aus validiertem `STANDBY`
 - [x] Produktfuehlerausfall fuehrt nicht zu stillem Sensorwechsel
-- [x] sichere Recovery wartet nicht blockierend auf NTP
-- [x] unbekannte Ausfallzeit erzeugt keinen erfundenen exakten Fortschritt
-- [x] Ausfallzeit wird nach NTP als Unsicherheitsintervall behandelt
+- [x] R1 verwendet keine automatische NTP-/Progress-Recovery
 - [x] kein Tuerkontakt in Release 1

@@ -42,11 +42,46 @@ nicht als Release-1-#24-Laufzeitvertrag umgesetzt.
   Fehlerklassen und Fehlercodes erlaubt.
 - Bei unsicherem Zustand wird nicht geraten.
 - Die hoechste aktive Fehlerklasse bestimmt den sicheren Ausgangszustand.
-- Alle relevanten Ursachen und Folgeereignisse bleiben nachvollziehbar.
+- Aktive Ursachen bleiben in einer endlichen, festen FaultCode-Menge
+  nachvollziehbar; Historie und Journaling bleiben beim bestehenden
+  `IEventJournal`, nicht im SafetyCore.
 - Sicherheitsreaktionen funktionieren ohne WLAN, Weboberflaeche, Netzwerkzeit
   oder Heimserver.
 - Sicherheitslogik und Fehlerdaten muessen innerhalb der Zielhardware mit 4 MB
   Flash ohne vorausgesetzte PSRAM funktionieren.
+
+## Verbindliche R1-FaultCode- und Lifecycle-Matrix
+
+R1 verwendet keine universelle Fehlerhierarchie. Die folgenden acht Codes sind
+die endliche SafetyCore-Menge; technische Detailursachen bleiben beim
+jeweiligen Producer. Alle Codes sind stabile typisierte Wire-Werte und werden
+nicht aus UI-Texten gebildet.
+
+| Code | Producer/Detail | Disposition und Gate | Clear-Regel | Ack / Neustart |
+|---|---|---|---|---|
+| `ConfigurationRuntimeFailure` | `ConfigurationService` + Detail-Cause | `BlockedImmediateStop` | kein Auto-Clear; frische Config und expliziter neuer Start | nur Anzeige; Reboot gibt nicht frei |
+| `ConfigurationUnavailable` | `ConfigurationRecoveryService`/Config-Projection | `SAFE_BOOT` | frische gueltige Config-/Recovery-Evidenz | nur Anzeige; keine neue Persistenz |
+| `ConfigurationIntegrityFailure` | `ConfigurationRecoveryService` | `SAFE_BOOT` | frische passende Integritaets-/Recovery-Evidenz | nur Anzeige; keine neue Persistenz |
+| `ConfigurationCommitIndeterminate` | `ConfigurationService` | `SAFE_BOOT` | eindeutig aufgeloestes Commit-/Recovery-Ergebnis | nur Anzeige; keine neue Persistenz |
+| `RunPersistenceUntrusted` | #17 Load-/Coordinator-Status | `SAFE_BOOT` | vertrauenswuerdiger Load und Coordinator-Zustand; untrusted Load wird nicht tombstoned | nur Anzeige; keine neue Persistenz |
+| `SafetySensorUnavailable` | #20/#21 Qualitaets-/Auswahlprojektion | `BlockedImmediateStop` | frische gueltige kanonische Sensor-/Auswahlevidenz | nur Anzeige; kein Sensor-Latch |
+| `ActuatorRequestWatchdog` | #23 echter Planner-RAM-Latch | `BlockedImmediateStop` | nur expliziter #23-Reset mit frischer Evidenz und aktivem Latch | Ack/Request loeschen nicht; Reboot verliert nur RAM-Latch |
+| `SystemProducerUnknown` | unbekannter/unmapped Producer | `SAFE_BOOT` | alle erforderlichen Producer aktuell bekannt und frisch validiert | nur Anzeige; keine neue Persistenz |
+
+Bei mehreren aktiven Codes dominiert `SAFE_BOOT`; die Primaerauswahl ist
+deterministisch, alle anderen aktiven Bits bleiben bis zu ihrem eigenen
+Clear-Vertrag erhalten. `Ack` quittiert hoechstens den einzelnen Code und
+veraendert weder Gate noch Clear-Zustand. Safety-Reaktion und Gate werden vor
+Journal/Notification bestimmt; deren Fehler koennen keine Abschaltung
+rollbacken.
+
+## C2-Legacy/Future – historische Vierklassenbeschreibung, nicht #24-R1
+
+Die folgenden historischen Abschnitte bleiben fuer spaetere Issues und
+Commissioning referenzierbar, sind aber kein #24-R1-Vertrag. Insbesondere
+gelten dort genannte persistente Latches, Service-PIN-Resets, automatische
+`SAFETY_RECOVERY`, thermische Codes, gewichteter Fortschritt und automatische
+Wiederfreigaben nicht fuer Release 1.
 
 ## Fehlerklassen
 

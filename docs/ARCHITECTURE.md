@@ -28,9 +28,9 @@ freigeben.
 
 Der produktive abstrakte Pfad ist `SafetyCore -> ActuatorPlanner -> Sink`.
 `ActuatorSafetyGateStatus::Unresolved` ist der Boot-/Fehler-Default; ein
-Aufrufer darf `Allowed` nicht als eigene Safety-Wahrheit einschleusen. Der
-gebundene SafetyCore ueberschreibt deshalb am Orchestrator die
-caller-supplied Gate-Eingabe.
+Aufrufer darf `Allowed` nicht als eigene Safety-Wahrheit einschleusen. Jeder
+aktorfähige Orchestrator wird konstruktiv mit `SafetyCore&` erzeugt und
+`tickActuatorPlan()` besitzt kein caller-supplied finales Gate.
 
 Issue #24 enthaelt keine GPIO-, BTS7960-, MOSFET-, Luefter- oder
 Thermal-Hardwareimplementierung und umgeht nicht #106. ResetCause wird ueber
@@ -201,18 +201,15 @@ Der Sicherheitskern ist vom Komfort- und UI-Code unabhaengig.
 
 Er enthaelt:
 
-- vier Fehlerklassen
-- stabile Fehlercodes
-- Primaer- und Folgefehler
-- Aktorsperren
-- getrennte Quittierung und Fehlerreset
-- persistente Verriegelungen
-- Watchdog- und Neustartbewertung
+- endliche stabile R1-FaultCode-Menge
+- deterministische Primaerursache und bounded Multi-Fault-Maske
+- Aktorsperren sowie getrennte Quittierung und Clear-Regeln
+- aktueller #23-Watchdog-RAM-Latch
+- diagnostische Resetcause ohne Restartakkumulator
 - `SAFE_BOOT`
-- Sicherheits-Eingriffsgrenze und harte Notgrenze
 
-Eine automatische Wiederfreigabe ist nur fuer explizit definierte, sicher
-pruefbare Betriebsfehler erlaubt.
+Thermal-/Hardware-Grenzen und spaetere automatische Recovery bleiben
+E5/#35/Future und sind keine SafetyCore-Produzenten in #24-R1.
 
 ### Persistenz
 
@@ -355,7 +352,7 @@ Netzwerkmodule umfassen:
 Kein Cloudzwang, kein automatischer Firmwaredownload und keine offizielle externe
 Schreib-API in Release 1.
 
-## Diagnose und Service
+## Diagnose und spaeterer Service (nicht #24-R1-Safety-Core)
 
 Diagnose liest strukturierte Zustandsmodelle und keine beliebigen globalen
 Variablen.
@@ -374,15 +371,15 @@ Der Serviceablauf ist eine eigene geschuetzte Zustandsmaschine:
 ## Zeit und Wiederanlauf
 
 - monotone Zeit steuert aktive Ablaufe
-- UTC/NTP dient Kalenderzeit und Unterbrechungsdauer
+- UTC/NTP dient Kalenderzeit; historische Unterbrechungs-/Progress-Recovery ist
+  #18/C2 und kein aktiver #24-R1-Pfad
 - Laufrevisionen speichern eine monotone Epoche. Jede Wiederherstellung
   eroeffnet eine neue Epoche, sodass die Uptime bei null beginnen darf, ohne die
   Reihenfolge der persistierten Revisionen zu verletzen.
 - Ein zwischenzeitlich fehlender UTC-Wert verwirft den letzten bekannten
   UTC-Zeitbezug nicht; spaetere UTC-Werte duerfen dahinter nicht zurueckfallen.
 - Wiederanlauf beginnt immer mit ausgeschalteten Aktoren
-- fehlende NTP-Zeit blockiert keine sichere phasenbezogene Entscheidung
-- spaeter eintreffende Zeit kann die Unterbrechungsbewertung korrigieren
+- fehlende NTP-Zeit erzeugt in #24-R1 keine Charge-Rettung oder Aktorfreigabe
 - eine spaetere batteriegepufferte RTC passt hinter dieselbe Zeitquellenschnittstelle
 
 ## Ressourcenmodell

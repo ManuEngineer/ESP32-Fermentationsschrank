@@ -154,7 +154,8 @@ Nach bestaetigter oder stark vermuteter Ausloesung gilt:
 - verriegelter Sicherheitsfehler,
 - keine automatische Wiederfreigabe,
 - Peltier bleibt gesperrt,
-- Service-PIN und physische Pruefung erforderlich,
+- spaeteres Hardware-/Service-Gate mit physischer Pruefung erforderlich;
+  kein #24-R1-Service-PIN-Vertrag,
 - Sicherung muss ersetzt und Ursache geklaert werden.
 
 ## Sicherer Ausgangszustand bei Boot, Reset und Bootloader
@@ -193,7 +194,7 @@ Hardwareloesung vorgesehen.
 `setup()` allein gilt nicht als ausreichende Sicherheitsmassnahme, weil die
 Ausgaenge bereits vor Ausfuehrung der Firmware einen Pegel besitzen koennen.
 
-## Software-Watchdogs und kontrollierter Neustart
+## Software-Watchdogs und kein automatischer Neustart in #24-R1
 
 ### Getrennte Ueberwachung
 
@@ -239,8 +240,9 @@ In `SAFE_BOOT` gilt:
   verfuegbar, soweit das System stabil genug ist,
 - der Grund fuer `SAFE_BOOT` wird lokal sichtbar angezeigt,
 - ein normaler Neustart allein verlaesst `SAFE_BOOT` nicht automatisch,
-- Freigabe verlangt bestandene Integritaetspruefungen und je nach Ursache die
-  Service-PIN.
+  - Freigabe verlangt bestandene aktuelle Integritaets-/Config-/Persistenz-
+    pruefungen und eine explizite Bedienentscheidung; ein Service-PIN ist
+    kein #24-R1-Vertrag.
 
 ## Beschaedigte Konfiguration oder Laufdaten
 
@@ -326,22 +328,19 @@ kann, wird erst angewendet, nachdem Transaktionsabsicht und neue Revision
 erfolgreich persistiert wurden. Ein unvollstaendiger oder nicht eindeutig
 aufgeloester Transaktionsmarker fuehrt beim Boot zu `SAFE_BOOT`.
 
-Vor jeder Recovery-Aktorfreigabe muessen beide Bedingungen erfuellt sein:
-
-1. der kritische Speicher besteht eine Lesen-Schreiben-Integritaetspruefung;
-2. die Recoveryentscheidung ist als neue Revision erfolgreich gespeichert und
-   wieder gelesen beziehungsweise verifiziert.
-
-Ein Persistenzfehler-Latch darf nur in einem geschuetzten Serviceablauf
-zurueckgesetzt werden, nachdem:
-
-- die Ursache behoben oder eindeutig eingegrenzt wurde;
-- die kritische Lesen-Schreiben-Integritaetspruefung bestanden ist;
-- kein unvollstaendiger Transaktionsmarker verbleibt;
-- der Reset als eigenes Ereignis dokumentiert wurde.
+Vor jeder Resume- oder Fresh-Start-Freigabe muessen die bestehende
+Write-before-Apply-Transaktion den Gesamtstatus `Applied`, die anschliessende
+FSM-Anwendung und frische Config-/Sensor-/Planner-Evidenz liefern. Ein
+kanonisches `Success` benoetigt keinen zweiten Readback; nur
+`CommitOutcomeUnknown` wird nach dem vorhandenen `writeExact()`-Vertrag durch
+Readback aufgeloest. Nach `PreparedHead` oder Slot-Teilmutation bleibt der
+Coordinator bei `BlockedIndeterminate`/unknown-safe.
 
 Quittierung, Neustart oder ein erfolgreicher einzelner Schreibversuch allein
-setzen den Latch nicht zurueck.
+setzen keinen Fault-Lifecycle zurueck. Der #23-Watchdog ist nur ein
+Current-Boot-RAM-Latch und wird ausschliesslich ueber
+`applyExternalWatchdogFaultReset()` mit aktueller Evidenz geloescht; #24 fuehrt
+keinen neuen persistenten Latch ein.
 
 ## Fehler- und Resetprotokoll
 
@@ -424,9 +423,10 @@ Verbindliche Regeln:
 - [x] nicht rekonstruierbaren aktiven Lauf sicher stoppen, ohne Benutzerprogramme
       zu loeschen
 - [x] nichtkritische Historienfehler erlauben Weiterbetrieb mit Warnung
-- [x] kritische Persistenzfehler schalten das Peltier aus und verriegeln das System
-- [x] Persistenzfehler-Latch und unvollstaendige Transaktionen sperren Recovery
-- [x] Latch-Reset nur im Service nach bestandener Speicherpruefung
+- [x] kritische Persistenzfehler schalten das Peltier aus und halten das Gate
+      unknown-safe
+- [x] unvollstaendige Transaktionen sperren Recovery; kein neuer Safety-Latch
+- [x] #23-Watchdog-Reset nur explizit im aktuellen Boot nach frischer Evidenz
 - [x] begrenztes priorisiertes Fehler- und Resetjournal
 - [x] nach jedem relevanten Neustart vollstaendig validierter Wiederanlauf
 - [x] alte GPIO-Zustaende werden niemals wiederhergestellt

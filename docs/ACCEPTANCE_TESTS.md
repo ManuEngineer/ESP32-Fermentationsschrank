@@ -71,15 +71,14 @@ Mindestens:
 - #17-Transaktionsstatus und Bootauswertung ohne neue Safety-Persistenz
 - kritischer Schreibfehler sperrt neue Aktoranforderungen vor weiteren
   Persistenzversuchen und setzt den RAM-seitigen Latch
-- minimaler persistenter Latch wird ausserhalb des normalen Laufjournals versucht;
-  auch sein Schreibfehler bleibt fail-closed
+- ein Fehler vor dem ersten dauerhaften #17-Write bleibt `Unchanged`; ein
+  Fehler nach `PreparedHead` bleibt `BlockedIndeterminate`/`Changed`
 - unvollstaendiger Transaktionsmarker fuehrt beim Boot zu `SAFE_BOOT`
-- Recovery-Aktorfreigabe erst nach bestandener Lesen-Schreiben-Pruefung und
-  erfolgreich persistierter, wieder verifizierter Recoveryrevision
-- Persistenzfehler-Latch bleibt bei Quittierung, Neustart und isoliert
-  erfolgreichem Schreibversuch gesetzt
-- Latch-Reset nur im geschuetzten Serviceablauf nach bestandener
-  Speicherpruefung, aufgeloestem Transaktionsmarker und dokumentiertem Reset
+- Resume-Angebot bleibt `Unresolved`; Resume und Fresh Start werden erst nach
+  dem bestehenden Gesamtstatus `Applied`, FSM-Anwendung und frischer Evidenz
+  freigeschaltet
+- normaler `Success` benoetigt keinen zweiten Readback; Readback erfolgt nur
+  zur Aufloesung von `CommitOutcomeUnknown` durch `writeExact()`
 - Aufbewahrung und Bereinigung
 - PIN-unabhaengiger Vollreset-Ablauf als Zustands- und Berechtigungslogik
 - Device-Shell mit Header, exakt vier festen Slots, Home-/Zurueck-Hierarchie
@@ -114,22 +113,17 @@ Mindestens:
   zwischenzeitlicher erneuter Produktausfall), kein unbegrenztes Wiederholen
 - Heizen, Neutralbereich, Kuehlen und Richtungswechsel
 - Stromunterbrechung in jeder Prozessphase
-- fehlende NTP-Zeit ohne erfundenen Fortschritt
-- spaeterer NTP-Abgleich mit Ausfallintervall
-- Zeitintervall innerhalb einer Phase
-- Zeitintervall ueber einer Abschluss- oder Haltegrenze
-- persistierte Verriegelung plus Neustart -> `SAFE_BOOT`
-- wiederholter Watchdog oder Bootschleife -> `SAFE_BOOT`
+- jede Resetcause: all-off/`Unresolved`, vollstaendige Revalidierung, kein
+  automatischer Resume und keine Restart-Akkumulation
+- Resume-Phasenmatrix: nur eindeutig fortsetzbare Phasen als Angebot, alle
+  zeit-/progressabhaengigen R1-Faelle als `NoActiveRun`
 - unvollstaendige Persistenztransaktion -> `SAFE_BOOT`
 - kritischer Persistenzschreibfehler -> sofortige Aktorsperre, sichere
-  Abschaltung und RAM-Latch
-- erfolgreicher minimaler Persistenzfehler-Latch -> Neustart bleibt verriegelt
-- fehlgeschlagener minimaler Latch-Schreibversuch -> keine Fortsetzung in
-  derselben Laufzeit und beim naechsten unklaren Boot `SAFE_BOOT`
-- Recoveryfreigabe ohne bestandene Lesen-Schreiben-Pruefung oder ohne verifizierte
-  neue Recoveryrevision wird abgelehnt
-- verfruehter Latch-Reset ausserhalb des Serviceablaufs oder vor bestandener
-  Speicherpruefung wird abgelehnt
+  Abschaltung und Current-Boot-RAM-Latch
+- Watchdog: neue Request und Ack loeschen nicht; expliziter Reset nur ueber
+  den bestehenden #23-Pfad mit aktueller Evidenz
+- `NoActiveRun`-Abschluss: `PreparedHead -> CheckpointSlot -> CommittedHead`
+  und erst nach `Applied` Standby anwenden
 - korrupter Kontrollpunkt mit sicherem Rueckfall
 - `COMPLETED` bleibt nach Neustart `COMPLETED`
 - kein Service- oder Aktortest aus `SAFE_BOOT`
@@ -356,12 +350,11 @@ Vor Release 1:
 
 - Unterbrechung in jeder wesentlichen Phase
 - Brownout und wiederholte Brownouts
-- Watchdog und Bootschleife bis `SAFE_BOOT`
-- Neustart mit persistierter Sicherheitsverriegelung
+- Watchdog-Trip und erneuter Boot: RAM-Latch ist nicht persistent, Boot bleibt
+  trotzdem all-off und revalidiert vollstaendig
 - Neustart mit persistiertem `COMPLETED`
-- fehlende NTP-Zeit
-- spaeterer NTP-Abgleich
-- Ausfallintervall innerhalb und ueber einer Phasengrenze
+- keine automatische Charge-Recovery, kein gewichteter/NTP-basierter R1-
+  Fortschritt
 - WLAN-Ausfall bei weiterlaufendem sicheren Prozess
 
 ### Persistenz und Speicher
@@ -374,15 +367,10 @@ Vor Release 1:
   Sperre vor einem weiteren Aktorbefehl nachweisen
 - unvollstaendigen Transaktionsmarker hinterlassen
 - kritischen Speicher nicht lesbar oder nicht schreibbar simulieren
-- Persistenzfehler-Latch setzen und Neustart ausfuehren
-- Schreiben des minimalen persistenten Latches zusaetzlich fehlschlagen lassen;
-  RAM-Latch und fail-closed-Verhalten muessen bestehen bleiben
-- Recoveryentscheidung erfolgreich schreiben, aber Ruecklesen beziehungsweise
-  Verifikation fehlschlagen lassen; Aktorfreigabe bleibt gesperrt
-- Latch-Reset vor Speicherpruefung, ausserhalb des Serviceablaufs und bei
-  verbleibendem Transaktionsmarker ablehnen
-- Latch-Reset nach bestandener Lesen-Schreiben-Pruefung und dokumentiertem
-  Serviceereignis zulassen
+- #17-Cutpoints vor `PreparedHead`, nach `PreparedHead`/Slot und nach
+  `CommittedHead` injizieren; Teiltransaktionen bleiben unknown-safe
+- `Success` ohne zweiten Readback sowie `CommitOutcomeUnknown` mit allen drei
+  vorhandenen `writeExact()`-Aufloesungen pruefen
 - Historienspeicher bis zur Bereinigung fuellen
 - nichtkritischen RAM- oder Exportfehler erzeugen
 
@@ -394,8 +382,8 @@ Vor Release 1:
 - Aktortest waehrend Lauf und `SAFE_BOOT`
 - konfliktierende Display- und Webaktion
 - alle Stopoptionen
-- vergessene Service-PIN mit lokalem PIN-unabhaengigem Vollreset
-- Versuch eines isolierten PIN-Resets muss abgelehnt werden
+- Service-PIN- und Vollreset-Tests gehoeren zu den spaeteren Service-/Hardware-
+  Gates, nicht zum #24-R1-Safety-Core
 
 ## Hardware-Abnahme
 

@@ -133,54 +133,35 @@ Laufbeendende Beispiele:
 
 Ein Neustart setzt solche Fehler nicht zurueck.
 
-## Phasenbezogene Wiederaufnahme
+## Exakte R1-Resume-Phasenmatrix
 
-### PREHEATING und REACHING_TARGET
+Ein `Current` wird nur als Resume-Angebot projiziert, wenn die Phase ohne alte
+Zeit- oder Progressgutschrift eindeutig mit frischer Evidenz fortsetzbar ist.
+Das Angebot bleibt `RECOVERY_EVALUATION`/`Unresolved`; erst ein expliziter
+Resume-Befehl, der bestehende #17-Gesamtstatus `Applied`, die FSM-Anwendung und
+eine neue Safety-Pruefung koennen spaeter `Allowed` ergeben.
 
-- Sensoren, Sicherheitsfreigaben und Zeitgrenzen pruefen
-- Zieltemperatur erneut anfahren
-- noch nicht gestartete Fermentationszeit nicht anrechnen
+| Phase | R1-Angebot | Ziel nach bestaetigtem Resume | Bootlokale Zeitbasis | Alte Zeit-/Progressdaten |
+|---|---|---|---|---|
+| `PREHEATING` | ja | `PREHEATING`/`REACHING_TARGET` gemaess bestehender FSM | neu ab Boot | verwerfen, nicht erforderlich |
+| `WAITING_FOR_PRODUCT` | nein | `NoActiveRun` | keine | Wartezeit waere erforderlich; verwerfen |
+| `REACHING_TARGET` | nein | `NoActiveRun` | neu starten waere nicht beweissicher | alter Reach-Timer erforderlich; verwerfen |
+| `QUALIFYING_TARGET` | nein | `NoActiveRun` | Qualifikation neu starten waere ein neuer Laufpfad | alte Qualifikationszeit verwerfen |
+| `FERMENTING` | nein | `NoActiveRun` | keine alte Restdauer ableiten | `PriorBootPhaseElapsed`/Progress nicht verwenden |
+| `COOLING` | ja | `COOLING` | frische ziel-/sensorbasierte Regelung | keine alte Zeitgutschrift |
+| `COOL_HOLDING` | nein | `NoActiveRun` | Haltedauer waere historisch zeitabhaengig | alte Haltedauer verwerfen |
+| `MANUAL_HOLDING` | ja | `MANUAL_HOLDING` | keine automatische Dauerbasis; frisch pruefen | alte Dauer nicht verwenden |
 
-### WAITING_FOR_PRODUCT
+`COMPLETED` wird als Completed-Projektion ohne Aktorfreigabe geladen. Ein
+persistierter `Fault` bleibt terminal/diagnostisch und wird nicht aktiviert.
+Keiner dieser Faelle verwendet Fallback-Promotion, Rollback-Resume, gewichteten
+Progress oder UTC-Ausfallrechnung.
 
-- nur innerhalb einer belastbar gueltigen Wartezeit fortsetzen
-- Produkt niemals automatisch als eingesetzt annehmen
-- bei nicht sicher entscheidbarer Wartezeit keine Fermentation starten
+## C2-Legacy – historische Zeit-/Recoverybeschreibung, nicht #24-R1
 
-### QUALIFYING_TARGET
-
-- Zieltemperatur erneut erreichen
-- Zielqualifikation vollständig neu beginnen
-
-### FERMENTING
-
-- sichere Temperaturregelung nach vollstaendiger Recoverypruefung neu ableiten
-- bei fehlender Zeit `RECOVERY_TIME_PENDING` setzen
-- unbekannter Unterbrechung keinen exakten Fortschritt gutschreiben
-- keinen automatischen Abschluss aus einem einzelnen Schaetzwert ableiten
-- spaetere Zeit- und Temperaturbewertung als Laufrevision nachtragen
-
-### COOLING
-
-- bei gueltigen Pflichtsensoren und ohne Sperre Kuehlung erneut ableiten
-- keine alte BTS7960-Richtung blind wiederherstellen
-
-### COOL_HOLDING
-
-- sichere Kuehlregelung erneut ableiten
-- zeitlich begrenztes Halten nur aus belastbarer Zeitbewertung beenden
-- bei ueberlappender Unsicherheit keinen automatischen Abschluss ausloesen
-
-### MANUAL_HOLDING
-
-- Zieltemperatur nach vollstaendiger Recoverypruefung weiter halten
-- Benutzer sichtbar ueber die Unterbrechung informieren
-
-### COMPLETED
-
-- keine Temperaturregelung neu starten
-- `COMPLETED` und Ergebnisdaten wiederherstellen
-- erst Benutzerquittierung fuehrt nach `STANDBY`
+Die folgenden Abschnitte bleiben nur als Referenz fuer bestehende #17/#18-
+Artefakte erhalten. Sie sind fuer den #24-R1-Produktpfad nicht normativ und
+duerfen weder Resume, Promotion, Gutschrift noch Aktorfreigabe ausloesen.
 
 ## Fehlende Messwerte waehrend des Stromausfalls
 
@@ -196,7 +177,7 @@ Messkurve. Verfuegbar sind nur:
 
 Die Firmware darf keine dazwischenliegenden Messwerte vortaeuschen.
 
-## Wiederanlauf vor NTP
+## C2-Legacy: Wiederanlauf vor NTP
 
 Vorgesehener Ablauf:
 
@@ -221,7 +202,7 @@ Bis zur Zeitsynchronisation:
 
 Fehlende NTP-Zeit allein beendet den Lauf nicht.
 
-## Unterbrechungsdauer ist ein Intervall
+## C2-Legacy: Unterbrechungsdauer ist ein Intervall
 
 Nach NTP gilt nicht automatisch:
 
@@ -251,7 +232,7 @@ Der maximale Abstand beruecksichtigt:
 Je groesser oder schlechter bestimmt das Intervall, desto niedriger die
 Konfidenz.
 
-## Entscheidung mit dem Zeitintervall
+## C2-Legacy: Entscheidung mit dem Zeitintervall
 
 ### Eindeutiges Ergebnis
 
@@ -275,7 +256,7 @@ eine festgelegte Unsicherheitsgrenze:
 Damit wartet die Regelung nicht blockierend, waehrend die Firmware trotzdem
 keinen fachlichen Abschluss erfindet.
 
-## Temperaturgewichteter Fortschritt
+## C2-Legacy: Temperaturgewichteter Fortschritt
 
 Eine Fermentation stoppt bei sinkender Temperatur nicht schlagartig. Weder volle
 Anrechnung noch vollstaendiges Pausieren der Ausfallzeit ist allgemein korrekt.
@@ -327,7 +308,7 @@ Der Hop-1-Fold verwendet nur `thisHopAltBootLocalSeconds` des konkreten Boots;
 ein Episode-Refresh, UTC-Reevaluation oder `ApplyRecoveryTimeCorrection`
 erzeugt keinen zusätzlichen beobachteten Laufzeitbeitrag.
 
-## Anzeige und Export
+## C2-Legacy: Anzeige und Export
 
 Die Recoveryanzeige zeigt mindestens:
 

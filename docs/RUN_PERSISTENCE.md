@@ -161,7 +161,13 @@ Das Kontrollpunktintervall ist zugleich eine Grenze fuer die Unsicherheit des
 Stromausfallzeitpunkts. Es darf nicht mit der exakten Ausfalldauer verwechselt
 werden.
 
-## Fortschrittsmodell
+## C2-Legacy: Fortschritts- und Zeitmodell, nicht #24-R1
+
+Die folgenden Felder und Berechnungen bleiben als Schema-3-/#18-Bestand
+lesbar, werden aber im aktiven #24-R1-Pfad weder fuer Resume noch fuer eine
+Charge-/Zeitgutschrift verwendet. Neutral vorhandene Schema-3-Felder duerfen
+ein einfaches Resume nicht pauschal ablehnen; aktive alte Recovery-Evidenz
+fuehrt stattdessen zu `NoActiveRun`.
 
 Die Wiederherstellung verlaesst sich nicht auf einen einzelnen Countdown.
 Kombiniert gespeichert werden:
@@ -356,8 +362,10 @@ Beim Boot gilt:
 5. beseitigte Ursachen als erledigt kennzeichnen
 6. historische Ereignisse erhalten
 
-Ein Neustart laedt keine nicht mehr bestehende Warnung blind als aktiv, entfernt
-aber auch keine persistierte Sicherheitsverriegelung.
+Ein Neustart laedt keine nicht mehr bestehende Warnung blind als aktiv. #24
+persistiert dafuer keinen allgemeinen Safety-/Watchdog-/Sensor-Latch; aktuelle
+untrusted Load-Zustaende bleiben `SAFE_BOOT`, und ein trusted semantisch nicht
+resumefaehiger Current wird ueber #17 als `NoActiveRun` abgeschlossen.
 
 ## Wiederanlaufreihenfolge im #24-R1-Pfad
 
@@ -434,7 +442,8 @@ von Gate A, Write-before-Apply und der atomaren Recovery-Revision.
 - atomare, versionierte Revisionen
 - mindestens aktuelle und letzte gueltige Revision
 - Transaktionsabsicht vor aktorwirksamen Zustandsaenderungen
-- reservierter minimaler Persistenzfehler-Latch
+- kein zusaetzlicher #24-Safety-Latch; #17-Transaktionsstatus ist die
+  bestehende Persistenzwahrheit
 - rotierende Speicherplaetze oder Wear-Leveling
 - kritischer Laufdatensatz getrennt von Messhistorie
 - keine Speicherung im Zwei-Sekunden-Sensorzyklus

@@ -29,7 +29,18 @@ Thermische Schutzgrenzen, Luefter-/H-Bruecken-/Hardwarefaults und
 E5-Grenzen bleiben spaeter integrierbar; #24 erfindet dafuer weder Codes noch
 Laufzeitwerte, keine automatische Gegenrichtung und keinen Service-PIN-Reset.
 
-## Sicherheitsrelevante Temperatursensoren
+## E5/#35/Future-Kontext – nicht normativ fuer #24-R1
+
+Die folgenden bestehenden Detailabschnitte dokumentieren spaetere
+Commissioning-, Temperatur-, Luefter- und Hardwareentscheidungen. Sie sind
+fuer #24-R1 nicht aktiv und erzeugen dort weder Fault-Codes noch Grenzwerte,
+persistente Latches, Service-PIN-Clear, kontrollierte Neustarts,
+`SAFETY_RECOVERY` oder automatische Gegenrichtung. Im #24-R1-Schnitt gelten
+ausschliesslich die oben beschriebenen #20/#21-Sensorprojektionen:
+`STALE`/`FAILED` sperrt beziehungsweise stoppt, und eine Freigabe erfolgt nur
+nach frischer kanonischer Evidenz.
+
+## Bestehende Sensor-, Temperatur- und Hardwarevertraege
 
 Das erste Release verwendet drei Temperaturrollen:
 

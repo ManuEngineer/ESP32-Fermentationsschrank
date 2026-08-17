@@ -180,8 +180,8 @@ In `SAFE_BOOT` erlaubt:
 - passive Diagnose
 - Lesen und Exportieren von Fehler-, Reset- und Persistenzinformationen
 - Netzwerkrecovery ohne Aktorwirkung
-- PIN-unabhaengiger lokaler Vollreset
-- UART-Recovery beziehungsweise erneutes Flashen
+- UART-Recovery beziehungsweise erneutes Flashen als spaeteres Hardware-/Boot-
+  Gate, nicht als #24-Safety-Clear
 
 In `SAFE_BOOT` gesperrt:
 
@@ -192,7 +192,7 @@ In `SAFE_BOOT` gesperrt:
 Nach Beseitigung der Ursache muss das Geraet erst bewusst und validiert nach
 `STANDBY` zurueckkehren. Erst dort kann der Servicebereich geoeffnet werden.
 
-## Gefuehrter Service-Hardwaretest
+## Spaeteres E5-Service-/Hardware-Gate (nicht #24-R1)
 
 ### Voraussetzungen
 
@@ -264,7 +264,7 @@ Servicewerte umgehen keine Pulldowns, Verriegelungen, Mindest-Ausschaltzeiten,
 Totzeiten oder Sicherheitsgrenzen. Konkrete Pulswerte bleiben
 `TBD_COMMISSIONING`.
 
-## PIN-unabhaengiger lokaler Vollreset
+## Spaeterer physischer Vollreset (nicht #24-R1)
 
 Bei vergessener Service-PIN ist ein physischer Recoveryweg erforderlich, der die
 PIN nicht voraussetzt.
@@ -278,7 +278,8 @@ PIN nicht voraussetzt.
 - UART-Loeschen/Neu-Flashen als letzter physischer Recoveryweg
 - vollstaendiger Werksreset; kein isolierter PIN-Reset
 
-Die konkrete Geste oder Taste bleibt `TBD_HARDWARE`.
+Die konkrete Geste oder Taste bleibt `TBD_HARDWARE`. #24 fuehrt keine
+Service-PIN- oder Vollresetlogik ein.
 
 ## Exporte
 
@@ -362,5 +363,5 @@ Nicht enthalten:
 - [x] Peltier nur als begrenzter gefuehrter Puls
 - [x] getrennte Lauf-, Diagnose- und Serviceexporte
 - [x] keine Geheimnisse in Diagnose oder Export
-- [x] PIN-unabhaengiger lokaler Vollreset
+- [ ] Service-/Vollreset-Gate fuer ein spaeteres Hardware-/Service-Issue
 - [x] UART in Release 1 nur fuer Flashen, Entwicklung und Recovery

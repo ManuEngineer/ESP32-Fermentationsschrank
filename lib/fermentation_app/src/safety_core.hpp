@@ -51,6 +51,14 @@ enum class RunLoadDisposition : std::uint8_t {
     SafeBoot,
 };
 
+enum class SafetyActivationKind : std::uint8_t {
+    None,
+    FreshStart,
+    Resume,
+};
+
+class ActuatorPlanner;
+
 struct SafetyCoreInput {
     // These flags are evidence from the existing producers, not alternate
     // safety state.  Missing evidence is deliberately not equivalent to true.
@@ -60,6 +68,7 @@ struct SafetyCoreInput {
     bool sensorEvidenceValidated{false};
     bool explicitActivationRequested{false};
     bool plannerEvidenceValidated{false};
+    SafetyActivationKind activationKind{SafetyActivationKind::None};
 
     std::optional<ConfigurationRecoveryStatus> configurationRecoveryStatus;
     std::optional<ConfigurationSafetyProducer> configurationProducer;
@@ -71,13 +80,15 @@ struct SafetyCoreInput {
     RunPersistenceCoordinatorState persistenceCoordinatorState{
         RunPersistenceCoordinatorState::Uninitialized};
     // Post-commit/post-FSM evidence from the existing application path. These
-    // are required before a resume offer can become an Allowed gate.
-    std::optional<RunPersistenceResultStatus> resumePersistenceResult;
+    // are required before a fresh start or resume can become an Allowed gate.
+    std::optional<RunPersistenceResultStatus> activationPersistenceResult;
     bool processActivationApplied{false};
 
     const device_platform::SensorQualitySnapshot* peltierSensor{nullptr};
     const SensorSelectionRuntimeState* sensorSelectionRuntime{nullptr};
-    bool requestWatchdogTripped{false};
+    // The Planner is the #23 watchdog authority. SafetyCore reads its
+    // existing RAM state; callers cannot inject a replacement bool.
+    const ActuatorPlanner* actuatorPlanner{nullptr};
 };
 
 struct SafetyEvaluation {
@@ -89,8 +100,6 @@ struct SafetyEvaluation {
     device_platform::ResetCause resetCause{
         device_platform::ResetCause::Unknown};
 };
-
-class ActuatorPlanner;
 
 class SafetyCore final {
    public:
@@ -107,15 +116,19 @@ class SafetyCore final {
     void acknowledge(FaultCode code) noexcept;
 
     // The existing #23 RAM-only reset is the sole watchdog-clear path. The
-    // caller must supply fresh evidence from the existing safety/planner path.
+    // method validates the supplied current producer evidence and the actual
+    // Planner latch before applying the existing reset operation.
     [[nodiscard]] bool resetRequestWatchdog(ActuatorPlanner& planner,
                                             std::uint64_t nowMonotonicMillis,
-                                            bool freshSafetyEvidence);
+                                            const SafetyCoreInput& input);
 
     [[nodiscard]] FaultCode activeFault() const noexcept {
-        return activeFault_;
+        return primaryFault(activeFaultMask_);
     }
-    [[nodiscard]] bool isAcknowledged() const noexcept { return acknowledged_; }
+    [[nodiscard]] bool isAcknowledged() const noexcept {
+        return isAcknowledged(activeFault());
+    }
+    [[nodiscard]] bool isAcknowledged(FaultCode code) const noexcept;
     [[nodiscard]] const SafetyEvaluation& lastEvaluation() const noexcept {
         return lastEvaluation_;
     }
@@ -146,17 +159,24 @@ class SafetyCore final {
         RunPersistenceCoordinatorState state) noexcept;
     [[nodiscard]] static SafetyDisposition dispositionForFault(
         FaultCode code) noexcept;
+    using FaultMask = std::uint16_t;
+    [[nodiscard]] static FaultMask faultBit(FaultCode code) noexcept;
+    [[nodiscard]] static bool hasFault(FaultMask mask, FaultCode code) noexcept;
+    [[nodiscard]] static FaultCode primaryFault(FaultMask mask) noexcept;
+    [[nodiscard]] static bool activationEvidenceComplete(
+        const SafetyCoreInput& input, RunLoadDisposition loadDisposition,
+        SafetyActivationKind expectedKind) noexcept;
     [[nodiscard]] bool canClearFault(
-        const SafetyCoreInput& input,
+        FaultCode code, const SafetyCoreInput& input,
         RunLoadDisposition loadDisposition) const noexcept;
 
     void setFault(FaultCode code) noexcept;
-    void clearFault() noexcept;
+    void clearFault(FaultCode code) noexcept;
 
     device_platform::ResetCause resetCause_{
         device_platform::ResetCause::Unknown};
-    FaultCode activeFault_{FaultCode::None};
-    bool acknowledged_{false};
+    FaultMask activeFaultMask_{0U};
+    FaultMask acknowledgedFaultMask_{0U};
     SafetyEvaluation lastEvaluation_{};
 };
 

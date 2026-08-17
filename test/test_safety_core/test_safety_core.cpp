@@ -10,22 +10,51 @@ namespace {
 
 using namespace fermentation;
 
+ActuatorPlannerParameters watchdogTestParameters() {
+    ActuatorPlannerParameters parameters;
+    parameters.switchingWindowMillis = 1000U;
+    parameters.minimumOnMillis = 100U;
+    parameters.minimumOffMillis = 100U;
+    parameters.polarityDeadTimeMillis = 100U;
+    parameters.pulseAccumulatorCapMillis = 1000U;
+    parameters.counterDirectionConfirmationQuoteThreshold = 0.5;
+    parameters.counterDirectionConfirmationDurationMillis = 100U;
+    parameters.requestWatchdogMillis = 1000U;
+    parameters.outerFanPostRunMillis = 100U;
+    parameters.innerFanPostRunMillis = 100U;
+    return parameters;
+}
+
+void tripWatchdog(ActuatorPlanner& planner) {
+    ActuatorPlanTickInput tick;
+    tick.temperatureControlledPhase = true;
+    tick.safetyGate.status = ActuatorSafetyGateStatus::Allowed;
+    static_cast<void>(planner.tick(tick));
+    tick.nowMonotonicMillis = 1000U;
+    const auto result = planner.tick(tick);
+    TEST_ASSERT_TRUE(result.reason == ActuatorPlanReason::StaleRequestWatchdog);
+    TEST_ASSERT_TRUE(planner.state().latchedWatchdogFault.has_value());
+}
+
 void validBootEvidence(SafetyCoreInput& input,
                        device_platform::SensorQualitySnapshot& sensor,
                        SensorSelectionRuntimeState& selection,
                        RunPersistenceSnapshot& snapshot) {
     input.bootValidationComplete = true;
     input.configurationValidated = true;
+    input.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::RuntimeReady;
     input.persistenceValidated = true;
     input.sensorEvidenceValidated = true;
     input.explicitActivationRequested = true;
     input.plannerEvidenceValidated = true;
+    input.activationKind = SafetyActivationKind::Resume;
     input.persistenceLoadStatus = RunPersistenceLoadStatus::Current;
     snapshot.variant = RunCheckpointVariant::ProgramRun;
     snapshot.processState.state = ProcessState::Preheating;
     input.persistenceSnapshot = &snapshot;
     input.persistenceCoordinatorState = RunPersistenceCoordinatorState::Ready;
-    input.resumePersistenceResult = RunPersistenceResultStatus::Applied;
+    input.activationPersistenceResult = RunPersistenceResultStatus::Applied;
     input.processActivationApplied = true;
     sensor.quality = device_platform::SensorQuality::Valid;
     selection.phase = SensorSelectionPhase::NormalProduct;
@@ -100,6 +129,78 @@ void test_validated_explicit_activation_is_allowed_only_after_all_evidence() {
     TEST_ASSERT_TRUE(result.faultCode == FaultCode::None);
 }
 
+void test_fresh_start_stays_unresolved_until_new_run_is_applied() {
+    SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    input.bootValidationComplete = true;
+    input.configurationValidated = true;
+    input.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::RuntimeReady;
+    input.persistenceValidated = true;
+    input.persistenceLoadStatus = RunPersistenceLoadStatus::NoActiveRun;
+    input.persistenceCoordinatorState = RunPersistenceCoordinatorState::Ready;
+    input.sensorEvidenceValidated = true;
+    input.explicitActivationRequested = true;
+    input.plannerEvidenceValidated = true;
+    input.activationKind = SafetyActivationKind::FreshStart;
+    sensor.quality = device_platform::SensorQuality::Valid;
+    selection.phase = SensorSelectionPhase::NormalProduct;
+    selection.permission = SensorPeltierPermission::Allowed;
+    input.peltierSensor = &sensor;
+    input.sensorSelectionRuntime = &selection;
+
+    const auto beforeCommit = safety.evaluate(input);
+    TEST_ASSERT_TRUE(beforeCommit.bootDisposition ==
+                     SafetyBootDisposition::Standby);
+    TEST_ASSERT_TRUE(beforeCommit.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_TRUE(beforeCommit.bootDisposition !=
+                     SafetyBootDisposition::ResumeOffer);
+
+    input.activationPersistenceResult = RunPersistenceResultStatus::Applied;
+    input.processActivationApplied = true;
+    const auto afterCommit = safety.evaluate(input);
+    TEST_ASSERT_TRUE(afterCommit.bootDisposition ==
+                     SafetyBootDisposition::Standby);
+    TEST_ASSERT_TRUE(afterCommit.gate.status ==
+                     ActuatorSafetyGateStatus::Allowed);
+}
+
+void test_fresh_start_commit_failure_never_allows() {
+    SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    input.bootValidationComplete = true;
+    input.configurationValidated = true;
+    input.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::RuntimeReady;
+    input.persistenceValidated = true;
+    input.persistenceLoadStatus = RunPersistenceLoadStatus::NoPersistedRun;
+    input.persistenceCoordinatorState = RunPersistenceCoordinatorState::Ready;
+    input.sensorEvidenceValidated = true;
+    input.explicitActivationRequested = true;
+    input.plannerEvidenceValidated = true;
+    input.activationKind = SafetyActivationKind::FreshStart;
+    input.activationPersistenceResult =
+        RunPersistenceResultStatus::PersistenceIndeterminate;
+    input.processActivationApplied = false;
+    sensor.quality = device_platform::SensorQuality::Valid;
+    selection.permission = SensorPeltierPermission::Allowed;
+    input.peltierSensor = &sensor;
+    input.sensorSelectionRuntime = &selection;
+
+    const auto result = safety.evaluate(input);
+    TEST_ASSERT_TRUE(result.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_TRUE(result.bootDisposition !=
+                     SafetyBootDisposition::ResumeOffer);
+}
+
 void test_resume_offer_stays_unresolved_until_apply_and_fsm_evidence() {
     SafetyCore safety;
     safety.beginBoot(device_platform::ResetCause::PowerOn);
@@ -108,7 +209,7 @@ void test_resume_offer_stays_unresolved_until_apply_and_fsm_evidence() {
     SensorSelectionRuntimeState selection;
     RunPersistenceSnapshot snapshot;
     validBootEvidence(input, sensor, selection, snapshot);
-    input.resumePersistenceResult.reset();
+    input.activationPersistenceResult.reset();
     input.processActivationApplied = false;
 
     const auto result = safety.evaluate(input);
@@ -118,7 +219,7 @@ void test_resume_offer_stays_unresolved_until_apply_and_fsm_evidence() {
     TEST_ASSERT_TRUE(result.gate.status ==
                      ActuatorSafetyGateStatus::Unresolved);
 
-    input.resumePersistenceResult = RunPersistenceResultStatus::Applied;
+    input.activationPersistenceResult = RunPersistenceResultStatus::Applied;
     const auto beforeFsm = safety.evaluate(input);
     TEST_ASSERT_TRUE(beforeFsm.gate.status ==
                      ActuatorSafetyGateStatus::Unresolved);
@@ -187,44 +288,38 @@ void test_missing_selection_projection_blocks_explicit_activation() {
 
 void test_watchdog_reset_requires_fresh_evidence_and_is_ram_only() {
     SafetyCore safety;
+    ActuatorPlanner planner(watchdogTestParameters());
+    tripWatchdog(planner);
     SafetyCoreInput input;
     device_platform::SensorQualitySnapshot sensor;
     SensorSelectionRuntimeState selection;
     RunPersistenceSnapshot snapshot;
     validBootEvidence(input, sensor, selection, snapshot);
-    input.requestWatchdogTripped = true;
+    input.actuatorPlanner = &planner;
 
     static_cast<void>(safety.evaluate(input));
-    ActuatorPlannerParameters parameters;
-    parameters.switchingWindowMillis = 1000U;
-    parameters.minimumOnMillis = 100U;
-    parameters.minimumOffMillis = 100U;
-    parameters.polarityDeadTimeMillis = 100U;
-    parameters.pulseAccumulatorCapMillis = 1000U;
-    parameters.counterDirectionConfirmationQuoteThreshold = 0.5;
-    parameters.counterDirectionConfirmationDurationMillis = 100U;
-    parameters.requestWatchdogMillis = 1000U;
-    parameters.outerFanPostRunMillis = 100U;
-    ActuatorPlanner planner(parameters);
-
-    TEST_ASSERT_FALSE(safety.resetRequestWatchdog(planner, 1U, false));
-    TEST_ASSERT_TRUE(safety.resetRequestWatchdog(planner, 2U, true));
+    input.sensorEvidenceValidated = false;
+    TEST_ASSERT_FALSE(safety.resetRequestWatchdog(planner, 1U, input));
+    input.sensorEvidenceValidated = true;
+    TEST_ASSERT_TRUE(safety.resetRequestWatchdog(planner, 2U, input));
+    TEST_ASSERT_FALSE(planner.state().latchedWatchdogFault.has_value());
     TEST_ASSERT_TRUE(safety.activeFault() == FaultCode::None);
 }
 
 void test_watchdog_fault_is_sticky_until_explicit_reset() {
     SafetyCore safety;
+    ActuatorPlanner planner(watchdogTestParameters());
+    tripWatchdog(planner);
     SafetyCoreInput input;
     device_platform::SensorQualitySnapshot sensor;
     SensorSelectionRuntimeState selection;
     RunPersistenceSnapshot snapshot;
     validBootEvidence(input, sensor, selection, snapshot);
-    input.requestWatchdogTripped = true;
+    input.actuatorPlanner = &planner;
     static_cast<void>(safety.evaluate(input));
     safety.acknowledge(FaultCode::ActuatorRequestWatchdog);
 
-    input.requestWatchdogTripped = false;
-    input.resumePersistenceResult.reset();
+    input.activationPersistenceResult.reset();
     input.processActivationApplied = false;
     const auto missingFaultEvidence = safety.evaluate(input);
     TEST_ASSERT_TRUE(missingFaultEvidence.faultCode ==
@@ -233,25 +328,14 @@ void test_watchdog_fault_is_sticky_until_explicit_reset() {
     TEST_ASSERT_TRUE(missingFaultEvidence.gate.status ==
                      ActuatorSafetyGateStatus::Unresolved);
 
-    input.resumePersistenceResult = RunPersistenceResultStatus::Applied;
+    input.activationPersistenceResult = RunPersistenceResultStatus::Applied;
     input.processActivationApplied = true;
     input.explicitActivationRequested = true;
     const auto newRequest = safety.evaluate(input);
     TEST_ASSERT_TRUE(newRequest.faultCode ==
                      FaultCode::ActuatorRequestWatchdog);
 
-    ActuatorPlannerParameters parameters;
-    parameters.switchingWindowMillis = 1000U;
-    parameters.minimumOnMillis = 100U;
-    parameters.minimumOffMillis = 100U;
-    parameters.polarityDeadTimeMillis = 100U;
-    parameters.pulseAccumulatorCapMillis = 1000U;
-    parameters.counterDirectionConfirmationQuoteThreshold = 0.5;
-    parameters.counterDirectionConfirmationDurationMillis = 100U;
-    parameters.requestWatchdogMillis = 1000U;
-    parameters.outerFanPostRunMillis = 100U;
-    ActuatorPlanner planner(parameters);
-    TEST_ASSERT_TRUE(safety.resetRequestWatchdog(planner, 3U, true));
+    TEST_ASSERT_TRUE(safety.resetRequestWatchdog(planner, 3U, input));
     TEST_ASSERT_TRUE(safety.activeFault() == FaultCode::None);
     TEST_ASSERT_TRUE(safety.lastEvaluation().faultCode == FaultCode::None);
     TEST_ASSERT_FALSE(safety.lastEvaluation().acknowledged);
@@ -286,13 +370,18 @@ void test_configuration_fault_requires_explicit_start_to_clear() {
     const auto withStart = safety.evaluate(input);
     TEST_ASSERT_TRUE(withStart.faultCode == FaultCode::None);
     TEST_ASSERT_TRUE(withStart.gate.status ==
-                     ActuatorSafetyGateStatus::Allowed);
+                     ActuatorSafetyGateStatus::Unresolved);
     TEST_ASSERT_FALSE(safety.isAcknowledged());
+
+    const auto afterClear = safety.evaluate(input);
+    TEST_ASSERT_TRUE(afterClear.gate.status ==
+                     ActuatorSafetyGateStatus::Allowed);
 }
 
 void test_safe_boot_fault_is_not_cleared_by_missing_producer() {
     SafetyCore safety;
     SafetyCoreInput input;
+    input.bootValidationComplete = true;
     input.configurationValidated = true;
     input.configurationRecoveryStatus =
         ConfigurationRecoveryStatus::ConfigurationUnavailable;
@@ -315,6 +404,122 @@ void test_safe_boot_fault_is_not_cleared_by_missing_producer() {
     TEST_ASSERT_TRUE(revalidated.bootDisposition ==
                      SafetyBootDisposition::Standby);
     TEST_ASSERT_FALSE(safety.isAcknowledged());
+}
+
+void test_multiple_faults_keep_each_clear_contract() {
+    SafetyCore safety;
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    RunPersistenceSnapshot snapshot;
+    validBootEvidence(input, sensor, selection, snapshot);
+    input.configurationProducer =
+        ConfigurationSafetyProducer::ConfigurationUnavailable;
+    sensor.quality = device_platform::SensorQuality::Stale;
+
+    const auto combined = safety.evaluate(input);
+    TEST_ASSERT_TRUE(combined.faultCode == FaultCode::ConfigurationUnavailable);
+    TEST_ASSERT_TRUE(combined.disposition == SafetyDisposition::SafeBoot);
+
+    sensor.quality = device_platform::SensorQuality::Valid;
+    const auto configStillActive = safety.evaluate(input);
+    TEST_ASSERT_TRUE(configStillActive.faultCode ==
+                     FaultCode::ConfigurationUnavailable);
+
+    input.configurationProducer.reset();
+    const auto cleared = safety.evaluate(input);
+    TEST_ASSERT_TRUE(cleared.faultCode == FaultCode::None);
+    TEST_ASSERT_TRUE(cleared.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    const auto afterClear = safety.evaluate(input);
+    TEST_ASSERT_TRUE(afterClear.gate.status ==
+                     ActuatorSafetyGateStatus::Allowed);
+}
+
+void test_acknowledgement_is_scoped_to_each_fault_code() {
+    SafetyCore safety;
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    RunPersistenceSnapshot snapshot;
+    validBootEvidence(input, sensor, selection, snapshot);
+    input.configurationProducer =
+        ConfigurationSafetyProducer::ConfigurationUnavailable;
+    sensor.quality = device_platform::SensorQuality::Stale;
+
+    static_cast<void>(safety.evaluate(input));
+    safety.acknowledge(FaultCode::ConfigurationUnavailable);
+    TEST_ASSERT_TRUE(
+        safety.isAcknowledged(FaultCode::ConfigurationUnavailable));
+    TEST_ASSERT_FALSE(
+        safety.isAcknowledged(FaultCode::SafetySensorUnavailable));
+
+    const auto stillBlocked = safety.evaluate(input);
+    TEST_ASSERT_TRUE(stillBlocked.faultCode ==
+                     FaultCode::ConfigurationUnavailable);
+    TEST_ASSERT_TRUE(stillBlocked.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+}
+
+void test_watchdog_fault_survives_safe_boot_clear_until_explicit_reset() {
+    SafetyCore safety;
+    ActuatorPlanner planner(watchdogTestParameters());
+    tripWatchdog(planner);
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    RunPersistenceSnapshot snapshot;
+    validBootEvidence(input, sensor, selection, snapshot);
+    input.actuatorPlanner = &planner;
+    input.configurationProducer =
+        ConfigurationSafetyProducer::ConfigurationUnavailable;
+
+    const auto safeBoot = safety.evaluate(input);
+    TEST_ASSERT_TRUE(safeBoot.faultCode == FaultCode::ConfigurationUnavailable);
+
+    input.configurationProducer.reset();
+    const auto watchdogRemains = safety.evaluate(input);
+    TEST_ASSERT_TRUE(watchdogRemains.faultCode ==
+                     FaultCode::ActuatorRequestWatchdog);
+    TEST_ASSERT_TRUE(watchdogRemains.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_TRUE(safety.resetRequestWatchdog(planner, 2U, input));
+    TEST_ASSERT_TRUE(safety.activeFault() == FaultCode::None);
+}
+
+void test_integrity_and_commit_faults_require_matching_resolution() {
+    SafetyCore integrity;
+    SafetyCoreInput integrityInput;
+    device_platform::SensorQualitySnapshot integritySensor;
+    SensorSelectionRuntimeState integritySelection;
+    RunPersistenceSnapshot integritySnapshot;
+    validBootEvidence(integrityInput, integritySensor, integritySelection,
+                      integritySnapshot);
+    integrityInput.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::ConfigurationIntegrityFailure;
+    TEST_ASSERT_TRUE(integrity.evaluate(integrityInput).faultCode ==
+                     FaultCode::ConfigurationIntegrityFailure);
+    integrityInput.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::RuntimeReady;
+    TEST_ASSERT_TRUE(integrity.evaluate(integrityInput).faultCode ==
+                     FaultCode::None);
+
+    SafetyCore commit;
+    SafetyCoreInput commitInput;
+    device_platform::SensorQualitySnapshot commitSensor;
+    SensorSelectionRuntimeState commitSelection;
+    RunPersistenceSnapshot commitSnapshot;
+    validBootEvidence(commitInput, commitSensor, commitSelection,
+                      commitSnapshot);
+    commitInput.configurationServiceMode =
+        ConfigurationServiceMode::CommitIndeterminate;
+    TEST_ASSERT_TRUE(commit.evaluate(commitInput).faultCode ==
+                     FaultCode::ConfigurationCommitIndeterminate);
+    commitInput.configurationServiceMode =
+        ConfigurationServiceMode::Operational;
+    commitInput.configurationCommitStatus =
+        ConfigurationCommitStatus::Activated;
+    TEST_ASSERT_TRUE(commit.evaluate(commitInput).faultCode == FaultCode::None);
 }
 
 void test_schema_three_neutral_fields_do_not_block_simple_resume() {
@@ -511,6 +716,8 @@ void setup_suite() {
     RUN_TEST(test_no_active_run_load_is_not_a_resume_offer);
     RUN_TEST(
         test_validated_explicit_activation_is_allowed_only_after_all_evidence);
+    RUN_TEST(test_fresh_start_stays_unresolved_until_new_run_is_applied);
+    RUN_TEST(test_fresh_start_commit_failure_never_allows);
     RUN_TEST(test_resume_offer_stays_unresolved_until_apply_and_fsm_evidence);
     RUN_TEST(
         test_non_resumable_current_never_becomes_allowed_from_boolean_evidence);
@@ -520,6 +727,10 @@ void setup_suite() {
     RUN_TEST(test_watchdog_fault_is_sticky_until_explicit_reset);
     RUN_TEST(test_configuration_fault_requires_explicit_start_to_clear);
     RUN_TEST(test_safe_boot_fault_is_not_cleared_by_missing_producer);
+    RUN_TEST(test_multiple_faults_keep_each_clear_contract);
+    RUN_TEST(test_acknowledgement_is_scoped_to_each_fault_code);
+    RUN_TEST(test_watchdog_fault_survives_safe_boot_clear_until_explicit_reset);
+    RUN_TEST(test_integrity_and_commit_faults_require_matching_resolution);
     RUN_TEST(test_schema_three_neutral_fields_do_not_block_simple_resume);
     RUN_TEST(test_load_matrix_rejects_fallback_and_untrusted_states);
     RUN_TEST(test_unknown_producer_is_fail_closed);
