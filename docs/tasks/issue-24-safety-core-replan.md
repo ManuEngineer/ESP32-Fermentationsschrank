@@ -21,7 +21,7 @@ Live-Revalidierung vor dieser neuen Planrevision am 2026-08-17:
 ```text
 PR #110: OPEN / Draft
 PR-Branch: agent/issue-24-safety-core-replan-v2
-PR-HEAD vor dieser Revision / direkter Parent: 4e47f17aa31d1f16b90cf6ae12eebad732354825
+PR-HEAD vor dieser Revision / direkter Parent: 8a3a38a28d725654c6d9954e095ae9468d7e8dc4
 PR-Base: main @ b8eae5f4da5f2666b5a9bda333d115254c4db5b2
 Issue #24: OPEN
 origin/main: b8eae5f4da5f2666b5a9bda333d115254c4db5b2
@@ -49,6 +49,28 @@ persistent gespeicherte #17-Head bleibt unverändert, das Wireformat bleibt
 Schema 3 und #18 bleibt die einzige fachliche Recoveryautorität. Y4 setzt eine
 rebootfeste Terminalpflicht; der alte Lauf endet ausschließlich über den
 kanonischen #17-`NoActiveRun`/`STANDBY`-Tombstone.
+
+### Verbindliche Konsistenzkorrekturen dieser Planrevision
+
+Diese Revision bleibt plan-only und ändert keine Produktions-, Test-, Header-,
+CPP-, Build- oder Konfigurationsdatei. Sie schließt die folgenden Verträge
+gegen `origin/main` @ `b8eae5f4da5f2666b5a9bda333d115254c4db5b2`:
+
+- technischer #17-Abandon und RAM-seitige terminale FSM-Events sind getrennte
+  Grenzen; `FaultResetCompleted`, `SafeBootExitCompleted` und der nicht
+  freigebende `RunAbandonCompleted` erzeugen keinen zweiten #17-Write;
+- `FaultAcknowledged` verwendet eine bounded, RAM-only
+  `MessageId -> SafetyFaultMessageReference`-Bindung mit aktueller Lineage;
+- `EmergencyMarker` besitzt die Scanstatus `TwoValid`, `OneValid`, `ZeroValid`
+  und `ReadIndeterminate`, einschließlich der Factory-/HistoryLoss-
+  Sonderverträge und des mechanischen Alternativwrite-Beweises;
+- ein bootlokaler `S3RecoveryExclusiveMode` sperrt jeden normalen #17-
+  Schreibeinstieg, bevor der Prepared-S3-Handoff klassifiziert ist;
+- Mixed-Snapshots trennen P1/O2-RAM-Events von commitabhängigen S3/Y4-Events,
+  ohne ein doppeltes `GateChanged` und mit einem neu hergeleiteten 36er-Batch;
+- `oldLineageKnown` ist planweit `Continuous=0`, `PartialSuccessor=1` und
+  `TotalDiscontinuity=0/1`; Acceptance-Tests trennen SafetyState-Decode von
+  der anschließenden #17-Evidence-Klassifikation.
 
 ## 1. Live-Vertragsabgleich
 
@@ -740,23 +762,56 @@ Feldkombinationen (alle nicht optionalen Zahlenfelder sind immer vorhanden):
 | `Cleared` | `MarkerRepair`, `FactoryInitialization`, `HistoryLossReinitialization` | `0` | `bootSequence > 0`; monotonic bootlokal, daher `0` zulässig |
 
 Unbekannte Werte, Reserved-Bits oder jede andere Kombination sind ungültig.
-Jede normale Active-/Cleared-Mutation folgt exakt diesem Zwei-Slot-Algorithmus:
+Der Scan klassifiziert die beiden Slotlesungen vor jeder normalen Mutation
+explizit:
 
 ```text
-1. sem0 und sem1 lesen, Envelope/CRC/Schema/Crossfields validieren.
-2. Winner: höchste gültige Revision; equal + identische Bytes -> sem0;
-   equal + unterschiedliche gültige Bytes -> MarkerIndeterminate.
-3. newMarkerRevision = max(valid) + 1 checked; UINT32_MAX -> Exhaustion.
-4. Ziel: bei zwei gültigen Slots Nicht-Winner; bei genau einem gültigen der
-   andere; bei fehlendem/korruptem Peer genau dieser; beide NotFound außerhalb
-   Factory/Reinit -> kein normaler Erfolg, SAFE_BOOT.
-5. bisherige Zielbytes merken, einen Kandidaten bilden und genau einmal schreiben.
-6. Success -> exact readback. CommitOutcomeUnknown: exakt Kandidat = committed,
-   exakt alte Zielbytes = not committed, jede dritte Wahrheit/ReadError/
-   CapacityError = Indeterminate. WriteError/CapacityError = not committed.
-7. Nur bei fehlender Bestätigung höchstens einen Alternativversuch auf dem
-   anderen Slot mit exakt denselben Kandidatbytes und derselben Revision;
-   kein Loop.
+TwoValid:
+  beide Slots sind semantisch gültig; höchste markerRevision gewinnt;
+  gleiche Revision plus identische Bytes -> sem0;
+  gleiche Revision plus unterschiedliche gültige Bytes -> MarkerIndeterminate.
+
+OneValid:
+  genau ein Slot ist semantisch gültig; der andere ist mechanisch NotFound oder
+  korrupt/semantisch ungültig; der gültige Slot ist der einzige Winner und der
+  Peer-Repair-/Mutationvertrag bleibt bounded.
+
+ZeroValid:
+  beide Slots wurden deterministisch gelesen, aber kein Slot ist gültig
+  (einschließlich corrupt+corrupt, corrupt+NotFound, beide semantisch
+  ungültig oder beide NotFound). Es gibt keinen Winner und keine
+  max(valid)-Revision. Weiter ist nur bei vollständig bewiesenem Factory-new-
+  Bootstrap oder vollständig qualifiziertem HistoryLoss-/TotalDiscontinuity-
+  Reinit-Vertrag zulässig; sonst MarkerIndeterminate, ImmediateStop, SAFE_BOOT,
+  kein normaler Active-/Cleared-Write und kein Blindrepair.
+
+ReadIndeterminate:
+  mindestens eine Lesung ist ReadError oder CapacityError, oder Decode-/Scan-
+  Evidenz lässt keinen verlässlichen Slotzustand zu. Es gibt keinen Winner,
+  keinen Blindwrite und keinen zweiten Versuch.
+```
+
+`NotFound` ist damit nur eine determinierte Scanantwort. Die Sonderverträge
+prüfen zusätzlich ihre vollständigen Preconditions: Factory-new verlangt die
+vier vollständig qualifizierten `NotFound`-Keys; HistoryLoss verlangt einen
+technisch les-/schreibbaren und bounded Storepfad, darf aber bei verlorener
+Markerwahrheit `ZeroValid` vorfinden. Ein normaler Marker-Write läuft danach
+exakt so:
+
+```text
+1. sem0/sem1 lesen und Scanstatus bestimmen; nur TwoValid/OneValid dürfen
+   einen normalen Winner-/Zielslot bestimmen.
+2. newMarkerRevision = max(valid) + 1 checked; UINT32_MAX -> Exhaustion.
+3. Kandidat bilden, bisherige Zielbytes exakt merken und genau einen bevorzugten
+   Writeversuch ausführen.
+4. Success -> exaktes Readback. CommitOutcomeUnknown -> exaktes Readback:
+   Kandidat = committed, alte Zielbytes = mechanisch NOT COMMITTED, jede dritte
+   Wahrheit/ReadError/CapacityError = ReadIndeterminate.
+5. Ein Alternativwrite auf dem anderen Slot ist nur zulässig, wenn der erste
+   Versuch mechanisch als NOT COMMITTED bewiesen ist: `WriteError`/
+   `NotWritten` oder `CommitOutcomeUnknown` plus exaktes Readback der alten
+   Zielbytes. Nach ReadError, Capacity-/Decode-Indeterminate, ZeroValid oder
+   MarkerIndeterminate gibt es keinen zweiten Write.
 ```
 
 Der Bootscan beider Marker gewinnt die höchste semantisch gültige Revision.
@@ -852,7 +907,8 @@ fehlender/unklarer SafetyState
  -> keine Run-Recovery
  -> autorisierter Run-Abandon über #17 zu NoActiveRun/STANDBY
  -> Configuration gesund
- -> Store Read/Write-Test und Markerprüfung gesund
+ -> Storepfad technisch les-/schreibbar, bounded und für Readback qualifiziert;
+    bestehende Markerwahrheit darf dabei `ZeroValid` sein
  -> Service-Autorisierung
  -> explizite SafetyState-Reinitialisierung
  -> neue SafetyHistoryLineage mit `historyLineageState=TotalDiscontinuity`
@@ -922,6 +978,29 @@ SafetyState-Commit mit Exact-Readback linearisiert die gesamte Menge. Ein
 Powerloss vor diesem Commit macht keinen Teil durable; nach bestätigtem Commit
 ist die gesamte im Snapshot neu erkannte persistenzpflichtige Menge durable.
 
+Ein Producer-Snapshot wird zuerst vollständig ausgewertet, auch wenn er
+gleichzeitig P1/O2-RAM-Mutationen und neue persistente S3/Y4-Identities
+enthält. Die Grenzen sind dann exakt:
+
+```text
+1. alle Ursachen des Snapshots aggregieren und den neuen RAM-Gatezustand
+   sofort fail-safe wirksam machen;
+2. die vollständige P1/O2-FaultCore-RAM-Mutation atomar abschließen;
+3. P1/O2-FaultRaised/FaultCleared und deren RAM-Mutationsbatch publizieren;
+4. die neue persistente S3/Y4-Menge als EINEN SafetyState-Kandidaten
+   committen und exact-readback-bestätigen;
+5. S3/Y4-Fault-/Latch-/Terminal-Events erst nach diesem Commit publizieren.
+```
+
+P1/O2-Events dürfen bei einem Crash zwischen RAM-Mutation und SafetyState-
+Commit bereits existieren; `ImmediateStop` bleibt wirksam. S3/Y4-Events und
+ein persistenter Erfolgsclaim dürfen dann noch nicht existieren. `GateChanged`
+wird für dieselbe tatsächliche aggregierte Gateänderung genau einmal beim
+ersten atomaren Schritt publiziert, der sie als Event wirksam macht: bei einer
+gemischten Mutation im P1/O2-RAM-Batch, bei einer rein persistenten Mutation im
+bestätigten SafetyState-Batch. Der persistente Batch wiederholt ein bereits
+publiziertes `GateChanged` niemals.
+
 CauseClear ist nur zulässig, wenn die vollständige kanonische Producer-Evidenz
 des konkreten Catalog-Eintrags gesund ist. Es setzt `causeCleared=true` und
 erhöht `persistentFaultRevision`; der Latch bleibt bestehen.
@@ -939,6 +1018,48 @@ Commit als Linearisierung. RAM-/Process-/Run-Handoff folgt erst danach.
 Quittierung ist ausschließlich UI-/Message-Zustand: kein SafetyState-Feld, kein
 CauseClear, kein Gatewechsel, keine Revisionserhöhung und keine persistenten
 Ack-Writes. Nach Reboot darf die Meldung wieder unquittiert erscheinen.
+
+### 6.1a FaultAcknowledged: exakte MessageId-Bindung
+
+Die SafetyFault-Projektion erzeugt für jede `MessageCode::SafetyFault`-Meldung
+eine bounded RAM-only-Referenz. Der Besitz ist eindeutig:
+
+```cpp
+struct SafetyFaultMessageReference {
+    FaultCode faultCode;
+    FaultSource faultSource;
+    std::uint32_t instanceId;          // P1/O2 = 0
+    std::uint32_t safetyHistoryEpoch;
+};
+```
+
+`SafetyFaultService` beziehungsweise der von ihm kontrollierte Safety-Message-
+Projektor erzeugt die Meldung und setzt exakt diese optionale fixed-size
+`RuntimeMessage::safetyFaultReference`; sie darf nur bei
+`MessageCode::SafetyFault` vorhanden sein. Das vorhandene optionale
+`RuntimeMessage::faultRevision` ist dafür keine ausreichende Identitybindung
+und wird weder geraten noch als Ersatz verwendet; falls es als #15-
+Kompatibilitätsprojektion bleibt, ist es rein abgeleitet. Die Referenz ist nicht
+Teil des SafetyState, nicht persistent und kein Ack-Wearpfad.
+
+Der Ack-Pfad arbeitet atomar in der RAM-Kopie:
+
+```text
+MessageCommandRequest.messageId
+ -> exakte RuntimeMessage suchen
+ -> MessageCode::SafetyFault und safetyFaultReference vorhanden
+ -> safetyHistoryEpoch == aktuelle Lineage und Referenz bindet exakt den
+    aktuellen, noch nicht gelösten FaultCore-Eintrag
+ -> nur diese Message und diese FaultIdentity quittieren
+ -> FaultAcknowledged mit exakt derselben Reference publizieren
+```
+
+Für eine Nicht-SafetyFault-Message, unbekannte `messageId`, fehlende Referenz,
+stale Lineage, nicht mehr aktiven/gelösten Fault oder inkonsistente Message-
+/Fault-Revision gibt es keinen erfundenen `FaultAcknowledged`. Eine
+Discontinuity invalidiert alle alten SafetyFaultMessageReferences. Die
+sichtbare Priorität, der erste aktive Fault und eine passende Revision dürfen
+niemals als implizite MessageId->Fault-Auflösung dienen.
 
 ### 6.2 Multi-Fault-Reset
 
@@ -1304,20 +1425,26 @@ Abschnitt 5.2. Keine monotone Zeit wird über Reboots subtrahiert.
 2  EmergencyMarker sem0/sem1 scannen
 3  SafetyState sf0/sf1 scannen, validieren, Redundanzstatus bestimmen
 4  ResetCause, bootSequence, RestartIntent, abnormalRestartCount auswerten
-5  #57 ConfigurationRecoveryService::boot()
-6  #56 ConfigurationService Runtime-/Commitzustand konsumieren
-7  #17 RunPersistence::loadAndInitialize()
-8  #20/#21 Sensor- und Sicherheits-Evidenz laden
-9  Producer -> SafetyFaultService Catalog-Mapping
-10 runRecoveryForbidden und beide Restartzwecke qualifizieren
-11 SAFE_BOOT-Entscheidung und bestehenden #17-Fallbackstatus trennen
-12 bestehendes `FallbackRecovered` ohne S3Intent -> bestehendes #18
-13 `Current/Fault` plus gültiger `S3RunRecovery`-Intent -> read-only
+5  bei Prepared `S3RunRecovery` bootlokal `S3RecoveryExclusiveMode` setzen;
+   normalen Application-/RunPersistence-Writebetrieb noch nicht starten
+6  #57 ConfigurationRecoveryService::boot()
+7  #56 ConfigurationService Runtime-/Commitzustand konsumieren
+8  #17 RunPersistence::loadAndInitialize() ausschließlich read-only laden
+9  #20/#21 Sensor- und Sicherheits-Evidenz laden
+10 Producer -> SafetyFaultService Catalog-Mapping
+11 runRecoveryForbidden und beide Restartzwecke qualifizieren
+12 SAFE_BOOT-Entscheidung und bestehenden #17-Fallbackstatus trennen
+13 bestehendes `FallbackRecovered` ohne S3Intent -> bestehendes #18
+14 `Current/Fault` plus gültiger `S3RunRecovery`-Intent -> read-only
    Safety-Fallback-Handoff -> #18
-14 erst nach vollständiger Qualifikation normaler Orchestrator/Planner/Sink-Tick
+15 erst nach Klassifikation und dem ausdrücklich erlaubten Pfad normaler
+   Orchestrator/Planner/Sink-Tick
 ```
 
-Kein Planner-/Sink-Tick darf vor Schritt 14 einen `Allowed`-Pfad erhalten.
+Kein periodischer Checkpoint, Command, Adjust, Completion-, Sensorselektions-
+oder sonstiger normaler #17-Write darf zwischen Schritt 5 und der
+Evidence-Klassifikation dazwischentreten. Kein Planner-/Sink-Tick darf vor
+Schritt 15 einen `Allowed`-Pfad erhalten.
 
 ### 8.5 SAFE_BOOT-Eintritt
 
@@ -1372,7 +1499,9 @@ Es gibt keine direkte `processState.state = Standby`-Zuweisung.
 `SafeBootExitCompleted` ist kein FaultReset und auch nicht der aktive
 S3-Recovery-Finalisierungsschritt aus Abschnitt 8.8. Ein Crash nach dem
 Flag-Commit vor der FSM-Transition wird beim nächsten Boot erneut qualifiziert
-und fail-closed behandelt. Der normale Exit verlangt weiterhin
+und fail-closed behandelt; er qualifiziert denselben RAM-FSM-Event aus dem
+bereits durablem SafetyState und dem #17-`NoActiveRun`/`STANDBY`-Readback,
+ohne einen zweiten #17-Write. Der normale Exit verlangt weiterhin
 `NoActiveRun/STANDBY`, keinen Latch, keinen Intent und kein Terminalflag.
 
 ### 8.7 SAFE_BOOT -> S3RecoveryDeparture
@@ -1444,10 +1573,33 @@ persistente Wahrheit dominieren.
 
 ### 8.8 S3RunRecovery: Schema-3-Klassifikation und Safety-Finalisierung
 
-Ein Prepared `S3RunRecovery` mit `restartAttempted=1` sperrt alle normalen
-RunPersistence-Mutationen. Zulässig sind bis zur Finalisierung ausschließlich
-der explizite #17-interne read-only Handoff und die bestehenden #18-
-Recoverymutationen. Die Klassifikation wird vollständig an
+Ein Prepared `S3RunRecovery` stellt vor jeder normalen Application-Aktivierung
+den bootlokalen Guard `S3RecoveryExclusiveMode` her. Der Guard ist keine
+persistent gespeicherte Wahrheit und keine zweite Recovery-FSM; die persistente
+Wahrheit bleibt der SafetyState-Intent. Er sitzt in der Safety-/Boot-
+Orchestration und sperrt den gemeinsamen #17-Coordinator vor dessen
+Schreibeinstiegen. Direkt zu blockieren sind mindestens:
+
+```text
+persistCommand()              // Start/Stop/Adjust/Completion/Ack-Commands
+persistTransition()           // normale Prozessübergänge
+checkpointPeriodic()          // periodische Checkpoints
+persistSensorSelection()      // automatische Sensorselektionswrites
+persistRecoveryCandidate()    // Zeit-/Correction-Writes außerhalb #18
+writeSnapshot()/writeSnapshotCore() als letzte Coordinator-Schranke
+```
+
+Damit bleiben auch normale automatische Prozess- und Sensorwrites sowie
+Recovery-Time-/Correction-Writes bis zu einer expliziten #18-Freigabe gesperrt.
+Erlaubt sind ausschließlich #17-Capture/Classify und
+`prepareSafetyFallbackRecovery(expected)` als read-only, die exakt benannten
+bestehenden #18-Recoverymutationen (`activateLoadedRun`,
+`activateFallbackRecoveredRun`, `resolveRecoveryOutcome`,
+`reevaluateRecoveryEvaluation` und `persistRecoveryCandidate` nur innerhalb
+des bestehenden #18-Recoverypfads) sowie der technische terminale Abandon.
+Jeder blockierte Einstieg liefert ohne Head-/Slot-Write einen fail-closed
+`RecoveryPending`/`NotAllowedInState`-Status; die Headrevision bleibt
+unverändert. Die Klassifikation wird vollständig an
 `classifyRecoveryEvidence(expected)` in #17 delegiert. Schema 3 bleibt ohne
 neues Feld; `mutationKind` wird ausdrücklich nicht als committed Provenienz
 verwendet, weil es im Prepared-Head verschwindet.
@@ -1460,15 +1612,15 @@ verwendet, weil es im Prepared-Head verschwindet.
 | `TerminalAlreadyCommitted` | Headrevision liegt strikt vorwärts; Current ist exakt gültiges `NoActiveRun`/`Standby` ohne Fallback | kein Resume/Restart; Intent/Evidence nach Readback löschen, `safeBootRequired` bis normalem Exit gesetzt lassen |
 | `InvalidOrOrphaned` | jede andere, unvollständige, widersprüchliche oder nicht mehr an die Evidence bindbare Kombination | kein Resume/Retry; forward-only terminalisieren, Intent/Evidence erst nach Tombstone löschen, SAFE_BOOT |
 
-Der Nachweis ist tragfähig, weil `activateFallbackRecoveredRun()` alle
-Recoverywrites mit `RunPersistenceMutationKind::Recovery` schreibt und normale
-Writes während Prepared blockiert sind. Diese Lock-/Forward-Invariante erlaubt
-#17 die mechanische Episode-Klassifikation, ohne eine persistente
-`mutationKind`-Behauptung zu erfinden. Der tatsächliche Committed-Head wird
-immer über Current/Fallback und physische Records geprüft. Kann eine künftige
-Implementierung eine der fünf Klassen nicht eindeutig aus Schema-3-Daten,
-Evidence und der Forward-only-Lockgrenze belegen, ist STOP/Owner-Entscheid
-zwingend; es gibt keinen Schemawechsel und kein Raten.
+Der Nachweis ist tragfähig, weil der Guard jeden normalen Einstieg mechanisch
+vor `writeSnapshotCore()` blockiert und nur die benannten #18-Mutationspfade
+ein internes, bootlokal begrenztes Erlaubnisfenster erhalten. Die
+`RunPersistenceMutationKind::Recovery`-Kennzeichnung bleibt eine technische
+Prepared-Head-Eigenschaft und wird nicht als Committed-Provenienz behauptet.
+Der tatsächliche Committed-Head wird immer über Current/Fallback und physische
+Records geprüft. Kann eine künftige Implementierung eine der fünf Klassen nicht
+eindeutig aus Schema-3-Daten, Evidence und der Forward-only-Lockgrenze belegen,
+ist STOP/Owner-Entscheid zwingend; es gibt keinen Schemawechsel und kein Raten.
 
 Nach einem eindeutig bestätigten #17/#18-Commit gilt:
 
@@ -1651,6 +1803,13 @@ BOOT -> Safety/Config/Run/Sensor qualification
    +--> existing #18 recovery
           +--> provable: forward durable Resume
           +--> not provable: canonical NoActiveRun/STANDBY Tombstone
+   |
+   +--> Evidence nicht beweisbar / nicht handoffberechtigt:
+          technischer #17-Abandon -> NoActiveRun/STANDBY durable
+          -> exact readback; RAM bleibt Fault/SafeBoot
+          -> CauseClear + TargetReset + letzter Blocker-Clear
+          -> FaultResetCompleted oder SafeBootExitCompleted nur RAM-seitig
+             nach den jeweils dauerhaft bestätigten Domaingrenzen; kein zweiter #17-Write
 ```
 
 ## 10. Y4-Terminalität und Run-Abandon
@@ -1676,9 +1835,28 @@ Blocker `Fault -> Standby`; `SafeBootExitCompleted` erlaubt erst nach dem
 normalen SAFE_BOOT-Gate `SafeBoot -> Standby`. `RunAbandonCompleted` ist ein
 technischer, nicht freigebender Lifecycle-Schritt und darf `Fault -> Fault`
 oder `SafeBoot -> SafeBoot` markieren, aber niemals RAM-seitig Standby
-freigeben. Alle drei werden als Kandidat validiert und durch #17
-Write-before-Apply geschützt; keiner darf `NoActiveRun + Fault` oder
-`NoActiveRun + SafeBoot` persistieren.
+freigeben. Der technische #17-Abandon ist die einzige Run-Domain-
+Durabilitygrenze: alter Run -> #17-Abandon -> `NoActiveRun`/`STANDBY`-
+Tombstone -> exaktes Readback. `RunAbandonCompleted` ist danach höchstens ein
+RAM-seitiger Lifecycle-Hinweis; er ist kein zweiter persistenter
+Runtransition-Write und darf nicht über `persistTransition()` nach
+`NoActiveRun` geschrieben werden.
+
+Erst wenn der Tombstone (falls ein Run vorhanden war), der #24-TargetReset im
+SafetyState und die Entfernung des letzten Safetyblockers jeweils durable und
+readback-bestätigt sind, wird `FaultResetCompleted` als validierter
+RAM-FSM-Kandidat `Fault -> Standby` angewendet. Das Event schreibt keinen
+weiteren #17-Snapshot. Für `SafeBootExitCompleted` gilt entsprechend:
+`NoActiveRun`/`STANDBY` ist bereits durable, `safeBootRequired=false` ist im
+SafetyState durable und alle Exitgates sind erfüllt; danach wird nur der
+validierte RAM-FSM-Kandidat `SafeBoot -> Standby` angewendet, ohne zusätzlichen
+#17-Write. Kein Event darf `NoActiveRun + Fault` oder `NoActiveRun + SafeBoot`
+persistieren.
+
+Ein Crash nach den dauerhaft bestätigten Domain-Commit(s), aber vor dem RAM-FSM-Apply, führt
+beim nächsten Boot zur erneuten Qualifikation desselben Events aus #17-
+Tombstone und SafetyState. Es gibt keine direkte State-Zuweisung und keinen
+zweiten Write-before-Apply-Pfad.
 
 ### 10.2 Terminalpunkt
 
@@ -1693,6 +1871,12 @@ Die kanonische Topologie ist ausschließlich:
 | #18 `RecoveryRejected` | `SafeBootExitCompleted` erst am Schluss | `SafeBootExitCompleted` | RecoveryRejected/Fault forward-only -> Tombstone -> Intent-Clear -> RAM bleibt SafeBoot -> normaler Exit |
 | Y4 mit aktivem Run | `RunAbandonCompleted` nach durablem Tombstone, gleicher RAM-Fault/SafeBoot-Zustand | `RunAbandonCompleted` | autorisierter Abandon, Tombstone, RAM bleibt Fault/SafeBoot; erst CauseClear + TargetReset + letzter Blocker und danach `FaultResetCompleted`/`SafeBootExitCompleted` -> Standby |
 | SAFE_BOOT-Abandon | `RunAbandonCompleted` ohne Freigabe | `RunAbandonCompleted` | Tombstone durable; RAM bleibt SafeBoot bis separatem Exit |
+
+Zwischen einem technischen Tombstone und `CauseClear`/Service-TargetReset
+existiert kein `Allowed` und kein normaler RAM-Standby. Der Tombstone ist nur
+Run-Domain-Durability; `FaultResetCompleted` oder `SafeBootExitCompleted`
+werden erst nach der jeweils eigenen SafetyState-/Exit-Durabilitygrenze
+RAM-seitig angewendet und schreiben keinen weiteren #17-Snapshot.
 
 Für Y4-Abandon gilt die Reihenfolge:
 
@@ -1918,8 +2102,8 @@ Die Crossfields sind für jede Eventfamilie vollständig festgelegt:
 
 | Eventfamilie | `instanceId` | `faultCode` / `faultSource` | `lineageState` | `oldLineageKnown` | Details |
 |---|---|---|---|---|
-| `FaultRaised`, `FaultCleared`, `FaultRelapsed` | bei P1/O2 `0`, bei S3/Y4 die konkrete Fault-Instance | exakt die Catalog-Identity | aktuelle Lineage | Continuous/Partial = `1`; Total = faktisch `0` oder `1` | Details `0` |
-| `FaultAcknowledged` | P1/O2 `0`, S3/Y4 konkrete Instance | exakt die acknowledged Identity | aktuelle Lineage | wie oben | `detail0=ActorSource`, `detail1=0`; kein SafetyState-Write/keine FaultRevision |
+| `FaultRaised`, `FaultCleared`, `FaultRelapsed` | bei P1/O2 `0`, bei S3/Y4 die konkrete Fault-Instance | exakt die Catalog-Identity | aktuelle Lineage | Continuous=`0`; Partial=`1`; Total faktisch `0` oder `1` | Details `0` |
+| `FaultAcknowledged` | P1/O2 `0`, S3/Y4 konkrete Instance | exakt die acknowledged Identity und dieselbe MessageReference | aktuelle Lineage | wie oben | `detail0=ActorSource`, `detail1=0`; kein SafetyState-Write/keine FaultRevision |
 | `FaultReset` | konkrete persistente Target-Instance | exakt die Target-Identity | aktuelle Lineage | wie oben | `detail0=ActorSource`, `detail1=0` |
 | `FaultResetRejected` | P1/O2 `0`, sonst Target-Instance | exakt die Target-Identity | aktuelle Lineage | wie oben | `detail0=ActorSource`, `detail1=FaultResetRejection` |
 | `GateChanged`, `TerminalRequiredSet`, `TerminalRequiredChanged` | immer `0` | beide `0` | aktuelle Lineage | wie oben | Details `0` |
@@ -1964,12 +2148,20 @@ static_assert(sizeof(NativeSafetyEventBatch) == 592);
 Die Wireform wird mit einem festen Bytewriter unabhängig von ABI-Padding
 serialisiert. Ein Event ist exakt `kSafetyEventWireBytes = 12` Byte. Die feste
 Menge ist `kMaxSafetyEventsPerMutation = 36` und ergibt
-`kSafetyEventBatchWireBytes = 13 + 36*12 = 445 Byte` pro Wire-Batch. Die Herleitung ist der echte Worst Case
-einer atomaren Multi-Fault-Raise-Mutation: `33 * FaultRaised + GateChanged +
-TerminalRequiredSet + TerminalRequiredChanged = 36`. Nicht persistente P1-/O2-Ereignisse,
-`BootClassified`, `SafeBootEntered`, `RedundancyRepair`, `HistoryLossDetected`,
-`HistoryDiscontinuity` und `SafetyReinitialized` tragen `instanceId=0`;
-S3-/Y4-Faultereignisse tragen die zugehörige persistente InstanceId.
+`kSafetyEventBatchWireBytes = 13 + 36*12 = 445 Byte` pro Wire-Batch. Die
+Herleitung bleibt korrekt, weil ein Batch genau eine Durability-/RAM-Grenze
+beschreibt: Der reine persistente Multi-Fault-Worst-Case ist
+`33 * FaultRaised + GateChanged + TerminalRequiredSet +
+TerminalRequiredChanged = 36`. Bei einem Mixed-Snapshot wird der Batch an der
+Grenze getrennt: bis zu acht P1/O2-FaultRaised/FaultCleared plus höchstens ein
+`GateChanged` ergeben höchstens 9 RAM-Events; der bestätigte persistente Batch
+enthält höchstens 33 Fault-/Latch-Events plus die nicht doppelt publizierte
+Terminalfolge. Die Summe eines Mixed-Snapshots darf daher größer als 36 sein,
+aber kein einzelner `SafetyEventBatch` überschreitet 36. Nicht persistente
+P1-/O2-Ereignisse, `BootClassified`, `SafeBootEntered`, `RedundancyRepair`,
+`HistoryLossDetected`, `HistoryDiscontinuity` und `SafetyReinitialized` tragen
+`instanceId=0`; S3-/Y4-Faultereignisse tragen die zugehörige persistente
+InstanceId.
 
 Die Einzelmutationen werden vollständig und ohne Crashgrenzen-Übergreifen
 enumeriert:
@@ -1996,8 +2188,9 @@ HistoryLoss nach redundant bestätigter SafetyState-Reinitialisierung:
              HistoryDiscontinuity, FaultRaised = 2
 HistoryLoss nach SafetyState und beiden qualifizierten Marker-Slots:
              SafetyReinitialized = 1
-P1/O2-RAM-Lifecycle: FaultRaised oder FaultCleared plus GateChanged = höchstens 2;
-             spätere Aktivierung ist wieder FaultRaised, nie FaultRelapsed
+P1/O2-RAM-Lifecycle: bis zu 8 FaultRaised/FaultCleared plus höchstens ein
+             GateChanged = höchstens 9; spätere Aktivierung ist wieder
+             FaultRaised, nie FaultRelapsed
 Ack: FaultAcknowledged = 1 nach atomarer Message-/FaultCore-RAM-Mutation
 TargetReset-Reject: FaultResetRejected = 1 nach atomarer Commandentscheidung
 ```
@@ -2032,7 +2225,11 @@ ist `Y4_INTERNAL_SAFETY`; es werden keine Events still abgeschnitten.
 
 Ein persistenter Multi-Fault-Raise publiziert seinen einen Batch erst nach dem
 einen bestätigten SafetyState-Commit. Ein Crash davor publiziert keinen
-Teil-Batch; ein Crash danach sieht die vollständige durable Menge. HistoryLoss
+persistenten Teil-Batch; ein Crash danach sieht die vollständige durable Menge.
+Bei einem Mixed-Snapshot ist der P1/O2-RAM-Batch davon getrennt und darf vor
+dem SafetyState-Commit bereits publiziert sein; der spätere persistente Batch
+enthält nur die nach Readback bestätigten S3/Y4-Fakten und wiederholt
+`GateChanged` nicht. HistoryLoss
 behauptet ebenfalls nie einen künftigen Schritt: Boot-Detection publiziert nur
 Detection/SAFE_BOOT; erst nach der redundant bestätigten SafetyState-Wahrheit
 folgen Discontinuity/FaultRaised und erst nach beiden qualifizierten
@@ -2058,6 +2255,15 @@ SafetyEventBatch native: 592 Byte
 Factory-new Bootstrap: 4 bestätigte Writes (sf0, sf1, sem0, sem1),
   jeder Write mit exact readback; Cut-Points 0..4
 ```
+
+Die Neuberechnung dieser Revision ändert keine statischen Bytewerte: Die
+`RunPersistenceRecoveryEvidence`-Projektion bleibt 68/88 Byte, der
+`SafetyState` bleibt 892/929 Byte, und der größte einzelne EventBatch bleibt
+`33 * FaultRaised + GateChanged + TerminalRequiredSet +
+TerminalRequiredChanged = 36` Events beziehungsweise 445/592 Byte. Ein
+Mixed-Snapshot kann über seine zwei Durabilitygrenzen zusammen mehr Events
+erzeugen, benötigt aber nur zwei bereits im 36er-Bound enthaltene Batches; es
+entsteht kein größerer fester RAM-Peak und keine PSRAM-Abhängigkeit.
 
 Die ImmediateStop-/Gate-/FaultCore-/Directive-Hotpaths sind feste Arrays und
 heapfrei. Der bestehende `IStateStore` ist dagegen ein `std::string`-Port; für
@@ -2326,19 +2532,26 @@ FAULT / SAFE_BOOT
    |
    +--> old persisted run can NEVER enter S3 recovery
    |
-Run-Abandon + Tombstone oder CauseClear + Service Reset
+Y4 aktiv
    |
-   +--> blocker bleibt: Fault/SafeBoot, flag true
+   +--> ImmediateStop; RAM bleibt Fault/SafeBoot
+   +--> technischer #17-Abandon -> NoActiveRun/STANDBY durable
+   +--> exact readback; RAM bleibt weiterhin Fault/SafeBoot
    |
-terminaler Standby-Punkt:
-   +--> Fault -> Standby-Kandidat
-   +--> clearActiveRunState
-   +--> kanonischer NoActiveRun/STANDBY-Tombstone via #17
-   +--> readback/commit bestätigt
-   +--> runRecoveryForbidden=false
+CauseClear + Service TargetReset
+   |
+   +--> letzter Safetyblocker entfernt und SafetyState durable
+   |
+   +--> FaultResetCompleted oder SafeBootExitCompleted als RAM-FSM-Kandidat
+   +--> kein zusätzlicher #17-Write
    |
    v
 STANDBY / separater SAFE_BOOT-Exit
+
+Zwischen Tombstone und CauseClear/TargetReset gibt es kein `Allowed` und
+keinen normalen RAM-Standby. `RunAbandonCompleted` bleibt ein nicht
+freigebender RAM-Hinweis. Ein Crash vor dem FSM-Apply qualifiziert denselben
+Event beim nächsten Boot erneut aus den beiden dauerhaft bestätigten Domainwahrheiten.
 ```
 
 ## 18. Mandatory Injection-Matrix aus `ACCEPTANCE_TESTS.md`
@@ -2484,6 +2697,10 @@ nur in der Erwartungsspalte.
 - Target-Reset bei vorhandenem Blocker, danach Release erst beim letzten Blocker;
 - 2x S3, S3+Y4, 2x Y4 und Primary-/Follow-up-Reihenfolge;
 - Ack ohne Safetywirkung; P1/O2 ohne persistente IDs/Revision;
+- zwei gleichzeitig aktive S3-Faults mit je eigener SafetyFault-Message:
+  Ack A quittiert exakt A auch bei höherer sichtbarer Priorität von B; zusätzlich
+  P1/O2-`instanceId=0`, unbekannte MessageId, fehlende/stale Reference,
+  bereits quittierte Message und normaler MessageAck ohne FaultAcknowledged;
 - Reboot erhält Latches, Revision, History-Epoch und Terminalflag.
 
 ### 19.2 S3
@@ -2530,6 +2747,16 @@ Für `Preheating`, `WaitingForProduct`, `ReachingTarget`, `QualifyingTarget`,
 - Crash nach durable #18-Fortschritt vor Intent-Clear: kein Replay, Intent
   anhand der neuen Run-Wahrheit abschließen;
 - `Restart Rejected`: kein Auto-Retry, späterer Service-/Owner-Reboot möglich.
+- nach technischem Tombstone gibt es keinen zweiten `persistTransition()`-
+  Write: `RunAbandonCompleted` bleibt Fault/SafeBoot; erst nach durablem TargetReset,
+  letztem Blocker-Clear und der jeweiligen SafetyState-/Exitgrenze folgen
+  `FaultResetCompleted` oder `SafeBootExitCompleted` ausschließlich als
+  RAM-FSM-Apply; Crash davor qualifiziert denselben Event beim nächsten Boot.
+- bei Prepared-S3Recovery blockieren `persistCommand`, `persistTransition`,
+  `checkpointPeriodic`, `persistSensorSelection`, normale Recovery-Time-/
+  Correction-Writes und die gemeinsame Core-Schranke; nur die benannten #18-
+  Recoverymutationen dürfen schreiben, danach klassifiziert #17 den Forward-
+  oder Terminalstand.
 
 ### 19.3 Y4 und Abandon
 
@@ -2551,6 +2778,14 @@ Marker corrupt, History-Loss-Reinit und Counterexhaustion.
 
 ### 19.4a EmergencyMarker und History/Event-Grenzen
 
+- jeder Bootscan liefert genau einen Status `TwoValid`, `OneValid`, `ZeroValid`
+  oder `ReadIndeterminate`; `ZeroValid` wird nur von vollständig qualifiziertem
+  Factory-new- oder HistoryLoss-Reinit weitergeführt, sonst ImmediateStop/
+  SAFE_BOOT ohne Winner, Active-/Cleared-Write oder Blindrepair;
+- `ReadIndeterminate` durch ReadError/CapacityError/Decode-Indeterminate führt
+  ohne Gewinnerclaim und ohne Alternativwrite zu ImmediateStop/SAFE_BOOT;
+- `corrupt+corrupt`, `corrupt+NotFound` und beide semantisch ungültigen Marker
+  sind ZeroValid; `CapacityError` beim Scan ist ReadIndeterminate;
 - Factory-Tie und Active-Tie gleicher Revision und byteidentischem Payload
   wählen `sem0`; gleiche Revision mit unterschiedlichem gültigem Payload ist
   `MarkerIndeterminate`, ImmediateStop und SAFE_BOOT;
@@ -2567,8 +2802,9 @@ Marker corrupt, History-Loss-Reinit und Counterexhaustion.
 - P1/O2 Raise/Clear und GateChanged werden ausschließlich nach ihrer
   atomaren RAM-FaultCore-Mutation publiziert, ohne SafetyState-Commit zu
   behaupten.
-- NotFound, korruptes Peer, `CommitOutcomeUnknown`, Alternativwrite mit
-  identischen Kandidatbytes/-revision, Repair-Crash und
+- NotFound, korruptes Peer, `CommitOutcomeUnknown`, Alternativwrite nur nach
+  mechanischem NOT-COMMITTED-Beweis mit identischen Kandidatbytes/-revision,
+  ReadError-/Capacity-/MarkerIndeterminate-Abbruch, Repair-Crash und
   `markerRevision==UINT32_MAX` decken den normalen Marker-Zwei-Slot-Algorithmus
   ab.
 
@@ -2606,11 +2842,18 @@ abgeleitete eigene Exhaustion, externe Domain-Counter und Goldenbytes an
 Der #17-Test trennt `FallbackRecovered` ohne S3Intent vom
 `Current/Fault + S3RunRecovery`-Handoff und prüft Capture-, Codec-,
 Klassifikations- und Required-Status inklusive `AlreadyPersisted`-Readback.
-S3RunRecovery-Tests trennen Candidate-time-Provenienz (aktives Preimage,
-CauseClear, exakter ServiceResetProof, atomare Entfernung plus
-Intent/Evidence) von Decode-time (Source nicht aktiv, gültige Lineage- und
-Crossfields, #17 Current/Fault, physisch verifizierter Fallback und
-ResetCause). Ressourcen-/Eventtests prüfen native und ESP-IDF-`sizeof`/`alignof`,
+Der reine SafetyState-Decode prüft nur Payload/CRC/Schema, Intent-Crossfields,
+Evidence-Wire und Lineage; er verlangt keinen geladenen #17-Current/Fault-
+Zustand. Erst danach lädt #17 und `classifyRecoveryEvidence(expected)` liefert
+`PendingHandoff`, `RecoveryForwardAlreadyCommitted`,
+`RecoveryRejectedAlreadyCommitted`, `TerminalAlreadyCommitted` oder
+`InvalidOrOrphaned`. Nur `PendingHandoff` verlangt den ursprünglichen Fault-
+Current, den physisch verifizierten Fallback und die passende ResetCause-
+Qualifikation; die Forward-/Rejected-/Terminal-Formen werden nach jedem
+erlaubten #18-Forward-Schritt einschließlich Crash vor Intent-Clear akzeptiert.
+Candidate-time-Provenienz (aktives Preimage, CauseClear, exakter
+ServiceResetProof, atomare Entfernung plus Intent/Evidence) bleibt davon
+getrennt. Ressourcen-/Eventtests prüfen native und ESP-IDF-`sizeof`/`alignof`,
 alle acht transienten Identities, tatsächlichen RAM-/Heap-Peak und
 Marker-Exhaustion bei `UINT32_MAX` sowie uint64-Grenzen von
 `recordRevision`/`attemptedSafetyRecordRevision` oberhalb `UINT32_MAX`.
@@ -2686,13 +2929,20 @@ Events und Identitäten:
   vor Attempted, Crash nach Attempted vor dem Port und explizites Rejected
   haben jeweils getrennte, konsistente Eventpublikationen; keine stille
   Trunkierung und kein Teil-Batch;
+- Mixed-Snapshot mit allen acht transienten P1/O2-Identities und neuen S3/Y4:
+  bis zu acht Raise/Clear plus höchstens ein `GateChanged` im RAM-Batch,
+  persistente Fault-/Terminal-Events erst nach dem SafetyState-Readback,
+  kein doppeltes `GateChanged`, Crash zwischen den Grenzen mit P1/O2-Events
+  aber ohne S3/Y4-Erfolgsclaim; reiner persistenter Worst-Case bleibt 36;
 - `HistoryDiscontinuity` im fixed-size Batch einschließlich
   `lineageState`/`oldLineageKnown`, P1/O2 mit `instanceId=0`;
 - `FaultAcknowledged`, erfolgreicher `FaultReset`, `FaultResetRejected`,
   `BootClassified` sowie Intent-/Attempt-/Rejected-Events beweisen jeweils
   ihre festen Actor-/Reject-/ResetCause-/Counter-/IntentKind-Details und bei
   Intent die `restartIntentSourceInstanceId`; unbekannte Detailwerte werden
-  beim Handoff abgelehnt;
+  beim Handoff abgelehnt. Ack A/B, höhere Priorität B, P1/O2 `instanceId=0`,
+  stale Lineage, unbekannte oder bereits quittierte Message und normaler
+  MessageAck ohne `FaultAcknowledged` sind getrennte Nachweise;
 - alle Nicht-Fault-Crossfields mit event-kind-spezifischen Neutralwerten und
   Goldenbyte-/Decode-Abdeckung je Eventfamilie;
 - 33 persistente Slots, neue `0x040E`-/`0x040F`-Domaincounter und
@@ -2778,13 +3028,19 @@ Die abschließende Plan-Konsistenzliste ist verbindlich:
 - S3 not provable terminalisiert zuerst unter aktivem Latch; jeder nicht mehr
   handoffberechtigte S3RunRecovery-Intent endet über Tombstone, Intent-Clear
   und separaten SAFE_BOOT-Exit statt Retry oder neuer Y4-Identity;
+- Y4-Tombstone gibt weder `Allowed` noch RAM-Standby frei: erst nach
+  `CauseClear`, Service-TargetReset, letztem Blocker-Clear und den jeweiligen
+  durable bestätigten SafetyState-Grenzen werden `FaultResetCompleted`/
+  `SafeBootExitCompleted` RAM-seitig angewendet; kein zweiter #17-Write;
 - gültiger Fault-current lädt den Fallback nicht automatisch: #17 Capture,
   Klassifikation und der neue read-only Handoff verwenden gemeinsam
   `loadReference`, stellen RAM/IDs/High-Watermarks korrekt her und rufen danach
   nur die bestehende #18-Grenze;
-- EmergencyMarker prüft sem0-Tie, Envelope/Payload-Revision, vollständige
+- EmergencyMarker klassifiziert `TwoValid`/`OneValid`/`ZeroValid`/
+  `ReadIndeterminate`, prüft sem0-Tie, Envelope/Payload-Revision, vollständige
   State-/Reason-Crossfields und erreicht Cleared/healthy erst nach beiden
-  qualifizierten Slots;
+  qualifizierten Slots; Alternativwrite nur nach mechanischem NOT-COMMITTED-
+  Beweis, nie nach Read-/Decode-/Marker-Indeterminate;
 - HistoryLoss hat getrennte bestätigte Event-Lifecycle-Schritte; P1/O2
   publizieren nur nach atomarer RAM-FaultCore-Mutation;
 - der öffentliche #15-FaultReset trägt nur `CommandEnvelope` plus
@@ -2798,9 +3054,15 @@ Die abschließende Plan-Konsistenzliste ist verbindlich:
   aktive SafetyTaskRecovery-Source; S3RunRecovery wird candidate-time mit
   Evidence erzeugt und boot-time ausschließlich durch #17 als Pending,
   Forward, Rejected, Terminal oder Orphan klassifiziert;
+- `S3RecoveryExclusiveMode` wird aus Prepared `S3RunRecovery` bootlokal vor
+  #17-Load gesetzt und blockiert jeden normalen Coordinator-Schreibeinstieg;
+  nur read-only Evidence und die ausdrücklich erlaubten #18-/Terminalpfade
+  dürfen schreiben;
 - SafetyEventBatch ist exakt an einen bestätigten atomaren FaultCore-RAM-,
   SafetyState-Commit-, Boot- oder Repair-Lifecycle-Schritt gebunden; Prepared,
   Attempted, Side-Effect und explizites Rejected werden getrennt publiziert,
+  Mixed-Snapshots trennen bis zu 8 P1/O2-Events + GateChanged von den
+  commitabhängigen S3/Y4-Events, GateChanged wird nicht doppelt publiziert,
   und Nicht-Fault-Crossfields sind je Eventfamilie goldenbyte-/decode-definiert;
 - Quittierung, erfolgreicher Reset, Reset-Ablehnung und Bootklassifikation
   übergeben #19 ihre typisierten Journalfakten (`ActorSource`, `RejectReason`,
@@ -2816,8 +3078,9 @@ Die abschließende Plan-Konsistenzliste ist verbindlich:
 - die normale EmergencyMarker-Mutation folgt dem begrenzten Zwei-Slot-
   Kandidat-/Readback-/Alternativwrite-Algorithmus; `markerRevision` endet bei
   `UINT32_MAX` fail-closed;
-- `TotalDiscontinuity` beschreibt keine globale Fortsetzungsordnung und darf
-  deshalb unabhängig vom faktischen `oldLineageKnown` auftreten;
+- `Continuous` trägt `oldLineageKnown=0`, `PartialSuccessor` trägt `1`,
+  `TotalDiscontinuity` beschreibt keine globale Fortsetzungsordnung und trägt
+  deshalb faktisch `0` oder `1`;
 - Catalog 41, gültige FaultSources 28 plus Reserved, persistente Records 33,
   SafetyState Payload 892 Byte, SafetyState Envelope 929 Byte, Evidence Wire
   68 Byte/native 88 Byte, EventKind 18, Event-Wire 12 Byte, Event-Batch-Wire
@@ -2876,6 +3139,16 @@ Planvertrag, die tatsächliche Testausführung bleibt plan-only `NOT_RUN`:
 | Y4 technical abandon ohne frühes Standby | PASS | 10.1-10.3 |
 | `NoActiveRun` / `STANDBY` | PASS | 10, 16, 19.3-19.4 |
 | `FaultResetCompleted` / `SafeBootExitCompleted` | PASS | 8.6, 10.1-10.2 |
+| terminale RAM-FSM-Events ohne zweiten #17-Write | PASS | 8.6, 9.4, 10.1-10.3, 19.2-19.3 |
+| Y4-Tombstone ohne frühes Standby/Allowed | PASS | 10.1-10.3, 17, 19.3 |
+| FaultAcknowledged exact MessageId->FaultReference | PASS | 6.1a, 13, 19.1, 19.6 |
+| EmergencyMarker ZeroValid/ReadIndeterminate | PASS | 5.1, 5.3, 19.4a, 19.5 |
+| Marker-Alternativwrite nur nach NOT-COMMITTED-Beweis | PASS | 5.1, 14.2, 19.4a |
+| S3RunRecovery Exclusive-Writer-Gate | PASS | 8.4, 8.8, 19.2, 19.5 |
+| alle normalen #17-Write-Entrypoints bei Prepared blockiert | PASS | 8.4, 8.8, 19.2 |
+| P1/O2 8er-Worst-Case und Mixed-Snapshot-Grenze | PASS | 6.1, 13, 19.6 |
+| `oldLineageKnown` Continuous/Partial/Total konsistent | PASS | 4.2, 13, 19.4a, 19.6 |
+| SafetyState-Decode getrennt von #17-Klassifikation | PASS | 4.4, 8.8, 19.5 |
 | #56 / #57 Gate | PASS | 1, 5.3, 8.4-8.7, 12 |
 | SafetyEvents / mixed snapshots | PASS | 13, 19.4a, 19.6 |
 | Journal handoff an #19 | PASS | 13, 15, 19.6 |
