@@ -1,18 +1,18 @@
 # Issue #29 Build- und Ressourcenbericht
 
 Dieser Bericht gehört zu Issue #29 und ist dem Implementierungs-HEAD
-`6be497af855af0c40084999397da055fcae9e015` zugeordnet. Die ESP-IDF-Profile
+`5950814fc21be557e565dad3aa6acf3dbe3c0b64` zugeordnet. Die ESP-IDF-Profile
 wurden mit ESP-IDF `v6.0.2` / Commit
 `7101770dc6db2667b3c477cc31365dd1acd6db4e` gebaut.
 
 ## `esp32_bringup`
 
-- `size.json total_size`: 194191 Bytes
+- `size.json total_size`: 194179 Bytes
 - DRAM: 13202 / 180736 Bytes
 - IRAM: 42023 / 131072 Bytes
 - App-BIN: 194304 Bytes
-- ELF: 6969396 Bytes
-- Mapfile: 5023334 Bytes
+- ELF: 6969868 Bytes
+- Mapfile: 5023889 Bytes
 - Bootloader-BIN: 26096 Bytes
 - Partitionstabellen-BIN: 3072 Bytes
 - `sdkconfig` SHA-256: `2b1de6d6a368794932df27e4bdc9e7e4d3d0b709c788db2bf67bb2c487d07961`
@@ -47,21 +47,29 @@ PSRAM-Status bleiben bis zur Hardwaremessung offen.
 
 ## Xtensa-Stack-Usage-Herleitung
 
-Der Bring-up-Build dieses Heads aktiviert `-fstack-usage` für die Diagnose-
-Probe sowie `run_commands.cpp`, `run_persistence_coordinator.cpp`,
-`temperature_control_orchestrator.cpp`, `process_state_machine.cpp` und
-`program_model.cpp`. Die relevante Evidenz lautet:
+Der Bring-up-Build dieses Heads aktiviert `-fstack-usage` und
+`-fcallgraph-info=su` für die Diagnose-Probe sowie die tatsächlich
+betroffenen `fermentation_app`-Quellen. Einzelne `.su`-Frames sind keine
+kumulative Call-Path-Obergrenze. `python3 scripts/analyze_issue_29_stack.py
+build/esp32_bringup` prüft die nicht-inlinierten `.ci`-Kanten und ergibt für
+den deterministischen Candidate-Allocation-Failure-Pfad:
 
-- `runProbe()`: 53248 Bytes maximaler Frame;
-- `decideProgramStart()`: 3072 Bytes;
-- `RunPersistenceCoordinator::loadAndInitialize()`: 8192 Bytes;
-- `RunPersistenceCoordinator::persistCommand()`: 9280 Bytes;
-- `TemperatureControlApplicationOrchestrator::persistCommand()`: 304 Bytes;
-- gehaltene Xtensa-Objektsumme: 24296 Bytes;
-- konservativer, begründeter Sicherheitspuffer: 4096 Bytes;
-- konfigurierte Diagnose-Taskgröße: 57344 Bytes.
+| gleichzeitig lebende Funktion | `.su`-Frame | Qualifier | kumulativ |
+|---|---:|---|---:|
+| `probeTask(void*)` | 48 B | `static` | 48 B |
+| `runProbe(ProbeContext&)` | 53232 B | `static` | 53280 B |
+| `persistFreshStartCommand(...)` | 32 B | `static` | 53312 B |
+| `TemperatureControlApplicationOrchestrator::persistCommand(...)` | 304 B | `static` | 53616 B |
+| `RunPersistenceCoordinator::persistCommand(...)` | 9280 B | `static` | 62896 B |
+| `RunPersistenceCoordinator::result(...)` | 32 B | `static` | 62928 B |
 
-Die `uxTaskGetStackHighWaterMark()`-Einheit ist für ESP32 in ESP-IDF 6.0.2
-als Bytes verifiziert. Die Werte sind Compiler-/Build-Evidenz, keine
-On-Target-HWM-Messung und kein Produktivbudget. `CONFIG_ESP_MAIN_TASK_STACK_SIZE`
-wurde nicht verändert.
+Die gehaltene Xtensa-Objektsumme beträgt 24296 Bytes; sie ersetzt die
+Call-Path-Summe nicht. Der begründete, begrenzte Diagnosepuffer beträgt
+4096 Bytes für Task-Einstieg/RTOS-Rahmen und kleine
+Compiler-/Instrumentierungsvariation. Auf 1024 Bytes ausgerichtet ergibt
+das 67584 Bytes Diagnose-Taskgröße. Alle sechs Qualifier sind `static`; ein
+`dynamic`-/`unbounded`-Qualifier oder fehlende Callgraph-Kante blockiert den
+Hardwarelauf. Die Werte sind Compiler-/Build-Evidenz, keine On-Target-HWM-
+Messung und kein Produktivbudget. `CONFIG_ESP_MAIN_TASK_STACK_SIZE` wurde
+nicht verändert. Die `uxTaskGetStackHighWaterMark()`-Einheit ist für ESP32 in
+ESP-IDF 6.0.2 als Bytes verifiziert.

@@ -17,7 +17,7 @@ vollständig.
 - Basis: `main @ 87dd593fcdc8d26831873a4163b174340b4347c0`
 - freigegebener Plan:
   `docs/tasks/issue-29-implementation-plan.md @ 4f49b44cff47f55bfd425d9e39c5a07256782ed7`
-- Implementierungs-HEAD: `6be497af855af0c40084999397da055fcae9e015`
+- Implementierungs-HEAD: `5950814fc21be557e565dad3aa6acf3dbe3c0b64`
 - ESP-IDF: `v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`
 - Ziel: ESP32 ohne PSRAM, aktorfrei und unbelastet
 
@@ -67,24 +67,40 @@ ausreichend vorausgesetzt; `CONFIG_ESP_MAIN_TASK_STACK_SIZE` wurde nicht
 geändert.
 
 Die Diagnose-Taskgröße wird im Code aus den tatsächlich kompilierten Xtensa-
-Objektgrößen und der `-fstack-usage`-Evidenz des Bring-up-Aufrufpfads gebildet.
-Der Build dieses Heads meldet `sizeof(CommandDecision)=9872`,
+Objektgrößen und der `-fstack-usage`-/`-fcallgraph-info=su`-Evidenz des
+Bring-up-Aufrufpfads gebildet. Der Build dieses Heads meldet
+`sizeof(CommandDecision)=9872`,
 `sizeof(RunCommandState)=4784`, `sizeof(ProgramStartRequest)=304`,
 `sizeof(RunPersistenceCoordinator)=8336`,
 `sizeof(TemperatureControlApplicationOrchestrator)=152`,
 `sizeof(TemperatureController)=280`, `sizeof(ActuatorPlanner)=424`,
 `sizeof(TargetQualificationEvaluator)=128` und `sizeof(SafetyCore)=16`; die
-Summe der gehaltenen statischen Objekte beträgt 24296 Bytes. Die relevante
-Compiler-Stack-Usage-Datei meldet für `runProbe()` den maximalen Frame von
-53248 Bytes; `decideProgramStart()` meldet 3072 Bytes und
-`RunPersistenceCoordinator::persistCommand()` 9280 Bytes. Daraus wird der
-größere Wert aus statischer Objekt-Summe und 53248-Byte-Frame plus ein
-begründeter 4096-Byte-Sicherheitspuffer abgeleitet: konfigurierte Diagnose-
-Taskgröße 57344 Bytes. Diese Zahlen sind kein Produktiv-Stackwert und
-verschieben `CommandDecision` nicht auf den Heap; `CONFIG_ESP_MAIN_TASK_STACK_SIZE`
-bleibt unverändert. Der On-Target-HWM muss die Herleitung anschließend
-bestätigen; Stackoverflow, Panic, Watchdog oder fehlender HWM sind `FAILED`/
-`BLOCKED`, nie `PASS`.
+Summe der gehaltenen statischen Objekte beträgt 24296 Bytes. Einzelne `.su`-
+Werte werden nicht additiv als Call-Path-Obergrenze missverstanden. Der
+relevante, tatsächlich im `.ci`-Callgraph belegte Fehlerpfad ist:
+
+| gleichzeitig lebende Funktion | `.su`-Frame | Qualifier | kumulativ |
+|---|---:|---|---:|
+| `probeTask(void*)` | 48 B | `static` | 48 B |
+| `runProbe(ProbeContext&)` | 53232 B | `static` | 53280 B |
+| `persistFreshStartCommand(...)` | 32 B | `static` | 53312 B |
+| `TemperatureControlApplicationOrchestrator::persistCommand(...)` | 304 B | `static` | 53616 B |
+| `RunPersistenceCoordinator::persistCommand(...)` | 9280 B | `static` | 62896 B |
+| `RunPersistenceCoordinator::result(...)` | 32 B | `static` | 62928 B |
+
+`scripts/analyze_issue_29_stack.py build/esp32_bringup` prüft diese sechs
+Frames, ihre `static`-Qualifier und die tatsächlichen `.ci`-Kanten. Die
+kompilierte kumulative Obergrenze beträgt 62928 Bytes. Der begründete,
+begrenzte Diagnosepuffer von 4096 Bytes deckt Task-Einstieg/RTOS-Rahmen und
+kleine Compiler-/Instrumentierungsvariation ab; anschließend wird
+reproduzierbar auf 1024 Bytes ausgerichtet. Daraus folgt die initiale
+Diagnose-Taskgröße von 67584 Bytes. Ein `dynamic`-/`unbounded`-Qualifier,
+fehlende Kante oder nicht reproduzierbare Kette blockiert den Hardwarelauf;
+es wird keine Stackgröße geraten. Diese Zahlen sind kein Produktiv-Stackwert
+und verschieben `CommandDecision` nicht auf den Heap;
+`CONFIG_ESP_MAIN_TASK_STACK_SIZE` bleibt unverändert. Der On-Target-HWM muss
+die Herleitung anschließend bestätigen; Stackoverflow, Panic, Watchdog oder
+fehlender HWM sind `FAILED`/`BLOCKED`, nie `PASS`.
 
 Die vorgesehenen Messpunkte bleiben getrennt:
 
