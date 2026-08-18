@@ -45,6 +45,21 @@ Das ist eine erfasste aktuelle Buildbaseline und keine Festlegung der
 finalen Produktionspartitionierung. Reale Flashgröße, Boardrevision und
 PSRAM-Status bleiben bis zur Hardwaremessung offen.
 
+## Vollständige lokale Verifikation
+
+Der kombinierte Ressourcenbericht wurde nach dem vollständigen lokalen Lauf
+erneut mit `Source-Git-SHA`=
+`5950814fc21be557e565dad3aa6acf3dbe3c0b64` erzeugt und verifiziert. Der
+Build-Commit der erneuten Artefakterzeugung war der nachgelagerte
+Dokumentations-HEAD `c1fc97c4149ea02b855ef9a01c662508d373e07f`; zwischen dem
+Implementierungs-HEAD und diesem Dokumentationscommit liegt keine
+Firmwareänderung. `pio run -e native`, die vollständige native Suite mit
+965/965 erfolgreichen Testfällen, beide ESP-IDF-Profile, beide
+ESP-IDF-Static-Analysis-Profile, Clang-Tidy, Format-, Architektur-, Secret-,
+Quality-Gate- und Artefakt-Scanprüfungen sowie die kumulative
+Xtensa-Stackherleitung waren `PASS`. Diese Software-/Buildnachweise sind kein
+Board-, UART-, Flash-, Pegel- oder Smoke-Nachweis.
+
 ## Xtensa-Stack-Usage-Herleitung
 
 Der Bring-up-Build dieses Heads aktiviert `-fstack-usage` und

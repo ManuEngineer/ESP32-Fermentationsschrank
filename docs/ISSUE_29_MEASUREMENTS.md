@@ -30,6 +30,7 @@ erneut messen; das spätere Lastgate, insbesondere #37, bleibt offen.
 | Nachweis | Ergebnis | Konkrete Evidenz |
 |---|---|---|
 | Native gezielte Tests | `PASS` | `test_run_commands` und `test_run_persistence_coordinator`; 162/162 Testfälle erfolgreich |
+| Native vollständige Suite | `PASS` | 42 Testgruppen; 965/965 Testfälle erfolgreich |
 | Native Produktionsbuild | `PASS` | `pio run -e native` |
 | ESP-IDF `esp32_bringup` | `PASS` | `python3 scripts/build_esp_idf_profiles.py all` |
 | ESP-IDF `esp32_release` | `PASS` | derselbe Profil-Lauf; Release enthält keinen Issue-29-Probequellpfad |
@@ -40,6 +41,7 @@ erneut messen; das spätere Lastgate, insbesondere #37, bleibt offen.
 | Architekturgrenzen | `PASS` | `python3 scripts/check_architecture_boundaries.py` |
 | Secret-Scan | `PASS` | `python3 scripts/check_secrets.py` |
 | Quality-Gate-Selbsttests | `PASS` | `python3 scripts/selftest_quality_gates.py` |
+| CI-Artefakt-Scanabdeckung | `PASS` | `python3 scripts/check_ci_artifact_scan_coverage.py` |
 | Build-/Ressourcenreport | `PASS` | [`ISSUE_29_BUILD_REPORT.md`](ISSUE_29_BUILD_REPORT.md), Source-SHA exakt zugeordnet |
 
 Der versionierte Build-/Ressourcenbericht enthält die von ESP-IDF erzeugten
@@ -136,6 +138,10 @@ nicht vorgezogen.
 In der Ausführungsumgebung wurde kein verifiziertes `/dev/ttyUSB*`-,
 `/dev/ttyACM*`- oder `/dev/serial/by-id`-Gerät gefunden. Deshalb wurden weder
 Flash noch Board gelesen oder beschrieben.
+Der verfügbare Anschluss ist auf RX/TX/GND begrenzt; EN/BOOT beziehungsweise
+DTR/RTS zur reproduzierbaren Reset-, Flashmode- und ROM-Recovery-Steuerung
+stehen nicht zur Verfügung. Es wurde deshalb kein unsicherer oder nicht
+reproduzierbarer Flash-/Resetversuch unternommen.
 
 | Kriterium | Ergebnis | Feststellung |
 |---|---|---|
