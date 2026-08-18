@@ -23,8 +23,13 @@ Release 1. Ergaenzende Detailregeln stehen in
   ein gespeichertes Programm.
 - Direkte Aktortests sind ausschliesslich im geschuetzten `SERVICE_MODE` aus
   validiertem `STANDBY` zulaessig.
-- Ein Wiederanlauf wartet nicht unnoetig auf Netzwerkzeit oder Benutzer, darf
-  aber weder Sicherheitsfreigaben noch unbekannten Fortschritt erfinden.
+- Die Bootklassifikation wartet nicht auf Netzwerkzeit oder NTP. Ein
+  tatsaechliches Resume ist in R1 jedoch niemals automatisch: Es erfordert eine
+  bewusste explizite Benutzerbestaetigung, den bestehenden
+  #17-Write-before-Apply-Pfad mit `Applied`, die FSM-Anwendung und frische
+  Evidenz. Bis dahin bleibt die Entscheidung ungeklaert; nicht resumefaehige
+  vertrauenswuerdige Phasen werden als `NoActiveRun` beendet und untrusted
+  Persistenz bleibt `SAFE_BOOT`.
 - Ein echter Sicherheitsfehler hat immer Vorrang vor automatischem Fortfahren.
 
 ## Grenze des fachlichen Zustandsautomaten
@@ -514,9 +519,11 @@ Warnungen lassen den Prozess grundsaetzlich weiterlaufen, sofern die
 Sicherheitslogik dies erlaubt. Sie werden sichtbar angezeigt und protokolliert.
 
 `WARNING_REQUIRES_ACTION` wird verwendet, wenn eine fachliche Entscheidung offen
-ist, etwa bei nicht eindeutig aufloesbarer Recovery-Zeit oder einem ausgefallenen
-optionalen Produktfuehler. Die Fehler- und Aktormatrix bestimmt, welche sichere
-Regelaktion waehrenddessen zulaessig bleibt.
+ist, etwa bei einem ausgefallenen optionalen Produktfuehler gemaess #21. Eine
+nicht eindeutig aufloesbare alte Recovery-Zeit ist kein R1-Fall fuer eine
+fortgesetzte Regelaktion: Zeit- oder progressabhaengige, nicht resumefaehige
+Phasen werden als `NoActiveRun` beendet; technisch untrusted Persistenz fuehrt
+zu `SAFE_BOOT`.
 
 ## FAULT
 
