@@ -1,5 +1,10 @@
 # Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustände
 
+Diese vollständige Planrevision korrigiert die Planreview-Befunde F1–F5 des
+vorherigen Plan-Commits `b4cc9e367145cb761ba72db731416ec969f798b7`. Sie ersetzt
+die vorherige Planfassung vollständig; ihre neue Commit-SHA ist das erneute
+Owner-Gate.
+
 ## 1. Status, Basis und Owner-Gate
 
 Issue #29 ist live `OPEN`/`READY`. `READY` autorisiert ausschließlich den
@@ -229,6 +234,20 @@ Die bestehenden Smoke-Verträge behalten exakt zwei reguläre
 Ressourcenmessungen. Die vier internen Probezeitpunkte sind separat markierte
 Probe-Artefakte und zählen nicht als zusätzliche reguläre Smoke-Messungen.
 
+### Aussagegrenze des #29-Ressourcennachweises
+
+Dieser Nachweis schließt das offene PR-#53-Gate erstmals auf realer
+ESP32-Hardware ohne PSRAM für den tatsächlich in #29 ausgeführten
+Bring-up-nahen Pfad. Er beweist nicht die spätere Ressourcenwirkung von noch
+nicht existierenden UI-, NVS-, Web-, Display- oder Parallelkonsumenten.
+
+Sobald solche Konsumenten entstehen, müssen ihre zusätzlichen Stack-, Heap-,
+Fragmentierungs- und Parallelwirkungen erneut gemessen werden. #29 erfüllt
+sein eigenes Ressourcen-Akzeptanzkriterium mit dem realen Bring-up-Nachweis;
+die abschließende Messung unter Parallel-/Releasebelastung bleibt als späteres
+Lastgate, insbesondere #37, sichtbar offen. Ein #29-Nachweis darf dieses
+spätere Gate nicht stillschweigend als bestanden markieren.
+
 ## 7. Fehlervertragsprobe und On-Target-Fault-Seam
 
 Die Allokationsfehlerreaktion wird nicht nur nativ geprüft. Der verbindliche
@@ -286,10 +305,19 @@ Der On-Target-Nachweis muss beweisen:
 - keine neue Aktorfreigabe entsteht;
 - Safety bleibt fail-closed.
 
-Zusätzlich werden auf demselben produktionsnahen Pfad deterministische
-Store-Fehler, insbesondere Kapazitätsfehler und unbekannter Commitausgang,
-beobachtet. Kein NVS-Adapter aus #90 und keine reale Aktorintegration aus
-#32/#33 werden hierfür vorgezogen.
+Auf demselben produktionsnahen Pfad wird keine allgemeine Store-Fehlermatrix
+und kein unabhängiger
+`CommitOutcomeUnknown`-/Power-Cut-Test vorgezogen. Der lokale Storedouble
+liefert nur die für den Probeaufbau notwendige initiale Read-Sicht und zeichnet
+jeden Write-Versuch auf. Beim injizierten Allokationsfehler muss die Writezahl
+null bleiben; jeder Write-Versuch ist ein Probe-Fehler und kann keinen Commit
+als Erfolg melden. Damit wird unmittelbar die fehlende Persistenzfreigabe des
+#29-Fehlervertrags beobachtbar, ohne #90 zu duplizieren.
+
+Allgemeine NVS-, Kapazitäts-, Power-Cut-, Readback- und
+`CommitOutcomeUnknown`-Validierung bleibt dem bestehenden Store-Vertrag und
+#90 vorbehalten. Keine reale Aktorintegration aus #32/#33 wird hierfür
+vorgezogen.
 
 Der native `SimulatedPersistentStateStore` und vorhandene native
 Allokationsharnesses bleiben ergänzende Regressionstests. Sie ersetzen den
@@ -300,6 +328,56 @@ Falls sich bei der Umsetzung zeigt, dass dieser lokale Seam nur durch einen
 neue Parallelstruktur möglich ist, wird die Umsetzung angehalten. Dann werden
 Befund, Auswirkungen und minimale Owneralternativen vorgelegt; es erfolgt
 keine stille Scopeerweiterung.
+
+### Konkrete Compile-time-Isolation
+
+Der Seam sitzt an der bestehenden Kandidaten-/Apply-Grenze in
+`lib/fermentation_app`, nicht nur in `main/app_main.cpp`. Die Isolation wird
+mit der vorhandenen Kconfig-Profilwahl und privaten Component-Definitionen
+umgesetzt:
+
+- `lib/fermentation_app/CMakeLists.txt` setzt nur bei
+  `CONFIG_APP_PROFILE_ESP32_BRINGUP` die private Definition
+  `APP_ISSUE_29_BRINGUP_PROBE=1` auf den `fermentation_app`-Component;
+- `CONFIG_APP_PROFILE_ESP32_RELEASE` setzt diese Definition nicht;
+- `main/CMakeLists.txt` setzt dieselbe Definition und nur für
+  `esp32_bringup` den privaten Include-Pfad
+  `../lib/fermentation_app/private`;
+- die konkrete interne Grenze besteht aus
+  `lib/fermentation_app/private/issue_29_bringup_fault_seam.hpp` und einer
+  ausschließlich unter `APP_ISSUE_29_BRINGUP_PROBE` kompilierten, lokal
+  begrenzten Seam-Sektion in
+  `lib/fermentation_app/src/run_persistence_coordinator.cpp`, also genau an
+  der bestehenden Kandidaten-/Apply-Grenze;
+- `main/app_main.cpp` hält die ESP-IDF-Ressourcenmessung und den
+  bring-up-only Probeaufruf im Composition Root. Es bindet den privaten
+  Header nur über den vorgenannten Bring-up-Include-Pfad ein;
+- der bestehende öffentliche Fachvertrag wird nicht erweitert und die
+  private Headergruppe wird nicht als Component-Include-Verzeichnis
+  installiert;
+- `fermentation_app` verwendet dafür keine ESP-IDF-Header oder ESP-IDF-API.
+
+Der Seam wird in der gemeinsamen Kandidaten-/Apply-Implementierung mit
+`#if defined(APP_ISSUE_29_BRINGUP_PROBE)` vollständig aus dem Releasepfad
+ausgeschlossen. Native PlatformIO-Builds erhalten weder die Kconfig-Variable
+noch die Definition und kompilieren den Probe-/Fault-Code nicht als aktiven
+Pfad.
+
+Die Isolation wird nachgewiesen durch:
+
+- Prüfung der `esp32_bringup`- und `esp32_release`-Compile-Commands: die
+  Definition darf nur im Bring-up-Component vorkommen;
+- Prüfung, dass native Builds die Definition nicht verwenden;
+- Prüfung, dass der Release-Compile-/Symbolbestand keinen nutzbaren
+  `issue_29`-Probe-/Fault-Seam enthält;
+- `python scripts/check_architecture_boundaries.py` ohne neue
+  `fermentation_app`-zu-ESP-IDF-Abhängigkeit;
+- gezielte Kconfig-/CMake-Gegenprüfung, dass widersprüchliche Profilwahl
+  weiterhin abbricht.
+
+Eine globale `operator new`-Überschreibung, ein öffentlicher
+Produktions-Allocator und eine allgemeine Fault-Injection-Plattform bleiben
+ausgeschlossen.
 
 ## 8. Hardware-Smoke und Abnahme
 
@@ -365,7 +443,205 @@ Alle späteren Nachweise verwenden ausschließlich:
 
 `NOT_RUN` ist kein bestandenes Ergebnis.
 
-## 10. Dokumentation und Roadmap
+## 10. Umsetzungs- und Commit-Schnitte nach Ownerfreigabe
+
+Die Umsetzung erfolgt in wenigen klaren Schnitten. Jeder Schnitt erhält einen
+eigenen Commit oder eine klar dokumentierte, nicht weiter teilbare
+Nachweisgrenze. Es werden keine künstlichen Mini-Commits erzeugt. Jeder
+Schnitt startet erst nach Freigabe der exakten Plan-SHA.
+
+### Schnitt 1 – Sichere Diagnostik und Profil-/Buildintegration
+
+Betroffene Dateigruppen:
+
+- `main/app_main.cpp` und der bestehende ESP-IDF-Composition-Root;
+- `main/CMakeLists.txt` sowie die vorhandenen Profil-/Kconfig-Dateien;
+- ausschließlich bereits vorhandene ResetCause-, Zeit- und
+  Diagnosegrenzen.
+
+Zweck:
+
+- sichere Boot-/Resetdiagnostik;
+- Profil-, Flash-, PSRAM- und Partition-Artefakt-Erfassung vorbereiten;
+- genau zwei reguläre Smoke-Ressourcenpunkte mit den vereinbarten Werten
+  vorbereiten;
+- keine Aktor-, UI-, NVS- oder neue Plattformintegration.
+
+Direkte Nachweise:
+
+- `git diff --check`;
+- gezielte CMake-/Kconfig-Prüfungen für genau ein Profil;
+- native und ESP-IDF-Compile-Prüfung des unveränderten aktorfreien Pfades;
+- Architektur- und Secret-Gate für die geänderten Dateien.
+
+Der Schnitt ist abgeschlossen, wenn beide Profile getrennt konfigurierbar
+sind, die Diagnose ausschließlich fail-closed und aktorfrei bleibt und noch
+keine `CommandDecision`-Fault-Instrumentierung enthalten ist.
+
+### Schnitt 2 – `CommandDecision`-Ressourcenprobe und Fault-Seam
+
+Betroffene Dateigruppen:
+
+- `lib/fermentation_app/CMakeLists.txt`;
+- `lib/fermentation_app/private/issue_29_bringup_fault_seam.hpp` und die
+  guarded Seam-Sektion in
+  `lib/fermentation_app/src/run_persistence_coordinator.cpp`;
+- `main/app_main.cpp` für die reale ESP-IDF-Ressourcenprobe und den privaten
+  Probeaufruf;
+- die bestehende Kandidaten-/Apply-Grenze in
+  `run_persistence_coordinator.cpp` beziehungsweise dem tatsächlich
+  zuständigen bestehenden Modul;
+- der bring-up-only Aufruf im Composition Root;
+- direkt betroffene native Command-/Apply-/Persistenztests.
+
+Zweck:
+
+- maximalen 48/96/1024-Kandidaten real halten und vermessen;
+- Ressourcenprobe und Fehlervertragsprobe getrennt halten;
+- den einmaligen `esp32_bringup`-only Fault-Seam compile-time isolieren;
+- den bestehenden Command-/Apply-/Persistenzvertrag mit lokalem Storedouble
+  und All-off-Sinks beobachten;
+- keine allgemeine Allocator- oder Store-Fault-Plattform erzeugen.
+
+Direkte Nachweise:
+
+- native Regressionen für Decision, lokale Apply-Atomizität und unveränderten
+  Zustand;
+- Compile-Command-/Symbolprüfung für Bring-up-only versus Release/native;
+- Architekturgrenzen;
+- gezielte ESP-IDF-Buildprüfung beider Profile.
+
+Der Schnitt ist abgeschlossen, wenn der On-Target-Probeaufruf den bestehenden
+Pfad trifft, der injizierte Fehler keine RAM-/Persistenz-/Aktorfreigabe erzeugt
+und Release/native keinen nutzbaren Seam enthalten.
+
+### Schnitt 3 – Gezielte lokale und ESP-IDF-Nachweise
+
+Betroffene Dateigruppen:
+
+- direkt betroffene `test/`-Dateien;
+- Build-/Analysekonfiguration nur, soweit sie durch Schnitt 1/2 erforderlich
+  ist;
+- keine neuen Fachverträge.
+
+Zweck:
+
+- gezielte native Command-/Apply-/Persistenzregressionen;
+- Architektur-, Secret-, Format- und Diff-Prüfungen;
+- `esp32_bringup`- und `esp32_release`-Builds sowie Static Analysis;
+- Build-/Ressourcenreport für den exakten Implementierungs-HEAD vorbereiten.
+
+Direkte Nachweise:
+
+- dokumentierte gezielte Native-Tests;
+- `python scripts/check_architecture_boundaries.py`;
+- `python scripts/check_secrets.py`;
+- `clang-format --dry-run --Werror` für geänderte C/C++-Dateien;
+- `git diff --check`;
+- `python scripts/build_esp_idf_profiles.py all`;
+- `python scripts/run_esp_idf_static_analysis.py all`;
+- `python scripts/build_report.py --append --esp-idf-profiles bringup release`
+  gemäß CI-Dokument.
+
+Der Schnitt ist abgeschlossen, wenn alle direkt betroffenen lokalen und
+profilbezogenen Nachweise mit `PASS`, `FAILED` oder reproduzierbarem
+`BLOCKED` dokumentiert sind. Nicht ausgeführte Hardwaregates bleiben
+`NOT_RUN`.
+
+### Schnitt 4 – Reale Board-, Flash-, UART-, Recovery- und Smoke-Nachweise
+
+Betroffene Dateigruppen/Artefakte:
+
+- kein weiterer Firmwarecode;
+- finaler Implementierungs-HEAD aus Schnitt 3;
+- ESP-IDF-Buildartefakte, UART-Logs und Messprotokoll.
+
+Zweck:
+
+- reale Boardrevision, Flashgröße, PSRAM, Partition und Boot-/Resetursachen
+  erfassen;
+- ROM-Bootloader-/FT232RL-Recovery ausführen;
+- beide Profile mindestens 35 Sekunden auf demselben unbelasteten Board
+  prüfen;
+- Ressourcenprobe und Fehlervertragsprobe auf dem realen ESP32 ausführen;
+- sichere, unbelastete Messpunkte prüfen.
+
+Nicht-Ziele sind weiterhin externe 12-V-Versorgung, Verbraucher, belastete
+MOSFET-Tests, reale Aktorfreigabe und Brownout-Injektion.
+
+Direkte Nachweise:
+
+- Messprotokoll mit Werkzeugversionen, Befehlen, Port, Board, SHA und Logs;
+- Build-/Ressourcenreport;
+- beide Smoke-Logs;
+- Probe-/Fault-Seam-Log;
+- Status je Kriterium als `PASS`, `FAILED`, `BLOCKED` oder `NOT_RUN`.
+
+Der Schnitt ist abgeschlossen, wenn die Nachweise auf dem exakten finalen
+Implementierungs-HEAD reproduzierbar erfasst oder mit konkretem Blocker
+dokumentiert sind. Hardwaretests gelten nicht als durch Buildgrün ersetzt.
+
+### Schnitt 5 – Versionierte Ergebnisdokumentation und Rückführung
+
+Betroffene Dokumente/Artefakte:
+
+- `docs/ISSUE_29_MEASUREMENTS.md` als versioniertes #29-Messprotokoll;
+- `docs/HARDWARE.md` für tatsächlich bestätigte Hardwarefakten;
+- `docs/OPEN_POINTS.md` nur für tatsächlich nachgewiesene Punkte;
+- referenzierte Build-/Ressourcenreports und UART-/Probe-Artefakte.
+
+Das Messprotokoll enthält mindestens Board/Revision, Flash/PSRAM,
+Partitionstabelle, Build-/Source-SHA, Toolchain, UART-/Recoveryweg,
+Resetursachen, beide Smokezeiten, Ressourcenwerte, Probe-/Fault-Ergebnis,
+sichere Messpunkte, offene Punkte und die direkten Artefaktverweise.
+
+Rückführung:
+
+- `docs/HARDWARE.md` erhält nur mit `confirmed_test` belegte Board-, Flash-,
+  PSRAM-, Boot- und unbelastete Pegelfakten und verweist auf das Protokoll;
+- `docs/OPEN_POINTS.md` wird nur bei vorhandenem konkretem Link auf
+  Messprotokoll, PR, Hardwarebericht oder Buildartefakt abgehakt;
+- nicht gemessene GPIO-, Verbraucher-, belastete MOSFET- und
+  Commissioning-Punkte bleiben unverändert `TBD_HARDWARE` bzw.
+  `TBD_COMMISSIONING`;
+- `TBD_IMPLEMENTATION_BUDGET` bleibt für nicht durch #29 belegte
+  Produktions-, Parallel- und Lastbudgets bestehen;
+- `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md` wird nur geändert, wenn ein
+  gemessener Wert eine dortige kanonische Regel oder Aussage tatsächlich
+  ändert. Rohmesswerte werden dort nicht doppelt gepflegt; das Protokoll ist
+  die Quelle der #29-Messwerte.
+
+Der Schnitt ist abgeschlossen, wenn alle behaupteten Fakten auf konkrete
+Artefakte verweisen und offene spätere #37-/Konsumenten-/Lastgates sichtbar
+bleiben.
+
+## 11. Kanonische Ergebnis- und Messdokumentation
+
+Der versionierte #29-Nachweis wird nach realer Durchführung unter
+`docs/ISSUE_29_MEASUREMENTS.md` geführt. Der Plan-only-PR erzeugt dieses
+Messprotokoll noch nicht, weil keine Messung stattfinden darf.
+
+Der Bericht referenziert die zugehörigen Build-/Ressourcenreports, zum
+Beispiel den versionierten oder als PR-/CI-Artefakt abgelegten Report mit
+Source-/Implementierungs-HEAD, Profil und Toolchain. UART-Logs und
+Probe-/Fault-Logs werden ebenfalls mit eindeutiger SHA-/HEAD-Zuordnung
+referenziert.
+
+Die Dokumentationsquelle ist dadurch eindeutig:
+
+```text
+reale Messung/Buildartefakt
+  -> docs/ISSUE_29_MEASUREMENTS.md
+  -> bestätigte Fakten in docs/HARDWARE.md
+  -> nur belegte Abhakpunkte in docs/OPEN_POINTS.md
+```
+
+`docs/RESOURCE_BUDGET_AND_MAINTENANCE.md` bleibt unverändert, solange keine
+kanonische Regel durch die Messung sachlich geändert werden muss. #29 liefert
+den ersten realen Bring-up-Nachweis; spätere UI-/NVS-/Web-/Display- und
+Parallelbelastung sowie das abschließende #37-Lastgate bleiben offen.
+
+## 12. Dokumentation und Roadmap
 
 Der Plan dokumentiert die betroffenen Module und Vertragsgrenzen, ohne
 Produktionscode zu ändern. Nach Ownerfreigabe sind insbesondere
@@ -382,7 +658,11 @@ Plattformverträge werden nur im genehmigten Umfang berührt.
   werden als nächstes Gate vermerkt;
 - fachliche Anforderungen werden nicht in die Roadmap kopiert.
 
-## 11. Plan-only Commit, Draft-PR und Handover
+Diese Planrevision ändert Reihenfolge, Status und nächstes Roadmap-Gate nicht;
+die bereits vorhandene minimale #29-Zeile ist deshalb ausreichend und wird in
+dieser Revision nicht erneut geändert.
+
+## 13. Plan-only Commit, Draft-PR und Handover
 
 Der Commit dieses Plan-PRs enthält ausschließlich:
 
