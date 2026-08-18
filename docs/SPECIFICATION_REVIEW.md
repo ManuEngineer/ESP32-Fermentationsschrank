@@ -104,8 +104,12 @@ Netzwerk, Web und Anzeige sind keine Voraussetzung fuer Regelung oder Safety.
 - Richtungswechsel erzwingt Abschaltung und Totzeit;
 - Sicherheitsabschaltungen ueberstimmen Mindestlaufzeiten;
 - Quittierung und Fehlerreset bleiben getrennt;
-- persistente Verriegelungen ueberleben einen Neustart;
-- wiederholte abnormale Neustarts fuehren zu `SAFE_BOOT`;
+- aktuelle, rein fluechtige Safety-Latches muessen einen Neustart nicht
+  ueberleben; jeder Neustart startet all-off und erzwingt die vollstaendige
+  Neubewertung von Konfiguration, Persistenz, Sensorik und Safety-Evidenz;
+- es gibt keine Restart-Akkumulation und kein Restart-Zeitfenster;
+  `SAFE_BOOT` entsteht aus aktuell untrusted Boot-, Konfigurations- oder
+  Persistenzevidenz, nicht aus einer vorsorglichen Neustartzaehlung;
 - `SAFE_BOOT` erlaubt keine leistungsbezogenen Aktortests;
 - firmwarefeste Grenzen koennen durch Konfiguration nur verschaerft werden;
 - der erste reale Peltier-Puls verlangt die dokumentierten elektrischen,
