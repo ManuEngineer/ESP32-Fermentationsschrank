@@ -4,6 +4,7 @@
 
 #include "control_context.hpp"
 #include "run_recovery.hpp"
+#include "safety_core.hpp"
 
 namespace fermentation {
 
@@ -87,12 +88,13 @@ TemperatureControlApplicationOrchestrator::
         RunPersistenceCoordinator& persistence,
         TemperatureController& temperatureController,
         TargetQualificationEvaluator& evaluator, ActuatorPlanner& planner,
-        ActuatorPlanSinkDriver& driver) noexcept
+        ActuatorPlanSinkDriver& driver, SafetyCore& safetyCore) noexcept
     : persistence_(persistence),
       temperatureController_(temperatureController),
       evaluator_(evaluator),
       planner_(&planner),
-      actuatorDriver_(&driver) {}
+      actuatorDriver_(&driver),
+      safetyCore_(&safetyCore) {}
 
 RunPersistenceResult TemperatureControlApplicationOrchestrator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
@@ -103,6 +105,43 @@ RunPersistenceResult TemperatureControlApplicationOrchestrator::persistCommand(
     return complete(persistence_.persistCommand(current, decision, time,
                                                 liveSensorEvidence),
                     before, current, time.monotonicMillis);
+}
+
+RunPersistenceResult
+TemperatureControlApplicationOrchestrator::persistFreshStartCommand(
+    RunCommandState& current, const CommandDecision& decision,
+    const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
+    const bool isFreshStartKind =
+        decision.kind == CommandKind::StartProgram ||
+        decision.kind == CommandKind::StartManualHolding;
+    if (!isFreshStartKind) {
+        RunPersistenceResult rejected;
+        rejected.status = RunPersistenceResultStatus::NotEligible;
+        rejected.coordinatorState = persistence_.state();
+        return rejected;
+    }
+    return persistCommand(current, decision, time, liveSensorEvidence);
+}
+
+RunPersistenceResult
+TemperatureControlApplicationOrchestrator::reconcileR1LoadedRun(
+    const RunPersistenceLoadResult& loaded, RunCommandState& current,
+    const RunCheckpointTime& time) {
+    const RunPersistenceSnapshot* snapshot =
+        loaded.snapshot.has_value() ? &*loaded.snapshot : nullptr;
+    if (SafetyCore::classifyRunLoad(loaded.status, snapshot) !=
+        RunLoadDisposition::NoActiveRun) {
+        RunPersistenceResult notEligible;
+        notEligible.status = RunPersistenceResultStatus::NotEligible;
+        notEligible.coordinatorState = persistence_.state();
+        return notEligible;
+    }
+
+    const TemperatureControlLifecycleSnapshot before{
+        current.processState.state};
+    return complete(persistence_.discardAsNoActiveRun(current, time), before,
+                    current, time.monotonicMillis);
 }
 
 RunPersistenceResult
@@ -294,15 +333,18 @@ TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
 
 ActuatorPlanTickResult
 TemperatureControlApplicationOrchestrator::tickActuatorPlan(
-    const RunCommandState& current, std::uint64_t nowMonotonicMillis,
-    ActuatorSafetyGateInput safetyGate) {
-    if (planner_ == nullptr || actuatorDriver_ == nullptr) {
+    const RunCommandState& current, std::uint64_t nowMonotonicMillis) {
+    if (planner_ == nullptr || actuatorDriver_ == nullptr ||
+        safetyCore_ == nullptr) {
         ActuatorPlanTickResult result;
         result.status = ActuatorPlanStatus::Unconfigured;
         result.reason = ActuatorPlanReason::NoCommissioning;
         result.appliedDirection = AbstractControlDirection::Idle;
         return result;
     }
+
+    const ActuatorSafetyGateInput safetyGate =
+        safetyCore_->lastEvaluation().gate;
 
     const EffectiveControlContext context =
         resolveEffectiveControlContext(current);

@@ -14,6 +14,7 @@
 namespace fermentation {
 
 class RunRecoveryCoordinator;
+class SafetyCore;
 
 // The only dynamic PI evidence a caller may supply. Target, role, and
 // context identity are always derived internally from the live
@@ -78,12 +79,25 @@ class TemperatureControlApplicationOrchestrator {
         RunPersistenceCoordinator& persistence,
         TemperatureController& temperatureController,
         TargetQualificationEvaluator& evaluator, ActuatorPlanner& planner,
-        ActuatorPlanSinkDriver& driver) noexcept;
+        ActuatorPlanSinkDriver& driver, SafetyCore& safetyCore) noexcept;
 
     [[nodiscard]] RunPersistenceResult persistCommand(
         RunCommandState& current, const CommandDecision& decision,
         const RunCheckpointTime& time,
         const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
+    // Explicit R1 fresh-start boundary. The existing command decision and
+    // #17 write-before-apply path remain the only mutation path; a non-start
+    // decision is rejected without touching persistence.
+    [[nodiscard]] RunPersistenceResult persistFreshStartCommand(
+        RunCommandState& current, const CommandDecision& decision,
+        const RunCheckpointTime& time,
+        const CrossRolePlausibilityContext* liveSensorEvidence = nullptr);
+    // R1 boot reconciliation for a trusted Current that the SafetyCore
+    // classifies as semantically non-resumable. Untrusted load statuses never
+    // enter this method's discard path.
+    [[nodiscard]] RunPersistenceResult reconcileR1LoadedRun(
+        const RunPersistenceLoadResult& loaded, RunCommandState& current,
+        const RunCheckpointTime& time);
     [[nodiscard]] RunPersistenceResult persistTransition(
         RunCommandState& current, const TransitionDecision& decision,
         const RunCheckpointTime& time,
@@ -120,8 +134,8 @@ class TemperatureControlApplicationOrchestrator {
     // inconsistent.
     //
     // Owner-Review F4: an active PI evaluation (one that could produce a
-    // Heating/Cooling ControlRequest) requires the planner-/driver-bound
-    // 5-argument constructor, because #23's feedback handoff is the only
+    // Heating/Cooling ControlRequest) requires the planner-/driver-/SafetyCore-
+    // bound 6-argument constructor, because #23's feedback handoff is the only
     // source of anti-windup feedback for #22. Without it, this method
     // unconditionally returns Unavailable/NoCommissioning instead of ever
     // running the PI core - not just on the first call, but on every call -
@@ -137,8 +151,7 @@ class TemperatureControlApplicationOrchestrator {
     // is consumed exactly once; the caller cannot inject an alternative
     // evaluation or feedback value.
     [[nodiscard]] ActuatorPlanTickResult tickActuatorPlan(
-        const RunCommandState& current, std::uint64_t nowMonotonicMillis,
-        ActuatorSafetyGateInput safetyGate = {});
+        const RunCommandState& current, std::uint64_t nowMonotonicMillis);
 
    private:
     [[nodiscard]] RunPersistenceResult complete(
@@ -155,6 +168,7 @@ class TemperatureControlApplicationOrchestrator {
     TargetQualificationEvaluator& evaluator_;
     ActuatorPlanner* planner_{nullptr};
     ActuatorPlanSinkDriver* actuatorDriver_{nullptr};
+    SafetyCore* safetyCore_{nullptr};
     std::optional<TemperatureControlResult> outstandingEvaluation_;
     std::optional<PreviousControlRequestFeedback>
         pendingControlRequestFeedback_;

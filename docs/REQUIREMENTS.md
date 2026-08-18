@@ -90,35 +90,41 @@ Anforderungen:
 - BTS7960-Eingaenge benoetigen Hardware-Pulldowns oder eine nachgewiesen sichere
   externe Freigabestufe.
 - Sicherheitsabschaltungen ueberstimmen Mindest-Einschaltzeiten.
-- Die Fehlerklassen sind Warnung, behebbarer Betriebsfehler, verriegelter
-  Sicherheitsfehler und schwerer Systemfehler.
+- #24 verwendet die minimalen Reaktionen `Information`,
+  `Blocked/ImmediateStop` und `SAFE_BOOT` mit stabiler FaultCode-Matrix.
 - `Quittieren` entfernt keine Ursache und keine Aktorsperre.
 - Ein Neustart ist kein Fehlerreset.
-- Sicherheits- und Systemfehler bleiben persistent verriegelt.
-- Wiederholte abnormale Neustarts fuehren zu `SAFE_BOOT`.
-- Eine Sicherheits-Eingriffsgrenze darf bei eindeutig sicherer Lage eine
-  begrenzte Gegenrichtung versuchen; eine harte Notgrenze sperrt beide
-  Richtungen.
-- Der Peltierpfad besitzt eine 7,5-A-Ueberstromsicherung und eine einmalige
-  Temperatursicherung als unabhaengige thermische Abschaltung.
+- R1 fuehrt keinen allgemeinen persistenten Safety-Latch, Restart-Zaehler,
+  Resetzeitfenster oder Service-PIN-Vertrag in #24 ein.
+- `SAFE_BOOT` entsteht aus aktuell untrusted System-, Config- oder
+  Persistenzzustand; jede Resetcause startet all-off und revalidiert frisch.
+- Eine automatische thermische `SAFETY_RECOVERY`-Gegenrichtung und neue
+  Thermal-/Hardwarefaults bleiben bis #35/E5 deferiert.
+- Der Peltierpfad besitzt eine 7,5-A-Ueberstromsicherung; eine unabhaengige
+  Temperatursicherung bleibt E5/#35/Future und ist kein #24-R1-Producer.
 - R_IS/L_IS werden nur verwendet, wenn das gelieferte BTS7960-Modul praktisch
   brauchbare und sicher angepasste Signale liefert.
 
 ## Persistenz und Wiederanlauf
+
+Fuer #24 wird ein technisch integerer, aber nicht einfach resumefaehiger Run
+als `NoActiveRun` beendet. Technisch untrusted Persistenz bleibt `SAFE_BOOT`;
+es gibt keinen Fallback-Resume, keine Promotion und keine Charge-Rettung.
 
 - Konfigurationen und aktive Laufkontrollpunkte sind atomar und versioniert.
 - Die letzte gueltige Revision bleibt als Rueckfall erhalten.
 - Wichtige Laufereignisse werden sofort gespeichert; periodische Kontrollpunkte
   standardmaessig alle 5 Minuten, einstellbar zwischen 1 und 60 Minuten.
 - Direkte GPIO- oder Aktorzustaende werden nie als Wiederanlaufzustand gespeichert.
-- Nach einer Unterbrechung wird eine sichere phasenbezogene Aktion neu berechnet.
-- Der Wiederanlauf wartet nicht blockierend auf NTP oder eine Benutzeraktion.
-- Fehlende Zeit fuehrt zu einer konservativen, gekennzeichneten Bewertung mit
-  niedriger Vertrauensstufe.
-- Nach spaeterer Netzwerkzeit werden Unterbrechungsdauer und Fortschritt
-  nachtraeglich korrigiert.
+- Nach einer Unterbrechung wird nur eine explizit R1-zulaessige Phase als
+  Resume-Angebot projiziert; sonst wird der integer geladene Lauf ueber #17 als
+  `NoActiveRun` beendet.
+- `RECOVERY_EVALUATION` bleibt ohne Aktorfreigabe. Explizites Resume und Fresh
+  Start verwenden den bestehenden Write-before-Apply-Pfad.
+- Alte UTC-/NTP-/gewichtete Fortschrittskorrektur und Charge-Rettung sind
+  #18/C2-Legacy, keine #24-R1-Anforderung.
 - Nichtkritische Historienfehler duerfen den Prozess mit Warnung weiterlaufen
-  lassen; kritische Persistenzfehler stoppen und verriegeln.
+  lassen; untrusted kritische Run-Persistenz fuehrt fail-closed zu `SAFE_BOOT`.
 
 ## Bedienung und Netzwerk
 
@@ -127,10 +133,9 @@ Anforderungen:
 - Die Weboberflaeche ist responsiv und auf Handy, Tablet und Computer fachlich
   gleichwertig.
 - Display und Web verarbeiten Aenderungen atomar und mit Revisionsschutz.
-- Der normale Webzugang kann mit einem Webpasswort geschuetzt werden; die
-  Service-PIN bleibt getrennt.
-- Servicefunktionen sind PIN-geschuetzt und waehrend eines aktiven Laufes
-  weitgehend gesperrt.
+- Der normale Webzugang kann mit einem Webpasswort geschuetzt werden.
+- Service-PIN- und Hardware-Servicefunktionen sind spaetere Service-Gates und
+  nicht Teil des #24-R1-Safety-Resetvertrags.
 - WLAN-Ersteinrichtung erfolgt bevorzugt ueber ein geschuetztes Einrichtungs-WLAN
   mit QR-Code und Captive Portal; lokale Eingabe bleibt moeglich.
 - Bei laenger fehlendem Heim-WLAN kann ein geschuetztes Ersatz-WLAN starten.

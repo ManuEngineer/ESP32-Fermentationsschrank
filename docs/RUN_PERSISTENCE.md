@@ -9,8 +9,8 @@ MOSFET- oder H-Bruecken-Zustaende werden nie wiederhergestellt.
 ## Grundsaetze
 
 - Nach jedem Boot bleiben Peltier und Aktoren zunaechst AUS.
-- Resetursache, Bootschleifen, persistierte Sperren und kritische
-  Speicherintegritaet werden vor `STANDBY` oder Recovery bewertet.
+- Resetursache, aktueller Loadstatus und kritische Speicherintegritaet werden
+  vor `STANDBY` oder einem Resume-Angebot bewertet; #24 zaehlt keine Bootschleifen.
 - Laufdaten, Sensoren, Sicherheitszustand und Wiederanlaufaktion werden vor jeder
   Freigabe validiert.
 - Wichtige Ereignisse werden sofort gespeichert.
@@ -19,9 +19,33 @@ MOSFET- oder H-Bruecken-Zustaende werden nie wiederhergestellt.
 - Kritische Laufdaten und Sicherheitsjournale haben Vorrang vor Historien.
 - Release 1 funktioniert mit 4 MB Flash ohne PSRAM.
 - Release 1 reserviert keine dualen OTA-Slots.
-- Ein Neustart ist kein Fehlerreset und loescht keine Persistenzsperre.
+- Ein Neustart ist kein Fehlerreset; #24 fuehrt keine allgemeine persistente
+  Persistenz- oder Safety-Sperre ein.
+
+## Issue #24 Release-1-Persistenzgrenze
+
+Issue #24 fuehrt keine allgemeine Safety-Persistenz, keinen Restart-Zaehler,
+kein Resetzeitfenster und keinen persistenten Watchdog-/Sensor-Latch ein. Der
+kanonische #17-Loadstatus unterscheidet vertrauenswuerdige `Current`-/Tombstone-
+Zustaende von technisch untrusted Persistenz. Ein vertrauenswuerdiger, aber
+nicht einfach resumefaehiger Current wird write-before-apply als `NoActiveRun`
+beendet; technisch untrusted bleibt `SAFE_BOOT` und wird nicht blind
+ueberschrieben.
+
+`PreparedHead -> CheckpointSlot -> CommittedHead` bleibt eine einzige
+Gesamttransaktion. Einzel-Key-`Success` ist definitiv und benoetigt keinen
+zweiten Readback; nur `CommitOutcomeUnknown` wird durch `writeExact()`
+aufgeloest. RAM/FSM wird erst nach dem Gesamtstatus `Applied` geaendert.
+
+Die historischen #18-Recovery-/Progressabschnitte dieses Dokuments sind C2-
+Legacy. Sie werden von #24 nicht als aktiver Produktpfad aufgerufen; es gibt in
+R1 kein Fallback-Resume, keine Promotion und keine Charge-Rettungsrechnung.
 
 ## Persistierter Laufzustand
+
+Der aktive R1-Vertrag verwendet die kanonischen Run-/Transaktionsfelder. Die
+nachfolgend mit Recovery-/Progressbezug genannten Schema-3-Felder bleiben als
+C2-Legacy lesbar, sind aber kein R1-Resume- oder Charge-Recovery-Vertrag.
 
 Mindestens enthalten:
 
@@ -32,15 +56,11 @@ Mindestens enthalten:
 - Regelmodus und primaerer Regelsensor
 - dokumentierte Sensorwechsel
 - nominelle Dauer
-- ehrliche Fortschrittsbasis und, nur bei freigegebenem Modell, kumulierter
-  temperaturgewichteter Fortschritt
-- Verlaengerungen und Korrekturen
+- ehrliche beobachtete Fortschrittsbasis; gewichtete Beitraege bleiben C2-
+  Legacy und werden im R1-Pfad nicht gutgeschrieben
+- Verlaengerungen und Korrekturen nur ueber bestehende kanonische Commands
 - letzter monotoner Zeitstand
-- letzter verlaesslicher UTC-Anker, sofern vorhanden
-- Zeitqualitaetsstatus
-- Recovery-Episode mit Vor-/Nach-Ausfall-Evidenz und Segmentkennung
-- ausstehender Recovery-Zeitanker, Boot-Anker und getaggte Vor-Boot-Zeit
-- kumulative wirksame nominale Zeitkorrektur mit Episodenrevision
+- Zeitqualitaetsstatus als Diagnose
 - letzte gueltige Temperaturen und Qualitaetszustaende von:
   - Schrankluft
   - Produkt, sofern vorhanden
@@ -53,6 +73,11 @@ Mindestens enthalten:
 - Revisionsnummer, Schema und Integritaetsinformation
 - Transaktionsstatus fuer sicherheits- und aktorwirksame Zustandsaenderungen
 
+Schema-3-Felder wie UTC-Anker, Recovery-Episode, Boot-Anker, nominale
+Zeitkorrektur und gewichtete Progressbasis bleiben darunter als C2-Legacy
+kompatibel lesbar. Sie erzeugen in R1 weder Resume-Gutschrift noch
+Charge-Recovery.
+
 Nicht gespeichert werden:
 
 - direkte H-Brueckenpegel
@@ -64,8 +89,9 @@ Nicht gespeichert werden:
 
 Nach Recovery beginnt der #22-PI-/Qualifikatorzustand leer. Eine alte
 `qualificationValidSinceMillis`-Markierung bleibt ausschliesslich ein
-Prozess-/Diagnosemarker und erzeugt keinen Qualifikationskredit; die bestehende
-Recovery-Rebase aus `QUALIFYING_TARGET` nach `REACHING_TARGET` bleibt bestehen.
+Prozess-/Diagnosemarker und erzeugt keinen Qualifikationskredit. In R1 gibt es
+keine Recovery-Rebase von `QUALIFYING_TARGET` nach `REACHING_TARGET`; ein
+solcher historischer #18-Pfad ist ausschliesslich C2-Legacy.
 
 Der Qualifikatorzustand bleibt fluechtig und wird nicht persistiert. Seine
 Evaluation erzeugt zunaechst einen Kandidaten; bei einer persistierbaren
@@ -115,13 +141,17 @@ Eine neue atomare Revision entsteht mindestens bei:
 - Aenderung des primaeren Regelsensors
 - laufrelevantem Sensorausfall oder validierter Rueckkehr
 - manueller Laufanpassung
-- automatischer Fortschrittskorrektur
+- laufrelevanter, explizit persistierter Fortschrittsanpassung ueber einen
+  bestehenden kanonischen Command
 - neuer Warnung oder neuem Fehler mit Laufwirkung
-- Quittierung oder Reset mit Zustandswirkung
+- Quittierung oder einem expliziten Start-/Resume-Entscheid mit
+  Zustandswirkung
 - Start oder Ende von Kuehlen und Halten
 - Abbruch
 - Abschluss
-- Wiederanlaufentscheidung
+- einer expliziten, ueber den bestehenden #17-Pfad persistierten
+  Start-/Resume-Entscheidung; automatische Recoveryentscheidungen gehoeren
+  zum C2-Legacy
 
 Zusammengehoerige Aenderungen duerfen in einer atomaren Revision gebuendelt
 werden. Ein Schritt, der spaeter Aktoren freigeben kann, wird erst angewendet,
@@ -142,7 +172,13 @@ Das Kontrollpunktintervall ist zugleich eine Grenze fuer die Unsicherheit des
 Stromausfallzeitpunkts. Es darf nicht mit der exakten Ausfalldauer verwechselt
 werden.
 
-## Fortschrittsmodell
+## C2-Legacy: Fortschritts- und Zeitmodell, nicht #24-R1
+
+Die folgenden Felder und Berechnungen bleiben als Schema-3-/#18-Bestand
+lesbar, werden aber im aktiven #24-R1-Pfad weder fuer Resume noch fuer eine
+Charge-/Zeitgutschrift verwendet. Neutral vorhandene Schema-3-Felder duerfen
+ein einfaches Resume nicht pauschal ablehnen; aktive alte Recovery-Evidenz
+fuehrt stattdessen zu `NoActiveRun`.
 
 Die Wiederherstellung verlaesst sich nicht auf einen einzelnen Countdown.
 Kombiniert gespeichert werden:
@@ -162,7 +198,7 @@ Fermenting-Episode mit bekannten Ausfallgrenzen und gueltiger, gefilterter
 Vor-/Nach-Ausfall-Evidenz. Der Produktfuehler hat die Vertrauensstufe
 `ProductPreferred`, der ausdruecklich verwendete Luftfuehler `AirReduced`.
 
-### Recovery-/Fortschrittsvertrag (Schema 3)
+### Historischer Recovery-/Fortschrittsvertrag (Schema 3, C2-Legacy)
 
 Der persistierte Vertrag besteht aus den getrennten Feldern
 `pendingRecoveryAnchor`, `recoveryBootAnchorMonotonicMillis`,
@@ -210,7 +246,7 @@ Beitrags. `confidence` bezeichnet die kumulative, konservative Vertrauensstufe:
 ein einziges `AirReduced` bleibt auch nach einem spaeteren
 `ProductPreferred`-Beitrag `AirReduced` und wird nie hochgestuft.
 
-## Zeitanker und Ausfallintervall
+## C2-Legacy: Zeitanker und Ausfallintervall, nicht #24-R1
 
 Nach dem NTP-Abgleich ist
 
@@ -293,17 +329,11 @@ Bereinigung erfolgt proaktiv vor einer Ressourcenwarnung.
 
 ## Rueckfall bei beschaedigten Daten
 
-Ist die neueste Revision ungueltig:
-
-1. juengste aeltere vollstaendig gueltige Revision waehlen
-2. unsicheren Zeitraum als Intervall bestimmen
-3. Rueckfall sichtbar melden und protokollieren
-4. Phase, Sperren und Speicherintegritaet erneut bewerten
-5. nur bei eindeutig sicherer Recoveryentscheidung autonom fortsetzen
-
-Ist kein vollstaendiger Programmschnappschuss rekonstruierbar oder koennte eine
-spaetere Sicherheitsverriegelung fehlen, wird nicht geraten. Das Geraet wechselt
-in einen sicheren verriegelten Datenfehlerzustand.
+Ist die aktuelle Revision technisch untrusted, wird sie nicht durch eine
+Fallback-Promotion oder eine geschaetzte Zeit-/Progressrechnung ersetzt: Das
+Geraet bleibt in `SAFE_BOOT`. Ein trusted, semantisch nicht resumefaehiger
+Current wird dagegen ueber den bestehenden #17-Pfad als `NoActiveRun`
+abgeschlossen.
 
 ## Kritischer Persistenzfehler
 
@@ -311,66 +341,57 @@ Schlaegt ein kritischer Schreibvorgang fehl:
 
 1. neue Aktoranforderungen sperren
 2. Peltier AUS und erforderlichen Luefternachlauf ausfuehren
-3. RAM-seitige Verriegelung setzen
-4. minimalen Persistenzfehler-Latch in einem reservierten redundanten Bereich
-   schreiben
-5. Fehlerzustand anzeigen und protokollieren
-
-Der reservierte Latch ist logisch vom normalen Laufjournal getrennt. Er liegt in
-Release 1 jedoch im selben physischen ESP32-Flash und darf deshalb nicht als
-unabhaengige Hardware-Redundanz bezeichnet werden.
+3. den bestehenden #17-Coordinator unknown-safe/blockiert halten
+4. Fehlerzustand anzeigen und protokollieren; keine neue persistente Safety-
+   oder Persistenz-Latch-Wahrheit schreiben
 
 Beim Boot gilt:
 
-- gesetzter Latch -> `SAFE_BOOT`
 - unvollstaendige Transaktionsabsicht -> `SAFE_BOOT`
 - nicht les- oder schreibbarer kritischer Speicher -> `SAFE_BOOT`
-- Recovery erst nach erfolgreicher Lesen-Schreiben-Integritaetspruefung
-- Latch-Reset nur im Serviceablauf nach nachgewiesener Speichergesundheit
+- Recovery-/Fresh-Start-Freigabe erst nach aktuellem kanonischem Producerpfad,
+  `Applied`, FSM-Anwendung und frischer Evidenz
 
 ## Meldungen nach Neustart
 
 1. Meldungshistorie laden
-2. Sensoren, Zeit, Sperren und System neu pruefen
+2. Sensoren, Producer-/Persistenzstatus und System neu pruefen
 3. fruehere aktive Meldungen gegen aktuelle Ursachen bewerten
 4. weiterhin aktive Meldungen wieder anzeigen
 5. beseitigte Ursachen als erledigt kennzeichnen
 6. historische Ereignisse erhalten
 
-Ein Neustart laedt keine nicht mehr bestehende Warnung blind als aktiv, entfernt
-aber auch keine persistierte Sicherheitsverriegelung.
+Ein Neustart laedt keine nicht mehr bestehende Warnung blind als aktiv. #24
+persistiert dafuer keinen allgemeinen Safety-/Watchdog-/Sensor-Latch; aktuelle
+untrusted Load-Zustaende bleiben `SAFE_BOOT`, und ein trusted semantisch nicht
+resumefaehiger Current wird ueber #17 als `NoActiveRun` abgeschlossen.
 
-## Wiederanlaufreihenfolge
+## Wiederanlaufreihenfolge im #24-R1-Pfad
 
 ```text
 Boot
 -> alle Ausgaenge AUS
--> Resetursache, Bootschleife und Verriegelungen pruefen
--> kritischen Speicher und Transaktionsmarker pruefen
--> aktuelle und Rueckfallrevision validieren
--> COMPLETED direkt wiederherstellen, falls zutreffend
--> aktiven Laufdatensatz auswaehlen
--> Schrankluft-, Produkt- und Kuehlkoerpersensor bewerten
-  -> RunRecoveryCoordinator::activate aufrufen
-  -> bestehende Phasen-/Regelsensorauswahl delegiert bewerten
-  -> Entscheidung atomar speichern
--> Regelung kontrolliert freigeben, sofern erlaubt
--> Netzwerk und NTP parallel wiederherstellen
--> Ausfallintervall und Fortschritt spaeter korrigieren
--> korrigierten Zustand atomar speichern
+-> Resetcause diagnostisch erfassen
+-> Config und Load-/Coordinatorstatus frisch validieren
+-> Completed erhalten, NoPersistedRun/NoActiveRun als Standby projizieren
+-> Current gegen das enge R1-Resume-Praedikat pruefen
+-> nicht resumefaehigen vertrauenswuerdigen Current als NoActiveRun schreiben
+-> untrusted Load als SAFE_BOOT sperren
+-> nur nach explizitem Start/Resume und aktueller Evidenz den Gatepfad pruefen
 ```
 
 Der Wiederanlauf blockiert nicht auf NTP. Ohne absolute Zeit wird kein exakter
 Unterbrechungsfortschritt erfunden und kein automatischer Phasenabschluss allein
 aus einer Schaetzung abgeleitet.
 
-## Recovery-API und Regelsensorauswahl bei Reaktivierung
+## Historische Recovery-API und Regelsensorauswahl bei Reaktivierung (C2)
 
 Issue #21 (Regelsensorauswahl, Ersatzbetrieb, Rueckkehrlogik) liefert den
 persistierten und den laufzeitseitigen Auswahlzustand. Die
-`RunRecoveryCoordinator`-Grenze aktiviert einen geladenen aktiven Lauf oder
-Fallback, delegiert die bestehende Empfehlung und persistiert die resultierende
-Recovery-Entscheidung. Sie fuehrt keine zweite Auswahl- oder Prozesslogik ein.
+Die `RunRecoveryCoordinator`-Grenze bleibt als bestehender #18/C2-Code
+erhalten, wird aber vom aktiven #24-R1-Produktpfad nicht aufgerufen. #24
+verwendet stattdessen die aktuelle #20/#21-Projektion, das enge
+Resume-Angebot und den kanonischen `NoActiveRun`-Abbruch.
 
 Bereits vorhanden:
 
@@ -420,7 +441,8 @@ von Gate A, Write-before-Apply und der atomaren Recovery-Revision.
 - atomare, versionierte Revisionen
 - mindestens aktuelle und letzte gueltige Revision
 - Transaktionsabsicht vor aktorwirksamen Zustandsaenderungen
-- reservierter minimaler Persistenzfehler-Latch
+- kein zusaetzlicher #24-Safety-Latch; #17-Transaktionsstatus ist die
+  bestehende Persistenzwahrheit
 - rotierende Speicherplaetze oder Wear-Leveling
 - kritischer Laufdatensatz getrennt von Messhistorie
 - keine Speicherung im Zwei-Sekunden-Sensorzyklus

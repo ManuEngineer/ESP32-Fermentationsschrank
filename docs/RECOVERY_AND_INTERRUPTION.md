@@ -10,26 +10,39 @@ Die persistierten Felder, die atomare Buchung und die Anzeigeprojektion sind
 hier und in [`RUN_PERSISTENCE.md`](RUN_PERSISTENCE.md) konsistent beschrieben;
 es gibt keine parallele Statusquelle.
 
-## Grundsatz: autonom, aber nicht blind
+## Issue #24 Release-1-Abbruch statt Charge-Recovery
 
-Ein unterbrochener Lauf soll nicht unnoetig auf Benutzer oder Netzwerk warten.
-Automatischer Wiederanlauf bedeutet jedoch nicht, unbekannte Ausfallzeit,
-Temperaturverlauf oder biologischen Fortschritt zu erfinden.
+R1 beginnt jeden Neustart mit all-off/`Unresolved` und vollstaendiger frischer
+Validierung. Ein technisch integerer, aber nicht einfach resumefaehiger Run
+wird als `NoActiveRun` ueber den bestehenden #17-Write-before-Apply-Pfad
+beendet. Technisch untrusted Load bleibt `SAFE_BOOT`; kein Tombstone verbirgt
+einen unbestimmten Zustand.
+
+Es gibt in #24 keinen automatischen Resume, kein Fallback-Resume, keine
+Promotion, keine gewichtete Progress-/UTC-Ausfallrechnung und keine neue
+persistente Safety-Sperre. Die bestehenden #18-Recoveryregeln bleiben als
+C2-Legacy dokumentiert, werden aber nicht vom aktiven #24-R1-Pfad aufgerufen.
+
+## Grundsatz: fail-closed, aber nicht automatisch
+
+R1 wartet fuer die Sicherheitsentscheidung weder auf Netzwerk noch auf NTP,
+behauptet aber auch keinen automatischen Wiederanlauf. Die Anwendung bewertet
+den aktuellen #17-Load, Config-/Sensor-/Planner-Evidenz und den bestehenden
+FaultCode-Pfad lokal und fail-closed.
 
 Deshalb gilt:
 
 - Jeder Wiederanlauf beginnt mit ausgeschalteten Aktoren.
-- Bootschleifen, persistierte Verriegelungen, Speicherintegritaet und Sensoren
-  werden vor jeder Aktorfreigabe geprueft.
+- Speicherintegritaet, aktueller Producerstatus und Sensoren werden vor jeder
+  Aktorfreigabe geprueft; Bootschleifen und persistierte allgemeine
+  Verriegelungen sind keine #24-R1-Zustaende.
 - Der letzte elektrische Aktorzustand wird nie wiederhergestellt.
-- Eine neue phasenbezogene Aktion wird aus validierten fachlichen Daten abgeleitet.
-- Sichere aktuelle Temperaturregelung darf vor verfuegbarer NTP-Zeit wieder
-  beginnen, sofern Phase und Freigaben eindeutig sind.
-- Unbekannter Unterbrechung wird kein frei geschaetzter exakter Fortschritt
-  gutgeschrieben.
-- Ein Sicherheitsfehler oder eine nicht rekonstruierbare Phase stoppt die
-  automatische Fortsetzung.
-- Die Recoveryentscheidung wird persistiert, bevor Aktoren freigegeben werden.
+- Ein eindeutig resumefaehiger Current wird nur als nicht freigebendes Angebot
+  projiziert; eine nicht einfache Phase wird als `NoActiveRun` ueber #17
+  beendet, ein untrusted Load bleibt `SAFE_BOOT`.
+- Keine Aktorfreigabe erfolgt vor explizitem Resume/Fresh Start, bestehendem
+  #17-Gesamtstatus `Applied`, FSM-Anwendung und frischer Safety-Evidenz.
+- Vorhandene NTP-/Zeit-/Progressdaten erzeugen keine R1-Gutschrift.
 
 ## Kein Tuerkontakt in Release 1
 
@@ -86,9 +99,10 @@ Die Wartezeit bleibt `TBD_COMMISSIONING`.
 Die vollstaendige Auswahl-, Ersatzbetriebs- und Rueckkehrlogik (alle drei
 Strategien, gleichzeitiger Schrankluft-/Kuehlkoerperausfall, manuelle
 Aktionen) ist in Issue #21 und PR #99 umgesetzt. Die tatsaechliche
-Reaktivierung eines geladenen aktiven Laufs durch PR #102 ist in
-`docs/RUN_PERSISTENCE.md`, Abschnitt "Recovery-API und Regelsensorauswahl
-bei Reaktivierung", beschrieben.
+Reaktivierung eines geladenen aktiven Laufs durch PR #102 gehoert zum
+`#18/C2-Legacy`-Vertrag; sie ist kein normaler #24-R1-Pfad. Die historische
+Beschreibung steht in `docs/RUN_PERSISTENCE.md` unter dem entsprechend
+markierten C2-Abschnitt.
 
 ## Maximale Wartezeit nach dem Vorheizen
 
@@ -101,14 +115,17 @@ bei Reaktivierung", beschrieben.
 - Ist die Maximalzeit belastbar abgelaufen, endet das Vorheizen sicher und der
   Lauf wird als nicht gestartet beziehungsweise abgebrochen protokolliert.
 - Ist nach einem Neustart unklar, ob die Maximalzeit abgelaufen ist, darf keine
-  Fermentation automatisch starten. Die Regelung bleibt nur in einer eindeutig
-  sicheren Warteaktion oder wird beendet.
+  Fermentation oder Warteaktion automatisch fortgesetzt werden.
+  `WAITING_FOR_PRODUCT` benoetigt die alte Wartezeit und wird als `NoActiveRun`
+  ueber den bestehenden #17-Pfad beendet.
 
 ## Fehlerquittierung und Fortsetzung
 
-Quittierung bedeutet nur Kenntnisnahme. Eine Fortsetzung richtet sich nach
-Fehlerklasse, beseitigter Ursache, erneuter Validierung und gegebenenfalls
-bewusstem Fehlerreset.
+Quittierung bedeutet nur Kenntnisnahme und aendert weder FaultCode noch Gate.
+Eine Fortsetzung richtet sich nach dem konkreten `FaultCode`/der Disposition,
+positiver Producer-Evidenz, erneuter Validierung und dem bestehenden expliziten
+Pfad. Eine universelle Fehlerklassen- oder Service-Resetlogik gibt es in R1
+nicht.
 
 Laufbeendende Beispiele:
 
@@ -118,56 +135,38 @@ Laufbeendende Beispiele:
 - unbrauchbare Persistenz oder unvollstaendige Transaktion
 - kritischer interner Softwarefehler
 
-Ein Neustart setzt solche Fehler nicht zurueck.
+Ein Neustart setzt solche Fehler nicht zurueck und loescht keine aktuelle
+unknown-safe Persistenz-/Producerlage.
 
-## Phasenbezogene Wiederaufnahme
+## Exakte R1-Resume-Phasenmatrix
 
-### PREHEATING und REACHING_TARGET
+Ein `Current` wird nur als Resume-Angebot projiziert, wenn die Phase ohne alte
+Zeit- oder Progressgutschrift eindeutig mit frischer Evidenz fortsetzbar ist.
+Das Angebot bleibt `RECOVERY_EVALUATION`/`Unresolved`; erst ein expliziter
+Resume-Befehl, der bestehende #17-Gesamtstatus `Applied`, die FSM-Anwendung und
+eine neue Safety-Pruefung koennen spaeter `Allowed` ergeben.
 
-- Sensoren, Sicherheitsfreigaben und Zeitgrenzen pruefen
-- Zieltemperatur erneut anfahren
-- noch nicht gestartete Fermentationszeit nicht anrechnen
+| Phase | R1-Angebot | Ziel nach bestaetigtem Resume | Bootlokale Zeitbasis | Alte Zeit-/Progressdaten |
+|---|---|---|---|---|
+| `PREHEATING` | ja | `PREHEATING`/`REACHING_TARGET` gemaess bestehender FSM | neu ab Boot | verwerfen, nicht erforderlich |
+| `WAITING_FOR_PRODUCT` | nein | `NoActiveRun` | keine | Wartezeit waere erforderlich; verwerfen |
+| `REACHING_TARGET` | nein | `NoActiveRun` | neu starten waere nicht beweissicher | alter Reach-Timer erforderlich; verwerfen |
+| `QUALIFYING_TARGET` | nein | `NoActiveRun` | Qualifikation neu starten waere ein neuer Laufpfad | alte Qualifikationszeit verwerfen |
+| `FERMENTING` | nein | `NoActiveRun` | keine alte Restdauer ableiten | `PriorBootPhaseElapsed`/Progress nicht verwenden |
+| `COOLING` | ja | `COOLING` | frische ziel-/sensorbasierte Regelung | keine alte Zeitgutschrift |
+| `COOL_HOLDING` | nein | `NoActiveRun` | Haltedauer waere historisch zeitabhaengig | alte Haltedauer verwerfen |
+| `MANUAL_HOLDING` | ja | `MANUAL_HOLDING` | keine automatische Dauerbasis; frisch pruefen | alte Dauer nicht verwenden |
 
-### WAITING_FOR_PRODUCT
+`COMPLETED` wird als Completed-Projektion ohne Aktorfreigabe geladen. Ein
+persistierter `Fault` bleibt terminal/diagnostisch und wird nicht aktiviert.
+Keiner dieser Faelle verwendet Fallback-Promotion, Rollback-Resume, gewichteten
+Progress oder UTC-Ausfallrechnung.
 
-- nur innerhalb einer belastbar gueltigen Wartezeit fortsetzen
-- Produkt niemals automatisch als eingesetzt annehmen
-- bei nicht sicher entscheidbarer Wartezeit keine Fermentation starten
+## C2-Legacy – historische Zeit-/Recoverybeschreibung, nicht #24-R1
 
-### QUALIFYING_TARGET
-
-- Zieltemperatur erneut erreichen
-- Zielqualifikation vollständig neu beginnen
-
-### FERMENTING
-
-- sichere Temperaturregelung nach vollstaendiger Recoverypruefung neu ableiten
-- bei fehlender Zeit `RECOVERY_TIME_PENDING` setzen
-- unbekannter Unterbrechung keinen exakten Fortschritt gutschreiben
-- keinen automatischen Abschluss aus einem einzelnen Schaetzwert ableiten
-- spaetere Zeit- und Temperaturbewertung als Laufrevision nachtragen
-
-### COOLING
-
-- bei gueltigen Pflichtsensoren und ohne Sperre Kuehlung erneut ableiten
-- keine alte BTS7960-Richtung blind wiederherstellen
-
-### COOL_HOLDING
-
-- sichere Kuehlregelung erneut ableiten
-- zeitlich begrenztes Halten nur aus belastbarer Zeitbewertung beenden
-- bei ueberlappender Unsicherheit keinen automatischen Abschluss ausloesen
-
-### MANUAL_HOLDING
-
-- Zieltemperatur nach vollstaendiger Recoverypruefung weiter halten
-- Benutzer sichtbar ueber die Unterbrechung informieren
-
-### COMPLETED
-
-- keine Temperaturregelung neu starten
-- `COMPLETED` und Ergebnisdaten wiederherstellen
-- erst Benutzerquittierung fuehrt nach `STANDBY`
+Die folgenden Abschnitte bleiben nur als Referenz fuer bestehende #17/#18-
+Artefakte erhalten. Sie sind fuer den #24-R1-Produktpfad nicht normativ und
+duerfen weder Resume, Promotion, Gutschrift noch Aktorfreigabe ausloesen.
 
 ## Fehlende Messwerte waehrend des Stromausfalls
 
@@ -183,7 +182,7 @@ Messkurve. Verfuegbar sind nur:
 
 Die Firmware darf keine dazwischenliegenden Messwerte vortaeuschen.
 
-## Wiederanlauf vor NTP
+## C2-Legacy: Wiederanlauf vor NTP
 
 Vorgesehener Ablauf:
 
@@ -208,7 +207,7 @@ Bis zur Zeitsynchronisation:
 
 Fehlende NTP-Zeit allein beendet den Lauf nicht.
 
-## Unterbrechungsdauer ist ein Intervall
+## C2-Legacy: Unterbrechungsdauer ist ein Intervall
 
 Nach NTP gilt nicht automatisch:
 
@@ -238,7 +237,7 @@ Der maximale Abstand beruecksichtigt:
 Je groesser oder schlechter bestimmt das Intervall, desto niedriger die
 Konfidenz.
 
-## Entscheidung mit dem Zeitintervall
+## C2-Legacy: Entscheidung mit dem Zeitintervall
 
 ### Eindeutiges Ergebnis
 
@@ -262,7 +261,7 @@ eine festgelegte Unsicherheitsgrenze:
 Damit wartet die Regelung nicht blockierend, waehrend die Firmware trotzdem
 keinen fachlichen Abschluss erfindet.
 
-## Temperaturgewichteter Fortschritt
+## C2-Legacy: Temperaturgewichteter Fortschritt
 
 Eine Fermentation stoppt bei sinkender Temperatur nicht schlagartig. Weder volle
 Anrechnung noch vollstaendiges Pausieren der Ausfallzeit ist allgemein korrekt.
@@ -314,7 +313,7 @@ Der Hop-1-Fold verwendet nur `thisHopAltBootLocalSeconds` des konkreten Boots;
 ein Episode-Refresh, UTC-Reevaluation oder `ApplyRecoveryTimeCorrection`
 erzeugt keinen zusätzlichen beobachteten Laufzeitbeitrag.
 
-## Anzeige und Export
+## C2-Legacy: Anzeige und Export
 
 Die Recoveryanzeige zeigt mindestens:
 
@@ -341,7 +340,10 @@ Fortschritt ausgegeben; die Rohgrenzen und der Status werden exportiert.
 Eine batteriegepufferte RTC kann spaeter hinter derselben Zeitquellenschnittstelle
 ergaenzt werden. Sie ist keine Voraussetzung fuer Release 1.
 
-## Akzeptierte Entscheidungen
+## C2-Legacy: historische akzeptierte Entscheidungen
+
+Die folgenden Entscheidungen gehoeren zum historischen #18-/C2-Modell. Sie
+sind fuer #24-R1 nicht normativ; dort gilt die oben stehende exakte R1-Matrix.
 
 - [x] kein Tuerkontakt in Release 1
 - [x] kein stiller Wechsel vom Produkt- zum Luftfuehler

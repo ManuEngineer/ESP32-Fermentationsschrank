@@ -23,8 +23,13 @@ Release 1. Ergaenzende Detailregeln stehen in
   ein gespeichertes Programm.
 - Direkte Aktortests sind ausschliesslich im geschuetzten `SERVICE_MODE` aus
   validiertem `STANDBY` zulaessig.
-- Ein Wiederanlauf wartet nicht unnoetig auf Netzwerkzeit oder Benutzer, darf
-  aber weder Sicherheitsfreigaben noch unbekannten Fortschritt erfinden.
+- Die Bootklassifikation wartet nicht auf Netzwerkzeit oder NTP. Ein
+  tatsaechliches Resume ist in R1 jedoch niemals automatisch: Es erfordert eine
+  bewusste explizite Benutzerbestaetigung, den bestehenden
+  #17-Write-before-Apply-Pfad mit `Applied`, die FSM-Anwendung und frische
+  Evidenz. Bis dahin bleibt die Entscheidung ungeklaert; nicht resumefaehige
+  vertrauenswuerdige Phasen werden als `NoActiveRun` beendet und untrusted
+  Persistenz bleibt `SAFE_BOOT`.
 - Ein echter Sicherheitsfehler hat immer Vorrang vor automatischem Fortfahren.
 
 ## Grenze des fachlichen Zustandsautomaten
@@ -65,6 +70,18 @@ Die Implementierung verwendet dafuer zwei getrennte Schritte:
 Kritische Fehler werden vor Bedienereignissen und normalen Phasenfortschritten
 ausgewertet. In `WAITING_FOR_PRODUCT` hat der belastbar erreichte Zeitablauf
 Vorrang vor einer gleichzeitig eintreffenden Produktbestaetigung.
+
+## Issue #24 Release-1-Resume-Grenze
+
+`RECOVERY_EVALUATION` ist in R1 ausschliesslich ein nicht freigebendes
+Resume-Angebot: kein `Allowed`, kein Aktorcommand und kein automatischer
+Resume. Ein Ablehnen, Timeout oder technisch integerer, semantisch nicht
+resumefaehiger Lauf wird ueber den bestehenden Write-before-Apply-Pfad als
+`NoActiveRun`/`STANDBY` beendet. Technisch untrusted Persistenz bleibt
+`SAFE_BOOT` und wird nicht durch eine neue Tombstone-Mutation verdeckt.
+
+Historische komplexe Recoverykontexte bleiben als #17/#18-Legacy dokumentiert,
+sind aber kein aktiver #24-R1-Produktpfad.
 
 ## Kanonische Zustandsnamen
 
@@ -110,9 +127,9 @@ Sicherheits- und Laufhistorie und waehlt erst danach den naechsten Zustand.
 BOOT
   -> Peltier und beide BTS7960-Richtungen AUS
   -> alle schaltbaren Ausgaenge zunaechst AUS
-  -> Resetursache und abnormalen Neustartzaehler auswerten
+  -> Resetcause nur diagnostisch erfassen; keine Restart-Akkumulation
   -> Konfiguration und kritischen Speicher validieren
-  -> persistierte Verriegelungen und unvollstaendige Transaktionen auswerten
+  -> aktuellen Config-/Persistenzzustand und Transaktionsstatus auswerten
   -> Sensoren und Hardwarefreigaben grundlegend pruefen
   -> gespeicherten Laufzustand klassifizieren
   -> Netzwerk und Zeitabgleich parallel vorbereiten
@@ -121,30 +138,35 @@ BOOT
 ### Uebergaenge
 
 ```text
-Bootschleife, persistierte Sperre, unvollstaendige Transaktion,
-kritischer Speicher- oder Initialisierungsfehler
-  -> SAFE_BOOT oder FAULT gemaess Fehlerklasse
+aktuell untrusted System-/Config-/Persistenzzustand, unvollstaendige
+Transaktion oder unbekannter Producer
+  -> SAFE_BOOT
+
+historischer `Current` im terminalen `Fault`
+  -> `FAULT`/TerminalFault ohne Aktivierung
 
 gueltiger persistierter Zustand COMPLETED
   -> COMPLETED
 
-gueltiger unterbrochener aktiver Lauf
-  -> RECOVERY_EVALUATION
+gueltiger Current mit R1-qualifizierbarer Phase
+  -> RECOVERY_EVALUATION ohne Freigabe
 
 kein aktiver oder abgeschlossener Lauf und alle Bootpruefungen bestanden
   -> STANDBY
 ```
 
 `STANDBY`, `COMPLETED` und `RECOVERY_EVALUATION` sind vor Abschluss der
-Bootpruefungen nicht erreichbar. Ein Neustart loescht keine Verriegelung und ist
-kein Fehlerreset.
+Bootpruefungen nicht erreichbar. Ein Neustart ist kein Fehlerreset; R1 fuehrt
+keine allgemeine persistente Verriegelung und keine Restart-Akkumulation ein.
 
 ## SAFE_BOOT
 
 ### Zweck
 
-Sicherer Wartungszustand nach wiederholtem abnormalem Neustart, persistierter
-Sperre oder nicht ausreichend nachweisbarer Systemintegritaet.
+Sicherer Zustand bei aktuell nicht vertrauenswuerdigem System-, Config- oder
+Persistenzzustand, unvollstaendiger Transaktion oder unbekanntem Producer.
+Wiederholte Neustarts und persistierte allgemeine Sperren sind keine R1-
+Safety-Wahrheit.
 
 ### Aktoren
 
@@ -160,11 +182,14 @@ Sperre oder nicht ausreichend nachweisbarer Systemintegritaet.
 - Fehler- und Resetjournal lesen
 - Berichte exportieren
 - Netzwerkwiederherstellung ohne Aktorwirkung
-- PIN-unabhaengigen lokalen Vollreset ausloesen
-- UART-Recovery beziehungsweise erneutes Flashen
+- passive Diagnose und Export ohne Aktorwirkung
+- physischer Vollreset, UART-Recovery und erneutes Flashen bleiben spaetere
+  E5-/Service-/Hardware-Gates und sind kein #24-R1-Resetvertrag
 
-Eine Rueckkehr zu `STANDBY` erfordert beseitigte Ursache, bestandene
-Integritaetspruefung und den fuer die Fehlerklasse vorgesehenen bewussten Reset.
+Eine Rueckkehr zu `STANDBY` erfordert beseitigte aktuelle Ursache, bestandene
+Config-/Persistenz-/Safety-Validierung und den fuer den konkreten FaultCode
+vorgesehenen positiven Clear-Pfad. Einen allgemeinen Service-/Fehlerklassen-
+Resetvertrag gibt es in R1 nicht.
 
 ## STANDBY
 
@@ -205,9 +230,10 @@ Ziel des leeren Schrankes erfolgreich qualifiziert
   -> WAITING_FOR_PRODUCT
 ```
 
-Nach einer Unterbrechung wird die Vorheizphase nur wieder aufgenommen, wenn der
-gespeicherte Lauf gueltig ist, keine Sperre aktiv ist und die maximale Wartezeit
-noch nicht sicher abgelaufen ist.
+Nach einem Neustart wird ein technisch vertrauenswuerdiger `PREHEATING`-Lauf
+als Resume-Angebot dargestellt. Die Aktorfreigabe bleibt bis zur bewussten
+Bestaetigung und der vollstaendigen frischen Evidenz gesperrt; ein
+automatischer Resume ist in R1 ausgeschlossen.
 
 ## WAITING_FOR_PRODUCT
 
@@ -257,7 +283,9 @@ maximale Wartezeit sicher abgelaufen
 ```
 
 Auch nach einem Neustart darf nicht angenommen werden, dass das Produkt bereits
-eingesetzt wurde.
+eingesetzt wurde. Ein vertrauenswuerdiger `WAITING_FOR_PRODUCT`-Checkpoint
+wird deshalb in R1 als `NoActiveRun` ueber den bestehenden #17-Pfad beendet;
+die historische Wartezeit wird nicht fortgesetzt.
 
 ## REACHING_TARGET
 
@@ -284,6 +312,10 @@ kritischer Sensor- oder Sicherheitsfehler
   -> FAULT
 ```
 
+Nach einem Neustart wird `REACHING_TARGET` in R1 nicht fortgesetzt und nicht
+neu gestartet. Ein technisch vertrauenswuerdiger `Current` wird als
+`NoActiveRun` beendet; die alte Reach-Zeit wird nicht rekonstruiert.
+
 ## QUALIFYING_TARGET
 
 ### Zweck
@@ -303,8 +335,9 @@ kritischer Fehler
   -> FAULT
 ```
 
-Nach einem Neustart beginnt eine zuvor nur teilweise absolvierte
-Zielqualifikation neu.
+Nach einem Neustart wird eine zuvor nur teilweise absolvierte
+`QUALIFYING_TARGET`-Phase in R1 nicht reaktiviert und nicht neu gestartet. Ein
+technisch vertrauenswuerdiger `Current` wird als `NoActiveRun` beendet.
 
 Der Evaluator liefert dafuer ausschliesslich `ProcessSignals`; er entscheidet
 keinen Prozessuebergang selbst. `REACHING_TARGET` darf bei jedem positiven
@@ -348,13 +381,12 @@ Fermentationsziel erreicht, aktives Kuehlen vorgesehen
   -> COOLING
 ```
 
-### Wiederanlauf
+### Neustartverhalten in R1
 
-Nach validierter Recovery darf die Temperaturregelung automatisch neu abgeleitet
-werden. Fehlt eine verlaessliche absolute Zeit, bleibt
-`RECOVERY_TIME_PENDING` aktiv. Der unbekannten Unterbrechung wird kein erfundener
-exakter Fortschritt gutgeschrieben und der Lauf wird nicht allein aufgrund einer
-Schaetzung automatisch abgeschlossen.
+`FERMENTING` ist in R1 nicht resumefaehig. Ein technisch vertrauenswuerdiger
+`Current` wird nach dem Neustart als `NoActiveRun` beendet; Fermentations-
+fortschritt und Restdauer werden nicht fortgesetzt oder neu abgeleitet.
+`RECOVERY_TIME_PENDING` ist dafuer kein Freigabe- oder Fortsetzungspfad.
 
 ## COOLING
 
@@ -374,8 +406,10 @@ kritischer Fehler
   -> FAULT
 ```
 
-Nach einer Unterbrechung wird eine gueltige Kuehlphase nur nach vollstaendiger
-Recoverypruefung automatisch wieder aufgenommen.
+Nach einem Neustart wird ein technisch vertrauenswuerdiger `COOLING`-Lauf als
+Resume-Angebot dargestellt. Die Kuehlung wird nicht automatisch fortgesetzt;
+erst bewusste Bestaetigung, der bestehende Write-before-Apply-Pfad und frische
+Evidenz koennen eine Aktorfreigabe ergeben.
 
 ## COOL_HOLDING
 
@@ -396,8 +430,9 @@ kritischer Fehler
 ```
 
 Bei unsicherer Ausfallzeit wird kein automatisches Ende aus einem einzelnen
-Schaetzwert abgeleitet. Die Regelung darf sicher weiterlaufen, waehrend
-`RECOVERY_TIME_PENDING` beziehungsweise `WARNING_REQUIRES_ACTION` sichtbar ist.
+Schaetzwert abgeleitet. Ein technisch vertrauenswuerdiger `COOL_HOLDING`-
+Checkpoint wird in R1 als `NoActiveRun` beendet; weder Haltezeit noch
+`RECOVERY_TIME_PENDING` setzen die Regelung fort.
 
 ## MANUAL_HOLDING
 
@@ -406,8 +441,10 @@ Schaetzwert abgeleitet. Die Regelung darf sicher weiterlaufen, waehrend
 Eine manuell gewaehlte Zieltemperatur ohne Timer halten.
 
 Der Zustand nutzt dieselbe Regel- und Sicherheitslogik wie ein Programmlauf und
-endet durch bewusste Benutzeraktion oder Fehler. Nach einer Unterbrechung wird er
-nur nach erfolgreicher Recoverypruefung automatisch fortgesetzt.
+endet durch bewusste Benutzeraktion oder Fehler. Nach einem Neustart ist ein
+Resume-Angebot nur zulaessig, wenn keine alte Dauer benoetigt wird. Auch dann
+erfolgt keine automatische Fortsetzung: Bewusste Bestaetigung,
+Write-before-Apply und frische Evidenz bleiben erforderlich.
 
 Ein manueller Haltebetrieb wechselt nie direkt von `STANDBY` nach
 `MANUAL_HOLDING`. Sein validierter, unveraenderlicher manueller Laufplan
@@ -482,9 +519,11 @@ Warnungen lassen den Prozess grundsaetzlich weiterlaufen, sofern die
 Sicherheitslogik dies erlaubt. Sie werden sichtbar angezeigt und protokolliert.
 
 `WARNING_REQUIRES_ACTION` wird verwendet, wenn eine fachliche Entscheidung offen
-ist, etwa bei nicht eindeutig aufloesbarer Recovery-Zeit oder einem ausgefallenen
-optionalen Produktfuehler. Die Fehler- und Aktormatrix bestimmt, welche sichere
-Regelaktion waehrenddessen zulaessig bleibt.
+ist, etwa bei einem ausgefallenen optionalen Produktfuehler gemaess #21. Eine
+nicht eindeutig aufloesbare alte Recovery-Zeit ist kein R1-Fall fuer eine
+fortgesetzte Regelaktion: Zeit- oder progressabhaengige, nicht resumefaehige
+Phasen werden als `NoActiveRun` beendet; technisch untrusted Persistenz fuehrt
+zu `SAFE_BOOT`.
 
 ## FAULT
 
@@ -510,61 +549,63 @@ Beispiele:
 
 ### Zweck
 
-Nach `BOOT` unverzueglich bestimmen, wie ein unterbrochener Lauf sicher und
-fachlich sinnvoll fortgesetzt wird.
+Nach `BOOT` unverzueglich bestimmen, ob ein unterbrochener Lauf lediglich als
+Resume-Angebot angezeigt, als `NoActiveRun` verworfen oder wegen untrusted
+Evidenz in `SAFE_BOOT` gehalten wird. Keine automatische Fortsetzung.
 
-Vor Eintritt wurden bereits Bootschleifen, persistierte Verriegelungen,
-unvollstaendige Transaktionen und grundlegende Speicherintegritaet geprueft.
+Vor Eintritt wurden aktueller Config-/Persistenzstatus, Transaktionsintegritaet
+und grundlegende Sensor-/Planner-Evidenz geprueft; es gibt keinen allgemeinen
+persistierten Safety-Latch.
 Zusaetzlich werden mindestens bewertet:
 
 - Programmschnappschuss und Laufrevisionen
 - Phase des unterbrochenen Laufes
 - aktueller und letzter gueltiger Sensorstatus
 - aktuelle und letzte bekannte Temperaturen
-- Zeitqualitaet und moegliches Ausfallintervall
+- nur die explizite R1-Phasenmatrix; keine alte Zeit-/Progressgutschrift
 - aktive Warnungen und Fehler
 - sichere phasenbezogene Aktoraktion
 
 ### Uebergaenge
 
 ```text
-Fortsetzung technisch und sicher zulaessig
-  -> geeigneten normalen Prozesszustand wieder aufnehmen
+NoPersistedRun / NoActiveRun
+  -> STANDBY, Gate Unresolved
 
-Zeit noch nicht belastbar
-  -> geeigneten sicheren Prozesszustand wieder aufnehmen
-  -> Kontext RECOVERY_TIME_PENDING setzen
+technisch integerer Current mit eindeutiger R1-Qualifikation
+  -> RECOVERY_EVALUATION, Gate Unresolved, Resume-Angebot
 
-Fortsetzung nicht sicher
-  -> FAULT
+technisch integerer Current ohne einfache R1-Qualifikation
+  -> kanonischer NoActiveRun-Abschluss ueber #17, danach STANDBY
 
-Lauf nicht fachlich rekonstruierbar
-  -> verriegelter Fehlerzustand; keine Aktorfreigabe
+technisch untrusted Load
+  -> SAFE_BOOT, keine Tombstone-Mutation und kein Resume
+
+expliziter Fresh Start oder bestaetigtes Resume
+  -> bestehender Write-before-Apply-Pfad
+  -> nach Gesamtstatus Applied, FSM-Anwendung und frischer Evidenz ggf. Allowed
 ```
 
-Die Recoveryentscheidung wird als neue Revision gespeichert, bevor Aktoren
-freigegeben werden.
+Die Entscheidung wird detached vorbereitet. Bei #17 gilt der Gesamtstatus der
+mehrstufigen Transaktion `PreparedHead -> CheckpointSlot -> CommittedHead` als
+Wahrheit: erst `Applied` erlaubt die RAM-/FSM-Anwendung; ein Einzel-Write-
+`Success` ist kein separater Gesamtstatus und benoetigt keinen zweiten
+Readback.
 
 ## RECOVERY_TIME_PENDING
 
 ### Zweck
 
-Kennzeichnen, dass die sichere aktuelle Prozessaktion bestimmt ist, die
-Unterbrechungsdauer und Fortschrittskorrektur aber noch nicht belastbar sind.
+`RECOVERY_TIME_PENDING` ist im #24-R1-Pfad kein Freigabekontext. Historische
+NTP-/Ausfallintervall- und Progressrechnung bleibt #18/C2-Legacy und darf
+keinen Resume- oder Aktorentscheid erzeugen.
 
 ### Verhalten
 
-- NTP-Zeitabgleich laeuft im Hintergrund
-- UI zeigt die ausstehende Zeitbewertung
-- keine scheinbar exakte Restzeit behaupten
-- keinen frei geschaetzten Unterbrechungsfortschritt anrechnen
-- keinen automatischen Phasenabschluss allein aus unbekannter Zeit ableiten
-- sichere phasenbezogene Regelung fortsetzen, soweit eindeutig zulaessig
-
-Nach verfuegbarer vertrauenswuerdiger UTC-Zeit wird die Ausfalldauer als
-Unter-/Obergrenze aus Kontrollpunktzeit und maximalem Kontrollpunktabstand
-berechnet. Ueberschneidet das Intervall eine Phasengrenze, bleibt eine sichtbare
-Benutzerentscheidung erforderlich.
+- Aktoren bleiben `Idle/Stop` und das Gate `Unresolved`.
+- Kein altes Zeit-, UTC- oder gewichtetes Progressfeld wird gutgeschrieben.
+- Ein Zustand ohne einfache frische Fortsetzung wird als `NoActiveRun`
+  beendet; technische Persistenzunsicherheit fuehrt zu `SAFE_BOOT`.
 
 ## SERVICE_MODE
 
@@ -575,7 +616,8 @@ Prozess.
 
 ### Regeln
 
-- Service-PIN erforderlich
+- Service-PIN, falls fuer spaetere Service-/Hardware-Gates benoetigt, ist
+  nicht Teil des #24-R1-Safety-Cores
 - deutlicher Warnhinweis vor Aktortests
 - Peltier- und Lueftertests zeitlich und leistungsmassig begrenzen
 - Richtungswechsel, Mindest-Ausschaltzeit und Totzeit bleiben erzwungen
@@ -604,15 +646,16 @@ Tuerinformation als vorhandene Sicherheits- oder Prozessbedingung voraussetzen.
 
 ## Akzeptierte Entscheidungen
 
-- [x] Bootpruefungen und persistierte Sperren haben Vorrang vor `STANDBY` und Recovery
+- [x] Bootpruefungen und aktuell untrusted System-/Config-/Persistenzzustaende
+  haben Vorrang vor `STANDBY` und Recovery
 - [x] `SAFE_BOOT` bleibt aktorfrei
 - [x] `COMPLETED` wird nach Neustart explizit wiederhergestellt
 - [x] keine allgemeine Pausenfunktion
 - [x] Stop bietet Ausschalten oder einen neuen manuellen Kuehllauf
 - [x] Warnungen und Fehler sind getrennt
-- [x] `SERVICE_MODE` nur aus validiertem `STANDBY`
+- [x] `SERVICE_MODE` nur aus validiertem `STANDBY`; physische Service-/Reset-
+      Geraete bleiben E5/Future
 - [x] Produktfuehlerausfall fuehrt nicht zu stillem Sensorwechsel
-- [x] sichere Recovery wartet nicht blockierend auf NTP
-- [x] unbekannte Ausfallzeit erzeugt keinen erfundenen exakten Fortschritt
-- [x] Ausfallzeit wird nach NTP als Unsicherheitsintervall behandelt
+- [x] R1 verwendet keine automatische NTP-/Progress-Recovery und keine
+      universelle Fehlerklassen-FSM
 - [x] kein Tuerkontakt in Release 1

@@ -21,6 +21,19 @@ ausschliesslich in `ROADMAP.md` und den Live-Issues.
 Reale Flash-Atomizitaet, reale Heapreserve und Belastungsmessungen bleiben
 spaetere Hardware- beziehungsweise Release-Gates.
 
+## Issue #24-Schnitt
+
+Die vorhandenen Producer bleiben die einzige Configuration-Safety-Quelle:
+`ConfigurationRecoveryService` liefert `ConfigurationUnavailable` bzw.
+`ConfigurationIntegrityFailure`; `ConfigurationService` liefert unter anderem
+`RuntimeFailure` und `CommitIndeterminate` mit typisierter Detailursache.
+SafetyCore projiziert diese Zustaende auf seine endliche FaultCode-Matrix und
+kopiert keine Konfigurationszustandsmaschine.
+
+Issue #24 fuehrt keinen parallelen Configuration-Safety-Enum, keinen neuen
+Persistenzschluessel, keinen Restart-/Safety-Latch und keine Service-PIN-Logik
+in diesem Konfigurationsvertrag ein.
+
 ## Architektur und Konfigurationsgeneration
 
 `FactoryConfiguration` ist unveraenderlicher Bestandteil der Firmware.
@@ -887,8 +900,9 @@ erzeugt und nichts still geloescht.
 
 Issue #16 liefert in diesem Fall einen typisierten
 `ConfigurationUnavailable`- beziehungsweise `ConfigurationIntegrityFailure`-
-Zustand und gibt keine RuntimeConfiguration frei. Die Einordnung in die
-systemweite Fehlerklasse und `SAFE_BOOT` erfolgt spaeter durch Issue #24.
+Zustand und gibt keine RuntimeConfiguration frei. Die Einordnung in den
+kanonischen FaultCode-/Disposition-Pfad und `SAFE_BOOT` erfolgt durch den
+bestehenden Issue-#24-Producerpfad.
 
 Firmwareupdates ueberschreiben keine Dokumente oder Standard-Arbeitskopien.
 Unbekannte oder nicht migrierbare Schemas loesen keine Factory-Neuanlage aus.

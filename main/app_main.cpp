@@ -3,6 +3,7 @@
 #include "app_config.hpp"
 #include "device_platform.hpp"
 #include "esp_timer_time_source.hpp"
+#include "esp_reset_cause_source.hpp"
 #include "fermentation_application.hpp"
 
 #include "esp_log.h"
@@ -54,12 +55,14 @@ void logResources() {
 extern "C" void app_main(void) {
     device_platform::DevicePlatform platform;
     fermentation::FermentationApplication application;
+    const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
 
     const device_platform::PlatformStartupContext startupContext{
         app_config::hasSafeDefaults(app_config::kActiveProfilePolicy),
     };
     const bool applicationStarted =
-        platform.begin(startupContext) && application.begin(platform);
+        platform.begin(startupContext) &&
+        application.begin(platform, &resetCauseSource);
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted);
 
