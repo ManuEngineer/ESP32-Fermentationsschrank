@@ -4,7 +4,7 @@ namespace fermentation {
 
 bool FermentationApplication::begin(
     device_platform::IPlatformServices& platformServices,
-    device_platform::IResetCauseSource* resetCauseSource) {
+    const device_platform::IResetCauseSource* resetCauseSource) {
     if (!platformServices.ready()) {
         return false;
     }

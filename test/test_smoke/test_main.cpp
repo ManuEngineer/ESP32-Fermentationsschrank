@@ -4,6 +4,7 @@
 
 #include "app_config.hpp"
 #include "device_platform.hpp"
+#include "mock_reset_cause_source.hpp"
 #include "fermentation_application.hpp"
 
 void test_project_metadata() {
@@ -106,6 +107,21 @@ void test_application_starts_through_platform_interface() {
     TEST_ASSERT_TRUE(application.ready());
 }
 
+void test_application_accepts_const_reset_cause_source() {
+    device_platform::DevicePlatform platform;
+    fermentation::FermentationApplication application;
+    const device_platform::PlatformStartupContext startupContext{
+        app_config::hasSafeDefaults(app_config::kActiveProfilePolicy),
+    };
+    const device_platform_test_support::MockResetCauseSource resetCauseSource(
+        device_platform::ResetCause::PowerOn);
+
+    TEST_ASSERT_TRUE(platform.begin(startupContext));
+    TEST_ASSERT_TRUE(application.begin(platform, &resetCauseSource));
+    TEST_ASSERT_TRUE(application.safetyCore().resetCause() ==
+                     device_platform::ResetCause::PowerOn);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_project_metadata);
@@ -117,5 +133,6 @@ int main() {
     RUN_TEST(test_application_rejects_platform_before_startup);
     RUN_TEST(test_platform_rejects_unsafe_startup_context);
     RUN_TEST(test_application_starts_through_platform_interface);
+    RUN_TEST(test_application_accepts_const_reset_cause_source);
     return UNITY_END();
 }

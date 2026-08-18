@@ -10,7 +10,7 @@ class FermentationApplication {
    public:
     [[nodiscard]] bool begin(
         device_platform::IPlatformServices& platformServices,
-        device_platform::IResetCauseSource* resetCauseSource = nullptr);
+        const device_platform::IResetCauseSource* resetCauseSource = nullptr);
     void update();
 
     [[nodiscard]] bool ready() const;
