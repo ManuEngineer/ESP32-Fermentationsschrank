@@ -99,11 +99,11 @@ struct RunPersistenceResult {
     // #21, 6.14.4: set only after a successful persistSensorSelection commit,
     // mutually exclusive (a mode change reports an event, everything else a
     // notice - never both, mirrors SensorSelectionStateMutation).
-    std::optional<SensorSelectionEvent> sensorSelectionEvent{};
-    std::optional<SensorSelectionNotice> sensorSelectionNotice{};
+    std::optional<SensorSelectionEvent> sensorSelectionEvent;
+    std::optional<SensorSelectionNotice> sensorSelectionNotice;
     // #21, 6.11: nur bei tatsaechlichem requestedMode != effectiveMode
     // (Startmatrix Zeile 2), erst nach erfolgreichem Commit sichtbar.
-    std::optional<StartSensorSelectionNotice> startSensorSelectionNotice{};
+    std::optional<StartSensorSelectionNotice> startSensorSelectionNotice;
     // Transient post-commit handoff only: set after successful persistence
     // and RAM apply for a target, sensor-role, cooling-target, or effective
     // ProductInserted Air -> Product context transition. Never persisted.

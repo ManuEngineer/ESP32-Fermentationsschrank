@@ -17,7 +17,7 @@ bool FermentationApplication::begin(
     // persistence, sensor and planner evidence yet.  Treat that absence as
     // untrusted and keep the application fail-closed until a later explicit
     // validation path provides it.
-    SafetyCoreInput bootEvidence;
+    const SafetyCoreInput bootEvidence;
     static_cast<void>(safetyCore_.evaluate(bootEvidence));
     return true;
 }
