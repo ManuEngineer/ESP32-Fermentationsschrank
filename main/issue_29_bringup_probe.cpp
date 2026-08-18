@@ -449,7 +449,11 @@ void logProbeSummary(const ProbeContext& context) {
     logSample("after_decision_release", context.afterDecisionRelease);
     logSample("before_task_create", context.beforeTaskCreate);
     logSample("after_task_create_blocked", context.afterTaskCreate);
-    logSample("after_task_cleanup", context.afterTaskCleanup);
+    if (context.afterTaskCleanupMeasured) {
+        logSample("after_task_cleanup", context.afterTaskCleanup);
+    } else {
+        ESP_LOGE(kTag, "after_task_cleanup status=BLOCKED");
+    }
     ESP_LOGI(kTag, "task_ready_hwm_bytes=%u",
              static_cast<unsigned>(context.readyTaskStackHighWaterMarkBytes));
     ESP_LOGI(
