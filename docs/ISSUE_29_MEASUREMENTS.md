@@ -1,8 +1,13 @@
 # Issue #29 Messprotokoll und Abnahmestatus
 
-Status dieses Protokolls: Software-/Buildnachweise `PASS`; reale
-Board-/UART-/Flash-/Ressourcen-/Smoke-Nachweise `BLOCKED` beziehungsweise
+Status dieses Protokolls: Software-/Buildnachweise `PASS`; die Issue-DoD ist
+wegen fehlender verifizierter Hardware noch nicht abgenommen. Reale
+Board-/UART-/Flash-/Ressourcen-/Smoke-Nachweise bleiben `BLOCKED` beziehungsweise
 `NOT_RUN`.
+
+Implementierungsstatus: `SOFTWARE_IMPLEMENTED_HARDWARE_BLOCKED`; die Issue-
+Abnahme und die Definition of Done sind ohne reale Targetevidenz nicht
+vollständig.
 
 ## Identität und Scope
 
@@ -12,7 +17,7 @@ Board-/UART-/Flash-/Ressourcen-/Smoke-Nachweise `BLOCKED` beziehungsweise
 - Basis: `main @ 87dd593fcdc8d26831873a4163b174340b4347c0`
 - freigegebener Plan:
   `docs/tasks/issue-29-implementation-plan.md @ 4f49b44cff47f55bfd425d9e39c5a07256782ed7`
-- Implementierungs-HEAD: `764759f8b307be75ce0acc8042b8fdef79b19ea7`
+- Implementierungs-HEAD: `6be497af855af0c40084999397da055fcae9e015`
 - ESP-IDF: `v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`
 - Ziel: ESP32 ohne PSRAM, aktorfrei und unbelastet
 
@@ -45,7 +50,7 @@ lokale Buildartefakte; ihre kanonischen Werte sind im Bericht festgehalten.
 
 | Profil | `APP_ISSUE_29_BRINGUP_PROBE` in Compile-Commands | Diagnose-Taskquelle |
 |---|---:|---:|
-| `esp32_bringup` | 42 Vorkommen im generierten Compile-Command-Artefakt | 3 Vorkommen |
+| `esp32_bringup` | 42 Vorkommen im generierten Compile-Command-Artefakt | 4 Vorkommen |
 | `esp32_release` | 0 | 0 |
 | native | 0 im generierten Buildartefakt | 0 |
 
@@ -61,21 +66,35 @@ den großen `CommandDecision`-/`RunCommandState`-/Persistenzpfad nicht als
 ausreichend vorausgesetzt; `CONFIG_ESP_MAIN_TASK_STACK_SIZE` wurde nicht
 geändert.
 
-Die Diagnose-Taskgröße wird im Code aus den tatsächlich kompilierten Größen
-von `CommandDecision`, `RunCommandState`, den gehaltenen Probeobjekten und
-einem separat benannten 16-KiB-Compiler-/Aufrufpfadpuffer gebildet. Dieser
-Wert ist kein Produktiv-Stackwert und verschiebt `CommandDecision` nicht auf
-den Heap. Der tatsächliche Task-Stackwert, die statischen Größen, die
-Call-Path-/Map-Auswertung und die High-Water-Mark gehören zur
-On-Target-Messung.
+Die Diagnose-Taskgröße wird im Code aus den tatsächlich kompilierten Xtensa-
+Objektgrößen und der `-fstack-usage`-Evidenz des Bring-up-Aufrufpfads gebildet.
+Der Build dieses Heads meldet `sizeof(CommandDecision)=9872`,
+`sizeof(RunCommandState)=4784`, `sizeof(ProgramStartRequest)=304`,
+`sizeof(RunPersistenceCoordinator)=8336`,
+`sizeof(TemperatureControlApplicationOrchestrator)=152`,
+`sizeof(TemperatureController)=280`, `sizeof(ActuatorPlanner)=424`,
+`sizeof(TargetQualificationEvaluator)=128` und `sizeof(SafetyCore)=16`; die
+Summe der gehaltenen statischen Objekte beträgt 24296 Bytes. Die relevante
+Compiler-Stack-Usage-Datei meldet für `runProbe()` den maximalen Frame von
+53248 Bytes; `decideProgramStart()` meldet 3072 Bytes und
+`RunPersistenceCoordinator::persistCommand()` 9280 Bytes. Daraus wird der
+größere Wert aus statischer Objekt-Summe und 53248-Byte-Frame plus ein
+begründeter 4096-Byte-Sicherheitspuffer abgeleitet: konfigurierte Diagnose-
+Taskgröße 57344 Bytes. Diese Zahlen sind kein Produktiv-Stackwert und
+verschieben `CommandDecision` nicht auf den Heap; `CONFIG_ESP_MAIN_TASK_STACK_SIZE`
+bleibt unverändert. Der On-Target-HWM muss die Herleitung anschließend
+bestätigen; Stackoverflow, Panic, Watchdog oder fehlender HWM sind `FAILED`/
+`BLOCKED`, nie `PASS`.
 
 Die vorgesehenen Messpunkte bleiben getrennt:
 
 - `B0`: vor `xTaskCreate`, ohne Diagnose-Task;
 - `B1`: nach Erzeugung des zunächst blockierten Diagnose-Tasks;
-- innerhalb des Tasks: vor Decision, vollständige Decision gehalten, lokaler
-  Apply, nach Decision-Freigabe;
-- `B2`: nach Taskabschluss und Freigabe;
+- innerhalb des Tasks: vor Decision, vollständige Decision gehalten,
+  vollständig erfolgreich angewendeter lokaler Kandidat gehalten, nach
+  Decision-Freigabe;
+- `B2`: erst nach bestätigtem Selbstlöschen und ausreichender Idle-Zeit für die
+  Freigabe von TCB/Stack;
 - je Punkt: freier Heap, Minimum-Free-Heap, größter 8-Bit-Block;
 - innerhalb des Tasks zusätzlich Ready-/Completion-Task-High-Water-Mark und
   Main-Task-High-Water-Mark.
@@ -85,10 +104,10 @@ Die vorgesehenen Messpunkte bleiben getrennt:
 | reale 48/96/1024-`CommandDecision`-Ressourcenprobe | `BLOCKED` | kein verifiziert angeschlossenes ESP32-Board/UART-Gerät in dieser Ausführung |
 | `B0`/`B1`/`B2` Heap- und Blockwerte | `NOT_RUN` | abhängig vom fehlenden On-Target-Lauf |
 | interne vier Probezeitpunkte | `NOT_RUN` | abhängig vom fehlenden On-Target-Lauf |
-| Task-Stack-High-Water-Mark | `NOT_RUN` | keine Hardwareausführung; kein Wert wird erfunden |
+| Task-Stack-High-Water-Mark | `NOT_RUN` | keine Hardwareausführung; kein Wert wird erfunden; die vier internen Punkte nutzen auf ESP32 die verifizierte Byte-API `uxTaskGetStackHighWaterMark(nullptr)` |
 | On-Target-Allokationsfehlervertrag | `BLOCKED` | kein verifiziertes Ziel für den `esp32_bringup`-only Fault-Seam |
 | fachlicher Zustand unverändert | `NOT_RUN` | On-Target-Beobachtung nicht ausgeführt |
-| kein Persistenz-Write/-Commit | `NOT_RUN` | lokaler Storedouble ist implementiert, On-Target-Ausführung fehlt |
+| kein Persistenz-Write/-Commit | `NOT_RUN` | lokaler `IStateStore`-Double und bestehender Apply-/Persistence-Vertrag sind instrumentiert; On-Target-Ausführung fehlt |
 | keine neue Aktorfreigabe, Safety fail-closed | `NOT_RUN` | All-off-Sinks sind implementiert, On-Target-Ausführung fehlt |
 
 Die lokale Fehlervertragsprobe verwendet nur den bestehenden
@@ -126,8 +145,9 @@ deshalb bestehen.
 Mangels realer Hardwareevidenz wurden `docs/HARDWARE.md` und
 `docs/OPEN_POINTS.md` nicht abgehakt oder mit unbestätigten Boardfakten
 aktualisiert. `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md` bleibt unverändert;
-der Buildbericht ist kein Beleg für ein kanonisches Produktions- oder
-Parallelbudget.
+der aktualisierte [`ISSUE_29_BUILD_REPORT.md`](ISSUE_29_BUILD_REPORT.md) und
+die compilerbasierte Stack-Usage-Herleitung sind Build-/Ressourcennachweise,
+aber kein Beleg für ein kanonisches Produktions- oder Parallelbudget.
 
 Vor einem späteren Hardwaregate müssen die fehlenden Werte auf dem exakt
 gleichen Implementierungs-HEAD ergänzt und mit UART-/Messartefakten verlinkt
