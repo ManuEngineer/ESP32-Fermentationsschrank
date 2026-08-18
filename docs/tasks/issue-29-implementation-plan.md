@@ -1,6 +1,6 @@
 # Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustände
 
-Diese vollständige Planrevision korrigiert die Planreview-Befunde F1–F5 des
+Diese vollständige Planrevision korrigiert die Planreview-Befunde F1–F7 des
 vorherigen Plan-Commits `b4cc9e367145cb761ba72db731416ec969f798b7`. Sie ersetzt
 die vorherige Planfassung vollständig; ihre neue Commit-SHA ist das erneute
 Owner-Gate.
@@ -248,6 +248,97 @@ die abschließende Messung unter Parallel-/Releasebelastung bleibt als späteres
 Lastgate, insbesondere #37, sichtbar offen. Ein #29-Nachweis darf dieses
 spätere Gate nicht stillschweigend als bestanden markieren.
 
+### Sichere Ausführungsgrenze für den realen Probeweg
+
+Der reale `CommandDecision`-/`RunCommandState`-Pfad läuft nicht implizit auf
+dem normalen `app_main`-Stack. PR #53 dokumentiert für den Xtensa-/ESP32-ABI
+`sizeof(CommandDecision) = 8.608 B` und weist ausdrücklich auf das Stack- und
+Integrationsrisiko hin. Da `sdkconfig.defaults` keinen eigenen Wert für
+`CONFIG_ESP_MAIN_TASK_STACK_SIZE` setzt, wird der Main-Task-Stack weder
+pauschal erhöht noch als ausreichende Probegrenze angenommen.
+
+Die Ressourcen- und Fehlervertragsprobe verwendet deshalb einen separaten,
+transienten Diagnose-Task, der nur im Profil `esp32_bringup` registriert wird:
+
+- `main/app_main.cpp` bleibt Composition Root und startet, überwacht und
+  beendet den Probeablauf über eine kleine private Bring-up-Schnittstelle;
+- die große Decision-/Apply-/Persistenzausführung liegt in der privaten
+  `main/issue_29_bringup_probe.hpp`/`.cpp`-Taskfunktion und läuft nicht auf
+  dem `app_main`-Stack;
+- der Task wird vor der eigentlichen Probe zunächst blockiert, damit
+  `app_main` den Heap-/Stack-Baselinepunkt vor und nach der Task-Erzeugung
+  getrennt erfassen kann. Erst danach wird genau ein begrenztes Startsignal
+  gegeben;
+- der Task besitzt nur die für #29 erforderliche Diagnosekoordination, keine
+  allgemeine Task-, Ressourcen- oder Monitoringplattform, und wird nach dem
+  Ergebnis sauber beendet und freigegeben;
+- die Ressourcenprobe und die Fehlervertragsprobe bleiben fachlich getrennt,
+  nutzen aber dieselbe sichere Task-Ausführungsgrenze. Nur die
+  Fehlervertragsprobe verwendet den lokalen Storedouble und All-off-Sinks;
+- `esp32_release` und native Builds registrieren weder diese Taskquelle noch
+  ihren privaten Probeport.
+
+Die initiale Task-Stackgröße wird nicht als Produktivwert erfunden. Vor der
+ersten Hardwareausführung wird sie für den tatsächlich kompilierten
+`esp32_bringup`-Pfad begründet und im Messprotokoll festgehalten:
+
+1. Zielcompiler und Xtensa-Build prüfen `sizeof(CommandDecision)` — erwartet
+   sind die aus PR #53 bekannten 8.608 B — sowie `sizeof(RunCommandState)` und
+   die Größen aller absichtlich auf dem Task-Stack gehaltenen Probeobjekte;
+2. der tatsächlich kompilierte Aufrufpfad wird einschließlich der
+   Compiler-Stack-Usage-/Map-Ausgaben, soweit der ESP-IDF-Toolchainlauf sie
+   liefert, und einer manuellen Prüfung der verbleibenden lokalen Frames
+   erfasst;
+3. daraus werden die maximale statische Objekt-/Framebelegung, die
+   API-/Aufrufreserve und ein konservativer, begründeter Messpuffer zu einer
+   ausgerichteten Bring-up-Taskgröße abgeleitet. Dieser Wert gilt nur für den
+   Diagnose-Task und wird nicht in `sdkconfig.defaults`,
+   `CONFIG_ESP_MAIN_TASK_STACK_SIZE` oder einen Produktionsvertrag
+   übernommen;
+4. fehlen eine belastbare Stack-Usage-Ausgabe, ein vollständiger Call-Path
+   oder eine begründbare Reserve, bleibt die Hardwareausführung `BLOCKED`.
+
+Die Messung trennt explizit Task-Stackreserve und dynamische Heapkosten:
+
+- `B0` vor `xTaskCreate`: freier Heap, Minimum-Free-Heap, größter Block und
+  Main-Task-High-Water-Mark ohne Diagnose-Task;
+- `B1` nach Erzeugung des zunächst blockierten Diagnose-Tasks: derselbe
+  Heap-/Block-/Main-Task-Satz, damit TCB- und Task-Stack-Allokation sichtbar
+  bleiben, aber noch keine `CommandDecision`-Kopie oder dynamische Strings
+  bewertet werden;
+- innerhalb des Diagnose-Tasks: Task-Stack-High-Water-Mark und die vier
+  fachlichen Probezeitpunkte vor Decision, bei vollständig gehaltener
+  Decision, während lokaler Apply und nach Abschluss/Freigabe;
+- innerhalb jedes dieser Punkte: freier Heap, Minimum-Free-Heap und größter
+  zusammenhängender 8-Bit-Block. Dynamische Strings/Kopien werden als
+  Heapwirkung dokumentiert und nicht als Stackreserve ausgegeben;
+- `B2` nach Taskabschluss und Freigabe: Heap-/Block-/Main-Task-Werte sowie die
+  eindeutige Task-Lifecycle-Information. Die Zusatzallokation des
+  Diagnose-Tasks darf in keinem Ergebnis als Teil der allgemeinen
+  Anwendungslast verborgen werden.
+
+Der konfigurierte Stackwert wird in der tatsächlichen Einheit der verwendeten
+ESP-IDF-/FreeRTOS-Task-API und zusätzlich, nur mit verifizierter Umrechnung,
+in Bytes dokumentiert. Der Task veröffentlicht sein Ergebnis über die kleine
+private Abschlusskoordination, signalisiert `app_main` den Abschluss und wird
+danach über den bestehenden FreeRTOS-Lifecyclepfad selbst beendet; `app_main`
+erfasst `B2` erst nach nachweisbarer Freigabe. Ein nicht eindeutig besitzbarer
+oder nicht freigebbarer Task ist `FAILED` beziehungsweise `BLOCKED`.
+
+Der Task wartet nur innerhalb eines begrenzten, überwachten Ablaufs, gibt an
+definierten Stellen Schedulerzeit ab und meldet einen eindeutigen Abschluss-
+oder Fehlerstatus. Stackoverflow, Watchdog, Panic, fehlgeschlagene
+Task-Erzeugung oder ein nicht ausreichend begründbarer Startstack sind
+`FAILED` beziehungsweise `BLOCKED`, niemals `PASS`. Die konfigurierte
+Taskgröße, alle Herleitungsdaten, die gemessene High-Water-Mark und die
+Heapkosten werden in `docs/ISSUE_29_MEASUREMENTS.md` dokumentiert.
+
+Der Diagnose-Task verändert den fachlichen Vertrag nicht und verschiebt die
+große `CommandDecision` nicht künstlich auf den Heap. Spätere reale
+UI-/NVS-/Web-/Display- und Parallelkonsumenten müssen ihre eigenen Task-,
+Stack- und Heapwirkungen erneut messen; #29 bleibt der erste Bring-up-
+Nachweis und schließt das spätere #37-Lastgate nicht.
+
 ## 7. Fehlervertragsprobe und On-Target-Fault-Seam
 
 Die Allokationsfehlerreaktion wird nicht nur nativ geprüft. Der verbindliche
@@ -340,8 +431,9 @@ umgesetzt:
   `CONFIG_APP_PROFILE_ESP32_BRINGUP` die private Definition
   `APP_ISSUE_29_BRINGUP_PROBE=1` auf den `fermentation_app`-Component;
 - `CONFIG_APP_PROFILE_ESP32_RELEASE` setzt diese Definition nicht;
-- `main/CMakeLists.txt` setzt dieselbe Definition und nur für
-  `esp32_bringup` den privaten Include-Pfad
+- `main/CMakeLists.txt` setzt dieselbe Definition und registriert nur für
+  `esp32_bringup` die private Quelldatei
+  `main/issue_29_bringup_probe.cpp` sowie den privaten Include-Pfad
   `../lib/fermentation_app/private`;
 - die konkrete interne Grenze besteht aus
   `lib/fermentation_app/private/issue_29_bringup_fault_seam.hpp` und einer
@@ -349,9 +441,11 @@ umgesetzt:
   begrenzten Seam-Sektion in
   `lib/fermentation_app/src/run_persistence_coordinator.cpp`, also genau an
   der bestehenden Kandidaten-/Apply-Grenze;
-- `main/app_main.cpp` hält die ESP-IDF-Ressourcenmessung und den
-  bring-up-only Probeaufruf im Composition Root. Es bindet den privaten
-  Header nur über den vorgenannten Bring-up-Include-Pfad ein;
+- `main/app_main.cpp` bleibt Composition Root und startet/überwacht den
+  transienten Task über dessen private Bring-up-Schnittstelle; die
+  ESP-IDF-Ressourcenmessung und der große Probeaufruf liegen in
+  `main/issue_29_bringup_probe.cpp`. Der private Header wird nur über den
+  vorgenannten Bring-up-Include-Pfad eingebunden;
 - der bestehende öffentliche Fachvertrag wird nicht erweitert und die
   private Headergruppe wird nicht als Component-Include-Verzeichnis
   installiert;
@@ -366,7 +460,8 @@ Pfad.
 Die Isolation wird nachgewiesen durch:
 
 - Prüfung der `esp32_bringup`- und `esp32_release`-Compile-Commands: die
-  Definition darf nur im Bring-up-Component vorkommen;
+  Definition und die Diagnose-Taskquelle dürfen nur im Bring-up-Component
+  vorkommen;
 - Prüfung, dass native Builds die Definition nicht verwenden;
 - Prüfung, dass der Release-Compile-/Symbolbestand keinen nutzbaren
   `issue_29`-Probe-/Fault-Seam enthält;
@@ -486,8 +581,11 @@ Betroffene Dateigruppen:
 - `lib/fermentation_app/private/issue_29_bringup_fault_seam.hpp` und die
   guarded Seam-Sektion in
   `lib/fermentation_app/src/run_persistence_coordinator.cpp`;
-- `main/app_main.cpp` für die reale ESP-IDF-Ressourcenprobe und den privaten
-  Probeaufruf;
+- `main/app_main.cpp` für den Composition-Root-Start, die Überwachung und den
+  privaten Start-/Monitor-Vertrag;
+- `main/issue_29_bringup_probe.hpp`/`.cpp` für den transienten Diagnose-Task
+  und die reale ESP-IDF-Ressourcenprobe;
+- die private Start-/Monitor-Schnittstelle des Bring-up-Tasks;
 - die bestehende Kandidaten-/Apply-Grenze in
   `run_persistence_coordinator.cpp` beziehungsweise dem tatsächlich
   zuständigen bestehenden Modul;
@@ -508,6 +606,8 @@ Direkte Nachweise:
 - native Regressionen für Decision, lokale Apply-Atomizität und unveränderten
   Zustand;
 - Compile-Command-/Symbolprüfung für Bring-up-only versus Release/native;
+- Herleitungs- und Lifecycle-Nachweis für Task-Stackgröße, Task-Stack-HWM,
+  Heapkosten sowie Task-Erzeugung und -Freigabe;
 - Architekturgrenzen;
 - gezielte ESP-IDF-Buildprüfung beider Profile.
 
@@ -664,10 +764,18 @@ dieser Revision nicht erneut geändert.
 
 ## 13. Plan-only Commit, Draft-PR und Handover
 
-Der Commit dieses Plan-PRs enthält ausschließlich:
+Der kumulative PR-Scope umfasst ausschließlich:
 
 - `docs/tasks/issue-29-implementation-plan.md`;
-- die minimal notwendige Änderung an `docs/ROADMAP.md`.
+- `docs/ROADMAP.md`.
+
+Der bisherige Zwei-Commit-Stand bestand aus dem ursprünglichen Plan mit der
+minimalen Roadmap-Synchronisierung und der folgenden vollständigen
+Planrevision, die ausschließlich die Plan-Datei änderte. Der nun folgende
+F6/F7-Korrekturcommit ändert wiederum ausschließlich
+`docs/tasks/issue-29-implementation-plan.md`; eine weitere Roadmapänderung ist
+nicht erforderlich. Damit bleibt der kumulative PR-Diff dokumentarisch und
+enthält keine Firmware-, Buildprofil-, Flash- oder Hardwareänderung.
 
 Der Draft-PR enthält mindestens:
 
