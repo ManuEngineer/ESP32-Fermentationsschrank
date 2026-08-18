@@ -16,7 +16,31 @@ Plausibilitaetsgrenzen bleiben bis zu den Versuchen am realen Aufbau
 `TBD_COMMISSIONING`, soweit dieses Dokument keine firmwarefeste Obergrenze
 festlegt.
 
-## Sicherheitsrelevante Temperatursensoren
+## Issue #24 Release-1-Grenze
+
+Der #24-Safety-Core konsumiert aus #20/#21 nur die bestehende
+Sensorqualitaets- und Auswahlprojektion. Er fuehrt keine zweite Sensor-FSM
+ein. `STALE`/`FAILED` sperrt die Peltierfreigabe beziehungsweise loest
+`ImmediateStop` aus; die Rueckkehr erfolgt ausschliesslich ueber die frische
+#20/#21-Evidenz.
+
+Thermische Schutzgrenzen, Luefter-/H-Bruecken-/Hardwarefaults und
+`SAFETY_RECOVERY` sind kein R1-Producer von #24. Ihre Commissioning- und
+E5-Grenzen bleiben spaeter integrierbar; #24 erfindet dafuer weder Codes noch
+Laufzeitwerte, keine automatische Gegenrichtung und keinen Service-PIN-Reset.
+
+## E5/#35/Future-Kontext – nicht normativ fuer #24-R1
+
+Die folgenden bestehenden Detailabschnitte dokumentieren spaetere
+Commissioning-, Temperatur-, Luefter- und Hardwareentscheidungen. Sie sind
+fuer #24-R1 nicht aktiv und erzeugen dort weder Fault-Codes noch Grenzwerte,
+persistente Latches, Service-PIN-Clear, kontrollierte Neustarts,
+`SAFETY_RECOVERY` oder automatische Gegenrichtung. Im #24-R1-Schnitt gelten
+ausschliesslich die oben beschriebenen #20/#21-Sensorprojektionen:
+`STALE`/`FAILED` sperrt beziehungsweise stoppt, und eine Freigabe erfolgt nur
+nach frischer kanonischer Evidenz.
+
+## Bestehende Sensor-, Temperatur- und Hardwarevertraege
 
 Das erste Release verwendet drei Temperaturrollen:
 

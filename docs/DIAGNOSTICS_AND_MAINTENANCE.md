@@ -11,12 +11,26 @@ UART dient in Release 1 nur dem Flashen, der technischen Entwicklung und der
 physischen Recovery. Ein benutzeraktivierbarer UART-Diagnosemodus ist
 `FUTURE_RELEASE`.
 
+## Issue #24 Release-1-Diagnosegrenze
+
+Der passive Boot-Selbsttest liest die Resetcause nur als Diagnoseevidenz.
+Release 1 fuehrt in #24 keinen generischen Neustartzaehler, kein
+Resetzeitfenster und keinen neuen persistenten Safety-Latch ein. `SAFE_BOOT`
+kommt aus einem aktuell nicht vertrauenswuerdigen System-, Config- oder
+Persistenzzustand; jeder Boot bleibt bis zur vollstaendigen Revalidierung
+all-off/`Unresolved`.
+
+Service-PIN, persistente Watchdog-/Sensorverriegelung und Charge-Recovery sind
+keine #24-R1-Voraussetzung. Die vorhandene Diagnose darf technische
+Servicegrenzen anzeigen, macht sie aber nicht zur Safety-Wahrheit.
+
 ## Grundsaetze
 
 - Diagnose darf Regelung, Sicherheitsaufgaben und Aktor-Watchdogs nicht blockieren.
 - Lesende Diagnose bleibt waehrend eines Laufes verfuegbar.
-- Aktor- und Hardwaretests sind nur aus validiertem `STANDBY` im
-  PIN-geschuetzten `SERVICE_MODE` erlaubt.
+- Aktor- und Hardwaretests sind spaetere E5-/Service-Gates: nur aus validiertem
+  `STANDBY` im bestaetigten PIN-geschuetzten `SERVICE_MODE` erlaubt; sie sind
+  kein #24-R1-Safety-Clear.
 - `SAFE_BOOT` erlaubt keine leistungsbezogenen Aktortests.
 - Ein normaler Boot fuehrt keine automatische Peltier-, Luefter- oder
   Summeraktivierung aus.
@@ -57,7 +71,8 @@ Zusaetzlich mindestens:
 - Fehler-, Persistenz-, Reset-, Brownout- und Watchdogjournal
 - Netzwerk-, NTP-, Flash-, Heap- und Ressourcenwerte
 - erlaubte Exporte
-- Servicepruefungen nur nach Service-PIN und gueltigem Zustand
+- Servicepruefungen nur nach Service-PIN und gueltigem Zustand; E5/Future,
+  nicht #24-R1-Safety-Core
 
 ## Diagnose waehrend eines Laufes
 
@@ -136,8 +151,8 @@ Mindestens sichtbar:
 
 Der Boot-Selbsttest prueft ohne Aktoraktivierung:
 
-1. Resetursache und abnormalen Neustartzaehler
-2. persistierte Verriegelungen und `SAFE_BOOT`
+1. Resetcause als Diagnose und `SAFE_BOOT`
+2. aktuell gelesenen System-/Config-/Persistenzzustand
 3. Firmware-, Schema- und Partitionsdaten
 4. Konfigurationsintegritaet und Rueckfallrevision
 5. Laufkontrollpunkt, Transaktionsmarker und Persistenzgesundheit
@@ -167,8 +182,8 @@ In `SAFE_BOOT` erlaubt:
 - passive Diagnose
 - Lesen und Exportieren von Fehler-, Reset- und Persistenzinformationen
 - Netzwerkrecovery ohne Aktorwirkung
-- PIN-unabhaengiger lokaler Vollreset
-- UART-Recovery beziehungsweise erneutes Flashen
+- UART-Recovery beziehungsweise erneutes Flashen als spaeteres Hardware-/Boot-
+  Gate, nicht als #24-Safety-Clear
 
 In `SAFE_BOOT` gesperrt:
 
@@ -179,7 +194,7 @@ In `SAFE_BOOT` gesperrt:
 Nach Beseitigung der Ursache muss das Geraet erst bewusst und validiert nach
 `STANDBY` zurueckkehren. Erst dort kann der Servicebereich geoeffnet werden.
 
-## Gefuehrter Service-Hardwaretest
+## Spaeteres E5-Service-/Hardware-Gate (nicht #24-R1)
 
 ### Voraussetzungen
 
@@ -251,7 +266,7 @@ Servicewerte umgehen keine Pulldowns, Verriegelungen, Mindest-Ausschaltzeiten,
 Totzeiten oder Sicherheitsgrenzen. Konkrete Pulswerte bleiben
 `TBD_COMMISSIONING`.
 
-## PIN-unabhaengiger lokaler Vollreset
+## Spaeterer physischer Vollreset (nicht #24-R1)
 
 Bei vergessener Service-PIN ist ein physischer Recoveryweg erforderlich, der die
 PIN nicht voraussetzt.
@@ -265,7 +280,8 @@ PIN nicht voraussetzt.
 - UART-Loeschen/Neu-Flashen als letzter physischer Recoveryweg
 - vollstaendiger Werksreset; kein isolierter PIN-Reset
 
-Die konkrete Geste oder Taste bleibt `TBD_HARDWARE`.
+Die konkrete Geste oder Taste bleibt `TBD_HARDWARE`. #24 fuehrt keine
+Service-PIN- oder Vollresetlogik ein.
 
 ## Exporte
 
@@ -278,8 +294,9 @@ Die konkrete Geste oder Taste bleibt `TBD_HARDWARE`.
 - Sensorstatus und Sensorwechsel
 - Regler- und Aktorereignisse
 - Warnungen, Fehler, Quittierungen und Resets
-- Unterbrechungsintervall und Recoveryentscheidung
-- Fortschrittskorrekturen und Laufanpassungen
+- #24-R1: Loadstatus, `NoActiveRun`-/Resume-Angebot und kanonische
+  Transaktionsergebnisse; historische Unterbrechungs- und
+  Fortschrittskorrekturen bleiben C2-Legacy
 - Abschluss- oder Abbruchgrund
 
 Formate: JSON und geeignete CSV-Tabellen.
@@ -287,7 +304,8 @@ Formate: JSON und geeignete CSV-Tabellen.
 ### Diagnoseexport
 
 - Firmware-, Hardware-, Schema- und Konfigurationsrevision
-- Resetursache, Neustartzaehler und `SAFE_BOOT`
+- Resetursache, `SAFE_BOOT` und der ausdrueckliche Hinweis, dass #24 keinen
+  Neustartzaehler fuehrt
 - Prozess-, Fehler- und Persistenzzustand
 - Sensor-, Regel-, Aktor- und Luefterdaten
 - Speicher- und Ressourceninformationen
@@ -349,5 +367,5 @@ Nicht enthalten:
 - [x] Peltier nur als begrenzter gefuehrter Puls
 - [x] getrennte Lauf-, Diagnose- und Serviceexporte
 - [x] keine Geheimnisse in Diagnose oder Export
-- [x] PIN-unabhaengiger lokaler Vollreset
+- [ ] Service-/Vollreset-Gate fuer ein spaeteres Hardware-/Service-Issue
 - [x] UART in Release 1 nur fuer Flashen, Entwicklung und Recovery

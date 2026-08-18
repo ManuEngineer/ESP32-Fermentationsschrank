@@ -512,9 +512,9 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         return {unavailableResult(), current};
     }
 
-    // A persisted RecoveryRejected -> Fault is terminal for this recovery
-    // episode. Restore it as-is and leave the recovery load state without
-    // re-entering the process state machine or touching persistence.
+    // A persisted historical Fault is terminal for this recovery episode.
+    // Restore it as-is and leave the recovery load state without re-entering
+    // the process state machine or touching persistence.
     if (current.processState.state == ProcessState::Fault) {
         state_ = RunPersistenceCoordinatorState::Ready;
         auto restored = result(RunPersistenceResultStatus::Applied,
@@ -701,6 +701,7 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         candidate.pendingRecoveryAnchor.reset();
         candidate.recoveryBootAnchorMonotonicMillis.reset();
         candidate.priorBootPhaseElapsed.reset();
+        clearActiveRunState(candidate);
         return commitCandidate(
             candidate,
             RunPersistenceFallbackDirective{
@@ -944,6 +945,7 @@ RunPersistenceCoordinator::activateFallbackRecoveredRun(
         candidate.pendingRecoveryAnchor.reset();
         candidate.recoveryBootAnchorMonotonicMillis.reset();
         candidate.priorBootPhaseElapsed.reset();
+        clearActiveRunState(candidate);
         return commitCandidate(
             candidate,
             RunPersistenceFallbackDirective{
@@ -1099,6 +1101,7 @@ RunPersistenceResult RunPersistenceCoordinator::reevaluateRecoveryEvaluation(
             candidate.pendingRecoveryAnchor.reset();
             candidate.recoveryBootAnchorMonotonicMillis.reset();
             candidate.priorBootPhaseElapsed.reset();
+            clearActiveRunState(candidate);
             fallbackDirective = RunPersistenceFallbackDirective{
                 RunPersistenceFallbackMode::ClearFallback, std::nullopt};
             messages = rejected.messages;
@@ -1276,6 +1279,7 @@ RunPersistenceResult RunPersistenceCoordinator::resolveRecoveryOutcome(
             candidate.pendingRecoveryAnchor.reset();
             candidate.recoveryBootAnchorMonotonicMillis.reset();
             candidate.priorBootPhaseElapsed.reset();
+            clearActiveRunState(candidate);
             fallbackDirective = RunPersistenceFallbackDirective{
                 RunPersistenceFallbackMode::ClearFallback, std::nullopt};
             messages = rejected.messages;
@@ -1399,6 +1403,59 @@ RunPersistenceResult RunPersistenceCoordinator::writeSnapshot(
     return writeSnapshotCore(snapshot, time, periodic, before, mutationKind,
                              commandId, std::nullopt,
                              RunPersistenceFallbackDirective{}, rollbackState);
+}
+
+RunPersistenceResult RunPersistenceCoordinator::discardAsNoActiveRun(
+    RunCommandState& current, const RunCheckpointTime& time) {
+    if (state_ != RunPersistenceCoordinatorState::Ready &&
+        state_ != RunPersistenceCoordinatorState::LoadedActiveRun) {
+        return unavailableResult();
+    }
+    if (!current.activeProgramRun.has_value() &&
+        !current.activeManualRun.has_value()) {
+        return result(RunPersistenceResultStatus::NoActiveRun);
+    }
+    if (current.runRevision == std::numeric_limits<std::uint32_t>::max()) {
+        return result(RunPersistenceResultStatus::CounterOverflow,
+                      RunPersistenceStep::CandidateApply);
+    }
+
+    auto candidate = current;
+    const auto discard =
+        propose(candidate.processState, ProcessState::Standby,
+                TransitionReason::RecoveryRejected, time.monotonicMillis);
+    if (!discard.proposed() ||
+        !applyProcessTransition(candidate.processState, discard,
+                                candidate.processRunSnapshot.has_value()
+                                    ? &*candidate.processRunSnapshot
+                                    : nullptr)) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    clearActiveRunState(candidate);
+    ++candidate.runRevision;
+
+    const auto snapshot = makeRunPersistenceSnapshot(
+        candidate, persistedIds_, persistedIdCount_,
+        RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes());
+    if (!snapshot.has_value()) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    const auto rollbackState = state_;
+    const auto persisted = writeSnapshotCore(
+        *snapshot, time, false, current, RunPersistenceMutationKind::Recovery,
+        std::nullopt, std::nullopt,
+        RunPersistenceFallbackDirective{
+            RunPersistenceFallbackMode::ClearFallback, std::nullopt},
+        rollbackState);
+    if (persisted.status != RunPersistenceResultStatus::Applied) {
+        return persisted;
+    }
+    current = candidate;
+    return persisted;
 }
 
 RunPersistenceResult RunPersistenceCoordinator::writeSnapshotCore(

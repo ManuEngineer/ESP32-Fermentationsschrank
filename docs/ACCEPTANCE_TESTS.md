@@ -24,6 +24,22 @@ Regelparameter und Ressourcenschwellen bleiben bis zu den jeweiligen Messungen
 - Ein Neustart gilt nie als Fehlerreset.
 - `SAFE_BOOT` bleibt in allen Tests aktorfrei.
 
+## Issue #24 Release-1-Testgrenze
+
+Der #24-Schnitt testet nur reale R1-Pfade: ResetCause-Diagnose mit
+all-off/`Unresolved`, frische Config-/Persistenz-/Sensorvalidierung,
+`NoActiveRun` fuer integer nicht resumefaehige Laeufe, technisch untrusted
+Load als `SAFE_BOOT`, die #17-Gesamttransaktion, die reale #20/#21-
+Sensorprojektion, den #23-Current-Boot-Watchdog-Latch, Ack ohne Freigabe und
+die E3/E5/#106-Negativgrenzen.
+
+Ein Restart-Zaehler, Resetzeitfenster, persistenter allgemeiner Safety- oder
+Watchdog-Latch, Service-PIN, automatische `SAFETY_RECOVERY`, Fallback-
+Promotion, gewichteter Recoveryfortschritt sowie neue Thermal-/Hardwarefaults
+sind keine #24-R1-Testfaelle. Historische Testpunkte dazu bleiben fuer ihre
+spaeteren Issues/Hardware-Gates gekennzeichnet und gelten nicht als #24-
+Abnahmekriterium.
+
 ## Testebenen
 
 ### Ebene 1: Native Unit-Tests
@@ -32,11 +48,12 @@ Mindestens:
 
 - Programm- und Konfigurationsvalidierung
 - kanonische Zustandsuebergaenge
-- Bootprioritaet fuer Bootschleifen, persistierte Sperren und Speicherfehler
+- Bootprioritaet fuer jede Resetcause, aktuelle Persistenzintegritaet und
+  fail-closed `SAFE_BOOT`
 - Wiederherstellung eines persistierten `COMPLETED`
 - virtuelle monotone und absolute Zeit
-- Ausfallzeit als Unter-/Obergrenze
-- kein automatischer Phasenabschluss bei ueberlappendem Unsicherheitsintervall
+- `C2-Legacy/#18`: Ausfallzeit als Unter-/Obergrenze und kein automatischer
+  Phasenabschluss bei ueberlappendem Unsicherheitsintervall; kein #24-R1-Gate
 - Zielqualifikation und Gnadenzeit
 - PI-Reglerkern und Luftbegrenzung
 - Impulsakkumulator
@@ -48,23 +65,33 @@ Mindestens:
   laufzeitseitiger Auswahlzustand ausserhalb des Wireformats, fail-closed
   nach Restore; strukturell ungueltige externe Kompatibilitaetsevidenz
   blockiert nur die Rueckkehr, nicht unabhaengige Sicherheitsreaktionen
-- Fehlerklassifikation, Quittierung und Fehlerreset
+- begrenzte FaultCode-/Disposition-Projektion, Mehrfachfehler, Quittierung ohne
+  Safetywirkung und code-spezifische positive Clear-Pfade
 - Persistenzschema, atomare Revisionen und Rueckfall
 - Transaktionsabsicht vor aktorwirksamer Zustandsaenderung
-- Persistenzfehler-Latch und Bootauswertung
+- #17-Transaktionsstatus und Bootauswertung ohne neue Safety-Persistenz
+- reale Config-Producerprojektion ohne zweite Configuration-FSM; normale
+  abgelehnte Mutationen bei gueltigem Operational-Runtime bleiben ohne
+  `SAFE_BOOT`
+- Unknown-Producer-Bits bleiben bei fehlender Quelle aktiv und loeschen sich nur
+  durch einen spaeteren bekannten Wert derselben Quelle
 - kritischer Schreibfehler sperrt neue Aktoranforderungen vor weiteren
-  Persistenzversuchen und setzt den RAM-seitigen Latch
-- minimaler persistenter Latch wird ausserhalb des normalen Laufjournals versucht;
-  auch sein Schreibfehler bleibt fail-closed
+  Persistenzversuchen; #17-Status und RAM/FSM bleiben ohne neuen persistenten
+  Safety-Latch unknown-safe
+- ein Fehler vor dem ersten dauerhaften #17-Write bleibt `Unchanged`; ein
+  Fehler nach `PreparedHead` bleibt `BlockedIndeterminate`/`Changed`
 - unvollstaendiger Transaktionsmarker fuehrt beim Boot zu `SAFE_BOOT`
-- Recovery-Aktorfreigabe erst nach bestandener Lesen-Schreiben-Pruefung und
-  erfolgreich persistierter, wieder verifizierter Recoveryrevision
-- Persistenzfehler-Latch bleibt bei Quittierung, Neustart und isoliert
-  erfolgreichem Schreibversuch gesetzt
-- Latch-Reset nur im geschuetzten Serviceablauf nach bestandener
-  Speicherpruefung, aufgeloestem Transaktionsmarker und dokumentiertem Reset
+- Resume-Angebot bleibt `Unresolved`; Resume und Fresh Start werden erst nach
+  dem bestehenden Gesamtstatus `Applied`, FSM-Anwendung und frischer Evidenz
+  freigeschaltet
+- echter Fresh-Start-Bridge vom Start-Command ueber den #17-Gesamtstatus bis
+  SafetyCore `Allowed`; Fehler vor `PreparedHead` und unaufgeloestes
+  `CommitOutcomeUnknown` bleiben `Unresolved`
+- normaler `Success` benoetigt keinen zweiten Readback; Readback erfolgt nur
+  zur Aufloesung von `CommitOutcomeUnknown` durch `writeExact()`
 - Aufbewahrung und Bereinigung
-- PIN-unabhaengiger Vollreset-Ablauf als Zustands- und Berechtigungslogik
+- physische Vollreset-/Service-PIN-Tests gehoeren zu spaeteren E4/E5-/Service-
+  Gates und sind kein #24-R1-Safety-Core-Gate
 - Device-Shell mit Header, exakt vier festen Slots, Home-/Zurueck-Hierarchie
   und sichtbaren leeren Slots
 - gemeinsame rendererunabhaengige View-Modelle, Commands, strukturierte
@@ -97,23 +124,20 @@ Mindestens:
   zwischenzeitlicher erneuter Produktausfall), kein unbegrenztes Wiederholen
 - Heizen, Neutralbereich, Kuehlen und Richtungswechsel
 - Stromunterbrechung in jeder Prozessphase
-- fehlende NTP-Zeit ohne erfundenen Fortschritt
-- spaeterer NTP-Abgleich mit Ausfallintervall
-- Zeitintervall innerhalb einer Phase
-- Zeitintervall ueber einer Abschluss- oder Haltegrenze
-- persistierte Verriegelung plus Neustart -> `SAFE_BOOT`
-- wiederholter Watchdog oder Bootschleife -> `SAFE_BOOT`
+- jede Resetcause: all-off/`Unresolved`, vollstaendige Revalidierung, kein
+  automatischer Resume und keine Restart-Akkumulation
+- Resume-Phasenmatrix: nur eindeutig fortsetzbare Phasen als Angebot, alle
+  zeit-/progressabhaengigen R1-Faelle als `NoActiveRun`
 - unvollstaendige Persistenztransaktion -> `SAFE_BOOT`
 - kritischer Persistenzschreibfehler -> sofortige Aktorsperre, sichere
-  Abschaltung und RAM-Latch
-- erfolgreicher minimaler Persistenzfehler-Latch -> Neustart bleibt verriegelt
-- fehlgeschlagener minimaler Latch-Schreibversuch -> keine Fortsetzung in
-  derselben Laufzeit und beim naechsten unklaren Boot `SAFE_BOOT`
-- Recoveryfreigabe ohne bestandene Lesen-Schreiben-Pruefung oder ohne verifizierte
-  neue Recoveryrevision wird abgelehnt
-- verfruehter Latch-Reset ausserhalb des Serviceablaufs oder vor bestandener
-  Speicherpruefung wird abgelehnt
-- korrupter Kontrollpunkt mit sicherem Rueckfall
+  Abschaltung und bestehender #17-Coordinator-/unknown-safe-Zustand; kein
+  neuer allgemeiner Current-Boot-RAM-Latch
+- Watchdog: neue Request und Ack loeschen nicht; expliziter Reset nur ueber
+  den bestehenden #23-Pfad mit aktueller Evidenz
+- `NoActiveRun`-Abschluss: `PreparedHead -> CheckpointSlot -> CommittedHead`
+  und erst nach `Applied` Standby anwenden
+- korrupter Kontrollpunkt -> bestehender technischer #17-Speichervertrag und
+  `FallbackRecovered -> SAFE_BOOT`; kein Fallback-Resume und keine Promotion
 - `COMPLETED` bleibt nach Neustart `COMPLETED`
 - kein Service- oder Aktortest aus `SAFE_BOOT`
 - Quittierung ohne Fehlerreset
@@ -233,11 +257,18 @@ Vor realem Aktorbetrieb:
 - Aktorfreigabelogik getestet
 - Mindestzeiten, Totzeit und Watchdog getestet
 - Persistenz, Transaktionsmarker und Rueckfall getestet
-- kritischer Schreibfehler sperrt Aktoren und setzt den RAM-Latch
-- minimaler persistenter Latch und dessen Fehlerpfad getestet
-- Latch-Reset-Gate nach Speicherpruefung getestet
-- Recoveryfreigabe verlangt verifizierte neue Revision
-- Ausfallintervall und Zeitunsicherheit getestet
+- kritischer Schreibfehler sperrt Aktoren; #17-Status und RAM/FSM bleiben bis
+  `Applied` unknown-safe, ohne neuen persistenten Safety-Latch
+- der bestehende #23-Current-Boot-Watchdog-Latch wird nur ueber den
+  vorhandenen expliziten Resetpfad mit frischer Evidenz geloescht
+- Recoveryangebot, Resume und Fresh Start bleiben vor `Applied`/FSM/frischer
+  Evidenz `Unresolved`; ein Fresh Start wird ueber den echten Application-Bridge
+  bis SafetyCore nachgewiesen
+- normale Config-Ablehnungen mit gueltigem Operational-Runtime erzeugen keinen
+  Safety-Fault; echte Producer-/Integrity-/Indeterminate-Signale bleiben
+  fail-closed
+- `C2-Legacy/#18`: Ausfallintervall, alte Zeitunsicherheit und gewichtete
+  Charge-Recovery sind kein #24-R1-Gate
 - kein Aktortest aus `SAFE_BOOT` erreichbar
 - alle sicherheitsrelevanten automatischen Tests bestanden
 
@@ -332,19 +363,19 @@ Vor Release 1:
 - fehlende thermische Peltierreaktion
 - Sicherheits-Eingriffsgrenze und harte Notgrenze
 - Abbruch eines Servicepulses
-- Peltier-Test ohne Temperatursicherung muss blockiert werden
+- E5/#35/Future: Peltier-Test ohne bestaetigte Temperatursicherung muss
+  blockiert werden
 - Aktortest aus `SAFE_BOOT` muss blockiert werden
 
 ### Versorgung, Zeit und Boot
 
 - Unterbrechung in jeder wesentlichen Phase
 - Brownout und wiederholte Brownouts
-- Watchdog und Bootschleife bis `SAFE_BOOT`
-- Neustart mit persistierter Sicherheitsverriegelung
+- Watchdog-Trip und erneuter Boot: RAM-Latch ist nicht persistent, Boot bleibt
+  trotzdem all-off und revalidiert vollstaendig
 - Neustart mit persistiertem `COMPLETED`
-- fehlende NTP-Zeit
-- spaeterer NTP-Abgleich
-- Ausfallintervall innerhalb und ueber einer Phasengrenze
+- keine automatische Charge-Recovery, kein gewichteter/NTP-basierter R1-
+  Fortschritt
 - WLAN-Ausfall bei weiterlaufendem sicheren Prozess
 
 ### Persistenz und Speicher
@@ -357,15 +388,10 @@ Vor Release 1:
   Sperre vor einem weiteren Aktorbefehl nachweisen
 - unvollstaendigen Transaktionsmarker hinterlassen
 - kritischen Speicher nicht lesbar oder nicht schreibbar simulieren
-- Persistenzfehler-Latch setzen und Neustart ausfuehren
-- Schreiben des minimalen persistenten Latches zusaetzlich fehlschlagen lassen;
-  RAM-Latch und fail-closed-Verhalten muessen bestehen bleiben
-- Recoveryentscheidung erfolgreich schreiben, aber Ruecklesen beziehungsweise
-  Verifikation fehlschlagen lassen; Aktorfreigabe bleibt gesperrt
-- Latch-Reset vor Speicherpruefung, ausserhalb des Serviceablaufs und bei
-  verbleibendem Transaktionsmarker ablehnen
-- Latch-Reset nach bestandener Lesen-Schreiben-Pruefung und dokumentiertem
-  Serviceereignis zulassen
+- #17-Cutpoints vor `PreparedHead`, nach `PreparedHead`/Slot und nach
+  `CommittedHead` injizieren; Teiltransaktionen bleiben unknown-safe
+- `Success` ohne zweiten Readback sowie `CommitOutcomeUnknown` mit allen drei
+  vorhandenen `writeExact()`-Aufloesungen pruefen
 - Historienspeicher bis zur Bereinigung fuellen
 - nichtkritischen RAM- oder Exportfehler erzeugen
 
@@ -377,8 +403,8 @@ Vor Release 1:
 - Aktortest waehrend Lauf und `SAFE_BOOT`
 - konfliktierende Display- und Webaktion
 - alle Stopoptionen
-- vergessene Service-PIN mit lokalem PIN-unabhaengigem Vollreset
-- Versuch eines isolierten PIN-Resets muss abgelehnt werden
+- Service-PIN- und Vollreset-Tests gehoeren zu den spaeteren Service-/Hardware-
+  Gates, nicht zum #24-R1-Safety-Core
 
 ## Hardware-Abnahme
 
@@ -488,12 +514,16 @@ formellen Gate aber kein `PASS`, wenn die Warnung eine Gate-Anforderung betrifft
 - [x] dokumentierte Abnahme jedes relevanten Hardwarestands
 - [x] Temperatursicherung vor dem ersten realen Peltier-Puls
 - [x] `SAFE_BOOT` bleibt aktorfrei
-- [x] Boot bewertet Verriegelungen und Persistenz vor Recovery
-- [x] Ausfallzeit wird als Intervall getestet
+- [x] Boot bewertet aktuelle Producer-/Persistenzintegritaet vor dem
+      Resume-Angebot; es gibt keine allgemeine persistente Verriegelung
+- [x] `C2-Legacy/#18`: Ausfallzeit wird als Intervall dokumentiert, ist aber
+      kein #24-R1-Safety-Gate
 - [x] `COMPLETED` wird nach Neustart wiederhergestellt
-- [x] kritischer Persistenzfehler sperrt Aktoren und setzt RAM-/Persistenz-Latch
-- [x] fehlgeschlagener minimaler Latch-Schreibversuch bleibt fail-closed
-- [x] Latch-Reset nur nach bestandenem Service- und Speicher-Gate
-- [x] PIN-unabhaengiger lokaler Vollreset wird getestet
+- [x] kritischer Persistenzfehler sperrt Aktoren und haelt den bestehenden
+      #17-Coordinator unknown-safe; kein neuer RAM-/Persistenz-Latch
+- [x] der #23-Current-Boot-Watchdog-Latch bleibt bis zum bestehenden
+      expliziten Resetpfad aktiv und wird mit frischer Evidenz geloescht
+- [x] `E4/E5/Future`: physischer Vollreset, Service-Gate und PIN-Regeln sind
+      kein #24-R1-Safety-Clear
 - [x] mindestens siebentaegiger Dauer- und Belastungstest
 - [x] formeller versionierter Testnachweis

@@ -10,6 +10,14 @@ Die exakten Nachlaufzeiten, Wiederholungsintervalle und Grenzwerte bleiben bis
 zur Inbetriebnahme beziehungsweise bis zu den Phasen
 `TEMPERATURE_CONTROL.md` und `SAFETY_AND_FAULTS.md` offen.
 
+## Issue #24 Release-1-Meldungs- und Safety-Grenze
+
+Die stabile R1-FaultCode- und Lifecycle-Matrix wird durch SafetyCore und
+`SAFETY_AND_FAULTS.md` vorgegeben. Dieses Dokument liefert keine zweite
+Fehlerklassifikation. Ack quittiert nur Anzeige/Akustik; Safety-Gate, Fault-
+Clear und `Allowed` bleiben davon unberuehrt. Journal- oder
+Notificationfehler duerfen eine Abschaltung nie verhindern.
+
 ## Rollen der Luefter
 
 ### Aussenluefter
@@ -171,4 +179,5 @@ Verhalten:
 - Erkennung und Reaktion bei Luefterausfall
 - konkrete Summermuster und Wiederholungsintervalle
 - technische Moeglichkeit einer Lautstaerkeregelung
-- genaue Meldungscodes und Fehlerklassen
+- UI-Meldungstexte und Prioritaetsdarstellung; die stabilen #24-FaultCodes
+  kommen aus dem SafetyCore-Vertrag
