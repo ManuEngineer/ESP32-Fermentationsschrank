@@ -10,13 +10,19 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende | `READY`; erster technischer Schritt zur realen ESP32-/Flash-/Heap-/Stack-/UART-Basis. Die Baseline bleibt aktorfrei und behauptet keine produktive Aktorfreigabe. | Eigener Plan-first-Draft-PR und danach reale Board-, Flash-, Boot-, UART- und Ressourcenmessungen |
-| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `PLANNED_SPEC_PENDING`; harte Grundlage #29 sowie der abgeschlossene generische Store-/Wirevertrag #54 sind zu verwenden. Keine zweite Persistenzarchitektur. | #29-Baseline und eigener freigegebener #90-Plan; danach NVS-/Partitions-/Power-Cut-/Readback-Nachweise |
-| 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, #29 bleibt die reale Board-/Ressourcenbasis. | #29-Nachweis, eigener Plan und reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen |
-| 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; der begrenzte sichere Bring-up baut auf #23/#24/#29 auf und benötigt #28 nicht als harte Vorbedingung. Die vollständige Diagnose-/Service-/Export-/UI-Integration bleibt an #28 als späteres Gate gebunden. | #29-Hardwarebasis; Bring-up ohne produktive Aktorfreigabe, danach #28-Integration sowie #35/#106-Gates für produktive Werte und Aktivierung |
-| 5 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt erst nach #29/#30/#32 und den unveränderten Safety-/Aktorverträgen. | sichere Lüfter-/MOSFET-Basis, Sensorbasis, eigener Plan und begrenzte aktorfreie bzw. Service-Hardwaretests |
-| 6 | Issue #19 – Journale, Aufbewahrung, Bereinigung, Backup und Import | Offen; Status des vorhandenen Entwurfs: `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`. Der Entwurf bleibt Reviewgrundlage und wird nicht als Plan- oder Implementierungsfreigabe behandelt. | Nach der Hardwarepriorität neue vollständige Planrevision auf aktuellem `main`; reale Budgets, NVS-/Partitionspfad, R1-Importbedarf und `RunImportAdmission` erneut entscheiden |
-| 7 | Issue #28 / #36 / #35 / #106 – Diagnose-, Abnahme-, Commissioning- und Aktor-Integrationsgates | Weiterhin offen mit bestehenden Abhängigkeiten. #28 verweist auf #19; #36 bündelt #28–#35; #35 liefert reale PI-/Safety-Grenzen; #106 bindet den per-Run-Aktorparametersnapshot an diese Werte. | Nach Auflösung der jeweiligen Live-Abhängigkeiten erste reale geschlossene Regelkette und anschließende Hardware-/Commissioning-Nachweise |
+| 1 | Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende | `READY`; reale ESP32-, Flash-, Heap-, Stack-, UART- und Boot-/Recoverybasis vor UI- und Adapteraufbau. Die Baseline bleibt aktorfrei. | Eigener Plan-first-Draft-PR und reale Board-, Flash-, Boot-, UART- und Ressourcenmessungen |
+| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `PLANNED_SPEC_PENDING`; baut auf #29 und dem abgeschlossenen generischen Store-/Wirevertrag #54 auf. Keine zweite Persistenzarchitektur. | #29-Baseline, eigener freigegebener #90-Plan sowie NVS-/Partitions-/Power-Cut-/Readback-Nachweise |
+| 3 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90 |
+| 4 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
+| 5 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26/#29 und bringt die echte Bedienung am Gerät über dieselben Contracts. | Hardware-/Pin-/Controllerbeweis, Ressourcen-/Lizenznachweis, reale Bedienungs- und Kalibrierungstests |
+| 6 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, #29 sowie die produktionsnahen Bedien-/Servicepfade bleiben Grundlage. | Eigener Plan, reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen über die bestehende Produktsoftware |
+| 7 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; eigener abschliessbarer Hardware-/Adapterscope nach #23/#24/#29. #28/#35/#106 sind keine #32-Abschlussvoraussetzungen. | Reale Zuordnung, Pegel, Boot-/Reset-, Verbraucher-, Strom-/Anlauf- und Adapter-/Testnachweise ohne produktive `ActuatorSafetyGateStatus::Allowed`-Freigabe |
+| 8 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt auf dem abgeschlossenen #32-Hardwarefundament nach #30. | Begrenzte sichere Peltier-/BTS7960-Serviceprüfung über die echte Produktsoftware |
+| 9 | Issue #106 strukturell – Per-Run-Producer-/Schema-/Snapshotmechanismus | `PLANNED_SPEC_PENDING`; darf nach #33 strukturell ohne erfundene Produktivwerte vorbereitet werden. | Eigener Plan; #35 bleibt Werte-/Grenzengate, keine TBD-Aktivierung |
+| 10 | Issue #34 – Sensorvergleich und thermische Grundvermessung | `TBD_COMMISSIONING`; nach #29/#30/#31/#32/#33 und damit bewusst später als der bedienbare Gerätepfad. | Reale Messreihen, Offsets und Exporte; keine vorgezogene Wegwerf-Testsoftware |
+| 11 | Issue #35 – PI-, Luft-, Aktor- und Sicherheitsparameter | `TBD_COMMISSIONING`; reale Werte und Grenzen nach #34. | Commissioning-Nachweise und verbindliche produktive Werte-/Safetyfreigabe |
+| 12 | Issue #106 produktiv – Per-Run-Bindung und Aktoraktivierung | `PLANNED_SPEC_PENDING`; produktiver Abschluss erst mit den durch #35 gelieferten Werten und Grenzen. | Produktive Snapshot-/Recoverybindung und Aktivierung ohne TBD-Werte |
+| 13 | Issue #19 / #28 / #36 / #37 – zurückgestellte Journale-, Diagnose-, Abnahme- und Releasegates | #19 bleibt `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`; #28 bleibt späteres Diagnose-/Service-/Exportgate mit seiner #19-Abhängigkeit. | Neue vollständige #19-Planrevision auf aktuellem `main`; danach spätere vollständige Diagnose-/Abnahme-/Releasegates |
 
 ## Naechste fachliche Arbeit
 
@@ -25,27 +31,43 @@ abgeschlossen. Der Release-1-Safety-Core bleibt beim bestätigten KISS- und
 fail-closed-Vertrag; Hardware-, reale Aktor-, NVS- und
 Inbetriebnahmenachweise sind dadurch nicht vorweggenommen.
 
-Die kürzeste sinnvolle technische Reihenfolge führt zunächst zur realen
-Hardwarebasis:
+Die endgültige Priorisierungsrichtung ist:
 
-1. #29: aktorfreier ESP32-Bring-up sowie Flash-, Heap-, Stack-, UART- und
-   sichere Boot-/Resetbaseline;
-2. #90: produktiver ESP-IDF-NVS-Adapter über den bestehenden `IStateStore`;
-3. #30: reale Temperatursensoren;
-4. #32: Lüfter, Summer und MOSFET-Ausgänge;
-5. #33: BTS7960/Peltier mit begrenzten Service-/Bring-up-Prüfungen.
+```text
+#29 -> #90 -> #25 -> #26 -> #31 -> #30 -> #32 -> #33
+  -> erste real bedienbare Fermenter-Hardwareintegration
+  -> #106 strukturell -> #34 -> #35 -> #106 produktiv
+  -> spätere vollständige Diagnose-/Abnahme-/Releasegates
+```
 
-Issue #32 wird für den begrenzten, sicheren Hardware-Bring-up nach #23/#24/#29
-eingeordnet; #28 ist dafür keine harte Vorbedingung. #28 bleibt das spätere
-Diagnose-/Service-/Export-/UI-Integrationsgate, soweit #32 davon abhängt, und
-seine eigene Abhängigkeit auf #19 bleibt unverändert. Eine produktive
-Aktorfreigabe beziehungsweise `ActuatorSafetyGateStatus::Allowed` wird durch
-den Bring-up nicht vorweggenommen und bleibt an #35/#106 gebunden.
+#29 und #90 liefern zuerst reale Plattform-, Ressourcen- und Persistenzbasis.
+#25/#26 bilden darauf die wiederverwendbare Device Shell und den
+Fermentations-Workspace; #31 bringt dieselben rendererunabhängigen Contracts
+auf reales Display und Touch. #30, #32 und #33 werden danach über die bis dahin
+vorhandenen produktionsnahen Bedien-, Service- und Diagnosepfade integriert.
 
-Danach werden #35/#36 und #106 anhand ihrer bestehenden Werte-, Hardware- und
-Abnahmeabhängigkeiten für die erste reale geschlossene Regelkette eingeordnet.
-Issue #19 wird zeitlich nach hinten verschoben, bleibt offen und fachlich
-erhalten.
+Es entsteht keine separate Wegwerf-Testsoftware und kein zweiter temporärer
+Bedien- oder Diagnosevertrag. Schmale Low-Level-Nachweise bleiben zulässig,
+wenn sie für Treiber, Pegel, Boot-/Reset-Sicherheit oder Fehlersuche notwendig
+sind; sie ersetzen aber nicht die spätere Produktsoftware.
+
+Issue #32 besitzt einen eigenen abschliessbaren Hardware-/Adapterscope nach
+#23/#24/#29. #28, #35 und #106 sind keine Abschlussvoraussetzungen von #32:
+#28 bleibt das spätere Diagnose-/Service-/Exportgate, #35 das Werte-/
+Safety-Commissioninggate und #106 das produktive Per-Run-/Aktivierungsgate.
+Das Schliessen von #32 behauptet keine produktive
+`ActuatorSafetyGateStatus::Allowed`-Freigabe.
+
+#34 und #35 bleiben wichtige Commissioning- und Releasegates, sind aber nicht
+Voraussetzung für die frühere bedienbare Firmware oder die schrittweise reale
+Hardwareintegration. #106 darf strukturell ohne erfundene Produktivwerte
+vorbereitet werden; produktive Werte und Aktivierung bleiben an #35 gebunden.
+
+Issue #19 bleibt zeitlich zurückgestellt, offen und fachlich erhalten. Sein
+externer Entwurf bleibt nicht kanonisch; vor einer späteren Umsetzung ist auf
+aktuellem `main` eine neue vollständige Planrevision erforderlich. #28 wird
+nicht als vorgezogener Parallelvertrag umgesetzt und behält seine Abhängigkeit
+auf #19.
 
 Issue #16 bleibt Trackingcontainer: #54–#57 und das
 `CONFIGURATION_SAFETY_INTEGRATION_GATE` sind abgeschlossen, reale
@@ -55,12 +77,19 @@ NVS-/Partitions-/Flash-/Hardwareabnahmen bleiben insbesondere über #90 offen.
 
 - PR #113 / Issue #111 sind als Markdown-only-Governancearbeit abgeschlossen;
   Firmware- und Safety-Semantik bleiben davon unberührt.
-- #29, #90, #30, #32 und #33 beginnen jeweils nur über ihr eigenes
-  Live-Issue, den geltenden Plan-first-Workflow und die jeweiligen Hardware-/
-  Owner-Gates.
+- #29 und #90 bilden die erste reale Plattformbasis; danach folgen #25, #26
+  und #31 für die echte Device Shell, App und Bedienung.
+- #30, #32 und #33 werden über die produktionsnahen UI-/Service-/Diagnosepfade
+  integriert. Low-Level-Hardwaretests bleiben schmal und erzeugen keine
+  separate Wegwerf-Testanwendung.
+- #106 strukturell, #34, #35 und #106 produktiv folgen erst nach der ersten
+  real bedienbaren Fermenter-Hardwareintegration.
 - #19 erhält vor einer späteren Umsetzung eine neue vollständige Planrevision
   auf dann aktuellem `main`. Der bestehende Review-Draft ist weder
   freigegeben noch kanonisch.
+- #28 bleibt ein späteres Diagnose-/Service-/Exportgate und verwendet, wo
+  Bedienung erforderlich ist, die #25/#26/#31-Contracts statt eines zweiten
+  temporären Vertrags. Web/WLAN blockieren den lokalen Gerätebetrieb nicht.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder
