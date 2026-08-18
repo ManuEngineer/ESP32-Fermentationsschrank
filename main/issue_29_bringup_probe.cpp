@@ -36,33 +36,39 @@ constexpr TickType_t kProbeControlWaitTicks = pdMS_TO_TICKS(30000U);
 constexpr UBaseType_t kProbePriority = tskIDLE_PRIORITY + 1U;
 constexpr std::uint32_t kStartProbeNotification = 1U << 0U;
 constexpr std::uint32_t kCleanupProbeNotification = 1U << 1U;
+constexpr std::uint32_t kProbeReadyEvent = 1U << 2U;
+constexpr std::uint32_t kProbeCompletedEvent = 1U << 3U;
+constexpr std::uint32_t kProbeCleanupEvent = 1U << 4U;
 
 // ESP-IDF 6.0.2 documents uxTaskGetStackHighWaterMark() as returning bytes
 // on ESP32 (rather than the word unit used by stock FreeRTOS documentation).
 // The four internal samples therefore use this API through its NULL/current-
 // task form and expose the result as *_bytes.
 
-// This is a diagnostic-task stack formula, not a product setting. It keeps
-// the objects deliberately held by the probe visible in the calculation and
-// adds the bounded compiler/map-derived call-path reserve. The value is
-// generated from the relevant esp32_bringup -fstack-usage evidence and is
-// deliberately not a product setting or a main-task change.
+// This is a diagnostic-task stack formula, not a product setting. The
+// relevant non-inlined frames are summed along the actual deterministic
+// candidate-allocation-failure path. The small script
+// scripts/analyze_issue_29_stack.py verifies the corresponding .su/.ci
+// artefacts and reproduces this result.
 constexpr std::size_t kHeldObjectBytes =
     sizeof(CommandDecision) + sizeof(RunCommandState) +
     sizeof(ProgramStartRequest) + sizeof(RunPersistenceCoordinator) +
     sizeof(TemperatureControlApplicationOrchestrator) +
     sizeof(TemperatureController) + sizeof(ActuatorPlanner) +
     sizeof(TargetQualificationEvaluator) + sizeof(SafetyCore);
-// esp32_bringup @ -Og, Xtensa GCC 15.2.0, -fstack-usage: runProbe() has a
-// 53248-byte maximum frame. This is the actual compiled call-path evidence,
-// not a guessed product stack value.
-constexpr std::size_t kMeasuredCallPathBytes = 53248U;
+// esp32_bringup @ -Og, Xtensa GCC 15.2.0, -fstack-usage and
+// -fcallgraph-info=su: probeTask + runProbe + persistFreshStartCommand +
+// TemperatureControlApplicationOrchestrator::persistCommand +
+// RunPersistenceCoordinator::persistCommand + result() = 62928 bytes.
+// Individual .su values are not a cumulative bound; this value is.
+constexpr std::size_t kMeasuredCallPathBytes = 62928U;
 constexpr std::size_t kMeasuredCallPathSafetyBufferBytes = 4096U;
-constexpr std::size_t kCompilerCallPathBufferBytes =
-    (kHeldObjectBytes > kMeasuredCallPathBytes ? kHeldObjectBytes
-                                               : kMeasuredCallPathBytes) +
-    kMeasuredCallPathSafetyBufferBytes;
-constexpr std::size_t kProbeTaskStackBytes = kCompilerCallPathBufferBytes;
+constexpr std::size_t kUnroundedProbeTaskStackBytes =
+    kMeasuredCallPathBytes + kMeasuredCallPathSafetyBufferBytes;
+// Keep the diagnostic allocation on a reproducible 1 KiB boundary after the
+// measured cumulative path and bounded safety buffer have been accounted for.
+constexpr std::size_t kProbeTaskStackBytes =
+    ((kUnroundedProbeTaskStackBytes + 1023U) / 1024U) * 1024U;
 static_assert(kProbeTaskStackBytes <=
               static_cast<std::size_t>(
                   std::numeric_limits<configSTACK_DEPTH_TYPE>::max()));
@@ -90,7 +96,7 @@ struct ProbeContext {
     bool localApplyMeasured{false};
     bool taskCleanupProven{false};
     bool afterTaskCleanupMeasured{false};
-    volatile bool cleanupStarted{false};
+    bool cleanupHandoffReceived{false};
     bool stateUnchanged{false};
     bool persistenceUnchanged{false};
     bool actorReleaseObserved{false};
@@ -392,7 +398,17 @@ bool waitForTaskControl(std::uint32_t& notification, TickType_t waitTicks) {
                            &notification, waitTicks) == pdTRUE;
 }
 
-void deleteProbeTask(ProbeContext& context, bool cleanupAlreadyRequested) {
+bool waitForCallerEvent(std::uint32_t expectedEvent, TickType_t waitTicks) {
+    std::uint32_t notification = 0U;
+    if (xTaskNotifyWait(0U, std::numeric_limits<std::uint32_t>::max(),
+                        &notification, waitTicks) != pdTRUE) {
+        return false;
+    }
+    return (notification & expectedEvent) != 0U;
+}
+
+[[noreturn]] void deleteProbeTask(ProbeContext& context,
+                                  bool cleanupAlreadyRequested) {
     std::uint32_t notification = 0U;
     if (!cleanupAlreadyRequested &&
         (!waitForTaskControl(notification, kProbeControlWaitTicks) ||
@@ -400,9 +416,18 @@ void deleteProbeTask(ProbeContext& context, bool cleanupAlreadyRequested) {
         context.taskFailed = true;
     }
 
-    context.cleanupStarted = true;
-    xTaskNotifyGive(context.caller);
+    // Copy the only context value needed by the final handoff before sending
+    // the event. After xTaskNotify returns, this worker deliberately performs
+    // no further access through `context`; the caller may then safely leave
+    // run() only after receiving the event.
+    const TaskHandle_t caller = context.caller;
+    if (caller != nullptr) {
+        (void)xTaskNotify(caller, kProbeCleanupEvent, eSetBits);
+    }
     vTaskDelete(nullptr);
+    for (;;) {
+        vTaskDelay(portMAX_DELAY);
+    }
 }
 
 void probeTask(void* argument) {
@@ -410,24 +435,23 @@ void probeTask(void* argument) {
     context->readyTaskStackHighWaterMarkBytes =
         uxTaskGetStackHighWaterMark(nullptr);
     context->ready = true;
-    xTaskNotifyGive(context->caller);
+    (void)xTaskNotify(context->caller, kProbeReadyEvent, eSetBits);
 
     std::uint32_t notification = 0U;
     if (!waitForTaskControl(notification, kProbeControlWaitTicks) ||
         (notification & kStartProbeNotification) == 0U) {
         context->taskFailed = true;
         context->completed = true;
-        xTaskNotifyGive(context->caller);
+        (void)xTaskNotify(context->caller, kProbeCompletedEvent, eSetBits);
         deleteProbeTask(*context,
                         (notification & kCleanupProbeNotification) != 0U);
-        return;
     }
 
     runProbe(*context);
     context->completed = true;
     context->completionTaskStackHighWaterMarkBytes =
         uxTaskGetStackHighWaterMark(nullptr);
-    xTaskNotifyGive(context->caller);
+    (void)xTaskNotify(context->caller, kProbeCompletedEvent, eSetBits);
     deleteProbeTask(*context, false);
 }
 
@@ -476,25 +500,40 @@ void logProbeSummary(const ProbeContext& context) {
              context.safetyFailClosed ? "true" : "false");
     ESP_LOGI(kTag,
              "internal_resource_hwm_valid=%s local_apply_measured=%s"
-             " task_cleanup_proven=%s after_task_cleanup_measured=%s",
+             " cleanup_handoff_received=%s task_cleanup_proven=%s"
+             " after_task_cleanup_measured=%s",
              context.resourcePass ? "true" : "false",
              context.localApplyMeasured ? "true" : "false",
+             context.cleanupHandoffReceived ? "true" : "false",
              context.taskCleanupProven ? "true" : "false",
              context.afterTaskCleanupMeasured ? "true" : "false");
 }
 
-bool requestCleanupAndWait(ProbeContext& context) {
-    if (context.task == nullptr ||
-        xTaskNotify(context.task, kCleanupProbeNotification, eSetBits) !=
-            pdPASS) {
-        return false;
+bool requestCleanupAndJoin(ProbeContext& context) {
+    const TaskHandle_t task = context.task;
+    if (task == nullptr ||
+        xTaskNotify(task, kCleanupProbeNotification, eSetBits) != pdPASS) {
+        ESP_LOGE(kTag,
+                 "BLOCKED: cleanup request failed; retaining Context until"
+                 " task termination is proven");
+        for (;;) {
+            vTaskDelay(portMAX_DELAY);
+        }
     }
-    const TickType_t cleanupStart = xTaskGetTickCount();
-    while (!context.cleanupStarted &&
-           (xTaskGetTickCount() - cleanupStart) < kCleanupWaitTicks) {
-        vTaskDelay(1U);
+
+    if (!waitForCallerEvent(kProbeCleanupEvent, kCleanupWaitTicks)) {
+        context.taskFailed = true;
+        ESP_LOGE(kTag,
+                 "BLOCKED: cleanup handoff exceeded bounded wait;"
+                 " retaining Context until worker handoff is received");
+        // A timeout is not ownership proof. Keep this caller alive in a
+        // fail-closed join until the worker has completed its final context
+        // access and sent the cleanup event.
+        while (!waitForCallerEvent(kProbeCleanupEvent, portMAX_DELAY)) {
+        }
     }
-    return context.cleanupStarted;
+    context.cleanupHandoffReceived = true;
+    return true;
 }
 
 }  // namespace
@@ -514,12 +553,13 @@ bool run() {
         return false;
     }
 
-    if (ulTaskNotifyTake(pdTRUE, kProbeWaitTicks) == 0U || !context.ready) {
+    if (!waitForCallerEvent(kProbeReadyEvent, kProbeWaitTicks) ||
+        !context.ready) {
         context.taskFailed = true;
         ESP_LOGE(kTag,
                  "BLOCKED: diagnostic task did not reach its blocked start"
                  " gate");
-        (void)requestCleanupAndWait(context);
+        (void)requestCleanupAndJoin(context);
         return false;
     }
     context.afterTaskCreate = sampleResources(context.task, context.caller);
@@ -527,42 +567,29 @@ bool run() {
         pdPASS) {
         context.taskFailed = true;
         ESP_LOGE(kTag, "BLOCKED: diagnostic task start notification failed");
-        (void)requestCleanupAndWait(context);
+        (void)requestCleanupAndJoin(context);
         return false;
     }
 
-    if (ulTaskNotifyTake(pdTRUE, kProbeWaitTicks) == 0U || !context.completed) {
+    if (!waitForCallerEvent(kProbeCompletedEvent, kProbeWaitTicks) ||
+        !context.completed) {
         context.taskFailed = true;
         ESP_LOGE(kTag,
                  "BLOCKED: diagnostic task did not complete within the"
                  " bounded wait");
-        (void)requestCleanupAndWait(context);
+        (void)requestCleanupAndJoin(context);
         return false;
     }
 
-    if (context.task == nullptr ||
-        xTaskNotify(context.task, kCleanupProbeNotification, eSetBits) !=
-            pdPASS) {
-        context.taskFailed = true;
-        ESP_LOGE(kTag, "BLOCKED: diagnostic task cleanup notification failed");
-        return false;
-    }
-    const TickType_t cleanupStart = xTaskGetTickCount();
-    while (!context.cleanupStarted &&
-           (xTaskGetTickCount() - cleanupStart) < kCleanupWaitTicks) {
-        vTaskDelay(1U);
-    }
-    if (!context.cleanupStarted) {
-        context.taskFailed = true;
-        ESP_LOGE(kTag,
-                 "BLOCKED: diagnostic task did not enter cleanup before"
-                 " timeout");
-        return false;
-    }
+    // Every post-create exit uses this same join. Receipt of the cleanup
+    // event proves that the worker has performed its last access to context;
+    // it is not confused with the later B2 heap-reclamation proof.
+    (void)requestCleanupAndJoin(context);
 
-    // The worker has acknowledged cleanup and is deleting itself. Do not
-    // query its handle. The Idle task owns deferred TCB/stack reclamation;
-    // wait for the B0 heap/block baseline to be restored before recording B2.
+    // The worker has completed its context handoff and is deleting itself.
+    // Do not query its handle. The Idle task owns deferred TCB/stack
+    // reclamation; wait for the B0 heap/block baseline to be restored before
+    // recording B2.
     const TickType_t idleStart = xTaskGetTickCount();
     while ((xTaskGetTickCount() - idleStart) < kCleanupWaitTicks) {
         vTaskDelay(1U);

@@ -24,6 +24,6 @@ if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
         "src/run_commands.cpp"
         "src/run_persistence_coordinator.cpp"
         "src/temperature_control_orchestrator.cpp"
-        PROPERTIES COMPILE_OPTIONS "-fstack-usage"
+        PROPERTIES COMPILE_OPTIONS "-fstack-usage;-fcallgraph-info=su"
     )
 endif()

@@ -41,7 +41,7 @@ if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
     target_sources(${COMPONENT_LIB} PRIVATE "issue_29_bringup_probe.cpp")
     set_source_files_properties(
         "issue_29_bringup_probe.cpp"
-        PROPERTIES COMPILE_OPTIONS "-fstack-usage"
+        PROPERTIES COMPILE_OPTIONS "-fstack-usage;-fcallgraph-info=su"
     )
     target_include_directories(${COMPONENT_LIB} PRIVATE
         "../lib/fermentation_app/private"
