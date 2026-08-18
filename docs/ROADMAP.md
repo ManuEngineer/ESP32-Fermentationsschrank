@@ -13,7 +13,7 @@ nicht kopiert, sondern verlinkt.
 | 1 | Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende | `READY`; erster technischer Schritt zur realen ESP32-/Flash-/Heap-/Stack-/UART-Basis. Die Baseline bleibt aktorfrei und behauptet keine produktive Aktorfreigabe. | Eigener Plan-first-Draft-PR und danach reale Board-, Flash-, Boot-, UART- und Ressourcenmessungen |
 | 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `PLANNED_SPEC_PENDING`; harte Grundlage #29 sowie der abgeschlossene generische Store-/Wirevertrag #54 sind zu verwenden. Keine zweite Persistenzarchitektur. | #29-Baseline und eigener freigegebener #90-Plan; danach NVS-/Partitions-/Power-Cut-/Readback-Nachweise |
 | 3 | Issue #30 – reale DS18B20-Sensoradapter | `BLOCKED_HARDWARE`; #20/#21 sind abgeschlossen, #29 bleibt die reale Board-/Ressourcenbasis. | #29-Nachweis, eigener Plan und reale Bus-, ROM-, CRC-, Hot-Plug- und Fehlerprüfungen |
-| 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; #23/#24 sind abgeschlossen, #29 bleibt die offene Hardwarebasis, und die bestehende Abhängigkeit auf #28 bleibt unverändert sichtbar. | #29-Hardwarebasis plus Auflösung der bestehenden #28-Abhängigkeit; keine kosmetische Dependency-Streichung |
+| 4 | Issue #32 – Lüfter, Summer und Onboard-MOSFET-Ausgaenge | `BLOCKED_HARDWARE`; der begrenzte sichere Bring-up baut auf #23/#24/#29 auf und benötigt #28 nicht als harte Vorbedingung. Die vollständige Diagnose-/Service-/Export-/UI-Integration bleibt an #28 als späteres Gate gebunden. | #29-Hardwarebasis; Bring-up ohne produktive Aktorfreigabe, danach #28-Integration sowie #35/#106-Gates für produktive Werte und Aktivierung |
 | 5 | Issue #33 – BTS7960, R_IS/L_IS und begrenzte Peltierpruefungen | `BLOCKED_HARDWARE`; folgt erst nach #29/#30/#32 und den unveränderten Safety-/Aktorverträgen. | sichere Lüfter-/MOSFET-Basis, Sensorbasis, eigener Plan und begrenzte aktorfreie bzw. Service-Hardwaretests |
 | 6 | Issue #19 – Journale, Aufbewahrung, Bereinigung, Backup und Import | Offen; Status des vorhandenen Entwurfs: `REVIEW_DRAFT – PRESERVE, NOT APPROVED, NOT CANONICAL, IMPLEMENTATION NOT_STARTED`. Der Entwurf bleibt Reviewgrundlage und wird nicht als Plan- oder Implementierungsfreigabe behandelt. | Nach der Hardwarepriorität neue vollständige Planrevision auf aktuellem `main`; reale Budgets, NVS-/Partitionspfad, R1-Importbedarf und `RunImportAdmission` erneut entscheiden |
 | 7 | Issue #28 / #36 / #35 / #106 – Diagnose-, Abnahme-, Commissioning- und Aktor-Integrationsgates | Weiterhin offen mit bestehenden Abhängigkeiten. #28 verweist auf #19; #36 bündelt #28–#35; #35 liefert reale PI-/Safety-Grenzen; #106 bindet den per-Run-Aktorparametersnapshot an diese Werte. | Nach Auflösung der jeweiligen Live-Abhängigkeiten erste reale geschlossene Regelkette und anschließende Hardware-/Commissioning-Nachweise |
@@ -35,13 +35,17 @@ Hardwarebasis:
 4. #32: Lüfter, Summer und MOSFET-Ausgänge;
 5. #33: BTS7960/Peltier mit begrenzten Service-/Bring-up-Prüfungen.
 
+Issue #32 wird für den begrenzten, sicheren Hardware-Bring-up nach #23/#24/#29
+eingeordnet; #28 ist dafür keine harte Vorbedingung. #28 bleibt das spätere
+Diagnose-/Service-/Export-/UI-Integrationsgate, soweit #32 davon abhängt, und
+seine eigene Abhängigkeit auf #19 bleibt unverändert. Eine produktive
+Aktorfreigabe beziehungsweise `ActuatorSafetyGateStatus::Allowed` wird durch
+den Bring-up nicht vorweggenommen und bleibt an #35/#106 gebunden.
+
 Danach werden #35/#36 und #106 anhand ihrer bestehenden Werte-, Hardware- und
 Abnahmeabhängigkeiten für die erste reale geschlossene Regelkette eingeordnet.
 Issue #19 wird zeitlich nach hinten verschoben, bleibt offen und fachlich
-erhalten. Die im Issue-#32-Text bestehende Abhängigkeit auf #28 und die
-nachgelagerte #28-Abhängigkeit auf #19 werden nicht still verändert; falls die
-Hardwarekette diese Grenze früher benötigt, ist dafür eine ausdrückliche
-Ownerentscheidung zur Abhängigkeit erforderlich.
+erhalten.
 
 Issue #16 bleibt Trackingcontainer: #54–#57 und das
 `CONFIGURATION_SAFETY_INTEGRATION_GATE` sind abgeschlossen, reale
