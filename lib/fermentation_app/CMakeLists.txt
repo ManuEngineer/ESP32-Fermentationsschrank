@@ -18,4 +18,12 @@ if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
         APP_ISSUE_29_BRINGUP_PROBE=1
     )
     target_include_directories(${COMPONENT_LIB} PRIVATE "private")
+    set_source_files_properties(
+        "src/program_model.cpp"
+        "src/process_state_machine.cpp"
+        "src/run_commands.cpp"
+        "src/run_persistence_coordinator.cpp"
+        "src/temperature_control_orchestrator.cpp"
+        PROPERTIES COMPILE_OPTIONS "-fstack-usage"
+    )
 endif()

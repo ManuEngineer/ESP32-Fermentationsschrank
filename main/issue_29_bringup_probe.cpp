@@ -31,22 +31,38 @@ namespace {
 
 constexpr char kTag[] = "issue29_probe";
 constexpr TickType_t kProbeWaitTicks = pdMS_TO_TICKS(10000U);
+constexpr TickType_t kCleanupWaitTicks = pdMS_TO_TICKS(3000U);
+constexpr TickType_t kProbeControlWaitTicks = pdMS_TO_TICKS(30000U);
 constexpr UBaseType_t kProbePriority = tskIDLE_PRIORITY + 1U;
+constexpr std::uint32_t kStartProbeNotification = 1U << 0U;
+constexpr std::uint32_t kCleanupProbeNotification = 1U << 1U;
+
+// ESP-IDF 6.0.2 documents uxTaskGetStackHighWaterMark() as returning bytes
+// on ESP32 (rather than the word unit used by stock FreeRTOS documentation).
+// The four internal samples therefore use this API through its NULL/current-
+// task form and expose the result as *_bytes.
 
 // This is a diagnostic-task stack formula, not a product setting. It keeps
 // the objects deliberately held by the probe visible in the calculation and
-// reserves a separately documented call-path/diagnostic buffer. The actual
-// ESP32 compiler stack-usage/map result remains a release gate: an
-// unverified result is BLOCKED, never a reason to silently enlarge the main
-// task or move CommandDecision to the heap.
-constexpr std::size_t kCompilerCallPathBufferBytes = 16U * 1024U;
-constexpr std::size_t kProbeTaskStackBytes =
+// adds the bounded compiler/map-derived call-path reserve. The value is
+// generated from the relevant esp32_bringup -fstack-usage evidence and is
+// deliberately not a product setting or a main-task change.
+constexpr std::size_t kHeldObjectBytes =
     sizeof(CommandDecision) + sizeof(RunCommandState) +
     sizeof(ProgramStartRequest) + sizeof(RunPersistenceCoordinator) +
     sizeof(TemperatureControlApplicationOrchestrator) +
     sizeof(TemperatureController) + sizeof(ActuatorPlanner) +
-    sizeof(TargetQualificationEvaluator) + sizeof(SafetyCore) +
-    kCompilerCallPathBufferBytes;
+    sizeof(TargetQualificationEvaluator) + sizeof(SafetyCore);
+// esp32_bringup @ -Og, Xtensa GCC 15.2.0, -fstack-usage: runProbe() has a
+// 53248-byte maximum frame. This is the actual compiled call-path evidence,
+// not a guessed product stack value.
+constexpr std::size_t kMeasuredCallPathBytes = 53248U;
+constexpr std::size_t kMeasuredCallPathSafetyBufferBytes = 4096U;
+constexpr std::size_t kCompilerCallPathBufferBytes =
+    (kHeldObjectBytes > kMeasuredCallPathBytes ? kHeldObjectBytes
+                                               : kMeasuredCallPathBytes) +
+    kMeasuredCallPathSafetyBufferBytes;
+constexpr std::size_t kProbeTaskStackBytes = kCompilerCallPathBufferBytes;
 static_assert(kProbeTaskStackBytes <=
               static_cast<std::size_t>(
                   std::numeric_limits<configSTACK_DEPTH_TYPE>::max()));
@@ -71,6 +87,10 @@ struct ProbeContext {
     bool taskFailed{false};
     bool decisionProposed{false};
     bool localApplyPass{false};
+    bool localApplyMeasured{false};
+    bool taskCleanupProven{false};
+    bool afterTaskCleanupMeasured{false};
+    volatile bool cleanupStarted{false};
     bool stateUnchanged{false};
     bool persistenceUnchanged{false};
     bool actorReleaseObserved{false};
@@ -78,6 +98,11 @@ struct ProbeContext {
     std::size_t storeWriteCount{0U};
     std::size_t storeReadCount{0U};
     RunPersistenceResultStatus faultStatus{RunPersistenceResultStatus::Blocked};
+    RunPersistenceStep faultStep{RunPersistenceStep::None};
+    RunPersistenceTechnicalReason faultTechnicalReason{
+        RunPersistenceTechnicalReason::None};
+    RunPersistenceDurability faultDurability{
+        RunPersistenceDurability::Unchanged};
     ResourceSample beforeDecision;
     ResourceSample decisionHeld;
     ResourceSample localApply;
@@ -89,12 +114,15 @@ struct ProbeContext {
     UBaseType_t completionTaskStackHighWaterMarkBytes{0U};
 };
 
-ResourceSample sampleResources(TaskHandle_t task, TaskHandle_t mainTask) {
+ResourceSample sampleResources(TaskHandle_t task, TaskHandle_t mainTask,
+                               bool sampleCurrentTask = false) {
     return {
         esp_get_free_heap_size(),
         esp_get_minimum_free_heap_size(),
         heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
-        task == nullptr ? 0U : uxTaskGetStackHighWaterMark(task),
+        sampleCurrentTask
+            ? uxTaskGetStackHighWaterMark(nullptr)
+            : (task == nullptr ? 0U : uxTaskGetStackHighWaterMark(task)),
         mainTask == nullptr ? 0U : uxTaskGetStackHighWaterMark(mainTask),
     };
 }
@@ -270,33 +298,38 @@ void runProbe(ProbeContext& context) {
     RunCommandState current = standbyState();
     ProgramStartRequest request = maximalStartRequest();
 
-    context.beforeDecision = sampleResources(nullptr, context.caller);
+    context.beforeDecision = sampleResources(nullptr, context.caller, true);
     std::optional<CommandDecision> decision;
     decision.emplace(decideProgramStart(current, request));
     context.decisionProposed = decision->proposed();
-    context.decisionHeld = sampleResources(nullptr, context.caller);
+    context.decisionHeld = sampleResources(nullptr, context.caller, true);
 
     if (!context.decisionProposed) {
         context.taskFailed = true;
-        context.completed = true;
-        xTaskNotifyGive(context.caller);
-        vTaskDelete(nullptr);
         return;
     }
 
     {
         RunCommandState candidate = current;
-        context.localApply = sampleResources(nullptr, context.caller);
         const auto apply = issue_29_bringup::applyCandidateForResourceProbe(
             candidate, *decision);
         context.localApplyPass = apply == CommandStatus::Applied;
+        if (context.localApplyPass) {
+            // Keep the decision, the applied candidate, and their dynamic
+            // contents alive while measuring the third planned point.
+            context.localApply = sampleResources(nullptr, context.caller, true);
+            context.localApplyMeasured = true;
+        } else {
+            context.taskFailed = true;
+        }
     }
 
     // Release the full decision and candidate before starting the separate
     // error-contract probe. This keeps the resource and fault observations
     // distinct and makes the dynamic string/copy heap cost visible.
     decision.reset();
-    context.afterDecisionRelease = sampleResources(nullptr, context.caller);
+    context.afterDecisionRelease =
+        sampleResources(nullptr, context.caller, true);
 
     BringupStateStore store;
     RunPersistenceCoordinator coordinator(
@@ -322,6 +355,9 @@ void runProbe(ProbeContext& context) {
         faultState, faultDecision, RunCheckpointTime{100U, std::nullopt});
 
     context.faultStatus = faultResult.status;
+    context.faultStep = faultResult.step;
+    context.faultTechnicalReason = faultResult.technicalReason;
+    context.faultDurability = faultResult.durability;
     context.storeWriteCount = store.writeCount();
     context.storeReadCount = store.readCount();
     context.stateUnchanged = unchangedStandbyState(faultState);
@@ -342,10 +378,29 @@ void runProbe(ProbeContext& context) {
         faultResult.step == RunPersistenceStep::CandidateApply &&
         context.stateUnchanged && context.persistenceUnchanged &&
         !context.actorReleaseObserved && context.safetyFailClosed;
-    context.resourcePass = context.localApplyPass;
-    context.completed = true;
-    context.completionTaskStackHighWaterMarkBytes =
-        uxTaskGetStackHighWaterMark(nullptr);
+    context.resourcePass =
+        context.localApplyPass && context.localApplyMeasured &&
+        context.beforeDecision.taskStackHighWaterMarkBytes > 0U &&
+        context.decisionHeld.taskStackHighWaterMarkBytes > 0U &&
+        context.localApply.taskStackHighWaterMarkBytes > 0U &&
+        context.afterDecisionRelease.taskStackHighWaterMarkBytes > 0U;
+}
+
+bool waitForTaskControl(std::uint32_t& notification, TickType_t waitTicks) {
+    notification = 0U;
+    return xTaskNotifyWait(0U, std::numeric_limits<std::uint32_t>::max(),
+                           &notification, waitTicks) == pdTRUE;
+}
+
+void deleteProbeTask(ProbeContext& context, bool cleanupAlreadyRequested) {
+    std::uint32_t notification = 0U;
+    if (!cleanupAlreadyRequested &&
+        (!waitForTaskControl(notification, kProbeControlWaitTicks) ||
+         (notification & kCleanupProbeNotification) == 0U)) {
+        context.taskFailed = true;
+    }
+
+    context.cleanupStarted = true;
     xTaskNotifyGive(context.caller);
     vTaskDelete(nullptr);
 }
@@ -356,23 +411,37 @@ void probeTask(void* argument) {
         uxTaskGetStackHighWaterMark(nullptr);
     context->ready = true;
     xTaskNotifyGive(context->caller);
-    if (ulTaskNotifyTake(pdTRUE, kProbeWaitTicks) == 0U) {
+
+    std::uint32_t notification = 0U;
+    if (!waitForTaskControl(notification, kProbeControlWaitTicks) ||
+        (notification & kStartProbeNotification) == 0U) {
         context->taskFailed = true;
         context->completed = true;
         xTaskNotifyGive(context->caller);
-        vTaskDelete(nullptr);
+        deleteProbeTask(*context,
+                        (notification & kCleanupProbeNotification) != 0U);
         return;
     }
+
     runProbe(*context);
+    context->completed = true;
+    context->completionTaskStackHighWaterMarkBytes =
+        uxTaskGetStackHighWaterMark(nullptr);
+    xTaskNotifyGive(context->caller);
+    deleteProbeTask(*context, false);
 }
 
 void logProbeSummary(const ProbeContext& context) {
     ESP_LOGI(kTag,
              "stack_formula_bytes=%zu command_decision_bytes=%zu"
              " run_command_state_bytes=%zu persistence_coordinator_bytes=%zu"
+             " held_object_bytes=%zu call_path_bytes=%zu"
+             " call_path_safety_buffer_bytes=%zu"
              " configured_task_stack_bytes=%u",
              kProbeTaskStackBytes, sizeof(CommandDecision),
              sizeof(RunCommandState), sizeof(RunPersistenceCoordinator),
+             kHeldObjectBytes, kMeasuredCallPathBytes,
+             kMeasuredCallPathSafetyBufferBytes,
              static_cast<unsigned>(kProbeTaskStackDepth));
     logSample("before_decision", context.beforeDecision);
     logSample("decision_held", context.decisionHeld);
@@ -387,15 +456,41 @@ void logProbeSummary(const ProbeContext& context) {
         kTag, "task_completion_hwm_bytes=%u",
         static_cast<unsigned>(context.completionTaskStackHighWaterMarkBytes));
     ESP_LOGI(kTag,
-             "fault_status=%u writes=%zu reads=%zu state_unchanged=%s"
+             "fault_status=%u fault_step=%u fault_technical_reason=%u"
+             " fault_durability=%u fault_pass=%s writes=%zu reads=%zu"
+             " state_unchanged=%s"
              " persistence_unchanged=%s actor_release=%s"
              " safety_fail_closed=%s",
              static_cast<unsigned>(context.faultStatus),
-             context.storeWriteCount, context.storeReadCount,
-             context.stateUnchanged ? "true" : "false",
+             static_cast<unsigned>(context.faultStep),
+             static_cast<unsigned>(context.faultTechnicalReason),
+             static_cast<unsigned>(context.faultDurability),
+             context.faultPass ? "PASS" : "FAILED", context.storeWriteCount,
+             context.storeReadCount, context.stateUnchanged ? "true" : "false",
              context.persistenceUnchanged ? "true" : "false",
              context.actorReleaseObserved ? "true" : "false",
              context.safetyFailClosed ? "true" : "false");
+    ESP_LOGI(kTag,
+             "internal_resource_hwm_valid=%s local_apply_measured=%s"
+             " task_cleanup_proven=%s after_task_cleanup_measured=%s",
+             context.resourcePass ? "true" : "false",
+             context.localApplyMeasured ? "true" : "false",
+             context.taskCleanupProven ? "true" : "false",
+             context.afterTaskCleanupMeasured ? "true" : "false");
+}
+
+bool requestCleanupAndWait(ProbeContext& context) {
+    if (context.task == nullptr ||
+        xTaskNotify(context.task, kCleanupProbeNotification, eSetBits) !=
+            pdPASS) {
+        return false;
+    }
+    const TickType_t cleanupStart = xTaskGetTickCount();
+    while (!context.cleanupStarted &&
+           (xTaskGetTickCount() - cleanupStart) < kCleanupWaitTicks) {
+        vTaskDelay(1U);
+    }
+    return context.cleanupStarted;
 }
 
 }  // namespace
@@ -420,25 +515,70 @@ bool run() {
         ESP_LOGE(kTag,
                  "BLOCKED: diagnostic task did not reach its blocked start"
                  " gate");
-        if (context.task != nullptr) vTaskDelete(context.task);
+        (void)requestCleanupAndWait(context);
         return false;
     }
     context.afterTaskCreate = sampleResources(context.task, context.caller);
-    xTaskNotifyGive(context.task);
+    if (xTaskNotify(context.task, kStartProbeNotification, eSetBits) !=
+        pdPASS) {
+        context.taskFailed = true;
+        ESP_LOGE(kTag, "BLOCKED: diagnostic task start notification failed");
+        (void)requestCleanupAndWait(context);
+        return false;
+    }
 
     if (ulTaskNotifyTake(pdTRUE, kProbeWaitTicks) == 0U || !context.completed) {
         context.taskFailed = true;
         ESP_LOGE(kTag,
                  "BLOCKED: diagnostic task did not complete within the"
                  " bounded wait");
-        if (context.task != nullptr) vTaskDelete(context.task);
+        (void)requestCleanupAndWait(context);
         return false;
     }
-    // The task has self-deleted only after publishing the completion signal.
-    // Do not query its handle after this point; B2 deliberately measures the
-    // post-cleanup heap and the app_main stack independently.
-    context.task = nullptr;
-    context.afterTaskCleanup = sampleResources(nullptr, context.caller);
+
+    if (context.task == nullptr ||
+        xTaskNotify(context.task, kCleanupProbeNotification, eSetBits) !=
+            pdPASS) {
+        context.taskFailed = true;
+        ESP_LOGE(kTag, "BLOCKED: diagnostic task cleanup notification failed");
+        return false;
+    }
+    const TickType_t cleanupStart = xTaskGetTickCount();
+    while (!context.cleanupStarted &&
+           (xTaskGetTickCount() - cleanupStart) < kCleanupWaitTicks) {
+        vTaskDelay(1U);
+    }
+    if (!context.cleanupStarted) {
+        context.taskFailed = true;
+        ESP_LOGE(kTag,
+                 "BLOCKED: diagnostic task did not enter cleanup before"
+                 " timeout");
+        return false;
+    }
+
+    // The worker has acknowledged cleanup and is deleting itself. Do not
+    // query its handle. The Idle task owns deferred TCB/stack reclamation;
+    // wait for the B0 heap/block baseline to be restored before recording B2.
+    const TickType_t idleStart = xTaskGetTickCount();
+    while ((xTaskGetTickCount() - idleStart) < kCleanupWaitTicks) {
+        vTaskDelay(1U);
+        const auto cleanupSample = sampleResources(nullptr, context.caller);
+        if (cleanupSample.freeHeapBytes >=
+                context.beforeTaskCreate.freeHeapBytes &&
+            cleanupSample.largestFreeBlockBytes >=
+                context.beforeTaskCreate.largestFreeBlockBytes) {
+            context.afterTaskCleanup = cleanupSample;
+            context.afterTaskCleanupMeasured = true;
+            context.taskCleanupProven = true;
+            break;
+        }
+    }
+    if (!context.taskCleanupProven) {
+        context.taskFailed = true;
+        ESP_LOGE(kTag,
+                 "BLOCKED: deferred diagnostic-task cleanup was not"
+                 " proven against B0");
+    }
 
     logProbeSummary(context);
     const bool stackObserved =
@@ -447,6 +587,8 @@ bool run() {
         context.afterTaskCreate.taskStackHighWaterMarkBytes > 0U;
     const bool completedSafely = context.completed && !context.taskFailed;
     const bool pass = completedSafely && stackObserved &&
+                      context.taskCleanupProven &&
+                      context.afterTaskCleanupMeasured &&
                       context.resourcePass && context.faultPass;
     ESP_LOGI(kTag, "result=%s", pass ? "PASS" : "FAILED");
     return pass;
