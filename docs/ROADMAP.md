@@ -10,7 +10,7 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende | `READY`; reale ESP32-, Flash-, Heap-, Stack-, UART- und Boot-/Recoverybasis vor UI- und Adapteraufbau. Die Baseline bleibt aktorfrei. | Eigener Plan-first-Draft-PR und reale Board-, Flash-, Boot-, UART- und Ressourcenmessungen |
+| 1 | Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende | `READY`; Plan-only Draft-PR auf `agent/issue-29-esp32-bringup-plan`, Ownerfreigabe der exakten Plan-SHA ausstehend. Die Baseline bleibt aktorfrei. | `docs/tasks/issue-29-implementation-plan.md` freigeben; danach reale Board-, Flash-, Boot-, UART- und Ressourcenmessungen |
 | 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `PLANNED_SPEC_PENDING`; baut auf #29 und dem abgeschlossenen generischen Store-/Wirevertrag #54 auf. Keine zweite Persistenzarchitektur. | #29-Baseline, eigener freigegebener #90-Plan sowie NVS-/Partitions-/Power-Cut-/Readback-Nachweise |
 | 3 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90 |
 | 4 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
