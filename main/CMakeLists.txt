@@ -1,3 +1,5 @@
+# Die Component muss registriert werden, bevor die aus Kconfig erzeugten
+# Profilvariablen fuer die private Quellenisolierung verwendet werden.
 idf_component_register(
     SRCS "app_main.cpp"
     PRIV_INCLUDE_DIRS "../include"
@@ -34,6 +36,17 @@ else()
     )
 endif()
 
+set(APP_ISSUE_29_COMPILE_DEFINITIONS)
+if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
+    target_sources(${COMPONENT_LIB} PRIVATE "issue_29_bringup_probe.cpp")
+    target_include_directories(${COMPONENT_LIB} PRIVATE
+        "../lib/fermentation_app/private"
+    )
+    list(APPEND APP_ISSUE_29_COMPILE_DEFINITIONS
+        APP_ISSUE_29_BRINGUP_PROBE=1
+    )
+endif()
+
 # Firmwarefeste Release-1-Grenzen bleiben feste Compile-Definitionen, keine
 # Kconfig-Menuoptionen (siehe docs/tasks/issue-74-implementation-plan.md,
 # Abschnitt 7.2 Punkt 4). Textidentisch mit platformio.inis
@@ -42,6 +55,7 @@ endif()
 # gesetzt, keine Verteilung auf mehrere Stellen.
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
     ${APP_PROFILE_DEFINE}
+    ${APP_ISSUE_29_COMPILE_DEFINITIONS}
     APP_TARGET_FLASH_MB=4
     APP_REQUIRE_PSRAM=0
     APP_WEB_OTA_ENABLED=0

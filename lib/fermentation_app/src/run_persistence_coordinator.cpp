@@ -11,7 +11,23 @@
 #include "sensor_selection.hpp"
 #include "storage_envelope.hpp"
 
+#if defined(APP_ISSUE_29_BRINGUP_PROBE)
+#include "issue_29_bringup_fault_seam.hpp"
+#endif
+
 namespace fermentation {
+
+#if defined(APP_ISSUE_29_BRINGUP_PROBE)
+namespace issue_29_bringup {
+
+CommandStatus applyCandidateForResourceProbe(
+    RunCommandState& candidate, const CommandDecision& decision) noexcept {
+    return applyRunCommand(candidate, decision);
+}
+
+}  // namespace issue_29_bringup
+#endif
+
 namespace {
 
 constexpr device_platform::RecordTypeId kCheckpointRecordType{7U};
@@ -1816,6 +1832,18 @@ RunPersistenceResult RunPersistenceCoordinator::persistCommand(
         ramResult.effectCount = decision.effectCount;
         return ramResult;
     }
+#if defined(APP_ISSUE_29_BRINGUP_PROBE)
+    // The probe names this existing candidate-copy boundary as its
+    // allocation-failure seam. No production allocator or public error
+    // contract is introduced; release/native builds do not compile this
+    // branch at all.
+    if (issue_29_bringup::consumeCandidateAllocationFailure()) {
+        return result(RunPersistenceResultStatus::Blocked,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection,
+                      RunPersistenceDurability::Unchanged);
+    }
+#endif
     auto candidate = current;
     const auto apply = applyRunCommand(candidate, decision);
     if (apply != CommandStatus::Applied)
