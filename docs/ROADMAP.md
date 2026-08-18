@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-08-17
+Stand: 2026-08-18
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -10,31 +10,35 @@ nicht kopiert, sondern verlinkt.
 
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
-| 1 | Issue #23 – Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik | PR #105 ist nach `main` gemergt; #23 ist auf dem aktuellen Base abgeschlossen. Das separate produktive Integrationsgate #106 bleibt als eigener Live-Status unveraendert sichtbar. | Issue #24 erhält einen eigenen Plan-/Owner-Gate-PR |
-| 2 | Issue #24 – FaultCodes, Disposition, SAFE_BOOT und Fehlerinjektion | PR #110 ist Draft; die Implementierung und die F13-F26-Restkorrekturen gegen die owner-freigegebene Release-1-KISS-Planrevision `docs/tasks/issue-24-safety-core-replan.md` (`97be3ddf53297768a277a76c02aa0251b7cd9943`) sind abgeschlossen; F26 war eine reine Markdown-Korrektur; gezielte Native-Gates bleiben dokumentiert | Vollstaendiges Owner-Review des aktuellen Implementierungs-HEADs; Full-/ESP-IDF-/Hardware-Gates bleiben bis zur Owner-Anweisung offen |
-| 3 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt (Live-Issue #29 als reale ESP32-Nachverfolgung ergaenzt, `OPEN_POINTS.md` kanonisch synchronisiert); das reale Ressourcen-Gate bleibt ueber #29/`OPEN_POINTS.md` offen sichtbar, bis reale Hardware-Messung vorliegt | Owner entscheidet ueber Abschluss von Epic #3 als `completed` |
+| 1 | Draft-PR #113 / Issue #111 – Codex Plan Mode in Plan-first-Workflow integrieren | Nach Merge von PR #110 auf `main` retargetet; Markdown-/Governance-only mit genau `AGENTS.md`, `docs/AGENT_WORKFLOW.md` und dieser Roadmap. Der Stacking-Konflikt ist auf dem neuen `main`-Stand aufgeloest; Firmwarecode und Safety-Vertraege bleiben unberuehrt. | Vollstaendiges Owner-Review des bereinigten 3-Dateien-Diffs; danach Ownerentscheidung ueber Ready/Merge gemaess Markdown-only-Workflow |
+| 2 | Issue #19 – Journale, Aufbewahrung, Bereinigung, Backup und Import | Naechste fachliche Arbeit nach dem Abschluss von #24. Issue #16 bleibt als Trackingcontainer offen; sein direkter Konfigurationskern #54–#57 und das #24-Safety-Integrationsgate sind abgeschlossen, reale NVS-/Partitions-/Hardwaregates bleiben separat sichtbar. | Vor Planbeginn Live-Abgleich von #19 und #16; danach eigener Plan-Mode-/Plan-SHA-/Owner-Gate-PR fuer #19 |
+| 3 | Epic-E1-Abschlussnachfuehrung – `CommandDecision`-Ressourcengate aus PR #53 | PR #103 ist gemergt; Live-Issue #29 und `OPEN_POINTS.md` halten das reale ESP32-Ressourcengate sichtbar, bis reale Hardware-Messung vorliegt. | Owner entscheidet ueber Abschluss von Epic #3 erst nach dem realen Ressourcennachweis |
 
 ## Naechste fachliche Arbeit
 
-Issue #22 – Zeitproportionale PI-Regelung und Luftbegrenzung – ist mit PR
-#104 ueber Merge-Commit `2986dca` nach `main` integriert und wurde als
-`completed` geschlossen. Der implementierte #22-Fachkern (`ControlRequest`,
-`ControlRequestContext`, `ControlSensorRole`, PI-/Luftbegrenzungslogik) ist
-kanonisch und wird von Issue #23 ausschliesslich wiederverwendet.
+Issue #24 – Release-1 Safety Core – ist mit PR #110 ueber Merge-Commit
+`a802b1f54435258e1e96cf92a9af16e72040a00d` nach `main` integriert. Der
+vollstaendige GitHub-CI-Lauf am finalen Implementierungs-HEAD `39f0898a` hat
+Native Build/Tests, clang-tidy, Architektur-/Quality-/Secret-Gates, beide
+ESP-IDF-6.0.2-Profile und ESP-IDF-Static-Analysis bestanden. Hardware- und
+Inbetriebnahmenachweise bleiben wie vorgesehen spaetere E5-/Open-Point-Gates.
 
-Die vorgesehene fachliche Reihenfolge nach dem Abschluss von #22 ist:
-Issue #23 (Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik), danach
-Issue #24 (Fehlerklassen und SAFE_BOOT) und anschliessend Issue #19 (Journale,
-Aufbewahrung, Bereinigung, Backup und Import). #23 ist mit PR #105 auf dem
-aktuellen `main` abgeschlossen; die neue #24-Arbeit beginnt ausschließlich
-nach ihrem eigenen Plan-/Owner-Gate. Issue #106 bleibt als separates
-produktives Integrationsgate unverändert offen.
+Die fachliche Reihenfolge ist damit nach #23 und #24 bei Issue #19 angekommen:
+Journale, Aufbewahrung, Bereinigung, Backup und Import. #19 beginnt erst nach
+seinem eigenen Live-Abgleich und Plan-/Owner-Gate. Die offene #16-Abhaengigkeit
+wird dabei nicht pauschal als erledigt oder blockierend interpretiert: #16 ist
+ein Trackingcontainer mit abgeschlossenem direktem Konfigurationskern und noch
+offenen realen NVS-/Hardware-Abnahmen. Issue #106 bleibt als separates
+produktives Aktor-Integrationsgate unveraendert offen und wird durch #19 nicht
+umgangen.
 
 ## Zulaessige Parallelitaet
 
-- PR #110 bleibt Draft auch nach der Planfreigabe; der Implementierungs-HEAD
-  benoetigt ein vollstaendiges Owner-Review, bevor der Owner ueber `Ready for
-  review` und Remote-CI entscheidet.
+- PR #113 ist ein Markdown-only Governance-PR und wird nach seinem eigenen
+  vollstaendigen Owner-Review separat abgeschlossen; er veraendert keine
+  Firmware- oder Safety-Semantik.
+- Neue fachliche Implementierung fuer #19 beginnt erst nach eigenem Branch,
+  Draft-PR, kanonischem Markdown-Plan und Freigabe der exakten Plan-SHA.
 - Hardware-, Bibliotheks- und Adapterarbeit beginnt nur ueber das zugehoerige
   Live-Issue und einen freigegebenen Plan.
 - Unabhaengige Recherche darf keine Umsetzung, Produktauswahl oder
@@ -49,6 +53,10 @@ produktives Integrationsgate unverändert offen.
 - Issue #89 (WLAN-Onboarding-Evaluation) und Issue #90
   (ESP-IDF-NVS-Adapter) benoetigen vor Beginn einen eigenen Live-Abgleich und
   freigegebenen Plan.
+- Issue #114 bewahrt den frueheren komplexen Advanced-Safety-/Recovery-Entwurf
+  als `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`. Er ist kein Release-1-Gate und
+  wird vor einer spaeteren Umsetzung vollstaendig gegen den dann aktuellen
+  Stand neu geplant und ownerfreigegeben.
 - OTA ist fuer ein spaeteres Release vorgesehen, aber kein Release-1-Scope.
 
 ## Zuletzt abgeschlossene groessere Grundlagen
@@ -60,9 +68,11 @@ produktives Integrationsgate unverändert offen.
 - PR #92: Markdown-only-Aenderungen ohne vollstaendige Firmware-CI;
 - PR #95 / Issue #20: Sensorqualitaet, Filterung und Plausibilitaet;
 - PR #96: kompakter Session-Handover-Vertrag;
-- PR #99 / Issue #21: Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik.
-- PR #102 / Issue #18: Wiederanlauf und temperaturgewichteter Fortschritt;
+- PR #99 / Issue #21: Regelsensorauswahl, Ersatzbetrieb und Rueckkehrlogik;
+- PR #102 / Issue #18: Wiederanlauf und temperaturgewichteter Fortschritt als erhaltener C2-Legacy-/Future-Ausbaupfad;
 - PR #104 / Issue #22: Zeitproportionale PI-Regelung und Luftbegrenzung;
+- PR #105 / Issue #23: Aktorplaner, Mindestzeiten, Totzeit und Luefterlogik;
+- PR #110 / Issue #24: Release-1 FaultCodes, Disposition, `SAFE_BOOT`, Fehlerinjektion und zentrale fail-closed SafetyCore-Grenze.
 
 ## Pflege
 

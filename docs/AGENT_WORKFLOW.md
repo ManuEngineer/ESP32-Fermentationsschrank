@@ -31,20 +31,40 @@ Plan-first-Workflow.
 
 ## 3. Planungsphase
 
-Fuer nicht triviale Arbeit werden ein Branch und ein Draft-PR erstellt. Der
-versionierte Plan liegt unter `docs/tasks/` und enthaelt mindestens:
+Fuer nicht triviale Arbeit werden ein Branch und ein Draft-PR erstellt. Bietet
+der verwendete Agent einen nativen Planungsmodus, wird dieser fuer
+Repositoryanalyse, Rueckfragen und Planerstellung bevorzugt verwendet; bei
+Codex ist dies Plan Mode. Der native Planungsmodus ist ein Arbeitsmodus und
+kein eigenes Freigabeartefakt. Er ersetzt weder `docs/tasks/`, den Plan-Commit
+noch das Owner-Gate.
+
+Der Markdown-Auftrag muss die folgende Planstruktur nicht wiederholen. Ein
+Verweis auf diesen Workflow genuegt, wenn Ziel, Scope und besondere
+Owner-Gates des konkreten Auftrags eindeutig sind. Damit bleibt der Auftrag
+kurz und der Planvertrag an genau einer kanonischen Stelle.
+
+Vor dem Plan-Commit werden die Ergebnisse des nativen Planungsmodus in genau
+eine vollstaendige, eigenstaendig ausfuehrbare Planfassung unter `docs/tasks/`
+konsolidiert. Nur diese versionierte Markdown-Fassung ist der kanonische Plan.
+Ein nur im Chat oder Plan Mode vorhandener Plan darf weder als freigegeben
+gelten noch als zweite Planwahrheit parallel weitergefuehrt werden.
+
+Der Plan ist proportional zu Umfang und Risiko der Aufgabe; KISS gilt auch fuer
+die Planung. Er enthaelt in angemessener Tiefe mindestens:
 
 - Ziel und Nicht-Ziele;
-- Live-Ausgangslage und Kontextbaseline;
-- verbindliche Quellen und bereits getroffene Entscheidungen;
-- betroffene Module und voraussichtliche Dateien;
-- Abhaengigkeiten, Blocker und Owner-Gates;
-- Daten-, Zustands-, Schnittstellen- und Abhaengigkeitsvertraege;
-- Safety-, Security-, Recovery- und Hardwaregrenzen, soweit betroffen;
-- kleine Umsetzungs- und Commit-Schnitte;
-- gezielte Tests und Nachweise;
-- Dokumentations- und Roadmapwirkung;
-- offene Fragen und materielle Risiken.
+- verifizierte Live-Ausgangslage, Kontextbaseline und relevante Quellen;
+- betroffene Module, Vertraege, Abhaengigkeiten, Blocker und Owner-Gates;
+- konkrete Umsetzungs- und Commit-Schnitte;
+- gezielte Tests, Nachweise und Dokumentationswirkung;
+- offene Entscheidungen und materielle Risiken;
+- Safety-, Security-, Recovery- und Hardwaregrenzen nur soweit tatsaechlich
+  betroffen.
+
+Nicht betroffene Themen werden nicht als leere Pflichtkapitel erzeugt. Bei
+Architektur-, API-, Schema-, Persistenz- oder Wireformatarbeit nennt der Plan
+die dafuer notwendigen Daten-, Zustands-, Schnittstellen- und
+Abhaengigkeitsvertraege explizit.
 
 Jede freigegebene Planrevision ist ein vollstaendiges und eigenstaendig
 ausfuehrbares Dokument. Historische Revisionen duerfen zur Nachvollziehbarkeit
@@ -54,8 +74,8 @@ mehrere alte Revisionen zusammensetzt. Findet ein Agent einen nicht
 konsolidierten Plan vor, rekonstruiert er ihn nicht aus den historischen
 Revisionen, sondern meldet die fehlende Plan-Konsolidierung als Blocker.
 
-Ein freigegebener Plan enthaelt ausserdem eine nachvollziehbare Struktur fuer
-die Abarbeitung. Dafuer genuegen je nach Umfang kleine Umsetzungs- und
+Ein freigegebener Plan enthaelt eine nachvollziehbare Struktur fuer die
+Abarbeitung. Dafuer genuegen je nach Umfang kleine Umsetzungs- und
 Commit-Schnitte, nummerierte Schritte, eine Checkliste oder eine vergleichbare
 Struktur. Eine zusaetzliche starre Taskliste ist nicht erforderlich, wenn die
 bestehende Planstruktur eine eigenstaendige und nachvollziehbare Umsetzung
@@ -63,16 +83,21 @@ ermoeglicht.
 
 In der Planungsphase werden ohne ausdrueckliche Ownerfreigabe keine
 Produktionslogik, produktiven Tests, Abhaengigkeiten, ADRs, Build-, Toolchain-,
-Hardware-, GPIO- oder Bibliotheksentscheidungen umgesetzt.
+Hardware-, GPIO- oder Bibliotheksentscheidungen umgesetzt. Ein abgeschlossener
+Plan Mode ist ausdruecklich keine Implementationserlaubnis.
 
 Nach dem Plan-Commit werden Planpfad, exakte Plan-SHA und offene Entscheidungen
 im Draft-PR ausgewiesen. Danach wird angehalten.
 
+Ist kein nativer Planungsmodus verfuegbar, wird derselbe Planvertrag direkt
+erfuellt; es wird kein tool-spezifischer Parallelprozess erfunden.
+
 ## 4. Planfreigabe
 
 Umgesetzt wird nur nach ausdruecklicher Ownerfreigabe des exakten
-Plan-Commits. Eine allgemeine Zustimmung ohne eindeutige Plan-SHA ersetzt dieses
-Gate nicht.
+Plan-Commits. Eine allgemeine Zustimmung oder eine Freigabe eines nur im Chat
+beziehungsweise Plan Mode sichtbaren Plans ohne eindeutige Plan-SHA ersetzt
+dieses Gate nicht.
 
 Vor der Umsetzung werden Branch, `HEAD`, Plan-SHA und seit der Freigabe
 eingegangene Aenderungen erneut geprueft. Bei veraenderter Grundlage wird der
@@ -106,6 +131,10 @@ Bei einer materiellen Abweichung:
 3. Plan aktualisieren und committen;
 4. neue exakte Plan-SHA vorlegen;
 5. erneute Ownerfreigabe abwarten.
+
+Fuer die Planrevision darf erneut ein nativer Planungsmodus verwendet werden;
+freigabefaehig ist wiederum nur die vollstaendige neue Markdown-Planrevision
+mit exakter SHA.
 
 Kleine redaktionelle oder rein mechanische Anpassungen innerhalb des
 freigegebenen Vertrags werden im Plan-/PR-Nachweis dokumentiert, ohne einen
