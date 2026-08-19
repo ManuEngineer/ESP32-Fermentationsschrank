@@ -1,9 +1,10 @@
 # Issue #90 NVS capacity evidence
 
-- source git SHA: `f060f971832ca352148c34c31d8818d3a2bf1c9b`
+- source git SHA: `f7292ca03f3f2387b13ac5124f70041b09923b1b`
 - ESP-IDF: `v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`
 - pinned NVS constants: `32` B/entry, `126` entries/page, `4000` B/chunk
 - status: arithmetic evidence only; real NVS statistics and GC remain hardware/BDL evidence
+- inventory provenance: keys and limits are mechanically parsed from the canonical sources below; contract drift fails this command
 
 | Record group | Key inventory | Slots | Max bytes | Entries/record | Entries | Canonical sources (keys / limits) |
 |---|---|---:|---:|---:|---:|---|
@@ -13,8 +14,8 @@
 | configuration.manifest | `cm0, cm1, cm2` | 3 | 149 | 6 | 18 | `lib/fermentation_app/src/configuration_storage_contract.hpp; lib/fermentation_app/src/configuration_limits.hpp` |
 | configuration.root | `cr0, cr1` | 2 | 114 | 5 | 10 | `lib/fermentation_app/src/configuration_storage_contract.hpp; lib/fermentation_app/src/configuration_limits.hpp` |
 | configuration.bootstrap | `cb0, cb1` | 2 | 42 | 3 | 6 | `lib/fermentation_app/src/configuration_storage_contract.hpp; lib/fermentation_app/src/configuration_limits.hpp` |
-| run.checkpoint | `rc0, rc1` | 2 | 8240 | 262 | 524 | `lib/fermentation_app/src/run_persistence_store.cpp; lib/fermentation_app/src/run_persistence_coordinator.cpp` |
-| run.head | `rh0` | 1 | 256 | 9 | 9 | `lib/fermentation_app/src/run_persistence_store.cpp; lib/fermentation_app/src/run_persistence_coordinator.cpp` |
+| run.checkpoint | `rc0, rc1` | 2 | 8240 | 262 | 524 | `lib/fermentation_app/src/run_persistence_store.cpp; lib/fermentation_app/src/run_persistence_coordinator.cpp; lib/fermentation_app/src/run_persistence_codec.cpp` |
+| run.head | `rh0` | 1 | 256 | 9 | 9 | `lib/fermentation_app/src/run_persistence_store.cpp; lib/fermentation_app/src/run_persistence_coordinator.cpp; lib/fermentation_app/src/run_persistence_codec.cpp` |
 
 Persistent inventory including namespace: `4768` entries.
 Peak with one simultaneous `32813`-byte replacement: `5804` entries.

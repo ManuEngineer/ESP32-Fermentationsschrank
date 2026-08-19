@@ -149,7 +149,8 @@ Aktueller Draft-Nachweis: Der lokale ausführbare BDL-Regressionssatz und der
 lokale vollständige dynamische Lauf sind nach den Korrekturen `PASS`. Die
 kanonische CMake-/CI-Umgebung konnte in dieser Arbeitsumgebung wegen fehlender
 Ruby-/BSD-CMock-Abhängigkeiten nicht ausgeführt werden und bleibt daher
-`NOT_RUN`; daraus wird kein `HOST_SOFTWARE_PASS` für GitHub-CI abgeleitet.
+`NOT_RUN`; daraus wird kein zusammenfassender GitHub-CI-Hostsoftware-PASS
+abgeleitet.
 
 Der On-Target-Runner verwendet ausschließlich den Bring-up-Harness
 `APP_ISSUE_90_NVS_HARDWARE_TEST=1`, das strikte externe Hook-Protokoll
