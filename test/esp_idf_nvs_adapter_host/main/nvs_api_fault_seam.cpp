@@ -12,7 +12,7 @@ namespace {
 struct FaultState {
     std::optional<esp_err_t> open;
     std::optional<esp_err_t> sizeQuery;
-    std::optional<esp_err_t> read;
+    std::optional<std::pair<esp_err_t, std::optional<std::size_t>>> read;
     std::optional<std::pair<esp_err_t, bool>> set;
     std::optional<esp_err_t> commit;
     std::optional<std::string> raceReplacement;
@@ -34,7 +34,10 @@ void NvsApiFaultSeam::failSizeQuery(esp_err_t error) {
     state().sizeQuery = error;
 }
 
-void NvsApiFaultSeam::failRead(esp_err_t error) { state().read = error; }
+void NvsApiFaultSeam::failRead(esp_err_t error,
+                               std::optional<std::size_t> reportedLength) {
+    state().read = std::make_pair(error, reportedLength);
+}
 
 void NvsApiFaultSeam::failSet(esp_err_t error, bool afterRealMutation) {
     state().set = std::make_pair(error, afterRealMutation);
@@ -75,7 +78,10 @@ extern "C" esp_err_t __wrap_nvs_get_blob(nvs_handle_t handle, const char* key,
     if (output == nullptr && fault.sizeQuery.has_value()) {
         return *fault.sizeQuery;
     }
-    if (output != nullptr && fault.read.has_value()) return *fault.read;
+    if (output != nullptr && fault.read.has_value()) {
+        if (fault.read->second.has_value()) *length = *fault.read->second;
+        return fault.read->first;
+    }
     if (output != nullptr && fault.raceReplacement.has_value() &&
         fault.raceUsed) {
         *length = fault.raceReplacement->size();

@@ -123,21 +123,42 @@ idf.py -C test/esp_idf_nvs_adapter_host \
   -B test/esp_idf_nvs_adapter_host/build --preview set-target linux
 idf.py -C test/esp_idf_nvs_adapter_host \
   -B test/esp_idf_nvs_adapter_host/build build
-test/esp_idf_nvs_adapter_host/build/issue_90_nvs_adapter_host.elf \
-  --ci-regression --report build/issue_90_nvs_adapter_host-matrix.json
-test/esp_idf_nvs_adapter_host/build/issue_90_nvs_adapter_host.elf \
-  --exhaustive --seed 0
+ISSUE90_HOST_MODE=ci-regression \
+ISSUE90_HOST_REPORT=build/issue_90_nvs_adapter_host-matrix.json \
+test/esp_idf_nvs_adapter_host/build/issue_90_nvs_adapter_host.elf
+ISSUE90_HOST_MODE=exhaustive \
+test/esp_idf_nvs_adapter_host/build/issue_90_nvs_adapter_host.elf
 ```
 
-`--ci-regression` ist der verbindliche, kurze Regressionssatz. Der
-`--exhaustive`-Lauf deckt die vollständige deterministische Fault-/Recovery-
-Matrix der sieben stabilen Blob-Daten-, Blob-Index- und Altwert-
-Entfernungsendpunkte mit drei festen Bytepatterns ab und wird als eigener
-Nachweis ausgeführt; er ersetzt nicht die spätere Standard-Flash-/Partitions-
-und ESP32-Hardwarematrix. Die BDL-Matrix belegt NVS-Storage-/Recovery-
-Semantik, nicht das reale Flashmedium. Nicht als stabiler Vertrag behandelte
-interne 4-Byte-Buchhaltungszwischenstände werden nicht als zusätzliche
+`ISSUE90_HOST_MODE=ci-regression` ist der verbindliche, kurze
+Regressionssatz. Beide Modi
+ermitteln die Mutationsfenster aus dem erfolgreichen Trace der gepinnten
+ESP-IDF-BDL-Implementierung. Der `--exhaustive`-Lauf schneidet an jedem
+reproduzierbar aufgezeichneten `Write`-/`Erase`-Callback des realen Pfads,
+einschließlich aller Blob-Datenchunks, Blob-Index-, Altwert-, GC-/PageManager-
+Copy- und Page-Erase-Mutationen, ergänzt um den Commit-Kontrollpunkt. Er führt
+dies für die definierten Bytepatterns sowie für den vorbefüllten GC-/Erase-Fall
+aus. Eine feste Sieben-Endpunkte-Auswahl ist ausdrücklich kein exhaustive-
+Nachweis. Der vollständige Lauf ersetzt nicht die spätere Standard-Flash-/
+Partitions- und ESP32-Hardwarematrix. Die BDL-Matrix belegt NVS-Storage- und
+Recovery-Semantik, nicht das reale Flashmedium. Nicht als stabiler Vertrag
+behandelte interne 4-Byte-Buchhaltungszwischenstände werden nicht als eigene
 ESP-IDF-Phasen behauptet.
+
+Aktueller Draft-Nachweis: Der lokale ausführbare BDL-Regressionssatz und der
+lokale vollständige dynamische Lauf sind nach den Korrekturen `PASS`. Die
+kanonische CMake-/CI-Umgebung konnte in dieser Arbeitsumgebung wegen fehlender
+Ruby-/BSD-CMock-Abhängigkeiten nicht ausgeführt werden und bleibt daher
+`NOT_RUN`; daraus wird kein `HOST_SOFTWARE_PASS` für GitHub-CI abgeleitet.
+
+Der On-Target-Runner verwendet ausschließlich den Bring-up-Harness
+`APP_ISSUE_90_NVS_HARDWARE_TEST=1`, das strikte externe Hook-Protokoll
+`ARM token=...`/`TRIP`/`RESTORE` mit `ARMED`/`TRIPPED`/`RESTORED`, wartet auf
+`CUT_ARMED`, `ROTATE_BEGIN`, nach `TRIP` auf UART-Verlust vor
+`ROTATE_RESULT`, und verlangt mindestens zehn Wiederholungen je Fenster
+(`blob_data`, `blob_index`, `old_removal`, `gc_erase`) sowie drei saubere
+Neustartkontrollen. Ohne reale Hardware und Power-Controller bleibt dieser
+Nachweis `BLOCKED/NOT_RUN`.
 
 Die #90-Kapazitätsrechnung wird reproduzierbar aus dem vollständigen
 Schlüssel-/Recordinventar und den gepinnten ESP-IDF-Konstanten erzeugt:

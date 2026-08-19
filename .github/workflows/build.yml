@@ -153,9 +153,9 @@ jobs:
           idf.py -C test/esp_idf_nvs_adapter_host \
             -B test/esp_idf_nvs_adapter_host/build build \
             2>&1 | tee build/issue_90_nvs_adapter_host-build.log
+          ISSUE90_HOST_MODE=ci-regression \
+          ISSUE90_HOST_REPORT=build/issue_90_nvs_adapter_host-matrix.json \
           test/esp_idf_nvs_adapter_host/build/issue_90_nvs_adapter_host.elf \
-            --ci-regression \
-            --report build/issue_90_nvs_adapter_host-matrix.json \
             2>&1 | tee build/issue_90_nvs_adapter_host-ci.log
 
       - name: Issue-90-Hostartefakte sichern

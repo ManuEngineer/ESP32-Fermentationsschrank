@@ -41,9 +41,30 @@ using issue90_host::StatefulBlockDevice;
 
 constexpr char kPartition[] = "state_store";
 constexpr std::size_t kPartitionSize = 69U * 4096U;
+constexpr std::size_t kRotationLimit = 2048U;
 constexpr std::size_t kMaximumProgramRecordBytes = 32813U;
 constexpr char kIdfSha[] = "7101770dc6db2667b3c477cc31365dd1acd6db4e";
 bool g_exhaustive{false};
+
+struct TestRecord final {
+    const char* key;
+    std::size_t maximumBytes;
+};
+
+constexpr std::array<TestRecord, 22U> kRecordInventory = {
+    {{"uc0", 301U},   {"uc1", 301U},   {"uc2", 301U},   {"uc3", 301U},
+     {"sc0", 45U},    {"sc1", 45U},    {"sc2", 45U},    {"sc3", 45U},
+     {"pc0", 32813U}, {"pc1", 32813U}, {"pc2", 32813U}, {"pc3", 32813U},
+     {"cm0", 149U},   {"cm1", 149U},   {"cm2", 149U},   {"cr0", 114U},
+     {"cr1", 114U},   {"cb0", 42U},    {"cb1", 42U},    {"rc0", 8240U},
+     {"rc1", 8240U},  {"rh0", 256U}}};
+
+const TestRecord& recordFor(const char* name) {
+    for (const auto& record : kRecordInventory) {
+        if (std::string(record.key) == name) return record;
+    }
+    throw TestFailure("unknown test inventory key");
+}
 
 device_platform::StateStoreKey key(const char* value) {
     const auto result = device_platform::StateStoreKey::create(value);
@@ -101,6 +122,48 @@ void requireOldOrNew(const NvsStateStore& store,
         store.read(stateKey, std::max(oldValue.size(), newValue.size()));
     REQUIRE(read.status == StateStoreReadStatus::Success);
     REQUIRE((read.value == oldValue || read.value == newValue));
+}
+
+void requireExact(const NvsStateStore& store,
+                  const device_platform::StateStoreKey& stateKey,
+                  const std::string& expected) {
+    const auto read = store.read(stateKey, expected.size());
+    REQUIRE(read.status == StateStoreReadStatus::Success);
+    REQUIRE(read.value == expected);
+}
+
+std::vector<std::size_t> relevantMutationCallbacks(
+    const std::vector<issue90_host::BlockTraceEvent>& trace) {
+    std::vector<std::size_t> result;
+    std::size_t lastWideWrite = 0U;
+    for (std::size_t index = 0U; index < trace.size(); ++index) {
+        const auto& event = trace[index];
+        if (event.operation == issue90_host::BlockOperation::Write &&
+            event.length > 4U) {
+            lastWideWrite = index;
+        }
+    }
+    std::size_t mutation = 0U;
+    for (std::size_t index = 0U; index < trace.size(); ++index) {
+        const auto& event = trace[index];
+        const bool isMutation =
+            event.operation == issue90_host::BlockOperation::Write ||
+            event.operation == issue90_host::BlockOperation::Erase;
+        if (!isMutation) continue;
+        ++mutation;
+        const bool isDataOrIndexWrite =
+            event.operation == issue90_host::BlockOperation::Write &&
+            event.length > 4U;
+        const bool isTrailingRemoval =
+            event.operation == issue90_host::BlockOperation::Write &&
+            event.length == 4U && index >= lastWideWrite;
+        if (event.operation == issue90_host::BlockOperation::Erase ||
+            isDataOrIndexWrite || isTrailingRemoval) {
+            result.push_back(mutation);
+        }
+    }
+    REQUIRE(!result.empty());
+    return result;
 }
 
 }  // namespace
@@ -186,37 +249,81 @@ void testErrorMapping() {
     const std::string oldValue = "old-value";
     const std::string newValue = "new-value";
 
-    NvsApiFaultSeam::failOpen(ESP_ERR_NVS_PART_NOT_FOUND);
-    REQUIRE(store.write(stateKey, newValue) ==
-            StateStoreWriteStatus::WriteError);
-    NvsApiFaultSeam::reset();
+    const std::array<esp_err_t, 5U> openWriteErrors{
+        ESP_ERR_NVS_PART_NOT_FOUND, ESP_ERR_NVS_NO_FREE_PAGES,
+        ESP_ERR_NVS_INVALID_STATE, ESP_ERR_NO_MEM, ESP_ERR_NOT_SUPPORTED};
+    for (const auto error : openWriteErrors) {
+        NvsApiFaultSeam::failOpen(error);
+        REQUIRE(store.write(stateKey, newValue) ==
+                StateStoreWriteStatus::WriteError);
+        NvsApiFaultSeam::reset();
+    }
+
     NvsApiFaultSeam::failOpen(ESP_ERR_NVS_NOT_FOUND);
     REQUIRE(store.read(stateKey, 32U).status == StateStoreReadStatus::NotFound);
     NvsApiFaultSeam::reset();
-    NvsApiFaultSeam::failOpen(ESP_ERR_NVS_PART_NOT_FOUND);
-    REQUIRE(store.read(stateKey, 32U).status ==
-            StateStoreReadStatus::ReadError);
-    NvsApiFaultSeam::reset();
+    for (const auto error : openWriteErrors) {
+        NvsApiFaultSeam::failOpen(error);
+        REQUIRE(store.read(stateKey, 32U).status ==
+                StateStoreReadStatus::ReadError);
+        NvsApiFaultSeam::reset();
+    }
 
     REQUIRE(store.write(stateKey, oldValue) == StateStoreWriteStatus::Success);
-    NvsApiFaultSeam::failSizeQuery(ESP_ERR_NVS_INVALID_LENGTH);
-    REQUIRE(store.read(stateKey, 32U).status ==
-            StateStoreReadStatus::ReadError);
+    NvsApiFaultSeam::failSizeQuery(ESP_ERR_NVS_NOT_FOUND);
+    REQUIRE(store.read(stateKey, 32U).status == StateStoreReadStatus::NotFound);
     NvsApiFaultSeam::reset();
-    NvsApiFaultSeam::failRead(ESP_ERR_NVS_INVALID_LENGTH);
-    REQUIRE(store.read(stateKey, 32U).status ==
-            StateStoreReadStatus::ReadError);
+    const std::array<esp_err_t, 5U> readErrors{
+        ESP_ERR_NVS_INVALID_LENGTH, ESP_ERR_NVS_INVALID_STATE, ESP_ERR_NO_MEM,
+        ESP_ERR_NVS_NO_FREE_PAGES, ESP_ERR_NOT_SUPPORTED};
+    for (const auto error : readErrors) {
+        NvsApiFaultSeam::failSizeQuery(error);
+        REQUIRE(store.read(stateKey, 32U).status ==
+                StateStoreReadStatus::ReadError);
+        NvsApiFaultSeam::reset();
+    }
+    NvsApiFaultSeam::failRead(ESP_ERR_NVS_NOT_FOUND);
+    REQUIRE(store.read(stateKey, 32U).status == StateStoreReadStatus::NotFound);
     NvsApiFaultSeam::reset();
+    NvsApiFaultSeam::failRead(ESP_ERR_NVS_INVALID_LENGTH, 64U);
+    REQUIRE(store.read(stateKey, 32U).status ==
+            StateStoreReadStatus::CapacityError);
+    NvsApiFaultSeam::reset();
+    for (const auto error : readErrors) {
+        NvsApiFaultSeam::failRead(error);
+        REQUIRE(store.read(stateKey, 32U).status ==
+                StateStoreReadStatus::ReadError);
+        NvsApiFaultSeam::reset();
+    }
 
     NvsApiFaultSeam::failSet(ESP_ERR_NVS_VALUE_TOO_LONG);
     REQUIRE(store.write(stateKey, newValue) ==
             StateStoreWriteStatus::CapacityError);
     NvsApiFaultSeam::reset();
-    NvsApiFaultSeam::failSet(ESP_ERR_NVS_REMOVE_FAILED);
-    REQUIRE(store.write(stateKey, newValue) ==
-            StateStoreWriteStatus::CommitOutcomeUnknown);
-    NvsApiFaultSeam::reset();
-    requireOldOrNew(store, stateKey, oldValue, newValue);
+    requireExact(store, stateKey, oldValue);
+
+    const std::array<esp_err_t, 4U> preMutationWriteErrors{
+        ESP_ERR_NVS_INVALID_HANDLE, ESP_ERR_NVS_READ_ONLY,
+        ESP_ERR_NVS_INVALID_NAME, ESP_ERR_NVS_KEY_TOO_LONG};
+    for (const auto error : preMutationWriteErrors) {
+        NvsApiFaultSeam::failSet(error);
+        REQUIRE(store.write(stateKey, newValue) ==
+                StateStoreWriteStatus::WriteError);
+        NvsApiFaultSeam::reset();
+        requireExact(store, stateKey, oldValue);
+    }
+
+    const std::array<esp_err_t, 6U> unknownWriteErrors{
+        ESP_ERR_NVS_NOT_ENOUGH_SPACE, ESP_ERR_NVS_NO_FREE_PAGES,
+        ESP_ERR_NVS_INVALID_STATE,    ESP_ERR_NO_MEM,
+        ESP_ERR_NOT_SUPPORTED,        ESP_ERR_NVS_REMOVE_FAILED};
+    for (const auto error : unknownWriteErrors) {
+        NvsApiFaultSeam::failSet(error);
+        REQUIRE(store.write(stateKey, newValue) ==
+                StateStoreWriteStatus::CommitOutcomeUnknown);
+        NvsApiFaultSeam::reset();
+        requireOldOrNew(store, stateKey, oldValue, newValue);
+    }
 
     NvsApiFaultSeam::failSet(ESP_ERR_FLASH_OP_FAIL, true);
     REQUIRE(store.write(stateKey, newValue) ==
@@ -227,6 +334,8 @@ void testErrorMapping() {
     NvsApiFaultSeam::failCommit(ESP_FAIL);
     REQUIRE(store.write(stateKey, newValue) ==
             StateStoreWriteStatus::CommitOutcomeUnknown);
+    NvsApiFaultSeam::reset();
+    requireOldOrNew(store, stateKey, oldValue, newValue);
 }
 
 void testOldOrNewAfterBdlCuts() {
@@ -238,7 +347,7 @@ void testOldOrNewAfterBdlCuts() {
         const std::string newValue =
             bytes(8240U, patterns[(repetition + 1U) % patterns.size()]);
 
-        std::size_t mutationCallbacks = 0U;
+        std::vector<std::size_t> mutationPoints;
         {
             HostStorage storage;
             NvsStateStore store;
@@ -247,26 +356,21 @@ void testOldOrNewAfterBdlCuts() {
             storage.device.clearTrace();
             REQUIRE(store.write(stateKey, newValue) ==
                     StateStoreWriteStatus::Success);
-            mutationCallbacks = storage.device.trace().size();
-            REQUIRE(mutationCallbacks > 0U);
+            mutationPoints = relevantMutationCallbacks(storage.device.trace());
         }
 
-        // These are logical end points in the successful 8,240-byte update
-        // trace of the pinned v6.0.2 BDL implementation: early/later
-        // BLOB_DATA chunks, BLOB_IDX publication, and old-version removal.
-        // The CI set is a small deterministic sample; --exhaustive covers
-        // all seven at all three fixed byte patterns.
-        const std::array<std::size_t, 7U> exhaustiveCutCallbacks{
-            6U, 15U, 19U, 21U, 22U, 28U, 35U};
-        const std::array<std::size_t, 3U> ciCutCallbacks{15U, 22U, 35U};
-        const std::vector<std::size_t> cutCallbacks =
-            g_exhaustive
-                ? std::vector<std::size_t>(exhaustiveCutCallbacks.begin(),
-                                           exhaustiveCutCallbacks.end())
-                : std::vector<std::size_t>(ciCutCallbacks.begin(),
-                                           ciCutCallbacks.end());
+        std::vector<std::size_t> cutCallbacks;
+        if (g_exhaustive) {
+            cutCallbacks = mutationPoints;
+        } else {
+            cutCallbacks = {mutationPoints.front(), mutationPoints.back()};
+            cutCallbacks.push_back(mutationPoints[mutationPoints.size() / 2U]);
+            std::sort(cutCallbacks.begin(), cutCallbacks.end());
+            cutCallbacks.erase(
+                std::unique(cutCallbacks.begin(), cutCallbacks.end()),
+                cutCallbacks.end());
+        }
         for (const std::size_t callback : cutCallbacks) {
-            REQUIRE(callback <= mutationCallbacks);
             HostStorage storage;
             NvsStateStore store;
             REQUIRE(store.write(stateKey, oldValue) ==
@@ -279,48 +383,141 @@ void testOldOrNewAfterBdlCuts() {
             storage.reinitialize();
             requireOldOrNew(store, stateKey, oldValue, newValue);
         }
+
+        HostStorage storage;
+        NvsStateStore store;
+        REQUIRE(store.write(stateKey, oldValue) ==
+                StateStoreWriteStatus::Success);
+        NvsApiFaultSeam::failCommit(ESP_ERR_FLASH_OP_FAIL);
+        REQUIRE(store.write(stateKey, newValue) ==
+                StateStoreWriteStatus::CommitOutcomeUnknown);
+        NvsApiFaultSeam::reset();
+        requireOldOrNew(store, stateKey, oldValue, newValue);
+    }
+}
+
+using TestValues = std::array<std::string, 22U>;
+
+std::size_t recordIndex(const TestRecord& wanted) {
+    for (std::size_t index = 0U; index < kRecordInventory.size(); ++index) {
+        if (&kRecordInventory[index] == &wanted) return index;
+    }
+    throw TestFailure("record is not in canonical test inventory");
+}
+
+TestValues prefillInventory(NvsStateStore& store) {
+    TestValues values;
+    for (std::size_t index = 0U; index < kRecordInventory.size(); ++index) {
+        const auto& record = kRecordInventory[index];
+        values[index] =
+            bytes(record.maximumBytes, static_cast<std::uint8_t>(index));
+        REQUIRE(store.write(key(record.key), values[index]) ==
+                StateStoreWriteStatus::Success);
+    }
+    return values;
+}
+
+const TestRecord& rotatingRecord(std::size_t rotation) {
+    constexpr std::array<const char*, 5U> rotatingKeys{"pc0", "pc1", "rc0",
+                                                       "rc1", "rh0"};
+    return recordFor(rotatingKeys[rotation % rotatingKeys.size()]);
+}
+
+std::string rotateValue(const TestRecord& record, std::size_t rotation) {
+    return bytes(record.maximumBytes, static_cast<std::uint8_t>(rotation + 3U));
+}
+
+void replayRotations(NvsStateStore& store, std::size_t count) {
+    for (std::size_t rotation = 0U; rotation < count; ++rotation) {
+        const auto& record = rotatingRecord(rotation);
+        REQUIRE(store.write(key(record.key), rotateValue(record, rotation)) ==
+                StateStoreWriteStatus::Success);
     }
 }
 
 void testPrefilledGcAndEraseWorkload() {
-    HostStorage storage;
-    NvsStateStore store;
-    const std::array<const char*, 22U> keys{
-        "uc0", "uc1", "uc2", "uc3", "sc0", "sc1", "sc2", "sc3",
-        "pc0", "pc1", "pc2", "pc3", "cm0", "cm1", "cm2", "cr0",
-        "cr1", "cb0", "cb1", "rc0", "rc1", "rh0"};
-    const std::array<std::size_t, 22U> sizes{
-        301U,   301U, 301U, 301U, 45U,  45U,  45U, 45U, 32813U, 32813U, 32813U,
-        32813U, 149U, 149U, 149U, 114U, 114U, 42U, 42U, 8240U,  8240U,  256U};
+    struct Scenario final {
+        std::size_t rotation;
+        const TestRecord* record;
+        TestValues oldValues;
+        TestValues newValues;
+        std::vector<std::size_t> mutationPoints;
+    };
 
-    for (std::size_t index = 0U; index < keys.size(); ++index) {
-        REQUIRE(store.write(
-                    key(keys[index]),
-                    bytes(sizes[index], static_cast<std::uint8_t>(index))) ==
-                StateStoreWriteStatus::Success);
-    }
-
-    bool eraseObserved = false;
-    for (std::size_t rotation = 0U; rotation < 2048U && !eraseObserved;
-         ++rotation) {
-        const auto slot = rotation % 5U;
-        const std::array<const char*, 5U> rotating{"pc0", "pc1", "rc0", "rc1",
-                                                   "rh0"};
-        const auto result =
-            store.write(key(rotating[slot]),
-                        bytes(sizes[8U + (slot < 4U ? slot : 13U)],
-                              static_cast<std::uint8_t>(rotation + 3U)));
-        REQUIRE((result == StateStoreWriteStatus::Success ||
-                 result == StateStoreWriteStatus::CommitOutcomeUnknown));
-        for (const auto& event : storage.device.trace()) {
-            if (event.operation == issue90_host::BlockOperation::Erase) {
-                eraseObserved = true;
-                break;
+    std::optional<Scenario> scenario;
+    {
+        HostStorage storage;
+        NvsStateStore store;
+        TestValues currentValues = prefillInventory(store);
+        for (std::size_t rotation = 0U;
+             rotation < kRotationLimit && !scenario.has_value(); ++rotation) {
+            const auto& record = rotatingRecord(rotation);
+            const auto oldValues = currentValues;
+            storage.device.clearTrace();
+            const auto replacement = rotateValue(record, rotation);
+            const auto result = store.write(key(record.key), replacement);
+            REQUIRE((result == StateStoreWriteStatus::Success ||
+                     result == StateStoreWriteStatus::CommitOutcomeUnknown));
+            currentValues[recordIndex(record)] = replacement;
+            const bool eraseObserved = std::any_of(
+                storage.device.trace().begin(), storage.device.trace().end(),
+                [](const auto& event) {
+                    return event.operation ==
+                           issue90_host::BlockOperation::Erase;
+                });
+            if (eraseObserved) {
+                scenario =
+                    Scenario{rotation, &record, oldValues, currentValues,
+                             relevantMutationCallbacks(storage.device.trace())};
             }
         }
-        storage.device.clearTrace();
     }
-    REQUIRE(eraseObserved);
+    REQUIRE(scenario.has_value());
+
+    std::vector<std::size_t> cutCallbacks = scenario->mutationPoints;
+    if (!g_exhaustive) {
+        cutCallbacks = {cutCallbacks.front(), cutCallbacks.back(),
+                        cutCallbacks[cutCallbacks.size() / 2U]};
+        std::sort(cutCallbacks.begin(), cutCallbacks.end());
+        cutCallbacks.erase(
+            std::unique(cutCallbacks.begin(), cutCallbacks.end()),
+            cutCallbacks.end());
+    }
+    for (const std::size_t callback : cutCallbacks) {
+        HostStorage cutStorage;
+        NvsStateStore cutStore;
+        static_cast<void>(prefillInventory(cutStore));
+        replayRotations(cutStore, scenario->rotation);
+        cutStorage.device.clearTrace();
+        cutStorage.device.failFromCallback(callback);
+        const auto result =
+            cutStore.write(key(scenario->record->key),
+                           scenario->newValues[recordIndex(*scenario->record)]);
+        REQUIRE(result == StateStoreWriteStatus::CommitOutcomeUnknown);
+        cutStorage.device.clearFailure();
+        cutStorage.reinitialize();
+        for (std::size_t index = 0U; index < kRecordInventory.size(); ++index) {
+            requireOldOrNew(cutStore, key(kRecordInventory[index].key),
+                            scenario->oldValues[index],
+                            scenario->newValues[index]);
+        }
+    }
+
+    HostStorage commitStorage;
+    NvsStateStore commitStore;
+    static_cast<void>(prefillInventory(commitStore));
+    replayRotations(commitStore, scenario->rotation);
+    NvsApiFaultSeam::failCommit(ESP_ERR_FLASH_OP_FAIL);
+    REQUIRE(commitStore.write(
+                key(scenario->record->key),
+                scenario->newValues[recordIndex(*scenario->record)]) ==
+            StateStoreWriteStatus::CommitOutcomeUnknown);
+    NvsApiFaultSeam::reset();
+    commitStorage.reinitialize();
+    for (std::size_t index = 0U; index < kRecordInventory.size(); ++index) {
+        requireOldOrNew(commitStore, key(kRecordInventory[index].key),
+                        scenario->oldValues[index], scenario->newValues[index]);
+    }
 
     nvs_stats_t stats{};
     REQUIRE(nvs_get_stats(kPartition, &stats) == ESP_OK);
@@ -328,33 +525,8 @@ void testPrefilledGcAndEraseWorkload() {
     REQUIRE(stats.available_entries > 0U);
 }
 
-int main(int argc, char** argv) {
-    bool exhaustive = false;
-    bool ciRegression = false;
-    std::uint32_t seed = 0U;
-    std::string reportPath;
-    for (int index = 1; index < argc; ++index) {
-        const std::string argument(argv[index]);
-        if (argument == "--exhaustive") {
-            exhaustive = true;
-        } else if (argument == "--ci-regression") {
-            ciRegression = true;
-        } else if (argument == "--seed" && index + 1 < argc) {
-            seed = static_cast<std::uint32_t>(std::stoul(argv[++index]));
-        } else if (argument == "--report" && index + 1 < argc) {
-            reportPath = argv[++index];
-        } else if (argument != "--help") {
-            std::cerr << "unknown argument: " << argument << '\n';
-            return 2;
-        }
-    }
-
-    if (argc == 2 && std::string(argv[1]) == "--help") {
-        std::cout << "usage: issue_90_nvs_adapter_host [--ci-regression] "
-                     "[--exhaustive --seed N] [--report PATH]\n";
-        return 0;
-    }
-
+int runHostTests(bool exhaustive, bool ciRegression, std::uint32_t seed,
+                 const char* reportPath) {
     g_exhaustive = exhaustive;
 
     struct TestCase {
@@ -383,7 +555,7 @@ int main(int argc, char** argv) {
         }
     }
     std::cout << "ISSUE90_HOST_PASS\n";
-    if (!reportPath.empty()) {
+    if (reportPath != nullptr) {
         const char* sourceSha = std::getenv("SOURCE_GIT_SHA");
         std::ofstream report(reportPath);
         if (!report) {
@@ -407,4 +579,14 @@ int main(int argc, char** argv) {
                << "}\n";
     }
     return 0;
+}
+
+extern "C" void app_main(void) {
+    const char* mode = std::getenv("ISSUE90_HOST_MODE");
+    const bool exhaustive =
+        mode != nullptr && std::string(mode) == "exhaustive";
+    const bool ciRegression =
+        mode != nullptr && std::string(mode) == "ci-regression";
+    const char* reportPath = std::getenv("ISSUE90_HOST_REPORT");
+    std::exit(runHostTests(exhaustive, ciRegression, 0U, reportPath));
 }

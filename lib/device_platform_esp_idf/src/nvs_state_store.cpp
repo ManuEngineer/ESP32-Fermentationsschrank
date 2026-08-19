@@ -120,6 +120,9 @@ device_platform::StateStoreReadResult NvsStateStore::read(
         nvs_get_blob(handle, key.bytes().c_str(), output, &readBytes);
     nvs_close(handle);
 
+    if (readErrorCode == ESP_ERR_NVS_NOT_FOUND) {
+        return StateStoreReadResult{StateStoreReadStatus::NotFound, {}};
+    }
     if (readErrorCode == ESP_ERR_NVS_INVALID_LENGTH && readBytes > maxBytes) {
         return StateStoreReadResult{StateStoreReadStatus::CapacityError, {}};
     }

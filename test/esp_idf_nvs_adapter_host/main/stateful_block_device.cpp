@@ -13,6 +13,9 @@ struct Context {
     std::vector<BlockTraceEvent>* trace;
     std::optional<std::size_t>* failFrom;
     std::size_t sequence{0U};
+    std::size_t mutationSequence{0U};
+    bool powerCutTriggered{false};
+    bool currentCallbackMutates{true};
 };
 
 Context& context(esp_blockdev_handle_t handle) {
@@ -23,7 +26,17 @@ bool record(Context& ctx, BlockOperation operation, std::uint64_t address,
             std::size_t length) {
     const std::size_t sequence = ++ctx.sequence;
     ctx.trace->push_back(BlockTraceEvent{operation, address, length, sequence});
-    return ctx.failFrom->has_value() && sequence >= **ctx.failFrom;
+    if (operation == BlockOperation::Write ||
+        operation == BlockOperation::Erase) {
+        ++ctx.mutationSequence;
+    }
+    const bool isMutation = operation == BlockOperation::Write ||
+                            operation == BlockOperation::Erase;
+    const bool powerCut = ctx.failFrom->has_value() && isMutation &&
+                          ctx.mutationSequence >= **ctx.failFrom;
+    ctx.currentCallbackMutates = !ctx.powerCutTriggered;
+    if (powerCut) ctx.powerCutTriggered = true;
+    return powerCut || ctx.powerCutTriggered;
 }
 
 esp_err_t read(esp_blockdev_handle_t handle, std::uint8_t* destination,
@@ -39,8 +52,8 @@ esp_err_t read(esp_blockdev_handle_t handle, std::uint8_t* destination,
     }
     const bool powerCut =
         record(ctx, BlockOperation::Read, sourceAddress, length);
-    std::copy_n(ctx.bytes->data() + sourceAddress, length, destination);
     if (powerCut) return ESP_ERR_FLASH_OP_FAIL;
+    std::copy_n(ctx.bytes->data() + sourceAddress, length, destination);
     return ESP_OK;
 }
 
@@ -56,6 +69,7 @@ esp_err_t write(esp_blockdev_handle_t handle, const std::uint8_t* source,
     }
     const bool powerCut =
         record(ctx, BlockOperation::Write, destinationAddress, length);
+    if (powerCut && !ctx.currentCallbackMutates) return ESP_ERR_FLASH_OP_FAIL;
     for (std::size_t index = 0U; index < length; ++index) {
         ctx.bytes->at(destinationAddress + index) &= source[index];
     }
@@ -74,6 +88,7 @@ esp_err_t erase(esp_blockdev_handle_t handle, std::uint64_t startAddress,
     }
     const bool powerCut =
         record(ctx, BlockOperation::Erase, startAddress, length);
+    if (powerCut && !ctx.currentCallbackMutates) return ESP_ERR_FLASH_OP_FAIL;
     std::fill_n(ctx.bytes->data() + startAddress, length, 0xffU);
     if (powerCut) return ESP_ERR_FLASH_OP_FAIL;
     return ESP_OK;
@@ -151,12 +166,20 @@ void StatefulBlockDevice::clearTrace() {
     trace_->clear();
     auto& ctx = context(handle_);
     ctx.sequence = 0U;
+    ctx.mutationSequence = 0U;
+    ctx.powerCutTriggered = false;
+    ctx.currentCallbackMutates = true;
 }
 
 void StatefulBlockDevice::failFromCallback(std::size_t callbackNumber) {
     failFrom_ = callbackNumber;
 }
 
-void StatefulBlockDevice::clearFailure() { failFrom_.reset(); }
+void StatefulBlockDevice::clearFailure() {
+    failFrom_.reset();
+    auto& ctx = context(handle_);
+    ctx.powerCutTriggered = false;
+    ctx.currentCallbackMutates = true;
+}
 
 }  // namespace issue90_host

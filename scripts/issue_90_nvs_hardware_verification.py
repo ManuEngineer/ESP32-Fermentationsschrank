@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import subprocess
 import sys
@@ -17,6 +16,7 @@ EXPECTED_KEYS = (
     "pc1", "pc2", "pc3", "cm0", "cm1", "cm2", "cr0", "cr1", "cb0",
     "cb1", "rc0", "rc1", "rh0",
 )
+WINDOWS = ("blob_data", "blob_index", "old_removal", "gc_erase")
 
 
 def root() -> Path:
@@ -78,6 +78,39 @@ class Harness:
             raise RuntimeError(f"incomplete READBACK_ALL; missing={missing}")
         return values
 
+    def require_uart_loss(self, seconds: float) -> None:
+        deadline = time.monotonic() + seconds
+        observed = []
+        while time.monotonic() < deadline:
+            raw = self.serial.readline()
+            if raw:
+                line = raw.decode("utf-8", errors="replace").strip()
+                observed.append(line)
+                if "ROTATE_RESULT" in line:
+                    raise RuntimeError(
+                        "UART remained live through ROTATE_RESULT after TRIP"
+                    )
+        if observed:
+            raise RuntimeError(f"UART did not become silent after TRIP: {observed[-5:]}")
+
+
+def parse_fields(line: str) -> dict[str, str]:
+    return dict(
+        field.split("=", 1)
+        for field in line.split()
+        if "=" in field
+    )
+
+
+def parse_rotate_begin(lines: list[str]) -> tuple[str, str]:
+    for line in reversed(lines):
+        if "ROTATE_BEGIN" not in line:
+            continue
+        fields = parse_fields(line)
+        if fields.get("key") in EXPECTED_KEYS and fields.get("new_sha256"):
+            return fields["key"], fields["new_sha256"]
+    raise RuntimeError(f"ROTATE_BEGIN marker has no key/hash: {lines[-5:]}")
+
 
 def require_old_or_new(
     before: dict[str, str], after: dict[str, str], new_hashes: dict[str, str]
@@ -89,8 +122,25 @@ def require_old_or_new(
             )
 
 
-def value(size: int, seed: int) -> bytes:
-    return bytes((seed + (index % 251)) & 0xFF for index in range(size))
+def run_hook(repo: Path, hook: Path, command: str) -> None:
+    result = subprocess.run(
+        [sys.executable, str(hook)],
+        cwd=repo,
+        input=command + "\n",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"power hook failed for {command!r}: {result.stderr.strip()}"
+        )
+    if result.stdout.strip() != {
+        "ARM": "ARMED", "TRIP": "TRIPPED", "RESTORE": "RESTORED"
+    }[command.split()[0]]:
+        raise RuntimeError(
+            f"power hook protocol mismatch for {command!r}: {result.stdout!r}"
+        )
 
 
 def main() -> int:
@@ -98,14 +148,24 @@ def main() -> int:
     parser.add_argument("--port", required=True)
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--uart-loss-timeout", type=float, default=1.0)
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--build-dir", type=Path, default=Path("build/issue_90_hw"))
-    parser.add_argument("--rotations", type=int, default=2048)
+    parser.add_argument("--repetitions", type=int, default=10)
+    parser.add_argument("--windows", default=",".join(WINDOWS))
     parser.add_argument("--power-hook", type=Path,
                         default=Path("scripts/issue_90_power_cut_hook.py"))
     args = parser.parse_args()
+    if args.repetitions < 10:
+        raise SystemExit("--repetitions must be at least 10 for the hardware matrix")
+    selected_windows = tuple(
+        window for window in args.windows.split(",") if window
+    )
+    if not selected_windows or any(window not in WINDOWS for window in selected_windows):
+        raise SystemExit(f"--windows must be selected from {','.join(WINDOWS)}")
     repo = root()
     build_dir = args.build_dir if args.build_dir.is_absolute() else repo / args.build_dir
+    hook = args.power_hook if args.power_hook.is_absolute() else repo / args.power_hook
     if args.build:
         build(repo, build_dir)
     try:
@@ -113,36 +173,40 @@ def main() -> int:
     except ImportError as error:
         raise SystemExit("pyserial is required for the owner-supplied UART runner") from error
 
-    with serial.Serial(args.port, args.baud, timeout=1.0) as port:
+    with serial.Serial(args.port, args.baud, timeout=0.1) as port:
         harness = Harness(port, args.timeout)
         harness.wait_for("READY partition=")
-        harness.send("PREFILL seed=0")
-        harness.wait_for("PREFILL_DONE")
-        harness.readback()
-        harness.send(f"ROTATE max_writes={args.rotations}")
-        harness.wait_for("ROTATE_RESULT")
-        harness.readback()
-
-        # Each power-cut repetition is externally timed by the configured
-        # controller. The firmware marker is the only synchronization point;
-        # no guessed delay or machine-local controller path is used.
-        for repetition in range(3):
-            token = f"issue90-{repetition}"
-            before_cut = harness.readback()
-            subprocess.run([sys.executable, str(repo / args.power_hook), "ARM", token],
-                           cwd=repo, check=True)
-            harness.send(f"CUT_ARM token={token}")
-            harness.wait_for("CUT_ARMED")
-            harness.send("ROTATE max_writes=1")
-            subprocess.run([sys.executable, str(repo / args.power_hook), "TRIP", token],
-                           cwd=repo, check=True)
-            subprocess.run([sys.executable, str(repo / args.power_hook), "RESTORE", token],
-                           cwd=repo, check=True)
+        for control in range(3):
+            harness.send("REBOOT")
             harness.wait_for("READY partition=")
-            after_cut = harness.readback()
-            new_hashes = dict(before_cut)
-            new_hashes["pc0"] = hashlib.sha256(value(32813, 3)).hexdigest()
-            require_old_or_new(before_cut, after_cut, new_hashes)
+            harness.readback()
+
+        for window in selected_windows:
+            for repetition in range(args.repetitions):
+                harness.send("PREFILL seed=0")
+                harness.wait_for("PREFILL_DONE")
+                before_cut = harness.readback()
+                token = f"issue90-{window}-{repetition}"
+                run_hook(repo, hook, f"ARM token={token}")
+                harness.send(f"CUT_ARM token={token}")
+                harness.wait_for("CUT_ARMED")
+                max_writes = 2048 if window == "gc_erase" else 1
+                harness.send(f"ROTATE max_writes={max_writes}")
+                rotate_lines = harness.wait_for("ROTATE_BEGIN")
+                key, new_hash = parse_rotate_begin(rotate_lines)
+                run_hook(repo, hook, "TRIP")
+                harness.require_uart_loss(args.uart_loss_timeout)
+                run_hook(repo, hook, "RESTORE")
+                harness.wait_for("READY partition=")
+                after_cut = harness.readback()
+                new_hashes = dict(before_cut)
+                new_hashes[key] = new_hash
+                require_old_or_new(before_cut, after_cut, new_hashes)
+                print(
+                    f"PASS power-cut window={window} repetition={repetition} "
+                    f"key={key} old_or_new=PASS"
+                )
+
         harness.send("STOP")
         harness.wait_for("PASS")
     return 0

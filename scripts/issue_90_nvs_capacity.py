@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the Issue #90 NVS capacity lower bound and R1 selection."""
+"""Derive and cross-check the Issue #90 NVS capacity inventory."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import os
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -14,62 +15,78 @@ IDF_SHA = "7101770dc6db2667b3c477cc31365dd1acd6db4e"
 PAGE_SIZE = 4096
 PAGE_COUNT_SELECTION = 69
 RESERVE_PAGES_SELECTION = 20
-KEYS = (
-    (
+
+
+@dataclass(frozen=True)
+class RecordGroup:
+    name: str
+    key_symbol: str
+    key_source: str
+    size_source: str
+    size_constant: str | None = None
+    size_mode: str = "constant"
+
+
+GROUPS = (
+    RecordGroup(
         "configuration.user",
-        ("uc0", "uc1", "uc2", "uc3"),
-        301,
-        "lib/fermentation_app/src/configuration_storage_contract.hpp; "
+        "kUserConfigurationSlotKeys",
+        "lib/fermentation_app/src/configuration_storage_contract.hpp",
         "lib/fermentation_app/src/configuration_limits.hpp",
+        "kMaximumUserConfigurationPayloadBytes",
+        "envelope_plus_service",
     ),
-    (
+    RecordGroup(
         "configuration.service",
-        ("sc0", "sc1", "sc2", "sc3"),
-        45,
-        "lib/fermentation_app/src/configuration_storage_contract.hpp; "
+        "kServiceConfigurationSlotKeys",
+        "lib/fermentation_app/src/configuration_storage_contract.hpp",
         "lib/fermentation_app/src/configuration_graph_store.cpp",
+        size_mode="graph_service",
     ),
-    (
+    RecordGroup(
         "configuration.program",
-        ("pc0", "pc1", "pc2", "pc3"),
-        32813,
-        "lib/fermentation_app/src/configuration_storage_contract.hpp; "
+        "kProgramCatalogSlotKeys",
+        "lib/fermentation_app/src/configuration_storage_contract.hpp",
         "lib/fermentation_app/src/configuration_limits.hpp",
+        "kMaximumProgramCatalogPayloadBytes",
+        "envelope_plus_service",
     ),
-    (
+    RecordGroup(
         "configuration.manifest",
-        ("cm0", "cm1", "cm2"),
-        149,
-        "lib/fermentation_app/src/configuration_storage_contract.hpp; "
+        "kConfigurationManifestSlotKeys",
+        "lib/fermentation_app/src/configuration_storage_contract.hpp",
         "lib/fermentation_app/src/configuration_limits.hpp",
+        "kMaximumConfigurationManifestEnvelopeBytes",
     ),
-    (
+    RecordGroup(
         "configuration.root",
-        ("cr0", "cr1"),
-        114,
-        "lib/fermentation_app/src/configuration_storage_contract.hpp; "
+        "kConfigurationRootSlotKeys",
+        "lib/fermentation_app/src/configuration_storage_contract.hpp",
         "lib/fermentation_app/src/configuration_limits.hpp",
+        "kMaximumConfigurationRootEnvelopeBytes",
     ),
-    (
+    RecordGroup(
         "configuration.bootstrap",
-        ("cb0", "cb1"),
-        42,
-        "lib/fermentation_app/src/configuration_storage_contract.hpp; "
+        "kConfigurationBootstrapSlotKeys",
+        "lib/fermentation_app/src/configuration_storage_contract.hpp",
         "lib/fermentation_app/src/configuration_limits.hpp",
+        "kMaximumConfigurationBootstrapEnvelopeBytes",
     ),
-    (
+    RecordGroup(
         "run.checkpoint",
-        ("rc0", "rc1"),
-        8240,
-        "lib/fermentation_app/src/run_persistence_store.cpp; "
-        "lib/fermentation_app/src/run_persistence_coordinator.cpp",
+        "run-persistence-literal:rc0,rc1",
+        "lib/fermentation_app/src/run_persistence_store.cpp",
+        "lib/fermentation_app/src/run_persistence_coordinator.cpp; "
+        "lib/fermentation_app/src/run_persistence_codec.cpp",
+        "kMaximumCheckpointRecordBytes",
     ),
-    (
+    RecordGroup(
         "run.head",
-        ("rh0",),
-        256,
-        "lib/fermentation_app/src/run_persistence_store.cpp; "
-        "lib/fermentation_app/src/run_persistence_coordinator.cpp",
+        "run-persistence-literal:rh0",
+        "lib/fermentation_app/src/run_persistence_store.cpp",
+        "lib/fermentation_app/src/run_persistence_coordinator.cpp; "
+        "lib/fermentation_app/src/run_persistence_codec.cpp",
+        "kMaximumHeadRecordBytes",
     ),
 )
 
@@ -78,11 +95,71 @@ def repository_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def read_source(root: Path, relative: str) -> str:
+    path = root / relative
+    if not path.is_file():
+        raise SystemExit(f"missing canonical inventory source: {relative}")
+    return path.read_text()
+
+
 def parse_define(path: Path, name: str) -> int:
     match = re.search(rf"#define\s+{re.escape(name)}\s+(\d+)", path.read_text())
     if match is None:
         raise SystemExit(f"missing {name} in {path}")
     return int(match.group(1))
+
+
+def parse_cpp_constant(root: Path, relative_sources: str, name: str) -> int:
+    values: list[int] = []
+    for relative in (part.strip() for part in relative_sources.split(";")):
+        path = root / relative
+        text = read_source(root, relative)
+        match = re.search(
+            rf"\b{re.escape(name)}\b\s*=\s*(\d+)\s*U?\s*;", text
+        )
+        if match is None:
+            raise SystemExit(f"missing C++ constant {name} in {path}")
+        values.append(int(match.group(1)))
+    if not values or len(set(values)) != 1:
+        raise SystemExit(
+            f"inconsistent C++ constant {name} in {relative_sources}: {values}"
+        )
+    return values[0]
+
+
+def parse_key_array(root: Path, relative: str, symbol: str) -> tuple[str, ...]:
+    text = read_source(root, relative)
+    match = re.search(rf"\b{re.escape(symbol)}\b\s*\{{(.*?)\}}", text, re.S)
+    if match is None:
+        raise SystemExit(f"missing key inventory {symbol} in {relative}")
+    keys = tuple(re.findall(r'"([a-z0-9]+)"', match.group(1)))
+    if not keys:
+        raise SystemExit(f"empty key inventory {symbol} in {relative}")
+    return keys
+
+
+def parse_service_size(root: Path) -> int:
+    text = read_source(root, "lib/fermentation_app/src/configuration_graph_store.cpp")
+    values = [
+        int(value)
+        for value in re.findall(
+            r"kServiceConfigurationSlotKeys\s*,\s*[^;]{0,240}?\b(\d+)U\s*\)",
+            text,
+            re.S,
+        )
+    ]
+    if not values or len(set(values)) != 1 or values[0] != 45:
+        raise SystemExit(f"service record size is not consistently 45: {values}")
+    return values[0]
+
+
+def parse_literal_keys(root: Path, literal: str) -> tuple[str, ...]:
+    source = read_source(root, "lib/fermentation_app/src/run_persistence_store.cpp")
+    expected = tuple(literal.split(":", 1)[1].split(","))
+    found = tuple(re.findall(r'create\("([a-z0-9]+)"\)', source))
+    if any(key not in found for key in expected):
+        raise SystemExit(f"run persistence key inventory missing {expected}")
+    return expected
 
 
 def entries(size: int, entry_size: int, chunk_max: int) -> int:
@@ -101,6 +178,34 @@ def current_sha(root: Path) -> str:
         capture_output=True,
     )
     return result.stdout.strip()
+
+
+def group_inventory(root: Path) -> list[tuple[str, tuple[str, ...], int, str]]:
+    inventory = []
+    for group in GROUPS:
+        if group.key_symbol.startswith("run-persistence-literal:"):
+            keys = parse_literal_keys(root, group.key_symbol)
+        else:
+            keys = parse_key_array(root, group.key_source, group.key_symbol)
+        if group.size_mode == "graph_service":
+            size = parse_service_size(root)
+        else:
+            size = parse_cpp_constant(
+                root, group.size_source, group.size_constant or ""
+            )
+            if group.size_mode == "envelope_plus_service":
+                graph = read_source(root, "lib/fermentation_app/src/configuration_graph_store.cpp")
+                expression = (
+                    rf"configuration_limits::{re.escape(group.size_constant or '')}"
+                    r"\s*\+\s*45U"
+                )
+                if not re.search(expression, graph):
+                    raise SystemExit(
+                        f"{group.name} is not consumed as limit + 45U in configuration_graph_store.cpp"
+                    )
+                size += 45
+        inventory.append((group.name, keys, size, group.key_source + "; " + group.size_source))
+    return inventory
 
 
 def main() -> int:
@@ -127,20 +232,17 @@ def main() -> int:
         raise SystemExit(f"IDF_PATH is not a git checkout: {idf_path}") from error
     if idf_sha != IDF_SHA:
         raise SystemExit(f"IDF_PATH SHA mismatch: expected {IDF_SHA}, got {idf_sha}")
-    for _, _, _, source in KEYS:
-        for source_path in source.split("; "):
-            if not (root / source_path).is_file():
-                raise SystemExit(f"missing canonical inventory source: {source_path}")
 
+    inventory = group_inventory(root)
     rows = []
-    persistent = 1  # namespace entry
-    for group, key_names, size, source in KEYS:
+    persistent = 1
+    for group, key_names, size, source in inventory:
         count = len(key_names)
         per_key = entries(size, entry_size, chunk_max)
         total = count * per_key
         persistent += total
         rows.append((group, key_names, count, size, per_key, total, source))
-    largest = max(size for _, _, size, _ in KEYS)
+    largest = max(size for _, _, size, _ in inventory)
     peak = persistent + entries(largest, entry_size, chunk_max)
     minimum_entries = peak + 2 * entry_count
     minimum_pages = (minimum_entries + entry_count - 1) // entry_count
@@ -163,6 +265,7 @@ def main() -> int:
         f"- ESP-IDF: `v6.0.2 @ {IDF_SHA}`",
         f"- pinned NVS constants: `{entry_size}` B/entry, `{entry_count}` entries/page, `{chunk_max}` B/chunk",
         "- status: arithmetic evidence only; real NVS statistics and GC remain hardware/BDL evidence",
+        "- inventory provenance: keys and limits are mechanically parsed from the canonical sources below; contract drift fails this command",
         "",
         "| Record group | Key inventory | Slots | Max bytes | Entries/record | Entries | Canonical sources (keys / limits) |",
         "|---|---|---:|---:|---:|---:|---|",
