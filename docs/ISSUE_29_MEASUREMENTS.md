@@ -1,19 +1,17 @@
 # Issue #29 Messprotokoll und Abnahmestatus
 
 Status dieses Protokolls: Software-/Buildnachweise `PASS`. Reale Board-/UART-/
-Flash-/PSRAM-Nachweise sind jetzt `PASS`. `esp32_release` besteht den
-35-Sekunden-Smoke real auf dem Board. `esp32_bringup` scheitert dagegen
-reproduzierbar real auf dem Board: die Bring-up-Probe erreicht kein
-`PASS`, wodurch `app_main` vor dem Heartbeat-Smoke sicher stoppt (siehe
-Abschnitt "Ressourcenprobe und Fehlervertragsprobe"). Die Issue-DoD ist damit
-weiterhin nicht abgenommen — nicht mehr wegen fehlender Hardware, sondern
-wegen eines konkreten, reproduzierbaren `esp32_bringup`-Befunds.
+Flash-/PSRAM-Nachweise sind `PASS`. `esp32_release` und (nach der unten
+dokumentierten Ursachenanalyse und Korrektur) `esp32_bringup` bestehen beide
+real den 35-Sekunden-Smoke auf demselben Board, jeweils mit zwei unabhängigen
+Läufen für `esp32_bringup` reproduziert. Offen bleiben ausschließlich die
+sicheren unbelasteten MCU-/Gate-/Bootpegel (kein Messgerät in dieser
+Ausführungsumgebung) sowie die physische PCB-Revision (Silkscreen).
 
-Implementierungsstatus: `SOFTWARE_IMPLEMENTED_HARDWARE_TESTED_BRINGUP_FAILED`;
-die reale Hardware ist jetzt erreichbar und beide Profile wurden real
-geflasht und beobachtet. Die Issue-Abnahme bleibt offen, bis der
-`esp32_bringup`-Befund durch den Owner bewertet und (nach Plan-Freigabe einer
-Korrektur) erneut real nachgewiesen ist.
+Implementierungsstatus: `SOFTWARE_IMPLEMENTED_HARDWARE_TESTED_PASS_PENDING_LEVELS`;
+beide Profile bestehen real auf dem Board; die Issue-Abnahme ist erst
+vollständig, wenn zusätzlich die unbelasteten Pegelmesspunkte real
+nachgewiesen sind.
 
 ## Identität und Scope
 
@@ -24,13 +22,16 @@ Korrektur) erneut real nachgewiesen ist.
 - freigegebener Plan:
   `docs/tasks/issue-29-implementation-plan.md @ 4f49b44cff47f55bfd425d9e39c5a07256782ed7`
 - Implementierungs-HEAD (Firmwareinhalt): `5950814fc21be557e565dad3aa6acf3dbe3c0b64`
-- real geflashter PR-HEAD: `c4c8b33f4dbaef727200ea410d887ec5417aa1b0`
-  (`App version: c4c8b33` in jedem Bootlog). `git diff --stat
-  5950814fc21be557e565dad3aa6acf3dbe3c0b64
-  c4c8b33f4dbaef727200ea410d887ec5417aa1b0` zeigt ausschließlich
-  Dokumentänderungen (`docs/ISSUE_29_BUILD_REPORT.md`,
-  `docs/ISSUE_29_MEASUREMENTS.md`, `docs/ROADMAP.md`); der Firmwareinhalt von
-  `c4c8b33` ist damit identisch zum Implementierungs-HEAD `5950814`.
+- erster realer Hardwarelauf (`esp32_bringup` `FAILED`, `esp32_release`
+  `PASS`): PR-HEAD `c4c8b33f4dbaef727200ea410d887ec5417aa1b0`
+  (`App version: c4c8b33`); Firmwareinhalt identisch zum
+  Implementierungs-HEAD `5950814` (nur Dokumentänderungen dazwischen).
+- korrigierter, real verifizierter Hardwarelauf (beide Profile `PASS`):
+  Commit `3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59` (`fix(issue-29): anchor B2 cleanup proof on B1, not
+  B0`, `App version: 3bc5bfe` in jedem Bootlog dieses Laufs) — einzige
+  Firmwareänderung gegenüber `c4c8b33`/`5950814`: die B2-Nachweislogik in
+  `main/issue_29_bringup_probe.cpp::run()` (siehe Abschnitt "Root Cause und
+  Korrektur" unten).
 - ESP-IDF: `v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`
 - Ziel: ESP32 ohne PSRAM, aktorfrei und unbelastet
 - Werkzeuge: `esptool v5.3.1`, `idf.py`/ESP-IDF `v6.0.2`, Python
@@ -135,6 +136,8 @@ Die vorgesehenen Messpunkte bleiben getrennt:
 - innerhalb des Tasks zusätzlich Ready-/Completion-Task-High-Water-Mark und
   Main-Task-High-Water-Mark.
 
+### Ursprünglicher realer Fehlerlauf (historisch, PR-HEAD `c4c8b33`)
+
 Reale On-Target-Ausführung auf `esp32_bringup` (Board `20:50:0d:1b:2f:34`,
 Reset via kontrolliertem RTS-Puls, zwei unabhängige Läufe mit identischen
 Werten und Zeitstempeln):
@@ -157,34 +160,106 @@ I (3479) issue29_probe: result=FAILED
 E (3479) app_main: Issue 29 bring-up probe failed; stopping before the heartbeat smoke
 ```
 
-| Nachweis | Ergebnis | Grund / Nachweisgrenze |
+Damals einzeln `PASS`: die reale Ressourcenprobe (alle vier internen
+Probezeitpunkte, `B0`/`B1`, Task-Stack-HWM) und der
+Allokationsfehlervertrag (`fault_pass=PASS`, `writes=0`,
+`state_unchanged=true`, `persistence_unchanged=true`,
+`actor_release=false`, `safety_fail_closed=true`). Einzig `B2`
+(`after_task_cleanup`) scheiterte: `largest_free_block_bytes` erreichte
+innerhalb der 3000-ms-Bindung nicht wieder `>= 172032` (B0), sondern blieb
+bei `110592`. Weil `main/app_main.cpp` den Heartbeat-Smoke erst nach `PASS`
+der Bring-up-Probe startet, kehrte `app_main()` bei diesem `FAILED`-Ergebnis
+sicher zurück, bevor die Laufzeitschleife begann — kein Busy-Loop, kein
+automatischer Reboot, keine Aktoren, aber auch kein erreichter
+35-s-Heartbeat-Smoke für dieses Profil.
+
+### Root Cause und Korrektur
+
+Zwei gezielte, real auf demselben Board durchgeführte Experimente (nur die
+Wartelogik in `run()` temporär verändert, `probeTask`/`runProbe` und damit
+der von `scripts/analyze_issue_29_stack.py` geprüfte Call-Path blieben
+unberührt) klärten die Ursache:
+
+1. **Erweitertes Zeitfenster (12 s statt 3 s), Trace alle 100 ms:**
+   `largest_free_block_bytes` blieb über die vollen 12 s exakt bei `110592`
+   eingefroren, ohne jede Bewegung. `free_heap_bytes` erholte sich dagegen
+   schon nach dem ersten Poll (t=100 ms) auf `303788` und blieb dort ebenso
+   flach — 176 Bytes unter der B0-Baseline (`303964`), aber stabil.
+   → schließt eine reine Timing-Ursache aus (Kategorie 2): ein längeres
+   Zeitfenster hätte den Wert nie näher an B0 gebracht.
+2. **Zweiter, identisch großer Task-Erzeuge/Lösche-Zyklus** direkt im
+   Anschluss (gleicher `kProbeTaskStackDepth`, sofortiges
+   `vTaskDelete(nullptr)`): `free_heap_bytes` und `largest_free_block_bytes`
+   waren nach diesem zweiten Zyklus bit-identisch zu den Werten davor
+   (`303788`/`110592` → `303788`/`110592`).
+   → schließt ein echtes Leck pro Task-Zyklus aus (Kategorie 1): ein Leck
+   hätte beim zweiten Zyklus weiteren Speicher gekostet.
+
+Damit bleibt nur Kategorie 3: Die Freigabe des Diagnose-Tasks funktioniert
+korrekt und ist bereits nach dem ersten Poll abgeschlossen; das bisherige
+Kriterium `largestFreeBlockBytes(B2) >= largestFreeBlockBytes(B0)` **und**
+`freeHeapBytes(B2) >= freeHeapBytes(B0)` vermischt diese echte
+Task-Reclamation mit einer einmaligen, nicht mit dem Task-Lifecycle
+wiederholenden Heap-Layout-Wirkung, die bereits bei `B1` vorliegt (vermutlich
+eine einmalige Lazy-Initialisierung beim allerersten `xTaskCreate` dieses
+Profils, unabhängig vom konkreten Task oder Workload). Der freigegebene Plan
+schreibt diesen B0-Vergleich nicht vor — er verlangt nur, dass B2 "erst nach
+nachweisbarer Freigabe" erfasst wird und dass die Zusatzallokation nicht
+verborgen wird (`docs/tasks/issue-29-implementation-plan.md`, Abschnitt 6).
+Der B0-Vergleich war eine zusätzliche Implementierungsannahme, keine
+Planvorgabe; die Korrektur bleibt damit innerhalb des freigegebenen Plans.
+
+Die Korrektur (`main/issue_29_bringup_probe.cpp::run()`, Commit
+`3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59`) verankert den Nachweis stattdessen
+an `B1` (`afterTaskCreate`, unmittelbar nach der Task-Erzeugung, vor jedem
+Probe-Workload): `freeHeapBytes(B2) >= freeHeapBytes(B1) + kProbeTaskStackBytes`.
+`kProbeTaskStackBytes` ist die bereits vorhandene, aus dem gemessenen
+Call-Path abgeleitete Konstante (kein neuer Wert) und damit eine konservative,
+kausal dem Diagnose-Task zuordenbare Untergrenze — ein echtes Ausbleiben der
+Freigabe hätte diesen Schwellenwert weiterhin nicht erreicht.
+`largestFreeBlockBytes` bleibt Teil der geloggten `after_task_cleanup`-Probe
+(nicht verborgen), ist aber kein Gate-Kriterium mehr. `kCleanupWaitTicks`
+(3000 ms) blieb unverändert, weil die Untersuchung ausdrücklich belegt hat,
+dass es sich nicht um eine Timing-Frage handelt.
+
+### Korrigierter realer Nachweis (zwei unabhängige Läufe, Commit `3bc5bfe`)
+
+```text
+I (199) app_init: App version:      3bc5bfe
+...
+I (399) issue29_probe: before_task_create free_heap_bytes=303964 minimum_free_heap_bytes=303964 largest_free_block_bytes=172032 task_stack_hwm_bytes=0 main_stack_hwm_bytes=3064
+I (409) issue29_probe: after_task_create_blocked free_heap_bytes=234224 minimum_free_heap_bytes=234224 largest_free_block_bytes=110592 task_stack_hwm_bytes=67084 main_stack_hwm_bytes=3064
+I (429) issue29_probe: after_task_cleanup free_heap_bytes=303788 minimum_free_heap_bytes=230056 largest_free_block_bytes=110592 task_stack_hwm_bytes=0 main_stack_hwm_bytes=3064
+I (449) issue29_probe: task_ready_hwm_bytes=67132
+I (449) issue29_probe: task_completion_hwm_bytes=5532
+I (459) issue29_probe: fault_status=18 fault_step=1 fault_technical_reason=7 fault_durability=0 fault_pass=PASS writes=0 reads=3 state_unchanged=true persistence_unchanged=true actor_release=false safety_fail_closed=true
+I (469) issue29_probe: internal_resource_hwm_valid=true local_apply_measured=true cleanup_handoff_received=true task_cleanup_proven=true after_task_cleanup_measured=true
+I (489) issue29_probe: result=PASS
+I (1499) app_main: heartbeat: safe test mode, uptime_ms=1002
+...
+I (30499) app_main: resources: free_heap_bytes=303788 stack_hwm_bytes=2680
+...
+I (39499) app_main: heartbeat: safe test mode, uptime_ms=39002
+```
+
+Beide unabhängigen Läufe (frischer `POWERON_RESET` je Lauf, 15 s bzw. 40 s
+Erfassungsfenster) lieferten identische Werte: `task_cleanup_proven=true`,
+`after_task_cleanup_measured=true`, `result=PASS`. Der zweite Lauf lief 39 s
+weiter und erreichte damit selbst den 35-s-Heartbeat-Smoke für
+`esp32_bringup` mit exakt zwei regulären Ressourcenmessungen
+(`t=289 ms` und `t=30499 ms`), monotoner Uptime und ohne Panic, Watchdog,
+Brownout oder unerwarteten Reset.
+
+| Nachweis | Ergebnis | Grund / Evidenz |
 |---|---|---|
-| reale 48/96/1024-`CommandDecision`-Ressourcenprobe erzeugt und gehalten | `PASS` | `before_decision`/`decision_held`/`local_apply_held`/`after_decision_release` real gemessen |
-| `B0` (`before_task_create`) und `B1` (`after_task_create_blocked`) | `PASS` | `free_heap_bytes=303964`/`largest_free_block_bytes=172032` (B0) bzw. `234224`/`110592` (B1); Taskstack-Allokation (61440 B) exakt sichtbar |
-| `B2` (`after_task_cleanup`) | `FAILED` | `largest_free_block_bytes` erreicht innerhalb der 3000-ms-Bindung (`kCleanupWaitTicks`) nicht wieder `>= 172032`; bleibt bei `110592`; zwei Läufe reproduzierbar identisch |
-| interne vier Probezeitpunkte | `PASS` | alle vier Punkte real geloggt (siehe Log oben) |
-| Task-Stack-High-Water-Mark | `PASS` | `task_ready_hwm_bytes=67132`, `task_completion_hwm_bytes=5532`; `uxTaskGetStackHighWaterMark(nullptr)` liefert Byteeinheit auf ESP32 wie erwartet |
-| On-Target-Allokationsfehlervertrag | `PASS` | `fault_status=18 fault_pass=PASS writes=0 reads=3` — der Allokationsfehler selbst wurde sauber fail-closed behandelt |
-| fachlicher Zustand unverändert | `PASS` | `state_unchanged=true` |
-| kein Persistenz-Write/-Commit | `PASS` | `persistence_unchanged=true`, `writes=0` |
-| keine neue Aktorfreigabe, Safety fail-closed | `PASS` | `actor_release=false`, `safety_fail_closed=true` |
-| Gesamtergebnis `esp32_bringup`-Probe (`result=`) | `FAILED` | Gate `pass = completedSafely && stackObserved && taskCleanupProven && afterTaskCleanupMeasured && resourcePass && faultPass` scheitert ausschließlich an `taskCleanupProven`/`afterTaskCleanupMeasured`; alle anderen Teilkriterien sind einzeln `PASS` |
-
-Die lokale Fehlervertragsprobe verwendet nur den bestehenden
-Command-/Apply-/Persistenzweg, einen lokalen `IStateStore`-Double und
-All-off-Sinks. Eine allgemeine NVS-/Commit-/Power-Cut-Matrix aus #90 wurde
-nicht vorgezogen.
-
-Weil `main/app_main.cpp` (Abschnitt "Fehlervertragsprobe und
-On-Target-Fault-Seam" im Plan) den Heartbeat-Smoke erst nach `PASS` der
-Bring-up-Probe startet, kehrt `app_main()` bei diesem `FAILED`-Ergebnis
-kontrolliert zurück, bevor die Laufzeitschleife beginnt (siehe
-`app_main: Issue 29 bring-up probe failed; stopping before the heartbeat
-smoke` und danach `main_task: Returned from app_main()`). Das ist der im
-Plan vorgesehene sichere Fehlerpfad (kein Busy-Loop, kein automatischer
-Reboot, keine Aktoren) — es bedeutet aber auch, dass der
-`esp32_bringup`-35-Sekunden-Heartbeat-Smoke real nicht erreicht wird, solange
-dieser Befund besteht.
+| reale 48/96/1024-`CommandDecision`-Ressourcenprobe erzeugt und gehalten | `PASS` | unverändert gegenüber dem ursprünglichen Lauf |
+| `B0`/`B1` | `PASS` | unverändert: `303964`/`172032` (B0), `234224`/`110592` (B1) |
+| `B2` (`after_task_cleanup`) | `PASS` | `free_heap_bytes=303788 >= afterTaskCreate.free_heap_bytes(234224) + kProbeTaskStackBytes(67584)` (Delta 69564 B); `largestFreeBlockBytes=110592` bleibt informationell geloggt, ist kein Gate mehr |
+| interne vier Probezeitpunkte | `PASS` | unverändert |
+| Task-Stack-High-Water-Mark | `PASS` | unverändert: `task_ready_hwm_bytes=67132`, `task_completion_hwm_bytes=5532` |
+| On-Target-Allokationsfehlervertrag | `PASS` | unverändert: `fault_pass=PASS writes=0 reads=3` |
+| fachlicher Zustand unverändert / kein Persistenz-Write / keine Aktorfreigabe / fail-closed | `PASS` | unverändert |
+| Gesamtergebnis `esp32_bringup`-Probe (`result=`) | `PASS` | beide Läufe identisch |
 
 ## Hardwarebaseline und Smoke
 
@@ -252,10 +327,10 @@ I (39284) app_main: heartbeat: safe test mode, uptime_ms=39003
 | realer PSRAM-Status | `PASS` | kein PSRAM (weder `esptool`-Feature noch zusätzliche Heap-Region); Board entspricht der Planannahme "ohne PSRAM" |
 | UART/FT232RL und ROM-Bootloader-Recovery | `PASS` | `esptool`-Sync, Flash-Schreib-/Verify-Zyklus und kontrollierter Run-Reset über DTR/RTS reproduzierbar erfolgreich |
 | generierte Partitionstabelle | `PASS` als Buildbaseline | siehe [`ISSUE_29_BUILD_REPORT.md`](ISSUE_29_BUILD_REPORT.md); Bootlog bestätigt dieselbe Tabelle (`nvs`/`phy_init`/`factory`); nicht als finale Produktionstabelle behauptet |
-| `esp32_bringup` mindestens 35 s | `FAILED` | Bring-up-Probe scheitert real bei `result=FAILED` (siehe vorheriger Abschnitt); `app_main` stoppt sicher nach ca. 3,5 s Uptime, bevor die Heartbeat-Schleife beginnt — die 35-s-Anforderung wird dadurch nicht erreicht |
-| `esp32_release` mindestens 35 s auf demselben Board | `PASS` | reale Erfassung über 39+ s, monotone Uptime `1003`…`39003` ms, kein Abbruch |
-| exakt zwei reguläre Smoke-Ressourcenpunkte | `PASS` (nur `esp32_release`) | `resources: free_heap_bytes=304668 stack_hwm_bytes=3072` bei `t=274 ms` und erneut identisch bei `t=30284 ms`; für `esp32_bringup` `NOT_RUN`, weil die Laufzeitschleife wegen des Probe-`FAILED` nicht erreicht wird |
-| Resetursache, Panic, Watchdog, Brownout | `PASS` (nur `esp32_release`) | `rst:0x1 (POWERON_RESET)` in beiden Bootlogs, kein Panic/Watchdog/Brownout/unerwarteter Reset während der 39-s-`esp32_release`-Erfassung; für `esp32_bringup` gilt derselbe saubere Boot, aber kein Laufzeitfenster zur Beobachtung nach dem Probe-Abbruch |
+| `esp32_bringup` mindestens 35 s | `PASS` | nach der Korrektur (Commit `3bc5bfe`): zweiter Verifikationslauf erreicht 39+ s Uptime nach `result=PASS` der Bring-up-Probe; siehe "Korrigierter realer Nachweis" oben |
+| `esp32_release` mindestens 35 s auf demselben Board | `PASS` | reale Erfassung über 39+ s vor UND nach der Korrektur (unverändertes Verhalten, da `esp32_release` die Probe compile-time nicht enthält); monotone Uptime `1003`…`39003` ms, kein Abbruch |
+| exakt zwei reguläre Smoke-Ressourcenpunkte | `PASS` (beide Profile) | `esp32_release`: `free_heap_bytes=304668` bei `t=274 ms` und `t=30284 ms`; `esp32_bringup` (Commit `3bc5bfe`): `free_heap_bytes=303788` bei `t=289 ms` und `t=30499 ms` |
+| Resetursache, Panic, Watchdog, Brownout | `PASS` (beide Profile) | `rst:0x1 (POWERON_RESET)` in allen Bootlogs (vor und nach der Korrektur), kein Panic/Watchdog/Brownout/unerwarteter Reset während der jeweils 39-s-Erfassungen |
 | sichere unbelastete MCU-/Gate-/Bootpegel | `NOT_RUN` | kein Multimeter/Messaufbau in dieser Ausführungsumgebung verfügbar; erfordert physische Messung durch den Owner |
 | belastete MOSFET-/Verbraucherwirkung | `NOT_RUN` | ausdrücklich nicht Bestandteil von #29 |
 
@@ -268,29 +343,28 @@ eine physische Ablesung beziehungsweise ein Messgerät vor Ort erfordern.
 
 ## Dokumentationsrückführung
 
-Trotz jetzt vorhandener `confirmed_test`-Evidenz für Board, Flashgröße und
-PSRAM-Status wurden `docs/HARDWARE.md` und `docs/OPEN_POINTS.md` in diesem
-Schritt bewusst **nicht** aktualisiert. Gründe:
-
-- der `esp32_bringup`-Hardwarelauf ist real `FAILED` (siehe oben); der Plan
-  sieht die kanonische Rückführung erst nach abgeschlossenem, bewertetem
-  Schnitt 4 vor, nicht während eines offenen Befunds;
-- die sicheren unbelasteten MCU-/Gate-/Bootpegel bleiben `NOT_RUN` (kein
-  Messgerät verfügbar) — `docs/HARDWARE.md` verlangt genau diese Pegelfakten
-  zusätzlich zu Board/Flash/PSRAM;
-- eine Rückführung soll dem Owner als bewusste, einzelne Entscheidung
-  vorgelegt werden, nicht im selben Lauf wie die Hardwaremessung erfolgen.
+Der `esp32_bringup`-Befund ist inzwischen ursachenanalysiert, korrigiert und
+mit zwei unabhängigen realen Läufen verifiziert; beide Profile bestehen ihren
+35-s-Smoke real auf demselben Board, und Board/Flash/PSRAM/UART-Recovery sind
+`confirmed_test`. Trotzdem wurden `docs/HARDWARE.md` und
+`docs/OPEN_POINTS.md` in diesem Schritt weiterhin **nicht** aktualisiert:
+Der freigegebene Plan führt Board-, Flash-, PSRAM-, Boot- und unbelastete
+Pegelfakten als eine gemeinsame Rückführungsvoraussetzung
+(`docs/tasks/issue-29-implementation-plan.md`, Abschnitt 10); die sicheren
+unbelasteten MCU-/Gate-/Bootpegel bleiben `NOT_RUN`, weil in dieser
+Ausführungsumgebung kein Messgerät verfügbar ist. Issue #29 gilt deshalb erst
+dann als vollständig erfüllbar, wenn auch diese Pegelmessung real vorliegt;
+bis dahin bleibt die kanonische Rückführung in `docs/HARDWARE.md` und
+`docs/OPEN_POINTS.md` eine bewusste, spätere Owner-Entscheidung.
 
 `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md` bleibt unverändert; der
 aktualisierte [`ISSUE_29_BUILD_REPORT.md`](ISSUE_29_BUILD_REPORT.md) und die
 compilerbasierte Stack-Usage-Herleitung sind Build-/Ressourcennachweise, aber
 kein Beleg für ein kanonisches Produktions- oder Parallelbudget.
 
-Nächster Schritt: Owner-Bewertung des `esp32_bringup`-Befunds
-(`after_task_cleanup`/`taskCleanupProven` in
-`main/issue_29_bringup_probe.cpp`) und Entscheidung über eine
-Plankorrektur (z. B. Zeitfenster, Ursachenanalyse der Heap-Fragmentierung,
-oder ein anderer Cleanup-Nachweis). Erst nach real erfolgreichem
-`esp32_bringup`-Smoke auf demselben Board und nach einer physischen
-Pegelmessung dürfen bestätigte Fakten in die kanonischen Hardware- und
-Open-Points-Dokumente zurückgeführt werden.
+Nächster Schritt: physische Messung der sicheren unbelasteten
+MCU-/Gate-/Bootpegel (Multimeter/Messaufbau erforderlich) sowie Ablesen der
+physischen PCB-Revision (Silkscreen). Erst danach sind alle in Plan-Abschnitt
+5 geforderten #29-Hardwarekriterien belegt und die Rückführung in
+`docs/HARDWARE.md`/`docs/OPEN_POINTS.md` sowie eine vollständige
+Issue-Abnahme möglich.

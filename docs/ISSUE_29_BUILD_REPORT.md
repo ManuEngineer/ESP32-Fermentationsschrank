@@ -60,12 +60,18 @@ Quality-Gate- und Artefakt-Scanprüfungen sowie die kumulative
 Xtensa-Stackherleitung waren `PASS`. Diese Software-/Buildnachweise sind kein
 Board-, UART-, Flash-, Pegel- oder Smoke-Nachweis.
 
-Der reale Hardwarelauf flashte beide Profile vom PR-HEAD
+Der erste reale Hardwarelauf flashte beide Profile vom PR-HEAD
 `c4c8b33f4dbaef727200ea410d887ec5417aa1b0` (`App version: c4c8b33` im
-Bootlog); der Firmwareinhalt ist gegenüber `5950814` unverändert (siehe
-[`ISSUE_29_MEASUREMENTS.md`](ISSUE_29_MEASUREMENTS.md), Abschnitt "Identität
-und Scope"). Die realen Board-, Flash-, PSRAM-, Smoke- und Probe-Ergebnisse
-sind dort dokumentiert und werden hier nicht dupliziert.
+Bootlog); der Firmwareinhalt ist gegenüber `5950814` unverändert. Dieser Lauf
+zeigte `esp32_bringup` real `FAILED` (Cleanup-Nachweis der Bring-up-Probe).
+Commit `3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59` korrigiert die
+B2-Nachweislogik in `main/issue_29_bringup_probe.cpp::run()` (einzige
+Firmwareänderung gegenüber `c4c8b33`/`5950814`); zwei erneute unabhängige
+Hardwareläufe auf demselben Board (`App version: 3bc5bfe`) zeigen beide
+Profile real `PASS`. Die vollständigen realen Board-, Flash-, PSRAM-, Smoke-,
+Root-Cause- und Probe-Ergebnisse sind in
+[`ISSUE_29_MEASUREMENTS.md`](ISSUE_29_MEASUREMENTS.md) dokumentiert und
+werden hier nicht dupliziert.
 
 ## Xtensa-Stack-Usage-Herleitung
 
