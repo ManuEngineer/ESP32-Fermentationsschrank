@@ -21,8 +21,8 @@
 - Profil: esp32_bringup
 - ESP-IDF-Tag: v6.0.2
 - ESP-IDF-Commit: 7101770dc6db2667b3c477cc31365dd1acd6db4e
-- Build-Commit: 0b4ee996ec3e90c14a41fa35673dfbfb9b7d1353
-- Source-Git-SHA: f7292ca03f3f2387b13ac5124f70041b09923b1b
+- Build-Commit: 87bf05f51081db59c691afe43d22181253c94e9d
+- Source-Git-SHA: 0573096dcc77bd98013b7a3f5be6dc123d90436b
 - Gesamter Flashverbrauch (size.json total_size): 195115 Bytes
 - DRAM: 13202 / 180736 Bytes
 - IRAM: 42023 / 131072 Bytes
@@ -38,8 +38,8 @@
 - Profil: esp32_release
 - ESP-IDF-Tag: v6.0.2
 - ESP-IDF-Commit: 7101770dc6db2667b3c477cc31365dd1acd6db4e
-- Build-Commit: 0b4ee996ec3e90c14a41fa35673dfbfb9b7d1353
-- Source-Git-SHA: f7292ca03f3f2387b13ac5124f70041b09923b1b
+- Build-Commit: 87bf05f51081db59c691afe43d22181253c94e9d
+- Source-Git-SHA: 0573096dcc77bd98013b7a3f5be6dc123d90436b
 - Gesamter Flashverbrauch (size.json total_size): 127635 Bytes
 - DRAM: 12650 / 180736 Bytes
 - IRAM: 42023 / 131072 Bytes

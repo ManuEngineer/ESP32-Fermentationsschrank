@@ -6,7 +6,7 @@
 - Grund: In dieser Draft-Phase war kein verifizierter ESP32, kein serieller
   Port und kein externer Power-Cut-Controller fuer den vollstaendigen
   Standard-Flash-/Partitionslauf verfuegbar.
-- Quellstand der geplanten Ausfuehrung: `f7292ca03f3f2387b13ac5124f70041b09923b1b`.
+- Quellstand der geplanten Ausfuehrung: `0573096dcc77bd98013b7a3f5be6dc123d90436b`.
 - Herstellerbasis: ESP-IDF `v6.0.2 @
   7101770dc6db2667b3c477cc31365dd1acd6db4e`.
 
