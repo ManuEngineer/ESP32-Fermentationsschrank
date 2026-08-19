@@ -20,6 +20,13 @@ Der Plan ist auf PR #116 gestapelt:
 - Abhängigkeit: `STACKED_ON_PR_116`; PR #116 bleibt Draft, Issue #29 bleibt
   offen.
 
+Diese konsolidierte R3-Revision enthält sowohl die korrigierte NVS-
+Kapazitätsarithmetik einschließlich des separaten `BLOB_IDX`-Entries als auch
+die anwendungsneutrale, durch den owning context gelieferte
+`NvsStateStoreConfig`. Sie ersetzt die vorherige Planrevision vollständig;
+keine der beiden materiellen Korrekturen darf aus einer historischen Fassung
+ergänzt werden.
+
 PR #116 liefert die aktuelle Software-/Build-Basis. Sein reales Board-,
 Flash-, UART-, Reset-, Standard-Flash-, Ressourcen- und Hardwaregate ist nicht
 geschlossen. Deshalb sind nach Planfreigabe Adapter-, Hosttest-, Kapazitäts-
@@ -37,7 +44,9 @@ eingeführt.
 Unverändert bleiben:
 
 - der direkte, verlustfreie `StateStoreKey`-zu-NVS-Schlüssel gemäß ADR-016;
-- Namespace- und Partitionsabgrenzung als Adapterdetail;
+- Namespace- und Partitionsabgrenzung als explizite Konfiguration des owning
+  context; die konkrete R1-Konfiguration wird nicht zur universellen
+  Adapterannahme;
 - `StateStoreReadStatus`, `StateStoreWriteStatus` einschließlich
   `CommitOutcomeUnknown`;
 - Envelope-, Schema-, Active-/Fallback-/Head-, Lauf- und Wire-Verträge;
@@ -78,15 +87,57 @@ gung für die Kapazitätsinventur.
 
 Die Live-Anforderungen sind [Issue #90](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/90), die Hardwareabhängigkeit [Issue #29](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/issues/29) und der aktuelle Stack [PR #116](https://github.com/ManuEngineer/ESP32-Fermentationsschrank/pull/116). Eine historische Planfassung ersetzt diese konsolidierte Fassung nicht.
 
-## Eindeutiger Partitions- und Namespacevertrag
+## Anwendungsneutrale Adapterkonfiguration und konkreter R1-Vertrag
 
-Der Adapter verwendet ausschließlich eine dedizierte NVS-Partition:
+`device_platform_esp_idf::NvsStateStore` implementiert ausschließlich den
+anwendungsneutralen NVS-Mechanismus. Partition und Namespace sind keine festen
+Klassenkonstanten und kein Fermentationsvertrag, sondern werden vom owning
+context explizit übergeben:
+
+```text
+Generischer Adapter:
+device_platform_esp_idf::NvsStateStore
+        ^
+        |
+owning context / Composition Root / #90-Harness
+        |
+        +-- partition = state_store
+        +-- namespace = fermentation   # konkrete R1-Konfiguration
+```
+
+Die konkrete Adapterkonfiguration bleibt klein und lifetime-sicher: Eine
+`NvsStateStoreConfig` (oder gleichwertige explizite Konstruktorparameter)
+besitzt die Partitions- und Namespacewerte als eigene, nicht referenzierte
+Strings. `NvsStateStore` erhält diese Konfiguration beim Konstruieren; es gibt
+keinen Defaultkonstruktor und keine versteckten `state_store`-/`fermentation`-
+Konstanten. Die Konfiguration wird vor dem ersten NVS-Aufruf gegen die
+gepinnten ESP-IDF-Grenzen für Label und Namespace validiert. Eine leere,
+zu lange oder anderweitig ungültige Konfiguration wird fail-closed behandelt:
+Der Adapter führt keinen NVS-Aufruf aus und liefert ausschließlich bestehende
+fehlerhafte Read-/Write-Ergebnisse des `IStateStore`-Vertrags. Es entsteht
+kein neuer Portstatus.
+
+Für R1 bleiben die vom owning context gelieferten Werte verbindlich:
 
 - Partitionslabel: `state_store`;
 - Partitionstyp/Subtyp: `data,nvs`;
 - Namespace: `fermentation`;
 - IStateStore-Schlüssel: direkt und unverändert als NVS-Key;
 - Defaultpartition `nvs`: nicht für IStateStore-Records.
+
+Diese Konfigurationspräzisierung ändert weder `IStateStore` noch
+`StateStoreKey`, den kanonischen Keybestand, Envelope-, Slot-, Wire- oder
+Recoveryverträge. NVS bleibt das produktive Backend. Es entsteht weder ein
+zweiter Persistenzport noch eine neue Persistenzarchitektur.
+
+Solange kein produktiver `IStateStore`-Consumer verdrahtet ist, liefert der
+#90-Bring-up-Harness diese R1-Konfiguration. Später übernimmt dies die
+ESP-IDF-Composition-Root beziehungsweise die konkrete Hardware-/Anwendungs-
+komposition. Init/Deinit verbleibt beim owning context und wandert nicht in
+`NvsStateStore`. Eine Registry, Factory, DI-Plattform oder benutzerkonfigu-
+rierbare Persistenzplattform wird nicht eingeführt. Aus der expliziten
+Konfiguration werden keine ESP32-S3-, Multi-Board-, OTA-, PSRAM- oder
+LittleFS-Erweiterungen abgeleitet.
 
 Die Trennung verhindert, dass die Adapterkapazität mit anderen Konsumenten
 vermischt wird. Der gepinnte ESP-IDF-WLAN-Vertrag aktiviert
@@ -98,8 +149,8 @@ initialisieren.
 
 ### Vorgesehener R1-Auswahlentscheid (wird mit exakter Planfreigabe verbindlich)
 
-Mit der Ownerfreigabe der exakten neuen Plan-Commit-SHA soll für den #90-
-eigenen Adapter `state_store = 69 * 4096 = 282.624 B` (276 KiB) verbindlich
+Mit der Ownerfreigabe der exakten neuen Plan-Commit-SHA soll für die #90-
+R1-Konfiguration `state_store = 69 * 4096 = 282.624 B` (276 KiB) verbindlich
 werden. Die Rechnung unten beweist eine Untergrenze von 49 Seiten; 69 Seiten
 sollen der mit dieser exakten Planfreigabe verbindliche Auswahlwert sein und
 enthalten 20 zusätzliche Seiten für Seitenpackung, Fragmentierung und die
@@ -135,18 +186,21 @@ bestehen.
 Referenz- oder Laufzeit-Shutdown-Infrastruktur.
 
 Sobald ein tatsächlicher produktiver `IStateStore`-Verbraucher verdrahtet wird,
-besitzt der jeweilige ESP-IDF Composition Root diesen einfachen R1-Ablauf:
+besitzt der jeweilige ESP-IDF Composition Root diesen einfachen R1-Ablauf und
+liefert dem Adapter die geprüfte Konfiguration:
 
-1. `nvs_flash_init_partition("state_store")` genau einmal vor der
-   Store-Konstruktion aufrufen;
-2. nur bei `ESP_OK` `NvsStateStore` konstruieren;
-3. danach den tatsächlichen Verbraucher konstruieren und ihm den Store
+1. die R1-Konfiguration mit Partition `state_store` und Namespace
+   `fermentation` erzeugen und fail-closed validieren;
+2. `nvs_flash_init_partition(config.partitionLabel.c_str())` genau einmal vor
+   der Store-Konstruktion aufrufen;
+3. nur bei `ESP_OK` `NvsStateStore(config)` konstruieren;
+4. danach den tatsächlichen Verbraucher konstruieren und ihm den Store
    übergeben;
-4. bei jeder Abweichung von `ESP_OK` fail-closed starten: Fehler loggen,
+5. bei jeder Abweichung von `ESP_OK` fail-closed starten: Fehler loggen,
    Store/Verbraucher nicht konstruieren, keine normale Anwendungsschleife und
    kein Aktorpfad;
-5. beim kontrollierten Ende zuerst Verbraucher, dann `NvsStateStore`, zuletzt
-   `nvs_flash_deinit_partition("state_store")` zerstören.
+6. beim kontrollierten Ende zuerst Verbraucher, dann `NvsStateStore`, zuletzt
+   `nvs_flash_deinit_partition(config.partitionLabel.c_str())` zerstören.
 
 `ESP_ERR_NVS_NO_FREE_PAGES`, `ESP_ERR_NVS_NEW_VERSION_FOUND`,
 `ESP_ERR_NVS_NOT_FOUND`, `ESP_ERR_INVALID_ARG`, `ESP_ERR_NO_MEM`,
@@ -166,8 +220,9 @@ Ein Handle wird pro `read`-/`write`-Operation geöffnet und vor der Rückkehr
 geschlossen. Ein langlebiges Handle ist in R1 nicht erforderlich; es gibt keine
 konkrete Nebenläufigkeits-, Transaktions- oder Recoveryanforderung dagegen.
 Die Wahl ist die einfachste Besitz- und Ressourcenregel und behauptet nicht,
-uncommittete Zustände zu verhindern. Der Store besitzt nur seine
-Operationslebensdauer; der Root besitzt Partition und übergeordnete Objekte.
+uncommittete Zustände zu verhindern. Der Store besitzt seine geprüfte
+Konfiguration und die Operationslebensdauer; der Root besitzt Initialisierung,
+Partition und übergeordnete Objekte.
 
 ## Produktionsadapter und Fehlervertrag
 
@@ -179,9 +234,12 @@ Vorgesehene Produktionsdateien:
 
 Der Adapter implementiert ausschließlich `device_platform::IStateStore`. Der
 portseitige öffentliche Header und der Fachkern bleiben frei von ESP-IDF. Die
-konkrete `NvsStateStore`-Klasse exponiert keinen rohen Handle und keine
-Lifecycle-Operation; ihr Handle bleibt ausschließlich innerhalb der
-Operationsimplementierung.
+konkrete `NvsStateStore`-Klasse erhält eine explizite, eigene
+`NvsStateStoreConfig`, exponiert keinen rohen Handle und keine Lifecycle-
+Operation; ihr Handle bleibt ausschließlich innerhalb der
+Operationsimplementierung. Alle `nvs_open_from_partition`-Aufrufe verwenden
+die geprüften Instanzwerte. Eine Abhängigkeit auf `fermentation_app` entsteht
+nicht.
 
 `nvs_set_blob()` mutiert in der gepinnten Basis tatsächlich während des
 Aufrufs: neue `BLOB_DATA`-Chunks, neuer `BLOB_IDX`, Entfernung des alten
@@ -201,7 +259,7 @@ Schreibfehlerargument und darf in der Set-/Commit-Matrix nicht als Grund für
 | Phase / ESP-IDF-Aufruf | Ergebnisabbildung | Garantie / Begründung |
 |---|---|---|
 | Root: `nvs_flash_init_partition` | `ESP_OK` erlaubt Root-Fortsetzung; jeder andere Status ist Startup-Failure und fail-closed | Kein Store existiert; kein Löschen, Formatieren oder Retry |
-| Read-open: `nvs_open_from_partition(..., NVS_READONLY, ...)` | `ESP_ERR_NVS_NOT_FOUND` → `NotFound`; jeder andere Fehler → `ReadError` | Vor `nvs_get_blob` keine Mutation; gültige feste Partition/Namespace/Keys machen `INVALID_NAME` und `INVALID_ARG` im Normalpfad unmöglich |
+| Read-open: `nvs_open_from_partition(..., NVS_READONLY, ...)` | `ESP_ERR_NVS_NOT_FOUND` → `NotFound`; jeder andere Fehler → `ReadError` | Vor `nvs_get_blob` keine Mutation; gültige explizite Partition-/Namespace-/Keywerte machen `INVALID_NAME` und `INVALID_ARG` im Normalpfad unmöglich |
 | Write-open: `nvs_open_from_partition(..., NVS_READWRITE, ...)` | Jeder Fehler → `WriteError` | `nvs_set_blob` wurde nicht erreicht; alter Wert sicher unverändert. `INVALID_NAME`/`INVALID_ARG` sind bei validierten Konstanten unmöglich |
 | Größenabfrage: `nvs_get_blob(handle, key, nullptr, &requiredBytes)` | `ESP_OK` → weiter; `NOT_FOUND` → `NotFound`; jeder andere Fehler → `ReadError` | `INVALID_LENGTH` ist bei nicht-nulligem `length` und nulligem Ausgabepuffer ein kontrolliert unmöglicher Normalpfad; ein injizierter oder unbekannter Fehler bleibt ReadError |
 | lokale Read-Grenze nach Größenabfrage | `requiredBytes > maxBytes` → `CapacityError` | Keine Allokation und kein zweiter Read; der gespeicherte alte Wert bleibt unangetastet |
@@ -364,8 +422,11 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_nvs_host_test.csv"
 ```
 
-Die Testinitialisierung ruft ausschließlich
-`nvs_flash_init_partition_bdl("state_store", bdl)` auf. Das Double muss den
+Die Testinitialisierung ruft für die konkrete R1-Konfiguration ausschließlich
+`nvs_flash_init_partition_bdl("state_store", bdl)` auf. Der Harness
+konstruiert den Adapter zusätzlich mit explizit gelieferten Werten
+`partition = "state_store"` und `namespace = "fermentation"`; diese Werte
+sind Test-/R1-Konfiguration und keine Adapterdefaults. Das Double muss den
 `esp_blockdev`-Vertrag erfüllen: `read_size=1`, `write_size=1`,
 `erase_size=4096`, Partitionsgröße als 4096-Vielfaches, `0xff` nach Erase,
 Read/Write/Erase/Release-Callbacks und keine Verschlüsselungsflagge. Es wird
@@ -520,11 +581,13 @@ Der Harness verwendet im Testbaum den echten `NvsStateStore` über den
 unveränderten `IStateStore`-Vertrag.
 
 Solange noch kein produktiver `IStateStore`-Verbraucher existiert, besitzt
-dieser Harness als Test-Orchestrator den Partitionslebenszyklus: Er ruft
-`nvs_flash_init_partition("state_store")` über den normalen ESP-IDF-
-Flashpfad auf, prüft strikt `ESP_OK`, konstruiert erst danach den echten
-`NvsStateStore` und zerstört bei normalem Ende zuerst den Store, dann den
-Handle-/Operationskontext und zuletzt `nvs_flash_deinit_partition`.
+dieser Harness als Test-Orchestrator den Partitionslebenszyklus und die
+konkrete R1-Konfiguration: Er ruft
+`nvs_flash_init_partition(config.partitionLabel.c_str())` über den normalen
+ESP-IDF-Flashpfad auf, prüft strikt `ESP_OK`, konstruiert erst danach den
+echten `NvsStateStore(config)` und zerstört bei normalem Ende zuerst den Store,
+dann den Handle-/Operationskontext und zuletzt
+`nvs_flash_deinit_partition(config.partitionLabel.c_str())`.
 `NvsStateStore` selbst erhält keine Init-/Deinit-Methode. Nach einem
 Power-Cut gibt es kein Deinit; der nächste Boot initialisiert die Partition
 erneut. Jede Initialisierungsabweichung ist fail-closed und führt weder zu
@@ -703,11 +766,15 @@ Die Umsetzung bleibt in diesen nachweisbaren Schnitten. Der aktuelle Plan-
 Commit enthält keinen dieser Produktions- oder Testpfade.
 
 1. **Adapterkern und Abhängigkeit**
-   - `nvs_state_store.hpp/.cpp`, direkte Key-/Namespace-Abbildung,
-     per-operation Handle, zweistufiger Read, vollständige Statusmatrix;
+   - `nvs_state_store.hpp/.cpp`, explizite lifetime-sichere
+     `NvsStateStoreConfig`, direkte Key-/Namespace-Abbildung über die
+     Instanzkonfiguration, per-operation Handle, zweistufiger Read und
+     vollständige Statusmatrix;
    - `lib/device_platform_esp_idf/CMakeLists.txt` mit `PRIV_REQUIRES nvs_flash`;
-   - Nachweis: portabler Fachkern ohne ESP-IDF-Leak, gezielter Komponentenbuild,
-     Format-/Diffprüfung.
+   - Nachweis: kein `fermentation`-Default und keine `fermentation_app`-
+     Abhängigkeit im Produktionsadapter, gültige R1-Konfiguration sowie
+     fail-closed Verhalten bei ungültiger Konfiguration; gezielter
+     Komponentenbuild und Format-/Diffprüfung.
 
 2. **Testbaum und BDL-Seam**
    - Hostprojekt, `esp_blockdev`-Double, testseitige Linker-Wrappers und
@@ -724,13 +791,15 @@ Commit enthält keinen dieser Produktions- oder Testpfade.
    - `scripts/issue_90_nvs_hardware_verification.py` sowie der schmale
      testseitige `scripts/issue_90_power_cut_hook.py` mit dem versionierten
      UART-/Hook-Protokoll und den repository-relativen Artefaktpfaden;
-   - Nachweis: echter `NvsStateStore`, 22-Schlüssel-Vorbefüllung,
+   - Nachweis: echter `NvsStateStore` mit expliziter R1-Konfiguration,
+     22-Schlüssel-Vorbefüllung,
      deterministische Rotation, Neustart, A/B-Hash-Readback, NVS-/Ressourcen-
      Marker und Raw-Page-Beweis für tatsächlichen GC/Erase; Release enthält
      weder Harness-Quelle noch `ISSUE90`-Marker.
 
 4. **Lifecycle-/Composition-Root-Gate**
-   - Testbaum beweist Init-/Deinit-/BDL-Besitz und Zerstörungsreihenfolge;
+   - Testbaum beweist Init-/Deinit-/BDL-Besitz, explizite R1-Konfiguration und
+     Zerstörungsreihenfolge;
    - der produktive Pfad in `main/app_main.cpp` bleibt unverändert, solange
      kein produktiver `IStateStore`-Verbraucher existiert; die ausschließlich
      testseitige Guard-/Harness-Einbindung ist Schnitt 3;
