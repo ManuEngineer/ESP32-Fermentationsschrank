@@ -37,6 +37,7 @@ constexpr std::size_t kPageSize = 4096U;
 constexpr std::size_t kPageCount = 69U;
 constexpr std::size_t kRotationLimit = 2048U;
 constexpr std::size_t kPageReadChunk = 256U;
+constexpr std::size_t kHarnessScratchBudgetBytes = 16U * 1024U;
 constexpr TickType_t kUartWait = pdMS_TO_TICKS(1000U);
 
 constexpr std::array<const char*, 22U> kKeys{
@@ -64,6 +65,11 @@ struct PageEvidence final {
     std::uint32_t keyMask{0U};
     Sha256 digest{};
 };
+
+static_assert(
+    2U * kPageCount * sizeof(PageEvidence) + kPageReadChunk <=
+        kHarnessScratchBudgetBytes,
+    "Issue-90 page evidence exceeds the fixed no-PSRAM scratch budget");
 
 constexpr std::uint32_t kPageStateActive = 0xfffffffeU;
 constexpr std::uint32_t kPageStateFull = 0xfffffffcU;
@@ -499,9 +505,11 @@ bool runIssue90NvsHardwareVerification() {
                         &harnessBaseline);
     ESP_LOGI(kTag,
              "READY partition=%s namespace=%s pages=%u page_bytes=%u "
+             "scratch_budget_bytes=%u "
              "profile=bringup idf=6.0.2 "
              "idf_sha=7101770dc6db2667b3c477cc31365dd1acd6db4e",
-             kPartition, kNamespace, kPageCount, kPageSize);
+             kPartition, kNamespace, kPageCount, kPageSize,
+             kHarnessScratchBudgetBytes);
     bool pass = true;
     std::string line;
     for (;;) {

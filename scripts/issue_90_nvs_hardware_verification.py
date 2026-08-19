@@ -153,8 +153,14 @@ def main() -> int:
     parser.add_argument("--build-dir", type=Path, default=Path("build/issue_90_hw"))
     parser.add_argument("--repetitions", type=int, default=10)
     parser.add_argument("--windows", default=",".join(WINDOWS))
-    parser.add_argument("--power-hook", type=Path,
+    parser.add_argument("--power-cut-hook", type=Path,
                         default=Path("scripts/issue_90_power_cut_hook.py"))
+    parser.add_argument("--profile", choices=("esp32_bringup",),
+                        default="esp32_bringup")
+    parser.add_argument("--scenario", choices=("prefilled_gc",),
+                        default="prefilled_gc")
+    parser.add_argument("--artifact-dir", type=Path,
+                        default=Path("build/issue_90_hardware_verification"))
     args = parser.parse_args()
     if args.repetitions < 10:
         raise SystemExit("--repetitions must be at least 10 for the hardware matrix")
@@ -164,8 +170,14 @@ def main() -> int:
     if not selected_windows or any(window not in WINDOWS for window in selected_windows):
         raise SystemExit(f"--windows must be selected from {','.join(WINDOWS)}")
     repo = root()
+    if args.profile != "esp32_bringup" or args.scenario != "prefilled_gc":
+        raise SystemExit("only the approved bring-up prefilled_gc scenario is supported")
     build_dir = args.build_dir if args.build_dir.is_absolute() else repo / args.build_dir
-    hook = args.power_hook if args.power_hook.is_absolute() else repo / args.power_hook
+    hook = (args.power_cut_hook if args.power_cut_hook.is_absolute()
+            else repo / args.power_cut_hook)
+    artifact_dir = (args.artifact_dir if args.artifact_dir.is_absolute()
+                    else repo / args.artifact_dir)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
     if args.build:
         build(repo, build_dir)
     try:
@@ -176,6 +188,9 @@ def main() -> int:
     with serial.Serial(args.port, args.baud, timeout=0.1) as port:
         harness = Harness(port, args.timeout)
         harness.wait_for("READY partition=")
+        harness.send("PREFILL seed=0")
+        harness.wait_for("PREFILL_DONE")
+        harness.readback()
         for control in range(3):
             harness.send("REBOOT")
             harness.wait_for("READY partition=")
