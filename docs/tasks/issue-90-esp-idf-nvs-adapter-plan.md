@@ -31,7 +31,7 @@ Der Plan ist auf PR #116 gestapelt:
 - Abhängigkeit: `STACKED_ON_PR_116`; PR #116 bleibt Draft, Issue #29 bleibt
   offen.
 
-Diese konsolidierte R3-Revision enthält sowohl die korrigierte NVS-
+Diese aktuelle konsolidierte Planrevision enthält sowohl die korrigierte NVS-
 Kapazitätsarithmetik einschließlich des separaten `BLOB_IDX`-Entries als auch
 die anwendungsneutrale, durch den owning context gelieferte
 `NvsStateStoreConfig`. Sie ersetzt die vorherige Planrevision vollständig;
@@ -730,8 +730,14 @@ NVS-Adapter noch führt sie einen neuen Persistenzport ein:
    window-spezifischen `delay_us`-/Triggerparameter und löst `TRIP` damit
    reproduzierbar relativ zu `ROTATE_BEGIN` aus. Ein Zielwindow gilt erst als
    verschieden, wenn seine Evidenzklasse von den drei anderen getrennt
-   nachgewiesen ist; `gc_erase` muss den tatsächlichen Erase-Callback und das
-   starke GC-Orakel erfüllen.
+   nachgewiesen ist. Für den Host-BDL bleibt der tatsächliche `Erase`-Callback
+   ein verpflichtender Exhaustive-Cut-/GC-Nachweispunkt. Der reale ESP32-
+   Standard-Flashpfad besitzt diesen BDL-Callback nicht: Dort darf
+   `gc_erase` ausschließlich durch das starke On-Target-Raw-Page-/Readback-
+   Orakel mit gelöschter vorher gültiger Seite, neuer Sequenz-/Belegungs-
+   struktur, lebenden kopierten Records, konsistenten NVS-Stats und
+   Vorher-/Nachher-Hashes akzeptiert werden. Es gibt dafür keinen internen
+   oder produktiven Erase-Hook und keine ESP-IDF-Eigeninstrumentierung.
 
 Kalibrierlauf, Sweepkandidaten, akzeptierte Parameter, Zielwindow,
 Triggerzeitpunkt, Hookantworten, Raw-Page-Klassifikation und Readback werden
@@ -909,15 +915,31 @@ Hostlauf ist `BLOCKED`/`NOT_RUN`, nicht PASS.
 ### Build-/Source-Provenienzvertrag
 
 Der gezielte ESP-IDF-Build-, Static-Analysis- und Ressourcenbericht wird nur
-aus einem committed, auflösbaren PR-Source-Stand erzeugt. `Source-Git-SHA`
-ist exakt die geprüfte PR-Source-SHA und wird aus `git rev-parse HEAD` des
-sauberen Checkouts übernommen. Der lokale `Build-Commit` muss mit
-`git cat-file -e <sha>^{commit}` im Repository beziehungsweise im PR-Verlauf
-auflösbar sein. Baut CI einen ephemeren Merge-Commit, werden dessen SHA und die
-PR-Source-SHA ausdrücklich als getrennte Felder dokumentiert. Eine nicht
-auflösbare, lokale Zwischen- oder Working-Tree-SHA ist kein kanonischer
-PASS-Nachweis, sondern `FAIL`/`NOT_RUN` und erfordert die Neuerzeugung des
-Berichts auf einem erreichbaren committed Stand.
+aus einem sauberen committed Checkout erzeugt. `Source-Git-SHA` ist exakt der
+Commit, dessen Inhalte gebaut und analysiert wurden; im lokalen Owner-/Draft-
+Lauf entspricht er `git rev-parse HEAD` nach erfolgreicher
+`git status --porcelain`-Leerprüfung. Der lokale Objektstore ist dafür nur eine
+Konsistenzprüfung und kein Erreichbarkeitsnachweis.
+
+Vor einem PASS prüft der Lauf den Source-Commit zusätzlich gegen GitHub/Remote:
+
+1. `gh api repos/ManuEngineer/ESP32-Fermentationsschrank/commits/<source-sha>`
+   muss den exakten `Source-Git-SHA` erfolgreich remote auflösen;
+2. `gh api --paginate
+   repos/ManuEngineer/ESP32-Fermentationsschrank/pulls/117/commits?per_page=100`
+   muss denselben SHA im aktuellen PR-Verlauf finden. Damit ist der Commit
+   entweder der aktuelle PR-Head oder ein nachweisbarer Vorfahr; ein nur lokal
+   vorhandener, nicht gepushter Zwischencommit bleibt ungültig, selbst wenn
+   `git cat-file -e <sha>^{commit}` lokal erfolgreich ist.
+
+Für einen normalen lokalen Build ist `Build-Commit` semantisch identisch mit
+`Source-Git-SHA`; ein erfundener oder temporärer lokaler Build-Commit ist
+unzulässig. Falls CI einen ephemeren PR-Merge-Commit baut, wird dieser separat
+als `CI-Merge-SHA`/`Build-Commit` mit seiner ephemeren Semantik dokumentiert;
+`Source-Git-SHA` bleibt die PR-Source-SHA und wird nicht durch den Merge-SHA
+ersetzt. Fehlende Remote-/PR-Auflösung, eine Abweichung zwischen gebauten
+Inhalten und `Source-Git-SHA` oder ein Working-Tree-/lokaler Zwischenstand ist
+`FAIL`/`NOT_RUN` und kein kanonischer PASS-Nachweis.
 
 ## Umsetzungs- und Commit-Schnitte nach Planfreigabe
 
