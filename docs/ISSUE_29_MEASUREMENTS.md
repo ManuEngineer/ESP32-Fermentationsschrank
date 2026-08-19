@@ -28,10 +28,17 @@ nachgewiesen sind.
   Implementierungs-HEAD `5950814` (nur Dokumentänderungen dazwischen).
 - korrigierter, real verifizierter Hardwarelauf (beide Profile `PASS`):
   Commit `3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59` (`fix(issue-29): anchor B2 cleanup proof on B1, not
-  B0`, `App version: 3bc5bfe` in jedem Bootlog dieses Laufs) — einzige
-  Firmwareänderung gegenüber `c4c8b33`/`5950814`: die B2-Nachweislogik in
-  `main/issue_29_bringup_probe.cpp::run()` (siehe Abschnitt "Root Cause und
-  Korrektur" unten).
+  B0`) — einzige Firmwareänderung gegenüber `c4c8b33`/`5950814`: die
+  B2-Nachweislogik in `main/issue_29_bringup_probe.cpp::run()` (siehe
+  Abschnitt "Root Cause und Korrektur" unten). Zwei unabhängige
+  `esp32_bringup`-Verifikationsläufe mit je 40 s Erfassungsfenster: der
+  erste vor dem folgenden Dokumentationscommit (`App version: 3bc5bfe`), der
+  zweite danach (`App version: 7024d15`, aktueller HEAD). `git diff --stat
+  3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59
+  7024d15df6bd9c647e91416f5ab3b66d13035f62` zeigt ausschließlich
+  Dokumentänderungen (`docs/ISSUE_29_BUILD_REPORT.md`,
+  `docs/ISSUE_29_MEASUREMENTS.md`); beide Läufe sind damit derselbe
+  Firmwareinhalt und lieferten byte-identische Messwerte.
 - ESP-IDF: `v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`
 - Ziel: ESP32 ohne PSRAM, aktorfrei und unbelastet
 - Werkzeuge: `esptool v5.3.1`, `idf.py`/ESP-IDF `v6.0.2`, Python
@@ -199,15 +206,21 @@ Damit bleibt nur Kategorie 3: Die Freigabe des Diagnose-Tasks funktioniert
 korrekt und ist bereits nach dem ersten Poll abgeschlossen; das bisherige
 Kriterium `largestFreeBlockBytes(B2) >= largestFreeBlockBytes(B0)` **und**
 `freeHeapBytes(B2) >= freeHeapBytes(B0)` vermischt diese echte
-Task-Reclamation mit einer einmaligen, nicht mit dem Task-Lifecycle
-wiederholenden Heap-Layout-Wirkung, die bereits bei `B1` vorliegt (vermutlich
-eine einmalige Lazy-Initialisierung beim allerersten `xTaskCreate` dieses
-Profils, unabhängig vom konkreten Task oder Workload). Der freigegebene Plan
-schreibt diesen B0-Vergleich nicht vor — er verlangt nur, dass B2 "erst nach
-nachweisbarer Freigabe" erfasst wird und dass die Zusatzallokation nicht
-verborgen wird (`docs/tasks/issue-29-implementation-plan.md`, Abschnitt 6).
-Der B0-Vergleich war eine zusätzliche Implementierungsannahme, keine
-Planvorgabe; die Korrektur bleibt damit innerhalb des freigegebenen Plans.
+Task-Reclamation mit einer Heap-Layout-Wirkung, die bereits bei `B1` vorliegt.
+Bewiesen ist dabei ausschließlich die **Zyklus-Invarianz**: Experiment 2 zeigt
+messtechnisch eindeutig, dass diese Wirkung nicht mit dem Diagnose-Task-
+Lifecycle skaliert — ein zweiter, identisch großer Erzeuge-/Lösche-Zyklus
+kostet nachweislich null zusätzliche Bytes. Die naheliegende Erklärung, dass
+es sich um eine einmalige Lazy-Initialisierung beim allerersten `xTaskCreate`
+dieses Profils handelt, ist dagegen ausdrücklich **nicht** untersucht oder
+belegt und wird hier nicht als Tatsache behauptet — für die Korrektur ist nur
+die bewiesene Zyklus-Invarianz relevant, nicht deren Ursache. Der
+freigegebene Plan schreibt den B0-Vergleich nicht vor — er verlangt nur, dass
+B2 "erst nach nachweisbarer Freigabe" erfasst wird und dass die
+Zusatzallokation nicht verborgen wird
+(`docs/tasks/issue-29-implementation-plan.md`, Abschnitt 6). Der B0-Vergleich
+war eine zusätzliche Implementierungsannahme, keine Planvorgabe; die
+Korrektur bleibt damit innerhalb des freigegebenen Plans.
 
 Die Korrektur (`main/issue_29_bringup_probe.cpp::run()`, Commit
 `3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59`) verankert den Nachweis stattdessen
@@ -216,16 +229,20 @@ Probe-Workload): `freeHeapBytes(B2) >= freeHeapBytes(B1) + kProbeTaskStackBytes`
 `kProbeTaskStackBytes` ist die bereits vorhandene, aus dem gemessenen
 Call-Path abgeleitete Konstante (kein neuer Wert) und damit eine konservative,
 kausal dem Diagnose-Task zuordenbare Untergrenze — ein echtes Ausbleiben der
-Freigabe hätte diesen Schwellenwert weiterhin nicht erreicht.
+Freigabe hätte diesen Schwellenwert weiterhin nicht erreicht. Die
+B1-Verankerung kann außerdem keinen Heapverlust aus dem eigentlichen
+Probe-Workload (Decision-/Kandidat-/String-Allokationen vor `B1`) verdecken:
+ein solcher Verlust würde das Delta zwischen `B1` und `B2` verkleinern und
+den Schwellenwert damit eher verfehlen, nie fälschlich erfüllen.
 `largestFreeBlockBytes` bleibt Teil der geloggten `after_task_cleanup`-Probe
 (nicht verborgen), ist aber kein Gate-Kriterium mehr. `kCleanupWaitTicks`
 (3000 ms) blieb unverändert, weil die Untersuchung ausdrücklich belegt hat,
 dass es sich nicht um eine Timing-Frage handelt.
 
-### Korrigierter realer Nachweis (zwei unabhängige Läufe, Commit `3bc5bfe`)
+### Korrigierter realer Nachweis (zwei unabhängige Läufe à 40 s)
 
 ```text
-I (199) app_init: App version:      3bc5bfe
+I (199) app_init: App version:      3bc5bfe    [Lauf 1] / 7024d15 [Lauf 2]
 ...
 I (399) issue29_probe: before_task_create free_heap_bytes=303964 minimum_free_heap_bytes=303964 largest_free_block_bytes=172032 task_stack_hwm_bytes=0 main_stack_hwm_bytes=3064
 I (409) issue29_probe: after_task_create_blocked free_heap_bytes=234224 minimum_free_heap_bytes=234224 largest_free_block_bytes=110592 task_stack_hwm_bytes=67084 main_stack_hwm_bytes=3064
@@ -242,13 +259,13 @@ I (30499) app_main: resources: free_heap_bytes=303788 stack_hwm_bytes=2680
 I (39499) app_main: heartbeat: safe test mode, uptime_ms=39002
 ```
 
-Beide unabhängigen Läufe (frischer `POWERON_RESET` je Lauf, 15 s bzw. 40 s
-Erfassungsfenster) lieferten identische Werte: `task_cleanup_proven=true`,
-`after_task_cleanup_measured=true`, `result=PASS`. Der zweite Lauf lief 39 s
-weiter und erreichte damit selbst den 35-s-Heartbeat-Smoke für
-`esp32_bringup` mit exakt zwei regulären Ressourcenmessungen
-(`t=289 ms` und `t=30499 ms`), monotoner Uptime und ohne Panic, Watchdog,
-Brownout oder unerwarteten Reset.
+Beide unabhängigen Läufe (frischer `POWERON_RESET` je Lauf, je 40 s
+Erfassungsfenster, byte-identische Werte in beiden Läufen) lieferten
+`task_cleanup_proven=true`, `after_task_cleanup_measured=true`,
+`result=PASS`, liefen danach jeweils bis mindestens `uptime_ms=39002` weiter
+und erreichten damit selbst den 35-s-Heartbeat-Smoke für `esp32_bringup` mit
+exakt zwei regulären Ressourcenmessungen (`t=289 ms` und `t=30499 ms`),
+monotoner Uptime und ohne Panic, Watchdog, Brownout oder unerwarteten Reset.
 
 | Nachweis | Ergebnis | Grund / Evidenz |
 |---|---|---|
@@ -327,7 +344,7 @@ I (39284) app_main: heartbeat: safe test mode, uptime_ms=39003
 | realer PSRAM-Status | `PASS` | kein PSRAM (weder `esptool`-Feature noch zusätzliche Heap-Region); Board entspricht der Planannahme "ohne PSRAM" |
 | UART/FT232RL und ROM-Bootloader-Recovery | `PASS` | `esptool`-Sync, Flash-Schreib-/Verify-Zyklus und kontrollierter Run-Reset über DTR/RTS reproduzierbar erfolgreich |
 | generierte Partitionstabelle | `PASS` als Buildbaseline | siehe [`ISSUE_29_BUILD_REPORT.md`](ISSUE_29_BUILD_REPORT.md); Bootlog bestätigt dieselbe Tabelle (`nvs`/`phy_init`/`factory`); nicht als finale Produktionstabelle behauptet |
-| `esp32_bringup` mindestens 35 s | `PASS` | nach der Korrektur (Commit `3bc5bfe`): zweiter Verifikationslauf erreicht 39+ s Uptime nach `result=PASS` der Bring-up-Probe; siehe "Korrigierter realer Nachweis" oben |
+| `esp32_bringup` mindestens 35 s | `PASS` | nach der Korrektur: beide unabhängigen 40-s-Verifikationsläufe erreichen 39+ s Uptime nach `result=PASS` der Bring-up-Probe; siehe "Korrigierter realer Nachweis" oben |
 | `esp32_release` mindestens 35 s auf demselben Board | `PASS` | reale Erfassung über 39+ s vor UND nach der Korrektur (unverändertes Verhalten, da `esp32_release` die Probe compile-time nicht enthält); monotone Uptime `1003`…`39003` ms, kein Abbruch |
 | exakt zwei reguläre Smoke-Ressourcenpunkte | `PASS` (beide Profile) | `esp32_release`: `free_heap_bytes=304668` bei `t=274 ms` und `t=30284 ms`; `esp32_bringup` (Commit `3bc5bfe`): `free_heap_bytes=303788` bei `t=289 ms` und `t=30499 ms` |
 | Resetursache, Panic, Watchdog, Brownout | `PASS` (beide Profile) | `rst:0x1 (POWERON_RESET)` in allen Bootlogs (vor und nach der Korrektur), kein Panic/Watchdog/Brownout/unerwarteter Reset während der jeweils 39-s-Erfassungen |
