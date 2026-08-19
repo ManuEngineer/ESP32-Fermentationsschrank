@@ -96,17 +96,20 @@ vermischt wird. Der gepinnte ESP-IDF-WLAN-Vertrag aktiviert
 produktive WLAN-Verdrahtung muss `nvs` mit eigenem Kapazitäts- und Hardwaregate
 initialisieren.
 
-### Freigegebener R1-Auswahlentscheid
+### Vorgesehener R1-Auswahlentscheid (wird mit exakter Planfreigabe verbindlich)
 
-Für den #90-eigenen Adapter wird `state_store = 69 * 4096 = 282.624 B` (276
-KiB) festgelegt. Die Rechnung unten beweist eine Untergrenze von 49 Seiten;
-69 Seiten sind der mit diesem Plan freigegebene Auswahlwert und enthalten 20
-zusätzliche Seiten für Seitenpackung, Fragmentierung und die begrenzten
-Update-/GC-Situationen.
+Mit der Ownerfreigabe der exakten neuen Plan-Commit-SHA soll für den #90-
+eigenen Adapter `state_store = 69 * 4096 = 282.624 B` (276 KiB) verbindlich
+werden. Die Rechnung unten beweist eine Untergrenze von 49 Seiten; 69 Seiten
+sollen der mit dieser exakten Planfreigabe verbindliche Auswahlwert sein und
+enthalten 20 zusätzliche Seiten für Seitenpackung, Fragmentierung und die
+begrenzten Update-/GC-Situationen. Bis zu dieser Ownerfreigabe bleibt der
+Status `IMPLEMENTATION_NOT_STARTED_PENDING_PLAN_APPROVAL`; weder Adapter- noch
+R1-Partitionsentscheidung gilt bereits als freigegeben.
 
-Die Umsetzung dieser normalen Partitionstabellenänderung ist nach
-Planfreigabe ohne zweiten Planentscheid zulässig, wenn alle folgenden
-Annahmen bestätigt sind:
+Nach dieser Ownerfreigabe soll die Umsetzung dieser normalen
+Partitionstabellenänderung ohne zweiten Planentscheid zulässig sein, wenn alle
+folgenden Annahmen bestätigt sind:
 
 1. #29 bestätigt den realen 4-MB-Flash und die ESP32-Standardpartitionierung;
 2. die vollständige Inventarrechnung bleibt bei höchstens 69 Seiten und die
@@ -121,8 +124,9 @@ Annahmen bestätigt sind:
 Eine abweichende reale Flashbasis, ein rechnerisches Ergebnis über 69 Seiten,
 ein nicht passendes App-/Alignmentbudget oder ein zusätzlicher Verbraucher ist
 eine materielle Abweichung: Umsetzung anhalten, neue Plan-SHA erzeugen und
-erneute Ownerfreigabe einholen. Bei bestätigten Annahmen bleibt kein pauschaler
-zweiter Planstopp vor der Tabellenänderung bestehen.
+erneute Ownerfreigabe einholen. Bei bestätigten Annahmen bleibt nach der
+Ownerfreigabe kein pauschaler zweiter Planstopp vor der Tabellenänderung
+bestehen.
 
 ## Lifecycle, Eigentum und Produktionsbindung
 
@@ -485,10 +489,135 @@ entscheidung, kein automatisches Löschen, Formatieren oder Init-Retry. Der
 BDL-Zweig ruft dagegen direkt den BDL-Erase-Callback auf und testet deshalb
 nicht die Standard-Flash-Erase-Verifikation.
 
+### Schmaler On-Target-Harness für den realen ESP32-Pfad
+
+Der reale Nachweis benötigt neben dem Runner eine testseitige Firmwareseite.
+Nach Planfreigabe werden dafür ausschließlich im bestehenden
+`esp32_bringup`-Profil folgende Pfade ergänzt:
+
+- `main/issue_90_nvs_hardware_verification.hpp` und
+  `main/issue_90_nvs_hardware_verification.cpp` enthalten den schmalen
+  UART-Harness, die deterministische Arbeitslast, die Ressourcen-/NVS-
+  Statusausgabe und die testseitige Raw-Page-Evidenz;
+- `main/CMakeLists.txt` nimmt diese Quellen nur unter
+  `CONFIG_APP_PROFILE_ESP32_BRINGUP` auf und setzt ausschließlich dort
+  `APP_ISSUE_90_NVS_HARDWARE_TEST=1`;
+- `main/app_main.cpp` ruft den Harness nur unter dieser Compile-Time-Guard
+  auf und startet in diesem Profilpfad danach keine normale
+  Anwendungsschleife. Das Releaseprofil erhält weder Quelle noch Definition;
+  ein Profilisolationscheck prüft das zusätzlich in beiden
+  `compile_commands.json` und im Release-ELF auf fehlende `ISSUE90`-Symbole /
+  Marker.
+
+Damit folgt #90 dem vorhandenen `esp32_bringup`-/Compile-Time-Isolationsmuster
+aus `main/CMakeLists.txt` und `app_main.cpp`. Es entsteht keine zweite
+Wegwerf-Anwendung, kein Testfixture unter
+`lib/device_platform_esp_idf/private/` und kein öffentlicher Persistenzport.
+Der Harness verwendet im Testbaum den echten `NvsStateStore` über den
+unveränderten `IStateStore`-Vertrag.
+
+Solange noch kein produktiver `IStateStore`-Verbraucher existiert, besitzt
+dieser Harness als Test-Orchestrator den Partitionslebenszyklus: Er ruft
+`nvs_flash_init_partition("state_store")` über den normalen ESP-IDF-
+Flashpfad auf, prüft strikt `ESP_OK`, konstruiert erst danach den echten
+`NvsStateStore` und zerstört bei normalem Ende zuerst den Store, dann den
+Handle-/Operationskontext und zuletzt `nvs_flash_deinit_partition`.
+`NvsStateStore` selbst erhält keine Init-/Deinit-Methode. Nach einem
+Power-Cut gibt es kein Deinit; der nächste Boot initialisiert die Partition
+erneut. Jede Initialisierungsabweichung ist fail-closed und führt weder zu
+Erase, Formatierung, Retry noch zur normalen Anwendungs-/Aktor-Schleife.
+
+#### Deterministisches UART-Protokoll
+
+Der Runner
+`scripts/issue_90_nvs_hardware_verification.py` spricht ausschließlich ein
+versioniertes, zeilenorientiertes Protokoll. Unerwartete, fehlende oder nicht
+parsebare Marker sind `FAIL`/`NOT_RUN`, niemals ein impliziter Erfolg.
+
+Der Harness akzeptiert genau diese Befehle:
+
+```text
+PREFILL seed=0
+ROTATE max_writes=2048
+READBACK_ALL
+REBOOT
+STOP
+```
+
+Für einen externen Power-Cut wird zusätzlich `CUT_ARM token=<deterministic-token>`
+akzeptiert. Der Harness antwortet mit mindestens diesen vollständigen Markern
+(Statuscodes sind ESP-IDF-Codes in Hex):
+
+```text
+ISSUE90 READY protocol=1 idf=7101770dc6db2667b3c477cc31365dd1acd6db4e profile=esp32_bringup partition=state_store pages=69
+ISSUE90 PREFILL_DONE keys=22
+ISSUE90 CUT_ARMED token=<token>
+ISSUE90 ROTATE_BEGIN seq=<n> key=<key> old_sha256=<sha> new_sha256=<sha>
+ISSUE90 ROTATE_RESULT seq=<n> set=<esp_err> commit=<esp_err>
+ISSUE90 GC_ERASE_DETECTED page=<n> old_seq=<n> new_seq=<n> evidence_sha256=<sha>
+ISSUE90 READBACK key=<key> status=<status> len=<n> sha256=<sha>
+ISSUE90 STATS used_entries=<n> free_entries=<n> available_entries=<n> total_entries=<n>
+ISSUE90 RESOURCE stage=<name> free_heap=<n> largest_block=<n> stack_hwm=<n>
+ISSUE90 REBOOTING
+ISSUE90 PASS reason=<reason>
+ISSUE90 FAIL reason=<reason>
+```
+
+`PREFILL` schreibt deterministisch die vollständige Inventur aus 19
+Konfigurationsschlüsseln (`uc0..uc3`, `sc0..sc3`, `pc0..pc3`, `cm0..cm2`,
+`cr0..cr1`, `cb0..cb1`) und drei Lauf-/Checkpointschlüsseln (`rc0`, `rc1`,
+`rh0`), jeweils mit dem berechneten Maximalrecord und festem Seed. `ROTATE`
+verwendet danach die feste Sequenz `pc0`, `pc1`, `rc0`, `rc1`, `rh0` mit
+byteverschiedenen Maximalrecords bis zum ersten nachgewiesenen GC/Erase oder
+höchstens 2.048 Schreiboperationen. Jede Operation ruft den echten Adapter
+auf und meldet Set-/Commitstatus, `nvs_get_stats()` und Ressourcenstände an
+den Runner. `READBACK_ALL` liefert für alle 22 Records exakte Länge und
+SHA-256; der Runner vergleicht ausschließlich vollständige alte oder neue
+Bytes. `REBOOT` veranlasst einen echten `esp_restart()`, worauf ein neuer
+`READY`-Marker und derselbe vollständige Readback folgen.
+
+Die Partition- und NVS-Statusmeldung kommt testseitig aus
+`esp_partition_find_first()`/`esp_partition_get()` und `nvs_get_stats()` und
+enthält Label, Adresse, Größe, Typ/Subtyp, Eintragsstatistik sowie die
+Messpunkte `startup`, `prefill`, `rotation`, `readback` und `post-reboot`.
+Ressourcen werden mit den bestehenden ESP-IDF-Statusquellen für freien Heap,
+größten freien 8-Bit-Block und Stack-High-Water-Mark erhoben. Diese
+Testausgaben sind Artefakte, kein neuer produktiver API-Vertrag.
+
+#### Nachweis eines tatsächlichen Page-GC/Erase
+
+Der Harness liest ausschließlich testseitig die 69-Seiten-Partition über
+`esp_partition_read()` in 4-KiB-Seitensnapshots und dekodiert die gepinnte
+NVS-Seiten-/Entry-Struktur anhand von `nvs_constants.h`. Für jeden
+Rotationsschritt werden Vorher-/Nachher-Snapshot, Seite, Sequenznummer,
+Seitenstatus, belegte Entries und SHA-256 des 4-KiB-Inhalts archiviert.
+
+`GC_ERASE_DETECTED` darf nur ausgegeben werden, wenn alle drei Bedingungen
+gemeinsam erfüllt sind: (a) eine zuvor gültige, nichtleere NVS-Seite mit
+Sequenznummer und Einträgen ist nach genau diesem `nvs_set_blob()`-Schritt
+vollständig `0xff`/gelöscht, (b) eine andere Seite besitzt danach die erwartete
+neue Sequenz-/Belegungsstruktur und mindestens die kopierten lebenden Records,
+und (c) `nvs_get_stats()`, der vollständige Readback und die gespeicherten
+Vorher-/Nachher-Hashes sind konsistent. Ein leerer Vorrat, eine bloße
+Statistikänderung oder ein erwarteter Rotationszähler ist kein GC-/Erase-
+Nachweis. Der reale Standard-Flashpfad wird damit über auslesbare
+Partitions-/Page-Evidenz und nicht über einen erfundenen produktiven Hook
+belegt.
+
+Der Harness speichert bei `GC_ERASE_DETECTED` und nach jeder Reinitialisierung
+die Rohsnapshots, Statuszeilen, Resetursache, A/B-Erwartungen und Hashes unter
+`build/issue_90_hardware_verification/`. Ein Power-Cut während einer
+`ROTATE_BEGIN`-bis-`ROTATE_RESULT`-Operation muss nach dem nächsten Boot
+entweder den vollständigen alten oder den vollständigen neuen Record liefern;
+bei einem Cut während GC/Erase wird zusätzlich die oben definierte Recovery-
+Evidenz erwartet. Ein nicht lesbarer, teilweiser oder nicht eindeutig
+zuordenbarer Zustand ist FAIL und führt zu fail-closed.
+
 ### Reale ESP32-Matrix
 
-Nach dem offenen #29-Hardwaregate wird derselbe vorbefüllte 69-Seiten-
-Workload über die normale ESP32-Partition ausgeführt. Die Matrix umfasst:
+Nach dem offenen #29-Hardwaregate führt `scripts/issue_90_nvs_hardware_verification.py`
+über den beschriebenen On-Target-Harness denselben vorbefüllten 69-Seiten-
+Workload über die normale ESP32-Partition aus. Die Matrix umfasst:
 
 1. saubere Vorbefüllung und Readback aller 22 Schlüssel;
 2. die deterministische Rotationsfolge bis zum nachweislichen Page-GC/Erase;
@@ -500,10 +629,24 @@ Workload über die normale ESP32-Partition ausgeführt. Die Matrix umfasst:
 
 Ein externer Cut-Aufbau wird nur mit ownerverifizierter Versorgung, Reset-
 und Steuerleitung verwendet; keine GPIO-, Pegel- oder Zeitannahme wird im
-Plan erfunden. Der Hosttest belegt interne Storage-/Recovery-Semantik, der
-ESP32-Test den normalen Flash-/Partition-/Erasepfad. Ein init-/readback-
-Fehler, eine Teil-/Mischversion, fehlender GC-/Erase-Nachweis oder ein
-unsicherer Hardwareaufbau ist BLOCKED/FAIL und niemals PASS.
+Plan erfunden. Der Runner erhält dafür über `--power-cut-hook
+"${POWER_CUT_HOOK}"` ein vorbereitetes, vom Repository-Root aus
+repository-relativ aufrufbares Testwerkzeug (beispielsweise
+`./scripts/issue_90_power_cut_hook.py`; absolute Maschinenpfade werden
+abgelehnt). Dieses Werkzeug akzeptiert auf stdin `ARM token=<token>`,
+`TRIP` und `RESTORE` und muss jeweils exakt `ARMED`, `TRIPPED` und `RESTORED`
+bestätigen. Der Runner sendet `ARM` vor `CUT_ARM`, wartet auf den zugehörigen
+`ROTATE_BEGIN`-Marker, löst `TRIP` aus, erwartet UART-Verlust vor
+`ROTATE_RESULT`, stellt mit `RESTORE` die Versorgung wieder her und wartet
+auf den neuen `READY`-Marker. Der vollständige Cut-/Reboot-/Readbackdatensatz
+enthält Token, Marker, Hookantworten und Zeitstempel. Fehlt eine
+ownerverifizierte Hook-/Versorgungsbindung, ist der Fall BLOCKED/NOT_RUN.
+
+Der Hosttest belegt interne Storage-/Recovery-Semantik und die vollständige
+Mutationsphasenmatrix; der ESP32-Test belegt den normalen
+Flash-/Partition-/Erasepfad einschließlich echter Page-Evidenz. Ein
+Init-/Readback-Fehler, eine Teil-/Mischversion, fehlender GC-/Erase-Nachweis
+oder ein unsicherer Hardwareaufbau ist BLOCKED/FAIL und niemals PASS.
 
 Der reproduzierbare Ablauf nach Freigabe der Hardwarefixture lautet:
 
@@ -511,10 +654,12 @@ Der reproduzierbare Ablauf nach Freigabe der Hardwarefixture lautet:
 test -n "${IDF_PATH:-}" && test -f "$IDF_PATH/export.sh"
 . "$IDF_PATH/export.sh"
 test -n "${ESP_PORT:-}"
+test -n "${POWER_CUT_HOOK:-}"
 python3 scripts/build_esp_idf_profiles.py all
 python3 scripts/issue_90_nvs_hardware_verification.py \
   --port "$ESP_PORT" --profile esp32_bringup --scenario prefilled_gc \
-  --repetitions 10 --artifact-dir build/issue_90_hardware_verification
+  --repetitions 10 --power-cut-hook "$POWER_CUT_HOOK" \
+  --artifact-dir build/issue_90_hardware_verification
 ```
 
 Das neue Runner-Skript setzt den aktorfreien Testmodus, wartet auf die
@@ -569,16 +714,29 @@ Commit enthält keinen dieser Produktions- oder Testpfade.
    - Nachweis: `--ci-regression` PASS und vollständiger Hostlauf als eigener
      Verifikationsartefakt.
 
-3. **Lifecycle-/Composition-Root-Gate**
+3. **On-Target-Hardwaretest und Profilisolation**
+   - `main/issue_90_nvs_hardware_verification.hpp/.cpp`, die Guard-
+     Einbindung in `main/app_main.cpp` und die
+     `CONFIG_APP_PROFILE_ESP32_BRINGUP`-Erweiterung in `main/CMakeLists.txt`;
+   - `scripts/issue_90_nvs_hardware_verification.py` sowie der schmale
+     testseitige `scripts/issue_90_power_cut_hook.py` mit dem versionierten
+     UART-/Hook-Protokoll und den repository-relativen Artefaktpfaden;
+   - Nachweis: echter `NvsStateStore`, 22-Schlüssel-Vorbefüllung,
+     deterministische Rotation, Neustart, A/B-Hash-Readback, NVS-/Ressourcen-
+     Marker und Raw-Page-Beweis für tatsächlichen GC/Erase; Release enthält
+     weder Harness-Quelle noch `ISSUE90`-Marker.
+
+4. **Lifecycle-/Composition-Root-Gate**
    - Testbaum beweist Init-/Deinit-/BDL-Besitz und Zerstörungsreihenfolge;
-   - `main/app_main.cpp` bleibt unverändert, solange kein produktiver
-     `IStateStore`-Verbraucher existiert;
+   - der produktive Pfad in `main/app_main.cpp` bleibt unverändert, solange
+     kein produktiver `IStateStore`-Verbraucher existiert; die ausschließlich
+     testseitige Guard-/Harness-Einbindung ist Schnitt 3;
    - bei späterer echter Verbraucherbindung: Root-Init/Storekonstruktion/
      Verbraucher-/Store-/Deinit-Reihenfolge gemeinsam im betroffenen Root;
    - Nachweis: Initfehler verhindert Konstruktion und Runtime; kein Erase/
      Format/Retry.
 
-4. **Kapazität und Partition**
+5. **Kapazität und Partition**
    - `scripts/issue_90_nvs_capacity.py`,
      `docs/ISSUE_90_CAPACITY_REPORT.md`,
      `partitions/issue_90_state_store.csv`, `sdkconfig.defaults`;
@@ -587,7 +745,7 @@ Commit enthält keinen dieser Produktions- oder Testpfade.
    - Nachweis: bei bestätigten Annahmen direkt umsetzbar; bei Abweichung
      materielles Owner-Gate mit neuer Plan-SHA.
 
-5. **Software-/CI-Integration**
+6. **Software-/CI-Integration**
    - `docs/CI_AND_QUALITY_GATES.md`, `.github/workflows/build.yml` und bei
      Artefaktbedarf `scripts/check_ci_artifact_scan_coverage.py`;
    - gezielte Befehle:
@@ -607,15 +765,16 @@ Commit enthält keinen dieser Produktions- oder Testpfade.
    - Nachweis: beide Profile, Static Analysis, Architektur, Secrets, Gate-
      Selbsttests und Host-CI-Regressionssatz mit PASS/BLOCKED/NOT_RUN.
 
-6. **Hardware-/Power-Cut-Verifikation**
+7. **Hardware-/Power-Cut-Verifikation**
    - ownerverifizierte normale ESP32-Partition, UART-/Reset-/Power-Cut-
-     Fixture, `scripts/issue_90_nvs_hardware_verification.py`, vorbefüllter
-     GC-Fall und A/B-Orakel;
+     Fixture, den On-Target-Harness aus Schnitt 3,
+     `scripts/issue_90_nvs_hardware_verification.py`, vorbefüllten GC-Fall
+     und A/B-Orakel;
    - Nachweis: vollständige Matrix, Logs, Partitionsdump, Resetursachen,
-     Readbacks und reale Resource-/Erase-Artefakte. Kein Build ersetzt diesen
-     Nachweis.
+     Readbacks, Raw-Page-Evidenz und reale Resource-/Erase-Artefakte. Kein
+     Build ersetzt diesen Nachweis.
 
-7. **Ressourcen, Schreiblast und Wear-Grenze**
+8. **Ressourcen, Schreiblast und Wear-Grenze**
    - `docs/ISSUE_90_BUILD_REPORT.md` und
      `docs/ISSUE_90_HARDWARE_VERIFICATION.md`;
    - Flash-/Appgröße, DRAM, Heap, größter Block, Stack-HWM, NVS-Stats,
@@ -628,7 +787,7 @@ Commit enthält keinen dieser Produktions- oder Testpfade.
      ausgewiesen. Es wird kein unbegrenzter Wear-Leveling-/Lebensdauernachweis
      behauptet.
 
-8. **Lizenz und Herkunft**
+9. **Lizenz und Herkunft**
    - `docs/THIRD_PARTY_COMPONENTS.md`,
      `docs/audits/THIRD_PARTY_SOURCE_AND_LICENSE_REVIEW.md`,
      `docs/audits/COMPONENT_EVALUATIONS.md` und bei Bedarf
@@ -667,6 +826,7 @@ oder `master`:
 
 - [`nvs.h`](https://github.com/espressif/esp-idf/blob/7101770dc6db2667b3c477cc31365dd1acd6db4e/components/nvs_flash/include/nvs.h)
 - [`nvs_flash.h`](https://github.com/espressif/esp-idf/blob/7101770dc6db2667b3c477cc31365dd1acd6db4e/components/nvs_flash/include/nvs_flash.h)
+- [`esp_partition.h`](https://github.com/espressif/esp-idf/blob/7101770dc6db2667b3c477cc31365dd1acd6db4e/components/esp_partition/include/esp_partition.h)
 - [`nvs_api.cpp`](https://github.com/espressif/esp-idf/blob/7101770dc6db2667b3c477cc31365dd1acd6db4e/components/nvs_flash/src/nvs_api.cpp)
 - [`nvs_handle_simple.cpp`](https://github.com/espressif/esp-idf/blob/7101770dc6db2667b3c477cc31365dd1acd6db4e/components/nvs_flash/src/nvs_handle_simple.cpp)
 - [`nvs_storage.cpp`](https://github.com/espressif/esp-idf/blob/7101770dc6db2667b3c477cc31365dd1acd6db4e/components/nvs_flash/src/nvs_storage.cpp)
@@ -699,7 +859,9 @@ Base branch: agent/issue-29-esp32-bringup-plan
 Base SHA: c4c8b33f4dbaef727200ea410d887ec5417aa1b0
 Dependency: STACKED_ON_PR_116; PR #116 Draft; Issue #29 offen und Hardware-/Standard-Flash-Gates offen
 Implementation: IMPLEMENTATION_NOT_STARTED_PENDING_PLAN_APPROVAL
-Partition decision: state_store = 69 pages / 276 KiB, subject only to the explicit assumptions above
+Proposed partition decision: `state_store = 69 pages / 276 KiB`; becomes
+binding with Owner approval of this exact plan SHA and remains usable without
+a second Owner gate only while the explicit assumptions above hold
 ```
 
 Der PR bleibt Draft. Es gibt kein Ready for review, keinen Merge, kein
