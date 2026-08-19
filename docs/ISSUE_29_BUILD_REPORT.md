@@ -60,6 +60,13 @@ Quality-Gate- und Artefakt-Scanprüfungen sowie die kumulative
 Xtensa-Stackherleitung waren `PASS`. Diese Software-/Buildnachweise sind kein
 Board-, UART-, Flash-, Pegel- oder Smoke-Nachweis.
 
+Der reale Hardwarelauf flashte beide Profile vom PR-HEAD
+`c4c8b33f4dbaef727200ea410d887ec5417aa1b0` (`App version: c4c8b33` im
+Bootlog); der Firmwareinhalt ist gegenüber `5950814` unverändert (siehe
+[`ISSUE_29_MEASUREMENTS.md`](ISSUE_29_MEASUREMENTS.md), Abschnitt "Identität
+und Scope"). Die realen Board-, Flash-, PSRAM-, Smoke- und Probe-Ergebnisse
+sind dort dokumentiert und werden hier nicht dupliziert.
+
 ## Xtensa-Stack-Usage-Herleitung
 
 Der Bring-up-Build dieses Heads aktiviert `-fstack-usage` und
