@@ -133,7 +133,7 @@ test/esp_idf_nvs_adapter_host/build/issue_90_nvs_adapter_host.elf
 `ISSUE90_HOST_MODE=ci-regression` ist der verbindliche, kurze
 Regressionssatz. Beide Modi
 ermitteln die Mutationsfenster aus dem erfolgreichen Trace der gepinnten
-ESP-IDF-BDL-Implementierung. Der `--exhaustive`-Lauf schneidet an jedem
+ESP-IDF-BDL-Implementierung. Der `ISSUE90_HOST_MODE=exhaustive`-Lauf schneidet an jedem
 reproduzierbar aufgezeichneten `Write`-/`Erase`-Callback des realen Pfads,
 einschließlich aller Blob-Datenchunks, Blob-Index-, Altwert-, GC-/PageManager-
 Copy- und Page-Erase-Mutationen, ergänzt um den Commit-Kontrollpunkt. Er führt
