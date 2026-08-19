@@ -1,8 +1,21 @@
 #pragma once
 
+#include <string>
+
 #include "state_store.hpp"
 
 namespace device_platform_esp_idf {
+
+// Owning context supplied configuration. The adapter owns a copy so the
+// caller does not have to keep the source strings alive.
+struct NvsStateStoreConfig final {
+    std::string partition;
+    std::string nameSpace;
+
+    NvsStateStoreConfig(std::string partitionName, std::string namespaceName);
+
+    [[nodiscard]] bool isValid() const noexcept;
+};
 
 // Concrete ESP-IDF adapter for the existing, application-neutral store port.
 // Partition initialization and lifetime belong to the owning Composition Root
@@ -10,7 +23,7 @@ namespace device_platform_esp_idf {
 // neither operation.
 class NvsStateStore final : public device_platform::IStateStore {
    public:
-    NvsStateStore() noexcept = default;
+    explicit NvsStateStore(NvsStateStoreConfig config);
     ~NvsStateStore() override = default;
 
     NvsStateStore(const NvsStateStore&) = delete;
@@ -25,6 +38,9 @@ class NvsStateStore final : public device_platform::IStateStore {
     [[nodiscard]] device_platform::StateStoreReadResult read(
         const device_platform::StateStoreKey& key,
         std::size_t maxBytes) const override;
+
+   private:
+    NvsStateStoreConfig config_;
 };
 
 }  // namespace device_platform_esp_idf

@@ -15,6 +15,7 @@ IDF_SHA = "7101770dc6db2667b3c477cc31365dd1acd6db4e"
 PAGE_SIZE = 4096
 PAGE_COUNT_SELECTION = 69
 RESERVE_PAGES_SELECTION = 20
+RUN_PERSISTENCE_KEYS = ("rc0", "rc1", "rh0")
 
 
 @dataclass(frozen=True)
@@ -157,14 +158,17 @@ def parse_literal_keys(root: Path, literal: str) -> tuple[str, ...]:
     source = read_source(root, "lib/fermentation_app/src/run_persistence_store.cpp")
     expected = tuple(literal.split(":", 1)[1].split(","))
     found = tuple(re.findall(r'create\("([a-z0-9]+)"\)', source))
-    if any(key not in found for key in expected):
-        raise SystemExit(f"run persistence key inventory missing {expected}")
+    if found != RUN_PERSISTENCE_KEYS:
+        raise SystemExit(
+            "run persistence key inventory drift: "
+            f"expected exact order/set {RUN_PERSISTENCE_KEYS}, found {found}"
+        )
     return expected
 
 
 def entries(size: int, entry_size: int, chunk_max: int) -> int:
     if size <= chunk_max:
-        return 1 + (size + entry_size - 1) // entry_size
+        return 1 + (size + entry_size - 1) // entry_size + 1
     chunks, remainder = divmod(size, chunk_max)
     result = chunks * (1 + chunk_max // entry_size)
     if remainder:
@@ -247,7 +251,7 @@ def main() -> int:
     minimum_entries = peak + 2 * entry_count
     minimum_pages = (minimum_entries + entry_count - 1) // entry_count
     selection_entries = PAGE_COUNT_SELECTION * entry_count
-    if minimum_pages != 49 or persistent != 4768 or peak != 5804:
+    if minimum_pages != 49 or persistent != 4784 or peak != 5820:
         raise SystemExit(
             f"capacity regression: persistent={persistent} peak={peak} "
             f"minimum_pages={minimum_pages}"
@@ -277,6 +281,7 @@ def main() -> int:
     lines.extend(
         [
             "",
+            f"Persistent recordbestand (without namespace): `{persistent - 1}` entries.",
             f"Persistent inventory including namespace: `{persistent}` entries.",
             f"Peak with one simultaneous `{largest}`-byte replacement: `{peak}` entries.",
             f"Two free pages for update/GC reserve: `{2 * entry_count}` entries.",

@@ -1,5 +1,6 @@
 #include "nvs_state_store.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -8,9 +9,6 @@
 
 namespace device_platform_esp_idf {
 namespace {
-
-constexpr char kPartitionName[] = "state_store";
-constexpr char kNamespaceName[] = "fermentation";
 
 // ESP-IDF v6.0.2 stores blob chunks in 125 data entries of 32 bytes. The
 // BLOB_IDX chunk index uses two 7-bit ranges, so the implementation's largest
@@ -50,17 +48,51 @@ StateStoreReadResult readError() {
     return StateStoreReadResult{StateStoreReadStatus::ReadError, {}};
 }
 
+bool validNvsName(const std::string& value, std::size_t maximumLength) {
+    if (value.empty() || value.size() > maximumLength ||
+        value.find('\0') != std::string::npos) {
+        return false;
+    }
+    return std::all_of(value.begin(), value.end(), [](char byte) {
+        const auto value = static_cast<unsigned char>(byte);
+        return (value >= 'A' && value <= 'Z') ||
+               (value >= 'a' && value <= 'z') ||
+               (value >= '0' && value <= '9') || value == '_' || value == '.' ||
+               value == '-';
+    });
+}
+
 }  // namespace
+
+NvsStateStoreConfig::NvsStateStoreConfig(std::string partitionName,
+                                         std::string namespaceName)
+    : partition(std::move(partitionName)),
+      nameSpace(std::move(namespaceName)) {}
+
+bool NvsStateStoreConfig::isValid() const noexcept {
+    // These limits are the pinned ESP-IDF v6.0.2 public NVS limits. The
+    // partition implementation accepts labels shorter than
+    // NVS_PART_NAME_MAX_SIZE; namespace names use the key-sized limit.
+    return validNvsName(partition, NVS_PART_NAME_MAX_SIZE - 1U) &&
+           validNvsName(nameSpace, NVS_NS_NAME_MAX_SIZE - 1U);
+}
+
+NvsStateStore::NvsStateStore(NvsStateStoreConfig config)
+    : config_(std::move(config)) {}
 
 device_platform::StateStoreWriteStatus NvsStateStore::write(
     const device_platform::StateStoreKey& key, const std::string& value) {
+    if (!config_.isValid()) {
+        return StateStoreWriteStatus::WriteError;
+    }
     if (value.size() > kNvsMaximumBlobBytes) {
         return StateStoreWriteStatus::CapacityError;
     }
 
     nvs_handle_t handle = 0;
     const esp_err_t openError = nvs_open_from_partition(
-        kPartitionName, kNamespaceName, NVS_READWRITE, &handle);
+        config_.partition.c_str(), config_.nameSpace.c_str(), NVS_READWRITE,
+        &handle);
     if (openError != ESP_OK) {
         return StateStoreWriteStatus::WriteError;
     }
@@ -85,9 +117,13 @@ device_platform::StateStoreWriteStatus NvsStateStore::write(
 
 device_platform::StateStoreReadResult NvsStateStore::read(
     const device_platform::StateStoreKey& key, std::size_t maxBytes) const {
+    if (!config_.isValid()) {
+        return readError();
+    }
     nvs_handle_t handle = 0;
     const esp_err_t openError = nvs_open_from_partition(
-        kPartitionName, kNamespaceName, NVS_READONLY, &handle);
+        config_.partition.c_str(), config_.nameSpace.c_str(), NVS_READONLY,
+        &handle);
     if (openError == ESP_ERR_NVS_NOT_FOUND) {
         return StateStoreReadResult{StateStoreReadStatus::NotFound, {}};
     }

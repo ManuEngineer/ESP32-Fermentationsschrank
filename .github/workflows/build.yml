@@ -158,18 +158,6 @@ jobs:
           test/esp_idf_nvs_adapter_host/build/issue_90_nvs_adapter_host.elf \
             2>&1 | tee build/issue_90_nvs_adapter_host-ci.log
 
-      - name: Issue-90-Hostartefakte sichern
-        if: success()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: issue-90-nvs-host
-          path: |
-            build/issue_90_nvs_adapter_host-build.log
-            build/issue_90_nvs_adapter_host-ci.log
-            build/issue_90_nvs_adapter_host-matrix.json
-          if-no-files-found: error
-          retention-days: 30
-
       - name: ESP-IDF-Profile bauen (Bring-up und Release)
         run: |
           set -euo pipefail
@@ -186,6 +174,18 @@ jobs:
           esac
 
           python scripts/build_esp_idf_profiles.py all
+
+      - name: Build-Provenienz gegen Remote-PR pruefen
+        run: |
+          python scripts/check_issue_90_build_provenance.py \
+            --source-git-sha "$SOURCE_GIT_SHA" \
+            --build-commit "$(git rev-parse HEAD)" \
+            --pr 117 --ci-merge-commit
+
+      - name: Issue-90-Release-Isolation pruefen
+        run: |
+          python scripts/check_issue_90_release_isolation.py \
+            --release-build-dir build/esp32_release
 
       - name: ESP-IDF-Ressourcenbericht ergaenzen (finaler Bericht)
         run: |
@@ -233,6 +233,18 @@ jobs:
             --scan-path build/issue_90_nvs_adapter_host-build.log \
             --scan-path build/issue_90_nvs_adapter_host-ci.log \
             --scan-path build/issue_90_nvs_adapter_host-matrix.json
+
+      - name: Issue-90-Hostartefakte sichern
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: issue-90-nvs-host
+          path: |
+            build/issue_90_nvs_adapter_host-build.log
+            build/issue_90_nvs_adapter_host-ci.log
+            build/issue_90_nvs_adapter_host-matrix.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Groessenbericht sichern
         if: success()

@@ -133,24 +133,24 @@ test/esp_idf_nvs_adapter_host/build/issue_90_nvs_adapter_host.elf
 `ISSUE90_HOST_MODE=ci-regression` ist der verbindliche, kurze
 Regressionssatz. Beide Modi
 ermitteln die Mutationsfenster aus dem erfolgreichen Trace der gepinnten
-ESP-IDF-BDL-Implementierung. Der `ISSUE90_HOST_MODE=exhaustive`-Lauf schneidet an jedem
-reproduzierbar aufgezeichneten `Write`-/`Erase`-Callback des realen Pfads,
-einschließlich aller Blob-Datenchunks, Blob-Index-, Altwert-, GC-/PageManager-
-Copy- und Page-Erase-Mutationen, ergänzt um den Commit-Kontrollpunkt. Er führt
-dies für die definierten Bytepatterns sowie für den vorbefüllten GC-/Erase-Fall
-aus. Eine feste Sieben-Endpunkte-Auswahl ist ausdrücklich kein exhaustive-
-Nachweis. Der vollständige Lauf ersetzt nicht die spätere Standard-Flash-/
-Partitions- und ESP32-Hardwarematrix. Die BDL-Matrix belegt NVS-Storage- und
-Recovery-Semantik, nicht das reale Flashmedium. Nicht als stabiler Vertrag
-behandelte interne 4-Byte-Buchhaltungszwischenstände werden nicht als eigene
-ESP-IDF-Phasen behauptet.
+ESP-IDF-BDL-Implementierung. Der `ISSUE90_HOST_MODE=exhaustive`-Lauf schneidet
+an jedem reproduzierbar aufgezeichneten `Write`-/`Erase`-Callback des realen
+Pfads, einschließlich aller Blob-Datenchunks, Blob-Index-, Altwert-,
+GC-/PageManager-Copy- und Page-Erase-Mutationen, einschließlich
+`length == 4`, ergänzt um den Commit-Kontrollpunkt. Eine feste Auswahl ist
+ausdrücklich kein Exhaustive-Nachweis.
 
-Aktueller Draft-Nachweis: Der lokale ausführbare BDL-Regressionssatz und der
-lokale vollständige dynamische Lauf sind nach den Korrekturen `PASS`. Die
-kanonische CMake-/CI-Umgebung konnte in dieser Arbeitsumgebung wegen fehlender
-Ruby-/BSD-CMock-Abhängigkeiten nicht ausgeführt werden und bleibt daher
-`NOT_RUN`; daraus wird kein zusammenfassender GitHub-CI-Hostsoftware-PASS
-abgeleitet.
+Der CI-Regressionssatz ist gezielt und darf kleiner bleiben. Der aktuelle
+lokale Exhaustive-Lauf ist jedoch `FAILED`: der reproduzierbare Schnitt an
+mutierendem Callback 12 (interner 4-Byte-Entry-State-Write) liefert nach
+Reinitialisierung `NotFound` statt vollständig altem oder neuem Wert. Dieser
+Befund wird nicht als `exhaustive PASS` oder `HOST_BDL_LOCAL_PASS` umetikettiert.
+Der vollständige Lauf ersetzt außerdem nicht die spätere Standard-Flash-/
+Partitions- und ESP32-Hardwarematrix.
+
+Gezielter Draft-Nachweis dieses Stands: `ci-regression PASS`,
+`exhaustive FAILED`, reale Hardware `BLOCKED/NOT_RUN`. Ein vollständiger
+projektweiter lokaler Lauf wurde nicht ausgeführt.
 
 Der On-Target-Runner verwendet ausschließlich den Bring-up-Harness
 `APP_ISSUE_90_NVS_HARDWARE_TEST=1`, das strikte externe Hook-Protokoll
@@ -169,6 +169,19 @@ python scripts/issue_90_nvs_capacity.py \
   --output docs/ISSUE_90_CAPACITY_REPORT.md \
   --source-git-sha "$(git rev-parse HEAD)"
 ```
+
+Build-/Source-Provenienz wird zusätzlich remote gegen GitHub und den offenen
+PR-Verlauf geprüft; `git cat-file -e` allein genügt nicht:
+
+```bash
+python scripts/check_issue_90_build_provenance.py \
+  --source-git-sha "$(git rev-parse HEAD)" \
+  --build-commit "$(git rev-parse HEAD)" --pr 117
+```
+
+Bei GitHub Actions wird ein ephemerer Merge-Commit mit
+`--ci-merge-commit` separat als Build-Commit bezeichnet; er ersetzt nie die
+PR-Source-SHA.
 
 Der Upgrade-, Herkunfts- und Hardware-Smoke-Vertrag steht in
 `ESP_IDF_UPGRADE_CONTRACT.md`.
@@ -268,10 +281,13 @@ Der Firmwarejob fuehrt in dieser Reihenfolge aus:
 8. ESP-IDF 6.0.2 am exakten Commit installieren und verifizieren;
 9. den Issue-90-NVS-BDL-Hosttest bauen und den CI-Regressionssatz ausführen;
 10. Bring-up- und Releaseprofil bauen;
-11. Ressourcenbericht ergaenzen;
-12. ESP-IDF-Static-Analysis;
-13. Artefakt-Scanabdeckung, Kapazitätsrechnung und Secretpruefung;
-14. Berichte und Buildartefakte sichern.
+11. Build-Provenienz remote gegen GitHub/PR prüfen;
+12. Release-Isolation einschließlich Harnessquelle, Marker und bedingter
+    Harness-Abhängigkeiten prüfen;
+13. Ressourcenbericht ergänzen;
+14. ESP-IDF-Static-Analysis;
+15. Artefakt-Scanabdeckung, Kapazitätsrechnung und Secretprüfung;
+16. erst danach Berichte und Buildartefakte sichern.
 
 `concurrency` bricht einen veralteten Lauf desselben Pull Requests ab, sobald
 ein neuerer Lauf startet.

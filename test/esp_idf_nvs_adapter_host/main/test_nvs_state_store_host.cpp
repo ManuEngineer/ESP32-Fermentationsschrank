@@ -36,6 +36,7 @@ class TestFailure final : public std::runtime_error {
 using device_platform::StateStoreReadStatus;
 using device_platform::StateStoreWriteStatus;
 using device_platform_esp_idf::NvsStateStore;
+using device_platform_esp_idf::NvsStateStoreConfig;
 using issue90_host::NvsApiFaultSeam;
 using issue90_host::StatefulBlockDevice;
 
@@ -117,11 +118,20 @@ class HostStorage final {
 
 void requireOldOrNew(const NvsStateStore& store,
                      const device_platform::StateStoreKey& stateKey,
-                     const std::string& oldValue, const std::string& newValue) {
+                     const std::string& oldValue, const std::string& newValue,
+                     std::size_t callback = 0U) {
     const auto read =
         store.read(stateKey, std::max(oldValue.size(), newValue.size()));
-    REQUIRE(read.status == StateStoreReadStatus::Success);
-    REQUIRE((read.value == oldValue || read.value == newValue));
+    if (read.status != StateStoreReadStatus::Success) {
+        throw std::runtime_error("old-or-new read status=" +
+                                 std::to_string(static_cast<int>(read.status)) +
+                                 " callback=" + std::to_string(callback));
+    }
+    if (read.value != oldValue && read.value != newValue) {
+        throw std::runtime_error(
+            "old-or-new value mismatch callback=" + std::to_string(callback) +
+            " length=" + std::to_string(read.value.size()));
+    }
 }
 
 void requireExact(const NvsStateStore& store,
@@ -135,14 +145,6 @@ void requireExact(const NvsStateStore& store,
 std::vector<std::size_t> relevantMutationCallbacks(
     const std::vector<issue90_host::BlockTraceEvent>& trace) {
     std::vector<std::size_t> result;
-    std::size_t lastWideWrite = 0U;
-    for (std::size_t index = 0U; index < trace.size(); ++index) {
-        const auto& event = trace[index];
-        if (event.operation == issue90_host::BlockOperation::Write &&
-            event.length > 4U) {
-            lastWideWrite = index;
-        }
-    }
     std::size_t mutation = 0U;
     for (std::size_t index = 0U; index < trace.size(); ++index) {
         const auto& event = trace[index];
@@ -151,16 +153,7 @@ std::vector<std::size_t> relevantMutationCallbacks(
             event.operation == issue90_host::BlockOperation::Erase;
         if (!isMutation) continue;
         ++mutation;
-        const bool isDataOrIndexWrite =
-            event.operation == issue90_host::BlockOperation::Write &&
-            event.length > 4U;
-        const bool isTrailingRemoval =
-            event.operation == issue90_host::BlockOperation::Write &&
-            event.length == 4U && index >= lastWideWrite;
-        if (event.operation == issue90_host::BlockOperation::Erase ||
-            isDataOrIndexWrite || isTrailingRemoval) {
-            result.push_back(mutation);
-        }
+        result.push_back(mutation);
     }
     REQUIRE(!result.empty());
     return result;
@@ -170,7 +163,7 @@ std::vector<std::size_t> relevantMutationCallbacks(
 
 void testBinaryAndEmptyValues() {
     HostStorage storage;
-    NvsStateStore store;
+    NvsStateStore store{NvsStateStoreConfig{"state_store", "fermentation"}};
     const auto stateKey = key("empty");
 
     REQUIRE(store.write(stateKey, {}) == StateStoreWriteStatus::Success);
@@ -185,9 +178,32 @@ void testBinaryAndEmptyValues() {
     REQUIRE(read.value == binary);
 }
 
+void testInvalidConfigurationFailsClosed() {
+    HostStorage storage;
+    const auto stateKey = key("invalid-config");
+    const std::string value = "must-not-reach-nvs";
+
+    const std::array<NvsStateStoreConfig, 3U> invalidConfigurations{
+        NvsStateStoreConfig{"", "fermentation"},
+        NvsStateStoreConfig{"state_store", ""},
+        NvsStateStoreConfig{"state_store", "namespace-is-too-long"}};
+    for (const auto& config : invalidConfigurations) {
+        REQUIRE(!config.isValid());
+        NvsStateStore store{config};
+        storage.device.clearTrace();
+        const auto openCallsBefore = NvsApiFaultSeam::openCalls();
+        REQUIRE(store.write(stateKey, value) ==
+                StateStoreWriteStatus::WriteError);
+        REQUIRE(store.read(stateKey, value.size()).status ==
+                StateStoreReadStatus::ReadError);
+        REQUIRE(NvsApiFaultSeam::openCalls() == openCallsBefore);
+        REQUIRE(storage.device.trace().empty());
+    }
+}
+
 void testBoundedTwoStageReadContract() {
     HostStorage storage;
-    NvsStateStore store;
+    NvsStateStore store{NvsStateStoreConfig{"state_store", "fermentation"}};
     const auto stateKey = key("race");
     const std::string oldValue = "old";
     const std::string replacement(64U, 'R');
@@ -205,7 +221,7 @@ void testBoundedTwoStageReadContract() {
 
 void testBlobBoundariesAndPatterns() {
     HostStorage storage;
-    NvsStateStore store;
+    NvsStateStore store{NvsStateStoreConfig{"state_store", "fermentation"}};
     const std::array<std::pair<const char*, std::size_t>, 4U> cases{
         std::pair{"b32", 32U}, std::pair{"b33", 33U}, std::pair{"c4000", 4000U},
         std::pair{"c4001", 4001U}};
@@ -223,7 +239,7 @@ void testBlobBoundariesAndPatterns() {
 
 void testMaximumRecordReadLimit() {
     HostStorage storage;
-    NvsStateStore store;
+    NvsStateStore store{NvsStateStoreConfig{"state_store", "fermentation"}};
     const auto stateKey = key("max");
     const auto maximum = bytes(kMaximumProgramRecordBytes, 0x11U);
 
@@ -244,7 +260,7 @@ void testMaximumRecordReadLimit() {
 
 void testErrorMapping() {
     HostStorage storage;
-    NvsStateStore store;
+    NvsStateStore store{NvsStateStoreConfig{"state_store", "fermentation"}};
     const auto stateKey = key("errors");
     const std::string oldValue = "old-value";
     const std::string newValue = "new-value";
@@ -350,7 +366,8 @@ void testOldOrNewAfterBdlCuts() {
         std::vector<std::size_t> mutationPoints;
         {
             HostStorage storage;
-            NvsStateStore store;
+            NvsStateStore store{
+                NvsStateStoreConfig{"state_store", "fermentation"}};
             REQUIRE(store.write(stateKey, oldValue) ==
                     StateStoreWriteStatus::Success);
             storage.device.clearTrace();
@@ -372,7 +389,8 @@ void testOldOrNewAfterBdlCuts() {
         }
         for (const std::size_t callback : cutCallbacks) {
             HostStorage storage;
-            NvsStateStore store;
+            NvsStateStore store{
+                NvsStateStoreConfig{"state_store", "fermentation"}};
             REQUIRE(store.write(stateKey, oldValue) ==
                     StateStoreWriteStatus::Success);
             storage.device.clearTrace();
@@ -381,11 +399,11 @@ void testOldOrNewAfterBdlCuts() {
             REQUIRE(result == StateStoreWriteStatus::CommitOutcomeUnknown);
             storage.device.clearFailure();
             storage.reinitialize();
-            requireOldOrNew(store, stateKey, oldValue, newValue);
+            requireOldOrNew(store, stateKey, oldValue, newValue, callback);
         }
 
         HostStorage storage;
-        NvsStateStore store;
+        NvsStateStore store{NvsStateStoreConfig{"state_store", "fermentation"}};
         REQUIRE(store.write(stateKey, oldValue) ==
                 StateStoreWriteStatus::Success);
         NvsApiFaultSeam::failCommit(ESP_ERR_FLASH_OP_FAIL);
@@ -447,7 +465,7 @@ void testPrefilledGcAndEraseWorkload() {
     std::optional<Scenario> scenario;
     {
         HostStorage storage;
-        NvsStateStore store;
+        NvsStateStore store{NvsStateStoreConfig{"state_store", "fermentation"}};
         TestValues currentValues = prefillInventory(store);
         for (std::size_t rotation = 0U;
              rotation < kRotationLimit && !scenario.has_value(); ++rotation) {
@@ -456,8 +474,7 @@ void testPrefilledGcAndEraseWorkload() {
             storage.device.clearTrace();
             const auto replacement = rotateValue(record, rotation);
             const auto result = store.write(key(record.key), replacement);
-            REQUIRE((result == StateStoreWriteStatus::Success ||
-                     result == StateStoreWriteStatus::CommitOutcomeUnknown));
+            REQUIRE(result == StateStoreWriteStatus::Success);
             currentValues[recordIndex(record)] = replacement;
             const bool eraseObserved = std::any_of(
                 storage.device.trace().begin(), storage.device.trace().end(),
@@ -485,7 +502,8 @@ void testPrefilledGcAndEraseWorkload() {
     }
     for (const std::size_t callback : cutCallbacks) {
         HostStorage cutStorage;
-        NvsStateStore cutStore;
+        NvsStateStore cutStore{
+            NvsStateStoreConfig{"state_store", "fermentation"}};
         static_cast<void>(prefillInventory(cutStore));
         replayRotations(cutStore, scenario->rotation);
         cutStorage.device.clearTrace();
@@ -504,7 +522,8 @@ void testPrefilledGcAndEraseWorkload() {
     }
 
     HostStorage commitStorage;
-    NvsStateStore commitStore;
+    NvsStateStore commitStore{
+        NvsStateStoreConfig{"state_store", "fermentation"}};
     static_cast<void>(prefillInventory(commitStore));
     replayRotations(commitStore, scenario->rotation);
     NvsApiFaultSeam::failCommit(ESP_ERR_FLASH_OP_FAIL);
@@ -535,6 +554,7 @@ int runHostTests(bool exhaustive, bool ciRegression, std::uint32_t seed,
     };
     const TestCase tests[]{
         {"binary-empty", testBinaryAndEmptyValues},
+        {"invalid-configuration", testInvalidConfigurationFailsClosed},
         {"bounded-read", testBoundedTwoStageReadContract},
         {"blob-boundaries", testBlobBoundariesAndPatterns},
         {"maximum-record", testMaximumRecordReadLimit},
@@ -572,7 +592,8 @@ int runHostTests(bool exhaustive, bool ciRegression, std::uint32_t seed,
                << "\",\n"
                << "  \"seed\": " << seed << ",\n"
                << "  \"status\": \"PASS\",\n"
-               << "  \"tests\": [\"binary-empty\", \"bounded-read\", "
+               << "  \"tests\": [\"binary-empty\", \"invalid-configuration\", "
+                  "\"bounded-read\", "
                   "\"blob-boundaries\", \"maximum-record\", "
                   "\"error-mapping\", \"old-or-new-bdl-cut\", "
                   "\"prefilled-gc-erase\"]\n"

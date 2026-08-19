@@ -3,6 +3,7 @@ idf_component_register(
         "stateful_block_device.cpp"
         "nvs_api_fault_seam.cpp"
         "test_nvs_state_store_host.cpp"
+        "host_main.cpp"
         "../../../lib/device_platform_esp_idf/src/nvs_state_store.cpp"
     INCLUDE_DIRS
         "."

@@ -309,11 +309,12 @@ COMPONENT_REQUIRES_ALLOWLIST = {
                 "device_platform",
                 "fermentation_app",
                 "device_platform_esp_idf",
-                "nvs_flash",
+                "esp_driver_gpio",
+                "esp_driver_uart",
                 "esp_partition",
                 "mbedtls",
-                "driver",
-                "esp_driver_uart",
+                "nvs_flash",
+                "spi_flash",
             }
         ),
     },
@@ -812,6 +813,31 @@ def collect_component_requires(body: str) -> tuple[set[str], set[str], list[str]
     return public_names, private_names, dynamic_tokens
 
 
+def collect_main_private_requirement_variable(text: str) -> set[str]:
+    """Resolve the deliberately small conditional main dependency list.
+
+    ``main/CMakeLists.txt`` must keep Issue-90 components out of the release
+    graph, but ESP-IDF needs those components in ``PRIV_REQUIRES`` during the
+    early component pass for a bring-up harness configure.  The list is
+    therefore assembled in one named variable.  Resolve only that exact
+    variable here; arbitrary dynamic CMake dependency expressions remain a
+    violation below.
+    """
+    names: set[str] = set()
+    assignment_pattern = re.compile(
+        r"(?:set\s*\(\s*APP_MAIN_PRIV_REQUIRES\b|"
+        r"list\s*\(\s*APPEND\s+APP_MAIN_PRIV_REQUIRES\b)"
+        r"(?P<body>[^)]*)\)",
+        re.DOTALL,
+    )
+    for match in assignment_pattern.finditer(text):
+        for token_match in CMAKE_TOKEN_PATTERN.finditer(match.group("body")):
+            token = token_match.group("quoted") or token_match.group("bare")
+            if CMAKE_IDENTIFIER_PATTERN.match(token):
+                names.add(token)
+    return names
+
+
 def add_component_requires_violations(violations: list[str], root: Path) -> None:
     for relative_path, allowed in COMPONENT_REQUIRES_ALLOWLIST.items():
         path = root / relative_path
@@ -825,6 +851,13 @@ def add_component_requires_violations(violations: list[str], root: Path) -> None
         if body is None:
             continue
         public_names, private_names, dynamic_tokens = collect_component_requires(body)
+        if relative_path == "main/CMakeLists.txt":
+            private_names.update(collect_main_private_requirement_variable(text))
+            dynamic_tokens = [
+                token
+                for token in dynamic_tokens
+                if token != "${APP_MAIN_PRIV_REQUIRES}"
+            ]
         for name in sorted(public_names - allowed["public"]):
             violations.append(
                 f"{path}: unerlaubte oeffentliche IDF-Komponentenabhaengigkeit "

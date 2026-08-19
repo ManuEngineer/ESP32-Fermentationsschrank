@@ -19,6 +19,7 @@ class NvsApiFaultSeam final {
     static void failSet(esp_err_t error, bool afterRealMutation = false);
     static void failCommit(esp_err_t error);
     static void raceAfterSizeQuery(std::string replacement);
+    [[nodiscard]] static std::size_t openCalls();
 };
 
 }  // namespace issue90_host

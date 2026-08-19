@@ -98,12 +98,33 @@ def count_success_upload_steps(workflow_text: str) -> int:
     )
 
 
+def find_scan_order_gaps(workflow_text: str) -> list[str]:
+    """Require coverage and the explicit secret/path scan before each upload."""
+    steps = split_into_steps(workflow_text)
+    coverage_seen = False
+    secret_scan_seen = False
+    gaps: list[str] = []
+    for step_block in steps:
+        if "check_ci_artifact_scan_coverage.py" in step_block:
+            coverage_seen = True
+        if "check_secrets.py" in step_block and "--scan-path" in step_block:
+            secret_scan_seen = True
+        if not is_success_upload_step(step_block):
+            continue
+        header_match = STEP_HEADER_PATTERN.match(step_block)
+        step_name = header_match["name"] if header_match else "<unbenannter Schritt>"
+        if not coverage_seen or not secret_scan_seen:
+            gaps.append(step_name)
+    return gaps
+
+
 def check_repository() -> int:
     if not WORKFLOW_PATH.is_file():
         raise SystemExit(f"Workflow-Datei fehlt: {WORKFLOW_PATH}")
 
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     gaps = find_scan_coverage_gaps(workflow_text)
+    order_gaps = find_scan_order_gaps(workflow_text)
 
     if gaps:
         for step_name, path in gaps:
@@ -114,6 +135,14 @@ def check_repository() -> int:
             )
         print(f"FAILED: {len(gaps)} ungeprueft hochgeladene Textartefakt(e)",
               file=sys.stderr)
+        return 1
+    if order_gaps:
+        for step_name in order_gaps:
+            print(
+                f"FAILED: Erfolgsupload '{step_name}' liegt vor "
+                "CI-Artefaktcoverage oder Secret-/Pfadscan",
+                file=sys.stderr,
+            )
         return 1
 
     step_count = count_success_upload_steps(workflow_text)
@@ -130,6 +159,9 @@ def run_selftest() -> int:
 jobs:
   firmware:
     steps:
+      - name: CI-Artefakt-Scanabdeckung pruefen
+        run: python scripts/check_ci_artifact_scan_coverage.py
+
       - name: Secret- und Pfadpruefung generierter Artefakte
         run: |
           python scripts/check_secrets.py \\
@@ -170,6 +202,14 @@ jobs:
     renamed_uncovered_workflow = uncovered_workflow.replace(
         "ESP-IDF-Bringup-Artefakte sichern", "Voellig anders benannter Schritt",
     )
+    upload_before_scan_workflow = covered_workflow.replace(
+        "      - name: Secret- und Pfadpruefung generierter Artefakte",
+        "      - name: Issue-90-Hostartefakte sichern\n"
+        "        uses: actions/upload-artifact@fixture\n"
+        "        with:\n"
+        "          path: build-report.md\n\n"
+        "      - name: Secret- und Pfadpruefung generierter Artefakte",
+    )
 
     checks = [
         (
@@ -199,6 +239,11 @@ jobs:
             "(strukturelle Erkennung, keine feste Namensliste)",
             find_scan_coverage_gaps(renamed_uncovered_workflow)
             == [("Voellig anders benannter Schritt", "build/esp32_bringup/fixture.map")],
+        ),
+        (
+            "Erfolgsupload vor dem Scan wird als Reihenfolgefehler erkannt",
+            find_scan_order_gaps(upload_before_scan_workflow)
+            == ["Issue-90-Hostartefakte sichern"],
         ),
     ]
 

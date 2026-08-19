@@ -17,6 +17,7 @@ struct FaultState {
     std::optional<esp_err_t> commit;
     std::optional<std::string> raceReplacement;
     bool raceUsed{false};
+    std::size_t openCalls{0U};
 };
 
 FaultState& state() {
@@ -50,6 +51,8 @@ void NvsApiFaultSeam::raceAfterSizeQuery(std::string replacement) {
     state().raceUsed = false;
 }
 
+std::size_t NvsApiFaultSeam::openCalls() { return state().openCalls; }
+
 }  // namespace issue90_host
 
 extern "C" esp_err_t __real_nvs_open_from_partition(const char* partName,
@@ -66,7 +69,8 @@ extern "C" esp_err_t __wrap_nvs_open_from_partition(const char* partName,
                                                     const char* namespaceName,
                                                     nvs_open_mode_t mode,
                                                     nvs_handle_t* outHandle) {
-    const auto& fault = issue90_host::state();
+    auto& fault = issue90_host::state();
+    ++fault.openCalls;
     if (fault.open.has_value()) return *fault.open;
     return __real_nvs_open_from_partition(partName, namespaceName, mode,
                                           outHandle);
