@@ -246,26 +246,26 @@ nicht neue Adapterlimits.
 
 | Recordgruppe | konkrete Schlüsselquelle | Anzahl | maximales Record | gepinnte NVS-Entries je Record |
 |---|---|---:|---:|---:|
-| User-Konfiguration | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `uc0..uc3`; [`configuration_limits.hpp`](../../lib/fermentation_app/src/configuration_limits.hpp) `kMaximumUserConfigurationPayloadBytes + 45` | 4 | 301 B | 11 |
-| Service-Konfiguration | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `sc0..sc3`; [`configuration_graph_store.cpp`](../../lib/fermentation_app/src/configuration_graph_store.cpp) ruft das leere Servicepayload mit 45-B-Envelopegrenze auf | 4 | 45 B | 3 |
+| User-Konfiguration | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `uc0..uc3`; [`configuration_limits.hpp`](../../lib/fermentation_app/src/configuration_limits.hpp) `kMaximumUserConfigurationPayloadBytes + 45` | 4 | 301 B | 12 |
+| Service-Konfiguration | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `sc0..sc3`; [`configuration_graph_store.cpp`](../../lib/fermentation_app/src/configuration_graph_store.cpp) ruft das leere Servicepayload mit 45-B-Envelopegrenze auf | 4 | 45 B | 4 |
 | Program-Katalog | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `pc0..pc3`; [`configuration_limits.hpp`](../../lib/fermentation_app/src/configuration_limits.hpp) `kMaximumProgramCatalogPayloadBytes + 45` | 4 | 32.813 B | 1.036 |
-| Manifest | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `cm0..cm2`; [`configuration_limits.hpp`](../../lib/fermentation_app/src/configuration_limits.hpp) `kMaximumConfigurationManifestEnvelopeBytes` | 3 | 149 B | 6 |
-| Root | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `cr0..cr1`; [`configuration_limits.hpp`](../../lib/fermentation_app/src/configuration_limits.hpp) `kMaximumConfigurationRootEnvelopeBytes` | 2 | 114 B | 5 |
-| Bootstrap | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `cb0..cb1`; [`configuration_limits.hpp`](../../lib/fermentation_app/src/configuration_limits.hpp) `kMaximumConfigurationBootstrapEnvelopeBytes` | 2 | 42 B | 3 |
+| Manifest | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `cm0..cm2`; [`configuration_limits.hpp`](../../lib/fermentation_app/src/configuration_limits.hpp) `kMaximumConfigurationManifestEnvelopeBytes` | 3 | 149 B | 7 |
+| Root | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `cr0..cr1`; [`configuration_limits.hpp`](../../lib/fermentation_app/src/configuration_limits.hpp) `kMaximumConfigurationRootEnvelopeBytes` | 2 | 114 B | 6 |
+| Bootstrap | [`configuration_storage_contract.hpp`](../../lib/fermentation_app/src/configuration_storage_contract.hpp) → `cb0..cb1`; [`configuration_limits.hpp`](../../lib/fermentation_app/src/configuration_limits.hpp) `kMaximumConfigurationBootstrapEnvelopeBytes` | 2 | 42 B | 4 |
 | Run-Checkpoint | [`run_persistence_store.cpp`](../../lib/fermentation_app/src/run_persistence_store.cpp) → `rc0`, `rc1`; [`run_persistence_coordinator.cpp`](../../lib/fermentation_app/src/run_persistence_coordinator.cpp) `kMaximumCheckpointRecordBytes` | 2 | 8.240 B | 262 |
-| Run-Head | [`run_persistence_store.cpp`](../../lib/fermentation_app/src/run_persistence_store.cpp) → `rh0`; [`run_persistence_coordinator.cpp`](../../lib/fermentation_app/src/run_persistence_coordinator.cpp) `kMaximumHeadRecordBytes` | 1 | 256 B | 9 |
+| Run-Head | [`run_persistence_store.cpp`](../../lib/fermentation_app/src/run_persistence_store.cpp) → `rh0`; [`run_persistence_coordinator.cpp`](../../lib/fermentation_app/src/run_persistence_coordinator.cpp) `kMaximumHeadRecordBytes` | 1 | 256 B | 10 |
 
 Damit gelten 22 gleichzeitig mögliche Schlüssel und:
 
 ```text
-4*11 + 4*3 + 4*1036 + 3*6 + 2*5 + 2*3 + 2*262 + 1*9 = 4.767 Entries
+4*12 + 4*4 + 4*1036 + 3*7 + 2*6 + 2*4 + 2*262 + 1*10 = 4.783 Entries
 Namespace fermentation                                      =     1 Entry
-persistenter Maximalbestand                                 = 4.768 Entries
+persistenter Maximalbestand                                 = 4.784 Entries
 größter simultaner Austauschrecord (pc0..pc3)              = 1.036 Entries
-Peak vor alter Recordentfernung                             = 5.804 Entries
+Peak vor alter Recordentfernung                             = 5.820 Entries
 zwei freie Seiten für Update-/GC-Reserve                    =   252 Entries
-Mindestbudget                                               = 6.056 Entries
-ceil(6.056 / 126 Entries je Seite)                          =    49 Seiten
+Mindestbudget                                               = 6.072 Entries
+ceil(6.072 / 126 Entries je Seite)                          =    49 Seiten
 49 * 4.096 B                                                = 196 KiB Untergrenze
 ```
 
@@ -273,12 +273,15 @@ Die Entrywerte folgen ausschließlich den gepinnten Konstanten
 `NVS_CONST_ENTRY_SIZE = 32`, `NVS_CONST_ENTRY_COUNT = 126` und
 `NVS_CONST_CHUNK_MAX_SIZE = 4.000`:
 
-- ein einseitiger variabler Blob benötigt `1 + ceil(bytes / 32)` Entries;
+- ein einseitiger variabler Blob benötigt eine variable Metadaten-Entry plus
+  `ceil(bytes / 32)` Payload-Entries und zusätzlich einen separaten
+  `BLOB_IDX`-Entry: `2 + ceil(bytes / 32)` Entries;
 - ein mehrseitiger Blob benötigt je Datenchunk Metadaten plus gerundete
-  Datenentries und einen zusätzlichen `BLOB_IDX`;
+  Datenentries sowie genau einen zusätzlichen `BLOB_IDX`;
 - 32.813 B ergeben acht 4.000-B-Chunks, einen 813-B-Rest und einen Index:
   `8*126 + (1+ceil(813/32)) + 1 = 1.036`;
-- 8.240 B ergeben `2*4.000 B + 240 B` und 262 Entries;
+- 8.240 B ergeben `2*4.000 B + 240 B` und einschließlich des separaten
+  `BLOB_IDX` `2*126 + (1+ceil(240/32)) + 1 = 262` Entries;
 - ein leerer Blob benötigt den BLOB-Daten-/Indexpfad, wird aber nicht als
   Nullpointer geschrieben.
 
