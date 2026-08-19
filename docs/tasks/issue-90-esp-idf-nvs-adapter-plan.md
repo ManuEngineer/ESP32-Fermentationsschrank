@@ -2,14 +2,25 @@
 
 ## Status, Basis und Freigabegrenze
 
-Der einzig gültige Status dieses Plans und der geplanten #90-Umsetzung ist bis
-zur Ownerfreigabe der exakten Plan-Commit-SHA:
+Der einzig gültige Status dieses Plans und der bereits im PR vorhandenen
+#90-Implementation ist bis zur Ownerfreigabe der exakten Plan-Commit-SHA:
 
-`IMPLEMENTATION_NOT_STARTED_PENDING_PLAN_APPROVAL`
+`IMPLEMENTATION_CORRECTIONS_PENDING_PLAN_APPROVAL`
 
-Die Software-/Host-/Buildphase wird erst nach dieser Freigabe ausführbar.
-Dieser Plan führt noch keine Firmware-, Partitionierungs-, Test-, CI- oder
-Hardwareänderung aus.
+PR #117 enthält bereits die frühere `NvsStateStore`-Implementation, den
+stateful BDL-Hosttest, die Kapazitätsprüfung, den On-Target-Harness sowie die
+zugehörige Runner-/CI-/Berichtsintegration. Diese bestehende Implementation
+enthält die bekannten Reviewbefunde weiterhin, insbesondere die bisherige
+Konfigurationsannahme sowie die noch nicht ausreichend nachgewiesenen
+Exhaustive-, Stack-, Power-Cut-, Orakel-, Artefakt-, Isolations- und
+Provenienzpfade. Die neue Planfreigabe gibt ausschließlich die Korrektur dieser
+bestehenden Implementation frei; sie autorisiert keinen Architekturwechsel und
+keine neue Parallelimplementation.
+
+Bisherige Host-/Build-PASS des PR sind bis zur Umsetzung und Prüfung dieser
+Korrekturen kein aktueller Abschlussnachweis. Vor der neuen Planfreigabe werden
+keine Firmware-, Test-, CI-, Harness-, Bericht- oder sonstigen
+Implementierungsänderungen vorgenommen.
 
 Der Plan ist auf PR #116 gestapelt:
 
@@ -113,9 +124,17 @@ keinen Defaultkonstruktor und keine versteckten `state_store`-/`fermentation`-
 Konstanten. Die Konfiguration wird vor dem ersten NVS-Aufruf gegen die
 gepinnten ESP-IDF-Grenzen für Label und Namespace validiert. Eine leere,
 zu lange oder anderweitig ungültige Konfiguration wird fail-closed behandelt:
-Der Adapter führt keinen NVS-Aufruf aus und liefert ausschließlich bestehende
-fehlerhafte Read-/Write-Ergebnisse des `IStateStore`-Vertrags. Es entsteht
-kein neuer Portstatus.
+Der Adapter führt keinen NVS-Aufruf aus, mutiert nichts und bildet den Fehler
+exakt auf bestehende Portstatus ab:
+
+- `write`: `StateStoreWriteStatus::WriteError`;
+- `read`: `StateStoreReadStatus::ReadError`.
+
+Es entsteht kein neuer Status und keine zweite Konfigurationsarchitektur. Die
+Validierung erfolgt einmal reproduzierbar aus den gepinnten ESP-IDF-Grenzen
+für Partitionslabel und Namespace (oder gleichwertig ohne parallele
+Konfigurationswahrheit); die geprüfte Konfiguration wird anschließend für alle
+Operationen verwendet.
 
 Für R1 bleiben die vom owning context gelieferten Werte verbindlich:
 
@@ -155,8 +174,9 @@ werden. Die Rechnung unten beweist eine Untergrenze von 49 Seiten; 69 Seiten
 sollen der mit dieser exakten Planfreigabe verbindliche Auswahlwert sein und
 enthalten 20 zusätzliche Seiten für Seitenpackung, Fragmentierung und die
 begrenzten Update-/GC-Situationen. Bis zu dieser Ownerfreigabe bleibt der
-Status `IMPLEMENTATION_NOT_STARTED_PENDING_PLAN_APPROVAL`; weder Adapter- noch
-R1-Partitionsentscheidung gilt bereits als freigegeben.
+Status `IMPLEMENTATION_CORRECTIONS_PENDING_PLAN_APPROVAL`; weder die
+Reviewkorrekturen noch die R1-Partitionsentscheidung gelten bereits als für die
+weitere Umsetzung freigegeben.
 
 Nach dieser Ownerfreigabe soll die Umsetzung dieser normalen
 Partitionstabellenänderung ohne zweiten Planentscheid zulässig sein, wenn alle
@@ -365,6 +385,13 @@ liest die kanonischen Limits nicht als zweite Fachwahrheit: Es prüft die
 Inventur gegen die Quellen, die gepinnten NVS-Konstanten, die Chunkgrenzen,
 den Namespace-Entry, zwei freie Seiten und das 69-Seiten-Auswahlfenster.
 
+Für die Run-Persistence prüft das Skript zusätzlich die exakte relevante
+Schlüsselmenge mechanisch: `{rc0, rc1, rh0}`. Die Prüfung ist ein Setvergleich
+gegen die kanonischen Run-Persistence-Quellen, nicht nur ein
+"Schlüssel-vorhanden"-Check. Jeder fehlende oder zusätzlich persistente
+Run-Key, jede Änderung der Slotanzahl oder jede abweichende Zuordnung lässt den
+Capacity-Check scheitern.
+
 ## Konkreter 4-MB-Weg und Tabelle
 
 Die aktuelle Single-App-Baseline wird durch die gepinnte
@@ -505,6 +532,19 @@ Die exhaustive Matrix enumeriert mindestens:
 - den `nvs_commit()`-Kontrollpunkt, obwohl er in v6.0.2 keine Flashmutation
   ausführt.
 
+Für den vollständigen Owner-Verifikationslauf ist die Schnittmenge der
+Unterbrechungspunkte der vollständige aufgezeichnete Satz aller mutierenden
+BDL-Callbacks: jeder `Write`- und jeder `Erase`-Callback wird geschnitten.
+Die Auswahl darf nicht anhand von `length` verkleinert werden; insbesondere
+Entry-State-/Range-State-Änderungen mit `length == 4` bleiben enthalten. Eine
+semantische Phasenklassifikation darf die geforderten BLOB_DATA-, BLOB_IDX-,
+Altwertentfernungs-, GC/PageManager-Copy- und Page-Erase-Mutationen nur
+zusätzlich benennen, nicht aus dem Cut-Satz entfernen. Ist ein Callback nicht
+eindeutig einer dieser Phasen zuordenbar, bleibt er als reproduzierbarer
+mutierender Cut-Punkt enthalten; ein fehlender oder verworfener Callback ist
+im Exhaustive-Lauf FAIL. Der kurze CI-Regressionssatz darf weiterhin eine
+kleinere, feste deterministische Auswahl verwenden.
+
 Die Traceklassifikation verwendet Callbackposition, Adresse/Länge und den
 gepinnten NVS-Seiten-/Entryinhalt; sie behauptet keine interne Phase, die nicht
 aus dem Artefakt ableitbar ist.
@@ -530,6 +570,14 @@ Jeder Fall protokolliert mindestens Scenario, Seed, Pattern, Callback-/
 Operationnummer, abgeleitete Mutationsphase, Setstatus, Commitstatus,
 Reinitialisierungsstatus, Readstatus, Länge und SHA-256 von erwartetem alt,
 erwartetem neuem und gelesenem Wert.
+
+Für normale, nicht absichtlich unterbrochene `PREFILL`- und
+Rotationspfade ist ausschließlich `StateStoreWriteStatus::Success` ein
+bestandenes Ergebnis. `CommitOutcomeUnknown` oder jeder andere Fehler ist dort
+FAIL und wird fail-closed behandelt; er darf nicht als erfolgreicher Clean-
+Write oder als stillschweigend akzeptierte Alt-/Neu-Auswahl zählen.
+`CommitOutcomeUnknown` mit dem Alt-/Neu-Readback-Orakel gehört ausschließlich
+zu den gezielten Fehler-, BDL-Cut- und Power-Cut-Recoveryfällen.
 
 ### Reproduzierbarer GC-/Erase-Fall
 
@@ -573,12 +621,41 @@ Nach Planfreigabe werden dafür ausschließlich im bestehenden
   `compile_commands.json` und im Release-ELF auf fehlende `ISSUE90`-Symbole /
   Marker.
 
+Die Harnessquelle und alle ausschließlich dafür nötigen Abhängigkeiten werden
+mit derselben Bring-up-Grenze isoliert. Das gilt insbesondere für zusätzliche
+UART-, Partitions- und Hash-/Evidenzabhängigkeiten in
+`main/CMakeLists.txt` (beispielsweise `esp_driver_uart`, `esp_partition`,
+`driver` oder eine nur für den Harness benötigte Hashkomponente). Sie dürfen
+nur im `APP_ISSUE_90_NVS_HARDWARE_TEST`-/Bring-up-Pfad in den Componentgraphen
+gelangen. Bereits vom produktiven `main` benötigte Abhängigkeiten bleiben
+erhalten und werden nicht künstlich entfernt. Der Release-Nachweis prüft
+Compile-Database, Componentgraph und ELF gemeinsam auf fehlende
+Harnessquellen, `APP_ISSUE_90_NVS_HARDWARE_TEST`, `ISSUE90`-Marker/Symbole und
+ausschließlich für #90 neu eingeführte Dependencies.
+
 Damit folgt #90 dem vorhandenen `esp32_bringup`-/Compile-Time-Isolationsmuster
 aus `main/CMakeLists.txt` und `app_main.cpp`. Es entsteht keine zweite
 Wegwerf-Anwendung, kein Testfixture unter
 `lib/device_platform_esp_idf/private/` und kein öffentlicher Persistenzport.
 Der Harness verwendet im Testbaum den echten `NvsStateStore` über den
 unveränderten `IStateStore`-Vertrag.
+
+#### No-PSRAM-Speicher- und Stackvertrag
+
+Page-/GC-Evidenz darf nicht als automatische Mehr-KiB-Objekte im
+unveränderten ESP-IDF-Main-Task-Stack liegen. Die Umsetzung verwendet deshalb
+einen ausschließlich internen, No-PSRAM-tauglichen, statisch begrenzten
+Test-BSS-Speicherpfad für die zwei festen `PageEvidence[69]`-Evidenzmengen und
+den Readbuffer (oder einen technisch gleichwertigen explizit gemessenen
+internen Heap-/Bring-up-Testtask-Pfad). Automatische Kopien dieser Arrays sind
+unzulässig. Die Obergrenze wird aus den konkreten `sizeof`-Werten gebildet,
+per `static_assert` gegen das feste Harness-Scratchbudget geprüft und im
+Linker-/Map-/ELF-Nachweis als interne Speicherbelegung ausgewiesen. Es gibt
+keine PSRAM-Abhängigkeit. Ein alternativer dedizierter Testtask muss seine
+Stackgröße ebenfalls explizit festlegen und per Compile-/Map-/Stacknachweis
+belegen; der unveränderte 3.584-B-Main-Task-Stack darf nicht als Reserve
+herangezogen werden. Reale Heap-, Largest-Block- und Stack-HWM-Werte bleiben
+bis zum Hardwarelauf zusätzlich `BLOCKED/NOT_RUN`.
 
 Solange noch kein produktiver `IStateStore`-Verbraucher existiert, besitzt
 dieser Harness als Test-Orchestrator den Partitionslebenszyklus und die
@@ -629,6 +706,41 @@ ISSUE90 PASS reason=<reason>
 ISSUE90 FAIL reason=<reason>
 ```
 
+#### Kalibrierter Power-Cut-Window-Vertrag
+
+Die vier Fenster `blob_data`, `blob_index`, `old_removal` und `gc_erase` sind
+eigene, technisch kalibrierte Testparameter und keine bloßen Szenarionamen.
+Die Kalibrierung ist testseitig und instrumentiert weder den produktiven
+NVS-Adapter noch führt sie einen neuen Persistenzport ein:
+
+1. Der Runner stellt einen explizit dokumentierten, sauberen
+   Kalibrier-Ausgangszustand her, startet die festgelegte Rotation und misst
+   die Zeitbasis ab dem zugehörigen `ROTATE_BEGIN`.
+2. Für jedes Fenster wird eine reproduzierbare Parameterspur mit mindestens
+   `window`, Sequenz/Key, `calibration_run_id`, `delay_us` zwischen
+   `ROTATE_BEGIN` und `TRIP`, Hook-/Restore-Timeouts und Seed/Pattern geführt.
+   Die Kandidaten werden über einen testseitigen Sweep und Wiederholungen
+   bestimmt; der Power-Controller erhält keine implizite Semantik.
+3. Ein Kandidat wird nur angenommen, wenn die nachfolgende Raw-Page-/Entry-
+   Evidenz und das Readback die tatsächlich getroffene Phase eindeutig
+   klassifizieren: BLOB_DATA, BLOB_IDX, Altwertentfernung oder der reale
+   GC-/Page-Erase-Fall. Nicht eindeutig klassifizierbare oder nur durch den
+   Zeitpunkt behauptete Kandidaten werden verworfen.
+4. Der Runner verwendet im Ownerlauf ausschließlich die akzeptierten,
+   window-spezifischen `delay_us`-/Triggerparameter und löst `TRIP` damit
+   reproduzierbar relativ zu `ROTATE_BEGIN` aus. Ein Zielwindow gilt erst als
+   verschieden, wenn seine Evidenzklasse von den drei anderen getrennt
+   nachgewiesen ist; `gc_erase` muss den tatsächlichen Erase-Callback und das
+   starke GC-Orakel erfüllen.
+
+Kalibrierlauf, Sweepkandidaten, akzeptierte Parameter, Zielwindow,
+Triggerzeitpunkt, Hookantworten, Raw-Page-Klassifikation und Readback werden
+im Artefakt mit Run-ID, Source-/Plan-SHA und Zeitstempeln archiviert. Der
+Owner-Verifikationslauf führt mindestens zehn Wiederholungen je dieser vier
+tatsächlich verschiedenen Fenster aus. Fehlt eine stabile Kalibrierung oder
+trifft ein Lauf kein eindeutig belegtes Zielwindow, ist er FAIL/BLOCKED und
+nicht PASS.
+
 `PREFILL` schreibt deterministisch die vollständige Inventur aus 19
 Konfigurationsschlüsseln (`uc0..uc3`, `sc0..sc3`, `pc0..pc3`, `cm0..cm2`,
 `cr0..cr1`, `cb0..cb1`) und drei Lauf-/Checkpointschlüsseln (`rc0`, `rc1`,
@@ -641,6 +753,18 @@ den Runner. `READBACK_ALL` liefert für alle 22 Records exakte Länge und
 SHA-256; der Runner vergleicht ausschließlich vollständige alte oder neue
 Bytes. `REBOOT` veranlasst einen echten `esp_restart()`, worauf ein neuer
 `READY`-Marker und derselbe vollständige Readback folgen.
+
+Direkt nach dem ersten deterministischen `PREFILL seed=0` wird eine
+unveränderliche Baseline mit Länge und SHA-256 aller 22 Records gespeichert.
+Jede der drei sauberen Neustartkontrollen vergleicht alle 22 Werte exakt mit
+dieser Baseline; ein einzelner abweichender Hash, eine abweichende Länge oder
+ein fehlender Wert ist FAIL. Jede unabhängige Power-Cut-Wiederholung beginnt
+entweder aus einem explizit testseitig zurückgesetzten/gelöschten
+Ausgangszustand oder aus einer dokumentierten, nachweislich deterministischen
+fortlaufenden Sequenz. Eine bloße erneute Vorbefüllung auf einer durch frühere
+Cuts veränderten NVS-Seiten-/GC-Lage gilt nicht als identische kalibrierte
+Baseline. Ein notwendiger Reset/Erase bleibt ausschließlich Bring-up-/Test-
+Logik und wird nie Bestandteil von `NvsStateStore`.
 
 Die Partition- und NVS-Statusmeldung kommt testseitig aus
 `esp_partition_find_first()`/`esp_partition_get()` und `nvs_get_stats()` und
@@ -734,6 +858,20 @@ schreibt nur die oben definierten Logs/Hashes/Reset-/Partitions-/NVS-Stats.
 Ein manueller `idf.py monitor`-Lauf allein ist kein Power-Cut- oder Readback-
 Nachweis.
 
+#### Verbindlicher Hardware-Artefaktvertrag
+
+`--artifact-dir` ist ein repository-relativer, vom Runner kontrollierter
+Ausgabepfad. Für jeden Lauf wird dort ein reproduzierbares Manifest mit
+Run-ID und UTC-Zeitstempeln geschrieben. Es referenziert mindestens Source-
+und Firmware-SHA, die freigegebene Plan-SHA, ESP-IDF-SHA und Profil, die real
+ermittelte Partitions-/Flash-Evidenz, Power-Cut-Window und akzeptierte
+Kalibrierparameter, UART- und Hook-/Controller-Logs, Tokens und Trigger,
+Readback-Längen/-Hashes, NVS-/GC-/Erase-/Raw-Page-Evidenz, Ressourcenlogs und
+den Abschlussstatus jeder Wiederholung. Die Logs bleiben mit ihren
+Repository-relativen Pfaden und Hashes referenzierbar; absolute Maschinen-
+pfade und Secrets werden abgelehnt. Alle erzeugten Textartefakte werden vor
+einem Erfolgsupload durch den Secret-/Pfadscan geprüft.
+
 ## Qualitätsgates und CI-Regressionsschutz
 
 Der neue Hosttest wird nach der Umsetzung verbindlich in die kanonischen
@@ -751,6 +889,14 @@ Definitionen aufgenommen:
   gesichert und durch Secret-/Pfadscan abgedeckt; erforderliche Anpassungen an
   `scripts/check_ci_artifact_scan_coverage.py` werden im Implementierungsschnitt
   mitgeführt.
+- Die Uploadreihenfolge ist verbindlich: erst generierte Issue-90-Textartefakte
+  erzeugen, dann `check_secrets.py --scan-path` erfolgreich über genau diese
+  Pfade ausführen, danach `check_ci_artifact_scan_coverage.py` ausführen und
+  erst nach beiden Erfolgen `actions/upload-artifact` für
+  `issue-90-nvs-host` ausführen. Kein Erfolgsartefakt darf vor dem
+  Secret-/Pfadscan hochgeladen werden. Der Coverage-Guard prüft deshalb sowohl
+  die vollständige Pfadabdeckung als auch die Reihenfolge Scan-vor-Upload und
+  schlägt bei einer Regression fehl.
 
 Der verbindliche CI-Regressionssatz ist deterministisch und umfasst die
 Grenzgrößen, empty/binary, Read-Race, Open-/Size-/Read-/Set-/Commit-Fehler,
@@ -759,6 +905,19 @@ festem Seed. Die exhaustive Matrix ist für jeden CI-Lauf nicht erforderlich;
 sie bleibt aber als reproduzierbarer Owner-/Hardware-Verifikationslauf
 `--exhaustive --seed 0` verpflichtend vor dem Hardwaregate. Ein fehlender
 Hostlauf ist `BLOCKED`/`NOT_RUN`, nicht PASS.
+
+### Build-/Source-Provenienzvertrag
+
+Der gezielte ESP-IDF-Build-, Static-Analysis- und Ressourcenbericht wird nur
+aus einem committed, auflösbaren PR-Source-Stand erzeugt. `Source-Git-SHA`
+ist exakt die geprüfte PR-Source-SHA und wird aus `git rev-parse HEAD` des
+sauberen Checkouts übernommen. Der lokale `Build-Commit` muss mit
+`git cat-file -e <sha>^{commit}` im Repository beziehungsweise im PR-Verlauf
+auflösbar sein. Baut CI einen ephemeren Merge-Commit, werden dessen SHA und die
+PR-Source-SHA ausdrücklich als getrennte Felder dokumentiert. Eine nicht
+auflösbare, lokale Zwischen- oder Working-Tree-SHA ist kein kanonischer
+PASS-Nachweis, sondern `FAIL`/`NOT_RUN` und erfordert die Neuerzeugung des
+Berichts auf einem erreichbaren committed Stand.
 
 ## Umsetzungs- und Commit-Schnitte nach Planfreigabe
 
@@ -930,7 +1089,9 @@ Plan commit: <exakte SHA dieser Planrevision>
 Base branch: agent/issue-29-esp32-bringup-plan
 Base SHA: c4c8b33f4dbaef727200ea410d887ec5417aa1b0
 Dependency: STACKED_ON_PR_116; PR #116 Draft; Issue #29 offen und Hardware-/Standard-Flash-Gates offen
-Implementation: IMPLEMENTATION_NOT_STARTED_PENDING_PLAN_APPROVAL
+Existing implementation: already present in PR #117; known review findings remain
+and are frozen until approval of this exact revised plan.
+Implementation: IMPLEMENTATION_CORRECTIONS_PENDING_PLAN_APPROVAL
 Proposed partition decision: `state_store = 69 pages / 276 KiB`; becomes
 binding with Owner approval of this exact plan SHA and remains usable without
 a second Owner gate only while the explicit assumptions above hold
