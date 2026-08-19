@@ -1,6 +1,6 @@
 # Issue #90 NVS capacity evidence
 
-- source git SHA: `2f6b2c67a3c880caac10efd1acbc8df7c0eab976`
+- source git SHA: `c506ae616c528d78b2349209b99997dbb738f0a1`
 - ESP-IDF: `v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`
 - pinned NVS constants: `32` B/entry, `126` entries/page, `4000` B/chunk
 - status: arithmetic evidence only; real NVS statistics and GC remain hardware/BDL evidence
