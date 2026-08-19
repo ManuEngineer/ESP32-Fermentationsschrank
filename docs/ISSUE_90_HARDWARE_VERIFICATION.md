@@ -72,7 +72,8 @@ folgende Evidenz erfasst und protokolliert:
   Alt-oder-Neu-Readback stimmen damit ueberein.
 
 Eine reine Statistik- oder Hashaenderung ist kein GC-/Erase-Nachweis. Die
-Evidenz wird seitenweise/streamend mit fester Obergrenze gesammelt; es werden
+Evidenz wird seitenweise/streamend mit einem festen 16-KiB-Scratch-Budget
+gesammelt (zwei Arrays von `PageEvidence` plus 256-B-Readbuffer); es werden
 keine zwei vollstaendigen 69-Seiten-Abbilder im No-PSRAM-Heap gehalten. Die
 Firmware meldet zusaetzlich Heap frei, groessten freien Block, Stack-HWM und
 die Deltas zwischen Baseline und Harnessbetrieb. Die reale Messung ist bis
