@@ -9,6 +9,9 @@
 #if defined(APP_ISSUE_29_BRINGUP_PROBE)
 #include "issue_29_bringup_probe.hpp"
 #endif
+#if defined(APP_ISSUE_90_NVS_HARDWARE_TEST)
+#include "issue_90_nvs_hardware_verification.hpp"
+#endif
 
 #include "esp_log.h"
 #include "esp_system.h"
@@ -81,6 +84,13 @@ extern "C" void app_main(void) {
     }
 
     logResources();
+
+#if defined(APP_ISSUE_90_NVS_HARDWARE_TEST)
+    if (!device_platform_esp_idf::runIssue90NvsHardwareVerification()) {
+        ESP_LOGE(kTag, "Issue 90 NVS hardware verification failed; stopping");
+    }
+    return;
+#endif
 
 #if defined(APP_ISSUE_29_BRINGUP_PROBE)
     if (!fermentation::issue_29_bringup::run()) {

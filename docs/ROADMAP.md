@@ -11,7 +11,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 1 | Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende | `IMPLEMENTATION_IN_PR; FULL_LOCAL_PASS; HARDWARE_BLOCKED`; Plan `docs/tasks/issue-29-implementation-plan.md @ 4f49b44cff47f55bfd425d9e39c5a07256782ed7` freigegeben, Software-/Buildimplementation und Reviewkorrekturen liegen in Draft-PR #116. Die Baseline bleibt aktorfrei. #29 bleibt Prioritaet 1; sein offenes Hardware-/Standard-Flash-Gate blockiert die entsprechenden #90-Nachweise, nicht die nach Ownerfreigabe zulaessige #90-Software-/Hostphase. | Nach verifiziertem Board-/UART-Aufbau reale Board-, Flash-, Boot-, UART-, Recovery-, Smoke- und Ressourcenmessungen |
-| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `IMPLEMENTATION_NOT_STARTED_PENDING_PLAN_APPROVAL`; eigener gestapelter Plan-Draft auf PR #116, Base `agent/issue-29-esp32-bringup-plan @ c4c8b33f4dbaef727200ea410d887ec5417aa1b0`; nach Ownerfreigabe der exakten Plan-SHA sind Adapter-/Host-/Buildarbeiten parallel zulaessig. Mit dieser Freigabe soll verbindlich werden: dedizierte `state_store`-NVS-Partition, Namespace `fermentation`, 69 Seiten / 276 KiB; keine zweite Persistenzarchitektur. Bis dahin gilt kein Adapter- oder R1-Auswahlentscheid als freigegeben. | Ownerfreigabe der exakten Plan-SHA; danach #29-Realflash-/Partitions-/Power-Cut-/Readback-/Ressourcen-/Wear-Gates sowie die expliziten 4-MB-/69-Seiten-Annahmen |
+| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `IMPLEMENTATION_IN_PR; HOST_SOFTWARE_PASS; HARDWARE_BLOCKED`; Umsetzung auf Draft-PR #117 nach Ownerfreigabe des exakten Plans `docs/tasks/issue-90-esp-idf-nvs-adapter-plan.md @ f060f971832ca352148c34c31d8818d3a2bf1c9b`, weiterhin gestapelt auf `agent/issue-29-esp32-bringup-plan @ c4c8b33f4dbaef727200ea410d887ec5417aa1b0`. Adapter-, Host-, Build- und Nachweislogik sind umgesetzt; die verbindliche R1-Auswahl `state_store`, Namespace `fermentation`, 69 Seiten / 276 KiB wird erst durch diese exakte Planfreigabe wirksam. #29 bleibt offen und blockiert nur Realflash-, Partitions-, Power-Cut-, Readback-, Ressourcen- und Wear-Nachweise; kein zweiter Persistenzport und keine finale Gesamtreservierung. | Ownerreview des Implementierungsstands; danach #29-Realflash-/Partitions-/Power-Cut-/Readback-/Ressourcen-/Wear-Gates und die 4-MB-/69-Seiten-Verifikation |
 | 3 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90 |
 | 4 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
 | 5 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26/#29 und bringt die echte Bedienung am Gerät über dieselben Contracts. | Hardware-/Pin-/Controllerbeweis, Ressourcen-/Lizenznachweis, reale Bedienungs- und Kalibrierungstests |
@@ -105,9 +105,10 @@ NVS-/Partitions-/Flash-/Hardwareabnahmen bleiben insbesondere über #90 offen.
   Inbetriebnahmenachweise stehen in `OPEN_POINTS.md`.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
   und Belastungstests blockiert.
-- Issue #89 (WLAN-Onboarding-Evaluation) und Issue #90
-  (ESP-IDF-NVS-Adapter) benoetigen vor Beginn einen eigenen Live-Abgleich und
-  freigegebenen Plan.
+- Issue #89 (WLAN-Onboarding-Evaluation) bleibt vor Beginn planpflichtig; Issue
+  #90 befindet sich nach ownerfreigegebenem Plan in Draft-Umsetzung. Seine
+  reale Standard-Flash-/Hardwareverifikation bleibt bis zum offenen #29-Gate
+  blockiert.
 - Issue #114 bewahrt den frueheren komplexen Advanced-Safety-/Recovery-Entwurf
   als `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`. Er ist kein Release-1-Gate und
   wird vor einer spaeteren Umsetzung vollstaendig gegen den dann aktuellen

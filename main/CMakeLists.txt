@@ -4,6 +4,7 @@ idf_component_register(
     SRCS "app_main.cpp"
     PRIV_INCLUDE_DIRS "../include"
     PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf
+        nvs_flash esp_partition mbedtls driver esp_driver_uart
 )
 
 # ESP-IDF 6.0.2 kompiliert C++ standardmaessig mit -std=gnu++26; das Projekt
@@ -37,6 +38,7 @@ else()
 endif()
 
 set(APP_ISSUE_29_COMPILE_DEFINITIONS)
+set(APP_ISSUE_90_COMPILE_DEFINITIONS)
 if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
     target_sources(${COMPONENT_LIB} PRIVATE "issue_29_bringup_probe.cpp")
     set_source_files_properties(
@@ -49,6 +51,14 @@ if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
     list(APPEND APP_ISSUE_29_COMPILE_DEFINITIONS
         APP_ISSUE_29_BRINGUP_PROBE=1
     )
+    if(APP_ISSUE_90_NVS_HARDWARE_TEST)
+        target_sources(${COMPONENT_LIB} PRIVATE
+            "issue_90_nvs_hardware_verification.cpp"
+        )
+        list(APPEND APP_ISSUE_90_COMPILE_DEFINITIONS
+            APP_ISSUE_90_NVS_HARDWARE_TEST=1
+        )
+    endif()
 endif()
 
 # Firmwarefeste Release-1-Grenzen bleiben feste Compile-Definitionen, keine
@@ -60,6 +70,7 @@ endif()
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
     ${APP_PROFILE_DEFINE}
     ${APP_ISSUE_29_COMPILE_DEFINITIONS}
+    ${APP_ISSUE_90_COMPILE_DEFINITIONS}
     APP_TARGET_FLASH_MB=4
     APP_REQUIRE_PSRAM=0
     APP_WEB_OTA_ENABLED=0

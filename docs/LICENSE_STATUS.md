@@ -32,6 +32,27 @@ Die Herkunft und der jeweilige Lizenzstatus gepruefter Komponenten werden im
 [`Third-Party-Komponentenregister`](THIRD_PARTY_COMPONENTS.md) sowie in den
 dazugehoerigen Auditdokumenten gepflegt.
 
+## Issue #90: konkret verwendeter ESP-IDF-Dateisatz
+
+Der #90-Adapter verwendet keine kopierten Herstellerdateien. Er bindet gegen
+die gepinnte ESP-IDF-Basis
+`v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e` und nutzt daraus die
+oeffentlichen NVS-/Partition-APIs; der private Hosttest nutzt zusaetzlich die
+gepinnten BDL-/NVS-Implementierungsquellen. Fuer den Herkunfts-, Lizenz- und
+Notice-Nachweis sind mindestens diese tatsaechlich entscheidenden Dateien und
+deren mitgelieferte Lizenz-/Noticeabdeckung zu pruefen:
+
+| Verwendung | ESP-IDF-Dateisatz | Dokumentationspflicht |
+|---|---|---|
+| Produktionsadapter | `components/nvs_flash/include/nvs.h`, `components/nvs_flash/include/nvs_flash.h`, `components/esp_partition/include/esp_partition.h` | Version/Commit, Apache-2.0 und die im ESP-IDF-Distributionsweg zugehoerigen Drittbestandteile/Notices erfassen |
+| Herstellervertrag und Kapazitaet | `components/nvs_flash/src/nvs_api.cpp`, `components/nvs_flash/src/nvs_storage.cpp`, `components/nvs_flash/private_include/nvs_constants.h`, `components/nvs_flash/src/nvs_pagemanager.cpp`, `components/nvs_flash/include/nvs_flash.h` | die fuer `nvs_set_blob`, No-op-`nvs_commit`, Chunk-/Entry-/GC-/Erase- und BDL-Vertraege verwendeten Quellen auf dem exakten Commit referenzieren |
+| Host-Recoverytest | `components/nvs_flash/host_test/nvs_host_test/main/bdl_ramdisk.cpp` sowie die zugehoerigen `esp_blockdev`-Header | BDL-Hosttest bleibt ein Testartefakt; Lizenz-/Noticeabdeckung des vollstaendigen tatsaechlich gebauten Komponentenimports pruefen |
+
+Der Repository-Nachweis besteht aus dieser Tabelle, dem Third-Party-Register,
+dem Auditregister und dem Release-/Hostartefakt-Notice-Check. Die #90-
+Implementierung behauptet weder aktivierte NVS-Verschluesselung noch Schutz
+gespeicherter Secrets; das separate Security-/Releasegate bleibt unveraendert.
+
 ## Projektbezeichnung
 
 Bis zu einem ausdruecklichen spaeteren Lizenzentscheid wird das Projekt nicht

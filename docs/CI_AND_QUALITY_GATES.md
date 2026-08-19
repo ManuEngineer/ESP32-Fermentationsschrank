@@ -112,6 +112,42 @@ python scripts/build_esp_idf_profiles.py all
 python scripts/run_esp_idf_static_analysis.py all
 ```
 
+Der reproduzierbare Issue-90-Hostpfad verwendet ausschließlich die gepinnte
+ESP-IDF-NVS-BDL-Implementation. `CONFIG_NVS_BDL_STACK=y` und
+`nvs_flash_init_partition_bdl()` sind auf `test/esp_idf_nvs_adapter_host/`
+beschränkt und dürfen nicht in Produktionsdefaults erscheinen:
+
+```bash
+. "$IDF_PATH/export.sh"
+idf.py -C test/esp_idf_nvs_adapter_host \
+  -B test/esp_idf_nvs_adapter_host/build --preview set-target linux
+idf.py -C test/esp_idf_nvs_adapter_host \
+  -B test/esp_idf_nvs_adapter_host/build build
+test/esp_idf_nvs_adapter_host/build/issue_90_nvs_adapter_host.elf \
+  --ci-regression --report build/issue_90_nvs_adapter_host-matrix.json
+test/esp_idf_nvs_adapter_host/build/issue_90_nvs_adapter_host.elf \
+  --exhaustive --seed 0
+```
+
+`--ci-regression` ist der verbindliche, kurze Regressionssatz. Der
+`--exhaustive`-Lauf deckt die vollständige deterministische Fault-/Recovery-
+Matrix der sieben stabilen Blob-Daten-, Blob-Index- und Altwert-
+Entfernungsendpunkte mit drei festen Bytepatterns ab und wird als eigener
+Nachweis ausgeführt; er ersetzt nicht die spätere Standard-Flash-/Partitions-
+und ESP32-Hardwarematrix. Die BDL-Matrix belegt NVS-Storage-/Recovery-
+Semantik, nicht das reale Flashmedium. Nicht als stabiler Vertrag behandelte
+interne 4-Byte-Buchhaltungszwischenstände werden nicht als zusätzliche
+ESP-IDF-Phasen behauptet.
+
+Die #90-Kapazitätsrechnung wird reproduzierbar aus dem vollständigen
+Schlüssel-/Recordinventar und den gepinnten ESP-IDF-Konstanten erzeugt:
+
+```bash
+python scripts/issue_90_nvs_capacity.py \
+  --output docs/ISSUE_90_CAPACITY_REPORT.md \
+  --source-git-sha "$(git rev-parse HEAD)"
+```
+
 Der Upgrade-, Herkunfts- und Hardware-Smoke-Vertrag steht in
 `ESP_IDF_UPGRADE_CONTRACT.md`.
 
@@ -208,11 +244,12 @@ Der Firmwarejob fuehrt in dieser Reihenfolge aus:
 6. native Static Analysis;
 7. Architektur-, Secret- und Gate-Selbsttests;
 8. ESP-IDF 6.0.2 am exakten Commit installieren und verifizieren;
-9. Bring-up- und Releaseprofil bauen;
-10. Ressourcenbericht ergaenzen;
-11. ESP-IDF-Static-Analysis;
-12. Artefakt-Scanabdeckung und Secretpruefung;
-13. Berichte und Buildartefakte sichern.
+9. den Issue-90-NVS-BDL-Hosttest bauen und den CI-Regressionssatz ausführen;
+10. Bring-up- und Releaseprofil bauen;
+11. Ressourcenbericht ergaenzen;
+12. ESP-IDF-Static-Analysis;
+13. Artefakt-Scanabdeckung, Kapazitätsrechnung und Secretpruefung;
+14. Berichte und Buildartefakte sichern.
 
 `concurrency` bricht einen veralteten Lauf desselben Pull Requests ab, sobald
 ein neuerer Lauf startet.

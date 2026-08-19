@@ -300,12 +300,21 @@ COMPONENT_REQUIRES_ALLOWLIST = {
     },
     "lib/device_platform_esp_idf/CMakeLists.txt": {
         "public": frozenset({"device_platform"}),
-        "private": frozenset({"esp_timer"}),
+        "private": frozenset({"esp_timer", "nvs_flash"}),
     },
     "main/CMakeLists.txt": {
         "public": frozenset(),
         "private": frozenset(
-            {"device_platform", "fermentation_app", "device_platform_esp_idf"}
+            {
+                "device_platform",
+                "fermentation_app",
+                "device_platform_esp_idf",
+                "nvs_flash",
+                "esp_partition",
+                "mbedtls",
+                "driver",
+                "esp_driver_uart",
+            }
         ),
     },
 }
@@ -1063,7 +1072,8 @@ IDF_LEAK_VIOLATION_CASES = {
         "main/CMakeLists.txt",
         'idf_component_register(SRCS "app_main.cpp" '
         'PRIV_INCLUDE_DIRS "../include" PRIV_REQUIRES '
-        "device_platform fermentation_app device_platform_esp_idf driver)\n",
+        "device_platform fermentation_app device_platform_esp_idf "
+        "bogus_component)\n",
     ),
     "main_faelschlich_oeffentliche_requires": (
         "main/CMakeLists.txt",

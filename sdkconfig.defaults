@@ -9,5 +9,14 @@ CONFIG_IDF_TARGET="esp32"
 # Release 1 zielt auf exakt 4 MB Flash (siehe AGENTS.md, app_config.hpp).
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
+# Issue #90: the production adapter owns a dedicated, non-encrypted NVS
+# partition. The BDL host setting is test-tree-only and is explicitly off in
+# both production profiles.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/issue_90_state_store.csv"
+CONFIG_NVS_BDL_STACK=n
+CONFIG_NVS_FLASH_VERIFY_ERASE=y
+CONFIG_NVS_FLASH_ERASE_ATTEMPTS=2
+
 # Kein PSRAM-Eintrag: CONFIG_SPIRAM ist im ESP-IDF-Default bereits
 # deaktiviert; Release 1 darf keine PSRAM-Abhaengigkeit einfuehren.
