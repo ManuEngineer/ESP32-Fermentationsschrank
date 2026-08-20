@@ -2,32 +2,46 @@
 
 ## Status, Basis und Freigabegrenze
 
-Der einzig gültige Status dieses Plans und der bereits im PR vorhandenen
-#90-Implementation ist bis zur Ownerfreigabe der exakten Plan-Commit-SHA:
+Der einzig gültige aktuelle Status dieses Plans und der bereits im PR
+vorhandenen #90-Implementation ist bis zur Ownerfreigabe der exakten neuen
+Plan-Commit-SHA:
 
-`IMPLEMENTATION_BLOCKED_PENDING_R4_PLAN_APPROVAL`
+`IMPLEMENTATION_BLOCKED_PENDING_R5_PLAN_APPROVAL`
 
-### Revision R4 – Callback-12-Planrevision pending Ownerfreigabe
+### Revision R5 – vollständige kanonische Planrevision
 
-Die Umsetzung dieses Plans ist nach dem reproduzierbaren vollständigen Host-
-`exhaustive`-Befund erneut angehalten. Die bisherige exakte Freigabe bleibt
-`da693e8a24735ff2cc09f019b119083f3792882e`; dieser Commit ist die vollständige
-neue Planrevision R4 und benötigt eine eigene Ownerfreigabe, bevor irgendeine
-Korrektur an Produktionscode, Test-Harness oder Testorakel umgesetzt wird.
+R5 ersetzt R4 vollständig. R4 ist nur noch Provenienz und darf weder
+patchweise ergänzt noch mit einer anderen Planrevision zusammengesetzt werden.
+Die frühere freigegebene Plan-SHA war
+`da693e8a24735ff2cc09f019b119083f3792882e`; die nicht freigegebene R4-SHA war
+`165a9691bd47233dc536715aa1e1926e35dcc13d`. Keine dieser SHAs ist die neue
+R5-SHA.
 
-Kontext nach der beauftragten Base-Synchronisierung:
+Die R5-SHA ist im Plantext absichtlich nicht vorweggenommen. Nach dem Commit
+werden ausschließlich die exakte neue SHA, der Planpfad und die Freigabelogik
+im PR-Body und im aktuellen `SESSION HANDOVER` veröffentlicht.
 
-- aktueller PR-#117-Head: `17100cc87427d7bcbeb25a8f53920abe686869d6`;
-- Merge-Commit von #116 nach #117: `17100cc87427d7bcbeb25a8f53920abe686869d6`;
-- aktueller #116-Base-Head: `30fa0a8264e2c4564d324340c6bebc204147f477`;
-- ursprünglicher #117-Implementierungs-/Build-Source-Commit: `c506ae616c528d78b2349209b99997dbb738f0a1`.
+Verifizierte Kontextbaseline dieser Revision:
 
-Die R4-Revision behandelt ausschließlich den Callback-12-Befund und die
-notwendige Entscheidung über die unveränderte `IStateStore`-Atomizitätsgrenze.
-Sie deutet den freigegebenen Firmwareplan nicht um und erlaubt bis zur neuen
-exakten Ownerfreigabe keine Implementation.
+- aktueller PR-#117-Head vor dieser Revision:
+  `bb2b53498829b77e8b0b9e38535b5eb41feecc63`;
+- Base-Branch: `agent/issue-29-esp32-bringup-plan`;
+- Base-SHA: `30fa0a8264e2c4564d324340c6bebc204147f477`;
+- Merge-Commit von #116 nach #117:
+  `17100cc87427d7bcbeb25a8f53920abe686869d6`;
+- build-relevanter synchronisierter Source-Commit:
+  `17100cc87427d7bcbeb25a8f53920abe686869d6`;
+- ursprünglicher #117-Implementierungs-/Build-Source-Commit:
+  `c506ae616c528d78b2349209b99997dbb738f0a1`;
+- gepinntes ESP-IDF: `v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`.
 
-## R4-Befund: reproduzierbarer vollständiger Host-Exhaustive-Fehler
+Diese Runde ändert ausschließlich den versionierten Plan und die minimalen
+Status-/Handovertexte. Produktionscode, Testcode, Testorakel, Harness,
+Runner, UART, Partition, Buildkonfiguration und Hardwarezustand bleiben
+unverändert. Vor einer exakten Ownerfreigabe der R5-SHA ist jede Umsetzung
+weiterhin gesperrt.
+
+## Erhaltene Callback-12-Evidenz: kein neuer Diagnoseauftrag
 
 Auf dem synchronisierten PR-Stand `17100cc` besteht der vollständige
 `ISSUE90_HOST_MODE=exhaustive`-Lauf weiterhin nicht:
@@ -71,7 +85,7 @@ Adapter selbst kann diese Reihenfolge nicht steuern: `nvs_set_blob()` besitzt
 die internen Daten-, Entry-State-, Page-State- und Index-Schritte. Der Test
 prüft weiterhin den unveränderten `IStateStore`-Vertrag; das Orakel wird nicht
 gelockert. Die vollständige Callbackauswahl wird ebenfalls nicht wieder auf
-lange Writes verkürzt, weil R4 die freigegebene Anforderung für alle
+lange Writes verkürzt, weil R5 die Anforderung für alle
 mutierenden `Write`-/`Erase`-Callbacks erhält.
 
 Die Diagnose wurde zusätzlich gegen die alternative Harness-Reihenfolge
@@ -82,42 +96,163 @@ Variante ist daher keine belastbare Korrektur, sondern bestätigt, dass die
 Sichtbarkeitslücke nicht durch eine einzelne Erwartung oder Callbacknummer
 behoben wird.
 
-## R4-Owner-Gate vor jeder Korrektur
+## Espressif-first-Abgleich und konkrete R5-Architekturentscheidung
 
-Vor einer Implementation muss der Owner eine vollständige R4-Entscheidung für
-die atomare Sichtbarkeit treffen. Zulässige Richtungen sind ausschließlich:
+### Herstellervertrag und Bedeutung des Befunds
 
-1. ein im bestehenden `IStateStore`-/direkten NVS-Key-/Wire-Vertrag
-   begründeter Korrekturpfad, der die vollständige alte oder neue Sichtbarkeit
-   auch bei allen geforderten internen BDL-Cuts beweist; oder
-2. ein ausdrücklich neuer, ownerfreigegebener Plan für zusätzliche
-   Transaktions-/Generations-/Indexpersistenz, falls diese zur atomaren
-   Sichtbarkeit erforderlich ist.
+Die offizielle ESP-IDF-v6.0.2-Dokumentation beschreibt NVS als gegen
+unerwarteten Stromverlust ausgelegt: Ausschalten zu jedem Zeitpunkt soll nach
+dem nächsten Start keinen Verlust bestehender Daten verursachen; verloren
+gehen darf nur das gerade neu geschriebene Key-Value-Paar. Die NVS-API
+beschreibt außerdem atomare Updates je Key-Value-Paar. Diese Aussagen sind
+der zu prüfende Herstellervertrag, nicht nur eine Testannahme.
 
-Das Abschwächen des Readback-Orakels, das Entfernen der 4-Byte-Cuts, das
-Akzeptieren von `NotFound` nach einem bestehenden Wert oder das bloße
-Umetikettieren von `NotFound` als `ReadError` sind keine zulässigen
-Korrekturen. Ebenso wird keine zweite Persistenzarchitektur und keine nur für
-den Test eingebaute Sonderlogik eingeführt. Falls der Owner keine der beiden
-Richtungen freigibt, bleibt Issue #90 mit diesem reproduzierbaren Befund offen.
+Der reproduzierte BDL-Cut ist zunächst eine plausible Power-Loss-Semantik:
+Der BDL persistiert jeden abgeschlossenen Write, der konfigurierte Cut stoppt
+den nächsten Write, und Deinit/Reinit entspricht dem Neustart. Damit darf der
+Fall nicht als künstlich „nicht real“ wegklassifiziert werden. Gleichzeitig
+ist ein BDL-Callback-Cut noch kein realer Versorgungstest; die spätere
+Hardwareprüfung bleibt separat und benötigt ein kontrollierbares Fixture.
 
-Nach R4-Freigabe sind mindestens erneut nachzuweisen: gezielte Hosttests,
-vollständiger Host-`exhaustive` mit allen mutierenden Callbacks, beide
-ESP-IDF-Profile, Static Analysis beider Profile, Build-/Source-Provenienz
-auf dem neuen build-relevanten Source-Commit sowie erst danach die geplanten
-realen NVS-/UART-/Readback-/GC-/Erase-/Power-Cut-/Ressourcennachweise. Bis
-dahin bleiben alle realen Issue-90-Hardwaretests `NOT_RUN` wegen des offenen
-Softwarevertragsbefunds, nicht wegen des separaten #29-Pegel-Restgates.
+Die gepinnte v6.0.2-Quelle wird konkret gegen diese Aussage gestellt:
+
+- `Storage::writeMultiPageBlob()` schreibt `BLOB_DATA`, Page-/Entry-State und
+  anschließend `BLOB_IDX` in mehreren getrennten Raw-Writes;
+- `Page::markFull()`/`alterPageState()` führt den beobachteten 4-Byte-Write bei
+  `0x2000` aus;
+- `nvs_pagemanager.cpp` enthält die Page-Recovery-/GC-Reihenfolge;
+- der offizielle v6.0.2-BDL-Hosttest aktiviert
+  `CONFIG_NVS_BDL_STACK=y`, verwendet die Espressif-BDL-Anforderungen und
+  enthält bereits ein Power-Off-/Old-or-New-Orakel, aber nicht diese
+  vollständige #90-BDL-Cut-Matrix.
+
+Der Abgleich entscheidet ausdrücklich zwischen Vertragsbefund und
+Fehlerbefund:
+
+1. Der Cut ist vom NVS-Vertrag gedeckt und ein gepinnter oder minimaler
+   Espressif-Fix stellt für alle Cuts wieder vollständiges Alt-oder-Neu her.
+2. Der Cut wird vom Herstellervertrag nicht gedeckt oder der Fehler bleibt im
+   direkten Pfad trotz Herstellerkorrektur bestehen. Dann ist der direkte
+   `IStateStore`-Vertrag mit v6.0.2 nicht belegbar und Issue #90 wird für die
+   Umsetzung `BLOCKED`; es wird keine halbfertige Eigenarchitektur begonnen.
+
+### Begrenzter Adopt-or-fix-Abgleich vor jeder Produktionskorrektur
+
+Der erste Umsetzungsschnitt nach Ownerfreigabe ist daher kein Adapter-
+Workaround, sondern ein dokumentierter Herstellerabgleich:
+
+1. Die exakt gepinnte v6.0.2-Quelle, `nvs_flash`-Kconfig, `nvs_set_blob`,
+   `nvs_commit`, `Page::markFull`, `PageManager::requestNewPage`, Recovery und
+   die vorhandenen BDL-Tests werden auf dem verifizierten ESP-IDF-Commit
+   gelesen und mit dem #90-Trace verknüpft.
+2. Der kleinste reproduzierbare BDL-Fall wird als unabhängiger upstream-
+   vergleichbarer Testfall festgehalten: alter Blob, neuer Blob, kompletter
+   mutierender Write-/Erase-Cut, Reinit und vollständiges Readback. Der Fall
+   enthält insbesondere den bisherigen Callback 12 und die alternativen
+   4-Byte-Cuts.
+3. Ein neuerer offizieller Espressif-Stand darf ausschließlich als Evidenz
+   gebaut und mit demselben Orakel verglichen werden. Im lokalen Hersteller-
+   Bestand ist `f0c7d9b6c603658c832858d0a4f25b5a05ea1760` dokumentiert:
+   `fix(nvs_flash): Fixed order of page state change to allow recovery`.
+   Dieser Commit verschiebt `markFreeing()` vor `activatePage()` im
+   PageManager; er ist ein begründeter Kandidat für GC-Recovery, aber noch
+   kein Beweis für den konkreten Callback-12-Fall.
+4. Der Kandidat gilt nur dann als Korrektur, wenn der identische #90-
+   `--exhaustive --seed 0`-Lauf mit allen mutierenden 4-Byte-, BLOB_DATA-,
+   BLOB_IDX-, GC-/Copy- und Erase-Cuts PASS ist und das Ergebnis im minimalen
+   Reproduktionsartefakt mit Source-/IDF-SHA festgehalten wird.
+5. Eine veröffentlichte neuere ESP-IDF-Version oder ein gezielter
+   Backport/Vendor-Patch ist eine separate Ownerentscheidung. R5 autorisiert
+   keinen stillen IDF-Upgrade, keinen unversionierten Patch im Projekt und
+   keine behauptete Lösung aus einem lediglich grün erscheinenden Teiltest.
+6. Zeigt der Herstellervergleich einen plausiblen Upstream-Defekt, werden
+   genau der minimale Reproducer, v6.0.2-SHA, neuer Vergleichs-SHA, Trace,
+   erwartetes Alt-/Neu-Orakel und das kleinste reproduzierte Ergebnis für eine
+   Espressif-Meldung archiviert. Das ist keine neue #90-Architektur.
+
+### R5-Empfehlung: direkter NVS-Pfad mit Espressif-Korrektur, sonst BLOCKED
+
+R5 empfiehlt konkret, `NvsStateStore` als direkten, anwendungsneutralen
+ESP-IDF-NVS-Adapter beizubehalten und die Atomizitätskorrektur ausschließlich
+im Herstellerpfad zu lösen: eine ownerfreigegebene, exakt versionierte
+ESP-IDF-Korrektur beziehungsweise ein gleichwertiger offizieller Fix ist die
+kleinste zulässige Richtung. Die bestehende direkte Key-/Blob-Abbildung, der
+`IStateStore`-Port und der Schema-1-Wirevertrag bleiben dabei unverändert.
+
+R5 plant ausdrücklich **keine** zusätzliche Transaktions-, Generation-,
+Index-, Selector- oder eigene Flash-/GC-Schicht. Der Grund ist nicht nur KISS:
+ADR-016 weist Atomizität, Integrität, Wear-Leveling und Recovery bewusst dem
+Herstellerbackend zu. Eine zweite Persistenzarchitektur würde den Scope,
+Kapazitäts-/Wear-Vertrag und die Recoveryverantwortung materiell erweitern.
+
+Wenn der Herstellerabgleich den direkten Pfad nicht belastbar repariert,
+empfiehlt R5 statt einer nachträglichen Architekturwahl den Status
+`BLOCKED`: Issue #90 darf dann erst nach einem eigenen Ownerauftrag oder einer
+neuen vollständigen Planrevision mit neuem Scope weitergehen. Diese
+Blockadeempfehlung ist die festgelegte R5-Ausweichgrenze und keine offene Wahl
+für die Implementierungsphase.
+
+### Direkter Backendvertrag, ausdrücklich ohne A/B-/Generationspersistenz
+
+Der empfohlene Pfad ist vollständig bestimmt:
+
+| Logischer Vertrag | Physische v6.0.2-Abbildung |
+|---|---|
+| `IStateStore::StateStoreKey` | exakt derselbe String als NVS-Key; 1–15 Bytes aus `[A-Za-z0-9_.-]`, keine Hash-/Trunkierung |
+| Store-Namespace | `fermentation`, als ein NVS-Namespace-Entry |
+| Partition | Label `state_store`, Typ/Subtyp `data,nvs`, 69 Seiten / 276 KiB im R1-Kandidatenlayout |
+| Wert | exakt ein binärsicheres NVS-BLOB je logischem Key; kein Envelope-/Wireformat-Umbau durch den Adapter |
+| Commitpunkt | `nvs_set_blob()` plus `nvs_commit()`; der Herstellerpfad bestimmt die interne Write-/GC-Reihenfolge |
+| Kollisionen | ausgeschlossen durch portseitige 15-Byte-/ASCII-Validierung und direkte 1:1-Abbildung; keine zusammengesetzten Namen |
+
+Die maximale `StateStoreKey`-Länge wird nicht durch Namespacepräfixe,
+Partitionsnamen oder Generationen verbraucht. Alle gültigen Schlüssel können
+direkt und verlustfrei gespeichert werden. Vorhandene NVS-Daten mit dieser
+Abbildung bleiben bei einem reinen Herstellerfix kompatibel. Ändert ein
+Upgrade das On-Flash-Format oder die Recoverykompatibilität, muss das vor
+Ownerfreigabe des Upgradepfads separat bewiesen werden; automatisches Löschen,
+Formatieren oder Migration wird nicht erfunden.
+
+Für jeden möglichen Cut gilt im direkten Vertrag: ein vollständiger alter oder
+neuer Blob ist zulässig, bei vorher nicht vorhandenem Key zusätzlich
+`NotFound`; ein Teilwert, Mischwert, beschädigter Blob oder `NotFound` nach
+vorher vorhandenem Wert ist FAIL. `CommitOutcomeUnknown` bleibt Unknown und
+wird durch exakten Readback aufgelöst; `NotFound` wird nie als Erfolg oder als
+Umbenennung in `ReadError` akzeptiert. `ReadError` nach der zweiten
+`nvs_get_blob()`-Abfrage bleibt ebenfalls ein echter Fehler.
+
+Nicht ausgewählte Transaktionsbegriffe sind damit bewusst nicht anwendbar:
+Es gibt keinen A/B-Slot, keine Generation, keinen Selector, keinen atomaren
+Selector-Primitivwert, keine beschädigte Generation und keine Selector-
+Recovery. Garbage Collection und Erase bleiben ausschließlich der
+ESP-IDF-NVS-Implementierung und dem dafür geplanten Orakel. ADR-016,
+`DECISIONS.md`, die direkte Key-Mapping-Aussage, `CONFIGURATION_PERSISTENCE.md`,
+`RUN_PERSISTENCE.md` und das Schema-1-Wireformat erhalten keine zweite
+fachliche Persistenzwahrheit. Kapazitätsmehrbedarf und zusätzliche Wearlast
+durch A/B-/Generationswrites entstehen nicht; die bestehende 69-Seiten-
+Annahme wird gegen 4 MB und die vorhandene NVS-Write-/GC-Last geprüft.
+
+## R5-Owner-Gate vor Umsetzung
+
+Der Owner muss nach Veröffentlichung der R5-SHA nur noch die festgelegte
+Herstellerpfadrichtung und deren Freigabevoraussetzung bestätigen: direkter
+NVS-Pfad mit exakt versionierter Espressif-Korrektur, andernfalls die
+ausdrückliche `BLOCKED`-Empfehlung. Eine Freigabe der alten R4-SHA oder eine
+allgemeine Zustimmung ohne die neue exakte R5-SHA autorisiert nichts.
+
+Das Readback-Orakel, alle 4-Byte-Cuts, `NotFound`-Semantik und der
+Schema-1-Wirevertrag bleiben unverändert. Nach R5-Freigabe gilt die
+verbindliche Reihenfolge aus dem Abschnitt „Umsetzungs- und Commit-Schnitte“.
+Der vorhandene PR-Code und die offenen R6-Befunde bleiben bis dahin
+unverändert.
 
 PR #117 enthält bereits die frühere `NvsStateStore`-Implementation, den
 stateful BDL-Hosttest, die Kapazitätsprüfung, den On-Target-Harness sowie die
 zugehörige Runner-/CI-/Berichtsintegration. Diese bestehende Implementation
-enthält die bekannten Reviewbefunde weiterhin, insbesondere die bisherige
-Konfigurationsannahme sowie die noch nicht ausreichend nachgewiesenen
-Exhaustive-, Stack-, Power-Cut-, Orakel-, Artefakt-, Isolations- und
-Provenienzpfade. Die neue Planfreigabe gibt ausschließlich die Korrektur dieser
-bestehenden Implementation frei; sie autorisiert keinen Architekturwechsel und
-keine neue Parallelimplementation.
+enthält die bekannten Reviewbefunde weiterhin. Die neue Planfreigabe gibt
+ausschließlich die in R5 beschriebenen Korrekturen frei; sie autorisiert
+keinen Produktions-, Harness-, Oracle-, Runner- oder Hardwarepfad vor dem
+Owner-Gate.
 
 Bisherige Host-/Build-PASS des PR sind bis zur Umsetzung und Prüfung dieser
 Korrekturen kein aktueller Abschlussnachweis. Vor der neuen Planfreigabe werden
@@ -128,27 +263,20 @@ Der Plan ist auf PR #116 gestapelt:
 
 - Branch: `agent/issue-90-nvs-adapter-plan`
 - Base-Branch: `agent/issue-29-esp32-bringup-plan`
-- Base-SHA of this R4 context: `30fa0a8264e2c4564d324340c6bebc204147f477`
+- Base-SHA: `30fa0a8264e2c4564d324340c6bebc204147f477`
 - Planpfad: `docs/tasks/issue-90-esp-idf-nvs-adapter-plan.md`
 - Abhängigkeit: `STACKED_ON_PR_116`; PR #116 bleibt Draft, Issue #29 bleibt
   offen.
-
-Diese aktuelle konsolidierte Planrevision enthält sowohl die korrigierte NVS-
-Kapazitätsarithmetik einschließlich des separaten `BLOB_IDX`-Entries als auch
-die anwendungsneutrale, durch den owning context gelieferte
-`NvsStateStoreConfig`. Sie ersetzt die vorherige Planrevision vollständig;
-keine der beiden materiellen Korrekturen darf aus einer historischen Fassung
-ergänzt werden.
 
 PR #116 liefert die aktuelle Software-/Build-Basis. Board-, Flash-, UART-,
 Reset-, Recovery- und Smoke-Nachweise sind auf dem tatsächlich getesteten
 realen Board dokumentiert. Die sicheren unbelasteten MCU-/Gate-/Bootpegel
 bleiben `NOT_RUN`; die physische PCB-Revision/Silkscreen ist nach
 Ownerentscheidung kein Abnahmekriterium. Dieses separate #29-Pegel-Restgate
-blockiert weder die #90-Softwarearbeit noch reale #90-Nachweise, sofern der
-dafür erforderliche sichere Aufbau verfügbar ist. Nicht ausgeführte reale
-Standard-Flash-/Partitions-, Power-Cut-, Readback-, Ressourcen- und
-Wear-Nachweise bleiben jeweils ehrlich `NOT_RUN` oder `BLOCKED`.
+blockiert weder die #90-Softwarearbeit noch reale #90-Nachweise. Nicht
+ausgeführte reale Standard-Flash-/Partitions-, Power-Cut-, Readback-,
+Ressourcen- und Wear-Nachweise bleiben jeweils ehrlich `NOT_RUN` oder
+`BLOCKED`.
 
 ## Scope und unveränderte Verträge
 
@@ -173,6 +301,40 @@ Unverändert bleiben:
 Nicht Bestandteil sind NVS-/Flashverschlüsselung, eine `nvs_keys`-Partition
 oder ein Schutzversprechen für gespeicherte Secrets. Das separate
 Security-/Releasegate `EVALUATE_BEFORE_RELEASE` bleibt unverändert bestehen.
+
+## Ownerreview-R6: Befunde, die R5 erhält oder ausdrücklich ersetzt
+
+Seit dem damaligen Review-Head `0e6b9eb86751b8a3b01fd64630eea273580ede3b`
+wurden keine #90-Produktions-, Harness- oder Runnerkorrekturen umgesetzt.
+Die Synchronisierung nach #116 hat nur Basis-, Evidenz-, Plan- und
+Statusinhalte verändert. Deshalb bleiben die folgenden Umsetzungsschnitte
+offen und sind nach R5-Freigabe verbindlich:
+
+| R6-Befund | R5-Behandlung |
+|---|---|
+| Read-Race: zweites `nvs_get_blob()` liefert `NOT_FOUND` | unverändert offen; nach erfolgreicher Größenabfrage ist dies `ReadError`, niemals `NotFound`/Erfolg; Race- und Größenänderungstests müssen den Status beweisen |
+| exakte ESP-IDF-Grenzen von `NvsStateStoreConfig` | unverändert offen; Label-/Namespace-Grenzen werden aus dem gepinnten v6.0.2-Vertrag geprüft, nicht geraten und nicht als neue Portgrenze erfunden |
+| tatsächlich vollständige genehmigte Host-Exhaustive-Matrix | unverändert offen; jeder mutierende `Write`-/`Erase`-Callback einschließlich 4-Byte-Cuts, BLOB_DATA, BLOB_IDX, GC/Copy und Erase bleibt enthalten |
+| reproduzierbare Fehler-/JSON-Artefakte | unverändert offen; Scenario, Seed, Pattern, Cut, Status, erwartetes Alt/Neu, Readback, SHA-256 und Provenienz werden maschinenlesbar archiviert |
+| Host-Testpartition `state_store,data,nvs,0x9000,0x45000` | unverändert offen; exakt diese 69-Seiten-Testpartition wird mechanisch geprüft und nicht mit der Produktions-CSV verwechselt |
+| span-aware Raw-Page-Parser | unverändert offen; Parser und Snapshot-Orakel berücksichtigen NVS-Entry-Spans, Page-State, Chunk-/Indexbezug und dürfen GC nicht aus einem Einzelbyte ableiten |
+| unmittelbare Baseline direkt vor dem geschnittenen Zielwrite | unverändert offen; Alt-SHA-/Längenbaseline wird unmittelbar vor dem Zielwrite erfasst, nicht erst nach Vorbefüllung oder früheren Rotationstests |
+| UART-/Runner-Vertrag ohne stille Protokollabweichung | unverändert offen; eine versionierte Befehls-/Marker-/Statusmatrix wird gemeinsam in Harness und Runner umgesetzt; fehlende, unerwartete oder nicht parsebare Marker sind FAIL/NOT_RUN |
+| reale Flashprüfung exakt gegen 4 MB | unverändert offen; Chip-ID/Flashgröße, Partitionstabelle, Offsets, Größen und Reserve werden gegen 4 MiB geprüft; ein Build allein genügt nicht |
+| vollständiger Hardware-Artefaktvertrag | unverändert offen; Source-/Firmware-/Plan-/IDF-SHA, Profil, Partition, UART, Reset, Raw-Page, NVS-Stats, Readback, Ressourcen, Latenz, Wear und Abschlussstatus werden pfad-/secretbereinigt referenziert |
+| belastbares GC-/Erase-Orakel | unverändert offen; Host-BDL-Callbacks und reale Raw-Page-/Readback-/Stats-Evidenz bleiben getrennte Nachweise; Statistikänderung allein ist kein Erase |
+| Release-Isolation inklusive Release-ELF | unverändert offen; Bring-up-Quelle, Compile-Definition, Marker, Symbole und nur testseitige Dependencies dürfen im Release-ELF/Graph nicht erscheinen |
+| belastbarer Harness-Scratch-/Stacknachweis | unverändert offen; statischer interner Scratch bleibt höchstens 16.240 B, Harness-Funktionsstack höchstens 400 B; automatische Kopien und PSRAM-Abhängigkeit sind unzulässig |
+| Lizenz-/Evaluation-Dokumente | unverändert offen; Espressif-Quellen, BDL-Hosttestbestand, Apache-2.0-/Drittbestandteile und eine mögliche Upgrade-/Backportquelle werden vor Veröffentlichung vollständig referenziert |
+| Roadmap-/Statussynchronität | unverändert offen; Plan, Roadmap, PR-Body, Issue #90 und genau ein aktueller Handover führen denselben Status `IMPLEMENTATION_BLOCKED_PENDING_R5_PLAN_APPROVAL` |
+
+R5 ersetzt materiell nur die noch offene R4-Architekturwahl durch die
+konkrete Empfehlung „direkter NVS-Pfad mit Espressif-Korrektur, sonst
+`BLOCKED`“ sowie die falsche R4-SHA-/Statusprovenienz. Die ausdrückliche
+Abhängigkeit „reale #90-Matrix erst nach offenem #29-Hardwaregate“ wird durch
+den aktuellen Boardstatus ersetzt: das #29-Pegel-Restgate blockiert die
+zulässigen aktorfreien NVS-Tests nicht. Ein USB-Anschluss allein erzeugt
+jedoch kein Power-Cut-Fixture; DTR/RTS-Reset zählt nicht als Power-Loss.
 
 ## Repository- und Fachquellen
 
@@ -279,9 +441,9 @@ werden. Die Rechnung unten beweist eine Untergrenze von 49 Seiten; 69 Seiten
 sollen der mit dieser exakten Planfreigabe verbindliche Auswahlwert sein und
 enthalten 20 zusätzliche Seiten für Seitenpackung, Fragmentierung und die
 begrenzten Update-/GC-Situationen. Die frühere Ownerfreigabe von
-`da693e8...` hat diesen R1-Auswahlwert bestätigt; bis zur neuen R4-Freigabe
+`da693e8...` hat diesen R1-Auswahlwert bestätigt; bis zur neuen R5-Freigabe
 bleibt die Umsetzung dennoch im Status
-`IMPLEMENTATION_BLOCKED_PENDING_R4_PLAN_APPROVAL`; weder die
+`IMPLEMENTATION_BLOCKED_PENDING_R5_PLAN_APPROVAL`; weder die
 Reviewkorrekturen noch die R1-Partitionsentscheidung gelten bereits als für die
 weitere Umsetzung freigegeben.
 
@@ -918,9 +1080,11 @@ zuordenbarer Zustand ist FAIL und führt zu fail-closed.
 
 ### Reale ESP32-Matrix
 
-Nach dem offenen #29-Hardwaregate führt `scripts/issue_90_nvs_hardware_verification.py`
-über den beschriebenen On-Target-Harness denselben vorbefüllten 69-Seiten-
-Workload über die normale ESP32-Partition aus. Die Matrix umfasst:
+Nach erfolgreicher Software-/Host-Verifikation führt
+`scripts/issue_90_nvs_hardware_verification.py` über den beschriebenen
+On-Target-Harness denselben vorbefüllten 69-Seiten-Workload über die normale
+ESP32-Partition aus. Das offene #29-Pegel-Restgate blockiert diese aktorfreien
+NVS-Nachweise nicht. Die Matrix umfasst:
 
 1. saubere Vorbefüllung und Readback aller 22 Schlüssel;
 2. die deterministische Rotationsfolge bis zum nachweislichen Page-GC/Erase;
@@ -1053,6 +1217,45 @@ Inhalten und `Source-Git-SHA` oder ein Working-Tree-/lokaler Zwischenstand ist
 Die Umsetzung bleibt in diesen nachweisbaren Schnitten. Der aktuelle Plan-
 Commit enthält keinen dieser Produktions- oder Testpfade.
 
+### Verbindliche Reihenfolge nach R5-Freigabe
+
+Die Umsetzung und Abschlussbewertung darf nur in dieser Reihenfolge fort-
+schreiten:
+
+1. die gewählte Callback-12-/Atomizitätskorrektur im Espressif-first-
+   Herstellerpfad belegen und umsetzen; bleibt der direkte Vertrag danach
+   nicht erfüllt, `BLOCKED` setzen und hier anhalten;
+2. alle verbleibenden Adapter-, Harness-, Parser- und Runnerkorrekturen
+   einschließlich Read-Race, exakter Konfiguration, span-aware Parser,
+   unmittelbarer Baseline, UART-Vertrag und Artefakte;
+3. die gezielte Host-CI-Regressionssuite ausführen;
+4. den vollständigen `--exhaustive --seed 0`-Ownerlauf über die vollständige
+   mutierende Callback-Matrix ausführen;
+5. Capacity-Nachweis und Produktionspartition gegen die 69-Seiten-Annahme
+   sowie exakt 4 MB ausführen;
+6. beide ESP-IDF-Profile `esp32_bringup` und `esp32_release` bauen;
+7. Static Analysis beider Profile ausführen;
+8. Stack-, Scratch-, Release-Isolations- und Release-ELF-Nachweise führen;
+9. Architektur-, Secret-/Pfad-, Artefakt-, Syntax-, Format- und Diff-Gates
+   ausführen;
+10. erst nach Host-Exhaustive-PASS die auf dem angeschlossenen Board
+    möglichen realen #90-Nachweise ausführen: Flash/Partition, normaler
+    NVS-Init/Write/Readback, Reboot/Recovery, NVS-Stats, Raw-Page/GC/Erase,
+    Heap/Largest-Block/Stack-HWM, Latenzen sowie sichere aktorfreie
+    Schreiblast-/Wear-Messungen;
+11. Power-Cut nur ausführen und als PASS bewerten, wenn eine kontrollierbare,
+    ownerverifizierte Versorgung/Hook tatsächlich vorhanden ist; DTR/RTS-
+    Reset und ein bloßer USB-Anschluss sind kein Power-Loss-Fixture;
+12. finale Build-, Source-, Hardware- und Artefaktprovenienz sichern und
+    anschließend Ownerreview abwarten.
+
+Ein Host-Exhaustive-FAIL blockiert weiterhin jeden Abschluss-PASS. Er
+blockiert nicht die reine technische Herstelleranalyse und den Nachweis, dass
+die direkte NVS-Richtung entweder reparierbar oder innerhalb #90 `BLOCKED`
+ist.
+
+### Detaillierte Commit-Schnitte innerhalb dieser Reihenfolge
+
 1. **Adapterkern und Abhängigkeit**
    - `nvs_state_store.hpp/.cpp`, explizite lifetime-sichere
      `NvsStateStoreConfig`, direkte Key-/Namespace-Abbildung über die
@@ -1184,6 +1387,9 @@ Alle Herstellerverträge verwenden ausschließlich
 `ESP-IDF v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`, niemals `stable`
 oder `master`:
 
+- [Offizielle NVS-Dokumentation ESP-IDF v6.0.2](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html), insbesondere Robustness/Power-Loss, atomare Key-Value-Updates, BDL und `nvs_commit()`;
+- [Espressif-Vergleichscommit `f0c7d9b6c603658c832858d0a4f25b5a05ea1760`](https://github.com/espressif/esp-idf/commit/f0c7d9b6c603658c832858d0a4f25b5a05ea1760) nur als nachzuweisender Kandidat, nicht als bereits übernommene Projektabhängigkeit;
+
 - [`nvs.h`](https://github.com/espressif/esp-idf/blob/7101770dc6db2667b3c477cc31365dd1acd6db4e/components/nvs_flash/include/nvs.h)
 - [`nvs_flash.h`](https://github.com/espressif/esp-idf/blob/7101770dc6db2667b3c477cc31365dd1acd6db4e/components/nvs_flash/include/nvs_flash.h)
 - [`esp_partition.h`](https://github.com/espressif/esp-idf/blob/7101770dc6db2667b3c477cc31365dd1acd6db4e/components/esp_partition/include/esp_partition.h)
@@ -1215,18 +1421,21 @@ Der Draft-PR führt nach dem Plancommit exakt aus:
 
 ```text
 Plan: docs/tasks/issue-90-esp-idf-nvs-adapter-plan.md
-Plan commit: <exakte SHA dieser Planrevision>
+Plan commit: nach dem Commit im PR-Body und im aktuellen SESSION HANDOVER veröffentlichen
 Base branch: agent/issue-29-esp32-bringup-plan
 Base SHA: 30fa0a8264e2c4564d324340c6bebc204147f477
 Dependency: STACKED_ON_PR_116; PR #116 Draft; Issue #29 offen mit NOT_RUN-Pegel-Restgate
 Existing implementation: already present in PR #117; known review findings remain
 and are frozen until approval of this exact revised plan.
 Previous approved plan: da693e8a24735ff2cc09f019b119083f3792882e
-Implementation: IMPLEMENTATION_BLOCKED_PENDING_R4_PLAN_APPROVAL
-Open finding: exhaustive callback 12 / NotFound; no implementation before R4 approval
-Proposed partition decision: `state_store = 69 pages / 276 KiB`; becomes
-binding with Owner approval of this exact plan SHA and remains usable without
-a second Owner gate only while the explicit assumptions above hold
+Implementation: IMPLEMENTATION_BLOCKED_PENDING_R5_PLAN_APPROVAL
+Open finding: exhaustive callback 12 / NotFound; no implementation before R5 approval
+Recommended backend: direct NVS with an owner-approved exact Espressif correction;
+if the manufacturer path cannot satisfy the unchanged old-or-new contract,
+recommend BLOCKED and do not invent adapter-side transaction persistence
+Proposed partition decision: `state_store = 69 pages / 276 KiB`; remains the
+direct-NVS R1 selection only while the explicit capacity and 4-MB assumptions
+above hold
 ```
 
 Der PR bleibt Draft. Es gibt kein Ready for review, keinen Merge, kein
