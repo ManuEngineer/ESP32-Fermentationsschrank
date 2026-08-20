@@ -6,25 +6,25 @@ Der einzig gültige aktuelle Status dieses Plans und der bereits im PR
 vorhandenen #90-Implementation ist bis zur Ownerfreigabe der exakten neuen
 Plan-Commit-SHA:
 
-`IMPLEMENTATION_BLOCKED_PENDING_R5_1_PLAN_APPROVAL`
+`IMPLEMENTATION_BLOCKED_PENDING_R5_2_PLAN_APPROVAL`
 
-### Revision R5.1 – vollständige kanonische Planrevision
+### Revision R5.2 – vollständige kanonische Planrevision
 
-R5.1 ersetzt R5 vollständig. R5 und R4 sind nur noch historische Provenienz
-und dürfen weder patchweise ergänzt noch mit dieser Revision zusammengesetzt
-werden. Die frühere freigegebene Plan-SHA war
+R5.2 ersetzt R5.1 vollständig. R5.1, R5 und R4 sind historische Provenienz
+ohne normative Wirkung und dürfen weder patchweise ergänzt noch mit dieser
+Revision zusammengesetzt werden. Die frühere freigegebene Plan-SHA war
 `da693e8a24735ff2cc09f019b119083f3792882e`; der nicht freigegebene
-R5-Plan-Head war `1e8cbfdf364199064683d52252ca0997a7217080`. Keine dieser
-SHAs ist die neue R5.1-SHA.
+R5.1-Plan-Head war `bcacd4258ca408115718fba7f98aa10d9cb19cdc`. Keine dieser
+SHAs ist die neue R5.2-SHA.
 
-Die R5.1-SHA wird im Plantext absichtlich nicht vorweggenommen. Nach dem
+Die R5.2-SHA wird im Plantext absichtlich nicht vorweggenommen. Nach dem
 Commit werden ausschließlich die exakte neue SHA, der Planpfad und die
 Freigabelogik im PR-Body und im aktuellen `SESSION HANDOVER` veröffentlicht.
 
 Verifizierte Kontextbaseline dieser Revision:
 
 - aktueller PR-#117-Head vor dieser Revision:
-  `1e8cbfdf364199064683d52252ca0997a7217080`;
+  `bcacd4258ca408115718fba7f98aa10d9cb19cdc`;
 - Base-Branch: `agent/issue-29-esp32-bringup-plan`;
 - Base-SHA: `30fa0a8264e2c4564d324340c6bebc204147f477`;
 - Merge-Commit von #116 nach #117:
@@ -39,7 +39,7 @@ Diese Runde ändert ausschließlich den versionierten Plan, die minimale
 Roadmap-Synchronisierung und die externen Status-/Handovertexte. Produktions-
 code, Testcode, Testorakel, Harness, Runner, UART, Partition,
 Buildkonfiguration und Hardwarezustand bleiben unverändert. Vor einer
-exakten Ownerfreigabe der R5.1-SHA ist jede Umsetzung weiterhin gesperrt.
+exakten Ownerfreigabe der R5.2-SHA ist jede Umsetzung weiterhin gesperrt.
 
 ## Erhaltene Callback-12-Evidenz: kein neuer Diagnoseauftrag
 
@@ -85,7 +85,7 @@ Adapter selbst kann diese Reihenfolge nicht steuern: `nvs_set_blob()` besitzt
 die internen Daten-, Entry-State-, Page-State- und Index-Schritte. Der Test
 prüft weiterhin den unveränderten `IStateStore`-Vertrag; das Orakel wird nicht
 gelockert. Die vollständige Callbackauswahl wird ebenfalls nicht wieder auf
-lange Writes verkürzt, weil R5.1 die Anforderung für alle
+lange Writes verkürzt, weil R5.2 die Anforderung für alle
 mutierenden `Write`-/`Erase`-Callbacks erhält.
 
 Die Diagnose wurde zusätzlich gegen die alternative Harness-Reihenfolge
@@ -96,7 +96,7 @@ Variante ist daher keine belastbare Korrektur, sondern bestätigt, dass die
 Sichtbarkeitslücke nicht durch eine einzelne Erwartung oder Callbacknummer
 behoben wird.
 
-## Espressif-first-Abgleich und konkrete R5.1-Architekturentscheidung
+## Espressif-first-Abgleich und konkrete R5.2-Architekturentscheidung
 
 ### Herstellervertrag und Bedeutung des Befunds
 
@@ -188,40 +188,49 @@ Vorlage nennt mindestens:
 - On-Flash-/Recovery- und Kompatibilitätsauswirkung;
 - Source-/IDF-Provenienz und den unveränderten Old-or-New-Vertrag.
 
-### Schritt 1B – Änderung erst nach Owner-Subgate
+### Schritt 1B – Änderung und unmittelbarer Herstellerpfadnachweis erst nach Owner-Subgate
 
-Erst nach dieser exakten Ownerfreigabe darf der ESP-IDF-Pin bzw. die
-Dependency auf den freigegebenen Zielstand geändert oder der exakt
-freigegebene Vendor-/Backport-Fix übernommen werden. Danach werden alle
-R5.1-Gates auf dem neuen exakten Source-/IDF-Stand wiederholt, einschließlich
-der vollständigen BDL-Cut-Matrix, der übrigen Host-/Adapter-/Parser-/
-Runner-Gates, der Profile, Provenienz, Artefakte und späteren Hardwaregrenzen.
+Erst nach der exakten Ownerfreigabe des Zielstands/Fix-SHA aus dem separaten
+Owner-Subgate darf der ESP-IDF-Pin beziehungsweise der exakt freigegebene
+Vendor-/Backport-Fix geändert oder übernommen werden. Schritt 1B beweist
+unmittelbar danach ausschließlich, dass der Herstellerpfad selbst den
+Callback-/Power-Loss-Befund behebt:
 
-Wenn Schritt 1A keinen belastbaren direkten Herstellerpfad ergibt oder der
-direkte Pfad auch mit dem belegten weiteren Herstellerstand den unveränderten
-Old-or-New-Vertrag nicht vollständig erfüllt, lautet die Empfehlung
-`BLOCKED`; die Umsetzung hält an. Es wird kein Adapter-Workaround begonnen.
+- der minimale Reproducer mit altem Blob, neuem Blob, Reinit und vollständigem
+  Readback;
+- dieselbe vollständige BDL-Cut-Matrix mit allen mutierenden
+  `Write`-/`Erase`-Callbacks einschließlich 4-Byte-, `BLOB_DATA`,
+  `BLOB_IDX`, Altwert-, GC-/Copy- und Page-Erase-Cuts;
+- exakte Source-/IDF-SHA-Provenienz;
+- der erforderliche Compatibility-/On-Flash-/Recovery-Abgleich.
 
-### R5.1-Empfehlung: direkter NVS-Pfad mit Espressif-Korrektur, sonst BLOCKED
+Nur wenn dieser Herstellerpfadnachweis vollständig `PASS` ist, darf die
+Arbeit an den weiterhin offenen Adapter-, Harness-, Parser-, Runner-,
+Artefakt- und übrigen R6-Korrekturen beginnen. Ein nicht bestandener,
+unvollständiger oder nicht reproduzierbarer Herstellernachweis bleibt
+`BLOCKED` und stoppt die Umsetzung. Die späteren R6-Korrekturen und ihre
+finalen Gates sind kein Bestandteil von Schritt 1B.
 
-R5.1 empfiehlt konkret, `NvsStateStore` als direkten, anwendungsneutralen
+### R5.2-Empfehlung: direkter NVS-Pfad mit Espressif-Korrektur, sonst BLOCKED
+
+R5.2 empfiehlt konkret, `NvsStateStore` als direkten, anwendungsneutralen
 ESP-IDF-NVS-Adapter beizubehalten und die Atomizitätskorrektur ausschließlich
 im Herstellerpfad zu lösen: eine ownerfreigegebene, exakt versionierte
 ESP-IDF-Korrektur beziehungsweise ein gleichwertiger offizieller Fix ist die
 kleinste zulässige Richtung. Die bestehende direkte Key-/Blob-Abbildung, der
 `IStateStore`-Port und der Schema-1-Wirevertrag bleiben dabei unverändert.
 
-R5.1 plant ausdrücklich **keine** zusätzliche Transaktions-, Generation-,
+R5.2 plant ausdrücklich **keine** zusätzliche Transaktions-, Generation-,
 Index-, Selector- oder eigene Flash-/GC-Schicht. Der Grund ist nicht nur KISS:
 ADR-016 weist Atomizität, Integrität, Wear-Leveling und Recovery bewusst dem
 Herstellerbackend zu. Eine zweite Persistenzarchitektur würde den Scope,
 Kapazitäts-/Wear-Vertrag und die Recoveryverantwortung materiell erweitern.
 
 Wenn der Herstellerabgleich den direkten Pfad nicht belastbar repariert,
-empfiehlt R5.1 statt einer nachträglichen Architekturwahl den Status
+empfiehlt R5.2 statt einer nachträglichen Architekturwahl den Status
 `BLOCKED`: Issue #90 darf dann erst nach einem eigenen Ownerauftrag oder einer
 neuen vollständigen Planrevision mit neuem Scope weitergehen. Diese
-Blockadeempfehlung ist die festgelegte R5.1-Ausweichgrenze und keine offene Wahl
+Blockadeempfehlung ist die festgelegte R5.2-Ausweichgrenze und keine offene Wahl
 für die Implementierungsphase.
 
 ### Direkter Backendvertrag und Ebenengrenzen
@@ -270,14 +279,25 @@ Run-Slots/-Heads und ihre Verträge, insbesondere `rc0`, `rc1` und `rh0`,
 bleiben unverändert. Diese Redundanz liegt oberhalb des generischen NVS-
 Adapters und ist keine vom Adapter erfundene A/B-Schicht.
 
-C. **Zukünftiges Firmware-OTA-A/B bleibt ausdrücklich möglich.** Der
-Espressif-first-Weg kann später mindestens zwei OTA-App-Slots
-(`ota_0`, `ota_1`), `otadata`, den ESP-IDF-Bootloader-/OTA-Mechanismus
-sowie geeigneten Rollback mit `PENDING_VERIFY` und Validierung verwenden.
-Konkrete OTA-Partitionierung und Flashbudget sind nicht Scope von Issue #90
-und werden durch diesen Plan nicht vorweggenommen. #90 darf aber keine
-unnötige Architekturentscheidung enthalten, die einen späteren Espressif-
-OTA-Weg ohne eigenen Ownerentscheid faktisch verunmöglicht.
+C. **Firmware-OTA bleibt eine optionale spätere Zukunftsfunktion.** Release 1
+benötigt kein OTA; aktuell werden keine Geräte ausgeliefert. Referenz ist das
+einzelne reale Owner-Gerät, für das der Owner dauerhaft physischen UART-Zugriff
+als Update- und Recoveryweg behält. OTA kann später bewertet werden, kann aber
+auch vollständig entfallen.
+
+Issue #90 reserviert keinen Flashplatz für `ota_0`, `ota_1` oder `otadata`
+und kompliziert weder die heutige Single-App-/UART-Partitionierung noch
+Ressourcenbudget, Tests oder Architektur wegen eines hypothetischen OTA-
+Features. Das aktuelle Single-App-/UART-Modell ist für Release 1 ausdrücklich
+zulässig und gewollt; es gibt keine Pflicht zu einer OTA-Kompatibilitätsreserve
+und keine Pflicht, heute eine spätere OTA-Partitionstabelle vorzubereiten.
+
+Falls später tatsächlich OTA gewünscht wird, werden Nutzen, Flashbudget,
+Partitionierung, Rollback, Update-/Recoverystrategie und der Espressif-first-
+Mechanismus in einem eigenen Scope mit neuem Plan und Ownerentscheid bewertet.
+Ein späterer OTA-Wunsch ist kein rückwirkender Abnahmefehler von #90 oder der
+heutigen Release-1-Partitionierung. #90 führt lediglich keine unnötige
+technische Sperre gegen eine spätere Neugestaltung ein.
 
 D. **Exakt ausgeschlossen ist nur die zusätzliche Adapter-Schicht.** Nicht
 zulässig als spontane #90-Lösung ist:
@@ -299,13 +319,6 @@ Fach-/Persistenzverträge
                 -> ESP-IDF NVS
 ```
 
-Sowie separat auf Firmwareebene:
-
-```text
-ESP-IDF Bootloader / OTA
-    -> ota_0 / ota_1 / otadata / Rollback
-```
-
 Garbage Collection und Erase bleiben ausschließlich der ESP-IDF-NVS-
 Implementierung und dem dafür geplanten Orakel. ADR-016, `DECISIONS.md`,
 die direkte Key-Mapping-Aussage, `CONFIGURATION_PERSISTENCE.md`,
@@ -315,40 +328,30 @@ durch eine vom Adapter eingeführte A/B-/Generationsschicht entstehen nicht;
 die bestehende 69-Seiten-Annahme wird gegen 4 MB und die vorhandene
 NVS-Write-/GC-Last geprüft.
 
-## R5.1-Owner-Gate vor Umsetzung
+## R5.2-Owner-Gate vor Umsetzung
 
-Der Owner muss nach Veröffentlichung der R5.1-SHA zwei Dinge ausdrücklich
-bestätigen: den unveränderten direkten NVS-/Old-or-New-Pfad und, sofern
-Schritt 1A einen belastbaren Herstellerfix ergibt, den exakten Dependency-/
-Patchentscheid im separaten Owner-Subgate. Eine allgemeine Zustimmung ohne die
-neue exakte R5.1-SHA oder ohne diesen konkreten Herstellerentscheid
-autorisiert nichts.
+Die Freigabe der exakten R5.2-SHA autorisiert zunächst ausschließlich
+Schritt 1A – Herstelleranalyse und Evidenz. Sie autorisiert weder einen
+ESP-IDF-Pinwechsel noch die Übernahme eines Vendor-/Backport-Patches und
+erteilt keine Vorabfreigabe für einen heute noch unbekannten späteren Fix.
 
-Das Readback-Orakel, alle 4-Byte-Cuts, `NotFound`-Semantik und der
-Schema-1-Wirevertrag bleiben unverändert. Nach R5.1-Freigabe gilt ausschließlich
-die geteilte 1A-/Subgate-/1B-Reihenfolge aus dem Abschnitt
-„Umsetzungs- und Commit-Schnitte“. Der vorhandene PR-Code und die offenen
-R6-Befunde bleiben bis dahin unverändert.
+Schritt 1A ändert keinen ESP-IDF-Pin und übernimmt keinen Vendor-/Backport-
+Patch. Ergibt 1A einen konkreten belastbaren Herstellerfix, Release- oder
+Backportpfad, folgt das bereits definierte separate Owner-Subgate für genau
+diesen Zielstand beziehungsweise Fix-SHA. Erst nach diesem Subgate ist
+Schritt 1B erlaubt. Ergibt 1A keinen belastbaren direkten Herstellerpfad,
+bleibt Issue #90 `BLOCKED` und die Umsetzung hält an.
 
-## R5.1-Owner-Gate vor Umsetzung
-
-Der Owner muss nach Veröffentlichung der R5.1-SHA nur noch die festgelegte
-Herstellerpfadrichtung und deren Freigabevoraussetzung bestätigen: direkter
-NVS-Pfad mit exakt versionierter Espressif-Korrektur, andernfalls die
-ausdrückliche `BLOCKED`-Empfehlung. Eine Freigabe der alten R4-SHA oder eine
-allgemeine Zustimmung ohne die neue exakte R5.1-SHA autorisiert nichts.
-
-Das Readback-Orakel, alle 4-Byte-Cuts, `NotFound`-Semantik und der
-Schema-1-Wirevertrag bleiben unverändert. Nach R5.1-Freigabe gilt die
-verbindliche Reihenfolge aus dem Abschnitt „Umsetzungs- und Commit-Schnitte“.
-Der vorhandene PR-Code und die offenen R6-Befunde bleiben bis dahin
-unverändert.
+Der unveränderte direkte Old-or-New-Vertrag, alle 4-Byte-Cuts,
+`NotFound`-Semantik und `CommitOutcomeUnknown` bleiben bestehen. Der
+Owner bestätigt mit der jetzigen R5.2-Freigabe nicht bereits einen späteren,
+noch unbekannten Herstellerfix oder Patch.
 
 PR #117 enthält bereits die frühere `NvsStateStore`-Implementation, den
 stateful BDL-Hosttest, die Kapazitätsprüfung, den On-Target-Harness sowie die
 zugehörige Runner-/CI-/Berichtsintegration. Diese bestehende Implementation
 enthält die bekannten Reviewbefunde weiterhin. Die neue Planfreigabe gibt
-ausschließlich die in R5.1 beschriebenen Korrekturen frei; sie autorisiert
+ausschließlich die in R5.2 beschriebenen Korrekturen frei; sie autorisiert
 keinen Produktions-, Harness-, Oracle-, Runner- oder Hardwarepfad vor dem
 Owner-Gate.
 
@@ -400,15 +403,15 @@ Nicht Bestandteil sind NVS-/Flashverschlüsselung, eine `nvs_keys`-Partition
 oder ein Schutzversprechen für gespeicherte Secrets. Das separate
 Security-/Releasegate `EVALUATE_BEFORE_RELEASE` bleibt unverändert bestehen.
 
-## Ownerreview-R6: Befunde, die R5.1 erhält oder ausdrücklich ersetzt
+## Ownerreview-R6: Befunde, die R5.2 erhält oder ausdrücklich ersetzt
 
 Seit dem damaligen Review-Head `0e6b9eb86751b8a3b01fd64630eea273580ede3b`
 wurden keine #90-Produktions-, Harness- oder Runnerkorrekturen umgesetzt.
 Die Synchronisierung nach #116 hat nur Basis-, Evidenz-, Plan- und
 Statusinhalte verändert. Deshalb bleiben die folgenden Umsetzungsschnitte
-offen und sind nach R5.1-Freigabe verbindlich:
+offen und sind nach R5.2-Freigabe verbindlich:
 
-| R6-Befund | R5.1-Behandlung |
+| R6-Befund | R5.2-Behandlung |
 |---|---|
 | Read-Race: zweites `nvs_get_blob()` liefert `NOT_FOUND` | unverändert offen; nach erfolgreicher Größenabfrage ist dies `ReadError`, niemals `NotFound`/Erfolg; Race- und Größenänderungstests müssen den Status beweisen |
 | exakte ESP-IDF-Grenzen von `NvsStateStoreConfig` | unverändert offen; Partitionslabel maximal 16 Zeichen (`NVS_PART_NAME_MAX_SIZE = 16`, Nullterminator nicht mitgezählt), Namespace maximal 15 Zeichen (`NVS_NS_NAME_MAX_SIZE = 16` einschließlich Nullterminator), leer/eingebettetes `NUL` fail-closed vor jedem NVS-Aufruf; keine zusätzliche Zeichenmengenrestriktion ohne ESP-IDF-Vertrag; portseitige `StateStoreKey`-Validierung bleibt getrennt |
@@ -424,15 +427,16 @@ offen und sind nach R5.1-Freigabe verbindlich:
 | Release-Isolation inklusive Release-ELF | unverändert offen; Bring-up-Quelle, Compile-Definition, Marker, Symbole und nur testseitige Dependencies dürfen im Release-ELF/Graph nicht erscheinen |
 | belastbarer Harness-Scratch-/Stacknachweis | unverändert offen; statischer interner Scratch bleibt höchstens 16.240 B, Harness-Funktionsstack höchstens 400 B; automatische Kopien und PSRAM-Abhängigkeit sind unzulässig |
 | Lizenz-/Evaluation-Dokumente | unverändert offen; Espressif-Quellen, BDL-Hosttestbestand, Apache-2.0-/Drittbestandteile und eine mögliche Upgrade-/Backportquelle werden vor Veröffentlichung vollständig referenziert |
-| Roadmap-/Statussynchronität | unverändert offen; Plan, Roadmap, PR-Body, Issue #90 und genau ein aktueller Handover führen denselben Status `IMPLEMENTATION_BLOCKED_PENDING_R5_1_PLAN_APPROVAL` |
+| Roadmap-/Statussynchronität | unverändert offen; Plan, Roadmap, PR-Body, Issue #90 und genau ein aktueller Handover führen denselben Status `IMPLEMENTATION_BLOCKED_PENDING_R5_2_PLAN_APPROVAL` |
 
-R5.1 ersetzt materiell nur die noch offene R4-Architekturwahl durch die
-konkrete Empfehlung „direkter NVS-Pfad mit Espressif-Korrektur, sonst
-`BLOCKED`“ sowie die falsche R4-SHA-/Statusprovenienz. Die ausdrückliche
-Abhängigkeit „reale #90-Matrix erst nach offenem #29-Hardwaregate“ wird durch
-den aktuellen Boardstatus ersetzt: das #29-Pegel-Restgate blockiert die
-zulässigen aktorfreien NVS-Tests nicht. Ein USB-Anschluss allein erzeugt
-jedoch kein Power-Cut-Fixture; DTR/RTS-Reset zählt nicht als Power-Loss.
+R5.2 ist die aktuelle vollständige normative Planwahrheit. Die Hersteller-
+provenienz, die 1A-/Subgate-/1B-Reihenfolge, die exakten
+`NvsStateStoreConfig`-Grenzen, der span-aware Raw-Page-Parser, die
+unmittelbare Cut-/Target-Baseline, die Ebenentrennung und der aktualisierte
+#29-Hardwarestatus sind darin verbindlich zusammengeführt. Die in der
+R6-Tabelle genannten Umsetzungspunkte bleiben offen. Historische R4-, R5-
+und R5.1-Fassungen haben keine normative Wirkung und werden nicht als zweite
+Planwahrheit fortgeschrieben.
 
 ## Repository- und Fachquellen
 
@@ -550,9 +554,9 @@ werden. Die Rechnung unten beweist eine Untergrenze von 49 Seiten; 69 Seiten
 sollen der mit dieser exakten Planfreigabe verbindliche Auswahlwert sein und
 enthalten 20 zusätzliche Seiten für Seitenpackung, Fragmentierung und die
 begrenzten Update-/GC-Situationen. Die frühere Ownerfreigabe von
-`da693e8...` hat diesen R1-Auswahlwert bestätigt; bis zur neuen R5.1-Freigabe
+`da693e8...` hat diesen R1-Auswahlwert bestätigt; bis zur neuen R5.2-Freigabe
 bleibt die Umsetzung dennoch im Status
-`IMPLEMENTATION_BLOCKED_PENDING_R5_1_PLAN_APPROVAL`; weder die
+`IMPLEMENTATION_BLOCKED_PENDING_R5_2_PLAN_APPROVAL`; weder die
 Reviewkorrekturen noch die R1-Partitionsentscheidung gelten bereits als für die
 weitere Umsetzung freigegeben.
 
@@ -1369,7 +1373,7 @@ Inhalten und `Source-Git-SHA` oder ein Working-Tree-/lokaler Zwischenstand ist
 Die Umsetzung bleibt in diesen nachweisbaren Schnitten. Der aktuelle Plan-
 Commit enthält keinen dieser Produktions- oder Testpfade.
 
-### Verbindliche Reihenfolge nach R5.1-Freigabe
+### Verbindliche Reihenfolge nach R5.2-Freigabe
 
 Die Umsetzung und Abschlussbewertung darf nur in dieser Reihenfolge
 fortschreiten:
@@ -1377,48 +1381,50 @@ fortschreiten:
 1. **Schritt 1A – Analyse/Evidenz:** gepinnte v6.0.2-Quelle und Tests
    analysieren, den minimalen reproduzierbaren Callback-/Power-Loss-Fall
    sichern, offizielle Espressif-Releases/Branches/Fixes evaluieren, dieselbe
-   vollständige BDL-Cut-Matrix gegen einen Vergleichsstand ausführen und
-   exakte Source-/IDF-SHAs sowie Ergebnisse dokumentieren. Keine
-   Projektabhängigkeit ändern und keinen Vendor-Patch übernehmen.
+   vollständige BDL-Cut-Matrix gegen Vergleichsstände ausführen und exakte
+   Source-/IDF-SHAs sowie Ergebnisse dokumentieren. Keine Projektabhängigkeit
+   ändern und keinen Vendor-/Backport-Patch übernehmen.
 2. **Owner-Subgate:** Wenn 1A einen konkreten Herstellerfix,
    Releasewechsel oder Backport als Lösung nachweist, exakten Zielstand/
-   Fix-SHA, vollständiges Testergebnis und Kompatibilitätsauswirkung vorlegen
-   und genau diesen Dependency-/Patchentscheid vom Owner freigeben lassen.
-3. **Schritt 1B – erst nach Ownerfreigabe:** ESP-IDF-Version/Pin oder den
-   exakt freigegebenen Vendor-/Backport-Fix ändern und danach alle
-   R5.1-Gates auf dem neuen exakten Source-/IDF-Stand wiederholen. Ergibt 1A
-   keinen belastbaren direkten Herstellerpfad oder erfüllt der direkte Pfad
-   auch mit dem belegten Herstellerstand den Old-or-New-Vertrag nicht
-   vollständig, `BLOCKED` setzen und anhalten.
-4. Alle verbleibenden Adapter-, Harness-, Parser- und Runnerkorrekturen
-   einschließlich Read-Race, exakter Konfiguration, span-aware Parser,
-   unmittelbarer Baseline, UART-Vertrag und Artefakte;
-5. die gezielte Host-CI-Regressionssuite ausführen;
-6. den vollständigen `--exhaustive --seed 0`-Ownerlauf über die vollständige
-   mutierende Callback-Matrix ausführen;
-7. Capacity-Nachweis und Produktionspartition gegen die 69-Seiten-Annahme
-   sowie exakt 4 MB ausführen;
-8. beide ESP-IDF-Profile `esp32_bringup` und `esp32_release` bauen;
-9. Static Analysis beider Profile ausführen;
-10. Stack-, Scratch-, Release-Isolations- und Release-ELF-Nachweise führen;
-11. Architektur-, Secret-/Pfad-, Artefakt-, Syntax-, Format- und Diff-Gates
-    ausführen;
-12. erst nach Host-Exhaustive-PASS die auf dem angeschlossenen Board
-    möglichen realen #90-Nachweise ausführen: Flash/Partition, normaler
-    NVS-Init/Write/Readback, Reboot/Recovery, NVS-Stats, Raw-Page/GC/Erase,
-    Heap/Largest-Block/Stack-HWM, Latenzen sowie sichere aktorfreie
-    Schreiblast-/Wear-Messungen;
-13. Power-Cut nur ausführen und als PASS bewerten, wenn eine kontrollierbare,
-    ownerverifizierte Versorgung/Hook tatsächlich vorhanden ist; DTR/RTS-
-    Reset und ein bloßer USB-Anschluss sind kein Power-Loss-Fixture;
-14. finale Build-, Source-, Hardware- und Artefaktprovenienz sichern und
-    anschließend Ownerreview abwarten.
+   Fix-SHA, vollständiges Testergebnis, Compatibility-/On-Flash-Auswirkung
+   und Source-/IDF-Provenienz vorlegen und genau diesen Entscheid vom Owner
+   freigeben lassen. Die jetzige R5.2-Planfreigabe erteilt diese spätere
+   Freigabe nicht vorab.
+3. **Schritt 1B – Herstellerpfadnachweis:** Erst nach dem Subgate den
+   freigegebenen ESP-IDF-Pin/Fix übernehmen und unmittelbar mit minimalem
+   Reproducer, identischer vollständiger BDL-Cut-Matrix, exakter
+   Source-/IDF-Provenienz und Compatibility-/On-Flash-/Recovery-Abgleich
+   beweisen, dass der Herstellerpfad selbst den Callback-/Power-Loss-Befund
+   behebt. Wenn dieser Nachweis nicht vollständig `PASS` ist, `BLOCKED`
+   setzen und stoppen.
+4. **Danach – weiterhin offene R6-Korrekturen:** Erst nach einem PASS aus
+   Schritt 1B die offenen Adapter-, Harness-, Parser-, Runner-, Artefakt- und
+   übrigen R6-Korrekturen implementieren.
+5. **Finale R5.2-Gates nach diesen Korrekturen:** gezielte
+   Host-Regressionssuite; vollständiger `--exhaustive --seed 0`; Capacity-
+   und 4-MB-Nachweis; beide ESP-IDF-Profile; Static Analysis; Stack-,
+   Scratch- und Release-ELF-Isolation; Architektur-, Secret-, Artefakt-,
+   Format- und Diff-Gates.
+6. Erst nach den Host-Gates die zulässigen realen Boardtests ausführen:
+   Flash/Partition, normaler NVS-Init/Write/Readback, Reboot/Recovery,
+   NVS-Stats, Raw-Page/GC/Erase, Heap/Largest-Block/Stack-HWM, Latenzen und
+   sichere aktorfreie Schreiblast-/Wear-Messungen.
+7. Power-Cut nur mit kontrollierbarer, ownerverifizierter Versorgung/Hook
+   ausführen und als PASS bewerten; DTR/RTS-Reset und bloßer USB-Anschluss
+   sind kein Power-Loss-Fixture.
+8. Finale Build-, Source-, Hardware- und Artefaktprovenienz sichern und
+   anschließend Ownerreview abwarten.
 
-Ein Host-Exhaustive-FAIL blockiert weiterhin jeden Abschluss-PASS. Er
-blockiert nicht die reine technische Herstelleranalyse; wenn deren direkter
-Herstellerpfad nicht belastbar ist, bleibt der Status `BLOCKED`.
+Ein Host-Exhaustive-FAIL blockiert weiterhin jeden Abschluss-PASS. Die
+Herstelleranalyse und der Herstellerpfadnachweis sind davon getrennte
+Voraussetzungen; ein nicht bestandener Schritt 1B bleibt `BLOCKED`.
 
 ### Detaillierte Commit-Schnitte innerhalb dieser Reihenfolge
+
+Die folgenden detaillierten Commit-Schnitte beginnen erst nach einem
+vollständigen PASS des Herstellerpfadnachweises aus Schritt 1B. Sie beschreiben
+die danach offenen R6-Umsetzungen und dürfen die 1A-/Owner-Subgate-/1B-Grenze
+nicht vorziehen oder überschreiben.
 
 1. **Adapterkern und Abhängigkeit**
    - `nvs_state_store.hpp/.cpp`, explizite lifetime-sichere
@@ -1609,8 +1615,8 @@ Dependency: STACKED_ON_PR_116; PR #116 Draft; Issue #29 offen mit NOT_RUN-Pegel-
 Existing implementation: already present in PR #117; known review findings remain
 and are frozen until approval of this exact revised plan.
 Previous approved plan: da693e8a24735ff2cc09f019b119083f3792882e
-Implementation: IMPLEMENTATION_BLOCKED_PENDING_R5_1_PLAN_APPROVAL
-Open finding: exhaustive callback 12 / NotFound; no implementation before R5.1 approval
+Implementation: IMPLEMENTATION_BLOCKED_PENDING_R5_2_PLAN_APPROVAL
+Open finding: exhaustive callback 12 / NotFound; no implementation before R5.2 approval
 Recommended backend: direct NVS with an owner-approved exact Espressif correction;
 if the manufacturer path cannot satisfy the unchanged old-or-new contract,
 recommend BLOCKED and do not invent adapter-side transaction persistence
