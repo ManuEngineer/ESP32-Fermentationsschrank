@@ -143,8 +143,7 @@ Tatsache verwendet werden. Die nachweisgebundene Checkliste steht in
 
 ## Zukunftsfunktionen ausserhalb von Release 1
 
-- Web-OTA, duale OTA-Slots, automatischer Firmwaredownload und automatisches
-  Firmware-Rollback;
+- mögliche spätere Web-OTA-/OTA-Slot-/Firmwaredownload-/Rollback-Funktion;
 - benutzeraktivierbare UART-Diagnose;
 - Produkt-Luft-Kaskadenregelung;
 - PID-Autotuning;
@@ -157,9 +156,10 @@ Tatsache verwendet werden. Die nachweisgebundene Checkliste steht in
 - eigener WireGuard-Client;
 - automatische Wartungserinnerungen.
 
-OTA ist fuer ein spaeteres Release ausdruecklich vorgesehen. Release 1 baut
-dafuer jedoch keine Bibliotheken, dualen Slots, Speicherreserven, Puffer oder
-versteckten Updatepfade vor.
+OTA ist nur eine moegliche spaetere Funktion und kann vollstaendig
+entfallen. Release 1 bleibt ohne OTA-Slots, OTA-Bibliotheken, Speicherreserven,
+Puffer oder versteckte Updatepfade; OTA ist weder Release-1-Pflicht noch
+zugesagte Roadmap.
 
 Zukunftsfunktionen duerfen erst mit eigenem Scope, Ressourcenbudget,
 Safety-/Securityanalyse, Testvertrag und Ownerfreigabe umgesetzt werden.

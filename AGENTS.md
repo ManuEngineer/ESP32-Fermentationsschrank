@@ -41,8 +41,10 @@ werden nicht geraten. `TBD_HARDWARE`, `TBD_COMMISSIONING` und
 
 Die Release-1-Abgrenzung steht in `docs/SPECIFICATION_REVIEW.md`.
 Zukunftsfunktionen werden nicht teilweise vorgebaut. OTA und automatischer
-Firmwaredownload sind fuer spaeter vorgesehen, aber nicht Release 1; jetzt
-werden dafuer keine Bibliotheken, Slots oder Speicherreserven eingebaut.
+Firmwaredownload sind aktuell weder geplant noch geschuldet, sondern nur
+moegliche spaetere Ownerentscheidungen; sie koennen vollstaendig entfallen.
+Release 1 bleibt beim UART-/Single-App-Modell, und jetzt werden dafuer keine
+Bibliotheken, Slots, Platzhalter oder Speicherreserven eingebaut.
 
 ADR-013 ist fuer die Modularchitektur verbindlich:
 

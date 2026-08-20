@@ -8,12 +8,16 @@ Rollbackregeln.
 Die zentrale Umfangsentscheidung lautet:
 
 - **Release 1 benoetigt nur Update und Wiederherstellung ueber FT232RL/UART.**
+- Aktuell werden keine Geraete ausgeliefert; Referenz ist das einzelne reale
+  Owner-Geraet mit dauerhaftem physischem UART-Zugriff fuer Update und Recovery.
 - Ein Webupload beziehungsweise OTA ist keine Implementierungspflicht fuer das
-  erste Release.
-- Die Softwarearchitektur soll eine spaetere sichere Web-OTA-Loesung nicht
-  verhindern.
+  erste Release und kann als spaetere Moeglichkeit vollstaendig entfallen.
+- Eine spaetere OTA-Loesung wird bei konkretem Ownerbedarf in eigenem Scope,
+  Plan und Espressif-first-Nachweis bewertet; Release 1 muss dafuer keine
+  Kompatibilitaetsreserve vorhalten.
 - Die nachfolgend beschriebenen OTA-, Signatur-, Rollback- und
-  Migrationsanforderungen gelten fuer eine spaetere optionale Erweiterung.
+  Migrationsanforderungen gelten ausschliesslich fuer eine spaetere optionale
+  Erweiterung.
 
 Diese Abgrenzung hat Vorrang vor Formulierungen, die Web-OTA als zwingenden
 Bestandteil des ersten Releases darstellen.
@@ -108,41 +112,29 @@ Ein Firmware-Downgrade darf keine neueren Konfigurations- oder Laufdaten still
 mit einem inkompatiblen Schema verwenden. Nicht verstandene Daten werden nicht
 teilweise geraten.
 
-## Architekturvorbereitung fuer spaeteres Web-OTA
+## Optionale spaetere OTA-Evaluierung
 
-Auch ohne implementiertes OTA werden Modulgrenzen vorgesehen fuer:
+Release 1 benoetigt keine OTA-spezifischen Updatequellen, Manifest-, Rollback-,
+Migrations- oder sonstigen Interfaces, Platzhalter oder Vorbereitungen. Das
+aktuelle Single-App-/UART-Modell bleibt vollstaendig zulaessig und gewollt;
+#90 reserviert keine OTA-Partitionen, Bibliotheken, Kompatibilitaetsreserven
+oder sonstige Ressourcen.
 
-- Updatequelle
-- Paketmanifest
-- Paketvalidierung
-- Berechtigungspruefung
-- Updatezustandsmaschine
-- Konfigurationsmigration
-- Firmwarevalidierung nach dem ersten Boot
-- automatischen oder manuellen Rollback
-- Updatejournal und Fortschrittsanzeige
-
-Diese Schnittstellen duerfen in Release 1 einfache nicht implementierte
-Platzhalter oder klar getrennte Abstraktionen sein. Es werden keine grossen
-ungenutzten OTA-Bibliotheken, Zertifikatsketten oder Firmwarepuffer nur fuer die
-spaetere Moeglichkeit eingebaut.
+Falls der Owner spaeter tatsaechlich OTA wuenscht, wird der Nutzen, das
+Flashbudget, die Partitionierung, der ESP-IDF-Bootloader-/OTA-Mechanismus,
+Rollback, Update-/Recoverystrategie und der genaue API-/Artefaktvertrag in
+einem eigenen Scope und Plan Espressif-first neu bewertet. Diese Entscheidung
+kann auch vollstaendig entfallen. Dieses Dokument erzeugt dafuer heute keine
+Implementierungserlaubnis.
 
 ## Spaeterer Updateweg
 
-Wenn Web-OTA spaeter umgesetzt wird, sind zwei Wege vorgesehen:
-
-1. lokaler Upload eines signierten Firmwarepakets ueber die Weboberflaeche
-2. physische Wiederherstellung und Entwicklerupdate ueber FT232RL/UART
-
-Nicht vorgesehen ist im ersten OTA-Ausbau:
-
-- automatischer Download aus GitHub
-- selbststaendige Suche nach neuen Versionen
-- Speicherung von GitHub-Zugangsdaten auf dem ESP32
-- Cloudpflicht fuer Updates
-
-UART bleibt auch nach Einfuehrung von OTA der verbindliche letzte
-Wiederherstellungsweg.
+Ein spaeterer OTA-Wunsch ist kein bestehendes Release- oder Roadmap-Ziel. Nur
+nach eigenem Scope, Plan und Ownerentscheid darf ein spaeterer Updateweg
+bewertet oder implementiert werden. Die Ausgestaltung folgt dann dem
+Espressif-first-Nachweis; der physische UART-Weg bleibt der kontrollierbare
+Recoveryweg. Die nachfolgenden OTA-Anforderungen sind deshalb ausschliesslich
+optionale spaetere Bewertungsgrundlage und keine Release-1-Pflicht.
 
 ## Berechtigung fuer spaeteres Web-OTA
 
@@ -423,7 +415,7 @@ protokolliert.
 - reservierter Platz fuer Konfiguration, Laufpersistenz, Journal und Historie
 - dokumentierte PlatformIO- und FT232RL-Flashprozedur
 - Sicherungs- und Wiederherstellungsablauf vor einem vollstaendigen Flash-Loeschen
-- spaeterer dualer OTA-Partitionsentwurf und Mindest-Sicherheitsabstand
+- optionale spaetere OTA-Bewertung von Partitionierung und Sicherheitsabstand, nur bei eigenem Scope, Plan und Ownerentscheid
 - konkretes Signaturformat und Schluesselverwaltungsverfahren
 - genaue `PENDING_VALIDATION`-Dauer und Erfolgskriterien
 - spaetere Migrations- und Rollbacktests

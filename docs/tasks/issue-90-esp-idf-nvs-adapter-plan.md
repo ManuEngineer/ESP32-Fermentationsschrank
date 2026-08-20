@@ -1,4 +1,4 @@
-`# Issue #90 – ESP-IDF-NVS-Adapter für `IStateStore`
+# Issue #90 – ESP-IDF-NVS-Adapter für `IStateStore`
 
 ## Status, Basis und Freigabegrenze
 
@@ -6,25 +6,29 @@ Der einzig gültige aktuelle Status dieses Plans und der bereits im PR
 vorhandenen #90-Implementation ist bis zur Ownerfreigabe der exakten neuen
 Plan-Commit-SHA:
 
-`IMPLEMENTATION_BLOCKED_PENDING_R5_3_PLAN_APPROVAL`
+`IMPLEMENTATION_BLOCKED_PENDING_R5_4_PLAN_APPROVAL`
 
-### Revision R5.3 – vollständige kanonische Planrevision
+### Revision R5.4 – vollständige kanonische Planrevision
 
-R5.3 ersetzt R5.2 vollständig. R5.2, R5.1, R5 und R4 sind historische
+R5.4 ersetzt R5.3 vollständig. R5.3, R5.2, R5.1, R5 und R4 sind historische
 Provenienz ohne normative Wirkung und dürfen weder patchweise ergänzt noch mit
 dieser Revision zusammengesetzt werden. Die frühere freigegebene Plan-SHA war
-`da693e8a24735ff2cc09f019b119083f3792882e`; der nicht freigegebene
-R5.2-Plan-Head war `e20a41f8d788ed737d6e610683b137ccf36762fc`. Keine dieser
-SHAs ist die neue R5.3-SHA.
+`da693e8a24735ff2cc09f019b119083f3792882e`; die nicht freigegebene
+R5.3-Plan-SHA war `ed80a29ebb9e2c0bc2a34dd1673e9acf0be66e18`. Der aktuelle
+PR-Head vor dieser Revision ist
+`3ae206bf463633eb74cf52889aca0d99ba26b2b2`. Keine dieser SHAs ist die neue
+R5.4-SHA.
 
-Die R5.3-SHA wird im Plantext absichtlich nicht vorweggenommen. Nach dem
-Commit werden ausschließlich die exakte neue SHA, der Planpfad und die
-Freigabelogik im PR-Body und im aktuellen `SESSION HANDOVER` veröffentlicht.
+Die R5.4-SHA wird im Plantext absichtlich nicht vorweggenommen. Nach dem
+Commit werden die exakte neue SHA, der Planpfad und die Freigabelogik im
+PR-Body und im aktuellen `SESSION HANDOVER` veröffentlicht.
 
 Verifizierte Kontextbaseline dieser Revision:
 
 - aktueller PR-#117-Head vor dieser Revision:
-  `e20a41f8d788ed737d6e610683b137ccf36762fc`;
+  `3ae206bf463633eb74cf52889aca0d99ba26b2b2`;
+- aktuelle nicht freigegebene R5.3-Plan-SHA:
+  `ed80a29ebb9e2c0bc2a34dd1673e9acf0be66e18`;
 - Base-Branch: `agent/issue-29-esp32-bringup-plan`;
 - Base-SHA: `30fa0a8264e2c4564d324340c6bebc204147f477`;
 - Merge-Commit von #116 nach #117:
@@ -35,11 +39,11 @@ Verifizierte Kontextbaseline dieser Revision:
   `c506ae616c528d78b2349209b99997dbb738f0a1`;
 - gepinntes ESP-IDF: `v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`.
 
-Diese Runde ändert ausschließlich den versionierten Plan, die minimale
-Roadmap-Synchronisierung und die externen Status-/Handovertexte. Produktions-
-code, Testcode, Testorakel, Harness, Runner, UART, Partition,
+Diese Runde ändert ausschließlich die vollständige R5.4-Planrevision, die
+minimalen aktuellen OTA-Kanonquellen und die externen Status-/Handovertexte.
+Produktionscode, Testcode, Testorakel, Harness, Runner, UART, Partition,
 Buildkonfiguration und Hardwarezustand bleiben unverändert. Vor einer
-exakten Ownerfreigabe der R5.3-SHA ist jede Umsetzung weiterhin gesperrt.
+exakten Ownerfreigabe der R5.4-SHA ist jede Umsetzung weiterhin gesperrt.
 
 ## Erhaltene Callback-12-Evidenz: kein neuer Diagnoseauftrag
 
@@ -85,7 +89,7 @@ Adapter selbst kann diese Reihenfolge nicht steuern: `nvs_set_blob()` besitzt
 die internen Daten-, Entry-State-, Page-State- und Index-Schritte. Der Test
 prüft weiterhin den unveränderten `IStateStore`-Vertrag; das Orakel wird nicht
 gelockert. Die vollständige Callbackauswahl wird ebenfalls nicht wieder auf
-lange Writes verkürzt, weil R5.3 die Anforderung für alle
+lange Writes verkürzt, weil R5.4 die Anforderung für alle
 mutierenden `Write`-/`Erase`-Callbacks erhält.
 
 Die Diagnose wurde zusätzlich gegen die alternative Harness-Reihenfolge
@@ -96,7 +100,7 @@ Variante ist daher keine belastbare Korrektur, sondern bestätigt, dass die
 Sichtbarkeitslücke nicht durch eine einzelne Erwartung oder Callbacknummer
 behoben wird.
 
-## Espressif-first-Abgleich und konkrete R5.3-Architekturentscheidung
+## Espressif-first-Abgleich und konkrete R5.4-Architekturentscheidung
 
 ### Herstellervertrag und Bedeutung des Befunds
 
@@ -136,9 +140,9 @@ Fehlerbefund:
    `IStateStore`-Vertrag mit v6.0.2 nicht belegbar und Issue #90 wird für die
    Umsetzung `BLOCKED`; es wird keine halbfertige Eigenarchitektur begonnen.
 
-### Phase A – Hersteller-/Quellenanalyse (durch R5.3-Planfreigabe autorisiert)
+### Phase A – Hersteller-/Quellenanalyse (durch R5.4-Planfreigabe autorisiert)
 
-Phase A ist der einzige Schritt, den die Freigabe der exakten R5.3-SHA
+Phase A ist der einzige Schritt, den die Freigabe der exakten R5.4-SHA
 unmittelbar autorisiert. Sie ist Analyse und Evidenz, keine Implementation:
 
 1. Die exakt gepinnte ESP-IDF-v6.0.2-Quelle, relevante `nvs_flash`-Kconfig,
@@ -178,8 +182,11 @@ Abschluss von Phase A:
   `NO_PROVEN_MANUFACTURER_CANDIDATE`;
 - konkrete Herstellerquellen und nächste Testgrundlage;
 - dokumentierter Bezug zum bestehenden Callback-12-/`NotFound`-Befund;
-- Ergebnis/HEAD/Provenienz synchronisiert in Plan, Roadmap, PR-Body, Issue #90
-  und genau einem aktuellen `SESSION HANDOVER`;
+- Ergebnis/HEAD/Provenienz im versionierten Bericht
+  `docs/ISSUE_90_MANUFACTURER_ANALYSIS.md` und in den dynamischen
+  Statusquellen Roadmap, PR-Body, Issue #90 sowie genau einem aktuellen
+  `SESSION HANDOVER` dokumentiert;
+- der freigegebene Plan bleibt unverändert;
 - danach `STOP` für Ownerreview.
 
 Ohne plausiblen Herstellerpfad wird Issue #90 `BLOCKED`; es gibt keine weitere
@@ -215,8 +222,10 @@ Die vollständige Matrix wird zuerst gegen den gepinnten
 v6.0.2-Stand ausgeführt. Ein reproduzierbarer `FAIL` ist zulässige
 Baseline-Evidenz und bleibt `FAIL`; er wird nicht zu PASS umetikettiert.
 
-Nach der Ausführung werden Ergebnis/HEAD/Provenienz und die Artefakte
-synchronisiert und es folgt `STOP` für Ownerreview. Die in Phase B fertig
+Nach der Ausführung werden Ergebnis/HEAD/Provenienz im vorgesehenen
+Evidence-/Artefaktbericht und der aktuelle Status in Roadmap, PR-Body, Issue #90
+sowie genau einem aktuellen `SESSION HANDOVER` dokumentiert; der Plan bleibt
+unverändert und es folgt `STOP` für Ownerreview. Die in Phase B fertig
 gestellte Matrix-/JSON-/Hostpartition-Grundlage wird später nicht als
 zweiter paralleler Vertrag implementiert.
 
@@ -237,8 +246,10 @@ Der Nachweis umfasst mindestens:
 
 Falls dafür eine Änderung des committed Hosttests erforderlich wird, wird sie
 nicht still als Analyseänderung vorgenommen: anhalten und den konkreten
-testseitigen Änderungsbedarf dem Owner vorlegen. Danach werden Ergebnis/HEAD/
-Provenienz synchronisiert und es folgt `STOP` für Ownerreview.
+testseitigen Änderungsbedarf dem Owner vorlegen. Danach werden Ergebnis/HEAD/Provenienz im vorgesehenen
+Evidence-/Artefaktbericht und der aktuelle Status in Roadmap, PR-Body, Issue #90
+sowie genau einem aktuellen `SESSION HANDOVER` dokumentiert; der Plan bleibt
+unverändert und es folgt `STOP` für Ownerreview.
 
 Nur ein belastbar vollständiger Herstellerkandidat darf zum nächsten Gate
 vorgelegt werden.
@@ -257,30 +268,32 @@ Vendor-/Backport-Fix frei. Erst dieses eigene Subgate autorisiert Phase D:
 - den Compatibility-/On-Flash-/Recovery-Abgleich.
 
 Wenn dieser Herstellernachweis nicht vollständig `PASS` ist, bleibt Issue #90
-`BLOCKED` und die Umsetzung stoppt. Bei `PASS` werden Ergebnis/HEAD/
-Provenienz synchronisiert und es folgt `STOP` für Ownerreview. Dieser PASS
+`BLOCKED` und die Umsetzung stoppt. Bei `PASS` werden Ergebnis/HEAD/Provenienz im vorgesehenen
+Evidence-/Build-/Hardwarebericht und der aktuelle Status in Roadmap, PR-Body,
+Issue #90 sowie genau einem aktuellen `SESSION HANDOVER` dokumentiert; der Plan
+bleibt unverändert und es folgt `STOP` für Ownerreview. Dieser PASS
 autorisiert die R6-Korrekturen nicht automatisch.
 
-### R5.3-Empfehlung: direkter NVS-Pfad mit Espressif-Korrektur, sonst BLOCKED
+### R5.4-Empfehlung: direkter NVS-Pfad mit Espressif-Korrektur, sonst BLOCKED
 
-R5.3 empfiehlt konkret, `NvsStateStore` als direkten, anwendungsneutralen
+R5.4 empfiehlt konkret, `NvsStateStore` als direkten, anwendungsneutralen
 ESP-IDF-NVS-Adapter beizubehalten und die Atomizitätskorrektur ausschließlich
 im Herstellerpfad zu lösen: eine ownerfreigegebene, exakt versionierte
 ESP-IDF-Korrektur beziehungsweise ein gleichwertiger offizieller Fix ist die
 kleinste zulässige Richtung. Die bestehende direkte Key-/Blob-Abbildung, der
 `IStateStore`-Port und der Schema-1-Wirevertrag bleiben dabei unverändert.
 
-R5.3 plant ausdrücklich **keine** zusätzliche Transaktions-, Generation-,
+R5.4 plant ausdrücklich **keine** zusätzliche Transaktions-, Generation-,
 Index-, Selector- oder eigene Flash-/GC-Schicht. Der Grund ist nicht nur KISS:
 ADR-016 weist Atomizität, Integrität, Wear-Leveling und Recovery bewusst dem
 Herstellerbackend zu. Eine zweite Persistenzarchitektur würde den Scope,
 Kapazitäts-/Wear-Vertrag und die Recoveryverantwortung materiell erweitern.
 
 Wenn der Herstellerabgleich den direkten Pfad nicht belastbar repariert,
-empfiehlt R5.3 statt einer nachträglichen Architekturwahl den Status
+empfiehlt R5.4 statt einer nachträglichen Architekturwahl den Status
 `BLOCKED`: Issue #90 darf dann erst nach einem eigenen Ownerauftrag oder einer
 neuen vollständigen Planrevision mit neuem Scope weitergehen. Diese
-Blockadeempfehlung ist die festgelegte R5.3-Ausweichgrenze und keine offene Wahl
+Blockadeempfehlung ist die festgelegte R5.4-Ausweichgrenze und keine offene Wahl
 für die Implementierungsphase.
 
 ### Direkter Backendvertrag und Ebenengrenzen
@@ -378,9 +391,9 @@ durch eine vom Adapter eingeführte A/B-/Generationsschicht entstehen nicht;
 die bestehende 69-Seiten-Annahme wird gegen 4 MB und die vorhandene
 NVS-Write-/GC-Last geprüft.
 
-## R5.3-Owner-Gate vor Umsetzung
+## R5.4-Owner-Gate vor Umsetzung
 
-Die Freigabe der exakten R5.3-SHA autorisiert ausschließlich Phase A –
+Die Freigabe der exakten R5.4-SHA autorisiert ausschließlich Phase A –
 Hersteller-/Quellenanalyse und Evidenz. Sie autorisiert weder Phase B noch
 Phase C, Phase D, einen ESP-IDF-Pinwechsel, die Übernahme eines
 Vendor-/Backport-Patches, einen R6-Implementierungsslice, ein finales
@@ -391,18 +404,21 @@ freigegeben.
 Für die gesamte weitere Abarbeitung gilt verbindlich:
 
 1. Jedes Owner-Gate autorisiert nur den konkret benannten nächsten Schritt.
-2. Nach diesem Schritt werden die gezielten Nachweise ausgeführt, Ergebnis,
-   HEAD, Provenienz und die Statusquellen synchronisiert und anschließend
-   für Ownerreview angehalten.
+2. Nach diesem Schritt werden nur die gezielten Nachweise ausgeführt,
+   Commit/Push und die vorgesehenen Evidence-/Build-/Hardwareberichte
+   aktualisiert sowie Roadmap, PR-Body, Issue #90 und genau ein aktueller
+   `SESSION HANDOVER` synchronisiert; anschließend wird für Ownerreview
+   angehalten.
 3. Erst eine neue ausdrückliche Ownerfreigabe autorisiert den nächsten
    geplanten Schritt. Ein Agenten-`PASS` ist niemals selbst die Freigabe des
    Folgeschritts.
 4. Für die rein planmäßige Fortsetzung zwischen bereits geplanten Slices ist
    keine neue Planrevision erforderlich; eine neue Plan-SHA bleibt bei
-   materieller Plan-/Scopeabweichung erforderlich. Das jeweilige
-   Owner-Subgate bleibt trotzdem verpflichtend.
+   materieller Plan-/Scope-/Architektur-/API-/Persistenz-/Teststrategie-/
+   Dependency-Abweichung erforderlich. Das jeweilige Owner-Subgate bleibt
+   trotzdem verpflichtend.
 
-Phase A besitzt durch die R5.3-Freigabe das erste Gate. Phase B, C und D,
+Phase A besitzt durch die R5.4-Freigabe das erste Gate. Phase B, C und D,
 jeder nachfolgende R6-Slice, das Final-Verification-Gate, der reale
 aktorfreie #90-Software-/Hardwarelauf und der Power-Cut erhalten jeweils ein
 eigenes, konkret benanntes Owner-Subgate. Ergibt Phase A keinen belastbaren
@@ -411,16 +427,53 @@ direkten Herstellerpfad, bleibt Issue #90 `BLOCKED` und stoppt.
 Der unveränderte Old-or-New-Vertrag, alle 4-Byte-Cuts, `NotFound`-Semantik
 und `CommitOutcomeUnknown` bleiben bestehen.
 
+## Immutable Plan-, Evidenz- und Statusvertrag
+
+Nach Ownerfreigabe der exakten R5.4-Plan-SHA bleibt
+`docs/tasks/issue-90-esp-idf-nvs-adapter-plan.md` unverändert. Der freigegebene
+Plan ist die unveränderliche normative Umsetzungsgrundlage und wird nicht für
+Fortschritts-, HEAD-, Status-, Ergebnis- oder Provenienzupdates verändert.
+
+Eine Planänderung erfolgt ausschließlich bei einer materiellen
+Plan-/Scope-/Architektur-/API-/Persistenz-/Teststrategie-/Dependency-
+Abweichung. Eine solche Abweichung erzeugt bewusst eine neue vollständige
+Planrevision mit neuer SHA und erneutem Owner-Plan-Gate.
+
+Phase-A-Ergebnisse werden im versionierten Bericht
+`docs/ISSUE_90_MANUFACTURER_ANALYSIS.md` abgelegt; auf der geprüften
+R5.4-Baseline existiert dafür noch kein passender aktueller Bericht. Phase B,
+C, D und die späteren Slices aktualisieren ausschließlich die jeweils
+vorgesehenen versionierten #90-Evidence-/Build-/Hardwareberichte, insbesondere
+`docs/ISSUE_90_BUILD_REPORT.md`,
+`docs/ISSUE_90_CAPACITY_REPORT.md` und
+`docs/ISSUE_90_HARDWARE_VERIFICATION.md` sowie den Herstelleranalysebericht,
+soweit er betroffen ist. Diese Berichte enthalten Ergebnisse und Provenienz,
+aber keine neue normative Vertrags- oder Planwahrheit.
+
+Roadmap, PR-Body, Issue #90 und genau ein aktueller `SESSION HANDOVER` führen
+jederzeit denselben aktuellen Phasen-/Owner-Gate-Status. Der freigegebene Plan
+bleibt unverändert auf seiner ownerfreigegebenen SHA.
+
+Nach jedem Gate gilt:
+
+```text
+freigegebener Schritt
+-> gezielte Arbeit/Nachweise
+-> Commit/Push
+-> Evidence-/Build-/Hardwareberichte + Roadmap + PR + Issue + Handover synchronisieren
+-> STOP für Ownerreview
+```
+
 PR #117 enthält bereits die frühere `NvsStateStore`-Implementation, den
 stateful BDL-Hosttest, die Kapazitätsprüfung, den On-Target-Harness sowie die
 zugehörige Runner-/CI-/Berichtsintegration. Diese bestehende Implementation
-enthält die bekannten Reviewbefunde weiterhin. R5.3 definiert die vollständige normative Korrektur; die exakte
+enthält die bekannten Reviewbefunde weiterhin. R5.4 definiert die vollständige normative Korrektur; die exakte
 Planfreigabe autorisiert jedoch ausschließlich Phase A. Kein Produktions-,
 Host-, Harness-, Oracle-, Runner-, ESP-IDF- oder Hardwarepfad ist vor seinem
 konkret benannten Owner-Gate freigegeben.
 
 Bisherige Host-/Build-PASS des PR sind bis zur Umsetzung und Prüfung dieser
-Korrekturen kein aktueller Abschlussnachweis. Vor der exakten R5.3-Planfreigabe werden
+Korrekturen kein aktueller Abschlussnachweis. Vor der exakten R5.4-Planfreigabe werden
 keine Firmware-, Test-, CI-, Harness-, Bericht- oder sonstigen
 Implementierungsänderungen vorgenommen.
 
@@ -467,14 +520,14 @@ Nicht Bestandteil sind NVS-/Flashverschlüsselung, eine `nvs_keys`-Partition
 oder ein Schutzversprechen für gespeicherte Secrets. Das separate
 Security-/Releasegate `EVALUATE_BEFORE_RELEASE` bleibt unverändert bestehen.
 
-## Ownerreview-R6: Befunde, die R5.3 erhält oder ausdrücklich ersetzt
+## Ownerreview-R6: Befunde, die R5.4 erhält oder ausdrücklich ersetzt
 
 Seit dem damaligen Review-Head `0e6b9eb86751b8a3b01fd64630eea273580ede3b`
 wurden keine #90-Produktions-, Harness- oder Runnerkorrekturen umgesetzt.
 Die Synchronisierung nach #116 hat nur Basis-, Evidenz-, Plan- und
 Statusinhalte verändert. Deshalb bleiben die folgenden R6-Umsetzungspunkte als normative Ziel- und Nachweisverträge offen; ihre Ausführung erfolgt erst in Phase B/D oder den danach jeweils ausdrücklich ownerfreigegebenen Slices:
 
-| R6-Befund | R5.3-Behandlung |
+| R6-Befund | R5.4-Behandlung |
 |---|---|
 | Read-Race: zweites `nvs_get_blob()` liefert `NOT_FOUND` | unverändert offen; nach erfolgreicher Größenabfrage ist dies `ReadError`, niemals `NotFound`/Erfolg; Race- und Größenänderungstests müssen den Status beweisen |
 | exakte ESP-IDF-Grenzen von `NvsStateStoreConfig` | unverändert offen; Partitionslabel maximal 16 Zeichen (`NVS_PART_NAME_MAX_SIZE = 16`, Nullterminator nicht mitgezählt), Namespace maximal 15 Zeichen (`NVS_NS_NAME_MAX_SIZE = 16` einschließlich Nullterminator), leer/eingebettetes `NUL` fail-closed vor jedem NVS-Aufruf; keine zusätzliche Zeichenmengenrestriktion ohne ESP-IDF-Vertrag; portseitige `StateStoreKey`-Validierung bleibt getrennt |
@@ -490,9 +543,9 @@ Statusinhalte verändert. Deshalb bleiben die folgenden R6-Umsetzungspunkte als 
 | Release-Isolation inklusive Release-ELF | unverändert offen; Bring-up-Quelle, Compile-Definition, Marker, Symbole und nur testseitige Dependencies dürfen im Release-ELF/Graph nicht erscheinen |
 | belastbarer Harness-Scratch-/Stacknachweis | unverändert offen; statischer interner Scratch bleibt höchstens 16.240 B, Harness-Funktionsstack höchstens 400 B; automatische Kopien und PSRAM-Abhängigkeit sind unzulässig |
 | Lizenz-/Evaluation-Dokumente | unverändert offen; Espressif-Quellen, BDL-Hosttestbestand, Apache-2.0-/Drittbestandteile und eine mögliche Upgrade-/Backportquelle werden vor Veröffentlichung vollständig referenziert |
-| Roadmap-/Statussynchronität | unverändert offen; Plan, Roadmap, PR-Body, Issue #90 und genau ein aktueller Handover führen jederzeit denselben aktuellen Phasen-/Owner-Gate-Status. Nach R5.3-Freigabe bleibt `IMPLEMENTATION_BLOCKED_PENDING_R5_3_PLAN_APPROVAL` nicht als aktueller Freigabestatus stehen; nach jedem Slice/Gate wird der erreichte Status synchronisiert, ohne einen noch nicht ownerfreigegebenen Schritt als autorisiert erscheinen zu lassen. |
+| Roadmap-/Statussynchronität | unverändert offen; Roadmap, PR-Body, Issue #90 und genau ein aktueller Handover führen jederzeit denselben aktuellen Phasen-/Owner-Gate-Status. Der freigegebene Plan bleibt unverändert auf seiner ownerfreigegebenen SHA; nach jedem Slice/Gate wird der erreichte Status in den dynamischen Quellen synchronisiert, ohne einen noch nicht ownerfreigegebenen Schritt als autorisiert erscheinen zu lassen. |
 
-R5.3 ist die aktuelle vollständige normative Planwahrheit. Die in der
+R5.4 ist die aktuelle vollständige normative Planwahrheit. Die in der
 R6-Tabelle genannten Adapter-, Harness-, Parser-, Runner-, Artefakt- und
 Verifikationspunkte bleiben als Umsetzungspunkte offen und werden nur in der
 vorgegebenen Phase-/Owner-Gate-Reihenfolge abgearbeitet. Historische R4-, R5-,
@@ -610,7 +663,7 @@ initialisieren.
 ### Vorgesehener R1-Auswahlentscheid (verbindliche Planentscheidung, keine Ausführungsfreigabe)
 
 Die R1-Konfigurationsentscheidung `state_store = 69 * 4096 = 282.624 B`
-(276 KiB) ist mit der Freigabe der exakten R5.3-Plan-SHA verbindlich, solange
+(276 KiB) ist mit der Freigabe der exakten R5.4-Plan-SHA verbindlich, solange
 die unten definierten Kapazitäts-, 4-MB-, App-, Verbraucher- und
 Herstellerannahmen unverändert gelten. Die Rechnung beweist eine Untergrenze
 von 49 Seiten; 69 Seiten enthalten 20 zusätzliche Seiten für Seitenpackung,
@@ -838,7 +891,7 @@ Capacity-Check scheitern.
 Die aktuelle Single-App-Baseline wird durch die gepinnte
 `partitions_singleapp.csv` beschrieben: `nvs` 24 KiB ab `0x9000`, `phy_init`
 4 KiB ab `0xf000`, `factory` ab `0x10000`. Die projektspezifische Ersetzung ist
-als Capacity-/Partition-Slice vorgeplant, aber durch die R5.3-Planfreigabe
+als Capacity-/Partition-Slice vorgeplant, aber durch die R5.4-Planfreigabe
 nicht unmittelbar autorisiert. Sie darf erst nach dem eigenen Owner-Gate
 dieses Slices und bei unveränderten Annahmen umgesetzt werden:
 
@@ -941,7 +994,7 @@ Persistenzport zu machen.
 
 Reproduzierbarer Hostlauf: Die Matrix-/JSON-/Hostpartition-
 Foundation gehört zu Phase B und darf erst nach deren eigenem Owner-Subgate
-ausgeführt werden; der allgemeine R5.3-Planentscheid autorisiert diesen Lauf
+ausgeführt werden; der allgemeine R5.4-Planentscheid autorisiert diesen Lauf
 nicht. Der vollständige Lauf bleibt später ein Final-Verification-Nachweis:
 
 ```bash
@@ -1371,6 +1424,20 @@ pfade und Secrets werden abgelehnt. Alle erzeugten Textartefakte werden vor
 einem Erfolgsupload durch den Secret-/Pfadscan geprüft.
 
 ## Qualitätsgates und CI-Regressionsschutz
+### Dokumentations-/Markdown-Diff-Gate
+
+Vor jedem Ownerreview dieses plan-/dokumentations-only Scopes wird gezielt
+geprüft:
+
+- die erste nichtleere Zeile ist exakt ein Markdown-H1;
+- Inline-Backticks und fenced code blocks sind ausgeglichen;
+- genau ein kanonischer `## ... Owner-Gate`-Abschnitt existiert;
+- keine stale Vorgänger-Status-, Planfreigabe- oder vorzeitige
+  Ausführungsfreigabeformulierung bleibt in den aktuellen Plan-/Statusquellen;
+- `git diff --check` ist sauber und der Diff enthält nur die ausdrücklich
+  freigegebenen Dokumentations-/Statusdateien.
+
+
 
 Der neue Hosttest wird nach der Umsetzung verbindlich in die kanonischen
 Definitionen aufgenommen:
@@ -1436,36 +1503,40 @@ Inhalten und `Source-Git-SHA` oder ein Working-Tree-/lokaler Zwischenstand ist
 ## Umsetzungs- und Commit-Schnitte nach Phasen und Freigaben
 
 Die Umsetzung bleibt in diesen nachweisbaren Schnitten. Der aktuelle
-R5.3-Plancommit enthält keinen Produktions-, Host-, Harness-, Oracle-, Runner-,
-ESP-IDF-Abhängigkeits- oder Hardwarepfad. R5.3 definiert den normativen
+R5.4-Plancommit enthält keinen Produktions-, Host-, Harness-, Oracle-, Runner-,
+ESP-IDF-Abhängigkeits- oder Hardwarepfad. R5.4 definiert den normativen
 Ziel-/Umsetzungsvertrag; seine Freigabe autorisiert nur Phase A.
 
 ### Verbindliche Phasen- und Gatekette
 
-1. **Phase A – Hersteller-/Quellenanalyse:** Mit der exakten R5.3-Planfreigabe
+1. **Phase A – Hersteller-/Quellenanalyse:** Mit der exakten R5.4-Planfreigabe
    nur die Analyse-/Evidenzaufgaben aus Phase A ausführen; keinen Pin ändern,
    keinen Vendor-/Backport-Patch übernehmen und keine Testimplementation
-   ändern. Ergebnis, HEAD und Provenienz synchronisieren und `STOP` für
-   Ownerreview.
+   ändern. Ergebnis, HEAD und Provenienz im vorgesehenen Evidenzbericht und in den
+   dynamischen Statusquellen dokumentieren; der Plan bleibt unverändert und
+   anschließend `STOP` für Ownerreview.
 2. **Owner-Subgate Phase B:** Erst nach expliziter Ownerfreigabe der Phase B
    die Host-Evidence-Foundation herstellen: vollständige genehmigte
    Szenariomatrix, alle mutierenden Write-/Erase-Callbacks einschließlich
    4-Byte-Cuts, per-Cut JSON-/Fehler-/Provenienzartefakte und exakte
    Hostpartition. Zuerst gegen gepinnten v6.0.2-Stand ausführen; reproduzierbare
-   FAILs bleiben Baseline-Evidenz. Danach synchronisieren und `STOP`.
+   FAILs bleiben Baseline-Evidenz. Danach Evidence-/Artefaktbericht und dynamische Statusquellen synchronisieren;
+   der Plan bleibt unverändert und anschließend `STOP`.
 3. **Owner-Subgate Phase C:** Erst nach expliziter Ownerfreigabe den
    Herstellervergleich mit der in B geprüften identischen Matrix gegen die
    ausgewählten offiziellen Vergleichsstände ausführen; Projekt-Pin
    unverändert lassen. Bei notwendigem Hosttest-Änderungsbedarf anhalten und
-   diesen konkret vorlegen. Ergebnis/HEAD/Provenienz synchronisieren und
-   `STOP`. Ohne vollständigen belastbaren Kandidaten kein nächstes Gate.
+   diesen konkret vorlegen. Ergebnis/HEAD/Provenienz im vorgesehenen Evidenzbericht und in den
+   dynamischen Statusquellen dokumentieren; der Plan bleibt unverändert und
+   anschließend `STOP`. Ohne vollständigen belastbaren Kandidaten kein nächstes Gate.
 4. **Owner-Subgate Phase D / Schritt 1B:** Erst nach exakter Freigabe des
    vorgeschlagenen Herstellerzielstands/Fix-SHA den Projekt-Pin bzw. exakt
    freigegebenen Patch ändern und den Herstellerpfad selbst mit minimalem
    Reproducer, identischer vollständiger Matrix, exakter Provenienz und
    Compatibility-/On-Flash-/Recovery-Abgleich nachweisen. Nicht vollständig
-   `PASS` bedeutet `BLOCKED` und `STOP`; bei `PASS` synchronisieren und erneut
-   für Ownerreview anhalten. Dieser PASS autorisiert keine R6-Korrektur.
+   `PASS` bedeutet `BLOCKED` und `STOP`; bei `PASS` Evidence-/Build-/Hardwarebericht und dynamische Statusquellen
+   aktualisieren; der Plan bleibt unverändert und anschließend für Ownerreview
+   anhalten. Dieser PASS autorisiert keine R6-Korrektur.
 5. **R6-Implementierungsslices:** Erst nach D-PASS und eigener expliziter
    Ownerfreigabe von Slice 1 die offenen Adapter-, Harness-, Parser-, Runner-,
    Artefakt- und übrigen R6-Korrekturen in den detaillierten Slices umsetzen.
@@ -1483,12 +1554,15 @@ Ziel-/Umsetzungsvertrag; seine Freigabe autorisiert nur Phase A.
    Architektur-, Secret-/Pfad-, Artefakt-, Syntax-, Format- und Diff-Gates,
    Build-/Source-Provenienz sowie die übrigen #90-Quality-Gates.
 8. **Final-Verification-Review:** Nach den vollständigen Softwaregates
-   Ergebnis/HEAD/Provenienz synchronisieren und `STOP` für Ownerreview.
+   Ergebnis/HEAD/Provenienz in den vorgesehenen Evidence-/Build-/Hardwareberichten
+   und den dynamischen Statusquellen dokumentieren; der Plan bleibt unverändert
+   und anschließend `STOP` für Ownerreview.
 9. **Eigenes Owner-Gate realer aktorfreier #90-Boardlauf:** Erst danach die
    normalen realen NVS-Nachweise autorisieren: Flash-/Partitionserfassung,
    Init/Write/Readback, Reboot/Recovery, NVS-Stats, Raw-Page/GC/Erase,
    Heap/Largest-Block/Stack-HWM, Latenzen und sichere Schreiblast-/Wear-
-   Messungen. Danach synchronisieren und `STOP`.
+   Messungen. Danach Evidence-/Artefaktbericht und dynamische Statusquellen synchronisieren;
+   der Plan bleibt unverändert und anschließend `STOP`.
 10. **Separates Power-Cut-Gate:** Erst bei tatsächlich kontrollierbarer,
     ownerverifizierter Versorgung/Hook den echten Power-Cut autorisieren.
     USB/DTR/RTS-Reset ist kein Power-Cut-Fixture. Nachweis synchronisieren und
@@ -1624,11 +1698,12 @@ nicht erneut implementiert.
      konkrete Projektlizenzabweichung findet.
 
 
-Kein detaillierter Slice ist durch die allgemeine R5.3-Planfreigabe
+Kein detaillierter Slice ist durch die allgemeine R5.4-Planfreigabe
 ausführungsautorisiert. Nach jedem Slice werden nur die direkt betroffenen
-Nachweise ausgeführt, der Commit/Push sowie Plan, Roadmap, PR-Body, Issue #90
-und genau ein aktueller `SESSION HANDOVER` synchronisiert und anschließend für
-Ownerreview angehalten. Ein PASS dokumentiert Evidenz, ersetzt aber kein
+Nachweise ausgeführt, der Commit/Push sowie die vorgesehenen Evidence-/
+Build-/Hardwareberichte, Roadmap, PR-Body, Issue #90 und genau ein aktueller
+`SESSION HANDOVER` synchronisiert und anschließend für Ownerreview angehalten;
+der freigegebene Plan bleibt unverändert. Ein PASS dokumentiert Evidenz, ersetzt aber kein
 Owner-Subgate.
 
 ## Ressourcen-, Wear- und Securitygrenze
@@ -1714,8 +1789,8 @@ Dependency: STACKED_ON_PR_116; PR #116 Draft; Issue #29 offen mit NOT_RUN-Pegel-
 Existing implementation: already present in PR #117; known review findings remain
 and are frozen until approval of this exact revised plan.
 Previous approved plan: da693e8a24735ff2cc09f019b119083f3792882e
-Current status: IMPLEMENTATION_BLOCKED_PENDING_R5_3_PLAN_APPROVAL
-Phase A: only the exact R5.3 plan approval authorizes Phase A.
+Current status: IMPLEMENTATION_BLOCKED_PENDING_R5_4_PLAN_APPROVAL
+Phase A: only the exact R5.4 plan approval authorizes Phase A.
 Next gates: separate Owner-Subgates for B, C, D, each R6 slice, Final Verification, board tests, and Power-Cut.
 Open finding: exhaustive callback 12 / NotFound; no implementation before the applicable Owner gate.
 Recommended backend: direct NVS; f0c7d9b6... is already equivalent behavior in the pinned v6.0.2 source; if no further proven manufacturer path satisfies unchanged Old-or-New, recommend BLOCKED.

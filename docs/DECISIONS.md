@@ -139,7 +139,7 @@
 - **Folgen:** Der physische Resetweg ist mehrstufig, lokal und von der
   Touchkalibrierung getrennt.
 
-## ADR-011: UART-Update fuer Release 1, Web-OTA spaeter
+## ADR-011: UART-Update fuer Release 1, OTA optionaler Future-Scope
 
 - **Status:** accepted
 - **Datum:** 2026-07-21
@@ -147,13 +147,17 @@
   initial ueber UART geflasht werden und 4 MB Flash sind knapp.
 - **Entscheidung:** FT232RL/UART ist der verbindliche Update- und Recoveryweg fuer
   Release 1. Ein Single-App-Partitionsplan ist zulaessig. Web-OTA, duale
-  Firmware-Slots, signierte Webpakete und automatisches Rollback sind
-  `FUTURE_RELEASE`.
+  Firmware-Slots, signierte Webpakete und automatisches Rollback sind keine
+  Release-1-Anforderung, sondern `FUTURE_OPTIONAL`: eine moegliche spaetere
+  Ownerentscheidung, die auch vollstaendig entfallen kann.
 - **Alternativen:** Web-OTA zwingend in Release 1; unsicheres Ueberschreiben der
   einzigen laufenden Apppartition.
-- **Folgen:** Release 1 bindet keine ungenutzten OTA-Bibliotheken oder
-  OTA-Speicherreserven ein. Eine spaetere Partitionsumstellung darf ein erneutes
-  UART-Flashen erfordern.
+- **Folgen:** Release 1 bindet keine ungenutzten OTA-Bibliotheken,
+  OTA-Partitionen, Kompatibilitaetsreserven oder OTA-Speicherreserven ein.
+  Eine spaetere OTA-Bewertung erfolgt nur bei konkretem Ownerbedarf in einem
+  eigenen Scope, Plan und Espressif-first-Nachweis; sie darf vollstaendig
+  entfallen. Eine spaetere Partitionsumstellung darf ein erneutes UART-Flashen
+  erfordern.
 
 ## ADR-012: Software-first mit gemeinsamem Bring-up-Profil
 
