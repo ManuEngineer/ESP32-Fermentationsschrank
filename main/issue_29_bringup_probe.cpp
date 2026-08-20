@@ -591,23 +591,19 @@ bool run() {
     // reclamation.
     //
     // The B2 proof is anchored on B1 (`afterTaskCreate`, sampled immediately
-    // after this task's own creation), not on B0. Two independent real-
-    // hardware experiments on esp32_bringup showed that comparing
-    // largestFreeBlockBytes (and the exact byte value of freeHeapBytes)
-    // against B0 is not a valid task-specific reclamation proof: a 12 s wait
-    // window left largestFreeBlockBytes completely flat (no convergence,
-    // ruling out a timing cause), and a second, identically-sized
-    // create/delete cycle run immediately afterward reproduced the exact
-    // same free_heap/largest_free_block plateau with zero additional cost
-    // (ruling out a per-cycle leak). The residual gap versus B0 is therefore
-    // a one-time heap-layout effect already present at B1, before this task
-    // ever ran its workload -- not something caused by this task's lifecycle,
-    // and not something any wait duration resolves. Comparing against B1
-    // instead requires proof that at least this task's own configured stack
-    // allocation (`kProbeTaskStackBytes`, already derived at compile time
-    // from the measured call path, not an invented constant) was returned to
-    // the heap after deletion -- a bound that is both causally attributable
-    // to this task and unaffected by the pre-existing one-time effect.
+    // after this task's own creation and before the actual probe workload
+    // starts), not on B0. Two independent real-hardware experiments on
+    // esp32_bringup established measured cycle invariance: a 12 s wait did
+    // not change the largest-free-block plateau, and a second, identically-
+    // sized create/delete cycle caused no further net loss. These experiments
+    // do not determine the concrete cause of the residual B0-to-B2 delta.
+    // The exact B0 return is therefore not a suitable task-specific cleanup
+    // gate. Comparing against B1 instead proves that at least this task's own
+    // configured stack allocation (`kProbeTaskStackBytes`, already derived at
+    // compile time from the measured call path, not an invented constant) was
+    // returned to the heap after deletion. That is a lower bound attributable
+    // to this task; it is not a general proof that every workload allocation
+    // is leak-free.
     // largestFreeBlockBytes remains part of the recorded B2 sample below (it
     // must not be hidden), but is informational rather than a pass/fail gate.
     const TickType_t idleStart = xTaskGetTickCount();

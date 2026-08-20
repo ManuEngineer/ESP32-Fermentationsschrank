@@ -9,9 +9,9 @@ sicheren unbelasteten MCU-/Gate-/Bootpegel (kein Messgerät in dieser
 Ausführungsumgebung) sowie die physische PCB-Revision (Silkscreen).
 
 Implementierungsstatus: `SOFTWARE_IMPLEMENTED_HARDWARE_TESTED_PASS_PENDING_LEVELS`;
-beide Profile bestehen real auf dem Board; die Issue-Abnahme ist erst
-vollständig, wenn zusätzlich die unbelasteten Pegelmesspunkte real
-nachgewiesen sind.
+beide Profile bestehen real auf dem Board. Die Issue-Abnahme ist erst
+vollständig, wenn zusätzlich die sicheren unbelasteten MCU-/Gate-/Bootpegel
+und die geforderte physische PCB-Revision real nachgewiesen sind.
 
 ## Identität und Scope
 
@@ -21,24 +21,28 @@ nachgewiesen sind.
 - Basis: `main @ 87dd593fcdc8d26831873a4163b174340b4347c0`
 - freigegebener Plan:
   `docs/tasks/issue-29-implementation-plan.md @ 4f49b44cff47f55bfd425d9e39c5a07256782ed7`
-- Implementierungs-HEAD (Firmwareinhalt): `5950814fc21be557e565dad3aa6acf3dbe3c0b64`
+- Pre-Fix-Firmwarestand: `5950814fc21be557e565dad3aa6acf3dbe3c0b64`
 - erster realer Hardwarelauf (`esp32_bringup` `FAILED`, `esp32_release`
   `PASS`): PR-HEAD `c4c8b33f4dbaef727200ea410d887ec5417aa1b0`
-  (`App version: c4c8b33`); Firmwareinhalt identisch zum
-  Implementierungs-HEAD `5950814` (nur Dokumentänderungen dazwischen).
-- korrigierter, real verifizierter Hardwarelauf (beide Profile `PASS`):
-  Commit `3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59` (`fix(issue-29): anchor B2 cleanup proof on B1, not
-  B0`) — einzige Firmwareänderung gegenüber `c4c8b33`/`5950814`: die
-  B2-Nachweislogik in `main/issue_29_bringup_probe.cpp::run()` (siehe
-  Abschnitt "Root Cause und Korrektur" unten). Zwei unabhängige
-  `esp32_bringup`-Verifikationsläufe mit je 40 s Erfassungsfenster: der
-  erste vor dem folgenden Dokumentationscommit (`App version: 3bc5bfe`), der
-  zweite danach (`App version: 7024d15`, aktueller HEAD). `git diff --stat
-  3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59
-  7024d15df6bd9c647e91416f5ab3b66d13035f62` zeigt ausschließlich
-  Dokumentänderungen (`docs/ISSUE_29_BUILD_REPORT.md`,
-  `docs/ISSUE_29_MEASUREMENTS.md`); beide Läufe sind damit derselbe
-  Firmwareinhalt und lieferten byte-identische Messwerte.
+  (`App version: c4c8b33`); Firmwareinhalt identisch zum Pre-Fix-Firmwarestand
+  `5950814` (nur Dokumentänderungen dazwischen).
+- Firmware-Fix und finaler Firmware-Source-Commit für die erfolgreichen
+  Nachweise: `3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59`
+  (`fix(issue-29): anchor B2 cleanup proof on B1, not B0`) — einzige
+  Firmwareänderung gegenüber `c4c8b33`/`5950814`: die B2-Nachweislogik in
+  `main/issue_29_bringup_probe.cpp::run()` (siehe Abschnitt
+  "Ursachenanalyse und Korrektur" unten).
+- Zwei unabhängige erfolgreiche `esp32_bringup`-Verifikationsläufe mit je
+  40 s Erfassungsfenster: Lauf 1 geflasht aus dem korrigierten Source-Commit
+  (`App version: 3bc5bfe`), Lauf 2 auf dem damaligen PR-/Dokumentationsstand
+  (`App version: 7024d15`). `git diff --name-only
+  3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59 a80999b55108aa5775e5cd5e44fae28911383643`
+  listet vor dieser Synchronisierung ausschließlich
+  `docs/ISSUE_29_BUILD_REPORT.md` und `docs/ISSUE_29_MEASUREMENTS.md`. Die
+  Synchronisierung ergänzt keinen Firmwarelogik-Fix, sondern nur den
+  vorsichtigen Codekommentar und Dokumentation. Beide Läufe liefen damit auf
+  demselben build-relevanten korrigierten Firmwareinhalt und lieferten
+  byte-identische Messwerte.
 - ESP-IDF: `v6.0.2 @ 7101770dc6db2667b3c477cc31365dd1acd6db4e`
 - Ziel: ESP32 ohne PSRAM, aktorfrei und unbelastet
 - Werkzeuge: `esptool v5.3.1`, `idf.py`/ESP-IDF `v6.0.2`, Python
@@ -180,41 +184,34 @@ sicher zurück, bevor die Laufzeitschleife begann — kein Busy-Loop, kein
 automatischer Reboot, keine Aktoren, aber auch kein erreichter
 35-s-Heartbeat-Smoke für dieses Profil.
 
-### Root Cause und Korrektur
+### Ursachenanalyse und Korrektur
 
 Zwei gezielte, real auf demselben Board durchgeführte Experimente (nur die
 Wartelogik in `run()` temporär verändert, `probeTask`/`runProbe` und damit
 der von `scripts/analyze_issue_29_stack.py` geprüfte Call-Path blieben
-unberührt) klärten die Ursache:
+unberührt) lieferten die folgenden Messbefunde; die konkrete Ursache des
+verbleibenden B0→B2-Restdeltas ist damit nicht bestimmt:
 
 1. **Erweitertes Zeitfenster (12 s statt 3 s), Trace alle 100 ms:**
    `largest_free_block_bytes` blieb über die vollen 12 s exakt bei `110592`
    eingefroren, ohne jede Bewegung. `free_heap_bytes` erholte sich dagegen
    schon nach dem ersten Poll (t=100 ms) auf `303788` und blieb dort ebenso
    flach — 176 Bytes unter der B0-Baseline (`303964`), aber stabil.
-   → schließt eine reine Timing-Ursache aus (Kategorie 2): ein längeres
-   Zeitfenster hätte den Wert nie näher an B0 gebracht.
+   → die 12-s-Wartezeit änderte das Plateau nicht; eine längere Wartezeit ist
+   damit kein geeigneter Weg, den B0-Wert wieder zu erreichen.
 2. **Zweiter, identisch großer Task-Erzeuge/Lösche-Zyklus** direkt im
    Anschluss (gleicher `kProbeTaskStackDepth`, sofortiges
    `vTaskDelete(nullptr)`): `free_heap_bytes` und `largest_free_block_bytes`
    waren nach diesem zweiten Zyklus bit-identisch zu den Werten davor
    (`303788`/`110592` → `303788`/`110592`).
-   → schließt ein echtes Leck pro Task-Zyklus aus (Kategorie 1): ein Leck
-   hätte beim zweiten Zyklus weiteren Speicher gekostet.
+   → der zweite identisch große Zyklus verursachte keinen weiteren Nettoverlust.
 
-Damit bleibt nur Kategorie 3: Die Freigabe des Diagnose-Tasks funktioniert
-korrekt und ist bereits nach dem ersten Poll abgeschlossen; das bisherige
-Kriterium `largestFreeBlockBytes(B2) >= largestFreeBlockBytes(B0)` **und**
-`freeHeapBytes(B2) >= freeHeapBytes(B0)` vermischt diese echte
-Task-Reclamation mit einer Heap-Layout-Wirkung, die bereits bei `B1` vorliegt.
-Bewiesen ist dabei ausschließlich die **Zyklus-Invarianz**: Experiment 2 zeigt
-messtechnisch eindeutig, dass diese Wirkung nicht mit dem Diagnose-Task-
-Lifecycle skaliert — ein zweiter, identisch großer Erzeuge-/Lösche-Zyklus
-kostet nachweislich null zusätzliche Bytes. Die naheliegende Erklärung, dass
-es sich um eine einmalige Lazy-Initialisierung beim allerersten `xTaskCreate`
-dieses Profils handelt, ist dagegen ausdrücklich **nicht** untersucht oder
-belegt und wird hier nicht als Tatsache behauptet — für die Korrektur ist nur
-die bewiesene Zyklus-Invarianz relevant, nicht deren Ursache. Der
+Bewiesen ist damit ausschließlich die **gemessene Zyklus-Invarianz**: Die
+12-s-Wartezeit ändert das Plateau nicht, und ein zweiter identisch großer
+Erzeuge-/Lösche-Zyklus kostet nachweislich keinen weiteren Nettoverlust. Die
+konkrete Ursache des einmaligen Restdeltas zwischen B0 und B2 ist nicht
+bestimmt. Deshalb ist die exakte B0-Rückkehr kein geeignetes task-spezifisches
+Cleanup-Gate. Der
 freigegebene Plan schreibt den B0-Vergleich nicht vor — er verlangt nur, dass
 B2 "erst nach nachweisbarer Freigabe" erfasst wird und dass die
 Zusatzallokation nicht verborgen wird
@@ -224,16 +221,19 @@ Korrektur bleibt damit innerhalb des freigegebenen Plans.
 
 Die Korrektur (`main/issue_29_bringup_probe.cpp::run()`, Commit
 `3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59`) verankert den Nachweis stattdessen
-an `B1` (`afterTaskCreate`, unmittelbar nach der Task-Erzeugung, vor jedem
-Probe-Workload): `freeHeapBytes(B2) >= freeHeapBytes(B1) + kProbeTaskStackBytes`.
-`kProbeTaskStackBytes` ist die bereits vorhandene, aus dem gemessenen
-Call-Path abgeleitete Konstante (kein neuer Wert) und damit eine konservative,
-kausal dem Diagnose-Task zuordenbare Untergrenze — ein echtes Ausbleiben der
-Freigabe hätte diesen Schwellenwert weiterhin nicht erreicht. Die
-B1-Verankerung kann außerdem keinen Heapverlust aus dem eigentlichen
-Probe-Workload (Decision-/Kandidat-/String-Allokationen vor `B1`) verdecken:
-ein solcher Verlust würde das Delta zwischen `B1` und `B2` verkleinern und
-den Schwellenwert damit eher verfehlen, nie fälschlich erfüllen.
+an `B1` (`afterTaskCreate`, unmittelbar nach der Task-Erzeugung und vor der
+Startbenachrichtigung); der eigentliche Probe-Workload beginnt erst danach:
+`freeHeapBytes(B2) >= freeHeapBytes(B1) + kProbeTaskStackBytes`.
+`kProbeTaskStackBytes` ist die bestehende, aus dem gemessenen Call-Path
+abgeleitete Konstante (kein neuer Wert) und weist mindestens die Rückgabe der
+konfigurierten Task-Stackgröße nach. Das gemessene Delta beträgt `69564 B`
+gegenüber `67584 B` Stack-Untergrenze, also `1980 B` Abstand. Der
+ESP-IDF-/FreeRTOS-Cleanup gibt bei dem dynamisch erzeugten Task neben dem
+Stack auch den TCB frei. Das Gate beweist damit zusammen mit dem
+dokumentierten Task-Lifecycle und den realen Wiederholungsläufen den
+Cleanup-Nachweis für #29; es beweist nicht automatisch die Freiheit von jedem
+beliebig kleinen Workload-Leak. Eine stärkere Aussage vollständiger
+Heap-Leak-Freiheit müsste separat nachgewiesen werden.
 `largestFreeBlockBytes` bleibt Teil der geloggten `after_task_cleanup`-Probe
 (nicht verborgen), ist aber kein Gate-Kriterium mehr. `kCleanupWaitTicks`
 (3000 ms) blieb unverändert, weil die Untersuchung ausdrücklich belegt hat,
@@ -242,7 +242,8 @@ dass es sich nicht um eine Timing-Frage handelt.
 ### Korrigierter realer Nachweis (zwei unabhängige Läufe à 40 s)
 
 ```text
-I (199) app_init: App version:      3bc5bfe    [Lauf 1] / 7024d15 [Lauf 2]
+I (199) app_init: App version:      3bc5bfe    [Lauf 1]
+I (199) app_init: App version:      7024d15    [Lauf 2]
 ...
 I (399) issue29_probe: before_task_create free_heap_bytes=303964 minimum_free_heap_bytes=303964 largest_free_block_bytes=172032 task_stack_hwm_bytes=0 main_stack_hwm_bytes=3064
 I (409) issue29_probe: after_task_create_blocked free_heap_bytes=234224 minimum_free_heap_bytes=234224 largest_free_block_bytes=110592 task_stack_hwm_bytes=67084 main_stack_hwm_bytes=3064
@@ -271,7 +272,7 @@ monotoner Uptime und ohne Panic, Watchdog, Brownout oder unerwarteten Reset.
 |---|---|---|
 | reale 48/96/1024-`CommandDecision`-Ressourcenprobe erzeugt und gehalten | `PASS` | unverändert gegenüber dem ursprünglichen Lauf |
 | `B0`/`B1` | `PASS` | unverändert: `303964`/`172032` (B0), `234224`/`110592` (B1) |
-| `B2` (`after_task_cleanup`) | `PASS` | `free_heap_bytes=303788 >= afterTaskCreate.free_heap_bytes(234224) + kProbeTaskStackBytes(67584)` (Delta 69564 B); `largestFreeBlockBytes=110592` bleibt informationell geloggt, ist kein Gate mehr |
+| `B2` (`after_task_cleanup`) | `PASS` | `free_heap_bytes=303788 >= afterTaskCreate.free_heap_bytes(234224) + kProbeTaskStackBytes(67584)` (Delta 69564 B, Abstand 1980 B); `largestFreeBlockBytes=110592` bleibt informationell geloggt, ist kein Gate mehr. Das weist mindestens die Stack-Rückgabe nach, nicht beliebige Workload-Leak-Freiheit. |
 | interne vier Probezeitpunkte | `PASS` | unverändert |
 | Task-Stack-High-Water-Mark | `PASS` | unverändert: `task_ready_hwm_bytes=67132`, `task_completion_hwm_bytes=5532` |
 | On-Target-Allokationsfehlervertrag | `PASS` | unverändert: `fault_pass=PASS writes=0 reads=3` |
@@ -360,8 +361,9 @@ eine physische Ablesung beziehungsweise ein Messgerät vor Ort erfordern.
 
 ## Dokumentationsrückführung
 
-Der `esp32_bringup`-Befund ist inzwischen ursachenanalysiert, korrigiert und
-mit zwei unabhängigen realen Läufen verifiziert; beide Profile bestehen ihren
+Der `esp32_bringup`-Befund ist inzwischen anhand der gemessenen
+Zyklus-Invarianz eingeordnet, korrigiert und mit zwei unabhängigen realen
+Läufen verifiziert; beide Profile bestehen ihren
 35-s-Smoke real auf demselben Board, und Board/Flash/PSRAM/UART-Recovery sind
 `confirmed_test`. Trotzdem wurden `docs/HARDWARE.md` und
 `docs/OPEN_POINTS.md` in diesem Schritt weiterhin **nicht** aktualisiert:

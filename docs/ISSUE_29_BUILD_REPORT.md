@@ -1,17 +1,18 @@
 # Issue #29 Build- und Ressourcenbericht
 
-Dieser Bericht gehört zu Issue #29 und ist dem Implementierungs-HEAD
-`5950814fc21be557e565dad3aa6acf3dbe3c0b64` zugeordnet. Die ESP-IDF-Profile
-wurden mit ESP-IDF `v6.0.2` / Commit
+Dieser Bericht gehört zu Issue #29 und ist dem finalen Firmware-Source-Commit
+`3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59` (B2-Fix) zugeordnet. Der frühere
+Firmwarestand `5950814fc21be557e565dad3aa6acf3dbe3c0b64` ist nur die
+Pre-Fix-Provenienz. Die ESP-IDF-Profile wurden mit ESP-IDF `v6.0.2` / Commit
 `7101770dc6db2667b3c477cc31365dd1acd6db4e` gebaut.
 
 ## `esp32_bringup`
 
-- `size.json total_size`: 194179 Bytes
+- `size.json total_size`: 194215 Bytes
 - DRAM: 13202 / 180736 Bytes
 - IRAM: 42023 / 131072 Bytes
-- App-BIN: 194304 Bytes
-- ELF: 6969868 Bytes
+- App-BIN: 194336 Bytes
+- ELF: 6971244 Bytes
 - Mapfile: 5023889 Bytes
 - Bootloader-BIN: 26096 Bytes
 - Partitionstabellen-BIN: 3072 Bytes
@@ -23,7 +24,7 @@ wurden mit ESP-IDF `v6.0.2` / Commit
 - DRAM: 12618 / 180736 Bytes
 - IRAM: 42023 / 131072 Bytes
 - App-BIN: 126592 Bytes
-- ELF: 3132344 Bytes
+- ELF: 3132728 Bytes
 - Mapfile: 2722263 Bytes
 - Bootloader-BIN: 26096 Bytes
 - Partitionstabellen-BIN: 3072 Bytes
@@ -47,29 +48,34 @@ PSRAM-Status bleiben bis zur Hardwaremessung offen.
 
 ## Vollständige lokale Verifikation
 
-Der kombinierte Ressourcenbericht wurde nach dem vollständigen lokalen Lauf
-erneut mit `Source-Git-SHA`=
-`5950814fc21be557e565dad3aa6acf3dbe3c0b64` erzeugt und verifiziert. Der
-Build-Commit der erneuten Artefakterzeugung war der nachgelagerte
-Dokumentations-HEAD `c1fc97c4149ea02b855ef9a01c662508d373e07f`; zwischen dem
-Implementierungs-HEAD und diesem Dokumentationscommit liegt keine
-Firmwareänderung. `pio run -e native`, die vollständige native Suite mit
+Der kombinierte Ressourcenbericht wurde nach dem B2-Fix erneut mit
+`Source-Git-SHA`=`3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59` erzeugt und
+verifiziert; der tatsächliche Build-Commit dieses Laufs war
+`a80999b55108aa5775e5cd5e44fae28911383643`. Die nachfolgenden
+Software-/Buildnachweise wurden diesem korrigierten Firmwareinhalt zugeordnet.
+`pio run -e native`, die vollständige native Suite mit
 965/965 erfolgreichen Testfällen, beide ESP-IDF-Profile, beide
 ESP-IDF-Static-Analysis-Profile, Clang-Tidy, Format-, Architektur-, Secret-,
 Quality-Gate- und Artefakt-Scanprüfungen sowie die kumulative
 Xtensa-Stackherleitung waren `PASS`. Diese Software-/Buildnachweise sind kein
 Board-, UART-, Flash-, Pegel- oder Smoke-Nachweis.
 
-Der erste reale Hardwarelauf flashte beide Profile vom PR-HEAD
+Der ursprüngliche reale Hardwarelauf flashte beide Profile vom PR-HEAD
 `c4c8b33f4dbaef727200ea410d887ec5417aa1b0` (`App version: c4c8b33` im
-Bootlog); der Firmwareinhalt ist gegenüber `5950814` unverändert. Dieser Lauf
-zeigte `esp32_bringup` real `FAILED` (Cleanup-Nachweis der Bring-up-Probe).
+Bootlog); der Firmwareinhalt entsprach dem Pre-Fix-Stand `5950814`. Dieser
+Lauf zeigte `esp32_bringup` real `FAILED`, während `esp32_release` `PASS` war.
 Commit `3bc5bfe4120d7ca6609733ab9d0736f1cfe99b59` korrigiert die
-B2-Nachweislogik in `main/issue_29_bringup_probe.cpp::run()` (einzige
-Firmwareänderung gegenüber `c4c8b33`/`5950814`); zwei erneute unabhängige
-Hardwareläufe auf demselben Board (`App version: 3bc5bfe`) zeigen beide
-Profile real `PASS`. Die vollständigen realen Board-, Flash-, PSRAM-, Smoke-,
-Root-Cause- und Probe-Ergebnisse sind in
+B2-Nachweislogik in `main/issue_29_bringup_probe.cpp::run()` (die einzige
+Firmwareänderung gegenüber `c4c8b33`/`5950814`). Der erste erfolgreiche
+post-fix-Lauf wurde mit `App version: 3bc5bfe` 40 s erfasst; der zweite mit
+`App version: 7024d15` ebenfalls 40 s. Der damalige Laufstand `7024d15` und
+der PR-Head vor dieser Synchronisierung `a80999b55108aa5775e5cd5e44fae28911383643`
+enthielten gegenüber `3bc5bfe` ausschließlich Dokumentänderungen in den
+beiden Issue-29-Berichten. Diese Synchronisierung ergänzt keinen
+Firmwarelogik-Fix, sondern nur den vorsichtigen Codekommentar und weitere
+Dokumentation; die build-relevante Firmwareprovenienz der beiden erfolgreichen
+Läufe bleibt der korrigierte Source-Stand `3bc5bfe`. Die vollständigen realen Board-, Flash-, PSRAM-, Smoke-,
+Zyklus-Invarianz- und Probe-Ergebnisse sind in
 [`ISSUE_29_MEASUREMENTS.md`](ISSUE_29_MEASUREMENTS.md) dokumentiert und
 werden hier nicht dupliziert.
 
