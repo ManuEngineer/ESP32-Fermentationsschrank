@@ -11,7 +11,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 1 | Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende | `SOFTWARE_IMPLEMENTED_HARDWARE_TESTED_PASS_PENDING_LEVELS`; Plan `docs/tasks/issue-29-implementation-plan.md @ 4f49b44cff47f55bfd425d9e39c5a07256782ed7` freigegeben, Software-/Buildnachweise und reale Board-/UART-/Flash-/Recovery-/Smoke-Nachweise liegen in Draft-PR #116 vor. Die Baseline bleibt aktorfrei. Das verbleibende Gate sind die sicheren unbelasteten MCU-/Gate-/Bootpegel (`NOT_RUN`). Die physische PCB-Revision/Silkscreen ist nach Ownerentscheidung kein Abnahmekriterium; Referenz ist das tatsächlich getestete reale Board. Das Pegel-Restgate blockiert die #90-Software und einen sicheren realen #90-Aufbau nicht. | Owner-Nachweis der offenen Pegel und anschliessendes Review-/Abnahmengate |
-| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `PRODUCT_RECOVERY_REPLAN_PENDING_R5_6_PLAN_APPROVAL`; der Callback-12-/`NotFound`-Befund bleibt gültige Backendcharakterisierung, ist nach der verbindlichen Release-1-Produktentscheidung aber nicht alleiniger Produktblocker. R5.4 `docs/tasks/issue-90-esp-idf-nvs-adapter-plan.md @ c35ce0342898f0e19d3cce5e6a7eaa077f73bad6` bleibt als immutable ownerfreigegebene Blockerrevision erhalten; R5.5 `docs/tasks/issue-90-architecture-replan-r5.5.md @ 1dfa7eb390ededec4dc58efee7138d3fffdd39ff` bleibt nicht ownerfreigegeben und nicht umzusetzen. Der neue eigenständige R5.6-Plan ist `docs/tasks/issue-90-product-recovery-replan-r5.6.md`; der Phase-A.1-Bericht bleibt `docs/ISSUE_90_MANUFACTURER_ANALYSIS.md @ 440180f5b712a1eda427292207ebc7e9861cd284`. NVS bleibt Default-Hypothese; Implementierung, Produkt-Recoverytests und reale Hardware bleiben bis zu Ownerfreigabe `NOT_RUN`. | Ownerfreigabe der exakten R5.6-Plan-SHA; danach nur der jeweils freigegebene nächste Slice |
+| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `PRODUCT_RECOVERY_REPLAN_PENDING_R5_7_PLAN_APPROVAL`; der Callback-12-/`NotFound`-Befund bleibt als `BACKEND_POWER_CUT_CHARACTERIZATION` beziehungsweise `KNOWN_BACKEND_LIMITATION` sichtbar und ist nach dem unveränderten Release-1-Produktvertrag nicht alleiniger Produktblocker. R5.4 `docs/tasks/issue-90-esp-idf-nvs-adapter-plan.md @ c35ce0342898f0e19d3cce5e6a7eaa077f73bad6` bleibt die immutable ownerfreigegebene historische Blockerrevision. R5.5 `docs/tasks/issue-90-architecture-replan-r5.5.md @ 1dfa7eb390ededec4dc58efee7138d3fffdd39ff` und R5.6 `docs/tasks/issue-90-product-recovery-replan-r5.6.md @ a84ae061abc7199d8285cd142c139cd829cb66e9` bleiben nicht ownerfreigegeben und unangewendet. Der neue eigenständige R5.7-Plan ist `docs/tasks/issue-90-product-recovery-replan-r5.7.md`; der Phase-A.1-Bericht bleibt `docs/ISSUE_90_MANUFACTURER_ANALYSIS.md @ 440180f5b712a1eda427292207ebc7e9861cd284`. NVS bleibt Default; R5.7 entfernt das nicht vorhandene UI-/physische Aktor-/Vollprodukt-Hardwaregate, begrenzt #90 auf beobachtbare Recoveryzustände und actor-free Boardverifikation und trennt Backendcharakterisierung vom Produktgate. Implementierung, Tests und Hardware bleiben `NOT_RUN`. | Ownerfreigabe der exakten R5.7-Plan-SHA; danach nur ein jeweils ausdrücklich freigegebener Slice |
 | 3 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90 |
 | 4 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
 | 5 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26/#29 und bringt die echte Bedienung am Gerät über dieselben Contracts. | Hardware-/Pin-/Controllerbeweis, Ressourcen-/Lizenznachweis, reale Bedienungs- und Kalibrierungstests |
@@ -106,16 +106,18 @@ NVS-/Partitions-/Flash-/Hardwareabnahmen bleiben insbesondere über #90 offen.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
   und Belastungstests blockiert.
 - Issue #89 (WLAN-Onboarding-Evaluation) bleibt vor Beginn planpflichtig; Issue
-  #90 befindet sich mit freigegebenem immutablem R5.4-Plan in Draft. R5.5 ist
-  nicht ownerfreigegeben und wird nicht umgesetzt. Die neue kanonische
-  R5.6-Planrevision führt die Persistenz auf den verbindlichen Release-1-
-  Produktvertrag zurück: Backendcharakterisierung, Record-/Recoveryvertrag
-  und Produktverhalten werden getrennt; NVS bleibt die Default-Hypothese.
-  Der aktuelle Status bis zur R5.6-Freigabe ist
-  `PRODUCT_RECOVERY_REPLAN_PENDING_R5_6_PLAN_APPROVAL`. Phase B,
-  Produkt-Recoverytests und reale Standard-Flash-/NVS-Hardwareverifikation
-  bleiben `NOT_RUN`. Das separate #29-Pegel-Restgate blockiert Issue #90
-  fachlich nicht.
+  #90 befindet sich mit freigegebenem immutablem R5.4-Plan in Draft. R5.5 und
+  R5.6 sind nicht ownerfreigegeben und werden nicht umgesetzt. Die neue
+  kanonische R5.7-Planrevision übernimmt den R5.6-Produktvertrag unverändert,
+  begrenzt #90 auf `RECOVERY_STATUS_OBSERVABLE`, actor-free Boardnachweise und
+  keinen vollständigen Fermenter-/UI-/physischen Aktor-End-to-End-Beweis.
+  Backendcharakterisierung und Produkt-Recovery-Gate bleiben getrennt; NVS
+  bleibt Default. Der aktuelle Status bis zur R5.7-Freigabe ist
+  `PRODUCT_RECOVERY_REPLAN_PENDING_R5_7_PLAN_APPROVAL`. Implementierung,
+  Produkt-Recoverytests und reale Hardwareverifikation bleiben `NOT_RUN`.
+  Das separate #29-Pegel-Restgate blockiert Issue #90 fachlich nicht; reale
+  Pegel-, MOSFET-/Lüfter-, BTS7960-/Peltier- und Display-/Touchnachweise
+  bleiben bei #29, #32, #33 und #25/#26/#31.
 - Issue #114 bewahrt den frueheren komplexen Advanced-Safety-/Recovery-Entwurf
   als `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`. Er ist kein Release-1-Gate und
   wird vor einer spaeteren Umsetzung vollstaendig gegen den dann aktuellen
