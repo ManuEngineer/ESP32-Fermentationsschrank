@@ -107,9 +107,10 @@ NVS-/Partitions-/Flash-/Hardwareabnahmen bleiben insbesondere über #90 offen.
   und Belastungstests blockiert.
 - Issue #89 (WLAN-Onboarding-Evaluation) bleibt vor Beginn planpflichtig; Issue
   #90 befindet sich mit konsolidierter Planrevision in Draft und wartet auf
-  Ownerfreigabe der exakten neuen Plan-SHA. Seine
-  reale Standard-Flash-/Hardwareverifikation bleibt bis zum offenen #29-Gate
-  blockiert.
+  Ownerfreigabe der exakten neuen Plan-SHA. Sein reproduzierbarer Callback-12-
+  Hostbefund ist offen; reale Standard-Flash-/NVS-Hardwareverifikation bleibt
+  bis zur Softwareentscheidung und tatsächlichen Ausführung `NOT_RUN`. Das
+  separate #29-Pegel-Restgate blockiert Issue #90 fachlich nicht.
 - Issue #114 bewahrt den frueheren komplexen Advanced-Safety-/Recovery-Entwurf
   als `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`. Er ist kein Release-1-Gate und
   wird vor einer spaeteren Umsetzung vollstaendig gegen den dann aktuellen

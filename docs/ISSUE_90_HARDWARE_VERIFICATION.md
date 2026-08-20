@@ -2,13 +2,18 @@
 
 ## Status
 
-- Gesamtstatus: `BLOCKED/NOT_RUN`.
-- Grund: Das #29-Hardwaregate ist offen; deshalb wurden kein verifizierter
-  ESP32, kein realer UART-/Power-Cut-Controller und kein Standard-Flashlauf
-  ausgeführt.
+- Gesamtstatus: `NOT_RUN`.
+- #29-Software/Bring-up/Board/UART/Flash/Recovery/Smokes sind auf dem
+  tatsächlich getesteten realen Board nachgewiesen. Nur die sicheren
+  unbelasteten MCU-/Gate-/Bootpegel bleiben dort `NOT_RUN`; die physische
+  PCB-Revision/Silkscreen ist nach Ownerentscheidung kein Abnahmekriterium.
+  Dieses Pegel-Restgate blockiert #90 nicht.
+- Issue-90-NVS-Hardwaretests wurden noch nicht real ausgeführt. Der
+  vollständige Hostvertrag bleibt wegen Callback 12 offen; daher darf aus dem
+  Host-Harness oder dem #29-Nachweis kein NVS-Hardware-PASS abgeleitet werden.
 - Der Bring-up-Harness-Build ist ein statischer Buildnachweis, kein
   Hardware-PASS. Reale Partition, UART, Power-Cut, Readback, GC/Erase und
-  Heap-/Largest-Block-/Stack-HWM-Messungen bleiben `BLOCKED/NOT_RUN`.
+  Heap-/Largest-Block-/Stack-HWM-Messungen bleiben `NOT_RUN`.
 - Die Firmware führt `state_store` / `fermentation` als explizite R1-
   Konfiguration an den anwendungsneutralen `NvsStateStore` heran. Der Adapter
   selbst besitzt keinen Init-/Deinit-Lifecycle.
@@ -103,7 +108,7 @@ Die Raw-Page-Evidenz verwendet ein festes, überprüftes No-PSRAM-Scratch-
 Budget. Sie liegt nicht als mehrere KiB automatische lokale Arrays auf dem
 unveränderten Main-Task-Stack. Statischer Compile-/ELF-Nachweis und reale
 Ressourcenmessungen sind getrennt; Letztere bleiben bis zur Hardwareausführung
-`BLOCKED/NOT_RUN`.
+`NOT_RUN`.
 
 ## Artefakte und offene Nachweise
 
@@ -117,9 +122,9 @@ Textartefakte unterliegen dem Secret-/Pfadscan.
 
 | Nachweis | Status |
 |---|---|
-| reale `state_store`-Partition, Flashgröße und Init | `BLOCKED/NOT_RUN` |
-| 22-Schlüssel-Prefill und vollständiger Readback | `BLOCKED/NOT_RUN` |
-| drei saubere Neustarts gegen Prefill-Baseline | `BLOCKED/NOT_RUN` |
-| zehn Power-Cut-Wiederholungen je vier Fenster | `BLOCKED/NOT_RUN` |
-| GC-/Erase-/Raw-Page-Orakel auf realem Flash | `BLOCKED/NOT_RUN` |
-| reale Heap-/Largest-Block-/Stack-HWM-Messung | `BLOCKED/NOT_RUN` |
+| reale `state_store`-Partition, Flashgröße und Init | `NOT_RUN` – kein Issue-90-Lauf ausgeführt; Hostvertrag Callback 12 offen |
+| 22-Schlüssel-Prefill und vollständiger Readback | `NOT_RUN` – kein Issue-90-Lauf ausgeführt |
+| drei saubere Neustarts gegen Prefill-Baseline | `NOT_RUN` – kein Issue-90-Lauf ausgeführt |
+| zehn Power-Cut-Wiederholungen je vier Fenster | `NOT_RUN` – kein Issue-90-Lauf ausgeführt |
+| GC-/Erase-/Raw-Page-Orakel auf realem Flash | `NOT_RUN` – kein Issue-90-Lauf ausgeführt |
+| reale Heap-/Largest-Block-/Stack-HWM-Messung | `NOT_RUN` – kein Issue-90-Lauf ausgeführt |
