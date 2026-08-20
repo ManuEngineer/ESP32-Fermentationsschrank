@@ -5,7 +5,109 @@
 Der einzig gültige Status dieses Plans und der bereits im PR vorhandenen
 #90-Implementation ist bis zur Ownerfreigabe der exakten Plan-Commit-SHA:
 
-`IMPLEMENTATION_CORRECTIONS_PENDING_PLAN_APPROVAL`
+`IMPLEMENTATION_BLOCKED_PENDING_R4_PLAN_APPROVAL`
+
+### Revision R4 – Callback-12-Planrevision pending Ownerfreigabe
+
+Die Umsetzung dieses Plans ist nach dem reproduzierbaren vollständigen Host-
+`exhaustive`-Befund erneut angehalten. Die bisherige exakte Freigabe bleibt
+`da693e8a24735ff2cc09f019b119083f3792882e`; dieser Commit ist die vollständige
+neue Planrevision R4 und benötigt eine eigene Ownerfreigabe, bevor irgendeine
+Korrektur an Produktionscode, Test-Harness oder Testorakel umgesetzt wird.
+
+Kontext nach der beauftragten Base-Synchronisierung:
+
+- aktueller PR-#117-Head: `17100cc87427d7bcbeb25a8f53920abe686869d6`;
+- Merge-Commit von #116 nach #117: `17100cc87427d7bcbeb25a8f53920abe686869d6`;
+- aktueller #116-Base-Head: `30fa0a8264e2c4564d324340c6bebc204147f477`;
+- ursprünglicher #117-Implementierungs-/Build-Source-Commit: `c506ae616c528d78b2349209b99997dbb738f0a1`.
+
+Die R4-Revision behandelt ausschließlich den Callback-12-Befund und die
+notwendige Entscheidung über die unveränderte `IStateStore`-Atomizitätsgrenze.
+Sie deutet den freigegebenen Firmwareplan nicht um und erlaubt bis zur neuen
+exakten Ownerfreigabe keine Implementation.
+
+## R4-Befund: reproduzierbarer vollständiger Host-Exhaustive-Fehler
+
+Auf dem synchronisierten PR-Stand `17100cc` besteht der vollständige
+`ISSUE90_HOST_MODE=exhaustive`-Lauf weiterhin nicht:
+
+```text
+PASS binary-empty
+PASS invalid-configuration
+PASS bounded-read
+PASS blob-boundaries
+PASS maximum-record
+PASS error-mapping
+FAIL old-or-new-bdl-cut: old-or-new read status=1 callback=12
+```
+
+`StateStoreReadStatus::1` ist im bestehenden Port `NotFound`, nicht ein
+zulässiger Old-or-New-Erfolg. Der Fehler ist damit präziser als
+`old-or-new-bdl-cut / callback 12 / NotFound` zu führen; ein `ReadError` wäre
+ebenso ein Fehler, falls er auf demselben Pfad auftritt.
+
+Der aufgezeichnete mutierende Trace des failing Cuts endet bei:
+
+```text
+callback 12: Write address=0x2000 length=4
+```
+
+Das ist im gepinnten ESP-IDF-v6.0.2-NVS-Pfad der Page-State-Write aus
+`Page::markFull()` beziehungsweise `Page::alterPageState()`. Davor wurden
+bereits neue `BLOB_DATA`-Bytes und die zugehörigen 4-Byte-Entry-State-/Range-
+Writes persistiert; der neue `BLOB_IDX` ist noch nicht persistiert. Das
+freigegebene BDL-Double friert beim ausgewählten Callback die persistente
+Byteabbildung ein und lässt nachfolgende Operationen fehlschlagen. Nach
+Deinit/Reinit bleibt die Seite deshalb in einem aktiven Recovery-Zustand mit
+neuen orphaned Blob-Daten und altem Index. Die NVS-Recovery behandelt den
+neuen Eintrag als Schlüsselduplikat, entfernt dabei den alten Index und der
+anschließende Adapter-Read liefert `NotFound` statt des vollständigen alten
+oder neuen Werts.
+
+Damit ist die Ursache die fehlende Old-or-New-Sichtbarkeit des gepinnten
+ESP-IDF-NVS-BLOB-Recoverypfads bei einem internen 4-Byte-Page-State-Cut. Der
+Adapter selbst kann diese Reihenfolge nicht steuern: `nvs_set_blob()` besitzt
+die internen Daten-, Entry-State-, Page-State- und Index-Schritte. Der Test
+prüft weiterhin den unveränderten `IStateStore`-Vertrag; das Orakel wird nicht
+gelockert. Die vollständige Callbackauswahl wird ebenfalls nicht wieder auf
+lange Writes verkürzt, weil R4 die freigegebene Anforderung für alle
+mutierenden `Write`-/`Erase`-Callbacks erhält.
+
+Die Diagnose wurde zusätzlich gegen die alternative Harness-Reihenfolge
+geprüft, in der der ausgewählte Block noch mutiert und erst danach der
+Fehlerzustand einsetzt. Dadurch verschiebt sich der Fehler auf einen früheren
+4-Byte-Entry-State-Cut; ein vollständiger Lauf wird damit nicht grün. Diese
+Variante ist daher keine belastbare Korrektur, sondern bestätigt, dass die
+Sichtbarkeitslücke nicht durch eine einzelne Erwartung oder Callbacknummer
+behoben wird.
+
+## R4-Owner-Gate vor jeder Korrektur
+
+Vor einer Implementation muss der Owner eine vollständige R4-Entscheidung für
+die atomare Sichtbarkeit treffen. Zulässige Richtungen sind ausschließlich:
+
+1. ein im bestehenden `IStateStore`-/direkten NVS-Key-/Wire-Vertrag
+   begründeter Korrekturpfad, der die vollständige alte oder neue Sichtbarkeit
+   auch bei allen geforderten internen BDL-Cuts beweist; oder
+2. ein ausdrücklich neuer, ownerfreigegebener Plan für zusätzliche
+   Transaktions-/Generations-/Indexpersistenz, falls diese zur atomaren
+   Sichtbarkeit erforderlich ist.
+
+Das Abschwächen des Readback-Orakels, das Entfernen der 4-Byte-Cuts, das
+Akzeptieren von `NotFound` nach einem bestehenden Wert oder das bloße
+Umetikettieren von `NotFound` als `ReadError` sind keine zulässigen
+Korrekturen. Ebenso wird keine zweite Persistenzarchitektur und keine nur für
+den Test eingebaute Sonderlogik eingeführt. Falls der Owner keine der beiden
+Richtungen freigibt, bleibt Issue #90 mit diesem reproduzierbaren Befund offen.
+
+Nach R4-Freigabe sind mindestens erneut nachzuweisen: gezielte Hosttests,
+vollständiger Host-`exhaustive` mit allen mutierenden Callbacks, beide
+ESP-IDF-Profile, Static Analysis beider Profile, Build-/Source-Provenienz
+auf dem neuen build-relevanten Source-Commit sowie erst danach die geplanten
+realen NVS-/UART-/Readback-/GC-/Erase-/Power-Cut-/Ressourcennachweise. Bis
+dahin bleiben alle realen Issue-90-Hardwaretests `NOT_RUN` wegen des offenen
+Softwarevertragsbefunds, nicht wegen des separaten #29-Pegel-Restgates.
 
 PR #117 enthält bereits die frühere `NvsStateStore`-Implementation, den
 stateful BDL-Hosttest, die Kapazitätsprüfung, den On-Target-Harness sowie die
@@ -26,7 +128,7 @@ Der Plan ist auf PR #116 gestapelt:
 
 - Branch: `agent/issue-90-nvs-adapter-plan`
 - Base-Branch: `agent/issue-29-esp32-bringup-plan`
-- Base-SHA: `c4c8b33f4dbaef727200ea410d887ec5417aa1b0`
+- Base-SHA of this R4 context: `30fa0a8264e2c4564d324340c6bebc204147f477`
 - Planpfad: `docs/tasks/issue-90-esp-idf-nvs-adapter-plan.md`
 - Abhängigkeit: `STACKED_ON_PR_116`; PR #116 bleibt Draft, Issue #29 bleibt
   offen.
@@ -38,12 +140,15 @@ die anwendungsneutrale, durch den owning context gelieferte
 keine der beiden materiellen Korrekturen darf aus einer historischen Fassung
 ergänzt werden.
 
-PR #116 liefert die aktuelle Software-/Build-Basis. Sein reales Board-,
-Flash-, UART-, Reset-, Standard-Flash-, Ressourcen- und Hardwaregate ist nicht
-geschlossen. Deshalb sind nach Planfreigabe Adapter-, Hosttest-, Kapazitäts-
-und Buildarbeiten zulässig; die reale Standard-Flash-/Partitions-, Power-Cut-,
-Readback-, Ressourcen- und Wear-Verifikation bleibt vom offenen #29-Gate
-abhängig. #29 blockiert damit nicht pauschal jede #90-Softwarearbeit.
+PR #116 liefert die aktuelle Software-/Build-Basis. Board-, Flash-, UART-,
+Reset-, Recovery- und Smoke-Nachweise sind auf dem tatsächlich getesteten
+realen Board dokumentiert. Die sicheren unbelasteten MCU-/Gate-/Bootpegel
+bleiben `NOT_RUN`; die physische PCB-Revision/Silkscreen ist nach
+Ownerentscheidung kein Abnahmekriterium. Dieses separate #29-Pegel-Restgate
+blockiert weder die #90-Softwarearbeit noch reale #90-Nachweise, sofern der
+dafür erforderliche sichere Aufbau verfügbar ist. Nicht ausgeführte reale
+Standard-Flash-/Partitions-, Power-Cut-, Readback-, Ressourcen- und
+Wear-Nachweise bleiben jeweils ehrlich `NOT_RUN` oder `BLOCKED`.
 
 ## Scope und unveränderte Verträge
 
@@ -173,8 +278,10 @@ R1-Konfiguration `state_store = 69 * 4096 = 282.624 B` (276 KiB) verbindlich
 werden. Die Rechnung unten beweist eine Untergrenze von 49 Seiten; 69 Seiten
 sollen der mit dieser exakten Planfreigabe verbindliche Auswahlwert sein und
 enthalten 20 zusätzliche Seiten für Seitenpackung, Fragmentierung und die
-begrenzten Update-/GC-Situationen. Bis zu dieser Ownerfreigabe bleibt der
-Status `IMPLEMENTATION_CORRECTIONS_PENDING_PLAN_APPROVAL`; weder die
+begrenzten Update-/GC-Situationen. Die frühere Ownerfreigabe von
+`da693e8...` hat diesen R1-Auswahlwert bestätigt; bis zur neuen R4-Freigabe
+bleibt die Umsetzung dennoch im Status
+`IMPLEMENTATION_BLOCKED_PENDING_R4_PLAN_APPROVAL`; weder die
 Reviewkorrekturen noch die R1-Partitionsentscheidung gelten bereits als für die
 weitere Umsetzung freigegeben.
 
@@ -1100,7 +1207,8 @@ oder `master`:
 ## Roadmap, Draft-PR und Owner-Gate
 
 Die Roadmap wird nur so weit geändert, dass #90 die parallele Software-/Host-
-phase und das weiterhin offene #29-Standard-Flash-/Hardwaregate korrekt zeigt.
+phase, den offenen Callback-12-Befund und das weiterhin offene #29-Pegel-
+Restgate korrekt zeigt. Das Pegel-Restgate blockiert #90 fachlich nicht.
 Anforderungen und die vollständige Kapazitätsrechnung bleiben in diesem Plan.
 
 Der Draft-PR führt nach dem Plancommit exakt aus:
@@ -1109,11 +1217,13 @@ Der Draft-PR führt nach dem Plancommit exakt aus:
 Plan: docs/tasks/issue-90-esp-idf-nvs-adapter-plan.md
 Plan commit: <exakte SHA dieser Planrevision>
 Base branch: agent/issue-29-esp32-bringup-plan
-Base SHA: c4c8b33f4dbaef727200ea410d887ec5417aa1b0
-Dependency: STACKED_ON_PR_116; PR #116 Draft; Issue #29 offen und Hardware-/Standard-Flash-Gates offen
+Base SHA: 30fa0a8264e2c4564d324340c6bebc204147f477
+Dependency: STACKED_ON_PR_116; PR #116 Draft; Issue #29 offen mit NOT_RUN-Pegel-Restgate
 Existing implementation: already present in PR #117; known review findings remain
 and are frozen until approval of this exact revised plan.
-Implementation: IMPLEMENTATION_CORRECTIONS_PENDING_PLAN_APPROVAL
+Previous approved plan: da693e8a24735ff2cc09f019b119083f3792882e
+Implementation: IMPLEMENTATION_BLOCKED_PENDING_R4_PLAN_APPROVAL
+Open finding: exhaustive callback 12 / NotFound; no implementation before R4 approval
 Proposed partition decision: `state_store = 69 pages / 276 KiB`; becomes
 binding with Owner approval of this exact plan SHA and remains usable without
 a second Owner gate only while the explicit assumptions above hold
