@@ -11,7 +11,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 1 | Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende | `SOFTWARE_IMPLEMENTED_HARDWARE_TESTED_PASS_PENDING_LEVELS`; Plan `docs/tasks/issue-29-implementation-plan.md @ 4f49b44cff47f55bfd425d9e39c5a07256782ed7` freigegeben, Software-/Buildnachweise und reale Board-/UART-/Flash-/Recovery-/Smoke-Nachweise liegen in Draft-PR #116 vor. Die Baseline bleibt aktorfrei. Das verbleibende Gate sind die sicheren unbelasteten MCU-/Gate-/Bootpegel (`NOT_RUN`). Die physische PCB-Revision/Silkscreen ist nach Ownerentscheidung kein Abnahmekriterium; Referenz ist das tatsächlich getestete reale Board. Das Pegel-Restgate blockiert die #90-Software und einen sicheren realen #90-Aufbau nicht. | Owner-Nachweis der offenen Pegel und anschliessendes Review-/Abnahmengate |
-| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `BLOCKED_NO_PROVEN_MANUFACTURER_CANDIDATE`; Phase A.1 korrigiert den ursprünglichen Bericht und klassifiziert `60561b6d...` nach exakter Source-/BDL-Control-Flow-Prüfung als `CANDIDATE_SOURCE_SEMANTICALLY_RULED_OUT` für den Callback-12-/`NotFound`-Power-Cut. Der exakte R5.4-Plan `docs/tasks/issue-90-esp-idf-nvs-adapter-plan.md @ c35ce0342898f0e19d3cce5e6a7eaa077f73bad6` bleibt unverändert und immutable; der korrigierte Evidenzbericht ist `docs/ISSUE_90_MANUFACTURER_ANALYSIS.md @ 440180f5b712a1eda427292207ebc7e9861cd284`. Der vollständige Host-`exhaustive`-Befund bleibt FAIL; Phase B ist nicht freigegeben; reale Hardware bleibt `NOT_RUN`. | Ownerreview des korrigierten Phase-A.1-Berichts; ohne belastbaren weiteren Herstellerpfad bleibt #90 `BLOCKED_NO_PROVEN_MANUFACTURER_CANDIDATE` |
+| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `ARCHITECTURE_REPLAN_PENDING_R5_5_PLAN_APPROVAL`; der bestätigte Phase-A.1-Befund bleibt `NO_PROVEN_MANUFACTURER_CANDIDATE`: `60561b6d...` ist für den Callback-12-/`NotFound`-Power-Cut source-semantisch ausgeschlossen, `f0c7d9b6...` ist im gepinnten v6.0.2-Verhalten bereits enthalten. R5.4 `docs/tasks/issue-90-esp-idf-nvs-adapter-plan.md @ c35ce0342898f0e19d3cce5e6a7eaa077f73bad6` bleibt als immutable ownerfreigegebene Blockerrevision erhalten; R5.5 ist `docs/tasks/issue-90-architecture-replan-r5.5.md` und wird erst nach eigener Ownerfreigabe normativ. Der Evidenzbericht bleibt `docs/ISSUE_90_MANUFACTURER_ANALYSIS.md @ 440180f5b712a1eda427292207ebc7e9861cd284`. Phase B, Implementierung und reale Hardware bleiben nicht freigegeben beziehungsweise `NOT_RUN`. | Ownerfreigabe der exakten R5.5-Plan-SHA; bis dahin Empfehlung `ARCHITECTURE_BLOCKED`, keine Implementierung |
 | 3 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90 |
 | 4 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
 | 5 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26/#29 und bringt die echte Bedienung am Gerät über dieselben Contracts. | Hardware-/Pin-/Controllerbeweis, Ressourcen-/Lizenznachweis, reale Bedienungs- und Kalibrierungstests |
@@ -106,15 +106,17 @@ NVS-/Partitions-/Flash-/Hardwareabnahmen bleiben insbesondere über #90 offen.
 - Thermische Parameter und Releaseabnahme bleiben bis zu den realen Messungen
   und Belastungstests blockiert.
 - Issue #89 (WLAN-Onboarding-Evaluation) bleibt vor Beginn planpflichtig; Issue
-  #90 befindet sich mit freigegebenem immutablem R5.4-Plan in Draft;
-  Phase A.1 hat den ursprünglichen `NO_PROVEN_MANUFACTURER_CANDIDATE`-Befund
-  nachgeprüft und bestätigt; `60561b6d...` ist für den konkreten Callback-12-/BDL-
-  Power-Cut source-semantisch ausgeschlossen. Der aktuelle Status ist
-  `BLOCKED_NO_PROVEN_MANUFACTURER_CANDIDATE`. Phase B ist nicht freigegeben. Sein
-  reproduzierbarer Callback-12-Hostbefund ist offen; reale Standard-Flash-/NVS-
-  Hardwareverifikation bleibt
-  bis zur Softwareentscheidung und tatsächlichen Ausführung `NOT_RUN`. Das
-  separate #29-Pegel-Restgate blockiert Issue #90 fachlich nicht.
+  #90 befindet sich mit freigegebenem immutablem R5.4-Plan in Draft und mit
+  neuer kanonischer R5.5-Architekturplanung am Owner-Gate. Phase A.1 hat den
+  ursprünglichen `NO_PROVEN_MANUFACTURER_CANDIDATE`-Befund nachgeprüft und
+  bestätigt; `60561b6d...` ist für den konkreten Callback-12-/BDL-Power-Cut
+  source-semantisch ausgeschlossen. Der aktuelle Status bis zur R5.5-Freigabe
+  ist `ARCHITECTURE_REPLAN_PENDING_R5_5_PLAN_APPROVAL`; die Planempfehlung ist
+  `ARCHITECTURE_BLOCKED`. Phase B ist nicht freigegeben. Sein reproduzierbarer
+  Callback-12-Hostbefund bleibt FAIL; reale Standard-Flash-/NVS-
+  Hardwareverifikation bleibt bis zur Softwareentscheidung und tatsächlichen
+  Ausführung `NOT_RUN`. Das separate #29-Pegel-Restgate blockiert Issue #90
+  fachlich nicht.
 - Issue #114 bewahrt den frueheren komplexen Advanced-Safety-/Recovery-Entwurf
   als `FUTURE_SCOPE_REFERENCE_NON_NORMATIVE`. Er ist kein Release-1-Gate und
   wird vor einer spaeteren Umsetzung vollstaendig gegen den dann aktuellen
