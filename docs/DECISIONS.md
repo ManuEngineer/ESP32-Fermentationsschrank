@@ -329,9 +329,11 @@
   und #57 systemweit integriert und getestet sind. Ein eigener persistenter
   globaler Mutationszaehler ist kein beschlossener Bestandteil von Release 1;
   seine Notwendigkeit bleibt bis zum Detailplan von #56
-  `FINAL_SELECTION_PENDING`. ADR-010, ADR-013 und ADR-016 bleiben unveraendert
-  gueltig; ADR-018 ersetzt fuer Release 1 die abweichenden Variante-A-Teile des
-  bisherigen Persistenzvertrags.
+  `FINAL_SELECTION_PENDING`. ADR-010 und ADR-013 bleiben gueltig; ADR-016 ist
+  mit der R5.7-Produkt-Recoverypraezisierung weiterhin accepted und beschreibt
+  NVS als physisches Defaultbackend ohne Einzel-Key-Hochverfuegbarkeits-
+  garantie. ADR-018 ersetzt fuer Release 1 weiterhin die abweichenden
+  Variante-A-Teile des bisherigen Persistenzvertrags.
 
 ## ADR-019: Rendererunabhaengige Device-UI-Shell
 

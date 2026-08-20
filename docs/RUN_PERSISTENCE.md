@@ -22,14 +22,43 @@ MOSFET- oder H-Bruecken-Zustaende werden nie wiederhergestellt.
 - Ein Neustart ist kein Fehlerreset; #24 fuehrt keine allgemeine persistente
   Persistenz- oder Safety-Sperre ein.
 
+## R5.7 Release-1-Recoverygrenze
+
+Die Run-Persistenz verwendet weiterhin `rc0` und `rc1` als
+Checkpointslots sowie `rh0` fuer Current-/Fallbackreferenzen. Revisionen,
+`Prepared`/`Committed`, Orphan- und High-Water-Pruefung bleiben erhalten.
+Nach einem Power-Cut sind ausschliesslich diese Produktoutcomes zulaessig:
+
+```text
+NEW_VALID_RESUME
+OLDER_VALID_CHECKPOINT_RESUME
+RUN_RECOVERY_REQUIRED / RUN_ABORT_REQUIRED
+```
+
+Ein aktueller oder explizit referenzierter aelterer Checkpoint darf nur nach
+vollstaendiger Envelope-/CRC-/Schema-/StorageEpoch- und fachlicher Validierung
+angeboten werden. Der juengste Checkpoint darf verloren gehen. Hohe Revision,
+blosse Existenz von `rc0`/`rc1`, `Prepared`- oder Orphan-Daten sowie ein
+fehlender oder unklarer `rh0` erzeugen nie allein ein Resume.
+
+Ein unklarer oder nicht rekonstruierbarer Run wird beim Boot nicht automatisch
+resumed, nicht still geloescht und nicht als `NoActiveRun` destruktiv
+persistiert. Der logische Aktor-/Produktiv-Gate bleibt geschlossen; der
+Zustand wird als `RUN_RECOVERY_REQUIRED`, `RUN_ABORT_REQUIRED` oder bereits
+vorhandene aequivalente Statussemantik beobachtbar. Ein spaeterer expliziter
+Start-, Reset- oder Discard-Befehl darf den unklaren Run kontrolliert ersetzen.
+
 ## Issue #24 Release-1-Persistenzgrenze
 
 Issue #24 fuehrt keine allgemeine Safety-Persistenz, keinen Restart-Zaehler,
 kein Resetzeitfenster und keinen persistenten Watchdog-/Sensor-Latch ein. Der
 kanonische #17-Loadstatus unterscheidet vertrauenswuerdige `Current`-/Tombstone-
-Zustaende von technisch untrusted Persistenz. Ein vertrauenswuerdiger, aber
-nicht einfach resumefaehiger Current wird write-before-apply als `NoActiveRun`
-beendet; technisch untrusted bleibt `SAFE_BOOT` und wird nicht blind
+Zustaende von technisch untrusted Persistenz. Ein vertrauenswuerdiger,
+ausdruecklich als semantisch nicht resumefaehig klassifizierter Current darf
+write-before-apply als `NoActiveRun` beendet werden. Das gilt nicht fuer einen
+unklaren, indeterminierten, unvollstaendigen, vorbereiteten oder orphanierten
+Run. Solche Zustaende bleiben `SAFE_BOOT` beziehungsweise
+`RUN_RECOVERY_REQUIRED`/`RUN_ABORT_REQUIRED` und werden nicht blind
 ueberschrieben.
 
 `PreparedHead -> CheckpointSlot -> CommittedHead` bleibt eine einzige
@@ -38,8 +67,11 @@ zweiten Readback; nur `CommitOutcomeUnknown` wird durch `writeExact()`
 aufgeloest. RAM/FSM wird erst nach dem Gesamtstatus `Applied` geaendert.
 
 Die historischen #18-Recovery-/Progressabschnitte dieses Dokuments sind C2-
-Legacy. Sie werden von #24 nicht als aktiver Produktpfad aufgerufen; es gibt in
-R1 kein Fallback-Resume, keine Promotion und keine Charge-Rettungsrechnung.
+Legacy. Sie werden von #24 nicht als aktiver Zeit-/Progresspfad aufgerufen; es
+gibt in R1 keine heuristische Fallback-Promotion und keine Charge-
+Rettungsrechnung. Ein explizit referenzierter und vollstaendig validierter
+aelterer Checkpoint darf nach R5.7 jedoch als
+`OLDER_VALID_CHECKPOINT_RESUME` angeboten werden.
 
 ## Persistierter Laufzustand
 
@@ -330,10 +362,15 @@ Bereinigung erfolgt proaktiv vor einer Ressourcenwarnung.
 ## Rueckfall bei beschaedigten Daten
 
 Ist die aktuelle Revision technisch untrusted, wird sie nicht durch eine
-Fallback-Promotion oder eine geschaetzte Zeit-/Progressrechnung ersetzt: Das
-Geraet bleibt in `SAFE_BOOT`. Ein trusted, semantisch nicht resumefaehiger
-Current wird dagegen ueber den bestehenden #17-Pfad als `NoActiveRun`
-abgeschlossen.
+geschaetzte Zeit-/Progressrechnung, hohe Revision oder Orphan-/Prepared-
+Promotion ersetzt. Ein explizit referenzierter und vollstaendig validierter
+aelterer Checkpoint darf als Best-Effort-Fallback verwendet werden. Ist auch
+dieser nicht eindeutig gueltig, bleibt das Geraet im sicheren Recovery-/
+`SAFE_BOOT`-Zustand und meldet `RUN_RECOVERY_REQUIRED` beziehungsweise
+`RUN_ABORT_REQUIRED`. Ein trusted, ausdruecklich semantisch nicht
+resumefaehiger Current darf dagegen ueber den bestehenden #17-Pfad als
+`NoActiveRun` abgeschlossen werden; diese kontrollierte Fachklassifikation ist
+keine Umdeutung eines unklaren Persistenzzustands.
 
 ## Kritischer Persistenzfehler
 
@@ -363,8 +400,10 @@ Beim Boot gilt:
 
 Ein Neustart laedt keine nicht mehr bestehende Warnung blind als aktiv. #24
 persistiert dafuer keinen allgemeinen Safety-/Watchdog-/Sensor-Latch; aktuelle
-untrusted Load-Zustaende bleiben `SAFE_BOOT`, und ein trusted semantisch nicht
-resumefaehiger Current wird ueber #17 als `NoActiveRun` abgeschlossen.
+untrusted oder indeterminierte Load-Zustaende bleiben `SAFE_BOOT` beziehungsweise
+Recovery-required. Ein trusted, ausdruecklich semantisch nicht resumefaehiger
+Current wird ueber #17 als `NoActiveRun` abgeschlossen; ein unklarer Run wird
+dagegen weder geloescht noch still als `NoActiveRun` persistiert.
 
 ## Wiederanlaufreihenfolge im #24-R1-Pfad
 
@@ -375,8 +414,9 @@ Boot
 -> Config und Load-/Coordinatorstatus frisch validieren
 -> Completed erhalten, NoPersistedRun/NoActiveRun als Standby projizieren
 -> Current gegen das enge R1-Resume-Praedikat pruefen
--> nicht resumefaehigen vertrauenswuerdigen Current als NoActiveRun schreiben
--> untrusted Load als SAFE_BOOT sperren
+-> explizit validierten Current oder aelteren Checkpoint als Resume anbieten
+-> trusted semantisch nicht resumefaehigen Current kontrolliert als NoActiveRun projizieren
+-> untrusted/unklaren Load als SAFE_BOOT/Recovery-required sperren
 -> nur nach explizitem Start/Resume und aktueller Evidenz den Gatepfad pruefen
 ```
 

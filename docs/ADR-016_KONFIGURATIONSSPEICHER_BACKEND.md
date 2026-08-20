@@ -35,10 +35,16 @@ Ein verlustfreier Adapter zwischen dem aktuellen Port und NVS existiert nicht:
   Bootstrap gelesen werden muss. Das erzeugt genau in #57 eine zirkulaere
   Abhaengigkeit.
 
-Zusaetzlich bietet NVS bereits eine Pruefsumme je Eintrag, atomares Ersetzen je
-Eintrag, Wear-Leveling und Bereinigung geloeschter Eintraege. Ohne benannte
-Backendentscheidung ist nicht bewertbar, welche Envelope-Felder notwendige
-Ergaenzung und welche Verdopplung sind.
+Zusaetzlich bietet NVS bereits Integritaetspruefung je Eintrag,
+Eintrags-/Flashverwaltung, Wear-Leveling und Bereinigung geloeschter Eintraege.
+Diese physischen Eigenschaften sind jedoch nicht mit einem
+Release-1-Produktvertrag gleichzusetzen, nach dem ein vorhandener Multi-Page-
+BLOB bei einem Power-Cut an jedem internen Same-Key-Mutationsfenster immer
+exakt als alter oder neuer vollstaendiger Wert erhalten bleiben muss. Der
+konkrete Callback-12-/`NotFound`-Befund zeigt, dass diese Gleichsetzung fuer
+den tatsaechlichen Vertrag nicht zulaessig ist. Ohne benannte
+Backendentscheidung ist weiterhin nicht bewertbar, welche Envelope-Felder
+notwendige Ergaenzung und welche Verdopplung sind.
 
 Die Entscheidung muss vor Issue #55 fallen, weil dort die konkreten Dokument-,
 Manifest- und Root-Schluessel definiert werden.
@@ -55,11 +61,11 @@ Manifest- und Root-Schluessel definiert werden.
 | Ressourcenbedarf | eine NVS-Partition, Groesse in #29 zu bestimmen |
 | Plattformtauglichkeit | hoch; 15-Zeichen-ASCII ist der kleinste gemeinsame Nenner plausibler Backends |
 
-**Vorteile:** Atomizitaet, Integritaet und Flashlebensdauer sind geloest, ohne
-sie selbst zu implementieren. Der `IStateStore`-Vertrag einschliesslich
-`CommitOutcomeUnknown` bildet das reale NVS-Verhalten korrekt ab. Werte werden
+**Vorteile:** Physische Integritaetspruefung, Flashverwaltung und
+Wear-Leveling sind geloest, ohne sie selbst zu implementieren. Werte werden
 als Blob gespeichert und bleiben binaersicher; nur der Schluesselraum wird
-eingeschraenkt.
+eingeschraenkt. Die fachliche Recovery kann auf der bestehenden
+Generations-/Root-/Fallback- und Slotmechanik aufbauen.
 
 **Nachteile:** Schluessel muessen kurz und in einem eingeschraenkten Zeichensatz
 gewaehlt werden. Die Groesse der NVS-Partition wird zu einem eigenen
@@ -119,11 +125,38 @@ Variante A.
    bleibt im Envelope, weil eine Werksreset-Generation eine plattformseitige
    Eigenschaft des Speichers ist.
 
+5. **Physisches Backend und Produkt-Recovery sind getrennte Ebenen.** Ein
+   waehrend eines Power-Cuts bearbeiteter Record darf nach dem Reboot alt, neu,
+   fehlend oder nicht verwendbar sein. Kein solcher unbekannter oder unlesbarer
+   Ausgang ist ein erfolgreicher Record. `CommitOutcomeUnknown` bleibt
+   unbekannt; `NotFound`, `ReadError`, `CapacityError` oder ein hoeher
+   ungueltiger vollstaendig gelesener Wert werden von der hoeheren
+   Persistenzschicht als `RECORD_OUTCOME_INDETERMINATE_OR_LOST` beziehungsweise
+   ihrer vorhandenen Consumersemantik behandelt.
+
+6. **Die Release-1-Integritaet entsteht oberhalb des Backends.** Envelope,
+   CRC, Schema, `StorageEpoch`, Dokumentrevisionen,
+   `ActiveConfigurationManifest`, Root/Fallback, `rc0`/`rc1`/`rh0`, explizite
+   Recovery-/Abortzustaende und ein fail-closed logischer Aktor-/Produktiv-Gate
+   entscheiden, ob ein vollstaendig validierter neuer Zustand, ein vollstaendig
+   validierter alter/Fallbackzustand oder Recovery-required verwendet wird.
+   Eine teilweise, gemischte, vorbereitete oder orphanierte Sicht wird nie
+   aktiviert.
+
+7. **NVS bleibt Default, solange der Produkt-Recoverybeweis PASS ist.**
+   Callback 12/`NotFound` bleibt als bekannte Backendlimitation sichtbar. Eine
+   zusaetzliche A/B-, Journal- oder Selector-Schicht sowie ein alternatives
+   Backend werden nicht allein aus diesem Befund eingefuehrt. Ein echter
+   Produkt-FAIL wuerde einen eigenen Ownerentscheid und Adopt-or-build-Nachweis
+   erfordern.
+
 ## Folgen
 
 **Einfacher:**
 
-- Atomizitaet, Integritaet und Flashlebensdauer sind keine Eigenentwicklung.
+- Integritaetspruefung, Flashverwaltung und Flashlebensdauer sind keine
+  Eigenentwicklung; daraus folgt keine vollstaendige Old-or-New-Garantie fuer
+  jeden Multi-Page-Same-Key-Power-Cut.
 - Der Bootstrap in #57 braucht keine Schluesselindextabelle und damit keine
   zirkulaere Abhaengigkeit.
 - Der Envelope bleibt fuer ein zweites Geraeteprojekt unveraendert verwendbar.
@@ -134,6 +167,10 @@ Variante A.
   eine dokumentierte Namenskonvention fest.
 - Die Groesse der NVS-Partition wird ein eigener Budgetposten und bleibt bis zur
   realen Messung `TBD_IMPLEMENTATION_BUDGET`.
+- Die hoehere Persistenz- und Recoveryarchitektur muss verlorene oder
+  ungueltige Records erkennen und auf einen vollstaendig validierten
+  Generation-/Slotzustand oder Recovery-required fallen; das Backend wird
+  dabei nicht zum fachlichen Rekonstruktor.
 
 **Spaeter zu pruefen:**
 

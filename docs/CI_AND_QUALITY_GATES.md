@@ -10,6 +10,36 @@ Der native Hostpfad verwendet PlatformIO `6.1.19`. Die ESP32-Produktionsprofile
 verwenden ESP-IDF `v6.0.2` am Commit
 `7101770dc6db2667b3c477cc31365dd1acd6db4e`.
 
+## R5.7 getrennte Issue-90-Gates
+
+Issue #90 berichtet Backend- und Produkt-Recoveryevidenz getrennt und
+maschinenlesbar:
+
+```text
+backend_characterization:
+    observed | known_limitation | unexpected_change
+
+product_recovery_gate:
+    PASS | FAIL | NOT_RUN
+```
+
+Der Callback-12-/`NotFound`-Befund bleibt konkrete
+`FAIL_CALLBACK_12_NOT_FOUND`-Evidenz der Backendcharakterisierung und wird
+weder gefiltert noch zu `OLD` oder `PASS` umetikettiert. Bei unveraendertem
+Befund ist er als `KNOWN_BACKEND_LIMITATION` klassifizierbar und blockiert den
+Produktabschluss nicht automatisch. Ein rotes Produkt-Recovery-Orakel bleibt
+unabhaengig davon ein echter Release-FAIL; eine unerwartete Aenderung des
+bekannten Backendbefunds ist reviewpflichtig.
+
+Das Produktgate bewertet nach simuliertem Reboot nur vollstaendig validierte
+Konfigurationsoutcomes (`NEW_VALID_CONFIGURATION`,
+`OLD_VALID_CONFIGURATION`/`FALLBACK_VALID_CONFIGURATION`,
+`CONFIGURATION_RECOVERY_REQUIRED`) sowie Runoutcomes (`NEW_VALID_RESUME`,
+`OLDER_VALID_CHECKPOINT_RESUME`, `RUN_RECOVERY_REQUIRED`/`RUN_ABORT_REQUIRED`).
+Teil-, Misch-, Corrupt-, Prepared- oder Orphanrecords, stille Factory-New-
+Annahmen, falsche Resumes und logische Aktorfreigabe bei unklarer Recovery
+bleiben unzulaessig.
+
 ## Ausfuehrungszeitpunkt
 
 ### Planung
@@ -152,14 +182,20 @@ Gezielter Draft-Nachweis dieses Stands: `ci-regression PASS`,
 `exhaustive FAILED`, reale Hardware `BLOCKED/NOT_RUN`. Ein vollständiger
 projektweiter lokaler Lauf wurde nicht ausgeführt.
 
-Der On-Target-Runner verwendet ausschließlich den Bring-up-Harness
-`APP_ISSUE_90_NVS_HARDWARE_TEST=1`, das strikte externe Hook-Protokoll
-`ARM token=...`/`TRIP`/`RESTORE` mit `ARMED`/`TRIPPED`/`RESTORED`, wartet auf
-`CUT_ARMED`, `ROTATE_BEGIN`, nach `TRIP` auf UART-Verlust vor
-`ROTATE_RESULT`, und verlangt mindestens zehn Wiederholungen je Fenster
-(`blob_data`, `blob_index`, `old_removal`, `gc_erase`) sowie drei saubere
-Neustartkontrollen. Ohne reale Hardware und Power-Controller bleibt dieser
-Nachweis `BLOCKED/NOT_RUN`.
+Die reale #90-Verifikation bleibt actor-free und verwendet den Bring-up-Harness
+`APP_ISSUE_90_NVS_HARDWARE_TEST=1` fuer repräsentative Konfigurations- und
+Run-Records, NVS-Initialisierung, Reboot, Persistenz- und
+Recoveryklassifikation sowie die Beobachtung des logischen geschlossenen
+Aktorgates ueber Harness/UART/Logs. Manuelle Power-Unterbrechungen duerfen
+waehrend aktiver repräsentativer Schreiblast wiederholt werden, behaupten aber
+keinen exakten internen Callback-, BLOB-, Index- oder GC-Cut. Das Planminimum
+ist ein sauberer Kontrolllauf plus mindestens drei Wiederholungen je
+ausgewaehltem realem Szenario. Ein externes exakt getriggertes Power-Cut-
+Fixture oder ein Power-Controller ist keine Release-1-Pflicht. Die Host-
+Fault-Injection bleibt fuer die praezise interne Cutabdeckung zustaendig.
+Eine fruehere Hook-/Controller-Matrix mit zehn Wiederholungen je internem
+Fenster ist damit keine #90-Release-Abnahmevoraussetzung; eine vorhandene
+Charakterisierungskapazitaet darf als zusaetzliche Evidenz erhalten bleiben.
 
 Die #90-Kapazitätsrechnung wird reproduzierbar aus dem vollständigen
 Schlüssel-/Recordinventar und den gepinnten ESP-IDF-Konstanten erzeugt:

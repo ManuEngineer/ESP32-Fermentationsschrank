@@ -18,8 +18,24 @@ Teilpakete #54 bis #57 geschnitten. Jedes Paket besitzt einen eigenen Scope und
 verwendet einen eigenen Plan-first-PR. Der aktuelle Arbeitsstand steht
 ausschliesslich in `ROADMAP.md` und den Live-Issues.
 
-Reale Flash-Atomizitaet, reale Heapreserve und Belastungsmessungen bleiben
-spaetere Hardware- beziehungsweise Release-Gates.
+Reale Flash- und Backendcharakterisierung, reale Heapreserve und
+Belastungsmessungen bleiben spaetere Hardware- beziehungsweise Release-Gates.
+Der R5.7-Produktvertrag verlangt keine Einzel-Key-Hochverfuegbarkeitsgarantie:
+Ein waehrend eines Power-Cuts bearbeiteter Record kann alt, neu, fehlen oder
+nicht verwendbar sein. Die Konfigurationsschicht darf nur eine vollstaendig
+validierte Sicht verwenden und liefert ausschliesslich:
+
+```text
+NEW_VALID_CONFIGURATION
+OLD_VALID_CONFIGURATION / FALLBACK_VALID_CONFIGURATION
+CONFIGURATION_RECOVERY_REQUIRED
+```
+
+Eine verlorene oder ungueltige Mutation ist kein erfolgreicher Record. Ein
+vollstaendig gueltiger alter Root-/Fallbackgraph bleibt verwendbar; fehlt ein
+sicher rekonstruierbarer Graph, bleibt die Konfiguration fail closed. Callback
+12/`NotFound` bleibt Backendcharakterisierung und wird nicht zu einem
+Produkt-PASS umetikettiert.
 
 ## Issue #24-Schnitt
 
@@ -594,19 +610,21 @@ durch und beweisen, dass die Slotrotation nicht vorzeitig blockiert.
 ### Nicht aufloesbares Root-Commit-Ergebnis
 
 Liefert der Root-Write `CommitOutcomeUnknown`, muss die laufende Mutation beide
-Rootslots und alle fuer den erwarteten Zielgraphen benoetigten Records
-vollstaendig ruecklesen sowie technisch und fachlich validieren. Ergibt dieser
-Scan eindeutig den alten oder den neuen kanonischen Graphen, wird genau dieser
-Ausgang verwendet.
+Rootslots und alle fuer die moeglichen Ziel- und Fallbackgraphen benoetigten
+Records vollstaendig ruecklesen sowie technisch und fachlich validieren. Ergibt
+dieser Scan einen vollstaendig gueltigen neuen Graphen, ist das Ergebnis
+`NEW_VALID_CONFIGURATION`. Ergibt er den vollstaendig gueltigen alten oder
+explizit referenzierten Fallbackgraphen, ist das Ergebnis
+`OLD_VALID_CONFIGURATION` beziehungsweise `FALLBACK_VALID_CONFIGURATION`.
 
-Die Aufloesung bestimmt zuerst den exakten Ausgang des Zielrootwrites. Liegen
-die erwarteten neuen kanonischen Rootbytes persistent vor, darf der Vorgang nie
-als alter Ausgang aufgeloest werden. Ist der neue Zielgraph danach noch nicht
-vollstaendig lesbar oder bestaetigbar, bleibt der Zustand unbestimmt
-beziehungsweise wechselt bei einem eindeutigen nachgelagerten Vertragsfehler in
-`ConfigurationRuntimeFailure`. `ResolutionRecoveredOld` ist nur erlaubt, wenn
-der Zielroot nachweislich nicht wirksam wurde und der alte kanonische Graph
-erneut exakt bestaetigt ist. Ein fremder dritter Root ist weder alt noch neu.
+Die Aufloesung aktiviert niemals nur einen vorhandenen Root, ein hohes
+Sequenzfeld oder einzelne gueltige Dokumente. Liegen neue Rootbytes vor, aber
+ist ihr Zielgraph nicht vollstaendig lesbar oder bestaetigbar, darf dieser
+Graph nicht aktiviert werden. Ein weiterhin vollstaendig validierbarer alter
+kanonischer Root oder dessen explizite Fallbackgeneration darf verwendet
+werden. Ist kein vollstaendig gueltiger Graph eindeutig rekonstruierbar,
+entsteht `CONFIGURATION_RECOVERY_REQUIRED`; ein fremder dritter Root ist weder
+automatisch alt noch neu.
 
 Kann der Scan wegen `ReadError`, `CapacityError`, Integritaetsfehler,
 semantischem Graphfehler oder eines vergleichbaren Storefehlers nicht
@@ -622,7 +640,9 @@ In diesem Zustand gilt:
 - keine normale Konfigurationsruntime wird weiter freigegeben;
 - weitere Konfigurationsmutationen und jede Slotwiederverwendung sind gesperrt;
 - der Zustand wird an das `CONFIGURATION_SAFETY_INTEGRATION_GATE` gemeldet;
-- es gibt weder automatischen Rollback noch Factory-Fallback;
+- es gibt weder heuristischen Rollback noch eine Factory-New-Annahme; eine
+  explizit referenzierte und vollstaendig validierte Fallbackgeneration bleibt
+  zulaessig;
 - ein unveraenderlicher aktiver Laufschnappschuss wird nicht still
   umgeschrieben; seine systemweite Safetywirkung bleibt #24.
 
@@ -993,12 +1013,13 @@ oder Resetversuch die relevanten Stringkapazitaeten getrennt fuer
 ProgramCatalog-Payload, Dokument-Envelopeworkspace, Store-Readback, den
 maximalen Slot-Scan-Lesepuffer sowie die kleinen kanonischen
 Bootstrap-/Manifest-/Rootbindungen. Vorherige maximale Dokumentrecords werden
-nur als kleine technische Deskriptoren gebunden; der Old-or-New-Portvertrag
-ersetzt eine zweite Vollkopie. Der transiente Lesepuffer, mit dem ein solcher
-alter Record waehrend der Slotsuche vollstaendig gelesen wird, bleibt davon
-unabhaengig real und erscheint eigenstaendig als Slot-Scan-Peak; er wird nicht
-mit dem kleinen Store-Readback-Peak des tatsaechlich neu geschriebenen Records
-vermischt. Modellreservierung erfolgt vor Factorymodellaufbau, und
+nur als kleine technische Deskriptoren gebunden; der Storevertrag verlangt
+keine zweite Vollkopie und keine Einzel-Key-Hochverfuegbarkeitsgarantie. Der
+transiente Lesepuffer, mit dem ein solcher alter Record waehrend der Slotsuche
+vollstaendig gelesen wird, bleibt davon unabhaengig real und erscheint
+eigenstaendig als Slot-Scan-Peak; er wird nicht mit dem kleinen
+Store-Readback-Peak des tatsaechlich neu geschriebenen Records vermischt.
+Modellreservierung erfolgt vor Factorymodellaufbau, und
 vorbereitete Recoverymodelle zaehlen zur festen Zwei-Generationen-Grenze. Ein
 tatsaechlich gehaltener Root-Indeterminate-Kontext weist seine zusaetzlichen
 fluechtigen Bootstrap-/Rootbindungskapazitaeten separat aus und haelt keinen
@@ -1019,10 +1040,14 @@ plausibler Backends, auch fuer dateibasierte Backends gueltig und in Logs
 lesbar). Listing, Verzeichnisse, Rename und Mehrschluesseltransaktionen sind
 nicht erforderlich.
 
-Der Port garantiert je Schluessel binaersicheres, dauerhaftes und
-stromausfallsicheres Replace: Nach Unterbrechung existiert der vollstaendige
-alte oder neue Wert; ein abgeschnittener oder gemischter Wert ist kein
-erfolgreicher Write; ein erfolgreich zurueckgekehrter Write ist dauerhaft.
+Der Port liefert bei bestaetigtem `Success` einen vollstaendig und dauerhaft
+gespeicherten Wert. Nach `CommitOutcomeUnknown` kann Readback eines zuvor
+vorhandenen Records `NotFound`, `ReadError`, `CapacityError` oder vollstaendige,
+auf hoeherer Ebene ungueltige Bytes ergeben. Diese Ergebnisse sind
+`RECORD_OUTCOME_INDETERMINATE_OR_LOST` beziehungsweise die vorhandene
+Consumersemantik, nicht Written, NotWritten, Old oder New. Envelope, CRC,
+Schema, `StorageEpoch`, Generation/Root/Fallback und die Produkt-Recovery
+entscheiden oberhalb des Ports ueber einen gueltigen Zustand.
 
 `device_platform` enthaelt ausschliesslich anwendungsneutrale Bausteine:
 
@@ -1092,8 +1117,10 @@ behaelt danach nur Manifest- und Referenzmetadaten. Muss der Fallback einen
 ungueltigen Active-Zweig ersetzen, wird er direkt zum aktiven Modell; ein
 zweites dauerhaft gehaltenes Fallback-`ProgramCatalog`-Modell entsteht nicht.
 `ReadError` oder `CapacityError` eines benoetigten Root- oder Graphrecords
-brechen die Bestimmung fail closed ab und erlauben nicht das Ausweichen auf
-einen aelteren scheinbar gueltigen Graphen.
+brechen die Bestimmung fail closed ab, sofern kein vollstaendig validierbarer
+expliziter Active-/Fallbackzweig des kanonischen Roots vorhanden ist. Ein
+unreferenzierter oder nur wegen hoher Revision scheinbar gueltiger aelterer
+Graph wird nie als Ersatz erraten.
 
 Auch die schreibende `ValidationOnly`-Pruefung wiederholt die globale
 Rootordnung und Active-/Fallback-Auswahl, bindet jeden zweiten Rootread an die
@@ -1141,7 +1168,9 @@ Die vollstaendige Matrix umfasst nach Abschluss aller Teilissues mindestens:
 - Manifest- und Root-Slotrotation bis ueber die erste Wiederverwendung hinaus
 - technische und fachliche Graphkorruption an Active und Fallback
 - Fehler bei Dokument-, Manifest- und Root-Write sowie Readback
-- `CommitOutcomeUnknown` mit eindeutig altem beziehungsweise neuem Readback
+- `CommitOutcomeUnknown` mit `NEW_VALID_CONFIGURATION`,
+  `OLD_VALID_CONFIGURATION`/`FALLBACK_VALID_CONFIGURATION` oder
+  `CONFIGURATION_RECOVERY_REQUIRED`
 - `CommitOutcomeUnknown` mit `ReadError`, `CapacityError`, CRC- oder
   Semantikfehler beim Aufloesungsscan
 - exakter neuer Zielroot mit voruebergehend nicht lesbarem oder ungueltigem
@@ -1236,10 +1265,12 @@ der laufenden Schreiboperation entsprechen.
 
 `IStateStore::write` liefert vier eindeutig unterscheidbare Ergebnisse statt
 einer pauschalen "unveraendert bei Fehler"-Garantie: `Success` (neuer Wert
-dauerhaft gespeichert), `WriteError` und `CapacityError` (sicher
-unveraendert) sowie `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
-nach einem Stromausfall zwischen Commit und Rueckkehr - der neue Wert kann
-bereits dauerhaft gespeichert sein; der Aufrufer muss zuruecklesen). `read()`
+vollstaendig und dauerhaft bestaetigt), `WriteError` und `CapacityError`
+(sicher unveraendert) sowie `CommitOutcomeUnknown` (Commit-Ausgang unbekannt,
+z. B. nach einem Stromausfall zwischen Commit und Rueckkehr). Readback kann
+danach `NotFound`, `ReadError`, `CapacityError` oder vollstaendige, auf
+hoeherer Ebene ungueltige Bytes liefern; der Aufrufer muss zuruecklesen und
+die hoehere Recoverysemantik entscheidet. `read()`
 und `write()` verwenden bewusst getrennte Statustypen -
 `StateStoreReadStatus` (`Success`/`NotFound`/`ReadError`/`CapacityError`) und
 `StateStoreWriteStatus` (`Success`/`WriteError`/`CapacityError`/

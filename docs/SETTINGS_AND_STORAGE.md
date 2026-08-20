@@ -28,10 +28,12 @@ LittleFS – zunächst nicht erforderlich
 ```
 
 LittleFS ist damit keine aktuelle Alternative zu `IStateStore`, Schema 1 oder
-dem produktiven NVS-Adapter aus #90. Es ist für Release 1 zunächst nicht
-erforderlich, aber nicht dauerhaft ausgeschlossen. Ein späterer Einsatz
-benötigt einen realen Datei-Use-Case, ein eigenes ownerfreigegebenes Issue,
-Partitions- und Ressourcenmessungen sowie einen dokumentierten Abnahmepfad.
+dem produktiven NVS-Adapter aus #90. Solange NVS zusammen mit der vorhandenen
+Konfigurations-/Run-Recovery den R5.7-Produktvertrag erfuellt, bleiben
+LittleFS, Embedded-KV-Stores und weitere Backends geschlossen und werden nicht
+vorsorglich evaluiert. Ein konkreter Produkt-FAIL wuerde einen neuen
+Ownerentscheid und einen vollstaendigen Adopt-or-build-Nachweis mit
+Power-Loss-, Lizenz-, Wartungs-, Ressourcen- und Migrationsvertrag erfordern.
 Kleine kritische Zustände werden nicht vorsorglich in ein Dateisystem
 verschoben. Die reale NVS-/Partitions-/Flashverifikation bleibt ein Gate aus
 #29/#90 und wird durch diese Einordnung nicht vorweggenommen.
@@ -44,6 +46,10 @@ verschoben. Die reale NVS-/Partitions-/Flashverifikation bleibt ein Gate aus
 - Neue Werte werden vor der Aktivierung vollstaendig validiert.
 - Keine teilweise geschriebene Konfiguration gilt als gueltig.
 - Die letzte nachweislich gueltige Revision bleibt als Rueckfall erhalten.
+- Ein waehrend Power-Cut bearbeiteter Record kann alt, neu, fehlen oder nicht
+  verwendbar sein; das ist kein bestaetigter Record-Erfolg. Die
+  Produkt-Recovery liefert nur vollstaendig validierten neuen Zustand,
+  vollstaendig validierten alten/Fallbackzustand oder Recovery-required.
 - Eine Service-PIN hebt keine firmwarefesten Sicherheitsgrenzen auf.
 - Normale Einstellungen starten einen laufenden Prozess nie automatisch neu.
 - Ein vergessener Service-PIN kann nur durch einen vollstaendigen lokalen
@@ -339,10 +345,13 @@ Anforderungen:
 - nach Root-Commit nur nicht allokierenden, nicht fehlschlagenden Runtime-
   Snapshot veroeffentlichen
 - `CommitOutcomeUnknown` nur nach vollstaendigem Root-/Graph-Readback als
-  eindeutig alt oder neu aufloesen
+  `NEW_VALID_CONFIGURATION`, `OLD_VALID_CONFIGURATION`/
+  `FALLBACK_VALID_CONFIGURATION` oder `CONFIGURATION_RECOVERY_REQUIRED`
+  aufloesen
 - bei nicht abschliessbarem Readback stabil typisiert fail closed bleiben:
   kein Snapshot-Publish, keine normale Runtime, keine weitere Mutation oder
-  Slotwiederverwendung, kein Rollback und kein Factory-Fallback
+  Slotwiederverwendung, kein heuristischer Rollback und keine Factory-New-
+  Annahme; eine explizit validierte Fallbackgeneration bleibt zulaessig
 - unbestimmten Commitzustand sowie Konfigurations-, Integritaets- und
   Verfuegbarkeitsfehler verbindlich ueber das
   `CONFIGURATION_SAFETY_INTEGRATION_GATE` in #24 integrieren

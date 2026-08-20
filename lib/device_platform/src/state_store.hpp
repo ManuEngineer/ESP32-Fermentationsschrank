@@ -34,11 +34,11 @@ enum class StateStoreWriteStatus : uint8_t {
     // Der Speicher ist voll; der zuvor gespeicherte Wert (falls vorhanden)
     // ist unveraendert.
     CapacityError,
-    // Der Commit-Ausgang ist unbekannt. Der neue Wert kann bereits
-    // vollstaendig und dauerhaft gespeichert sein oder auch nicht - beides
-    // ist zulaessig, ein abgeschnittener oder gemischter Wert jedoch nie.
-    // Der Aufrufer muss zuruecklesen, um den tatsaechlichen Stand zu
-    // bestimmen.
+    // Der Commit-Ausgang ist unbekannt. Nach einem Stromausfall kann der
+    // bearbeitete Record alt, neu, fehlend oder nicht verwendbar sein. Kein
+    // solcher Ausgang ist ein bestaetigter Write-Erfolg. Der Aufrufer muss
+    // zuruecklesen; die hoehere Persistenzschicht entscheidet anhand ihrer
+    // Record-, Generations- oder Slotsemantik ueber einen gueltigen Fallback.
     CommitOutcomeUnknown,
 };
 
@@ -54,10 +54,11 @@ struct StateStoreReadResult {
 // Anwendung, nicht dieses Ports (siehe docs/CONFIGURATION_PERSISTENCE.md,
 // Abschnitt "Speicherport und Modulgrenzen").
 //
-// Vertrag pro Schluessel: ein erfolgreich zurueckgekehrter `write` ersetzt den
-// vorherigen Wert atomar und dauerhaft. Nach einer Unterbrechung ist fuer
-// jeden Schluessel entweder der vollstaendige alte oder der vollstaendige
-// neue Wert sichtbar, nie ein abgeschnittener oder gemischter Wert.
+// Vertrag pro Schluessel: ein erfolgreich bestaetigter `write` liefert einen
+// vollstaendig und dauerhaft gespeicherten Wert. `CommitOutcomeUnknown` ist
+// kein Erfolg. Nach einer Unterbrechung kann ein bearbeiteter Record alt, neu,
+// fehlend oder nicht verwendbar sein; die hoehere Persistenzschicht darf nur
+// vollstaendig validierte Records aktivieren.
 //
 // `write` liefert genau eines von vier eindeutig unterscheidbaren Ergebnissen:
 //   - `Success`: der neue Wert ist vollstaendig und dauerhaft gespeichert.
@@ -65,11 +66,11 @@ struct StateStoreReadResult {
 //     gespeicherte Wert (falls vorhanden) ist unveraendert.
 //   - `CapacityError`: der Speicher ist voll; ebenfalls sicher unveraendert.
 //   - `CommitOutcomeUnknown`: der Commit-Ausgang ist unbekannt (z. B. ein
-//     Stromausfall zwischen Commit und Rueckkehr an den Aufrufer). Der neue
-//     Wert kann bereits dauerhaft gespeichert sein oder auch nicht - welcher
-//     der beiden Faelle zutrifft, ist ohne Ruecklesen nicht bekannt. Es gibt
-//     nie einen abgeschnittenen oder gemischten Wert. Der Aufrufer muss in
-//     diesem Fall zuruecklesen, um den tatsaechlichen Stand zu bestimmen.
+//     Stromausfall zwischen Commit und Rueckkehr an den Aufrufer). Readback
+//     kann `NotFound`, `ReadError`, `CapacityError` oder vollstaendige, auf
+//     hoeherer Ebene ungueltige Bytes liefern. Der Aufrufer muss in diesem
+//     Fall zuruecklesen; `RECORD_OUTCOME_INDETERMINATE_OR_LOST` ist eine
+//     hoehere Consumerklassifikation und kein geratener Write-Erfolg.
 // Es gibt bewusst keine pauschale Garantie, dass jeder nicht erfolgreiche
 // `write` den alten Wert unveraendert laesst - das gilt nur fuer `WriteError`
 // und `CapacityError`, nicht fuer `CommitOutcomeUnknown`.
