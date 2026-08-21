@@ -1,14 +1,19 @@
-# Issue #90 – sauberer Neustart auf aktueller PR-116-Basis (R5.8)
+# Issue #90 – sauberer Neustart auf korrigierter PR-116-Basis (R5.9)
 
 ## Status, Ziel und Owner-Gate
 
 Diese Datei ist die vollständige, eigenständig ausführbare kanonische
-Planrevision R5.8 für den sauberen Neustart von Issue #90. Sie ist kein
+Planrevision R5.9 für den sauberen Neustart von Issue #90. Sie ist kein
 Nachfolger-Commit im historischen PR #117 und enthält keine Umsetzung.
+
+R5.8 bleibt die historische, nicht ownerfreigegebene Planrevision
+`docs/tasks/issue-90-clean-restart-plan-r5.8.md @
+3766e96d2e4091e26e0a33de9ed094850f0f28f7`. R5.9 setzt R5.8 nicht voraus,
+sondern enthält alle für die spätere Umsetzung erforderlichen Aussagen selbst.
 
 Bis zur ausdrücklichen Freigabe der exakten Commit-SHA dieser Datei gilt:
 
-`CLEAN_RESTART_PLAN_PENDING_R5_8_OWNER_APPROVAL`
+`CLEAN_RESTART_PLAN_PENDING_R5_9_OWNER_APPROVAL`
 
 Die Freigabe dieser Plan-SHA autorisiert noch keinen Umsetzungsslice. Jeder
 spätere Slice erhält zusätzlich ein eigenes ausdrückliches Owner-Gate. Ohne
@@ -21,24 +26,27 @@ Die Live-Prüfung vor dieser Revision ergab:
 
 | Quelle | Live-Stand | Bedeutung für diesen Neustart |
 |---|---|---|
-| PR #116 | OPEN, Draft; Base `main @ 87dd593fcdc8d26831873a4163b174340b4347c0`; aktueller Head `30fa0a8264e2c4564d324340c6bebc204147f477` | PR #116 ist nicht in `main` enthalten. Sein aktueller ownerreviewter Head ist die neue Arbeitsbasis. |
-| PR #117 | OPEN, Draft; Base `agent/issue-29-esp32-bringup-plan @ 30fa0a8264e2c4564d324340c6bebc204147f477`; aktueller Head `5cc1fcdc7fe7014192592e188e1c5c331a7f507e` | Historische, nicht weiterzuverwendende Umsetzung. Unverändert lassen; nicht mergen, rebasen, force-pushen oder schließen. |
+| PR #116 | OPEN, Draft; Base `main @ 87dd593fcdc8d26831873a4163b174340b4347c0`; aktueller Head `25b41ae75ef8de04576623411f068876427a87cd` | PR #116 ist nicht in `main` enthalten. Sein aktueller korrigierter Head ist die ausgewählte Arbeitsbasis. Eine Ownerfreigabe dieses exakten Heads wird nicht behauptet. |
+| PR #117 | OPEN, Draft; Base `agent/issue-29-esp32-bringup-plan @ 25b41ae75ef8de04576623411f068876427a87cd`; aktueller Head `5cc1fcdc7fe7014192592e188e1c5c331a7f507e` | Historische, nicht weiterzuverwendende Umsetzung. Unverändert lassen; nicht mergen, rebasen, force-pushen oder schließen. |
+| PR #118 | OPEN, Draft; Branch `agent/issue-90-clean-restart-plan-r5.8`; aktueller Head vor R5.9 `695dbfa6b87a99719c37c8cad29a39ae496c6c66`; Base-Branch `agent/issue-29-esp32-bringup-plan @ 25b41ae75ef8de04576623411f068876427a87cd` | Diese neue R5.9-Revision ist das einzige neue Ownerfreigabeobjekt. |
 | Issue #90 | OPEN, Titel `[E5.7] ESP-IDF-NVS-Adapter fuer IStateStore implementieren und verifizieren` | Bleibt offen. Die alte Umsetzung ist keine neue Codebasis. |
-| Roadmap | Stand `2026-08-18` vor dieser Revision; #29 bleibt offen und blockiert die weitere reale Basis | Nur die notwendige neue #90-Planstatuszeile wird synchronisiert. Anforderungen werden nicht in die Roadmap kopiert. |
+| Roadmap | Stand `2026-08-21` nach der #29-Statusbereinigung; #29 bleibt nur wegen der sicheren unbelasteten MCU-/Gate-/Bootpegel offen. | Die #29-Priorisierung ist kein pauschaler Blocker für #90-Software-/Hostarbeit; #90 bleibt actor-free. |
 
 Die Arbeitsbaseline dieses Plans ist damit:
 
 ```text
 CONTEXT_BASELINE_BRANCH: agent/issue-29-esp32-bringup-plan
-CONTEXT_BASELINE_SHA: 30fa0a8264e2c4564d324340c6bebc204147f477
-CONTEXT_HEAD_SHA: 30fa0a8264e2c4564d324340c6bebc204147f477
-CONTEXT_PLAN_SHA: Commit-SHA der vorliegenden Datei; die exakte SHA steht im
-  neuen PR-Body und im aktuellen SESSION HANDOVER
+CONTEXT_BASELINE_SHA: 25b41ae75ef8de04576623411f068876427a87cd
+CONTEXT_HEAD_SHA: 695dbfa6b87a99719c37c8cad29a39ae496c6c66
+CONTEXT_PLAN_SHA: Commit-SHA der vorliegenden Datei; die exakte SHA wird im
+  neuen PR-Body und im aktuellen SESSION HANDOVER dokumentiert
 CONTEXT_REFRESH_MODE: FULL
 CONTEXT_DELTA: Live-PR/Issue/Branch-Abgleich, Roadmap, Root- und lokale AGENTS.md,
   bindende ADR-/Recovery-/Safety-/CI-Quellen, Baselineinventur auf PR-116-HEAD
-SOURCE_OF_TRUTH_CONFLICT: NONE für die Arbeitsbasis; R5.7 bleibt historische
-  fachliche Quelle und ist kein Bestandteil der neuen Branchbasis.
+SOURCE_OF_TRUTH_CONFLICT: NONE
+  (nach Bereinigung der #29-Statusquellen und erneutem vollständigem
+  Live-Abgleich); R5.7 bleibt historische fachliche Quelle und ist kein
+  Bestandteil der neuen Branchbasis.
 ```
 
 ### Historische Provenienz
@@ -115,7 +123,7 @@ einen separaten belegten Ownerentscheid.
 
 ## Saubere Baselineinventur auf PR #116-HEAD
 
-Die folgenden Aussagen wurden auf `30fa0a8264...` geprüft. Sie behaupten
+Die folgenden Aussagen wurden auf `25b41ae75ef8...` geprüft. Sie behaupten
 nichts, was erst durch PR #117 eingeführt wurde.
 
 ### Tatsächlich vorhandene Komponenten
@@ -169,6 +177,28 @@ ein. Der neue Plan darf diesen Widerspruch nicht still übergehen:
   unbelegte Multi-Page-Same-Key-Garantie.
 - Eine materielle Vertragsänderung wird erst im ownerfreigegebenen
   Vertrags-Slice umgesetzt; diese Runde ändert die Quellen nicht.
+
+## #29-Restgate und #90-Abhängigkeit
+
+Der vollständige Live-Abgleich nach der #29-Dokumentationskorrektur ergibt:
+
+- PR #116 bleibt OPEN/Draft auf dem korrigierten Head
+  `25b41ae75ef8de04576623411f068876427a87cd`.
+- Issue #29 bleibt OPEN.
+- Das einzige verbleibende #29-Abnahmegate sind die sicheren unbelasteten
+  MCU-/Gate-/Bootpegel.
+- PCB-Revision und Silkscreen sind kein #29-Abnahmekriterium und kein
+  BLOCKED-Kriterium.
+- Die Pegelmessung wird nicht als #90-NVS-/Recovery-Produktgate umetikettiert.
+- #90-Software-, Host-/Oracle- und Backendarbeit darf auf dieser sauberen
+  #116-Basis nach ihren eigenen Owner-Gates erfolgen.
+- Reale #90-Boardtests bleiben actor-free und behaupten keine physische
+  Ausgangssicherheit.
+- Falls der Owner zuerst #29 abschließen will, ist das eine
+  Arbeitsreihenfolge und keine erfundene fachliche NVS-Abhängigkeit.
+
+Diese Aussage steht nach der Korrektur konsistent in Issue #29, PR #116,
+`docs/ISSUE_29_MEASUREMENTS.md`, `docs/ROADMAP.md`, PR #118 und diesem Plan.
 
 ## Übernommener R5.7-Release-1-Produktvertrag
 
@@ -294,7 +324,7 @@ Die Reihenfolge ist eine Umsetzungsvorlage, keine Vorautorisierung.
 
 ### Slice 1 – kanonischer Vertrags- und ADR-Abgleich
 
-Nach Freigabe der exakten R5.8-Plan-SHA werden zunächst die aktuelle saubere
+Nach Freigabe der exakten R5.9-Plan-SHA werden zunächst die aktuelle saubere
 Baseline und R5.7 gegen ADR-013/ADR-016, Konfigurations-/Run-/Safety- und
 Quality-Verträge abgeglichen. Dabei werden insbesondere
 `CommitOutcomeUnknown`, `NotFound`, Recoverystatus, `Prepared`/Orphan,
@@ -397,7 +427,10 @@ tatsächlich gelaufen ist.
 Gate: Adapterbuild und Charakterisierung sind reproduzierbar; bekannte
 Callback-12-Evidenz bleibt `FAIL_CALLBACK_12_NOT_FOUND` /
 `KNOWN_BACKEND_LIMITATION` und separat vom Produktgate; kein Backend-PASS wird
-behauptet.
+behauptet. Ein finaler #90-Produkt-PASS ist erst zulässig, wenn die real
+charakterisierten Cut-Zustände die vollständige Kette aus Reboot, Reload,
+Record-/Graph-/Run-Validierung, Recoveryprojektion und logischem Gate durch die
+höhere Produktions-Recovery bestanden haben.
 
 ### Slice 6 – finale Softwareverifikation
 
@@ -418,6 +451,21 @@ bleiben `FAIL`, `BLOCKED` oder `NOT_RUN`; sie werden nicht zu einem
 vollständigen PASS zusammengefasst.
 
 ### Slice 7 – gezielte actor-free reale Boardverifikation
+
+### Definition von Boardidentität für Slice 7
+
+Mit Boardidentität sind ausschließlich gemeint:
+
+- das tatsächlich getestete reale Board als Referenz;
+- erwarteter ESP32-Zielchip und relevante Laufzeitidentität;
+- reale 4-MB-Flashgröße;
+- No-PSRAM-Basis;
+- reproduzierbarer UART- und Resetweg.
+
+Nicht gemeint und kein BLOCKED-Kriterium sind eine physische PCB-Revision, eine
+Silkscreen-Bezeichnung oder ein fehlendes formales Board-Revisionslabel. Eine
+fehlende solche Information darf weder #29 noch #90 blockieren.
+
 
 Nur nach bestandenem Software-/Orakel-Gate und eigener Ownerfreigabe:
 
@@ -461,12 +509,12 @@ Status darf einen alten #117-Commit als neuen Produktionsnachweis verwenden.
 
 ## Abnahmekriterien und Status des neuen Plan-PR
 
-Der neue R5.8-Plan ist erst nach Ownerfreigabe seiner exakten SHA eine
+Der neue R5.9-Plan ist erst nach Ownerfreigabe seiner exakten SHA eine
 Umsetzungsgrundlage. Für diesen Plan-PR gelten bis dahin:
 
 | Nachweis | Status |
 |---|---|
-| Live-PR-/Issue-/Roadmap-/Basisabgleich | `PASS` |
+| Live-PR-/Issue-/Roadmap-/Basisabgleich nach #29-Bereinigung | `PASS` |
 | Saubere Baselineinventur ohne PR #117 | `PASS` |
 | R5.7-Produktentscheidungen vollständig übernommen | `PASS` als Planinhalt |
 | Historische #117-Reviewbefunde als Prüfcheckliste | `PASS` als Planinhalt |
@@ -475,7 +523,7 @@ Umsetzungsgrundlage. Für diesen Plan-PR gelten bis dahin:
 | Neue CI-/Dependency-/Backend-/Partitionimplementation | `NOT_RUN` / nicht enthalten |
 | Firmware-, ESP-IDF-, Host- und Hardwaretests | `NOT_RUN` |
 | Reale Boardverifikation und Power-Cut-Nachweis | `BLOCKED/NOT_RUN` bis eigenem Boardgate |
-| Exakte Planfreigabe | `BLOCKED` bis Ownerentscheidung |
+| Exakte R5.9-Planfreigabe | `BLOCKED` bis Ownerentscheidung |
 
 Der abschließende Diff dieses Plan-PR darf nur die neue Planrevision und die
 minimale Roadmap-Synchronisierung enthalten. Vor Übergabe sind `git diff
