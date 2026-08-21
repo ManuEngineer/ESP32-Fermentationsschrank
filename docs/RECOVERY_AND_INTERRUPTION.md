@@ -18,10 +18,14 @@ wird als `NoActiveRun` ueber den bestehenden #17-Write-before-Apply-Pfad
 beendet. Technisch untrusted Load bleibt `SAFE_BOOT`; kein Tombstone verbirgt
 einen unbestimmten Zustand.
 
-Es gibt in #24 keinen automatischen Resume, kein Fallback-Resume, keine
-Promotion, keine gewichtete Progress-/UTC-Ausfallrechnung und keine neue
-persistente Safety-Sperre. Die bestehenden #18-Recoveryregeln bleiben als
-C2-Legacy dokumentiert, werden aber nicht vom aktiven #24-R1-Pfad aufgerufen.
+Es gibt in #24 keinen automatischen Resume, kein automatisches Fallback-Resume,
+keine automatische Promotion, keine gewichtete Progress-/UTC-Ausfallrechnung
+und keine neue persistente Safety-Sperre. Der R5.9-#90-Vertrag darf einen nach
+vollstaendiger Head-/Slot-/CRC-/Schema-/Epoch-/Referenzvalidierung bestimmten
+aelteren Fallback als nicht-aktivierendes
+`OLDER_VALID_CHECKPOINT_RESUME`-Angebot klassifizieren. Die bestehenden
+#18-Recoveryregeln bleiben als C2-Legacy dokumentiert, werden aber nicht
+automatisch vom aktiven #24-R1-Pfad aufgerufen.
 
 ## Grundsatz: fail-closed, aber nicht automatisch
 
@@ -159,8 +163,10 @@ eine neue Safety-Pruefung koennen spaeter `Allowed` ergeben.
 
 `COMPLETED` wird als Completed-Projektion ohne Aktorfreigabe geladen. Ein
 persistierter `Fault` bleibt terminal/diagnostisch und wird nicht aktiviert.
-Keiner dieser Faelle verwendet Fallback-Promotion, Rollback-Resume, gewichteten
-Progress oder UTC-Ausfallrechnung.
+Keiner dieser Bootfaelle verwendet automatische Fallback-Promotion,
+automatisches Rollback-Resume, gewichteten Progress oder UTC-Ausfallrechnung.
+Ein #90-Fallback-Angebot bleibt bis zu explizitem Resume, `Applied`,
+FSM-Anwendung und frischer Safety-Evidenz nicht-aktivierend.
 
 ## C2-Legacy – historische Zeit-/Recoverybeschreibung, nicht #24-R1
 

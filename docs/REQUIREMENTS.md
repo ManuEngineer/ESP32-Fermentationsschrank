@@ -109,7 +109,10 @@ Anforderungen:
 
 Fuer #24 wird ein technisch integerer, aber nicht einfach resumefaehiger Run
 als `NoActiveRun` beendet. Technisch untrusted Persistenz bleibt `SAFE_BOOT`;
-es gibt keinen Fallback-Resume, keine Promotion und keine Charge-Rettung.
+es gibt kein automatisches Fallback-Resume, keine automatische Promotion und
+keine Charge-Rettung. Der R5.9-#90-Vertrag darf einen vollstaendig validierten
+aelteren Fallback als nicht-aktivierendes `OLDER_VALID_CHECKPOINT_RESUME`-
+Angebot klassifizieren; daraus folgt beim Boot weder Resume noch `Allowed`.
 
 - Konfigurationen und aktive Laufkontrollpunkte sind atomar und versioniert.
 - Die letzte gueltige Revision bleibt als Rueckfall erhalten.
@@ -121,6 +124,10 @@ es gibt keinen Fallback-Resume, keine Promotion und keine Charge-Rettung.
   `NoActiveRun` beendet.
 - `RECOVERY_EVALUATION` bleibt ohne Aktorfreigabe. Explizites Resume und Fresh
   Start verwenden den bestehenden Write-before-Apply-Pfad.
+- Ein `OLDER_VALID_CHECKPOINT_RESUME`-Angebot setzt einen unbrauchbaren Current
+  sowie vollstaendig validierten Head-, Slot-, CRC-, Schema-, Epoch- und
+  Referenzschutz voraus. Erst explizite Resume-Entscheidung, `Applied`, FSM-
+  Anwendung und frische Safety-Evidenz koennen spaeter den Gatepfad bewerten.
 - Alte UTC-/NTP-/gewichtete Fortschrittskorrektur und Charge-Rettung sind
   #18/C2-Legacy, keine #24-R1-Anforderung.
 - Nichtkritische Historienfehler duerfen den Prozess mit Warnung weiterlaufen

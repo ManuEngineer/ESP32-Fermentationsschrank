@@ -179,7 +179,11 @@ Mindestens:
 - `NoActiveRun`-Abschluss: `PreparedHead -> CheckpointSlot -> CommittedHead`
   und erst nach `Applied` Standby anwenden
 - korrupter Kontrollpunkt -> bestehender technischer #17-Speichervertrag und
-  `FallbackRecovered -> SAFE_BOOT`; kein Fallback-Resume und keine Promotion
+  fail-closed Recovery. Ein vollstaendig validierter aelterer Fallback darf im
+  #90-Orakel als `OLDER_VALID_CHECKPOINT_RESUME`-Angebot klassifiziert werden,
+  aber nicht automatisch resume, promoten oder `Allowed` werden; erst
+  explizites Resume, `Applied`, FSM und frische Safety-Evidenz oeffnen den
+  weiteren Gatepfad
 - `COMPLETED` bleibt nach Neustart `COMPLETED`
 - kein Service- oder Aktortest aus `SAFE_BOOT`
 - Quittierung ohne Fehlerreset
