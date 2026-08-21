@@ -28,13 +28,15 @@ enum class StateStoreReadStatus : uint8_t {
 
 enum class StateStoreWriteStatus : uint8_t {
     Success,
-    // Nach dem bestehenden Adaptervertrag ist der Vorgang sicher nicht
-    // wirksam geworden; der zuvor gespeicherte Wert (falls vorhanden) bleibt
-    // dort unveraendert, wo dieser Vertrag tatsaechlich gilt.
+    // Der Adapter darf diesen Status nur zurueckgeben, wenn er sicher belegen
+    // kann, dass dieser konkrete Schreibvorgang keinen dauerhaften
+    // Zustandswechsel bewirkt hat; der zuvor gespeicherte Wert (falls
+    // vorhanden) bleibt unveraendert.
     WriteError,
-    // Nach dem bestehenden Adaptervertrag ist der Speicher voll; der zuvor
-    // gespeicherte Wert (falls vorhanden) bleibt dort unveraendert, wo dieser
-    // Vertrag tatsaechlich gilt.
+    // Der Adapter darf diesen Status nur zurueckgeben, wenn der
+    // Kapazitaetsfehler sicher vor jeder dauerhaften Zustandsaenderung
+    // klassifiziert wurde und der zuvor gespeicherte Wert (falls vorhanden)
+    // unveraendert blieb.
     CapacityError,
     // Der Commit-Ausgang ist unbekannt. Der neue Wert kann bereits
     // vollstaendig und dauerhaft gespeichert sein oder auch nicht. Ein
@@ -72,22 +74,22 @@ struct StateStoreReadResult {
 //
 // `write` liefert genau eines von vier eindeutig unterscheidbaren Ergebnissen:
 //   - `Success`: der neue Wert ist vollstaendig und dauerhaft gespeichert.
-//   - `WriteError`: nach dem bestehenden Adaptervertrag ist der Vorgang
-//     sicher nicht wirksam geworden; der zuvor gespeicherte Wert (falls
-//     vorhanden) bleibt dort unveraendert, wo dieser Vertrag tatsaechlich
-//     gilt.
-//   - `CapacityError`: nach dem bestehenden Adaptervertrag ist der Speicher
-//     voll und der zuvor gespeicherte Wert bleibt dort unveraendert, wo dieser
-//     Vertrag tatsaechlich gilt.
+//   - `WriteError`: der Adapter bestaetigt, dass der konkrete Schreibvorgang
+//     keinen dauerhaften Zustandswechsel bewirkt hat; andernfalls muss er
+//     `CommitOutcomeUnknown` liefern.
+//   - `CapacityError`: der Adapter bestaetigt, dass der Kapazitaetsfehler vor
+//     jeder dauerhaften Zustandsaenderung lag und der vorherige Wert
+//     unveraendert blieb; andernfalls muss er `CommitOutcomeUnknown` liefern.
 //   - `CommitOutcomeUnknown`: der Commit-Ausgang ist unbekannt (z. B. ein
 //     Stromausfall zwischen Commit und Rueckkehr an den Aufrufer). Der neue
 //     Wert kann bereits dauerhaft gespeichert sein oder auch nicht. Ein
 //     spaeterer Read kann `Success` mit Bytes, `NotFound`, `ReadError`,
 //     `CapacityError` oder einen anderen bestehenden Readstatus liefern; der
 //     Aufrufer muss den vollstaendigen Produkt-/Recoverykontext validieren.
-// Es gibt bewusst keine pauschale Garantie, dass jeder nicht erfolgreiche
-// `write` den alten Wert unveraendert laesst - das gilt nur fuer `WriteError`
-// und `CapacityError`, nicht fuer `CommitOutcomeUnknown`.
+// `WriteError` und `CapacityError` sind damit eindeutige "sicher nicht
+// wirksam"-Ergebnisse. `CommitOutcomeUnknown` ist das ausschliessliche
+// Ergebnis fuer einen moeglicherweise wirksamen, aber nicht aufgeklaerten
+// Vorgang.
 class IStateStore {
    public:
     IStateStore() = default;

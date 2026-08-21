@@ -1289,12 +1289,17 @@ der laufenden Schreiboperation entsprechen.
 
 `IStateStore::write` liefert vier eindeutig unterscheidbare Ergebnisse statt
 einer pauschalen "unveraendert bei Fehler"-Garantie: `Success` (neuer Wert
-dauerhaft gespeichert), `WriteError` und `CapacityError` (sicher
-unveraendert) sowie `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
+dauerhaft gespeichert), `WriteError` (der Adapter belegt, dass dieser konkrete
+Write keinen dauerhaften Zustandswechsel bewirkte) und `CapacityError` (der
+Adapter belegt, dass der Kapazitaetsfehler vor jeder dauerhaften
+Zustandsaenderung lag und der vorherige Zustand unveraendert blieb) sowie
+`CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
 nach einem Stromausfall zwischen Commit und Rueckkehr - der neue Wert kann
 bereits dauerhaft gespeichert sein, muss es aber nicht; ein spaeterer Read
 kann jeden bestehenden Readstatus liefern und der Aufrufer muss den hoeheren
-Produkt-/Recoverykontext validieren). `read()`
+Produkt-/Recoverykontext validieren; kann der Adapter bei `WriteError` oder
+`CapacityError` den sicheren Nichtwirksamkeits-/Vorab-Capacity-Vertrag nicht
+belegen, muss er `CommitOutcomeUnknown` liefern). `read()`
 und `write()` verwenden bewusst getrennte Statustypen -
 `StateStoreReadStatus` (`Success`/`NotFound`/`ReadError`/`CapacityError`) und
 `StateStoreWriteStatus` (`Success`/`WriteError`/`CapacityError`/
