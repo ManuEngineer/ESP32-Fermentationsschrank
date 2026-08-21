@@ -56,13 +56,31 @@ product_recovery_gate:
 
 Callback 12/`NotFound` bleibt als sichtbare
 `BACKEND_POWER_CUT_CHARACTERIZATION` / `KNOWN_BACKEND_LIMITATION` erhalten und
-ist kein Backend-PASS. Ein finaler Produkt-Recovery-PASS ist nur zulaessig,
-wenn der reale oder simulierte Backendzustand anschliessend durch die hoehere
-Kette aus Reboot/Reload, Record-/Graph-/Run-Validierung,
-Recoveryprojektion und logischem Safety-/Actuator-Gate geprueft wurde. Ein
-separat gruener Backend- oder Simulatorlauf reicht dafuer nicht. Die gesamte
-Verifikation bleibt actor-free; UI und physische Aktorsicherheit sind kein
-#90-Gate.
+ist kein Backend-PASS. Slice 2 darf mit dem
+`SimulatedPersistentStateStore` erwartete Produktoutcomes deterministisch im
+Produktorakel pruefen. Ein finaler #90-Produkt-Recovery-PASS ist jedoch nur
+zulaessig, wenn zusaetzlich jeder relevante real aus der gepinnten
+NVS-/BDL-Charakterisierung hervorgehende Cut-/Recoveryzustand durch die
+hoehere Produktions-Recovery laeuft:
+
+```text
+real charakterisierter NVS-/BDL-Cut-Zustand
+-> Reinitialisierung / Reboot
+-> vollstaendiges Reload
+-> Record-/Envelope-/CRC-/Schema-/StorageEpoch-Pruefung
+-> Generation/Root/Manifest/Fallback bzw. rc0/rc1/rh0
+-> Prepared/Orphan/Indeterminate-Klassifikation
+-> Produkt-Recovery-Outcome
+-> SafetyCore / Safe-Boot / logischer Actuator-Gate
+```
+
+Ein Simulator-PASS plus separat dokumentierte reale Backendcharakterisierung
+reicht nicht fuer den finalen Produkt-PASS, solange die realen Zustaende nicht
+auf Produktebene geprueft wurden. Callback 12 darf Backend-FAIL / Known
+Limitation bleiben und zugleich zu einem sicheren Produkt-Recovery-PASS
+fuehren, wenn die hoehere Ebene den realen Zustand korrekt erkennt und
+fail-closed behandelt. Die gesamte Verifikation bleibt actor-free; UI und
+physische Aktorsicherheit sind kein #90-Gate.
 
 ## Testebenen
 

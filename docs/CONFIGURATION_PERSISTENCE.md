@@ -805,8 +805,10 @@ Der erfolgreiche dauerhafte Write eines neuen gueltigen
 `ConfigurationRootRecord` mit hoeherer rootSequence ist der einzige persistente
 Linearisierungspunkt. Danach wird innerhalb derselben exklusiven Mutation der
 vorbereitete Snapshot nicht allokierend, nicht serialisierend und vertraglich
-nicht fehlschlagend atomar sichtbar. Leser sehen nur die vollstaendig alte oder
-neue Generation.
+nicht fehlschlagend atomar sichtbar. Die owning-context-Validierung aktiviert
+nur den vollstaendigen alten oder neuen kanonischen Graphen; dies ist eine
+Generation-/Graphentscheidung und keine technische Einzel-Record- oder
+Same-Key-OLD/NEW-Garantie fuer einen unklaren Write.
 
 Ein eindeutig festgestellter Fehler vor Root-Commit laesst alte Konfiguration
 und Snapshot unveraendert. Ein nicht aufloesbares
@@ -1038,9 +1040,10 @@ oder Resetversuch die relevanten Stringkapazitaeten getrennt fuer
 ProgramCatalog-Payload, Dokument-Envelopeworkspace, Store-Readback, den
 maximalen Slot-Scan-Lesepuffer sowie die kleinen kanonischen
 Bootstrap-/Manifest-/Rootbindungen. Vorherige maximale Dokumentrecords werden
-nur als kleine technische Deskriptoren gebunden; die technische Einzel-Record-
-Old-or-New-Eigenschaft des Ports ersetzt eine zweite Vollkopie, ist aber keine
-Produktgarantie fuer eine unterbrochene mehrrecordige Same-Key-Transaktion. Der
+nur als kleine technische Deskriptoren gebunden. Der Port stellt fuer einen
+unklaren oder unterbrochenen Write keine technische Einzel-Record- oder
+Same-Key-OLD/NEW-Garantie bereit und ersetzt damit keine Produktvalidierung
+durch eine zweite Vollkopie. Der
 transiente Lesepuffer, mit dem ein solcher alter Record waehrend der Slotsuche vollstaendig gelesen wird, bleibt davon
 unabhaengig real und erscheint eigenstaendig als Slot-Scan-Peak; er wird nicht
 mit dem kleinen Store-Readback-Peak des tatsaechlich neu geschriebenen Records
@@ -1187,7 +1190,8 @@ Die vollstaendige Matrix umfasst nach Abschluss aller Teilissues mindestens:
 - Manifest- und Root-Slotrotation bis ueber die erste Wiederverwendung hinaus
 - technische und fachliche Graphkorruption an Active und Fallback
 - Fehler bei Dokument-, Manifest- und Root-Write sowie Readback
-- `CommitOutcomeUnknown` mit eindeutig altem beziehungsweise neuem Readback
+- `CommitOutcomeUnknown` mit vollstaendig validiertem vorherigem
+  beziehungsweise neuem Generation-/Graph-Outcome
 - `CommitOutcomeUnknown` mit `ReadError`, `CapacityError`, CRC- oder
   Semantikfehler beim Aufloesungsscan
 - exakter neuer Zielroot mit voruebergehend nicht lesbarem oder ungueltigem
@@ -1258,20 +1262,23 @@ Slotzahlen, Root-/Manifestbedeutung oder Schutzmengen - das bleibt Paket C
 (#56). Die anwendungsneutrale Fundamentschicht begrenzt lediglich jeden
 einzelnen technischen Scan auf hoechstens acht Slots.
 
-`SimulatedPersistentStateStore` modelliert die drei geforderten Zustands-
+`SimulatedPersistentStateStore` modelliert als deterministischer Testdouble die
+drei geforderten Zustands-
 bereiche explizit als getrennte private Datenhaltung: dauerhaft `committed_`,
 eine gestagte, aber noch nicht committete Schreiboperation
 (`std::optional<PendingWrite> pendingWrite_` mit Schluessel und vollstaendigem
 neuem Wert) sowie sonstiger fluechtiger Testzustand (Fault-Schalter, Read-/
-NotFound-Injektion). `write()` bildet damit die reale Reihenfolge "vollstaendig
-staging, dann atomar committen" nach: bei `FailBeforeBegin` und
+NotFound-Injektion). Diese festgelegten Fault-Modi sind Simulatorsemantik und
+keine NVS- oder allgemeine `IStateStore`-Garantie. `write()` bildet eine
+deterministische Testdouble-Reihenfolge "vollstaendig staging, dann committen"
+nach: bei `FailBeforeBegin` und
 `CapacityExceeded` entsteht kein Staging und `committed_` bleibt unberuehrt;
 bei `PowerCutBeforeCommit` wird der vollstaendige neue Wert gestagt, aber nie
 in `committed_` uebernommen - erst ein simulierter `restart()` verwirft das
 Staging, danach ist ausschliesslich der alte committed Wert sichtbar; bei
-Erfolg und bei `PowerCutAfterCommitBeforeReturn` wird der gestagte Wert atomar
-komplett in `committed_` uebernommen (nie ein Teil- oder Mischwert) und das
-Staging sofort geleert. `restart()` loescht `pendingWrite_` sowie alle
+Erfolg und bei `PowerCutAfterCommitBeforeReturn` wird der gestagte Wert im
+Testdouble komplett in `committed_` uebernommen und das Staging sofort geleert.
+`restart()` loescht `pendingWrite_` sowie alle
 fluechtigen Testschalter, laesst `committed_` aber unveraendert. Ein rein
 testinterner Zugriff `hasPendingWriteForTesting()` macht das gestagte-aber-
 nicht-committete Staging fuer native Tests beobachtbar, ohne die produktive
@@ -1285,7 +1292,9 @@ einer pauschalen "unveraendert bei Fehler"-Garantie: `Success` (neuer Wert
 dauerhaft gespeichert), `WriteError` und `CapacityError` (sicher
 unveraendert) sowie `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
 nach einem Stromausfall zwischen Commit und Rueckkehr - der neue Wert kann
-bereits dauerhaft gespeichert sein; der Aufrufer muss zuruecklesen). `read()`
+bereits dauerhaft gespeichert sein, muss es aber nicht; ein spaeterer Read
+kann jeden bestehenden Readstatus liefern und der Aufrufer muss den hoeheren
+Produkt-/Recoverykontext validieren). `read()`
 und `write()` verwenden bewusst getrennte Statustypen -
 `StateStoreReadStatus` (`Success`/`NotFound`/`ReadError`/`CapacityError`) und
 `StateStoreWriteStatus` (`Success`/`WriteError`/`CapacityError`/
