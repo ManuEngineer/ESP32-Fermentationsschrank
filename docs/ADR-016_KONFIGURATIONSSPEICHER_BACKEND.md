@@ -119,6 +119,19 @@ Variante A.
    bleibt im Envelope, weil eine Werksreset-Generation eine plattformseitige
    Eigenschaft des Speichers ist.
 
+### Release-1-Produktgrenze
+
+Die technische Atomizitaet eines einzelnen NVS-/Store-Records ist nicht die
+Release-1-Garantie fuer eine mehrrecordige Konfigurations- oder Lauftransaktion.
+Insbesondere wird aus einem unterbrochenen Same-Key-Write kein Produktversprechen,
+auf der Recoveryebene immer exakt OLD oder NEW zu erhalten. Die owning context-
+Ebene aktiviert ausschliesslich vollstaendig validierte Records, Generationen,
+Referenzen und Root-/Manifestgraphen. `CommitOutcomeUnknown` bleibt unbekannt
+und wird nicht geraten; ein spaeterer Readbackfehler oder ein in einer begonnenen
+Readphase verlorener Record ist nicht dasselbe wie ein urspruenglich fehlender
+Key. Diese Klarstellung aendert weder den schmalen `IStateStore`-Port noch die
+NVS-Defaultentscheidung.
+
 ## Folgen
 
 **Einfacher:**

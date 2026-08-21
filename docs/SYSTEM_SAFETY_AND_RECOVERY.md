@@ -31,6 +31,28 @@ thermische `SAFETY_RECOVERY` bleiben ausserhalb des #24-R1-Produktpfads.
 Hardware- und thermische Nachweise gehoeren zu E5 und den dort genannten
 Inbetriebnahme-Gates.
 
+### R5.9-Produkt-Recovery-Gate und Backendcharakterisierung
+
+Die technische Backendcharakterisierung ist keine Produktfreigabe. Fuer
+Issue #90 bleiben beide Ebenen getrennt und beobachtbar:
+
+```text
+backend_characterization:
+    observed | known_limitation | unexpected_change
+
+product_recovery_gate:
+    PASS | FAIL | NOT_RUN
+```
+
+Callback 12/`NotFound` bleibt als
+`BACKEND_POWER_CUT_CHARACTERIZATION` / `KNOWN_BACKEND_LIMITATION` sichtbar.
+Ein Backend-FAIL oder eine bekannte Limitation darf nur dann mit einem
+Produkt-Recovery-PASS koexistieren, wenn die hoehere Recoverylogik den
+Record-/Generations-/Runzustand vollstaendig validiert, unklare Zustaende
+korrekt klassifiziert und fail-closed bis zum logischen Gate bleibt. Kein
+Recoverystatus, keine Projektion und keine UI erzeugt daraus allein eine
+physische Aktorfreigabe; #90 bleibt actor-free.
+
 ## Versorgungskonzept des ersten Releases
 
 ### Verbindliche Basis

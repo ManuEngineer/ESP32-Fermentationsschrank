@@ -34,6 +34,51 @@ Issue #24 fuehrt keinen parallelen Configuration-Safety-Enum, keinen neuen
 Persistenzschluessel, keinen Restart-/Safety-Latch und keine Service-PIN-Logik
 in diesem Konfigurationsvertrag ein.
 
+## Issue #90 R5.9: Recovery- und Backendgrenze
+
+Der bestehende Vertrag wird fuer den Clean Restart von Issue #90 wie folgt
+ausgelegt, ohne eine neue oeffentliche Statusfamilie einzufuehren:
+
+- `CommitOutcomeUnknown` ist kein Erfolg und wird weder als alter noch als
+  neuer Produktstand geraten. Die Aufloesung erfolgt nur ueber den vollstaendig
+  validierten Root-/Manifest-/Graph-Readback; bleibt sie unklar, bleibt der
+  Konfigurationszustand recovery-required und fail-closed.
+- `NotFound` bedeutet nur, dass ein konkreter Read-Aufruf keinen Record unter
+  dem Key beobachtet hat. Ein Read-/Readbackfehler nach Beginn einer Operation,
+  einschliesslich eines verlorenen oder unklar gewordenen Records, ist nicht
+  der urspruengliche leere Zustand und darf nicht als Factory-New behandelt
+  werden.
+- `StorageEpoch`, Generation, Root, Manifest, Fallback, Bootstrap und alle
+  referenzierten Records bilden gemeinsam die Aktivierungsentscheidung. Nur ein
+  vollstaendig validierter Graph darf Runtime werden.
+- `Prepared`, Orphan, Partial, Mixed, Corrupt und jeder indeterminierte
+  Zustand sind niemals ein aktivierbarer gueltiger Zustand. Sie bleiben fuer
+  Recovery beobachtbar und fuehren nicht zu stiller Mutation, Loeschung oder
+  Factory-Neuanlage.
+- Der vorhandene `ConfigurationRecoveryStatus`-/`ConfigurationCommitStatus`-
+  Vertrag und die SafetyCore-Projektion sind dafuer ausreichend; diese
+  Klarstellung fuehrt keinen neuen Enumwert ein.
+
+Backendcharakterisierung und Produkt-Recovery-Gate sind getrennte Wahrheiten.
+Eine technische Backendbeobachtung wird fuer spaetere Nachweise mindestens in
+folgender Form erhalten:
+
+```text
+backend_characterization:
+    observed | known_limitation | unexpected_change
+
+product_recovery_gate:
+    PASS | FAIL | NOT_RUN
+```
+
+Callback 12/`NotFound` bleibt als sichtbare
+`BACKEND_POWER_CUT_CHARACTERIZATION` / `KNOWN_BACKEND_LIMITATION` erhalten und
+wird nicht als Backend-PASS umetikettiert. Ein Backend-FAIL oder eine bekannte
+Limitation kann auf Produktebene zu einem sicheren Recovery-PASS fuehren, wenn
+die hoehere Ebene den verlorenen oder unklaren Record korrekt erkennt und
+fail-closed bleibt. Ein separates Backendresultat oder ein UI-Status ersetzt
+keine Produkt-Recoverypruefung.
+
 ## Architektur und Konfigurationsgeneration
 
 `FactoryConfiguration` ist unveraenderlicher Bestandteil der Firmware.
@@ -993,9 +1038,10 @@ oder Resetversuch die relevanten Stringkapazitaeten getrennt fuer
 ProgramCatalog-Payload, Dokument-Envelopeworkspace, Store-Readback, den
 maximalen Slot-Scan-Lesepuffer sowie die kleinen kanonischen
 Bootstrap-/Manifest-/Rootbindungen. Vorherige maximale Dokumentrecords werden
-nur als kleine technische Deskriptoren gebunden; der Old-or-New-Portvertrag
-ersetzt eine zweite Vollkopie. Der transiente Lesepuffer, mit dem ein solcher
-alter Record waehrend der Slotsuche vollstaendig gelesen wird, bleibt davon
+nur als kleine technische Deskriptoren gebunden; die technische Einzel-Record-
+Old-or-New-Eigenschaft des Ports ersetzt eine zweite Vollkopie, ist aber keine
+Produktgarantie fuer eine unterbrochene mehrrecordige Same-Key-Transaktion. Der
+transiente Lesepuffer, mit dem ein solcher alter Record waehrend der Slotsuche vollstaendig gelesen wird, bleibt davon
 unabhaengig real und erscheint eigenstaendig als Slot-Scan-Peak; er wird nicht
 mit dem kleinen Store-Readback-Peak des tatsaechlich neu geschriebenen Records
 vermischt. Modellreservierung erfolgt vor Factorymodellaufbau, und

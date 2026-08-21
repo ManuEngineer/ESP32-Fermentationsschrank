@@ -40,6 +40,30 @@ sind keine #24-R1-Testfaelle. Historische Testpunkte dazu bleiben fuer ihre
 spaeteren Issues/Hardware-Gates gekennzeichnet und gelten nicht als #24-
 Abnahmekriterium.
 
+## Issue #90 R5.9: getrennte Nachweise
+
+Fuer die spaetere #90-Persistenz-/Recoveryverifikation werden technische
+Backendcharakterisierung und das hoehere Produkt-Recovery-Gate getrennt und
+maschinenlesbar ausgewiesen:
+
+```text
+backend_characterization:
+    observed | known_limitation | unexpected_change
+
+product_recovery_gate:
+    PASS | FAIL | NOT_RUN
+```
+
+Callback 12/`NotFound` bleibt als sichtbare
+`BACKEND_POWER_CUT_CHARACTERIZATION` / `KNOWN_BACKEND_LIMITATION` erhalten und
+ist kein Backend-PASS. Ein finaler Produkt-Recovery-PASS ist nur zulaessig,
+wenn der reale oder simulierte Backendzustand anschliessend durch die hoehere
+Kette aus Reboot/Reload, Record-/Graph-/Run-Validierung,
+Recoveryprojektion und logischem Safety-/Actuator-Gate geprueft wurde. Ein
+separat gruener Backend- oder Simulatorlauf reicht dafuer nicht. Die gesamte
+Verifikation bleibt actor-free; UI und physische Aktorsicherheit sind kein
+#90-Gate.
+
 ## Testebenen
 
 ### Ebene 1: Native Unit-Tests

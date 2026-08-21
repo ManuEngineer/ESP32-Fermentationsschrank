@@ -54,10 +54,17 @@ struct StateStoreReadResult {
 // Anwendung, nicht dieses Ports (siehe docs/CONFIGURATION_PERSISTENCE.md,
 // Abschnitt "Speicherport und Modulgrenzen").
 //
-// Vertrag pro Schluessel: ein erfolgreich zurueckgekehrter `write` ersetzt den
-// vorherigen Wert atomar und dauerhaft. Nach einer Unterbrechung ist fuer
-// jeden Schluessel entweder der vollstaendige alte oder der vollstaendige
-// neue Wert sichtbar, nie ein abgeschnittener oder gemischter Wert.
+// Technischer Vertrag pro Schluessel: ein erfolgreich zurueckgekehrter
+// `write` ersetzt den vorherigen Wert atomar und dauerhaft. Fuer diesen
+// einzelnen vollstaendigen Store-Record ist nach einer Unterbrechung entweder
+// der vollstaendige alte oder der vollstaendige neue Wert sichtbar, nie ein
+// abgeschnittener oder gemischter Wert. Das ist eine technische
+// Einzel-Record-Eigenschaft des Ports, keine Release-1-Produktgarantie fuer
+// eine mehrrecordige Konfigurations- oder Lauftransaktion und insbesondere
+// keine Garantie, dass ein unterbrochener Same-Key-Write auf Produkt- oder
+// Recoveryebene immer exakt OLD oder NEW ergibt. Die hoeheren Ebenen muessen
+// Records, Generationen, Referenzen und Recoveryzustand vollstaendig
+// validieren.
 //
 // `write` liefert genau eines von vier eindeutig unterscheidbaren Ergebnissen:
 //   - `Success`: der neue Wert ist vollstaendig und dauerhaft gespeichert.
@@ -92,6 +99,13 @@ class IStateStore {
     // `maxBytes` ist das aufrufer- beziehungsweise schluesselspezifische
     // Leselimit: uebersteigt der gespeicherte Wert `maxBytes`, liefert dies
     // `CapacityError` statt eines unkontrolliert grossen Werts.
+    // `NotFound` bedeutet, dass dieser konkrete Read-Aufruf keinen Wert unter
+    // dem Schluessel beobachtet hat. Es ist kein historischer Beleg, dass der
+    // Schluessel nie existierte. Bei Readback nach einem begonnenen Write oder
+    // einer unklaren Transaktion darf ein spaeteres `NotFound` deshalb nicht
+    // als urspruengliches leeres Factory-Neuheitsereignis umgedeutet werden;
+    // die aufrufende Recoveryebene muss die Read-Phase und den unklaren
+    // Ausgang erhalten.
     // Rueckgabetyp `StateStoreReadStatus` (in `StateStoreReadResult`)
     // schliesst `WriteError`/`CommitOutcomeUnknown` bereits durch das
     // Typsystem aus - kein Adapter kann diese als Leseergebnis zurueckgeben.

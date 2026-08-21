@@ -41,6 +41,32 @@ Die historischen #18-Recovery-/Progressabschnitte dieses Dokuments sind C2-
 Legacy. Sie werden von #24 nicht als aktiver Produktpfad aufgerufen; es gibt in
 R1 kein Fallback-Resume, keine Promotion und keine Charge-Rettungsrechnung.
 
+### R5.9-Record- und Recoverygrenze
+
+Der bestehende Run-Port verwendet genau drei kanonische Records: `rh0` ist der
+Head mit Current-/Fallback-Referenzen und Transaktionszustand; `rc0` und `rc1`
+sind die beiden Checkpointslots. Erst der vollstaendig validierte Head- und
+Checkpointgraph bestimmt, ob ein Current, Fallback oder kein sicherer Runstand
+vorliegt.
+
+`NotFound` bei einem konkreten Read ist nur die Beobachtung, dass dieser Key in
+diesem Read keinen Record lieferte. Ein spaeterer Read-/Readbackfehler oder ein
+nach Beginn einer Transaktion verlorener Record ist kein urspruengliches
+`NoPersistedRun` und darf nicht als solches, als `NoActiveRun` oder als stiller
+Loeschpfad behandelt werden. `NoActiveRun` ist nur fuer einen vertrauenswuerdig
+bestimmten, semantisch nicht resumefaehigen Current beziehungsweise den
+kanonisch bestimmten leeren Stand zulaessig; unklare, Prepared-, Orphan-,
+Partial-, Mixed-, Corrupt- und indeterminierte Zustaende bleiben
+Recovery-/Abort-required und fail-closed.
+
+Die vorhandenen `RunPersistenceLoadStatus`,
+`RunPersistenceCoordinatorState`, `RunPersistenceResultStatus` und
+`SafetyCore`-Projektionen sind dafuer ausreichend. Recoverystatus bleibt als
+technische/produktliche Beobachtung erhalten (`RECOVERY_STATUS_OBSERVABLE`),
+ohne UI- oder Aktorfreigabe zu implizieren. Die logische Freigabe bleibt bis
+zu vollstaendig validiertem Graph, `Applied`, FSM-Anwendung und frischer
+Evidenz gesperrt.
+
 ## Persistierter Laufzustand
 
 Der aktive R1-Vertrag verwendet die kanonischen Run-/Transaktionsfelder. Die
