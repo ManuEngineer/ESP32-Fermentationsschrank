@@ -6,12 +6,13 @@ dokumentierten Ursachenanalyse und Korrektur) `esp32_bringup` bestehen beide
 real den 35-Sekunden-Smoke auf demselben Board, jeweils mit zwei unabhängigen
 Läufen für `esp32_bringup` reproduziert. Offen bleiben ausschließlich die
 sicheren unbelasteten MCU-/Gate-/Bootpegel (kein Messgerät in dieser
-Ausführungsumgebung) sowie die physische PCB-Revision (Silkscreen).
+Ausführungsumgebung).
 
 Implementierungsstatus: `SOFTWARE_IMPLEMENTED_HARDWARE_TESTED_PASS_PENDING_LEVELS`;
 beide Profile bestehen real auf dem Board. Die Issue-Abnahme ist erst
 vollständig, wenn zusätzlich die sicheren unbelasteten MCU-/Gate-/Bootpegel
-und die geforderte physische PCB-Revision real nachgewiesen sind.
+real nachgewiesen sind. Die physische PCB-Revision beziehungsweise der
+Silkscreen ist nach Ownerentscheidung kein Abnahmekriterium.
 
 ## Identität und Scope
 
@@ -355,9 +356,10 @@ I (39284) app_main: heartbeat: safe test mode, uptime_ms=39003
 Es wurden keine 12-V-Verbraucher, Aktoren, Sensoren, Displays, Lüfter,
 BTS7960- oder Peltierkomponenten integriert oder aktiviert. `HARDWARE_UNVERIFIED`,
 `TBD_HARDWARE`, `TBD_COMMISSIONING` und `TBD_IMPLEMENTATION_BUDGET` bleiben
-deshalb bestehen. Die physische PCB-/Boardrevision (Silkscreen-Aufdruck) und
-die sicheren unbelasteten Pegelmesspunkte bleiben ebenfalls offen, da sie
-eine physische Ablesung beziehungsweise ein Messgerät vor Ort erfordern.
+deshalb bestehen. Die sichere Messung der unbelasteten Pegelmesspunkte bleibt
+offen, da sie eine physische Ablesung beziehungsweise ein Messgerät vor Ort
+erfordert. Die physische PCB-/Boardrevision beziehungsweise der
+Silkscreen-Aufdruck ist nach Ownerentscheidung kein Abnahmekriterium.
 
 ## Dokumentationsrückführung
 
@@ -372,9 +374,11 @@ Pegelfakten als eine gemeinsame Rückführungsvoraussetzung
 (`docs/tasks/issue-29-implementation-plan.md`, Abschnitt 10); die sicheren
 unbelasteten MCU-/Gate-/Bootpegel bleiben `NOT_RUN`, weil in dieser
 Ausführungsumgebung kein Messgerät verfügbar ist. Issue #29 gilt deshalb erst
-dann als vollständig erfüllbar, wenn auch diese Pegelmessung real vorliegt;
-bis dahin bleibt die kanonische Rückführung in `docs/HARDWARE.md` und
-`docs/OPEN_POINTS.md` eine bewusste, spätere Owner-Entscheidung.
+dann als vollständig erfüllbar, wenn diese Pegelmessung real vorliegt; bis
+dahin bleibt die kanonische Rückführung in `docs/HARDWARE.md` und
+`docs/OPEN_POINTS.md` eine bewusste, spätere Owner-Entscheidung. Eine
+physische PCB-Revision oder ein Silkscreen-Nachweis ist dafür nicht
+erforderlich.
 
 `docs/RESOURCE_BUDGET_AND_MAINTENANCE.md` bleibt unverändert; der
 aktualisierte [`ISSUE_29_BUILD_REPORT.md`](ISSUE_29_BUILD_REPORT.md) und die
@@ -382,8 +386,8 @@ compilerbasierte Stack-Usage-Herleitung sind Build-/Ressourcennachweise, aber
 kein Beleg für ein kanonisches Produktions- oder Parallelbudget.
 
 Nächster Schritt: physische Messung der sicheren unbelasteten
-MCU-/Gate-/Bootpegel (Multimeter/Messaufbau erforderlich) sowie Ablesen der
-physischen PCB-Revision (Silkscreen). Erst danach sind alle in Plan-Abschnitt
-5 geforderten #29-Hardwarekriterien belegt und die Rückführung in
+MCU-/Gate-/Bootpegel (Multimeter/Messaufbau erforderlich). Erst danach ist das
+einzige verbleibende #29-Restgate belegt und die Rückführung in
 `docs/HARDWARE.md`/`docs/OPEN_POINTS.md` sowie eine vollständige
-Issue-Abnahme möglich.
+Issue-Abnahme möglich. Eine fehlende PCB-Revision oder Silkscreen-Bezeichnung
+blockiert diese Abnahme nicht.
