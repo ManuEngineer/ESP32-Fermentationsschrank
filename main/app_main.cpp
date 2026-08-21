@@ -6,6 +6,10 @@
 #include "esp_reset_cause_source.hpp"
 #include "fermentation_application.hpp"
 
+#if defined(APP_ISSUE_29_BRINGUP_PROBE)
+#include "issue_29_bringup_probe.hpp"
+#endif
+
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -77,6 +81,15 @@ extern "C" void app_main(void) {
     }
 
     logResources();
+
+#if defined(APP_ISSUE_29_BRINGUP_PROBE)
+    if (!fermentation::issue_29_bringup::run()) {
+        ESP_LOGE(kTag,
+                 "Issue 29 bring-up probe failed; stopping before the"
+                 " heartbeat smoke");
+        return;
+    }
+#endif
 
     // Erst hier, unmittelbar vor der Laufzeitschleife, konstruiert: die
     // geloggte Uptime bedeutet damit eindeutig "Laufzeit seit
