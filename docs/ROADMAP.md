@@ -1,6 +1,6 @@
 # Projekt-Roadmap
 
-Stand: 2026-08-18
+Stand: 2026-08-21
 
 Diese Datei ist die einzige aktuelle Status- und Taskuebersicht. Fachliche
 Anforderungen, vollstaendige Issue-Inhalte und historische Begruendungen werden
@@ -11,7 +11,7 @@ nicht kopiert, sondern verlinkt.
 | Prioritaet | Arbeit | Status | Naechstes Gate |
 |---:|---|---|---|
 | 1 | Issue #29 – ESP32-Bring-up, Partition, Ressourcen und sichere Ausgangszustaende | `SOFTWARE_IMPLEMENTED_HARDWARE_TESTED_PASS_PENDING_LEVELS`; Plan `docs/tasks/issue-29-implementation-plan.md @ 4f49b44cff47f55bfd425d9e39c5a07256782ed7` freigegeben, Software-/Buildnachweise und zwei reale post-fix 40-s-Smokes liegen in Draft-PR #116 vor. Die Baseline bleibt aktorfrei; sichere unbelastete MCU-/Gate-/Bootpegel und die physische PCB-Revision bleiben offen. #29 bleibt Prioritaet 1 und blockiert #90. | Owner-Nachweis der offenen Pegel und physischen PCB-Revision; danach Review-/Abnahmentscheidung ohne Issue-Schliessung durch den Agenten |
-| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `PLANNED_SPEC_PENDING`; baut auf #29 und dem abgeschlossenen generischen Store-/Wirevertrag #54 auf. Keine zweite Persistenzarchitektur. | #29-Baseline, eigener freigegebener #90-Plan sowie NVS-/Partitions-/Power-Cut-/Readback-Nachweise |
+| 2 | Issue #90 – produktiver ESP-IDF-NVS-Adapter fuer `IStateStore` | `CLEAN_RESTART_PLAN_DRAFT_PENDING_OWNER_APPROVAL`; neue saubere Planrevision R5.8 entsteht auf PR #116 HEAD `30fa0a8264e2c4564d324340c6bebc204147f477`. PR #117 bleibt historische OPEN/Draft-Umsetzung und ist keine Branchbasis. Keine zweite Persistenzarchitektur. | Ownerfreigabe der exakten neuen R5.8-Plan-SHA; danach separat gegatete Recovery-Orakel-, Bestands-, Minimalfix-, NVS-, Software- und actor-free Board-Slices |
 | 3 | Issue #25 – gemeinsame rendererunabhaengige Device-UI-/App-Vertraege | `PLANNED_SPEC_PENDING`; gemeinsame Shell-, App-, View-Model- und Command-Vertraege fuer Touch und Web. Keine Renderer- oder Pluginplattform. | Eigener Plan und native Vertragsnachweise auf der Ressourcenbasis aus #29/#90 |
 | 4 | Issue #26 – lokale Touch-Shell und Fermentations-Workspace | `PLANNED_SPEC_PENDING`; baut auf #25 auf und bleibt von realer Displayhardware getrennt, bis #31 folgt. | Eigener Plan, simulierte Bedienpfade und produktionsnahe Shell-/App-Vertraege |
 | 5 | Issue #31 – realer Renderer, Display, Touch und Kalibrierung | `BLOCKED_HARDWARE`; folgt #25/#26/#29 und bringt die echte Bedienung am Gerät über dieselben Contracts. | Hardware-/Pin-/Controllerbeweis, Ressourcen-/Lizenznachweis, reale Bedienungs- und Kalibrierungstests |
