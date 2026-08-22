@@ -3,7 +3,7 @@
 idf_component_register(
     SRCS "app_main.cpp"
     PRIV_INCLUDE_DIRS "../include"
-    PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf
+    PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf nvs_flash
 )
 
 # ESP-IDF 6.0.2 kompiliert C++ standardmaessig mit -std=gnu++26; das Projekt

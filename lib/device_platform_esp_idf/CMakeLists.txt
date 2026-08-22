@@ -1,7 +1,7 @@
 idf_component_register(
     SRC_DIRS "src"
     INCLUDE_DIRS "src"
-    REQUIRES device_platform
+    REQUIRES device_platform nvs_flash
     PRIV_REQUIRES esp_timer
 )
 

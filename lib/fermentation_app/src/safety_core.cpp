@@ -10,8 +10,8 @@ bool isPersistenceSafeBoot(RunPersistenceLoadStatus status) {
         case RunPersistenceLoadStatus::NoPersistedRun:
         case RunPersistenceLoadStatus::Current:
         case RunPersistenceLoadStatus::NoActiveRun:
-            return false;
         case RunPersistenceLoadStatus::FallbackRecovered:
+            return false;
         case RunPersistenceLoadStatus::PreparedInterrupted:
         case RunPersistenceLoadStatus::NotReconstructible:
         case RunPersistenceLoadStatus::NotReconstructibleOrphanedState:
@@ -29,6 +29,15 @@ bool isTrustedCoordinatorState(RunPersistenceCoordinatorState state) {
     return state == RunPersistenceCoordinatorState::ReadyEmpty ||
            state == RunPersistenceCoordinatorState::LoadedActiveRun ||
            state == RunPersistenceCoordinatorState::Ready;
+}
+
+bool isValidFallbackRecoveryEvidence(const SafetyCoreInput& input) {
+    return input.persistenceLoadStatus.has_value() &&
+           *input.persistenceLoadStatus ==
+               RunPersistenceLoadStatus::FallbackRecovered &&
+           input.persistenceValidated && input.persistenceSnapshot != nullptr &&
+           input.persistenceCoordinatorState ==
+               RunPersistenceCoordinatorState::FallbackRecoveryPending;
 }
 
 bool hasFreshConfigurationEvidence(const SafetyCoreInput& input) {
@@ -224,6 +233,8 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
     RunLoadDisposition loadDisposition = RunLoadDisposition::SafeBoot;
     const bool hasKnownLoadStatus = input.persistenceLoadStatus.has_value() &&
                                     isKnown(*input.persistenceLoadStatus);
+    const bool validFallbackRecoveryEvidence =
+        isValidFallbackRecoveryEvidence(input);
     if (!hasKnownLoadStatus ||
         isPersistenceSafeBoot(input.persistenceLoadStatus.value_or(
             RunPersistenceLoadStatus::ReadFailed))) {
@@ -234,13 +245,21 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
         if (loadDisposition == RunLoadDisposition::SafeBoot)
             observe(FaultCode::RunPersistenceUntrusted);
     }
+    if (input.persistenceLoadStatus.has_value() &&
+        *input.persistenceLoadStatus ==
+            RunPersistenceLoadStatus::FallbackRecovered &&
+        !validFallbackRecoveryEvidence)
+        observe(FaultCode::RunPersistenceUntrusted);
     switch (input.persistenceCoordinatorState) {
         case RunPersistenceCoordinatorState::BlockedIndeterminate:
-        case RunPersistenceCoordinatorState::FallbackRecoveryPending:
         case RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed:
         case RunPersistenceCoordinatorState::Busy:
         case RunPersistenceCoordinatorState::Uninitialized:
             observe(FaultCode::RunPersistenceUntrusted);
+            break;
+        case RunPersistenceCoordinatorState::FallbackRecoveryPending:
+            if (!validFallbackRecoveryEvidence)
+                observe(FaultCode::RunPersistenceUntrusted);
             break;
         default:
             break;
@@ -419,6 +438,7 @@ RunLoadDisposition SafetyCore::classifyRunLoad(
         case RunPersistenceLoadStatus::NoActiveRun:
             return RunLoadDisposition::Standby;
         case RunPersistenceLoadStatus::Current:
+        case RunPersistenceLoadStatus::FallbackRecovered:
             if (snapshot == nullptr) return RunLoadDisposition::SafeBoot;
             if (snapshot->processState.state == ProcessState::Completed)
                 return RunLoadDisposition::Completed;
@@ -427,7 +447,6 @@ RunLoadDisposition SafetyCore::classifyRunLoad(
             return isR1ResumeEligible(*snapshot)
                        ? RunLoadDisposition::ResumeOffer
                        : RunLoadDisposition::NoActiveRun;
-        case RunPersistenceLoadStatus::FallbackRecovered:
         case RunPersistenceLoadStatus::PreparedInterrupted:
         case RunPersistenceLoadStatus::NotReconstructible:
         case RunPersistenceLoadStatus::NotReconstructibleOrphanedState:
@@ -640,27 +659,34 @@ bool SafetyCore::canClearFault(
         case FaultCode::ConfigurationCommitIndeterminate:
             return input.bootValidationComplete &&
                    hasResolvedCommitEvidence(input);
-        case FaultCode::RunPersistenceUntrusted:
+        case FaultCode::RunPersistenceUntrusted: {
+            const bool trustedCoordinator =
+                isTrustedCoordinatorState(input.persistenceCoordinatorState) ||
+                isValidFallbackRecoveryEvidence(input);
             return input.bootValidationComplete && input.persistenceValidated &&
                    input.persistenceLoadStatus.has_value() &&
                    !isPersistenceSafeBoot(*input.persistenceLoadStatus) &&
-                   isTrustedCoordinatorState(
-                       input.persistenceCoordinatorState) &&
+                   trustedCoordinator &&
                    loadDisposition != RunLoadDisposition::SafeBoot &&
                    (loadDisposition != RunLoadDisposition::ResumeOffer ||
                     input.persistenceSnapshot != nullptr);
+        }
         case FaultCode::SafetySensorUnavailable:
             return hasFreshSensorEvidence(input);
         case FaultCode::ActuatorRequestWatchdog:
             return false;
-        case FaultCode::SystemProducerUnknown:
+        case FaultCode::SystemProducerUnknown: {
+            const bool trustedCoordinator =
+                isTrustedCoordinatorState(input.persistenceCoordinatorState) ||
+                isValidFallbackRecoveryEvidence(input);
             return unknownProducerSources_ == 0U &&
                    input.bootValidationComplete &&
                    hasFreshConfigurationEvidence(input) &&
                    input.persistenceValidated &&
                    input.persistenceLoadStatus.has_value() &&
                    !isPersistenceSafeBoot(*input.persistenceLoadStatus) &&
-                   isTrustedCoordinatorState(input.persistenceCoordinatorState);
+                   trustedCoordinator;
+        }
         case FaultCode::None:
             return true;
     }

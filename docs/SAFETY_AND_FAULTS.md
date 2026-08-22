@@ -25,7 +25,9 @@ historischen allgemeinen Fehlerklassen- und Recoverynotizen dieses Dokuments:
   Restart-Zaehler, kein Resetzeitfenster, keine Service-PIN-Pflicht und keine
   automatische `SAFETY_RECOVERY`-Gegenrichtung.
 - Resetcause ist Diagnose. Jeder Boot validiert Configuration, Persistenz und
-  aktuelle Evidenz neu; ein Neustart erzeugt weder Resume noch `Allowed`.
+  aktuelle Evidenz neu; ein Neustart erzeugt weder automatisch aktivierendes
+  Resume noch `Allowed`. Ein vollstaendig validierter #90-Fallback darf nur als
+  nicht-aktivierendes Resume-Angebot beobachtbar werden.
 
 Historische Detailabschnitte zu spaeteren Produzenten, thermischen Grenzen und
 Serviceablaeufen bleiben als Zukunfts-/Nachfolgekontext erhalten, werden aber

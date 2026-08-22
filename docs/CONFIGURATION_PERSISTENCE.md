@@ -34,6 +34,51 @@ Issue #24 fuehrt keinen parallelen Configuration-Safety-Enum, keinen neuen
 Persistenzschluessel, keinen Restart-/Safety-Latch und keine Service-PIN-Logik
 in diesem Konfigurationsvertrag ein.
 
+## Issue #90 R5.9: Recovery- und Backendgrenze
+
+Der bestehende Vertrag wird fuer den Clean Restart von Issue #90 wie folgt
+ausgelegt, ohne eine neue oeffentliche Statusfamilie einzufuehren:
+
+- `CommitOutcomeUnknown` ist kein Erfolg und wird weder als alter noch als
+  neuer Produktstand geraten. Die Aufloesung erfolgt nur ueber den vollstaendig
+  validierten Root-/Manifest-/Graph-Readback; bleibt sie unklar, bleibt der
+  Konfigurationszustand recovery-required und fail-closed.
+- `NotFound` bedeutet nur, dass ein konkreter Read-Aufruf keinen Record unter
+  dem Key beobachtet hat. Ein Read-/Readbackfehler nach Beginn einer Operation,
+  einschliesslich eines verlorenen oder unklar gewordenen Records, ist nicht
+  der urspruengliche leere Zustand und darf nicht als Factory-New behandelt
+  werden.
+- `StorageEpoch`, Generation, Root, Manifest, Fallback, Bootstrap und alle
+  referenzierten Records bilden gemeinsam die Aktivierungsentscheidung. Nur ein
+  vollstaendig validierter Graph darf Runtime werden.
+- `Prepared`, Orphan, Partial, Mixed, Corrupt und jeder indeterminierte
+  Zustand sind niemals ein aktivierbarer gueltiger Zustand. Sie bleiben fuer
+  Recovery beobachtbar und fuehren nicht zu stiller Mutation, Loeschung oder
+  Factory-Neuanlage.
+- Der vorhandene `ConfigurationRecoveryStatus`-/`ConfigurationCommitStatus`-
+  Vertrag und die SafetyCore-Projektion sind dafuer ausreichend; diese
+  Klarstellung fuehrt keinen neuen Enumwert ein.
+
+Backendcharakterisierung und Produkt-Recovery-Gate sind getrennte Wahrheiten.
+Eine technische Backendbeobachtung wird fuer spaetere Nachweise mindestens in
+folgender Form erhalten:
+
+```text
+backend_characterization:
+    observed | known_limitation | unexpected_change
+
+product_recovery_gate:
+    PASS | FAIL | NOT_RUN
+```
+
+Callback 12/`NotFound` bleibt als sichtbare
+`BACKEND_POWER_CUT_CHARACTERIZATION` / `KNOWN_BACKEND_LIMITATION` erhalten und
+wird nicht als Backend-PASS umetikettiert. Ein Backend-FAIL oder eine bekannte
+Limitation kann auf Produktebene zu einem sicheren Recovery-PASS fuehren, wenn
+die hoehere Ebene den verlorenen oder unklaren Record korrekt erkennt und
+fail-closed bleibt. Ein separates Backendresultat oder ein UI-Status ersetzt
+keine Produkt-Recoverypruefung.
+
 ## Architektur und Konfigurationsgeneration
 
 `FactoryConfiguration` ist unveraenderlicher Bestandteil der Firmware.
@@ -760,8 +805,10 @@ Der erfolgreiche dauerhafte Write eines neuen gueltigen
 `ConfigurationRootRecord` mit hoeherer rootSequence ist der einzige persistente
 Linearisierungspunkt. Danach wird innerhalb derselben exklusiven Mutation der
 vorbereitete Snapshot nicht allokierend, nicht serialisierend und vertraglich
-nicht fehlschlagend atomar sichtbar. Leser sehen nur die vollstaendig alte oder
-neue Generation.
+nicht fehlschlagend atomar sichtbar. Die owning-context-Validierung aktiviert
+nur den vollstaendigen alten oder neuen kanonischen Graphen; dies ist eine
+Generation-/Graphentscheidung und keine technische Einzel-Record- oder
+Same-Key-OLD/NEW-Garantie fuer einen unklaren Write.
 
 Ein eindeutig festgestellter Fehler vor Root-Commit laesst alte Konfiguration
 und Snapshot unveraendert. Ein nicht aufloesbares
@@ -993,9 +1040,11 @@ oder Resetversuch die relevanten Stringkapazitaeten getrennt fuer
 ProgramCatalog-Payload, Dokument-Envelopeworkspace, Store-Readback, den
 maximalen Slot-Scan-Lesepuffer sowie die kleinen kanonischen
 Bootstrap-/Manifest-/Rootbindungen. Vorherige maximale Dokumentrecords werden
-nur als kleine technische Deskriptoren gebunden; der Old-or-New-Portvertrag
-ersetzt eine zweite Vollkopie. Der transiente Lesepuffer, mit dem ein solcher
-alter Record waehrend der Slotsuche vollstaendig gelesen wird, bleibt davon
+nur als kleine technische Deskriptoren gebunden. Der Port stellt fuer einen
+unklaren oder unterbrochenen Write keine technische Einzel-Record- oder
+Same-Key-OLD/NEW-Garantie bereit und ersetzt damit keine Produktvalidierung
+durch eine zweite Vollkopie. Der
+transiente Lesepuffer, mit dem ein solcher alter Record waehrend der Slotsuche vollstaendig gelesen wird, bleibt davon
 unabhaengig real und erscheint eigenstaendig als Slot-Scan-Peak; er wird nicht
 mit dem kleinen Store-Readback-Peak des tatsaechlich neu geschriebenen Records
 vermischt. Modellreservierung erfolgt vor Factorymodellaufbau, und
@@ -1141,7 +1190,8 @@ Die vollstaendige Matrix umfasst nach Abschluss aller Teilissues mindestens:
 - Manifest- und Root-Slotrotation bis ueber die erste Wiederverwendung hinaus
 - technische und fachliche Graphkorruption an Active und Fallback
 - Fehler bei Dokument-, Manifest- und Root-Write sowie Readback
-- `CommitOutcomeUnknown` mit eindeutig altem beziehungsweise neuem Readback
+- `CommitOutcomeUnknown` mit vollstaendig validiertem vorherigem
+  beziehungsweise neuem Generation-/Graph-Outcome
 - `CommitOutcomeUnknown` mit `ReadError`, `CapacityError`, CRC- oder
   Semantikfehler beim Aufloesungsscan
 - exakter neuer Zielroot mit voruebergehend nicht lesbarem oder ungueltigem
@@ -1212,20 +1262,23 @@ Slotzahlen, Root-/Manifestbedeutung oder Schutzmengen - das bleibt Paket C
 (#56). Die anwendungsneutrale Fundamentschicht begrenzt lediglich jeden
 einzelnen technischen Scan auf hoechstens acht Slots.
 
-`SimulatedPersistentStateStore` modelliert die drei geforderten Zustands-
+`SimulatedPersistentStateStore` modelliert als deterministischer Testdouble die
+drei geforderten Zustands-
 bereiche explizit als getrennte private Datenhaltung: dauerhaft `committed_`,
 eine gestagte, aber noch nicht committete Schreiboperation
 (`std::optional<PendingWrite> pendingWrite_` mit Schluessel und vollstaendigem
 neuem Wert) sowie sonstiger fluechtiger Testzustand (Fault-Schalter, Read-/
-NotFound-Injektion). `write()` bildet damit die reale Reihenfolge "vollstaendig
-staging, dann atomar committen" nach: bei `FailBeforeBegin` und
+NotFound-Injektion). Diese festgelegten Fault-Modi sind Simulatorsemantik und
+keine NVS- oder allgemeine `IStateStore`-Garantie. `write()` bildet eine
+deterministische Testdouble-Reihenfolge "vollstaendig staging, dann committen"
+nach: bei `FailBeforeBegin` und
 `CapacityExceeded` entsteht kein Staging und `committed_` bleibt unberuehrt;
 bei `PowerCutBeforeCommit` wird der vollstaendige neue Wert gestagt, aber nie
 in `committed_` uebernommen - erst ein simulierter `restart()` verwirft das
 Staging, danach ist ausschliesslich der alte committed Wert sichtbar; bei
-Erfolg und bei `PowerCutAfterCommitBeforeReturn` wird der gestagte Wert atomar
-komplett in `committed_` uebernommen (nie ein Teil- oder Mischwert) und das
-Staging sofort geleert. `restart()` loescht `pendingWrite_` sowie alle
+Erfolg und bei `PowerCutAfterCommitBeforeReturn` wird der gestagte Wert im
+Testdouble komplett in `committed_` uebernommen und das Staging sofort geleert.
+`restart()` loescht `pendingWrite_` sowie alle
 fluechtigen Testschalter, laesst `committed_` aber unveraendert. Ein rein
 testinterner Zugriff `hasPendingWriteForTesting()` macht das gestagte-aber-
 nicht-committete Staging fuer native Tests beobachtbar, ohne die produktive
@@ -1236,10 +1289,17 @@ der laufenden Schreiboperation entsprechen.
 
 `IStateStore::write` liefert vier eindeutig unterscheidbare Ergebnisse statt
 einer pauschalen "unveraendert bei Fehler"-Garantie: `Success` (neuer Wert
-dauerhaft gespeichert), `WriteError` und `CapacityError` (sicher
-unveraendert) sowie `CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
+dauerhaft gespeichert), `WriteError` (der Adapter belegt, dass dieser konkrete
+Write keinen dauerhaften Zustandswechsel bewirkte) und `CapacityError` (der
+Adapter belegt, dass der Kapazitaetsfehler vor jeder dauerhaften
+Zustandsaenderung lag und der vorherige Zustand unveraendert blieb) sowie
+`CommitOutcomeUnknown` (Commit-Ausgang unbekannt, z. B.
 nach einem Stromausfall zwischen Commit und Rueckkehr - der neue Wert kann
-bereits dauerhaft gespeichert sein; der Aufrufer muss zuruecklesen). `read()`
+bereits dauerhaft gespeichert sein, muss es aber nicht; ein spaeterer Read
+kann jeden bestehenden Readstatus liefern und der Aufrufer muss den hoeheren
+Produkt-/Recoverykontext validieren; kann der Adapter bei `WriteError` oder
+`CapacityError` den sicheren Nichtwirksamkeits-/Vorab-Capacity-Vertrag nicht
+belegen, muss er `CommitOutcomeUnknown` liefern). `read()`
 und `write()` verwenden bewusst getrennte Statustypen -
 `StateStoreReadStatus` (`Success`/`NotFound`/`ReadError`/`CapacityError`) und
 `StateStoreWriteStatus` (`Success`/`WriteError`/`CapacityError`/

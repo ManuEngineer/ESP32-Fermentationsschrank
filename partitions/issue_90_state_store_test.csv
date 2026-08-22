@@ -1,0 +1,8 @@
+# Issue #90 destructive-characterization layout: mutually exclusive test
+# image, never used by the production release image. It deliberately uses a
+# distinct NVS partition label and has no product state_store partition.
+# Name,            Type, SubType, Offset,   Size,     Flags
+nvs,               data, nvs,     0x009000, 0x006000,
+phy_init,          data, phy,     0x00F000, 0x001000,
+factory,           app,  factory, 0x010000, 0x2F0000,
+state_store_test,  data, nvs,     0x300000, 0x100000,

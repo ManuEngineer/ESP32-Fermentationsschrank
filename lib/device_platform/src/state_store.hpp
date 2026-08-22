@@ -28,17 +28,23 @@ enum class StateStoreReadStatus : uint8_t {
 
 enum class StateStoreWriteStatus : uint8_t {
     Success,
-    // Der Vorgang ist sicher nicht wirksam geworden; der zuvor gespeicherte
-    // Wert (falls vorhanden) ist unveraendert.
+    // Der Adapter darf diesen Status nur zurueckgeben, wenn er sicher belegen
+    // kann, dass dieser konkrete Schreibvorgang keinen dauerhaften
+    // Zustandswechsel bewirkt hat; der zuvor gespeicherte Wert (falls
+    // vorhanden) bleibt unveraendert.
     WriteError,
-    // Der Speicher ist voll; der zuvor gespeicherte Wert (falls vorhanden)
-    // ist unveraendert.
+    // Der Adapter darf diesen Status nur zurueckgeben, wenn der
+    // Kapazitaetsfehler sicher vor jeder dauerhaften Zustandsaenderung
+    // klassifiziert wurde und der zuvor gespeicherte Wert (falls vorhanden)
+    // unveraendert blieb.
     CapacityError,
     // Der Commit-Ausgang ist unbekannt. Der neue Wert kann bereits
-    // vollstaendig und dauerhaft gespeichert sein oder auch nicht - beides
-    // ist zulaessig, ein abgeschnittener oder gemischter Wert jedoch nie.
-    // Der Aufrufer muss zuruecklesen, um den tatsaechlichen Stand zu
-    // bestimmen.
+    // vollstaendig und dauerhaft gespeichert sein oder auch nicht. Ein
+    // spaeterer Read darf deshalb einen vollstaendig lesbaren Record,
+    // `NotFound`, `ReadError`, `CapacityError` oder einen anderen vorhandenen
+    // Readstatus liefern; daraus folgt auf Portebene weder OLD noch NEW.
+    // Der Aufrufer muss den Readback zusammen mit Envelope-, Generation- und
+    // Recoverykontext vollstaendig validieren.
     CommitOutcomeUnknown,
 };
 
@@ -54,25 +60,36 @@ struct StateStoreReadResult {
 // Anwendung, nicht dieses Ports (siehe docs/CONFIGURATION_PERSISTENCE.md,
 // Abschnitt "Speicherport und Modulgrenzen").
 //
-// Vertrag pro Schluessel: ein erfolgreich zurueckgekehrter `write` ersetzt den
-// vorherigen Wert atomar und dauerhaft. Nach einer Unterbrechung ist fuer
-// jeden Schluessel entweder der vollstaendige alte oder der vollstaendige
-// neue Wert sichtbar, nie ein abgeschnittener oder gemischter Wert.
+// Technischer Vertrag pro Schluessel: ein erfolgreich zurueckgekehrter
+// `write` bedeutet, dass der neue Wert vollstaendig und dauerhaft gespeichert
+// ist. Fuer einen Write, dessen Abschluss unklar oder unterbrochen ist, legt
+// der Port dagegen nicht fest, welchen spaeteren Readstatus oder welche Bytes
+// ein Backend beobachtbar macht. Der Read kann einen vollstaendig lesbaren
+// Record, `NotFound`, `ReadError`, `CapacityError` oder einen anderen
+// vorhandenen Readstatus liefern. Eine Unterbrechung waehrend eines
+// Same-Key-Writes erhaelt deshalb keine technische OLD/NEW-Garantie. Die
+// hoeheren Ebenen muessen Records, Envelopes, Generationen, Referenzen und
+// Recoveryzustand vollstaendig validieren; nicht eindeutig validierbare
+// Ergebnisse bleiben indeterminiert und fail-closed.
 //
 // `write` liefert genau eines von vier eindeutig unterscheidbaren Ergebnissen:
 //   - `Success`: der neue Wert ist vollstaendig und dauerhaft gespeichert.
-//   - `WriteError`: der Vorgang ist sicher nicht wirksam geworden; der zuvor
-//     gespeicherte Wert (falls vorhanden) ist unveraendert.
-//   - `CapacityError`: der Speicher ist voll; ebenfalls sicher unveraendert.
+//   - `WriteError`: der Adapter bestaetigt, dass der konkrete Schreibvorgang
+//     keinen dauerhaften Zustandswechsel bewirkt hat; andernfalls muss er
+//     `CommitOutcomeUnknown` liefern.
+//   - `CapacityError`: der Adapter bestaetigt, dass der Kapazitaetsfehler vor
+//     jeder dauerhaften Zustandsaenderung lag und der vorherige Wert
+//     unveraendert blieb; andernfalls muss er `CommitOutcomeUnknown` liefern.
 //   - `CommitOutcomeUnknown`: der Commit-Ausgang ist unbekannt (z. B. ein
 //     Stromausfall zwischen Commit und Rueckkehr an den Aufrufer). Der neue
-//     Wert kann bereits dauerhaft gespeichert sein oder auch nicht - welcher
-//     der beiden Faelle zutrifft, ist ohne Ruecklesen nicht bekannt. Es gibt
-//     nie einen abgeschnittenen oder gemischten Wert. Der Aufrufer muss in
-//     diesem Fall zuruecklesen, um den tatsaechlichen Stand zu bestimmen.
-// Es gibt bewusst keine pauschale Garantie, dass jeder nicht erfolgreiche
-// `write` den alten Wert unveraendert laesst - das gilt nur fuer `WriteError`
-// und `CapacityError`, nicht fuer `CommitOutcomeUnknown`.
+//     Wert kann bereits dauerhaft gespeichert sein oder auch nicht. Ein
+//     spaeterer Read kann `Success` mit Bytes, `NotFound`, `ReadError`,
+//     `CapacityError` oder einen anderen bestehenden Readstatus liefern; der
+//     Aufrufer muss den vollstaendigen Produkt-/Recoverykontext validieren.
+// `WriteError` und `CapacityError` sind damit eindeutige "sicher nicht
+// wirksam"-Ergebnisse. `CommitOutcomeUnknown` ist das ausschliessliche
+// Ergebnis fuer einen moeglicherweise wirksamen, aber nicht aufgeklaerten
+// Vorgang.
 class IStateStore {
    public:
     IStateStore() = default;
@@ -92,6 +109,13 @@ class IStateStore {
     // `maxBytes` ist das aufrufer- beziehungsweise schluesselspezifische
     // Leselimit: uebersteigt der gespeicherte Wert `maxBytes`, liefert dies
     // `CapacityError` statt eines unkontrolliert grossen Werts.
+    // `NotFound` bedeutet, dass dieser konkrete Read-Aufruf keinen Wert unter
+    // dem Schluessel beobachtet hat. Es ist kein historischer Beleg, dass der
+    // Schluessel nie existierte. Bei Readback nach einem begonnenen Write oder
+    // einer unklaren Transaktion darf ein spaeteres `NotFound` deshalb nicht
+    // als urspruengliches leeres Factory-Neuheitsereignis umgedeutet werden;
+    // die aufrufende Recoveryebene muss die Read-Phase und den unklaren
+    // Ausgang erhalten.
     // Rueckgabetyp `StateStoreReadStatus` (in `StateStoreReadResult`)
     // schliesst `WriteError`/`CommitOutcomeUnknown` bereits durch das
     // Typsystem aus - kein Adapter kann diese als Leseergebnis zurueckgeben.

@@ -40,6 +40,48 @@ sind keine #24-R1-Testfaelle. Historische Testpunkte dazu bleiben fuer ihre
 spaeteren Issues/Hardware-Gates gekennzeichnet und gelten nicht als #24-
 Abnahmekriterium.
 
+## Issue #90 R5.9: getrennte Nachweise
+
+Fuer die spaetere #90-Persistenz-/Recoveryverifikation werden technische
+Backendcharakterisierung und das hoehere Produkt-Recovery-Gate getrennt und
+maschinenlesbar ausgewiesen:
+
+```text
+backend_characterization:
+    observed | known_limitation | unexpected_change
+
+product_recovery_gate:
+    PASS | FAIL | NOT_RUN
+```
+
+Callback 12/`NotFound` bleibt als sichtbare
+`BACKEND_POWER_CUT_CHARACTERIZATION` / `KNOWN_BACKEND_LIMITATION` erhalten und
+ist kein Backend-PASS. Slice 2 darf mit dem
+`SimulatedPersistentStateStore` erwartete Produktoutcomes deterministisch im
+Produktorakel pruefen. Ein finaler #90-Produkt-Recovery-PASS ist jedoch nur
+zulaessig, wenn zusaetzlich jeder relevante real aus der gepinnten
+NVS-/BDL-Charakterisierung hervorgehende Cut-/Recoveryzustand durch die
+hoehere Produktions-Recovery laeuft:
+
+```text
+real charakterisierter NVS-/BDL-Cut-Zustand
+-> Reinitialisierung / Reboot
+-> vollstaendiges Reload
+-> Record-/Envelope-/CRC-/Schema-/StorageEpoch-Pruefung
+-> Generation/Root/Manifest/Fallback bzw. rc0/rc1/rh0
+-> Prepared/Orphan/Indeterminate-Klassifikation
+-> Produkt-Recovery-Outcome
+-> SafetyCore / Safe-Boot / logischer Actuator-Gate
+```
+
+Ein Simulator-PASS plus separat dokumentierte reale Backendcharakterisierung
+reicht nicht fuer den finalen Produkt-PASS, solange die realen Zustaende nicht
+auf Produktebene geprueft wurden. Callback 12 darf Backend-FAIL / Known
+Limitation bleiben und zugleich zu einem sicheren Produkt-Recovery-PASS
+fuehren, wenn die hoehere Ebene den realen Zustand korrekt erkennt und
+fail-closed behandelt. Die gesamte Verifikation bleibt actor-free; UI und
+physische Aktorsicherheit sind kein #90-Gate.
+
 ## Testebenen
 
 ### Ebene 1: Native Unit-Tests
@@ -137,7 +179,11 @@ Mindestens:
 - `NoActiveRun`-Abschluss: `PreparedHead -> CheckpointSlot -> CommittedHead`
   und erst nach `Applied` Standby anwenden
 - korrupter Kontrollpunkt -> bestehender technischer #17-Speichervertrag und
-  `FallbackRecovered -> SAFE_BOOT`; kein Fallback-Resume und keine Promotion
+  fail-closed Recovery. Ein vollstaendig validierter aelterer Fallback darf im
+  #90-Orakel als `OLDER_VALID_CHECKPOINT_RESUME`-Angebot klassifiziert werden,
+  aber nicht automatisch resume, promoten oder `Allowed` werden; erst
+  explizites Resume, `Applied`, FSM und frische Safety-Evidenz oeffnen den
+  weiteren Gatepfad
 - `COMPLETED` bleibt nach Neustart `COMPLETED`
 - kein Service- oder Aktortest aus `SAFE_BOOT`
 - Quittierung ohne Fehlerreset

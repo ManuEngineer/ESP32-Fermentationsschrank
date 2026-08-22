@@ -38,8 +38,61 @@ zweiten Readback; nur `CommitOutcomeUnknown` wird durch `writeExact()`
 aufgeloest. RAM/FSM wird erst nach dem Gesamtstatus `Applied` geaendert.
 
 Die historischen #18-Recovery-/Progressabschnitte dieses Dokuments sind C2-
-Legacy. Sie werden von #24 nicht als aktiver Produktpfad aufgerufen; es gibt in
-R1 kein Fallback-Resume, keine Promotion und keine Charge-Rettungsrechnung.
+Legacy. Sie werden von #24 nicht automatisch als aktiver Produktpfad
+aufgerufen; R1 fuehrt kein automatisches Fallback-Resume, keine automatische
+Promotion und keine Charge-Rettungsrechnung ein.
+
+### R5.9-Record- und Recoverygrenze
+
+Der bestehende Run-Port verwendet genau drei kanonische Records: `rh0` ist der
+Head mit Current-/Fallback-Referenzen und Transaktionszustand; `rc0` und `rc1`
+sind die beiden Checkpointslots. Erst der vollstaendig validierte Head- und
+Checkpointgraph bestimmt, ob ein Current, Fallback oder kein sicherer Runstand
+vorliegt.
+
+`NotFound` bei einem konkreten Read ist nur die Beobachtung, dass dieser Key in
+diesem Read keinen Record lieferte. Ein spaeterer Read-/Readbackfehler oder ein
+nach Beginn einer Transaktion verlorener Record ist kein urspruengliches
+`NoPersistedRun` und darf nicht als solches, als `NoActiveRun` oder als stiller
+Loeschpfad behandelt werden. `NoActiveRun` ist nur fuer einen vertrauenswuerdig
+bestimmten, semantisch nicht resumefaehigen Current beziehungsweise den
+kanonisch bestimmten leeren Stand zulaessig; unklare, Prepared-, Orphan-,
+Partial-, Mixed-, Corrupt- und indeterminierte Zustaende bleiben
+Recovery-/Abort-required und fail-closed.
+
+Die vorhandenen `RunPersistenceLoadStatus`,
+`RunPersistenceCoordinatorState`, `RunPersistenceResultStatus` und
+`SafetyCore`-Projektionen sind dafuer ausreichend. Recoverystatus bleibt als
+technische/produktliche Beobachtung erhalten (`RECOVERY_STATUS_OBSERVABLE`),
+ohne UI- oder Aktorfreigabe zu implizieren. Die logische Freigabe bleibt bis
+zu vollstaendig validiertem Graph, `Applied`, FSM-Anwendung und frischer
+Evidenz gesperrt.
+
+### R5.9: aelterer Fallback als nicht-aktivierendes Resume-Angebot
+
+`OLDER_VALID_CHECKPOINT_RESUME` ist in #90 eine Produktklassifikation und ein
+nicht-aktivierendes Resume-Angebot, kein automatischer Boot-Resume und keine
+Fallback-Promotion in RAM oder FSM. Sie ist nur zulaessig, wenn der Current-
+Pfad unbrauchbar und der kanonisch referenzierte aeltere Fallback vollstaendig
+gegen Head, Slot, CRC, Schema, `StorageEpoch` und Referenzen validiert ist.
+
+Bis zur Benutzerentscheidung bleibt der logische Gatezustand
+`UNRESOLVED`/`actuator_allowed=false`. Die weitere Kette lautet verbindlich:
+
+```text
+explizite Resume-Entscheidung
+-> bestehender Write-before-Apply-Pfad
+-> Gesamtstatus Applied
+-> FSM-Anwendung
+-> frische Config-/Sensor-/Planner-/Persistenzevidenz
+-> erneute SafetyCore-Pruefung
+-> erst dann eventuell ActuatorSafetyGateStatus::Allowed
+```
+
+Alte Zeit-/Progressgutschrift, Charge-Rettung, automatische Promotion und
+Allowed allein aus einem Fallbackrecord bleiben verboten. Unklare oder nicht
+vollstaendig validierte Fallbacklagen bleiben Recovery-/Abort-required und
+fail-closed.
 
 ## Persistierter Laufzustand
 
