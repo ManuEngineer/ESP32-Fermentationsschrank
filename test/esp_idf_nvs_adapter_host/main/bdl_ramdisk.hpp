@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <array>
+#include <string>
 #include <vector>
 
 #include "esp_blockdev.h"
@@ -17,6 +18,8 @@ struct BdlEvent {
     std::size_t occurrence;
     esp_err_t result;
     BdlCutPhase cutPhase;
+    std::string logicalKey;
+    std::uint32_t baselineChecksum;
 };
 
 class TestRamDisk final {
@@ -32,7 +35,10 @@ class TestRamDisk final {
     void clearEvents();
     void setCutPlan(BdlOperation operation, std::size_t occurrence,
                     BdlCutPhase phase);
+    void armCutForNext(BdlOperation operation, BdlCutPhase phase);
     void clearCutPlan();
+    void setLogicalKey(const char* key);
+    void clearLogicalKey();
     [[nodiscard]] std::vector<BdlEvent> events() const;
     [[nodiscard]] std::uint32_t checksum() const;
 

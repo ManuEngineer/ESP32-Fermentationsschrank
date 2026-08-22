@@ -1,2 +1,5 @@
 CONFIG_IDF_TARGET="linux"
 CONFIG_NVS_BDL_STACK=y
+# The host bridge keeps large codec/fixture objects on the ESP-IDF main task.
+# This is test-only and does not affect esp32_bringup or esp32_release.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768

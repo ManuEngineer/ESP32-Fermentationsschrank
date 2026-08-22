@@ -16,6 +16,8 @@ struct Context {
     BdlOperation cutOperation{BdlOperation::Read};
     std::size_t cutOccurrence{0U};
     BdlCutPhase cutPhase{BdlCutPhase::None};
+    std::string logicalKey;
+    std::uint32_t logicalBaselineChecksum{0U};
 };
 
 Context& context(esp_blockdev_handle_t handle) {
@@ -36,8 +38,9 @@ bool cutMatches(Context& disk, BdlOperation operation, BdlCutPhase phase,
 void record(Context& disk, BdlOperation operation, std::uint64_t offset,
             std::size_t length, std::size_t occurrence, esp_err_t result,
             BdlCutPhase cutPhase) {
-    disk.events.push_back(
-        {operation, offset, length, occurrence, result, cutPhase});
+    disk.events.push_back({operation, offset, length, occurrence, result,
+                           cutPhase, disk.logicalKey,
+                           disk.logicalBaselineChecksum});
 }
 
 esp_err_t read(esp_blockdev_handle_t handle, uint8_t* destination,
@@ -220,9 +223,33 @@ void TestRamDisk::setCutPlan(BdlOperation operation, std::size_t occurrence,
     }
 }
 
+void TestRamDisk::armCutForNext(BdlOperation operation, BdlCutPhase phase) {
+    if (handle_ != nullptr) {
+        auto& disk = context(handle_);
+        const auto index = static_cast<std::size_t>(operation);
+        disk.cutOperation = operation;
+        disk.cutOccurrence = disk.occurrences[index] + 1U;
+        disk.cutPhase = phase;
+    }
+}
+
 void TestRamDisk::clearCutPlan() {
     if (handle_ != nullptr) {
         context(handle_).cutPhase = BdlCutPhase::None;
+    }
+}
+
+void TestRamDisk::setLogicalKey(const char* key) {
+    if (handle_ != nullptr) {
+        auto& disk = context(handle_);
+        disk.logicalKey = key == nullptr ? "" : key;
+        disk.logicalBaselineChecksum = checksum();
+    }
+}
+
+void TestRamDisk::clearLogicalKey() {
+    if (handle_ != nullptr) {
+        context(handle_).logicalKey.clear();
     }
 }
 
