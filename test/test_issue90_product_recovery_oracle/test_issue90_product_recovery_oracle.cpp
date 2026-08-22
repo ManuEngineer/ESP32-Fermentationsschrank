@@ -2975,6 +2975,9 @@ const char* gateStatusName(fermentation::ActuatorSafetyGateStatus value) {
 struct ProductionActual {
     std::string primaryStatus;
     std::string secondaryStatus;
+    bool snapshotPresent{false};
+    bool fallbackReferenceValidated{false};
+    bool persistenceValidated{false};
     std::string recordClassification{"UNMAPPED"};
     std::string productOutcome{"UNMAPPED"};
     std::string safetyProjection{"UNMAPPED"};
@@ -3017,7 +3020,7 @@ BackendObservation seedProductionStore(const OracleCase& item,
 }
 
 fermentation::SafetyEvaluation evaluateProductionSafety(
-    const ProductionActual& /*unused*/, bool configurationValidated,
+    ProductionActual& actual, bool configurationValidated,
     fermentation::ConfigurationRecoveryStatus configurationStatus,
     fermentation::ConfigurationServiceMode configurationMode,
     std::optional<fermentation::ConfigurationSafetyProducer>
@@ -3032,12 +3035,17 @@ fermentation::SafetyEvaluation evaluateProductionSafety(
     input.configurationRecoveryStatus = configurationStatus;
     input.configurationServiceMode = configurationMode;
     input.configurationProducer = configurationProducer;
-    input.persistenceValidated =
+    const bool persistenceValidated =
         persistenceStatus ==
             fermentation::RunPersistenceLoadStatus::NoPersistedRun ||
         persistenceStatus == fermentation::RunPersistenceLoadStatus::Current ||
         persistenceStatus ==
-            fermentation::RunPersistenceLoadStatus::NoActiveRun;
+            fermentation::RunPersistenceLoadStatus::NoActiveRun ||
+        (persistenceStatus ==
+             fermentation::RunPersistenceLoadStatus::FallbackRecovered &&
+         persistenceSnapshot != nullptr);
+    actual.persistenceValidated = persistenceValidated;
+    input.persistenceValidated = persistenceValidated;
     input.persistenceLoadStatus = persistenceStatus;
     input.persistenceSnapshot = persistenceSnapshot;
     input.persistenceCoordinatorState = coordinatorState;
@@ -3130,6 +3138,11 @@ ProductionActual runRunProduction(const OracleCase& item,
     const auto result = coordinator.loadAndInitialize();
     ProductionActual actual;
     actual.primaryStatus = runPersistenceLoadStatusName(result.status);
+    actual.snapshotPresent = result.snapshot.has_value();
+    actual.fallbackReferenceValidated =
+        result.status ==
+            fermentation::RunPersistenceLoadStatus::FallbackRecovered &&
+        actual.snapshotPresent;
     actual.secondaryStatus =
         std::string("coordinator_state=") +
         runPersistenceCoordinatorStateName(coordinator.state());
@@ -3220,6 +3233,21 @@ void test_existing_production_matches_slice2_oracle() {
         const auto actual = item.domain == Domain::Configuration
                                 ? runConfigurationProduction(item, store)
                                 : runRunProduction(item, store);
+        if (item.domain == Domain::Run &&
+            (item.scenario == Scenario::FallbackValid ||
+             item.scenario == Scenario::InvalidReference ||
+             item.scenario == Scenario::ForeignEpoch)) {
+            TEST_ASSERT_EQUAL_STRING("FallbackRecovered",
+                                     actual.primaryStatus.c_str());
+            TEST_ASSERT_TRUE(actual.snapshotPresent);
+            TEST_ASSERT_TRUE(actual.fallbackReferenceValidated);
+            TEST_ASSERT_TRUE(actual.persistenceValidated);
+            TEST_ASSERT_TRUE(
+                actual.secondaryStatus.find("FallbackRecoveryPending") !=
+                std::string::npos);
+            TEST_ASSERT_EQUAL_STRING("UNRESOLVED", actual.logicalGate.c_str());
+            TEST_ASSERT_FALSE(actual.actuatorAllowed);
+        }
         const std::string expectedOutcome = item.hasProductOutcome
                                                 ? outcomeName(item.outcome)
                                                 : "NOT_APPLICABLE";
@@ -3262,7 +3290,9 @@ void test_existing_production_matches_slice2_oracle() {
             "issue90_production_compare_case=%s expected_product_outcome=%s "
             "expected_safety_projection=%s expected_safety_producer=%s "
             "expected_logical_gate=UNRESOLVED expected_actuator_allowed=false "
-            "actual_primary_status=%s actual_secondary_status=%s "
+            "actual_primary_status=%s actual_snapshot_present=%s "
+            "actual_fallback_reference_validated=%s "
+            "actual_persistence_validated=%s actual_secondary_status=%s "
             "actual_record_classification=%s actual_product_outcome=%s "
             "actual_safety_projection=%s actual_safety_producer=%s "
             "actual_logical_gate=%s actual_actuator_allowed=%s "
@@ -3272,6 +3302,9 @@ void test_existing_production_matches_slice2_oracle() {
             "fixture_reboot=%s\n",
             item.id, expectedOutcome.c_str(), expectedSafety.c_str(),
             expectedProducer.c_str(), actual.primaryStatus.c_str(),
+            actual.snapshotPresent ? "true" : "false",
+            actual.fallbackReferenceValidated ? "true" : "false",
+            actual.persistenceValidated ? "true" : "false",
             actual.secondaryStatus.c_str(), actual.recordClassification.c_str(),
             actual.productOutcome.c_str(), actual.safetyProjection.c_str(),
             actual.safetyProducer.c_str(), actual.logicalGate.c_str(),
