@@ -228,7 +228,7 @@ const std::vector<OracleCase> kMatrix = {
              RecordClassification::FullyValidOlder,
              ProductOutcome::OldValidConfiguration, SafetyProjection::Standby,
              SafetyProducer::None, false),
-    makeCase("config_cm0_fallback_valid", Domain::Configuration,
+    makeCase("config_cr1_fallback_valid", Domain::Configuration,
              Scenario::FallbackValid, "invalid current with valid fallback",
              StateStoreReadStatus::Success,
              RecordClassification::FullyValidFallback,
@@ -327,7 +327,7 @@ const std::vector<OracleCase> kMatrix = {
              ProductOutcome::ConfigurationRecoveryRequired,
              SafetyProjection::SafeBoot,
              SafetyProducer::ConfigurationIntegrityFailure, true),
-    makeCase("config_cr1_foreign_epoch", Domain::Configuration,
+    makeCase("config_cm0_foreign_epoch", Domain::Configuration,
              Scenario::ForeignEpoch, "cm0 foreign StorageEpoch",
              StateStoreReadStatus::Success, RecordClassification::ForeignEpoch,
              ProductOutcome::ConfigurationRecoveryRequired,
@@ -382,14 +382,14 @@ const std::vector<OracleCase> kMatrix = {
         SafetyProjection::ResumeOffer, SafetyProducer::None, false,
         StateStoreWriteStatus::CommitOutcomeUnknown),
     makeCase(
-        "run_rc0_write_error_older", Domain::Run, Scenario::SafeWriteErrorOld,
+        "run_rc0_write_error_current", Domain::Run, Scenario::SafeWriteErrorOld,
         "new checkpoint rejected before commit", StateStoreReadStatus::Success,
         RecordClassification::FullyValidCurrent, ProductOutcome::NewValidResume,
         SafetyProjection::ResumeOffer, SafetyProducer::None, false,
         StateStoreWriteStatus::WriteError),
     makeCase(
-        "run_rc0_capacity_error_older", Domain::Run, Scenario::SafeCapacityOld,
-        "new checkpoint rejected before capacity",
+        "run_rc0_capacity_error_current", Domain::Run,
+        Scenario::SafeCapacityOld, "new checkpoint rejected before capacity",
         StateStoreReadStatus::Success, RecordClassification::FullyValidCurrent,
         ProductOutcome::NewValidResume, SafetyProjection::ResumeOffer,
         SafetyProducer::None, false, StateStoreWriteStatus::CapacityError),
@@ -875,7 +875,7 @@ std::string targetKey(const OracleCase& item) {
 void writeRunBaseline(SimulatedPersistentStateStore& store,
                       std::map<std::string, std::string>& bytes,
                       bool withFallback, bool resumeEligible = true,
-                      bool writeHead = true) {
+                      bool writeHead = true, bool persistCurrent = true) {
     if (withFallback) {
         const auto oldSnapshot =
             runSnapshot(resumeEligible, "issue90-line-run", 1U);
@@ -884,7 +884,7 @@ void writeRunBaseline(SimulatedPersistentStateStore& store,
         bytes["rc1"] = runRecord(oldSnapshot, 1U);
         bytes["rc0"] = runRecord(newSnapshot, 2U);
         put(store, "rc1", bytes["rc1"]);
-        put(store, "rc0", bytes["rc0"]);
+        if (persistCurrent) put(store, "rc0", bytes["rc0"]);
         if (writeHead) {
             const auto current = runReference(bytes["rc0"], 0U);
             const auto fallback = runReference(bytes["rc1"], 1U);
@@ -1104,13 +1104,23 @@ BackendObservation observe(const OracleCase& item) {
             item.scenario == Scenario::ForeignEpoch ||
             item.scenario == Scenario::PreparedInterrupted ||
             item.scenario == Scenario::Orphan;
-        if (item.scenario == Scenario::MissingReferencedRun ||
-            item.scenario == Scenario::NotReconstructible) {
+        if (item.scenario == Scenario::MissingReferencedRun) {
             const auto snapshot = runSnapshot(true, "issue90-missing-run", 1U);
             const auto rc0 = runRecord(snapshot, 1U);
             const auto current = runReference(rc0, 0U);
             baseline["rh0"] = runHead(current);
             put(store, "rh0", baseline["rh0"]);
+        } else if (item.scenario == Scenario::NotReconstructible) {
+            const auto oldSnapshot =
+                runSnapshot(true, "issue90-not-reconstructible", 1U);
+            const auto newSnapshot =
+                runSnapshot(true, "issue90-not-reconstructible", 2U);
+            const auto oldRecord = runRecord(oldSnapshot, 1U);
+            const auto newRecord = runRecord(newSnapshot, 2U);
+            const auto head = runHead(runReference(newRecord, 0U),
+                                      runReference(oldRecord, 1U));
+            baseline["rh0"] = head;
+            put(store, "rh0", head);
         } else if (item.scenario != Scenario::NoPersistedRun &&
                    !customUnknownHeadMutation &&
                    item.scenario != Scenario::ControlledDiscardPost) {
@@ -1146,17 +1156,22 @@ BackendObservation observe(const OracleCase& item) {
                 baseline["rh0"] = head;
                 break;
             }
-            case Scenario::FallbackValid: {
-                const auto head = fermentation::decodeRunPersistenceHead(
-                    baseline["rh0"], kEpoch);
-                TEST_ASSERT_TRUE(head.has_value());
-                auto invalid = *head;
-                invalid.current.payloadCrc ^= 1U;
-                const auto bytes =
-                    fermentation::encodeRunPersistenceHead(invalid, kEpoch);
-                TEST_ASSERT_TRUE(bytes.has_value());
-                store.injectCorruption(keyFor("rh0"), *bytes);
-            } break;
+            case Scenario::FallbackValid:
+                // The head points at an unavailable newer revision while the
+                // valid current-slot bytes remain as an unreferenced
+                // same-run candidate. The older fallback edge is valid.
+                {
+                    const auto head = fermentation::decodeRunPersistenceHead(
+                        baseline["rh0"], kEpoch);
+                    TEST_ASSERT_TRUE(head.has_value());
+                    auto unavailableCurrent = *head;
+                    unavailableCurrent.current.checkpointRevision += 1U;
+                    const auto bytes = fermentation::encodeRunPersistenceHead(
+                        unavailableCurrent, kEpoch);
+                    TEST_ASSERT_TRUE(bytes.has_value());
+                    store.injectCorruption(keyFor("rh0"), *bytes);
+                }
+                break;
             case Scenario::UnknownCommitValid:
             case Scenario::UnknownCommitNotFound: {
                 // OLD and NEW are separate checkpoints on one run line. Only
@@ -1482,44 +1497,103 @@ bool hasCommitted(const BackendObservation& observed, const char* key) {
     return observed.committed.find(key) != observed.committed.end();
 }
 
-bool validConfigurationGeneration(const BackendObservation& observed,
-                                  const char* rootKey, const char* manifestKey,
-                                  const char* userKey, const char* serviceKey,
-                                  const char* catalogKey) {
-    if (!hasCommitted(observed, rootKey) ||
-        !hasCommitted(observed, manifestKey) ||
+std::optional<fermentation::ConfigurationRootRecord> decodeConfigurationRoot(
+    const BackendObservation& observed, const char* rootKey) {
+    if (!hasCommitted(observed, rootKey)) return std::nullopt;
+    const auto envelope =
+        device_platform::decodeEnvelope(observed.committed.at(rootKey));
+    if (!envelope.envelope.has_value() ||
+        envelope.envelope->recordTypeId != kConfigurationRootRecordType ||
+        envelope.envelope->schemaVersion !=
+            fermentation::kConfigurationRootSchemaVersion1 ||
+        envelope.envelope->storageEpoch != kEpoch) {
+        return std::nullopt;
+    }
+    const auto root = fermentation::decodeConfigurationRootPayload(
+        envelope.envelope->payload);
+    return root.value;
+}
+
+bool configurationManifestReferenceMatches(
+    const fermentation::ConfigurationManifestReference& reference,
+    const BackendObservation& observed, const char* manifestKey) {
+    if (manifestKey[0] != 'c' || manifestKey[1] != 'm' ||
+        manifestKey[2] < '0' || manifestKey[2] > '9' ||
+        !hasCommitted(observed, manifestKey)) {
+        return false;
+    }
+    const auto envelope =
+        device_platform::decodeEnvelope(observed.committed.at(manifestKey));
+    if (!envelope.envelope.has_value() ||
+        envelope.envelope->recordTypeId != kConfigurationManifestRecordType ||
+        envelope.envelope->schemaVersion !=
+            fermentation::kConfigurationManifestSchemaVersion1 ||
+        envelope.envelope->storageEpoch != kEpoch) {
+        return false;
+    }
+    return reference.recordType == kConfigurationManifestRecordType &&
+           reference.slot.value() ==
+               static_cast<std::uint32_t>(manifestKey[2] - '0') &&
+           reference.version.value() == envelope.envelope->versionValue &&
+           reference.schemaVersion == envelope.envelope->schemaVersion &&
+           reference.payloadLength == envelope.envelope->payload.size() &&
+           reference.payloadCrc == device_platform::computeCrc32IsoHdlc(
+                                       envelope.envelope->payload) &&
+           reference.storageEpoch == envelope.envelope->storageEpoch;
+}
+
+bool configurationRootReferencesMatch(const BackendObservation& observed,
+                                      const char* rootKey,
+                                      const char* activeManifestKey,
+                                      const char* fallbackManifestKey) {
+    const auto root = decodeConfigurationRoot(observed, rootKey);
+    if (!root.has_value() || !configurationManifestReferenceMatches(
+                                 root->active, observed, activeManifestKey)) {
+        return false;
+    }
+    if (fallbackManifestKey == nullptr) {
+        return !root->fallback.has_value();
+    }
+    return root->fallback.has_value() &&
+           configurationManifestReferenceMatches(*root->fallback, observed,
+                                                 fallbackManifestKey);
+}
+
+bool validConfigurationManifestGeneration(const BackendObservation& observed,
+                                          const char* manifestKey,
+                                          const char* userKey,
+                                          const char* serviceKey,
+                                          const char* catalogKey) {
+    if (!hasCommitted(observed, manifestKey) ||
         !hasCommitted(observed, userKey) ||
         !hasCommitted(observed, serviceKey) ||
         !hasCommitted(observed, catalogKey)) {
         return false;
     }
-    const auto rootEnvelope =
-        device_platform::decodeEnvelope(observed.committed.at(rootKey));
     const auto manifestEnvelope =
         device_platform::decodeEnvelope(observed.committed.at(manifestKey));
-    if (!rootEnvelope.envelope.has_value() ||
-        !manifestEnvelope.envelope.has_value()) {
-        return false;
-    }
-    const auto root = fermentation::decodeConfigurationRootPayload(
-        rootEnvelope.envelope->payload);
-    const auto manifest = fermentation::decodeConfigurationManifestPayload(
-        manifestEnvelope.envelope->payload);
-    if (!root.value.has_value() || !manifest.value.has_value() ||
-        root.value->active.slot.value() !=
-            static_cast<std::uint32_t>(manifestKey[2] - '0') ||
-        root.value->active.storageEpoch != kEpoch ||
+    if (!manifestEnvelope.envelope.has_value() ||
+        manifestEnvelope.envelope->recordTypeId !=
+            kConfigurationManifestRecordType ||
+        manifestEnvelope.envelope->schemaVersion !=
+            fermentation::kConfigurationManifestSchemaVersion1 ||
         manifestEnvelope.envelope->storageEpoch != kEpoch) {
         return false;
     }
+    const auto manifest = fermentation::decodeConfigurationManifestPayload(
+        manifestEnvelope.envelope->payload);
+    if (!manifest.value.has_value()) return false;
     const auto matches = [&](const std::string& key, const auto& referenceValue,
                              RecordTypeId type) {
         const auto record =
             device_platform::decodeEnvelope(observed.committed.at(key));
         if (!record.envelope.has_value() ||
             record.envelope->recordTypeId != type ||
-            record.envelope->storageEpoch != kEpoch ||
+            record.envelope->schemaVersion != referenceValue.schemaVersion ||
+            record.envelope->storageEpoch != referenceValue.storageEpoch ||
             record.envelope->versionValue != referenceValue.version.value() ||
+            referenceValue.slot.value() !=
+                static_cast<std::uint32_t>(key[2] - '0') ||
             record.envelope->payload.size() != referenceValue.payloadLength ||
             device_platform::computeCrc32IsoHdlc(record.envelope->payload) !=
                 referenceValue.payloadCrc) {
@@ -1533,6 +1607,25 @@ bool validConfigurationGeneration(const BackendObservation& observed,
                    kServiceConfigurationRecordType) &&
            matches(catalogKey, manifest.value->programCatalog,
                    kProgramCatalogRecordType);
+}
+
+bool validConfigurationGeneration(const BackendObservation& observed,
+                                  const char* rootKey, const char* manifestKey,
+                                  const char* userKey, const char* serviceKey,
+                                  const char* catalogKey) {
+    return configurationRootReferencesMatch(observed, rootKey, manifestKey,
+                                            nullptr) &&
+           validConfigurationManifestGeneration(observed, manifestKey, userKey,
+                                                serviceKey, catalogKey);
+}
+
+bool configurationFallbackReferenceMatches(const BackendObservation& observed,
+                                           const char* rootKey,
+                                           const char* fallbackManifestKey) {
+    const auto root = decodeConfigurationRoot(observed, rootKey);
+    return root.has_value() && root->fallback.has_value() &&
+           configurationManifestReferenceMatches(*root->fallback, observed,
+                                                 fallbackManifestKey);
 }
 
 bool validRunRecord(const BackendObservation& observed, const char* key,
@@ -1576,11 +1669,57 @@ bool validRunHeadGraph(const BackendObservation& observed,
             observed.committed.at("rc1"), kEpoch);
         if (!fallback.has_value() ||
             head->fallback->checkpointRevision >= current->checkpointRevision ||
-            fallback->snapshot.activeRunId != current->snapshot.activeRunId) {
+            fallback->snapshot.activeRunId != current->snapshot.activeRunId ||
+            !fermentation::runCheckpointReferenceMatches(*head->fallback,
+                                                         *fallback, 1U)) {
             return false;
         }
     }
-    return true;
+    return fermentation::runCheckpointReferenceMatches(head->current, *current,
+                                                       0U);
+}
+
+bool validRunFallbackWithUnavailableCurrent(
+    const BackendObservation& observed) {
+    if (!hasCommitted(observed, "rh0") || !hasCommitted(observed, "rc0") ||
+        !validRunRecord(observed, "rc0", 0U) ||
+        !validRunRecord(observed, "rc1", 1U)) {
+        return false;
+    }
+    const auto head = fermentation::decodeRunPersistenceHead(
+        observed.committed.at("rh0"), kEpoch);
+    if (!head.has_value() ||
+        head->state != fermentation::RunPersistenceHeadState::Committed ||
+        !head->fallback.has_value() || head->current.slot != 0U ||
+        head->fallback->checkpointRevision >=
+            head->current.checkpointRevision) {
+        return false;
+    }
+    const auto fallback = fermentation::decodeRunPersistenceRecord(
+        observed.committed.at("rc1"), kEpoch);
+    const auto current = fermentation::decodeRunPersistenceRecord(
+        observed.committed.at("rc0"), kEpoch);
+    return current.has_value() && fallback.has_value() &&
+           !fermentation::runCheckpointReferenceMatches(head->current, *current,
+                                                        0U) &&
+           fallback->snapshot.activeRunId == current->snapshot.activeRunId &&
+           fallback->checkpointRevision < current->checkpointRevision &&
+           fermentation::runCheckpointReferenceMatches(*head->fallback,
+                                                       *fallback, 1U);
+}
+
+bool validRunHeadFallbackReference(const BackendObservation& observed) {
+    if (!hasCommitted(observed, "rh0") || !hasCommitted(observed, "rc1")) {
+        return false;
+    }
+    const auto head = fermentation::decodeRunPersistenceHead(
+        observed.committed.at("rh0"), kEpoch);
+    const auto fallback = fermentation::decodeRunPersistenceRecord(
+        observed.committed.at("rc1"), kEpoch);
+    return head.has_value() && head->fallback.has_value() &&
+           fallback.has_value() &&
+           fermentation::runCheckpointReferenceMatches(*head->fallback,
+                                                       *fallback, 1U);
 }
 
 bool semanticFixturePassed(const OracleCase& item,
@@ -1605,24 +1744,23 @@ bool semanticFixturePassed(const OracleCase& item,
                        decoded.value->active.slot.value() == 2U;
             }
             case Scenario::FallbackValid: {
-                if (!oldValid || !hasCommitted(observed, "cr1") ||
+                if (!oldValid ||
+                    !configurationRootReferencesMatch(observed, "cr1", "cm1",
+                                                      "cm0") ||
+                    !validConfigurationManifestGeneration(
+                        observed, "cm0", "uc0", "sc0", "pc0") ||
                     !hasCommitted(observed, "uc1"))
                     return false;
-                const auto root = device_platform::decodeEnvelope(
-                    observed.committed.at("cr1"));
-                if (!root.envelope.has_value()) return false;
-                const auto decoded =
-                    fermentation::decodeConfigurationRootPayload(
-                        root.envelope->payload);
                 const auto user = device_platform::decodeEnvelope(
                     observed.committed.at("uc1"));
-                return decoded.value.has_value() &&
-                       decoded.value->fallback.has_value() &&
-                       decoded.value->fallback->slot.value() == 0U &&
-                       !user.envelope.has_value();
+                return !user.envelope.has_value();
             }
             case Scenario::UnknownCommitValid:
-                return oldValid && hasCommitted(observed, "cr1") &&
+                return oldValid &&
+                       configurationRootReferencesMatch(observed, "cr1", "cm1",
+                                                        "cm0") &&
+                       validConfigurationManifestGeneration(
+                           observed, "cm1", "uc1", "sc1", "pc1") &&
                        observed.committed.at("cr0") !=
                            observed.committed.at("cr1");
             case Scenario::SafeWriteErrorOld:
@@ -1630,7 +1768,11 @@ bool semanticFixturePassed(const OracleCase& item,
                 return oldValid && observed.writeTargetKey == "cr1" &&
                        !hasCommitted(observed, "cr1");
             case Scenario::UnknownCommitNotFound:
-                return oldValid && hasCommitted(observed, "cr1") &&
+                return oldValid &&
+                       configurationRootReferencesMatch(observed, "cr1", "cm1",
+                                                        "cm0") &&
+                       validConfigurationManifestGeneration(
+                           observed, "cm1", "uc1", "sc1", "pc1") &&
                        observed.readStatus == StateStoreReadStatus::NotFound;
             case Scenario::ReadError:
                 return oldValid &&
@@ -1695,11 +1837,26 @@ bool semanticFixturePassed(const OracleCase& item,
                 return decoded.envelope.has_value() &&
                        decoded.envelope->storageEpoch != kEpoch;
             }
-            case Scenario::InvalidReference:
-                return oldValid && hasCommitted(observed, "cr1");
-            case Scenario::InvalidReferenceNoFallback:
+            case Scenario::InvalidReference: {
+                const auto root = decodeConfigurationRoot(observed, "cr1");
+                return oldValid && root.has_value() &&
+                       !configurationManifestReferenceMatches(
+                           root->active, observed, "cm1") &&
+                       configurationFallbackReferenceMatches(observed, "cr1",
+                                                             "cm0") &&
+                       validConfigurationManifestGeneration(
+                           observed, "cm0", "uc0", "sc0", "pc0");
+            }
+            case Scenario::InvalidReferenceNoFallback: {
+                const auto root = decodeConfigurationRoot(observed, "cr0");
+                return root.has_value() && !root->fallback.has_value() &&
+                       !configurationManifestReferenceMatches(root->active,
+                                                              observed, "cm0");
+            }
             case Scenario::NotReconstructible:
-                return hasCommitted(observed, "cr0");
+                return hasCommitted(observed, "cr0") &&
+                       !validConfigurationGeneration(observed, "cr0", "cm0",
+                                                     "uc0", "sc0", "pc0");
             case Scenario::Orphan:
                 return oldValid && hasCommitted(observed, "uc3");
             case Scenario::OrphanedGeneration:
@@ -1719,22 +1876,31 @@ bool semanticFixturePassed(const OracleCase& item,
             return validRunHeadGraph(observed,
                                      item.scenario == Scenario::OlderValid);
         case Scenario::FallbackValid:
+            return validRunFallbackWithUnavailableCurrent(observed);
         case Scenario::InvalidReference: {
             if (!hasCommitted(observed, "rh0") ||
+                !hasCommitted(observed, "rc0") ||
                 !validRunRecord(observed, "rc1", 1U))
                 return false;
             const auto current = fermentation::decodeRunPersistenceRecord(
                 observed.committed.at("rc0"), kEpoch);
             const auto head = fermentation::decodeRunPersistenceHead(
                 observed.committed.at("rh0"), kEpoch);
+            const auto fallback = fermentation::decodeRunPersistenceRecord(
+                observed.committed.at("rc1"), kEpoch);
             return current.has_value() && head.has_value() &&
+                   fallback.has_value() &&
                    !fermentation::runCheckpointReferenceMatches(head->current,
-                                                                *current, 0U);
+                                                                *current, 0U) &&
+                   head->fallback.has_value() &&
+                   fermentation::runCheckpointReferenceMatches(*head->fallback,
+                                                               *fallback, 1U) &&
+                   fallback->snapshot.activeRunId ==
+                       current->snapshot.activeRunId &&
+                   fallback->checkpointRevision < current->checkpointRevision;
         }
         case Scenario::ForeignEpoch: {
-            if (!hasCommitted(observed, "rh0") ||
-                !validRunRecord(observed, "rc1", 1U))
-                return false;
+            if (!validRunHeadFallbackReference(observed)) return false;
             const auto currentEnvelope =
                 device_platform::decodeEnvelope(observed.committed.at("rc0"));
             return currentEnvelope.envelope.has_value() &&
@@ -1782,10 +1948,21 @@ bool semanticFixturePassed(const OracleCase& item,
                        .envelope.has_value() &&
                    device_platform::decodeEnvelope(observed.readBytes)
                            .envelope->schemaVersion == 99U;
-        case Scenario::InvalidReferenceNoFallback:
-            return hasCommitted(observed, "rh0") &&
-                   hasCommitted(observed, "rc0") &&
-                   !hasCommitted(observed, "rc1");
+        case Scenario::InvalidReferenceNoFallback: {
+            if (!hasCommitted(observed, "rh0") ||
+                !hasCommitted(observed, "rc0") ||
+                hasCommitted(observed, "rc1")) {
+                return false;
+            }
+            const auto current = fermentation::decodeRunPersistenceRecord(
+                observed.committed.at("rc0"), kEpoch);
+            const auto head = fermentation::decodeRunPersistenceHead(
+                observed.committed.at("rh0"), kEpoch);
+            return current.has_value() && head.has_value() &&
+                   !head->fallback.has_value() &&
+                   !fermentation::runCheckpointReferenceMatches(head->current,
+                                                                *current, 0U);
+        }
         case Scenario::PreparedInterrupted: {
             const auto head = fermentation::decodeRunPersistenceHead(
                 observed.committed.at("rh0"), kEpoch);
@@ -1797,9 +1974,16 @@ bool semanticFixturePassed(const OracleCase& item,
             return !hasCommitted(observed, "rh0") &&
                    validRunRecord(observed, "rc0", 0U) &&
                    validRunRecord(observed, "rc1", 1U);
-        case Scenario::NotReconstructible:
-            return hasCommitted(observed, "rh0") &&
-                   !hasCommitted(observed, "rc0");
+        case Scenario::NotReconstructible: {
+            if (!hasCommitted(observed, "rh0") ||
+                hasCommitted(observed, "rc0") ||
+                hasCommitted(observed, "rc1")) {
+                return false;
+            }
+            const auto head = fermentation::decodeRunPersistenceHead(
+                observed.committed.at("rh0"), kEpoch);
+            return head.has_value() && head->fallback.has_value();
+        }
         case Scenario::ControlledDiscard: {
             const auto record = fermentation::decodeRunPersistenceRecord(
                 observed.committed.at("rc0"), kEpoch);
@@ -1829,6 +2013,199 @@ bool semanticFixturePassed(const OracleCase& item,
     return false;
 }
 
+bool expectedTruthSanity(const OracleCase& item) {
+    if (item.logicalGate != LogicalGate::Unresolved || item.actuatorAllowed) {
+        return false;
+    }
+    if (!item.hasProductOutcome) {
+        return item.producer == SafetyProducer::None &&
+               !item.prohibitedActiveState &&
+               item.safety == SafetyProjection::Standby &&
+               ((item.domain == Domain::Configuration &&
+                 item.scenario == Scenario::FactoryEmpty &&
+                 item.classification == RecordClassification::FactoryEmpty &&
+                 item.baseline == BaselineClassification::FactoryEmpty &&
+                 item.recoveryAction ==
+                     ExpectedRecoveryAction::FactoryInitialization) ||
+                (item.domain == Domain::Run &&
+                 item.scenario == Scenario::NoPersistedRun &&
+                 item.classification == RecordClassification::NoPersistedRun &&
+                 item.baseline == BaselineClassification::NoPersistedRun &&
+                 item.recoveryAction == ExpectedRecoveryAction::NoActiveRun) ||
+                (item.domain == Domain::Run &&
+                 item.scenario == Scenario::ControlledDiscardPost &&
+                 item.classification ==
+                     RecordClassification::ControlledDiscard &&
+                 item.baseline ==
+                     BaselineClassification::ControlledDiscardTombstone &&
+                 item.recoveryAction == ExpectedRecoveryAction::NoActiveRun));
+    }
+    if (item.baseline != BaselineClassification::None ||
+        item.recoveryAction != ExpectedRecoveryAction::None) {
+        return false;
+    }
+
+    const auto validConfiguration = [&](ProductOutcome outcome,
+                                        RecordClassification classification) {
+        return item.domain == Domain::Configuration &&
+               item.outcome == outcome &&
+               item.classification == classification &&
+               item.safety == SafetyProjection::Standby &&
+               item.producer == SafetyProducer::None &&
+               !item.prohibitedActiveState;
+    };
+    const auto configurationRecovery =
+        [&](SafetyProducer producer, RecordClassification classification) {
+            return item.domain == Domain::Configuration &&
+                   item.outcome ==
+                       ProductOutcome::ConfigurationRecoveryRequired &&
+                   item.classification == classification &&
+                   item.safety == SafetyProjection::SafeBoot &&
+                   item.producer == producer && item.prohibitedActiveState;
+        };
+    const auto validResume = [&](ProductOutcome outcome,
+                                 RecordClassification classification) {
+        return item.domain == Domain::Run && item.outcome == outcome &&
+               item.classification == classification &&
+               item.safety == SafetyProjection::ResumeOffer &&
+               item.producer == SafetyProducer::None &&
+               !item.prohibitedActiveState;
+    };
+    const auto runRecovery = [&](RecordClassification classification) {
+        return item.domain == Domain::Run &&
+               item.outcome == ProductOutcome::RunRecoveryRequired &&
+               item.classification == classification &&
+               item.safety == SafetyProjection::SafeBoot &&
+               item.producer == SafetyProducer::RunPersistenceUntrusted &&
+               item.prohibitedActiveState;
+    };
+
+    if (item.domain == Domain::Configuration) {
+        switch (item.scenario) {
+            case Scenario::CurrentValid:
+            case Scenario::CurrentWithoutFallback:
+            case Scenario::UnknownCommitValid:
+            case Scenario::Orphan:
+                return validConfiguration(
+                    ProductOutcome::NewValidConfiguration,
+                    item.scenario == Scenario::Orphan
+                        ? RecordClassification::Orphan
+                        : RecordClassification::FullyValidCurrent);
+            case Scenario::OlderValid:
+            case Scenario::SafeWriteErrorOld:
+            case Scenario::SafeCapacityOld:
+            case Scenario::UnknownCommitNotFound:
+                return validConfiguration(
+                    ProductOutcome::OldValidConfiguration,
+                    RecordClassification::FullyValidOlder);
+            case Scenario::FallbackValid:
+                return validConfiguration(
+                    ProductOutcome::FallbackValidConfiguration,
+                    RecordClassification::FullyValidFallback);
+            case Scenario::InvalidReference:
+                return validConfiguration(
+                    ProductOutcome::FallbackValidConfiguration,
+                    RecordClassification::InvalidReference);
+            case Scenario::ReadError:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationUnavailable,
+                    RecordClassification::Indeterminate);
+            case Scenario::ReadCapacity:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationUnavailable,
+                    RecordClassification::Indeterminate);
+            case Scenario::MissingEvidence:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationIntegrityFailure,
+                    RecordClassification::Missing);
+            case Scenario::Partial:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationIntegrityFailure,
+                    RecordClassification::Partial);
+            case Scenario::Mixed:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationIntegrityFailure,
+                    RecordClassification::Mixed);
+            case Scenario::CorruptEnvelopeCrc:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationIntegrityFailure,
+                    RecordClassification::Corrupt);
+            case Scenario::UnsupportedSchema:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationIntegrityFailure,
+                    RecordClassification::UnsupportedSchema);
+            case Scenario::InvalidReferenceNoFallback:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationIntegrityFailure,
+                    RecordClassification::InvalidReference);
+            case Scenario::ForeignEpoch:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationIntegrityFailure,
+                    RecordClassification::ForeignEpoch);
+            case Scenario::OrphanedGeneration:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationIntegrityFailure,
+                    RecordClassification::Orphan);
+            case Scenario::NotReconstructible:
+                return configurationRecovery(
+                    SafetyProducer::ConfigurationIntegrityFailure,
+                    RecordClassification::NotReconstructible);
+            default:
+                return false;
+        }
+    }
+
+    switch (item.scenario) {
+        case Scenario::CurrentValid:
+        case Scenario::OlderValid:
+        case Scenario::UnknownCommitValid:
+        case Scenario::SafeWriteErrorOld:
+        case Scenario::SafeCapacityOld:
+            return validResume(ProductOutcome::NewValidResume,
+                               RecordClassification::FullyValidCurrent);
+        case Scenario::FallbackValid:
+        case Scenario::InvalidReference:
+        case Scenario::ForeignEpoch:
+            return validResume(ProductOutcome::OlderValidCheckpointResume,
+                               item.scenario == Scenario::FallbackValid
+                                   ? RecordClassification::FullyValidFallback
+                               : item.scenario == Scenario::InvalidReference
+                                   ? RecordClassification::InvalidReference
+                                   : RecordClassification::ForeignEpoch);
+        case Scenario::UnknownCommitNotFound:
+        case Scenario::ReadError:
+        case Scenario::ReadCapacity:
+            return runRecovery(RecordClassification::Indeterminate);
+        case Scenario::MissingReferencedRun:
+            return runRecovery(RecordClassification::Missing);
+        case Scenario::Partial:
+            return runRecovery(RecordClassification::Partial);
+        case Scenario::Mixed:
+            return runRecovery(RecordClassification::Mixed);
+        case Scenario::CorruptEnvelopeCrc:
+            return runRecovery(RecordClassification::Corrupt);
+        case Scenario::UnsupportedSchema:
+            return runRecovery(RecordClassification::UnsupportedSchema);
+        case Scenario::InvalidReferenceNoFallback:
+            return runRecovery(RecordClassification::InvalidReference);
+        case Scenario::PreparedInterrupted:
+            return runRecovery(RecordClassification::PreparedInterrupted);
+        case Scenario::Orphan:
+            return runRecovery(RecordClassification::Orphan);
+        case Scenario::NotReconstructible:
+            return runRecovery(RecordClassification::NotReconstructible);
+        case Scenario::ControlledDiscard:
+            return item.outcome == ProductOutcome::RunAbortRequired &&
+                   item.classification ==
+                       RecordClassification::ControlledDiscard &&
+                   item.safety == SafetyProjection::NoActiveRun &&
+                   item.producer == SafetyProducer::None &&
+                   !item.prohibitedActiveState;
+        default:
+            return false;
+    }
+}
+
 bool fixtureSanityPassed(const OracleCase& item,
                          const BackendObservation& observed) {
     const bool safetyShape = !item.actuatorAllowed &&
@@ -1838,6 +2215,7 @@ bool fixtureSanityPassed(const OracleCase& item,
                                item.producer != SafetyProducer::None));
     return observed.restarted && !observed.pendingAfterRestart &&
            observed.readStatus == item.expectedReadStatus && safetyShape &&
+           expectedTruthSanity(item) &&
            (item.scenario != Scenario::PreparedInterrupted ||
             observed.durablePreparedHead) &&
            semanticFixturePassed(item, observed);
@@ -2095,6 +2473,16 @@ void test_every_case_has_real_post_reboot_fixture_evidence() {
                                      newRecord->snapshot.activeRunId.c_str());
             TEST_ASSERT_TRUE(oldRecord->checkpointRevision <
                              newRecord->checkpointRevision);
+            if (item.scenario == Scenario::FallbackValid) {
+                const auto head = fermentation::decodeRunPersistenceHead(
+                    observed.committed.at("rh0"), kEpoch);
+                TEST_ASSERT_TRUE(head.has_value());
+                TEST_ASSERT_TRUE(head->fallback.has_value());
+                TEST_ASSERT_FALSE(fermentation::runCheckpointReferenceMatches(
+                    head->current, *newRecord, 0U));
+                TEST_ASSERT_TRUE(fermentation::runCheckpointReferenceMatches(
+                    *head->fallback, *oldRecord, 1U));
+            }
         }
         if (item.scenario == Scenario::ReadCapacity) {
             TEST_ASSERT_TRUE(observed.readBytes.empty());
@@ -2250,6 +2638,25 @@ void test_semantic_counterexamples_are_explicit() {
             TEST_ASSERT_TRUE(item.producer ==
                              SafetyProducer::RunPersistenceUntrusted);
         }
+        if (item.scenario == Scenario::MissingReferencedRun) {
+            const auto observed = observe(item);
+            TEST_ASSERT_FALSE(hasCommitted(observed, "rc0"));
+            TEST_ASSERT_FALSE(hasCommitted(observed, "rc1"));
+            const auto head = fermentation::decodeRunPersistenceHead(
+                observed.committed.at("rh0"), kEpoch);
+            TEST_ASSERT_TRUE(head.has_value());
+            TEST_ASSERT_FALSE(head->fallback.has_value());
+        }
+        if (item.scenario == Scenario::NotReconstructible &&
+            item.domain == Domain::Run) {
+            const auto observed = observe(item);
+            TEST_ASSERT_FALSE(hasCommitted(observed, "rc0"));
+            TEST_ASSERT_FALSE(hasCommitted(observed, "rc1"));
+            const auto head = fermentation::decodeRunPersistenceHead(
+                observed.committed.at("rh0"), kEpoch);
+            TEST_ASSERT_TRUE(head.has_value());
+            TEST_ASSERT_TRUE(head->fallback.has_value());
+        }
         if (item.scenario == Scenario::OlderValid &&
             item.domain == Domain::Run) {
             TEST_ASSERT_TRUE(item.outcome == ProductOutcome::NewValidResume);
@@ -2311,6 +2718,65 @@ void test_product_recovery_gate_rejects_inconsistent_observation() {
                      std::string::npos);
 }
 
+void test_product_recovery_gate_rejects_invalid_fallback_reference() {
+    const OracleCase* item = nullptr;
+    for (const auto& candidate : kMatrix) {
+        if (candidate.domain == Domain::Run &&
+            candidate.scenario == Scenario::FallbackValid) {
+            item = &candidate;
+            break;
+        }
+    }
+    TEST_ASSERT_NOT_NULL(item);
+    auto observed = observe(*item);
+    const auto head = fermentation::decodeRunPersistenceHead(
+        observed.committed.at("rh0"), kEpoch);
+    TEST_ASSERT_TRUE(head.has_value());
+    TEST_ASSERT_TRUE(head->fallback.has_value());
+    auto invalid = *head;
+    invalid.fallback->payloadCrc ^= 1U;
+    const auto bytes = fermentation::encodeRunPersistenceHead(invalid, kEpoch);
+    TEST_ASSERT_TRUE(bytes.has_value());
+    observed.committed["rh0"] = *bytes;
+    TEST_ASSERT_TRUE(
+        machineLine(*item, observed).find("product_recovery_gate=FAIL") !=
+        std::string::npos);
+}
+
+void test_product_recovery_gate_rejects_wrong_product_outcome() {
+    const OracleCase* item = nullptr;
+    for (const auto& candidate : kMatrix) {
+        if (candidate.domain == Domain::Configuration &&
+            candidate.scenario == Scenario::CurrentValid) {
+            item = &candidate;
+            break;
+        }
+    }
+    TEST_ASSERT_NOT_NULL(item);
+    auto wrong = *item;
+    wrong.outcome = ProductOutcome::OldValidConfiguration;
+    TEST_ASSERT_TRUE(
+        machineLine(wrong, observe(*item)).find("product_recovery_gate=FAIL") !=
+        std::string::npos);
+}
+
+void test_product_recovery_gate_rejects_wrong_safety_projection() {
+    const OracleCase* item = nullptr;
+    for (const auto& candidate : kMatrix) {
+        if (candidate.domain == Domain::Run &&
+            candidate.scenario == Scenario::CurrentValid) {
+            item = &candidate;
+            break;
+        }
+    }
+    TEST_ASSERT_NOT_NULL(item);
+    auto wrong = *item;
+    wrong.safety = SafetyProjection::Standby;
+    TEST_ASSERT_TRUE(
+        machineLine(wrong, observe(*item)).find("product_recovery_gate=FAIL") !=
+        std::string::npos);
+}
+
 void test_callback_12_remains_real_nvs_only() {
     constexpr const char* referenceLine =
         "issue90_oracle_backend_reference=FAIL_CALLBACK_12_NOT_FOUND "
@@ -2339,6 +2805,9 @@ int main() {
     RUN_TEST(test_semantic_counterexamples_are_explicit);
     RUN_TEST(test_machine_output_contains_fixture_and_truth_separation);
     RUN_TEST(test_product_recovery_gate_rejects_inconsistent_observation);
+    RUN_TEST(test_product_recovery_gate_rejects_invalid_fallback_reference);
+    RUN_TEST(test_product_recovery_gate_rejects_wrong_product_outcome);
+    RUN_TEST(test_product_recovery_gate_rejects_wrong_safety_projection);
     RUN_TEST(test_callback_12_remains_real_nvs_only);
     return UNITY_END();
 }
