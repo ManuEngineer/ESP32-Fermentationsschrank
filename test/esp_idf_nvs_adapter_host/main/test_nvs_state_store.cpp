@@ -2,11 +2,16 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
 
 #include "bdl_ramdisk.hpp"
 #include "nvs_flash.h"
+#include "run_persistence_coordinator.hpp"
+#include "safety_core.hpp"
 
 namespace {
 
@@ -106,6 +111,11 @@ class PartitionFixture final {
         }
     }
 
+    void restart() const {
+        CHECK(nvs_flash_deinit_partition(label_) == ESP_OK);
+        CHECK(nvs_flash_init_partition_bdl(label_, disk_.handle()) == ESP_OK);
+    }
+
     [[nodiscard]] std::unique_ptr<device_platform_esp_idf::NvsStateStore>
     openStore() const {
         const auto config =
@@ -117,6 +127,9 @@ class PartitionFixture final {
         CHECK(result.store != nullptr);
         return std::move(result.store);
     }
+
+    [[nodiscard]] TestRamDisk& disk() { return disk_; }
+    [[nodiscard]] const char* label() const { return label_; }
 
    private:
     const char* label_;
@@ -141,9 +154,9 @@ void configValidation() {
     CHECK(device_platform_esp_idf::NvsStateStoreConfig::create(
               "abcdefghijklmno", "abcdefghijklmno")
               .has_value());
-    CHECK(!device_platform_esp_idf::NvsStateStoreConfig::create(
-               "abcdefghijklmnop", "x")
-               .has_value());
+    CHECK(device_platform_esp_idf::NvsStateStoreConfig::create(
+              "abcdefghijklmnop", "x")
+              .has_value());
     CHECK(!device_platform_esp_idf::NvsStateStoreConfig::create("", "x")
                .has_value());
     CHECK(!device_platform_esp_idf::NvsStateStoreConfig::create(
@@ -244,9 +257,30 @@ void safePreCommitWriteErrorIsWriteError() {
     resetFaults();
     PartitionFixture fixture("adapt_wrerr");
     auto store = fixture.openStore();
+    CHECK(store->read(key("missing"), 32U).status ==
+          device_platform::StateStoreReadStatus::NotFound);
     setFault = SetFault::SafeWriteError;
     CHECK(store->write(key("writeerr"), "rejected") ==
           device_platform::StateStoreWriteStatus::WriteError);
+    store.reset();
+    fixture.restart();
+    store = fixture.openStore();
+    CHECK(store->read(key("writeerr"), 32U).status ==
+          device_platform::StateStoreReadStatus::NotFound);
+
+    setFault = SetFault::None;
+    const std::string oldValue = "old-persistent-value";
+    CHECK(store->write(key("existing"), oldValue) ==
+          device_platform::StateStoreWriteStatus::Success);
+    setFault = SetFault::SafeWriteError;
+    CHECK(store->write(key("existing"), "new-rejected") ==
+          device_platform::StateStoreWriteStatus::WriteError);
+    store.reset();
+    fixture.restart();
+    store = fixture.openStore();
+    const auto readback = store->read(key("existing"), oldValue.size());
+    CHECK(readback.status == device_platform::StateStoreReadStatus::Success);
+    CHECK(readback.value == oldValue);
     resetFaults();
 }
 
@@ -261,11 +295,290 @@ void potentiallyEffectiveSetErrorIsUnknown() {
 }
 
 void preCommitCapacityIsCapacityError() {
-    PartitionFixture fixture("adapter_small", 0x3000U);
+    PartitionFixture fixture("adapter_size", 0x20000U);
     auto store = fixture.openStore();
-    const std::string tooLarge(8240U, 'c');
+    const std::string tooLarge(130000U, 'c');
     CHECK(store->write(key("large"), tooLarge) ==
           device_platform::StateStoreWriteStatus::CapacityError);
+    store.reset();
+    fixture.restart();
+    store = fixture.openStore();
+    CHECK(store->read(key("large"), tooLarge.size()).status ==
+          device_platform::StateStoreReadStatus::NotFound);
+
+    const std::string oldValue = "capacity-old";
+    CHECK(store->write(key("cap_existing"), oldValue) ==
+          device_platform::StateStoreWriteStatus::Success);
+    CHECK(store->write(key("cap_existing"), tooLarge) ==
+          device_platform::StateStoreWriteStatus::CapacityError);
+    store.reset();
+    fixture.restart();
+    store = fixture.openStore();
+    const auto readback = store->read(key("cap_existing"), oldValue.size());
+    CHECK(readback.status == device_platform::StateStoreReadStatus::Success);
+    CHECK(readback.value == oldValue);
+}
+
+void emptyBlobSurvivesRestart() {
+    PartitionFixture fixture("adapter_empty");
+    auto store = fixture.openStore();
+    CHECK(store->write(key("empty"), std::string{}) ==
+          device_platform::StateStoreWriteStatus::Success);
+    store.reset();
+    fixture.restart();
+    store = fixture.openStore();
+    const auto readback = store->read(key("empty"), 0U);
+    CHECK(readback.status == device_platform::StateStoreReadStatus::Success);
+    CHECK(readback.value.empty());
+}
+
+const char* operationName(BdlOperation operation) {
+    switch (operation) {
+        case BdlOperation::Read:
+            return "read";
+        case BdlOperation::Write:
+            return "write";
+        case BdlOperation::Erase:
+            return "erase";
+        case BdlOperation::Sync:
+            return "sync";
+    }
+    return "unknown";
+}
+
+const char* runLoadStatusName(fermentation::RunPersistenceLoadStatus status) {
+    using fermentation::RunPersistenceLoadStatus;
+    switch (status) {
+        case RunPersistenceLoadStatus::NoPersistedRun:
+            return "NoPersistedRun";
+        case RunPersistenceLoadStatus::Current:
+            return "Current";
+        case RunPersistenceLoadStatus::NoActiveRun:
+            return "NoActiveRun";
+        case RunPersistenceLoadStatus::FallbackRecovered:
+            return "FallbackRecovered";
+        case RunPersistenceLoadStatus::PreparedInterrupted:
+            return "PreparedInterrupted";
+        case RunPersistenceLoadStatus::NotReconstructible:
+            return "NotReconstructible";
+        case RunPersistenceLoadStatus::NotReconstructibleOrphanedState:
+            return "NotReconstructibleOrphanedState";
+        case RunPersistenceLoadStatus::ReadFailed:
+            return "ReadFailed";
+        case RunPersistenceLoadStatus::CapacityExceeded:
+            return "CapacityExceeded";
+        case RunPersistenceLoadStatus::UnsupportedSchema:
+            return "UnsupportedSchema";
+        case RunPersistenceLoadStatus::ForeignEpoch:
+            return "ForeignEpoch";
+        case RunPersistenceLoadStatus::AlreadyInitialized:
+            return "AlreadyInitialized";
+    }
+    return "Unknown";
+}
+
+const char* coordinatorStateName(
+    fermentation::RunPersistenceCoordinatorState state) {
+    using fermentation::RunPersistenceCoordinatorState;
+    switch (state) {
+        case RunPersistenceCoordinatorState::Uninitialized:
+            return "Uninitialized";
+        case RunPersistenceCoordinatorState::ReadyEmpty:
+            return "ReadyEmpty";
+        case RunPersistenceCoordinatorState::LoadedActiveRun:
+            return "LoadedActiveRun";
+        case RunPersistenceCoordinatorState::Ready:
+            return "Ready";
+        case RunPersistenceCoordinatorState::Busy:
+            return "Busy";
+        case RunPersistenceCoordinatorState::BlockedIndeterminate:
+            return "BlockedIndeterminate";
+        case RunPersistenceCoordinatorState::FallbackRecoveryPending:
+            return "FallbackRecoveryPending";
+        case RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed:
+            return "PersistenceCommittedApplyFailed";
+    }
+    return "Unknown";
+}
+
+const char* safetyBootDispositionName(
+    fermentation::SafetyBootDisposition value) {
+    using fermentation::SafetyBootDisposition;
+    switch (value) {
+        case SafetyBootDisposition::Unresolved:
+            return "UNRESOLVED";
+        case SafetyBootDisposition::Standby:
+            return "STANDBY";
+        case SafetyBootDisposition::ResumeOffer:
+            return "RESUME_OFFER";
+        case SafetyBootDisposition::NoActiveRun:
+            return "NO_ACTIVE_RUN";
+        case SafetyBootDisposition::Completed:
+            return "COMPLETED";
+        case SafetyBootDisposition::TerminalFault:
+            return "TERMINAL_FAULT";
+        case SafetyBootDisposition::SafeBoot:
+            return "SAFE_BOOT";
+    }
+    return "UNKNOWN";
+}
+
+const char* faultCodeName(fermentation::FaultCode value) {
+    using fermentation::FaultCode;
+    switch (value) {
+        case FaultCode::None:
+            return "None";
+        case FaultCode::ConfigurationRuntimeFailure:
+            return "ConfigurationRuntimeFailure";
+        case FaultCode::ConfigurationUnavailable:
+            return "ConfigurationUnavailable";
+        case FaultCode::ConfigurationIntegrityFailure:
+            return "ConfigurationIntegrityFailure";
+        case FaultCode::ConfigurationCommitIndeterminate:
+            return "ConfigurationCommitIndeterminate";
+        case FaultCode::RunPersistenceUntrusted:
+            return "RunPersistenceUntrusted";
+        case FaultCode::SafetySensorUnavailable:
+            return "SafetySensorUnavailable";
+        case FaultCode::ActuatorRequestWatchdog:
+            return "ActuatorRequestWatchdog";
+        case FaultCode::SystemProducerUnknown:
+            return "SystemProducerUnknown";
+    }
+    return "Unknown";
+}
+
+struct ProductBridgeObservation {
+    const char* loadStatus;
+    const char* coordinatorState;
+    const char* safetyProjection;
+    const char* safetyProducer;
+    bool actuatorAllowed;
+};
+
+ProductBridgeObservation runProductBridge(
+    const char* caseId, fermentation::RunPersistenceCoordinator& coordinator) {
+    const auto loaded = coordinator.loadAndInitialize();
+    fermentation::SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::Unknown);
+    fermentation::SafetyCoreInput input;
+    input.bootValidationComplete = true;
+    input.persistenceLoadStatus = loaded.status;
+    input.persistenceSnapshot =
+        loaded.snapshot.has_value() ? &*loaded.snapshot : nullptr;
+    input.persistenceCoordinatorState = coordinator.state();
+    input.persistenceValidated = false;
+    const auto evaluation = safety.evaluate(input);
+    const auto observation = ProductBridgeObservation{
+        runLoadStatusName(loaded.status),
+        coordinatorStateName(coordinator.state()),
+        safetyBootDispositionName(evaluation.bootDisposition),
+        faultCodeName(evaluation.faultCode),
+        evaluation.gate.status ==
+            fermentation::ActuatorSafetyGateStatus::Allowed};
+    std::printf(
+        "issue90_product_bridge_case=%s actual_load_status=%s "
+        "actual_coordinator_state=%s actual_safety_projection=%s "
+        "actual_safety_producer=%s actual_logical_gate=UNRESOLVED "
+        "actual_actuator_allowed=%s product_recovery_gate=NOT_RUN\n",
+        caseId, observation.loadStatus, observation.coordinatorState,
+        observation.safetyProjection, observation.safetyProducer,
+        observation.actuatorAllowed ? "true" : "false");
+    return observation;
+}
+
+void writeCutArtifact(const char* caseId, const char* label,
+                      const char* targetKey, const char* oldIdentity,
+                      const char* newIdentity, const char* injectedPhase,
+                      std::uint32_t baselineChecksum, const TestRamDisk& disk,
+                      device_platform::StateStoreWriteStatus writeStatus,
+                      device_platform::StateStoreReadStatus readStatus,
+                      const ProductBridgeObservation& bridge) {
+    const std::filesystem::path directory = "/tmp/issue90-slice5-artifacts";
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    CHECK(!error);
+    std::ofstream artifact(directory / (std::string(caseId) + ".json"));
+    CHECK(artifact.good());
+    artifact << "{\n"
+             << "  \"source_sha\": \""
+             << (std::getenv("ISSUE90_SOURCE_SHA") == nullptr
+                     ? "UNKNOWN"
+                     : std::getenv("ISSUE90_SOURCE_SHA"))
+             << "\",\n"
+             << "  \"esp_idf\": "
+                "\"v6.0.2@7101770dc6db2667b3c477cc31365dd1acd6db4e\",\n"
+             << "  \"case_id\": \"" << caseId << "\",\n"
+             << "  \"partition\": \"" << label << "\",\n"
+             << "  \"namespace\": \"fermentation\",\n"
+             << "  \"key\": \"" << targetKey << "\",\n"
+             << "  \"blob_size\": 32,\n"
+             << "  \"old_identity\": \"" << oldIdentity << "\",\n"
+             << "  \"new_identity\": \"" << newIdentity << "\",\n"
+             << "  \"baseline_checksum_before_cut\": " << baselineChecksum
+             << ",\n"
+             << "  \"target_operation\": \"write\",\n"
+             << "  \"injected_cut\": \"" << injectedPhase << "\",\n"
+             << "  \"write_status\": " << static_cast<unsigned>(writeStatus)
+             << ",\n"
+             << "  \"read_status_after_reinit\": "
+             << static_cast<unsigned>(readStatus) << ",\n"
+             << "  \"backend_classification\": \"observed\",\n"
+             << "  \"product_recovery_result\": \"" << bridge.loadStatus
+             << "\",\n"
+             << "  \"product_coordinator_state\": \"" << bridge.coordinatorState
+             << "\",\n"
+             << "  \"product_safety_projection\": \"" << bridge.safetyProjection
+             << "\",\n"
+             << "  \"product_safety_producer\": \"" << bridge.safetyProducer
+             << "\",\n"
+             << "  \"product_logical_gate\": \"UNRESOLVED\",\n"
+             << "  \"product_actuator_allowed\": "
+             << (bridge.actuatorAllowed ? "true" : "false") << ",\n"
+             << "  \"product_recovery_gate\": \"NOT_RUN\",\n"
+             << "  \"events\": [\n";
+    const auto events = disk.events();
+    for (std::size_t index = 0U; index < events.size(); ++index) {
+        const auto& event = events[index];
+        artifact << "    {\"operation\": \"" << operationName(event.operation)
+                 << "\", \"offset\": " << event.offset
+                 << ", \"length\": " << event.length
+                 << ", \"occurrence\": " << event.occurrence
+                 << ", \"result\": " << event.result << "}"
+                 << (index + 1U == events.size() ? "\n" : ",\n");
+    }
+    artifact << "  ]\n}\n";
+    CHECK(artifact.good());
+}
+
+void cutHarnessWritesEarlyAndLateArtifacts() {
+    const auto run = [](const char* caseId, const char* label,
+                        BdlCutPhase phase) {
+        resetFaults();
+        PartitionFixture fixture(label);
+        auto store = fixture.openStore();
+        fixture.disk().clearEvents();
+        const auto baselineChecksum = fixture.disk().checksum();
+        fixture.disk().setCutPlan(BdlOperation::Write, 1U, phase);
+        const auto writeStatus =
+            store->write(key("cut_target"), std::string(32U, 'n'));
+        store.reset();
+        fixture.disk().clearCutPlan();
+        fixture.restart();
+        store = fixture.openStore();
+        const auto readStatus = store->read(key("rh0"), 32U).status;
+        fermentation::RunPersistenceCoordinator coordinator(
+            *store, device_platform::StorageEpoch{1U},
+            fermentation::RunCheckpointSchedule{});
+        const auto bridge = runProductBridge(caseId, coordinator);
+        writeCutArtifact(
+            caseId, fixture.label(), "rh0", "OLD_ABSENT", "NEW_32_BYTES",
+            phase == BdlCutPhase::Before ? "before_write" : "after_write",
+            baselineChecksum, fixture.disk(), writeStatus, readStatus, bridge);
+    };
+
+    run("bdl_cut_early", "cut_early", BdlCutPhase::Before);
+    run("bdl_cut_late", "cut_late", BdlCutPhase::After);
 }
 
 void productRecordSizeAndMutationMatrix() {
@@ -300,15 +613,17 @@ extern "C" void app_main(void) {
     safePreCommitWriteErrorIsWriteError();
     potentiallyEffectiveSetErrorIsUnknown();
     preCommitCapacityIsCapacityError();
+    emptyBlobSurvivesRestart();
     productRecordSizeAndMutationMatrix();
-    std::puts("Issue90 NVS adapter host tests: 12/12 PASS");
+    cutHarnessWritesEarlyAndLateArtifacts();
+    std::puts("Issue90 NVS adapter host tests: 14/14 PASS");
     std::puts(
         "issue90_backend_characterization=observed "
         "evidence_scope=ESP_IDF_BDL_HOST product_recovery_gate=NOT_RUN");
     std::puts(
         "issue90_backend_matrix=small_blob,same_key_overwrite,medium_blob,page_"
         "boundary,product_record_8240,new_key,existing_key,commit,readback_"
-        "capacity");
+        "capacity,empty_blob,write_cut_before,write_cut_after");
     std::puts(
         "issue90_backend_matrix_completeness=PARTIAL exhaustive=false "
         "gc_erase_cut=NOT_RUN");

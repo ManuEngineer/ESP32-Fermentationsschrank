@@ -299,13 +299,18 @@ COMPONENT_REQUIRES_ALLOWLIST = {
         "private": frozenset(),
     },
     "lib/device_platform_esp_idf/CMakeLists.txt": {
-        "public": frozenset({"device_platform"}),
-        "private": frozenset({"esp_timer", "nvs_flash"}),
+        "public": frozenset({"device_platform", "nvs_flash"}),
+        "private": frozenset({"esp_timer"}),
     },
     "main/CMakeLists.txt": {
         "public": frozenset(),
         "private": frozenset(
-            {"device_platform", "fermentation_app", "device_platform_esp_idf"}
+            {
+                "device_platform",
+                "fermentation_app",
+                "device_platform_esp_idf",
+                "nvs_flash",
+            }
         ),
     },
 }
@@ -951,13 +956,13 @@ def create_clean_fixture(root: Path) -> None:
         ),
         "lib/device_platform_esp_idf/CMakeLists.txt": (
             'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
-            'REQUIRES device_platform PRIV_REQUIRES esp_timer nvs_flash)\n'
+            'REQUIRES device_platform nvs_flash PRIV_REQUIRES esp_timer)\n'
         ),
         "main/app_main.cpp": '#include "device_platform.hpp"\n',
         "main/CMakeLists.txt": (
             'idf_component_register(SRCS "app_main.cpp" '
             'PRIV_INCLUDE_DIRS "../include" PRIV_REQUIRES '
-            "device_platform fermentation_app device_platform_esp_idf)\n"
+            "device_platform fermentation_app device_platform_esp_idf nvs_flash)\n"
         ),
         # Issue #21, Plan Abschnitt 7/9.7: minimale, in sich saubere Instanz
         # der vier gegenseitig eingeschraenkten Header - Grundlage fuer die

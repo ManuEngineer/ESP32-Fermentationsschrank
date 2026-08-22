@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "esp_err.h"
 #include "nvs.h"
@@ -14,12 +15,25 @@ namespace device_platform_esp_idf {
 // The owning context supplies both values. The adapter deliberately has no
 // application-specific defaults; in particular, "state_store" and
 // "fermentation" belong to the R1 composition root, not to this component.
-struct NvsStateStoreConfig {
-    std::string partitionLabel;
-    std::string namespaceName;
-
+class NvsStateStoreConfig final {
+   public:
     [[nodiscard]] static std::optional<NvsStateStoreConfig> create(
         std::string partitionLabel, std::string namespaceName);
+
+    [[nodiscard]] const std::string& partitionLabel() const noexcept {
+        return partitionLabel_;
+    }
+    [[nodiscard]] const std::string& namespaceName() const noexcept {
+        return namespaceName_;
+    }
+
+   private:
+    NvsStateStoreConfig(std::string partitionLabel, std::string namespaceName)
+        : partitionLabel_(std::move(partitionLabel)),
+          namespaceName_(std::move(namespaceName)) {}
+
+    std::string partitionLabel_;
+    std::string namespaceName_;
 };
 
 struct NvsStateStoreOpenResult;

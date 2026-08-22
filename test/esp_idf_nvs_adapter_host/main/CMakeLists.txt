@@ -2,12 +2,9 @@ idf_component_register(
     SRCS
         "test_nvs_state_store.cpp"
         "bdl_ramdisk.cpp"
-        "../../../lib/device_platform_esp_idf/src/nvs_state_store.cpp"
     INCLUDE_DIRS
         "."
-        "../../../lib/device_platform_esp_idf/src"
-        "../../../lib/device_platform/src"
-    REQUIRES nvs_flash
+    REQUIRES device_platform_esp_idf fermentation_app
     PRIV_REQUIRES esp_blockdev
 )
 

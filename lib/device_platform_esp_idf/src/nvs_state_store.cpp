@@ -6,32 +6,37 @@ namespace device_platform_esp_idf {
 namespace {
 
 device_platform::StateStoreWriteStatus mapSetError(esp_err_t error) {
-    // These errors are reported by nvs_set_blob before a durable commit. The
-    // v6.0.2 contract describes them as rejected input, a read-only / invalid
-    // handle, or insufficient storage; no persistent mutation is possible
-    // through this not-yet-committed operation.
+    // ESP-IDF v6.0.2 does not provide a deferred-write boundary here:
+    // NVSHandleSimple::set_blob() calls Storage::writeItem() directly and
+    // nvs_commit() is currently a no-op. writeMultiPageBlob() may already
+    // have written BLOB_DATA/Page state before returning an error. Therefore
+    // only front-door failures and the pre-write value-size guard below have
+    // enough source-level evidence for a "certainly unchanged" mapping.
     switch (error) {
-        case ESP_ERR_NVS_NOT_ENOUGH_SPACE:
         case ESP_ERR_NVS_VALUE_TOO_LONG:
+            // writeMultiPageBlob() checks the page-count limit before its
+            // first page write (nvs_storage.cpp:281-290 in v6.0.2).
             return device_platform::StateStoreWriteStatus::CapacityError;
         case ESP_ERR_NVS_INVALID_HANDLE:
         case ESP_ERR_NVS_READ_ONLY:
+        case ESP_ERR_NVS_NOT_INITIALIZED:
+            // nvs_find_ns_handle()/NVSHandleSimple::set_blob() or the first
+            // Storage::writeItem() state check returns before a write.
+            return device_platform::StateStoreWriteStatus::WriteError;
+        case ESP_ERR_NVS_REMOVE_FAILED:
+        case ESP_FAIL:
+        case ESP_ERR_NVS_NOT_ENOUGH_SPACE:
         case ESP_ERR_NVS_INVALID_NAME:
         case ESP_ERR_NVS_KEY_TOO_LONG:
         case ESP_ERR_NVS_INVALID_LENGTH:
-        case ESP_ERR_NVS_NOT_INITIALIZED:
         case ESP_ERR_NVS_INVALID_STATE:
         case ESP_ERR_NVS_NO_FREE_PAGES:
         case ESP_ERR_NVS_PART_NOT_FOUND:
         case ESP_ERR_INVALID_ARG:
         case ESP_ERR_NO_MEM:
-            return device_platform::StateStoreWriteStatus::WriteError;
-        case ESP_ERR_NVS_REMOVE_FAILED:
-        case ESP_FAIL:
         default:
-            // REMOVE_FAILED explicitly says that the value may already have
-            // been written and can finish after reinitialization. Unknown or
-            // lower-layer errors receive the same fail-closed treatment.
+            // This includes page allocation, page/erase/GC, and cleanup
+            // errors, which may follow a partial durable write.
             return device_platform::StateStoreWriteStatus::CommitOutcomeUnknown;
     }
 }
@@ -40,27 +45,28 @@ device_platform::StateStoreWriteStatus mapSetError(esp_err_t error) {
 
 std::optional<NvsStateStoreConfig> NvsStateStoreConfig::create(
     std::string partitionLabel, std::string namespaceName) {
-    // The public v6.0.2 partition-label constant is a 16-byte storage bound,
-    // while the actual NVSPartition/BDL admission check requires a label
-    // shorter than that bound. Reject the boundary here so a configuration
-    // cannot be accepted and then rejected by the selected ESP-IDF backend.
+    // The normal ESP-IDF partition contract permits 16 non-NUL label bytes;
+    // the v6.0.2 BDL admission path has a stricter test-only
+    // strlen(label) >= NVS_PART_NAME_MAX_SIZE quirk. Keep that quirk out of
+    // the generic production adapter contract. BDL fixtures use a shorter
+    // label and document the backend-specific limit separately.
     // Namespace length includes the NUL in NVS_NS_NAME_MAX_SIZE, so the
     // largest accepted namespace is 15 bytes. No character whitelist or
     // silent truncation is introduced.
     if (partitionLabel.empty() ||
-        partitionLabel.size() >= NVS_PART_NAME_MAX_SIZE ||
+        partitionLabel.size() > NVS_PART_NAME_MAX_SIZE ||
         namespaceName.empty() ||
         namespaceName.size() + 1U > NVS_NS_NAME_MAX_SIZE) {
         return std::nullopt;
     }
-    return NvsStateStoreConfig{std::move(partitionLabel),
-                               std::move(namespaceName)};
+    return NvsStateStoreConfig(std::move(partitionLabel),
+                               std::move(namespaceName));
 }
 
 NvsStateStoreOpenResult NvsStateStore::open(const NvsStateStoreConfig& config) {
     nvs_handle_t handle = 0U;
     const esp_err_t status = nvs_open_from_partition(
-        config.partitionLabel.c_str(), config.namespaceName.c_str(),
+        config.partitionLabel().c_str(), config.namespaceName().c_str(),
         NVS_READWRITE, &handle);
     if (status != ESP_OK) {
         return NvsStateStoreOpenResult{status, nullptr};

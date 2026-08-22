@@ -1,9 +1,13 @@
 #include <cinttypes>
+#include <memory>
+#include <utility>
 
 #include "app_config.hpp"
 #include "device_platform.hpp"
 #include "esp_timer_time_source.hpp"
 #include "esp_reset_cause_source.hpp"
+#include "nvs_flash.h"
+#include "nvs_state_store.hpp"
 #include "fermentation_application.hpp"
 
 #if defined(APP_ISSUE_29_BRINGUP_PROBE)
@@ -24,6 +28,65 @@ constexpr uint64_t kSecondResourceLogAfterMs = 30000U;
 // docs/tasks/issue-73-implementation-plan.md, Abschnitt 12. Bewusst nicht
 // pdMS_TO_TICKS(1), da das bei CONFIG_FREERTOS_HZ=100 auf 0 runden koennte.
 constexpr TickType_t kCooperativeYieldTicks = 1;
+
+// The composition root owns the concrete partition lifecycle.  The adapter
+// only opens/closes its handle; it never initializes, erases, or deinitializes
+// an ESP-IDF partition.  This small actor-free context deliberately does not
+// construct a full recovery/application graph yet: later slices may inject
+// this IStateStore into the owning recovery context after their own gates.
+class NvsOwningContext final {
+   public:
+    [[nodiscard]] static std::unique_ptr<NvsOwningContext> create() {
+        auto config = device_platform_esp_idf::NvsStateStoreConfig::create(
+            "state_store", "fermentation");
+        if (!config.has_value()) {
+            ESP_LOGE(kTag, "invalid state-store owning-context configuration");
+            return nullptr;
+        }
+
+        const auto initStatus =
+            nvs_flash_init_partition(config->partitionLabel().c_str());
+        if (initStatus != ESP_OK) {
+            ESP_LOGE(kTag, "state-store partition init failed: %s",
+                     esp_err_to_name(initStatus));
+            return nullptr;
+        }
+
+        auto opened = device_platform_esp_idf::NvsStateStore::open(*config);
+        if (opened.status != ESP_OK || opened.store == nullptr) {
+            ESP_LOGE(kTag, "state-store open failed: %s",
+                     esp_err_to_name(opened.status));
+            static_cast<void>(
+                nvs_flash_deinit_partition(config->partitionLabel().c_str()));
+            return nullptr;
+        }
+
+        return std::unique_ptr<NvsOwningContext>(
+            new NvsOwningContext(std::move(*config), std::move(opened.store)));
+    }
+
+    ~NvsOwningContext() {
+        store_.reset();
+        const auto status =
+            nvs_flash_deinit_partition(config_.partitionLabel().c_str());
+        if (status != ESP_OK) {
+            ESP_LOGE(kTag, "state-store partition deinit failed: %s",
+                     esp_err_to_name(status));
+        }
+    }
+
+    NvsOwningContext(const NvsOwningContext&) = delete;
+    NvsOwningContext& operator=(const NvsOwningContext&) = delete;
+
+   private:
+    NvsOwningContext(
+        device_platform_esp_idf::NvsStateStoreConfig config,
+        std::unique_ptr<device_platform_esp_idf::NvsStateStore> store)
+        : config_(std::move(config)), store_(std::move(store)) {}
+
+    device_platform_esp_idf::NvsStateStoreConfig config_;
+    std::unique_ptr<device_platform_esp_idf::NvsStateStore> store_;
+};
 
 void logBootSummary(const app_config::ProfilePolicy& policy,
                     bool applicationStarted) {
@@ -57,6 +120,13 @@ void logResources() {
 }  // namespace
 
 extern "C" void app_main(void) {
+    const auto stateStoreContext = NvsOwningContext::create();
+    if (stateStoreContext == nullptr) {
+        // No recovery/application path is started if the owning context
+        // cannot initialize and open its persistent store.
+        return;
+    }
+
     device_platform::DevicePlatform platform;
     fermentation::FermentationApplication application;
     const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
