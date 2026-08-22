@@ -1,0 +1,8 @@
+# Issue #90 production layout: 4 MB, single factory app, no OTA.
+# The state_store partition is the only product NVS region for the generic
+# IStateStore adapter. Offsets are explicit so the 4 MB boundary is auditable.
+# Name,        Type, SubType, Offset,   Size,     Flags
+nvs,           data, nvs,     0x009000, 0x006000,
+phy_init,      data, phy,     0x00F000, 0x001000,
+factory,       app,  factory, 0x010000, 0x1C0000,
+state_store,   data, nvs,     0x1D0000, 0x230000,

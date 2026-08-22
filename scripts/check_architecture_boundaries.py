@@ -300,7 +300,7 @@ COMPONENT_REQUIRES_ALLOWLIST = {
     },
     "lib/device_platform_esp_idf/CMakeLists.txt": {
         "public": frozenset({"device_platform"}),
-        "private": frozenset({"esp_timer"}),
+        "private": frozenset({"esp_timer", "nvs_flash"}),
     },
     "main/CMakeLists.txt": {
         "public": frozenset(),
@@ -951,7 +951,7 @@ def create_clean_fixture(root: Path) -> None:
         ),
         "lib/device_platform_esp_idf/CMakeLists.txt": (
             'idf_component_register(SRC_DIRS "src" INCLUDE_DIRS "src" '
-            'REQUIRES device_platform PRIV_REQUIRES esp_timer)\n'
+            'REQUIRES device_platform PRIV_REQUIRES esp_timer nvs_flash)\n'
         ),
         "main/app_main.cpp": '#include "device_platform.hpp"\n',
         "main/CMakeLists.txt": (

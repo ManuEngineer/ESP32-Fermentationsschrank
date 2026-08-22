@@ -9,5 +9,10 @@ CONFIG_IDF_TARGET="esp32"
 # Release 1 zielt auf exakt 4 MB Flash (siehe AGENTS.md, app_config.hpp).
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
+# Issue #90 production partition layout. The destructive characterization
+# uses the separate partitions/issue_90_state_store_test.csv test image.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/issue_90_state_store.csv"
+
 # Kein PSRAM-Eintrag: CONFIG_SPIRAM ist im ESP-IDF-Default bereits
 # deaktiviert; Release 1 darf keine PSRAM-Abhaengigkeit einfuehren.
