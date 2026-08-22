@@ -271,6 +271,11 @@ void preCommitCapacityIsCapacityError() {
 void productRecordSizeAndMutationMatrix() {
     PartitionFixture fixture("adapter_matrix", 0x20000U);
     auto store = fixture.openStore();
+    CHECK(store->write(key("overwrite"), "old") ==
+          device_platform::StateStoreWriteStatus::Success);
+    CHECK(store->write(key("overwrite"), "new") ==
+          device_platform::StateStoreWriteStatus::Success);
+    CHECK(store->read(key("overwrite"), 3U).value == "new");
     for (const std::size_t size : {1U, 32U, 1024U, 4096U, 8192U, 8240U}) {
         const auto recordKey = key(("k" + std::to_string(size)).c_str());
         const std::string value(size, static_cast<char>(size & 0x7FU));
@@ -297,4 +302,18 @@ extern "C" void app_main(void) {
     preCommitCapacityIsCapacityError();
     productRecordSizeAndMutationMatrix();
     std::puts("Issue90 NVS adapter host tests: 12/12 PASS");
+    std::puts(
+        "issue90_backend_characterization=observed "
+        "evidence_scope=ESP_IDF_BDL_HOST product_recovery_gate=NOT_RUN");
+    std::puts(
+        "issue90_backend_matrix=small_blob,same_key_overwrite,medium_blob,page_"
+        "boundary,product_record_8240,new_key,existing_key,commit,readback_"
+        "capacity");
+    std::puts(
+        "issue90_backend_matrix_completeness=PARTIAL exhaustive=false "
+        "gc_erase_cut=NOT_RUN");
+    std::puts(
+        "callback_12=FAIL_CALLBACK_12_NOT_FOUND "
+        "backend_characterization=known_limitation "
+        "evidence_scope=REAL_NVS_ONLY product_recovery_gate=NOT_RUN");
 }
