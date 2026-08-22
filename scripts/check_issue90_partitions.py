@@ -29,15 +29,18 @@ EXPECTED = {
     },
 }
 
-# ESP-IDF v6.0.2 NVS model used by the host backend: 32-byte entries, 126
-# usable entries per 4 KiB page, and 4000-byte multi-page BLOB_DATA chunks.
-# A blob consumes one BLOB_INDEX entry plus one entry per data chunk.
+# ESP-IDF v6.0.2 NVS model used by the host backend. Page::writeItem() stores
+# one variable-length metadata entry and ceil(chunk_size / ENTRY_SIZE) data
+# entries for each BLOB_DATA chunk. writeMultiPageBlob() stores one separate
+# BLOB_IDX entry after all chunks have been written.
 NVS_PAGE_SIZE = 0x1000
 NVS_ENTRY_SIZE = 32
 NVS_ENTRY_COUNT = 126
 NVS_CHUNK_MAX_SIZE = NVS_ENTRY_SIZE * (NVS_ENTRY_COUNT - 1)
 NVS_BLOB_INDEX_ENTRIES = 1
 NVS_NAMESPACE_METADATA_ENTRIES = 1
+NVS_PAGE_HEADER_BYTES = 32
+NVS_PAGE_ENTRY_TABLE_BYTES = 32
 
 CONFIGURATION_BLOB_SIZES = (
     (256 + 45,) * 4,  # uc0..uc3
@@ -49,19 +52,48 @@ CONFIGURATION_BLOB_SIZES = (
 )
 RUN_BLOB_SIZES = (8240, 8240, 256)  # rc0/rc1/rh0
 
-# R1 permits two model generations. During a write, the old generation, new
-# candidate, and prepared transaction can coexist. These are capacity-planning
-# reserves, not a claim about a guaranteed flash-wear lifetime.
+# R1 permits the current generation, a new candidate and a prepared
+# transaction to coexist during a mutation. This multiplier is applied to the
+# complete simultaneously resident record set, not to GC or wear reserves.
 NVS_TRANSACTION_GENERATION_MULTIPLIER = 3
-NVS_PAGE_METADATA_ENTRIES = 2
+# Two pages keep a destination page and a live source page available while
+# NVS compacts one update; two more pages cover fragmentation across the
+# simultaneous configuration/run mutation set. These are technical GC/update
+# reserves, separate from the planning-only wear headroom below.
 NVS_GC_RESERVE_PAGES = 2
 NVS_FRAGMENTATION_RESERVE_PAGES = 2
+# Planning headroom for future R1 overwrite/erase cycles. It is reported
+# separately and is not part of the technical minimum.
 NVS_WEAR_HEADROOM_PAGES = 64
 
 
+def blob_data_chunks(blob_size: int) -> tuple[int, ...]:
+    if blob_size == 0:
+        return (0,)
+    chunks: list[int] = []
+    remaining = blob_size
+    while remaining:
+        chunk_size = min(remaining, NVS_CHUNK_MAX_SIZE)
+        chunks.append(chunk_size)
+        remaining -= chunk_size
+    return tuple(chunks)
+
+
+def blob_data_entries(chunk_size: int) -> int:
+    data_entries = (chunk_size + NVS_ENTRY_SIZE - 1) // NVS_ENTRY_SIZE
+    return 1 + data_entries
+
+
 def nvs_blob_entries(blob_size: int) -> int:
-    chunks = (blob_size + NVS_CHUNK_MAX_SIZE - 1) // NVS_CHUNK_MAX_SIZE
-    return NVS_BLOB_INDEX_ENTRIES + max(chunks, 1)
+    return NVS_BLOB_INDEX_ENTRIES + sum(
+        blob_data_entries(chunk_size) for chunk_size in blob_data_chunks(blob_size)
+    )
+
+
+def legacy_blob_entries(blob_size: int) -> int:
+    """The pre-correction formula, retained only for a regression assertion."""
+    chunk_count = (blob_size + NVS_CHUNK_MAX_SIZE - 1) // NVS_CHUNK_MAX_SIZE
+    return NVS_BLOB_INDEX_ENTRIES + max(chunk_count, 1)
 
 
 def capacity_model() -> dict[str, int]:
@@ -73,30 +105,37 @@ def capacity_model() -> dict[str, int]:
     logical_entries = NVS_NAMESPACE_METADATA_ENTRIES + sum(
         nvs_blob_entries(size) for size in configuration + RUN_BLOB_SIZES
     )
-    transaction_entries = (
+    technical_minimum_entries = (
         logical_entries * NVS_TRANSACTION_GENERATION_MULTIPLIER
-        + NVS_PAGE_METADATA_ENTRIES
     )
-    data_pages = (transaction_entries + NVS_ENTRY_COUNT - 1) // NVS_ENTRY_COUNT
-    minimum_pages = (
-        data_pages
-        + NVS_GC_RESERVE_PAGES
-        + NVS_FRAGMENTATION_RESERVE_PAGES
+    technical_minimum_pages = (
+        technical_minimum_entries + NVS_ENTRY_COUNT - 1
+    ) // NVS_ENTRY_COUNT
+    gc_fragmentation_reserve_pages = (
+        NVS_GC_RESERVE_PAGES + NVS_FRAGMENTATION_RESERVE_PAGES
+    )
+    planned_state_store_pages = (
+        technical_minimum_pages
+        + gc_fragmentation_reserve_pages
         + NVS_WEAR_HEADROOM_PAGES
     )
     return {
         "configuration_records": len(configuration),
         "run_records": len(RUN_BLOB_SIZES),
-        "logical_entries": logical_entries,
-        "transaction_entries": transaction_entries,
-        "data_pages": data_pages,
-        "minimum_pages": minimum_pages,
-        "minimum_bytes": minimum_pages * NVS_PAGE_SIZE,
+        "single_generation_entries": logical_entries,
+        "technical_minimum_entries": technical_minimum_entries,
+        "technical_minimum_pages": technical_minimum_pages,
+        "technical_minimum_bytes": technical_minimum_pages * NVS_PAGE_SIZE,
+        "gc_fragmentation_reserve_pages": gc_fragmentation_reserve_pages,
+        "wear_headroom_pages": NVS_WEAR_HEADROOM_PAGES,
+        "planned_state_store_pages": planned_state_store_pages,
+        "planned_state_store_bytes": planned_state_store_pages * NVS_PAGE_SIZE,
+        "planned_headroom_pages": 0x100000 // NVS_PAGE_SIZE - planned_state_store_pages,
     }
 
 
 CAPACITY = capacity_model()
-DERIVED_MINIMUM_STATE_STORE = CAPACITY["minimum_bytes"]
+DERIVED_MINIMUM_STATE_STORE = CAPACITY["planned_state_store_bytes"]
 
 
 def read_partitions(path: Path) -> dict[str, tuple[int, int, str, str]]:
@@ -242,6 +281,37 @@ def run_self_tests() -> None:
         "product/test partition mixture", lambda: validate_layout(path, mixed)
     )
 
+    boundary_expectations = {
+        0: 2,
+        1: 3,
+        31: 3,
+        32: 3,
+        33: 4,
+        NVS_CHUNK_MAX_SIZE - 1: 127,
+        NVS_CHUNK_MAX_SIZE: 127,
+        NVS_CHUNK_MAX_SIZE + 1: 129,
+        8240: 262,
+        32768 + 45: 1036,
+    }
+    for blob_size, expected_entries in boundary_expectations.items():
+        actual_entries = nvs_blob_entries(blob_size)
+        if actual_entries != expected_entries:
+            raise AssertionError(
+                f"BLOB-Grenze {blob_size}: erwartet {expected_entries}, "
+                f"gefunden {actual_entries}"
+            )
+    if nvs_blob_entries(8240) <= legacy_blob_entries(8240):
+        raise AssertionError("Selftest erkennt die alte BLOB-Entry-Formel nicht")
+
+    capacity = capacity_model()
+    if capacity["technical_minimum_entries"] != 14352:
+        raise AssertionError("unerwartete technische Entry-Mindestmenge")
+    if capacity["technical_minimum_pages"] != 114:
+        raise AssertionError("unerwartete technische Seiten-Mindestmenge")
+    if capacity["planned_state_store_pages"] != 182:
+        raise AssertionError("unerwartete geplante State-Store-Seitenmenge")
+    print("PASS: NVS-Entry-/Chunk-Grenztests und alte Formel erkannt")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -263,10 +333,27 @@ def main() -> int:
         check(root / "partitions" / filename)
         print(
             f"PASS: {filename} 4-MB layout, isolation and NVS model "
-            f"(0x{DERIVED_MINIMUM_STATE_STORE:X}, "
-            f"{CAPACITY['transaction_entries']} entries, "
-            f"{CAPACITY['minimum_pages']} pages)"
+            f"(technical=0x{CAPACITY['technical_minimum_bytes']:X}, "
+            f"planned=0x{CAPACITY['planned_state_store_bytes']:X})"
         )
+    print(f"technical_minimum_entries={CAPACITY['technical_minimum_entries']}")
+    print(f"nvs_page_header_bytes={NVS_PAGE_HEADER_BYTES}")
+    print(f"nvs_page_entry_table_bytes={NVS_PAGE_ENTRY_TABLE_BYTES}")
+    print(f"nvs_entry_size_bytes={NVS_ENTRY_SIZE}")
+    print(f"nvs_usable_entries_per_page={NVS_ENTRY_COUNT}")
+    print(f"nvs_blob_data_chunk_max_bytes={NVS_CHUNK_MAX_SIZE}")
+    print(f"technical_minimum_pages={CAPACITY['technical_minimum_pages']}")
+    print(f"technical_minimum_bytes=0x{CAPACITY['technical_minimum_bytes']:X}")
+    print(
+        "gc_fragmentation_reserve_pages="
+        f"{CAPACITY['gc_fragmentation_reserve_pages']}"
+    )
+    print(f"wear_headroom_pages={CAPACITY['wear_headroom_pages']}")
+    print(f"planned_state_store_pages={CAPACITY['planned_state_store_pages']}")
+    print(
+        f"planned_state_store_bytes=0x{CAPACITY['planned_state_store_bytes']:X}"
+    )
+    print(f"planned_headroom_pages={CAPACITY['planned_headroom_pages']}")
     if arguments.require_built_apps:
         check_built_app_sizes(root)
     return 0
