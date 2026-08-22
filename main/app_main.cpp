@@ -77,6 +77,8 @@ class NvsOwningContext final {
 
     NvsOwningContext(const NvsOwningContext&) = delete;
     NvsOwningContext& operator=(const NvsOwningContext&) = delete;
+    NvsOwningContext(NvsOwningContext&&) = delete;
+    NvsOwningContext& operator=(NvsOwningContext&&) = delete;
 
    private:
     NvsOwningContext(
