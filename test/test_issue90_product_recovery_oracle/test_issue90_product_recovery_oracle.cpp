@@ -15,16 +15,24 @@
 #include "configuration_bootstrap_codec.hpp"
 #include "configuration_document_codec.hpp"
 #include "configuration_graph_codec.hpp"
+#include "configuration_graph_store.hpp"
 #include "configuration_limits.hpp"
+#include "configuration_mutation_coordinator.hpp"
+#include "configuration_recovery_service.hpp"
+#include "configuration_service.hpp"
 #include "configuration_storage_contract.hpp"
 #include "crc32.hpp"
+#include "run_checkpoint_schedule.hpp"
 #include "run_persistence_codec.hpp"
+#include "run_persistence_coordinator.hpp"
 #include "run_persistence_contract.hpp"
+#include "safety_core.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "standard_program_catalog.hpp"
 #include "state_store.hpp"
 #include "state_store_key.hpp"
 #include "storage_envelope.hpp"
+#include "time_zone_resolver.hpp"
 
 namespace {
 
@@ -2777,6 +2785,511 @@ void test_product_recovery_gate_rejects_wrong_safety_projection() {
         std::string::npos);
 }
 
+const char* configurationRecoveryStatusName(
+    fermentation::ConfigurationRecoveryStatus value) {
+    using fermentation::ConfigurationRecoveryStatus;
+    switch (value) {
+        case ConfigurationRecoveryStatus::RuntimeReady:
+            return "RuntimeReady";
+        case ConfigurationRecoveryStatus::FactoryInitializationCompleted:
+            return "FactoryInitializationCompleted";
+        case ConfigurationRecoveryStatus::FactoryResetCompleted:
+            return "FactoryResetCompleted";
+        case ConfigurationRecoveryStatus::ConfigurationMutationBusy:
+            return "ConfigurationMutationBusy";
+        case ConfigurationRecoveryStatus::ConfigurationModelBudgetBusy:
+            return "ConfigurationModelBudgetBusy";
+        case ConfigurationRecoveryStatus::StateTransitionRejected:
+            return "StateTransitionRejected";
+        case ConfigurationRecoveryStatus::ConfigurationUnavailable:
+            return "ConfigurationUnavailable";
+        case ConfigurationRecoveryStatus::ConfigurationIntegrityFailure:
+            return "ConfigurationIntegrityFailure";
+        case ConfigurationRecoveryStatus::UnsupportedNewerConfigurationSchema:
+            return "UnsupportedNewerConfigurationSchema";
+        case ConfigurationRecoveryStatus::PersistenceReadFailure:
+            return "PersistenceReadFailure";
+        case ConfigurationRecoveryStatus::PersistenceCapacityFailure:
+            return "PersistenceCapacityFailure";
+        case ConfigurationRecoveryStatus::PersistenceWriteFailure:
+            return "PersistenceWriteFailure";
+        case ConfigurationRecoveryStatus::CounterOverflow:
+            return "CounterOverflow";
+        case ConfigurationRecoveryStatus::RuntimePreparationFailure:
+            return "RuntimePreparationFailure";
+        case ConfigurationRecoveryStatus::BootstrapCommitIndeterminate:
+            return "BootstrapCommitIndeterminate";
+        case ConfigurationRecoveryStatus::
+            ConfigurationRecordOutcomeIndeterminate:
+            return "ConfigurationRecordOutcomeIndeterminate";
+        case ConfigurationRecoveryStatus::ConfigurationCommitIndeterminate:
+            return "ConfigurationCommitIndeterminate";
+    }
+    return "UnknownConfigurationRecoveryStatus";
+}
+
+const char* configurationServiceModeName(
+    fermentation::ConfigurationServiceMode value) {
+    using fermentation::ConfigurationServiceMode;
+    switch (value) {
+        case ConfigurationServiceMode::NoRuntime:
+            return "NoRuntime";
+        case ConfigurationServiceMode::RecoveryPreparing:
+            return "RecoveryPreparing";
+        case ConfigurationServiceMode::Operational:
+            return "Operational";
+        case ConfigurationServiceMode::CommitInProgress:
+            return "CommitInProgress";
+        case ConfigurationServiceMode::CommitIndeterminate:
+            return "CommitIndeterminate";
+        case ConfigurationServiceMode::ResetPreparing:
+            return "ResetPreparing";
+        case ConfigurationServiceMode::ResetEligibleNoRuntime:
+            return "ResetEligibleNoRuntime";
+        case ConfigurationServiceMode::EpochResetting:
+            return "EpochResetting";
+        case ConfigurationServiceMode::BootstrapFinalizationPending:
+            return "BootstrapFinalizationPending";
+        case ConfigurationServiceMode::RuntimeFailure:
+            return "RuntimeFailure";
+    }
+    return "UnknownConfigurationServiceMode";
+}
+
+const char* runPersistenceLoadStatusName(
+    fermentation::RunPersistenceLoadStatus value) {
+    using fermentation::RunPersistenceLoadStatus;
+    switch (value) {
+        case RunPersistenceLoadStatus::NoPersistedRun:
+            return "NoPersistedRun";
+        case RunPersistenceLoadStatus::Current:
+            return "Current";
+        case RunPersistenceLoadStatus::NoActiveRun:
+            return "NoActiveRun";
+        case RunPersistenceLoadStatus::FallbackRecovered:
+            return "FallbackRecovered";
+        case RunPersistenceLoadStatus::PreparedInterrupted:
+            return "PreparedInterrupted";
+        case RunPersistenceLoadStatus::NotReconstructible:
+            return "NotReconstructible";
+        case RunPersistenceLoadStatus::NotReconstructibleOrphanedState:
+            return "NotReconstructibleOrphanedState";
+        case RunPersistenceLoadStatus::ReadFailed:
+            return "ReadFailed";
+        case RunPersistenceLoadStatus::CapacityExceeded:
+            return "CapacityExceeded";
+        case RunPersistenceLoadStatus::UnsupportedSchema:
+            return "UnsupportedSchema";
+        case RunPersistenceLoadStatus::ForeignEpoch:
+            return "ForeignEpoch";
+        case RunPersistenceLoadStatus::AlreadyInitialized:
+            return "AlreadyInitialized";
+    }
+    return "UnknownRunPersistenceLoadStatus";
+}
+
+const char* runPersistenceCoordinatorStateName(
+    fermentation::RunPersistenceCoordinatorState value) {
+    using fermentation::RunPersistenceCoordinatorState;
+    switch (value) {
+        case RunPersistenceCoordinatorState::Uninitialized:
+            return "Uninitialized";
+        case RunPersistenceCoordinatorState::ReadyEmpty:
+            return "ReadyEmpty";
+        case RunPersistenceCoordinatorState::LoadedActiveRun:
+            return "LoadedActiveRun";
+        case RunPersistenceCoordinatorState::Ready:
+            return "Ready";
+        case RunPersistenceCoordinatorState::Busy:
+            return "Busy";
+        case RunPersistenceCoordinatorState::BlockedIndeterminate:
+            return "BlockedIndeterminate";
+        case RunPersistenceCoordinatorState::FallbackRecoveryPending:
+            return "FallbackRecoveryPending";
+        case RunPersistenceCoordinatorState::PersistenceCommittedApplyFailed:
+            return "PersistenceCommittedApplyFailed";
+    }
+    return "UnknownRunPersistenceCoordinatorState";
+}
+
+const char* safetyBootDispositionName(
+    fermentation::SafetyBootDisposition value) {
+    using fermentation::SafetyBootDisposition;
+    switch (value) {
+        case SafetyBootDisposition::Unresolved:
+            return "UNRESOLVED";
+        case SafetyBootDisposition::Standby:
+            return "STANDBY";
+        case SafetyBootDisposition::ResumeOffer:
+            return "RESUME_OFFER";
+        case SafetyBootDisposition::NoActiveRun:
+            return "NO_ACTIVE_RUN";
+        case SafetyBootDisposition::Completed:
+            return "COMPLETED";
+        case SafetyBootDisposition::TerminalFault:
+            return "TERMINAL_FAULT";
+        case SafetyBootDisposition::SafeBoot:
+            return "SAFE_BOOT";
+    }
+    return "UNMAPPED";
+}
+
+const char* faultCodeName(fermentation::FaultCode value) {
+    using fermentation::FaultCode;
+    switch (value) {
+        case FaultCode::None:
+            return "None";
+        case FaultCode::ConfigurationRuntimeFailure:
+            return "ConfigurationRuntimeFailure";
+        case FaultCode::ConfigurationUnavailable:
+            return "ConfigurationUnavailable";
+        case FaultCode::ConfigurationIntegrityFailure:
+            return "ConfigurationIntegrityFailure";
+        case FaultCode::ConfigurationCommitIndeterminate:
+            return "ConfigurationCommitIndeterminate";
+        case FaultCode::RunPersistenceUntrusted:
+            return "RunPersistenceUntrusted";
+        case FaultCode::SafetySensorUnavailable:
+            return "SafetySensorUnavailable";
+        case FaultCode::ActuatorRequestWatchdog:
+            return "ActuatorRequestWatchdog";
+        case FaultCode::SystemProducerUnknown:
+            return "SystemProducerUnknown";
+    }
+    return "UnknownFaultCode";
+}
+
+const char* gateStatusName(fermentation::ActuatorSafetyGateStatus value) {
+    using fermentation::ActuatorSafetyGateStatus;
+    switch (value) {
+        case ActuatorSafetyGateStatus::Unresolved:
+            return "UNRESOLVED";
+        case ActuatorSafetyGateStatus::Allowed:
+            return "ALLOWED";
+        case ActuatorSafetyGateStatus::ImmediateStop:
+            return "IMMEDIATE_STOP";
+    }
+    return "UNMAPPED";
+}
+
+struct ProductionActual {
+    std::string primaryStatus;
+    std::string secondaryStatus;
+    std::string recordClassification{"UNMAPPED"};
+    std::string productOutcome{"UNMAPPED"};
+    std::string safetyProjection{"UNMAPPED"};
+    std::string safetyProducer{"UNMAPPED"};
+    std::string logicalGate{"UNMAPPED"};
+    bool actuatorAllowed{false};
+    std::string baseline{"NONE"};
+    std::string recoveryAction{"NONE"};
+};
+
+class ProductionResolver final : public device_platform::ITimeZoneResolver {
+   public:
+    device_platform::TimeZonePrepareResult prepare(
+        const std::string& value) const override {
+        if (value != "Europe/Zurich") {
+            return {
+                device_platform::TimeZonePrepareStatus::UnsupportedIdentifier,
+                std::nullopt};
+        }
+        return {device_platform::TimeZonePrepareStatus::Success,
+                device_platform::PreparedTimeZone{value}};
+    }
+};
+
+BackendObservation seedProductionStore(const OracleCase& item,
+                                       SimulatedPersistentStateStore& store) {
+    const auto observed = observe(item);
+    for (const auto& [key, value] : observed.committed)
+        put(store, key.c_str(), value);
+    store.restart();
+    if (item.scenario == Scenario::UnknownCommitNotFound) {
+        store.forceNotFound(keyFor(observed.productReadTargetKey.c_str()),
+                            true);
+    }
+    if (item.scenario == Scenario::ReadError) {
+        store.injectReadFailure(keyFor(observed.productReadTargetKey.c_str()),
+                                true);
+    }
+    return observed;
+}
+
+fermentation::SafetyEvaluation evaluateProductionSafety(
+    const ProductionActual& /*unused*/, bool configurationValidated,
+    fermentation::ConfigurationRecoveryStatus configurationStatus,
+    fermentation::ConfigurationServiceMode configurationMode,
+    std::optional<fermentation::ConfigurationSafetyProducer>
+        configurationProducer,
+    fermentation::RunPersistenceLoadStatus persistenceStatus,
+    const fermentation::RunPersistenceSnapshot* persistenceSnapshot,
+    fermentation::RunPersistenceCoordinatorState coordinatorState) {
+    fermentation::SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+    fermentation::SafetyCoreInput input;
+    input.configurationValidated = configurationValidated;
+    input.configurationRecoveryStatus = configurationStatus;
+    input.configurationServiceMode = configurationMode;
+    input.configurationProducer = configurationProducer;
+    input.persistenceValidated =
+        persistenceStatus ==
+            fermentation::RunPersistenceLoadStatus::NoPersistedRun ||
+        persistenceStatus == fermentation::RunPersistenceLoadStatus::Current ||
+        persistenceStatus ==
+            fermentation::RunPersistenceLoadStatus::NoActiveRun;
+    input.persistenceLoadStatus = persistenceStatus;
+    input.persistenceSnapshot = persistenceSnapshot;
+    input.persistenceCoordinatorState = coordinatorState;
+    device_platform::SensorQualitySnapshot sensor;
+    fermentation::SensorSelectionRuntimeState selection;
+    if (persistenceSnapshot != nullptr) {
+        sensor.quality = device_platform::SensorQuality::Valid;
+        selection.permission = fermentation::SensorPeltierPermission::Allowed;
+        input.sensorEvidenceValidated = true;
+        input.peltierSensor = &sensor;
+        input.sensorSelectionRuntime = &selection;
+    }
+    return safety.evaluate(input);
+}
+
+ProductionActual runConfigurationProduction(
+    const OracleCase& item, SimulatedPersistentStateStore& store) {
+    static_cast<void>(item);
+    ProductionResolver resolver;
+    fermentation::ConfigurationMutationCoordinator coordinator;
+    fermentation::ConfigurationBootstrapStore bootstrap(store);
+    fermentation::ConfigurationGraphStore graph(store, resolver);
+    fermentation::ConfigurationService service(coordinator, graph, resolver);
+    auto recovery = fermentation::ConfigurationRecoveryService::create(
+        store, bootstrap, graph, service, coordinator);
+    const auto result = recovery->boot();
+    const auto graphResult = graph.loadCanonicalGraph(kEpoch);
+
+    ProductionActual actual;
+    actual.primaryStatus = configurationRecoveryStatusName(result.status);
+    actual.secondaryStatus =
+        std::string("service_mode=") +
+        configurationServiceModeName(service.mode()) + ";fallback_used=" +
+        (result.diagnostics.fallbackUsed ? "true" : "false") +
+        ";skipped_higher_roots=" +
+        std::to_string(result.diagnostics.skippedHigherRoots);
+    const bool ready = result.status ==
+                       fermentation::ConfigurationRecoveryStatus::RuntimeReady;
+    const bool factoryCompleted = result.status ==
+                                  fermentation::ConfigurationRecoveryStatus::
+                                      FactoryInitializationCompleted;
+    if (factoryCompleted) {
+        actual.baseline = baselineName(BaselineClassification::FactoryEmpty);
+        actual.recoveryAction =
+            actionName(ExpectedRecoveryAction::FactoryInitialization);
+    } else if (ready) {
+        if (graphResult.graph.has_value() &&
+            graphResult.graph->selectedFallback) {
+            actual.productOutcome = "FALLBACK_VALID_CONFIGURATION";
+            actual.recordClassification = "FullyValidFallback";
+        } else {
+            const auto higherManifest = store.read(
+                keyFor("cm1"), fermentation::configuration_limits::
+                                   kMaximumConfigurationManifestEnvelopeBytes);
+            const bool olderGenerationSelected =
+                result.diagnostics.skippedHigherRoots > 0U ||
+                (graphResult.graph.has_value() &&
+                 graphResult.graph->rootSequence.value() == 1U &&
+                 higherManifest.status == StateStoreReadStatus::Success);
+            if (olderGenerationSelected) {
+                actual.productOutcome = "OLD_VALID_CONFIGURATION";
+                actual.recordClassification = "FullyValidOlder";
+            } else {
+                actual.productOutcome = "NEW_VALID_CONFIGURATION";
+                actual.recordClassification = "FullyValidCurrent";
+            }
+        }
+    } else {
+        actual.productOutcome = "CONFIGURATION_RECOVERY_REQUIRED";
+        actual.recordClassification = "Indeterminate";
+    }
+    const auto safety = evaluateProductionSafety(
+        actual, ready || factoryCompleted, result.status, service.mode(),
+        result.safetyProducer,
+        fermentation::RunPersistenceLoadStatus::NoPersistedRun, nullptr,
+        fermentation::RunPersistenceCoordinatorState::ReadyEmpty);
+    actual.safetyProjection = safetyBootDispositionName(safety.bootDisposition);
+    actual.safetyProducer = faultCodeName(safety.faultCode);
+    actual.logicalGate = gateStatusName(safety.gate.status);
+    actual.actuatorAllowed =
+        safety.gate.status == fermentation::ActuatorSafetyGateStatus::Allowed;
+    return actual;
+}
+
+ProductionActual runRunProduction(const OracleCase& item,
+                                  SimulatedPersistentStateStore& store) {
+    static_cast<void>(item);
+    fermentation::RunPersistenceCoordinator coordinator(
+        store, kEpoch, fermentation::RunCheckpointSchedule{});
+    const auto result = coordinator.loadAndInitialize();
+    ProductionActual actual;
+    actual.primaryStatus = runPersistenceLoadStatusName(result.status);
+    actual.secondaryStatus =
+        std::string("coordinator_state=") +
+        runPersistenceCoordinatorStateName(coordinator.state());
+    if (result.status ==
+        fermentation::RunPersistenceLoadStatus::NoPersistedRun) {
+        actual.baseline = baselineName(BaselineClassification::NoPersistedRun);
+        actual.recoveryAction = actionName(ExpectedRecoveryAction::NoActiveRun);
+    } else if (result.status ==
+               fermentation::RunPersistenceLoadStatus::NoActiveRun) {
+        actual.baseline =
+            baselineName(BaselineClassification::ControlledDiscardTombstone);
+        actual.recoveryAction = actionName(ExpectedRecoveryAction::NoActiveRun);
+    } else if (result.status ==
+                   fermentation::RunPersistenceLoadStatus::Current &&
+               result.snapshot.has_value()) {
+        if (result.snapshot->variant ==
+            fermentation::RunCheckpointVariant::NoActiveRun) {
+            actual.baseline = baselineName(
+                BaselineClassification::ControlledDiscardTombstone);
+            actual.recoveryAction =
+                actionName(ExpectedRecoveryAction::NoActiveRun);
+        } else if (fermentation::SafetyCore::isR1ResumeEligible(
+                       *result.snapshot)) {
+            actual.productOutcome = "NEW_VALID_RESUME";
+            actual.recordClassification = "FullyValidCurrent";
+        } else {
+            actual.productOutcome = "RUN_ABORT_REQUIRED";
+            actual.recordClassification = "FullyValidCurrent";
+        }
+    } else if (result.status ==
+               fermentation::RunPersistenceLoadStatus::FallbackRecovered) {
+        actual.productOutcome = "OLDER_VALID_CHECKPOINT_RESUME";
+        actual.recordClassification = "FullyValidFallback";
+    } else {
+        actual.productOutcome = "RUN_RECOVERY_REQUIRED";
+        actual.recordClassification = "Indeterminate";
+    }
+    const auto safety = evaluateProductionSafety(
+        actual, true, fermentation::ConfigurationRecoveryStatus::RuntimeReady,
+        fermentation::ConfigurationServiceMode::Operational, std::nullopt,
+        result.status,
+        result.snapshot.has_value() ? &*result.snapshot : nullptr,
+        coordinator.state());
+    actual.safetyProjection = safetyBootDispositionName(safety.bootDisposition);
+    actual.safetyProducer = faultCodeName(safety.faultCode);
+    actual.logicalGate = gateStatusName(safety.gate.status);
+    actual.actuatorAllowed =
+        safety.gate.status == fermentation::ActuatorSafetyGateStatus::Allowed;
+    return actual;
+}
+
+const char* expectedSafetyName(SafetyProjection value) {
+    switch (value) {
+        case SafetyProjection::Standby:
+            return "STANDBY";
+        case SafetyProjection::NoActiveRun:
+            return "NO_ACTIVE_RUN";
+        case SafetyProjection::ResumeOffer:
+            return "RESUME_OFFER";
+        case SafetyProjection::SafeBoot:
+            return "SAFE_BOOT";
+    }
+    return "UNMAPPED";
+}
+
+const char* expectedProducerName(SafetyProducer value) {
+    switch (value) {
+        case SafetyProducer::None:
+            return "None";
+        case SafetyProducer::ConfigurationUnavailable:
+            return "ConfigurationUnavailable";
+        case SafetyProducer::ConfigurationIntegrityFailure:
+            return "ConfigurationIntegrityFailure";
+        case SafetyProducer::RunPersistenceUntrusted:
+            return "RunPersistenceUntrusted";
+    }
+    return "UNMAPPED";
+}
+
+void test_existing_production_matches_slice2_oracle() {
+    std::size_t pass = 0U;
+    std::size_t fail = 0U;
+    std::size_t blocked = 0U;
+    std::size_t notRun = 0U;
+    for (const auto& item : kMatrix) {
+        SimulatedPersistentStateStore store;
+        const auto fixture = seedProductionStore(item, store);
+        const auto actual = item.domain == Domain::Configuration
+                                ? runConfigurationProduction(item, store)
+                                : runRunProduction(item, store);
+        const std::string expectedOutcome = item.hasProductOutcome
+                                                ? outcomeName(item.outcome)
+                                                : "NOT_APPLICABLE";
+        const std::string expectedSafety = item.hasProductOutcome
+                                               ? expectedSafetyName(item.safety)
+                                               : "NOT_APPLICABLE";
+        const std::string expectedProducer =
+            item.hasProductOutcome ? expectedProducerName(item.producer)
+                                   : "NOT_APPLICABLE";
+        const bool baselineMatch =
+            actual.baseline == baselineName(item.baseline) &&
+            actual.recoveryAction == actionName(item.recoveryAction);
+        const bool outcomeMatch =
+            !item.hasProductOutcome || actual.productOutcome == expectedOutcome;
+        const bool safetyMatch = !item.hasProductOutcome ||
+                                 actual.safetyProjection == expectedSafety;
+        const bool producerMatch = !item.hasProductOutcome ||
+                                   actual.safetyProducer == expectedProducer;
+        const bool gateMatch =
+            actual.logicalGate == "UNRESOLVED" && !actual.actuatorAllowed;
+        const bool comparisonPass = baselineMatch && outcomeMatch &&
+                                    safetyMatch && producerMatch && gateMatch;
+        const char* difference = "NONE";
+        if (!outcomeMatch) {
+            difference = "RECOVERY";
+        } else if (!producerMatch || !safetyMatch) {
+            difference = "SAFETY";
+        } else if (!gateMatch) {
+            difference = "GATE";
+        } else if (!baselineMatch) {
+            difference = "STATUS";
+        }
+        const char* resultName = comparisonPass ? "PASS" : "FAIL";
+        if (comparisonPass) {
+            ++pass;
+        } else {
+            ++fail;
+        }
+        std::printf(
+            "issue90_production_compare_case=%s expected_product_outcome=%s "
+            "expected_safety_projection=%s expected_safety_producer=%s "
+            "expected_logical_gate=UNRESOLVED expected_actuator_allowed=false "
+            "actual_primary_status=%s actual_secondary_status=%s "
+            "actual_record_classification=%s actual_product_outcome=%s "
+            "actual_safety_projection=%s actual_safety_producer=%s "
+            "actual_logical_gate=%s actual_actuator_allowed=%s "
+            "expected_baseline=%s actual_baseline=%s "
+            "expected_recovery_action=%s actual_recovery_action=%s "
+            "fixture_read_status=%s comparison_result=%s difference_class=%s "
+            "fixture_reboot=%s\n",
+            item.id, expectedOutcome.c_str(), expectedSafety.c_str(),
+            expectedProducer.c_str(), actual.primaryStatus.c_str(),
+            actual.secondaryStatus.c_str(), actual.recordClassification.c_str(),
+            actual.productOutcome.c_str(), actual.safetyProjection.c_str(),
+            actual.safetyProducer.c_str(), actual.logicalGate.c_str(),
+            actual.actuatorAllowed ? "true" : "false",
+            baselineName(item.baseline), actual.baseline.c_str(),
+            actionName(item.recoveryAction), actual.recoveryAction.c_str(),
+            readStatusName(fixture.readStatus), resultName, difference,
+            fixture.restarted ? "true" : "false");
+    }
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(kMatrix.size()),
+        static_cast<std::uint32_t>(pass + fail + blocked + notRun));
+    std::printf(
+        "issue90_production_compare_summary=cases:%zu pass:%zu fail:%zu "
+        "blocked:%zu not_run:%zu callback12=REAL_NVS_ONLY/NOT_RUN\n",
+        kMatrix.size(), pass, fail, blocked, notRun);
+}
+
 void test_callback_12_remains_real_nvs_only() {
     constexpr const char* referenceLine =
         "issue90_oracle_backend_reference=FAIL_CALLBACK_12_NOT_FOUND "
@@ -2808,6 +3321,7 @@ int main() {
     RUN_TEST(test_product_recovery_gate_rejects_invalid_fallback_reference);
     RUN_TEST(test_product_recovery_gate_rejects_wrong_product_outcome);
     RUN_TEST(test_product_recovery_gate_rejects_wrong_safety_projection);
+    RUN_TEST(test_existing_production_matches_slice2_oracle);
     RUN_TEST(test_callback_12_remains_real_nvs_only);
     return UNITY_END();
 }
