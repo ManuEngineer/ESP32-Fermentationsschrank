@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <new>
 #include <unistd.h>
 #include <vector>
 
@@ -254,7 +255,7 @@ esp_err_t release(esp_blockdev_handle_t handle) {
         return ESP_ERR_INVALID_ARG;
     }
     std::free(context(handle).bytes);
-    std::free(handle->ctx);
+    delete static_cast<Context*>(handle->ctx);
     std::free(handle);
     return ESP_OK;
 }
@@ -276,11 +277,11 @@ TestRamDisk::TestRamDisk(std::size_t totalSize, std::size_t eraseSize) {
     }
     auto* device = static_cast<esp_blockdev_handle_t>(
         std::calloc(1U, sizeof(esp_blockdev_t)));
-    auto* diskContext = static_cast<Context*>(std::calloc(1U, sizeof(Context)));
+    auto* diskContext = new (std::nothrow) Context{};
     auto* bytes = static_cast<std::byte*>(std::malloc(totalSize));
     if (device == nullptr || diskContext == nullptr || bytes == nullptr) {
         std::free(bytes);
-        std::free(diskContext);
+        delete diskContext;
         std::free(device);
         return;
     }

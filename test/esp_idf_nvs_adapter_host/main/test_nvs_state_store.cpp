@@ -119,6 +119,22 @@ extern "C" esp_err_t __wrap_nvs_commit(nvs_handle_t handle) {
         }                                          \
     } while (false)
 
+bool finalHostGatePass(bool gcEraseObserved, bool powerCutPass,
+                       bool gcEraseCutPass, std::size_t bridgeFailures,
+                       std::size_t bridgeBlocked, std::size_t bridgeNotRun) {
+    return gcEraseObserved && powerCutPass && gcEraseCutPass &&
+           bridgeFailures == 0U && bridgeBlocked == 0U && bridgeNotRun == 0U;
+}
+
+void finalGateNegativeSelfTests() {
+    CHECK(finalHostGatePass(true, true, true, 0U, 0U, 0U));
+    CHECK(!finalHostGatePass(true, false, true, 0U, 0U, 0U));
+    CHECK(!finalHostGatePass(true, true, false, 0U, 0U, 0U));
+    CHECK(!finalHostGatePass(true, true, true, 1U, 0U, 0U));
+    CHECK(!finalHostGatePass(true, true, true, 0U, 0U, 1U));
+    std::puts("issue90_final_gate_negative_selftests=4 PASS");
+}
+
 device_platform::StateStoreKey key(const char* raw) {
     const auto result = device_platform::StateStoreKey::create(raw);
     CHECK(result.key.has_value());
@@ -527,12 +543,32 @@ constexpr ExpectedProductTruth kUnknownCommitNewExpected{
 // The backend cause remains CommitOutcomeUnknown; only the post-restart
 // product state is compared here.
 constexpr ExpectedProductTruth kFullyValidCurrentExpected{
-    "run_rc0_write_error_older",
+    "run_rc0_new_valid_resume",
     "NEW_VALID_RESUME",
     "RESUME_OFFER",
     "None",
     "UNRESOLVED",
     false};
+
+constexpr std::array<const char*, 2U> kCanonicalSlice2RunOracleCases = {{
+    "run_rh0_unknown_commit_new",
+    "run_rc0_new_valid_resume",
+}};
+
+bool isCanonicalSlice2RunOracleCase(const char* caseId) {
+    return std::any_of(kCanonicalSlice2RunOracleCases.begin(),
+                       kCanonicalSlice2RunOracleCases.end(),
+                       [caseId](const char* canonical) {
+                           return std::strcmp(caseId, canonical) == 0;
+                       });
+}
+
+void canonicalOracleIdSelfTest() {
+    CHECK(isCanonicalSlice2RunOracleCase("run_rh0_unknown_commit_new"));
+    CHECK(isCanonicalSlice2RunOracleCase("run_rc0_new_valid_resume"));
+    CHECK(!isCanonicalSlice2RunOracleCase("run_rc0_write_error_older"));
+    std::puts("issue90_canonical_oracle_id_selftest=PASS");
+}
 
 const char* runProductOutcomeName(
     fermentation::RunPersistenceLoadStatus status,
@@ -563,6 +599,9 @@ const char* runProductOutcomeName(
 ProductBridgeObservation runProductBridge(
     const char* caseId, fermentation::RunPersistenceCoordinator& coordinator,
     const ExpectedProductTruth* expected) {
+    if (expected != nullptr) {
+        CHECK(isCanonicalSlice2RunOracleCase(expected->oracleCaseId));
+    }
     const auto loaded = coordinator.loadAndInitialize();
     fermentation::SafetyCore safety;
     safety.beginBoot(device_platform::ResetCause::Unknown);
@@ -1454,20 +1493,26 @@ void abruptPowerCutHarness() {
 }
 
 void abruptGcEraseWriterChild(const char* imagePath, const char* metadataPath,
-                              BdlCutPhase phase) {
+                              const char* oldValuePath,
+                              const char* newValuePath, BdlCutPhase phase) {
     resetFaults();
     PartitionFixture fixture("gc_pcut_write", 0x20000U);
     auto store = fixture.openStore();
     fixture.disk().setAbruptCutFiles(imagePath, metadataPath);
     fixture.disk().armCutForNext(BdlOperation::Erase, phase,
                                  BdlCutMode::AbruptProcessExit);
+    std::string oldValue;
     for (std::size_t revision = 0U; revision < 256U; ++revision) {
         std::string value(8240U, static_cast<char>(revision & 0x7FU));
         value[0] = static_cast<char>((revision + 1U) & 0x7FU);
+        fixture.disk().setMutationHeadFiles(oldValuePath, newValuePath);
+        fixture.disk().setMutationOldHead(oldValue);
+        fixture.disk().setMutationNewHead(value);
         if (store->write(key("gc_window"), value) !=
             device_platform::StateStoreWriteStatus::Success) {
             _exit(143);
         }
+        oldValue = value;
     }
     _exit(144);
 }
@@ -1481,8 +1526,11 @@ void abruptGcEraseRecoveryChild(const char* imagePath, const char* resultPath) {
     std::ofstream result(resultPath, std::ios::out | std::ios::trunc);
     if (!result.good()) _exit(146);
     result << "restart_read_status=" << readStatusName(read.status) << '\n'
-           << "product_recovery_gate=NOT_APPLICABLE\n"
-           << "result=PASS\n";
+           << "restart_value_identity="
+           << (read.status == device_platform::StateStoreReadStatus::Success
+                   ? bytesIdentity(read.value)
+                   : "NOT_VISIBLE")
+           << '\n';
     result.close();
     if (!result.good()) _exit(147);
     _exit(0);
@@ -1492,7 +1540,9 @@ void writeGcErasePowerCutArtifact(
     const char* caseId, const char* stimulusKind,
     const std::map<std::string, std::string>& metadata,
     const std::map<std::string, std::string>& result,
-    const std::string& frozenImage) {
+    const std::string& frozenImage, const std::string& oldValue,
+    const std::string& newValue, bool oldExact, bool newExact,
+    const char* backendCharacterization, const char* backendResult) {
     const std::filesystem::path directory = "/tmp/issue90-slice5-artifacts";
     const auto metadataValue = [&metadata](const char* name) {
         const auto found = metadata.find(name);
@@ -1532,6 +1582,12 @@ void writeGcErasePowerCutArtifact(
              << "  \"target_length\": " << metadataValue("length") << ",\n"
              << "  \"baseline_checksum_immediately_before_target\": "
              << metadataValue("baseline_checksum") << ",\n"
+             << "  \"old_identity\": \"" << bytesIdentity(oldValue) << "\",\n"
+             << "  \"new_identity\": \"" << bytesIdentity(newValue) << "\",\n"
+             << "  \"restart_value_identity\": \""
+             << resultValue("restart_value_identity") << "\",\n"
+             << "  \"old_exact\": " << (oldExact ? "true" : "false") << ",\n"
+             << "  \"new_exact\": " << (newExact ? "true" : "false") << ",\n"
              << "  \"frozen_image_identity\": \"" << bytesIdentity(frozenImage)
              << "\",\n"
              << "  \"after_image_checksum\": \""
@@ -1542,10 +1598,10 @@ void writeGcErasePowerCutArtifact(
              << "  \"restart_read_status\": \""
              << resultValue("restart_read_status") << "\",\n"
              << "  \"oracle_case_id\": \"NOT_APPLICABLE\",\n"
-             << "  \"backend_characterization\": \"observed\",\n"
-             << "  \"product_recovery_gate\": \""
-             << resultValue("product_recovery_gate") << "\",\n"
-             << "  \"result\": \"" << resultValue("result") << "\"\n}\n";
+             << "  \"backend_characterization\": \"" << backendCharacterization
+             << "\",\n"
+             << "  \"product_recovery_gate\": \"NOT_APPLICABLE\",\n"
+             << "  \"result\": \"" << backendResult << "\"\n}\n";
     artifact.close();
     CHECK(artifact.good());
 }
@@ -1558,14 +1614,18 @@ bool abruptGcEraseCase(const char* caseId, BdlCutPhase phase) {
     const auto prefix = directory / (std::string("gc_") + caseId);
     const auto imagePath = prefix.string() + ".image";
     const auto metadataPath = prefix.string() + ".metadata";
+    const auto oldValuePath = prefix.string() + ".old_value";
+    const auto newValuePath = prefix.string() + ".new_value";
     const auto resultPath = prefix.string() + ".result";
-    for (const auto& path : {imagePath, metadataPath, resultPath}) {
+    for (const auto& path :
+         {imagePath, metadataPath, oldValuePath, newValuePath, resultPath}) {
         std::filesystem::remove(path, error);
     }
     const auto writer = fork();
     CHECK(writer >= 0);
     if (writer == 0) {
         abruptGcEraseWriterChild(imagePath.c_str(), metadataPath.c_str(),
+                                 oldValuePath.c_str(), newValuePath.c_str(),
                                  phase);
     }
     int writerStatus = 0;
@@ -1598,15 +1658,35 @@ bool abruptGcEraseCase(const char* caseId, BdlCutPhase phase) {
     CHECK(!frozenImage.empty());
     CHECK(!metadata.empty());
     CHECK(!result.empty());
-    writeGcErasePowerCutArtifact(caseId,
-                                 phase == BdlCutPhase::Before
-                                     ? "POWER_CUT_ERASE_BEFORE"
+    const auto oldValue = readBinaryFile(oldValuePath);
+    const auto newValue = readBinaryFile(newValuePath);
+    CHECK(!oldValue.empty());
+    CHECK(!newValue.empty());
+    const auto restartStatus = result.find("restart_read_status");
+    const auto restartIdentity = result.find("restart_value_identity");
+    CHECK(restartStatus != result.end());
+    CHECK(restartIdentity != result.end());
+    const bool oldExact = restartStatus->second == "Success" &&
+                          restartIdentity->second == bytesIdentity(oldValue);
+    const bool newExact = restartStatus->second == "Success" &&
+                          restartIdentity->second == bytesIdentity(newValue);
+    const bool backendPass = oldExact || newExact;
+    const char* backendCharacterization =
+        backendPass ? "observed" : "unexpected_change";
+    const char* backendResult = backendPass ? "PASS" : "FAIL";
+    std::map<std::string, std::string> classifiedResult = result;
+    classifiedResult["product_recovery_gate"] = "NOT_APPLICABLE";
+    classifiedResult["result"] = backendResult;
+    writeGcErasePowerCutArtifact(
+        caseId,
+        phase == BdlCutPhase::Before ? "POWER_CUT_ERASE_BEFORE"
                                      : "POWER_CUT_ERASE_AFTER",
-                                 metadata, result, frozenImage);
-    for (const auto& [name, value] : result) {
+        metadata, classifiedResult, frozenImage, oldValue, newValue, oldExact,
+        newExact, backendCharacterization, backendResult);
+    for (const auto& [name, value] : classifiedResult) {
         std::printf("issue90_gc_erase_%s=%s\n", name.c_str(), value.c_str());
     }
-    return requiredValue(result, "result") == "PASS";
+    return backendPass;
 }
 
 void abruptGcEraseHarness() {
@@ -1626,14 +1706,26 @@ void productRecordSizeAndMutationMatrix() {
     CHECK(store->write(key("overwrite"), "new") ==
           device_platform::StateStoreWriteStatus::Success);
     CHECK(store->read(key("overwrite"), 3U).value == "new");
-    for (const std::size_t size : {1U, 32U, 1024U, 4096U, 8192U, 8240U}) {
+    constexpr std::array<std::size_t, 9U> sizes = {
+        1U, 32U, 1024U, 3999U, 4000U, 4001U, 4096U, 8192U, 8240U};
+    for (const std::size_t size : sizes) {
         const auto recordKey = key(("k" + std::to_string(size)).c_str());
         const std::string value(size, static_cast<char>(size & 0x7FU));
         CHECK(store->write(recordKey, value) ==
               device_platform::StateStoreWriteStatus::Success);
-        CHECK(store->read(recordKey, size).status ==
-              device_platform::StateStoreReadStatus::Success);
     }
+    store.reset();
+    fixture.restart();
+    store = fixture.openStore();
+    for (const std::size_t size : sizes) {
+        const auto recordKey = key(("k" + std::to_string(size)).c_str());
+        const std::string expected(size, static_cast<char>(size & 0x7FU));
+        const auto readback = store->read(recordKey, size);
+        CHECK(readback.status ==
+              device_platform::StateStoreReadStatus::Success);
+        CHECK(readback.value == expected);
+    }
+    std::puts("issue90_real_chunk_boundaries=3999,4000,4001 PASS");
 }
 
 std::size_t nvsModelBlobEntries(std::size_t blobSize) {
@@ -1727,6 +1819,7 @@ bool gcEraseCharacterization() {
 }  // namespace
 
 extern "C" void app_main(void) {
+    canonicalOracleIdSelfTest();
     configValidation();
     openFailureIsNotMissingKey();
     binaryWriteReadAndMissingKey();
@@ -1745,6 +1838,10 @@ extern "C" void app_main(void) {
     cutHarnessWritesEarlyAndLateArtifacts();
     abruptPowerCutHarness();
     abruptGcEraseHarness();
+    finalGateNegativeSelfTests();
+    CHECK(finalHostGatePass(gcEraseObserved, abruptPowerCutAllPass,
+                            abruptGcEraseCutAllPass, productBridgeFailures,
+                            productBridgeBlocked, productBridgeNotRun));
     std::puts("Issue90 NVS adapter host tests: 14/14 PASS");
     std::puts(
         "issue90_backend_characterization=observed "
@@ -1759,7 +1856,8 @@ extern "C" void app_main(void) {
     std::puts(bridgeSummary.c_str());
     std::puts(
         "issue90_backend_matrix=small_blob,same_key_overwrite,medium_blob,page_"
-        "boundary,product_record_8240,new_key,existing_key,commit,readback_"
+        "boundary_3999_4000_4001,product_record_8240,new_key,existing_key,"
+        "commit,readback_"
         "capacity,empty_blob,bdl_io_failure_before_rh0,"
         "bdl_io_failure_after_rh0,bdl_committed_rh0_product_bridge,"
         "power_cut_rh0_before,power_cut_rh0_after,"
