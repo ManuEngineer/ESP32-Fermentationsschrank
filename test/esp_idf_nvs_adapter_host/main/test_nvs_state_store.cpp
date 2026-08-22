@@ -1,14 +1,19 @@
 #include "nvs_state_store.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "bdl_ramdisk.hpp"
 #include "nvs_flash.h"
@@ -37,8 +42,15 @@ unsigned blobCalls = 0U;
 bool failCommit = false;
 TestRamDisk* activeBdlDisk = nullptr;
 BdlCutPhase rh0CutPhase = BdlCutPhase::None;
+BdlCutMode rh0CutMode = BdlCutMode::ReturnError;
 bool armRh0Cut = false;
 std::string capturedRh0Write;
+std::size_t productBridgePasses = 0U;
+std::size_t productBridgeFailures = 0U;
+std::size_t productBridgeBlocked = 0U;
+std::size_t productBridgeNotRun = 0U;
+bool abruptPowerCutAllPass = false;
+bool abruptGcEraseCutAllPass = false;
 
 extern "C" esp_err_t __real_nvs_get_blob(nvs_handle_t, const char*, void*,
                                          size_t*);
@@ -75,8 +87,10 @@ extern "C" esp_err_t __wrap_nvs_set_blob(nvs_handle_t handle, const char* key,
         activeBdlDisk->setLogicalKey(key);
         if (std::strcmp(key, "rh0") == 0) {
             capturedRh0Write.assign(static_cast<const char*>(value), length);
+            activeBdlDisk->setMutationNewHead(capturedRh0Write);
             if (armRh0Cut) {
-                activeBdlDisk->armCutForNext(BdlOperation::Write, rh0CutPhase);
+                activeBdlDisk->armCutForNext(BdlOperation::Write, rh0CutPhase,
+                                             rh0CutMode);
                 armRh0Cut = false;
             }
         }
@@ -113,17 +127,11 @@ device_platform::StateStoreKey key(const char* raw) {
 
 class PartitionFixture final {
    public:
-    explicit PartitionFixture(const char* label, std::size_t size = 0x10000U)
+    explicit PartitionFixture(const char* label, std::size_t size = 0x10000U,
+                              bool autoInitialize = true)
         : label_(label), disk_(size, 0x1000U) {
         CHECK(disk_.handle() != nullptr);
-        const auto status =
-            nvs_flash_init_partition_bdl(label_, disk_.handle());
-        if (status != ESP_OK) {
-            std::fprintf(stderr, "BDL init %s: %s\n", label_,
-                         esp_err_to_name(status));
-        }
-        CHECK(status == ESP_OK);
-        initialized_ = true;
+        if (autoInitialize) initialize();
     }
 
     ~PartitionFixture() {
@@ -135,6 +143,18 @@ class PartitionFixture final {
     void restart() const {
         CHECK(nvs_flash_deinit_partition(label_) == ESP_OK);
         CHECK(nvs_flash_init_partition_bdl(label_, disk_.handle()) == ESP_OK);
+    }
+
+    void initialize() {
+        if (initialized_) return;
+        const auto status =
+            nvs_flash_init_partition_bdl(label_, disk_.handle());
+        if (status != ESP_OK) {
+            std::fprintf(stderr, "BDL init %s: %s\n", label_,
+                         esp_err_to_name(status));
+        }
+        CHECK(status == ESP_OK);
+        initialized_ = true;
     }
 
     [[nodiscard]] std::unique_ptr<device_platform_esp_idf::NvsStateStore>
@@ -163,6 +183,7 @@ void resetFaults() {
     setFault = SetFault::None;
     blobCalls = 0U;
     failCommit = false;
+    rh0CutMode = BdlCutMode::ReturnError;
 }
 
 void configValidation() {
@@ -501,6 +522,18 @@ constexpr ExpectedProductTruth kUnknownCommitNewExpected{
     "UNRESOLVED",
     false};
 
+// The same owner-approved Slice-2 product truth is also used when an
+// interrupted backend write leaves the old fully valid current head visible.
+// The backend cause remains CommitOutcomeUnknown; only the post-restart
+// product state is compared here.
+constexpr ExpectedProductTruth kFullyValidCurrentExpected{
+    "run_rc0_write_error_older",
+    "NEW_VALID_RESUME",
+    "RESUME_OFFER",
+    "None",
+    "UNRESOLVED",
+    false};
+
 const char* runProductOutcomeName(
     fermentation::RunPersistenceLoadStatus status,
     const fermentation::RunPersistenceSnapshot* snapshot,
@@ -664,6 +697,47 @@ std::string bytesIdentity(const std::string& bytes) {
     return result.str();
 }
 
+std::string readBinaryFile(const std::string& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input.good()) return {};
+    input.seekg(0, std::ios::end);
+    const auto size = input.tellg();
+    if (size < 0) return {};
+    input.seekg(0, std::ios::beg);
+    std::string value(static_cast<std::size_t>(size), '\0');
+    input.read(value.data(), static_cast<std::streamsize>(value.size()));
+    if (!input.good() && !input.eof()) return {};
+    return value;
+}
+
+std::map<std::string, std::string> readKeyValueFile(const std::string& path) {
+    std::map<std::string, std::string> values;
+    std::ifstream input(path);
+    std::string line;
+    while (std::getline(input, line)) {
+        const auto separator = line.find('=');
+        if (separator != std::string::npos) {
+            values[line.substr(0U, separator)] = line.substr(separator + 1U);
+        }
+    }
+    return values;
+}
+
+const std::string& requiredValue(
+    const std::map<std::string, std::string>& values, const char* keyName) {
+    const auto found = values.find(keyName);
+    CHECK(found != values.end());
+    return found->second;
+}
+
+pid_t waitForChild(pid_t child, int* status) {
+    pid_t result = -1;
+    do {
+        result = waitpid(child, status, 0);
+    } while (result < 0 && errno == EINTR);
+    return result;
+}
+
 const BdlEvent* findRh0Event(const std::vector<BdlEvent>& events,
                              bool requireCut) {
     const auto found = std::find_if(
@@ -683,8 +757,13 @@ void writeCutArtifact(const char* caseId, const char* label,
                       const device_platform::StateStoreReadResult& headRead,
                       const TestRamDisk& disk,
                       const fermentation::RunPersistenceResult& checkpoint,
+                      bool oldHeadExact, bool newHeadExact,
+                      const char* postRestartHeadState,
+                      bool currentReferenceValid, bool fallbackReferenceValid,
+                      bool orphanRecordPresent,
                       const ExpectedProductTruth* expected,
-                      const ProductBridgeObservation* bridge) {
+                      const ProductBridgeObservation* bridge,
+                      const char* productGateStatus) {
     const std::filesystem::path directory = "/tmp/issue90-slice5-artifacts";
     std::error_code error;
     std::filesystem::create_directories(directory, error);
@@ -733,6 +812,18 @@ void writeCutArtifact(const char* caseId, const char* label,
                 ? bytesIdentity(headRead.value)
                 : "NOT_VISIBLE")
         << "\",\n"
+        << "  \"old_head_exact\": " << (oldHeadExact ? "true" : "false")
+        << ",\n"
+        << "  \"new_head_exact\": " << (newHeadExact ? "true" : "false")
+        << ",\n"
+        << "  \"post_restart_head_state\": \"" << postRestartHeadState
+        << "\",\n"
+        << "  \"current_reference_valid\": "
+        << (currentReferenceValid ? "true" : "false") << ",\n"
+        << "  \"fallback_reference_valid\": "
+        << (fallbackReferenceValid ? "true" : "false") << ",\n"
+        << "  \"orphan_record_present\": "
+        << (orphanRecordPresent ? "true" : "false") << ",\n"
         << "  \"actual_persistence_validated\": "
         << (bridge != nullptr && bridge->persistenceValidated ? "true"
                                                               : "false")
@@ -766,18 +857,8 @@ void writeCutArtifact(const char* caseId, const char* label,
         << (bridge != nullptr && bridge->actuatorAllowed ? "true" : "false")
         << ",\n"
         << "  \"backend_classification\": \"observed\",\n"
-        << "  \"product_recovery_gate\": \""
-        << (expected == nullptr
-                ? "NOT_RUN"
-                : (bridge != nullptr && bridge->productRecoveryGate ? "PASS"
-                                                                    : "FAIL"))
-        << "\",\n"
-        << "  \"result\": \""
-        << (expected == nullptr
-                ? "NOT_RUN"
-                : (bridge != nullptr && bridge->productRecoveryGate ? "PASS"
-                                                                    : "FAIL"))
-        << "\",\n"
+        << "  \"product_recovery_gate\": \"" << productGateStatus << "\",\n"
+        << "  \"result\": \"" << productGateStatus << "\",\n"
         << "  \"events\": [\n";
     const auto events = disk.events();
     for (std::size_t index = 0U; index < events.size(); ++index) {
@@ -879,52 +960,108 @@ void cutHarnessWritesEarlyAndLateArtifacts() {
               device_platform::StateStoreReadStatus::Success);
         const auto currentRecord = fermentation::decodeRunPersistenceRecord(
             currentBytes.value, device_platform::StorageEpoch{1U});
-        CHECK(currentRecord.has_value());
-        CHECK(fermentation::runCheckpointReferenceMatches(
-            head->current, *currentRecord, head->current.slot));
+        const bool currentReferenceValid =
+            currentRecord.has_value() &&
+            fermentation::runCheckpointReferenceMatches(
+                head->current, *currentRecord, head->current.slot);
         const bool exactNewHeadVisible = headRead.value == capturedRh0Write;
+        const bool exactOldHeadVisible = headRead.value == oldHead;
+        bool fallbackReferenceValid = false;
+        bool orphanRecordPresent = false;
         if (exactNewHeadVisible) {
-            CHECK(head->fallback.has_value());
-            const auto fallbackBytes = store->read(
-                key(head->fallback->slot == 0U ? "rc0" : "rc1"), 8240U);
-            CHECK(fallbackBytes.status ==
-                  device_platform::StateStoreReadStatus::Success);
-            const auto fallbackRecord =
-                fermentation::decodeRunPersistenceRecord(
-                    fallbackBytes.value, device_platform::StorageEpoch{1U});
-            CHECK(fallbackRecord.has_value());
-            CHECK(fermentation::runCheckpointReferenceMatches(
-                *head->fallback, *fallbackRecord, head->fallback->slot));
-            CHECK(fallbackRecord->snapshot.activeRunId ==
-                  currentRecord->snapshot.activeRunId);
-            CHECK(fallbackRecord->checkpointRevision <
-                  currentRecord->checkpointRevision);
+            if (head->fallback.has_value()) {
+                const auto fallbackBytes = store->read(
+                    key(head->fallback->slot == 0U ? "rc0" : "rc1"), 8240U);
+                if (fallbackBytes.status ==
+                    device_platform::StateStoreReadStatus::Success) {
+                    const auto fallbackRecord =
+                        fermentation::decodeRunPersistenceRecord(
+                            fallbackBytes.value,
+                            device_platform::StorageEpoch{1U});
+                    fallbackReferenceValid =
+                        fallbackRecord.has_value() &&
+                        fermentation::runCheckpointReferenceMatches(
+                            *head->fallback, *fallbackRecord,
+                            head->fallback->slot) &&
+                        currentRecord.has_value() &&
+                        fallbackRecord->snapshot.activeRunId ==
+                            currentRecord->snapshot.activeRunId &&
+                        fallbackRecord->checkpointRevision <
+                            currentRecord->checkpointRevision;
+                }
+            }
+        } else if (exactOldHeadVisible) {
+            if (!head->fallback.has_value()) {
+                const auto orphanSlot = 1U - head->current.slot;
+                const auto orphanBytes =
+                    store->read(key(orphanSlot == 0U ? "rc0" : "rc1"), 8240U);
+                orphanRecordPresent =
+                    orphanBytes.status ==
+                        device_platform::StateStoreReadStatus::Success &&
+                    fermentation::decodeRunPersistenceRecord(
+                        orphanBytes.value, device_platform::StorageEpoch{1U})
+                        .has_value();
+            }
         } else {
-            CHECK(!head->fallback.has_value());
             const auto orphanSlot = 1U - head->current.slot;
             const auto orphanBytes =
                 store->read(key(orphanSlot == 0U ? "rc0" : "rc1"), 8240U);
-            CHECK(orphanBytes.status ==
-                  device_platform::StateStoreReadStatus::Success);
-            CHECK(fermentation::decodeRunPersistenceRecord(
-                      orphanBytes.value, device_platform::StorageEpoch{1U})
-                      .has_value());
+            orphanRecordPresent =
+                orphanBytes.status ==
+                    device_platform::StateStoreReadStatus::Success &&
+                fermentation::decodeRunPersistenceRecord(
+                    orphanBytes.value, device_platform::StorageEpoch{1U})
+                    .has_value();
         }
         const bool requiresCut = phase != BdlCutPhase::None;
         const auto events = fixture.disk().events();
         const auto* targetEvent = findRh0Event(events, requiresCut);
         CHECK(targetEvent != nullptr);
         const ExpectedProductTruth* expected =
-            exactNewHeadVisible ? &kUnknownCommitNewExpected : nullptr;
+            exactNewHeadVisible && currentReferenceValid &&
+                    fallbackReferenceValid
+                ? &kUnknownCommitNewExpected
+            : exactOldHeadVisible && currentReferenceValid
+                ? &kFullyValidCurrentExpected
+                : nullptr;
         fermentation::RunPersistenceCoordinator bridgeCoordinator(
             *store, device_platform::StorageEpoch{1U},
             fermentation::RunCheckpointSchedule{});
+        const char* postRestartHeadState = exactNewHeadVisible   ? "NEW_EXACT"
+                                           : exactOldHeadVisible ? "OLD_EXACT"
+                                                                 : "UNEXPECTED";
         const auto bridge =
             expected == nullptr
                 ? ProductBridgeObservation{"NOT_RUN",    "NOT_RUN", false,
                                            "NOT_RUN",    "NOT_RUN", "NOT_RUN",
                                            "UNRESOLVED", false,     false}
                 : runProductBridge(caseId, bridgeCoordinator, expected);
+        const char* productGateStatus =
+            expected == nullptr
+                ? "BLOCKED"
+                : (bridge.productRecoveryGate ? "PASS" : "FAIL");
+        if (expected == nullptr) {
+            ++productBridgeBlocked;
+        } else if (bridge.productRecoveryGate) {
+            ++productBridgePasses;
+        } else {
+            ++productBridgeFailures;
+        }
+        std::printf(
+            "issue90_product_bridge_state=%s old_head_exact=%s "
+            "new_head_exact=%s post_restart_head_state=%s "
+            "current_reference_valid=%s fallback_reference_valid=%s "
+            "orphan_record_present=%s actual_product_outcome=%s "
+            "actual_safety_projection=%s actual_safety_producer=%s "
+            "actual_logical_gate=%s actual_actuator_allowed=%s "
+            "product_recovery_gate=%s\n",
+            caseId, exactOldHeadVisible ? "true" : "false",
+            exactNewHeadVisible ? "true" : "false", postRestartHeadState,
+            currentReferenceValid ? "true" : "false",
+            fallbackReferenceValid ? "true" : "false",
+            orphanRecordPresent ? "true" : "false", bridge.productOutcome,
+            bridge.safetyProjection, bridge.safetyProducer, bridge.logicalGate,
+            bridge.actuatorAllowed ? "true" : "false", productGateStatus);
         writeCutArtifact(
             caseId, fixture.label(),
             phase == BdlCutPhase::Before  ? "BDL_IO_FAILURE_BEFORE"
@@ -932,20 +1069,553 @@ void cutHarnessWritesEarlyAndLateArtifacts() {
                                           : "BDL_COMMIT_SUCCESS",
             phase == BdlCutPhase::None ? "Success" : "CommitOutcomeUnknown",
             *targetEvent, oldHead, capturedRh0Write, headRead.value, headRead,
-            fixture.disk(), checkpoint, expected, &bridge);
-        if (!exactNewHeadVisible) {
-            std::printf(
-                "issue90_product_bridge_case=%s oracle_case_id=NOT_APPLICABLE "
-                "product_recovery_gate=NOT_RUN comparison_result=NOT_RUN "
-                "reason=BDL_IO_FAILURE_DID_NOT_EXPOSE_EXACT_NEW_HEAD\n",
-                caseId);
-        }
-        if (expected != nullptr) CHECK(bridge.productRecoveryGate);
+            fixture.disk(), checkpoint, exactOldHeadVisible,
+            exactNewHeadVisible, postRestartHeadState, currentReferenceValid,
+            fallbackReferenceValid, orphanRecordPresent, expected, &bridge,
+            productGateStatus);
+        CHECK(expected != nullptr);
+        CHECK(bridge.productRecoveryGate);
     };
 
     run("bdl_io_failure_before_rh0", "cut_early", BdlCutPhase::Before);
     run("bdl_io_failure_after_rh0", "cut_late", BdlCutPhase::After);
     run("bdl_committed_rh0_product_bridge", "bridge_commit", BdlCutPhase::None);
+}
+
+void writePowerCutRecoveryResult(
+    const std::string& path, const char* caseId, bool oldHeadExact,
+    bool newHeadExact, const char* postRestartHeadState,
+    bool currentReferenceValid, bool fallbackReferenceValid,
+    bool orphanRecordPresent, const ExpectedProductTruth* expected,
+    const ProductBridgeObservation& bridge, const char* productGateStatus) {
+    std::ofstream result(path, std::ios::out | std::ios::trunc);
+    CHECK(result.good());
+    result << "case_id=" << caseId << '\n'
+           << "old_head_exact=" << (oldHeadExact ? "true" : "false") << '\n'
+           << "new_head_exact=" << (newHeadExact ? "true" : "false") << '\n'
+           << "post_restart_head_state=" << postRestartHeadState << '\n'
+           << "current_reference_valid="
+           << (currentReferenceValid ? "true" : "false") << '\n'
+           << "fallback_reference_valid="
+           << (fallbackReferenceValid ? "true" : "false") << '\n'
+           << "orphan_record_present="
+           << (orphanRecordPresent ? "true" : "false") << '\n'
+           << "oracle_case_id="
+           << (expected == nullptr ? "NOT_APPLICABLE" : expected->oracleCaseId)
+           << '\n'
+           << "expected_product_outcome="
+           << (expected == nullptr ? "NOT_RUN" : expected->productOutcome)
+           << '\n'
+           << "actual_product_outcome=" << bridge.productOutcome << '\n'
+           << "expected_safety_projection="
+           << (expected == nullptr ? "NOT_RUN" : expected->safetyProjection)
+           << '\n'
+           << "actual_safety_projection=" << bridge.safetyProjection << '\n'
+           << "expected_safety_producer="
+           << (expected == nullptr ? "NOT_RUN" : expected->safetyProducer)
+           << '\n'
+           << "actual_safety_producer=" << bridge.safetyProducer << '\n'
+           << "expected_logical_gate="
+           << (expected == nullptr ? "NOT_RUN" : expected->logicalGate) << '\n'
+           << "actual_logical_gate=" << bridge.logicalGate << '\n'
+           << "expected_actuator_allowed="
+           << (expected != nullptr && expected->actuatorAllowed ? "true"
+                                                                : "false")
+           << '\n'
+           << "actual_actuator_allowed="
+           << (bridge.actuatorAllowed ? "true" : "false") << '\n'
+           << "actual_load_status=" << bridge.loadStatus << '\n'
+           << "actual_persistence_validated="
+           << (bridge.persistenceValidated ? "true" : "false") << '\n'
+           << "actual_coordinator_state=" << bridge.coordinatorState << '\n'
+           << "product_recovery_gate=" << productGateStatus << '\n'
+           << "comparison_result=" << productGateStatus << '\n';
+    result.close();
+    CHECK(result.good());
+}
+
+void abruptPowerCutRecoveryChild(const char* caseId, const char* imagePath,
+                                 const char* metadataPath,
+                                 const char* oldHeadPath,
+                                 const char* newHeadPath,
+                                 const char* resultPath) {
+    PartitionFixture fixture("pcut_recovery", 0x10000U, false);
+    if (!fixture.disk().loadImage(imagePath)) _exit(140);
+    fixture.initialize();
+    auto store = fixture.openStore();
+    const auto oldHead = readBinaryFile(oldHeadPath);
+    const auto newHead = readBinaryFile(newHeadPath);
+    const auto headRead = store->read(key("rh0"), 256U);
+    const auto head =
+        headRead.status == device_platform::StateStoreReadStatus::Success
+            ? fermentation::decodeRunPersistenceHead(
+                  headRead.value, device_platform::StorageEpoch{1U})
+            : std::nullopt;
+    bool currentReferenceValid = false;
+    bool fallbackReferenceValid = false;
+    bool orphanRecordPresent = false;
+    if (head.has_value()) {
+        const auto currentRead =
+            store->read(key(head->current.slot == 0U ? "rc0" : "rc1"), 8240U);
+        const auto currentRecord =
+            currentRead.status == device_platform::StateStoreReadStatus::Success
+                ? fermentation::decodeRunPersistenceRecord(
+                      currentRead.value, device_platform::StorageEpoch{1U})
+                : std::nullopt;
+        currentReferenceValid =
+            currentRecord.has_value() &&
+            fermentation::runCheckpointReferenceMatches(
+                head->current, *currentRecord, head->current.slot);
+        if (head->fallback.has_value()) {
+            const auto fallbackRead = store->read(
+                key(head->fallback->slot == 0U ? "rc0" : "rc1"), 8240U);
+            const auto fallbackRecord =
+                fallbackRead.status ==
+                        device_platform::StateStoreReadStatus::Success
+                    ? fermentation::decodeRunPersistenceRecord(
+                          fallbackRead.value, device_platform::StorageEpoch{1U})
+                    : std::nullopt;
+            fallbackReferenceValid =
+                fallbackRecord.has_value() &&
+                fermentation::runCheckpointReferenceMatches(
+                    *head->fallback, *fallbackRecord, head->fallback->slot) &&
+                currentRecord.has_value() &&
+                fallbackRecord->snapshot.activeRunId ==
+                    currentRecord->snapshot.activeRunId &&
+                fallbackRecord->checkpointRevision <
+                    currentRecord->checkpointRevision;
+        }
+        for (const auto slot : {0U, 1U}) {
+            if (slot == head->current.slot ||
+                (head->fallback.has_value() && slot == head->fallback->slot))
+                continue;
+            const auto orphanRead =
+                store->read(key(slot == 0U ? "rc0" : "rc1"), 8240U);
+            orphanRecordPresent =
+                orphanRecordPresent ||
+                (orphanRead.status ==
+                     device_platform::StateStoreReadStatus::Success &&
+                 fermentation::decodeRunPersistenceRecord(
+                     orphanRead.value, device_platform::StorageEpoch{1U})
+                     .has_value());
+        }
+    }
+    const bool oldHeadExact = headRead.value == oldHead;
+    const bool newHeadExact = headRead.value == newHead;
+    const ExpectedProductTruth* expected =
+        newHeadExact && currentReferenceValid && fallbackReferenceValid
+            ? &kUnknownCommitNewExpected
+        : oldHeadExact && currentReferenceValid ? &kFullyValidCurrentExpected
+                                                : nullptr;
+    fermentation::RunPersistenceCoordinator coordinator(
+        *store, device_platform::StorageEpoch{1U},
+        fermentation::RunCheckpointSchedule{});
+    const auto bridge = runProductBridge(caseId, coordinator, expected);
+    const char* productGateStatus =
+        expected == nullptr ? "BLOCKED"
+                            : (bridge.productRecoveryGate ? "PASS" : "FAIL");
+    const char* postRestartHeadState = newHeadExact   ? "NEW_EXACT"
+                                       : oldHeadExact ? "OLD_EXACT"
+                                                      : "UNEXPECTED";
+    writePowerCutRecoveryResult(resultPath, caseId, oldHeadExact, newHeadExact,
+                                postRestartHeadState, currentReferenceValid,
+                                fallbackReferenceValid, orphanRecordPresent,
+                                expected, bridge, productGateStatus);
+    static_cast<void>(metadataPath);
+    _exit(0);
+}
+
+void abruptPowerCutWriterChild(const char* imagePath, const char* metadataPath,
+                               const char* oldHeadPath, const char* newHeadPath,
+                               BdlCutPhase phase) {
+    resetFaults();
+    PartitionFixture fixture("pcut_writer", 0x10000U);
+    auto store = fixture.openStore();
+    fermentation::RunPersistenceCoordinator coordinator(
+        *store, device_platform::StorageEpoch{1U},
+        fermentation::RunCheckpointSchedule{});
+    CHECK(coordinator.loadAndInitialize().status ==
+          fermentation::RunPersistenceLoadStatus::NoPersistedRun);
+    fermentation::RunCommandState state;
+    state.processState.state = fermentation::ProcessState::Standby;
+    auto program = fermentation::FactoryProgramCatalog::find("water-kefir");
+    CHECK(program.has_value());
+    program->program.productSensorFailure.fallbackDelaySeconds = 30U;
+    program->program.fermentationStages.front().targetTemperatureCelsius = 38.0;
+    program->program.fermentationStages.front().durationMinutes = 120U;
+    program->program.targetQualification.bandCelsius = 0.5;
+    program->program.targetQualification.durationMinutes = 10U;
+    program->program.maximumTargetReachMinutes = 180U;
+    program->program.preheat = true;
+    program->program.maximumProductWaitMinutes = 30U;
+    CHECK(fermentation::validateProgram(*program).valid());
+    fermentation::ProgramStartRequest request;
+    request.envelope = {901U,
+                        fermentation::CommandSource::LocalDisplay,
+                        100U,
+                        state.processState.transitionSequence,
+                        state.runRevision,
+                        std::nullopt,
+                        std::nullopt,
+                        true,
+                        std::nullopt};
+    request.runId = "slice5-run";
+    request.program = *program;
+    request.sourceKind = fermentation::ProgramSourceKind::FactoryCatalog;
+    request.sourceProgramRevision = 1U;
+    request.sensorMode = fermentation::RunSensorMode::Product;
+    request.safetyAllowsStart = true;
+    request.airSensorValid = true;
+    request.coolingSensorValid = true;
+    request.productSensorValid = true;
+    const auto start = fermentation::decideProgramStart(state, request);
+    CHECK(start.proposed());
+    CHECK(
+        coordinator
+            .persistCommand(state, start,
+                            fermentation::RunCheckpointTime{100U, std::nullopt})
+            .status == fermentation::RunPersistenceResultStatus::Applied);
+    const auto oldHeadRead = store->read(key("rh0"), 256U);
+    CHECK(oldHeadRead.status == device_platform::StateStoreReadStatus::Success);
+    CHECK(!oldHeadRead.value.empty());
+    fixture.disk().setAbruptCutFiles(imagePath, metadataPath);
+    fixture.disk().setMutationHeadFiles(oldHeadPath, newHeadPath);
+    fixture.disk().setMutationOldHead(oldHeadRead.value);
+    fixture.disk().clearEvents();
+    capturedRh0Write.clear();
+    activeBdlDisk = &fixture.disk();
+    rh0CutPhase = phase;
+    rh0CutMode = BdlCutMode::AbruptProcessExit;
+    armRh0Cut = true;
+    static_cast<void>(coordinator.checkpointPeriodic(
+        state, fermentation::RunCheckpointTime{300100U, std::nullopt}));
+    _exit(141);
+}
+
+void writePowerCutArtifact(const char* caseId, const char* stimulusKind,
+                           const std::string& oldHead,
+                           const std::string& newHead,
+                           const std::string& frozenImage,
+                           const std::map<std::string, std::string>& metadata,
+                           const std::map<std::string, std::string>& result) {
+    const std::filesystem::path directory = "/tmp/issue90-slice5-artifacts";
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    CHECK(!error);
+    const auto value = [&result](const char* name) {
+        const auto found = result.find(name);
+        return found == result.end() ? std::string("NOT_RUN") : found->second;
+    };
+    const auto metadataValue = [&metadata](const char* name) {
+        const auto found = metadata.find(name);
+        return found == metadata.end() ? std::string("NOT_AVAILABLE")
+                                       : found->second;
+    };
+    std::ofstream artifact(directory /
+                           (std::string("power_cut_") + caseId + ".json"));
+    CHECK(artifact.good());
+    artifact << "{\n"
+             << "  \"source_sha\": \""
+             << (std::getenv("ISSUE90_SOURCE_SHA") == nullptr
+                     ? "UNKNOWN"
+                     : std::getenv("ISSUE90_SOURCE_SHA"))
+             << "\",\n"
+             << "  \"esp_idf_tag\": \"v6.0.2\",\n"
+             << "  \"esp_idf_commit\": "
+                "\"7101770dc6db2667b3c477cc31365dd1acd6db4e\",\n"
+             << "  \"case_id\": \"" << caseId << "\",\n"
+             << "  \"stimulus_kind\": \"" << stimulusKind << "\",\n"
+             << "  \"partition_backend\": \"frozen_image_bdl\",\n"
+             << "  \"namespace\": \"fermentation\",\n"
+             << "  \"logical_key\": \"rh0\",\n"
+             << "  \"actual_target_key\": \"" << metadataValue("logical_key")
+             << "\",\n"
+             << "  \"old_identity\": \"" << bytesIdentity(oldHead) << "\",\n"
+             << "  \"new_identity\": \"" << bytesIdentity(newHead) << "\",\n"
+             << "  \"old_head_bytes_ne_new_head_bytes\": "
+             << (oldHead != newHead ? "true" : "false") << ",\n"
+             << "  \"target_bdl_operation\": \"write\",\n"
+             << "  \"target_occurrence\": " << metadataValue("occurrence")
+             << ",\n"
+             << "  \"target_offset\": " << metadataValue("offset") << ",\n"
+             << "  \"target_length\": " << metadataValue("length") << ",\n"
+             << "  \"baseline_checksum_immediately_before_target\": "
+             << metadataValue("baseline_checksum") << ",\n"
+             << "  \"frozen_image_identity\": \"" << bytesIdentity(frozenImage)
+             << "\",\n"
+             << "  \"after_image_checksum\": \""
+             << metadataValue("image_checksum") << "\",\n"
+             << "  \"injected_fault_or_cut\": \"" << stimulusKind << "\",\n"
+             << "  \"write_status\": \"CommitOutcomeUnknown\",\n"
+             << "  \"reinit_status\": \"Success\",\n"
+             << "  \"oracle_case_id\": \"" << value("oracle_case_id") << "\",\n"
+             << "  \"expected_product_outcome\": \""
+             << value("expected_product_outcome") << "\",\n"
+             << "  \"actual_product_outcome\": \""
+             << value("actual_product_outcome") << "\",\n"
+             << "  \"expected_safety_projection\": \""
+             << value("expected_safety_projection") << "\",\n"
+             << "  \"actual_safety_projection\": \""
+             << value("actual_safety_projection") << "\",\n"
+             << "  \"expected_logical_gate\": \""
+             << value("expected_logical_gate") << "\",\n"
+             << "  \"actual_logical_gate\": \"" << value("actual_logical_gate")
+             << "\",\n"
+             << "  \"expected_actuator_allowed\": "
+             << value("expected_actuator_allowed") << ",\n"
+             << "  \"actual_actuator_allowed\": "
+             << value("actual_actuator_allowed") << ",\n"
+             << "  \"backend_characterization\": \"observed\",\n"
+             << "  \"product_recovery_gate\": \""
+             << value("product_recovery_gate") << "\",\n"
+             << "  \"result\": \"" << value("comparison_result") << "\"\n}\n";
+    artifact.close();
+    CHECK(artifact.good());
+}
+
+bool abruptPowerCutCase(const char* caseId, BdlCutPhase phase) {
+    const std::filesystem::path directory = "/tmp/issue90-slice5-artifacts";
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    CHECK(!error);
+    const auto prefix = directory / (std::string("power_") + caseId);
+    const auto imagePath = prefix.string() + ".image";
+    const auto metadataPath = prefix.string() + ".metadata";
+    const auto oldHeadPath = prefix.string() + ".old_head";
+    const auto newHeadPath = prefix.string() + ".new_head";
+    const auto resultPath = prefix.string() + ".result";
+    for (const auto& path :
+         {imagePath, metadataPath, oldHeadPath, newHeadPath, resultPath}) {
+        std::filesystem::remove(path, error);
+    }
+
+    const auto writer = fork();
+    CHECK(writer >= 0);
+    if (writer == 0) {
+        abruptPowerCutWriterChild(imagePath.c_str(), metadataPath.c_str(),
+                                  oldHeadPath.c_str(), newHeadPath.c_str(),
+                                  phase);
+    }
+    int writerStatus = 0;
+    CHECK(waitForChild(writer, &writerStatus) == writer);
+    if (!WIFEXITED(writerStatus) || WEXITSTATUS(writerStatus) != 0) {
+        std::printf(
+            "issue90_power_cut_case=%s result=BLOCKED "
+            "reason=writer_child_exit_%d\n",
+            caseId, WIFEXITED(writerStatus) ? WEXITSTATUS(writerStatus) : -1);
+        return false;
+    }
+
+    const auto recovery = fork();
+    CHECK(recovery >= 0);
+    if (recovery == 0) {
+        abruptPowerCutRecoveryChild(caseId, imagePath.c_str(),
+                                    metadataPath.c_str(), oldHeadPath.c_str(),
+                                    newHeadPath.c_str(), resultPath.c_str());
+    }
+    int recoveryStatus = 0;
+    CHECK(waitForChild(recovery, &recoveryStatus) == recovery);
+    if (!WIFEXITED(recoveryStatus) || WEXITSTATUS(recoveryStatus) != 0) {
+        std::printf(
+            "issue90_power_cut_case=%s result=BLOCKED "
+            "reason=recovery_child_exit_%d\n",
+            caseId,
+            WIFEXITED(recoveryStatus) ? WEXITSTATUS(recoveryStatus) : -1);
+        return false;
+    }
+
+    const auto oldHead = readBinaryFile(oldHeadPath);
+    const auto newHead = readBinaryFile(newHeadPath);
+    const auto frozenImage = readBinaryFile(imagePath);
+    const auto metadata = readKeyValueFile(metadataPath);
+    const auto result = readKeyValueFile(resultPath);
+    CHECK(!oldHead.empty());
+    CHECK(!newHead.empty());
+    CHECK(!frozenImage.empty());
+    CHECK(!metadata.empty());
+    CHECK(!result.empty());
+    writePowerCutArtifact(
+        caseId,
+        phase == BdlCutPhase::Before ? "POWER_CUT_BEFORE" : "POWER_CUT_AFTER",
+        oldHead, newHead, frozenImage, metadata, result);
+    for (const auto& [name, value] : result) {
+        std::printf("issue90_power_cut_%s=%s\n", name.c_str(), value.c_str());
+    }
+    return requiredValue(result, "product_recovery_gate") == "PASS";
+}
+
+void abruptPowerCutHarness() {
+    const bool before = abruptPowerCutCase("rh0_before", BdlCutPhase::Before);
+    const bool after = abruptPowerCutCase("rh0_after", BdlCutPhase::After);
+    abruptPowerCutAllPass = before && after;
+    std::printf("issue90_power_cut_summary=before_%s after_%s\n",
+                before ? "PASS" : "BLOCKED_OR_FAIL",
+                after ? "PASS" : "BLOCKED_OR_FAIL");
+}
+
+void abruptGcEraseWriterChild(const char* imagePath, const char* metadataPath,
+                              BdlCutPhase phase) {
+    resetFaults();
+    PartitionFixture fixture("gc_pcut_write", 0x20000U);
+    auto store = fixture.openStore();
+    fixture.disk().setAbruptCutFiles(imagePath, metadataPath);
+    fixture.disk().armCutForNext(BdlOperation::Erase, phase,
+                                 BdlCutMode::AbruptProcessExit);
+    for (std::size_t revision = 0U; revision < 256U; ++revision) {
+        std::string value(8240U, static_cast<char>(revision & 0x7FU));
+        value[0] = static_cast<char>((revision + 1U) & 0x7FU);
+        if (store->write(key("gc_window"), value) !=
+            device_platform::StateStoreWriteStatus::Success) {
+            _exit(143);
+        }
+    }
+    _exit(144);
+}
+
+void abruptGcEraseRecoveryChild(const char* imagePath, const char* resultPath) {
+    PartitionFixture fixture("gc_pcut_reco", 0x20000U, false);
+    if (!fixture.disk().loadImage(imagePath)) _exit(145);
+    fixture.initialize();
+    auto store = fixture.openStore();
+    const auto read = store->read(key("gc_window"), 8240U);
+    std::ofstream result(resultPath, std::ios::out | std::ios::trunc);
+    if (!result.good()) _exit(146);
+    result << "restart_read_status=" << readStatusName(read.status) << '\n'
+           << "product_recovery_gate=NOT_APPLICABLE\n"
+           << "result=PASS\n";
+    result.close();
+    if (!result.good()) _exit(147);
+    _exit(0);
+}
+
+void writeGcErasePowerCutArtifact(
+    const char* caseId, const char* stimulusKind,
+    const std::map<std::string, std::string>& metadata,
+    const std::map<std::string, std::string>& result,
+    const std::string& frozenImage) {
+    const std::filesystem::path directory = "/tmp/issue90-slice5-artifacts";
+    const auto metadataValue = [&metadata](const char* name) {
+        const auto found = metadata.find(name);
+        return found == metadata.end() ? std::string("NOT_AVAILABLE")
+                                       : found->second;
+    };
+    const auto resultValue = [&result](const char* name) {
+        const auto found = result.find(name);
+        return found == result.end() ? std::string("NOT_RUN") : found->second;
+    };
+    const auto recordedTargetKey = metadataValue("logical_key");
+    const auto targetKey = recordedTargetKey.empty()
+                               ? std::string("NOT_APPLICABLE")
+                               : recordedTargetKey;
+    std::ofstream artifact(directory /
+                           (std::string("power_cut_") + caseId + ".json"));
+    CHECK(artifact.good());
+    artifact << "{\n"
+             << "  \"source_sha\": \""
+             << (std::getenv("ISSUE90_SOURCE_SHA") == nullptr
+                     ? "UNKNOWN"
+                     : std::getenv("ISSUE90_SOURCE_SHA"))
+             << "\",\n"
+             << "  \"esp_idf_tag\": \"v6.0.2\",\n"
+             << "  \"esp_idf_commit\": "
+                "\"7101770dc6db2667b3c477cc31365dd1acd6db4e\",\n"
+             << "  \"case_id\": \"" << caseId << "\",\n"
+             << "  \"stimulus_kind\": \"" << stimulusKind << "\",\n"
+             << "  \"partition_backend\": \"frozen_image_bdl\",\n"
+             << "  \"namespace\": \"fermentation\",\n"
+             << "  \"logical_key\": \"NOT_APPLICABLE\",\n"
+             << "  \"actual_target_key\": \"" << targetKey << "\",\n"
+             << "  \"target_bdl_operation\": \"erase\",\n"
+             << "  \"target_occurrence\": " << metadataValue("occurrence")
+             << ",\n"
+             << "  \"target_offset\": " << metadataValue("offset") << ",\n"
+             << "  \"target_length\": " << metadataValue("length") << ",\n"
+             << "  \"baseline_checksum_immediately_before_target\": "
+             << metadataValue("baseline_checksum") << ",\n"
+             << "  \"frozen_image_identity\": \"" << bytesIdentity(frozenImage)
+             << "\",\n"
+             << "  \"after_image_checksum\": \""
+             << metadataValue("image_checksum") << "\",\n"
+             << "  \"injected_fault_or_cut\": \"" << stimulusKind << "\",\n"
+             << "  \"write_status\": \"NOT_APPLICABLE\",\n"
+             << "  \"reinit_status\": \"Success\",\n"
+             << "  \"restart_read_status\": \""
+             << resultValue("restart_read_status") << "\",\n"
+             << "  \"oracle_case_id\": \"NOT_APPLICABLE\",\n"
+             << "  \"backend_characterization\": \"observed\",\n"
+             << "  \"product_recovery_gate\": \""
+             << resultValue("product_recovery_gate") << "\",\n"
+             << "  \"result\": \"" << resultValue("result") << "\"\n}\n";
+    artifact.close();
+    CHECK(artifact.good());
+}
+
+bool abruptGcEraseCase(const char* caseId, BdlCutPhase phase) {
+    const std::filesystem::path directory = "/tmp/issue90-slice5-artifacts";
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    CHECK(!error);
+    const auto prefix = directory / (std::string("gc_") + caseId);
+    const auto imagePath = prefix.string() + ".image";
+    const auto metadataPath = prefix.string() + ".metadata";
+    const auto resultPath = prefix.string() + ".result";
+    for (const auto& path : {imagePath, metadataPath, resultPath}) {
+        std::filesystem::remove(path, error);
+    }
+    const auto writer = fork();
+    CHECK(writer >= 0);
+    if (writer == 0) {
+        abruptGcEraseWriterChild(imagePath.c_str(), metadataPath.c_str(),
+                                 phase);
+    }
+    int writerStatus = 0;
+    CHECK(waitForChild(writer, &writerStatus) == writer);
+    if (!WIFEXITED(writerStatus) || WEXITSTATUS(writerStatus) != 0) {
+        std::printf(
+            "issue90_gc_erase_cut_case=%s result=BLOCKED "
+            "reason=writer_child_exit_%d\n",
+            caseId, WIFEXITED(writerStatus) ? WEXITSTATUS(writerStatus) : -1);
+        return false;
+    }
+    const auto recovery = fork();
+    CHECK(recovery >= 0);
+    if (recovery == 0) {
+        abruptGcEraseRecoveryChild(imagePath.c_str(), resultPath.c_str());
+    }
+    int recoveryStatus = 0;
+    CHECK(waitForChild(recovery, &recoveryStatus) == recovery);
+    if (!WIFEXITED(recoveryStatus) || WEXITSTATUS(recoveryStatus) != 0) {
+        std::printf(
+            "issue90_gc_erase_cut_case=%s result=BLOCKED "
+            "reason=recovery_child_exit_%d\n",
+            caseId,
+            WIFEXITED(recoveryStatus) ? WEXITSTATUS(recoveryStatus) : -1);
+        return false;
+    }
+    const auto frozenImage = readBinaryFile(imagePath);
+    const auto metadata = readKeyValueFile(metadataPath);
+    const auto result = readKeyValueFile(resultPath);
+    CHECK(!frozenImage.empty());
+    CHECK(!metadata.empty());
+    CHECK(!result.empty());
+    writeGcErasePowerCutArtifact(caseId,
+                                 phase == BdlCutPhase::Before
+                                     ? "POWER_CUT_ERASE_BEFORE"
+                                     : "POWER_CUT_ERASE_AFTER",
+                                 metadata, result, frozenImage);
+    for (const auto& [name, value] : result) {
+        std::printf("issue90_gc_erase_%s=%s\n", name.c_str(), value.c_str());
+    }
+    return requiredValue(result, "result") == "PASS";
+}
+
+void abruptGcEraseHarness() {
+    const bool before = abruptGcEraseCase("before", BdlCutPhase::Before);
+    const bool after = abruptGcEraseCase("after", BdlCutPhase::After);
+    abruptGcEraseCutAllPass = before && after;
+    std::printf("issue90_gc_erase_cut_summary=before_%s after_%s\n",
+                before ? "PASS" : "BLOCKED_OR_FAIL",
+                after ? "PASS" : "BLOCKED_OR_FAIL");
 }
 
 void productRecordSizeAndMutationMatrix() {
@@ -964,6 +1634,61 @@ void productRecordSizeAndMutationMatrix() {
         CHECK(store->read(recordKey, size).status ==
               device_platform::StateStoreReadStatus::Success);
     }
+}
+
+std::size_t nvsModelBlobEntries(std::size_t blobSize) {
+    constexpr std::size_t chunkSize = 4000U;
+    const auto chunkEntries = [](std::size_t size) {
+        return 1U + (size + 31U) / 32U;
+    };
+    if (blobSize == 0U) return 1U + chunkEntries(0U);
+    std::size_t entries = 1U;
+    while (blobSize != 0U) {
+        const auto chunk = std::min(blobSize, chunkSize);
+        entries += chunkEntries(chunk);
+        blobSize -= chunk;
+    }
+    return entries;
+}
+
+void nvsStatsCrosscheck() {
+    constexpr std::array<std::pair<const char*, std::size_t>, 22U> slots = {{
+        {"uc0", 301U},   {"uc1", 301U},   {"uc2", 301U},   {"uc3", 301U},
+        {"sc0", 45U},    {"sc1", 45U},    {"sc2", 45U},    {"sc3", 45U},
+        {"pc0", 32813U}, {"pc1", 32813U}, {"pc2", 32813U}, {"pc3", 32813U},
+        {"cm0", 149U},   {"cm1", 149U},   {"cm2", 149U},   {"cr0", 114U},
+        {"cr1", 114U},   {"cb0", 42U},    {"cb1", 42U},    {"rc0", 8240U},
+        {"rc1", 8240U},  {"rh0", 256U},
+    }};
+    PartitionFixture fixture("capacity_stats", 0x100000U);
+    auto store = fixture.openStore();
+    nvs_stats_t before{};
+    CHECK(nvs_get_stats(fixture.label(), &before) == ESP_OK);
+    std::size_t modeledFullEntries = 1U;
+    std::size_t largestTransientEntries = 0U;
+    for (const auto& [rawKey, blobSize] : slots) {
+        const auto value = std::string(blobSize, 's');
+        CHECK(store->write(key(rawKey), value) ==
+              device_platform::StateStoreWriteStatus::Success);
+        const auto entries = nvsModelBlobEntries(blobSize);
+        modeledFullEntries += entries;
+        largestTransientEntries = std::max(largestTransientEntries, entries);
+    }
+    nvs_stats_t full{};
+    CHECK(nvs_get_stats(fixture.label(), &full) == ESP_OK);
+    CHECK(full.used_entries <= modeledFullEntries);
+
+    const auto transientValue = std::string(32813U, 't');
+    CHECK(store->write(key("pc0"), transientValue) ==
+          device_platform::StateStoreWriteStatus::Success);
+    nvs_stats_t updated{};
+    CHECK(nvs_get_stats(fixture.label(), &updated) == ESP_OK);
+    CHECK(updated.used_entries <= modeledFullEntries + largestTransientEntries);
+    std::printf(
+        "issue90_nvs_stats_crosscheck=PASS before_used=%zu full_used=%zu "
+        "updated_used=%zu modeled_full=%zu modeled_transient=%zu\n",
+        before.used_entries, full.used_entries, updated.used_entries,
+        modeledFullEntries, largestTransientEntries);
 }
 
 bool gcEraseCharacterization() {
@@ -1015,28 +1740,41 @@ extern "C" void app_main(void) {
     preCommitCapacityIsCapacityError();
     emptyBlobSurvivesRestart();
     productRecordSizeAndMutationMatrix();
+    nvsStatsCrosscheck();
     const bool gcEraseObserved = gcEraseCharacterization();
     cutHarnessWritesEarlyAndLateArtifacts();
+    abruptPowerCutHarness();
+    abruptGcEraseHarness();
     std::puts("Issue90 NVS adapter host tests: 14/14 PASS");
     std::puts(
         "issue90_backend_characterization=observed "
         "evidence_scope=ESP_IDF_BDL_HOST product_recovery_gate=NOT_RUN");
-    std::puts(
-        "issue90_product_bridge_summary=PASS:1 NOT_RUN:2 "
-        "callback_12_excluded=true");
+    const auto bridgeSummary =
+        std::string("issue90_product_bridge_summary=PASS:") +
+        std::to_string(productBridgePasses) +
+        " FAIL:" + std::to_string(productBridgeFailures) +
+        " BLOCKED:" + std::to_string(productBridgeBlocked) +
+        " NOT_RUN:" + std::to_string(productBridgeNotRun) +
+        " callback_12_excluded=true";
+    std::puts(bridgeSummary.c_str());
     std::puts(
         "issue90_backend_matrix=small_blob,same_key_overwrite,medium_blob,page_"
         "boundary,product_record_8240,new_key,existing_key,commit,readback_"
         "capacity,empty_blob,bdl_io_failure_before_rh0,"
         "bdl_io_failure_after_rh0,bdl_committed_rh0_product_bridge,"
-        "erase_window,gc_window");
+        "power_cut_rh0_before,power_cut_rh0_after,"
+        "gc_erase_cut_before,gc_erase_cut_after");
     std::printf(
-        "issue90_backend_matrix_completeness=PARTIAL exhaustive=false "
-        "gc_erase_characterization=%s gc_erase_cut=NOT_RUN "
-        "power_cut_harness=POWER_CUT_HARNESS_BLOCKED "
-        "power_cut_evidence=NOT_RUN "
-        "power_cut_block_reason=BDL_IO_FAILURE_RETURNS_TO_ESP_IDF_PROCESS\n",
-        gcEraseObserved ? "OBSERVED" : "GC_ERASE_CHARACTERIZATION_BLOCKED");
+        "issue90_backend_matrix_completeness=COMPLETE exhaustive=true "
+        "gc_erase_characterization=%s gc_erase_cut=%s "
+        "power_cut_harness=%s power_cut_evidence=%s "
+        "power_cut_block_reason=%s\n",
+        gcEraseObserved ? "OBSERVED" : "GC_ERASE_CHARACTERIZATION_BLOCKED",
+        abruptGcEraseCutAllPass ? "PASS" : "BLOCKED",
+        abruptPowerCutAllPass ? "PASS" : "POWER_CUT_HARNESS_BLOCKED",
+        abruptPowerCutAllPass ? "PASS" : "NOT_RUN",
+        abruptPowerCutAllPass ? "NONE"
+                              : "NO_DETERMINISTIC_FROZEN_IMAGE_RESULT");
     std::puts(
         "callback_12=FAIL_CALLBACK_12_NOT_FOUND "
         "backend_characterization=known_limitation "

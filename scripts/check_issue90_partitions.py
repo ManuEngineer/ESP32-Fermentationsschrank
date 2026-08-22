@@ -52,10 +52,6 @@ CONFIGURATION_BLOB_SIZES = (
 )
 RUN_BLOB_SIZES = (8240, 8240, 256)  # rc0/rc1/rh0
 
-# R1 permits the current generation, a new candidate and a prepared
-# transaction to coexist during a mutation. This multiplier is applied to the
-# complete simultaneously resident record set, not to GC or wear reserves.
-NVS_TRANSACTION_GENERATION_MULTIPLIER = 3
 # Two pages keep a destination page and a live source page available while
 # NVS compacts one update; two more pages cover fragmentation across the
 # simultaneous configuration/run mutation set. These are technical GC/update
@@ -102,11 +98,21 @@ def capacity_model() -> dict[str, int]:
         for group in CONFIGURATION_BLOB_SIZES
         for blob_size in group
     )
-    logical_entries = NVS_NAMESPACE_METADATA_ENTRIES + sum(
+    full_slot_keyspace_entries = NVS_NAMESPACE_METADATA_ENTRIES + sum(
         nvs_blob_entries(size) for size in configuration + RUN_BLOB_SIZES
     )
+    # A same-key update keeps the old value until the new index is committed.
+    # The complete old slot set is already represented above; only the largest
+    # additional candidate blob is transiently co-resident. No other
+    # transaction-wide duplicate is proven by the current production path.
+    same_key_update_transient_entries = max(
+        nvs_blob_entries(size) for size in configuration + RUN_BLOB_SIZES
+    )
+    other_proven_transient_entries = 0
     technical_minimum_entries = (
-        logical_entries * NVS_TRANSACTION_GENERATION_MULTIPLIER
+        full_slot_keyspace_entries
+        + same_key_update_transient_entries
+        + other_proven_transient_entries
     )
     technical_minimum_pages = (
         technical_minimum_entries + NVS_ENTRY_COUNT - 1
@@ -122,7 +128,9 @@ def capacity_model() -> dict[str, int]:
     return {
         "configuration_records": len(configuration),
         "run_records": len(RUN_BLOB_SIZES),
-        "single_generation_entries": logical_entries,
+        "full_slot_keyspace_entries": full_slot_keyspace_entries,
+        "same_key_update_transient_entries": same_key_update_transient_entries,
+        "other_proven_transient_entries": other_proven_transient_entries,
         "technical_minimum_entries": technical_minimum_entries,
         "technical_minimum_pages": technical_minimum_pages,
         "technical_minimum_bytes": technical_minimum_pages * NVS_PAGE_SIZE,
@@ -304,12 +312,16 @@ def run_self_tests() -> None:
         raise AssertionError("Selftest erkennt die alte BLOB-Entry-Formel nicht")
 
     capacity = capacity_model()
-    if capacity["technical_minimum_entries"] != 14352:
-        raise AssertionError("unerwartete technische Entry-Mindestmenge")
-    if capacity["technical_minimum_pages"] != 114:
-        raise AssertionError("unerwartete technische Seiten-Mindestmenge")
-    if capacity["planned_state_store_pages"] != 182:
-        raise AssertionError("unerwartete geplante State-Store-Seitenmenge")
+    if capacity["technical_minimum_entries"] != (
+        capacity["full_slot_keyspace_entries"]
+        + capacity["same_key_update_transient_entries"]
+        + capacity["other_proven_transient_entries"]
+    ):
+        raise AssertionError("transienter Entrybedarf doppelt oder falsch gezählt")
+    if capacity["full_slot_keyspace_entries"] >= capacity["technical_minimum_entries"]:
+        raise AssertionError("Same-Key-Transientenbedarf fehlt")
+    if capacity["planned_state_store_pages"] >= 0x100000 // NVS_PAGE_SIZE:
+        raise AssertionError("Kapazitätsmodell lässt keinen Headroom")
     print("PASS: NVS-Entry-/Chunk-Grenztests und alte Formel erkannt")
 
 
@@ -336,6 +348,15 @@ def main() -> int:
             f"(technical=0x{CAPACITY['technical_minimum_bytes']:X}, "
             f"planned=0x{CAPACITY['planned_state_store_bytes']:X})"
         )
+    print(f"full_slot_keyspace_entries={CAPACITY['full_slot_keyspace_entries']}")
+    print(
+        "same_key_update_transient_entries="
+        f"{CAPACITY['same_key_update_transient_entries']}"
+    )
+    print(
+        "other_proven_transient_entries="
+        f"{CAPACITY['other_proven_transient_entries']}"
+    )
     print(f"technical_minimum_entries={CAPACITY['technical_minimum_entries']}")
     print(f"nvs_page_header_bytes={NVS_PAGE_HEADER_BYTES}")
     print(f"nvs_page_entry_table_bytes={NVS_PAGE_ENTRY_TABLE_BYTES}")

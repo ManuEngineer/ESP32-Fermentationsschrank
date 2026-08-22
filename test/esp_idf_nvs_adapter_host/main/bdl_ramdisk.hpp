@@ -10,6 +10,7 @@
 
 enum class BdlOperation : std::uint8_t { Read, Write, Erase, Sync };
 enum class BdlCutPhase : std::uint8_t { None, Before, After };
+enum class BdlCutMode : std::uint8_t { ReturnError, AbruptProcessExit };
 
 struct BdlEvent {
     BdlOperation operation;
@@ -34,11 +35,18 @@ class TestRamDisk final {
 
     void clearEvents();
     void setCutPlan(BdlOperation operation, std::size_t occurrence,
-                    BdlCutPhase phase);
-    void armCutForNext(BdlOperation operation, BdlCutPhase phase);
+                    BdlCutPhase phase,
+                    BdlCutMode mode = BdlCutMode::ReturnError);
+    void armCutForNext(BdlOperation operation, BdlCutPhase phase,
+                       BdlCutMode mode = BdlCutMode::ReturnError);
     void clearCutPlan();
     void setLogicalKey(const char* key);
     void clearLogicalKey();
+    void setAbruptCutFiles(const char* imagePath, const char* metadataPath);
+    void setMutationHeadFiles(const char* oldHeadPath, const char* newHeadPath);
+    void setMutationOldHead(const std::string& value);
+    void setMutationNewHead(const std::string& value);
+    [[nodiscard]] bool loadImage(const char* imagePath);
     [[nodiscard]] std::vector<BdlEvent> events() const;
     [[nodiscard]] std::uint32_t checksum() const;
 
