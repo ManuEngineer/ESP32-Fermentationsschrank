@@ -83,6 +83,8 @@ class LocalStore final : public device_platform::IStateStore {
         values_[keyValue] = std::move(value);
     }
 
+    void erase(const char* keyValue) { values_.erase(keyValue); }
+
     void failRead(const char* keyValue,
                   device_platform::StateStoreReadStatus status) {
         faults_[keyValue] = status;
@@ -1126,6 +1128,18 @@ void test_empty_other_epoch_and_corrupt_current_root_are_distinct() {
     const auto corruptResult =
         corruptGraphStore.loadCanonicalGraph(StorageEpoch{1U});
     TEST_ASSERT_TRUE(corruptResult.status ==
+                     fermentation::ConfigurationGraphLoadStatus::
+                         ConfigurationGraphIntegrityFailure);
+
+    LocalStore orphanedGeneration;
+    seedGraph(orphanedGeneration);
+    orphanedGeneration.erase("cr0");
+    orphanedGeneration.erase("cr1");
+    fermentation::ConfigurationGraphStore orphanedGraphStore(orphanedGeneration,
+                                                             resolver);
+    const auto orphanedResult =
+        orphanedGraphStore.loadCanonicalGraph(StorageEpoch{1U});
+    TEST_ASSERT_TRUE(orphanedResult.status ==
                      fermentation::ConfigurationGraphLoadStatus::
                          ConfigurationGraphIntegrityFailure);
 }

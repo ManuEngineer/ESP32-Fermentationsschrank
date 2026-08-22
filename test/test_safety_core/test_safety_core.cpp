@@ -75,6 +75,28 @@ void validOperationalStandbyEvidence(SafetyCoreInput& input) {
         RunPersistenceCoordinatorState::ReadyEmpty;
 }
 
+void validFallbackRecoveryEvidence(
+    SafetyCoreInput& input, device_platform::SensorQualitySnapshot& sensor,
+    SensorSelectionRuntimeState& selection, RunPersistenceSnapshot& snapshot) {
+    input.bootValidationComplete = true;
+    input.configurationValidated = true;
+    input.configurationRecoveryStatus =
+        ConfigurationRecoveryStatus::RuntimeReady;
+    input.persistenceValidated = true;
+    input.persistenceLoadStatus = RunPersistenceLoadStatus::FallbackRecovered;
+    input.persistenceCoordinatorState =
+        RunPersistenceCoordinatorState::FallbackRecoveryPending;
+    input.persistenceSnapshot = &snapshot;
+    input.sensorEvidenceValidated = true;
+    sensor.quality = device_platform::SensorQuality::Valid;
+    selection.phase = SensorSelectionPhase::NormalProduct;
+    selection.permission = SensorPeltierPermission::Allowed;
+    input.peltierSensor = &sensor;
+    input.sensorSelectionRuntime = &selection;
+    snapshot.variant = RunCheckpointVariant::ProgramRun;
+    snapshot.processState.state = ProcessState::Preheating;
+}
+
 void test_missing_boot_evidence_is_safe_boot() {
     SafetyCore safety;
     safety.beginBoot(device_platform::ResetCause::PowerOn);
@@ -561,15 +583,154 @@ void test_schema_three_neutral_fields_do_not_block_simple_resume() {
 }
 
 void test_load_matrix_rejects_fallback_and_untrusted_states() {
+    RunPersistenceSnapshot snapshot;
     TEST_ASSERT_TRUE(
         SafetyCore::classifyRunLoad(RunPersistenceLoadStatus::FallbackRecovered,
                                     nullptr) == RunLoadDisposition::SafeBoot);
+    snapshot.variant = RunCheckpointVariant::ProgramRun;
+    snapshot.processState.state = ProcessState::Preheating;
+    TEST_ASSERT_TRUE(SafetyCore::classifyRunLoad(
+                         RunPersistenceLoadStatus::FallbackRecovered,
+                         &snapshot) == RunLoadDisposition::ResumeOffer);
     TEST_ASSERT_TRUE(SafetyCore::classifyRunLoad(
                          RunPersistenceLoadStatus::PreparedInterrupted,
                          nullptr) == RunLoadDisposition::SafeBoot);
     TEST_ASSERT_TRUE(SafetyCore::classifyRunLoad(
                          RunPersistenceLoadStatus::NoActiveRun, nullptr) ==
                      RunLoadDisposition::Standby);
+}
+
+void test_validated_fallback_is_non_activating_resume_offer() {
+    SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    RunPersistenceSnapshot snapshot;
+    validFallbackRecoveryEvidence(input, sensor, selection, snapshot);
+
+    const auto result = safety.evaluate(input);
+    TEST_ASSERT_TRUE(result.faultCode == FaultCode::None);
+    TEST_ASSERT_TRUE(result.bootDisposition ==
+                     SafetyBootDisposition::ResumeOffer);
+    TEST_ASSERT_TRUE(result.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_FALSE(result.gate.status == ActuatorSafetyGateStatus::Allowed);
+}
+
+void test_fallback_without_snapshot_is_fail_closed() {
+    SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    RunPersistenceSnapshot snapshot;
+    validFallbackRecoveryEvidence(input, sensor, selection, snapshot);
+    input.persistenceSnapshot = nullptr;
+
+    const auto result = safety.evaluate(input);
+    TEST_ASSERT_TRUE(result.faultCode == FaultCode::RunPersistenceUntrusted);
+    TEST_ASSERT_TRUE(result.bootDisposition == SafetyBootDisposition::SafeBoot);
+    TEST_ASSERT_TRUE(result.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+}
+
+void test_fallback_without_validated_persistence_is_fail_closed() {
+    SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    RunPersistenceSnapshot snapshot;
+    validFallbackRecoveryEvidence(input, sensor, selection, snapshot);
+    input.persistenceValidated = false;
+
+    const auto result = safety.evaluate(input);
+    TEST_ASSERT_TRUE(result.faultCode == FaultCode::RunPersistenceUntrusted);
+    TEST_ASSERT_TRUE(result.bootDisposition == SafetyBootDisposition::SafeBoot);
+    TEST_ASSERT_TRUE(result.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+}
+
+void test_pending_fallback_requires_consistent_load_tuple() {
+    SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    RunPersistenceSnapshot snapshot;
+    validFallbackRecoveryEvidence(input, sensor, selection, snapshot);
+    input.persistenceLoadStatus = RunPersistenceLoadStatus::Current;
+
+    const auto result = safety.evaluate(input);
+    TEST_ASSERT_TRUE(result.faultCode == FaultCode::RunPersistenceUntrusted);
+    TEST_ASSERT_TRUE(result.bootDisposition == SafetyBootDisposition::SafeBoot);
+    TEST_ASSERT_TRUE(result.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+}
+
+void test_fallback_phase_and_terminal_states_never_offer_resume() {
+    const auto classify = [](ProcessState state) {
+        RunPersistenceSnapshot snapshot;
+        snapshot.variant = RunCheckpointVariant::ProgramRun;
+        snapshot.processState.state = state;
+        return SafetyCore::classifyRunLoad(
+            RunPersistenceLoadStatus::FallbackRecovered, &snapshot);
+    };
+    TEST_ASSERT_TRUE(classify(ProcessState::Fermenting) ==
+                     RunLoadDisposition::NoActiveRun);
+    TEST_ASSERT_TRUE(classify(ProcessState::Completed) ==
+                     RunLoadDisposition::Completed);
+    TEST_ASSERT_TRUE(classify(ProcessState::Fault) ==
+                     RunLoadDisposition::TerminalFault);
+}
+
+void test_fallback_pending_never_allows_before_recovery_apply() {
+    SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    RunPersistenceSnapshot snapshot;
+    validFallbackRecoveryEvidence(input, sensor, selection, snapshot);
+    input.explicitActivationRequested = true;
+    input.plannerEvidenceValidated = true;
+    input.activationKind = SafetyActivationKind::Resume;
+    input.activationPersistenceResult = RunPersistenceResultStatus::Applied;
+    input.processActivationApplied = true;
+
+    const auto result = safety.evaluate(input);
+    TEST_ASSERT_TRUE(result.faultCode == FaultCode::None);
+    TEST_ASSERT_TRUE(result.bootDisposition ==
+                     SafetyBootDisposition::ResumeOffer);
+    TEST_ASSERT_TRUE(result.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_FALSE(result.gate.status == ActuatorSafetyGateStatus::Allowed);
+}
+
+void test_latched_fallback_fault_clears_to_unresolved_offer() {
+    SafetyCore safety;
+    safety.beginBoot(device_platform::ResetCause::PowerOn);
+    SafetyCoreInput input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    RunPersistenceSnapshot snapshot;
+    validFallbackRecoveryEvidence(input, sensor, selection, snapshot);
+    input.persistenceValidated = false;
+
+    const auto first = safety.evaluate(input);
+    TEST_ASSERT_TRUE(first.faultCode == FaultCode::RunPersistenceUntrusted);
+    TEST_ASSERT_TRUE(first.gate.status == ActuatorSafetyGateStatus::Unresolved);
+
+    input.persistenceValidated = true;
+    const auto resolved = safety.evaluate(input);
+    TEST_ASSERT_TRUE(resolved.faultCode == FaultCode::None);
+    TEST_ASSERT_TRUE(resolved.bootDisposition ==
+                     SafetyBootDisposition::ResumeOffer);
+    TEST_ASSERT_TRUE(resolved.gate.status ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_FALSE(resolved.gate.status ==
+                      ActuatorSafetyGateStatus::Allowed);
 }
 
 void test_unknown_producer_is_fail_closed() {
@@ -905,6 +1066,13 @@ void setup_suite() {
     RUN_TEST(test_integrity_and_commit_faults_require_matching_resolution);
     RUN_TEST(test_schema_three_neutral_fields_do_not_block_simple_resume);
     RUN_TEST(test_load_matrix_rejects_fallback_and_untrusted_states);
+    RUN_TEST(test_validated_fallback_is_non_activating_resume_offer);
+    RUN_TEST(test_fallback_without_snapshot_is_fail_closed);
+    RUN_TEST(test_fallback_without_validated_persistence_is_fail_closed);
+    RUN_TEST(test_pending_fallback_requires_consistent_load_tuple);
+    RUN_TEST(test_fallback_phase_and_terminal_states_never_offer_resume);
+    RUN_TEST(test_fallback_pending_never_allows_before_recovery_apply);
+    RUN_TEST(test_latched_fallback_fault_clears_to_unresolved_offer);
     RUN_TEST(test_unknown_producer_is_fail_closed);
     RUN_TEST(test_unknown_producer_sources_resolve_independently);
     RUN_TEST(test_configuration_recovery_status_uses_producer_context);

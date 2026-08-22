@@ -1021,6 +1021,10 @@ ConfigurationGraphLoadResult ConfigurationGraphStore::loadCanonicalGraph(
         } else if (rootOtherEpochSlots != 0U) {
             result.status = ConfigurationGraphLoadStatus::
                 ConfigurationGraphUnavailableOtherEpoch;
+        } else if (!users.records.empty() || !services.records.empty() ||
+                   !catalogs.records.empty() || !manifests.records.empty()) {
+            result.status = ConfigurationGraphLoadStatus::
+                ConfigurationGraphIntegrityFailure;
         } else {
             result.status =
                 ConfigurationGraphLoadStatus::ConfigurationGraphUnavailable;
