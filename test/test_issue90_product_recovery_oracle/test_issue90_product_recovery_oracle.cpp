@@ -3222,6 +3222,46 @@ const char* expectedProducerName(SafetyProducer value) {
     return "UNMAPPED";
 }
 
+bool productionComparisonPass(const OracleCase& item,
+                              const ProductionActual& actual) {
+    const bool baselineMatch =
+        actual.baseline == baselineName(item.baseline) &&
+        actual.recoveryAction == actionName(item.recoveryAction);
+    const bool outcomeMatch =
+        !item.hasProductOutcome ||
+        actual.productOutcome == outcomeName(item.outcome);
+    const bool safetyMatch =
+        !item.hasProductOutcome ||
+        actual.safetyProjection == expectedSafetyName(item.safety);
+    const bool producerMatch =
+        !item.hasProductOutcome ||
+        actual.safetyProducer == expectedProducerName(item.producer);
+    const bool classificationMatch =
+        actual.recordClassification == classificationName(item.classification);
+    const bool gateMatch =
+        actual.logicalGate == logicalGateName(item.logicalGate) &&
+        actual.actuatorAllowed == item.actuatorAllowed;
+    return baselineMatch && outcomeMatch && safetyMatch && producerMatch &&
+           classificationMatch && gateMatch;
+}
+
+void test_production_comparator_rejects_wrong_record_classification() {
+    const auto& item = kMatrix.front();
+    ProductionActual matching;
+    matching.recordClassification = classificationName(item.classification);
+    matching.productOutcome = outcomeName(item.outcome);
+    matching.safetyProjection = expectedSafetyName(item.safety);
+    matching.safetyProducer = expectedProducerName(item.producer);
+    matching.logicalGate = logicalGateName(item.logicalGate);
+    matching.actuatorAllowed = item.actuatorAllowed;
+    matching.baseline = baselineName(item.baseline);
+    matching.recoveryAction = actionName(item.recoveryAction);
+
+    TEST_ASSERT_TRUE(productionComparisonPass(item, matching));
+    matching.recordClassification = "Orphan";
+    TEST_ASSERT_FALSE(productionComparisonPass(item, matching));
+}
+
 void test_existing_production_matches_slice2_oracle() {
     std::size_t pass = 0U;
     std::size_t fail = 0U;
@@ -3266,10 +3306,13 @@ void test_existing_production_matches_slice2_oracle() {
                                  actual.safetyProjection == expectedSafety;
         const bool producerMatch = !item.hasProductOutcome ||
                                    actual.safetyProducer == expectedProducer;
+        const bool classificationMatch =
+            actual.recordClassification ==
+            classificationName(item.classification);
         const bool gateMatch =
-            actual.logicalGate == "UNRESOLVED" && !actual.actuatorAllowed;
-        const bool comparisonPass = baselineMatch && outcomeMatch &&
-                                    safetyMatch && producerMatch && gateMatch;
+            actual.logicalGate == logicalGateName(item.logicalGate) &&
+            actual.actuatorAllowed == item.actuatorAllowed;
+        const bool comparisonPass = productionComparisonPass(item, actual);
         const char* difference = "NONE";
         if (!outcomeMatch) {
             difference = "RECOVERY";
@@ -3277,6 +3320,8 @@ void test_existing_production_matches_slice2_oracle() {
             difference = "SAFETY";
         } else if (!gateMatch) {
             difference = "GATE";
+        } else if (!classificationMatch) {
+            difference = "RECORD_CLASSIFICATION";
         } else if (!baselineMatch) {
             difference = "STATUS";
         }
@@ -3288,6 +3333,7 @@ void test_existing_production_matches_slice2_oracle() {
         }
         std::printf(
             "issue90_production_compare_case=%s expected_product_outcome=%s "
+            "expected_record_classification=%s "
             "expected_safety_projection=%s expected_safety_producer=%s "
             "expected_logical_gate=UNRESOLVED expected_actuator_allowed=false "
             "actual_primary_status=%s actual_snapshot_present=%s "
@@ -3300,7 +3346,8 @@ void test_existing_production_matches_slice2_oracle() {
             "expected_recovery_action=%s actual_recovery_action=%s "
             "fixture_read_status=%s comparison_result=%s difference_class=%s "
             "fixture_reboot=%s\n",
-            item.id, expectedOutcome.c_str(), expectedSafety.c_str(),
+            item.id, expectedOutcome.c_str(),
+            classificationName(item.classification), expectedSafety.c_str(),
             expectedProducer.c_str(), actual.primaryStatus.c_str(),
             actual.snapshotPresent ? "true" : "false",
             actual.fallbackReferenceValidated ? "true" : "false",
@@ -3354,6 +3401,7 @@ int main() {
     RUN_TEST(test_product_recovery_gate_rejects_invalid_fallback_reference);
     RUN_TEST(test_product_recovery_gate_rejects_wrong_product_outcome);
     RUN_TEST(test_product_recovery_gate_rejects_wrong_safety_projection);
+    RUN_TEST(test_production_comparator_rejects_wrong_record_classification);
     RUN_TEST(test_existing_production_matches_slice2_oracle);
     RUN_TEST(test_callback_12_remains_real_nvs_only);
     return UNITY_END();
