@@ -131,8 +131,9 @@ void finalGateNegativeSelfTests() {
     CHECK(!finalHostGatePass(true, false, true, 0U, 0U, 0U));
     CHECK(!finalHostGatePass(true, true, false, 0U, 0U, 0U));
     CHECK(!finalHostGatePass(true, true, true, 1U, 0U, 0U));
+    CHECK(!finalHostGatePass(true, true, true, 0U, 1U, 0U));
     CHECK(!finalHostGatePass(true, true, true, 0U, 0U, 1U));
-    std::puts("issue90_final_gate_negative_selftests=4 PASS");
+    std::puts("issue90_final_gate_negative_selftests=5 PASS");
 }
 
 device_platform::StateStoreKey key(const char* raw) {
@@ -1757,14 +1758,12 @@ void nvsStatsCrosscheck() {
     nvs_stats_t before{};
     CHECK(nvs_get_stats(fixture.label(), &before) == ESP_OK);
     std::size_t modeledFullEntries = 1U;
-    std::size_t largestTransientEntries = 0U;
     for (const auto& [rawKey, blobSize] : slots) {
         const auto value = std::string(blobSize, 's');
         CHECK(store->write(key(rawKey), value) ==
               device_platform::StateStoreWriteStatus::Success);
         const auto entries = nvsModelBlobEntries(blobSize);
         modeledFullEntries += entries;
-        largestTransientEntries = std::max(largestTransientEntries, entries);
     }
     nvs_stats_t full{};
     CHECK(nvs_get_stats(fixture.label(), &full) == ESP_OK);
@@ -1775,12 +1774,15 @@ void nvsStatsCrosscheck() {
           device_platform::StateStoreWriteStatus::Success);
     nvs_stats_t updated{};
     CHECK(nvs_get_stats(fixture.label(), &updated) == ESP_OK);
-    CHECK(updated.used_entries <= modeledFullEntries + largestTransientEntries);
+    const auto conservativeTransientEntries = modeledFullEntries;
+    CHECK(updated.used_entries <=
+          modeledFullEntries + conservativeTransientEntries);
     std::printf(
         "issue90_nvs_stats_crosscheck=PASS before_used=%zu full_used=%zu "
-        "updated_used=%zu modeled_full=%zu modeled_transient=%zu\n",
+        "updated_used=%zu modeled_full=%zu "
+        "modeled_conservative_full_copy=%zu\n",
         before.used_entries, full.used_entries, updated.used_entries,
-        modeledFullEntries, largestTransientEntries);
+        modeledFullEntries, conservativeTransientEntries);
 }
 
 bool gcEraseCharacterization() {
@@ -1842,7 +1844,7 @@ extern "C" void app_main(void) {
     CHECK(finalHostGatePass(gcEraseObserved, abruptPowerCutAllPass,
                             abruptGcEraseCutAllPass, productBridgeFailures,
                             productBridgeBlocked, productBridgeNotRun));
-    std::puts("Issue90 NVS adapter host tests: 14/14 PASS");
+    std::puts("ISSUE90_HOST_ADAPTER_GATE=PASS");
     std::puts(
         "issue90_backend_characterization=observed "
         "evidence_scope=ESP_IDF_BDL_HOST product_recovery_gate=NOT_RUN");
@@ -1863,7 +1865,7 @@ extern "C" void app_main(void) {
         "power_cut_rh0_before,power_cut_rh0_after,"
         "gc_erase_cut_before,gc_erase_cut_after");
     std::printf(
-        "issue90_backend_matrix_completeness=COMPLETE exhaustive=true "
+        "DEFINED_BACKEND_MATRIX_COMPLETE=true "
         "gc_erase_characterization=%s gc_erase_cut=%s "
         "power_cut_harness=%s power_cut_evidence=%s "
         "power_cut_block_reason=%s\n",
@@ -1876,6 +1878,7 @@ extern "C" void app_main(void) {
     std::puts(
         "callback_12=FAIL_CALLBACK_12_NOT_FOUND "
         "backend_characterization=known_limitation "
-        "evidence_scope=REAL_NVS_ONLY product_recovery_gate=NOT_RUN");
+        "evidence_scope=REAL_NVS_ONLY product_recovery_gate=NOT_RUN "
+        "CALLBACK_12_REAL_NVS_PRODUCT_GATE=NOT_RUN_PENDING_SLICE7");
     std::exit(0);
 }

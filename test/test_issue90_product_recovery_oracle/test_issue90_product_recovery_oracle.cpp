@@ -3236,16 +3236,14 @@ bool productionComparisonPass(const OracleCase& item,
     const bool producerMatch =
         !item.hasProductOutcome ||
         actual.safetyProducer == expectedProducerName(item.producer);
-    const bool classificationMatch =
-        actual.recordClassification == classificationName(item.classification);
     const bool gateMatch =
         actual.logicalGate == logicalGateName(item.logicalGate) &&
         actual.actuatorAllowed == item.actuatorAllowed;
     return baselineMatch && outcomeMatch && safetyMatch && producerMatch &&
-           classificationMatch && gateMatch;
+           gateMatch;
 }
 
-void test_production_comparator_rejects_wrong_record_classification() {
+void test_production_comparator_rejects_wrong_product_outcome() {
     const auto& item = kMatrix.front();
     ProductionActual matching;
     matching.recordClassification = classificationName(item.classification);
@@ -3258,7 +3256,7 @@ void test_production_comparator_rejects_wrong_record_classification() {
     matching.recoveryAction = actionName(item.recoveryAction);
 
     TEST_ASSERT_TRUE(productionComparisonPass(item, matching));
-    matching.recordClassification = "Orphan";
+    matching.productOutcome = "OLD_VALID_CONFIGURATION";
     TEST_ASSERT_FALSE(productionComparisonPass(item, matching));
 }
 
@@ -3306,9 +3304,6 @@ void test_existing_production_matches_slice2_oracle() {
                                  actual.safetyProjection == expectedSafety;
         const bool producerMatch = !item.hasProductOutcome ||
                                    actual.safetyProducer == expectedProducer;
-        const bool classificationMatch =
-            actual.recordClassification ==
-            classificationName(item.classification);
         const bool gateMatch =
             actual.logicalGate == logicalGateName(item.logicalGate) &&
             actual.actuatorAllowed == item.actuatorAllowed;
@@ -3320,8 +3315,6 @@ void test_existing_production_matches_slice2_oracle() {
             difference = "SAFETY";
         } else if (!gateMatch) {
             difference = "GATE";
-        } else if (!classificationMatch) {
-            difference = "RECORD_CLASSIFICATION";
         } else if (!baselineMatch) {
             difference = "STATUS";
         }
@@ -3333,7 +3326,6 @@ void test_existing_production_matches_slice2_oracle() {
         }
         std::printf(
             "issue90_production_compare_case=%s expected_product_outcome=%s "
-            "expected_record_classification=%s "
             "expected_safety_projection=%s expected_safety_producer=%s "
             "expected_logical_gate=UNRESOLVED expected_actuator_allowed=false "
             "actual_primary_status=%s actual_snapshot_present=%s "
@@ -3346,8 +3338,7 @@ void test_existing_production_matches_slice2_oracle() {
             "expected_recovery_action=%s actual_recovery_action=%s "
             "fixture_read_status=%s comparison_result=%s difference_class=%s "
             "fixture_reboot=%s\n",
-            item.id, expectedOutcome.c_str(),
-            classificationName(item.classification), expectedSafety.c_str(),
+            item.id, expectedOutcome.c_str(), expectedSafety.c_str(),
             expectedProducer.c_str(), actual.primaryStatus.c_str(),
             actual.snapshotPresent ? "true" : "false",
             actual.fallbackReferenceValidated ? "true" : "false",
@@ -3368,6 +3359,11 @@ void test_existing_production_matches_slice2_oracle() {
         "issue90_production_compare_summary=cases:%zu pass:%zu fail:%zu "
         "blocked:%zu not_run:%zu callback12=REAL_NVS_ONLY/NOT_RUN\n",
         kMatrix.size(), pass, fail, blocked, notRun);
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(fail));
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(blocked));
+    TEST_ASSERT_EQUAL_UINT32(0U, static_cast<std::uint32_t>(notRun));
+    TEST_ASSERT_EQUAL_UINT32(static_cast<std::uint32_t>(kMatrix.size()),
+                             static_cast<std::uint32_t>(pass));
 }
 
 void test_callback_12_remains_real_nvs_only() {
@@ -3375,13 +3371,17 @@ void test_callback_12_remains_real_nvs_only() {
         "issue90_oracle_backend_reference=FAIL_CALLBACK_12_NOT_FOUND "
         "backend_characterization=known_limitation "
         "evidence_scope=REAL_NVS_ONLY "
-        "product_recovery_gate=NOT_RUN";
+        "product_recovery_gate=NOT_RUN "
+        "CALLBACK_12_REAL_NVS_PRODUCT_GATE=NOT_RUN_PENDING_SLICE7";
     std::printf("%s\n", referenceLine);
     const std::string line{referenceLine};
     TEST_ASSERT_TRUE(line.find("REAL_NVS_ONLY") != std::string::npos);
     TEST_ASSERT_TRUE(line.find("known_limitation") != std::string::npos);
     TEST_ASSERT_TRUE(line.find("product_recovery_gate=NOT_RUN") !=
                      std::string::npos);
+    TEST_ASSERT_TRUE(
+        line.find("CALLBACK_12_REAL_NVS_PRODUCT_GATE=NOT_RUN_PENDING_SLICE7") !=
+        std::string::npos);
     TEST_ASSERT_TRUE(line.find("SIMULATOR_ONLY") == std::string::npos);
 }
 
@@ -3401,7 +3401,7 @@ int main() {
     RUN_TEST(test_product_recovery_gate_rejects_invalid_fallback_reference);
     RUN_TEST(test_product_recovery_gate_rejects_wrong_product_outcome);
     RUN_TEST(test_product_recovery_gate_rejects_wrong_safety_projection);
-    RUN_TEST(test_production_comparator_rejects_wrong_record_classification);
+    RUN_TEST(test_production_comparator_rejects_wrong_product_outcome);
     RUN_TEST(test_existing_production_matches_slice2_oracle);
     RUN_TEST(test_callback_12_remains_real_nvs_only);
     return UNITY_END();

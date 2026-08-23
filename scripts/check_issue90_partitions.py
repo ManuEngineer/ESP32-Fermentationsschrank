@@ -101,27 +101,27 @@ def capacity_model() -> dict[str, int]:
     full_slot_keyspace_entries = NVS_NAMESPACE_METADATA_ENTRIES + sum(
         nvs_blob_entries(size) for size in configuration + RUN_BLOB_SIZES
     )
-    # A same-key update keeps the old value until the new index is committed.
-    # The complete old slot set is already represented above; only the largest
-    # additional candidate blob is transiently co-resident. No other
-    # transaction-wide duplicate is proven by the current production path.
-    same_key_update_transient_entries = max(
-        nvs_blob_entries(size) for size in configuration + RUN_BLOB_SIZES
-    )
+    # ESP-IDF writes a new blob version before deleting the old value. The
+    # exact transaction-wide coexistence of all application mutations is not
+    # proven by the current production path, so use a deliberately
+    # conservative full-slot-copy bound instead of a single-largest-blob
+    # pseudo-minimum.
+    conservative_full_slot_copy_entries = full_slot_keyspace_entries
+    same_key_update_transient_entries = conservative_full_slot_copy_entries
     other_proven_transient_entries = 0
-    technical_minimum_entries = (
+    conservative_capacity_bound_entries = (
         full_slot_keyspace_entries
         + same_key_update_transient_entries
         + other_proven_transient_entries
     )
-    technical_minimum_pages = (
-        technical_minimum_entries + NVS_ENTRY_COUNT - 1
+    conservative_capacity_bound_pages = (
+        conservative_capacity_bound_entries + NVS_ENTRY_COUNT - 1
     ) // NVS_ENTRY_COUNT
     gc_fragmentation_reserve_pages = (
         NVS_GC_RESERVE_PAGES + NVS_FRAGMENTATION_RESERVE_PAGES
     )
     planned_state_store_pages = (
-        technical_minimum_pages
+        conservative_capacity_bound_pages
         + gc_fragmentation_reserve_pages
         + NVS_WEAR_HEADROOM_PAGES
     )
@@ -129,11 +129,13 @@ def capacity_model() -> dict[str, int]:
         "configuration_records": len(configuration),
         "run_records": len(RUN_BLOB_SIZES),
         "full_slot_keyspace_entries": full_slot_keyspace_entries,
+        "conservative_full_slot_copy_entries": conservative_full_slot_copy_entries,
         "same_key_update_transient_entries": same_key_update_transient_entries,
         "other_proven_transient_entries": other_proven_transient_entries,
-        "technical_minimum_entries": technical_minimum_entries,
-        "technical_minimum_pages": technical_minimum_pages,
-        "technical_minimum_bytes": technical_minimum_pages * NVS_PAGE_SIZE,
+        "conservative_capacity_bound_entries": conservative_capacity_bound_entries,
+        "conservative_capacity_bound_pages": conservative_capacity_bound_pages,
+        "conservative_capacity_bound_bytes": conservative_capacity_bound_pages
+        * NVS_PAGE_SIZE,
         "gc_fragmentation_reserve_pages": gc_fragmentation_reserve_pages,
         "wear_headroom_pages": NVS_WEAR_HEADROOM_PAGES,
         "planned_state_store_pages": planned_state_store_pages,
@@ -143,7 +145,7 @@ def capacity_model() -> dict[str, int]:
 
 
 CAPACITY = capacity_model()
-DERIVED_MINIMUM_STATE_STORE = CAPACITY["planned_state_store_bytes"]
+DERIVED_CONSERVATIVE_STATE_STORE = CAPACITY["planned_state_store_bytes"]
 
 
 def read_partitions(path: Path) -> dict[str, tuple[int, int, str, str]]:
@@ -204,10 +206,10 @@ def validate_layout(
     nvs_start, nvs_size, _, _ = partitions[nvs_label]
     if nvs_start + nvs_size != FLASH_END:
         raise ValueError(f"{path}: {nvs_label} endet nicht bei 0x{FLASH_END:X}")
-    if nvs_size < DERIVED_MINIMUM_STATE_STORE:
+    if nvs_size < DERIVED_CONSERVATIVE_STATE_STORE:
         raise ValueError(
-            f"{path}: {nvs_label} ist kleiner als der abgeleitete Bedarf "
-            f"0x{DERIVED_MINIMUM_STATE_STORE:X}"
+            f"{path}: {nvs_label} ist kleiner als der konservative Bound "
+            f"0x{DERIVED_CONSERVATIVE_STATE_STORE:X}"
         )
     if "state_store" in partitions and "state_store_test" in partitions:
         raise ValueError(f"{path}: Produkt- und Testpartition vermischt")
@@ -312,17 +314,23 @@ def run_self_tests() -> None:
         raise AssertionError("Selftest erkennt die alte BLOB-Entry-Formel nicht")
 
     capacity = capacity_model()
-    if capacity["technical_minimum_entries"] != (
+    if capacity["conservative_full_slot_copy_entries"] != (
+        capacity["full_slot_keyspace_entries"]
+    ):
+        raise AssertionError("konservativer Full-Slot-Copy-Bound fehlt")
+    if capacity["conservative_capacity_bound_entries"] != (
         capacity["full_slot_keyspace_entries"]
         + capacity["same_key_update_transient_entries"]
         + capacity["other_proven_transient_entries"]
     ):
-        raise AssertionError("transienter Entrybedarf doppelt oder falsch gezählt")
-    if capacity["full_slot_keyspace_entries"] >= capacity["technical_minimum_entries"]:
-        raise AssertionError("Same-Key-Transientenbedarf fehlt")
+        raise AssertionError("konservativer Capacity-Bound falsch berechnet")
+    if capacity["same_key_update_transient_entries"] != capacity[
+        "full_slot_keyspace_entries"
+    ]:
+        raise AssertionError("Full-Slot-Copy-Reserve fehlt")
     if capacity["planned_state_store_pages"] >= 0x100000 // NVS_PAGE_SIZE:
         raise AssertionError("Kapazitätsmodell lässt keinen Headroom")
-    print("PASS: NVS-Entry-/Chunk-Grenztests und alte Formel erkannt")
+    print("PASS: NVS-Entry-/Chunk-Grenztests, alte Formel und konservativer Bound")
 
 
 def main() -> int:
@@ -345,7 +353,7 @@ def main() -> int:
         check(root / "partitions" / filename)
         print(
             f"PASS: {filename} 4-MB layout, isolation and NVS model "
-            f"(technical=0x{CAPACITY['technical_minimum_bytes']:X}, "
+            f"(conservative_bound=0x{CAPACITY['conservative_capacity_bound_bytes']:X}, "
             f"planned=0x{CAPACITY['planned_state_store_bytes']:X})"
         )
     print(f"full_slot_keyspace_entries={CAPACITY['full_slot_keyspace_entries']}")
@@ -354,17 +362,30 @@ def main() -> int:
         f"{CAPACITY['same_key_update_transient_entries']}"
     )
     print(
+        "conservative_full_slot_copy_entries="
+        f"{CAPACITY['conservative_full_slot_copy_entries']}"
+    )
+    print(
         "other_proven_transient_entries="
         f"{CAPACITY['other_proven_transient_entries']}"
     )
-    print(f"technical_minimum_entries={CAPACITY['technical_minimum_entries']}")
+    print(
+        "conservative_capacity_bound_entries="
+        f"{CAPACITY['conservative_capacity_bound_entries']}"
+    )
     print(f"nvs_page_header_bytes={NVS_PAGE_HEADER_BYTES}")
     print(f"nvs_page_entry_table_bytes={NVS_PAGE_ENTRY_TABLE_BYTES}")
     print(f"nvs_entry_size_bytes={NVS_ENTRY_SIZE}")
     print(f"nvs_usable_entries_per_page={NVS_ENTRY_COUNT}")
     print(f"nvs_blob_data_chunk_max_bytes={NVS_CHUNK_MAX_SIZE}")
-    print(f"technical_minimum_pages={CAPACITY['technical_minimum_pages']}")
-    print(f"technical_minimum_bytes=0x{CAPACITY['technical_minimum_bytes']:X}")
+    print(
+        "conservative_capacity_bound_pages="
+        f"{CAPACITY['conservative_capacity_bound_pages']}"
+    )
+    print(
+        "conservative_capacity_bound_bytes="
+        f"0x{CAPACITY['conservative_capacity_bound_bytes']:X}"
+    )
     print(
         "gc_fragmentation_reserve_pages="
         f"{CAPACITY['gc_fragmentation_reserve_pages']}"
