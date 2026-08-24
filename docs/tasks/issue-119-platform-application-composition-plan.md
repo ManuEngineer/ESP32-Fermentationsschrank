@@ -33,11 +33,18 @@ und real **fehlgeschlagen**: der Produktboot erreicht in
 einen `Interrupt wdt timeout`, bevor Configuration-Recovery oder
 Safety-Projektion erreicht werden. Eine eigene Ursachenanalyserunde
 (PR #120) hat die Ursache real auf Hardware eingegrenzt und durch den
-Owner akzeptiert. Abschnitt 13–19 dieser Datei sind die daraus folgende
-**vollständige Planrevision** der Composition-Root-Struktur — sie ändern
-nichts an der in Abschnitt 1–12 bereits getroffenen und weiterhin gültigen
-Architekturentscheidung, korrigieren aber, **wie** die dort beschriebenen
-boot-transienten Objekte im Composition Root gehalten werden:
+Owner akzeptiert. Die daraus folgende Korrektur ist **direkt in die
+kanonischen Abschnitte 5.2 (Boot-/Composition-Reihenfolge), 5.5
+(Ownership/Lifetime), 5.6 (KISS-Prüfung) und 8 (Schritt 1.1)
+eingearbeitet** — es gibt keinen separat gültigen alten Vertrag mehr,
+den ein Leser gegen eine neuere Korrektur auflösen müsste. Die dortige
+Architekturentscheidung selbst (Abschnitt 1–3: `IStateStore` bleibt
+separate Dependency, ADR-013-Grenzen, Akzeptanzkriterium) bleibt
+unverändert gültig; korrigiert wird ausschließlich, **wie** (Storage-Ort,
+Lebenszeit-Scope) die dort benannten boot-transienten Objekte im
+Composition Root gehalten werden. Abschnitt 13–19 liefert dazu die
+Root-Cause-Evidenz, die Messwerte und die technische Begründung
+(Referenzen auf 5.2/5.5), nicht einen zweiten, konkurrierenden Vertrag:
 
 ```text
 CAUSE_CLASS=#120_BINARY_OR_INTEGRATION_DEPENDENT
@@ -72,8 +79,10 @@ Realer Befund aus #90 R5.9 Slice 7: Der ESP-IDF-Composition-Root
 (`NvsOwningContext` öffnet ihn real, `application: ready` auf zwei
 unabhängigen realen Reboots bestätigt), stellt ihn dem
 Application-/Recovery-Graph aber nicht zur Verfügung.
-`FermentationApplication` verdrahtet aktuell nur ein `SafetyCore`, keinen
-`ConfigurationRecoveryService`, `RunRecoveryCoordinator` oder Store.
+Vor Schritt 1 verdrahtete `FermentationApplication` nur ein `SafetyCore`,
+keinen `ConfigurationRecoveryService`, `RunRecoveryCoordinator` oder
+Store — Schritt 1 (Abschnitt 8) hat diesen Composition Gap real
+geschlossen, siehe Abschnitt 5/8.
 
 Nicht wiedereröffnet: #71, #73, #74 (NVS jeweils ausdrücklich
 Nicht-Scope). Nicht zweckentfremdet: #106 (Aktorplaner-Recovery-Bindung,
@@ -123,17 +132,26 @@ durch eine Dummy-Zweit-App zu erbringen.
 
 ## 4. Reale Inventur (jetzt geprüft, nicht auf später verschoben)
 
+**Historischer Planungsstand:** Diese Inventur wurde am `#118`-HEAD vor
+Umsetzung von Schritt 1 erhoben und war die reale Grundlage der in
+Abschnitt 5 getroffenen R1.0-Entscheidung. Sie beschreibt bewusst den
+Vor-Schritt-1-Code (Präsens bezieht sich auf diesen Zeitpunkt, nicht auf
+den heutigen Stand nach Schritt 1). Der tatsächlich umgesetzte,
+aktuell gültige Vertrag steht in Abschnitt 5 (R1.0, umgesetzt) und
+Abschnitt 13–19 (R1.1-Korrektur); diese Inventur bleibt als
+Planungsbeleg unverändert stehen.
+
 Am `#118`-HEAD `fd7e4e3ec58c9f3dda45710fd346752e083d7d19` real geprüft:
 
 - `main/app_main.cpp`: `NvsOwningContext::create()` initialisiert die
   `state_store`-Partition und öffnet real einen
   `device_platform_esp_idf::NvsStateStore` (Namespace `"fermentation"`
-  als Aufrufargument, nicht als Adapterdefault). Danach werden
+  als Aufrufargument, nicht als Adapterdefault). Danach wurden
   `device_platform::DevicePlatform platform;`,
   `fermentation::FermentationApplication application;` und
   `const device_platform_esp_idf::EspResetCauseSource resetCauseSource;`
   auf dem Stack konstruiert. `application.begin(platform,
-  &resetCauseSource)` erhält den Store aktuell **nicht**.
+  &resetCauseSource)` erhielt den Store zu diesem Zeitpunkt **nicht**.
 - `IPlatformServices` hat genau eine Methode (`ready()`), implementiert
   ausschließlich von `DevicePlatform` (`final`).
 - `FermentationApplication::begin(IPlatformServices&, const
@@ -280,9 +298,16 @@ Evidenz noch nicht liefert. Genau diese Luecke schliesst #119 (siehe
 `app_main()` (`main/app_main.cpp`) kehrt im Erfolgsfall **nie** zurueck
 (`for (;;) { ... }` nach dem Start); lokale Variablen auf oberster Ebene
 von `app_main()` (wie `stateStoreContext`, `platform`, `application`)
-leben damit bereits heute prozessweit. Das ist das bestehende, zu
-verwendende Lebenszeitmuster fuer neu hinzukommende
-Compositionsobjekte, kein neuer Mechanismus.
+leben damit prozessweit. Das war zum Zeitpunkt dieser Inventur (vor
+Schritt 1) das vorgesehene Lebenszeitmuster für **alle** neu
+hinzukommenden Compositionsobjekte. Die R1.1-Korrektur (Abschnitt 15)
+grenzt dieses Muster präziser ein: Prozesslebenszeit auf oberster
+`app_main()`-Ebene gilt nur noch für Objekte, die nach `begin()`
+tatsächlich weiterleben müssen (`NvsOwningContext`, `DevicePlatform`,
+`FermentationApplication`, optional `EspResetCauseSource`); alle
+boot-only Compositionsobjekte leben stattdessen im Scope des in
+Abschnitt 5.2/15 festgelegten `composeAndBeginApplication(...)`-Helpers
+und werden bei dessen Rückkehr automatisch (RAII) zerstört.
 
 ## 5. Architekturentscheidung (jetzt entschieden)
 
@@ -306,17 +331,22 @@ Gegenbeleg; kein `STOP – MATERIAL_ARCHITECTURE_DECISION_REQUIRED`.
 Kleinste damit festgelegte Composition:
 
 1. `main/app_main.cpp` (Composition Root) konstruiert nach erfolgreichem
-   `NvsOwningContext::create()` — mit derselben Lebenszeit wie der Store —
-   die bereits vorhandenen Fachobjekte `ConfigurationBootstrapStore`,
-   `ConfigurationGraphStore`, `ConfigurationMutationCoordinator`,
-   `ConfigurationService`, `ConfigurationRecoveryService` (via
-   `::create(...)`) und bedingt `RunPersistenceCoordinator`, alle über
-   den bereits geöffneten `NvsStateStore` (als `IStateStore&`). Das ist
-   ADR-013-konform: der Composition Root darf konkrete Anwendungsmodule
-   instanziieren. `RunRecoveryCoordinator` wird für #119 **nicht**
-   konstruiert (YAGNI, 5.4): `activate(...)` verlangt reale
-   Sensorevidenz, die #119 nicht liefert; die Dependency wird erst
-   eingeführt, wenn ein späteres Issue sie produktiv braucht.
+   `NvsOwningContext::create()` die bereits vorhandenen Fachobjekte
+   `ConfigurationBootstrapStore`, `ConfigurationGraphStore`,
+   `ConfigurationMutationCoordinator`, `ConfigurationService`,
+   `ConfigurationRecoveryService` (via `::create(...)`) und bedingt
+   `RunPersistenceCoordinator`, alle über den bereits geöffneten
+   `NvsStateStore` (als `IStateStore&`). Das ist ADR-013-konform: der
+   Composition Root darf konkrete Anwendungsmodule instanziieren. Die
+   exakte Lebenszeit ist **nicht** für jedes Objekt dieselbe wie die des
+   Store — sie ist objektweise in Abschnitt 5.5 klassifiziert und wird
+   technisch über den `composeAndBeginApplication(...)`-Boot-Helper
+   (Abschnitt 5.2/15) abgebildet: boot-only für alle hier genannten
+   Fachobjekte, Prozesslebenszeit nur für `NvsOwningContext`,
+   `DevicePlatform` und `FermentationApplication`. `RunRecoveryCoordinator`
+   wird für #119 **nicht** konstruiert (YAGNI, 5.4): `activate(...)`
+   verlangt reale Sensorevidenz, die #119 nicht liefert; die Dependency
+   wird erst eingeführt, wenn ein späteres Issue sie produktiv braucht.
 2. `FermentationApplication::begin(...)` erhält die bereits real
    erzeugten Boot-Ergebnisse und den bedingt konstruierten
    `RunPersistenceCoordinator` als zusätzliche, rein transiente
@@ -432,6 +462,33 @@ benannt, nicht in dieser Planrunde implementiert (Abschnitt 8/9).
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
 ```
 
+Dies ist der **konsolidierte, aktuell gültige** Vertrag (R1.1). Er ersetzt
+den ursprünglichen R1.0-Stack-Storage-Ansatz vollständig; es gibt keinen
+parallel gültigen älteren Vertrag mehr in diesem Abschnitt.
+
+**Boot-Composition-Helper (verbindlich, Ownerentscheidung):** Alle
+boot-only Fachobjekte werden von einem privaten,
+`main/app_main.cpp`-lokalen Helper konstruiert und komponiert, nicht auf
+oberster `app_main()`-Ebene:
+
+```cpp
+namespace {
+[[nodiscard]] bool composeAndBeginApplication(
+    device_platform::IStateStore& store,
+    device_platform::DevicePlatform& platform,
+    fermentation::FermentationApplication& application,
+    const device_platform_esp_idf::EspResetCauseSource& resetCauseSource);
+}  // namespace
+```
+
+Kein öffentliches Interface, kein Framework, keine neue
+`device_platform`-API — eine gewöhnliche freie Funktion im anonymen
+Namespace von `main/app_main.cpp`, exakt wie die bereits bestehende
+`NvsOwningContext`. Sie kapselt ausschließlich Boot-Composition und gibt
+**nur** den bestehenden Start-Erfolg (`bool`) zurück — nie einen großen
+Recovery-/Persistence-Typ by-value (siehe Begründung 14, Abschnitt zur
+`new T(...)`-Elision).
+
 Exakte Reihenfolge im Composition Root (`main/app_main.cpp`), alles vor
 `application.begin(...)`:
 
@@ -448,73 +505,133 @@ Exakte Reihenfolge im Composition Root (`main/app_main.cpp`), alles vor
    Partition) und muss deshalb jeden `IStateStore`-Consumer überleben,
    der aus dieser Referenz entsteht (5.5).
 3. `device_platform::DevicePlatform platform; platform.begin(...)`
-   (unverändert bestehend).
-4. `device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;`
+   (unverändert bestehend), auf oberster `app_main()`-Ebene
+   (Prozesslebenszeit).
+4. `app_main()` ruft
+   `composeAndBeginApplication(stateStoreContext->store(), platform,
+   application, resetCauseSource)` auf. Alles Folgende (Schritte 5–12)
+   läuft **innerhalb** dieses Helpers, boot-only, automatisch per RAII
+   zerstört bei dessen Rückkehr (5.5/15) — nicht mehr auf oberster
+   `app_main()`-Ebene.
+5. `device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;`
    (zustandslos, kein Init nötig).
-5. Auf oberster `app_main()`-Ebene (Prozesslebenszeit, siehe 4.3)
-   konstruiert: `ConfigurationMutationCoordinator mutationCoordinator;`,
-   `ConfigurationBootstrapStore bootstrapStore(store);`,
-   `ConfigurationGraphStore graphStore(store, timeZoneResolver);`,
-   `ConfigurationService configurationService(mutationCoordinator,
-   graphStore, timeZoneResolver);`.
-6. `auto configurationRecoveryService = ConfigurationRecoveryService::create(store, bootstrapStore, graphStore, configurationService, mutationCoordinator);`
-   Fehlerpfad: `== nullptr` → identisch zum bestehenden
-   `NvsOwningContext::create() == nullptr`-Muster: kompletter
-   Anwendungsstart abgebrochen, kein `application.begin(...)`. Dieser
-   Fall ist laut Abschnitt 4.2 ein reiner Verdrahtungsfehler der
-   Composition, kein Umweltfehler, und wird deshalb nicht als
-   Safety-Evidenz projiziert, sondern als Startfehler behandelt.
-7. `const auto configurationRecoveryResult = configurationRecoveryService->boot();`
+6. Im Helper-Scope konstruiert: `ConfigurationMutationCoordinator
+   mutationCoordinator;`, `ConfigurationBootstrapStore
+   bootstrapStore(store);`, `ConfigurationGraphStore graphStore(store,
+   timeZoneResolver);`, `ConfigurationService configurationService(
+   mutationCoordinator, graphStore, timeZoneResolver);`. Direkt danach,
+   noch unbedingt auf derselben Helper-Ebene deklariert, aber bewusst
+   noch **nicht belegt** (Default-Konstruktion auf `nullptr`):
+   `std::unique_ptr<fermentation::RunPersistenceCoordinator>
+   runPersistenceCoordinator;` und
+   `std::unique_ptr<fermentation::RunPersistenceLoadResult>
+   runPersistenceLoadResult;`. Diese Deklaration außerhalb jedes
+   bedingten Blocks ist zwingend: eine Deklaration innerhalb des
+   jeweiligen `if`-Blocks (Schritt 9/10) würde ihren Gültigkeitsbereich
+   vor `application.begin()` (Schritt 11) verlassen — exakt der
+   Block-Scope-Fehler, den bereits R1.0 ausschloss. Schritt 9/10 belegen
+   diese beiden bereits deklarierten Zeiger nur noch per `.reset(...)`,
+   sie deklarieren keine neuen Locals.
+7. `auto configurationRecoveryService = ConfigurationRecoveryService::create(store, bootstrapStore, graphStore, configurationService, mutationCoordinator);`
+   Fehlerpfad: `== nullptr` → Helper protokolliert und liefert `false`
+   zurück, `app_main()` bricht den Applikationsstart identisch zum
+   bestehenden `NvsOwningContext::create() == nullptr`-Muster ab, kein
+   `application.begin(...)`. Dieser Fall ist laut Abschnitt 4.2 ein
+   reiner Verdrahtungsfehler der Composition, kein Umweltfehler, und
+   wird deshalb nicht als Safety-Evidenz projiziert, sondern als
+   Startfehler behandelt.
+8. `const auto configurationRecoveryResult = configurationRecoveryService->boot();`
    Kein Abbruch hier: **jedes** Ergebnis, auch ein Fehlerstatus, wird
    unverändert an `application.begin(...)` weitergereicht (siehe 5.4) —
    fail-closed entsteht durch die bereits bestehende
    `SafetyCore`-Fehlerklassifikation, nicht durch frühen Abbruch.
-8. Nur wenn `configurationRecoveryResult.status` einer der drei
+9. Nur wenn `configurationRecoveryResult.status` einer der drei
    Erfolgsstatus ist (`RuntimeReady`, `FactoryInitializationCompleted`,
    `FactoryResetCompleted`):
    `auto runtimeRead = configurationService.acquireRuntime();`
    Nur wenn `runtimeRead.status == RuntimeConfigurationReadStatus::RuntimeLeaseGranted`:
-   `const auto storageEpoch = runtimeRead.lease.get().storageEpoch();`,
-   danach `runPersistenceCoordinator.emplace(store, storageEpoch, RunCheckpointSchedule{});`
-   (`std::optional<RunPersistenceCoordinator>` auf `app_main()`-Ebene).
-   Die Lease wird durch Scope-Ende der lokalen `runtimeRead` sofort
-   wieder freigegeben (RAII), bevor `application.begin()` läuft — kein
-   Lease wird über den Bootpfad hinaus gehalten.
-   In jedem anderen Fall (Recovery nicht erfolgreich, oder Erfolg aber
-   keine Lease erhalten) bleibt `runPersistenceCoordinator` leer. Es
-   wird **kein** Ersatzepoche (`StorageEpoch{1}` o. ä.) erfunden, nur
-   damit der Pfad kompiliert — genau das ist hiermit ausgeschlossen.
-9. `std::optional<RunPersistenceLoadResult> runPersistenceLoadResult;`
-   auf `app_main()`-Ebene (**nicht** innerhalb eines inneren Scopes) —
-   nur wenn `runPersistenceCoordinator` befüllt wurde:
-   `runPersistenceLoadResult.emplace(runPersistenceCoordinator->loadAndInitialize());`.
-   Damit gilt:
-   ```text
-   RunPersistenceCoordinator lifetime = app_main scope
-   RunPersistenceLoadResult lifetime = mindestens bis application.begin() zurückkehrt
+
+   ```cpp
+   runPersistenceCoordinator.reset(
+       new (std::nothrow) fermentation::RunPersistenceCoordinator(
+           store, runtimeRead.lease.get().storageEpoch(),
+           fermentation::RunCheckpointSchedule{}));
+   if (runPersistenceCoordinator == nullptr) {
+       ESP_LOGE(kTag, "boot composition allocation failed: RunPersistenceCoordinator");
+       return false;  // BOOT_COMPOSITION_ALLOCATION_FAILURE, sicherer Startabbruch (Abschnitt 17)
+   }
    ```
-   Ein `const auto` innerhalb des `if`-Blocks aus Schritt 8 würde seinen
-   Gültigkeitsbereich vor dem `begin()`-Aufruf verlassen — genau das
-   wird hiermit ausgeschlossen.
-10. `application.begin(platform, configurationService,
-    configurationRecoveryResult, runPersistenceCoordinator ?
-    &*runPersistenceCoordinator : nullptr, runPersistenceLoadResult ?
-    &*runPersistenceLoadResult : nullptr, &resetCauseSource);`
-    Kein `RunRecoveryCoordinator` wird konstruiert oder übergeben (siehe
-    Kleinste-Composition-Punkt 1 und 5.4/5.5 — YAGNI: #119 hat keinen
-    Aufrufer für `activate(...)`, der reale Sensorevidenz voraussetzt).
-    Der Bootbefund muss nach `begin()` nicht dauerhaft in der App
-    gespeichert werden (5.5).
+
+   Heap-owned via `std::unique_ptr`, boot-only (Helper-Scope), Allokation
+   über `new (std::nothrow)` — keine Exceptions (4). Die Lease wird durch
+   Scope-Ende der lokalen `runtimeRead` sofort wieder freigegeben (RAII),
+   bevor `application.begin()` läuft — kein Lease wird über den Bootpfad
+   hinaus gehalten. In jedem anderen Fall (Recovery nicht erfolgreich,
+   oder Erfolg aber keine Lease erhalten) bleibt `runPersistenceCoordinator`
+   `nullptr`. Es wird **kein** Ersatzepoche (`StorageEpoch{1}` o. ä.)
+   erfunden, nur damit der Pfad kompiliert — genau das ist hiermit
+   ausgeschlossen. Eine Allokationsfehler (`nullptr` aus `new
+   (std::nothrow)`) wird **nicht** wie "keine Lease erhalten" behandelt
+   — beides sind unterscheidbare Zustände (echtes Fehlen vs. Unfähigkeit,
+   real vorhandene Evidenz zu materialisieren) und dürfen nicht
+   zusammenfallen; ein Allokationsfehler bricht den Applikationsstart
+   sicher ab, statt mit `nullptr` weiterzulaufen und `begin()` eine
+   fehlende Persistence-Evidenz vorzutäuschen.
+10. Nur wenn `runPersistenceCoordinator != nullptr`:
+
+    ```cpp
+    runPersistenceLoadResult.reset(
+        new (std::nothrow) fermentation::RunPersistenceLoadResult(
+            runPersistenceCoordinator->loadAndInitialize()));
+    if (runPersistenceLoadResult == nullptr) {
+        ESP_LOGE(kTag, "boot composition allocation failed: RunPersistenceLoadResult");
+        return false;  // BOOT_COMPOSITION_ALLOCATION_FAILURE, sicherer Startabbruch (Abschnitt 17)
+    }
+    ```
+
+    `new (std::nothrow) T(prvalue_of_T)` statt `std::make_unique<T>(...)`
+    ist hier zwingend (nicht nur Stilfrage), siehe Abschnitt 14: nur die
+    Direktinitialisierung eines neuen Objekts aus einem Prvalue desselben
+    Typs erzwingt seit C++17 Copy-Elision und vermeidet den real im
+    Disassembly nachgewiesenen zusätzlichen ~3.808-Byte-Rückgabepuffer.
+    Damit gilt:
+    ```text
+    RunPersistenceCoordinator storage = heap-owned unique_ptr, boot-only (Helper-Scope)
+    RunPersistenceLoadResult storage  = heap-owned unique_ptr, boot-only (Helper-Scope)
+    ```
+11. `application.begin(platform, configurationService,
+    configurationRecoveryResult, runPersistenceCoordinator.get(),
+    runPersistenceLoadResult.get(), &resetCauseSource);` — reine
+    Zeigerübergabe (`.get()`), kein Ownership-Transfer an die
+    Application. Kein `RunRecoveryCoordinator` wird konstruiert oder
+    übergeben (siehe Kleinste-Composition-Punkt 1 und 5.4/5.5 — YAGNI:
+    #119 hat keinen Aufrufer für `activate(...)`, der reale
+    Sensorevidenz voraussetzt).
+12. Der Helper gibt `applicationStarted` (`bool`, Rückgabewert von
+    `application.begin(...)`) an `app_main()` zurück. Beim Verlassen des
+    Helper-Scopes werden `configurationRecoveryService`,
+    `runPersistenceLoadResult`, `runPersistenceCoordinator`,
+    `configurationService`, `graphStore`, `bootstrapStore`,
+    `mutationCoordinator`, `timeZoneResolver` automatisch (RAII, in
+    umgekehrter Deklarationsreihenfolge — die beiden `unique_ptr` sind
+    laut Schritt 6 vor `configurationRecoveryService` deklariert, ihr
+    tatsächlicher Belegungszeitpunkt per `.reset(...)` in Schritt 9/10
+    ändert diese Reihenfolge nicht) zerstört. Der Bootbefund muss
+    nach `begin()` nicht dauerhaft in der App gespeichert werden (5.5);
+    ein manuelles `.reset()` ist nicht nötig — die Scope-Grenze des
+    Helpers **ist** die Boot-only-Lebenszeit.
 
 ### 5.3 Fehlerpfade bei jedem Init-/Create-/Boot-/Load-Schritt
 
 | Schritt | Fehlerfall | Ergebnis |
 |---|---|---|
 | `NvsOwningContext::create()` | `nullptr` | Anwendungsstart abgebrochen (unverändert bestehend) |
-| `ConfigurationRecoveryService::create(...)` | `nullptr` (Identitätsverletzung, 4.2) | Anwendungsstart abgebrochen, kein `application.begin(...)` |
+| `ConfigurationRecoveryService::create(...)` | `nullptr` (Identitätsverletzung, 4.2) | Helper liefert `false`, Anwendungsstart abgebrochen, kein `application.begin(...)` |
 | `ConfigurationRecoveryService::boot()` | beliebiger Nicht-Erfolgsstatus | An `begin()` weitergereicht; `SafetyCoreInput.configurationValidated=false`; bestehende Fault-Klassifikation greift (`ConfigurationUnavailable`/`ConfigurationIntegrityFailure`/…) |
 | `ConfigurationService::acquireRuntime()` nach Boot-Erfolg | kein `RuntimeLeaseGranted` | Kein `RunPersistenceCoordinator` konstruiert; `configurationValidated` bleibt dennoch am realen Boot-Status ausgerichtet, `persistenceValidated=false` |
-| `RunPersistenceCoordinator::loadAndInitialize()` | jeder `RunPersistenceLoadStatus` ungleich der drei vertrauten Erfolgswerte (`NoPersistedRun`/`Current`/`NoActiveRun`) bzw. `FallbackRecovered` ohne Snapshot | `persistenceValidated=false`; Status unverändert real projiziert, keine stille Umdeutung |
+| `new (std::nothrow) RunPersistenceCoordinator(...)` (5.2 Schritt 9) | `nullptr` (Allokationsfehler) | `BOOT_COMPOSITION_ALLOCATION_FAILURE`, geloggt; Helper liefert `false`, Anwendungsstart abgebrochen, kein `application.begin(...)` mit vorgetäuscht fehlender Persistence-Evidenz (17) |
+| `new (std::nothrow) RunPersistenceLoadResult(...)` (5.2 Schritt 10) | `nullptr` (Allokationsfehler) | `BOOT_COMPOSITION_ALLOCATION_FAILURE`, geloggt; Helper liefert `false`, Anwendungsstart abgebrochen, identisch zur Zeile oben |
+| `RunPersistenceCoordinator::loadAndInitialize()` (erfolgreiche Allokation) | jeder `RunPersistenceLoadStatus` ungleich der drei vertrauten Erfolgswerte (`NoPersistedRun`/`Current`/`NoActiveRun`) bzw. `FallbackRecovered` ohne Snapshot | `persistenceValidated=false`; Status unverändert real projiziert, keine stille Umdeutung |
 
 Kein `NOT_RUN -> PASS`, kein Ersatzwert, kein stiller Erfolgsfall bei
 irgendeinem dieser Schritte (siehe auch Abschnitt 10).
@@ -625,22 +742,24 @@ begründet (dieselbe Regel wie für `RunRecoveryCoordinator`, 5.4).
 `FermentationApplication` erhält damit für #119 **keine neuen Member**;
 sie bleibt bei `platformServices_` und `safetyCore_`.
 
-Ownership/Lifetime (jedes Objekt genau einmal klassifiziert):
+Ownership/Lifetime (jedes Objekt genau einmal klassifiziert; konsolidierter
+R1.1-Endstand — `app_main()` bezeichnet die oberste Ebene, `Helper`
+bezeichnet den Scope von `composeAndBeginApplication(...)`, Abschnitt 5.2/15):
 
 | Objekt | Owner | Lifetime | Referenziert von | Nach `begin()` noch benötigt? |
 |---|---|---|---|---|
-| `NvsOwningContext` | `app_main()` | Gesamte Nutzungsdauer aller vom Store abhängigen Objekte / im aktuellen Composition Root Prozesslebenszeit (4.3) | Composition Root (liefert `store()`) | **Ja** — als alleiniger Lifetime-Owner des `NvsStateStore` und der initialisierten Partition (Destruktor zerstört Store, deinitialisiert danach Partition); muss jeden `IStateStore`-Consumer überleben, auch wenn der Context selbst nicht erneut aktiv abgefragt wird |
+| `NvsOwningContext` | `app_main()` | Gesamte Nutzungsdauer aller vom Store abhängigen Objekte / Prozesslebenszeit (4.3) | Composition Root (liefert `store()`) | **Ja** — als alleiniger Lifetime-Owner des `NvsStateStore` und der initialisierten Partition (Destruktor zerstört Store, deinitialisiert danach Partition); muss jeden `IStateStore`-Consumer überleben, auch wenn der Context selbst nicht erneut aktiv abgefragt wird |
 | `DevicePlatform` | `app_main()` | Prozesslebenszeit | Composition Root; `FermentationApplication` über `IPlatformServices&` (bestehend, unverändert) | Ja — bestehendes, unverändertes Muster (`platformServices_`) |
-| `EspResetCauseSource` | `app_main()` | Prozesslebenszeit | Composition Root; einmalig an `begin(...)` übergeben (bestehend, unverändert) | Nein — bestehendes Muster: nur beim `begin()`-Aufruf gelesen |
-| `EspTimeZoneResolver` | `app_main()` | Prozesslebenszeit | `ConfigurationGraphStore`, `ConfigurationService` (Konstruktorreferenz) | Nein von `FermentationApplication`; indirekt weiter von `ConfigurationGraphStore`/`ConfigurationService` gehalten |
-| `ConfigurationMutationCoordinator` | `app_main()` | Prozesslebenszeit | `ConfigurationService`, `ConfigurationRecoveryService` | Nein von `FermentationApplication` |
-| `ConfigurationBootstrapStore` | `app_main()` | Prozesslebenszeit | `ConfigurationRecoveryService` | Nein von `FermentationApplication` |
-| `ConfigurationGraphStore` | `app_main()` | Prozesslebenszeit | `ConfigurationService`, `ConfigurationRecoveryService` | Nein von `FermentationApplication` |
-| `ConfigurationService` | `app_main()` | Prozesslebenszeit | `ConfigurationRecoveryService` (Konstruktorreferenz); `begin(...)` erhält sie transient als Parameter | Nein als Member — nur transient während `begin()` gelesen (`mode()`, 5.4); kein nachweislicher laufender Zugriff in #119 |
-| `ConfigurationRecoveryService` | `app_main()` (`std::unique_ptr`) | Prozesslebenszeit | Composition Root | Nein von `FermentationApplication`; Composition Root behält ihn (spätere Factory-Reset-Auslösung ist kein #119-Scope) |
-| `std::optional<RunPersistenceCoordinator>` | `app_main()` | Prozesslebenszeit, falls befüllt | `begin(...)` erhält Zeiger transient | Nein als Member — nur transient während `begin()` gelesen; kein nachweislicher laufender Zugriff in #119 |
-| `std::optional<RunPersistenceLoadResult>` | `app_main()` | Mindestens bis `begin()` zurückkehrt | `begin(...)` erhält Zeiger transient | Nein — reiner Bootbefund, nur zur Projektion |
+| `EspResetCauseSource` | `app_main()` | Prozesslebenszeit | Composition Root; einmalig an `begin(...)` übergeben (bestehend, unverändert) | Nein — bestehendes Muster: nur beim `begin()`-Aufruf gelesen; bleibt außerhalb des Helpers, weil seine Lebenszeit fachlich unkritisch ist (nur transienter Lesezugriff) |
 | `FermentationApplication` | `app_main()` | Prozesslebenszeit | — | — |
+| `EspTimeZoneResolver` | `Helper` | Boot-only (Helper-Scope) | `ConfigurationGraphStore`, `ConfigurationService` (Konstruktorreferenz) | Nein — RAII-Ende bei Helper-Rückkehr |
+| `ConfigurationMutationCoordinator` | `Helper` | Boot-only (Helper-Scope) | `ConfigurationService`, `ConfigurationRecoveryService` | Nein — RAII-Ende bei Helper-Rückkehr |
+| `ConfigurationBootstrapStore` | `Helper` | Boot-only (Helper-Scope) | `ConfigurationRecoveryService` | Nein — RAII-Ende bei Helper-Rückkehr |
+| `ConfigurationGraphStore` | `Helper` | Boot-only (Helper-Scope) | `ConfigurationService`, `ConfigurationRecoveryService` | Nein — RAII-Ende bei Helper-Rückkehr |
+| `ConfigurationService` | `Helper` | Boot-only (Helper-Scope) | `ConfigurationRecoveryService` (Konstruktorreferenz); `begin(...)` erhält sie transient als Parameter | Nein als Member — nur transient während `begin()` gelesen (`mode()`, 5.4); RAII-Ende bei Helper-Rückkehr |
+| `ConfigurationRecoveryService` | `Helper` (`std::unique_ptr`) | Boot-only (Helper-Scope) | Helper | Nein von `FermentationApplication`; anders als im ursprünglichen R1.0-Entwurf **nicht** mehr über den Boot hinaus lebendig gehalten — `beginAuthorizedFactoryReset()` hat in #119 keinen Aufrufer (5.6), Prozesslebenszeit "auf Vorrat" widerspricht YAGNI; ein späteres Issue mit realem Bedarf führt die Dependency dann neu ein |
+| `std::unique_ptr<RunPersistenceCoordinator>` | `Helper` | Boot-only (Helper-Scope), heap-owned | `begin(...)` erhält Rohzeiger (`.get()`) transient | Nein als Member — nur transient während `begin()` gelesen; RAII-Ende bei Helper-Rückkehr |
+| `std::unique_ptr<RunPersistenceLoadResult>` | `Helper` | Boot-only (Helper-Scope), heap-owned | `begin(...)` erhält Rohzeiger (`.get()`) transient | Nein — reiner Bootbefund, nur zur Projektion; RAII-Ende bei Helper-Rückkehr |
 
 `ConfigurationBootstrapStore`, `ConfigurationGraphStore`,
 `ConfigurationMutationCoordinator` werden von `FermentationApplication`
@@ -649,16 +768,6 @@ Ownership/Lifetime (jedes Objekt genau einmal klassifiziert):
 5.6) und nur intern friend-referenziert, nie von außen aufgerufen.
 Keine widersprüchliche Aussage zwischen Bootreihenfolge (5.2), Signatur
 (oben) und dieser Tabelle.
-
-**R1.1-Korrektur dieser Tabelle:** Die Zeilen `std::optional<RunPersistenceCoordinator>`
-und `std::optional<RunPersistenceLoadResult>` beschreiben den realen,
-ownerreviewten Schritt-1-Stand (`app_main()`-Stack-Storage). Dieser Stand
-ist real WDT-fehlgeschlagen (Abschnitt 13) und wird durch Schritt 1.1
-(Abschnitt 14/15) auf `std::unique_ptr<RunPersistenceCoordinator>` bzw.
-`std::unique_ptr<RunPersistenceLoadResult>` korrigiert — Owner bleibt
-weiterhin `app_main()`, Referenzierung durch `begin(...)` bleibt
-transient/rohe Zeiger, nur der Storage-Ort wechselt von Stack auf Heap.
-Alle übrigen Zeilen dieser Tabelle bleiben unverändert gültig.
 
 ### 5.6 KISS-Prüfung der `FermentationApplication`-Schnittstelle
 
@@ -671,7 +780,7 @@ geprüft wurde für jedes Objekt aus Abschnitt 4, ob
 | `ConfigurationService` | Nein als Member | Kein nachweislicher laufender Zugriff in #119 (`update()` bleibt Platzhalter, Sensor-/UI-/Aktorintegration ist Nicht-Scope); nur transient während `begin()` für `mode()`/`acquireRuntime()` gelesen (5.4). Nicht mit "künftige Issues brauchen das später" begründet — wird bei nachgewiesenem Bedarf dann eingeführt |
 | `ConfigurationRecoveryResult` | Nein | Einmaliger Bootbefund, nicht laufend gültig; wird nur einmal in `SafetyCoreInput` projiziert |
 | `ConfigurationBootstrapStore`/`ConfigurationGraphStore`/`ConfigurationMutationCoordinator` | Nein | Reine interne Kollaborateure von `ConfigurationService`/`ConfigurationRecoveryService`, nie direkt von außen aufgerufen |
-| `ConfigurationRecoveryService` | Nein (für #119) | `beginAuthorizedFactoryReset()` hat in #119 keinen Aufrufer; Composition Root hält ihn ohnehin lebendig, falls ein späteres Issue ihn braucht — keine Signaturänderung nötig, da nicht über `FermentationApplication` geführt |
+| `ConfigurationRecoveryService` | Nein (für #119) | `beginAuthorizedFactoryReset()` hat in #119 keinen Aufrufer; boot-only im Helper-Scope gehalten (5.5), nicht länger prozessweit "auf Vorrat" — keine Signaturänderung nötig, da nicht über `FermentationApplication` geführt; ein späteres Issue mit realem Bedarf führt die Dependency dann neu ein |
 | `RunPersistenceCoordinator` | Nein als Member | Kein nachweislicher laufender Zugriff in #119 (dieselbe Begründung wie `ConfigurationService`); nur transient während `begin()` für `state()`/Projektion gelesen (5.4) |
 | `RunPersistenceLoadResult` | Nein | Einmaliger Bootbefund, nur zur Projektion |
 | `RunRecoveryCoordinator` | **Gar nicht konstruiert** (YAGNI, 5.4) | `activate(...)` verlangt reale Sensorevidenz, die #119 nicht liefert; keine Instanz "auf Vorrat" für ein späteres Issue |
@@ -759,19 +868,39 @@ erfüllt.
 
 ### Schritt 1.1 (R1.1, neu) – Composition-Root-Stack-Restrukturierung
 
-Ausschließlich im Composition Root (`main/app_main.cpp`), gemäß Abschnitt
-14/15: `std::optional<RunPersistenceCoordinator>` und
-`std::optional<RunPersistenceLoadResult>` durch heapbesitzende
-`std::unique_ptr<...>` mit Boot-only-Lebenszeit ersetzen. Keine
-Signaturänderung an `FermentationApplication::begin(...)` nötig (sie
-nimmt bereits rohe Zeiger, Abschnitt 5.5) und keine Änderung an
+Ausschließlich im Composition Root (`main/app_main.cpp`), gemäß dem
+konsolidierten Vertrag in Abschnitt 5.2/5.5:
+
+1. Den privaten, `app_main.cpp`-lokalen Boot-Composition-Helper
+   `composeAndBeginApplication(...)` einführen (5.2, **verbindlich**,
+   keine Owner-Option "kann auch entfallen"). Alle boot-only
+   Fachobjekte (`EspTimeZoneResolver`, `ConfigurationMutationCoordinator`,
+   `ConfigurationBootstrapStore`, `ConfigurationGraphStore`,
+   `ConfigurationService`, `ConfigurationRecoveryService`,
+   `ConfigurationRecoveryResult`, bedingt `RunPersistenceCoordinator`,
+   bedingt `RunPersistenceLoadResult`) in dessen Scope verschieben; nur
+   `NvsOwningContext`, `DevicePlatform`, `FermentationApplication` (und
+   optional `EspResetCauseSource`) bleiben auf oberster
+   `app_main()`-Ebene (5.5).
+2. `std::optional<RunPersistenceCoordinator>` und
+   `std::optional<RunPersistenceLoadResult>` durch heapbesitzende
+   `std::unique_ptr<...>` mit `new (std::nothrow) T(...)`-Allokation und
+   explizitem `BOOT_COMPOSITION_ALLOCATION_FAILURE`-Fehlerpfad ersetzen
+   (5.2 Schritte 9–10, 17). Für `RunPersistenceLoadResult` zwingend
+   `new (std::nothrow) T(prvalue_of_T)`, nicht `make_unique` (14).
+3. Heap-Nachweis um `heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)`
+   an den in Abschnitt 17 benannten Bootpunkten ergänzen.
+
+Keine Signaturänderung an `FermentationApplication::begin(...)` nötig
+(sie nimmt bereits rohe Zeiger, Abschnitt 5.5) und keine Änderung an
 `RunPersistenceCoordinator` selbst. Details, Zielarchitektur, Boot-only-
-Lebenszeit und Kriterien: Abschnitt 13–18.
+Lebenszeit und Kriterien: Abschnitt 13–19.
 
 Gate: `APP_MAIN_ENTRY_FRAME_AFTER < CONFIGURED_MAIN_TASK_STACK` (Abschnitt
-16, statisch nach dem Build gemessen); Architekturgrenzen weiterhin
-`PASS`; kein Verhaltensunterschied in Configuration-/Run-Recovery,
-Safety-Projektion, Wireformaten.
+16, statisch nach dem Build gemessen, notwendig aber nicht hinreichend);
+Architekturgrenzen weiterhin `PASS`; kein Verhaltensunterschied in
+Configuration-/Run-Recovery, Safety-Projektion, Wireformaten;
+`BOOT_COMPOSITION_ALLOCATION_FAILURE`-Pfad vorhanden und fail-closed.
 
 **Status: `NOT_STARTED`. Eigenes Owner-Gate, unabhängig von Schritt 1.**
 
@@ -852,7 +981,7 @@ verlinkt, aber nicht durch #119-Fortschritt automatisch geschlossen.
 | Produkt-Boot-Orchestrierung und Safety-Projektion festgelegt (5.4) | `PASS` |
 | `begin(...)`-Signatur, Ownership/Lifetime festgelegt, nicht auf Schritt 1 verschoben (5.5) | `PASS` |
 | KISS-Prüfung der `FermentationApplication`-Schnittstelle (5.6) | `PASS` |
-| `RunPersistenceLoadResult`-Lebenszeit korrigiert (app_main-Scope statt Blockscope, 5.2) | `PASS` |
+| `RunPersistenceLoadResult`-Lebenszeit korrigiert (damals: app_main-Scope statt Blockscope; R1.1 konsolidiert dieselbe Garantie als Helper-Scope statt Blockscope, siehe aktuelle Deklaration in 5.2 Schritt 6) | `PASS` |
 | `RunRecoveryCoordinator` per YAGNI aus Composition/Signatur entfernt (5.4/5.5/5.6) | `PASS` |
 | Ownership/Lifetime-Tabelle vollständig, widerspruchsfrei (`ConfigurationService` ergänzt, 5.5) | `PASS` |
 | `ITimeZoneResolver`-Begründung auf Port-/Issue-55-Vertrag als normative Quelle korrigiert (5.1) | `PASS` |
@@ -945,37 +1074,12 @@ gemessen 12.160 Byte (`sizeof(std::optional<RunPersistenceCoordinator>)`
 `ConfigurationBootstrapStore`, `ConfigurationGraphStore`) sind zusammen
 real unter 100 Byte groß.
 
-**Festgelegte Variante (genau eine, keine Alternative offen):**
-
-In `main/app_main.cpp` werden ausschließlich
-
-```cpp
-std::optional<RunPersistenceCoordinator> runPersistenceCoordinator;
-std::optional<RunPersistenceLoadResult> runPersistenceLoadResult;
-```
-
-durch
-
-```cpp
-std::unique_ptr<fermentation::RunPersistenceCoordinator> runPersistenceCoordinator;
-std::unique_ptr<fermentation::RunPersistenceLoadResult> runPersistenceLoadResult;
-```
-
-ersetzt. Konstruktion weiterhin bedingt durch dasselbe
-Recovery-Status-Gate wie heute (Abschnitt 5.2/5.4, unverändert):
-
-```cpp
-if (/* wie bisher: RuntimeReady | FactoryInitializationCompleted |
-       FactoryResetCompleted, gefolgt von RuntimeLeaseGranted */) {
-    runPersistenceCoordinator = std::make_unique<fermentation::RunPersistenceCoordinator>(
-        store, runtimeRead.lease.get().storageEpoch(),
-        fermentation::RunCheckpointSchedule{});
-}
-if (runPersistenceCoordinator != nullptr) {
-    runPersistenceLoadResult.reset(new fermentation::RunPersistenceLoadResult(
-        runPersistenceCoordinator->loadAndInitialize()));
-}
-```
+**Festgelegte Variante (genau eine, keine Alternative offen):** der
+vollständige, konsolidierte Vertrag (Storage-Typen, Boot-Composition-
+Helper, Allokations-/Fehlerpfad) steht kanonisch in Abschnitt 5.2/5.5;
+dieser Abschnitt liefert nur die Messevidenz und die technische
+Begründung, warum `new (std::nothrow) T(...)` statt
+`std::make_unique<T>(...)` für `RunPersistenceLoadResult` zwingend ist.
 
 **Warum `new T(...)` statt `std::make_unique<T>(...)` für
 `runPersistenceLoadResult` (kein Stilfehler, technisch notwendig):**
@@ -1016,20 +1120,22 @@ Ownership-Transfer). Keine Änderung an `RunPersistenceCoordinator`,
 Ownership/Ressourcenmanagement im Composition Root.
 
 Kein `static`, kein globales Singleton, kein Service Locator, kein
-DI-Container, keine neue `device_platform`-API. Ein privater,
-`app_main.cpp`-lokaler Boot-Helper (z. B. eine kleine freie Funktion, die
-die obige bedingte Konstruktion kapselt) ist zulässig, wenn er die
-Boot-only-Lebenszeit klar ausdrückt — er ist keine neue Architektur/API
-und bleibt intern zu `main/app_main.cpp`.
+DI-Container, keine neue `device_platform`-API. Der in Abschnitt 5.2
+festgelegte private, `app_main.cpp`-lokale Boot-Composition-Helper
+`composeAndBeginApplication(...)` ist keine neue Architektur/API — eine
+gewöhnliche freie Funktion im anonymen Namespace, intern zu
+`main/app_main.cpp`, wie das bereits bestehende `NvsOwningContext`-Muster.
 
-**Verbindlich für einen solchen Helper:** Er darf `RunPersistenceLoadResult`
-ausschließlich über `std::unique_ptr<RunPersistenceLoadResult>`
-zurückgeben (Zeigergröße als Rückgabewert), **nie** `RunPersistenceLoadResult`
-by-value. Ein By-Value-Rückgabetyp würde denselben versteckten
+**Verbindlich für den Helper:** Er darf `RunPersistenceLoadResult`
+ausschließlich über `std::unique_ptr<RunPersistenceLoadResult>` nach
+außen tragen (nie `RunPersistenceLoadResult` by-value) und insgesamt nur
+`bool` an `app_main()` zurückgeben (5.2 Schritt 12). Ein By-Value-
+Rückgabetyp für `RunPersistenceLoadResult` würde denselben versteckten
 Rückgabepuffer erneut im Frame der aufrufenden Funktion erzeugen (siehe
 Begründung oben) und die `new T(...)`-Elision zunichtemachen, egal wie
-der Helper intern konstruiert. Das `new T(...)`-Konstrukt selbst gehört
-in den Helper hinein, nicht an die Aufrufstelle verschoben.
+der Helper intern konstruiert. Das `new (std::nothrow) T(...)`-Konstrukt
+gehört in den Helper hinein (5.2 Schritt 10), nicht an die Aufrufstelle
+verschoben.
 
 ## 15. R1.1 – Boot-only-Lebenszeit
 
@@ -1039,29 +1145,29 @@ Real geprüft (`lib/fermentation_app/src/fermentation_application.hpp`):
 noch `runPersistenceLoadResult` (noch `configurationService`,
 `configurationRecoveryResult`) werden von `begin(...)` als Member
 gespeichert — sie sind bereits heute rein transient (Abschnitt 5.5,
-unverändert bestätigt). Die R1.1-Korrektur ändert damit **nur den
-Storage-Ort** (Stack -> Heap), nicht die Lebenszeit- oder
-Zugriffssemantik.
+bestätigt).
 
-Freigabe der Boot-transienten Heapobjekte in `app_main()`, sobald kein
-realer Consumer sie mehr besitzt — spätestens direkt nach dem
-`application.begin(...)`-Aufruf:
-
-```cpp
-const bool applicationStarted = application.begin(
-    platform, configurationService, configurationRecoveryResult,
-    runPersistenceCoordinator.get(), runPersistenceLoadResult.get(),
-    &resetCauseSource);
-
-runPersistenceLoadResult.reset();
-runPersistenceCoordinator.reset();
-```
+Die R1.1-Korrektur bildet diese Boot-only-Lebenszeit nicht nur über den
+Storage-Ort ab (Stack -> Heap), sondern zusätzlich über einen echten
+Scope: alle boot-only Fachobjekte werden ausschließlich innerhalb des in
+Abschnitt 5.2 festgelegten `composeAndBeginApplication(...)`-Helpers
+konstruiert. Ihre Lebenszeit **ist** damit exakt der Helper-Scope — kein
+manuelles `.reset()` nötig, kein Risiko einer vergessenen/falsch
+angeordneten Freigabe: Der C++-Compiler zerstört beim Verlassen des
+Helpers (regulärer Return **und** jeder frühe `return false;`-Fehlerpfad,
+5.2/5.3) automatisch alle lokalen Objekte in umgekehrter
+Konstruktionsreihenfolge (RAII), einschließlich
+`runPersistenceLoadResult`, `runPersistenceCoordinator` und
+`configurationRecoveryService`. `app_main()` selbst hält nach dem Aufruf
+von `composeAndBeginApplication(...)` keine Referenz mehr auf diese
+Objekte.
 
 `NvsOwningContext`-Vertrag bleibt unverändert: `store()` bleibt
 nicht-besitzend; der Context bleibt alleiniger Owner von
 `NvsStateStore` und Partition (Abschnitt 5.5, unverändert) — er wird
 durch Schritt 1.1 nicht berührt, da `RunPersistenceCoordinator` den
-Store nur referenziert, nicht besitzt.
+Store nur referenziert, nicht besitzt, und die an den Helper übergebene
+`IStateStore&`-Referenz dessen Lebenszeit nicht beeinflusst.
 
 ## 16. R1.1 – Main-Task-Stack-Kriterium
 
@@ -1082,51 +1188,75 @@ CONFIGURED_MAIN_TASK_STACK=3584
 ```
 
 **Überschlägige Restrechnung (Schätzung, kein Beweis, ersetzt die
-Pflichtmessung nicht):** Die beiden entfernten Stack-Locals allein tragen
-real gemessen 12.160 Byte
-(`sizeof(std::optional<RunPersistenceCoordinator>)` = 8.344,
-`sizeof(std::optional<RunPersistenceLoadResult>)` = 3.816); ohne die
-`new T(...)`-Korrektur aus Abschnitt 14 bliebe damit ein Rest von
-16.432 − 12.160 = 4.272 Byte — 688 Byte **über** dem 3.584-Byte-Budget.
-Der reale Disassembly-Befund aus Abschnitt 14 zeigt aber eine dritte,
-bislang nicht mitgezählte Region: der `loadAndInitialize()`-Rückgabewert
-belegt zusätzlich zur Optional-Speicherung (`a1+16+0x2210`) einen
-separaten Temporärpuffer bei `a1+16+0x3108` — 0xEF8 = 3.832 Byte
-Abstand, konsistent mit `sizeof` 3.808 plus Alignment. Vollständig
-gerechnet: 8.344 (Coordinator) + 3.816 (Optional) + ~3.808
-(Rückgabepuffer) = 15.968 von 16.432 Byte, d. h. nur ~464 Byte
-verbleiben für alle übrigen benannten Locals (< 100 Byte, Abschnitt 14)
-und die Register-Save-Fläche. Die `new T(...)`-Korrektur entfernt genau
-diesen dritten Puffer (garantierte Elision, Abschnitt 14) zusätzlich zu
-den beiden Locals — die realistische Restgröße liegt damit eher bei
-~464 Byte als bei 4.272 Byte, **falls** der Boot-Helper exakt wie in
-Abschnitt 14 festgelegt implementiert wird (`std::unique_ptr`-Rückgabe,
-nicht `RunPersistenceLoadResult`-by-value). `-Og`-Frames sind trotzdem
-nicht strikt additiv/subtraktiv über Codeänderungen hinweg (Spill-/
-Temporärflächen werden neu verteilt, nicht nur gelöscht) — beide Zahlen
-(4.272 ohne, ~464 mit der `new T(...)`-Korrektur) sind Schätzungen; die
-tatsächliche `APP_MAIN_ENTRY_FRAME_AFTER`-Zahl kann nur durch einen
-echten Build mit Debuginfo (wie in Abschnitt 13/14 für die Vorher-Werte
-verwendet) bestimmt werden. Diese Messung ist ausdrücklich **nicht**
-Teil dieser PLAN-ONLY-Runde (Abschnitt 6 des Auftrags); ein nicht
-commiteter Diagnose-Build in einem separaten
-Arbeitsbaum (analog zum `fd7e4e3`-Baseline-Vorgehen aus PR #120) ist eine
-Option, die der Owner nach Freigabe dieser Datei separat autorisieren
-kann, bevor Schritt 1.1 committet wird. Sollte das Kriterium nach realer
-Umsetzung nicht erfüllt sein, ist das ein neuer, eigener Befund für den
-Owner (siehe unten) — keine Vorwegnahme in dieser Planrunde.
+Pflichtmessung nicht):** Mit dem konsolidierten Vertrag (5.2) verschieben
+sich die boot-only Fachobjekte vollständig aus `app_main()`s eigenem
+Frame in den separaten Frame des `composeAndBeginApplication(...)`-
+Helpers — `app_main()` selbst behält nach Schritt 1.1 nur noch
+`stateStoreContext` (`unique_ptr`, 4 Byte), `platform`
+(`DevicePlatform`, 8 Byte), `application` (`FermentationApplication`,
+20 Byte), `resetCauseSource` (`EspResetCauseSource`, 4 Byte),
+`startupContext` (klein) und `applicationStarted` (`bool`, 1 Byte) —
+zusammen real unter 100 Byte an benannten Locals, weit unter dem
+3.584-Byte-Budget selbst mit grosszügiger `-Og`-Spill-/Aufruf-Reserve.
+`APP_MAIN_ENTRY_FRAME_AFTER` bezeichnet **ausschliesslich** diesen
+`app_main()`-eigenen Frame, nicht den Frame des Helpers.
 
-Notwendiges statisches Kriterium:
+Der Helper selbst trägt die vormals in `app_main()` benannten Locals:
+`EspTimeZoneResolver`(4) + `ConfigurationMutationCoordinator`(1) +
+`ConfigurationBootstrapStore`(4) + `ConfigurationGraphStore`(8) +
+`ConfigurationService`(232) + `unique_ptr<ConfigurationRecoveryService>`(4)
++ `ConfigurationRecoveryResult`(44) +
+`unique_ptr<RunPersistenceCoordinator>`(4) +
+`unique_ptr<RunPersistenceLoadResult>`(4) + `runtimeRead`
+(`RuntimeConfigurationReadResult`, Größe nicht gemessen) — zusammen
+deutlich unter 1 KiB an benannten Locals; keine mehrere-KiB-Objekte mehr
+in diesem Frame, da beide `RunPersistenceCoordinator`/
+`RunPersistenceLoadResult` nur noch als 4-Byte-Zeiger auftreten (5.2) und
+der `new (std::nothrow) T(loadAndInitialize())`-Aufruf (5.2 Schritt 10)
+per garantierter C++17-Elision direkt in den Heap schreibt, ohne
+Rückgabepuffer im Helper-Frame.
+
+Beide Frames (`app_main()` und Helper) existieren während des Boots
+gleichzeitig auf demselben `main`-Task-Stack (Aufrufkette, kein
+Kontextwechsel) — ihre Summe, nicht nur `app_main()`s eigener Frame,
+bestimmt den tatsächlichen Spitzenverbrauch während der Composition.
+Deshalb bleibt der Kriteriumsvergleich unten ausdrücklich **notwendig,
+aber nicht hinreichend**: er beweist nur, dass `app_main()` selbst nicht
+erneut zur direkten Ursache eines Überlaufs wird (Regressionsschutz für
+genau diese Bugklasse), nicht dass die volle Aufrufkette inklusive
+Helper und aller ESP-IDF-internen Frames (NVS, Flash, Crosscore-IPC,
+siehe PR #120) innerhalb des Budgets bleibt. Diese vollständige Aussage
+liefert erst die reale `RUNTIME_STACK_HWM_BYTES`-Messung unter echtem
+Recovery-Workload weiter unten — kein Whole-ROM-Callgraph, keine
+prophylaktische Stackvergrösserung im Vorgriff darauf.
+
+Beide Zahlen (app_main()-Frame < 100 Byte, Helper-Frame < 1 KiB) sind
+Schätzungen aus benannten Locals; `-Og`-Frames sind nicht strikt
+additiv/subtraktiv über Codeänderungen hinweg (Spill-/Temporärflächen
+werden neu verteilt, nicht nur gelöscht). Die tatsächlichen
+`APP_MAIN_ENTRY_FRAME_AFTER`-Werte (für `app_main()` und optional den
+Helper) können nur durch einen echten Build mit Debuginfo (wie in
+Abschnitt 13/14 für die Vorher-Werte verwendet) bestimmt werden. Diese
+Messung ist ausdrücklich **nicht** Teil dieser PLAN-ONLY-Runde
+(Abschnitt 6 des Auftrags); ein nicht commiteter Diagnose-Build in einem
+separaten Arbeitsbaum (analog zum `fd7e4e3`-Baseline-Vorgehen aus
+PR #120) ist eine Option, die der Owner nach Freigabe dieser Datei
+separat autorisieren kann, bevor Schritt 1.1 committet wird.
+
+Notwendiges statisches Kriterium (notwendig, nicht hinreichend):
 
 ```text
 APP_MAIN_ENTRY_FRAME_AFTER < CONFIGURED_MAIN_TASK_STACK
 ```
 
-Keine erfundene Prozentreserve. Sollte dieses Kriterium nach Schritt 1.1
-nicht erfüllt sein, ist das ein neuer, eigener Befund für den Owner —
-kein automatischer Rückfall auf `MAIN_TASK_STACK_BLANKET_INCREASE`.
+Keine erfundene Prozentreserve, kein Whole-ROM-Callgraph, keine
+prophylaktische Stackvergrösserung. Sollte dieses Kriterium nach
+Schritt 1.1 nicht erfüllt sein, ist das ein neuer, eigener Befund für
+den Owner — kein automatischer Rückfall auf
+`MAIN_TASK_STACK_BLANKET_INCREASE`.
 
-Erst danach real:
+Erst danach real, als die eigentliche hinreichende Aussage über die
+volle Aufrufkette:
 
 ```text
 FULL_RUNTIME_STACK_HEADROOM
@@ -1136,39 +1266,91 @@ RUNTIME_STACK_HWM_BYTES=<measured under real recovery workload>
 Nur diese reale HWM (nicht der Entry-Frame-Wert) darf einen separaten,
 gemessenen Stackgrößenbedarf begründen — und nur, nachdem die
 strukturelle Korrektur bereits umgesetzt ist (Abschnitt 1 der
-Owner-Entscheidung, unverändert).
+Owner-Entscheidung, unverändert). Zeigt diese reale HWM später einen
+moderaten Mehrbedarf, ist das **STOP für eine eigene, gesonderte
+Ownerentscheidung** — keine automatische Stackanpassung durch den
+Agenten, auch nicht nach erfolgter Restrukturierung.
 
-## 17. R1.1 – Heapwirkung
+## 17. R1.1 – Heapwirkung und Allocation-Failure-Vertrag
 
 Da `RunPersistenceCoordinator` (8.336 Byte) und
 `RunPersistenceLoadResult` (bis zu 3.808 Byte) vom Stack auf den Heap
 verschoben werden, ist für die spätere Umsetzung real zu messen (kein
-Zielwert wird hier vorweggenommen):
+Zielwert wird hier vorweggenommen). Die gesamte freie Heapmenge allein
+ist keine ausreichende Evidenz, da insbesondere 8.336 Byte am Stück
+allokierbar sein müssen — Fragmentierung kann eine ausreichende
+Gesamtsumme trotzdem unzuteilbar machen. Zusätzlich zu den bisherigen
+Messpunkten wird deshalb an denselben Bootpunkten der grösste frei
+allokierbare 8-Bit-fähige Block erfasst, über die bereits vorhandene
+ESP-IDF-Heap-API (`heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)`,
+keine neue Memory-Abstraktion):
 
 ```text
 BOOT_HEAP_BEFORE_COMPOSITION
+BOOT_HEAP_LARGEST_BLOCK_BEFORE_COMPOSITION
 BOOT_HEAP_MIN_DURING_COMPOSITION
+BOOT_HEAP_LARGEST_BLOCK_AFTER_COORDINATOR_ALLOCATION
+BOOT_HEAP_LARGEST_BLOCK_AFTER_LOAD_RESULT_ALLOCATION
 BOOT_HEAP_AFTER_BOOT_TRANSIENTS_RELEASED
 ```
 
-Kein eigener Allocator, keine vorsorgliche neue Speicherplattform. Die
-Freigabe nach Abschnitt 15 (`.reset()` direkt nach `begin()`) hält die
-Heap-Spitzenlast auf die Dauer der Composition/Recovery begrenzt statt
-für die gesamte Prozesslaufzeit.
+Kein eigener Allocator, keine vorsorgliche neue Speicherplattform, kein
+willkürlicher Reservefaktor. Die RAII-Freigabe beim Verlassen des
+Helper-Scopes (Abschnitt 15) hält die Heap-Spitzenlast auf die Dauer der
+Composition/Recovery begrenzt statt für die gesamte Prozesslaufzeit. Der
+reale erfolgreiche Produktboot plus diese Messwerte sind die Evidenz.
 
-## 18. R1.1 – Recovery-/Safety-Vertrag unverändert
+**Allocation-Failure-Vertrag (fail-closed, kein impliziter
+`std::bad_alloc`/Abort-Vertrag):** Beide grossen R1.1-Allokationen
+(`RunPersistenceCoordinator`, `RunPersistenceLoadResult`, 5.2 Schritte
+9–10) verwenden `new (std::nothrow) T(...)` statt `new T(...)` — keine
+Exceptions werden aktiviert oder benötigt (konsistent mit dem
+bestehenden ESP-IDF-/C++17-Targetvertrag dieses Repositories). Liefert
+eine der beiden Allokationen `nullptr`:
 
-Durch Schritt 1.1 nicht verändert: `StorageEpoch`-Quelle;
-Configuration-Recovery-Reihenfolge (Abschnitt 5.2); reale
-`SafetyCoreInput`-Projektion (Abschnitt 5.4);
-`RunPersistenceCoordinator::loadAndInitialize()` und alle übrigen
-`RunPersistenceCoordinator`-Methoden; SafetyCore-Projektion;
-Fail-closed-Semantik (Abschnitt 10); `EspTimeZoneResolver` (Abschnitt
-5.1); Callback-12-Vertrag; Run-/Configuration-Wireformate;
-App-/Platform-Abhängigkeitsrichtung (Abschnitt 2/3); NVS-Partition und
--Backend (Abschnitt 9 unverändert). Der Fix ist ausschließlich
-Ownership-/Ressourcenmanagement im Composition Root, keine neue
-Recoverysemantik.
+```text
+BOOT_COMPOSITION_ALLOCATION_FAILURE
+-> explizit loggen (ESP_LOGE, wie die übrigen Composition-Fehlerpfade, 5.3)
+-> kein application.begin() mit erfundener/fehlender Persistence-Evidenz
+-> sicherer Startabbruch (Helper liefert false, wie jeder andere
+   Composition-Fehlerpfad in 5.3)
+```
+
+Eine fehlgeschlagene Allokation wird **nicht** wie "keine
+`RuntimeLeaseGranted`-Lease erhalten" behandelt (5.2 Schritt 9) — das
+wäre eine stille Umdeutung eines Ressourcenfehlers in einen fachlich
+harmlosen "kein aktiver Lauf"-Zustand und würde `application.begin()`
+eine tatsächlich vorhandene, aber nicht materialisierbare
+Persistence-Evidenz vorenthalten, ohne das kenntlich zu machen. Kein
+eigener Allocator, kein globales Failed-Allocation-Framework.
+
+## 18. R1.1 – Recovery-/Safety-/Platform-Vertrag unverändert
+
+Durch Schritt 1.1 nicht neu entworfen oder verändert:
+
+- `StorageEpoch`-Quelle (Abschnitt 4.2/5.2);
+- Recovery-Status-Gates (Abschnitt 5.2/5.3);
+- `ConfigurationRecoveryService::create(...)` und `::boot()`
+  (Abschnitt 5.2/5.3);
+- `RunPersistenceCoordinator::loadAndInitialize()` und alle übrigen
+  `RunPersistenceCoordinator`-Methoden (Abschnitt 5.2);
+- reale `SafetyCoreInput`-Projektion und SafetyCore-Projektion
+  (Abschnitt 5.4);
+- Fail-closed-Semantik (Abschnitt 10);
+- `EspTimeZoneResolver` (Abschnitt 5.1);
+- `FermentationApplication::begin(...)`-Signatur (Abschnitt 5.5,
+  unverändert — keine Signaturänderung durch Schritt 1.1 nötig);
+- `RunRecoveryCoordinator` bleibt ausserhalb #119 (YAGNI, Abschnitt 5.4);
+- NVS-Partition und -Backend (Abschnitt 9);
+- Callback-12-Vertrag;
+- Run-/Configuration-Wireformate und -Schemas;
+- `device_platform::IStateStore` (Abschnitt 4);
+- `device_platform::IPlatformServices` (Abschnitt 5);
+- Device-Platform-Abhängigkeitsrichtung (Abschnitt 2/3).
+
+Der Fix ist ausschließlich Ownership-/Ressourcenmanagement im
+Composition Root, keine neue Recoverysemantik und keine Ausweitung
+dieser Planbereinigung in eine neue Architekturrevision.
 
 ## 19. R1.1 – Schritt-2-Verifikation nach Umsetzung (Vertrag, nicht Teil dieser Runde)
 
@@ -1207,20 +1389,26 @@ PRODUCT_RECOVERY_MISMATCH=NOT_EVALUATED_BOOT_WDT_BEFORE_RECOVERY
 | Ownerentscheidung `BOOT_STACK_FIX_DIRECTION=RESTRUCTURE_COMPOSITION_ROOT` übernommen (Abschnitt 1 des Auftrags) | `PASS` |
 | `MAIN_TASK_STACK_BLANKET_INCREASE` als primärer Fix zurückgewiesen und nicht Teil dieser Revision | `PASS` |
 | Reale Zielgrößen im Release-Target gemessen (nicht Host/native), genau die angefragten fünf Typen (Abschnitt 14) | `PASS` |
-| Genau eine konkrete Zielvariante festgelegt, keine Alternativen offen (Abschnitt 14) | `PASS` |
-| Boot-only-Lebenszeit technisch abgebildet, `FermentationApplication` weiterhin ohne neue Member (Abschnitt 15) | `PASS` |
+| Genau eine konkrete Zielvariante festgelegt, keine Alternativen offen, direkt in den kanonischen Abschnitten (5.2/5.5/8), keine parallele alte Fassung (Reviewkorrektur Punkt 1) | `PASS` |
+| Privater Boot-Composition-Helper `composeAndBeginApplication(...)` als verbindliche Entscheidung festgelegt, nicht nur "zulässig" (Reviewkorrektur Punkt 2, Abschnitt 5.2/8) | `PASS` |
+| Boot-only-Lebenszeit über Helper-Scope/RAII technisch abgebildet, `FermentationApplication` weiterhin ohne neue Member (Abschnitt 15) | `PASS` |
 | Keine Signaturänderung an `FermentationApplication::begin(...)` nötig, real anhand des Headers geprüft (Abschnitt 15) | `PASS` |
-| `RunPersistenceCoordinator`/`RunPersistenceLoadResult`/Wireformate intern unverändert (Abschnitt 14/18) | `PASS` |
-| Main-Task-Stack-Kriterium ohne erfundene Reserve definiert (Abschnitt 16) | `PASS` |
-| Heapwirkung als Messpunkt (kein Zielwert) vorgesehen (Abschnitt 17) | `PASS` |
-| Recovery-/Safety-Vertrag als unverändert bestätigt (Abschnitt 18) | `PASS` |
+| `RunPersistenceCoordinator`/`RunPersistenceLoadResult`/Wireformate intern unverändert; Storage exakt `unique_ptr`, boot-only, `.get()`-Zeigerübergabe (Abschnitt 5.2/14/18) | `PASS` |
+| Allocation-Failure-Vertrag explizit, fail-closed, `new (std::nothrow) T(...)`, kein Exceptions-Vertrag (Reviewkorrektur Punkt 4, Abschnitt 5.2/17) | `PASS` |
+| Heapnachweis um zusammenhängende Allokierbarkeit (`heap_caps_get_largest_free_block`) ergänzt (Reviewkorrektur Punkt 5, Abschnitt 17) | `PASS` |
+| Main-Task-Stack-Kriterium sauber getrennt: notwendig/nicht hinreichend, kein Whole-ROM-Callgraph, STOP bei realem Mehrbedarf (Reviewkorrektur Punkt 6, Abschnitt 16) | `PASS` |
+| Recovery-/Safety-/Platform-Vertrag vollständig als unverändert bestätigt (Reviewkorrektur Punkt 7, Abschnitt 18) | `PASS` |
 | Schritt-2-Vertrag nach Umsetzung vollständig wieder aufgenommen (Abschnitt 19) | `PASS` |
+| Veraltete Gegenwartsformulierungen aus der Vor-Schritt-1-Inventur als historisch gekennzeichnet (Reviewkorrektur Punkt 8, Abschnitt 1/4) | `PASS` |
 | `MATERIAL_ARCHITECTURE_DECISION_OPEN` | `NO` |
 | Kein Service Locator, DI-Container, Singleton, `static`, neue Device-Platform-API | `PASS` |
 | Neue Produktions-/Testimplementation in dieser Runde | `NOT_RUN` / nicht enthalten (PLAN ONLY) |
+| `R1_1_CANONICAL_CONSOLIDATION` | `PASS` |
+| `OLD_OPTIONAL_STORAGE_AS_CURRENT_CONTRACT` | `NONE` |
 | `ROADMAP_SYNC` (`docs/ROADMAP.md`, gleicher Commit wie diese Datei) | `PASS` |
-| `PR_120_BODY_SYNC` | wird nach diesem Commit per PR-Bearbeitung/-Kommentar nachgezogen, siehe SESSION HANDOVER |
-| `ISSUE_119_SYNC` | wird nach diesem Commit nachgezogen, siehe SESSION HANDOVER |
+| `PR_120_BODY_SYNC` | wird nach diesem Commit per PR-Bearbeitung nachgezogen, siehe SESSION HANDOVER |
+| `ISSUE_119_BODY_SYNC` | wird nach diesem Commit per Issue-Body-Bearbeitung nachgezogen (nicht nur Kommentar), siehe SESSION HANDOVER |
+| `SOURCE_OF_TRUTH_CONFLICT` | `YES` bis Issue-#119-Body-Sync abgeschlossen, danach `NONE` (siehe SESSION HANDOVER) |
 | `CURRENT_HANDOVER` | wird nach diesem Commit als PR-Kommentar erstellt |
 | Exakte R1.1-Planfreigabe | `BLOCKED` bis Ownerentscheidung |
 
