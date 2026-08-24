@@ -1,5 +1,6 @@
 #include <cinttypes>
 #include <memory>
+#include <new>
 #include <optional>
 #include <utility>
 
@@ -230,16 +231,6 @@ void logHeapEvidence(const char* stage) {
         runPersistenceCoordinator.get(), runPersistenceLoadResult.get(),
         &resetCauseSource);
 
-    // esp_get_minimum_free_heap_size() ist der von ESP-IDF seit Boot
-    // fortlaufend mitgefuehrte Tiefstwert ueber den gesamten bisherigen
-    // Bootpfad (schliesst z. B. auch nvs_flash_init_partition() vor dieser
-    // Composition mit ein), kein hier neu berechneter oder auf die
-    // Composition eingegrenzter Wert. Ohne neue Instrumentierung ist das der
-    // naechstliegende, mit vorhandenen ESP-IDF-APIs erreichbare Proxy fuer
-    // BOOT_HEAP_MIN_DURING_COMPOSITION.
-    ESP_LOGI(kTag, "BOOT_HEAP_MIN_DURING_COMPOSITION=%" PRIu32,
-             esp_get_minimum_free_heap_size());
-
     return applicationStarted;
 }
 
@@ -267,8 +258,44 @@ extern "C" void app_main(void) {
 
     auto& store = stateStoreContext->store();
     logHeapEvidence("BEFORE_COMPOSITION");
+
+    // Lokaler Minimum-Monitor, bewusst erst unmittelbar vor und bis
+    // unmittelbar nach composeAndBeginApplication(...) aktiv: der globale
+    // esp_get_minimum_free_heap_size()-Tiefstwert seit Boot wuerde auch
+    // fruehere Phasen (z. B. nvs_flash_init_partition() in
+    // NvsOwningContext::create()) einschliessen und BOOT_HEAP_MIN_DURING_
+    // COMPOSITION damit eine praezisere Evidenz vortaeuschen, als tatsaechlich
+    // gemessen wird.
+    const esp_err_t heapMinMonitorStart =
+        heap_caps_monitor_local_minimum_free_size_start();
+    if (heapMinMonitorStart != ESP_OK) {
+        ESP_LOGE(kTag, "heap local-min monitor start failed: %s",
+                 esp_err_to_name(heapMinMonitorStart));
+    }
+
     const bool applicationStarted = composeAndBeginApplication(
         store, platform, application, resetCauseSource);
+
+    if (heapMinMonitorStart == ESP_OK) {
+        const size_t compositionMinimumFreeBytes =
+            heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+        ESP_LOGI(kTag, "BOOT_HEAP_MIN_DURING_COMPOSITION=%u",
+                 static_cast<unsigned>(compositionMinimumFreeBytes));
+
+        const esp_err_t heapMinMonitorStop =
+            heap_caps_monitor_local_minimum_free_size_stop();
+        if (heapMinMonitorStop != ESP_OK) {
+            ESP_LOGE(kTag, "heap local-min monitor stop failed: %s",
+                     esp_err_to_name(heapMinMonitorStop));
+        }
+    } else {
+        // Kein erfundener Messwert: ohne laufenden Monitor gibt es keinen
+        // auf die Composition eingegrenzten Tiefstwert zu loggen.
+        ESP_LOGE(kTag,
+                 "BOOT_HEAP_MIN_DURING_COMPOSITION unavailable: monitor "
+                 "did not start");
+    }
+
     logHeapEvidence("AFTER_BOOT_TRANSIENTS_RELEASED");
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted);
