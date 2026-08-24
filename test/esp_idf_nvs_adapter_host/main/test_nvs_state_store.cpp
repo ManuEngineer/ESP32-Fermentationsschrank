@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "bdl_ramdisk.hpp"
+#include "esp_time_zone_resolver.hpp"
 #include "nvs_flash.h"
 #include "run_commands.hpp"
 #include "run_persistence_codec.hpp"
@@ -224,6 +225,21 @@ void configValidation() {
     CHECK(!device_platform_esp_idf::NvsStateStoreConfig::create(
                "p", std::string(16U, 'n'))
                .has_value());
+}
+
+void espTimeZoneResolverContract() {
+    const device_platform_esp_idf::EspTimeZoneResolver resolver;
+
+    const auto supported = resolver.prepare("Europe/Zurich");
+    CHECK(supported.status == device_platform::TimeZonePrepareStatus::Success);
+    CHECK(supported.prepared.has_value());
+    CHECK(supported.prepared->canonicalIdentifier == "Europe/Zurich");
+
+    const auto unknown = resolver.prepare("Unknown/Identifier");
+    CHECK(unknown.status ==
+          device_platform::TimeZonePrepareStatus::UnsupportedIdentifier);
+    CHECK(!unknown.prepared.has_value());
+    std::puts("ESP_TIME_ZONE_RESOLVER_CONTRACT=PASS");
 }
 
 void openFailureIsNotMissingKey() {
@@ -1821,6 +1837,7 @@ bool gcEraseCharacterization() {
 }  // namespace
 
 extern "C" void app_main(void) {
+    espTimeZoneResolverContract();
     canonicalOracleIdSelfTest();
     configValidation();
     openFailureIsNotMissingKey();
