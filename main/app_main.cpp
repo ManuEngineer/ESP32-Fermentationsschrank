@@ -23,6 +23,7 @@
 #include "issue_29_bringup_probe.hpp"
 #endif
 
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -102,6 +103,18 @@ class NvsOwningContext final {
     std::unique_ptr<device_platform_esp_idf::NvsStateStore> store_;
 };
 
+// Boot-only Composition: konstruiert und verdrahtet alle Configuration-/
+// Recovery-/Run-Persistence-Fachobjekte innerhalb ihres eigenen Scopes und
+// ruft anschliessend application.begin(...) auf. Kein Objekt aus diesem
+// Scope wird zurueckgegeben oder ueberlebt den Aufruf; siehe
+// docs/tasks/issue-119-platform-application-composition-plan.md Abschnitt
+// 5.2/5.5/15.
+[[nodiscard]] bool composeAndBeginApplication(
+    device_platform::IStateStore& store,
+    device_platform::DevicePlatform& platform,
+    fermentation::FermentationApplication& application,
+    const device_platform_esp_idf::EspResetCauseSource& resetCauseSource);
+
 void logBootSummary(const app_config::ProfilePolicy& policy,
                     bool applicationStarted) {
     const char* TAG = kTag;
@@ -131,6 +144,105 @@ void logResources() {
              freeHeapBytes, static_cast<unsigned>(stackHighWaterMarkBytes));
 }
 
+// Feldnamen entsprechen wortwoertlich den in der Freigabe (Abschnitt 8)
+// benannten Messpunkten `BOOT_HEAP_<stage>` /
+// `BOOT_HEAP_LARGEST_BLOCK_<stage>`, damit sie im Boot-Log grep-bar bleiben.
+void logHeapEvidence(const char* stage) {
+    const uint32_t freeHeapBytes = esp_get_free_heap_size();
+    const size_t largestBlockBytes =
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    ESP_LOGI(kTag, "BOOT_HEAP_%s=%" PRIu32, stage, freeHeapBytes);
+    ESP_LOGI(kTag, "BOOT_HEAP_LARGEST_BLOCK_%s=%u", stage,
+             static_cast<unsigned>(largestBlockBytes));
+}
+
+[[nodiscard]] bool composeAndBeginApplication(
+    device_platform::IStateStore& store,
+    device_platform::DevicePlatform& platform,
+    fermentation::FermentationApplication& application,
+    const device_platform_esp_idf::EspResetCauseSource& resetCauseSource) {
+    device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;
+    fermentation::ConfigurationMutationCoordinator mutationCoordinator;
+    fermentation::ConfigurationBootstrapStore bootstrapStore(store);
+    fermentation::ConfigurationGraphStore graphStore(store, timeZoneResolver);
+    fermentation::ConfigurationService configurationService(
+        mutationCoordinator, graphStore, timeZoneResolver);
+
+    // Beide Zeiger bewusst unbedingt auf Helper-Ebene deklariert (nicht
+    // innerhalb der folgenden bedingten Bloecke): sie muessen bis zum
+    // application.begin(...)-Aufruf weiter unten gueltig bleiben. Siehe
+    // Plan Abschnitt 5.2 Schritt 6 und Freigabe Abschnitt 3.
+    std::unique_ptr<fermentation::RunPersistenceCoordinator>
+        runPersistenceCoordinator;
+    std::unique_ptr<fermentation::RunPersistenceLoadResult>
+        runPersistenceLoadResult;
+
+    auto configurationRecoveryService =
+        fermentation::ConfigurationRecoveryService::create(
+            store, bootstrapStore, graphStore, configurationService,
+            mutationCoordinator);
+    if (configurationRecoveryService == nullptr) {
+        ESP_LOGE(kTag, "configuration recovery composition failed");
+        return false;
+    }
+
+    const auto configurationRecoveryResult =
+        configurationRecoveryService->boot();
+    if (configurationRecoveryResult.status ==
+            fermentation::ConfigurationRecoveryStatus::RuntimeReady ||
+        configurationRecoveryResult.status ==
+            fermentation::ConfigurationRecoveryStatus::
+                FactoryInitializationCompleted ||
+        configurationRecoveryResult.status ==
+            fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted) {
+        const auto runtimeRead = configurationService.acquireRuntime();
+        if (runtimeRead.status ==
+            fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+            runPersistenceCoordinator.reset(
+                new (std::nothrow) fermentation::RunPersistenceCoordinator(
+                    store, runtimeRead.lease.get().storageEpoch(),
+                    fermentation::RunCheckpointSchedule{}));
+            if (runPersistenceCoordinator == nullptr) {
+                ESP_LOGE(kTag,
+                         "boot composition allocation failed: "
+                         "RunPersistenceCoordinator");
+                return false;
+            }
+            logHeapEvidence("AFTER_COORDINATOR_ALLOCATION");
+        }
+    }
+
+    if (runPersistenceCoordinator != nullptr) {
+        runPersistenceLoadResult.reset(
+            new (std::nothrow) fermentation::RunPersistenceLoadResult(
+                runPersistenceCoordinator->loadAndInitialize()));
+        if (runPersistenceLoadResult == nullptr) {
+            ESP_LOGE(kTag,
+                     "boot composition allocation failed: "
+                     "RunPersistenceLoadResult");
+            return false;
+        }
+        logHeapEvidence("AFTER_LOAD_RESULT_ALLOCATION");
+    }
+
+    const bool applicationStarted = application.begin(
+        platform, configurationService, configurationRecoveryResult,
+        runPersistenceCoordinator.get(), runPersistenceLoadResult.get(),
+        &resetCauseSource);
+
+    // esp_get_minimum_free_heap_size() ist der von ESP-IDF seit Boot
+    // fortlaufend mitgefuehrte Tiefstwert ueber den gesamten bisherigen
+    // Bootpfad (schliesst z. B. auch nvs_flash_init_partition() vor dieser
+    // Composition mit ein), kein hier neu berechneter oder auf die
+    // Composition eingegrenzter Wert. Ohne neue Instrumentierung ist das der
+    // naechstliegende, mit vorhandenen ESP-IDF-APIs erreichbare Proxy fuer
+    // BOOT_HEAP_MIN_DURING_COMPOSITION.
+    ESP_LOGI(kTag, "BOOT_HEAP_MIN_DURING_COMPOSITION=%" PRIu32,
+             esp_get_minimum_free_heap_size());
+
+    return applicationStarted;
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
@@ -154,56 +266,10 @@ extern "C" void app_main(void) {
     }
 
     auto& store = stateStoreContext->store();
-    device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;
-    fermentation::ConfigurationMutationCoordinator mutationCoordinator;
-    fermentation::ConfigurationBootstrapStore bootstrapStore(store);
-    fermentation::ConfigurationGraphStore graphStore(store, timeZoneResolver);
-    fermentation::ConfigurationService configurationService(
-        mutationCoordinator, graphStore, timeZoneResolver);
-    auto configurationRecoveryService =
-        fermentation::ConfigurationRecoveryService::create(
-            store, bootstrapStore, graphStore, configurationService,
-            mutationCoordinator);
-    if (configurationRecoveryService == nullptr) {
-        ESP_LOGE(kTag, "configuration recovery composition failed");
-        logBootSummary(app_config::kActiveProfilePolicy, false);
-        return;
-    }
-
-    const auto configurationRecoveryResult =
-        configurationRecoveryService->boot();
-    std::optional<fermentation::RunPersistenceCoordinator>
-        runPersistenceCoordinator;
-    if (configurationRecoveryResult.status ==
-            fermentation::ConfigurationRecoveryStatus::RuntimeReady ||
-        configurationRecoveryResult.status ==
-            fermentation::ConfigurationRecoveryStatus::
-                FactoryInitializationCompleted ||
-        configurationRecoveryResult.status ==
-            fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted) {
-        const auto runtimeRead = configurationService.acquireRuntime();
-        if (runtimeRead.status ==
-            fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
-            runPersistenceCoordinator.emplace(
-                store, runtimeRead.lease.get().storageEpoch(),
-                fermentation::RunCheckpointSchedule{});
-        }
-    }
-
-    std::optional<fermentation::RunPersistenceLoadResult>
-        runPersistenceLoadResult;
-    if (runPersistenceCoordinator.has_value()) {
-        runPersistenceLoadResult.emplace(
-            runPersistenceCoordinator->loadAndInitialize());
-    }
-
-    const bool applicationStarted = application.begin(
-        platform, configurationService, configurationRecoveryResult,
-        runPersistenceCoordinator.has_value() ? &*runPersistenceCoordinator
-                                              : nullptr,
-        runPersistenceLoadResult.has_value() ? &*runPersistenceLoadResult
-                                             : nullptr,
-        &resetCauseSource);
+    logHeapEvidence("BEFORE_COMPOSITION");
+    const bool applicationStarted = composeAndBeginApplication(
+        store, platform, application, resetCauseSource);
+    logHeapEvidence("AFTER_BOOT_TRANSIENTS_RELEASED");
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted);
 
