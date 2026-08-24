@@ -203,12 +203,14 @@ siehe Entscheidung 5.1.
   oder Umweltfehler. Bei korrekt implementierter Composition tritt dieser
   Fall nie ein; er bleibt dennoch ein zu behandelnder Fehlerpfad (siehe
   5.3).
-- `RunRecoveryCoordinator` hat sowohl einen Default-Konstruktor
-  (`RunRecoveryCoordinator() = default;`) als auch Ueberladungen, die den
-  `RunPersistenceCoordinator&` explizit als Parameter statt als
-  gebundenes Member erwarten
-  (`lib/fermentation_app/src/run_recovery.hpp`). Er kann also unabhaengig
-  von einer gueltigen Epoche immer sicher konstruiert werden.
+- `RunRecoveryCoordinator` existiert bereits im Code
+  (`lib/fermentation_app/src/run_recovery.hpp`), mit Default-Konstruktor
+  und `activate(...)`-Ueberladungen, die zwingend eine reale
+  `CrossRolePlausibilityContext` (Sensorevidenz) verlangen. Diese
+  Evidenz liefert #119 nicht (Nicht-Scope, Abschnitt 7); der Coordinator
+  wird deshalb fuer #119 **nicht** konstruiert (YAGNI, 5.4), obwohl er
+  technisch unabhaengig von einer gueltigen Epoche sicher konstruierbar
+  waere.
 - `NvsOwningContext` (`main/app_main.cpp`) kapselt den geoeffneten Store
   aktuell vollstaendig privat und bietet **keinen** Zugriff auf
   `device_platform::IStateStore&` nach aussen. Fuer die Composition ist
@@ -277,17 +279,21 @@ Kleinste damit festgelegte Composition:
    die bereits vorhandenen Fachobjekte `ConfigurationBootstrapStore`,
    `ConfigurationGraphStore`, `ConfigurationMutationCoordinator`,
    `ConfigurationService`, `ConfigurationRecoveryService` (via
-   `::create(...)`), bedingt `RunPersistenceCoordinator` und immer
-   `RunRecoveryCoordinator`, alle über den bereits geöffneten
-   `NvsStateStore` (als `IStateStore&`). Das ist ADR-013-konform: der
-   Composition Root darf konkrete Anwendungsmodule instanziieren.
-2. `FermentationApplication::begin(...)` erhält diese bereits
-   konstruierten Recoverykomponenten und die bereits real erzeugten
-   Boot-Ergebnisse als zusätzliche, explizite Referenz-/Zeigerparameter
-   (analog zum bestehenden `const IResetCauseSource*`-Muster) statt sie
-   selbst zu besitzen, selbst zu erzeugen oder über `IPlatformServices`
-   zu beziehen. `FermentationApplication` bleibt Eigentümer nur der
-   Verknüpfung zu `SafetyCore`, nicht der Store-/Persistenzobjekte.
+   `::create(...)`) und bedingt `RunPersistenceCoordinator`, alle über
+   den bereits geöffneten `NvsStateStore` (als `IStateStore&`). Das ist
+   ADR-013-konform: der Composition Root darf konkrete Anwendungsmodule
+   instanziieren. `RunRecoveryCoordinator` wird für #119 **nicht**
+   konstruiert (YAGNI, 5.4): `activate(...)` verlangt reale
+   Sensorevidenz, die #119 nicht liefert; die Dependency wird erst
+   eingeführt, wenn ein späteres Issue sie produktiv braucht.
+2. `FermentationApplication::begin(...)` erhält die bereits real
+   erzeugten Boot-Ergebnisse und den bedingt konstruierten
+   `RunPersistenceCoordinator` als zusätzliche, rein transiente
+   Referenz-/Zeigerparameter (analog zum bestehenden
+   `const IResetCauseSource*`-Muster) statt sie selbst zu besitzen,
+   selbst zu erzeugen oder über `IPlatformServices` zu beziehen.
+   `FermentationApplication` bleibt Eigentümer nur der Verknüpfung zu
+   `SafetyCore`, nicht der Store-/Persistenz-/Configurationobjekte (5.5).
 3. Kein neuer Port, kein neues Schema, keine neue generische
    Application-API. Exakte Parameterreihenfolge, Fehlerpfade und die
    endgültige Methodensignatur sind mit diesem Plan bereits jetzt
@@ -300,33 +306,51 @@ MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
 ```
 
 Ein kleiner, generischer `device_platform_esp_idf::EspTimeZoneResolver`
-wird als expliziter, minimaler Bestandteil von #119 geplant:
+wird als expliziter, minimaler Bestandteil von #119 geplant.
+
+**Normative Quelle der Semantik** ist ausschließlich der bestehende
+Portvertrag und Issue #55, **nicht** der Oracle-Test:
+
+1. `ITimeZoneResolver` und sein Vertrag stammen aus Issue #55 bzw. dem
+   bereits bestehenden Port (`lib/device_platform/src/time_zone_resolver.hpp`).
+2. `validateUserConfiguration(...)` ruft `prepare()` erst **nach**
+   struktureller Prüfung und Treffer im App-Firmwarekatalog auf
+   (Abschnitt 4.1).
+3. Issue #55 schließt reale ESP32-Zeitzonendatenbank,
+   Betriebssystemintegration und lokale-Zeit-nach-UTC-Terminplanung
+   ausdrücklich aus.
+4. Der kleine Plattformadapter beantwortet deshalb nur die Frage, ob
+   eine bereits app-seitig erlaubte kanonische ID auf dieser
+   Geräteplattform vorbereitet/unterstützt ist — nicht mehr.
+5. Der bereits reale, ownerseitig durchgelaufene
+   `ProductionResolver` aus dem #90-R5.9-Slice-7-Oracle (Abschnitt 4.1)
+   ist **bestätigende Testevidenz**, dass die hier geplante
+   R1-Ausprägung mit der bereits geprüften Recovery-Evidenz konsistent
+   ist — **nicht** die normative Quelle des Produktionsvertrags. Der
+   Oracle-Test definiert nicht, was Produktion tun muss; der
+   bestehende Port-/Issue-55-Vertrag tut das.
+
+Design des Adapters:
 
 - Eigentümerschaft: `device_platform_esp_idf` (analog
   `EspResetCauseSource`, `EspTimerTimeSource`, `NvsStateStore`); keine
   Abhängigkeit auf `fermentation_app`.
 - Vertrag: eine kleine, statisch kompilierte, anwendungsneutrale Tabelle
-  bereits als "vom Geräteplattform-Adapter verifiziert unterstützt"
-  bekannter kanonischer IANA-Bezeichner. Für R1 enthält sie exakt den
-  einen Wert, den der Oracle-Referenztest bereits real modelliert:
-  `"Europe/Zurich"`. Bekannte Bezeichner liefern `Success` mit demselben
-  Bezeichner als `PreparedTimeZone::canonicalIdentifier` (Echo, keine
-  Umwandlung); unbekannte liefern `UnsupportedIdentifier`. Das ist kein
-  No-op/Always-success-Resolver: er unterscheidet real zwischen
-  unterstützten und nicht unterstützten Bezeichnern anhand einer
-  echten, wenn auch aktuell einelementigen, Plattformtabelle — exakt das
-  bereits vorhandene, ownerseitig durchgelaufene
-  `ProductionResolver`-Verhalten aus dem #90-R5.9-Slice-7-Oracle
-  (Abschnitt 4.1), nicht neu erfunden.
-- Der Adapter ruft **bewusst kein** `setenv("TZ", …)`/`tzset()` und
-  berührt keinen realen Betriebssystem-Zeitzonenzustand. Das ist keine
-  Verkürzung, sondern deckt sich exakt mit dem, was `prepare()`
-  laut Interface-Kommentar und Issue #55 tatsächlich leisten muss: eine
-  bereits katalogseitig geprüfte kanonische ID plattformseitig als
-  vorbereitbar bestätigen oder ablehnen — nicht die reale
-  lokale-Zeit-nach-UTC-Terminplanung oder Systemzeitintegration
-  herstellen. Beides bleibt, wie in #55 explizit festgelegt, außerhalb
-  dieses Adapters und außerhalb von #119.
+  kanonischer IANA-Bezeichner, die diese Geräteplattform technisch als
+  vorbereitet/unterstützt akzeptiert. Für R1 enthält sie exakt den
+  einen Wert `"Europe/Zurich"`. Bekannte Bezeichner liefern `Success`
+  mit demselben Bezeichner als `PreparedTimeZone::canonicalIdentifier`
+  (Echo, keine Umwandlung); unbekannte liefern `UnsupportedIdentifier`.
+  Das ist kein No-op/Always-success-Resolver: er unterscheidet real
+  zwischen unterstützten und nicht unterstützten Bezeichnern anhand
+  einer echten, wenn auch aktuell einelementigen, Plattformtabelle.
+- ```text
+  EspTimeZoneResolver does NOT configure system local time.
+  ```
+  Der Adapter ruft **bewusst kein** `setenv("TZ", …)`/`tzset()` und
+  berührt keinen realen Betriebssystem-Zeitzonenzustand. Die offizielle
+  ESP-IDF-Zeitzonenaktivierung über `TZ`/`tzset()` bleibt, wie in #55
+  festgelegt, außerhalb dieses Adapters und außerhalb von #119.
 - Keine neue Datenbank: die Tabelle ist ein einzelner, im Code
   dokumentierter Fakt (dieselbe Größenordnung wie der bereits
   bestehende `kTimeZones`-Fixarray in
@@ -340,6 +364,36 @@ wird als expliziter, minimaler Bestandteil von #119 geplant:
   Erweiterung dieser Plattformtabelle in `device_platform_esp_idf`,
   unabhängig vom jeweiligen App-Katalog — konsistent mit dem
   Architektur-Akzeptanzkriterium aus Abschnitt 3.
+
+**App-Katalog und Plattform-Support sind zwei getrennte
+Verantwortungen**, auch wenn beide in R1 nur `Europe/Zurich` enthalten:
+
+```text
+fermentation_app firmware catalog
+    -> welche TimeZoneIds diese konkrete App erlaubt
+
+device_platform_esp_idf EspTimeZoneResolver
+    -> welche kanonischen TimeZoneIds diese Plattform technisch
+       als vorbereitet/unterstützt akzeptiert
+```
+
+Sie werden nicht zusammengelegt, nur weil sie zufällig deckungsgleich
+sind. Fail-closed bleibt in jedem Fall:
+
+```text
+App erlaubt ID, Plattform unterstützt sie nicht
+-> TimeZoneRejected
+```
+
+Mindestens ein gezielter Test in Schritt 1 muss belegen:
+
+```text
+Europe/Zurich -> Success + exact canonical echo
+unknown ID -> UnsupportedIdentifier
+```
+
+Keine allgemeine IANA-Testmatrix; dieser Testumfang wird jetzt nur
+benannt, nicht in dieser Planrunde implementiert (Abschnitt 8/9).
 
 ### 5.2 `StorageEpoch`-Herkunft und Composition-/Boot-Reihenfolge
 
@@ -393,19 +447,27 @@ Exakte Reihenfolge im Composition Root (`main/app_main.cpp`), alles vor
    keine Lease erhalten) bleibt `runPersistenceCoordinator` leer. Es
    wird **kein** Ersatzepoche (`StorageEpoch{1}` o. ä.) erfunden, nur
    damit der Pfad kompiliert — genau das ist hiermit ausgeschlossen.
-9. Nur wenn `runPersistenceCoordinator` befüllt wurde:
-   `const auto runPersistenceLoadResult = runPersistenceCoordinator->loadAndInitialize();`.
-10. `fermentation::RunRecoveryCoordinator runRecoveryCoordinator;`
-    immer default-konstruiert (kostenlos, keine Epoche nötig, siehe
-    4.2); bei vorhandenem `runPersistenceCoordinator` wird er über die
-    explizite `RunPersistenceCoordinator&`-Parameterüberladung seiner
-    Methoden verwendet (Abschnitt 4.2), nicht über den Konstruktor
-    zwingend gebunden.
-11. `application.begin(platform, configurationService,
+9. `std::optional<RunPersistenceLoadResult> runPersistenceLoadResult;`
+   auf `app_main()`-Ebene (**nicht** innerhalb eines inneren Scopes) —
+   nur wenn `runPersistenceCoordinator` befüllt wurde:
+   `runPersistenceLoadResult.emplace(runPersistenceCoordinator->loadAndInitialize());`.
+   Damit gilt:
+   ```text
+   RunPersistenceCoordinator lifetime = app_main scope
+   RunPersistenceLoadResult lifetime = mindestens bis application.begin() zurückkehrt
+   ```
+   Ein `const auto` innerhalb des `if`-Blocks aus Schritt 8 würde seinen
+   Gültigkeitsbereich vor dem `begin()`-Aufruf verlassen — genau das
+   wird hiermit ausgeschlossen.
+10. `application.begin(platform, configurationService,
     configurationRecoveryResult, runPersistenceCoordinator ?
-    &*runPersistenceCoordinator : nullptr, runPersistenceCoordinator ?
-    &runPersistenceLoadResult : nullptr, &runRecoveryCoordinator,
-    &resetCauseSource);`
+    &*runPersistenceCoordinator : nullptr, runPersistenceLoadResult ?
+    &*runPersistenceLoadResult : nullptr, &resetCauseSource);`
+    Kein `RunRecoveryCoordinator` wird konstruiert oder übergeben (siehe
+    Kleinste-Composition-Punkt 1 und 5.4/5.5 — YAGNI: #119 hat keinen
+    Aufrufer für `activate(...)`, der reale Sensorevidenz voraussetzt).
+    Der Bootbefund muss nach `begin()` nicht dauerhaft in der App
+    gespeichert werden (5.5).
 
 ### 5.3 Fehlerpfade bei jedem Init-/Create-/Boot-/Load-Schritt
 
@@ -460,16 +522,33 @@ Sensor-/Planner-/Aktivierungsfelder (`sensorEvidenceValidated`,
 `activationKind`, `activationPersistenceResult`,
 `processActivationApplied`) bleiben unverändert auf ihren
 Default-/Leerwerten: #119 führt keine neue Sensor- oder Planner-Quelle
-ein. Damit bleibt `RunRecoveryCoordinator::activate(...)` (verlangt
-`CrossRolePlausibilityContext`) außerhalb von `begin()` unaufgerufen —
-`FallbackRecovered` bleibt dadurch, wie durch den bereits bestehenden
-`SafetyCore`-Vertrag garantiert, ein validiertes, nicht aktivierendes
-Resume-Angebot; kein automatisches Resume und kein `Allowed`-Gate allein
-durch einen erfolgreichen NVS-Read. Der `RunRecoveryCoordinator` bleibt
-in `FermentationApplication` referenziert, um genau diesen späteren,
-sensorgestützten Aktivierungspfad zu bedienen, sobald ein zukünftiges
-Issue reale Sensor-/Planner-Evidenz liefert — keine zweite
-Recovery-/Safety-Regelimplementierung entsteht dafür.
+ein.
+
+**YAGNI: `RunRecoveryCoordinator` wird für #119 nicht konstruiert, nicht
+referenziert und nicht als `begin()`-Parameter geführt.**
+`RunRecoveryCoordinator::activate(...)` verlangt zwingend eine reale
+`CrossRolePlausibilityContext` (Sensorevidenz), die #119 nicht liefert;
+Sensor-/Plannerintegration ist ausdrücklich Nicht-Scope von #119
+(Abschnitt 7). `begin()` ruft ihn deshalb schon strukturell nicht auf —
+nicht weil eine Instanz zwar existiert, aber ungenutzt bliebe, sondern
+weil in #119 gar keine Instanz existiert. Wenn ein späteres Issue reale
+Sensor-/Planner-Evidenz besitzt und `RunRecoveryCoordinator::activate(...)`
+produktiv braucht, wird die Dependency dann eingeführt — nicht jetzt auf
+Vorrat. `FallbackRecovered` bleibt dadurch, wie durch den bereits
+bestehenden `SafetyCore`-Vertrag garantiert, ein validiertes, nicht
+aktivierendes Resume-Angebot; kein automatisches Resume und kein
+`Allowed`-Gate allein durch einen erfolgreichen NVS-Read. Der #119-
+Bootpfad benötigt für seine aktuelle Aufgabe nur:
+
+```text
+RunPersistenceCoordinator::loadAndInitialize()
+-> RunPersistenceLoadResult
+-> bestehende SafetyCore-Projektion
+```
+
+Keine zweite Recovery-/Safety-Regelimplementierung entsteht dafür; es
+wird auch kein neuer Container oder eine neue Abstraktion geschaffen, um
+`RunRecoveryCoordinator` trotzdem "bereitzuhalten".
 
 Es wird keine bestehende Production-vs-Oracle-/Safety-Vertragslogik im
 Composition Root neu nachgebaut; `evaluate(...)` bleibt die alleinige
@@ -484,40 +563,55 @@ Auswertung.
     const ConfigurationRecoveryResult& configurationRecoveryResult,
     RunPersistenceCoordinator* runPersistenceCoordinator,
     const RunPersistenceLoadResult* runPersistenceLoadResult,
-    RunRecoveryCoordinator* runRecoveryCoordinator,
     const device_platform::IResetCauseSource* resetCauseSource = nullptr);
 ```
 
 `runPersistenceCoordinator`/`runPersistenceLoadResult` sind gemeinsam
-entweder beide `nullptr` oder beide gesetzt (5.2/5.3).
-`runRecoveryCoordinator` ist immer gesetzt (immer default-konstruierbar,
-4.2). Der bestehende `const IResetCauseSource* = nullptr`-Parameter
-bleibt unverändert letzter Parameter mit Default.
+entweder beide `nullptr` oder beide gesetzt (5.2/5.3). Kein
+`RunRecoveryCoordinator`-Parameter (YAGNI, 5.4). Der bestehende
+`const IResetCauseSource* = nullptr`-Parameter bleibt unverändert
+letzter Parameter mit Default.
 
-Ownership/Lifetime:
+**Alle vier neuen Parameter (`configurationService`,
+`configurationRecoveryResult`, `runPersistenceCoordinator`,
+`runPersistenceLoadResult`) werden ausschließlich transient innerhalb
+von `begin()` gelesen, um `SafetyCoreInput` zu befüllen (5.4) — keiner
+wird als Member gespeichert.** Für #119 gibt es keinen nachweislichen
+laufenden Zugriff nach `begin()`: `update()` bleibt unverändert ein
+Platzhalter (Nicht-Scope: Sensor-/UI-/WLAN-/Aktorintegration, Abschnitt
+7); Schritt 2 verifiziert reale Reboot-/Recovery-Zyklen, nicht
+laufenden Zugriff aus einem aktiven Applikations-Loop heraus. Sollte ein
+späteres Issue laufenden Zugriff auf `ConfigurationService` oder
+`RunPersistenceCoordinator` demonstrierbar brauchen, wird die Dependency
+dann eingeführt — nicht jetzt mit "künftige Issues brauchen das später"
+begründet (dieselbe Regel wie für `RunRecoveryCoordinator`, 5.4).
+`FermentationApplication` erhält damit für #119 **keine neuen Member**;
+sie bleibt bei `platformServices_` und `safetyCore_`.
 
-- Composition Root (`app_main()`, Prozesslebenszeit gemäß 4.3) **besitzt**
-  weiterhin: den Store (`NvsOwningContext`), `ConfigurationBootstrapStore`,
-  `ConfigurationGraphStore`, `ConfigurationMutationCoordinator`,
-  `EspTimeZoneResolver`, `ConfigurationRecoveryService`
-  (`std::unique_ptr`), `std::optional<RunPersistenceCoordinator>`,
-  `RunRecoveryCoordinator`.
-- `FermentationApplication` **referenziert nur** (rohe, nicht besitzende
-  Zeiger/Referenzen, analog zum bestehenden `platformServices_`- und
-  `IResetCauseSource*`-Muster): `configurationService_`,
-  `runPersistenceCoordinator_`, `runRecoveryCoordinator_`. Sie überleben
-  `FermentationApplication` in jedem Fall, da der Composition Root nie
-  zurückkehrt (4.3).
-- `ConfigurationBootstrapStore`, `ConfigurationGraphStore`,
-  `ConfigurationMutationCoordinator` werden von
-  `FermentationApplication` **nicht** referenziert — sie sind reine
-  interne Kollaborateure von `ConfigurationService`/
-  `ConfigurationRecoveryService` (KISS-Prüfung, 5.6) und nur intern
-  friend-referenziert, nie von außen aufgerufen.
-- `ConfigurationRecoveryService` wird von `FermentationApplication`
-  für #119 **nicht** referenziert (siehe 5.6); der Composition Root
-  behält ihn für eine spätere, in #119 nicht gebaute
-  Factory-Reset-Auslösung.
+Ownership/Lifetime (jedes Objekt genau einmal klassifiziert):
+
+| Objekt | Owner | Lifetime | Referenziert von | Nach `begin()` noch benötigt? |
+|---|---|---|---|---|
+| `NvsOwningContext` | `app_main()` | Prozesslebenszeit (4.3) | Composition Root (liefert `store()`) | Nein — nur zur Store-Beschaffung; lebt weiter, wird aber nicht mehr gelesen |
+| `DevicePlatform` | `app_main()` | Prozesslebenszeit | Composition Root; `FermentationApplication` über `IPlatformServices&` (bestehend, unverändert) | Ja — bestehendes, unverändertes Muster (`platformServices_`) |
+| `EspResetCauseSource` | `app_main()` | Prozesslebenszeit | Composition Root; einmalig an `begin(...)` übergeben (bestehend, unverändert) | Nein — bestehendes Muster: nur beim `begin()`-Aufruf gelesen |
+| `EspTimeZoneResolver` | `app_main()` | Prozesslebenszeit | `ConfigurationGraphStore`, `ConfigurationService` (Konstruktorreferenz) | Nein von `FermentationApplication`; indirekt weiter von `ConfigurationGraphStore`/`ConfigurationService` gehalten |
+| `ConfigurationMutationCoordinator` | `app_main()` | Prozesslebenszeit | `ConfigurationService`, `ConfigurationRecoveryService` | Nein von `FermentationApplication` |
+| `ConfigurationBootstrapStore` | `app_main()` | Prozesslebenszeit | `ConfigurationRecoveryService` | Nein von `FermentationApplication` |
+| `ConfigurationGraphStore` | `app_main()` | Prozesslebenszeit | `ConfigurationService`, `ConfigurationRecoveryService` | Nein von `FermentationApplication` |
+| `ConfigurationService` | `app_main()` | Prozesslebenszeit | `ConfigurationRecoveryService` (Konstruktorreferenz); `begin(...)` erhält sie transient als Parameter | Nein als Member — nur transient während `begin()` gelesen (`mode()`, 5.4); kein nachweislicher laufender Zugriff in #119 |
+| `ConfigurationRecoveryService` | `app_main()` (`std::unique_ptr`) | Prozesslebenszeit | Composition Root | Nein von `FermentationApplication`; Composition Root behält ihn (spätere Factory-Reset-Auslösung ist kein #119-Scope) |
+| `std::optional<RunPersistenceCoordinator>` | `app_main()` | Prozesslebenszeit, falls befüllt | `begin(...)` erhält Zeiger transient | Nein als Member — nur transient während `begin()` gelesen; kein nachweislicher laufender Zugriff in #119 |
+| `std::optional<RunPersistenceLoadResult>` | `app_main()` | Mindestens bis `begin()` zurückkehrt | `begin(...)` erhält Zeiger transient | Nein — reiner Bootbefund, nur zur Projektion |
+| `FermentationApplication` | `app_main()` | Prozesslebenszeit | — | — |
+
+`ConfigurationBootstrapStore`, `ConfigurationGraphStore`,
+`ConfigurationMutationCoordinator` werden von `FermentationApplication`
+**nicht** referenziert — sie sind reine interne Kollaborateure von
+`ConfigurationService`/`ConfigurationRecoveryService` (KISS-Prüfung,
+5.6) und nur intern friend-referenziert, nie von außen aufgerufen.
+Keine widersprüchliche Aussage zwischen Bootreihenfolge (5.2), Signatur
+(oben) und dieser Tabelle.
 
 ### 5.6 KISS-Prüfung der `FermentationApplication`-Schnittstelle
 
@@ -527,18 +621,18 @@ geprüft wurde für jedes Objekt aus Abschnitt 4, ob
 
 | Objekt | Nach `begin()` gebraucht? | Grund |
 |---|---|---|
-| `ConfigurationService` | Ja | Laufende Config-Reads/-Writes und `mode()`/`acquireRuntime()` in künftigen Issues; einzige laufende Wahrheit |
+| `ConfigurationService` | Nein als Member | Kein nachweislicher laufender Zugriff in #119 (`update()` bleibt Platzhalter, Sensor-/UI-/Aktorintegration ist Nicht-Scope); nur transient während `begin()` für `mode()`/`acquireRuntime()` gelesen (5.4). Nicht mit "künftige Issues brauchen das später" begründet — wird bei nachgewiesenem Bedarf dann eingeführt |
 | `ConfigurationRecoveryResult` | Nein | Einmaliger Bootbefund, nicht laufend gültig; wird nur einmal in `SafetyCoreInput` projiziert |
 | `ConfigurationBootstrapStore`/`ConfigurationGraphStore`/`ConfigurationMutationCoordinator` | Nein | Reine interne Kollaborateure von `ConfigurationService`/`ConfigurationRecoveryService`, nie direkt von außen aufgerufen |
 | `ConfigurationRecoveryService` | Nein (für #119) | `beginAuthorizedFactoryReset()` hat in #119 keinen Aufrufer; Composition Root hält ihn ohnehin lebendig, falls ein späteres Issue ihn braucht — keine Signaturänderung nötig, da nicht über `FermentationApplication` geführt |
-| `RunPersistenceCoordinator` | Ja (bedingt) | Laufende Persistenzoperationen (`persistCommand`, `checkpointPeriodic`, …) sind explizit Teil des #119-Ziels "Komponenten über den echten Produktpfad verbinden" |
+| `RunPersistenceCoordinator` | Nein als Member | Kein nachweislicher laufender Zugriff in #119 (dieselbe Begründung wie `ConfigurationService`); nur transient während `begin()` für `state()`/Projektion gelesen (5.4) |
 | `RunPersistenceLoadResult` | Nein | Einmaliger Bootbefund, nur zur Projektion |
-| `RunRecoveryCoordinator` | Ja | Später sensorgestützter Aktivierungspfad (5.4) |
+| `RunRecoveryCoordinator` | **Gar nicht konstruiert** (YAGNI, 5.4) | `activate(...)` verlangt reale Sensorevidenz, die #119 nicht liefert; keine Instanz "auf Vorrat" für ein späteres Issue |
 
-Ergebnis: die in 5.5 festgelegte Signatur mit expliziten Referenz-/
-Zeigerparametern bleibt nach dieser Prüfung die kleinste Lösung. Kein
-neuer Container, kein Service Locator, kein DI-Framework, keine neue
-generische Application-API.
+Ergebnis: die in 5.5 festgelegte Signatur mit vier rein transienten
+Referenz-/Zeigerparametern (keiner als Member gespeichert) bleibt nach
+dieser Prüfung die kleinste Lösung. Kein neuer Container, kein Service
+Locator, kein DI-Framework, keine neue generische Application-API.
 
 ## 6. Keine vorschnelle neue generische Application-API
 
@@ -684,6 +778,11 @@ verlinkt, aber nicht durch #119-Fortschritt automatisch geschlossen.
 | Produkt-Boot-Orchestrierung und Safety-Projektion festgelegt (5.4) | `PASS` |
 | `begin(...)`-Signatur, Ownership/Lifetime festgelegt, nicht auf Schritt 1 verschoben (5.5) | `PASS` |
 | KISS-Prüfung der `FermentationApplication`-Schnittstelle (5.6) | `PASS` |
+| `RunPersistenceLoadResult`-Lebenszeit korrigiert (app_main-Scope statt Blockscope, 5.2) | `PASS` |
+| `RunRecoveryCoordinator` per YAGNI aus Composition/Signatur entfernt (5.4/5.5/5.6) | `PASS` |
+| Ownership/Lifetime-Tabelle vollständig, widerspruchsfrei (`ConfigurationService` ergänzt, 5.5) | `PASS` |
+| `ITimeZoneResolver`-Begründung auf Port-/Issue-55-Vertrag als normative Quelle korrigiert (5.1) | `PASS` |
+| App-Katalog vs. Plattform-Support als getrennte Verantwortungen dokumentiert (5.1) | `PASS` |
 | Architekturentscheidung getroffen und begründet (Abschnitt 5) | `PASS` |
 | `MATERIAL_ARCHITECTURE_DECISION_OPEN` | `NO` |
 | Akzeptanzkriterium definiert | `PASS` |
