@@ -410,6 +410,12 @@ Exakte Reihenfolge im Composition Root (`main/app_main.cpp`), alles vor
    bereits geöffneten Store (`device_platform::IStateStore& store()
    const`). Das ist eine Änderung ausschließlich an dieser bereits im
    Composition Root lebenden Klasse, keine neue Plattformfähigkeit.
+   `store()` liefert nur eine nicht besitzende Referenz; der Accessor
+   überträgt keinerlei Ownership. `NvsOwningContext` bleibt alleiniger
+   Lifetime-Owner des `NvsStateStore` und der initialisierten Partition
+   (sein Destruktor zerstört den Store und deinitialisiert danach die
+   Partition) und muss deshalb jeden `IStateStore`-Consumer überleben,
+   der aus dieser Referenz entsteht (5.5).
 3. `device_platform::DevicePlatform platform; platform.begin(...)`
    (unverändert bestehend).
 4. `device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;`
@@ -592,7 +598,7 @@ Ownership/Lifetime (jedes Objekt genau einmal klassifiziert):
 
 | Objekt | Owner | Lifetime | Referenziert von | Nach `begin()` noch benötigt? |
 |---|---|---|---|---|
-| `NvsOwningContext` | `app_main()` | Prozesslebenszeit (4.3) | Composition Root (liefert `store()`) | Nein — nur zur Store-Beschaffung; lebt weiter, wird aber nicht mehr gelesen |
+| `NvsOwningContext` | `app_main()` | Gesamte Nutzungsdauer aller vom Store abhängigen Objekte / im aktuellen Composition Root Prozesslebenszeit (4.3) | Composition Root (liefert `store()`) | **Ja** — als alleiniger Lifetime-Owner des `NvsStateStore` und der initialisierten Partition (Destruktor zerstört Store, deinitialisiert danach Partition); muss jeden `IStateStore`-Consumer überleben, auch wenn der Context selbst nicht erneut aktiv abgefragt wird |
 | `DevicePlatform` | `app_main()` | Prozesslebenszeit | Composition Root; `FermentationApplication` über `IPlatformServices&` (bestehend, unverändert) | Ja — bestehendes, unverändertes Muster (`platformServices_`) |
 | `EspResetCauseSource` | `app_main()` | Prozesslebenszeit | Composition Root; einmalig an `begin(...)` übergeben (bestehend, unverändert) | Nein — bestehendes Muster: nur beim `begin()`-Aufruf gelesen |
 | `EspTimeZoneResolver` | `app_main()` | Prozesslebenszeit | `ConfigurationGraphStore`, `ConfigurationService` (Konstruktorreferenz) | Nein von `FermentationApplication`; indirekt weiter von `ConfigurationGraphStore`/`ConfigurationService` gehalten |
@@ -783,6 +789,7 @@ verlinkt, aber nicht durch #119-Fortschritt automatisch geschlossen.
 | Ownership/Lifetime-Tabelle vollständig, widerspruchsfrei (`ConfigurationService` ergänzt, 5.5) | `PASS` |
 | `ITimeZoneResolver`-Begründung auf Port-/Issue-55-Vertrag als normative Quelle korrigiert (5.1) | `PASS` |
 | App-Katalog vs. Plattform-Support als getrennte Verantwortungen dokumentiert (5.1) | `PASS` |
+| `NvsOwningContext`-Lifetime korrekt als Lifetime-Owner des Store/der Partition dokumentiert, `store()` als nicht besitzend klargestellt (5.2/5.5) | `PASS` |
 | Architekturentscheidung getroffen und begründet (Abschnitt 5) | `PASS` |
 | `MATERIAL_ARCHITECTURE_DECISION_OPEN` | `NO` |
 | Akzeptanzkriterium definiert | `PASS` |
