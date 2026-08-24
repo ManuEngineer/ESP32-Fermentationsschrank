@@ -11,12 +11,12 @@ Commit-SHA dieser Datei gilt:
 COMPOSITION_PLAN_PENDING_R1_0_OWNER_APPROVAL
 ```
 
-Die Freigabe autorisiert noch keinen Umsetzungsslice; jeder Slice (A–D)
-erhält ein eigenes Owner-Gate.
+Die Freigabe autorisiert noch keine Umsetzung. Schritt 1 und Schritt 2
+(Abschnitt 8) erhalten je ein eigenes Owner-Gate.
 
 ```text
 BASE_PR=#118
-BASE_SHA=903136f641712c2144eba6ffa8eb289dfb472af1
+BASE_SHA=fd7e4e3ec58c9f3dda45710fd346752e083d7d19
 IMPLEMENTATION=NOT_STARTED
 ```
 
@@ -24,10 +24,17 @@ Keine #118-Implementation wird kopiert oder cherry-gepickt.
 
 ## 1. Herkunft und Abgrenzung
 
-Issue #119 übernimmt das in Issue #90 R5.9 Slice 7 (owner-freigegeben,
-real ausgeführt) entdeckte Composition-Gate. #90/PR #118 bleibt mit R6.0
-(`docs/tasks/issue-90-clean-restart-plan-r6.0.md`) eine rein
-anwendungsneutrale StateStore-/NVS-Plattformfähigkeit.
+Issue #119 ist der von Issue #90 R5.9 Punkt 9 selbst vorgesehene
+separate, eigens ownerfreizugebende Composition-Schritt: R5.9 verbietet
+eine unnötige Vollprodukt-/Composition-Root-Integration in #90 und lässt
+`app_main`/`FermentationApplication` nur bei belegtem, separat
+freizugebendem Bedarf berühren. Der reale Slice-7-Versuch (owner
+freigegeben, real ausgeführt) hat diesen Bedarf belegt. #119 ist damit
+keine neue #90-Planrevision, sondern die Folgeaktion, die R5.9 selbst
+verlangt. #90/PR #118 bleibt unverändert auf R5.9
+(`docs/tasks/issue-90-clean-restart-plan-r5.9.md @
+baf0b2ae04cd42afa75dfa00e21d900116b38bc8`) als alleiniger kanonischer
+Umsetzungsgrundlage.
 
 Realer Befund aus #90 R5.9 Slice 7: Der ESP-IDF-Composition-Root
 (`main/app_main.cpp`) besitzt den konkreten `NvsStateStore` bereits
@@ -83,81 +90,99 @@ bleibt die verbindliche automatisierte Prüfung.
 Dieser Nachweis ist strukturell (Architektur-/Dependency-Checks), nicht
 durch eine Dummy-Zweit-App zu erbringen.
 
-## 4. Bereits vorhandene Inventur (Ausgangslage für Slice A)
+## 4. Reale Inventur (jetzt geprüft, nicht auf später verschoben)
 
-Am `#118`-HEAD real geprüft (siehe R6.0 Abschnitt 3):
+Am `#118`-HEAD `fd7e4e3ec58c9f3dda45710fd346752e083d7d19` real geprüft:
 
-- `IStateStore` ist bereits vollständig anwendungsneutral.
-- `NvsStateStore`/`NvsStateStoreConfig` tragen bereits den Kommentar, dass
-  `"state_store"`/`"fermentation"` Composition-Root-Konfiguration sind,
-  keine Plattformdefaults.
-- Bereits vorhandene Fachkomponenten akzeptieren `IStateStore&` bereits
-  direkt als Konstruktorparameter, ohne Umweg über eine
-  Plattform-Applikations-Kopplung:
+- `main/app_main.cpp`: `NvsOwningContext::create()` initialisiert die
+  `state_store`-Partition und öffnet real einen
+  `device_platform_esp_idf::NvsStateStore` (Namespace `"fermentation"`
+  als Aufrufargument, nicht als Adapterdefault). Danach werden
+  `device_platform::DevicePlatform platform;`,
+  `fermentation::FermentationApplication application;` und
+  `const device_platform_esp_idf::EspResetCauseSource resetCauseSource;`
+  auf dem Stack konstruiert. `application.begin(platform,
+  &resetCauseSource)` erhält den Store aktuell **nicht**.
+- `IPlatformServices` hat genau eine Methode (`ready()`), implementiert
+  ausschließlich von `DevicePlatform` (`final`).
+- `FermentationApplication::begin(IPlatformServices&, const
+  IResetCauseSource*)` hält aktuell nur `platformServices_` (Zeiger) und
+  `safetyCore_` (Member). Keine Configuration-/Run-Recoverykomponente ist
+  Mitglied.
+- `device_platform::IStateStore` ist bereits vollständig
+  anwendungsneutral (nur `StateStoreReadStatus`/`StateStoreWriteStatus`,
+  Byteschlüssel/-werte).
+- `device_platform_esp_idf::NvsStateStore`/`NvsStateStoreConfig` tragen
+  bereits den Kommentar, dass `"state_store"`/`"fermentation"`
+  Composition-Root-Konfiguration sind, keine Plattformdefaults.
+- Bereits vorhandene `lib/fermentation_app/`-Fachkomponenten akzeptieren
+  `IStateStore&` bereits direkt als expliziten Konstruktorparameter, ohne
+  Umweg über eine Plattform-Applikations-Kopplung:
   - `ConfigurationBootstrapStore(IStateStore&)`
   - `ConfigurationGraphStore(IStateStore&, const ITimeZoneResolver&)`
   - `ConfigurationService(ConfigurationMutationCoordinator&, ConfigurationGraphStore&, const ITimeZoneResolver&)`
   - `RunPersistenceCoordinator(IStateStore&, …)`
   - `ConfigurationRecoveryService::create(IStateStore&, ConfigurationBootstrapStore&, ConfigurationGraphStore&, ConfigurationService&, ConfigurationMutationCoordinator&)`
   - `RunRecoveryCoordinator(RunPersistenceCoordinator&)`
-- `FermentationApplication::begin(IPlatformServices&, const IResetCauseSource*)`
-  hält aktuell nur `platformServices_` (Zeiger) und `safetyCore_`
-  (Member); keine der obigen Recoverykomponenten ist Mitglied.
-- `IPlatformServices` hat aktuell genau eine Methode (`ready()`),
-  implementiert ausschließlich von `DevicePlatform`.
 
-Diese Inventur ist die Ausgangslage für Slice A, nicht deren Ergebnis;
-Slice A muss sie am dann aktuellen HEAD erneut real bestätigen, bevor
-irgendetwas verdrahtet wird.
+## 5. Architekturentscheidung (jetzt entschieden)
 
-## 5. Offene Entwurfsfrage (nicht vorentschieden)
+```text
+IStateStore bleibt eine separate, explizite Dependency.
+IPlatformServices wird NICHT um IStateStore erweitert.
+```
 
-Der Plan entscheidet **nicht**, ob:
+Begründung anhand der realen Inventur aus Abschnitt 4: `IPlatformServices`
+enthält aktuell ausschließlich `ready()`; keine der bereits vorhandenen
+Fachkomponenten konsumiert `IStateStore` über eine gebündelte
+Services-Abstraktion, sondern jede nimmt `IStateStore&` als eigenen,
+expliziten Konstruktorparameter entgegen — dasselbe Muster wie das
+bereits bestehende zusätzliche `begin()`-Argument
+`const IResetCauseSource*`. Eine Erweiterung von `IPlatformServices`
+wäre ohne belegten Gegenbedarf eine unnötige God-Interface-Aggregation
+und würde `DevicePlatform` (die einzige Implementierung) mit einer
+fachfremden Zuständigkeit belasten. Die reale Inventur zeigt keinen
+Gegenbeleg; kein `STOP – MATERIAL_ARCHITECTURE_DECISION_REQUIRED`.
 
-1. `IStateStore` als separate Dependency an `FermentationApplication`
-   bzw. deren owning Recovery-Kontext gegeben wird (analog zum
-   bestehenden Muster `IResetCauseSource*` als zusätzlicher
-   `begin()`-Parameter), oder
-2. `IStateStore` fachlich Teil von `IPlatformServices` wird.
+Kleinste damit festgelegte Composition:
 
-Vorläufiger Befund aus Abschnitt 4 (kein Vorentscheid): Da
-`ConfigurationBootstrapStore`, `ConfigurationGraphStore`,
-`RunPersistenceCoordinator` und `ConfigurationRecoveryService::create`
-bereits alle `IStateStore&` als eigenständigen, expliziten Parameter
-entgegennehmen — nicht über eine gebündelte Services-Abstraktion — spricht
-das bestehende Vertragsmuster tendenziell für Variante 1 (separate
-Dependency, analog `IResetCauseSource*`). `IPlatformServices` um
-`IStateStore` zu erweitern wäre eine God-Interface-Erweiterung, für die
-Abschnitt 4 keinen belegten Bedarf zeigt. Slice A muss diese Frage anhand
-der dann realen Konstruktoren, Owner und Lebenszeiten abschließend
-begründen und entscheiden; bis dahin bleibt sie offen.
-
-Kriterien für die Slice-A-Entscheidung: SOLID, KISS, keine
-Fermentationsbegriffe in Plattformports, keine unnötige
-God-Interface-Erweiterung, native Testbarkeit, eindeutige
-Objektlebenszeit, kein globaler Service Locator.
+1. `main/app_main.cpp` (Composition Root) konstruiert nach erfolgreichem
+   `NvsOwningContext::create()` — mit derselben Lebenszeit wie der Store —
+   die bereits vorhandenen Fachobjekte `ConfigurationBootstrapStore`,
+   `ConfigurationGraphStore`, `ConfigurationMutationCoordinator`,
+   `ConfigurationService`, `ConfigurationRecoveryService` (via
+   `::create(...)`), `RunPersistenceCoordinator` und
+   `RunRecoveryCoordinator`, alle über den bereits geöffneten
+   `NvsStateStore` (als `IStateStore&`). Das ist ADR-013-konform: der
+   Composition Root darf konkrete Anwendungsmodule instanziieren.
+2. `FermentationApplication::begin(...)` erhält diese bereits
+   konstruierten Recoverykomponenten als zusätzliche, explizite
+   Referenzparameter (analog zum bestehenden
+   `const IResetCauseSource*`-Muster) statt sie selbst zu besitzen oder
+   über `IPlatformServices` zu beziehen. `FermentationApplication` bleibt
+   Eigentümer nur der Verknüpfung zu `SafetyCore`, nicht der
+   Store-/Persistenzobjekte.
+3. Kein neuer Port, kein neues Schema, keine neue generische
+   Application-API. Exakte Parameterreihenfolge, Fehlerpfad bei
+   `ConfigurationRecoveryService::create(...) == nullptr` und die
+   endgültige Methodensignatur werden in Schritt 1 (Abschnitt 8)
+   implementiert, nicht in diesem Plan vorweggenommen.
 
 ## 6. Keine vorschnelle neue generische Application-API
 
-Kein automatisches Einführen von `IApplication`, `IRecoveryApplication`,
-`IApplicationPersistence`, `ApplicationContainer` oder ähnlichem. Zuerst
-werden vorhandene Konstruktoren, Owner, Services und Lebenszeiten
-inventarisiert (Slice A). Kann der heutige Composition Root mit
-bestehenden Verträgen sauber verdrahten, wird direkt verdrahtet — keine
-neue Abstraktion. Nur ein konkreter, belegter Kopplungsmangel darf eine
-kleine zusätzliche app-neutrale Schnittstelle rechtfertigen, mit
-exaktem Bedarfsnachweis im Slice-A-Ergebnis und eigenem Owner-Gate vor
-Umsetzung.
+Bestätigt durch Abschnitt 4/5: kein `IApplication`, `IRecoveryApplication`,
+`IApplicationPersistence`, `ApplicationContainer`, kein Service Locator,
+kein DI-Framework, kein zweiter Recovery-Orchestrator. Der heutige
+Composition Root verdrahtet mit den bereits bestehenden Verträgen direkt.
 
 ## 7. Scope
 
 ### In Scope
 
-**Plattform-/Composition-Seite:** bestehende StateStore-Lifetime prüfen;
-`NvsStateStore` bleibt im ESP-IDF-Composition-Root besessen;
-anwendungsneutrale Übergabe über bestehende oder minimal notwendige
-abstrakte Verträge; fail-closed Init/Open/Lifetime; keine konkrete App im
-Plattformmodul.
+**Plattform-/Composition-Seite:** `NvsStateStore` bleibt im
+ESP-IDF-Composition-Root besessen; anwendungsneutrale Übergabe über die
+in Abschnitt 5 festgelegte kleinste Verdrahtung; fail-closed
+Init/Open/Lifetime; keine konkrete App im Plattformmodul.
 
 **Aktueller erster Consumer:** die bereits vorhandenen Configuration
 Boot/Recovery-, Run-Persistence/Recovery- und SafetyCore-/Gate-
@@ -167,18 +192,16 @@ Eigentümerschaft bereits liegt (`lib/fermentation_app/`); sie werden
 nicht wegen Wiederverwendbarkeit nach `device_platform` verschoben.
 
 **Reale Verifikation:** die aus #90 R5.9 Slice 7 übertragenen Gates,
-actor-free:
+actor-free (siehe Abschnitt 9 für den vollständigen R5.9-Vertrag):
 
 ```text
-BOARD_IDENTITY_GATE          (bereits real PASS, wird nicht wiederholt,
-                               sofern Board/Setup unverändert)
+BOARD_IDENTITY_GATE          (bereits real PASS, wird nicht grundlos
+                               wiederholt, sofern Board/Setup unverändert)
 UART_RESET_GATE               (bereits real PASS, dito)
 REAL_NVS_RECOVERY_GATE
 CALLBACK_12_REAL_NVS_PRODUCT_GATE
 FULL_RUNTIME_STACK_HEADROOM  (reale HWM unter dem dann existierenden
-                               Recovery-Workload; ergänzt, ersetzt nicht,
-                               das #90-eigene statische
-                               RELEASE_STACK_SCRATCH_GATE)
+                               Recovery-Workload)
 MANUAL_POWER_CUT_GATE
 ```
 
@@ -192,49 +215,68 @@ Fermenter; neues Wireformat oder Schema ohne belegten Bedarf; Sensor-,
 UI-, WLAN- oder Aktorintegration; reale GPIO-/MOSFET-/BTS7960-/
 Peltierfreigabe.
 
-## 8. Owner-gatete Slices
+## 8. Owner-gatete Umsetzungsschritte
 
-### Slice A – vollständige Composition-Inventur und Entscheidung
+Zwei fachliche Schritte, bewusst KISS gehalten — keine weitere
+Inventur-/Entscheidungsphase nach der Freigabe, da Abschnitt 4/5 dies
+bereits jetzt real geleistet haben.
 
-Nach Freigabe der exakten R1.0-Plan-SHA und separater Slice-A-Freigabe:
-vollständige, am dann aktuellen HEAD erneut real geprüfte Inventur von
-`main/app_main.cpp`, `DevicePlatform`, `IPlatformServices`, `IStateStore`,
-`NvsStateStore`, `FermentationApplication`, Configuration-Boot/Recovery,
-Run-Persistence/Recovery, `SafetyCore`, Objektlebenszeiten,
-Bootreihenfolge, Task-/Stack-Besitz. Beantwortet abschließend die in
-Abschnitt 5 offene Entwurfsfrage mit Begründung. Kein Code.
+### Schritt 1 – minimale echte Composition
 
-Gate: kleinste notwendige Verdrahtung benannt und begründet; belegt, ob
-überhaupt eine zusätzliche Schnittstelle nötig ist.
-
-### Slice B – minimale echte Produktcomposition
-
-Plattformadapter im Composition Root; aktuelle konkrete App als
-Consumer entsprechend der Slice-A-Entscheidung verdrahtet; keine
-Rückwärtsabhängigkeit; keine alternative Diagnose-Composition; actor-free.
+Die in Abschnitt 5 festgelegte kleinste Verdrahtung umsetzen:
+vorhandenen `NvsStateStore`/`IStateStore` verwenden; vorhandene
+app-seitigen Recoverykomponenten verwenden; kleinste notwendige
+Ownership-/Lifetime-Verdrahtung im Composition Root. Keine neue
+generische Application-API, kein Service Locator, kein DI-Framework,
+kein zweiter Recovery-Orchestrator, keine alternative
+Diagnose-Composition.
 
 Gate: `scripts/check_architecture_boundaries.py` PASS; keine neue
 Rückwärtsabhängigkeit; Akzeptanzkriterium aus Abschnitt 3 strukturell
 erfüllt.
 
-### Slice C – gezielte Software-/Architekturverifikation
+### Schritt 2 – gezielte Verifikation
 
-Vorhandene Tests wiederverwenden; nur notwendige neue
-Compositiontests; Architekturgrenzen explizit prüfen; beide
-ESP-IDF-Profile; Ressourcen nur soweit durch die Composition betroffen
-(inkl. Aktualisierung des #90-`RELEASE_STACK_SCRATCH_GATE`-Nachweises,
-falls sich der Main-Task-Callgraph durch die Composition ändert).
+Software/Build: direkt betroffene Tests wiederverwenden, nur notwendige
+neue Compositiontests; Architekturgrenzen explizit prüfen; beide
+ESP-IDF-Profile; nur durch die Composition betroffene Ressourcen (Stack/
+Scratch nur dort, wo sich der Main-Task-Callgraph durch die Composition
+tatsächlich ändert; die aus #90 bekannte statische Zusatzuntersuchung
+bleibt informativ, kein eigenständiges hartes Gate).
 
-### Slice D – reales actor-free Boardgate
+Real actor-free, vollständig gemäß dem in Abschnitt 9 übernommenen
+R5.9-Slice-7-Vertrag:
 
-Die in Abschnitt 7 gelisteten übertragenen realen Gates, actor-free,
-inklusive Callback 12, Runtime-Stack-Headroom unter dem realen
-Recovery-Workload und mindestens drei realen manuellen
-Stromunterbrechungen je ausgewähltem Szenario während aktiver
-Schreiblast (analog zum in #90 R5.9 Abschnitt 8/Slice 7 bereits
-etablierten Vertrag).
+```text
+REAL_NVS_RECOVERY_GATE
+CALLBACK_12_REAL_NVS_PRODUCT_GATE
+FULL_RUNTIME_STACK_HEADROOM
+MANUAL_POWER_CUT_GATE
+```
 
-## 9. Fail-closed Regeln (unverändert aus #90 R5.9 übernommen)
+Bereits gültige Board-/UART-Evidenz (`BOARD_IDENTITY_GATE=PASS`,
+`UART_RESET_GATE=PASS`) nicht grundlos wiederholen.
+
+## 9. R5.9-Slice-7-Vertrag vollständig übernommen
+
+Schritt 2 erfüllt den in #90 R5.9 Slice 7 bereits definierten realen
+Vertrag, ohne eine neue Testmatrix zu erfinden:
+
+- realer Boot/Reboot/NVS-Reload;
+- repräsentative Configuration-/Run-Records;
+- vollständige Record-/Envelope-/CRC-/Schema-/Epoch-/Referenzvalidierung;
+- Recoveryoutcome;
+- Safety-Projektion;
+- logischer Gate;
+- kein physischer Aktortest;
+- Callback 12 bleibt Backend-Known-Limitation, separat vom Produktgate
+  bewertet;
+- mindestens drei reale manuelle Power-Cuts pro ausgewähltem relevantem
+  Szenario während aktiver Schreiblast;
+- reale Runtime-HWM unter dem dann existierenden Recovery-Workload;
+- fail-closed bei unvollständiger Evidenz (siehe Abschnitt 10).
+
+## 10. Fail-closed Regeln (unverändert aus #90 R5.9 übernommen)
 
 Kein `NOT_RUN -> PASS`, kein `BLOCKED -> PASS`, kein unerwarteter
 NVS-Zustand als stiller `NoActiveRun`, kein unklarer
@@ -243,24 +285,26 @@ stiller Discard, kein Fallback als automatisches Resume, kein
 Recoverystatus als physische Aktorfreigabe. Der actor-free logische Gate
 bleibt bei unvollständiger Evidenz geschlossen.
 
-## 10. Dynamische Statuspflege
+## 11. Dynamische Statuspflege
 
-Nach jedem Slice werden HEAD, Plan-SHA, Ergebnisstatus, offene Befunde
-und der nächste Owner-Schritt im neuen Draft-PR, in Issue #119 und in
+Nach jedem Schritt werden HEAD, Plan-SHA, Ergebnisstatus, offene Befunde
+und der nächste Owner-Schritt im Draft-PR #120, in Issue #119 und in
 `docs/ROADMAP.md` synchronisiert, sowie genau ein aktueller
 `SESSION HANDOVER` gepflegt. Issue #90 wird bei Bedarf informativ
 verlinkt, aber nicht durch #119-Fortschritt automatisch geschlossen.
 
-## 11. Abnahmekriterien dieser Planrunde
+## 12. Abnahmekriterien dieser Planrunde
 
 | Nachweis | Status |
 |---|---|
 | Live-PR-/Issue-/Epic-/Roadmap-Abgleich | `PASS` |
-| Architekturinventur (Abschnitt 4) | `PASS` als Planinhalt |
-| Entwurfsfrage offen gehalten, nicht vorentschieden | `PASS` |
+| Reale Architekturinventur (Abschnitt 4) | `PASS` |
+| Architekturentscheidung getroffen und begründet (Abschnitt 5) | `PASS` |
+| `MATERIAL_ARCHITECTURE_DECISION_OPEN` | `NO` |
 | Akzeptanzkriterium definiert | `PASS` |
 | Neue Produktions-/Test-/Compositionimplementation | `NOT_RUN` / nicht enthalten |
-| Reale Boardverifikation | `NOT_RUN` bis Slice D |
+| Reale Boardverifikation (Schritt 2) | `NOT_RUN` bis eigene Freigabe |
 | Exakte R1.0-Planfreigabe | `BLOCKED` bis Ownerentscheidung |
 
-STOP nach Freigabe dieser Datei; keine Implementation vor Slice-A-Freigabe.
+STOP nach Freigabe dieser Datei; keine Implementation vor Freigabe von
+Schritt 1.
