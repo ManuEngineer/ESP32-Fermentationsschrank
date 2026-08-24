@@ -1,14 +1,23 @@
 #include <cinttypes>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "app_config.hpp"
+#include "configuration_bootstrap_store.hpp"
+#include "configuration_graph_store.hpp"
+#include "configuration_mutation_coordinator.hpp"
+#include "configuration_recovery_service.hpp"
+#include "configuration_service.hpp"
 #include "device_platform.hpp"
-#include "esp_timer_time_source.hpp"
 #include "esp_reset_cause_source.hpp"
+#include "esp_time_zone_resolver.hpp"
+#include "esp_timer_time_source.hpp"
 #include "nvs_flash.h"
 #include "nvs_state_store.hpp"
 #include "fermentation_application.hpp"
+#include "run_checkpoint_schedule.hpp"
+#include "run_persistence_coordinator.hpp"
 
 #if defined(APP_ISSUE_29_BRINGUP_PROBE)
 #include "issue_29_bringup_probe.hpp"
@@ -29,11 +38,10 @@ constexpr uint64_t kSecondResourceLogAfterMs = 30000U;
 // pdMS_TO_TICKS(1), da das bei CONFIG_FREERTOS_HZ=100 auf 0 runden koennte.
 constexpr TickType_t kCooperativeYieldTicks = 1;
 
-// The composition root owns the concrete partition lifecycle.  The adapter
+// The composition root owns the concrete partition lifecycle. The adapter
 // only opens/closes its handle; it never initializes, erases, or deinitializes
-// an ESP-IDF partition.  This small actor-free context deliberately does not
-// construct a full recovery/application graph yet: later slices may inject
-// this IStateStore into the owning recovery context after their own gates.
+// an ESP-IDF partition. The store accessor below is deliberately non-owning;
+// this context remains alive for every consumer constructed from it.
 class NvsOwningContext final {
    public:
     [[nodiscard]] static std::unique_ptr<NvsOwningContext> create() {
@@ -79,6 +87,10 @@ class NvsOwningContext final {
     NvsOwningContext& operator=(const NvsOwningContext&) = delete;
     NvsOwningContext(NvsOwningContext&&) = delete;
     NvsOwningContext& operator=(NvsOwningContext&&) = delete;
+
+    [[nodiscard]] device_platform::IStateStore& store() const noexcept {
+        return *store_;
+    }
 
    private:
     NvsOwningContext(
@@ -136,9 +148,62 @@ extern "C" void app_main(void) {
     const device_platform::PlatformStartupContext startupContext{
         app_config::hasSafeDefaults(app_config::kActiveProfilePolicy),
     };
-    const bool applicationStarted =
-        platform.begin(startupContext) &&
-        application.begin(platform, &resetCauseSource);
+    if (!platform.begin(startupContext)) {
+        logBootSummary(app_config::kActiveProfilePolicy, false);
+        return;
+    }
+
+    auto& store = stateStoreContext->store();
+    device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;
+    fermentation::ConfigurationMutationCoordinator mutationCoordinator;
+    fermentation::ConfigurationBootstrapStore bootstrapStore(store);
+    fermentation::ConfigurationGraphStore graphStore(store, timeZoneResolver);
+    fermentation::ConfigurationService configurationService(
+        mutationCoordinator, graphStore, timeZoneResolver);
+    auto configurationRecoveryService =
+        fermentation::ConfigurationRecoveryService::create(
+            store, bootstrapStore, graphStore, configurationService,
+            mutationCoordinator);
+    if (configurationRecoveryService == nullptr) {
+        ESP_LOGE(kTag, "configuration recovery composition failed");
+        logBootSummary(app_config::kActiveProfilePolicy, false);
+        return;
+    }
+
+    const auto configurationRecoveryResult =
+        configurationRecoveryService->boot();
+    std::optional<fermentation::RunPersistenceCoordinator>
+        runPersistenceCoordinator;
+    if (configurationRecoveryResult.status ==
+            fermentation::ConfigurationRecoveryStatus::RuntimeReady ||
+        configurationRecoveryResult.status ==
+            fermentation::ConfigurationRecoveryStatus::
+                FactoryInitializationCompleted ||
+        configurationRecoveryResult.status ==
+            fermentation::ConfigurationRecoveryStatus::FactoryResetCompleted) {
+        const auto runtimeRead = configurationService.acquireRuntime();
+        if (runtimeRead.status ==
+            fermentation::RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
+            runPersistenceCoordinator.emplace(
+                store, runtimeRead.lease.get().storageEpoch(),
+                fermentation::RunCheckpointSchedule{});
+        }
+    }
+
+    std::optional<fermentation::RunPersistenceLoadResult>
+        runPersistenceLoadResult;
+    if (runPersistenceCoordinator.has_value()) {
+        runPersistenceLoadResult.emplace(
+            runPersistenceCoordinator->loadAndInitialize());
+    }
+
+    const bool applicationStarted = application.begin(
+        platform, configurationService, configurationRecoveryResult,
+        runPersistenceCoordinator.has_value() ? &*runPersistenceCoordinator
+                                              : nullptr,
+        runPersistenceLoadResult.has_value() ? &*runPersistenceLoadResult
+                                             : nullptr,
+        &resetCauseSource);
 
     logBootSummary(app_config::kActiveProfilePolicy, applicationStarted);
 
