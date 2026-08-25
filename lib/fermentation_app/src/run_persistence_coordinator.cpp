@@ -7,6 +7,7 @@
 #include "run_persistence_codec.hpp"
 #include "run_progress_weighting.hpp"
 #include "run_recovery_time.hpp"
+#include "boot_classification.hpp"
 #include "control_context.hpp"
 #include "sensor_selection.hpp"
 #include "storage_envelope.hpp"
@@ -771,6 +772,95 @@ RecoveryActivationOutcome RunPersistenceCoordinator::activateLoadedRun(
         candidate.recoveryBootAnchorMonotonicMillis.reset();
     }
     return commitCandidate(candidate);
+}
+
+RunPersistenceResult RunPersistenceCoordinator::activateR1EligibleRun(
+    RunCommandState& current, const RunCheckpointTime& time,
+    const CrossRolePlausibilityContext* liveSensorEvidence) {
+    if (state_ != RunPersistenceCoordinatorState::LoadedActiveRun ||
+        !currentHead_.has_value() ||
+        !slots_[currentHead_->current.slot].has_value()) {
+        return unavailableResult();
+    }
+
+    // These terminal states follow the exact RAM-only restoration precedent
+    // of activateLoadedRun(). They do not require live sensor evidence and do
+    // not create a process transition.
+    if (current.processState.state == ProcessState::Fault) {
+        state_ = RunPersistenceCoordinatorState::Ready;
+        auto restored = result(RunPersistenceResultStatus::Applied,
+                               RunPersistenceStep::RamApply,
+                               RunPersistenceTechnicalReason::None,
+                               RunPersistenceDurability::Unchanged);
+        restored.coordinatorState = state_;
+        return restored;
+    }
+
+    if (current.processState.state == ProcessState::Completed) {
+        current.processState.stateEnteredAtMillis = time.monotonicMillis;
+        state_ = RunPersistenceCoordinatorState::Ready;
+        auto restored = result(RunPersistenceResultStatus::Applied,
+                               RunPersistenceStep::RamApply,
+                               RunPersistenceTechnicalReason::None,
+                               RunPersistenceDurability::Unchanged);
+        restored.coordinatorState = state_;
+        return restored;
+    }
+
+    const auto& loadedSnapshot = slots_[currentHead_->current.slot]->snapshot;
+    if (!boot_classification::isR1ResumeEligible(loadedSnapshot) ||
+        current.processState.state != loadedSnapshot.processState.state ||
+        liveSensorEvidence == nullptr) {
+        return result(RunPersistenceResultStatus::NotEligible,
+                      RunPersistenceStep::CandidateApply);
+    }
+
+    // Step 5 will replace this local return-by-value path with the approved
+    // in-place working set. Step 2 intentionally keeps that stack-safety work
+    // out of scope while preserving write-before-apply semantics.
+    auto candidate = current;
+    candidate.processState =
+        rebasedRecoveredState(current.processState, time.monotonicMillis);
+
+    if (!candidate.sensorSelection.has_value() ||
+        !candidate.activeRunSensorMode.has_value()) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+    const auto recommendation = computeRestartSensorSelection(
+        *candidate.sensorSelection, *candidate.activeRunSensorMode,
+        recoverySensorSelectionProgramContext(candidate), *liveSensorEvidence);
+    if (recommendation.runtime.permission != SensorPeltierPermission::Allowed) {
+        return result(RunPersistenceResultStatus::NotEligible,
+                      RunPersistenceStep::CandidateApply);
+    }
+    candidate.sensorSelectionRuntime = recommendation.runtime;
+    candidate.activeRunSensorMode = recommendation.activeMode;
+    if (candidate.activeManualRun.has_value()) {
+        candidate.activeManualRun->values.sensorMode =
+            recommendation.activeMode;
+    }
+
+    const auto snapshot = makeRunPersistenceSnapshot(
+        candidate, persistedIds_, persistedIdCount_,
+        RunCheckpointTrigger::Transition, time, schedule_.intervalMinutes());
+    if (!snapshot.has_value()) {
+        return result(RunPersistenceResultStatus::InvalidDecision,
+                      RunPersistenceStep::CandidateApply,
+                      RunPersistenceTechnicalReason::InvalidProjection);
+    }
+
+    const auto persisted = writeSnapshotCore(
+        *snapshot, time, false, current, RunPersistenceMutationKind::Recovery,
+        std::nullopt, std::nullopt, RunPersistenceFallbackDirective{},
+        RunPersistenceCoordinatorState::LoadedActiveRun);
+    if (persisted.status != RunPersistenceResultStatus::Applied) {
+        return persisted;
+    }
+
+    current = candidate;
+    return persisted;
 }
 
 RecoveryActivationOutcome
