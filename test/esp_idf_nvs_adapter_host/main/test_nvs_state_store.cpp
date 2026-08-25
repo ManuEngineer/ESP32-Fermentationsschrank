@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "bdl_ramdisk.hpp"
+#include "esp_time_zone_resolver.hpp"
 #include "nvs_flash.h"
 #include "run_commands.hpp"
 #include "run_persistence_codec.hpp"
@@ -1827,9 +1828,46 @@ bool gcEraseCharacterization() {
     return eraseObserved;
 }
 
+void timeZoneResolverContract() {
+    const device_platform_esp_idf::EspTimeZoneResolver resolver;
+
+    const auto zurich = resolver.prepare("Europe/Zurich");
+    CHECK(zurich.status == device_platform::TimeZonePrepareStatus::Success);
+    CHECK(zurich.prepared.has_value());
+    CHECK(zurich.prepared->canonicalIdentifier == "Europe/Zurich");
+    std::puts("ESP_TIME_ZONE_RESOLVER_EUROPE_ZURICH_SUCCESS=PASS");
+
+    const auto unknown = resolver.prepare("Europe/Berlin");
+    CHECK(unknown.status ==
+          device_platform::TimeZonePrepareStatus::UnsupportedIdentifier);
+    CHECK(!unknown.prepared.has_value());
+    std::puts("ESP_TIME_ZONE_RESOLVER_UNKNOWN_IDENTIFIER_UNSUPPORTED=PASS");
+
+    const auto empty = resolver.prepare("");
+    CHECK(empty.status ==
+          device_platform::TimeZonePrepareStatus::UnsupportedIdentifier);
+    CHECK(!empty.prepared.has_value());
+    std::puts("ESP_TIME_ZONE_RESOLVER_EMPTY_IDENTIFIER_UNSUPPORTED=PASS");
+
+    CHECK(unknown.status !=
+          device_platform::TimeZonePrepareStatus::PreparationFailed);
+    CHECK(empty.status !=
+          device_platform::TimeZonePrepareStatus::PreparationFailed);
+    std::puts("ESP_TIME_ZONE_RESOLVER_PREPARATION_FAILED_NOT_RETURNED_R1=PASS");
+
+    const auto repeated = resolver.prepare("Europe/Zurich");
+    CHECK(repeated.status == zurich.status);
+    CHECK(repeated.prepared.has_value());
+    CHECK(repeated.prepared->canonicalIdentifier ==
+          zurich.prepared->canonicalIdentifier);
+    std::puts("ESP_TIME_ZONE_RESOLVER_REPEAT_CALL_DETERMINISTIC=PASS");
+    std::puts("ESP_TIME_ZONE_RESOLVER_STATELESS=PASS");
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
+    timeZoneResolverContract();
     canonicalOracleIdSelfTest();
     configValidation();
     openFailureIsNotMissingKey();

@@ -80,6 +80,10 @@ class NvsOwningContext final {
     NvsOwningContext(NvsOwningContext&&) = delete;
     NvsOwningContext& operator=(NvsOwningContext&&) = delete;
 
+    [[nodiscard]] device_platform::IStateStore& store() const noexcept {
+        return *store_;
+    }
+
    private:
     NvsOwningContext(
         device_platform_esp_idf::NvsStateStoreConfig config,
