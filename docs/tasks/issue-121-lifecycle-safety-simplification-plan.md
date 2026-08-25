@@ -38,18 +38,77 @@ Abschnitt 12 (Composition) übernommen, nicht als Code.
 
 ### Korrekturrunden (diese Revision)
 
-Der Owner hat vier Fassungen dieser Plandatei zurückgewiesen:
+Der Owner hat fünf Fassungen dieser Plandatei zurückgewiesen:
 
 - SHA `ea4f057` (Korrekturrunde 1): 6 Blocker, 5 Major-Befunde, 1 Minor-Befund.
 - SHA `666525e` (Korrekturrunde 2): 7 Blocker, 5 Major-Befunde.
 - SHA `fdb240a` (Korrekturrunde 3): 3 Blocker, 6 Major-Befunde.
 - SHA `cd64c8f` (Korrekturrunde 4): 6 Blocker, 5 Major-Befunde.
+- SHA `117b0d4` (Korrekturrunde 5): 7 Blocker, 2 Major-Befunde.
 
-Alle Befunde aller vier Runden wurden gegen den realen Code auf `BASE_SHA`
+Alle Befunde aller fünf Runden wurden gegen den realen Code auf `BASE_SHA`
 nachverifiziert (siehe Abschnitt 4, neu ergänzte Unterpunkte) und sind in
 dieser Fassung **in-place** korrigiert, nicht als Anhang neben dem alten
-Text. Es gibt keine R2-/R3-/R4-/R5-Planrevision; diese Datei bleibt „R1",
-vierfach konsolidiert. **Korrekturrunde 4 hat das von Runde 3 als „später
+Text. Es gibt keine R2-/R3-/R4-/R5-/R6-Planrevision; diese Datei bleibt „R1",
+fünffach konsolidiert. **Korrekturrunde 5 hat Runde 4s eigenen
+Stack-Sicherheits-Vertrag (Abschnitt 12.4) als unvollständig erkannt: der
+Vertrag schloss nur die Aufrufer-Ebene, nicht die intern von
+`RunPersistenceCoordinator` und `run_persistence_codec.cpp` selbst
+konstruierten grossen Werte.** Real geprüft: `writeSnapshotCore()`
+(`run_persistence_coordinator.cpp:1571`) konstruiert weiterhin einen lokalen
+`RunPersistenceRawRecord record{...}` (real gemessen `sizeof(
+RunPersistenceRawRecord)=4152`, enthält selbst ein vollständiges
+`RunPersistenceSnapshot`); `loadAndInitialize()`s `loadReference`-Lambda
+(Zeile 347-386) gibt `std::optional<RunPersistenceRawRecord>` per Wert
+zurück, zweimal aufgerufen als `currentRecord`/`fallbackRecord`-Lokale
+(Zeile 388/465); `decodeRunPersistenceSnapshot()`
+(`run_persistence_codec.cpp:1151`) konstruiert intern `RunPersistenceSnapshot
+s;` als lokale Variable. Zusätzlich real gemessen (Host-Build):
+`sizeof(RunPersistenceCoordinator)=8968` (die Klasse selbst ist bereits
+gross, da `slots_[2]` zwei `std::optional<RunPersistenceRawRecord>` als
+**Instanzmember** hält, nicht erst durch diesen Plan). Korrektur: ein
+Coordinator-eigenes `RunPersistenceWorkingSet`-Wertmember
+(`candidate`/`snapshot`/`record`, ersetzt Runde 4s separates
+`candidateScratch_`) plus durchgängige In-place-/Out-Parameter-Kerne für
+Snapshot-Projektion (`makeRunPersistenceSnapshotInto()`), Codec-Decode
+(`decodeRunPersistenceSnapshotInto()`/`decodeRunPersistenceRecordInto()`)
+und Laden (`loadAndInitializeInto()`) schliessen jetzt auch diese
+Callee-interne Ebene (Abschnitt 12.4, vollständig überarbeitet). Runde 5
+korrigierte ausserdem: Runde 4s Reentrancy-Begründung „das Scratch ist
+durch `state_ == Busy` geschützt" war real falsch – `candidate`/`snapshot`
+werden in `persistCommand()`/`discardAsNoActiveRun()` **vor**
+`writeSnapshotCore()`s `state_ = Busy`-Zuweisung konstruiert (real geprüft,
+`run_persistence_coordinator.cpp:1495`); der tatsächlich tragfähige
+Reentrancy-Vertrag ist eine explizite Single-Task-Aufrufaffinität, kein
+`state_`-basierter Lock (Abschnitt 12.4). Runde 4s Formulierung
+„`candidateScratch_` wird im Konstruktor mit `new (std::nothrow)`
+alloziert; der Konstruktor gibt bei Fehler `nullptr`/einen Fehlerstatus
+zurück" war zusätzlich technisch unmöglich (ein Konstruktor hat keinen
+Rückgabewert) und ist mit dem neuen `RunPersistenceWorkingSet`-Wertmember
+gegenstandslos geworden: `RunPersistenceCoordinator` selbst wird bereits
+als Ganzes über `new (std::nothrow)` durch `FermentationApplication`
+alloziert (unverändert gegenüber Runde 4s §12.1-Ownership-Tabelle) – keine
+zweite, separate Scratch-Allokation nötig. `decideProgramStartInto()`/
+`decideManualStartInto()` waren in Runde 4 nur als Wrapper um die
+bestehenden Return-by-value-Kerne (`beginDecision()`/`result()`) skizziert;
+real geprüft (`run_commands.cpp:187-221`, `:687-797`) mutieren diese Kerne
+ein einziges lokales `CommandDecision decision`-Objekt (`sizeof(
+CommandDecision)=10520`) durchgängig über die gesamte Funktion – ein
+Wrapper hätte sich auf nicht garantierte NRVO verlassen. Korrektur: ein
+neuer `beginDecisionInto()`-Kern schreibt direkt in die vom Aufrufer
+übergebene `CommandDecision&`; `decideProgramStartInto()`/
+`decideManualStartInto()` operieren durchgängig über eine Referenz auf das
+Zielobjekt statt über eine lokale Kopie; die bestehenden
+Return-by-value-Funktionen delegieren jetzt umgekehrt an die neuen
+In-place-Kerne (ein `CommandDecision decision; decideProgramStartInto(...,
+decision); return decision;`), statt dass die In-place-Variante auf der
+Return-by-value-Variante aufbaut. Schliesslich korrigierte Runde 5 die
+Scope-Aussage in Abschnitt 14 („keine Änderung an
+`run_persistence_codec.cpp`"/„`RunPersistenceCoordinator` (außer der einen
+neuen Methode)"): beide Dateien erhalten jetzt zusätzlich rein mechanische
+In-place-/Out-Parameter-Helfer zur Stack-Sicherheit, ohne Wire-/Schema-/
+Semantikänderung (Byte-for-byte-Regression aller Schema-1/2/3-Fixtures
+bleibt Pflichttest). **Korrekturrunde 4 hat das von Runde 3 als „später
 zu messendes Restrisiko" behandelte Coordinator-Stackproblem als bereits
 bewiesenen Blocker eingeordnet:** `docs/ISSUE_29_BUILD_REPORT.md` (reale
 Xtensa-`-fstack-usage`-Messung auf `BASE_SHA`) dokumentiert
@@ -109,10 +168,10 @@ ARCHITECTURE_AUDIT_OWNER_REVIEW=PASS_WITH_CORRECTIONS
 ARCHITECTURE_AUDIT_SOURCE_TEXT=NOT_PERSISTED_NOT_RECOVERABLE
 ARCHITECTURE_VERDICT=SIMPLIFY
 PLAN_BASIS=FRESH_CODE_INVENTORY_PLUS_OWNER_CORRECTIONS_A_J
-PRIOR_PLAN_SHA=cd64c8fca0d970ccc952c4cd9c0676b776cf1a20
+PRIOR_PLAN_SHA=117b0d4d6d5853dd26d20f23e9910da0767a0c19
 PRIOR_PLAN_REVIEW=CORRECTION_REQUIRED
-EARLIER_PLAN_SHA=fdb240a08192536141c26522f44295f2dfdcba9d
-EARLIEST_PLAN_SHA=666525ea63594adc1e2fd77e452b637b22f868c2
+EARLIER_PLAN_SHA=cd64c8fca0d970ccc952c4cd9c0676b776cf1a20
+EARLIEST_PLAN_SHA=fdb240a08192536141c26522f44295f2dfdcba9d
 FIRST_PLAN_SHA=ea4f05723bdcf78fd6e081484ef6ab0cb28f1bf6
 ```
 
@@ -588,7 +647,7 @@ enum class BootClassification : std::uint8_t {
 | `ResumeOffer` | `READY` | **nicht published** | Snapshot bleibt technisch in `RunPersistenceCoordinator` (`LoadedActiveRun`); rekonstruierter `RunCommandState` lebt **in `FermentationApplication`** (Abschnitt 9, Blocker 1) | `DENIED` | ResumeOffer-Anzeige mit Snapshot-Vorschau |
 | `ResumeConfirmed` | `READY` | published nach `RunPersistenceCoordinator::activateR1EligibleRun()` (Abschnitt 9.1, **neu**, deckt alle drei `LoadedActiveRun`-Ausgänge ab – Fault/Completed/3 Resume-Phasen –, kein `activateLoadedRun()`) | `activateR1EligibleRun()`, durabler Schreibvorgang (Recovery-Mutation, `UseStandardFallback`) | `DENIED` bis frische Interlock-Evidenz nach `Applied` | Lauf läuft weiter |
 | `ResumeRejected` | `READY` | published: `Standby` nach Discard | `RunPersistenceCoordinator::discardAsNoActiveRun()` (write-before-apply, bestehend) | `DENIED` | Verworfen-Hinweis optional |
-| `DiscardableRun` | `READY` | published: `Standby`, nur bei `Applied`, nach `discardAsNoActiveRun()` mit einem via `restoreRunPersistenceSnapshot()` rekonstruierten `RunCommandState&` (Abschnitt 9, Major 6 – **nicht** ein leerer/minimaler Stub) | `discardAsNoActiveRun()`, write-before-apply | `DENIED` | keine (stiller Discard, wie heute); bei Fehlschlag `SERVICE_REQUIRED` statt stillem Discard (Abschnitt 9 Fehlerklassifikation) |
+| `DiscardableRun` | `READY` | published: `Standby`, nur bei `Applied`, nach `discardAsNoActiveRun()` mit einem via `restoreRunPersistenceSnapshotInto()` rekonstruierten `RunCommandState&` (Abschnitt 9, Major 6 – **nicht** ein leerer/minimaler Stub) | `discardAsNoActiveRun()`, write-before-apply | `DENIED` | keine (stiller Discard, wie heute); bei Fehlschlag `SERVICE_REQUIRED` statt stillem Discard (Abschnitt 9 Fehlerklassifikation) |
 | `CompletedRun` | `READY` | `target` heap-alloziert (`new (std::nothrow)`) + `restoreRunPersistenceSnapshotInto(*loaded.snapshot, *target)` (Abschnitt 12.4.2, Major 9, Runde 4 – identisches Muster wie `DiscardableRun`), dann published: `Completed` via `activateR1EligibleRun(*target, time, nullptr)` (Abschnitt 9.1, exakter `activateLoadedRun()`-Completed-Präzedenzfall: RAM-only, `stateEnteredAtMillis`-Refresh; nur bei `Applied`: `runtimeRunState_ = std::move(target)`) | RAM-Mutation, `RunPersistenceDurability::Unchanged` (kein Store-Schreibvorgang) | `DENIED` | Abschluss-Anzeige |
 | `TerminalRunFault` | `READY` | `target` heap-alloziert (`new (std::nothrow)`) + `restoreRunPersistenceSnapshotInto(*loaded.snapshot, *target)` (Abschnitt 12.4.2, Major 9, Runde 4 – identisches Muster wie `DiscardableRun`), dann published: `Fault` via `activateR1EligibleRun(*target, time, nullptr)` (Abschnitt 9.1, exakter `activateLoadedRun()`-Fault-Präzedenzfall: RAM-only, unveränderter `current`; nur bei `Applied`: `runtimeRunState_ = std::move(target)`; **kein** `propose(Boot→Fault)` – `validBootTopology()` kennt diese Kante nicht, Abschnitt 4.2 Major 8) | RAM-Mutation, `RunPersistenceDurability::Unchanged` (kein Store-Schreibvorgang) | `DENIED` | Fehler-Anzeige |
 | `UntrustedConfiguration` | `SERVICE_REQUIRED` | nicht published | keine | `DENIED` | `FaultCode ∈ {ConfigurationUnavailable, ConfigurationIntegrityFailure, ConfigurationCommitIndeterminate}` |
@@ -666,7 +725,7 @@ Beweis, dass `Boot` nie persistiert/published/als Permission verwendet wird:
    mit `processState.state == Boot` – die vier Schreibstellen
    (`activateR1EligibleRun()`s drei Zweige, Abschnitt 9.1, sowie
    `discardAsNoActiveRun()`) starten entweder aus
-   `restoreRunPersistenceSnapshot()`s Ausgabe (die selbst nur aus einem
+   `restoreRunPersistenceSnapshotInto()`s Ausgabe (die selbst nur aus einem
    bereits validierten, also nie-`Boot`-Snapshot rekonstruiert) oder aus
    einem `propose()`-erzeugten `Standby`-Kandidaten.
 3. **Nie Permission:** `ActuationEvidence` (Abschnitt 10) enthält keinen
@@ -772,10 +831,19 @@ Standby (Application READY, Actuation DENIED)
      persistFreshStartCommand(), hier direkt in FermentationApplication
      angewendet statt ueber den – in dieser Revision nicht komponierten –
      Orchestrator, Abschnitt 4.9)
-  -> RunPersistenceCoordinator::persistCommand(*runtimeRunState_, decision,
-     time, liveSensorEvidence)  // bestehende API, #17 Write-before-Apply
-     unveraendert; schliesst Major 7 (Runde 3) – der kanonische
-     Runtime-State ist der Eingang, nicht ein generisches "current"
+  -> decisionTarget = std::unique_ptr<CommandDecision>{
+       new (std::nothrow) CommandDecision()}
+     if (decisionTarget == nullptr) -> fail-closed, kein Start
+     (Abschnitt 12.4.3, Blocker 4 Runde 4)
+  -> decideProgramStartInto(..., *decisionTarget)  // oder
+     decideManualStartInto(...) - stack-sicherer In-place-Kern
+     (Abschnitt 12.4.3, Blocker 6 Runde 5), KEIN generisches "decision"
+     bei !proposed() -> kein Start (bestehende Ablehnungslogik unveraendert)
+  -> RunPersistenceCoordinator::persistCommand(*runtimeRunState_,
+     *decisionTarget, time, liveSensorEvidence)  // bestehende API,
+     #17 Write-before-Apply unveraendert; schliesst Major 7 (Runde 3) –
+     der kanonische Runtime-State ist der Eingang, nicht ein generisches
+     "current"
   -> RunPersistenceResultStatus::Applied  // writeSnapshot() mutiert
      *runtimeRunState_ selbst in-place (dieselbe write-before-apply-
      Konvention wie ueberall im Coordinator, Abschnitt 4.4/9.1); bei
@@ -827,14 +895,28 @@ std::optional<ProcessRuntimeState> publishedProcessState() const {
 }
 ```
 
-**Allokationsfehlerfall (verbindlich, Runde 3):** Schlägt die Heap-Allokation
-für `runtimeRunState_` oder `pendingResume_` fehl (`new (std::nothrow)`),
-gilt fail-closed: kein publizierter aktiver Lauf
-(`publishedProcessState() == std::nullopt`), kein Resume-Angebot,
-`Actuation DENIED`, ein typisierter `PresentationState`-Fehler
-(`FaultCode` – kein neuer Wert nötig, mappt auf denselben
-`RunPersistenceUntrusted`-Diagnosepfad wie ein technischer Ladefehler,
-Abschnitt 11), keine erfundene Store-Mutation.
+**Allokationsfehlerfall (verbindlich, Runde 3; Diagnoseattribution
+korrigiert, Blocker 7/Major 8 Runde 4/5):** Schlägt die Heap-Allokation für
+`runtimeRunState_` oder `pendingResume_` fehl (`new (std::nothrow)`), gilt
+fail-closed: kein publizierter aktiver Lauf (`publishedProcessState() ==
+std::nullopt`), kein Resume-Angebot, `Actuation DENIED`, **kein** Store-
+Schreibvorgang. **Korrektur gegenüber der Vorfassung dieses Abschnitts
+(real übersehener Widerspruch zu Abschnitt 11, Blocker 7, Runde 5):** dieser
+Absatz mappte den Fehler weiterhin auf denselben `FaultCode::
+RunPersistenceUntrusted`-Diagnosepfad wie ein technischer Ladefehler – das
+widerspricht Major 8 (Abschnitt 11), wonach ein Application-/
+Allokationsfehler die Persistence-Vertrauenswürdigkeit nicht falsifiziert
+(„Producer bleiben Autorität ihrer eigenen Wahrheit"; ein Heap-Fehler bei
+der Application-seitigen Objektkonstruktion sagt nichts über Store oder
+Persistence aus). Kanonisch, konsistent mit Abschnitt 11:
+
+```text
+PresentationState.applicationAllocationFailure = true
+FaultCode::None   // kein Safety-FaultCode, kein RunPersistenceUntrusted
+Persistence-Trust unveraendert (RunPersistenceCoordinator::state()
+  bleibt unberuehrt, dieser Fehler entsteht in FermentationApplication,
+  nicht im Coordinator)
+```
 
 ```text
 RUNTIME_RUN_STATE_STORAGE=HEAP_OWNED
@@ -847,7 +929,7 @@ FERMENTATION_APPLICATION_INLINE_LARGE_RUN_STATE=NO
 Jeder Flow aus Abschnitt 7, der etwas published, schreibt zuerst
 `runtimeRunState_` (bei `NoRun` einen minimalen `RunCommandState` mit
 `processState.state == Standby`; bei `ResumeRejected`/`DiscardableRun` den
-via `restoreRunPersistenceSnapshot()` rekonstruierten und durch
+via `restoreRunPersistenceSnapshotInto()` rekonstruierten und durch
 `discardAsNoActiveRun()` auf `Standby` mutierten `RunCommandState` –
 **kein** minimaler Stub, Major 6, Abschnitt 9; sonst den von
 `RunPersistenceCoordinator`/`activateR1EligibleRun()` gelieferten
@@ -859,7 +941,7 @@ strikt erfüllt: vor dem ersten Schreiben von `runtimeRunState_` bleibt
 default-konstruiertes `ProcessRuntimeState{Boot}`).
 
 ```text
-RunPersistenceCoordinator::loadAndInitialize()
+RunPersistenceCoordinator::loadAndInitializeInto(runPersistenceLoadResult&)
   -> RunPersistenceLoadResult{status, snapshot}
   -> boot_classification::classify(status, snapshot)  // Abschnitt 7.3:
      FallbackRecovered -> SafeBoot, sonst wie isR1ResumeEligible()
@@ -974,7 +1056,7 @@ Bei Ablehnung (ResumeOffer, Nutzer lehnt ab):
      Abschnitt 4.9/8 – Aufruf ist identisch zur internen Wrapper-Logik, nur
      ohne die dort zusaetzliche automatische PI-/Planner-Reset-Seite, die
      hier wirkungslos waere). `*pendingResume_` (bereits durch
-     `restoreRunPersistenceSnapshot()` rekonstruiert, s.o.) ist der
+     `restoreRunPersistenceSnapshotInto()` rekonstruiert, s.o.) ist der
      benoetigte `RunCommandState&`-Eingang.
   -> RunPersistenceCoordinator::discardAsNoActiveRun() committet den
      NoActiveRun-Tombstone zuerst durabel (write-before-apply, bestehend)
@@ -1095,10 +1177,11 @@ nach dem real geprüften Muster von `discardAsNoActiveRun()`/
 `persistTransition()` (Abschnitt 4.4/9):
 
 ```text
-1. candidate = current  // lokale Kopie, current bleibt bis Schritt 6
-   unveraendert
-2. candidate.processState = rebasedRecoveredState(current.processState,
-   time.monotonicMillis)
+1. workingSet_.candidate = current  // Coordinator-eigenes Wertmember
+   (Abschnitt 12.4.4, Runde 5 - ersetzt die vormalige lokale Kopie), current
+   bleibt bis Schritt 6 unveraendert
+2. workingSet_.candidate.processState = rebasedRecoveredState(
+   current.processState, time.monotonicMillis)
    // schliesst Blocker 2: Wiederverwendung der bereits bestehenden,
    // bereits fuer den C2-Pfad genutzten Funktion
    // (run_persistence_coordinator.cpp:177-189), statt nur
@@ -1132,21 +1215,22 @@ nach dem real geprüften Muster von `discardAsNoActiveRun()`/
        return result(NotEligible, CandidateApply, None)
        // schliesst Blocker 3: Zweig 3 verlangt echte Evidenz, current
        // unveraendert, kein Schreibvorgang
-     if (!candidate.sensorSelection.has_value() ||
-         !candidate.activeRunSensorMode.has_value())
+     if (!workingSet_.candidate.sensorSelection.has_value() ||
+         !workingSet_.candidate.activeRunSensorMode.has_value())
        return result(InvalidDecision, CandidateApply, InvalidProjection)
        // current unveraendert; real geprueft: fuer die drei
        // R1-eligiblen Phasen sind beide Felder immer gesetzt (Vertrag von
-       // restoreRunPersistenceSnapshot()), dieser Zweig ist reine
+       // restoreRunPersistenceSnapshotInto()), dieser Zweig ist reine
        // Konsistenzsicherung wie im C2-Praezedenzfall (Zeile 683-686)
      recommendation = computeRestartSensorSelection(
-       *candidate.sensorSelection, *candidate.activeRunSensorMode,
-       recoverySensorSelectionProgramContext(candidate),  // bereits
-         // bestehende TU-private Hilfsfunktion (anonymous namespace,
-         // Zeile 78), unveraendert wiederverwendet - deckt sowohl
-         // ProgramRun (liest activeProgramRun->snapshot().sourceProgram.
-         // program) als auch ManualRun (Default-Kontext) ab, exakt wie im
-         // bestehenden C2-Aufruf
+       *workingSet_.candidate.sensorSelection,
+       *workingSet_.candidate.activeRunSensorMode,
+       recoverySensorSelectionProgramContext(workingSet_.candidate),
+         // bereits bestehende TU-private Hilfsfunktion (anonymous
+         // namespace, Zeile 78), unveraendert wiederverwendet - deckt
+         // sowohl ProgramRun (liest activeProgramRun->snapshot().
+         // sourceProgram.program) als auch ManualRun (Default-Kontext) ab,
+         // exakt wie im bestehenden C2-Aufruf
        *liveSensorEvidence)
      if (recommendation.runtime.permission != SensorPeltierPermission::Allowed)
        return result(NotEligible, CandidateApply, None)
@@ -1157,30 +1241,39 @@ nach dem real geprüften Muster von `discardAsNoActiveRun()`/
        // tatsaechliche Gate-Feld). current UNVERAENDERT - keine Mutation,
        // kein Schreibvorgang (Abschnitt 9: Application bleibt im
        // ResumeOffer-Zustand)
-     candidate.sensorSelectionRuntime = recommendation.runtime
-     candidate.activeRunSensorMode = recommendation.activeMode
-     if (candidate.activeManualRun.has_value())
-       candidate.activeManualRun->values.sensorMode = recommendation.activeMode
+     workingSet_.candidate.sensorSelectionRuntime = recommendation.runtime
+     workingSet_.candidate.activeRunSensorMode = recommendation.activeMode
+     if (workingSet_.candidate.activeManualRun.has_value())
+       workingSet_.candidate.activeManualRun->values.sensorMode =
+         recommendation.activeMode
        // exakt wie im C2-Praezedenzfall, Zeile 690-695
-3. snapshot = makeRunPersistenceSnapshot(candidate, persistedIds_,
-   persistedIdCount_, RunCheckpointTrigger::Transition, time,
-   schedule_.intervalMinutes())  // bestehende Funktion; snapshot==nullopt
-   -> InvalidDecision, current unveraendert
+3. if (!makeRunPersistenceSnapshotInto(workingSet_.candidate, persistedIds_,
+     persistedIdCount_, RunCheckpointTrigger::Transition, time,
+     schedule_.intervalMinutes(), workingSet_.snapshot))
+     -> InvalidDecision, current unveraendert
+   // Stack-sicherer In-place-Kern (Abschnitt 12.4.1, Runde 5), ersetzt die
+   // vormalige Return-by-value-Verwendung; schreibt direkt in
+   // workingSet_.snapshot statt einen lokalen optional<RunPersistenceSnapshot>
+   // (4096 B, real gemessen) zurueckzugeben
 4. rollbackState = state_  // == LoadedActiveRun, VOR dem Aufruf gesichert
-   persisted = writeSnapshotCore(*snapshot, time, /*periodic=*/false,
-     current, RunPersistenceMutationKind::Recovery, /*commandId=*/nullopt,
-     /*targetSlotOverride=*/nullopt,
+   persisted = writeSnapshotCore(workingSet_.snapshot, time,
+     /*periodic=*/false, current, RunPersistenceMutationKind::Recovery,
+     /*commandId=*/nullopt, /*targetSlotOverride=*/nullopt,
      RunPersistenceFallbackDirective{},  // Default = UseStandardFallback
        // KORREKTUR gegenueber Vorfassung (real gefundener Bug in der
        // Vorfassung selbst, Runde 2): ClearFallback wuerde
        // writeSnapshotCore()s clearFallbackAllowed-Bedingung
        // (nur Fault- oder NoActiveRun-Snapshots) NIE erfuellen, da
-       // candidate.processState.state hier Preheating/Cooling/
+       // workingSet_.candidate.processState.state hier Preheating/Cooling/
        // ManualHolding ist -> directiveValid waere false ->
        // InvalidDecision fuer JEDEN Resume-Confirm-Versuch. Korrekt ist
        // der Default UseStandardFallback (kein reference), derselbe, den
        // persistTransition() ueber writeSnapshot() implizit verwendet.
      rollbackState)
+   // writeSnapshotCore() selbst konstruiert intern KEINEN lokalen
+   // RunPersistenceRawRecord mehr, sondern schreibt in workingSet_.record
+   // (Abschnitt 12.4.4, Blocker 1 Runde 5) - fuer diesen Aufrufer
+   // transparent, kein Signaturwechsel.
    // writeSnapshotCore() setzt bei einem Fehlschlag state_ = rollbackState
    // (== LoadedActiveRun) selbst zurueck (real geprüft) -> Application
    // bleibt im ResumeOffer-Zustand, kein zusaetzlicher Rollback-Code noetig.
@@ -1188,7 +1281,7 @@ nach dem real geprüften Muster von `discardAsNoActiveRun()`/
    UNVERAENDERT (Blocker 4: current wird ausschliesslich nach Applied
    mutiert) – vollstaendige Fehlerklassifikation fuer den Aufrufer siehe
    unten (Blocker 2)
-6. current = candidate  // current erst JETZT mutiert
+6. current = workingSet_.candidate  // current erst JETZT mutiert
    // state_ wurde von writeSnapshotCore() bereits intern auf Ready gesetzt
    // (real geprüft, snapshot.variant != NoActiveRun -> Ready, nicht
    // ReadyEmpty)
@@ -1616,17 +1709,32 @@ FermentationApplication::begin(platformServices, store, resetCauseSource):
       // Schritt 4 UEBERSPRUNGEN, RunPersistenceCoordinator bleibt nullptr,
       // Application setzt SERVICE_REQUIRED (Abschnitt 4.6/7); lease ist
       // lokal, ueberlebt Schritt 3a nicht.
-  4. RunPersistenceCoordinator(store, epoch, schedule) -> begin() konstruiert
+  4. runPersistenceCoordinator = std::unique_ptr<RunPersistenceCoordinator>{
+       new (std::nothrow) RunPersistenceCoordinator(store, epoch, schedule)}
+     if (runPersistenceCoordinator == nullptr) -> Allokationsfehler,
+       fail-closed, SERVICE_REQUIRED (Abschnitt 12.1) - eine einzige
+       Allokation fuer den gesamten Coordinator inkl. seines inline
+       RunPersistenceWorkingSet-Wertmembers (Abschnitt 12.4.4, Runde 5),
+       keine zweite/separate Scratch-Allokation
      runPersistenceLoadResult = std::unique_ptr<RunPersistenceLoadResult>{
-       new (std::nothrow) RunPersistenceLoadResult(
-         runPersistenceCoordinator->loadAndInitialize())}
-     // epoch == lease.get().storageEpoch() aus Schritt 3a. KEIN lokales
-     // `auto loadResult = ...loadAndInitialize();` (Abschnitt 12.4.5,
-     // Blocker 3, Runde 4: sizeof(RunPersistenceLoadResult)==4112 B, real
-     // gemessen, bereits ueber dem 3584-B-Budget als lokaler Wert). Muster
-     // uebernommen als Randbedingung aus dem bereits ownerreviewten
-     // #119/#120-Stackfix (kein Code-Cherrypick). Bei nullptr:
-     // Allokationsfehler, fail-closed, SERVICE_REQUIRED.
+       new (std::nothrow) RunPersistenceLoadResult()}
+     if (runPersistenceLoadResult == nullptr) -> Allokationsfehler,
+       fail-closed, SERVICE_REQUIRED
+     runPersistenceCoordinator->loadAndInitializeInto(
+       *runPersistenceLoadResult)
+     // epoch == lease.get().storageEpoch() aus Schritt 3a. KEIN
+     // `new (std::nothrow) RunPersistenceLoadResult(coordinator->
+     // loadAndInitialize())` mehr (Abschnitt 12.4.5, Blocker 2 Runde 5):
+     // loadAndInitialize()s interne loadReference()-Lambda konstruierte
+     // weiterhin lokale std::optional<RunPersistenceRawRecord>-Werte
+     // (real gemessen sizeof(RunPersistenceRawRecord)=4152 B) - ein
+     // aeusserer Heap-Zielwert allein loeste diese Callee-interne Ebene
+     // nicht. loadAndInitializeInto() schreibt jetzt durchgaengig in
+     // Referenzparameter/das Coordinator-eigene workingSet_.record
+     // (Abschnitt 12.4.5). sizeof(RunPersistenceLoadResult)==4112 B war
+     // schon als lokaler Rueckgabewert allein ueber dem 3584-B-Budget;
+     // Grundmuster uebernommen als Randbedingung aus dem bereits
+     // ownerreviewten #119/#120-Stackfix (kein Code-Cherrypick).
   5. boot_classification::classify(configResult, *runPersistenceLoadResult)
      -> BootClassification (Abschnitt 7); runPersistenceLoadResult ist
      boot-transient (lokale unique_ptr-Variable in begin(), kein
@@ -1798,12 +1906,13 @@ per Hardware-HWM zu messendes, in dieser Revision nicht gelöstes
 Restrisiko" – das ist mit dieser realen Messung nicht mehr haltbar.
 Abschnitt 12.4 legt für jeden der neu erreichbaren Pfade
 (`RunCommandState`-Restore, `CommandDecision`-Konstruktion, Coordinator-
-Candidate-Scratch, `RunPersistenceLoadResult`) einen konkreten,
-stack-sicheren Vertrag fest (Out-Parameter-Varianten bzw. einmalig
-allozierte Coordinator-eigene Scratch-Objekte) und macht die Einhaltung zu
-einer **Pflichtmessung vor jeder Hardwarefreigabe** (statischer
-Produkt-Stackgate, Abschnitt 12.4.6), nicht zu einer nachgelagerten,
-optionalen HWM-Beobachtung.
+`RunPersistenceWorkingSet` inkl. Snapshot-/RawRecord-Projektion und
+Decode, `RunPersistenceLoadResult`) einen konkreten, stack-sicheren Vertrag
+fest (durchgängige Out-Parameter-/In-place-Kerne bzw. das inline
+Coordinator-eigene Wertmember, Abschnitt 12.4.4-4.6) und macht die
+Einhaltung zu einer **Pflichtmessung vor jeder Hardwarefreigabe**
+(statischer Produkt-Stackgate, Abschnitt 12.4.7), nicht zu einer
+nachgelagerten, optionalen HWM-Beobachtung.
 
 **Abnahmemetrik (korrigiert, Major 6, Runde 4 – actor-free Scope
 respektiert):** Eine frühere Fassung verlangte für den realen Main-Task-
@@ -1823,7 +1932,7 @@ REAL_HARDWARE_BOOT
      logResources() verwendet) dieses tatsaechlich erreichbaren Pfads
   -> gegen CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584 (Abschnitt 16)
 
-STATIC_STACK_EVIDENCE=MANDATORY_NOW (Abschnitt 12.4.6, vor Hardware)
+STATIC_STACK_EVIDENCE=MANDATORY_NOW (Abschnitt 12.4.7, vor Hardware)
 REAL_RUNTIME_HWM=NOT_RUN_UNTIL_REAL_PRODUCT_TRIGGER_PATH_EXISTS
   // Fresh Start/Resume-HWM bleibt ehrlich NOT_RUN, bis eine spaetere
   // Issue-Erweiterung (#25/#26/#31/#106, Abschnitt 3) einen echten,
@@ -1850,11 +1959,11 @@ prüfenden aktiven Lauf, für den ein periodischer Checkpoint fachlich
 etwas leisten würde. Keine produktiven PI-/Planner-Ticks; kein
 `tickActuatorPlan()`-Aufruf im Produktpfad.
 
-### 12.4 Stack-Sicherheits-Vertrag für #121-Produktpfade (Blocker 1/2/3/4/5, Runde 4, geschlossen)
+### 12.4 Stack-Sicherheits-Vertrag für #121-Produktpfade (Blocker 1-6, Runde 4+5, geschlossen)
 
-**Ausgangslage – kein Restrisiko, sondern bewiesener Blocker (Blocker 1):**
-`docs/ISSUE_29_BUILD_REPORT.md` (real vorhanden, Xtensa-`-fstack-usage`-
-Messung auf `BASE_SHA`) dokumentiert bereits:
+**Ausgangslage – kein Restrisiko, sondern bewiesener Blocker (Blocker 1,
+Runde 4):** `docs/ISSUE_29_BUILD_REPORT.md` (real vorhanden, Xtensa-
+`-fstack-usage`-Messung auf `BASE_SHA`) dokumentiert bereits:
 
 ```text
 RunPersistenceCoordinator::persistCommand(...) = 9280 B static frame
@@ -1862,26 +1971,43 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE = 3584 B
 ```
 
 `9280 > 3584` – ein **einzelner** Funktionsaufruf sprengt bereits das
-gesamte Main-Task-Budget, unabhängig von jeder Call-Path-Summierung. Die
-Vorfassung dieses Plans bezeichnete das Stackrisiko fälschlich als „später
-per Hardware-HWM zu messendes Restrisiko" (Abschnitt 12.2 vorheriger
-Fassung) – das ist mit dieser realen Evidenz nicht mehr haltbar. Zusätzlich
-real gemessen (Host-Build, `g++ -std=c++17`, dieselbe Technik wie Runde 3):
+gesamte Main-Task-Budget, unabhängig von jeder Call-Path-Summierung. Kein
+Primärfix über `CONFIG_ESP_MAIN_TASK_STACK_SIZE`
+(`MAIN_TASK_STACK_PRIMARY_INCREASE=NO` bleibt in Kraft). Zusätzlich real
+gemessen (Host-Build, `g++ -std=c++17`, dieselbe Technik wie Runde 3):
 
 ```text
-sizeof(RunCommandState)          = 5096 B
-sizeof(CommandDecision)          = 10520 B  (enthaelt RunCommandState
-                                              before + after)
-sizeof(RunPersistenceSnapshot)   = 4096 B
-sizeof(RunPersistenceLoadResult) = 4112 B   (optional<RunPersistenceSnapshot>)
+sizeof(RunCommandState)           = 5096 B
+sizeof(CommandDecision)           = 10520 B  (enthaelt RunCommandState
+                                               before + after)
+sizeof(RunPersistenceSnapshot)    = 4096 B
+sizeof(RunPersistenceLoadResult)  = 4112 B   (optional<RunPersistenceSnapshot>)
+sizeof(RunPersistenceRawRecord)   = 4152 B   (NEU real gemessen, Runde 5;
+                                               enthaelt selbst ein
+                                               vollstaendiges
+                                               RunPersistenceSnapshot)
+sizeof(RunPersistenceCoordinator) = 8968 B   (NEU real gemessen, Runde 5;
+                                               bereits auf BASE_SHA gross,
+                                               da slots_[2] zwei
+                                               optional<RunPersistenceRawRecord>
+                                               als Instanzmember haelt)
 ```
 
 Jeder dieser Werte liegt bereits einzeln über dem 3584-B-Budget.
-Stack-Sicherheit der neu produktiv erreichbaren #121-Pfade wird damit zur
-**Software-/Build-Vorbedingung vor jeder Hardwareverifikation** (Schritt 7,
-Abschnitt 15), nicht zu einer nachgelagerten Messung. Kein Primärfix über
-`CONFIG_ESP_MAIN_TASK_STACK_SIZE`
-(`MAIN_TASK_STACK_PRIMARY_INCREASE=NO` bleibt in Kraft).
+**Korrektur gegenüber Runde 4 (Runde 5):** Runde 4 schloss nur die
+Aufrufer-Ebene (Application/Coordinator-öffentliche Signaturen). Real
+geprüft blieben zwei Ebenen weiterhin stack-unsicher: (a) `writeSnapshotCore()`
+(`run_persistence_coordinator.cpp:1571`) konstruiert intern weiterhin einen
+lokalen `RunPersistenceRawRecord record{...}`; (b) `loadAndInitialize()`s
+`loadReference`-Lambda (Zeile 347-386) gibt `std::optional<
+RunPersistenceRawRecord>` per Wert zurück (zweimal aufgerufen als
+`currentRecord`/`fallbackRecord`-Lokale, Zeile 388/465), und
+`decodeRunPersistenceSnapshot()` (`run_persistence_codec.cpp:1151`)
+konstruiert intern `RunPersistenceSnapshot s;` als lokale Variable. Beide
+Ebenen sind jetzt Teil dieses Vertrags (4.4/4.5/4.6 unten). Stack-Sicherheit
+der neu produktiv erreichbaren #121-Pfade bleibt **Software-/
+Build-Vorbedingung vor jeder Hardwareverifikation** (Schritt 7/8,
+Abschnitt 15), nicht eine nachgelagerte Messung.
 
 **Scope:** Nur die durch #121 neu real erreichbaren Pfade werden
 korrigiert – nicht pauschal alle 13 historischen `auto candidate =
@@ -1890,7 +2016,7 @@ Persistence-Architektur, nicht `RunRecoveryCoordinator`/C2:
 
 ```text
 FermentationApplication::begin()
-RunPersistenceCoordinator::loadAndInitialize()
+RunPersistenceCoordinator::loadAndInitializeInto()
 Boot Current -> restore/classify/discard
 Completed/Fault restore
 ResumeOffer construction
@@ -1907,8 +2033,8 @@ statt einer begrenzten Speicher-/Scratchkorrektur erfordern: **STOP –
 OWNER_REVIEW_REQUIRED**, keine eigenmächtige Architekturentscheidung.
 
 **4.1 Fail-closed-Allokation – einheitliche `nothrow`-Semantik (schließt
-Blocker 4):** Jede in diesem Plan spezifizierte Heap-Allokation verwendet
-**ausschließlich**:
+Blocker 4, Runde 4):** Jede in diesem Plan spezifizierte Heap-Allokation
+verwendet **ausschließlich**:
 
 ```cpp
 std::unique_ptr<T> ptr{new (std::nothrow) T(...)};
@@ -1934,12 +2060,13 @@ ALLOCATION_FAILURE_CAN_ABORT_OR_THROW=NO
 ```
 
 **4.2 `restoreRunPersistenceSnapshot()` – stack-sicherer Produktpfad-Vertrag
-(schließt Blocker 2.1):** Real geprüft (`run_persistence_contract.cpp:470+`):
-die bestehende Funktion konstruiert intern `RunCommandState restored;`
-(5096 B) als lokale Variable und gibt sie per `std::optional<RunCommandState>`
-zurück. Ob NRVO diese Kopie eliminiert, ist **nicht** vom Standard
-garantiert – der Produktpfad darf sich darauf nicht verlassen. Neue,
-zusätzliche Out-Parameter-Variante, **nur** vom Produktpfad verwendet:
+(schließt Blocker 2.1, Runde 4):** Real geprüft
+(`run_persistence_contract.cpp:470+`): die bestehende Funktion konstruiert
+intern `RunCommandState restored;` (5096 B) als lokale Variable und gibt
+sie per `std::optional<RunCommandState>` zurück. Ob NRVO diese Kopie
+eliminiert, ist **nicht** vom Standard garantiert – der Produktpfad darf
+sich darauf nicht verlassen. Neue, zusätzliche Out-Parameter-Variante,
+**nur** vom Produktpfad verwendet:
 
 ```cpp
 // Schreibt direkt in destination, keine lokale RunCommandState-Kopie
@@ -1966,25 +2093,77 @@ Aufrufer (§9 `ResumeOffer`, `DiscardableRun`; §9.1-Aufrufer für
    restaurierten Zustand)
 ```
 
-**4.3 `CommandDecision` – stack-sicherer Fresh-Start-Vertrag (schließt
-Blocker 2.2):** Real geprüft (`run_commands.hpp:394-414`, `:426/428`):
-`CommandDecision` enthält `RunCommandState before; RunCommandState after;`
-(zusammen bereits >10 KiB, real gemessen `sizeof(CommandDecision)=10520`);
-`decideProgramStart(...)`/`decideManualStart(...)` geben `CommandDecision`
-per Wert zurück. Analog zu 4.2, **neue** Out-Parameter-Varianten, nur vom
-Produktpfad verwendet:
+**4.3 `CommandDecision` – echter In-place-Kern statt Wrapper (schließt
+Blocker 2.2 Runde 4, Blocker 6 Runde 5):** Real geprüft
+(`run_commands.hpp:394-414`, `:426/428`; Implementierung
+`run_commands.cpp:187-221`, `:687-797`): `CommandDecision` enthält
+`RunCommandState before; RunCommandState after;` (zusammen bereits >10 KiB,
+real gemessen `sizeof(CommandDecision)=10520`). **Korrektur gegenüber
+Runde 4 (real gefundener Entwurfsfehler, Blocker 6):** Runde 4 skizzierte
+`decideProgramStartInto()`/`decideManualStartInto()` nur als dünne Wrapper
+um die bestehenden Return-by-value-Kerne `beginDecision()`/`result()`. Real
+geprüft mutieren `beginDecision()`/`result()` und alle `decide*()`-Funktionen
+(z. B. `decideProgramStart()`, Zeile 687-797) ein einziges lokales
+`CommandDecision decision`-Objekt **durchgängig über die gesamte Funktion**
+(Dutzende Zugriffe auf `decision.status`/`.before`/`.after`, Hilfsaufrufe wie
+`requireRunRevision(decision)`/`addEffect(decision, ...)`, die
+`CommandDecision&` erwarten) – ein Wrapper, der diese Kerne unverändert
+aufruft und das Ergebnis kopiert, hätte sich auf **nicht garantierte** NRVO
+über eine Aufrufkette hinweg verlassen, genau das, was Blocker 2.2 bereits
+für `restoreRunPersistenceSnapshot()` ausschließt. Korrektur: neuer,
+**echter** In-place-Kern, der direkt in die vom Aufrufer übergebene
+`CommandDecision&` schreibt – keine `bool`-Rückgabe als zweiter,
+undefinierter Statuskanal (`CommandDecision.status` trägt den fachlichen
+Ausgang bereits vollständig):
 
 ```cpp
-[[nodiscard]] bool decideProgramStartInto(
-    /* dieselben Parameter wie decideProgramStart(...) */,
-    CommandDecision& destination);
-[[nodiscard]] bool decideManualStartInto(
-    /* dieselben Parameter wie decideManualStart(...) */,
-    CommandDecision& destination);
+void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
+                 CommandKind kind, CommandStatus status,
+                 CommandDecision& destination);
+void beginDecisionInto(const RunCommandState& current,
+                        const CommandEnvelope& envelope, CommandKind kind,
+                        CommandDecision& destination);
+void decideProgramStartInto(const RunCommandState& current,
+                             const ProgramStartRequest& request,
+                             CommandDecision& destination);
+void decideManualStartInto(const RunCommandState& current,
+                            const ManualStartRequest& request,
+                            CommandDecision& destination);
 ```
 
-Bestehende Return-by-value-Varianten bleiben für Host-/Legacy-Consumer
-unverändert bestehen. Fresh-Start-Produktpfad (Abschnitt 8, korrigiert):
+`resultInto()` setzt `destination = CommandDecision{};` als **erste**
+Zeile (analog zur Codec-Reset-Konvention in 4.6), bevor `status`/`kind`/
+`envelope`/`before`/`after` gesetzt werden – der reale `result()`
+(`run_commands.cpp:187-197`) default-konstruiert sein lokales `decision`
+implizit über die Deklaration `CommandDecision decision;`; ohne diesen
+expliziten Reset auf `destination` könnten bei Wiederverwendung desselben
+`decisionTarget`-Puffers über mehrere Aufrufe hinweg veraltete Felder
+(`startSummary`, `effects`, `effectCount` u. a.) aus einem vorherigen
+Aufruf stehen bleiben. `decideProgramStartInto()`/`decideManualStartInto()` operieren
+**durchgängig über eine Referenz auf `destination`** statt über eine
+lokale Kopie – mechanisch identisch zum bestehenden Funktionskörper, nur
+mit `auto& decision = destination;` statt `auto decision = beginDecision(
+...);` als erster Zeile, und jedem `return decision;` durch ein einfaches
+`return;` ersetzt (der fachliche Ausgang steht bereits vollständig in
+`destination`). **Richtungsumkehr gegenüber Runde 4 (verbindlich):** die
+bestehenden Return-by-value-Funktionen `decideProgramStart()`/
+`decideManualStart()` bauen jetzt auf dem neuen In-place-Kern auf, nicht
+umgekehrt:
+
+```cpp
+CommandDecision decideProgramStart(const RunCommandState& current,
+                                   const ProgramStartRequest& request) {
+    CommandDecision decision;
+    decideProgramStartInto(current, request, decision);
+    return decision;
+}
+```
+
+Diese Return-by-value-Wrapper bleiben für Host-/Legacy-Consumer
+(`test_run_commands` u. a.) unverändert nutzbar – hier ist ein einzelnes
+stack-lokales `CommandDecision` unkritisch, da kein 3584-B-Main-Task-Budget
+gilt. Der Produktpfad (Fresh Start, Abschnitt 8) verwendet ausschließlich
+die `Into()`-Kerne:
 
 ```text
 1. decisionTarget = std::unique_ptr<CommandDecision>{
@@ -1996,87 +2175,245 @@ unverändert bestehen. Fresh-Start-Produktpfad (Abschnitt 8, korrigiert):
    *decisionTarget, time, liveSensorEvidence)
 ```
 
-**4.4 Coordinator-interne Candidate-Scratch – eine konkrete Entscheidung,
-kein offenes Menü (schließt Blocker 2.3):** `persistCommand()`,
-`discardAsNoActiveRun()` und `activateR1EligibleRun()` benötigen weiterhin
-ein `candidate`-großes Scratchobjekt für Write-before-Apply (unveränderter
-Vertrag, `WRITE_BEFORE_APPLY=UNCHANGED`, `STORE_SEMANTICS=UNCHANGED`,
+```text
+PRODUCT_DECIDE_INTO_CALLS_RETURN_BY_VALUE_DECIDER=NO
+PRODUCT_DECIDE_INTO_CALLS_RETURN_BY_VALUE_BEGIN_DECISION=NO
+COMMAND_DECISION_OUT_PARAM_ALWAYS_RECEIVES_COMPLETE_STATUS=YES
+SECOND_DECISION_STATUS_CHANNEL=NO
+```
+
+**4.4 `RunPersistenceWorkingSet` – Coordinator-eigenes Wertmember, ersetzt
+Runde 4s `candidateScratch_` (schließt Blocker 2.3 Runde 4, Blocker 1/4/5
+Runde 5):** `persistCommand()`, `discardAsNoActiveRun()` und
+`activateR1EligibleRun()` benötigen weiterhin ein `candidate`-großes
+Scratchobjekt für Write-before-Apply; `writeSnapshotCore()` benötigt
+weiterhin ein `RunPersistenceRawRecord`-großes Scratchobjekt (real geprüft,
+Zeile 1571 – Runde 4 hatte dies übersehen); die Snapshot-Projektion
+benötigt ein `RunPersistenceSnapshot`-großes Scratchobjekt (unverändert:
+`WRITE_BEFORE_APPLY=UNCHANGED`, `STORE_SEMANTICS=UNCHANGED`,
 `WIRE_FORMAT=UNCHANGED`, `SCHEMA=UNCHANGED`, `RECOVERY_POLICY=UNCHANGED`).
-Gewählte Lösung: **Coordinator-eigenes, einmal bei Konstruktion
-allokiertes Scratch** für genau dieses Write-before-Apply-Muster, kein
-Scratch pro Aufruf:
+**Korrektur gegenüber Runde 4 (Owner-Vorschlag Runde 5, KISS):** statt drei
+getrennter Scratch-Konzepte (Runde 4s `candidateScratch_` plus zwei bislang
+ungelöste interne Lokale) ein **einziges** Coordinator-eigenes Wertmember,
+das alle drei write-before-apply-Zwischenwerte bündelt:
 
 ```cpp
+struct RunPersistenceWorkingSet {
+    RunCommandState candidate;
+    RunPersistenceSnapshot snapshot;
+    RunPersistenceRawRecord record;
+};
+
 class RunPersistenceCoordinator {
     // ...
-    std::unique_ptr<RunCommandState> candidateScratch_;   // fuer
-      // persistCommand()/discardAsNoActiveRun()/
-      // activateR1EligibleRun()s Zweig 3 (Write-before-Apply-
-      // Arbeitskopie, ausschliesslich Coordinator-intern)
+    RunPersistenceWorkingSet workingSet_;   // Wertmember, KEINE separate
+      // Allokation (s. u.) - fuer persistCommand()/discardAsNoActiveRun()/
+      // activateR1EligibleRun()s Write-before-Apply-Arbeitskopie
+      // (workingSet_.candidate), die Snapshot-Projektion
+      // (workingSet_.snapshot) und writeSnapshotCore()s internen
+      // RunPersistenceRawRecord (workingSet_.record)
 };
 ```
 
-`decisionScratch_`/`decisionTarget` (Abschnitt 4.3) ist **kein**
-Coordinator-Member und lebt bewusst nicht hier: `persistCommand(
-RunCommandState& current, const CommandDecision& decision, ...)` nimmt
-`decision` als vom Aufrufer bereitgestellte `const`-Referenz entgegen –
-der Aufrufer (`FermentationApplication`, Abschnitt 4.3) muss den
-Speicher, den `decideProgramStartInto(...)` befüllt, also selbst
-besitzen. Ein Coordinator-eigenes `decisionScratch_` würde bedeuten, dass
-der Coordinator eine veränderliche Referenz zum Befüllen nach außen
-reicht und sie anschließend als eigenen `const`-Parameter zurückliest –
-das widerspricht der Signatur und wird hier **nicht** gewählt. Klare
-Trennung: `candidateScratch_` Coordinator-eigen (seine eigene
-Write-before-Apply-Arbeitskopie), `decisionTarget` Application-eigen
-(die Eingabe des Aufrufers).
-
-`candidateScratch_` wird im Konstruktor mit `new (std::nothrow)`
-allokiert; schlägt die Allokation fehl, gibt der Konstruktor (bzw. eine
-`create()`-Factory nach bestehendem `NvsOwningContext::create()`-Muster)
-`nullptr`/einen Fehlerstatus zurück – `RunPersistenceCoordinator` wird gar
-nicht komponiert (deckt sich mit Abschnitt 4.6/12 Schritt 3a, wo bereits
-ein Nicht-Konstruktions-Fehlerpfad für `RunPersistenceCoordinator`
-existiert). **Reentrancy** (Blocker 2.3, explizit gefordert): geschlossen
-über die bereits bestehende `state_`-Maschine – `persistCommand()`/
-`discardAsNoActiveRun()`/`persistTransition()`/`activateR1EligibleRun()`
-verlangen bereits heute `state_ == Ready`/`ReadyEmpty`/`LoadedActiveRun`
-als Vorbedingung und setzen `state_ = Busy` für die Dauer des internen
-Schreibvorgangs (`writeSnapshotCore()`, real geprüft, Abschnitt 4.4/9.1);
-ein zweiter Aufruf während `Busy` wird bereits heute über
-`unavailableResult()` abgelehnt (Abschnitt 4.4) – **kein neuer Lock, keine
-neue Zustandsmaschine**, `candidateScratch_` wird also nie von zwei
-Aufrufen gleichzeitig beschrieben. Kein globaler/statischer
-Scratch-Speicher; `candidateScratch_` ist ein
-`RunPersistenceCoordinator`-Instanzmember mit Application-Lifetime
-(Abschnitt 12.1).
-
-**4.5 `RunPersistenceLoadResult` – Boot-transienter Heap-Vertrag (schließt
-Blocker 3):** `sizeof(RunPersistenceLoadResult) == 4112` Byte (real
-gemessen), bereits über dem 3584-B-Budget als einzelner lokaler Wert. Der
-bereits ownerreviewte #119/#120-Stackfix (`main/issue_29_bringup_probe.cpp`,
-Muster übernommen als Randbedingung, **kein** Codecherry-Pick) verwendet
-bewusst:
+**Snapshot-Projektion – In-place-Kern (schließt Blocker 1, Runde 5):**
+`makeRunPersistenceSnapshot()` (`run_persistence_contract.hpp:144-148`,
+real geprüft) gibt `std::optional<RunPersistenceSnapshot>` per Wert zurück
+und wird im Produktpfad (§9.1 Zweig 3 sowie intern in `persistCommand()`/
+`discardAsNoActiveRun()`) auf `candidate` angewendet. Exakt gewählte
+Out-Parameter-Variante, **nur** vom Produktpfad verwendet:
 
 ```cpp
-std::unique_ptr<RunPersistenceLoadResult> runPersistenceLoadResult{
-    new (std::nothrow) RunPersistenceLoadResult(
-        runPersistenceCoordinator->loadAndInitialize())};
-if (runPersistenceLoadResult == nullptr) -> fail-closed (SERVICE_REQUIRED)
+[[nodiscard]] bool makeRunPersistenceSnapshotInto(
+    const RunCommandState& state,
+    const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,
+    std::size_t idCount, RunCheckpointTrigger trigger,
+    const RunCheckpointTime& time, std::uint16_t intervalMinutes,
+    RunPersistenceSnapshot& destination);
 ```
 
-`FermentationApplication::begin()` (Abschnitt 12, Schritt 4/5) übernimmt
-exakt dieses Muster: **kein** `auto loadResult = coordinator->
-loadAndInitialize();` als lokaler Wert. Die Konstruktion
-`RunPersistenceLoadResult(...)` innerhalb des `new (std::nothrow)`-Ausdrucks
-kopiert das Rückgabeergebnis von `loadAndInitialize()` genau einmal in den
-bereits allozierten Heap-Speicher (Placement des Konstruktoraufrufs
-unmittelbar im `new`-Ausdruck, kein Zwischenschritt über einen benannten
-lokalen Wert). `boot_classification::classify(...)` liest anschließend aus
-`*runPersistenceLoadResult`.
+Produktpfad-Aufruf schreibt direkt in `workingSet_.snapshot`:
+
+```cpp
+if (!makeRunPersistenceSnapshotInto(workingSet_.candidate, persistedIds_,
+        persistedIdCount_, trigger, time, schedule_.intervalMinutes(),
+        workingSet_.snapshot))
+  -> InvalidDecision, current unveraendert
+```
+
+Die bestehende `makeRunPersistenceSnapshot()` (Return-by-value) bleibt für
+Host-/Legacy-Tests unverändert nutzbar und delegiert jetzt an
+`makeRunPersistenceSnapshotInto()` (dieselbe Richtungsumkehr-Konvention wie
+4.3/4.5/4.6).
+
+```text
+PRODUCT_MAKE_SNAPSHOT_LOCAL_4096B=NO
+PRODUCT_WRITE_RAW_RECORD_LOCAL_4096B_PLUS=NO
+PRODUCT_SNAPSHOT_STORAGE=COORDINATOR_HEAP_WORKING_SET
+PRODUCT_RAW_RECORD_STORAGE=COORDINATOR_HEAP_WORKING_SET
+WRITE_BEFORE_APPLY=UNCHANGED
+WIRE_BYTES=UNCHANGED
+PERSISTENCE_TRANSACTION_ORDER=UNCHANGED
+FALLBACK_SEMANTICS=UNCHANGED
+```
+
+**Keine separate Allokation, kein Konstruktor-Rückgabewert-Widerspruch
+(Blocker 5, Runde 5 – Korrektur eines technisch unmöglichen Vertrags aus
+Runde 4):** Runde 4 spezifizierte, `candidateScratch_` werde „im
+Konstruktor mit `new (std::nothrow)` alloziert; schlägt die Allokation
+fehl, gibt der Konstruktor … `nullptr`/einen Fehlerstatus zurück" – ein
+Konstruktor hat aber keinen Rückgabewert, dieser Vertrag war nicht
+implementierbar. Mit `workingSet_` als **Wertmember** (kein `unique_ptr`,
+keine zweite interne Allokation) entfällt das Problem strukturell:
+`RunPersistenceCoordinator` selbst wird bereits als Ganzes über
+`new (std::nothrow) RunPersistenceCoordinator(...)` durch
+`FermentationApplication` alloziert (unverändert gegenüber Runde 4s
+Ownership-Tabelle, Abschnitt 12.1/12 Schritt 4) – schlägt diese **eine**
+Allokation fehl, wird der gesamte Coordinator (inklusive seines inline
+`workingSet_`) gar nicht komponiert, exakt derselbe bereits bestehende
+fail-closed-Pfad wie für jedes andere `unique_ptr`-Member in Abschnitt 12.1.
+Keine zweite, separate Scratch-Allokation, keine `create()`-Factory nötig.
+
+**Reentrancy – Korrektur einer realen Fehlbegründung aus Runde 4 (Blocker 4,
+Runde 5):** Runde 4 behauptete, das Scratch sei „über die bereits
+bestehende `state_`-Maschine" geschützt, da `writeSnapshotCore()`
+`state_ = Busy` setze. Real geprüft (`run_persistence_coordinator.cpp:
+1847`/`:1866`, `persistCommand()`) ist das falsch: `auto candidate =
+current;` und `const auto snapshot = makeRunPersistenceSnapshot(...)`
+werden **vor** dem Aufruf von `writeSnapshot()`/`writeSnapshotCore()`
+konstruiert – `state_` ist zu diesem Zeitpunkt noch `Ready`/`ReadyEmpty`,
+nicht `Busy` (`state_ = Busy` steht erst in `writeSnapshotCore()` selbst,
+Zeile 1495, **nach** der Candidate-/Snapshot-Konstruktion des Aufrufers).
+`state_ == Busy` schützt also die **Store-Schreiboperation**, nicht die
+**Konstruktion** von `workingSet_.candidate`/`.snapshot`/`.record`. Der
+tatsächlich tragfähige Reentrancy-Vertrag ist struktureller, nicht
+zustandsbasierter Natur – explizit gemacht statt implizit behauptet:
+
+```text
+RUN_PERSISTENCE_COORDINATOR_THREAD_SAFE=NO
+RUN_PERSISTENCE_COORDINATOR_REENTRANT=NO
+PRODUCT_OWNER=FermentationApplication
+PRODUCT_CALL_AFFINITY=SINGLE_SERIALIZED_APPLICATION_TASK
+CONCURRENT_DIRECT_CALLS=FORBIDDEN
+```
+
+**Nachweis für #121 (real gegen `main/app_main.cpp` und
+`lib/device_platform_esp_idf/src/nvs_state_store.*` geprüft, nicht nur
+behauptet):** `app_main()` (`main/app_main.cpp:123-193`, vollständig
+gelesen) ist der einzige Einstiegspunkt; nach `application.begin(...)`
+läuft ausschließlich eine einzige `for (;;) { platform.update();
+application.update(); ...; vTaskDelay(...); }`-Schleife in genau dieser
+einen ESP-IDF-Maintask – kein `xTaskCreate`/`xTimerCreate`/
+`esp_timer_create` im produktiven `main/`- oder `fermentation_app`-Code
+(einzige Fundstelle: `main/issue_29_bringup_probe.cpp:547`, ausschließlich
+unter `APP_ISSUE_29_BRINGUP_PROBE` kompiliert, in Release-/#121-Builds
+nicht enthalten). `NvsStateStore`/`NvsOwningContext` (real geprüft,
+`nvs_state_store.hpp/.cpp`) registrieren keinen Callback, keine ISR, keinen
+zweiten Task, der in den Coordinator zurückrufen könnte. `Abschnitt 12.3`
+legt zusätzlich fest, dass `FermentationApplication::update()` in dieser
+Revision **leer** bleibt und **kein** `checkpointPeriodic()`-Aufruf
+existiert – der einzige in dieser Revision tatsächlich produkt-erreichbare
+Coordinator-Aufrufpfad ist damit `begin()`s synchrone Bootsequenz selbst
+(Abschnitt 12); Fresh Start/Resume/Discard haben (wie bereits an anderer
+Stelle dieses Plans dokumentiert, `REAL_RUNTIME_HWM_WITHOUT_REAL_TRIGGER=
+NOT_CLAIMED`, Abschnitt 12.2) in dieser actor-free Composition noch keinen
+echten Produkttrigger. Die actor-free Composition (Abschnitt 3/12)
+verdrahtet also strukturell keinen zweiten Task, keinen Sensor-/Planner-/
+Timer-Callback und keinen Store-/Codec-Rückruf, der
+`RunPersistenceCoordinator` von außerhalb dieser einen Aufruferkette
+erreichen könnte. Kein neuer Lock, keine neue Zustandsmaschine – die
+Garantie ist eine **Aufrufkonvention** (dokumentierte Vorbedingung, keine
+Laufzeitprüfung). Spätere UI-/Web-Producer (außerhalb dieses Plans) müssen
+über denselben serialisierten Application-Aufrufpfad gehen, nicht direkt
+aus einer fremden Task in den Coordinator rufen – reine
+Dokumentationsvorgabe für spätere Issues, kein Code in dieser Revision.
+
+**Zusätzliches, unabhängig tragfähiges Argument für `workingSet_.record`
+speziell (`loadAndInitializeInto()` vs. `writeSnapshotCore()`):** selbst
+ohne die obige Single-Task-Argumentation schließen sich diese beiden
+Schreiber von `workingSet_.record` bereits über die bestehende
+`state_`-Maschine gegenseitig aus – `loadAndInitialize()`/
+`loadAndInitializeInto()` verlangt `state_ == Uninitialized` (real geprüft,
+Zeile 274-276, sonst `AlreadyInitialized`), während jeder Aufrufer von
+`writeSnapshotCore()` `state_ ∈ {Ready, ReadyEmpty, LoadedActiveRun}`
+verlangt (Abschnitt 12.4.4 oben) – disjunkte Zustandsmengen. Da `state_`
+den Coordinator nach dem ersten `loadAndInitializeInto()`-Aufruf
+unwiderruflich aus `Uninitialized` heraus bewegt (kein Reset-Pfad zurück zu
+`Uninitialized` existiert, real geprüft), kann `loadAndInitializeInto()`
+über die gesamte Coordinator-Lebensdauer nur **einmal** laufen, bevor
+`writeSnapshotCore()` überhaupt erstmals aufrufbar wird – dieselbe
+Garantie wie die Single-Task-Argumentation, hier aber zusätzlich durch die
+Zustandsmaschine selbst erzwungen, nicht nur durch Aufrufkonvention.
+
+**4.5 `loadAndInitializeInto()` – stack-sicherer Load-/Decode-Kern (schließt
+Blocker 2, Runde 5):** Real geprüft: `loadAndInitialize()`s interne
+`loadReference`-Lambda (`run_persistence_coordinator.cpp:347-386`) gibt
+`std::optional<RunPersistenceRawRecord>` per Wert zurück und wird zweimal
+aufgerufen (`currentRecord`, Zeile 388; `fallbackRecord`, Zeile 465) – beide
+sind lokale, stack-resident konstruierte `RunPersistenceRawRecord`-Werte
+(4152 B). Runde 4s Fix (Application-seitiges `unique_ptr<
+RunPersistenceLoadResult>`, Abschnitt 4.6 Vorfassung) löste nur die
+**äußere** Rückgabe von `loadAndInitialize()`, nicht diese **innere**
+Ebene. Korrektur – neue, **einzige** Coordinator-Methode für den
+Produktpfad:
+
+```cpp
+void RunPersistenceCoordinator::loadAndInitializeInto(
+    RunPersistenceLoadResult& destination);
+```
+
+Mechanische Transformation (kein Semantikwechsel, dieselbe Validierungs-/
+Fehlerreihenfolge wie die bestehende Funktion):
+
+```text
+- loadReference() decodiert direkt in workingSet_.record statt einen
+  lokalen optional<RunPersistenceRawRecord> zurueckzugeben:
+    if (!decodeRunPersistenceRecordInto(bytes, epoch_, workingSet_.record))
+      -> Fehlerstatus wie bisher
+- Current/Fallback: slots_[slot] = workingSet_.record  // unveraendert:
+  bereits vorher eine Kopie in ein bestehendes Heap-Member (slots_ ist
+  bereits Coordinator-Instanzmember, Abschnitt "Ausgangslage"), nur die
+  Quelle ist jetzt workingSet_.record statt einer lokalen Optional-Variable.
+  Bewusst NICHT direkt in slots_[slot] decodiert: runCheckpointReferenceMatches()
+  (real geprueft, run_persistence_codec.cpp) validiert den dekodierten
+  Record ERST GEGEN die erwartete Reference, NACHDEM decodeRunPersistenceRecordInto()
+  zurueckgekehrt ist - ein noch nicht validierter Record darf slots_ (die
+  technische Wahrheit des Coordinators) nie erreichen; workingSet_.record
+  ist daher die einzige Zwischenablage fuer noch-nicht-validierte Daten.
+- jeder bisherige `return {status, snapshot};`/`return {status,
+  std::nullopt};` wird zu `destination.status = status; destination.snapshot
+  = snapshot;  return;` bzw. `destination = {status, std::nullopt}; return;`
+- state_-Uebergaenge (ReadyEmpty/LoadedActiveRun/BlockedIndeterminate)
+  unveraendert an denselben Stellen
+```
+
+`FermentationApplication::begin()` (Abschnitt 12, Schritt 4) ruft:
+
+```cpp
+runPersistenceLoadResult = std::unique_ptr<RunPersistenceLoadResult>{
+    new (std::nothrow) RunPersistenceLoadResult()};
+if (runPersistenceLoadResult == nullptr) -> fail-closed (SERVICE_REQUIRED)
+runPersistenceCoordinator->loadAndInitializeInto(*runPersistenceLoadResult);
+```
+
+**Kein** `new (std::nothrow) RunPersistenceLoadResult(coordinator->
+loadAndInitialize())` mehr (Runde 4s Muster) – dieses Muster kopierte den
+Rückgabewert der (weiterhin intern stack-schweren) `loadAndInitialize()`
+exakt einmal in den Heap, löste aber nie die interne `loadReference`-Ebene.
+Das Grundprinzip „Ziel zuerst heap-allozieren, dann in-place befüllen"
+bleibt unverändert die Randbedingung aus dem bereits ownerreviewten
+#119/#120-Stackfix (kein Code-Cherrypick), jetzt konsequent bis in die
+Callee-Ebene durchgezogen. Die bestehende `loadAndInitialize()`
+(Return-by-value) bleibt für Host-/Legacy-Tests unverändert nutzbar und
+delegiert jetzt an `loadAndInitializeInto()` (dieselbe
+Richtungsumkehr-Konvention wie 4.3):
 
 ```text
 RUN_PERSISTENCE_LOAD_RESULT_STORAGE=HEAP_BOOT_TRANSIENT
 RUN_PERSISTENCE_LOAD_RESULT_LOCAL_BY_VALUE=NO
+PRODUCT_LOAD_RAW_RECORD_LOCAL=NO
+PRODUCT_LOAD_RESULT_LOCAL_BY_VALUE=NO
+PRODUCT_DECODE_SNAPSHOT_LOCAL=NO
+PRODUCT_DECODE_RESULT_LARGE_LOCAL=NO
 ```
 
 Lebensdauer: boot-transient (lokale `unique_ptr`-Variable in `begin()`,
@@ -2084,25 +2421,92 @@ nicht Application-Lifetime-Member – nach der Klassifikation nicht mehr
 benötigt, `RunPersistenceCoordinator::state()` bleibt die technische
 Wahrheit, Abschnitt 4.4).
 
-**4.6 Statischer Produkt-Stackgate – Pflicht vor jeder Hardwarefreigabe
-(schließt Blocker 5):** Die bestehende Instrumentierung
-(`docs/ISSUE_29_BUILD_REPORT.md`: `-fstack-usage`/`-fcallgraph-info=su` für
-die Diagnose-Probe sowie „die tatsächlich betroffenen `fermentation_app`-
-Quellen"; `scripts/analyze_issue_29_stack.py` wertet die `.ci`-Kanten aus)
-wird auf die in Abschnitt 12.4 (Scope) benannten #121-Produktpfad-TUs
-erweitert – **dieselbe** Technik, **derselbe** Skript-Mechanismus, nicht
-neu erfunden; Zielpfad wird der reale Produkt-Callgraph
-(`FermentationApplication::begin()` etc.) statt (nur) der Diagnose-Probe.
-Nach Implementation, **vor** jeder Hardwarefreigabe (Schritt 7,
-Abschnitt 15):
+**4.6 `run_persistence_codec.cpp` – rein mechanische In-place-Helfer
+(schließt Blocker 3, Runde 5):** Scope-Korrektur gegenüber Runde 4
+(Abschnitt 14 sagte bislang „keine Änderung an `run_persistence_codec.cpp`"
+– das ist nach 4.5 nicht mehr haltbar, da `decodeRunPersistenceRecordInto()`
+dort ergänzt werden muss). Real geprüft (`run_persistence_codec.cpp:1146-
+1262`): `decodeRunPersistenceSnapshot()` konstruiert intern
+`RunPersistenceSnapshot s;`, befüllt es über die gesamte Funktion
+sequentiell per `ByteReader`, und gibt es am Ende per `{Status::Success,
+std::move(s)}` zurück – rein mechanisch auf einen Out-Parameter umstellbar,
+ohne jede Wire-/Schema-/Validierungsänderung:
+
+```cpp
+[[nodiscard]] RunPersistenceCodecStatus decodeRunPersistenceSnapshotInto(
+    const std::string& payload, std::uint32_t schemaVersion,
+    RunPersistenceSnapshot& destination);
+[[nodiscard]] bool decodeRunPersistenceRecordInto(
+    const std::string& bytes, device_platform::StorageEpoch epoch,
+    RunPersistenceRawRecord& destination);
+```
+
+`decodeRunPersistenceSnapshotInto()`: identischer Funktionskörper, `s`
+ersetzt durch `destination` (`destination = RunPersistenceSnapshot{};` als
+erste Zeile statt einer frischen lokalen Variable), jedes `return {status,
+std::nullopt}` wird zu `return status;`, das abschließende `return
+{Status::Success, std::move(s)}` wird zu `return
+RunPersistenceCodecStatus::Success;` (die Felder stehen bereits vollständig
+in `destination`). `decodeRunPersistenceRecordInto()`: ruft
+`decodeRunPersistenceSnapshotInto(envelope.payload, schemaVersion,
+destination.snapshot)` direkt auf `destination.snapshot`, setzt
+anschließend `destination.bytes`/`.checkpointRevision`/`.utcUnixSeconds` –
+kein zusätzlicher lokaler `RunPersistenceRawRecord`. `encodeRunPersistenceSnapshot()`
+nimmt bereits heute `std::string& out` als Out-Parameter entgegen
+(`run_persistence_codec.hpp:27`, real geprüft) – die Encode-Richtung war
+bereits stack-sicher, nur die Decode-Richtung fehlte.
+
+**Nicht zulässig (unverändert gegenüber der Owner-Vorgabe):**
+
+```text
+kein neues Wireformat
+keine Feldänderung
+keine Schemaänderung
+keine Enum-Nummerierung
+keine Legacy-Decode-Entfernung
+keine geänderte Validierungssemantik
+```
+
+```text
+RUN_PERSISTENCE_CODEC_WIRE_SEMANTICS=UNCHANGED
+RUN_PERSISTENCE_CODEC_SCHEMA=UNCHANGED
+RUN_PERSISTENCE_CODEC_BYTES=UNCHANGED
+RUN_PERSISTENCE_CODEC_STACK_SAFE_IMPLEMENTATION_HELPERS=IN_SCOPE
+```
+
+Pflicht: Byte-for-byte-Regression aller bestehenden Schema-1/2/3-Fixtures
+(Abschnitt 13). Die bestehenden Return-by-value-Funktionen
+`decodeRunPersistenceSnapshot()`/`decodeRunPersistenceRecord()` bleiben für
+Host-/Legacy-Tests unverändert nutzbar und delegieren jetzt an die
+`Into()`-Kerne (dieselbe Richtungsumkehr-Konvention wie 4.3/4.5).
+
+**4.7 Statischer Produkt-Stackgate – Pflicht vor jeder Hardwarefreigabe
+(schließt Blocker 5 Runde 4, Major 8 Runde 5):** Die bestehende
+Instrumentierung (`docs/ISSUE_29_BUILD_REPORT.md`: `-fstack-usage`/
+`-fcallgraph-info=su` für die Diagnose-Probe sowie „die tatsächlich
+betroffenen `fermentation_app`-Quellen"; `scripts/analyze_issue_29_stack.py`
+wertet die `.ci`-Kanten aus) wird auf die in Abschnitt 12.4 (Scope)
+benannten #121-Produktpfad-TUs erweitert – **dieselbe** Technik,
+**derselbe** Skript-Mechanismus, nicht neu erfunden; Zielpfad wird der
+reale Produkt-Callgraph (`FermentationApplication::begin()` etc.) statt
+(nur) der Diagnose-Probe. Nach Implementation, **vor** jeder
+Hardwarefreigabe (Schritt 8, Abschnitt 15). **Erweiterte Frameliste
+gegenüber Runde 4 (Major 8, Runde 5 – deckt jetzt auch die in 4.5/4.6
+neu benannten internen Kerne ab):**
 
 ```text
 CONFIGURED_RELEASE_MAIN_TASK_STACK=3584
 APP_MAIN_ENTRY_FRAME=<measured>
 FERMENTATION_APPLICATION_BEGIN_FRAME=<measured>
-RUN_PERSISTENCE_LOAD_AND_INITIALIZE_FRAME=<measured>
+MAKE_RUN_PERSISTENCE_SNAPSHOT_INTO_FRAME=<measured>
+DECODE_RUN_PERSISTENCE_SNAPSHOT_INTO_FRAME=<measured>
+DECODE_RUN_PERSISTENCE_RECORD_INTO_FRAME=<measured>
+RUN_PERSISTENCE_LOAD_AND_INITIALIZE_INTO_FRAME=<measured>
+WRITE_SNAPSHOT_CORE_FRAME=<measured>
 RESTORE_PRODUCT_PATH_FRAME=<measured>
 FRESH_START_DECISION_FRAME=<measured>
+DECIDE_PROGRAM_START_INTO_FRAME=<measured>
+DECIDE_MANUAL_START_INTO_FRAME=<measured>
 RUN_PERSISTENCE_PERSIST_COMMAND_FRAME=<measured>
 DISCARD_AS_NO_ACTIVE_RUN_FRAME=<measured>
 ACTIVATE_R1_ELIGIBLE_RUN_FRAME=<measured>
@@ -2133,6 +2537,44 @@ STOP – OWNER_REVIEW_REQUIRED
 
 Keine Hardware zum Ausprobieren, wenn die statische Evidenz bereits nicht
 in das Taskbudget passt.
+
+**4.8 Heap-/Largest-Block-Budget des vergrößerten Coordinators (schließt
+Major 9, Runde 5):** `RunPersistenceCoordinator` wächst durch das inline
+`workingSet_`-Wertmember (Abschnitt 4.4) um `candidate` (5096 B) +
+`snapshot` (4096 B) + `record` (4152 B) ≈ 13,3 KiB gegenüber dem bereits
+real gemessenen `sizeof(RunPersistenceCoordinator)=8968` B – **Heap**, kein
+Stack (Abschnitt "Ausgangslage"), aber real relevant für den bereits aus
+#120 bekannten Heap-/Fragmentierungs-Randbedingungswert:
+
+```text
+BOOT_HEAP_BEFORE_COMPOSITION ~= 280 KB          -- #120-Randbedingung,
+BOOT_HEAP_LARGEST_BLOCK_BEFORE_COMPOSITION = 147456 B  -- kein #121-PASS-Beweis
+```
+
+Diese #120-Zahlen sind **keine** #121-Abnahmeevidenz – sie stammen aus
+einer anderen Composition (Abschnitt 2). Nach Implementation, vor
+Hardwarefreigabe zusätzlich zu messen (Software-/Build-Ebene, real ESP32,
+nicht Host):
+
+```text
+SIZEOF_RUN_PERSISTENCE_COORDINATOR=<measured ESP32>
+SIZEOF_RUN_PERSISTENCE_WORKING_SET=<measured ESP32>
+STATIC_DRAM_DELTA=<measured>
+```
+
+Beim später ownerfreigegebenen actor-free Hardwareboot (Schritt 8,
+Abschnitt 15) zusätzlich real zu messen:
+
+```text
+FREE_HEAP_BEFORE_APPLICATION_COMPOSITION=<measured>
+LARGEST_BLOCK_BEFORE_COORDINATOR_ALLOCATION=<measured>
+FREE_HEAP_AFTER_APPLICATION_COMPOSITION=<measured>
+LARGEST_BLOCK_AFTER_APPLICATION_COMPOSITION=<measured>
+```
+
+Kein neuer Local-Min-Heap-Monitor (bereits in einer früheren Runde
+verworfen, bleibt verworfen) – reine Boot-Zeit-Momentaufnahme, keine
+laufende Überwachung.
 
 ## 13. Teststrategie
 
@@ -2263,6 +2705,25 @@ FAULT_COMPLETED_RESTORE_ALLOCATION_FAILURE_FAILS_CLOSED=PASS
 WATCHDOG_RESET_REEVALUATES_FRESH_EVIDENCE=PASS
 WATCHDOG_RESET_REJECTS_OTHER_CURRENT_FAULT=PASS
 WATCHDOG_RESET_HAS_NO_INTERLOCK_LATCH_TO_CLEAR=PASS
+
+MAKE_SNAPSHOT_PRODUCT_PATH_HAS_NO_LARGE_LOCAL=PASS
+WRITE_SNAPSHOT_CORE_HAS_NO_RAW_RECORD_LARGE_LOCAL=PASS
+
+LOAD_AND_INITIALIZE_PRODUCT_PATH_HAS_NO_RAW_RECORD_LOCAL=PASS
+DECODE_SNAPSHOT_PRODUCT_PATH_WRITES_INTO_HEAP_TARGET=PASS
+DECODE_RECORD_PRODUCT_PATH_WRITES_INTO_HEAP_TARGET=PASS
+
+SCHEMA1_CODEC_BYTE_REGRESSION=PASS
+SCHEMA2_CODEC_BYTE_REGRESSION=PASS
+SCHEMA3_CODEC_BYTE_REGRESSION=PASS
+WIRE_FORMAT_UNCHANGED=PASS
+
+DECIDE_PROGRAM_START_INTO_NO_LARGE_INTERNAL_DECISION=PASS
+DECIDE_MANUAL_START_INTO_NO_LARGE_INTERNAL_DECISION=PASS
+LEGACY_DECIDERS_DELEGATE_TO_INPLACE_CORE=PASS
+
+RUN_PERSISTENCE_COORDINATOR_SINGLE_TASK_CONTRACT=PASS
+NO_REENTRANT_PRODUCT_COORDINATOR_CALL=PASS
 ```
 
 Bestehende relevante native Suiten vollständig weiterführen. Beide
@@ -2279,7 +2740,11 @@ extrahieren (inkl. `FallbackRecovered`-Korrektur); `SafetyCore` →
 `ActuationInterlock` verkleinern und umbenennen; `PresentationState`
 einführen; neue kleine `RunPersistenceCoordinator::activateR1EligibleRun()`;
 `NvsOwningContext::store()`; neuer `EspTimeZoneResolver`-Adapter; zugehörige
-Tests migrieren/ergänzen.
+Tests migrieren/ergänzen. **Ergänzt (Blocker 7, Runde 5):** rein mechanische
+In-place-/Out-Parameter-Stack-Sicherheits-Helfer in `run_commands.hpp/.cpp`,
+`run_persistence_contract.hpp/.cpp`, `run_persistence_coordinator.hpp/.cpp`
+und `run_persistence_codec.hpp/.cpp` (Abschnitt 12.4) – ohne Wire-/Schema-/
+Semantikänderung, siehe Abgrenzung unten.
 
 ### Nicht Scope
 
@@ -2302,10 +2767,23 @@ Tests migrieren/ergänzen.
   Produktparameter vor #35/#106 verboten)
 ```
 
-Keine Änderung an `run_persistence_codec.cpp`, `ActuatorPlanner`,
-`ActuatorPlanSinkDriver`, `RunPersistenceCoordinator` (außer der einen neuen
-Methode), `ConfigurationRecoveryService`, `ConfigurationService`,
-`process_state_machine.hpp/.cpp`.
+**Korrektur gegenüber Runde 4 (Blocker 7, Runde 5):** die Vorfassung
+behauptete „keine Änderung an `run_persistence_codec.cpp`" und
+„`RunPersistenceCoordinator` (außer der einen neuen Methode)" – das ist mit
+dem vollständigen Stack-Sicherheits-Vertrag (Abschnitt 12.4) nicht mehr
+haltbar. Richtig: `run_persistence_codec.cpp` erhält
+`decodeRunPersistenceSnapshotInto()`/`decodeRunPersistenceRecordInto()`
+(Abschnitt 12.4.6); `RunPersistenceCoordinator` erhält zusätzlich zu
+`activateR1EligibleRun()` das `workingSet_`-Wertmember und
+`loadAndInitializeInto()` (Abschnitt 12.4.4/4.5); `run_commands.cpp`
+erhält `beginDecisionInto()`/`decideProgramStartInto()`/
+`decideManualStartInto()` (Abschnitt 12.4.3); `run_persistence_contract.cpp`
+erhält `restoreRunPersistenceSnapshotInto()`/`makeRunPersistenceSnapshotInto()`
+(Abschnitt 12.4.2/4.4). In jedem Fall ausschließlich mechanische
+In-place-/Out-Parameter-Helfer ohne Wire-/Schema-/Semantikänderung, keine
+neue öffentliche Fachlogik. Unverändert **keine** Änderung an
+`ActuatorPlanner`, `ActuatorPlanSinkDriver`, `ConfigurationRecoveryService`,
+`ConfigurationService`, `process_state_machine.hpp/.cpp`.
 
 ## 15. Umsetzungsschritte (owner-gated, keine Umsetzung in dieser Runde)
 
@@ -2320,25 +2798,35 @@ Schritt 3: safety_core.hpp/.cpp -> actuation_interlock.hpp/.cpp umbenennen
   anpassen (Abschnitt 4.9), alle Referenzstellen mechanisch anpassen.
 Schritt 4: NvsOwningContext::store() + EspTimeZoneResolver-Adapter
   ergaenzen (Abschnitt 12.2).
-Schritt 5: Stack-Sicherheits-Vertrag umsetzen (Abschnitt 12.4, Runde 4):
-  restoreRunPersistenceSnapshotInto()/decideProgramStartInto()/
-  decideManualStartInto() als neue Out-Parameter-Varianten (bestehende
-  Return-by-value-APIs bleiben fuer Host-/Legacy-Tests unveraendert),
-  Coordinator-eigenes candidateScratch_ (einmalig bei Konstruktion
-  alloziert), Application-eigenes decisionTarget (Fresh-Start-Pfad,
-  Abschnitt 4.3), RunPersistenceLoadResult boot-transient heap-alloziert
-  in begin(). Alle Allokationen ausschliesslich ueber new (std::nothrow),
-  keine make_unique-Nutzung fuer fail-closed-Pfade.
+Schritt 5: Stack-Sicherheits-Vertrag umsetzen (Abschnitt 12.4, Runde 4+5):
+  restoreRunPersistenceSnapshotInto()/beginDecisionInto()/
+  decideProgramStartInto()/decideManualStartInto()/
+  makeRunPersistenceSnapshotInto()/decodeRunPersistenceSnapshotInto()/
+  decodeRunPersistenceRecordInto()/loadAndInitializeInto() als neue,
+  durchgaengig In-place arbeitende Kerne (bestehende Return-by-value-APIs
+  bleiben fuer Host-/Legacy-Tests unveraendert und delegieren jetzt an
+  diese Kerne, Abschnitt 12.4.3/4.5/4.6). Coordinator-eigenes
+  RunPersistenceWorkingSet-Wertmember workingSet_ (candidate/snapshot/
+  record, Abschnitt 12.4.4 – ersetzt Runde 4s separates
+  candidateScratch_, keine zweite Allokation), Application-eigenes
+  decisionTarget (Fresh-Start-Pfad, Abschnitt 12.4.3), RunPersistenceLoadResult
+  boot-transient heap-alloziert in begin() (Abschnitt 12.4.5). Alle
+  Allokationen ausschliesslich ueber new (std::nothrow), keine
+  make_unique-Nutzung fuer fail-closed-Pfade.
 Schritt 6: FermentationApplication::begin() um die actor-free Composition-
   Fassade erweitern (Abschnitt 12), main/app_main.cpp minimal anpassen,
   Member-Deklarationsreihenfolge fuer ConfigurationService-Dependencies
   (Abschnitt 12.1) korrekt umsetzen.
-Schritt 7: Teststrategie vollstaendig umsetzen (Abschnitt 13).
-Schritt 8: statischer Produkt-Stackgate (Abschnitt 12.4.6) – Pflicht VOR
-  jeder Hardwarefreigabe, kein optionaler Nachweis. Erst danach: reale
-  ESP-IDF-Builds + actor-free Boot-/Classification-Pfad-HWM-Nachweis
-  (Abschnitt 12.2, korrigierte Abnahmemetrik); danach eigenes Owner-Gate
-  fuer einen realen actor-free Hardwareboot.
+Schritt 7: Teststrategie vollstaendig umsetzen (Abschnitt 13), inklusive
+  Byte-for-byte-Regression aller Schema-1/2/3-Fixtures gegen die neuen
+  Codec-In-place-Kerne (Abschnitt 12.4.6).
+Schritt 8: statischer Produkt-Stackgate (Abschnitt 12.4.7) – Pflicht VOR
+  jeder Hardwarefreigabe, kein optionaler Nachweis. Heap-/Largest-Block-
+  Budget des vergroesserten Coordinators (Abschnitt 12.4.8) gehoert zum
+  selben Software-/Build-Nachweis. Erst danach: reale ESP-IDF-Builds +
+  actor-free Boot-/Classification-Pfad-HWM-Nachweis (Abschnitt 12.2,
+  korrigierte Abnahmemetrik); danach eigenes Owner-Gate fuer einen realen
+  actor-free Hardwareboot.
 ```
 
 Jeder Schritt erfordert eine eigene Owner-Freigabe vor Beginn.
@@ -2364,38 +2852,68 @@ MAIN_TASK_STACK_PRIMARY_INCREASE=NO
 MAIN_TASK_STACK_HIGH_WATERMARK=<PASS|FAIL|NOT_MEASURED>
 KNOWN_MAIN_TASK_STACK_CONFLICT=RESOLVED_IN_PLAN
 PERSIST_COMMAND_FRAME_BEFORE=9280
+PERSIST_COMMAND_FRAME_AFTER=<measured>
 PRODUCT_REACHABLE_HEAVY_BY_VALUE_PATHS=CLOSED
-RESTORE_PRODUCT_PATH=STACK_SAFE
-COMMAND_DECISION_PRODUCT_PATH=STACK_SAFE
+
+PRODUCT_RUNCOMMANDSTATE_LOCAL=NO
+PRODUCT_COMMANDDECISION_LOCAL=NO
+PRODUCT_RUNPERSISTENCESNAPSHOT_LOCAL=NO
+PRODUCT_RUNPERSISTENCERAWRECORD_LOCAL=NO
+PRODUCT_RUNPERSISTENCELOADRESULT_LOCAL=NO
+
+SNAPSHOT_PRODUCT_PATH=IN_PLACE
+RESTORE_PRODUCT_PATH=IN_PLACE
+DECODE_PRODUCT_PATH=IN_PLACE
+DECISION_PRODUCT_PATH=IN_PLACE
+
 RUN_PERSISTENCE_LOAD_RESULT_STORAGE=HEAP_BOOT_TRANSIENT
-COORDINATOR_PRODUCT_SCRATCH_POLICY=COORDINATOR_OWNED_CANDIDATE_APPLICATION_OWNED_DECISION
+COORDINATOR_WORKING_SET_STORAGE=VALUE_MEMBER_INLINE_NO_SEPARATE_ALLOCATION
+COORDINATOR_THREAD_SAFE=NO
+COORDINATOR_REENTRANT=NO
+COORDINATOR_PRODUCT_CALL_AFFINITY=SINGLE_SERIALIZED_APPLICATION_TASK
+
+RUN_PERSISTENCE_CODEC_WIRE_SEMANTICS=UNCHANGED
+RUN_PERSISTENCE_CODEC_STACK_SAFE_HELPERS=IN_SCOPE
+
 FAIL_CLOSED_ALLOCATION_USES_NOTHROW=YES
 INTERLOCK_FALLBACK_TRUST_EXCEPTION=REMOVED
 APPLICATION_OOM_DIAGNOSTIC=NON_PERSISTENCE
 WATCHDOG_RESET_STATELESS_CONTRACT=CLOSED
 PRODUCT_REACHABLE_STATIC_STACK_GATE=MANDATORY_BEFORE_HARDWARE
 REAL_RUNTIME_HWM_WITHOUT_REAL_TRIGGER=NOT_CLAIMED
+
+SIZEOF_RUN_PERSISTENCE_COORDINATOR_BEFORE=<measured ESP32>   -- Host-Build-Indikativwert 8968 B, Delta nur ESP32-vs-ESP32 aussagekraeftig
+SIZEOF_RUN_PERSISTENCE_COORDINATOR_AFTER=<measured ESP32>
+COORDINATOR_HEAP_ALLOCATION_LARGEST_BLOCK_GATE=<PASS|FAIL>
+
+PLAN_INTERNAL_CONFLICT=NONE
+OLD_STACK_PATH_TEXT=NONE
+OLD_OOM_ATTRIBUTION_TEXT=NONE
 BREAKING_PERSISTENCE_CHANGE=NO
 SCHEMA_MIGRATION_REQUIRED=NO
 ISSUE121_PRODUCT_COMPOSITION_ACTOR_FREE=YES
-REAL_HARDWARE_BOOT=NOT_RUN                    -- eigenes Owner-Gate, Schritt 7
+REAL_HARDWARE_BOOT=NOT_RUN                    -- eigenes Owner-Gate, Schritt 8
 ```
 
 `SIZEOF_FERMENTATION_APPLICATION`/`APP_MAIN_ENTRY_FRAME` werden aus dem
 realen Release-ELF gemessen (Abschnitt 12.2), nicht geschätzt.
 `MAIN_TASK_STACK_HIGH_WATERMARK` und `PRODUCT_REACHABLE_STATIC_STACK_GATE`
-(Abschnitt 12.4.6) sind beide **Pflichtgates vor jeder Hardwarefreigabe**,
+(Abschnitt 12.4.7) sind beide **Pflichtgates vor jeder Hardwarefreigabe**,
 nicht optionale Beobachtungen – das vormals als „bewusst nicht gelöstes
 Restrisiko" geführte Coordinator-Stackproblem (Runde 3) ist mit dem
-vollständigen Stack-Sicherheits-Vertrag (Abschnitt 12.4, Runde 4) als
-`KNOWN_MAIN_TASK_STACK_CONFLICT=RESOLVED_IN_PLAN` geschlossen. **Präzisierung:**
-„RESOLVED_IN_PLAN" heißt, dass der **Entwurf** jeden real identifizierten
-schweren By-Value-Pfad schließt (`CommandDecision`-Rückgabe,
-`RunCommandState`-Rückgabe, `RunPersistenceLoadResult`-Lokalwert,
-Coordinator-`candidate`); das gemessene `PERSIST_COMMAND_FRAME_BEFORE=9280`
+vollständigen Stack-Sicherheits-Vertrag (Abschnitt 12.4, Runde 4+5) als
+`KNOWN_MAIN_TASK_STACK_CONFLICT=RESOLVED_IN_PLAN` geschlossen. **Präzisierung
+(unverändert gegenüber Runde 4):** „RESOLVED_IN_PLAN" heißt, dass der
+**Entwurf** jeden real identifizierten schweren By-Value-Pfad schließt –
+jetzt sowohl auf der Aufrufer-Ebene (`CommandDecision`-Rückgabe,
+`RunCommandState`-Rückgabe, `RunPersistenceLoadResult`-Lokalwert) als auch
+auf der zuvor übersehenen Callee-Ebene (Coordinator-interner
+`RunPersistenceRawRecord`, `loadReference()`s interne Optionals,
+`decodeRunPersistenceSnapshot()`s interne lokale Snapshot-Variable,
+Abschnitt 12.4, Runde 5); das gemessene `PERSIST_COMMAND_FRAME_BEFORE=9280`
 war der By-Value-Zustand vor diesem Plan. Es gibt bewusst noch **kein**
 `PERSIST_COMMAND_FRAME_AFTER`-Ist-Wert – der bleibt bis zur Implementation
-`<measured>` (Abschnitt 12.4.6) und wird ausschließlich durch den
+`<measured>` (Abschnitt 12.4.7) und wird ausschließlich durch den
 `PRODUCT_REACHABLE_STATIC_STACK_GATE` real bewiesen, nicht durch diesen
 Plantext behauptet. Ein `FAIL` dieser Gates in der Implementation wäre
 danach ein realer Implementationsfehler gegen einen bereits im Entwurf
@@ -2422,18 +2940,41 @@ BOOT_PROCESS_BOUNDARY=CLOSED
 RUNTIME_APPLICATION_LIFECYCLE=CLOSED
 
 KNOWN_MAIN_TASK_STACK_CONFLICT=RESOLVED_IN_PLAN
+PERSIST_COMMAND_FRAME_BEFORE=9280
+CONFIGURED_RELEASE_MAIN_TASK_STACK=3584
 PRODUCT_REACHABLE_HEAVY_BY_VALUE_PATHS=CLOSED
-RESTORE_PRODUCT_PATH=STACK_SAFE
-COMMAND_DECISION_PRODUCT_PATH=STACK_SAFE
+
+PRODUCT_RUNCOMMANDSTATE_LOCAL=NO
+PRODUCT_COMMANDDECISION_LOCAL=NO
+PRODUCT_RUNPERSISTENCESNAPSHOT_LOCAL=NO
+PRODUCT_RUNPERSISTENCERAWRECORD_LOCAL=NO
+PRODUCT_RUNPERSISTENCELOADRESULT_LOCAL=NO
+
+SNAPSHOT_PRODUCT_PATH=IN_PLACE
+RESTORE_PRODUCT_PATH=IN_PLACE
+DECODE_PRODUCT_PATH=IN_PLACE
+DECISION_PRODUCT_PATH=IN_PLACE
+
 RUN_PERSISTENCE_LOAD_RESULT_STORAGE=HEAP_BOOT_TRANSIENT
-COORDINATOR_PRODUCT_SCRATCH_POLICY=COORDINATOR_OWNED_CANDIDATE_APPLICATION_OWNED_DECISION
+COORDINATOR_WORKING_SET_STORAGE=VALUE_MEMBER_INLINE_NO_SEPARATE_ALLOCATION
+COORDINATOR_THREAD_SAFE=NO
+COORDINATOR_REENTRANT=NO
+COORDINATOR_PRODUCT_CALL_AFFINITY=SINGLE_SERIALIZED_APPLICATION_TASK
+
+RUN_PERSISTENCE_CODEC_WIRE_SEMANTICS=UNCHANGED
+RUN_PERSISTENCE_CODEC_STACK_SAFE_HELPERS=IN_SCOPE
+
 FAIL_CLOSED_ALLOCATION_USES_NOTHROW=YES
+MAIN_TASK_STACK_PRIMARY_INCREASE=NO
 INTERLOCK_FALLBACK_TRUST_EXCEPTION=REMOVED
 APPLICATION_OOM_DIAGNOSTIC=NON_PERSISTENCE
 WATCHDOG_RESET_STATELESS_CONTRACT=CLOSED
 PRODUCT_REACHABLE_STATIC_STACK_GATE=MANDATORY_BEFORE_HARDWARE
 REAL_RUNTIME_HWM_WITHOUT_REAL_TRIGGER=NOT_CLAIMED
 
+PLAN_INTERNAL_CONFLICT=NONE
+OLD_STACK_PATH_TEXT=NONE
+OLD_OOM_ATTRIBUTION_TEXT=NONE
 BREAKING_PERSISTENCE_CHANGE=NO
 SCHEMA_MIGRATION_REQUIRED=NO
 
