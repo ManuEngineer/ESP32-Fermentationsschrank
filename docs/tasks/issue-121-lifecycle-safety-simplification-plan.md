@@ -71,7 +71,7 @@ Planrunde und erzeugt keine neue Revisionsdatei.
 
 ```text
 PRIOR_APPROVED_PLAN_SHA=e249b51cedf6f6a3edbce3a0889c48d77b79e828
-PRIOR_REVIEWED_CORRECTION_SHA=1da7fc41652a8070f8120be5a1d8eefbb2721444
+ARCHITECTURE_BOUNDARY_CORRECTION_SHA=1da7fc41652a8070f8120be5a1d8eefbb2721444
 POST_APPROVAL_PLAN_CORRECTION=BEFORE_STEP_6
 POST_APPROVAL_PLAN_CORRECTION_REASON=FERMENTATION_APP_MUST_NOT_DEPEND_ON_DEVICE_PLATFORM_ESP_IDF
 STEP_6_IMPLEMENTATION_STARTED=NO
@@ -499,7 +499,11 @@ private `writeSnapshotCore(...)` verwendet (Abschnitt 9).
 
 ### 4.5 `ConfigurationRecoveryService`
 
-Unverändert gegenüber Vorfassung. Kein Änderungsbedarf.
+Domain- und Recovery-Semantik bleiben unverändert. Für die neue produktive
+Schritt-6-Composition ist ausschließlich die mechanische äußere
+Allokationszeile in `create()` auf `new (std::nothrow)` umzustellen; der
+bestehende `nullptr`-Vertrag wird damit um den äußeren Allokationsfehler
+ergänzt. Keine Änderung an `boot()`, Recovery-Policy oder API-Signatur.
 
 ### 4.6 `ConfigurationService`
 
@@ -514,6 +518,13 @@ ConfigurationService(ConfigurationMutationCoordinator& mutationCoordinator,
 
 Alle drei müssen mindestens so lange leben wie `ConfigurationService`
 selbst (Abschnitt 12.1, Ownership-Tabelle).
+
+`ConfigurationGraphStore` hält neben `IStateStore&` ebenfalls eine externe
+`const ITimeZoneResolver&`. Schritt 6 konstruiert ihn exakt mit
+`ConfigurationGraphStore(store, timeZoneResolver)` und übergibt dieselbe
+Resolver-Referenz zusätzlich an
+`ConfigurationService(*mutationCoordinator_, *graphStore_, timeZoneResolver)`;
+die bestehende Dependency-Identity-Prüfung bleibt damit erfüllt.
 
 **Neu real geprüft (schließt Blocker 7, `StorageEpoch`-Quelle für
 `RunPersistenceCoordinator`):** `ConfigurationService::acquireRuntime()`
@@ -532,9 +543,11 @@ Schritt 4 (`RunPersistenceCoordinator`-Konstruktion) aufgerufen; bei
 `status != RuntimeLeaseGranted` wird `RunPersistenceCoordinator` **nicht**
 konstruiert, `FermentationApplication` setzt `SERVICE_REQUIRED` und
 `Actuation DENIED` (derselbe fail-closed-Vertrag wie jeder andere
-Boot-Fehlerpfad, Abschnitt 7), `begin()` läuft ohne
-`RunPersistenceCoordinator`-Member weiter (`unique_ptr` bleibt `nullptr`,
-Abschnitt 12.1). Die Lease selbst lebt nur für die Dauer des
+Boot-Fehlerpfad, Abschnitt 7), **kein** `RunPersistenceLoadResult` und keine
+`boot_classification`-Klassifikation werden erzeugt oder dereferenziert;
+`begin()` gibt nach dem bereits aufgebauten Application-Lifecycle `true`
+zurück und läuft ohne `RunPersistenceCoordinator`-Member weiter (`unique_ptr`
+bleibt `nullptr`, Abschnitt 12.1). Die Lease selbst lebt nur für die Dauer des
 Epoch-Auslesens (lokale Variable in `begin()`, kein Application-Lifetime-
 Member).
 
@@ -624,7 +637,8 @@ Unverändert gegenüber Vorfassung.
 | Verantwortung | Typ | Autorität für |
 |---|---|---|
 | Device/Application Lifecycle | `FermentationApplication` (erweitert) | `INITIALIZING` / `READY` / `SERVICE_REQUIRED`; Komposition der übrigen vier; hält den einen kanonischen `runtimeRunState_` (Abschnitt 9, Blocker 1), aus dem `publishedProcessState()` als reine Projektion liest |
-| Boot Classification | `boot_classification.hpp/.cpp` (neu, frei Funktion) | Klassifikation eines geladenen Snapshots + Konfigurationsvertrauen zu genau einem der Boot-Flow-Ergebnisse (Abschnitt 7) |
+| Boot Classification | `boot_classification.hpp/.cpp` (neu, freie Funktionen) | Klassifikation ausschließlich des technisch geladenen `RunPersistenceLoadResult` zu genau einem der Boot-Flow-Ergebnisse (Abschnitt 7); Konfigurationsvertrauen bleibt bei `ConfigurationRecoveryService`/`ConfigurationService` und gated die Run-Klassifikation in `FermentationApplication` |
+| Configuration Trust | `ConfigurationRecoveryService` / `ConfigurationService` | Konfigurationsvertrauen und Runtime-Lease; kein Bestandteil der `boot_classification`-API |
 | Process Lifecycle | `ProcessStateMachine` (unverändert) | Laufzustand eines aktiven Laufs (Preheating…Fault) **und** weiterhin `ServiceMode` (Abschnitt 7.1, unverändert, nicht verschoben). Boot-transiente Werte (`Boot`, `SafeBoot`, `RecoveryEvaluation`) bleiben im Wire-Enum bestehen (Abschnitt 6), werden aber von der aktiven `BootClassification`-Policy nicht mehr neu erzeugt – die *Boot-Entscheidung selbst* liegt bei `BootClassification`, nicht bei `ProcessStateMachine` |
 | Persistence Technical Result | `RunPersistenceCoordinator` (+ 1 neue kleine R1-Methode, Abschnitt 9) | technische Speicherwahrheit, `RunPersistenceLoadResult`, `RunPersistenceResult` |
 | Actuation Permission | `ActuationInterlock` (umbenannt/verkleinert aus `SafetyCore`) | `DENIED`/`ALLOWED` für den `ActuatorPlanner`-Eingang (Autorität etabliert, physischer Consumer folgt in späteren Issues, Abschnitt 3) |
@@ -787,6 +801,53 @@ Beide sind unabhängig. `ServiceMode` erzeugt laut `activationEvidenceComplete()
 (unverändert) strukturell nie `ALLOWED` – fail-closed `DENIED` ohne neuen
 Code. Keine neue Berechtigungs-/PIN-Plattform.
 
+**Application-Lifecycle-Vertrag für `begin()` (Schritt-6-Korrektur):** Die
+Application besitzt genau eine Lifecycle-Wahrheit, keinen Verbund aus
+parallel gepflegten Booleschen Zuständen:
+
+```cpp
+enum class ApplicationLifecycleState : std::uint8_t {
+    Initializing,
+    Ready,
+    ServiceRequired,
+};
+```
+
+`FermentationApplication` hält `lifecycleState_` mit dem Initialwert
+`Initializing`. `ready()` ist ausschließlich die Projektion
+`lifecycleState_ == ApplicationLifecycleState::Ready`; bei Bedarf darf ein
+read-only `lifecycleState()`-Accessor denselben Wert exponieren.
+
+Für den vollständigen ESP32-Produkt-Overload bedeutet der Rückgabewert:
+
+```text
+begin() == false:
+  fundamentale Vorbedingung vor dem Aufbau eines sicheren Application-
+  Lifecycles verletzt (insbesondere platformServices nicht bereit);
+  app_main darf abbrechen, es existiert kein lebender Application-Lifecycle.
+
+begin() == true:
+  ein sicherer lebender Application-Lifecycle wurde aufgebaut; der Zustand
+  ist READY oder SERVICE_REQUIRED.
+```
+
+Configuration-/Persistence-/Boot-/explizite Composition-Allokationsfehler
+nach dem Aufbau des Lifecycles setzen `ServiceRequired`, lassen
+`publishedProcessState()` als `std::nullopt`, halten Actuation `DENIED` und
+geben **nicht** nachträglich `false` zurück. `SERVICE_REQUIRED` überlebt die
+Rückkehr aus `begin()`. `READY` bedeutet ausschließlich Lifecycle-Ready und
+ist niemals gleichbedeutend mit Actuation-Erlaubnis.
+
+```text
+APPLICATION_LIFECYCLE_SINGLE_SOURCE=ApplicationLifecycleState
+BEGIN_TRUE_MEANS_APPLICATION_LIFECYCLE_ALIVE=YES
+BEGIN_TRUE_CAN_BE_SERVICE_REQUIRED=YES
+READY_MEANS_LIFECYCLE_READY_ONLY=YES
+SERVICE_REQUIRED_SURVIVES_BEGIN_RETURN=YES
+APP_MAIN_DESTROYS_SERVICE_REQUIRED_APPLICATION=NO
+APPLICATION_READY_EQUALS_ACTUATION_ALLOWED=NO
+```
+
 ### 7.2 Bootzustandspublikation: `INITIALIZING` vs. `STANDBY`, und was mit `Boot` passiert (Korrektur I, Blocker 8, geschlossen)
 
 **Entscheidung (unverändert gegenüber Vorfassung):**
@@ -905,6 +966,32 @@ präzisiert: `isR1ResumeEligible()` bleibt tatsächlich byteidentisch;
 `classifyRunLoad()` bekommt den oben gezeigten einen zusätzlichen frühen
 Zweig für `FallbackRecovered` und ist damit eine **R1-spezifische
 Variante**, keine 1:1-Kopie.
+
+Die Zuständigkeit bleibt dabei strikt getrennt: `boot_classification` nimmt
+nur die bereits implementierte Zwei-Parameter-Run-Load-API entgegen:
+
+```cpp
+[[nodiscard]] RunLoadDisposition classifyRunLoad(
+    RunPersistenceLoadStatus status,
+    const RunPersistenceSnapshot* snapshot) noexcept;
+
+[[nodiscard]] BootClassification classify(
+    RunPersistenceLoadStatus status,
+    const RunPersistenceSnapshot* snapshot) noexcept;
+```
+
+Es gibt keinen `ConfigurationRecoveryResult`-/`configResult`-Parameter.
+Configuration Trust und Runtime-Lease werden vorher durch die
+Configuration-Komponenten geprüft; erst danach wird ein vorhandenes
+`RunPersistenceLoadResult` klassifiziert.
+
+```text
+BOOT_CLASSIFICATION_CONFIGURATION_AUTHORITY=NO
+BOOT_CLASSIFICATION_RUN_LOAD_AUTHORITY=YES
+CONFIG_RUNTIME_LEASE_GATE_PRECEDES_RUN_LOAD=YES
+RUN_LOAD_CLASSIFICATION_WITHOUT_LOAD_RESULT=NO
+NULL_LOAD_RESULT_DEREFERENCE_PATH=NONE
+```
 
 ### 7.4 Runtime-Lifecycle nach erfolgreichem Boot (Blocker 9, neu geschlossen)
 
@@ -1062,9 +1149,14 @@ default-konstruiertes `ProcessRuntimeState{Boot}`).
 
 ```text
 RunPersistenceCoordinator::loadAndInitializeInto(runPersistenceLoadResult&)
-  -> RunPersistenceLoadResult{status, snapshot}
-  -> boot_classification::classify(status, snapshot)  // Abschnitt 7.3:
-     FallbackRecovered -> SafeBoot, sonst wie isR1ResumeEligible()
+  -> load status in `persistenceLoadStatus_` (kleine Application-Kopie)
+  -> snapshotPtr = loadResult.snapshot ? &*loadResult.snapshot : nullptr
+  -> loadDisposition_ = boot_classification::classifyRunLoad(
+       loadResult.status, snapshotPtr)
+  -> boot_classification::classify(loadResult.status, snapshotPtr)
+     // Abschnitt 7.3: FallbackRecovered -> SafeBoot, sonst wie
+     // isR1ResumeEligible(); beide sind die bestehende Zwei-Parameter-API
+     // und keine Configuration-Trust-Autorität
   -> ResumeOffer (nur fuer status==Current, Phase in
      {Preheating, Cooling, ManualHolding})
      -> pendingResume_ = std::unique_ptr<RunCommandState>{
@@ -1086,10 +1178,10 @@ RunPersistenceCoordinator::loadAndInitializeInto(runPersistenceLoadResult&)
      -> PENDING_RESUME_OWNER=FermentationApplication
         PENDING_RESUME_TYPE=std::unique_ptr<RunCommandState>
         PENDING_RESUME_LIFETIME=von Klassifikation bis Confirm/Reject/
-          begin()-Fehlschlag (RAII-Member von FermentationApplication,
-          kein dangling reference ueber begin()-Rueckkehr hinweg, da
-          FermentationApplication selbst als Application-Lifetime-Objekt
-          lebt, Abschnitt 12.1)
+          SERVICE_REQUIRED oder READY (RAII-Member von
+          FermentationApplication, kein dangling reference ueber
+          begin()-Rueckkehr hinweg, da ein partieller Fehler nach dem
+          Lifecycle-Aufbau begin()==true zurueckgibt, Abschnitt 12.1)
         PENDING_RESUME_CLEAR_ON=confirm (nach Applied verschoben in den
           aktiven RunCommandState), reject (verworfen), begin()-
           Allokationsfehlschlag (verworfen, fail-closed)
@@ -1679,8 +1771,9 @@ Ladefehler des Stores. Das ist sachlich falsch: ein Application-/Heap-
 Allokationsfehler sagt nichts über die Vertrauenswürdigkeit von Store oder
 Persistence aus, und die Regel „Producer bleiben Autorität ihrer eigenen
 Wahrheit" (Korrektur G) verlangt eine eigene, korrekt attribuierte
-Diagnose. Fail-closed-Verhalten bleibt identisch (`SERVICE_REQUIRED`/
-`begin()`-Fehlschlag, `Actuation DENIED`, kein Store-Write, kein Resume);
+Diagnose. Fail-closed-Verhalten bleibt identisch (`SERVICE_REQUIRED`,
+`begin()==true` nach dem Lifecycle-Aufbau, `Actuation DENIED`, kein
+Store-Write, kein Resume);
 nur die **Diagnoseattribution** ändert sich. Keine neue generische
 Fehlerplattform, kein neuer Safety-`FaultCode`-Enumwert (der bestehende
 `FaultCode`-Enum bleibt Safety-Produzenten vorbehalten) – stattdessen ein
@@ -1815,10 +1908,21 @@ abstrakten Plattformport.
 ```text
 main/app_main.cpp (geaendert, minimal):
   NvsOwningContext::create()  // unveraendert
+  if (stateStoreContext == nullptr) -> return
+  device_platform::DevicePlatform platform
   const device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;
     // Root-Value-Objekt, keine Heapallokation
-  application.begin(platform, stateStoreContext->store(), timeZoneResolver,
-                    &resetCauseSource)
+  fermentation::FermentationApplication application;
+  const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
+  const bool applicationStarted =
+      platform.begin(startupContext) &&
+      application.begin(platform, stateStoreContext->store(), timeZoneResolver,
+                        &resetCauseSource);
+  if (!applicationStarted) -> log "application: startup failed"; return
+  if (application.ready()) -> log "application: ready"
+  else -> log "application: service required"
+  // begin()==true && !ready() erhält die Application und ihre Diagnose-
+  // Wahrheit; der bestehende Main-Loop darf sie weiterleben lassen.
     // NEU: IStateStore&- und ITimeZoneResolver&-Parameter ueber die
     // bestehenden abstrakten Ports; beide Root-Objekte ueberleben die
     // Application (Abschnitt 12.2)
@@ -1827,53 +1931,66 @@ FermentationApplication::begin(
     platformServices, store, timeZoneResolver, resetCauseSource):
   // Vollstaendiger ESP32-Produkt-Overload; alle Typen in der
   // fermentation_app-Signatur stammen aus device_platform.
+  0. Wenn platformServices nicht bereit ist: return false. Kein
+     Application-Lifecycle wurde gestartet; app_main darf abbrechen.
+  1. lifecycleState_ = Initializing; Presentation reset cause erfassen;
+     die Application ist ab hier ein sicherer lebender Lifecycle.
   2. bootstrapStore_, graphStore_, mutationCoordinator_,
-     configurationService_ mit store/timeZoneResolver konstruieren
+     configurationService_ mit store/timeZoneResolver konstruieren.
+     ConfigurationGraphStore(store, timeZoneResolver) und
+     ConfigurationService(*mutationCoordinator_, *graphStore_,
+     timeZoneResolver) verwenden dieselbe externe Resolver-Referenz.
+     Scheitert eine dieser expliziten Composition-Allokationen oder liefert
+     ConfigurationRecoveryService::create() nullptr, setzt die Application
+     ServiceRequired, publiziert keinen ProcessState, hält Actuation DENIED
+     und gibt true zurück.
   3. ConfigurationRecoveryService::create(store, bootstrapStore_, graphStore_,
      configurationService_, mutationCoordinator_) -> boot()  // boot-only,
-     danach zerstoert
-  3a. configurationService_.acquireRuntime() -> RuntimeConfigurationReadResult
-      // NEU spezifiziert (Blocker 7, Abschnitt 4.6): liefert epoch ueber
-      // lease.get().storageEpoch(); bei status != RuntimeLeaseGranted wird
-      // Schritt 4 UEBERSPRUNGEN, RunPersistenceCoordinator bleibt nullptr,
-      // Application setzt SERVICE_REQUIRED (Abschnitt 4.6/7); lease ist
-      // lokal, ueberlebt Schritt 3a nicht.
-  4. runPersistenceCoordinator = std::unique_ptr<RunPersistenceCoordinator>{
-       new (std::nothrow) RunPersistenceCoordinator(store, epoch, schedule)}
-     if (runPersistenceCoordinator == nullptr) -> Allokationsfehler,
-       fail-closed, SERVICE_REQUIRED (Abschnitt 12.1) - eine einzige
-       Allokation fuer den gesamten Coordinator inkl. seines inline
-       RunPersistenceWorkingSet-Wertmembers (Abschnitt 12.4.4, Runde 5),
-       keine zweite/separate Scratch-Allokation
-     runPersistenceLoadResult = std::unique_ptr<RunPersistenceLoadResult>{
+     danach zerstoert; Domain-/Recovery-Semantik unveraendert.
+  4. configurationService_.acquireRuntime() -> RuntimeConfigurationReadResult
+     Wenn status != RuntimeLeaseGranted (RuntimeReadLeaseBusy oder
+     ConfigurationRuntimeUnavailable):
+       lifecycleState_ = ServiceRequired; runPersistenceCoordinator_ bleibt
+       nullptr; es gibt KEIN RunPersistenceLoadResult, KEINE
+       boot_classification::classify()/classifyRunLoad()-Auswertung, keine
+       dereferenzierte LoadResult-Variable, keinen publizierten ProcessState
+       und Actuation DENIED; return true.
+     Nur bei RuntimeLeaseGranted: epoch = lease.get().storageEpoch(); die
+     Lease bleibt lokal und wird nicht als Member gespeichert.
+  5. runPersistenceCoordinator_ =
+       std::unique_ptr<RunPersistenceCoordinator>{
+         new (std::nothrow) RunPersistenceCoordinator(store, epoch, schedule)}
+     Wenn nullptr: ServiceRequired, kein Publish, Actuation DENIED, return
+     true. Dies ist eine einzige Allokation fuer den gesamten Coordinator
+     inklusive inline RunPersistenceWorkingSet, keine Scratch-Allokation.
+  6. loadResult = std::unique_ptr<RunPersistenceLoadResult>{
        new (std::nothrow) RunPersistenceLoadResult()}
-     if (runPersistenceLoadResult == nullptr) -> Allokationsfehler,
-       fail-closed, SERVICE_REQUIRED
-     runPersistenceCoordinator->loadAndInitializeInto(
-       *runPersistenceLoadResult)
-     // epoch == lease.get().storageEpoch() aus Schritt 3a. KEIN
-     // `new (std::nothrow) RunPersistenceLoadResult(coordinator->
-     // loadAndInitialize())` mehr (Abschnitt 12.4.5, Blocker 2 Runde 5):
-     // loadAndInitialize()s interne loadReference()-Lambda konstruierte
-     // weiterhin lokale std::optional<RunPersistenceRawRecord>-Werte
-     // (real gemessen sizeof(RunPersistenceRawRecord)=4152 B) - ein
-     // aeusserer Heap-Zielwert allein loeste diese Callee-interne Ebene
-     // nicht. loadAndInitializeInto() schreibt jetzt durchgaengig in
-     // Referenzparameter/das Coordinator-eigene workingSet_.record
-     // (Abschnitt 12.4.5). sizeof(RunPersistenceLoadResult)==4112 B war
-     // schon als lokaler Rueckgabewert allein ueber dem 3584-B-Budget;
-     // Grundmuster uebernommen als Randbedingung aus dem bereits
-     // ownerreviewten #119/#120-Stackfix (kein Code-Cherrypick).
-  5. boot_classification::classify(configResult, *runPersistenceLoadResult)
-     -> BootClassification (Abschnitt 7); runPersistenceLoadResult ist
-     boot-transient (lokale unique_ptr-Variable in begin(), kein
-     Application-Lifetime-Member) und wird nach diesem Schritt nicht mehr
-     benoetigt
-  6. je nach BootClassification: sofort Application-Lifecycle setzen,
-     ProcessRuntimeState ggf. published (7.2), pendingResume_ ggf. gesetzt
-     (9), Actuation bleibt DENIED
-  7. ActuationInterlock::evaluate(evidence) mit den realen Werten aus
-     Schritt 3-5 (kein leeres SafetyCoreInput mehr, 4.1)
+     Wenn nullptr: ServiceRequired, kein Publish, Actuation DENIED, return
+     true. Danach ausschließlich
+       runPersistenceCoordinator_->loadAndInitializeInto(*loadResult).
+     Kein Return-by-value-loadAndInitialize(), kein by-value lokaler
+     RunPersistenceLoadResult und kein lokaler RunPersistenceRawRecord.
+  7. persistenceLoadStatus_ = loadResult->status;
+     snapshotPtr = loadResult->snapshot.has_value()
+         ? &*loadResult->snapshot : nullptr;
+     loadDisposition_ = boot_classification::classifyRunLoad(
+         loadResult->status, snapshotPtr);
+     classification = boot_classification::classify(
+         loadResult->status, snapshotPtr);
+     // Beide Funktionen sind die bestehende Zwei-Parameter-Run-Load-API;
+     // Configuration Trust wird hier nicht nochmals klassifiziert.
+  8. loadResult bleibt nur bis zum Abschluss der Boot-Flow-Projektion
+     heap-owned/transient und wird danach freigegeben. Je nach classification
+     den Flow aus Abschnitt 7 ausführen: runtimeRunState_/pendingResume_
+     ausschließlich heap-owned über die bestehenden Into-Kerne herstellen,
+     nur gültige ProcessStates publizieren, bei ResumeOffer nichts
+     publizieren; Actuation bleibt DENIED.
+  9. Nach erfolgreichem Flow lifecycleState_ = Ready oder – bei jedem
+     fail-closed Flow – ServiceRequired. Nur dann return true.
+  10. Spätere ActuationEvidence verwendet die beiden kleinen Application-
+      Kopien `persistenceLoadStatus_` und `loadDisposition_` sowie den
+      frischen `runPersistenceCoordinator_->state()`-Wert; der boot-transiente
+      LoadResult und sein Snapshot werden nicht aufbewahrt.
 
 KEIN ActuatorPlanner, KEIN ActuatorPlanSinkDriver, KEIN TemperatureController,
 KEIN TargetQualificationEvaluator, KEIN TemperatureControlApplicationOrchestrator
@@ -1956,13 +2073,22 @@ CONFIGURATION_SERVICE_NEVER_OUTLIVES_TIME_ZONE_RESOLVER=YES
 | `ITimeZoneResolver`-Referenz | `ConfigurationService` als non-owning Consumer | nur über die Lebensdauer des Consumers | Root-Value-Objekt `EspTimeZoneResolver` | NEIN | Provider lebt länger als `FermentationApplication` | N/A – keine Ownership |
 | `ConfigurationMutationCoordinator` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit | keine externen | NEIN (`ConfigurationService` hält Referenz) | **nach** `configurationService_` (Runde-4-Korrektur, Major 10) | fail-closed |
 | `ConfigurationBootstrapStore` | `FermentationApplication` (`unique_ptr`) | **boot-only möglich** – real geprüft: nur `ConfigurationRecoveryService::create()` nimmt sie entgegen, kein weiterer Konsument nach `boot()` gefunden | `IStateStore` | JA (kann nach Schritt 3 zerstört werden) | vor `IStateStore` | fail-closed |
-| `ConfigurationGraphStore` | `FermentationApplication` (`unique_ptr`) | **Application-Laufzeit** – `ConfigurationService`-Konstruktor hält `ConfigurationGraphStore&` laufend (Abschnitt 4.6), NICHT boot-only | `IStateStore` | NEIN | **nach** `configurationService_` (Runde-4-Korrektur, Major 10), vor `IStateStore` | fail-closed |
+| `ConfigurationGraphStore` | `FermentationApplication` (`unique_ptr`) | **Application-Laufzeit** – `ConfigurationService`-Konstruktor hält `ConfigurationGraphStore&` laufend (Abschnitt 4.6), NICHT boot-only | `IStateStore`, externe `ITimeZoneResolver`-Referenz | NEIN | **nach** `configurationService_` (Runde-4-Korrektur, Major 10), vor `IStateStore` | fail-closed |
 | `ConfigurationService` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit | `mutationCoordinator_`, `graphStore_`, externe `ITimeZoneResolver`-Referenz (alle müssen mindestens gleich lang leben) | NEIN | **vor** den beiden Application-Dependencies; der Root-Resolver lebt ebenfalls weiter | fail-closed |
-| `ConfigurationRecoveryService` | lokal in `begin()` (`unique_ptr`, per `create()`) | **boot-only** (nur `boot()` aufgerufen, danach freigegeben) | `store`, `bootstrapStore_`, `graphStore_`, `configurationService_`, `mutationCoordinator_` | JA | vor `bootstrapStore_` | bereits bestehender `nullptr`-Vertrag von `create()` |
+| `ConfigurationRecoveryService` | lokal in `begin()` (`unique_ptr`, per `create()`) | **boot-only** (nur `boot()` aufgerufen, danach freigegeben) | `store`, `bootstrapStore_`, `graphStore_`, `configurationService_`, `mutationCoordinator_` | JA | vor `bootstrapStore_` | `nullptr` bei Dependency-Identity-Fehler oder äußerem `new (std::nothrow)`-Allokationsfehler |
 | `RunPersistenceCoordinator` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit (auch für Fresh Start/Resume-Aufrufe außerhalb von `begin()`) | `IStateStore`, `epoch` (aus Schritt 3a, Abschnitt 4.6/12), `schedule` | NEIN | vor `IStateStore` | fail-closed **plus** (Blocker 7, neu) bei `acquireRuntime().status != RuntimeLeaseGranted`: `unique_ptr` bleibt `nullptr`, Coordinator wird gar nicht konstruiert, `FermentationApplication` setzt `SERVICE_REQUIRED` |
 | `pendingResume_` (`std::unique_ptr<RunCommandState>`, Runde-3-Korrektur: NICHT `optional`, Abschnitt 9 Blocker 1) | `FermentationApplication` (`unique_ptr`) | von Klassifikation bis Confirm/Reject (Abschnitt 9) | keine externen Referenzen | NEIN | trivial (`unique_ptr`-Member) | fail-closed: `new (std::nothrow)` schlägt fehl → `nullptr` bleibt, kein Resume-Angebot, `SERVICE_REQUIRED` |
 | `runtimeRunState_` (`std::unique_ptr<RunCommandState>`, Runde-3-Korrektur: NICHT `optional`, Blocker 1) | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit; einzige Quelle für `publishedProcessState()` (Abschnitt 9) | keine externen Referenzen | NEIN | trivial (`unique_ptr`-Member) | fail-closed: `new (std::nothrow)` schlägt fehl → kein publizierter Lauf, `SERVICE_REQUIRED` |
 | `PresentationState` | `FermentationApplication` (Wertmember) | Application-Laufzeit | keine | NEIN | trivial | entfällt |
+| `ApplicationLifecycleState` | `FermentationApplication` (Wertmember) | Application-Laufzeit | keine | NEIN | trivial | entfällt |
+| `persistenceLoadStatus_` / `loadDisposition_` | `FermentationApplication` (kleine Wertmember) | ab erfolgreichem Run-Load bis zum nächsten Boot/Load | `boot_classification`-Ergebnis; keine technische Ownership | NEIN | trivial | entfällt |
+
+```text
+ESP_TIME_ZONE_RESOLVER_OUTLIVES_APPLICATION=YES
+CONFIGURATION_SERVICE_NEVER_OUTLIVES_TIME_ZONE_RESOLVER=YES
+CONFIGURATION_GRAPH_STORE_NEVER_OUTLIVES_TIME_ZONE_RESOLVER=YES
+CONFIG_GRAPH_AND_SERVICE_USE_SAME_TIME_ZONE_RESOLVER_IDENTITY=YES
+```
 
 **Verbindlich (Zerstörungsreihenfolge präzisiert, Major 10, Runde 4 – die
 Vorfassung enthielt widersprüchliche Formulierungen: die Dependency-Zeilen
@@ -1993,6 +2119,12 @@ class FermentationApplication {
       // den beiden Application-Dependencies deklariert -> wird bei
       // Zerstoerung ZUERST aufgeraeumt (umgekehrte Deklarationsreihenfolge),
       // Dependencies bleiben waehrend seiner Destruktorausfuehrung gueltig
+    ApplicationLifecycleState lifecycleState_{
+        ApplicationLifecycleState::Initializing};
+    std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;
+    RunLoadDisposition loadDisposition_{RunLoadDisposition::SafeBoot};
+    std::unique_ptr<RunCommandState> runtimeRunState_;
+    std::unique_ptr<RunCommandState> pendingResume_;
     // ...
 };
 ```
@@ -2000,15 +2132,32 @@ class FermentationApplication {
 Konstruktionsreihenfolge in `begin()` entspricht dieser Deklarations-
 reihenfolge (Member werden in Deklarationsreihenfolge konstruiert). Kein
 manueller Destruktor nötig (reines Member-RAII). `IStateStore` bleibt
-ausschließlich bei
-`NvsOwningContext` (unverändert). Ein partiell fehlgeschlagenes `begin()`
-(z. B. Allokationsfehler bei Schritt 2) gibt `false` zurück; bereits
-konstruierte `unique_ptr`-Member von `FermentationApplication` werden beim
-Zerstören des `FermentationApplication`-Objekts (durch `app_main()`s
-bestehenden Fehlerpfad, Abschnitt 4.8) RAII-sicher freigegeben – keine
-dangling References, da nichts von einem Objekt referenziert wird, das
-bereits zerstört ist (`IStateStore` überlebt in jedem Fall, da
-`NvsOwningContext` außerhalb von `FermentationApplication` liegt).
+ausschließlich bei `NvsOwningContext` (unverändert). Nach dem Aufbau des
+sicheren Application-Lifecycles führt ein partieller Fehler zu
+`ServiceRequired`, `begin()` gibt in diesem Fall **true** zurück und die
+Application bleibt im Root-Lifetime erhalten; nur die fundamentale
+Vorbedingung vor Lifecycle-Aufbau (z. B. `platformServices` nicht bereit)
+liefert `false`. `app_main()` beendet den Task nur bei diesem echten
+`begin()==false`-Pfad und zerstört keine lebende `SERVICE_REQUIRED`-
+Application. Bereits konstruierte `unique_ptr`-Member werden durch
+Member-RAII freigegeben; keine dangling References, da `IStateStore` und der
+Root-Resolver außerhalb der Application überleben.
+
+`ConfigurationRecoveryService::create()` bleibt API-seitig unverändert und
+behält seinen `unique_ptr`-/`nullptr`-Vertrag. Schritt 6 ändert ausschließlich
+die bestehende äußere Allokationszeile mechanisch auf
+`new (std::nothrow) ConfigurationRecoveryService(...)` (mit direktem
+`<new>`-Include): `nullptr` entsteht dann sowohl bei Dependency-Identity-
+Fehler als auch bei äußerem Allokationsfehler. Domain-/Recovery-Semantik,
+`boot()`, Factory-Signatur und ConfigurationService bleiben unverändert.
+Verschachtelte STL-Allokationen oder beliebige Konstruktor-Ausnahmen werden
+damit nicht als graceful OOM-Vertrag behauptet.
+
+```text
+CONFIG_RECOVERY_CREATE_OUTER_ALLOCATION_USES_NOTHROW=YES
+CONFIG_RECOVERY_CREATE_NULLPTR_ON_OUTER_ALLOCATION_FAILURE=YES
+CONFIG_RECOVERY_DOMAIN_POLICY_CHANGE=NO
+```
 
 ### 12.2 Neue kleine #121-Zusätze (Blocker 6/12, nicht aus #120 übernommen)
 
@@ -2738,10 +2887,23 @@ PRODUCT_DECODE_SNAPSHOT_LOCAL=NO
 PRODUCT_DECODE_RESULT_LARGE_LOCAL=NO
 ```
 
-Lebensdauer: boot-transient (lokale `unique_ptr`-Variable in `begin()`,
-nicht Application-Lifetime-Member – nach der Klassifikation nicht mehr
-benötigt, `RunPersistenceCoordinator::state()` bleibt die technische
-Wahrheit, Abschnitt 4.4).
+Lebensdauer: der große `RunPersistenceLoadResult` bleibt boot-transient
+(lokale `unique_ptr`-Variable in `begin()`, kein Application-Lifetime-Member)
+und wird nach der Boot-Flow-Projektion freigegeben. Nur die zwei kleinen
+Application-Werte `persistenceLoadStatus_` und `loadDisposition_` bleiben für
+spätere `ActuationEvidence`-Projektionen erhalten; die technische laufende
+Coordinator-Wahrheit bleibt `RunPersistenceCoordinator::state()`.
+
+```text
+RUN_LOAD_RESULT_STORAGE=HEAP_BOOT_TRANSIENT
+RUN_LOAD_SNAPSHOT_APPLICATION_COPY=NO
+APPLICATION_PERSISTENCE_LOAD_STATUS_STORAGE=SMALL_VALUE_ONLY
+APPLICATION_LOAD_DISPOSITION_STORAGE=SMALL_VALUE_ONLY
+POST_BEGIN_ACTUATION_EVIDENCE_HAS_LOAD_STATUS=YES
+POST_BEGIN_ACTUATION_EVIDENCE_HAS_LOAD_DISPOSITION=YES
+SECOND_PERSISTENCE_TECHNICAL_AUTHORITY=NO
+SECOND_BOOT_CLASSIFICATION_AUTHORITY=NO
+```
 
 **4.6 `run_persistence_codec.cpp` – rein mechanische In-place-Helfer
 (schließt Blocker 3, Runde 5):** Scope-Korrektur gegenüber Runde 4
@@ -3377,6 +3539,31 @@ DECODE_LEGACY_SCHEMA_REUSE_CLEARS_RUN_PROGRESS_OBSERVED_SECONDS=PASS
 LOAD_RESULT_REUSE_ALREADY_INITIALIZED_CLEARS_OLD_SNAPSHOT=PASS
 LOAD_RESULT_ERROR_NEVER_EXPOSES_STALE_SNAPSHOT=PASS
 
+BOOT_CLASSIFICATION_MATCHES_EXISTING_TWO_PARAMETER_API=PASS
+CONFIG_RUNTIME_UNAVAILABLE_SKIPS_RUN_PERSISTENCE_LOAD=PASS
+CONFIG_RUNTIME_UNAVAILABLE_SKIPS_BOOT_CLASSIFICATION=PASS
+CONFIG_RUNTIME_UNAVAILABLE_HAS_NO_LOAD_RESULT_DEREFERENCE=PASS
+
+APPLICATION_LIFECYCLE_SINGLE_SOURCE=PASS
+SERVICE_REQUIRED_SURVIVES_BEGIN_RETURN=PASS
+SERVICE_REQUIRED_READY_RETURNS_FALSE=PASS
+APP_MAIN_SERVICE_REQUIRED_PATH_REMAINS_ALIVE=PASS
+APP_MAIN_HARD_BEGIN_FAILURE_STILL_STOPS=PASS
+NATIVE_SMOKE_READY_SEMANTICS_UNCHANGED=PASS
+
+CONFIG_RECOVERY_CREATE_OUTER_ALLOCATION_USES_NOTHROW=PASS
+CONFIG_RECOVERY_CREATE_ALLOCATION_FAILURE_RETURNS_NULL=PASS
+CONFIG_RECOVERY_CREATE_IDENTITY_FAILURE_RETURNS_NULL=PASS
+
+RUN_LOAD_RESULT_REMAINS_BOOT_TRANSIENT=PASS
+POST_BEGIN_PERSISTENCE_LOAD_STATUS_AVAILABLE=PASS
+POST_BEGIN_LOAD_DISPOSITION_AVAILABLE=PASS
+POST_BEGIN_INTERLOCK_EVIDENCE_DOES_NOT_REQUIRE_LOAD_RESULT_LIFETIME=PASS
+
+CONFIG_GRAPH_STORE_USES_INJECTED_TIME_ZONE_RESOLVER=PASS
+CONFIG_SERVICE_USES_SAME_TIME_ZONE_RESOLVER_IDENTITY=PASS
+CONFIG_GRAPH_STORE_RESOLVER_LIFETIME=PASS
+
 EXPLICIT_ISSUE121_OBJECT_ALLOCATION_USES_NOTHROW=PASS
 GRACEFUL_NESTED_STL_OOM_RECOVERY_NOT_CLAIMED=PASS
 ```
@@ -3419,7 +3606,10 @@ extrahieren (inkl. `FallbackRecovered`-Korrektur); `SafetyCore` →
 `ActuationInterlock` verkleinern und umbenennen; `PresentationState`
 einführen; neue kleine `RunPersistenceCoordinator::activateR1EligibleRun()`;
 `NvsOwningContext::store()`; neuer `EspTimeZoneResolver`-Adapter; zugehörige
-Tests migrieren/ergänzen. **Ergänzt (Blocker 7, Runde 5):** rein mechanische
+Tests migrieren/ergänzen. `ConfigurationRecoveryService` bleibt in Domain- und
+Recovery-Semantik unverändert; die mechanische `new (std::nothrow)`-
+Allokationskorrektur in `create()` für die produktive #121-Composition ist in
+Schritt 6 in Scope. **Ergänzt (Blocker 7, Runde 5):** rein mechanische
 In-place-/Out-Parameter-Stack-Sicherheits-Helfer in `run_commands.hpp/.cpp`,
 `run_persistence_contract.hpp/.cpp`, `run_persistence_coordinator.hpp/.cpp`
 und `run_persistence_codec.hpp/.cpp` (Abschnitt 12.4) – ohne Wire-/Schema-/
@@ -3461,8 +3651,10 @@ erhält `restoreRunPersistenceSnapshotInto()`/`makeRunPersistenceSnapshotInto()`
 (Abschnitt 12.4.2/4.4). In jedem Fall ausschließlich mechanische
 In-place-/Out-Parameter-Helfer ohne Wire-/Schema-/Semantikänderung, keine
 neue öffentliche Fachlogik. Unverändert **keine** Änderung an
-`ActuatorPlanner`, `ActuatorPlanSinkDriver`, `ConfigurationRecoveryService`,
-`ConfigurationService`, `process_state_machine.hpp/.cpp`.
+`ActuatorPlanner`, `ActuatorPlanSinkDriver`, `ConfigurationService`,
+`process_state_machine.hpp/.cpp`. `ConfigurationRecoveryService` bleibt
+fachlich unverändert; ausschließlich der äußere Allokationsausdruck in
+`create()` wird in Schritt 6 mechanisch auf `new (std::nothrow)` umgestellt.
 
 ## 15. Umsetzungsschritte (owner-gated, keine Umsetzung in dieser Runde)
 
@@ -3506,6 +3698,13 @@ Schritt 6: main/app_main.cpp komponiert das konkrete
   `device_platform`-Ports, der Native-Smoke-Overload bleibt erhalten, und
   die Member-Deklarationsreihenfolge fuer die Application-eigenen
   `ConfigurationService`-Dependencies (Abschnitt 12.1) wird korrekt umgesetzt.
+  `ConfigurationRecoveryService::create()` erhält dabei ausschließlich die
+  mechanische äußere `new (std::nothrow)`-Allokationskorrektur; Domain- und
+  Recovery-Semantik bleiben unverändert. Der Application-Lifecycle wird über
+  den einen `ApplicationLifecycleState`-Wert geführt: `begin()==true` kann
+  `SERVICE_REQUIRED` bedeuten, während nur ein Fehler vor Lifecycle-Aufbau
+  `false` liefert. Bei fehlendem RuntimeLease werden Coordinator, LoadResult
+  und BootClassification vollständig übersprungen.
   Die Application übernimmt dabei die bereits in Schritt 5 implementierten
   In-place-Kerne mit den tatsächlich benötigten Consumerzielen: den
   boot-transienten heap-owned `RunPersistenceLoadResult` sowie die
@@ -3513,6 +3712,10 @@ Schritt 6: main/app_main.cpp komponiert das konkrete
   Return-by-value-Pfad wird wieder eingeführt. Fresh Start besitzt in #121
   weiterhin keinen erfundenen Produkttrigger: `CommandDecision` wird erst
   bei einem echten, späteren Aufruf per `new (std::nothrow)` alloziert.
+  `persistenceLoadStatus_` und `loadDisposition_` bleiben ausschließlich als
+  kleine, read-only Boot-Evidenzkopien für spätere `ActuationEvidence`
+  erhalten; kein Snapshot wird in der Application dupliziert und keine zweite
+  technische oder Classification-Autorität entsteht.
   Keine Boot-Allokation nur zur Vorbereitung eines unerreichbaren Triggers,
   keine UI-/Sensor-/Actor-Composition.
 Schritt 7: Teststrategie vollstaendig umsetzen (Abschnitt 13), inklusive
@@ -3670,7 +3873,7 @@ PLAN_SHA=<exact, nach Commit>
 
 ARCHITECTURE_VERDICT=SIMPLIFY
 PRIOR_APPROVED_PLAN_SHA=e249b51cedf6f6a3edbce3a0889c48d77b79e828
-PRIOR_REVIEWED_CORRECTION_SHA=1da7fc41652a8070f8120be5a1d8eefbb2721444
+PRIOR_REVIEWED_CORRECTION_SHA=9b101295af6468878057758356de33848ec18061
 PLAN_CORRECTION_REASON=FERMENTATION_APP_MUST_NOT_DEPEND_ON_DEVICE_PLATFORM_ESP_IDF
 ARCHITECTURE_BOUNDARY_CHANGE=NO
 FERMENTATION_APP_DEPENDS_ON_DEVICE_PLATFORM_ESP_IDF=NO
@@ -3678,6 +3881,8 @@ ESP_TIME_ZONE_RESOLVER_OWNER=ESP_IDF_COMPOSITION_ROOT
 ESP_TIME_ZONE_RESOLVER_OUTLIVES_APPLICATION=YES
 CONFIGURATION_SERVICE_NEVER_OUTLIVES_TIME_ZONE_RESOLVER=YES
 FERMENTATION_APPLICATION_TIME_ZONE_PORT=ITimeZoneResolver
+CONFIGURATION_GRAPH_STORE_NEVER_OUTLIVES_TIME_ZONE_RESOLVER=YES
+CONFIG_GRAPH_AND_SERVICE_USE_SAME_TIME_ZONE_RESOLVER_IDENTITY=YES
 FERMENTATION_APP_CMAKE_CHANGE=NO
 ARCHITECTURE_CHECKER_CHANGE=NO
 ADR_013_CHANGE=NO
@@ -3703,6 +3908,20 @@ PERSIST_COMMAND_SINGLE_FRAME_CONFLICT=RESOLVED_IN_IMPLEMENTATION_STEP_5
 CONFIGURED_RELEASE_MAIN_TASK_STACK=3584
 PRODUCT_REACHABLE_STATIC_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
 PRODUCT_REACHABLE_HEAVY_BY_VALUE_PATHS=CLOSED
+
+BOOT_CLASSIFICATION_CONFIGURATION_AUTHORITY=NO
+BOOT_CLASSIFICATION_RUN_LOAD_AUTHORITY=YES
+CONFIG_RUNTIME_LEASE_GATE_PRECEDES_RUN_LOAD=YES
+RUN_LOAD_CLASSIFICATION_WITHOUT_LOAD_RESULT=NO
+NULL_LOAD_RESULT_DEREFERENCE_PATH=NONE
+
+APPLICATION_LIFECYCLE_SINGLE_SOURCE=ApplicationLifecycleState
+BEGIN_TRUE_MEANS_APPLICATION_LIFECYCLE_ALIVE=YES
+BEGIN_TRUE_CAN_BE_SERVICE_REQUIRED=YES
+READY_MEANS_LIFECYCLE_READY_ONLY=YES
+SERVICE_REQUIRED_SURVIVES_BEGIN_RETURN=YES
+APP_MAIN_DESTROYS_SERVICE_REQUIRED_APPLICATION=NO
+APPLICATION_READY_EQUALS_ACTUATION_ALLOWED=NO
 
 PRODUCT_RUNCOMMANDSTATE_LOCAL=NO
 PRODUCT_COMMANDDECISION_LOCAL=NO
@@ -3734,7 +3953,19 @@ RUN_PERSISTENCE_CODEC_WIRE_SEMANTICS=UNCHANGED
 RUN_PERSISTENCE_CODEC_STACK_SAFE_HELPERS=IN_SCOPE
 OLD_CODEC_NO_DIFF_TEXT=NONE
 
+RUN_LOAD_RESULT_STORAGE=HEAP_BOOT_TRANSIENT
+RUN_LOAD_SNAPSHOT_APPLICATION_COPY=NO
+APPLICATION_PERSISTENCE_LOAD_STATUS_STORAGE=SMALL_VALUE_ONLY
+APPLICATION_LOAD_DISPOSITION_STORAGE=SMALL_VALUE_ONLY
+POST_BEGIN_ACTUATION_EVIDENCE_HAS_LOAD_STATUS=YES
+POST_BEGIN_ACTUATION_EVIDENCE_HAS_LOAD_DISPOSITION=YES
+SECOND_PERSISTENCE_TECHNICAL_AUTHORITY=NO
+SECOND_BOOT_CLASSIFICATION_AUTHORITY=NO
+
 EXPLICIT_ISSUE121_OBJECT_ALLOCATION_USES_NOTHROW=YES
+CONFIG_RECOVERY_CREATE_OUTER_ALLOCATION_USES_NOTHROW=YES
+CONFIG_RECOVERY_CREATE_NULLPTR_ON_OUTER_ALLOCATION_FAILURE=YES
+CONFIG_RECOVERY_DOMAIN_POLICY_CHANGE=NO
 NESTED_STL_ALLOCATION_SEMANTICS=PREEXISTING_STANDARD_LIBRARY_BEHAVIOR
 GRACEFUL_NESTED_STL_OOM_RECOVERY=NOT_CLAIMED
 ISSUE121_CUSTOM_ALLOCATOR_OR_PMR=NO
@@ -3772,6 +4003,10 @@ STEP_6_SOURCE_SHA=NOT_CREATED
 IMPLEMENTATION_STEP_6_GATE=BLOCKED_PENDING_REVISED_PLAN_OWNER_REVIEW
 IMPLEMENTATION_STEP_7=NOT_STARTED
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
+PRODUCTION_CODE_CHANGE=NO
+TEST_CODE_CHANGE=NO
+FIRMWARE_TESTS=NOT_RUN_PLAN_ONLY
+HARDWARE_RUN=NO
 OWNER_PLAN_REVIEW=PENDING
 ```
 
