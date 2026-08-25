@@ -9,9 +9,21 @@ Commit-SHA dieser Datei gilt:
 
 ```text
 LIFECYCLE_SIMPLIFICATION_PLAN_PENDING_OWNER_APPROVAL
-IMPLEMENTATION=NOT_STARTED
-PRODUCTION_CODE_CHANGED=NO
-TEST_CODE_CHANGED=NO
+IMPLEMENTATION=IN_PROGRESS_BLOCKED_BEFORE_STEP_6
+IMPLEMENTATION_STEPS_1_TO_5=PASS
+IMPLEMENTATION_STEP_6=NOT_STARTED
+IMPLEMENTATION_STEP_6_GATE=BLOCKED_PENDING_REVISED_PLAN_OWNER_REVIEW
+IMPLEMENTATION_STEP_7=NOT_STARTED
+OWNER_STEP_5_REVIEW=PASS
+STEP_1_SOURCE_SHA=cbfd81e1a622da6f241b89ca43636f41bf798ada
+STEP_2_SOURCE_SHA=6f0d6341c4ae37634fdacb8df09650b8b0c8212d
+STEP_3_SOURCE_SHA=eda125791eda5bfb6ec7125b7392ea971f3c8ec0
+STEP_4_SOURCE_SHA=8bf3592e77d6d8841dd2a572cbbd3bce2da22b81
+STEP_5_ORIGINAL_SOURCE_SHA=18f9c85f9221f81e006eb994324f62758ae414fd
+STEP_5_CORRECTION_SOURCE_SHA=7049380d0e4bd9c0522c4475fa156febcd63ed5d
+STEP_5_EFFECTIVE_SOURCE_SHA=7049380d0e4bd9c0522c4475fa156febcd63ed5d
+THIS_PLAN_CORRECTION_PRODUCTION_CODE_CHANGED=NO
+THIS_PLAN_CORRECTION_TEST_CODE_CHANGED=NO
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
 ```
 
@@ -46,6 +58,25 @@ Der Owner hat sechs Fassungen dieser Plandatei zurückgewiesen:
 - SHA `cd64c8f` (Korrekturrunde 4): 6 Blocker, 5 Major-Befunde.
 - SHA `117b0d4` (Korrekturrunde 5): 7 Blocker, 2 Major-Befunde.
 - SHA `658873c` (Korrekturrunde 6): 5 Blocker, 3 Major-Befunde.
+
+**Post-Approval-Korrektur vor Schritt 6:** Die zuvor ownerfreigegebene
+Plan-SHA `e249b51cedf6f6a3edbce3a0889c48d77b79e828` wurde nach der
+Umsetzung und Ownerfreigabe der Schritte 1–5 vor Beginn von Schritt 6
+materiell korrigiert. Grund war die erst danach erkannte, reale
+Architekturgrenze `FERMENTATION_APP_MUST_NOT_DEPEND_ON_DEVICE_PLATFORM_ESP_IDF`.
+Die Architekturgrenze selbst bleibt unverändert; es wurde keine
+Schritt-6-Implementation begonnen. Die Schritte 1–5 und ihre Source-SHAs
+bleiben gültig. Die Korrektur ist keine siebte vorab zurückgewiesene
+Planrunde und erzeugt keine neue Revisionsdatei.
+
+```text
+PRIOR_APPROVED_PLAN_SHA=e249b51cedf6f6a3edbce3a0889c48d77b79e828
+PRIOR_REVIEWED_CORRECTION_SHA=1da7fc41652a8070f8120be5a1d8eefbb2721444
+POST_APPROVAL_PLAN_CORRECTION=BEFORE_STEP_6
+POST_APPROVAL_PLAN_CORRECTION_REASON=FERMENTATION_APP_MUST_NOT_DEPEND_ON_DEVICE_PLATFORM_ESP_IDF
+STEP_6_IMPLEMENTATION_STARTED=NO
+ARCHITECTURE_BOUNDARY_CHANGE=NO
+```
 
 Alle Befunde aller sechs Runden wurden gegen den realen Code auf `BASE_SHA`
 nachverifiziert (siehe Abschnitt 4, neu ergänzte Unterpunkte) und sind in
@@ -1911,12 +1942,17 @@ ESP-IDF- und ohne `device_platform_test_support`-Abhängigkeit; sie verwendet
 nur den erhaltenen schmalen Native-/Smoke-Overload. Es gibt keine lokale
 Fake-`IStateStore`-Implementierung und keinen neuen Host-StateStore.
 
+```text
+ESP_TIME_ZONE_RESOLVER_OUTLIVES_APPLICATION=YES
+CONFIGURATION_SERVICE_NEVER_OUTLIVES_TIME_ZONE_RESOLVER=YES
+```
+
 ### 12.1 Vollständige Ownership-/Lifetime-Tabelle (Blocker 6, geschlossen)
 
 | Objekt | Owner | Lifetime | Depends On | Boot-only? | Zerstörungsreihenfolge | Allocation-Failure |
 |---|---|---|---|---|---|---|
 | `NvsStateStore` (`IStateStore`) | `NvsOwningContext` (in `main/app_main.cpp`, unverändert) | Prozesslaufzeit, überlebt alle Consumer | `NvsOwningContext`-Partition | NEIN | letztes (nach `FermentationApplication`) | bestehend (`nullptr`-Rückgabe von `create()`) |
-| Konkreter `EspTimeZoneResolver` | ESP-IDF-Composition-Root (`main/app_main.cpp`) | Root-Value-Objekt; überlebt `FermentationApplication` | keine | NEIN | vor `FermentationApplication` zerstört | N/A – keine Heapallokation |
+| Konkreter `EspTimeZoneResolver` | ESP-IDF-Composition-Root (`main/app_main.cpp`) | Root-Value-Objekt; überlebt `FermentationApplication` | keine | NEIN | **nach** `FermentationApplication` zerstört | N/A – keine Heapallokation |
 | `ITimeZoneResolver`-Referenz | `ConfigurationService` als non-owning Consumer | nur über die Lebensdauer des Consumers | Root-Value-Objekt `EspTimeZoneResolver` | NEIN | Provider lebt länger als `FermentationApplication` | N/A – keine Ownership |
 | `ConfigurationMutationCoordinator` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit | keine externen | NEIN (`ConfigurationService` hält Referenz) | **nach** `configurationService_` (Runde-4-Korrektur, Major 10) | fail-closed |
 | `ConfigurationBootstrapStore` | `FermentationApplication` (`unique_ptr`) | **boot-only möglich** – real geprüft: nur `ConfigurationRecoveryService::create()` nimmt sie entgegen, kein weiterer Konsument nach `boot()` gefunden | `IStateStore` | JA (kann nach Schritt 3 zerstört werden) | vor `IStateStore` | fail-closed |
@@ -2481,16 +2517,20 @@ ManualRun -> ProgramRun` auf demselben `workingSet_.snapshot` stale
 Felder aus einem früheren Aufruf durchschlagen lassen (`program`,
 `activeRunId`, `sensorSelection`, `manual`, `revisions`/`revisionCount`
 u. a.). `makeRunPersistenceSnapshotInto()` setzt daher `destination` als
-**erste** Zeile über denselben field-by-field-Reset zurück, den
-`decodeRunPersistenceSnapshotInto()` (4.6) verwendet (Reset-Vertrag in 4.9
-unten) – die anschließende, unveränderte Feldbefüllung nach `variant`
-macht das Ergebnis danach bit-für-bit äquivalent zu einer frischen lokalen
-Variablen:
+**erste** Zeile nach dem field-by-field-Grundprinzip zurück, verwendet aber
+seine eigene Make-Resetliste. `decodeRunPersistenceSnapshotInto()` (4.6)
+verwendet ebenfalls dieses Grundprinzip, jedoch eine getrennte,
+schemaabhängige Decode-Resetliste (Reset-Vertrag in 4.9 unten). Die
+anschließende, unveränderte Feldbefüllung nach `variant` macht das Make-
+Ergebnis danach bit-für-bit äquivalent zu einer frischen lokalen Variablen:
 
 ```text
 SNAPSHOT_INTO_STARTS_FROM_DEFAULT_EQUIVALENT_STATE=YES
 SNAPSHOT_VARIANT_SWITCH_LEAVES_NO_STALE_FIELDS=YES
 SNAPSHOT_REUSE_IS_SEMANTICALLY_EQUIVALENT_TO_FRESH_LOCAL=YES
+SNAPSHOT_MAKE_AND_DECODE_SHARE_RESET_PRINCIPLE=YES
+SNAPSHOT_MAKE_AND_DECODE_SHARE_IDENTICAL_RESET_LIST=NO
+DECODE_RESET_LIST_DIFFERS_FROM_MAKE_RESET_LIST=YES
 ```
 
 Die bestehende `makeRunPersistenceSnapshot()` (Return-by-value) bleibt für
@@ -2819,8 +2859,8 @@ neu benannten internen Kerne ab):**
 CONFIGURED_RELEASE_MAIN_TASK_STACK=3584
 APP_MAIN_ENTRY_FRAME=<measured>
 FERMENTATION_APPLICATION_BEGIN_FRAME=<measured>
-MAKE_RUN_PERSISTENCE_SNAPSHOT_INTO_FRAME=<measured>
-DECODE_RUN_PERSISTENCE_SNAPSHOT_INTO_FRAME=<measured>
+MAKE_RUN_PERSISTENCE_SNAPSHOT_INTO_FRAME=48 B
+DECODE_RUN_PERSISTENCE_SNAPSHOT_INTO_FRAME=512 B
 DECODE_RUN_PERSISTENCE_RECORD_INTO_FRAME=<measured>
 RUN_PERSISTENCE_LOAD_AND_INITIALIZE_INTO_FRAME=<measured>
 WRITE_SNAPSHOT_CORE_FRAME=<measured>
@@ -2836,7 +2876,26 @@ PRODUCT_FRESH_START_CUMULATIVE_STACK_PATH=<measured or NOT_PRODUCT_REACHABLE>
 PRODUCT_RESUME_CUMULATIVE_STACK_PATH=<measured or NOT_PRODUCT_REACHABLE>
 PRODUCT_DISCARD_CUMULATIVE_STACK_PATH=<measured>
 PERSIST_COMMAND_FRAME_BEFORE=9280
-PERSIST_COMMAND_FRAME_AFTER=<measured>
+PERSIST_COMMAND_FRAME_AFTER=688 B
+```
+
+Die folgenden Werte sind bereits gemessene Step-5-Einzelframes der
+stack-sicheren technischen Kerne:
+
+```text
+MAKE_SNAPSHOT_INTO_FRAME=48 B
+DECODE_SNAPSHOT_INTO_FRAME=512 B
+PERSIST_COMMAND_SINGLE_FRAME_CONFLICT=RESOLVED_IN_IMPLEMENTATION_STEP_5
+PERSIST_COMMAND_FRAME_BEFORE=9280 B
+PERSIST_COMMAND_FRAME_AFTER=688 B
+```
+
+Diese Einzelframe-Evidenz ist kein kumulativer Produkt-Callgraph-Nachweis.
+Der finale Gate-Status bleibt bis zur Application-Composition in Schritt 6
+offen:
+
+```text
+PRODUCT_REACHABLE_STATIC_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
 ```
 
 **Ergänzung Runde 6:** die in Abschnitt 4.9 gewählten Reset-Helfer messen,
@@ -2853,7 +2912,7 @@ Abnahme:
 
 ```text
 NO_PRODUCT_REACHABLE_SINGLE_FRAME_EXCEEDS_CONFIGURED_TASK_STACK=PASS
-PRODUCT_REACHABLE_STATIC_STACK_GATE=PASS
+PRODUCT_REACHABLE_STATIC_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
 ```
 
 Einzelne `.su`-Frames ersetzen die kumulative Callgraph-Betrachtung nicht
@@ -3261,9 +3320,9 @@ RUN_PERSISTENCE_LOAD_RESULT_HEAP_BOOT_TRANSIENT=PASS
 NOTHROW_ALLOCATION_FAILURE_FAILS_CLOSED=PASS
 MAKE_UNIQUE_NOT_USED_FOR_FAIL_CLOSED_ALLOCATION=PASS
 PERSIST_COMMAND_FRAME_BEFORE=9280
-PERSIST_COMMAND_FRAME_AFTER=<measured>
-PRODUCT_REACHABLE_STATIC_STACK_GATE=PASS
-PRODUCT_BOOT_CUMULATIVE_STACK_GATE=PASS
+PERSIST_COMMAND_FRAME_AFTER=688 B
+PRODUCT_REACHABLE_STATIC_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
+PRODUCT_BOOT_CUMULATIVE_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
 
 INTERLOCK_HAS_NO_PERSISTENCE_SNAPSHOT_INPUT=PASS
 INTERLOCK_HAS_NO_FALLBACK_RECOVERY_TRUST_EXCEPTION=PASS
@@ -3418,23 +3477,25 @@ Schritt 3: safety_core.hpp/.cpp -> actuation_interlock.hpp/.cpp umbenennen
   anpassen (Abschnitt 4.9), alle Referenzstellen mechanisch anpassen.
 Schritt 4: NvsOwningContext::store() + EspTimeZoneResolver-Adapter
   ergaenzen (Abschnitt 12.2).
-Schritt 5: Stack-Sicherheits-Vertrag umsetzen (Abschnitt 12.4, Runde
-  4+5+6): restoreRunPersistenceSnapshotInto()/beginDecisionInto()/
-  decideProgramStartInto()/decideManualStartInto()/
-  makeRunPersistenceSnapshotInto()/decodeRunPersistenceSnapshotInto()/
+Schritt 5: In-place-/Stack-Safety-Kerne und das Coordinator-eigene
+  `RunPersistenceWorkingSet`-Wertmember umsetzen (Abschnitt 12.4, Runde
+  4+5+6): restoreRunPersistenceSnapshotInto()/beginDecisionInto() /
+  decideProgramStartInto()/decideManualStartInto() /
+  makeRunPersistenceSnapshotInto()/decodeRunPersistenceSnapshotInto() /
   decodeRunPersistenceRecordInto()/loadAndInitializeInto() als neue,
   durchgaengig In-place arbeitende Kerne (bestehende Return-by-value-APIs
   bleiben fuer Host-/Legacy-Tests unveraendert und delegieren jetzt an
-  diese Kerne, Abschnitt 12.4.3/4.5/4.6). Coordinator-eigenes
-  RunPersistenceWorkingSet-Wertmember workingSet_ (candidate/snapshot/
-  record, Abschnitt 12.4.4 – ersetzt Runde 4s separates
-  candidateScratch_, keine zweite Allokation), Application-eigenes
-  decisionTarget (Fresh-Start-Pfad, Abschnitt 12.4.3), RunPersistenceLoadResult
-  boot-transient heap-alloziert in begin() (Abschnitt 12.4.5). Jeder
-  wiederverwendete In-place-Kern folgt dem field-by-field-Reset-Vertrag aus
-  Abschnitt 12.4.9 (kein Ganzobjekt-Temporary via `destination = T{};`).
+  diese Kerne, Abschnitt 12.4.3/4.5/4.6). Das `workingSet_`-Wertmember
+  enthaelt `candidate`/`snapshot`/`record` (Abschnitt 12.4.4 – ersetzt
+  Runde 4s separates `candidateScratch_`, keine zweite Allokation).
+  Schritt 5 enthielt **keine** `FermentationApplication`-Produktcomposition;
+  insbesondere wurden weder `decisionTarget` noch das boot-transiente
+  `RunPersistenceLoadResult` produktiv in `begin()` komponiert. Diese
+  Application-Consumer gehören zur Composition-Seite von Schritt 6.
+  Jeder wiederverwendete In-place-Kern folgt dem field-by-field-Reset-Vertrag
+  aus Abschnitt 12.4.9 (kein Ganzobjekt-Temporary via `destination = T{};`).
   Alle expliziten Objektallokationen ausschliesslich ueber
-  new (std::nothrow), keine make_unique-Nutzung fuer fail-closed-Pfade;
+  `new (std::nothrow)`, keine make_unique-Nutzung fuer fail-closed-Pfade;
   verschachtelte STL-Allokationen folgen dem verengten Vertrag aus
   Abschnitt 12.4.10 (kein neuer Allocator/PMR).
 Schritt 6: main/app_main.cpp komponiert das konkrete
@@ -3445,6 +3506,15 @@ Schritt 6: main/app_main.cpp komponiert das konkrete
   `device_platform`-Ports, der Native-Smoke-Overload bleibt erhalten, und
   die Member-Deklarationsreihenfolge fuer die Application-eigenen
   `ConfigurationService`-Dependencies (Abschnitt 12.1) wird korrekt umgesetzt.
+  Die Application übernimmt dabei die bereits in Schritt 5 implementierten
+  In-place-Kerne mit den tatsächlich benötigten Consumerzielen: den
+  boot-transienten heap-owned `RunPersistenceLoadResult` sowie die
+  heap-owned `runtimeRunState_`-/`pendingResume_`-Ziele; kein großer lokaler
+  Return-by-value-Pfad wird wieder eingeführt. Fresh Start besitzt in #121
+  weiterhin keinen erfundenen Produkttrigger: `CommandDecision` wird erst
+  bei einem echten, späteren Aufruf per `new (std::nothrow)` alloziert.
+  Keine Boot-Allokation nur zur Vorbereitung eines unerreichbaren Triggers,
+  keine UI-/Sensor-/Actor-Composition.
 Schritt 7: Teststrategie vollstaendig umsetzen (Abschnitt 13), inklusive
   Byte-for-byte-Regression aller Schema-1/2/3-Fixtures gegen die neuen
   Codec-In-place-Kerne (Abschnitt 12.4.6).
@@ -3482,7 +3552,7 @@ MAIN_TASK_STACK_PRIMARY_INCREASE=NO
 MAIN_TASK_STACK_HIGH_WATERMARK=<PASS|FAIL|NOT_MEASURED>
 KNOWN_MAIN_TASK_STACK_CONFLICT=RESOLVED_IN_PLAN
 PERSIST_COMMAND_FRAME_BEFORE=9280
-PERSIST_COMMAND_FRAME_AFTER=<measured>
+PERSIST_COMMAND_FRAME_AFTER=688 B
 PRODUCT_REACHABLE_HEAVY_BY_VALUE_PATHS=CLOSED
 
 PRODUCT_RUNCOMMANDSTATE_LOCAL=NO
@@ -3579,14 +3649,16 @@ auf der zuvor übersehenen Callee-Ebene (Coordinator-interner
 `RunPersistenceRawRecord`, `loadReference()`s interne Optionals,
 `decodeRunPersistenceSnapshot()`s interne lokale Snapshot-Variable,
 Abschnitt 12.4, Runde 5); das gemessene `PERSIST_COMMAND_FRAME_BEFORE=9280`
-war der By-Value-Zustand vor diesem Plan. Es gibt bewusst noch **kein**
-`PERSIST_COMMAND_FRAME_AFTER`-Ist-Wert – der bleibt bis zur Implementation
-`<measured>` (Abschnitt 12.4.7) und wird ausschließlich durch den
-`PRODUCT_REACHABLE_STATIC_STACK_GATE` real bewiesen, nicht durch diesen
-Plantext behauptet. Ein `FAIL` dieser Gates in der Implementation wäre
-danach ein realer Implementationsfehler gegen einen bereits im Entwurf
-geschlossenen Plan, keine weiterhin offene Architekturfrage – aber die
-Zahl selbst ist erst nach dem Gate bewiesen, nicht schon jetzt.
+war der By-Value-Zustand vor diesem Plan. Die Step-5-Einzelframe-Evidenz ist
+bereits real vorhanden: `MAKE_SNAPSHOT_INTO_FRAME=48 B`,
+`DECODE_SNAPSHOT_INTO_FRAME=512 B` und
+`PERSIST_COMMAND_FRAME_AFTER=688 B`. Diese Einzelframes lösen jedoch nicht
+den kumulativen Produkt-Callgraph-Nachweis. Der
+`PRODUCT_REACHABLE_STATIC_STACK_GATE` bleibt deshalb bis zur
+Application-Composition in Schritt 6 offen. Ein `FAIL` dieses finalen Gates
+in der Implementation wäre danach ein realer Implementationsfehler gegen
+einen bereits im Entwurf geschlossenen Plan, keine weiterhin offene
+Architekturfrage.
 
 ## 17. Statuszusammenfassung
 
@@ -3598,15 +3670,22 @@ PLAN_SHA=<exact, nach Commit>
 
 ARCHITECTURE_VERDICT=SIMPLIFY
 PRIOR_APPROVED_PLAN_SHA=e249b51cedf6f6a3edbce3a0889c48d77b79e828
+PRIOR_REVIEWED_CORRECTION_SHA=1da7fc41652a8070f8120be5a1d8eefbb2721444
 PLAN_CORRECTION_REASON=FERMENTATION_APP_MUST_NOT_DEPEND_ON_DEVICE_PLATFORM_ESP_IDF
 ARCHITECTURE_BOUNDARY_CHANGE=NO
 FERMENTATION_APP_DEPENDS_ON_DEVICE_PLATFORM_ESP_IDF=NO
 ESP_TIME_ZONE_RESOLVER_OWNER=ESP_IDF_COMPOSITION_ROOT
+ESP_TIME_ZONE_RESOLVER_OUTLIVES_APPLICATION=YES
+CONFIGURATION_SERVICE_NEVER_OUTLIVES_TIME_ZONE_RESOLVER=YES
 FERMENTATION_APPLICATION_TIME_ZONE_PORT=ITimeZoneResolver
 FERMENTATION_APP_CMAKE_CHANGE=NO
 ARCHITECTURE_CHECKER_CHANGE=NO
 ADR_013_CHANGE=NO
 NATIVE_SMOKE_OVERLOAD=PRESERVED
+NEW_TIME_ZONE_PORT=NO
+NEW_FACTORY=NO
+NEW_SERVICE_LOCATOR=NO
+NEW_DI_FRAMEWORK=NO
 
 RESUME_OFFER_OWNERSHIP=CLOSED
 R1_RESUME_PATH=CLOSED_NO_C2
@@ -3618,8 +3697,11 @@ BOOT_PROCESS_BOUNDARY=CLOSED
 RUNTIME_APPLICATION_LIFECYCLE=CLOSED
 
 KNOWN_MAIN_TASK_STACK_CONFLICT=RESOLVED_IN_PLAN
-PERSIST_COMMAND_FRAME_BEFORE=9280
+PERSIST_COMMAND_FRAME_BEFORE=9280 B
+PERSIST_COMMAND_FRAME_AFTER=688 B
+PERSIST_COMMAND_SINGLE_FRAME_CONFLICT=RESOLVED_IN_IMPLEMENTATION_STEP_5
 CONFIGURED_RELEASE_MAIN_TASK_STACK=3584
+PRODUCT_REACHABLE_STATIC_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
 PRODUCT_REACHABLE_HEAVY_BY_VALUE_PATHS=CLOSED
 
 PRODUCT_RUNCOMMANDSTATE_LOCAL=NO
@@ -3638,6 +3720,8 @@ SNAPSHOT_REUSE_IS_SEMANTICALLY_EQUIVALENT_TO_FRESH_LOCAL=YES
 COMMAND_DECISION_REUSE_NO_STALE_FIELDS=YES
 COMMAND_DECISION_RESET_LIST_EXHAUSTS_ALL_STRUCT_MEMBERS=YES
 SNAPSHOT_MAKE_RESET_LIST_EXHAUSTS_ALL_STRUCT_MEMBERS=YES
+SNAPSHOT_MAKE_AND_DECODE_SHARE_RESET_PRINCIPLE=YES
+SNAPSHOT_MAKE_AND_DECODE_SHARE_IDENTICAL_RESET_LIST=NO
 DECODE_RESET_LIST_DIFFERS_FROM_MAKE_RESET_LIST=YES
 LOAD_RESULT_ERROR_NEVER_EXPOSES_STALE_SNAPSHOT=YES
 
@@ -3667,14 +3751,25 @@ REAL_RUNTIME_HWM_WITHOUT_REAL_TRIGGER=NOT_CLAIMED
 PLAN_INTERNAL_CONFLICT=NONE
 OLD_STACK_PATH_TEXT=NONE
 OLD_OOM_ATTRIBUTION_TEXT=NONE
+RESOLVER_LIFETIME_TABLE_CONFLICT=CLOSED
+CURRENT_IMPLEMENTATION_STATUS_CONFLICT=CLOSED
+STEP5_STEP6_SCOPE_HISTORY_CONFLICT=CLOSED
+MAKE_DECODE_RESET_TEXT_CONFLICT=CLOSED
+STEP5_STACK_EVIDENCE_STATUS_CONFLICT=CLOSED
+POST_APPROVAL_PLAN_HISTORY=CLOSED
 SOURCE_OF_TRUTH_CONFLICT=NONE
 
 BREAKING_PERSISTENCE_CHANGE=NO
 SCHEMA_MIGRATION_REQUIRED=NO
 
-IMPLEMENTATION=NOT_STARTED
+IMPLEMENTATION=IN_PROGRESS_BLOCKED_BEFORE_STEP_6
+IMPLEMENTATION_STEPS_1_TO_5=PASS
+OWNER_STEP_5_REVIEW=PASS
+STEP_5_EFFECTIVE_SOURCE_SHA=7049380d0e4bd9c0522c4475fa156febcd63ed5d
+STEP_5_PRODUCT_COMPOSITION=NO
 IMPLEMENTATION_STEP_6=NOT_STARTED
 STEP_6_SOURCE_SHA=NOT_CREATED
+IMPLEMENTATION_STEP_6_GATE=BLOCKED_PENDING_REVISED_PLAN_OWNER_REVIEW
 IMPLEMENTATION_STEP_7=NOT_STARTED
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
 OWNER_PLAN_REVIEW=PENDING
