@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "actuator_plan_types.hpp"
+#include "boot_classification.hpp"
 #include "configuration_recovery_service.hpp"
 #include "configuration_service.hpp"
 #include "reset_cause.hpp"
@@ -34,15 +35,6 @@ enum class SafetyDisposition : std::uint8_t {
 
 enum class SafetyBootDisposition : std::uint8_t {
     Unresolved,
-    Standby,
-    ResumeOffer,
-    NoActiveRun,
-    Completed,
-    TerminalFault,
-    SafeBoot,
-};
-
-enum class RunLoadDisposition : std::uint8_t {
     Standby,
     ResumeOffer,
     NoActiveRun,
@@ -139,12 +131,6 @@ class SafetyCore final {
     [[nodiscard]] static std::uint16_t wireValue(FaultCode code) noexcept {
         return static_cast<std::uint16_t>(code);
     }
-
-    [[nodiscard]] static bool isR1ResumeEligible(
-        const RunPersistenceSnapshot& snapshot) noexcept;
-    [[nodiscard]] static RunLoadDisposition classifyRunLoad(
-        RunPersistenceLoadStatus status,
-        const RunPersistenceSnapshot* snapshot) noexcept;
 
    private:
     [[nodiscard]] static bool isKnown(

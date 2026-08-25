@@ -20,6 +20,7 @@
 #include "configuration_mutation_coordinator.hpp"
 #include "configuration_recovery_service.hpp"
 #include "configuration_service.hpp"
+#include "boot_classification.hpp"
 #include "configuration_storage_contract.hpp"
 #include "crc32.hpp"
 #include "run_checkpoint_schedule.hpp"
@@ -381,8 +382,8 @@ const std::vector<OracleCase> kMatrix = {
              "invalid current with valid older fallback",
              StateStoreReadStatus::Success,
              RecordClassification::FullyValidFallback,
-             ProductOutcome::OlderValidCheckpointResume,
-             SafetyProjection::ResumeOffer, SafetyProducer::None, false),
+             ProductOutcome::RunRecoveryRequired, SafetyProjection::SafeBoot,
+             SafetyProducer::RunPersistenceUntrusted, true),
     makeCase(
         "run_rh0_unknown_commit_new", Domain::Run, Scenario::UnknownCommitValid,
         "new head committed after cut", StateStoreReadStatus::Success,
@@ -454,8 +455,8 @@ const std::vector<OracleCase> kMatrix = {
              Scenario::InvalidReference, "invalid current with valid fallback",
              StateStoreReadStatus::Success,
              RecordClassification::InvalidReference,
-             ProductOutcome::OlderValidCheckpointResume,
-             SafetyProjection::ResumeOffer, SafetyProducer::None, false),
+             ProductOutcome::RunRecoveryRequired, SafetyProjection::SafeBoot,
+             SafetyProducer::RunPersistenceUntrusted, true),
     makeCase("run_rh0_invalid_reference_no_fallback", Domain::Run,
              Scenario::InvalidReferenceNoFallback,
              "invalid current without fallback", StateStoreReadStatus::Success,
@@ -465,8 +466,8 @@ const std::vector<OracleCase> kMatrix = {
     makeCase("run_rc0_foreign_epoch", Domain::Run, Scenario::ForeignEpoch,
              "current checkpoint foreign StorageEpoch",
              StateStoreReadStatus::Success, RecordClassification::ForeignEpoch,
-             ProductOutcome::OlderValidCheckpointResume,
-             SafetyProjection::ResumeOffer, SafetyProducer::None, false),
+             ProductOutcome::RunRecoveryRequired, SafetyProjection::SafeBoot,
+             SafetyProducer::RunPersistenceUntrusted, true),
     makeCase("run_rh0_prepared_interrupted", Domain::Run,
              Scenario::PreparedInterrupted, "durable Prepared head",
              StateStoreReadStatus::Success,
@@ -2174,12 +2175,7 @@ bool expectedTruthSanity(const OracleCase& item) {
         case Scenario::FallbackValid:
         case Scenario::InvalidReference:
         case Scenario::ForeignEpoch:
-            return validResume(ProductOutcome::OlderValidCheckpointResume,
-                               item.scenario == Scenario::FallbackValid
-                                   ? RecordClassification::FullyValidFallback
-                               : item.scenario == Scenario::InvalidReference
-                                   ? RecordClassification::InvalidReference
-                                   : RecordClassification::ForeignEpoch);
+            return runRecovery(item.classification);
         case Scenario::UnknownCommitNotFound:
         case Scenario::ReadError:
         case Scenario::ReadCapacity:
@@ -2672,7 +2668,7 @@ void test_semantic_counterexamples_are_explicit() {
         if (item.scenario == Scenario::FallbackValid &&
             item.domain == Domain::Run) {
             TEST_ASSERT_TRUE(item.outcome ==
-                             ProductOutcome::OlderValidCheckpointResume);
+                             ProductOutcome::RunRecoveryRequired);
         }
         if (item.scenario == Scenario::ControlledDiscard) {
             TEST_ASSERT_TRUE(item.outcome == ProductOutcome::RunAbortRequired);
@@ -3164,7 +3160,7 @@ ProductionActual runRunProduction(const OracleCase& item,
                 BaselineClassification::ControlledDiscardTombstone);
             actual.recoveryAction =
                 actionName(ExpectedRecoveryAction::NoActiveRun);
-        } else if (fermentation::SafetyCore::isR1ResumeEligible(
+        } else if (fermentation::boot_classification::isR1ResumeEligible(
                        *result.snapshot)) {
             actual.productOutcome = "NEW_VALID_RESUME";
             actual.recordClassification = "FullyValidCurrent";
@@ -3174,7 +3170,15 @@ ProductionActual runRunProduction(const OracleCase& item,
         }
     } else if (result.status ==
                fermentation::RunPersistenceLoadStatus::FallbackRecovered) {
-        actual.productOutcome = "OLDER_VALID_CHECKPOINT_RESUME";
+        const auto loadDisposition =
+            fermentation::boot_classification::classifyRunLoad(
+                result.status,
+                result.snapshot.has_value() ? &*result.snapshot : nullptr);
+        if (loadDisposition == fermentation::RunLoadDisposition::SafeBoot) {
+            actual.productOutcome = "RUN_RECOVERY_REQUIRED";
+        } else {
+            actual.productOutcome = "OLDER_VALID_CHECKPOINT_RESUME";
+        }
         actual.recordClassification = "FullyValidFallback";
     } else {
         actual.productOutcome = "RUN_RECOVERY_REQUIRED";

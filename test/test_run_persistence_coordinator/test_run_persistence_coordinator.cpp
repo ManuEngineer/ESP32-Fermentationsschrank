@@ -8,6 +8,7 @@
 #include "run_persistence_coordinator.hpp"
 #include "run_persistence_codec.hpp"
 #include "run_recovery.hpp"
+#include "boot_classification.hpp"
 #include "qualification_orchestrator.hpp"
 #include "control_context.hpp"
 #include "mock_bidirectional_actuator_sink.hpp"
@@ -7914,9 +7915,9 @@ void test_orchestrator_reconciles_non_resumable_current_before_standby() {
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
                           static_cast<int>(loaded.status));
     TEST_ASSERT_TRUE(loaded.snapshot.has_value());
-    TEST_ASSERT_TRUE(
-        SafetyCore::classifyRunLoad(loaded.status, &*loaded.snapshot) ==
-        RunLoadDisposition::NoActiveRun);
+    TEST_ASSERT_TRUE(boot_classification::classifyRunLoad(loaded.status,
+                                                          &*loaded.snapshot) ==
+                     RunLoadDisposition::NoActiveRun);
     auto current = restoreRunPersistenceSnapshot(*loaded.snapshot);
     TEST_ASSERT_TRUE(current.has_value());
 

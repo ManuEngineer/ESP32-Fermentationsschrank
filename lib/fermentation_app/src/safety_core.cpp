@@ -240,8 +240,8 @@ SafetyEvaluation SafetyCore::evaluate(const SafetyCoreInput& input) {
             RunPersistenceLoadStatus::ReadFailed))) {
         observe(FaultCode::RunPersistenceUntrusted);
     } else {
-        loadDisposition = classifyRunLoad(*input.persistenceLoadStatus,
-                                          input.persistenceSnapshot);
+        loadDisposition = boot_classification::classifyRunLoad(
+            *input.persistenceLoadStatus, input.persistenceSnapshot);
         if (loadDisposition == RunLoadDisposition::SafeBoot)
             observe(FaultCode::RunPersistenceUntrusted);
     }
@@ -371,8 +371,8 @@ bool SafetyCore::resetRequestWatchdog(ActuatorPlanner& planner,
         !isKnown(*input.persistenceLoadStatus) ||
         isPersistenceSafeBoot(*input.persistenceLoadStatus) ||
         !isTrustedCoordinatorState(input.persistenceCoordinatorState) ||
-        classifyRunLoad(*input.persistenceLoadStatus,
-                        input.persistenceSnapshot) ==
+        boot_classification::classifyRunLoad(*input.persistenceLoadStatus,
+                                             input.persistenceSnapshot) ==
             RunLoadDisposition::SafeBoot ||
         !hasFault(activeFaultMask_, FaultCode::ActuatorRequestWatchdog) ||
         activeFaultMask_ != faultBit(FaultCode::ActuatorRequestWatchdog))
@@ -391,73 +391,6 @@ bool SafetyCore::resetRequestWatchdog(ActuatorPlanner& planner,
     lastEvaluation_ = SafetyEvaluation{};
     lastEvaluation_.resetCause = resetCause_;
     return true;
-}
-
-bool SafetyCore::isR1ResumeEligible(
-    const RunPersistenceSnapshot& snapshot) noexcept {
-    if (snapshot.variant == RunCheckpointVariant::NoActiveRun ||
-        snapshot.processState.state == ProcessState::Completed ||
-        snapshot.processState.state == ProcessState::Fault ||
-        snapshot.processState.state == ProcessState::RecoveryEvaluation ||
-        snapshot.pendingRecoveryAnchor.has_value() ||
-        snapshot.recoveryBootAnchorMonotonicMillis.has_value() ||
-        snapshot.lastRecoveryEpisodeEvidence.has_value() ||
-        snapshot.priorBootPhaseElapsed.has_value() ||
-        snapshot.nominalRecoveryAdjustment.has_value() ||
-        snapshot.runProgress.weightedProgress.has_value() ||
-        snapshot.runProgress.basis == RunProgressBasis::PartialUnknownHistory) {
-        return false;
-    }
-    switch (snapshot.processState.state) {
-        case ProcessState::Preheating:
-        case ProcessState::Cooling:
-        case ProcessState::ManualHolding:
-            return true;
-        case ProcessState::WaitingForProduct:
-        case ProcessState::ReachingTarget:
-        case ProcessState::QualifyingTarget:
-        case ProcessState::Fermenting:
-        case ProcessState::CoolHolding:
-        case ProcessState::Boot:
-        case ProcessState::SafeBoot:
-        case ProcessState::Standby:
-        case ProcessState::Completed:
-        case ProcessState::RecoveryEvaluation:
-        case ProcessState::Fault:
-        case ProcessState::ServiceMode:
-            return false;
-    }
-    return false;
-}
-
-RunLoadDisposition SafetyCore::classifyRunLoad(
-    RunPersistenceLoadStatus status,
-    const RunPersistenceSnapshot* snapshot) noexcept {
-    switch (status) {
-        case RunPersistenceLoadStatus::NoPersistedRun:
-        case RunPersistenceLoadStatus::NoActiveRun:
-            return RunLoadDisposition::Standby;
-        case RunPersistenceLoadStatus::Current:
-        case RunPersistenceLoadStatus::FallbackRecovered:
-            if (snapshot == nullptr) return RunLoadDisposition::SafeBoot;
-            if (snapshot->processState.state == ProcessState::Completed)
-                return RunLoadDisposition::Completed;
-            if (snapshot->processState.state == ProcessState::Fault)
-                return RunLoadDisposition::TerminalFault;
-            return isR1ResumeEligible(*snapshot)
-                       ? RunLoadDisposition::ResumeOffer
-                       : RunLoadDisposition::NoActiveRun;
-        case RunPersistenceLoadStatus::PreparedInterrupted:
-        case RunPersistenceLoadStatus::NotReconstructible:
-        case RunPersistenceLoadStatus::NotReconstructibleOrphanedState:
-        case RunPersistenceLoadStatus::ReadFailed:
-        case RunPersistenceLoadStatus::CapacityExceeded:
-        case RunPersistenceLoadStatus::UnsupportedSchema:
-        case RunPersistenceLoadStatus::ForeignEpoch:
-        case RunPersistenceLoadStatus::AlreadyInitialized:
-            return RunLoadDisposition::SafeBoot;
-    }
-    return RunLoadDisposition::SafeBoot;
 }
 
 bool SafetyCore::isKnown(ConfigurationRecoveryStatus status) noexcept {

@@ -562,45 +562,7 @@ void test_integrity_and_commit_faults_require_matching_resolution() {
     TEST_ASSERT_TRUE(commit.evaluate(commitInput).faultCode == FaultCode::None);
 }
 
-void test_schema_three_neutral_fields_do_not_block_simple_resume() {
-    RunPersistenceSnapshot snapshot;
-    snapshot.variant = RunCheckpointVariant::ProgramRun;
-    snapshot.processState.state = ProcessState::Preheating;
-    TEST_ASSERT_TRUE(SafetyCore::isR1ResumeEligible(snapshot));
-    TEST_ASSERT_TRUE(SafetyCore::classifyRunLoad(
-                         RunPersistenceLoadStatus::Current, &snapshot) ==
-                     RunLoadDisposition::ResumeOffer);
-
-    snapshot.processState.state = ProcessState::Fermenting;
-    TEST_ASSERT_FALSE(SafetyCore::isR1ResumeEligible(snapshot));
-    TEST_ASSERT_TRUE(SafetyCore::classifyRunLoad(
-                         RunPersistenceLoadStatus::Current, &snapshot) ==
-                     RunLoadDisposition::NoActiveRun);
-
-    snapshot.processState.state = ProcessState::Preheating;
-    snapshot.pendingRecoveryAnchor = PendingRecoveryAnchor{};
-    TEST_ASSERT_FALSE(SafetyCore::isR1ResumeEligible(snapshot));
-}
-
-void test_load_matrix_rejects_fallback_and_untrusted_states() {
-    RunPersistenceSnapshot snapshot;
-    TEST_ASSERT_TRUE(
-        SafetyCore::classifyRunLoad(RunPersistenceLoadStatus::FallbackRecovered,
-                                    nullptr) == RunLoadDisposition::SafeBoot);
-    snapshot.variant = RunCheckpointVariant::ProgramRun;
-    snapshot.processState.state = ProcessState::Preheating;
-    TEST_ASSERT_TRUE(SafetyCore::classifyRunLoad(
-                         RunPersistenceLoadStatus::FallbackRecovered,
-                         &snapshot) == RunLoadDisposition::ResumeOffer);
-    TEST_ASSERT_TRUE(SafetyCore::classifyRunLoad(
-                         RunPersistenceLoadStatus::PreparedInterrupted,
-                         nullptr) == RunLoadDisposition::SafeBoot);
-    TEST_ASSERT_TRUE(SafetyCore::classifyRunLoad(
-                         RunPersistenceLoadStatus::NoActiveRun, nullptr) ==
-                     RunLoadDisposition::Standby);
-}
-
-void test_validated_fallback_is_non_activating_resume_offer() {
+void test_validated_fallback_is_service_required_without_resume() {
     SafetyCore safety;
     safety.beginBoot(device_platform::ResetCause::PowerOn);
     SafetyCoreInput input;
@@ -610,9 +572,8 @@ void test_validated_fallback_is_non_activating_resume_offer() {
     validFallbackRecoveryEvidence(input, sensor, selection, snapshot);
 
     const auto result = safety.evaluate(input);
-    TEST_ASSERT_TRUE(result.faultCode == FaultCode::None);
-    TEST_ASSERT_TRUE(result.bootDisposition ==
-                     SafetyBootDisposition::ResumeOffer);
+    TEST_ASSERT_TRUE(result.faultCode == FaultCode::RunPersistenceUntrusted);
+    TEST_ASSERT_TRUE(result.bootDisposition == SafetyBootDisposition::SafeBoot);
     TEST_ASSERT_TRUE(result.gate.status ==
                      ActuatorSafetyGateStatus::Unresolved);
     TEST_ASSERT_FALSE(result.gate.status == ActuatorSafetyGateStatus::Allowed);
@@ -669,22 +630,6 @@ void test_pending_fallback_requires_consistent_load_tuple() {
                      ActuatorSafetyGateStatus::Unresolved);
 }
 
-void test_fallback_phase_and_terminal_states_never_offer_resume() {
-    const auto classify = [](ProcessState state) {
-        RunPersistenceSnapshot snapshot;
-        snapshot.variant = RunCheckpointVariant::ProgramRun;
-        snapshot.processState.state = state;
-        return SafetyCore::classifyRunLoad(
-            RunPersistenceLoadStatus::FallbackRecovered, &snapshot);
-    };
-    TEST_ASSERT_TRUE(classify(ProcessState::Fermenting) ==
-                     RunLoadDisposition::NoActiveRun);
-    TEST_ASSERT_TRUE(classify(ProcessState::Completed) ==
-                     RunLoadDisposition::Completed);
-    TEST_ASSERT_TRUE(classify(ProcessState::Fault) ==
-                     RunLoadDisposition::TerminalFault);
-}
-
 void test_fallback_pending_never_allows_before_recovery_apply() {
     SafetyCore safety;
     safety.beginBoot(device_platform::ResetCause::PowerOn);
@@ -700,9 +645,8 @@ void test_fallback_pending_never_allows_before_recovery_apply() {
     input.processActivationApplied = true;
 
     const auto result = safety.evaluate(input);
-    TEST_ASSERT_TRUE(result.faultCode == FaultCode::None);
-    TEST_ASSERT_TRUE(result.bootDisposition ==
-                     SafetyBootDisposition::ResumeOffer);
+    TEST_ASSERT_TRUE(result.faultCode == FaultCode::RunPersistenceUntrusted);
+    TEST_ASSERT_TRUE(result.bootDisposition == SafetyBootDisposition::SafeBoot);
     TEST_ASSERT_TRUE(result.gate.status ==
                      ActuatorSafetyGateStatus::Unresolved);
     TEST_ASSERT_FALSE(result.gate.status == ActuatorSafetyGateStatus::Allowed);
@@ -724,9 +668,9 @@ void test_latched_fallback_fault_clears_to_unresolved_offer() {
 
     input.persistenceValidated = true;
     const auto resolved = safety.evaluate(input);
-    TEST_ASSERT_TRUE(resolved.faultCode == FaultCode::None);
+    TEST_ASSERT_TRUE(resolved.faultCode == FaultCode::RunPersistenceUntrusted);
     TEST_ASSERT_TRUE(resolved.bootDisposition ==
-                     SafetyBootDisposition::ResumeOffer);
+                     SafetyBootDisposition::SafeBoot);
     TEST_ASSERT_TRUE(resolved.gate.status ==
                      ActuatorSafetyGateStatus::Unresolved);
     TEST_ASSERT_FALSE(resolved.gate.status ==
@@ -950,42 +894,6 @@ void test_configuration_fault_projection_uses_stable_r1_codes() {
                      FaultCode::ConfigurationCommitIndeterminate);
 }
 
-void test_all_technical_load_statuses_are_safe_boot() {
-    constexpr RunPersistenceLoadStatus technicalStatuses[] = {
-        RunPersistenceLoadStatus::FallbackRecovered,
-        RunPersistenceLoadStatus::PreparedInterrupted,
-        RunPersistenceLoadStatus::NotReconstructible,
-        RunPersistenceLoadStatus::NotReconstructibleOrphanedState,
-        RunPersistenceLoadStatus::ReadFailed,
-        RunPersistenceLoadStatus::CapacityExceeded,
-        RunPersistenceLoadStatus::UnsupportedSchema,
-        RunPersistenceLoadStatus::ForeignEpoch,
-        RunPersistenceLoadStatus::AlreadyInitialized,
-    };
-    for (const auto status : technicalStatuses) {
-        TEST_ASSERT_TRUE(SafetyCore::classifyRunLoad(status, nullptr) ==
-                         RunLoadDisposition::SafeBoot);
-    }
-}
-
-void test_resume_phase_matrix_is_explicit() {
-    constexpr ProcessState states[] = {
-        ProcessState::Preheating,     ProcessState::WaitingForProduct,
-        ProcessState::ReachingTarget, ProcessState::QualifyingTarget,
-        ProcessState::Fermenting,     ProcessState::Cooling,
-        ProcessState::CoolHolding,    ProcessState::ManualHolding,
-    };
-    constexpr bool eligible[] = {true,  false, false, false,
-                                 false, true,  false, true};
-    for (std::size_t index = 0U; index < std::size(states); ++index) {
-        RunPersistenceSnapshot snapshot;
-        snapshot.variant = RunCheckpointVariant::ProgramRun;
-        snapshot.processState.state = states[index];
-        TEST_ASSERT_TRUE(SafetyCore::isR1ResumeEligible(snapshot) ==
-                         eligible[index]);
-    }
-}
-
 void test_last_evaluation_preserves_fail_closed_gate_for_composition_root() {
     SafetyCore safety;
     safety.beginBoot(device_platform::ResetCause::Unknown);
@@ -1064,13 +972,10 @@ void setup_suite() {
     RUN_TEST(test_acknowledgement_is_scoped_to_each_fault_code);
     RUN_TEST(test_watchdog_fault_survives_safe_boot_clear_until_explicit_reset);
     RUN_TEST(test_integrity_and_commit_faults_require_matching_resolution);
-    RUN_TEST(test_schema_three_neutral_fields_do_not_block_simple_resume);
-    RUN_TEST(test_load_matrix_rejects_fallback_and_untrusted_states);
-    RUN_TEST(test_validated_fallback_is_non_activating_resume_offer);
+    RUN_TEST(test_validated_fallback_is_service_required_without_resume);
     RUN_TEST(test_fallback_without_snapshot_is_fail_closed);
     RUN_TEST(test_fallback_without_validated_persistence_is_fail_closed);
     RUN_TEST(test_pending_fallback_requires_consistent_load_tuple);
-    RUN_TEST(test_fallback_phase_and_terminal_states_never_offer_resume);
     RUN_TEST(test_fallback_pending_never_allows_before_recovery_apply);
     RUN_TEST(test_latched_fallback_fault_clears_to_unresolved_offer);
     RUN_TEST(test_unknown_producer_is_fail_closed);
@@ -1079,8 +984,6 @@ void setup_suite() {
     RUN_TEST(
         test_normal_configuration_commit_rejections_keep_operational_runtime);
     RUN_TEST(test_configuration_fault_projection_uses_stable_r1_codes);
-    RUN_TEST(test_all_technical_load_statuses_are_safe_boot);
-    RUN_TEST(test_resume_phase_matrix_is_explicit);
     RUN_TEST(
         test_last_evaluation_preserves_fail_closed_gate_for_composition_root);
     RUN_TEST(test_reset_cause_port_is_diagnostic_only);

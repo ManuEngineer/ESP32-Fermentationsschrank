@@ -2,6 +2,7 @@
 
 #include <utility>
 
+#include "boot_classification.hpp"
 #include "control_context.hpp"
 #include "run_recovery.hpp"
 #include "safety_core.hpp"
@@ -130,7 +131,7 @@ TemperatureControlApplicationOrchestrator::reconcileR1LoadedRun(
     const RunCheckpointTime& time) {
     const RunPersistenceSnapshot* snapshot =
         loaded.snapshot.has_value() ? &*loaded.snapshot : nullptr;
-    if (SafetyCore::classifyRunLoad(loaded.status, snapshot) !=
+    if (boot_classification::classifyRunLoad(loaded.status, snapshot) !=
         RunLoadDisposition::NoActiveRun) {
         RunPersistenceResult notEligible;
         notEligible.status = RunPersistenceResultStatus::NotEligible;
