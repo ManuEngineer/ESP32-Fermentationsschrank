@@ -1150,7 +1150,6 @@ RunPersistenceCodecStatus decodeRunPersistenceSnapshotInto(
     destination.activeRunSensorMode.reset();
     destination.sensorSelection.reset();
     destination.program.reset();
-    destination.revisions = {};
     destination.revisionCount = 0U;
     destination.manual.reset();
     destination.processRunSnapshot.reset();
@@ -1162,8 +1161,6 @@ RunPersistenceCodecStatus decodeRunPersistenceSnapshotInto(
     destination.nominalRecoveryAdjustment.reset();
     destination.recoveryEpisodeRevision = 0U;
     destination.runProgress = RunProgressState{};
-    destination.persistedRunCommandIds = {};
-    destination.persistedRunCommandCount = 0U;
     auto& s = destination;
     if (payload.size() > kMaximumCheckpointPayloadBytes)
         return RunPersistenceCodecStatus::CapacityExceeded;

@@ -387,7 +387,6 @@ void resetRunPersistenceSnapshotForMake(RunPersistenceSnapshot& destination) {
     destination.activeRunSensorMode.reset();
     destination.sensorSelection.reset();
     destination.program.reset();
-    destination.revisions = {};
     destination.revisionCount = 0U;
     destination.manual.reset();
     destination.processRunSnapshot.reset();
@@ -397,8 +396,6 @@ void resetRunPersistenceSnapshotForMake(RunPersistenceSnapshot& destination) {
     destination.priorBootPhaseElapsed.reset();
     destination.nominalRecoveryAdjustment.reset();
     destination.runProgress = RunProgressState{};
-    destination.persistedRunCommandIds = {};
-    destination.persistedRunCommandCount = 0U;
 }
 
 }  // namespace
