@@ -519,7 +519,11 @@ nicht konstruiert werden. Das ist derselbe Fund, den bereits die #119-Plandatei
 – hier wird **nicht** deren Code übernommen (Ownerauftrag: kein #120-Code),
 sondern die Notwendigkeit eines neuen, kleinen, eigenständig in #121 zu
 implementierenden `EspTimeZoneResolver`-Adapters als expliziter Scope-Zusatz
-festgehalten (Abschnitt 12.2).
+festgehalten (Abschnitt 12.2). Die konkrete Adapter-Ownership liegt dabei
+bei der ESP-IDF-Composition-Root; `fermentation_app` konsumiert ausschließlich
+die bereits bestehende abstrakte `device_platform::ITimeZoneResolver`-
+Referenz. Dadurch bleibt die verbindliche ADR-013-Abhängigkeit
+`fermentation_app -> device_platform` unverändert.
 
 ### 4.7 `ActuatorPlanner` / `ActuatorPlanSinkDriver`
 
@@ -1773,18 +1777,27 @@ WATCHDOG_RESET_HAS_NO_INTERLOCK_LATCH_TO_CLEAR=PASS
 
 **Application-interne Fassade, kein neuer Root-Helper** (unverändert
 begründet gegenüber Vorfassung). `main/app_main.cpp` ändert sich minimal.
+Die konkrete ESP-IDF-Zeitzonenimplementierung bleibt ausschließlich in der
+ESP-IDF-Composition-Root; die Fachkomponente sieht nur den bestehenden
+abstrakten Plattformport.
 
 ```text
 main/app_main.cpp (geaendert, minimal):
   NvsOwningContext::create()  // unveraendert
-  application.begin(platform, stateStoreContext->store(), &resetCauseSource)
-    // NEU: IStateStore&-Parameter ueber den neuen store()-Accessor
-    // (Abschnitt 12.2)
+  const device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;
+    // Root-Value-Objekt, keine Heapallokation
+  application.begin(platform, stateStoreContext->store(), timeZoneResolver,
+                    &resetCauseSource)
+    // NEU: IStateStore&- und ITimeZoneResolver&-Parameter ueber die
+    // bestehenden abstrakten Ports; beide Root-Objekte ueberleben die
+    // Application (Abschnitt 12.2)
 
-FermentationApplication::begin(platformServices, store, resetCauseSource):
-  1. timeZoneResolver_ (neuer EspTimeZoneResolver-Adapter, Abschnitt 12.2)
-  2. bootstrapStore_, graphStore_, mutationCoordinator_, configurationService_
-     mit store/timeZoneResolver_ konstruieren
+FermentationApplication::begin(
+    platformServices, store, timeZoneResolver, resetCauseSource):
+  // Vollstaendiger ESP32-Produkt-Overload; alle Typen in der
+  // fermentation_app-Signatur stammen aus device_platform.
+  2. bootstrapStore_, graphStore_, mutationCoordinator_,
+     configurationService_ mit store/timeZoneResolver konstruieren
   3. ConfigurationRecoveryService::create(store, bootstrapStore_, graphStore_,
      configurationService_, mutationCoordinator_) -> boot()  // boot-only,
      danach zerstoert
@@ -1837,16 +1850,78 @@ in dieser Composition (Abschnitt 3/4.9, Blocker 5/11). RunRecoveryCoordinator
 NICHT konstruiert (Korrektur B).
 ```
 
+Der vollständige ESP32-Produkt-Overload lautet:
+
+```cpp
+[[nodiscard]] bool begin(
+    device_platform::IPlatformServices& platformServices,
+    device_platform::IStateStore& store,
+    const device_platform::ITimeZoneResolver& timeZoneResolver,
+    const device_platform::IResetCauseSource* resetCauseSource = nullptr);
+```
+
+`fermentation_application.hpp/.cpp` enthalten dabei weder
+`device_platform_esp_idf::` noch einen ESP-IDF-Header. `ConfigurationService`
+erhält die injizierte abstrakte Referenz direkt:
+
+```cpp
+ConfigurationService(
+    *mutationCoordinator_, *graphStore_, timeZoneResolver);
+```
+
+Der bestehende schmale Native-/Smoke-Overload bleibt zusätzlich erhalten:
+
+```cpp
+[[nodiscard]] bool begin(
+    device_platform::IPlatformServices& platformServices,
+    const device_platform::IResetCauseSource* resetCauseSource = nullptr);
+```
+
+Dieser Overload bleibt ein reiner Native-Smoke-Kompatibilitätspfad ohne
+`IStateStore`-, `ITimeZoneResolver`-, ESP-IDF- oder
+`device_platform_test_support`-Composition. Er erzeugt keine Persistence-/
+Timezone-Composition und keine Aktorfreigabe. Der ESP32-Produktpfad verwendet
+ausschließlich den vollständigen Overload oben. Es gibt keine dritte
+`begin()`-Variante.
+
+Die Architekturgrenzen bleiben dabei unverändert und sind Teil des
+Schritt-6-Vertrags:
+
+```text
+lib/fermentation_app/CMakeLists.txt:
+  REQUIRES device_platform
+  unveraendert
+
+main/CMakeLists.txt:
+  PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf ...
+  bereits ausreichend
+
+scripts/check_architecture_boundaries.py:
+  unveraendert
+  device_platform_esp_idf bleibt unter fermentation_app verboten
+
+docs/ADR-013_REUSABLE_DEVICE_PLATFORM.md:
+  unveraendert
+```
+
+`NvsOwningContext` und der konkrete `EspTimeZoneResolver` werden in
+`main/app_main.cpp` vor der `FermentationApplication` deklariert und leben
+bis nach deren Zerstörung. Die native `src/main.cpp`-Composition bleibt ohne
+ESP-IDF- und ohne `device_platform_test_support`-Abhängigkeit; sie verwendet
+nur den erhaltenen schmalen Native-/Smoke-Overload. Es gibt keine lokale
+Fake-`IStateStore`-Implementierung und keinen neuen Host-StateStore.
+
 ### 12.1 Vollständige Ownership-/Lifetime-Tabelle (Blocker 6, geschlossen)
 
 | Objekt | Owner | Lifetime | Depends On | Boot-only? | Zerstörungsreihenfolge | Allocation-Failure |
 |---|---|---|---|---|---|---|
 | `NvsStateStore` (`IStateStore`) | `NvsOwningContext` (in `main/app_main.cpp`, unverändert) | Prozesslaufzeit, überlebt alle Consumer | `NvsOwningContext`-Partition | NEIN | letztes (nach `FermentationApplication`) | bestehend (`nullptr`-Rückgabe von `create()`) |
-| `EspTimeZoneResolver` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit | `IStateStore`? NEIN (zeitzonenspezifisch, keine Store-Abhängigkeit, Abschnitt 12.2) | NEIN (`ConfigurationService` hält Referenz laufend) | **nach** `configurationService_` (Runde-4-Korrektur, Major 10 – Vorfassung hatte die Richtung vertauscht, s. u.) | fail-closed: `begin()` gibt `false` zurück |
+| Konkreter `EspTimeZoneResolver` | ESP-IDF-Composition-Root (`main/app_main.cpp`) | Root-Value-Objekt; überlebt `FermentationApplication` | keine | NEIN | vor `FermentationApplication` zerstört | N/A – keine Heapallokation |
+| `ITimeZoneResolver`-Referenz | `ConfigurationService` als non-owning Consumer | nur über die Lebensdauer des Consumers | Root-Value-Objekt `EspTimeZoneResolver` | NEIN | Provider lebt länger als `FermentationApplication` | N/A – keine Ownership |
 | `ConfigurationMutationCoordinator` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit | keine externen | NEIN (`ConfigurationService` hält Referenz) | **nach** `configurationService_` (Runde-4-Korrektur, Major 10) | fail-closed |
 | `ConfigurationBootstrapStore` | `FermentationApplication` (`unique_ptr`) | **boot-only möglich** – real geprüft: nur `ConfigurationRecoveryService::create()` nimmt sie entgegen, kein weiterer Konsument nach `boot()` gefunden | `IStateStore` | JA (kann nach Schritt 3 zerstört werden) | vor `IStateStore` | fail-closed |
 | `ConfigurationGraphStore` | `FermentationApplication` (`unique_ptr`) | **Application-Laufzeit** – `ConfigurationService`-Konstruktor hält `ConfigurationGraphStore&` laufend (Abschnitt 4.6), NICHT boot-only | `IStateStore` | NEIN | **nach** `configurationService_` (Runde-4-Korrektur, Major 10), vor `IStateStore` | fail-closed |
-| `ConfigurationService` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit | `mutationCoordinator_`, `graphStore_`, `timeZoneResolver_` (alle müssen mindestens gleich lang leben, real erzwungen durch Referenzmember) | NEIN | **vor** allen drei Dependencies (zuerst zerstört – korrekte Richtung, unverändert; siehe Deklarationsreihenfolge-Konsequenz unten, Major 10) | fail-closed |
+| `ConfigurationService` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit | `mutationCoordinator_`, `graphStore_`, externe `ITimeZoneResolver`-Referenz (alle müssen mindestens gleich lang leben) | NEIN | **vor** den beiden Application-Dependencies; der Root-Resolver lebt ebenfalls weiter | fail-closed |
 | `ConfigurationRecoveryService` | lokal in `begin()` (`unique_ptr`, per `create()`) | **boot-only** (nur `boot()` aufgerufen, danach freigegeben) | `store`, `bootstrapStore_`, `graphStore_`, `configurationService_`, `mutationCoordinator_` | JA | vor `bootstrapStore_` | bereits bestehender `nullptr`-Vertrag von `create()` |
 | `RunPersistenceCoordinator` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit (auch für Fresh Start/Resume-Aufrufe außerhalb von `begin()`) | `IStateStore`, `epoch` (aus Schritt 3a, Abschnitt 4.6/12), `schedule` | NEIN | vor `IStateStore` | fail-closed **plus** (Blocker 7, neu) bei `acquireRuntime().status != RuntimeLeaseGranted`: `unique_ptr` bleibt `nullptr`, Coordinator wird gar nicht konstruiert, `FermentationApplication` setzt `SERVICE_REQUIRED` |
 | `pendingResume_` (`std::unique_ptr<RunCommandState>`, Runde-3-Korrektur: NICHT `optional`, Abschnitt 9 Blocker 1) | `FermentationApplication` (`unique_ptr`) | von Klassifikation bis Confirm/Reject (Abschnitt 9) | keine externen Referenzen | NEIN | trivial (`unique_ptr`-Member) | fail-closed: `new (std::nothrow)` schlägt fehl → `nullptr` bleibt, kein Resume-Angebot, `SERVICE_REQUIRED` |
@@ -1854,31 +1929,34 @@ NICHT konstruiert (Korrektur B).
 | `PresentationState` | `FermentationApplication` (Wertmember) | Application-Laufzeit | keine | NEIN | trivial | entfällt |
 
 **Verbindlich (Zerstörungsreihenfolge präzisiert, Major 10, Runde 4 – die
-Vorfassung enthielt widersprüchliche Formulierungen: die drei
-Dependency-Zeilen sagten „vor `configurationService_`" zerstört, während
-`ConfigurationService`s eigene Zeile „vor allen drei Dependencies" sagte –
+Vorfassung enthielt widersprüchliche Formulierungen: die Dependency-Zeilen
+sagten „vor `configurationService_`" zerstört, während
+`ConfigurationService`s eigene Zeile „vor den Dependencies" sagte –
 beide können nicht gleichzeitig gelten):** `ConfigurationService` hält
-`mutationCoordinator_`/`graphStore_`/`timeZoneResolver_` als **Referenzen**
+`mutationCoordinator_`/`graphStore_` sowie den extern injizierten
+`ITimeZoneResolver` als **Referenzen**
 (Konstruktorvertrag, Abschnitt 4.6) – diese Referenzen müssen während der
 gesamten Lebensdauer von `ConfigurationService`, **einschließlich seiner
-eigenen Destruktorausführung**, gültig bleiben. Korrekt ist daher: die drei
-Dependencies werden **nach** `ConfigurationService` zerstört (nicht davor).
+eigenen Destruktorausführung**, gültig bleiben. Korrekt ist daher: die beiden
+Application-Dependencies werden **nach** `ConfigurationService` zerstört
+(nicht davor); der Root-Resolver lebt unabhängig davon ebenfalls länger als
+die Application.
 In C++ werden Member in **umgekehrter Deklarationsreihenfolge** zerstört;
-um „`ConfigurationService` zuerst, Dependencies danach" zu erreichen,
-müssen die drei Dependency-Member **vor** `configurationService_`
+um „`ConfigurationService` zuerst, Application-Dependencies danach" zu
+erreichen, müssen die beiden Application-Dependency-Member **vor**
+`configurationService_`
 **deklariert** werden:
 
 ```cpp
 class FermentationApplication {
     // ...
-    std::unique_ptr<device_platform_esp_idf::EspTimeZoneResolver>
-        timeZoneResolver_;
+    std::unique_ptr<ConfigurationBootstrapStore> bootstrapStore_;
     std::unique_ptr<ConfigurationMutationCoordinator> mutationCoordinator_;
     std::unique_ptr<ConfigurationGraphStore> graphStore_;
     std::unique_ptr<ConfigurationService> configurationService_;  // NACH
-      // den drei Dependencies deklariert -> wird bei Zerstoerung ZUERST
-      // aufgeraeumt (umgekehrte Deklarationsreihenfolge), Dependencies
-      // bleiben waehrend seiner Destruktorausfuehrung gueltig
+      // den beiden Application-Dependencies deklariert -> wird bei
+      // Zerstoerung ZUERST aufgeraeumt (umgekehrte Deklarationsreihenfolge),
+      // Dependencies bleiben waehrend seiner Destruktorausfuehrung gueltig
     // ...
 };
 ```
@@ -1908,7 +1986,10 @@ bereits zerstört ist (`IStateStore` überlebt in jedem Fall, da
    sichtbar gemacht).
 2. **`device_platform_esp_idf::EspTimeZoneResolver`** (neu, eigenständig für
    #121 entworfen, nicht aus #120 kopiert): kleiner, zustandsloser Adapter,
-   der `device_platform::ITimeZoneResolver` implementiert. Design-Referenz
+   der `device_platform::ITimeZoneResolver` implementiert und ausschließlich
+   von der ESP-IDF-Composition-Root als Root-Value-Objekt gehalten wird. Die
+   `fermentation_app`-Composition erhält nur die abstrakte Referenz.
+   Design-Referenz
    (nicht Code-Übernahme): #119-Plandatei Abschnitt 5.1 identifizierte
    dieselbe Lücke und dieselbe Zielarchitektur (ESP-IDF-native
    Zeitzonenauflösung ohne Netzwerkabhängigkeit). Scope-Grenze: nur so viel
@@ -1966,18 +2047,30 @@ bereits zerstört ist (`IStateStore` überlebt in jedem Fall, da
    Der Adapter hat keinen Konstruktorparameter, keinen inneren Zustand, kein
    Caching – jeder `prepare()`-Aufruf ist unabhängig und deterministisch.
 
+   Die ESP-IDF-Composition-Root hält den konkreten Adapter als normales
+   Value-Objekt. Es gibt keine Heapallokation und damit keinen
+   Resolver-Allokationsfehlerpfad:
+
+   ```text
+   ESP_TIME_ZONE_RESOLVER_OWNER=ESP_IDF_COMPOSITION_ROOT
+   ESP_TIME_ZONE_RESOLVER_HEAP_ALLOCATION=NO
+   ESP_TIME_ZONE_RESOLVER_ALLOCATION_FAILURE_PATH=NOT_APPLICABLE
+   ```
+
 **Lebenszeit-Klarstellung (Abweichung von einer ersten Fassung):** Anders
 als #119/#120s rein *boot-only* Objekte müssen die meisten hier komponierten
 Objekte für die **gesamte Laufzeit** existieren (siehe Tabelle 12.1), nicht
 nur bis Boot-Ende – u. a. weil Fresh Start/Resume (Abschnitt 8/9) nach
 `begin()` erneut `RunPersistenceCoordinator`/`ConfigurationService`
-aufrufen. Diese Objekte werden deshalb **heapbesitzende Member von
+aufrufen. Application-eigene Objekte werden deshalb **heapbesitzende Member von
 `FermentationApplication`** (`std::unique_ptr<T>`, `new (std::nothrow)`,
 fail-closed bei Allokationsfehler), nicht Werte-Member und nicht lokale
 Stack-Objekte in `begin()`. `sizeof(FermentationApplication)` bleibt dadurch
 klein (nur Zeiger, inklusive der beiden `unique_ptr<RunCommandState>`-Member
 `runtimeRunState_`/`pendingResume_`, Abschnitt 9 Blocker 1, plus
 `PresentationState`), unabhängig von der Größe des komponierten Graphen.
+Der konkrete `EspTimeZoneResolver` ist davon ausgenommen: Er bleibt als
+zustandsloses Root-Value-Objekt außerhalb der Application bestehen.
 
 **Stack-Sicherheit der neu produktiv erreichbaren Pfade (real gemessen,
 kein offenes Restrisiko mehr – vollständiger Vertrag Abschnitt 12.4,
@@ -3116,6 +3209,23 @@ ESP_TIME_ZONE_RESOLVER_NO_SETENV_TZ=PASS
 ESP_TIME_ZONE_RESOLVER_NO_TZSET=PASS
 ESP_TIME_ZONE_RESOLVER_NO_SYSTEM_TIME_MUTATION=PASS
 
+FERMENTATION_APP_DEPENDS_ON_DEVICE_PLATFORM_ESP_IDF=NO
+FERMENTATION_APP_CMAKE_REQUIRES_DEVICE_PLATFORM_ONLY=PASS
+ARCHITECTURE_CHECKER_UNCHANGED=PASS
+
+ESP_TIME_ZONE_RESOLVER_OWNER=ESP_IDF_COMPOSITION_ROOT
+ESP_TIME_ZONE_RESOLVER_ROOT_VALUE_STORAGE=PASS
+ESP_TIME_ZONE_RESOLVER_OUTLIVES_APPLICATION=PASS
+
+FERMENTATION_APPLICATION_USES_ABSTRACT_TIME_ZONE_PORT=PASS
+CONFIGURATION_SERVICE_RECEIVES_INJECTED_ITIMEZONERESOLVER=PASS
+ESP32_PRODUCT_BEGIN_REQUIRES_STORE_AND_TIME_ZONE_PORT=PASS
+
+NATIVE_SMOKE_OVERLOAD_PRESERVED=PASS
+NATIVE_SMOKE_USES_DEVICE_PLATFORM_ESP_IDF=NO
+NATIVE_COMPOSITION_ROOT_HAS_NO_TEST_SUPPORT_DEPENDENCY=PASS
+NATIVE_COMPOSITION_ROOT_HAS_NO_ESP_IDF_DEPENDENCY=PASS
+
 BOOT_PROOF_NO_WRITE_PATH_PRODUCES_BOOT_STATE=PASS
 
 RUNTIME_RUN_STATE_HEAP_OWNED_NOT_INLINE=PASS
@@ -3242,8 +3352,10 @@ vollständigem Software-Ownerreview.
 
 ### In Scope
 
-Composition-Lücke schließen (`IStateStore`/`ITimeZoneResolver` real bis
-`FermentationApplication` durchreichen, actor-free); `BootClassification`
+Composition-Lücke schließen (`IStateStore`/`ITimeZoneResolver` als abstrakte
+`device_platform`-Ports bis `FermentationApplication` durchreichen,
+konkrete ESP-IDF-Adapter bleiben in der ESP-IDF-Composition-Root,
+actor-free); `BootClassification`
 extrahieren (inkl. `FallbackRecovered`-Korrektur); `SafetyCore` →
 `ActuationInterlock` verkleinern und umbenennen; `PresentationState`
 einführen; neue kleine `RunPersistenceCoordinator::activateR1EligibleRun()`;
@@ -3325,10 +3437,14 @@ Schritt 5: Stack-Sicherheits-Vertrag umsetzen (Abschnitt 12.4, Runde
   new (std::nothrow), keine make_unique-Nutzung fuer fail-closed-Pfade;
   verschachtelte STL-Allokationen folgen dem verengten Vertrag aus
   Abschnitt 12.4.10 (kein neuer Allocator/PMR).
-Schritt 6: FermentationApplication::begin() um die actor-free Composition-
-  Fassade erweitern (Abschnitt 12), main/app_main.cpp minimal anpassen,
-  Member-Deklarationsreihenfolge fuer ConfigurationService-Dependencies
-  (Abschnitt 12.1) korrekt umsetzen.
+Schritt 6: main/app_main.cpp komponiert das konkrete
+  `EspTimeZoneResolver`-Value-Objekt in der ESP-IDF-Composition-Root und
+  injiziert `IStateStore&` plus abstrakte `ITimeZoneResolver&` in den
+  vollständigen Produkt-Overload von `FermentationApplication::begin()`;
+  die actor-free Application-Composition bleibt ausschließlich gegen
+  `device_platform`-Ports, der Native-Smoke-Overload bleibt erhalten, und
+  die Member-Deklarationsreihenfolge fuer die Application-eigenen
+  `ConfigurationService`-Dependencies (Abschnitt 12.1) wird korrekt umgesetzt.
 Schritt 7: Teststrategie vollstaendig umsetzen (Abschnitt 13), inklusive
   Byte-for-byte-Regression aller Schema-1/2/3-Fixtures gegen die neuen
   Codec-In-place-Kerne (Abschnitt 12.4.6).
@@ -3481,6 +3597,16 @@ PLAN_REVISION=R1
 PLAN_SHA=<exact, nach Commit>
 
 ARCHITECTURE_VERDICT=SIMPLIFY
+PRIOR_APPROVED_PLAN_SHA=e249b51cedf6f6a3edbce3a0889c48d77b79e828
+PLAN_CORRECTION_REASON=FERMENTATION_APP_MUST_NOT_DEPEND_ON_DEVICE_PLATFORM_ESP_IDF
+ARCHITECTURE_BOUNDARY_CHANGE=NO
+FERMENTATION_APP_DEPENDS_ON_DEVICE_PLATFORM_ESP_IDF=NO
+ESP_TIME_ZONE_RESOLVER_OWNER=ESP_IDF_COMPOSITION_ROOT
+FERMENTATION_APPLICATION_TIME_ZONE_PORT=ITimeZoneResolver
+FERMENTATION_APP_CMAKE_CHANGE=NO
+ARCHITECTURE_CHECKER_CHANGE=NO
+ADR_013_CHANGE=NO
+NATIVE_SMOKE_OVERLOAD=PRESERVED
 
 RESUME_OFFER_OWNERSHIP=CLOSED
 R1_RESUME_PATH=CLOSED_NO_C2
@@ -3547,6 +3673,9 @@ BREAKING_PERSISTENCE_CHANGE=NO
 SCHEMA_MIGRATION_REQUIRED=NO
 
 IMPLEMENTATION=NOT_STARTED
+IMPLEMENTATION_STEP_6=NOT_STARTED
+STEP_6_SOURCE_SHA=NOT_CREATED
+IMPLEMENTATION_STEP_7=NOT_STARTED
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
 OWNER_PLAN_REVIEW=PENDING
 ```
