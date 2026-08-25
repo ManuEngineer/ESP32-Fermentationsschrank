@@ -16,7 +16,7 @@
 #include "run_commands.hpp"
 #include "run_limits.hpp"
 #include "run_persistence_coordinator.hpp"
-#include "safety_core.hpp"
+#include "actuation_interlock.hpp"
 #include "state_store.hpp"
 #include "temperature_control_orchestrator.hpp"
 
@@ -55,7 +55,7 @@ constexpr std::size_t kHeldObjectBytes =
     sizeof(ProgramStartRequest) + sizeof(RunPersistenceCoordinator) +
     sizeof(TemperatureControlApplicationOrchestrator) +
     sizeof(TemperatureController) + sizeof(ActuatorPlanner) +
-    sizeof(TargetQualificationEvaluator) + sizeof(SafetyCore);
+    sizeof(TargetQualificationEvaluator) + sizeof(ActuationInterlock);
 // esp32_bringup @ -Og, Xtensa GCC 15.2.0, -fstack-usage and
 // -fcallgraph-info=su: probeTask + runProbe + persistFreshStartCommand +
 // TemperatureControlApplicationOrchestrator::persistCommand +
@@ -350,9 +350,8 @@ void runProbe(ProbeContext& context) {
     AllOffBinarySink outerFan;
     AllOffBinarySink innerFan;
     ActuatorPlanSinkDriver driver(peltier, outerFan, innerFan);
-    SafetyCore safetyCore;
     TemperatureControlApplicationOrchestrator application(
-        coordinator, controller, evaluator, planner, driver, safetyCore);
+        coordinator, controller, evaluator, planner, driver);
 
     issue_29_bringup::armCandidateAllocationFailure();
     RunCommandState faultState = standbyState();
@@ -376,8 +375,9 @@ void runProbe(ProbeContext& context) {
         outerFan.callCount() != 0U || innerFan.callCount() != 0U ||
         peltier.releaseObserved() || outerFan.releaseObserved() ||
         innerFan.releaseObserved();
-    context.safetyFailClosed = safetyCore.lastEvaluation().gate.status !=
-                               ActuatorSafetyGateStatus::Allowed;
+    const auto safetyEvaluation = ActuationInterlock::evaluate({});
+    context.safetyFailClosed =
+        safetyEvaluation.permission != ActuatorSafetyGateStatus::Allowed;
     context.faultPass =
         faultDecision.proposed() &&
         faultResult.status == RunPersistenceResultStatus::Blocked &&

@@ -1,8 +1,7 @@
 #pragma once
 
 #include "platform_services.hpp"
-#include "reset_cause.hpp"
-#include "safety_core.hpp"
+#include "presentation_state.hpp"
 
 namespace fermentation {
 
@@ -14,13 +13,13 @@ class FermentationApplication {
     void update();
 
     [[nodiscard]] bool ready() const;
-    [[nodiscard]] const SafetyCore& safetyCore() const noexcept {
-        return safetyCore_;
+    [[nodiscard]] const PresentationState& presentationState() const noexcept {
+        return presentationState_;
     }
 
    private:
     device_platform::IPlatformServices* platformServices_{nullptr};
-    SafetyCore safetyCore_;
+    PresentationState presentationState_;
 };
 
 }  // namespace fermentation

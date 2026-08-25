@@ -5,7 +5,6 @@
 #include "boot_classification.hpp"
 #include "control_context.hpp"
 #include "run_recovery.hpp"
-#include "safety_core.hpp"
 
 namespace fermentation {
 
@@ -89,13 +88,12 @@ TemperatureControlApplicationOrchestrator::
         RunPersistenceCoordinator& persistence,
         TemperatureController& temperatureController,
         TargetQualificationEvaluator& evaluator, ActuatorPlanner& planner,
-        ActuatorPlanSinkDriver& driver, SafetyCore& safetyCore) noexcept
+        ActuatorPlanSinkDriver& driver) noexcept
     : persistence_(persistence),
       temperatureController_(temperatureController),
       evaluator_(evaluator),
       planner_(&planner),
-      actuatorDriver_(&driver),
-      safetyCore_(&safetyCore) {}
+      actuatorDriver_(&driver) {}
 
 RunPersistenceResult TemperatureControlApplicationOrchestrator::persistCommand(
     RunCommandState& current, const CommandDecision& decision,
@@ -334,18 +332,15 @@ TemperatureControlApplicationOrchestrator::evaluateTemperatureControl(
 
 ActuatorPlanTickResult
 TemperatureControlApplicationOrchestrator::tickActuatorPlan(
-    const RunCommandState& current, std::uint64_t nowMonotonicMillis) {
-    if (planner_ == nullptr || actuatorDriver_ == nullptr ||
-        safetyCore_ == nullptr) {
+    const RunCommandState& current, std::uint64_t nowMonotonicMillis,
+    const ActuatorSafetyGateInput& currentGate) {
+    if (planner_ == nullptr || actuatorDriver_ == nullptr) {
         ActuatorPlanTickResult result;
         result.status = ActuatorPlanStatus::Unconfigured;
         result.reason = ActuatorPlanReason::NoCommissioning;
         result.appliedDirection = AbstractControlDirection::Idle;
         return result;
     }
-
-    const ActuatorSafetyGateInput safetyGate =
-        safetyCore_->lastEvaluation().gate;
 
     const EffectiveControlContext context =
         resolveEffectiveControlContext(current);
@@ -354,7 +349,7 @@ TemperatureControlApplicationOrchestrator::tickActuatorPlan(
     input.currentCanonicalContext = context.requestContext;
     input.temperatureControlledPhase =
         isTemperatureControlledProcessState(current.processState.state);
-    input.safetyGate = safetyGate;
+    input.safetyGate = currentGate;
     if (!context.valid) {
         // No valid effective context may accidentally keep the physical gate
         // open when a caller omitted a fresh #22 evaluation.

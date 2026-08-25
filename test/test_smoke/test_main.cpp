@@ -118,7 +118,8 @@ void test_application_accepts_const_reset_cause_source() {
 
     TEST_ASSERT_TRUE(platform.begin(startupContext));
     TEST_ASSERT_TRUE(application.begin(platform, &resetCauseSource));
-    TEST_ASSERT_TRUE(application.safetyCore().resetCause() ==
+    TEST_ASSERT_TRUE(application.presentationState().resetCause.has_value());
+    TEST_ASSERT_TRUE(*application.presentationState().resetCause ==
                      device_platform::ResetCause::PowerOn);
 }
 

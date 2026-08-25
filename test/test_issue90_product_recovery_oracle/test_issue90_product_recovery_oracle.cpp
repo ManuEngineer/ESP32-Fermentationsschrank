@@ -27,7 +27,7 @@
 #include "run_persistence_codec.hpp"
 #include "run_persistence_coordinator.hpp"
 #include "run_persistence_contract.hpp"
-#include "safety_core.hpp"
+#include "actuation_interlock.hpp"
 #include "simulated_persistent_state_store.hpp"
 #include "standard_program_catalog.hpp"
 #include "state_store.hpp"
@@ -2908,23 +2908,35 @@ const char* runPersistenceCoordinatorStateName(
     return "UnknownRunPersistenceCoordinatorState";
 }
 
-const char* safetyBootDispositionName(
-    fermentation::SafetyBootDisposition value) {
-    using fermentation::SafetyBootDisposition;
-    switch (value) {
-        case SafetyBootDisposition::Unresolved:
+const char* safetyProjectionName(fermentation::RunLoadDisposition disposition,
+                                 fermentation::FaultCode fault) {
+    using fermentation::FaultCode;
+    switch (fault) {
+        case FaultCode::ConfigurationUnavailable:
+        case FaultCode::ConfigurationIntegrityFailure:
+        case FaultCode::ConfigurationCommitIndeterminate:
+        case FaultCode::RunPersistenceUntrusted:
+        case FaultCode::SystemProducerUnknown:
+            return "SAFE_BOOT";
+        case FaultCode::ConfigurationRuntimeFailure:
+        case FaultCode::SafetySensorUnavailable:
+        case FaultCode::ActuatorRequestWatchdog:
             return "UNRESOLVED";
-        case SafetyBootDisposition::Standby:
+        case FaultCode::None:
+            break;
+    }
+    switch (disposition) {
+        case fermentation::RunLoadDisposition::Standby:
             return "STANDBY";
-        case SafetyBootDisposition::ResumeOffer:
+        case fermentation::RunLoadDisposition::ResumeOffer:
             return "RESUME_OFFER";
-        case SafetyBootDisposition::NoActiveRun:
+        case fermentation::RunLoadDisposition::NoActiveRun:
             return "NO_ACTIVE_RUN";
-        case SafetyBootDisposition::Completed:
+        case fermentation::RunLoadDisposition::Completed:
             return "COMPLETED";
-        case SafetyBootDisposition::TerminalFault:
+        case fermentation::RunLoadDisposition::TerminalFault:
             return "TERMINAL_FAULT";
-        case SafetyBootDisposition::SafeBoot:
+        case fermentation::RunLoadDisposition::SafeBoot:
             return "SAFE_BOOT";
     }
     return "UNMAPPED";
@@ -3015,7 +3027,7 @@ BackendObservation seedProductionStore(const OracleCase& item,
     return observed;
 }
 
-fermentation::SafetyEvaluation evaluateProductionSafety(
+fermentation::ActuationEvaluation evaluateProductionSafety(
     ProductionActual& actual, bool configurationValidated,
     fermentation::ConfigurationRecoveryStatus configurationStatus,
     fermentation::ConfigurationServiceMode configurationMode,
@@ -3024,9 +3036,7 @@ fermentation::SafetyEvaluation evaluateProductionSafety(
     fermentation::RunPersistenceLoadStatus persistenceStatus,
     const fermentation::RunPersistenceSnapshot* persistenceSnapshot,
     fermentation::RunPersistenceCoordinatorState coordinatorState) {
-    fermentation::SafetyCore safety;
-    safety.beginBoot(device_platform::ResetCause::PowerOn);
-    fermentation::SafetyCoreInput input;
+    fermentation::ActuationEvidence input;
     input.configurationValidated = configurationValidated;
     input.configurationRecoveryStatus = configurationStatus;
     input.configurationServiceMode = configurationMode;
@@ -3043,7 +3053,8 @@ fermentation::SafetyEvaluation evaluateProductionSafety(
     actual.persistenceValidated = persistenceValidated;
     input.persistenceValidated = persistenceValidated;
     input.persistenceLoadStatus = persistenceStatus;
-    input.persistenceSnapshot = persistenceSnapshot;
+    input.loadDisposition = fermentation::boot_classification::classifyRunLoad(
+        persistenceStatus, persistenceSnapshot);
     input.persistenceCoordinatorState = coordinatorState;
     device_platform::SensorQualitySnapshot sensor;
     fermentation::SensorSelectionRuntimeState selection;
@@ -3054,7 +3065,7 @@ fermentation::SafetyEvaluation evaluateProductionSafety(
         input.peltierSensor = &sensor;
         input.sensorSelectionRuntime = &selection;
     }
-    return safety.evaluate(input);
+    return fermentation::ActuationInterlock::evaluate(input);
 }
 
 ProductionActual runConfigurationProduction(
@@ -3118,11 +3129,14 @@ ProductionActual runConfigurationProduction(
         result.safetyProducer,
         fermentation::RunPersistenceLoadStatus::NoPersistedRun, nullptr,
         fermentation::RunPersistenceCoordinatorState::ReadyEmpty);
-    actual.safetyProjection = safetyBootDispositionName(safety.bootDisposition);
+    actual.safetyProjection = safetyProjectionName(
+        fermentation::boot_classification::classifyRunLoad(
+            fermentation::RunPersistenceLoadStatus::NoPersistedRun, nullptr),
+        safety.faultCode);
     actual.safetyProducer = faultCodeName(safety.faultCode);
-    actual.logicalGate = gateStatusName(safety.gate.status);
+    actual.logicalGate = gateStatusName(safety.permission);
     actual.actuatorAllowed =
-        safety.gate.status == fermentation::ActuatorSafetyGateStatus::Allowed;
+        safety.permission == fermentation::ActuatorSafetyGateStatus::Allowed;
     return actual;
 }
 
@@ -3190,11 +3204,15 @@ ProductionActual runRunProduction(const OracleCase& item,
         result.status,
         result.snapshot.has_value() ? &*result.snapshot : nullptr,
         coordinator.state());
-    actual.safetyProjection = safetyBootDispositionName(safety.bootDisposition);
+    actual.safetyProjection = safetyProjectionName(
+        fermentation::boot_classification::classifyRunLoad(
+            result.status,
+            result.snapshot.has_value() ? &*result.snapshot : nullptr),
+        safety.faultCode);
     actual.safetyProducer = faultCodeName(safety.faultCode);
-    actual.logicalGate = gateStatusName(safety.gate.status);
+    actual.logicalGate = gateStatusName(safety.permission);
     actual.actuatorAllowed =
-        safety.gate.status == fermentation::ActuatorSafetyGateStatus::Allowed;
+        safety.permission == fermentation::ActuatorSafetyGateStatus::Allowed;
     return actual;
 }
 

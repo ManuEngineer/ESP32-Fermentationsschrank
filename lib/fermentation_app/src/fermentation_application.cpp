@@ -10,15 +10,10 @@ bool FermentationApplication::begin(
     }
 
     platformServices_ = &platformServices;
-    safetyCore_.beginBoot(resetCauseSource == nullptr
-                              ? device_platform::ResetCause::Unknown
-                              : resetCauseSource->resetCause());
-    // The composition root has not supplied the real configuration,
-    // persistence, sensor and planner evidence yet.  Treat that absence as
-    // untrusted and keep the application fail-closed until a later explicit
-    // validation path provides it.
-    const SafetyCoreInput bootEvidence;
-    static_cast<void>(safetyCore_.evaluate(bootEvidence));
+    presentationState_ = PresentationState{};
+    presentationState_.resetCause = resetCauseSource == nullptr
+                                        ? device_platform::ResetCause::Unknown
+                                        : resetCauseSource->resetCause();
     return true;
 }
 

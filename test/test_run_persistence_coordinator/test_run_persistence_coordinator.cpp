@@ -24,7 +24,7 @@
 #include "state_store_key.hpp"
 #include "standard_program_catalog.hpp"
 #include "storage_envelope.hpp"
-#include "safety_core.hpp"
+#include "actuation_interlock.hpp"
 #include "temperature_control_orchestrator.hpp"
 
 namespace fermentation {
@@ -257,22 +257,18 @@ ActuatorPlannerParameters bridgeActuatorPlannerParameters() {
     return result;
 }
 
-void allowActuatorSafetyForTest(SafetyCore& safetyCore,
-                                ActuatorPlanner& planner,
+void allowActuatorSafetyForTest(ActuatorPlanner& planner,
                                 device_platform::SensorQualitySnapshot& sensor,
-                                SensorSelectionRuntimeState& selection,
-                                RunPersistenceSnapshot& persistenceSnapshot) {
-    SafetyCoreInput input;
+                                SensorSelectionRuntimeState& selection) {
+    ActuationEvidence input;
     input.bootValidationComplete = true;
     input.configurationValidated = true;
     input.configurationRecoveryStatus =
         ConfigurationRecoveryStatus::RuntimeReady;
     input.persistenceValidated = true;
     input.persistenceLoadStatus = RunPersistenceLoadStatus::Current;
+    input.loadDisposition = RunLoadDisposition::ResumeOffer;
     input.persistenceCoordinatorState = RunPersistenceCoordinatorState::Ready;
-    persistenceSnapshot.variant = RunCheckpointVariant::ProgramRun;
-    persistenceSnapshot.processState.state = ProcessState::Preheating;
-    input.persistenceSnapshot = &persistenceSnapshot;
     input.activationKind = SafetyActivationKind::Resume;
     input.activationPersistenceResult = RunPersistenceResultStatus::Applied;
     input.processActivationApplied = true;
@@ -284,9 +280,8 @@ void allowActuatorSafetyForTest(SafetyCore& safetyCore,
     input.peltierSensor = &sensor;
     input.sensorSelectionRuntime = &selection;
     input.actuatorPlanner = &planner;
-    safetyCore.beginBoot(device_platform::ResetCause::PowerOn);
-    const auto evaluation = safetyCore.evaluate(input);
-    TEST_ASSERT_TRUE(evaluation.gate.status ==
+    const auto evaluation = ActuationInterlock::evaluate(input);
+    TEST_ASSERT_TRUE(evaluation.permission ==
                      ActuatorSafetyGateStatus::Allowed);
 }
 
@@ -306,10 +301,8 @@ struct ActuatorHandoffFixture {
     device_platform_test_support::MockBinaryOutputSink outerFan;
     device_platform_test_support::MockBinaryOutputSink innerFan;
     ActuatorPlanSinkDriver driver;
-    SafetyCore safetyCore;
     device_platform::SensorQualitySnapshot safetySensor;
     SensorSelectionRuntimeState safetySelection;
-    RunPersistenceSnapshot safetySnapshot;
     TemperatureControlApplicationOrchestrator application;
 
     ActuatorHandoffFixture()
@@ -318,11 +311,9 @@ struct ActuatorHandoffFixture {
           controller(bridgeTemperatureParameters(), bridgeTemperaturePolicy()),
           planner(bridgeActuatorPlannerParameters()),
           driver(peltier, outerFan, innerFan),
-          application(coordinator, controller, evaluator, planner, driver,
-                      safetyCore) {
+          application(coordinator, controller, evaluator, planner, driver) {
         static_cast<void>(coordinator.loadAndInitialize());
-        allowActuatorSafetyForTest(safetyCore, planner, safetySensor,
-                                   safetySelection, safetySnapshot);
+        allowActuatorSafetyForTest(planner, safetySensor, safetySelection);
     }
 };
 
@@ -2905,7 +2896,9 @@ void test_evaluate_temperature_control_target_changed_uses_new_value_only() {
     // Consume the outstanding evaluation so the second public
     // evaluateTemperatureControl() call below is not fail-closed by the
     // single-outstanding-evaluation guard (Abschnitt 6.1).
-    static_cast<void>(application.tickActuatorPlan(state, 100U));
+    static_cast<void>(application.tickActuatorPlan(
+        state, 100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}));
 
     const auto decision = decideRunAdjustment(
         state, targetAdjustmentRequest(state, 902U, 200U, 20.0));
@@ -3020,7 +3013,9 @@ void test_evaluate_temperature_control_invalid_context_resets_runtime() {
     // evaluateTemperatureControl() call below is not fail-closed by the
     // single-outstanding-evaluation guard (Abschnitt 6.1); this test targets
     // context-validity resets, not the planner's own physical output.
-    static_cast<void>(application.tickActuatorPlan(state, 100U));
+    static_cast<void>(application.tickActuatorPlan(
+        state, 100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}));
 
     TemperatureControlEvaluationEvidence secondEvidence = firstEvidence;
     secondEvidence.sampleTimestampMonotonicMillis = 1'100U;
@@ -3063,7 +3058,9 @@ void test_evaluate_temperature_control_invalid_context_resets_runtime() {
         controller.state().lastSampleTimestampMonotonicMillis.has_value());
     // Consume this outstanding (fail-closed) evaluation too, for the same
     // reason as above.
-    static_cast<void>(application.tickActuatorPlan(state, 2'100U));
+    static_cast<void>(application.tickActuatorPlan(
+        state, 2'100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}));
 
     state.processRunSnapshot = makeProcessRunSnapshot(*state.activeProgramRun);
     TEST_ASSERT_TRUE(state.processRunSnapshot.has_value());
@@ -3428,14 +3425,11 @@ void test_application_actuator_handoff_and_lifecycle_boundary() {
     device_platform_test_support::MockBinaryOutputSink outerFan;
     device_platform_test_support::MockBinaryOutputSink innerFan;
     ActuatorPlanSinkDriver driver(peltier, outerFan, innerFan);
-    SafetyCore safetyCore;
     device_platform::SensorQualitySnapshot safetySensor;
     SensorSelectionRuntimeState safetySelection;
-    RunPersistenceSnapshot safetySnapshot;
-    allowActuatorSafetyForTest(safetyCore, planner, safetySensor,
-                               safetySelection, safetySnapshot);
+    allowActuatorSafetyForTest(planner, safetySensor, safetySelection);
     TemperatureControlApplicationOrchestrator application(
-        coordinator, controller, evaluator, planner, driver, safetyCore);
+        coordinator, controller, evaluator, planner, driver);
 
     auto state = readyActiveRunWithSensorSelection(coordinator, 797U);
     TemperatureControlEvaluationEvidence evidence;
@@ -3451,7 +3445,9 @@ void test_application_actuator_handoff_and_lifecycle_boundary() {
                      TemperatureControlStatus::InvalidInput);
     TEST_ASSERT_FALSE(repeatedBeforeTick.controlRequest.has_value());
 
-    const auto firstPlan = application.tickActuatorPlan(state, 100U);
+    const auto firstPlan = application.tickActuatorPlan(
+        state, 100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_TRUE(firstPlan.acceptedCommandSequence.has_value());
     TEST_ASSERT_EQUAL_UINT64(first.controlRequest->identity.sequence,
                              *firstPlan.acceptedCommandSequence);
@@ -3468,7 +3464,9 @@ void test_application_actuator_handoff_and_lifecycle_boundary() {
     TEST_ASSERT_EQUAL_UINT64(first.controlRequest->identity.sequence + 1U,
                              second.controlRequest->identity.sequence);
     TEST_ASSERT_TRUE(second.integralContributionQuote > 0.0);
-    const auto secondPlan = application.tickActuatorPlan(state, 2'100U);
+    const auto secondPlan = application.tickActuatorPlan(
+        state, 2'100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_EQUAL_UINT64(second.controlRequest->identity.sequence,
                              *secondPlan.acceptedCommandSequence);
 
@@ -3487,7 +3485,7 @@ void test_application_actuator_handoff_and_lifecycle_boundary() {
     TEST_ASSERT_TRUE(innerFan.enabled());
 }
 
-void test_safety_core_fault_forces_idle_after_allowed_output() {
+void test_actuation_interlock_fault_forces_idle_after_allowed_output() {
     ActuatorHandoffFixture fixture;
     auto state = readyActiveRunWithSensorSelection(fixture.coordinator, 798U);
     TemperatureControlEvaluationEvidence evidence;
@@ -3498,24 +3496,27 @@ void test_safety_core_fault_forces_idle_after_allowed_output() {
     const auto evaluation =
         fixture.application.evaluateTemperatureControl(state, evidence);
     TEST_ASSERT_TRUE(evaluation.controlRequest.has_value());
-    const auto allowedPlan = fixture.application.tickActuatorPlan(state, 100U);
+    const auto allowedPlan = fixture.application.tickActuatorPlan(
+        state, 100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_TRUE(allowedPlan.appliedDirection ==
                      AbstractControlDirection::Heating);
 
-    const auto watchdogPlan =
-        fixture.application.tickActuatorPlan(state, 60'101U);
+    const auto watchdogPlan = fixture.application.tickActuatorPlan(
+        state, 60'101U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_TRUE(watchdogPlan.reason ==
                      ActuatorPlanReason::StaleRequestWatchdog);
     TEST_ASSERT_TRUE(fixture.planner.state().latchedWatchdogFault.has_value());
 
-    SafetyCoreInput faultInput;
+    ActuationEvidence faultInput;
     faultInput.bootValidationComplete = true;
     faultInput.configurationValidated = true;
     faultInput.configurationRecoveryStatus =
         ConfigurationRecoveryStatus::RuntimeReady;
     faultInput.persistenceValidated = true;
     faultInput.persistenceLoadStatus = RunPersistenceLoadStatus::Current;
-    faultInput.persistenceSnapshot = &fixture.safetySnapshot;
+    faultInput.loadDisposition = RunLoadDisposition::ResumeOffer;
     faultInput.persistenceCoordinatorState =
         RunPersistenceCoordinatorState::Ready;
     faultInput.activationKind = SafetyActivationKind::Resume;
@@ -3528,12 +3529,13 @@ void test_safety_core_fault_forces_idle_after_allowed_output() {
     faultInput.peltierSensor = &fixture.safetySensor;
     faultInput.sensorSelectionRuntime = &fixture.safetySelection;
     faultInput.actuatorPlanner = &fixture.planner;
-    const auto fault = fixture.safetyCore.evaluate(faultInput);
+    const auto fault = ActuationInterlock::evaluate(faultInput);
     TEST_ASSERT_TRUE(fault.faultCode == FaultCode::ActuatorRequestWatchdog);
-    TEST_ASSERT_TRUE(fault.gate.status == ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_TRUE(fault.permission == ActuatorSafetyGateStatus::Unresolved);
 
-    const auto stoppedPlan =
-        fixture.application.tickActuatorPlan(state, 60'200U);
+    const auto stoppedPlan = fixture.application.tickActuatorPlan(
+        state, 60'200U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Unresolved});
     TEST_ASSERT_TRUE(stoppedPlan.appliedDirection ==
                      AbstractControlDirection::Idle);
     TEST_ASSERT_FALSE(fixture.peltier.forward());
@@ -3574,14 +3576,11 @@ void test_application_repeated_i_tick_after_stale_b_does_not_corrupt_next_evalua
     device_platform_test_support::MockBinaryOutputSink outerFan;
     device_platform_test_support::MockBinaryOutputSink innerFan;
     ActuatorPlanSinkDriver driver(peltier, outerFan, innerFan);
-    SafetyCore safetyCore;
     device_platform::SensorQualitySnapshot safetySensor;
     SensorSelectionRuntimeState safetySelection;
-    RunPersistenceSnapshot safetySnapshot;
-    allowActuatorSafetyForTest(safetyCore, planner, safetySensor,
-                               safetySelection, safetySnapshot);
+    allowActuatorSafetyForTest(planner, safetySensor, safetySelection);
     TemperatureControlApplicationOrchestrator application(
-        coordinator, controller, evaluator, planner, driver, safetyCore);
+        coordinator, controller, evaluator, planner, driver);
     auto state = readyActiveRunWithSensorSelection(coordinator, 950U);
 
     TemperatureControlEvaluationEvidence evidence;
@@ -3590,7 +3589,9 @@ void test_application_repeated_i_tick_after_stale_b_does_not_corrupt_next_evalua
     evidence.product = bridgeSensorSample(36.0);
     const auto a = application.evaluateTemperatureControl(state, evidence);
     TEST_ASSERT_TRUE(a.controlRequest.has_value());
-    const auto aPlan = application.tickActuatorPlan(state, 999U);
+    const auto aPlan = application.tickActuatorPlan(
+        state, 999U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_TRUE(aPlan.appliedDirection ==
                      AbstractControlDirection::Heating);
 
@@ -3602,13 +3603,17 @@ void test_application_repeated_i_tick_after_stale_b_does_not_corrupt_next_evalua
     // B is only observed by the planner exactly at its own watchdog boundary
     // (createdAt 0, now 1000) - stale on arrival - while the running
     // heartbeat (H = 999, from A's own admission tick) is not yet due.
-    const auto bPlan = application.tickActuatorPlan(state, 1'000U);
+    const auto bPlan = application.tickActuatorPlan(
+        state, 1'000U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_TRUE(bPlan.admissionOutcome ==
                      ActuatorAdmissionOutcome::StaleOnArrivalWatchdog);
 
     // A second planner tick, still well before H's own boundary (999+1000 =
     // 1999), with no new #22 evaluation in between.
-    static_cast<void>(application.tickActuatorPlan(state, 1'500U));
+    static_cast<void>(application.tickActuatorPlan(
+        state, 1'500U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed}));
 
     evidence.sampleTimestampMonotonicMillis = 1'500U;
     const auto next = application.evaluateTemperatureControl(state, evidence);
@@ -3649,14 +3654,11 @@ void test_application_multi_rate_windows_and_downstream_minimum_off_probe() {
     device_platform_test_support::MockBinaryOutputSink outerFan;
     device_platform_test_support::MockBinaryOutputSink innerFan;
     ActuatorPlanSinkDriver driver(peltier, outerFan, innerFan);
-    SafetyCore safetyCore;
     device_platform::SensorQualitySnapshot safetySensor;
     SensorSelectionRuntimeState safetySelection;
-    RunPersistenceSnapshot safetySnapshot;
-    allowActuatorSafetyForTest(safetyCore, planner, safetySensor,
-                               safetySelection, safetySnapshot);
+    allowActuatorSafetyForTest(planner, safetySensor, safetySelection);
     TemperatureControlApplicationOrchestrator application(
-        coordinator, controller, evaluator, planner, driver, safetyCore);
+        coordinator, controller, evaluator, planner, driver);
     auto state = readyActiveRunWithSensorSelection(coordinator, 799U);
 
     std::uint64_t windowSourceSequence = 0U;
@@ -3687,7 +3689,9 @@ void test_application_multi_rate_windows_and_downstream_minimum_off_probe() {
         }
         previousIntegral = evaluation.integralContributionQuote;
 
-        const auto plan = application.tickActuatorPlan(state, timestamp);
+        const auto plan = application.tickActuatorPlan(
+            state, timestamp,
+            ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
         TEST_ASSERT_TRUE(plan.acceptedCommandSequence.has_value());
         TEST_ASSERT_EQUAL_UINT64(evaluation.controlRequest->identity.sequence,
                                  *plan.acceptedCommandSequence);
@@ -3729,16 +3733,13 @@ void test_application_multi_rate_windows_and_downstream_minimum_off_probe() {
     device_platform_test_support::MockBinaryOutputSink limitedInnerFan;
     ActuatorPlanSinkDriver limitedDriver(limitedPeltier, limitedOuterFan,
                                          limitedInnerFan);
-    SafetyCore limitedSafetyCore;
     device_platform::SensorQualitySnapshot limitedSafetySensor;
     SensorSelectionRuntimeState limitedSafetySelection;
-    RunPersistenceSnapshot limitedSafetySnapshot;
-    allowActuatorSafetyForTest(limitedSafetyCore, limitedPlanner,
-                               limitedSafetySensor, limitedSafetySelection,
-                               limitedSafetySnapshot);
+    allowActuatorSafetyForTest(limitedPlanner, limitedSafetySensor,
+                               limitedSafetySelection);
     TemperatureControlApplicationOrchestrator limitedApplication(
         limitedCoordinator, limitedController, limitedEvaluator, limitedPlanner,
-        limitedDriver, limitedSafetyCore);
+        limitedDriver);
     auto limitedState =
         readyActiveRunWithSensorSelection(limitedCoordinator, 800U);
     TemperatureControlEvaluationEvidence limitedEvidence;
@@ -3748,8 +3749,9 @@ void test_application_multi_rate_windows_and_downstream_minimum_off_probe() {
     const auto firstLimited = limitedApplication.evaluateTemperatureControl(
         limitedState, limitedEvidence);
     TEST_ASSERT_TRUE(firstLimited.controlRequest.has_value());
-    const auto firstLimitedPlan =
-        limitedApplication.tickActuatorPlan(limitedState, 100U);
+    const auto firstLimitedPlan = limitedApplication.tickActuatorPlan(
+        limitedState, 100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_TRUE(firstLimitedPlan.appliedDirection ==
                      AbstractControlDirection::Heating);
 
@@ -3759,8 +3761,9 @@ void test_application_multi_rate_windows_and_downstream_minimum_off_probe() {
     TEST_ASSERT_TRUE(secondLimited.controlRequest.has_value());
     TEST_ASSERT_TRUE(secondLimited.integralContributionQuote > 0.0);
     const double integralBeforeGate = secondLimited.integralContributionQuote;
-    const auto secondLimitedPlan =
-        limitedApplication.tickActuatorPlan(limitedState, 2'100U);
+    const auto secondLimitedPlan = limitedApplication.tickActuatorPlan(
+        limitedState, 2'100U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_EQUAL_UINT64(secondLimited.controlRequest->identity.sequence,
                              *secondLimitedPlan.acceptedCommandSequence);
     TEST_ASSERT_TRUE(secondLimitedPlan.appliedDirection ==
@@ -3776,8 +3779,9 @@ void test_application_multi_rate_windows_and_downstream_minimum_off_probe() {
     const auto physicalOffAt = windowStart + scheduledOn + 1U;
     TEST_ASSERT_TRUE(physicalOffAt <
                      windowStart + limitedParameters.switchingWindowMillis);
-    const auto offPortion =
-        limitedApplication.tickActuatorPlan(limitedState, physicalOffAt);
+    const auto offPortion = limitedApplication.tickActuatorPlan(
+        limitedState, physicalOffAt,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_TRUE(offPortion.appliedDirection ==
                      AbstractControlDirection::Idle);
     TEST_ASSERT_TRUE(
@@ -3786,8 +3790,9 @@ void test_application_multi_rate_windows_and_downstream_minimum_off_probe() {
 
     const auto nextWindow =
         windowStart + limitedParameters.switchingWindowMillis;
-    const auto limitedPlan =
-        limitedApplication.tickActuatorPlan(limitedState, nextWindow);
+    const auto limitedPlan = limitedApplication.tickActuatorPlan(
+        limitedState, nextWindow,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_TRUE(limitedPlan.reason ==
                      ActuatorPlanReason::MinimumOffTimeHeld);
     TEST_ASSERT_TRUE(limitedPlan.appliedDirection ==
@@ -3921,14 +3926,18 @@ void test_application_bridge_resets_runtime_at_committed_lifecycle_boundaries() 
         fixture.application.evaluateTemperatureControl(state, evidence);
     TEST_ASSERT_TRUE(fresh.controlRequest.has_value());
     TEST_ASSERT_FALSE(fresh.status == TemperatureControlStatus::InvalidInput);
-    const auto freshPlan = fixture.application.tickActuatorPlan(state, 30'000U);
+    const auto freshPlan = fixture.application.tickActuatorPlan(
+        state, 30'000U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_EQUAL_UINT64(fresh.controlRequest->identity.sequence,
                              *freshPlan.acceptedCommandSequence);
 
     // Finally create a latched watchdog fault in the same fixture and cross a
     // second real committed boundary. The lifecycle reset is not an external
     // #24 fault reset: the latch must survive it.
-    const auto watchdog = fixture.application.tickActuatorPlan(state, 90'001U);
+    const auto watchdog = fixture.application.tickActuatorPlan(
+        state, 90'001U,
+        ActuatorSafetyGateInput{ActuatorSafetyGateStatus::Allowed});
     TEST_ASSERT_TRUE(watchdog.reason ==
                      ActuatorPlanReason::StaleRequestWatchdog);
     TEST_ASSERT_TRUE(fixture.planner.state().latchedWatchdogFault.has_value());
@@ -8384,12 +8393,12 @@ void test_orchestrator_fresh_start_uses_existing_command_commit_boundary() {
                           static_cast<int>(current.processState.state));
 }
 
-SafetyCoreInput freshStartSafetyInput(
+ActuationEvidence freshStartSafetyInput(
     RunPersistenceLoadStatus loadStatus,
     const RunPersistenceResult& persistenceResult, bool processApplied,
     device_platform::SensorQualitySnapshot& sensor,
     SensorSelectionRuntimeState& selection, ActuatorPlanner& planner) {
-    SafetyCoreInput input;
+    ActuationEvidence input;
     input.bootValidationComplete = true;
     input.configurationValidated = true;
     input.configurationRecoveryStatus =
@@ -8397,6 +8406,7 @@ SafetyCoreInput freshStartSafetyInput(
     input.configurationServiceMode = ConfigurationServiceMode::Operational;
     input.persistenceValidated = true;
     input.persistenceLoadStatus = loadStatus;
+    input.loadDisposition = RunLoadDisposition::Standby;
     input.persistenceCoordinatorState = persistenceResult.coordinatorState;
     input.explicitActivationRequested = true;
     input.activationKind = SafetyActivationKind::FreshStart;
@@ -8429,8 +8439,6 @@ void test_fresh_start_bridge_reaches_safety_only_after_real_apply() {
     ActuatorPlanner planner(bridgeActuatorPlannerParameters());
     device_platform::SensorQualitySnapshot sensor;
     SensorSelectionRuntimeState selection;
-    SafetyCore safety;
-    safety.beginBoot(device_platform::ResetCause::PowerOn);
 
     RunCommandState current;
     current.processState.state = ProcessState::Standby;
@@ -8442,13 +8450,11 @@ void test_fresh_start_bridge_reaches_safety_only_after_real_apply() {
     notApplied.coordinatorState = RunPersistenceCoordinatorState::ReadyEmpty;
     auto beforeApply = freshStartSafetyInput(loaded.status, notApplied, false,
                                              sensor, selection, planner);
-    const auto beforeCommit = safety.evaluate(beforeApply);
-    TEST_ASSERT_TRUE(beforeCommit.bootDisposition ==
-                     SafetyBootDisposition::Standby);
-    TEST_ASSERT_TRUE(beforeCommit.gate.status ==
+    const auto beforeCommit = ActuationInterlock::evaluate(beforeApply);
+    TEST_ASSERT_TRUE(beforeCommit.permission ==
                      ActuatorSafetyGateStatus::Unresolved);
-    TEST_ASSERT_TRUE(beforeCommit.bootDisposition !=
-                     SafetyBootDisposition::ResumeOffer);
+    TEST_ASSERT_TRUE(beforeApply.loadDisposition ==
+                     RunLoadDisposition::Standby);
 
     const auto applied = application.persistFreshStartCommand(
         current, decision, RunCheckpointTime{100U, std::nullopt});
@@ -8459,9 +8465,9 @@ void test_fresh_start_bridge_reaches_safety_only_after_real_apply() {
 
     auto afterApply = freshStartSafetyInput(loaded.status, applied, true,
                                             sensor, selection, planner);
-    const auto allowed = safety.evaluate(afterApply);
-    TEST_ASSERT_TRUE(allowed.bootDisposition == SafetyBootDisposition::Standby);
-    TEST_ASSERT_TRUE(allowed.gate.status == ActuatorSafetyGateStatus::Allowed);
+    const auto allowed = ActuationInterlock::evaluate(afterApply);
+    TEST_ASSERT_TRUE(allowed.permission == ActuatorSafetyGateStatus::Allowed);
+    TEST_ASSERT_TRUE(afterApply.loadDisposition == RunLoadDisposition::Standby);
     TEST_ASSERT_TRUE(afterApply.activationKind ==
                      SafetyActivationKind::FreshStart);
 }
@@ -8495,17 +8501,15 @@ void test_fresh_start_bridge_write_error_and_unresolved_unknown_never_allow() {
     ActuatorPlanner writeErrorPlanner(bridgeActuatorPlannerParameters());
     device_platform::SensorQualitySnapshot writeErrorSensor;
     SensorSelectionRuntimeState writeErrorSelection;
-    SafetyCore writeErrorSafety;
-    writeErrorSafety.beginBoot(device_platform::ResetCause::PowerOn);
     auto writeErrorInput = freshStartSafetyInput(
         writeErrorLoad.status, writeError, false, writeErrorSensor,
         writeErrorSelection, writeErrorPlanner);
     const auto writeErrorEvaluation =
-        writeErrorSafety.evaluate(writeErrorInput);
-    TEST_ASSERT_TRUE(writeErrorEvaluation.gate.status ==
+        ActuationInterlock::evaluate(writeErrorInput);
+    TEST_ASSERT_TRUE(writeErrorEvaluation.permission ==
                      ActuatorSafetyGateStatus::Unresolved);
-    TEST_ASSERT_TRUE(writeErrorEvaluation.bootDisposition !=
-                     SafetyBootDisposition::ResumeOffer);
+    TEST_ASSERT_TRUE(writeErrorInput.loadDisposition ==
+                     RunLoadDisposition::Standby);
 
     SequencedWriteStore unknownStore;
     RunPersistenceCoordinator unknownCoordinator(
@@ -8535,15 +8539,13 @@ void test_fresh_start_bridge_write_error_and_unresolved_unknown_never_allow() {
     ActuatorPlanner unknownPlanner(bridgeActuatorPlannerParameters());
     device_platform::SensorQualitySnapshot unknownSensor;
     SensorSelectionRuntimeState unknownSelection;
-    SafetyCore unknownSafety;
-    unknownSafety.beginBoot(device_platform::ResetCause::PowerOn);
     auto unknownInput =
         freshStartSafetyInput(unknownLoad.status, unknown, false, unknownSensor,
                               unknownSelection, unknownPlanner);
-    const auto unknownEvaluation = unknownSafety.evaluate(unknownInput);
+    const auto unknownEvaluation = ActuationInterlock::evaluate(unknownInput);
     TEST_ASSERT_TRUE(unknownEvaluation.faultCode ==
                      FaultCode::RunPersistenceUntrusted);
-    TEST_ASSERT_TRUE(unknownEvaluation.gate.status ==
+    TEST_ASSERT_TRUE(unknownEvaluation.permission ==
                      ActuatorSafetyGateStatus::Unresolved);
 }
 
@@ -8586,16 +8588,13 @@ void test_discarded_no_active_run_can_use_real_fresh_start_bridge() {
     ActuatorPlanner planner(bridgeActuatorPlannerParameters());
     device_platform::SensorQualitySnapshot sensor;
     SensorSelectionRuntimeState selection;
-    SafetyCore safety;
-    safety.beginBoot(device_platform::ResetCause::PowerOn);
     auto input =
         freshStartSafetyInput(RunPersistenceLoadStatus::NoActiveRun, started,
                               true, sensor, selection, planner);
-    const auto evaluation = safety.evaluate(input);
-    TEST_ASSERT_TRUE(evaluation.bootDisposition ==
-                     SafetyBootDisposition::Standby);
-    TEST_ASSERT_TRUE(evaluation.gate.status ==
+    const auto evaluation = ActuationInterlock::evaluate(input);
+    TEST_ASSERT_TRUE(evaluation.permission ==
                      ActuatorSafetyGateStatus::Allowed);
+    TEST_ASSERT_TRUE(input.loadDisposition == RunLoadDisposition::Standby);
 }
 
 }  // namespace
@@ -8684,7 +8683,7 @@ int main(int, char**) {
     RUN_TEST(test_air_run_product_inserted_is_air_to_air_without_pi_transition);
     RUN_TEST(test_application_bridge_hands_off_cooling_context_once);
     RUN_TEST(test_application_actuator_handoff_and_lifecycle_boundary);
-    RUN_TEST(test_safety_core_fault_forces_idle_after_allowed_output);
+    RUN_TEST(test_actuation_interlock_fault_forces_idle_after_allowed_output);
     RUN_TEST(
         test_application_repeated_i_tick_after_stale_b_does_not_corrupt_next_evaluation);
     RUN_TEST(

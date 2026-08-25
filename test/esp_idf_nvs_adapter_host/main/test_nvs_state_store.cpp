@@ -20,7 +20,7 @@
 #include "run_commands.hpp"
 #include "run_persistence_codec.hpp"
 #include "run_persistence_coordinator.hpp"
-#include "safety_core.hpp"
+#include "actuation_interlock.hpp"
 #include "standard_program_catalog.hpp"
 
 namespace {
@@ -460,23 +460,35 @@ const char* coordinatorStateName(
     return "Unknown";
 }
 
-const char* safetyBootDispositionName(
-    fermentation::SafetyBootDisposition value) {
-    using fermentation::SafetyBootDisposition;
-    switch (value) {
-        case SafetyBootDisposition::Unresolved:
+const char* safetyProjectionName(fermentation::RunLoadDisposition disposition,
+                                 fermentation::FaultCode fault) {
+    using fermentation::FaultCode;
+    switch (fault) {
+        case FaultCode::ConfigurationUnavailable:
+        case FaultCode::ConfigurationIntegrityFailure:
+        case FaultCode::ConfigurationCommitIndeterminate:
+        case FaultCode::RunPersistenceUntrusted:
+        case FaultCode::SystemProducerUnknown:
+            return "SAFE_BOOT";
+        case FaultCode::ConfigurationRuntimeFailure:
+        case FaultCode::SafetySensorUnavailable:
+        case FaultCode::ActuatorRequestWatchdog:
             return "UNRESOLVED";
-        case SafetyBootDisposition::Standby:
+        case FaultCode::None:
+            break;
+    }
+    switch (disposition) {
+        case fermentation::RunLoadDisposition::Standby:
             return "STANDBY";
-        case SafetyBootDisposition::ResumeOffer:
+        case fermentation::RunLoadDisposition::ResumeOffer:
             return "RESUME_OFFER";
-        case SafetyBootDisposition::NoActiveRun:
+        case fermentation::RunLoadDisposition::NoActiveRun:
             return "NO_ACTIVE_RUN";
-        case SafetyBootDisposition::Completed:
+        case fermentation::RunLoadDisposition::Completed:
             return "COMPLETED";
-        case SafetyBootDisposition::TerminalFault:
+        case fermentation::RunLoadDisposition::TerminalFault:
             return "TERMINAL_FAULT";
-        case SafetyBootDisposition::SafeBoot:
+        case fermentation::RunLoadDisposition::SafeBoot:
             return "SAFE_BOOT";
     }
     return "UNKNOWN";
@@ -573,24 +585,24 @@ void canonicalOracleIdSelfTest() {
 
 const char* runProductOutcomeName(
     fermentation::RunPersistenceLoadStatus status,
-    const fermentation::RunPersistenceSnapshot* snapshot,
-    const fermentation::SafetyEvaluation& evaluation) {
+    const fermentation::RunPersistenceSnapshot* snapshot) {
     using fermentation::RunPersistenceLoadStatus;
-    using fermentation::SafetyBootDisposition;
     if (status == RunPersistenceLoadStatus::Current && snapshot != nullptr) {
-        if (evaluation.bootDisposition == SafetyBootDisposition::ResumeOffer)
-            return "NEW_VALID_RESUME";
-        if (evaluation.bootDisposition == SafetyBootDisposition::Completed)
-            return "COMPLETED";
-        if (evaluation.bootDisposition == SafetyBootDisposition::TerminalFault)
-            return "TERMINAL_FAULT";
-        if (evaluation.bootDisposition == SafetyBootDisposition::NoActiveRun)
-            return "RUN_ABORT_REQUIRED";
+        switch (fermentation::boot_classification::classifyRunLoad(status,
+                                                                   snapshot)) {
+            case fermentation::RunLoadDisposition::ResumeOffer:
+                return "NEW_VALID_RESUME";
+            case fermentation::RunLoadDisposition::Completed:
+                return "COMPLETED";
+            case fermentation::RunLoadDisposition::TerminalFault:
+                return "TERMINAL_FAULT";
+            case fermentation::RunLoadDisposition::NoActiveRun:
+                return "RUN_ABORT_REQUIRED";
+            case fermentation::RunLoadDisposition::Standby:
+            case fermentation::RunLoadDisposition::SafeBoot:
+                break;
+        }
     }
-    if (status == RunPersistenceLoadStatus::FallbackRecovered &&
-        snapshot != nullptr &&
-        evaluation.bootDisposition == SafetyBootDisposition::ResumeOffer)
-        return "OLDER_VALID_CHECKPOINT_RESUME";
     if (status == RunPersistenceLoadStatus::NoPersistedRun)
         return "NO_PERSISTED_RUN";
     if (status == RunPersistenceLoadStatus::NoActiveRun) return "NO_ACTIVE_RUN";
@@ -604,9 +616,7 @@ ProductBridgeObservation runProductBridge(
         CHECK(isCanonicalSlice2RunOracleCase(expected->oracleCaseId));
     }
     const auto loaded = coordinator.loadAndInitialize();
-    fermentation::SafetyCore safety;
-    safety.beginBoot(device_platform::ResetCause::Unknown);
-    fermentation::SafetyCoreInput input;
+    fermentation::ActuationEvidence input;
     input.bootValidationComplete = true;
     input.configurationValidated = true;
     input.configurationRecoveryStatus =
@@ -614,8 +624,9 @@ ProductBridgeObservation runProductBridge(
     input.configurationServiceMode =
         fermentation::ConfigurationServiceMode::Operational;
     input.persistenceLoadStatus = loaded.status;
-    input.persistenceSnapshot =
-        loaded.snapshot.has_value() ? &*loaded.snapshot : nullptr;
+    input.loadDisposition = fermentation::boot_classification::classifyRunLoad(
+        loaded.status,
+        loaded.snapshot.has_value() ? &*loaded.snapshot : nullptr);
     input.persistenceCoordinatorState = coordinator.state();
     input.persistenceValidated =
         loaded.snapshot.has_value() &&
@@ -631,24 +642,22 @@ ProductBridgeObservation runProductBridge(
         input.peltierSensor = &sensor;
         input.sensorSelectionRuntime = &selection;
     }
-    const auto evaluation = safety.evaluate(input);
+    const auto evaluation = fermentation::ActuationInterlock::evaluate(input);
     const auto logicalGate =
-        evaluation.gate.status ==
-                fermentation::ActuatorSafetyGateStatus::Allowed
+        evaluation.permission == fermentation::ActuatorSafetyGateStatus::Allowed
             ? "ALLOWED"
             : "UNRESOLVED";
     auto observation = ProductBridgeObservation{
         runLoadStatusName(loaded.status),
         coordinatorStateName(coordinator.state()),
         input.persistenceValidated,
-        safetyBootDispositionName(evaluation.bootDisposition),
+        safetyProjectionName(input.loadDisposition, evaluation.faultCode),
         faultCodeName(evaluation.faultCode),
-        runProductOutcomeName(
-            loaded.status,
-            loaded.snapshot.has_value() ? &*loaded.snapshot : nullptr,
-            evaluation),
+        runProductOutcomeName(loaded.status, loaded.snapshot.has_value()
+                                                 ? &*loaded.snapshot
+                                                 : nullptr),
         logicalGate,
-        evaluation.gate.status ==
+        evaluation.permission ==
             fermentation::ActuatorSafetyGateStatus::Allowed,
         false};
     observation.productRecoveryGate =
