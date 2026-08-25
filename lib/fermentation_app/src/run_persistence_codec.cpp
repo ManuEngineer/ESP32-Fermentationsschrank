@@ -1143,24 +1143,43 @@ RunPersistenceCodecStatus encodeRunPersistenceSnapshot(
     return RunPersistenceCodecStatus::Success;
 }
 
-RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
-    const std::string& payload, std::uint32_t schemaVersion) {
+RunPersistenceCodecStatus decodeRunPersistenceSnapshotInto(
+    const std::string& payload, std::uint32_t schemaVersion,
+    RunPersistenceSnapshot& destination) {
+    destination.activeRunId.clear();
+    destination.activeRunSensorMode.reset();
+    destination.sensorSelection.reset();
+    destination.program.reset();
+    destination.revisions = {};
+    destination.revisionCount = 0U;
+    destination.manual.reset();
+    destination.processRunSnapshot.reset();
+    destination.pendingRecoveryAnchor.reset();
+    destination.recoveryBootAnchorMonotonicMillis.reset();
+    destination.recoveryTemperatureEvidence.lastKnown = CrossRoleEvidence{};
+    destination.lastRecoveryEpisodeEvidence.reset();
+    destination.priorBootPhaseElapsed.reset();
+    destination.nominalRecoveryAdjustment.reset();
+    destination.recoveryEpisodeRevision = 0U;
+    destination.runProgress = RunProgressState{};
+    destination.persistedRunCommandIds = {};
+    destination.persistedRunCommandCount = 0U;
+    auto& s = destination;
     if (payload.size() > kMaximumCheckpointPayloadBytes)
-        return {RunPersistenceCodecStatus::CapacityExceeded, std::nullopt};
+        return RunPersistenceCodecStatus::CapacityExceeded;
     ByteReader reader(payload);
-    RunPersistenceSnapshot s;
     if (!readVariant(reader, s.variant) || !readTrigger(reader, s.trigger)) {
-        return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
+        return RunPersistenceCodecStatus::InvalidWireValue;
     }
     if (!be::readUint64(reader, s.checkpointMonotonicMillis) ||
         !be::readUint16(reader, s.intervalMinutes) ||
         !be::readUint32(reader, s.runRevision) ||
         !readString(reader, 48U, s.activeRunId))
-        return {RunPersistenceCodecStatus::Truncated, std::nullopt};
+        return RunPersistenceCodecStatus::Truncated;
     if (s.variant != RunCheckpointVariant::NoActiveRun) {
         RunSensorMode mode;
         if (!readSensor(reader, mode))
-            return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
+            return RunPersistenceCodecStatus::InvalidWireValue;
         s.activeRunSensorMode = mode;
         // A schema-1 payload predates this field entirely (6.12) and is
         // mapped onto the explicit LegacyUnknown/None/0 sentinel (Korrektur-
@@ -1172,13 +1191,11 @@ RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
         if (schemaVersion >= kSensorSelectionFieldIntroducedInSchema) {
             bool present = false;
             if (!be::readOptionalTag(reader, present))
-                return {RunPersistenceCodecStatus::InvalidWireValue,
-                        std::nullopt};
+                return RunPersistenceCodecStatus::InvalidWireValue;
             if (present) {
                 PersistedSensorSelectionState selection;
                 if (!readPersistedSensorSelectionState(reader, selection))
-                    return {RunPersistenceCodecStatus::InvalidWireValue,
-                            std::nullopt};
+                    return RunPersistenceCodecStatus::InvalidWireValue;
                 s.sensorSelection = selection;
             }
         } else {
@@ -1195,37 +1212,36 @@ RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
             !readProgramSource(reader, p.sourceKind) ||
             !readString(reader, kMaximumCheckpointPayloadBytes, program) ||
             !be::readUint8(reader, count) || count > kMaximumRunRevisions)
-            return {RunPersistenceCodecStatus::Truncated, std::nullopt};
+            return RunPersistenceCodecStatus::Truncated;
         const auto decoded = decodeProgramDocumentPayload(program);
         if (!decoded.document.has_value())
-            return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
+            return RunPersistenceCodecStatus::InvalidWireValue;
         p.sourceProgram = *decoded.document;
         s.program = std::move(p);
         s.revisionCount = count;
         for (std::size_t i = 0U; i < s.revisionCount; ++i)
             if (!readRevision(reader, s.revisions[i]))
-                return {RunPersistenceCodecStatus::InvalidWireValue,
-                        std::nullopt};
+                return RunPersistenceCodecStatus::InvalidWireValue;
     } else if (s.variant == RunCheckpointVariant::ManualRun) {
         ManualRunPlan p;
         if (!readManual(reader, s.activeRunId, p))
-            return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
+            return RunPersistenceCodecStatus::InvalidWireValue;
         s.manual = std::move(p);
     }
     if (s.variant != RunCheckpointVariant::NoActiveRun) {
         ProcessRunSnapshot p;
         if (!readProcessSnapshot(reader, p))
-            return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
+            return RunPersistenceCodecStatus::InvalidWireValue;
         s.processRunSnapshot = std::move(p);
     }
     std::uint8_t count = 0U;
     if (!readRuntime(reader, s.processState) || !be::readUint8(reader, count) ||
         count > kMaximumPersistedRunCommandIds)
-        return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
+        return RunPersistenceCodecStatus::InvalidWireValue;
     s.persistedRunCommandCount = count;
     for (std::size_t i = 0U; i < count; ++i)
         if (!be::readUint64(reader, s.persistedRunCommandIds[i]))
-            return {RunPersistenceCodecStatus::Truncated, std::nullopt};
+            return RunPersistenceCodecStatus::Truncated;
     if (schemaVersion >= kRecoveryFieldsIntroducedInSchema) {
         if (!readOptionalPendingRecoveryAnchor(reader,
                                                s.pendingRecoveryAnchor) ||
@@ -1240,7 +1256,7 @@ RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
                 reader, s.nominalRecoveryAdjustment) ||
             !be::readUint32(reader, s.recoveryEpisodeRevision) ||
             !readRunProgressState(reader, s.runProgress)) {
-            return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
+            return RunPersistenceCodecStatus::InvalidWireValue;
         }
     } else if (s.variant != RunCheckpointVariant::NoActiveRun) {
         // 5.28: Schema-1/2-Migration eines aktiven Runs startet ehrlich mit
@@ -1255,10 +1271,21 @@ RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
             WeightedProgressCoverage::PartialUnknown, std::nullopt};
     }
     if (reader.remaining() != 0U)
-        return {RunPersistenceCodecStatus::TrailingBytes, std::nullopt};
+        return RunPersistenceCodecStatus::TrailingBytes;
     if (!validateRunPersistenceSnapshotForSchema(s, schemaVersion))
-        return {RunPersistenceCodecStatus::InvalidWireValue, std::nullopt};
-    return {RunPersistenceCodecStatus::Success, std::move(s)};
+        return RunPersistenceCodecStatus::InvalidWireValue;
+    return RunPersistenceCodecStatus::Success;
+}
+
+RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
+    const std::string& payload, std::uint32_t schemaVersion) {
+    RunPersistenceSnapshot snapshot;
+    const auto status =
+        decodeRunPersistenceSnapshotInto(payload, schemaVersion, snapshot);
+    if (status != RunPersistenceCodecStatus::Success) {
+        return {status, std::nullopt};
+    }
+    return {status, std::move(snapshot)};
 }
 
 namespace {
@@ -1536,22 +1563,34 @@ std::optional<RunPersistenceHead> decodeRunPersistenceHead(
     return head;
 }
 
-std::optional<RunPersistenceRawRecord> decodeRunPersistenceRecord(
-    const std::string& bytes, device_platform::StorageEpoch epoch) {
+bool decodeRunPersistenceRecordInto(const std::string& bytes,
+                                    device_platform::StorageEpoch epoch,
+                                    RunPersistenceRawRecord& destination) {
     const auto envelope = device_platform::decodeEnvelope(bytes);
     if (!envelope.envelope.has_value() ||
         envelope.envelope->recordTypeId != kCheckpointRecordType ||
         !knownRunPersistenceSchema(envelope.envelope->schemaVersion) ||
         envelope.envelope->storageEpoch != epoch ||
         envelope.envelope->versionValue == 0U) {
+        return false;
+    }
+    if (decodeRunPersistenceSnapshotInto(
+            envelope.envelope->payload, envelope.envelope->schemaVersion,
+            destination.snapshot) != RunPersistenceCodecStatus::Success)
+        return false;
+    destination.bytes = bytes;
+    destination.checkpointRevision = envelope.envelope->versionValue;
+    destination.utcUnixSeconds = envelope.envelope->utcUnixSeconds;
+    return true;
+}
+
+std::optional<RunPersistenceRawRecord> decodeRunPersistenceRecord(
+    const std::string& bytes, device_platform::StorageEpoch epoch) {
+    RunPersistenceRawRecord record;
+    if (!decodeRunPersistenceRecordInto(bytes, epoch, record)) {
         return std::nullopt;
     }
-    const auto snapshot = decodeRunPersistenceSnapshot(
-        envelope.envelope->payload, envelope.envelope->schemaVersion);
-    if (!snapshot.snapshot.has_value()) return std::nullopt;
-    return RunPersistenceRawRecord{bytes, *snapshot.snapshot,
-                                   envelope.envelope->versionValue,
-                                   envelope.envelope->utcUnixSeconds};
+    return record;
 }
 
 bool runCheckpointReferenceMatches(const RunCheckpointReference& reference,

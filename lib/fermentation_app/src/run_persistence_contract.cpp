@@ -380,20 +380,45 @@ bool validateRunPersistenceSnapshotForSchema(
     return validateRunPersistenceSnapshot(snapshot);
 }
 
-std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
+namespace {
+
+void resetRunPersistenceSnapshotForMake(RunPersistenceSnapshot& destination) {
+    destination.activeRunId.clear();
+    destination.activeRunSensorMode.reset();
+    destination.sensorSelection.reset();
+    destination.program.reset();
+    destination.revisions = {};
+    destination.revisionCount = 0U;
+    destination.manual.reset();
+    destination.processRunSnapshot.reset();
+    destination.pendingRecoveryAnchor.reset();
+    destination.recoveryBootAnchorMonotonicMillis.reset();
+    destination.lastRecoveryEpisodeEvidence.reset();
+    destination.priorBootPhaseElapsed.reset();
+    destination.nominalRecoveryAdjustment.reset();
+    destination.runProgress = RunProgressState{};
+    destination.persistedRunCommandIds = {};
+    destination.persistedRunCommandCount = 0U;
+}
+
+}  // namespace
+
+bool makeRunPersistenceSnapshotInto(
     const RunCommandState& state,
     const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,
     std::size_t idCount, RunCheckpointTrigger trigger,
-    const RunCheckpointTime& time, std::uint16_t intervalMinutes) {
+    const RunCheckpointTime& time, std::uint16_t intervalMinutes,
+    RunPersistenceSnapshot& snapshot) {
+    resetRunPersistenceSnapshotForMake(snapshot);
     const bool hasProgram = state.activeProgramRun.has_value();
     const bool hasManual = state.activeManualRun.has_value();
     if (hasProgram && hasManual) {
-        return std::nullopt;
+        return false;
     }
     if (!hasProgram && !hasManual &&
         (!state.activeRunId.empty() || state.activeRunSensorMode.has_value() ||
          state.processRunSnapshot.has_value())) {
-        return std::nullopt;
+        return false;
     }
     // #21, 6.12: validateRunPersistenceSnapshot now enforces the mandatory-
     // presence rule unconditionally (Korrekturauftrag Befund 4 - a schema-1
@@ -406,9 +431,8 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
     // sensorSelection unconditionally, so this can never legitimately fail for
     // a freshly-built candidate.
     if ((hasProgram || hasManual) && !state.sensorSelection.has_value()) {
-        return std::nullopt;
+        return false;
     }
-    RunPersistenceSnapshot snapshot;
     snapshot.trigger = trigger;
     snapshot.checkpointMonotonicMillis = time.monotonicMillis;
     snapshot.intervalMinutes = intervalMinutes;
@@ -462,38 +486,65 @@ std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
     } else {
         snapshot.variant = RunCheckpointVariant::NoActiveRun;
     }
-    return validateRunPersistenceSnapshot(snapshot)
-               ? std::optional<RunPersistenceSnapshot>{std::move(snapshot)}
-               : std::nullopt;
+    return validateRunPersistenceSnapshot(snapshot);
 }
 
-std::optional<RunCommandState> restoreRunPersistenceSnapshot(
-    const RunPersistenceSnapshot& snapshot) {
-    if (!validateRunPersistenceSnapshot(snapshot)) {
+std::optional<RunPersistenceSnapshot> makeRunPersistenceSnapshot(
+    const RunCommandState& state,
+    const std::array<CommandId, kMaximumPersistedRunCommandIds>& ids,
+    std::size_t idCount, RunCheckpointTrigger trigger,
+    const RunCheckpointTime& time, std::uint16_t intervalMinutes) {
+    RunPersistenceSnapshot snapshot;
+    if (!makeRunPersistenceSnapshotInto(state, ids, idCount, trigger, time,
+                                        intervalMinutes, snapshot)) {
         return std::nullopt;
     }
-    RunCommandState restored;
-    restored.processState = snapshot.processState;
-    restored.runRevision = snapshot.runRevision;
+    return snapshot;
+}
+
+bool restoreRunPersistenceSnapshotInto(const RunPersistenceSnapshot& snapshot,
+                                       RunCommandState& destination) {
+    if (!validateRunPersistenceSnapshot(snapshot)) {
+        return false;
+    }
+    destination.activeProgramRun.reset();
+    destination.activeManualRun.reset();
+    destination.activeRunId.clear();
+    destination.activeRunSensorMode.reset();
+    destination.sensorSelection.reset();
+    destination.processRunSnapshot.reset();
+    destination.pendingRecoveryAnchor.reset();
+    destination.recoveryBootAnchorMonotonicMillis.reset();
+    destination.lastRecoveryEpisodeEvidence.reset();
+    destination.priorBootPhaseElapsed.reset();
+    destination.nominalRecoveryAdjustment.reset();
+    destination.runProgress = RunProgressState{};
+    destination.sensorSelectionRuntime = SensorSelectionRuntimeState{};
+    destination.processState = snapshot.processState;
+    destination.runRevision = snapshot.runRevision;
     // Siehe Kommentar in makeRunPersistenceSnapshot: dieselbe Zweiteilung
     // rueckwaerts.
-    restored.recoveryTemperatureEvidence = snapshot.recoveryTemperatureEvidence;
-    restored.recoveryEpisodeRevision = snapshot.recoveryEpisodeRevision;
+    destination.recoveryTemperatureEvidence =
+        snapshot.recoveryTemperatureEvidence;
+    destination.recoveryEpisodeRevision = snapshot.recoveryEpisodeRevision;
     if (snapshot.variant == RunCheckpointVariant::ProgramRun) {
-        restored.activeProgramRun = ActiveRun::restore(
+        auto restoredActiveRun = ActiveRun::restore(
             *snapshot.program, snapshot.revisions, snapshot.revisionCount);
-        restored.activeRunId = snapshot.activeRunId;
-        restored.activeRunSensorMode = snapshot.activeRunSensorMode;
-        restored.sensorSelection = snapshot.sensorSelection;
-        restored.processRunSnapshot = snapshot.processRunSnapshot;
-        restored.pendingRecoveryAnchor = snapshot.pendingRecoveryAnchor;
-        restored.recoveryBootAnchorMonotonicMillis =
+        if (!restoredActiveRun.has_value()) return false;
+        destination.activeProgramRun = std::move(*restoredActiveRun);
+        destination.activeRunId = snapshot.activeRunId;
+        destination.activeRunSensorMode = snapshot.activeRunSensorMode;
+        destination.sensorSelection = snapshot.sensorSelection;
+        destination.processRunSnapshot = snapshot.processRunSnapshot;
+        destination.pendingRecoveryAnchor = snapshot.pendingRecoveryAnchor;
+        destination.recoveryBootAnchorMonotonicMillis =
             snapshot.recoveryBootAnchorMonotonicMillis;
-        restored.lastRecoveryEpisodeEvidence =
+        destination.lastRecoveryEpisodeEvidence =
             snapshot.lastRecoveryEpisodeEvidence;
-        restored.priorBootPhaseElapsed = snapshot.priorBootPhaseElapsed;
-        restored.nominalRecoveryAdjustment = snapshot.nominalRecoveryAdjustment;
-        restored.runProgress = snapshot.runProgress;
+        destination.priorBootPhaseElapsed = snapshot.priorBootPhaseElapsed;
+        destination.nominalRecoveryAdjustment =
+            snapshot.nominalRecoveryAdjustment;
+        destination.runProgress = snapshot.runProgress;
         // #21, 6.12: restore uebernimmt die persistierte Auswahl, aber der
         // RAM-only-Laufzeitzustand ist fail-closed - kein Wireformat traegt
         // ihn, und bootlokale Timer (fallbackWaitStartedAtMonotonicMillis,
@@ -501,35 +552,43 @@ std::optional<RunCommandState> restoreRunPersistenceSnapshot(
         // #18 (Reaktivierung LoadedActiveRun -> Ready) muss diesen Zustand
         // explizit neu bewerten (computeRestartSensorSelection), bevor eine
         // Peltier-Freigabe moeglich ist.
-        restored.sensorSelectionRuntime = SensorSelectionRuntimeState{};
-        restored.sensorSelectionRuntime.phase =
+        destination.sensorSelectionRuntime.phase =
             SensorSelectionPhase::RestartRevalidationPending;
-        restored.sensorSelectionRuntime.permission =
+        destination.sensorSelectionRuntime.permission =
             SensorPeltierPermission::Blocked;
     } else if (snapshot.variant == RunCheckpointVariant::ManualRun) {
-        restored.activeManualRun = snapshot.manual;
-        restored.activeRunId = snapshot.activeRunId;
-        restored.activeRunSensorMode = snapshot.activeRunSensorMode;
-        restored.sensorSelection = snapshot.sensorSelection;
-        restored.processRunSnapshot = snapshot.processRunSnapshot;
-        restored.pendingRecoveryAnchor = snapshot.pendingRecoveryAnchor;
-        restored.recoveryBootAnchorMonotonicMillis =
+        destination.activeManualRun = snapshot.manual;
+        destination.activeRunId = snapshot.activeRunId;
+        destination.activeRunSensorMode = snapshot.activeRunSensorMode;
+        destination.sensorSelection = snapshot.sensorSelection;
+        destination.processRunSnapshot = snapshot.processRunSnapshot;
+        destination.pendingRecoveryAnchor = snapshot.pendingRecoveryAnchor;
+        destination.recoveryBootAnchorMonotonicMillis =
             snapshot.recoveryBootAnchorMonotonicMillis;
-        restored.lastRecoveryEpisodeEvidence =
+        destination.lastRecoveryEpisodeEvidence =
             snapshot.lastRecoveryEpisodeEvidence;
-        restored.priorBootPhaseElapsed = snapshot.priorBootPhaseElapsed;
-        restored.nominalRecoveryAdjustment = snapshot.nominalRecoveryAdjustment;
-        restored.runProgress = snapshot.runProgress;
+        destination.priorBootPhaseElapsed = snapshot.priorBootPhaseElapsed;
+        destination.nominalRecoveryAdjustment =
+            snapshot.nominalRecoveryAdjustment;
+        destination.runProgress = snapshot.runProgress;
         // Siehe Kommentar im ProgramRun-Zweig.
-        restored.sensorSelectionRuntime = SensorSelectionRuntimeState{};
-        restored.sensorSelectionRuntime.phase =
+        destination.sensorSelectionRuntime.phase =
             SensorSelectionPhase::RestartRevalidationPending;
-        restored.sensorSelectionRuntime.permission =
+        destination.sensorSelectionRuntime.permission =
             SensorPeltierPermission::Blocked;
     }
     // NoActiveRun: restored.sensorSelectionRuntime bleibt der
     // Default-Inaktivzustand (Phase NoActiveRun, Blocked) - der explizite
     // NoActiveRun-Default aus 6.12.
+    return true;
+}
+
+std::optional<RunCommandState> restoreRunPersistenceSnapshot(
+    const RunPersistenceSnapshot& snapshot) {
+    RunCommandState restored;
+    if (!restoreRunPersistenceSnapshotInto(snapshot, restored)) {
+        return std::nullopt;
+    }
     return restored;
 }
 

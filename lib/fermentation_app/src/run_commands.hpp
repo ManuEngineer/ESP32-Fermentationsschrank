@@ -423,6 +423,20 @@ struct CommandDecision {
     }
 };
 
+void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
+                CommandKind kind, CommandStatus status,
+                CommandDecision& destination);
+void beginDecisionInto(const RunCommandState& current,
+                       const CommandEnvelope& envelope, CommandKind kind,
+                       CommandDecision& destination);
+
+void decideProgramStartInto(const RunCommandState& current,
+                            const ProgramStartRequest& request,
+                            CommandDecision& destination);
+void decideManualStartInto(const RunCommandState& current,
+                           const ManualStartRequest& request,
+                           CommandDecision& destination);
+
 [[nodiscard]] CommandDecision decideProgramStart(
     const RunCommandState& current, const ProgramStartRequest& request);
 [[nodiscard]] CommandDecision decideManualStart(

@@ -184,22 +184,30 @@ void rememberProcessedCommand(RunCommandState& state, CommandId id) {
     state.processedCommandIds.back() = id;
 }
 
-CommandDecision result(const RunCommandState& current,
-                       const CommandEnvelope& envelope, CommandKind kind,
-                       CommandStatus status) {
-    CommandDecision decision;
-    decision.status = status;
-    decision.kind = kind;
-    decision.envelope = envelope;
-    decision.before = current;
-    decision.after = current;
-    return decision;
+void resultIntoLocal(const RunCommandState& current,
+                     const CommandEnvelope& envelope, CommandKind kind,
+                     CommandStatus status, CommandDecision& destination) {
+    destination.startSummary.reset();
+    destination.adjustmentPreview.reset();
+    destination.effectCount = 0U;
+    destination.sensorSelectionApplyStatus.reset();
+    destination.sensorSelectionEvent.reset();
+    destination.sensorSelectionNotice.reset();
+    destination.startSensorSelectionNotice.reset();
+    destination.committedControlContextTransition.reset();
+    destination.status = status;
+    destination.kind = kind;
+    destination.envelope = envelope;
+    destination.before = current;
+    destination.after = current;
 }
 
-CommandDecision beginDecision(const RunCommandState& current,
-                              const CommandEnvelope& envelope,
-                              CommandKind kind) {
-    auto decision = result(current, envelope, kind, CommandStatus::Proposed);
+void beginDecisionIntoLocal(const RunCommandState& current,
+                            const CommandEnvelope& envelope, CommandKind kind,
+                            CommandDecision& destination) {
+    resultIntoLocal(current, envelope, kind, CommandStatus::Proposed,
+                    destination);
+    auto& decision = destination;
     if (envelope.id == 0U || !validCommandSource(envelope.source)) {
         decision.status = CommandStatus::InvalidInput;
     } else if (containsProcessedCommand(current, envelope.id)) {
@@ -217,6 +225,13 @@ CommandDecision beginDecision(const RunCommandState& current,
                isRunComfortCommand(kind)) {
         decision.status = CommandStatus::SafetyRejected;
     }
+}
+
+CommandDecision beginDecision(const RunCommandState& current,
+                              const CommandEnvelope& envelope,
+                              CommandKind kind) {
+    CommandDecision decision;
+    beginDecisionIntoLocal(current, envelope, kind, decision);
     return decision;
 }
 
@@ -568,6 +583,18 @@ StartSensorSelectionOutcome startSensorSelectionOutcome(
 
 }  // namespace
 
+void resultInto(const RunCommandState& current, const CommandEnvelope& envelope,
+                CommandKind kind, CommandStatus status,
+                CommandDecision& destination) {
+    resultIntoLocal(current, envelope, kind, status, destination);
+}
+
+void beginDecisionInto(const RunCommandState& current,
+                       const CommandEnvelope& envelope, CommandKind kind,
+                       CommandDecision& destination) {
+    beginDecisionIntoLocal(current, envelope, kind, destination);
+}
+
 // #21, 6.14.6: einzige Implementierung; ersetzt das vormalige
 // run_commands.cpp::clearActiveRun (nur intern sichtbar) und
 // run_persistence_coordinator.cpp::clearCandidateRun (zweite, getrennte
@@ -684,53 +711,55 @@ std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
                : std::nullopt;
 }
 
-CommandDecision decideProgramStart(const RunCommandState& current,
-                                   const ProgramStartRequest& request) {
-    auto decision =
-        beginDecision(current, request.envelope, CommandKind::StartProgram);
+void decideProgramStartInto(const RunCommandState& current,
+                            const ProgramStartRequest& request,
+                            CommandDecision& destination) {
+    beginDecisionInto(current, request.envelope, CommandKind::StartProgram,
+                      destination);
+    auto& decision = destination;
     if (!requireRunRevision(decision)) {
-        return decision;
+        return;
     }
     if (!request.safetyAllowsStart) {
         decision.status = CommandStatus::SafetyRejected;
-        return decision;
+        return;
     }
     if (current.processState.state != ProcessState::Standby ||
         current.activeProgramRun.has_value() ||
         current.activeManualRun.has_value()) {
         decision.status = CommandStatus::NotAllowedInState;
-        return decision;
+        return;
     }
     if (!run_limits::validRunId(request.runId) ||
         !validSensorMode(request.sensorMode)) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
     // #21, 6.5: Vorbedingung fuer jede Zeile der Startmatrix - gilt
     // unabhaengig von SensorPreference und angefordertem Modus, kein
     // Sonderfall pro Zeile.
     if (!request.airSensorValid || !request.coolingSensorValid) {
         decision.status = CommandStatus::SafetyRejected;
-        return decision;
+        return;
     }
     const auto resolution = resolveProgramStartSensorMode(
         request.program.program.sensorPreference, request.sensorMode,
         request.productSensorValid);
     if (!resolution.valid) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
 
     auto run = ActiveRun::start(request.program, request.sourceKind,
                                 request.sourceProgramRevision);
     if (!run.has_value()) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
     const auto snapshot = makeProcessRunSnapshot(*run);
     if (!snapshot.has_value()) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
 
     // Die Startzusammenfassung entsteht aus vollstaendig validierten Daten und
@@ -766,17 +795,17 @@ CommandDecision decideProgramStart(const RunCommandState& current,
 
     if (!request.envelope.confirmed) {
         decision.status = CommandStatus::NotConfirmed;
-        return decision;
+        return;
     }
 
     if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
-        return decision;
+        return;
     }
 
     if (!applyTransition(decision.after, ProcessEvent::StartRun,
                          request.envelope.monotonicMillis, &*snapshot)) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
 
     decision.after.activeRunId = request.runId;
@@ -793,36 +822,38 @@ CommandDecision decideProgramStart(const RunCommandState& current,
     decision.after.sensorSelectionRuntime = outcome.runtime;
     decision.after.sensorSelection = outcome.persisted;
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
-    return decision;
+    return;
 }
 
-CommandDecision decideManualStart(const RunCommandState& current,
-                                  const ManualStartRequest& request) {
-    auto decision = beginDecision(current, request.envelope,
-                                  CommandKind::StartManualHolding);
+void decideManualStartInto(const RunCommandState& current,
+                           const ManualStartRequest& request,
+                           CommandDecision& destination) {
+    beginDecisionInto(current, request.envelope,
+                      CommandKind::StartManualHolding, destination);
+    auto& decision = destination;
     if (!requireRunRevision(decision)) {
-        return decision;
+        return;
     }
     if (!request.safetyAllowsStart) {
         decision.status = CommandStatus::SafetyRejected;
-        return decision;
+        return;
     }
     if (current.processState.state != ProcessState::Standby ||
         current.activeProgramRun.has_value() ||
         current.activeManualRun.has_value()) {
         decision.status = CommandStatus::NotAllowedInState;
-        return decision;
+        return;
     }
     auto plan = makeManualPlan(request.plan, request.envelope);
     if (!plan.has_value()) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
     // #21, 6.5/6.8: dieselbe Vorbedingung wie fuer Programmstarts - gilt fuer
     // jeden Start, nicht nur programmgefuehrte.
     if (!request.airSensorValid || !request.coolingSensorValid) {
         decision.status = CommandStatus::SafetyRejected;
-        return decision;
+        return;
     }
 
     // Wie bei decideProgramStart: die Zusammenfassung entsteht aus dem
@@ -843,17 +874,17 @@ CommandDecision decideManualStart(const RunCommandState& current,
 
     if (!request.envelope.confirmed) {
         decision.status = CommandStatus::NotConfirmed;
-        return decision;
+        return;
     }
 
     if (!requireRevisionCapacity(decision, decision.before.runRevision)) {
-        return decision;
+        return;
     }
 
     if (!installManualRun(decision.after, decision.envelope,
                           std::move(*plan))) {
         decision.status = CommandStatus::InvalidInput;
-        return decision;
+        return;
     }
     beginMutation(decision);
     ++decision.after.runRevision;
@@ -870,6 +901,20 @@ CommandDecision decideManualStart(const RunCommandState& current,
     decision.after.sensorSelection = outcome.persisted;
     static_cast<void>(addEffect(decision, CommandEffect::ManualRunStarted));
     static_cast<void>(addEffect(decision, CommandEffect::RunStarted));
+    return;
+}
+
+CommandDecision decideProgramStart(const RunCommandState& current,
+                                   const ProgramStartRequest& request) {
+    CommandDecision decision;
+    decideProgramStartInto(current, request, decision);
+    return decision;
+}
+
+CommandDecision decideManualStart(const RunCommandState& current,
+                                  const ManualStartRequest& request) {
+    CommandDecision decision;
+    decideManualStartInto(current, request, decision);
     return decision;
 }
 

@@ -184,6 +184,7 @@ class RunPersistenceCoordinator {
     RunPersistenceCoordinator& operator=(RunPersistenceCoordinator&&) = delete;
 
     [[nodiscard]] RunPersistenceLoadResult loadAndInitialize();
+    void loadAndInitializeInto(RunPersistenceLoadResult& destination);
     [[nodiscard]] RunPersistenceResult persistCommand(
         RunCommandState& current, const CommandDecision& decision,
         const RunCheckpointTime& time,
@@ -248,6 +249,12 @@ class RunPersistenceCoordinator {
    private:
     friend class RunPersistenceCoordinatorTestAccess;
 
+    struct RunPersistenceWorkingSet {
+        RunCommandState candidate;
+        RunPersistenceSnapshot snapshot;
+        RunPersistenceRawRecord record;
+    };
+
     // `mutationKind` is explicit (6.14.2) rather than inferred from
     // commandId presence: persistTransition and persistSensorSelection both
     // omit commandId, but need distinct RunPersistenceHead::mutationKind
@@ -279,6 +286,7 @@ class RunPersistenceCoordinator {
     RunPersistenceStore store_;
     device_platform::StorageEpoch epoch_;
     RunCheckpointSchedule schedule_;
+    RunPersistenceWorkingSet workingSet_;
     RunPersistenceCoordinatorState state_{
         RunPersistenceCoordinatorState::Uninitialized};
     std::optional<RunPersistenceRawRecord> slots_[2];

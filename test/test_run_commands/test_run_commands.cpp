@@ -2398,6 +2398,82 @@ void test_cooling_replacement_run_without_valid_fixed_sensors_stays_blocked() {
             completionDecision.after.sensorSelectionRuntime.permission));
 }
 
+void test_start_decision_into_reuses_destination_without_stale_fields() {
+    const auto state = standbyState();
+    auto programRequest = programStart(state, 1U);
+    CommandDecision destination;
+    decideProgramStartInto(state, programRequest, destination);
+    TEST_ASSERT_TRUE(destination.proposed());
+    TEST_ASSERT_TRUE(destination.startSummary.has_value());
+    TEST_ASSERT_TRUE(destination.effectCount > 0U);
+
+    programRequest = programStart(state, 2U);
+    programRequest.safetyAllowsStart = false;
+    decideProgramStartInto(state, programRequest, destination);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
+                          static_cast<int>(destination.status));
+    TEST_ASSERT_FALSE(destination.startSummary.has_value());
+    TEST_ASSERT_FALSE(destination.adjustmentPreview.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, destination.effectCount);
+    TEST_ASSERT_FALSE(destination.sensorSelectionApplyStatus.has_value());
+    TEST_ASSERT_FALSE(destination.sensorSelectionEvent.has_value());
+    TEST_ASSERT_FALSE(destination.sensorSelectionNotice.has_value());
+    TEST_ASSERT_FALSE(destination.startSensorSelectionNotice.has_value());
+    TEST_ASSERT_FALSE(
+        destination.committedControlContextTransition.has_value());
+    TEST_ASSERT_TRUE(equalRunCommandStates(destination.before, state));
+    TEST_ASSERT_TRUE(equalRunCommandStates(destination.after, state));
+
+    auto manualRequest = manualStart(state, 3U, manualPlan("hold"));
+    decideManualStartInto(state, manualRequest, destination);
+    TEST_ASSERT_TRUE(destination.proposed());
+    TEST_ASSERT_TRUE(destination.effectCount > 0U);
+    manualRequest = manualStart(state, 4U, manualPlan("hold"), false);
+    decideManualStartInto(state, manualRequest, destination);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(CommandStatus::SafetyRejected),
+                          static_cast<int>(destination.status));
+    TEST_ASSERT_FALSE(destination.startSummary.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, destination.effectCount);
+    TEST_ASSERT_TRUE(equalRunCommandStates(destination.before, state));
+    TEST_ASSERT_TRUE(equalRunCommandStates(destination.after, state));
+}
+
+void test_legacy_start_deciders_delegate_to_inplace_core() {
+    const auto state = standbyState();
+    const auto programRequest = programStart(state, 11U);
+    CommandDecision programInto;
+    decideProgramStartInto(state, programRequest, programInto);
+    const auto programLegacy = decideProgramStart(state, programRequest);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(programLegacy.status),
+                          static_cast<int>(programInto.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(programLegacy.kind),
+                          static_cast<int>(programInto.kind));
+    TEST_ASSERT_EQUAL_UINT32(programLegacy.effectCount,
+                             programInto.effectCount);
+    TEST_ASSERT_TRUE(
+        equalRunCommandStates(programLegacy.before, programInto.before));
+    TEST_ASSERT_TRUE(
+        equalRunCommandStates(programLegacy.after, programInto.after));
+    TEST_ASSERT_EQUAL(programLegacy.startSummary.has_value(),
+                      programInto.startSummary.has_value());
+
+    const auto manualRequest = manualStart(state, 12U, manualPlan("hold"));
+    CommandDecision manualInto;
+    decideManualStartInto(state, manualRequest, manualInto);
+    const auto manualLegacy = decideManualStart(state, manualRequest);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(manualLegacy.status),
+                          static_cast<int>(manualInto.status));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(manualLegacy.kind),
+                          static_cast<int>(manualInto.kind));
+    TEST_ASSERT_EQUAL_UINT32(manualLegacy.effectCount, manualInto.effectCount);
+    TEST_ASSERT_TRUE(
+        equalRunCommandStates(manualLegacy.before, manualInto.before));
+    TEST_ASSERT_TRUE(
+        equalRunCommandStates(manualLegacy.after, manualInto.after));
+    TEST_ASSERT_EQUAL(manualLegacy.startSummary.has_value(),
+                      manualInto.startSummary.has_value());
+}
+
 }  // namespace
 
 int main() {
@@ -2460,5 +2536,7 @@ int main() {
     RUN_TEST(test_cooling_replacement_run_gets_fresh_sensor_selection);
     RUN_TEST(
         test_cooling_replacement_run_without_valid_fixed_sensors_stays_blocked);
+    RUN_TEST(test_start_decision_into_reuses_destination_without_stale_fields);
+    RUN_TEST(test_legacy_start_deciders_delegate_to_inplace_core);
     return UNITY_END();
 }

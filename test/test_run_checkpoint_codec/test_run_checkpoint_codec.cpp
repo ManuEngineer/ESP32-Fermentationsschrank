@@ -92,6 +92,34 @@ RunPersistenceSnapshot programSnapshot() {
     return *snapshot;
 }
 
+RunPersistenceSnapshot recoveryEvaluationPendingSnapshot();
+
+RunCommandState manualCommandState() {
+    ManualRunPlan plan;
+    plan.values.runId = "manual-into";
+    plan.values.targetTemperatureCelsius = 12.0;
+    plan.values.sensorMode = RunSensorMode::Air;
+    plan.values.qualificationBandCelsius = 0.5;
+    plan.values.qualificationDurationMinutes = 10U;
+    plan.values.maximumTargetReachMinutes = 180U;
+    plan.createdAtMonotonicMillis = 10U;
+    TEST_ASSERT_TRUE(validateManualRunPlan(plan));
+
+    RunCommandState state;
+    state.activeManualRun = plan;
+    state.activeRunId = plan.values.runId;
+    state.activeRunSensorMode = plan.values.sensorMode;
+    state.runRevision = 1U;
+    state.sensorSelection = PersistedSensorSelectionState{
+        SensorSelectionProvenance::InitialSelection,
+        SensorSelectionDecisionCause::StartSelection, 1U};
+    state.processRunSnapshot = makeProcessRunSnapshot(plan);
+    TEST_ASSERT_TRUE(state.processRunSnapshot.has_value());
+    state.processState.state = ProcessState::ManualHolding;
+    state.processState.stateEnteredAtMillis = 100U;
+    return state;
+}
+
 void test_program_checkpoint_round_trip_restores_active_run() {
     const auto source = programSnapshot();
     std::string encoded;
@@ -118,6 +146,96 @@ void test_program_checkpoint_round_trip_restores_active_run() {
     const auto restored = restoreRunPersistenceSnapshot(*decoded.snapshot);
     TEST_ASSERT_TRUE(restored.has_value());
     TEST_ASSERT_TRUE(restored->activeProgramRun.has_value());
+}
+
+void test_inplace_projection_and_restore_match_legacy_semantics() {
+    const auto source = programSnapshot();
+    RunCommandState restored;
+    TEST_ASSERT_TRUE(restoreRunPersistenceSnapshotInto(source, restored));
+    std::array<CommandId, kMaximumPersistedRunCommandIds> ids{};
+    ids[0] = 99U;
+
+    RunPersistenceSnapshot projected;
+    TEST_ASSERT_TRUE(makeRunPersistenceSnapshotInto(
+        restored, ids, 1U, source.trigger,
+        RunCheckpointTime{source.checkpointMonotonicMillis, 1700000000},
+        source.intervalMinutes, projected));
+    std::string expectedBytes;
+    std::string actualBytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(source, expectedBytes)));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(projected, actualBytes)));
+    TEST_ASSERT_EQUAL_UINT32(expectedBytes.size(), actualBytes.size());
+    TEST_ASSERT_EQUAL_MEMORY(expectedBytes.data(), actualBytes.data(),
+                             expectedBytes.size());
+
+    RunPersistenceSnapshot decodedDestination =
+        recoveryEvaluationPendingSnapshot();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(decodeRunPersistenceSnapshotInto(
+            expectedBytes, kCurrentRunPersistenceSchema, decodedDestination)));
+    RunCommandState restoredInto;
+    TEST_ASSERT_TRUE(
+        restoreRunPersistenceSnapshotInto(decodedDestination, restoredInto));
+    TEST_ASSERT_TRUE(restoredInto.activeProgramRun.has_value());
+    TEST_ASSERT_EQUAL_STRING(restored.activeRunId.c_str(),
+                             restoredInto.activeRunId.c_str());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(restored.processState.state),
+                          static_cast<int>(restoredInto.processState.state));
+}
+
+void test_snapshot_into_variant_reuse_clears_stale_fields() {
+    const auto programState = *restoreRunPersistenceSnapshot(programSnapshot());
+    const auto manualState = manualCommandState();
+    RunCommandState emptyState;
+    emptyState.processState.state = ProcessState::Standby;
+    std::array<CommandId, kMaximumPersistedRunCommandIds> ids{};
+    RunPersistenceSnapshot destination = programSnapshot();
+
+    TEST_ASSERT_TRUE(makeRunPersistenceSnapshotInto(
+        programState, ids, 0U, RunCheckpointTrigger::Command,
+        RunCheckpointTime{200U, std::nullopt}, 5U, destination));
+    TEST_ASSERT_TRUE(destination.program.has_value());
+    TEST_ASSERT_FALSE(destination.manual.has_value());
+
+    TEST_ASSERT_TRUE(makeRunPersistenceSnapshotInto(
+        emptyState, ids, 0U, RunCheckpointTrigger::Transition,
+        RunCheckpointTime{201U, std::nullopt}, 5U, destination));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunCheckpointVariant::NoActiveRun),
+                          static_cast<int>(destination.variant));
+    TEST_ASSERT_FALSE(destination.program.has_value());
+    TEST_ASSERT_FALSE(destination.manual.has_value());
+    TEST_ASSERT_FALSE(destination.sensorSelection.has_value());
+    TEST_ASSERT_FALSE(destination.processRunSnapshot.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, destination.revisionCount);
+    TEST_ASSERT_FALSE(destination.pendingRecoveryAnchor.has_value());
+    TEST_ASSERT_FALSE(destination.lastRecoveryEpisodeEvidence.has_value());
+    TEST_ASSERT_FALSE(destination.priorBootPhaseElapsed.has_value());
+    TEST_ASSERT_FALSE(destination.nominalRecoveryAdjustment.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, destination.runProgress.observedRunSeconds);
+    TEST_ASSERT_FALSE(destination.runProgress.weightedProgress.has_value());
+
+    emptyState.activeRunId = "stale-invalid-projection";
+    TEST_ASSERT_FALSE(makeRunPersistenceSnapshotInto(
+        emptyState, ids, 0U, RunCheckpointTrigger::Command,
+        RunCheckpointTime{201U, std::nullopt}, 5U, destination));
+    emptyState.activeRunId.clear();
+
+    TEST_ASSERT_TRUE(makeRunPersistenceSnapshotInto(
+        manualState, ids, 0U, RunCheckpointTrigger::Transition,
+        RunCheckpointTime{202U, std::nullopt}, 5U, destination));
+    TEST_ASSERT_FALSE(destination.program.has_value());
+    TEST_ASSERT_TRUE(destination.manual.has_value());
+
+    TEST_ASSERT_TRUE(makeRunPersistenceSnapshotInto(
+        programState, ids, 0U, RunCheckpointTrigger::Command,
+        RunCheckpointTime{203U, std::nullopt}, 5U, destination));
+    TEST_ASSERT_TRUE(destination.program.has_value());
+    TEST_ASSERT_FALSE(destination.manual.has_value());
 }
 
 void test_active_recovery_fault_requires_schema_three() {
@@ -1147,6 +1265,38 @@ void test_schema_one_payload_decodes_without_sensor_selection_field() {
                           static_cast<int>(misread.status));
 }
 
+void test_legacy_decode_reuse_clears_schema_three_only_fields() {
+    const auto modern = recoveryEvaluationPendingSnapshot();
+    std::string modernBytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(modern, modernBytes)));
+    RunPersistenceSnapshot destination;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(decodeRunPersistenceSnapshotInto(
+            modernBytes, kCurrentRunPersistenceSchema, destination)));
+    TEST_ASSERT_EQUAL_UINT32(12U, destination.recoveryEpisodeRevision);
+    TEST_ASSERT_TRUE(destination.recoveryTemperatureEvidence.lastKnown.air
+                         .filteredCelsius.has_value());
+    TEST_ASSERT_EQUAL_UINT32(999U, destination.runProgress.observedRunSeconds);
+
+    const auto legacyBytes = schemaOneActivePayload();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
+                          static_cast<int>(decodeRunPersistenceSnapshotInto(
+                              legacyBytes, 1U, destination)));
+    TEST_ASSERT_EQUAL_UINT32(0U, destination.recoveryEpisodeRevision);
+    TEST_ASSERT_FALSE(destination.recoveryTemperatureEvidence.lastKnown.air
+                          .filteredCelsius.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, destination.runProgress.observedRunSeconds);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunProgressBasis::PartialUnknownHistory),
+        static_cast<int>(destination.runProgress.basis));
+    TEST_ASSERT_TRUE(destination.runProgress.weightedProgress.has_value());
+    TEST_ASSERT_FALSE(
+        destination.runProgress.weightedProgress->lastApplied.has_value());
+}
+
 void test_no_active_run_migration_from_schema_one_keeps_default_progress() {
     // 5.28/5.14 Punkt 6: NoActiveRun-Migration erfindet keinen
     // PartialUnknownHistory-Zustand fuer einen nicht existierenden Run - die
@@ -1227,6 +1377,8 @@ void test_committed_head_accepts_mixed_current_and_fallback_schema() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_program_checkpoint_round_trip_restores_active_run);
+    RUN_TEST(test_inplace_projection_and_restore_match_legacy_semantics);
+    RUN_TEST(test_snapshot_into_variant_reuse_clears_stale_fields);
     RUN_TEST(test_active_recovery_fault_requires_schema_three);
     RUN_TEST(test_tombstone_has_empty_run_id_and_rejects_active_data);
     RUN_TEST(
@@ -1257,6 +1409,7 @@ int main(int, char**) {
     RUN_TEST(test_weighted_progress_provenance_role_and_confidence_must_match);
     RUN_TEST(test_first_after_restart_evidence_requires_canonical_latch_form);
     RUN_TEST(test_schema_one_payload_decodes_without_sensor_selection_field);
+    RUN_TEST(test_legacy_decode_reuse_clears_schema_three_only_fields);
     RUN_TEST(
         test_no_active_run_migration_from_schema_one_keeps_default_progress);
     RUN_TEST(

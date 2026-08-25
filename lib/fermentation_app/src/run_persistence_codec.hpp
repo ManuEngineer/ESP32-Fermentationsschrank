@@ -32,6 +32,9 @@ struct RunPersistenceDecodeResult {
 // current one.
 [[nodiscard]] RunPersistenceDecodeResult decodeRunPersistenceSnapshot(
     const std::string& payload, std::uint32_t schemaVersion);
+[[nodiscard]] RunPersistenceCodecStatus decodeRunPersistenceSnapshotInto(
+    const std::string& payload, std::uint32_t schemaVersion,
+    RunPersistenceSnapshot& destination);
 
 // Schema-1 record codecs are deliberately separate from the coordinator.  The
 // coordinator supplies transaction ordering; these functions own only stable
@@ -42,6 +45,9 @@ struct RunPersistenceDecodeResult {
     const std::string& bytes, device_platform::StorageEpoch epoch);
 [[nodiscard]] std::optional<RunPersistenceRawRecord> decodeRunPersistenceRecord(
     const std::string& bytes, device_platform::StorageEpoch epoch);
+[[nodiscard]] bool decodeRunPersistenceRecordInto(
+    const std::string& bytes, device_platform::StorageEpoch epoch,
+    RunPersistenceRawRecord& destination);
 [[nodiscard]] bool runCheckpointReferenceMatches(
     const RunCheckpointReference& reference,
     const RunPersistenceRawRecord& record, std::size_t slot);

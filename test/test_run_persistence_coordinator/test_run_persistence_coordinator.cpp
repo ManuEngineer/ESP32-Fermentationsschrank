@@ -550,6 +550,25 @@ void test_load_empty_then_commit_and_restore_run_projection() {
         runtime->sensorSelectionRuntime.lastAppliedMonotonicMillis.has_value());
 }
 
+void test_load_result_into_clears_stale_snapshot_on_reuse() {
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    RunPersistenceCoordinator coordinator(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    RunPersistenceLoadResult destination;
+    coordinator.loadAndInitializeInto(destination);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NoPersistedRun),
+        static_cast<int>(destination.status));
+    TEST_ASSERT_FALSE(destination.snapshot.has_value());
+
+    destination.snapshot = RunPersistenceSnapshot{};
+    coordinator.loadAndInitializeInto(destination);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::AlreadyInitialized),
+        static_cast<int>(destination.status));
+    TEST_ASSERT_FALSE(destination.snapshot.has_value());
+}
+
 void test_apply_recovery_time_correction_uses_persist_command_atomically() {
     device_platform_test_support::SimulatedPersistentStateStore store;
     RunPersistenceCoordinator coordinator(
@@ -8602,6 +8621,7 @@ void test_discarded_no_active_run_can_use_real_fresh_start_bridge() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_load_empty_then_commit_and_restore_run_projection);
+    RUN_TEST(test_load_result_into_clears_stale_snapshot_on_reuse);
     RUN_TEST(
         test_apply_recovery_time_correction_uses_persist_command_atomically);
     RUN_TEST(
