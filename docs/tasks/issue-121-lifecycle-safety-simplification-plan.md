@@ -38,18 +38,19 @@ Abschnitt 12 (Composition) übernommen, nicht als Code.
 
 ### Korrekturrunden (diese Revision)
 
-Der Owner hat zwei Fassungen dieser Plandatei zurückgewiesen:
+Der Owner hat drei Fassungen dieser Plandatei zurückgewiesen:
 
 - SHA `ea4f057` (Korrekturrunde 1): 6 Blocker, 5 Major-Befunde, 1 Minor-Befund.
 - SHA `666525e` (Korrekturrunde 2): 7 Blocker, 5 Major-Befunde.
+- SHA `fdb240a` (Korrekturrunde 3): 3 Blocker, 6 Major-Befunde.
 
-Alle Befunde beider Runden wurden gegen den realen Code auf `BASE_SHA`
+Alle Befunde aller drei Runden wurden gegen den realen Code auf `BASE_SHA`
 nachverifiziert (siehe Abschnitt 4, neu ergänzte Unterpunkte) und sind in
 dieser Fassung **in-place** korrigiert, nicht als Anhang neben dem alten
-Text. Es gibt keine R2-/R3-Planrevision; diese Datei bleibt „R1", zweifach
-konsolidiert. Korrekturrunde 2 hat zusätzlich einen realen Fehler in Runde 1
-selbst aufgedeckt und behoben: der damalige Beweis „`Boot` wird nie
-persistiert, weil `RunPersistenceSnapshot.processState` nur bei
+Text. Es gibt keine R2-/R3-/R4-Planrevision; diese Datei bleibt „R1",
+dreifach konsolidiert. Korrekturrunde 2 hat zusätzlich einen realen Fehler
+in Runde 1 selbst aufgedeckt und behoben: der damalige Beweis „`Boot` wird
+nie persistiert, weil `RunPersistenceSnapshot.processState` nur bei
 `variant != NoActiveRun` geschrieben wird" (Abschnitt 7.2) war sachlich
 falsch – `makeRunPersistenceSnapshot()` kopiert `processState` unbedingt, vor
 jeder Variant-Verzweigung (real geprüft). Der korrigierte, tatsächlich
@@ -62,6 +63,21 @@ Entwurf gefunden: die für den R1-Resume-Schreibpfad vorgesehene
 `writeSnapshotCore()`s `directiveValid`-Prüfung nie bestanden (nur für
 `Fault`/`NoActiveRun`-Snapshots zulässig, nicht für die drei aktiven
 R1-Resume-Phasen) – korrigiert auf `UseStandardFallback` (Abschnitt 9.1).
+**Korrekturrunde 3 hat einen realen, hart gemessenen Stack-Fehler in Runde
+2s eigenem Entwurf gefunden:** `runtimeRunState_`/`pendingResume_` waren als
+`std::optional<RunCommandState>`-Wertmember spezifiziert –
+`std::optional<T>` speichert `T` **inline**. `sizeof(RunCommandState)` ist
+real gemessen `5096` Byte (Abschnitt 9); zwei solcher Felder hätten
+`sizeof(FermentationApplication)` um über 10 KB vergrößert, bei
+`CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584` exakt dieselbe Stack-Fehlerklasse wie
+bei #120 reproduziert. Korrigiert auf `std::unique_ptr<RunCommandState>`
+(Abschnitt 9/12.1). Runde 3 hat außerdem ein verwandtes, **nicht** von
+diesem Plan eingeführtes, sondern bereits auf `BASE_SHA` bestehendes
+Stack-Risiko benannt (der `auto candidate = current;`-Kopiervorgang in
+mehreren `RunPersistenceCoordinator`-Methoden, ebenfalls `~5096` Byte, jetzt
+erstmals über den realen Produktpfad erreichbar) – als offenes, zu
+messendes Risiko dokumentiert, nicht stillschweigend gelöst
+(Abschnitt 12.2).
 
 ```text
 ARCHITECTURE_AUDIT=COMPLETED
@@ -69,9 +85,10 @@ ARCHITECTURE_AUDIT_OWNER_REVIEW=PASS_WITH_CORRECTIONS
 ARCHITECTURE_AUDIT_SOURCE_TEXT=NOT_PERSISTED_NOT_RECOVERABLE
 ARCHITECTURE_VERDICT=SIMPLIFY
 PLAN_BASIS=FRESH_CODE_INVENTORY_PLUS_OWNER_CORRECTIONS_A_J
-PRIOR_PLAN_SHA=666525ea63594adc1e2fd77e452b637b22f868c2
+PRIOR_PLAN_SHA=fdb240a08192536141c26522f44295f2dfdcba9d
 PRIOR_PLAN_REVIEW=CORRECTION_REQUIRED
-EARLIER_PLAN_SHA=ea4f05723bdcf78fd6e081484ef6ab0cb28f1bf6
+EARLIER_PLAN_SHA=666525ea63594adc1e2fd77e452b637b22f868c2
+EARLIEST_PLAN_SHA=ea4f05723bdcf78fd6e081484ef6ab0cb28f1bf6
 ```
 
 ## 1. Ownerkorrekturen A–J (verbindlich, vollständig referenziert)
@@ -477,12 +494,48 @@ abgeleitet, nicht persistiert).
 | 13 | `RecoveryEvaluation` | Boot-transiente Wartezustand auf Resume/Reject | **Nein** | Ja | s. u. | NEIN |
 | 15 | `ServiceMode` | bewusst gewählter Bedienmodus | **Ja, unverändert** (Abschnitt 7.1) | Ja | – | NEIN |
 
-**Klassifikation beim Lesen für 1/2/13:** Werden von der neuen
-`BootClassification` nie mehr aktiv geschrieben. Ein alter Snapshot mit
-`processState.state ∈ {Boot, SafeBoot, RecoveryEvaluation}` klassifiziert
-bereits heute unverändert über `isR1ResumeEligible()` (Abschnitt 9) als
-nicht resumefähig → `BootClassification::DiscardableRun`. Kein neuer Code
-für diesen Fall nötig.
+**Klassifikation beim Lesen für 1/2/13 (korrigiert, Major 4, Runde 3 – die
+Vorfassung behandelte alle drei Werte fälschlich über denselben Mechanismus;
+real sind es zwei verschiedene, beide bereits heute unverändert korrekte
+Mechanismen, kein neuer Code für keinen der drei Fälle):**
+
+- **`Boot`/`SafeBoot` (1/2):** Diese erreichen **nie** einen erfolgreichen
+  `RunPersistenceLoadStatus::Current`-Load. `validStateFor(variant, state)`
+  (Abschnitt 4.2) lehnt `Boot`/`SafeBoot` für **jede** Variante ab (weder in
+  der `ProgramRun`- noch der `ManualRun`-Whitelist, `NoActiveRun` verlangt
+  exakt `Standby`); `decodeRunPersistenceSnapshot()`
+  (`run_persistence_codec.cpp:1259`, real geprüft) ruft
+  `validateRunPersistenceSnapshotForSchema()` **innerhalb** des Decodierens
+  auf – ein solcher Payload liefert `RunPersistenceCodecStatus::
+  InvalidSnapshot`, keinen erfolgreich decodierten Snapshot. Der reale Lade-
+  Fehlerpfad mündet in `RunPersistenceLoadStatus::NotReconstructible` (oder
+  eine der benachbarten technischen Fehlerstatus, `run_persistence_
+  coordinator.hpp:114-127`), die die bereits bestehende, unveränderte
+  `classifyRunLoad()`-Switch (`safety_core.cpp:450-458`, real geprüft) direkt
+  auf `RunLoadDisposition::SafeBoot` abbildet – **ohne** `isR1ResumeEligible()`
+  je aufzurufen. Wire-Enum-Decodierbarkeit (Tabelle oben, Spalte
+  „Legacy-Decode?") ist nicht dasselbe wie ein gültiger, ladbarer
+  Persistence-Snapshot – Ersteres bezieht sich nur auf die reine
+  `ProcessState`-Zahl-zu-Enum-Abbildung, Letzteres auf den vollständigen,
+  vom Variant abhängigen `validStateFor()`-Vertrag.
+- **`RecoveryEvaluation` (13):** Ist dagegen in **beiden** Whitelists
+  (`ProgramRun`/`ManualRun`) enthalten, also ein gültiger, ladbarer
+  `Current`-Snapshot. `classifyRunLoad()` erreicht hier tatsächlich
+  `isR1ResumeEligible()`, die `RecoveryEvaluation` explizit ausschließt
+  (`safety_core.cpp:401`, real geprüft) → `RunLoadDisposition::NoActiveRun`
+  → `BootClassification::DiscardableRun`. Das ist die vom Owner geforderte
+  **explizite, einzelne** R1-Policy-Entscheidung für diesen Fall (nicht
+  „offen gelassen"):
+
+  ```text
+  LEGACY_RECOVERY_EVALUATION_POLICY=DiscardableRun
+  ```
+
+  Begründung: `RecoveryEvaluation` repräsentiert einen unentschiedenen
+  C2-Zwischenzustand aus einer früheren, nicht-R1-Firmware; ein Discard
+  (statt `SERVICE_REQUIRED`) ist wegen des vom Owner akzeptierten
+  Chargeverlusts zulässig und erfordert keinen neuen Code – die bestehende
+  `isR1ResumeEligible()`-Logik erzeugt dieses Ergebnis bereits unverändert.
 
 `FaultCode` ist nicht in dieser Tabelle, weil es real nirgends persistiert
 wird (Abschnitt 4.3) und daher keinem Wire-Vertrag unterliegt.
@@ -506,11 +559,11 @@ enum class BootClassification : std::uint8_t {
 
 | Flow | Application Lifecycle | Process State | Persistence Action | Actuation | Diagnose |
 |---|---|---|---|---|---|
-| `NoRun` | `READY` | published: `Standby` (direkt via `propose()`+`TransitionReason::BootCompleted`, deckt sich mit `validBootTopology()`) | keine | `DENIED` (bis Fresh Start) | keine |
+| `NoRun` | `READY` | `runtimeRunState_ = std::make_unique<RunCommandState>(...)` mit `processState.state == Standby` (via `propose()`+`TransitionReason::BootCompleted`, deckt sich mit `validBootTopology()`); Allokationsfehler → fail-closed, `SERVICE_REQUIRED` statt `READY` (Abschnitt 9 Blocker 1); published erst nach erfolgreicher Allokation | keine | `DENIED` (bis Fresh Start) | keine |
 | `ResumeOffer` | `READY` | **nicht published** | Snapshot bleibt technisch in `RunPersistenceCoordinator` (`LoadedActiveRun`); rekonstruierter `RunCommandState` lebt **in `FermentationApplication`** (Abschnitt 9, Blocker 1) | `DENIED` | ResumeOffer-Anzeige mit Snapshot-Vorschau |
 | `ResumeConfirmed` | `READY` | published nach `RunPersistenceCoordinator::activateR1EligibleRun()` (Abschnitt 9.1, **neu**, deckt alle drei `LoadedActiveRun`-Ausgänge ab – Fault/Completed/3 Resume-Phasen –, kein `activateLoadedRun()`) | `activateR1EligibleRun()`, durabler Schreibvorgang (Recovery-Mutation, `UseStandardFallback`) | `DENIED` bis frische Interlock-Evidenz nach `Applied` | Lauf läuft weiter |
 | `ResumeRejected` | `READY` | published: `Standby` nach Discard | `RunPersistenceCoordinator::discardAsNoActiveRun()` (write-before-apply, bestehend) | `DENIED` | Verworfen-Hinweis optional |
-| `DiscardableRun` | `READY` | published: `Standby` nach direktem `discardAsNoActiveRun()`-Aufruf (Application ruft Coordinator direkt, nicht über den Orchestrator, Abschnitt 3) | `discardAsNoActiveRun()` | `DENIED` | keine (stiller Discard, wie heute) |
+| `DiscardableRun` | `READY` | published: `Standby`, nur bei `Applied`, nach `discardAsNoActiveRun()` mit einem via `restoreRunPersistenceSnapshot()` rekonstruierten `RunCommandState&` (Abschnitt 9, Major 6 – **nicht** ein leerer/minimaler Stub) | `discardAsNoActiveRun()`, write-before-apply | `DENIED` | keine (stiller Discard, wie heute); bei Fehlschlag `SERVICE_REQUIRED` statt stillem Discard (Abschnitt 9 Fehlerklassifikation) |
 | `CompletedRun` | `READY` | published: `Completed` via `activateR1EligibleRun()` (Abschnitt 9.1, exakter `activateLoadedRun()`-Completed-Präzedenzfall: RAM-only, `stateEnteredAtMillis`-Refresh) | RAM-Mutation, `RunPersistenceDurability::Unchanged` (kein Store-Schreibvorgang) | `DENIED` | Abschluss-Anzeige |
 | `TerminalRunFault` | `READY` | published: `Fault` via `activateR1EligibleRun()` (Abschnitt 9.1, exakter `activateLoadedRun()`-Fault-Präzedenzfall: RAM-only, unveränderter `current`; **kein** `propose(Boot→Fault)` – `validBootTopology()` kennt diese Kante nicht, Abschnitt 4.2 Major 8) | RAM-Mutation, `RunPersistenceDurability::Unchanged` (kein Store-Schreibvorgang) | `DENIED` | Fehler-Anzeige |
 | `UntrustedConfiguration` | `SERVICE_REQUIRED` | nicht published | keine | `DENIED` | `FaultCode ∈ {ConfigurationUnavailable, ConfigurationIntegrityFailure, ConfigurationCommitIndeterminate}` |
@@ -598,10 +651,15 @@ Beweis, dass `Boot` nie persistiert/published/als Permission verwendet wird:
 
 Die erste tatsächliche Veröffentlichung geschieht ausschließlich über die
 bestehenden Exportfunktionen `propose()`/`applyProcessTransition()` (für
-`NoRun`/`ResumeRejected`/`CompletedRun`/`TerminalRunFault`) bzw. über die
-direkte Feldsetzung im neuen `activateR1EligibleRun()`-Pfad (Abschnitt 9,
-mirrored aus dem bestehenden `Completed`-Präzedenzfall in
-`activateLoadedRun()`).
+`NoRun`/`ResumeRejected`, Abschnitt 4.2) bzw. über die direkte Feldsetzung im
+neuen `activateR1EligibleRun()`-Pfad (für `CompletedRun`/`TerminalRunFault`/
+den aktiven Resume, Abschnitt 9.1, mirrored aus dem bestehenden `Completed`-/
+`Fault`-Präzedenzfall in `activateLoadedRun()`). **Korrektur gegenüber der
+Vorfassung (Major 5, Runde 3):** `CompletedRun`/`TerminalRunFault` wurden
+hier fälschlich weiterhin bei `propose()`/`applyProcessTransition()`
+aufgeführt – das widerspricht Major 8 (Abschnitt 4.2), wonach beide
+ausschließlich über `activateR1EligibleRun()`s RAM-only-Zweige laufen, da
+`validBootTopology()` keine `Boot→Fault`-Kante kennt.
 
 ### 7.3 `FallbackRecovered` erzeugt in R1 kein `ResumeOffer` (Blocker 3, geschlossen)
 
@@ -680,16 +738,24 @@ dokumentiert (Abschnitt 10), ohne in dieser Revision Code zu erzeugen.
 
 ```text
 Standby (Application READY, Actuation DENIED)
+  // runtimeRunState_ bereits aus dem NoRun-Boot-Flow gesetzt (Abschnitt 7:
+  // ein minimaler RunCommandState mit processState.state == Standby,
+  // heapbesitzend, Abschnitt 9 Blocker 1)
   -> Nutzer Start-Kommando
   -> Application prueft CommandKind ∈ {StartProgram, StartManualHolding}
      (dieselbe Regel wie TemperatureControlApplicationOrchestrator::
      persistFreshStartCommand(), hier direkt in FermentationApplication
      angewendet statt ueber den – in dieser Revision nicht komponierten –
      Orchestrator, Abschnitt 4.9)
-  -> RunPersistenceCoordinator::persistCommand(current, decision, time,
-     liveSensorEvidence)  // bestehende API, #17 Write-before-Apply
-     unveraendert
-  -> RunPersistenceResultStatus::Applied
+  -> RunPersistenceCoordinator::persistCommand(*runtimeRunState_, decision,
+     time, liveSensorEvidence)  // bestehende API, #17 Write-before-Apply
+     unveraendert; schliesst Major 7 (Runde 3) – der kanonische
+     Runtime-State ist der Eingang, nicht ein generisches "current"
+  -> RunPersistenceResultStatus::Applied  // writeSnapshot() mutiert
+     *runtimeRunState_ selbst in-place (dieselbe write-before-apply-
+     Konvention wie ueberall im Coordinator, Abschnitt 4.4/9.1); bei
+     Fehlschlag bleibt *runtimeRunState_ UNVERAENDERT (weiterhin Standby),
+     kein Start
   -> ActuationInterlock::evaluate(evidence) mit
      activationKind=FreshStart, explicitActivationRequested=true,
      processActivationApplied=true, activationPersistenceResult=Applied
@@ -703,25 +769,63 @@ evaluate` mit den realen Post-Commit-Feldern) ist neu.
 
 ## 9. Resume (Ownership-/Lifetime-Vertrag, Korrektur F, Blocker 1/2/3 geschlossen)
 
-**Kanonischer `runtimeRunState_` (schließt Blocker 1, Runde 2):**
+**Kanonischer `runtimeRunState_` (schließt Blocker 1, Runde 2; Speicherform
+korrigiert, Blocker 1, Runde 3):**
 `FermentationApplication` hält genau **einen** kanonischen
-`std::optional<RunCommandState> runtimeRunState_`-Member für den aktuell
+`std::unique_ptr<RunCommandState> runtimeRunState_`-Member für den aktuell
 aktiven, publizierten Lauf (getrennt von `pendingResume_`, das nur die
-unbestätigte Resume-Vorschau hält, Abschnitt 12.1). `publishedProcessState()`
-wird eine **reine Projektion**:
+unbestätigte Resume-Vorschau hält, Abschnitt 12.1). **Korrektur gegenüber
+der Vorfassung (real gemessener Bug, Runde 3):** Ein `std::optional<T>`
+speichert `T` **inline**, nicht auf dem Heap. `RunCommandState` ist real
+gemessen `sizeof(RunCommandState) == 5096` Byte (Host-Build; reale
+ESP32/xtensa-Größen können leicht abweichen, die Größenordnung bleibt
+gleich) – zwei solcher Felder als `std::optional`-Wertmember hätten
+`sizeof(FermentationApplication)` um über 10 KB vergrößert, bei
+`CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584` (PR #118) exakt dieselbe
+Stack-Fehlerklasse wie bei #120 reproduziert, für die `application` als
+Stackobjekt in `main/app_main.cpp` (`fermentation::FermentationApplication
+application;`) konstruiert wird. Beide Felder sind daher `unique_ptr`, nicht
+`optional`:
+
+```cpp
+std::unique_ptr<RunCommandState> runtimeRunState_;
+std::unique_ptr<RunCommandState> pendingResume_;
+```
+
+`publishedProcessState()` wird eine **reine Projektion**:
 
 ```cpp
 std::optional<ProcessRuntimeState> publishedProcessState() const {
-    return runtimeRunState_.has_value()
+    return runtimeRunState_ != nullptr
                ? std::optional{runtimeRunState_->processState}
                : std::nullopt;
 }
 ```
 
+**Allokationsfehlerfall (verbindlich, Runde 3):** Schlägt die Heap-Allokation
+für `runtimeRunState_` oder `pendingResume_` fehl (`new (std::nothrow)`),
+gilt fail-closed: kein publizierter aktiver Lauf
+(`publishedProcessState() == std::nullopt`), kein Resume-Angebot,
+`Actuation DENIED`, ein typisierter `PresentationState`-Fehler
+(`FaultCode` – kein neuer Wert nötig, mappt auf denselben
+`RunPersistenceUntrusted`-Diagnosepfad wie ein technischer Ladefehler,
+Abschnitt 11), keine erfundene Store-Mutation.
+
+```text
+RUNTIME_RUN_STATE_STORAGE=HEAP_OWNED
+PENDING_RESUME_STORAGE=HEAP_OWNED
+RUNTIME_RUN_STATE_ALLOCATION_FAILURE=FAIL_CLOSED
+PENDING_RESUME_ALLOCATION_FAILURE=FAIL_CLOSED
+FERMENTATION_APPLICATION_INLINE_LARGE_RUN_STATE=NO
+```
+
 Jeder Flow aus Abschnitt 7, der etwas published, schreibt zuerst
-`runtimeRunState_` (bei `NoRun`/`ResumeRejected`/`DiscardableRun` einen
-minimalen `RunCommandState` mit `processState.state == Standby`, sonst den
-von `RunPersistenceCoordinator`/`activateR1EligibleRun()` gelieferten
+`runtimeRunState_` (bei `NoRun` einen minimalen `RunCommandState` mit
+`processState.state == Standby`; bei `ResumeRejected`/`DiscardableRun` den
+via `restoreRunPersistenceSnapshot()` rekonstruierten und durch
+`discardAsNoActiveRun()` auf `Standby` mutierten `RunCommandState` –
+**kein** minimaler Stub, Major 6, Abschnitt 9; sonst den von
+`RunPersistenceCoordinator`/`activateR1EligibleRun()` gelieferten
 Kandidaten) und liest `publishedProcessState()` nie ad hoc aus einem anderen
 Objekt. Es gibt damit genau eine Schreibstelle für „was ist aktuell
 published" – kein zweiter Publikationsmechanismus (Korrektur I bleibt damit
@@ -736,13 +840,21 @@ RunPersistenceCoordinator::loadAndInitialize()
      FallbackRecovered -> SafeBoot, sonst wie isR1ResumeEligible()
   -> ResumeOffer (nur fuer status==Current, Phase in
      {Preheating, Cooling, ManualHolding})
-     -> pendingResume_ = restoreRunPersistenceSnapshot(*loaded.snapshot)
+     -> restored = restoreRunPersistenceSnapshot(*loaded.snapshot)
         // NEU gefundene, bereits bestehende, bereits getestete Funktion
         // (run_persistence_contract.hpp/.cpp), liefert std::optional<
         // RunCommandState>. "Technical restoration only: ... does not
         // make recovery, boot, fault or safety decisions."
+        if (!restored.has_value()) -> SafeBoot/SERVICE_REQUIRED (technischer
+          Konsistenzfehler, kein Resume moeglich)
+        pendingResume_ = std::make_unique<RunCommandState>(std::move(*restored))
+        // EINZIGE Stelle, an der der 5096-Byte-Wert kopiert/verschoben
+        // wird, um ihn auf den Heap zu bringen (unique_ptr-Konstruktion) -
+        // kein wiederholter Stackframe danach.
+        if (pendingResume_ == nullptr) -> Allokationsfehler, fail-closed
+          (s.o., kein Resume, kein publizierter Lauf, SERVICE_REQUIRED)
      -> PENDING_RESUME_OWNER=FermentationApplication
-        PENDING_RESUME_TYPE=std::optional<RunCommandState>
+        PENDING_RESUME_TYPE=std::unique_ptr<RunCommandState>
         PENDING_RESUME_LIFETIME=von Klassifikation bis Confirm/Reject/
           begin()-Fehlschlag (RAII-Member von FermentationApplication,
           kein dangling reference ueber begin()-Rueckkehr hinweg, da
@@ -771,28 +883,44 @@ Bei explizitem Resume-Confirm durch Nutzer:
   -> Application prueft aktuelle Config-/Sensor-/Safety-Evidenz frisch
      (dieselben hasFreshConfigurationEvidence()/hasFreshSensorEvidence()-
      Helfer, unveraendert aus safety_core.cpp uebernommen)
-  -> RunPersistenceCoordinator::activateR1EligibleRun(pendingResume_.value(),
-     time, liveSensorEvidence)  // NEU, kleine R1-spezifische Methode (siehe
-     unten), KEIN activateLoadedRun(). Sensor-Revalidierung (Blocker 5)
-     geschieht INTERN im Coordinator (Abschnitt 9.1, Zweig 3), nicht in
-     der Application – Begruendung: die dafuer noetige
-     recoverySensorSelectionProgramContext()-Hilfsfunktion ist TU-privat
-     in run_persistence_coordinator.cpp (anonymous namespace, real
-     geprueft), also fuer FermentationApplication ohnehin nicht sichtbar;
-     eine Duplikation dieser ~15-zeiligen Logik in der Application waere
-     ein DRY-Verstoss. `pendingResume_.value()` wird als `RunCommandState&`
-     uebergeben – bei Erfolg mutiert der Coordinator dieses Objekt selbst
+  -> RunPersistenceCoordinator::activateR1EligibleRun(*pendingResume_,
+     time, &liveSensorEvidence)  // NEU, kleine R1-spezifische Methode (siehe
+     unten), KEIN activateLoadedRun(). Dritter Parameter jetzt Pointer
+     (Blocker 3, Runde 3) – fuer den aktiven Resume-Zweig immer non-null.
+     Sensor-Revalidierung (Blocker 5) geschieht INTERN im Coordinator
+     (Abschnitt 9.1, Zweig 3), nicht in der Application – Begruendung: die
+     dafuer noetige recoverySensorSelectionProgramContext()-Hilfsfunktion
+     ist TU-privat in run_persistence_coordinator.cpp (anonymous
+     namespace, real geprueft), also fuer FermentationApplication ohnehin
+     nicht sichtbar; eine Duplikation dieser ~15-zeiligen Logik in der
+     Application waere ein DRY-Verstoss. `*pendingResume_` wird als
+     `RunCommandState&` uebergeben (Dereferenzierung des unique_ptr, KEINE
+     Kopie) – bei Erfolg mutiert der Coordinator dieses Objekt selbst
      IN-PLACE (write-before-apply, Abschnitt 9.1); es entsteht kein
      separates "candidate", das die Application eigens uebernehmen muesste.
   -> RunPersistenceResult.status == Applied
-  -> danach runtimeRunState_ = std::move(*pendingResume_)  // *pendingResume_
+  -> danach runtimeRunState_ = std::move(pendingResume_)  // verschiebt den
+     unique_ptr selbst (O(1), KEIN 5096-Byte-Kopiervorgang) – *pendingResume_
      wurde vom Coordinator-Aufruf bereits in-place auf den rebasten Zustand
      aktualisiert (s. o.); ProcessRuntimeState damit erstmals als reine
      Projektion published (Abschnitt 9, Blocker 1; direkt aus
      runtimeRunState_->processState, ohne propose()/
      applyProcessTransition(), Abschnitt 4.2/7.2 – Praezedenzfall aus
      activateLoadedRun()s Completed-Zweig)
-  -> pendingResume_ geleert (bereits nach runtimeRunState_ verschoben)
+  -> pendingResume_ ist danach nullptr (Inhalt bereits nach runtimeRunState_
+     verschoben, kein separates Leeren noetig)
+  -> **Fehlerklassifikation bei `status != Applied`** (schliesst Blocker 2,
+     Abschnitt 9.1 traegt die vollstaendige Logik): NUR wenn
+     `persisted.coordinatorState == LoadedActiveRun` UND
+     `persisted.durability == Unchanged`, bleibt `pendingResume_`
+     unveraendert bestehen und ein erneuter Confirm ist zulaessig (sauber
+     zurueckgerollter, retry-sicherer Fehler). In JEDEM anderen Fall
+     (`BlockedIndeterminate`, `PersistenceCommittedApplyFailed`,
+     `durability != Unchanged`) gilt: `pendingResume_` gilt NICHT mehr als
+     aktuelle Store-Wahrheit (wird aber nicht geleert – Diagnosezweck),
+     Application -> `SERVICE_REQUIRED`, `Actuation DENIED`, ein erneuter
+     Resume-Confirm-Versuch ist `NOT_ALLOWED`, kein Tombstone/Repair-Versuch
+     zur Verschleierung der Ambiguitaet.
   -> ActuationInterlock::evaluate() mit activationKind=Resume,
      processActivationApplied=true, activationPersistenceResult=Applied
   -> erst danach ALLOWED moeglich
@@ -811,16 +939,48 @@ Bei explizitem Resume-Confirm durch Nutzer:
   verletzen, Abschnitt 9.1) – die Blockade bleibt reine
   Read-Only-Konsequenz.
 
-Bei Ablehnung / technisch vertrauenswuerdigem aber nicht resumefaehigem Run:
-  -> Application ruft RunPersistenceCoordinator::discardAsNoActiveRun()
-     direkt (nicht ueber TemperatureControlApplicationOrchestrator::
-     reconcileR1LoadedRun(), Abschnitt 4.9/8 – Aufruf ist identisch zur
-     internen Wrapper-Logik, nur ohne die dort zusaetzliche automatische
-     PI-/Planner-Reset-Seite, die hier wirkungslos waere)
+Bei Ablehnung (ResumeOffer, Nutzer lehnt ab):
+  -> Application ruft RunPersistenceCoordinator::discardAsNoActiveRun(
+     *pendingResume_, time) direkt (nicht ueber
+     TemperatureControlApplicationOrchestrator::reconcileR1LoadedRun(),
+     Abschnitt 4.9/8 – Aufruf ist identisch zur internen Wrapper-Logik, nur
+     ohne die dort zusaetzliche automatische PI-/Planner-Reset-Seite, die
+     hier wirkungslos waere). `*pendingResume_` (bereits durch
+     `restoreRunPersistenceSnapshot()` rekonstruiert, s.o.) ist der
+     benoetigte `RunCommandState&`-Eingang.
   -> RunPersistenceCoordinator::discardAsNoActiveRun() committet den
      NoActiveRun-Tombstone zuerst durabel (write-before-apply, bestehend)
-  -> pendingResume_ geleert
-  -> erst danach Standby published
+  -> nur bei Applied: runtimeRunState_ = std::move(pendingResume_) (der nun
+     durch discardAsNoActiveRun() in-place auf Standby mutierte Zustand),
+     danach Standby published
+  -> bei Fehlschlag: pendingResume_ bleibt bestehen (Diagnosezweck), kein
+     Standby-Publish, Klassifikation nach `coordinatorState`/`durability`
+     wie oben (retry-sicher nur bei `LoadedActiveRun`+`Unchanged`, sonst
+     `SERVICE_REQUIRED`)
+
+Bei `DiscardableRun` (bereits beim Boot als vertrauenswuerdig, aber nicht
+resumefaehig klassifiziert – schliesst Major 6, Runde 3; **anders als der
+ResumeOffer/Ablehnung-Pfad existiert hier noch kein `pendingResume_`**, da
+diese Klassifikation nie durch `ResumeOffer` lief):
+  -> restored = restoreRunPersistenceSnapshot(*loaded.snapshot)  // dieselbe
+     bestehende Funktion wie im ResumeOffer-Zweig, hier direkt waehrend der
+     Boot-Klassifikation aufgerufen statt erst bei Nutzerinteraktion
+     if (!restored.has_value()) -> SafeBoot/SERVICE_REQUIRED (technischer
+       Konsistenzfehler)
+  -> discardTarget = std::make_unique<RunCommandState>(std::move(*restored))
+     if (discardTarget == nullptr) -> Allokationsfehler, fail-closed
+       (SERVICE_REQUIRED, kein Standby-Publish)
+  -> RunPersistenceCoordinator::discardAsNoActiveRun(*discardTarget, time)
+     direkt (Application ruft Coordinator direkt, nicht ueber den
+     Orchestrator, Abschnitt 3)
+  -> nur bei Applied: runtimeRunState_ = std::move(discardTarget) – der
+     lokale `unique_ptr` wird in den Application-Lifetime-Member verschoben
+     (danach IST er dieses Objekt, kein separates Lifetime-Konzept), danach
+     Standby published
+  -> bei Fehlschlag: kein Standby-Publish, `runtimeRunState_` bleibt
+     nullptr, Klassifikation nach `coordinatorState`/`durability` wie oben;
+     `discardTarget` selbst wird beim Verlassen des `begin()`-Scopes
+     freigegeben (RAII), da es nie in `runtimeRunState_` verschoben wurde
 
 Bei FallbackRecovered (Abschnitt 7.3):
   -> BootClassification::SafeBoot, kein pendingResume_, kein Tombstone
@@ -843,13 +1003,24 @@ Ausschnitt davon.
 ```text
 RunPersistenceResult RunPersistenceCoordinator::activateR1EligibleRun(
     RunCommandState& current, const RunCheckpointTime& time,
-    const CrossRolePlausibilityContext& liveSensorEvidence)
+    const CrossRolePlausibilityContext* liveSensorEvidence = nullptr)
 ```
 
 Dritter Parameter `liveSensorEvidence` neu gegenüber der Vorfassung (schließt
 Blocker 5 vollständig; identische Signatur-Erweiterung wie
-`activateLoadedRun()` selbst sie trägt) – wird ausschließlich in Zweig 3
-benötigt.
+`activateLoadedRun()` selbst sie trägt). **Korrektur gegenüber der
+Vorfassung (Blocker 3, Runde 3):** als Pointer mit Default `nullptr`, nicht
+als zwingende Referenz – `Fault`/`Completed` (Zweig 1/2) benötigen und lesen
+`liveSensorEvidence` nie (#121 bleibt actor-free, für die reine
+Historien-Restaurierung eines terminalen Laufs gibt es keine
+Sensor-Fragestellung); nur Zweig 3 (aktiver Resume) benötigt echte Evidenz:
+
+```text
+Fault (Zweig 1): liveSensorEvidence darf nullptr sein
+Completed (Zweig 2): liveSensorEvidence darf nullptr sein
+Aktiver Resume (Zweig 3): liveSensorEvidence MUSS non-null sein;
+  nullptr -> NotEligible, keine Mutation, kein Schreibvorgang
+```
 
 **Vorbedingung:** `state_ == LoadedActiveRun`, sonst `unavailableResult()`,
 keine Mutation.
@@ -924,6 +1095,10 @@ nach dem real geprüften Muster von `discardAsNoActiveRun()`/
    C2-Aufrufort gespiegelt, run_persistence_coordinator.cpp:682-699;
    Reihenfolge bewusst identisch zum Praezedenzfall - der Guard steht VOR
    dem Aufruf, der die Optionals dereferenziert):
+     if (liveSensorEvidence == nullptr)
+       return result(NotEligible, CandidateApply, None)
+       // schliesst Blocker 3: Zweig 3 verlangt echte Evidenz, current
+       // unveraendert, kein Schreibvorgang
      if (!candidate.sensorSelection.has_value() ||
          !candidate.activeRunSensorMode.has_value())
        return result(InvalidDecision, CandidateApply, InvalidProjection)
@@ -939,7 +1114,7 @@ nach dem real geprüften Muster von `discardAsNoActiveRun()`/
          // ProgramRun (liest activeProgramRun->snapshot().sourceProgram.
          // program) als auch ManualRun (Default-Kontext) ab, exakt wie im
          // bestehenden C2-Aufruf
-       liveSensorEvidence)
+       *liveSensorEvidence)
      if (recommendation.runtime.permission != SensorPeltierPermission::Allowed)
        return result(NotEligible, CandidateApply, None)
        // EXAKT dieselbe Gate-Bedingung wie im C2-Praezedenzfall (Zeile
@@ -978,7 +1153,8 @@ nach dem real geprüften Muster von `discardAsNoActiveRun()`/
    // bleibt im ResumeOffer-Zustand, kein zusaetzlicher Rollback-Code noetig.
 5. if (persisted.status != Applied) return persisted;  // current
    UNVERAENDERT (Blocker 4: current wird ausschliesslich nach Applied
-   mutiert)
+   mutiert) – vollstaendige Fehlerklassifikation fuer den Aufrufer siehe
+   unten (Blocker 2)
 6. current = candidate  // current erst JETZT mutiert
    // state_ wurde von writeSnapshotCore() bereits intern auf Ready gesetzt
    // (real geprüft, snapshot.variant != NoActiveRun -> Ready, nicht
@@ -986,8 +1162,59 @@ nach dem real geprüften Muster von `discardAsNoActiveRun()`/
    return persisted  // Applied, Durability::Changed
 ```
 
-**Fehlerfall:** `current.processState.state` liegt in keinem der drei Zweige
-→ `RunPersistenceResultStatus::NotEligible`, keine Mutation. Da
+**Fehlerklassifikation bei `persisted.status != Applied` in Zweig 3
+(schließt Blocker 2, Runde 3 – real vollständig gegen `writeSnapshotCore()`s
+Fehlerpfade nachverfolgt, `run_persistence_coordinator.cpp:1477-1766`):**
+`writeSnapshotCore()` durchläuft für den nicht-periodischen Schreibpfad
+(`periodic=false`, wie hier verwendet) drei sequentielle Store-Operationen
+(`PreparedHead`-Schreiben, `CheckpointSlot`-Schreiben, `CommittedHead`-
+Schreiben) plus vorausgehende reine Encode-/Read-Schritte. Jeder `result(...)`-
+Aufruf setzt `value.coordinatorState = state_` **zum Zeitpunkt der
+Result-Konstruktion**, also **nach** einer eventuellen internen
+`enterBlockedIndeterminate()`/Rollback-Mutation (`result()`,
+`run_persistence_coordinator.cpp:241-252`, real geprüft) – der Aufrufer kann
+sich daher vollständig auf `persisted.coordinatorState` verlassen, ohne den
+internen Kontrollfluss nachzubilden:
+
+```text
+Retry-sicher (Application bleibt ResumeOffer, erneuter Confirm erlaubt):
+  persisted.coordinatorState == LoadedActiveRun
+  AND persisted.durability == Unchanged
+  // real geprueft: dieser Fall tritt NUR ein bei (a) einem reinen
+  // Encode-/Read-Fehler VOR jedem Store-Schreibversuch (Envelope-/
+  // Kopf-Encode-CapacityExceeded, physicalTarget-Lesefehler faellt NICHT
+  // hierunter - der ruft immer enterBlockedIndeterminate() auf) oder
+  // (b) einem PreparedHead-Schreibfehler, der NICHT Indeterminate war
+  // (readyState() -> state_ = rollbackState == LoadedActiveRun)
+
+SERVICE_REQUIRED (kein Retry, kein Tombstone/Repair, pendingResume_ gilt
+nicht mehr als aktuelle Store-Wahrheit):
+  jeder andere Fall, insbesondere:
+  - persisted.coordinatorState == BlockedIndeterminate
+    (jeder CheckpointSlot-/CommittedHead-Schreibfehler nach erfolgreichem
+    PreparedHead ruft IMMER enterBlockedIndeterminate() auf, unabhaengig
+    vom Indeterminate-/Failed-Status der einzelnen Store-Operation - reale
+    Zeilen 1727/1740/1743 real geprueft; ebenso jeder physicalTarget-
+    Lesefehler und jeder PreparedHead-Schreibfehler MIT Indeterminate-
+    Ergebnis)
+  - persisted.coordinatorState == PersistenceCommittedApplyFailed
+    (in Zweig 3 nicht erreichbar, da nach erfolgreichem Applied keine
+    weitere RAM-Apply-Mutation stattfindet - candidate ist bereits vor dem
+    Schreibversuch vollstaendig konstruiert; als Catch-all trotzdem in der
+    Regel oben enthalten, falls ein spaeterer Umbau dies aendert)
+  - persisted.durability != Unchanged (MayHaveChanged oder Changed)
+```
+
+```text
+R1_RESUME_CLEAN_WRITE_FAILURE_CAN_RETRY_ONLY_IF_STORE_UNCHANGED=PASS
+R1_RESUME_INDETERMINATE_WRITE_ENTERS_SERVICE_REQUIRED=PASS
+R1_RESUME_INDETERMINATE_WRITE_CANNOT_RETRY_CONFIRM=PASS
+R1_RESUME_FAILED_WRITE_NEVER_ACTUATES=PASS
+```
+
+**Fehlerfall (Vorbedingung/Konsistenzsicherung):** `state_ != LoadedActiveRun`
+oder `current.processState.state` liegt in keinem der drei Zweige →
+`RunPersistenceResultStatus::NotEligible`, keine Mutation. Da
 `isR1ResumeEligible()` bereits beim Klassifizieren nur die drei
 Resume-Phasen als `ResumeOffer` zulässt und `TerminalRunFault`/`CompletedRun`
 (Abschnitt 7) die einzigen weiteren Aufrufer von `activateR1EligibleRun()`
@@ -1029,13 +1256,6 @@ Offline-Dauer"; real gilt das Gegenteil):**
   Zeitlimit in diesen Phasen (temperaturgetrieben, kein
   `stateHasTargetReachTimer()`-Zustand) – das Zuruecksetzen hat **keinen**
   beobachtbaren Zeiteffekt.
-
-**Vorbedingung/Fehlerfall:** `state_ != LoadedActiveRun` oder
-`current.processState.state ∉ R1_RESUME_ELIGIBLE_PHASES` →
-`RunPersistenceResultStatus::NotEligible`, keine Mutation. Da
-`isR1ResumeEligible()` bereits beim Klassifizieren nur genau diese drei
-Phasen als `ResumeOffer` zulaesst, ist dieser Fehlerfall in der Praxis nur
-eine Konsistenzsicherung, kein neues Gate.
 
 ## 10. Interlock (`ActuationInterlock`, minimaler Vertrag)
 
@@ -1220,8 +1440,8 @@ NICHT konstruiert (Korrektur B).
 | `ConfigurationService` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit | `mutationCoordinator_`, `graphStore_`, `timeZoneResolver_` (alle müssen mindestens gleich lang leben, real erzwungen durch Referenzmember) | NEIN | vor allen drei Dependencies | fail-closed |
 | `ConfigurationRecoveryService` | lokal in `begin()` (`unique_ptr`, per `create()`) | **boot-only** (nur `boot()` aufgerufen, danach freigegeben) | `store`, `bootstrapStore_`, `graphStore_`, `configurationService_`, `mutationCoordinator_` | JA | vor `bootstrapStore_` | bereits bestehender `nullptr`-Vertrag von `create()` |
 | `RunPersistenceCoordinator` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit (auch für Fresh Start/Resume-Aufrufe außerhalb von `begin()`) | `IStateStore`, `epoch` (aus Schritt 3a, Abschnitt 4.6/12), `schedule` | NEIN | vor `IStateStore` | fail-closed **plus** (Blocker 7, neu) bei `acquireRuntime().status != RuntimeLeaseGranted`: `unique_ptr` bleibt `nullptr`, Coordinator wird gar nicht konstruiert, `FermentationApplication` setzt `SERVICE_REQUIRED` |
-| `pendingResume_` (`std::optional<RunCommandState>`) | `FermentationApplication` (Wertmember) | von Klassifikation bis Confirm/Reject (Abschnitt 9) | keine externen Referenzen (reiner Wert) | NEIN | trivial (Wertmember) | entfällt (kein Heap) |
-| `runtimeRunState_` (`std::optional<RunCommandState>`, Blocker 1) | `FermentationApplication` (Wertmember) | Application-Laufzeit; einzige Quelle für `publishedProcessState()` (Abschnitt 9) | keine externen Referenzen (reiner Wert) | NEIN | trivial (Wertmember) | entfällt (kein Heap) |
+| `pendingResume_` (`std::unique_ptr<RunCommandState>`, Runde-3-Korrektur: NICHT `optional`, Abschnitt 9 Blocker 1) | `FermentationApplication` (`unique_ptr`) | von Klassifikation bis Confirm/Reject (Abschnitt 9) | keine externen Referenzen | NEIN | trivial (`unique_ptr`-Member) | fail-closed: `new (std::nothrow)` schlägt fehl → `nullptr` bleibt, kein Resume-Angebot, `SERVICE_REQUIRED` |
+| `runtimeRunState_` (`std::unique_ptr<RunCommandState>`, Runde-3-Korrektur: NICHT `optional`, Blocker 1) | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit; einzige Quelle für `publishedProcessState()` (Abschnitt 9) | keine externen Referenzen | NEIN | trivial (`unique_ptr`-Member) | fail-closed: `new (std::nothrow)` schlägt fehl → kein publizierter Lauf, `SERVICE_REQUIRED` |
 | `PresentationState` | `FermentationApplication` (Wertmember) | Application-Laufzeit | keine | NEIN | trivial | entfällt |
 
 **Verbindlich:** Alle von langlebigen Objekten referenzierten Dependencies
@@ -1281,7 +1501,21 @@ bereits zerstört ist (`IStateStore` überlebt in jedem Fall, da
    Nachschlagetabelle – **keine** OS-/IANA-Zeitzonendatenbank, **kein**
    NTP-Zugriff, **keine** WLAN-Abhängigkeit, **keine** externe Bibliothek
    (Interface-Kommentar bestätigt dies bereits explizit: „Eine reale
-   ESP32-Zeitzonendatenbank ist nicht Bestandteil dieses Ports."). R1-Scope:
+   ESP32-Zeitzonendatenbank ist nicht Bestandteil dieses Ports."). **Explizit
+   ausgeschlossen (schließt Major 8, Runde 3 – präziser als das allgemeine
+   `NO_OS_DEPENDENCY`):**
+
+   ```text
+   NO setenv("TZ", ...)
+   NO tzset()
+   NO system-local-time mutation
+   ```
+
+   `prepare()` mutiert keinerlei Prozess-/System-globalen Zustand (kein
+   `TZ`-Environment, keine libc-Zeitzonenumschaltung) – die Rückgabe
+   (`PreparedTimeZone{canonicalIdentifier}`) ist ein reiner Wert, den der
+   Aufrufer (`ConfigurationService`) selbst hält; `EspTimeZoneResolver`
+   besitzt keine Seiteneffekte außerhalb seines Rückgabewerts. R1-Scope:
    genau **ein** unterstützter Bezeichner.
 
    | `canonicalIdentifier` | Ergebnis |
@@ -1305,8 +1539,31 @@ aufrufen. Diese Objekte werden deshalb **heapbesitzende Member von
 `FermentationApplication`** (`std::unique_ptr<T>`, `new (std::nothrow)`,
 fail-closed bei Allokationsfehler), nicht Werte-Member und nicht lokale
 Stack-Objekte in `begin()`. `sizeof(FermentationApplication)` bleibt dadurch
-klein (nur Zeiger + `pendingResume_` + `PresentationState`), unabhängig von
-der Größe des komponierten Graphen.
+klein (nur Zeiger, inklusive der beiden `unique_ptr<RunCommandState>`-Member
+`runtimeRunState_`/`pendingResume_`, Abschnitt 9 Blocker 1, plus
+`PresentationState`), unabhängig von der Größe des komponierten Graphen.
+
+**Bekanntes, ausdrücklich nicht in dieser Revision gelöstes Restrisiko
+(real gemessen, muss vom Owner zur Kenntnis genommen werden, nicht von
+diesem Plan verdeckt werden):** `RunPersistenceCoordinator::
+discardAsNoActiveRun()`, `::persistCommand()`, `::persistTransition()` und
+das neue `::activateR1EligibleRun()` folgen alle demselben, bereits auf
+`BASE_SHA` bestehenden Muster `auto candidate = current;` – eine
+**Stack**-Kopie von `sizeof(RunCommandState) == 5096` Byte (real gemessen,
+Abschnitt 9 Blocker 1) innerhalb der jeweiligen Coordinator-Methode, nicht
+auf dem Heap. Das ist **vorbestehendes Verhalten** (13 Fundstellen im
+unveränderten `run_persistence_coordinator.cpp`, real gezählt) – #121
+führt es nicht neu ein, verdrahtet aber erstmals mehrere dieser Aufrufe
+(`persistCommand` bei Fresh Start, `discardAsNoActiveRun`/
+`activateR1EligibleRun` bei Boot-Resume/-Discard) in den realen ESP-IDF-
+Produktpfad, wo sie auf demselben Main-Task laufen wie die in Abschnitt 16
+gemessene `CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584`. Ein einzelner solcher
+Aufruf allein übersteigt bereits diesen Stack-Budget-Wert. Dieser Plan löst
+das **nicht** (weder durch eine Main-Task-Stack-Vergrößerung –
+`MAIN_TASK_STACK_PRIMARY_INCREASE=NO` bleibt in Kraft – noch durch einen
+Coordinator-internen Umbau, der außerhalb des #121-Scopes läge) – er macht
+das Risiko explizit messbar (Abnahmemetrik unten) und legt die
+Owner-Entscheidung offen, statt sie stillschweigend zu übergehen.
 
 **Abnahmemetrik (gemessener Pfad exakt festgelegt, Abschnitt 12.3):**
 `app_main()`s eigener Entry-Frame bleibt beim heutigen, real gemessenen
@@ -1317,7 +1574,10 @@ verwendet) über genau den in #121 erreichbaren Pfad: den vollständigen
 `begin()`-Aufruf plus einen einzelnen, gezielt ausgelösten
 Fresh-Start-**oder**-Resume-Aufruf (kein periodischer `update()`-Tick, da
 `update()` leer bleibt, Abschnitt 12.3) – gegen
-`CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584` (Abschnitt 16).
+`CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584` (Abschnitt 16). Diese Messung deckt
+sowohl `sizeof(FermentationApplication)` (jetzt heap-schlank) als auch den
+oben benannten `candidate`-Stackframe (dominanter erwarteter Verbraucher)
+in einem einzigen realen Zahlenwert ab – kein separates Modell nötig.
 
 ### 12.3 Runtime-Verhalten (`update()`, Blocker 10)
 
@@ -1407,8 +1667,37 @@ R1_SENSOR_EVIDENCE_STILL_REQUIRED_ON_RESUME_CONFIRM=PASS
 ESP_TIME_ZONE_RESOLVER_EUROPE_ZURICH_SUCCESS=PASS
 ESP_TIME_ZONE_RESOLVER_UNKNOWN_IDENTIFIER_UNSUPPORTED=PASS
 ESP_TIME_ZONE_RESOLVER_NO_NETWORK_NO_OS_DEPENDENCY=PASS
+ESP_TIME_ZONE_RESOLVER_NO_SETENV_TZ=PASS
+ESP_TIME_ZONE_RESOLVER_NO_TZSET=PASS
+ESP_TIME_ZONE_RESOLVER_NO_SYSTEM_TIME_MUTATION=PASS
 
 BOOT_PROOF_NO_WRITE_PATH_PRODUCES_BOOT_STATE=PASS
+
+RUNTIME_RUN_STATE_HEAP_OWNED_NOT_INLINE=PASS
+PENDING_RESUME_HEAP_OWNED_NOT_INLINE=PASS
+RUNTIME_RUN_STATE_ALLOCATION_FAILURE_FAIL_CLOSED=PASS
+PENDING_RESUME_ALLOCATION_FAILURE_FAIL_CLOSED=PASS
+
+R1_RESUME_CLEAN_WRITE_FAILURE_CAN_RETRY_ONLY_IF_STORE_UNCHANGED=PASS
+R1_RESUME_INDETERMINATE_WRITE_ENTERS_SERVICE_REQUIRED=PASS
+R1_RESUME_INDETERMINATE_WRITE_CANNOT_RETRY_CONFIRM=PASS
+R1_RESUME_FAILED_WRITE_NEVER_ACTUATES=PASS
+
+R1_FAULT_RESTORE_WITHOUT_SENSOR_CONTEXT=PASS
+R1_COMPLETED_RESTORE_WITHOUT_SENSOR_CONTEXT=PASS
+R1_ACTIVE_RESUME_WITHOUT_SENSOR_CONTEXT_FAILS_CLOSED=PASS
+
+LEGACY_PROCESS_STATE_ENUM_DECODE=PASS
+LEGACY_BOOT_SNAPSHOT_REJECTED_AS_INVALID=PASS
+LEGACY_SAFEBOOT_SNAPSHOT_REJECTED_AS_INVALID=PASS
+LEGACY_RECOVERY_EVALUATION_POLICY_DISCARDABLE_RUN=PASS
+
+DISCARDABLE_RUN_HAS_VALID_RESTORED_CURRENT=PASS
+DISCARDABLE_RUN_APPLIED_PUBLISHES_STANDBY=PASS
+DISCARDABLE_RUN_WRITE_FAILURE_DOES_NOT_PUBLISH_STANDBY=PASS
+
+FRESH_START_USES_CANONICAL_RUNTIME_RUN_STATE=PASS
+FRESH_START_WRITE_FAILURE_LEAVES_RUNTIME_STATE_UNAPPLIED=PASS
 ```
 
 Bestehende relevante native Suiten vollständig weiterführen. Beide
@@ -1489,12 +1778,24 @@ BOOT_CLASSIFICATION_TEST=<PASS|FAIL>
 ESP_IDF_BRINGUP_BUILD=<PASS|FAIL>
 ESP_IDF_RELEASE_BUILD=<PASS|FAIL>
 APP_MAIN_ENTRY_FRAME_UNCHANGED=<PASS|FAIL>
+APP_MAIN_ENTRY_FRAME=<measured, real release ELF>
+SIZEOF_FERMENTATION_APPLICATION=<measured>
+FERMENTATION_APPLICATION_INLINE_LARGE_RUN_STATE=NONE
+MAIN_TASK_STACK_PRIMARY_INCREASE=NO
 MAIN_TASK_STACK_HIGH_WATERMARK=<PASS|FAIL|NOT_MEASURED>
 BREAKING_PERSISTENCE_CHANGE=NO
 SCHEMA_MIGRATION_REQUIRED=NO
 ISSUE121_PRODUCT_COMPOSITION_ACTOR_FREE=YES
 REAL_HARDWARE_BOOT=NOT_RUN                    -- eigenes Owner-Gate, Schritt 7
 ```
+
+`SIZEOF_FERMENTATION_APPLICATION`/`APP_MAIN_ENTRY_FRAME` werden aus dem
+realen Release-ELF gemessen (Abschnitt 12.2), nicht geschätzt.
+`MAIN_TASK_STACK_HIGH_WATERMARK` deckt zusätzlich das in Abschnitt 12.2
+benannte, bewusst nicht in diesem Plan gelöste `candidate`-Stackframe-Risiko
+(5096 Byte pro `RunPersistenceCoordinator`-Aufruf, vorbestehendes Verhalten)
+ab – ein `FAIL` dieses Gates ist eine reale, an den Owner zu eskalierende
+Erkenntnis, kein stiller Blocker für die Planfreigabe selbst.
 
 ## 17. Statuszusammenfassung
 
