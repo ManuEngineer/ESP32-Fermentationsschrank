@@ -242,7 +242,7 @@ bool FermentationApplication::publishStandby() {
     }
 
     if (!establishBootCompletedStandby(target->processState, 0U)) {
-        requireService(FaultCode::RunPersistenceUntrusted);
+        requireService(FaultCode::None);
         return false;
     }
     runtimeRunState_ = std::move(target);
