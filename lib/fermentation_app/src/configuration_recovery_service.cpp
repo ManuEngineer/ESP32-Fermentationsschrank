@@ -2,6 +2,7 @@
 
 #include <array>
 #include <limits>
+#include <new>
 #include <utility>
 
 #include "configuration_limits.hpp"
@@ -224,9 +225,9 @@ ConfigurationRecoveryService::create(
         return nullptr;
     }
     return std::unique_ptr<ConfigurationRecoveryService>(
-        new ConfigurationRecoveryService(store, bootstrapStore, graphStore,
-                                         configurationService,
-                                         mutationCoordinator));
+        new (std::nothrow) ConfigurationRecoveryService(
+            store, bootstrapStore, graphStore, configurationService,
+            mutationCoordinator));
 }
 
 ConfigurationRecoveryStatus ConfigurationRecoveryService::verifyFactoryEmpty()

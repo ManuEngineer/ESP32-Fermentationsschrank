@@ -6,6 +6,7 @@
 #include "device_platform.hpp"
 #include "esp_timer_time_source.hpp"
 #include "esp_reset_cause_source.hpp"
+#include "esp_time_zone_resolver.hpp"
 #include "nvs_flash.h"
 #include "nvs_state_store.hpp"
 #include "fermentation_application.hpp"
@@ -95,7 +96,7 @@ class NvsOwningContext final {
 };
 
 void logBootSummary(const app_config::ProfilePolicy& policy,
-                    bool applicationStarted) {
+                    bool applicationStarted, bool applicationReady) {
     const char* TAG = kTag;
     ESP_LOGI(TAG, "%s", app_config::kProjectName);
     ESP_LOGI(TAG, "profile: %s", app_config::profileName(policy.profile));
@@ -104,10 +105,12 @@ void logBootSummary(const app_config::ProfilePolicy& policy,
     ESP_LOGI(TAG, "actuator policy: %s",
              app_config::actuatorPolicyName(policy.actuatorPolicy));
     ESP_LOGI(TAG, "real actuators: disabled");
-    if (applicationStarted) {
+    if (!applicationStarted) {
+        ESP_LOGE(TAG, "application: startup failed");
+    } else if (applicationReady) {
         ESP_LOGI(TAG, "application: ready");
     } else {
-        ESP_LOGE(TAG, "application: startup failed");
+        ESP_LOGW(TAG, "application: service required");
     }
 }
 
@@ -134,6 +137,7 @@ extern "C" void app_main(void) {
     }
 
     device_platform::DevicePlatform platform;
+    const device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;
     fermentation::FermentationApplication application;
     const device_platform_esp_idf::EspResetCauseSource resetCauseSource;
 
@@ -142,9 +146,11 @@ extern "C" void app_main(void) {
     };
     const bool applicationStarted =
         platform.begin(startupContext) &&
-        application.begin(platform, &resetCauseSource);
+        application.begin(platform, stateStoreContext->store(),
+                          timeZoneResolver, &resetCauseSource);
 
-    logBootSummary(app_config::kActiveProfilePolicy, applicationStarted);
+    logBootSummary(app_config::kActiveProfilePolicy, applicationStarted,
+                   application.ready());
 
     if (!applicationStarted) {
         // Sicherer Fehlerpfad: keine Hardware, kein Busy-Loop, keine

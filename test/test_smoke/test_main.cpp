@@ -5,7 +5,9 @@
 #include "app_config.hpp"
 #include "device_platform.hpp"
 #include "mock_reset_cause_source.hpp"
+#include "mock_time_zone_resolver.hpp"
 #include "fermentation_application.hpp"
+#include "simulated_persistent_state_store.hpp"
 
 void test_project_metadata() {
     TEST_ASSERT_EQUAL_STRING("ESP32-Fermentationsschrank",
@@ -123,6 +125,39 @@ void test_application_accepts_const_reset_cause_source() {
                      device_platform::ResetCause::PowerOn);
 }
 
+void test_product_application_composes_against_abstract_ports() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+    const device_platform::PlatformStartupContext startupContext{true};
+
+    TEST_ASSERT_TRUE(platform.begin(startupContext));
+    TEST_ASSERT_TRUE(application.begin(platform, store, timeZoneResolver));
+    TEST_ASSERT_TRUE(application.ready());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ApplicationLifecycleState::Ready),
+        static_cast<int>(application.lifecycleState()));
+    const auto published = application.publishedProcessState();
+    TEST_ASSERT_TRUE(published.has_value());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(fermentation::ProcessState::Standby),
+                          static_cast<int>(published->state));
+    TEST_ASSERT_EQUAL_INT(1, static_cast<int>(published->transitionSequence));
+}
+
+void test_product_application_rejects_unready_platform_before_lifecycle() {
+    device_platform::DevicePlatform platform;
+    device_platform_test_support::SimulatedPersistentStateStore store;
+    device_platform_test_support::MockTimeZoneResolver timeZoneResolver;
+    fermentation::FermentationApplication application;
+
+    TEST_ASSERT_FALSE(application.begin(platform, store, timeZoneResolver));
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(fermentation::ApplicationLifecycleState::Initializing),
+        static_cast<int>(application.lifecycleState()));
+    TEST_ASSERT_FALSE(application.publishedProcessState().has_value());
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_project_metadata);
@@ -135,5 +170,8 @@ int main() {
     RUN_TEST(test_platform_rejects_unsafe_startup_context);
     RUN_TEST(test_application_starts_through_platform_interface);
     RUN_TEST(test_application_accepts_const_reset_cause_source);
+    RUN_TEST(test_product_application_composes_against_abstract_ports);
+    RUN_TEST(
+        test_product_application_rejects_unready_platform_before_lifecycle);
     return UNITY_END();
 }

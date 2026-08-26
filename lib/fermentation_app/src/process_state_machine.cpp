@@ -1082,4 +1082,13 @@ bool applyProcessTransition(ProcessRuntimeState& current,
     return true;
 }
 
+bool applyBootCompletedStandby(ProcessRuntimeState& current,
+                               std::uint64_t monotonicMillis) {
+    const auto decision =
+        propose(current, ProcessState::Standby, TransitionReason::BootCompleted,
+                monotonicMillis);
+    return decision.proposed() &&
+           applyProcessTransition(current, decision, nullptr);
+}
+
 }  // namespace fermentation
