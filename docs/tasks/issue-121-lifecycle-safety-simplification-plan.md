@@ -9,12 +9,13 @@ Commit-SHA dieser Datei gilt:
 
 ```text
 LIFECYCLE_SIMPLIFICATION_PLAN_PENDING_OWNER_APPROVAL
-IMPLEMENTATION=IN_PROGRESS_BLOCKED_BEFORE_STEP_6
+IMPLEMENTATION=STEP_6_IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
 IMPLEMENTATION_STEPS_1_TO_5=PASS
-IMPLEMENTATION_STEP_6=NOT_STARTED
+IMPLEMENTATION_STEP_6=IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
 IMPLEMENTATION_STEP_6_GATE=BLOCKED_PENDING_REVISED_PLAN_OWNER_REVIEW
 IMPLEMENTATION_STEP_7=NOT_STARTED
 OWNER_STEP_5_REVIEW=PASS
+OWNER_STEP_6_REVIEW=CHANGES_REQUIRED
 STEP_1_SOURCE_SHA=cbfd81e1a622da6f241b89ca43636f41bf798ada
 STEP_2_SOURCE_SHA=6f0d6341c4ae37634fdacb8df09650b8b0c8212d
 STEP_3_SOURCE_SHA=eda125791eda5bfb6ec7125b7392ea971f3c8ec0
@@ -22,8 +23,14 @@ STEP_4_SOURCE_SHA=8bf3592e77d6d8841dd2a572cbbd3bce2da22b81
 STEP_5_ORIGINAL_SOURCE_SHA=18f9c85f9221f81e006eb994324f62758ae414fd
 STEP_5_CORRECTION_SOURCE_SHA=7049380d0e4bd9c0522c4475fa156febcd63ed5d
 STEP_5_EFFECTIVE_SOURCE_SHA=7049380d0e4bd9c0522c4475fa156febcd63ed5d
-THIS_PLAN_CORRECTION_PRODUCTION_CODE_CHANGED=NO
-THIS_PLAN_CORRECTION_TEST_CODE_CHANGED=NO
+STEP_6_PRE_REVIEW_APPROVED_PLAN_SHA=86009eeba99b260a056c22ec82fd6c66c9531c73
+STEP_6_ORIGINAL_SOURCE_SHA=d764de7d83ab5bb73d50500e03c99df00fc8bba2
+STEP_6_CORRECTION_SOURCE_SHA=d016d7fc6c6d60a3e2145a386f793686f20a4200
+STEP_6_EFFECTIVE_SOURCE_SHA=d016d7fc6c6d60a3e2145a386f793686f20a4200
+STEP_6_POST_IMPLEMENTATION_PLAN_CORRECTION_REASON=BOOT_COMPLETED_STANDBY_DOMAIN_OWNERSHIP_AND_DIAGNOSTIC_ATTRIBUTION
+PLAN_DEVIATION=DISCOVERED_AND_DOCUMENTED_PENDING_REVISED_PLAN_APPROVAL
+THIS_PLAN_CORRECTION_PRODUCTION_CODE_CHANGE=NO
+THIS_PLAN_CORRECTION_TEST_CODE_CHANGE=NO
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
 ```
 
@@ -316,7 +323,9 @@ Owner werden separat ausgewiesen. Keine doppelte Policy:
 
 ```text
 Device/Application Lifecycle   -> FermentationApplication (erweitert)
-Process Lifecycle              -> ProcessStateMachine (unveraendert)
+Process Lifecycle              -> ProcessStateMachine (Topologie und
+                                   fachliche Policy unveraendert; enge
+                                   Domain-API in Schritt 6)
 Boot Classification            -> neu: boot_classification.hpp/.cpp
 Persistence Technical Result   -> RunPersistenceCoordinator (+ 1 neue kleine
                                    R1-Methode, Abschnitt 9)
@@ -393,12 +402,18 @@ für den Phasenwechsel nutzen und muss stattdessen dem bereits im Code
 vorhandenen Präzedenzfall aus `activateLoadedRun()`s `Completed`-Zweig
 folgen (Abschnitt 4.4): dort wird `candidate.processState.
 stateEnteredAtMillis` **direkt** gesetzt, ohne `propose()`/
-`applyProcessTransition()`-Aufruf. Kein neuer `TransitionReason`-Wert nötig,
-keine Änderung an `process_state_machine.hpp/.cpp`.
+`applyProcessTransition()`-Aufruf. Kein neuer `TransitionReason`-Wert nötig;
+Topologie und fachliche Process-State-Policy bleiben unverändert. Schritt 6
+ergänzt ausschließlich die unten definierte enge Domain-API für den
+`NoRun`-Bootpfad.
 
-`propose()`/`applyProcessTransition()` bleiben unverändert exportiert und
-werden für `NoRun`/`ResumeRejected` (Abschnitt 7, dort `from`/`to` bereits
-durch `validBootTopology()`/`RecoveryRejected` gedeckt) weiterhin verwendet.
+`propose()`/`applyProcessTransition()` bleiben unverändert exportiert. Der
+`NoRun`-Pfad ruft sie aus `FermentationApplication` nicht direkt auf, sondern
+verwendet ausschließlich `establishBootCompletedStandby()`; nur diese
+Domain-API ruft intern den bestehenden `propose(... BootCompleted ...)`- und
+`applyProcessTransition(..., nullptr)`-Pfad auf. `validBootTopology()` bleibt
+dabei die einzige Topologie-Wahrheit. `ResumeRejected` verwendet den
+bestehenden Coordinator-Discard-Pfad.
 **Korrektur (Major 8, Runde 2):** `CompletedRun` und `TerminalRunFault`
 laufen **nicht** über `propose()`/`applyProcessTransition()` – `validBootTopology()`
 (real geprüft) kennt **keine** `Boot→Fault`-Kante; ein
@@ -408,7 +423,35 @@ zwingend ablehnen würde. Beide Flows laufen stattdessen über den erweiterten
 `RunPersistenceCoordinator::activateR1EligibleRun()` (Abschnitt 9.1), der
 exakt den bestehenden `Fault`-/`Completed`-Präzedenzfall aus
 `activateLoadedRun()` direkt wiederverwendet (Abschnitt 4.4) – kein neuer
-`TransitionReason`, keine `process_state_machine.hpp/.cpp`-Änderung.
+`TransitionReason` und keine Änderung an Topologie, Enum oder fachlicher
+Process-State-Policy.
+
+**Domain-Ownership des `NoRun`-Bootübergangs (Schritt 6):** Die enge API
+liegt in `process_state_machine.hpp/.cpp` und hält Projection sowie Mutation
+in der Process-State-Machine:
+
+```cpp
+[[nodiscard]] bool establishBootCompletedStandby(
+    ProcessRuntimeState& current,
+    std::uint64_t monotonicMillis);
+```
+
+Ihr Vertrag ist ausschließlich der bestehende
+`BootCompleted: Boot -> Standby`-Pfad. Intern verwendet sie nur
+`propose(..., ProcessState::Standby, TransitionReason::BootCompleted, ...)`
+und `applyProcessTransition(..., nullptr)`. Sie führt keine neue fachliche
+Transition-Policy und keine Persistenzmutation ein. `FermentationApplication`
+verwendet diese Domain-API, ruft `applyProcessTransition()` und `propose()`
+nicht direkt auf, und der Architekturchecker bleibt unverändert.
+
+```text
+NO_RUN_BOOT_TRANSITION_OWNER=PROCESS_STATE_MACHINE
+FERMENTATION_APPLICATION_DIRECT_APPLY_PROCESS_TRANSITION=NO
+ARCHITECTURE_CHECKER_CHANGE=NO
+PROCESS_STATE_TOPOLOGY_CHANGE=NO
+PROCESS_STATE_ENUM_CHANGE=NO
+TRANSITION_REASON_CHANGE=NO
+```
 
 **Neu real geprüft (Beweisbasis für Abschnitt 7.2, Major 9,
 `run_persistence_contract.cpp:14-53`):** `validStateFor(variant, state)`
@@ -642,7 +685,7 @@ Unverändert gegenüber Vorfassung.
 | Device/Application Lifecycle | `FermentationApplication` (erweitert) | `INITIALIZING` / `READY` / `SERVICE_REQUIRED`; Komposition der übrigen vier; hält den einen kanonischen `runtimeRunState_` (Abschnitt 9, Blocker 1), aus dem `publishedProcessState()` als reine Projektion liest |
 | Boot Classification | `boot_classification.hpp/.cpp` (neu, freie Funktionen) | Klassifikation ausschließlich des technisch geladenen `RunPersistenceLoadResult` zu genau einem der Boot-Flow-Ergebnisse (Abschnitt 7); Konfigurationsvertrauen bleibt bei `ConfigurationRecoveryService`/`ConfigurationService` und gated die Run-Klassifikation in `FermentationApplication` |
 | Configuration Trust | `ConfigurationRecoveryService` / `ConfigurationService` | Konfigurationsvertrauen und Runtime-Lease; kein Bestandteil der `boot_classification`-API |
-| Process Lifecycle | `ProcessStateMachine` (unverändert) | Laufzustand eines aktiven Laufs (Preheating…Fault) **und** weiterhin `ServiceMode` (Abschnitt 7.1, unverändert, nicht verschoben). Boot-transiente Werte (`Boot`, `SafeBoot`, `RecoveryEvaluation`) bleiben im Wire-Enum bestehen (Abschnitt 6), werden aber von der aktiven `BootClassification`-Policy nicht mehr neu erzeugt – die *Boot-Entscheidung selbst* liegt bei `BootClassification`, nicht bei `ProcessStateMachine` |
+| Process Lifecycle | `ProcessStateMachine` | Laufzustand eines aktiven Laufs (Preheating…Fault) **und** weiterhin `ServiceMode` (Abschnitt 7.1, unverändert, nicht verschoben). Topologie und fachliche Policy bleiben unverändert; Schritt 6 ergänzt ausschließlich `establishBootCompletedStandby()` als enge Domain-API für den bestehenden `BootCompleted: Boot -> Standby`-Pfad. Boot-transiente Werte (`Boot`, `SafeBoot`, `RecoveryEvaluation`) bleiben im Wire-Enum bestehen (Abschnitt 6), werden aber von der aktiven `BootClassification`-Policy nicht mehr neu erzeugt – die *Boot-Entscheidung selbst* liegt bei `BootClassification`, nicht bei `ProcessStateMachine` |
 | Persistence Technical Result | `RunPersistenceCoordinator` (+ 1 neue kleine R1-Methode, Abschnitt 9) | technische Speicherwahrheit, `RunPersistenceLoadResult`, `RunPersistenceResult` |
 | Actuation Permission | `ActuationInterlock` (umbenannt/verkleinert aus `SafetyCore`) | `DENIED`/`ALLOWED` für den `ActuatorPlanner`-Eingang (Autorität etabliert, physischer Consumer folgt in späteren Issues, Abschnitt 3) |
 | Fault/Diagnostic Presentation | `PresentationState` (Abschnitt 11) | UI-/Diagnoseanzeige, nie gate-relevant |
@@ -773,7 +816,7 @@ enum class BootClassification : std::uint8_t {
 
 | Flow | Application Lifecycle | Process State | Persistence Action | Actuation | Diagnose |
 |---|---|---|---|---|---|
-| `NoRun` | `READY` | `runtimeRunState_ = std::unique_ptr<RunCommandState>{new (std::nothrow) RunCommandState()}` (Abschnitt 12.4.1, Runde 4 – nicht `make_unique`), `processState.state == Standby` (via `propose()`+`TransitionReason::BootCompleted`, deckt sich mit `validBootTopology()`); Allokationsfehler → fail-closed, `SERVICE_REQUIRED` statt `READY` (Abschnitt 9 Blocker 1); published erst nach erfolgreicher Allokation | keine | `DENIED` (bis Fresh Start) | keine |
+| `NoRun` | `READY` | `runtimeRunState_ = std::unique_ptr<RunCommandState>{new (std::nothrow) RunCommandState()}` (Abschnitt 12.4.1, Runde 4 – nicht `make_unique`); die Application ruft danach ausschließlich `establishBootCompletedStandby(runtimeRunState_->processState, 0U)` auf. Die Domain-API etabliert intern den bestehenden `propose()`+`applyProcessTransition(..., nullptr)`-Pfad mit `TransitionReason::BootCompleted`; `validBootTopology()` bleibt die einzige Topologie-Wahrheit. Allokations- oder Domain-Projektionsfehler → fail-closed, `SERVICE_REQUIRED` statt `READY` (Abschnitt 9); published erst nach erfolgreicher Projektion | keine | `DENIED` (bis Fresh Start) | keine |
 | `ResumeOffer` | `READY` | **nicht published** | Snapshot bleibt technisch in `RunPersistenceCoordinator` (`LoadedActiveRun`); rekonstruierter `RunCommandState` lebt **in `FermentationApplication`** (Abschnitt 9, Blocker 1) | `DENIED` | ResumeOffer-Anzeige mit Snapshot-Vorschau |
 | `ResumeConfirmed` | `READY` | published nach `RunPersistenceCoordinator::activateR1EligibleRun()` (Abschnitt 9.1, **neu**, deckt alle drei `LoadedActiveRun`-Ausgänge ab – Fault/Completed/3 Resume-Phasen –, kein `activateLoadedRun()`) | `activateR1EligibleRun()`, durabler Schreibvorgang (Recovery-Mutation, `UseStandardFallback`) | `DENIED` bis frische Interlock-Evidenz nach `Applied` | Lauf läuft weiter |
 | `ResumeRejected` | `READY` | published: `Standby` nach Discard | `RunPersistenceCoordinator::discardAsNoActiveRun()` (write-before-apply, bestehend) | `DENIED` | Verworfen-Hinweis optional |
@@ -885,13 +928,14 @@ Initialisierungswert eines default-konstruierten ProcessRuntimeState.
 Beweis, dass `Boot` nie persistiert/published/als Permission verwendet wird:
 
 1. **Nie published:** Jeder in Abschnitt 7 definierte Flow published
-   entweder gar nichts (`ResumeOffer`, `SafeBoot`-Familie) oder ruft
-   explizit `propose()`/den neuen `activateR1EligibleRun()`/
-   `discardAsNoActiveRun()`-Pfad mit einem konkreten Zielzustand
-   (`Standby`, `Completed`, `Fault`, der resumierten Phase) auf. Es gibt
-   **keinen** Codepfad in `FermentationApplication`, der
-   `publishedProcessState()` mit einem default-konstruierten
-   `ProcessRuntimeState` befüllt.
+   entweder gar nichts (`ResumeOffer`, `SafeBoot`-Familie), verwendet für
+   `NoRun` die enge Domain-API `establishBootCompletedStandby()` oder nutzt
+   den neuen `activateR1EligibleRun()`-/`discardAsNoActiveRun()`-Pfad mit
+   einem konkreten Zielzustand (`Standby`, `Completed`, `Fault`, der
+   resumierten Phase). Es gibt **keinen** Codepfad in
+   `FermentationApplication`, der `applyProcessTransition()` oder `propose()`
+   direkt aufruft oder `publishedProcessState()` mit einem
+   default-konstruierten `ProcessRuntimeState` befüllt.
 2. **Nie persistiert (korrigierter Beweis, Runde 2 – Major 9; die
    Vorfassung hatte hier fälschlich behauptet, `processState` werde nur bei
    `variant != NoActiveRun` geschrieben; real gilt das Gegenteil:
@@ -914,18 +958,22 @@ Beweis, dass `Boot` nie persistiert/published/als Permission verwendet wird:
    `discardAsNoActiveRun()`) starten entweder aus
    `restoreRunPersistenceSnapshotInto()`s Ausgabe (die selbst nur aus einem
    bereits validierten, also nie-`Boot`-Snapshot rekonstruiert) oder aus
-   einem `propose()`-erzeugten `Standby`-Kandidaten.
+   einem durch `establishBootCompletedStandby()` domainseitig erzeugten
+   `Standby`-Kandidaten.
 3. **Nie Permission:** `ActuationEvidence` (Abschnitt 10) enthält keinen
    `ProcessState`-Rohwert; `activationEvidenceComplete()`-artige Prüfungen
    hängen an `activationKind`/`processActivationApplied`/
    `activationPersistenceResult`, nicht am konkreten `ProcessState`-Wert.
 
-Die erste tatsächliche Veröffentlichung geschieht ausschließlich über die
-bestehenden Exportfunktionen `propose()`/`applyProcessTransition()` (für
-`NoRun`/`ResumeRejected`, Abschnitt 4.2) bzw. über die direkte Feldsetzung im
-neuen `activateR1EligibleRun()`-Pfad (für `CompletedRun`/`TerminalRunFault`/
-den aktiven Resume, Abschnitt 9.1, mirrored aus dem bestehenden `Completed`-/
-`Fault`-Präzedenzfall in `activateLoadedRun()`). **Korrektur gegenüber der
+Die erste tatsächliche Veröffentlichung geschieht für `NoRun` über die
+enge Domain-API `establishBootCompletedStandby()`; deren interne
+`propose()`-/`applyProcessTransition()`-Aufrufe bleiben vollständig in der
+Process-State-Machine. `ResumeRejected` und `DiscardableRun` verwenden den
+`RunPersistenceCoordinator`-Discard-Pfad. `CompletedRun`/`TerminalRunFault`/
+der aktive Resume verwenden die direkte Feldsetzung im neuen
+`activateR1EligibleRun()`-Pfad (Abschnitt 9.1, gespiegelt aus dem bestehenden
+`Completed`-/`Fault`-Präzedenzfall in `activateLoadedRun()`).
+**Korrektur gegenüber der
 Vorfassung (Major 5, Runde 3):** `CompletedRun`/`TerminalRunFault` wurden
 hier fälschlich weiterhin bei `propose()`/`applyProcessTransition()`
 aufgeführt – das widerspricht Major 8 (Abschnitt 4.2), wonach beide
@@ -1147,9 +1195,35 @@ PENDING_RESUME_ALLOCATION_FAILURE=FAIL_CLOSED
 FERMENTATION_APPLICATION_INLINE_LARGE_RUN_STATE=NO
 ```
 
+**NoRun-Domainprojektion getrennt vom Allokationsfehler:** Wenn die
+Allokation des frischen `RunCommandState` erfolgreich war, aber
+`establishBootCompletedStandby(target->processState, 0U)` die bestehende
+`BootCompleted`-Projektion nicht etablieren kann, ist das ein
+Application-/Domain-Invariantfehler. Zu diesem Zeitpunkt sind
+`BootClassification=NoRun` und `Persistence Action=NONE` bereits feststehend;
+die Persistence-Wahrheit wird dadurch nicht nachträglich untrusted. Der
+Fehler bleibt fail-closed und verwendet ausschließlich den bestehenden
+`SERVICE_REQUIRED`-Lifecycle mit `FaultCode::None`:
+
+```text
+APPLICATION_LIFECYCLE=SERVICE_REQUIRED
+PUBLISHED_PROCESS_STATE=NONE
+ACTUATION=DENIED
+FAULT_CODE=None
+APPLICATION_ALLOCATION_FAILURE=false
+PERSISTENCE_TRUST=UNCHANGED
+STORE_WRITE=NONE
+```
+
+Es wird kein neuer `FaultCode`, kein neues `PresentationState`-Flag und kein
+direkter Feld-Write auf `Standby` eingeführt; die spätere Codekorrektur ist
+`requireService(FaultCode::None)` an diesem einzigen Domain-Fehlerpfad.
+
 Jeder Flow aus Abschnitt 7, der etwas published, schreibt zuerst
 `runtimeRunState_` (bei `NoRun` einen minimalen `RunCommandState` mit
-`processState.state == Standby`; bei `ResumeRejected`/`DiscardableRun` den
+`processState.state == Standby`, nach erfolgreicher
+`establishBootCompletedStandby()`-Projektion; bei
+`ResumeRejected`/`DiscardableRun` den
 via `restoreRunPersistenceSnapshotInto()` rekonstruierten und durch
 `discardAsNoActiveRun()` auf `Standby` mutierten `RunCommandState` –
 **kein** minimaler Stub, Major 6, Abschnitt 9; sonst den von
@@ -1811,6 +1885,14 @@ applicationAllocationFailure = true`. Der `SERVICE_REQUIRED`/`DENIED`-
 Zustand selbst wird – wie jeder andere Application-Lifecycle-Zustand –
 direkt aus dem fehlgeschlagenen `begin()`/Allokationsschritt abgeleitet,
 nicht aus einem Interlock-`evaluate()`-Ergebnis.
+
+Das vorhandene `applicationAllocationFailure`-Flag gilt ausschließlich für
+eine tatsächlich fehlgeschlagene Heap-Allokation. Ein Fehlschlag von
+`establishBootCompletedStandby()` nach erfolgreicher Allokation setzt dieses
+Flag **nicht** (`APPLICATION_ALLOCATION_FAILURE=false`) und führt ebenfalls
+nicht zu `RunPersistenceUntrusted`; dafür gilt der in Abschnitt 9 definierte
+`SERVICE_REQUIRED`-/`FaultCode::None`-Vertrag. Es wird kein weiteres
+Presentation- oder Fehlerflag eingeführt.
 
 ```text
 APPLICATION_ALLOCATION_FAILURE_NE_PERSISTENCE_UNTRUSTED=YES
@@ -3378,7 +3460,10 @@ Aufbauend auf bestehender Testinfrastruktur (Abschnitt 4).
   Abschnitt 7, inklusive `FallbackRecovered → SafeBoot` (Abschnitt 7.3,
   Pflichttest `R1_FALLBACK_RECOVERED_NEVER_RESUME=PASS`) und der drei
   Legacy-Wire-Werte im geladenen Snapshot.
-- `test/test_process_state_machine`: unverändert lauffähig.
+- `test/test_process_state_machine`: bestehende Tests bleiben lauffähig;
+  zusätzlich gezielter Test für `establishBootCompletedStandby()` – nur der
+  bestehende `BootCompleted: Boot -> Standby`-Pfad wird geprüft, ohne neue
+  Transition-Regel oder Wire-/Enum-Änderung.
 - `test/test_run_persistence_coordinator`: neue Testfälle für
   `activateR1EligibleRun()` (alle drei eligible Phasen, Fehlerfall
   außerhalb der Phasenliste, Fehlerfall `state_ != LoadedActiveRun`).
@@ -3665,8 +3750,12 @@ erhält `restoreRunPersistenceSnapshotInto()`/`makeRunPersistenceSnapshotInto()`
 (Abschnitt 12.4.2/4.4). In jedem Fall ausschließlich mechanische
 In-place-/Out-Parameter-Helfer ohne Wire-/Schema-/Semantikänderung, keine
 neue öffentliche Fachlogik. Unverändert **keine** Änderung an
-`ActuatorPlanner`, `ActuatorPlanSinkDriver`, `ConfigurationService`,
-`process_state_machine.hpp/.cpp`. `ConfigurationRecoveryService` bleibt
+`ActuatorPlanner` und `ActuatorPlanSinkDriver`; `ConfigurationService` bleibt
+fachlich unverändert. `process_state_machine.hpp/.cpp`
+erhalten ausschließlich die enge Domain-API
+`establishBootCompletedStandby(ProcessRuntimeState&, uint64_t)` für den
+`NoRun`-Bootpfad; Topologie, fachliche Policy, Process-State-Enum und
+Transition-Reasons bleiben unverändert. `ConfigurationRecoveryService` bleibt
 fachlich unverändert; ausschließlich der äußere Allokationsausdruck in
 `create()` wird in Schritt 6 mechanisch auf `new (std::nothrow)` umgestellt.
 
@@ -3730,6 +3819,18 @@ Schritt 6: main/app_main.cpp komponiert das konkrete
   kleine, read-only Boot-Evidenzkopien für spätere `ActuationEvidence`
   erhalten; kein Snapshot wird in der Application dupliziert und keine zweite
   technische oder Classification-Autorität entsteht.
+  Im `NoRun`-Bootpfad ruft `FermentationApplication` nach erfolgreicher
+  Heap-Allokation ausschließlich
+  `establishBootCompletedStandby(target->processState, 0U)` auf. Diese enge
+  Domain-API besitzt die Process-State-Machine; sie verwendet intern nur den
+  bestehenden `propose(... BootCompleted ...)`- und
+  `applyProcessTransition(..., nullptr)`-Pfad. Die Application ruft keine
+  dieser beiden Mutationsfunktionen direkt auf. Topologie, Process-State-Enum,
+  Transition-Reasons, fachliche Policy und Architekturchecker bleiben
+  unverändert.
+  Scheitert die Domain-Projektion nach erfolgreicher Allokation, gilt
+  `SERVICE_REQUIRED` + `FaultCode::None`, ohne Publish, Store-Write,
+  Persistence-Trust-Änderung oder `applicationAllocationFailure`-Flag.
   Keine Boot-Allokation nur zur Vorbereitung eines unerreichbaren Triggers,
   keine UI-/Sensor-/Actor-Composition.
 Schritt 7: Teststrategie vollstaendig umsetzen (Abschnitt 13), inklusive
@@ -3808,6 +3909,19 @@ ISSUE121_CONTAINER_REDESIGN=NO
 
 INTERLOCK_FALLBACK_TRUST_EXCEPTION=REMOVED
 APPLICATION_OOM_DIAGNOSTIC=NON_PERSISTENCE
+NO_RUN_BOOT_TRANSITION_OWNER=PROCESS_STATE_MACHINE
+FERMENTATION_APPLICATION_DIRECT_APPLY_PROCESS_TRANSITION=NO
+ARCHITECTURE_CHECKER_CHANGE=NO
+PROCESS_STATE_TOPOLOGY_CHANGE=NO
+PROCESS_STATE_ENUM_CHANGE=NO
+TRANSITION_REASON_CHANGE=NO
+NO_RUN_DOMAIN_PROJECTION_FAILURE_APPLICATION_LIFECYCLE=SERVICE_REQUIRED
+NO_RUN_DOMAIN_PROJECTION_FAILURE_PUBLISHED_PROCESS_STATE=NONE
+NO_RUN_DOMAIN_PROJECTION_FAILURE_ACTUATION=DENIED
+NO_RUN_DOMAIN_PROJECTION_FAILURE_FAULT_CODE=None
+NO_RUN_DOMAIN_PROJECTION_FAILURE_APPLICATION_ALLOCATION_FAILURE=false
+NO_RUN_DOMAIN_PROJECTION_FAILURE_PERSISTENCE_TRUST=UNCHANGED
+NO_RUN_DOMAIN_PROJECTION_FAILURE_STORE_WRITE=NONE
 WATCHDOG_RESET_STATELESS_CONTRACT=CLOSED
 PRODUCT_REACHABLE_STATIC_STACK_GATE=MANDATORY_BEFORE_HARDWARE_RUN_AUTHORIZATION
 MAIN_TASK_STACK_HIGH_WATERMARK=MANDATORY_DURING_AUTHORIZED_HARDWARE_RUN
@@ -3820,6 +3934,9 @@ COORDINATOR_HEAP_ALLOCATION_LARGEST_BLOCK_GATE=NOT_RUN_BEFORE_HARDWARE_OR_PASS_F
 PLAN_INTERNAL_CONFLICT=NONE
 OLD_STACK_PATH_TEXT=NONE
 OLD_OOM_ATTRIBUTION_TEXT=NONE
+STALE_PROCESS_STATE_MACHINE_UNCHANGED_STEP6_TEXT=NONE
+STALE_APPLICATION_DIRECT_APPLY_TRANSITION_TEXT=NONE
+STALE_NO_RUN_PERSISTENCE_UNTRUSTED_DIAGNOSTIC_TEXT=NONE
 BREAKING_PERSISTENCE_CHANGE=NO
 SCHEMA_MIGRATION_REQUIRED=NO
 ISSUE121_PRODUCT_COMPOSITION_ACTOR_FREE=YES
@@ -3890,6 +4007,8 @@ ARCHITECTURE_VERDICT=SIMPLIFY
 PRIOR_APPROVED_PLAN_SHA=e249b51cedf6f6a3edbce3a0889c48d77b79e828
 PRIOR_REVIEWED_CORRECTION_SHA=9b101295af6468878057758356de33848ec18061
 PLAN_CORRECTION_REASON=BOOT_CLASSIFICATION_AND_CONFIGURATION_TRUST_MUST_REMAIN_SEPARATE
+STEP_6_PRE_REVIEW_APPROVED_PLAN_SHA=86009eeba99b260a056c22ec82fd6c66c9531c73
+STEP_6_POST_IMPLEMENTATION_PLAN_CORRECTION_REASON=BOOT_COMPLETED_STANDBY_DOMAIN_OWNERSHIP_AND_DIAGNOSTIC_ATTRIBUTION
 ARCHITECTURE_BOUNDARY_CHANGE=NO
 FERMENTATION_APP_DEPENDS_ON_DEVICE_PLATFORM_ESP_IDF=NO
 ESP_TIME_ZONE_RESOLVER_OWNER=ESP_IDF_COMPOSITION_ROOT
@@ -3900,6 +4019,9 @@ CONFIGURATION_GRAPH_STORE_NEVER_OUTLIVES_TIME_ZONE_RESOLVER=YES
 CONFIG_GRAPH_AND_SERVICE_USE_SAME_TIME_ZONE_RESOLVER_IDENTITY=YES
 FERMENTATION_APP_CMAKE_CHANGE=NO
 ARCHITECTURE_CHECKER_CHANGE=NO
+PROCESS_STATE_TOPOLOGY_CHANGE=NO
+PROCESS_STATE_ENUM_CHANGE=NO
+TRANSITION_REASON_CHANGE=NO
 ADR_013_CHANGE=NO
 NATIVE_SMOKE_OVERLOAD=PRESERVED
 NEW_TIME_ZONE_PORT=NO
@@ -3910,6 +4032,10 @@ NEW_DI_FRAMEWORK=NO
 RESUME_OFFER_OWNERSHIP=CLOSED
 R1_RESUME_PATH=CLOSED_NO_C2
 FALLBACK_RECOVERED_R1_POLICY=SERVICE_REQUIRED_NO_RESUME
+NO_RUN_BOOT_TRANSITION_OWNER=PROCESS_STATE_MACHINE
+FERMENTATION_APPLICATION_DIRECT_APPLY_PROCESS_TRANSITION=NO
+PROCESS_STATE_MACHINE_NO_RUN_API=establishBootCompletedStandby(ProcessRuntimeState&, uint64_t)
+NO_RUN_BOOT_TRANSITION_INTERNALS=propose_PLUS_applyProcessTransition_NULLPTR
 STATELESS_INTERLOCK_HANDOFF=CLOSED
 PRODUCT_COMPOSITION_ACTOR_FREE=YES
 CONFIG_LIFETIME_GRAPH=CLOSED
@@ -3965,6 +4091,7 @@ COORDINATOR_REENTRANT=NO
 COORDINATOR_PRODUCT_CALL_AFFINITY=SINGLE_SERIALIZED_APPLICATION_TASK
 
 RUN_PERSISTENCE_CODEC_WIRE_SEMANTICS=UNCHANGED
+WIRE_FORMAT_CHANGE=NO
 RUN_PERSISTENCE_CODEC_STACK_SAFE_HELPERS=IN_SCOPE
 OLD_CODEC_NO_DIFF_TEXT=NONE
 
@@ -4004,24 +4131,36 @@ MAKE_DECODE_RESET_TEXT_CONFLICT=CLOSED
 STEP5_STACK_EVIDENCE_STATUS_CONFLICT=CLOSED
 POST_APPROVAL_PLAN_HISTORY=CLOSED
 SOURCE_OF_TRUTH_CONFLICT=NONE
+STALE_PROCESS_STATE_MACHINE_UNCHANGED_STEP6_TEXT=NONE
+STALE_APPLICATION_DIRECT_APPLY_TRANSITION_TEXT=NONE
+STALE_NO_RUN_PERSISTENCE_UNTRUSTED_DIAGNOSTIC_TEXT=NONE
 
 BREAKING_PERSISTENCE_CHANGE=NO
 SCHEMA_MIGRATION_REQUIRED=NO
 
-IMPLEMENTATION=IN_PROGRESS_BLOCKED_BEFORE_STEP_6
+IMPLEMENTATION=STEP_6_IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
 IMPLEMENTATION_STEPS_1_TO_5=PASS
 OWNER_STEP_5_REVIEW=PASS
 STEP_5_EFFECTIVE_SOURCE_SHA=7049380d0e4bd9c0522c4475fa156febcd63ed5d
 STEP_5_PRODUCT_COMPOSITION=NO
-IMPLEMENTATION_STEP_6=NOT_STARTED
-STEP_6_SOURCE_SHA=NOT_CREATED
+IMPLEMENTATION_STEP_6=IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
+STEP_6_SOURCE_SHA=d016d7fc6c6d60a3e2145a386f793686f20a4200
 IMPLEMENTATION_STEP_6_GATE=BLOCKED_PENDING_REVISED_PLAN_OWNER_REVIEW
 IMPLEMENTATION_STEP_7=NOT_STARTED
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
 PRODUCTION_CODE_CHANGE=NO
 TEST_CODE_CHANGE=NO
+THIS_PLAN_CORRECTION_PRODUCTION_CODE_CHANGE=NO
+THIS_PLAN_CORRECTION_TEST_CODE_CHANGE=NO
 FIRMWARE_TESTS=NOT_RUN_PLAN_ONLY
 HARDWARE_RUN=NO
+PR120=OPEN_DRAFT_FROZEN
+PR122=OPEN_DRAFT
+ISSUE121=OPEN
+MERGE=NO
+PLAN_DEVIATION=DISCOVERED_AND_DOCUMENTED_PENDING_REVISED_PLAN_APPROVAL
+OWNER_STEP_6_REVIEW=CHANGES_REQUIRED
+SOURCE_OF_TRUTH_CONFLICT=NONE
 OWNER_PLAN_REVIEW=PENDING
 ```
 
