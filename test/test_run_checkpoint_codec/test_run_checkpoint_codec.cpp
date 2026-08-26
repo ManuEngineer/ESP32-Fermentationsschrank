@@ -179,7 +179,11 @@ void test_program_checkpoint_round_trip_restores_active_run() {
     TEST_ASSERT_TRUE(restored->activeProgramRun.has_value());
 }
 
-void test_schema_one_two_fixtures_match_return_and_inplace_decoders() {
+// Hardcoded schema-1/2 bytes are the legacy-compatibility oracle. The direct
+// Into decode proves the new core against those same fixtures. The equality
+// with the return-by-value wrapper is wrapper parity only because that wrapper
+// already delegates to the Into core; it is not an independent codec oracle.
+void test_schema_one_two_fixtures_cover_legacy_compatibility_and_into_core() {
     for (const auto& fixture :
          {std::pair<std::uint32_t, std::string>{1U, schemaOneActivePayload()},
           std::pair<std::uint32_t, std::string>{2U, schemaTwoActivePayload()},
@@ -215,7 +219,7 @@ void test_schema_one_two_fixtures_match_return_and_inplace_decoders() {
     }
 }
 
-void test_record_decode_failure_does_not_update_destination() {
+void test_record_envelope_failure_leaves_destination_unmodified() {
     const auto original = recoveryEvaluationPendingSnapshot();
     const auto record = checkpointRecordBytes(original);
     auto damaged = record;
@@ -237,6 +241,61 @@ void test_record_decode_failure_does_not_update_destination() {
                              destination.snapshot.activeRunId.c_str());
     TEST_ASSERT_EQUAL_UINT32(original.recoveryEpisodeRevision,
                              destination.snapshot.recoveryEpisodeRevision);
+}
+
+void test_inner_snapshot_decode_failure_is_not_consumed() {
+    const auto original = programSnapshot();
+    const auto record = checkpointRecordBytes(original);
+    const auto decodedEnvelope = device_platform::decodeEnvelope(record);
+    TEST_ASSERT_TRUE(decodedEnvelope.envelope.has_value());
+    TEST_ASSERT_EQUAL_UINT32(7U,
+                             decodedEnvelope.envelope->recordTypeId.value());
+    TEST_ASSERT_EQUAL_UINT32(kCurrentRunPersistenceSchema,
+                             decodedEnvelope.envelope->schemaVersion);
+    TEST_ASSERT_EQUAL_UINT64(9U,
+                             decodedEnvelope.envelope->storageEpoch.value());
+    TEST_ASSERT_EQUAL_UINT64(7U, decodedEnvelope.envelope->versionValue);
+    TEST_ASSERT_TRUE(decodedEnvelope.envelope->payload.size() > 1U);
+
+    auto innerFailureEnvelope = *decodedEnvelope.envelope;
+    innerFailureEnvelope.payload.pop_back();
+    std::string innerFailureRecord;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+        static_cast<int>(device_platform::encodeEnvelope(
+            innerFailureEnvelope, innerFailureRecord, 8240U)));
+    const auto reencodedEnvelope =
+        device_platform::decodeEnvelope(innerFailureRecord);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeDecodeStatus::Success),
+        static_cast<int>(reencodedEnvelope.status));
+    TEST_ASSERT_TRUE(reencodedEnvelope.envelope.has_value());
+
+    RunPersistenceRawRecord destination;
+    destination.bytes = "sentinel-record";
+    destination.snapshot = recoveryEvaluationPendingSnapshot();
+    destination.checkpointRevision = 99U;
+    destination.utcUnixSeconds = 1700000000;
+
+    TEST_ASSERT_FALSE(decodeRunPersistenceRecordInto(
+        innerFailureRecord, device_platform::StorageEpoch(9U), destination));
+    // The snapshot decoder is allowed to have partially filled its target.
+    // The record caller must nevertheless withhold all record metadata until
+    // the complete snapshot decode succeeds.
+    TEST_ASSERT_EQUAL_STRING("checkpoint-run",
+                             destination.snapshot.activeRunId.c_str());
+    TEST_ASSERT_EQUAL_STRING("sentinel-record", destination.bytes.c_str());
+    TEST_ASSERT_EQUAL_UINT64(99U, destination.checkpointRevision);
+    TEST_ASSERT_TRUE(destination.utcUnixSeconds.has_value());
+    TEST_ASSERT_EQUAL_INT64(1700000000, *destination.utcUnixSeconds);
+
+    TEST_ASSERT_TRUE(decodeRunPersistenceRecordInto(
+        record, device_platform::StorageEpoch(9U), destination));
+    TEST_ASSERT_EQUAL_STRING(record.c_str(), destination.bytes.c_str());
+    TEST_ASSERT_EQUAL_UINT64(7U, destination.checkpointRevision);
+    TEST_ASSERT_TRUE(destination.snapshot.program.has_value());
+    TEST_ASSERT_EQUAL_STRING(original.activeRunId.c_str(),
+                             destination.snapshot.activeRunId.c_str());
 }
 
 void test_inplace_projection_and_restore_match_legacy_semantics() {
@@ -1493,8 +1552,10 @@ void test_committed_head_accepts_mixed_current_and_fallback_schema() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_program_checkpoint_round_trip_restores_active_run);
-    RUN_TEST(test_schema_one_two_fixtures_match_return_and_inplace_decoders);
-    RUN_TEST(test_record_decode_failure_does_not_update_destination);
+    RUN_TEST(
+        test_schema_one_two_fixtures_cover_legacy_compatibility_and_into_core);
+    RUN_TEST(test_record_envelope_failure_leaves_destination_unmodified);
+    RUN_TEST(test_inner_snapshot_decode_failure_is_not_consumed);
     RUN_TEST(test_inplace_projection_and_restore_match_legacy_semantics);
     RUN_TEST(test_snapshot_into_variant_reuse_clears_stale_fields);
     RUN_TEST(test_active_recovery_fault_requires_schema_three);

@@ -5995,6 +5995,12 @@ void test_activate_r1_eligible_clean_failure_can_retry_but_indeterminate_cannot(
         TEST_ASSERT_EQUAL_INT(
             static_cast<int>(RunPersistenceCoordinatorState::LoadedActiveRun),
             static_cast<int>(coordinator.state()));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceCoordinatorState::LoadedActiveRun),
+            static_cast<int>(failed.coordinatorState));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceDurability::Unchanged),
+            static_cast<int>(failed.durability));
 
         store.clearFaults();
         const auto retried = coordinator.activateR1EligibleRun(
@@ -6051,6 +6057,88 @@ void test_activate_r1_eligible_clean_failure_can_retry_but_indeterminate_cannot(
         TEST_ASSERT_EQUAL_UINT64(oldEnteredAt,
                                  restored->processState.stateEnteredAtMillis);
     }
+}
+
+void test_inner_snapshot_decode_failure_is_not_installed_or_reused() {
+    SequencedWriteStore store;
+    RunPersistenceCoordinator seed(store, device_platform::StorageEpoch(1U),
+                                   RunCheckpointSchedule{});
+    static_cast<void>(seed.loadAndInitialize());
+    const auto expectedState = persistedPreheatingRun(seed, 2050U);
+    const auto currentReference =
+        RunPersistenceCoordinatorTestAccess::currentReference(seed);
+    const auto currentKey =
+        currentReference.slot == 0U ? slotKey("rc0") : slotKey("rc1");
+    const auto originalRead = store.read(currentKey, 8240U);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreReadStatus::Success),
+        static_cast<int>(originalRead.status));
+
+    const auto originalEnvelope =
+        device_platform::decodeEnvelope(originalRead.value);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeDecodeStatus::Success),
+        static_cast<int>(originalEnvelope.status));
+    TEST_ASSERT_TRUE(originalEnvelope.envelope.has_value());
+    TEST_ASSERT_EQUAL_UINT32(7U,
+                             originalEnvelope.envelope->recordTypeId.value());
+    TEST_ASSERT_EQUAL_UINT32(kCurrentRunPersistenceSchema,
+                             originalEnvelope.envelope->schemaVersion);
+    TEST_ASSERT_EQUAL_UINT64(1U,
+                             originalEnvelope.envelope->storageEpoch.value());
+    TEST_ASSERT_TRUE(originalEnvelope.envelope->payload.size() > 1U);
+
+    auto innerFailureEnvelope = *originalEnvelope.envelope;
+    innerFailureEnvelope.payload.pop_back();
+    std::string innerFailureRecord;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+        static_cast<int>(device_platform::encodeEnvelope(
+            innerFailureEnvelope, innerFailureRecord, 8240U)));
+    const auto reencodedEnvelope =
+        device_platform::decodeEnvelope(innerFailureRecord);
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeDecodeStatus::Success),
+        static_cast<int>(reencodedEnvelope.status));
+    TEST_ASSERT_TRUE(reencodedEnvelope.envelope.has_value());
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreWriteStatus::Success),
+        static_cast<int>(
+            store.backing().write(currentKey, innerFailureRecord)));
+    store.restart();
+
+    RunPersistenceCoordinator failedLoad(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto failed = failedLoad.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceLoadStatus::NotReconstructible),
+        static_cast<int>(failed.status));
+    TEST_ASSERT_FALSE(failed.snapshot.has_value());
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCoordinatorState::BlockedIndeterminate),
+        static_cast<int>(failedLoad.state()));
+    TEST_ASSERT_FALSE(RunPersistenceCoordinatorTestAccess::slotLoaded(
+        failedLoad, currentReference.slot));
+    TEST_ASSERT_FALSE(RunPersistenceCoordinatorTestAccess::slotLoaded(
+        failedLoad, 1U - currentReference.slot));
+
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::StateStoreWriteStatus::Success),
+        static_cast<int>(
+            store.backing().write(currentKey, originalRead.value)));
+    store.restart();
+
+    RunPersistenceCoordinator validLoad(
+        store, device_platform::StorageEpoch(1U), RunCheckpointSchedule{});
+    const auto valid = validLoad.loadAndInitialize();
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceLoadStatus::Current),
+                          static_cast<int>(valid.status));
+    TEST_ASSERT_TRUE(valid.snapshot.has_value());
+    TEST_ASSERT_EQUAL_STRING(expectedState.activeRunId.c_str(),
+                             valid.snapshot->activeRunId.c_str());
+    TEST_ASSERT_TRUE(RunPersistenceCoordinatorTestAccess::slotLoaded(
+        validLoad, currentReference.slot));
 }
 
 void test_apply_live_recovery_evidence_requires_a_value_to_latch() {
@@ -8879,6 +8967,7 @@ int main(int, char**) {
     RUN_TEST(test_activate_r1_eligible_write_failure_leaves_current_unchanged);
     RUN_TEST(
         test_activate_r1_eligible_clean_failure_can_retry_but_indeterminate_cannot);
+    RUN_TEST(test_inner_snapshot_decode_failure_is_not_installed_or_reused);
     RUN_TEST(test_apply_live_recovery_evidence_requires_a_value_to_latch);
     RUN_TEST(test_activate_loaded_run_resumes_and_retains_unresolved_anchor);
     RUN_TEST(

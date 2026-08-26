@@ -228,6 +228,8 @@ void test_resume_failed_persistence_never_actuates() {
     device_platform::SensorQualitySnapshot sensor;
     SensorSelectionRuntimeState selection;
     validBootEvidence(input, sensor, selection);
+    input.persistenceCoordinatorState =
+        RunPersistenceCoordinatorState::LoadedActiveRun;
     input.activationPersistenceResult = RunPersistenceResultStatus::WriteFailed;
     input.processActivationApplied = false;
 
