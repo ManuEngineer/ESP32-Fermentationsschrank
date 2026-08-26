@@ -12,19 +12,23 @@ target_compile_options(${COMPONENT_LIB} PRIVATE "-std=gnu++17")
 # The #121 static product-stack gate reuses the existing GCC stack-usage and
 # callgraph artefacts for the product-reachable lifecycle and persistence
 # paths.  These flags are analysis-only and do not alter product semantics,
-# profile selection, or the configured task stack.
-set_source_files_properties(
-    "src/fermentation_application.cpp"
-    "src/program_model.cpp"
-    "src/process_state_machine.cpp"
-    "src/run_commands.cpp"
-    "src/run_persistence_contract.cpp"
-    "src/run_persistence_codec.cpp"
-    "src/run_persistence_coordinator.cpp"
-    "src/run_snapshot.cpp"
-    "src/temperature_control_orchestrator.cpp"
-    PROPERTIES COMPILE_OPTIONS "-fstack-usage;-fcallgraph-info=su"
-)
+# profile selection, or the configured task stack.  Clang's separate ESP-IDF
+# analysis build does not accept GCC's callgraph option.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(
+        "src/fermentation_application.cpp"
+        "src/program_document_codec.cpp"
+        "src/program_model.cpp"
+        "src/process_state_machine.cpp"
+        "src/run_commands.cpp"
+        "src/run_persistence_contract.cpp"
+        "src/run_persistence_codec.cpp"
+        "src/run_persistence_coordinator.cpp"
+        "src/run_snapshot.cpp"
+        "src/temperature_control_orchestrator.cpp"
+        PROPERTIES COMPILE_OPTIONS "-fstack-usage;-fcallgraph-info=su"
+    )
+endif()
 
 # Der #29-Fehler-Seam bleibt ein privates, bring-up-only Compile-Artefakt.
 # Native und esp32_release erhalten weder die Definition noch den privaten

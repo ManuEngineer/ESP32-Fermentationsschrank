@@ -829,8 +829,10 @@ bool validateProcessRunSnapshot(const ProcessRunSnapshot& snapshot) {
                    program_limits::kMaximumHoldDurationMinutes);
 }
 
-std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(const ActiveRun& run) {
-    const auto& program = run.snapshot().sourceProgram.program;
+std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
+    const RunProgramSnapshot& runSnapshot,
+    const EffectiveRunValues& effectiveValues) {
+    const auto& program = runSnapshot.sourceProgram.program;
     if (!program.targetQualification.durationMinutes.has_value() ||
         !program.maximumTargetReachMinutes.has_value()) {
         return std::nullopt;
@@ -845,11 +847,15 @@ std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(const ActiveRun& run) {
     snapshot.maximumTargetReachMinutes = *program.maximumTargetReachMinutes;
     snapshot.maximumProductWaitMinutes = program.maximumProductWaitMinutes;
     snapshot.fermentationDurationMinutes =
-        run.effectiveValues().remainingDurationMinutes;
+        effectiveValues.remainingDurationMinutes;
     snapshot.holdDurationMinutes = program.completion.holdDurationMinutes;
     return validateProcessRunSnapshot(snapshot)
                ? std::optional<ProcessRunSnapshot>{snapshot}
                : std::nullopt;
+}
+
+std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(const ActiveRun& run) {
+    return makeProcessRunSnapshot(run.snapshot(), run.effectiveValues());
 }
 
 bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,

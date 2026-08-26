@@ -49,6 +49,9 @@ struct ProcessRunSnapshot {
 [[nodiscard]] bool validateProcessRunSnapshot(
     const ProcessRunSnapshot& snapshot);
 [[nodiscard]] std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
+    const RunProgramSnapshot& runSnapshot,
+    const EffectiveRunValues& effectiveValues);
+[[nodiscard]] std::optional<ProcessRunSnapshot> makeProcessRunSnapshot(
     const ActiveRun& run);
 [[nodiscard]] bool equalProcessRunSnapshot(const ProcessRunSnapshot& left,
                                            const ProcessRunSnapshot& right);

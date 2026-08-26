@@ -340,12 +340,15 @@ bool validateRunPersistenceSnapshot(const RunPersistenceSnapshot& snapshot) {
             snapshot.processRunSnapshot->kind != ProcessKind::Timed) {
             return false;
         }
-        const auto restored = ActiveRun::restore(
-            *snapshot.program, snapshot.revisions, snapshot.revisionCount);
-        const auto expectedProcess = restored.has_value()
-                                         ? makeProcessRunSnapshot(*restored)
-                                         : std::optional<ProcessRunSnapshot>{};
-        return restored.has_value() && expectedProcess.has_value() &&
+        EffectiveRunValues effectiveValues;
+        if (!validateRunProgramSnapshotInto(
+                *snapshot.program, snapshot.revisions, snapshot.revisionCount,
+                effectiveValues)) {
+            return false;
+        }
+        const auto expectedProcess =
+            makeProcessRunSnapshot(*snapshot.program, effectiveValues);
+        return expectedProcess.has_value() &&
                validateProcessRuntimeForCheckpoint(
                    snapshot.processState, &*snapshot.processRunSnapshot,
                    snapshot.checkpointMonotonicMillis) &&
@@ -525,10 +528,11 @@ bool restoreRunPersistenceSnapshotInto(const RunPersistenceSnapshot& snapshot,
         snapshot.recoveryTemperatureEvidence;
     destination.recoveryEpisodeRevision = snapshot.recoveryEpisodeRevision;
     if (snapshot.variant == RunCheckpointVariant::ProgramRun) {
-        auto restoredActiveRun = ActiveRun::restore(
-            *snapshot.program, snapshot.revisions, snapshot.revisionCount);
-        if (!restoredActiveRun.has_value()) return false;
-        destination.activeProgramRun = std::move(*restoredActiveRun);
+        if (!ActiveRun::restoreInto(*snapshot.program, snapshot.revisions,
+                                    snapshot.revisionCount,
+                                    destination.activeProgramRun)) {
+            return false;
+        }
         destination.activeRunId = snapshot.activeRunId;
         destination.activeRunSensorMode = snapshot.activeRunSensorMode;
         destination.sensorSelection = snapshot.sensorSelection;

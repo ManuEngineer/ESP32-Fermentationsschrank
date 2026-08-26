@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <limits>
+#include <optional>
 
 #include "run_snapshot.hpp"
 #include "standard_program_catalog.hpp"
@@ -362,6 +363,92 @@ void test_restore_replays_snapshot_and_revision_history() {
         restored->snapshot().sourceProgram.program.name.c_str());
 }
 
+void test_restore_into_matches_legacy_and_handles_zero_revisions() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    TEST_ASSERT_TRUE(run.has_value());
+
+    std::optional<ActiveRun> destination =
+        ActiveRun::start(source, ProgramSourceKind::UserProgram, 10U);
+    TEST_ASSERT_TRUE(destination.has_value());
+    TEST_ASSERT_TRUE(ActiveRun::restoreInto(run->snapshot(), run->revisions(),
+                                            run->revisionCount(), destination));
+
+    const auto legacy = ActiveRun::restore(run->snapshot(), run->revisions(),
+                                           run->revisionCount());
+    TEST_ASSERT_TRUE(legacy.has_value());
+    TEST_ASSERT_TRUE(destination.has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(
+        legacy->effectiveValues().targetTemperatureCelsius,
+        destination->effectiveValues().targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(
+        legacy->effectiveValues().remainingDurationMinutes,
+        destination->effectiveValues().remainingDurationMinutes);
+    TEST_ASSERT_EQUAL_UINT32(0U, destination->revisionCount());
+
+    auto adjusted =
+        ActiveRun::start(source, ProgramSourceKind::UserProgram, 11U);
+    TEST_ASSERT_TRUE(adjusted.has_value());
+    TEST_ASSERT_TRUE(decideAndApply(*adjusted, targetAdjustment(40.0, 100U),
+                                    adjustableContext())
+                         .applied());
+    TEST_ASSERT_TRUE(
+        ActiveRun::restoreInto(adjusted->snapshot(), adjusted->revisions(),
+                               adjusted->revisionCount(), destination));
+    TEST_ASSERT_EQUAL_UINT32(1U, destination->revisionCount());
+    TEST_ASSERT_EQUAL_DOUBLE(
+        40.0, destination->effectiveValues().targetTemperatureCelsius);
+}
+
+void test_restore_into_replays_multiple_revisions() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    TEST_ASSERT_TRUE(run.has_value());
+    TEST_ASSERT_TRUE(
+        decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
+            .applied());
+
+    RunAdjustmentRequest durationRequest;
+    durationRequest.remainingDurationMinutes = 90U;
+    durationRequest.confirmed = true;
+    durationRequest.timestamp.monotonicMillis = 200U;
+    TEST_ASSERT_TRUE(
+        decideAndApply(*run, durationRequest, adjustableContext()).applied());
+
+    std::optional<ActiveRun> restored;
+    TEST_ASSERT_TRUE(ActiveRun::restoreInto(run->snapshot(), run->revisions(),
+                                            run->revisionCount(), restored));
+    TEST_ASSERT_TRUE(restored.has_value());
+    TEST_ASSERT_EQUAL_DOUBLE(
+        40.0, restored->effectiveValues().targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(
+        90U, restored->effectiveValues().remainingDurationMinutes);
+    TEST_ASSERT_EQUAL_UINT32(2U, restored->revisionCount());
+    TEST_ASSERT_EQUAL_UINT32(2U, restored->revisions()[1].sequence);
+}
+
+void test_restore_into_rejects_invalid_revision_without_replacing_destination() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    TEST_ASSERT_TRUE(run.has_value());
+    TEST_ASSERT_TRUE(
+        decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
+            .applied());
+
+    std::optional<ActiveRun> destination =
+        ActiveRun::start(source, ProgramSourceKind::UserProgram, 10U);
+    TEST_ASSERT_TRUE(destination.has_value());
+    auto invalidRevisions = run->revisions();
+    invalidRevisions[0].sequence = 2U;
+
+    TEST_ASSERT_FALSE(ActiveRun::restoreInto(run->snapshot(), invalidRevisions,
+                                             1U, destination));
+    TEST_ASSERT_TRUE(destination.has_value());
+    TEST_ASSERT_EQUAL_UINT32(0U, destination->revisionCount());
+    TEST_ASSERT_EQUAL_DOUBLE(
+        39.0, destination->effectiveValues().targetTemperatureCelsius);
+}
+
 void test_restore_rejects_corrupt_or_reordered_revision_history() {
     const auto source = makeCommissionedUserProgram();
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
@@ -608,6 +695,10 @@ int main() {
     RUN_TEST(test_duration_and_combined_adjustments_are_atomic);
     RUN_TEST(test_unconfirmed_unsafe_and_completed_stage_changes_are_rejected);
     RUN_TEST(test_restore_replays_snapshot_and_revision_history);
+    RUN_TEST(test_restore_into_matches_legacy_and_handles_zero_revisions);
+    RUN_TEST(test_restore_into_replays_multiple_revisions);
+    RUN_TEST(
+        test_restore_into_rejects_invalid_revision_without_replacing_destination);
     RUN_TEST(test_restore_rejects_corrupt_or_reordered_revision_history);
     RUN_TEST(test_timestamp_and_revision_capacity_are_enforced);
     RUN_TEST(test_unix_timestamp_going_backwards_is_rejected);
