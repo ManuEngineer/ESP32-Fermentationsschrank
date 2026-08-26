@@ -9,13 +9,14 @@ Commit-SHA dieser Datei gilt:
 
 ```text
 LIFECYCLE_SIMPLIFICATION_PLAN_PENDING_OWNER_APPROVAL
-IMPLEMENTATION=STEP_6_IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
+IMPLEMENTATION=STEP_7_IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
 IMPLEMENTATION_STEPS_1_TO_5=PASS
 IMPLEMENTATION_STEP_6=IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
 IMPLEMENTATION_STEP_6_GATE=BLOCKED_PENDING_REVISED_PLAN_OWNER_REVIEW
-IMPLEMENTATION_STEP_7=NOT_STARTED
+IMPLEMENTATION_STEP_7=IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
 OWNER_STEP_5_REVIEW=PASS
-OWNER_STEP_6_REVIEW=CHANGES_REQUIRED
+OWNER_STEP_6_REVIEW=REOPENED_BY_STEP_7_COVERAGE_REVIEW
+OWNER_STEP_7_REVIEW=CHANGES_REQUIRED
 STEP_1_SOURCE_SHA=cbfd81e1a622da6f241b89ca43636f41bf798ada
 STEP_2_SOURCE_SHA=6f0d6341c4ae37634fdacb8df09650b8b0c8212d
 STEP_3_SOURCE_SHA=eda125791eda5bfb6ec7125b7392ea971f3c8ec0
@@ -26,11 +27,31 @@ STEP_5_EFFECTIVE_SOURCE_SHA=7049380d0e4bd9c0522c4475fa156febcd63ed5d
 STEP_6_PRE_REVIEW_APPROVED_PLAN_SHA=86009eeba99b260a056c22ec82fd6c66c9531c73
 STEP_6_ORIGINAL_SOURCE_SHA=d764de7d83ab5bb73d50500e03c99df00fc8bba2
 STEP_6_CORRECTION_SOURCE_SHA=d016d7fc6c6d60a3e2145a386f793686f20a4200
-STEP_6_EFFECTIVE_SOURCE_SHA=d016d7fc6c6d60a3e2145a386f793686f20a4200
+STEP_6_EFFECTIVE_SOURCE_SHA=5d8bc4d55d996c282fddd05a30ffde7184a12238
 STEP_6_POST_IMPLEMENTATION_PLAN_CORRECTION_REASON=BOOT_COMPLETED_STANDBY_DOMAIN_OWNERSHIP_AND_DIAGNOSTIC_ATTRIBUTION
+STEP_7_PRE_REVIEW_APPROVED_PLAN_SHA=68b81a16892a3a27c2eabdb8f571e34f1c107bbb
+STEP_7_PRE_REVIEW_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
+STEP_7_PLAN_CORRECTION_REASON=APPLICATION_TRIGGER_REACHABILITY_AND_DECODE_FAILURE_EVIDENCE
+STEP_7_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
+APPROVED_PLAN_SHA=68b81a16892a3a27c2eabdb8f571e34f1c107bbb
+PLAN_SHA=<exact, nach Commit>
 PLAN_DEVIATION=DISCOVERED_AND_DOCUMENTED_PENDING_REVISED_PLAN_APPROVAL
+OWNER_PLAN_REVIEW=PENDING
 THIS_PLAN_CORRECTION_PRODUCTION_CODE_CHANGE=NO
 THIS_PLAN_CORRECTION_TEST_CODE_CHANGE=NO
+PRODUCTION_CODE_CHANGE=NO
+TEST_CODE_CHANGE=NO
+PLAN_CODE_CHANGE=NO
+ARCHITECTURE_CHECKER_CHANGE=NO
+WIRE_FORMAT_CHANGE=NO
+SCHEMA_CHANGE=NO
+IMPLEMENTATION_STEP_8=NOT_STARTED
+PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
+HARDWARE_RUN=NO
+PR120=OPEN_DRAFT_FROZEN
+PR122=OPEN_DRAFT
+ISSUE121=OPEN
+MERGE=NO
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
 ```
 
@@ -355,9 +376,10 @@ Der Orchestrator bleibt Ziel künftiger Issues (#33/#106) und wird in dieser
 Revision **nicht produktiv komponiert**; seine Fachlogik/Domänenpolitik
 bleibt unverändert, nur die mechanische Interlock-Signatur (Abschnitt 4.9)
 migriert. Native/Integrationstests dürfen ihn weiterhin mit bestehenden
-Mock-Parametern prüfen (Abschnitt 13). `FermentationApplication` ruft für
-Fresh Start und R1-Resume `RunPersistenceCoordinator` **direkt** auf, nicht
-über den Orchestrator (Abschnitt 8/9).
+Mock-Parametern prüfen (Abschnitt 13). Die späteren Fresh-Start-/R1-Resume-
+Consumerverträge verwenden die bestehenden Coordinator-Primitiven direkt;
+in #121 existiert dafür jedoch kein realer Product-Command-Trigger und keine
+Application-Verdrahtung (Abschnitt 8/9).
 
 ## 4. Current-State-Inventur (auf `BASE_SHA`, real geprüft)
 
@@ -682,7 +704,7 @@ Unverändert gegenüber Vorfassung.
 
 | Verantwortung | Typ | Autorität für |
 |---|---|---|
-| Device/Application Lifecycle | `FermentationApplication` (erweitert) | `INITIALIZING` / `READY` / `SERVICE_REQUIRED`; Komposition der übrigen vier; hält den einen kanonischen `runtimeRunState_` (Abschnitt 9, Blocker 1), aus dem `publishedProcessState()` als reine Projektion liest |
+| Device/Application Lifecycle | `FermentationApplication` (erweitert) | `INITIALIZING` / `READY` / `SERVICE_REQUIRED`; Composition der #121-Lifecycle-/Trust-Objekte ohne Product-Command-Producer; hält den einen kanonischen `runtimeRunState_` (Abschnitt 9, Blocker 1), aus dem `publishedProcessState()` als reine Projektion liest |
 | Boot Classification | `boot_classification.hpp/.cpp` (neu, freie Funktionen) | Klassifikation ausschließlich des technisch geladenen `RunPersistenceLoadResult` zu genau einem der Boot-Flow-Ergebnisse (Abschnitt 7); Konfigurationsvertrauen bleibt bei `ConfigurationRecoveryService`/`ConfigurationService` und gated die Run-Klassifikation in `FermentationApplication` |
 | Configuration Trust | `ConfigurationRecoveryService` / `ConfigurationService` | Konfigurationsvertrauen und Runtime-Lease; kein Bestandteil der `boot_classification`-API |
 | Process Lifecycle | `ProcessStateMachine` | Laufzustand eines aktiven Laufs (Preheating…Fault) **und** weiterhin `ServiceMode` (Abschnitt 7.1, unverändert, nicht verschoben). Topologie und fachliche Policy bleiben unverändert; Schritt 6 ergänzt ausschließlich `establishBootCompletedStandby()` als enge Domain-API für den bestehenden `BootCompleted: Boot -> Standby`-Pfad. Boot-transiente Werte (`Boot`, `SafeBoot`, `RecoveryEvaluation`) bleiben im Wire-Enum bestehen (Abschnitt 6), werden aber von der aktiven `BootClassification`-Policy nicht mehr neu erzeugt – die *Boot-Entscheidung selbst* liegt bei `BootClassification`, nicht bei `ProcessStateMachine` |
@@ -814,12 +836,19 @@ enum class BootClassification : std::uint8_t {
 };
 ```
 
+`ResumeConfirmed`, `ResumeRejected` und die Fresh-Start-Flows sind hier als
+fachlich definierte spätere Consumer-Flows dokumentiert. #121 verdrahtet
+keinen Product-Command-Producer und besitzt daher keinen erreichbaren
+Application-Trigger für diese Aktionen; ihre Domain-/Coordinator-Primitive
+bleiben implementiert und werden von einem späteren echten Consumer in der
+festgelegten Reihenfolge verwendet.
+
 | Flow | Application Lifecycle | Process State | Persistence Action | Actuation | Diagnose |
 |---|---|---|---|---|---|
 | `NoRun` | `READY` | `runtimeRunState_ = std::unique_ptr<RunCommandState>{new (std::nothrow) RunCommandState()}` (Abschnitt 12.4.1, Runde 4 – nicht `make_unique`); die Application ruft danach ausschließlich `establishBootCompletedStandby(runtimeRunState_->processState, 0U)` auf. Die Domain-API etabliert intern den bestehenden `propose()`+`applyProcessTransition(..., nullptr)`-Pfad mit `TransitionReason::BootCompleted`; `validBootTopology()` bleibt die einzige Topologie-Wahrheit. Allokations- oder Domain-Projektionsfehler → fail-closed, `SERVICE_REQUIRED` statt `READY` (Abschnitt 9); published erst nach erfolgreicher Projektion | keine | `DENIED` (bis Fresh Start) | keine |
 | `ResumeOffer` | `READY` | **nicht published** | Snapshot bleibt technisch in `RunPersistenceCoordinator` (`LoadedActiveRun`); rekonstruierter `RunCommandState` lebt **in `FermentationApplication`** (Abschnitt 9, Blocker 1) | `DENIED` | ResumeOffer-Anzeige mit Snapshot-Vorschau |
-| `ResumeConfirmed` | `READY` | published nach `RunPersistenceCoordinator::activateR1EligibleRun()` (Abschnitt 9.1, **neu**, deckt alle drei `LoadedActiveRun`-Ausgänge ab – Fault/Completed/3 Resume-Phasen –, kein `activateLoadedRun()`) | `activateR1EligibleRun()`, durabler Schreibvorgang (Recovery-Mutation, `UseStandardFallback`) | `DENIED` bis frische Interlock-Evidenz nach `Applied` | Lauf läuft weiter |
-| `ResumeRejected` | `READY` | published: `Standby` nach Discard | `RunPersistenceCoordinator::discardAsNoActiveRun()` (write-before-apply, bestehend) | `DENIED` | Verworfen-Hinweis optional |
+| `ResumeConfirmed` | `READY` bei einem späteren echten Consumer; in #121 `NOT_PRODUCT_REACHABLE` | published nach `RunPersistenceCoordinator::activateR1EligibleRun()` (Abschnitt 9.1, **neu**, deckt alle drei `LoadedActiveRun`-Ausgänge ab – Fault/Completed/3 Resume-Phasen –, kein `activateLoadedRun()`) | `activateR1EligibleRun()`, durabler Schreibvorgang (Recovery-Mutation, `UseStandardFallback`) | `DENIED` bis frische Interlock-Evidenz nach `Applied` | Lauf läuft weiter |
+| `ResumeRejected` | `READY` bei einem späteren echten Consumer; in #121 `NOT_PRODUCT_REACHABLE` | published: `Standby` nach Discard | `RunPersistenceCoordinator::discardAsNoActiveRun()` (write-before-apply, bestehend) | `DENIED` | Verworfen-Hinweis optional |
 | `DiscardableRun` | `READY` | published: `Standby`, nur bei `Applied`, nach `discardAsNoActiveRun()` mit einem via `restoreRunPersistenceSnapshotInto()` rekonstruierten `RunCommandState&` (Abschnitt 9, Major 6 – **nicht** ein leerer/minimaler Stub) | `discardAsNoActiveRun()`, write-before-apply | `DENIED` | keine (stiller Discard, wie heute); bei Fehlschlag `SERVICE_REQUIRED` statt stillem Discard (Abschnitt 9 Fehlerklassifikation) |
 | `CompletedRun` | `READY` | `target` heap-alloziert (`new (std::nothrow)`) + `restoreRunPersistenceSnapshotInto(*loaded.snapshot, *target)` (Abschnitt 12.4.2, Major 9, Runde 4 – identisches Muster wie `DiscardableRun`), dann published: `Completed` via `activateR1EligibleRun(*target, time, nullptr)` (Abschnitt 9.1, exakter `activateLoadedRun()`-Completed-Präzedenzfall: RAM-only, `stateEnteredAtMillis`-Refresh; nur bei `Applied`: `runtimeRunState_ = std::move(target)`) | RAM-Mutation, `RunPersistenceDurability::Unchanged` (kein Store-Schreibvorgang) | `DENIED` | Abschluss-Anzeige |
 | `TerminalRunFault` | `READY` | `target` heap-alloziert (`new (std::nothrow)`) + `restoreRunPersistenceSnapshotInto(*loaded.snapshot, *target)` (Abschnitt 12.4.2, Major 9, Runde 4 – identisches Muster wie `DiscardableRun`), dann published: `Fault` via `activateR1EligibleRun(*target, time, nullptr)` (Abschnitt 9.1, exakter `activateLoadedRun()`-Fault-Präzedenzfall: RAM-only, unveränderter `current`; nur bei `Applied`: `runtimeRunState_ = std::move(target)`; **kein** `propose(Boot→Fault)` – `validBootTopology()` kennt diese Kante nicht, Abschnitt 4.2 Major 8) | RAM-Mutation, `RunPersistenceDurability::Unchanged` (kein Store-Schreibvorgang) | `DENIED` | Fehler-Anzeige |
@@ -1081,17 +1110,27 @@ dokumentiert (Abschnitt 10), ohne in dieser Revision Code zu erzeugen.
 
 ## 8. Fresh Start
 
+Die Fresh-Start-Policy und ihre Domain-Primitiven sind in R1 definiert bzw.
+implementiert. #121 bleibt jedoch actor-free, `FermentationApplication::update()`
+bleibt leer und enthält keinen UI-/Command-Producer. Daher ist der
+Application-Trigger in dieser Issue nicht produktseitig erreichbar; die
+Application-Verdrahtung wird auf den ersten echten Command-Consumer eines
+späteren Issues verschoben.
+
 ```text
+R1_FRESH_START_POLICY=DEFINED
+R1_FRESH_START_DOMAIN_PRIMITIVES=IMPLEMENTED
+R1_FRESH_START_APPLICATION_TRIGGER=NOT_PRODUCT_REACHABLE_IN_ISSUE121
+R1_FRESH_START_APPLICATION_WIRING=DEFERRED_TO_FIRST_REAL_COMMAND_CONSUMER
+
 Standby (Application READY, Actuation DENIED)
-  // runtimeRunState_ bereits aus dem NoRun-Boot-Flow gesetzt (Abschnitt 7:
-  // ein minimaler RunCommandState mit processState.state == Standby,
-  // heapbesitzend, Abschnitt 9 Blocker 1)
-  -> Nutzer Start-Kommando
-  -> Application prueft CommandKind ∈ {StartProgram, StartManualHolding}
-     (dieselbe Regel wie TemperatureControlApplicationOrchestrator::
-     persistFreshStartCommand(), hier direkt in FermentationApplication
-     angewendet statt ueber den – in dieser Revision nicht komponierten –
-     Orchestrator, Abschnitt 4.9)
+  // runtimeRunState_ ist im NoRun-Boot-Flow bereits heap-owned gesetzt.
+  // Der folgende Ablauf ist der verbindliche spätere Consumervertrag,
+  // kein in #121 erreichbarer Application-Handler.
+  -> echter späterer Product-Command-Consumer
+  -> prüft CommandKind ∈ {StartProgram, StartManualHolding}
+     (dieselbe Domain-Regel wie TemperatureControlApplicationOrchestrator::
+     persistFreshStartCommand(), ohne eine zweite Policy)
   -> decisionTarget = std::unique_ptr<CommandDecision>{
        new (std::nothrow) CommandDecision()}
      if (decisionTarget == nullptr) -> fail-closed, kein Start
@@ -1122,7 +1161,7 @@ Persistenzcode; nur die direkte Verdrahtung ist neu" war nach dem
 inzwischen deutlich erweiterten Stack-Safety-Umbau (Abschnitt 12.4) nicht
 mehr korrekt. Richtig: Keine neue Persistenz-**Semantik**, kein neues
 Wireformat und keine neue Transaktionspolicy. Neu sind die direkte
-Application-Verdrahtung (`RunPersistenceCoordinator::persistCommand` +
+Spätere Consumer-Verdrahtung (`RunPersistenceCoordinator::persistCommand` +
 `ActuationInterlock::evaluate` mit den realen Post-Commit-Feldern) plus
 rein mechanische, stack-sichere In-place-Helfer
 (`decideProgramStartInto()`/`decideManualStartInto()`,
@@ -1265,14 +1304,15 @@ RunPersistenceCoordinator::loadAndInitializeInto(runPersistenceLoadResult&)
         // Kopie irgendwo im Aufrufpfad
      -> PENDING_RESUME_OWNER=FermentationApplication
         PENDING_RESUME_TYPE=std::unique_ptr<RunCommandState>
-        PENDING_RESUME_LIFETIME=von Klassifikation bis Confirm/Reject/
-          SERVICE_REQUIRED oder READY (RAII-Member von
+        PENDING_RESUME_LIFETIME=von Klassifikation bis zum ersten echten
+          Command-Consumer, SERVICE_REQUIRED oder READY (RAII-Member von
           FermentationApplication, kein dangling reference ueber
           begin()-Rueckkehr hinweg, da ein partieller Fehler nach dem
           Lifecycle-Aufbau begin()==true zurueckgibt, Abschnitt 12.1)
         PENDING_RESUME_CLEAR_ON=confirm (nach Applied verschoben in den
           aktiven RunCommandState), reject (verworfen), begin()-
-          Allokationsfehlschlag (verworfen, fail-closed)
+          Allokationsfehlschlag (verworfen, fail-closed); Confirm/Reject
+          sind in #121 nicht als Application-Trigger erreichbar
      -> Snapshot selbst bleibt zusaetzlich technisch im
         RunPersistenceCoordinator (state()==LoadedActiveRun); zwei
         Darstellungen desselben Laufs (Rohsnapshot beim Coordinator,
@@ -1289,8 +1329,17 @@ RunPersistenceCoordinator::loadAndInitializeInto(runPersistenceLoadResult&)
      -> Actuation DENIED
      -> kein automatisches FSM-Advancement
 
-Bei explizitem Resume-Confirm durch Nutzer:
-  -> Application prueft aktuelle Config-/Sensor-/Safety-Evidenz frisch
+R1_RESUME_OFFER_BOOT_PROJECTION=IMPLEMENTED_IN_ISSUE121
+R1_PENDING_RESUME_LIFETIME=IMPLEMENTED_IN_ISSUE121
+R1_RESUME_CONFIRM_COORDINATOR_POLICY=IMPLEMENTED
+R1_RESUME_REJECT_COORDINATOR_POLICY=IMPLEMENTED
+R1_RESUME_CONFIRM_APPLICATION_TRIGGER=NOT_PRODUCT_REACHABLE_IN_ISSUE121
+R1_RESUME_REJECT_APPLICATION_TRIGGER=NOT_PRODUCT_REACHABLE_IN_ISSUE121
+R1_RESUME_APPLICATION_WIRING=DEFERRED_TO_FIRST_REAL_COMMAND_CONSUMER
+
+Bei einem späteren echten Product-Command-Consumer für Resume-Confirm
+(nicht in #121):
+  -> Consumer prueft aktuelle Config-/Sensor-/Safety-Evidenz frisch
      (dieselben hasFreshConfigurationEvidence()/hasFreshSensorEvidence()-
      Helfer, unveraendert aus safety_core.cpp uebernommen)
   -> RunPersistenceCoordinator::activateR1EligibleRun(*pendingResume_,
@@ -1349,8 +1398,8 @@ Bei explizitem Resume-Confirm durch Nutzer:
   verletzen, Abschnitt 9.1) – die Blockade bleibt reine
   Read-Only-Konsequenz.
 
-Bei Ablehnung (ResumeOffer, Nutzer lehnt ab):
-  -> Application ruft RunPersistenceCoordinator::discardAsNoActiveRun(
+Bei Ablehnung (ResumeOffer, späterer echter Consumer lehnt ab; nicht in #121):
+  -> Consumer ruft RunPersistenceCoordinator::discardAsNoActiveRun(
      *pendingResume_, time) direkt (nicht ueber
      TemperatureControlApplicationOrchestrator::reconcileR1LoadedRun(),
      Abschnitt 4.9/8 – Aufruf ist identisch zur internen Wrapper-Logik, nur
@@ -2172,8 +2221,8 @@ CONFIGURATION_SERVICE_NEVER_OUTLIVES_TIME_ZONE_RESOLVER=YES
 | `ConfigurationGraphStore` | `FermentationApplication` (`unique_ptr`) | **Application-Laufzeit** – `ConfigurationService`-Konstruktor hält `ConfigurationGraphStore&` laufend (Abschnitt 4.6), NICHT boot-only | `IStateStore`, externe `ITimeZoneResolver`-Referenz | NEIN | **nach** `configurationService_` (Runde-4-Korrektur, Major 10), vor `IStateStore` | fail-closed |
 | `ConfigurationService` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit | `mutationCoordinator_`, `graphStore_`, externe `ITimeZoneResolver`-Referenz (alle müssen mindestens gleich lang leben) | NEIN | **vor** den beiden Application-Dependencies; der Root-Resolver lebt ebenfalls weiter | fail-closed |
 | `ConfigurationRecoveryService` | lokal in `begin()` (`unique_ptr`, per `create()`) | **boot-only** (nur `boot()` aufgerufen, danach freigegeben) | `store`, `bootstrapStore_`, `graphStore_`, `configurationService_`, `mutationCoordinator_` | JA | vor `bootstrapStore_` | `nullptr` bei Dependency-Identity-Fehler oder äußerem `new (std::nothrow)`-Allokationsfehler |
-| `RunPersistenceCoordinator` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit (auch für Fresh Start/Resume-Aufrufe außerhalb von `begin()`) | `IStateStore`, `epoch` (aus Schritt 3a, Abschnitt 4.6/12), `schedule` | NEIN | vor `IStateStore` | fail-closed **plus** (Blocker 7, neu) bei `acquireRuntime().status != RuntimeLeaseGranted`: `unique_ptr` bleibt `nullptr`, Coordinator wird gar nicht konstruiert, `FermentationApplication` setzt `SERVICE_REQUIRED` |
-| `pendingResume_` (`std::unique_ptr<RunCommandState>`, Runde-3-Korrektur: NICHT `optional`, Abschnitt 9 Blocker 1) | `FermentationApplication` (`unique_ptr`) | von Klassifikation bis Confirm/Reject (Abschnitt 9) | keine externen Referenzen | NEIN | trivial (`unique_ptr`-Member) | fail-closed: `new (std::nothrow)` schlägt fehl → `nullptr` bleibt, kein Resume-Angebot, `SERVICE_REQUIRED` |
+| `RunPersistenceCoordinator` | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit (auch für spätere Fresh-Start-/Resume-Aufrufe außerhalb von `begin()`; kein solcher Product-Trigger in #121) | `IStateStore`, `epoch` (aus Schritt 3a, Abschnitt 4.6/12), `schedule` | NEIN | vor `IStateStore` | fail-closed **plus** (Blocker 7, neu) bei `acquireRuntime().status != RuntimeLeaseGranted`: `unique_ptr` bleibt `nullptr`, Coordinator wird gar nicht konstruiert, `FermentationApplication` setzt `SERVICE_REQUIRED` |
+| `pendingResume_` (`std::unique_ptr<RunCommandState>`, Runde-3-Korrektur: NICHT `optional`, Abschnitt 9 Blocker 1) | `FermentationApplication` (`unique_ptr`) | von Klassifikation bis zum ersten echten Command-Consumer, Confirm/Reject, `SERVICE_REQUIRED` oder `READY` (Abschnitt 9; kein solcher Application-Trigger in #121) | keine externen Referenzen | NEIN | trivial (`unique_ptr`-Member) | fail-closed: `new (std::nothrow)` schlägt fehl → `nullptr` bleibt, kein Resume-Angebot, `SERVICE_REQUIRED` |
 | `runtimeRunState_` (`std::unique_ptr<RunCommandState>`, Runde-3-Korrektur: NICHT `optional`, Blocker 1) | `FermentationApplication` (`unique_ptr`) | Application-Laufzeit; einzige Quelle für `publishedProcessState()` (Abschnitt 9) | keine externen Referenzen | NEIN | trivial (`unique_ptr`-Member) | fail-closed: `new (std::nothrow)` schlägt fehl → kein publizierter Lauf, `SERVICE_REQUIRED` |
 | `PresentationState` | `FermentationApplication` (Wertmember) | Application-Laufzeit | keine | NEIN | trivial | entfällt |
 | `ApplicationLifecycleState` | `FermentationApplication` (Wertmember) | Application-Laufzeit | keine | NEIN | trivial | entfällt |
@@ -2341,9 +2390,11 @@ CONFIG_RECOVERY_DOMAIN_POLICY_CHANGE=NO
 **Lebenszeit-Klarstellung (Abweichung von einer ersten Fassung):** Anders
 als #119/#120s rein *boot-only* Objekte müssen die meisten hier komponierten
 Objekte für die **gesamte Laufzeit** existieren (siehe Tabelle 12.1), nicht
-nur bis Boot-Ende – u. a. weil Fresh Start/Resume (Abschnitt 8/9) nach
-`begin()` erneut `RunPersistenceCoordinator`/`ConfigurationService`
-aufrufen. Application-eigene Objekte werden deshalb **heapbesitzende Member von
+nur bis Boot-Ende – u. a. weil ein späterer echter Product-Command-Consumer
+für Fresh Start/Resume (Abschnitt 8/9) nach `begin()` erneut
+`RunPersistenceCoordinator`/`ConfigurationService` aufrufen wird. #121 selbst
+verdrahtet dafür keinen solchen Trigger. Application-eigene Objekte werden
+deshalb **heapbesitzende Member von
 `FermentationApplication`** (`std::unique_ptr<T>`, `new (std::nothrow)`,
 fail-closed bei Allokationsfehler), nicht Werte-Member und nicht lokale
 Stack-Objekte in `begin()`. `sizeof(FermentationApplication)` bleibt dadurch
@@ -2407,13 +2458,19 @@ Nachweis.
 
 ```text
 #121_PRODUCT_RUNTIME=ACTOR_FREE
+ISSUE121_PRODUCT_RUNTIME=ACTOR_FREE
+FERMENTATION_APPLICATION_UPDATE=EMPTY
+REAL_PRODUCT_COMMAND_TRIGGER=NONE
+NO_SPECULATIVE_FRESH_START_API=YES
+NO_SPECULATIVE_RESUME_CONFIRM_REJECT_API=YES
 ```
 
 **Entscheidung (keine offene Alternative):** `FermentationApplication::
 update()` bleibt in dieser Revision **vollständig leer** (unverändert
 gegenüber dem heutigen `BASE_SHA`-Stand, Abschnitt 4.1). Kein
 `checkpointPeriodic()`-Aufruf: eine actor-free Composition hat außerhalb
-eines expliziten Fresh-Start-/Resume-Aufrufs keinen periodisch zu
+eines späteren, expliziten Fresh-Start-/Resume-Aufrufs durch einen echten
+Product-Command-Consumer keinen periodisch zu
 prüfenden aktiven Lauf, für den ein periodischer Checkpoint fachlich
 etwas leisten würde. Keine produktiven PI-/Planner-Ticks; kein
 `tickActuatorPlan()`-Aufruf im Produktpfad.
@@ -2468,10 +2525,13 @@ der neu produktiv erreichbaren #121-Pfade bleibt **Software-/
 Build-Vorbedingung vor jeder Hardwareverifikation** (Schritt 7/8,
 Abschnitt 15), nicht eine nachgelagerte Messung.
 
-**Scope:** Nur die durch #121 neu real erreichbaren Pfade werden
-korrigiert – nicht pauschal alle 13 historischen `auto candidate =
-current;`-Fundstellen (Runde 3), nicht die gesamte Command-/
-Persistence-Architektur, nicht `RunRecoveryCoordinator`/C2:
+**Scope:** Nur die durch #121 neu real erreichbaren Pfade sowie die für einen
+späteren echten Product-Command-Consumer verbindlich beschriebenen
+Domain-/Coordinator-Primitiven werden korrigiert – nicht pauschal alle 13
+historischen `auto candidate = current;`-Fundstellen (Runde 3), nicht die
+gesamte Command-/Persistence-Architektur, nicht `RunRecoveryCoordinator`/C2.
+Die folgenden Fresh-Start-/Resume-Consumerpfade sind in diesem Plan deshalb
+als spätere, noch nicht in #121 produktseitig erreichbare Verträge markiert:
 
 ```text
 FermentationApplication::begin()
@@ -2479,6 +2539,7 @@ RunPersistenceCoordinator::loadAndInitializeInto()
 Boot Current -> restore/classify/discard
 Completed/Fault restore
 ResumeOffer construction
+// spätere echte Product-Command-Consumer, nicht in #121:
 Resume confirm -> activateR1EligibleRun()
 Resume reject -> discardAsNoActiveRun()
 Fresh Start decision creation
@@ -2667,8 +2728,9 @@ CommandDecision decideProgramStart(const RunCommandState& current,
 Diese Return-by-value-Wrapper bleiben für Host-/Legacy-Consumer
 (`test_run_commands` u. a.) unverändert nutzbar – hier ist ein einzelnes
 stack-lokales `CommandDecision` unkritisch, da kein 3584-B-Main-Task-Budget
-gilt. Der Produktpfad (Fresh Start, Abschnitt 8) verwendet ausschließlich
-die `Into()`-Kerne:
+gilt. Der spätere Product-Consumerpfad für Fresh Start (Abschnitt 8) verwendet
+ausschließlich die `Into()`-Kerne; in #121 ist dieser Pfad nicht
+produktseitig erreichbar:
 
 ```text
 1. decisionTarget = std::unique_ptr<CommandDecision>{
@@ -3130,8 +3192,8 @@ RUN_PERSISTENCE_PERSIST_COMMAND_FRAME=<measured>
 DISCARD_AS_NO_ACTIVE_RUN_FRAME=<measured>
 ACTIVATE_R1_ELIGIBLE_RUN_FRAME=<measured>
 PRODUCT_BOOT_CUMULATIVE_STACK_PATH=<measured>
-PRODUCT_FRESH_START_CUMULATIVE_STACK_PATH=<measured or NOT_PRODUCT_REACHABLE>
-PRODUCT_RESUME_CUMULATIVE_STACK_PATH=<measured or NOT_PRODUCT_REACHABLE>
+PRODUCT_FRESH_START_CUMULATIVE_STACK_PATH=NOT_PRODUCT_REACHABLE
+PRODUCT_RESUME_CUMULATIVE_STACK_PATH=NOT_PRODUCT_REACHABLE
 PRODUCT_DISCARD_CUMULATIVE_STACK_PATH=<measured>
 PERSIST_COMMAND_FRAME_BEFORE=9280
 PERSIST_COMMAND_FRAME_AFTER=688 B
@@ -3149,11 +3211,11 @@ PERSIST_COMMAND_FRAME_AFTER=688 B
 ```
 
 Diese Einzelframe-Evidenz ist kein kumulativer Produkt-Callgraph-Nachweis.
-Der finale Gate-Status bleibt bis zur Application-Composition in Schritt 6
-offen:
+Der finale Gate-Nachweis ist nach der Application-Composition weiterhin
+nicht ausgeführt und bleibt dem Schritt 8 vorbehalten:
 
 ```text
-PRODUCT_REACHABLE_STATIC_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
+PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
 ```
 
 **Ergänzung Runde 6:** die in Abschnitt 4.9 gewählten Reset-Helfer messen,
@@ -3170,7 +3232,7 @@ Abnahme:
 
 ```text
 NO_PRODUCT_REACHABLE_SINGLE_FRAME_EXCEEDS_CONFIGURED_TASK_STACK=PASS
-PRODUCT_REACHABLE_STATIC_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
+PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
 ```
 
 Einzelne `.su`-Frames ersetzen die kumulative Callgraph-Betrachtung nicht
@@ -3478,8 +3540,14 @@ Zusätzlich verpflichtend (Blocker 13, vollständig übernommen):
 R1_FALLBACK_RECOVERED_NEVER_RESUME=PASS
 
 RESUME_OFFER_SURVIVES_BEGIN_RETURN=PASS
-RESUME_CONFIRM_HAS_VALID_PENDING_STATE=PASS
-RESUME_REJECT_CLEARS_PENDING_STATE=PASS
+RESUME_CONFIRM_HAS_VALID_PENDING_STATE=NOT_PRODUCT_REACHABLE_STEP7
+RESUME_REJECT_CLEARS_PENDING_STATE=NOT_PRODUCT_REACHABLE_STEP7
+
+NOT_PRODUCT_REACHABLE != PASS
+NOT_PRODUCT_REACHABLE != FAILED
+
+FRESH_START_USES_CANONICAL_RUNTIME_RUN_STATE=NOT_PRODUCT_REACHABLE_STEP7
+FRESH_START_WRITE_FAILURE_LEAVES_RUNTIME_STATE_UNAPPLIED=NOT_PRODUCT_REACHABLE_STEP7
 
 R1_RESUME_DOES_NOT_CREATE_RECOVERY_EVALUATION=PASS
 R1_RESUME_DOES_NOT_CREATE_C2_RECOVERY_FIELDS=PASS
@@ -3571,9 +3639,6 @@ DISCARDABLE_RUN_HAS_VALID_RESTORED_CURRENT=PASS
 DISCARDABLE_RUN_APPLIED_PUBLISHES_STANDBY=PASS
 DISCARDABLE_RUN_WRITE_FAILURE_DOES_NOT_PUBLISH_STANDBY=PASS
 
-FRESH_START_USES_CANONICAL_RUNTIME_RUN_STATE=PASS
-FRESH_START_WRITE_FAILURE_LEAVES_RUNTIME_STATE_UNAPPLIED=PASS
-
 NO_PRODUCT_REACHABLE_RUNCOMMANDSTATE_STACK_COPY=PASS
 NO_PRODUCT_REACHABLE_COMMANDDECISION_STACK_OBJECT=PASS
 PRODUCT_RESTORE_IN_PLACE_HEAP=PASS
@@ -3582,8 +3647,8 @@ NOTHROW_ALLOCATION_FAILURE_FAILS_CLOSED=PASS
 MAKE_UNIQUE_NOT_USED_FOR_FAIL_CLOSED_ALLOCATION=PASS
 PERSIST_COMMAND_FRAME_BEFORE=9280
 PERSIST_COMMAND_FRAME_AFTER=688 B
-PRODUCT_REACHABLE_STATIC_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
-PRODUCT_BOOT_CUMULATIVE_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
+PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
+PRODUCT_BOOT_CUMULATIVE_STACK_GATE=NOT_RUN
 
 INTERLOCK_HAS_NO_PERSISTENCE_SNAPSHOT_INPUT=PASS
 INTERLOCK_HAS_NO_FALLBACK_RECOVERY_TRUST_EXCEPTION=PASS
@@ -3689,6 +3754,51 @@ prüfbar, da `noActiveRunHasNoRecoveryFields()`
 `recoveryTemperatureEvidence` nicht kennt und ein stale Wert die
 Validierung sonst unbemerkt passieren würde.
 
+**Pflichttest für einen Fehler innerhalb des Snapshot-Decodes (Blocker,
+Runde 7):** `DECODE_SNAPSHOT_FAILURE_NOT_CONSUMED=PASS` darf nicht nur einen
+Envelope-/Integritätsfehler abdecken. Der Test muss ein gültiges Envelope mit
+korrektem `RecordType`, `StorageEpoch` und Schema-/Versionsfeld erzeugen,
+danach den Payload so verändern oder kürzen, dass
+`decodeRunPersistenceSnapshotInto()` nach Beginn der Feldbefüllung innerhalb
+des Snapshot-Decodes fehlschlägt, und anschließend das Envelope mit
+korrekter Integrität neu encodieren. Über den Record-/Coordinator-Pfad ist
+zu beweisen:
+
+1. `decodeRunPersistenceRecordInto(...) == false`;
+2. der fehlgeschlagene Record wird nicht nach `slots_` übernommen;
+3. der partielle Destination-Zustand wird nicht als gültiger Load-Snapshot
+   exponiert;
+4. ein nachfolgender gültiger Decode/Load wird nicht durch partielle alte
+   Destination-Felder beeinflusst.
+
+Der bestehende frühe Integritätsfall bleibt als eigener Test zulässig und
+heißt präzise `test_record_envelope_failure_leaves_destination_unmodified`.
+Der neue Test beweist die Nicht-Konsumierung des inneren Decode-Ergebnisses;
+er behauptet ausdrücklich **nicht**, dass das Destination-Objekt bei jedem
+Decode-Fehler byte-for-byte unverändert bleibt. Der vertraglich gültige und
+verbrauchbare Zustand entsteht erst bei `SUCCESS`.
+
+Der Clean-Resume-Failure-Test verwendet für den sauberen Write-Failure den
+realen Producerzustand `persistenceCoordinatorState=LoadedActiveRun` bei
+`durability=Unchanged`; für den indeterminierten Fall verwendet er
+`persistenceCoordinatorState=BlockedIndeterminate`. Beide Fälle bleiben
+fail-closed, aber nur der erste ist retry-sicher.
+
+**Einordnung der Legacy-vs-Into-Parität:**
+
+```text
+Hardcoded Schema-1/2-Bytes = Legacy-Fixture-Kompatibilität
+direkter Into-Decode = neue Core-Kompatibilität mit denselben Fixtures
+bestehender Schema-3-Golden = aktueller Encoder-Bytevertrag
+Legacy-vs-Into-Gleichheit = Wrapper-Parität, kein unabhängiger Codec-Oracle
+```
+
+`decodeRunPersistenceSnapshot()` delegiert bereits an
+`decodeRunPersistenceSnapshotInto()`. Die Gleichheit beider Ausgaben ist
+daher nur ein Wrapper-Paritätsnachweis; sie ersetzt weder den direkten
+Into-Decode gegen die hartcodierten Legacy-Fixtures noch die Schema-3-
+Byte-for-byte-Regression.
+
 Bestehende relevante native Suiten vollständig weiterführen. Beide
 ESP-IDF-Profile bleiben Pflicht. Realer Hardwareboot erst nach
 vollständigem Software-Ownerreview.
@@ -3786,7 +3896,10 @@ Schritt 5: In-place-/Stack-Safety-Kerne und das Coordinator-eigene
   Schritt 5 enthielt **keine** `FermentationApplication`-Produktcomposition;
   insbesondere wurden weder `decisionTarget` noch das boot-transiente
   `RunPersistenceLoadResult` produktiv in `begin()` komponiert. Diese
-  Application-Consumer gehören zur Composition-Seite von Schritt 6.
+  Die boot-/lifecycle-relevanten Application-Ziele gehören zur
+  Composition-Seite von Schritt 6; echte Product-Command-Consumer für Fresh
+  Start sowie Resume Confirm/Reject bleiben bis zu einem späteren Issue
+  deferred und sind in #121 nicht produktseitig erreichbar.
   Jeder wiederverwendete In-place-Kern folgt dem field-by-field-Reset-Vertrag
   aus Abschnitt 12.4.9 (kein Ganzobjekt-Temporary via `destination = T{};`).
   Alle expliziten Objektallokationen ausschliesslich ueber
@@ -3926,6 +4039,8 @@ WATCHDOG_RESET_STATELESS_CONTRACT=CLOSED
 PRODUCT_REACHABLE_STATIC_STACK_GATE=MANDATORY_BEFORE_HARDWARE_RUN_AUTHORIZATION
 MAIN_TASK_STACK_HIGH_WATERMARK=MANDATORY_DURING_AUTHORIZED_HARDWARE_RUN
 REAL_RUNTIME_HWM_WITHOUT_REAL_TRIGGER=NOT_CLAIMED
+PRODUCT_FRESH_START_CUMULATIVE_STACK_PATH=NOT_PRODUCT_REACHABLE
+PRODUCT_RESUME_CUMULATIVE_STACK_PATH=NOT_PRODUCT_REACHABLE
 
 SIZEOF_RUN_PERSISTENCE_COORDINATOR_BEFORE=<measured ESP32>   -- Host-Build-Indikativwert 8968 B, Delta nur ESP32-vs-ESP32 aussagekraeftig
 SIZEOF_RUN_PERSISTENCE_COORDINATOR_AFTER=<measured ESP32>
@@ -3989,8 +4104,8 @@ bereits real vorhanden: `MAKE_SNAPSHOT_INTO_FRAME=48 B`,
 `DECODE_SNAPSHOT_INTO_FRAME=512 B` und
 `PERSIST_COMMAND_FRAME_AFTER=688 B`. Diese Einzelframes lösen jedoch nicht
 den kumulativen Produkt-Callgraph-Nachweis. Der
-`PRODUCT_REACHABLE_STATIC_STACK_GATE` bleibt deshalb bis zur
-Application-Composition in Schritt 6 offen. Ein `FAIL` dieses finalen Gates
+`PRODUCT_REACHABLE_STATIC_STACK_GATE` ist deshalb nach Schritt 7 noch
+`NOT_RUN` und gehört als finales Gate zu Schritt 8. Ein `FAIL` dieses Gates
 in der Implementation wäre danach ein realer Implementationsfehler gegen
 einen bereits im Entwurf geschlossenen Plan, keine weiterhin offene
 Architekturfrage.
@@ -4047,7 +4162,7 @@ PERSIST_COMMAND_FRAME_BEFORE=9280 B
 PERSIST_COMMAND_FRAME_AFTER=688 B
 PERSIST_COMMAND_SINGLE_FRAME_CONFLICT=RESOLVED_IN_IMPLEMENTATION_STEP_5
 CONFIGURED_RELEASE_MAIN_TASK_STACK=3584
-PRODUCT_REACHABLE_STATIC_STACK_GATE=PENDING_FINAL_PRODUCT_CALLGRAPH_AFTER_STEP_6
+PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
 PRODUCT_REACHABLE_HEAVY_BY_VALUE_PATHS=CLOSED
 
 BOOT_CLASSIFICATION_CONFIGURATION_AUTHORITY=NO
@@ -4138,28 +4253,40 @@ STALE_NO_RUN_PERSISTENCE_UNTRUSTED_DIAGNOSTIC_TEXT=NONE
 BREAKING_PERSISTENCE_CHANGE=NO
 SCHEMA_MIGRATION_REQUIRED=NO
 
-IMPLEMENTATION=STEP_6_IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
+IMPLEMENTATION=STEP_7_IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
 IMPLEMENTATION_STEPS_1_TO_5=PASS
 OWNER_STEP_5_REVIEW=PASS
 STEP_5_EFFECTIVE_SOURCE_SHA=7049380d0e4bd9c0522c4475fa156febcd63ed5d
 STEP_5_PRODUCT_COMPOSITION=NO
 IMPLEMENTATION_STEP_6=IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
-STEP_6_SOURCE_SHA=d016d7fc6c6d60a3e2145a386f793686f20a4200
+STEP_6_SOURCE_SHA=5d8bc4d55d996c282fddd05a30ffde7184a12238
+STEP_6_EFFECTIVE_SOURCE_SHA=5d8bc4d55d996c282fddd05a30ffde7184a12238
 IMPLEMENTATION_STEP_6_GATE=BLOCKED_PENDING_REVISED_PLAN_OWNER_REVIEW
-IMPLEMENTATION_STEP_7=NOT_STARTED
+IMPLEMENTATION_STEP_7=IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
+STEP_7_PRE_REVIEW_APPROVED_PLAN_SHA=68b81a16892a3a27c2eabdb8f571e34f1c107bbb
+STEP_7_PRE_REVIEW_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
+STEP_7_PLAN_CORRECTION_REASON=APPLICATION_TRIGGER_REACHABILITY_AND_DECODE_FAILURE_EVIDENCE
+STEP_7_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
 PRODUCTION_CODE_CHANGE=NO
 TEST_CODE_CHANGE=NO
+PLAN_CODE_CHANGE=NO
+ARCHITECTURE_CHECKER_CHANGE=NO
+WIRE_FORMAT_CHANGE=NO
+SCHEMA_CHANGE=NO
 THIS_PLAN_CORRECTION_PRODUCTION_CODE_CHANGE=NO
 THIS_PLAN_CORRECTION_TEST_CODE_CHANGE=NO
 FIRMWARE_TESTS=NOT_RUN_PLAN_ONLY
+IMPLEMENTATION_STEP_8=NOT_STARTED
+PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
 HARDWARE_RUN=NO
 PR120=OPEN_DRAFT_FROZEN
 PR122=OPEN_DRAFT
 ISSUE121=OPEN
 MERGE=NO
 PLAN_DEVIATION=DISCOVERED_AND_DOCUMENTED_PENDING_REVISED_PLAN_APPROVAL
-OWNER_STEP_6_REVIEW=CHANGES_REQUIRED
+OWNER_STEP_6_REVIEW=REOPENED_BY_STEP_7_COVERAGE_REVIEW
+OWNER_STEP_7_REVIEW=CHANGES_REQUIRED
 SOURCE_OF_TRUTH_CONFLICT=NONE
 OWNER_PLAN_REVIEW=PENDING
 ```
