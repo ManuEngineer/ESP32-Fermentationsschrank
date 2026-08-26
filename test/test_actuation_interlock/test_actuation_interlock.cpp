@@ -223,6 +223,31 @@ void test_resume_offer_stays_unresolved_until_apply_and_fsm_evidence() {
     TEST_ASSERT_TRUE(afterFsm.permission == ActuatorSafetyGateStatus::Allowed);
 }
 
+void test_resume_failed_persistence_never_actuates() {
+    ActuationEvidence input;
+    device_platform::SensorQualitySnapshot sensor;
+    SensorSelectionRuntimeState selection;
+    validBootEvidence(input, sensor, selection);
+    input.activationPersistenceResult = RunPersistenceResultStatus::WriteFailed;
+    input.processActivationApplied = false;
+
+    const auto cleanFailure = ActuationInterlock::evaluate(input);
+    TEST_ASSERT_TRUE(cleanFailure.permission ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_FALSE(cleanFailure.permission ==
+                      ActuatorSafetyGateStatus::Allowed);
+
+    input.activationPersistenceResult =
+        RunPersistenceResultStatus::PersistenceIndeterminate;
+    input.persistenceCoordinatorState =
+        RunPersistenceCoordinatorState::BlockedIndeterminate;
+    const auto indeterminate = ActuationInterlock::evaluate(input);
+    TEST_ASSERT_TRUE(indeterminate.permission ==
+                     ActuatorSafetyGateStatus::Unresolved);
+    TEST_ASSERT_FALSE(indeterminate.permission ==
+                      ActuatorSafetyGateStatus::Allowed);
+}
+
 void test_unconfirmed_resume_offer_does_not_require_sensor() {
     ActuationEvidence input;
     input.bootValidationComplete = true;
@@ -876,6 +901,7 @@ void setup_suite() {
     RUN_TEST(test_fresh_start_stays_unresolved_until_new_run_is_applied);
     RUN_TEST(test_fresh_start_commit_failure_never_allows);
     RUN_TEST(test_resume_offer_stays_unresolved_until_apply_and_fsm_evidence);
+    RUN_TEST(test_resume_failed_persistence_never_actuates);
     RUN_TEST(test_unconfirmed_resume_offer_does_not_require_sensor);
     RUN_TEST(test_resume_confirm_requires_sensor_evidence);
     RUN_TEST(

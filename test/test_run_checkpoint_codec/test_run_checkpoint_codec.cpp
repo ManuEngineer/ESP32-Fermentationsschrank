@@ -1,5 +1,7 @@
 #include <unity.h>
 
+#include <utility>
+
 #include "run_persistence_codec.hpp"
 #include "standard_program_catalog.hpp"
 #include "storage_envelope.hpp"
@@ -56,6 +58,12 @@ std::string schemaTwoActivePayload() {
     return payload;
 }
 
+std::string schemaOneNoActivePayload() {
+    return bytesFromHex(
+        "03020000000000000064000500000000000003000000000000000000000000000"
+        "0000000000000000000");
+}
+
 RunPersistenceSnapshot programSnapshot() {
     auto document = FactoryProgramCatalog::find("water-kefir");
     TEST_ASSERT_TRUE(document.has_value());
@@ -90,6 +98,29 @@ RunPersistenceSnapshot programSnapshot() {
         RunCheckpointTime{100U, 1700000000}, 5U);
     TEST_ASSERT_TRUE(snapshot.has_value());
     return *snapshot;
+}
+
+std::string checkpointRecordBytes(const RunPersistenceSnapshot& snapshot) {
+    constexpr device_platform::RecordTypeId kCheckpointRecordType{7U};
+    constexpr std::size_t kMaximumCheckpointRecordBytes = 8240U;
+    std::string payload;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(RunPersistenceCodecStatus::Success),
+        static_cast<int>(encodeRunPersistenceSnapshot(snapshot, payload)));
+    const device_platform::StorageEpoch epoch(9U);
+    const device_platform::StorageEnvelope envelope{
+        kCheckpointRecordType,
+        kCurrentRunPersistenceSchema,
+        epoch,
+        7U,
+        std::nullopt,
+        payload};
+    std::string bytes;
+    TEST_ASSERT_EQUAL_INT(
+        static_cast<int>(device_platform::EnvelopeEncodeStatus::Success),
+        static_cast<int>(device_platform::encodeEnvelope(
+            envelope, bytes, kMaximumCheckpointRecordBytes)));
+    return bytes;
 }
 
 RunPersistenceSnapshot recoveryEvaluationPendingSnapshot();
@@ -146,6 +177,66 @@ void test_program_checkpoint_round_trip_restores_active_run() {
     const auto restored = restoreRunPersistenceSnapshot(*decoded.snapshot);
     TEST_ASSERT_TRUE(restored.has_value());
     TEST_ASSERT_TRUE(restored->activeProgramRun.has_value());
+}
+
+void test_schema_one_two_fixtures_match_return_and_inplace_decoders() {
+    for (const auto& fixture :
+         {std::pair<std::uint32_t, std::string>{1U, schemaOneActivePayload()},
+          std::pair<std::uint32_t, std::string>{2U, schemaTwoActivePayload()},
+          std::pair<std::uint32_t, std::string>{1U, schemaOneNoActivePayload()},
+          std::pair<std::uint32_t, std::string>{2U,
+                                                schemaOneNoActivePayload()}}) {
+        const auto legacy =
+            decodeRunPersistenceSnapshot(fixture.second, fixture.first);
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceCodecStatus::Success),
+            static_cast<int>(legacy.status));
+        TEST_ASSERT_TRUE(legacy.snapshot.has_value());
+
+        auto inPlace = recoveryEvaluationPendingSnapshot();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceCodecStatus::Success),
+            static_cast<int>(decodeRunPersistenceSnapshotInto(
+                fixture.second, fixture.first, inPlace)));
+
+        std::string legacyBytes;
+        std::string inPlaceBytes;
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceCodecStatus::Success),
+            static_cast<int>(
+                encodeRunPersistenceSnapshot(*legacy.snapshot, legacyBytes)));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceCodecStatus::Success),
+            static_cast<int>(
+                encodeRunPersistenceSnapshot(inPlace, inPlaceBytes)));
+        TEST_ASSERT_EQUAL_UINT32(legacyBytes.size(), inPlaceBytes.size());
+        TEST_ASSERT_EQUAL_MEMORY(legacyBytes.data(), inPlaceBytes.data(),
+                                 legacyBytes.size());
+    }
+}
+
+void test_record_decode_failure_does_not_update_destination() {
+    const auto original = recoveryEvaluationPendingSnapshot();
+    const auto record = checkpointRecordBytes(original);
+    auto damaged = record;
+    damaged.back() = static_cast<char>(damaged.back() ^ 0x01);
+
+    RunPersistenceRawRecord destination;
+    destination.bytes = "sentinel-record";
+    destination.snapshot = original;
+    destination.checkpointRevision = 99U;
+    destination.utcUnixSeconds = 1700000000;
+
+    TEST_ASSERT_FALSE(decodeRunPersistenceRecordInto(
+        damaged, device_platform::StorageEpoch(9U), destination));
+    TEST_ASSERT_EQUAL_STRING("sentinel-record", destination.bytes.c_str());
+    TEST_ASSERT_EQUAL_UINT64(99U, destination.checkpointRevision);
+    TEST_ASSERT_TRUE(destination.utcUnixSeconds.has_value());
+    TEST_ASSERT_EQUAL_INT64(1700000000, *destination.utcUnixSeconds);
+    TEST_ASSERT_EQUAL_STRING(original.activeRunId.c_str(),
+                             destination.snapshot.activeRunId.c_str());
+    TEST_ASSERT_EQUAL_UINT32(original.recoveryEpisodeRevision,
+                             destination.snapshot.recoveryEpisodeRevision);
 }
 
 void test_inplace_projection_and_restore_match_legacy_semantics() {
@@ -1266,7 +1357,12 @@ void test_schema_one_payload_decodes_without_sensor_selection_field() {
 }
 
 void test_legacy_decode_reuse_clears_schema_three_only_fields() {
-    const auto modern = recoveryEvaluationPendingSnapshot();
+    auto modern = programSnapshot();
+    modern.recoveryEpisodeRevision = 12U;
+    modern.recoveryTemperatureEvidence.lastKnown.air.filteredCelsius = 21.5;
+    modern.recoveryTemperatureEvidence.lastKnown.air.quality =
+        device_platform::SensorQuality::Valid;
+    modern.runProgress.observedRunSeconds = 999U;
     std::string modernBytes;
     TEST_ASSERT_EQUAL_INT(
         static_cast<int>(RunPersistenceCodecStatus::Success),
@@ -1281,20 +1377,42 @@ void test_legacy_decode_reuse_clears_schema_three_only_fields() {
                          .filteredCelsius.has_value());
     TEST_ASSERT_EQUAL_UINT32(999U, destination.runProgress.observedRunSeconds);
 
-    const auto legacyBytes = schemaOneActivePayload();
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
-                          static_cast<int>(decodeRunPersistenceSnapshotInto(
-                              legacyBytes, 1U, destination)));
-    TEST_ASSERT_EQUAL_UINT32(0U, destination.recoveryEpisodeRevision);
-    TEST_ASSERT_FALSE(destination.recoveryTemperatureEvidence.lastKnown.air
-                          .filteredCelsius.has_value());
-    TEST_ASSERT_EQUAL_UINT32(0U, destination.runProgress.observedRunSeconds);
-    TEST_ASSERT_EQUAL_INT(
-        static_cast<int>(RunProgressBasis::PartialUnknownHistory),
-        static_cast<int>(destination.runProgress.basis));
-    TEST_ASSERT_TRUE(destination.runProgress.weightedProgress.has_value());
-    TEST_ASSERT_FALSE(
-        destination.runProgress.weightedProgress->lastApplied.has_value());
+    // A genuine NoActiveRun payload has no schema-specific tail. Reusing the
+    // same destination for both legacy schema declarations must nevertheless
+    // clear every schema-3-only field, including the fields not known to the
+    // schema validator itself.
+    for (const std::uint32_t schema : {1U, 2U}) {
+        const auto legacyBytes = schemaOneNoActivePayload();
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunPersistenceCodecStatus::Success),
+            static_cast<int>(decodeRunPersistenceSnapshotInto(
+                legacyBytes, schema, destination)));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(RunCheckpointVariant::NoActiveRun),
+            static_cast<int>(destination.variant));
+        TEST_ASSERT_EQUAL_UINT32(0U, destination.recoveryEpisodeRevision);
+        TEST_ASSERT_FALSE(destination.recoveryTemperatureEvidence.lastKnown.air
+                              .filteredCelsius.has_value());
+        TEST_ASSERT_FALSE(destination.recoveryTemperatureEvidence.lastKnown
+                              .product.filteredCelsius.has_value());
+        TEST_ASSERT_FALSE(destination.recoveryTemperatureEvidence.lastKnown
+                              .cooling.filteredCelsius.has_value());
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(device_platform::SensorQuality::Stale),
+            static_cast<int>(
+                destination.recoveryTemperatureEvidence.lastKnown.air.quality));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(device_platform::SensorQuality::Stale),
+            static_cast<int>(destination.recoveryTemperatureEvidence.lastKnown
+                                 .product.quality));
+        TEST_ASSERT_EQUAL_INT(
+            static_cast<int>(device_platform::SensorQuality::Stale),
+            static_cast<int>(destination.recoveryTemperatureEvidence.lastKnown
+                                 .cooling.quality));
+        TEST_ASSERT_EQUAL_UINT32(0U,
+                                 destination.runProgress.observedRunSeconds);
+        TEST_ASSERT_FALSE(destination.runProgress.weightedProgress.has_value());
+    }
 }
 
 void test_no_active_run_migration_from_schema_one_keeps_default_progress() {
@@ -1304,9 +1422,7 @@ void test_no_active_run_migration_from_schema_one_keeps_default_progress() {
     // genuiner Schema-1-Payload (identisch zur bisherigen NoActiveRun-
     // Kodierung vor #18 - dieser Bereich schrieb nie ein schema-abhaengiges
     // Feld) traegt keinen angehaengten Schema-3-Block.
-    const auto schemaOnePayload = bytesFromHex(
-        "03020000000000000064000500000000000003000000000000000000000000000"
-        "0000000000000000000");
+    const auto schemaOnePayload = schemaOneNoActivePayload();
     const auto decoded = decodeRunPersistenceSnapshot(schemaOnePayload, 1U);
     TEST_ASSERT_EQUAL_INT(static_cast<int>(RunPersistenceCodecStatus::Success),
                           static_cast<int>(decoded.status));
@@ -1377,6 +1493,8 @@ void test_committed_head_accepts_mixed_current_and_fallback_schema() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_program_checkpoint_round_trip_restores_active_run);
+    RUN_TEST(test_schema_one_two_fixtures_match_return_and_inplace_decoders);
+    RUN_TEST(test_record_decode_failure_does_not_update_destination);
     RUN_TEST(test_inplace_projection_and_restore_match_legacy_semantics);
     RUN_TEST(test_snapshot_into_variant_reuse_clears_stale_fields);
     RUN_TEST(test_active_recovery_fault_requires_schema_three);
