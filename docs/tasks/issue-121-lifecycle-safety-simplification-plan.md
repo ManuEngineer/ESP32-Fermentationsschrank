@@ -309,7 +309,8 @@ Nicht Gegenstand: eine neue Ursachenanalyse des `LoadProhibited`-Panics.
 
 ## 3. Zielarchitektur-Überblick
 
-Fünf Verantwortlichkeiten, je eine Autorität, keine doppelte Policy:
+Fünf Zielachsen mit je einer primären Autorität; unterstützende fachliche
+Owner werden separat ausgewiesen. Keine doppelte Policy:
 
 ```text
 Device/Application Lifecycle   -> FermentationApplication (erweitert)
@@ -632,7 +633,7 @@ Teil der #121-Produktcomposition (Abschnitt 3, Blocker 5/11):
 
 Unverändert gegenüber Vorfassung.
 
-## 5. Zielverantwortungen (5 Autoritäten, keine Doppel-Policy)
+## 5. Zielverantwortungen – keine Doppel-Policy
 
 | Verantwortung | Typ | Autorität für |
 |---|---|---|
@@ -762,8 +763,9 @@ enum class BootClassification : std::uint8_t {
     DiscardableRun,  // = altes "NoActiveRun": vertrauenswuerdig, nicht resumefaehig
     CompletedRun,    // = altes "Completed"
     TerminalRunFault,// = altes "TerminalFault"
-    SafeBoot,        // inkl. FallbackRecovered (NEU, Abschnitt 7.3) und
-                      // Config-/Persistenzfehler
+    SafeBoot,        // Run-/Persistence-Load nicht vertrauenswürdig,
+                      // inkl. FallbackRecovered (NEU, Abschnitt 7.3);
+                      // kein Configuration-Trust-Ergebnis
 };
 ```
 
@@ -776,11 +778,18 @@ enum class BootClassification : std::uint8_t {
 | `DiscardableRun` | `READY` | published: `Standby`, nur bei `Applied`, nach `discardAsNoActiveRun()` mit einem via `restoreRunPersistenceSnapshotInto()` rekonstruierten `RunCommandState&` (Abschnitt 9, Major 6 – **nicht** ein leerer/minimaler Stub) | `discardAsNoActiveRun()`, write-before-apply | `DENIED` | keine (stiller Discard, wie heute); bei Fehlschlag `SERVICE_REQUIRED` statt stillem Discard (Abschnitt 9 Fehlerklassifikation) |
 | `CompletedRun` | `READY` | `target` heap-alloziert (`new (std::nothrow)`) + `restoreRunPersistenceSnapshotInto(*loaded.snapshot, *target)` (Abschnitt 12.4.2, Major 9, Runde 4 – identisches Muster wie `DiscardableRun`), dann published: `Completed` via `activateR1EligibleRun(*target, time, nullptr)` (Abschnitt 9.1, exakter `activateLoadedRun()`-Completed-Präzedenzfall: RAM-only, `stateEnteredAtMillis`-Refresh; nur bei `Applied`: `runtimeRunState_ = std::move(target)`) | RAM-Mutation, `RunPersistenceDurability::Unchanged` (kein Store-Schreibvorgang) | `DENIED` | Abschluss-Anzeige |
 | `TerminalRunFault` | `READY` | `target` heap-alloziert (`new (std::nothrow)`) + `restoreRunPersistenceSnapshotInto(*loaded.snapshot, *target)` (Abschnitt 12.4.2, Major 9, Runde 4 – identisches Muster wie `DiscardableRun`), dann published: `Fault` via `activateR1EligibleRun(*target, time, nullptr)` (Abschnitt 9.1, exakter `activateLoadedRun()`-Fault-Präzedenzfall: RAM-only, unveränderter `current`; nur bei `Applied`: `runtimeRunState_ = std::move(target)`; **kein** `propose(Boot→Fault)` – `validBootTopology()` kennt diese Kante nicht, Abschnitt 4.2 Major 8) | RAM-Mutation, `RunPersistenceDurability::Unchanged` (kein Store-Schreibvorgang) | `DENIED` | Fehler-Anzeige |
-| `UntrustedConfiguration` | `SERVICE_REQUIRED` | nicht published | keine | `DENIED` | `FaultCode ∈ {ConfigurationUnavailable, ConfigurationIntegrityFailure, ConfigurationCommitIndeterminate}` |
-| `UntrustedPersistence` | `SERVICE_REQUIRED` | nicht published | keine | `DENIED` | `FaultCode = RunPersistenceUntrusted` |
-| **`FallbackRecovered`** (neu benannter Flow, Abschnitt 7.3) | `SERVICE_REQUIRED` | nicht published | **kein** Discard/Tombstone | `DENIED` | eigener Diagnosehinweis „Fallback-Wiederherstellung, kein automatischer Resume" |
+| `UntrustedConfiguration` | `SERVICE_REQUIRED` (Configuration-/Application-Flow außerhalb von `BootClassification`) | nicht published | keine | `DENIED` | `FaultCode ∈ {ConfigurationUnavailable, ConfigurationIntegrityFailure, ConfigurationCommitIndeterminate}` |
+| `UntrustedPersistence` | `SERVICE_REQUIRED` (aus `BootClassification::SafeBoot` für den technischen Run-Load) | nicht published | keine | `DENIED` | `FaultCode = RunPersistenceUntrusted` |
+| **`FallbackRecovered`** (neu benannter Run-Load-Flow aus `BootClassification::SafeBoot`, Abschnitt 7.3) | `SERVICE_REQUIRED` | nicht published | **kein** Discard/Tombstone | `DENIED` | eigener Diagnosehinweis „Fallback-Wiederherstellung, kein automatischer Resume" |
 | `SensorUnavailableAtStartup` | **`READY`** (Korrektur E) | published: `Standby` | keine | `DENIED`, Grund `SafetySensorUnavailable` sobald Aktivierung versucht wird | Sensor-Warnung, kein Service-Zustand |
 | `WatchdogLatched` | `READY` (Laufzeit-, kein Boot-Flow) | unverändert | keine | `DENIED`, Grund `RequestWatchdogFaultLatched` | Watchdog-Anzeige |
+
+`UntrustedConfiguration` ist in dieser Tabelle ausdrücklich kein Ergebnis
+von `BootClassification`: Configuration Trust wird vor dem Run-Load durch
+`ConfigurationRecoveryService`/`ConfigurationService` geprüft und führt
+direkt zum Application-Lifecycle `SERVICE_REQUIRED`. `UntrustedPersistence`
+und `FallbackRecovered` sind dagegen Run-/Persistence-Load-Ergebnisse; nur
+deren `SafeBoot`-Klassifikation gehört zur `boot_classification`-Autorität.
 
 ### 7.1 Servicebegriffe: `SERVICE_MODE` vs. `SERVICE_REQUIRED` (Korrektur J, geschlossen)
 
@@ -791,10 +800,13 @@ SERVICE_MODE   = ProcessState::ServiceMode, UNVERAENDERT (Abschnitt 4.2).
                  betretbar, nur ueber ExitServiceMode wieder verlassbar.
 
 SERVICE_REQUIRED = Application-Lifecycle-Wert, Eigentuemer:
-                 FermentationApplication. Gesetzt bei
-                 BootClassification::SafeBoot (inkl. UntrustedConfiguration/
-                 UntrustedPersistence/FallbackRecovered, Abschnitt 7) sowie
-                 bei bestimmten Runtime-Producerfehlern (Abschnitt 7.4).
+                 FermentationApplication. Gesetzt bei Configuration-Trust-
+                 Fehlern außerhalb von BootClassification, bei
+                 BootClassification::SafeBoot für untrusted Run-/Persistence-
+                 Loads (inkl. FallbackRecovered, aber nicht
+                 UntrustedConfiguration, Abschnitt 7) sowie bei bestimmten
+                 explizit definierten Composition-/Runtime-Producerfehlern
+                 (Abschnitt 7.4).
 ```
 
 Beide sind unabhängig. `ServiceMode` erzeugt laut `activationEvidenceComplete()`
@@ -1668,7 +1680,7 @@ Permission, Grund und physische Reaktion bereits vollständig
 | `unknownProducerSources_` | **Drop** | vollständiger, frischer Evidence-Snapshot pro Tick ersetzt dies stateless |
 | `canClearFault()` | **Drop** | ohne Maske nichts zu „clearen"; Freshness-Helfer bleiben frei Funktionen |
 | `resetRequestWatchdog()` | **Keep**, ohne Maskenzugriff | Vollständiger Vertrag (alle 13 unveränderten Einzelbedingungen + eine frische `evaluate()`-Neuprojektion statt der beiden alten Maskenprüfungen) in Abschnitt 11.1 (Major 11, Runde 4) |
-| `FaultCode` | **Keep** (unverändert, RAM-only) | Diagnose-Enum, `dispositionForFault()`-Mapping entfällt mit `SafetyDisposition` (ersetzt durch direktes `FaultCode`→`SERVICE_REQUIRED`-Mapping in `FermentationApplication`, Abschnitt 7) |
+| `FaultCode` | **Keep** (unverändert, RAM-only) | Diagnose-/Interlock-Projektion; `dispositionForFault()`-Mapping entfällt mit `SafetyDisposition`. Es gibt kein generisches `FaultCode`→`SERVICE_REQUIRED`-Mapping: der Application-Lifecycle folgt ausschließlich den ausdrücklich definierten Configuration-/Persistence-/Composition-/Runtime-Bedingungen, während Sensor- und Watchdog-Faults getrennte `READY`-/Actuation-/Presentation-Fälle bleiben (Abschnitt 7) |
 
 ### 10.3 `evaluate()` als reine Funktion
 
@@ -3810,6 +3822,7 @@ BREAKING_PERSISTENCE_CHANGE=NO
 SCHEMA_MIGRATION_REQUIRED=NO
 ISSUE121_PRODUCT_COMPOSITION_ACTOR_FREE=YES
 REAL_HARDWARE_BOOT=NOT_RUN                    -- eigenes Owner-Gate, Schritt 8
+PR120=OPEN_DRAFT_FROZEN
 ```
 
 `SIZEOF_FERMENTATION_APPLICATION`/`APP_MAIN_ENTRY_FRAME` werden aus dem
