@@ -32,9 +32,8 @@ constexpr TickType_t kCooperativeYieldTicks = 1;
 
 // The composition root owns the concrete partition lifecycle.  The adapter
 // only opens/closes its handle; it never initializes, erases, or deinitializes
-// an ESP-IDF partition.  This small actor-free context deliberately does not
-// construct a full recovery/application graph yet: later slices may inject
-// this IStateStore into the owning recovery context after their own gates.
+// an ESP-IDF partition.  The actor-free application receives a non-owning
+// IStateStore reference from this context after the store has been opened.
 class NvsOwningContext final {
    public:
     [[nodiscard]] static std::unique_ptr<NvsOwningContext> create() {

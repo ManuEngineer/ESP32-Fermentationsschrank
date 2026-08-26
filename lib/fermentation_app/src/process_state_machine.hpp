@@ -202,11 +202,11 @@ struct PriorBootPhaseElapsed {
     ProcessRuntimeState& current, const TransitionDecision& decision,
     const ProcessRunSnapshot* runSnapshot);
 
-// Der Application-Bootpfad benoetigt fuer NoRun denselben validierten
-// BootCompleted-Uebergang wie die uebrigen ProcessStateMachine-Verbraucher.
-// Die Anwendung kennt damit keinen internen Apply-Kern direkt.
-[[nodiscard]] bool applyBootCompletedStandby(ProcessRuntimeState& current,
-                                             std::uint64_t monotonicMillis);
+// Der Domain-Bootpfad etabliert den einzigen gueltigen BootCompleted-
+// Uebergang nach Standby. Die Transition-Projektion und ihre Anwendung
+// bleiben damit vollstaendig in der Process-State-Machine.
+[[nodiscard]] bool establishBootCompletedStandby(ProcessRuntimeState& current,
+                                                 std::uint64_t monotonicMillis);
 
 // Oeffentlich fuer Recovery-Orchestrierung ausserhalb dieser
 // Uebersetzungseinheit

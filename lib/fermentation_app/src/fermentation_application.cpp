@@ -13,17 +13,6 @@
 namespace fermentation {
 namespace {
 
-bool configurationRecoverySucceeded(ConfigurationRecoveryStatus status) {
-    switch (status) {
-        case ConfigurationRecoveryStatus::RuntimeReady:
-        case ConfigurationRecoveryStatus::FactoryInitializationCompleted:
-        case ConfigurationRecoveryStatus::FactoryResetCompleted:
-            return true;
-        default:
-            return false;
-    }
-}
-
 FaultCode configurationFault(ConfigurationRecoveryStatus status) {
     switch (status) {
         case ConfigurationRecoveryStatus::ConfigurationIntegrityFailure:
@@ -123,14 +112,9 @@ bool FermentationApplication::begin(
 
     const auto configurationResult = recovery->boot();
     recovery.reset();
-    if (!configurationRecoverySucceeded(configurationResult.status)) {
-        requireService(configurationFault(configurationResult.status));
-        return true;
-    }
-
     const auto runtime = configurationService_->acquireRuntime();
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {
-        requireService(FaultCode::ConfigurationUnavailable);
+        requireService(configurationFault(configurationResult.status));
         return true;
     }
     const auto epoch = runtime.lease.get().storageEpoch();
@@ -257,7 +241,7 @@ bool FermentationApplication::publishStandby() {
         return false;
     }
 
-    if (!applyBootCompletedStandby(target->processState, 0U)) {
+    if (!establishBootCompletedStandby(target->processState, 0U)) {
         requireService(FaultCode::RunPersistenceUntrusted);
         return false;
     }

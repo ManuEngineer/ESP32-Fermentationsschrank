@@ -1082,8 +1082,8 @@ bool applyProcessTransition(ProcessRuntimeState& current,
     return true;
 }
 
-bool applyBootCompletedStandby(ProcessRuntimeState& current,
-                               std::uint64_t monotonicMillis) {
+bool establishBootCompletedStandby(ProcessRuntimeState& current,
+                                   std::uint64_t monotonicMillis) {
     const auto decision =
         propose(current, ProcessState::Standby, TransitionReason::BootCompleted,
                 monotonicMillis);
