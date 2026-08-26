@@ -11,6 +11,14 @@ idf_component_register(
 # docs/tasks/issue-72-implementation-plan.md, Abschnitt 5).
 target_compile_options(${COMPONENT_LIB} PRIVATE "-std=gnu++17")
 
+# The #121 static product-stack gate reuses the existing GCC stack-usage and
+# callgraph artefacts.  This is analysis-only instrumentation; it does not
+# change the product code, profile semantics, or configured task stack.
+set_source_files_properties(
+    "app_main.cpp"
+    PROPERTIES COMPILE_OPTIONS "-fstack-usage;-fcallgraph-info=su"
+)
+
 # Profilwahl kommt aus main/Kconfig.projbuild (choice APP_ESP32_PROFILE),
 # gesetzt ueber sdkconfig.defaults.bringup/.release (siehe
 # docs/tasks/issue-74-implementation-plan.md, Abschnitt 7.2). Genau eine
