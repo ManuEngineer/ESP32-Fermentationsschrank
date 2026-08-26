@@ -53,6 +53,16 @@ PR122=OPEN_DRAFT
 ISSUE121=OPEN
 MERGE=NO
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
+ISSUE121_REAL_PRODUCT_COMMAND_TRIGGER=NONE
+REAL_PRODUCT_COMMAND_TRIGGER=DEFERRED
+EXACT_COMMAND_HANDLER_API=DEFERRED_NOT_DESIGNED_IN_ISSUE121
+PENDING_RESUME_OWNER=FermentationApplication
+RUNTIME_RUN_STATE_OWNER=FermentationApplication
+EXTERNAL_COMMAND_PRODUCER_DIRECT_PRIVATE_STATE_ACCESS=NO
+UNQUALIFIED_HISTORICAL_CURRENT_STATUS=NONE
+HISTORICAL_STEP6_NOT_STARTED_CANNOT_BE_READ_AS_CURRENT=YES
+CURRENT_PLAN_CORRECTION_REASON_AMBIGUITY=NONE
+STEP_7_PLAN_CORRECTION_REASON_IS_CURRENT=YES
 ```
 
 `MATERIAL_ARCHITECTURE_DECISION_OPEN=NO` gilt nur für die in dieser Datei
@@ -100,11 +110,13 @@ Planrunde und erzeugt keine neue Revisionsdatei.
 ```text
 PRIOR_APPROVED_PLAN_SHA=e249b51cedf6f6a3edbce3a0889c48d77b79e828
 ARCHITECTURE_BOUNDARY_CORRECTION_SHA=1da7fc41652a8070f8120be5a1d8eefbb2721444
-EARLIER_POST_APPROVAL_PLAN_CORRECTION=BEFORE_STEP_6
-EARLIER_POST_APPROVAL_PLAN_CORRECTION_REASON=FERMENTATION_APP_MUST_NOT_DEPEND_ON_DEVICE_PLATFORM_ESP_IDF
-CURRENT_POST_APPROVAL_PLAN_CORRECTION=BEFORE_STEP_6
-CURRENT_POST_APPROVAL_PLAN_CORRECTION_REASON=BOOT_CLASSIFICATION_AND_CONFIGURATION_TRUST_MUST_REMAIN_SEPARATE
-STEP_6_IMPLEMENTATION_STARTED=NO
+EARLIER_PRE_STEP6_POST_APPROVAL_PLAN_CORRECTION=BEFORE_STEP_6
+EARLIER_PRE_STEP6_POST_APPROVAL_PLAN_CORRECTION_REASON=FERMENTATION_APP_MUST_NOT_DEPEND_ON_DEVICE_PLATFORM_ESP_IDF
+LATER_PRE_STEP6_POST_APPROVAL_PLAN_CORRECTION=BEFORE_STEP_6
+LATER_PRE_STEP6_POST_APPROVAL_PLAN_CORRECTION_REASON=BOOT_CLASSIFICATION_AND_CONFIGURATION_TRUST_MUST_REMAIN_SEPARATE
+STEP_6_IMPLEMENTATION_STARTED_AT_THAT_HISTORICAL_POINT=NO
+UNQUALIFIED_HISTORICAL_CURRENT_STATUS=NONE
+HISTORICAL_STEP6_NOT_STARTED_CANNOT_BE_READ_AS_CURRENT=YES
 ARCHITECTURE_BOUNDARY_CHANGE=NO
 ```
 
@@ -840,8 +852,8 @@ enum class BootClassification : std::uint8_t {
 fachlich definierte spätere Consumer-Flows dokumentiert. #121 verdrahtet
 keinen Product-Command-Producer und besitzt daher keinen erreichbaren
 Application-Trigger für diese Aktionen; ihre Domain-/Coordinator-Primitive
-bleiben implementiert und werden von einem späteren echten Consumer in der
-festgelegten Reihenfolge verwendet.
+bleiben implementiert und werden von einem späteren Application-owned
+Handler an der Command-Grenze in der festgelegten Reihenfolge verwendet.
 
 | Flow | Application Lifecycle | Process State | Persistence Action | Actuation | Diagnose |
 |---|---|---|---|---|---|
@@ -1127,8 +1139,10 @@ Standby (Application READY, Actuation DENIED)
   // runtimeRunState_ ist im NoRun-Boot-Flow bereits heap-owned gesetzt.
   // Der folgende Ablauf ist der verbindliche spätere Consumervertrag,
   // kein in #121 erreichbarer Application-Handler.
-  -> echter späterer Product-Command-Consumer
-  -> prüft CommandKind ∈ {StartProgram, StartManualHolding}
+  -> Application-owned Command-Grenze eines späteren Issues
+     (konkrete Handler-API in #121 nicht entworfen)
+  -> der Application-owned Handler prüft CommandKind ∈
+     {StartProgram, StartManualHolding}
      (dieselbe Domain-Regel wie TemperatureControlApplicationOrchestrator::
      persistFreshStartCommand(), ohne eine zweite Policy)
   -> decisionTarget = std::unique_ptr<CommandDecision>{
@@ -1336,13 +1350,22 @@ R1_RESUME_REJECT_COORDINATOR_POLICY=IMPLEMENTED
 R1_RESUME_CONFIRM_APPLICATION_TRIGGER=NOT_PRODUCT_REACHABLE_IN_ISSUE121
 R1_RESUME_REJECT_APPLICATION_TRIGGER=NOT_PRODUCT_REACHABLE_IN_ISSUE121
 R1_RESUME_APPLICATION_WIRING=DEFERRED_TO_FIRST_REAL_COMMAND_CONSUMER
+REAL_PRODUCT_COMMAND_TRIGGER=DEFERRED
+EXACT_COMMAND_HANDLER_API=DEFERRED_NOT_DESIGNED_IN_ISSUE121
+PENDING_RESUME_OWNER=FermentationApplication
+RUNTIME_RUN_STATE_OWNER=FermentationApplication
+EXTERNAL_COMMAND_PRODUCER_DIRECT_PRIVATE_STATE_ACCESS=NO
 
 Bei einem späteren echten Product-Command-Consumer für Resume-Confirm
 (nicht in #121):
-  -> Consumer prueft aktuelle Config-/Sensor-/Safety-Evidenz frisch
+  -> die spätere Application-owned Command-Grenze nimmt den Befehl an;
+     die konkrete Handler-API wird in diesem späteren Issue definiert
+  -> Application-owned Handler prueft aktuelle Config-/Sensor-/Safety-Evidenz
+     frisch
      (dieselben hasFreshConfigurationEvidence()/hasFreshSensorEvidence()-
      Helfer, unveraendert aus safety_core.cpp uebernommen)
-  -> RunPersistenceCoordinator::activateR1EligibleRun(*pendingResume_,
+  -> Application-owned Handler ruft
+     RunPersistenceCoordinator::activateR1EligibleRun(*pendingResume_,
      time, &liveSensorEvidence)  // NEU, kleine R1-spezifische Methode (siehe
      unten), KEIN activateLoadedRun(). Dritter Parameter jetzt Pointer
      (Blocker 3, Runde 3) – fuer den aktiven Resume-Zweig immer non-null.
@@ -1358,7 +1381,8 @@ Bei einem späteren echten Product-Command-Consumer für Resume-Confirm
      IN-PLACE (write-before-apply, Abschnitt 9.1); es entsteht kein
      separates "candidate", das die Application eigens uebernehmen muesste.
   -> RunPersistenceResult.status == Applied
-  -> danach runtimeRunState_ = std::move(pendingResume_)  // verschiebt den
+  -> danach verschiebt der Application-owned Handler
+     runtimeRunState_ = std::move(pendingResume_)  // verschiebt den
      unique_ptr selbst (O(1), KEIN 5096-Byte-Kopiervorgang) – *pendingResume_
      wurde vom Coordinator-Aufruf bereits in-place auf den rebasten Zustand
      aktualisiert (s. o.); ProcessRuntimeState damit erstmals als reine
@@ -1399,7 +1423,8 @@ Bei einem späteren echten Product-Command-Consumer für Resume-Confirm
   Read-Only-Konsequenz.
 
 Bei Ablehnung (ResumeOffer, späterer echter Consumer lehnt ab; nicht in #121):
-  -> Consumer ruft RunPersistenceCoordinator::discardAsNoActiveRun(
+  -> Application-owned Handler ruft
+     RunPersistenceCoordinator::discardAsNoActiveRun(
      *pendingResume_, time) direkt (nicht ueber
      TemperatureControlApplicationOrchestrator::reconcileR1LoadedRun(),
      Abschnitt 4.9/8 – Aufruf ist identisch zur internen Wrapper-Logik, nur
@@ -1409,7 +1434,8 @@ Bei Ablehnung (ResumeOffer, späterer echter Consumer lehnt ab; nicht in #121):
      benoetigte `RunCommandState&`-Eingang.
   -> RunPersistenceCoordinator::discardAsNoActiveRun() committet den
      NoActiveRun-Tombstone zuerst durabel (write-before-apply, bestehend)
-  -> nur bei Applied: runtimeRunState_ = std::move(pendingResume_) (der nun
+  -> nur bei Applied: Application-owned Handler verschiebt
+     runtimeRunState_ = std::move(pendingResume_) (der nun
      durch discardAsNoActiveRun() in-place auf Standby mutierte Zustand),
      danach Standby published
   -> bei Fehlschlag: pendingResume_ bleibt bestehen (Diagnosezweck), kein
@@ -2390,7 +2416,7 @@ CONFIG_RECOVERY_DOMAIN_POLICY_CHANGE=NO
 **Lebenszeit-Klarstellung (Abweichung von einer ersten Fassung):** Anders
 als #119/#120s rein *boot-only* Objekte müssen die meisten hier komponierten
 Objekte für die **gesamte Laufzeit** existieren (siehe Tabelle 12.1), nicht
-nur bis Boot-Ende – u. a. weil ein späterer echter Product-Command-Consumer
+nur bis Boot-Ende – u. a. weil ein späterer Application-owned Command-Handler
 für Fresh Start/Resume (Abschnitt 8/9) nach `begin()` erneut
 `RunPersistenceCoordinator`/`ConfigurationService` aufrufen wird. #121 selbst
 verdrahtet dafür keinen solchen Trigger. Application-eigene Objekte werden
@@ -2460,7 +2486,9 @@ Nachweis.
 #121_PRODUCT_RUNTIME=ACTOR_FREE
 ISSUE121_PRODUCT_RUNTIME=ACTOR_FREE
 FERMENTATION_APPLICATION_UPDATE=EMPTY
-REAL_PRODUCT_COMMAND_TRIGGER=NONE
+ISSUE121_REAL_PRODUCT_COMMAND_TRIGGER=NONE
+REAL_PRODUCT_COMMAND_TRIGGER=DEFERRED
+EXACT_COMMAND_HANDLER_API=DEFERRED_NOT_DESIGNED_IN_ISSUE121
 NO_SPECULATIVE_FRESH_START_API=YES
 NO_SPECULATIVE_RESUME_CONFIRM_REJECT_API=YES
 ```
@@ -2539,7 +2567,7 @@ RunPersistenceCoordinator::loadAndInitializeInto()
 Boot Current -> restore/classify/discard
 Completed/Fault restore
 ResumeOffer construction
-// spätere echte Product-Command-Consumer, nicht in #121:
+// spätere Application-owned Product-Command-Handler, nicht in #121:
 Resume confirm -> activateR1EligibleRun()
 Resume reject -> discardAsNoActiveRun()
 Fresh Start decision creation
@@ -3895,8 +3923,8 @@ Schritt 5: In-place-/Stack-Safety-Kerne und das Coordinator-eigene
   Runde 4s separates `candidateScratch_`, keine zweite Allokation).
   Schritt 5 enthielt **keine** `FermentationApplication`-Produktcomposition;
   insbesondere wurden weder `decisionTarget` noch das boot-transiente
-  `RunPersistenceLoadResult` produktiv in `begin()` komponiert. Diese
-  Die boot-/lifecycle-relevanten Application-Ziele gehören zur
+  `RunPersistenceLoadResult` produktiv in `begin()` komponiert. Die
+  boot-/lifecycle-relevanten Application-Ziele gehören zur
   Composition-Seite von Schritt 6; echte Product-Command-Consumer für Fresh
   Start sowie Resume Confirm/Reject bleiben bis zu einem späteren Issue
   deferred und sind in #121 nicht produktseitig erreichbar.
@@ -4121,7 +4149,7 @@ PLAN_SHA=<exact, nach Commit>
 ARCHITECTURE_VERDICT=SIMPLIFY
 PRIOR_APPROVED_PLAN_SHA=e249b51cedf6f6a3edbce3a0889c48d77b79e828
 PRIOR_REVIEWED_CORRECTION_SHA=9b101295af6468878057758356de33848ec18061
-PLAN_CORRECTION_REASON=BOOT_CLASSIFICATION_AND_CONFIGURATION_TRUST_MUST_REMAIN_SEPARATE
+PRE_STEP6_PLAN_CORRECTION_REASON=BOOT_CLASSIFICATION_AND_CONFIGURATION_TRUST_MUST_REMAIN_SEPARATE
 STEP_6_PRE_REVIEW_APPROVED_PLAN_SHA=86009eeba99b260a056c22ec82fd6c66c9531c73
 STEP_6_POST_IMPLEMENTATION_PLAN_CORRECTION_REASON=BOOT_COMPLETED_STANDBY_DOMAIN_OWNERSHIP_AND_DIAGNOSTIC_ATTRIBUTION
 ARCHITECTURE_BOUNDARY_CHANGE=NO
@@ -4267,6 +4295,12 @@ STEP_7_PRE_REVIEW_APPROVED_PLAN_SHA=68b81a16892a3a27c2eabdb8f571e34f1c107bbb
 STEP_7_PRE_REVIEW_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
 STEP_7_PLAN_CORRECTION_REASON=APPLICATION_TRIGGER_REACHABILITY_AND_DECODE_FAILURE_EVIDENCE
 STEP_7_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
+ISSUE121_REAL_PRODUCT_COMMAND_TRIGGER=NONE
+REAL_PRODUCT_COMMAND_TRIGGER=DEFERRED
+EXACT_COMMAND_HANDLER_API=DEFERRED_NOT_DESIGNED_IN_ISSUE121
+PENDING_RESUME_OWNER=FermentationApplication
+RUNTIME_RUN_STATE_OWNER=FermentationApplication
+EXTERNAL_COMMAND_PRODUCER_DIRECT_PRIVATE_STATE_ACCESS=NO
 MATERIAL_ARCHITECTURE_DECISION_OPEN=NO
 PRODUCTION_CODE_CHANGE=NO
 TEST_CODE_CHANGE=NO
@@ -4287,6 +4321,8 @@ MERGE=NO
 PLAN_DEVIATION=DISCOVERED_AND_DOCUMENTED_PENDING_REVISED_PLAN_APPROVAL
 OWNER_STEP_6_REVIEW=REOPENED_BY_STEP_7_COVERAGE_REVIEW
 OWNER_STEP_7_REVIEW=CHANGES_REQUIRED
+CURRENT_PLAN_CORRECTION_REASON_AMBIGUITY=NONE
+STEP_7_PLAN_CORRECTION_REASON_IS_CURRENT=YES
 SOURCE_OF_TRUTH_CONFLICT=NONE
 OWNER_PLAN_REVIEW=PENDING
 ```
