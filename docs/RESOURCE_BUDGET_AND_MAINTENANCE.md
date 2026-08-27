@@ -37,11 +37,25 @@ FRAMEWORK_DEFAULT_IS_PRODUCT_BUDGET=NO
 - Ein vorhandener Zahlenwert darf nicht mit einer behaupteten Bauteillebensdauer
   verwechselt werden.
 
-Der Release-1-SafetyCore hat eine endliche Compile-Time-FaultCode-Menge und
-feste bzw. enum-indexierte aktive/acknowledged Faultdaten. Er besitzt keine
-unbegrenzt wachsende Fault-Historie und keine dynamischen Faulttexte als
-Safety-Wahrheit; Journaling bleibt beim vorhandenen Event-Journal. Kein Fault-
-Ereignis darf im Safetykern Heapwachstum pro Ereignis verursachen.
+Der Release-1-Interlock ist `ActuationInterlock`. Er ist stateless und wertet
+die aktuelle `ActuationEvidence` gegen die endliche Compile-Time-
+`FaultCode`-Menge aus. `ActuationEvidence` und `ActuationInterlock` besitzen
+keinen interlock-eigenen active-/acknowledged-Fault-State und keine
+Fault-Historie. Dynamische Faulttexte sind keine Interlock-Wahrheit; eine
+Interlock-Evaluation darf kein unbegrenztes Heapwachstum pro Auswertung
+verursachen. Die bestehende Trennung von Interlock-Auswertung und
+Journaling/Diagnose bleibt erhalten; daraus wird keine Interlock-eigene
+Fault-Historie abgeleitet.
+
+```text
+RELEASE1_INTERLOCK=ActuationInterlock
+INTERLOCK_STATELESS=YES
+FAULT_CODE_SET=FINITE_COMPILE_TIME
+INTERLOCK_OWNS_ACTIVE_ACKNOWLEDGED_FAULT_STATE=NO
+INTERLOCK_OWNS_FAULT_HISTORY=NO
+DYNAMIC_FAULT_TEXT_AS_INTERLOCK_TRUTH=NO
+UNBOUNDED_HEAP_GROWTH_PER_INTERLOCK_EVALUATION=NO
+```
 
 ## Ueberwachte Ressourcen
 
