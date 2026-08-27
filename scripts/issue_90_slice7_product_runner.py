@@ -34,6 +34,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from unittest import mock
 
+import check_build_profiles
+
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_PARTITION = "state_store_test"
@@ -106,6 +108,25 @@ def require_source_sha(value: str) -> str:
     if not GIT_SHA_PATTERN.fullmatch(value):
         raise RunnerError(f"invalid documented production source SHA: {value}")
     return value
+
+
+def require_clean_source_tree() -> None:
+    try:
+        check_build_profiles.require_clean_source_tree(ROOT)
+    except RuntimeError as error:
+        raise RunnerError(str(error)) from error
+
+
+def verify_harness_source_sha(expected_source_sha: str, observed_source_sha: str) -> str:
+    """Accept only the complete exact SHA emitted by ISSUE90_READY."""
+    try:
+        expected = require_source_sha(expected_source_sha)
+        observed = require_source_sha(observed_source_sha)
+    except RunnerError as error:
+        raise RunnerError("BLOCKED_HARNESS_SOURCE_SHA_MISMATCH") from error
+    if observed != expected:
+        raise RunnerError("BLOCKED_HARNESS_SOURCE_SHA_MISMATCH")
+    return observed
 
 
 def release_build_provenance(report_path: Path) -> dict[str, str]:
@@ -315,6 +336,7 @@ def prepare_pre_harness_backup(
 ) -> int:
     if not rom_bootloader_ready:
         raise RunnerError("BLOCKED_ROM_BOOTLOADER_REQUIRED_FOR_PRE_HARNESS_BACKUP")
+    require_clean_source_tree()
     source_sha = require_source_sha(args.production_source_sha)
     production_table = Path(args.production_partition_table)
     table_size, table_sha = require_production_partition_artifact(production_table)
@@ -403,12 +425,14 @@ def prepare_pre_harness_backup(
         "production_restore_required": True,
         "campaign_result": "NOT_RUN",
         "restore_state": "PENDING_OWNER_BOOTLOADER_ACTION",
+        "source_tree_clean": True,
     }
     output = Path(args.manifest_output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print("PRE_HARNESS_BACKUP=PASS", flush=True)
     print("BACKUP_SOURCE_STATE=PRODUCTION_LAYOUT", flush=True)
+    print("SOURCE_TREE_CLEAN=YES", flush=True)
     print("TEST_PARTITION_PHYSICALLY_SEPARATE=NO", flush=True)
     print("TEST_PARTITION_REUSES_PRODUCTION_FLASH_RANGE=YES", flush=True)
     print(f"PRODUCTION_SOURCE_SHA={source_sha}", flush=True)
@@ -458,6 +482,8 @@ def load_pre_harness_manifest(path: Path) -> dict[str, object]:
         raise RunnerError("BACKUP_SOURCE_STATE rejected; production layout required")
     if data.get("actor_free") is not True or data.get("real_actuators_enabled") is not False:
         raise RunnerError("backup manifest actor-free contract rejected")
+    if data.get("source_tree_clean") is not True:
+        raise RunnerError("SOURCE_TREE_CLEAN proof missing")
     if not isinstance(data.get("production_restore_required"), bool):
         raise RunnerError("production restore requirement missing")
     if data.get("campaign_result") not in {
@@ -1007,7 +1033,7 @@ class ProductSerial:
             for name in REQUIRED_FAULT_FIELDS
         }
 
-    def ready(self) -> dict[str, str]:
+    def ready(self, expected_source_sha: str) -> dict[str, str]:
         _, fields = self.read_until("ISSUE90_READY")
         if fields.get("partition") != TEST_PARTITION:
             raise RunnerError(f"unexpected test partition: {fields}")
@@ -1017,6 +1043,17 @@ class ProductSerial:
             raise RunnerError(f"test partition physical separation claim rejected: {fields}")
         if fields.get("test_partition_reuses_production_flash_range") != "YES":
             raise RunnerError(f"test partition range reuse not declared: {fields}")
+        observed_source_sha = fields.get("source_sha", "UNKNOWN")
+        try:
+            verify_harness_source_sha(expected_source_sha, observed_source_sha)
+        except RunnerError:
+            print(f"HARNESS_OBSERVED_SOURCE_SHA={observed_source_sha}", flush=True)
+            print(f"EXPECTED_HARNESS_SOURCE_SHA={expected_source_sha}", flush=True)
+            print("HARNESS_SOURCE_SHA_VERIFICATION=FAIL", flush=True)
+            raise
+        print(f"HARNESS_OBSERVED_SOURCE_SHA={observed_source_sha}", flush=True)
+        print(f"EXPECTED_HARNESS_SOURCE_SHA={expected_source_sha}", flush=True)
+        print("HARNESS_SOURCE_SHA_VERIFICATION=PASS", flush=True)
         return fields
 
     def status(self) -> dict[str, str]:
@@ -1090,7 +1127,11 @@ def run_physical_campaign(args: argparse.Namespace) -> int:
         raise RunnerError("Slice-7 contract requires exactly 3 attempts per scenario")
     if args.profile != "esp32_bringup":
         raise RunnerError("the Slice-7 harness is bring-up-only")
+    require_clean_source_tree()
     manifest = require_pre_harness_manifest(Path(args.pre_harness_manifest))
+    expected_source_sha = require_source_sha(
+        str(manifest.get("production_source_sha", ""))
+    )
     print("PRE_HARNESS_BACKUP=PASS", flush=True)
     print("BACKUP_SOURCE_STATE=PRODUCTION_LAYOUT", flush=True)
     print("TEST_PARTITION_PHYSICALLY_SEPARATE=NO", flush=True)
@@ -1099,7 +1140,7 @@ def run_physical_campaign(args: argparse.Namespace) -> int:
 
     try:
         with ProductSerial(args.port, args.baud, args.timeout) as device:
-            ready = device.ready()
+            ready = device.ready(expected_source_sha)
             if (
                 ready.get("backup_required") != "YES"
                 or ready.get("partition_offset") != "0x300000"
@@ -1119,7 +1160,7 @@ def run_physical_campaign(args: argparse.Namespace) -> int:
                 input("After the ESP32 supply is physically OFF, press Enter. ")
                 print("OWNER_ACTION_NOW=POWER_ON", flush=True)
                 input("After the ESP32 supply is physically ON, press Enter. ")
-                device.ready()
+                device.ready(expected_source_sha)
                 status = device.status()
                 classification = print_attempt_result(
                     args.scenario,
@@ -1321,6 +1362,17 @@ def selftest_backup_workflow() -> None:
             release_build_report=str(release_report),
         )
         with mock.patch(__name__ + ".run_esptool", side_effect=fake_esptool):
+            with mock.patch.object(
+                check_build_profiles,
+                "source_tree_status",
+                return_value=" M dirty-source.cpp\n",
+            ):
+                _expect_rejected(
+                    lambda: prepare_pre_harness_backup(
+                        prepare_args, rom_bootloader_ready=True
+                    ),
+                    "BLOCKED_DIRTY_SOURCE_TREE",
+                )
             _expect_rejected(
                 lambda: prepare_pre_harness_backup(prepare_args),
                 "BLOCKED_ROM_BOOTLOADER_REQUIRED_FOR_PRE_HARNESS_BACKUP",
@@ -1449,7 +1501,7 @@ def selftest_backup_workflow() -> None:
                 def __exit__(self, *_: object) -> None:
                     return None
 
-                def ready(self) -> dict[str, str]:
+                def ready(self, _expected_source_sha: str) -> dict[str, str]:
                     raise RunnerError("selftest campaign interruption")
 
             campaign_args = argparse.Namespace(
@@ -1461,14 +1513,17 @@ def selftest_backup_workflow() -> None:
                 attempts=3,
                 pre_harness_manifest=str(manifest_path),
             )
-            with mock.patch(
-                __name__ + ".ProductSerial",
-                return_value=FailingProductSerial(),
+            with mock.patch.object(
+                check_build_profiles, "source_tree_status", return_value=""
             ):
-                _expect_rejected(
-                    lambda: run_physical_campaign(campaign_args),
-                    "selftest campaign interruption",
-                )
+                with mock.patch(
+                    __name__ + ".ProductSerial",
+                    return_value=FailingProductSerial(),
+                ):
+                    _expect_rejected(
+                        lambda: run_physical_campaign(campaign_args),
+                        "selftest campaign interruption",
+                    )
             failure_manifest = load_pre_harness_manifest(manifest_path)
             if (
                 failure_manifest.get("production_restore_required") is not True
@@ -1531,6 +1586,7 @@ def selftest_backup_workflow() -> None:
     print("PASS: complete production restore sequence selftest", flush=True)
     print("PASS: ROM bootloader and restore phase state selftests", flush=True)
     print("PASS: exact release/post-restore provenance selftests", flush=True)
+    print("PASS: proof build/prepare rejects dirty source tree", flush=True)
 
 
 def selftest_recovery_classifier() -> None:
@@ -1626,6 +1682,8 @@ def selftest_recovery_classifier() -> None:
 
 
 def selftest() -> int:
+    source_sha = "1" * 40
+    require_clean_source_tree()
     status = _base_status()
     status_line = (
         "I issue90: ISSUE90_STATUS application_started=YES "
@@ -1641,6 +1699,7 @@ def selftest() -> int:
         "partition_offset=0x300000 partition_size=0x100000 "
         "test_partition_physically_separate=NO "
         "test_partition_reuses_production_flash_range=YES "
+        f"source_sha={source_sha} "
         "load_stop=STOP_OR_PHYSICAL_POWER_CUT",
         "ISSUE90_READY",
     )
@@ -1650,9 +1709,22 @@ def selftest() -> int:
         raise RunnerError("backup safety parser failed")
     if ready.get("test_partition_physically_separate") != "NO":
         raise RunnerError("physical partition claim parser failed")
+    if ready.get("source_sha") != source_sha:
+        raise RunnerError("harness source SHA parser failed")
+    for observed_source_sha in ("", "not-a-sha", "2" * 40):
+        _expect_rejected(
+            lambda observed=observed_source_sha: verify_harness_source_sha(
+                source_sha, observed
+            ),
+            "BLOCKED_HARNESS_SOURCE_SHA_MISMATCH",
+        )
+    if verify_harness_source_sha(source_sha, source_sha) != source_sha:
+        raise RunnerError("exact harness source SHA was not accepted")
     selftest_backup_workflow()
     selftest_recovery_classifier()
+    print("PASS: clean source tree accepted", flush=True)
     print("PASS: Issue #90 Slice-7 UART field parser", flush=True)
+    print("PASS: exact harness source SHA field and verification", flush=True)
     print("PASS: actor-free and reused-flash-range guard", flush=True)
     return 0
 

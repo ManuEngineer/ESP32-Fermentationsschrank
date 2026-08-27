@@ -257,8 +257,9 @@ void Harness::start() noexcept {
              "partition_offset=0x300000 partition_size=0x100000 "
              "test_partition_physically_separate=NO "
              "test_partition_reuses_production_flash_range=YES "
+             "source_sha=%s "
              "load_stop=STOP_OR_PHYSICAL_POWER_CUT",
-             kTestPartition);
+             kTestPartition, APP_SOURCE_GIT_SHA);
     emitStatus();
 }
 

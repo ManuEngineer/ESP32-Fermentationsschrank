@@ -48,6 +48,11 @@ def require_idf() -> Path:
 
 def build() -> None:
     require_idf()
+    try:
+        check_build_profiles.require_clean_source_tree(ROOT)
+    except RuntimeError as error:
+        raise SystemExit(str(error)) from error
+    print("SOURCE_TREE_CLEAN=YES")
     command = [
         "idf.py",
         "-B",
