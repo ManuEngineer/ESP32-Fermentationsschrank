@@ -11,6 +11,10 @@
 #include "nvs_state_store.hpp"
 #include "fermentation_application.hpp"
 
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+#include "issue_90_slice7_harness.hpp"
+#endif
+
 #if defined(APP_ISSUE_29_BRINGUP_PROBE)
 #include "issue_29_bringup_probe.hpp"
 #endif
@@ -20,9 +24,18 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#ifndef APP_SOURCE_GIT_SHA
+#define APP_SOURCE_GIT_SHA "UNKNOWN"
+#endif
+
 namespace {
 
 constexpr char kTag[] = "app_main";
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+constexpr char kStateStorePartitionLabel[] = "state_store_test";
+#else
+constexpr char kStateStorePartitionLabel[] = "state_store";
+#endif
 constexpr uint64_t kHeartbeatIntervalMs = 1000U;
 constexpr uint64_t kSecondResourceLogAfterMs = 30000U;
 // Mindestens ein Tick Schedulerkooperation je Schleifendurchlauf; siehe
@@ -38,7 +51,7 @@ class NvsOwningContext final {
    public:
     [[nodiscard]] static std::unique_ptr<NvsOwningContext> create() {
         auto config = device_platform_esp_idf::NvsStateStoreConfig::create(
-            "state_store", "fermentation");
+            kStateStorePartitionLabel, "fermentation");
         if (!config.has_value()) {
             ESP_LOGE(kTag, "invalid state-store owning-context configuration");
             return nullptr;
@@ -99,6 +112,7 @@ void logBootSummary(const app_config::ProfilePolicy& policy,
     const char* TAG = kTag;
     ESP_LOGI(TAG, "%s", app_config::kProjectName);
     ESP_LOGI(TAG, "profile: %s", app_config::profileName(policy.profile));
+    ESP_LOGI(TAG, "source git sha: %s", APP_SOURCE_GIT_SHA);
     ESP_LOGI(TAG, "hardware state: %s",
              app_config::hardwareStateName(policy.startupHardwareState));
     ESP_LOGI(TAG, "actuator policy: %s",
@@ -134,6 +148,10 @@ extern "C" void app_main(void) {
         // cannot initialize and open its persistent store.
         return;
     }
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+    ESP_LOGI(kTag,
+             "ISSUE90_NVS_PARTITION_INIT=PASS ISSUE90_NVS_STORE_OPEN=PASS");
+#endif
 
     device_platform::DevicePlatform platform;
     const device_platform_esp_idf::EspTimeZoneResolver timeZoneResolver;
@@ -161,6 +179,11 @@ extern "C" void app_main(void) {
         return;
     }
 
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+    fermentation::issue_90_slice7::Harness issue90Harness(application);
+    issue90Harness.start();
+#endif
+
     logResources();
 
 #if defined(APP_ISSUE_29_BRINGUP_PROBE)
@@ -184,6 +207,9 @@ extern "C" void app_main(void) {
     for (;;) {
         platform.update();
         application.update();
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+        issue90Harness.update();
+#endif
 
         const uint64_t nowMs = timeSource.monotonicMillis();
         if (nowMs - lastHeartbeatMs >= kHeartbeatIntervalMs) {

@@ -9,8 +9,9 @@ CONFIG_IDF_TARGET="esp32"
 # Release 1 zielt auf exakt 4 MB Flash (siehe AGENTS.md, app_config.hpp).
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
-# Issue #90 production partition layout. The destructive characterization
-# uses the separate partitions/issue_90_state_store_test.csv test image.
+# Issue #90 production partition layout. The bring-up-only harness selects an
+# alternative label for the same physical state-store flash range; it is not
+# a physically separate test partition.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/issue_90_state_store.csv"
 

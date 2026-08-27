@@ -81,6 +81,34 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def source_tree_status(root: Path | None = None) -> str:
+    """Return the porcelain status used for proof-build cleanliness."""
+    repository = repo_root() if root is None else root
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=repository,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "BLOCKED_DIRTY_SOURCE_TREE: git status failed: "
+            f"{result.stderr.strip()}"
+        )
+    return result.stdout
+
+
+def require_clean_source_tree(root: Path | None = None) -> None:
+    """Fail closed unless the proof-build source tree is exactly clean."""
+    status = source_tree_status(root)
+    if status:
+        raise RuntimeError(
+            "BLOCKED_DIRTY_SOURCE_TREE: git status --porcelain returned:\n"
+            f"{status}"
+        )
+
+
 # --- sdkconfig ---------------------------------------------------------
 
 def read_sdkconfig(sdkconfig_path: Path) -> dict[str, str]:

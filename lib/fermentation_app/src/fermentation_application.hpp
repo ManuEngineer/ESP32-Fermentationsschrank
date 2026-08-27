@@ -19,6 +19,13 @@ class ConfigurationMutationCoordinator;
 class ConfigurationRecoveryService;
 class ConfigurationService;
 class RunPersistenceCoordinator;
+enum class ConfigurationRecoveryStatus : std::uint8_t;
+
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+namespace issue_90_slice7 {
+class Harness;
+}
+#endif
 
 enum class ApplicationLifecycleState : std::uint8_t {
     Initializing,
@@ -51,6 +58,9 @@ class FermentationApplication {
     }
 
    private:
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+    friend class issue_90_slice7::Harness;
+#endif
     void requireService(FaultCode faultCode,
                         bool applicationAllocationFailure = false) noexcept;
     [[nodiscard]] bool publishStandby();
@@ -65,6 +75,9 @@ class FermentationApplication {
     std::unique_ptr<RunCommandState> pendingResume_;
     std::optional<RunPersistenceLoadStatus> persistenceLoadStatus_;
     RunLoadDisposition loadDisposition_{RunLoadDisposition::SafeBoot};
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+    std::optional<ConfigurationRecoveryStatus> configurationRecoveryStatus_;
+#endif
     ApplicationLifecycleState lifecycleState_{
         ApplicationLifecycleState::Initializing};
     PresentationState presentationState_;

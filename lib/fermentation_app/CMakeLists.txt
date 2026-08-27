@@ -33,3 +33,16 @@ if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
     )
     target_include_directories(${COMPONENT_LIB} PRIVATE "private")
 endif()
+
+# The Slice-7 application bridge is private to the dedicated bring-up
+# harness.  It is absent from the release and native compilation units.
+if(APP_ISSUE_90_SLICE7_HARNESS)
+    if(NOT CONFIG_APP_PROFILE_ESP32_BRINGUP)
+        message(FATAL_ERROR
+            "Issue #90 Slice-7 application bridge is bring-up-only"
+        )
+    endif()
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE
+        APP_ISSUE_90_SLICE7_HARNESS=1
+    )
+endif()
