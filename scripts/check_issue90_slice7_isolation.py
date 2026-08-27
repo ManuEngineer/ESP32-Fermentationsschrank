@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-HARNESS_TOKEN = "APP_ISSUE_90_SLICE7_HARNESS"
+HARNESS_DEFINE = "APP_ISSUE_90_SLICE7_HARNESS"
 
 
 def read(path: Path) -> str:
@@ -39,10 +39,10 @@ def check_source_contract() -> None:
         raise SystemExit("main CMake does not gate the harness variable")
     if "CONFIG_APP_PROFILE_ESP32_BRINGUP" not in main:
         raise SystemExit("main CMake has no bring-up profile guard")
-    if HARNESS_TOKEN not in main or HARNESS_TOKEN not in app:
+    if HARNESS_DEFINE not in main or HARNESS_DEFINE not in app:
         raise SystemExit("harness compile definition is not present in both scopes")
     for overlay in ("sdkconfig.defaults.bringup", "sdkconfig.defaults.release"):
-        if HARNESS_TOKEN in read(ROOT / overlay):
+        if HARNESS_DEFINE in read(ROOT / overlay):
             raise SystemExit(f"harness definition leaked into {overlay}")
     print("PASS: compile-time harness gate is bring-up-only")
 

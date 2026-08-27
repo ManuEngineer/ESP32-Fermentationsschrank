@@ -2,8 +2,8 @@
 """Build the private Issue #90 Slice-7 bring-up harness.
 
 The harness uses the current product composition and persistence services but
-is compiled only for the bring-up profile.  It uses the dedicated
-``state_store_test`` partition and never flashes a device.
+is compiled only for the bring-up profile. It uses the ``state_store_test``
+label for the reused production flash range and never flashes a device.
 """
 
 from __future__ import annotations

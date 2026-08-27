@@ -255,6 +255,8 @@ void Harness::start() noexcept {
              "ISSUE90_READY partition=%s actor_free=YES "
              "real_actuators_enabled=NO backup_required=YES "
              "partition_offset=0x300000 partition_size=0x100000 "
+             "test_partition_physically_separate=NO "
+             "test_partition_reuses_production_flash_range=YES "
              "load_stop=STOP_OR_PHYSICAL_POWER_CUT",
              kTestPartition);
     emitStatus();

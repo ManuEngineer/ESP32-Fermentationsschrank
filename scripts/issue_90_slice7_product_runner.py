@@ -1,29 +1,52 @@
 #!/usr/bin/env python3
-"""Interactive actor-free Issue #90 Slice-7 product runner.
+"""Actor-free Issue #90 Slice-7 product runner.
 
-The runner speaks only the private bring-up protocol.  It never toggles RTS or
-EN and never controls board power.  A later physical attempt pauses at the
-machine-readable owner window so the Owner can remove and restore ESP32 power.
+The runner is deliberately split into fail-closed phases:
+
+* ``prepare`` reads and verifies the production layout before a harness is
+  flashed or booted;
+* ``campaign`` only accepts an already verified pre-harness manifest;
+* ``restore`` writes the production layout and release artifacts back;
+* ``verify-restored-boot`` verifies the normal product boot after an Owner
+  power cycle.
+
+The runner never toggles RTS or EN and never controls board power.  Physical
+power removal is performed only by the Owner at the explicit power-cut
+window.  All recovery decisions use the raw current product status and the
+explicit Slice-7 classifier below; no status-string existence is a PASS
+criterion.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import io
 import json
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_PARTITION = "state_store_test"
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
+PLAN_SHA = "baf0b2ae04cd42afa75dfa00e21d900116b38bc8"
 STATE_STORE_OFFSET = 0x300000
 STATE_STORE_SIZE = 0x100000
+PARTITION_TABLE_OFFSET = 0x8000
+PARTITION_TABLE_RESERVED_SIZE = 0x1000
+BOOTLOADER_OFFSET = 0x1000
+APPLICATION_OFFSET = 0x10000
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
 class RunnerError(RuntimeError):
@@ -64,10 +87,31 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def require_file(path: Path, description: str) -> None:
+    if not path.is_file():
+        raise RunnerError(f"{description} missing: {path}")
+
+
+def require_exact_blob(path: Path, expected_size: int, description: str) -> str:
+    require_file(path, description)
+    actual_size = path.stat().st_size
+    if actual_size != expected_size:
+        raise RunnerError(
+            f"{description} has {actual_size} bytes; expected {expected_size}"
+        )
+    return sha256_file(path)
+
+
+def require_source_sha(value: str) -> str:
+    if not GIT_SHA_PATTERN.fullmatch(value):
+        raise RunnerError(f"invalid documented production source SHA: {value}")
+    return value
+
+
 def run_esptool(port: str, baud: int, command: list[str]) -> None:
     tool = shutil.which("esptool")
     if tool is None:
-        raise RunnerError("pinned ESP-IDF esptool is required for partition safety")
+        raise RunnerError("pinned ESP-IDF esptool is required for flash safety")
     result = subprocess.run(
         [
             tool,
@@ -96,59 +140,575 @@ def run_esptool(port: str, baud: int, command: list[str]) -> None:
         )
 
 
-def require_partition_image(path: Path) -> str:
-    if not path.is_file():
-        raise RunnerError(f"missing state-store backup: {path}")
-    if path.stat().st_size != STATE_STORE_SIZE:
-        raise RunnerError(
-            f"state-store backup has {path.stat().st_size} bytes; "
-            f"expected {STATE_STORE_SIZE}"
-        )
-    return sha256_file(path)
+def capture_verified_flash_region(
+    port: str, baud: int, offset: int, size: int, target: Path, description: str
+) -> str:
+    """Read one flash region twice and publish it only after equal hashes."""
 
-
-def capture_state_store_backup(port: str, baud: int, target: Path) -> str:
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
-        prefix="issue90-state-store-", dir=target.parent
+        prefix="issue90-flash-", dir=target.parent
     ) as directory:
         first = Path(directory) / "capture.bin"
         second = Path(directory) / "capture-readback.bin"
-        command = ["read-flash", hex(STATE_STORE_OFFSET), hex(STATE_STORE_SIZE)]
+        command = ["read-flash", hex(offset), hex(size)]
         run_esptool(port, baud, [*command, str(first)])
-        first_sha = require_partition_image(first)
+        first_sha = require_exact_blob(first, size, description)
         run_esptool(port, baud, [*command, str(second)])
-        second_sha = require_partition_image(second)
+        second_sha = require_exact_blob(second, size, description)
         if first_sha != second_sha:
-            raise RunnerError("state-store backup read-back hash mismatch")
+            raise RunnerError(f"{description} read-back hash mismatch")
         first.replace(target)
-    return require_partition_image(target)
+    return require_exact_blob(target, size, description)
 
 
-def restore_state_store_backup(port: str, baud: int, backup: Path) -> str:
-    backup_sha = require_partition_image(backup)
-    run_esptool(
-        port,
-        baud,
-        ["write-flash", hex(STATE_STORE_OFFSET), str(backup)],
-    )
-    with tempfile.TemporaryDirectory(
-        prefix="issue90-state-store-verify-", dir=backup.parent
-    ) as directory:
-        verify = Path(directory) / "restore-readback.bin"
+def readback_hash(
+    port: str, baud: int, offset: int, size: int, expected_sha: str, description: str
+) -> str:
+    with tempfile.TemporaryDirectory(prefix="issue90-readback-") as directory:
+        readback = Path(directory) / "readback.bin"
         run_esptool(
             port,
             baud,
-            [
-                "read-flash",
-                hex(STATE_STORE_OFFSET),
-                hex(STATE_STORE_SIZE),
-                str(verify),
-            ],
+            ["read-flash", hex(offset), hex(size), str(readback)],
         )
-        if require_partition_image(verify) != backup_sha:
-            raise RunnerError("state-store restore read-back hash mismatch")
-    return backup_sha
+        actual_sha = require_exact_blob(readback, size, description)
+    if actual_sha != expected_sha:
+        raise RunnerError(f"{description} read-back hash mismatch")
+    return actual_sha
+
+
+def write_and_verify_flash_region(
+    port: str,
+    baud: int,
+    offset: int,
+    path: Path,
+    expected_size: int,
+    expected_sha: str,
+    description: str,
+) -> str:
+    actual_sha = require_exact_blob(path, expected_size, description)
+    if actual_sha != expected_sha:
+        raise RunnerError(f"{description} source hash mismatch")
+    run_esptool(port, baud, ["write-flash", hex(offset), str(path)])
+    return readback_hash(port, baud, offset, expected_size, expected_sha, description)
+
+
+def require_production_partition_artifact(path: Path) -> tuple[int, str]:
+    require_file(path, "production partition-table artifact")
+    size = path.stat().st_size
+    if size <= 0 or size > PARTITION_TABLE_RESERVED_SIZE:
+        raise RunnerError(
+            "production partition-table artifact has no valid canonical "
+            f"ESP-IDF boundary: {size} bytes"
+        )
+    return size, sha256_file(path)
+
+
+def release_artifact_paths(release_dir: Path) -> dict[str, Path]:
+    return {
+        "bootloader": release_dir / "bootloader" / "bootloader.bin",
+        "partition_table": release_dir / "partition_table" / "partition-table.bin",
+        "application": release_dir / "esp32_fermentationsschrank.bin",
+    }
+
+
+def require_release_artifacts(release_dir: Path) -> dict[str, dict[str, object]]:
+    paths = release_artifact_paths(release_dir)
+    offsets = {
+        "bootloader": BOOTLOADER_OFFSET,
+        "partition_table": PARTITION_TABLE_OFFSET,
+        "application": APPLICATION_OFFSET,
+    }
+    artifacts: dict[str, dict[str, object]] = {}
+    for name, path in paths.items():
+        require_file(path, f"production release {name} artifact")
+        size = path.stat().st_size
+        if size <= 0:
+            raise RunnerError(f"production release {name} artifact is empty: {path}")
+        artifacts[name] = {
+            "file": str(path.resolve()),
+            "offset": offsets[name],
+            "size": size,
+            "sha256": sha256_file(path),
+        }
+    table_size, table_sha = require_production_partition_artifact(paths["partition_table"])
+    if artifacts["partition_table"]["size"] != table_size:
+        raise RunnerError("partition-table artifact size changed during inspection")
+    if artifacts["partition_table"]["sha256"] != table_sha:
+        raise RunnerError("partition-table artifact hash changed during inspection")
+    return artifacts
+
+
+def prepare_pre_harness_backup(args: argparse.Namespace) -> int:
+    source_sha = require_source_sha(args.production_source_sha)
+    production_table = Path(args.production_partition_table)
+    table_size, table_sha = require_production_partition_artifact(production_table)
+    release_artifacts = require_release_artifacts(Path(args.production_release_dir))
+    if release_artifacts["partition_table"]["sha256"] != table_sha:
+        raise RunnerError(
+            "production partition-table argument differs from release artifact"
+        )
+
+    backup_dir = Path(args.backup_dir)
+    table_backup = backup_dir / "production_partition_table.bin"
+    state_backup = backup_dir / "production_state_store.bin"
+    table_backup_sha = capture_verified_flash_region(
+        args.port,
+        args.baud,
+        PARTITION_TABLE_OFFSET,
+        table_size,
+        table_backup,
+        "production partition-table backup",
+    )
+    if table_backup_sha != table_sha:
+        raise RunnerError(
+            "production board partition-table bytes do not match the documented "
+            "release artifact"
+        )
+    state_backup_sha = capture_verified_flash_region(
+        args.port,
+        args.baud,
+        STATE_STORE_OFFSET,
+        STATE_STORE_SIZE,
+        state_backup,
+        "production state-store backup",
+    )
+
+    manifest = {
+        "protocol_version": PROTOCOL_VERSION,
+        "phase": "PRE_HARNESS_BACKUP",
+        "plan_sha": PLAN_SHA,
+        "source_sha": source_sha,
+        "backup_source_state": "PRODUCTION_LAYOUT",
+        "test_partition": {
+            "label": TEST_PARTITION,
+            "offset": STATE_STORE_OFFSET,
+            "size": STATE_STORE_SIZE,
+            "physically_separate": False,
+            "reuses_production_flash_range": True,
+        },
+        "backups": {
+            "production_partition_table": {
+                "file": str(table_backup.resolve()),
+                "offset": PARTITION_TABLE_OFFSET,
+                "size": table_size,
+                "sha256": table_backup_sha,
+            },
+            "production_state_store": {
+                "file": str(state_backup.resolve()),
+                "offset": STATE_STORE_OFFSET,
+                "size": STATE_STORE_SIZE,
+                "sha256": state_backup_sha,
+            },
+        },
+        "production_release_artifacts": release_artifacts,
+        "sensitive_artifacts_local_only": True,
+        "full_flash_backup": False,
+        "actor_free": True,
+        "real_actuators_enabled": False,
+        "power_cut_type": "PHYSICAL_POWER_REMOVAL",
+        "rts_en_software_reset_substitute": False,
+    }
+    output = Path(args.manifest_output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print("PRE_HARNESS_BACKUP=PASS", flush=True)
+    print("BACKUP_SOURCE_STATE=PRODUCTION_LAYOUT", flush=True)
+    print("TEST_PARTITION_PHYSICALLY_SEPARATE=NO", flush=True)
+    print("TEST_PARTITION_REUSES_PRODUCTION_FLASH_RANGE=YES", flush=True)
+    print(f"PRODUCTION_PARTITION_TABLE_BACKUP_SHA256={table_backup_sha}", flush=True)
+    print(f"PRODUCTION_STATE_STORE_BACKUP_SHA256={state_backup_sha}", flush=True)
+    return 0
+
+
+def _manifest_file(entry: object, name: str) -> tuple[Path, int, str, int]:
+    if not isinstance(entry, dict):
+        raise RunnerError(f"backup manifest entry malformed: {name}")
+    try:
+        path = Path(str(entry["file"]))
+        offset = int(entry["offset"])
+        size = int(entry["size"])
+        expected_sha = str(entry["sha256"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise RunnerError(f"backup manifest entry malformed: {name}") from error
+    if not SHA256_PATTERN.fullmatch(expected_sha):
+        raise RunnerError(f"backup manifest hash malformed: {name}")
+    actual_sha = require_exact_blob(path, size, name)
+    if actual_sha != expected_sha:
+        raise RunnerError(f"backup manifest hash mismatch: {name}")
+    return path, offset, expected_sha, size
+
+
+def load_pre_harness_manifest(path: Path) -> dict[str, object]:
+    require_file(path, "pre-harness backup manifest")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RunnerError(f"backup manifest cannot be read: {path}") from error
+    if not isinstance(data, dict):
+        raise RunnerError("backup manifest is not an object")
+    if data.get("protocol_version") != PROTOCOL_VERSION:
+        raise RunnerError("backup manifest protocol version rejected")
+    if data.get("phase") != "PRE_HARNESS_BACKUP":
+        raise RunnerError("backup manifest phase rejected")
+    if data.get("plan_sha") != PLAN_SHA:
+        raise RunnerError("backup manifest plan SHA rejected")
+    if data.get("backup_source_state") != "PRODUCTION_LAYOUT":
+        raise RunnerError("BACKUP_SOURCE_STATE rejected; production layout required")
+    if data.get("actor_free") is not True or data.get("real_actuators_enabled") is not False:
+        raise RunnerError("backup manifest actor-free contract rejected")
+    partition = data.get("test_partition")
+    if not isinstance(partition, dict):
+        raise RunnerError("backup manifest test partition missing")
+    if (
+        partition.get("label") != TEST_PARTITION
+        or partition.get("offset") != STATE_STORE_OFFSET
+        or partition.get("size") != STATE_STORE_SIZE
+        or partition.get("physically_separate") is not False
+        or partition.get("reuses_production_flash_range") is not True
+    ):
+        raise RunnerError("test partition physical-layout contract rejected")
+    source_sha = require_source_sha(str(data.get("source_sha", "")))
+    backups = data.get("backups")
+    if not isinstance(backups, dict):
+        raise RunnerError("backup manifest backups missing")
+    table_backup = _manifest_file(
+        backups.get("production_partition_table"),
+        "production partition-table backup",
+    )
+    if table_backup[1] != PARTITION_TABLE_OFFSET:
+        raise RunnerError("production partition-table backup offset rejected")
+    if table_backup[3] <= 0 or table_backup[3] > PARTITION_TABLE_RESERVED_SIZE:
+        raise RunnerError("production partition-table backup boundary rejected")
+    state_backup = _manifest_file(
+        backups.get("production_state_store"), "production state-store backup"
+    )
+    if state_backup[1] != STATE_STORE_OFFSET or state_backup[3] != STATE_STORE_SIZE:
+        raise RunnerError("production state-store backup range rejected")
+
+    release = data.get("production_release_artifacts")
+    if not isinstance(release, dict):
+        raise RunnerError("production release artifacts missing")
+    expected_offsets = {
+        "bootloader": BOOTLOADER_OFFSET,
+        "partition_table": PARTITION_TABLE_OFFSET,
+        "application": APPLICATION_OFFSET,
+    }
+    for name, expected_offset in expected_offsets.items():
+        artifact = release.get(name)
+        if not isinstance(artifact, dict):
+            raise RunnerError(f"production release artifact missing: {name}")
+        artifact_path, offset, artifact_sha, size = _manifest_file(
+            artifact, f"production release {name} artifact"
+        )
+        if offset != expected_offset:
+            raise RunnerError(f"production release {name} offset rejected")
+        artifact["file"] = str(artifact_path)
+        artifact["sha256"] = artifact_sha
+        artifact["size"] = size
+    if release["partition_table"]["size"] != table_backup[3]:
+        raise RunnerError(
+            "production release partition-table size differs from captured table"
+        )
+    if release["partition_table"]["sha256"] != table_backup[2]:
+        raise RunnerError(
+            "production release partition-table differs from captured production table"
+        )
+    data["source_sha"] = source_sha
+    data["backups"] = backups
+    data["production_release_artifacts"] = release
+    return data
+
+
+def require_pre_harness_manifest(path: Path | None) -> dict[str, object]:
+    if path is None:
+        raise RunnerError("BLOCKED_PRE_HARNESS_BACKUP_REQUIRED")
+    return load_pre_harness_manifest(path)
+
+
+def restore_production_layout(
+    args: argparse.Namespace, manifest: dict[str, object]
+) -> None:
+    backups = manifest.get("backups")
+    if not isinstance(backups, dict):
+        raise RunnerError("backup manifest backups missing during restore")
+    table_backup, table_offset, table_sha, table_size = _manifest_file(
+        backups.get("production_partition_table"),
+        "production partition-table backup",
+    )
+    state_backup, state_offset, state_sha, state_size = _manifest_file(
+        backups.get("production_state_store"), "production state-store backup"
+    )
+    write_and_verify_flash_region(
+        args.port,
+        args.baud,
+        state_offset,
+        state_backup,
+        state_size,
+        state_sha,
+        "production state-store restore",
+    )
+    write_and_verify_flash_region(
+        args.port,
+        args.baud,
+        table_offset,
+        table_backup,
+        table_size,
+        table_sha,
+        "production partition-table restore",
+    )
+    release = manifest.get("production_release_artifacts")
+    if not isinstance(release, dict):
+        raise RunnerError("production release artifacts missing during restore")
+    command = ["write-flash"]
+    ordered_names = ("bootloader", "partition_table", "application")
+    for name in ordered_names:
+        artifact = release.get(name)
+        if not isinstance(artifact, dict):
+            raise RunnerError(f"production release artifact missing during restore: {name}")
+        command.extend([hex(int(artifact["offset"])), str(artifact["file"])])
+    run_esptool(args.port, args.baud, command)
+    for name in ordered_names:
+        artifact = release.get(name)
+        if not isinstance(artifact, dict):
+            raise RunnerError(f"production release artifact missing during verify: {name}")
+        readback_hash(
+            args.port,
+            args.baud,
+            int(artifact["offset"]),
+            int(artifact["size"]),
+            str(artifact["sha256"]),
+            f"production release {name} restore",
+        )
+    print("PRODUCTION_LAYOUT_RESTORED=PASS", flush=True)
+    print("PRODUCTION_STATE_STORE_RESTORED=PASS", flush=True)
+    print("PRODUCTION_RELEASE_FIRMWARE_RESTORED=PASS", flush=True)
+
+
+REQUIRED_STATUS_FIELDS = (
+    "application_lifecycle",
+    "configuration_recovery_status",
+    "configuration_runtime_available",
+    "run_persistence_load_status",
+    "run_load_disposition",
+    "published_process_state",
+    "actuator_release",
+)
+REQUIRED_FAULT_FIELDS = ("PANIC", "WATCHDOG", "BROWNOUT", "UNEXPECTED_RESET")
+KNOWN_LIFECYCLES = {"Ready", "ServiceRequired"}
+KNOWN_CONFIG_SUCCESS = {
+    "RuntimeReady",
+    "FactoryInitializationCompleted",
+    "FactoryResetCompleted",
+}
+KNOWN_CONFIG_FAIL_CLOSED = {
+    "ConfigurationUnavailable",
+    "ConfigurationIntegrityFailure",
+    "UnsupportedNewerConfigurationSchema",
+    "PersistenceReadFailure",
+    "PersistenceCapacityFailure",
+    "PersistenceWriteFailure",
+    "CounterOverflow",
+    "RuntimePreparationFailure",
+    "BootstrapCommitIndeterminate",
+    "ConfigurationRecordOutcomeIndeterminate",
+    "ConfigurationCommitIndeterminate",
+}
+KNOWN_CONFIG_STATUSES = KNOWN_CONFIG_SUCCESS | KNOWN_CONFIG_FAIL_CLOSED | {
+    "ConfigurationMutationBusy",
+    "ConfigurationModelBudgetBusy",
+    "StateTransitionRejected",
+}
+KNOWN_RUN_LOAD_SUCCESS = {
+    "NoPersistedRun",
+    "Current",
+    "NoActiveRun",
+}
+KNOWN_RUN_LOAD_FAIL_CLOSED = {
+    "FallbackRecovered",
+    "PreparedInterrupted",
+    "NotReconstructible",
+    "NotReconstructibleOrphanedState",
+    "ReadFailed",
+    "CapacityExceeded",
+    "UnsupportedSchema",
+    "ForeignEpoch",
+    "AlreadyInitialized",
+}
+KNOWN_RUN_LOAD_STATUSES = KNOWN_RUN_LOAD_SUCCESS | KNOWN_RUN_LOAD_FAIL_CLOSED | {
+    "NOT_AVAILABLE"
+}
+KNOWN_DISPOSITIONS = {
+    "Standby",
+    "ResumeOffer",
+    "NoActiveRun",
+    "Completed",
+    "TerminalFault",
+    "SafeBoot",
+}
+KNOWN_PROCESS_STATES = {
+    "NONE",
+    "Standby",
+    "Preheating",
+    "WaitingForProduct",
+    "ReachingTarget",
+    "QualifyingTarget",
+    "Fermenting",
+    "Cooling",
+    "CoolHolding",
+    "ManualHolding",
+    "Completed",
+    "RecoveryEvaluation",
+    "Fault",
+    "ServiceMode",
+    "Boot",
+    "SafeBoot",
+}
+
+
+@dataclass(frozen=True)
+class RecoveryClassification:
+    classification: str
+    reason: str
+    result: str
+
+
+def _fail_closed_configuration(status: dict[str, str]) -> bool:
+    return (
+        status["application_lifecycle"] == "ServiceRequired"
+        and status["configuration_runtime_available"] == "NO"
+        and status["run_persistence_load_status"] == "NOT_AVAILABLE"
+        and status["run_load_disposition"] == "SafeBoot"
+        and status["published_process_state"] == "NONE"
+    )
+
+
+def _fail_closed_run(status: dict[str, str]) -> bool:
+    return (
+        status["application_lifecycle"] == "ServiceRequired"
+        and status["configuration_runtime_available"] == "YES"
+        and status["run_persistence_load_status"] in KNOWN_RUN_LOAD_FAIL_CLOSED
+        and status["run_load_disposition"] == "SafeBoot"
+        and status["published_process_state"] == "NONE"
+    )
+
+
+def classify_product_recovery(
+    scenario: str, status: dict[str, str], faults: dict[str, str]
+) -> RecoveryClassification:
+    """Classify only exact current-product status combinations.
+
+    The allowed combinations mirror the current recovery sources: a valid
+    configuration publishes ``Standby``; a valid R1-resumable run publishes
+    no operational state until the resume decision and exposes
+    ``ResumeOffer``; a no-run/tombstone result maps to ``Standby``; and an
+    untrusted configuration/run path is ``ServiceRequired``/``SafeBoot``.
+    """
+
+    if scenario not in {"config", "run"}:
+        return RecoveryClassification("UNMAPPED", "unknown_scenario", "BLOCKED")
+    missing = [key for key in REQUIRED_STATUS_FIELDS if key not in status]
+    missing += [key for key in REQUIRED_FAULT_FIELDS if key not in faults]
+    if missing:
+        return RecoveryClassification(
+            "UNMAPPED", "missing_raw_product_fields", "BLOCKED"
+        )
+    if status["actuator_release"] != "false":
+        return RecoveryClassification(
+            "UNSAFE_ACTUATOR_RELEASE", "actuator_release_not_false", "FAIL"
+        )
+    if any(faults[key] != "NONE_OBSERVED" for key in REQUIRED_FAULT_FIELDS):
+        return RecoveryClassification("FAULT_OBSERVED", "runtime_fault_observed", "FAIL")
+    if status["application_lifecycle"] not in KNOWN_LIFECYCLES:
+        return RecoveryClassification("UNMAPPED", "unknown_application_lifecycle", "BLOCKED")
+    if status["configuration_recovery_status"] not in KNOWN_CONFIG_STATUSES:
+        return RecoveryClassification(
+            "UNMAPPED", "unknown_configuration_recovery_status", "BLOCKED"
+        )
+    if status["configuration_runtime_available"] not in {"YES", "NO"}:
+        return RecoveryClassification("UNMAPPED", "unknown_runtime_availability", "BLOCKED")
+    if status["run_persistence_load_status"] not in KNOWN_RUN_LOAD_STATUSES:
+        return RecoveryClassification("UNMAPPED", "unknown_run_load_status", "BLOCKED")
+    if status["run_load_disposition"] not in KNOWN_DISPOSITIONS:
+        return RecoveryClassification("UNMAPPED", "unknown_run_disposition", "BLOCKED")
+    if status["published_process_state"] not in KNOWN_PROCESS_STATES:
+        return RecoveryClassification("UNMAPPED", "unknown_published_process_state", "BLOCKED")
+
+    config_status = status["configuration_recovery_status"]
+    if config_status in KNOWN_CONFIG_FAIL_CLOSED and _fail_closed_configuration(status):
+        return RecoveryClassification(
+            "CONFIGURATION_FAIL_CLOSED",
+            "configuration_runtime_unavailable_service_required_safeboot",
+            "PASS_FAIL_CLOSED",
+        )
+
+    if config_status in KNOWN_CONFIG_SUCCESS:
+        if status["application_lifecycle"] == "ServiceRequired" and _fail_closed_run(
+            status
+        ):
+            return RecoveryClassification(
+                "RUN_FAIL_CLOSED",
+                "run_persistence_untrusted_service_required_safeboot",
+                "PASS_FAIL_CLOSED",
+            )
+        if (
+            status["application_lifecycle"] != "Ready"
+            or status["configuration_runtime_available"] != "YES"
+        ):
+            return RecoveryClassification(
+                "UNEXPECTED_CONFIGURATION_STATE",
+                "successful_configuration_not_operational",
+                "FAIL",
+            )
+        if scenario == "config":
+            allowed = (
+                status["run_persistence_load_status"] in {"NoPersistedRun", "NoActiveRun"}
+                and status["run_load_disposition"] == "Standby"
+                and status["published_process_state"] == "Standby"
+            )
+            if allowed:
+                return RecoveryClassification(
+                    "CONFIGURATION_RECOVERED",
+                    "valid_old_or_new_configuration_published_standby",
+                    "PASS",
+                )
+            return RecoveryClassification(
+                "UNEXPECTED_CONFIGURATION_OUTCOME",
+                "configuration_scenario_status_tuple_not_allowed",
+                "FAIL",
+            )
+
+        run_tuple = (
+            status["run_persistence_load_status"],
+            status["run_load_disposition"],
+            status["published_process_state"],
+        )
+        if run_tuple in {
+            ("NoPersistedRun", "Standby", "Standby"),
+            ("NoActiveRun", "Standby", "Standby"),
+            ("Current", "NoActiveRun", "Standby"),
+        }:
+            return RecoveryClassification(
+                "RUN_RECOVERED_STANDBY",
+                "valid_no_run_or_non_resume_run_published_standby",
+                "PASS",
+            )
+        if run_tuple == ("Current", "ResumeOffer", "NONE"):
+            return RecoveryClassification(
+                "RUN_RECOVERED_RESUME_OFFER",
+                "valid_r1_resume_offer_not_published_before_decision",
+                "PASS",
+            )
+        return RecoveryClassification(
+            "UNEXPECTED_RUN_OUTCOME", "run_scenario_status_tuple_not_allowed", "FAIL"
+        )
+
+    return RecoveryClassification(
+        "UNEXPECTED_FAIL_CLOSED_STATE",
+        "known_recovery_failure_not_in_contractual_fail_closed_shape",
+        "FAIL",
+    )
 
 
 class ProductSerial:
@@ -185,19 +745,44 @@ class ProductSerial:
         self._serial.write((command + "\n").encode("ascii"))
         self._serial.flush()
 
+    def _read_line(self) -> str | None:
+        raw = self._serial.readline()
+        if not raw:
+            return None
+        line = raw.decode("utf-8", errors="replace").strip()
+        self._observe_faults(line)
+        return line
+
     def read_until(self, marker: str) -> tuple[list[str], dict[str, str]]:
         deadline = time.monotonic() + self.timeout
         lines: list[str] = []
         while time.monotonic() < deadline:
-            raw = self._serial.readline()
-            if not raw:
+            line = self._read_line()
+            if line is None:
                 continue
-            line = raw.decode("utf-8", errors="replace").strip()
             lines.append(line)
-            self._observe_faults(line)
             if marker in line:
                 return lines, marker_fields(line, marker)
         raise RunnerError(f"timeout waiting for {marker}; last={lines[-8:]}")
+
+    def wait_for_product_boot(self) -> None:
+        deadline = time.monotonic() + self.timeout
+        lines: list[str] = []
+        saw_actor_free = False
+        saw_ready = False
+        while time.monotonic() < deadline:
+            line = self._read_line()
+            if line is None:
+                continue
+            lines.append(line)
+            lowered = line.lower()
+            saw_actor_free |= "real actuators: disabled" in lowered
+            saw_ready |= "application: ready" in lowered
+            if saw_actor_free and saw_ready:
+                if self.observed_faults:
+                    raise RunnerError(f"fault during restored product boot: {lines[-8:]}")
+                return
+        raise RunnerError(f"normal product boot not verified; last={lines[-8:]}")
 
     def _observe_faults(self, line: str) -> None:
         lowered = line.lower()
@@ -213,7 +798,7 @@ class ProductSerial:
     def fault_status(self) -> dict[str, str]:
         return {
             name: ("NONE_OBSERVED" if name not in self.observed_faults else "OBSERVED")
-            for name in ("PANIC", "WATCHDOG", "BROWNOUT", "UNEXPECTED_RESET")
+            for name in REQUIRED_FAULT_FIELDS
         }
 
     def ready(self) -> dict[str, str]:
@@ -222,6 +807,10 @@ class ProductSerial:
             raise RunnerError(f"unexpected test partition: {fields}")
         if fields.get("real_actuators_enabled") != "NO":
             raise RunnerError(f"actor-free contract missing: {fields}")
+        if fields.get("test_partition_physically_separate") != "NO":
+            raise RunnerError(f"test partition physical separation claim rejected: {fields}")
+        if fields.get("test_partition_reuses_production_flash_range") != "YES":
+            raise RunnerError(f"test partition range reuse not declared: {fields}")
         return fields
 
     def status(self) -> dict[str, str]:
@@ -254,31 +843,40 @@ class ProductSerial:
         return window
 
 
-def write_manifest(
-    output: Path,
-    *,
-    source_sha: str,
-    firmware: Path | None,
+def print_attempt_result(
     scenario: str,
-    attempts: int,
-    backup_sha256: str,
-) -> None:
-    output.parent.mkdir(parents=True, exist_ok=True)
-    manifest = {
-        "protocol_version": PROTOCOL_VERSION,
-        "source_sha": source_sha,
-        "firmware_sha256": None if firmware is None else sha256_file(firmware),
-        "plan_sha": "baf0b2ae04cd42afa75dfa00e21d900116b38bc8",
-        "partition": TEST_PARTITION,
-        "scenario": scenario,
-        "attempts": attempts,
-        "actor_free": True,
-        "real_actuators_enabled": False,
-        "power_cut_type": "PHYSICAL_POWER_REMOVAL",
-        "rts_en_software_reset_substitute": False,
-        "state_store_backup_sha256": backup_sha256,
+    attempt: int,
+    window: dict[str, str],
+    status: dict[str, str],
+    faults: dict[str, str],
+) -> RecoveryClassification:
+    classification = classify_product_recovery(scenario, status, faults)
+    fields = {
+        "SCENARIO": scenario,
+        "ATTEMPT": str(attempt),
+        "CUT_WINDOW": window.get("iteration", "UNKNOWN"),
+        "CONFIGURATION_RECOVERY_STATUS": status.get(
+            "configuration_recovery_status", "UNKNOWN"
+        ),
+        "CONFIGURATION_RUNTIME_AVAILABLE": status.get(
+            "configuration_runtime_available", "UNKNOWN"
+        ),
+        "RUN_PERSISTENCE_LOAD_STATUS": status.get(
+            "run_persistence_load_status", "UNKNOWN"
+        ),
+        "RUN_LOAD_DISPOSITION": status.get("run_load_disposition", "UNKNOWN"),
+        "PUBLISHED_PROCESS_STATE": status.get("published_process_state", "UNKNOWN"),
+        "ACTUATOR_RELEASE": status.get("actuator_release", "UNKNOWN"),
+        "PRODUCT_RECOVERY_CLASSIFICATION": classification.classification,
+        "PRODUCT_RECOVERY_REASON": classification.reason,
+        "PANIC": faults.get("PANIC", "UNKNOWN"),
+        "WATCHDOG": faults.get("WATCHDOG", "UNKNOWN"),
+        "BROWNOUT": faults.get("BROWNOUT", "UNKNOWN"),
+        "UNEXPECTED_RESET": faults.get("UNEXPECTED_RESET", "UNKNOWN"),
+        "RESULT": classification.result,
     }
-    output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print(" ".join(f"{key}={value}" for key, value in fields.items()), flush=True)
+    return classification
 
 
 def run_physical_campaign(args: argparse.Namespace) -> int:
@@ -286,38 +884,23 @@ def run_physical_campaign(args: argparse.Namespace) -> int:
         raise RunnerError("Slice-7 contract requires exactly 3 attempts per scenario")
     if args.profile != "esp32_bringup":
         raise RunnerError("the Slice-7 harness is bring-up-only")
-    if not args.backup_file:
-        raise RunnerError(
-            "--backup-file is required; the test layout reuses the state-store "
-            "flash range and must be restored"
-        )
-    firmware = Path(args.firmware) if args.firmware else None
-    backup = Path(args.backup_file)
-    with ProductSerial(args.port, args.baud, args.timeout) as device:
-        ready = device.ready()
-        if (
-            ready.get("backup_required") != "YES"
-            or ready.get("partition_offset") != "0x300000"
-            or ready.get("partition_size") != "0x100000"
-        ):
-            raise RunnerError(f"firmware did not require a partition backup: {ready}")
-        device.command("BACKUP_OR_CONFIRM_TEST_PARTITION")
-        device.status()
+    manifest = require_pre_harness_manifest(Path(args.pre_harness_manifest))
+    print("PRE_HARNESS_BACKUP=PASS", flush=True)
+    print("BACKUP_SOURCE_STATE=PRODUCTION_LAYOUT", flush=True)
+    print("TEST_PARTITION_PHYSICALLY_SEPARATE=NO", flush=True)
+    print("TEST_PARTITION_REUSES_PRODUCTION_FLASH_RANGE=YES", flush=True)
 
-    backup_sha = capture_state_store_backup(args.port, args.baud, backup)
-    print(f"STATE_STORE_BACKUP=PASS sha256={backup_sha}", flush=True)
-    write_manifest(
-        Path(args.artifact_dir) / "issue90_slice7_manifest.json",
-        source_sha=args.source_sha or git_sha(),
-        firmware=firmware,
-        scenario=args.scenario,
-        attempts=args.attempts,
-        backup_sha256=backup_sha,
-    )
-
+    campaign_succeeded = False
     try:
         with ProductSerial(args.port, args.baud, args.timeout) as device:
-            device.ready()
+            ready = device.ready()
+            if (
+                ready.get("backup_required") != "YES"
+                or ready.get("partition_offset") != "0x300000"
+                or ready.get("partition_size") != "0x100000"
+            ):
+                raise RunnerError(f"firmware did not expose expected test range: {ready}")
+            device.command("BACKUP_OR_CONFIRM_TEST_PARTITION")
             device.status()
             for attempt in range(1, args.attempts + 1):
                 window = device.prepare_power_cut(args.scenario)
@@ -332,52 +915,308 @@ def run_physical_campaign(args: argparse.Namespace) -> int:
                 input("After the ESP32 supply is physically ON, press Enter. ")
                 device.ready()
                 status = device.status()
-                faults = device.fault_status()
-                recovery_pass = (
-                    status.get("configuration_runtime_available") == "YES"
-                    and status.get("published_process_state") is not None
-                    and all(value == "NONE_OBSERVED" for value in faults.values())
+                classification = print_attempt_result(
+                    args.scenario,
+                    attempt,
+                    window,
+                    status,
+                    device.fault_status(),
                 )
-                result = "PASS" if recovery_pass else "FAIL"
-                print(
-                    f"SCENARIO={args.scenario} ATTEMPT={attempt} "
-                    f"POST_REBOOT_NVS_STATUS={status.get('configuration_recovery_status', 'UNKNOWN')} "
-                    f"RECORD_VALIDATION={status.get('configuration_runtime_available', 'UNKNOWN')} "
-                    f"CONFIGURATION_RECOVERY_RESULT={status.get('configuration_recovery_status', 'UNKNOWN')} "
-                    f"RUN_RECOVERY_RESULT={status.get('run_load_disposition', 'UNKNOWN')} "
-                    f"LOGICAL_GATE_RESULT={'PASS' if recovery_pass else 'FAIL'} "
-                    f"ACTUATOR_RELEASE=false PANIC={faults['PANIC']} "
-                    f"WATCHDOG={faults['WATCHDOG']} BROWNOUT={faults['BROWNOUT']} "
-                    f"UNEXPECTED_RESET={faults['UNEXPECTED_RESET']} RESULT={result}"
-                )
-                if not recovery_pass:
-                    raise RunnerError(f"product recovery gate failed: {status}")
+                if classification.result not in {"PASS", "PASS_FAIL_CLOSED"}:
+                    raise RunnerError(
+                        "product recovery classifier rejected observed status: "
+                        f"{classification}"
+                    )
                 if args.scenario == "run":
                     cleanup = device.command("RUN_CONTROL_DISCARD_PENDING")
                     if cleanup.get("result") != "PASS":
                         raise RunnerError(f"run cleanup failed: {cleanup}")
+        campaign_succeeded = True
     finally:
-        restored_sha = restore_state_store_backup(args.port, args.baud, backup)
-        print(f"STATE_STORE_RESTORE=PASS sha256={restored_sha}", flush=True)
+        # Restoration is mandatory even after an interrupted/failed campaign.
+        # It never captures a first backup and it never accepts an unverified
+        # manifest.
+        try:
+            restore_production_layout(args, manifest)
+        except RunnerError:
+            print("RESTORE_GATE=FAIL", file=sys.stderr, flush=True)
+            raise
+
+    if not campaign_succeeded:
+        raise RunnerError("campaign did not complete")
+    print("OWNER_ACTION_NOW=PRODUCT_POWER_CYCLE", flush=True)
+    input("After the restored production board is physically power-cycled, press Enter. ")
+    verify_restored_product_boot(args)
     return 0
 
 
-def selftest() -> int:
-    status = marker_fields(
-        "I (10) issue90: ISSUE90_STATUS application_started=YES "
-        "application_lifecycle=Ready configuration_recovery_status=RuntimeReady "
-        "configuration_runtime_available=YES run_persistence_load_status=NoPersistedRun "
-        "run_load_disposition=Standby published_process_state=Standby "
-        "actuator_release=false",
-        "ISSUE90_STATUS",
+def verify_restored_product_boot(args: argparse.Namespace) -> None:
+    with ProductSerial(args.port, args.baud, args.timeout) as device:
+        device.wait_for_product_boot()
+    print("POST_RESTORE_PRODUCT_BOOT=PASS", flush=True)
+    print("RESTORE_GATE=PASS", flush=True)
+
+
+def run_restore(args: argparse.Namespace) -> int:
+    manifest = require_pre_harness_manifest(Path(args.pre_harness_manifest))
+    restore_production_layout(args, manifest)
+    print("POST_RESTORE_PRODUCT_BOOT=NOT_RUN_OWNER_POWER_CYCLE_REQUIRED", flush=True)
+    print("RESTORE_GATE=NOT_RUN_OWNER_POWER_CYCLE_REQUIRED", flush=True)
+    return 0
+
+
+def _base_status(**overrides: str) -> dict[str, str]:
+    status = {
+        "application_lifecycle": "Ready",
+        "configuration_recovery_status": "RuntimeReady",
+        "configuration_runtime_available": "YES",
+        "run_persistence_load_status": "NoPersistedRun",
+        "run_load_disposition": "Standby",
+        "published_process_state": "Standby",
+        "actuator_release": "false",
+    }
+    status.update(overrides)
+    return status
+
+
+def _no_faults() -> dict[str, str]:
+    return {key: "NONE_OBSERVED" for key in REQUIRED_FAULT_FIELDS}
+
+
+def _expect_rejected(action: object, expected: str) -> None:
+    try:
+        action()  # type: ignore[operator]
+    except RunnerError as error:
+        if expected not in str(error):
+            raise RunnerError(f"expected rejection {expected}, got {error}") from error
+        return
+    raise RunnerError(f"expected rejection: {expected}")
+
+
+def selftest_backup_workflow() -> None:
+    with tempfile.TemporaryDirectory(prefix="issue90-selftest-") as directory:
+        root = Path(directory)
+        release_dir = root / "release"
+        (release_dir / "bootloader").mkdir(parents=True)
+        (release_dir / "partition_table").mkdir(parents=True)
+        table = b"production-partition-table" * 100
+        bootloader = b"bootloader" * 100
+        application = b"application" * 1000
+        (release_dir / "partition_table" / "partition-table.bin").write_bytes(table)
+        (release_dir / "bootloader" / "bootloader.bin").write_bytes(bootloader)
+        (release_dir / "esp32_fermentationsschrank.bin").write_bytes(application)
+        state = bytes((index % 251 for index in range(STATE_STORE_SIZE)))
+
+        regions: dict[int, bytes] = {
+            PARTITION_TABLE_OFFSET: table,
+            STATE_STORE_OFFSET: state,
+        }
+        tamper_state_readback = False
+
+        def fake_esptool(_port: str, _baud: int, command: list[str]) -> None:
+            nonlocal tamper_state_readback
+            operation = command[0]
+            if operation == "read-flash":
+                offset = int(command[1], 0)
+                size = int(command[2], 0)
+                target = Path(command[3])
+                source = bytearray(b"\xff" * size)
+                for region_offset, region in regions.items():
+                    start = max(offset, region_offset)
+                    end = min(offset + size, region_offset + len(region))
+                    if start < end:
+                        source[start - offset : end - offset] = region[
+                            start - region_offset : end - region_offset
+                        ]
+                if tamper_state_readback and offset == STATE_STORE_OFFSET:
+                    source[0] ^= 0x01
+                target.write_bytes(bytes(source))
+            elif operation == "write-flash":
+                pairs = command[1:]
+                for index in range(0, len(pairs), 2):
+                    regions[int(pairs[index], 0)] = Path(pairs[index + 1]).read_bytes()
+            else:
+                raise RunnerError(f"unexpected mocked esptool operation: {operation}")
+
+        prepare_args = argparse.Namespace(
+            port="mock",
+            baud=115200,
+            production_source_sha="1" * 40,
+            production_partition_table=str(
+                release_dir / "partition_table" / "partition-table.bin"
+            ),
+            production_release_dir=str(release_dir),
+            backup_dir=str(root / "backup"),
+            manifest_output=str(root / "manifest.json"),
+        )
+        with mock.patch(__name__ + ".run_esptool", side_effect=fake_esptool):
+            with contextlib.redirect_stdout(io.StringIO()):
+                prepare_pre_harness_backup(prepare_args)
+            manifest_path = Path(prepare_args.manifest_output)
+            manifest = load_pre_harness_manifest(manifest_path)
+            _expect_rejected(
+                lambda: require_pre_harness_manifest(None),
+                "BLOCKED_PRE_HARNESS_BACKUP_REQUIRED",
+            )
+
+            wrong_layout = root / "wrong-layout.json"
+            wrong_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            wrong_data["backup_source_state"] = "HARNESS_LAYOUT"
+            wrong_layout.write_text(json.dumps(wrong_data), encoding="utf-8")
+            _expect_rejected(
+                lambda: load_pre_harness_manifest(wrong_layout),
+                "BACKUP_SOURCE_STATE",
+            )
+
+            wrong_hash = root / "wrong-hash.json"
+            wrong_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            wrong_data["backups"]["production_state_store"]["sha256"] = "0" * 64
+            wrong_hash.write_text(json.dumps(wrong_data), encoding="utf-8")
+            _expect_rejected(lambda: load_pre_harness_manifest(wrong_hash), "hash mismatch")
+
+            missing_table = root / "missing-table.json"
+            missing_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            missing_data["backups"]["production_partition_table"]["file"] = str(
+                root / "does-not-exist.bin"
+            )
+            missing_table.write_text(json.dumps(missing_data), encoding="utf-8")
+            _expect_rejected(
+                lambda: load_pre_harness_manifest(missing_table),
+                "production partition-table backup missing",
+            )
+
+            restore_args = argparse.Namespace(port="mock", baud=115200)
+            restore_missing_table = json.loads(
+                json.dumps(manifest)
+            )
+            restore_missing_table["backups"]["production_partition_table"][
+                "file"
+            ] = str(root / "missing-production-partition-table.bin")
+            _expect_rejected(
+                lambda: restore_production_layout(restore_args, restore_missing_table),
+                "production partition-table backup missing",
+            )
+            tamper_state_readback = True
+            _expect_rejected(
+                lambda: restore_production_layout(restore_args, manifest),
+                "production state-store restore read-back hash mismatch",
+            )
+            tamper_state_readback = False
+            with contextlib.redirect_stdout(io.StringIO()):
+                restore_production_layout(restore_args, manifest)
+    print("PASS: pre-harness backup required before campaign", flush=True)
+    print("PASS: backup source/layout/hash rejection selftests", flush=True)
+    print("PASS: complete production restore sequence selftest", flush=True)
+
+
+def selftest_recovery_classifier() -> None:
+    faults = _no_faults()
+    valid_configuration = classify_product_recovery("config", _base_status(), faults)
+    if valid_configuration.result != "PASS":
+        raise RunnerError(f"valid configuration rejected: {valid_configuration}")
+    for config_status in (
+        "RuntimeReady",
+        "FactoryInitializationCompleted",
+        "FactoryResetCompleted",
+    ):
+        status = _base_status(configuration_recovery_status=config_status)
+        result = classify_product_recovery("config", status, faults)
+        if result.result != "PASS":
+            raise RunnerError(f"valid old/new configuration rejected: {result}")
+
+    valid_run = _base_status(
+        run_persistence_load_status="Current",
+        run_load_disposition="ResumeOffer",
+        published_process_state="NONE",
     )
-    require_actor_free(status)
-    if status["configuration_recovery_status"] != "RuntimeReady":
-        raise RunnerError("status parser failed")
+    if classify_product_recovery("run", valid_run, faults).result != "PASS":
+        raise RunnerError("valid resume offer rejected")
+    for status in (
+        _base_status(),
+        _base_status(
+            run_persistence_load_status="NoActiveRun",
+            run_load_disposition="Standby",
+        ),
+        _base_status(
+            run_persistence_load_status="Current",
+            run_load_disposition="NoActiveRun",
+        ),
+    ):
+        if classify_product_recovery("run", status, faults).result != "PASS":
+            raise RunnerError(f"valid standby/run outcome rejected: {status}")
+
+    config_fail_closed = _base_status(
+        application_lifecycle="ServiceRequired",
+        configuration_recovery_status="ConfigurationIntegrityFailure",
+        configuration_runtime_available="NO",
+        run_persistence_load_status="NOT_AVAILABLE",
+        run_load_disposition="SafeBoot",
+        published_process_state="NONE",
+    )
+    if (
+        classify_product_recovery("config", config_fail_closed, faults).result
+        != "PASS_FAIL_CLOSED"
+    ):
+        raise RunnerError("configuration fail-closed outcome rejected")
+
+    run_fail_closed = _base_status(
+        application_lifecycle="ServiceRequired",
+        run_persistence_load_status="FallbackRecovered",
+        run_load_disposition="SafeBoot",
+        published_process_state="NONE",
+    )
+    if (
+        classify_product_recovery("run", run_fail_closed, faults).result
+        != "PASS_FAIL_CLOSED"
+    ):
+        raise RunnerError("run fail-closed outcome rejected")
+
+    if classify_product_recovery(
+        "run",
+        _base_status(
+            run_persistence_load_status="Current",
+            run_load_disposition="ResumeOffer",
+            published_process_state="Standby",
+        ),
+        faults,
+    ).result != "FAIL":
+        raise RunnerError("published NONE/Standby semantic counterexample accepted")
+    if classify_product_recovery(
+        "config", _base_status(published_process_state="NONE"), faults
+    ).result != "FAIL":
+        raise RunnerError("configuration runtime was mistaken for record validation")
+    if classify_product_recovery(
+        "config", _base_status(actuator_release="true"), faults
+    ).result != "FAIL":
+        raise RunnerError("actuator release was not rejected")
+    if classify_product_recovery(
+        "config", _base_status(run_load_disposition="Unknown"), faults
+    ).result != "BLOCKED":
+        raise RunnerError("unknown status was not blocked")
+    incomplete = _base_status()
+    del incomplete["published_process_state"]
+    if classify_product_recovery("config", incomplete, faults).result != "BLOCKED":
+        raise RunnerError("missing raw status was not blocked")
+    print("PASS: explicit configuration/run recovery classifier matrix", flush=True)
+    print("PASS: published NONE and fail-closed semantic counterexamples", flush=True)
+
+
+def selftest() -> int:
+    status = _base_status()
+    status_line = (
+        "I issue90: ISSUE90_STATUS application_started=YES "
+        + " ".join(f"{key}={value}" for key, value in status.items())
+    )
+    parsed = marker_fields(status_line, "ISSUE90_STATUS")
+    require_actor_free(parsed)
+    if classify_product_recovery("config", parsed, _no_faults()).result != "PASS":
+        raise RunnerError("status parser/classifier failed")
     ready = marker_fields(
         "I issue90: ISSUE90_READY partition=state_store_test actor_free=YES "
         "real_actuators_enabled=NO backup_required=YES "
         "partition_offset=0x300000 partition_size=0x100000 "
+        "test_partition_physically_separate=NO "
+        "test_partition_reuses_production_flash_range=YES "
         "load_stop=STOP_OR_PHYSICAL_POWER_CUT",
         "ISSUE90_READY",
     )
@@ -385,34 +1224,64 @@ def selftest() -> int:
         raise RunnerError("ready parser failed")
     if ready.get("backup_required") != "YES":
         raise RunnerError("backup safety parser failed")
-    if ready.get("partition_offset") != "0x300000":
-        raise RunnerError("partition offset parser failed")
-    print("PASS: Issue #90 Slice-7 UART field parser")
-    print("PASS: actor-free status oracle")
-    print("PASS: dedicated test-partition guard")
+    if ready.get("test_partition_physically_separate") != "NO":
+        raise RunnerError("physical partition claim parser failed")
+    selftest_backup_workflow()
+    selftest_recovery_classifier()
+    print("PASS: Issue #90 Slice-7 UART field parser", flush=True)
+    print("PASS: actor-free and reused-flash-range guard", flush=True)
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--selftest", action="store_true")
+    parser.add_argument(
+        "--phase",
+        choices=("prepare", "campaign", "restore", "verify-restored-boot"),
+        default="campaign",
+    )
     parser.add_argument("--port")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--profile", choices=("esp32_bringup",), default="esp32_bringup")
     parser.add_argument("--scenario", choices=("config", "run"), default="config")
     parser.add_argument("--attempts", type=int, default=3)
-    parser.add_argument("--artifact-dir", default="build/issue90_slice7_hardware")
-    parser.add_argument("--backup-file")
-    parser.add_argument("--firmware")
-    parser.add_argument("--source-sha")
+    parser.add_argument("--pre-harness-manifest")
+    parser.add_argument(
+        "--manifest-output",
+        default="build/issue90_slice7_hardware/pre_harness_manifest.json",
+    )
+    parser.add_argument(
+        "--backup-dir", default="build/issue90_slice7_hardware/pre_harness_backup"
+    )
+    parser.add_argument(
+        "--production-partition-table",
+        default="build/esp32_release/partition_table/partition-table.bin",
+    )
+    parser.add_argument("--production-release-dir", default="build/esp32_release")
+    parser.add_argument("--production-source-sha")
     args = parser.parse_args()
     if args.selftest:
         return selftest()
     if not args.port:
         parser.error("--port is required unless --selftest is used")
     try:
-        return run_physical_campaign(args)
+        if args.phase == "prepare":
+            if not args.production_source_sha:
+                parser.error("--production-source-sha is required for --phase prepare")
+            return prepare_pre_harness_backup(args)
+        if args.phase == "campaign":
+            if not args.pre_harness_manifest:
+                raise RunnerError("BLOCKED_PRE_HARNESS_BACKUP_REQUIRED")
+            return run_physical_campaign(args)
+        if not args.pre_harness_manifest:
+            raise RunnerError("BLOCKED_PRE_HARNESS_BACKUP_REQUIRED")
+        if args.phase == "restore":
+            return run_restore(args)
+        load_pre_harness_manifest(Path(args.pre_harness_manifest))
+        verify_restored_product_boot(args)
+        return 0
     except RunnerError as error:
         print(f"BLOCKED/FAILED: {error}", file=sys.stderr)
         return 2
