@@ -18,7 +18,13 @@ ACTUATOR_RELEASE_FROM_RECOVERY_ALONE=NO
 FERMENTATION_DURATION_REACHED_DURING_OUTAGE=USE_NORMAL_FSM_COMPLETION_SEMANTICS
 USER_CONFIRMATION_ONLY_BECAUSE_OF_OUTAGE=NO
 NO_DOUBLE_COUNTING=YES
-NO_NEW_PERSISTENCE_FIELD=YES
+OUTAGE_TIME_IN_OBSERVED_RUN_SECONDS=NO
+REDEFINE_OBSERVED_RUN_SECONDS_SEMANTICS=NO
+R1_PHASE_TIMER_CONTINUITY_FIELD=priorBootPhaseElapsed
+R1_OBSERVED_RUNTIME_FIELD=runProgress.observedRunSeconds
+NEW_PERSISTENCE_FIELD=NO
+NEW_SCHEMA=NO
+NON_EXACT_PRIOR_PHASE_ELAPSED=FAIL_CLOSED
 NEW_GENERIC_TIME_QUALITY_ENUM=NO
 NEW_APP_SPECIFIC_DEVICE_PLATFORM_TIME_TYPE=NO
 SECOND_RECOVERY_COORDINATOR_PLANNED=NO
@@ -240,11 +246,13 @@ wenn alle folgenden Bedingungen vorliegen:
    Indeterminiertheitsstatus oder sonstigen untrusted Recoverygrund.
 
 Die exakte schemafreie Rechnung ist in Abschnitt 4.2 festgelegt. Sie
-verwendet den UTC-Wert desselben validierten Checkpointrecords und den
-persistierten Fortschritt plus den beim Checkpoint noch offenen Live-Abschnitt.
-Eine fachlich aequivalente Darstellung ist nur zulaessig, wenn sie exakt diese
-kanonischen vorhandenen Felder verwendet. Die Formel ist keine Temperatur-,
-Biologie- oder Zustandsrekonstruktion.
+verwendet den exakten neutralen `priorBootPhaseElapsed`-Phasenoffset plus den
+beim Checkpoint noch offenen Live-Abschnitt und anschliessend die Ausfallzeit
+aus der UTC desselben validierten Checkpointrecords. `observedRunSeconds` ist
+eine davon getrennte monotone Beobachtungsstatistik und kein aktueller
+Fermentationstimer. Eine fachlich aequivalente Darstellung ist nur zulaessig,
+wenn sie exakt diese kanonischen vorhandenen Felder verwendet. Die Formel ist
+keine Temperatur-, Biologie- oder Zustandsrekonstruktion.
 
 Wenn die berechnete Gesamtzeit unter der nominalen Fermentationsdauer liegt,
 wird der Kandidat ohne Benutzerbestaetigung logisch wieder als
@@ -369,35 +377,54 @@ dafuer nicht erforderlich.
 ### 4.2 Exakter schemafreier FERMENTING-Zeitvertrag
 
 Der UTC-Wert des exakt validierten `RunPersistenceRawRecord` ist der
-Checkpointrahmen. Er wird zusammen mit Checkpoint-Payload, Checkpointrevision
-und den Zeitfeldern validiert. Keine spaeter beobachtete globale UTC und kein
-anderer Record darf diesen Anker ersetzen.
+Checkpointrahmen. Er wird zusammen mit Checkpoint-Payload, Checkpointrevision,
+monotonem Checkpointtimestamp und Recordgraph validiert. Keine spaeter
+beobachtete globale UTC und kein anderer Record darf diesen Anker ersetzen.
 
-Fuer einen `FERMENTING`-Checkpoint gilt:
+`priorBootPhaseElapsed` ist der bestehende boot-unabhaengige, additive
+Phasen-Timeroffset. Fuer einen vollstaendig validierten Current-
+`FERMENTING`-Checkpoint gilt:
 
 ```text
+if priorBootPhaseElapsed absent:
+    prior_phase_elapsed_seconds = 0
+
+if priorBootPhaseElapsed present:
+    require taggedState == FERMENTING
+    require upperBoundSeconds present
+    require lowerBoundSeconds == upperBoundSeconds
+    prior_phase_elapsed_seconds = lowerBoundSeconds
+
 checkpoint_live_segment_seconds =
     (checkpointMonotonicMillis - processState.stateEnteredAtMillis) / 1000
 
-persisted_elapsed_at_checkpoint =
-    runProgress.observedRunSeconds
+phase_elapsed_at_checkpoint =
+    prior_phase_elapsed_seconds
     + checkpoint_live_segment_seconds
 
 outage_seconds =
     trusted_current_utc
     - checkpoint_record_utc
 
-recovered_elapsed_seconds =
-    persisted_elapsed_at_checkpoint
+recovered_phase_elapsed_seconds =
+    phase_elapsed_at_checkpoint
     + outage_seconds
 ```
 
-Dabei sind die bestehenden Felder gemeint:
+Ein fehlender `priorBootPhaseElapsed`-Wert bedeutet den exakten neutralen
+Anfangswert `0`. Ein vorhandener Wert muss dagegen fuer diese automatische
+R1-Fortsetzung mit `taggedState == FERMENTING`, vorhandenem `upperBoundSeconds`
+und `lowerBoundSeconds == upperBoundSeconds` exakt sein. Ein nur begrenzter,
+partieller oder anders getaggter Wert ist
+`NON_EXACT_PRIOR_PHASE_ELAPSED=FAIL_CLOSED`.
+
+Die bestehenden Felder sind:
 
 ```text
 RunPersistenceSnapshot::checkpointMonotonicMillis
 RunPersistenceSnapshot::processState.stateEnteredAtMillis
 RunProgressState::observedRunSeconds
+RunPersistenceSnapshot::priorBootPhaseElapsed
 RunPersistenceRawRecord::utcUnixSeconds
 ```
 
@@ -411,36 +438,116 @@ Die Mindestvorbedingungen sind:
 ```text
 processState.state == FERMENTING
 processState.stateEnteredAtMillis <= checkpointMonotonicMillis
-runProgress.basis == KnownTotal
+priorBootPhaseElapsed absent OR exact lowerBoundSeconds == upperBoundSeconds
+priorBootPhaseElapsed absent OR taggedState == FERMENTING
 checkpoint_record_utc present and trusted
 trusted_current_utc >= checkpoint_record_utc
-no arithmetic overflow
+no arithmetic overflow or lossy narrowing
 Current/record graph fully validated
 ```
 
-Subtraktionen, Additionen, Divisionen und Saturierungen werden checked
-ausgefuehrt. Bei `PartialUnknownHistory`, fehlender exakter Zeitbasis,
-negativer Zeitdifferenz, Timestampwiderspruch, Revisionstausch oder Overflow
-gilt `NO_EXACT_WALL_CLOCK_RECOVERY` und `FAIL_CLOSED`; es wird nicht geraten.
+`runProgress.basis == KnownTotal` bleibt fuer den fachlichen
+Fermentationsvertrag erforderlich. `observedRunSeconds` wird dabei nicht als
+Phasentimer verwendet.
 
-Wenn `recovered_elapsed_seconds` kleiner als die nominelle
+Subtraktionen, Additionen, Divisionen und Narrowings werden checked
+ausgefuehrt. Bei `PartialUnknownHistory`, fehlender exakter Zeitbasis,
+fehlendem `upperBoundSeconds`, `lowerBoundSeconds != upperBoundSeconds`,
+falschem Tag, negativer Zeitdifferenz, Timestampwiderspruch, Revisionstausch
+oder Overflow gilt `NO_EXACT_WALL_CLOCK_RECOVERY` und `FAIL_CLOSED`; es wird
+nicht geraten.
+
+Wenn `recovered_phase_elapsed_seconds` kleiner als die nominelle
 Fermentationsdauer ist, wird der logisch fortgesetzte Kandidat vor dem
 Write-before-Apply-Handoff so neu verankert:
 
 ```text
-candidate.runProgress.observedRunSeconds = recovered_elapsed_seconds
 candidate.processState.state = FERMENTING
 candidate.processState.stateEnteredAtMillis = current_monotonic_millis
+candidate.priorBootPhaseElapsed = TaggedPriorBootPhaseElapsed{
+    taggedState = FERMENTING,
+    elapsed = {
+        lowerBoundSeconds = recovered_phase_elapsed_seconds,
+        upperBoundSeconds = recovered_phase_elapsed_seconds
+    }
+}
 ```
+
+Das checked Narrowing von `recovered_phase_elapsed_seconds` auf die
+bestehenden Integerbreiten ist Pflicht. Bei nicht verlustfreier Darstellung
+gilt `FAIL_CLOSED`; es wird nicht saturiert.
 
 Der neue Boot misst danach nur noch den Live-Abschnitt ab dem neuen
 `stateEnteredAtMillis`. Beim spaeteren normalen Verlassen von `FERMENTING`
-addiert der bestehende `persistTransition()`-Pfad genau diesen neuen
-Live-Abschnitt wieder zu `observedRunSeconds`. Bereits angerechnete Zeit wird
-nicht in ein zweites Feld kopiert und nicht nochmals zur naechsten Recovery
-addiert.
+addiert der bestehende `persistTransition()`-Pfad genau diesen sicher
+beobachteten Live-Abschnitt wieder zu `observedRunSeconds`.
 
-### 4.3 Alte Schema-3-/#18-Felder
+```text
+candidate.runProgress.observedRunSeconds =
+    checked_add(
+        previous.runProgress.observedRunSeconds,
+        checkpoint_live_segment_seconds
+    )
+```
+
+`outage_seconds`, `recovered_phase_elapsed_seconds` und
+`prior_phase_elapsed_seconds` werden nie in `observedRunSeconds` gefaltet.
+Damit bleibt `OUTAGE_TIME_IN_OBSERVED_RUN_SECONDS=NO` und es entsteht keine
+Doppelzaehlung.
+
+Die normale FSM erhaelt denselben exakten Priorwert als bestehenden Parameter:
+
+```text
+elapsed_for_fsm =
+    (now - stateEnteredAtMillis) / 1000
+    + priorBootPhaseElapsed.exact_seconds
+```
+
+`decideProcessTransition()` beziehungsweise `decideFermenting()` verwendet
+damit den bereits verankerten Wert. Die FSM liest weder Persistenz noch UTC
+noch `ITimeSource`; Application/Orchestrator projiziert nur den validierten
+Wert in den bestehenden `priorElapsed`-Parameter.
+
+### 4.3 AdjustRun-Rebaseline und Timerkontinuitaet
+
+`observedRunSeconds` ist absichtlich nicht die aktuelle
+FERMENTING-Phasenuhr. Ein bestehendes `AdjustRun` waehrend `FERMENTING` darf
+die beobachtete Laufzeit gemaess seiner bestehenden Fold-Semantik fortschreiben
+und die effektive Restdauer sowie `stateEnteredAtMillis` neu verankern. Die
+anschliessende R1-Recovery verwendet dann den aktuellen exakten
+`priorBootPhaseElapsed`-Wert plus den aktuellen Checkpoint-Live-Abschnitt. Sie
+verwendet nicht die globale monotone `observedRunSeconds`-Summe als Ersatz fuer
+diesen aktuellen Phasentimeroffset.
+
+Die spaetere Umsetzung muss mindestens diesen Ablauf testen:
+
+```text
+FERMENTING laeuft
+-> AdjustRun-Neubaseline faltet den sicher beobachteten Abschnitt in
+   observedRunSeconds
+-> bestehende Semantik verankert stateEnteredAtMillis und effektive Restdauer
+-> spaeterer Checkpoint und Stromausfall
+-> R1 verwendet aktuelles exact priorBootPhaseElapsed + Live-Segment + UTC-
+   Ausfallzeit
+-> die alte observedRunSeconds-Gesamtsumme verlaengert/verkuerzt die aktuelle
+   Restdauer nicht versehentlich
+```
+
+Akzeptanz des Slices:
+
+```text
+ADJUST_RUN_REBASE_RECOVERY_TIMER_CORRECT=YES
+OBSERVED_RUN_SECONDS_NOT_USED_AS_CURRENT_PHASE_TIMER=YES
+```
+
+Der aktuelle historische Helper fuer einen effektiven FERMENTING-Priorwert
+kann `nominalRecoveryAdjustment` einbeziehen. Dieser C2-/Legacy-Anteil darf
+im aktiven R1-Aufrufgraphen nicht als Timerkorrektur wirksam werden. Die
+Umsetzung verwendet fuer R1 ausschliesslich den exakten neutralen
+`priorBootPhaseElapsed`-Wert; Codec-Lesbarkeit und historische Negativtests
+bleiben davon getrennt.
+
+### 4.4 Alte Schema-3-/#18-Felder
 
 Die historischen Felder bleiben, soweit die bestehende Codec-Kompatibilitaet
 es verlangt, lesbar:
@@ -456,8 +563,13 @@ recoveryEpisodeRevision
 runProgress.weightedProgress
 ```
 
-Sie werden fuer die neue R1-Wall-Clock-Entscheidung aktiv ignoriert. Ihre
-blosse Anwesenheit macht einen ansonsten vollstaendig validierten aktuellen
+`weightedProgress`, Temperatur-Evidenz, `nominalRecoveryAdjustment` und
+biologische Recoverydaten erzeugen keine R1-Ausfallgutschrift. Der neutrale
+Vertrag von `priorBootPhaseElapsed` als boot-unabhaengiger Phasen-Timeroffset
+wird dagegen fuer die exakte R1-Kontinuitaet wiederverwendet. Dafuer sind nur
+`lowerBoundSeconds == upperBoundSeconds` und der Tag `FERMENTING` zulaessig;
+partielle oder unklare Bounds bleiben fail-closed. Die blosse Anwesenheit
+historischer Felder macht einen ansonsten vollstaendig validierten aktuellen
 Run nicht zu `NoActiveRun`; widerspruechliche oder nicht validierbare Daten
 bleiben jedoch fail-closed. Der alte gewichtete Berechnungspfad darf nicht
 ueber einen indirekten Fallback wieder in R1 gelangen.
@@ -583,6 +695,11 @@ Kuehl-/Hold-Uebergang braucht die normale frische Evidenz. Die bestehende
 Benutzerquittierung von `Completed` bleibt unveraendert und wird nicht durch
 eine neue Power-Loss-Bestaetigung ersetzt.
 
+Die Umsetzung fuehrt diesen Fall ueber den bestehenden
+`FermentationCompleted`-/`applyProcessTransition()`-Pfad und dessen gueltige
+TransitionReasons. Sie setzt keinen synthetischen Direktzustand mit einer
+neuen oder falschen Reason und ueberspringt keine bestehende FSM-Topologie.
+
 ### 6.4 Nachgelagerte Aktorfreigabe
 
 Auch nach einer positiven Zeit-Recovery muessen Configuration Runtime, die
@@ -597,7 +714,7 @@ elektrischen Zustand anwenden.
 
 ```text
 CURRENT_STATE=Die normale FSM besitzt FermentationCompleted und die CompletionModes FinishWithoutCooling, CoolThenFinish, CoolAndHoldForDuration und CoolAndHoldUntilManualStop. Der aktuelle Recoveryvertrag darf die sensorabhaengige CoolingTargetReached-Evidenz waehrend des Ausfalls nicht erfinden.
-MINIMAL_R1_OPTION=Recovered elapsed auf die nominale Grenze begrenzen und die bestehende FermentationCompleted-Semantik auswerten: FinishWithoutCooling -> Completed; alle drei Cooling-Modi -> Cooling.
+MINIMAL_R1_OPTION=Bei recovered elapsed >= nominal die bestehende FermentationCompleted-Semantik ueber den gueltigen FSM-/Transition-Pfad auswerten: FinishWithoutCooling -> Completed; alle drei Cooling-Modi -> Cooling.
 RECOMMENDATION=Normale FSM-Completion-Semantik verwenden. Kein generisches CompletionPending nur wegen Power Loss, kein automatisches Ueberspringen von Cooling und keine Anrechnung auf einen noch nicht beobachteten CoolHolding-Timer.
 WHY=Der Stromausfall ist keine Benutzerentscheidung fuer einen vertrauenswuerdigen Current-FERMENTING-Run. Die normale CompletionMode-Auswertung trennt die berechenbare Fermentationszeit von der nicht rekonstruierbaren Kuehlziel-/Hold-Evidenz.
 OWNER_DECISION_REQUIRED=NO
@@ -636,10 +753,10 @@ OWNER_DECISION_REQUIRED=NO
 ### 7.5 Schema-3-/#18-Felder
 
 ```text
-CURRENT_STATE=Die alten Pending-, Episode-, PriorElapsed-, RecoveryAdjustment-, Temperatur- und weightedProgress-Felder sind in Schema 3 lesbar und werden von Codec, Recoverycode und Tests verwendet; sie sind fuer den aktuellen R1-Pfad fachlich nicht kanonisch.
-MINIMAL_R1_OPTION=Lesbarkeit, CRC-/Schema-/Referenzvalidierung und Rueckwaertskompatibilitaet behalten; alte Felder aktiv aus der R1-Zeitentscheidung ausschliessen. Nur Checkpoint-UTC, exakter persistierter Fortschritt und nominale Dauer in ihrer jeweiligen Rolle verwenden.
-RECOMMENDATION=Keine sofortige Feld-/Schemaentfernung und keine automatische Migration. Alte Werte duerfen eine gueltige Current-Lage nicht allein wegen ihrer Anwesenheit verwerfen, aber Widerspruch oder Integritaetsfehler bleibt fail-closed.
-WHY=So wird #18 nicht reaktiviert, der Wire-Vertrag bleibt stabil und die neue R1-Logik bleibt nachvollziehbar klein.
+CURRENT_STATE=Schema-3-Pending-, Episode-, RecoveryAdjustment-, Temperatur- und weightedProgress-Felder sind als C2-/Kompatibilitaetsdaten lesbar. priorBootPhaseElapsed ist dagegen ein bereits vorhandener neutraler, boot-unabhaengiger Phasen-Timeroffset und wird fuer die R1-Kontinuitaet verwendet.
+MINIMAL_R1_OPTION=Lesbarkeit, CRC-/Schema-/Referenzvalidierung und Rueckwaertskompatibilitaet behalten; gewichtete/biologische Felder aktiv aus der R1-Zeitentscheidung ausschliessen. Den neutralen exakten priorBootPhaseElapsed-Offset fuer die aktuelle FERMENTING-Phasenkontinuitaet verwenden.
+RECOMMENDATION=Keine sofortige Feld-/Schemaentfernung und keine automatische Migration. priorBootPhaseElapsed bleibt fuer R1 nutzbar, aber nur mit FERMENTING-Tag und exakten Bounds. weightedProgress, Temperatur-Evidenz und nominalRecoveryAdjustment erzeugen keine R1-Ausfallgutschrift.
+WHY=So wird #18 nicht reaktiviert, der Wire-Vertrag bleibt stabil und die neue R1-Logik trennt beobachtete Laufzeit, Phasentimer und historische biologische Recoverydaten sauber.
 OWNER_DECISION_REQUIRED=NO
 ```
 
@@ -699,6 +816,9 @@ Produktentscheid darf nicht still erfunden werden.
 - Current-Pfad vollstaendig technisch und fachlich validieren;
 - trusted UTC -> `recovered_elapsed_seconds` berechnen;
 - unter nominaler Dauer automatisch logisch als `FERMENTING` fortsetzen;
+- `priorBootPhaseElapsed` exakt mit der wiederhergestellten Phasenzeit setzen;
+- nur den sicher beobachteten Checkpoint-Live-Abschnitt in
+  `observedRunSeconds` falten;
 - Write-before-Apply einhalten;
 - Aktoren bis zu den frischen Safety-Gates aus lassen;
 - Mehrfach-Reboot ohne Doppelzaehlung nachweisen.
@@ -723,7 +843,10 @@ Produktentscheid darf nicht still erfunden werden.
 ### Slice E – #90- und Legacy-Abgrenzung
 
 - Fallback nicht automatisch promoten oder aktivieren;
-- weighted-/C2-Pfad aus dem aktiven R1-Aufrufgraphen ausschliessen;
+- weighted-/biological-/C2-Pfad und insbesondere
+  `nominalRecoveryAdjustment` aus dem aktiven R1-Aufrufgraphen ausschliessen;
+- den bestehenden `foldObservedRunSeconds()`-Mechanismus wiederverwenden,
+  sofern seine Precondition fuer den beobachteten Live-Abschnitt passt;
 - keine breite Cleanup-Arbeit und keine Entfernung aller C2-Dateien als Ziel;
 - bestehende #90-Orakel unveraendert streng halten;
 - keine neue zweite Recovery- oder Persistenzkomponente.
@@ -745,11 +868,12 @@ Bestandteil dieses Plan-PRs:
 | Slice | Gezielte Tests/Nachweise |
 |---|---|
 | A | Native Recovery-Disposition- und Boot-Klassifikationsmatrix; `KnownTotal`-/Timestamp-/CRC-/Referenz-/Revision-/Overflow-Grenzen; `WaitingForTrustedTime` ist nicht `NoActiveRun` und nicht `ResumeOffer` |
-| B | `test_run_persistence_coordinator`, Checkpoint- und Snapshot-/Codec-Tests: exakt `observedRunSeconds + live segment`, Record-UTC-Anker, Write-before-Apply und automatische logische `FERMENTING`-Fortsetzung |
+| B | `test_run_persistence_coordinator`, Checkpoint- und Snapshot-/Codec-Tests: exakt `prior phase elapsed + live segment + outage`, Record-UTC-Anker, getrennte Fortschreibung `observedRunSeconds + live segment`, Write-before-Apply und automatische logische `FERMENTING`-Fortsetzung |
 | C | `test_process_state_machine`: `FermentationCompleted`-Semantik fuer alle vier CompletionModes; `FinishWithoutCooling -> Completed`, drei Cooling-Modi -> `Cooling`; kein CoolingTargetReached ohne Sensorbeobachtung und kein Hold-Timer-Kredit |
 | D | `test_time_source`, VirtualTimeSource absent -> trusted transition, Application-/Composition-/Dependency-Guard; `ITimeSource`-Injektion ohne blockierenden Boot-Wait und ohne WLAN-/Provisioning-Implementierung |
 | E | `test_issue90_product_recovery_oracle`; Fallback nie automatisch Current/Aktorfreigabe, explizite Auswahlgrenze; `test_run_recovery_time`/`test_run_progress_weighting` bleiben als Legacy-Negativtests oder werden nur bei realer aktiver Kopplung entfernt |
-| B/E | Mehrfach-Reboot-/Mehrfach-Recovery-Szenarien: Checkpoint A, weiterer Live-Abschnitt, Checkpoint B, zweiter Ausfall; keine Doppelzaehlung; alte Weighted-/Temperaturfelder beeinflussen `recovered_elapsed_seconds` nie |
+| B/E | Mehrfach-Reboot-/Mehrfach-Recovery-Szenarien: Checkpoint A, weiterer Live-Abschnitt, Checkpoint B, zweiter Ausfall; `priorBootPhaseElapsed` fuehrt die Phasenzeit, `observedRunSeconds` nur beobachtete Live-Zeit; keine Doppelzaehlung; alte Weighted-/Temperaturfelder beeinflussen `recovered_elapsed_seconds` nie |
+| B/C | FSM-Timerkontinuitaet und AdjustRun-Rebaseline: exakter Priorwert wird als bestehendes `priorElapsed` uebergeben; eine echte AdjustRun-Neubaseline beeinflusst die aktuelle Restdauer korrekt, ohne die globale `observedRunSeconds`-Summe als Phasentimer zu verwenden |
 | F | Markdown-/Link-/Source-of-Truth-Checks sowie Review des vollstaendigen aktuellen Diffs; danach gezielte geaenderte Bereichstests |
 
 ### 10.1 Konkrete Testfaelle
@@ -759,14 +883,57 @@ vorzusehen:
 
 ```text
 CURRENT_FERMENTING_EXACT_TIME:
-  checkpoint persisted elapsed = 20 min
+  exact prior phase elapsed + current live segment = 20 min
+  observedRunSeconds = 20 min observed (or the existing prior observed total)
   outage = 10 min
-  -> recovered elapsed = 30 min
+  -> phase elapsed at checkpoint = 20 min
+  -> recovered phase elapsed = 30 min
+  -> observedRunSeconds remains observed-only; outage is not folded into it
   -> logical FERMENTING, sofern nominale Dauer nicht erreicht
 
 MULTI_REBOOT_NO_DOUBLE_COUNTING:
-  recovery A -> weiterer Live-Abschnitt -> checkpoint B -> zweiter Ausfall
-  -> jeder Abschnitt genau einmal in observedRunSeconds
+  nominal = 120 min
+  Boot A: 20 min live -> checkpoint -> 10 min outage
+  Recovery A: priorBootPhaseElapsed = 30 min, observedRunSeconds += 20 min
+  Boot B: 15 min live -> checkpoint -> 5 min outage
+  Recovery B: phase at checkpoint = 30 + 15 = 45 min
+              recovered phase elapsed = 45 + 5 = 50 min
+              priorBootPhaseElapsed = 50 min
+              observedRunSeconds += 15 min
+  -> FSM phase elapsed = 50 min
+  -> observedRunSeconds total = 35 min
+  -> outage credit total = 15 min
+  -> no double counting
+
+RUNTIME_TIMER_AFTER_RECOVERY:
+  nominal = 60 min, recovered exact prior = 30 min
+  -> after 29 further live minutes still FERMENTING
+  -> after 30 further live minutes normal FermentationCompleted semantics
+
+OBSERVED_RUNTIME_SEPARATE:
+  20 min observed + 10 min outage
+  -> recovered phase elapsed = 30 min
+  -> observedRunSeconds = 20 min, never 30 min
+
+PRIOR_BOOT_PHASE_ELAPSED_EXACT_REQUIRED:
+  absent -> prior phase elapsed = 0
+  exact lowerBoundSeconds == upperBoundSeconds, tagged FERMENTING -> allowed
+  upperBoundSeconds absent -> fail closed
+  lowerBoundSeconds != upperBoundSeconds -> fail closed
+  wrong taggedState -> fail closed
+
+ADJUST_RUN_REBASE:
+  FERMENTING -> real AdjustRun folds observed live time
+  -> existing semantics reanchor stateEnteredAtMillis and effective rest duration
+  -> later checkpoint/outage uses current exact priorBootPhaseElapsed + live
+  -> observedRunSeconds global sum does not replace the current phase timer
+  -> ADJUST_RUN_REBASE_RECOVERY_TIMER_CORRECT=YES
+
+FSM_PURITY:
+  ProcessStateMachine depends on UTC = NO
+  ProcessStateMachine depends on persistence = NO
+  ProcessStateMachine depends on ITimeSource = NO
+  Application/Orchestrator supplies only the already validated priorElapsed
 
 DURATION_COMPLETION:
   FinishWithoutCooling -> Completed
@@ -820,12 +987,14 @@ Hardwareakzeptanz.
    reaktivieren.
 2. Ein vollstaendig validierter `FERMENTING`-Checkpoint mit vertrauenswuerdigem
    UTC-Anker und aktueller UTC verwendet exakt
-   `observedRunSeconds + live segment + outage`; Temperatur-/Biologie-/Weighting-
-   Felder beeinflussen die Entscheidung nicht.
+   `exact prior phase elapsed + current live segment + trusted outage`; separat
+   wird `observedRunSeconds + current live segment` fortgeschrieben.
+   Temperatur-/Biologie-/Weighting-Felder beeinflussen die Entscheidung nicht.
 3. Liegt `recovered_elapsed_seconds` unter der nominalen Dauer, wird der
    Current-Run ohne Benutzerbestaetigung logisch automatisch als `FERMENTING`
    fortgesetzt; `stateEnteredAtMillis` wird auf die aktuelle monotone Zeit
-   gesetzt und spaetere Live-Zeit wird nicht doppelt gezaehlt.
+   gesetzt, `priorBootPhaseElapsed` traegt den exakten bereits verstrichenen
+   Anteil und spaetere Live-Zeit wird nicht doppelt gezaehlt.
 4. Bei erreichter nominaler Dauer gilt die normale FSM-Semantik:
    `FinishWithoutCooling -> Completed`, alle drei Cooling-Modi -> `Cooling`.
    CoolingTargetReached und ein noch nicht begonnener CoolHolding-Timer werden
@@ -853,17 +1022,21 @@ Hardwareakzeptanz.
    NVS-Orakel werden nicht abgeschwaecht; nur explizite Fallback-Auswahl kann
    in denselben Zeitvertrag eintreten.
 13. Mehrfach-Reboot und Mehrfach-Recovery zaehlen keinen bereits angerechneten
-   Live-Abschnitt doppelt.
-14. Die sechs Edge Cases sind gemaess den verbindlichen Ownerentscheidungen
+   Live-Abschnitt doppelt; `observedRunSeconds` bleibt dabei beobachtete Zeit
+   und `priorBootPhaseElapsed` bleibt die Phasen-Timerkontinuitaet.
+14. Ein echter AdjustRun-Rebaseline-Fall verwendet fuer die spaetere Recovery
+   den aktuellen Prior-Phasenoffset und nicht die globale
+   `observedRunSeconds`-Summe als aktuellen Phasentimer.
+15. Die sechs Edge Cases sind gemaess den verbindlichen Ownerentscheidungen
    umgesetzt und in gezielten nativen Tests nachgewiesen.
-15. Die semantischen Recoveryzustaende sind spaeter fuer #25 projizierbar,
+16. Die semantischen Recoveryzustaende sind spaeter fuer #25 projizierbar,
    ohne UI-/Renderer-/Layoutentscheidungen in Issue #124 einzufuehren.
 
 ## 12. Source-of-Truth-Updates
 
 ### In dieser Planrunde
 
-- neues Issue #124 angelegt;
+- Issue #124 auf die vollstaendige korrigierte Planfassung synchronisieren;
 - neuer versionierter Plan unter diesem Pfad;
 - `docs/ROADMAP.md` minimal aktualisiert: #124 steht vor #25 und die
   Priorisierungsrichtung verweist darauf;
