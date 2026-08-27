@@ -22,6 +22,43 @@ using fermentation::RunAdjustmentStatus;
 using fermentation::RunChangeReason;
 using fermentation::RunChangeSource;
 
+void assertRevisionEqual(const fermentation::RunRevision& expected,
+                         const fermentation::RunRevision& actual) {
+    TEST_ASSERT_EQUAL_UINT32(expected.sequence, actual.sequence);
+    TEST_ASSERT_EQUAL_UINT32(expected.monotonicEpoch, actual.monotonicEpoch);
+    TEST_ASSERT_EQUAL_UINT32(static_cast<std::uint32_t>(expected.stageIndex),
+                             static_cast<std::uint32_t>(actual.stageIndex));
+    TEST_ASSERT_EQUAL_UINT32(
+        static_cast<std::uint32_t>(expected.completedStageCount),
+        static_cast<std::uint32_t>(actual.completedStageCount));
+    TEST_ASSERT_EQUAL_DOUBLE(expected.before.targetTemperatureCelsius,
+                             actual.before.targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(expected.before.remainingDurationMinutes,
+                             actual.before.remainingDurationMinutes);
+    TEST_ASSERT_EQUAL_DOUBLE(expected.after.targetTemperatureCelsius,
+                             actual.after.targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_UINT32(expected.after.remainingDurationMinutes,
+                             actual.after.remainingDurationMinutes);
+    TEST_ASSERT_EQUAL(expected.targetTemperatureChanged,
+                      actual.targetTemperatureChanged);
+    TEST_ASSERT_EQUAL(expected.remainingDurationChanged,
+                      actual.remainingDurationChanged);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<std::uint8_t>(expected.effect),
+                            static_cast<std::uint8_t>(actual.effect));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<std::uint8_t>(expected.source),
+                            static_cast<std::uint8_t>(actual.source));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<std::uint8_t>(expected.reason),
+                            static_cast<std::uint8_t>(actual.reason));
+    TEST_ASSERT_EQUAL_UINT64(expected.timestamp.monotonicMillis,
+                             actual.timestamp.monotonicMillis);
+    TEST_ASSERT_EQUAL(expected.timestamp.unixTimeSeconds.has_value(),
+                      actual.timestamp.unixTimeSeconds.has_value());
+    if (expected.timestamp.unixTimeSeconds.has_value()) {
+        TEST_ASSERT_EQUAL_INT64(*expected.timestamp.unixTimeSeconds,
+                                *actual.timestamp.unixTimeSeconds);
+    }
+}
+
 ProgramDocument makeCommissionedFactoryProgram(const char* id) {
     auto document = FactoryProgramCatalog::find(id);
     TEST_ASSERT_TRUE(document.has_value());
@@ -427,6 +464,62 @@ void test_restore_into_replays_multiple_revisions() {
     TEST_ASSERT_EQUAL_UINT32(2U, restored->revisions()[1].sequence);
 }
 
+void test_restore_keeps_unused_revision_tail_default_for_into_and_legacy() {
+    const auto source = makeCommissionedUserProgram();
+    auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
+    TEST_ASSERT_TRUE(run.has_value());
+    TEST_ASSERT_TRUE(
+        decideAndApply(*run, targetAdjustment(40.0, 100U), adjustableContext())
+            .applied());
+
+    auto inputRevisions = run->revisions();
+    fermentation::RunRevision sentinel;
+    sentinel.sequence = 99U;
+    sentinel.monotonicEpoch = 17U;
+    sentinel.stageIndex = 3U;
+    sentinel.before.targetTemperatureCelsius = 12.0;
+    sentinel.after.targetTemperatureCelsius = 47.0;
+    sentinel.targetTemperatureChanged = true;
+    sentinel.source = RunChangeSource::WebInterface;
+    sentinel.reason = RunChangeReason::RecoveryCorrection;
+    sentinel.timestamp.monotonicMillis = 1234U;
+    sentinel.timestamp.unixTimeSeconds = 1784736000;
+    inputRevisions[2] = sentinel;
+
+    std::optional<ActiveRun> restored;
+    TEST_ASSERT_TRUE(
+        ActiveRun::restoreInto(run->snapshot(), inputRevisions, 1U, restored));
+    TEST_ASSERT_TRUE(restored.has_value());
+    assertRevisionEqual(inputRevisions[0], restored->revisions()[0]);
+    const auto& restoredTail = restored->revisions()[2];
+    TEST_ASSERT_EQUAL_UINT32(0U, restoredTail.sequence);
+    TEST_ASSERT_EQUAL_UINT32(0U, restoredTail.monotonicEpoch);
+    TEST_ASSERT_EQUAL_UINT32(
+        0U, static_cast<std::uint32_t>(restoredTail.stageIndex));
+    TEST_ASSERT_EQUAL_DOUBLE(0.0, restoredTail.before.targetTemperatureCelsius);
+    TEST_ASSERT_EQUAL_DOUBLE(0.0, restoredTail.after.targetTemperatureCelsius);
+    TEST_ASSERT_FALSE(restoredTail.targetTemperatureChanged);
+    TEST_ASSERT_FALSE(restoredTail.remainingDurationChanged);
+    TEST_ASSERT_EQUAL_UINT8(
+        static_cast<std::uint8_t>(fermentation::RunAdjustmentEffect::None),
+        static_cast<std::uint8_t>(restoredTail.effect));
+    TEST_ASSERT_EQUAL_UINT8(
+        static_cast<std::uint8_t>(RunChangeSource::LocalDisplay),
+        static_cast<std::uint8_t>(restoredTail.source));
+    TEST_ASSERT_EQUAL_UINT8(
+        static_cast<std::uint8_t>(RunChangeReason::UserAdjustment),
+        static_cast<std::uint8_t>(restoredTail.reason));
+    TEST_ASSERT_EQUAL_UINT64(0U, restoredTail.timestamp.monotonicMillis);
+    TEST_ASSERT_FALSE(restoredTail.timestamp.unixTimeSeconds.has_value());
+
+    const auto legacy = ActiveRun::restore(run->snapshot(), inputRevisions, 1U);
+    TEST_ASSERT_TRUE(legacy.has_value());
+    assertRevisionEqual(inputRevisions[0], legacy->revisions()[0]);
+    TEST_ASSERT_EQUAL_UINT32(0U, legacy->revisions()[2].sequence);
+    TEST_ASSERT_FALSE(
+        legacy->revisions()[2].timestamp.unixTimeSeconds.has_value());
+}
+
 void test_restore_into_rejects_invalid_revision_without_replacing_destination() {
     const auto source = makeCommissionedUserProgram();
     auto run = ActiveRun::start(source, ProgramSourceKind::UserProgram, 9U);
@@ -697,6 +790,8 @@ int main() {
     RUN_TEST(test_restore_replays_snapshot_and_revision_history);
     RUN_TEST(test_restore_into_matches_legacy_and_handles_zero_revisions);
     RUN_TEST(test_restore_into_replays_multiple_revisions);
+    RUN_TEST(
+        test_restore_keeps_unused_revision_tail_default_for_into_and_legacy);
     RUN_TEST(
         test_restore_into_rejects_invalid_revision_without_replacing_destination);
     RUN_TEST(test_restore_rejects_corrupt_or_reordered_revision_history);

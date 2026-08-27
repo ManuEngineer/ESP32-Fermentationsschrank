@@ -13,20 +13,13 @@ target_compile_options(${COMPONENT_LIB} PRIVATE "-std=gnu++17")
 # callgraph artefacts for the product-reachable lifecycle and persistence
 # paths.  These flags are analysis-only and do not alter product semantics,
 # profile selection, or the configured task stack.  Clang's separate ESP-IDF
-# analysis build does not accept GCC's callgraph option.
+# analysis build does not accept GCC's callgraph option.  The complete
+# component is instrumented so the configuration composition preceding the
+# persistence paths is covered as well.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set_source_files_properties(
-        "src/fermentation_application.cpp"
-        "src/program_document_codec.cpp"
-        "src/program_model.cpp"
-        "src/process_state_machine.cpp"
-        "src/run_commands.cpp"
-        "src/run_persistence_contract.cpp"
-        "src/run_persistence_codec.cpp"
-        "src/run_persistence_coordinator.cpp"
-        "src/run_snapshot.cpp"
-        "src/temperature_control_orchestrator.cpp"
-        PROPERTIES COMPILE_OPTIONS "-fstack-usage;-fcallgraph-info=su"
+    target_compile_options(${COMPONENT_LIB} PRIVATE
+        -fstack-usage
+        -fcallgraph-info=su
     )
 endif()
 

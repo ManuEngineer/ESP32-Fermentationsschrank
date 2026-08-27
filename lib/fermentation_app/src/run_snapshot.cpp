@@ -286,7 +286,9 @@ bool ActiveRun::restoreInto(
         return false;
     }
     destination.emplace(RestoreConstructionTag{}, snapshot, effectiveValues);
-    destination->revisions_ = revisions;
+    for (std::size_t index = 0U; index < revisionCount; ++index) {
+        destination->revisions_[index] = revisions[index];
+    }
     destination->revisionCount_ = revisionCount;
     destination->monotonicEpoch_ =
         revisionCount > 0U ? revisions[revisionCount - 1U].monotonicEpoch + 1U
