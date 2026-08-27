@@ -35,6 +35,10 @@ STEP_7_PLAN_CORRECTION_REASON=APPLICATION_TRIGGER_REACHABILITY_AND_DECODE_FAILUR
 STEP_7_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
 STEP_8_STACK_PLAN_CORRECTION_REASON=MEASURED_VIABILITY_REPLACES_UNJUSTIFIED_DEFAULT_BUDGET
 STEP_8_VIABILITY_EVIDENCE=OWNER_PROVIDED_PRIOR_HARDWARE_AND_STATIC_MEASUREMENTS
+STEP_8_PRE_CORRECTION_SOURCE_SHA=2cedf885e0916df784764ff050fa54b96e1aec1c
+STEP_8_PRE_CORRECTION_CHANGES=RETAINED_AND_ACCEPTED
+STEP_8_POST_PLAN_CORRECTION_IMPLEMENTATION=NOT_STARTED
+RESOURCE_DETAIL_CONFLICT=RESOLVED
 APPROVED_PLAN_SHA=1568c8930aeb759468aeca1e27da93889875554a
 PLAN_SHA=<exact, nach Commit>
 PLAN_DEVIATION=DISCOVERED_AND_DOCUMENTED_PENDING_REVISED_PLAN_APPROVAL
@@ -84,11 +88,20 @@ vollstaendige statische Produktpfad-Evidenz und die reale Viability-Messung
 begründen stattdessen die folgende Release-1-Basisentscheidung:
 
 ```text
+MAIN_TASK_STACK_CONFIG_SOURCE=sdkconfig.defaults
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+BRINGUP_RELEASE_DUPLICATE_STACK_SETTING=NO
 MAIN_TASK_STACK_BASIS=MEASURED_AND_STATICALLY_VERIFIED
 STACK_MICRO_OPTIMIZATION_TO_3584_REQUIRED=NO
 STACK_CONFIGURATION_CHANGE=PLANNED_ONLY_NOT_IMPLEMENTED_IN_THIS_CORRECTION
 ```
+
+`sdkconfig.defaults` ist die gemeinsame und damit kanonische ESP-IDF-
+Konfigurationsquelle fuer den Main-Task-Stack. `sdkconfig.defaults.bringup`
+und `sdkconfig.defaults.release` waehlen ausschliesslich das jeweilige Profil;
+der Stackwert wird dort nicht dupliziert. Die spaetere produktive Aenderung
+setzt den Wert nur in `sdkconfig.defaults`; diese Korrekturrunde aendert keine
+SDKConfig-Datei.
 
 Die `16 KiB` sind eine gemessene Release-1-Baseline und keine fuer alle
 zukuenftigen Releases unveraenderliche Naturgrenze. Eine spaetere produktive
@@ -4060,9 +4073,17 @@ Schritt 6: main/app_main.cpp komponiert das konkrete
 Schritt 7: Teststrategie vollstaendig umsetzen (Abschnitt 13), inklusive
   Byte-for-byte-Regression aller Schema-1/2/3-Fixtures gegen die neuen
   Codec-In-place-Kerne (Abschnitt 12.4.6).
+Die vor der Stack-Plan-Korrektur bereits akzeptierte Step-8-Implementation am
+`STEP_8_PRE_CORRECTION_SOURCE_SHA=2cedf885e0916df784764ff050fa54b96e1aec1c`
+umfasst die Stackanalyse-Instrumentierung sowie den semantiktreuen
+`ActiveRun::restoreInto()`-Prefix-/Tail-Fix mit zugehoeriger Regression. Diese
+Aenderungen bleiben erhalten und akzeptiert; `NOT_STARTED` bezieht sich nur
+auf den nach dieser Plan-Korrektur neu geschnittenen Step-8-Teil.
 Schritt 8: Nach der separat freigegebenen produktiven
-  Stack-Konfigurationsaenderung auf `CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384`
-  die finale Requalifikation gemaess Abschnitt 16 durchfuehren. Der
+  Stack-Konfigurationsaenderung in `sdkconfig.defaults` auf
+  `CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384` die finale Requalifikation gemaess
+  Abschnitt 16 durchfuehren. Die Profil-Overlays bleiben ohne duplizierten
+  Stackwert. Der
   evidenzbasierte Abschlussvertrag lautet:
 
   CONFIGURED_RELEASE_MAIN_TASK_STACK=16384 B
@@ -4353,7 +4374,9 @@ ISSUE121_CONTAINER_REDESIGN=NO
 INTERLOCK_FALLBACK_TRUST_EXCEPTION=REMOVED
 APPLICATION_OOM_DIAGNOSTIC=NON_PERSISTENCE
 WATCHDOG_RESET_STATELESS_CONTRACT=CLOSED
+MAIN_TASK_STACK_CONFIG_SOURCE=sdkconfig.defaults
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384 B
+BRINGUP_RELEASE_DUPLICATE_STACK_SETTING=NO
 MAIN_TASK_STACK_BASIS=MEASURED_AND_STATICALLY_VERIFIED
 STACK_MICRO_OPTIMIZATION_TO_3584_REQUIRED=NO
 PRODUCT_REACHABLE_STATIC_STACK_GATE=MANDATORY_BEFORE_HARDWARE_RUN_AUTHORIZATION
@@ -4397,6 +4420,10 @@ STEP_7_PLAN_CORRECTION_REASON=APPLICATION_TRIGGER_REACHABILITY_AND_DECODE_FAILUR
 STEP_7_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
 STEP_8_STACK_PLAN_CORRECTION_REASON=MEASURED_VIABILITY_REPLACES_UNJUSTIFIED_DEFAULT_BUDGET
 STEP_8_VIABILITY_EVIDENCE=OWNER_PROVIDED_PRIOR_HARDWARE_AND_STATIC_MEASUREMENTS
+STEP_8_PRE_CORRECTION_SOURCE_SHA=2cedf885e0916df784764ff050fa54b96e1aec1c
+STEP_8_PRE_CORRECTION_CHANGES=RETAINED_AND_ACCEPTED
+STEP_8_POST_PLAN_CORRECTION_IMPLEMENTATION=NOT_STARTED
+RESOURCE_DETAIL_CONFLICT=RESOLVED
 ISSUE121_REAL_PRODUCT_COMMAND_TRIGGER=NONE
 REAL_PRODUCT_COMMAND_TRIGGER=DEFERRED
 EXACT_COMMAND_HANDLER_API=DEFERRED_NOT_DESIGNED_IN_ISSUE121
