@@ -87,6 +87,33 @@ Vereinfachung von Safety, Security, Recovery, Testbarkeit oder dokumentierten
 Vertraegen. Bewusste Abweichungen werden im freigegebenen Plan konkret
 begruendet und im Review gegen den tatsaechlichen Diff bewertet.
 
+## Ressourcenbudgets aus Messung und Produktkontext
+
+Harte Ressourcenlimits benoetigen eine reale Hardware- oder
+Produktbegruendung und das dafuer vorgesehene Owner-Gate. Ein Framework- oder
+Toolchain-Default ist kein Produktbudget, solange diese Begruendung fehlt.
+
+- Fruehe Subsystembudgets sind Planungs- und Warnwerte. Sie werden erst dann zu
+  harten Grenzen, wenn die Grenze ausdruecklich begruendet, gemessen und
+  ownerfreigegeben ist.
+- Optimiert wird bei einem nachgewiesenen Gesamtsystemrisiko oder einer
+  gemessenen Ueberschreitung, nicht allein zur Einhaltung eines unbegruendeten
+  lokalen Richtwerts.
+- Eine Freigabe bewertet den relevanten Gesamtsystempfad mit angemessener
+  Reserve. Dazu gehoeren insbesondere statische Stackpfade und
+  Main-Task-HWM, Heap und groesster zusammenhaengender Block sowie Flash,
+  IRAM und DRAM.
+- Ein Ressourcenwert aus einem Diagnose-, Bring-up- oder Teilpfad ist kein
+  allgemeiner Freigabebeweis. Nach der Integration neuer Subsysteme werden
+  Ressourcen im Gesamtsystem erneut vermessen.
+- WLAN, LVGL/Display und Web benoetigen deshalb nach ihrer Integration eine
+  eigene Ressourcenqualifikation; lokale Regelung und Safety duerfen davon
+  nicht abhaengen.
+
+Die detaillierten Speicherpflege-, Aufbewahrungs- und Wartungsregeln stehen
+weiterhin zentral in `RESOURCE_BUDGET_AND_MAINTENANCE.md`; dieses Dokument
+definiert dafuer nur den allgemeinen Engineering-Grundsatz.
+
 ## Adopt-or-build und Espressif-first
 
 Vor einer Eigenentwicklung wird geprueft, ob eine bestehende Komponente die

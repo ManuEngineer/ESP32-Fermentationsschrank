@@ -9,14 +9,14 @@ Commit-SHA dieser Datei gilt:
 
 ```text
 LIFECYCLE_SIMPLIFICATION_PLAN_PENDING_OWNER_APPROVAL
-IMPLEMENTATION=STEP_7_IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
+IMPLEMENTATION=STEP_7_PASS_PENDING_STACK_PLAN_CORRECTION_OWNER_REVIEW
 IMPLEMENTATION_STEPS_1_TO_5=PASS
-IMPLEMENTATION_STEP_6=IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
-IMPLEMENTATION_STEP_6_GATE=BLOCKED_PENDING_REVISED_PLAN_OWNER_REVIEW
-IMPLEMENTATION_STEP_7=IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
+IMPLEMENTATION_STEP_6=PASS
+IMPLEMENTATION_STEP_6_GATE=PASS
+IMPLEMENTATION_STEP_7=PASS
 OWNER_STEP_5_REVIEW=PASS
-OWNER_STEP_6_REVIEW=REOPENED_BY_STEP_7_COVERAGE_REVIEW
-OWNER_STEP_7_REVIEW=CHANGES_REQUIRED
+OWNER_STEP_6_REVIEW=PASS
+OWNER_STEP_7_REVIEW=PASS
 STEP_1_SOURCE_SHA=cbfd81e1a622da6f241b89ca43636f41bf798ada
 STEP_2_SOURCE_SHA=6f0d6341c4ae37634fdacb8df09650b8b0c8212d
 STEP_3_SOURCE_SHA=eda125791eda5bfb6ec7125b7392ea971f3c8ec0
@@ -33,7 +33,9 @@ STEP_7_PRE_REVIEW_APPROVED_PLAN_SHA=68b81a16892a3a27c2eabdb8f571e34f1c107bbb
 STEP_7_PRE_REVIEW_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
 STEP_7_PLAN_CORRECTION_REASON=APPLICATION_TRIGGER_REACHABILITY_AND_DECODE_FAILURE_EVIDENCE
 STEP_7_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
-APPROVED_PLAN_SHA=68b81a16892a3a27c2eabdb8f571e34f1c107bbb
+STEP_8_STACK_PLAN_CORRECTION_REASON=MEASURED_VIABILITY_REPLACES_UNJUSTIFIED_DEFAULT_BUDGET
+STEP_8_VIABILITY_EVIDENCE=OWNER_PROVIDED_PRIOR_HARDWARE_AND_STATIC_MEASUREMENTS
+APPROVED_PLAN_SHA=1568c8930aeb759468aeca1e27da93889875554a
 PLAN_SHA=<exact, nach Commit>
 PLAN_DEVIATION=DISCOVERED_AND_DOCUMENTED_PENDING_REVISED_PLAN_APPROVAL
 OWNER_PLAN_REVIEW=PENDING
@@ -50,8 +52,8 @@ BUILD_CHANGE=NO
 PLAN_COMMIT_ONLY_CANONICAL_PLAN=YES
 STATUS_COMMIT_ONLY_STATUS_DOCUMENTATION=YES
 PRODUCTION_OR_TEST_DIFF=NONE
-IMPLEMENTATION_STEP_8=NOT_STARTED
-PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
+IMPLEMENTATION_STEP_8=NOT_STARTED_AFTER_STACK_PLAN_CORRECTION
+PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN_AFTER_PLANNED_STACK_CONFIGURATION_CHANGE
 HARDWARE_RUN=NO
 PR120=OPEN_DRAFT_FROZEN
 PR122=OPEN_DRAFT
@@ -73,6 +75,60 @@ STEP_7_PLAN_CORRECTION_REASON_IS_CURRENT=YES
 `MATERIAL_ARCHITECTURE_DECISION_OPEN=NO` gilt nur für die in dieser Datei
 tatsächlich getroffenen und in Abschnitt 5–13 geschlossenen Entscheidungen.
 Die Freigabe autorisiert noch keine Umsetzung.
+
+## Release-1-Ressourcenentscheidung fuer den Main-Task-Stack
+
+Die bisherige harte Behandlung von `3584 B` wird aufgehoben. `3584 B` ist der
+ESP-IDF-Default und keine fachliche Release-1-Produktanforderung. Die
+vollstaendige statische Produktpfad-Evidenz und die reale Viability-Messung
+begründen stattdessen die folgende Release-1-Basisentscheidung:
+
+```text
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+MAIN_TASK_STACK_BASIS=MEASURED_AND_STATICALLY_VERIFIED
+STACK_MICRO_OPTIMIZATION_TO_3584_REQUIRED=NO
+STACK_CONFIGURATION_CHANGE=PLANNED_ONLY_NOT_IMPLEMENTED_IN_THIS_CORRECTION
+```
+
+Die `16 KiB` sind eine gemessene Release-1-Baseline und keine fuer alle
+zukuenftigen Releases unveraenderliche Naturgrenze. Eine spaetere produktive
+Konfigurationsaenderung auf diesen Wert wird nach ihrer Umsetzung erneut
+qualifiziert; die vorliegende Plan-/Dokumentationskorrektur aendert weder
+`sdkconfig` noch Produktions- oder Testcode.
+
+```text
+DIAGNOSTIC_MAIN_TASK_STACK=16384 B
+STATIC_RELEASE_MAX_PATH=10576 B
+STATIC_RELEASE_HEADROOM_AT_16K=5808 B
+STATIC_BRINGUP_MAX_PATH=10544 B
+STATIC_BRINGUP_HEADROOM_AT_16K=5840 B
+HARDWARE_RELEASE_BOOT_CYCLES=3
+HARDWARE_FACTORY_INITIALIZATION=PASS
+HARDWARE_INITIALIZED_NVS=PASS
+STACK_HIGH_WATERMARK_REMAINING_MIN=8904 B
+APPROX_MAX_OBSERVED_STACK_USED=7480 B
+MIN_FREE_HEAP=237740 B
+MINIMUM_FREE_HEAP=233896 B
+MIN_LARGEST_FREE_8BIT_BLOCK=110592 B
+PANIC=NONE_OBSERVED
+WATCHDOG=NONE_OBSERVED
+BROWNOUT=NONE_OBSERVED
+UNEXPECTED_RESET=NONE_OBSERVED
+RESOURCE_DEGRADATION=NONE_OBSERVED
+```
+
+Diese Werte sind vorhandene Viability-Evidenz und werden in dieser Runde
+nicht erneut auf Hardware ausgefuehrt. Sie begruenden die Entscheidung, ersetzen
+aber nicht die finale Requalifikation nach der spaeteren produktiven
+Stack-Konfigurationsaenderung. WLAN, LVGL/Display und Web sind mit dieser
+Evidenz noch nicht ressourcenmaessig freigegeben und werden nach ihrer
+Integration im Gesamtsystem erneut vermessen.
+
+Diese Korrektur aendert nicht das Run-Persistence-Schema oder #17/#18-Code,
+die `FERMENTING`-Resume-Policy, die UTC-/NTP-Policy, das Checkpointintervall
+oder die Recovery-Dokumente. Keine weiteren `Into()`-, Scratch-, Heap-,
+Callchain- oder Ownership-Refactors werden allein zur Einhaltung des
+unbegruendeten ESP-IDF-Defaults verlangt.
 
 ```text
 BASE_PR=#118
@@ -217,11 +273,11 @@ zu messendes Restrisiko" behandelte Coordinator-Stackproblem als bereits
 bewiesenen Blocker eingeordnet:** `docs/ISSUE_29_BUILD_REPORT.md` (reale
 Xtensa-`-fstack-usage`-Messung auf `BASE_SHA`) dokumentiert
 `RunPersistenceCoordinator::persistCommand(...) = 9280 B` statischen Frame
-– bereits einzeln über `CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584`, unabhängig
-von jeder Call-Path-Summierung. Zusätzlich real gemessen:
+– bereits einzeln über dem damaligen ESP-IDF-Defaultwert von `3584 B`,
+unabhängig von jeder Call-Path-Summierung. Zusätzlich real gemessen:
 `sizeof(CommandDecision)=10520`, `sizeof(RunPersistenceSnapshot)=4096`,
-`sizeof(RunPersistenceLoadResult)=4112` – ebenfalls alle einzeln über dem
-Budget. Ein vollständiger Stack-Sicherheits-Vertrag (Out-Parameter-
+`sizeof(RunPersistenceLoadResult)=4112` – ebenfalls alle einzeln über diesem
+historischen Defaultwert. Ein vollständiger Stack-Sicherheits-Vertrag (Out-Parameter-
 Varianten für `RunCommandState`/`CommandDecision`-Restaurierung,
 Coordinator-eigenes einmalig alloziertes Scratch, boot-transiente
 Heap-Speicherung für `RunPersistenceLoadResult`, verbindlicher statischer
@@ -256,8 +312,9 @@ R1-Resume-Phasen) – korrigiert auf `UseStandardFallback` (Abschnitt 9.1).
 `std::optional<T>` speichert `T` **inline**. `sizeof(RunCommandState)` ist
 real gemessen `5096` Byte (Abschnitt 9); zwei solcher Felder hätten
 `sizeof(FermentationApplication)` um über 10 KB vergrößert, bei
-`CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584` exakt dieselbe Stack-Fehlerklasse wie
-bei #120 reproduziert. Korrigiert auf `std::unique_ptr<RunCommandState>`
+dem damaligen ESP-IDF-Defaultwert von `3584 B` exakt dieselbe
+Stack-Fehlerklasse wie bei #120 reproduziert. Korrigiert auf
+`std::unique_ptr<RunCommandState>`
 (Abschnitt 9/12.1). Runde 3 hat außerdem ein verwandtes, **nicht** von
 diesem Plan eingeführtes, sondern bereits auf `BASE_SHA` bestehendes
 Stack-Risiko benannt (der `auto candidate = current;`-Kopiervorgang in
@@ -1201,7 +1258,7 @@ gemessen `sizeof(RunCommandState) == 5096` Byte (Host-Build; reale
 ESP32/xtensa-Größen können leicht abweichen, die Größenordnung bleibt
 gleich) – zwei solcher Felder als `std::optional`-Wertmember hätten
 `sizeof(FermentationApplication)` um über 10 KB vergrößert, bei
-`CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584` (PR #118) exakt dieselbe
+dem damaligen ESP-IDF-Defaultwert von `3584 B` (PR #118) exakt dieselbe
 Stack-Fehlerklasse wie bei #120 reproduziert, für die `application` als
 Stackobjekt in `main/app_main.cpp` (`fermentation::FermentationApplication
 application;`) konstruiert wird. Beide Felder sind daher `unique_ptr`, nicht
@@ -2439,9 +2496,9 @@ zustandsloses Root-Value-Objekt außerhalb der Application bestehen.
 kein offenes Restrisiko mehr – vollständiger Vertrag Abschnitt 12.4,
 Blocker 1-5, Runde 4):** `RunPersistenceCoordinator::persistCommand()`
 allein hat einen real Xtensa-gemessenen statischen Frame von 9280 Byte
-(`docs/ISSUE_29_BUILD_REPORT.md`) – über dem gesamten
-`CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584`-Budget, unabhängig von jeder
-Call-Path-Summierung. Eine frühere Fassung dieses Plans bezeichnete das
+(`docs/ISSUE_29_BUILD_REPORT.md`) – über dem damaligen ESP-IDF-Defaultwert
+von `3584 B`, unabhängig von jeder Call-Path-Summierung. Eine frühere Fassung
+dieses Plans bezeichnete das
 zugrundeliegende `auto candidate = current;`-Muster fälschlich als „später
 per Hardware-HWM zu messendes, in dieser Revision nicht gelöstes
 Restrisiko" – das ist mit dieser realen Messung nicht mehr haltbar.
@@ -2471,7 +2528,8 @@ REAL_HARDWARE_BOOT
   -> actor-free echter Boot-/Classification-Pfad
   -> realer Main-Task-HWM (uxTaskGetStackHighWaterMark, bereits heute in
      logResources() verwendet) dieses tatsaechlich erreichbaren Pfads
-  -> gegen CONFIG_ESP_MAIN_TASK_STACK_SIZE=3584 (Abschnitt 16)
+  -> gegen die konfigurierte Release-1-Stackgroesse und deren statischen
+     Produktpfadvertrag (Abschnitt 16)
 
 STATIC_STACK_EVIDENCE=MANDATORY_NOW (Abschnitt 12.4.7, vor Hardware)
 REAL_RUNTIME_HWM=NOT_RUN_UNTIL_REAL_PRODUCT_TRIGGER_PATH_EXISTS
@@ -2508,22 +2566,26 @@ prüfenden aktiven Lauf, für den ein periodischer Checkpoint fachlich
 etwas leisten würde. Keine produktiven PI-/Planner-Ticks; kein
 `tickActuatorPlan()`-Aufruf im Produktpfad.
 
-### 12.4 Stack-Sicherheits-Vertrag für #121-Produktpfade (Blocker 1-6, Runde 4+5+6, geschlossen)
+### 12.4 Stack-Sicherheits- und Ressourcenvertrag für #121-Produktpfade
 
-**Ausgangslage – kein Restrisiko, sondern bewiesener Blocker (Blocker 1,
-Runde 4):** `docs/ISSUE_29_BUILD_REPORT.md` (real vorhanden, Xtensa-
-`-fstack-usage`-Messung auf `BASE_SHA`) dokumentiert bereits:
+Der Vertrag folgt dem kanonischen Ressourcenprinzip aus
+`docs/ENGINEERING_PRINCIPLES.md`: Ein Framework-Default wird nicht als
+Produktbudget behandelt. Die bereits akzeptierten In-place-/Scratch-
+Korrekturen bleiben als semantiktreue Stack-Sicherheitsarbeit bestehen; diese
+Planrevision verlangt keine weiteren Refactors allein fuer `3584 B`.
+
+**Historische Ausgangslage – real gemessener Defaultpfad:**
+`docs/ISSUE_29_BUILD_REPORT.md` (real vorhanden, Xtensa-`-fstack-usage`-
+Messung auf `BASE_SHA`) dokumentiert:
 
 ```text
 RunPersistenceCoordinator::persistCommand(...) = 9280 B static frame
-CONFIG_ESP_MAIN_TASK_STACK_SIZE = 3584 B
+ESP_IDF_DEFAULT_MAIN_TASK_STACK_SIZE = 3584 B
 ```
 
-`9280 > 3584` – ein **einzelner** Funktionsaufruf sprengt bereits das
-gesamte Main-Task-Budget, unabhängig von jeder Call-Path-Summierung. Kein
-Primärfix über `CONFIG_ESP_MAIN_TASK_STACK_SIZE`
-(`MAIN_TASK_STACK_PRIMARY_INCREASE=NO` bleibt in Kraft). Zusätzlich real
-gemessen (Host-Build, `g++ -std=c++17`, dieselbe Technik wie Runde 3):
+Der Befund zeigt, dass der historische Defaultpfad fuer den damaligen Build
+nicht ausreichte; er ist keine fortbestehende Release-1-Grenze. Zusätzlich
+real gemessen (Host-Build, `g++ -std=c++17`, dieselbe Technik wie Runde 3):
 
 ```text
 sizeof(RunCommandState)           = 5096 B
@@ -2542,7 +2604,10 @@ sizeof(RunPersistenceCoordinator) = 8968 B   (NEU real gemessen, Runde 5;
                                                als Instanzmember haelt)
 ```
 
-Jeder dieser Werte liegt bereits einzeln über dem 3584-B-Budget.
+Jeder dieser Werte liegt bereits einzeln über dem historischen Defaultwert von
+`3584 B`. Die akzeptierten In-place-/Scratch-Korrekturen schliessen diese
+schweren By-value-Pfade; weitere Mikrooptimierung nur zum Erreichen des
+Defaults ist nicht erforderlich.
 **Korrektur gegenüber Runde 4 (Runde 5):** Runde 4 schloss nur die
 Aufrufer-Ebene (Application/Coordinator-öffentliche Signaturen). Real
 geprüft blieben zwei Ebenen weiterhin stack-unsicher: (a) `writeSnapshotCore()`
@@ -2760,8 +2825,9 @@ CommandDecision decideProgramStart(const RunCommandState& current,
 
 Diese Return-by-value-Wrapper bleiben für Host-/Legacy-Consumer
 (`test_run_commands` u. a.) unverändert nutzbar – hier ist ein einzelnes
-stack-lokales `CommandDecision` unkritisch, da kein 3584-B-Main-Task-Budget
-gilt. Der spätere Product-Consumerpfad für Fresh Start (Abschnitt 8) verwendet
+ein stack-lokales `CommandDecision` unkritisch, da dieser Host-/Legacy-Pfad nicht
+im konfigurierten ESP32-Main-Task-Produktpfad liegt. Der spätere
+Product-Consumerpfad für Fresh Start (Abschnitt 8) verwendet
 ausschließlich die `Into()`-Kerne; in #121 ist dieser Pfad nicht
 produktseitig erreichbar:
 
@@ -3194,22 +3260,21 @@ Pflicht: Byte-for-byte-Regression aller bestehenden Schema-1/2/3-Fixtures
 Host-/Legacy-Tests unverändert nutzbar und delegieren jetzt an die
 `Into()`-Kerne (dieselbe Richtungsumkehr-Konvention wie 4.3/4.5).
 
-**4.7 Statischer Produkt-Stackgate – Pflicht vor jeder Hardwarefreigabe
-(schließt Blocker 5 Runde 4, Major 8 Runde 5):** Die bestehende
+**4.7 Evidenzbasiertes statisches Produkt-Stackgate:** Die bestehende
 Instrumentierung (`docs/ISSUE_29_BUILD_REPORT.md`: `-fstack-usage`/
-`-fcallgraph-info=su` für die Diagnose-Probe sowie „die tatsächlich
-betroffenen `fermentation_app`-Quellen"; `scripts/analyze_issue_29_stack.py`
-wertet die `.ci`-Kanten aus) wird auf die in Abschnitt 12.4 (Scope)
-benannten #121-Produktpfad-TUs erweitert – **dieselbe** Technik,
-**derselbe** Skript-Mechanismus, nicht neu erfunden; Zielpfad wird der
-reale Produkt-Callgraph (`FermentationApplication::begin()` etc.) statt
-(nur) der Diagnose-Probe. Nach Implementation, **vor** jeder
-Hardwarefreigabe (Schritt 8, Abschnitt 15). **Erweiterte Frameliste
-gegenüber Runde 4 (Major 8, Runde 5 – deckt jetzt auch die in 4.5/4.6
-neu benannten internen Kerne ab):**
+`-fcallgraph-info=su`; `scripts/analyze_issue_29_stack.py` wertet die
+`.ci`-Kanten aus) wird auf die in Abschnitt 12.4 (Scope) benannten
+#121-Produktpfad-TUs angewendet – **dieselbe** Technik und derselbe
+Skript-Mechanismus. Der Zielpfad ist der reale Produkt-Callgraph
+(`FermentationApplication::begin()` usw.), nicht nur die Diagnose-Probe.
+Das Gate wird nach der spaeteren produktiven Stack-Konfigurationsaenderung
+auf `16 KiB` und vor der Owner-Hardwarefreigabe ausgefuehrt. Die
+Viability-Evidenz aus diesem Auftrag ist dafuer die Begruendung, ersetzt aber
+nicht die finale Requalifikation.
 
 ```text
-CONFIGURED_RELEASE_MAIN_TASK_STACK=3584
+CONFIGURED_RELEASE_MAIN_TASK_STACK=16384 B
+MAIN_TASK_STACK_BASIS=MEASURED_AND_STATICALLY_VERIFIED
 APP_MAIN_ENTRY_FRAME=<measured>
 FERMENTATION_APPLICATION_BEGIN_FRAME=<measured>
 MAKE_RUN_PERSISTENCE_SNAPSHOT_INTO_FRAME=48 B
@@ -3225,6 +3290,8 @@ RUN_PERSISTENCE_PERSIST_COMMAND_FRAME=<measured>
 DISCARD_AS_NO_ACTIVE_RUN_FRAME=<measured>
 ACTIVATE_R1_ELIGIBLE_RUN_FRAME=<measured>
 PRODUCT_BOOT_CUMULATIVE_STACK_PATH=<measured>
+PRODUCT_BOOT_CUMULATIVE_STACK_PATH < CONFIGURED_RELEASE_MAIN_TASK_STACK
+STATIC_HEADROOM >= 4096 B
 PRODUCT_FRESH_START_CUMULATIVE_STACK_PATH=NOT_PRODUCT_REACHABLE
 PRODUCT_RESUME_CUMULATIVE_STACK_PATH=NOT_PRODUCT_REACHABLE
 PRODUCT_DISCARD_CUMULATIVE_STACK_PATH=<measured>
@@ -3233,7 +3300,7 @@ PERSIST_COMMAND_FRAME_AFTER=688 B
 ```
 
 Die folgenden Werte sind bereits gemessene Step-5-Einzelframes der
-stack-sicheren technischen Kerne:
+stack-sicheren technischen Kerne und bleiben als Evidenz erhalten:
 
 ```text
 MAKE_SNAPSHOT_INTO_FRAME=48 B
@@ -3244,11 +3311,12 @@ PERSIST_COMMAND_FRAME_AFTER=688 B
 ```
 
 Diese Einzelframe-Evidenz ist kein kumulativer Produkt-Callgraph-Nachweis.
-Der finale Gate-Nachweis ist nach der Application-Composition weiterhin
-nicht ausgeführt und bleibt dem Schritt 8 vorbehalten:
+Der finale Gate-Nachweis erfolgt im Schritt 8 mit der konfigurierten
+`16 KiB`-Stackgroesse:
 
 ```text
-PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
+NO_PRODUCT_REACHABLE_SINGLE_FRAME_EXCEEDS_CONFIGURED_TASK_STACK=<PASS|FAIL>
+PRODUCT_REACHABLE_STATIC_STACK_GATE=<PASS|FAIL|NOT_RUN>
 ```
 
 **Ergänzung Runde 6:** die in Abschnitt 4.9 gewählten Reset-Helfer messen,
@@ -3264,8 +3332,11 @@ RESET_RUN_PERSISTENCE_LOAD_RESULT_FRAME=<measured or INLINED>
 Abnahme:
 
 ```text
+CONFIGURED_RELEASE_MAIN_TASK_STACK=16384 B
+PRODUCT_BOOT_CUMULATIVE_STACK_PATH < CONFIGURED_RELEASE_MAIN_TASK_STACK
+STATIC_HEADROOM >= 4096 B
 NO_PRODUCT_REACHABLE_SINGLE_FRAME_EXCEEDS_CONFIGURED_TASK_STACK=PASS
-PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
+PRODUCT_REACHABLE_STATIC_STACK_GATE=PASS
 ```
 
 Einzelne `.su`-Frames ersetzen die kumulative Callgraph-Betrachtung nicht
@@ -3278,11 +3349,13 @@ PRODUCT_REACHABLE_STATIC_STACK_GATE=BLOCKED
 STOP – OWNER_REVIEW_REQUIRED
 ```
 
-Keine Hardware zum Ausprobieren, wenn die statische Evidenz bereits nicht
-in das Taskbudget passt.
+Keine Hardware zum Ausprobieren, wenn die statische Evidenz die konfigurierte
+`16 KiB`-Stackgroesse oder die Mindestreserve nicht einhaelt. Die
+`16 KiB`-Entscheidung ist keine unveraenderliche Grenze fuer spaetere Releases;
+deren Ressourcenpfad wird jeweils erneut bewertet.
 
-**4.8 Heap-/Largest-Block-Budget des vergrößerten Coordinators (schließt
-Major 9, Runde 5):** `RunPersistenceCoordinator` wächst durch das inline
+**4.8 Heap-/Largest-Block-Ressourcenmessung des vergrößerten Coordinators
+(schließt Major 9, Runde 5):** `RunPersistenceCoordinator` wächst durch das inline
 `workingSet_`-Wertmember (Abschnitt 4.4) um `candidate` (5096 B) +
 `snapshot` (4096 B) + `record` (4152 B) ≈ 13,3 KiB gegenüber dem bereits
 real gemessenen `sizeof(RunPersistenceCoordinator)=8968` B – **Heap**, kein
@@ -3295,9 +3368,14 @@ BOOT_HEAP_LARGEST_BLOCK_BEFORE_COMPOSITION = 147456 B  -- kein #121-PASS-Beweis
 ```
 
 Diese #120-Zahlen sind **keine** #121-Abnahmeevidenz – sie stammen aus
-einer anderen Composition (Abschnitt 2). Nach Implementation, vor
-Hardwarefreigabe zusätzlich zu messen (Software-/Build-Ebene, real ESP32,
-nicht Host):
+einer anderen Composition (Abschnitt 2). Die vorhandene #121-Viability-
+Evidenz misst bereits `MIN_FREE_HEAP=237740 B`,
+`MINIMUM_FREE_HEAP=233896 B` und
+`MIN_LARGEST_FREE_8BIT_BLOCK=110592 B` über drei Release-Bootzyklen.
+Nach der produktiven Stack-Konfigurationsaenderung und vor der
+Hardwareabnahme sind dieselben Werte im Gesamtsystem erneut zu erfassen.
+Auf Software-/Build-Ebene, real ESP32 und nicht nur Host, sind zusaetzlich
+zu messen:
 
 ```text
 SIZEOF_RUN_PERSISTENCE_COORDINATOR=<measured ESP32>
@@ -3680,8 +3758,8 @@ NOTHROW_ALLOCATION_FAILURE_FAILS_CLOSED=PASS
 MAKE_UNIQUE_NOT_USED_FOR_FAIL_CLOSED_ALLOCATION=PASS
 PERSIST_COMMAND_FRAME_BEFORE=9280
 PERSIST_COMMAND_FRAME_AFTER=688 B
-PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
-PRODUCT_BOOT_CUMULATIVE_STACK_GATE=NOT_RUN
+PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN_AFTER_PLANNED_STACK_CONFIGURATION_CHANGE
+PRODUCT_BOOT_CUMULATIVE_STACK_GATE=NOT_RUN_AFTER_PLANNED_STACK_CONFIGURATION_CHANGE
 
 INTERLOCK_HAS_NO_PERSISTENCE_SNAPSHOT_INPUT=PASS
 INTERLOCK_HAS_NO_FALLBACK_RECOVERY_TRUST_EXCEPTION=PASS
@@ -3982,15 +4060,27 @@ Schritt 6: main/app_main.cpp komponiert das konkrete
 Schritt 7: Teststrategie vollstaendig umsetzen (Abschnitt 13), inklusive
   Byte-for-byte-Regression aller Schema-1/2/3-Fixtures gegen die neuen
   Codec-In-place-Kerne (Abschnitt 12.4.6).
-Schritt 8: Gate-Reihenfolge exakt wie Abschnitt 16 (Major 9, Runde 6)
-  einhalten, kein optionaler Nachweis: (1) statischer Produkt-Stackgate
-  (Abschnitt 12.4.7) PASS, (2) reale ESP-IDF-Builds/statische
-  Ressourcen-Gates PASS, (3) Owner-Hardwarefreigabe, (4) actor-free realer
-  Hardwareboot, (5) Main-Task-Stack-HWM waehrend dieses Laufs messen, (6)
-  Heap-/Largest-Block-Momentaufnahmen (Abschnitt 12.4.8) waehrend
-  desselben Laufs messen, (7) Owner-Abnahme. Kein Hardwarelauf vor
-  Schritt (3) – ein reales HWM kann per Definition erst waehrend eines
-  Hardwarelaufs gemessen werden, nicht davor.
+Schritt 8: Nach der separat freigegebenen produktiven
+  Stack-Konfigurationsaenderung auf `CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384`
+  die finale Requalifikation gemaess Abschnitt 16 durchfuehren. Der
+  evidenzbasierte Abschlussvertrag lautet:
+
+  CONFIGURED_RELEASE_MAIN_TASK_STACK=16384 B
+  PRODUCT_BOOT_CUMULATIVE_STACK_PATH < CONFIGURED_RELEASE_MAIN_TASK_STACK
+  STATIC_HEADROOM >= 4096 B
+  NO_PRODUCT_REACHABLE_SINGLE_FRAME_EXCEEDS_CONFIGURED_TASK_STACK=PASS
+  REAL_MAIN_TASK_STACK_HWM_REMAINING >= 4096 B
+  NO_PANIC_WATCHDOG_BROWNOUT_UNEXPECTED_RESET=PASS
+  RESOURCE_DEGRADATION=NONE_OBSERVED
+
+  Dazu werden (1) der statische Produkt-Callgraph, (2) reale ESP-IDF-Builds
+  und statische Ressourcen-Gates, (3) die Owner-Hardwarefreigabe, (4) ein
+  actor-free realer Hardwareboot, (5) Main-Task-HWM waehrend dieses Laufs,
+  (6) Heap-/Largest-Block-Momentaufnahmen waehrend desselben Laufs und (7)
+  die Owner-Abnahme nachgewiesen. Kein Hardwarelauf vor der Ownerfreigabe;
+  ein reales HWM kann per Definition erst waehrend eines Hardwarelaufs
+  gemessen werden. WLAN, LVGL/Display und Web sind in diesem Schritt nur dann
+  freigegeben, wenn sie bereits integriert und im Gesamtsystem vermessen sind.
 ```
 
 Jeder Schritt erfordert eine eigene Owner-Freigabe vor Beginn.
@@ -4012,8 +4102,11 @@ APP_MAIN_ENTRY_FRAME_UNCHANGED=<PASS|FAIL>
 APP_MAIN_ENTRY_FRAME=<measured, real release ELF>
 SIZEOF_FERMENTATION_APPLICATION=<measured>
 FERMENTATION_APPLICATION_INLINE_LARGE_RUN_STATE=NONE
-MAIN_TASK_STACK_PRIMARY_INCREASE=NO
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384 B
+MAIN_TASK_STACK_BASIS=MEASURED_AND_STATICALLY_VERIFIED
+STACK_MICRO_OPTIMIZATION_TO_3584_REQUIRED=NO
 MAIN_TASK_STACK_HIGH_WATERMARK=<PASS|FAIL|NOT_MEASURED>
+REAL_MAIN_TASK_STACK_HWM_REMAINING=<measured>
 KNOWN_MAIN_TASK_STACK_CONFLICT=RESOLVED_IN_PLAN
 PERSIST_COMMAND_FRAME_BEFORE=9280
 PERSIST_COMMAND_FRAME_AFTER=688 B
@@ -4072,6 +4165,12 @@ WATCHDOG_RESET_STATELESS_CONTRACT=CLOSED
 PRODUCT_REACHABLE_STATIC_STACK_GATE=MANDATORY_BEFORE_HARDWARE_RUN_AUTHORIZATION
 MAIN_TASK_STACK_HIGH_WATERMARK=MANDATORY_DURING_AUTHORIZED_HARDWARE_RUN
 REAL_RUNTIME_HWM_WITHOUT_REAL_TRIGGER=NOT_CLAIMED
+PRODUCT_BOOT_CUMULATIVE_STACK_PATH=<measured>
+PRODUCT_BOOT_CUMULATIVE_STACK_PATH < CONFIGURED_RELEASE_MAIN_TASK_STACK
+STATIC_HEADROOM >= 4096 B
+NO_PRODUCT_REACHABLE_SINGLE_FRAME_EXCEEDS_CONFIGURED_TASK_STACK=PASS
+NO_PANIC_WATCHDOG_BROWNOUT_UNEXPECTED_RESET=PASS
+RESOURCE_DEGRADATION=NONE_OBSERVED
 PRODUCT_FRESH_START_CUMULATIVE_STACK_PATH=NOT_PRODUCT_REACHABLE
 PRODUCT_RESUME_CUMULATIVE_STACK_PATH=NOT_PRODUCT_REACHABLE
 
@@ -4095,21 +4194,25 @@ PR120=OPEN_DRAFT_FROZEN
 `SIZEOF_FERMENTATION_APPLICATION`/`APP_MAIN_ENTRY_FRAME` werden aus dem
 realen Release-ELF gemessen (Abschnitt 12.2), nicht geschätzt.
 
-**Korrektur der Gate-Reihenfolge (Major 9, Runde 6):** die Vorfassung
-formulierte `MAIN_TASK_STACK_HIGH_WATERMARK` und
-`PRODUCT_REACHABLE_STATIC_STACK_GATE` sinngemäß als gleichrangige
-Pflichtgates „vor jeder Hardwarefreigabe" – ein reales HWM kann aber per
-Definition erst **während** eines Hardwarelaufs gemessen werden, nicht
-davor. Exakte, zeitlich korrekte Reihenfolge:
+**Gate-Reihenfolge fuer die evidenzbasierte Stackentscheidung:** Die
+Viability-Messung begruendet die Release-1-Konfiguration, ersetzt aber nicht
+die finale Requalifikation nach der spaeteren produktiven
+Stack-Konfigurationsaenderung. Ein reales HWM kann per Definition erst
+**während** eines Hardwarelaufs gemessen werden, nicht davor. Exakte,
+zeitlich korrekte Reihenfolge:
 
 ```text
-1. PRODUCT_REACHABLE_STATIC_STACK_GATE=PASS
-2. ESP-IDF-Builds/statische Ressourcen-Gates=PASS
-3. OWNER_HARDWARE_RUN_AUTHORIZATION
-4. actor-free realer Hardwareboot
-5. MAIN_TASK_STACK_HIGH_WATERMARK messen
-6. Heap-/Largest-Block-Momentaufnahmen messen (Abschnitt 12.4.8)
-7. OWNER_HARDWARE_ACCEPTANCE
+1. CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384 produktiv konfigurieren
+2. PRODUCT_REACHABLE_STATIC_STACK_GATE=PASS mit
+   PRODUCT_BOOT_CUMULATIVE_STACK_PATH < CONFIGURED_RELEASE_MAIN_TASK_STACK
+   und STATIC_HEADROOM >= 4096 B
+3. ESP-IDF-Builds/statische Ressourcen-Gates=PASS
+4. OWNER_HARDWARE_RUN_AUTHORIZATION
+5. actor-free realer Hardwareboot
+6. REAL_MAIN_TASK_STACK_HWM messen und >= 4096 B verbleibend nachweisen
+7. Heap-/Largest-Block-Momentaufnahmen messen (Abschnitt 12.4.8)
+8. PANIC/WATCHDOG/BROWNOUT/UNEXPECTED_RESET und RESOURCE_DEGRADATION pruefen
+9. OWNER_HARDWARE_ACCEPTANCE
 ```
 
 ```text
@@ -4118,30 +4221,14 @@ MAIN_TASK_STACK_HIGH_WATERMARK=MANDATORY_DURING_AUTHORIZED_HARDWARE_RUN
 COORDINATOR_HEAP_ALLOCATION_LARGEST_BLOCK_GATE=NOT_RUN_BEFORE_HARDWARE_OR_PASS_FAIL_DURING_AUTHORIZED_RUN
 ```
 
-Kein Hardwarelauf vor Punkt 3 – `PRODUCT_REACHABLE_STATIC_STACK_GATE`
-bleibt das eine echte **Vor**-Hardware-Pflichtgate, nicht optionale
-Beobachtung – das vormals als „bewusst nicht gelöstes
-Restrisiko" geführte Coordinator-Stackproblem (Runde 3) ist mit dem
-vollständigen Stack-Sicherheits-Vertrag (Abschnitt 12.4, Runde 4+5) als
-`KNOWN_MAIN_TASK_STACK_CONFLICT=RESOLVED_IN_PLAN` geschlossen. **Präzisierung
-(unverändert gegenüber Runde 4):** „RESOLVED_IN_PLAN" heißt, dass der
-**Entwurf** jeden real identifizierten schweren By-Value-Pfad schließt –
-jetzt sowohl auf der Aufrufer-Ebene (`CommandDecision`-Rückgabe,
-`RunCommandState`-Rückgabe, `RunPersistenceLoadResult`-Lokalwert) als auch
-auf der zuvor übersehenen Callee-Ebene (Coordinator-interner
-`RunPersistenceRawRecord`, `loadReference()`s interne Optionals,
-`decodeRunPersistenceSnapshot()`s interne lokale Snapshot-Variable,
-Abschnitt 12.4, Runde 5); das gemessene `PERSIST_COMMAND_FRAME_BEFORE=9280`
-war der By-Value-Zustand vor diesem Plan. Die Step-5-Einzelframe-Evidenz ist
-bereits real vorhanden: `MAKE_SNAPSHOT_INTO_FRAME=48 B`,
-`DECODE_SNAPSHOT_INTO_FRAME=512 B` und
-`PERSIST_COMMAND_FRAME_AFTER=688 B`. Diese Einzelframes lösen jedoch nicht
-den kumulativen Produkt-Callgraph-Nachweis. Der
-`PRODUCT_REACHABLE_STATIC_STACK_GATE` ist deshalb nach Schritt 7 noch
-`NOT_RUN` und gehört als finales Gate zu Schritt 8. Ein `FAIL` dieses Gates
-in der Implementation wäre danach ein realer Implementationsfehler gegen
-einen bereits im Entwurf geschlossenen Plan, keine weiterhin offene
-Architekturfrage.
+Kein Hardwarelauf vor Punkt 4 – `PRODUCT_REACHABLE_STATIC_STACK_GATE` bleibt
+eine echte **Vor**-Hardware-Pflicht. `KNOWN_MAIN_TASK_STACK_CONFLICT=
+RESOLVED_IN_PLAN` bedeutet weiterhin nur, dass der Entwurf die bereits
+identifizierten schweren By-value-Pfade mit den akzeptierten
+In-place-/Scratch-Korrekturen schliesst. Die neue Release-1-Stackgroesse wird
+aber erst durch die finale Requalifikation mit realem Produkt-Callgraph,
+HWM-, Heap- und Resetnachweisen bestaetigt. Ein zukuenftiges Release darf
+seine Stackgroesse bei neuer Gesamtsystemevidenz anders waehlen.
 
 ## 17. Statuszusammenfassung
 
@@ -4194,8 +4281,10 @@ KNOWN_MAIN_TASK_STACK_CONFLICT=RESOLVED_IN_PLAN
 PERSIST_COMMAND_FRAME_BEFORE=9280 B
 PERSIST_COMMAND_FRAME_AFTER=688 B
 PERSIST_COMMAND_SINGLE_FRAME_CONFLICT=RESOLVED_IN_IMPLEMENTATION_STEP_5
-CONFIGURED_RELEASE_MAIN_TASK_STACK=3584
-PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
+CONFIGURED_RELEASE_MAIN_TASK_STACK=16384 B
+MAIN_TASK_STACK_BASIS=MEASURED_AND_STATICALLY_VERIFIED
+STACK_MICRO_OPTIMIZATION_TO_3584_REQUIRED=NO
+PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN_AFTER_PLANNED_STACK_CONFIGURATION_CHANGE
 PRODUCT_REACHABLE_HEAVY_BY_VALUE_PATHS=CLOSED
 
 BOOT_CLASSIFICATION_CONFIGURATION_AUTHORITY=NO
@@ -4264,10 +4353,16 @@ ISSUE121_CONTAINER_REDESIGN=NO
 INTERLOCK_FALLBACK_TRUST_EXCEPTION=REMOVED
 APPLICATION_OOM_DIAGNOSTIC=NON_PERSISTENCE
 WATCHDOG_RESET_STATELESS_CONTRACT=CLOSED
-MAIN_TASK_STACK_PRIMARY_INCREASE=NO
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384 B
+MAIN_TASK_STACK_BASIS=MEASURED_AND_STATICALLY_VERIFIED
+STACK_MICRO_OPTIMIZATION_TO_3584_REQUIRED=NO
 PRODUCT_REACHABLE_STATIC_STACK_GATE=MANDATORY_BEFORE_HARDWARE_RUN_AUTHORIZATION
 MAIN_TASK_STACK_HIGH_WATERMARK=MANDATORY_DURING_AUTHORIZED_HARDWARE_RUN
 REAL_RUNTIME_HWM_WITHOUT_REAL_TRIGGER=NOT_CLAIMED
+REAL_MAIN_TASK_STACK_HWM_REMAINING >= 4096 B
+STATIC_HEADROOM >= 4096 B
+NO_PANIC_WATCHDOG_BROWNOUT_UNEXPECTED_RESET=PASS
+RESOURCE_DEGRADATION=NONE_OBSERVED
 
 PLAN_INTERNAL_CONFLICT=NONE
 OLD_STACK_PATH_TEXT=NONE
@@ -4286,20 +4381,22 @@ STALE_NO_RUN_PERSISTENCE_UNTRUSTED_DIAGNOSTIC_TEXT=NONE
 BREAKING_PERSISTENCE_CHANGE=NO
 SCHEMA_MIGRATION_REQUIRED=NO
 
-IMPLEMENTATION=STEP_7_IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
+IMPLEMENTATION=STEP_7_PASS_PENDING_STACK_PLAN_CORRECTION_OWNER_REVIEW
 IMPLEMENTATION_STEPS_1_TO_5=PASS
 OWNER_STEP_5_REVIEW=PASS
 STEP_5_EFFECTIVE_SOURCE_SHA=7049380d0e4bd9c0522c4475fa156febcd63ed5d
 STEP_5_PRODUCT_COMPOSITION=NO
-IMPLEMENTATION_STEP_6=IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
+IMPLEMENTATION_STEP_6=PASS
 STEP_6_SOURCE_SHA=5d8bc4d55d996c282fddd05a30ffde7184a12238
 STEP_6_EFFECTIVE_SOURCE_SHA=5d8bc4d55d996c282fddd05a30ffde7184a12238
-IMPLEMENTATION_STEP_6_GATE=BLOCKED_PENDING_REVISED_PLAN_OWNER_REVIEW
-IMPLEMENTATION_STEP_7=IMPLEMENTED_PENDING_REVISED_PLAN_OWNER_REVIEW
+IMPLEMENTATION_STEP_6_GATE=PASS
+IMPLEMENTATION_STEP_7=PASS
 STEP_7_PRE_REVIEW_APPROVED_PLAN_SHA=68b81a16892a3a27c2eabdb8f571e34f1c107bbb
 STEP_7_PRE_REVIEW_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
 STEP_7_PLAN_CORRECTION_REASON=APPLICATION_TRIGGER_REACHABILITY_AND_DECODE_FAILURE_EVIDENCE
 STEP_7_SOURCE_SHA=4270c5eaa06e607a943e572ddc6d0f5f65900dc8
+STEP_8_STACK_PLAN_CORRECTION_REASON=MEASURED_VIABILITY_REPLACES_UNJUSTIFIED_DEFAULT_BUDGET
+STEP_8_VIABILITY_EVIDENCE=OWNER_PROVIDED_PRIOR_HARDWARE_AND_STATIC_MEASUREMENTS
 ISSUE121_REAL_PRODUCT_COMMAND_TRIGGER=NONE
 REAL_PRODUCT_COMMAND_TRIGGER=DEFERRED
 EXACT_COMMAND_HANDLER_API=DEFERRED_NOT_DESIGNED_IN_ISSUE121
@@ -4321,16 +4418,16 @@ PLAN_COMMIT_ONLY_CANONICAL_PLAN=YES
 STATUS_COMMIT_ONLY_STATUS_DOCUMENTATION=YES
 PRODUCTION_OR_TEST_DIFF=NONE
 FIRMWARE_TESTS=NOT_RUN_PLAN_ONLY
-IMPLEMENTATION_STEP_8=NOT_STARTED
-PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN
+IMPLEMENTATION_STEP_8=NOT_STARTED_AFTER_STACK_PLAN_CORRECTION
+PRODUCT_REACHABLE_STATIC_STACK_GATE=NOT_RUN_AFTER_PLANNED_STACK_CONFIGURATION_CHANGE
 HARDWARE_RUN=NO
 PR120=OPEN_DRAFT_FROZEN
 PR122=OPEN_DRAFT
 ISSUE121=OPEN
 MERGE=NO
 PLAN_DEVIATION=DISCOVERED_AND_DOCUMENTED_PENDING_REVISED_PLAN_APPROVAL
-OWNER_STEP_6_REVIEW=REOPENED_BY_STEP_7_COVERAGE_REVIEW
-OWNER_STEP_7_REVIEW=CHANGES_REQUIRED
+OWNER_STEP_6_REVIEW=PASS
+OWNER_STEP_7_REVIEW=PASS
 CURRENT_PLAN_CORRECTION_REASON_AMBIGUITY=NONE
 STEP_7_PLAN_CORRECTION_REASON_IS_CURRENT=YES
 SOURCE_OF_TRUTH_CONFLICT=NONE
