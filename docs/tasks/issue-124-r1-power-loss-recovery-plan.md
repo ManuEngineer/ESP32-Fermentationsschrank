@@ -12,6 +12,23 @@ ISSUE=124
 BASE_BRANCH=integration/r1-development
 BASE_SHA=7642739c8a05fb08615ff04e2d0770c5a381b23d
 PLAN_BRANCH=agent/issue-124-r1-power-loss-recovery-plan
+POWER_LOSS_ALONE_REQUIRES_USER_CONFIRMATION=NO
+TRUSTED_CURRENT_FERMENTING_LOGICAL_RECOVERY=AUTOMATIC
+ACTUATOR_RELEASE_FROM_RECOVERY_ALONE=NO
+FERMENTATION_DURATION_REACHED_DURING_OUTAGE=USE_NORMAL_FSM_COMPLETION_SEMANTICS
+USER_CONFIRMATION_ONLY_BECAUSE_OF_OUTAGE=NO
+NO_DOUBLE_COUNTING=YES
+NO_NEW_PERSISTENCE_FIELD=YES
+NEW_GENERIC_TIME_QUALITY_ENUM=NO
+NEW_APP_SPECIFIC_DEVICE_PLATFORM_TIME_TYPE=NO
+SECOND_RECOVERY_COORDINATOR_PLANNED=NO
+SECOND_PERSISTENCE_COORDINATOR_PLANNED=NO
+OLDER_VALID_CHECKPOINT_AUTO_PROMOTION=NO
+OLDER_VALID_CHECKPOINT_AUTO_ACTIVATION=NO
+DELETE_ALL_C2_FILES_AS_GOAL=NO
+R1_ACTIVE_CALL_GRAPH_TO_WEIGHTED_RECOVERY=NONE
+R1_ACTIVE_CALL_GRAPH_TO_BIOLOGICAL_MODEL=NONE
+OWNER_DECISIONS_REQUIRED=NONE
 REPLACES_R1_NO_FERMENTING_RESUME_POLICY=YES
 REOPENS_ISSUE18=NO
 REOPENS_ISSUE24=NO
@@ -207,7 +224,7 @@ Erfolg interpretiert werden.
 
 ### 3.2 Vertrauenswuerdiges FERMENTING
 
-Ein `FERMENTING`-Checkpoint darf nur dann als Zeit-Recovery bewertet werden,
+Ein `FERMENTING`-Checkpoint wird nur dann automatisch logisch fortgesetzt,
 wenn alle folgenden Bedingungen vorliegen:
 
 1. `Current` beziehungsweise der vollstaendig validierte Checkpoint ist
@@ -222,18 +239,22 @@ wenn alle folgenden Bedingungen vorliegen:
 6. Es gibt keinen Widerspruch, Ruecksprung, Overflow, unaufgeloesten
    Indeterminiertheitsstatus oder sonstigen untrusted Recoverygrund.
 
-Dann wird die reale Wall-Clock-Zeit als reine Zeitrechnung angerechnet:
+Die exakte schemafreie Rechnung ist in Abschnitt 4.2 festgelegt. Sie
+verwendet den UTC-Wert desselben validierten Checkpointrecords und den
+persistierten Fortschritt plus den beim Checkpoint noch offenen Live-Abschnitt.
+Eine fachlich aequivalente Darstellung ist nur zulaessig, wenn sie exakt diese
+kanonischen vorhandenen Felder verwendet. Die Formel ist keine Temperatur-,
+Biologie- oder Zustandsrekonstruktion.
 
-```text
-elapsed_after_boot
-  = persisted_elapsed_at_checkpoint
-  + trusted_current_time
-  - trusted_checkpoint_absolute_time
-```
+Wenn die berechnete Gesamtzeit unter der nominalen Fermentationsdauer liegt,
+wird der Kandidat ohne Benutzerbestaetigung logisch wieder als
+`FERMENTING` fortgesetzt. Der Stromausfall allein erzeugt keinen Dialog und
+keine fachliche Ablehnung.
 
-Eine fachlich aequivalente Darstellung ist zulaessig, wenn sie die
-kanonischen vorhandenen Felder korrekt nutzt. Die Formel ist keine
-Temperatur-, Biologie- oder Zustandsrekonstruktion.
+Wenn die nominale Dauer erreicht oder ueberschritten ist, wird die normale
+`FermentationCompleted`-Semantik der FSM verwendet; die verbindliche
+Abgrenzung zu `Cooling` steht in Abschnitt 6.3. Auch dabei entsteht keine
+Benutzerbestaetigung nur wegen des Stromausfalls.
 
 ### 3.3 Kein biologisches Modell
 
@@ -246,6 +267,13 @@ keine R1-Entscheidung. Sie duerfen nur aus Kompatibilitaetsgruenden lesbar
 bleiben, sofern ihre Integritaetsvalidierung das zulaesst.
 
 ### 3.4 Boot, WLAN/NTP und TimePending
+
+```text
+RECOVERY_CONTRACT_IMPLEMENTED=PLANNED
+REAL_NETWORK_TIME_PRODUCER_AVAILABLE=NOT_PROVEN_IN_CURRENT_REPOSITORY
+WLAN_ONBOARDING_SCOPE=NOT_OWNED_BY_ISSUE124
+CONNECTIVITY_UI_SCOPE=NOT_OWNED_BY_ISSUE124
+```
 
 Der verbindliche Ablauf ist nicht blockierend:
 
@@ -262,22 +290,34 @@ Der verbindliche Ablauf ist nicht blockierend:
    `RecoveryEvaluation` mit einer kleinen, expliziten Disposition sinngemaess
    `TimePending`.
 5. In `TimePending` bleiben Aktoren aus, es wird keine Restzeit geraten und
-   kein Resume behauptet. WLAN/NTP darf parallel arbeiten; Boot wartet weder
-   synchron noch in einer Endlosschleife.
+   kein Resume behauptet. Es gibt keine Persistenzmutation nur wegen des
+   Wartens und keinen `NoActiveRun`-Tombstone. WLAN/NTP darf parallel arbeiten;
+   Boot wartet weder synchron noch in einer Endlosschleife.
 6. Sobald dieselbe app-neutrale Zeitquelle vertrauenswuerdige absolute Zeit
    liefert, wird genau dieselbe validierte Persistenzevidenz erneut bewertet.
    Die Bewertung darf nicht durch eine inzwischen neu erfundene oder
    unvollstaendig validierte Momentaufnahme ersetzt werden.
-7. Eine gueltige Zeitrechnung fuehrt zunaechst nur zu einer Recovery-
-   Disposition. Runtime/FSM, frische Config-/Sensor-/Hardware-/Safety-
-   Evidenz und der bestehende Command-/Transition-Write-before-Apply-Pfad
-   bleiben vor jeder eventuellen Freigabe.
+7. Eine gueltige Zeitrechnung fuehrt bei noch nicht erreichter nominaler
+   Dauer automatisch zur logischen `FERMENTING`-Fortsetzung. Bei erreichter
+   Dauer wird die normale `FermentationCompleted`-Semantik angewendet.
+   Runtime/FSM, frische Config-/Sensor-/Hardware-/Safety-Evidenz und der
+   bestehende Command-/Transition-Write-before-Apply-Pfad bleiben vor jeder
+   eventuellen Aktorfreigabe.
 
-`TimePending` ist dabei kein neuer allgemeiner Recovery-Engine-Zustand und
-kein synchroner Netzwerkvertrag. Falls ein bestehender
-`RecoveryEvaluation`-/Disposition-Vertrag die Unterscheidung ohne
-semantische Ueberladung tragen kann, ist dieser zu erweitern statt eine neue
-FSM-Hauptphase einzufuehren.
+`TimePending` ist ein RAM-/Application-Status unter dem bestehenden
+`ProcessState::RecoveryEvaluation`, keine neue FSM-Hauptphase, kein neuer
+persistierter Prozesszustand und keine Recoveryengine. Die typisierte
+Disposition heisst semantisch `WaitingForTrustedTime`; der konkrete Enumname
+darf den bestehenden Namenskonventionen folgen.
+
+```text
+FSM_STATE=RecoveryEvaluation
+RECOVERY_DISPOSITION=WaitingForTrustedTime
+ACTORS_OFF=YES
+PERSISTENCE_MUTATION_WHILE_ONLY_WAITING_FOR_TIME=NO
+NO_ACTIVE_RUN_TOMBSTONE=NO
+NO_RESUME_CLAIM=YES
+```
 
 ### 3.5 Unklare Lage und Aktoren
 
@@ -308,6 +348,11 @@ Boot, Reset, Fehler, `TimePending`, Recovery-Angebot und unbekannter Zustand
 bleiben all-off. Es gibt keine Wiederherstellung letzter GPIO-, H-Bruecken-
 oder MOSFET-Zustaende.
 
+Ein vertrauenswuerdig logisch fortgesetzter Current-Run ist davon getrennt:
+`ACTUATOR_RELEASE_FROM_RECOVERY_ALONE=NO`. Aktoren bleiben aus, bis die
+bestehende frische Configuration-/Sensor-/Hardware-/Safety-/Planner-Kette
+erfolgreich durchlaufen ist.
+
 ## 4. Persistierte Felder, Wiederverwendung und Legacygrenze
 
 ### 4.1 Kein Schema- oder Wire-Break
@@ -317,28 +362,85 @@ PERSISTENCE_SCHEMA_CHANGE_PLANNED=NO
 ```
 
 Die Umsetzung darf keine neue Schema-Version, keinen neuen Pflicht-Key und
-keinen unnoetigen Migrationsschnitt einfuehren. Vor dem ersten Codecommit
-der Umsetzung ist durch Tests und Codepfadnachweis zu bestaetigen, welches
-bestehende Feld exakt `persisted_elapsed_at_checkpoint` repraesentiert.
+keinen unnoetigen Migrationsschnitt einfuehren. Der exakte bestehende
+Feldvertrag ist in Abschnitt 4.2 festgelegt; eine neue Ownerentscheidung ist
+dafuer nicht erforderlich.
 
-Als Kandidaten sind nur bereits kanonische Felder zulaessig:
+### 4.2 Exakter schemafreier FERMENTING-Zeitvertrag
 
-- `RunCheckpointTime::utcUnixSeconds` beziehungsweise der bestehende
-  persistierte UTC-Wert des Checkpoint-Envelopes als absoluter Anker;
-- `RunPersistenceSnapshot::checkpointMonotonicMillis` nur als bestehender
-  Checkpoint-Zeitanteil innerhalb eines Boots, nicht als bootuebergreifende
-  Ausfallzeit;
-- die bereits persistierte Run-Fortschritts-/Beobachtungszeit, insbesondere
-  `runProgress.observedRunSeconds`, sofern der aktuelle Producer nachweislich
-  den fachlich erforderlichen Checkpointwert schreibt;
-- die bestehende `nominalDurationSeconds` nur als Zielgrenze, nie als
-  Ausfallzeit.
+Der UTC-Wert des exakt validierten `RunPersistenceRawRecord` ist der
+Checkpointrahmen. Er wird zusammen mit Checkpoint-Payload, Checkpointrevision
+und den Zeitfeldern validiert. Keine spaeter beobachtete globale UTC und kein
+anderer Record darf diesen Anker ersetzen.
 
-Falls kein vorhandenes Feld den exakten Checkpoint-Fortschritt traegt, stoppt
-die Umsetzung vor einer Schemaerfindung und legt eine neue Ownerentscheidung
-vor. Ein neues Feld ist in diesem Plan nicht freigegeben.
+Fuer einen `FERMENTING`-Checkpoint gilt:
 
-### 4.2 Alte Schema-3-/#18-Felder
+```text
+checkpoint_live_segment_seconds =
+    (checkpointMonotonicMillis - processState.stateEnteredAtMillis) / 1000
+
+persisted_elapsed_at_checkpoint =
+    runProgress.observedRunSeconds
+    + checkpoint_live_segment_seconds
+
+outage_seconds =
+    trusted_current_utc
+    - checkpoint_record_utc
+
+recovered_elapsed_seconds =
+    persisted_elapsed_at_checkpoint
+    + outage_seconds
+```
+
+Dabei sind die bestehenden Felder gemeint:
+
+```text
+RunPersistenceSnapshot::checkpointMonotonicMillis
+RunPersistenceSnapshot::processState.stateEnteredAtMillis
+RunProgressState::observedRunSeconds
+RunPersistenceRawRecord::utcUnixSeconds
+```
+
+`RunCheckpointTime::utcUnixSeconds` ist der bestehende Eingang, aus dem der
+Record-UTC-Anker beim Schreiben entsteht. Die monotone Zeit ist nur fuer den
+noch offenen Live-Abschnitt innerhalb der aktuellen Boot-/Prozessbasis gueltig;
+sie wird nicht selbst als bootuebergreifende Ausfallzeit verwendet.
+
+Die Mindestvorbedingungen sind:
+
+```text
+processState.state == FERMENTING
+processState.stateEnteredAtMillis <= checkpointMonotonicMillis
+runProgress.basis == KnownTotal
+checkpoint_record_utc present and trusted
+trusted_current_utc >= checkpoint_record_utc
+no arithmetic overflow
+Current/record graph fully validated
+```
+
+Subtraktionen, Additionen, Divisionen und Saturierungen werden checked
+ausgefuehrt. Bei `PartialUnknownHistory`, fehlender exakter Zeitbasis,
+negativer Zeitdifferenz, Timestampwiderspruch, Revisionstausch oder Overflow
+gilt `NO_EXACT_WALL_CLOCK_RECOVERY` und `FAIL_CLOSED`; es wird nicht geraten.
+
+Wenn `recovered_elapsed_seconds` kleiner als die nominelle
+Fermentationsdauer ist, wird der logisch fortgesetzte Kandidat vor dem
+Write-before-Apply-Handoff so neu verankert:
+
+```text
+candidate.runProgress.observedRunSeconds = recovered_elapsed_seconds
+candidate.processState.state = FERMENTING
+candidate.processState.stateEnteredAtMillis = current_monotonic_millis
+```
+
+Der neue Boot misst danach nur noch den Live-Abschnitt ab dem neuen
+`stateEnteredAtMillis`. Beim spaeteren normalen Verlassen von `FERMENTING`
+addiert der bestehende `persistTransition()`-Pfad genau diesen neuen
+Live-Abschnitt wieder zu `observedRunSeconds`. Bereits angerechnete Zeit wird
+nicht in ein zweites Feld kopiert und nicht nochmals zur naechsten Recovery
+addiert.
+
+### 4.3 Alte Schema-3-/#18-Felder
 
 Die historischen Felder bleiben, soweit die bestehende Codec-Kompatibilitaet
 es verlangt, lesbar:
@@ -378,9 +480,10 @@ main/app_main.cpp (Composition Root)
        -> Config-Recovery und acquireRuntime() als Trust-Gate
        -> einziger RunPersistenceCoordinator: load/validate
        -> Recovery-Disposition fuer Current/Fallback/Unknown
-            -> TimePending, solange trusted UTC fehlt
+            -> WaitingForTrustedTime, solange trusted UTC fehlt
             -> Wall-Clock-Kandidat bei trusted UTC
-       -> bestehende Process-FSM fuer explizite Runtime-Entscheidung
+            -> automatische logische FERMENTING-Fortsetzung oder normale FSM-Abschlusssemantik
+       -> bestehende Process-FSM fuer logische Zustandsentscheidung
        -> frische Sensor-/Hardware-/Safety-Evidenz
        -> bestehende Aktor-/Planner-Grenze; Boot bleibt all-off
 ```
@@ -391,6 +494,24 @@ System-/NTP-Zustand liefern, darf aber keine Fermentationsbegriffe in
 `device_platform` einfuehren. `main/app_main.cpp` bleibt fuer Erstellung,
 Verdrahtung und Lebensdauer der Quelle verantwortlich. WLAN/NTP wird nicht
 zum synchronen Application-Bootvertrag.
+
+Issue #124 besitzt keinen produktiven NTP-/SNTP- oder WLAN-Onboardingpfad.
+Issue #89 fuer WLAN-Onboarding/Provisionierung bleibt separat offen. #124
+besitzt ausschliesslich die ITimeSource-Injektion, die
+`nullopt`-/trusted-UTC-Semantik und die nichtblockierende Re-Evaluation, wenn
+ein spaeterer Producer ueber denselben Port trusted UTC liefert. Es implementiert
+keinen WLAN-Lifecycle, Credential-Speicher, Connection Manager oder
+Connectivity-UI. Der Status ist daher getrennt zu fuehren:
+
+```text
+RECOVERY_CONTRACT_IMPLEMENTED=PLANNED
+REAL_NETWORK_TIME_PRODUCER_AVAILABLE=NOT_PROVEN_IN_CURRENT_REPOSITORY
+```
+
+Die Recoveryimplementierung darf ohne aktuell verfuegbaren realen
+Netzwerkzeit-Producer native und fachlich abgeschlossen werden. Eine spaetere
+Connectivity-Integration liefert lediglich Werte ueber den bestehenden
+`ITimeSource`-Vertrag.
 
 Die `ProcessStateMachine` bleibt rein deterministisch. Sie bekommt keine
 Persistenz-, NTP-, UTC- oder Hardwareabhaengigkeit. Die Recoverybewertung und
@@ -423,9 +544,9 @@ Sensorzyklus erzeugen.
 Current FERMENTING + dieselbe Persistenzevidenz + trusted checkpoint UTC
   + trusted current UTC
   -> einfache Wall-Clock-Rechnung
-  -> Recovery-Disposition mit berechnetem Fortschritt
+  -> recovered elapsed < nominal: automatisch logisch FERMENTING
+  -> recovered elapsed >= nominal: normale FermentationCompleted-Semantik
   -> keine automatische Aktorfreigabe
-  -> explizite fachliche Entscheidung ueber Resume/Completion
   -> bestehender FSM-/Command-/Persistenz-/Safety-Handoff
 ```
 
@@ -434,7 +555,35 @@ unplausible Werte und konkurrierende neue Persistenzrevisionen fail-closed
 behandeln. Eine aktuelle Zeit, die nur technisch lesbar aber nicht
 vertrauenswuerdig ist, reicht nicht.
 
-### 6.3 Nachgelagerte Aktorfreigabe
+### 6.3 Nominale Dauer waehrend des Ausfalls erreicht
+
+Die ermittelte Gesamtzeit verwendet die normale FSM-Semantik von
+`FermentationCompleted`:
+
+```text
+CompletionMode::FinishWithoutCooling
+    -> Completed
+
+CompletionMode::CoolThenFinish
+CompletionMode::CoolAndHoldForDuration
+CompletionMode::CoolAndHoldUntilManualStop
+    -> Cooling
+```
+
+Es gibt kein generisches `CompletionPending` nur wegen Power Loss, kein
+automatisches Ueberspringen von `Cooling` und kein behauptetes
+`CoolingTargetReached` waehrend des Ausfalls. `CoolingTargetReached` ist
+sensor-/signalabhaengig. Ohne Ausfallmesswerte darf die Software weder den
+Zeitpunkt des Kuehlzieles rekonstruieren noch Stromausfallzeit auf einen noch
+nicht begonnenen `CoolHolding`-Timer anrechnen.
+
+Nach dem Boot darf der logisch abgelaufene FERMENTING-Run gemaess dieser
+normalen Semantik in `Completed` oder `Cooling` stehen. Jeder weitere
+Kuehl-/Hold-Uebergang braucht die normale frische Evidenz. Die bestehende
+Benutzerquittierung von `Completed` bleibt unveraendert und wird nicht durch
+eine neue Power-Loss-Bestaetigung ersetzt.
+
+### 6.4 Nachgelagerte Aktorfreigabe
 
 Auch nach einer positiven Zeit-Recovery muessen Configuration Runtime, die
 aktuelle Sensorqualitaet und Regelsensorauswahl, Hardware-/Commissioning-
@@ -447,41 +596,41 @@ elektrischen Zustand anwenden.
 ### 7.1 Berechnete Zeit ueberschreitet die nominelle Dauer
 
 ```text
-CURRENT_STATE=Die vorhandene Zeitrechnung kann elapsed_after_boot groesser oder gleich nominalDurationSeconds ergeben; ein verbindlicher R1-Uebergang aus FERMENTING ist aktuell nicht definiert.
-MINIMAL_R1_OPTION=Berechnung saturiert beziehungsweise markiert die nominale Grenze und erzeugt eine explizite Completion-Pending-/Resume-Disposition ohne Aktorfreigabe.
-RECOMMENDATION=Nicht still weiterrechnen und nicht automatisch in die naechste Phase wechseln; den Zustand als fachlich berechnetes Ende mit ausstehender expliziter Entscheidung exponieren.
-WHY=Die Wall-Clock-Rechnung ist vertrauenswuerdig, beantwortet aber nicht die fachliche und Safety-Frage, ob ein Prozessabschluss, ein kontrollierter naechster Phasenuebergang oder eine Benutzeraktion erforderlich ist. Negative/ueberlaufende Darstellungen muessen ausgeschlossen werden.
-OWNER_DECISION_REQUIRED=YES
+CURRENT_STATE=Die normale FSM besitzt FermentationCompleted und die CompletionModes FinishWithoutCooling, CoolThenFinish, CoolAndHoldForDuration und CoolAndHoldUntilManualStop. Der aktuelle Recoveryvertrag darf die sensorabhaengige CoolingTargetReached-Evidenz waehrend des Ausfalls nicht erfinden.
+MINIMAL_R1_OPTION=Recovered elapsed auf die nominale Grenze begrenzen und die bestehende FermentationCompleted-Semantik auswerten: FinishWithoutCooling -> Completed; alle drei Cooling-Modi -> Cooling.
+RECOMMENDATION=Normale FSM-Completion-Semantik verwenden. Kein generisches CompletionPending nur wegen Power Loss, kein automatisches Ueberspringen von Cooling und keine Anrechnung auf einen noch nicht beobachteten CoolHolding-Timer.
+WHY=Der Stromausfall ist keine Benutzerentscheidung fuer einen vertrauenswuerdigen Current-FERMENTING-Run. Die normale CompletionMode-Auswertung trennt die berechenbare Fermentationszeit von der nicht rekonstruierbaren Kuehlziel-/Hold-Evidenz.
+OWNER_DECISION_REQUIRED=NO
 ```
 
 ### 7.2 Direkte naechste Phase oder Entscheidung nach Boot
 
 ```text
-CURRENT_STATE=Die FSM kennt RecoveryEvaluation und explizite Recovery-Events, aber der aktuelle R1-Vertrag erlaubt keinen automatischen FERMENTING-Resume und definiert keinen automatischen Abschluss nach Wall-Clock-Ueberschreitung.
-MINIMAL_R1_OPTION=RecoveryEvaluation beibehalten; Resume beziehungsweise Completion nur als explizite, bestaetigbare fachliche Entscheidung durch den bestehenden Command-/Transition-Pfad anbieten.
-RECOMMENDATION=Kein direkter automatischer Phasenwechsel. Erst nach expliziter Entscheidung, vollstaendiger Runtime-/FSM-Validierung und frischer Safety-Evidenz darf ein fachlicher Uebergang committed werden.
-WHY=Power-Loss-Recovery darf die Aktor- und Safety-Grenze nicht implizit ueberfahren. So bleiben Berechnung, Disposition und physische Freigabe getrennt.
-OWNER_DECISION_REQUIRED=YES
+CURRENT_STATE=Ein vollstaendig validierter Current-FERMENTING-Run ist die kanonische letzte Wahrheit. Die normale FSM definiert die fachliche CompletionMode-Auswertung; CoolingTargetReached bleibt sensor-/signalabhaengig.
+MINIMAL_R1_OPTION=Unterhalb der nominalen Dauer den Kandidaten automatisch logisch als FERMENTING mit neuem aktuellem stateEnteredAtMillis fortsetzen. Ab nominaler Dauer die normale FermentationCompleted-Semantik anwenden; anschliessende Cooling-/Hold-Uebergaenge erst mit frischer Evidenz.
+RECOMMENDATION=Kein Benutzer-Dialog allein wegen Stromausfall und kein automatisches Ueberspringen sensorabhaengiger Cooling-/Hold-Schritte. Die logische Current-Fortsetzung ist automatisch; Aktorfreigabe bleibt separat und fail-closed.
+WHY=Die Ownerentscheidung trennt fachliche Zustandsfortsetzung von elektrischer Freigabe. So wird Power Loss nicht als Prozessende fehlinterpretiert, ohne Kuehlmesswerte zu erfinden oder Safety-Gates zu umgehen.
+OWNER_DECISION_REQUIRED=NO
 ```
 
 ### 7.3 Kanonische absolute Zeitquelle und UTC-Anker
 
 ```text
 CURRENT_STATE=Der app-neutrale ITimeSource-Port existiert; die produktive EspTimerTimeSource liefert aktuell nur monotone Zeit und fuer unixTimeSeconds() immer nullopt. Checkpointzeit und optionaler UTC-Wert existieren bereits in RunCheckpointTime/Envelope.
-MINIMAL_R1_OPTION=ITimeSource als einziger Application-Zeitport verwenden; den vorhandenen persistierten Checkpoint-UTC-Wert als Anker und die bestehende Runtime-/NTP-UTC als aktuelle Zeit verwenden. Die monotone Checkpointzeit bleibt bootlokale Evidenz und ersetzt keinen absoluten Anker.
-RECOMMENDATION=Diese bestehenden Felder und den bestehenden Port als kanonisch festlegen; vor Umsetzung durch Codec-/Producer-Tests beweisen, dass der UTC-Wert mit genau dem Checkpoint und dem persistierten Fortschritt verknuepft ist. NTP liefert nur die Quelle, nicht die Fachentscheidung.
-WHY=Das erfuellt ADR-013 ohne Fermentationsvertrag in device_platform und vermeidet einen Schemaumbau. Ein neuer Zeitanker oder eine zweite Zeitabstraktion wuerde die Vertrauensgrenze unnoetig vervielfachen.
-OWNER_DECISION_REQUIRED=NO, sofern der Feldnachweis den bestehenden UTC-/Fortschrittsvertrag bestaetigt; andernfalls vor Implementierung YES.
+MINIMAL_R1_OPTION=ITimeSource als einzigen Application-Zeitport verwenden; die UTC von RunPersistenceRawRecord als exakt gebundenen Checkpoint-Anker und unixTimeSeconds() als aktuelle UTC verwenden. Die monotone Checkpointzeit bleibt bootlokale Evidenz und ersetzt keinen absoluten Anker.
+RECOMMENDATION=Den bestehenden ITimeSource-/Record-Vertrag verbindlich wiederverwenden. Der Adapter darf nur dann einen UTC-Wert liefern, wenn sein Portvertrag ihn als verlaesslich zusichert; #124 implementiert keinen WLAN-/NTP-Producer.
+WHY=Das erfuellt ADR-013 ohne Fermentationsvertrag in device_platform und vermeidet einen Schemaumbau, waehrend der exakte Record-Anker vor spaeteren globalen Zeitbeobachtungen geschuetzt wird.
+OWNER_DECISION_REQUIRED=NO
 ```
 
 ### 7.4 Neuer kleiner TimePending-Status oder bestehender Vertrag
 
 ```text
 CURRENT_STATE=ProcessState::RecoveryEvaluation existiert; RECOVERY_TIME_PENDING ist dokumentarisch als C2-Kontext vorhanden, aber es gibt noch keinen kleinen aktiven R1-Status fuer fehlende trusted UTC.
-MINIMAL_R1_OPTION=RecoveryEvaluation als FSM-Zustand behalten und eine eng begrenzte typisierte Recovery-Disposition beziehungsweise Statusinformation WaitingForTrustedTime/TimePending ergaenzen; keine neue FSM-Hauptphase und keine Recoveryengine.
-RECOMMENDATION=Ein expliziter kleiner Status ist noetig, wenn der bestehende RecoveryEvaluation-Vertrag die Unterscheidung nicht verlustfrei tragen kann. Er muss app-seitig bleiben und darf weder NoActiveRun noch ResumeOffer semantisch ueberladen.
-WHY=Ohne unterscheidbare Pending-Semantik wuerde fehlende Zeit erneut falsch als NoActiveRun oder als behauptetes Resume erscheinen. Ein voller Coordinator oder Netzwerkstatusautomat ist dafuer nicht erforderlich.
-OWNER_DECISION_REQUIRED=YES
+MINIMAL_R1_OPTION=RecoveryEvaluation als FSM-Zustand behalten und eine eng begrenzte typisierte app-seitige Disposition WaitingForTrustedTime/TimePending ergaenzen; keine neue FSM-Hauptphase, keinen neuen persistierten Prozesszustand und keine Recoveryengine.
+RECOMMENDATION=WaitingForTrustedTime verbindlich als RAM-/Application-Disposition unter RecoveryEvaluation einfuehren. Bei spaeter trusted UTC dieselbe geladene revisionsgebundene Evidenz erneut bewerten; bei Revisionstausch fail-closed.
+WHY=Die Disposition verhindert, dass fehlende Zeit als NoActiveRun oder als Resume-Behauptung erscheint, ohne die FSM oder device_platform mit Netzwerksemantik zu belasten.
+OWNER_DECISION_REQUIRED=NO
 ```
 
 ### 7.5 Schema-3-/#18-Felder
@@ -498,10 +647,10 @@ OWNER_DECISION_REQUIRED=NO
 
 ```text
 CURRENT_STATE=#90 liefert einen technisch validierten, aelteren Checkpoint als getrennte Fallback-/Recoveryklassifikation; er ist kein automatischer Produkt-Resume und die reale Callback-12-/Hardwarekampagne ist noch ein eigenes Gate.
-MINIMAL_R1_OPTION=Fallback technisch getrennt halten. Keine automatische Promotion und keine automatische Wall-Clock-Rechnung auf einem nur als Fallback markierten Datensatz. Erst eine explizite fachliche Auswahl eines vollstaendig validierten Fallbacks darf denselben R1-Zeitvertrag anwenden; auch dann bleiben Actors-Off und Safety-Handoffs zwingend.
-RECOMMENDATION=Das #90-Oracle unveraendert streng lassen und OLDER_VALID_CHECKPOINT_RESUME als nicht aktivierendes Angebot behandeln. Ohne explizite Auswahl oder ohne vertrauenswuerdigen UTC-Anker bleibt die Lage fail-closed/TimePending und wird nicht als NoActiveRun verkleidet.
-WHY=#124 darf weder die NVS-/Callback-12-Orakel abschwaechen noch einen aelteren technisch validierten Record still zum aktuellen Run befoerdern. Die einfache Zeitrechnung ist nur fuer eine eindeutig gewaehlte und voll validierte Evidenz zulaessig.
-OWNER_DECISION_REQUIRED=YES fuer die ausdrueckliche Zulassung eines explizit gewaehlten Fallbacks als Zeitrechnungsbasis; die Nicht-Promotion ohne diese Auswahl ist verbindlich.
+MINIMAL_R1_OPTION=Fallback technisch getrennt halten. Keine automatische Promotion und keine automatische Wall-Clock-Rechnung auf einem nur als Fallback markierten Datensatz. Erst eine explizite fachliche Auswahl/Akzeptanz eines vollstaendig validierten Fallbacks darf denselben R1-Zeitvertrag anwenden; auch dann bleiben Actors-Off und Safety-Handoffs zwingend.
+RECOMMENDATION=Das #90-Oracle unveraendert streng lassen: OLDER_VALID_CHECKPOINT_RESUME bleibt ein nicht aktivierendes Angebot. Eine explizit ausgewaehlte Fallback-Evidenz darf erst danach in denselben Zeitvertrag eintreten; ohne Auswahl oder UTC-Anker bleibt sie fail-closed/TimePending und wird nicht als NoActiveRun verkleidet.
+WHY=#124 darf weder die NVS-/Callback-12-Orakel abschwaechen noch einen aelteren technisch validierten Record still zum Current befoerdern. Current-FERMENTING ist automatisch, Fallback ist wegen der ersetzten Current-Wahrheit explizit.
+OWNER_DECISION_REQUIRED=NO
 ```
 
 ## 8. Spaetere rendererunabhaengige Projektion fuer #25
@@ -510,82 +659,73 @@ Issue #25 wird in diesem Auftrag weder implementiert noch geplant. Der
 Recovery-Zielvertrag muss spaeter lediglich folgende semantische Informationen
 rendererunabhaengig projizierbar machen:
 
-- normaler Prozess-/Recoverystatus;
-- `RecoveryEvaluation` als fachliche Bewertung;
-- `WaitingForTrustedTime`/`TimePending` mit unverfaenglichem Statusgrund;
-- berechnete Recovery-/Resume-Verfuegbarkeit ohne Aktorfreigabe;
-- Completion-Pending, falls die Ownerentscheidung diesen Fall bestaetigt;
-- explizit abgelehntes oder fail-closed Recovery-Ergebnis;
-- strukturierter Grund/Status fuer fehlende Zeit, ungueltige Persistenz,
-  widerspruechliche Evidenz oder erforderliche Benutzer-/Safety-Entscheidung;
+- `Normal`;
+- `WaitingForTrustedTime` unter `RecoveryEvaluation`;
+- `CurrentRunRecovered` fuer automatisch logisch fortgesetztes Current-
+  `FERMENTING`;
+- `FallbackSelectionRequired` fuer ein bewusst auszuwaehlendes, niemals
+  automatisch zu promotendes #90-Fallback-Angebot;
+- `RecoveryRejectedOrFailClosed` mit strukturiertem Grund;
+- `Completed`;
+- `Cooling`;
+- die fachlich notwendigen Gruende fuer fehlende Zeit, ungueltige Persistenz,
+  widerspruechliche Evidenz sowie benoetigte frische Sensor-/Safety-Evidenz;
 - keine Roh-GPIO-, Renderer-, LVGL-, Web-, Layout- oder Textentscheidung.
 
 Diese Liste ist nur die spaetere semantische Projektionsgrenze. Nach
-Ownerfreigabe wird entschieden, ob zuerst die Recoveryimplementation folgt
-oder #25 gegen den freigegebenen Vertrag geplant werden kann.
+der Recoveryimplementation kann #25 gegen diesen freigegebenen Vertrag geplant
+werden. Ein normal vertrauenswuerdig wiederhergestellter Current-
+`FERMENTING`-Run benoetigt keinen bestaetigenden UI-Dialog allein wegen des
+Stromausfalls.
 
 ## 9. Umsetzungsslices nach Planfreigabe
 
-Die folgenden Slices bilden eine zusammenhaengende Umsetzung. Kein Slice darf
-die Ownerentscheidungen aus Abschnitt 7 still ersetzen.
+Die folgenden Slices bilden eine zusammenhaengende Umsetzung. Die
+Ownerentscheidungen sind verbindlich abgeschlossen; ein neuer materieller
+Produktentscheid darf nicht still erfunden werden.
 
-### Slice A – Kanonische Felder und Disposition festschreiben
+### Slice A – Exakte Zeitbasis und Recovery-Disposition
 
-- aktuellen Producer-/Codec-Pfad fuer Checkpoint-UTC und den exakten
-  persistierten Fortschritt nachweisen;
-- kleine app-seitige Recovery-Disposition fuer `TimePending`, trusted
-  Wall-Clock-Ergebnis und fail-closed Gruende festlegen;
-- `ProcessState::RecoveryEvaluation` nicht durch eine neue Hauptphase ersetzen;
-- keine Schema-/Wire-Aenderung;
-- Tests fuer fehlende/ungueltige/zeitlich widerspruechliche Evidenz sowie
-  Statusabgrenzung zu `NoActiveRun`, `ResumeOffer` und `SAFE_BOOT`.
+- obige schemafreie Formel mit `KnownTotal`-, Overflow-, Timestamp- und
+  Revisionsgates implementierbar machen;
+- `WaitingForTrustedTime` als app-seitige typisierte Disposition unter
+  `ProcessState::RecoveryEvaluation` festlegen;
+- keine Persistence-Mutation nur durch das Warten auf Zeit;
+- native Tabellen-/Propertytests fuer genaue Rechnung, Zeitfehler und
+  fail-closed Statusabgrenzung.
 
-### Slice B – Bestehenden Zeitport bis zur Composition Root verdrahten
+### Slice B – Current FERMENTING Recovery
 
-- `ITimeSource` nur dort injizieren, wo die Application Recovery bewertet;
-- `main/app_main.cpp` als einziger Composition Root fuer die konkrete Quelle;
-- ESP-IDF-Adapter so anbinden, dass `unixTimeSeconds()` nur bei
-  vertrauenswuerdiger aktueller UTC einen Wert liefert;
-- keine synchrone WLAN-/NTP-Wartephase und kein NTP-Vertrag in
-  `device_platform`;
-- native Tests mit `VirtualTimeSource` fuer absent/present/regressed UTC und
-  monotone Zeit;
-- konkrete ESP-IDF-/NTP-Verifikation als eigener Build-/Host-/Hardware-
-  Nachweis gemaess `docs/CI_AND_QUALITY_GATES.md`, nicht als simulierte
-  Hardwareabnahme ausgeben.
+- Current-Pfad vollstaendig technisch und fachlich validieren;
+- trusted UTC -> `recovered_elapsed_seconds` berechnen;
+- unter nominaler Dauer automatisch logisch als `FERMENTING` fortsetzen;
+- Write-before-Apply einhalten;
+- Aktoren bis zu den frischen Safety-Gates aus lassen;
+- Mehrfach-Reboot ohne Doppelzaehlung nachweisen.
 
-### Slice C – Einfache R1-Bewertung im bestehenden Persistenzpfad
+### Slice C – Dauergrenze und normale FSM
 
-- `Current FERMENTING` nur nach kompletter bestehender Integritaets- und
-  Referenzvalidierung bewerten;
-- ohne trusted UTC in `RecoveryEvaluation/TimePending` halten;
-- mit trusted UTC die einfache Wall-Clock-Rechnung ausfuehren;
-- negative Differenzen, Overflow, fehlende Anker, neue Revisionen und
-  widerspruechliche Evidenz fail-closed behandeln;
-- Checkpointplan und unmittelbare Event-Writes unveraendert lassen;
-- keinen C2-Weighted-/Temperature-/Episode-Pfad aufrufen;
-- `RunPersistenceCoordinator` bleibt einziger Persistenzowner.
+- bei erreichter Dauer die normale `FermentationCompleted`-Semantik verwenden;
+- `FinishWithoutCooling` -> `Completed`;
+- `CoolThenFinish`, `CoolAndHoldForDuration` und
+  `CoolAndHoldUntilManualStop` -> `Cooling`;
+- kein Ueberspringen sensorabhaengiger Cooling-/Hold-Grenzen;
+- keine Anrechnung auf einen noch nicht begonnenen `CoolHolding`-Timer.
 
-### Slice D – FSM-, Runtime- und Actuation-Handoff
+### Slice D – TimeSource und Composition
 
-- Recovery-Disposition ueber den bestehenden expliziten FSM-/Command-Pfad
-  weiterfuehren;
-- die Ownerentscheidung fuer nominale Ueberschreitung implementieren, erst
-  nach deren Freigabe;
-- `Applied` und bestehende Write-before-Apply-Semantik als alleinige RAM-/FSM-
-  Handoff-Grenze beibehalten;
-- frische Config-, Sensor-, Hardware- und Safety-Evidenz erzwingen;
-- `ACTORS_OFF` bei Boot, Pending, Reject, Fehler und unbekannter Lage
-  nachweisen; niemals GPIO-Zustaende restaurieren.
+- bestehenden `ITimeSource`-Port in den R1-Recoverypfad injizieren;
+- ESP-IDF-Adaptergrenze klein halten;
+- kein WLAN-/Provisioning-Scope und kein Connectivity Manager;
+- `VirtualTimeSource` absent -> trusted transition testen;
+- keine blockierende Bootwartephase.
 
-### Slice E – Legacy- und #90-Abgrenzung
+### Slice E – #90- und Legacy-Abgrenzung
 
-- historische `RunRecoveryCoordinator`-/Weighting-Aufrufe aus dem aktiven
-  Pfad und dem Orchestrator entfernen oder stilllegen;
-- Codec-/Kompatibilitaetstests fuer lesbare Schema-3-Felder behalten;
-- alte Felder aktiv als nicht R1-kanonisch testen;
-- `OLDER_VALID_CHECKPOINT_RESUME` und Callback-12-Orakel unveraendert streng
-  halten; keine automatische Fallback-Promotion;
+- Fallback nicht automatisch promoten oder aktivieren;
+- weighted-/C2-Pfad aus dem aktiven R1-Aufrufgraphen ausschliessen;
+- keine breite Cleanup-Arbeit und keine Entfernung aller C2-Dateien als Ziel;
+- bestehende #90-Orakel unveraendert streng halten;
 - keine neue zweite Recovery- oder Persistenzkomponente.
 
 ### Slice F – Normative Source-of-Truth-Nachfuehrung
@@ -604,12 +744,68 @@ Bestandteil dieses Plan-PRs:
 
 | Slice | Gezielte Tests/Nachweise |
 |---|---|
-| A | Native Recovery-Disposition- und Boot-Klassifikationsmatrix; Current/Schema/CRC/Referenz- und Unknown-Grenzen; `TimePending` ist nicht `NoActiveRun` und nicht `ResumeOffer` |
-| B | `test_time_source`; native Virtual-Time-Tests; Composition-/Dependency-Guard; ESP-IDF-Adapter-/NTP-Hostnachweis nur mit verfuegbarer Quelle, kein synchroner Boot-Wait |
-| C | `test_run_persistence_coordinator`, Checkpoint- und Snapshot-/Codec-Tests: Formel, exakter UTC-Anker, Feldwiederverwendung, alte Felder ohne Gewichtung, kein Write je Sensorzyklus, 1/5/60-Minuten-Grenzen, unknown write outcome |
-| D | `test_process_state_machine`, bestehende Orchestrator-/Actuation-Tests: RecoveryEvaluation, Pending, explizite Entscheidung, nominale Ueberschreitung gemaess Ownerentscheidung, all-off und kein GPIO-Restore |
-| E | `test_run_recovery_time`/`test_run_progress_weighting` als Legacy-Negativtests oder gezielte Entfernung ihrer aktiven Produktionskopplung; `test_issue90_product_recovery_oracle`; Fallback bleibt nicht aktivierend |
+| A | Native Recovery-Disposition- und Boot-Klassifikationsmatrix; `KnownTotal`-/Timestamp-/CRC-/Referenz-/Revision-/Overflow-Grenzen; `WaitingForTrustedTime` ist nicht `NoActiveRun` und nicht `ResumeOffer` |
+| B | `test_run_persistence_coordinator`, Checkpoint- und Snapshot-/Codec-Tests: exakt `observedRunSeconds + live segment`, Record-UTC-Anker, Write-before-Apply und automatische logische `FERMENTING`-Fortsetzung |
+| C | `test_process_state_machine`: `FermentationCompleted`-Semantik fuer alle vier CompletionModes; `FinishWithoutCooling -> Completed`, drei Cooling-Modi -> `Cooling`; kein CoolingTargetReached ohne Sensorbeobachtung und kein Hold-Timer-Kredit |
+| D | `test_time_source`, VirtualTimeSource absent -> trusted transition, Application-/Composition-/Dependency-Guard; `ITimeSource`-Injektion ohne blockierenden Boot-Wait und ohne WLAN-/Provisioning-Implementierung |
+| E | `test_issue90_product_recovery_oracle`; Fallback nie automatisch Current/Aktorfreigabe, explizite Auswahlgrenze; `test_run_recovery_time`/`test_run_progress_weighting` bleiben als Legacy-Negativtests oder werden nur bei realer aktiver Kopplung entfernt |
+| B/E | Mehrfach-Reboot-/Mehrfach-Recovery-Szenarien: Checkpoint A, weiterer Live-Abschnitt, Checkpoint B, zweiter Ausfall; keine Doppelzaehlung; alte Weighted-/Temperaturfelder beeinflussen `recovered_elapsed_seconds` nie |
 | F | Markdown-/Link-/Source-of-Truth-Checks sowie Review des vollstaendigen aktuellen Diffs; danach gezielte geaenderte Bereichstests |
+
+### 10.1 Konkrete Testfaelle
+
+Mindestens folgende nativen Tests und Property-/Tabellenfaelle sind
+vorzusehen:
+
+```text
+CURRENT_FERMENTING_EXACT_TIME:
+  checkpoint persisted elapsed = 20 min
+  outage = 10 min
+  -> recovered elapsed = 30 min
+  -> logical FERMENTING, sofern nominale Dauer nicht erreicht
+
+MULTI_REBOOT_NO_DOUBLE_COUNTING:
+  recovery A -> weiterer Live-Abschnitt -> checkpoint B -> zweiter Ausfall
+  -> jeder Abschnitt genau einmal in observedRunSeconds
+
+DURATION_COMPLETION:
+  FinishWithoutCooling -> Completed
+  CoolThenFinish -> Cooling
+  CoolAndHoldForDuration -> Cooling
+  CoolAndHoldUntilManualStop -> Cooling
+
+NO_INFERRED_COOLING:
+  keine Sensor-/Signal-Evidenz waehrend des Ausfalls
+  -> CoolingTargetReached nie behaupten
+  -> Ausfallzeit nie auf noch nicht begonnenen CoolHolding-Timer anrechnen
+
+TIME_PENDING:
+  trusted checkpoint + keine aktuelle UTC
+  -> RecoveryEvaluation / WaitingForTrustedTime
+  -> actors off, kein Tombstone, kein Resume-Claim, keine Persistence-Mutation
+  spaetere trusted UTC
+  -> dieselbe revisionsgebundene Evidenz erneut bewerten
+
+TIME_FAILURES:
+  current UTC < checkpoint UTC -> fail closed
+  arithmetic overflow -> fail closed
+  missing checkpoint UTC -> fail closed
+  PartialUnknownHistory -> no exact R1 resume
+  neue Persistenzrevision waehrend Pending -> stale evidence / fail closed
+
+TIME_SOURCE:
+  ITimeSource::unixTimeSeconds() == nullopt -> nicht trusted/verfuegbar
+  Wert vorhanden -> trusted absolute UTC nur gemaess Portvertrag
+
+FALLBACK:
+  FallbackRecovered / OLDER_VALID_CHECKPOINT_RESUME
+  -> nie automatische Current-Promotion oder Aktorfreigabe
+  -> erst explizite Auswahl/Akzeptanz darf Zeitrechnung verwenden
+
+LEGACY:
+  weightedProgress oder Temperatur-Evidenz vorhanden
+  -> nie R1-Ausfallgutschrift oder recovered elapsed beeinflussen
+```
 
 In diesem Plan-Gate werden keine Firmware-, ESP-IDF-, Hardware- oder
 vollstaendigen Testlaeufe ausgefuehrt. `NOT_RUN` ist kein bestandenes Ergebnis.
@@ -623,33 +819,45 @@ Hardwareakzeptanz.
    `REPLACES_R1_NO_FERMENTING_RESUME_POLICY=YES`, ohne #18 oder #24 zu
    reaktivieren.
 2. Ein vollstaendig validierter `FERMENTING`-Checkpoint mit vertrauenswuerdigem
-   UTC-Anker und aktueller UTC rechnet ausschliesslich reale Wall-Clock-Zeit
-   an; Temperatur-/Biologie-/Weighting-Felder beeinflussen die Entscheidung
-   nicht.
-3. Fehlt trusted UTC unmittelbar nach Boot, bleibt derselbe valide Run in
-   `RecoveryEvaluation/TimePending`; er wird weder als `NoActiveRun`
-   verworfen noch als Resume behauptet.
-4. WLAN/NTP laeuft asynchron; es gibt keinen blockierenden Bootloop und keine
-   fachliche Recovery-Logik in `device_platform`.
-5. Persistenz-, Zeitanker-, Run-, Schema-, CRC-, Epoch- und Referenzunsicherheit
-   bleibt `NO_GUESS`, `NO_AUTOMATIC_RESUME`, `FAIL_CLOSED` und wird nicht
-   umetikettiert.
-6. Nach jedem Boot sowie bei Pending, Reject, Fehler und unbekannter Lage sind
+   UTC-Anker und aktueller UTC verwendet exakt
+   `observedRunSeconds + live segment + outage`; Temperatur-/Biologie-/Weighting-
+   Felder beeinflussen die Entscheidung nicht.
+3. Liegt `recovered_elapsed_seconds` unter der nominalen Dauer, wird der
+   Current-Run ohne Benutzerbestaetigung logisch automatisch als `FERMENTING`
+   fortgesetzt; `stateEnteredAtMillis` wird auf die aktuelle monotone Zeit
+   gesetzt und spaetere Live-Zeit wird nicht doppelt gezaehlt.
+4. Bei erreichter nominaler Dauer gilt die normale FSM-Semantik:
+   `FinishWithoutCooling -> Completed`, alle drei Cooling-Modi -> `Cooling`.
+   CoolingTargetReached und ein noch nicht begonnener CoolHolding-Timer werden
+   waehrend des Ausfalls nie inferiert.
+5. Fehlt trusted UTC unmittelbar nach Boot, bleibt derselbe valide Run in
+   `RecoveryEvaluation/WaitingForTrustedTime`; es gibt keine Persistence-
+   Mutation nur wegen des Wartens, keinen Tombstone und keinen Resume-Claim.
+6. WLAN/NTP laeuft asynchron; #124 implementiert kein WLAN-Onboarding,
+   Credentialmanagement, Connectivity UI oder einen neuen NTP-Service in
+   `device_platform`. `ITimeSource` bleibt der einzige Zeitport.
+7. Persistenz-, Zeitanker-, Run-, Schema-, CRC-, Epoch-, Referenz-,
+   Revisions- und Rechenunsicherheit bleibt `NO_GUESS`,
+   `NO_AUTOMATIC_RESUME`, `FAIL_CLOSED` und wird nicht umetikettiert.
+8. Nach jedem Boot sowie bei Pending, Reject, Fehler und unbekannter Lage sind
    Aktoren aus; keine elektrischen Zustandsreste werden restauriert.
-7. Checkpointgrenzen und unmittelbare Eventpersistenz bleiben unveraendert;
+9. Checkpointgrenzen und unmittelbare Eventpersistenz bleiben unveraendert;
    Sensorzyklen erzeugen keine neuen pauschalen Writes.
-8. Der bestehende einzelne `RunPersistenceCoordinator` sowie die #121-
+10. Der bestehende einzelne `RunPersistenceCoordinator` sowie die #121-
    Composition bleiben Source of Truth; es gibt keinen zweiten Coordinator,
    keinen monolithischen SafetyCore und keinen App-Typ in `device_platform`.
-9. Schema-3-/#18-Felder bleiben, soweit erforderlich, kompatibel lesbar,
+11. Schema-3-/#18-Felder bleiben, soweit erforderlich, kompatibel lesbar,
    erzeugen aber keine temperaturgewichtete R1-Entscheidung.
-10. `OLDER_VALID_CHECKPOINT_RESUME` aus #90 bleibt ein getrenntes, nicht
-    automatisch aktivierendes Fallback-Angebot; Callback-12- und
-    NVS-Orakel werden nicht abgeschwaecht.
-11. Die sechs Edge Cases sind mit der jeweiligen Ownerentscheidung umgesetzt
-    und in gezielten nativen Tests nachgewiesen.
-12. Die semantischen Recoveryzustaende sind spaeter fuer #25 projizierbar,
-    ohne UI-/Renderer-/Layoutentscheidungen in Issue #124 einzufuehren.
+12. `OLDER_VALID_CHECKPOINT_RESUME` aus #90 bleibt ein getrenntes, nicht
+   automatisch aktivierendes Fallback-Angebot; Callback-12- und
+   NVS-Orakel werden nicht abgeschwaecht; nur explizite Fallback-Auswahl kann
+   in denselben Zeitvertrag eintreten.
+13. Mehrfach-Reboot und Mehrfach-Recovery zaehlen keinen bereits angerechneten
+   Live-Abschnitt doppelt.
+14. Die sechs Edge Cases sind gemaess den verbindlichen Ownerentscheidungen
+   umgesetzt und in gezielten nativen Tests nachgewiesen.
+15. Die semantischen Recoveryzustaende sind spaeter fuer #25 projizierbar,
+   ohne UI-/Renderer-/Layoutentscheidungen in Issue #124 einzufuehren.
 
 ## 12. Source-of-Truth-Updates
 
@@ -681,7 +889,7 @@ Hardwareakzeptanz.
 | Persistierter UTC-Anker ist nicht exakt mit dem Fortschrittswert gekoppelt | Slice A stoppt vor Implementation; keine neue implizite Semantik |
 | NTP kommt nie | Dauerhaft all-off/TimePending oder fail-closed; kein Bootblock und kein Resumeversprechen |
 | Alte Schema-3-Felder werden indirekt wieder fachlich wirksam | explizite Negativtests und Entfernen der aktiven C2-Aufrufkette |
-| Zeit ueberschreitet nominelle Dauer | Ownerentscheidung zu Completion-Pending versus explizitem naechstem Schritt; keine stille Phase |
+| Zeit ueberschreitet nominelle Dauer | normale FermentationCompleted-Semantik; FinishWithoutCooling -> Completed, Cooling-Modi -> Cooling; keine stille Phase |
 | Fallback wird zum stillen Current promoted | #90-Oracle und explizite Auswahlgrenze unveraendert lassen |
 | Zeitport oder NTP-Integration leakt Fermentationslogik in Plattform | Architektur-Guard; sofortiger Abbruch und Owner-Richtung |
 | Aktorfreigabe wird aus Recoveryberechnung abgeleitet | All-off-/Safety-Handoff-Test; Diff reviewen und Slice abbrechen |
@@ -694,8 +902,8 @@ Hardwareakzeptanz.
   Branchloeschen.
 - Die spaetere Implementation stoppt, wenn ein vorhandenes Persistenzfeld die
   geforderte Semantik nicht traegt und dafuer ein Schemaumbau erforderlich
-  waere, wenn eine Ownerentscheidung aus Abschnitt 7 fehlt, wenn ein zweiter
-  Coordinator erforderlich erschiene oder wenn Aktor-/Hardwarevertraege
+  waere, wenn ein neuer materieller Produktentscheid sichtbar wird, wenn ein
+  zweiter Coordinator erforderlich erschiene oder wenn Aktor-/Hardwarevertraege
   erweitert werden muessten.
 - Bei einem unklaren Write-Ausgang, technischer Indeterminiertheit,
   untrusted Zeit oder nicht reproduzierbarem Build-/Hostverhalten wird nicht
@@ -707,26 +915,38 @@ Hardwareakzeptanz.
 - Physische Hardwaretests, NVS-Power-Cuts und reale Aktorfreigaben sind keine
   stillschweigende Folge dieses Plan-PRs und bleiben ihre eigenen Owner-Gates.
 
-## 15. Offene Ownerentscheidungen und Abschlussgate
+## 15. Abgeschlossene Ownerentscheidungen und Abschlussgate
 
 ```text
-OWNER_DECISION_REQUIRED=YES
-OPEN_OWNER_DECISIONS=
-1. Verhalten bei elapsed_after_boot >= nominalDurationSeconds.
-2. Kein automatischer naechster Phasenwechsel versus explizite Completion-/Resume-Entscheidung.
-3. Explizite Zulassung eines vollstaendig validierten, bewusst ausgewaehlten #90-Fallbacks als Zeitrechnungsbasis.
-4. Exakte Form der kleinen app-seitigen TimePending-Disposition, sofern RecoveryEvaluation sie nicht ohne semantische Ueberladung traegt.
+OWNER_DECISIONS_REQUIRED=NONE
+POWER_LOSS_ALONE_REQUIRES_USER_CONFIRMATION=NO
+TRUSTED_CURRENT_FERMENTING_LOGICAL_RECOVERY=AUTOMATIC
+FERMENTATION_DURATION_REACHED_DURING_OUTAGE=USE_NORMAL_FSM_COMPLETION_SEMANTICS
+TIME_PENDING=WaitingForTrustedTime under RecoveryEvaluation
+OLDER_VALID_CHECKPOINT_AUTO_PROMOTION=NO
+OLDER_VALID_CHECKPOINT_AUTO_ACTIVATION=NO
+SECOND_RECOVERY_COORDINATOR_PLANNED=NO
+SECOND_PERSISTENCE_COORDINATOR_PLANNED=NO
 ```
 
-Die bestehende Wahl des app-neutralen `ITimeSource`-Ports sowie das Beibehalten
-der Schema-3-Lesbarkeit sind Empfehlungen ohne offene Ownerentscheidung,
-solange der in Slice A geforderte Feldnachweis erfolgreich ist. Eine
-Abweichung davon erzeugt vor Umsetzung ein neues Owner-Gate.
+Damit sind die vier bisherigen Edge-Case-Entscheidungen geschlossen:
+`elapsed >= nominal` nutzt die normale FSM-Completion-Semantik; ein normaler
+Current-FERMENTING-Run wird automatisch logisch fortgesetzt; `TimePending`
+ist eine typed Application-Disposition unter `RecoveryEvaluation`; und ein
+#90-Fallback wird nie automatisch promoted oder aktiviert, sondern benoetigt
+explizite Auswahl/Akzeptanz. Die bestehende Wahl des app-neutralen
+`ITimeSource`-Ports, die Schema-3-Lesbarkeit und der enge #124-Network-Scope
+sind damit ebenfalls festgelegt.
+
+Wenn das erneute Live-Audit einen neuen materiellen Produktentscheid sichtbar
+macht, wird dieser nicht still erfunden; der Plan stoppt mit einem klaren
+Owner-Gate. Der aktuelle Auftrag erzeugt jedoch keine offene
+Ownerentscheidung.
 
 ```text
 ISSUE25_IMPLEMENTATION=NOT_STARTED
 IMPLEMENTATION=NOT_STARTED
 MERGE=NO
 OWNER_PLAN_REVIEW_REQUIRED=YES
-STOP=Owner Review des neuen R1-Recoveryplans
+STOP=Owner Review der vollstaendigen korrigierten Planfassung
 ```
