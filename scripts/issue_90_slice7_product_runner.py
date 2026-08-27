@@ -108,7 +108,39 @@ def require_source_sha(value: str) -> str:
     return value
 
 
-def run_esptool(port: str, baud: int, command: list[str]) -> None:
+def release_build_provenance(report_path: Path) -> dict[str, str]:
+    """Read exact release provenance from the existing build report."""
+
+    require_file(report_path, "release build provenance report")
+    report = report_path.read_text(encoding="utf-8")
+    section_match = re.search(
+        r"^## ESP-IDF esp32_release .*?(?=^## |\Z)",
+        report,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if section_match is None:
+        raise RunnerError("release build provenance section missing")
+    section = section_match.group(0)
+    values: dict[str, str] = {}
+    for name in ("Build-Commit", "Source-Git-SHA"):
+        match = re.search(rf"^- {re.escape(name)}: ([0-9a-f]{{40}})$", section, re.MULTILINE)
+        if match is None:
+            raise RunnerError(f"release build provenance field missing: {name}")
+        values[name] = require_source_sha(match.group(1))
+    values["report_sha256"] = sha256_file(report_path)
+    return values
+
+
+def require_embedded_source_sha(path: Path, source_sha: str) -> None:
+    """Require the exact build SHA in the application provenance string."""
+
+    expected = require_source_sha(source_sha).encode("ascii")
+    require_file(path, "production release application artifact")
+    if expected not in path.read_bytes():
+        raise RunnerError("BLOCKED_RELEASE_ARTIFACT_PROVENANCE_MISMATCH")
+
+
+def run_esptool(port: str, baud: int, command: list[str]) -> str:
     tool = shutil.which("esptool")
     if tool is None:
         raise RunnerError("pinned ESP-IDF esptool is required for flash safety")
@@ -138,6 +170,44 @@ def run_esptool(port: str, baud: int, command: list[str]) -> None:
             f"esptool {' '.join(command[:1])} failed: "
             f"{details[-1] if details else 'no diagnostic'}"
         )
+    return result.stdout + result.stderr
+
+
+def confirm_rom_bootloader(args: argparse.Namespace, action: str) -> bool:
+    print(f"OWNER_ACTION_REQUIRED={action}", flush=True)
+    print(
+        "OWNER_INSTRUCTIONS=POWER_ON_HOLD_IO0_TO_GND_TOGGLE_EN_OR_POWER_CYCLE_"
+        "RELEASE_IO0_AFTER_ROM_BOOTLOADER",
+        flush=True,
+    )
+    try:
+        input("After the ESP32 ROM bootloader is active, press Enter. ")
+    except (EOFError, KeyboardInterrupt) as error:
+        print("ROM_BOOTLOADER_READY=FAIL", flush=True)
+        raise RunnerError("owner ROM-bootloader confirmation missing") from error
+    try:
+        probe_output = run_esptool(args.port, args.baud, ["chip-id"])
+    except RunnerError as error:
+        print("ROM_BOOTLOADER_READY=FAIL", flush=True)
+        raise RunnerError("ROM_BOOTLOADER_READY=FAIL") from error
+    if "chip is" not in probe_output.lower():
+        print("ROM_BOOTLOADER_READY=FAIL", flush=True)
+        raise RunnerError("ROM_BOOTLOADER_READY=FAIL; chip-id response unrecognized")
+    print("ROM_BOOTLOADER_READY=PASS", flush=True)
+    return True
+
+
+def confirm_normal_power_cycle() -> bool:
+    print("OWNER_ACTION_REQUIRED=EXIT_ROM_BOOTLOADER_AND_NORMAL_POWER_CYCLE", flush=True)
+    print(
+        "OWNER_INSTRUCTIONS=RELEASE_IO0_FROM_GND_THEN_PERFORM_REAL_NORMAL_POWER_CYCLE",
+        flush=True,
+    )
+    try:
+        input("After IO0 is released and the normal power cycle is complete, press Enter. ")
+    except (EOFError, KeyboardInterrupt) as error:
+        raise RunnerError("owner normal-power-cycle confirmation missing") from error
+    return True
 
 
 def capture_verified_flash_region(
@@ -240,11 +310,25 @@ def require_release_artifacts(release_dir: Path) -> dict[str, dict[str, object]]
     return artifacts
 
 
-def prepare_pre_harness_backup(args: argparse.Namespace) -> int:
+def prepare_pre_harness_backup(
+    args: argparse.Namespace, *, rom_bootloader_ready: bool = False
+) -> int:
+    if not rom_bootloader_ready:
+        raise RunnerError("BLOCKED_ROM_BOOTLOADER_REQUIRED_FOR_PRE_HARNESS_BACKUP")
     source_sha = require_source_sha(args.production_source_sha)
     production_table = Path(args.production_partition_table)
     table_size, table_sha = require_production_partition_artifact(production_table)
     release_artifacts = require_release_artifacts(Path(args.production_release_dir))
+    provenance_path = Path(args.release_build_report)
+    provenance = release_build_provenance(provenance_path)
+    if (
+        provenance["Source-Git-SHA"] != source_sha
+        or provenance["Build-Commit"] != source_sha
+    ):
+        raise RunnerError("BLOCKED_RELEASE_ARTIFACT_PROVENANCE_MISMATCH")
+    require_embedded_source_sha(
+        Path(str(release_artifacts["application"]["file"])), source_sha
+    )
     if release_artifacts["partition_table"]["sha256"] != table_sha:
         raise RunnerError(
             "production partition-table argument differs from release artifact"
@@ -279,7 +363,14 @@ def prepare_pre_harness_backup(args: argparse.Namespace) -> int:
         "protocol_version": PROTOCOL_VERSION,
         "phase": "PRE_HARNESS_BACKUP",
         "plan_sha": PLAN_SHA,
-        "source_sha": source_sha,
+        "production_source_sha": source_sha,
+        "release_build_source_sha": provenance["Source-Git-SHA"],
+        "release_build_commit": provenance["Build-Commit"],
+        "release_build_provenance": {
+            "file": str(provenance_path.resolve()),
+            "sha256": provenance["report_sha256"],
+            "profile": "esp32_release",
+        },
         "backup_source_state": "PRODUCTION_LAYOUT",
         "test_partition": {
             "label": TEST_PARTITION,
@@ -309,6 +400,9 @@ def prepare_pre_harness_backup(args: argparse.Namespace) -> int:
         "real_actuators_enabled": False,
         "power_cut_type": "PHYSICAL_POWER_REMOVAL",
         "rts_en_software_reset_substitute": False,
+        "production_restore_required": True,
+        "campaign_result": "NOT_RUN",
+        "restore_state": "PENDING_OWNER_BOOTLOADER_ACTION",
     }
     output = Path(args.manifest_output)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -317,8 +411,14 @@ def prepare_pre_harness_backup(args: argparse.Namespace) -> int:
     print("BACKUP_SOURCE_STATE=PRODUCTION_LAYOUT", flush=True)
     print("TEST_PARTITION_PHYSICALLY_SEPARATE=NO", flush=True)
     print("TEST_PARTITION_REUSES_PRODUCTION_FLASH_RANGE=YES", flush=True)
+    print(f"PRODUCTION_SOURCE_SHA={source_sha}", flush=True)
+    print(
+        f"RELEASE_BUILD_SOURCE_SHA={provenance['Source-Git-SHA']}", flush=True
+    )
+    print("RELEASE_ARTIFACT_PROVENANCE_GATE=PASS", flush=True)
     print(f"PRODUCTION_PARTITION_TABLE_BACKUP_SHA256={table_backup_sha}", flush=True)
     print(f"PRODUCTION_STATE_STORE_BACKUP_SHA256={state_backup_sha}", flush=True)
+    print("OWNER_ACTION_REQUIRED=ENTER_ROM_BOOTLOADER_FOR_HARNESS_FLASH", flush=True)
     return 0
 
 
@@ -358,6 +458,28 @@ def load_pre_harness_manifest(path: Path) -> dict[str, object]:
         raise RunnerError("BACKUP_SOURCE_STATE rejected; production layout required")
     if data.get("actor_free") is not True or data.get("real_actuators_enabled") is not False:
         raise RunnerError("backup manifest actor-free contract rejected")
+    if not isinstance(data.get("production_restore_required"), bool):
+        raise RunnerError("production restore requirement missing")
+    if data.get("campaign_result") not in {
+        "NOT_RUN",
+        "PASS",
+        "FAIL_OR_INTERRUPTED",
+    }:
+        raise RunnerError("backup manifest campaign state rejected")
+    restore_state = data.get("restore_state")
+    if restore_state not in {
+        "PENDING_OWNER_BOOTLOADER_ACTION",
+        "RESTORE_FAILED_RETRY_REQUIRED",
+        "RESTORED_PENDING_NORMAL_BOOT",
+        "COMPLETE",
+    }:
+        raise RunnerError("backup manifest restore state rejected")
+    production_restore_required = data.get("production_restore_required")
+    if restore_state == "COMPLETE":
+        if production_restore_required is not False:
+            raise RunnerError("completed restore manifest still requires restore")
+    elif production_restore_required is not True:
+        raise RunnerError("pending restore manifest does not require restore")
     partition = data.get("test_partition")
     if not isinstance(partition, dict):
         raise RunnerError("backup manifest test partition missing")
@@ -369,7 +491,42 @@ def load_pre_harness_manifest(path: Path) -> dict[str, object]:
         or partition.get("reuses_production_flash_range") is not True
     ):
         raise RunnerError("test partition physical-layout contract rejected")
-    source_sha = require_source_sha(str(data.get("source_sha", "")))
+    source_sha = require_source_sha(str(data.get("production_source_sha", "")))
+    release_source_sha = require_source_sha(
+        str(data.get("release_build_source_sha", ""))
+    )
+    release_build_commit = require_source_sha(
+        str(data.get("release_build_commit", ""))
+    )
+    if source_sha != release_source_sha or source_sha != release_build_commit:
+        raise RunnerError("BLOCKED_RELEASE_ARTIFACT_PROVENANCE_MISMATCH")
+    provenance = data.get("release_build_provenance")
+    if not isinstance(provenance, dict):
+        raise RunnerError("release build provenance missing")
+    provenance_path = Path(str(provenance.get("file", "")))
+    if provenance.get("profile") != "esp32_release":
+        raise RunnerError("release build provenance profile rejected")
+    expected_report_sha = str(provenance.get("sha256", ""))
+    if not SHA256_PATTERN.fullmatch(expected_report_sha):
+        raise RunnerError("release build provenance hash malformed")
+    if sha256_file(provenance_path) != expected_report_sha:
+        raise RunnerError("release build provenance file hash mismatch")
+    current_provenance = release_build_provenance(provenance_path)
+    if (
+        current_provenance["Source-Git-SHA"] != release_source_sha
+        or current_provenance["Build-Commit"] != release_build_commit
+    ):
+        raise RunnerError("BLOCKED_RELEASE_ARTIFACT_PROVENANCE_MISMATCH")
+    if restore_state in {"RESTORED_PENDING_NORMAL_BOOT", "COMPLETE"}:
+        restored_application_sha = str(data.get("restored_application_sha256", ""))
+        if not SHA256_PATTERN.fullmatch(restored_application_sha):
+            raise RunnerError("restored application provenance missing")
+    if restore_state == "COMPLETE":
+        post_restore_source_sha = require_source_sha(
+            str(data.get("post_restore_product_source_sha", ""))
+        )
+        if post_restore_source_sha != source_sha:
+            raise RunnerError("post-restore product provenance mismatch")
     backups = data.get("backups")
     if not isinstance(backups, dict):
         raise RunnerError("backup manifest backups missing")
@@ -415,7 +572,9 @@ def load_pre_harness_manifest(path: Path) -> dict[str, object]:
         raise RunnerError(
             "production release partition-table differs from captured production table"
         )
-    data["source_sha"] = source_sha
+    data["production_source_sha"] = source_sha
+    data["release_build_source_sha"] = release_source_sha
+    data["release_build_commit"] = release_build_commit
     data["backups"] = backups
     data["production_release_artifacts"] = release
     return data
@@ -428,8 +587,13 @@ def require_pre_harness_manifest(path: Path | None) -> dict[str, object]:
 
 
 def restore_production_layout(
-    args: argparse.Namespace, manifest: dict[str, object]
-) -> None:
+    args: argparse.Namespace,
+    manifest: dict[str, object],
+    *,
+    rom_bootloader_ready: bool = False,
+) -> str:
+    if not rom_bootloader_ready:
+        raise RunnerError("BLOCKED_ROM_BOOTLOADER_REQUIRED_FOR_PRODUCTION_RESTORE")
     backups = manifest.get("backups")
     if not isinstance(backups, dict):
         raise RunnerError("backup manifest backups missing during restore")
@@ -469,11 +633,12 @@ def restore_production_layout(
             raise RunnerError(f"production release artifact missing during restore: {name}")
         command.extend([hex(int(artifact["offset"])), str(artifact["file"])])
     run_esptool(args.port, args.baud, command)
+    application_sha = ""
     for name in ordered_names:
         artifact = release.get(name)
         if not isinstance(artifact, dict):
             raise RunnerError(f"production release artifact missing during verify: {name}")
-        readback_hash(
+        actual_sha = readback_hash(
             args.port,
             args.baud,
             int(artifact["offset"]),
@@ -481,9 +646,39 @@ def restore_production_layout(
             str(artifact["sha256"]),
             f"production release {name} restore",
         )
+        if name == "application":
+            application_sha = actual_sha
     print("PRODUCTION_LAYOUT_RESTORED=PASS", flush=True)
     print("PRODUCTION_STATE_STORE_RESTORED=PASS", flush=True)
     print("PRODUCTION_RELEASE_FIRMWARE_RESTORED=PASS", flush=True)
+    return application_sha
+
+
+def update_manifest_state(path: Path, **updates: object) -> None:
+    require_file(path, "pre-harness backup manifest")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RunnerError(f"backup manifest cannot be updated: {path}") from error
+    if not isinstance(data, dict):
+        raise RunnerError("backup manifest is not an object")
+    data.update(updates)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def require_restore_pending(manifest: dict[str, object]) -> None:
+    if manifest.get("production_restore_required") is not True:
+        raise RunnerError("PRODUCTION_RESTORE_REQUIRED is not asserted")
+
+
+def verify_observed_product_source_sha(
+    expected_source_sha: str, observed_source_sha: str
+) -> str:
+    expected = require_source_sha(expected_source_sha)
+    observed = require_source_sha(observed_source_sha)
+    if observed != expected:
+        raise RunnerError("POST_RESTORE_PRODUCT_SOURCE_SHA_MISMATCH")
+    return observed
 
 
 REQUIRED_STATUS_FIELDS = (
@@ -731,6 +926,7 @@ class ProductSerial:
         self._serial.open()
         self.timeout = timeout
         self.observed_faults: set[str] = set()
+        self.observed_product_source_sha: str | None = None
 
     def close(self) -> None:
         self._serial.close()
@@ -765,7 +961,7 @@ class ProductSerial:
                 return lines, marker_fields(line, marker)
         raise RunnerError(f"timeout waiting for {marker}; last={lines[-8:]}")
 
-    def wait_for_product_boot(self) -> None:
+    def wait_for_product_boot(self) -> str:
         deadline = time.monotonic() + self.timeout
         lines: list[str] = []
         saw_actor_free = False
@@ -778,11 +974,21 @@ class ProductSerial:
             lowered = line.lower()
             saw_actor_free |= "real actuators: disabled" in lowered
             saw_ready |= "application: ready" in lowered
-            if saw_actor_free and saw_ready:
+            source_marker = "source git sha:"
+            if source_marker in lowered:
+                observed = line[
+                    lowered.index(source_marker) + len(source_marker) :
+                ].strip()
+                if GIT_SHA_PATTERN.fullmatch(observed):
+                    self.observed_product_source_sha = observed
+            if saw_actor_free and saw_ready and self.observed_product_source_sha:
                 if self.observed_faults:
                     raise RunnerError(f"fault during restored product boot: {lines[-8:]}")
-                return
-        raise RunnerError(f"normal product boot not verified; last={lines[-8:]}")
+                return self.observed_product_source_sha
+        raise RunnerError(
+            "normal product boot/provenance not verified; "
+            f"last={lines[-8:]}"
+        )
 
     def _observe_faults(self, line: str) -> None:
         lowered = line.lower()
@@ -889,8 +1095,8 @@ def run_physical_campaign(args: argparse.Namespace) -> int:
     print("BACKUP_SOURCE_STATE=PRODUCTION_LAYOUT", flush=True)
     print("TEST_PARTITION_PHYSICALLY_SEPARATE=NO", flush=True)
     print("TEST_PARTITION_REUSES_PRODUCTION_FLASH_RANGE=YES", flush=True)
+    print("OWNER_ACTION_REQUIRED=ENTER_ROM_BOOTLOADER_FOR_HARNESS_FLASH", flush=True)
 
-    campaign_succeeded = False
     try:
         with ProductSerial(args.port, args.baud, args.timeout) as device:
             ready = device.ready()
@@ -931,37 +1137,87 @@ def run_physical_campaign(args: argparse.Namespace) -> int:
                     cleanup = device.command("RUN_CONTROL_DISCARD_PENDING")
                     if cleanup.get("result") != "PASS":
                         raise RunnerError(f"run cleanup failed: {cleanup}")
-        campaign_succeeded = True
-    finally:
-        # Restoration is mandatory even after an interrupted/failed campaign.
-        # It never captures a first backup and it never accepts an unverified
-        # manifest.
-        try:
-            restore_production_layout(args, manifest)
-        except RunnerError:
-            print("RESTORE_GATE=FAIL", file=sys.stderr, flush=True)
-            raise
+    except BaseException:
+        update_manifest_state(
+            Path(args.pre_harness_manifest),
+            campaign_result="FAIL_OR_INTERRUPTED",
+            production_restore_required=True,
+            restore_state="PENDING_OWNER_BOOTLOADER_ACTION",
+        )
+        print("CAMPAIGN_RESULT=FAIL_OR_INTERRUPTED", flush=True)
+        print("PRODUCTION_RESTORE_REQUIRED=YES", flush=True)
+        print("RESTORE_PENDING_OWNER_BOOTLOADER_ACTION=YES", flush=True)
+        raise
 
-    if not campaign_succeeded:
-        raise RunnerError("campaign did not complete")
-    print("OWNER_ACTION_NOW=PRODUCT_POWER_CYCLE", flush=True)
-    input("After the restored production board is physically power-cycled, press Enter. ")
-    verify_restored_product_boot(args)
+    update_manifest_state(
+        Path(args.pre_harness_manifest),
+        campaign_result="PASS",
+        production_restore_required=True,
+        restore_state="PENDING_OWNER_BOOTLOADER_ACTION",
+    )
+    print("CAMPAIGN_RESULT=PASS", flush=True)
+    print("PRODUCTION_RESTORE_REQUIRED=YES", flush=True)
+    print("RESTORE_PENDING_OWNER_BOOTLOADER_ACTION=YES", flush=True)
     return 0
 
 
-def verify_restored_product_boot(args: argparse.Namespace) -> None:
+def verify_restored_product_boot(
+    args: argparse.Namespace,
+    manifest: dict[str, object],
+    *,
+    normal_power_cycle_ready: bool = False,
+) -> None:
+    if not normal_power_cycle_ready:
+        raise RunnerError("BLOCKED_NORMAL_POWER_CYCLE_REQUIRED_FOR_PRODUCT_BOOT")
+    expected_source_sha = require_source_sha(
+        str(manifest.get("production_source_sha", ""))
+    )
     with ProductSerial(args.port, args.baud, args.timeout) as device:
-        device.wait_for_product_boot()
+        observed_source_sha = device.wait_for_product_boot()
+    print(f"POST_RESTORE_PRODUCT_SOURCE_SHA={observed_source_sha}", flush=True)
+    print(f"EXPECTED_PRODUCT_SOURCE_SHA={expected_source_sha}", flush=True)
+    verify_observed_product_source_sha(expected_source_sha, observed_source_sha)
+    print("POST_RESTORE_SOURCE_SHA_VERIFICATION=PASS", flush=True)
+    update_manifest_state(
+        Path(args.pre_harness_manifest),
+        production_restore_required=False,
+        restore_state="COMPLETE",
+        post_restore_product_source_sha=observed_source_sha,
+    )
     print("POST_RESTORE_PRODUCT_BOOT=PASS", flush=True)
     print("RESTORE_GATE=PASS", flush=True)
 
 
 def run_restore(args: argparse.Namespace) -> int:
-    manifest = require_pre_harness_manifest(Path(args.pre_harness_manifest))
-    restore_production_layout(args, manifest)
+    manifest_path = Path(args.pre_harness_manifest)
+    manifest = require_pre_harness_manifest(manifest_path)
+    require_restore_pending(manifest)
+    print("RESTORE_REQUIRED=YES", flush=True)
+    rom_bootloader_ready = confirm_rom_bootloader(
+        args, "POWER_ON_AND_ENTER_ROM_BOOTLOADER_FOR_PRODUCTION_RESTORE"
+    )
+    try:
+        application_sha = restore_production_layout(
+            args, manifest, rom_bootloader_ready=rom_bootloader_ready
+        )
+    except BaseException:
+        update_manifest_state(
+            manifest_path,
+            production_restore_required=True,
+            restore_state="RESTORE_FAILED_RETRY_REQUIRED",
+        )
+        print("RESTORE_GATE=FAIL", flush=True)
+        print("PRODUCTION_RESTORE_REQUIRED=YES", flush=True)
+        raise
+    update_manifest_state(
+        manifest_path,
+        production_restore_required=True,
+        restore_state="RESTORED_PENDING_NORMAL_BOOT",
+        restored_application_sha256=application_sha,
+    )
     print("POST_RESTORE_PRODUCT_BOOT=NOT_RUN_OWNER_POWER_CYCLE_REQUIRED", flush=True)
     print("RESTORE_GATE=NOT_RUN_OWNER_POWER_CYCLE_REQUIRED", flush=True)
+    print("OWNER_ACTION_REQUIRED=EXIT_ROM_BOOTLOADER_AND_NORMAL_POWER_CYCLE", flush=True)
     return 0
 
 
@@ -1002,9 +1258,20 @@ def selftest_backup_workflow() -> None:
         table = b"production-partition-table" * 100
         bootloader = b"bootloader" * 100
         application = b"application" * 1000
+        source_sha = "1" * 40
+        release_report = root / "build-report.md"
+        release_report.write_text(
+            "## ESP-IDF esp32_release (JSON2-basierte IDF-Messung)\n\n"
+            f"- Build-Commit: {source_sha}\n"
+            f"- Source-Git-SHA: {source_sha}\n",
+            encoding="utf-8",
+        )
+        release_report_original = release_report.read_bytes()
         (release_dir / "partition_table" / "partition-table.bin").write_bytes(table)
         (release_dir / "bootloader" / "bootloader.bin").write_bytes(bootloader)
-        (release_dir / "esp32_fermentationsschrank.bin").write_bytes(application)
+        (release_dir / "esp32_fermentationsschrank.bin").write_bytes(
+            application + source_sha.encode("ascii")
+        )
         state = bytes((index % 251 for index in range(STATE_STORE_SIZE)))
 
         regions: dict[int, bytes] = {
@@ -1013,9 +1280,11 @@ def selftest_backup_workflow() -> None:
         }
         tamper_state_readback = False
 
-        def fake_esptool(_port: str, _baud: int, command: list[str]) -> None:
+        def fake_esptool(_port: str, _baud: int, command: list[str]) -> str:
             nonlocal tamper_state_readback
             operation = command[0]
+            if operation == "chip-id":
+                return "Chip is ESP32"
             if operation == "read-flash":
                 offset = int(command[1], 0)
                 size = int(command[2], 0)
@@ -1037,21 +1306,51 @@ def selftest_backup_workflow() -> None:
                     regions[int(pairs[index], 0)] = Path(pairs[index + 1]).read_bytes()
             else:
                 raise RunnerError(f"unexpected mocked esptool operation: {operation}")
+            return ""
 
         prepare_args = argparse.Namespace(
             port="mock",
             baud=115200,
-            production_source_sha="1" * 40,
+            production_source_sha=source_sha,
             production_partition_table=str(
                 release_dir / "partition_table" / "partition-table.bin"
             ),
             production_release_dir=str(release_dir),
             backup_dir=str(root / "backup"),
             manifest_output=str(root / "manifest.json"),
+            release_build_report=str(release_report),
         )
         with mock.patch(__name__ + ".run_esptool", side_effect=fake_esptool):
+            _expect_rejected(
+                lambda: prepare_pre_harness_backup(prepare_args),
+                "BLOCKED_ROM_BOOTLOADER_REQUIRED_FOR_PRE_HARNESS_BACKUP",
+            )
+            _expect_rejected(
+                lambda: require_source_sha("wrong-source"),
+                "invalid documented production source SHA",
+            )
+            wrong_source_args = argparse.Namespace(**vars(prepare_args))
+            wrong_source_args.production_source_sha = "2" * 40
+            _expect_rejected(
+                lambda: prepare_pre_harness_backup(
+                    wrong_source_args, rom_bootloader_ready=True
+                ),
+                "BLOCKED_RELEASE_ARTIFACT_PROVENANCE_MISMATCH",
+            )
+            application_path = release_dir / "esp32_fermentationsschrank.bin"
+            application_with_wrong_provenance = application_path.read_bytes()
+            application_path.write_bytes(application)
+            _expect_rejected(
+                lambda: prepare_pre_harness_backup(
+                    prepare_args, rom_bootloader_ready=True
+                ),
+                "BLOCKED_RELEASE_ARTIFACT_PROVENANCE_MISMATCH",
+            )
+            application_path.write_bytes(application_with_wrong_provenance)
             with contextlib.redirect_stdout(io.StringIO()):
-                prepare_pre_harness_backup(prepare_args)
+                prepare_pre_harness_backup(
+                    prepare_args, rom_bootloader_ready=True
+                )
             manifest_path = Path(prepare_args.manifest_output)
             manifest = load_pre_harness_manifest(manifest_path)
             _expect_rejected(
@@ -1085,7 +1384,23 @@ def selftest_backup_workflow() -> None:
                 "production partition-table backup missing",
             )
 
-            restore_args = argparse.Namespace(port="mock", baud=115200)
+            release_report.write_bytes(release_report_original + b"stale\n")
+            _expect_rejected(
+                lambda: load_pre_harness_manifest(manifest_path),
+                "release build provenance file hash mismatch",
+            )
+            release_report.write_bytes(release_report_original)
+
+            restore_args = argparse.Namespace(
+                port="mock",
+                baud=115200,
+                timeout=1.0,
+                pre_harness_manifest=str(manifest_path),
+            )
+            _expect_rejected(
+                lambda: restore_production_layout(restore_args, manifest),
+                "BLOCKED_ROM_BOOTLOADER_REQUIRED_FOR_PRODUCTION_RESTORE",
+            )
             restore_missing_table = json.loads(
                 json.dumps(manifest)
             )
@@ -1093,20 +1408,129 @@ def selftest_backup_workflow() -> None:
                 "file"
             ] = str(root / "missing-production-partition-table.bin")
             _expect_rejected(
-                lambda: restore_production_layout(restore_args, restore_missing_table),
+                lambda: restore_production_layout(
+                    restore_args,
+                    restore_missing_table,
+                    rom_bootloader_ready=True,
+                ),
                 "production partition-table backup missing",
             )
             tamper_state_readback = True
             _expect_rejected(
-                lambda: restore_production_layout(restore_args, manifest),
+                lambda: restore_production_layout(
+                    restore_args, manifest, rom_bootloader_ready=True
+                ),
                 "production state-store restore read-back hash mismatch",
             )
             tamper_state_readback = False
             with contextlib.redirect_stdout(io.StringIO()):
-                restore_production_layout(restore_args, manifest)
+                restore_production_layout(
+                    restore_args, manifest, rom_bootloader_ready=True
+                )
+            _expect_rejected(
+                lambda: verify_restored_product_boot(restore_args, manifest),
+                "BLOCKED_NORMAL_POWER_CYCLE_REQUIRED_FOR_PRODUCT_BOOT",
+            )
+            _expect_rejected(
+                lambda: verify_observed_product_source_sha(source_sha, "2" * 40),
+                "POST_RESTORE_PRODUCT_SOURCE_SHA_MISMATCH",
+            )
+            update_manifest_state(
+                manifest_path,
+                campaign_result="FAIL_OR_INTERRUPTED",
+                production_restore_required=True,
+                restore_state="PENDING_OWNER_BOOTLOADER_ACTION",
+            )
+
+            class FailingProductSerial:
+                def __enter__(self) -> "FailingProductSerial":
+                    return self
+
+                def __exit__(self, *_: object) -> None:
+                    return None
+
+                def ready(self) -> dict[str, str]:
+                    raise RunnerError("selftest campaign interruption")
+
+            campaign_args = argparse.Namespace(
+                port="mock",
+                baud=115200,
+                timeout=1.0,
+                profile="esp32_bringup",
+                scenario="config",
+                attempts=3,
+                pre_harness_manifest=str(manifest_path),
+            )
+            with mock.patch(
+                __name__ + ".ProductSerial",
+                return_value=FailingProductSerial(),
+            ):
+                _expect_rejected(
+                    lambda: run_physical_campaign(campaign_args),
+                    "selftest campaign interruption",
+                )
+            failure_manifest = load_pre_harness_manifest(manifest_path)
+            if (
+                failure_manifest.get("production_restore_required") is not True
+                or failure_manifest.get("campaign_result") != "FAIL_OR_INTERRUPTED"
+                or failure_manifest.get("restore_state")
+                != "PENDING_OWNER_BOOTLOADER_ACTION"
+            ):
+                raise RunnerError("campaign failure did not retain restore requirement")
+            update_manifest_state(
+                manifest_path,
+                campaign_result="PASS",
+                production_restore_required=True,
+                restore_state="RESTORED_PENDING_NORMAL_BOOT",
+                restored_application_sha256=sha256_file(application_path),
+            )
+
+            class FakeProductSerial:
+                def __init__(self, observed_source_sha: str) -> None:
+                    self.observed_source_sha = observed_source_sha
+
+                def __enter__(self) -> "FakeProductSerial":
+                    return self
+
+                def __exit__(self, *_: object) -> None:
+                    return None
+
+                def wait_for_product_boot(self) -> str:
+                    return self.observed_source_sha
+
+            with mock.patch(
+                __name__ + ".ProductSerial",
+                return_value=FakeProductSerial("2" * 40),
+            ):
+                _expect_rejected(
+                    lambda: verify_restored_product_boot(
+                        restore_args,
+                        manifest,
+                        normal_power_cycle_ready=True,
+                    ),
+                    "POST_RESTORE_PRODUCT_SOURCE_SHA_MISMATCH",
+                )
+            with mock.patch(
+                __name__ + ".ProductSerial",
+                return_value=FakeProductSerial(source_sha),
+            ):
+                verify_restored_product_boot(
+                    restore_args,
+                    manifest,
+                    normal_power_cycle_ready=True,
+                )
+            complete_manifest = load_pre_harness_manifest(manifest_path)
+            if (
+                complete_manifest.get("restore_state") != "COMPLETE"
+                or complete_manifest.get("production_restore_required") is not False
+                or complete_manifest.get("post_restore_product_source_sha") != source_sha
+            ):
+                raise RunnerError("successful post-restore provenance was not committed")
     print("PASS: pre-harness backup required before campaign", flush=True)
     print("PASS: backup source/layout/hash rejection selftests", flush=True)
     print("PASS: complete production restore sequence selftest", flush=True)
+    print("PASS: ROM bootloader and restore phase state selftests", flush=True)
+    print("PASS: exact release/post-restore provenance selftests", flush=True)
 
 
 def selftest_recovery_classifier() -> None:
@@ -1260,6 +1684,7 @@ def main() -> int:
         default="build/esp32_release/partition_table/partition-table.bin",
     )
     parser.add_argument("--production-release-dir", default="build/esp32_release")
+    parser.add_argument("--release-build-report", default="build-report.md")
     parser.add_argument("--production-source-sha")
     args = parser.parse_args()
     if args.selftest:
@@ -1270,7 +1695,12 @@ def main() -> int:
         if args.phase == "prepare":
             if not args.production_source_sha:
                 parser.error("--production-source-sha is required for --phase prepare")
-            return prepare_pre_harness_backup(args)
+            rom_bootloader_ready = confirm_rom_bootloader(
+                args, "ENTER_ROM_BOOTLOADER_FOR_PRE_HARNESS_BACKUP"
+            )
+            return prepare_pre_harness_backup(
+                args, rom_bootloader_ready=rom_bootloader_ready
+            )
         if args.phase == "campaign":
             if not args.pre_harness_manifest:
                 raise RunnerError("BLOCKED_PRE_HARNESS_BACKUP_REQUIRED")
@@ -1279,8 +1709,14 @@ def main() -> int:
             raise RunnerError("BLOCKED_PRE_HARNESS_BACKUP_REQUIRED")
         if args.phase == "restore":
             return run_restore(args)
-        load_pre_harness_manifest(Path(args.pre_harness_manifest))
-        verify_restored_product_boot(args)
+        manifest_path = Path(args.pre_harness_manifest)
+        manifest = load_pre_harness_manifest(manifest_path)
+        if manifest.get("restore_state") != "RESTORED_PENDING_NORMAL_BOOT":
+            raise RunnerError("BLOCKED_RESTORE_NOT_VERIFIED_BEFORE_NORMAL_PRODUCT_BOOT")
+        confirm_normal_power_cycle()
+        verify_restored_product_boot(
+            args, manifest, normal_power_cycle_ready=True
+        )
         return 0
     except RunnerError as error:
         print(f"BLOCKED/FAILED: {error}", file=sys.stderr)

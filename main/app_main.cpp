@@ -24,6 +24,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#ifndef APP_SOURCE_GIT_SHA
+#define APP_SOURCE_GIT_SHA "UNKNOWN"
+#endif
+
 namespace {
 
 constexpr char kTag[] = "app_main";
@@ -108,6 +112,7 @@ void logBootSummary(const app_config::ProfilePolicy& policy,
     const char* TAG = kTag;
     ESP_LOGI(TAG, "%s", app_config::kProjectName);
     ESP_LOGI(TAG, "profile: %s", app_config::profileName(policy.profile));
+    ESP_LOGI(TAG, "source git sha: %s", APP_SOURCE_GIT_SHA);
     ESP_LOGI(TAG, "hardware state: %s",
              app_config::hardwareStateName(policy.startupHardwareState));
     ESP_LOGI(TAG, "actuator policy: %s",

@@ -49,6 +49,23 @@ else()
     )
 endif()
 
+# Embed the exact checked-out source commit in the firmware metadata log. This
+# is provenance only; it does not alter product behavior or persistence.
+execute_process(
+    COMMAND git rev-parse HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE APP_SOURCE_GIT_SHA
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE APP_SOURCE_GIT_SHA_RESULT
+)
+string(LENGTH "${APP_SOURCE_GIT_SHA}" APP_SOURCE_GIT_SHA_LENGTH)
+if(NOT APP_SOURCE_GIT_SHA_RESULT EQUAL 0 OR NOT APP_SOURCE_GIT_SHA_LENGTH EQUAL 40)
+    message(FATAL_ERROR
+        "Could not determine the exact 40-character application source SHA"
+    )
+endif()
+set(APP_SOURCE_GIT_SHA_DEFINE "APP_SOURCE_GIT_SHA=\"${APP_SOURCE_GIT_SHA}\"")
+
 set(APP_ISSUE_29_COMPILE_DEFINITIONS)
 if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
     target_sources(${COMPONENT_LIB} PRIVATE "issue_29_bringup_probe.cpp")
@@ -97,6 +114,7 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
     ${APP_PROFILE_DEFINE}
     ${APP_ISSUE_29_COMPILE_DEFINITIONS}
     ${APP_ISSUE_90_SLICE7_COMPILE_DEFINITIONS}
+    ${APP_SOURCE_GIT_SHA_DEFINE}
     APP_TARGET_FLASH_MB=4
     APP_REQUIRE_PSRAM=0
     APP_WEB_OTA_ENABLED=0
