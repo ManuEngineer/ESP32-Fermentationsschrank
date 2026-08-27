@@ -11,6 +11,16 @@ set(EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/lib/device_platform_esp_idf"
 )
 
+# The private Issue #90 Slice-7 harness needs the console UART only in its
+# dedicated bring-up build.  Keep the ESP-IDF UART/VFS components out of the
+# normal product component graph.
+if(APP_ISSUE_90_SLICE7_HARNESS)
+    # Explicitly select the IDF console components for the optional harness
+    # graph; optional component requirements are resolved only for selected
+    # build components when MINIMAL_BUILD is enabled.
+    set(COMPONENTS main esp_driver_uart vfs)
+endif()
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 idf_build_set_property(MINIMAL_BUILD ON)
 project(esp32_fermentationsschrank)

@@ -65,6 +65,9 @@ bool FermentationApplication::begin(
                                         : resetCauseSource->resetCause();
     persistenceLoadStatus_.reset();
     loadDisposition_ = RunLoadDisposition::SafeBoot;
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+    configurationRecoveryStatus_.reset();
+#endif
     pendingResume_.reset();
     runtimeRunState_.reset();
     runPersistenceCoordinator_.reset();
@@ -111,6 +114,9 @@ bool FermentationApplication::begin(
     }
 
     const auto configurationResult = recovery->boot();
+#if defined(APP_ISSUE_90_SLICE7_HARNESS)
+    configurationRecoveryStatus_ = configurationResult.status;
+#endif
     recovery.reset();
     const auto runtime = configurationService_->acquireRuntime();
     if (runtime.status != RuntimeConfigurationReadStatus::RuntimeLeaseGranted) {

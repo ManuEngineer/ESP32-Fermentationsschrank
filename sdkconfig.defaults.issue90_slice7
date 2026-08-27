@@ -1,0 +1,5 @@
+# Issue #90 Slice-7 harness overlay.  This file is used only by the dedicated
+# bring-up harness build and never by the normal bring-up or release profiles.
+# It selects the mutually exclusive test NVS partition so destructive tests do
+# not touch the production state_store partition.
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/issue_90_state_store_test.csv"

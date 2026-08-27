@@ -3,7 +3,8 @@
 idf_component_register(
     SRCS "app_main.cpp"
     PRIV_INCLUDE_DIRS "../include"
-    PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf nvs_flash
+    PRIV_REQUIRES device_platform fermentation_app device_platform_esp_idf
+                  nvs_flash
 )
 
 # ESP-IDF 6.0.2 kompiliert C++ standardmaessig mit -std=gnu++26; das Projekt
@@ -63,6 +64,29 @@ if(CONFIG_APP_PROFILE_ESP32_BRINGUP)
     )
 endif()
 
+# Issue #90 Slice-7 is a private, bring-up-only hardware runner.  It is
+# enabled only by the dedicated harness build command; release and native
+# builds do not compile or link any of its sources.
+set(APP_ISSUE_90_SLICE7_COMPILE_DEFINITIONS)
+if(APP_ISSUE_90_SLICE7_HARNESS)
+    if(NOT CONFIG_APP_PROFILE_ESP32_BRINGUP)
+        message(FATAL_ERROR
+            "Issue #90 Slice-7 harness is allowed only in esp32_bringup"
+        )
+    endif()
+    # The harness reads the console UART without changing the normal app
+    # component graph.  The dedicated harness build makes these optional
+    # components available; the release and native graphs do not.
+    idf_component_optional_requires(PRIVATE esp_driver_uart vfs)
+    target_sources(
+        ${COMPONENT_LIB}
+        PRIVATE "issue_90_slice7_harness.cpp"
+    )
+    list(APPEND APP_ISSUE_90_SLICE7_COMPILE_DEFINITIONS
+        APP_ISSUE_90_SLICE7_HARNESS=1
+    )
+endif()
+
 # Firmwarefeste Release-1-Grenzen bleiben feste Compile-Definitionen, keine
 # Kconfig-Menuoptionen (siehe docs/tasks/issue-74-implementation-plan.md,
 # Abschnitt 7.2 Punkt 4). Textidentisch mit platformio.inis
@@ -72,6 +96,7 @@ endif()
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
     ${APP_PROFILE_DEFINE}
     ${APP_ISSUE_29_COMPILE_DEFINITIONS}
+    ${APP_ISSUE_90_SLICE7_COMPILE_DEFINITIONS}
     APP_TARGET_FLASH_MB=4
     APP_REQUIRE_PSRAM=0
     APP_WEB_OTA_ENABLED=0
